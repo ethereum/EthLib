@@ -1,0 +1,9 @@
+topic: beacon_block
+blocks:
+- {block: 
+    block_0x63b2597628536690d23830a4c8a1c5ccbccb6c49a0b2e1d043cf0a029863e681}
+messages:
+- {current_time_ms: 6500, message: 
+    block_0x23a4a68bf4da2c1a5ce7996f10d13019af3a0676337fba85ea74897350e20428, 
+    expected: reject, reason: block proposer_index does not match expected 
+    proposer}

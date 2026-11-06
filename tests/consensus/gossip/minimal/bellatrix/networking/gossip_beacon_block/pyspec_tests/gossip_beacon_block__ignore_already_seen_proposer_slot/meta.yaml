@@ -1,0 +1,12 @@
+topic: beacon_block
+blocks:
+- {block: 
+    block_0xed6dce031339ad4d26cd80c06be657940b3c0bcf2eac9f2bd55241f0f5f64350}
+messages:
+- {current_time_ms: 6500, message: 
+    block_0x88d38f24c8b81c60c09b366f7e99f824b25c89db3e22d144e870608c66344f8f, 
+    expected: valid}
+- {current_time_ms: 6600, message: 
+    block_0x88d38f24c8b81c60c09b366f7e99f824b25c89db3e22d144e870608c66344f8f, 
+    expected: ignore, reason: block is not the first valid block for this slot 
+    and proposer}

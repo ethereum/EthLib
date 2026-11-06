@@ -1,0 +1,11 @@
+topic: beacon_block
+blocks:
+- {block: 
+    block_0xed6dce031339ad4d26cd80c06be657940b3c0bcf2eac9f2bd55241f0f5f64350}
+finalized_checkpoint: {epoch: 1, block: 
+    block_0xed6dce031339ad4d26cd80c06be657940b3c0bcf2eac9f2bd55241f0f5f64350}
+messages:
+- {current_time_ms: 48500, message: 
+    block_0x87a0a61644b8e64ec1b7b4b0ec7ea75784d8f2a11112557cd62c5805922d67af, 
+    expected: ignore, reason: block is not from a slot greater than the latest 
+    finalized slot}

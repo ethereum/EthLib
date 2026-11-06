@@ -8,7 +8,11 @@ from consensus.test_epoch_processing import (
     MINIMAL_ONLY as EPOCH_MINIMAL_ONLY,
 )
 from consensus.test_fork_choice import HANDLERS as FORK_CHOICE, SPECIFIED as FORK_CHOICE_FORKS
-from consensus.test_gossip_validation import SPECIFIED as GOSSIP_FORKS, TOPICS as GOSSIP_TOPICS
+from consensus.test_gossip_validation import (
+    SPECIFIED as GOSSIP_FORKS,
+    TOPICS as GOSSIP_TOPICS,
+    runs as runs_gossip,
+)
 from consensus.test_operations import HANDLERS as OPERATIONS
 from consensus.test_rewards import HANDLERS as REWARDS, SPECIFIED as REWARDS_FORKS
 from consensus.test_transition import GROUPS as TRANSITION_GROUPS
@@ -100,8 +104,9 @@ NOT_VENDORED = (
     | {f"mainnet/{fork}/sync/optimistic" for fork in FORK_CHOICE_FORKS if fork != "altair"}
     | {
         f"mainnet/{fork}/networking/gossip_{topic}"
-        for topic, first in GOSSIP_TOPICS.items()
-        for fork in GOSSIP_FORKS[GOSSIP_FORKS.index(first) :]
+        for topic in GOSSIP_TOPICS
+        for fork in GOSSIP_FORKS
+        if runs_gossip(fork, f"gossip_{topic}")
     }
     | {
         f"{preset}/{fork}/networking/{handler}"

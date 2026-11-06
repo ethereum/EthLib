@@ -1,0 +1,8 @@
+topic: beacon_block
+blocks:
+- {block: 
+    block_0x1a3e9c9f0125cf7f621a4e4ab41478ec6a40b033b31b5aef3e145d056c892fd6}
+messages:
+- {current_time_ms: 6500, message: 
+    block_0x9b2f80eeb67906444b151fde16ccfa9509afb95cc6d90f5e229b62fdd3bbfd5d, 
+    expected: valid}

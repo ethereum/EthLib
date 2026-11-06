@@ -1,0 +1,8 @@
+topic: beacon_block
+blocks:
+- {block: 
+    block_0xed6dce031339ad4d26cd80c06be657940b3c0bcf2eac9f2bd55241f0f5f64350}
+messages:
+- {current_time_ms: 6500, message: 
+    block_0x0f962a12b2f2933e77f1dc873fee4bde8e9cf49913f83dc9e056fc9e337abaf4, 
+    expected: ignore, reason: block's parent has not been seen}

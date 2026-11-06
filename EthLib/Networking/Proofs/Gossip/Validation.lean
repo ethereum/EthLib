@@ -24,6 +24,13 @@ theorem andThen_eq_accept {first : ValidationResult} {next : Unit → Validation
     first.andThen next = accept ↔ first = accept ∧ next () = accept := by
   cases first <;> simp [andThen]
 
+/-- Two checks in a row ignore exactly when the first ignores, or accepts and the next ignores. -/
+theorem andThen_eq_ignore {first : ValidationResult} {next : Unit → ValidationResult}
+    {reason : String} :
+    first.andThen next = ignore reason ↔
+      first = ignore reason ∨ (first = accept ∧ next () = ignore reason) := by
+  cases first <;> simp [andThen]
+
 /-- A check that does not accept decides the outcome of the chain. -/
 theorem andThen_of_ne_accept {first : ValidationResult} (h : first ≠ accept)
     (next : Unit → ValidationResult) : first.andThen next = first := by
@@ -53,6 +60,11 @@ end ValidationResult
 @[simp] theorem rejectUnless_eq_accept {condition : Bool} {reason : String} :
     rejectUnless condition reason = .accept ↔ condition = true := by
   cases condition <;> simp [rejectUnless]
+
+/-- An ignore check ignores exactly when its condition fails, with its own reason. -/
+@[simp] theorem ignoreUnless_eq_ignore {condition : Bool} {reason other : String} :
+    ignoreUnless condition reason = .ignore other ↔ condition = false ∧ reason = other := by
+  cases condition <;> simp [ignoreUnless]
 
 /-- A reject check never ignores. -/
 @[simp] theorem rejectUnless_ne_ignore {condition : Bool} {reason other : String} :

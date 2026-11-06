@@ -1,0 +1,6 @@
+preset: minimal
+fork: bellatrix
+runner: networking
+handler: gossip_beacon_block
+suite: pyspec_tests
+case: gossip_beacon_block__ignore_parent_execution_verified_invalid

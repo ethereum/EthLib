@@ -42,9 +42,9 @@ theorem isNonStrictSuperset_of_mem {seenBits : List (List Bool)} {bits : List Bo
   refine ⟨bits, mem, ?_⟩
   simp [List.all_eq_true, List.mem_iff_getElem]
 
-/-- A selection proof selects its signer when a subcommittee needs at most one aggregator.
+/-- A selection proof selects its signer when the modulus of the selection is 1.
 
-That is the case of a committee with fewer seats than subnets times the aggregator target. -/
+That is the case when a subcommittee has fewer than twice the aggregator target in members. -/
 theorem isSyncCommitteeAggregator_of_small {signature : BLSSignature}
     (small : preset.SYNC_COMMITTEE_SIZE / SYNC_COMMITTEE_SUBNET_COUNT /
       TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE ≤ 1) :

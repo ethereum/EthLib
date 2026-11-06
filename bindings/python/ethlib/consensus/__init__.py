@@ -537,8 +537,16 @@ def gossip_validation(
     messages: list[tuple[int, int, bytes]],
     verify: bool = True,
     config: dict | None = None,
+    blocks: list[tuple[int, int | None, bytes]] | None = None,
+    finalized: tuple[int, bytes] | None = None,
 ) -> list[tuple[str, str | None]]:
     """The outcome of each gossip message of a topic, in turn, with the reason of a failure."""
+    # A block after the anchor is (1 if failed, 2 if pending, else 0; payload status; SSZ bytes).
+    block_records = b"".join(
+        bytes([kind, 255 if status is None else status]) + len(data).to_bytes(4, "little") + data
+        for kind, status, data in blocks or []
+    )
+    checkpoint = b"" if finalized is None else finalized[0].to_bytes(8, "little") + finalized[1]
     # A message is (arrival time in milliseconds, subnet ID, SSZ bytes).
     records = b"".join(
         time.to_bytes(8, "little")
@@ -549,7 +557,16 @@ def gossip_validation(
     )
     replacements = json.dumps(config).encode() if config else b""
     out = _native.consensus_gossip_validation(
-        name, fork, anchor_state, anchor_block, topic.encode(), records, replacements, verify
+        name,
+        fork,
+        anchor_state,
+        anchor_block,
+        block_records,
+        checkpoint,
+        topic.encode(),
+        records,
+        replacements,
+        verify,
     )
     outcomes, offset = [], 0
     while offset < len(out):

@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Exports.ForkChoice
+public import EthLib.Consensus.Gossip.Block
 public import EthLib.Consensus.Gossip.Operations
 public import EthLib.Consensus.Gossip.SyncCommittee
 
@@ -10,6 +11,18 @@ public import EthLib.Consensus.Gossip.SyncCommittee
 A C-ABI export that validates gossip messages of one topic, in turn, against one store.
 
 The store starts from an anchor state and a signed anchor block, given in SSZ.
+
+More signed blocks may follow the anchor, each as two bytes, a 4-byte length and that many bytes.
+
+The first byte marks a block that failed its transition with 1, or a pending block with 2.
+
+The node knows such a block but holds no state after it.
+
+The state after any other block is the state transition of the state of its parent.
+
+The second byte gives the status of the payload of the block, or 255 for none.
+
+An optional 40-byte checkpoint, an epoch and a root, replaces the finalized checkpoint.
 
 A JSON object may replace values of the configuration, and an empty one keeps it.
 
@@ -40,6 +53,7 @@ namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz Networking.Gossip
 open EthLib.Exports (Result)
+open Serialization.Ssz.Exports (runSsz)
 
 /-- A gossip message of a case: its time of arrival in milliseconds, its subnet and its bytes. -/
 structure GossipInput where
@@ -73,11 +87,53 @@ def outcomeRecord : ValidationResult → ByteArray
   | .ignore reason => ByteArray.empty.push 1 ++ littleEndian 4 reason.utf8ByteSize ++ reason.toUTF8
   | .reject reason => ByteArray.empty.push 2 ++ littleEndian 4 reason.utf8ByteSize ++ reason.toUTF8
 
+/-- A block that follows the anchor of a case, with what the node knows of it. -/
+structure GossipBlockInput where
+  /-- 1 for a block that failed its transition, 2 for a pending block, 0 otherwise. -/
+  kind : UInt8
+  /-- The status of the payload of the block, or 255 for none. -/
+  status : UInt8
+  /-- The SSZ bytes of the signed block. -/
+  data : ByteArray
+
+/-- The blocks that the bytes hold from an offset.
+
+Each block reads at least 6 bytes, so one round more than the bytes suffices. -/
+def readGossipBlocks : (rounds : Nat) → ByteArray → Nat → Result (List GossipBlockInput)
+  | 0, _, _ => throw (0, "blocks do not end")
+  | rounds + 1, bytes, offset =>
+    if offset = bytes.size then return []
+    else if bytes.size < offset + 6 then throw (0, "a block is cut short")
+    else do
+      let length := (← decodeInput UInt32 (bytes.extract (offset + 2) (offset + 6))).toNat
+      let stop := offset + 6 + length
+      if bytes.size < stop then throw (0, "the bytes of a block are cut short")
+      let rest ← readGossipBlocks rounds bytes stop
+      return ⟨bytes[offset]!, bytes[offset + 1]!, bytes.extract (offset + 6) stop⟩ :: rest
+
+/-- The store and the statuses after a block that follows the anchor.
+
+A failed or a pending block joins the known blocks only.
+
+Another block also gets its state, by the state transition of the state of its parent. -/
+def importGossipBlock {preset : Preset} {fork : Fork} (config : Config)
+    (checks : SignatureChecks) (store : Store preset fork) (statuses : PayloadStatuses)
+    (input : GossipBlockInput) : Result (Store preset fork × PayloadStatuses) := do
+  let signed ← decodeInput (SignedBeaconBlock preset fork) input.data
+  let root ← runSsz "block rejected" (SszType.hashTreeRoot signed.message)
+  let statuses := if input.status = 255 then statuses else statuses.insert root input.status
+  let store := { store with blocks := store.blocks.insert root signed.message }
+  if input.kind ≠ 0 then return (store, statuses)
+  let parentState ← runForkChoice (store.blockState signed.message.parentRoot)
+  let state ← runForkChoice
+    ((stateTransition config checks (.constant true) parentState signed).mapError .transition)
+  return ({ store with blockStates := store.blockStates.insert root state }, statuses)
+
 /-- Whether gossip validation of a topic is specified here at a fork.
 
 The sync committee has topics from Altair, and changes of BLS credentials from Capella. -/
 def gossipValidationSpecified (fork : Fork) : String → Bool
-  | "attester_slashing" | "proposer_slashing" | "voluntary_exit" => true
+  | "attester_slashing" | "proposer_slashing" | "voluntary_exit" | "beacon_block" => true
   | "sync_committee" | "sync_committee_contribution_and_proof" => .altair ≤ fork
   | "bls_to_execution_change" => .shapella ≤ fork
   | _ => false
@@ -86,8 +142,8 @@ def gossipValidationSpecified (fork : Fork) : String → Bool
 
 The keys change only when the message is valid. -/
 def validateGossipInput {preset : Preset} {fork : Fork} (config : Config)
-    (checks : SignatureChecks) (store : Store preset fork) (topic : String) (seen : Seen)
-    (input : GossipInput) : Result (ValidationResult × Seen) := do
+    (checks : SignatureChecks) (store : Store preset fork) (statuses : PayloadStatuses)
+    (topic : String) (seen : Seen) (input : GossipInput) : Result (ValidationResult × Seen) := do
   let record (outcome : ValidationResult) (update : Seen → Seen) :=
     (outcome, if outcome.isAccept then update seen else seen)
   match topic with
@@ -109,6 +165,11 @@ def validateGossipInput {preset : Preset} {fork : Fork} (config : Config)
     let outcome ← runForkChoice
       (validateBlsToExecutionChange config checks seen store signed input.currentTimeMs)
     return record outcome (·.recordBlsToExecutionChange signed)
+  | "beacon_block" =>
+    let signed ← decodeInput (SignedBeaconBlock preset fork) input.data
+    let outcome ← runForkChoice
+      (validateBeaconBlock config checks seen store statuses signed input.currentTimeMs)
+    return record outcome (·.recordBeaconBlock signed)
   | "sync_committee" =>
     let message ← decodeInput SyncCommitteeMessage input.data
     if altair : .altair ≤ fork then
@@ -125,12 +186,13 @@ def validateGossipInput {preset : Preset} {fork : Fork} (config : Config)
     else throw (0, "the sync committee has no topic before Altair")
   | _ => throw (0, s!"gossip validation of the topic {topic} is not yet specified")
 
-/-- Validate the messages of a topic in turn, against the store of an anchor.
+/-- Validate the messages of a topic in turn, against the store of an anchor and later blocks.
 
 From Gloas the store is not specified here. -/
 @[export eth_consensus_gossip_validation]
 def gossipValidationExport
-    (name fork anchorState anchorBlock topic messages replacements : ByteArray) (verify : Bool) :
+    (name fork anchorState anchorBlock blocks finalized topic messages replacements : ByteArray)
+    (verify : Bool) :
     Result ByteArray := do
   let preset ← presetOf (← nameOf name)
   let fork ← forkOf fork
@@ -141,11 +203,17 @@ def gossipValidationExport
     throw (0, s!"gossip validation of the topic {topic} at {fork.name} is not yet specified")
   let anchorState ← decodeInput (BeaconState preset fork) anchorState
   let anchorBlock ← decodeInput (SignedBeaconBlock preset fork) anchorBlock
-  let store ← runForkChoice (getForkchoiceStore config anchorState anchorBlock.message)
+  let mut store ← runForkChoice (getForkchoiceStore config anchorState anchorBlock.message)
+  let mut statuses : PayloadStatuses := {}
+  for input in ← readGossipBlocks (blocks.size + 1) blocks 0 do
+    (store, statuses) ← importGossipBlock config checks store statuses input
+  if finalized.size = 40 then
+    store := { store with finalizedCheckpoint := ← decodeInput Checkpoint finalized }
+  else if finalized.size ≠ 0 then throw (0, "the finalized checkpoint is not 40 bytes")
   let mut seen : Seen := {}
   let mut out := ByteArray.empty
   for input in ← readGossipInputs (messages.size + 1) messages 0 do
-    let (outcome, next) ← validateGossipInput config checks store topic seen input
+    let (outcome, next) ← validateGossipInput config checks store statuses topic seen input
     seen := next
     out := out ++ outcomeRecord outcome
   return out

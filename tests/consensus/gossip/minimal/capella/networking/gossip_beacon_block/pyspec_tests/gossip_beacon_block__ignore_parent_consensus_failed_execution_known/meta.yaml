@@ -1,0 +1,12 @@
+topic: beacon_block
+blocks:
+- {block: 
+    block_0x38cc52ad8750747901e58d142f74121f6f372b6e1761c5f56d031cc8ff4ba36d}
+- {block: 
+    block_0x544d152a5a4812191230008fb211fcb06b48a0ec093ce36efa08a03519d0d67f, 
+    failed: true, payload_status: VALID}
+messages:
+- {current_time_ms: 12500, message: 
+    block_0x80fa8704b13df7bc58a3a02b0a04169cee3d3189c2158d1351bcedc4b6512a9f, 
+    expected: ignore, reason: block's parent is invalid and its payload is 
+    processed}
