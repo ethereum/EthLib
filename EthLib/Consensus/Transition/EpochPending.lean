@@ -14,13 +14,18 @@ At the end of an epoch the queue is read from its front, and stops at the first 
 * comes as a request while deposits of the old mechanism remain, in Electra only;
 * entered the queue after the start of the finalized epoch;
 * would pass the most deposits per epoch; or
-* would pass the activation churn, which then carries over to the next epoch.
+* would pass the churn of deposits, which then carries over to the next epoch.
+
+Before Gloas the churn of deposits is the churn that activations and exits share.
+
+From Gloas it is the churn of activations alone, as [EIP-8061] specifies.
 
 A deposit to a withdrawn validator is credited outside the churn.
 
 A deposit to a validator that exits waits at the end of the queue.
 
 [EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
+[EIP-8061]: https://eips.ethereum.org/EIPS/eip-8061#deposit-processing
 -/
 
 @[expose] public section
@@ -109,9 +114,9 @@ def depositWaits (state : BeaconState preset fork) (finalizedSlot : Slot)
     (deposit : PendingDeposit) : Bool :=
   (bridgeDepositsPending state && GENESIS_SLOT < deposit.slot) || finalizedSlot < deposit.slot
 
-/-- From Electra to Fulu: the state after the pending deposits of an epoch.
+/-- From Electra: the state after the pending deposits of an epoch.
 
-The churn available is the churn left from the last epoch and the activation churn.
+The churn available is the churn left from the last epoch and the churn of deposits.
 
 A request waits while deposits of the old mechanism remain, in Electra only.
 
@@ -119,15 +124,12 @@ The queue keeps the deposits not reached, then the postponed ones.
 
 If the pass stopped at the churn, the churn not used carries over, and else none does.
 
-A 64-bit overflow is an error.
-
-Gloas changes the pass, which EthLib does not yet have here. -/
+A 64-bit overflow is an error. -/
 def processPendingDeposits (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (electra : .pectra ≤ fork) :
     Except TransitionError (BeaconState preset fork) := do
-  if .glamsterdam ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
   let nextEpoch ← liftAccessor (liftArith (addChecked (getCurrentEpoch state) 1))
-  let churn ← liftAccessor (getActivationExitChurnLimit config state)
+  let churn ← liftAccessor (depositChurnLimit config state)
   let available ←
     liftAccessor (liftArith (addChecked (state.depositBalanceToConsume electra) churn))
   let finalizedSlot ← liftAccessor

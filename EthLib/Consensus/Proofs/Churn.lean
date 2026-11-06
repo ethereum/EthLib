@@ -21,6 +21,10 @@ An amount that fits the churn available always finds its place in the current ep
 In Electra, the churns of consolidations and of activations and exits add up to the whole churn.
 
 So their difference does not wrap.
+
+From Gloas, the churn of exits is a whole number of increments.
+
+The churn of activations is the churn of exits up to a maximum, and pending deposits take it.
 -/
 
 @[expose] public section
@@ -142,6 +146,44 @@ theorem getConsolidationChurnLimit_add {config : Config} {state : BeaconState pr
   rw [UInt64.toNat_sub_of_le _ _ le]
   have := UInt64.le_iff_toNat_le.mp le
   omega
+
+/-- A balance rounded down to an increment is a whole number of increments. -/
+theorem sub_mod_mod_self (balance increment : Gwei) :
+    (balance - balance % increment) % increment = 0 := by
+  have le : balance % increment ≤ balance := by
+    rw [UInt64.le_iff_toNat_le, UInt64.toNat_mod]
+    exact Nat.mod_le _ _
+  apply UInt64.toNat_inj.mp
+  rw [UInt64.toNat_mod, UInt64.toNat_sub_of_le _ _ le, UInt64.toNat_mod]
+  simpa using Nat.sub_mod_eq_zero_of_mod_eq (Nat.mod_mod _ _).symm
+
+/-- From Gloas, the churn of exits is a whole number of effective balance increments. -/
+theorem getExitChurnLimit_mod {config : Config} {state : BeaconState preset fork} {exit : Gwei}
+    (computed : getExitChurnLimit config state = .ok exit) :
+    exit % preset.EFFECTIVE_BALANCE_INCREMENT = 0 := by
+  simp only [getExitChurnLimit, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨_, _, rfl⟩ := computed
+  exact sub_mod_mod_self _ _
+
+/-- From Gloas, the churn of activations is the churn of exits up to its maximum. -/
+theorem getActivationChurnLimit_of_exit {config : Config} {state : BeaconState preset fork}
+    {exit : Gwei} (exitOk : getExitChurnLimit config state = .ok exit) :
+    getActivationChurnLimit config state =
+      .ok (min config.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS exit) := by
+  simp only [getActivationChurnLimit, exitOk, bind, Except.bind, pure, Except.pure]
+
+/-- From Gloas, the pending deposits take the churn of activations. -/
+theorem depositChurnLimit_of_gloas {config : Config} {state : BeaconState preset fork}
+    (gloas : .glamsterdam ≤ fork) :
+    depositChurnLimit config state = getActivationChurnLimit config state := by
+  simp only [depositChurnLimit, gloas, ↓reduceIte]
+
+/-- Before Gloas, the pending deposits take the churn that activations and exits share. -/
+theorem depositChurnLimit_of_lt {config : Config} {state : BeaconState preset fork}
+    (before : fork < .glamsterdam) :
+    depositChurnLimit config state = getActivationExitChurnLimit config state := by
+  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  simp only [depositChurnLimit, notGloas, ↓reduceIte]
 
 /-- The churn update of an exit records its epoch as the earliest open one. -/
 theorem computeExitEpochAndUpdateChurn_earliest {config : Config}

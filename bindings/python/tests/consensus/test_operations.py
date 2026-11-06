@@ -49,6 +49,7 @@ HANDLERS = {
         "voluntary_exit",
         ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas"),
     ),
+    "voluntary_exit_churn": ("voluntary_exit", ("gloas",)),
     "execution_payload": ("body", ("bellatrix", "capella", "deneb", "electra", "fulu")),
     "withdrawals": ("execution_payload", ("capella", "deneb", "electra", "fulu", "gloas")),
     "bls_to_execution_change": ("address_change", ("capella", "deneb", "electra", "fulu")),

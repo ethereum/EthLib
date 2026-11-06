@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: epoch_processing
+handler: pending_deposits
+suite: pyspec_tests
+case: process_pending_deposits_withdrawable_validator_not_churned
