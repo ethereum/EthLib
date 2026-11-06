@@ -1,0 +1,8 @@
+topic: beacon_aggregate_and_proof
+blocks:
+- {block: 
+    block_0x7be303c94a52d4652667fae459f1c5f2744e523ffc2e5abab45bac690feaa714}
+messages:
+- {current_time_ms: 6500, message: 
+    aggregate_0xacf138dfe4cd46e9893cf0e6250a922bc5e99e1b0b784b6d1c06edee74c6fe43,
+  expected: reject, reason: aggregate data index is non-zero}

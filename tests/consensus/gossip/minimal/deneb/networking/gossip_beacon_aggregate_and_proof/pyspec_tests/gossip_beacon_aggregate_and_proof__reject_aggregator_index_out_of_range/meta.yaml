@@ -1,0 +1,8 @@
+topic: beacon_aggregate_and_proof
+blocks:
+- {block: 
+    block_0x4ec4291b4093239db1cc3f54141579def42012be60398989d24f0884685a6942}
+messages:
+- {current_time_ms: 6500, message: 
+    aggregate_0x6a2dda4c6d04e7a88d9e4348158c3f00ed92ca37ba8f0a7cf83e2964e01c205b,
+  expected: reject, reason: aggregator is not a member of the committee}

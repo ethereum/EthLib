@@ -78,12 +78,6 @@ def isSyncCommitteeAggregator (preset : Preset) (signature : BLSSignature) : Boo
   let hash := sha256Bytes32 (packBytes signature)
   bytesToUint64 (Vector.ofFn fun i : Fin 8 => hash[i.val]) % modulo == 0
 
-/-- Whether earlier bits cover new bits: one of them sets every bit that the new bits set.
-
-The lists hold one bit for each member of a subcommittee, so they have one length. -/
-def isNonStrictSuperset (seenBits : List (List Bool)) (newBits : List Bool) : Bool :=
-  seenBits.any fun prior => (prior.zip newBits).all fun (bit, newBit) => !newBit || bit
-
 /-- From Altair: the bits of the valid contributions seen for a slot, a root and a subcommittee. -/
 def Seen.contributionBits (seen : Seen) (key : Slot × Root × UInt64) : List (List Bool) :=
   seen.syncContributionBits.filterMap fun (seenKey, bits) =>

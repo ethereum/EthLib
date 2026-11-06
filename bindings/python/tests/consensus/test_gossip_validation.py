@@ -22,14 +22,18 @@ TOPICS = {
     "proposer_slashing": "altair",
     "voluntary_exit": "altair",
     "beacon_block": "altair",
+    "beacon_attestation": "altair",
+    "beacon_aggregate_and_proof": "altair",
     "sync_committee_message": "altair",
     "sync_committee_contribution_and_proof": "altair",
     "bls_to_execution_change": "capella",
 }
 SPECIFIED = ("altair", "bellatrix", "capella", "deneb", "electra", "fulu")
 # The topics whose cases stop at an earlier fork, with their last fork.
-# The Electra and Fulu block cases import blocks or cross an epoch, which waits for C35-C40.
+# The Electra and Fulu block cases import blocks, whose transition waits for C37b.
 LAST = {"beacon_block": "deneb"}
+# The cases that import an Electra or Fulu block, whose transition waits for C37b.
+WAITING = {"gossip_beacon_attestation__ignore_finalized_not_ancestor": ("electra", "fulu")}
 
 # The release archives that hold the cases.
 ARCHIVES = {
@@ -53,6 +57,13 @@ def runs(fork: str, handler: str) -> bool:
         <= SPECIFIED.index(fork)
         <= SPECIFIED.index(LAST.get(topic, SPECIFIED[-1]))
     )
+
+
+def _marks(fork: str, case: Path) -> list:
+    """The skip mark of a case that waits for the block transition of its fork."""
+    if fork in WAITING.get(case.name, ()):
+        return [pytest.mark.skip(reason="the block transition of this fork is not yet specified")]
+    return []
 
 
 def _read(case: Path, name: str) -> bytes:
@@ -119,7 +130,11 @@ def _cases() -> list:
     for meta in sorted(FILES.rglob("meta.yaml")):
         case = meta.parent
         preset, fork = case.relative_to(FILES).parts[:2]
-        cases.append(pytest.param(preset, fork, case, id=case.relative_to(FILES).as_posix()))
+        cases.append(
+            pytest.param(
+                preset, fork, case, id=case.relative_to(FILES).as_posix(), marks=_marks(fork, case)
+            )
+        )
     return cases
 
 
@@ -144,7 +159,7 @@ def _archive_cases() -> list:
                         fork,
                         case,
                         id=f"{preset}/{case.relative_to(base).as_posix()}",
-                        marks=pytest.mark.archive(name),
+                        marks=[pytest.mark.archive(name), *_marks(fork, case)],
                     )
                 )
     # An empty list would skip the test in silence, so a wrong path in an archive fails here.
@@ -191,10 +206,16 @@ def test_unknown_topic():
     case = _valid_case("gossip_voluntary_exit")
     with raises(
         consensus.ForkChoiceError,
-        "gossip validation of the topic beacon_attestation at shapella is not yet specified",
+        "gossip validation of the topic light_client_optimistic_update at shapella is not yet "
+        "specified",
     ) as info:
         consensus.gossip_validation(
-            "minimal", "shapella", _read(case, "state"), b"", "beacon_attestation", []
+            "minimal",
+            "shapella",
+            _read(case, "state"),
+            b"",
+            "light_client_optimistic_update",
+            [],
         )
     assert info.value.code == 0
 

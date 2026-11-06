@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Exports.ForkChoice
+public import EthLib.Consensus.Gossip.Attestation
 public import EthLib.Consensus.Gossip.Block
 public import EthLib.Consensus.Gossip.Operations
 public import EthLib.Consensus.Gossip.SyncCommittee
@@ -133,7 +134,8 @@ def importGossipBlock {preset : Preset} {fork : Fork} (config : Config)
 
 The sync committee has topics from Altair, and changes of BLS credentials from Capella. -/
 def gossipValidationSpecified (fork : Fork) : String → Bool
-  | "attester_slashing" | "proposer_slashing" | "voluntary_exit" | "beacon_block" => true
+  | "attester_slashing" | "proposer_slashing" | "voluntary_exit" | "beacon_block"
+  | "beacon_attestation" | "beacon_aggregate_and_proof" => true
   | "sync_committee" | "sync_committee_contribution_and_proof" => .altair ≤ fork
   | "bls_to_execution_change" => .shapella ≤ fork
   | _ => false
@@ -170,6 +172,29 @@ def validateGossipInput {preset : Preset} {fork : Fork} (config : Config)
     let outcome ← runForkChoice
       (validateBeaconBlock config checks seen store statuses signed input.currentTimeMs)
     return record outcome (·.recordBeaconBlock signed)
+  | "beacon_attestation" =>
+    if electra : .pectra ≤ fork then
+      let attestation ← decodeInput SingleAttestation input.data
+      let outcome ← runForkChoice (validateSingleAttestation config checks seen store electra
+        attestation input.currentTimeMs input.subnetId)
+      return record outcome
+        (·.recordAttestation attestation.data.target.epoch attestation.attesterIndex)
+    else
+      let attestation ← decodeInput (Attestation preset fork) input.data
+      let outcome ← runForkChoice (validateBeaconAttestation config checks seen store
+        (Nat.lt_of_not_le electra) attestation input.currentTimeMs input.subnetId)
+      if !outcome.isAccept then return (outcome, seen)
+      -- A valid attestation sets one bit, so it has an attester.
+      let some attester ← runForkChoice (beaconAttestationAttester config store attestation)
+        | throw (0, "a valid attestation has no attester")
+      return (outcome, seen.recordAttestation attestation.data.target.epoch attester)
+  | "beacon_aggregate_and_proof" =>
+    let signed ← decodeInput (SignedAggregateAndProof preset fork) input.data
+    let outcome ← runForkChoice
+      (validateAggregateAndProof config checks seen store signed input.currentTimeMs)
+    if !outcome.isAccept then return (outcome, seen)
+    let root ← runSsz "aggregate rejected" (SszType.hashTreeRoot signed.message.aggregate.data)
+    return (outcome, seen.recordAggregateAndProof signed root)
   | "sync_committee" =>
     let message ← decodeInput SyncCommitteeMessage input.data
     if altair : .altair ≤ fork then

@@ -1,0 +1,9 @@
+topic: beacon_aggregate_and_proof
+blocks:
+- {block: 
+    block_0x4ec4291b4093239db1cc3f54141579def42012be60398989d24f0884685a6942}
+messages:
+- {current_time_ms: 6500, message: 
+    aggregate_0x63dcb3e983417d91df973bc3c639072e815b627d11b9ad9147ab6013e67b0ea2,
+  expected: reject, reason: invalid aggregator signature}
+bls_setting: 1

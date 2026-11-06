@@ -1,0 +1,11 @@
+topic: beacon_aggregate_and_proof
+blocks:
+- {block: 
+    block_0x4ec4291b4093239db1cc3f54141579def42012be60398989d24f0884685a6942}
+messages:
+- {current_time_ms: 6500, message: 
+    aggregate_0x5e08d5bd63853c7b80ad0a05eb85620dc1267dfa6c08f7c54345c761333419c7,
+  expected: valid}
+- {current_time_ms: 6600, message: 
+    aggregate_0x2fe573e972fc576797192b26ab19aa48d983e42b65c64b2c5ee9bb13689617d7,
+  expected: ignore, reason: already seen aggregate for this epoch and aggregator}

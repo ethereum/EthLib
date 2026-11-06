@@ -1,0 +1,11 @@
+topic: beacon_aggregate_and_proof
+blocks:
+- {block: 
+    block_0x4ec4291b4093239db1cc3f54141579def42012be60398989d24f0884685a6942}
+- {block: 
+    block_0x5c73eb4b7a0d2d7d40857b59522bd7cdb7804b6b12febf4f5a3994082c7387f6, 
+    failed: true}
+messages:
+- {current_time_ms: 12500, message: 
+    aggregate_0x351c8ed2d1727829bb3eace9ae0842b85543527bb78898a56e07d3110a49a0b6,
+  expected: reject, reason: block being voted for failed validation}

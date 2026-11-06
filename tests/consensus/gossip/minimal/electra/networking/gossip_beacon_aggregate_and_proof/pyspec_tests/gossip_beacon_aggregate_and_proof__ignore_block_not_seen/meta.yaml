@@ -1,0 +1,8 @@
+topic: beacon_aggregate_and_proof
+blocks:
+- {block: 
+    block_0x7be303c94a52d4652667fae459f1c5f2744e523ffc2e5abab45bac690feaa714}
+messages:
+- {current_time_ms: 12500, message: 
+    aggregate_0x143151b80e562d3f74cb03623b4b1b4858013e2aa1f0413d84445c7652208333,
+  expected: ignore, reason: block being voted for has not been seen}

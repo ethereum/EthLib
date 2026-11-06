@@ -174,6 +174,9 @@ It keeps every case of the block topic from Altair to Deneb.
 A block case may import more blocks after the anchor, and mark some as failed or pending.
 It may also give the status of their payloads, and replace the finalized checkpoint.
 The Electra and Fulu block cases wait for the state transition of their blocks.
+It keeps every case of the attestation and aggregate topics at Altair, Deneb and Electra.
+Deneb changes the window of time of a vote, and Electra moves the committee out of the attestation data.
+At Bellatrix, Capella and Fulu it keeps the case with one valid message of each of these topics.
 `bindings/python/tests/consensus/test_gossip_validation.py` validates each message in Lean and compares the outcome and the reason with the case.
 
 The directory `genesis/` holds every genesis case of `minimal.tar.gz` in the same way.

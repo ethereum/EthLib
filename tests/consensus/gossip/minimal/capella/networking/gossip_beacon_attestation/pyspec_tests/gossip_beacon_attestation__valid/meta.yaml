@@ -1,0 +1,8 @@
+topic: beacon_attestation
+blocks:
+- {block: 
+    block_0x63b2597628536690d23830a4c8a1c5ccbccb6c49a0b2e1d043cf0a029863e681}
+messages:
+- {subnet_id: 2, current_time_ms: 6500, message: 
+    attestation_0x0523a66a70d9bf03b927386eb371b6ba93091d8dba920578b0ffcad50e3e72af,
+  expected: valid}

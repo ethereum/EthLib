@@ -1,0 +1,8 @@
+topic: beacon_attestation
+blocks:
+- {block: 
+    block_0x33570af1c055639caaff25701b98e8468cde61cb8c8d38531f51aa3971a97605}
+messages:
+- {subnet_id: 0, current_time_ms: 6500, message: 
+    attestation_0xd60c92f9d037c258331bc9af298dc7082538650f40d1059565729f85c171e80e,
+  expected: reject, reason: committee index out of range}

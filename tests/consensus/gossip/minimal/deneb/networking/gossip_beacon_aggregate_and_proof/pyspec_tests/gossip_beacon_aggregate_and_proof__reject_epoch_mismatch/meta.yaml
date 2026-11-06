@@ -1,0 +1,8 @@
+topic: beacon_aggregate_and_proof
+blocks:
+- {block: 
+    block_0x4ec4291b4093239db1cc3f54141579def42012be60398989d24f0884685a6942}
+messages:
+- {current_time_ms: 6500, message: 
+    aggregate_0x86371920812413c950743b3b4cc3e40dd6314c68647cca3b0001682a53383719,
+  expected: reject, reason: attestation epoch does not match target epoch}

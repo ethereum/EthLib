@@ -1,0 +1,11 @@
+topic: beacon_aggregate_and_proof
+blocks:
+- {block: 
+    block_0x33570af1c055639caaff25701b98e8468cde61cb8c8d38531f51aa3971a97605}
+messages:
+- {current_time_ms: 6500, message: 
+    aggregate_0xa124ff973726139062bbdd0fe632078a8798686b0cc5b666219a2f95a171e049,
+  expected: valid}
+- {current_time_ms: 6600, message: 
+    aggregate_0x5f0a50752eb1efa871a5b8d4d9de9125f7cc9c6712d2b53e81760d55e639c07a,
+  expected: valid}
