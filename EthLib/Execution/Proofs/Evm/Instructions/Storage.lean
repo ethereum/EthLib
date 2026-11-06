@@ -166,7 +166,7 @@ variable [GasMeter Meter]
 
 /-- SLOAD on a key: access the slot, pay, read the slot, put its word in place of the key.
 
-The price depends on whether the slot is cold. -/
+From Berlin, the price depends on whether the slot is cold. -/
 theorem sloadStep_cons {evm : Evm fork Meter} {word : U256} {rest : List U256}
     (h : evm.stack.val = word :: rest) :
     sloadStep evm =
