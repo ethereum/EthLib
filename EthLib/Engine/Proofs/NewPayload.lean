@@ -10,6 +10,8 @@ Each fork from Paris to BPO5 has a version of the method, and no other fork has 
 
 Request lists that pass the checks have distinct types, in increasing order.
 
+The checks pass only for an array of the parameters of the version, none of them null.
+
 If the last block of a chain is not the parent, a payload that passes the checks is syncing.
 
 If it is the parent, a payload whose block passes the state transition is valid.
@@ -86,6 +88,30 @@ theorem nodup_types_of_validRequests {requests : List ByteArray}
   List.Pairwise.map _ (fun _ _ ⟨a, b, ha, hb, hlt⟩ => by
     rw [ha, hb]; exact fun e => UInt8.ne_of_lt hlt (Option.some.inj e))
     (pairwise_of_validRequests h)
+
+/-! ## The parameters of the checks -/
+
+/-- The checks pass only for an array with the parameters of the version, none of them null. -/
+theorem params_of_checkNewPayload_ok {config : ChainConfig} {version : Nat} {params : Lean.Json}
+    {r : Except (PayloadStatus × PayloadError) (CheckedBlock version)}
+    (h : checkNewPayload config version params = .ok r) :
+    ∃ items : Array Lean.Json, params = .arr items ∧ items.size = paramCount version ∧
+      ∀ j ∈ items, j.isNull = false := by
+  unfold checkNewPayload at h
+  cases params with
+  | arr items' =>
+    refine ⟨items', rfl, ?_⟩
+    by_cases hc : (items'.toList.length == paramCount version) = true ∧
+        (items'.toList.all fun x => !x.isNull) = true
+    · simp only [List.all_eq_true, Bool.not_eq_true', beq_iff_eq] at hc
+      exact ⟨by simpa using hc.1, fun j hj => hc.2 j (by simpa using hj)⟩
+    · exfalso
+      simp (config := {maxSteps := 2000000}) only [hc, pure, Except.pure, ite_false,
+        reduceCtorEq, Json.invalid, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
+  | _ =>
+    exfalso
+    simp (config := {maxSteps := 2000000}) only [reduceCtorEq, Json.invalid, bind, Except.bind,
+      throw, throwThe, MonadExceptOf.throw] at h
 
 /-! ## The status on a chain that holds the parent -/
 
