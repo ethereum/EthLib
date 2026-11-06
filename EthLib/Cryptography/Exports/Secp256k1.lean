@@ -107,7 +107,7 @@ def signExport (privateKey hash : ByteArray) : Result ByteArray := runSecp256k1 
   let d ← readPrivateKey privateKey
   let h ← readHash hash
   let (r, s, odd) ← Ecdsa.sign d h
-  return ⟨(toBytesBE 32 r.val ++ toBytesBE 32 s.val ++ [if odd then 1 else 0]).toArray⟩
+  return ⟨(Base.natToBytes 32 r.val ++ Base.natToBytes 32 s.val ++ [if odd then 1 else 0]).toArray⟩
 
 /-- The ECDH shared secret of SEC 1 v2 §3.3.1: the 32-byte `x` of `d Q`.
 

@@ -111,11 +111,11 @@ theorem idVerify_idSign {sk : Fn} {challengeData ephemeralPubkey signature : Byt
     simp only [bind, Except.bind, pure, Except.pure, Except.ok.injEq] at h
     subst h
     have hv := Ecdsa.verify_sign_rfc6979 hs
-    have hr := length_toBytesBE 32 r.val
-    have hs' := length_toBytesBE 32 s.val
+    have hr := Base.natToBytes_length 32 r.val
+    have hs' := Base.natToBytes_length 32 s.val
     simp only [idVerify, Bool.and_eq_true, beq_iff_eq]
     refine ⟨by simp [ByteArray.size, hr, hs'], ?_⟩
-    simp only [List.take_left' hr, List.drop_left' hr, bytesToNat_toBytesBE]
+    simp only [List.take_left' hr, List.drop_left' hr, Base.bytesToNat_natToBytes]
     rw [Nat.mod_eq_of_lt (Nat.lt_trans r.isLt (by decide)),
       Nat.mod_eq_of_lt (Nat.lt_trans s.isLt (by decide))]
     exact hv

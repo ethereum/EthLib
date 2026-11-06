@@ -85,7 +85,7 @@ theorem verifyV4_of_verify {r : Enr} {q : Point} {rr ss : Fn} {content : ByteArr
     (hid : r.get KEY_ID = some (.bytes SCHEME_V4))
     (hkey : r.get KEY_SECP256K1 = some (.bytes q.encodeCompressed))
     (hc : Serialization.Rlp.encode r.content = .ok content)
-    (hsig : r.signature = ⟨(toBytesBE 32 rr.val ++ toBytesBE 32 ss.val).toArray⟩)
+    (hsig : r.signature = ⟨(Base.natToBytes 32 rr.val ++ Base.natToBytes 32 ss.val).toArray⟩)
     (hv : Ecdsa.verify q (Hash.Keccak.keccak256 content) rr.val ss.val = true) :
     verifyV4 r = true := by
   -- ECDSA rejects the point at infinity and points off the curve, so the key decodes.
@@ -101,16 +101,17 @@ theorem verifyV4_of_verify {r : Enr} {q : Point} {rr ss : Fn} {content : ByteArr
       rw [h0] at hv
       cases hv
     · rfl
-  have hlr := length_toBytesBE 32 rr.val
-  have hls := length_toBytesBE 32 ss.val
+  have hlr := Base.natToBytes_length 32 rr.val
+  have hls := Base.natToBytes_length 32 ss.val
   have hmod (x : Fn) : x.val % 256 ^ 32 = x.val :=
     Nat.mod_eq_of_lt (lt_trans x.isLt (by decide : Fn.modulus < 256 ^ 32))
   refine verifyV4_eq_true_iff.mpr ⟨q, content, publicKeyV4_of_get hcurve hinf hid hkey, hc,
     by rw [hsig]; simp [ByteArray.size, hlr, hls], ?_⟩
-  have hlist : r.signature.data.toList = toBytesBE 32 rr.val ++ toBytesBE 32 ss.val := by
+  have hlist :
+      r.signature.data.toList = Base.natToBytes 32 rr.val ++ Base.natToBytes 32 ss.val := by
     rw [hsig]
-  rw [hlist, List.take_left' hlr, List.drop_left' hlr, bytesToNat_toBytesBE,
-    bytesToNat_toBytesBE, hmod, hmod]
+  rw [hlist, List.take_left' hlr, List.drop_left' hlr, Base.bytesToNat_natToBytes,
+    Base.bytesToNat_natToBytes, hmod, hmod]
   exact hv
 
 /-- A record verifies when its signature is the deterministic one from its private key `sk`.
@@ -127,7 +128,7 @@ theorem verifyV4_of_sign {r : Enr} {sk rr ss : Fn} {odd : Bool} {content : ByteA
     (hkey : r.get KEY_SECP256K1 = some (.bytes (Point.mul sk Point.generator).encodeCompressed))
     (hc : Serialization.Rlp.encode r.content = .ok content)
     (hsign : Ecdsa.sign sk (Hash.Keccak.keccak256 content) = .ok (rr, ss, odd))
-    (hsig : r.signature = ⟨(toBytesBE 32 rr.val ++ toBytesBE 32 ss.val).toArray⟩) :
+    (hsig : r.signature = ⟨(Base.natToBytes 32 rr.val ++ Base.natToBytes 32 ss.val).toArray⟩) :
     verifyV4 r = true :=
   verifyV4_of_verify hid hkey hc hsig (Ecdsa.verify_sign_rfc6979 hsign)
 
