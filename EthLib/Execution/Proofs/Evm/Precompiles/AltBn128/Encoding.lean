@@ -13,7 +13,7 @@ The decoder reads back every point on the curve from its 64 bytes.
 
 Each 64 bytes that it accepts are the encoding of the point that it returns.
 
-So the decoder accepts exactly the encodings of the points on the curve, and each point has one.
+So the decoder accepts 64 bytes exactly when they encode a point on the curve.
 
 The point `(0, 0)` is not on the curve, so it cannot be confused with the point at infinity.
 
@@ -100,5 +100,11 @@ theorem g1ToBytes_of_bytesToG1 {raw : List UInt8} {p : Point} (hlen : raw.length
         · cases h
     · cases h
   · cases h
+
+/-- 64 bytes decode to a point exactly when the point is on the curve and the bytes encode it. -/
+theorem bytesToG1_eq_ok_iff {raw : List UInt8} (hlen : raw.length = 64) (p : Point) :
+    bytesToG1 raw = .ok p ↔ p.isOnCurve = true ∧ g1ToBytes p = raw :=
+  ⟨fun h => ⟨bytesToG1_isOnCurve h, g1ToBytes_of_bytesToG1 hlen h⟩,
+    fun ⟨hp, hraw⟩ => hraw ▸ bytesToG1_g1ToBytes hp⟩
 
 end EthLib.Execution.Evm.Precompiles.AltBn128
