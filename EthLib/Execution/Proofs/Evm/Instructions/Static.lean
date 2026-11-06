@@ -26,7 +26,9 @@ That holds for the instructions of each of the ten groups that give the next fra
 
 The instructions that write fail in such a frame: SSTORE, TSTORE, LOG and SELFDESTRUCT.
 
-SSTORE and SELFDESTRUCT halt the frame with the reads that they made.
+Before Glamsterdam, SSTORE and SELFDESTRUCT halt the frame with the reads that they made.
+
+From Glamsterdam, they fail before any read.
 
 The calls and the creations are not here.
 -/
@@ -210,7 +212,11 @@ theorem stateKept_sloadStep {evm after : Evm fork Meter} (h : sloadStep evm = .o
     (stateKept_recordStorageRead _ _ _)).trans
     (StateKept.of_sameContext (pushWord_sameContext h4)) |>.advance
 
-/-- SSTORE in a static frame never changes the state: it halts with the reads that it made. -/
+/-- SSTORE in a static frame never changes the state.
+
+Before Glamsterdam it halts with the reads that it made.
+
+From Glamsterdam it fails before any read. -/
 theorem stateKept_sstoreStep_of_isStatic {evm after : Evm fork Meter}
     (static : evm.message.isStatic = true) (h : sstoreStep evm = .ok after) :
     StateKept evm after := by
@@ -257,7 +263,11 @@ theorem stateKept_storageStep_of_isStatic {op : Op}
   case sload => subst hstep; exact stateKept_sloadStep h
   case sstore => subst hstep; exact stateKept_sstoreStep_of_isStatic static h
 
-/-- SELFDESTRUCT in a static frame never changes the state: it halts with the reads it made. -/
+/-- SELFDESTRUCT in a static frame never changes the state.
+
+Before Glamsterdam it halts with the reads that it made.
+
+From Glamsterdam it fails before any read. -/
 theorem stateKept_selfdestructStep_of_isStatic {evm after : Evm fork Meter}
     (static : evm.message.isStatic = true) (h : selfdestructStep fork evm = .ok after) :
     StateKept evm after := by
@@ -331,11 +341,6 @@ theorem stateKept_returnOpStep {op : Op}
     split at hstep
     · cases hstep; exact StateKept.of_sameContext (revertStep_sameContext h)
     · cases hstep
-
-/-- A choice among two instructions gives one of them. -/
-private theorem orElse_eq_some {α : Type} {a b : Option α} {x : α}
-    (h : (a <|> b) = some x) : a = some x ∨ b = some x := by
-  cases a <;> simp_all [HOrElse.hOrElse, OrElse.orElse, Option.orElse]
 
 /-- Each instruction that gives the next frame leaves the state in a static frame. -/
 theorem stateKept_instruction_of_isStatic {op : Op}
