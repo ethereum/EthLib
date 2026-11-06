@@ -18,6 +18,8 @@ namespace EthLib.Cryptography.Sphincs.Unforgeability.Bridge
 open EthLib.Cryptography.Sphincs
 open EthLib.Cryptography.Sphincs.Constants
 open SphincsSecurity.Concrete (tweakableHash)
+open EthLib.Cryptography.HashSig
+  (toList_data_append toList_data_packBytes toList_uintToBytes bytesToUint_ofBV)
 
 /-! ## Codewords -/
 
@@ -26,9 +28,8 @@ def ofEncoding (e : SphincsSecurity.Encoding) : Codeword :=
   Vector.ofFn fun i : Fin V => ⟨(e ⟨i.val, i.isLt⟩).val, (e ⟨i.val, i.isLt⟩).isLt⟩
 
 /-- A digest's bytes read back as a number are the digest's number. -/
-theorem bytesToUint_ofDigest (d : SphincsSecurity.Digest) : bytesToUint (ofDigest d) = d.toNat := by
-  rw [ofDigest, ofBV_eq_uintToBytes, Base.bytesToUint_uintToBytes]
-  exact Nat.mod_eq_of_lt (lt_of_lt_of_le d.isLt (by decide))
+theorem bytesToUint_ofDigest (d : SphincsSecurity.Digest) : bytesToUint (ofDigest d) = d.toNat :=
+  bytesToUint_ofBV 16 d
 
 /-- EthLib's digits of a digest are the model's. -/
 theorem digits_ofDigest (d : SphincsSecurity.Digest) :

@@ -39,14 +39,11 @@ namespace EthLib.Cryptography.Xmss.Unforgeability
 
 open EthLib.Cryptography.Xmss
 open EthLib.Cryptography.Xmss.Constants
+open EthLib.Cryptography.HashSig (toList_data_append toList_data_packBytes toList_uintToBytes)
 
 variable {m : Type → Type} [Monad m] [LawfulMonad m] [HasQuery XmssSecurity.HashSpec m]
 
 /-! ## Bytes of hash inputs -/
-
-@[simp] theorem toList_data_append (a b : ByteArray) :
-    (a ++ b).data.toList = a.data.toList ++ b.data.toList := by
-  simp [ByteArray.data_append]
 
 omit [Monad m] [LawfulMonad m] [HasQuery XmssSecurity.HashSpec m] in
 /-- A list of functions' values, each a list, flattened. -/

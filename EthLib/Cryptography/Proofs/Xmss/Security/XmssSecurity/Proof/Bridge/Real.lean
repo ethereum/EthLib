@@ -136,8 +136,8 @@ theorem bottomPrfInput (seed : MasterSeed) (d : Derivations) (index : LeafIndex)
       (Xmss.packBytes (ofSeed seed))).data.toList
       = bottomInput d.parameter seed (index, ⟨j.val, j.isLt⟩) := by
   rw [bottomInput_eq]
-  simp only [Xmss.thInput, Xmss.Unforgeability.toList_data_append,
-    Xmss.Unforgeability.toList_data_packBytes, Xmss.Unforgeability.toList_ofParam,
+  simp only [Xmss.thInput, EthLib.Cryptography.HashSig.toList_data_append,
+    EthLib.Cryptography.HashSig.toList_data_packBytes, Xmss.Unforgeability.toList_ofParam,
     Xmss.Unforgeability.toList_ofSeed, Xmss.Unforgeability.toList_addrPrf]
   rw [Xmss.Unforgeability.toNat_ofLeafIndex]
   -- The bottom layer adds no flag to `hi`.
@@ -150,8 +150,8 @@ theorem topPrfInput (seed : MasterSeed) (d : Derivations) (key : TopIndex) (j : 
       (Xmss.packBytes (ofSeed seed))).data.toList
       = topInput d.parameter seed (key, ⟨j.val, j.isLt⟩) := by
   rw [topInput_eq]
-  simp only [Xmss.thInput, Xmss.Unforgeability.toList_data_append,
-    Xmss.Unforgeability.toList_data_packBytes, Xmss.Unforgeability.toList_ofParam,
+  simp only [Xmss.thInput, EthLib.Cryptography.HashSig.toList_data_append,
+    EthLib.Cryptography.HashSig.toList_data_packBytes, Xmss.Unforgeability.toList_ofParam,
     Xmss.Unforgeability.toList_ofSeed, Xmss.Unforgeability.toList_addrPrf]
   rw [Xmss.Unforgeability.toNat_ofTopIndex]
   -- The top layer adds its flag to `hi`.
@@ -364,8 +364,8 @@ theorem realParam (h : Prepared seed d result cache) :
       (Xmss.packBytes (ofSeed seed))).data.toList
       = paramInput seed := by
     rw [paramInput_eq]
-    simp only [Xmss.thInput, Xmss.Unforgeability.toList_data_append,
-      Xmss.Unforgeability.toList_data_packBytes, Xmss.Unforgeability.toList_ofParam,
+    simp only [Xmss.thInput, EthLib.Cryptography.HashSig.toList_data_append,
+      EthLib.Cryptography.HashSig.toList_data_packBytes, Xmss.Unforgeability.toList_ofParam,
       Xmss.Unforgeability.toList_ofSeed, Xmss.Unforgeability.toList_addrParam]
     rfl
   refine (resolves_queryH (y := d.param) ?_).bind ?_

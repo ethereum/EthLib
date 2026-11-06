@@ -19,24 +19,9 @@ namespace EthLib.Cryptography.Sphincs.Unforgeability.Bridge
 open EthLib.Cryptography.Sphincs
 open EthLib.Cryptography.Sphincs.Constants
 open SphincsSecurity (fieldBytes tweakBytes TweakFields)
+open EthLib.Cryptography.HashSig (toList_uintToBytes append_ofNat)
 
 /-! ## The encoding -/
-
-/-- `LE_{8k}(z)`, listed, is the model's `k` bytes of `z` as a `8 k`-bit vector. -/
-theorem toList_uintToBytes (k z : Nat) :
-    (uintToBytes k z).toList = SphincsSecurity.bytesLE k (BitVec.ofNat (8 * k) z) := by
-  rw [← ofBV_ofNat, toList_ofBV]
-  rfl
-
-/-- The byte that holds a type below 32 and a step below 8. -/
-private theorem append_ofNat (tau mu : Nat) (htau : tau < 32) (hmu : mu < 8) :
-    BitVec.ofNat 3 mu ++ BitVec.ofNat 5 tau = BitVec.ofNat (8 * 1) (tau + 32 * mu) := by
-  apply BitVec.eq_of_toNat_eq
-  simp only [BitVec.toNat_append, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hmu,
-    show tau % 2 ^ 5 = tau from Nat.mod_eq_of_lt (by omega)]
-  -- The step sits above the 5 bits of the type, so `or` is a sum.
-  rw [← Nat.shiftLeft_add_eq_or_of_lt (by omega), Nat.shiftLeft_eq, Nat.mod_eq_of_lt (by omega)]
-  omega
 
 /-- The model's fields of an address that EthLib encodes. -/
 def addressFields (type : Nat) (step : Nat) (layer tree hi lo : Nat) : TweakFields :=

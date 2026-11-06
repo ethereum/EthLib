@@ -42,6 +42,7 @@ open XmssSecurity.Bridge (paramInput derivedSigningOracle realRest realGame real
   realKeygen)
 open XmssSecurity.Seeded (Erases worldKnown run'_lift_sample_bind run'_query_bind
   hashQueryBound_query_bind_of)
+open EthLib.Cryptography.HashSig (toList_data_append toList_data_packBytes)
 
 /-! ## The two calls the signer repeats -/
 

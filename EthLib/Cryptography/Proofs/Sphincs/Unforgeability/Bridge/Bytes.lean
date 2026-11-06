@@ -79,15 +79,6 @@ abbrev ofMessage {w : Nat} (x : BitVec w) : Message := ofBV MESSAGE_LEN x
     (ofMessage x).toList = SphincsSecurity.bytesLE 32 x :=
   toList_ofBV 32 x
 
-/-- The bytes of a fixed-size object, as a list. -/
-@[simp] theorem toList_data_packBytes {n : Nat} (v : Vector UInt8 n) :
-    (packBytes v).data.toList = v.toList :=
-  rfl
-
-@[simp] theorem toList_data_append (a b : ByteArray) :
-    (a ++ b).data.toList = a.data.toList ++ b.data.toList := by
-  simp [ByteArray.data_append]
-
 /-! ## The two halves of a hash value -/
 
 /-- The first 16 bytes of a hash value are the bytes of its low 128 bits. -/

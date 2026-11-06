@@ -23,6 +23,7 @@ open EthLib.Cryptography.Sphincs
 open EthLib.Cryptography.Sphincs.Constants
 open SphincsSecurity (tweakBytes fieldBytes)
 open SphincsSecurity.Concrete (tweakableHash)
+open EthLib.Cryptography.HashSig (toList_data_append toList_data_packBytes)
 
 variable {m : Type → Type} [Monad m] [LawfulMonad m] [HasQuery HashSig.HashSpec m]
 
