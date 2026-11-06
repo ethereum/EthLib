@@ -53,7 +53,8 @@ def test_every_group_has_a_runner_or_a_plan() -> None:
 # A mainnet operation, epoch step, fork or transition case holds states of a few hundred
 # kilobytes, for the same reason, and a mainnet rewards case holds one.
 # A mainnet fork choice or optimistic sync case holds an anchor state of that size too; the
-# mainnet archive has no reorg or withholding case, and merge blocks only at Bellatrix.
+# mainnet archive has no reorg, withholding or deposit reorg case, and merge blocks only at
+# Bellatrix.
 # A mainnet gossip case holds an anchor state of a few hundred kilobytes too.
 # The custody cases of Gloas and Heze repeat those of Fulu, and only the fork name in their
 # manifest differs, so only the Fulu cases are vendored.
@@ -98,7 +99,7 @@ NOT_VENDORED = (
         for handler in FORK_CHOICE
         for fork in FORK_CHOICE_FORKS
         # The optimistic cases sit under sync, not fork_choice.
-        if handler not in ("reorg", "withholding", "optimistic")
+        if handler not in ("deposit_with_reorg", "reorg", "withholding", "optimistic")
         and (handler != "on_merge_block" or fork == "bellatrix")
     }
     | {f"mainnet/{fork}/sync/optimistic" for fork in FORK_CHOICE_FORKS if fork != "altair"}

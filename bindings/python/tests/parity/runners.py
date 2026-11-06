@@ -46,9 +46,6 @@ NOT_YET = {
     "random": "the state transition after Phase 0 (consensus track C26 to C40)",
     "sanity": "the state transition after Phase 0 (consensus track C26 to C40)",
     "transition": "the Electra and Fulu blocks (consensus track C35 to C40)",
-    "fork_choice": "the Electra and Fulu blocks in the state transition (C35 to C40)",
-    "fast_confirmation": "the Electra and Fulu blocks in the state transition (C35 to C40)",
-    "sync": "the Electra and Fulu blocks in the state transition (C35 to C40)",
     "networking": "gossip validation of blocks, votes and sidecars (consensus track C63, C64)",
     "ssz_static": "the remaining beacon containers (consensus track C2, C6 to C12)",
 }

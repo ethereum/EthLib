@@ -227,8 +227,6 @@ The preset, the configuration and the fork are named in UTF-8.
 
 The signature checks run unless the last argument is false.
 
-From Electra the state transition does not yet take a block.
-
 From Gloas the store is not specified here. -/
 @[export eth_consensus_fork_choice]
 def forkChoiceExport (name fork anchorState anchorBlock steps replacements : ByteArray)
