@@ -25,13 +25,7 @@ namespace EthLib.Cryptography.Xmss.Unforgeability
 open EthLib.Cryptography.Xmss
 open EthLib.Cryptography.Xmss.Constants
 open XmssSecurity.TargetSum (decodeDigest digestEncoding digestTop digitOffset zeroBits)
-
-/-- The integer the bytes of a bit vector encode is the bit vector's. -/
-theorem bytesToUint_ofBV (n : Nat) (x : BitVec (8 * n)) :
-    bytesToUint (ofBV n x) = x.toNat := by
-  rw [ofBV_eq_uintToBytes, Base.bytesToUint_uintToBytes]
-  -- The integer is below `2^(8n) = 256^n`, so the modulus does nothing.
-  exact Nat.mod_eq_of_lt (by simpa [pow_mul] using x.isLt)
+open EthLib.Cryptography.HashSig (bytesToUint_ofBV)
 
 /-- A digest's integer is its bit vector's. -/
 @[simp] theorem bytesToUint_ofDigest (x : XmssSecurity.Digest) :

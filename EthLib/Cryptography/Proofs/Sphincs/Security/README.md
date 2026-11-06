@@ -97,6 +97,9 @@ The changes that follow from this are:
   A file that imports all of Mathlib needs more memory than EthLib's limit per file.
 - `LazyRun/Reveal.lean` states that revealing a coordinate commutes with sampling the rest of a uniform table as an equality in distribution.
 - `lake exe check-decls` rejects `opaque` declarations, so the sampling instances of `Seed/Model.lean`, `GraphView/Sampling.lean` and `LazyRun/GraphSampling.lean` are irreducible definitions instead.
+- leanXMSS uses the same random oracle, and neither scheme imports the other.
+  So the oracle, its inputs and answers and the truncation of an answer come from `Proofs/HashSig/Oracle.lean`.
+  `Scheme.lean` exports them under their old names, so the proof keeps them.
 - No file raises the heartbeat limit.
 - Arguments that the simplifier does not use, deprecated lemma names and unused section variables are removed, so the files build without warnings.
 

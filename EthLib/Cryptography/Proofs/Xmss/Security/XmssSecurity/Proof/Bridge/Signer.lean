@@ -66,8 +66,8 @@ theorem rndInput_toList (P : PublicParameter) (seed : MasterSeed) (index : LeafI
       (Xmss.packBytes (ofSeed seed) ++ Xmss.packBytes (ofMessage message))).data.toList
       = rndInput P seed ⟨index, message⟩ := by
   rw [rndInput_eq]
-  simp only [Xmss.thInput, Xmss.Unforgeability.toList_data_append,
-    Xmss.Unforgeability.toList_data_packBytes, Xmss.Unforgeability.toList_ofParam,
+  simp only [Xmss.thInput, EthLib.Cryptography.HashSig.toList_data_append,
+    EthLib.Cryptography.HashSig.toList_data_packBytes, Xmss.Unforgeability.toList_ofParam,
     Xmss.Unforgeability.toList_ofSeed, Xmss.Unforgeability.toList_ofMessage,
     Xmss.Unforgeability.toList_addrRnd, Xmss.Unforgeability.toNat_ofLeafIndex]
   -- The bottom layer adds no flag to `hi`.
@@ -81,8 +81,8 @@ theorem topRndInput_toList (P : PublicParameter) (seed : MasterSeed) (key : TopI
       (Xmss.packBytes (ofSeed seed) ++ Xmss.packBytes (ofDigest root))).data.toList
       = topRndInput P seed (key, root) := by
   rw [topRndInput_eq]
-  simp only [Xmss.thInput, Xmss.Unforgeability.toList_data_append,
-    Xmss.Unforgeability.toList_data_packBytes, Xmss.Unforgeability.toList_ofParam,
+  simp only [Xmss.thInput, EthLib.Cryptography.HashSig.toList_data_append,
+    EthLib.Cryptography.HashSig.toList_data_packBytes, Xmss.Unforgeability.toList_ofParam,
     Xmss.Unforgeability.toList_ofSeed, Xmss.Unforgeability.toList_ofDigest,
     Xmss.Unforgeability.toList_addrRnd, Xmss.Unforgeability.toNat_ofTopIndex]
   -- The top layer adds its flag to `hi`.

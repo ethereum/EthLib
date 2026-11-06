@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Bytes
 public import EthLib.Base.Proofs.LittleEndian
 public import EthLib.Cryptography.Proofs.HashSig.Oracle
 
@@ -84,6 +85,40 @@ theorem ofBV_eq_uintToBytes (n : Nat) {w : Nat} (y : BitVec w) :
   simp only [UInt8.toNat_ofBitVec, BitVec.extractLsb'_toNat, Nat.shiftRight_eq_div_pow]
   rw [show (256 : Nat) ^ i = 2 ^ (8 * i) by rw [pow_mul]; norm_num]
   simp
+
+/-- `LE_{8k}(z)`, listed, is `bytesLE k` of `z` as an `8 k`-bit vector. -/
+theorem toList_uintToBytes (k z : Nat) :
+    (uintToBytes k z).toList = bytesLE k (BitVec.ofNat (8 * k) z) := by
+  rw [← ofBV_ofNat, toList_ofBV]
+
+/-- The integer that the bytes of a bit vector encode is the bit vector's. -/
+theorem bytesToUint_ofBV (n : Nat) (x : BitVec (8 * n)) :
+    bytesToUint (ofBV n x) = x.toNat := by
+  rw [ofBV_eq_uintToBytes, Base.bytesToUint_uintToBytes]
+  -- The integer is below `2^(8n) = 256^n`, so the modulus does nothing.
+  exact Nat.mod_eq_of_lt (by simpa [pow_mul] using x.isLt)
+
+/-- The byte that holds a 5-bit field below a 3-bit field, as one 8-bit vector. -/
+theorem append_ofNat (tau mu : Nat) (htau : tau < 32) (hmu : mu < 8) :
+    BitVec.ofNat 3 mu ++ BitVec.ofNat 5 tau = BitVec.ofNat (8 * 1) (tau + 32 * mu) := by
+  apply BitVec.eq_of_toNat_eq
+  simp only [BitVec.toNat_append, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hmu,
+    show tau % 2 ^ 5 = tau from Nat.mod_eq_of_lt (by omega)]
+  -- The high field sits above the 5 low bits, so `or` is a sum.
+  rw [← Nat.shiftLeft_add_eq_or_of_lt (by omega), Nat.shiftLeft_eq, Nat.mod_eq_of_lt (by omega)]
+  omega
+
+/-! ## Byte arrays as lists -/
+
+/-- The bytes of a fixed-size object, as a list. -/
+@[simp] theorem toList_data_packBytes {n : Nat} (v : Vector UInt8 n) :
+    (Base.packBytes v).data.toList = v.toList :=
+  rfl
+
+/-- The bytes of two byte arrays, joined, as a list. -/
+@[simp] theorem toList_data_append (a b : ByteArray) :
+    (a ++ b).data.toList = a.data.toList ++ b.data.toList := by
+  simp [ByteArray.data_append]
 
 /-! ## Back from bytes
 
