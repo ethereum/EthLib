@@ -29,11 +29,6 @@ TOPICS = {
     "bls_to_execution_change": "capella",
 }
 SPECIFIED = ("altair", "bellatrix", "capella", "deneb", "electra", "fulu")
-# The topics whose cases stop at an earlier fork, with their last fork.
-# The Electra and Fulu block cases import blocks, whose transition waits for C37b.
-LAST = {"beacon_block": "deneb"}
-# The cases that import an Electra or Fulu block, whose transition waits for C37b.
-WAITING = {"gossip_beacon_attestation__ignore_finalized_not_ancestor": ("electra", "fulu")}
 
 # The release archives that hold the cases.
 ARCHIVES = {
@@ -53,17 +48,8 @@ def runs(fork: str, handler: str) -> bool:
     return (
         fork in SPECIFIED
         and topic in TOPICS
-        and SPECIFIED.index(TOPICS[topic])
-        <= SPECIFIED.index(fork)
-        <= SPECIFIED.index(LAST.get(topic, SPECIFIED[-1]))
+        and SPECIFIED.index(TOPICS[topic]) <= SPECIFIED.index(fork)
     )
-
-
-def _marks(fork: str, case: Path) -> list:
-    """The skip mark of a case that waits for the block transition of its fork."""
-    if fork in WAITING.get(case.name, ()):
-        return [pytest.mark.skip(reason="the block transition of this fork is not yet specified")]
-    return []
 
 
 def _read(case: Path, name: str) -> bytes:
@@ -130,11 +116,7 @@ def _cases() -> list:
     for meta in sorted(FILES.rglob("meta.yaml")):
         case = meta.parent
         preset, fork = case.relative_to(FILES).parts[:2]
-        cases.append(
-            pytest.param(
-                preset, fork, case, id=case.relative_to(FILES).as_posix(), marks=_marks(fork, case)
-            )
-        )
+        cases.append(pytest.param(preset, fork, case, id=case.relative_to(FILES).as_posix()))
     return cases
 
 
@@ -159,7 +141,7 @@ def _archive_cases() -> list:
                         fork,
                         case,
                         id=f"{preset}/{case.relative_to(base).as_posix()}",
-                        marks=[pytest.mark.archive(name), *_marks(fork, case)],
+                        marks=pytest.mark.archive(name),
                     )
                 )
     # An empty list would skip the test in silence, so a wrong path in an archive fails here.

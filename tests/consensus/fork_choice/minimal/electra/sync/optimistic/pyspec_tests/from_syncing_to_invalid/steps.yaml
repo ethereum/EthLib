@@ -1,0 +1,103 @@
+- {tick: 7728}
+- checks:
+    time: 7728
+    head:
+      slot: 0
+      root: '0xdd79fae2e505861809a1639e91209b76d38b6191376c9816604fe86599866873'
+    justified_checkpoint:
+      epoch: 0
+      root: '0xdd79fae2e505861809a1639e91209b76d38b6191376c9816604fe86599866873'
+    finalized_checkpoint:
+      epoch: 0
+      root: '0xdd79fae2e505861809a1639e91209b76d38b6191376c9816604fe86599866873'
+    proposer_boost_root: '0x0000000000000000000000000000000000000000000000000000000000000000'
+- block_hash: '0xae0932be4a440c9ef07b326fee7f62edfc5e98c03de62d5a2f888423c236db25'
+  payload_status:
+    status: VALID
+    latest_valid_hash: '0xae0932be4a440c9ef07b326fee7f62edfc5e98c03de62d5a2f888423c236db25'
+    validation_error: null
+- {block: 
+    block_0x6f9392d7fd4d85d3ae1618d8ab0791489e31cf55c873d137e0f3c4c98ef209f7, 
+    valid: true}
+- checks:
+    head:
+      slot: 9
+      root: '0x6f9392d7fd4d85d3ae1618d8ab0791489e31cf55c873d137e0f3c4c98ef209f7'
+- block_hash: '0x275dace3b3067b13ef1dbb883b6c637ef6df739427b17728e6a6d40f8df9172a'
+  payload_status:
+    status: VALID
+    latest_valid_hash: '0x275dace3b3067b13ef1dbb883b6c637ef6df739427b17728e6a6d40f8df9172a'
+    validation_error: null
+- {block: 
+    block_0x1310c2ad29404f37e4f1a0f4e487980339e999da0438aa6c6aa93ee1c0cdb2ea, 
+    valid: true}
+- checks:
+    head:
+      slot: 10
+      root: '0x1310c2ad29404f37e4f1a0f4e487980339e999da0438aa6c6aa93ee1c0cdb2ea'
+- block_hash: '0xfc2a5e1e6818e4a0048832f2f3b7736fcc725e392f252ea904e8d32ee482625f'
+  payload_status:
+    status: VALID
+    latest_valid_hash: '0xfc2a5e1e6818e4a0048832f2f3b7736fcc725e392f252ea904e8d32ee482625f'
+    validation_error: null
+- {block: 
+    block_0x3b70a797fa1d7cb718b11c259d10ea063b2127074b8f57cebbbe91f4d0debe83, 
+    valid: true}
+- checks:
+    head:
+      slot: 11
+      root: '0x3b70a797fa1d7cb718b11c259d10ea063b2127074b8f57cebbbe91f4d0debe83'
+- block_hash: '0x3c1abc66aa4fdeacda7f4ece18314b35a966f388c6e27f907a596f10ecdf2f2e'
+  payload_status:
+    status: VALID
+    latest_valid_hash: '0x3c1abc66aa4fdeacda7f4ece18314b35a966f388c6e27f907a596f10ecdf2f2e'
+    validation_error: null
+- {block: 
+    block_0xc4391abfe38d2350679e3c75ad74c83e4f1438d152ac269a09ca641511833373, 
+    valid: true}
+- checks:
+    head:
+      slot: 12
+      root: '0xc4391abfe38d2350679e3c75ad74c83e4f1438d152ac269a09ca641511833373'
+- block_hash: '0x5bcf8c2f5577246ec0eb2c3c18211062144b1de34502679e4958404f828915fd'
+  payload_status: {status: SYNCING, latest_valid_hash: null, validation_error: 
+      null}
+- {block: 
+    block_0xbcafdb176c5a2a8144ef9bdf8bbf8626f31c0d0e42f73eb5afb197489367be8c, 
+    valid: true}
+- checks:
+    head:
+      slot: 10
+      root: '0xbcafdb176c5a2a8144ef9bdf8bbf8626f31c0d0e42f73eb5afb197489367be8c'
+- block_hash: '0x8e67a4869d08adb5986e0018d8958bba26347a19f4abff9ec4ea20036461c689'
+  payload_status: {status: SYNCING, latest_valid_hash: null, validation_error: 
+      null}
+- {block: 
+    block_0x66f0dd87e45a69b1616ef00c2e39c72ed96263d5aee4d056a2fc7cfc37c5bc32, 
+    valid: true}
+- checks:
+    head:
+      slot: 11
+      root: '0x66f0dd87e45a69b1616ef00c2e39c72ed96263d5aee4d056a2fc7cfc37c5bc32'
+- block_hash: '0x356efaabe66323f4054afd939b5304eb16f2e0d5423242704f552b4bf7a299a8'
+  payload_status: {status: SYNCING, latest_valid_hash: null, validation_error: 
+      null}
+- {block: 
+    block_0xede444339d440c29633faa875ca156ec0787e4e72082be5569807e9ae4d9e9fb, 
+    valid: true}
+- checks:
+    head:
+      slot: 12
+      root: '0xede444339d440c29633faa875ca156ec0787e4e72082be5569807e9ae4d9e9fb'
+- block_hash: '0x62c3fca4d3a007b3aa20d279ce030ea81e365e06b8d7d72fcb25af71e228ac98'
+  payload_status:
+    status: INVALID
+    latest_valid_hash: '0xae0932be4a440c9ef07b326fee7f62edfc5e98c03de62d5a2f888423c236db25'
+    validation_error: invalid
+- {block: 
+    block_0x992311f8c01b2189c39f7b1bbe01863c67b294137e7a8141bc12f4359e55818a, 
+    valid: false}
+- checks:
+    head:
+      slot: 12
+      root: '0xc4391abfe38d2350679e3c75ad74c83e4f1438d152ac269a09ca641511833373'

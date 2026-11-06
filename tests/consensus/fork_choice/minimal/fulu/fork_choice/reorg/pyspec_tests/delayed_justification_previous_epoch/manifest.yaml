@@ -1,0 +1,6 @@
+preset: minimal
+fork: fulu
+runner: fork_choice
+handler: reorg
+suite: pyspec_tests
+case: delayed_justification_previous_epoch

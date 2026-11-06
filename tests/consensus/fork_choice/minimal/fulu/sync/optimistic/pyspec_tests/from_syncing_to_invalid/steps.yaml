@@ -1,0 +1,103 @@
+- {tick: 7728}
+- checks:
+    time: 7728
+    head:
+      slot: 0
+      root: '0xb74d39065fccf42e828bf0220c1c433ff8d4b46d8c24254d5509a10e525e7d05'
+    justified_checkpoint:
+      epoch: 0
+      root: '0xb74d39065fccf42e828bf0220c1c433ff8d4b46d8c24254d5509a10e525e7d05'
+    finalized_checkpoint:
+      epoch: 0
+      root: '0xb74d39065fccf42e828bf0220c1c433ff8d4b46d8c24254d5509a10e525e7d05'
+    proposer_boost_root: '0x0000000000000000000000000000000000000000000000000000000000000000'
+- block_hash: '0xf686ce958d9429518a8413d13cbe8dcaff4b74b56f74a6452da9fcd738207c05'
+  payload_status:
+    status: VALID
+    latest_valid_hash: '0xf686ce958d9429518a8413d13cbe8dcaff4b74b56f74a6452da9fcd738207c05'
+    validation_error: null
+- {block: 
+    block_0x74c878cf915801e14bf7ff6dd35b45b796c4b994d49197e81581054eb951fbd3, 
+    valid: true}
+- checks:
+    head:
+      slot: 9
+      root: '0x74c878cf915801e14bf7ff6dd35b45b796c4b994d49197e81581054eb951fbd3'
+- block_hash: '0xdee9edefa51bbe9bb904015424c8703ccb6c82b82173a51fbda1565ab46f6ed0'
+  payload_status:
+    status: VALID
+    latest_valid_hash: '0xdee9edefa51bbe9bb904015424c8703ccb6c82b82173a51fbda1565ab46f6ed0'
+    validation_error: null
+- {block: 
+    block_0x997e42aed1d4e87f3256717afb82003bae42d34b4ea12b55e00a5e94d2b72872, 
+    valid: true}
+- checks:
+    head:
+      slot: 10
+      root: '0x997e42aed1d4e87f3256717afb82003bae42d34b4ea12b55e00a5e94d2b72872'
+- block_hash: '0x8e5fc61cbf8ee943b81d432ed3b5c472aaef8e532e2ab546c668157a3c66b988'
+  payload_status:
+    status: VALID
+    latest_valid_hash: '0x8e5fc61cbf8ee943b81d432ed3b5c472aaef8e532e2ab546c668157a3c66b988'
+    validation_error: null
+- {block: 
+    block_0xf325e81aa2dbcb91ec7ca624973790a7ef6dc64823079e896fe1651ce385e9a6, 
+    valid: true}
+- checks:
+    head:
+      slot: 11
+      root: '0xf325e81aa2dbcb91ec7ca624973790a7ef6dc64823079e896fe1651ce385e9a6'
+- block_hash: '0xd8ab13f40de02ce95222ca88a52c460c9ad812b51aaa23e48d35039b3fcd3d97'
+  payload_status:
+    status: VALID
+    latest_valid_hash: '0xd8ab13f40de02ce95222ca88a52c460c9ad812b51aaa23e48d35039b3fcd3d97'
+    validation_error: null
+- {block: 
+    block_0x1333cf79ea952183b4f9656b24476b970b80a92ef73c8283e0e3b5025a5c0708, 
+    valid: true}
+- checks:
+    head:
+      slot: 12
+      root: '0x1333cf79ea952183b4f9656b24476b970b80a92ef73c8283e0e3b5025a5c0708'
+- block_hash: '0x82fd11d0966651fde2a5e24163eeea5c9eee866837728d22047aa58ba5d1373d'
+  payload_status: {status: SYNCING, latest_valid_hash: null, validation_error: 
+      null}
+- {block: 
+    block_0x7d2df5b496493f20e225b635487640c7ac93c9084bec1632b3c6c6926bba423c, 
+    valid: true}
+- checks:
+    head:
+      slot: 12
+      root: '0x1333cf79ea952183b4f9656b24476b970b80a92ef73c8283e0e3b5025a5c0708'
+- block_hash: '0xc3f999bf43c4033e09de5262655398f2239c968e1435ed7bbc1a6323b1b86ca9'
+  payload_status: {status: SYNCING, latest_valid_hash: null, validation_error: 
+      null}
+- {block: 
+    block_0x4b4f0cf253da41d50b7fdc37f867905b49e89aec8793a6f1333eabd125409968, 
+    valid: true}
+- checks:
+    head:
+      slot: 11
+      root: '0x4b4f0cf253da41d50b7fdc37f867905b49e89aec8793a6f1333eabd125409968'
+- block_hash: '0x4512aa96b4b2155d2c3c2fd0e4f86c8682b0e12a973aed8dd1d4993ae42e96c5'
+  payload_status: {status: SYNCING, latest_valid_hash: null, validation_error: 
+      null}
+- {block: 
+    block_0x72f3c89bca5613dc6e442b040aba347b4020aeac7078a27ae8d389dd44c59531, 
+    valid: true}
+- checks:
+    head:
+      slot: 12
+      root: '0x72f3c89bca5613dc6e442b040aba347b4020aeac7078a27ae8d389dd44c59531'
+- block_hash: '0x56b218e08519ac1db60db4ff0e6623e3dc748d1f214ba61af76c2f73bd327ba1'
+  payload_status:
+    status: INVALID
+    latest_valid_hash: '0xf686ce958d9429518a8413d13cbe8dcaff4b74b56f74a6452da9fcd738207c05'
+    validation_error: invalid
+- {block: 
+    block_0x03849044d9d5055443a9143fea573e6ec7157b904ac8f795c7cc1a1950943887, 
+    valid: false}
+- checks:
+    head:
+      slot: 12
+      root: '0x1333cf79ea952183b4f9656b24476b970b80a92ef73c8283e0e3b5025a5c0708'

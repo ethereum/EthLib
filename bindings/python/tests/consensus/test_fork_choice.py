@@ -19,6 +19,7 @@ FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "fork_choi
 
 # The handlers that EthLib runs, and the forks at which it runs them.
 HANDLERS = (
+    "deposit_with_reorg",
     "ex_ante",
     "get_head",
     "get_proposer_head",
@@ -28,7 +29,7 @@ HANDLERS = (
     "reorg",
     "withholding",
 )
-SPECIFIED = ("altair", "bellatrix", "capella", "deneb")
+SPECIFIED = ("altair", "bellatrix", "capella", "deneb", "electra", "fulu")
 
 # The suites of the fast confirmation cases, which EthLib runs at the forks above.
 FAST_CONFIRMATION = (
@@ -56,17 +57,6 @@ FAST_CONFIRMATION_CHECKS = (
     "safe_execution_block_hash",
 )
 
-# The Fulu cases that judge the columns of a block, which EthLib checks before the state
-# transition; that transition does not yet take a Fulu block.
-COLUMN_CASES = "on_block_peerdas__"
-
-# The codes of the errors that the data check raises: a bad KZG input, missing columns and
-# invalid columns.
-_DATA_CODES = (30, 32, 33)
-
-# The code of a rejection by the state transition.
-_TRANSITION_CODE = 10
-
 # The release archives that hold the cases.
 ARCHIVES = {
     "minimal": "consensus-specs/v1.7.0-beta.4/minimal",
@@ -83,11 +73,6 @@ def runs(fork: str, runner: str, handler: str) -> bool:
     """Whether EthLib runs the cases of a handler at a fork."""
     suites = FAST_CONFIRMATION if runner == "fast_confirmation" else HANDLERS
     return fork in SPECIFIED and handler in suites
-
-
-def checks_columns(fork: str, case: Path) -> bool:
-    """Whether EthLib runs a Fulu case only up to the check of the columns of its block."""
-    return fork == "fulu" and fork not in SPECIFIED and case.name.startswith(COLUMN_CASES)
 
 
 def _load(path: Path):
@@ -201,17 +186,9 @@ def run_case(preset: str, fork: str, case: Path) -> None:
         if "checks" in step:
             assert all(isinstance(read, dict) for read in reads), (index, reads)
             _check(outcome, step["checks"])
-        elif not checks_columns(fork, case):
-            assert (outcome is None) == step.get("valid", True), (index, step, outcome)
-        elif step.get("valid", True):
-            # The columns pass, so only the state transition may reject the block.
-            assert outcome is None or outcome.code == _TRANSITION_CODE, (index, step, outcome)
-            if outcome is not None:
-                # Later steps need the block that the transition rejects.
-                break
         else:
-            assert outcome is not None and outcome.code in _DATA_CODES, (index, step, outcome)
-    assert next(outcomes, None) is None or checks_columns(fork, case)
+            assert (outcome is None) == step.get("valid", True), (index, step, outcome)
+    assert next(outcomes, None) is None
 
 
 def _cases() -> list:
@@ -230,7 +207,7 @@ def _archive_cases() -> list:
         return []
     cases = []
     for preset, name in ARCHIVES.items():
-        paths = [f"tests/{preset}/{fork}/fork_choice" for fork in (*SPECIFIED, "fulu")]
+        paths = [f"tests/{preset}/{fork}/fork_choice" for fork in SPECIFIED]
         # The optimistic sync cases start at Bellatrix.
         paths += [f"tests/{preset}/{fork}/sync" for fork in SPECIFIED if fork != "altair"]
         # The fast confirmation cases are minimal only.
@@ -245,7 +222,7 @@ def _archive_cases() -> list:
         for steps in sorted(found):
             case = steps.parent
             fork, runner, handler = case.relative_to(base).parts[:3]
-            if runs(fork, runner, handler) or checks_columns(fork, case):
+            if runs(fork, runner, handler):
                 cases.append(
                     pytest.param(
                         preset,
@@ -273,7 +250,7 @@ def test_digests():
 
 @pytest.mark.parametrize("preset, fork, case", _cases())
 def test_case(preset, fork, case):
-    assert runs(fork, case.parts[-4], case.parts[-3]) or checks_columns(fork, case)
+    assert runs(fork, case.parts[-4], case.parts[-3])
     run_case(preset, fork, case)
 
 

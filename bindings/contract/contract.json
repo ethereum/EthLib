@@ -2686,7 +2686,7 @@
       {"constructor": "invalidColumns", "code": 33}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "The outcome of each step of a fork choice case, from an anchor state and an anchor block.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nThe signature checks run unless the last argument is false.\n\nFrom Electra the state transition does not yet take a block.\n\nFrom Gloas the store is not specified here."},
+   "The outcome of each step of a fork choice case, from an anchor state and an anchor block.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nThe signature checks run unless the last argument is false.\n\nFrom Gloas the store is not specified here."},
   {"summary":
    "Validate the messages of a topic in turn, against the store of an anchor and later blocks.",
    "signature":

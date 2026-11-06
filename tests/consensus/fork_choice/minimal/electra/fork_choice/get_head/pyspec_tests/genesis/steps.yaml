@@ -1,0 +1,5 @@
+- checks:
+    genesis_time: 0
+    head:
+      slot: 0
+      root: '0xdd79fae2e505861809a1639e91209b76d38b6191376c9816604fe86599866873'
