@@ -50,11 +50,6 @@ def parseBytes (n : Nat) (err : Nat → KzgError) (b : ByteArray) :
 
 /-! ## Bytes <-> field element helpers -/
 
-/-- Encode `n` as `len` big-endian bytes. -/
-def intToBytesBE (n : Nat) (len : Nat) : ByteArray :=
-  ByteArray.mk <| Array.ofFn (n := len) fun i =>
-    UInt8.ofNat ((n >>> ((len - 1 - i.val) * 8)) &&& 0xff)
-
 /-- Convert untrusted bytes to an element of the BLS scalar field.
 
 It rejects an integer of at least the modulus. -/

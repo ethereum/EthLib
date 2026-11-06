@@ -74,14 +74,8 @@ theorem compute_eq_pow_mod (data : ByteArray) (l : Lengths) :
 theorem compute_modulus_zero (data : ByteArray) (l : Lengths)
     (h : readNat data l.modulusStart l.modulus = 0) :
     (compute data l).data = Array.replicate l.modulus 0 := by
-  -- Zero written on any width is that many zero bytes.
-  have h1 : natToBytes l.modulus 0 = List.replicate l.modulus 0 := by
-    generalize l.modulus = len
-    induction len with
-    | zero => rfl
-    | succ len ih => simp [natToBytes, ih, List.replicate_succ']
   have := compute_data data l
-  rw [ite_eq_left h, h1] at this
+  rw [ite_eq_left h, natToBytes_zero_right] at this
   exact Array.toList_inj.mp (by simpa using this)
 
 /-- An empty modulus gives an empty output, even with an empty base.

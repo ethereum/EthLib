@@ -57,54 +57,6 @@ theorem throw_bind {ε α β : Type} (e : ε) (f : α → Except ε β) :
     (throw e >>= f : Except ε β) = throw e :=
   rfl
 
-/-- Decoding the encoding of `n` over `len` bytes recovers `n` modulo
-`256 ^ len`. -/
-theorem bytesToNat_intToBytesBE (n len : Nat) :
-    Base.bytesToNat (intToBytesBE n len).data.toList = n % 256 ^ len := by
-  induction len with
-  | zero => simp [intToBytesBE, Base.bytesToNat, Nat.mod_one]
-  | succ len ih =>
-    have hdecomp : (intToBytesBE n (len + 1)).data.toList
-        = UInt8.ofNat ((n >>> (len * 8)) &&& 0xff) ::
-          (intToBytesBE n len).data.toList := by
-      have h0 : len + 1 - 1 - 0 = len := by omega
-      have hs : ∀ i : Fin len, len + 1 - 1 - (i.val + 1) = len - 1 - i.val :=
-        fun i => by omega
-      simp only [intToBytesBE, Array.toList_ofFn, List.ofFn_succ,
-        Fin.val_zero, Fin.val_succ, h0, hs]
-    have hlen : (intToBytesBE n len).data.toList.length = len := by
-      simp [intToBytesBE]
-    have hbyte : (UInt8.ofNat ((n >>> (len * 8)) &&& 0xff)).toNat
-        = n / 256 ^ len % 256 := by
-      rw [UInt8.toNat_ofNat', show (0xff : Nat) = 2 ^ 8 - 1 by decide,
-        Nat.and_two_pow_sub_one_eq_mod, Nat.mod_mod,
-        Nat.shiftRight_eq_div_pow, Nat.pow_mul',
-        show (2 : Nat) ^ 8 = 256 by decide]
-    rw [hdecomp, Base.bytesToNat_cons, hlen, hbyte, ih, Nat.pow_succ, Nat.mod_mul,
-      Nat.mul_comm (n / 256 ^ len % 256)]
-    exact Nat.add_comm _ _
-
-/-- Decoding inverts encoding for values that fit in `len` bytes. -/
-theorem bytesToNat_intToBytesBE_of_lt {n len : Nat}
-    (h : n < 256 ^ len) :
-    Base.bytesToNat (intToBytesBE n len).data.toList = n := by
-  rw [bytesToNat_intToBytesBE, Nat.mod_eq_of_lt h]
-
-/-- Encoding a decoded byte array at its own size gives back the same bytes.
-
-Big-endian encoding has no slack once the length is fixed.
-So any byte array is the canonical encoding of its own value.
--/
-theorem intToBytesBE_bytesToNat (b : ByteArray) :
-    intToBytesBE (Base.bytesToNat b.data.toList) b.size = b := by
-  -- The decoded value fits in the size, so encoding then decoding returns it.
-  -- Both arrays then have the same size and the same value, hence the same bytes.
-  have fits : Base.bytesToNat b.data.toList < 256 ^ b.size := by
-    simpa using Base.bytesToNat_lt b.data.toList
-  refine ByteArray.ext (Array.ext' (Base.bytesToNat_inj ?_ ?_))
-  · simp [intToBytesBE]
-  · exact bytesToNat_intToBytesBE_of_lt fits
-
 /-- A decoded field element is the big-endian value of its bytes.
 
 That value is below the modulus. -/

@@ -212,16 +212,16 @@ def computeVerifyCellKzgProofBatchChallenge
     (cosetsEvals : Array CosetEvals)
     (proofs : Array KZGProof) : Fr :=
   let h := RANDOM_CHALLENGE_KZG_CELL_BATCH_DOMAIN
-    ++ intToBytesBE FIELD_ELEMENTS_PER_BLOB 8
-    ++ intToBytesBE FIELD_ELEMENTS_PER_CELL 8
-    ++ intToBytesBE commitments.size 8
-    ++ intToBytesBE cellIndices.size 8
+    ++ ⟨(Base.natToBytes 8 FIELD_ELEMENTS_PER_BLOB).toArray⟩
+    ++ ⟨(Base.natToBytes 8 FIELD_ELEMENTS_PER_CELL).toArray⟩
+    ++ ⟨(Base.natToBytes 8 commitments.size).toArray⟩
+    ++ ⟨(Base.natToBytes 8 cellIndices.size).toArray⟩
   let h := commitments.foldl (init := h) fun h c => h ++ ⟨c.toArray⟩
   -- One entry per cell, from four arrays of one length, which the callers check.
   let cells := (commitmentIndices.zip cellIndices).zip (cosetsEvals.zip proofs)
   let h := cells.foldl (init := h) fun h ((commitmentIndex, cellIndex), (evals, proof)) =>
-    let h := h ++ intToBytesBE commitmentIndex 8
-    let h := h ++ intToBytesBE cellIndex 8
+    let h := h ++ ⟨(Base.natToBytes 8 commitmentIndex).toArray⟩
+    let h := h ++ ⟨(Base.natToBytes 8 cellIndex).toArray⟩
     let h := evals.foldl (init := h) fun h ce =>
       h ++ ⟨(blsFieldToBytes ce).toArray⟩
     h ++ ⟨proof.toArray⟩

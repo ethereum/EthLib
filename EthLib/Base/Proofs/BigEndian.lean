@@ -10,6 +10,7 @@ Reading and writing big-endian bytes undo each other.
 - A list of `k` bytes holds a value below `256 ^ k`.
 - Writing `n` on `len` bytes gives bytes that read back as `n % 256 ^ len`.
 - On `a + b` bytes, `n` is `n / 256 ^ b` on the first `a` bytes, then `n` on the last `b`.
+- Zero on `len` bytes is `len` zero bytes.
 - Reading `k` bytes and writing the value back on `k` bytes gives the same bytes.
 -/
 
@@ -55,10 +56,10 @@ theorem bytesToNat_lt (bytes : List UInt8) : bytesToNat bytes < 256 ^ bytes.leng
 theorem bytesToNat_natToBytes (len n : Nat) :
     bytesToNat (natToBytes len n) = n % 256 ^ len := by
   induction len generalizing n with
-  | zero => simp [natToBytes, bytesToNat, Nat.mod_one]
+  | zero => simp [natToBytes_zero, bytesToNat, Nat.mod_one]
   | succ len ih =>
     -- Split off the lowest byte, which is written last.
-    rw [natToBytes, bytesToNat_append, ih, List.length_singleton]
+    rw [natToBytes_succ, bytesToNat_append, ih, List.length_singleton]
     have hlow : bytesToNat [UInt8.ofNat (n % 256)] = n % 256 := by
       simp [bytesToNat]
     rw [hlow, Nat.pow_one]
@@ -69,11 +70,17 @@ theorem bytesToNat_natToBytes (len n : Nat) :
 theorem natToBytes_add (a b n : Nat) :
     natToBytes (a + b) n = natToBytes a (n / 256 ^ b) ++ natToBytes b n := by
   induction b generalizing n with
-  | zero => simp [natToBytes]
+  | zero => simp [natToBytes_zero]
   | succ b ih =>
     -- Both sides end with the lowest byte, and the higher bytes are `n / 256` written on `a + b`.
-    rw [← Nat.add_assoc, natToBytes, ih, natToBytes, List.append_assoc, Nat.div_div_eq_div_mul,
-      Nat.pow_succ, Nat.mul_comm 256]
+    rw [← Nat.add_assoc, natToBytes_succ, ih, natToBytes_succ, List.append_assoc,
+      Nat.div_div_eq_div_mul, Nat.pow_succ, Nat.mul_comm 256]
+
+/-- Zero on `len` bytes is `len` zero bytes. -/
+theorem natToBytes_zero_right (len : Nat) : natToBytes len 0 = List.replicate len 0 := by
+  induction len with
+  | zero => rfl
+  | succ len ih => rw [natToBytes_succ, Nat.zero_div, ih, List.replicate_succ']; rfl
 
 /-- A number below `256 ^ len` survives the round trip through `len` bytes. -/
 theorem bytesToNat_natToBytes_of_lt {len n : Nat} (h : n < 256 ^ len) :
@@ -85,7 +92,7 @@ theorem natToBytes_bytesToNat (bytes : List UInt8) :
     natToBytes bytes.length (bytesToNat bytes) = bytes := by
   generalize hn : bytes.length = len
   induction len generalizing bytes with
-  | zero => simp [List.length_eq_zero_iff.mp hn, natToBytes]
+  | zero => simp [List.length_eq_zero_iff.mp hn, natToBytes_zero]
   | succ len ih =>
     -- Split off the last byte, the lowest digit.
     obtain ⟨front, b, rfl⟩ := (List.eq_nil_or_concat bytes).resolve_left (by rintro rfl; simp at hn)
@@ -98,7 +105,7 @@ theorem natToBytes_bytesToNat (bytes : List UInt8) :
     -- The front is the value divided by 256, and the last byte its remainder.
     have hdiv : (bytesToNat front * 256 + b.toNat) / 256 = bytesToNat front := by omega
     have hmod : (bytesToNat front * 256 + b.toNat) % 256 = b.toNat := by omega
-    rw [hv, natToBytes, hdiv, hmod, ih front hf]
+    rw [hv, natToBytes_succ, hdiv, hmod, ih front hf]
     simp
 
 /-- Two byte lists of one length that hold the same number are equal. -/
