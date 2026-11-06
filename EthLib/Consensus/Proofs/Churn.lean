@@ -87,9 +87,8 @@ theorem churnQueue_spend {earliestEpoch firstEpoch perEpochChurn churnLeft amoun
       rw [quotientValue]
       exact Nat.lt_of_le_of_lt (Nat.div_le_self _ _) (by omega)
     have additional : (quotient + 1).toNat = quotient.toNat + 1 := by
-      rw [UInt64.toNat_add]
       have := amount.toNat_lt
-      exact Nat.mod_eq_of_lt (by simp; omega)
+      exact toNat_add_of_lt (by simp; omega)
     obtain ⟨_, laterValue⟩ := addChecked_ok_iff.mp added
     obtain ⟨_, productValue⟩ := mulChecked_ok_iff.mp multiplied
     obtain ⟨_, totalValue⟩ := addChecked_ok_iff.mp summed

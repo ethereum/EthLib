@@ -94,13 +94,7 @@ theorem computePulledUpTip_ordered {root : Root}
   unfold computePulledUpTip at pulled
   simp only [bind_ok_iff] at pulled
   obtain ⟨state, found, pulledState, weighed, block, -, epoch, -, pulled⟩ := pulled
-  have invariant : Invariant state := by
-    unfold blockState at found
-    split at found
-    · rename_i kept
-      cases found
-      exact holds kept
-    · cases found
+  have invariant : Invariant state := holds (blockState_ok_iff.mp found)
   have le := finalized_le_currentJustified
     (processJustificationAndFinalization_ordered invariant.ordered invariant.settled
       (Base.mapError_ok_iff.mp weighed)).1

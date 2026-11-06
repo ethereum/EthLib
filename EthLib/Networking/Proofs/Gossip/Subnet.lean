@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Proofs.MapM
+public import EthLib.Base.Proofs.Uint64
 public import EthLib.Networking.Gossip.Subnet
 
 /-!
@@ -62,11 +63,6 @@ theorem computeSubscribedSubnets_ok {subnets : List SubnetID}
   obtain ⟨_, _, ok⟩ := from_index subnet member
   exact computeSubscribedSubnet_lt ok
 
-/-- A sum below `2^64` does not overflow. -/
-private theorem addChecked_of_lt {a b : UInt64} (h : a.toNat + b.toNat < 2 ^ 64) :
-    Base.Uint64.addChecked a b = .ok (a + b) := by
-  simp [Base.Uint64.addChecked, h]
-
 /-- A prefix of `b` bits of a node ID is below `2^b`. -/
 theorem nodePrefix_lt (nodeId : NodeID) {bits : Nat} (h : bits ≤ NODE_ID_BITS) :
     nodeId.toNat >>> (NODE_ID_BITS - bits) < 2 ^ bits := by
@@ -107,7 +103,7 @@ theorem computeSubscribedSubnet_exists {index : UInt64}
       exact nodePrefix)
   have bitsFit : ¬64 ≤ b := by omega
   have half : 2 ^ b ≤ 2 ^ 63 := Nat.pow_le_pow_right (by decide) (by omega)
-  have shifted := addChecked_of_lt (a := epoch)
+  have shifted := Base.Uint64.addChecked_of_lt (a := epoch)
     (b := (nodeId.toNat % config.EPOCHS_PER_SUBNET_SUBSCRIPTION.toNat).toUInt64)
     (by rw [toNat_of_lt (by omega)]; omega)
   unfold computeSubscribedSubnet
@@ -130,7 +126,7 @@ theorem computeSubscribedSubnet_exists {index : UInt64}
       rw [hq] at hp'
       cases hp'
       rw [UInt64.lt_iff_toNat_lt, toNat_of_lt below] at hqn
-      rw [addChecked_of_lt (by omega)]
+      rw [Base.Uint64.addChecked_of_lt (by omega)]
       exact ⟨_, rfl⟩
 
 /-- The choice of the subnets of a node succeeds when the parameters fit and the shuffle succeeds.

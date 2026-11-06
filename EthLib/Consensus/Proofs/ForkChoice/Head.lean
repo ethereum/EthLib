@@ -110,6 +110,14 @@ namespace Store
 
 variable {config : Config} {store : Store preset fork}
 
+/-- The lookup of the state of a checkpoint succeeds exactly when the store holds it. -/
+theorem checkpointState_ok_iff {checkpoint : Checkpoint} {state : BeaconState preset fork} :
+    store.checkpointState checkpoint = .ok state ↔
+      store.checkpointStates[checkpoint]? = some state := by
+  unfold checkpointState
+  cases store.checkpointStates[checkpoint]? <;>
+    simp [throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
+
 /-- From Gloas the children of a node are not yet specified here, so they fail. -/
 theorem getNodeChildren_of_gloas {node : ForkChoiceNode} (gloas : .glamsterdam ≤ fork) :
     store.getNodeChildren node = .error (.forkNotYetSpecified fork) := by
