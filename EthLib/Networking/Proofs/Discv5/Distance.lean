@@ -10,9 +10,11 @@ The logarithmic distance of discv5 is an ultrametric.
 - A distance is below `2^k` exactly when the logarithmic distance is at most `k`.
 - The distances from `a` to `b` and from `b` to `c` XOR to the distance from `a` to `c`.
 - The logarithmic distance from `a` to `c` is at most the larger of the two through `b`.
-- When the two through `b` differ, the one from `a` to `c` is the larger of them.
+- When the one from `a` to `b` is smaller, the one from `a` to `c` is the one from `b` to `c`.
 
-"Node Table" of `discv5-theory.md` groups the nodes of a table by their logarithmic distance.
+"Node Table" of `discv5-theory.md` groups the nodes of a table by their logarithmic distance:
+
+<https://github.com/ethereum/devp2p/blob/88f1c80800d6/discv5/discv5-theory.md#node-table>
 -/
 
 @[expose] public section
