@@ -16,6 +16,14 @@ A head that the tree does not hold is syncing.
 
 A head that is invalid stays invalid, with the latest valid ancestor as the latest valid hash.
 
+The execution layer may also know a finalized block, the latest one that an earlier update named.
+
+A valid head below that block is valid, and the forkchoice state is neither checked nor applied.
+
+The source allows the update to be skipped there, and this model skips it.
+
+A head equal to that block follows the steps below, as for any other valid head.
+
 A valid head becomes the head of the canonical chain.
 
 The safe and the finalized block must then be the head or its ancestors, unless they are zero.
@@ -32,7 +40,7 @@ Payload attributes start a payload build, which is not specified here, so they m
 
 The method specifications state these rules, at commit `3284ee8` of execution-apis:
 
-- [`engine_forkchoiceUpdatedV1`][v1], steps 4, 5, 7 and 9
+- [`engine_forkchoiceUpdatedV1`][v1], steps 2, 4, 5, 7 and 9
 - [`engine_forkchoiceUpdatedV2`][v2] and [`engine_forkchoiceUpdatedV3`][v3]
 
 Each version has its payload attributes: [version 1][a1], [version 2][a2] and [version 3][a3].
@@ -108,13 +116,27 @@ def latestValid (tree : PayloadTree) (hash : Hash32) : Option Hash32 :=
 def onChain (tree : PayloadTree) (head hash : Hash32) : Bool :=
   hash == ZERO_HASH || (chainOf tree head).contains hash
 
-/-- The status of a forkchoice update, and the new head when it changes. -/
-def forkchoiceUpdated (tree : PayloadTree) (state : ForkchoiceState) :
+/-- Whether a block is a strict ancestor of the finalized block that the execution layer knows.
+
+It is not when the execution layer knows no finalized block. -/
+def belowFinalized (tree : PayloadTree) (finalized : Option Hash32) (hash : Hash32) : Bool :=
+  match finalized with
+  | some f => hash != f && (chainOf tree f).contains hash
+  | none => false
+
+/-- The status of a forkchoice update, and the new head when it changes.
+
+The execution layer knows the payloads of the tree, and the finalized block of an earlier update.
+-/
+def forkchoiceUpdated (tree : PayloadTree) (finalized : Option Hash32) (state : ForkchoiceState) :
     Except EngineError (PayloadStatus × Option Hash32) :=
   match tree.lookup state.headBlockHash with
   | none => pure (⟨.syncing, none⟩, none)
   | some head =>
     if !head.valid then pure (⟨.invalid, latestValid tree state.headBlockHash⟩, none)
+    -- Step 2: a valid head below the known finalized block is valid, and the update is skipped.
+    else if belowFinalized tree finalized state.headBlockHash then
+      pure (⟨.valid, some state.headBlockHash⟩, none)
     else if onChain tree state.headBlockHash state.safeBlockHash &&
         onChain tree state.headBlockHash state.finalizedBlockHash then
       pure (⟨.valid, some state.headBlockHash⟩, some state.headBlockHash)

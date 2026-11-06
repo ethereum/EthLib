@@ -121,3 +121,45 @@ def test_payload_attributes() -> None:
     ) as error:
         engine.forkchoice_updated(TREE, "engine_forkchoiceUpdatedV1", [state, {"timestamp": "0x1"}])
     assert error.value.code == 0
+
+
+def test_head_below_finalized() -> None:
+    """A valid head below the known finalized block is valid, and the request is not checked."""
+    state = {"headBlockHash": _hash(2), "safeBlockHash": _hash(3), "finalizedBlockHash": ZERO}
+    response = engine.forkchoice_updated(
+        TREE, "engine_forkchoiceUpdatedV3", [state, None], finalized=_hash(3)
+    )
+    assert response == {
+        "payloadStatus": {"status": "VALID", "latestValidHash": _hash(2), "validationError": None},
+        "payloadId": None,
+    }
+
+
+def test_head_at_finalized() -> None:
+    """A head equal to the known finalized block is checked as any other head."""
+    with raises(
+        engine.EngineError, "engine error: EthLib.Engine.EngineError.invalidForkchoiceState"
+    ) as error:
+        engine.forkchoice_updated(
+            TREE,
+            "engine_forkchoiceUpdatedV3",
+            [
+                {"headBlockHash": _hash(3), "safeBlockHash": _hash(9), "finalizedBlockHash": ZERO},
+                None,
+            ],
+            finalized=_hash(3),
+        )
+    assert error.value.code == 38002
+
+
+def test_finalized_not_a_hash() -> None:
+    """A known finalized block that is not a hash of 32 bytes is an input error, with code 0."""
+    state = {"headBlockHash": _hash(2), "safeBlockHash": ZERO, "finalizedBlockHash": ZERO}
+    with raises(
+        engine.EngineError,
+        'finalized: EthLib.Engine.EngineError.invalidParams "finalized: 1 bytes, not 32"',
+    ) as error:
+        engine.forkchoice_updated(
+            TREE, "engine_forkchoiceUpdatedV3", [state, None], finalized="0x00"
+        )
+    assert error.value.code == 0
