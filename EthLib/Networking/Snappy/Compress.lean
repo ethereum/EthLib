@@ -106,7 +106,7 @@ def compressLoop (src : ByteArray) (table : Array Nat) (i lit : Nat) (out : Byte
 termination_by src.size - i
 decreasing_by all_goals (have : minCopyLength = 4 := rfl; (try simp only [s, c, len] at *); omega)
 
-/-- A Snappy block of `src`: the length as a varint, then literals and copies.
+/-- A Snappy block of the input: the length as a varint, then literals and copies.
 
 The input must have at most 2^32 - 1 bytes, the largest length that a preamble can declare (§1).
 

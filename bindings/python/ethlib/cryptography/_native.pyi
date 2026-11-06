@@ -768,7 +768,7 @@ def snappy_decompress(block: bytes) -> bytes:
     ...
 
 def snappy_compress(data: bytes) -> bytes:
-    """A Snappy block of `src`: the length as a varint, then literals and copies."""
+    """A Snappy block of the input: the length as a varint, then literals and copies."""
     ...
 
 def snappy_decode_frames(stream: bytes) -> bytes:

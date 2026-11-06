@@ -576,7 +576,7 @@
   "The bytes a Snappy block decompresses to, or why it is not a valid block."
 
 #define DOC_snappy_compress \
-  "A Snappy block of `src`: the length as a varint, then literals and copies."
+  "A Snappy block of the input: the length as a varint, then literals and copies."
 
 #define DOC_snappy_decode_frames \
   "The bytes a framed stream decodes to, or why it is not a valid stream."
