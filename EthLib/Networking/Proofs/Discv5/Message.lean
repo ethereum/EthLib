@@ -13,7 +13,8 @@ Properties of the discv5 messages.
 - The fields of each message read back as the message.
 - A valid message decodes back from its plaintext.
 - A message that decodes is valid.
-- A plaintext that decodes is the encoding of its message, so each message has one plaintext.
+- A plaintext that decodes is the encoding of its message.
+- So a message has at most one plaintext that decodes to it.
 -/
 
 @[expose] public section
@@ -68,17 +69,12 @@ theorem valid_of_decode {bytes : ByteArray} {m : Message} (h : Message.decode by
 
 /-! ## Canonical plaintexts -/
 
-/-- A bind of `Except` succeeds exactly when both steps do. -/
-private theorem bind_eq_ok {ε α β : Type} {x : Except ε α} {f : α → Except ε β} {y : β} :
-    (x >>= f) = .ok y ↔ ∃ a, x = .ok a ∧ f a = .ok y := by
-  cases x <;> simp [bind, Except.bind]
-
 /-- An item reads as a port exactly when it is the item of that port. -/
-theorem portOfItem_eq_ok {item : Item} {port : UInt16} :
+theorem portOfItem_eq_ok_iff {item : Item} {port : UInt16} :
     portOfItem item = .ok port ↔ portItem port = item := by
   constructor
   · intro h
-    simp only [portOfItem, bind_eq_ok, pure, Except.pure, Except.ok.injEq] at h
+    simp only [portOfItem, Base.bind_ok_iff, pure, Except.pure, Except.ok.injEq] at h
     obtain ⟨n, hn, rfl⟩ := h
     obtain ⟨rfl, hlt⟩ := Item.eq_scalar_of_toScalarBelow hn
     simp [portItem, Nat.mod_eq_of_lt hlt]
@@ -91,7 +87,7 @@ theorem fields_of_ofFields {type : UInt8} {items : List Item} {m : Message}
   unfold Message.ofFields at h
   split at h
   all_goals
-    simp only [bind_eq_ok, Codec.ofItem_eq_ok_iff, portOfItem_eq_ok, pure, Except.pure,
+    simp only [Base.bind_ok_iff, Codec.ofItem_eq_ok_iff, portOfItem_eq_ok_iff, pure, Except.pure,
       Except.ok.injEq, Option.some.injEq, reduceCtorEq] at h
   -- Each field read is the item of what it read, and the last step substitutes the message.
   all_goals
