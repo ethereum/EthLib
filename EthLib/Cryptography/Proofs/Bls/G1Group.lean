@@ -39,6 +39,7 @@ namespace EthLib.Cryptography.Bls.G1
 
 open WeierstrassCurve (Jacobian)
 open WeierstrassCurve.Jacobian
+open scoped EthLib.Cryptography.Bls.Fp
 
 /-- Unfolding equation for `mulNat`. Stated here because the
 compiler-generated equations of a recursive definition are only
@@ -155,9 +156,7 @@ theorem add_eq_addSpec : (add : G1 → G1 → G1) = addSpec := by
   -- `q` has `z = 1`: rebuild it with a literal one, then compare with the mixed formulas.
   · rename_i h1
     obtain ⟨qx, qy, qz⟩ := q
-    -- `simp` reads `h1` as `qz.val = 1`, and the value of `(1 : Fp)` is `1 % modulus`.
-    have hv : qz.val = 1 := by simpa [Fp.beq, Fp.one] using h1
-    have hz : qz = 1 := Fin.ext (hv.trans (Nat.mod_eq_of_lt (by decide)).symm)
+    have hz : qz = 1 := Fp.beq_iff.mp h1
     subst hz
     exact (addSpec_eq_addMixed p qx qy hp hq).symm
   · exact (addSpec_eq_addGeneral p q hp hq).symm
@@ -167,12 +166,12 @@ in Jacobian coordinates over `ZMod Fp.modulus`. -/
 def curve : Jacobian (ZMod Fp.modulus) :=
   { a₁ := 0, a₂ := 0, a₃ := 0, a₄ := 0, a₆ := 4 }
 
-/-- The Mathlib Jacobian representative of a spec point. -/
-def rep (P : G1) : Fin 3 → ZMod Fp.modulus := ![P.x, P.y, P.z]
+/-- The Mathlib Jacobian representative of a spec point: its coordinates, mapped to `ZMod p`. -/
+def rep (P : G1) : Fin 3 → ZMod Fp.modulus := ![Fp.toZMod P.x, Fp.toZMod P.y, Fp.toZMod P.z]
 
-@[simp] theorem rep_x (P : G1) : rep P 0 = P.x := rfl
-@[simp] theorem rep_y (P : G1) : rep P 1 = P.y := rfl
-@[simp] theorem rep_z (P : G1) : rep P 2 = P.z := rfl
+@[simp] theorem rep_x (P : G1) : rep P 0 = Fp.toZMod P.x := rfl
+@[simp] theorem rep_y (P : G1) : rep P 1 = Fp.toZMod P.y := rfl
+@[simp] theorem rep_z (P : G1) : rep P 2 = Fp.toZMod P.z := rfl
 
 /-- Validity of a spec point: its representative is a nonsingular curve
 point. Spec-produced points satisfy this (see the `valid_*` lemmas);
@@ -187,19 +186,22 @@ noncomputable def toPoint (P : G1) : curve.toAffine.Point :=
 
 /-! ## Boolean-test bridges -/
 
-theorem isZero_iff {a : Fp} : a.isZero = true ↔ (a : ZMod Fp.modulus) = 0 := by
-  rw [Fp.isZero, beq_iff_eq]
-  exact ZMod.val_eq_zero (n := Fp.modulus) a
+theorem isZero_iff {a : Fp} : a.isZero = true ↔ Fp.toZMod a = 0 := by
+  rw [Fp.isZero_eq, beq_iff_eq, Fp.val_eq]
+  exact ZMod.val_eq_zero _
 
-theorem beq_iff {a b : Fp} : a.beq b = true ↔ (a : ZMod Fp.modulus) = b := by
-  rw [Fp.beq, beq_iff_eq]
-  exact ⟨fun h => Fin.ext h, fun h => congrArg Fin.val h⟩
+theorem beq_iff {a b : Fp} : a.beq b = true ↔ Fp.toZMod a = Fp.toZMod b := by
+  rw [Fp.toZMod_inj]
+  exact Fp.beq_iff
 
 /-! ## Zero and negation -/
 
 theorem rep_zero : rep zero = ![1, 1, 0] := by
   funext i
-  fin_cases i <;> rfl
+  fin_cases i
+  · exact Fp.toZMod_one
+  · exact Fp.toZMod_one
+  · exact Fp.toZMod_zero
 
 /-- The point at infinity passes the test for infinity. -/
 @[simp] theorem isInfinity_zero : (zero : G1).isInfinity = true := Fp.zero_isZero
@@ -220,13 +222,18 @@ private theorem curve_negY (Q : Fin 3 → ZMod Fp.modulus) :
   ring
 
 theorem rep_neg (P : G1) : rep (neg P) = curve.neg (rep P) := by
+  -- Each coordinate is rewritten, since a defeq check through the map to `ZMod p` would unfold it.
+  have hx : (neg P).x = P.x := rfl
+  have hy : (neg P).y = -P.y := rfl
+  have hz : (neg P).z = P.z := rfl
   funext i
   fin_cases i
-  · rfl
-  · show (-P.y : ZMod Fp.modulus) = curve.negY (rep P)
-    rw [curve_negY]
-    rfl
-  · rfl
+  · show Fp.toZMod (neg P).x = curve.neg (rep P) 0
+    rw [neg_X, rep_x, hx]
+  · show Fp.toZMod (neg P).y = curve.neg (rep P) 1
+    rw [neg_Y, curve_negY, rep_y, hy, Fp.toZMod_neg]
+  · show Fp.toZMod (neg P).z = curve.neg (rep P) 2
+    rw [neg_Z, rep_z, hz]
 
 theorem valid_neg {P : G1} (h : Valid P) : Valid (neg P) := by
   rw [Valid, rep_neg]
@@ -283,15 +290,15 @@ theorem rep_double {P : G1} (hz : ¬P.z.isZero = true) :
     rep (double P) = curve.dblXYZ (rep P) := by
   funext i
   fin_cases i
-  · show (double P).x = curve.dblX (rep P)
-    rw [double_eq_doubleSpec, doubleSpec, ite_eq_right hz]
-    exact dblX_eq P.x P.y P.z
-  · show (double P).y = curve.dblY (rep P)
-    rw [double_eq_doubleSpec, doubleSpec, ite_eq_right hz]
-    exact dblY_eq P.x P.y P.z
-  · show (double P).z = curve.dblZ (rep P)
-    rw [double_eq_doubleSpec, doubleSpec, ite_eq_right hz]
-    exact dblZ_eq P.x P.y P.z
+  · show Fp.toZMod (double P).x = curve.dblX ![Fp.toZMod P.x, Fp.toZMod P.y, Fp.toZMod P.z]
+    rw [double_eq_doubleSpec, doubleSpec, ite_eq_right hz, ← dblX_eq]
+    push_toZMod
+  · show Fp.toZMod (double P).y = curve.dblY ![Fp.toZMod P.x, Fp.toZMod P.y, Fp.toZMod P.z]
+    rw [double_eq_doubleSpec, doubleSpec, ite_eq_right hz, ← dblY_eq]
+    push_toZMod
+  · show Fp.toZMod (double P).z = curve.dblZ ![Fp.toZMod P.x, Fp.toZMod P.y, Fp.toZMod P.z]
+    rw [double_eq_doubleSpec, doubleSpec, ite_eq_right hz, ← dblZ_eq]
+    push_toZMod
 
 theorem valid_double {P : G1} (h : Valid P) : Valid (double P) := by
   by_cases hz : P.z.isZero = true
@@ -413,15 +420,30 @@ private theorem rep_add_general {P Q : G1} (hP : Valid P) (hQ : Valid Q)
     rep (add P Q)
       = (-(2 * (rep P 2 * rep Q 2)))
           • curve.addXYZ (rep P) (rep Q) := by
-  obtain ⟨hX, hY, hZ⟩ := spec_add_components P.x P.y P.z Q.x Q.y Q.z
-    (P.z * P.z) (Q.z * Q.z) (P.x * (Q.z * Q.z)) (Q.x * (P.z * P.z)) (P.y * Q.z * (Q.z * Q.z)) (Q.y * P.z * (P.z * P.z))
-    (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))
-    (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))
-    ((Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)))))
-    (Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z))))
-    ((P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)))))
-    ((Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))) * (Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))) - ((Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))) - Fp.ofNat 2 * ((P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))))
-    rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
+  obtain ⟨hX, hY, hZ⟩ := spec_add_components (Fp.toZMod P.x) (Fp.toZMod P.y) (Fp.toZMod P.z)
+    (Fp.toZMod Q.x) (Fp.toZMod Q.y) (Fp.toZMod Q.z)
+    (Fp.toZMod (P.z * P.z))
+    (Fp.toZMod (Q.z * Q.z))
+    (Fp.toZMod (P.x * (Q.z * Q.z)))
+    (Fp.toZMod (Q.x * (P.z * P.z)))
+    (Fp.toZMod (P.y * Q.z * (Q.z * Q.z)))
+    (Fp.toZMod (Q.y * P.z * (P.z * P.z)))
+    (Fp.toZMod (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)))
+    (Fp.toZMod (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z *
+      P.z) - P.x * (Q.z * Q.z)))))
+    (Fp.toZMod ((Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x *
+      (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))))
+    (Fp.toZMod (Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))))
+    (Fp.toZMod ((P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) *
+      (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))))
+    (Fp.toZMod ((Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))) * (Fp.ofNat 2
+      * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))) - ((Q.x * (P.z * P.z) - P.x * (Q.z
+      * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z *
+      P.z) - P.x * (Q.z * Q.z))))) - Fp.ofNat 2 * ((P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z *
+      P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)))))))
+    (by push_toZMod) (by push_toZMod) (by push_toZMod) (by push_toZMod) (by push_toZMod)
+    (by push_toZMod) (by push_toZMod) (by push_toZMod) (by push_toZMod) (by push_toZMod)
+    (by push_toZMod) (by push_toZMod)
     (valid_equation hP) (valid_equation hQ)
   have hbranch : add P Q = G1.mk
       ((Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))) * (Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))) - ((Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))) - Fp.ofNat 2 * ((P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))))
@@ -431,16 +453,23 @@ private theorem rep_add_general {P Q : G1} (hP : Valid P) (hQ : Valid Q)
     exact ite_eq_right hu
   rw [hbranch]
   funext k
+  -- Each side is pushed into `ZMod p`, since a defeq check through the map would unfold it.
   fin_cases k
-  · exact hX.trans
-      ((smul_fin3_ext (curve.addXYZ (rep P) (rep Q))
-        (-(2 * (rep P 2 * rep Q 2)))).1).symm
-  · exact hY.trans
-      ((smul_fin3_ext (curve.addXYZ (rep P) (rep Q))
-        (-(2 * (rep P 2 * rep Q 2)))).2.1).symm
-  · exact hZ.trans
-      ((smul_fin3_ext (curve.addXYZ (rep P) (rep Q))
-        (-(2 * (rep P 2 * rep Q 2)))).2.2).symm
+  · have h := hX.trans ((smul_fin3_ext (curve.addXYZ (rep P) (rep Q))
+      (-(2 * (rep P 2 * rep Q 2)))).1).symm
+    show Fp.toZMod _ = _
+    push_toZMod at h ⊢
+    exact h
+  · have h := hY.trans ((smul_fin3_ext (curve.addXYZ (rep P) (rep Q))
+      (-(2 * (rep P 2 * rep Q 2)))).2.1).symm
+    show Fp.toZMod _ = _
+    push_toZMod at h ⊢
+    exact h
+  · have h := hZ.trans ((smul_fin3_ext (curve.addXYZ (rep P) (rep Q))
+      (-(2 * (rep P 2 * rep Q 2)))).2.2).symm
+    show Fp.toZMod _ = _
+    push_toZMod at h ⊢
+    exact h
 
 /-! ### The addition homomorphism -/
 
@@ -449,14 +478,14 @@ projections (definitionally equal, but with every operation
 syntactically over `ZMod`, as `linear_combination` needs). -/
 private theorem beq_x_iff {P Q : G1} :
     (P.x * (Q.z * Q.z)).beq (Q.x * (P.z * P.z)) = true
-      ↔ rep P 0 * (rep Q 2 * rep Q 2) = rep Q 0 * (rep P 2 * rep P 2) :=
-  beq_iff
+      ↔ rep P 0 * (rep Q 2 * rep Q 2) = rep Q 0 * (rep P 2 * rep P 2) := by
+  simp only [beq_iff, rep_x, rep_z, Fp.toZMod_mul]
 
 private theorem beq_y_iff {P Q : G1} :
     (P.y * Q.z * (Q.z * Q.z)).beq (Q.y * P.z * (P.z * P.z)) = true
       ↔ rep P 1 * rep Q 2 * (rep Q 2 * rep Q 2)
-          = rep Q 1 * rep P 2 * (rep P 2 * rep P 2) :=
-  beq_iff
+          = rep Q 1 * rep P 2 * (rep P 2 * rep P 2) := by
+  simp only [beq_iff, rep_y, rep_z, Fp.toZMod_mul]
 
 private theorem two_ne_zero' : (2 : ZMod Fp.modulus) ≠ 0 := by decide
 
@@ -474,9 +503,11 @@ private theorem isUnit_scale {P Q : G1} (hz1 : ¬P.z.isZero = true)
 theorem valid_add {P Q : G1} (hP : Valid P) (hQ : Valid Q) :
     Valid (add P Q) := by
   by_cases hz1 : P.z.isZero = true
-  · rwa [Valid, add_of_left_zero hz1]
+  · rw [add_of_left_zero hz1]
+    exact hQ
   by_cases hz2 : Q.z.isZero = true
-  · rwa [Valid, add_of_right_zero hz1 hz2]
+  · rw [add_of_right_zero hz1 hz2]
+    exact hP
   by_cases hu : (P.x * (Q.z * Q.z)).beq (Q.x * (P.z * P.z)) = true
   · by_cases hs : (P.y * Q.z * (Q.z * Q.z)).beq (Q.y * P.z * (P.z * P.z)) = true
     · rw [Valid, add_of_dbl hz1 hz2 hu hs]
@@ -517,13 +548,11 @@ theorem toPoint_add {P Q : G1} (hP : Valid P) (hQ : Valid Q) :
         ((nonsingular_iff (rep Q)).mp hQ).1 hx hy
       have hequiv : rep P ≈ curve.neg (rep Q) := by
         refine equiv_of_X_eq_of_Y_eq (z_ne_zero hz1) ?_ ?_ ?_
-        · show rep Q 2 ≠ 0
+        · rw [neg_Z]
           exact z_ne_zero hz2
-        · show rep P 0 * rep Q 2 ^ 2 = curve.neg (rep Q) 0 * rep P 2 ^ 2
-          rw [neg_X]
+        · rw [neg_X, neg_Z]
           exact hx
-        · show rep P 1 * rep Q 2 ^ 3 = curve.neg (rep Q) 1 * rep P 2 ^ 3
-          rw [neg_Y]
+        · rw [neg_Y, neg_Z]
           exact hyneg
       rw [add_of_opp hz1 hz2 hu hs, toPoint_zero,
         show toPoint P = -toPoint Q from (Point.toAffine_of_equiv hequiv).trans

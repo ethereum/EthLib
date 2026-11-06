@@ -537,6 +537,11 @@ theorem beq_iff {a b : Fp} : a.beq b = true ↔ a = b := by
 /-- The zero test reads the integer. -/
 theorem isZero_eq (a : Fp) : a.isZero = (a.val == 0) := rfl
 
+/-- The zero test of `Fp` holds exactly at zero. -/
+theorem isZero_iff {a : Fp} : a.isZero = true ↔ a = 0 := by
+  rw [isZero_eq, beq_iff_eq]
+  exact ⟨fun h => ext (h.trans val_zero.symm), fun h => h ▸ val_zero⟩
+
 /-- Zero passes the zero test. -/
 theorem zero_isZero : Fp.zero.isZero = true :=
   (isZero_eq 0).trans (by rw [val_zero]; rfl)

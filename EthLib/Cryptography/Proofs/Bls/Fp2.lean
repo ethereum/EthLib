@@ -68,12 +68,12 @@ instance : One Fp2 := ⟨one⟩
 /-! ## Boolean equality and zero check -/
 
 theorem beq_iff_eq {a b : Fp2} : a.beq b = true ↔ a = b := by
-  rw [beq, Bool.and_eq_true, Fp.baseField_beq, Fp.baseField_beq, G1.beq_iff, G1.beq_iff]
+  rw [beq, Bool.and_eq_true, Fp.baseField_beq, Fp.baseField_beq, Fp.beq_iff, Fp.beq_iff]
   exact ⟨fun ⟨h0, h1⟩ => ext h0 h1, fun h => ⟨congrArg c0 h, congrArg c1 h⟩⟩
 
 theorem isZero_iff {a : Fp2} : a.isZero = true ↔ a = 0 := by
-  rw [isZero, Bool.and_eq_true, Fp.baseField_isZero, Fp.baseField_isZero, G1.isZero_iff,
-    G1.isZero_iff]
+  rw [isZero, Bool.and_eq_true, Fp.baseField_isZero, Fp.baseField_isZero, Fp.isZero_iff,
+    Fp.isZero_iff]
   exact ⟨fun ⟨h0, h1⟩ => ext h0 h1, fun h => ⟨congrArg c0 h, congrArg c1 h⟩⟩
 
 instance : LawfulBEq Fp2 where
@@ -574,7 +574,7 @@ theorem sqrt_ok {a c : Fp2} (h : Fp2.sqrt a = .ok c) : c * c = a := by
     fun _ hx => fp_mul_inverse hx
   obtain ⟨c0, c1⟩ := c
   rcases sqrt_eq_ok_cases h with ⟨hz, ⟨hs, h1⟩ | ⟨hs, h0⟩⟩ | ⟨hz, s, hs, htry, h1⟩
-  · have hc1 : a.c1 = 0 := G1.isZero_iff.mp hz
+  · have hc1 : a.c1 = 0 := Fp.isZero_iff.mp hz
     dsimp only at hs h1
     subst h1
     have hsq : c0 * c0 = a.c0 := sqrtOrError_ok hs
@@ -584,7 +584,7 @@ theorem sqrt_ok {a c : Fp2} (h : Fp2.sqrt a = .ok c) : c * c = a := by
     · show c0 * 0 + 0 * c0 = a.c1
       rw [Fin.mul_zero, Fin.zero_mul, hc1]
       rfl
-  · have hc1 : a.c1 = 0 := G1.isZero_iff.mp hz
+  · have hc1 : a.c1 = 0 := Fp.isZero_iff.mp hz
     dsimp only at hs h0
     subst h0
     have hsq : (c1 : ZMod Fp.modulus) * c1 = -a.c0 := sqrtOrError_ok hs
@@ -594,7 +594,7 @@ theorem sqrt_ok {a c : Fp2} (h : Fp2.sqrt a = .ok c) : c * c = a := by
       rw [Fin.zero_mul, Fin.mul_zero, hc1]
       rfl
   · have hc1 : a.c1 ≠ 0 := fun h0 => by
-      have hz' : BaseField.isZero a.c1 = true := G1.isZero_iff.mpr h0
+      have hz' : BaseField.isZero a.c1 = true := Fp.isZero_iff.mpr h0
       rw [hz] at hz'
       cases hz'
     dsimp only at htry h1
@@ -617,17 +617,17 @@ theorem signBit_neg {y : Fp2} (hy : y ≠ 0) :
   unfold Fp2.signBit
   -- Negation preserves whether the imaginary part is zero.
   have hc1_zero : (-y).c1.isZero = y.c1.isZero := by
-    rw [Bool.eq_iff_iff, G1.isZero_iff, G1.isZero_iff, Fp2.neg_c1, neg_eq_zero]
+    rw [Bool.eq_iff_iff, Fp.isZero_iff, Fp.isZero_iff, Fp2.neg_c1, neg_eq_zero]
   rw [hc1_zero]
   by_cases hc1 : y.c1.isZero = true
   -- When c1 = 0, a nonzero element has c0 != 0, so signBit inspects c0.
   · simp only [hc1, Bool.not_true, Bool.false_eq_true, ↓reduceIte, Fp2.neg_c0]
-    have hc1_eq : y.c1 = 0 := G1.isZero_iff.mp hc1
+    have hc1_eq : y.c1 = 0 := Fp.isZero_iff.mp hc1
     have hc0_ne : y.c0 ≠ 0 := fun hc0_eq => hy (Fp2.ext hc0_eq hc1_eq)
     exact G1.signBit_neg hc0_ne
   -- When c1 != 0, signBit inspects c1 directly.
   · simp only [hc1, Bool.not_false, ↓reduceIte, Fp2.neg_c1]
-    have hc1_ne : y.c1 ≠ 0 := fun hc1_eq => hc1 (G1.isZero_iff.mpr hc1_eq)
+    have hc1_ne : y.c1 ≠ 0 := fun hc1_eq => hc1 (Fp.isZero_iff.mpr hc1_eq)
     exact G1.signBit_neg hc1_ne
 
 private theorem c1_zero_factors_zmod {b0 b1 : ZMod Fp.modulus}

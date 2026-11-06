@@ -67,7 +67,8 @@ theorem rotate_toPoint {x y x' : F} (hv : Valid ⟨x, y, Fp.one⟩) (hv' : Valid
   rw [Affine.Point.some.injEq, hx, _root_.map_mul, one_pow, one_pow, mul_one, mul_one]
   constructor
   · linear_combination fpToFp12 x * fpToFp12 beta * hb
-  · linear_combination fpToFp12 y * (fpToFp12 beta ^ 3 + 1) * hb
+  · dsimp only
+    linear_combination fpToFp12 (Fp.toZMod y) * (fpToFp12 beta ^ 3 + 1) * hb
 
 /-- An equation of `Fp` elements, decided by comparing their values. -/
 theorem eq_of_decide {a b : F} (h : @decide (a = b) (instDecidableEqFin _ a b) = true) : a = b :=
