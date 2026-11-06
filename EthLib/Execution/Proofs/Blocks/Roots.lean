@@ -15,6 +15,8 @@ So a block with no transactions, receipts or withdrawals has that root for each 
 The key of each item is the RLP encoding of its index, so the keys of a list's trie are distinct.
 
 Two lists with one root then give every key one value, or the search finds a Keccak-256 collision.
+
+So two lists with one root are equal, or a search over their indices finds such a collision.
 -/
 
 @[expose] public section
@@ -116,5 +118,117 @@ theorem indexedRoot_binding_key {values₁ values₂ : List ByteArray}
   -- A plain trie has no two keys with one path, so the path searches return nothing.
   · simp [findPathCollision] at hpath
   · simp [findPathCollision] at hpath
+
+/-! ## Two lists with one root -/
+
+/-- The value of an index's key in a list's trie is the item at that index.
+
+Past the end of the list, the key has no value. -/
+theorem valueAt_of_indexedEntries {values : List ByteArray}
+    {entries : List (ByteArray × ByteArray)} (h : indexedEntries values = .ok entries)
+    {i : Nat} {key : ByteArray} (hkey : Codec.encode i = .ok key) :
+    valueAt keccak256 ⟨false, entries⟩ key = values[i]? := by
+  rw [valueAt_plain keccak256 entries key]
+  -- Each entry with the key is the entry at the index, since its own index has the same key.
+  have hunique : ∀ entry ∈ entries, entry.1 = key →
+      ∃ hi : i < entries.length, entry = entries[i] := by
+    intro entry hmem heq
+    obtain ⟨j, hj, rfl⟩ := List.getElem_of_mem hmem
+    have hj' := (getElem_of_indexedEntries h ⟨j, hj⟩).1
+    simp only [Fin.getElem_fin] at hj'
+    rw [heq] at hj'
+    cases Codec.encode_injective hj' hkey
+    exact ⟨hj, rfl⟩
+  by_cases hi : i < entries.length
+  · have hentry := getElem_of_indexedEntries h ⟨i, hi⟩
+    simp only [Fin.getElem_fin] at hentry
+    have hkey' : entries[i].1 = key := (Except.ok.inj (hkey.symm.trans hentry.1)).symm
+    -- The search finds an entry with the key, and that entry is the one at the index.
+    cases hfind : entries.find? (fun entry => sameBytes entry.1 key) with
+    | none =>
+      have := List.find?_eq_none.mp hfind entries[i] (List.getElem_mem hi)
+      simp [(sameBytes_iff _ _).mpr hkey'] at this
+    | some entry =>
+      have hmem := List.mem_of_find?_eq_some hfind
+      have hsame := (sameBytes_iff _ _).mp (List.find?_some
+        (p := fun entry : ByteArray × ByteArray => sameBytes entry.1 key) hfind)
+      obtain ⟨_, rfl⟩ := hunique entry hmem hsame
+      rw [List.getElem?_eq_getElem (length_of_indexedEntries h ▸ hi)]
+      simp [hentry.2]
+  · -- No entry has the key, and the list ends before the index.
+    rw [List.getElem?_eq_none (by rw [← length_of_indexedEntries h]; omega)]
+    rw [List.find?_eq_none.mpr]
+    · rfl
+    · intro entry hmem hsame
+      exact hi (hunique entry hmem ((sameBytes_iff _ _).mp hsame)).1
+
+/-- The collision in the proofs of the first index, below the longer length, of two lists. -/
+def findIndexedCollision (values₁ values₂ : List ByteArray) : Option (ByteArray × ByteArray) :=
+  match indexedEntries values₁, indexedEntries values₂ with
+  | .ok entries₁, .ok entries₂ =>
+    (List.range (max values₁.length values₂.length)).findSome? fun i =>
+      match Codec.encode i with
+      | .ok key => findCollision keccak256 ⟨false, entries₁⟩ ⟨false, entries₂⟩ key
+      | .error _ => none
+  | _, _ => none
+
+/-- Every pair that the search returns is a collision. -/
+theorem findIndexedCollision_valid {values₁ values₂ : List ByteArray}
+    {pair : ByteArray × ByteArray} (h : findIndexedCollision values₁ values₂ = some pair) :
+    IsCollision keccak256 pair := by
+  unfold findIndexedCollision at h
+  split at h
+  · obtain ⟨-, i, -, -, hfound, -⟩ := List.findSome?_eq_some_iff.mp h
+    split at hfound
+    · exact findCollision_valid keccak256 hfound
+    · cases hfound
+  · cases h
+
+/-- A list compared with itself has no collision. -/
+theorem findIndexedCollision_self (values : List ByteArray) :
+    findIndexedCollision values values = none := by
+  unfold findIndexedCollision
+  split
+  · rename_i entries₁ entries₂ h₁ h₂
+    rw [h₁] at h₂
+    cases h₂
+    refine List.findSome?_eq_none_iff.mpr fun i _ => ?_
+    split
+    · exact findCollision_self keccak256 _ _
+    · rfl
+  · rfl
+
+/-- Binding of a list's root: two lists with one root are equal.
+
+Otherwise the search over their indices finds a Keccak-256 collision in the proofs of one index. -/
+theorem indexedRoot_binding {values₁ values₂ : List ByteArray} {root' : Hash32}
+    (hroot₁ : indexedRoot values₁ = .ok root') (hroot₂ : indexedRoot values₂ = .ok root') :
+    values₁ = values₂ ∨
+      ∃ pair, findIndexedCollision values₁ values₂ = some pair ∧ IsCollision keccak256 pair := by
+  cases hsearch : findIndexedCollision values₁ values₂ with
+  | some pair => exact .inr ⟨pair, rfl, findIndexedCollision_valid hsearch⟩
+  | none =>
+  refine .inl (List.ext_getElem? fun i => ?_)
+  obtain ⟨entries₁, hentries₁, htrie₁⟩ := indexedRoot_eq_ok_iff.mp hroot₁
+  obtain ⟨entries₂, hentries₂, htrie₂⟩ := indexedRoot_eq_ok_iff.mp hroot₂
+  by_cases hi : i < max values₁.length values₂.length
+  · -- The index has a key, since one of the lists encodes it.
+    obtain ⟨key, hkey⟩ : ∃ key, Codec.encode i = .ok key := by
+      by_cases hi₁ : i < values₁.length
+      · exact ⟨_, (getElem_of_indexedEntries hentries₁
+          ⟨i, (length_of_indexedEntries hentries₁).symm ▸ hi₁⟩).1⟩
+      · exact ⟨_, (getElem_of_indexedEntries hentries₂
+          ⟨i, (length_of_indexedEntries hentries₂).symm ▸ (by omega)⟩).1⟩
+    rw [← valueAt_of_indexedEntries hentries₁ hkey, ← valueAt_of_indexedEntries hentries₂ hkey]
+    rcases indexedRoot_binding_key hentries₁ hentries₂ htrie₁ htrie₂ key with hvalue |
+      ⟨pair, hfound, -⟩
+    · exact hvalue
+    · -- The search over the indices reaches this one and returns its collision.
+      unfold findIndexedCollision at hsearch
+      rw [hentries₁, hentries₂] at hsearch
+      have := List.findSome?_eq_none_iff.mp hsearch i (List.mem_range.mpr hi)
+      simp [hkey, hfound] at this
+  · -- Both lists end before the index.
+    rw [List.getElem?_eq_none (by omega), List.getElem?_eq_none (by omega)]
 
 end EthLib.Execution.Blocks
