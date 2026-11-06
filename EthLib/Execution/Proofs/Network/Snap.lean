@@ -1,12 +1,15 @@
 module
 
 public import EthLib.Execution.Network.Snap
+public import EthLib.Execution.Proofs.Network.Protocol
 public import EthLib.Execution.Proofs.Network.Status
 
 /-!
 # Proofs: the snap capability
 
 A snap version and its number determine each other.
+
+The count of message IDs for snap and eth is nonzero exactly on the capabilities of their versions.
 
 An account reads back from its slim form.
 
@@ -74,6 +77,10 @@ theorem number_injective : Function.Injective number := fun a b h => by
   have := ofNumber?_number a
   rwa [h, ofNumber?_number, Option.some.injEq, eq_comm] at this
 
+/-- Every snap version has at least one message ID. -/
+theorem messageCount_pos (v : SnapVersion) : 0 < v.messageCount := by
+  cases v <;> decide
+
 end SnapVersion
 
 /-- The multiplexing of RLPx gives a snap capability the message count of its version. -/
@@ -85,6 +92,43 @@ theorem capabilityLength_snap (v : SnapVersion) :
 theorem capabilityLength_eth (v : EthVersion) :
     capabilityLength v.capability = v.messageCount := by
   cases v <;> rfl
+
+/-- The names of the two capabilities differ. -/
+theorem SNAP_NAME_ne_ETH_NAME : SNAP_NAME ≠ ETH_NAME := by
+  decide
+
+/-- The snap and eth count of message IDs is nonzero exactly on a snap or an eth capability. -/
+theorem capabilityLength_ne_zero_iff {c : Networking.Devp2p.Capability} :
+    capabilityLength c ≠ 0 ↔
+      (∃ v : SnapVersion, v.capability = c) ∨ ∃ v : EthVersion, v.capability = c := by
+  unfold capabilityLength
+  split
+  next hname =>
+    -- An eth capability has another name.
+    have heth : ¬∃ v : EthVersion, v.capability = c := by
+      rintro ⟨v, rfl⟩
+      exact SNAP_NAME_ne_ETH_NAME hname.symm
+    simp only [heth, or_false]
+    constructor
+    · intro h
+      cases hv : SnapVersion.ofNumber? c.version with
+      | none => simp [hv] at h
+      | some v =>
+        refine ⟨v, ?_⟩
+        cases c
+        simp only [SnapVersion.capability, Networking.Devp2p.Capability.mk.injEq]
+        exact ⟨hname.symm, SnapVersion.ofNumber?_eq_some_iff.mp hv⟩
+    · rintro ⟨v, rfl⟩
+      simp only [SnapVersion.capability, SnapVersion.ofNumber?_number, Option.map_some,
+        Option.getD_some]
+      exact Nat.pos_iff_ne_zero.mp (SnapVersion.messageCount_pos v)
+  next hname =>
+    -- A snap capability has another name.
+    have hsnap : ¬∃ v : SnapVersion, v.capability = c := by
+      rintro ⟨v, rfl⟩
+      exact hname rfl
+    simp only [hsnap, false_or]
+    exact ethLength_ne_zero_iff
 
 namespace SnapMessage
 
