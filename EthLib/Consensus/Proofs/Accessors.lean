@@ -32,6 +32,8 @@ An attestation has at most as many signers as bits, so its indexed form never ex
 Before Fulu, the proposer is active in the epoch of the state.
 
 A signature domain always has a value.
+
+A write to a circular buffer is read back at its position, and leaves every other entry unchanged.
 -/
 
 @[expose] public section
@@ -701,5 +703,31 @@ theorem getDomain_total (config : Config) (state : BeaconState preset fork)
       state.forkVersions.previousVersion else state.forkVersions.currentVersion)
     state.genesisValidatorsRoot
   exact ⟨domain, by simp only [computed]; rfl⟩
+
+/-- A write to a circular buffer is read back at the position it wrote. -/
+theorem readCircular_writeCircular {α : Type} {n : UInt64} {buffer written : Vector α n.toNat}
+    {i : UInt64} {value : α} (computed : writeCircular buffer i value = .ok written) :
+    readCircular written i = .ok value := by
+  unfold writeCircular at computed
+  split at computed
+  · cases computed
+  · next nonzero =>
+    cases computed
+    simp [readCircular, nonzero]
+
+/-- A write to a circular buffer leaves the entry at every other position unchanged. -/
+theorem readCircular_writeCircular_of_ne {α : Type} {n : UInt64}
+    {buffer written : Vector α n.toNat} {i j : UInt64} {value : α}
+    (computed : writeCircular buffer i value = .ok written) (other : i % n ≠ j % n) :
+    readCircular written j = readCircular buffer j := by
+  unfold writeCircular at computed
+  split at computed
+  · cases computed
+  · next nonzero =>
+    cases computed
+    have differ : i.toNat % n.toNat ≠ j.toNat % n.toNat := by
+      rw [← UInt64.toNat_mod, ← UInt64.toNat_mod]
+      exact fun same => other (UInt64.toNat_inj.mp same)
+    simp [readCircular, nonzero, differ]
 
 end EthLib.Consensus

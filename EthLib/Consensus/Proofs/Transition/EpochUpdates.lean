@@ -239,26 +239,27 @@ theorem sameSizes_processSlashings (computed : processSlashings state = .ok afte
 
 /-- The slashings reset clears the slashed balance of the next epoch, and nothing else. -/
 theorem processSlashingsReset_eq (computed : processSlashingsReset state = .ok after) :
-    ∃ nextEpoch : Epoch, nextEpoch.toNat = (getCurrentEpoch state).toNat + 1 ∧
-      after = { state with
-        slashings :=
-          state.slashings.set! (nextEpoch % preset.EPOCHS_PER_SLASHINGS_VECTOR).toNat 0 } := by
+    ∃ (nextEpoch : Epoch) (slashings : Vector Gwei preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat),
+      nextEpoch.toNat = (getCurrentEpoch state).toNat + 1 ∧
+      writeCircular state.slashings nextEpoch 0 = .ok slashings ∧
+      after = { state with slashings } := by
   simp only [processSlashingsReset, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
     addChecked_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨nextEpoch, ⟨_, sum⟩, rfl⟩ := computed
-  exact ⟨nextEpoch, by simpa using sum, rfl⟩
+  obtain ⟨nextEpoch, ⟨_, sum⟩, slashings, written, rfl⟩ := computed
+  exact ⟨nextEpoch, slashings, by simpa using sum, written, rfl⟩
 
 /-- The RANDAO reset copies the mix of the current epoch to the next epoch, and nothing else. -/
 theorem processRandaoMixesReset_eq (computed : processRandaoMixesReset state = .ok after) :
-    ∃ (nextEpoch : Epoch) (mix : Bytes32), nextEpoch.toNat = (getCurrentEpoch state).toNat + 1 ∧
+    ∃ (nextEpoch : Epoch) (mix : Bytes32)
+      (randaoMixes : Vector Bytes32 preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat),
+      nextEpoch.toNat = (getCurrentEpoch state).toNat + 1 ∧
       getRandaoMix state (getCurrentEpoch state) = .ok mix ∧
-      after = { state with
-        randaoMixes :=
-          state.randaoMixes.set! (nextEpoch % preset.EPOCHS_PER_HISTORICAL_VECTOR).toNat mix } := by
+      writeCircular state.randaoMixes nextEpoch mix = .ok randaoMixes ∧
+      after = { state with randaoMixes } := by
   simp only [processRandaoMixesReset, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
     addChecked_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨nextEpoch, ⟨_, sum⟩, mix, mixOk, rfl⟩ := computed
-  exact ⟨nextEpoch, mix, by simpa using sum, mixOk, rfl⟩
+  obtain ⟨nextEpoch, ⟨_, sum⟩, mix, mixOk, randaoMixes, written, rfl⟩ := computed
+  exact ⟨nextEpoch, mix, randaoMixes, by simpa using sum, mixOk, written, rfl⟩
 
 /-- Before Altair, the rotation moves the pending attestations of the current epoch to the previous.
 
