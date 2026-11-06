@@ -55,20 +55,23 @@ def opcodePositions (code : ByteArray) : List Nat :=
 
 It scans at most `fuel` opcodes, the same positions as the list of opcode positions.
 
-It calls itself only last, so a scan of millions of opcodes needs no deep stack. -/
-def markJumpDestsFrom (code : ByteArray) : (fuel pc : Nat) → Array Bool → Array Bool
+It calls itself only last, so a scan of millions of opcodes needs no deep stack.
+
+There is one flag for each byte of the code, so each position that the scan visits has a flag. -/
+def markJumpDestsFrom (code : ByteArray) :
+    (fuel pc : Nat) → Vector Bool code.size → Vector Bool code.size
   | 0, _, flags => flags
   | fuel + 1, pc, flags =>
-    if pc < code.size then
+    if h : pc < code.size then
       markJumpDestsFrom code fuel (nextOpcode code pc)
-        (if byteAt code pc = JUMPDEST then flags.set! pc true else flags)
+        (if byteAt code pc = JUMPDEST then flags.set pc true h else flags)
     else flags
 
 /-- The valid jump destinations of the code, as one flag for each position.
 
 A flag is true when an opcode starts at the position and the byte there is JUMPDEST. -/
 def validJumpDestinations (code : ByteArray) : Array Bool :=
-  markJumpDestsFrom code code.size 0 (Array.replicate code.size false)
+  (markJumpDestsFrom code code.size 0 (Vector.replicate code.size false)).toArray
 
 /-- Whether a position is a valid jump destination, given the flags of the code. -/
 def isValidJumpDest (flags : Array Bool) (pc : Nat) : Bool :=
