@@ -10,6 +10,7 @@ What a successful map over a list in `Except` returns.
 Lean core proves no such facts for `Except`, and every layer needs them.
 
 - The map has one output for each input.
+- Two lists that map to one list are equal, when the function is injective on their items.
 - A run of checks passes exactly when each check passes.
 - The function succeeds on every input.
 - Each output is the image of an input.
@@ -48,6 +49,30 @@ theorem mapM_ok_length {xs : List α} {ys : List β} (h : xs.mapM f = .ok ys) :
   | cons x xs ih =>
     obtain ⟨_, rest, _, tail, rfl⟩ := mapM_cons_ok.mp h
     simp [ih tail]
+
+/-- Two lists that a function maps to one list are equal, when it is injective on their items. -/
+theorem mapM_ok_injective {xs ys : List α} {zs : List β}
+    (hinjective : ∀ x ∈ xs, ∀ y ∈ ys, ∀ z, f x = .ok z → f y = .ok z → x = y)
+    (hx : xs.mapM f = .ok zs) (hy : ys.mapM f = .ok zs) : xs = ys := by
+  induction xs generalizing ys zs with
+  | nil =>
+    simp only [List.mapM_nil, pure, Except.pure, Except.ok.injEq] at hx
+    subst hx
+    cases ys with
+    | nil => rfl
+    | cons y ys =>
+      obtain ⟨_, _, _, _, h⟩ := mapM_cons_ok.mp hy
+      cases h
+  | cons x xs ih =>
+    obtain ⟨z, rest, hz, hrest, rfl⟩ := mapM_cons_ok.mp hx
+    cases ys with
+    | nil => cases hy
+    | cons y ys =>
+      obtain ⟨z', rest', hz', hrest', h⟩ := mapM_cons_ok.mp hy
+      obtain ⟨rfl, rfl⟩ := List.cons.inj h
+      -- The heads have one output, and the tails map to one list.
+      rw [hinjective x (by simp) y (by simp) z hz hz',
+        ih (fun x hx y hy => hinjective x (by simp [hx]) y (by simp [hy])) hrest hrest']
 
 /-- A run of checks over a list passes exactly when each check passes. -/
 theorem forM_ok_iff {xs : List α} {check : α → Except ε Unit} :
