@@ -101,13 +101,18 @@ private theorem curve_negY (Q : Fin 3 → Fp2) :
   ring
 
 theorem rep_neg (P : G2) : rep (neg P) = curve.neg (rep P) := by
+  -- Each coordinate is rewritten, since a defeq check of whole vectors would unfold the arithmetic.
+  have hx : (neg P).x = P.x := rfl
+  have hy : (neg P).y = -P.y := rfl
+  have hz : (neg P).z = P.z := rfl
   funext i
   fin_cases i
-  · rfl
-  · show (-P.y : Fp2) = curve.negY (rep P)
-    rw [curve_negY]
-    rfl
-  · rfl
+  · show (neg P).x = curve.neg (rep P) 0
+    rw [neg_X, rep_x, hx]
+  · show (neg P).y = curve.neg (rep P) 1
+    rw [neg_Y, curve_negY, rep_y, hy]
+  · show (neg P).z = curve.neg (rep P) 2
+    rw [neg_Z, rep_z, hz]
 
 theorem valid_neg {P : G2} (h : Valid P) : Valid (neg P) := by
   rw [Valid, rep_neg]
@@ -116,6 +121,12 @@ theorem valid_neg {P : G2} (h : Valid P) : Valid (neg P) := by
 theorem toPoint_neg {P : G2} (h : Valid P) : toPoint (neg P) = -toPoint P := by
   rw [toPoint, rep_neg]
   exact Point.toAffine_neg h
+
+/-- The constants of the formulas are the numerals of `Fp2`. -/
+private theorem ofFp_ofNat (n : Nat) [n.AtLeastTwo] :
+    Fp2.ofFp (BaseField.ofNat n : Fp) = (OfNat.ofNat n : Fp2) := by
+  rw [Fp2.numeral_eq]
+  rfl
 
 /-! ## Doubling
 
@@ -162,12 +173,15 @@ theorem rep_double {P : G2} (hz : ¬P.z.isZero = true) :
   fin_cases i
   · show (double P).x = curve.dblX (rep P)
     rw [double, ite_eq_right hz]
+    simp only [ofFp_ofNat]
     exact dblX_eq P.x P.y P.z
   · show (double P).y = curve.dblY (rep P)
     rw [double, ite_eq_right hz]
+    simp only [ofFp_ofNat]
     exact dblY_eq P.x P.y P.z
   · show (double P).z = curve.dblZ (rep P)
     rw [double, ite_eq_right hz]
+    simp only [ofFp_ofNat]
     exact dblZ_eq P.x P.y P.z
 
 theorem valid_double {P : G2} (h : Valid P) : Valid (double P) := by
@@ -293,20 +307,21 @@ private theorem rep_add_general {P Q : G2} (hP : Valid P) (hQ : Valid Q)
   let s1 := P.y * Q.z * z2z2
   let s2 := Q.y * P.z * z1z1
   let h := u2 - u1
-  let i := Fp2.ofFp (Fp.ofNat 2) * h * (Fp2.ofFp (Fp.ofNat 2) * h)
+  let i := 2 * h * (2 * h)
   let j := h * i
-  let r := Fp2.ofFp (Fp.ofNat 2) * (s2 - s1)
+  let r := 2 * (s2 - s1)
   let v := u1 * i
-  let x3 := r * r - j - Fp2.ofFp (Fp.ofNat 2) * v
+  let x3 := r * r - j - 2 * v
   obtain ⟨hX, hY, hZ⟩ := spec_add_components P.x P.y P.z Q.x Q.y Q.z
     z1z1 z2z2 u1 u2 s1 s2 h i j r v x3
     rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
     (valid_equation hP) (valid_equation hQ)
   have hbranch : add P Q = G2.mk x3
-      (r * (v - x3) - Fp2.ofFp (Fp.ofNat 2) * s1 * j)
+      (r * (v - x3) - 2 * s1 * j)
       (((P.z + Q.z) * (P.z + Q.z) - z1z1 - z2z2) * h) := by
-    rw [add, ite_eq_right hz1, ite_eq_right hz2]
-    exact ite_eq_right hu
+    rw [add, ite_eq_right hz1, ite_eq_right hz2, ite_eq_right hu]
+    simp only [ofFp_ofNat]
+    rfl
   rw [hbranch]
   funext k
   fin_cases k
@@ -348,9 +363,11 @@ private theorem isUnit_scale {P Q : G2} (hz1 : ¬P.z.isZero = true)
 theorem valid_add {P Q : G2} (hP : Valid P) (hQ : Valid Q) :
     Valid (add P Q) := by
   by_cases hz1 : P.z.isZero = true
-  · rwa [Valid, add_of_left_zero hz1]
+  · rw [Valid, add_of_left_zero hz1]
+    exact hQ
   by_cases hz2 : Q.z.isZero = true
-  · rwa [Valid, add_of_right_zero hz1 hz2]
+  · rw [Valid, add_of_right_zero hz1 hz2]
+    exact hP
   by_cases hu : (P.x * (Q.z * Q.z)).beq (Q.x * (P.z * P.z)) = true
   · by_cases hs : (P.y * Q.z * (Q.z * Q.z)).beq (Q.y * P.z * (P.z * P.z)) = true
     · rw [Valid, add_of_dbl hz1 hz2 hu hs]
@@ -393,13 +410,11 @@ theorem toPoint_add {P Q : G2} (hP : Valid P) (hQ : Valid Q) :
         ((nonsingular_iff (rep Q)).mp hQ).1 hx hy
       have hequiv : rep P ≈ curve.neg (rep Q) := by
         refine equiv_of_X_eq_of_Y_eq (z_ne_zero hz1) ?_ ?_ ?_
-        · show rep Q 2 ≠ 0
+        · rw [neg_Z]
           exact z_ne_zero hz2
-        · show rep P 0 * rep Q 2 ^ 2 = curve.neg (rep Q) 0 * rep P 2 ^ 2
-          rw [neg_X]
+        · rw [neg_X, neg_Z]
           exact hx
-        · show rep P 1 * rep Q 2 ^ 3 = curve.neg (rep Q) 1 * rep P 2 ^ 3
-          rw [neg_Y]
+        · rw [neg_Y, neg_Z]
           exact hyneg
       rw [add_of_opp hz1 hz2 hu hs, toPoint_zero,
         show toPoint P = -toPoint Q from (Point.toAffine_of_equiv hequiv).trans
