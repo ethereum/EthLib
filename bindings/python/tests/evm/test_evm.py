@@ -357,11 +357,44 @@ def test_extend_memory(current: int, ranges: list, result: tuple) -> None:
     assert extend_memory(current, ranges) == result
 
 
-def test_raw_lengths() -> None:
-    # The extension takes whole words and whole ranges, so a shorter input is rejected.
+# The codes of an operand and of ranges of the wrong length, from the binding contract.
+OPERAND_LENGTH = 101
+RANGES_LENGTH = 102
+
+
+@pytest.mark.parametrize("position", [0, 1, 2])
+@pytest.mark.parametrize("length", [0, 1, 31, 33])
+def test_operand_must_be_32_bytes(position: int, length: int) -> None:
+    # The extension takes whole words, so an operand of another length is rejected.
     from ethlib.cryptography import _native
 
-    with raises(ValueError, "each operand must be 32 bytes"):
-        _native.evm_word_op(0x01, b"\x01", bytes(32), bytes(32))
-    with raises(ValueError, "the ranges must be a whole number of 64-byte pairs"):
-        _native.evm_extend_memory_cost(b"\x00", bytes(63))
+    operands = [bytes(32)] * 3
+    operands[position] = bytes(length)
+    with raises(EvmError, "each operand must be 32 bytes") as info:
+        _native.evm_word_op(0x01, *operands)
+    assert info.value.code == OPERAND_LENGTH
+
+
+def test_operand_length_checked_before_opcode() -> None:
+    # JUMP is outside the table of words, but the short operand is the error reported.
+    from ethlib.cryptography import _native
+
+    with raises(EvmError, "each operand must be 32 bytes") as info:
+        _native.evm_word_op(0x56, bytes(31), bytes(32), bytes(32))
+    assert info.value.code == OPERAND_LENGTH
+
+
+@pytest.mark.parametrize("length", [1, 32, 63, 65, 127])
+def test_ranges_must_be_whole_pairs(length: int) -> None:
+    # The extension takes whole ranges of two words, so a partial range is rejected.
+    from ethlib.cryptography import _native
+
+    for export in (_native.evm_extend_memory_cost, _native.evm_extend_memory_expand_by):
+        with raises(EvmError, "the ranges must be a whole number of 64-byte pairs") as info:
+            export(b"\x00", bytes(length))
+        assert info.value.code == RANGES_LENGTH
+
+
+def test_no_ranges() -> None:
+    # An empty list of ranges is a whole number of pairs, so memory does not grow.
+    assert extend_memory(0, []) == (0, 0)

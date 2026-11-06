@@ -1,6 +1,7 @@
 /* Python wrappers of the EVM word, memory price and contract address exports.
  *
- * Words and numbers cross the boundary as big-endian bytes, which the Python package converts. */
+ * Words and numbers cross the boundary as big-endian bytes, which the Python package converts.
+ * Lean checks the length of each argument, so these wrappers check only the types. */
 #include "wrappers.h"
 
 /* ---- Lean externs ----------------------------------------------------- */
@@ -49,30 +50,6 @@ parse_bytes_args(
   return 1;
 }
 
-/* Check that the `bytes` argument at `index`, if it is `bytes`, has a length that is a
- * multiple of `unit`, and exactly `unit` when `exact` is set.
- *
- * It returns 0 with a ValueError set otherwise.
- * It runs before any array is built, so a failed check leaks nothing. */
-static int
-check_length(
-  PyObject* args,
-  Py_ssize_t index,
-  Py_ssize_t unit,
-  int exact,
-  const char* what
-) {
-  if (index >= PyTuple_GET_SIZE(args)) return 1;
-  PyObject* item = PyTuple_GET_ITEM(args, index);
-  if (!PyBytes_Check(item)) return 1;
-  Py_ssize_t len = PyBytes_GET_SIZE(item);
-  if (exact ? len != unit : len % unit != 0) {
-    PyErr_Format(PyExc_ValueError, "%s", what);
-    return 0;
-  }
-  return 1;
-}
-
 /* ---- Wrappers --------------------------------------------------------- */
 
 PyObject*
@@ -90,10 +67,6 @@ py_evm_word_op(
   if (opcode > 0xff) {
     PyErr_SetString(PyExc_OverflowError, "the opcode must be below 256");
     return NULL;
-  }
-  /* Each operand is one word. */
-  for (Py_ssize_t i = 1; i <= 3; i++) {
-    if (!check_length(args, i, 32, 1, "each operand must be 32 bytes")) return NULL;
   }
   lean_object* a[EVM_MAX_ARGS];
   if (!parse_bytes_args(args, 1, 3, a)) return NULL;
@@ -131,13 +104,9 @@ py_evm_extend_memory_cost(
   PyObject* self,
   PyObject* args
 ) {
-  /* Each range is a start word and a size word. */
-  if (!check_length(args, 1, 64, 0, "the ranges must be a whole number of 64-byte pairs")) {
-    return NULL;
-  }
   lean_object* a[EVM_MAX_ARGS];
   if (!parse_bytes_args(args, 0, 2, a)) return NULL;
-  return pybytes_of_bytearray(eth_evm_extend_memory_cost(a[0], a[1]));
+  return except_into_pybytes(eth_evm_extend_memory_cost(a[0], a[1]), EVM_ERROR);
 }
 
 PyObject*
@@ -145,13 +114,9 @@ py_evm_extend_memory_expand_by(
   PyObject* self,
   PyObject* args
 ) {
-  /* Each range is a start word and a size word. */
-  if (!check_length(args, 1, 64, 0, "the ranges must be a whole number of 64-byte pairs")) {
-    return NULL;
-  }
   lean_object* a[EVM_MAX_ARGS];
   if (!parse_bytes_args(args, 0, 2, a)) return NULL;
-  return pybytes_of_bytearray(eth_evm_extend_memory_expand_by(a[0], a[1]));
+  return except_into_pybytes(eth_evm_extend_memory_expand_by(a[0], a[1]), EVM_ERROR);
 }
 
 PyObject*
@@ -159,11 +124,9 @@ py_evm_create_address(
   PyObject* self,
   PyObject* args
 ) {
-  /* The sender is an address of 20 bytes, and the nonce is big-endian. */
-  if (!check_length(args, 0, 20, 1, "the sender must be 20 bytes")) return NULL;
   lean_object* a[EVM_MAX_ARGS];
   if (!parse_bytes_args(args, 0, 2, a)) return NULL;
-  return except_into_pybytes(eth_evm_create_address(a[0], a[1]), RLP_ERROR);
+  return except_into_pybytes(eth_evm_create_address(a[0], a[1]), EVM_ERROR);
 }
 
 PyObject*
@@ -171,10 +134,7 @@ py_evm_create2_address(
   PyObject* self,
   PyObject* args
 ) {
-  /* The sender is an address of 20 bytes, and the salt is one word. */
-  if (!check_length(args, 0, 20, 1, "the sender must be 20 bytes")) return NULL;
-  if (!check_length(args, 1, 32, 1, "the salt must be 32 bytes")) return NULL;
   lean_object* a[EVM_MAX_ARGS];
   if (!parse_bytes_args(args, 0, 3, a)) return NULL;
-  return pybytes_of_bytearray(eth_evm_create2_address(a[0], a[1], a[2]));
+  return except_into_pybytes(eth_evm_create2_address(a[0], a[1], a[2]), EVM_ERROR);
 }
