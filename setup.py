@@ -17,7 +17,7 @@ import subprocess
 from glob import glob
 from pathlib import Path
 
-from setuptools import Extension, setup
+from setuptools import Extension, find_packages, setup
 from setuptools.command.build_ext import build_ext
 
 REPO_ROOT = Path(__file__).parent.resolve()
@@ -196,52 +196,8 @@ def _make_extension() -> Extension:
 
 setup(
     package_dir={"": "bindings/python"},
-    packages=[
-        "ethlib",
-        "ethlib.cryptography",
-        "ethlib.cryptography.kzg",
-        "ethlib.cryptography.bls",
-        "ethlib.cryptography.xmss",
-        "ethlib.cryptography.sphincs",
-        "ethlib.cryptography.vrf",
-        "ethlib.cryptography.sha256",
-        "ethlib.cryptography.crc32",
-        "ethlib.cryptography.crc32c",
-        "ethlib.cryptography.aes",
-        "ethlib.cryptography.hmac",
-        "ethlib.cryptography.kdf",
-        "ethlib.cryptography.secp256k1",
-        "ethlib.cryptography.secp256r1",
-        "ethlib.cryptography.ethash",
-        "ethlib.precompiles",
-        "ethlib.networking",
-        "ethlib.networking.enr",
-        "ethlib.state",
-        "ethlib.chain",
-        "ethlib.engine",
-        "ethlib.consensus",
-        "ethlib.networking.reqresp",
-        "ethlib.networking.rlpx",
-        "ethlib.networking.devp2p",
-        "ethlib.networking.discv4",
-        "ethlib.networking.forkid",
-        "ethlib.execution",
-        "ethlib.execution.blocks",
-        "ethlib.execution.evm",
-        "ethlib.execution.fees",
-        "ethlib.execution.network",
-        "ethlib.execution.network.snap",
-        "ethlib.execution.pow",
-        "ethlib.execution.trie",
-        "ethlib.execution.transactions",
-        "ethlib.networking.discv5",
-        "ethlib.networking.gossip",
-        "ethlib.networking.snappy",
-        "ethlib.networking.varint",
-        "ethlib.serialization",
-        "ethlib.serialization.rlp",
-        "ethlib.serialization.ssz",
-    ],
+    # Each directory under the package root that has an `__init__.py`, so no list can drift.
+    packages=find_packages(where="bindings/python", include=["ethlib", "ethlib.*"]),
     # The type stub of the extension, which `lake exe gen-bindings` writes from Lean.
     package_data={"ethlib": ["py.typed"], "ethlib.cryptography": ["_native.pyi"]},
     ext_modules=[_make_extension()],
