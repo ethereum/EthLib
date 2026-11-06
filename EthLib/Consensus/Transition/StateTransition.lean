@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proposers
+public import EthLib.Consensus.Transition.BuilderPayments
 public import EthLib.Consensus.Transition.EpochParticipation
 public import EthLib.Consensus.Transition.EpochPending
 public import EthLib.Consensus.Transition.EpochUpdates
@@ -93,18 +94,23 @@ Before Capella the history takes a root of each span, and from Capella a summary
 
 The rotation of the participation flags and the sync committee update follow.
 
-From Fulu the lookahead of proposers moves on last, as [EIP-7917] specifies.
+From Fulu the lookahead of proposers moves on after them, as [EIP-7917] specifies.
 
-Gloas adds steps, which EthLib does not yet have here, so it fails as not yet specified.
+From Gloas [EIP-7732] adds two steps: the builder payments and the window of payload committees.
+
+The builder payments settle after the pending consolidations, and the window moves on last.
+
+Heze changes the epoch, which EthLib does not yet have here, so it fails as not yet specified.
 
 [EIP-7917]: https://eips.ethereum.org/EIPS/eip-7917#specification
+[EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#state-transition
 -/
 def processEpochAltair (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (altair : .altair ≤ fork) :
     Except TransitionError (BeaconState preset fork) :=
-  if gloas : .glamsterdam ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
+  if heze : .hegota ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
   else do
-    have before : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le gloas) (by decide)
+    have before : fork < .hegota := Nat.lt_of_not_le heze
     let state ← processJustificationAndFinalization state
     let state ← processInactivityUpdates config state altair
     let state ← processRewardsAndPenalties config state
@@ -112,6 +118,9 @@ def processEpochAltair (config : Config) (checks : SignatureChecks)
     let state ← processSlashings state
     let state ← processEth1DataReset before state
     let state ← processPendingBalances config checks state
+    let state ← (if gloas : .glamsterdam ≤ fork then
+        liftAccessor (processBuilderPendingPayments state gloas)
+      else pure state)
     let state ← processEffectiveBalanceUpdates state
     let state ← processSlashingsReset state
     let state ← processRandaoMixesReset state
@@ -119,7 +128,9 @@ def processEpochAltair (config : Config) (checks : SignatureChecks)
       else processHistoricalRootsUpdate state
     let state := processParticipationFlagUpdates state altair
     let state ← processSyncCommitteeUpdates state altair
-    if fulu : .fusaka ≤ fork then liftAccessor (processProposerLookahead state fulu)
+    let state ← (if fulu : .fusaka ≤ fork then liftAccessor (processProposerLookahead state fulu)
+      else pure state)
+    if gloas : .glamsterdam ≤ fork then liftAccessor (processPtcWindow state gloas)
     else pure state
 
 /-- The state after the epoch transition.
