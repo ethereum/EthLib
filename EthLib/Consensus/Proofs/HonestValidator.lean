@@ -219,4 +219,88 @@ theorem getCommitteeAssignment_unique {state : BeaconState preset fork} {epoch :
   exact eq_of_mem_getBeaconCommittee within (slotEpoch.symm) otherLt (slotEpoch ▸ indexLt) fits
     otherComputed computed otherMem member
 
+/-- A search that finds nothing found no position whose committee holds the validator. -/
+theorem not_mem_of_findCommittee_none {state : BeaconState preset fork}
+    {validatorIndex : ValidatorIndex} :
+    ∀ {positions : List (Slot × CommitteeIndex)},
+      findCommittee state validatorIndex positions = .ok none →
+      ∀ position ∈ positions, ∀ committee,
+        getBeaconCommittee state position.1 position.2 = .ok committee →
+        validatorIndex ∉ committee
+  | [], _, _, mem, _, _ => absurd mem List.not_mem_nil
+  | (slot, index) :: rest, h, position, mem, committee, computed => by
+    unfold findCommittee at h
+    obtain ⟨committee', computed', h⟩ := bind_ok_iff.mp h
+    rw [mapError_ok_iff] at computed'
+    split at h
+    · cases h
+    rename_i notMem
+    rcases List.mem_cons.mp mem with rfl | mem
+    · rw [computed, Except.ok.injEq] at computed'
+      exact computed' ▸ notMem
+    · exact not_mem_of_findCommittee_none h position mem committee computed
+
+/-- Each slot of an epoch, with an index below the committees of a slot, is a position of it.
+
+An epoch must have at least one slot. -/
+theorem mem_committeePositions_of_epoch {state : BeaconState preset fork} {epoch : Epoch}
+    {positions : List (Slot × CommitteeIndex)} (positive : preset.SLOTS_PER_EPOCH ≠ 0)
+    (h : committeePositions state epoch = .ok positions) {slot : Slot} {index : CommitteeIndex}
+    (slotEpoch : computeEpochAtSlot preset slot = epoch)
+    (indexLt : index < getCommitteeCountPerSlot state epoch) :
+    (slot, index) ∈ positions := by
+  unfold committeePositions at h
+  obtain ⟨startSlot, started, h⟩ := bind_ok_iff.mp h
+  rw [mapError_ok_iff] at started
+  have start := (mulChecked_ok_iff.mp started)
+  split at h
+  · simp only [pure, Except.pure, Except.ok.injEq] at h
+    subst h
+    have lengthPos : 0 < preset.SLOTS_PER_EPOCH.toNat :=
+      Nat.pos_of_ne_zero fun zero => positive (UInt64.toNat_inj.mp (by simpa using zero))
+    have epochNat := congrArg UInt64.toNat slotEpoch
+    simp only [computeEpochAtSlot, UInt64.toNat_div] at epochNat
+    -- The slot is the first slot of the epoch plus its place in the epoch.
+    have split := Nat.div_add_mod slot.toNat preset.SLOTS_PER_EPOCH.toNat
+    rw [epochNat] at split
+    have offsetLt := Nat.mod_lt slot.toNat lengthPos
+    simp only [List.mem_flatMap, List.mem_range, List.mem_map, Prod.mk.injEq]
+    refine ⟨slot.toNat % preset.SLOTS_PER_EPOCH.toNat, offsetLt, index.toNat,
+      UInt64.lt_iff_toNat_lt.mp indexLt, ?_, by simp⟩
+    apply UInt64.toNat_inj.mp
+    have offsetSmall : slot.toNat % preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 :=
+      Nat.lt_of_lt_of_le offsetLt (Nat.le_of_lt preset.SLOTS_PER_EPOCH.toNat_lt)
+    rw [UInt64.toNat_add, Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt offsetSmall,
+      start.2, Nat.mul_comm, split, Nat.mod_eq_of_lt slot.toNat_lt]
+  · simp [throw, throwThe, MonadExceptOf.throw] at h
+
+/-- An active validator never gets the answer that it has no committee in its epoch.
+
+The search may still fail, for an epoch too far ahead or a committee without a value.
+
+The seed of the epoch must have a value, and an epoch must have at least one slot.
+
+The slots of the epoch must fit in 64 bits.
+
+The number of active validators times the number of committees of the epoch must fit too. -/
+theorem getCommitteeAssignment_ne_none {state : BeaconState preset fork} {epoch : Epoch}
+    {seed : Bytes32} (seedOk : getSeed state epoch DOMAIN_BEACON_ATTESTER = .ok seed)
+    (positive : preset.SLOTS_PER_EPOCH ≠ 0)
+    (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64)
+    (fits : (getActiveValidatorIndices state epoch).length *
+      ((getCommitteeCountPerSlot state epoch).toNat * preset.SLOTS_PER_EPOCH.toNat) < 2 ^ 64)
+    {validatorIndex : ValidatorIndex}
+    (active : validatorIndex ∈ getActiveValidatorIndices state epoch) :
+    getCommitteeAssignment state epoch validatorIndex ≠ .ok none := by
+  intro h
+  unfold getCommitteeAssignment at h
+  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  split at h
+  · obtain ⟨positions, positioned, found⟩ := bind_ok_iff.mp h
+    obtain ⟨slot, index, committee, slotEpoch, indexLt, computed, mem⟩ :=
+      exists_mem_getBeaconCommittee seedOk positive slotsFit fits active
+    exact not_mem_of_findCommittee_none found (slot, index)
+      (mem_committeePositions_of_epoch positive positioned slotEpoch indexLt) committee computed mem
+  · simp [throw, throwThe, MonadExceptOf.throw] at h
+
 end EthLib.Consensus
