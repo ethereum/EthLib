@@ -26,7 +26,7 @@ Each slot has from one committee up to the most committees of the preset.
 
 Each member of a committee, and each validator that an attestation shows, is active in its epoch.
 
-No validator is in two committees of one epoch.
+Every active validator is in a committee of its epoch, and no validator is in two of them.
 
 The indices of an attestation increase strictly, as the check of an indexed attestation asks.
 
@@ -427,6 +427,107 @@ theorem eq_of_mem_getBeaconCommittee {state : BeaconState preset fork}
   apply UInt64.toNat_inj.mp
   rw [← Nat.div_add_mod firstSlot.toNat length, ← Nat.div_add_mod secondSlot.toNat length,
     epochNat, sameMod]
+
+/-- A product below `2^64` succeeds, and it returns the wrapping product. -/
+theorem mulChecked_of_lt {a b : UInt64} (small : a.toNat * b.toNat < 2 ^ 64) :
+    mulChecked a b = .ok (a * b) :=
+  Base.Uint64.mulChecked_ok_iff.mpr ⟨small, by rw [UInt64.toNat_mul, Nat.mod_eq_of_lt small]⟩
+
+/-- Every active validator is in a committee of its epoch.
+
+The committee has a slot of the epoch and an index below the committees of a slot.
+
+The seed of the epoch must have a value, and an epoch must have at least one slot.
+
+The slots of the epoch must fit in 64 bits.
+
+The number of active validators times the number of committees of the epoch must fit too. -/
+theorem exists_mem_getBeaconCommittee {state : BeaconState preset fork} {epoch : Epoch}
+    {seed : Bytes32} (seedOk : getSeed state epoch DOMAIN_BEACON_ATTESTER = .ok seed)
+    (positive : preset.SLOTS_PER_EPOCH ≠ 0)
+    (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64)
+    (fits : (getActiveValidatorIndices state epoch).length *
+      ((getCommitteeCountPerSlot state epoch).toNat * preset.SLOTS_PER_EPOCH.toNat) < 2 ^ 64)
+    {member : ValidatorIndex} (active : member ∈ getActiveValidatorIndices state epoch) :
+    ∃ slot index committee, computeEpochAtSlot preset slot = epoch ∧
+      index < getCommitteeCountPerSlot state epoch ∧
+      getBeaconCommittee state slot index = .ok committee ∧ member ∈ committee := by
+  have lengthPos : 0 < preset.SLOTS_PER_EPOCH.toNat :=
+    Nat.pos_of_ne_zero fun zero => positive (UInt64.toNat_inj.mp (by simpa using zero))
+  have perPos : 0 < (getCommitteeCountPerSlot state epoch).toNat :=
+    UInt64.le_iff_toNat_le.mp (one_le_getCommitteeCountPerSlot state epoch)
+  have countFits : (getCommitteeCountPerSlot state epoch).toNat * preset.SLOTS_PER_EPOCH.toNat <
+      2 ^ 64 :=
+    Nat.lt_of_le_of_lt (Nat.le_mul_of_pos_left _ (List.length_pos_of_mem active)) fits
+  have countEq : (getCommitteeCountPerSlot state epoch * preset.SLOTS_PER_EPOCH).toNat =
+      (getCommitteeCountPerSlot state epoch).toNat * preset.SLOTS_PER_EPOCH.toNat := by
+    rw [UInt64.toNat_mul, Nat.mod_eq_of_lt countFits]
+  have countPos : 0 < getCommitteeCountPerSlot state epoch * preset.SLOTS_PER_EPOCH :=
+    UInt64.lt_iff_toNat_lt.mpr (by rw [countEq]; exact Nat.mul_pos perPos lengthPos)
+  -- The validator is in committee `position` of the epoch.
+  obtain ⟨position, positionLt, committee, computed, mem⟩ :=
+    exists_mem_computeCommittee (preset := preset) (seed := seed)
+      (indices := (getActiveValidatorIndices state epoch).toArray)
+      (by simpa [countEq] using fits) countPos (by simpa using active)
+  rw [countEq] at positionLt
+  have perSmall := (getCommitteeCountPerSlot state epoch).toNat_lt
+  generalize perEq : (getCommitteeCountPerSlot state epoch).toNat = perSlot at *
+  generalize lengthEq : preset.SLOTS_PER_EPOCH.toNat = length at *
+  -- That committee is committee `place mod perSlot` of the slot at `place` in the epoch.
+  have placeLt : position / perSlot < length := Nat.div_lt_of_lt_mul positionLt
+  have indexLt : position % perSlot < perSlot := Nat.mod_lt _ perPos
+  have slotLt : epoch.toNat * length + position / perSlot < 2 ^ 64 := by
+    have : epoch.toNat * length + position / perSlot < (epoch.toNat + 1) * length := by
+      rw [Nat.succ_mul]
+      omega
+    omega
+  have slotNat : (UInt64.ofNat (epoch.toNat * length + position / perSlot)).toNat =
+      epoch.toNat * length + position / perSlot := by
+    rw [UInt64.toNat_ofNat', Nat.mod_eq_of_lt slotLt]
+  have indexNat : (UInt64.ofNat (position % perSlot)).toNat = position % perSlot := by
+    rw [UInt64.toNat_ofNat', Nat.mod_eq_of_lt (by omega)]
+  have epochEq :
+      computeEpochAtSlot preset (UInt64.ofNat (epoch.toNat * length + position / perSlot)) =
+        epoch := by
+    apply UInt64.toNat_inj.mp
+    rw [computeEpochAtSlot, UInt64.toNat_div, slotNat, lengthEq, Nat.mul_comm,
+      Nat.mul_add_div lengthPos, Nat.div_eq_of_lt placeLt, Nat.add_zero]
+  have placeNat :
+      (UInt64.ofNat (epoch.toNat * length + position / perSlot) % preset.SLOTS_PER_EPOCH).toNat =
+        position / perSlot := by
+    rw [UInt64.toNat_mod, slotNat, lengthEq, Nat.mul_comm, Nat.mul_add_mod,
+      Nat.mod_eq_of_lt placeLt]
+  refine ⟨UInt64.ofNat (epoch.toNat * length + position / perSlot),
+    UInt64.ofNat (position % perSlot), committee, epochEq, ?_, ?_, mem⟩
+  · exact UInt64.lt_iff_toNat_lt.mpr (by rw [indexNat, perEq]; exact indexLt)
+  -- The checked products and sum of the position all fit, and give `position` back.
+  have split : position / perSlot * perSlot + position % perSlot = position := by
+    rw [Nat.mul_comm]
+    exact Nat.div_add_mod _ _
+  have productSmall : position / perSlot * perSlot < 2 ^ 64 := by omega
+  have productOk := mulChecked_of_lt (a := UInt64.ofNat (epoch.toNat * length + position / perSlot)
+    % preset.SLOTS_PER_EPOCH) (b := getCommitteeCountPerSlot state epoch)
+    (by rw [placeNat, perEq]; exact productSmall)
+  have productNat :
+      (UInt64.ofNat (epoch.toNat * length + position / perSlot) % preset.SLOTS_PER_EPOCH *
+        getCommitteeCountPerSlot state epoch).toNat = position / perSlot * perSlot := by
+    rw [UInt64.toNat_mul, placeNat, perEq, Nat.mod_eq_of_lt productSmall]
+  have sumOk := addChecked_of_lt
+    (a := UInt64.ofNat (epoch.toNat * length + position / perSlot) % preset.SLOTS_PER_EPOCH *
+      getCommitteeCountPerSlot state epoch) (b := UInt64.ofNat (position % perSlot))
+    (by rw [productNat, indexNat, split]; omega)
+  have countOk := mulChecked_of_lt (a := getCommitteeCountPerSlot state epoch)
+    (b := preset.SLOTS_PER_EPOCH) (by rw [perEq, lengthEq]; exact countFits)
+  have positionEq :
+      UInt64.ofNat (epoch.toNat * length + position / perSlot) % preset.SLOTS_PER_EPOCH *
+          getCommitteeCountPerSlot state epoch + UInt64.ofNat (position % perSlot) =
+        UInt64.ofNat position := by
+    apply UInt64.toNat_inj.mp
+    rw [Base.Uint64.toNat_add_of_lt (by rw [productNat, indexNat, split]; omega), productNat,
+      indexNat, split, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (by omega)]
+  simp only [getBeaconCommittee, epochEq, seedOk, liftArith, productOk, sumOk, countOk, bind,
+    Except.bind, Except.mapError, positionEq]
+  rw [computed]
 
 /-- One step of the pass that drops repeats keeps its list decreasing, below the rest. -/
 theorem keepNew_step {kept rest : List ValidatorIndex} {first : ValidatorIndex}
