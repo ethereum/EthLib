@@ -7,6 +7,8 @@ public import EthLib.Consensus.Transition.EpochPending
 public import EthLib.Consensus.Transition.EpochUpdates
 public import EthLib.Consensus.Transition.Execution
 public import EthLib.Consensus.Transition.Operations
+public import EthLib.Consensus.Transition.ParentPayload
+public import EthLib.Consensus.Transition.Payload
 public import EthLib.Consensus.Transition.Requests
 public import EthLib.Consensus.Transition.SyncAggregate
 
@@ -197,43 +199,61 @@ def processSlots (config : Config) (checks : SignatureChecks) (state : BeaconSta
 
 Before Capella the payload runs only once execution is enabled, at the merge or after it.
 
-From Capella the withdrawals of the payload run first, and the payload always runs. -/
-def processBlockExecution (config : Config) (engine : ExecutionEngine preset fork)
-    (state : BeaconState preset fork) (body : BeaconBlockBody preset fork)
-    (bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam) :
+From Capella the withdrawals of the payload run first, and the payload always runs.
+
+From Gloas the block carries a bid for the payload instead of the payload.
+
+The withdrawals run first, then the bid. -/
+def processBlockExecution (config : Config) (checks : SignatureChecks)
+    (engine : ExecutionEngine preset fork) (state : BeaconState preset fork)
+    (body : BeaconBlockBody preset fork) (bellatrix : .bellatrix ≤ fork) :
     Except TransitionError (BeaconState preset fork) :=
-  if capella : .shapella ≤ fork then do
-    let state ← processWithdrawals state capella fun _ => body.executionPayload bellatrix
-    processExecutionPayload config engine state body bellatrix
-  else if isExecutionEnabled state body bellatrix then
-    processExecutionPayload config engine state body bellatrix
-  else pure state
+  if gloas : .glamsterdam ≤ fork then do
+    have capella : .shapella ≤ fork := Nat.le_trans (by decide) gloas
+    let state ← processWithdrawals state capella fun before =>
+      absurd gloas (Nat.not_le_of_lt before)
+    processExecutionPayloadBid config checks state gloas (body.signedExecutionPayloadBid gloas)
+  else
+    have execution : .bellatrix ≤ fork ∧ fork < .glamsterdam := ⟨bellatrix, Nat.lt_of_not_le gloas⟩
+    if capella : .shapella ≤ fork then do
+      let state ← processWithdrawals state capella fun _ => body.executionPayload execution
+      processExecutionPayload config engine state body execution
+    else if isExecutionEnabled state body execution then
+      processExecutionPayload config engine state body execution
+    else pure state
 
 /-- From Altair: the state after a block.
 
-The header runs first, then from Bellatrix the execution part of the block.
+From Gloas the payload of the parent block runs first, if the parent has one.
+
+The header runs next, then from Bellatrix the execution part of the block.
 
 The RANDAO reveal, the vote on the deposit contract and the operations follow.
 
+From Gloas the attestations of the operations read the slot of the parent block.
+
 The sync aggregate comes last.
 
-Gloas moves the payload out of the block, which EthLib does not yet have here.
+Heze changes the epoch and the block, which EthLib does not yet have here.
 
 So it fails as not yet specified. -/
 def processBlockAltair (config : Config) (checks : SignatureChecks)
     (engine : ExecutionEngine preset fork) (state : BeaconState preset fork)
     (block : BeaconBlock preset fork) (altair : .altair ≤ fork) :
     Except TransitionError (BeaconState preset fork) :=
-  if gloas : .glamsterdam ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
+  if heze : .hegota ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
   else do
-    have before : fork < .glamsterdam := Nat.lt_of_not_le gloas
+    have before : fork < .hegota := Nat.lt_of_not_le heze
     let parentSlot := state.latestBlockHeader.slot
+    let state ← (if gloas : .glamsterdam ≤ fork then
+        processParentExecutionPayload config checks state gloas block.body
+      else pure state)
     let state ← processBlockHeader state block
-    let state ← if bellatrix : .bellatrix ≤ fork then
-        processBlockExecution config engine state block.body ⟨bellatrix, before⟩
-      else pure state
+    let state ← (if bellatrix : .bellatrix ≤ fork then
+        processBlockExecution config checks engine state block.body bellatrix
+      else pure state)
     let state ← processRandao config checks state block.body
-    let state ← processEth1Data (Nat.lt_trans before (by decide)) state block.body
+    let state ← processEth1Data before state block.body
     let state ← processOperations config checks state block.body parentSlot
     processSyncAggregate config checks state altair (block.body.syncAggregate altair)
 
