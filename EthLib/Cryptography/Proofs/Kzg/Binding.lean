@@ -14,6 +14,8 @@ So `(-z, (π - π') / (y' - y))` solves the strong Diffie–Hellman problem for 
 
 The setup also holds `[τ]_2`, so the instance is the asymmetric variant of the problem.
 
+The scalar of 48 bytes is the scalar that their point represents, if there is one.
+
 The search reads only the two openings, as in Appendix C.1 of the paper below.
 
 It is the extended version of Kate, Zaverucha and Goldberg, CACR 2010-10:

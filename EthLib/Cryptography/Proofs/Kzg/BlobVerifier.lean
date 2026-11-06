@@ -19,6 +19,7 @@ Each root below is a root of the error polynomial of the batch.
 - Under the pairing law, the verdict is true exactly when the batch challenge is a root.
 - Every entry of an accepted batch satisfies the opening equation, or the batch challenge is a root.
 - With the hash a random oracle, the root case has probability at most `(q + 1) (n - 1) / r`.
+  Here `q` bounds the queries, `n` the commitments, and `r` is the order of `Fr`.
 - Every batch of valid blob openings is accepted, including honestly computed proofs.
 -/
 
@@ -494,7 +495,7 @@ noncomputable def blobInputRomExperiment
 
 The hash of the batch check is a random oracle on the batch of openings that the check builds.
 
-The adversary makes `q` queries, then outputs a batch with at most `n` commitments.
+The adversary makes at most `q` queries, then outputs a batch with at most `n` commitments.
 
 The event is that the batch challenge is a root of a nonzero error polynomial of the batch.
 
@@ -502,7 +503,13 @@ Its probability is at most `(q + 1) (n - 1) / r`.
 
 An accepted batch runs on inputs of one size, so `n` bounds the number of blobs as well.
 
-An accepted batch with an invalid entry lies in this event, by the theorem on accepted batches. -/
+The event does not ask that the check accepts.
+
+Take the pairing law, a well-formed setup of `τ`, and the oracle in place of the hash.
+
+Let each scalar be the scalar of its bytes.
+
+Then an accepted batch with an invalid entry lies in this event. -/
 theorem prEvent_blobInput_root_le (τ : Fr) (c w : Bytes48 → Fr) {n : Nat}
     (adversary : OracleComp (OpeningBatch →ₒ Fr) BlobBatchInput) {q : Nat}
     (hq : OracleComp.IsTotalQueryBound adversary q) :
@@ -640,7 +647,9 @@ theorem exists_honest_blob_batch (laws : Bls.PairingLaws) (τ : Fr) :
 
 The adversary outputs one all-zero blob with `[1]_1` as the commitment and `[0]_1` as the proof.
 
-Under `scalarOf`, its error polynomial is the constant `1 - 0 - 0 = 1`, which is not zero. -/
+With each scalar the scalar of its bytes, its error polynomial is the constant `1 - 0 - 0 = 1`.
+
+That polynomial is not zero, but it has no root, so the event of the bound does not occur here. -/
 theorem exists_blobInput_adversary_nonzero_errorPoly (τ : Fr) :
     ∃ (adversary : OracleComp (OpeningBatch →ₒ Fr) BlobBatchInput) (y : BlobBatchInput),
       adversary = pure y ∧

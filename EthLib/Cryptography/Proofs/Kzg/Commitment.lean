@@ -12,6 +12,10 @@ A setup of the secret `τ` holds `[τ^i]_1`, `[τ^i]_2` and `[L_i(τ)]_1`, with 
 
 A blob's commitment sums its values times the Lagrange points, which gives `[p(τ)]_1`.
 
+A polynomial of degree below 4096, committed with the monomial points, also gives `[p(τ)]_1`.
+
+The setup built from the powers `[τ^i]_1` and `[τ^i]_2` is a well-formed setup of `τ`.
+
 The scheme is PolyCommit_DL, §3.2 of Kate, Zaverucha and Goldberg, ASIACRYPT 2010:
 
 <https://www.iacr.org/archive/asiacrypt2010/6477178/6477178.pdf>
@@ -146,7 +150,7 @@ theorem represents_commitPoly {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ
     G1.Represents (commitPoly s p) (p.eval τ) :=
   represents_commitPoly_of_monomial hs.monomial_g1 hp
 
-/-- The powers of the secret: 4096 points in `G1` and 65 points in `G2`.
+/-- Points that stand for the powers of a secret: 4096 in `G1` and 65 in `G2`.
 
 In security games they are `[τ^i]_1` for `i ≤ 4095` and `[τ^i]_2` for `i ≤ 64`. -/
 abbrev SetupPowers : Type := Vector G1 FIELD_ELEMENTS_PER_BLOB × Vector G2 KZG_SETUP_G2_LENGTH

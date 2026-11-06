@@ -270,7 +270,7 @@ theorem verifyCellKzgProofBatchImpl_decodes {s : TrustedSetup}
 /-- A map over an array that succeeds on every entry returns no error. -/
 theorem array_mapM_ne_error {ε α β : Type} {f : α → Except ε β} {xs : Array α} {e : ε}
     (h : ∀ x ∈ xs, ∃ y, f x = .ok y) : xs.mapM f ≠ .error e := by
-  obtain ⟨ys, hys⟩ := Base.array_mapM_exists_ok h
+  obtain ⟨ys, hys⟩ := array_mapM_exists_ok h
   rw [hys]
   exact fun h => nomatch h
 
