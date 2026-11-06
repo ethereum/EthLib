@@ -20,7 +20,7 @@ Every condition must hold, so that the skip is safe and cheap:
 - finality is recent, and the proposer is early in its slot;
 - before Fulu, the slot does not start an epoch, where the proposer shuffling could change.
 
-A weak head from a proposer that proposed twice in its slot is also skipped, at any time.
+A weak head of the previous slot, from a proposer that proposed twice in it, is also skipped.
 
 Gloas changes the choice and its late, weak and strong tests, which fail there as not yet specified.
 -/

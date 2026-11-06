@@ -49,7 +49,7 @@ variable {config : Config} {store : Store preset fork}
 
 /-- The sum of the effective balances, in a state, of the equivocators among some validators.
 
-An index outside the state adds nothing. -/
+An index outside the state adds nothing, so a statement must also require each equivocator known. -/
 def equivocatorWeight (store : Store preset fork) (state : BeaconState preset fork)
     (validators : List ValidatorIndex) : Nat :=
   (((validators.filter store.equivocatingIndices.contains).filterMap fun validator =>
@@ -274,7 +274,7 @@ private theorem forIn_equivocators_ok_iff {state : BeaconState preset fork}
 
 /-- A walk over the committees of some indices adds the balances of their equivocators.
 
-It succeeds exactly when each committee does, each equivocator is known, and the sum fits. -/
+It succeeds exactly when each committee is found, each equivocator is known, and the sum fits. -/
 private theorem forIn_committees_ok_iff {state justified : BeaconState preset fork} {slot : Slot}
     {indices : List Nat} {start stop : Nat} (small : start < 2 ^ 64) :
     forIn indices start (fun (index weight : Nat) => do
@@ -340,7 +340,9 @@ private theorem forIn_committees_ok_iff {state justified : BeaconState preset fo
 
 Its equivocators are those of the committees of its slot, in the state of the head.
 
-Their balances come from the justified state, which must hold each of them.
+Its votes and the balances of its equivocators come from the justified state.
+
+That state must hold each equivocator.
 
 The weight must fit in 64 bits. -/
 theorem isHeadWeak_ok_iff {root : Root} {weak : Bool} :
@@ -416,7 +418,9 @@ Each test must answer, and the slot of each block plus one must fit in 64 bits.
 
 It takes the parent when either list of tests passes, and the head otherwise.
 
-The first list is for a late head, and the second for a weak head whose proposer equivocated. -/
+The first list is for a late head.
+
+The second list is for a weak head of the previous slot whose proposer equivocated. -/
 theorem getProposerHead_ok_iff {headNode chosen : ForkChoiceNode} {slot : Slot} :
     store.getProposerHead config headNode slot = .ok chosen ↔
       fork < .glamsterdam ∧ store.proposerBoostRoot ≠ headNode.root ∧
