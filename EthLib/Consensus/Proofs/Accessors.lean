@@ -704,6 +704,18 @@ theorem getDomain_total (config : Config) (state : BeaconState preset fork)
     state.genesisValidatorsRoot
   exact ⟨domain, by simp only [computed]; rfl⟩
 
+/-- A write to a circular buffer of nonzero length replaces the entry at position `i mod n`. -/
+theorem writeCircular_of_ne_zero {α : Type} {n : UInt64} (buffer : Vector α n.toNat)
+    (i : UInt64) (value : α) (nonzero : n ≠ 0) :
+    writeCircular buffer i value =
+      .ok (buffer.set (i % n).toNat value (toNat_mod_lt nonzero)) := by
+  simp [writeCircular, nonzero]
+
+/-- A write to a circular buffer of length zero is a division-by-zero error. -/
+theorem writeCircular_zero {α : Type} (buffer : Vector α (0 : UInt64).toNat) (i : UInt64)
+    (value : α) : writeCircular buffer i value = .error (.arith .divisionByZero) := by
+  simp [writeCircular]
+
 /-- A write to a circular buffer is read back at the position it wrote. -/
 theorem readCircular_writeCircular {α : Type} {n : UInt64} {buffer written : Vector α n.toNat}
     {i : UInt64} {value : α} (computed : writeCircular buffer i value = .ok written) :

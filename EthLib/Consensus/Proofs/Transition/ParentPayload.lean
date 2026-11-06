@@ -63,7 +63,10 @@ theorem applyParentExecutionPayload_available {requests : ExecutionRequests pres
       (state.latestBlockHeader.slot % preset.SLOTS_PER_HISTORICAL_ROOT).toNat] = true := by
   simp only [applyParentExecutionPayload, bind, Except.bind, pure, Except.pure] at computed
   repeat' (split at computed <;> try cases computed)
-  simp [Vector.set!]
+  rename_i written
+  have nonzero : preset.SLOTS_PER_HISTORICAL_ROOT ≠ 0 := fun zero => by simp [zero] at inRange
+  have read := readCircular_writeCircular (liftAccessor_ok.mp written)
+  simpa [readCircular, nonzero] using read
 
 /-- The payment of the parent's builder changes no pending payment but the one it settles.
 

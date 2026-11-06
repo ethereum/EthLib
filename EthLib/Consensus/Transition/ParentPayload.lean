@@ -123,10 +123,10 @@ def applyParentExecutionPayload (config : Config) (checks : SignatureChecks)
   checkCount (requests.builderExits gloas).data.size preset.MAX_BUILDER_EXIT_REQUESTS_PER_PAYLOAD
   let state ← settleParentPayment state gloas
   let state ← processParentRequests config checks state gloas requests
-  let index := (parentSlot % preset.SLOTS_PER_HISTORICAL_ROOT).toNat
-  let bits := (state.executionPayloadAvailability gloas).bits
+  let bits ← liftAccessor
+    (writeCircular (state.executionPayloadAvailability gloas).bits parentSlot true)
   return { state with
-    executionPayloadAvailability := fun _ => ⟨bits.set! index true⟩
+    executionPayloadAvailability := fun _ => ⟨bits⟩
     latestBlockHash := fun _ => parentBid.blockHash }
 
 /-- From Gloas: the state after the parent payload, as a block finds it.
