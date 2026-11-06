@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Networking.Proofs.Discv5.Distance
 public import EthLib.Networking.Proofs.Discv5.Identity
 public import EthLib.Networking.Proofs.Discv5.Message
 public import EthLib.Networking.Proofs.Discv5.Packet
