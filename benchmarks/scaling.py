@@ -49,18 +49,27 @@ def want(n):
     return WHICH is None or n in WHICH
 
 
+def varint(v):
+    """The Snappy preamble of the length `v`, a little-endian varint (format_description.txt §1)."""
+    return bytes([v & 0x7F | 0x80]) + varint(v >> 7) if v >= 0x80 else bytes([v])
+
+
+def literal(data):
+    """One Snappy literal element that holds `data` (format_description.txt §2.1)."""
+    n = len(data) - 1
+    if n < 60:
+        return bytes([n << 2]) + data
+    k = (n.bit_length() + 7) // 8
+    return bytes([(59 + k) << 2]) + n.to_bytes(k, "little") + data
+
+
 def far_copies(data):
     """A Snappy block: `data` as one literal, then 4-byte copies from `len(data)` bytes back."""
     n = len(data)
-
-    def varint(v):
-        return bytes([v & 0x7F | 0x80]) + varint(v >> 7) if v >= 0x80 else bytes([v])
-
     # format_description.txt §2.2.3: a copy of 4 bytes with a 4-byte offset has the tag 0b00001111.
     copy = bytes([0x0F]) + n.to_bytes(4, "little")
     copies = n // 4
-    literal = snappy.compress_literal(data)[len(varint(n)) :]
-    return varint(n + 4 * copies) + literal + copy * copies
+    return varint(n + 4 * copies) + literal(data) + copy * copies
 
 
 if want("hash"):
@@ -114,7 +123,7 @@ if want("snappy"):
     show(
         "snappy.decompress (literal)",
         sizes,
-        [t(lambda c=snappy.compress_literal(raw[:n]): snappy.decompress(c)) for n in sizes],
+        [t(lambda c=varint(n) + literal(raw[:n]): snappy.decompress(c)) for n in sizes],
     )
     show(
         "snappy.decompress (far copies)",
@@ -122,9 +131,9 @@ if want("snappy"):
         [t(lambda c=far_copies(raw[:n]): snappy.decompress(c)) for n in sizes],
     )
     show(
-        "snappy.compress_literal",
+        "snappy.compress",
         sizes,
-        [t(lambda d=raw[:n]: snappy.compress_literal(d)) for n in sizes],
+        [t(lambda d=raw[:n]: snappy.compress(d)) for n in sizes],
     )
 
 if want("ssz"):

@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Networking.Rlpx.Handshake
-public import EthLib.Networking.Snappy.Block
+public import EthLib.Networking.Snappy.Compress
 
 /-!
 # `Networking.Devp2p.P2p`
@@ -156,7 +156,7 @@ With `snappy`, every message but Hello is compressed, as "Message Encoding" asks
 def encodeMessage (snappy : Bool) (m : Message) : Except P2pError ByteArray := do
   let id ← (encode (Item.scalar m.id)).mapError .rlp
   let data ← (encode m.toItem).mapError .rlp
-  return id ++ if snappy && m.id != 0x00 then Snappy.compressLiteral data else data
+  return id ++ if snappy && m.id != 0x00 then Snappy.compress data else data
 
 /--
 The message in the frame data `msg-id || msg-data`.

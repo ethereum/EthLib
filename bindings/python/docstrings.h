@@ -575,8 +575,8 @@
 #define DOC_snappy_decompress \
   "The bytes a Snappy block decompresses to, or why it is not a valid block."
 
-#define DOC_snappy_compress_literal \
-  "A Snappy block of `data` that holds one literal, for data of at most 2^32 - 1 bytes."
+#define DOC_snappy_compress \
+  "A Snappy block of `src`: the length as a varint, then literals and copies."
 
 #define DOC_snappy_decode_frames \
   "The bytes a framed stream decodes to, or why it is not a valid stream."

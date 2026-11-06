@@ -5228,14 +5228,14 @@
    "docstring":
    "The bytes a Snappy block decompresses to, or why it is not a valid block."},
   {"summary":
-   "A Snappy block of `data` that holds one literal, for data of at most 2^32 - 1 bytes.",
+   "A Snappy block of `src`: the length as a varint, then literals and copies.",
    "signature": "(data: bytes) -> bytes",
-   "operation": "EthLib.Networking.Snappy.compressLiteral",
-   "method": "snappy_compress_literal",
+   "operation": "EthLib.Networking.Snappy.compress",
+   "method": "snappy_compress",
    "errors": [],
    "error_class": null,
    "docstring":
-   "A Snappy block of `data` that holds one literal, for data of at most 2^32 - 1 bytes."},
+   "A Snappy block of `src`: the length as a varint, then literals and copies.\n\nThe input must have at most 2^32 - 1 bytes, the largest length that a preamble can declare (§1).\n\nA longer input gives a preamble out of range, so decompression rejects the block."},
   {"summary":
    "The bytes a framed stream decodes to, or why it is not a valid stream.",
    "signature": "(stream: bytes) -> bytes",

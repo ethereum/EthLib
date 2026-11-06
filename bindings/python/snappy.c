@@ -11,7 +11,7 @@ eth_snappy_decompress(
 );
 
 extern lean_object*
-eth_snappy_compress_literal(
+eth_snappy_compress(
   lean_object* data
 );
 
@@ -68,13 +68,13 @@ py_snappy_decompress(
 }
 
 PyObject*
-py_snappy_compress_literal(
+py_snappy_compress(
   PyObject* self,
   PyObject* args
 ) {
   lean_object* data = parse_one_bytes(args, "data");
   if (!data) return NULL;
-  return except_into_pybytes(eth_snappy_compress_literal(data), SNAPPY_ERROR);
+  return except_into_pybytes(eth_snappy_compress(data), SNAPPY_ERROR);
 }
 
 PyObject*

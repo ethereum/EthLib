@@ -16,9 +16,7 @@ Properties of Snappy block decompression, against `format_description.txt` of `g
 - A block that decompresses yields exactly the length it declared, at most 2^32 - 1.
 - Its first five bytes alone declare that length.
 - The fuel that bounds the element loop never changes the result.
-- A block of one literal decompresses back to its data, for at most 2^32 - 1 bytes.
-
-One byte string has many encodings, so the round trip goes one way only.
+- A literal element appends its data to the output (§2.1).
 
 The kernel checks everything here, so no `native_decide` or `bv_decide` axiom appears.
 -/
@@ -333,7 +331,7 @@ theorem decompress_size_eq_declared {bs out : ByteArray}
     ∃ rest, readPreamble bs.toList = .ok (out.size, rest) :=
   decompressToArray_size_eq_declared h
 
-/-! ## The literal encoder -/
+/-! ## Literals (§2.1) -/
 
 /-- The bytes of a byte array, read one by one, are the bytes of its array. -/
 theorem toList_eq_data_toList (bs : ByteArray) : bs.toList = bs.data.toList := by
@@ -405,35 +403,6 @@ theorem decompressElements_literal {declared : Nat} {data : List UInt8} (hne : d
       .ok data.toByteArray := by
   have := decompressElements_literal_append (o := []) (s := []) hne h (by simpa using hd) fuel
   simpa [decompressElements] using this
-
-/-- A block of one literal decompresses to its data as a byte array, for up to 2^32 - 1 bytes. -/
-theorem decompressToArray_compressLiteralList {data : List UInt8}
-    (h : data.length ≤ maxUncompressedLength) :
-    decompressToArray (compressLiteralList data) = .ok data.toByteArray := by
-  rw [decompressToArray, compressLiteralList, readPreamble_encode _ h]
-  cases data with
-  | nil => rfl
-  | cons b bs =>
-      simp only [List.isEmpty_cons, Bool.false_eq_true, ↓reduceIte]
-      obtain ⟨f, hf⟩ : ∃ f, (literal (b :: bs)).length = f + 1 := by
-        exact ⟨_, by simp only [literal, List.length_append, List.length_cons]; rfl⟩
-      rw [hf, decompressElements_literal (List.cons_ne_nil b bs)
-        (by simp [maxUncompressedLength] at h ⊢; omega) (Nat.le_refl _)]
-      simp
-
-/-- A block of one literal decompresses to its data, for data of at most 2^32 - 1 bytes. -/
-theorem decompressList_compressLiteralList {data : List UInt8}
-    (h : data.length ≤ maxUncompressedLength) :
-    decompressList (compressLiteralList data) = .ok data := by
-  simp [decompressList, decompressToArray_compressLiteralList h, Except.map]
-
-/-- The literal block of a byte array decompresses back to it, for at most 2^32 - 1 bytes. -/
-theorem decompress_compressLiteral {d : ByteArray} (h : d.size ≤ maxUncompressedLength) :
-    decompress (compressLiteral d) = .ok d := by
-  have hl : d.data.toList.length ≤ maxUncompressedLength := by simpa using h
-  rw [decompress, compressLiteral, toList_eq_data_toList]
-  simp only [decompressToArray_compressLiteralList hl]
-  exact congrArg Except.ok (ByteArray.ext (by simp))
 
 /-- The length that the first bytes of a block declare is the length it decompresses to. -/
 theorem declaredLength_of_decompress {bs out : ByteArray} (h : decompress bs = .ok out) :

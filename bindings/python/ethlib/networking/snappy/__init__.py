@@ -11,9 +11,9 @@ def decompress(block: bytes) -> bytes:
     return _native.snappy_decompress(block)
 
 
-def compress_literal(data: bytes) -> bytes:
-    """The block that holds the data as one literal."""
-    return _native.snappy_compress_literal(data)
+def compress(data: bytes) -> bytes:
+    """The Snappy block of the data, which has at most 2^32 - 1 bytes."""
+    return _native.snappy_compress(data)
 
 
 def decode_frames(stream: bytes) -> bytes:

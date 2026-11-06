@@ -109,6 +109,10 @@ private theorem eq_take_of_repeat {L r : List UInt8} {p n offset : Nat} (hoff : 
 /-- A copy element takes the first `p` bytes of a list `L` to its first `p + len` bytes.
 
 Each byte of the copy is the byte `offset` places before it in `L`.
+
+The offset is from 1 to 65535 and at most `p`, and the length is from 1 to 64.
+
+Both `L` and the declared length hold at least `p + len` bytes.
 -/
 theorem reads_copyElement {declared : Nat} {L : List UInt8} {p offset len : Nat}
     (hoff : 0 < offset) (hle : offset ≤ p) (hlen1 : 1 ≤ len) (hlen2 : len ≤ maxCopyLength)

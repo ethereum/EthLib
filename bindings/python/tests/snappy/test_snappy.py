@@ -4,6 +4,8 @@
 # cramjam 2.14.0. Every other case is built by hand from format_description.txt and
 # framing_format.txt of google/snappy.
 
+import random
+
 import pytest
 
 from ethlib.networking import snappy
@@ -47,24 +49,50 @@ def test_decompress(block: str, data: bytes) -> None:
     assert snappy.decompress(bytes.fromhex(block)) == data
 
 
-# Each data and the block of one literal that holds it.
-LITERALS = [
-    # The nine bytes 123456789: length 9, then a tag holding the length minus one.
-    (b"123456789", "0920" + b"123456789".hex()),
-    # Empty data: the length zero and no elements.
-    (b"", "00"),
-    # A literal of 60 bytes, the longest whose length fits in the tag.
-    (A * 60, "3cec" + "41" * 60),
-    # A literal of 61 bytes, the shortest whose length takes one extra byte (tag 60).
-    (A * 61, "3df03c" + "41" * 61),
-    # A literal of 257 bytes, whose length minus one, 256, takes two extra bytes (tag 61).
-    (A * 257, "8102f40001" + "41" * 257),
+def _varint(n: int) -> bytes:
+    # The preamble: the length in groups of seven bits, low group first (§1).
+    out = bytearray()
+    while n >= 0x80:
+        out.append(n & 0x7F | 0x80)
+        n >>= 7
+    out.append(n)
+    return bytes(out)
+
+
+def _noise(n: int) -> bytes:
+    # Bytes from a fixed seed, which hold no repeat that a copy could use.
+    return random.Random(2026).randbytes(n)
+
+
+# Each input of the compressor, chosen around the bounds of §2.1 and §2.2.
+COMPRESS_INPUTS = [
+    pytest.param(b"", id="empty"),
+    pytest.param(A, id="1 byte"),
+    pytest.param(A * 4, id="4 equal bytes"),
+    # One byte, then a copy of 64 bytes: the longest that one copy element holds (§2.2.2).
+    pytest.param(A * 65, id="65 equal bytes"),
+    pytest.param(A * 66, id="66 equal bytes"),
+    pytest.param(A * 68, id="68 equal bytes"),
+    pytest.param(A * 100_000, id="100000 equal bytes"),
+    # The largest offset of a copy with a one-byte offset is 2047 (§2.2.1).
+    pytest.param(_noise(2047) * 2, id="repeat at distance 2047"),
+    pytest.param(_noise(2048) * 2, id="repeat at distance 2048"),
+    pytest.param(_noise(10_000), id="incompressible"),
 ]
 
 
-@pytest.mark.parametrize(("data", "block"), LITERALS)
-def test_compress_literal(data: bytes, block: str) -> None:
-    assert snappy.compress_literal(data) == bytes.fromhex(block)
+@pytest.mark.parametrize("data", COMPRESS_INPUTS)
+def test_compress_round_trip(data: bytes) -> None:
+    block = snappy.compress(data)
+    # The block starts with the length of the data (§1), and decompresses back to it.
+    assert block.startswith(_varint(len(data)))
+    assert snappy.decompress(block) == data
+
+
+def test_compress_long_run() -> None:
+    # A run of one byte is one literal and copies of offset 1, far shorter than the run.
+    data = A * 100_000
+    assert len(snappy.compress(data)) < len(data) // 10
 
 
 # Each rejected block and the fault that rejects it, one per fault.
