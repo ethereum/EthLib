@@ -930,7 +930,7 @@ The Lean and Python docstrings of `sign` both say so.
 <!-- generated: pins -->
 The specification requires no package.
 The package requires Mathlib, at `v4.35.0`, commit `56a0058`.
-The package requires VCVio, at `516e8b8`.
+The package requires VCVio, at `7d5df99`.
 Only the proofs import them.
 The Lean toolchain is `leanprover/lean4:v4.35.0`.
 <!-- end generated -->
