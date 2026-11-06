@@ -440,6 +440,9 @@ ECADD and ECMUL fail exactly when the gas is below the price or a point does not
 ECPAIRING succeeds exactly when the gas covers the price and every pair decodes
 (`ecpairing_eq_ok_iff`), and it returns the word 0 or 1 (`ecpairing_ok`).
 Every decoded point is on the curve (`bytesToG1_isOnCurve`).
+The decoder of a point of `G_1` reads back every point on the curve from its 64 bytes
+(`bytesToG1_g1ToBytes`).
+Each 64 bytes that it accepts encode the point that it returns (`g1ToBytes_of_bytesToG1`).
 `Group.lean` shows that ECADD returns the sum of its points in the group of the curve, and ECMUL
 the product of its point by its scalar (`ecadd_toPoint`, `ecmul_toPoint`).
 
