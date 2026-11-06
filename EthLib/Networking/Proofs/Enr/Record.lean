@@ -15,6 +15,8 @@ Every record it accepts has the key `id`, and it rejects a record without it.
 
 It undoes the encoder on every record that fits, has increasing keys and has the key `id`.
 
+Every record it accepts came from its own encoding, so a record has one accepted encoding.
+
 The same holds for the text form.
 
 Two errors with one code come from one constructor.
@@ -189,6 +191,85 @@ theorem fromText_toText (r : Enr) (text : String) (bytes : ByteArray) (he : r.en
   simp only [Base64.encode, String.toList_ofList] at hlist
   simp only [Base64.encode, String.toList_ofList, hlist, Except.mapError, bind, Except.bind,
     hdec, decode_encode r bytes he hs hk hid]
+
+/-! ## Canonical encodings -/
+
+/-- Items that read as pairs are the items of those pairs. -/
+theorem flatten_of_readPairs :
+    (items : List Item) → {pairs : List (ByteArray × Item)} → readPairs items = .ok pairs →
+      flatten pairs = items
+  | [], _, h => by
+    simp only [readPairs, pure, Except.pure, Except.ok.injEq] at h
+    subst h
+    rfl
+  | .bytes key :: value :: rest, pairs, h => by
+    cases hr : readPairs rest with
+    | error e => simp [readPairs, hr, bind, Except.bind] at h
+    | ok ps =>
+      simp only [readPairs, hr, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at h
+      subst h
+      simp [flatten, flatten_of_readPairs rest hr]
+  | .list _ :: _ :: _, _, h => by
+    simp [readPairs, throw, throwThe, MonadExceptOf.throw] at h
+  | [_], _, h => by
+    simp [readPairs, throw, throwThe, MonadExceptOf.throw] at h
+
+/-- Bytes that decode to a record are the encoding of that record. -/
+theorem encode_of_decode {bytes : ByteArray} {r : Enr} (h : decode bytes = .ok r) :
+    r.encode = .ok bytes := by
+  unfold decode at h
+  by_cases hsize : MAX_RECORD_SIZE < bytes.size
+  · simp [hsize, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+  cases hd : Serialization.Rlp.decode bytes with
+  | error e => simp [hsize, hd, Except.mapError, bind, Except.bind] at h
+  | ok item =>
+    simp only [hsize, hd, ↓reduceIte, Except.mapError, bind, Except.bind] at h
+    split at h
+    · rename_i signature seqItem rest
+      -- Each read succeeded, and each one is inverted by the encoder.
+      cases hseq : (Codec.ofItem seqItem : Except RlpError UInt64) with
+      | error e => simp [hseq] at h
+      | ok seq =>
+        cases hp : readPairs rest with
+        | error e => simp [hseq, hp] at h
+        | ok pairs =>
+          cases hc : checkKeys pairs with
+          | error e => simp [hseq, hp, hc] at h
+          | ok u =>
+            by_cases hid : pairs.any (·.1 = KEY_ID) = true
+            · simp only [hseq, hp, hc, hid, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at h
+              subst h
+              rw [Enr.encode, LawfulCodec.toItem_of_ofItem hseq, flatten_of_readPairs rest hp]
+              exact Serialization.Rlp.encode_decode bytes _ hd
+            · simp [hseq, hp, hc, hid, throw, throwThe, MonadExceptOf.throw] at h
+    all_goals simp [throw, throwThe, MonadExceptOf.throw] at h
+
+/-- Bytes decode to a record exactly when they are its encoding and the record passes the checks.
+
+The checks are the size of at most 300 bytes, keys that strictly increase, and the key `id`. -/
+theorem decode_eq_ok_iff (bytes : ByteArray) (r : Enr) :
+    decode bytes = .ok r ↔ r.encode = .ok bytes ∧ bytes.size ≤ MAX_RECORD_SIZE ∧
+      r.pairs.Pairwise (fun p q => keyLt p.1 q.1) ∧ ∃ value, (KEY_ID, value) ∈ r.pairs :=
+  ⟨fun h => ⟨encode_of_decode h, size_le_of_decode h, pairwise_of_decode h, has_id_of_decode h⟩,
+    fun ⟨he, hs, hk, hid⟩ => decode_encode r bytes he hs hk hid⟩
+
+/-- A text that reads as a record is the text form of that record. -/
+theorem toText_of_fromText {text : String} {r : Enr} (h : fromText text = .ok r) :
+    r.toText = .ok text := by
+  unfold fromText at h
+  split at h
+  · rename_i rest htext
+    cases hb : Base64.decodeList rest with
+    | error e => simp [hb, Except.mapError, bind, Except.bind] at h
+    | ok bytes =>
+      simp only [hb, Except.mapError, bind, Except.bind] at h
+      -- The bytes are the encoding of the record, and the characters are the base64 of the bytes.
+      have hl := Base64.encodeList_decodeList rest bytes hb
+      simp only [Enr.toText, encode_of_decode h, bind, Except.bind, pure, Except.pure,
+        Except.ok.injEq]
+      apply String.toList_injective
+      simp [Base64.encode, TEXT_PREFIX, hl, htext]
+  · simp [throw, throwThe, MonadExceptOf.throw] at h
 
 /-! ## Error codes -/
 
