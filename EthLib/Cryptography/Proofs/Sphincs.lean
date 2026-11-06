@@ -38,6 +38,7 @@ public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Ots
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Landing
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Tree
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Fors
+public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Digest
 
 /-!
 # Proofs: leanSPHINCS
