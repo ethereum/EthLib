@@ -165,6 +165,9 @@ In the second, the store does not know the parent of the block that the payload 
 At Deneb it also keeps two `on_block` cases with blobs.
 In the first, the proofs show that the blobs match the commitments of each block.
 In the second, a proof does not match, so the store rejects the block.
+At Electra and Fulu it keeps the smallest case of each handler, of the optimistic sync and of each fast confirmation suite.
+Electra adds the handler `deposit_with_reorg`.
+At Fulu its `on_block` case is one whose block lacks the columns that the node samples.
 `bindings/python/tests/consensus/test_fork_choice.py` runs each case on one store in Lean and compares each step with the case.
 
 The directory `gossip/` holds gossip validation cases from `minimal.tar.gz` in the same way.
@@ -178,7 +181,7 @@ It keeps every case of these two topics at Altair, and the case with one valid m
 It keeps every case of the block topic from Altair to Deneb.
 A block case may import more blocks after the anchor, and mark some as failed or pending.
 It may also give the status of their payloads, and replace the finalized checkpoint.
-The Electra and Fulu block cases wait for the state transition of their blocks.
+At Electra and Fulu it keeps the case with one valid block.
 It keeps every case of the attestation and aggregate topics at Altair, Deneb and Electra.
 Deneb changes the window of time of a vote, and Electra moves the committee out of the attestation data.
 At Bellatrix, Capella and Fulu it keeps the case with one valid message of each of these topics.
