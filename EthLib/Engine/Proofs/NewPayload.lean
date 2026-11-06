@@ -10,7 +10,7 @@ Each fork from Paris to BPO5 has a version of the method, and no other fork has 
 
 Request lists that pass the checks have distinct types, in increasing order.
 
-The checks pass only for an array of the parameters of the version, none of them null.
+Without a JSON-RPC error, the parameters are an array of the values of the version, none null.
 
 If the last block of a chain is not the parent, a payload that passes the checks is syncing.
 
@@ -91,27 +91,33 @@ theorem nodup_types_of_validRequests {requests : List ByteArray}
 
 /-! ## The parameters of the checks -/
 
-/-- The checks pass only for an array with the parameters of the version, none of them null. -/
+/-- Without a JSON-RPC error, the parameters are an array of the values of the version.
+
+None of them is null. -/
 theorem params_of_checkNewPayload_ok {config : ChainConfig} {version : Nat} {params : Lean.Json}
     {r : Except (PayloadStatus × PayloadError) (CheckedBlock version)}
     (h : checkNewPayload config version params = .ok r) :
     ∃ items : Array Lean.Json, params = .arr items ∧ items.size = paramCount version ∧
       ∀ j ∈ items, j.isNull = false := by
-  unfold checkNewPayload at h
   cases params with
-  | arr items' =>
-    refine ⟨items', rfl, ?_⟩
-    by_cases hc : (items'.toList.length == paramCount version) = true ∧
-        (items'.toList.all fun x => !x.isNull) = true
+  | arr items =>
+    refine ⟨items, rfl, ?_⟩
+    by_cases hc : (items.toList.length == paramCount version) = true ∧
+        (items.toList.all fun x => !x.isNull) = true
     · simp only [List.all_eq_true, Bool.not_eq_true', beq_iff_eq] at hc
       exact ⟨by simpa using hc.1, fun j hj => hc.2 j (by simpa using hj)⟩
-    · exfalso
-      simp (config := {maxSteps := 2000000}) only [hc, pure, Except.pure, ite_false,
-        reduceCtorEq, Json.invalid, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
-  | _ =>
-    exfalso
-    simp (config := {maxSteps := 2000000}) only [reduceCtorEq, Json.invalid, bind, Except.bind,
-      throw, throwThe, MonadExceptOf.throw] at h
+    · unfold checkNewPayload at h
+      rw [bind_ok_iff] at h
+      obtain ⟨l, hl, h⟩ := h
+      cases hl
+      -- Reduce without inlining the join points of the do block, so the check is the outer `if`.
+      dsimp -zeta only at h
+      rw [ite_eq_right hc, bind_ok_iff] at h
+      -- A failed check is an error, never a result.
+      obtain ⟨_, hInvalid, -⟩ := h
+      cases hInvalid
+  -- Any other JSON value is not an array, so the read fails at once.
+  | _ => cases h
 
 /-! ## The status on a chain that holds the parent -/
 
