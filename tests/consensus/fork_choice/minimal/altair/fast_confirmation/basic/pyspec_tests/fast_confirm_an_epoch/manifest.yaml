@@ -1,0 +1,6 @@
+preset: minimal
+fork: altair
+runner: fast_confirmation
+handler: basic
+suite: pyspec_tests
+case: fast_confirm_an_epoch

@@ -13,7 +13,11 @@ from ruamel.yaml import YAML
 from consensus.containers import CONTAINERS, FORKS as CONSENSUS_FORK
 from consensus.test_epoch_processing import HANDLERS as EPOCH_STEPS, runs as runs_epoch_step
 from consensus.test_fork import runs as runs_upgrade
-from consensus.test_fork_choice import HANDLERS as FORK_CHOICE, runs as runs_fork_choice
+from consensus.test_fork_choice import (
+    FAST_CONFIRMATION,
+    HANDLERS as FORK_CHOICE,
+    runs as runs_fork_choice,
+)
 from consensus.test_genesis import HANDLERS as GENESIS, runs as runs_genesis
 from consensus.test_light_client_data_collection import runs_data_collection
 from consensus.test_light_client_sync import SPECIFIED as LIGHT_CLIENT_FORKS, runs_sync
@@ -42,7 +46,7 @@ NOT_YET = {
     "sanity": "the state transition after Phase 0 (consensus track C26 to C40)",
     "transition": "the Electra and Fulu blocks (consensus track C35 to C40)",
     "fork_choice": "the Electra and Fulu blocks in the state transition (C35 to C40)",
-    "fast_confirmation": "fast confirmation rule (consensus track, decision 9)",
+    "fast_confirmation": "the Electra and Fulu blocks in the state transition (C35 to C40)",
     "sync": "the Electra and Fulu blocks in the state transition (C35 to C40)",
     "networking": "gossip validation (consensus track C63 and C64)",
     "ssz_static": "the remaining beacon containers (consensus track C2, C6 to C12)",
@@ -689,7 +693,7 @@ def _transition(root: Path, case: Case) -> None:
 def _fork_choice(root: Path, case: Case) -> None:
     from consensus.test_fork_choice import run_case
 
-    # tests/<preset>/<fork>/<fork_choice or sync>/<handler>/<suite>/<case>
+    # tests/<preset>/<fork>/<fork_choice, sync or fast_confirmation>/<handler>/<suite>/<case>
     run_case(case.preset, case.fork, root / case.path)
 
 
@@ -742,6 +746,8 @@ RUNNERS = {
     **{f"fork_choice/{handler}": _fork_choice for handler in FORK_CHOICE},
     # Optimistic sync runs as a fork choice case, with the verdicts of the execution layer.
     "sync/optimistic": _fork_choice,
+    # The fast confirmation cases are fork choice cases whose checks also read the rule's store.
+    **{f"fast_confirmation/{suite}": _fork_choice for suite in FAST_CONFIRMATION},
     **{group: _transition for group in TRANSITION_GROUPS},
     **{f"genesis/{handler}": _genesis for handler in GENESIS},
     "legacy_ommers": legacy.run_ommers,
@@ -789,7 +795,7 @@ def runner(case: Case):
         return None
     if run is _upgrade and not runs_upgrade(case.fork):
         return None
-    if run is _fork_choice and not runs_fork_choice(case.fork, case.group.split("/")[1]):
+    if run is _fork_choice and not runs_fork_choice(case.fork, *case.group.split("/")):
         return None
     if run is _transition and not runs_transition(case.fork, case.group):
         return None

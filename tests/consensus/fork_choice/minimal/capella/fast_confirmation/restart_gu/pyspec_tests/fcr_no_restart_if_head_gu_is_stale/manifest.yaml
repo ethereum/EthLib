@@ -1,0 +1,6 @@
+preset: minimal
+fork: capella
+runner: fast_confirmation
+handler: restart_gu
+suite: pyspec_tests
+case: fcr_no_restart_if_head_gu_is_stale

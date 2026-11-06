@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Exports.Transition
+public import EthLib.Consensus.ForkChoice.FastConfirmation
 public import EthLib.Consensus.ForkChoice.Handlers
 public import EthLib.Consensus.ForkChoice.Optimistic
 public import EthLib.Consensus.ForkChoice.ProposerHead
@@ -48,6 +49,20 @@ An invalid verdict may add the 32 bytes of the latest valid hash of the chain.
 The block then fails, and the blocks that the verdict finds invalid leave the store.
 
 Without a verdict the execution layer accepts the payload.
+
+Kind 9 runs the fast confirmation of the slot, on a store of its own that starts with the case.
+
+It gives three checkpoints, each an epoch and a root.
+
+They are the justified checkpoints that the node saw in the previous and the current epoch.
+
+The third is the greatest unrealized checkpoint of the previous epoch.
+
+Then come the heads of the previous and the current slot, and the confirmed root.
+
+Before Bellatrix a byte of 0 ends it.
+
+From Bellatrix a byte of 1 and the hash of the safe execution block end it.
 
 After each step comes one byte: 0 when the store takes the step, 1 when it rejects it.
 
@@ -116,6 +131,23 @@ def storeRecord {preset : Preset} {fork : Fork} (config : Config) (store : Store
     let slot ← store.getCurrentSlot config
     return record ++ Base.packBytes (← store.getProposerHead config head slot).root
   return record
+
+/-- The bytes of a rejected step: a byte of 1, the error code, then the length and the message. -/
+def rejection (e : ForkChoiceError) : ByteArray :=
+  let message := (reprStr e).toUTF8
+  (ByteArray.empty.push 1) ++ littleEndian 4 e.code.toNat ++ littleEndian 4 message.size ++ message
+
+/-- What the fast confirmation of a slot gives, from Bellatrix with the safe execution block. -/
+def fastConfirmationRecord {preset : Preset} {fork : Fork} (store : Store preset fork)
+    (fcr : FastConfirmationStore) : Except ForkChoiceError ByteArray := do
+  let record := checkpointRecord fcr.previousEpochObservedJustifiedCheckpoint ++
+    checkpointRecord fcr.currentEpochObservedJustifiedCheckpoint ++
+    checkpointRecord fcr.previousEpochGreatestUnrealizedCheckpoint ++
+    Base.packBytes fcr.previousSlotHead ++ Base.packBytes fcr.currentSlotHead ++
+    Base.packBytes fcr.confirmedRoot
+  if bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam then
+    return record.push 1 ++ Base.packBytes (← store.getSafeExecutionBlockHash fcr bellatrix)
+  return record.push 0
 
 /-- The store after a step and the bytes that the step reports, or the error that rejects it. -/
 def runForkChoiceStep {preset : Preset} {fork : Fork} (config : Config) (checks : SignatureChecks)
@@ -208,6 +240,7 @@ def forkChoiceExport (name fork anchorState anchorBlock steps replacements : Byt
   let anchorState ← decodeInput (BeaconState preset fork) anchorState
   let anchorBlock ← decodeInput (BeaconBlock preset fork) anchorBlock
   let mut store ← runForkChoice (getForkchoiceStore config anchorState anchorBlock)
+  let mut fcr := getFastConfirmationStore store
   let mut out := ByteArray.empty
   let mut powBlocks : List PowBlock := []
   let mut blobData : Array Cryptography.Kzg.Blob × Array Cryptography.Kzg.KZGProof := (#[], #[])
@@ -230,6 +263,17 @@ def forkChoiceExport (name fork anchorState anchorBlock steps replacements : Byt
     if step.1 = 8 then
       verdict ← readPayloadVerdict step.2
       out := out.push 0
+      continue
+    if step.1 = 9 then
+      if step.2.size ≠ 0 then throw (0, "a fast confirmation takes no bytes")
+      match do
+          let next ← store.onFastConfirmation config fcr
+          return (next, ← fastConfirmationRecord store next) with
+      | .ok (next, record) =>
+        fcr := next
+        out := out.push 0 ++ record
+      | .error e =>
+        out := out ++ rejection e
       continue
     let known := powBlocks
     let held := blobData
@@ -263,8 +307,7 @@ def forkChoiceExport (name fork anchorState anchorBlock steps replacements : Byt
       store := next
       out := out.push 0 ++ record
     | .error e =>
-      let message := (reprStr e).toUTF8
-      out := out.push 1 ++ littleEndian 4 e.code.toNat ++ littleEndian 4 message.size ++ message
+      out := out ++ rejection e
   return out
 
 end EthLib.Consensus.Exports

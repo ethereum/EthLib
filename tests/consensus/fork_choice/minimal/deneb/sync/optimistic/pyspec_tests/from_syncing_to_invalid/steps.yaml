@@ -1,0 +1,103 @@
+- {tick: 7728}
+- checks:
+    time: 7728
+    head:
+      slot: 0
+      root: '0x7dbf5a9be22a1eb829ada180da364be672909f2598e294e8891a089048684b1b'
+    justified_checkpoint:
+      epoch: 0
+      root: '0x7dbf5a9be22a1eb829ada180da364be672909f2598e294e8891a089048684b1b'
+    finalized_checkpoint:
+      epoch: 0
+      root: '0x7dbf5a9be22a1eb829ada180da364be672909f2598e294e8891a089048684b1b'
+    proposer_boost_root: '0x0000000000000000000000000000000000000000000000000000000000000000'
+- block_hash: '0x9df16c02311ba1f93c2d7526fa691cbe2ffbd8d29b760f1e8539edd9d991e813'
+  payload_status:
+    status: VALID
+    latest_valid_hash: '0x9df16c02311ba1f93c2d7526fa691cbe2ffbd8d29b760f1e8539edd9d991e813'
+    validation_error: null
+- {block: 
+    block_0xb1e3e56aa381f836f6f41c898346ca5ef9cf561e915baec2dd74c6dc78dc1b2f, 
+    valid: true}
+- checks:
+    head:
+      slot: 9
+      root: '0xb1e3e56aa381f836f6f41c898346ca5ef9cf561e915baec2dd74c6dc78dc1b2f'
+- block_hash: '0x04dfa0dd16a7b3139d9033daa563618fb465b23ac4539d6a08395ed53df78a95'
+  payload_status:
+    status: VALID
+    latest_valid_hash: '0x04dfa0dd16a7b3139d9033daa563618fb465b23ac4539d6a08395ed53df78a95'
+    validation_error: null
+- {block: 
+    block_0xeafbf9bbe0ec7ef270b54d955529347431537f91c2f37aac46a665f096190af2, 
+    valid: true}
+- checks:
+    head:
+      slot: 10
+      root: '0xeafbf9bbe0ec7ef270b54d955529347431537f91c2f37aac46a665f096190af2'
+- block_hash: '0x1816506985361e6681c584b659d5ec078a67abf068536245fbd39891205bccee'
+  payload_status:
+    status: VALID
+    latest_valid_hash: '0x1816506985361e6681c584b659d5ec078a67abf068536245fbd39891205bccee'
+    validation_error: null
+- {block: 
+    block_0xd42f503228a4da8b28f1980b071c4403159f9aae3059c117979e0cb039251a0e, 
+    valid: true}
+- checks:
+    head:
+      slot: 11
+      root: '0xd42f503228a4da8b28f1980b071c4403159f9aae3059c117979e0cb039251a0e'
+- block_hash: '0x79ed8e19005fd60050e09d7f8c6a1162b90370162496aa8a775d7e61e8e39ab7'
+  payload_status:
+    status: VALID
+    latest_valid_hash: '0x79ed8e19005fd60050e09d7f8c6a1162b90370162496aa8a775d7e61e8e39ab7'
+    validation_error: null
+- {block: 
+    block_0x3f588880f30dcfa002b8ad3c562f9c00396080da11808f9e98eec5d0c51439e1, 
+    valid: true}
+- checks:
+    head:
+      slot: 12
+      root: '0x3f588880f30dcfa002b8ad3c562f9c00396080da11808f9e98eec5d0c51439e1'
+- block_hash: '0xf103a17d9a54978ba8551ac9228b219755a73f654b5a79e25dcbb246fb2461e3'
+  payload_status: {status: SYNCING, latest_valid_hash: null, validation_error: 
+      null}
+- {block: 
+    block_0x7126bbe5db3ddb31a8d635a5433058f7873689eeca5c09d5438eea37cfc78763, 
+    valid: true}
+- checks:
+    head:
+      slot: 12
+      root: '0x3f588880f30dcfa002b8ad3c562f9c00396080da11808f9e98eec5d0c51439e1'
+- block_hash: '0x02878b1e74659d59dfbcbe2eb4dfaa67f6914b8e1924b9697f63e826c1c3c787'
+  payload_status: {status: SYNCING, latest_valid_hash: null, validation_error: 
+      null}
+- {block: 
+    block_0x558205504ae35f5257171ee07c35c31320f3fc2d0457dbe67e2351c3ce9d78e2, 
+    valid: true}
+- checks:
+    head:
+      slot: 11
+      root: '0x558205504ae35f5257171ee07c35c31320f3fc2d0457dbe67e2351c3ce9d78e2'
+- block_hash: '0x1f699fe6165a671b0b60c317f0684c185c0063aaa75f9069fb4c3c11dc8cad63'
+  payload_status: {status: SYNCING, latest_valid_hash: null, validation_error: 
+      null}
+- {block: 
+    block_0x571ea6f27c4e730cf4db9421092997adbf0368086ca95d7753d29cd79d1b4bf8, 
+    valid: true}
+- checks:
+    head:
+      slot: 12
+      root: '0x571ea6f27c4e730cf4db9421092997adbf0368086ca95d7753d29cd79d1b4bf8'
+- block_hash: '0xd09945d0a20ddfff8d8e65e46de4b1f62d71be3d28c7fc02a422719b714136c9'
+  payload_status:
+    status: INVALID
+    latest_valid_hash: '0x9df16c02311ba1f93c2d7526fa691cbe2ffbd8d29b760f1e8539edd9d991e813'
+    validation_error: invalid
+- {block: 
+    block_0xf2e4f6fa0f0417315586e8d2c91b23e140763e46aefd928ec2f279ebcd08e9d4, 
+    valid: false}
+- checks:
+    head:
+      slot: 12
+      root: '0x3f588880f30dcfa002b8ad3c562f9c00396080da11808f9e98eec5d0c51439e1'

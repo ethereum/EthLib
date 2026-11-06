@@ -26,6 +26,8 @@ At the start of each slot the handler records the head, then moves the confirmed
 
 When the assumptions seem broken, it falls back to the finalized block.
 
+From Bellatrix the payload of the confirmed block is the safe block of the execution layer.
+
 Every node is pending before Gloas, and from Gloas the rule fails as not yet specified.
 -/
 
@@ -532,6 +534,13 @@ def onFastConfirmation (fcr : FastConfirmationStore) :
   let head := (← store.getHead config).root
   let fcr ← store.updateFastConfirmationVariables config fcr head
   return { fcr with confirmedRoot := ← store.getLatestConfirmed config fcr head }
+
+/-- The hash of the payload in the confirmed block, which the execution layer takes as safe.
+
+The rule starts at Bellatrix, and Gloas changes it. -/
+def getSafeExecutionBlockHash (fcr : FastConfirmationStore)
+    (bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam) : Except ForkChoiceError Hash32 :=
+  return ((← store.block fcr.confirmedRoot).body.executionPayload bellatrix).blockHash
 
 end Store
 

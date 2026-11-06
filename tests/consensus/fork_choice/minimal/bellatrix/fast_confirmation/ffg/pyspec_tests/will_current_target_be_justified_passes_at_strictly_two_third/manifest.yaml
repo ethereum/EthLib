@@ -1,0 +1,6 @@
+preset: minimal
+fork: bellatrix
+runner: fast_confirmation
+handler: ffg
+suite: pyspec_tests
+case: will_current_target_be_justified_passes_at_strictly_two_third
