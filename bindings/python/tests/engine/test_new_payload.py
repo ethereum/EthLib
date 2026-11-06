@@ -108,12 +108,26 @@ def test_v4_at_amsterdam() -> None:
     assert error.value.code == 38005
 
 
-def test_v5_block_access_list_not_rlp() -> None:
+@pytest.mark.parametrize("access_list", ["0x01", "0xc000", "0x"])
+def test_v5_block_access_list_not_rlp(access_list: str) -> None:
     """A block access list that is not the RLP form of one makes the payload invalid."""
+    # 0x01 is a byte string, 0xc000 an empty list with a trailing byte, and 0x no item at all.
     params = _prague_v4()
-    # The byte 0x01 is an RLP byte string, not a list of accounts.
-    payload = dict(params[0], blockAccessList="0x01", slotNumber="0x0")
+    payload = dict(params[0], blockAccessList=access_list, slotNumber="0x0")
     status = engine.new_payload(_amsterdam(), "engine_newPayloadV5", [payload, *params[1:]])
     assert status["status"] == "INVALID"
     assert status["latestValidHash"] is None
-    assert status["validationError"].startswith("406: ")
+    assert status["validationError"] == "406: the block access list is not the RLP form of one"
+
+
+def test_v5_without_slot_number() -> None:
+    """Version 5 rejects a payload without its slot number as an invalid parameter."""
+    params = _prague_v4()
+    payload = dict(params[0], blockAccessList="0xc0")
+    with raises(
+        engine.EngineError,
+        "engine error: EthLib.Engine.EngineError.invalidParams "
+        '"payload: not the fields of version 4"',
+    ) as error:
+        engine.new_payload(_amsterdam(), "engine_newPayloadV5", [payload, *params[1:]])
+    assert error.value.code == 32602

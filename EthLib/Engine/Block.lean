@@ -36,7 +36,9 @@ From Glamsterdam, it passes the block access list and the slot number beside the
 
 The list must be the RLP form of a block access list, by step 3 of [`engine_newPayloadV5`][v5].
 
-The header holds the Keccak-256 hash of those bytes, by [EIP-7928][eip-7928], and the slot number.
+The header holds the Keccak-256 hash of those bytes, by [EIP-7928][eip-7928].
+
+It holds the slot number too, by [EIP-7843][eip-7843].
 
 Whether the list matches the execution of the block is a check of the state transition.
 
@@ -46,6 +48,7 @@ Whether the list matches the execution of the block is a check of the state tran
 [v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/prague.md#specification
 [v5]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#specification
 [eip-7928]: https://eips.ethereum.org/EIPS/eip-7928#engine-api
+[eip-7843]: https://eips.ethereum.org/EIPS/eip-7843#header-extension
 -/
 
 @[expose] public section

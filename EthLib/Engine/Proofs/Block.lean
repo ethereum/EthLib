@@ -18,7 +18,7 @@ From Glamsterdam, the block access list of the method must be the RLP form of a 
 
 The header then holds the Keccak-256 hash of its bytes, and the slot number of the method.
 
-Bytes that are not such a form give no block, with the reason that names the list.
+Bytes that are not such a form give no block.
 -/
 
 public section
@@ -56,6 +56,18 @@ theorem sinceM_eq_ok {ε α : Type} {f : Fork} {g : f ≤ fork → Except ε α}
     rw [h hf]
     exact congrArg Except.ok (Since.eq_const hf x).symm
   · exact congrArg Except.ok (Since.eq_of_not_le (by assumption) _ _)
+
+/-- A field that a step computed is the step's value at each fork that has the field. -/
+theorem sinceM_apply {ε α : Type} {f : Fork} {g : f ≤ fork → Except ε α} {x : Since f fork α}
+    (h : sinceM g = .ok x) (hf : f ≤ fork) : g hf = .ok (x hf) := by
+  unfold sinceM at h
+  rw [dite_eq_left hf] at h
+  cases hg : g hf with
+  | error e => simp [hg, Functor.map, Except.map] at h
+  | ok a =>
+    simp only [hg, Functor.map, Except.map] at h
+    cases h
+    rfl
 
 /-- Decoded transactions encode back to their bytes, and the fork has their kinds. -/
 theorem encode_of_decodeTransactions {index : Nat} {bytes : List ByteArray}
@@ -253,18 +265,6 @@ theorem toBlock_ofBlock (hParis : .paris ≤ fork)
   · cases h
 
 /-! ## The block access list, from Glamsterdam -/
-
-/-- A field that a step computed is the step's value at each fork that has the field. -/
-theorem sinceM_apply {ε α : Type} {f : Fork} {g : f ≤ fork → Except ε α} {x : Since f fork α}
-    (h : sinceM g = .ok x) (hf : f ≤ fork) : g hf = .ok (x hf) := by
-  unfold sinceM at h
-  rw [dite_eq_left hf] at h
-  cases hg : g hf with
-  | error e => simp [hg, Functor.map, Except.map] at h
-  | ok a =>
-    simp only [hg, Functor.map, Except.map] at h
-    cases h
-    rfl
 
 /-- Bytes give the hash of a block access list exactly when they are the RLP form of one.
 
