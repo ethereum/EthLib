@@ -77,6 +77,10 @@ class TransitionError(EthLibError, ValueError):
     """A step of the beacon state transition rejected its state or its block."""
 
 
+class WeakSubjectivityError(EthLibError, ValueError):
+    """The weak subjectivity period or the staleness check of a checkpoint has no answer."""
+
+
 class LightClientError(EthLibError, ValueError):
     """A light client rejected a bootstrap or an update."""
 
@@ -221,6 +225,7 @@ __all__ = [
     "ReqRespError",
     "ConsensusError",
     "TransitionError",
+    "WeakSubjectivityError",
     "LightClientError",
     "ForkChoiceError",
     "HkdfError",

@@ -403,6 +403,14 @@ def consensus_is_valid_genesis_state(name: str, fork: str, state: bytes, config:
     """Whether a candidate genesis state launches the chain."""
     ...
 
+def consensus_compute_weak_subjectivity_period(name: str, fork: str, state: bytes, config: bytes) -> int:
+    """The weak subjectivity period of a state, in epochs."""
+    ...
+
+def consensus_is_within_weak_subjectivity_period(name: str, fork: str, state: bytes, checkpoint: bytes, config: bytes, genesis_time_ms: int, time_ms: int) -> bool:
+    """Whether a checkpoint is within the weak subjectivity period of its state, at a time."""
+    ...
+
 def consensus_upgrade_state(name: str, fork: str, pre: bytes, config: bytes, verify: bool) -> bytes:
     """The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes."""
     ...

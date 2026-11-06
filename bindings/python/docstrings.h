@@ -302,6 +302,12 @@
 #define DOC_consensus_is_valid_genesis_state \
   "Whether a candidate genesis state launches the chain."
 
+#define DOC_consensus_compute_weak_subjectivity_period \
+  "The weak subjectivity period of a state, in epochs."
+
+#define DOC_consensus_is_within_weak_subjectivity_period \
+  "Whether a checkpoint is within the weak subjectivity period of its state, at a time."
+
 #define DOC_consensus_upgrade_state \
   "The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes."
 

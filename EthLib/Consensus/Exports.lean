@@ -14,6 +14,7 @@ public import EthLib.Consensus.Exports.Shuffle
 public import EthLib.Consensus.Exports.Ssz
 public import EthLib.Consensus.Exports.Transition
 public import EthLib.Consensus.Exports.LightClient
+public import EthLib.Consensus.Exports.WeakSubjectivity
 
 /-!
 # `EthLib.Consensus.Exports`

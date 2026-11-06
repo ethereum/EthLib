@@ -171,6 +171,7 @@ extern PyObject* TRANSITION_ERROR;
 extern PyObject* LIGHT_CLIENT_ERROR;
 extern PyObject* FORK_CHOICE_ERROR;
 extern PyObject* CHAIN_ERROR;
+extern PyObject* WEAK_SUBJECTIVITY_ERROR;
 
 /* ---- Argument parsing helpers ---------------------------------------- */
 
@@ -309,6 +310,8 @@ PyObject* py_consensus_fork_choice (PyObject* self, PyObject* args);
 PyObject* py_consensus_gossip_validation (PyObject* self, PyObject* args);
 PyObject* py_consensus_initialize_genesis (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_valid_genesis_state (PyObject* self, PyObject* args);
+PyObject* py_consensus_compute_weak_subjectivity_period (PyObject* self, PyObject* args);
+PyObject* py_consensus_is_within_weak_subjectivity_period (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_ssz                                  (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_possession_signing_root              (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_is_valid_possession_proof            (PyObject* self, PyObject* args);
