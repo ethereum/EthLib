@@ -25,7 +25,7 @@ A failed assertion of the rule, or a read past the end of a list, is an error.
 
 A division by a parameter of the preset or the configuration assumes that it is not zero.
 
-A read of a circular buffer of length zero is an error.
+A read or a write of a circular buffer of length zero is an error.
 -/
 
 @[expose] public section
@@ -138,7 +138,7 @@ theorem toNat_mod_lt {i n : UInt64} (nonzero : n ≠ 0) : (i % n).toNat < n.toNa
 
 /-- The entry at position `i mod n` of a circular buffer of length `n`.
 
-A buffer of length zero has no entry, since the position divides by zero. -/
+A buffer of length zero has no entry, so the read is a division-by-zero error. -/
 def readCircular {α : Type} {n : UInt64} (buffer : Vector α n.toNat) (i : UInt64) :
     Except AccessorError α :=
   if nonzero : n = 0 then .error (.arith .divisionByZero)
@@ -146,7 +146,7 @@ def readCircular {α : Type} {n : UInt64} (buffer : Vector α n.toNat) (i : UInt
 
 /-- A circular buffer of length `n` with the entry at position `i mod n` replaced.
 
-A buffer of length zero has no entry, since the position divides by zero. -/
+A buffer of length zero has no entry to replace, so the write is a division-by-zero error. -/
 def writeCircular {α : Type} {n : UInt64} (buffer : Vector α n.toNat) (i : UInt64) (value : α) :
     Except AccessorError (Vector α n.toNat) :=
   if nonzero : n = 0 then .error (.arith .divisionByZero)

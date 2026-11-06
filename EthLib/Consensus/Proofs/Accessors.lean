@@ -33,7 +33,7 @@ Before Fulu, the proposer is active in the epoch of the state.
 
 A signature domain always has a value.
 
-A write to a circular buffer is read back at its position, and leaves the other positions.
+A write to a circular buffer is read back at its position, and leaves every other entry unchanged.
 -/
 
 @[expose] public section
@@ -715,7 +715,7 @@ theorem readCircular_writeCircular {α : Type} {n : UInt64} {buffer written : Ve
     cases computed
     simp [readCircular, nonzero]
 
-/-- A write to a circular buffer leaves the entry at every other position. -/
+/-- A write to a circular buffer leaves the entry at every other position unchanged. -/
 theorem readCircular_writeCircular_of_ne {α : Type} {n : UInt64}
     {buffer written : Vector α n.toNat} {i j : UInt64} {value : α}
     (computed : writeCircular buffer i value = .ok written) (other : i % n ≠ j % n) :

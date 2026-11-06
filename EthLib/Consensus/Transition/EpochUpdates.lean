@@ -276,7 +276,7 @@ def processEffectiveBalanceUpdates (state : BeaconState preset fork) :
 
 /-- The state with the slashed balance of the next epoch cleared.
 
-A buffer of slashed balances of length zero has no entry, and is an error. -/
+If the buffer of slashed balances has length zero, the reset fails, since it has no position. -/
 def processSlashingsReset (state : BeaconState preset fork) :
     Except TransitionError (BeaconState preset fork) := do
   let nextEpoch ← liftAccessor (liftArith (addChecked (getCurrentEpoch state) 1))
@@ -285,7 +285,7 @@ def processSlashingsReset (state : BeaconState preset fork) :
 
 /-- The state with the RANDAO mix of the next epoch set to that of the current epoch.
 
-A buffer of mixes of length zero has no entry, and is an error. -/
+If the buffer of mixes has length zero, the reset fails, since it has no position. -/
 def processRandaoMixesReset (state : BeaconState preset fork) :
     Except TransitionError (BeaconState preset fork) := do
   let currentEpoch := getCurrentEpoch state
