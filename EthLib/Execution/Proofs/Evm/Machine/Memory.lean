@@ -2,7 +2,7 @@ module
 
 public import EthLib.Base.Proofs.Bytes
 public import EthLib.Execution.Evm.Machine.Memory
-public import EthLib.Execution.Proofs.Evm.Gas
+public import EthLib.Execution.Proofs.Evm.Gas.Memory
 
 /-!
 # Proofs: `Evm.Machine.Memory`

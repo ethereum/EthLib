@@ -1,0 +1,557 @@
+module
+
+public import EthLib.Base.Fork
+public import EthLib.Base.U256
+public import EthLib.Execution.Evm.Words
+
+/-!
+# `Evm.Gas.Prices`
+
+The gas prices of the EVM.
+
+A price that a fork changed is a function of the fork, and the other prices are constants.
+
+Appendix G, Fee Schedule, of the Yellow Paper, Shanghai version, lists most prices.
+
+Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
+
+Appendix G of its Berlin version, at [`beacfbd`][yp-berlin], gives the refunds before London.
+
+A price that an EIP adds or changes names that EIP:
+
+- [EIP-2](https://eips.ethereum.org/EIPS/eip-2#specification), contract creation by a transaction
+- [EIP-145](https://eips.ethereum.org/EIPS/eip-145#specification), SHL, SHR and SAR
+- [EIP-150](https://eips.ethereum.org/EIPS/eip-150#specification), IO, calls and all but one 64th
+- [EIP-160](https://eips.ethereum.org/EIPS/eip-160#specification), EXP
+- [EIP-211](https://eips.ethereum.org/EIPS/eip-211#specification), RETURNDATASIZE, RETURNDATACOPY
+- [EIP-1014](https://eips.ethereum.org/EIPS/eip-1014#specification), CREATE2
+- [EIP-1052](https://eips.ethereum.org/EIPS/eip-1052#specification), EXTCODEHASH
+- [EIP-1153](https://eips.ethereum.org/EIPS/eip-1153), TLOAD and TSTORE
+- [EIP-1344](https://eips.ethereum.org/EIPS/eip-1344#specification), CHAINID
+- [EIP-1884](https://eips.ethereum.org/EIPS/eip-1884#specification), SLOAD, BALANCE, EXTCODEHASH
+- [EIP-2028](https://eips.ethereum.org/EIPS/eip-2028#specification), call data
+- [EIP-2200](https://eips.ethereum.org/EIPS/eip-2200#specification), the refund to clear a slot
+- [EIP-2929](https://eips.ethereum.org/EIPS/eip-2929#parameters), cold and warm accesses
+- [EIP-2930](https://eips.ethereum.org/EIPS/eip-2930#parameters), access lists
+- [EIP-3198](https://eips.ethereum.org/EIPS/eip-3198#specification), BASEFEE
+- [EIP-3529](https://eips.ethereum.org/EIPS/eip-3529#specification), refunds
+- [EIP-3855](https://eips.ethereum.org/EIPS/eip-3855), PUSH0
+- [EIP-3860](https://eips.ethereum.org/EIPS/eip-3860#parameters), init code
+- [EIP-4399](https://eips.ethereum.org/EIPS/eip-4399#specification), PREVRANDAO
+- [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844), BLOBHASH
+- [EIP-5656](https://eips.ethereum.org/EIPS/eip-5656), MCOPY
+- [EIP-7516](https://eips.ethereum.org/EIPS/eip-7516), BLOBBASEFEE
+- [EIP-7623](https://eips.ethereum.org/EIPS/eip-7623#specification), the call data floor
+- [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702#parameters), authorizations
+- [EIP-7825](https://eips.ethereum.org/EIPS/eip-7825#specification), the gas cap of a transaction
+- [EIP-7939](https://eips.ethereum.org/EIPS/eip-7939#specification), CLZ
+- [EIP-2780][eip-2780], the parts of a transaction
+- [EIP-7843][eip-7843], SLOTNUM
+- [EIP-7976][eip-7976], the call data floor
+- [EIP-8024][eip-8024], DUPN, SWAPN and EXCHANGE
+- [EIP-8037][eip-8037], authorizations, gas limit
+- [EIP-8038][eip-8038], accounts, calls and access lists
+
+The last six are in Last Call, so their prices may still change.
+
+The precompiles keep their prices, and the blob prices are with the blob fees.
+
+[yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
+[yp-berlin]: https://github.com/ethereum/yellowpaper/blob/beacfbd29ccc04dfd790f2282d4c4b1c0afc9b5a/Paper.tex
+[eip-2780]: https://eips.ethereum.org/EIPS/eip-2780#parameters
+[eip-7843]: https://eips.ethereum.org/EIPS/eip-7843#gas-cost
+[eip-7976]: https://eips.ethereum.org/EIPS/eip-7976#specification
+[eip-8024]: https://eips.ethereum.org/EIPS/eip-8024#specification
+[eip-8037]: https://eips.ethereum.org/EIPS/eip-8037#specification
+[eip-8038]: https://eips.ethereum.org/EIPS/eip-8038#parameters
+-/
+
+@[expose] public section
+
+namespace EthLib.Execution.Evm
+
+/-! The gas prices that no fork changed.
+
+A price that a fork adds holds from that fork on. -/
+
+namespace GasCosts
+
+/-- The price of the base tier of instructions. -/
+def BASE : Nat := 2
+/-- The price of the very low tier. -/
+def VERY_LOW : Nat := 3
+/-- The price of the low tier. -/
+def LOW : Nat := 5
+/-- The price of the mid tier. -/
+def MID : Nat := 8
+/-- The price of the high tier. -/
+def HIGH : Nat := 10
+
+/-- The price to access an account or a storage slot that the transaction already accessed.
+
+From EIP-2929. -/
+def WARM_ACCESS : Nat := 100
+/-- The price of the first access to a storage slot in a transaction, from EIP-2929. -/
+def COLD_STORAGE_ACCESS : Nat := 2100
+
+/-- The price to set a storage slot from zero to a value that is not zero. -/
+def STORAGE_SET : Nat := 20000
+/-- The price to change a storage slot whose value is not zero.
+
+From Berlin, it includes the price of a cold access to the slot, by EIP-2929.
+
+It is `SSTORE_RESET_GAS` as EIP-2200 sets it, which EIP-8038 calls `GAS_STORAGE_UPDATE`.
+
+The `COLD_STORAGE_WRITE` of the rationale of EIP-8038 is a gas estimate from measured run times.
+
+It is not this price. -/
+def COLD_STORAGE_WRITE : Nat := 5000
+
+/-- The price of a write that moves a slot away from its original value, by EIP-8038. -/
+def STORAGE_WRITE : Nat := 10000
+
+/-- The gas that a call with value gives the callee on top of the gas it passes. -/
+def CALL_STIPEND : Nat := 2300
+/-- The price to send value with a call, up to BPO5. -/
+def CALL_VALUE : Nat := 9000
+/-- The price to write the leaf values of an account, from EIP-8038.
+
+From Glamsterdam, the price to send value with a call is this plus the stipend. -/
+def ACCOUNT_WRITE : Nat := 9000
+/-- The extra price of a call that creates an account. -/
+def NEW_ACCOUNT : Nat := 25000
+
+/-- The price per byte of the code that a contract creation stores. -/
+def CODE_DEPOSIT_PER_BYTE : Nat := 200
+/-- The price per 32-byte word of init code, from EIP-3860. -/
+def CODE_INIT_PER_WORD : Nat := 2
+
+/-- The price of each authorization in a transaction, from EIP-7702. -/
+def AUTH_PER_EMPTY_ACCOUNT : Nat := 25000
+
+/-- A price of zero. -/
+def ZERO : Nat := 0
+/-- The linear price per 32-byte word of memory. -/
+def MEMORY_PER_WORD : Nat := 3
+/-- The price of the fast-step tier, from EIP-1884. -/
+def FAST_STEP : Nat := 5
+
+/-- An authorization for an account that exists gets back its price minus this, from EIP-7702. -/
+def REFUND_AUTH_PER_EXISTING_ACCOUNT : Nat := 12500
+
+/-- The base price of a transaction. -/
+def TX_BASE : Nat := 21000
+/-- The price per zero byte of call data. -/
+def TX_DATA_PER_ZERO : Nat := 4
+/-- The standard price per token of call data, from EIP-7623. -/
+def TX_DATA_TOKEN_STANDARD : Nat := 4
+/-- The largest gas of a transaction, `2^24`, from EIP-7825.
+
+From Glamsterdam it bounds the gas that the transaction itself costs, by EIP-8037. -/
+def TX_MAX_GAS_LIMIT : Nat := 16777216
+
+/-- The price of the sender of a transaction, from EIP-2780, at Glamsterdam. -/
+def TX_BASE_COST : Nat := 12000
+/-- The price of a transaction that sends value to another account, from EIP-2780. -/
+def TX_VALUE_COST : Nat := 6000
+/-- The price of each authorization of a transaction, from EIP-8037, at Glamsterdam.
+
+EIP-8037 defines it as a sum of four parts:
+
+- 1616 for the 101 bytes of an authorization of EIP-7702, at 16 gas per byte
+- 3000 for ECRECOVER, which recovers the authority
+- 3000 for a cold access to the authority, the price of EIP-8038
+- 200 for two warm accesses to store values in the authority
+
+The price of ECRECOVER is in the precompiles, and this file does not import them.
+
+So the definition keeps the number, and a proof checks the sum. -/
+def EXECUTION_PER_AUTH_BASE_COST : Nat := 7816
+/-- The largest gas limit of a transaction, `2^32 - 1`, from EIP-8037. -/
+def TX_MAX_TOTAL_GAS_LIMIT : Nat := 4294967295
+
+/-- The price of ADD. -/
+def OPCODE_ADD : Nat := VERY_LOW
+/-- The price of SUB. -/
+def OPCODE_SUB : Nat := VERY_LOW
+/-- The price of MUL. -/
+def OPCODE_MUL : Nat := LOW
+/-- The price of DIV. -/
+def OPCODE_DIV : Nat := LOW
+/-- The price of SDIV. -/
+def OPCODE_SDIV : Nat := LOW
+/-- The price of MOD. -/
+def OPCODE_MOD : Nat := LOW
+/-- The price of SMOD. -/
+def OPCODE_SMOD : Nat := LOW
+/-- The price of ADDMOD. -/
+def OPCODE_ADDMOD : Nat := MID
+/-- The price of MULMOD. -/
+def OPCODE_MULMOD : Nat := MID
+/-- The price of SIGNEXTEND. -/
+def OPCODE_SIGNEXTEND : Nat := LOW
+/-- The price of LT. -/
+def OPCODE_LT : Nat := VERY_LOW
+/-- The price of GT. -/
+def OPCODE_GT : Nat := VERY_LOW
+/-- The price of SLT. -/
+def OPCODE_SLT : Nat := VERY_LOW
+/-- The price of SGT. -/
+def OPCODE_SGT : Nat := VERY_LOW
+/-- The price of EQ. -/
+def OPCODE_EQ : Nat := VERY_LOW
+/-- The price of ISZERO. -/
+def OPCODE_ISZERO : Nat := VERY_LOW
+/-- The price of AND. -/
+def OPCODE_AND : Nat := VERY_LOW
+/-- The price of OR. -/
+def OPCODE_OR : Nat := VERY_LOW
+/-- The price of XOR. -/
+def OPCODE_XOR : Nat := VERY_LOW
+/-- The price of NOT. -/
+def OPCODE_NOT : Nat := VERY_LOW
+/-- The price of BYTE. -/
+def OPCODE_BYTE : Nat := VERY_LOW
+/-- The price of SHL, from EIP-145. -/
+def OPCODE_SHL : Nat := VERY_LOW
+/-- The price of SHR, from EIP-145. -/
+def OPCODE_SHR : Nat := VERY_LOW
+/-- The price of SAR, from EIP-145. -/
+def OPCODE_SAR : Nat := VERY_LOW
+/-- The price of CLZ, from EIP-7939. -/
+def OPCODE_CLZ : Nat := LOW
+/-- The price of JUMP. -/
+def OPCODE_JUMP : Nat := MID
+/-- The price of JUMPI. -/
+def OPCODE_JUMPI : Nat := HIGH
+/-- The price of JUMPDEST. -/
+def OPCODE_JUMPDEST : Nat := 1
+/-- The price of CALLDATALOAD. -/
+def OPCODE_CALLDATALOAD : Nat := VERY_LOW
+/-- The price of BLOCKHASH. -/
+def OPCODE_BLOCKHASH : Nat := 20
+/-- The price of COINBASE. -/
+def OPCODE_COINBASE : Nat := BASE
+/-- The price of POP. -/
+def OPCODE_POP : Nat := BASE
+/-- The price of MSIZE. -/
+def OPCODE_MSIZE : Nat := BASE
+/-- The price of PC. -/
+def OPCODE_PC : Nat := BASE
+/-- The price of GAS. -/
+def OPCODE_GAS : Nat := BASE
+/-- The price of ADDRESS. -/
+def OPCODE_ADDRESS : Nat := BASE
+/-- The price of ORIGIN. -/
+def OPCODE_ORIGIN : Nat := BASE
+/-- The price of CALLER. -/
+def OPCODE_CALLER : Nat := BASE
+/-- The price of CALLVALUE. -/
+def OPCODE_CALLVALUE : Nat := BASE
+/-- The price of CALLDATASIZE. -/
+def OPCODE_CALLDATASIZE : Nat := BASE
+/-- The price of CODESIZE. -/
+def OPCODE_CODESIZE : Nat := BASE
+/-- The price of GASPRICE. -/
+def OPCODE_GASPRICE : Nat := BASE
+/-- The price of TIMESTAMP. -/
+def OPCODE_TIMESTAMP : Nat := BASE
+/-- The price of NUMBER. -/
+def OPCODE_NUMBER : Nat := BASE
+/-- The price of GASLIMIT. -/
+def OPCODE_GASLIMIT : Nat := BASE
+/-- The price of PREVRANDAO, DIFFICULTY before EIP-4399. -/
+def OPCODE_PREVRANDAO : Nat := BASE
+/-- The price of RETURNDATASIZE, from EIP-211. -/
+def OPCODE_RETURNDATASIZE : Nat := BASE
+/-- The price of CHAINID, from EIP-1344. -/
+def OPCODE_CHAINID : Nat := BASE
+/-- The price of SELFBALANCE, from EIP-1884. -/
+def OPCODE_SELFBALANCE : Nat := FAST_STEP
+/-- The price of BASEFEE, from EIP-3198. -/
+def OPCODE_BASEFEE : Nat := BASE
+/-- The price of BLOBBASEFEE, from EIP-7516. -/
+def OPCODE_BLOBBASEFEE : Nat := BASE
+/-- The price of SLOTNUM, from EIP-7843. -/
+def OPCODE_SLOTNUM : Nat := BASE
+/-- The price of BLOBHASH, from EIP-4844. -/
+def OPCODE_BLOBHASH : Nat := 3
+/-- The price of PUSH1 to PUSH32. -/
+def OPCODE_PUSH : Nat := VERY_LOW
+/-- The price of PUSH0, from EIP-3855. -/
+def OPCODE_PUSH0 : Nat := BASE
+/-- The price of DUP1 to DUP16. -/
+def OPCODE_DUP : Nat := VERY_LOW
+/-- The price of SWAP1 to SWAP16. -/
+def OPCODE_SWAP : Nat := VERY_LOW
+/-- The price of DUPN, from EIP-8024. -/
+def OPCODE_DUPN : Nat := VERY_LOW
+/-- The price of SWAPN, from EIP-8024. -/
+def OPCODE_SWAPN : Nat := VERY_LOW
+/-- The price of EXCHANGE, from EIP-8024. -/
+def OPCODE_EXCHANGE : Nat := VERY_LOW
+/-- The price of TLOAD, from EIP-1153. -/
+def OPCODE_TLOAD : Nat := WARM_ACCESS
+/-- The price of TSTORE, from EIP-1153. -/
+def OPCODE_TSTORE : Nat := WARM_ACCESS
+
+/-- The base price of RETURNDATACOPY, from EIP-211. -/
+def OPCODE_RETURNDATACOPY_BASE : Nat := VERY_LOW
+/-- The price per copied word of RETURNDATACOPY, from EIP-211. -/
+def OPCODE_RETURNDATACOPY_PER_WORD : Nat := 3
+/-- The base price of CALLDATACOPY. -/
+def OPCODE_CALLDATACOPY_BASE : Nat := VERY_LOW
+/-- The base price of CODECOPY. -/
+def OPCODE_CODECOPY_BASE : Nat := VERY_LOW
+/-- The base price of MCOPY, from EIP-5656. -/
+def OPCODE_MCOPY_BASE : Nat := VERY_LOW
+/-- The base price of MLOAD. -/
+def OPCODE_MLOAD_BASE : Nat := VERY_LOW
+/-- The base price of MSTORE. -/
+def OPCODE_MSTORE_BASE : Nat := VERY_LOW
+/-- The base price of MSTORE8. -/
+def OPCODE_MSTORE8_BASE : Nat := VERY_LOW
+/-- The price per copied word of CALLDATACOPY, CODECOPY, EXTCODECOPY and MCOPY. -/
+def OPCODE_COPY_PER_WORD : Nat := 3
+/-- The base price of CREATE, and of CREATE2 from EIP-1014. -/
+def OPCODE_CREATE_BASE : Nat := 32000
+/-- The base price of EXP. -/
+def OPCODE_EXP_BASE : Nat := 10
+/-- The base price of KECCAK256. -/
+def OPCODE_KECCAK256_BASE : Nat := 30
+/-- The price per hashed word of KECCAK256. -/
+def OPCODE_KECCAK256_PER_WORD : Nat := 6
+/-- The base price of LOG0 to LOG4. -/
+def OPCODE_LOG_BASE : Nat := 375
+/-- The price per logged byte. -/
+def OPCODE_LOG_DATA_PER_BYTE : Nat := 8
+/-- The price per log topic. -/
+def OPCODE_LOG_TOPIC : Nat := 375
+end GasCosts
+
+open EthLib.Base (Fork U256)
+open GasCosts
+
+/-- The gas prices that a fork changed, and that depend only on the fork. -/
+structure GasSchedule where
+  /-- The price per byte of the exponent of EXP. -/
+  OPCODE_EXP_PER_BYTE : Nat
+  /-- The base price of SELFDESTRUCT. -/
+  OPCODE_SELFDESTRUCT_BASE : Nat
+  /-- The extra price in execution gas of a SELFDESTRUCT that creates an account. -/
+  OPCODE_SELFDESTRUCT_NEW_ACCOUNT : Nat
+  /-- The extra price of a transaction that creates a contract. -/
+  TX_CREATE : Nat
+  /-- The price per nonzero byte of call data. -/
+  TX_DATA_PER_NON_ZERO : Nat
+  /-- The floor price per token of call data, from Pectra. -/
+  TX_DATA_TOKEN_FLOOR : Nat
+  /-- The price per address of an access list, from Berlin. -/
+  TX_ACCESS_LIST_ADDRESS : Nat
+  /-- The price per storage key of an access list, from Berlin. -/
+  TX_ACCESS_LIST_STORAGE_KEY : Nat
+  /-- The price of the first access to an account in a transaction, from Berlin. -/
+  COLD_ACCOUNT_ACCESS : Nat
+  /-- The refund to clear a storage slot whose value is not zero. -/
+  REFUND_STORAGE_CLEAR : Nat
+  /-- The refund for each account that SELFDESTRUCT destroys. -/
+  REFUND_SELF_DESTRUCT : Nat
+  deriving DecidableEq, Repr
+
+/-- The gas prices of a fork that depend only on the fork.
+
+Each price changes only at the forks that the comments name.
+
+From Glamsterdam, the prices of an access list and the refund to clear a slot derive from others.
+
+The section Conversion to gas costs of [EIP-8038][eip-8038] gives their formulas.
+
+It gives the refund as `(STORAGE_WRITE + COLD_STORAGE_ACCESS) * (4800/5000)`.
+
+The code multiplies before it divides, so the division in `Nat` is exact.
+
+It is exact since `12100 * 4800 = 11616 * 5000`.
+
+[eip-8038]: https://eips.ethereum.org/EIPS/eip-8038#conversion-to-gas-costs
+-/
+def gasSchedule (fork : Fork) : GasSchedule :=
+  -- EIP-2929 sets the price at 2600, and EIP-8038 raises it to 3000.
+  let coldAccountAccess := if fork ≥ .glamsterdam then 3000 else 2600
+  { -- EIP-160 raises the price from 10 to 50.
+    OPCODE_EXP_PER_BYTE := if fork ≥ .spuriousDragon then 50 else 10
+    -- EIP-150 raises the price from 0 to 5000.
+    OPCODE_SELFDESTRUCT_BASE := if fork ≥ .tangerineWhistle then 5000 else 0
+    -- EIP-150 adds the price, and EIP-8038 replaces it with the write of an account.
+    OPCODE_SELFDESTRUCT_NEW_ACCOUNT :=
+      if fork ≥ .glamsterdam then ACCOUNT_WRITE
+      else if fork ≥ .tangerineWhistle then 25000 else 0
+    -- EIP-2 raises the price of a contract creation from 21000 to 53000.
+    TX_CREATE := if fork ≥ .homestead then 32000 else 0
+    -- EIP-2028 lowers the price from 68 to 16.
+    TX_DATA_PER_NON_ZERO := if fork ≥ .istanbul then 16 else 68
+    -- EIP-7623 sets the price at 10, and EIP-7976 raises it to 16.
+    TX_DATA_TOKEN_FLOOR := if fork ≥ .glamsterdam then 16 else 10
+    -- EIP-2930 sets the price at 2400, and EIP-8038 at the cold minus the warm price, 2900.
+    TX_ACCESS_LIST_ADDRESS :=
+      if fork ≥ .glamsterdam then coldAccountAccess - WARM_ACCESS else 2400
+    -- EIP-2930 sets the price at 1900, and EIP-8038 at the cold minus the warm price, 2000.
+    TX_ACCESS_LIST_STORAGE_KEY :=
+      if fork ≥ .glamsterdam then COLD_STORAGE_ACCESS - WARM_ACCESS else 1900
+    COLD_ACCOUNT_ACCESS := coldAccountAccess
+    -- EIP-3529 lowers the refund from 15000 (EIP-2200) to 4800, and EIP-8038 raises it to 11616.
+    REFUND_STORAGE_CLEAR :=
+      if fork ≥ .glamsterdam then (STORAGE_WRITE + COLD_STORAGE_ACCESS) * 4800 / 5000
+      else if fork ≥ .london then 4800 else 15000
+    -- EIP-3529 removes the refund, which is 24000 in the Berlin version of the Yellow Paper.
+    REFUND_SELF_DESTRUCT := if fork ≥ .london then 0 else 24000 }
+
+namespace GasCosts
+
+/-- The price to access and write the account that a contract creation deploys, from EIP-8038.
+
+It is the write of an account plus a cold access to it at Glamsterdam, 9000 + 3000 = 12000.
+
+The section Conversion to gas costs of [EIP-8038][eip-8038] gives this formula.
+
+[eip-8038]: https://eips.ethereum.org/EIPS/eip-8038#conversion-to-gas-costs
+-/
+def CREATE_ACCESS : Nat := ACCOUNT_WRITE + (gasSchedule .glamsterdam).COLD_ACCOUNT_ACCESS
+
+end GasCosts
+
+/-- The price of an access to an account at `fork`, from EIP-2929.
+
+The first access to an account in a transaction is cold, and a later one is warm.
+
+EIP-8038 raises the cold price from 2600 to 3000 at Glamsterdam. -/
+def accountAccessCost (fork : Fork) (cold : Bool) : Nat :=
+  if cold then (gasSchedule fork).COLD_ACCOUNT_ACCESS else WARM_ACCESS
+
+/-- The price of SLOAD.
+
+From Berlin, it is the price of a cold or a warm access to the slot.
+
+Before Berlin, it does not depend on the access. -/
+def sloadCost (fork : Fork) (cold : Bool) : Nat :=
+  if fork ≥ .berlin then
+    -- EIP-2929 replaces the price of 800 with the price of the access.
+    if cold then COLD_STORAGE_ACCESS else WARM_ACCESS
+  else if fork ≥ .istanbul then
+    -- EIP-1884 raises the price from 200 to 800.
+    800
+  else if fork ≥ .tangerineWhistle then
+    -- EIP-150 raises the price from 50 to 200.
+    200
+  else 50
+
+/-- The price of BALANCE.
+
+From Berlin, it is the price of a cold or a warm access to the account.
+
+Before Berlin, it does not depend on the access. -/
+def balanceCost (fork : Fork) (cold : Bool) : Nat :=
+  if fork ≥ .berlin then
+    -- EIP-2929 replaces the price of 700 with the price of the access.
+    accountAccessCost fork cold
+  else if fork ≥ .istanbul then
+    -- EIP-1884 raises the price from 400 to 700.
+    700
+  else if fork ≥ .tangerineWhistle then
+    -- EIP-150 raises the price from 20 to 400.
+    400
+  else 20
+
+/-- The price of EXTCODESIZE, and the base price of EXTCODECOPY.
+
+From Berlin, it is the price of a cold or a warm access to the account.
+
+From Glamsterdam, it adds the price of a warm access for the read of the code.
+
+Before Berlin, it does not depend on the access. -/
+def externalBaseCost (fork : Fork) (cold : Bool) : Nat :=
+  if fork ≥ .glamsterdam then
+    -- EIP-8038 adds a warm access for the second read.
+    accountAccessCost fork cold + WARM_ACCESS
+  else if fork ≥ .berlin then
+    -- EIP-2929 replaces the price of 700 with the price of the access.
+    accountAccessCost fork cold
+  else if fork ≥ .tangerineWhistle then
+    -- EIP-150 raises the price from 20 to 700.
+    700
+  else 20
+
+/-- The price of EXTCODEHASH, which EIP-1052 adds at Constantinople.
+
+From Berlin, it is the price of a cold or a warm access to the account.
+
+Before Berlin, it does not depend on the access. -/
+def extcodehashCost (fork : Fork) (cold : Bool) : Nat :=
+  if fork ≥ .berlin then
+    -- EIP-2929 replaces the price of 700 with the price of the access.
+    accountAccessCost fork cold
+  else if fork ≥ .istanbul then
+    -- EIP-1884 raises the price from 400 to 700.
+    700
+  else 400
+
+/-- The base price of CALL, CALLCODE, DELEGATECALL and STATICCALL.
+
+From Berlin, it is the price of a cold or a warm access to the account.
+
+Before Berlin, it does not depend on the access. -/
+def callBaseCost (fork : Fork) (cold : Bool) : Nat :=
+  if fork ≥ .berlin then
+    -- EIP-2929 replaces the price of 700 with the price of the access.
+    accountAccessCost fork cold
+  else if fork ≥ .tangerineWhistle then
+    -- EIP-150 raises the price from 40 to 700.
+    700
+  else 40
+
+/-- The most gas that a call can pass on: all but one 64th of the gas, rounded up.
+
+The limit holds from Tangerine Whistle.
+
+Source: EIP-150, and the function `L` of Appendix H.1 of the Yellow Paper. -/
+def maxMessageCallGas (gas : Nat) : Nat :=
+  gas - gas / 64
+
+/-- The price of init code: 2 gas per 32-byte word.
+
+The price holds from Shanghai.
+
+Source: EIP-3860. -/
+def initCodeCost (initCodeLength : Nat) : Nat :=
+  CODE_INIT_PER_WORD * wordCount initCodeLength
+
+/-- The most bytes of code that a creation may deploy at `fork`, or none for no bound.
+
+[EIP-170](https://eips.ethereum.org/EIPS/eip-170#specification) sets it at 24576 at Spurious Dragon.
+
+[EIP-7954][eip-7954] raises it to 65536 at Glamsterdam.
+
+[eip-7954]: https://eips.ethereum.org/EIPS/eip-7954#specification
+-/
+def maxCodeSize (fork : Fork) : Option Nat :=
+  if fork ≥ .glamsterdam then some 65536
+  else if fork ≥ .spuriousDragon then some 24576
+  else none
+
+/-- The most bytes of init code at `fork`, from Shapella on.
+
+[EIP-3860](https://eips.ethereum.org/EIPS/eip-3860#parameters) sets it at 49152 at Shapella.
+
+It defines the limit as twice the code limit, and only from Shapella on.
+
+[EIP-7954][eip-7954] raises it to 131072 at Glamsterdam, and keeps that ratio.
+
+No limit of init code exists before Shapella, so each rule that reads this one checks the fork.
+
+The definition keeps its own numbers, since no code limit exists before Spurious Dragon.
+
+[eip-7954]: https://eips.ethereum.org/EIPS/eip-7954#specification
+-/
+def maxInitCodeSize (fork : Fork) : Nat :=
+  if fork ≥ .glamsterdam then 131072 else 49152
+
+end EthLib.Execution.Evm

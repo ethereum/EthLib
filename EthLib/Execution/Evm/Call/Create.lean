@@ -1,6 +1,7 @@
 module
 
-public import EthLib.Execution.Evm.Call
+public import EthLib.Execution.Evm.Call.Child
+public import EthLib.Execution.Evm.Call.Instructions
 public import EthLib.Execution.Evm.Call.ContractAddress
 
 /-!

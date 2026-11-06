@@ -12,19 +12,15 @@ public import EthLib.Execution.Evm.Gas
 public import EthLib.Execution.Evm.Machine.Errors
 public import EthLib.Execution.Evm.Op
 public import EthLib.Execution.Evm.Machine.Stack
-public import EthLib.Execution.Evm.Call.Delegation
 public import EthLib.Execution.Evm.Environment
 public import EthLib.Execution.Evm.Machine.Frame
-public import EthLib.Execution.Evm.Gas.StateGas
 public import EthLib.Execution.Evm.Step
 public import EthLib.Execution.Evm.Instructions.StackN
 public import EthLib.Execution.Evm.Instructions.StackOnly
 public import EthLib.Execution.Evm.Instructions.MemoryData
 public import EthLib.Execution.Evm.Instructions.Return
-public import EthLib.Execution.Evm.Gas.CallGas
 public import EthLib.Execution.Evm.Instructions.EnvironmentData
 public import EthLib.Execution.Evm.Instructions.AccountData
-public import EthLib.Execution.Evm.Call.ContractAddress
 public import EthLib.Execution.Evm.Instructions.LogData
 public import EthLib.Execution.Evm.Instructions.TransientStorage
 public import EthLib.Execution.Evm.Instructions.Storage
@@ -32,11 +28,8 @@ public import EthLib.Execution.Evm.Machine.JumpDest
 public import EthLib.Execution.Evm.Instructions.ControlFlow
 public import EthLib.Execution.Evm.Measure
 public import EthLib.Execution.Evm.Call
-public import EthLib.Execution.Evm.Call.Create
 public import EthLib.Execution.Evm.Instructions.SelfDestruct
-public import EthLib.Execution.Evm.Call.TransferLog
 public import EthLib.Execution.Evm.Interpreter
-public import EthLib.Execution.Evm.Call.MessageCall
 
 /-!
 # `EthLib.Execution.Evm`

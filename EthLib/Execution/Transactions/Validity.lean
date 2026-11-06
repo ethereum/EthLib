@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Evm.Gas
+public import EthLib.Execution.Evm.Gas.Prices
 public import EthLib.Cryptography.Kzg.VersionedHash
 public import EthLib.Execution.Transactions.Signature
 

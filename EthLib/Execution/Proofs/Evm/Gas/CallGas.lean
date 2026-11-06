@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Gas.CallGas
-public import EthLib.Execution.Proofs.Evm.Gas
+public import EthLib.Execution.Proofs.Evm.Gas.Prices
 
 /-!
 # Proofs: `Evm.Gas.CallGas`

@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.Proofs.Address
-public import EthLib.Execution.Evm.Instructions.SelfDestruct
+public import EthLib.Execution.Evm.Call.TransferLog
 
 /-!
 # Proofs: `Evm.Call.TransferLog`
@@ -11,8 +11,6 @@ Before Glamsterdam, a move of ether writes no log.
 From Glamsterdam, it writes exactly one log when it moves a positive amount to another account.
 
 That log comes from the system address, and its last two topics hold the sender and the recipient.
-
-From Glamsterdam, SELFDESTRUCT writes that log for the balance it moves.
 -/
 
 @[expose] public section
@@ -58,18 +56,5 @@ theorem transferLog_topics (sender recipient : Address) (amount : U256) :
 theorem drop_toBeBytes_toU256 (address : Address) :
     (U256.toBeBytes address.toU256).drop 12 = address :=
   EthLib.Base.toAddressMasked_toU256 address
-
-/-- SELFDESTRUCT writes the transfer log of the balance it moves, none before Glamsterdam. -/
-theorem finishSelfdestruct_logs {beneficiary : Address} {refund : Nat} {Meter : Type}
-    {evm after : Evm fork Meter} (h : finishSelfdestruct fork beneficiary refund evm = .ok after) :
-    after.substate.logs =
-      pushTransferLog fork evm.substate.logs evm.message.currentTarget beneficiary
-        (evm.state.getAccount evm.message.currentTarget).balance := by
-  unfold finishSelfdestruct at h
-  split at h
-  · cases h
-  · obtain ⟨state, -, h⟩ := Base.bind_ok_iff.mp h
-    cases h
-    rfl
 
 end EthLib.Execution.Evm

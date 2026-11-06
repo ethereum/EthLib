@@ -2,7 +2,7 @@ module
 
 public import EthLib.Execution.Evm.Call.Delegation
 public import EthLib.Execution.Evm.Machine.Frame
-public import EthLib.Execution.Evm.Gas
+public import EthLib.Execution.Evm.Gas.Prices
 public import EthLib.Execution.State.Tracker
 public import EthLib.Execution.Transactions.Signature
 
