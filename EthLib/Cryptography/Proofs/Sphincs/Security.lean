@@ -1,26 +1,13 @@
 module
 
 public import
-  EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.RecoveredFors
-public import
-  EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.RefinedEvents
-public import
-  EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.SignedReveals
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.Targeting
+  EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.RefinedOutcome
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Configurations
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverBound.ClassLaw
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverBound.HTermOption
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverBound.IntTables
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverPotential.StartValue
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LargeBudget.HeavyTerm
-public import
-  EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LargeBudget.WeightedPotential
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverBound.NearOption
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LargeBudget.HeavyRoute
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.ExposedUniform
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.RouteStart
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Reduction.SeedElimination
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.ScanSigner.ScanReveals
-public import
-  EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.SmallBudget.Contact.NearWitness
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.SmallBudget.Linear.Payoff
 
 /-!
 # Proofs: the model of the leanSPHINCS security proof
