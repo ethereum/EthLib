@@ -65,6 +65,7 @@ public import EthLib.Consensus.Transition.ForkBoundary
 public import EthLib.Consensus.Transition.Genesis
 public import EthLib.Consensus.Transition.Operations
 public import EthLib.Consensus.Transition.Payload
+public import EthLib.Consensus.Transition.Requests
 public import EthLib.Consensus.Transition.StateTransition
 public import EthLib.Consensus.Transition.SyncAggregate
 public import EthLib.Consensus.Transition.Upgrade

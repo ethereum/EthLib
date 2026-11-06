@@ -100,6 +100,15 @@ def bridgeDepositsPending (state : BeaconState preset fork) : Bool :=
     state.eth1DepositIndex before < state.depositRequestsStartIndex ⟨electra.1, before⟩
   else false
 
+/-- From Electra: whether a pending deposit waits for a later epoch.
+
+It waits if it entered the queue after a slot, the first slot of the finalized epoch.
+
+In Electra a request also waits while deposits of the old mechanism remain. -/
+def depositWaits (state : BeaconState preset fork) (finalizedSlot : Slot)
+    (deposit : PendingDeposit) : Bool :=
+  (bridgeDepositsPending state && GENESIS_SLOT < deposit.slot) || finalizedSlot < deposit.slot
+
 /-- From Electra to Fulu: the state after the pending deposits of an epoch.
 
 The churn available is the churn left from the last epoch and the activation churn.
@@ -123,12 +132,9 @@ def processPendingDeposits (config : Config) (checks : SignatureChecks)
     liftAccessor (liftArith (addChecked (state.depositBalanceToConsume electra) churn))
   let finalizedSlot ← liftAccessor
     (liftArith (computeStartSlotAtEpoch preset state.finalizedCheckpoint.epoch))
-  let bridge := bridgeDepositsPending state
-  let stop (deposit : PendingDeposit) :=
-    (bridge && GENESIS_SLOT < deposit.slot) || finalizedSlot < deposit.slot
   let queue := state.pendingDeposits electra
-  let pass ← passPendingDeposits config checks stop nextEpoch available state 0 0 #[]
-    queue.data.toList
+  let pass ← passPendingDeposits config checks (depositWaits state finalizedSlot) nextEpoch
+    available state 0 0 #[] queue.data.toList
   let pending : PendingDeposits preset fork :=
     ⟨pass.1.rest.toArray ++ pass.1.postponed, fun before => by
       have fits : pass.1.rest.length + pass.1.postponed.size ≤ queue.data.size := by

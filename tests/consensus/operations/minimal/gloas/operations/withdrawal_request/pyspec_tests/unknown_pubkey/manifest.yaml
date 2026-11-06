@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: operations
+handler: withdrawal_request
+suite: pyspec_tests
+case: unknown_pubkey

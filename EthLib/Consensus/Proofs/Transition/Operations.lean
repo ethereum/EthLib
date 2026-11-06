@@ -74,6 +74,33 @@ theorem balanceSum_increaseBalance {index : ValidatorIndex} {delta : Gwei}
     omega
   · cases found
 
+/-- Lowering a balance by at most itself takes the amount from the sum of the balances. -/
+theorem balanceSum_decreaseBalance {index : ValidatorIndex} {delta balance : Gwei}
+    (found : getBalance state index = .ok balance) (le : delta ≤ balance)
+    (computed : decreaseBalance state index delta = .ok after) :
+    balanceSum after + delta.toNat = balanceSum state := by
+  simp only [decreaseBalance, found, bind, Except.bind, pure, Except.pure,
+    Except.ok.injEq] at computed
+  subst computed
+  unfold getBalance at found
+  split at found
+  · rename_i read
+    cases found
+    obtain ⟨inside, rfl⟩ := Array.getElem?_eq_some_iff.mp read
+    unfold balanceSum BeaconState.setBalance
+    simp only [Array.set!_eq_setIfInBounds, Array.setIfInBounds, inside, ↓reduceDIte,
+      Array.toList_set, List.map_set]
+    have := sum_set_add (l := state.balances.data.toList.map (·.toNat)) (i := index.toNat)
+      (by simpa using inside) (saturatingSub state.balances.data[index.toNat] delta).toNat
+    simp only [List.getElem_map, Array.getElem_toList] at this
+    have sub : (saturatingSub state.balances.data[index.toNat] delta).toNat + delta.toNat =
+        state.balances.data[index.toNat].toNat := by
+      rw [toNat_saturatingSub]
+      have := UInt64.le_iff_toNat_le.mp le
+      omega
+    omega
+  · cases found
+
 /-! ## Attestations -/
 
 /-- Recording a pending attestation appends it to the list of its epoch, and changes nothing else.

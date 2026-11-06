@@ -36,6 +36,8 @@ HANDLERS = {
     "attestation": ("attestation", ("phase0", "altair", "bellatrix", "capella", "deneb")),
     "deposit": ("deposit", ("phase0", "altair", "bellatrix", "capella", "deneb", "electra")),
     "deposit_request": ("deposit_request", ("electra", "fulu")),
+    "withdrawal_request": ("withdrawal_request", ("electra", "fulu", "gloas")),
+    "consolidation_request": ("consolidation_request", ("electra", "fulu", "gloas")),
     "sync_aggregate": (
         "sync_aggregate",
         ("altair", "bellatrix", "capella", "deneb", "electra", "fulu"),

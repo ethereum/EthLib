@@ -1,0 +1,6 @@
+preset: minimal
+fork: fulu
+runner: operations
+handler: consolidation_request
+suite: pyspec_tests
+case: incorrect_source_has_pending_withdrawal

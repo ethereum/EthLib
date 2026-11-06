@@ -1,0 +1,6 @@
+preset: minimal
+fork: electra
+runner: epoch_processing
+handler: pending_consolidations
+suite: pyspec_tests
+case: skip_consolidation_when_source_slashed
