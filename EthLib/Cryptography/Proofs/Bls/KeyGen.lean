@@ -55,7 +55,7 @@ theorem keyGenLoop_ne_hkdf (ikm keyInfo salt : ByteArray) (attempts : Nat) :
       ⟨_, hx.symm.trans (Hkdf.expand_eq (by simp [Hkdf.extract, Hkdf.HASH_LEN])
         (by simp [KEYGEN_L, Hkdf.HASH_LEN]))⟩
     rw [mapError_ok_bind] at h
-    generalize Fr.ofNat (Fr.bytesBEToNat okm) = sk at h
+    generalize Fr.ofNat (Base.bytesToNat okm.data.toList) = sk at h
     dsimp only at h
     split at h
     · exact ih _ h

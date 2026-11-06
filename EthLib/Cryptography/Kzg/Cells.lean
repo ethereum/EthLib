@@ -8,6 +8,7 @@ public import EthLib.Cryptography.Kzg.Fft
 public import EthLib.Cryptography.Kzg.Core
 public import EthLib.Cryptography.Kzg.TrustedSetup
 public import EthLib.Cryptography.Kzg.Errors
+public import EthLib.Base.BigEndian
 
 /-!
 # `Cells`
@@ -400,7 +401,7 @@ def unpackIndicesBE (b : ByteArray) : Except KzgError (Array Nat) := do
   let n := b.size / 8
   let mut out : Array Nat := Array.mkEmpty n
   for i in [:n] do
-    out := out.push (bytesBEToNat (b.extract (i*8) ((i+1)*8)))
+    out := out.push (Base.bytesToNat (b.extract (i*8) ((i+1)*8)).data.toList)
   return out
 
 end EthLib.Cryptography.Kzg

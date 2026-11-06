@@ -25,7 +25,6 @@ namespace EthLib.Cryptography.Secp256r1.Exports
 
 open EthLib.Exports (Result)
 
-open EthLib.Cryptography.Secp256k1 (ofBytesBE)
 
 /-- The length of a public key: `x` then `y`, 32 bytes each. -/
 def PUBLIC_KEY_LEN : Nat := 64
@@ -42,7 +41,7 @@ def runSecp256r1 {α : Type} (act : Except Secp256r1Error α) : Result α :=
 
 /-- A coordinate below `p`, or an error. -/
 def readCoordinate (bytes : List UInt8) : Except Secp256r1Error Fp :=
-  let v := ofBytesBE bytes
+  let v := Base.bytesToNat bytes
   if h : v < Fp.modulus then .ok ⟨v, h⟩ else .error .coordinateTooLarge
 
 /-- The affine point of a 64-byte public key, or an error for any other length. -/
@@ -55,13 +54,13 @@ def readPublicKey (bytes : ByteArray) : Except Secp256r1Error Point := do
 
 /-- The integer of a 32-byte hash, or an error for any other length. -/
 def readHash (bytes : ByteArray) : Except Secp256r1Error Nat :=
-  if bytes.size = HASH_LEN then .ok (ofBytesBE bytes.data.toList)
+  if bytes.size = HASH_LEN then .ok (Base.bytesToNat bytes.data.toList)
   else .error (.badHashSize bytes.size)
 
 /-- The integers `r` and `s` of a 64-byte signature, or an error for any other length. -/
 def readSignature (bytes : ByteArray) : Except Secp256r1Error (Nat × Nat) :=
   if bytes.size = SIGNATURE_LEN then
-    .ok (ofBytesBE (bytes.data.toList.take 32), ofBytesBE (bytes.data.toList.drop 32))
+    .ok (Base.bytesToNat (bytes.data.toList.take 32), Base.bytesToNat (bytes.data.toList.drop 32))
   else .error (.badSignatureSize bytes.size)
 
 /-! ## Sizes

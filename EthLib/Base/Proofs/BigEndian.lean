@@ -101,6 +101,11 @@ theorem natToBytes_bytesToNat (bytes : List UInt8) :
     rw [hv, natToBytes, hdiv, hmod, ih front hf]
     simp
 
+/-- Two byte lists of one length that hold the same number are equal. -/
+theorem bytesToNat_inj {a b : List UInt8} (length : a.length = b.length)
+    (same : bytesToNat a = bytesToNat b) : a = b := by
+  rw [← natToBytes_bytesToNat a, ← natToBytes_bytesToNat b, length, same]
+
 /-- The first byte is worth `256` to the power of the number of bytes after it. -/
 theorem bytesToNat_cons (b : UInt8) (rest : List UInt8) :
     bytesToNat (b :: rest) = b.toNat * 256 ^ rest.length + bytesToNat rest := by

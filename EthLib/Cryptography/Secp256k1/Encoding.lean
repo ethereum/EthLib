@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Secp256k1.Curve
 public import EthLib.Cryptography.Secp256k1.Errors
+public import EthLib.Base.BigEndian
 
 /-!
 # `Secp256k1.Encoding`
@@ -39,10 +40,6 @@ theorem length_toBytesBE (k v : Nat) : (toBytesBE k v).length = k := by
   | zero => rfl
   | succ k ih => simp [toBytesBE, ih]
 
-/-- The integer that big-endian bytes write, by SEC 1 v2 §2.3.8. -/
-def ofBytesBE (bytes : List UInt8) : Nat :=
-  bytes.foldl (fun acc b => 256 * acc + b.toNat) 0
-
 /-- A coordinate as 32 bytes, by SEC 1 v2 §2.3.5. -/
 def Fp.toBytes (x : Fp) : List UInt8 := toBytesBE 32 x.val
 
@@ -51,7 +48,7 @@ theorem Fp.length_toBytes (x : Fp) : x.toBytes.length = 32 := length_toBytesBE 3
 
 /-- 32 bytes as a coordinate, by SEC 1 v2 §2.3.6: the integer must be below `p`. -/
 def Fp.ofBytes (bytes : List UInt8) : Except Secp256k1Error Fp :=
-  if h : ofBytesBE bytes < Fp.modulus then .ok ⟨_, h⟩ else .error .coordinateTooLarge
+  if h : Base.bytesToNat bytes < Fp.modulus then .ok ⟨_, h⟩ else .error .coordinateTooLarge
 
 namespace Point
 

@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Bls.Errors
 public import EthLib.Cryptography.Montgomery
 public import EthLib.Cryptography.Hash.Sha256
+public import EthLib.Base.BigEndian
 
 /-!
 # `Fr`
@@ -133,17 +134,6 @@ def batchInverse (xs : Array Fr) : Array Fr :=
 /-- `a ^ b` raises `a` to `b.val`, treating the exponent as an integer. -/
 instance : HPow Fr Fr Fr := ⟨fun a b => powNat a b.val⟩
 
-/-- Big-endian accumulation of `bytes` onto `acc`. -/
-def fromBytesBEAux (acc : Nat) : List UInt8 → Nat
-  | [] => acc
-  | b :: rest => fromBytesBEAux ((acc <<< 8) ||| b.toNat) rest
-
-/-- Decode big-endian bytes as a natural number.
-
-Both decoders of field elements from bytes use it. -/
-@[inline] def bytesBEToNat (b : ByteArray) : Nat :=
-  fromBytesBEAux 0 b.data.toList
-
 /-- Decode a 32-byte big-endian integer as an element of `Fr`.
 
 It rejects an input of the wrong size, and an integer of at least `r`.
@@ -164,7 +154,7 @@ def fromBytesBE (b : ByteArray) : Except BlsError Fr :=
 The output is not uniform over `Fr`. -/
 def hashToBlsField (data : ByteArray) : Fr :=
   let hashedData := Hash.sha256 data
-  Fr.ofNat (bytesBEToNat hashedData)
+  Fr.ofNat (Base.bytesToNat hashedData.data.toList)
 
 end Fr
 

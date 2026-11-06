@@ -6,6 +6,7 @@ public import EthLib.Cryptography.Kzg.Constants
 public import EthLib.Cryptography.Kzg.BitReversal
 public import EthLib.Cryptography.Kzg.Errors
 public import EthLib.Cryptography.Kzg.Fft
+public import EthLib.Base.BigEndian
 
 /-!
 # `Polynomials`
@@ -53,15 +54,6 @@ def parseBytes (n : Nat) (err : Nat → KzgError) (b : ByteArray) :
 def intToBytesBE (n : Nat) (len : Nat) : ByteArray :=
   ByteArray.mk <| Array.ofFn (n := len) fun i =>
     UInt8.ofNat ((n >>> ((len - 1 - i.val) * 8)) &&& 0xff)
-
-/-- Big-endian accumulation of `bytes` onto `acc`. -/
-def bytesBEToNatAux (acc : Nat) : List UInt8 → Nat
-  | [] => acc
-  | b :: rest => bytesBEToNatAux ((acc <<< 8) ||| b.toNat) rest
-
-/-- Decode big-endian bytes as a `Nat`. -/
-def bytesBEToNat (b : ByteArray) : Nat :=
-  bytesBEToNatAux 0 b.data.toList
 
 /-- Convert untrusted bytes to an element of the BLS scalar field.
 

@@ -71,36 +71,17 @@ theorem sqrt_complete {a b : Fp} (h : b * b = a) :
 
 /-! ## Big-endian bytes
 
-The byte decoder of `Fp` folds over the bytes, from the most significant.
+The byte decoder of `Fp` reads the bytes as one big-endian integer.
 
-The KZG decoder computes the same fold, so its round trip gives that of a field element. -/
-
-/-- The byte decoder of `Fp` is a left fold over the bytes, by definition. -/
-theorem bytesBEToNat_eq_list (b : ByteArray) :
-    Fp.bytesBEToNat b
-      = b.data.toList.foldl (fun acc u => (acc <<< 8) ||| u.toNat) 0 :=
-  rfl
-
-/-- The KZG list-fold decoder agrees with `List.foldl`. -/
-private theorem kzgAux_eq_foldl (l : List UInt8) (acc : Nat) :
-    Kzg.bytesBEToNatAux acc l
-      = l.foldl (fun acc u => (acc <<< 8) ||| u.toNat) acc := by
-  induction l generalizing acc with
-  | nil => rfl
-  | cons u rest ih =>
-    rw [Kzg.bytesBEToNatAux, List.foldl_cons]
-    exact ih _
+The KZG encoder writes that integer back, so its round trip gives that of a field element. -/
 
 /-- Decoding the encoding of a field element recovers its value. -/
-private theorem bytesBEToNat_toBytesBE (x : Fp) :
-    Fp.bytesBEToNat (Fp.toBytesBE x) = x.val := by
+private theorem bytesToNat_toBytesBE (x : Fp) :
+    Base.bytesToNat (Fp.toBytesBE x).data.toList = x.val := by
   have heq : Fp.toBytesBE x = Kzg.intToBytesBE x.val 48 := rfl
-  rw [heq, bytesBEToNat_eq_list, ← kzgAux_eq_foldl]
-  have := Kzg.bytesBEToNat_intToBytesBE_of_lt
-    (n := x.val) (len := 48) (by
-      calc x.val < Fp.modulus := x.isLt
-        _ < 256 ^ 48 := by decide)
-  rwa [Kzg.bytesBEToNat] at this
+  rw [heq]
+  exact Kzg.bytesToNat_intToBytesBE_of_lt (calc x.val < Fp.modulus := x.isLt
+    _ < 256 ^ 48 := by decide)
 
 /-! ## Encoding size, byte 0, and the `fromBytesBE` round-trip -/
 
@@ -134,8 +115,8 @@ theorem toBytesBE_head_lt (x : Fp) : ((Fp.toBytesBE x).get! 0).toNat < 0x20 := b
 
 theorem fromBytesBE_toBytesBE (x : Fp) : Fp.fromBytesBE x.toBytesBE = .ok x := by
   rw [Fp.fromBytesBE, ite_eq_right (by rw [size_toBytesBE]; decide),
-    dite_eq_left (by rw [bytesBEToNat_toBytesBE]; exact x.isLt)]
-  simp only [bytesBEToNat_toBytesBE]
+    dite_eq_left (by rw [bytesToNat_toBytesBE]; exact x.isLt)]
+  simp only [bytesToNat_toBytesBE]
 
 /-! ## Canonical byte encoding
 
@@ -157,11 +138,10 @@ theorem toBytesBE_fromBytesBE {b : ByteArray} {x : Fp}
     -- An in-range value is the decoded element itself.
     · cases h
       -- The encoder is the KZG big-endian encoder at width 48.
-      -- The decoding loop is the KZG list fold over the same bytes.
-      show Kzg.intToBytesBE (Fp.bytesBEToNat b) 48 = b
-      rw [bytesBEToNat_eq_list, ← kzgAux_eq_foldl, ← hsz48]
+      show Kzg.intToBytesBE (Base.bytesToNat b.data.toList) 48 = b
+      rw [← hsz48]
       -- Any byte array is the encoding of its own value at its own size.
-      exact Kzg.intToBytesBE_bytesBEToNat b
+      exact Kzg.intToBytesBE_bytesToNat b
     -- A value at or above p is rejected.
     · cases h
 

@@ -54,8 +54,8 @@ def output (hash : Vector UInt8 32) (v r s : Nat) : ByteArray :=
 
 /-- The operation of the precompile: read the four words, then compute the output. -/
 def compute (data : ByteArray) : ByteArray :=
-  output (word data 0) (ofBytesBE (word data 32).toList) (ofBytesBE (word data 64).toList)
-    (ofBytesBE (word data 96).toList)
+  output (word data 0) (Base.bytesToNat (word data 32).toList)
+    (Base.bytesToNat (word data 64).toList) (Base.bytesToNat (word data 96).toList)
 
 /-- Run the precompile on `data` with `gas` available.
 

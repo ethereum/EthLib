@@ -57,7 +57,7 @@ The candidate is `bits2int(T)`, and the state keeps the new `V`.
 -/
 def nonceNext (state : NonceState) : Nat × NonceState :=
   let v := hmac state.key state.value
-  (ofBytesBE v.data.toList, ⟨state.key, v⟩)
+  (Base.bytesToNat v.data.toList, ⟨state.key, v⟩)
 
 /-- Step h.3 of RFC 6979 §3.2 on a rejected candidate: `K = HMAC_K(V | 00)`, `V = HMAC_K(V)`. -/
 def nonceReject (state : NonceState) : NonceState :=

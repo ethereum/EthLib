@@ -37,7 +37,7 @@ def nodeIdOf (bytes : ByteArray) : Result NodeId :=
 
 /-- A private key of 32 big-endian bytes, below the group order. -/
 def privateKeyOf (bytes : ByteArray) : Result Fn :=
-  let k := ofBytesBE bytes.data.toList
+  let k := Base.bytesToNat bytes.data.toList
   if bytes.size = 32 ∧ k < Fn.modulus then pure (Fin.ofNat _ k)
   else throw (0, "private key is not 32 bytes below the group order")
 

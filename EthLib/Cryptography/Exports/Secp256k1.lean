@@ -46,14 +46,14 @@ def readHash (bytes : ByteArray) : Except Secp256k1Error (Vector UInt8 32) :=
 A larger value is rejected rather than reduced, so each key has one encoding. -/
 def readPrivateKey (bytes : ByteArray) : Except Secp256k1Error Fn :=
   if bytes.size = 32 then
-    let d := ofBytesBE bytes.data.toList
+    let d := Base.bytesToNat bytes.data.toList
     if h : d < Fn.modulus then .ok ⟨d, h⟩ else .error .privateKeyTooLarge
   else .error (.badPrivateKeySize bytes.size)
 
 /-- The integers `r` and `s` of a 64-byte signature, or an error for any other length. -/
 def readSignature (bytes : ByteArray) : Except Secp256k1Error (Nat × Nat) :=
   if bytes.size = SIGNATURE_LEN then
-    .ok (ofBytesBE (bytes.data.toList.take 32), ofBytesBE (bytes.data.toList.drop 32))
+    .ok (Base.bytesToNat (bytes.data.toList.take 32), Base.bytesToNat (bytes.data.toList.drop 32))
   else .error (.badSignatureSize bytes.size)
 
 /-! ## Sizes

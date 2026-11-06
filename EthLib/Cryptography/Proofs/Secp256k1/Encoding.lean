@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.BigEndian
 public import EthLib.Cryptography.Secp256k1.Encoding
 public import EthLib.Cryptography.Proofs.Secp256k1.Order
 
@@ -26,42 +27,24 @@ namespace EthLib.Cryptography.Secp256k1
 
 /-! ## Big-endian bytes -/
 
-theorem ofBytesBE_append_singleton (l : List UInt8) (b : UInt8) :
-    ofBytesBE (l ++ [b]) = 256 * ofBytesBE l + b.toNat := by
-  simp [ofBytesBE, List.foldl_append]
+/-- The bytes of `v` are its `k` big-endian bytes in the Base encoding. -/
+theorem toBytesBE_eq_natToBytes (k v : Nat) : toBytesBE k v = Base.natToBytes k v := by
+  induction k generalizing v with
+  | zero => rfl
+  | succ k ih => simp [toBytesBE, Base.natToBytes, ih]
 
 /-- Reading the bytes of `v` gives `v mod 256^k`. -/
-theorem ofBytesBE_toBytesBE (k v : Nat) : ofBytesBE (toBytesBE k v) = v % 256 ^ k := by
-  induction k generalizing v with
-  | zero => simp [toBytesBE, ofBytesBE, Nat.mod_one]
-  | succ k ih =>
-    have hb : (UInt8.ofNat (v % 256)).toNat = v % 256 := by
-      rw [UInt8.toNat_ofNat']
-      exact Nat.mod_mod_of_dvd _ (by decide)
-    rw [toBytesBE, ofBytesBE_append_singleton, ih, hb, Nat.pow_succ', Nat.mod_mul]
-    ring
+theorem bytesToNat_toBytesBE (k v : Nat) : Base.bytesToNat (toBytesBE k v) = v % 256 ^ k := by
+  rw [toBytesBE_eq_natToBytes, Base.bytesToNat_natToBytes]
 
 /-- Bytes read as an integer and written back are unchanged. -/
-theorem toBytesBE_ofBytesBE (l : List UInt8) : toBytesBE l.length (ofBytesBE l) = l := by
-  induction l using List.reverseRecOn with
-  | nil => rfl
-  | append_singleton l b ih =>
-    rw [List.length_append, List.length_singleton, toBytesBE, ofBytesBE_append_singleton]
-    have hb := b.toNat_lt
-    rw [show (256 * ofBytesBE l + b.toNat) / 256 = ofBytesBE l by omega,
-      show (256 * ofBytesBE l + b.toNat) % 256 = b.toNat by omega, ih, UInt8.ofNat_toNat]
-
-theorem ofBytesBE_lt (l : List UInt8) : ofBytesBE l < 256 ^ l.length := by
-  induction l using List.reverseRecOn with
-  | nil => decide
-  | append_singleton l b ih =>
-    rw [ofBytesBE_append_singleton, List.length_append, List.length_singleton, Nat.pow_succ]
-    have := b.toNat_lt
-    omega
+theorem toBytesBE_bytesToNat (l : List UInt8) :
+    toBytesBE l.length (Base.bytesToNat l) = l := by
+  rw [toBytesBE_eq_natToBytes, Base.natToBytes_bytesToNat]
 
 theorem Fp.ofBytes_toBytes (x : Fp) : Fp.ofBytes x.toBytes = .ok x := by
-  have h : ofBytesBE x.toBytes = x.val := by
-    rw [Fp.toBytes, ofBytesBE_toBytesBE, Nat.mod_eq_of_lt (Nat.lt_trans x.isLt (by decide))]
+  have h : Base.bytesToNat x.toBytes = x.val := by
+    rw [Fp.toBytes, bytesToNat_toBytesBE, Nat.mod_eq_of_lt (Nat.lt_trans x.isLt (by decide))]
   simp only [Fp.ofBytes, h, x.isLt, dite_true]
 
 /-- 32 bytes that read as a coordinate are that coordinate's bytes. -/
@@ -71,7 +54,7 @@ theorem Fp.toBytes_of_ofBytes {l : List UInt8} {x : Fp} (hl : l.length = 32) (h 
   split at h
   · cases h
     rw [Fp.toBytes, ← hl]
-    exact toBytesBE_ofBytesBE l
+    exact toBytesBE_bytesToNat l
   · cases h
 
 /-! ## Decompression -/
