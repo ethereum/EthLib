@@ -89,7 +89,7 @@ theorem processSlot_nextPayloadUnavailable (gloas : .glamsterdam ≤ fork)
   · contradiction
 
 /-- One slot step moves the slot on by exactly one. -/
-theorem advanceSlot_slot (computed : advanceSlot config state = .ok after) :
+theorem advanceSlot_slot (computed : advanceSlot config checks state = .ok after) :
     after.slot.toNat = state.slot.toNat + 1 := by
   simp only [advanceSlot, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
     addChecked_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
@@ -99,7 +99,8 @@ theorem advanceSlot_slot (computed : advanceSlot config state = .ok after) :
 /-- Some count of slot steps moves the slot on by exactly that count. -/
 theorem advanceSlots_slot :
     ∀ (count : Nat) {state after : BeaconState preset fork},
-      advanceSlots config count state = .ok after → after.slot.toNat = state.slot.toNat + count
+      advanceSlots config checks count state = .ok after →
+        after.slot.toNat = state.slot.toNat + count
   | 0, _, _, computed => by
     simp only [advanceSlots, pure, Except.pure, Except.ok.injEq] at computed
     rw [computed]
@@ -112,14 +113,15 @@ theorem advanceSlots_slot :
 
 /-- Advancing to a slot that is not after the slot of the state fails. -/
 theorem processSlots_of_le {slot : Slot} (notAfter : slot ≤ state.slot) :
-    processSlots config state slot = .error (.slotNotAfter slot state.slot) := by
+    processSlots config checks state slot = .error (.slotNotAfter slot state.slot) := by
   have : ¬state.slot < slot := UInt64.not_lt.mpr notAfter
   simp [processSlots, ensure, this, bind, Except.bind]
 
 /-- Advancing to a slot succeeds only when the slot is after that of the state.
 
 The state then ends exactly at that slot. -/
-theorem processSlots_slot {slot : Slot} (computed : processSlots config state slot = .ok after) :
+theorem processSlots_slot {slot : Slot}
+    (computed : processSlots config checks state slot = .ok after) :
     state.slot < slot ∧ after.slot = slot := by
   simp only [processSlots, bind_ok_iff, ensure_ok_iff] at computed
   obtain ⟨_, later, advanced⟩ := computed
@@ -157,7 +159,7 @@ When the result is validated, the block carries its proposer's signature on that
 Its state root is then the root of the state after it. -/
 theorem stateTransition_ok {signed : SignedBeaconBlock preset fork} {validateResult : Bool}
     (computed : stateTransition config checks engine state signed validateResult = .ok after) :
-    ∃ advanced, processSlots config state signed.message.slot = .ok advanced ∧
+    ∃ advanced, processSlots config checks state signed.message.slot = .ok advanced ∧
       advanced.slot = signed.message.slot ∧
       (validateResult = true → verifyBlockSignature config checks advanced signed = .ok true) ∧
       processBlock config checks engine advanced signed.message = .ok after ∧

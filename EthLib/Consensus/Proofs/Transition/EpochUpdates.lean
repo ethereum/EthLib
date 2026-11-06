@@ -8,9 +8,9 @@ public import EthLib.Consensus.Transition.EpochUpdates
 
 An updated effective balance is the old one, or the balance rounded down to an increment and capped.
 
-The effective balances are aligned when each is a whole number of increments, at most the largest.
+The effective balances are aligned when each is a whole number of increments, at most its largest.
 
-When the largest is itself a whole number of increments, the update keeps them aligned.
+When each largest value is itself a whole number of increments, the update keeps them aligned.
 
 The registry updates, the slashings and the update of the effective balances keep the sizes.
 
@@ -32,22 +32,22 @@ variable {preset : Preset} {fork : Base.Fork} {state after : BeaconState preset 
 /-! ## Effective balances -/
 
 /-- An updated effective balance is the old one, or the balance rounded down and capped. -/
-theorem updatedEffectiveBalance_cases {balance effectiveBalance result : Gwei}
-    (computed : updatedEffectiveBalance preset balance effectiveBalance = .ok result) :
+theorem updatedEffectiveBalance_cases {largest balance effectiveBalance result : Gwei}
+    (computed : updatedEffectiveBalance preset largest balance effectiveBalance = .ok result) :
     result = effectiveBalance ∨
-      result = min (balance - balance % preset.EFFECTIVE_BALANCE_INCREMENT)
-        preset.MAX_EFFECTIVE_BALANCE := by
+      result = min (balance - balance % preset.EFFECTIVE_BALANCE_INCREMENT) largest := by
   simp only [updatedEffectiveBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨_, _, _, _, leaves, _, rfl⟩ := computed
   cases leaves
   · exact .inl rfl
   · exact .inr rfl
 
-/-- Every effective balance is a whole number of increments, and at most the largest. -/
+/-- Every effective balance is a whole number of increments, and at most its largest at the fork.
+-/
 def EffectiveBalancesAligned (state : BeaconState preset fork) : Prop :=
   ∀ validator ∈ state.validators.data.toList,
     validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0 ∧
-      validator.effectiveBalance ≤ preset.MAX_EFFECTIVE_BALANCE
+      validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator
 
 /-- A balance rounded down to an increment is a whole number of increments. -/
 theorem sub_mod_mod_self (balance increment : Gwei) :
@@ -60,12 +60,11 @@ theorem sub_mod_mod_self (balance increment : Gwei) :
   simpa using Nat.sub_mod_eq_zero_of_mod_eq (Nat.mod_mod _ _).symm
 
 /-- An updated effective balance is aligned when the old one and the largest are. -/
-theorem updatedEffectiveBalance_aligned {balance effectiveBalance result : Gwei}
-    (maxAligned : preset.MAX_EFFECTIVE_BALANCE % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
-    (old : effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0 ∧
-      effectiveBalance ≤ preset.MAX_EFFECTIVE_BALANCE)
-    (computed : updatedEffectiveBalance preset balance effectiveBalance = .ok result) :
-    result % preset.EFFECTIVE_BALANCE_INCREMENT = 0 ∧ result ≤ preset.MAX_EFFECTIVE_BALANCE := by
+theorem updatedEffectiveBalance_aligned {largest balance effectiveBalance result : Gwei}
+    (maxAligned : largest % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
+    (old : effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0 ∧ effectiveBalance ≤ largest)
+    (computed : updatedEffectiveBalance preset largest balance effectiveBalance = .ok result) :
+    result % preset.EFFECTIVE_BALANCE_INCREMENT = 0 ∧ result ≤ largest := by
   rcases updatedEffectiveBalance_cases computed with rfl | rfl
   · exact old
   · rw [UInt64.min_def]
@@ -77,7 +76,7 @@ theorem updatedEffectiveBalance_aligned {balance effectiveBalance result : Gwei}
 theorem effectiveBalancesAligned_setValidator {index : Nat} {validator : Validator}
     (holds : EffectiveBalancesAligned state)
     (good : validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0 ∧
-      validator.effectiveBalance ≤ preset.MAX_EFFECTIVE_BALANCE) :
+      validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator) :
     EffectiveBalancesAligned (state.setValidator index validator) := by
   intro other member
   simp only [BeaconState.setValidator, Array.set!_eq_setIfInBounds, Array.toList_setIfInBounds]
@@ -86,9 +85,10 @@ theorem effectiveBalancesAligned_setValidator {index : Nat} {validator : Validat
   · exact holds other old
   · exact good
 
-/-- The update of one effective balance keeps them aligned, when the largest is aligned. -/
+/-- The update of one effective balance keeps them aligned, when each largest is aligned. -/
 theorem updateEffectiveBalance_aligned {index : Nat}
-    (maxAligned : preset.MAX_EFFECTIVE_BALANCE % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
+    (maxAligned : ∀ validator,
+      withdrawalMaxEffectiveBalance preset fork validator % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
     (holds : EffectiveBalancesAligned state)
     (computed : updateEffectiveBalance state index = .ok after) :
     EffectiveBalancesAligned after := by
@@ -96,7 +96,7 @@ theorem updateEffectiveBalance_aligned {index : Nat}
     Except.ok.injEq] at computed
   obtain ⟨validator, found, _, _, effectiveBalance, updated, rfl⟩ := computed
   apply effectiveBalancesAligned_setValidator holds
-  apply updatedEffectiveBalance_aligned maxAligned _ updated
+  apply updatedEffectiveBalance_aligned (maxAligned validator) _ updated
   unfold getValidator at found
   split at found
   · rename_i read
@@ -106,15 +106,14 @@ theorem updateEffectiveBalance_aligned {index : Nat}
 
 /-- The update of the effective balances keeps them aligned.
 
-The largest effective balance must be a whole number of increments. -/
+The largest effective balance of each validator must be a whole number of increments. -/
 theorem processEffectiveBalanceUpdates_aligned
-    (maxAligned : preset.MAX_EFFECTIVE_BALANCE % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
+    (maxAligned : ∀ validator,
+      withdrawalMaxEffectiveBalance preset fork validator % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
     (holds : EffectiveBalancesAligned state)
     (computed : processEffectiveBalanceUpdates state = .ok after) :
     EffectiveBalancesAligned after := by
   unfold processEffectiveBalanceUpdates at computed
-  split at computed
-  · cases computed
   exact foldlM_ok_invariant EffectiveBalancesAligned
     (fun _ _ _ before step => updateEffectiveBalance_aligned maxAligned before step) holds
     computed
@@ -130,8 +129,6 @@ theorem sameSizes_updateEffectiveBalance {index : Nat}
 theorem sameSizes_processEffectiveBalanceUpdates
     (computed : processEffectiveBalanceUpdates state = .ok after) : SameSizes state after := by
   unfold processEffectiveBalanceUpdates at computed
-  split at computed
-  · cases computed
   exact foldlM_ok_invariant (SameSizes state)
     (fun _ _ _ sizes step => sizes.trans (sameSizes_updateEffectiveBalance step))
     (SameSizes.refl state) computed
@@ -161,15 +158,35 @@ theorem getValidatorActivationChurnLimit_le {config : Config} :
       getValidatorActivationChurnLimit config state ≤ getValidatorChurnLimit config state :=
   ⟨Std.min_le_left, Std.min_le_right⟩
 
-/-- The registry updates succeed only before Electra, and keep the sizes. -/
-theorem processRegistryUpdates_ok {config : Config}
-    (computed : processRegistryUpdates config state = .ok after) :
-    fork < .pectra ∧ SameSizes state after := by
+theorem sameSizes_updateRegistryEntryElectra {config : Config} {activationEpoch : Epoch}
+    {index : Nat}
+    (computed : updateRegistryEntryElectra config activationEpoch state index = .ok after) :
+    SameSizes state after := by
+  simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨_, _, computed⟩ := computed
+  split at computed
+  · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, rfl⟩ := computed
+    exact sameSizes_setValidator _ _ _
+  split at computed
+  · rw [liftAccessor_ok] at computed
+    exact sameSizes_initiateValidatorExit computed
+  split at computed
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    exact computed ▸ sameSizes_setValidator _ _ _
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    exact computed ▸ SameSizes.refl _
+
+/-- The registry updates keep the sizes. -/
+theorem sameSizes_processRegistryUpdates {config : Config}
+    (computed : processRegistryUpdates config state = .ok after) : SameSizes state after := by
   unfold processRegistryUpdates at computed
   split at computed
-  · cases computed
-  rename_i electra
-  refine ⟨Nat.lt_of_not_le electra, ?_⟩
+  · simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    exact foldlM_ok_invariant (SameSizes state)
+      (fun _ _ _ sizes step => sizes.trans (sameSizes_updateRegistryEntryElectra step))
+      (SameSizes.refl state) computed
   simp only [bind_ok_iff] at computed
   obtain ⟨updated, updatedOk, activated⟩ := computed
   have first := foldlM_ok_invariant (SameSizes state)
@@ -195,19 +212,38 @@ theorem sameSizes_applySlashingPenalty {total adjusted : Gwei} {index : Nat}
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ SameSizes.refl _
 
-/-- The slashings succeed only before Electra, and keep the sizes. -/
-theorem processSlashings_ok (computed : processSlashings state = .ok after) :
-    fork < .pectra ∧ SameSizes state after := by
-  unfold processSlashings at computed
+theorem sameSizes_applySlashingPenaltyElectra {perIncrement : Gwei} {index : Nat}
+    (computed : applySlashingPenaltyElectra state perIncrement index = .ok after) :
+    SameSizes state after := by
+  simp only [applySlashingPenaltyElectra, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨validator, _, computed⟩ := computed
   split at computed
-  · cases computed
-  rename_i electra
-  refine ⟨Nat.lt_of_not_le electra, ?_⟩
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    split at computed
+    · simp only [bind_ok_iff, liftAccessor_ok] at computed
+      obtain ⟨_, _, lowered⟩ := computed
+      exact sameSizes_decreaseBalance lowered
+    · simp only [pure, Except.pure, Except.ok.injEq] at computed
+      exact computed ▸ SameSizes.refl _
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    exact computed ▸ SameSizes.refl _
+
+/-- The slashings keep the sizes. -/
+theorem sameSizes_processSlashings (computed : processSlashings state = .ok after) :
+    SameSizes state after := by
+  unfold processSlashings at computed
   simp only [bind_ok_iff] at computed
-  obtain ⟨_, _, _, _, _, _, applied⟩ := computed
-  exact foldlM_ok_invariant (SameSizes state)
-    (fun _ _ _ sizes step => sizes.trans (sameSizes_applySlashingPenalty step))
-    (SameSizes.refl state) applied
+  obtain ⟨_, _, _, _, _, _, computed⟩ := computed
+  split at computed
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, applied⟩ := computed
+    exact foldlM_ok_invariant (SameSizes state)
+      (fun _ _ _ sizes step => sizes.trans (sameSizes_applySlashingPenaltyElectra step))
+      (SameSizes.refl state) applied
+  · exact foldlM_ok_invariant (SameSizes state)
+      (fun _ _ _ sizes step => sizes.trans (sameSizes_applySlashingPenalty step))
+      (SameSizes.refl state) computed
 
 /-! ## Resets and rotations -/
 

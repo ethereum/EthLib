@@ -55,4 +55,11 @@ def getMaxEffectiveBalance (preset : Preset) (validator : Validator) : Gwei :=
   if hasCompoundingWithdrawalCredential validator then preset.MAX_EFFECTIVE_BALANCE_ELECTRA
   else preset.MIN_ACTIVATION_BALANCE
 
+/-- The largest effective balance of a validator at a fork.
+
+Before Electra it is the same for every validator. -/
+def withdrawalMaxEffectiveBalance (preset : Preset) (fork : Base.Fork) (validator : Validator) :
+    Gwei :=
+  if .pectra ≤ fork then getMaxEffectiveBalance preset validator else preset.MAX_EFFECTIVE_BALANCE
+
 end EthLib.Consensus

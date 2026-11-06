@@ -1,0 +1,6 @@
+preset: minimal
+fork: fulu
+runner: epoch_processing
+handler: slashings
+suite: pyspec_tests
+case: minimal_penalty

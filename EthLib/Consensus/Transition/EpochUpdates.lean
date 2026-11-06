@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Credentials
 public import EthLib.Consensus.Transition.EpochRewards
 
 /-!
@@ -8,6 +9,8 @@ public import EthLib.Consensus.Transition.EpochRewards
 The steps of the epoch transition after the rewards.
 
 The registry queues new validators for activation, and activates some.
+
+From Electra every queued validator whose place is finalized is activated, with no churn limit.
 
 It ejects the validators whose balance fell too low.
 
@@ -22,8 +25,6 @@ The circular buffers of slashings and RANDAO mixes move on to the next epoch.
 Before Capella, the roots of each span of slots join the historical roots.
 
 Before Altair, the pending attestations of the current epoch become those of the previous one.
-
-Where a later fork changes a rule, the step fails as not yet specified there.
 
 A 64-bit overflow is an error.
 -/
@@ -80,6 +81,31 @@ def activateValidator (state : BeaconState preset fork) (index : ValidatorIndex)
     liftAccessor (liftArith (computeActivationExitEpoch preset (getCurrentEpoch state)))
   return state.setValidator index.toNat { validator with activationEpoch }
 
+/-- From Electra: the state after the registry updates of one validator, as [EIP-7251] specifies.
+
+A validator eligible for the activation queue joins it at the next epoch.
+
+Otherwise an active validator at or below the ejection balance starts to exit.
+
+Otherwise a validator eligible for activation is activated at the given epoch.
+
+[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
+-/
+def updateRegistryEntryElectra (config : Config) (activationEpoch : Epoch)
+    (state : BeaconState preset fork) (index : Nat) :
+    Except TransitionError (BeaconState preset fork) := do
+  let validator ← liftAccessor (getValidator state index.toUInt64)
+  let currentEpoch := getCurrentEpoch state
+  if isEligibleForActivationQueue preset fork validator then
+    let activationEligibilityEpoch ← liftAccessor (liftArith (addChecked currentEpoch 1))
+    return state.setValidator index { validator with activationEligibilityEpoch }
+  else if isActiveValidator validator currentEpoch &&
+      validator.effectiveBalance ≤ config.EJECTION_BALANCE then
+    liftAccessor (initiateValidatorExit config state index.toUInt64)
+  else if isEligibleForActivation state validator then
+    return state.setValidator index { validator with activationEpoch }
+  else return state
+
 /-- The state after the registry updates.
 
 Each validator in turn may join the activation queue, and may be ejected.
@@ -88,13 +114,20 @@ Then the first validators of the queue are activated, as many as the churn limit
 
 From Deneb the activations have their own limit, as [EIP-7514] specifies.
 
-Electra changes the rule, which EthLib does not yet have here.
+From Electra one pass over the validators also activates them, with no limit, as [EIP-7251] says.
+
+They are activated at the first epoch an activation may take.
 
 [EIP-7514]: https://eips.ethereum.org/EIPS/eip-7514#specification
+[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
 -/
 def processRegistryUpdates (config : Config) (state : BeaconState preset fork) :
     Except TransitionError (BeaconState preset fork) :=
-  if .pectra ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
+  if .pectra ≤ fork then do
+    let activationEpoch ←
+      liftAccessor (liftArith (computeActivationExitEpoch preset (getCurrentEpoch state)))
+    (List.range state.validators.data.size).foldlM
+      (updateRegistryEntryElectra config activationEpoch) state
   else do
     let state ← (List.range state.validators.data.size).foldlM (updateRegistryEntry config) state
     let limit := if .dencun ≤ fork then getValidatorActivationChurnLimit config state
@@ -133,22 +166,50 @@ def applySlashingPenalty (state : BeaconState preset fork)
     else pure state
   else pure state
 
+/-- From Electra: the state after the slashing penalty of one validator, if it is due.
+
+It is due for a slashed validator halfway through its time before it may withdraw.
+
+The penalty is a penalty per increment times the effective balance counted in increments. -/
+def applySlashingPenaltyElectra (state : BeaconState preset fork) (perIncrement : Gwei)
+    (index : Nat) : Except TransitionError (BeaconState preset fork) := do
+  let validator ← liftAccessor (getValidator state index.toUInt64)
+  if validator.slashed then
+    let due ← liftAccessor (liftArith
+      (addChecked (getCurrentEpoch state) (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2)))
+    if due = validator.withdrawableEpoch then
+      let penalty ← liftAccessor (liftArith (mulChecked perIncrement
+        (validator.effectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT)))
+      liftAccessor (decreaseBalance state index.toUInt64 penalty)
+    else pure state
+  else pure state
+
 /-- The state after the slashing penalties of an epoch.
 
 The slashed balance of the recent epochs is scaled by a multiplier of the fork.
 
 It is capped by the active balance.
 
-Electra counts the penalty per increment of balance, which EthLib does not yet have. -/
+From Electra the penalty is counted per increment of balance, as [EIP-7251] specifies.
+
+The penalty per increment divides the capped balance by the active balance counted in increments.
+
+The active balance is at least one increment, so only a zero increment divides by zero.
+
+[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
+-/
 def processSlashings (state : BeaconState preset fork) :
-    Except TransitionError (BeaconState preset fork) :=
-  if .pectra ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
-  else do
-    let total ← liftAccessor (getTotalActiveBalance state)
-    let slashed ← liftAccessor (liftArith
-      (mulChecked (← slashingsSum state) (parameters preset fork).PROPORTIONAL_SLASHING_MULTIPLIER))
-    (List.range state.validators.data.size).foldlM
-      (fun state index => applySlashingPenalty state total (min slashed total) index) state
+    Except TransitionError (BeaconState preset fork) := do
+  let total ← liftAccessor (getTotalActiveBalance state)
+  let slashed ← liftAccessor (liftArith
+    (mulChecked (← slashingsSum state) (parameters preset fork).PROPORTIONAL_SLASHING_MULTIPLIER))
+  let indices := List.range state.validators.data.size
+  if .pectra ≤ fork then
+    let perIncrement ← liftAccessor (liftArith do
+      divChecked (min slashed total) (← divChecked total preset.EFFECTIVE_BALANCE_INCREMENT))
+    indices.foldlM (applySlashingPenaltyElectra · perIncrement ·) state
+  else
+    indices.foldlM (applySlashingPenalty · total (min slashed total) ·) state
 
 /-! ## Resets and rotations -/
 
@@ -179,8 +240,8 @@ It changes only when the balance leaves a band around it.
 
 The band reaches a fixed fraction of an increment below and above.
 
-It then becomes the balance rounded down to an increment, and at most the largest. -/
-def updatedEffectiveBalance (preset : Preset) (balance effectiveBalance : Gwei) :
+It then becomes the balance rounded down to an increment, and at most a largest value. -/
+def updatedEffectiveBalance (preset : Preset) (largest balance effectiveBalance : Gwei) :
     Except TransitionError Gwei := do
   let hysteresis := preset.EFFECTIVE_BALANCE_INCREMENT / preset.HYSTERESIS_QUOTIENT
   let downward ←
@@ -189,26 +250,29 @@ def updatedEffectiveBalance (preset : Preset) (balance effectiveBalance : Gwei) 
     liftAccessor (liftArith (mulChecked hysteresis preset.HYSTERESIS_UPWARD_MULTIPLIER))
   let leaves ← leavesBand balance effectiveBalance downward upward
   return if leaves then
-      min (balance - balance % preset.EFFECTIVE_BALANCE_INCREMENT) preset.MAX_EFFECTIVE_BALANCE
+      min (balance - balance % preset.EFFECTIVE_BALANCE_INCREMENT) largest
     else effectiveBalance
 
-/-- The state with the effective balance of one validator updated from its balance. -/
+/-- The state with the effective balance of one validator updated from its balance.
+
+Its largest effective balance is that of the fork, which from Electra depends on its credentials. -/
 def updateEffectiveBalance (state : BeaconState preset fork) (index : Nat) :
     Except TransitionError (BeaconState preset fork) := do
   let validator ← liftAccessor (getValidator state index.toUInt64)
   let balance ← liftAccessor (getBalance state index.toUInt64)
-  let effectiveBalance ← updatedEffectiveBalance preset balance validator.effectiveBalance
+  let effectiveBalance ← updatedEffectiveBalance preset
+    (withdrawalMaxEffectiveBalance preset fork validator) balance validator.effectiveBalance
   return state.setValidator index { validator with effectiveBalance }
 
 /-- The state after the update of the effective balances.
 
-Electra lets the largest effective balance depend on the credentials.
+From Electra the largest effective balance depends on the credentials, as [EIP-7251] specifies.
 
-EthLib does not yet have that rule. -/
+[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
+-/
 def processEffectiveBalanceUpdates (state : BeaconState preset fork) :
     Except TransitionError (BeaconState preset fork) :=
-  if .pectra ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
-  else (List.range state.validators.data.size).foldlM updateEffectiveBalance state
+  (List.range state.validators.data.size).foldlM updateEffectiveBalance state
 
 /-- The state with the slashed balance of the next epoch cleared. -/
 def processSlashingsReset (state : BeaconState preset fork) :

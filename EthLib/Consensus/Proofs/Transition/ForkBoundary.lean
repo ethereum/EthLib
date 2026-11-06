@@ -86,9 +86,9 @@ theorem advanceSlotAcross_of_before {fork : Fork} {state : BeaconState preset fo
     (before : ∀ next ∈ config.nextFork fork,
       state.slot.toNat + 1 < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat) :
     advanceSlotAcross config checks ⟨fork, state⟩ =
-      (advanceSlot config state).map (ForkedBeaconState.mk fork) := by
+      (advanceSlot config checks state).map (ForkedBeaconState.mk fork) := by
   unfold advanceSlotAcross
-  cases advanced : advanceSlot config state with
+  cases advanced : advanceSlot config checks state with
   | error => rfl
   | ok after =>
     have notDue : upgradeDue config (⟨fork, after⟩ : ForkedBeaconState preset) = false :=
@@ -103,11 +103,11 @@ theorem processSlotsAcross_of_before {fork : Fork} {state : BeaconState preset f
     (before : ∀ next ∈ config.nextFork fork,
       slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat) :
     processSlotsAcross config checks ⟨fork, state⟩ slot =
-      (processSlots config state slot).map (ForkedBeaconState.mk fork) := by
+      (processSlots config checks state slot).map (ForkedBeaconState.mk fork) := by
   have loop : ∀ (count : Nat) (state : BeaconState preset fork),
       state.slot.toNat + count ≤ slot.toNat →
       advanceSlotsAcross config checks count ⟨fork, state⟩ =
-        (advanceSlots config count state).map (ForkedBeaconState.mk fork) := by
+        (advanceSlots config checks count state).map (ForkedBeaconState.mk fork) := by
     intro count
     induction count with
     | zero => intro state _; rfl
@@ -117,7 +117,7 @@ theorem processSlotsAcross_of_before {fork : Fork} {state : BeaconState preset f
       rw [advanceSlotAcross_of_before fun next scheduled => by
         have := before next scheduled
         omega]
-      cases advanced : advanceSlot config state with
+      cases advanced : advanceSlot config checks state with
       | error => rfl
       | ok after =>
         have := advanceSlot_slot advanced
@@ -156,6 +156,7 @@ theorem stateTransitionAcross_of_before {fork : Fork} {engine : ExecutionEngine 
       stateTransition config checks engine state signed validateResult := by
   unfold stateTransitionAcross stateTransition
   rw [processSlotsAcross_of_before before]
-  cases processSlots config state signed.message.slot <;> simp [bind, Except.bind, Except.map]
+  cases processSlots config checks state signed.message.slot <;>
+    simp [bind, Except.bind, Except.map]
 
 end EthLib.Consensus

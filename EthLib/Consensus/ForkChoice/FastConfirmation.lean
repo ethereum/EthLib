@@ -176,13 +176,15 @@ def getCommitteesBetweenSlots (head : Root) (startSlot endSlot : Slot) :
     let committee ← store.getSlotCommittee head (startSlot + offset.toUInt64)
     return committee.foldl (·.insert ·) participants
 
-/-- The state of the head, with its slots processed to the current epoch if it is older. -/
+/-- The state of the head, with its slots processed to the current epoch if it is older.
+
+The pending deposits of an epoch from Electra check the signatures of new keys with BLS. -/
 def getPulledUpHeadState (head : Root) : Except ForkChoiceError (BeaconState preset fork) := do
   let headState ← store.blockState head
   let currentEpoch ← store.getCurrentStoreEpoch config
   if getCurrentEpoch headState < currentEpoch then
     let start ← (computeStartSlotAtEpoch preset currentEpoch).mapError .arith
-    (processSlots config headState start).mapError .transition
+    (processSlots config .bls headState start).mapError .transition
   else return headState
 
 /-- The votes for a node from the members of the committees of a range of slots.
