@@ -9,8 +9,7 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Encoding
 
 A record signed with the private key of its `secp256k1` pair verifies.
 
-The public key of a record is the point that its compressed `secp256k1` value encodes, when the
-`id` pair is `v4`.
+A `v4` record has the public key that its compressed `secp256k1` value encodes.
 
 A record that verifies has a public key.
 -/
@@ -23,8 +22,9 @@ open EthLib.Cryptography
 open EthLib.Cryptography.Secp256k1
 open EthLib.Serialization.Rlp
 
-/-- The public key of a record whose `id` is `v4` and whose `secp256k1` value is the compressed
-form of a point on the curve other than infinity is that point. -/
+/-- The public key of a record is the point that its `secp256k1` value encodes.
+
+The `id` must be `v4`, and the value must be the compressed form of a curve point, not infinity. -/
 theorem publicKeyV4_of_get {r : Enr} {q : Point} (hq : q.isOnCurve = true) (hinf : q ≠ .infinity)
     (hid : r.get KEY_ID = some (.bytes SCHEME_V4))
     (hkey : r.get KEY_SECP256K1 = some (.bytes q.encodeCompressed)) :
@@ -45,11 +45,11 @@ theorem publicKeyV4_ok_of_verifyV4 {r : Enr} (h : verifyV4 r = true) :
     exact ⟨q, hq⟩
   · cases h
 
-/-- Signing the content of a record with the private key `sk` of its `secp256k1` pair makes the
-record verify.
+/-- A record whose content is signed with the private key `sk` of its `secp256k1` pair verifies.
 
-The signature is `r || s`, each in 32 bytes, from the signing operation of SEC 1 v2 §4.1.3 with
-the Keccak-256 hash of the RLP content. -/
+The signature is `r || s` of SEC 1 v2 §4.1.3, each in 32 bytes.
+
+It signs the Keccak-256 hash of the content. -/
 theorem verifyV4_of_sign {r : Enr} {sk rr ss : Fn} {odd : Bool} {content : ByteArray}
     (hid : r.get KEY_ID = some (.bytes SCHEME_V4))
     (hkey : r.get KEY_SECP256K1 = some (.bytes (Point.mul sk Point.generator).encodeCompressed))
