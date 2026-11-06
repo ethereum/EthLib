@@ -35,6 +35,8 @@ public import EthLib.Cryptography.Proofs.Sphincs.SignatureFailure
 public import EthLib.Cryptography.Proofs.Sphincs.Security
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Statement
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Ots
+public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Commute
+public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Landing
 
 /-!
 # Proofs: leanSPHINCS
