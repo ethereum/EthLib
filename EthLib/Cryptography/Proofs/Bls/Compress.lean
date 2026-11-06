@@ -324,8 +324,8 @@ private theorem compress_noninf {p : G1} (hinf : ¬ p.isInfinity = true)
       (let base := (Fp.toBytesBE xa).set! 0 ((Fp.toBytesBE xa).get! 0 ||| 0x80)
        if Fp.signBit ya then base.set! 0 (base.get! 0 ||| 0x20) else base) := by
   unfold compress
-  simp only [Id.run, hinf, hpa]
-  rfl
+  simp only [Id.run, hinf, hpa, Bool.false_eq_true, ↓reduceIte]
+  split <;> rfl
 
 /-- The 48-byte infinity encoding decodes to the zero point. -/
 private theorem uncompress_infinityBytes :
@@ -333,10 +333,9 @@ private theorem uncompress_infinityBytes :
   have hsz : infinityBytes.size = 48 := by decide
   have hhead : infinityBytes.get! 0 = 0xc0 := by decide
   have htail : tailAllZero infinityBytes 1 = true := by decide +kernel
-  rw [uncompress, ite_eq_right (by rw [hsz]; decide)]
-  dsimp only
-  rw [hhead, htail]
-  rfl
+  rw [uncompress, ite_eq_right (show ¬ infinityBytes.size ≠ 48 from fun h => h hsz)]
+  -- `dsimp only` is slow here when `Fp` is in Montgomery form.
+  simp (config := { decide := true }) only [hhead, htail]
 
 /-- Sign selection in `uncompress` (a `Prop`-equality condition)
 recovers `y` from `±y` and the stored sign bit. -/
