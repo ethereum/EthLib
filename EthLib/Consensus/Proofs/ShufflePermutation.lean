@@ -14,6 +14,10 @@ Hence the shuffled list holds each index below the count exactly once.
 
 The committees cut from a list of indices then hold each of its entries exactly once.
 
+So each entry of the list is in one of the committees.
+
+When the list has no repeat, no entry is in two committees.
+
 Each member of any committee that has a value is one of the indices.
 -/
 
@@ -365,5 +369,66 @@ theorem mem_of_computeCommittee {preset : Preset} {indices : Array ValidatorInde
       exact Array.getElem_mem entry
   · simp [zero, fits, bind, Except.bind, throw, throwThe, MonadExcept.throw,
       MonadExceptOf.throw] at computed
+
+/-- Each entry of a list of indices is in one of the `count` committees cut from it.
+
+The bounds must fit in 64 bits, and the count must be positive. -/
+theorem exists_mem_computeCommittee {preset : Preset} {indices : Array ValidatorIndex}
+    {seed : Bytes32} {count : UInt64} (fits : indices.size * count.toNat < 2 ^ 64)
+    (positive : 0 < count) {member : ValidatorIndex} (mem : member ∈ indices) :
+    ∃ index < count.toNat, ∃ committee,
+      computeCommittee preset indices seed (UInt64.ofNat index) count = .ok committee ∧
+        member ∈ committee := by
+  have perm := computeCommittee_partition fits positive
+    (computeCommittee_mapM (preset := preset) (seed := seed) fits)
+  have inFlat := perm.symm.mem_iff.mp (Array.mem_toList_iff.mpr mem)
+  obtain ⟨committee, listed, inCommittee⟩ := List.mem_flatMap.mp inFlat
+  obtain ⟨index, inRange, rfl⟩ := List.mem_map.mp listed
+  exact ⟨index, List.mem_range.mp inRange, _,
+    computeCommittee_of_mem fits index inRange, Array.mem_toList_iff.mp inCommittee⟩
+
+/-- No entry of a list of indices without repeats is in two of the committees cut from it.
+
+Two committees below the count that both hold one entry are the same committee.
+
+The bounds must fit in 64 bits. -/
+theorem eq_of_mem_computeCommittee {preset : Preset} {indices : Array ValidatorIndex}
+    {seed : Bytes32} {count : UInt64} (nodup : indices.toList.Nodup)
+    (fits : indices.size * count.toNat < 2 ^ 64) {first second : Nat}
+    (firstLt : first < count.toNat) (secondLt : second < count.toNat)
+    {firstCommittee secondCommittee : Array ValidatorIndex}
+    (firstComputed :
+      computeCommittee preset indices seed (UInt64.ofNat first) count = .ok firstCommittee)
+    (secondComputed :
+      computeCommittee preset indices seed (UInt64.ofNat second) count = .ok secondCommittee)
+    {member : ValidatorIndex} (firstMem : member ∈ firstCommittee)
+    (secondMem : member ∈ secondCommittee) : first = second := by
+  have positive : 0 < count := UInt64.lt_iff_toNat_lt.mpr (Nat.zero_lt_of_lt firstLt)
+  let slice := fun index =>
+    (Shuffle.committeeSlice preset indices seed count.toNat index).toArray.toList
+  -- The concatenated committees are a permutation of the list, so they have no repeat either.
+  have perm := computeCommittee_partition fits positive
+    (computeCommittee_mapM (preset := preset) (seed := seed) fits)
+  rw [List.flatMap_map] at perm
+  have apart := (List.pairwise_flatMap.mp (perm.nodup_iff.mpr nodup)).2
+  have firstEq := computeCommittee_of_mem (preset := preset) (seed := seed) fits first
+    (List.mem_range.mpr firstLt)
+  have secondEq := computeCommittee_of_mem (preset := preset) (seed := seed) fits second
+    (List.mem_range.mpr secondLt)
+  rw [firstComputed, Except.ok.injEq] at firstEq
+  rw [secondComputed, Except.ok.injEq] at secondEq
+  subst firstEq secondEq
+  -- Committees at two different places of the range share no entry.
+  have split : ∀ i j, i < count.toNat → j < count.toNat → i < j →
+      ∀ x ∈ slice i, ∀ y ∈ slice j, x ≠ y := by
+    intro i j iLt jLt lt
+    have := List.pairwise_iff_getElem.mp apart i j (by simpa using iLt) (by simpa using jLt) lt
+    simpa using this
+  have firstIn : member ∈ slice first := Array.mem_toList_iff.mpr firstMem
+  have secondIn : member ∈ slice second := Array.mem_toList_iff.mpr secondMem
+  rcases Nat.lt_trichotomy first second with lt | same | gt
+  · exact absurd rfl (split first second firstLt secondLt lt member firstIn member secondIn)
+  · exact same
+  · exact absurd rfl (split second first secondLt firstLt gt member secondIn member firstIn)
 
 end EthLib.Consensus
