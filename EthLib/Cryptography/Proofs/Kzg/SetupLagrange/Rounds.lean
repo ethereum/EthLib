@@ -333,7 +333,7 @@ theorem lagrangeOfMonomial_of_checks {s : TrustedSetup} (hs : TrustedSetup.ofHex
     refine sum_congr rfl fun j2 hj2 => ?_
     rw [mem_range] at hj2
     rw [scalarB_val hk1 hj2, (hAsum j2 hj2 j3 hj3 k1 hk1).1]
-    congr 2
+    refine congrArg (_ • ·) (congrArg (_ • ·) ?_)
     refine sum_congr rfl fun j1 hj1 => ?_
     rw [mem_range] at hj1
     rw [one_nsmul, Nat.mod_eq_of_lt (by omega)]

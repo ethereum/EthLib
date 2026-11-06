@@ -115,7 +115,8 @@ theorem toPoint_g1Msm_generator (scalar : List UInt8) :
       G1.modulus_smul_generator
   have hdec : [(g1ToBytes G1.generator, scalar)].mapM (fun pair => bytesToG1 pair.1 true) =
       .ok [g] := by
-    simp [hg, bind, Except.bind, pure, Except.pure]
+    rw [List.mapM_cons, List.mapM_nil, hg]
+    rfl
   have h := g1Msm_eq_ok_iff.mpr ⟨[g], hdec, rfl⟩
   refine ⟨_, h, ?_⟩
   rw [toPoint_of_g1Msm_eq_ok hdec h]
@@ -213,7 +214,8 @@ theorem toPoint_g2Msm_generator (scalar : List UInt8) :
     fun _ => G2.inSubgroup_generator
   have hdec : [(g2ToBytes G2.generator, scalar)].mapM (fun pair => bytesToG2 pair.1 true) =
       .ok [g] := by
-    simp [hg, bind, Except.bind, pure, Except.pure]
+    rw [List.mapM_cons, List.mapM_nil, hg]
+    rfl
   have h := g2Msm_eq_ok_iff.mpr ⟨[g], hdec, rfl⟩
   refine ⟨_, h, ?_⟩
   rw [toPoint_of_g2Msm_eq_ok hdec h]

@@ -39,6 +39,11 @@ private theorem two_eq : Fp2.ofFp (BaseField.ofNat 2 : Fp) = 2 := by decide_eq_a
 
 private theorem three_eq : Fp2.ofFp (BaseField.ofNat 3 : Fp) = 3 := by decide_eq_at_model []
 
+/-- The inclusion of `ZMod p` into `Fp12` at the image of `a` goes through `Fp2`. -/
+private theorem fpToFp12_eq (a : Fp) : fpToFp12 (Fp.toZMod a) = fp2ToFp12 (Fp2.ofFp a) := by
+  rw [← fpToFp2_apply]
+  rfl
+
 private theorem fp2ToFp12_ne_zero {a : Fp2} (h : a ≠ 0) : fp2ToFp12 a ≠ 0 :=
   (map_ne_zero fp2ToFp12).mpr h
 
@@ -61,7 +66,7 @@ theorem millerDouble_snd {T : G2} (hz : T.z ≠ 0) (hy : T.y ≠ 0) (xp yp : Fp)
   have h2 := two_ne_zero'
   simp only [X, Y, millerDouble, lineValue_eq, untwist, lineAt, two_eq, three_eq, map_mul,
     map_sub, map_neg, map_div₀, map_pow, map_ofNat]
-  change _ = _ * (_ * (fp2ToFp12 (Fp2.ofFp yp) - _ - _ * (fp2ToFp12 (Fp2.ofFp xp) - _)))
+  rw [fpToFp12_eq xp, fpToFp12_eq yp]
   field_simp
   ring
 
@@ -93,7 +98,7 @@ theorem millerAdd_snd {T : G2} {xq yq : Fp2} (hz : T.z ≠ 0) (hx : xq * T.z ^ 2
     rw [h, div_mul_cancel₀ _ (pow_ne_zero _ hz)]
   simp only [X, Y, X', Y', millerAdd, lineValue_eq, untwist, lineAt, map_mul, map_sub,
     map_neg, map_div₀, map_pow] at hd ⊢
-  change _ = _ * (_ * (fp2ToFp12 (Fp2.ofFp yp) - _ - _ * (fp2ToFp12 (Fp2.ofFp xp) - _)))
+  rw [fpToFp12_eq xp, fpToFp12_eq yp]
   field_simp
   ring
 

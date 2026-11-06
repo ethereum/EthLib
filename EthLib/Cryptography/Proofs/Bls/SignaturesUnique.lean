@@ -147,8 +147,11 @@ theorem fastAggregateVerify_rogue (laws : PairingLaws) (sk : SecretKey) {c : Fr}
   have hkeys : #[pkBytes sk, pkBytes rogue] = ([sk, rogue].map pkBytes).toArray := rfl
   have hsum : ([sk, rogue].map (·.val)).sum = c := rogue_sum sk.val c
   rw [hrogue, hkeys]
-  refine fastAggregateVerify_of_represents laws (List.cons_ne_nil _ _) (hsum ▸ hc0) hQ hb ?_
-  exact hsum ▸ hb.mul c
+  have h1 : ([sk, rogue].map (·.val)).sum ≠ 0 := by rw [hsum]; exact hc0
+  have h2 : G2.Represents (G2.mul Q c) (([sk, rogue].map (·.val)).sum * b) := by
+    rw [hsum]
+    exact hb.mul c
+  exact fastAggregateVerify_of_represents laws (List.cons_ne_nil _ _) h1 hQ hb h2
 
 end Signatures
 

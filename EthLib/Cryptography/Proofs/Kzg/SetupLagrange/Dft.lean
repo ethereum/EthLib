@@ -81,7 +81,8 @@ private theorem everyOther_map {α β : Type} {k : Nat} (f : α → β) (xs : Ve
 /-- The transform on points has the coordinates that the transform on naturals computes. -/
 theorem map_coords_fftGlv (k : Nat) (vals : Vector G1 (2 ^ k)) (roots : Vector Nat (2 ^ k)) :
     (fftGlv k vals roots).map coords = fftNat k (vals.map coords) roots := by
-  have hneg (q : G1) : coords (G1.neg q) = G1.TorsionCheck.neg (coords q) := rfl
+  have hneg (q : G1) : coords (G1.neg q) = G1.TorsionCheck.neg (coords q) :=
+    G1.TorsionCheck.coords_neg q
   induction k with
   | zero => rfl
   | succ k ih =>

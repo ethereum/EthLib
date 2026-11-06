@@ -79,7 +79,15 @@ theorem twist_x_ne_zero {x y : Fp2} (h : G2.curve.toAffine.Nonsingular x y) : x 
     linear_combination h1
   have hn := congrArg Fp2.norm he
   simp only [Fp2.norm_mul] at hn
-  have h2 : Fp2.norm 2 = 0 := Fp12.sq_eq_two_mul_sq_zmod (nxi := Fp2.norm Fp2.xi) rfl hn
+  have hn' := congrArg Fp.toZMod hn
+  push_toZMod at hn'
+  -- The norm of `xi = 1 + i` is `1 + 1 = 2`.
+  have hnxi : Fp.toZMod (Fp2.norm Fp2.xi) = 2 := by
+    simp only [Fp2.norm, Fp2.xi]
+    push_toZMod
+    norm_num
+  have h2 : Fp2.norm 2 = 0 :=
+    Fp.toZMod.injective ((Fp12.sq_eq_two_mul_sq_zmod hnxi hn').trans Fp.toZMod_zero.symm)
   exact absurd h2 (by decide_eq_at_model [Fp2.norm])
 
 /-- The final exponentiation commutes with division. -/

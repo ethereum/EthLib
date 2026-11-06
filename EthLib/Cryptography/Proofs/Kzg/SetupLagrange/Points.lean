@@ -88,9 +88,11 @@ private theorem select_eq {y₀ yPos : Fp} (hy : yPos = y₀ ∨ yPos = -y₀) (
   · rfl
   by_cases h0 : y₀ = 0
   · subst h0
-    simp
+    have hn0 : -(0 : Fp) = 0 := Fp.toZMod.injective (by push_toZMod; exact neg_zero)
+    simp only [hn0]
+  have hnn : - -y₀ = y₀ := Fp.toZMod.injective (by push_toZMod; exact neg_neg _)
   rw [signBit_neg h0]
-  by_cases hP : P <;> cases Fp.signBit y₀ <;> simp [hP]
+  by_cases hP : P <;> cases Fp.signBit y₀ <;> simp [hP, hnn]
 
 /-- Decompression returns `(x, y, 1)` from the bytes of a string that encodes `(x, y)`. -/
 theorem coords_of_encodes {s : String} {b : ByteArray} {q : G1} {x y : Nat}
