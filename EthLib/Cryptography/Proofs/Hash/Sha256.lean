@@ -417,7 +417,7 @@ theorem chain_toState (block : ByteArray) (initial : Spec.State) :
     intro first s whole hs within
     -- One block, then the rest from the next block on.
     rw [chain]
-    -- The bound on the remaining bytes depends on the list, so simp moves the list, not rw.
+    -- The proof of the bound mentions the list, so `rw` cannot rewrite the list, but `simp` can.
     simp only [List.drop_drop, show 64 * first + 64 = 64 * (first + 1) by omega]
     rw [ih (first + 1) _ (by omega), show first + 1 + count = first + (count + 1) by omega]
     rw [compress_toState s block (64 * first) (by omega), hs, Spec.blocks]

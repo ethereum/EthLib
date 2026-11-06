@@ -95,7 +95,7 @@ def pad (message : ByteArray) : List UInt8 :=
   message.data.toList ++ 0x80 :: List.replicate (paddingZeros message.size) 0 ++
     (lengthBytes message.size).data.toList
 
-/-! ## Parsing -/
+/-! ## Words of four bytes -/
 
 /-- Four bytes read as one big-endian word, FIPS 180-4 §3.1. -/
 @[inline] def big32 (b0 b1 b2 b3 : UInt8) : UInt32 :=
@@ -149,6 +149,8 @@ def rounds : List UInt32 → Window → State → State
 The hash value after one more block, FIPS 180-4 §6.2.2, steps 2 to 4.
 
 The working variables start as the hash value, go through the rounds, and are added back to it.
+
+The block is the first 64 bytes of the list, which the hypothesis guarantees.
 -/
 def compress (s : State) (block : List UInt8) (whole : 64 ≤ block.length) : State :=
   let r := rounds K.toList (Window.ofBlock (block.take 64).toArray (by simp; omega)) s
