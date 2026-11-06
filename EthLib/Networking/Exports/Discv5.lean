@@ -2,7 +2,7 @@ module
 
 public import EthLib.Base.Exports
 public import Lean.Data.Json
-public import EthLib.Serialization.Ssz.Codec.Json
+public import EthLib.Base.Hex
 public import EthLib.Networking.Discv5.Identity
 public import EthLib.Networking.Discv5.Message
 public import EthLib.Networking.Discv5.Packet
@@ -91,7 +91,7 @@ def idVerifyExport (pubkey challengeData ephemeralPubkey nodeIdB signature : Byt
 
 /-- Bytes as a `0x`-prefixed lowercase hex string. -/
 def hex (bytes : List UInt8) : Json :=
-  Json.str (Serialization.Ssz.toHex bytes.toArray)
+  Json.str (Base.hexString bytes)
 
 /-- Run a packet operation, with its error as a code and a message. -/
 def runPacket {α : Type} (act : Except PacketError α) : Result α :=

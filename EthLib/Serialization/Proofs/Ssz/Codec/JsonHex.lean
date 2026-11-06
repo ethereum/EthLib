@@ -17,19 +17,8 @@ private def hexDigitsOf (data : Bytes) : List Char :=
 
 /-- Writing appends the digits of each byte in turn. -/
 private theorem toHex_eq (data : Bytes) :
-    (toHex data).toList = '0' :: 'x' :: hexDigitsOf data := by
-  -- The fold starts from the marker and pushes two characters per byte.
-  have general : ∀ (bytes : List UInt8) (text : String),
-      (bytes.foldl (fun text byte => (Base.byteHexDigits byte).foldl String.push text)
-        text).toList = text.toList ++ bytes.flatMap Base.byteHexDigits := by
-    intro bytes
-    induction bytes with
-    | nil => simp
-    | cons byte rest ih =>
-      intro text
-      rw [List.foldl_cons, ih]
-      simp [Base.byteHexDigits]
-  simpa [toHex, hexDigitsOf, Array.foldl_toList] using general data.toList "0x"
+    (toHex data).toList = '0' :: 'x' :: hexDigitsOf data :=
+  Base.toList_hexString data.toList
 
 /-- Each of the sixteen digits reads back as its own value. -/
 private theorem hexDigit_hexDigitChar (digit : Fin 16) :
