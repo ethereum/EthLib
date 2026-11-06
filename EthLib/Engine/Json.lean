@@ -57,7 +57,7 @@ def hexValue (upper : Bool) (c : UInt8) : Option UInt8 :=
 def hexDigits (what : String) : Json → Decode ByteArray
   | .str s =>
     let b := s.toUTF8
-    if b.size ≥ 2 ∧ b[0]! = 48 ∧ b[1]! = 120 then pure (b.extract 2 b.size)
+    if b[0]? = some 48 ∧ b[1]? = some 120 then pure (b.extract 2 b.size)
     else invalid s!"{what}: no 0x marker"
   | _ => invalid s!"{what}: not a string"
 
@@ -67,9 +67,12 @@ def bytesOf (what : String) (upper : Bool) (j : Json) : Decode ByteArray := do
   if digits.size % 2 ≠ 0 then invalid s!"{what}: odd number of hex digits" else
   let mut out := ByteArray.emptyWithCapacity (digits.size / 2)
   for i in [0:digits.size / 2] do
-    match hexValue upper digits[2 * i]!, hexValue upper digits[2 * i + 1]! with
-    | some high, some low => out := out.push (16 * high + low)
-    | _, _ => invalid s!"{what}: not a hex digit"
+    match digits[2 * i]?, digits[2 * i + 1]? with
+    | some c, some d =>
+      match hexValue upper c, hexValue upper d with
+      | some high, some low => out := out.push (16 * high + low)
+      | _, _ => invalid s!"{what}: not a hex digit"
+    | _, _ => invalid s!"{what}: odd number of hex digits"
   return out
 
 /-- A byte string of any length. -/
@@ -89,10 +92,10 @@ def address (what : String) (j : Json) : Decode Address := fixed what 20 j (uppe
 def quantity (what : String) (bits : Nat) (j : Json) : Decode Nat := do
   let digits ← hexDigits what j
   if digits.size = 0 then invalid s!"{what}: no digits" else
-  if digits.size > 1 ∧ digits[0]! = 48 then invalid s!"{what}: leading zero" else
+  if digits.size > 1 ∧ digits[0]? = some 48 then invalid s!"{what}: leading zero" else
   let mut value := 0
-  for i in [0:digits.size] do
-    match hexValue false digits[i]! with
+  for c in digits do
+    match hexValue false c with
     | some d => value := 16 * value + d.toNat
     | none => invalid s!"{what}: not a hex digit"
   if value < 2 ^ bits then pure value else invalid s!"{what}: above 2^{bits}"

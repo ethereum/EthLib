@@ -58,25 +58,34 @@ theorem exists_acceptsFork_iff (fork : Fork) :
 /-- Request lists that pass the check have strictly increasing types. -/
 theorem pairwise_of_validRequests {requests : List ByteArray}
     (h : validRequests requests = true) :
-    requests.Pairwise fun r s => r[0]! < s[0]! := by
+    requests.Pairwise fun r s => ∃ a b, r[0]? = some a ∧ s[0]? = some b ∧ a < b := by
   induction requests with
   | nil => exact .nil
   | cons r rest ih =>
     match rest, h with
     | [], _ => exact List.pairwise_singleton _ r
     | s :: rest', h =>
-      simp only [validRequests, Bool.and_eq_true, decide_eq_true_eq] at h
-      obtain ⟨⟨⟨-, -⟩, hrs⟩, hRest⟩ := h
-      have hTail := ih hRest
-      refine List.Pairwise.cons (fun t ht => ?_) hTail
-      rcases List.mem_cons.mp ht with rfl | ht
-      · exact hrs
-      · exact UInt8.lt_trans hrs (List.rel_of_pairwise_cons hTail ht)
+      simp only [validRequests] at h
+      split at h
+      · rename_i a b hra hsb
+        simp only [Bool.and_eq_true, decide_eq_true_eq] at h
+        obtain ⟨⟨⟨-, -⟩, hab⟩, hRest⟩ := h
+        have hTail := ih hRest
+        refine List.Pairwise.cons (fun t ht => ?_) hTail
+        rcases List.mem_cons.mp ht with rfl | ht
+        · exact ⟨a, b, hra, hsb, hab⟩
+        · obtain ⟨b', c, hb', hc, hbc⟩ := List.rel_of_pairwise_cons hTail ht
+          rw [hsb] at hb'
+          cases hb'
+          exact ⟨a, c, hra, hc, UInt8.lt_trans hab hbc⟩
+      · exact absurd h (by simp)
 
 /-- Request lists that pass the check have distinct types. -/
 theorem nodup_types_of_validRequests {requests : List ByteArray}
-    (h : validRequests requests = true) : (requests.map fun r => r[0]!).Nodup :=
-  List.Pairwise.map _ (fun _ _ hlt => UInt8.ne_of_lt hlt) (pairwise_of_validRequests h)
+    (h : validRequests requests = true) : (requests.map fun r => r[0]?).Nodup :=
+  List.Pairwise.map _ (fun _ _ ⟨a, b, ha, hb, hlt⟩ => by
+    rw [ha, hb]; exact fun e => UInt8.ne_of_lt hlt (Option.some.inj e))
+    (pairwise_of_validRequests h)
 
 /-! ## The status on a chain that holds the parent -/
 

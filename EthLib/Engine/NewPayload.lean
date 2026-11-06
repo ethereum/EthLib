@@ -91,7 +91,10 @@ def acceptsStructure (version layout : Nat) : Bool :=
 def validRequests : List ByteArray → Bool
   | [] => true
   | [r] => r.size > 1
-  | r :: s :: rest => r.size > 1 && s.size > 1 && r[0]! < s[0]! && validRequests (s :: rest)
+  | r :: s :: rest =>
+    match r[0]?, s[0]? with
+    | some a, some b => r.size > 1 && s.size > 1 && a < b && validRequests (s :: rest)
+    | _, _ => false
 
 /-- A payload that passed the checks of a version of the method: the block at its fork. -/
 structure CheckedBlock (version : Nat) where
@@ -115,16 +118,20 @@ def checkNewPayload (config : ChainConfig) (version : Nat) (params : Json) :
     | _ => invalid "params: not an array"
   unless params.length == paramCount version ∧ params.all (!·.isNull) do
     invalid s!"params: not {paramCount version} values"
-  let any ← anyPayload params[0]!
+  let param (i : Nat) : Except EngineError Json :=
+    match params[i]? with
+    | some j => pure j
+    | none => invalid s!"params: no value {i}"
+  let any ← anyPayload (← param 0)
   unless acceptsStructure version any.version do
     invalid s!"payload: version {any.version} of the structure"
   let hashes ← if version ≥ 3 then
-    some <$> array "expectedBlobVersionedHashes" (fixed "versioned hash" 32) params[1]!
+    some <$> array "expectedBlobVersionedHashes" (fixed "versioned hash" 32) (← param 1)
     else pure none
   let beaconRoot ← if version ≥ 3 then
-    some <$> fixed "parentBeaconBlockRoot" 32 params[2]! else pure none
+    some <$> fixed "parentBeaconBlockRoot" 32 (← param 2) else pure none
   let requests ← if version ≥ 4 then
-    some <$> array "executionRequests" (bytes "request") params[3]! else pure none
+    some <$> array "executionRequests" (bytes "request") (← param 3) else pure none
   if let some requests := requests then
     unless validRequests requests do invalid "executionRequests: out of order or too short"
   -- The fork of the payload must be one that the version takes.
