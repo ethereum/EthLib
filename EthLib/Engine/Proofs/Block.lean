@@ -38,9 +38,7 @@ theorem packBytes_requestsCommitment (requests : List ByteArray) :
   · simp only [packBytes, Vector.toArray_ofFn, Array.size_ofFn]
     exact hSize.symm
   · intro i h₁ h₂
-    simp only [packBytes, Vector.toArray_ofFn, Array.getElem_ofFn]
-    rw [getElem!_pos r i h₂]
-    rfl
+    simp [packBytes, Array.getD_eq_getD_getElem?, Array.getElem?_eq_getElem h₂]
 
 /-- A field computed only at the forks that have it is the field of the step. -/
 theorem sinceM_eq_ok {ε α : Type} {f : Fork} {g : f ≤ fork → Except ε α} {x : Since f fork α}

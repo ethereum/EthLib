@@ -150,6 +150,6 @@ def requestsHash (requests : List ByteArray) : ByteArray :=
 
 /-- The requests hash of request lists, as the 32 bytes of a header field. -/
 def requestsCommitment (requests : List ByteArray) : Hash32 :=
-  Vector.ofFn fun i => (requestsHash requests)[i.val]!
+  Vector.ofFn fun i => (requestsHash requests).data.getD i.val 0
 
 end EthLib.Execution.Blocks
