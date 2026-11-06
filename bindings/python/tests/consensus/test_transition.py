@@ -59,7 +59,15 @@ GROUPS = {
         "gloas",
     ),
     # A transition case lies under the fork after its fork epoch.
-    "transition/core": ("altair", "bellatrix", "capella", "deneb", "electra", "fulu"),
+    "transition/core": (
+        "altair",
+        "bellatrix",
+        "capella",
+        "deneb",
+        "electra",
+        "fulu",
+        "gloas",
+    ),
 }
 
 # The release archives that hold the cases.
