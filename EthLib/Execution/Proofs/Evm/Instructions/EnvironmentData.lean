@@ -15,6 +15,12 @@ A list of hashes too short to reach a block gives 0 for it, never another hash.
 
 BLOBHASH gives the hash at its index, and 0 past the end of the list.
 
+BLOCKHASH and BLOBHASH, from Dencun, pay their price.
+
+Then BLOCKHASH puts the hash of the block in place of the number.
+
+BLOBHASH puts the versioned hash in place of the index.
+
 SLOTNUM pays the base price and pushes the slot of the block, from Glamsterdam on.
 
 Each instruction exists exactly from the fork that adds its opcode.
@@ -29,6 +35,7 @@ None of them changes memory either.
 namespace EthLib.Execution.Evm
 
 open EthLib.Base (Fork Hash32 U256)
+open GasCosts
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
@@ -44,6 +51,40 @@ theorem readFrame_of_length_lt {cost : Nat} {value : Evm fork Meter → U256}
   simp only [readFrame, chargeGas, pushWord, advance, Stack.push]
   rcases hc : GasMeter.charge evm.gas cost with _ | _ <;>
     simp [bind, Except.bind, pure, Except.pure, Except.map, full]
+
+/-- BLOCKHASH on a block number: pay, then put the hash of that block in its place. -/
+theorem blockhashStep_cons {evm : Evm fork Meter} {number : U256} {rest : List U256}
+    (h : evm.stack.val = number :: rest) :
+    blockhashStep evm = (GasMeter.charge evm.gas OPCODE_BLOCKHASH).map fun gas =>
+      { evm with
+        stack := ⟨blockHash evm.message.blockEnv.blockHashes evm.message.blockEnv.number
+            number.toNat :: rest, length_cons_le (dropped := [number]) h (by simp)⟩,
+        gas, pc := evm.pc + 1 } := by
+  have hstack : evm.stack = ⟨number :: rest, h ▸ evm.stack.property⟩ := Subtype.ext h
+  have room : ¬(rest.length = STACK_LIMIT) := by
+    have := length_cons_le (x := number) (dropped := [number]) h (by simp)
+    simp only [List.length_cons] at this
+    omega
+  simp only [blockhashStep, popWord, chargeGas, pushWord, advance, hstack, Stack.pop, Stack.push]
+  rcases hc : GasMeter.charge evm.gas OPCODE_BLOCKHASH with _ | _ <;>
+    simp [hc, bind, Except.bind, pure, Except.pure, Except.map, room]
+
+/-- BLOBHASH on an index, from Dencun: pay, then put the versioned hash of that index in place. -/
+theorem blobhashStep_cons (hfork : .dencun ≤ fork) {evm : Evm fork Meter} {index : U256}
+    {rest : List U256} (h : evm.stack.val = index :: rest) :
+    blobhashStep hfork evm = (GasMeter.charge evm.gas OPCODE_BLOBHASH).map fun gas =>
+      { evm with
+        stack := ⟨blobHash (evm.message.txEnv.blobVersionedHashes hfork) index :: rest,
+          length_cons_le (dropped := [index]) h (by simp)⟩,
+        gas, pc := evm.pc + 1 } := by
+  have hstack : evm.stack = ⟨index :: rest, h ▸ evm.stack.property⟩ := Subtype.ext h
+  have room : ¬(rest.length = STACK_LIMIT) := by
+    have := length_cons_le (x := index) (dropped := [index]) h (by simp)
+    simp only [List.length_cons] at this
+    omega
+  simp only [blobhashStep, popWord, chargeGas, pushWord, advance, hstack, Stack.pop, Stack.push]
+  rcases hc : GasMeter.charge evm.gas OPCODE_BLOBHASH with _ | _ <;>
+    simp [hc, bind, Except.bind, pure, Except.pure, Except.map, room]
 
 /-- A block out of the 256 blocks before the current one has hash 0. -/
 theorem blockHash_of_not_mem {hashes : List Hash32} {current n : Nat}
