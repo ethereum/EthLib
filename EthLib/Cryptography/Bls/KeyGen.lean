@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Bls.Signatures
 public import EthLib.Cryptography.Hash.Hkdf
+public import EthLib.Base.BigEndian
 
 /-!
 # BLS key generation
@@ -45,7 +46,7 @@ def keyGenLoop (ikm keyInfo : ByteArray) : (salt : ByteArray) → (attempts : Na
     let okm ← (Hkdf.expand prk (keyInfo ++ HashToCurve.i2osp KEYGEN_L 2) KEYGEN_L).mapError
       fun _ => .keyGenHkdf
     -- `OS2IP(OKM) mod r`.
-    let sk := Fr.ofNat (Fr.bytesBEToNat okm)
+    let sk := Fr.ofNat (Base.bytesToNat okm.data.toList)
     if h : sk = 0 then keyGenLoop ikm keyInfo salt attempts else return ⟨sk, h⟩
 
 /-- Key generation (§2.3): a secret key from at least 32 bytes of input keying material.

@@ -74,7 +74,7 @@ def verifyV4 (r : Enr) : Bool :=
     if r.signature.size = 64 then
       let sig := r.signature.data.toList
       Ecdsa.verify q (Hash.Keccak.keccak256 content)
-        (ofBytesBE (sig.take 32)) (ofBytesBE (sig.drop 32))
+        (Base.bytesToNat (sig.take 32)) (Base.bytesToNat (sig.drop 32))
     else false
   | _, _ => false
 

@@ -89,6 +89,7 @@ def idVerify (pk : Point) (challengeData ephemeralPubkey : ByteArray) (nodeIdB :
     (signature : ByteArray) : Bool :=
   signature.size == 64 &&
     Ecdsa.verify pk (idSignatureHash challengeData ephemeralPubkey nodeIdB)
-      (ofBytesBE (signature.data.toList.take 32)) (ofBytesBE (signature.data.toList.drop 32))
+      (Base.bytesToNat (signature.data.toList.take 32))
+      (Base.bytesToNat (signature.data.toList.drop 32))
 
 end EthLib.Networking.Discv5

@@ -54,7 +54,7 @@ theorem recoverSigner_signatureBytes {sk : Fn} {hash : Vector UInt8 32} {sig : F
   unfold recoverSigner signatureBytes
   cases odd <;>
     simp only [Vector.toList, List.take_left' hlr, List.append_assoc,
-      List.drop_left' hlr, List.take_left' hls, ofBytesBE_toBytesBE, hmod] <;>
+      List.drop_left' hlr, List.take_left' hls, bytesToNat_toBytesBE, hmod] <;>
     (simp only [Bool.false_eq_true, ite_false, ite_true] at hrec
      simp [hlr, hls, Except.mapError, hrec])
 

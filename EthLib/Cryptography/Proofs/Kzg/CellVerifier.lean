@@ -400,10 +400,16 @@ theorem blsFieldToBytes_of_bytesToBlsField {b : Base.Bytes32} {f : Fr}
     have h32 : (⟨b.toArray⟩ : ByteArray).size = 32 := by simp [ByteArray.size]
     have h32' : (⟨(blsFieldToBytes f).toArray⟩ : ByteArray).size = 32 := by
       simp [ByteArray.size]
-    have e := intToBytesBE_bytesBEToNat (⟨b.toArray⟩ : ByteArray)
-    have e' := intToBytesBE_bytesBEToNat (⟨(blsFieldToBytes f).toArray⟩ : ByteArray)
-    rw [h32, ← hval] at e
-    rw [h32', ← hval'] at e'
+    have e : intToBytesBE f.val 32 = ⟨b.toArray⟩ := by
+      have back := intToBytesBE_bytesToNat (⟨b.toArray⟩ : ByteArray)
+      rw [h32] at back
+      rw [hval]
+      exact back
+    have e' : intToBytesBE f.val 32 = ⟨(blsFieldToBytes f).toArray⟩ := by
+      have back := intToBytesBE_bytesToNat (⟨(blsFieldToBytes f).toArray⟩ : ByteArray)
+      rw [h32'] at back
+      rw [hval']
+      exact back
     rw [← e, ← e']
   apply Vector.toArray_inj.mp
   exact congrArg ByteArray.data harr

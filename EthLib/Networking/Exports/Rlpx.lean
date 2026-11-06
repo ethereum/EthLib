@@ -44,7 +44,7 @@ def runEcies {α : Type} (act : Except Ecies.EciesError α) : Result α :=
 /-- A private key of 32 big-endian bytes, or an error unless it is below `n`. -/
 def readPrivateKey (bytes : ByteArray) : Result Fn :=
   if bytes.size = 32 then
-    let k := ofBytesBE bytes.data.toList
+    let k := Base.bytesToNat bytes.data.toList
     if h : k < Fn.modulus then pure ⟨k, h⟩
     else throw (0, "private key is not below n")
   else throw (0, s!"bad private key size: {bytes.size}, expected 32")

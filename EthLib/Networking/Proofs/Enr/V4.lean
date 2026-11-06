@@ -50,8 +50,9 @@ ECDSA signs the Keccak-256 hash of the RLP encoding of the content. -/
 theorem verifyV4_eq_true_iff {r : Enr} :
     verifyV4 r = true ↔ ∃ q content, r.publicKeyV4 = .ok q ∧
       Serialization.Rlp.encode r.content = .ok content ∧ r.signature.size = 64 ∧
-      Ecdsa.verify q (Hash.Keccak.keccak256 content) (ofBytesBE (r.signature.data.toList.take 32))
-        (ofBytesBE (r.signature.data.toList.drop 32)) = true := by
+      Ecdsa.verify q (Hash.Keccak.keccak256 content)
+        (Base.bytesToNat (r.signature.data.toList.take 32))
+        (Base.bytesToNat (r.signature.data.toList.drop 32)) = true := by
   unfold verifyV4
   constructor
   · intro h
@@ -108,8 +109,8 @@ theorem verifyV4_of_verify {r : Enr} {q : Point} {rr ss : Fn} {content : ByteArr
     by rw [hsig]; simp [ByteArray.size, hlr, hls], ?_⟩
   have hlist : r.signature.data.toList = toBytesBE 32 rr.val ++ toBytesBE 32 ss.val := by
     rw [hsig]
-  rw [hlist, List.take_left' hlr, List.drop_left' hlr, ofBytesBE_toBytesBE,
-    ofBytesBE_toBytesBE, hmod, hmod]
+  rw [hlist, List.take_left' hlr, List.drop_left' hlr, bytesToNat_toBytesBE,
+    bytesToNat_toBytesBE, hmod, hmod]
   exact hv
 
 /-- A record verifies when its signature is the deterministic one from its private key `sk`.

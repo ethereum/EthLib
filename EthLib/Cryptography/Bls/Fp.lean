@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Bls.Errors
 public import EthLib.Cryptography.Inverse
 public import EthLib.Cryptography.BaseField
 public import EthLib.Cryptography.Montgomery
+public import EthLib.Base.BigEndian
 
 /-!
 # `Fp`
@@ -157,17 +158,13 @@ instance : BaseField Fp where
   sqrt a := (Fp.sqrt a).toOption
   sgn0 a := a.val % 2 == 1
 
-/-- Decode big-endian bytes as a `Nat`. -/
-def bytesBEToNat (b : ByteArray) : Nat :=
-  b.data.toList.foldl (fun acc u => (acc <<< 8) ||| u.toNat) 0
-
 /-- Decode a 48-byte big-endian integer as an element of `Fp`.
 
 It rejects an input of the wrong size, and an integer of at least `p`. -/
 def fromBytesBE (b : ByteArray) : Except BlsError Fp :=
   if b.size ≠ 48 then .error .nonCanonicalFieldElement
   else
-    let n := bytesBEToNat b
+    let n := Base.bytesToNat b.data.toList
     if h : n < modulus then .ok ⟨n, h⟩ else .error .nonCanonicalFieldElement
 
 /-- Encode as 48 big-endian bytes. -/

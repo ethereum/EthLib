@@ -199,8 +199,8 @@ def recoverSigner (hash : Vector UInt8 32) (sig : Vector UInt8 65) : Except Hand
   let bytes := sig.toList
   let v := sig[64]
   if h : v.toNat < 2 then
-    (Ecdsa.recover hash (ofBytesBE (bytes.take 32)) (ofBytesBE ((bytes.drop 32).take 32))
-      ⟨v.toNat, h⟩).mapError .secp256k1
+    (Ecdsa.recover hash (Base.bytesToNat (bytes.take 32))
+      (Base.bytesToNat ((bytes.drop 32).take 32)) ⟨v.toNat, h⟩).mapError .secp256k1
   else .error (.badRecoveryId v)
 
 /--

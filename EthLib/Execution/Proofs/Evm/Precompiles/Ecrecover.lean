@@ -82,8 +82,8 @@ theorem compute_callData (hash : Vector UInt8 32) {v r s : Nat} (hv : v < 2 ^ 25
     (hr : r < 2 ^ 256)
     (hs : s < 2 ^ 256) : compute (callData hash v r s) = output hash v r s := by
   unfold compute
-  rw [word_callData_hash, word_callData_v, word_callData_r, word_callData_s, ofBytesBE_toBytesBE,
-    ofBytesBE_toBytesBE, ofBytesBE_toBytesBE, Nat.mod_eq_of_lt (by simpa using hv),
+  rw [word_callData_hash, word_callData_v, word_callData_r, word_callData_s, bytesToNat_toBytesBE,
+    bytesToNat_toBytesBE, bytesToNat_toBytesBE, Nat.mod_eq_of_lt (by simpa using hv),
     Nat.mod_eq_of_lt (by simpa using hr), Nat.mod_eq_of_lt (by simpa using hs)]
 
 /-- The output is empty or 32 bytes. -/

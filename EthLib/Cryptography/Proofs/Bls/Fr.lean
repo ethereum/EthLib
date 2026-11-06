@@ -197,20 +197,11 @@ theorem fromBytesBE_toBytesBE (a : Fr) : fromBytesBE a.toBytesBE = .ok a := by
   simp only [ne_eq, not_true_eq_false, ↓reduceIte]
   rw [show a.toBytesBE = Montgomery.toBytesBE a from rfl, Montgomery.ofBytesBE_toBytesBE]
 
-/-- The big-endian fold of the bytes is the integer they write. -/
-theorem fromBytesBEAux_eq (acc : Nat) (l : List UInt8) :
-    fromBytesBEAux acc l = l.foldl (fun acc b => acc * 256 + b.toNat) acc := by
-  induction l generalizing acc with
-  | nil => rfl
-  | cons b rest ih =>
-    rw [fromBytesBEAux, ih, List.foldl_cons, ← Nat.shiftLeft_add_eq_or_of_lt b.toNat_lt,
-      Nat.shiftLeft_eq]
-
 /-- A successful `fromBytesBE` implies: the input was 32 bytes, the value
 is the big-endian decoding, and the value is canonical. -/
 theorem fromBytesBE_ok {b : ByteArray} {f : Fr}
     (h : fromBytesBE b = .ok f) :
-    b.size = 32 ∧ f.val = fromBytesBEAux 0 b.data.toList ∧
+    b.size = 32 ∧ f.val = Base.bytesToNat b.data.toList ∧
       f.val < modulus := by
   rw [fromBytesBE] at h
   split at h
@@ -228,8 +219,7 @@ theorem fromBytesBE_ok {b : ByteArray} {f : Fr}
     · simp only [hlt, ↓reduceIte] at h
       cases h
       refine ⟨hs, ?_, val_lt _⟩
-      rw [show Montgomery.ofNat _ = ofNat _ from rfl, val_ofNat_of_lt hlt, fromBytesBEAux_eq]
-      rfl
+      rw [show Montgomery.ofNat _ = ofNat _ from rfl, val_ofNat_of_lt hlt]
     · simp only [hlt, ↓reduceIte] at h
       cases h
 

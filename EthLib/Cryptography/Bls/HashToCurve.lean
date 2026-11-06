@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Bls.Compress
 public import EthLib.Cryptography.Hash.Sha256
+public import EthLib.Base.BigEndian
 
 /-!
 # `HashToCurve`
@@ -75,7 +76,7 @@ expand-message output. -/
 
 def fpFromBytesL (b : ByteArray) : F :=
   -- OS2IP into a Nat, then reduce mod p.
-  BaseField.ofNat (Fp.bytesBEToNat b)
+  BaseField.ofNat (Base.bytesToNat b.data.toList)
 
 def hashToFieldFp2
     (msg : ByteArray) (dst : ByteArray) (count : Nat)

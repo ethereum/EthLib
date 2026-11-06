@@ -121,12 +121,18 @@ theorem fromBytesBE_eq {l : List Nat} {x : Fp}
   dsimp only at h
   split at h
   · cases Except.ok.inj h
-    show Fp.bytesBEToNat _ = _
-    rw [Fp.bytesBEToNat_eq_list]
+    show Base.bytesToNat _ = _
     cases l with
     | nil => rfl
     | cons a t =>
-      simp [ByteArray.set!, ByteArray.get!, xOf, List.foldl_map]
+      simp [ByteArray.set!, ByteArray.get!, xOf]
+      -- Both sides fold over the same bytes: a byte of value `u` adds `acc * 256 + u % 256`.
+      rw [Base.bytesToNat, List.foldl_cons, List.foldl_map]
+      refine congrArg₂ (fun f i => List.foldl f i t) ?_ ?_
+      · funext acc u
+        rw [← Nat.shiftLeft_add_eq_or_of_lt (Nat.mod_lt u (by decide) : u % 256 < 2 ^ 8),
+          Nat.shiftLeft_eq, UInt8.toNat_ofNat']
+      · simp [UInt8.toNat_and]
   · cases h
 
 /-! ## The check is sound -/

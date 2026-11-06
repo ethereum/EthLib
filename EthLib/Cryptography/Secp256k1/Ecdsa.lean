@@ -42,7 +42,7 @@ namespace Ecdsa
 /-- The integer `e` of a hash, by SEC 1 v2 §4.1.4 step 3.
 
 `n` has 256 bits, as many as the hash, so step 3.2 keeps every bit. -/
-def hashToInt (hash : Vector UInt8 32) : Nat := ofBytesBE hash.toList
+def hashToInt (hash : Vector UInt8 32) : Nat := Base.bytesToNat hash.toList
 
 /-- Whether `(r, s)` is a valid signature on `hash` under the public key `q`, by SEC 1 v2 §4.1.4.
 

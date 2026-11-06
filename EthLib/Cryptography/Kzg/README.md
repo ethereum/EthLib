@@ -106,13 +106,13 @@ Those proofs are in `Core.lean`, `Cells.lean` and `Recovery.lean`.
 Field elements travel as 32-byte big-endian integers, so decoding must not merge two inputs.
 Those proofs are in `Polynomials.lean`.
 
-Big-endian decoding is injective on byte strings of one length (`bytesBEToNat_inj`).
+Big-endian decoding is injective on byte strings of one length (`Base.bytesToNat_inj`).
 The length matters: without it decoding is not injective, since `00` and `00 00` both decode to 0.
 
 In the other direction, take the `len`-byte encoding of `n`.
-Its decoding is `n` when `n < 256^len` (`bytesBEToNat_intToBytesBE_of_lt`).
-Otherwise it is `n mod 256^len` (`bytesBEToNat_intToBytesBE`).
-Encoding a decoded string at its own length returns that string (`intToBytesBE_bytesBEToNat`).
+Its decoding is `n` when `n < 256^len` (`bytesToNat_intToBytesBE_of_lt`).
+Otherwise it is `n mod 256^len` (`bytesToNat_intToBytesBE`).
+Encoding a decoded string at its own length returns that string (`intToBytesBE_bytesToNat`).
 
 **Bit reversal.**
 A blob stores its values in bit-reversed order of the roots of unity.
