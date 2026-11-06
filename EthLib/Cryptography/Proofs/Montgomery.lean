@@ -77,8 +77,8 @@ theorem mulLimbs_cast (a : Limbs.T n) (ha : Limbs.val a < M.p) (b : Limbs.T n) :
   have hc := congrArg (Nat.cast : ℕ → ZMod M.p) (mulLimbs_spec M a ha b).2
   rw [ZMod.natCast_mod, ZMod.natCast_mod, Nat.cast_mul, Nat.cast_mul] at hc
   rw [mul_comm, radix]
-  change ((2 ^ (32 * n) : ℕ) : ZMod M.p) * (Limbs.val (mulCore a b M.pLimbs M.pinv) : ZMod M.p) = _
-  rw [mulCore]
+  change ((2 ^ (32 * n) : ℕ) : ZMod M.p) * (Limbs.val (M.mul a b) : ZMod M.p) = _
+  rw [M.mul_spec a b ha]
   exact hc
 
 /-- The product is the product mod `p`. -/
