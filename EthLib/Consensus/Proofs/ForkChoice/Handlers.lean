@@ -51,6 +51,13 @@ theorem EpochsLe.trans {a b c : Store preset fork} (ab : a.EpochsLe b) (bc : b.E
 
 variable {config : Config} {store : Store preset fork}
 
+/-- The lookup of the state of a block succeeds exactly when the store holds it. -/
+theorem blockState_ok_iff {root : Root} {state : BeaconState preset fork} :
+    store.blockState root = .ok state ↔ store.blockStates[root]? = some state := by
+  unfold blockState
+  cases store.blockStates[root]? <;>
+    simp [throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
+
 /-- Replacing the checkpoints lowers neither epoch. -/
 theorem updateCheckpoints_epochsLe (justified finalized : Checkpoint) :
     store.EpochsLe (store.updateCheckpoints justified finalized) := by
@@ -747,9 +754,7 @@ theorem onAttestation_voted {checks : SignatureChecks} {attestation : Attestatio
   · simp only [pure, Except.pure, Except.ok.injEq] at attested
     subst attested
     refine ⟨targetState, indexed, ?_, ?_, fun i voted honest => ?_⟩
-    · unfold checkpointState at found
-      split at found <;>
-        simp_all [throw, throwThe, MonadExceptOf.throw, pure, Except.pure, updateLatestMessages]
+    · simpa [updateLatestMessages] using checkpointState_ok_iff.mp found
     · cases g : getIndexedAttestation targetState attestation <;> simp_all [Except.mapError]
     · exact foldl_recordVote _ _ voted honest
   · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at attested

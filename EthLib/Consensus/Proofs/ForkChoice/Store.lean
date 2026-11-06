@@ -36,6 +36,13 @@ namespace Store
 
 variable {store : Store preset fork}
 
+/-- The lookup of a block succeeds exactly when the store holds it. -/
+theorem block_ok_iff {root : Root} {block : BeaconBlock preset fork} :
+    store.block root = .ok block ↔ store.blocks[root]? = some block := by
+  unfold Store.block
+  cases store.blocks[root]? <;>
+    simp [throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
+
 /-- From Gloas the ancestor walk is not yet specified here, so it fails. -/
 theorem getAncestor_of_gloas {node : ForkChoiceNode} {slot : Slot} (gloas : .glamsterdam ≤ fork) :
     store.getAncestor node slot = .error (.forkNotYetSpecified fork) := by
@@ -118,8 +125,7 @@ theorem getAncestor_le {node ancestor : ForkChoiceNode} {slot : Slot}
 theorem isAncestor_self {node : ForkChoiceNode} {block : BeaconBlock preset fork}
     (before : fork < .glamsterdam) (found : store.blocks[node.root]? = some block) :
     store.isAncestor node node = .ok true := by
-  have known : store.block node.root = .ok block := by
-    simp [Store.block, found, pure, Except.pure]
+  have known : store.block node.root = .ok block := block_ok_iff.mpr found
   simp [isAncestor, known, getAncestor_of_le before found (UInt64.le_refl _), bind, Except.bind,
     pure, Except.pure]
 

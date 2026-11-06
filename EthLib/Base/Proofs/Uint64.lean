@@ -29,6 +29,16 @@ theorem addChecked_ok_iff {a b c : UInt64} :
     simp only [reduceCtorEq, false_iff, not_and]
     omega
 
+/-- A wrapping sum below `2^64` is the sum on `Nat`. -/
+theorem toNat_add_of_lt {a b : UInt64} (h : a.toNat + b.toNat < 2 ^ 64) :
+    (a + b).toNat = a.toNat + b.toNat := by
+  rw [UInt64.toNat_add, Nat.mod_eq_of_lt h]
+
+/-- A sum below `2^64` succeeds, and it returns the wrapping sum. -/
+theorem addChecked_of_lt {a b : UInt64} (h : a.toNat + b.toNat < 2 ^ 64) :
+    addChecked a b = .ok (a + b) :=
+  addChecked_ok_iff.mpr ⟨h, toNat_add_of_lt h⟩
+
 /-- The difference succeeds exactly when `b ≤ a`, and then it is the difference on `Nat`. -/
 theorem subChecked_ok_iff {a b c : UInt64} :
     subChecked a b = .ok c ↔ b.toNat ≤ a.toNat ∧ c.toNat = a.toNat - b.toNat := by

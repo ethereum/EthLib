@@ -214,8 +214,7 @@ theorem isAncestor_iff {root : Root} {node : ForkChoiceNode} {block : BeaconBloc
     (pending : node.payloadStatus = .pending)
     (computed : store.isAncestor ⟨root, .pending⟩ node = .ok result) :
     result = true ↔ (blockTree lower).Ancestor (some node.root) (some root) := by
-  have known : store.block node.root = .ok block := by
-    simp [Store.block, found, pure, Except.pure]
+  have known : store.block node.root = .ok block := block_ok_iff.mpr found
   simp only [isAncestor, known, bind, Except.bind] at computed
   cases walk : store.getAncestor ⟨root, .pending⟩ block.slot with
   | error e => simp [walk] at computed

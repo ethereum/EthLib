@@ -4,6 +4,7 @@ public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.ForkChoice.ProposerHead
+public import EthLib.Consensus.Proofs.ForkChoice.Handlers
 
 /-!
 # Proofs: the head on which a proposer builds
@@ -18,9 +19,9 @@ From Gloas the choice fails as not yet specified.
 
 Before Gloas an exact statement gives when it answers and which node it takes, from its tests.
 
-The shuffling test has a statement on each side of Fulu.
+Each test has an exact statement of when it answers and what it returns.
 
-Each other test has an exact statement of when it answers and what it returns.
+The shuffling test always passes from Fulu, and before Fulu it reads the slot in its epoch.
 -/
 
 @[expose] public section
@@ -43,39 +44,32 @@ theorem shufflingAllowsReorg_of_lt {slot : Slot} (before : fork < .fusaka)
   have later : ¬ .fusaka ≤ fork := Nat.not_le_of_lt before
   simp [shufflingAllowsReorg, isShufflingStable, later, positive, pure, Except.pure]
 
-namespace Store
-
-variable {config : Config} {store : Store preset fork}
+/-- The shuffling test answers exactly as above, and fails only before Fulu with empty epochs. -/
+theorem shufflingAllowsReorg_ok_iff {slot : Slot} {allows : Bool} :
+    shufflingAllowsReorg preset fork slot = .ok allows ↔
+      (.fusaka ≤ fork ∧ allows = true) ∨
+        (fork < .fusaka ∧ preset.SLOTS_PER_EPOCH ≠ 0 ∧
+          allows = decide (slot % preset.SLOTS_PER_EPOCH ≠ 0)) := by
+  by_cases fulu : .fusaka ≤ fork
+  · have later : ¬ fork < .fusaka := Nat.not_lt_of_le fulu
+    simp [shufflingAllowsReorg_of_fulu fulu, fulu, later, eq_comm]
+  have before : fork < .fusaka := Nat.lt_of_not_le fulu
+  by_cases positive : preset.SLOTS_PER_EPOCH = 0
+  · simp [shufflingAllowsReorg, isShufflingStable, fulu, positive, throw, throwThe,
+      MonadExceptOf.throw]
+  · simp [shufflingAllowsReorg_of_lt before positive, fulu, before, positive, eq_comm]
 
 /-- The sum of the effective balances, in a state, of the equivocators among some validators.
 
 An index outside the state adds nothing, so a statement must also require each equivocator known. -/
-def equivocatorWeight (store : Store preset fork) (state : BeaconState preset fork)
+def equivocatorWeight (equivocators : List ValidatorIndex) (state : BeaconState preset fork)
     (validators : List ValidatorIndex) : Nat :=
-  (((validators.filter store.equivocatingIndices.contains).filterMap fun validator =>
+  (((validators.filter equivocators.contains).filterMap fun validator =>
     state.validators.data[validator.toNat]?).map (·.effectiveBalance.toNat)).sum
 
-/-- The lookup of a block succeeds exactly when the store holds it. -/
-private theorem block_ok_iff {root : Root} {block : BeaconBlock preset fork} :
-    store.block root = .ok block ↔ store.blocks[root]? = some block := by
-  unfold Store.block
-  cases store.blocks[root]? <;>
-    simp [throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
+namespace Store
 
-/-- The lookup of the state of a block succeeds exactly when the store holds it. -/
-private theorem blockState_ok_iff {root : Root} {state : BeaconState preset fork} :
-    store.blockState root = .ok state ↔ store.blockStates[root]? = some state := by
-  unfold blockState
-  cases store.blockStates[root]? <;>
-    simp [throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
-
-/-- The lookup of the state of a checkpoint succeeds exactly when the store holds it. -/
-private theorem checkpointState_ok_iff {checkpoint : Checkpoint} {state : BeaconState preset fork} :
-    store.checkpointState checkpoint = .ok state ↔
-      store.checkpointStates[checkpoint]? = some state := by
-  unfold checkpointState
-  cases store.checkpointStates[checkpoint]? <;>
-    simp [throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
+variable {config : Config} {store : Store preset fork}
 
 /-- Before Gloas, a head is late exactly when the store records that it was not timely. -/
 theorem isHeadLate_ok_iff {root : Root} {late : Bool} :
@@ -219,10 +213,10 @@ theorem isProposerEquivocation_ok_iff {root : Root} {equivocation : Bool} :
   cases equivocation <;> simp [many]
 
 /-- A sum over the validators of two lists adds the sums over each list. -/
-private theorem equivocatorWeight_append {state : BeaconState preset fork}
-    {first second : List ValidatorIndex} :
-    store.equivocatorWeight state (first ++ second) =
-      store.equivocatorWeight state first + store.equivocatorWeight state second := by
+private theorem equivocatorWeight_append {equivocators : List ValidatorIndex}
+    {state : BeaconState preset fork} {first second : List ValidatorIndex} :
+    equivocatorWeight equivocators state (first ++ second) =
+      equivocatorWeight equivocators state first + equivocatorWeight equivocators state second := by
   simp [equivocatorWeight]
 
 /-- One step of the walk over a committee in the weak test. -/
@@ -245,7 +239,7 @@ private theorem forIn_equivocators_ok_iff {state : BeaconState preset fork}
     forIn validators start (equivocatorStep store state) = .ok stop ↔
       (∀ validator ∈ validators, store.equivocatingIndices.contains validator = true →
         state.validators.data[validator.toNat]?.isSome) ∧
-      stop = start + store.equivocatorWeight state validators := by
+      stop = start + equivocatorWeight store.equivocatingIndices state validators := by
   induction validators generalizing start with
   | nil =>
     simp only [List.forIn_nil, pure, Except.pure, Except.ok.injEq, List.not_mem_nil,
@@ -260,14 +254,15 @@ private theorem forIn_equivocators_ok_iff {state : BeaconState preset fork}
         simp only [equivocatorStep, contained, found, ↓reduceIte]
         simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
       | some known =>
-        have weight : store.equivocatorWeight state (validator :: rest) =
-            known.effectiveBalance.toNat + store.equivocatorWeight state rest := by
+        have weight : equivocatorWeight store.equivocatingIndices state (validator :: rest) =
+            known.effectiveBalance.toNat +
+              equivocatorWeight store.equivocatingIndices state rest := by
           simp only [equivocatorWeight, List.filter_cons, contained, ↓reduceIte,
             List.filterMap_cons, found, List.map_cons, List.sum_cons]
         simp only [equivocatorStep, contained, found, ↓reduceIte, Except.ok.injEq,
           exists_eq_left', ih, weight, Option.isSome_some, forall_const, true_and, Nat.add_assoc]
-    · have weight : store.equivocatorWeight state (validator :: rest) =
-          store.equivocatorWeight state rest := by
+    · have weight : equivocatorWeight store.equivocatingIndices state (validator :: rest) =
+          equivocatorWeight store.equivocatingIndices state rest := by
         simp only [equivocatorWeight, List.filter_cons, contained, Bool.false_eq_true, ↓reduceIte]
       simp only [equivocatorStep, contained, Bool.false_eq_true, ↓reduceIte, Except.ok.injEq,
         exists_eq_left', ih, weight, false_imp_iff, true_and]
@@ -290,7 +285,8 @@ private theorem forIn_committees_ok_iff {state justified : BeaconState preset fo
         (∀ validator ∈ committees.flatMap Array.toList,
           store.equivocatingIndices.contains validator = true →
             justified.validators.data[validator.toNat]?.isSome) ∧
-        stop = start + store.equivocatorWeight justified (committees.flatMap Array.toList) ∧
+        stop = start + equivocatorWeight store.equivocatingIndices justified
+          (committees.flatMap Array.toList) ∧
         stop < 2 ^ 64 := by
   induction indices generalizing start with
   | nil =>
@@ -327,9 +323,11 @@ private theorem forIn_committees_ok_iff {state justified : BeaconState preset fo
       simp only [List.flatMap_cons, List.forall_mem_append] at known
       rw [List.flatMap_cons, equivocatorWeight_append, ← Nat.add_assoc] at value
       -- The sum only grows, so a sum that fits at the end fits after each committee.
-      have within : start + store.equivocatorWeight justified committee.toList < 2 ^ 64 := by
+      have within : start +
+          equivocatorWeight store.equivocatingIndices justified committee.toList < 2 ^ 64 := by
         omega
-      refine ⟨.yield (start + store.equivocatorWeight justified committee.toList), ?_,
+      refine ⟨.yield
+          (start + equivocatorWeight store.equivocatingIndices justified committee.toList), ?_,
         (ih within).mpr ⟨others, mappedRest, known.2, value, fits⟩⟩
       simp only [bind_ok_iff, mapError_ok_iff, ← Array.forIn_toList,
         forIn_equivocators_ok_iff]
@@ -359,10 +357,10 @@ theorem isHeadWeak_ok_iff {root : Root} {weak : Bool} :
         (∀ validator ∈ committees.flatMap Array.toList,
           store.equivocatingIndices.contains validator = true →
             justified.validators.data[validator.toNat]?.isSome) ∧
-        votes.toNat + store.equivocatorWeight justified (committees.flatMap Array.toList) < 2 ^ 64 ∧
-        weak = decide (votes.toNat +
-            store.equivocatorWeight justified (committees.flatMap Array.toList) <
-          threshold.toNat) := by
+        votes.toNat + equivocatorWeight store.equivocatingIndices justified
+          (committees.flatMap Array.toList) < 2 ^ 64 ∧
+        weak = decide (votes.toNat + equivocatorWeight store.equivocatingIndices justified
+            (committees.flatMap Array.toList) < threshold.toNat) := by
   by_cases gloas : .glamsterdam ≤ fork
   · have later : ¬ fork < .glamsterdam := Nat.not_lt_of_le gloas
     simp [isHeadWeak, gloas, later, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
@@ -395,12 +393,6 @@ private theorem next_slot_ok_iff {first next : Slot} :
       first.toNat + 1 < 2 ^ 64 ∧ next.toNat = first.toNat + 1 := by
   rw [mapError_ok_iff, Uint64.addChecked_ok_iff]
   rfl
-
-/-- A slot and one that fit in 64 bits add up to the sum on `Nat`. -/
-private theorem toNat_slot_add_one {first : Slot} (fits : first.toNat + 1 < 2 ^ 64) :
-    (first + 1).toNat = first.toNat + 1 := by
-  rw [UInt64.toNat_add]
-  exact Nat.mod_eq_of_lt fits
 
 /-- Two tests in a row that lead to one node act as one test that either can pass. -/
 private theorem ite_ite_eq_ite_or {α : Type} {first second firstNat secondNat : Prop}
@@ -473,8 +465,10 @@ theorem getProposerHead_ok_iff {headNode chosen : ForkChoiceNode} {slot : Slot} 
       equivocation, headKnown, parentKnown, lateFound, shufflingFound, competitiveFound,
       recentFound, onTimeFound, parentFits, headFits, weakFound, strongFound, equivocationFound,
       rfl⟩
-    have parentValue := toNat_slot_add_one parentFits
-    have headValue := toNat_slot_add_one headFits
+    have parentValue : (parent.slot + 1).toNat = parent.slot.toNat + 1 :=
+      Uint64.toNat_add_of_lt parentFits
+    have headValue : (head.slot + 1).toNat = head.slot.toNat + 1 :=
+      Uint64.toNat_add_of_lt headFits
     have parentSlots : parent.slot + 1 = head.slot ↔ parent.slot.toNat + 1 = head.slot.toNat := by
       rw [← UInt64.toNat_inj, parentValue]
     have headSlots : head.slot + 1 = slot ↔ head.slot.toNat + 1 = slot.toNat := by
@@ -486,6 +480,40 @@ theorem getProposerHead_ok_iff {headNode chosen : ForkChoiceNode} {slot : Slot} 
     simp only [unboosted, ↓reduceIte, bind_ok_iff, pure, Except.pure, Except.ok.injEq]
     exact ⟨weak, weakFound, strong, strongFound, equivocation, equivocationFound,
       ite_ite_eq_ite_or (by rw [parentSlots, headSlots]) (by rw [headSlots])⟩
+
+/-- The choice of a proposer, from the answers of its tests.
+
+Before Gloas, let the boost have worn off, and let the store hold the head and its parent.
+
+Let each test answer, and let the slot of each block plus one fit in 64 bits.
+
+Then the choice is the parent when either list of tests passes, and the head otherwise. -/
+theorem getProposerHead_eq {headNode : ForkChoiceNode} {slot : Slot}
+    {head parent : BeaconBlock preset fork}
+    {late shuffling competitive recent onTime weak strong equivocation : Bool}
+    (before : fork < .glamsterdam) (unboosted : store.proposerBoostRoot ≠ headNode.root)
+    (headKnown : store.blocks[headNode.root]? = some head)
+    (parentKnown : store.blocks[head.parentRoot]? = some parent)
+    (lateFound : store.isHeadLate headNode.root = .ok late)
+    (shufflingFound : shufflingAllowsReorg preset fork slot = .ok shuffling)
+    (competitiveFound : store.isFfgCompetitive headNode.root head.parentRoot = .ok competitive)
+    (recentFound : store.isFinalizationOk config slot = .ok recent)
+    (onTimeFound : store.isProposingOnTime config = .ok onTime)
+    (parentFits : parent.slot.toNat + 1 < 2 ^ 64) (headFits : head.slot.toNat + 1 < 2 ^ 64)
+    (weakFound : store.isHeadWeak config headNode.root = .ok weak)
+    (strongFound : store.isParentStrong config headNode.root = .ok strong)
+    (equivocationFound : store.isProposerEquivocation headNode.root = .ok equivocation) :
+    store.getProposerHead config headNode slot = .ok
+      (if (late ∧ shuffling ∧ competitive ∧ recent ∧ onTime ∧
+            (parent.slot.toNat + 1 = head.slot.toNat ∧ head.slot.toNat + 1 = slot.toNat) ∧
+            weak ∧ strong) ∨
+          (weak ∧ head.slot.toNat + 1 = slot.toNat ∧ equivocation)
+        then ⟨head.parentRoot, .pending⟩
+        else headNode) :=
+  getProposerHead_ok_iff.mpr ⟨before, unboosted, head, parent, late, shuffling, competitive,
+    recent, onTime, weak, strong, equivocation, headKnown, parentKnown, lateFound, shufflingFound,
+    competitiveFound, recentFound, onTimeFound, parentFits, headFits, weakFound, strongFound,
+    equivocationFound, rfl⟩
 
 /-- The proposer builds on the head, or on the parent of its block.
 
