@@ -31,7 +31,7 @@ Each root below is a root of the error polynomial of the batch.
 
 namespace EthLib.Cryptography.Kzg
 
-open EthLib.Base (array_mapM_ok array_mapM_exists_ok getElem!_mem_of_lt)
+open EthLib.Base (array_mapM_ok array_mapM_exists_ok)
 open EthLib.Cryptography.Bls (G1 G2 Fr)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
@@ -270,12 +270,12 @@ private theorem blobLoop_eq_ok {blobs : Array Blob} {commitmentsBytes proofsByte
       obtain ⟨k, hk, rfl⟩ := List.getElem_of_mem he
       rw [hgetL k hk]
       have hk' : k < blobs.size := hlenL ▸ hk
-      have hcb := hcsk k (hc ▸ hk')
-      rw [getElem!_pos commitmentsBytes k (hc ▸ hk')] at hcb
-      have hpb := hpgk k (hp ▸ hk')
-      rw [getElem!_pos proofsBytes k (hp ▸ hk')] at hpb
-      have hbl := hpsk k hk'
-      rw [getElem!_pos blobs k hk'] at hbl
+      have hcb := hcsk k (hc ▸ hk') (by omega)
+      rw [← getElem!_pos csG1 k (by omega)] at hcb
+      have hpb := hpgk k (hp ▸ hk') (by omega)
+      rw [← getElem!_pos psG1 k (by omega)] at hpb
+      have hbl := hpsk k hk' (by omega)
+      rw [← getElem!_pos ps k (by omega)] at hbl
       exact blobLoopStep_of_ok acc _ _ _ k hcb hpb hbl]
   rw [← List.foldl_map, list_foldl_blobPureStep]
   refine congrArg Except.ok ?_
@@ -449,9 +449,15 @@ theorem verifyBlobKzgProofBatch_ok_iff_root (laws : Bls.PairingLaws) {s : Truste
   obtain ⟨hcssz, hcsk⟩ := array_mapM_ok hcsG1
   obtain ⟨hpgsz, hpgk⟩ := array_mapM_ok hpsG1
   have hC' : ∀ i < csG1.size, G1.Represents csG1[i]! ((fun i => c y.commitments[i]!) i) :=
-    fun i hi => hC i (hcssz ▸ hi) _ (uncompressG1_of_validateKzgG1Point (hcsk i (hcssz ▸ hi)))
+    fun i hi => by
+      have h1 := hcsk i (hcssz ▸ hi) hi
+      rw [← getElem!_pos y.commitments i (hcssz ▸ hi), ← getElem!_pos csG1 i hi] at h1
+      exact hC i (hcssz ▸ hi) _ (uncompressG1_of_validateKzgG1Point h1)
   have hP' : ∀ i < psG1.size, G1.Represents psG1[i]! ((fun i => w y.proofs[i]!) i) :=
-    fun i hi => hP i (hpgsz ▸ hi) _ (uncompressG1_of_validateKzgG1Point (hpgk i (hpgsz ▸ hi)))
+    fun i hi => by
+      have h1 := hpgk i (hpgsz ▸ hi) hi
+      rw [← getElem!_pos y.proofs i (hpgsz ▸ hi), ← getElem!_pos psG1 i hi] at h1
+      exact hP i (hpgsz ▸ hi) _ (uncompressG1_of_validateKzgG1Point h1)
   exact verifyKzgProofBatch_ok_iff_root laws hs hC' hP' hbatch
 
 /-- **An accepted batch of blobs is valid, or its batch challenge is a root.**
@@ -492,9 +498,14 @@ theorem verifyBlobKzgProofBatch_valid_or_root (laws : Bls.PairingLaws) {s : Trus
     have heq := (batchErrorPoly_eq_zero_iff τ (fun k => c y.commitments[k]!) (y.evals[·]!)
       (fun k => w y.proofs[k]!) (y.challenges[·]!) y.commitments.size).mp hzero i hi_c
     refine ⟨heq, ?_⟩
-    have hbl := hpsk i hi
-    have hrC := hC i hi_c _ (uncompressG1_of_validateKzgG1Point (hcsk i hi_c))
-    have hrP := hP i hi_p _ (uncompressG1_of_validateKzgG1Point (hpgk i hi_p))
+    have hbl := hpsk i hi (hpssz ▸ hi)
+    have hcb := hcsk i hi_c (hcssz ▸ hi_c)
+    have hpb := hpgk i hi_p (hpgsz ▸ hi_p)
+    rw [← getElem!_pos y.blobs i hi, ← getElem!_pos ps i (hpssz ▸ hi)] at hbl
+    rw [← getElem!_pos y.commitments i hi_c, ← getElem!_pos csG1 i (hcssz ▸ hi_c)] at hcb
+    rw [← getElem!_pos y.proofs i hi_p, ← getElem!_pos psG1 i (hpgsz ▸ hi_p)] at hpb
+    have hrC := hC i hi_c _ (uncompressG1_of_validateKzgG1Point hcb)
+    have hrP := hP i hi_p _ (uncompressG1_of_validateKzgG1Point hpb)
     have hchal : y.challenges[i]! = computeChallenge y.blobs[i]! y.commitments[i]! := by
       rw [getElem!_pos y.challenges i (by simp [BlobBatchInput.challenges, hi])]
       simp [BlobBatchInput.challenges, getElem!_pos y.blobs i hi]
@@ -502,7 +513,7 @@ theorem verifyBlobKzgProofBatch_valid_or_root (laws : Bls.PairingLaws) {s : Trus
       rw [getElem!_pos y.evals i (by simp [BlobBatchInput.evals, hi])]
       simp [BlobBatchInput.evals, hdec]
     refine verifyBlobKzgProof_of_blobOpeningValid laws hs
-      ⟨ps[i]!, _, _, _, _, hbl, hcsk i hi_c, hrC, hpgk i hi_p, hrP, ?_⟩
+      ⟨ps[i]!, _, _, _, _, hbl, hcb, hrC, hpb, hrP, ?_⟩
     rw [← hchal, ← heval]
     exact heq
   · exact Or.inr ⟨hzero, (verifyBlobKzgProofBatch_ok_iff_root laws hs y hC hP h).mp rfl⟩
@@ -597,7 +608,11 @@ theorem verifyBlobKzgProofBatch_of_blobOpeningValid (laws : Bls.PairingLaws) {s 
     refine (batchErrorPoly_eq_zero_iff τ _ _ _ _ _).mpr fun i hi => ?_
     have hi' : i < blobs.size := hc ▸ hi
     obtain ⟨poly, C, c, P, w, hpoly, hCv, hCr, hPv, hPr, heq⟩ := hv i hi'
-    have hpoly_eq : ps[i]! = poly := Except.ok.inj ((hpsk i hi').symm.trans hpoly)
+    have hpoly_eq : ps[i]! = poly := by
+      have h1 := hpsk i hi' (by omega)
+      rw [← getElem!_pos blobs i hi'] at h1
+      rw [getElem!_pos ps i (by omega)]
+      exact Except.ok.inj (h1.symm.trans hpoly)
     have hchal : y.challenges[i]! = computeChallenge blobs[i]! commitments[i]! := by
       rw [getElem!_pos y.challenges i (by simp [y, BlobBatchInput.challenges, hi'])]
       simp [y, BlobBatchInput.challenges, getElem!_pos blobs i hi']
@@ -608,8 +623,14 @@ theorem verifyBlobKzgProofBatch_of_blobOpeningValid (laws : Bls.PairingLaws) {s 
     rw [scalarOf_eq hCv hCr, scalarOf_eq hPv hPr, hchal, heval]
     exact heq
   have hroot := (verifyBlobKzgProofBatch_ok_iff_root laws hs y
-    (fun i hi _ hu => represents_scalarOf (hcs _ (getElem!_mem_of_lt hi)) hu)
-    (fun i hi _ hu => represents_scalarOf (hps _ (getElem!_mem_of_lt hi)) hu) hb).mpr
+    (fun i hi _ hu => represents_scalarOf
+      (hcs y.commitments[i]! (by
+        rw [getElem!_pos y.commitments i hi]
+        exact Array.getElem_mem hi)) hu)
+    (fun i hi _ hu => represents_scalarOf
+      (hps y.proofs[i]! (by
+        rw [getElem!_pos y.proofs i hi]
+        exact Array.getElem_mem hi)) hu) hb).mpr
     (by rw [hzero, Polynomial.eval_zero])
   rw [hb, hroot]
 
@@ -733,11 +754,14 @@ theorem exists_blobInput_adversary_prEvent_root_eq (τ : Fr) :
   obtain ⟨ps, hpsM⟩ := array_mapM_exists_ok (f := blobToPolynomial) (xs := y.blobs) fun bl hbl => by
     obtain rfl : bl = zeroBlob := by simpa [y] using hbl
     exact ⟨_, blobToPolynomial_zeroBlob⟩
-  obtain ⟨-, hpsk⟩ := array_mapM_ok hpsM
+  obtain ⟨hpssz, hpsk⟩ := array_mapM_ok hpsM
   have hdec : decodeBlobPolys y.blobs = ps := decodeBlobPolys_of_ok hpsM
   have heval : ∀ i < 2, y.evals[i]! = 0 := fun i hi => by
     have hpsi : ps[i]! = Array.ofFn fun _ : Fin FIELD_ELEMENTS_PER_BLOB => Fr.zero := by
-      have h0 := hpsk i hi
+      have hi2 : i < y.blobs.size := hi
+      have hj : i < ps.size := by rw [hpssz]; exact hi2
+      have h0 := hpsk i hi2 hj
+      rw [← getElem!_pos y.blobs i hi2, ← getElem!_pos ps i hj] at h0
       rw [getElem!_pair _ hi] at h0
       exact Except.ok.inj (h0.symm.trans blobToPolynomial_zeroBlob)
     have hinterp : interpolant ps[i]! = 0 := by

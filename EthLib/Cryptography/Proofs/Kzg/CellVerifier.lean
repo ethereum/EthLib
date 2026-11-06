@@ -181,10 +181,8 @@ theorem zipIdx_mapM_eq_ok {ε : Type} {g : Bytes48 × Nat → Except ε Bytes48}
   obtain ⟨hsz, hk⟩ := array_mapM_ok h
   rw [Array.size_zipIdx] at hsz
   refine Array.ext hsz fun i hi hi' => ?_
-  have := hg _ _ (hk i (by rw [Array.size_zipIdx]; exact hi'))
-  rw [← getElem!_pos qs i hi, ← getElem!_pos ps i hi', this,
-    getElem!_pos _ i (by rw [Array.size_zipIdx]; exact hi'), Array.getElem_zipIdx]
-  exact (getElem!_pos ps i hi').symm
+  have := hg _ _ (hk i (by rw [Array.size_zipIdx]; exact hi') hi)
+  rw [this, Array.getElem_zipIdx]
 
 /-- **An accepted outer check is an accepted core check.**
 
@@ -545,8 +543,7 @@ theorem verifyCellKzgProofBatch_exists_ok {s : TrustedSetup} {bs : Array Bytes48
     (any_idxOf?_dedupCommitments bs) hG hQ hci
     (fun e he => by
       obtain ⟨k, hk, rfl⟩ := Array.getElem_of_mem he
-      have := hevk k (hevsz ▸ hk)
-      rw [← getElem!_pos _ k hk]
+      have := hevk k (hevsz ▸ hk) hk
       exact size_bytesToBlsFields this)
   rw [hb] at hO
   cases hO
@@ -622,10 +619,14 @@ theorem verifyCellKzgProofBatch_ok_iff_root (laws : Bls.PairingLaws) {s : Truste
       G1.Represents G[i]! ((fun i => c (dedupCommitments y.commitments).1[i]!) i) := by
     intro i hi
     obtain ⟨k, hk, hkd⟩ := hdmem i (hGsz ▸ hi)
-    have := hC k hk _ (hkd ▸ hGk i (hGsz ▸ hi))
+    have hGk' := hGk i (hGsz ▸ hi) hi
+    rw [← getElem!_pos _ i (hGsz ▸ hi), ← getElem!_pos G i hi] at hGk'
+    have := hC k hk _ (hkd ▸ hGk')
     rwa [hkd] at this
   have hP' : ∀ k < Q.size, G1.Represents Q[k]! ((fun k => w y.proofs[k]!) k) :=
-    fun k hk => hP k (hQsz ▸ hk) _ (hQk k (hQsz ▸ hk))
+    fun k hk => hP k (hQsz ▸ hk) _ (by
+      have hQk' := hQk k (hQsz ▸ hk) hk
+      rwa [← getElem!_pos _ k (hQsz ▸ hk), ← getElem!_pos Q k hk] at hQk')
   have := verifyCellKzgProofBatchImpl_ok_iff_root laws hs hG hQ hC' hP' hI
   simpa only [CellBatch.errorPoly, CellBatch.challenge, CellBatchInput.toCellBatch, hx] using this
 
@@ -701,8 +702,10 @@ theorem verifyCellKzgProofBatch_binding {GT : Type} [CommMonoid GT] (M : TargetG
   obtain ⟨h₁, h₂, h₃, hci, evals, hev, -⟩ := verifyCellKzgProofBatch_eq_ok h
   have hx : y.toCellBatch.cosetsEvals = evals := decodeCells_of_ok hev
   obtain ⟨hesz, hek⟩ := array_mapM_ok hev
-  have hdec := hek k hk
-  have hdec' := hek k' hk'
+  have hdec := hek k hk (by omega)
+  have hdec' := hek k' hk' (by omega)
+  rw [← getElem!_pos y.cells k hk, ← getElem!_pos evals k (by omega)] at hdec
+  rw [← getElem!_pos y.cells k' hk', ← getElem!_pos evals k' (by omega)] at hdec'
   by_cases hne : y.cells[k]! = y.cells[k']!
   · exact Or.inl hne
   have hne' : evals[k]! ≠ evals[k']! := fun heq =>

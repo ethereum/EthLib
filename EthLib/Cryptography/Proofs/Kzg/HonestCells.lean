@@ -41,7 +41,7 @@ So the batch check accepts the cells and proofs of blobs, and so does the verifi
 
 namespace EthLib.Cryptography.Kzg
 
-open EthLib.Base (array_mapM_ok array_mapM_exists_ok getElem!_mem_of_lt)
+open EthLib.Base (array_mapM_ok array_mapM_exists_ok)
 open EthLib.Cryptography.Bls (G1 Fr)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr Polynomial
@@ -236,12 +236,17 @@ theorem errorPoly_eq_zero_of_cellOpeningValid {τ : Fr} {y : CellBatchInput}
       obtain ⟨k, hk, rfl⟩ := Array.getElem_of_mem hx
       obtain ⟨-, e, -, -, -, -, he, -⟩ := hv k (h₁ ▸ hk)
       exact ⟨e, by rw [← getElem!_pos _ k hk]; exact he⟩
-  obtain ⟨-, hevk⟩ := array_mapM_ok hev
+  obtain ⟨hesz, hevk⟩ := array_mapM_ok hev
   obtain ⟨-, hdidx, -⟩ := dedupCommitments_spec y.commitments
   refine (cellErrorPoly_eq_zero_iff τ _ _ _ _ _).mpr fun k hk => ?_
   have hk' : k < y.commitments.size := h₃ ▸ hk
   obtain ⟨-, e, C, a, W, w, he, hCv, hCr, hWv, hWr, hval⟩ := hv k hk'
-  have hek : evals[k]! = e := Except.ok.inj ((hevk k (h₁ ▸ hk')).symm.trans he)
+  have hkc : k < y.cells.size := h₁ ▸ hk'
+  have hke : k < evals.size := by omega
+  have hek : evals[k]! = e := by
+    rw [getElem!_pos evals k hke]
+    rw [getElem!_pos y.cells k hkc] at he
+    exact Except.ok.inj ((hevk k hkc hke).symm.trans he)
   simp only [CellBatchInput.toCellBatch, decodeCells_of_ok hev, hek, (hdidx k hk').2,
     scalarOf_eq hCv hCr, scalarOf_eq hWv hWr]
   exact hval
@@ -262,16 +267,24 @@ theorem cellOpeningValid_of_errorPoly_eq_zero {s : TrustedSetup} {τ : Fr} {y : 
   obtain ⟨h₁, h₂, h₃, hci, evals, hev, -⟩ := verifyCellKzgProofBatch_eq_ok h
   obtain ⟨hvc, hvp⟩ := validates_of_verifyCellKzgProofBatch h
   obtain ⟨-, hdidx, -⟩ := dedupCommitments_spec y.commitments
-  obtain ⟨-, hevk⟩ := array_mapM_ok hev
-  have hvck := hvc _ (getElem!_mem_of_lt hk)
-  have hvpk := hvp _ (getElem!_mem_of_lt (h₂ ▸ hk))
+  obtain ⟨hesz, hevk⟩ := array_mapM_ok hev
+  have hvck := hvc y.commitments[k]! (by
+    rw [getElem!_pos y.commitments k hk]
+    exact Array.getElem_mem hk)
+  have hvpk := hvp y.proofs[k]! (by
+    rw [getElem!_pos y.proofs k (h₂ ▸ hk)]
+    exact Array.getElem_mem (h₂ ▸ hk))
   obtain ⟨C, hC⟩ := exists_validateKzgG1Point_of_validateKzgG1 hvck
   obtain ⟨P, hP⟩ := exists_validateKzgG1Point_of_validateKzgG1 hvpk
   have hv := (cellErrorPoly_eq_zero_iff τ _ _ _ _ _).mp hz k (by
     simp only [CellBatchInput.toCellBatch]
     omega)
   simp only [CellBatchInput.toCellBatch, decodeCells_of_ok hev, (hdidx k hk).2] at hv
-  exact ⟨hci k (by omega), evals[k]!, C, _, P, _, hevk k (by omega), hC,
+  have hkc : k < y.cells.size := by omega
+  have hke : k < evals.size := by omega
+  have hevk' := hevk k hkc hke
+  rw [← getElem!_pos y.cells k hkc, ← getElem!_pos evals k hke] at hevk'
+  exact ⟨hci k (by omega), evals[k]!, C, _, P, _, hevk', hC,
     represents_scalarOf hvck (uncompressG1_of_validateKzgG1Point hC), hP,
     represents_scalarOf hvpk (uncompressG1_of_validateKzgG1Point hP), hv⟩
 
@@ -336,8 +349,14 @@ theorem verifyCellKzgProofBatch_of_cellOpeningValid (laws : Bls.PairingLaws) {s 
   have hz : y.toCellBatch.errorPoly τ scalarOf scalarOf = 0 :=
     errorPoly_eq_zero_of_cellOpeningValid h₁ h₃ hv
   have hroot := (verifyCellKzgProofBatch_ok_iff_root laws hs y
-    (fun k hk _ hu => represents_scalarOf (hbs _ (getElem!_mem_of_lt hk)) hu)
-    (fun k hk _ hu => represents_scalarOf (hps _ (getElem!_mem_of_lt hk)) hu) hb).mpr
+    (fun k hk _ hu => represents_scalarOf
+      (hbs y.commitments[k]! (by
+        rw [getElem!_pos y.commitments k hk]
+        exact Array.getElem_mem hk)) hu)
+    (fun k hk _ hu => represents_scalarOf
+      (hps y.proofs[k]! (by
+        rw [getElem!_pos y.proofs k hk]
+        exact Array.getElem_mem hk)) hu) hb).mpr
     (by rw [hz, Polynomial.eval_zero])
   rw [hb, hroot]
 

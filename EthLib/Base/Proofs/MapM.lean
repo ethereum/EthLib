@@ -165,9 +165,9 @@ theorem vector_mapM_ok_getElem {n : Nat} {xs : Vector α n} {ys : Vector β n}
   simpa using this
 
 /-- A successful map over an array keeps its size, and output `i` is the image of input `i`. -/
-theorem array_mapM_ok_getElem [Inhabited β] {xs : Array α} {ys : Array β}
-    (h : xs.mapM f = .ok ys) :
-    ys.size = xs.size ∧ ∀ (i : Nat) (hi : i < xs.size), f xs[i] = .ok ys[i]! := by
+theorem array_mapM_ok {xs : Array α} {ys : Array β} (h : xs.mapM f = .ok ys) :
+    ys.size = xs.size ∧
+      ∀ (i : Nat) (hi : i < xs.size) (hj : i < ys.size), f xs[i] = .ok ys[i] := by
   rw [Array.mapM_eq_mapM_toList] at h
   cases hl : xs.toList.mapM f with
   | error e => rw [hl] at h; cases h
@@ -176,20 +176,9 @@ theorem array_mapM_ok_getElem [Inhabited β] {xs : Array α} {ys : Array β}
     have hys : zs.toArray = ys := Except.ok.inj h
     subst hys
     have hlen := mapM_ok_length hl
-    refine ⟨by simpa using hlen, fun i hi => ?_⟩
+    refine ⟨by simpa using hlen, fun i hi hj => ?_⟩
     have hi' : i < xs.toList.length := by simpa using hi
-    have he := mapM_ok_getElem hl i hi'
-    rw [getElem!_pos zs.toArray i (by simpa [hlen] using hi)]
-    simpa using he
-
-/-- The same, with input `i` read by `xs[i]!`. -/
-theorem array_mapM_ok [Inhabited α] [Inhabited β] {xs : Array α} {ys : Array β}
-    (h : xs.mapM f = .ok ys) :
-    ys.size = xs.size ∧ ∀ i < xs.size, f xs[i]! = .ok ys[i]! := by
-  obtain ⟨hsize, hget⟩ := array_mapM_ok_getElem h
-  refine ⟨hsize, fun i hi => ?_⟩
-  rw [getElem!_pos xs i hi]
-  exact hget i hi
+    simpa using mapM_ok_getElem hl i hi'
 
 /-- A map over an array succeeds when the function succeeds on every entry. -/
 theorem array_mapM_exists_ok {xs : Array α} (h : ∀ x ∈ xs, ∃ y, f x = .ok y) :
@@ -220,12 +209,6 @@ theorem array_mapM_ok_mem {xs : Array α} {ys : Array β} (h : xs.mapM f = .ok y
     intro y hy
     obtain ⟨x, hmem, hx⟩ := mapM_ok_mem hl y (List.mem_toArray.mp hy)
     exact ⟨x, Array.mem_toList_iff.mp hmem, hx⟩
-
-/-- An entry of an array, read in range, is a member of the array. -/
-theorem getElem!_mem_of_lt [Inhabited α] {xs : Array α} {k : Nat} (hk : k < xs.size) :
-    xs[k]! ∈ xs := by
-  rw [getElem!_pos xs k hk]
-  exact Array.getElem_mem hk
 
 /-- A failed map fails with its error on some input, and succeeds on every input before it. -/
 theorem mapM_error {xs : List α} {e : ε} (h : xs.mapM f = .error e) :

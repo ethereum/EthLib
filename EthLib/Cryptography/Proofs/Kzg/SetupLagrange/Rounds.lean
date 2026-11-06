@@ -37,7 +37,7 @@ open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.SetupTorsion (codes)
 open EthLib.Cryptography.Kzg.BitReversal
 open Finset
-open EthLib.Base (array_mapM_ok_getElem)
+open EthLib.Base (array_mapM_ok)
 
 /-! ## Points by position -/
 
@@ -47,9 +47,11 @@ theorem hexListToBytes_getElem {hex : Array String} {bytes : Array ByteArray}
     (h : TrustedSetup.hexListToBytes hex = .ok bytes) :
     bytes.size = hex.size ∧
       ∀ (i : Nat) (hi : i < hex.size), TrustedSetup.hexToBytes? hex[i] = some bytes[i]! := by
-  obtain ⟨hsize, hget⟩ := array_mapM_ok_getElem h
+  obtain ⟨hsize, hget⟩ := array_mapM_ok h
   refine ⟨hsize, fun i hi => ?_⟩
-  have he := hget i hi
+  have hj : i < bytes.size := hsize ▸ hi
+  have he := hget i hi hj
+  rw [getElem!_pos bytes i hj]
   split at he
   · rename_i b hb
     rw [hb, Except.ok.inj he]
@@ -86,10 +88,10 @@ theorem ofBytes_getElem {g1LagrangeBytes g1MonomialBytes g2MonomialBytes : Array
       (hm : (xs.mapM fun b =>
         (Bls.G1.uncompress b).mapError fun _ => KzgError.invalidTrustedSetup) = .ok ys)
       (j : Nat) (hj : j < ys.size) : G1.uncompress xs[j]! = .ok ys[j] := by
-    obtain ⟨hsize, hget⟩ := array_mapM_ok_getElem hm
+    obtain ⟨hsize, hget⟩ := array_mapM_ok hm
     have hj' : j < xs.size := by rw [← hsize]; exact hj
-    rw [getElem!_pos xs j hj', ← getElem!_pos ys j hj]
-    exact Base.mapError_ok_iff.mp (hget j hj')
+    rw [getElem!_pos xs j hj']
+    exact Base.mapError_ok_iff.mp (hget j hj' hj)
   split at h
   · rename_i hl
     split at h
