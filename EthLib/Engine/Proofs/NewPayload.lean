@@ -6,7 +6,9 @@ public import EthLib.Engine.Proofs.Block
 /-!
 # Proofs: the checks of `engine_newPayload`
 
-Each fork from Paris to BPO5 has a version of the method, and no other fork has one.
+Each fork from Paris to Glamsterdam has a version of the method, and no other fork has one.
+
+Version 5 takes Glamsterdam alone.
 
 Request lists that pass the checks have distinct types, in increasing order.
 
@@ -40,9 +42,9 @@ theorem PayloadError.code_injective (e₁ e₂ : PayloadError) (h : e₁.code = 
   cases e₁ <;> cases e₂ <;>
     first | rfl | (simp only [PayloadError.code] at h; exact absurd h (by decide))
 
-/-- Some version of the method takes a fork exactly when the fork is from Paris to BPO5. -/
+/-- Some version of the method takes a fork exactly when the fork is from Paris to Glamsterdam. -/
 theorem exists_acceptsFork_iff (fork : Fork) :
-    (∃ version, acceptsFork version fork = true) ↔ .paris ≤ fork ∧ fork < .glamsterdam := by
+    (∃ version, acceptsFork version fork = true) ↔ .paris ≤ fork ∧ fork < .hegota := by
   constructor
   · rintro ⟨version, h⟩
     revert h
@@ -56,6 +58,27 @@ theorem exists_acceptsFork_iff (fork : Fork) :
       | exact ⟨2, rfl⟩
       | exact ⟨3, rfl⟩
       | exact ⟨4, rfl⟩
+      | exact ⟨5, rfl⟩
+
+/-- Version 5 of the method takes exactly Glamsterdam. -/
+theorem acceptsFork_five_iff (fork : Fork) : acceptsFork 5 fork = true ↔ fork = .glamsterdam := by
+  simp [acceptsFork]
+
+/-- The payload decoder of version 5 rejects a payload without its block access list.
+
+The error is an invalid parameter, as step 2 of `engine_newPayloadV5` asks. -/
+theorem payloadParam_five_of_not_mem {j : Lean.Json} {fs : List (String × Lean.Json)}
+    (hfs : Json.fields "payload" j = .ok fs) (hmiss : "blockAccessList" ∉ fs.map Prod.fst) :
+    payloadParam 5 j = .error (.invalidParams "payload: not the fields of version 4") := by
+  -- No field has the name of the list, so the payload does not have the fields of version 4.
+  have hany : (fs.any fun field => field.1 == "blockAccessList") = false := by
+    rw [List.any_eq_false]
+    intro field hmem heq
+    exact hmiss (List.mem_map.mpr ⟨field, hmem, by simpa using heq⟩)
+  have hfields : Json.hasExactly fs Json.payloadFieldsV4 = false := by
+    simp [Json.hasExactly, Json.payloadFieldsV4, Json.amsterdamFields, hany]
+  simp [payloadParam, Json.payloadV4, hfs, hfields, Json.invalid, bind, Except.bind, throw,
+    throwThe, MonadExceptOf.throw]
 
 /-- Request lists that pass the check have strictly increasing types. -/
 theorem pairwise_of_validRequests {requests : List ByteArray}

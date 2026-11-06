@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Engine.Payload
+public import EthLib.Execution.Blocks.BlockAccessList
 public import EthLib.Execution.Blocks.Requests
 public import EthLib.Execution.Blocks.Roots
 public import EthLib.Execution.Blocks.Validate
@@ -31,12 +32,23 @@ Step 2 of [`engine_newPayloadV1`][v1] states the check.
 
 Step 2 of [`engine_newPayloadV4`][v4] adds the requests to it.
 
-The conversions hold up to BPO5, since Glamsterdam adds fields to the header.
+From Glamsterdam, it passes the block access list and the slot number beside the payload.
+
+The list must be the RLP form of a block access list, by step 3 of [`engine_newPayloadV5`][v5].
+
+The header holds the Keccak-256 hash of those bytes, by [EIP-7928][eip-7928].
+
+It holds the slot number too, by [EIP-7843][eip-7843].
+
+Whether the list matches the execution of the block is a check of the state transition.
 
 [eip-3675]: https://eips.ethereum.org/EIPS/eip-3675#block-structure
 [eip-4399]: https://eips.ethereum.org/EIPS/eip-4399#block-structure
 [v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#specification
 [v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/prague.md#specification
+[v5]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#specification
+[eip-7928]: https://eips.ethereum.org/EIPS/eip-7928#engine-api
+[eip-7843]: https://eips.ethereum.org/EIPS/eip-7843#header-extension
 -/
 
 @[expose] public section
@@ -46,6 +58,7 @@ namespace EthLib.Engine
 open EthLib.Base
 open EthLib.Execution.Blocks
 open EthLib.Execution.Transactions
+open EthLib.Cryptography.Hash.Keccak (keccak256)
 
 variable {fork : Fork}
 
@@ -65,10 +78,13 @@ namespace ExecutionPayload
 
 /-- The header of a payload.
 
-The transactions root and the method's parameters are inputs. -/
+The transactions root, the hash of the block access list and the method's parameters are inputs.
+-/
 def toHeader (p : ExecutionPayload fork) (transactionsRoot : Hash32)
     (parentBeaconBlockRoot : Since .dencun fork Hash32)
-    (requests : Since .pectra fork (List ByteArray)) (hFork : fork < .glamsterdam) :
+    (requests : Since .pectra fork (List ByteArray))
+    (blockAccessListHash : Since .glamsterdam fork Hash32)
+    (slotNumber : Since .glamsterdam fork UInt64) :
     Except PayloadError (Header fork) := do
   let withdrawalsRoot ← sinceM fun h =>
     (Execution.Blocks.withdrawalsRoot (p.withdrawals h)).mapError fun _ => .noEncoding
@@ -94,18 +110,29 @@ def toHeader (p : ExecutionPayload fork) (transactionsRoot : Hash32)
     excessBlobGas := p.excessBlobGas
     parentBeaconBlockRoot
     requestsHash := fun h => requestsCommitment (requests h)
-    blockAccessListHash := fun h => absurd (Nat.lt_of_lt_of_le hFork h) (Nat.lt_irrefl _)
-    slotNumber := fun h => absurd (Nat.lt_of_lt_of_le hFork h) (Nat.lt_irrefl _) }
+    blockAccessListHash
+    slotNumber }
+
+/-- The hash of a block access list, which must be the RLP encoding of one. -/
+def blockAccessListHashOf (bytes : ByteArray) : Except PayloadError Hash32 :=
+  match (Serialization.Rlp.Codec.decode bytes : Except _ BlockAccessList) with
+  | .ok _ => .ok (keccak256 bytes)
+  | .error _ => .error .invalidBlockAccessList
 
 /-- The block of a payload, before the check of its block hash.
 
-Each transaction must decode at the fork, and the block has no ommers. -/
+Each transaction must decode at the fork, and the block has no ommers.
+
+From Glamsterdam, the block access list must decode too. -/
 def toBlockUnchecked (p : ExecutionPayload fork) (parentBeaconBlockRoot : Since .dencun fork Hash32)
-    (requests : Since .pectra fork (List ByteArray)) (hFork : fork < .glamsterdam) :
+    (requests : Since .pectra fork (List ByteArray))
+    (blockAccessList : Since .glamsterdam fork ByteArray)
+    (slotNumber : Since .glamsterdam fork UInt64) :
     Except PayloadError (Block fork Transaction) := do
   let transactions ← decodeTransactions fork 0 p.transactions
   let root ← (indexedRoot p.transactions).mapError fun _ => .noEncoding
-  let header ← p.toHeader root parentBeaconBlockRoot requests hFork
+  let accessListHash ← sinceM fun h => blockAccessListHashOf (blockAccessList h)
+  let header ← p.toHeader root parentBeaconBlockRoot requests accessListHash slotNumber
   return ⟨header, transactions, [], p.withdrawals⟩
 
 /-- Check that the block hash of a payload is the hash of a header. -/
@@ -116,9 +143,11 @@ def checkBlockHash (p : ExecutionPayload fork) (header : Header fork) :
 
 /-- The block of a payload, whose block hash must be the hash of its header. -/
 def toBlock (p : ExecutionPayload fork) (parentBeaconBlockRoot : Since .dencun fork Hash32)
-    (requests : Since .pectra fork (List ByteArray)) (hFork : fork < .glamsterdam) :
+    (requests : Since .pectra fork (List ByteArray))
+    (blockAccessList : Since .glamsterdam fork ByteArray)
+    (slotNumber : Since .glamsterdam fork UInt64) :
     Except PayloadError (Block fork Transaction) := do
-  let block ← p.toBlockUnchecked parentBeaconBlockRoot requests hFork
+  let block ← p.toBlockUnchecked parentBeaconBlockRoot requests blockAccessList slotNumber
   p.checkBlockHash block.header
   return block
 

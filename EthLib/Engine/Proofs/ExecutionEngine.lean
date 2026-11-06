@@ -50,13 +50,14 @@ theorem size_pos_of_decodeTransactions {f : Fork} {index : Nat} {bytes : List By
     · exact ih rest_ok b mem
 
 /-- The transactions of the block of a payload are those of the payload, decoded at its fork. -/
-theorem decodeTransactions_of_toBlock {f : Fork} {hFork : f < .glamsterdam}
+theorem decodeTransactions_of_toBlock {f : Fork}
     {p : ExecutionPayload f} {beacon : Since .dencun f Hash32}
-    {requests : Since .pectra f (List ByteArray)} {b : Block f Transaction}
-    (h : p.toBlock beacon requests hFork = .ok b) :
+    {requests : Since .pectra f (List ByteArray)} {accessList : Since .glamsterdam f ByteArray}
+    {slot : Since .glamsterdam f UInt64} {b : Block f Transaction}
+    (h : p.toBlock beacon requests accessList slot = .ok b) :
     decodeTransactions f 0 p.transactions = .ok b.transactions := by
   simp only [ExecutionPayload.toBlock, ExecutionPayload.toBlockUnchecked, bind_ok_iff] at h
-  obtain ⟨_, ⟨txs, decoded, _, _, _, _, built⟩, _, _, result⟩ := h
+  obtain ⟨_, ⟨txs, decoded, _, _, _, _, _, _, built⟩, _, _, result⟩ := h
   cases built
   cases result
   exact decoded

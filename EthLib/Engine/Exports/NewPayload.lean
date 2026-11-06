@@ -45,6 +45,7 @@ def reasonMessage : PayloadError → String
     s!"block hash {hexString expected.toList}, header hash {hexString computed.toList}"
   | .wrongVersionedHashes => "the expected versioned hashes are not those of the block"
   | .invalidBlock e => s!"{e.code}: {Execution.Blocks.Exports.blockErrorMessage e}"
+  | .invalidBlockAccessList => "the block access list is not the RLP form of one"
 
 /-- The JSON of a payload status, with the code of its reason first in the error. -/
 def statusJson (status : PayloadStatus) (reason : Option PayloadError) : Json :=
@@ -57,10 +58,10 @@ def statusJson (status : PayloadStatus) (reason : Option PayloadError) : Json :=
   (Json.mkObj [("status", status.status.name), ("latestValidHash", latest),
     ("validationError", error)])
 
-/-- The version of a method name `engine_newPayloadV1` to `engine_newPayloadV4`. -/
+/-- The version of a method name `engine_newPayloadV1` to `engine_newPayloadV5`. -/
 def newPayloadVersion (method : String) : Option Nat :=
   ["engine_newPayloadV1", "engine_newPayloadV2", "engine_newPayloadV3",
-    "engine_newPayloadV4"].idxOf? method |>.map (· + 1)
+    "engine_newPayloadV4", "engine_newPayloadV5"].idxOf? method |>.map (· + 1)
 
 /-- The payload status of an `engine_newPayload` request, without the parent's state. -/
 @[export eth_engine_new_payload]
