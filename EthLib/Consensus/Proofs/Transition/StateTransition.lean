@@ -76,20 +76,16 @@ theorem processSlot_slot (computed : processSlot state = .ok after) : after.slot
 
 Its bit is the one at the next slot modulo the length of the circular buffer. -/
 theorem processSlot_nextPayloadUnavailable (gloas : .glamsterdam ≤ fork)
-    (positive : 0 < preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     (computed : processSlot state = .ok after) :
     (after.executionPayloadAvailability gloas).bits[(state.slot.toNat + 1) %
-      preset.SLOTS_PER_HISTORICAL_ROOT.toNat]'(Nat.mod_lt _ positive) = false := by
+      preset.SLOTS_PER_HISTORICAL_ROOT.toNat]? = some false := by
   unfold processSlot at computed
   simp only [bind_ok_iff, liftSsz_ok, liftAccessor_ok] at computed
   obtain ⟨_, _, _, _, _, _, _, _, computed⟩ := computed
   split at computed
   · obtain ⟨next, bits, sum, written, rfl⟩ :=
       unsetNextPayloadAvailability_ok (liftAccessor_ok.mp computed)
-    have nonzero : preset.SLOTS_PER_HISTORICAL_ROOT ≠ 0 := fun zero => by simp [zero] at positive
-    have read := readCircular_writeCircular written
-    simp only [readCircular, nonzero, ↓reduceDIte, Except.ok.injEq] at read
-    simpa [UInt64.toNat_mod, sum] using read
+    simpa [UInt64.toNat_mod, sum] using getElem?_writeCircular written
   · contradiction
 
 /-- One slot step moves the slot on by exactly one. -/

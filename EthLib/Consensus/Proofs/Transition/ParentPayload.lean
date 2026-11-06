@@ -53,20 +53,15 @@ theorem applyParentExecutionPayload_latestBlockHash {requests : ExecutionRequest
 
 /-- A full parent marks its slot as having a payload.
 
-The position of the slot must be one of the positions of the record. -/
+The bit of its slot, modulo the length of the record, is set. -/
 theorem applyParentExecutionPayload_available {requests : ExecutionRequests preset fork}
-    (computed : applyParentExecutionPayload config checks state gloas requests = .ok after)
-    (inRange :
-      (state.latestBlockHeader.slot % preset.SLOTS_PER_HISTORICAL_ROOT).toNat <
-        preset.SLOTS_PER_HISTORICAL_ROOT.toNat) :
+    (computed : applyParentExecutionPayload config checks state gloas requests = .ok after) :
     (after.executionPayloadAvailability gloas).bits[
-      (state.latestBlockHeader.slot % preset.SLOTS_PER_HISTORICAL_ROOT).toNat] = true := by
+      (state.latestBlockHeader.slot % preset.SLOTS_PER_HISTORICAL_ROOT).toNat]? = some true := by
   simp only [applyParentExecutionPayload, bind, Except.bind, pure, Except.pure] at computed
   repeat' (split at computed <;> try cases computed)
   rename_i written
-  have nonzero : preset.SLOTS_PER_HISTORICAL_ROOT ≠ 0 := fun zero => by simp [zero] at inRange
-  have read := readCircular_writeCircular (liftAccessor_ok.mp written)
-  simpa [readCircular, nonzero] using read
+  exact getElem?_writeCircular (liftAccessor_ok.mp written)
 
 /-- The payment of the parent's builder changes no pending payment but the one it settles.
 
