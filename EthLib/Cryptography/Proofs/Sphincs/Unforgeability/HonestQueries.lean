@@ -77,7 +77,7 @@ theorem findFirst_map_monad {κ β : Type} (trial : Nat → κ) (test : κ → m
 /-- The chain starts commute with the map. -/
 theorem chainStarts_map_monad (pp : PublicParam) (key : OtsKey) :
     φ (chainStarts pp prf key) = chainStarts pp (mapPrf φ prf) key := by
-  rw [chainStarts, chainStarts, map_bind, ofFnInOrder_map_monad φ map_pure map_bind]
+  rw [chainStarts, chainStarts, map_bind, HashSig.ofFnInOrder_map_monad φ map_pure map_bind]
   exact congrArg _ (funext fun _ => map_pure _)
 
 /-- A one-time key's leaf, from the seed, commutes with the map. -/
@@ -85,8 +85,8 @@ theorem otsPublicLeaf_map_monad (pp : PublicParam) (key : OtsKey) :
     φ (otsPublicLeaf H pp prf key) = otsPublicLeaf (fun x => φ (H x)) pp (mapPrf φ prf) key := by
   rw [otsPublicLeaf, otsPublicLeaf, map_bind, chainStarts_map_monad φ map_pure map_bind]
   refine congrArg _ (funext fun starts => ?_)
-  simp only [map_bind, ofFnInOrder_map_monad φ map_pure map_bind, chain,
-    chain_map_monad φ map_pure map_bind, chainStep_map_monad φ map_pure map_bind, otsLeafHash,
+  simp only [map_bind, HashSig.ofFnInOrder_map_monad φ map_pure map_bind, chain,
+    Wots.chain_map_monad φ map_pure map_bind, chainStep_map_monad φ map_pure map_bind, otsLeafHash,
     th_map_monad φ map_pure map_bind]
 
 /-- The counter search commutes with the map. -/
@@ -108,8 +108,8 @@ theorem otsSign_map_monad [LawfulMonad m] [LawfulMonad n] (pp : PublicParam) (ke
   | none => exact map_pure _
   | some found =>
     simp only [map_bind, map_pure, chainStarts_map_monad φ map_pure map_bind,
-      ofFnInOrder_map_monad φ map_pure map_bind, chain, chain_map_monad φ map_pure map_bind,
-      chainStep_map_monad φ map_pure map_bind]
+      HashSig.ofFnInOrder_map_monad φ map_pure map_bind, chain,
+      Wots.chain_map_monad φ map_pure map_bind, chainStep_map_monad φ map_pure map_bind]
 
 /-- A hypertree node commutes with the map. -/
 theorem node_map_monad (pp : PublicParam) (layer : Layer) (tree level j : Nat) :
@@ -159,7 +159,7 @@ theorem forsNode_map_monad (pp : PublicParam) (idx : Nat) (kappa : Fin FORS_TREE
 /-- A FORS key commutes with the map. -/
 theorem forsKey_map_monad (pp : PublicParam) (idx : Nat) :
     φ (forsKey H pp prf idx) = forsKey (fun x => φ (H x)) pp (mapPrf φ prf) idx := by
-  rw [forsKey, forsKey, ofFnInOrder_map_monad φ map_pure map_bind]
+  rw [forsKey, forsKey, HashSig.ofFnInOrder_map_monad φ map_pure map_bind]
   simp only [map_bind, map_pure, forsNode_map_monad φ map_pure map_bind]
 
 /-- A FORS opening commutes with the map. -/
@@ -176,7 +176,7 @@ theorem forsSign_map_monad (pp : PublicParam) (idx : Nat)
     (leaves : Vector (Fin (2 ^ FORS_HEIGHT)) FORS_TREES) :
     φ (forsSign H pp prf idx leaves)
       = forsSign (fun x => φ (H x)) pp (mapPrf φ prf) idx leaves := by
-  rw [forsSign, forsSign, ofFnInOrder_map_monad φ map_pure map_bind]
+  rw [forsSign, forsSign, HashSig.ofFnInOrder_map_monad φ map_pure map_bind]
   simp only [treeOpen_map_monad φ map_pure map_bind]
 
 /-- The randomizer commutes with the map. -/

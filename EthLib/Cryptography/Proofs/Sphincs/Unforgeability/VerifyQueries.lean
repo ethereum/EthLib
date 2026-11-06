@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.HashSig
 public import EthLib.Cryptography.Proofs.Merkle.Completeness
 public import EthLib.Cryptography.Proofs.Sphincs.Encoding
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Game
@@ -116,25 +117,6 @@ theorem map_monad_map {β γ : Type} (g : β → γ) (x : m β) : φ (g <$> x) =
   simp only [Function.comp_def, map_pure]
 
 omit [LawfulMonad m] [LawfulMonad n] in
-/-- Computing a vector in order commutes with the map. -/
-theorem ofFnInOrder_map_monad {α : Type} :
-    ∀ (k : Nat) (f : Fin k → m α),
-      φ (HashSig.ofFnInOrder k f) = HashSig.ofFnInOrder k fun i => φ (f i)
-  | 0, _ => map_pure _
-  | k + 1, f => by
-    simp only [HashSig.ofFnInOrder, map_bind, map_pure, ofFnInOrder_map_monad k]
-
-omit [LawfulMonad m] [LawfulMonad n] in
-/-- A hash chain commutes with the map. -/
-theorem chain_map_monad {α : Type} {k : Nat} (step : Fin k → α → m α) (start : Nat) :
-    ∀ (steps : Nat) (h : start + steps ≤ k) (value : α),
-      φ (Wots.chain step start steps h value)
-        = Wots.chain (fun i v => φ (step i v)) start steps h value
-  | 0, _, _ => map_pure _
-  | s + 1, h, value => by
-    rw [Wots.chain_succ, Wots.chain_succ, map_bind, chain_map_monad step start s]
-
-omit [LawfulMonad m] [LawfulMonad n] in
 /-- A tweakable hash call commutes with the map. -/
 theorem th_map_monad (pp : PublicParam) (A : Address) (payload : ByteArray) :
     φ (th H pp A payload) = th (fun x => φ (H x)) pp A payload := by
@@ -169,7 +151,7 @@ omit [LawfulMonad m] [LawfulMonad n] in
 /-- The message digest commutes with the map. -/
 theorem messageDigest_map_monad (pp : PublicParam) (msg : Message) (rho : Randomizer) :
     φ (messageDigest H pp msg rho) = messageDigest (fun x => φ (H x)) pp msg rho := by
-  rw [messageDigest, messageDigest, map_bind, ofFnInOrder_map_monad φ map_pure map_bind]
+  rw [messageDigest, messageDigest, map_bind, HashSig.ofFnInOrder_map_monad φ map_pure map_bind]
   exact congrArg _ (funext fun _ => map_pure _)
 
 omit [LawfulMonad m] [LawfulMonad n] in
@@ -191,7 +173,7 @@ theorem forsRecover_map_monad (pp : PublicParam) (idx : Nat)
     (openings : Vector TreeOpening FORS_TREES) :
     φ (forsRecover H pp idx leaves openings)
       = forsRecover (fun x => φ (H x)) pp idx leaves openings := by
-  rw [forsRecover, forsRecover, ofFnInOrder_map_monad φ map_pure map_bind]
+  rw [forsRecover, forsRecover, HashSig.ofFnInOrder_map_monad φ map_pure map_bind]
   simp only [treeRecover_map_monad φ map_pure map_bind]
 
 /-- Recovering a one-time leaf commutes with the map. -/
@@ -204,9 +186,9 @@ theorem otsLeaf_map_monad (pp : PublicParam) (key : OtsKey) (msg : ByteArray) (c
   cases x with
   | none => exact map_pure _
   | some x =>
-    simp only [map_bind, map_pure, ofFnInOrder_map_monad φ map_pure map_bind, chain,
-      chain_map_monad φ map_pure map_bind, chainStep_map_monad φ map_pure map_bind, otsLeafHash,
-      th_map_monad φ map_pure map_bind]
+    simp only [map_bind, map_pure, HashSig.ofFnInOrder_map_monad φ map_pure map_bind, chain,
+      Wots.chain_map_monad φ map_pure map_bind, chainStep_map_monad φ map_pure map_bind,
+      otsLeafHash, th_map_monad φ map_pure map_bind]
 
 /-- A layer's root commutes with the map. -/
 theorem layerRoot_map_monad (pp : PublicParam) (layer : Layer) (idx : Nat) (msg : ByteArray)
