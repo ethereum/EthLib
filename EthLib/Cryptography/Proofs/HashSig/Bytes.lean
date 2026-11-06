@@ -117,6 +117,17 @@ theorem ofBV_inj {n w : Nat} {x y : BitVec w} (hw : w ≤ 8 * n) (h : ofBV n x =
   rwa [Nat.mod_eq_of_lt (lt_of_lt_of_le x.isLt hpow), Nat.mod_eq_of_lt (lt_of_lt_of_le y.isLt hpow)]
     at this
 
+/-- The `n` bytes of a bit vector of `8 n` bits, as a bijection.
+
+The inverse reads the bytes as a little-endian integer.
+
+Every bit is kept: at `n = 32`, a full oracle answer, before either 16-byte half is taken. -/
+def ofBVEquiv (n : Nat) : BitVec (8 * n) ≃ Vector UInt8 n where
+  toFun := ofBV n
+  invFun v := BitVec.ofNat (8 * n) (bytesToUint v)
+  left_inv x := ofBV_inj le_rfl (ofBV_ofNat_bytesToUint (ofBV n x) le_rfl)
+  right_inv v := ofBV_ofNat_bytesToUint v le_rfl
+
 /-! ## The oracle's answers as bytes -/
 
 /-- A hash value's 32 bytes. -/
