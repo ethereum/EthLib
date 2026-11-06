@@ -179,14 +179,6 @@ theorem stateKept_accountStep {op : Op}
     · cases hstep
 
 omit [GasMeter Meter] in
-/-- A charge of state gas keeps the message, the state and the substate. -/
-theorem chargeStateGas_sameContext [GasMeter Meter] {evm after : Evm fork Meter} {amount : Nat}
-    (h : chargeStateGas evm amount = .ok after) : SameContext evm after := by
-  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
-  cases h
-  exact ⟨rfl, rfl, rfl⟩
-
-omit [GasMeter Meter] in
 /-- An access to a storage key keeps the state. -/
 theorem stateKept_accessStorageKey (evm : Evm fork Meter) (address : Address)
     (key : Bytes32) : StateKept evm (accessStorageKey evm address key).2 := by

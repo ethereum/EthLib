@@ -169,6 +169,13 @@ theorem chargeGas_sameContext {evm after : Evm fork Meter} {amount : Nat}
   cases h
   exact ⟨rfl, rfl, rfl⟩
 
+/-- A charge of state gas keeps the message, the state and the substate. -/
+theorem chargeStateGas_sameContext {evm after : Evm fork Meter} {amount : Nat}
+    (h : chargeStateGas evm amount = .ok after) : SameContext evm after := by
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+  cases h
+  exact ⟨rfl, rfl, rfl⟩
+
 /-- A charge for a price and memory keeps the message, the state and the substate. -/
 theorem chargeGasAndMemory_sameContext {evm after : Evm fork Meter} {cost : Nat}
     {ranges : List (U256 × U256)} (h : chargeGasAndMemory evm cost ranges = .ok after) :

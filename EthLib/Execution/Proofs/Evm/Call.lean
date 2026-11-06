@@ -5,7 +5,6 @@ public import EthLib.Execution.Proofs.Evm.Call.Create
 public import EthLib.Execution.Proofs.Evm.Call.Delegation
 public import EthLib.Execution.Proofs.Evm.Call.Instructions
 public import EthLib.Execution.Proofs.Evm.Call.MessageCall
-public import EthLib.Execution.Proofs.Evm.Call.StaticFrame
 public import EthLib.Execution.Proofs.Evm.Call.TransferLog
 
 /-!
