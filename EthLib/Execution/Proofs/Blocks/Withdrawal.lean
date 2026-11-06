@@ -14,6 +14,8 @@ So a withdrawal decodes from exactly one byte string, its encoding.
 After the withdrawals of a block, each account holds its balance plus the wei withdrawn to it.
 
 Its nonce and its code stay the same.
+
+The withdrawals of a block succeed exactly when no balance would reach `2^256`.
 -/
 
 @[expose] public section
@@ -114,6 +116,51 @@ private theorem getAccount_foldlM_createEther (fork : Fork) {wei : Withdrawal �
       · simp only [withdrawnTo, hsame, ↓reduceIte, List.filter_cons, decide_false,
           Bool.false_eq_true, Nat.add_zero]
 
+/-- The wei of a list with one more withdrawal in front. -/
+theorem withdrawnTo_cons (w : Withdrawal) (rest : List Withdrawal) (address : Address) :
+    withdrawnTo (w :: rest) address =
+      (if w.address = address then w.amount.toNat * GWEI_TO_WEI else 0) +
+        withdrawnTo rest address := by
+  by_cases hsame : w.address = address <;>
+    simp [withdrawnTo, hsame, Nat.add_mul]
+
+/-- The steps of the withdrawals succeed exactly when no balance would reach `2^256`. -/
+private theorem foldlM_createEther_isOk_iff (fork : Fork) {wei : Withdrawal → U256}
+    (hwei : ∀ w, (wei w).toNat = w.amount.toNat * GWEI_TO_WEI) (withdrawals : List Withdrawal) :
+    ∀ {tx : TransactionState},
+      (∃ tx', withdrawals.foldlM (fun tx w => tx.createEther fork w.address (wei w)) tx = .ok tx') ↔
+        ∀ address,
+          (tx.getAccount address).balance.toNat + withdrawnTo withdrawals address < 2 ^ 256 := by
+  induction withdrawals with
+  | nil =>
+    intro tx
+    simp only [List.foldlM_nil, withdrawnTo, List.filter_nil, List.map_nil, List.sum_nil,
+      Nat.zero_mul, Nat.add_zero]
+    exact ⟨fun _ address => (tx.getAccount address).balance.isLt, fun _ => ⟨tx, rfl⟩⟩
+  | cons w rest ih =>
+    intro tx
+    rw [List.foldlM_cons]
+    cases hmid : tx.createEther fork w.address (wei w) with
+    | error e =>
+      simp only [bind, Except.bind, reduceCtorEq, exists_false, false_iff, Classical.not_forall,
+        Nat.not_lt]
+      -- The first withdrawal already overflows the balance of its address.
+      have hover : ¬ (tx.getAccount w.address).balance.toNat + (wei w).toNat < 2 ^ 256 :=
+        fun hfit => by
+          obtain ⟨tx', h⟩ := TransactionState.createEther_isOk_iff.mpr hfit
+          rw [hmid] at h
+          cases h
+      refine ⟨w.address, ?_⟩
+      rw [withdrawnTo_cons, ← hwei]
+      simp only [↓reduceIte]
+      omega
+    | ok mid =>
+      simp only [bind, Except.bind]
+      rw [ih]
+      refine forall_congr' fun address => ?_
+      rw [(getAccount_createEther hmid address).1, withdrawnTo_cons, hwei]
+      by_cases hsame : w.address = address <;> simp only [hsame, ↓reduceIte] <;> omega
+
 /-- After the withdrawals of a block, each account holds its balance plus its withdrawn wei.
 
 Its nonce and its code hash stay the same, and an address with no withdrawal keeps its balance. -/
@@ -140,5 +187,17 @@ theorem getAccount_processWithdrawals {fork : Fork} {block block' : BlockState}
       rfl
     rw [hread]
     exact getAccount_foldlM_createEther fork (fun w => toNat_wei w.amount) withdrawals htx address
+
+/-- The withdrawals of a block succeed exactly when each balance stays below `2^256`.
+
+The balance of an address counts every wei that the withdrawals give it. -/
+theorem processWithdrawals_isOk_iff {fork : Fork} {block : BlockState}
+    {withdrawals : List Withdrawal} :
+    (∃ block', processWithdrawals fork block withdrawals = .ok block') ↔
+      ∀ address, ((TransactionState.ofBlock block).getAccount address).balance.toNat +
+        withdrawnTo withdrawals address < 2 ^ 256 := by
+  rw [← foldlM_createEther_isOk_iff fork (fun w => toNat_wei w.amount) withdrawals]
+  simp only [processWithdrawals, withdrawalState, bind, Except.bind, pure, Except.pure]
+  split <;> simp_all
 
 end EthLib.Execution.Blocks
