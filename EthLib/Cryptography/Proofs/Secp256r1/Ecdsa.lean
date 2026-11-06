@@ -10,6 +10,10 @@ A signature from the signing operation of SEC 1 v2 §4.1.3 verifies.
 A valid signature has `r` and `s` in `[1, n - 1]`, under a key on the curve other than `O`.
 
 `(r, s)` and `(r, n - s)` are valid together.
+
+When `p <= r + n`, they are the only valid signatures with that `r`.
+
+Below that bound, the rebuilt point may have `x = r + n`, and nothing ties two such signatures.
 -/
 
 @[expose] public section
@@ -181,5 +185,106 @@ theorem verify_neg_s (q : Point) (e r : Nat) {s : Nat} (hs : 0 < s ∧ s < Fn.mo
       · rw [verify_infinity, verify_infinity]
       · rw [verify_of_not_isOnCurve hq', verify_of_not_isOnCurve hq']
   · simp only [verify, dite_eq_right hr]
+
+
+/-- What a valid signature gives: the ranges, a valid key, and the rebuilt point `R`.
+
+That point has `x_R mod n = r`. -/
+theorem verify_rebuilt {q : Point} {e r s : Nat} (hv : verify q e r s = true) :
+    ∃ (hr : 0 < r ∧ r < Fn.modulus) (hs : 0 < s ∧ s < Fn.modulus),
+      q ≠ .infinity ∧ q.isOnCurve = true ∧
+      ∃ x y : Fp, mul (Fin.ofNat _ e * Fn.inv ⟨s, hs.2⟩) generator
+        + mul ((⟨r, hr.2⟩ : Fn) * Fn.inv ⟨s, hs.2⟩) q = .affine x y ∧ x.val % Fn.modulus = r := by
+  obtain ⟨hr, hs⟩ := verify_range hv
+  have hq : q ≠ .infinity ∧ q.isOnCurve = true := by
+    by_cases hi : q = .infinity
+    · subst hi; rw [verify_infinity] at hv; cases hv
+    · cases hc : q.isOnCurve
+      · rw [verify_of_not_isOnCurve hc] at hv; cases hv
+      · exact ⟨hi, rfl⟩
+  refine ⟨hr, hs, hq.1, hq.2, ?_⟩
+  rw [verify, dite_eq_left hr, dite_eq_left hs, ite_eq_left hq] at hv
+  dsimp only at hv
+  rw [mulAdd_eq _ _ isOnCurve_generator hq.2] at hv
+  split at hv
+  · cases hv
+  · rename_i x y hR
+    exact ⟨x, y, hR, by simpa using hv⟩
+
+/-- An `x` below `p` with `x mod n = r` is `r`, when `p <= r + n`. -/
+private theorem val_eq_of_mod_eq {x : Fp} {r : Nat} (hx : x.val % Fn.modulus = r)
+    (hp : Fp.modulus ≤ r + Fn.modulus) : x.val = r := by
+  have hdiv := Nat.mod_add_div x.val Fn.modulus
+  have hlt := x.isLt
+  by_cases h0 : x.val / Fn.modulus = 0
+  · rw [h0, Nat.mul_zero, Nat.add_zero] at hdiv
+    omega
+  · have := Nat.le_mul_of_pos_right Fn.modulus (Nat.pos_of_ne_zero h0)
+    omega
+
+/-- Two signatures with the same `r` verify only if their `s` agree up to sign mod `n`.
+
+The bound `p <= r + n` makes both rebuilt points have `x = r`, so they are equal or opposite. -/
+theorem verify_s_eq_or_neg {q : Point} {e r s s' : Nat}
+    (hv : verify q e r s = true) (hv' : verify q e r s' = true)
+    (hp : Fp.modulus ≤ r + Fn.modulus) : s' = s ∨ s' = Fn.modulus - s := by
+  obtain ⟨hr, hs, -, hqc, x, y, hR, hx⟩ := verify_rebuilt hv
+  obtain ⟨hr', hs', -, -, x', y', hR', hx'⟩ := verify_rebuilt hv'
+  -- Both rebuilt points have `x = r`.
+  obtain rfl : x' = x := Fin.ext ((val_eq_of_mod_eq hx' hp).trans (val_eq_of_mod_eq hx hp).symm)
+  have hG := isOnCurve_generator
+  have hc : (affine x' y).isOnCurve = true :=
+    hR ▸ isOnCurve_add (isOnCurve_mul _ hG) (isOnCurve_mul _ hqc)
+  have hc' : (affine x' y').isOnCurve = true :=
+    hR' ▸ isOnCurve_add (isOnCurve_mul _ hG) (isOnCurve_mul _ hqc)
+  -- Each point is `s^(-1) X` for the same `X = e G + r Q`, and `X != 0`.
+  set X := Fn.toZMod (Fin.ofNat _ e) • toPoint generator + Fn.toZMod ⟨r, hr.2⟩ • toPoint q
+  have hP : toPoint (affine x' y) = (Fn.toZMod ⟨s, hs.2⟩)⁻¹ • X := by
+    rw [← hR, toPoint_rebuilt _ _ hqc]
+    simp only [X, map_mul, Fn.toZMod_inv, smul_add, smul_smul, mul_comm]
+  have hP' : toPoint (affine x' y') = (Fn.toZMod ⟨s', hs'.2⟩)⁻¹ • X := by
+    rw [← hR', toPoint_rebuilt _ _ hqc]
+    simp only [X, map_mul, Fn.toZMod_inv, smul_add, smul_smul, mul_comm]
+  have hX : X ≠ 0 := fun h0 => by
+    rw [h0, smul_zero, toPoint_eq_zero hc] at hP
+    cases hP
+  -- The two `y` square to the same value, so they agree up to sign.
+  have hsq : Fp.toZMod y' * Fp.toZMod y' = Fp.toZMod y * Fp.toZMod y :=
+    ((isOnCurve_affine _ _).mp hc').trans ((isOnCurve_affine _ _).mp hc).symm
+  have hfac : (Fp.toZMod y' - Fp.toZMod y) * (Fp.toZMod y' + Fp.toZMod y) = 0 := by
+    linear_combination hsq
+  rcases mul_eq_zero.mp hfac with h | h
+  · -- The same point: `s'^(-1) X = s^(-1) X`, so `s' = s`.
+    obtain rfl : y' = y := Fp.toZMod.injective (sub_eq_zero.mp h)
+    have h0 : ((Fn.toZMod ⟨s', hs'.2⟩)⁻¹ - (Fn.toZMod ⟨s, hs.2⟩)⁻¹) • X = 0 := by
+      rw [sub_smul, ← hP, ← hP', sub_self]
+    have heq := inv_injective (sub_eq_zero.mp ((smul_eq_zero.mp h0).resolve_right hX))
+    exact Or.inl (congrArg Fin.val (Fn.toZMod.injective heq))
+  · -- Opposite points: `s'^(-1) X = -(s^(-1) X)`, so `s' = -s`.
+    have hy : y' = -y :=
+      Fp.toZMod.injective ((eq_neg_of_add_eq_zero_left h).trans (Fp.toZMod_neg y).symm)
+    subst hy
+    have hneg : toPoint (affine x' (-y)) = -toPoint (affine x' y) :=
+      toPoint_negPoint (p := affine x' y) hc
+    have h0 : ((Fn.toZMod ⟨s', hs'.2⟩)⁻¹ + (Fn.toZMod ⟨s, hs.2⟩)⁻¹) • X = 0 := by
+      rw [add_smul, ← hP, ← hP', hneg, neg_add_cancel]
+    have heq : Fn.toZMod ⟨s', hs'.2⟩ = -Fn.toZMod ⟨s, hs.2⟩ := by
+      rw [← inv_inj, inv_neg]
+      exact eq_neg_of_add_eq_zero_left ((smul_eq_zero.mp h0).resolve_right hX)
+    have hv := congrArg Fin.val (Fn.toZMod.injective (heq.trans (Fn.toZMod_neg _).symm))
+    simp only [Fin.neg_def] at hv
+    exact Or.inr (hv.trans (Nat.mod_eq_of_lt (by omega)))
+
+/-- Let `(r, s)` be a valid signature, with `p <= r + n`.
+
+Then `(r, s')` is valid exactly when `s'` is `s` or `n - s`. -/
+theorem verify_iff_of_verify {q : Point} {e r s s' : Nat} (hv : verify q e r s = true)
+    (hp : Fp.modulus ≤ r + Fn.modulus) :
+    verify q e r s' = true ↔ s' = s ∨ s' = Fn.modulus - s := by
+  refine ⟨fun hv' => verify_s_eq_or_neg hv hv' hp, ?_⟩
+  rintro (rfl | rfl)
+  · exact hv
+  · obtain ⟨-, hs, -⟩ := verify_rebuilt hv
+    rw [verify_neg_s q e r hs, hv]
 
 end EthLib.Cryptography.Secp256r1
