@@ -37,20 +37,13 @@ namespace EthLib.Cryptography.Bls.Fp
 
 set_option maxRecDepth 4000
 
-/-- `Fp.beq` in `ZMod` form (compare `G1.beq_iff`). -/
-private theorem beq_iff' {a b : Fp} :
-    a.beq b = true ↔ (a : ZMod Fp.modulus) = b := by
-  rw [Fp.beq, beq_iff_eq]
-  exact ⟨fun h => Fin.ext h, fun h => congrArg Fin.val h⟩
-
 /-- Soundness of `Fp.sqrt`: a returned root squares to the input. -/
-theorem sqrt_ok {a c : Fp} (h : Fp.sqrt a = .ok c) :
-    (c : ZMod Fp.modulus) * c = a := by
+theorem sqrt_ok {a c : Fp} (h : Fp.sqrt a = .ok c) : c * c = a := by
   rw [Fp.sqrt] at h
   split at h
   · rename_i hbeq
     cases h
-    exact beq_iff'.mp hbeq
+    exact Fp.beq_iff.mp hbeq
   · cases h
 
 /-- The core Euler-criterion computation, phrased over `ZMod`. -/
@@ -67,21 +60,18 @@ private theorem pow_sqrt_exponent {x y : ZMod Fp.modulus} (h : y * y = x) :
         pow_add, ZMod.pow_card_sub_one_eq_one hy, one_mul, pow_two]
 
 /-- Completeness of `Fp.sqrt`: it succeeds on every square. -/
-theorem sqrt_complete {a b : Fp} (h : (b : ZMod Fp.modulus) * b = a) :
+theorem sqrt_complete {a b : Fp} (h : b * b = a) :
     Fp.sqrt a = .ok (Fp.powNat a ((Fp.modulus + 1) / 4)) := by
-  have hcand : (Fp.powNat a ((Fp.modulus + 1) / 4) : ZMod Fp.modulus)
-      * Fp.powNat a ((Fp.modulus + 1) / 4) = a := by
-    rw [powNat_eq_zmod_pow a ((Fp.modulus + 1) / 4)]
-    exact pow_sqrt_exponent h
-  rw [Fp.sqrt, ite_eq_left (beq_iff'.mpr hcand)]
+  have hcand : Fp.powNat a ((Fp.modulus + 1) / 4) * Fp.powNat a ((Fp.modulus + 1) / 4) = a := by
+    apply toZMod.injective
+    rw [toZMod_mul, toZMod_powNat]
+    exact pow_sqrt_exponent (by rw [← toZMod_mul, h])
+  rw [Fp.sqrt, ite_eq_left (show (Fp.powNat a ((Fp.modulus + 1) / 4) *
+    Fp.powNat a ((Fp.modulus + 1) / 4)).beq a = true from Fp.beq_iff.mpr hcand)]
 
-/-! ## Big-endian byte recovery
+/-! ## Big-endian bytes
 
-`Fp.toBytesBE` is definitionally the KZG codec's `intToBytesBE` at
-width 48, whose decode-encode round-trip is already proved in
-`Proofs.Kzg.Polynomials`; the only new content is converting the
-spec's `Id.run` decoding loop (`Fp.bytesBEToNat`) into the KZG
-list-fold decoder. -/
+The spec's decoding loop `Fp.bytesBEToNat` is a fold over the byte list. -/
 
 private theorem byteArray_getElem! (b : ByteArray) (i : Nat) :
     b[i]! = b.data[i]! := by
@@ -214,19 +204,22 @@ private theorem curve_eq_aux (x y z w : ZMod Fp.modulus) (hw : z * w = 1)
   linear_combination w ^ 6 * heq + 4 * h6
 
 private theorem z_mul_inverse {p : G1} (hz : ¬ p.z.isZero = true) :
-    (p.z : ZMod Fp.modulus) * (p.z.inverse : ZMod Fp.modulus) = 1 := by
-  rw [Fp.inverse_eq_inv]
+    Fp.toZMod p.z * Fp.toZMod p.z.inverse = 1 := by
+  rw [Fp.toZMod_inverse]
   exact mul_inv_cancel₀ (fun hh => hz (isZero_iff.mpr hh))
 
 /-- The affine `y` squares to `x³ + 4` (matching uncompress's `rhs`). -/
 theorem affine_sqrt_witness {p : G1} (h : Valid p) (hz : ¬ p.z.isZero = true) :
-    ((p.toAffine).2 : ZMod Fp.modulus) * (p.toAffine).2
+    (p.toAffine).2 * (p.toAffine).2
       = (p.toAffine).1 * (p.toAffine).1 * (p.toAffine).1 + Fp.ofNat 4 := by
   have heq := valid_equation h
   rw [rep_x, rep_y, rep_z] at heq
   have hw := z_mul_inverse hz
   simp only [G1.toAffine, Fp.baseField_isZero, Fp.baseField_inverse, ite_eq_right hz]
-  exact curve_eq_aux p.x p.y p.z p.z.inverse hw heq
+  apply Fp.toZMod.injective
+  push_toZMod
+  linear_combination curve_eq_aux (Fp.toZMod p.x) (Fp.toZMod p.y) (Fp.toZMod p.z)
+    (Fp.toZMod p.z.inverse) hw heq
 
 /-! ## Sign-bit recovery -/
 
@@ -234,10 +227,10 @@ theorem affine_sqrt_witness {p : G1} (h : Valid p) (hz : ¬ p.z.isZero = true) :
 `y ≠ p − y`). -/
 theorem signBit_neg {y : Fp} (hy : y ≠ 0) :
     Fp.signBit (-y) = !Fp.signBit y := by
+  have hy0 : 0 < y.val := Nat.pos_of_ne_zero (fun hh => hy (Fp.ext (hh.trans Fp.val_zero.symm)))
+  have hylt : y.val < Fp.modulus := Fp.val_lt y
   have hv : (-y).val = Fp.modulus - y.val := by
-    rw [Fin.val_neg, ite_eq_right hy]
-  have hy0 : 0 < y.val := Nat.pos_of_ne_zero (fun hh => hy (Fin.ext hh))
-  have hylt : y.val < Fp.modulus := y.isLt
+    rw [Fp.val_neg, Nat.mod_eq_of_lt (by omega)]
   have hodd : Fp.modulus % 2 = 1 := by decide
   unfold Fp.signBit
   rw [hv, show Fp.modulus - (Fp.modulus - y.val) = y.val from by omega]
@@ -261,15 +254,18 @@ theorem sqrt_pm {ya yPos : ZMod Fp.modulus}
 
 /-- Uncompress's sign selection recovers the original `y` from `±y`
 and the stored sign bit. -/
-private theorem sign_recovery {ya yPos : Fp}
-    (hsq : (yPos : ZMod Fp.modulus) * yPos = (ya : ZMod Fp.modulus) * ya) :
+private theorem sign_recovery {ya yPos : Fp} (hsq : yPos * yPos = ya * ya) :
     (if Fp.signBit yPos = Fp.signBit ya then yPos else -yPos) = ya := by
-  rcases sqrt_pm hsq with h | h
-  · rw [show yPos = ya from h, ite_eq_left rfl]
-  · rw [show yPos = -ya from h]
+  have hz : Fp.toZMod yPos * Fp.toZMod yPos = Fp.toZMod ya * Fp.toZMod ya := by
+    rw [← Fp.toZMod_mul, ← Fp.toZMod_mul, hsq]
+  rcases sqrt_pm hz with h | h
+  · rw [show yPos = ya from Fp.toZMod.injective h, ite_eq_left rfl]
+  · rw [show yPos = -ya from Fp.toZMod.injective (h.trans (Fp.toZMod_neg ya).symm)]
     by_cases hya : ya = 0
     · subst hya
-      simp
+      have hn : -(0 : Fp) = 0 :=
+        Fp.toZMod.injective (by rw [Fp.toZMod_neg, Fp.toZMod_zero, neg_zero])
+      rw [hn, ite_eq_left rfl]
     · rw [signBit_neg hya, ite_eq_right (Bool.not_ne_self _), neg_neg]
 
 /-! ## `ByteArray` `get!`/`set!` plumbing -/
@@ -312,26 +308,25 @@ private theorem yval_aux (y z w : ZMod Fp.modulus) (hw : z * w = 1) :
     y * (w * w * w) * z ^ 3 = y := by
   linear_combination y * ((z * w) ^ 2 + z * w + 1) * hw
 
-private theorem xeq_aux (x z w one : ZMod Fp.modulus) (hw : z * w = 1)
-    (hone : one = 1) : x * (w * w) * z ^ 2 = x * one ^ 2 := by
-  subst hone; rw [one_pow, mul_one]; exact xval_aux x z w hw
-
-private theorem yeq_aux (y z w one : ZMod Fp.modulus) (hw : z * w = 1)
-    (hone : one = 1) : y * (w * w * w) * z ^ 3 = y * one ^ 3 := by
-  subst hone; rw [one_pow, mul_one]; exact yval_aux y z w hw
-
 /-- The compressed-then-decompressed point (affine, `z = 1`) denotes the
 same group element as `p`. -/
 theorem toPoint_affine_normalize {p : G1} (hz : ¬ p.z.isZero = true) :
     toPoint ⟨(p.toAffine).1, (p.toAffine).2, Fp.one⟩ = toPoint p := by
-  have hzne : (p.z : ZMod Fp.modulus) ≠ 0 := fun hh => hz (isZero_iff.mpr hh)
+  have hzne : Fp.toZMod p.z ≠ 0 := fun hh => hz (isZero_iff.mpr hh)
   have hw := z_mul_inverse hz
-  refine Point.toAffine_of_equiv (equiv_of_X_eq_of_Y_eq one_ne_zero hzne ?_ ?_)
+  have hone : rep ⟨(p.toAffine).1, (p.toAffine).2, Fp.one⟩ 2 ≠ 0 := by
+    rw [rep_z, Fp.one_def, Fp.toZMod_one]
+    exact one_ne_zero
+  refine Point.toAffine_of_equiv (equiv_of_X_eq_of_Y_eq hone hzne ?_ ?_)
   · -- rep q 0 * rep p 2 ^ 2 = rep p 0 * rep q 2 ^ 2
-    simp only [rep, G1.toAffine, Fp.baseField_isZero, Fp.baseField_inverse, ite_eq_right hz]
-    exact xeq_aux p.x p.z p.z.inverse Fp.one hw rfl
-  · simp only [rep, G1.toAffine, Fp.baseField_isZero, Fp.baseField_inverse, ite_eq_right hz]
-    exact yeq_aux p.y p.z p.z.inverse Fp.one hw rfl
+    simp only [rep_x, rep_z, G1.toAffine, Fp.baseField_isZero, Fp.baseField_inverse,
+      ite_eq_right hz, Fp.one_def]
+    push_toZMod
+    linear_combination xval_aux (Fp.toZMod p.x) (Fp.toZMod p.z) (Fp.toZMod p.z.inverse) hw
+  · simp only [rep_y, rep_z, G1.toAffine, Fp.baseField_isZero, Fp.baseField_inverse,
+      ite_eq_right hz, Fp.one_def]
+    push_toZMod
+    linear_combination yval_aux (Fp.toZMod p.y) (Fp.toZMod p.z) (Fp.toZMod p.z.inverse) hw
 
 /-! ## Compress → uncompress round-trip -/
 
@@ -362,7 +357,7 @@ private theorem uncompress_infinityBytes :
 /-- Sign selection in `uncompress` (a `Prop`-equality condition)
 recovers `y` from `±y` and the stored sign bit. -/
 private theorem sign_recovery' {ya yPos : Fp} {P : Prop} [Decidable P]
-    (hsq : (yPos : ZMod Fp.modulus) * yPos = (ya : ZMod Fp.modulus) * ya)
+    (hsq : yPos * yPos = ya * ya)
     (hP : P ↔ (Fp.signBit ya = true)) :
     (if (Fp.signBit yPos = true) = P then yPos else -yPos) = ya := by
   have key : ((Fp.signBit yPos = true) = P) ↔ (Fp.signBit yPos = Fp.signBit ya) := by
@@ -381,7 +376,7 @@ private theorem uncompress_of_facts {xa ya yPos : Fp} {cb : ByteArray}
     (hsg : (cb.get! 0 &&& 0x20 ≠ 0) ↔ (Fp.signBit ya = true))
     (hmaskeq : cb.set! 0 (cb.get! 0 &&& 0x1f) = Fp.toBytesBE xa)
     (hsqrt : Fp.sqrt (xa * xa * xa + Fp.ofNat 4) = .ok yPos)
-    (hysq : (yPos : ZMod Fp.modulus) * yPos = (ya : ZMod Fp.modulus) * ya) :
+    (hysq : yPos * yPos = ya * ya) :
     uncompress cb = .ok ⟨xa, ya, Fp.one⟩ := by
   rw [uncompress, ite_eq_right (by rw [hsize]; decide)]
   simp only
@@ -474,13 +469,12 @@ theorem uncompress_compress {p : G1} (h : Valid p) :
     set B0 := (Fp.toBytesBE xa).get! 0 with hB0
     have hb0 : B0 < 0x20 := by
       rw [hB0, UInt8.lt_iff_toNat_lt]; exact Fp.toBytesBE_head_lt xa
-    have hsqw : (ya : ZMod Fp.modulus) * ya = xa * xa * xa + Fp.ofNat 4 := by
+    have hsqw : ya * ya = xa * xa * xa + Fp.ofNat 4 := by
       have := affine_sqrt_witness h hinf; rw [hpa] at this; exact this
     have hsqrt := Fp.sqrt_complete hsqw
-    have hysq : ((Fp.powNat (xa * xa * xa + Fp.ofNat 4)
-        ((Fp.modulus + 1) / 4) : Fp) : ZMod Fp.modulus)
+    have hysq : Fp.powNat (xa * xa * xa + Fp.ofNat 4) ((Fp.modulus + 1) / 4)
         * Fp.powNat (xa * xa * xa + Fp.ofNat 4) ((Fp.modulus + 1) / 4)
-        = (ya : ZMod Fp.modulus) * ya := by rw [Fp.sqrt_ok hsqrt, ← hsqw]
+        = ya * ya := by rw [Fp.sqrt_ok hsqrt, ← hsqw]
     have hsz48 : (Fp.toBytesBE xa).size = 48 := Fp.size_toBytesBE xa
     have hcp := compress_noninf hinf hpa
     have hother : ∀ i, i ≠ 0 → (compress p).get! i = (Fp.toBytesBE xa).get! i := by
@@ -580,10 +574,12 @@ So every point on the curve `y^2 = x^3 + 4` has `y != 0`.
 
 This makes the two square roots `y` and `-y` distinct, so the sign bit of a compressed point always selects exactly one of them.
 -/
-theorem cube_add_four_ne_zero (x : Fp) :
-    (x : ZMod Fp.modulus) * x * x + Fp.ofNat 4 ≠ 0 :=
-  -- The base field is the integers modulo p, where the statement is proved above.
-  cube_add_four_ne_zero_zmod x
+theorem cube_add_four_ne_zero (x : Fp) : x * x * x + Fp.ofNat 4 ≠ 0 := by
+  -- Read the equation in `ZMod p`, where the statement is proved above.
+  intro h
+  have h' := congrArg Fp.toZMod h
+  push_toZMod at h'
+  exact cube_add_four_ne_zero_zmod _ h'
 
 /-! ### Decoded points lie on the curve -/
 
@@ -617,7 +613,8 @@ theorem valid_of_affine_eq {x y : Fp} (h : y * y = x * x * x + Fp.ofNat 4) :
   -- Read the equation in `ZMod p`.
   have hz : Fp.toZMod y * Fp.toZMod y = Fp.toZMod x * Fp.toZMod x * Fp.toZMod x + 4 := by
     have h' := congrArg Fp.toZMod h
-    rwa [map_add, map_mul, map_mul, map_mul, Fp.toZMod_ofNat, Nat.cast_ofNat] at h'
+    push_toZMod at h'
+    exact h'
   show curve.Nonsingular (rep ⟨x, y, Fp.one⟩)
   -- Nonsingular means: the equation holds and some partial derivative is nonzero.
   rw [nonsingular_iff, equation_iff]
@@ -625,20 +622,19 @@ theorem valid_of_affine_eq {x y : Fp} (h : y * y = x * x * x + Fp.ofNat 4) :
   simp only [show curve.a₁ = 0 from rfl, show curve.a₂ = 0 from rfl,
     show curve.a₃ = 0 from rfl, show curve.a₄ = 0 from rfl,
     show curve.a₆ = (4 : ZMod Fp.modulus) from rfl,
-    rep_x, rep_y, rep_z, show (Fp.one : ZMod Fp.modulus) = 1 from rfl]
+    rep_x, rep_y, rep_z, Fp.one_def, Fp.toZMod_one]
   -- The equation holds, and the y-derivative is the nonzero partial.
   exact ⟨valid_eq_zmod hz, Or.inr (Or.inl (dy_ne_zero_zmod hz))⟩
 
 /-- Choosing `y` or `-y` does not change `y^2`. -/
 private theorem sq_select {yPos : Fp} {P : Prop} [Decidable P] :
-    (((if (Fp.signBit yPos = true) = P then yPos else -yPos : Fp) : ZMod Fp.modulus) *
-      (if (Fp.signBit yPos = true) = P then yPos else -yPos : Fp)) =
-      (yPos : ZMod Fp.modulus) * yPos := by
+    (if (Fp.signBit yPos = true) = P then yPos else -yPos) *
+      (if (Fp.signBit yPos = true) = P then yPos else -yPos) = yPos * yPos := by
   split
   -- Keeping the root leaves the square unchanged.
   · rfl
   -- Negating the root: (-y) * (-y) = y * y.
-  · exact neg_mul_neg _ _
+  · exact Fp.toZMod.injective (by push_toZMod; exact neg_mul_neg _ _)
 
 /-- Any point returned by decompression is a nonsingular curve point.
 
@@ -679,7 +675,7 @@ theorem uncompress_valid {b : ByteArray} {q : G1}
 Here `x` decodes from the input without its three flag bits, and `y^2 = x^3 + 4`. -/
 theorem uncompress_eq_zero_or {b : ByteArray} {q : G1} (h : G1.uncompress b = .ok q) :
     q = zero ∨ ∃ x y : Fp, Fp.fromBytesBE (b.set! 0 (b.get! 0 &&& 0x1f)) = .ok x ∧
-      (y : ZMod Fp.modulus) * y = x * x * x + Fp.ofNat 4 ∧ q = ⟨x, y, Fp.one⟩ := by
+      y * y = x * x * x + Fp.ofNat 4 ∧ q = ⟨x, y, Fp.one⟩ := by
   rw [uncompress] at h
   split at h
   · cases h
@@ -776,14 +772,12 @@ private theorem toAffine_of_z_one (x y : Fp) :
   simp only [Fp.baseField_isZero, Fp.baseField_inverse]
   -- z = 1 is not zero, so the point is not at infinity.
   rw [ite_eq_right (Bool.eq_false_iff.mp Fp.one_isZero)]
-  -- The inverse of 1 is 1, read off from the identity z * z^(-1) = 1.
-  have hinv : Fp.one.inverse = (1 : Fp) := by
-    have h := z_mul_inverse (p := ⟨Fp.zero, Fp.zero, Fp.one⟩)
-      (Bool.eq_false_iff.mp Fp.one_isZero)
-    change (1 : Fp) * Fp.one.inverse = (1 : Fp) at h
-    rwa [Fin.one_mul] at h
+  -- The inverse of 1 is 1.
+  have hinv : Fp.one.inverse = (1 : Fp) :=
+    Fp.toZMod.injective (by rw [Fp.toZMod_inverse, Fp.one_def, Fp.toZMod_one, inv_one])
   -- Dividing by 1^2 and 1^3 leaves x and y unchanged.
-  rw [hinv, Fin.mul_one, Fin.mul_one, Fin.mul_one, Fin.mul_one]
+  rw [hinv]
+  refine Prod.ext ?_ ?_ <;> dsimp only <;> apply Fp.toZMod.injective <;> push_toZMod <;> ring
 
 /-! ### The infinity encoding -/
 
@@ -845,11 +839,11 @@ private theorem infinityBytes_get!_pos (i : Fin 48) (hi : 1 ≤ i.val) :
   revert hi i; decide
 
 /-- A point with `y = 0` would put a root of `x^3 + 4` on the curve. -/
-private theorem zero_eq_of_sq_eq {x y : ZMod Fp.modulus} (hy0 : y = 0)
-    (hsq : y * y = x * x * x + 4) : x * x * x + 4 = 0 := by
+private theorem zero_eq_of_sq_eq {x y : Fp} (hy0 : y = 0)
+    (hsq : y * y = x * x * x + Fp.ofNat 4) : x * x * x + Fp.ofNat 4 = 0 := by
   -- Substitute y = 0 into y^2 = x^3 + 4.
-  rw [hy0] at hsq
-  linear_combination -hsq
+  rw [← hsq, hy0]
+  exact Fp.toZMod.injective (by rw [Fp.toZMod_mul, Fp.toZMod_zero, mul_zero])
 
 /-! ### The converse theorems -/
 
@@ -928,6 +922,7 @@ theorem compress_uncompress {b : ByteArray} {q : G1}
             -- The decoded point has z = 1, so it is finite and already affine.
             have hqinf : ¬ (⟨x, y, Fp.one⟩ : G1).isInfinity = true := by
               change ¬ Fp.one.isZero = true
+              rw [Fp.one_isZero]
               decide
             have hpa : (⟨x, y, Fp.one⟩ : G1).toAffine = (x, y) := toAffine_of_z_one x y
             rw [compress_noninf hqinf hpa]
