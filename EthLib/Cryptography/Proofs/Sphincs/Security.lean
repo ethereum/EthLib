@@ -1,22 +1,26 @@
 module
 
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Base.SplitCert
 public import
   EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.RecoveredFors
+public import
+  EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.RefinedEvents
 public import
   EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.SignedReveals
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.Targeting
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Configurations
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverBound.MomentTable
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverBound.PerIndex
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverPotential.Game
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverPotential.Groups
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LargeBudget.WeightedScan
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverBound.ClassLaw
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverBound.HTermOption
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverBound.IntTables
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverPotential.StartValue
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LargeBudget.HeavyTerm
+public import
+  EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LargeBudget.WeightedPotential
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.ExposedUniform
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.Replay
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.RouteStart
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Reduction.SeedElimination
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.ScanSigner.ScanReveals
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.ScanSigner.SignatureLaw
+public import
+  EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.SmallBudget.Contact.NearWitness
 
 /-!
 # Proofs: the model of the leanSPHINCS security proof
