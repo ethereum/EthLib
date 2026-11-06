@@ -1,15 +1,14 @@
-"""Known answers of the RIPEMD-160 precompile.
-
-The messages and digests are the test vectors on Bosselaers' RIPEMD-160 page,
-https://homes.esat.kuleuven.be/~bosselae/ripemd160.html.
-The precompile left-pads each 20-byte digest with twelve zero bytes.
-"""
+"""Known answers of the RIPEMD-160 precompile."""
 
 import pytest
 
 from ethlib.precompiles import price, run
 
 from .forks import FORKS, ends
+
+# The messages and digests are the test vectors on Bosselaers' RIPEMD-160 page:
+# https://homes.esat.kuleuven.be/~bosselae/ripemd160.html
+# The precompile left-pads each 20-byte digest with twelve zero bytes.
 
 ADDRESS = 0x03
 

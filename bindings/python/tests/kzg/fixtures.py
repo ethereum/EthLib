@@ -1,7 +1,4 @@
-"""
-Constant inputs (blobs, field elements, points, cells) shared by every
-KZG test-vector generator.
-"""
+"""Constant inputs (blobs, field elements, points, cells) shared by the KZG vector generators."""
 
 from functools import cache
 
@@ -66,10 +63,11 @@ G1_POINT_AT_INFINITY = G1_to_pubkey(bls.Z1)
 
 
 def bls_add_one(x: bytes) -> bytes:
-    """Compressed-G1 addition `x + G1_generator`. Used to fabricate
-    intentionally-incorrect proofs in the verify-* generators. Implemented
-    via `py_ecc` so the spec module doesn't need to expose a curve-add
-    primitive purely for negative-test fixtures."""
+    """
+    Compressed-G1 addition `x + G1_generator`, which makes wrong proofs for the verify generators.
+
+    It uses `py_ecc`, so the specification exposes no curve addition just for negative cases.
+    """
     return G1_to_pubkey(bls.add(pubkey_to_G1(BLSPubkey(x)), bls.G1))
 
 
@@ -218,9 +216,11 @@ INVALID_INDIVIDUAL_CELL_BYTES = [
 
 
 def cell_to_coset_evals(cell: bytes) -> list[bytes]:
-    """Split a cell into its 64 field-element-bytes — the form the
-    `compute_verify_cell_kzg_proof_batch_challenge` generator passes as
-    each entry of `cosets_evals`. The Lean impl of `compute_cells`
-    stores cells in the same byte order the challenge function
-    consumes, so this is just a 32-byte chunk-up."""
+    """
+    Split a cell into its 64 field elements of 32 bytes each.
+
+    The challenge generator of the batch cell check passes this form as each coset evaluation.
+
+    The cells of the Lean specification use the byte order that the challenge reads.
+    """
     return [cell[i * 32 : (i + 1) * 32] for i in range(_FE_PER_CELL)]

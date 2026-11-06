@@ -1,12 +1,4 @@
-"""EthLib against the pinned BLS and hash-to-curve vectors.
-
-The `sign`, `verify`, `aggregate`, `fast_aggregate_verify`, `aggregate_verify`,
-`deserialization_G1`, `deserialization_G2` and `hash_to_G2` cases come from
-`ethereum/bls12-381-tests` v0.1.2.
-The `hash_to_curve` cases come from RFC 9380, Appendices J.10.1, K.1 and K.2.
-
-These tests read the cases and write nothing, so the digests keep their upstream provenance.
-"""
+"""EthLib against the pinned BLS and hash-to-curve vectors."""
 
 from pathlib import Path
 
@@ -15,6 +7,13 @@ from ruamel.yaml import YAML
 
 from ethlib.cryptography import bls
 from raising import raises
+
+# The BLS cases come from `ethereum/bls12-381-tests` v0.1.2.
+# They are `sign`, `verify`, `aggregate`, `fast_aggregate_verify` and `aggregate_verify`.
+# They also cover `deserialization_G1`, `deserialization_G2` and `hash_to_G2`.
+# The `hash_to_curve` cases come from RFC 9380, Appendices J.10.1, K.1 and K.2.
+#
+# These tests write nothing, so the digests keep their upstream provenance.
 
 ROOT = Path(__file__).resolve().parents[4] / "tests" / "cryptography"
 LOADER = YAML(typ="safe", pure=True)

@@ -1,7 +1,4 @@
-"""The exceptions of the bindings carry the code and the message of the Lean error.
-
-Each expected code is the one that the Lean type of the error defines.
-"""
+"""The exceptions of the bindings carry the code and the message of the Lean error."""
 
 import pytest
 
@@ -13,6 +10,8 @@ from ethlib.precompiles import run
 from ethlib.serialization import rlp
 from ethlib.state import StateError, state_root
 from raising import raises
+
+# Each expected code is the one that the Lean type of the error defines.
 
 
 def test_kzg_error_carries_code_and_message() -> None:

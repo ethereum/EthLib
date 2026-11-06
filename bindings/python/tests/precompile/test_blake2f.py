@@ -1,11 +1,4 @@
-"""The BLAKE2F precompile against the test vectors of EIP-152 and of BLAKE2.
-
-The EIP-152 vectors are copied byte for byte.
-
-File: EIPS/eip-152.md
-Repository: ethereum/EIPs
-Commit: 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445
-"""
+"""The BLAKE2F precompile against the test vectors of EIP-152 and of BLAKE2."""
 
 import hashlib
 import struct
@@ -16,6 +9,12 @@ from ethlib.precompiles import run
 from raising import raises
 
 from .forks import ends
+
+# The EIP-152 vectors are copied byte for byte.
+#
+# File: EIPS/eip-152.md
+# Repository: ethereum/EIPs
+# Commit: 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445
 
 # The fork that adds the precompile, istanbul, and the latest fork: no fork in between changes it.
 FORKS = ends("istanbul")

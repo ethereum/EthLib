@@ -132,13 +132,14 @@ def test_valid_regression1() -> None:
     """
     Regression from fusaka-devnet-5.
 
-    In c-kzg-4844, given 8 or more blobs where one of the commitments was the point-at-infinity,
-    the verification result would be incorrect. The 8 blob threshold is because c-kzg-4844 uses a
-    naive MSM implementation for small inputs, which is why existing reference tests did not find
-    the problem. The actual bug was in blst though; it was fixed here:
+    In c-kzg-4844, 8 or more blobs with one commitment at infinity gave a wrong result.
+
+    Below 8 blobs, c-kzg-4844 uses a naive MSM, so the earlier reference tests missed the bug.
+
+    The bug was in blst, which fixed it in this commit:
     https://github.com/supranational/blst/commit/f48500c1fdbefa7c0bf9800bccd65d28236799c1
 
-    Test inputs came from Teku here:
+    The inputs come from Teku:
     https://github.com/Consensys/teku/pull/9893
     """
     commitments = [

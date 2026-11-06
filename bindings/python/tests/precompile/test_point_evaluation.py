@@ -1,16 +1,4 @@
-"""The point evaluation precompile against the `verify_kzg_proof` vectors of this repository.
-
-Each vector of `tests/cryptography/kzg/verify_kzg_proof` becomes a 192-byte call:
-
-    versioned_hash: 32 | z: 32 | y: 32 | commitment: 48 | proof: 48
-
-The versioned hash is `0x01` followed by the last 31 bytes of SHA-256 of the commitment,
-as in EIP-4844.
-
-A proof that verifies gives the two words `FIELD_ELEMENTS_PER_BLOB` and `BLS_MODULUS`.
-A proof that fails, or an input that does not decode, makes the call fail.
-The test checks that the call fails with the error that names the reason.
-"""
+"""The point evaluation precompile against the `verify_kzg_proof` vectors of this repository."""
 
 import hashlib
 from pathlib import Path
@@ -22,6 +10,16 @@ from ethlib.precompiles import run
 from raising import raises
 
 from .forks import ends
+
+# Each vector of `tests/cryptography/kzg/verify_kzg_proof` becomes a 192-byte call:
+#
+#     versioned_hash: 32 | z: 32 | y: 32 | commitment: 48 | proof: 48
+#
+# The versioned hash is `0x01`, then the last 31 bytes of SHA-256 of the commitment (EIP-4844).
+#
+# A proof that verifies gives the two words `FIELD_ELEMENTS_PER_BLOB` and `BLS_MODULUS`.
+# A proof that fails, or an input that does not decode, makes the call fail.
+# The test checks that the call fails with the error that names the reason.
 
 # The fork that adds the precompile, dencun, and the latest fork: no fork in between changes it.
 FORKS = ends("dencun")

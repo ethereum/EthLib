@@ -1,10 +1,4 @@
-"""The snap capability, against hand-built messages and the block access lists of the fixtures.
-
-The snap/2 forms come from caps/snap.md of ethereum/devp2p at its pin.
-The trie node messages are those of snap/1, whose text EthLib/Execution/Network/Snap.lean cites.
-The pinned file records only their removal by snap/2.
-The access lists and their hashes come from tests/execution/blocks/block_access_lists.json.
-"""
+"""The snap capability, against hand-built messages and the block access lists of the fixtures."""
 
 import json
 from pathlib import Path
@@ -31,6 +25,11 @@ from ethlib.execution.network.snap import (
 )
 from ethlib.serialization import rlp
 from raising import raises
+
+# The snap/2 forms come from caps/snap.md of ethereum/devp2p at its pin.
+# The trie node messages are those of snap/1, whose text EthLib/Execution/Network/Snap.lean cites.
+# The pinned file records only their removal by snap/2.
+# The access lists and their hashes come from tests/execution/blocks/block_access_lists.json.
 
 _BALS = Path(__file__).resolve().parents[4] / "tests/execution/blocks/block_access_lists.json"
 

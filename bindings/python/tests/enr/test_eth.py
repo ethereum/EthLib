@@ -1,9 +1,4 @@
-"""The "eth" entry of a node record, against hand-built records.
-
-The entry is `[[forkHash, forkNext], ...]`, from enr-entries/eth.md of ethereum/devp2p at the pin.
-No official vectors exist, so each record is built here as RLP with a placeholder signature.
-The reader does not check the signature.
-"""
+"""The "eth" entry of a node record, against hand-built records."""
 
 import pytest
 
@@ -11,6 +6,10 @@ from ethlib.errors import EnrError
 from ethlib.networking import enr, forkid
 from ethlib.serialization import rlp
 from raising import raises
+
+# The entry is `[[forkHash, forkNext], ...]`, from enr-entries/eth.md of ethereum/devp2p at the pin.
+# No official vectors exist, so each record is RLP built here with a placeholder signature.
+# The reader does not check the signature.
 
 SIGNATURE = bytes(64)
 

@@ -1,8 +1,4 @@
-"""The transaction exchange of the eth capability.
-
-The hashes come from the TransactionTests of ethereum/tests at the pin in tests/sources.toml.
-The messages are built here as RLP, from caps/eth.md, EIP-2976, EIP-5793 and EIP-8070.
-"""
+"""The transaction exchange of the eth capability."""
 
 import json
 from pathlib import Path
@@ -22,6 +18,9 @@ from ethlib.execution.network import (
 )
 from ethlib.serialization import rlp
 from raising import raises
+
+# The hashes come from the TransactionTests of ethereum/tests at the pin in tests/sources.toml.
+# The messages are RLP built here, from caps/eth.md, EIP-2976, EIP-5793 and EIP-8070.
 
 FIXTURES = Path(__file__).resolve().parents[4] / "tests/execution/ethereum_tests/TransactionTests"
 

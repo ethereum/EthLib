@@ -1,10 +1,4 @@
-"""The state root against the genesis tests of ethereum/tests.
-
-Each case of `genesis/basic_genesis_tests.json` gives an allocation
-and the RLP of its genesis block.
-The state root of the allocation must be the fourth field of the block header.
-`genesis/README.md` gives the origin of the file and its licence.
-"""
+"""The state root against the genesis tests of ethereum/tests."""
 
 import json
 from pathlib import Path
@@ -13,6 +7,10 @@ import pytest
 
 from ethlib.state import state_root
 from raising import raises
+
+# Each case of `genesis/basic_genesis_tests.json` gives an allocation and the RLP of its genesis.
+# The state root of the allocation must be the fourth field of the block header.
+# `genesis/README.md` gives the origin of the file and its licence.
 
 _CASES = json.loads(
     (Path(__file__).resolve().parent / "genesis" / "basic_genesis_tests.json").read_text()

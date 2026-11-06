@@ -1,9 +1,4 @@
-"""Test-vector generator: `verify`.
-
-The keys and signatures come from the committed `key_gen` and `sign` cases.
-
-Each rejection changes one input, so it fails at one known step.
-"""
+"""Test-vector generator: `verify`."""
 
 import pytest
 
@@ -11,6 +6,9 @@ from dumper import hex_str, write_case
 from ethlib.cryptography import sphincs
 
 from . import fixtures
+
+# The keys and signatures come from the committed `key_gen` and `sign` cases.
+# Each rejection changes one input, so it fails at one known step.
 
 HANDLER = "verify"
 

@@ -1,9 +1,4 @@
-"""The access list messages of eth/71 and the cell messages of eth/72.
-
-The forms come from caps/eth.md of ethereum/devp2p at the pin.
-The access lists and their hashes come from tests/execution/blocks/block_access_lists.json.
-No official vectors exist for the messages, so each one is built here as RLP.
-"""
+"""The access list messages of eth/71 and the cell messages of eth/72."""
 
 import pytest
 
@@ -20,6 +15,10 @@ from ethlib.serialization import rlp
 from raising import raises
 
 from .test_snap import BALS
+
+# The forms come from caps/eth.md of ethereum/devp2p at the pin.
+# The access lists and their hashes come from tests/execution/blocks/block_access_lists.json.
+# No official vectors exist for the messages, so each one is RLP built here.
 
 
 def _p(n: int) -> bytes:

@@ -17,7 +17,8 @@ from ethlib.errors import Secp256k1Error
 # A signature is 64 bytes: r then s, each a 32-byte big-endian integer.
 #
 # An argument that is not bytes raises `TypeError`.
-# An input that the specification rejects raises `Secp256k1Error`, a `ValueError` with a code.
+# An input that the specification rejects raises `Secp256k1Error`.
+# It is a `ValueError` with the code of the Lean error.
 
 
 def verify(public_key: bytes, msg_hash: bytes, signature: bytes) -> bool:

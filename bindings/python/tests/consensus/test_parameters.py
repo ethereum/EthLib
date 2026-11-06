@@ -1,9 +1,4 @@
-"""The presets, configurations and parameters of EthLib against the files of consensus-specs.
-
-The files are the mainnet and minimal presets from Phase 0 to Heze, and the two configurations.
-They are copied byte for byte from ethereum/consensus-specs, at the pin that `tests/sources.toml`
-records, into `tests/consensus/parameters/`, and `SHA256SUMS` there fixes their digests.
-"""
+"""The presets, configurations and parameters of EthLib against the files of consensus-specs."""
 
 import hashlib
 from pathlib import Path
@@ -13,6 +8,10 @@ from ruamel.yaml import YAML
 
 from ethlib import consensus
 from raising import raises
+
+# The files are the mainnet and minimal presets from Phase 0 to Heze, and the two configurations.
+# They are byte-for-byte copies from ethereum/consensus-specs, at the pin of `tests/sources.toml`.
+# They sit in `tests/consensus/parameters/`, whose `SHA256SUMS` fixes their digests.
 
 FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "parameters"
 

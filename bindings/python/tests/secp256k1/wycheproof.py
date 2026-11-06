@@ -1,19 +1,17 @@
-"""
-Readers for the Wycheproof ECDSA test sets of secp256k1.
-
-Directory: testvectors_v1
-Repository: C2SP/wycheproof
-Commit: d17cc89fa5c8f4f4d378b5385ebf75da5d0926c9
-Licence: Apache 2.0 (wycheproof/LICENSE)
-
-Each test signs a message hashed with SHA-256.
-The hash is EthLib's own SHA-256, which its NIST vectors pin.
-"""
+"""Readers for the Wycheproof ECDSA test sets of secp256k1."""
 
 import json
 from pathlib import Path
 
 from ethlib.cryptography.sha256 import sha256
+
+# Directory: testvectors_v1
+# Repository: C2SP/wycheproof
+# Commit: d17cc89fa5c8f4f4d378b5385ebf75da5d0926c9
+# Licence: Apache 2.0 (wycheproof/LICENSE)
+#
+# Each test signs a message hashed with SHA-256.
+# The hash is EthLib's own SHA-256, which its NIST vectors pin.
 
 DIR = Path(__file__).resolve().parent / "wycheproof"
 

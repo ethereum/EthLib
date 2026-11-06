@@ -1,13 +1,4 @@
-"""
-Inputs shared by the leanSPHINCS test-vector generators.
-
-Key generation builds the top tree, `2^10` one-time keys, and signing builds
-the FORS key and three trees, which takes the compiled specification seconds
-per case.
-
-So their cases are written only when `ETHLIB_SLOW_VECTORS=1`, and every other
-run reads the committed ones back.
-"""
+"""Inputs shared by the leanSPHINCS test-vector generators."""
 
 import os
 
@@ -15,6 +6,12 @@ import pytest
 from ruamel.yaml import YAML
 
 from dumper import ROOT
+
+# Key generation builds the top tree, `2^10` one-time keys.
+# Signing builds the FORS key and three trees.
+# Each takes the compiled specification seconds per case.
+# So their cases are written only when `ETHLIB_SLOW_VECTORS=1`.
+# Every other run reads the committed ones back.
 
 # ---- Slow cases ------------------------------------------------------------
 

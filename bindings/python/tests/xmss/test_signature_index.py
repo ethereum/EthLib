@@ -1,9 +1,4 @@
-"""Test-vector generator: `signature_index`.
-
-Each signature carries its leaf index in its first 4 bytes, little-endian.
-
-The expected index of each signed case is the index it was signed at, not a value read back.
-"""
+"""Test-vector generator: `signature_index`."""
 
 import pytest
 
@@ -11,6 +6,9 @@ from dumper import hex_str, write_case
 from ethlib.cryptography import xmss
 
 from . import fixtures
+
+# Each signature carries its leaf index in its first 4 bytes, little-endian.
+# The expected index of each signed case is the index it was signed at, not a value read back.
 
 HANDLER = "signature_index"
 

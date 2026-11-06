@@ -1,11 +1,4 @@
-"""The alt_bn128 precompiles of EIP-196 and EIP-197 against py_ecc.
-
-py_ecc 8.0.0 computes every expected point independently of EthLib.
-
-Byzantium adds the precompiles, at the prices of EIP-196 and EIP-197: 500 for an addition,
-40000 for a multiplication, and `100000 + 80000 * k` for a pairing check on `k` pairs.
-From Istanbul, EIP-1108 lowers them to 150, 6000 and `45000 + 34000 * k`.
-"""
+"""The alt_bn128 precompiles of EIP-196 and EIP-197 against py_ecc."""
 
 import pytest
 from py_ecc import bn128
@@ -14,6 +7,12 @@ from ethlib.precompiles import price, run
 from raising import raises
 
 from .forks import since
+
+# py_ecc 8.0.0 computes every expected point independently of EthLib.
+#
+# Byzantium adds the precompiles, at the prices of EIP-196 and EIP-197.
+# They are 500 for an addition, 40000 for a multiplication, and `100000 + 80000 * k` for k pairs.
+# From Istanbul, EIP-1108 lowers them to 150, 6000 and `45000 + 34000 * k`.
 
 # The prices change once, at Istanbul, so the calls run on each side of that change and at the
 # latest fork. The price test runs at every fork.

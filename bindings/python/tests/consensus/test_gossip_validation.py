@@ -70,10 +70,14 @@ def _read(case: Path, name: str) -> bytes:
 
 
 def _partial_messages(case: Path, meta: dict) -> list:
-    """The partial messages of a case, after the headers that the node validated before it.
+    """
+    The partial messages of a case, after the headers that the node validated before it.
 
-    Each message starts with its kind, 1 for such a header and 0 for a sidecar, then the root of
-    its block; the column of a sidecar takes the place of the subnet.
+    Each message starts with its kind, 1 for such a header and 0 for a sidecar.
+
+    The root of its block follows.
+
+    The column of a sidecar takes the place of the subnet.
     """
     headers = [
         (0, 0, b"\x01" + _hex(entry["block_root"]) + _read(case, entry["header"]))

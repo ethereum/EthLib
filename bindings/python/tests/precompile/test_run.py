@@ -1,8 +1,4 @@
-"""Every precompile through the one entry point, at every fork, against an independent oracle.
-
-The prices of the first four precompiles are those of Appendix E of the Yellow Paper.
-The others are those of the EIP that adds each precompile.
-"""
+"""Every precompile through the one entry point, at every fork, against an independent oracle."""
 
 import hashlib
 import struct
@@ -13,6 +9,9 @@ from ethlib.precompiles import ADDRESSES, price, run
 from raising import raises
 
 from .forks import FORKS, since
+
+# The prices of the first four precompiles are those of Appendix E of the Yellow Paper.
+# The others are those of the EIP that adds each precompile.
 
 # The fork that adds each precompile, from its EIP, and Frontier for the first four.
 ADDED = {

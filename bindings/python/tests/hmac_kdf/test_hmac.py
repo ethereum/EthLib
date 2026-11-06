@@ -1,7 +1,4 @@
-"""HMAC-SHA-256, HKDF and the Concatenation KDF against the test vectors of their RFCs.
-
-Python's `hmac` and `hashlib` modules vouch for each value as an independent implementation.
-"""
+"""HMAC-SHA-256, HKDF and the Concatenation KDF against the test vectors of their RFCs."""
 
 import hashlib
 import hmac as std_hmac
@@ -12,6 +9,8 @@ import pytest
 from ethlib.cryptography.hmac import hmac_sha256
 from ethlib.cryptography.kdf import concat_kdf, hkdf, hkdf_extract
 from raising import raises
+
+# Python's `hmac` and `hashlib` modules vouch for each value as an independent implementation.
 
 # RFC 4231 §4.2 to §4.8, test cases 1 to 7: key, message and tag, in hex.
 # Test case 5 truncates its tag to 128 bits.
