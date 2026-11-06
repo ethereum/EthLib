@@ -64,6 +64,23 @@ theorem exists_acceptsFork_iff (fork : Fork) :
 theorem acceptsFork_five_iff (fork : Fork) : acceptsFork 5 fork = true ↔ fork = .glamsterdam := by
   simp [acceptsFork]
 
+/-- Version 5 rejects, as an invalid parameter, a payload without its block access list.
+
+Step 2 of `engine_newPayloadV5` asks for that error. -/
+theorem payloadParam_five_of_not_mem {j : Lean.Json} {fs : List (String × Lean.Json)}
+    (hfs : Json.fields "payload" j = .ok fs) (hmiss : "blockAccessList" ∉ fs.map Prod.fst) :
+    ∃ reason, payloadParam 5 j = .error (.invalidParams reason) := by
+  -- No field has the name of the list, so the payload does not have the fields of version 4.
+  have hany : (fs.any fun field => field.1 == "blockAccessList") = false := by
+    rw [List.any_eq_false]
+    intro field hmem heq
+    exact hmiss (List.mem_map.mpr ⟨field, hmem, by simpa using heq⟩)
+  have hfields : Json.hasExactly fs Json.payloadFieldsV4 = false := by
+    simp [Json.hasExactly, Json.payloadFieldsV4, Json.amsterdamFields, hany]
+  refine ⟨"payload: not the fields of version 4", ?_⟩
+  simp [payloadParam, Json.payloadV4, hfs, hfields, Json.invalid, bind, Except.bind, throw,
+    throwThe, MonadExceptOf.throw]
+
 /-- Request lists that pass the check have strictly increasing types. -/
 theorem pairwise_of_validRequests {requests : List ByteArray}
     (h : validRequests requests = true) :

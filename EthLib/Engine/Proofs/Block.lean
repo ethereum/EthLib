@@ -13,6 +13,12 @@ A payload whose block hash is the hash of its header is the payload of its block
 A block of the shape that a payload gives comes back from its payload.
 
 The shape is fixed by EIP-3675 from Paris, with roots and a requests hash that match the lists.
+
+From Glamsterdam, the block access list of the method must be the RLP form of a block access list.
+
+The header then holds the Keccak-256 hash of its bytes, and the slot number of the method.
+
+Bytes that are not such a form give no block, with the reason that names the list.
 -/
 
 public section
@@ -22,6 +28,8 @@ namespace EthLib.Engine
 open EthLib.Base
 open EthLib.Execution.Blocks
 open EthLib.Execution.Transactions
+open EthLib.Cryptography.Hash.Keccak (keccak256)
+
 variable {fork : Fork}
 
 /-! ## Pieces -/
@@ -243,6 +251,88 @@ theorem toBlock_ofBlock (hParis : .paris ≤ fork)
     subst hOmmers
     rfl
   · cases h
+
+/-! ## The block access list, from Glamsterdam -/
+
+/-- A field that a step computed is the step's value at each fork that has the field. -/
+theorem sinceM_apply {ε α : Type} {f : Fork} {g : f ≤ fork → Except ε α} {x : Since f fork α}
+    (h : sinceM g = .ok x) (hf : f ≤ fork) : g hf = .ok (x hf) := by
+  unfold sinceM at h
+  rw [dite_eq_left hf] at h
+  cases hg : g hf with
+  | error e => simp [hg, Functor.map, Except.map] at h
+  | ok a =>
+    simp only [hg, Functor.map, Except.map] at h
+    cases h
+    rfl
+
+/-- Bytes give the hash of a block access list exactly when they are the RLP form of one.
+
+The hash is then the Keccak-256 hash of the bytes, as EIP-7928 writes. -/
+theorem blockAccessListHashOf_eq_ok_iff (bytes : ByteArray) (hash : Hash32) :
+    blockAccessListHashOf bytes = .ok hash ↔
+      (∃ bal : BlockAccessList, Serialization.Rlp.Codec.decode bytes = .ok bal) ∧
+        hash = keccak256 bytes := by
+  unfold blockAccessListHashOf
+  split
+  · rename_i bal hbal
+    constructor
+    · intro h
+      cases h
+      exact ⟨⟨bal, hbal⟩, rfl⟩
+    · rintro ⟨-, rfl⟩
+      rfl
+  · rename_i e he
+    simp only [reduceCtorEq, false_iff, not_and, he]
+    rintro ⟨_, hbal⟩
+    cases hbal
+
+/-- Bytes that are not the RLP form of a block access list fail with the reason that names it. -/
+theorem blockAccessListHashOf_eq_error_iff (bytes : ByteArray) (e : PayloadError) :
+    blockAccessListHashOf bytes = .error e ↔
+      (∀ bal : BlockAccessList, Serialization.Rlp.Codec.decode bytes ≠ .ok bal) ∧
+        e = .invalidBlockAccessList := by
+  unfold blockAccessListHashOf
+  split
+  · rename_i bal hbal
+    simp only [reduceCtorEq, false_iff, not_and, hbal]
+    exact fun h => absurd rfl (h bal)
+  · rename_i err he
+    constructor
+    · intro h
+      cases h
+      exact ⟨fun _ hbal => (by rw [he] at hbal; cases hbal), rfl⟩
+    · rintro ⟨-, rfl⟩
+      rfl
+
+/-- From Glamsterdam, the block of a payload holds the hash of the access list and the slot.
+
+The access list is then the RLP form of a block access list. -/
+theorem toBlock_glamsterdam {p : ExecutionPayload fork} {beacon : Since .dencun fork Hash32}
+    {requests : Since .pectra fork (List ByteArray)}
+    {accessList : Since .glamsterdam fork ByteArray} {slot : Since .glamsterdam fork UInt64}
+    {b : Block fork Transaction} (h : p.toBlock beacon requests accessList slot = .ok b)
+    (hf : .glamsterdam ≤ fork) :
+    (∃ bal : BlockAccessList, Serialization.Rlp.Codec.decode (accessList hf) = .ok bal) ∧
+      b.header.blockAccessListHash hf = keccak256 (accessList hf) ∧
+      b.header.slotNumber hf = slot hf := by
+  simp only [toBlock, toBlockUnchecked, toHeader, checkBlockHash, bind_ok_iff, pure_eq_ok,
+    mapError_ok_iff] at h
+  obtain ⟨_, ⟨txs, -, root, -, accessHash, hAccess, _, ⟨wr, -, rfl⟩, rfl⟩, -, -, rfl⟩ := h
+  obtain ⟨hdecode, hhash⟩ :=
+    (blockAccessListHashOf_eq_ok_iff _ _).mp (sinceM_apply hAccess hf)
+  exact ⟨hdecode, hhash, rfl⟩
+
+/-- From Glamsterdam, a payload whose access list is not the RLP form of one gives no block. -/
+theorem toBlock_ne_ok_of_not_decode {p : ExecutionPayload fork}
+    {beacon : Since .dencun fork Hash32} {requests : Since .pectra fork (List ByteArray)}
+    {accessList : Since .glamsterdam fork ByteArray} {slot : Since .glamsterdam fork UInt64}
+    (hf : .glamsterdam ≤ fork)
+    (hbad : ∀ bal : BlockAccessList, Serialization.Rlp.Codec.decode (accessList hf) ≠ .ok bal)
+    (b : Block fork Transaction) : p.toBlock beacon requests accessList slot ≠ .ok b := by
+  intro h
+  obtain ⟨⟨bal, hbal⟩, -⟩ := toBlock_glamsterdam h hf
+  exact hbad bal hbal
 
 end ExecutionPayload
 
