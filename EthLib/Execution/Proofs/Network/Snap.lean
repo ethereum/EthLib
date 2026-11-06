@@ -6,6 +6,8 @@ public import EthLib.Execution.Proofs.Network.Status
 /-!
 # Proofs: the snap capability
 
+A version and its number determine each other.
+
 An account reads back from its slim form.
 
 Each message reads back from its ID and its RLP item on the versions that use its ID.
@@ -50,6 +52,29 @@ theorem ofSlimAccount_slimAccount (account : State.Account) (root : Hash32) :
   by_cases hr : root = EMPTY_TRIE_ROOT <;> by_cases hc : code = State.EMPTY_CODE_HASH <;>
     simp [ofSlimAccount, slimAccount, hr, hc, toItem_hash_ne_empty, Item.fields, Item.toItems,
       Item.field_toItem, bind, Except.bind, pure, Except.pure]
+
+namespace SnapVersion
+
+/-- The number of a version reads back to that version. -/
+theorem ofNumber?_number (v : SnapVersion) : ofNumber? v.number = some v := by
+  cases v <;> rfl
+
+/-- A number reads to a version exactly when it is the number of that version. -/
+theorem ofNumber?_eq_some_iff {n : Nat} {v : SnapVersion} :
+    ofNumber? n = some v ↔ v.number = n := by
+  constructor
+  · intro h
+    unfold ofNumber? at h
+    split at h <;> cases h <;> rfl
+  · rintro rfl
+    exact ofNumber?_number v
+
+/-- Two versions with one number are one version. -/
+theorem number_injective : Function.Injective number := fun a b h => by
+  have := ofNumber?_number a
+  rwa [h, ofNumber?_number, Option.some.injEq, eq_comm] at this
+
+end SnapVersion
 
 /-- The multiplexing of RLPx gives a snap capability the message count of its version. -/
 theorem capabilityLength_snap (v : SnapVersion) :
