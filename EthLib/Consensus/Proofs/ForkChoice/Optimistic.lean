@@ -63,7 +63,9 @@ theorem mem_filterMapM_ok {α β ε : Type} {f : α → Except ε (Option β)} :
           exact .inl ok.symm
         · exact .inr ⟨x', mem, ok⟩
 
-/-- Outside the forks with a payload, the zero hash names a block and another hash does not. -/
+/-- Outside the forks with a payload in the block body, the zero hash names every block.
+
+Another hash names none. -/
 theorem marksLatestValid_of_not_range {hash : Hash32} {block : BeaconBlock preset fork}
     (range : ¬ (.bellatrix ≤ fork ∧ fork < .glamsterdam)) :
     marksLatestValid hash block = true ↔ hash = Vector.replicate 32 0 := by
@@ -495,7 +497,9 @@ theorem onInvalidPayload_of_unnamed {hash : Hash32} {block : BeaconBlock preset 
     simp [onInvalidPayload, later, rooted, unnamed, walk, bind, Except.bind, Except.mapError, pure,
       Except.pure]
 
-/-- Before Gloas, the block is the first invalid one if the hash names neither it nor an ancestor.
+/-- Before Gloas, the block is the first invalid one when the hash names no block of its chain.
+
+The chain here holds the block and its known ancestors.
 
 That needs each known parent at a lower slot, or the walk can fail. -/
 theorem onInvalidPayload_of_absent {hash : Hash32} {block : BeaconBlock preset fork} {root : Root}
