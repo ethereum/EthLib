@@ -7,6 +7,7 @@ public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Encoding
 # Proofs: `Evm.Precompiles.Bls12381.G1`
 
 - G1ADD rejects any length other than 256 bytes before it charges gas, and then runs out of gas below its price.
+- With enough gas, G1ADD succeeds exactly when both halves decode, and returns the encoded sum.
 - Every encoded G1 point, and so every output of G1ADD and G1MSM, has 128 bytes.
 - G1MSM rejects an empty input or a length that is not a whole number of 160-byte pairs.
 - Its discount never raises the price above that of `k` separate products.
@@ -35,20 +36,37 @@ theorem bls12G1Add_outOfGas {data : ByteArray} (hsize : data.size = 256) {gas : 
     bls12G1Add data gas = .error (.outOfGas GAS_G1ADD gas) := by
   simp [bls12G1Add, hsize, hgas, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
+/-- G1ADD succeeds exactly on 256 bytes, with at least its price in gas.
+
+Each 128-byte half must decode to a point, without the subgroup check.
+
+The output is the padded encoding of the sum of the two points. -/
+theorem bls12G1Add_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
+    bls12G1Add data gas = .ok out ↔
+      data.size = 256 ∧ GAS_G1ADD ≤ gas ∧
+        ∃ raw0 raw1 p0 p1,
+          unpadG1 (data.data.toList.take 128) = .ok raw0 ∧
+          unpadG1 (data.data.toList.drop 128) = .ok raw1 ∧
+          bytesToG1 raw0 false = .ok p0 ∧
+          bytesToG1 raw1 false = .ok p1 ∧
+          out = ⟨(padG1 (g1ToBytes (G1.add p0 p1))).toArray⟩ := by
+  by_cases hsize : data.size ≠ 256
+  · simp [bls12G1Add_invalidInputLength hsize gas, hsize]
+  · have hsize' : data.size = 256 := Decidable.not_not.mp hsize
+    by_cases hgas : gas < GAS_G1ADD
+    · simp [bls12G1Add_outOfGas hsize' hgas, hsize', Nat.not_le.mpr hgas]
+    · simp only [bls12G1Add, hsize', ne_eq, not_true_eq_false, ↓reduceIte, hgas,
+        Nat.not_lt.mp hgas, true_and, bind, Except.bind, pure, Except.pure]
+      cases hu0 : unpadG1 (data.data.toList.take 128) <;>
+        cases hu1 : unpadG1 (data.data.toList.drop 128) <;> simp
+      rename_i raw0 raw1
+      cases hp0 : bytesToG1 raw0 false <;>
+        cases hp1 : bytesToG1 raw1 false <;> simp [eq_comm]
+
 /-- Every output of G1ADD has 128 bytes. -/
 theorem bls12G1Add_size {data : ByteArray} {gas : Nat} {out : ByteArray} (h : bls12G1Add data gas = .ok out) :
     out.size = 128 := by
-  simp only [bls12G1Add, bind, throw, throwThe, MonadExceptOf.throw] at h
-  -- Past the two checks, the output is the padded encoding of a sum.
-  split at h
-  · cases h
-  split at h
-  · cases h
-  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
-  cases h
+  obtain ⟨-, -, -, -, p0, p1, -, -, -, -, rfl⟩ := (bls12G1Add_eq_ok_iff data gas out).mp h
   simp [ByteArray.size, length_padG1_g1ToBytes]
 
 /-! ## G1MSM -/
