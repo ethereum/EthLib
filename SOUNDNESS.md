@@ -662,7 +662,12 @@ There `findPathCollision` returns two different keys of the trie with one hash.
 It searches only a secured trie, and it is proved to return only collisions.
 `findKeyCollision_of_nodup` proves that the key search returns none for keys with distinct hashes.
 
-Both theorems still assume that the keys of each trie are distinct, as the keys of a map are.
+Both theorems assume that the keys of each trie are distinct, as the keys of a map are.
+The variants `root_binding_foldl_trieSet` and `verifyProof_sound_foldl_trieSet` apply to tries built by setting any list of key-value pairs from an empty trie.
+Later entries replace earlier values of the same key, and an empty value removes its key.
+`nodup_keys_foldl_trieSet` proves that this construction supplies the unique keys required by Yellow Paper Appendix D, so callers need no distinctness hypothesis.
+This construction is the path of Python `trie.root`, through `Execution/Exports/Trie.lean`.
+The state and storage roots in `Execution/State/Root.lean` and the indexed roots in `Execution/Blocks/Roots.lean` build tries directly, so these variants do not discharge their distinctness hypotheses.
 No theorem bounds the probability of finding a collision.
 
 ### Light client
