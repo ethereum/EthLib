@@ -5,6 +5,7 @@ public import EthLib.Base.Proofs.MapM
 public import EthLib.Consensus.Gossip.Seen
 public import EthLib.Consensus.HonestValidator
 public import EthLib.Consensus.Proofs.Accessors
+public import EthLib.Consensus.Transition.Block
 public import EthLib.Cryptography.Proofs.Bls.SignaturesCorrect
 
 /-!
@@ -58,6 +59,79 @@ theorem isValidSignatureAtEpoch_of_signAtEpoch (laws : PairingLaws) {α : Type} 
   unfold isValidSignatureAtEpoch
   simp only [domained, rooted, bind, Except.bind, Except.mapError, pure, Except.pure]
   exact congrArg Except.ok verifies
+
+/-- A signature at an epoch is a signature of the signing root of the object at that epoch.
+
+Under the laws of the pairing, it verifies under the public key of the secret key. -/
+theorem signAtEpoch_verifies (laws : PairingLaws) {α : Type} [SszType α] {config : Config}
+    {state : BeaconState preset fork} {domainType : DomainType} {epoch : Epoch} {object : α}
+    {key : Signatures.SecretKey} {signature : BLSSignature}
+    (signed : signAtEpoch config state domainType epoch object key = .ok signature) :
+    ∃ domain root, getDomain config state domainType (some epoch) = .ok domain ∧
+      computeSigningRoot object domain = .ok root ∧
+      Signatures.verify (packBytes (Signatures.skToPk key)) (packBytes root)
+        (packBytes signature) = true := by
+  unfold signAtEpoch at signed
+  obtain ⟨domain, domained, signed⟩ := bind_ok_iff.mp signed
+  obtain ⟨root, rooted, signs⟩ := bind_ok_iff.mp signed
+  rw [mapError_ok_iff] at domained rooted signs
+  obtain ⟨signature', signs', verifies⟩ := Signatures.verify_sign laws key (packBytes root)
+  rw [signs', Except.ok.injEq] at signs
+  subst signs
+  exact ⟨domain, root, domained, rooted, verifies⟩
+
+/-- A block signed by its proposer passes the check of the block's signature.
+
+The block must be for a slot of the current epoch, and the proposer must have the public key.
+
+The statement holds under the laws of the pairing, as BLS correctness does. -/
+theorem verifyBlockSignature_of_getBlockSignature (laws : PairingLaws) {config : Config}
+    {state : BeaconState preset fork} {signed : SignedBeaconBlock preset fork}
+    {key : Signatures.SecretKey} {proposer : Validator}
+    (registered : getValidator state signed.message.proposerIndex = .ok proposer)
+    (owned : proposer.pubkey = Signatures.skToPk key)
+    (current : computeEpochAtSlot preset signed.message.slot = getCurrentEpoch state)
+    (signedBy : getBlockSignature config state signed.message key = .ok signed.signature) :
+    verifyBlockSignature config .bls state signed = .ok true := by
+  unfold getBlockSignature at signedBy
+  rw [current] at signedBy
+  obtain ⟨domain, root, domained, rooted, verifies⟩ := signAtEpoch_verifies laws signedBy
+  unfold verifyBlockSignature
+  -- The domain of the current epoch is the default domain of the state.
+  have domainDefault : getDomain config state DOMAIN_BEACON_PROPOSER = .ok domain := domained
+  simp only [liftAccessor, liftSsz, registered, domainDefault, rooted, Except.mapError, bind,
+    Except.bind, pure, Except.pure, owned, SignatureChecks.bls, verifies]
+
+/-- The RANDAO reveal of the proposer passes the RANDAO check of its block.
+
+The block must be for a slot of the current epoch, and the proposer must have the public key.
+
+The processing of the reveal may still fail for another reason, never for an invalid reveal.
+
+The statement holds under the laws of the pairing, as BLS correctness does. -/
+theorem processRandao_ne_invalidRandaoReveal (laws : PairingLaws) {config : Config}
+    {state : BeaconState preset fork} {block : BeaconBlock preset fork}
+    {key : Signatures.SecretKey} {proposerIndex : ValidatorIndex} {proposer : Validator}
+    (proposes : getBeaconProposerIndex state = .ok proposerIndex)
+    (registered : getValidator state proposerIndex = .ok proposer)
+    (owned : proposer.pubkey = Signatures.skToPk key)
+    (current : computeEpochAtSlot preset block.slot = getCurrentEpoch state)
+    (signedBy : getEpochSignature config state block key = .ok block.body.randaoReveal) :
+    processRandao config .bls state block.body ≠ .error .invalidRandaoReveal := by
+  unfold getEpochSignature at signedBy
+  simp only [current] at signedBy
+  obtain ⟨domain, root, domained, rooted, verifies⟩ := signAtEpoch_verifies laws signedBy
+  have domainDefault : getDomain config state DOMAIN_RANDAO = .ok domain := domained
+  unfold processRandao
+  simp only [liftAccessor, liftSsz, proposes, registered, domainDefault, rooted, Except.mapError,
+    bind, Except.bind, pure, Except.pure, owned, SignatureChecks.bls, verifies, ensure,
+    ↓reduceIte]
+  -- What is left reads and writes the mix of the epoch, whose errors are accessor errors.
+  cases getRandaoMix state (getCurrentEpoch state) with
+  | error => simp
+  | ok mix =>
+    simp only
+    cases writeCircularRooted state.randaoMixes (getCurrentEpoch state) _ <;> simp
 
 /-- A selection proof for the slot of an aggregate passes the gossip check of a selection proof.
 
