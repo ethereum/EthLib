@@ -27,10 +27,14 @@ namespace EthLib.Networking.Gossip
 /-- The number of a gossip subnet. -/
 abbrev SubnetID := UInt64
 
+/-- The two lowercase hex digits of a byte, high digit first. -/
+def byteHexDigits (byte : UInt8) : List Char :=
+  [Base.hexDigitChar ⟨byte.toNat / 16, by have := byte.toNat_lt; omega⟩,
+    Base.hexDigitChar ⟨byte.toNat % 16, by omega⟩]
+
 /-- The characters of a fork digest: two lowercase hex digits per byte, high digit first. -/
 def forkDigestChars (digest : Vector UInt8 4) : List Char :=
-  digest.toList.flatMap fun byte =>
-    [Base.hexAlphabet[byte.toNat / 16]!, Base.hexAlphabet[byte.toNat % 16]!]
+  digest.toList.flatMap byteHexDigits
 
 /-- The topic string of a fork digest and a name. -/
 def topicString (digest : Vector UInt8 4) (name : String) : String :=
@@ -64,7 +68,7 @@ def dropSuffix? (suf cs : List Char) : Option (List Char) :=
 
 /-- The value of a lowercase hex digit. -/
 def hexDigit? (c : Char) : Option Nat :=
-  (List.range 16).find? (Base.hexAlphabet[·]! == c)
+  ((List.finRange 16).find? (Base.hexDigitChar · == c)).map Fin.val
 
 /-- The byte that two lowercase hex digits write, high digit first. -/
 def hexByte? (hi lo : Char) : Option UInt8 := do

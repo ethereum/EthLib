@@ -53,28 +53,26 @@ theorem eq_append_of_dropSuffix? {suf cs start : List Char}
 /-! ## The fork digest -/
 
 /-- The hex digit of a value below 16 reads back as that value. -/
-theorem hexDigit?_hexAlphabet : ∀ k < 16, hexDigit? Base.hexAlphabet[k]! = some k := by
+theorem hexDigit?_hexDigitChar : ∀ k : Fin 16, hexDigit? (Base.hexDigitChar k) = some k.val := by
   decide
 
 /-- A character that reads as a value is the hex digit of that value, below 16. -/
 theorem hexDigit?_eq_some {c : Char} {k : Nat} (h : hexDigit? c = some k) :
-    k < 16 ∧ Base.hexAlphabet[k]! = c := by
+    ∃ hk : k < 16, Base.hexDigitChar ⟨k, hk⟩ = c := by
   unfold hexDigit? at h
-  have := List.find?_some h
-  exact ⟨List.mem_range.mp (List.mem_of_find?_eq_some h), by simpa using this⟩
+  obtain ⟨i, hi, rfl⟩ := Option.map_eq_some_iff.mp h
+  exact ⟨i.isLt, by simpa using List.find?_some hi⟩
 
 /-- The two hex digits of a byte read back as that byte. -/
-theorem hexByte?_digits (byte : UInt8) :
-    hexByte? Base.hexAlphabet[byte.toNat / 16]! Base.hexAlphabet[byte.toNat % 16]! = some byte := by
-  have := byte.toNat_lt
-  have hi := hexDigit?_hexAlphabet (byte.toNat / 16) (by omega)
-  have lo := hexDigit?_hexAlphabet (byte.toNat % 16) (by omega)
-  simp only [hexByte?, hi, lo, Option.pure_def, Option.bind_eq_bind, Option.bind_some,
-    Nat.div_add_mod, UInt8.ofNat_toNat]
+theorem hexByte?_hexDigitChar (byte : UInt8) (hHi : byte.toNat / 16 < 16)
+    (hLo : byte.toNat % 16 < 16) :
+    hexByte? (Base.hexDigitChar ⟨_, hHi⟩) (Base.hexDigitChar ⟨_, hLo⟩) = some byte := by
+  simp only [hexByte?, hexDigit?_hexDigitChar, Option.pure_def, Option.bind_eq_bind,
+    Option.bind_some, Nat.div_add_mod, UInt8.ofNat_toNat]
 
 /-- Two characters that read as a byte are the two hex digits of that byte. -/
-theorem digits_of_hexByte? {hi lo : Char} {byte : UInt8} (h : hexByte? hi lo = some byte) :
-    [Base.hexAlphabet[byte.toNat / 16]!, Base.hexAlphabet[byte.toNat % 16]!] = [hi, lo] := by
+theorem byteHexDigits_of_hexByte? {hi lo : Char} {byte : UInt8}
+    (h : hexByte? hi lo = some byte) : byteHexDigits byte = [hi, lo] := by
   simp only [hexByte?, Option.pure_def, Option.bind_eq_bind, Option.bind_eq_some_iff,
     Option.some.injEq] at h
   obtain ⟨k, hk, l, hl, rfl⟩ := h
@@ -83,8 +81,8 @@ theorem digits_of_hexByte? {hi lo : Char} {byte : UInt8} (h : hexByte? hi lo = s
   have : (UInt8.ofNat (16 * k + l)).toNat = 16 * k + l := by
     rw [UInt8.toNat_ofNat']
     omega
-  rw [this]
-  congr 3 <;> omega
+  simp only [byteHexDigits, this]
+  congr 4 <;> omega
 
 /-- A fork digest is its four bytes. -/
 theorem vector_four (v : Vector UInt8 4) : v = #v[v[0], v[1], v[2], v[3]] := by
@@ -97,13 +95,13 @@ theorem vector_four (v : Vector UInt8 4) : v = #v[v[0], v[1], v[2], v[3]] := by
 theorem forkDigestChars_length (digest : Vector UInt8 4) :
     (forkDigestChars digest).length = 8 := by
   rw [vector_four digest]
-  simp [forkDigestChars]
+  simp [forkDigestChars, byteHexDigits]
 
 /-- The hex digits of a fork digest read back as that digest. -/
 theorem parseForkDigest_forkDigestChars (digest : Vector UInt8 4) :
     parseForkDigest (forkDigestChars digest) = some digest := by
   rw [vector_four digest]
-  simp [forkDigestChars, parseForkDigest, hexByte?_digits]
+  simp [forkDigestChars, byteHexDigits, parseForkDigest, hexByte?_hexDigitChar]
 
 /-- Characters that read as a fork digest are the hex digits of that digest. -/
 theorem forkDigestChars_of_parseForkDigest {cs : List Char} {digest : Vector UInt8 4}
@@ -113,11 +111,8 @@ theorem forkDigestChars_of_parseForkDigest {cs : List Char} {digest : Vector UIn
   · simp only [Option.pure_def, Option.bind_eq_bind, Option.bind_eq_some_iff,
       Option.some.injEq] at h
     obtain ⟨w, hw, x, hx, y, hy, z, hz, rfl⟩ := h
-    have := digits_of_hexByte? hw
-    have := digits_of_hexByte? hx
-    have := digits_of_hexByte? hy
-    have := digits_of_hexByte? hz
-    simp_all [forkDigestChars]
+    simp [forkDigestChars, byteHexDigits_of_hexByte? hw, byteHexDigits_of_hexByte? hx,
+      byteHexDigits_of_hexByte? hy, byteHexDigits_of_hexByte? hz]
   · cases h
 
 /-! ## Topic strings -/
