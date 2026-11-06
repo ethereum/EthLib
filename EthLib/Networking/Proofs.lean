@@ -23,6 +23,7 @@ public import EthLib.Networking.Proofs.Rlpx.Frame
 public import EthLib.Networking.Proofs.Rlpx.Handshake
 public import EthLib.Networking.Proofs.Snappy.Block
 public import EthLib.Networking.Proofs.Snappy.Compress
+public import EthLib.Networking.Proofs.Snappy.CompressSize
 public import EthLib.Networking.Proofs.Snappy.Encode
 public import EthLib.Networking.Proofs.Snappy.Frame
 

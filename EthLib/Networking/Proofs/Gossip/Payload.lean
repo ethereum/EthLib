@@ -3,6 +3,7 @@ module
 public import EthLib.Networking.Gossip.Parameters
 public import EthLib.Networking.Gossip.Payload
 public import EthLib.Networking.Proofs.Snappy.Block
+public import EthLib.Networking.Proofs.Snappy.CompressSize
 
 /-!
 # `Networking.Proofs.Gossip.Payload`
@@ -13,6 +14,8 @@ Properties of the size limits on gossip, and of the gossipsub parameters.
 - The payload decoder accepts exactly the data within that length which decompresses to a
   payload within the cap and the bound of its type.
 - It rejects data above either bound.
+- It accepts the block that the compressor writes for a payload within the cap and the bound of
+  its type.
 - It rejects a payload length above the bounds from the preamble alone, before it decompresses.
 - The mesh bounds and the message cache windows are ordered.
 -/
@@ -62,6 +65,26 @@ theorem decodePayload_eq_ok_iff {typeBound : UInt64} {data payload : ByteArray} 
           exact ⟨rfl, by omega⟩
         · rintro ⟨rfl, _⟩
           rfl
+
+/-- The decoder accepts the block that the compressor writes for a payload within both bounds.
+
+The payload must be at most the payload cap and the bound of its type, which the decoder checks.
+
+Its block is within the worst-case compression of the cap.
+
+A block takes at most `32 + n + n / 6` bytes for a payload of `n` bytes.
+-/
+theorem decodePayload_compress {typeBound : UInt64} {payload : ByteArray}
+    (within : payload.size ≤ (min typeBound MAX_PAYLOAD_SIZE).toNat) :
+    decodePayload typeBound (Snappy.compress payload) = .ok payload := by
+  have cap : MAX_PAYLOAD_SIZE.toNat = 10485760 := by decide
+  have hle : (min typeBound MAX_PAYLOAD_SIZE).toNat ≤ MAX_PAYLOAD_SIZE.toNat := by
+    exact UInt64.le_iff_toNat_le.mp (Std.min_le_right)
+  have hmax : payload.size ≤ Snappy.maxUncompressedLength := by
+    simp only [Snappy.maxUncompressedLength]; omega
+  refine decodePayload_eq_ok_iff.mpr ⟨?_, Proofs.Snappy.Compress.decompress_compress hmax, within⟩
+  have := Proofs.Snappy.CompressSize.size_compress_le hmax
+  omega
 
 /-- Data longer than the worst-case compression of the payload cap is rejected. -/
 theorem decodePayload_compressed_too_long {typeBound : UInt64} {data : ByteArray}
