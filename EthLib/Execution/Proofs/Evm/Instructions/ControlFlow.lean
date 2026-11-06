@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Instructions.ControlFlow
+public import EthLib.Execution.Proofs.Evm.Instructions.EnvironmentData
 public import EthLib.Execution.Proofs.Evm.Machine.JumpDest
 public import EthLib.Execution.Proofs.Evm.Step
 
@@ -14,6 +15,20 @@ Otherwise it moves the program counter to the destination.
 JUMPI with a zero condition goes to the next opcode, whatever the destination.
 
 JUMPI with another condition fails exactly as JUMP does.
+
+With a nonzero condition and a valid destination, JUMPI that pays drops both words.
+
+Then it moves the program counter to the destination.
+
+STOP halts the frame and moves the program counter by 1, at no price.
+
+JUMPDEST pays its price, then moves the program counter by 1.
+
+PC and GAS, on a stack with room for one more word, pay their price, then push a word.
+
+PC pushes the program counter of the opcode.
+
+GAS pushes the gas left after its own price.
 
 When the frame holds the flags of its code, the valid destinations are the JUMPDEST opcodes.
 
@@ -86,6 +101,63 @@ theorem jumpiStep_eq_error_iff {evm : Evm fork Meter} {destination condition : U
   cases hv : isValidJumpDest evm.validJumpDestinations destination.toNat <;>
     simp [paid, hv, nz, bind, Except.bind, pure, Except.pure, throw, throwThe,
       MonadExceptOf.throw]
+
+omit [GasMeter Meter] in
+/-- STOP halts the frame and moves past the opcode, at no price. -/
+theorem stopStep_eq (evm : Evm fork Meter) :
+    stopStep evm = .ok { evm with running := false, pc := evm.pc + 1 } := rfl
+
+/-- JUMPDEST pays, then goes to the next opcode. -/
+theorem jumpdestStep_eq (evm : Evm fork Meter) :
+    jumpdestStep evm = (GasMeter.charge evm.gas OPCODE_JUMPDEST).map fun gas =>
+      { evm with gas, pc := evm.pc + 1 } := by
+  rcases hc : GasMeter.charge evm.gas OPCODE_JUMPDEST with _ | _ <;>
+    simp [hc, jumpdestStep, chargeGas, bind, Except.bind, pure, Except.pure, Except.map, advance]
+
+/-- PC on a stack with room: pay, then push the program counter of the opcode. -/
+theorem controlFlowStep_pc_of_length_lt
+    {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    (hstep : controlFlowStep .pc = some step) {evm : Evm fork Meter}
+    (room : evm.stack.val.length < STACK_LIMIT) :
+    step evm = (GasMeter.charge evm.gas OPCODE_PC).map fun gas =>
+      { evm with
+        gas
+        stack := ⟨BitVec.ofNat 256 evm.pc :: evm.stack.val, room⟩
+        pc := evm.pc + 1 } := by
+  simp only [controlFlowStep, Option.some.injEq] at hstep
+  subst hstep
+  exact readFrame_of_length_lt room
+
+/-- GAS on a stack with room: pay, then push the gas left after that price. -/
+theorem controlFlowStep_gas_of_length_lt
+    {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    (hstep : controlFlowStep .gas = some step) {evm : Evm fork Meter}
+    (room : evm.stack.val.length < STACK_LIMIT) :
+    step evm = (GasMeter.charge evm.gas OPCODE_GAS).map fun gas =>
+      { evm with
+        gas
+        stack := ⟨BitVec.ofNat 256 (GasMeter.gasLeft gas) :: evm.stack.val, room⟩
+        pc := evm.pc + 1 } := by
+  simp only [controlFlowStep, Option.some.injEq] at hstep
+  subst hstep
+  exact readFrame_of_length_lt room
+
+/-- JUMPI with a nonzero condition that pays, to a valid destination, jumps there. -/
+theorem jumpiStep_of_isValidJumpDest {evm : Evm fork Meter} {destination condition : U256}
+    {rest : List U256} {gas : Meter} (h : evm.stack.val = destination :: condition :: rest)
+    (nonzero : condition ≠ 0) (paid : GasMeter.charge evm.gas OPCODE_JUMPI = .ok gas)
+    (valid : isValidJumpDest evm.validJumpDestinations destination.toNat = true) :
+    jumpiStep evm = .ok { evm with
+      stack := ⟨rest, by
+        have := evm.stack.property
+        rw [h, List.length_cons, List.length_cons] at this
+        omega⟩,
+      gas, pc := destination.toNat } := by
+  have hstack : evm.stack = ⟨destination :: condition :: rest, h ▸ evm.stack.property⟩ :=
+    Subtype.ext h
+  have nz : ¬condition = 0#256 := nonzero
+  simp [jumpiStep, popWord, chargeGas, hstack, Stack.pop, paid, valid, nz, bind, Except.bind, pure,
+    Except.pure]
 
 /-- With the flags of its code, JUMP that pays fails exactly off the JUMPDEST opcodes. -/
 theorem jumpStep_eq_error_iff_of_code {evm : Evm fork Meter} {destination : U256}

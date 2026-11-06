@@ -10,6 +10,16 @@ public import EthLib.Execution.Proofs.Evm.Step
 
 PUSH reads the code past its end as zeros.
 
+POP on a stack with a word on top pays its price.
+
+Then it drops that word and moves the program counter by 1.
+
+PUSH0 to PUSH32 on a stack with room pay the price of PUSH0 for width 0, else of PUSH.
+
+Then they push the next `n` bytes of code, as a big-endian word.
+
+They move the program counter by `1 + n`.
+
 DUP and SWAP fail with an underflow exactly on a stack too short for their depth.
 
 From Spurious Dragon, EXP costs 10 plus 50 per byte of the exponent.
@@ -62,6 +72,40 @@ theorem swapN_of_length_le {n : Fin 16} {evm : Evm fork Meter} {gas : Meter}
     simp only [List.length_cons] at h
     simp [swapN, chargeGas, paid, bind, Except.bind, pure, Except.pure, hs,
       List.getElem?_eq_none_iff.mpr (show rest.length ≤ n.val by omega)]
+
+/-- POP on a stack with `x` on top: pay, then drop `x`. -/
+theorem popStep_cons {evm : Evm fork Meter} {x : U256} {rest : List U256}
+    (h : evm.stack.val = x :: rest) :
+    popStep evm = (GasMeter.charge evm.gas OPCODE_POP).map fun gas =>
+      { evm with
+        stack := ⟨rest, by
+          have := evm.stack.property
+          rw [h, List.length_cons] at this
+          omega⟩,
+        gas, pc := evm.pc + 1 } := by
+  have hstack : evm.stack = ⟨x :: rest, h ▸ evm.stack.property⟩ := Subtype.ext h
+  simp only [popStep, popWord, chargeGas, hstack, Stack.pop]
+  rcases hc : GasMeter.charge evm.gas OPCODE_POP with _ | _ <;>
+    simp [hc, bind, Except.bind, pure, Except.pure, Except.map, advance]
+
+/-- PUSHn, for each width from 0 to 32, on a stack with room: pay, then push the next `n` bytes.
+
+PUSH0 pays the price of PUSH0, and the other widths the price of PUSH.
+
+The program counter moves past the opcode and its `n` bytes. -/
+theorem pushN_of_length_lt {n : Fin 33} {evm : Evm fork Meter}
+    (room : evm.stack.val.length < STACK_LIMIT) :
+    pushN n evm = (GasMeter.charge evm.gas (if n.val = 0 then OPCODE_PUSH0 else OPCODE_PUSH)).map
+      fun gas =>
+        { evm with
+          stack := ⟨pushData evm.code evm.pc n :: evm.stack.val, room⟩,
+          gas, pc := evm.pc + (1 + n) } := by
+  have full : ¬evm.stack.val.length = STACK_LIMIT := Nat.ne_of_lt room
+  unfold pushN
+  generalize (if n.val = 0 then OPCODE_PUSH0 else OPCODE_PUSH) = price
+  rcases hc : GasMeter.charge evm.gas price with _ | _ <;>
+    simp [hc, chargeGas, bind, Except.bind, pure, Except.pure, Except.map, pushWord,
+      Stack.push, full, advance]
 
 /-- From Spurious Dragon, EXP costs 10 plus 50 per byte of the exponent, by EIP-160. -/
 theorem expStep_cons {fork : Fork} (hfork : fork ≥ .spuriousDragon) {evm : Evm fork Meter}
