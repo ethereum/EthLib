@@ -209,8 +209,8 @@ def slashValidator (config : Config) (state : BeaconState preset fork)
     { validator with slashed := true, withdrawableEpoch }
   let slashed ← readCircular state.slashings epoch
   let slashed ← liftArith (addChecked slashed validator.effectiveBalance)
-  let state := { state with
-    slashings := state.slashings.set! (epoch % preset.EPOCHS_PER_SLASHINGS_VECTOR).toNat slashed }
+  let slashings ← writeCircular state.slashings epoch slashed
+  let state := { state with slashings }
   let parameters := parameters preset fork
   let state ← decreaseBalance state slashedIndex
     (validator.effectiveBalance / parameters.MIN_SLASHING_PENALTY_QUOTIENT)

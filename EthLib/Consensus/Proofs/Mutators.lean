@@ -140,8 +140,8 @@ theorem sameSizes_slashValidator {config : Config} {state after : BeaconState pr
     (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
     SameSizes state after := by
   simp only [slashValidator, bind_ok_iff, liftArith, mapError_ok_iff] at computed
-  obtain ⟨exited, exitedOk, _, _, _, _, _, _, _, _, _, lowered, _, _, _, _, _, raised, _, final,
-    done⟩ := computed
+  obtain ⟨exited, exitedOk, _, _, _, _, _, _, _, _, _, _, _, lowered, _, _, _, _, _, raised, _,
+    final, done⟩ := computed
   have cancelled := slashValidator_last done
   refine (sameSizes_initiateValidatorExit exitedOk).trans (SameSizes.trans ?_
     ((sameSizes_decreaseBalance lowered).trans ((sameSizes_increaseBalance raised).trans
@@ -299,8 +299,8 @@ theorem slashValidator_slashedFlag {config : Config} {state after : BeaconState 
       ∀ other, other ≠ slashedIndex → slashedFlag after other = slashedFlag state other := by
   unfold slashValidator at computed
   simp only [bind_ok_iff, liftArith, mapError_ok_iff] at computed
-  obtain ⟨exited, exitedOk, validator, found, withdrawable, _, _, _, _, _, _, lowered, _, _, _, _,
-    _, raised, _, final, done⟩ := computed
+  obtain ⟨exited, exitedOk, validator, found, withdrawable, _, _, _, _, _, _, _, _, lowered, _, _,
+    _, _, _, raised, _, final, done⟩ := computed
   -- The balance steps keep the registry in which the validator is marked slashed.
   let marked : Validator :=
     { validator with
@@ -374,8 +374,8 @@ theorem slashValidator_payments {config : Config} {state after : BeaconState pre
       if payment.proposerIndex = slashedIndex then .empty else payment := by
   unfold slashValidator at computed
   simp only [bind_ok_iff, liftArith, mapError_ok_iff] at computed
-  obtain ⟨exited, exitedOk, _, _, _, _, _, _, _, _, _, lowered, _, _, _, _, _, raised, _, final,
-    done⟩ := computed
+  obtain ⟨exited, exitedOk, _, _, _, _, _, _, _, _, _, _, _, lowered, _, _, _, _, _, raised, _,
+    final, done⟩ := computed
   simp only [pure, Except.pure, Except.ok.injEq, gloas, ↓reduceDIte] at done
   subst done
   simp only [cancelProposerPayments]

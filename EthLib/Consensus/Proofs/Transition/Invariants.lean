@@ -168,7 +168,7 @@ theorem frame_slashValidator {slashedIndex : ValidatorIndex}
     (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
     Frame state after := by
   simp only [slashValidator, bind_ok_iff, liftArith, mapError_ok_iff] at computed
-  obtain ⟨exited, exitedOk, validator, found, delay, _, _, _, _, _, lowered, loweredOk,
+  obtain ⟨exited, exitedOk, validator, found, delay, _, _, _, _, _, _, _, lowered, loweredOk,
     proposer, _, _, _, raised, raisedOk, last, lastOk, done⟩ := computed
   refine (frame_initiateValidatorExit exitedOk).trans <|
     ((frame_setValidator (index := slashedIndex.toNat)
