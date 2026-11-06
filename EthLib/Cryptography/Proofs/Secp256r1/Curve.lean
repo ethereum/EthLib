@@ -60,6 +60,12 @@ theorem toPoint_affine {x y : Fp} (h : (affine x y).isOnCurve = true) :
 
 @[simp] theorem toPoint_infinity : toPoint infinity = 0 := rfl
 
+/-- `(0, 0)` does not lie on the curve.
+
+EIP-7951, Point of Infinity Encoding, encodes the point at infinity as `(0, 0)` for this reason. -/
+theorem isOnCurve_affine_zero_zero : (affine 0 0).isOnCurve = false := by
+  decide
+
 /-! ## Addition -/
 
 /-- A pair whose coordinates are those of a group element is on the curve, and is that element. -/

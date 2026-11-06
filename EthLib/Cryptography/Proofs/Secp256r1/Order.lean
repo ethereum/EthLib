@@ -153,6 +153,22 @@ theorem toPoint_mul' (k : Fn) {p : Point} (hp : p.isOnCurve = true) :
     toPoint (mul k p) = Fn.toZMod k • toPoint p :=
   toPoint_mul k hp
 
+/-- `d G` is not the point at infinity when `d` is nonzero, since `G` has order `n`. -/
+theorem mul_generator_ne_infinity {d : Fn} (hd : d ≠ 0) : mul d generator ≠ .infinity := by
+  intro h
+  have h0 := congrArg toPoint h
+  rw [toPoint_mul' d isOnCurve_generator, toPoint_infinity, smul_eq_zero] at h0
+  rcases h0 with h0 | h0
+  · exact hd (Fn.toZMod.injective (h0.trans (map_zero _).symm))
+  · exact toPoint_generator_ne_zero h0
+
+/-- A nonzero scalar gives an affine public key `d G`. -/
+theorem exists_mul_generator_eq_affine {d : Fn} (hd : d ≠ 0) :
+    ∃ qx qy : Fp, mul d generator = .affine qx qy := by
+  cases hq : mul d generator with
+  | infinity => exact absurd hq (mul_generator_ne_infinity hd)
+  | affine qx qy => exact ⟨qx, qy, rfl⟩
+
 /-- Every point on the curve is `k G` for one scalar `k`: every public key has a private key. -/
 theorem exists_eq_mul_generator {p : Point} (hp : p.isOnCurve = true) : ∃ k : Fn, p = mul k generator := by
   -- `G` has order `n`, the size of the group, so its multiples are the whole group.

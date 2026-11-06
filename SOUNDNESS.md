@@ -655,6 +655,20 @@ The ECRECOVER theorems rest on the secp256k1 ones, and all three are in `Executi
 
 No theorem relates the module to the execution-specs code it follows, which calls a C library to recover the key.
 
+### P256VERIFY
+
+The P256VERIFY theorems rest on the secp256r1 ones, and are in `Execution/Proofs/Evm/Precompiles/P256Verify.lean`.
+`isValid_callData` proves that, on the 160-byte call data of EIP-7951 with an affine public key, the input check gives the result of ECDSA verification.
+`p256Verify_callData_sign` proves that a signature from the signing operation of SEC 1 returns the word 1 under its public key, when the call has at least 6900 gas.
+`p256Verify_callData_neg_s` proves that, for `s` in `(0, n)`, `(r, s)` and `(r, n - s)` give the same result at every gas limit.
+Either both signatures are valid or neither is, so the call does not require a low `s`.
+`exists_p256Verify_eq_ok_valid` proves that the valid output is reachable.
+The witness signs the hash 0 with the private key 1 and the nonce 1.
+So the public key and the point `R = k G` are both the base point.
+
+No theorem checks the module against the EIP-7951 pseudocode line by line.
+The Python test `bindings/python/tests/precompile/test_p256verify.py` runs it on the 781 test vectors of EIP-7951, 778 of which come from Wycheproof.
+
 ### EIP-2537 precompiles
 
 The BLS12-381 precompiles read and write field elements and points in the encoding of EIP-2537.
