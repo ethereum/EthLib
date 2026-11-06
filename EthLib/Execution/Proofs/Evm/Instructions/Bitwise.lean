@@ -6,6 +6,7 @@ public import EthLib.Base.Proofs.U256
 /-!
 # Proofs: `Evm.Instructions.Bitwise`
 
+- AND, OR, XOR and NOT act on the bits of the integer.
 - BYTE reads one base-256 digit of the word.
 - SHL, SHR and SAR agree with the bit vector shifts, for every shift up to 2^256 - 1.
 -/
@@ -15,6 +16,22 @@ public import EthLib.Base.Proofs.U256
 namespace EthLib.Execution.Evm
 
 open EthLib.Base
+
+/-- AND is the bitwise and of the integers. -/
+theorem toNat_bitwiseAnd (x y : U256) : (bitwiseAnd x y).toNat = x.toNat &&& y.toNat :=
+  BitVec.toNat_and x y
+
+/-- OR is the bitwise or of the integers. -/
+theorem toNat_bitwiseOr (x y : U256) : (bitwiseOr x y).toNat = x.toNat ||| y.toNat :=
+  BitVec.toNat_or x y
+
+/-- XOR is the bitwise exclusive or of the integers. -/
+theorem toNat_bitwiseXor (x y : U256) : (bitwiseXor x y).toNat = x.toNat ^^^ y.toNat :=
+  BitVec.toNat_xor x y
+
+/-- NOT is 2^256 - 1 minus the integer. -/
+theorem toNat_bitwiseNot (x : U256) : (bitwiseNot x).toNat = 2 ^ 256 - 1 - x.toNat :=
+  BitVec.toNat_not
 
 /-- BYTE `i` of a word is its digit of weight `256^(31 - i)`. -/
 theorem toNat_getByte (byteIndex word : U256) (h : byteIndex.toNat < 32) :
@@ -97,5 +114,15 @@ theorem toNat_countLeadingZeros (x : U256) :
     have := (Nat.log2_lt hx0).mpr this
     simp only [countLeadingZeros, bitLength, hx0, ite_false, hx, BitVec.toNat_ofNat]
     omega
+
+/-- SHL multiplies by a power of 2, reduced modulo 2^256. -/
+theorem toNat_bitwiseShl (shift value : U256) :
+    (bitwiseShl shift value).toNat = value.toNat * 2 ^ shift.toNat % 2 ^ 256 := by
+  rw [bitwiseShl_eq, BitVec.toNat_shiftLeft, Nat.shiftLeft_eq]
+
+/-- SHR divides by a power of 2, rounding down. -/
+theorem toNat_bitwiseShr (shift value : U256) :
+    (bitwiseShr shift value).toNat = value.toNat / 2 ^ shift.toNat := by
+  rw [bitwiseShr_eq, BitVec.toNat_ushiftRight, Nat.shiftRight_eq_div_pow]
 
 end EthLib.Execution.Evm
