@@ -655,6 +655,18 @@ The ECRECOVER theorems rest on the secp256k1 ones, and all three are in `Executi
 
 No theorem relates the module to the execution-specs code it follows, which calls a C library to recover the key.
 
+### P256VERIFY
+
+The P256VERIFY theorems rest on the secp256r1 ones, and are in `Execution/Proofs/Evm/Precompiles/P256Verify.lean`.
+`isValid_callData` proves that 160 bytes of a public key read back as that key.
+`p256Verify_callData_sign` proves that a signature from the signing operation of SEC 1 returns the word 1 under its public key, when the call has 6900 gas.
+`p256Verify_callData_neg_s` proves that `(r, s)` and `(r, n - s)` give the same result at every gas limit.
+EIP-7951 accepts both, and the call does not choose the low one.
+`exists_p256Verify_eq_ok_valid` proves that the valid output is reachable.
+The witness uses the private key 1 and the nonce 1 on the hash 0, so the rebuilt point is the base point.
+
+No theorem relates the module to the execution-specs code it follows.
+
 ### EIP-2537 precompiles
 
 The BLS12-381 precompiles read and write field elements and points in the encoding of EIP-2537.
