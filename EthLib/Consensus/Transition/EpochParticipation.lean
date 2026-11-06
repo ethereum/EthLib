@@ -31,17 +31,22 @@ A validator that hit the target loses one point, and one that missed gains the s
 
 Outside a leak the score then loses the recovery rate.
 
+The leak test is read after the first change, so an overflow there is the error that comes first.
+
 A score never falls below zero, and a score past 64 bits is an error. -/
-def nextInactivityScore (config : Config) (hit leaking : Bool) (score : UInt64) :
-    Except TransitionError UInt64 := do
+def nextInactivityScore (config : Config) (hit : Bool) (leaking : Except TransitionError Bool)
+    (score : UInt64) : Except TransitionError UInt64 := do
   let score ← if hit then pure (saturatingSub score 1)
     else liftAccessor (liftArith (addChecked score config.INACTIVITY_SCORE_BIAS))
-  return if leaking then score else saturatingSub score config.INACTIVITY_SCORE_RECOVERY_RATE
+  return if ← leaking then score else saturatingSub score config.INACTIVITY_SCORE_RECOVERY_RATE
 
-/-- From Altair: the inactivity scores with the score of one eligible validator updated. -/
-def updateInactivityScore (config : Config) (hit : Array Bool) (leaking : Bool)
-    (scores : InactivityScores preset fork) (index : ValidatorIndex) :
-    Except TransitionError (InactivityScores preset fork) := do
+/-- From Altair: the inactivity scores with the score of one eligible validator updated.
+
+The marks of the validators that hit the target are read first, then the score. -/
+def updateInactivityScore (config : Config) (hit : Except TransitionError (Array Bool))
+    (leaking : Except TransitionError Bool) (scores : InactivityScores preset fork)
+    (index : ValidatorIndex) : Except TransitionError (InactivityScores preset fork) := do
+  let hit ← hit
   if inside : index.toNat < scores.data.size then
     let score ← nextInactivityScore config (hit.getD index.toNat false) leaking
       scores.data[index.toNat]
@@ -53,17 +58,23 @@ def updateInactivityScore (config : Config) (hit : Array Bool) (leaking : Bool)
 
 The first epoch changes nothing, since the scores follow the previous epoch.
 
-Each eligible validator then updates its score, by whether it hit the target of that epoch. -/
+Each eligible validator then updates its score, by whether it hit the target of that epoch.
+
+The validators that hit the target and the leak test do not change during the update.
+
+Each is computed once, and read for each validator where the update needs it.
+
+So each of their errors arises only once an eligible validator reaches it. -/
 def processInactivityUpdates (config : Config) (state : BeaconState preset fork)
     (altair : .altair ≤ fork) : Except TransitionError (BeaconState preset fork) :=
   if getCurrentEpoch state = GENESIS_EPOCH then pure state
   else do
-    let participating ← liftAccessor (getUnslashedParticipatingIndices state altair
-      TIMELY_TARGET_FLAG_INDEX (getPreviousEpoch state))
-    let hit := markIndices state.validators.data.size participating
-    let leaking ← isInInactivityLeak state
-    let scores ← (← getEligibleValidatorIndices state).foldlM
-      (updateInactivityScore config hit leaking) (state.inactivityScores altair)
+    let eligible ← getEligibleValidatorIndices state
+    let hit := liftAccessor ((getUnslashedParticipatingIndices state altair
+      TIMELY_TARGET_FLAG_INDEX (getPreviousEpoch state)).map
+        (markIndices state.validators.data.size))
+    let scores ← eligible.foldlM (updateInactivityScore config hit (isInInactivityLeak state))
+      (state.inactivityScores altair)
     return { state with inactivityScores := fun _ => scores }
 
 /-- From Altair: the state after the rotation of the participation flags.
