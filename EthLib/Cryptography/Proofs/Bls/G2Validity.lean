@@ -102,7 +102,9 @@ theorem cube_add_bTwist_ne_zero (x : Fp2) :
     rw [show Fp2.norm (-bTwist) = Fp.ofNat 32 by
         decide_eq_at_model [Fp2.norm, Fp2.neg_c0, Fp2.neg_c1, bTwist],
       Fp.toZMod_ofNat, Nat.cast_ofNat]
-  exact cube_ne_32_zmod (Fp2.norm x) (hnorm.trans hbt)
+  have hz := congrArg Fp.toZMod hnorm
+  push_toZMod at hz
+  exact cube_ne_32_zmod (Fp.toZMod (Fp2.norm x)) (hz.trans hbt)
 
 /-- Because `x^3 + bTwist` has no root, any affine solution has `2 * y != 0` and is nonsingular. -/
 theorem valid_of_affine_equation {x y : Fp2}

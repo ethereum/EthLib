@@ -350,6 +350,7 @@ private theorem sign_recovery' {ya yPos : Fp} {P : Prop} [Decidable P]
   rw [if_congr key rfl rfl]
   exact sign_recovery hsq
 
+set_option linter.auxLemma false in
 /-- Uncompress recovers `⟨xa, ya, 1⟩` from compressed bytes `cb`
 satisfying the flag- and coordinate-level facts. -/
 private theorem uncompress_of_facts {xa ya yPos : Fp} {cb : ByteArray}
@@ -361,12 +362,18 @@ private theorem uncompress_of_facts {xa ya yPos : Fp} {cb : ByteArray}
     (hsqrt : Fp.sqrt (xa * xa * xa + Fp.ofNat 4) = .ok yPos)
     (hysq : yPos * yPos = ya * ya) :
     uncompress cb = .ok ⟨xa, ya, Fp.one⟩ := by
-  rw [uncompress, ite_eq_right (by rw [hsize]; decide)]
-  simp only
-  rw [ite_eq_right (by rw [decide_eq_true hc]; decide), ite_eq_right (by rw [hi]; decide),
-    hmaskeq, Fp.fromBytesBE_toBytesBE]
-  simp only [hsqrt]
-  rw [sign_recovery' hysq hsg]
+  rw [uncompress, ite_eq_right (show ¬ cb.size ≠ 48 from fun h => h hsize)]
+  extract_lets head isC isI yS xb
+  have hC : ¬ (!decide isC) = true := by simp [isC, head, hc]
+  have hI : ¬ isI := by simp [isI, head, hi]
+  rw [ite_eq_right hC, ite_eq_right hI, show xb = Fp.toBytesBE xa from hmaskeq,
+    Fp.fromBytesBE_toBytesBE]
+  simp (config := { zeta := false, iota := false, beta := false }) only [uncompress.match_1.eq_2]
+  extract_lets rhs
+  rw [show Fp.sqrt rhs = .ok yPos from hsqrt]
+  simp (config := { zeta := false, iota := false, beta := false }) only [uncompress.match_1.eq_2]
+  extract_lets y
+  rw [show y = ya from sign_recovery' hysq hsg]
 
 /-! ## Flags in the compressed header byte
 
@@ -619,39 +626,86 @@ private theorem sq_select {yPos : Fp} {P : Prop} [Decidable P] :
   -- Negating the root: (-y) * (-y) = y * y.
   · exact Fp.toZMod.injective (by push_toZMod; exact neg_mul_neg _ _)
 
+-- Both matches use one matcher, named on purpose: its equations select a branch without evaluation.
+set_option linter.auxLemma false in
+/-- A successful decompression read 48 bytes with the compression flag set.
+
+The point is then the identity, read from the canonical infinity encoding, or `(x, y, 1)`.
+
+Here `x` decodes from the input without its three flag bits.
+
+The square root of `x^3 + 4` succeeds, and `y` is its root with the sign that the flag selects.
+-/
+private theorem uncompress_ok_cases {b : ByteArray} {q : G1} (h : uncompress b = .ok q) :
+    b.size = 48 ∧ (b.get! 0 &&& 0x80) ≠ 0 ∧
+      ((b.get! 0 = 0xc0 ∧ tailAllZero b 1 = true ∧ q = zero) ∨
+        ((b.get! 0 &&& 0x40) = 0 ∧ ∃ x yPos : Fp,
+          Fp.fromBytesBE (b.set! 0 (b.get! 0 &&& 0x1f)) = .ok x ∧
+          Fp.sqrt (x * x * x + Fp.ofNat 4) = .ok yPos ∧
+          q = ⟨x, if (Fp.signBit yPos = true) = ((b.get! 0 &&& 0x20) ≠ 0) then yPos else -yPos,
+            Fp.one⟩)) := by
+  rw [uncompress] at h
+  -- A size other than 48 is rejected.
+  split at h
+  · cases h
+  rename_i hsz
+  extract_lets head isC isI yS xb at h
+  refine ⟨by omega, ?_⟩
+  -- A cleared compression flag is rejected.
+  split at h
+  · cases h
+  rename_i hcomp
+  refine ⟨fun h0 => hcomp (by simp [isC, head, h0]), ?_⟩
+  -- Infinity flag set: only the canonical encoding gives the identity.
+  split at h
+  · split at h
+    · cases h
+    rename_i hflags
+    cases h
+    simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at hflags
+    obtain ⟨⟨_, hhead⟩, htail⟩ := hflags
+    exact Or.inl ⟨Classical.not_not.mp (of_decide_eq_false hhead),
+      by simpa only [Bool.not_eq_false'] using htail, rfl⟩
+  rename_i hinf
+  refine Or.inr ⟨not_ne_iff.mp hinf, ?_⟩
+  -- Infinity flag clear: name the decoded x, then select its branch by rewriting.
+  generalize hd : Fp.fromBytesBE xb = d at h
+  cases d with
+  | error e =>
+    simp (config := { zeta := false, iota := false, beta := false }) only
+      [uncompress.match_1.eq_1] at h
+    cases h
+  | ok x =>
+    simp (config := { zeta := false, iota := false, beta := false }) only
+      [uncompress.match_1.eq_2] at h
+    -- Name the square root of x^3 + 4, then select its branch the same way.
+    extract_lets rhs at h
+    generalize hs : Fp.sqrt rhs = s at h
+    cases s with
+    | error e =>
+      simp (config := { zeta := false, iota := false, beta := false }) only
+        [uncompress.match_1.eq_1] at h
+      cases h
+    | ok yPos =>
+      simp (config := { zeta := false, iota := false, beta := false }) only
+        [uncompress.match_1.eq_2] at h
+      extract_lets y at h
+      cases h
+      refine ⟨x, yPos, ?_, ?_, rfl⟩ <;> first | rfl | assumption
+
 /-- Any point returned by decompression is a nonsingular curve point.
 
 Decompression does not check subgroup membership, so neither does this statement.
 -/
 theorem uncompress_valid {b : ByteArray} {q : G1}
     (h : G1.uncompress b = .ok q) : Valid q := by
-  rw [uncompress] at h
-  split at h
-  -- A size other than 48 is rejected.
-  · cases h
-  · dsimp only at h
-    split at h
-    -- A cleared compression flag is rejected.
-    · cases h
-    · split at h
-      -- Infinity flag set: the result, if any, is the identity, which is valid.
-      · split at h
-        · cases h
-        · cases h
-          exact valid_zero
-      -- Infinity flag clear: x must decode and x^3 + 4 must have a square root.
-      · split at h
-        · cases h
-        · rename_i x hx
-          split at h
-          · cases h
-          · rename_i yPos hsqrt
-            cases h
-            -- The returned point is (x, y, 1) with y = yPos or y = -yPos.
-            apply valid_of_affine_eq
-            -- Either sign squares to yPos^2, and the square root guarantees yPos^2 = x^3 + 4.
-            rw [sq_select]
-            exact Fp.sqrt_ok hsqrt
+  obtain ⟨-, -, ⟨-, -, rfl⟩ | ⟨-, x, yPos, -, hsqrt, rfl⟩⟩ := uncompress_ok_cases h
+  -- The identity is valid.
+  · exact valid_zero
+  -- Either sign squares to yPos^2, and the square root guarantees yPos^2 = x^3 + 4.
+  · apply valid_of_affine_eq
+    rw [sq_select]
+    exact Fp.sqrt_ok hsqrt
 
 /-- A point that decompression returns is the point at infinity, or `(x, y, 1)`.
 
@@ -659,27 +713,11 @@ Here `x` decodes from the input without its three flag bits, and `y^2 = x^3 + 4`
 theorem uncompress_eq_zero_or {b : ByteArray} {q : G1} (h : G1.uncompress b = .ok q) :
     q = zero ∨ ∃ x y : Fp, Fp.fromBytesBE (b.set! 0 (b.get! 0 &&& 0x1f)) = .ok x ∧
       y * y = x * x * x + Fp.ofNat 4 ∧ q = ⟨x, y, Fp.one⟩ := by
-  rw [uncompress] at h
-  split at h
-  · cases h
-  · dsimp only at h
-    split at h
-    · cases h
-    · split at h
-      · split at h
-        · cases h
-        · cases h
-          exact Or.inl rfl
-      · split at h
-        · cases h
-        · rename_i x hx
-          split at h
-          · cases h
-          · rename_i yPos hsqrt
-            cases h
-            refine Or.inr ⟨x, _, hx, ?_, rfl⟩
-            rw [sq_select]
-            exact Fp.sqrt_ok hsqrt
+  obtain ⟨-, -, ⟨-, -, rfl⟩ | ⟨-, x, yPos, hx, hsqrt, rfl⟩⟩ := uncompress_ok_cases h
+  · exact Or.inl rfl
+  · refine Or.inr ⟨x, _, hx, ?_, rfl⟩
+    rw [sq_select]
+    exact Fp.sqrt_ok hsqrt
 
 /-! ### Re-encoding the header byte -/
 
@@ -847,100 +885,66 @@ Accepted inputs fall into two shapes, and each is rebuilt byte for byte.
 -/
 theorem compress_uncompress {b : ByteArray} {q : G1}
     (h : G1.uncompress b = .ok q) : G1.compress q = b := by
-  rw [uncompress] at h
-  split at h
-  -- A size other than 48 is rejected.
-  · cases h
-  · rename_i hsz
-    have hsz48 : b.size = 48 := by omega
-    dsimp only at h
-    split at h
-    -- A cleared compression flag is rejected.
-    · cases h
-    · rename_i hcomp
-      -- Invariant: the compression flag 0x80 is set in the header byte.
-      have hc : (b.get! 0 &&& 0x80) ≠ 0 := by
-        by_contra h0
-        exact hcomp (by simp [h0])
-      split at h
-      -- Phase 1: infinity flag set.
-      · split at h
-        · cases h
-        · rename_i hflags
-          cases h
-          -- Compressing the identity writes the fixed infinity encoding.
-          rw [compress_inf rfl]
-          -- Acceptance means: header byte 0xc0, and a successful tail scan.
-          simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at hflags
-          obtain ⟨⟨_, hhead⟩, htail⟩ := hflags
-          have hhead0 : b.get! 0 = 0xc0 := Classical.not_not.mp (of_decide_eq_false hhead)
-          have htail0 : ∀ i, 1 ≤ i → i < b.size → b.get! i = 0 :=
-            tailAllZero_ok b (by simp only [Bool.not_eq_false'] at htail; exact htail)
-          -- Compare with the infinity encoding byte by byte.
-          refine ba_ext (by rw [hsz48]; decide) (fun i hi => ?_)
-          have hi48 : i < 48 := by simpa [show infinityBytes.size = 48 by decide] using hi
-          by_cases hi0 : i = 0
-          -- Byte 0 is 0xc0 on both sides.
-          · subst hi0
-            rw [hhead0]
-            decide
-          -- Bytes 1 to 47 are zero on both sides.
-          · have hi1 : 1 ≤ i := Nat.pos_of_ne_zero hi0
-            have hib : i < b.size := by rw [hsz48]; exact hi48
-            rw [infinityBytes_get!_pos ⟨i, hi48⟩ hi1, htail0 i hi1 hib]
-      -- Phase 2: infinity flag clear, so the point is finite.
-      · rename_i hinf_flag
-        -- Invariant: the infinity flag 0x40 is clear in the header byte.
-        have hi : (b.get! 0 &&& 0x40) = 0 := not_ne_iff.mp hinf_flag
-        split at h
-        · cases h
-        · rename_i x hx
-          split at h
-          · cases h
-          · rename_i yPos hsqrt
-            cases h
-            -- Name the root that decompression selected from the sign flag.
-            set y : Fp :=
-              if (Fp.signBit yPos = true) = ((b.get! 0 &&& 0x20) ≠ 0) then yPos else -yPos
-            -- The decoded point has z = 1, so it is finite and already affine.
-            have hqinf : ¬ (⟨x, y, Fp.one⟩ : G1).isInfinity = true := by
-              change ¬ Fp.one.isZero = true
-              rw [Fp.one_isZero]
-              decide
-            have hpa : (⟨x, y, Fp.one⟩ : G1).toAffine = (x, y) := toAffine_of_z_one x y
-            rw [compress_noninf hqinf hpa]
-            dsimp only
-            -- x was decoded from the input with its flag bits cleared.
-            -- Its encoding is therefore that same masked input.
-            have hxbytes : Fp.toBytesBE x = b.set! 0 (b.get! 0 &&& 0x1f) :=
-              Fp.toBytesBE_fromBytesBE hx
-            -- The computed root is nonzero, because x^3 + 4 has no root.
-            have hypos : yPos ≠ 0 := by
-              intro hy0
-              exact cube_add_four_ne_zero x (zero_eq_of_sq_eq hy0 (Fp.sqrt_ok hsqrt))
-            -- So the selected root carries exactly the sign stored in the input.
-            have hsign : Fp.signBit y = decide ((b.get! 0 &&& 0x20) ≠ 0) :=
-              signBit_select hypos
-            have h0lt : 0 < b.size := by omega
-            -- Setting the compression flag on the masked input gives:
-            --
-            --     header byte (head &&& 0x1f) ||| 0x80, then 47 bytes of b
-            have hbase :
-                (Fp.toBytesBE x).set! 0 ((Fp.toBytesBE x).get! 0 ||| 0x80) =
-                  b.set! 0 ((b.get! 0 &&& 0x1f) ||| 0x80) := by
-              rw [hxbytes, ba_get!_set!_self b _ h0lt, ba_set!_set!_same]
-            by_cases hs : (b.get! 0 &&& 0x20) ≠ 0
-            -- Sign flag set: compression also sets 0x20, which rebuilds the header byte.
-            · have hsy : Fp.signBit y = true := by rw [hsign, decide_eq_true hs]
-              have hrec := head_reconstruct (b.get! 0) hc hi
-              rw [ite_eq_left hs] at hrec
-              rw [ite_eq_left hsy, hbase, ba_get!_set!_self b _ h0lt,
-                ba_set!_set!_same, hrec, ba_set!_get!_self b h0lt]
-            -- Sign flag clear: compression leaves 0x20 clear, which is the header byte.
-            · have hsy : ¬ Fp.signBit y = true := by rw [hsign, decide_eq_false hs]; decide
-              have hrec := head_reconstruct (b.get! 0) hc hi
-              rw [ite_eq_right hs] at hrec
-              rw [ite_eq_right hsy, hbase, hrec, ba_set!_get!_self b h0lt]
+  obtain ⟨hsz48, hc, ⟨hhead0, htail, rfl⟩ | ⟨hi, x, yPos, hx, hsqrt, rfl⟩⟩ :=
+    uncompress_ok_cases h
+  -- Phase 1: the identity, accepted only from the canonical infinity encoding.
+  · -- Compressing the identity writes the fixed infinity encoding.
+    rw [compress_inf rfl]
+    have htail0 : ∀ i, 1 ≤ i → i < b.size → b.get! i = 0 := tailAllZero_ok b htail
+    -- Compare with the infinity encoding byte by byte.
+    refine ba_ext (by rw [hsz48]; decide) (fun i hi => ?_)
+    have hi48 : i < 48 := by simpa [show infinityBytes.size = 48 by decide] using hi
+    by_cases hi0 : i = 0
+    -- Byte 0 is 0xc0 on both sides.
+    · subst hi0
+      rw [hhead0]
+      decide
+    -- Bytes 1 to 47 are zero on both sides.
+    · have hi1 : 1 ≤ i := Nat.pos_of_ne_zero hi0
+      have hib : i < b.size := by rw [hsz48]; exact hi48
+      rw [infinityBytes_get!_pos ⟨i, hi48⟩ hi1, htail0 i hi1 hib]
+  -- Phase 2: a finite point, decoded from the masked input.
+  · -- Name the root that decompression selected from the sign flag.
+    set y : Fp :=
+      if (Fp.signBit yPos = true) = ((b.get! 0 &&& 0x20) ≠ 0) then yPos else -yPos
+    -- The decoded point has z = 1, so it is finite and already affine.
+    have hqinf : ¬ (⟨x, y, Fp.one⟩ : G1).isInfinity = true := by
+      change ¬ Fp.one.isZero = true
+      rw [Fp.one_isZero]
+      decide
+    have hpa : (⟨x, y, Fp.one⟩ : G1).toAffine = (x, y) := toAffine_of_z_one x y
+    rw [compress_noninf hqinf hpa]
+    dsimp only
+    -- x was decoded from the masked input, so its encoding is that masked input.
+    have hxbytes : Fp.toBytesBE x = b.set! 0 (b.get! 0 &&& 0x1f) :=
+      Fp.toBytesBE_fromBytesBE hx
+    -- The computed root is nonzero, because x^3 + 4 has no root.
+    have hypos : yPos ≠ 0 := by
+      intro hy0
+      exact cube_add_four_ne_zero x (zero_eq_of_sq_eq hy0 (Fp.sqrt_ok hsqrt))
+    -- So the selected root carries exactly the sign stored in the input.
+    have hsign : Fp.signBit y = decide ((b.get! 0 &&& 0x20) ≠ 0) :=
+      signBit_select hypos
+    have h0lt : 0 < b.size := by omega
+    -- Setting the compression flag on the masked input gives:
+    --
+    --     header byte (head &&& 0x1f) ||| 0x80, then 47 bytes of b
+    have hbase :
+        (Fp.toBytesBE x).set! 0 ((Fp.toBytesBE x).get! 0 ||| 0x80) =
+          b.set! 0 ((b.get! 0 &&& 0x1f) ||| 0x80) := by
+      rw [hxbytes, ba_get!_set!_self b _ h0lt, ba_set!_set!_same]
+    by_cases hs : (b.get! 0 &&& 0x20) ≠ 0
+    -- Sign flag set: compression also sets 0x20, which rebuilds the header byte.
+    · have hsy : Fp.signBit y = true := by rw [hsign, decide_eq_true hs]
+      have hrec := head_reconstruct (b.get! 0) hc hi
+      rw [ite_eq_left hs] at hrec
+      rw [ite_eq_left hsy, hbase, ba_get!_set!_self b _ h0lt,
+        ba_set!_set!_same, hrec, ba_set!_get!_self b h0lt]
+    -- Sign flag clear: compression leaves 0x20 clear, which is the header byte.
+    · have hsy : ¬ Fp.signBit y = true := by rw [hsign, decide_eq_false hs]; decide
+      have hrec := head_reconstruct (b.get! 0) hc hi
+      rw [ite_eq_right hs] at hrec
+      rw [ite_eq_right hsy, hbase, hrec, ba_set!_get!_self b h0lt]
 
 /-- **Non-malleability.** Two byte strings that decompress to the same point are equal.
 

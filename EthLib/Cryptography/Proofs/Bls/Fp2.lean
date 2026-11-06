@@ -650,7 +650,8 @@ theorem signBit_neg {y : Fp2} (hy : y ≠ 0) :
   unfold Fp2.signBit
   -- Negation preserves whether the imaginary part is zero.
   have hc1_zero : (-y).c1.isZero = y.c1.isZero := by
-    rw [Bool.eq_iff_iff, Fp.isZero_iff, Fp.isZero_iff, Fp2.neg_c1, neg_eq_zero]
+    rw [Bool.eq_iff_iff, Fp.isZero_iff, Fp.isZero_iff, Fp2.neg_c1, ← Fp.toZMod_inj,
+      Fp.toZMod_neg, Fp.toZMod_zero, neg_eq_zero, ← Fp.toZMod_zero, Fp.toZMod_inj]
   rw [hc1_zero]
   by_cases hc1 : y.c1.isZero = true
   -- When c1 = 0, a nonzero element has c0 != 0, so signBit inspects c0.
@@ -799,7 +800,8 @@ theorem natCast_eq (n : Nat) : (n : Fp2) = ⟨Fp.ofNat n, Fp.zero⟩ := by
     · apply Fp.ext
       show (Fp.ofNat n + 1).val = _
       rw [Fp.val_add, Fp.val_ofNat, Fp.val_ofNat, Fp.val_one, Nat.mod_add_mod]
-    · rfl
+    · show (0 : Fp) + 0 = 0
+      exact Fp.toZMod.injective (by rw [Fp.toZMod_add, Fp.toZMod_zero, add_zero])
 
 /-- A numeral is the element with that real part and a zero imaginary part. -/
 theorem numeral_eq (n : Nat) [n.AtLeastTwo] : (OfNat.ofNat n : Fp2) = ⟨Fp.ofNat n, Fp.zero⟩ :=

@@ -200,9 +200,11 @@ theorem norm_mulByV (a : Fp6) : norm a.mulByV = (norm a).mulByOnePlusI := by
 
 /-! ## `xi` is not a cube, so the norm is zero only at zero -/
 
-open scoped Fin.CommRing in
 theorem norm_mulByOnePlusI (a : Fp2) : Fp2.norm a.mulByOnePlusI = 2 * Fp2.norm a := by
   simp only [Fp2.norm, Fp2.mulByOnePlusI]
+  apply Fp.toZMod.injective
+  push_toZMod
+  rw [Fp.toZMod_numeral]
   ring
 
 @[simp]
@@ -247,10 +249,12 @@ private theorem cube_eq_xi_mul_cube {x y : Fp2}
   have hnorm : Fp2.norm (x * x * x) = Fp2.norm (y * y * y * Fp2.xi) :=
     congrArg Fp2.norm h
   simp only [Fp2.norm_mul] at hnorm
-  have hy0 : Fp2.norm y = 0 :=
-    cube_eq_two_mul_cube_zmod (u := Fp2.norm x) (w := Fp2.norm y)
-      (nxi := Fp2.norm Fp2.xi) rfl hnorm
-  exact (Fp2.norm_eq_zero_iff y).mp hy0
+  -- Read the norms in `ZMod p`, where the norm of `xi` is 2.
+  have hz := congrArg Fp.toZMod hnorm
+  push_toZMod at hz
+  have hy0 : Fp.toZMod (Fp2.norm y) = 0 :=
+    cube_eq_two_mul_cube_zmod (by rw [norm_xi, Fp.toZMod_ofNat, Nat.cast_ofNat]) hz
+  exact (Fp2.norm_eq_zero_iff y).mp (Fp.toZMod.injective (by rw [hy0, Fp.toZMod_zero]))
 
 private theorem norm_eq_zero_aux {a0 a1 a2 : Fp2}
     (h : a0 * (a0 * a0 - a1 * a2 * Fp2.xi) +
