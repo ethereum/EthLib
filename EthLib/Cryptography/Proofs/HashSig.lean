@@ -11,6 +11,8 @@ A read of a fixed-size object succeeds exactly when the buffer has room, and rea
 A read out of a concatenation reads the part it covers.
 
 In the identity monad, a vector computed in order is the vector of its entries.
+
+A map of monads that keeps `pure` and `bind` commutes with computing a vector in order.
 -/
 
 @[expose] public section
@@ -126,5 +128,15 @@ theorem packBytes_readBytes (b : ByteArray) (offset n : Nat) (h) :
     cases i with
     | zero => simp
     | succ i => simp [Fin.succ]
+
+/-- A map of monads that keeps `pure` and `bind` commutes with computing a vector in order. -/
+theorem ofFnInOrder_map_monad {m n : Type → Type} [Monad m] [Monad n]
+    (φ : ∀ {β : Type}, m β → n β) (map_pure : ∀ {β : Type} (b : β), φ (pure b) = pure b)
+    (map_bind : ∀ {β γ : Type} (x : m β) (f : β → m γ), φ (x >>= f) = φ x >>= fun b => φ (f b))
+    {α : Type} :
+    ∀ (k : Nat) (f : Fin k → m α), φ (ofFnInOrder k f) = ofFnInOrder k fun i => φ (f i)
+  | 0, _ => map_pure _
+  | k + 1, f => by
+    simp only [ofFnInOrder, map_bind, map_pure, ofFnInOrder_map_monad φ map_pure map_bind k]
 
 end EthLib.Cryptography.HashSig

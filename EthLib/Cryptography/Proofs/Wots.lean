@@ -9,6 +9,8 @@ public import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 
 A walk of `s₁` steps, then `s₂` more, is a walk of `s₁ + s₂` steps.
 
+A map of monads that keeps `pure` and `bind` commutes with a walk.
+
 The search returns the least admissible trial in its window.
 
 When the hash is a random oracle, a search over fresh inputs fails with an exact probability.
@@ -59,6 +61,17 @@ theorem chain_add [LawfulMonad m] {s₁ s₂ mid : Nat} (hmid : mid = start + s�
     have hpos : (⟨start + s₁ + s, by omega⟩ : Fin n) = ⟨start + (s₁ + s), by omega⟩ :=
       Fin.ext (Nat.add_assoc _ _ _)
     rw [hpos]
+
+/-- A map of monads that keeps `pure` and `bind` commutes with a walk. -/
+theorem chain_map_monad {m' : Type → Type} [Monad m'] (φ : ∀ {β : Type}, m β → m' β)
+    (map_pure : ∀ {β : Type} (b : β), φ (pure b) = pure b)
+    (map_bind : ∀ {β γ : Type} (x : m β) (f : β → m γ), φ (x >>= f) = φ x >>= fun b => φ (f b))
+    (step : Fin n → α → m α) (start : Nat) :
+    ∀ (steps : Nat) (h : start + steps ≤ n) (value : α),
+      φ (chain step start steps h value) = chain (fun i v => φ (step i v)) start steps h value
+  | 0, _, _ => map_pure _
+  | s + 1, h, value => by
+    rw [chain_succ, chain_succ, map_bind, chain_map_monad φ map_pure map_bind step start s]
 
 end Chain
 
