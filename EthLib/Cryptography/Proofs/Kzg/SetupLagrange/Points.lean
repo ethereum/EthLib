@@ -135,10 +135,11 @@ theorem coords_of_encodes {s : String} {b : ByteArray} {q : G1} {x y : Nat}
   cases hq
   have hxv : xf.val = xOf (h :: t) := SetupTorsion.fromBytesBE_eq (by rw [hhead]; exact hx)
   -- Decompression starts from `y` or from its negation.
-  let y₀ : Fp := ⟨y, hy⟩
+  let y₀ : Fp := Fp.ofNat y
+  have hyv : y₀.val = y := Fp.val_ofNat_of_lt hy
   have hy₀ : (y₀ : ZMod Fp.modulus) * y₀ = xf * xf * xf + Fp.ofNat 4 := by
-    apply Fin.ext
-    rw [Fin.val_mul, Fin.val_add, Fin.val_mul, Fin.val_mul, hxv]
+    apply Fp.ext
+    rw [Fp.val_mul, Fp.val_add, Fp.val_mul, Fp.val_mul, hxv, hyv, Fp.val_ofNat]
     exact hsq
   have hpm := sqrt_pm ((Fp.sqrt_ok hsqrt).trans hy₀.symm)
   rw [select_eq hpm]
@@ -146,12 +147,12 @@ theorem coords_of_encodes {s : String} {b : ByteArray} {q : G1} {x y : Nat}
   refine Prod.ext rfl (Prod.ext ?_ rfl)
   -- The sign of `y` is the sign flag, so decompression keeps `y`.
   have hc : (Fp.signBit y₀ = true) = ((UInt8.ofNat h &&& 0x20) ≠ 0) := by
-    have hsb : Fp.signBit y₀ = signBit y := rfl
+    have hsb : Fp.signBit y₀ = signBit y := by rw [Fp.signBit, hyv, signBit]
     rw [hsb, hsign]
     exact propext ⟨fun h' => (flag20 h).mpr (bne_iff_ne.mp h'),
       fun h' => bne_iff_ne.mpr ((flag20 h).mp h')⟩
   show (if (Fp.signBit y₀ = true) = _ then y₀ else -y₀).val = y
-  rw [ite_eq_left hc]
+  rw [ite_eq_left hc, hyv]
 
 /-! ## Points with `z = 1` -/
 
@@ -165,18 +166,17 @@ def onCurve (x y : Nat) : Bool :=
 theorem coords_affinePoint {x y : Nat} (h : onCurve x y = true) :
     coords (affinePoint x y) = (x, y, 1) := by
   simp only [onCurve, Bool.and_eq_true, Nat.blt_eq, beq_iff_eq] at h
-  simp only [coords, affinePoint, Fp.ofNat, Fin.val_ofNat, Nat.mod_eq_of_lt h.1.1,
-    Nat.mod_eq_of_lt h.1.2]
-  rfl
+  simp only [coords, affinePoint, Fp.val_ofNat_of_lt h.1.1, Fp.val_ofNat_of_lt h.1.2,
+    Fp.one_def, Fp.val_one]
 
 theorem valid_affinePoint {x y : Nat} (h : onCurve x y = true) : Valid (affinePoint x y) := by
   apply valid_of_affine_eq
   have hc : (Fp.ofNat x).val = x := congrArg (·.1) (coords_affinePoint h)
   have hc' : (Fp.ofNat y).val = y := congrArg (·.2.1) (coords_affinePoint h)
   simp only [onCurve, Bool.and_eq_true, beq_iff_eq] at h
-  apply Fin.ext
+  apply Fp.ext
   show ((Fp.ofNat y) * (Fp.ofNat y)).val = (Fp.ofNat x * Fp.ofNat x * Fp.ofNat x + Fp.ofNat 4).val
-  rw [Fin.val_mul, hc', Fin.val_add, Fin.val_mul, Fin.val_mul, hc]
+  rw [Fp.val_mul, hc', Fp.val_add, Fp.val_mul, Fp.val_mul, hc, Fp.val_ofNat]
   exact h.2
 
 /-! ## Projective comparison -/

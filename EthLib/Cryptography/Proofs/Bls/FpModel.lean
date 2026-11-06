@@ -16,7 +16,7 @@ The map from `Fp` to the model respects every operation of a base field.
 
 So the lemmas that commute a map with each definition carry a check from the model to `Fp`.
 
-A proof states its check at the model, then transfers it, and never makes the kernel run `Fp`.
+A proof can state its check at the model and transfer it, so that the kernel does not run `Fp`.
 -/
 
 @[expose] public section
