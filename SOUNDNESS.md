@@ -667,7 +667,7 @@ The witness signs the hash 0 with the private key 1 and the nonce 1.
 So the public key and the point `R = k G` are both the base point.
 
 No theorem checks the module against the EIP-7951 pseudocode line by line.
-The Python test `bindings/python/tests/precompile/test_p256verify.py` runs it on the 781 test vectors of EIP-7951, which the EIP derives from Wycheproof.
+The Python test `bindings/python/tests/precompile/test_p256verify.py` runs it on the 781 test vectors of EIP-7951, 778 of which come from Wycheproof.
 
 ### EIP-2537 precompiles
 
