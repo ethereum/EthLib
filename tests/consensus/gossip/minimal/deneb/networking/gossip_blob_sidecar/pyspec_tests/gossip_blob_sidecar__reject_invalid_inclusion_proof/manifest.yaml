@@ -1,0 +1,6 @@
+preset: minimal
+fork: deneb
+runner: networking
+handler: gossip_blob_sidecar
+suite: pyspec_tests
+case: gossip_blob_sidecar__reject_invalid_inclusion_proof

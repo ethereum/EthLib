@@ -1,0 +1,8 @@
+topic: blob_sidecar
+blocks:
+- {block: 
+    block_0x1a3e9c9f0125cf7f621a4e4ab41478ec6a40b033b31b5aef3e145d056c892fd6}
+messages:
+- {subnet_id: 0, current_time_ms: 6500, message: 
+    blob_sidecar_0xa562a6c5d13b0e27462a8c03e83b1d878a35d08e3afafd15d11c515a40fe603e,
+  expected: reject, reason: proposer index out of range}

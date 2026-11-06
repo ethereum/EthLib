@@ -1,0 +1,11 @@
+topic: blob_sidecar
+blocks:
+- {block: 
+    block_0x1a3e9c9f0125cf7f621a4e4ab41478ec6a40b033b31b5aef3e145d056c892fd6}
+finalized_checkpoint: {epoch: 1, block: 
+    block_0x1a3e9c9f0125cf7f621a4e4ab41478ec6a40b033b31b5aef3e145d056c892fd6}
+messages:
+- {subnet_id: 0, current_time_ms: 48500, message: 
+    blob_sidecar_0x1e5919ea62d7f3d93398325116e6ec7047e6f7197cf0b501e1ca17d4def808d3,
+  expected: ignore, reason: blob sidecar is not from a slot greater than the 
+    latest finalized slot}

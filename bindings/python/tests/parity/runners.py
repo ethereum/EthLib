@@ -608,8 +608,14 @@ def _custody_columns(root: Path, case: Case) -> None:
 
 def _gossip_data_column_sidecar(root: Path, case: Case) -> None:
     from consensus.test_data_column import run_gossip_case
+    from consensus.test_gossip_validation import run_case
 
-    run_gossip_case(root / case.path, case.preset)
+    # Before Gloas the store is specified, so the whole validation runs; from Gloas only the
+    # sidecar checks that read no store do.
+    if runs_gossip(case.fork, "gossip_data_column_sidecar"):
+        run_case(case.preset, case.fork, root / case.path)
+    else:
+        run_gossip_case(root / case.path, case.preset)
 
 
 def _gossip_partial_data_column_sidecar(root: Path, case: Case) -> None:
@@ -735,11 +741,15 @@ RUNNERS = {
     "shuffling/core": _shuffle,
     "networking/get_custody_groups": _custody_groups,
     "networking/compute_columns_for_custody_group": _custody_columns,
-    # The checks of the sidecar alone; the checks that read the store come with C63.
+    # The whole validation before Gloas; from Gloas the checks of the sidecar alone.
     "networking/gossip_data_column_sidecar": _gossip_data_column_sidecar,
     # The checks of a partial message that read no store; the others wait for C63.
     "networking/gossip_partial_data_column_sidecar": _gossip_partial_data_column_sidecar,
-    **{f"networking/gossip_{topic}": _gossip for topic in GOSSIP_TOPICS},
+    **{
+        f"networking/gossip_{topic}": _gossip
+        for topic in GOSSIP_TOPICS
+        if topic != "data_column_sidecar"
+    },
     **{f"ssz_static/{container}": _ssz_static for container in CONTAINERS},
     "light_client/single_merkle_proof": _single_merkle_proof,
     "merkle_proof/single_merkle_proof": _merkle_proof,

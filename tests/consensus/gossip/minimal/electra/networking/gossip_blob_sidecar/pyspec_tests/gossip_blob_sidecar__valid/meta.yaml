@@ -1,0 +1,8 @@
+topic: blob_sidecar
+blocks:
+- {block: 
+    block_0xc1ca31b37671fc545f784ab7ed9259e4562edf4becc1df59682663091e43653e}
+messages:
+- {subnet_id: 0, current_time_ms: 6500, message: 
+    blob_sidecar_0x2227117ea724d7d36da0498a005d61929c7faab164a507f22a617704829fca34,
+  expected: valid}

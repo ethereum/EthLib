@@ -1,9 +1,11 @@
 module
 
 public import EthLib.Consensus.Exports.ForkChoice
+public import EthLib.Cryptography.Exports.Kzg
 public import EthLib.Consensus.Gossip.Attestation
 public import EthLib.Consensus.Gossip.Block
 public import EthLib.Consensus.Gossip.Operations
+public import EthLib.Consensus.Gossip.Sidecar
 public import EthLib.Consensus.Gossip.SyncCommittee
 
 /-!
@@ -55,6 +57,7 @@ namespace EthLib.Consensus.Exports
 open Base Serialization.Ssz Networking.Gossip
 open EthLib.Exports (Result)
 open Serialization.Ssz.Exports (runSsz)
+open Cryptography.Kzg.Exports (embeddedSetup)
 
 /-- A gossip message of a case: its time of arrival in milliseconds, its subnet and its bytes. -/
 structure GossipInput where
@@ -132,12 +135,16 @@ def importGossipBlock {preset : Preset} {fork : Fork} (config : Config)
 
 /-- Whether gossip validation of a topic is specified here at a fork.
 
-The sync committee has topics from Altair, and changes of BLS credentials from Capella. -/
+The sync committee has topics from Altair, and changes of BLS credentials from Capella.
+
+Blob sidecars travel at Deneb and Electra, and column sidecars from Fulu. -/
 def gossipValidationSpecified (fork : Fork) : String → Bool
   | "attester_slashing" | "proposer_slashing" | "voluntary_exit" | "beacon_block"
   | "beacon_attestation" | "beacon_aggregate_and_proof" => true
   | "sync_committee" | "sync_committee_contribution_and_proof" => .altair ≤ fork
   | "bls_to_execution_change" => .shapella ≤ fork
+  | "blob_sidecar" => .dencun ≤ fork && fork < .fusaka
+  | "data_column_sidecar" => .fusaka ≤ fork && fork < .glamsterdam
   | _ => false
 
 /-- The outcome of one message of a topic, and the keys seen after it.
@@ -209,6 +216,22 @@ def validateGossipInput {preset : Preset} {fork : Fork} (config : Config)
         (validateContributionAndProof config checks seen store altair signed input.currentTimeMs)
       return record outcome (·.recordContributionAndProof signed)
     else throw (0, "the sync committee has no topic before Altair")
+  | "blob_sidecar" =>
+    let sidecar ← decodeInput (BlobSidecar preset) input.data
+    if blobs : .dencun ≤ fork ∧ fork < .fusaka then
+      let setup ← runForkChoice (embeddedSetup.mapError .kzg)
+      let outcome ← runForkChoice (validateBlobSidecar config checks setup seen store blobs sidecar
+        input.currentTimeMs input.subnetId)
+      return record outcome (·.recordBlobSidecar sidecar)
+    else throw (0, "blob sidecars travel only at Deneb and Electra")
+  | "data_column_sidecar" =>
+    let sidecar ← decodeInput (DataColumnSidecar preset fork) input.data
+    if columns : .fusaka ≤ fork ∧ fork < .glamsterdam then
+      let setup ← runForkChoice (embeddedSetup.mapError .kzg)
+      let outcome ← runForkChoice (validateDataColumnSidecar config checks setup seen store columns
+        sidecar input.currentTimeMs input.subnetId)
+      return record outcome (·.recordDataColumnSidecar columns.2 sidecar)
+    else throw (0, "column sidecars travel only from Fulu, before Gloas")
   | _ => throw (0, s!"gossip validation of the topic {topic} is not yet specified")
 
 /-- Validate the messages of a topic in turn, against the store of an anchor and later blocks.
