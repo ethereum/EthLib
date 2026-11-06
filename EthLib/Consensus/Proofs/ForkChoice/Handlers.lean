@@ -268,8 +268,9 @@ theorem catchUp_ne_tickNotAdvancing {tickSlot slot : Slot} (start : Store preset
       · simp [pure, Except.pure] at stalled
 
 /-- Storing the state of a target keeps the checkpoints, the blocks and their states. -/
-theorem storeTargetCheckpointState_frame {target : Checkpoint} {after : Store preset fork}
-    (stored : store.storeTargetCheckpointState config target = .ok after) :
+theorem storeTargetCheckpointState_frame {checks : SignatureChecks} {target : Checkpoint}
+    {after : Store preset fork}
+    (stored : store.storeTargetCheckpointState config checks target = .ok after) :
     store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates := by
   unfold storeTargetCheckpointState at stored
   split at stored

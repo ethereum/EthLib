@@ -87,7 +87,7 @@ decreasing_by
 /-- The state after one slot, then after the upgrades due at the slot it reaches. -/
 def advanceSlotAcross (config : Config) (checks : SignatureChecks)
     (forked : ForkedBeaconState preset) : Except TransitionError (ForkedBeaconState preset) := do
-  let state ← advanceSlot config forked.state
+  let state ← advanceSlot config checks forked.state
   processUpgrades config checks ⟨forked.fork, state⟩
 
 /-- The state some count of slots later, one slot at a time, with the upgrades on the way. -/

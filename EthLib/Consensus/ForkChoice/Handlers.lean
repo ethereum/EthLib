@@ -289,18 +289,18 @@ def validateOnAttestation (attestation : Attestation preset fork) (isFromBlock :
   if (← store.getCurrentSlot config) < due then throw (.attestationNotYetDue attestation.data.slot)
 
 /-- The state of a checkpoint: the state of its block, advanced to the start of its epoch. -/
-def computeCheckpointState (target : Checkpoint) :
+def computeCheckpointState (checks : SignatureChecks) (target : Checkpoint) :
     Except ForkChoiceError (BeaconState preset fork) := do
   let base ← store.blockState target.root
   let start ← (computeStartSlotAtEpoch preset target.epoch).mapError .arith
-  if base.slot < start then (processSlots config base start).mapError .transition
+  if base.slot < start then (processSlots config checks base start).mapError .transition
   else pure base
 
 /-- The store with the state of a checkpoint, unless it holds one already. -/
-def storeTargetCheckpointState (target : Checkpoint) :
+def storeTargetCheckpointState (checks : SignatureChecks) (target : Checkpoint) :
     Except ForkChoiceError (Store preset fork) := do
   if store.checkpointStates.contains target then return store
-  let state ← store.computeCheckpointState config target
+  let state ← store.computeCheckpointState config checks target
   return { store with checkpointStates := store.checkpointStates.insert target state }
 
 /-- The store with the vote of an attestation as the latest vote of its validators.
@@ -319,7 +319,7 @@ The attestation must be valid in the state of its target, with its signature. -/
 def onAttestation (checks : SignatureChecks) (attestation : Attestation preset fork)
     (isFromBlock : Bool) : Except ForkChoiceError (Store preset fork) := do
   store.validateOnAttestation config attestation isFromBlock
-  let store ← store.storeTargetCheckpointState config attestation.data.target
+  let store ← store.storeTargetCheckpointState config checks attestation.data.target
   let targetState ← store.checkpointState attestation.data.target
   let indexed ← (getIndexedAttestation targetState attestation).mapError .accessor
   unless ← (isValidIndexedAttestation config checks targetState indexed).mapError .transition do

@@ -1,0 +1,6 @@
+preset: minimal
+fork: electra
+runner: epoch_processing
+handler: effective_balance_updates
+suite: pyspec_tests
+case: effective_balance_hysteresis_with_compounding_credentials

@@ -396,11 +396,33 @@ theorem frame_activateValidator {index : ValidatorIndex}
   obtain ⟨validator, found, _, _, rfl⟩ := computed
   exact frame_setValidator fun ordered => ordered validator (mem_of_getValidator found)
 
+theorem frame_updateRegistryEntryElectra {activationEpoch : Epoch} {index : Nat}
+    (computed : updateRegistryEntryElectra config activationEpoch state index = .ok after) :
+    Frame state after := by
+  simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨validator, found, computed⟩ := computed
+  have kept : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch :=
+    fun ordered => ordered validator (mem_of_getValidator found)
+  split at computed
+  · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, rfl⟩ := computed
+    exact frame_setValidator kept
+  split at computed
+  · rw [liftAccessor_ok] at computed
+    exact frame_initiateValidatorExit computed
+  split at computed
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    exact computed ▸ frame_setValidator kept
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    exact computed ▸ Frame.refl _
+
 theorem frame_processRegistryUpdates
     (computed : processRegistryUpdates config state = .ok after) : Frame state after := by
   unfold processRegistryUpdates at computed
   split at computed
-  · cases computed
+  · simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    exact Frame.foldlM (fun _ _ _ ok => frame_updateRegistryEntryElectra ok) computed
   simp only [bind_ok_iff] at computed
   obtain ⟨updated, updatedOk, activated⟩ := computed
   exact (Frame.foldlM (fun _ _ _ ok => frame_updateRegistryEntry ok) updatedOk).trans
@@ -423,14 +445,33 @@ theorem frame_applySlashingPenalty {total adjusted : Gwei} {index : Nat}
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ Frame.refl _
 
+theorem frame_applySlashingPenaltyElectra {perIncrement : Gwei} {index : Nat}
+    (computed : applySlashingPenaltyElectra state perIncrement index = .ok after) :
+    Frame state after := by
+  simp only [applySlashingPenaltyElectra, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨_, _, computed⟩ := computed
+  split at computed
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    split at computed
+    · simp only [bind_ok_iff, liftAccessor_ok] at computed
+      obtain ⟨_, _, lowered⟩ := computed
+      exact frame_decreaseBalance lowered
+    · simp only [pure, Except.pure, Except.ok.injEq] at computed
+      exact computed ▸ Frame.refl _
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    exact computed ▸ Frame.refl _
+
 theorem frame_processSlashings (computed : processSlashings state = .ok after) :
     Frame state after := by
   unfold processSlashings at computed
-  split at computed
-  · cases computed
   simp only [bind_ok_iff] at computed
-  obtain ⟨_, _, _, _, _, _, applied⟩ := computed
-  exact Frame.foldlM (fun _ _ _ ok => frame_applySlashingPenalty ok) applied
+  obtain ⟨_, _, _, _, _, _, computed⟩ := computed
+  split at computed
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, applied⟩ := computed
+    exact Frame.foldlM (fun _ _ _ ok => frame_applySlashingPenaltyElectra ok) applied
+  · exact Frame.foldlM (fun _ _ _ ok => frame_applySlashingPenalty ok) computed
 
 theorem frame_processEth1DataReset {before : fork < .hegota}
     (computed : processEth1DataReset before state = .ok after) : Frame state after := by
@@ -453,8 +494,6 @@ theorem frame_updateEffectiveBalance {index : Nat}
 theorem frame_processEffectiveBalanceUpdates
     (computed : processEffectiveBalanceUpdates state = .ok after) : Frame state after := by
   unfold processEffectiveBalanceUpdates at computed
-  split at computed
-  · cases computed
   exact Frame.foldlM (fun _ _ _ ok => frame_updateEffectiveBalance ok) computed
 
 theorem frame_processSlashingsReset (computed : processSlashingsReset state = .ok after) :
@@ -568,7 +607,7 @@ The current justified epoch ends at most at the current epoch.
 
 The registry keeps one balance for each validator, and each exit no later than its withdrawal. -/
 theorem processEpoch_invariant (altair : fork < .altair) (holds : Invariant state)
-    (computed : processEpoch config state = .ok after) :
+    (computed : processEpoch config checks state = .ok after) :
     after.slot = state.slot ∧ BalancesMatch after ∧ ExitsOrdered after ∧
       CheckpointsOrdered after ∧
       state.finalizedCheckpoint.epoch ≤ after.finalizedCheckpoint.epoch ∧
@@ -626,7 +665,7 @@ When the slot ends an epoch, the current justified epoch is at most that epoch.
 
 The next slot starts the next epoch, whose previous epoch is that one. -/
 theorem advanceSlot_invariant (altair : fork < .altair) (holds : Invariant state)
-    (computed : advanceSlot config state = .ok after) :
+    (computed : advanceSlot config checks state = .ok after) :
     Invariant after ∧ state.finalizedCheckpoint.epoch ≤ after.finalizedCheckpoint.epoch := by
   simp only [advanceSlot, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
     addChecked_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
@@ -680,7 +719,7 @@ theorem advanceSlot_invariant (altair : fork < .altair) (holds : Invariant state
 
 theorem advanceSlots_invariant (altair : fork < .altair) :
     ∀ {count : Nat} {state after : BeaconState preset fork}, Invariant state →
-      advanceSlots config count state = .ok after →
+      advanceSlots config checks count state = .ok after →
       Invariant after ∧ state.finalizedCheckpoint.epoch ≤ after.finalizedCheckpoint.epoch
   | 0, state, after, holds, computed => by
     simp only [advanceSlots, pure, Except.pure, Except.ok.injEq] at computed
@@ -697,7 +736,7 @@ theorem advanceSlots_invariant (altair : fork < .altair) :
 
 The finalized epoch does not decrease. -/
 theorem processSlots_invariant (altair : fork < .altair) {slot : Slot} (holds : Invariant state)
-    (computed : processSlots config state slot = .ok after) :
+    (computed : processSlots config checks state slot = .ok after) :
     Invariant after ∧ state.finalizedCheckpoint.epoch ≤ after.finalizedCheckpoint.epoch := by
   simp only [processSlots, bind_ok_iff, ensure_ok_iff] at computed
   obtain ⟨_, _, advanced⟩ := computed

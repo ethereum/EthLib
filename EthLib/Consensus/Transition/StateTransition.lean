@@ -1,9 +1,12 @@
 module
 
+public import EthLib.Consensus.Proposers
 public import EthLib.Consensus.Transition.EpochParticipation
+public import EthLib.Consensus.Transition.EpochPending
 public import EthLib.Consensus.Transition.EpochUpdates
 public import EthLib.Consensus.Transition.Execution
 public import EthLib.Consensus.Transition.Operations
+public import EthLib.Consensus.Transition.Requests
 public import EthLib.Consensus.Transition.SyncAggregate
 
 /-!
@@ -67,37 +70,57 @@ def processSlot (state : BeaconState preset fork) :
   if gloas : .glamsterdam ≤ fork then liftAccessor (unsetNextPayloadAvailability state gloas)
   else return state
 
+/-- From Electra: the state after the pending deposits, then the pending consolidations.
+
+Before Electra the state stays the same. -/
+def processPendingBalances (config : Config) (checks : SignatureChecks)
+    (state : BeaconState preset fork) : Except TransitionError (BeaconState preset fork) :=
+  if electra : .pectra ≤ fork then do
+    processPendingConsolidations (← processPendingDeposits config checks state electra) electra
+  else pure state
+
 /-- From Altair: the state after the epoch transition.
 
 Justification and finalization come first, then the inactivity scores, rewards and penalties.
 
 The registry updates, the slashings and the reset of the deposit votes follow.
 
+From Electra the pending deposits and the pending consolidations come next.
+
 Then come the effective balances, the slashings and RANDAO resets, and the history.
 
 Before Capella the history takes a root of each span, and from Capella a summary.
 
-The rotation of the participation flags and the sync committee update come last.
+The rotation of the participation flags and the sync committee update follow.
 
-Electra adds steps, which EthLib does not yet have here, so it fails as not yet specified. -/
-def processEpochAltair (config : Config) (state : BeaconState preset fork)
-    (altair : .altair ≤ fork) : Except TransitionError (BeaconState preset fork) :=
-  if electra : .pectra ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
+From Fulu the lookahead of proposers moves on last, as [EIP-7917] specifies.
+
+Gloas adds steps, which EthLib does not yet have here, so it fails as not yet specified.
+
+[EIP-7917]: https://eips.ethereum.org/EIPS/eip-7917#specification
+-/
+def processEpochAltair (config : Config) (checks : SignatureChecks)
+    (state : BeaconState preset fork) (altair : .altair ≤ fork) :
+    Except TransitionError (BeaconState preset fork) :=
+  if gloas : .glamsterdam ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
   else do
-    have before : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le electra) (by decide)
+    have before : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le gloas) (by decide)
     let state ← processJustificationAndFinalization state
     let state ← processInactivityUpdates config state altair
     let state ← processRewardsAndPenalties config state
     let state ← processRegistryUpdates config state
     let state ← processSlashings state
     let state ← processEth1DataReset before state
+    let state ← processPendingBalances config checks state
     let state ← processEffectiveBalanceUpdates state
     let state ← processSlashingsReset state
     let state ← processRandaoMixesReset state
     let state ← if capella : .shapella ≤ fork then processHistoricalSummariesUpdate state capella
       else processHistoricalRootsUpdate state
     let state := processParticipationFlagUpdates state altair
-    processSyncCommitteeUpdates state altair
+    let state ← processSyncCommitteeUpdates state altair
+    if fulu : .fusaka ≤ fork then liftAccessor (processProposerLookahead state fulu)
+    else pure state
 
 /-- The state after the epoch transition.
 
@@ -109,10 +132,12 @@ Then come the effective balances, the slashings and RANDAO resets and the histor
 
 The rotation of the pending attestations comes last.
 
-From Altair the participation flags and the sync committees add their steps. -/
-def processEpoch (config : Config) (state : BeaconState preset fork) :
+From Altair the participation flags and the sync committees add their steps.
+
+From Electra the pending deposits check the signatures of new keys, as an argument says how. -/
+def processEpoch (config : Config) (checks : SignatureChecks) (state : BeaconState preset fork) :
     Except TransitionError (BeaconState preset fork) :=
-  if altair : .altair ≤ fork then processEpochAltair config state altair
+  if altair : .altair ≤ fork then processEpochAltair config checks state altair
   else do
     have before : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le altair) (by decide)
     let state ← processJustificationAndFinalization state
@@ -127,35 +152,35 @@ def processEpoch (config : Config) (state : BeaconState preset fork) :
     processParticipationRecordUpdates state
 
 /-- The state after the epoch transition, if a slot is the last of its epoch. -/
-def epochIfLast (config : Config) (next : Slot) (state : BeaconState preset fork) :
-    Except TransitionError (BeaconState preset fork) :=
-  if next % preset.SLOTS_PER_EPOCH = 0 then processEpoch config state else pure state
+def epochIfLast (config : Config) (checks : SignatureChecks) (next : Slot)
+    (state : BeaconState preset fork) : Except TransitionError (BeaconState preset fork) :=
+  if next % preset.SLOTS_PER_EPOCH = 0 then processEpoch config checks state else pure state
 
 /-- The state after one slot.
 
 The slot is cached, the last slot of an epoch runs the epoch transition, and the slot moves on.
 
 Neither step changes the slot, so the next slot is that of the state plus one. -/
-def advanceSlot (config : Config) (state : BeaconState preset fork) :
+def advanceSlot (config : Config) (checks : SignatureChecks) (state : BeaconState preset fork) :
     Except TransitionError (BeaconState preset fork) := do
   let next ← liftAccessor (liftArith (addChecked state.slot 1))
   let state ← processSlot state
-  let state ← epochIfLast config next state
+  let state ← epochIfLast config checks next state
   return { state with slot := next }
 
 /-- The state some count of slots later, one slot at a time. -/
-def advanceSlots (config : Config) : Nat → BeaconState preset fork →
+def advanceSlots (config : Config) (checks : SignatureChecks) : Nat → BeaconState preset fork →
     Except TransitionError (BeaconState preset fork)
   | 0, state => pure state
-  | count + 1, state => do advanceSlots config count (← advanceSlot config state)
+  | count + 1, state => do advanceSlots config checks count (← advanceSlot config checks state)
 
 /-- The state at a later slot.
 
 The slot must be after the slot of the state. -/
-def processSlots (config : Config) (state : BeaconState preset fork) (slot : Slot) :
-    Except TransitionError (BeaconState preset fork) := do
+def processSlots (config : Config) (checks : SignatureChecks) (state : BeaconState preset fork)
+    (slot : Slot) : Except TransitionError (BeaconState preset fork) := do
   ensure (state.slot < slot) (.slotNotAfter slot state.slot)
-  advanceSlots config (slot.toNat - state.slot.toNat) state
+  advanceSlots config checks (slot.toNat - state.slot.toNat) state
 
 /-- From Bellatrix: the state after the execution part of a block.
 
@@ -257,7 +282,7 @@ def stateTransition (config : Config) (checks : SignatureChecks)
     (engine : ExecutionEngine preset fork) (state : BeaconState preset fork)
     (signed : SignedBeaconBlock preset fork) (validateResult : Bool := true) :
     Except TransitionError (BeaconState preset fork) := do
-  let state ← processSlots config state signed.message.slot
+  let state ← processSlots config checks state signed.message.slot
   applySignedBlock config checks engine state signed validateResult
 
 end EthLib.Consensus

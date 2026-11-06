@@ -2285,7 +2285,7 @@
       {"constructor": "blockForkMismatch", "code": 74}]}],
    "error_class": "TransitionError",
    "docstring":
-   "The state some slots later, as SSZ bytes.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nA target slot that reaches `2^64` is an error."},
+   "The state some slots later, as SSZ bytes.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nFrom Electra the pending deposits check the signatures of new keys with BLS, as the vectors expect.\n\nA target slot that reaches `2^64` is an error."},
   {"summary":
    "The state after a signed block, as SSZ bytes, with the signature and the state root checked.",
    "signature":

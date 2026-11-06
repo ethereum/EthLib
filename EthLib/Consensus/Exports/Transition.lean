@@ -249,6 +249,8 @@ def processEpochExport (name fork handler pre replacements : ByteArray) : Result
 
 The preset, the configuration and the fork are named in UTF-8.
 
+From Electra the pending deposits check the signatures of new keys with BLS, as the vectors expect.
+
 A target slot that reaches `2^64` is an error. -/
 @[export eth_consensus_process_slots]
 def processSlotsExport (name fork pre replacements : ByteArray) (slots : UInt64) :
@@ -257,7 +259,7 @@ def processSlotsExport (name fork pre replacements : ByteArray) (slots : UInt64)
   let config ← configWith name replacements
   let state ← decodeInput (BeaconState preset fork) pre
   let target ← runTransition (liftAccessor (liftArith (Uint64.addChecked state.slot slots)))
-  let after ← runTransition (processSlots config state target)
+  let after ← runTransition (processSlots config .bls state target)
   (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")
 
 /-- The state after a signed block, as SSZ bytes, with the signature and the state root checked.

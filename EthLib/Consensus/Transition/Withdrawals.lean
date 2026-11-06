@@ -65,13 +65,6 @@ def isFullyWithdrawableValidator (fork : Base.Fork) (validator : Validator) (bal
     (epoch : Epoch) : Bool :=
   hasWithdrawalAddress fork validator && validator.withdrawableEpoch ≤ epoch && 0 < balance
 
-/-- From Capella: the largest effective balance of a validator, for its withdrawals.
-
-Before Electra it is the same for every validator. -/
-def withdrawalMaxEffectiveBalance (preset : Preset) (fork : Base.Fork) (validator : Validator) :
-    Gwei :=
-  if .pectra ≤ fork then getMaxEffectiveBalance preset validator else preset.MAX_EFFECTIVE_BALANCE
-
 /-- From Capella: whether a validator may withdraw the excess of its balance.
 
 The excess is the part above its largest effective balance.
