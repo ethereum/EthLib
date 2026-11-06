@@ -7,6 +7,7 @@ public import EthLib.Execution.Proofs.Evm.PowMod
 /-!
 # Proofs: `Evm.Instructions.Arithmetic`
 
+- ADD, SUB and MUL give the sum, the difference and the product, reduced modulo 2^256.
 - Each division and remainder agrees with the bit vector operation, apart from the divisor 0.
 - ADDMOD, MULMOD and EXP return the exact value, reduced once.
 - SIGNEXTEND is the sign extension of the low bytes, as a bit vector.
@@ -17,6 +18,18 @@ public import EthLib.Execution.Proofs.Evm.PowMod
 namespace EthLib.Execution.Evm
 
 open EthLib.Base
+
+/-- ADD is the sum of the operands, reduced modulo 2^256. -/
+theorem toNat_add (x y : U256) : (add x y).toNat = (x.toNat + y.toNat) % 2 ^ 256 :=
+  BitVec.toNat_add x y
+
+/-- SUB is the difference of the operands, reduced modulo 2^256. -/
+theorem toNat_sub (x y : U256) : (sub x y).toNat = (2 ^ 256 - y.toNat + x.toNat) % 2 ^ 256 :=
+  BitVec.toNat_sub x y
+
+/-- MUL is the product of the operands, reduced modulo 2^256. -/
+theorem toNat_mul (x y : U256) : (mul x y).toNat = x.toNat * y.toNat % 2 ^ 256 :=
+  BitVec.toNat_mul x y
 
 /-- Truncated division is the sign of the product times the quotient of the absolute values. -/
 private theorem tdiv_eq_sign_mul (x y : Int) : x.tdiv y = (x * y).sign * ((x.natAbs / y.natAbs : Nat) : Int) := by
