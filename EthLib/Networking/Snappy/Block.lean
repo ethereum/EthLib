@@ -248,7 +248,7 @@ def decompress (bs : ByteArray) : Except SnappyError ByteArray :=
 def literalLengthBytes (n : Nat) : Nat :=
   if n < 2 ^ 8 then 1 else if n < 2 ^ 16 then 2 else if n < 2 ^ 24 then 3 else 4
 
-/-- One literal element that holds `data`, of 1 to 2^32 bytes (§2.1).
+/-- The tag and the length bytes of a literal of `n` bytes, for `n` from 1 to 2^32 (§2.1).
 
 A length up to 60 sits in the tag as the length minus one.
 
@@ -256,13 +256,16 @@ A longer length is written, minus one, in 1 to 4 bytes after the tag.
 
 The six upper bits of the tag then hold 59 plus that count, so 60 to 63.
 -/
-def literal (data : List UInt8) : List UInt8 :=
-  let n := data.length - 1
-  if n < 60 then
-    UInt8.ofNat (n * 4) :: data
+def literalHeader (n : Nat) : List UInt8 :=
+  if n - 1 < 60 then
+    [UInt8.ofNat ((n - 1) * 4)]
   else
-    let k := literalLengthBytes n
-    UInt8.ofNat ((59 + k) * 4) :: (uintToBytes k n).toList ++ data
+    let k := literalLengthBytes (n - 1)
+    UInt8.ofNat ((59 + k) * 4) :: (uintToBytes k (n - 1)).toList
+
+/-- One literal element that holds `data`, of 1 to 2^32 bytes: its header, then the data (§2.1). -/
+def literal (data : List UInt8) : List UInt8 :=
+  literalHeader data.length ++ data
 
 /-- A Snappy block of `data`: the length as a varint, then the data as one literal.
 

@@ -22,6 +22,7 @@ public import EthLib.Networking.Proofs.Rlpx.Ecies
 public import EthLib.Networking.Proofs.Rlpx.Frame
 public import EthLib.Networking.Proofs.Rlpx.Handshake
 public import EthLib.Networking.Proofs.Snappy.Block
+public import EthLib.Networking.Proofs.Snappy.Encode
 public import EthLib.Networking.Proofs.Snappy.Frame
 
 /-!

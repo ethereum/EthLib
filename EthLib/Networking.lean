@@ -24,6 +24,7 @@ public import EthLib.Networking.Rlpx.Ecies
 public import EthLib.Networking.Rlpx.Frame
 public import EthLib.Networking.Rlpx.Handshake
 public import EthLib.Networking.Snappy.Block
+public import EthLib.Networking.Snappy.Encode
 public import EthLib.Networking.Snappy.Frame
 
 /-!

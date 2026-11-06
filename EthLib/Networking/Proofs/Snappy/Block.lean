@@ -355,39 +355,56 @@ theorem toList_eq_data_toList (bs : ByteArray) : bs.toList = bs.data.toList := b
   unfold ByteArray.toList
   simpa using loop 0 [] (Nat.zero_le _)
 
-/-- The tag of a literal reads back as a literal, and its length as the data length (§2.1). -/
-theorem decompressElements_literal {declared : Nat} {data : List UInt8} (hne : data ≠ [])
-    (h : data.length ≤ 2 ^ 32) (hd : data.length ≤ declared) (fuel : Nat) :
-    decompressElements declared (literal data) ByteArray.empty (fuel + 1) =
-      .ok data.toByteArray := by
+/-- A literal, then any bytes: the literal appends its data to the output (§2.1).
+
+The data holds 1 to 2^32 bytes.
+
+The output, followed by the data, stays within the declared length.
+-/
+theorem decompressElements_literal_append {declared : Nat} {o data s : List UInt8}
+    (hne : data ≠ []) (h : data.length ≤ 2 ^ 32) (hd : o.length + data.length ≤ declared)
+    (fuel : Nat) :
+    decompressElements declared (literal data ++ s) o.toByteArray (fuel + 1) =
+      decompressElements declared s (o ++ data).toByteArray fuel := by
   have hpos : 0 < data.length := List.length_pos_iff.mpr hne
-  dsimp only [literal]
-  split
+  simp only [literal, literalHeader]
+  by_cases hn : data.length - 1 < 60
   -- The length sits in the tag.
-  · rename_i hn
-    have ht : (UInt8.ofNat ((data.length - 1) * 4)).toNat = (data.length - 1) * 4 := by
+  · have ht : (UInt8.ofNat ((data.length - 1) * 4)).toNat = (data.length - 1) * 4 := by
       rw [UInt8.toNat_ofNat']; omega
-    simp only [decompressElements, ht]
-    simp [hn, show data.length - 1 + 1 = data.length by omega, decompressElements,
-      show ¬ declared < data.length by omega]
+    simp only [hn, ↓reduceIte, List.cons_append, List.nil_append, decompressElements, ht]
+    simp [hn, show data.length - 1 + 1 = data.length by omega,
+      show ¬ declared < o.length + data.length by omega,
+      show ¬ data.length + s.length < data.length by omega]
   -- The length takes 1 to 4 bytes after the tag.
-  · rename_i hn
-    have hk : 1 ≤ literalLengthBytes (data.length - 1) ∧ literalLengthBytes (data.length - 1) ≤ 4 ∧
+  · have hk : 1 ≤ literalLengthBytes (data.length - 1) ∧ literalLengthBytes (data.length - 1) ≤ 4 ∧
         data.length - 1 < 256 ^ literalLengthBytes (data.length - 1) := by
       unfold literalLengthBytes
       split <;> (try split) <;> (try split) <;> simp only [Nat.reducePow] at * <;> omega
     obtain ⟨hk1, hk4, hlt⟩ := hk
+    simp only [hn, ↓reduceIte]
     generalize literalLengthBytes (data.length - 1) = k at *
     have ht : (UInt8.ofNat ((59 + k) * 4)).toNat = (59 + k) * 4 := by
       rw [UInt8.toNat_ofNat']; omega
     have hv : (uintToBytes k (data.length - 1)).toList.foldr
         (fun byte acc => byte.toNat + 256 * acc) 0 = data.length - 1 := by
       simpa using EthLib.Base.foldr_uintToBytes_of_lt hlt
-    rw [List.cons_append]
+    have hk' : (uintToBytes k (data.length - 1)).toList.length = k := by simp
+    simp only [List.cons_append, List.append_assoc]
     simp only [decompressElements, ht, EthLib.Base.bytesToUint_toVector]
-    simp [show ¬ 59 + k < 60 by omega, show 59 + k - 59 = k by omega, hv,
-      show data.length - 1 + 1 = data.length by omega, decompressElements,
-      show ¬ declared < data.length by omega]
+    simp [show ¬ 59 + k < 60 by omega, show 59 + k - 59 = k by omega, hv, hk',
+      show data.length - 1 + 1 = data.length by omega,
+      show ¬ declared < o.length + data.length by omega,
+      show ¬ data.length + s.length < data.length by omega,
+      show ¬ k + (data.length + s.length) < k by omega]
+
+/-- The tag of a literal reads back as a literal, and its length as the data length (§2.1). -/
+theorem decompressElements_literal {declared : Nat} {data : List UInt8} (hne : data ≠ [])
+    (h : data.length ≤ 2 ^ 32) (hd : data.length ≤ declared) (fuel : Nat) :
+    decompressElements declared (literal data) ByteArray.empty (fuel + 1) =
+      .ok data.toByteArray := by
+  have := decompressElements_literal_append (o := []) (s := []) hne h (by simpa using hd) fuel
+  simpa [decompressElements] using this
 
 /-- A block of one literal decompresses to its data as a byte array, for up to 2^32 - 1 bytes. -/
 theorem decompressToArray_compressLiteralList {data : List UInt8}
@@ -399,7 +416,7 @@ theorem decompressToArray_compressLiteralList {data : List UInt8}
   | cons b bs =>
       simp only [List.isEmpty_cons, Bool.false_eq_true, ↓reduceIte]
       obtain ⟨f, hf⟩ : ∃ f, (literal (b :: bs)).length = f + 1 := by
-        dsimp only [literal]; split <;> exact ⟨_, rfl⟩
+        exact ⟨_, by simp only [literal, List.length_append, List.length_cons]; rfl⟩
       rw [hf, decompressElements_literal (List.cons_ne_nil b bs)
         (by simp [maxUncompressedLength] at h ⊢; omega) (Nat.le_refl _)]
       simp
