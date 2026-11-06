@@ -15,6 +15,8 @@ Not yet released.
   The Lean function and the C export `eth_engine_forkchoice_updated` take that block as a new argument, between the tree and the request.
   The C export reads it as JSON text: a block hash, or `null` for none.
   In Python, `engine.forkchoice_updated` takes it as the keyword `finalized`, `None` by default, so a call without it gets the same answer as before.
+- `engine_forkchoiceUpdated` with payload attributes now answers a syncing head, an invalid head and a head below the known finalized block, since no payload build begins there ([#1018](https://github.com/ethereum/EthLib/pull/1018)).
+  A request that would select a new head with payload attributes is still refused with code 0, because the build is not specified.
 
 ## 0.3.0
 

@@ -6,7 +6,7 @@ public import EthLib.Engine.ForkchoiceUpdated
 /-!
 # `Exports.ForkchoiceUpdated`
 
-The C export of `engine_forkchoiceUpdated`, versions 1 to 3, without payload attributes.
+The C export of `engine_forkchoiceUpdated`, versions 1 to 3, without a payload build.
 
 The payload tree and the request cross the boundary as JSON text in UTF-8.
 
@@ -20,7 +20,7 @@ The result is the JSON text of the response: the payload status, and no payload 
 
 A JSON-RPC error has the code of its Engine API error: 32602 or 38002.
 
-An unknown method, payload attributes, or input that is not JSON, has code 0.
+An unknown method, input that is not JSON, or payload attributes on a new head, has code 0.
 -/
 
 public section
@@ -61,9 +61,11 @@ def forkchoiceUpdatedExport (tree finalized request : ByteArray) : Result ByteAr
   let some _ := forkchoiceUpdatedVersion method | throw (0, s!"no method {method}")
   let engine {α : Type} (act : Except EngineError α) : Result α :=
     act.mapError fun e => (e.code, s!"engine error: {reprStr e}")
-  let some state ← engine (forkchoiceUpdatedParams (request.getObjValD "params"))
-    | throw (0, "payload attributes: building a payload is not specified")
-  let (status, _) ← engine (forkchoiceUpdated tree finalized state)
+  let (state, attributes) ← engine (forkchoiceUpdatedParams (request.getObjValD "params"))
+  let (status, head) ← engine (forkchoiceUpdated tree finalized state)
+  -- Step 8: payload attributes start a build only on a new valid head, and no build is specified.
+  if attributes && head.isSome then
+    throw (0, "payload attributes: building a payload is not specified")
   let response := Json.mkObj [
     ("payloadStatus", statusJson status none),
     ("payloadId", .null)]

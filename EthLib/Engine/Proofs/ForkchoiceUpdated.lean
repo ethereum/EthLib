@@ -20,7 +20,7 @@ The parameters decode exactly when they are a JSON array of two values.
 
 The first value must also decode as a forkchoice state.
 
-The result is that state when the payload attributes are `null`, and no state otherwise.
+The result is that state, and whether the payload attributes are not `null`.
 -/
 
 public section
@@ -133,12 +133,12 @@ theorem forkchoiceUpdated_of_belowFinalized {p : KnownPayload}
 
 The first value must also decode as a forkchoice state.
 
-The result is that state when the payload attributes are `null`, and no state otherwise. -/
-theorem forkchoiceUpdatedParams_eq_ok_iff {params : Lean.Json} {r : Option ForkchoiceState} :
+The result is that state, and whether the payload attributes are not `null`. -/
+theorem forkchoiceUpdatedParams_eq_ok_iff {params : Lean.Json} {r : ForkchoiceState × Bool} :
     forkchoiceUpdatedParams params = .ok r ↔
       ∃ stateJson attributes s, params = .arr #[stateJson, attributes] ∧
         forkchoiceStateOfJson stateJson = .ok s ∧
-          r = if attributes.isNull then some s else none := by
+          r = (s, !attributes.isNull) := by
   unfold forkchoiceUpdatedParams
   cases params with
   | arr items =>

@@ -114,7 +114,7 @@ def test_wrong_fields() -> None:
 
 
 def test_payload_attributes() -> None:
-    """Payload attributes ask for a payload build, which is not specified, so code 0."""
+    """Payload attributes on a new valid head ask for a build, which is not specified, so code 0."""
     state = {"headBlockHash": _hash(3), "safeBlockHash": ZERO, "finalizedBlockHash": ZERO}
     with raises(
         engine.EngineError, "payload attributes: building a payload is not specified"
@@ -149,6 +149,56 @@ def test_head_at_finalized() -> None:
             ],
             finalized=_hash(3),
         )
+    assert error.value.code == 38002
+
+
+def test_attributes_below_finalized() -> None:
+    """Below the known finalized block no build begins, so payload attributes give `VALID`."""
+    state = {"headBlockHash": _hash(2), "safeBlockHash": ZERO, "finalizedBlockHash": ZERO}
+    response = engine.forkchoice_updated(
+        TREE, "engine_forkchoiceUpdatedV1", [state, {"timestamp": "0x1"}], finalized=_hash(3)
+    )
+    assert response == {
+        "payloadStatus": {"status": "VALID", "latestValidHash": _hash(2), "validationError": None},
+        "payloadId": None,
+    }
+
+
+def test_attributes_unknown_head() -> None:
+    """An unknown head is syncing, and its payload attributes start no build."""
+    state = {"headBlockHash": _hash(9), "safeBlockHash": ZERO, "finalizedBlockHash": ZERO}
+    response = engine.forkchoice_updated(
+        TREE, "engine_forkchoiceUpdatedV1", [state, {"timestamp": "0x1"}]
+    )
+    assert response == {
+        "payloadStatus": {"status": "SYNCING", "latestValidHash": None, "validationError": None},
+        "payloadId": None,
+    }
+
+
+def test_attributes_invalid_head() -> None:
+    """An invalid head stays invalid, and its payload attributes start no build."""
+    state = {"headBlockHash": _hash(5), "safeBlockHash": ZERO, "finalizedBlockHash": ZERO}
+    response = engine.forkchoice_updated(
+        TREE, "engine_forkchoiceUpdatedV1", [state, {"timestamp": "0x1"}]
+    )
+    assert response == {
+        "payloadStatus": {
+            "status": "INVALID",
+            "latestValidHash": _hash(3),
+            "validationError": None,
+        },
+        "payloadId": None,
+    }
+
+
+def test_attributes_inconsistent_state() -> None:
+    """An inconsistent forkchoice state fails before its payload attributes are read."""
+    state = {"headBlockHash": _hash(2), "safeBlockHash": _hash(3), "finalizedBlockHash": ZERO}
+    with raises(
+        engine.EngineError, "engine error: EthLib.Engine.EngineError.invalidForkchoiceState"
+    ) as error:
+        engine.forkchoice_updated(TREE, "engine_forkchoiceUpdatedV1", [state, {"timestamp": "0x1"}])
     assert error.value.code == 38002
 
 

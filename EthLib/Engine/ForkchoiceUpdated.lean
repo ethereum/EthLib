@@ -6,7 +6,7 @@ public import EthLib.Execution.Blocks.Withdrawal
 /-!
 # `Engine.ForkchoiceUpdated`
 
-The choice of the head in `engine_forkchoiceUpdated`, versions 1 to 3, without payload attributes.
+The choice of the head in `engine_forkchoiceUpdated`, versions 1 to 3, without a payload build.
 
 The consensus layer names a head, a safe block and a finalized block.
 
@@ -36,11 +36,15 @@ Otherwise the state is invalid, with JSON-RPC code `-38002`.
 
 The parameters are the forkchoice state, with exactly its three fields, and the payload attributes.
 
-Payload attributes start a payload build, which is not specified here, so they must be `null`.
+Payload attributes start a payload build only when the update selects a new valid head.
+
+That build is not specified here, so such a request is refused.
+
+With any other answer no build begins, so the payload attributes change nothing.
 
 The method specifications state these rules, at commit `3284ee8` of execution-apis:
 
-- [`engine_forkchoiceUpdatedV1`][v1], steps 2, 4, 5, 7 and 9
+- [`engine_forkchoiceUpdatedV1`][v1], steps 2, 4, 5, 7, 8 and 9
 - [`engine_forkchoiceUpdatedV2`][v2] and [`engine_forkchoiceUpdatedV3`][v3]
 
 Each version has its payload attributes: [version 1][a1], [version 2][a2] and [version 3][a3].
@@ -153,13 +157,13 @@ def forkchoiceStateOfJson (j : Json) : Decode ForkchoiceState := do
     safeBlockHash := ← fixed "safeBlockHash" 32 (← get "safeBlockHash")
     finalizedBlockHash := ← fixed "finalizedBlockHash" 32 (← get "finalizedBlockHash") }
 
-/-- The parameters of a version of the method: the forkchoice state, then `null` attributes.
+/-- The parameters of a version of the method: the forkchoice state, then the payload attributes.
 
-It has none when the attributes are not `null`, since building a payload is not specified here. -/
-def forkchoiceUpdatedParams (params : Json) : Decode (Option ForkchoiceState) := do
+It returns the state, and whether the attributes are not `null`. -/
+def forkchoiceUpdatedParams (params : Json) : Decode (ForkchoiceState × Bool) := do
   let .arr items := params | invalid "params: not an array"
   let [state, attributes] := items.toList | invalid "params: not 2 values"
   let state ← forkchoiceStateOfJson state
-  return if attributes.isNull then some state else none
+  return (state, !attributes.isNull)
 
 end EthLib.Engine
