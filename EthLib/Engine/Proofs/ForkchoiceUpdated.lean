@@ -1,9 +1,10 @@
 module
 
 public import EthLib.Engine.ForkchoiceUpdated
+public import EthLib.Base.Except
 
 /-!
-# Proofs: the head that `engine_forkchoiceUpdated` selects
+# Proofs: the parameters and the head of `engine_forkchoiceUpdated`
 
 The update is syncing exactly when the execution layer does not hold the head.
 
@@ -12,6 +13,12 @@ A valid update selects a valid head that the execution layer holds.
 Its safe and finalized blocks are then zero, or the head or one of its known ancestors.
 
 An invalid head names as latest valid hash a valid block of its own chain.
+
+The parameters decode exactly when they are a JSON array of two values.
+
+The first value must also decode as a forkchoice state.
+
+The result is that state when the payload attributes are `null`, and no state otherwise.
 -/
 
 public section
@@ -97,5 +104,37 @@ theorem forkchoiceUpdated_valid {result : PayloadStatus × Option Hash32}
         simp only [Bool.not_eq_true', Bool.not_eq_false] at hNotInvalid
         exact ⟨⟨p, hp, by simpa using hNotInvalid⟩, rfl, hChain.1, hChain.2⟩
       · cases h
+
+/-! ## The parameters -/
+
+/-- The parameters decode exactly when they are a JSON array of two values.
+
+The first value must also decode as a forkchoice state.
+
+The result is that state when the payload attributes are `null`, and no state otherwise. -/
+theorem forkchoiceUpdatedParams_eq_ok_iff {params : Lean.Json} {r : Option ForkchoiceState} :
+    forkchoiceUpdatedParams params = .ok r ↔
+      ∃ stateJson attributes s, params = .arr #[stateJson, attributes] ∧
+        forkchoiceStateOfJson stateJson = .ok s ∧
+          r = if attributes.isNull then some s else none := by
+  unfold forkchoiceUpdatedParams
+  cases params with
+  | arr items =>
+    obtain ⟨l⟩ := items
+    -- Only a list of two values gets past the shape check.
+    match l with
+    | [stateJson, attributes] =>
+      simp only [bind_ok_iff]
+      constructor
+      · rintro ⟨s, hs, hr⟩
+        exact ⟨stateJson, attributes, s, rfl, hs, (Except.ok.inj hr).symm⟩
+      · rintro ⟨stateJson', attributes', s, heq, hs, rfl⟩
+        cases heq
+        exact ⟨s, hs, rfl⟩
+    | [] => simp [Json.invalid, throw, throwThe, MonadExceptOf.throw]
+    | [_] => simp [Json.invalid, throw, throwThe, MonadExceptOf.throw]
+    | _ :: _ :: _ :: _ => simp [Json.invalid, throw, throwThe, MonadExceptOf.throw]
+  -- Any other JSON value is not an array.
+  | _ => simp [Json.invalid, throw, throwThe, MonadExceptOf.throw]
 
 end EthLib.Engine
