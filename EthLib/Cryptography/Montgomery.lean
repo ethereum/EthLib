@@ -1362,45 +1362,72 @@ The compiler makes one copy for each modulus, so each product is a direct call. 
 termination_by k
 decreasing_by omega
 
-/-- The powers `a ^ 0` to `a ^ 15`, from `t` holding the first powers.
+/-- `t` followed by `k` new entries: `last * a`, `last * a ^ 2`, up to `last * a ^ k`.
+
+When `last` is `a ^ m`, the new entries are `a ^ (m + 1)` to `a ^ (m + k)`.
+
+The last power is an argument, so the builder never reads the array back.
 
 The compiler makes one copy for each modulus, so each product is a direct call. -/
 @[specialize M] def powTableAux (a : Montgomery M) :
-    Nat → Array (Montgomery M) → Array (Montgomery M)
-  | 0, t => t
-  | k + 1, t => powTableAux a k (t.push (mul t.back! a))
+    Nat → Montgomery M → Array (Montgomery M) → Array (Montgomery M)
+  | 0, _, t => t
+  | k + 1, last, t =>
+    let next := mul last a
+    powTableAux a k next (t.push next)
+
+/-- Each product adds one entry. -/
+theorem size_powTableAux (a : Montgomery M) :
+    ∀ (k : Nat) (last : Montgomery M) (t : Array (Montgomery M)),
+      (powTableAux a k last t).size = t.size + k
+  | 0, _, _ => rfl
+  | k + 1, last, t => by
+    rw [powTableAux, size_powTableAux a k, Array.size_push]
+    omega
 
 /-- The powers `a ^ 0` to `a ^ 15`. -/
-@[inline] def powTable (a : Montgomery M) : Array (Montgomery M) :=
-  powTableAux a 15 #[one]
+@[inline] def powTable (a : Montgomery M) : Vector (Montgomery M) 16 :=
+  ⟨powTableAux a 15 one #[one], size_powTableAux a 15 one #[one]⟩
 
 /-- `acc ^ 16 * a ^ d` for a digit `d` below 16, with the powers `t` of `a`. -/
-@[inline] def window (t : Array (Montgomery M)) (acc : Montgomery M) (d : UInt32) :
-    Montgomery M :=
+@[inline] def window (t : Vector (Montgomery M) 16) (acc : Montgomery M) (d : UInt32)
+    (digit : d.toNat < 16) : Montgomery M :=
   let s := mul acc acc
   let s := mul s s
   let s := mul s s
   let s := mul s s
-  mul s t[d.toNat]!
+  mul s t[d.toNat]
+
+/-- The top four bits of a word are a digit below 16. -/
+theorem toNat_shiftRight_twentyEight_lt (w : UInt32) : (w >>> 28).toNat < 16 := by
+  rw [UInt32.toNat_shiftRight, Nat.shiftRight_eq_div_pow]
+  have := w.toNat_lt
+  simp only [UInt32.reduceToNat, Nat.reduceMod]
+  omega
+
+/-- The low four bits of a word are a digit below 16. -/
+theorem toNat_and_fifteen_lt (w : UInt32) : (w &&& 15).toNat < 16 := by
+  rw [UInt32.toNat_and]
+  exact Nat.lt_succ_of_le Nat.and_le_right
 
 /-- `acc ^ (2 ^ 32) * a ^ w`, four bits of `w` at a time, with the powers `t` of `a`. -/
-@[inline] def powWord (t : Array (Montgomery M)) (acc : Montgomery M) (w : UInt32) :
+@[inline] def powWord (t : Vector (Montgomery M) 16) (acc : Montgomery M) (w : UInt32) :
     Montgomery M :=
-  let acc := window t acc (w >>> 28)
-  let acc := window t acc (w >>> 24 &&& 15)
-  let acc := window t acc (w >>> 20 &&& 15)
-  let acc := window t acc (w >>> 16 &&& 15)
-  let acc := window t acc (w >>> 12 &&& 15)
-  let acc := window t acc (w >>> 8 &&& 15)
-  let acc := window t acc (w >>> 4 &&& 15)
-  window t acc (w &&& 15)
+  let acc := window t acc (w >>> 28) (toNat_shiftRight_twentyEight_lt w)
+  let acc := window t acc (w >>> 24 &&& 15) (toNat_and_fifteen_lt _)
+  let acc := window t acc (w >>> 20 &&& 15) (toNat_and_fifteen_lt _)
+  let acc := window t acc (w >>> 16 &&& 15) (toNat_and_fifteen_lt _)
+  let acc := window t acc (w >>> 12 &&& 15) (toNat_and_fifteen_lt _)
+  let acc := window t acc (w >>> 8 &&& 15) (toNat_and_fifteen_lt _)
+  let acc := window t acc (w >>> 4 &&& 15) (toNat_and_fifteen_lt _)
+  window t acc (w &&& 15) (toNat_and_fifteen_lt _)
 
 /-- `acc ^ (2 ^ (32 k)) * a ^ e`, for the integer `e` of the low `k` limbs of `l`.
 
 The limbs go from the highest, with the powers `t` of `a`.
 
 The compiler makes one copy for each modulus, so each product is a direct call. -/
-@[specialize M] def powDigits (t : Array (Montgomery M)) (l : Limbs.T n) :
+@[specialize M] def powDigits (t : Vector (Montgomery M) 16) (l : Limbs.T n) :
     Nat → Montgomery M → Montgomery M
   | 0, acc => acc
   | k + 1, acc => powDigits t l k (powWord t acc (Limbs.get l k).toUInt32)
