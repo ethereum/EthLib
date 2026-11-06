@@ -253,17 +253,17 @@ theorem decodePayload_lengthBelowMinimum {typeMin typeBound declared : UInt64}
 /-! ## The literal encoder -/
 
 /-- Uncompressed chunks add eight bytes to each block of up to 65536 bytes. -/
-theorem length_encodeChunksLiteral_le (data : List UInt8) (fuel : Nat) :
-    (Snappy.encodeChunksLiteral data fuel).length ≤
+theorem length_encodeChunks_uncompressedChunk_le (data : List UInt8) (fuel : Nat) :
+    (Snappy.encodeChunks Snappy.uncompressedChunk data fuel).length ≤
       data.length + 8 * ((data.length + 65535) / 65536) := by
   induction fuel generalizing data with
-  | zero => cases data <;> simp [Snappy.encodeChunksLiteral]
+  | zero => cases data <;> simp [Snappy.encodeChunks]
   | succ fuel ih =>
     cases data with
-    | nil => simp [Snappy.encodeChunksLiteral]
+    | nil => simp [Snappy.encodeChunks]
     | cons b bs =>
       have := ih ((b :: bs).drop Snappy.maxChunkLength)
-      simp only [Snappy.encodeChunksLiteral, Snappy.uncompressedChunk, List.length_append,
+      simp only [Snappy.encodeChunks, Snappy.uncompressedChunk, List.length_append,
         List.length_cons, Vector.length_toList, List.length_take, List.length_drop,
         Snappy.maxChunkLength] at this ⊢
       omega
@@ -271,7 +271,7 @@ theorem length_encodeChunksLiteral_le (data : List UInt8) (fuel : Nat) :
 /-- The literal frames of `n` bytes fit in the bound `32 + n + n / 6`. -/
 theorem size_encodeFramesLiteral_le (d : ByteArray) :
     (Snappy.encodeFramesLiteral d).size ≤ 32 + d.size + d.size / 6 := by
-  have := length_encodeChunksLiteral_le d.data.toList d.data.size
+  have := length_encodeChunks_uncompressedChunk_le d.data.toList d.data.size
   simp only [Array.length_toList] at this
   simp only [Snappy.encodeFramesLiteral, ByteArray.size, List.size_toArray, List.length_append,
     Snappy.streamIdentifier, List.length_cons, List.length_nil]

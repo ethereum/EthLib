@@ -18,7 +18,7 @@ An uncompressed data chunk holds the same checksum, then the bytes (§4.3).
 
 The encoder writes a compressed chunk only when it is shorter than the uncompressed chunk.
 
-So a chunk of data that does not compress takes eight bytes more than the data, as before.
+So a chunk of data that does not compress takes eight bytes more than the data.
 -/
 
 @[expose] public section
@@ -44,23 +44,11 @@ def dataChunk (data : List UInt8) : List UInt8 :=
   if (compressedChunk data).length < (uncompressedChunk data).length then compressedChunk data
   else uncompressedChunk data
 
-/-- The data cut into chunks of 65536 bytes, the last one shorter, each in its shorter form.
-
-The fuel bounds the number of chunks, and the data length is enough.
--/
-def encodeChunks : List UInt8 → Nat → List UInt8
-  | [], _ => []
-  -- Out of fuel: unreachable when the fuel is at least the data length.
-  | _ :: _, 0 => []
-  | b :: bs, fuel + 1 =>
-      dataChunk ((b :: bs).take maxChunkLength) ++
-        encodeChunks ((b :: bs).drop maxChunkLength) fuel
-
 /-- A framed stream that decodes to `data`: the stream identifier, then its chunks.
 
 A chunk is compressed when that makes it shorter.
 -/
 def encodeFrames (data : ByteArray) : ByteArray :=
-  ⟨(streamIdentifier ++ encodeChunks data.data.toList data.size).toArray⟩
+  ⟨(streamIdentifier ++ encodeChunks dataChunk data.data.toList data.size).toArray⟩
 
 end EthLib.Networking.Snappy
