@@ -144,16 +144,19 @@ Each can return nothing: on one climb compared with itself (`findCollision_self`
 So the statements say something, even though every compressing hash has collisions.
 
 `Proofs/Merkle/RandomOracle.lean` bounds classical searches against an ideal random oracle with `N` outputs and an empty initial cache.
-`prEvent_collision_le` bounds a collision among queried inputs by `q^2 / N` for at most `q` hash calls, with private randomness free.
-`prEvent_secondPreimage_le` bounds a second preimage of one fixed honest input by `q / N`.
-It conditions on the honest digest and excludes that input from the remaining query domain.
-The remaining oracle cells are independent and uniform.
+`prEvent_collision_le` bounds a collision among queried inputs by `q^2 / N` for at most `q` hash calls, and private uniform sampling is not counted.
+This bound exceeds the standard birthday bound `q(q - 1) / (2N)` by the factor `2q / (q - 1)`, a little over 2.
+
+`prEvent_secondPreimage_le` bounds by `q / N` a hit on a target digest fixed before the run, among queried inputs other than one honest input.
+The theorem does not tie the target to the digest of the honest input.
+Reading it as a second-preimage bound conditions on the honest digest and assumes that the other oracle answers stay independent and uniform.
+That conditioning is a modelling step, not a proved one.
 
 The Merkle applications model the tuple `(level, position, left, right)` as the oracle input.
-They require an injective encoding of that tuple, not a hash that ignores the position.
-The oracle searches agree with `findCollision` and `findSecondPreimage` for every complete answer table.
-`prEvent_findCollisionM_le` bounds the first search by `(2h)^2 / N`, where `h` is the shorter path length.
-`prEvent_findSecondPreimageM_le` bounds the second by `Q^2 / N`, with fixed honest leaves and `Q = secondPreimageQueries level path.length`.
+They require an injective encoding of that tuple, for levels and positions inside the encodable range, not a hash that ignores the position.
+The bounds run `findCollision` and `findSecondPreimage` themselves, with an oracle query as the node hash.
+For paths and leaves fixed before the oracle is sampled, `prEvent_findCollision_queryNode_le` bounds the first search by `(2h)^2 / N`, where `h` is the shorter path length.
+For the same fixed inputs, `prEvent_findSecondPreimage_queryNode_le` bounds the second by `Q^2 / N`, with `Q = secondPreimageQueries level path.length`.
 Its budget counts every hash call, including repeated honest-node computations:
 
 ```text
@@ -161,6 +164,7 @@ Q(l, 0) = 0
 Q(l, n+1) = 1 + 2*(2^l - 1) + (2^(l+1) - 1) + Q(l+1, n)
 ```
 
+For a path of length `n` from level `l`, `Q` equals `2^(l+n+2) - 2^(l+2) - 2n`, while the search queries at most `2^(l+n) - 1 + n` distinct inputs.
 The honest ancestors depend on oracle answers, so this search uses the birthday bound, not the bound for one fixed target.
 The covered-event theorems also allow adaptive surrounding clients, provided their total budget includes the witness queries and honest-tree construction.
 These statements do not bound attacks on a concrete hash or quantum queries.
@@ -824,7 +828,8 @@ The two theorems of Casper FFG share one bullet, as do the signature theorems of
   So do the failure bounds of the codeword searches of leanXMSS and leanSPHINCS.
 - Merkle search bounds: each new `(level, position, left, right)` input receives an independent uniform answer from a finite nonempty range.
   Repeated inputs receive the same answer, and the initial cache is empty.
-  The fixed-target bound conditions on one honest digest and excludes its input from the remaining oracle domain.
+  The fixed-target bound excludes one honest input from the oracle domain and fixes the target before the run.
+  Reading it as a second-preimage bound conditions on the honest digest, a modelling step that no theorem proves.
   Only classical queries are counted.
   No SHA-256, Keccak or quantum security claim follows from this model.
 - VRF unpredictability: Keccak-256 is a random oracle on byte strings, as for leanXMSS.

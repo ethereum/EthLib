@@ -42,8 +42,8 @@ theorem branchMessages_cons (index level : Nat) (node sibling : Bytes) (rest : L
 It is the two messages of the lowest node where the branches hash different pairs to one parent. -/
 def findBranchCollision (index level : Nat) (left right : Bytes)
     (leftProof rightProof : List Bytes) : Option (Bytes × Bytes) :=
-  (Cryptography.Merkle.findCollision (fun _ _ => combine) level (index >>> level) left right
-      leftProof rightProof).map fun c => (c.x.1 ++ c.x.2, c.y.1 ++ c.y.2)
+  (Cryptography.Merkle.findCollision (m := Id) (fun _ _ => combine) level (index >>> level) left
+      right leftProof rightProof).run.map fun c => (c.x.1 ++ c.x.2, c.y.1 ++ c.y.2)
 
 /-- Between branches of complete nodes, the search returns two different 64-byte messages.
 
@@ -96,7 +96,7 @@ theorem climbBranch_binding {index level : Nat} {left right : Bytes}
   rcases Cryptography.Merkle.climb_binding _ _ _ level (index >>> level) left right lengths same
     with ⟨leaves, -⟩ | found
   · exact .inl leaves
-  · exact .inr (by simpa [findBranchCollision] using found)
+  · exact .inr (by simpa [findBranchCollision, Id.run] using found)
 
 /-- A branch passes width validation exactly when every supplied sibling is a full node. -/
 theorem checkChunks_ok_iff (nodes : List Bytes) :

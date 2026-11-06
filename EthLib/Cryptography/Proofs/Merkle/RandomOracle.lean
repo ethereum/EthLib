@@ -8,17 +8,21 @@ public import VCVio.OracleComp.QueryTracking.SubSpec
 /-!
 # Classical random-oracle collision bounds
 
-The oracle samples each new input uniformly and remembers its answer.
+A random oracle is a uniformly random function, chosen once for every party.
 
-Source: Bellare and Rogaway, "Random Oracles are Practical", section 2 (Oracles).
+Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2, "Oracles".
 
 <https://cseweb.ucsd.edu/~mihir/papers/ro.pdf>
+
+The oracle here samples each new input uniformly and remembers its answer.
 
 Repeated inputs are not collisions, but still count towards the query budget.
 
 The birthday bound here is the loose bound `q^2 / N`, for `N` possible answers.
 
-The proof charges each fresh answer at most `q / N`, including private sampling for free.
+It exceeds the standard bound `q(q - 1) / (2N)` by the factor `2q / (q - 1)`, a little over 2.
+
+The proof charges each fresh answer at most `q / N`, and private uniform sampling is not counted.
 
 These are ideal-oracle statements, not claims about the structure of a concrete hash.
 -/
@@ -56,7 +60,7 @@ theorem collision_cacheQuery {c : (D →ₒ R).QueryCache} {t : D} {u : R}
 
 /-- The collision probability of an adaptive classical client is at most `q * (q / N)`.
 
-Here `N = Nat.card R`, private randomness is free, and the initial cache is empty.
+Here `N = Nat.card R`, private uniform sampling is not counted, and the initial cache is empty.
 -/
 theorem prEvent_collision_le [SampleableType R]
     (oa : OracleComp (unifSpec + (D →ₒ R)) α) {q : Nat}
@@ -97,11 +101,9 @@ theorem prEvent_collision_le [SampleableType R]
 /-- The cache contains a query with the fixed target digest. -/
 def Hits (r : R) (c : (D →ₒ R).QueryCache) : Prop := ∃ x, c x = some r
 
-/-- A fixed target digest has hit probability at most `q / N` in `q` queries.
+/-- A target digest fixed before the run has hit probability at most `q / N` in `q` queries.
 
-For a second preimage of a fixed honest input `x`, take `D` to exclude `x`.
-
-The honest digest is fixed before this run, and all other oracle cells remain independent.
+Nothing here ties the target to the digest of any input.
 -/
 theorem prEvent_hits_le [SampleableType R]
     (r : R) (oa : OracleComp (unifSpec + (D →ₒ R)) α) {q : Nat}
@@ -127,13 +129,28 @@ theorem prEvent_hits_le [SampleableType R]
 
 /-- An oracle input includes the parent position and its ordered children.
 
-This models a position-tweaked node hash, with an injective encoding of this tuple.
+This models a node hash tweaked by its position.
+
+A concrete hash matches it through an injective encoding of this tuple.
+
+Such an encoding exists for levels and positions inside the encodable range.
 -/
 abbrev NodeInput (R : Type) := Nat × Nat × R × R
 
-/-- Read a complete oracle table as the node hash of the deterministic binding searches. -/
+/-- Read a complete oracle table as a node hash in the identity monad. -/
 def nodeHash (g : NodeInput R → R) (level j : Nat) (a b : R) : Id R :=
   pure (g (level, j, a, b))
+
+/-- The same node hash, with calls exposed rather than answered by a fixed table. -/
+def queryNode (level j : Nat) (a b : R) : OracleComp (NodeInput R →ₒ R) R :=
+  liftM ((NodeInput R →ₒ R).query (level, j, a, b))
+
+/-- One node-hash call costs one query. -/
+theorem queryNode_queryBound (level j : Nat) (a b : R) :
+    IsTotalQueryBound (queryNode level j a b) 1 := by
+  change IsTotalQueryBound
+    (liftM ((NodeInput R →ₒ R).query (level, j, a, b)) >>= pure) 1
+  exact isTotalQueryBound_query_bind_iff.mpr ⟨Nat.one_pos, fun _ => trivial⟩
 
 /-- A completed search whose two witness inputs were queried gives a cache collision.
 
@@ -181,48 +198,12 @@ theorem collision_of_findSecondPreimage [DecidableEq R] (g : NodeInput R → R)
         g (w.level + 1, w.j, x.1, x.2) at heq
     exact hx.trans (congrArg some heq.symm)
 
-/-- The collision search with its hash calls exposed to the oracle.
+/-- The collision search against the oracle makes two calls per common level.
 
-It makes two calls per visited level and stops at the first collision.
--/
-def findCollisionM [DecidableEq R] : (level j : Nat) → (a b : R) →
-    (p q : List R) → OracleComp (NodeInput R →ₒ R) (Option (Merkle.Collision R))
-  | level, j, a, b, s :: p, t :: q => do
-    let x := ordered j a s
-    let y := ordered j b t
-    let parentA ← liftM ((NodeInput R →ₒ R).query (level + 1, j / 2, x.1, x.2))
-    let parentB ← liftM ((NodeInput R →ₒ R).query (level + 1, j / 2, y.1, y.2))
-    if x ≠ y ∧ parentA = parentB then return some ⟨level + 1, j / 2, x, y⟩
-    else findCollisionM (level + 1) (j / 2) parentA parentB p q
-  | _, _, _, _, _, _ => pure none
-
-/-- The oracle search is the existing deterministic search under every complete answer table. -/
-theorem evalWithAnswerFn_findCollisionM [DecidableEq R] (g : NodeInput R → R) :
+The bound holds even if the lists have different lengths. -/
+theorem findCollision_queryBound [DecidableEq R] :
     ∀ (p q : List R) (level j : Nat) (a b : R),
-      evalWithAnswerFn (QueryImpl.ofFn g) (findCollisionM level j a b p q) =
-        findCollision (nodeHash g) level j a b p q := by
-  intro p
-  induction p with
-  | nil => intros; rfl
-  | cons s p ih =>
-    intro q level j a b
-    cases q with
-    | nil => rfl
-    | cons t q =>
-      simp only [findCollisionM, evalWithAnswerFn_bind, evalWithAnswerFn_liftM_query,
-        QueryImpl.ofFn_apply, findCollision, nodeHash]
-      dsimp only [Id.run, pure]
-      by_cases h : ordered j a s ≠ ordered j b t ∧
-          g (level + 1, j / 2, (ordered j a s).1, (ordered j a s).2) =
-            g (level + 1, j / 2, (ordered j b t).1, (ordered j b t).2)
-      · simp [h.1, h.2, evalWithAnswerFn_pure]
-      · simp only [h, ↓reduceIte]
-        exact ih q _ _ _ _
-
-/-- Two calls per common level suffice, even if the lists have different lengths. -/
-theorem findCollisionM_queryBound [DecidableEq R] :
-    ∀ (p q : List R) (level j : Nat) (a b : R),
-      IsTotalQueryBound (findCollisionM level j a b p q)
+      IsTotalQueryBound (findCollision queryNode level j a b p q)
         (2 * min p.length q.length) := by
   intro p
   induction p with
@@ -233,7 +214,7 @@ theorem findCollisionM_queryBound [DecidableEq R] :
     | nil => trivial
     | cons t q =>
       simp only [List.length_cons, min_add_add_right,
-        findCollisionM, isTotalQueryBound_query_bind_iff]
+        findCollision, queryNode, isTotalQueryBound_query_bind_iff]
       refine ⟨by omega, fun x => ⟨by omega, fun y => ?_⟩⟩
       split
       · trivial
@@ -241,20 +222,20 @@ theorem findCollisionM_queryBound [DecidableEq R] :
         omega
 
 /-- Replaying a successful search from a cache exposes a collision in that cache. -/
-theorem collision_of_partial_findCollisionM [DecidableEq R]
+theorem collision_of_partial_findCollision [DecidableEq R]
     (c : (NodeInput R →ₒ R).QueryCache) :
     ∀ (p q : List R) (level j : Nat) (a b : R) (w : Merkle.Collision R),
-      simulateQ c.toPartialImpl (findCollisionM level j a b p q) = some (some w) →
+      simulateQ c.toPartialImpl (findCollision queryNode level j a b p q) = some (some w) →
         Collision c := by
   intro p
   induction p with
-  | nil => intro q level j a b w hw; simp [findCollisionM] at hw
+  | nil => intro q level j a b w hw; simp [findCollision] at hw
   | cons s p ih =>
     intro q level j a b w hw
     cases q with
-    | nil => simp [findCollisionM] at hw
+    | nil => simp [findCollision] at hw
     | cons t q =>
-      simp only [findCollisionM, simulateQ_bind, simulateQ_spec_query,
+      simp only [findCollision, queryNode, simulateQ_bind, simulateQ_spec_query,
         QueryCache.toPartialImpl_apply] at hw
       obtain ⟨x, hx, hw⟩ := Option.bind_eq_some_iff.mp hw
       obtain ⟨y, hy, hw⟩ := Option.bind_eq_some_iff.mp hw
@@ -285,25 +266,29 @@ theorem prEvent_collision_le_total [SampleableType R]
   have h := prEvent_collision_le (liftComp oa (unifSpec + (D →ₒ R))) hb
   simpa only [OracleSpec.romImpl, QueryImpl.simulateQ_add_liftComp_right] using h
 
-/-- The existing Merkle collision search succeeds with probability at most `(2h)^2 / N`.
+/-- The collision search against the oracle succeeds with probability at most `(2h)^2 / N`.
 
 Here `h` is the shorter path length, and the oracle cache starts empty.
+
+The paths and leaves are fixed before the oracle is sampled.
+
+Paths chosen after seeing oracle answers need the bound for covered events.
 -/
-theorem prEvent_findCollisionM_le [SampleableType R] [DecidableEq R]
+theorem prEvent_findCollision_queryNode_le [SampleableType R] [DecidableEq R]
     (p q : List R) (level j : Nat) (a b : R) :
     Pr{let z ← (simulateQ (NodeInput R →ₒ R).randomOracle
-      (findCollisionM level j a b p q)).run ∅}[z.1.isSome] ≤
+      (findCollision queryNode level j a b p q)).run ∅}[z.1.isSome] ≤
         (2 * min p.length q.length : Nat) *
           ((2 * min p.length q.length : Nat) / (Nat.card R : ℝ≥0∞)) := by
   refine (prEvent_mono_of_support _ _ _ ?_).trans
-    (prEvent_collision_le_total _ (findCollisionM_queryBound p q level j a b))
+    (prEvent_collision_le_total _ (findCollision_queryBound p q level j a b))
   intro z hz hs
   obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp hs
   -- The final cache replays every query of this run without sampling again.
   have hp := QueryImpl.simulateQ_toPartialImpl_snd_of_mem_support_run_simulateQ_withCaching
-    uniformSampleImpl (findCollisionM level j a b p q) hz
+    uniformSampleImpl (findCollision queryNode level j a b p q) hz
   rw [hw] at hp
-  exact collision_of_partial_findCollisionM z.2 p q level j a b w hp
+  exact collision_of_partial_findCollision z.2 p q level j a b w hp
 
 /-- The probability bound transfers to any event that returns a covered Merkle collision.
 
@@ -349,17 +334,6 @@ theorem prEvent_findSecondPreimage_le [SampleableType R] [DecidableEq R]
   obtain ⟨g, leaves, q, level, j, b, hs, hc⟩ := hsearch z hz he
   exact collision_of_findSecondPreimage g z.2 leaves q level j b hc hs
 
-/-- The same node hash, with calls exposed rather than answered by a fixed table. -/
-def queryNode (level j : Nat) (a b : R) : OracleComp (NodeInput R →ₒ R) R :=
-  liftM ((NodeInput R →ₒ R).query (level, j, a, b))
-
-/-- One node-hash call costs one query. -/
-theorem queryNode_queryBound (level j : Nat) (a b : R) :
-    IsTotalQueryBound (queryNode level j a b) 1 := by
-  change IsTotalQueryBound
-    (liftM ((NodeInput R →ₒ R).query (level, j, a, b)) >>= pure) 1
-  exact isTotalQueryBound_query_bind_iff.mpr ⟨Nat.one_pos, fun _ => trivial⟩
-
 /-- Computing an honest node from fixed leaves makes `2^level - 1` hash calls. -/
 theorem node_queryBound (leaves : Nat → R) : ∀ level j,
     IsTotalQueryBound (node queryNode (fun j => pure (leaves j)) level j)
@@ -378,45 +352,34 @@ theorem node_queryBound (leaves : Nat → R) : ∀ level j,
     rw [Nat.pow_succ]
     omega
 
-/-- Worst-case calls of the literal second-preimage search, including honest recomputation.
+/-- Worst-case calls of the second-preimage search, including honest recomputation.
 
 At each level it hashes the candidate and computes the two honest children and parent.
 
 Repeated honest calls still count, even though the oracle answers them from its cache.
+
+From level `l` over `n` siblings, the budget is `2^(l+n+2) - 2^(l+2) - 2n`.
+
+The search queries at most `2^(l+n) - 1 + n` distinct inputs, about a quarter of that.
 -/
 def secondPreimageQueries : Nat → Nat → Nat
   | _, 0 => 0
   | level, n + 1 =>
     1 + 2 * (2 ^ level - 1) + (2 ^ (level + 1) - 1) + secondPreimageQueries (level + 1) n
 
-/-- The literal second-preimage search with all hash calls exposed.
+/-- The second-preimage search against the oracle respects its worst-case budget.
 
-The honest leaves are fixed values, so reading a leaf makes no oracle call.
--/
-def findSecondPreimageM [DecidableEq R] (leaves : Nat → R) :
-    (level j : Nat) → R → List R →
-      OracleComp (NodeInput R →ₒ R) (Option (SecondPreimage R))
-  | level, j, b, t :: q => do
-    let y := ordered j b t
-    let parent ← queryNode (level + 1) (j / 2) y.1 y.2
-    let left ← node queryNode (fun j => pure (leaves j)) level (2 * (j / 2))
-    let right ← node queryNode (fun j => pure (leaves j)) level (2 * (j / 2) + 1)
-    let honest ← node queryNode (fun j => pure (leaves j)) (level + 1) (j / 2)
-    if y ≠ (left, right) ∧ parent = honest then return some ⟨level, j / 2, y⟩
-    else findSecondPreimageM leaves (level + 1) (j / 2) parent q
-  | _, _, _, [] => pure none
-
-/-- The literal second-preimage search respects its stated worst-case budget. -/
-theorem findSecondPreimageM_queryBound [DecidableEq R] (leaves : Nat → R) :
+The honest leaves are fixed values, so reading a leaf makes no oracle call. -/
+theorem findSecondPreimage_queryBound [DecidableEq R] (leaves : Nat → R) :
     ∀ (q : List R) (level j : Nat) (b : R),
-      IsTotalQueryBound (findSecondPreimageM leaves level j b q)
+      IsTotalQueryBound (findSecondPreimage queryNode (fun j => pure (leaves j)) level j b q)
         (secondPreimageQueries level q.length) := by
   intro q
   induction q with
   | nil => intros; trivial
   | cons t q ih =>
     intro level j b
-    simp only [findSecondPreimageM]
+    simp only [findSecondPreimage]
     have h := isTotalQueryBound_bind
       (queryNode_queryBound (level + 1) (j / 2) (ordered j b t).1 (ordered j b t).2)
       fun parent => isTotalQueryBound_bind (node_queryBound leaves level (2 * (j / 2)))
@@ -425,7 +388,7 @@ theorem findSecondPreimageM_queryBound [DecidableEq R] (leaves : Nat → R) :
       fun honest => show IsTotalQueryBound
         (if ordered j b t ≠ (left, right) ∧ parent = honest then
           pure (some ⟨level, j / 2, ordered j b t⟩)
-        else findSecondPreimageM leaves (level + 1) (j / 2) parent q)
+        else findSecondPreimage queryNode (fun j => pure (leaves j)) (level + 1) (j / 2) parent q)
         (secondPreimageQueries (level + 1) q.length) from by
           split
           · trivial
@@ -448,50 +411,15 @@ theorem evalWithAnswerFn_node (g : NodeInput R → R) (leaves : Nat → R) : ∀
       evalWithAnswerFn_liftM_query, QueryImpl.ofFn_apply]
     rfl
 
-/-- The second-preimage oracle search agrees with the existing search for every answer table. -/
-theorem evalWithAnswerFn_findSecondPreimageM [DecidableEq R]
-    (g : NodeInput R → R) (leaves : Nat → R) : ∀ (q : List R) (level j : Nat) (b : R),
-    evalWithAnswerFn (QueryImpl.ofFn g) (findSecondPreimageM leaves level j b q) =
-      findSecondPreimage (nodeHash g) (fun j => pure (leaves j)) level j b q := by
-  intro q
-  induction q with
-  | nil => intros; rfl
-  | cons t q ih =>
-    intro level j b
-    simp only [findSecondPreimageM, evalWithAnswerFn_bind, evalWithAnswerFn_node,
-      queryNode, evalWithAnswerFn_liftM_query, QueryImpl.ofFn_apply, findSecondPreimage]
-    change evalWithAnswerFn (QueryImpl.ofFn g)
-      (if ordered j b t ≠
-          ((node (nodeHash g) (fun j => pure (leaves j)) level (2 * (j / 2))).run,
-            (node (nodeHash g) (fun j => pure (leaves j)) level (2 * (j / 2) + 1)).run) ∧
-          g (level + 1, j / 2, (ordered j b t).1, (ordered j b t).2) =
-            (node (nodeHash g) (fun j => pure (leaves j)) (level + 1) (j / 2)).run
-        then pure _ else _) = (if _ then _ else _)
-    by_cases h : ordered j b t ≠
-        ((node (nodeHash g) (fun j => pure (leaves j)) level (2 * (j / 2))).run,
-          (node (nodeHash g) (fun j => pure (leaves j)) level (2 * (j / 2) + 1)).run) ∧
-        g (level + 1, j / 2, (ordered j b t).1, (ordered j b t).2) =
-          (node (nodeHash g) (fun j => pure (leaves j)) (level + 1) (j / 2)).run
-    · have h' : ordered j b t ≠
-          ((node (nodeHash g) (fun j => pure (leaves j)) level (2 * (j / 2))).run,
-            (node (nodeHash g) (fun j => pure (leaves j)) level (2 * (j / 2) + 1)).run) ∧
-          (nodeHash g (level + 1) (j / 2) (ordered j b t).1 (ordered j b t).2).run =
-            (node (nodeHash g) (fun j => pure (leaves j)) (level + 1) (j / 2)).run := h
-      rw [ite_eq_left h, ite_eq_left h']
-      rfl
-    · have h' : ¬ (ordered j b t ≠
-          ((node (nodeHash g) (fun j => pure (leaves j)) level (2 * (j / 2))).run,
-            (node (nodeHash g) (fun j => pure (leaves j)) level (2 * (j / 2) + 1)).run) ∧
-          (nodeHash g (level + 1) (j / 2) (ordered j b t).1 (ordered j b t).2).run =
-            (node (nodeHash g) (fun j => pure (leaves j)) (level + 1) (j / 2)).run) := h
-      rw [ite_eq_right h, ite_eq_right h']
-      exact ih _ _ _
+/-- A fixed target is hit with probability at most `q / N`, among queried inputs.
 
-/-- A fixed honest input is excluded from the adversary's query domain.
+The oracle answers only inputs other than one honest input.
 
-Conditioned on its digest `r`, each remaining cell is still independent and uniform.
+The target `r` is fixed before the run.
 
-Thus finding a second preimage of that input in `q` classical calls costs at most `q / N`.
+As a second-preimage bound, `r` is the honest digest, and the other answers stay uniform.
+
+That conditioning is a modelling step, not a proved one: nothing here ties `r` to that input.
 -/
 theorem prEvent_secondPreimage_le [SampleableType R] (honest : D) (r : R)
     (oa : OracleComp (unifSpec + ({x : D // x ≠ honest} →ₒ R)) α) {q : Nat}
@@ -519,19 +447,20 @@ theorem cached_parent_of_partial_node (g : NodeInput R → R)
   rwa [← hleft, ← hright] at ha
 
 /-- A successful partial second-preimage search exposes two distinct cached inputs. -/
-theorem collision_of_partial_findSecondPreimageM [SampleableType R] [DecidableEq R]
+theorem collision_of_partial_findSecondPreimage [SampleableType R] [DecidableEq R]
     (c : (NodeInput R →ₒ R).QueryCache) (leaves : Nat → R) :
     ∀ (q : List R) (level j : Nat) (b : R) (w : SecondPreimage R),
-      simulateQ c.toPartialImpl (findSecondPreimageM leaves level j b q) = some (some w) →
+      simulateQ c.toPartialImpl
+        (findSecondPreimage queryNode (fun j => pure (leaves j)) level j b q) = some (some w) →
         Collision c := by
   -- Complete the cache only to identify the repeated honest-child computations.
   obtain ⟨g, hg⟩ := c.exists_agreesWithFn
   intro q
   induction q with
-  | nil => intro level j b w hw; simp [findSecondPreimageM] at hw
+  | nil => intro level j b w hw; simp [findSecondPreimage] at hw
   | cons t q ih =>
     intro level j b w hw
-    simp only [findSecondPreimageM, simulateQ_bind] at hw
+    simp only [findSecondPreimage, simulateQ_bind] at hw
     obtain ⟨parent, hp, hw⟩ := Option.bind_eq_some_iff.mp hw
     obtain ⟨left, hl, hw⟩ := Option.bind_eq_some_iff.mp hw
     obtain ⟨right, hr, hw⟩ := Option.bind_eq_some_iff.mp hw
@@ -553,23 +482,27 @@ theorem collision_of_partial_findSecondPreimageM [SampleableType R] [DecidableEq
       · simpa [h.2] using hc
     · exact ih _ _ parent w hw
 
-/-- The literal second-preimage search has the birthday bound at its full query budget.
+/-- The second-preimage search against the oracle has the birthday bound at its full budget.
 
 The bound includes recomputing honest ancestors, rather than treating them as fixed targets.
+
+The path and leaves are fixed before the oracle is sampled.
+
+A path chosen after seeing oracle answers needs the bound for covered events.
 -/
-theorem prEvent_findSecondPreimageM_le [SampleableType R] [DecidableEq R]
+theorem prEvent_findSecondPreimage_queryNode_le [SampleableType R] [DecidableEq R]
     (leaves : Nat → R) (q : List R) (level j : Nat) (b : R) :
     Pr{let z ← (simulateQ (NodeInput R →ₒ R).randomOracle
-      (findSecondPreimageM leaves level j b q)).run ∅}[z.1.isSome] ≤
+      (findSecondPreimage queryNode (fun j => pure (leaves j)) level j b q)).run ∅}[z.1.isSome] ≤
         (secondPreimageQueries level q.length : ℝ≥0∞) *
           ((secondPreimageQueries level q.length : ℝ≥0∞) / Nat.card R) := by
   refine (prEvent_mono_of_support _ _ _ ?_).trans
-    (prEvent_collision_le_total _ (findSecondPreimageM_queryBound leaves q level j b))
+    (prEvent_collision_le_total _ (findSecondPreimage_queryBound leaves q level j b))
   intro z hz hs
   obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp hs
   have hp := QueryImpl.simulateQ_toPartialImpl_snd_of_mem_support_run_simulateQ_withCaching
-    uniformSampleImpl (findSecondPreimageM leaves level j b q) hz
+    uniformSampleImpl (findSecondPreimage queryNode (fun j => pure (leaves j)) level j b q) hz
   rw [hw] at hp
-  exact collision_of_partial_findSecondPreimageM z.2 leaves q level j b w hp
+  exact collision_of_partial_findSecondPreimage z.2 leaves q level j b w hp
 
 end EthLib.Cryptography.Merkle.RandomOracle

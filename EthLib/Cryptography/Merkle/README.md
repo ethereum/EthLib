@@ -85,26 +85,32 @@ It returns the first level where the climb hashes a pair other than the honest c
 On the honest climb the search returns nothing (`findSecondPreimage_honest`), so the second case of `climb_binding_node` is not true for every climb.
 
 Both searches take one step per level of the climb, and each step hashes the pairs it compares.
-`findSecondPreimage` also computes the honest node that it compares against on each level.
+`findSecondPreimage` also computes the two honest children and the honest node that it compares against on each level.
+Like the tree, both searches run in any monad.
+The binding theorems run them in the identity monad, and `RandomOracle.lean` runs the same definitions against an oracle.
 
-`RandomOracle.lean` proves query budgets and probability bounds for oracle versions of both searches.
-These versions agree with the existing searches for every complete answer table.
+`RandomOracle.lean` proves query budgets and probability bounds for both searches when an oracle answers their hash calls.
 The oracle assigns independent uniform answers to distinct `(level, position, left, right)` tuples and remembers repeated inputs.
 The bounds exclude position-ignoring hashes, including those of SSZ and the VRF tree.
 They make no security claim about a concrete hash or quantum queries.
 
-With an empty initial cache and `N` possible answers, `prEvent_collision_le` bounds collision probability by `q^2 / N` for at most `q` classical hash calls.
-`prEvent_secondPreimage_le` bounds a second preimage of one fixed honest input by `q / N`.
-It conditions on the honest digest and excludes that input from the remaining query domain.
+With an empty initial cache and `N` possible answers, `prEvent_collision_le` bounds the probability of a collision among queried inputs by `q^2 / N` for at most `q` classical hash calls.
+This bound exceeds the standard birthday bound `q(q - 1) / (2N)` by the factor `2q / (q - 1)`, a little over 2.
+`prEvent_secondPreimage_le` bounds by `q / N` the probability that a queried input other than one fixed honest input has a target digest fixed before the run.
+As a second-preimage bound, it takes the target to be the honest digest and the other answers to stay uniform given that digest.
+That conditioning is a modelling step: the theorem does not tie the target to the honest input.
 
-`findCollisionM_queryBound` gives at most `2h` calls, where `h` is the shorter path length.
-`prEvent_findCollisionM_le` bounds its success probability by `(2h)^2 / N`.
-For fixed honest leaves, `findSecondPreimageM_queryBound` counts all calls, including repeated honest-node computations:
+`findCollision_queryBound` gives at most `2h` calls, where `h` is the shorter path length.
+For paths and leaves fixed before the oracle is sampled, `prEvent_findCollision_queryNode_le` bounds the success probability of the search by `(2h)^2 / N`.
+For fixed honest leaves, `findSecondPreimage_queryBound` counts all calls, including repeated honest-node computations:
 
 ```text
 Q(l, 0) = 0
 Q(l, n+1) = 1 + 2*(2^l - 1) + (2^(l+1) - 1) + Q(l+1, n)
 ```
 
-`prEvent_findSecondPreimageM_le` bounds its success probability by `Q(l, n)^2 / N` for a path of length `n` starting at level `l`.
+For a path of length `n` from level `l`, fixed with the leaves before the oracle is sampled, `prEvent_findSecondPreimage_queryNode_le` bounds the success probability by `Q(l, n)^2 / N`.
+The budget `Q(l, n)` equals `2^(l+n+2) - 2^(l+2) - 2n`, because the search recomputes the honest nodes on every level.
+The search queries at most `2^(l+n) - 1 + n` distinct inputs, so the budget counts about four times as many calls.
 Its honest ancestors depend on oracle answers, so this search uses the birthday bound rather than the bound for one fixed target.
+A search whose paths depend on oracle answers goes through the covered-event theorems `prEvent_findCollision_le` and `prEvent_findSecondPreimage_le`.
