@@ -243,4 +243,13 @@ theorem evalDist_table_extract {Result : Type} (cell : Cell)
   have h' := h.symm.bind_left (fun table => next table (table cell))
   simpa only [bind_assoc, pure_bind, Function.update_self] using h'
 
+omit [DecidableEq Cell] [_root_.Finite Cell] [SampleableType Answer]
+  [SampleableType (Cell → Answer)] in
+/-- Two independent draws have the same joint distribution in either order. -/
+theorem bind_bind_swap {α β γ : Type} (mx : ProbComp α) (my : ProbComp β)
+    (f : α → β → ProbComp γ) :
+    (mx >>= fun a => my >>= fun b => f a b) =ᵈ (my >>= fun b => mx >>= fun a => f a b) := by
+  let : MeasurableSpace γ := ⊤
+  exact EvalDistEq.of_evalDist_eq (evalDist_bind_bind_swap mx my f)
+
 end SphincsSecurity.FiniteGraphSampling

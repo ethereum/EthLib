@@ -7,7 +7,9 @@ public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Scheme
 
 The configuration has total height 26 over three layers, and FORS with 24 trees of height 10.
 
-The results hold for any split of the 26 levels over the layers, such as 10 + 8 + 8.
+The parameters give both lower layers the same height, 6, 7 or 8, so the top layer has 14, 12 or 10.
+
+The results hold for each of these three splits.
 
 They also hold for every signature limit.
 -/
