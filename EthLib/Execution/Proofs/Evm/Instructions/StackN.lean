@@ -241,6 +241,40 @@ theorem exchangeStep_sameContext {evm after : Evm fork Meter} (h : exchangeStep 
     · cases h
   · cases h
 
+/-- DUPN keeps memory. -/
+theorem memory_dupnStep {evm after : Evm fork Meter} (h : dupnStep evm = .ok after) :
+    after.memory = evm.memory := by
+  obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
+  split at h
+  · split at h
+    · cases h
+    · obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+      cases h
+      simp only [advance, memory_pushWord h2, memory_chargeGas h1]
+  · cases h
+
+/-- SWAPN keeps memory. -/
+theorem memory_swapnStep {evm after : Evm fork Meter} (h : swapnStep evm = .ok after) :
+    after.memory = evm.memory := by
+  obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
+  split at h
+  · split at h
+    · cases h
+      simp only [advance, memory_chargeGas h1]
+    · cases h
+  · cases h
+
+/-- EXCHANGE keeps memory. -/
+theorem memory_exchangeStep {evm after : Evm fork Meter} (h : exchangeStep evm = .ok after) :
+    after.memory = evm.memory := by
+  obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
+  split at h
+  · split at h
+    · cases h
+      simp only [advance, memory_chargeGas h1]
+    · cases h
+  · cases h
+
 /-! ## The order of the failures -/
 
 /-- DUPN fails first when the meter cannot pay its 3 gas, whatever its immediate byte and stack.

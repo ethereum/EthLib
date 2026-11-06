@@ -31,6 +31,7 @@ public import EthLib.Execution.Proofs.Evm.Instructions.Storage
 public import EthLib.Execution.Proofs.Evm.Machine.JumpDest
 public import EthLib.Execution.Proofs.Evm.Instructions.ControlFlow
 public import EthLib.Execution.Proofs.Evm.Interpreter
+public import EthLib.Execution.Proofs.Evm.MemorySize
 public import EthLib.Execution.Proofs.Evm.Call.MessageCall
 public import EthLib.Execution.Proofs.Evm.Instructions.SelfDestruct
 public import EthLib.Execution.Proofs.Evm.Call.TransferLog

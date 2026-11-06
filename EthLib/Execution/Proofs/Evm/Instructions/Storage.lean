@@ -25,6 +25,8 @@ From Berlin, an access to a slot is cold exactly when the transaction has not ac
 SSTORE never completes in a static frame, and from Istanbul fails with 2300 gas or less.
 
 From Glamsterdam, SSTORE in a static frame fails before it reads the stack.
+
+SLOAD and SSTORE keep memory.
 -/
 
 @[expose] public section
@@ -210,5 +212,62 @@ theorem sstoreStep_of_gasLeft_le (h : fork ≥ .istanbul) {evm : Evm fork Meter}
     · simp [hd] at hst
   simp [sstoreStep, first, popWord, hstack, Stack.pop, bind, Except.bind, pure, Except.pure, h,
     low, throw, throwThe, MonadExceptOf.throw]
+
+omit [GasMeter Meter] in
+/-- An access to a slot keeps memory. -/
+theorem memory_accessStorageKey (evm : Evm fork Meter) (a : Address) (key : Bytes32) :
+    (accessStorageKey evm a key).2.memory = evm.memory := by
+  obtain ⟨_, h⟩ := accessStorageKey_snd evm a key
+  rw [h]
+
+/-- Each instruction that uses storage keeps memory. -/
+theorem memory_storageStep {op : Op}
+    {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    (hstep : storageStep op = some step) {evm after : Evm fork Meter}
+    (h : step evm = .ok after) : after.memory = evm.memory := by
+  cases op <;> simp only [storageStep, Option.some.injEq, reduceCtorEq] at hstep <;>
+    subst hstep
+  case sload =>
+    obtain ⟨⟨k, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    rcases hpair : accessStorageKey e1 e1.message.currentTarget (U256.toBeBytes k) with
+      ⟨cold, e2⟩
+    have m2 : e2.memory = evm.memory := by
+      have := memory_accessStorageKey e1 e1.message.currentTarget (U256.toBeBytes k)
+      rw [hpair] at this
+      exact this.trans (popWord_eq_ok h1).2.1
+    simp only [hpair] at h
+    obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    simp only [advance, memory_pushWord h4, recordStorageRead, memory_chargeGas h3]
+    exact m2
+  case sstore =>
+    unfold sstoreStep at h
+    split at h
+    · simp [bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
+    obtain ⟨⟨k, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨n, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+    have m2 : e2.memory = evm.memory := (popWord_eq_ok h2).2.1.trans (popWord_eq_ok h1).2.1
+    simp only [] at h
+    split at h
+    · simp [throw, throwThe, MonadExceptOf.throw] at h
+    · rcases hpair : accessStorageKey e2 e2.message.currentTarget (U256.toBeBytes k) with
+        ⟨cold, e3⟩
+      have m3 : e3.memory = evm.memory := by
+        have := memory_accessStorageKey e2 e2.message.currentTarget (U256.toBeBytes k)
+        rw [hpair] at this
+        exact this.trans m2
+      simp only [hpair] at h
+      rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
+      · obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
+        obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
+        split at h
+        · simp [throw, throwThe, MonadExceptOf.throw] at h
+        · obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+          cases h
+          simp only [advance]
+          rw [memory_chargeStateGas h5, memory_chargeGas h4]
+          exact m3
+      · exact m3
 
 end EthLib.Execution.Evm

@@ -17,6 +17,8 @@ From Spurious Dragon, EXP costs 10 plus 50 per byte of the exponent.
 KECCAK256 pays 30, 6 per hashed word and the growth of memory.
 
 None of these instructions changes the message, the state or the substate of the frame.
+
+Each of them keeps the size of memory a multiple of 32.
 -/
 
 @[expose] public section
@@ -161,6 +163,76 @@ theorem stackOnlyStep_sameContext {op : Op}
       · cases h
         have := chargeGas_sameContext h1
         exact ⟨this.message, this.state, this.substate⟩
+    · cases h
+
+/-- Each stack instruction, and KECCAK256, keeps the size of memory a multiple of 32. -/
+theorem size_stackOnlyStep_mod {op : Op}
+    {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    (hstep : stackOnlyStep fork op = some step) {evm after : Evm fork Meter}
+    (hmod : evm.memory.size % 32 = 0) (h : step evm = .ok after) :
+    after.memory.size % 32 = 0 := by
+  suffices keep : op ≠ .keccak256 → after.memory = evm.memory by
+    by_cases hk : op = .keccak256
+    · subst hk
+      simp only [stackOnlyStep, Option.some.injEq] at hstep
+      subst hstep
+      obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+      obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+      obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
+      obtain ⟨_, h4, h⟩ := Base.bind_ok_iff.mp h
+      cases h
+      simp only [advance, memory_pushWord h4]
+      refine size_chargeGasAndMemory_mod ?_ h3
+      rw [(popWord_eq_ok h2).2.1, (popWord_eq_ok h1).2.1]
+      exact hmod
+    · rw [keep hk]
+      exact hmod
+  intro hk
+  cases op <;> simp only [stackOnlyStep, Option.some.injEq, reduceCtorEq] at hstep
+  all_goals (try split at hstep) <;> (try simp only [Option.some.injEq, reduceCtorEq] at hstep) <;>
+    (try subst hstep)
+  all_goals first
+    | cases hstep
+    | exact absurd rfl hk
+    | exact memory_dupnStep h
+    | exact memory_swapnStep h
+    | exact memory_exchangeStep h
+    | exact memory_unaryOp h
+    | exact memory_binaryOp h
+    | exact memory_ternaryOp h
+    | skip
+  case exp =>
+    obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h4, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    simp only [advance, memory_pushWord h4, memory_chargeGas h3, (popWord_eq_ok h2).2.1,
+      (popWord_eq_ok h1).2.1]
+  case pop =>
+    obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    simp only [advance, memory_chargeGas h2, (popWord_eq_ok h1).2.1]
+  case push =>
+    obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    simp only [advance, memory_pushWord h2, memory_chargeGas h1]
+  case dup =>
+    obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
+    split at h
+    · cases h
+    · obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+      cases h
+      simp only [advance, memory_pushWord h2, memory_chargeGas h1]
+  case swap =>
+    obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
+    split at h
+    · split at h
+      · cases h
+      · cases h
+        simp only [advance, memory_chargeGas h1]
     · cases h
 
 end EthLib.Execution.Evm
