@@ -5,10 +5,18 @@ The version is the same in `pyproject.toml` and `lakefile.lean`.
 
 ## 0.3.0
 
-Not yet released.
+Released on 2026-11-06.
 
-This version adds many primitives, layers and bindings that 0.2.0 did not have.
-The sections below list only the changes to what 0.2.0 offered: BLS, KZG and XMSS.
+0.2.0 had Python bindings for BLS and KZG only.
+In 0.3.0, the package `ethlib` has a subpackage for each layer of EthLib:
+
+- `ethlib.cryptography`: `aes`, `bls`, `crc32`, `crc32c`, `ethash`, `hmac`, `kdf`, `keccak`, `kzg`, `secp256k1`, `secp256r1`, `sha256`, `sphincs`, `vrf` and `xmss`
+- `ethlib.serialization`: `rlp` and `ssz`
+- `ethlib.networking`: `devp2p`, `discv4`, `discv5`, `enr`, `forkid`, `gossip`, `reqresp`, `rlpx`, `snappy` and `varint`
+- `ethlib.execution`: `blocks`, `evm`, `fees`, `network`, `pow`, `transactions` and `trie`, with `ethlib.precompiles`, `ethlib.state` and `ethlib.chain`
+- `ethlib.consensus` and `ethlib.engine`, for the consensus layer and the Engine API
+
+The sections below list the changes that a caller of 0.2.0, or of master before this release, may need to act on.
 
 ### Typed errors in the Python bindings
 
