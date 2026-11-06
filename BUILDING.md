@@ -90,9 +90,13 @@ The cache uses version `v2`, so that it cannot restore entries saved before this
 Native objects are platform-specific.
 The build therefore does not claim the platform independence that CompPoly's library-only release archive relies on.
 
+The vector suites need only the library, so they run in the `suites` job, beside the proofs in the `build` job.
+Each job builds the library and the exports from the restored cache, and only the `build` job saves a cache.
+
 The job summary reports the wall time and the CPU work of each build and test stage.
 The exports are measured before the bindings are installed, to keep their timing separate from the uv package build.
-The `ethlib-build-timing` artifact holds the logs, the timing records, the module tables and the report.
+The `ethlib-build-timing` artifact holds the logs, the timing records, the module tables and the report of the `build` job.
+The `ethlib-suites-timing` artifact holds the logs and the report of the `suites` job.
 
 Per-module comparisons use the last samples stored with the restored build.
 They compare the same rebuilt modules, and keep the precision Lake reports.
