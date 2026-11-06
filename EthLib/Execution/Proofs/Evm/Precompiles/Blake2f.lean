@@ -11,6 +11,10 @@ For every input:
 - a 213-byte input whose flag byte is neither `0` nor `1` is rejected;
 - any other input returns F on its fields.
 
+The flag byte is byte 212 of a 213-byte input.
+
+The statements about the flag byte read it with a default, which a 213-byte input never uses.
+
 The fields are decoded as EIP-152 encodes them, for every input:
 
 - the rounds field is big-endian;
@@ -64,17 +68,20 @@ theorem readFlag_invalid (flag : UInt8) (hf : 1 < flag) : readFlag flag = .error
 
 /-- A 213-byte input whose flag byte is above `1` is rejected with that byte. -/
 theorem output_invalidFlag (data : ByteArray) (h : data.size = INPUT_BYTES)
-    (hf : (1 : UInt8) < data[212]!) :
-    output data = .error (.invalidFlag data[212]!) := by
+    (hf : (1 : UInt8) < (data.data.getD 212 0)) :
+    output data = .error (.invalidFlag (data.data.getD 212 0)) := by
   -- Byte 212 is in range, so reading it with a default gives the byte itself.
-  rw [getElem!_pos data 212 (by simp only [h, INPUT_BYTES]; omega), ByteArray.getElem_eq_getElem_data] at hf ⊢
+  have hlt : 212 < data.data.size := by simp only [ByteArray.size_data, h, INPUT_BYTES]; omega
+  rw [Array.getD_eq_getD_getElem?, Array.getElem?_eq_getElem hlt, Option.getD_some] at hf ⊢
   simp [output, h, readFlag_invalid _ hf]
 
 /-- A 213-byte input whose flag byte reads as `f` returns F on its fields, with that flag. -/
 theorem output_ok (data : ByteArray) (h : data.size = INPUT_BYTES) {f : Bool}
-    (hf : readFlag data[212]! = .ok f) : output data = .ok (compute ⟨data.data, h⟩ f) := by
+    (hf : readFlag (data.data.getD 212 0) = .ok f) :
+    output data = .ok (compute ⟨data.data, h⟩ f) := by
   -- Byte 212 is in range, so reading it with a default gives the byte itself.
-  rw [getElem!_pos data 212 (by simp only [h, INPUT_BYTES]; omega), ByteArray.getElem_eq_getElem_data] at hf
+  have hlt : 212 < data.data.size := by simp only [ByteArray.size_data, h, INPUT_BYTES]; omega
+  rw [Array.getD_eq_getD_getElem?, Array.getElem?_eq_getElem hlt, Option.getD_some] at hf
   simp [output, h, hf]
 
 /-- The three errors of a call, in the order the call checks them.
@@ -88,8 +95,8 @@ theorem blake2f_eq_error_iff (data : ByteArray) (gas : Nat) (e : Blake2fError) :
     blake2f data gas = .error e ↔
       (data.size ≠ INPUT_BYTES ∧ e = .invalidInputLength data.size) ∨
       (data.size = INPUT_BYTES ∧ gas < gasCost data ∧ e = .outOfGas (gasCost data) gas) ∨
-      (data.size = INPUT_BYTES ∧ gasCost data ≤ gas ∧ (1 : UInt8) < data[212]! ∧
-        e = .invalidFlag data[212]!) := by
+      (data.size = INPUT_BYTES ∧ gasCost data ≤ gas ∧ (1 : UInt8) < (data.data.getD 212 0) ∧
+        e = .invalidFlag (data.data.getD 212 0)) := by
   by_cases hsize : data.size = INPUT_BYTES
   · by_cases hgas : gas < gasCost data
     · rw [blake2f_outOfGas data hsize hgas]
@@ -99,9 +106,10 @@ theorem blake2f_eq_error_iff (data : ByteArray) (gas : Nat) (e : Blake2fError) :
       omega
     · have henough := Nat.le_of_not_lt hgas
       rw [blake2f_of_gas data hsize henough]
-      by_cases hf : (1 : UInt8) < data[212]!
+      by_cases hf : (1 : UInt8) < (data.data.getD 212 0)
       · rw [output_invalidFlag data hsize hf]
-        simp [hsize, hgas, henough, hf, eq_comm, Except.map]
+        rw [Array.getD_eq_getD_getElem?] at hf
+        simp [hsize, hgas, henough, hf, eq_comm, Except.map, Array.getD_eq_getD_getElem?]
       · -- A flag byte of `0` or `1` decodes, so the call succeeds.
         have h01 : ∀ x : UInt8, ¬(1 : UInt8) < x → x = 0 ∨ x = 1 := by
           intro x hx
@@ -109,10 +117,11 @@ theorem blake2f_eq_error_iff (data : ByteArray) (gas : Nat) (e : Blake2fError) :
           rcases (by simp at hx; omega : x.toNat = 0 ∨ x.toNat = 1) with h | h
           · exact .inl (UInt8.toNat_inj.mp h)
           · exact .inr (UInt8.toNat_inj.mp h)
-        obtain ⟨f, hok⟩ : ∃ f, readFlag data[212]! = .ok f := by
+        obtain ⟨f, hok⟩ : ∃ f, readFlag (data.data.getD 212 0) = .ok f := by
           rcases h01 _ hf with h | h <;> rw [h] <;> exact ⟨_, rfl⟩
         rw [output_ok data hsize hok]
-        simp [hsize, hgas, hf, Except.map]
+        rw [Array.getD_eq_getD_getElem?] at hf
+        simp [hsize, hgas, hf, Except.map, Array.getD_eq_getD_getElem?]
   · rw [blake2f_invalidInputLength data hsize]
     simp [hsize, eq_comm]
 
