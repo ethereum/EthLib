@@ -94,10 +94,11 @@ def committeePositions (state : BeaconState preset fork) (epoch : Epoch) :
     Except ValidatorDutyError (List (Slot × CommitteeIndex)) := do
   let startSlot ← (computeStartSlotAtEpoch preset epoch).mapError .arith
   -- The last slot of the epoch must be a 64-bit slot.
-  unless startSlot.toNat + preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64 do throw (.arith .overflow)
-  let perSlot := getCommitteeCountPerSlot state epoch
-  return (List.range preset.SLOTS_PER_EPOCH.toNat).flatMap fun offset =>
-    (List.range perSlot.toNat).map fun index => (startSlot + offset.toUInt64, index.toUInt64)
+  if startSlot.toNat + preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64 then
+    let perSlot := getCommitteeCountPerSlot state epoch
+    return (List.range preset.SLOTS_PER_EPOCH.toNat).flatMap fun offset =>
+      (List.range perSlot.toNat).map fun index => (startSlot + offset.toUInt64, index.toUInt64)
+  else throw (.arith .overflow)
 
 /-- The committee of a validator in an epoch, with the index and the slot of the committee.
 
@@ -108,8 +109,8 @@ def getCommitteeAssignment (state : BeaconState preset fork) (epoch : Epoch)
     (validatorIndex : ValidatorIndex) :
     Except ValidatorDutyError (Option (Array ValidatorIndex × CommitteeIndex × Slot)) := do
   let nextEpoch ← (addChecked (getCurrentEpoch state) 1).mapError .arith
-  unless epoch ≤ nextEpoch do throw (.epochTooFar epoch nextEpoch)
-  findCommittee state validatorIndex (← committeePositions state epoch)
+  if epoch ≤ nextEpoch then findCommittee state validatorIndex (← committeePositions state epoch)
+  else throw (.epochTooFar epoch nextEpoch)
 
 /-- Whether a validator proposes the block of the slot of a state. -/
 def isProposer (state : BeaconState preset fork) (validatorIndex : ValidatorIndex) :
