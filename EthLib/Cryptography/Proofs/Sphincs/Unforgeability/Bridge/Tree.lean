@@ -157,7 +157,9 @@ theorem otsSign_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.Pub
 
 /-! ## Nodes and roots -/
 
-/-- A node of a tree whose leaves are in the tree is the model's node. -/
+/-- A node is the model's node, on every layer.
+
+Its level is at most the top height, and its leaves are among the first `2 ^ TOP_HEIGHT`. -/
 theorem node_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.PublicParameter)
     (lay : SphincsSecurity.Layer) (tree : SphincsSecurity.TreeIndex) :
     ∀ (level j : Nat), level ≤ TOP_HEIGHT → j < 2 ^ (TOP_HEIGHT - level) →
