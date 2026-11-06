@@ -1362,9 +1362,11 @@ The compiler makes one copy for each modulus, so each product is a direct call. 
 termination_by k
 decreasing_by omega
 
-/-- `t` followed by `last * a`, `last * a ^ 2`, and so on, `k` products in all.
+/-- `t` followed by `k` new entries: `last * a`, `last * a ^ 2`, up to `last * a ^ k`.
 
-With `last = a ^ m` the last entry of `t`, the new entries are `a ^ (m + 1)` to `a ^ (m + k)`.
+When `last` is `a ^ m`, the new entries are `a ^ (m + 1)` to `a ^ (m + k)`.
+
+The last power is an argument, so the builder never reads the array back.
 
 The compiler makes one copy for each modulus, so each product is a direct call. -/
 @[specialize M] def powTableAux (a : Montgomery M) :

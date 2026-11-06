@@ -220,7 +220,11 @@ theorem ofNat_toNat (a : Montgomery M) : ofNat a.toNat = a := by
   apply toZMod_injective
   rw [toZMod_ofNat, toNat_eq, ZMod.natCast_zmod_val]
 
-/-- The table holds the powers of `a`, from the first powers. -/
+/-- Let `t` hold `a ^ 0` to `a ^ (s - 1)`, where its size `s` is at least 1.
+
+Let `last` be `a ^ (s - 1)`.
+
+Then the extended table holds `a ^ 0` to `a ^ (s + k - 1)`. -/
 theorem powTableAux_spec (a : Montgomery M) (k : ℕ) (last : Montgomery M)
     (t : Array (Montgomery M)) (hlast : toZMod last = toZMod a ^ (t.size - 1)) (ht : 0 < t.size)
     (h : ∀ i < t.size, toZMod t[i]! = toZMod a ^ i) :
@@ -280,7 +284,7 @@ theorem toZMod_powWord (a acc : Montgomery M) (w : UInt32) :
     exact Nat.and_two_pow_sub_one_eq_mod _ 4
   unfold powWord
   simp only
-  -- Each window carries the bound of its digit.
+  -- Each window carries the proof that its digit is below 16, so the rewrites leave no side goals.
   rw [toZMod_window, toZMod_window, toZMod_window, toZMod_window, toZMod_window, toZMod_window,
     toZMod_window, toZMod_window, e0, e 4 (by decide), e 8 (by decide),
     e 12 (by decide), e 16 (by decide), e 20 (by decide), e 24 (by decide), e7]
