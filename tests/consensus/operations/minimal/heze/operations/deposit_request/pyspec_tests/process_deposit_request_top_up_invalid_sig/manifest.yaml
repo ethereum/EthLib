@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: operations
+handler: deposit_request
+suite: pyspec_tests
+case: process_deposit_request_top_up_invalid_sig

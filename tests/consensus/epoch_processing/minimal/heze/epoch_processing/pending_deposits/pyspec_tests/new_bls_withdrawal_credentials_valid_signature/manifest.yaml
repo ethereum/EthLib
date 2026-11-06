@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: epoch_processing
+handler: pending_deposits
+suite: pyspec_tests
+case: new_bls_withdrawal_credentials_valid_signature

@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: operations
+handler: execution_payload_bid
+suite: pyspec_tests
+case: process_execution_payload_bid_self_build_non_zero_value

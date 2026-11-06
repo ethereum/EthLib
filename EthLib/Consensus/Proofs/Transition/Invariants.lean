@@ -278,9 +278,11 @@ theorem frame_applyDeposit (altair : fork < .altair) {pubkey : BLSPubkey}
     Frame state after := by
   have notElectra : ¬Fork.pectra ≤ fork := fun le =>
     Nat.lt_irrefl _ (Nat.lt_of_lt_of_le (Nat.lt_trans altair (by decide)) le)
+  have notHeze : ¬Fork.hegota ≤ fork := fun le =>
+    Nat.lt_irrefl _ (Nat.lt_of_lt_of_le (Nat.lt_trans altair (by decide)) le)
   simp only [applyDeposit, notElectra, ↓reduceDIte, applyPendingDeposit] at computed
   split at computed
-  · simp only [bind_ok_iff] at computed
+  · simp only [notHeze, false_and, ↓reduceIte, bind_ok_iff] at computed
     obtain ⟨valid, _, computed⟩ := computed
     split at computed
     · exact frame_addValidatorToRegistry altair computed

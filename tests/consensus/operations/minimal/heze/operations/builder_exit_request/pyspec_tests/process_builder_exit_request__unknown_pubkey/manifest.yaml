@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: operations
+handler: builder_exit_request
+suite: pyspec_tests
+case: process_builder_exit_request__unknown_pubkey

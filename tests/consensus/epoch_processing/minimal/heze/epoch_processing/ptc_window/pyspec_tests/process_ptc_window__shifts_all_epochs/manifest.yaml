@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: epoch_processing
+handler: ptc_window
+suite: pyspec_tests
+case: process_ptc_window__shifts_all_epochs

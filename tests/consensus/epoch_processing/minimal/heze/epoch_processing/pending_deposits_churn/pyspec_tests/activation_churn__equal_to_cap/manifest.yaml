@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: epoch_processing
+handler: pending_deposits_churn
+suite: pyspec_tests
+case: activation_churn__equal_to_cap

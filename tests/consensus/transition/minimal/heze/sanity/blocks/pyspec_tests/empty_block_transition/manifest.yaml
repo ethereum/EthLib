@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: sanity
+handler: blocks
+suite: pyspec_tests
+case: empty_block_transition

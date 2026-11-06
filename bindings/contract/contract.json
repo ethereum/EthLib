@@ -2489,7 +2489,7 @@
       {"constructor": "attestationIndexAboveOne", "code": 81}]}],
    "error_class": "TransitionError",
    "docstring":
-   "The state after a signed block of a fork, from a state of that fork or an earlier one.\n\nThe state advances to the slot of the block and upgrades at each fork epoch on the way.\n\nThe fork epochs are those of the configuration, with its replacements.\n\nThe block must be of the fork that the state then has.\n\nThe preset, the configuration and both forks are named in UTF-8, each fork up to Gloas.\n\nThe signature checks run unless the last argument is false.\n\nThe execution layer accepts every payload, as in the vectors, which fix no answer for blocks."},
+   "The state after a signed block of a fork, from a state of that fork or an earlier one.\n\nThe state advances to the slot of the block and upgrades at each fork epoch on the way.\n\nThe fork epochs are those of the configuration, with its replacements.\n\nThe block must be of the fork that the state then has.\n\nThe preset, the configuration and both forks are named in UTF-8, each fork up to Heze.\n\nThe signature checks run unless the last argument is false.\n\nThe execution layer accepts every payload, as in the vectors, which fix no answer for blocks."},
   {"summary":
    "The candidate genesis state of a block of the proof-of-work chain, as SSZ bytes.",
    "signature":

@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: operations
+handler: attester_slashing
+suite: pyspec_tests
+case: invalid_all_empty_indices

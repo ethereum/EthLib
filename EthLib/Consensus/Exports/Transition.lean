@@ -30,9 +30,9 @@ One export runs a block operation on a state, and another one step of the epoch 
 
 Two more advance a state by some slots, and run the whole transition of a signed block.
 
-They take and return states as SSZ bytes, and accept forks up to Gloas.
+They take and return states as SSZ bytes, and accept forks up to Heze.
 
-At Gloas, only the steps whose Gloas rule EthLib holds run.
+From Gloas, only the steps whose Gloas rule EthLib holds run.
 
 Another export upgrades a state to the next consensus fork, from Altair to Heze.
 
@@ -161,12 +161,9 @@ def gloasOperations : List String :=
     "withdrawal_request", "consolidation_request", "voluntary_exit", "voluntary_exit_churn",
     "deposit_request", "parent_execution_payload", "attestation"]
 
-/-- The preset and the fork that UTF-8 names name, at a fork up to Gloas. -/
+/-- The preset and the fork that UTF-8 names name, at a fork up to Heze. -/
 def transitionPresetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do
-  let preset ← presetOf (← nameOf name)
-  let fork ← forkOf fork
-  if .hegota ≤ fork then throw (0, s!"fork {fork.name} not yet specified")
-  return (preset, fork)
+  return (← presetOf (← nameOf name), ← forkOf fork)
 
 /-- The state after one step of the epoch transition of a handler of the vectors. -/
 def runEpochStep {preset : Preset} {fork : Fork} (config : Config) (handler : String)
@@ -233,7 +230,7 @@ def processOperationExport (name fork handler pre operation replacements : ByteA
   let config ← configWith name replacements
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   let handler ← nameOf handler
-  -- At Gloas only the operations whose Gloas rule EthLib holds run.
+  -- From Gloas only the operations whose Gloas rule EthLib holds run, and Heze keeps that rule.
   if .glamsterdam ≤ fork ∧ handler ∉ gloasOperations then
     throw (0, s!"operation {handler} not yet specified at {fork.name}")
   let state ← decodeInput (BeaconState preset fork) pre
@@ -327,7 +324,7 @@ The fork epochs are those of the configuration, with its replacements.
 
 The block must be of the fork that the state then has.
 
-The preset, the configuration and both forks are named in UTF-8, each fork up to Gloas.
+The preset, the configuration and both forks are named in UTF-8, each fork up to Heze.
 
 The signature checks run unless the last argument is false.
 

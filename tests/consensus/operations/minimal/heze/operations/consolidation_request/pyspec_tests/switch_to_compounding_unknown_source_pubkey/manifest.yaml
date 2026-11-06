@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: operations
+handler: consolidation_request
+suite: pyspec_tests
+case: switch_to_compounding_unknown_source_pubkey

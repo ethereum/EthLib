@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: rewards
+handler: leak
+suite: pyspec_tests
+case: empty_leak

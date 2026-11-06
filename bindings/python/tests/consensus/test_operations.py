@@ -18,7 +18,7 @@ FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "operation
 
 # The file of the operation of each handler, and the forks whose rule EthLib holds.
 # Electra changes attestations and exits, Deneb the signature of exits, and Gloas attestations.
-# Gloas moves the execution payload out of the block.
+# Gloas moves the execution payload out of the block, and Heze keeps the Gloas rules.
 # From Gloas the withdrawals take no payload, so their cases have no operation file.
 HANDLERS = {
     "block_header": (
@@ -27,37 +27,37 @@ HANDLERS = {
     ),
     "proposer_slashing": (
         "proposer_slashing",
-        ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas"),
+        ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas", "heze"),
     ),
     "attester_slashing": (
         "attester_slashing",
-        ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas"),
+        ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas", "heze"),
     ),
     "attestation": (
         "attestation",
-        ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas"),
+        ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas", "heze"),
     ),
     "deposit": ("deposit", ("phase0", "altair", "bellatrix", "capella", "deneb", "electra")),
-    "deposit_request": ("deposit_request", ("electra", "fulu", "gloas")),
-    "withdrawal_request": ("withdrawal_request", ("electra", "fulu", "gloas")),
-    "consolidation_request": ("consolidation_request", ("electra", "fulu", "gloas")),
+    "deposit_request": ("deposit_request", ("electra", "fulu", "gloas", "heze")),
+    "withdrawal_request": ("withdrawal_request", ("electra", "fulu", "gloas", "heze")),
+    "consolidation_request": ("consolidation_request", ("electra", "fulu", "gloas", "heze")),
     "sync_aggregate": (
         "sync_aggregate",
         ("altair", "bellatrix", "capella", "deneb", "electra", "fulu"),
     ),
     "voluntary_exit": (
         "voluntary_exit",
-        ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas"),
+        ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas", "heze"),
     ),
-    "voluntary_exit_churn": ("voluntary_exit", ("gloas",)),
+    "voluntary_exit_churn": ("voluntary_exit", ("gloas", "heze")),
     "execution_payload": ("body", ("bellatrix", "capella", "deneb", "electra", "fulu")),
-    "withdrawals": ("execution_payload", ("capella", "deneb", "electra", "fulu", "gloas")),
+    "withdrawals": ("execution_payload", ("capella", "deneb", "electra", "fulu", "gloas", "heze")),
     "bls_to_execution_change": ("address_change", ("capella", "deneb", "electra", "fulu")),
-    "payload_attestation": ("payload_attestation", ("gloas",)),
-    "execution_payload_bid": ("execution_payload_bid", ("gloas",)),
-    "builder_deposit_request": ("builder_deposit_request", ("gloas",)),
-    "builder_exit_request": ("builder_exit_request", ("gloas",)),
-    "parent_execution_payload": ("block", ("gloas",)),
+    "payload_attestation": ("payload_attestation", ("gloas", "heze")),
+    "execution_payload_bid": ("execution_payload_bid", ("gloas", "heze")),
+    "builder_deposit_request": ("builder_deposit_request", ("gloas", "heze")),
+    "builder_exit_request": ("builder_exit_request", ("gloas", "heze")),
+    "parent_execution_payload": ("block", ("gloas", "heze")),
 }
 
 # The release archives, and the forks whose archived cases this file runs.
@@ -65,7 +65,7 @@ ARCHIVES = {
     "minimal": "consensus-specs/v1.7.0-beta.4/minimal",
     "mainnet": "consensus-specs/v1.7.0-beta.4/mainnet",
 }
-ARCHIVE_FORKS = ("electra", "fulu", "gloas")
+ARCHIVE_FORKS = ("electra", "fulu", "gloas", "heze")
 
 
 def runs(fork: str, handler: str) -> bool:

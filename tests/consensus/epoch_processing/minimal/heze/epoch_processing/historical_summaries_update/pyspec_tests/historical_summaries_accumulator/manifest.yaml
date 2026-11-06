@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: epoch_processing
+handler: historical_summaries_update
+suite: pyspec_tests
+case: historical_summaries_accumulator

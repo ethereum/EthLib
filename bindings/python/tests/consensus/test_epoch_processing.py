@@ -27,8 +27,18 @@ HANDLERS = {
         "electra",
         "fulu",
         "gloas",
+        "heze",
     ),
-    "inactivity_updates": ("altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas"),
+    "inactivity_updates": (
+        "altair",
+        "bellatrix",
+        "capella",
+        "deneb",
+        "electra",
+        "fulu",
+        "gloas",
+        "heze",
+    ),
     "rewards_and_penalties": (
         "phase0",
         "altair",
@@ -38,6 +48,7 @@ HANDLERS = {
         "electra",
         "fulu",
         "gloas",
+        "heze",
     ),
     "registry_updates": (
         "phase0",
@@ -48,6 +59,7 @@ HANDLERS = {
         "electra",
         "fulu",
         "gloas",
+        "heze",
     ),
     "slashings": (
         "phase0",
@@ -58,6 +70,7 @@ HANDLERS = {
         "electra",
         "fulu",
         "gloas",
+        "heze",
     ),
     "eth1_data_reset": (
         "phase0",
@@ -78,6 +91,7 @@ HANDLERS = {
         "electra",
         "fulu",
         "gloas",
+        "heze",
     ),
     "slashings_reset": (
         "phase0",
@@ -88,6 +102,7 @@ HANDLERS = {
         "electra",
         "fulu",
         "gloas",
+        "heze",
     ),
     "randao_mixes_reset": (
         "phase0",
@@ -98,9 +113,10 @@ HANDLERS = {
         "electra",
         "fulu",
         "gloas",
+        "heze",
     ),
     "historical_roots_update": ("phase0", "altair", "bellatrix"),
-    "historical_summaries_update": ("capella", "deneb", "electra", "fulu", "gloas"),
+    "historical_summaries_update": ("capella", "deneb", "electra", "fulu", "gloas", "heze"),
     "participation_record_updates": ("phase0",),
     "participation_flag_updates": (
         "altair",
@@ -110,6 +126,7 @@ HANDLERS = {
         "electra",
         "fulu",
         "gloas",
+        "heze",
     ),
     "sync_committee_updates": (
         "altair",
@@ -119,13 +136,14 @@ HANDLERS = {
         "electra",
         "fulu",
         "gloas",
+        "heze",
     ),
-    "ptc_window": ("gloas",),
-    "builder_pending_payments": ("gloas",),
-    "proposer_lookahead": ("fulu", "gloas"),
-    "pending_deposits": ("electra", "fulu", "gloas"),
-    "pending_deposits_churn": ("gloas",),
-    "pending_consolidations": ("electra", "fulu", "gloas"),
+    "ptc_window": ("gloas", "heze"),
+    "builder_pending_payments": ("gloas", "heze"),
+    "proposer_lookahead": ("fulu", "gloas", "heze"),
+    "pending_deposits": ("electra", "fulu", "gloas", "heze"),
+    "pending_deposits_churn": ("gloas", "heze"),
+    "pending_consolidations": ("electra", "fulu", "gloas", "heze"),
 }
 
 # A mainnet sync committee period is 256 epochs, so the release has no mainnet case of its update.
