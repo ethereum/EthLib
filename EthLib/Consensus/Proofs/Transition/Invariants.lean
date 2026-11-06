@@ -301,10 +301,8 @@ theorem frame_processVoluntaryExit {signed : SignedVoluntaryExit}
     (computed : processVoluntaryExit config checks state signed = .ok after) :
     Frame state after := by
   unfold processVoluntaryExit at computed
-  split at computed
-  · cases computed
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := computed
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := computed
   exact frame_initiateValidatorExit exited
 
 /-- Before Altair, the operations of a block form a frame. -/
@@ -315,12 +313,15 @@ theorem frame_processOperations (altair : fork < .altair) {body : BeaconBlockBod
   · cases computed
   simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at computed
   obtain ⟨_, _, _, _, proposers, proposersOk, attesters, attestersOk, attested, attestedOk,
-    deposited, depositedOk, exited, exitsOk, changesOk⟩ := computed
-  have order : Fork.altair ≤ Fork.shapella := by decide
+    deposited, depositedOk, exited, exitsOk, changed, changesOk, requestsOk⟩ := computed
   have capella : ¬Fork.shapella ≤ fork := fun le =>
-    Nat.lt_irrefl _ (Nat.lt_of_lt_of_le altair (Nat.le_trans order le))
-  simp only [capella, ↓reduceDIte, pure, Except.pure, Except.ok.injEq] at changesOk
-  subst changesOk
+    Nat.lt_irrefl _ (Nat.lt_of_lt_of_le altair (Nat.le_trans (by decide) le))
+  have electra : ¬Fork.pectra ≤ fork := fun le =>
+    Nat.lt_irrefl _ (Nat.lt_of_lt_of_le altair (Nat.le_trans (by decide) le))
+  simp only [processBlsToExecutionChanges, capella, ↓reduceDIte, pure, Except.pure,
+    Except.ok.injEq] at changesOk
+  simp only [electra, ↓reduceDIte, pure, Except.pure, Except.ok.injEq] at requestsOk
+  subst changesOk requestsOk
   exact (Frame.foldlM (fun _ _ _ ok => frame_processProposerSlashing ok) proposersOk).trans <|
     (Frame.foldlM (fun _ _ _ ok => frame_processAttesterSlashing ok) attestersOk).trans <|
     (Frame.foldlM (fun _ _ _ ok => frame_processAttestation altair ok) attestedOk).trans <|

@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: operations
+handler: voluntary_exit
+suite: pyspec_tests
+case: invalid_validator_not_active

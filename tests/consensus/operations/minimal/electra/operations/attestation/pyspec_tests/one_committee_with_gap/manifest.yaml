@@ -1,0 +1,6 @@
+preset: minimal
+fork: electra
+runner: operations
+handler: attestation
+suite: pyspec_tests
+case: one_committee_with_gap

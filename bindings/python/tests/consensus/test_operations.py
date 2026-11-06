@@ -17,7 +17,7 @@ from .test_data_column import replacements
 FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "operations"
 
 # The file of the operation of each handler, and the forks whose rule EthLib holds.
-# Electra changes attestations and exits, and Deneb the signature of exits.
+# Electra changes attestations and exits, Deneb the signature of exits, and Gloas attestations.
 # Gloas moves the execution payload out of the block.
 # From Gloas the withdrawals take no payload, so their cases have no operation file.
 HANDLERS = {
@@ -33,7 +33,10 @@ HANDLERS = {
         "attester_slashing",
         ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas"),
     ),
-    "attestation": ("attestation", ("phase0", "altair", "bellatrix", "capella", "deneb")),
+    "attestation": (
+        "attestation",
+        ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu"),
+    ),
     "deposit": ("deposit", ("phase0", "altair", "bellatrix", "capella", "deneb", "electra")),
     "deposit_request": ("deposit_request", ("electra", "fulu")),
     "withdrawal_request": ("withdrawal_request", ("electra", "fulu", "gloas")),
@@ -42,7 +45,10 @@ HANDLERS = {
         "sync_aggregate",
         ("altair", "bellatrix", "capella", "deneb", "electra", "fulu"),
     ),
-    "voluntary_exit": ("voluntary_exit", ("phase0", "altair", "bellatrix", "capella", "deneb")),
+    "voluntary_exit": (
+        "voluntary_exit",
+        ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas"),
+    ),
     "execution_payload": ("body", ("bellatrix", "capella", "deneb", "electra", "fulu")),
     "withdrawals": ("execution_payload", ("capella", "deneb", "electra", "fulu", "gloas")),
     "bls_to_execution_change": ("address_change", ("capella", "deneb", "electra", "fulu")),

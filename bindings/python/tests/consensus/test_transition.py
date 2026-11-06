@@ -19,11 +19,11 @@ FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "transitio
 # The forks at which EthLib runs each group, as runner and handler.
 GROUPS = {
     "sanity/slots": ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu"),
-    "sanity/blocks": ("phase0", "altair", "bellatrix", "capella", "deneb"),
-    "finality/finality": ("phase0", "altair", "bellatrix", "capella", "deneb"),
-    "random/random": ("phase0", "altair", "bellatrix", "capella", "deneb"),
+    "sanity/blocks": ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu"),
+    "finality/finality": ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu"),
+    "random/random": ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu"),
     # A transition case lies under the fork after its fork epoch.
-    "transition/core": ("altair", "bellatrix", "capella", "deneb"),
+    "transition/core": ("altair", "bellatrix", "capella", "deneb", "electra", "fulu"),
 }
 
 # The Gloas slot cases that stay inside one epoch.

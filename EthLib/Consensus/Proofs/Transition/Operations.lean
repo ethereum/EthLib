@@ -239,7 +239,7 @@ theorem sameSizes_processAttestationAltair {attestation : Attestation preset for
   · cases computed
   simp only [bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, _, _, _, _, raised⟩ := computed
+    _, _, raised⟩ := computed
   exact (sameSizes_setEpochParticipation _ _).trans (sameSizes_increaseBalance raised)
 
 theorem sameSizes_processAttestation {attestation : Attestation preset fork}
@@ -519,35 +519,33 @@ theorem voluntaryExitDomain_of_dencun {epoch : Epoch} (dencun : .dencun ≤ fork
         state.genesisValidatorsRoot) := by
   simp only [voluntaryExitDomain, dencun, ↓reduceIte]
 
-/-- A valid voluntary exit is before Electra.
-
-It is from an active validator that has not started to exit.
+/-- A valid voluntary exit is from an active validator that has not started to exit.
 
 The exit is not for a later epoch, and the validator has been active for long enough.
+
+From Electra the validator has no pending partial withdrawal.
 
 The validator signs the exit, under the domain of a voluntary exit. -/
 theorem processVoluntaryExit_checks {signed : SignedVoluntaryExit}
     (computed : processVoluntaryExit config checks state signed = .ok after) :
-    fork < .pectra ∧ ∃ validator, getValidator state signed.message.validatorIndex = .ok validator ∧
+    ∃ validator, getValidator state signed.message.validatorIndex = .ok validator ∧
       isActiveValidator validator (getCurrentEpoch state) = true ∧
       validator.exitEpoch = FAR_FUTURE_EPOCH ∧
       signed.message.epoch ≤ getCurrentEpoch state ∧
       validator.activationEpoch.toNat + config.SHARD_COMMITTEE_PERIOD.toNat ≤
         (getCurrentEpoch state).toNat ∧
+      checkNoPendingWithdrawal state signed.message.validatorIndex = .ok () ∧
       ∃ domain signingRoot,
         voluntaryExitDomain config state signed.message.epoch = .ok domain ∧
         computeSigningRoot signed.message domain = .ok signingRoot ∧
         checks.verify (packBytes validator.pubkey) (packBytes signingRoot)
           (packBytes signed.signature) = true := by
   unfold processVoluntaryExit at computed
-  split at computed
-  · cases computed
-  rename_i electra
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok, liftArith, mapError_ok_iff,
     addChecked_ok_iff] at computed
   obtain ⟨validator, found, _, active, _, notExiting, _, notLater, eligible, ⟨_, summed⟩, _,
-    longEnough, domain, domainOk, signingRoot, rootOk, _, verified, _⟩ := computed
-  refine ⟨Nat.lt_of_not_le electra, validator, found, active, notExiting, notLater, ?_, domain,
+    longEnough, ⟨⟩, noPending, domain, domainOk, signingRoot, rootOk, _, verified, _⟩ := computed
+  refine ⟨validator, found, active, notExiting, notLater, ?_, noPending, domain,
     signingRoot, domainOk, rootOk, verified⟩
   rw [← summed]
   exact UInt64.le_iff_toNat_le.mp longEnough
@@ -561,12 +559,10 @@ theorem processVoluntaryExit_exited {signed : SignedVoluntaryExit}
       exited.withdrawableEpoch.toNat =
         exited.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat ∧
       (config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY ≠ 0 → exited.exitEpoch ≠ FAR_FUTURE_EPOCH) := by
-  obtain ⟨_, validator, found, _, notExiting, _⟩ := processVoluntaryExit_checks computed
+  obtain ⟨validator, found, _, notExiting, _⟩ := processVoluntaryExit_checks computed
   unfold processVoluntaryExit at computed
-  split at computed
-  · cases computed
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at computed
-  obtain ⟨_, found', _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := computed
+  obtain ⟨_, found', _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := computed
   obtain ⟨exitedValidator, read, sum⟩ :=
     initiateValidatorExit_withdrawableEpoch found notExiting exited
   refine ⟨exitedValidator, read, sum, fun nonzero far => ?_⟩
@@ -583,32 +579,34 @@ theorem sameSizes_processVoluntaryExit {signed : SignedVoluntaryExit}
     (computed : processVoluntaryExit config checks state signed = .ok after) :
     SameSizes state after := by
   unfold processVoluntaryExit at computed
-  split at computed
-  · cases computed
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := computed
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := computed
   exact sameSizes_initiateValidatorExit exited
 
 /-! ## All the operations of a block -/
 
-/-- The operations of a valid block run before Electra.
-
-The block holds every outstanding deposit, up to the most per block. -/
-theorem processOperations_deposits {body : BeaconBlockBody preset fork}
+/-- Before Electra, a valid block holds every outstanding deposit, up to the most per block. -/
+theorem processOperations_deposits (beforeElectra : fork < .pectra)
+    {body : BeaconBlockBody preset fork}
     (computed : processOperations config checks state body = .ok after) :
-    fork < .pectra ∧ ∀ before : fork < .hegota,
+    ∀ before : fork < .hegota,
       (state.eth1DepositIndex before).toNat ≤ (state.eth1Data before).depositCount.toNat ∧
       (body.deposits before).data.size =
         min preset.MAX_DEPOSITS.toNat
           ((state.eth1Data before).depositCount.toNat - (state.eth1DepositIndex before).toNat) := by
+  intro _
+  have notElectra : ¬Fork.pectra ≤ fork := Nat.not_le.mpr beforeElectra
+  have notFulu : ¬Fork.fusaka ≤ fork := fun le => notElectra (Nat.le_trans (by decide) le)
   unfold processOperations at computed
   split at computed
   · cases computed
-  rename_i capella
-  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    subChecked_ok_iff] at computed
-  obtain ⟨outstanding, ⟨noUnderflow, difference⟩, _, count, _⟩ := computed
-  refine ⟨Nat.lt_of_not_le capella, fun _ => ⟨UInt64.le_iff_toNat_le.mp noUnderflow, ?_⟩⟩
+  simp only [bind_ok_iff, ensure_ok_iff] at computed
+  obtain ⟨expected, expectedOk, _, count, _⟩ := computed
+  simp only [expectedDepositCount, notFulu, notElectra, ↓reduceIte, ↓reduceDIte, bind_ok_iff,
+    liftAccessor_ok, liftArith, mapError_ok_iff, subChecked_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at expectedOk
+  obtain ⟨outstanding, ⟨noUnderflow, difference⟩, rfl⟩ := expectedOk
+  refine ⟨UInt64.le_iff_toNat_le.mp noUnderflow, ?_⟩
   rw [count, UInt64.min_def]
   split
   · rename_i le
@@ -618,33 +616,10 @@ theorem processOperations_deposits {body : BeaconBlockBody preset fork}
     have := mt UInt64.le_iff_toNat_le.mpr gt
     omega
 
-/-- The operations of a block keep one balance for each validator. -/
-theorem balancesMatch_processOperations {body : BeaconBlockBody preset fork}
-    (computed : processOperations config checks state body = .ok after)
-    (holds : BalancesMatch state) : BalancesMatch after := by
-  unfold processOperations at computed
-  split at computed
-  · cases computed
-  simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at computed
-  obtain ⟨_, _, _, _, proposers, proposersOk, attesters, attestersOk, attested, attestedOk,
-    deposited, depositedOk, exited, exitsOk, changesOk⟩ := computed
-  have keep {α : Type} (step : BeaconState preset fork → α → Except TransitionError _)
-      (sizes : ∀ s x s', step s x = .ok s' → SameSizes s s') :=
-    fun s x s' (h : BalancesMatch s) ok => balancesMatch_of_sameSizes (sizes s x s' ok) h
-  have one := foldlM_ok_invariant BalancesMatch
-    (keep _ fun _ _ _ ok => sameSizes_processProposerSlashing ok) holds proposersOk
-  have two := foldlM_ok_invariant BalancesMatch
-    (keep _ fun _ _ _ ok => sameSizes_processAttesterSlashing ok) one attestersOk
-  have three := foldlM_ok_invariant BalancesMatch
-    (keep _ fun _ _ _ ok => sameSizes_processAttestation ok) two attestedOk
-  have four := foldlM_ok_invariant BalancesMatch
-    (fun _ _ _ h ok => balancesMatch_processDeposit ok h) three depositedOk
-  have five := foldlM_ok_invariant BalancesMatch
-    (keep _ fun _ _ _ ok => sameSizes_processVoluntaryExit ok) four exitsOk
-  split at changesOk
-  · exact foldlM_ok_invariant BalancesMatch
-      (keep _ fun _ _ _ ok => sameSizes_processBlsToExecutionChange ok) five changesOk
-  · cases changesOk
-    exact five
+/-- From Fulu, a block holds no deposit. -/
+theorem expectedDepositCount_of_fusaka (fulu : .fusaka ≤ fork) {before : fork < .hegota} :
+    expectedDepositCount state before = .ok 0 := by
+  simp only [expectedDepositCount, fulu, ↓reduceIte]
+  rfl
 
 end EthLib.Consensus

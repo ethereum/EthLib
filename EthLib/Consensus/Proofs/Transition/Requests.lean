@@ -11,6 +11,8 @@ A withdrawal request and a consolidation request keep one balance for each valid
 The pending consolidations of an epoch keep the registry.
 
 They move balance from one validator to another, so the sum of the balances stays.
+
+So the operations of a block, with the requests from Electra, keep one balance for each validator.
 -/
 
 @[expose] public section
@@ -137,5 +139,64 @@ theorem sameSizes_processConsolidationRequest {electra : .pectra ≤ fork}
     | (cases computed; exact SameSizes.refl _)
     | exact (switchToCompoundingValidator_compounding (liftAccessor_ok.mp computed)).1
     | exact sameSizes_queueConsolidation computed
+
+/-! ## All the operations of a block -/
+
+/-- The requests of the execution layer in a block keep the sizes of the registry and balances. -/
+theorem sameSizes_processExecutionRequests {body : BeaconBlockBody preset fork}
+    {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
+    (computed : processExecutionRequests config state body electra = .ok after) :
+    SameSizes state after := by
+  simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at computed
+  obtain ⟨deposited, depositedOk, withdrawn, withdrawnOk, consolidated⟩ := computed
+  have keep {α : Type} {step : BeaconState preset fork → α → Except TransitionError _}
+      (sizes : ∀ s x s', step s x = .ok s' → SameSizes s s') {items : List α}
+      {start finish : BeaconState preset fork} (folded : items.foldlM step start = .ok finish) :
+      SameSizes start finish :=
+    foldlM_ok_invariant (SameSizes start) (fun _ _ _ same ok => same.trans (sizes _ _ _ ok))
+      (SameSizes.refl _) folded
+  have requested := keep (fun _ _ _ ok =>
+    ⟨congrArg (·.data.size) (processDepositRequest_ok ok).2.1,
+      congrArg (·.data.size) (processDepositRequest_ok ok).2.2⟩) depositedOk
+  exact requested.trans <|
+    (keep (fun _ _ _ ok => sameSizes_processWithdrawalRequest ok) withdrawnOk).trans
+      (keep (fun _ _ _ ok => sameSizes_processConsolidationRequest ok) consolidated)
+
+/-- The operations of a block keep one balance for each validator. -/
+theorem balancesMatch_processOperations {checks : SignatureChecks}
+    {body : BeaconBlockBody preset fork}
+    (computed : processOperations config checks state body = .ok after)
+    (holds : BalancesMatch state) : BalancesMatch after := by
+  unfold processOperations at computed
+  split at computed
+  · cases computed
+  simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at computed
+  obtain ⟨_, _, _, _, proposers, proposersOk, attesters, attestersOk, attested, attestedOk,
+    deposited, depositedOk, exited, exitsOk, changed, changesOk, requestsOk⟩ := computed
+  have keep {α : Type} (step : BeaconState preset fork → α → Except TransitionError _)
+      (sizes : ∀ s x s', step s x = .ok s' → SameSizes s s') :=
+    fun s x s' (h : BalancesMatch s) ok => balancesMatch_of_sameSizes (sizes s x s' ok) h
+  have one := foldlM_ok_invariant BalancesMatch
+    (keep _ fun _ _ _ ok => sameSizes_processProposerSlashing ok) holds proposersOk
+  have two := foldlM_ok_invariant BalancesMatch
+    (keep _ fun _ _ _ ok => sameSizes_processAttesterSlashing ok) one attestersOk
+  have three := foldlM_ok_invariant BalancesMatch
+    (keep _ fun _ _ _ ok => sameSizes_processAttestation ok) two attestedOk
+  have four := foldlM_ok_invariant BalancesMatch
+    (fun _ _ _ h ok => balancesMatch_processDeposit ok h) three depositedOk
+  have five := foldlM_ok_invariant BalancesMatch
+    (keep _ fun _ _ _ ok => sameSizes_processVoluntaryExit ok) four exitsOk
+  have six : BalancesMatch changed := by
+    unfold processBlsToExecutionChanges at changesOk
+    split at changesOk
+    · rw [← Array.foldlM_toList] at changesOk
+      exact foldlM_ok_invariant BalancesMatch
+        (keep _ fun _ _ _ ok => sameSizes_processBlsToExecutionChange ok) five changesOk
+    · cases changesOk
+      exact five
+  split at requestsOk
+  · exact balancesMatch_of_sameSizes (sameSizes_processExecutionRequests requestsOk) six
+  · cases requestsOk
+    exact six
 
 end EthLib.Consensus

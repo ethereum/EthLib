@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Participation
 public import EthLib.Consensus.Transition.Block
 public import EthLib.Consensus.Transition.BuilderRequests
+public import EthLib.Consensus.Transition.Requests
 public import EthLib.Consensus.Transition.Withdrawals
 public import EthLib.Serialization.Ssz.Merkle.Branch
 
@@ -12,6 +13,8 @@ public import EthLib.Serialization.Ssz.Merkle.Branch
 The operations of a block: slashings, attestations, deposits and voluntary exits.
 
 From Capella a block also changes BLS credentials to addresses.
+
+From Electra the requests of the execution layer follow: deposits, withdrawals and consolidations.
 
 A block runs them in that order, each kind in the order of the block.
 
@@ -30,6 +33,8 @@ From Electra the amount of a deposit waits in a queue instead.
 A deposit that the execution layer requests waits there too.
 
 A voluntary exit starts the exit of an active validator that has been active for long enough.
+
+From Electra its validator must have no pending partial withdrawal.
 
 Where a later fork changes a rule, the step fails as not yet specified there.
 -/
@@ -119,7 +124,50 @@ def checkInclusionDeadline (state : BeaconState preset fork) (slot : Slot) :
     ensure (state.slot ≤ latest) (.attestationTooLate slot state.slot)
   else pure ()
 
-/-- From Altair to Deneb: the state after an attestation.
+/-- From Electra: the total size of some committees of a slot, each with an attester.
+
+Each committee must be one of the slot, and must have a bit set for at least one member.
+
+The bits of each committee follow those of the committees before it.
+
+The bits must reach past each committee, else the attestation is invalid. -/
+def attestationCommitteesSize (state : BeaconState preset fork) (data : AttestationData)
+    (bits : Array Bool) : List CommitteeIndex → Nat → Except TransitionError Nat
+  | [], offset => pure offset
+  | index :: rest, offset => do
+    let count := getCommitteeCountPerSlot state data.target.epoch
+    ensure (index < count) (.committeeIndexOutOfRange index count)
+    let committee ← liftAccessor (getBeaconCommittee state data.slot index)
+    let attesters ← liftAccessor (committeeAttesters bits offset committee)
+    ensure (attesters ≠ []) (.noCommitteeAttester index)
+    attestationCommitteesSize state data bits rest (offset + committee.size)
+
+/-- The check that an attestation has one bit for each member of its committees.
+
+Before Electra it names one committee of its slot by its index.
+
+From Electra its index must be zero, and its committee bits name the committees, as [EIP-7549] says.
+
+Each of them must then have an attester.
+
+[EIP-7549]: https://eips.ethereum.org/EIPS/eip-7549#consensus-layer
+-/
+def checkAttestationCommittees (state : BeaconState preset fork)
+    (attestation : Attestation preset fork) : Except TransitionError Unit := do
+  let data := attestation.data
+  let bits := attestation.aggregationBits.bits
+  if electra : .pectra ≤ fork then
+    ensure (data.index = 0) (.attestationIndexNotZero data.index)
+    let size ← attestationCommitteesSize state data bits
+      (getCommitteeIndices (attestation.committeeBits electra)) 0
+    ensure (bits.size = size) (.aggregationBitsLength bits.size size)
+  else
+    let count := getCommitteeCountPerSlot state data.target.epoch
+    ensure (data.index < count) (.committeeIndexOutOfRange data.index count)
+    let committee ← liftAccessor (getBeaconCommittee state data.slot data.index)
+    ensure (bits.size = committee.size) (.aggregationBitsLength bits.size committee.size)
+
+/-- From Altair to Fulu: the state after an attestation.
 
 Its target must be the current or the previous epoch, and the epoch of its slot.
 
@@ -127,7 +175,7 @@ It must be included at least the least inclusion delay after its slot.
 
 Before Deneb it must also be included at most one epoch after its slot, as [EIP-7045] removes.
 
-It must name a committee of its slot, with one bit for each member.
+It must have one bit for each member of its committees, which from Electra may be several.
 
 Its source, target and head earn flags by its inclusion delay, and its source must be justified.
 
@@ -137,14 +185,14 @@ Each attester gets the flags it earned in the epoch of the target.
 
 The proposer earns a share of the base rewards of the flags newly set.
 
-Electra changes the committees of an attestation, which EthLib does not yet have here.
+Gloas changes the rule, which EthLib does not yet have here.
 
 [EIP-7045]: https://eips.ethereum.org/EIPS/eip-7045#specification
 -/
 def processAttestationAltair (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (attestation : Attestation preset fork)
     (altair : .altair ≤ fork) : Except TransitionError (BeaconState preset fork) :=
-  if .pectra ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
+  if .glamsterdam ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
   else do
     let data := attestation.data
     let currentEpoch := getCurrentEpoch state
@@ -156,11 +204,7 @@ def processAttestationAltair (config : Config) (checks : SignatureChecks)
       liftAccessor (liftArith (addChecked data.slot preset.MIN_ATTESTATION_INCLUSION_DELAY))
     ensure (earliest ≤ state.slot) (.attestationTooEarly data.slot state.slot)
     checkInclusionDeadline state data.slot
-    let count := getCommitteeCountPerSlot state data.target.epoch
-    ensure (data.index < count) (.committeeIndexOutOfRange data.index count)
-    let committee ← liftAccessor (getBeaconCommittee state data.slot data.index)
-    let bits := attestation.aggregationBits.bits
-    ensure (bits.size = committee.size) (.aggregationBitsLength bits.size committee.size)
+    checkAttestationCommittees state attestation
     let earned ← liftAccessor
       (getAttestationParticipationFlagIndices state data (state.slot - data.slot))
     let indexed ← liftAccessor (getIndexedAttestation state attestation)
@@ -408,6 +452,16 @@ def processDepositRequest (state : BeaconState preset fork) (electra : .pectra �
 
 /-! ## Voluntary exits -/
 
+/-- From Electra: the check that a validator has no pending partial withdrawal.
+
+Before Electra there is no such withdrawal, and nothing is checked. -/
+def checkNoPendingWithdrawal (state : BeaconState preset fork) (index : ValidatorIndex) :
+    Except TransitionError Unit :=
+  if electra : .pectra ≤ fork then do
+    let pending ← liftAccessor (getPendingBalanceToWithdraw state electra index)
+    ensure (pending = 0) (.exitPendingWithdrawal index)
+  else pure ()
+
 /-- The domain under which a validator signs a voluntary exit for an epoch.
 
 Before Deneb it is the domain of the fork at that epoch.
@@ -433,16 +487,17 @@ It must have been active for long enough.
 
 The exit must not be for a later epoch than the current one.
 
+From Electra the validator must have no pending partial withdrawal, as [EIP-7251] specifies.
+
 The validator must sign the exit, under the domain of a voluntary exit.
 
 The validator then starts to exit.
 
-Electra changes the rule, which EthLib does not yet have here. -/
+[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
+-/
 def processVoluntaryExit (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (signed : SignedVoluntaryExit) :
-    Except TransitionError (BeaconState preset fork) :=
-  if .pectra ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
-  else do
+    Except TransitionError (BeaconState preset fork) := do
     let exit := signed.message
     let validator ← liftAccessor (getValidator state exit.validatorIndex)
     let epoch := getCurrentEpoch state
@@ -453,6 +508,7 @@ def processVoluntaryExit (config : Config) (checks : SignatureChecks)
     let eligible ←
       liftAccessor (liftArith (addChecked validator.activationEpoch config.SHARD_COMMITTEE_PERIOD))
     ensure (eligible ≤ epoch) (.exitTooSoon exit.validatorIndex)
+    checkNoPendingWithdrawal state exit.validatorIndex
     let domain ← voluntaryExitDomain config state exit.epoch
     let signingRoot ← liftSsz (computeSigningRoot exit domain)
     ensure (checks.verify (packBytes validator.pubkey) (packBytes signingRoot)
@@ -461,26 +517,74 @@ def processVoluntaryExit (config : Config) (checks : SignatureChecks)
 
 /-! ## All the operations of a block -/
 
+/-- The number of deposits that a block must hold, before Heze.
+
+Before Electra it is every deposit that the state has not processed, up to the most per block.
+
+In Electra the deposits of the contract stop at the first deposit request, as [EIP-6110] specifies.
+
+So it counts only the deposits before that request, up to the most per block.
+
+From Fulu a block holds no deposit.
+
+Before Electra, a deposit index past the deposit count is a 64-bit underflow, and an error.
+
+[EIP-6110]: https://eips.ethereum.org/EIPS/eip-6110#consensus-layer
+-/
+def expectedDepositCount (state : BeaconState preset fork) (before : fork < .hegota) :
+    Except TransitionError Nat :=
+  let index := state.eth1DepositIndex before
+  let count := (state.eth1Data before).depositCount
+  if .fusaka ≤ fork then pure 0
+  else if electra : .pectra ≤ fork then
+    let limit := min count (state.depositRequestsStartIndex ⟨electra, before⟩)
+    pure (if index < limit then (min preset.MAX_DEPOSITS (limit - index)).toNat else 0)
+  else do
+    let outstanding ← liftAccessor (liftArith (subChecked count index))
+    return (min preset.MAX_DEPOSITS outstanding).toNat
+
+/-- From Electra to Fulu: the state after the requests of the execution layer in a block.
+
+The deposit requests run first, then the withdrawal requests and the consolidation requests. -/
+def processExecutionRequests (config : Config) (state : BeaconState preset fork)
+    (body : BeaconBlockBody preset fork) (electra : .pectra ≤ fork ∧ fork < .glamsterdam) :
+    Except TransitionError (BeaconState preset fork) := do
+  let requests := body.executionRequests electra
+  let state ← requests.deposits.data.foldlM (processDepositRequest · electra.1 ·) state
+  let state ← requests.withdrawals.data.foldlM (processWithdrawalRequest config · electra.1 ·) state
+  requests.consolidations.data.foldlM (processConsolidationRequest config · electra.1 ·) state
+
+/-- From Capella: the state after the changes of BLS credentials of a block.
+
+Before Capella the state stays the same. -/
+def processBlsToExecutionChanges (config : Config) (checks : SignatureChecks)
+    (state : BeaconState preset fork) (body : BeaconBlockBody preset fork) :
+    Except TransitionError (BeaconState preset fork) :=
+  if capella : .shapella ≤ fork then
+    (body.blsToExecutionChanges capella).data.foldlM (processBlsToExecutionChange config checks)
+      state
+  else pure state
+
 /-- The state after the operations of a block.
 
-The block must hold every deposit that the state has not processed, up to the most per block.
+The block must hold the number of deposits that the state expects.
 
 The proposer slashings run first, then the attester slashings, attestations, deposits and exits.
 
-From Capella the changes of BLS credentials run last.
+From Capella the changes of BLS credentials follow.
 
-A 64-bit underflow is an error.
+From Electra the requests of the execution layer run last.
 
-Electra changes the deposits and adds the requests, which EthLib does not yet have. -/
+From Fulu a block holds no deposit, so no deposit runs.
+
+Gloas moves the requests out of the block, which EthLib does not yet have here. -/
 def processOperations (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (body : BeaconBlockBody preset fork) :
     Except TransitionError (BeaconState preset fork) :=
-  if electra : .pectra ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
+  if gloas : .glamsterdam ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
   else do
-    have before : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le electra) (by decide)
-    let outstanding ← liftAccessor (liftArith
-      (subChecked (state.eth1Data before).depositCount (state.eth1DepositIndex before)))
-    let expected := (min preset.MAX_DEPOSITS outstanding).toNat
+    have before : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le gloas) (by decide)
+    let expected ← expectedDepositCount state before
     let deposits := (body.deposits before).data
     ensure (deposits.size = expected) (.wrongDepositCount deposits.size expected)
     let state ← body.proposerSlashings.data.foldlM (processProposerSlashing config checks) state
@@ -488,9 +592,9 @@ def processOperations (config : Config) (checks : SignatureChecks)
     let state ← body.attestations.data.foldlM (processAttestation config checks) state
     let state ← deposits.foldlM (processDeposit config checks before) state
     let state ← body.voluntaryExits.data.foldlM (processVoluntaryExit config checks) state
-    if capella : .shapella ≤ fork then
-      (body.blsToExecutionChanges capella).data.foldlM (processBlsToExecutionChange config checks)
-        state
+    let state ← processBlsToExecutionChanges config checks state body
+    if electra : .pectra ≤ fork then
+      processExecutionRequests config state body ⟨electra, Nat.lt_of_not_le gloas⟩
     else return state
 
 end EthLib.Consensus
