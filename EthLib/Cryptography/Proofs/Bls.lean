@@ -5,6 +5,7 @@ public import EthLib.Cryptography.Proofs.Bls.BaseFieldMap
 public import EthLib.Cryptography.Proofs.Bls.CurveMap
 public import EthLib.Cryptography.Proofs.Bls.PairingMap
 public import EthLib.Cryptography.Proofs.Bls.HashToCurveMap
+public import EthLib.Cryptography.Proofs.Bls.FpModel
 public import EthLib.Cryptography.Proofs.Bls.Fp6
 public import EthLib.Cryptography.Proofs.Bls.Fp12
 public import EthLib.Cryptography.Proofs.Bls.FpZMod
