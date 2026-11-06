@@ -118,12 +118,21 @@ theorem toPoint_endo {q : G1} (h : Valid q) : toPoint (endo q) = endoHom (toPoin
   rw [toPoint, toPoint, rep_endo]
   exact toAffine_endo h
 
+/-- The coordinates of the generator, as integers. -/
+private theorem coords_generator :
+    TorsionCheck.coords generator = (generatorX % Fp.modulus, generatorY % Fp.modulus, 1) := by
+  simp only [TorsionCheck.coords, generator, Fp.baseField_ofNat, Fp.baseField_one, Fp.val_ofNat,
+    Fp.val_one]
+
 /-- The image of the generator `(x, y)` is `(β' x, y)`. -/
 private theorem coords_endo_generator :
     TorsionCheck.coords (endo generator) =
       (TorsionCheck.fmul cubeRootNat (TorsionCheck.coords generator).1,
         (TorsionCheck.coords generator).2.1, 1) := by
-  decide +kernel
+  refine Prod.ext ?_ (Prod.ext rfl Fp.val_one)
+  show (cubeRoot * rep generator 0 : Fp).val = _
+  rw [← cubeRoot_val]
+  exact Fp.val_mul cubeRoot _
 
 theorem eigenvalue_lt : eigenvalue < 2 ^ 128 := by decide +kernel
 
@@ -132,7 +141,7 @@ theorem endoHom_generator : endoHom (toPoint generator) = eigenvalue • toPoint
   rw [← toPoint_endo valid_generator, ← toPoint_mulNat valid_generator,
     ← mulNatAux_eq 128 generator eigenvalue eigenvalue_lt]
   refine (toPoint_eq_of_sameAffine coords_endo_generator ?_).symm
-  rw [TorsionCheck.coords_mulNatAux]
+  rw [TorsionCheck.coords_mulNatAux, coords_generator]
   decide +kernel
 
 /-- On a point of order dividing `r`, the map `(x, y) ↦ (β' x, y)` is the product by `λ`. -/

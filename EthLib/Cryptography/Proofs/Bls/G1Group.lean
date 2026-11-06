@@ -97,9 +97,12 @@ def addSpec (p q : G1) : G1 :=
       ⟨x', y', z'⟩
 
 /-- `2`, `3` and `8` in `Fp`, as sums of ones, so `grind` can normalize them. -/
-private theorem fp_two : Fp.ofNat 2 = 1 + 1 := by decide
-private theorem fp_three : Fp.ofNat 3 = 1 + 1 + 1 := by decide
-private theorem fp_eight : Fp.ofNat 8 = 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 := by decide
+private theorem fp_two : Fp.ofNat 2 = 1 + 1 :=
+  Fp.ext (by simp only [Fp.val_ofNat, Fp.val_add, Fp.val_one])
+private theorem fp_three : Fp.ofNat 3 = 1 + 1 + 1 :=
+  Fp.ext (by simp only [Fp.val_ofNat, Fp.val_add, Fp.val_one, Nat.mod_add_mod])
+private theorem fp_eight : Fp.ofNat 8 = 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 :=
+  Fp.ext (by simp only [Fp.val_ofNat, Fp.val_add, Fp.val_one, Nat.mod_add_mod])
 
 /-- The library's doubling gives the printed coordinates. -/
 theorem double_eq_doubleSpec : (double : G1 → G1) = doubleSpec := by
@@ -197,6 +200,9 @@ theorem beq_iff {a b : Fp} : a.beq b = true ↔ (a : ZMod Fp.modulus) = b := by
 theorem rep_zero : rep zero = ![1, 1, 0] := by
   funext i
   fin_cases i <;> rfl
+
+/-- The point at infinity passes the test for infinity. -/
+@[simp] theorem isInfinity_zero : (zero : G1).isInfinity = true := Fp.zero_isZero
 
 theorem valid_zero : Valid zero := by
   rw [Valid, rep_zero]

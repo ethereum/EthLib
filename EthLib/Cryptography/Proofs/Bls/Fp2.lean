@@ -726,9 +726,6 @@ theorem ne_of_model {a b : Fp2} (h : (a.map Fp.toModel).beq (b.map Fp.toModel) =
 theorem one_isZero : (one : Fp2).isZero = false :=
   Bool.eq_false_iff.mpr fun h => one_ne_zero (isZero_iff.mp h)
 
-/-- The power of the field is the library's exponentiation. -/
-theorem pow_eq_powNat (a : Fp2) (e : Nat) : a ^ e = powNat a e := (powNat_eq_pow a e).symm
-
 /-- A natural number is the element with that real part and a zero imaginary part. -/
 theorem natCast_eq (n : Nat) : (n : Fp2) = ⟨Fp.ofNat n, Fp.zero⟩ := by
   induction n with
@@ -768,7 +765,7 @@ macro "decide_eq_at_model" "[" ids:Lean.Parser.Tactic.simpLemma,* "]" : tactic =
               | apply Fp.eq_of_model
               | apply Fp2.ne_of_model
               | apply Fp2.eq_of_model
-             simp only [Fp2.pow_eq_powNat, Fp2.numeral_eq, Fp2.div_eq_mul_inverse,
+             simp only [← Fp2.powNat_eq_pow, Fp2.numeral_eq, Fp2.div_eq_mul_inverse,
                Fp2.inv_eq_inverse, ← Fp2.one_eq_one, ← Fp2.zero_eq_zero, Fp2.map_add, Fp2.map_sub,
                Fp2.map_neg, Fp2.map_mul, Fp2.map_mk, Fp2.map_one, Fp2.map_zero, Fp2.map_i,
                Fp2.map_ofFp, Fp2.map_conjugate, Fp2.map_inverse, Fp2.map_powNat,

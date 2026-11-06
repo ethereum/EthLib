@@ -489,6 +489,17 @@ theorem val_mul (a b : Fp) : (a * b).val = a.val * b.val % modulus := rfl
 /-- The integer of a negation is `p` minus the integer, mod `p`. -/
 theorem val_neg (a : Fp) : (-a).val = (modulus - a.val) % modulus := rfl
 
+/-- The zero test reads the integer. -/
+theorem isZero_eq (a : Fp) : a.isZero = (a.val == 0) := rfl
+
+/-- Zero passes the zero test. -/
+theorem zero_isZero : Fp.zero.isZero = true :=
+  (isZero_eq 0).trans (by rw [val_zero]; rfl)
+
+/-- One fails the zero test. -/
+theorem one_isZero : Fp.one.isZero = false :=
+  (isZero_eq 1).trans (by rw [val_one]; rfl)
+
 /-! ## The base-field operations of `Fp` -/
 
 /-- The extensions read the equality of `Fp` as its boolean equality. -/

@@ -124,7 +124,7 @@ theorem modulus_smul_generator :
 `z = 1 ≠ 0`, so it maps to an affine point). -/
 theorem toPoint_generator_ne_zero : toPoint generator ≠ 0 := by
   rw [toPoint, Point.toAffine_of_Z_ne_zero valid_generator
-    (by exact fun h => absurd (isZero_iff.mpr h) (by decide))]
+    (by rw [rep_z]; exact one_ne_zero)]
   exact fun h => by cases h
 
 /-- The generator has additive order exactly `r`. -/

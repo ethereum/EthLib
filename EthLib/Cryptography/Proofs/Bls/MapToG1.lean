@@ -49,13 +49,20 @@ private def sqrtNegZ : Fp :=
   Fp.ofNat (0x4610e003bd3ac94dfa9246c390d7a78942602029175a4ca * 2 ^ 192 +
     0x366d601f33f3946e3ed39794735c38315d874bc1d70637c3)
 
-private theorem sqrtNegZ_sq : toF sqrtNegZ * toF sqrtNegZ = -toF Z := by decide
+private theorem sqrtNegZ_sq : toF sqrtNegZ * toF sqrtNegZ = -toF Z := by
+  show sqrtNegZ * sqrtNegZ = -Z
+  decide_eq_at_model [sqrtNegZ, Z]
 
-private theorem aprime_ne_zero : toF Aprime ≠ 0 := by decide
+private theorem aprime_ne_zero : toF Aprime ≠ 0 := by
+  show Aprime ≠ (0 : Fp)
+  decide_eq_at_model [Aprime]
 
 -- At the exceptional `u`, the map takes `x1 = B' / (Z * A')`, and `g(x1)` is a square.
 private theorem sqrt_exceptional_ok :
     (Fp.sqrt (g (Bprime * BaseField.inverse (Z * Aprime)))).isOk = true := by
+  rw [Fp.sqrt_isOk_eq]
+  simp only [g, Z, Aprime, Bprime, Fp.baseField_ofNat, Fp.baseField_inverse, Fp.toModel_add,
+    Fp.toModel_mul, Fp.toModel_inverse, Fp.toModel_ofNat]
   decide +kernel
 
 /-- `g(t * x1) = t^3 * g(x1)` when `x1 = (-B' / A') * (1 + 1 / (t^2 + t))`. -/

@@ -348,10 +348,16 @@ private theorem compress_noninf {p : G1} (hinf : ¬ p.isInfinity = true)
   simp only [Id.run, hinf, hpa]
   rfl
 
-/-- The infinity round-trip is a closed 48-byte decidable computation
-checked in the kernel (`decide +kernel`). -/
+/-- The 48-byte infinity encoding decodes to the zero point. -/
 private theorem uncompress_infinityBytes :
-    uncompress infinityBytes = .ok zero := by decide +kernel
+    uncompress infinityBytes = .ok zero := by
+  have hsz : infinityBytes.size = 48 := by decide
+  have hhead : infinityBytes.get! 0 = 0xc0 := by decide
+  have htail : tailAllZero infinityBytes 1 = true := by decide +kernel
+  rw [uncompress, ite_eq_right (by rw [hsz]; decide)]
+  dsimp only
+  rw [hhead, htail]
+  rfl
 
 /-- Sign selection in `uncompress` (a `Prop`-equality condition)
 recovers `y` from `±y` and the stored sign bit. -/
@@ -766,10 +772,11 @@ private theorem toAffine_of_z_one (x y : Fp) :
   unfold toAffine
   simp only [Fp.baseField_isZero, Fp.baseField_inverse]
   -- z = 1 is not zero, so the point is not at infinity.
-  rw [ite_eq_right (by decide : ¬ Fp.one.isZero = true)]
+  rw [ite_eq_right (Bool.eq_false_iff.mp Fp.one_isZero)]
   -- The inverse of 1 is 1, read off from the identity z * z^(-1) = 1.
   have hinv : Fp.one.inverse = (1 : Fp) := by
-    have h := z_mul_inverse (p := ⟨Fp.zero, Fp.zero, Fp.one⟩) (by decide)
+    have h := z_mul_inverse (p := ⟨Fp.zero, Fp.zero, Fp.one⟩)
+      (Bool.eq_false_iff.mp Fp.one_isZero)
     change (1 : Fp) * Fp.one.inverse = (1 : Fp) at h
     rwa [Fin.one_mul] at h
   -- Dividing by 1^2 and 1^3 leaves x and y unchanged.

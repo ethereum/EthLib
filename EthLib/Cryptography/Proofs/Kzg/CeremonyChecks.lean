@@ -40,11 +40,13 @@ def g2Validate (p : G2) : Bool :=
 
 /-- `g1Validate` rejects the `G1` identity (`G1.zero`). -/
 @[simp] theorem g1Validate_zero_eq_false : g1Validate G1.zero = false := by
-  decide
+  rw [g1Validate, G1.isInfinity_zero]
+  rfl
 
 /-- `g2Validate` rejects the `G2` identity (`G2.zero`). -/
 @[simp] theorem g2Validate_zero_eq_false : g2Validate G2.zero = false := by
-  decide
+  rw [g2Validate, G2.isInfinity_zero]
+  rfl
 
 /-- Any point accepted by `g1Validate` is non-infinity. -/
 theorem g1Validate_isInfinity_eq_false {p : G1} (h : g1Validate p = true) :
@@ -61,7 +63,7 @@ theorem g2Validate_isInfinity_eq_false {p : G2} (h : g2Validate p = true) :
 /-- Adding from `G1.zero` on the left returns the right operand. -/
 @[simp] theorem G1.zero_add (q : G1) : G1.add G1.zero q = q := by
   unfold Bls.G1.add
-  have hz : BaseField.isZero (G1.zero : G1).z = true := by decide
+  have hz : BaseField.isZero (G1.zero : G1).z = true := G1.isInfinity_zero
   simp [hz]
 
 /-- Adding `G1.zero` on the right of a non-infinity point returns the point unchanged. -/
@@ -69,7 +71,7 @@ theorem g2Validate_isInfinity_eq_false {p : G2} (h : g2Validate p = true) :
     G1.add p G1.zero = p := by
   unfold Bls.G1.add
   have hpz : BaseField.isZero p.z = false := hp
-  have hz : BaseField.isZero (G1.zero : G1).z = true := by decide
+  have hz : BaseField.isZero (G1.zero : G1).z = true := G1.isInfinity_zero
   simp [hpz, hz]
 
 /-- Scalar multiplication of any `G1` point by `0` gives `G1.zero`. -/
@@ -89,7 +91,7 @@ theorem g2Validate_isInfinity_eq_false {p : G2} (h : g2Validate p = true) :
 /-- Adding from `G2.zero` on the left returns the right operand. -/
 @[simp] theorem G2.zero_add (q : G2) : G2.add G2.zero q = q := by
   unfold Bls.G2.add
-  have hz : (G2.zero : G2).z.isZero = true := by decide
+  have hz : (G2.zero : G2).z.isZero = true := G2.isInfinity_zero
   simp [hz]
 
 /-- Adding `G2.zero` on the right of a non-infinity point returns the point unchanged. -/
@@ -97,7 +99,7 @@ theorem g2Validate_isInfinity_eq_false {p : G2} (h : g2Validate p = true) :
     G2.add p G2.zero = p := by
   unfold Bls.G2.add
   have hpz : p.z.isZero = false := hp
-  have hz : (G2.zero : G2).z.isZero = true := by decide
+  have hz : (G2.zero : G2).z.isZero = true := G2.isInfinity_zero
   simp [hpz, hz]
 
 /-- Unfolding equation for the executable G2 double-and-add multiplication. -/
@@ -154,17 +156,15 @@ theorem g1Mul_nonzero_iff (s : Fr) :
 theorem g1Mul_ne_zero_of_isInfinity_eq_false {p : G1} {s : Fr}
     (h : G1.isInfinity (G1.mul p s) = false) : s ≠ 0 := by
   rintro rfl
-  rw [G1.mul_zero] at h
-  revert h
-  decide
+  rw [G1.mul_zero, G1.isInfinity_zero] at h
+  cases h
 
 /-- Non-infinity of a `G2` scalar multiple implies the scalar is nonzero. -/
 theorem g2Mul_ne_zero_of_isInfinity_eq_false {p : G2} {x : Fr}
     (h : G2.isInfinity (G2.mul p x) = false) : x ≠ 0 := by
   rintro rfl
-  rw [G2.mul_zero] at h
-  revert h
-  decide
+  rw [G2.mul_zero, G2.isInfinity_zero] at h
+  cases h
 
 /-- Equality of two pairings, expressed using the repository's product-pairing checker.
 
