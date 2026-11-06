@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Bls.Compress
 public import EthLib.Cryptography.Proofs.Bls.G2Group
+public import EthLib.Cryptography.Proofs.Bls.CurveMap
 
 /-!
 # Proofs: twist membership and the validity of the `G2` generator
@@ -40,11 +41,24 @@ def isOnTwist (p : G2) : Bool :=
     p.y * p.y == p.x * p.x * p.x + bTwist * z6
 
 @[simp] theorem isOnTwist_zero : isOnTwist zero = true := by
-  decide
+  unfold isOnTwist
+  rw [ite_eq_left (show (zero : G2).isInfinity = true from Fp2.isZero_iff.mpr rfl)]
 
-/-- Checked in the kernel on the 381-bit `Fp2` generator coordinates. -/
-theorem isOnTwist_generator : isOnTwist generator = true := by
-  decide +kernel
+/-- A triple with `z = 1` whose coordinates solve the affine equation is on the twist. -/
+theorem isOnTwist_of_z_one {x y : Fp2} (h : y * y = x * x * x + bTwist) :
+    isOnTwist ⟨x, y, Fp2.one⟩ = true := by
+  unfold isOnTwist
+  have hinf : (⟨x, y, Fp2.one⟩ : G2).isInfinity = false := Fp2.one_isZero
+  rw [ite_eq_right (by rw [hinf]; decide)]
+  dsimp only
+  have h1 : (Fp2.one : Fp2) * Fp2.one = Fp2.one := mul_one (1 : Fp2)
+  have hb : (bTwist : Fp2) * Fp2.one = bTwist := mul_one (bTwist : Fp2)
+  rw [h1, h1, h1, hb, h]
+  exact beq_self_eq_true _
+
+/-- The kernel checks the affine equation on the 381-bit `Fp2` generator coordinates. -/
+theorem isOnTwist_generator : isOnTwist generator = true :=
+  isOnTwist_of_z_one (by decide_eq_at_model [generator, G2.map_bTwist])
 
 /-! ## Nonsingularity of affine twist points -/
 
@@ -94,9 +108,8 @@ theorem valid_of_affine_equation {x y : Fp2}
   have hy : y ≠ 0 := by
     intro hy
     apply cube_add_bTwist_ne_zero x
-    rw [← h, hy]
-    decide
-  have h2 : (2 : Fp2) ≠ 0 := by decide
+    rw [← h, hy, mul_zero]
+  have h2 : (2 : Fp2) ≠ 0 := by decide_eq_at_model []
   show curve.Nonsingular (rep ⟨x, y, Fp2.one⟩)
   rw [nonsingular_iff, equation_iff]
   simp only [show curve.a₁ = 0 from rfl, show curve.a₂ = 0 from rfl,

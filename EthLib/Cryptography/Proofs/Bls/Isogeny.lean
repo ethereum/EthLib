@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Bls.HashToCurve
 public import EthLib.Cryptography.Proofs.Bls.G2Validity
+public import EthLib.Cryptography.Proofs.Bls.HashToCurveMap
 
 /-!
 # Proofs: the 3-isogeny sends `E'` onto the twist
@@ -43,38 +44,22 @@ private theorem iso_poly (x : Fp2) :
   rw [h2, h3, h4, h5, h6, h7]
   ring
 
--- The coefficients of Appendix E.3, written out so that `change` can check them below.
-private def K10 : Fp2 := ⟨Fp.ofNat 0x5c759507e8e333ebb5b7a9a47d7ed8532c52d39fd3a042a88b58423c50ae15d5c2638e343d9c71c6238aaaaaaaa97d6, Fp.ofNat 0x5c759507e8e333ebb5b7a9a47d7ed8532c52d39fd3a042a88b58423c50ae15d5c2638e343d9c71c6238aaaaaaaa97d6⟩
-private def K11 : Fp2 := ⟨Fp.ofNat 0, Fp.ofNat 0x11560bf17baa99bc32126fced787c88f984f87adf7ae0c7f9a208c6b4f20a4181472aaa9cb8d555526a9ffffffffc71a⟩
-private def K12 : Fp2 := ⟨Fp.ofNat 0x11560bf17baa99bc32126fced787c88f984f87adf7ae0c7f9a208c6b4f20a4181472aaa9cb8d555526a9ffffffffc71e, Fp.ofNat 0x8ab05f8bdd54cde190937e76bc3e447cc27c3d6fbd7063fcd104635a790520c0a395554e5c6aaaa9354ffffffffe38d⟩
-private def K13 : Fp2 := ⟨Fp.ofNat 0x171d6541fa38ccfaed6dea691f5fb614cb14b4e7f4e810aa22d6108f142b85757098e38d0f671c7188e2aaaaaaaa5ed1, Fp.ofNat 0⟩
-private def K20 : Fp2 := ⟨Fp.ofNat 0, Fp.ofNat 0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaa63⟩
-private def K21 : Fp2 := ⟨Fp.ofNat 0xc, Fp.ofNat 0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaa9f⟩
-private def K30 : Fp2 := ⟨Fp.ofNat 0x1530477c7ab4113b59a4c18b076d11930f7da5d4a07f649bf54439d87d27e500fc8c25ebf8c92f6812cfc71c71c6d706, Fp.ofNat 0x1530477c7ab4113b59a4c18b076d11930f7da5d4a07f649bf54439d87d27e500fc8c25ebf8c92f6812cfc71c71c6d706⟩
-private def K31 : Fp2 := ⟨Fp.ofNat 0, Fp.ofNat 0x5c759507e8e333ebb5b7a9a47d7ed8532c52d39fd3a042a88b58423c50ae15d5c2638e343d9c71c6238aaaaaaaa97be⟩
-private def K32 : Fp2 := ⟨Fp.ofNat 0x11560bf17baa99bc32126fced787c88f984f87adf7ae0c7f9a208c6b4f20a4181472aaa9cb8d555526a9ffffffffc71c, Fp.ofNat 0x8ab05f8bdd54cde190937e76bc3e447cc27c3d6fbd7063fcd104635a790520c0a395554e5c6aaaa9354ffffffffe38f⟩
-private def K33 : Fp2 := ⟨Fp.ofNat 0x124c9ad43b6cf79bfbf7043de3811ad0761b0f37a1e26286b0e977c69aa274524e79097a56dc4bd9e1b371c71c718b10, Fp.ofNat 0⟩
-private def K40 : Fp2 := ⟨Fp.ofNat 0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffa8fb, Fp.ofNat 0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffa8fb⟩
-private def K41 : Fp2 := ⟨Fp.ofNat 0, Fp.ofNat 0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffa9d3⟩
-private def K42 : Fp2 := ⟨Fp.ofNat 0x12, Fp.ofNat 0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaa99⟩
-
-private theorem k10_eq : K10 = (304 + 304 * I) / 9 := by decide +kernel
-private theorem k11_eq : K11 = (-24 * I) / 9 := by decide +kernel
-private theorem k12_eq : K12 = (12 - 12 * I) / 9 := by decide +kernel
-private theorem k13_eq : K13 = 1 / 9 := by decide +kernel
-private theorem k20_eq : K20 = -72 * I := by decide +kernel
-private theorem k21_eq : K21 = 12 - 12 * I := by decide +kernel
-private theorem k30_eq : K30 = (752 + 752 * I) / 27 := by decide +kernel
-private theorem k31_eq : K31 = (264 * I) / 27 := by decide +kernel
-private theorem k32_eq : K32 = (-18 + 18 * I) / 27 := by decide +kernel
-private theorem k33_eq : K33 = -1 / 27 := by decide +kernel
-private theorem k40_eq : K40 = -432 - 432 * I := by decide +kernel
-private theorem k41_eq : K41 = -216 * I := by decide +kernel
-private theorem k42_eq : K42 = 18 - 18 * I := by decide +kernel
+private theorem k10_eq : (k10 : Fp2) = (304 + 304 * I) / 9 := by decide_eq_at_model [map_k10]
+private theorem k11_eq : (k11 : Fp2) = (-24 * I) / 9 := by decide_eq_at_model [map_k11]
+private theorem k12_eq : (k12 : Fp2) = (12 - 12 * I) / 9 := by decide_eq_at_model [map_k12]
+private theorem k13_eq : (k13 : Fp2) = 1 / 9 := by decide_eq_at_model [map_k13]
+private theorem k20_eq : (k20 : Fp2) = -72 * I := by decide_eq_at_model [map_k20]
+private theorem k21_eq : (k21 : Fp2) = 12 - 12 * I := by decide_eq_at_model [map_k21]
+private theorem k30_eq : (k30 : Fp2) = (752 + 752 * I) / 27 := by decide_eq_at_model [map_k30]
+private theorem k31_eq : (k31 : Fp2) = (264 * I) / 27 := by decide_eq_at_model [map_k31]
+private theorem k32_eq : (k32 : Fp2) = (-18 + 18 * I) / 27 := by decide_eq_at_model [map_k32]
+private theorem k33_eq : (k33 : Fp2) = -1 / 27 := by decide_eq_at_model [map_k33]
+private theorem k40_eq : (k40 : Fp2) = -432 - 432 * I := by decide_eq_at_model [map_k40]
+private theorem k41_eq : (k41 : Fp2) = -216 * I := by decide_eq_at_model [map_k41]
+private theorem k42_eq : (k42 : Fp2) = 18 - 18 * I := by decide_eq_at_model [map_k42]
 
 -- The denominator `x_den` is `d(x)^2`.
 private theorem xDen_eq (x : Fp2) : x * x + k21 * x + k20 = (d x) ^ 2 := by
-  change x * x + K21 * x + K20 = _
   rw [k21_eq, k20_eq]
   unfold d
   linear_combination -36 * Fp2.i_sq
@@ -82,7 +67,6 @@ private theorem xDen_eq (x : Fp2) : x * x + k21 * x + k20 = (d x) ^ 2 := by
 -- The denominator `y_den` is `d(x)^3`.
 private theorem yDen_eq (x : Fp2) :
     x * x * x + k42 * (x * x) + k41 * x + k40 = (d x) ^ 3 := by
-  change x * x * x + K42 * (x * x) + K41 * x + K40 = _
   rw [k42_eq, k41_eq, k40_eq]
   unfold d
   have hi3 : I ^ 3 = -I := by rw [pow_succ, pow_two, Fp2.i_sq]; ring
@@ -92,14 +76,12 @@ private theorem yDen_eq (x : Fp2) :
 
 private theorem xNum_eq (x : Fp2) :
     k13 * (x * x * x) + k12 * (x * x) + k11 * x + k10 = xn x / 9 := by
-  change K13 * (x * x * x) + K12 * (x * x) + K11 * x + K10 = _
   rw [k13_eq, k12_eq, k11_eq, k10_eq]
   unfold xn
   ring
 
 private theorem yNum_eq (x : Fp2) :
     k33 * (x * x * x) + k32 * (x * x) + k31 * x + k30 = yn x / 27 := by
-  change K33 * (x * x * x) + K32 * (x * x) + K31 * x + K30 = _
   rw [k33_eq, k32_eq, k31_eq, k30_eq]
   unfold yn
   ring
@@ -126,7 +108,9 @@ private theorem sq_ne_two (z : ZMod Fp.modulus) : z * z ≠ 2 := by
 private theorem pole_not_on_curve (y : Fp2) : y * y ≠ 4 + 4 * I := by
   intro hy
   have hn := congrArg Fp2.norm hy
-  rw [Fp2.norm_mul, show Fp2.norm (4 + 4 * I) = (32 : Fp) by decide +kernel] at hn
+  rw [Fp2.norm_mul, show Fp2.norm (4 + 4 * I) = (32 : Fp) by
+    decide_eq_at_model [Fp2.norm, Fp2.add_c0, Fp2.add_c1, Fp2.mul_c0, Fp2.mul_c1, Fp2.i_c0,
+      Fp2.i_c1]] at hn
   let z : ZMod Fp.modulus := Fp2.norm y
   have hz : z * z = 32 := hn
   apply sq_ne_two (z / 4)
@@ -139,7 +123,8 @@ private theorem d_ne_zero {x y : Fp2} (h : y * y = swuG x) : d x ≠ 0 := by
   have hx : x = -6 + 6 * I := by
     unfold d at hd
     linear_combination hd
-  have hc : swuG (-6 + 6 * I) = 4 + 4 * I := by decide +kernel
+  have hc : swuG (-6 + 6 * I) = 4 + 4 * I := by
+    decide_eq_at_model [swuG, map_Aprime, map_Bprime]
   rw [hx, hc] at h
   exact pole_not_on_curve y h
 
@@ -164,11 +149,11 @@ theorem isoMapG2_curve_eq {x y : Fp2} (h : y * y = swuG x) :
     ∃ a b, isoMapG2 x y = ⟨a, b, Fp2.one⟩ ∧ b * b = a * a * a + G2.bTwist := by
   have hd := d_ne_zero h
   refine ⟨_, _, isoMapG2_eq hd, ?_⟩
-  have h9 : (9 : Fp2) ≠ 0 := by decide
-  have h27 : (27 : Fp2) ≠ 0 := by decide
-  have hb : G2.bTwist = 4 + 4 * I := by decide +kernel
-  have ha : Aprime = 240 * I := by decide +kernel
-  have hb' : Bprime = 1012 + 1012 * I := by decide +kernel
+  have h9 : (9 : Fp2) ≠ 0 := by decide_eq_at_model []
+  have h27 : (27 : Fp2) ≠ 0 := by decide_eq_at_model []
+  have hb : G2.bTwist = 4 + 4 * I := by decide_eq_at_model [G2.map_bTwist]
+  have ha : Aprime = 240 * I := by decide_eq_at_model [map_Aprime]
+  have hb' : Bprime = 1012 + 1012 * I := by decide_eq_at_model [map_Bprime]
   rw [hb]
   unfold swuG at h
   rw [ha, hb'] at h

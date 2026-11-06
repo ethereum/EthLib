@@ -303,8 +303,7 @@ theorem inverse_zero : (0 : Fp12).inverse = 0 := by
 instance : Field Fp12 where
   inv := inverse
   exists_pair_ne := ⟨0, 1, fun h => by
-    have := congrArg (fun x => x.c0.c0.c0) h
-    revert this; decide⟩
+    exact zero_ne_one (α := Fp6) (congrArg c0 h)⟩
   mul_inv_cancel := fun _ h => mul_inverse_cancel h
   inv_zero := inverse_zero
   nnqsmul := _

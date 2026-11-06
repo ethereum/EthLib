@@ -161,7 +161,7 @@ theorem w_sixth : w ^ 6 = fp2ToFp12 Fp2.xi := by
 
 /-- Cancels `xi = 1 + i` in `bTwist = 4 * xi` when scaling `(x, y)` by `(w^(-2), w^(-3))`. -/
 theorem twist_coefficient : fp2ToFp12 G2.bTwist * (w⁻¹) ^ 6 = 4 := by
-  have hb : G2.bTwist = (4 : Fp2) * Fp2.xi := by decide
+  have hb : G2.bTwist = (4 : Fp2) * Fp2.xi := by decide_eq_at_model [G2.map_bTwist, Fp2.xi]
   rw [hb, map_mul, map_ofNat, inv_pow, ← w_sixth]
   field_simp [w_ne_zero]
 
@@ -267,8 +267,9 @@ theorem primeFrobeniusHom_apply (P : ambientCurve.Point) :
 
 /-! ## Additivity of `psi` and its eigenvalue on `G2.generator` -/
 
-private theorem alpha_cube : psiAlpha ^ 3 = psiBeta ^ 2 := by decide +kernel
-private theorem beta_twist : psiBeta ^ 2 * G2.bTwist.conjugate = G2.bTwist := by decide +kernel
+private theorem alpha_cube : psiAlpha ^ 3 = psiBeta ^ 2 := HashToCurve.c1Psi_cube
+private theorem beta_twist : psiBeta ^ 2 * G2.bTwist.conjugate = G2.bTwist :=
+  HashToCurve.c2Psi_twist
 
 private theorem twist_frob_equation {x y : Fp2}
     (h : y ^ 2 = x ^ 3 + G2.bTwist) :

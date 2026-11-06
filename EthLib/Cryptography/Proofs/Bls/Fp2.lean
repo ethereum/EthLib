@@ -4,6 +4,8 @@ public import EthLib.Cryptography.Bls.Fp2
 public import EthLib.Cryptography.Bls.Compress
 public import EthLib.Cryptography.Proofs.Bls.FpZMod
 public import EthLib.Cryptography.Proofs.Bls.Compress
+public import EthLib.Cryptography.Proofs.Bls.FpModel
+public import EthLib.Cryptography.Proofs.Bls.BaseFieldMap
 public import Mathlib.Tactic.Ring
 public import Mathlib.Tactic.LinearCombination
 
@@ -21,6 +23,10 @@ The norm is zero only at zero, because `-1` is not a square in `Fp`.
 That holds since `p = 3 mod 4`, and it makes every nonzero element invertible.
 
 It also proves that the library's exponentiation is the field power, and that a square root it returns squares back to its input.
+
+The last section decides equations of closed terms in the model of `Fp`.
+
+There the kernel computes on natural numbers.
 -/
 
 @[expose] public section
@@ -301,8 +307,9 @@ theorem inverse_zero : (0 : Fp2).inverse = 0 := by
 instance : Field Fp2 where
   inv := inverse
   exists_pair_ne := ⟨0, 1, fun h => by
-    have := congrArg c0 h
-    revert this; decide⟩
+    exact Fp.ne_of_model (by
+      simp only [zero_c0, one_c0, Fp.toModel_zero', Fp.toModel_one']
+      decide +kernel) (congrArg c0 h)⟩
   mul_inv_cancel := fun a h => mul_inverse_cancel h
   inv_zero := inverse_zero
   div_eq_mul_inv := fun _ _ => rfl
@@ -524,7 +531,9 @@ private theorem sqrtOrError_complete {a b : Fp} (h : (b : ZMod Fp.modulus) * b =
 
 private theorem two_mul_inverse :
     (Fp.ofNat 2 : ZMod Fp.modulus) * ((Fp.ofNat 2).inverse : ZMod Fp.modulus) = 1 :=
-  fp_mul_inverse (by decide)
+  fp_mul_inverse (Fp.ne_of_model (by
+    simp only [Fp.toModel_ofNat, Fp.toModel_zero']
+    decide +kernel))
 
 private theorem sqrt_branch_gen_aux {invFn : Fp → Fp}
     (hinv : ∀ x : Fp, x ≠ 0 → (x : ZMod Fp.modulus) * (invFn x : ZMod Fp.modulus) = 1)
@@ -699,4 +708,75 @@ theorem sqrt_complete {a b : Fp2} (hb : b * b = a) :
     -- Purely real root: b0^2 = a0.
     · exact Or.inl ⟨_, sqrtOrError_complete (sub_zero_mul_zmod ha0 hb1)⟩
 
+/-! ## Equations decided in the model -/
+
+/-- Two elements are equal when their images in the model are. -/
+theorem eq_of_model {a b : Fp2} (h : (a.map Fp.toModel).beq (b.map Fp.toModel) = true) :
+    a = b :=
+  beq_iff_eq.mp (by rwa [map_beq] at h)
+
+/-- Two elements differ when their images in the model do. -/
+theorem ne_of_model {a b : Fp2} (h : (a.map Fp.toModel).beq (b.map Fp.toModel) = false) :
+    a ≠ b := by
+  rintro rfl
+  rw [map_beq, (beq_iff_eq (a := a)).mpr rfl] at h
+  exact Bool.noConfusion h
+
+/-- One is not zero, so its zero test fails. -/
+theorem one_isZero : (one : Fp2).isZero = false :=
+  Bool.eq_false_iff.mpr fun h => one_ne_zero (isZero_iff.mp h)
+
+/-- The power of the field is the library's exponentiation. -/
+theorem pow_eq_powNat (a : Fp2) (e : Nat) : a ^ e = powNat a e := (powNat_eq_pow a e).symm
+
+/-- A natural number is the element with that real part and a zero imaginary part. -/
+theorem natCast_eq (n : Nat) : (n : Fp2) = ⟨Fp.ofNat n, Fp.zero⟩ := by
+  induction n with
+  | zero => rfl
+  | succ n ih =>
+    rw [Nat.cast_succ, ih]
+    apply ext
+    · apply Fp.ext
+      show (Fp.ofNat n + 1).val = _
+      rw [Fp.val_add, Fp.val_ofNat, Fp.val_ofNat, Fp.val_one, Nat.mod_add_mod]
+    · rfl
+
+/-- A numeral is the element with that real part and a zero imaginary part. -/
+theorem numeral_eq (n : Nat) [n.AtLeastTwo] : (OfNat.ofNat n : Fp2) = ⟨Fp.ofNat n, Fp.zero⟩ :=
+  natCast_eq n
+
+/-- The division of the field multiplies by the library's inverse. -/
+theorem div_eq_mul_inverse (a b : Fp2) : a / b = a * b.inverse := rfl
+
+/-- The inverse of the field is the library's inverse. -/
+theorem inv_eq_inverse (a : Fp2) : a⁻¹ = a.inverse := rfl
+
 end EthLib.Cryptography.Bls.Fp2
+
+namespace EthLib.Cryptography.Bls
+
+/-- Decides an equation or a disequation of closed terms in `Fp` or `Fp2`, in the model.
+
+The listed definitions are unfolded first.
+
+The field operations are rewritten to the library's, and the map is pushed down to the integers.
+
+So the kernel computes in the model, on natural numbers. -/
+macro "decide_eq_at_model" "[" ids:Lean.Parser.Tactic.simpLemma,* "]" : tactic =>
+  `(tactic| (first
+              | apply Fp.ne_of_model
+              | apply Fp.eq_of_model
+              | apply Fp2.ne_of_model
+              | apply Fp2.eq_of_model
+             simp only [Fp2.pow_eq_powNat, Fp2.numeral_eq, Fp2.div_eq_mul_inverse,
+               Fp2.inv_eq_inverse, ← Fp2.one_eq_one, ← Fp2.zero_eq_zero, Fp2.map_add, Fp2.map_sub,
+               Fp2.map_neg, Fp2.map_mul, Fp2.map_mk, Fp2.map_one, Fp2.map_zero, Fp2.map_i,
+               Fp2.map_ofFp, Fp2.map_conjugate, Fp2.map_inverse, Fp2.map_powNat,
+               Fp2.map_mulByOnePlusI, Fp.toModel_ofNat, Fp.toModel_zero, Fp.toModel_one,
+               Fp.toModel_zero', Fp.toModel_one', Fp.toModel_numeral, Fp.toModel_add,
+               Fp.toModel_sub, Fp.toModel_mul, Fp.toModel_neg, Fp.toModel_inverse,
+               Fp.toModel_powNat, Fp.baseField_ofNat, Fp.baseField_zero, Fp.baseField_one,
+               Fp.baseField_inverse, Fp.baseField_powNat, $ids,*]
+             decide +kernel))
+
+end EthLib.Cryptography.Bls

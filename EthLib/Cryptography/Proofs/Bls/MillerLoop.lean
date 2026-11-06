@@ -35,14 +35,16 @@ private theorem lineValue_eq (c0 c2 c3 : Fp2) :
   rw [Fp12.eq_sum (lineValue c0 c2 c3)]
   simp only [lineValue, Fp2.zero_eq_zero, map_zero, zero_mul, add_zero]
 
-private theorem two_eq : Fp2.ofFp (BaseField.ofNat 2 : Fp) = 2 := by decide
+private theorem two_eq : Fp2.ofFp (BaseField.ofNat 2 : Fp) = 2 := by decide_eq_at_model []
 
-private theorem three_eq : Fp2.ofFp (BaseField.ofNat 3 : Fp) = 3 := by decide
-
-private theorem two_ne_zero' : (2 : Fp12) ≠ 0 := by decide
+private theorem three_eq : Fp2.ofFp (BaseField.ofNat 3 : Fp) = 3 := by decide_eq_at_model []
 
 private theorem fp2ToFp12_ne_zero {a : Fp2} (h : a ≠ 0) : fp2ToFp12 a ≠ 0 :=
   (map_ne_zero fp2ToFp12).mpr h
+
+private theorem two_ne_zero' : (2 : Fp12) ≠ 0 := by
+  rw [← map_ofNat fp2ToFp12 2]
+  exact fp2ToFp12_ne_zero (by decide_eq_at_model [])
 
 /-- The doubling step multiplies `f^2` by the tangent at the untwist of `T`, times `c w^3`.
 

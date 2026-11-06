@@ -12,7 +12,8 @@ namespace EthLib.Cryptography.Bls.CofactorCertificate
 
 def independent23 : G2 := ⟨⟨Fp.ofNat 2709995428003268608871894472228856346337839268359478051610933685877360518813348186307165653556980764463340627527317, Fp.ofNat 3554443526158050189626448917867136396708755108860714478547527567704052590003136535872275788661066543853688497564247⟩, ⟨Fp.ofNat 1473716000648057153732370793749569872625382979758951807858832989805910300066502167700706499893185223611335808515777, Fp.ofNat 3344235560376118688516689358070514142701873435005234113818031012772657324870196060098815547126141301608517003735704⟩, Fp2.one⟩
 
-theorem independent23_valid : G2.Valid independent23 := G2.valid_of_affine_equation (by decide +kernel)
+theorem independent23_valid : G2.Valid independent23 :=
+  G2.valid_of_affine_equation (by decide_eq_at_model [G2.map_bTwist])
 
 theorem independent23_nonzero : G2.toPoint independent23 ≠ 0 := by
   intro hz
@@ -20,7 +21,7 @@ theorem independent23_nonzero : G2.toPoint independent23 ≠ 0 := by
   exact Bool.noConfusion h
 
 theorem independent23_annihilator : 23 • G2.toPoint independent23 = 0 :=
-  nsmul_zero_cert independent23 independent23_valid 23 6 (by decide +kernel)
+  nsmul_zero_cert independent23 independent23_valid 23 6 (by decide)
     (by decide_g2_at_model [independent23])
 
 theorem independent23_clear_zero : (clearAux independent23).isInfinity = true := by
