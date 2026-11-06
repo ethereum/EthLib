@@ -7,6 +7,7 @@ public import EthLib.Serialization.Proofs.Ssz.Type.CompatibilitySymmetry
 public import EthLib.Serialization.Proofs.Ssz.Type.CompatibilityBudget
 public import EthLib.Serialization.Proofs.Ssz.Type.DefaultLaws
 public import EthLib.Serialization.Proofs.Ssz.Type.Equality
+public import EthLib.Serialization.Proofs.Ssz.Type.ValueEquality
 public import EthLib.Serialization.Proofs.Ssz.Type.FitsLaws
 public import EthLib.Serialization.Proofs.Ssz.Type.Legality
 public import EthLib.Serialization.Proofs.Ssz.Type.PathLaws
