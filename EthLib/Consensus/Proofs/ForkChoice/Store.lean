@@ -131,7 +131,9 @@ theorem getForkchoiceStore_of_gloas {config : Config} {anchorState : BeaconState
     getForkchoiceStore config anchorState anchorBlock = .error (.forkNotYetSpecified fork) := by
   simp [getForkchoiceStore, gloas, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
 
-/-- A new store holds its anchor block and state, justified and finalized at the anchor's epoch. -/
+/-- A new store holds its anchor block and state.
+
+Each of its checkpoints, realized or not, is the anchor block at the anchor's epoch. -/
 theorem getForkchoiceStore_anchor {config : Config} {anchorState : BeaconState preset fork}
     {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
     (made : getForkchoiceStore config anchorState anchorBlock = .ok store) :
@@ -139,7 +141,9 @@ theorem getForkchoiceStore_anchor {config : Config} {anchorState : BeaconState p
       store.blocks[anchorRoot]? = some anchorBlock ∧
       store.blockStates[anchorRoot]? = some anchorState ∧
       store.justifiedCheckpoint = ⟨getCurrentEpoch anchorState, anchorRoot⟩ ∧
-      store.finalizedCheckpoint = ⟨getCurrentEpoch anchorState, anchorRoot⟩ := by
+      store.finalizedCheckpoint = ⟨getCurrentEpoch anchorState, anchorRoot⟩ ∧
+      store.unrealizedJustifiedCheckpoint = ⟨getCurrentEpoch anchorState, anchorRoot⟩ ∧
+      store.unrealizedFinalizedCheckpoint = ⟨getCurrentEpoch anchorState, anchorRoot⟩ := by
   unfold getForkchoiceStore at made
   split at made
   · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at made
@@ -159,7 +163,7 @@ theorem getForkchoiceStore_anchor {config : Config} {anchorState : BeaconState p
         | ok timeMs =>
           simp only [time, pure, Except.pure, Except.ok.injEq] at made
           subst made
-          exact ⟨anchorRoot, rfl, by simp, by simp, rfl, rfl⟩
+          exact ⟨anchorRoot, rfl, by simp, by simp, rfl, rfl, rfl, rfl⟩
 
 /-- A new store knows only its anchor block, and only the anchor state. -/
 theorem getForkchoiceStore_maps {config : Config} {anchorState : BeaconState preset fork}
