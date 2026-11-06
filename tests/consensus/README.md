@@ -168,6 +168,8 @@ Each message expects to be valid, ignored or rejected, and a failure names its r
 The directory keeps the cases of attester slashings, proposer slashings, voluntary exits and changes of BLS credentials.
 It keeps every case of these topics at Capella and Deneb, since Deneb changes the domain of an exit signature.
 At Altair, Bellatrix, Electra and Fulu it keeps the case with one valid message of each topic.
+It also keeps the cases of the two sync committee topics, which start at Altair.
+It keeps every case of these two topics at Altair, and the case with one valid message at each later fork.
 `bindings/python/tests/consensus/test_gossip_validation.py` validates each message in Lean and compares the outcome and the reason with the case.
 
 The directory `genesis/` holds every genesis case of `minimal.tar.gz` in the same way.

@@ -1,0 +1,6 @@
+preset: minimal
+fork: altair
+runner: networking
+handler: gossip_sync_committee_contribution_and_proof
+suite: pyspec_tests
+case: gossip_sync_committee_contribution_and_proof__reject_invalid_aggregate_signature

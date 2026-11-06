@@ -1,0 +1,9 @@
+topic: sync_committee
+blocks:
+- {block: 
+    block_0x33570af1c055639caaff25701b98e8468cde61cb8c8d38531f51aa3971a97605}
+messages:
+- {current_time_ms: 500, subnet_id: 3, message: 
+    sync_committee_message_0x75304b62818121501d9f5dcb96029ad0bd22992f088bb885fedade9ff630f935,
+  expected: valid}
+bls_setting: 1

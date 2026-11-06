@@ -1,0 +1,6 @@
+preset: minimal
+fork: altair
+runner: networking
+handler: gossip_sync_committee_message
+suite: pyspec_tests
+case: gossip_sync_committee_message__reject_validator_index_out_of_range

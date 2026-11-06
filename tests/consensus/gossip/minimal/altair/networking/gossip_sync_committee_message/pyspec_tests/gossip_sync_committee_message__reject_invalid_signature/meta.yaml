@@ -1,0 +1,9 @@
+topic: sync_committee
+blocks:
+- {block: 
+    block_0x33570af1c055639caaff25701b98e8468cde61cb8c8d38531f51aa3971a97605}
+messages:
+- {current_time_ms: 500, subnet_id: 3, message: 
+    sync_committee_message_0x9d5a4463d2524ff98b03b77ca4aa6d5bf60d33aa4435122a2d87c52245e24349,
+  expected: reject, reason: invalid sync committee message signature}
+bls_setting: 1
