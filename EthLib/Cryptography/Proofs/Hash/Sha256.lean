@@ -238,29 +238,21 @@ private def windowOf (f : Nat → UInt32) : Window :=
 private theorem windowOf_w0 (f : Nat → UInt32) : (windowOf f).w0 = f 0 := rfl
 
 /-- The first window holds the words of the block, FIPS 180-4 §6.2.2, step 1. -/
-private theorem ofBlock_block (block : ByteArray) (start : Nat) (whole : start + 64 ≤ block.size)
-    (size : ((block.data.toList.drop start).take 64).toArray.size = 64) :
-    Window.ofBlock ((block.data.toList.drop start).take 64).toArray size
+private theorem ofBlock_block (block : ByteArray) (start : Nat) (whole : start + 64 ≤ block.size) :
+    Window.ofBlock block start whole
       = windowOf fun i => scheduleWord (Spec.inputWords block start) (0 + i) := by
-  -- Byte `p` of the block, for `p < 64`, is byte `start + p` of the byte array.
-  have byte (p : Nat) (within : p < 64) :
-      ((block.data.toList.drop start).take 64).toArray[p]'(by omega) = block[start + p]! := by
-    simp only [List.getElem_toArray, List.getElem_take, List.getElem_drop, Array.getElem_toList]
-    exact (getElem!_pos block (start + p) (by omega)).symm
   -- Each of the sixteen words reads four bytes of the block.
   have word (i : Nat) (input : i < 16) :
-      big32 (((block.data.toList.drop start).take 64).toArray[4 * i]'(by omega))
-          (((block.data.toList.drop start).take 64).toArray[4 * i + 1]'(by omega))
-          (((block.data.toList.drop start).take 64).toArray[4 * i + 2]'(by omega))
-          (((block.data.toList.drop start).take 64).toArray[4 * i + 3]'(by omega))
+      big32 (block[start + 4 * i]'(by omega)) (block[start + 4 * i + 1]'(by omega))
+          (block[start + 4 * i + 2]'(by omega)) (block[start + 4 * i + 3]'(by omega))
         = scheduleWord (Spec.inputWords block start) (0 + i) := by
-    rw [byte _ (by omega), byte _ (by omega), byte _ (by omega), byte _ (by omega)]
     apply UInt32.toBitVec_inj.mp
     rw [scheduleWord, UInt32.toBitVec_ofBitVec, Nat.zero_add, Spec.messageWord]
-    simp only [input, ↓reduceDIte, Spec.inputWords, Vector.getElem_ofFn, ← big32_toBitVec,
-      Nat.add_assoc]
-  simp only [Window.ofBlock, windowOf]
-  congr <;> exact word _ (by decide)
+    simp only [input, ↓reduceDIte, Spec.inputWords, Vector.getElem_ofFn]
+    have read := big32_toBitVec block (start + 4 * i)
+    simp (disch := omega) only [getElem!_pos] at read
+    exact read
+  simp (disch := decide) only [Window.ofBlock, windowOf, word]
 
 /-- Each move of the window is one more word of the schedule, by the recurrence. -/
 private theorem next_windowOf (input : Vector Spec.Word 16) (t : Nat) :
@@ -316,7 +308,7 @@ private theorem rounds_toState (input : Vector Spec.Word 16) (initial : Spec.Sta
 /-- The compression of a whole block is the one of FIPS 180-4 §6.2.2, steps 2 to 4. -/
 theorem compress_toState (s : State) (block : ByteArray) (start : Nat)
     (whole : start + 64 ≤ block.size) :
-    interpret (compress s (block.data.toList.drop start) (by simp; omega)) =
+    interpret (compress s block start whole) =
       Spec.compression (Spec.inputWords block start) (interpret s) := by
   have all := rounds_toState (Spec.inputWords block start) (interpret s) 64 0 rfl s rfl
   simp only [compress]
@@ -332,18 +324,19 @@ theorem compress_toState (s : State) (block : ByteArray) (start : Nat)
   simp only [lengthBytes, ByteArray.size, Array.size_ofFn]
 
 /-- Padding adds the `0x80` byte, the zeros, and the eight length bytes. -/
-theorem pad_length (message : ByteArray) :
-    (pad message).length = message.size + 1 + paddingZeros message.size + 8 := by
-  simp only [pad, List.length_append, List.length_cons, List.length_replicate,
-    Array.length_toList, ByteArray.size_data, lengthBytes_size]
-  omega
+theorem pad_size (message : ByteArray) :
+    (pad message).size = message.size + 1 + paddingZeros message.size + 8 := by
+  simp only [pad, ByteArray.size_append, lengthBytes_size]
+  -- The `0x80` byte is one byte, and the zeros are as many as they count.
+  show message.size + 1 + (Array.replicate (paddingZeros message.size) (0 : UInt8)).size + 8 = _
+  rw [Array.size_replicate]
 
 /-- Padding adds fewer than a block of zeros. -/
 theorem paddingZeros_lt (size : Nat) : paddingZeros size < 64 := Nat.mod_lt _ (by decide)
 
 /-- A padded message is whole blocks. -/
-theorem pad_length_mod (message : ByteArray) : (pad message).length % 64 = 0 := by
-  rw [pad_length]
+theorem pad_size_mod (message : ByteArray) : (pad message).size % 64 = 0 := by
+  rw [pad_size]
   unfold paddingZeros
   omega
 
@@ -381,7 +374,7 @@ theorem lengthBytes_digit (size : Nat) (admitted : size < 2 ^ 61) (i : Fin 8) :
 
 /-- The padding is the one of FIPS 180-4 §5.1.1, below 2⁶¹ bytes. -/
 theorem pad_eq_spec (message : ByteArray) (admitted : message.size < 2 ^ 61) :
-    pad message = (Spec.padded message).data.toList := by
+    pad message = Spec.padded message := by
   have zeros : paddingZeros message.size = Spec.zeroCount message.size := by
     unfold paddingZeros Spec.zeroCount
     omega
@@ -395,42 +388,40 @@ theorem pad_eq_spec (message : ByteArray) (admitted : message.size < 2 ^ 61) :
       simpa [ByteArray.getElem_eq_getElem_data] using
         lengthBytes_digit message.size admitted ⟨p, by simpa using left⟩
   -- The message, the `0x80` byte, the zeros and the length agree region by region.
-  simp [pad, Spec.padded, zeros, length]
+  apply ByteArray.ext
+  simp [pad, Spec.padded, zeros, length, ByteArray.data_append]
 
 /-! ## The hash -/
 
 /-- Every digest is 32 bytes long, whatever the message. -/
 @[simp] theorem hash_size (message : ByteArray) : (hash message).size = 32 := by
-  simp only [hash, digest, wordBytes, ByteArray.size, List.size_toArray, List.length_append,
-    List.length_cons, List.length_nil]
+  simp only [hash, digest, ByteArray.size, List.size_toArray, List.length_cons, List.length_nil]
 
 /-- The blocks from any block on continue the model's chain of blocks. -/
 theorem chain_toState (block : ByteArray) (initial : Spec.State) :
-    ∀ count first s, 64 * (first + count) ≤ block.size →
+    ∀ count first start s (whole : start + 64 * count ≤ block.size), start = 64 * first →
       interpret s = Spec.blocks block initial first →
-      ∀ within, interpret (chain compress count (block.data.toList.drop (64 * first)) within s)
+      interpret (chain compress block count start whole s)
         = Spec.blocks block initial (first + count) := by
   intro count
   induction count with
-  | zero => intro first s _ hs _; exact hs
+  | zero => intro first start s _ _ hs; exact hs
   | succ count ih =>
-    intro first s whole hs within
+    intro first start s whole hstart hs
     -- One block, then the rest from the next block on.
-    rw [chain]
-    -- The proof of the bound mentions the list, so `rw` cannot rewrite the list, but `simp` can.
-    simp only [List.drop_drop, show 64 * first + 64 = 64 * (first + 1) by omega]
-    rw [ih (first + 1) _ (by omega), show first + 1 + count = first + (count + 1) by omega]
-    rw [compress_toState s block (64 * first) (by omega), hs, Spec.blocks]
+    rw [chain, show first + (count + 1) = first + 1 + count by omega]
+    apply ih (first + 1) (start + 64) _ _ (by omega)
+    rw [compress_toState s block start (by omega), hs, hstart, Spec.blocks]
 
 /-- The digest is the model's digest. -/
 theorem digest_eq_spec (s : State) : digest s = Spec.digest (interpret s) := by
   apply ByteArray.ext
-  simp only [digest, wordBytes, Spec.digest, Spec.State.words, interpret]
+  simp only [digest, byteAt, Spec.digest, Spec.State.words, interpret]
   apply Array.toList_inj.mp
-  simp only [Array.toList_ofFn, List.ofFn_succ, List.ofFn_zero, Fin.val_succ,
-    Fin.val_zero]
+  simp only [Array.toList_ofFn, List.ofFn_succ, List.ofFn_zero,
+    Fin.val_succ, Fin.val_zero]
   -- Each output byte is one base-256 digit of its word.
-  simp only [List.cons_append, List.nil_append, List.cons.injEq, and_true]
+  simp only [List.cons.injEq, and_true]
   repeat' constructor
   all_goals (apply UInt8.toNat_inj.mp; simp [Nat.shiftRight_eq_div_pow])
 
@@ -442,15 +433,13 @@ FIPS 180-4 §5.1.1 bounds a message at 2⁶⁴ bits, which is 2⁶¹ bytes.
 theorem hash_eq_spec (message : ByteArray) (admitted : message.size < 2 ^ 61) :
     hash message = Spec.hash message := by
   have start : interpret initial = Spec.initial := by decide
-  have size : (pad message).length = (Spec.padded message).size := by
-    rw [pad_eq_spec message admitted, Array.length_toList, ByteArray.size_data]
-  have whole := chain_toState (Spec.padded message) Spec.initial
-    ((Spec.padded message).size / 64) 0 initial (by omega) start
-    (by rw [Array.length_toList, ByteArray.size_data, Nat.mul_zero, List.drop_zero]
-        exact Nat.mul_div_le _ _)
-  simp only [Nat.mul_zero, List.drop_zero, Nat.zero_add] at whole
-  simp only [hash, size, digest_eq_spec, Spec.hash]
-  simp only [pad_eq_spec message admitted]
-  rw [whole]
+  -- The padded bytes are the model's, and the chain then runs over them.
+  have padded : ∀ bytes, bytes = Spec.padded message → ∀ whole,
+      digest (chain compress bytes (bytes.size / 64) 0 whole initial) = Spec.hash message := by
+    intro bytes same whole
+    subst same
+    rw [digest_eq_spec, chain_toState _ Spec.initial _ 0 0 initial whole (by omega) start,
+      Nat.zero_add, Spec.hash]
+  exact padded (pad message) (pad_eq_spec message admitted) _
 
 end EthLib.Cryptography.Hash.Sha256
