@@ -60,6 +60,14 @@ theorem encode_decode {b : ByteArray} {x : α} (h : decode b = .ok x) : encode x
 theorem decode_eq_ok_iff (b : ByteArray) (x : α) : decode b = .ok x ↔ encode x = .ok b :=
   ⟨encode_decode, decode_encode⟩
 
+/-- Two values with one encoding are equal, because the decoder reads each back. -/
+theorem encode_injective {x y : α} {b : ByteArray} (hx : encode x = .ok b)
+    (hy : encode y = .ok b) : x = y := by
+  have h := decode_encode hx
+  rw [decode_encode hy] at h
+  cases h
+  rfl
+
 end Codec
 
 /-! ## The helpers -/

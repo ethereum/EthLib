@@ -12,15 +12,9 @@ An empty list has the root of the empty trie, the Keccak-256 hash of `0x80`.
 
 So a block with no transactions, receipts or withdrawals has that root for each list.
 
-The key of each item is the RLP encoding of its index.
+The key of each item is the RLP encoding of its index, so the keys of a list's trie are distinct.
 
-Two indices have two different encodings, because the decoder reads each index back.
-
-So the keys of a list's trie are distinct, which the binding of a trie's root assumes.
-
-Two lists with one root then give every key one value.
-
-Otherwise the search over the proofs of that key finds a Keccak-256 collision.
+Two lists with one root then give every key one value, or the search finds a Keccak-256 collision.
 -/
 
 @[expose] public section
@@ -78,7 +72,7 @@ theorem getElem_of_indexedEntries {values : List ByteArray}
 /-- The keys of a list's entries are distinct.
 
 Two indices with one encoding are one index, because the decoder reads each index back. -/
-theorem nodup_keys_of_indexedEntries {values : List ByteArray}
+theorem indexedEntries_nodup {values : List ByteArray}
     {entries : List (ByteArray × ByteArray)} (h : indexedEntries values = .ok entries) :
     (entries.map Prod.fst).Nodup := by
   refine List.pairwise_iff_getElem.mpr fun i j hi hj hij heq => Nat.ne_of_lt hij ?_
@@ -89,13 +83,10 @@ theorem nodup_keys_of_indexedEntries {values : List ByteArray}
   simp only [Fin.getElem_fin] at hi' hj'
   rw [heq] at hi'
   -- Both indices decode from the one key.
-  have := Codec.decode_encode hi'
-  rw [Codec.decode_encode hj'] at this
-  cases this
-  rfl
+  exact Codec.encode_injective hi' hj'
 
-/-- A list has a root when its entries have a root, as a plain trie. -/
-theorem indexedRoot_eq_ok {values : List ByteArray} {root' : Hash32} :
+/-- A list has a root exactly when its entries have that root, as a plain trie. -/
+theorem indexedRoot_eq_ok_iff {values : List ByteArray} {root' : Hash32} :
     indexedRoot values = .ok root' ↔
       ∃ entries, indexedEntries values = .ok entries ∧
         root keccak256 ⟨false, entries⟩ = .ok root' := by
@@ -116,8 +107,8 @@ theorem indexedRoot_binding_key {values₁ values₂ : List ByteArray}
       ∃ pair,
         findCollision keccak256 ⟨false, entries₁⟩ ⟨false, entries₂⟩ key = some pair ∧
           IsCollision keccak256 pair := by
-  have hkeys₁ := nodup_keys_of_indexedEntries hentries₁
-  have hkeys₂ := nodup_keys_of_indexedEntries hentries₂
+  have hkeys₁ := indexedEntries_nodup hentries₁
+  have hkeys₂ := indexedEntries_nodup hentries₂
   rcases root_binding keccak256 (trie₁ := ⟨false, entries₁⟩) (trie₂ := ⟨false, entries₂⟩) rfl
       hroot₁ hroot₂ hkeys₁ hkeys₂ key with hvalue | hfound | ⟨_, hpath, _⟩ | ⟨_, hpath, _⟩
   · exact .inl hvalue

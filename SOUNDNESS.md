@@ -706,8 +706,8 @@ Later entries replace earlier values of the same key, and an empty value removes
 This construction is the path of Python `trie.root`, through `Execution/Exports/Trie.lean`.
 The state and storage roots in `Execution/State/Root.lean` build tries directly, and `stateEntries_nodup` and `storageEntries_nodup` supply their distinct keys.
 The indexed roots in `Execution/Blocks/Roots.lean` also build tries directly, with the RLP encoding of each index as its key.
-`nodup_keys_of_indexedEntries` (`Execution/Proofs/Blocks/Roots.lean`) supplies their distinct keys, since the RLP decoder reads each index back from its encoding.
-With it, `indexedRoot_binding_key` shows that two lists with one root give every key one value.
+`indexedEntries_nodup` (`Execution/Proofs/Blocks/Roots.lean`) supplies their distinct keys, since the RLP decoder reads each index back from its encoding.
+With these distinct keys, `indexedRoot_binding_key` shows that two lists with one root give every key one value.
 Otherwise `findCollision` returns a collision in the proofs of that key.
 No theorem bounds the probability of finding a collision.
 
