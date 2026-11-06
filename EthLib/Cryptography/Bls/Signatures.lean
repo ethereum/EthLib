@@ -186,8 +186,8 @@ def ethAggregatePubkeys (pubkeys : Array ByteArray) : Except BlsError ByteArray 
   if pubkeys.isEmpty then
     throw .emptyPubkeyList
   let mut agg : G1 := G1.zero
-  for i in [:pubkeys.size] do
-    let pk := pubkeys[i]!
+  for h : i in [:pubkeys.size] do
+    let pk := pubkeys[i]
     if pk.size ≠ 48 then
       throw (.badPubkeySize pk.size)
     if !(G1.keyValidate pk).isOk then
