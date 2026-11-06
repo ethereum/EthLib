@@ -584,6 +584,9 @@
 #define DOC_snappy_encode_frames_literal \
   "A framed stream that decodes to `data`: the stream identifier, then uncompressed chunks."
 
+#define DOC_snappy_encode_frames \
+  "A framed stream that decodes to `data`: the stream identifier, then its chunks."
+
 #define DOC_snappy_masked_crc \
   "The masked CRC-32C that a data chunk stores (§3)."
 

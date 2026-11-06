@@ -26,6 +26,11 @@ def encode_frames_literal(data: bytes) -> bytes:
     return _native.snappy_encode_frames_literal(data)
 
 
+def encode_frames(data: bytes) -> bytes:
+    """The framed stream that holds the data, each chunk compressed when that makes it shorter."""
+    return _native.snappy_encode_frames(data)
+
+
 def masked_crc(data: bytes) -> int:
     """The masked CRC-32C that a data chunk stores for the data."""
     return _native.snappy_masked_crc(data)

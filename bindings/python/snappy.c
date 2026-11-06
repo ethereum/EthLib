@@ -26,6 +26,11 @@ eth_snappy_encode_frames_literal(
 );
 
 extern lean_object*
+eth_snappy_encode_frames(
+  lean_object* data
+);
+
+extern lean_object*
 eth_snappy_masked_crc(
   lean_object* data
 );
@@ -96,6 +101,16 @@ py_snappy_encode_frames_literal(
   if (!data) return NULL;
   return except_into_pybytes(
     eth_snappy_encode_frames_literal(data), SNAPPY_ERROR);
+}
+
+PyObject*
+py_snappy_encode_frames(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* data = parse_one_bytes(args, "data");
+  if (!data) return NULL;
+  return except_into_pybytes(eth_snappy_encode_frames(data), SNAPPY_ERROR);
 }
 
 PyObject*
