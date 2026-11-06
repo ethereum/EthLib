@@ -39,7 +39,7 @@ def readOffsets (data : Bytes) (count : Nat) : List Nat :=
 /-- Bits recovered from packed bytes, the first bit lowest in the first byte. -/
 def unpackBits (data : Bytes) (count : Nat) : Array Bool :=
   -- Division by eight selects the byte, and the remainder selects its bit from the low end.
-  (Array.range count).map fun i => (data[i / 8]! >>> UInt8.ofNat (i % 8)) &&& 1 == 1
+  (Array.range count).map fun i => (data[i / 8]?.getD 0 >>> UInt8.ofNat (i % 8)) &&& 1 == 1
 
 /--
 Position of the highest set bit of a byte, counted from the low end.
@@ -148,7 +148,7 @@ def structBodies (data : Bytes) (slots : List Slot) (leading : Nat) : Except Err
     if data.size != leading then throw (.scope leading data.size)
     return slots.map Slot.held
   -- The first body starts where the slots end; anything else leaves a gap or an overlap.
-  if offsets[0]! != leading then throw (.firstOffset leading offsets[0]!)
+  if offsets.headD 0 != leading then throw (.firstOffset leading (offsets.headD 0))
   -- Validate the complete offset order before extracting any variable payload.
   let spans ← offsetSpans offsets data.size
   takeSlots data slots spans
@@ -177,7 +177,8 @@ def vectorSlices (element : Desc) (length : Nat) (data : Bytes) :
     if data.size < expectedFirst then throw (.scopeTooSmall expectedFirst data.size)
     if length == 0 then return []
     let offsets := readOffsets data length
-    if offsets[0]! != expectedFirst then throw (.firstOffset expectedFirst offsets[0]!)
+    if offsets.headD 0 != expectedFirst then
+      throw (.firstOffset expectedFirst (offsets.headD 0))
     let spans ← offsetSpans offsets data.size
     -- `zipWith` pairs each offset with its span in a loop of constant stack.
     return List.zipWith (fun start span => data.extract start (start + span)) offsets spans
@@ -222,7 +223,7 @@ For example, the byte `0000_1101` has its closing bit at position 3, and it hold
 def unpackDelimited (limit : Option Nat) (data : Bytes) : Except Err (Array Bool) := do
   -- Even an empty value carries its closing bit, so no encoding is empty.
   if data.size == 0 then throw .emptyEncoding
-  let final := data[data.size - 1]!
+  let final := data[data.size - 1]?.getD 0
   -- Trailing zero bytes would give one value a second encoding.
   if final == 0 then
     if data.all (· == 0) then throw .noDelimiter else throw .trailingZeros
@@ -238,7 +239,7 @@ mutual
 def deserialize : Desc → Bytes → Except Err Value
   | .bool, data => do
     if data.size != 1 then throw (.scope 1 data.size)
-    match data[0]! with
+    match data[0]?.getD 0 with
     | 0 => return .bool false
     | 1 => return .bool true
     | byte => throw (.notABit byte.toNat)
@@ -259,7 +260,7 @@ def deserialize : Desc → Bytes → Except Err Value
     if data.size != expected then throw (.scope expected data.size)
     -- Bits above the last declared one are padding, and a set one is not canonical.
     if length % 8 != 0 && data.size > 0 then
-      if data[data.size - 1]! >>> UInt8.ofNat (length % 8) != 0 then throw .paddingBits
+      if data[data.size - 1]?.getD 0 >>> UInt8.ofNat (length % 8) != 0 then throw .paddingBits
     return .bits (unpackBits data length)
   | .bitList limit, data => return .bits (← unpackDelimited (some limit) data)
   | .progressiveBitList limit, data => return .bits (← unpackDelimited limit data)
@@ -276,7 +277,7 @@ def deserialize : Desc → Bytes → Except Err Value
   | .progressiveContainer _ _ fields, data => return .seq (← deserializeStruct fields data)
   | .compatibleUnion selectors options, data => do
     if data.size < 1 then throw .noSelector
-    deserializeOption selectors options (data[0]!).toNat (data.extract 1 data.size)
+    deserializeOption selectors options (data[0]?.getD 0).toNat (data.extract 1 data.size)
 termination_by d => (sizeOf d, 0)
 
 /-- Each element of a sequence decoded on its own. -/

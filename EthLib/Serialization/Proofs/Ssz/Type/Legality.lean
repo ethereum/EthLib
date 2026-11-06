@@ -23,7 +23,7 @@ theorem wellFormed_container_iff (names : List String) (fields : List Desc) :
 under one name of its own and each legal. -/
 theorem wellFormed_progressiveContainer_iff (active : List Bool) (names : List String) (fields : List Desc) :
     (Desc.progressiveContainer active names fields).wellFormed = .ok () ↔
-      active ≠ [] ∧ active.getLast! = true ∧ active.length ≤ maxActiveFields ∧ fields ≠ [] ∧
+      active ≠ [] ∧ active.getLast? = some true ∧ active.length ≤ maxActiveFields ∧ fields ≠ [] ∧
         active.countP (· == true) = fields.length ∧ names.length = fields.length ∧
         firstDuplicate names = none ∧ Desc.allWellFormed fields = .ok () := by
   -- The checks run in order, so each one is settled before the next is read.
@@ -31,7 +31,7 @@ theorem wellFormed_progressiveContainer_iff (active : List Bool) (names : List S
   by_cases e : active.isEmpty = true
   · simp_all [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
   simp only [e, Bool.false_eq_true, ite_false]
-  by_cases g : (active.getLast! == false) = true
+  by_cases g : (active.getLast? == some false) = true
   · simp_all [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
   simp only [g, Bool.false_eq_true, ite_false]
   by_cases w : active.length > maxActiveFields
@@ -47,6 +47,13 @@ theorem wellFormed_progressiveContainer_iff (active : List Bool) (names : List S
   by_cases l : (names.length != fields.length) = true
   · simp_all [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
   simp only [l, Bool.false_eq_true, ite_false]
+  -- A nonempty layout has a last position, and the gap check says it is set.
+  obtain ⟨x, hx⟩ : ∃ x, active.getLast? = some x := by
+    cases h : active.getLast? with
+    | none => exact absurd (List.getLast?_eq_none_iff.mp h) (by simpa using e)
+    | some x => exact ⟨x, rfl⟩
+  have hx' : x = true := by simpa [hx] using g
+  subst hx'
   cases d : firstDuplicate names
   · simp_all
   · simp_all [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]

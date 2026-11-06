@@ -79,8 +79,9 @@ theorem unpackBits_packBits (bits : Array Bool) (byteCount : Nat)
     simp only [unpackBits, Array.getElem_map, Array.getElem_range]
     -- The byte this bit lands in is one the packing wrote.
     have inBytes : position / 8 < byteCount := by omega
-    have byteIs : (packBits bits byteCount)[position / 8]! = packByte bits (position / 8) := by
-      simp [packBits, getElem!_pos, inBytes]
+    have byteIs :
+        (packBits bits byteCount)[position / 8]?.getD 0 = packByte bits (position / 8) := by
+      simp [packBits, inBytes]
     rw [byteIs, packByte_bit bits (position / 8) (position % 8) (by omega)]
     -- The byte and the offset within it name the position they came from.
     have index : position / 8 * 8 + position % 8 = position := by omega
@@ -148,9 +149,9 @@ theorem unpackBits_packBits_push (bits : Array Bool) (byteCount : Nat)
     simp only [unpackBits, Array.getElem_map, Array.getElem_range]
     -- The room assumption includes the delimiter, so every earlier data bit lies in an allocated byte.
     have inBytes : position / 8 < byteCount := by omega
-    have byteIs : (packBits (bits.push true) byteCount)[position / 8]!
+    have byteIs : (packBits (bits.push true) byteCount)[position / 8]?.getD 0
         = packByte (bits.push true) (position / 8) := by
-      simp [packBits, getElem!_pos, inBytes]
+      simp [packBits, inBytes]
     rw [byteIs, packByte_bit _ (position / 8) (position % 8) (by omega)]
     -- The byte and the offset within it name the position they came from.
     have index : position / 8 * 8 + position % 8 = position := by omega
@@ -171,9 +172,9 @@ theorem unpackDelimited_packBitsDelimited (limit : Option Nat) (data : Array Boo
   have widthIs : (packBits (data.push true) ((data.size + 8) / 8)).size
       = (data.size + 8) / 8 := by simp [packBits]
   -- The last byte is the one the closing bit landed in.
-  have finalIs : (packBits (data.push true) ((data.size + 8) / 8))[data.size / 8]!
+  have finalIs : (packBits (data.push true) ((data.size + 8) / 8))[data.size / 8]?.getD 0
       = packByte (data.push true) (data.size / 8) := by
-    simp [packBits, getElem!_pos]
+    simp [packBits]
   -- The closing bit is set, one position past the last of the data.
   have isSet : (packByte (data.push true) (data.size / 8) >>> UInt8.ofNat (data.size % 8))
       &&& 1 = 1 := by
@@ -194,7 +195,7 @@ theorem unpackDelimited_packBitsDelimited (limit : Option Nat) (data : Array Boo
     intro zero; simp [zero] at isSet
   -- The number of complete earlier bytes plus the delimiter position recovers the exact data-bit count.
   have counted : 8 * ((data.size + 8) / 8 - 1)
-      + highestBit (packBits (data.push true) ((data.size + 8) / 8))[data.size / 8]!
+      + highestBit ((packBits (data.push true) ((data.size + 8) / 8))[data.size / 8]?.getD 0)
       = data.size := by
     rw [finalIs, highestBit_eq _ (data.size % 8) (by omega) isSet above]
     omega
@@ -224,12 +225,12 @@ theorem roundTrip_bitVector {length : Nat} {data : Array Bool} (fits : data.size
   simp only [deserialize, width, bne_self_eq_false, ite_eq_right, Bool.false_eq_true, not_false_eq_true]
   -- Nothing is set above the last declared bit, so the padding check passes.
   have padded : ∀ h : length % 8 != 0 ∧ (length + 7) / 8 > 0,
-      (packBits data ((length + 7) / 8))[(length + 7) / 8 - 1]! >>> UInt8.ofNat (length % 8)
+      (packBits data ((length + 7) / 8))[(length + 7) / 8 - 1]?.getD 0 >>> UInt8.ofNat (length % 8)
         = 0 := by
     intro ⟨odd, room⟩
     have inBytes : (length + 7) / 8 - 1 < (length + 7) / 8 := by omega
-    have byteIs : (packBits data ((length + 7) / 8))[(length + 7) / 8 - 1]!
-        = packByte data ((length + 7) / 8 - 1) := by simp [packBits, getElem!_pos, inBytes]
+    have byteIs : (packBits data ((length + 7) / 8))[(length + 7) / 8 - 1]?.getD 0
+        = packByte data ((length + 7) / 8 - 1) := by simp [packBits, inBytes]
     rw [byteIs]
     refine packByte_high_clear data _ _ (by omega) ?_
     -- The last byte starts a whole number of bytes in, and the data ends inside it.

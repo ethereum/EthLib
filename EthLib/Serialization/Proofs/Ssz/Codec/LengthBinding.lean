@@ -32,7 +32,8 @@ theorem activeFieldsWord_injective {left right : List Bool}
   intro position insideLeft insideRight
   -- Select the containing byte, shift the requested bit to the low position, and mask away the other bits.
   have bit := congrArg
-    (fun bytes : Bytes => (bytes[position / 8]! >>> UInt8.ofNat (position % 8)) &&& 1 == 1) same
+    (fun bytes : Bytes =>
+      (bytes[position / 8]?.getD 0 >>> UInt8.ofNat (position % 8)) &&& 1 == 1) same
   -- The packed bit at that position is exactly the corresponding active-field flag.
   rw [activeFieldsWord_bit left position (by omega), activeFieldsWord_bit right position (by omega)] at bit
   simpa [insideLeft, insideRight] using bit
@@ -44,7 +45,8 @@ theorem activeFieldsWord_flags {left right : List Bool}
     left[position]?.getD false = right[position]?.getD false := by
   -- A position past the end of a layout reads as clear, like a gap inside it.
   have bit := congrArg
-    (fun bytes : Bytes => (bytes[position / 8]! >>> UInt8.ofNat (position % 8)) &&& 1 == 1) same
+    (fun bytes : Bytes =>
+      (bytes[position / 8]?.getD 0 >>> UInt8.ofNat (position % 8)) &&& 1 == 1) same
   simpa only [activeFieldsWord_bit _ position inside] using bit
 
 /--

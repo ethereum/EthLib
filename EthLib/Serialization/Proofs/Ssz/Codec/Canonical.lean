@@ -98,7 +98,7 @@ private theorem byte_eq_of_bits {left right : UInt8}
 theorem packBits_unpackBits {data : Bytes} {count : Nat}
     (padding : ∀ index, index < data.size → ∀ offset, offset < 8 →
       count ≤ index * 8 + offset →
-      ((data[index]! >>> UInt8.ofNat offset) &&& 1 == 1) = false) :
+      ((data[index]?.getD 0 >>> UInt8.ofNat offset) &&& 1 == 1) = false) :
     packBits (unpackBits data count) data.size = data := by
   -- Compare output length first, then compare every bit of every byte.
   apply Array.ext
@@ -116,10 +116,10 @@ theorem packBits_unpackBits {data : Bytes} {count : Nat}
       simp only [unpackBits, Array.getElem_map, Array.getElem_range]
       have quotient : (index * 8 + offset) / 8 = index := by omega
       have remainder : (index * 8 + offset) % 8 = offset := by omega
-      simp [quotient, remainder, getElem!_pos, inside]
+      simp [quotient, remainder, inside]
     · -- A discarded bit is clear on both sides by the canonical padding rule.
       rw [Array.getElem?_eq_none (by simpa using Nat.le_of_not_lt held)]
-      simpa [getElem!_pos, inside] using (padding index inside offset small (by omega)).symm
+      simpa [inside] using (padding index inside offset small (by omega)).symm
 
 private theorem byte_padding (byte : UInt8) (start offset : Fin 8)
     (clear : byte >>> UInt8.ofNat start.val = 0) (above : start.val ≤ offset.val) :
@@ -141,14 +141,14 @@ theorem canonical_bitVector {length : Nat} {data : Bytes} {value : Value}
     simp [deserialize, same, Bind.bind, Except.bind] at read
   have padding : ∀ index, index < data.size → ∀ offset, offset < 8 →
       length ≤ index * 8 + offset →
-      ((data[index]! >>> UInt8.ofNat offset) &&& 1 == 1) = false := by
+      ((data[index]?.getD 0 >>> UInt8.ofNat offset) &&& 1 == 1) = false := by
     intro index inside offset small above
     -- Only the final byte can contain padding, and only after the last declared bit.
     have last : index = data.size - 1 := by omega
     have remainder : length % 8 ≠ 0 := by omega
     have lower : length % 8 ≤ offset := by omega
     -- A nonzero high padding region would have caused the decoder to reject the final byte.
-    have clear : data[data.size - 1]! >>> UInt8.ofNat (length % 8) = 0 :=
+    have clear : data[data.size - 1]?.getD 0 >>> UInt8.ofNat (length % 8) = 0 :=
       Decidable.byContradiction fun same => by
         rw [sized] at same
         simp [deserialize, sized, remainder, same, show 1 ≤ length by omega,
