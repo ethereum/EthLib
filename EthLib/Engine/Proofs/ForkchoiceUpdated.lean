@@ -8,7 +8,9 @@ public import EthLib.Base.Except
 
 The update is syncing exactly when the execution layer does not hold the head.
 
-A valid update selects a valid head that the execution layer holds.
+A valid head below the known finalized block is valid, and the head does not change.
+
+Any other valid update selects a valid head that the execution layer holds.
 
 Its safe and finalized blocks are then zero, or the head or one of its known ancestors.
 

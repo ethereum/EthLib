@@ -124,7 +124,7 @@ def test_payload_attributes() -> None:
 
 
 def test_head_below_finalized() -> None:
-    """A valid head below the known finalized block is valid, and the request is not checked."""
+    """A valid head below the known finalized block is valid, whatever its safe block."""
     state = {"headBlockHash": _hash(2), "safeBlockHash": _hash(3), "finalizedBlockHash": ZERO}
     response = engine.forkchoice_updated(
         TREE, "engine_forkchoiceUpdatedV3", [state, None], finalized=_hash(3)
