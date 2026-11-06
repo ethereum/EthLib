@@ -69,11 +69,11 @@ def readSteps : (rounds : Nat) → ByteArray → Nat → Result (List SyncStep)
   | 0, _, _ => throw (0, "steps do not end")
   | rounds + 1, bytes, offset =>
     if offset = bytes.size then return []
-    else if bytes.size < offset + 10 then throw (0, "a step is cut short")
+    else if short : bytes.size < offset + 10 then throw (0, "a step is cut short")
     else do
-      let kind := bytes.get! offset
+      let kind := bytes[offset]'(by omega)
       let slot ← decodeAs UInt64 (bytes.extract (offset + 1) (offset + 9))
-      let nameStop := offset + 10 + (bytes.get! (offset + 9)).toNat
+      let nameStop := offset + 10 + (bytes[offset + 9]'(by omega)).toNat
       if bytes.size < nameStop + 4 then throw (0, "a step is cut short")
       let length := (← decodeAs UInt32 (bytes.extract nameStop (nameStop + 4))).toNat
       let stop := nameStop + 4 + length
