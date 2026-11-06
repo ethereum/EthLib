@@ -66,69 +66,43 @@ theorem not_mem_of_lt_nextOpcode {code : ByteArray} {fuel pc p q : Nat}
         exact ⟨by omega, ih hp⟩
     · simp at hp
 
-/-- Marking the JUMPDEST bytes of a list of positions sets exactly those flags. -/
-theorem getD_foldl_mark {code : ByteArray} (positions : List Nat) (flags : Array Bool)
-    (hsize : flags.size = code.size) (hlt : ∀ x ∈ positions, x < code.size) (i : Nat) :
-    (positions.foldl
-        (fun flags pc => if byteAt code pc = JUMPDEST then flags.set! pc true else flags)
-        flags).getD i false = true ↔
-      flags.getD i false = true ∨ (i ∈ positions ∧ byteAt code i = JUMPDEST) := by
-  induction positions generalizing flags with
-  | nil => simp
-  | cons pc rest ih =>
-    simp only [List.foldl_cons]
-    have hpc := hlt pc List.mem_cons_self
-    have hrest : ∀ x ∈ rest, x < code.size := fun x hx => hlt x (List.mem_cons_of_mem _ hx)
-    split
-    next hj =>
-      rw [ih _ (by simp [hsize]) hrest]
-      by_cases hi : i = pc
-      · subst hi
-        simp [Array.getD_eq_getD_getElem?, hj, hsize, hpc]
-      · simp [Array.getD_eq_getD_getElem?, Ne.symm hi, hi]
-    next hj =>
-      rw [ih _ hsize hrest]
-      by_cases hi : i = pc
-      · subst hi
-        simp [hj]
-      · simp [hi]
-
-/-- The scan that marks the flags visits the listed opcode positions, in order. -/
-theorem markJumpDestsFrom_eq_foldl (code : ByteArray) (fuel pc : Nat) (flags : Array Bool) :
-    markJumpDestsFrom code fuel pc flags =
-      (opcodePositionsFrom code fuel pc).foldl
-        (fun flags pc => if byteAt code pc = JUMPDEST then flags.set! pc true else flags)
-        flags := by
+/-- The scan that marks the flags sets exactly the JUMPDEST bytes of the positions it lists. -/
+theorem getD_markJumpDestsFrom {code : ByteArray} (fuel pc : Nat) (flags : Vector Bool code.size)
+    (i : Nat) :
+    (markJumpDestsFrom code fuel pc flags).toArray.getD i false = true ↔
+      flags.toArray.getD i false = true ∨
+        (i ∈ opcodePositionsFrom code fuel pc ∧ byteAt code i = JUMPDEST) := by
   induction fuel generalizing pc flags with
   | zero => simp [markJumpDestsFrom, opcodePositionsFrom]
   | succ fuel ih =>
     unfold markJumpDestsFrom opcodePositionsFrom
     split
-    · rw [ih]
-      rfl
-    · rfl
-
-/-- The valid jump destinations mark each listed opcode position that holds JUMPDEST. -/
-theorem validJumpDestinations_eq_foldl (code : ByteArray) :
-    validJumpDestinations code =
-      (opcodePositions code).foldl
-        (fun flags pc => if byteAt code pc = JUMPDEST then flags.set! pc true else flags)
-        (Array.replicate code.size false) :=
-  markJumpDestsFrom_eq_foldl code code.size 0 _
+    next hpc =>
+      rw [ih]
+      split
+      next hj =>
+        by_cases hi : i = pc
+        · subst hi
+          simp [Array.getD_eq_getD_getElem?, hj, hpc]
+        · simp [Array.getD_eq_getD_getElem?, Ne.symm hi, hi]
+      next hj =>
+        by_cases hi : i = pc
+        · subst hi
+          simp [hj]
+        · simp [hi]
+    · simp
 
 /-- A position is a valid destination exactly when an opcode starts there with the byte JUMPDEST. -/
 theorem isValidJumpDest_iff {code : ByteArray} {i : Nat} :
     isValidJumpDest (validJumpDestinations code) i = true ↔
       i ∈ opcodePositions code ∧ byteAt code i = JUMPDEST := by
-  rw [validJumpDestinations_eq_foldl]
-  unfold isValidJumpDest
-  rw [getD_foldl_mark (opcodePositions code) _ (by simp)
-    fun x hx => (le_of_mem_opcodePositionsFrom hx).2]
+  unfold isValidJumpDest validJumpDestinations opcodePositions
+  rw [getD_markJumpDestsFrom]
   -- No flag is set before the scan.
-  have unset : (Array.replicate code.size false).getD i false = false := by
-    simp only [Array.getD_eq_getD_getElem?, Array.getElem?_replicate]
+  have unset : (Vector.replicate code.size false).toArray.getD i false = false := by
+    simp only [Vector.toArray_replicate, Array.getD_eq_getD_getElem?, Array.getElem?_replicate]
     split <;> rfl
-  simp [unset]
+  rw [unset, Bool.false_eq_true, false_or]
 
 /-- Each valid jump destination holds the byte `0x5b`. -/
 theorem byteAt_of_isValidJumpDest {code : ByteArray} {i : Nat}
