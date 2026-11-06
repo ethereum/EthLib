@@ -25,6 +25,10 @@ A deposit to a new key adds a validator if its signature is valid, and else chan
 
 A deposit to a known key adds to the balance of that validator.
 
+From Electra the amount of a deposit waits in a queue instead.
+
+A deposit that the execution layer requests waits there too.
+
 A voluntary exit starts the exit of an active validator that has been active for long enough.
 
 Where a later fork changes a rule, the step fails as not yet specified there.
@@ -229,37 +233,37 @@ def processAttestation (config : Config) (checks : SignatureChecks)
 
 /-! ## Deposits -/
 
-/-- The validator that a deposit creates, before Electra.
+/-- The validator that a deposit creates.
 
 Its effective balance is the amount rounded down to a whole increment, and at most the largest.
 
-It is not slashed, not yet eligible for activation, and has no exit. -/
-def getValidatorFromDeposit (preset : Preset) (pubkey : BLSPubkey)
-    (withdrawalCredentials : Bytes32) (amount : Gwei) : Validator where
-  pubkey
-  withdrawalCredentials
-  effectiveBalance :=
-    min (amount - amount % preset.EFFECTIVE_BALANCE_INCREMENT) preset.MAX_EFFECTIVE_BALANCE
-  slashed := false
-  activationEligibilityEpoch := FAR_FUTURE_EPOCH
-  activationEpoch := FAR_FUTURE_EPOCH
-  exitEpoch := FAR_FUTURE_EPOCH
-  withdrawableEpoch := FAR_FUTURE_EPOCH
+From Electra the largest depends on its credentials, as [EIP-7251] specifies.
 
-/-- From Altair to Deneb: the state with a new validator at the index for a new validator.
+It is not slashed, not yet eligible for activation, and has no exit.
+
+[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
+-/
+def getValidatorFromDeposit (preset : Preset) (fork : Base.Fork) (pubkey : BLSPubkey)
+    (withdrawalCredentials : Bytes32) (amount : Gwei) : Validator :=
+  let validator : Validator :=
+    { pubkey, withdrawalCredentials, effectiveBalance := 0, slashed := false
+      activationEligibilityEpoch := FAR_FUTURE_EPOCH, activationEpoch := FAR_FUTURE_EPOCH
+      exitEpoch := FAR_FUTURE_EPOCH, withdrawableEpoch := FAR_FUTURE_EPOCH }
+  { validator with
+    effectiveBalance := min (amount - amount % preset.EFFECTIVE_BALANCE_INCREMENT)
+      (withdrawalMaxEffectiveBalance preset fork validator) }
+
+/-- From Altair: the state with a new validator at the index for a new validator.
 
 It gets its balance, no participation flag in either epoch, and an inactivity score of zero.
 
-A list at its limit is an error.
-
-Electra changes the validator that a deposit creates, which EthLib does not yet have here. -/
+A list at its limit is an error. -/
 def addValidatorToRegistryAltair (state : BeaconState preset fork) (altair : .altair ≤ fork)
     (pubkey : BLSPubkey) (withdrawalCredentials : Bytes32) (amount : Gwei) :
     Except TransitionError (BeaconState preset fork) :=
-  if .pectra ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
-  else liftAccessor do
+  liftAccessor do
     let index := getIndexForNewValidator state
-    let validator := getValidatorFromDeposit preset pubkey withdrawalCredentials amount
+    let validator := getValidatorFromDeposit preset fork pubkey withdrawalCredentials amount
     let validators ← setOrAppendList state.validators index validator
     let balances ← setOrAppendList state.balances index amount
     let previous ← setOrAppendList (state.previousEpochParticipation altair) index 0
@@ -287,13 +291,13 @@ def addValidatorToRegistry (state : BeaconState preset fork) (pubkey : BLSPubkey
       .ok { state with
         validators :=
           ⟨state.validators.data.push
-              (getValidatorFromDeposit preset pubkey withdrawalCredentials amount),
+              (getValidatorFromDeposit preset fork pubkey withdrawalCredentials amount),
             fun _ => by simp only [Array.size_push]; omega⟩
         balances :=
           ⟨state.balances.data.push amount, fun _ => by simp only [Array.size_push]; omega⟩ }
     else .error .registryFull
 
-/-- The state after the deposit of an amount to a key.
+/-- The state after a deposit is credited.
 
 A key that no validator has gets a new validator, if the deposit carries its signature.
 
@@ -301,18 +305,56 @@ A deposit to a new key with an invalid signature changes nothing.
 
 A key that a validator has adds the amount to the balance of the first such validator.
 
-Electra queues deposits instead, which EthLib does not yet have. -/
+Before Electra a deposit is credited at once; from Electra it waits in the pending deposits. -/
+def applyPendingDeposit (config : Config) (checks : SignatureChecks)
+    (state : BeaconState preset fork) (deposit : PendingDeposit) :
+    Except TransitionError (BeaconState preset fork) :=
+  match state.validators.data.findIdx? (·.pubkey == deposit.pubkey) with
+  | none => do
+    if ← isValidDepositSignature config checks deposit.pubkey deposit.withdrawalCredentials
+        deposit.amount deposit.signature then
+      addValidatorToRegistry state deposit.pubkey deposit.withdrawalCredentials deposit.amount
+    else return state
+  | some index => liftAccessor (increaseBalance state index.toUInt64 deposit.amount)
+
+/-- From Electra: the state after the deposit of an amount to a key, as [EIP-7251] specifies.
+
+A new key with a valid signature gets a new validator with no balance.
+
+A deposit to a new key with an invalid signature changes nothing.
+
+Otherwise the deposit joins the pending deposits, at the genesis slot.
+
+That slot tells it apart from a deposit that comes as a request.
+
+[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
+-/
+def applyDepositElectra (config : Config) (checks : SignatureChecks)
+    (state : BeaconState preset fork) (electra : .pectra ≤ fork) (pubkey : BLSPubkey)
+    (withdrawalCredentials : Bytes32) (amount : Gwei) (signature : BLSSignature) :
+    Except TransitionError (BeaconState preset fork) := do
+  let deposit : PendingDeposit := ⟨pubkey, withdrawalCredentials, amount, signature, GENESIS_SLOT⟩
+  match state.validators.data.findIdx? (·.pubkey == pubkey) with
+  | none =>
+    if ← isValidDepositSignature config checks pubkey withdrawalCredentials amount signature then
+      let state ← addValidatorToRegistry state pubkey withdrawalCredentials 0
+      liftAccessor (addPendingDeposit state electra deposit)
+    else return state
+  | some _ => liftAccessor (addPendingDeposit state electra deposit)
+
+/-- The state after the deposit of an amount to a key.
+
+Before Electra the deposit is credited at once.
+
+From Electra it waits in the pending deposits. -/
 def applyDeposit (config : Config) (checks : SignatureChecks) (state : BeaconState preset fork)
     (pubkey : BLSPubkey) (withdrawalCredentials : Bytes32) (amount : Gwei)
     (signature : BLSSignature) : Except TransitionError (BeaconState preset fork) :=
-  if .pectra ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
+  if electra : .pectra ≤ fork then
+    applyDepositElectra config checks state electra pubkey withdrawalCredentials amount signature
   else
-    match state.validators.data.findIdx? (·.pubkey == pubkey) with
-    | none => do
-      if ← isValidDepositSignature config checks pubkey withdrawalCredentials amount signature then
-        addValidatorToRegistry state pubkey withdrawalCredentials amount
-      else return state
-    | some index => liftAccessor (increaseBalance state index.toUInt64 amount)
+    applyPendingDeposit config checks state
+      ⟨pubkey, withdrawalCredentials, amount, signature, GENESIS_SLOT⟩
 
 /-- The state after a deposit of a block.
 
@@ -333,6 +375,36 @@ def processDeposit (config : Config) (checks : SignatureChecks) (before : fork <
   let next ← liftAccessor (liftArith (addChecked index 1))
   applyDeposit config checks { state with eth1DepositIndex := fun _ => next } deposit.data.pubkey
     deposit.data.withdrawalCredentials deposit.data.amount deposit.data.signature
+
+/-- In Electra: the state that records the index of the first deposit request.
+
+A state that holds such an index already keeps it.
+
+From Fulu nothing is recorded. -/
+def recordDepositRequestsStart (state : BeaconState preset fork) (index : UInt64) :
+    BeaconState preset fork :=
+  if electra : .pectra ≤ fork ∧ fork < .fusaka then
+    if state.depositRequestsStartIndex ⟨electra.1, Nat.lt_trans electra.2 (by decide)⟩ =
+        UNSET_DEPOSIT_REQUESTS_START_INDEX then
+      { state with depositRequestsStartIndex := fun _ => index }
+    else state
+  else state
+
+/-- From Electra: the state after a deposit that the execution layer requests, as [EIP-6110] adds.
+
+The deposit joins the pending deposits, at the current slot.
+
+In Electra the first such request also records its index as the start of the requests.
+
+From Fulu nothing is recorded.
+
+[EIP-6110]: https://eips.ethereum.org/EIPS/eip-6110#consensus-layer
+-/
+def processDepositRequest (state : BeaconState preset fork) (electra : .pectra ≤ fork)
+    (request : DepositRequest) : Except TransitionError (BeaconState preset fork) :=
+  let state := recordDepositRequestsStart state request.index
+  liftAccessor (addPendingDeposit state electra
+    ⟨request.pubkey, request.withdrawalCredentials, request.amount, request.signature, state.slot⟩)
 
 /-! ## Voluntary exits -/
 

@@ -1,0 +1,6 @@
+preset: minimal
+fork: fulu
+runner: epoch_processing
+handler: pending_deposits
+suite: pyspec_tests
+case: process_pending_deposits_balance_above_churn

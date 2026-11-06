@@ -275,9 +275,9 @@ theorem frame_applyDeposit (altair : fork < .altair) {pubkey : BLSPubkey}
     (computed :
       applyDeposit config checks state pubkey withdrawalCredentials amount signature = .ok after) :
     Frame state after := by
-  unfold applyDeposit at computed
-  split at computed
-  · cases computed
+  have notElectra : ¬Fork.pectra ≤ fork := fun le =>
+    Nat.lt_irrefl _ (Nat.lt_of_lt_of_le (Nat.lt_trans altair (by decide)) le)
+  simp only [applyDeposit, notElectra, ↓reduceDIte, applyPendingDeposit] at computed
   split at computed
   · simp only [bind_ok_iff] at computed
     obtain ⟨valid, _, computed⟩ := computed

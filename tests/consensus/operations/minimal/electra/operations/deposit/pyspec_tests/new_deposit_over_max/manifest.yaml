@@ -1,0 +1,6 @@
+preset: minimal
+fork: electra
+runner: operations
+handler: deposit
+suite: pyspec_tests
+case: new_deposit_over_max

@@ -129,6 +129,14 @@ def appendWithinLimit {switch : Base.Fork} {α : Type} {limit : Nat}
     .ok ⟨list.data.push item, fun before => by simpa using fits before⟩
   else .error (.listFull limit)
 
+/-- From Electra: the state with a deposit at the end of the pending deposits.
+
+A queue at its limit is an error. -/
+def addPendingDeposit (state : BeaconState preset fork) (electra : .pectra ≤ fork)
+    (deposit : PendingDeposit) : Except AccessorError (BeaconState preset fork) := do
+  let pending ← appendWithinLimit (state.pendingDeposits electra) deposit
+  return { state with pendingDeposits := fun _ => pending }
+
 /-- From Electra: the state in which the excess balance of a validator waits as a pending deposit.
 
 The excess is the balance above the activation balance.
