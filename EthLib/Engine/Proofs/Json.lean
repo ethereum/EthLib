@@ -17,7 +17,7 @@ The byte string decoders read back the bytes of their hex encoding.
 
 That holds for byte strings of any length and of a given size.
 
-The decoder with uppercase digits and the one without return the same bytes for that encoding.
+Whether the decoder accepts uppercase digits does not matter there.
 
 The proofs rest on two facts about the encoding.
 
@@ -157,7 +157,7 @@ theorem shape_of_anyPayload {j : Lean.Json} {p : AnyPayload} (h : anyPayload j =
     blobGasUsed_isSome_iff_of_anyPayload h, excessBlobGas_isSome_iff_of_anyPayload h⟩
 
 /-- ASCII characters encode to their own bytes. -/
-theorem ascii_utf8Encode (l : List Char) (h : ∀ c ∈ l, c.val ≤ 0x7F) :
+private theorem ascii_utf8Encode (l : List Char) (h : ∀ c ∈ l, c.val ≤ 0x7F) :
     l.utf8Encode = (l.map fun c => c.val.toUInt8).toByteArray := by
   induction l with
   | nil => rfl
@@ -168,7 +168,7 @@ theorem ascii_utf8Encode (l : List Char) (h : ∀ c ∈ l, c.val ≤ 0x7F) :
     exact (List.toByteArray_append (l := [c.val.toUInt8])).symm
 
 /-- Entry `2 * i` and `2 * i + 1` of a list that holds two entries per element. -/
-theorem flatMap_pair_getElem? {α β : Type} (x y : α → β) (l : List α) (i : Nat) :
+private theorem flatMap_pair_getElem? {α β : Type} (x y : α → β) (l : List α) (i : Nat) :
     (l.flatMap fun a => [x a, y a])[2 * i]? = l[i]?.map x ∧
     (l.flatMap fun a => [x a, y a])[2 * i + 1]? = l[i]?.map y := by
   induction l generalizing i with
@@ -184,7 +184,7 @@ theorem flatMap_pair_getElem? {α β : Type} (x y : α → β) (l : List α) (i 
       · rw [show 2 * (i + 1) + 1 = 2 * i + 1 + 1 + 1 by omega]; simpa using this.2
 
 /-- A loop that pushes one byte per index returns the bytes it pushed. -/
-theorem forIn_range'_push {s k : Nat}
+private theorem forIn_range'_push {s k : Nat}
     {f : Nat → ByteArray → Except EngineError (ForInStep ByteArray)}
     (g : Nat → UInt8) (h : ∀ i out, i ∈ List.range' s k → f i out = .ok (.yield (out.push (g i))))
     (out : ByteArray) :
@@ -200,7 +200,7 @@ theorem forIn_range'_push {s k : Nat}
     simp [List.map_cons]
 
 /-- The hex digits are ASCII. -/
-theorem hexDigitChar_ascii (n : Fin 16) : (hexDigitChar n).val ≤ 0x7F := by
+private theorem hexDigitChar_ascii (n : Fin 16) : (hexDigitChar n).val ≤ 0x7F := by
   revert n; decide +revert
 
 /-- The digits after the marker `0x` of a hex encoding are the ASCII codes of its characters. -/
@@ -236,7 +236,8 @@ theorem hexDigits_hexString (what : String) (data : List UInt8) :
   simp [ByteArray.data_extract]
 
 /-- A byte is sixteen times its high digit plus its low digit. -/
-theorem byte_split (b : UInt8) : 16 * (b.toNat / 16).toUInt8 + (b.toNat % 16).toUInt8 = b := by
+private theorem byte_split (b : UInt8) :
+    16 * (b.toNat / 16).toUInt8 + (b.toNat % 16).toUInt8 = b := by
   have h := b.toNat_lt
   apply UInt8.toNat_inj.mp
   simp only [UInt8.toNat_add, UInt8.toNat_mul, Nat.toUInt8_eq, UInt8.toNat_ofNat,
@@ -244,16 +245,16 @@ theorem byte_split (b : UInt8) : 16 * (b.toNat / 16).toUInt8 + (b.toNat % 16).to
   omega
 
 /-- The sum of a list of twos is twice its length. -/
-theorem sum_two (l : List UInt8) : (l.map fun _ => 2).sum = 2 * l.length := by
+private theorem sum_two (l : List UInt8) : (l.map fun _ => 2).sum = 2 * l.length := by
   induction l with
   | nil => rfl
   | cons b l ih => simp only [List.map_cons, List.sum_cons, ih, List.length_cons]; omega
 
 /-- The high digit of a byte. -/
-def highDigit (b : UInt8) : Fin 16 := ⟨b.toNat / 16, by have := b.toNat_lt; omega⟩
+private def highDigit (b : UInt8) : Fin 16 := ⟨b.toNat / 16, by have := b.toNat_lt; omega⟩
 
 /-- The low digit of a byte. -/
-def lowDigit (b : UInt8) : Fin 16 := ⟨b.toNat % 16, by omega⟩
+private def lowDigit (b : UInt8) : Fin 16 := ⟨b.toNat % 16, by omega⟩
 
 /-- The decoder reads back the bytes of their hex encoding, with or without uppercase digits. -/
 theorem bytesOf_hexString (what : String) (upper : Bool) (data : List UInt8) :
@@ -334,10 +335,5 @@ theorem fixed_hexString (what : String) (n : Nat) (v : Vector UInt8 n) (upper : 
   exact Vector.toArray_inj.mp (by
     simp only [List.data_toByteArray]
     rw [← Vector.toArray_toList])
-
-/-- The decoders agree on the bytes of a hex encoding, whether or not they accept uppercase. -/
-theorem bytesOf_hexString_upper (what : String) (data : List UInt8) :
-    bytesOf what true (.str (hexString data)) = bytesOf what false (.str (hexString data)) := by
-  rw [bytesOf_hexString, bytesOf_hexString]
 
 end EthLib.Engine.Json
