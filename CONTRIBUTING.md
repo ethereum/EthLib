@@ -387,12 +387,19 @@ uv run --no-sync ruff check
 uv run --no-sync ty check
 git ls-files -z '*.py' | xargs -0 uv run --no-sync codespell
 uv run --no-sync python scripts/check_raises.py
+uv run --no-sync python scripts/check_docstrings.py
 ```
 
 A test expects an exception through `raises` of `bindings/python/tests/raising.py`, which matches the whole message.
 Where the decoder computes a number from malformed bytes, `raises_shape` matches the whole message with any number at each `{n}` of its template.
 `scripts/check_raises.py` fails on any other use of `pytest.raises`, except a bare call in a function that `scripts/check_raises_allowlist.txt` lists with its reason.
 It also fails on a template with `|`, `.*`, a brace or a backslash outside `{n}`.
+
+A Python module docstring is one line that says what the module is.
+A fact that the code needs goes in a comment next to that code, or in the `--help` text of a script.
+A class or function docstring is one line when possible.
+Otherwise it has short sentences, one per line, with a blank line between groups.
+`scripts/check_docstrings.py` fails on a module docstring of more than one line, and on a docstring sentence that wraps onto a second line.
 
 `pyproject.toml` configures each tool, and `uv.lock` pins its version.
 

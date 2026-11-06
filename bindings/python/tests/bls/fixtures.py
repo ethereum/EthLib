@@ -1,6 +1,4 @@
-"""
-Reference operations come from `py_ecc.bls.G2ProofOfPossession`.
-"""
+"""Reference operations come from `py_ecc.bls.G2ProofOfPossession`."""
 
 from typing import cast
 
