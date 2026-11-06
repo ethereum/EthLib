@@ -1,16 +1,4 @@
-"""The weak subjectivity period and the staleness check of a checkpoint.
-
-The expected periods are the tables of consensus-specs v1.7.0-beta.4, which tests/sources.toml
-pins: specs/phase0/weak-subjectivity.md, specs/electra/weak-subjectivity.md and
-specs/gloas/weak-subjectivity.md.
-Each table gives the period at the mainnet preset and configuration, with a safety decay of 10.
-
-Each state is built here, with every field zero except the validators and their balances.
-Every validator is active from epoch 0, with the effective balance of the row.
-A state from Bellatrix on is an Altair state upgraded fork by fork, which keeps the validators.
-The rows of the Phase 0 table with more than 262144 validators, and the rows of the Gloas table
-above 16777216 ether, are left out: their states take minutes to build.
-"""
+"""Weak subjectivity periods and checkpoint staleness against the consensus-specs tables."""
 
 import struct
 
@@ -23,6 +11,8 @@ from raising import raises
 GWEI = 10**9
 FAR_FUTURE_EPOCH = 2**64 - 1
 
+# Each state has every field zero except the validators and their balances.
+#
 # The mainnet sizes of the fields of a Phase 0 state, or None for a field of variable size.
 _PHASE0_FIELDS = [
     ("genesis_time", 8),
@@ -100,10 +90,8 @@ def _registry(count: int, effective_balance: int) -> dict:
 
 
 def phase0_state(count: int, effective_balance: int, slot: int = 0, roots=None) -> bytes:
-    """The SSZ bytes of a mainnet Phase 0 state with `count` equal validators.
-
-    `roots` maps an index of the block roots to the root that it holds.
-    """
+    """The SSZ bytes of a mainnet Phase 0 state with `count` equal validators."""
+    # `roots` maps an index of the block roots to the root that it holds.
     values = {**_registry(count, effective_balance), "slot": struct.pack("<Q", slot)}
     if roots:
         block_roots = bytearray(8192 * 32)
@@ -114,10 +102,8 @@ def phase0_state(count: int, effective_balance: int, slot: int = 0, roots=None) 
 
 
 def altair_state(count: int, effective_balance: int) -> bytes:
-    """The SSZ bytes of a mainnet Altair state with `count` equal validators.
-
-    Both sync committees hold the one key of every validator.
-    """
+    """The SSZ bytes of a mainnet Altair state with `count` equal validators."""
+    # Both sync committees hold the one key of every validator.
     return _container(
         _ALTAIR_FIELDS, {**_altair_values(count), **_registry(count, effective_balance)}
     )
@@ -141,13 +127,18 @@ _LATER_FORKS = ["bellatrix", "shapella", "dencun", "pectra", "fusaka", "glamster
 
 def state_at(fork: str, count: int, effective_balance: int) -> bytes:
     """The Altair state of `count` validators, upgraded up to a later fork."""
+    # The upgrades keep the validators, so a later state has the same registry.
     state = altair_state(count, effective_balance)
     for later in _LATER_FORKS[: _LATER_FORKS.index(fork) + 1]:
         state = consensus.upgrade_state("mainnet", later, state, verify=False)
     return state
 
 
+# The tables give the period at the mainnet preset and configuration, with a safety decay of 10.
+# Every validator is active from epoch 0, with the effective balance of the row.
+#
 # specs/phase0/weak-subjectivity.md: average balance in ether, validator count, period.
+# The rows above 262144 validators are left out: their states take minutes to build.
 PHASE0_TABLE = [
     (28, 32768, 504),
     (28, 65536, 752),
@@ -170,6 +161,7 @@ ELECTRA_TABLE = [
 ]
 
 # specs/gloas/weak-subjectivity.md: total active balance in ether, period.
+# The rows above 16777216 ether are left out: their states take minutes to build.
 GLOAS_TABLE = [
     (1048576, 620),
     (2097152, 911),

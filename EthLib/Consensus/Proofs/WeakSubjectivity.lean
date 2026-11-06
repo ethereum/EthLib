@@ -35,11 +35,16 @@ open Base Uint64
 
 variable {preset : Preset} {fork : Base.Fork}
 
-/-! ## The closed forms -/
+/-- Two errors with one code come from one constructor. -/
+theorem WeakSubjectivityError.code_injective (e₁ e₂ : WeakSubjectivityError)
+    (h : e₁.code = e₂.code) : e₁.ctorIdx = e₂.ctorIdx := by
+  -- Each code is one more than the index of its constructor.
+  have back : ∀ e : WeakSubjectivityError, e.code.toNat - 1 = e.ctorIdx := by
+    intro e
+    cases e <;> rfl
+  rw [← back e₁, ← back e₂, h]
 
-/-- Every natural number below `2^64` is the value of a 64-bit integer. -/
-theorem exists_toNat_eq {n : Nat} (h : n < 2 ^ 64) : ∃ a : UInt64, a.toNat = n :=
-  ⟨UInt64.ofNatLT n h, rfl⟩
+/-! ## The closed forms -/
 
 /-- From Electra: the period of a balance and a churn succeeds exactly when nothing overflows.
 
@@ -104,13 +109,6 @@ theorem computeWeakSubjectivityPeriodGloas_eq_ok_iff {config : Config}
   unfold computeWeakSubjectivityPeriodGloas
   simp only [bind_ok_iff, mapError_ok_iff]
   exact ⟨fun ⟨a, ha, b, hb, hc⟩ => ⟨a, b, ha, hb, hc⟩, fun ⟨a, b, ha, hb, hc⟩ => ⟨a, ha, b, hb, hc⟩⟩
-
-/-- The larger of two 64-bit integers has the larger value. -/
-theorem toNat_max (a b : UInt64) : (max a b).toNat = max a.toNat b.toNat := by
-  rw [UInt64.max_def, Nat.max_def]
-  by_cases h : a ≤ b
-  · simp [h, UInt64.le_iff_toNat_le.mp h]
-  · simp [h, mt UInt64.le_iff_toNat_le.mpr h]
 
 /-- Phase 0: computed epochs are one of the two expressions of the rule, on natural numbers.
 
