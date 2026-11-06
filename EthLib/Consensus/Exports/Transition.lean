@@ -154,12 +154,15 @@ def runOperation {preset : Preset} {fork : Fork} (config : Config) (checks : Sig
     else throw (0, s!"no operation parent_execution_payload at {fork.name}")
   | handler => throw (0, s!"no operation {handler}")
 
-/-- The operations whose Gloas rule EthLib holds. -/
+/-- The handlers of the operation vectors that run from Gloas.
+
+From Gloas a block must hold no deposit, and the execution payload leaves the block. -/
 def gloasOperations : List String :=
-  ["payload_attestation", "execution_payload_bid", "builder_deposit_request",
+  ["block_header", "payload_attestation", "execution_payload_bid", "builder_deposit_request",
     "builder_exit_request", "withdrawals", "proposer_slashing", "attester_slashing",
     "withdrawal_request", "consolidation_request", "voluntary_exit", "voluntary_exit_churn",
-    "deposit_request", "parent_execution_payload", "attestation"]
+    "deposit_request", "parent_execution_payload", "attestation", "sync_aggregate",
+    "bls_to_execution_change"]
 
 /-- The preset and the fork that UTF-8 names name, at a fork up to Heze. -/
 def transitionPresetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do
@@ -230,9 +233,8 @@ def processOperationExport (name fork handler pre operation replacements : ByteA
   let config ← configWith name replacements
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   let handler ← nameOf handler
-  -- From Gloas only the operations whose Gloas rule EthLib holds run, and Heze keeps that rule.
   if .glamsterdam ≤ fork ∧ handler ∉ gloasOperations then
-    throw (0, s!"operation {handler} not yet specified at {fork.name}")
+    throw (0, s!"no operation {handler} at {fork.name}")
   let state ← decodeInput (BeaconState preset fork) pre
   let after ← runOperation config checks executionValid handler state operation
   (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")

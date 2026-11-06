@@ -23,7 +23,7 @@ FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "operation
 HANDLERS = {
     "block_header": (
         "block",
-        ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu"),
+        ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas", "heze"),
     ),
     "proposer_slashing": (
         "proposer_slashing",
@@ -43,7 +43,7 @@ HANDLERS = {
     "consolidation_request": ("consolidation_request", ("electra", "fulu", "gloas", "heze")),
     "sync_aggregate": (
         "sync_aggregate",
-        ("altair", "bellatrix", "capella", "deneb", "electra", "fulu"),
+        ("altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas", "heze"),
     ),
     "voluntary_exit": (
         "voluntary_exit",
@@ -52,7 +52,10 @@ HANDLERS = {
     "voluntary_exit_churn": ("voluntary_exit", ("gloas", "heze")),
     "execution_payload": ("body", ("bellatrix", "capella", "deneb", "electra", "fulu")),
     "withdrawals": ("execution_payload", ("capella", "deneb", "electra", "fulu", "gloas", "heze")),
-    "bls_to_execution_change": ("address_change", ("capella", "deneb", "electra", "fulu")),
+    "bls_to_execution_change": (
+        "address_change",
+        ("capella", "deneb", "electra", "fulu", "gloas", "heze"),
+    ),
     "payload_attestation": ("payload_attestation", ("gloas", "heze")),
     "execution_payload_bid": ("execution_payload_bid", ("gloas", "heze")),
     "builder_deposit_request": ("builder_deposit_request", ("gloas", "heze")),
@@ -182,14 +185,11 @@ def test_archive_case(preset, fork, handler, case):
     run_case(preset, fork, handler, case)
 
 
-def test_operation_not_yet_specified_at_gloas():
-    # At Gloas, an operation whose Gloas rule EthLib does not hold fails before it reads the state.
-    with raises(
-        consensus.TransitionError, "operation block_header not yet specified at glamsterdam"
-    ) as info:
-        consensus.process_operation("minimal", "glamsterdam", "block_header", b"", b"")
+def test_no_deposit_from_gloas():
+    # A Gloas block holds no deposit, so the operation fails before it reads the state.
+    with raises(consensus.TransitionError, "no operation deposit at glamsterdam") as info:
+        consensus.process_operation("minimal", "glamsterdam", "deposit", b"", b"")
     assert info.value.code == 0
-    assert "not yet specified" in str(info.value)
 
 
 def test_undecodable_state():
