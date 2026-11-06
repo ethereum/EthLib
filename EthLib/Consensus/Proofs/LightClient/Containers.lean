@@ -15,11 +15,9 @@ So its bytes decode back to it.
 
 The generalized indices of the light client are those that the types give.
 
-They hold at every fork from Altair, for both presets.
+They hold at every fork from Altair, at every preset.
 
-From Altair to the forks before Gloas they hold at every preset.
-
-There the node at each index is the root of its field.
+At each of these forks the node at each index is the root of its field.
 
 So the length of each branch is the depth of the node it proves.
 -/
@@ -72,7 +70,7 @@ theorem lightClientGindices_eq_of_lt (altair : .altair ≤ fork) (beforeGloas : 
 The next committee branch of an update opens this node against the attested state root.
 
 It holds for every state of a lawful type with a nonempty committee, whatever the update. -/
-theorem BeaconState.nodeRoot_nextSyncCommittee_of_lt
+private theorem BeaconState.nodeRoot_nextSyncCommittee_of_lt
     [LawfulSszType (BeaconState preset fork)] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
     (altair : .altair ≤ fork) (beforeGloas : fork < .glamsterdam)
     (state : BeaconState preset fork) {root : Bytes32}
@@ -106,7 +104,7 @@ theorem BeaconState.nodeRoot_nextSyncCommittee_of_lt
 The branch of a bootstrap opens this node against the state root of its beacon header.
 
 It holds for every state with a lawful type and a nonempty committee. -/
-theorem BeaconState.nodeRoot_currentSyncCommittee_of_lt
+private theorem BeaconState.nodeRoot_currentSyncCommittee_of_lt
     [LawfulSszType (BeaconState preset fork)] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
     (altair : .altair ≤ fork) (beforeGloas : fork < .glamsterdam)
     (state : BeaconState preset fork) {root : Bytes32}
@@ -138,7 +136,7 @@ theorem BeaconState.nodeRoot_currentSyncCommittee_of_lt
 /-- From Altair to the forks before Gloas, the finality node is the root of the finalized root.
 
 The finality branch of an update opens this node against the attested state root. -/
-theorem BeaconState.nodeRoot_finalizedCheckpoint_root_of_lt
+private theorem BeaconState.nodeRoot_finalizedCheckpoint_root_of_lt
     [LawfulSszType (BeaconState preset fork)]
     (altair : .altair ≤ fork) (beforeGloas : fork < .glamsterdam)
     (state : BeaconState preset fork) {root : Bytes32}
@@ -171,6 +169,156 @@ theorem BeaconState.nodeRoot_finalizedCheckpoint_root_of_lt
   have index_eq : index = finalizedRootGindex fork :=
     Except.ok.inj (indexed.symm.trans (lightClientGindices_eq_of_lt altair beforeGloas).1)
   simpa [index_eq] using read
+
+/-- From Gloas, the state type gives the three light client indices, at every preset.
+
+The state is a progressive container, so a field sits at its place in the layout.
+
+From Heze the three removed eth1 fields leave gaps, so the ordinals drop by three.
+
+The places, and so the indices, stay those of Gloas. -/
+theorem lightClientGindices_eq_of_glamsterdam_le (gloas : .glamsterdam ≤ fork) :
+    getGeneralizedIndex (SszType.desc (BeaconState preset fork))
+        [.position (if .hegota ≤ fork then 17 else 20), .position 1] =
+          .ok (finalizedRootGindex fork) ∧
+      getGeneralizedIndex (SszType.desc (BeaconState preset fork))
+        [.position (if .hegota ≤ fork then 19 else 22)] = .ok (currentSyncCommitteeGindex fork) ∧
+      getGeneralizedIndex (SszType.desc (BeaconState preset fork))
+        [.position (if .hegota ≤ fork then 20 else 23)] = .ok (nextSyncCommitteeGindex fork) := by
+  cases fork
+  all_goals try exact absurd gloas (by decide)
+  all_goals
+    unfold SszType.desc
+    simp +decide [BeaconState.instSszType, SszType.forkContainer, SszType.progressiveContainer,
+      getGeneralizedIndex, Desc.resolveStep, Desc.chunkPosition, Desc.elementType,
+      Desc.chunkCount, SszType.desc, SszFields.descs, BeaconState.names,
+      BeaconState.activeFields, layoutPosition, activePosition, progressiveChunkGindex,
+      Bind.bind, Except.bind, Pure.pure, Except.pure, nextPow2, finalizedRootGindex,
+      currentSyncCommitteeGindex, nextSyncCommitteeGindex]
+    simp [gindexConcat, gindexDepth, depthFor, Bind.bind, Except.bind, Pure.pure, Except.pure]
+
+/-- From Gloas, the next committee node is the root of the state's next committee. -/
+private theorem BeaconState.nodeRoot_nextSyncCommittee_of_glamsterdam_le
+    [LawfulSszType (BeaconState preset fork)] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
+    (gloas : .glamsterdam ≤ fork) (state : BeaconState preset fork) {root : Bytes32}
+    (rooted : SszType.hashTreeRoot
+      (state.nextSyncCommittee (Nat.le_trans (by decide) gloas)) = .ok root) :
+    nodeRoot (SszType.desc (BeaconState preset fork)) (SszType.toValue state)
+      (nextSyncCommitteeGindex fork) = .ok root.toArray := by
+  -- The next committee is a field of the progressive state, at its ordinal at the fork.
+  have selected : PathSelects (SszType.desc (BeaconState preset fork))
+      (SszType.toValue state) [.position (if .hegota ≤ fork then 20 else 23)] root.toArray := by
+    cases fork
+    all_goals try exact absurd gloas (by decide)
+    all_goals
+      apply PathSelects.progressiveField
+        (LawfulSszType.wellFormed (α := type_of% state)) (LawfulSszType.fits state)
+        (child := SszType.desc (SyncCommittee preset))
+        (inner := SszType.toValue (state.nextSyncCommittee (Nat.le_trans (by decide) gloas)))
+      · rfl
+      · rfl
+      · exact .root (SszType.hashTreeRoot_ok_iff.mp rooted)
+  obtain ⟨index, indexed, read⟩ := selected.reads
+  have index_eq : index = nextSyncCommitteeGindex fork :=
+    Except.ok.inj (indexed.symm.trans (lightClientGindices_eq_of_glamsterdam_le gloas).2.2)
+  simpa [index_eq] using read
+
+/-- From Gloas, the current committee node is the root of the state's current committee. -/
+private theorem BeaconState.nodeRoot_currentSyncCommittee_of_glamsterdam_le
+    [LawfulSszType (BeaconState preset fork)] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
+    (gloas : .glamsterdam ≤ fork) (state : BeaconState preset fork) {root : Bytes32}
+    (rooted : SszType.hashTreeRoot
+      (state.currentSyncCommittee (Nat.le_trans (by decide) gloas)) = .ok root) :
+    nodeRoot (SszType.desc (BeaconState preset fork)) (SszType.toValue state)
+      (currentSyncCommitteeGindex fork) = .ok root.toArray := by
+  -- The current committee is a field of the progressive state, at its ordinal at the fork.
+  have selected : PathSelects (SszType.desc (BeaconState preset fork))
+      (SszType.toValue state) [.position (if .hegota ≤ fork then 19 else 22)] root.toArray := by
+    cases fork
+    all_goals try exact absurd gloas (by decide)
+    all_goals
+      apply PathSelects.progressiveField
+        (LawfulSszType.wellFormed (α := type_of% state)) (LawfulSszType.fits state)
+        (child := SszType.desc (SyncCommittee preset))
+        (inner := SszType.toValue (state.currentSyncCommittee (Nat.le_trans (by decide) gloas)))
+      · rfl
+      · rfl
+      · exact .root (SszType.hashTreeRoot_ok_iff.mp rooted)
+  obtain ⟨index, indexed, read⟩ := selected.reads
+  have index_eq : index = currentSyncCommitteeGindex fork :=
+    Except.ok.inj (indexed.symm.trans (lightClientGindices_eq_of_glamsterdam_le gloas).2.1)
+  simpa [index_eq] using read
+
+/-- From Gloas, the finality node is the root of the finalized checkpoint's root field. -/
+private theorem BeaconState.nodeRoot_finalizedCheckpoint_root_of_glamsterdam_le
+    [LawfulSszType (BeaconState preset fork)]
+    (gloas : .glamsterdam ≤ fork) (state : BeaconState preset fork) {root : Bytes32}
+    (rooted : SszType.hashTreeRoot state.finalizedCheckpoint.root = .ok root) :
+    nodeRoot (SszType.desc (BeaconState preset fork)) (SszType.toValue state)
+      (finalizedRootGindex fork) = .ok root.toArray := by
+  -- Finality descends through the checkpoint field, then its root at ordinal 1.
+  have selected : PathSelects (SszType.desc (BeaconState preset fork))
+      (SszType.toValue state) [.position (if .hegota ≤ fork then 17 else 20), .position 1]
+      root.toArray := by
+    cases fork
+    all_goals try exact absurd gloas (by decide)
+    all_goals
+      apply PathSelects.progressiveField
+        (LawfulSszType.wellFormed (α := type_of% state)) (LawfulSszType.fits state)
+        (child := SszType.desc Checkpoint) (inner := SszType.toValue state.finalizedCheckpoint)
+      · rfl
+      · rfl
+      · apply PathSelects.containerField
+          (LawfulSszType.wellFormed (α := Checkpoint))
+          (LawfulSszType.fits state.finalizedCheckpoint) (ordinal := 1)
+          (child := SszType.desc Root) (inner := SszType.toValue state.finalizedCheckpoint.root)
+        · rfl
+        · rfl
+        · exact .root (SszType.hashTreeRoot_ok_iff.mp rooted)
+  obtain ⟨index, indexed, read⟩ := selected.reads
+  have index_eq : index = finalizedRootGindex fork :=
+    Except.ok.inj (indexed.symm.trans (lightClientGindices_eq_of_glamsterdam_le gloas).1)
+  simpa [index_eq] using read
+
+/-- At every fork from Altair, the next committee node is the root of the state's next committee.
+
+The next committee branch of an update opens this node against the attested state root. -/
+theorem BeaconState.nodeRoot_nextSyncCommittee
+    [LawfulSszType (BeaconState preset fork)] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
+    (altair : .altair ≤ fork) (state : BeaconState preset fork) {root : Bytes32}
+    (rooted : SszType.hashTreeRoot (state.nextSyncCommittee altair) = .ok root) :
+    nodeRoot (SszType.desc (BeaconState preset fork)) (SszType.toValue state)
+      (nextSyncCommitteeGindex fork) = .ok root.toArray :=
+  if beforeGloas : fork < .glamsterdam then
+    nodeRoot_nextSyncCommittee_of_lt altair beforeGloas state rooted
+  else nodeRoot_nextSyncCommittee_of_glamsterdam_le (Nat.le_of_not_lt beforeGloas) state rooted
+
+/-- At every fork from Altair, the current committee node is the root of that field.
+
+The branch of a bootstrap opens this node against the state root of its beacon header. -/
+theorem BeaconState.nodeRoot_currentSyncCommittee
+    [LawfulSszType (BeaconState preset fork)] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
+    (altair : .altair ≤ fork) (state : BeaconState preset fork) {root : Bytes32}
+    (rooted : SszType.hashTreeRoot (state.currentSyncCommittee altair) = .ok root) :
+    nodeRoot (SszType.desc (BeaconState preset fork)) (SszType.toValue state)
+      (currentSyncCommitteeGindex fork) = .ok root.toArray :=
+  if beforeGloas : fork < .glamsterdam then
+    nodeRoot_currentSyncCommittee_of_lt altair beforeGloas state rooted
+  else nodeRoot_currentSyncCommittee_of_glamsterdam_le (Nat.le_of_not_lt beforeGloas) state rooted
+
+/-- At every fork from Altair, the finality node is the root of the finalized checkpoint's root.
+
+The finality branch of an update opens this node against the attested state root. -/
+theorem BeaconState.nodeRoot_finalizedCheckpoint_root
+    [LawfulSszType (BeaconState preset fork)]
+    (altair : .altair ≤ fork) (state : BeaconState preset fork) {root : Bytes32}
+    (rooted : SszType.hashTreeRoot state.finalizedCheckpoint.root = .ok root) :
+    nodeRoot (SszType.desc (BeaconState preset fork)) (SszType.toValue state)
+      (finalizedRootGindex fork) = .ok root.toArray :=
+  if beforeGloas : fork < .glamsterdam then
+    nodeRoot_finalizedCheckpoint_root_of_lt altair beforeGloas state rooted
+  else nodeRoot_finalizedCheckpoint_root_of_glamsterdam_le (Nat.le_of_not_lt beforeGloas) state
+    rooted
 
 variable [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
 
