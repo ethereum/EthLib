@@ -33,6 +33,8 @@ public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.LabTree
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.LabFors
 public import EthLib.Cryptography.Proofs.Sphincs.SignatureFailure
 public import EthLib.Cryptography.Proofs.Sphincs.Security
+public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Statement
+public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Translate
 
 /-!
 # Proofs: leanSPHINCS
