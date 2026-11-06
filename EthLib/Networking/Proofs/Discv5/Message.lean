@@ -13,6 +13,7 @@ Properties of the discv5 messages.
 - The fields of each message read back as the message.
 - A valid message decodes back from its plaintext.
 - A message that decodes is valid.
+- A plaintext that decodes is the encoding of its message, so each message has one plaintext.
 -/
 
 @[expose] public section
@@ -64,6 +65,89 @@ theorem valid_of_decode {bytes : ByteArray} {m : Message} (h : Message.decode by
     · simp [hf, hv, bind, Except.bind, pure, Except.pure] at h
       exact h ▸ hv
     · simp [hf, hv, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
+
+/-! ## Canonical plaintexts -/
+
+/-- A bind of `Except` succeeds exactly when both steps do. -/
+private theorem bind_eq_ok {ε α β : Type} {x : Except ε α} {f : α → Except ε β} {y : β} :
+    (x >>= f) = .ok y ↔ ∃ a, x = .ok a ∧ f a = .ok y := by
+  cases x <;> simp [bind, Except.bind]
+
+/-- An item reads as a port exactly when it is the item of that port. -/
+theorem portOfItem_eq_ok {item : Item} {port : UInt16} :
+    portOfItem item = .ok port ↔ portItem port = item := by
+  constructor
+  · intro h
+    simp only [portOfItem, bind_eq_ok, pure, Except.pure, Except.ok.injEq] at h
+    obtain ⟨n, hn, rfl⟩ := h
+    obtain ⟨rfl, hlt⟩ := Item.eq_scalar_of_toScalarBelow hn
+    simp [portItem, Nat.mod_eq_of_lt hlt]
+  · rintro rfl
+    exact portOfItem_portItem port
+
+/-- Fields that read as a message are the fields of that message, under its type. -/
+theorem fields_of_ofFields {type : UInt8} {items : List Item} {m : Message}
+    (h : Message.ofFields type items = .ok (some m)) : m.type = type ∧ m.fields = items := by
+  unfold Message.ofFields at h
+  split at h
+  all_goals
+    simp only [bind_eq_ok, Codec.ofItem_eq_ok_iff, portOfItem_eq_ok, pure, Except.pure,
+      Except.ok.injEq, Option.some.injEq, reduceCtorEq] at h
+  -- Each field read is the item of what it read, and the last step substitutes the message.
+  all_goals
+    repeat obtain ⟨_, rfl, h⟩ := h
+    exact ⟨UInt8.toNat_inj.mp (by simp_all [Message.type]), rfl⟩
+
+/-- A plaintext that decodes, before the checks, is the encoding of its message. -/
+theorem encode_of_decodeFields {bytes : ByteArray} {m : Message}
+    (h : Message.decodeFields bytes = .ok m) : m.encode = .ok bytes := by
+  unfold Message.decodeFields at h
+  split at h
+  · rename_i type rest hbytes
+    split at h
+    case isFalse => cases h
+    -- Each step of the decoder succeeded, and each one is inverted by a step of the encoder.
+    cases hd : Serialization.Rlp.decode ⟨rest.toArray⟩ with
+    | error e => simp [hd, Except.mapError, bind, Except.bind] at h
+    | ok item =>
+      cases hi : item.toItems with
+      | error e => simp [hd, hi, Except.mapError, bind, Except.bind] at h
+      | ok items =>
+        cases ho : Message.ofFields type items with
+        | error e => simp [hd, hi, ho, Except.mapError, bind, Except.bind] at h
+        | ok o =>
+          cases o with
+          | none => simp [hd, hi, ho, Except.mapError, bind, Except.bind] at h
+          | some m' =>
+            simp [hd, hi, ho, Except.mapError, bind, Except.bind, pure, Except.pure] at h
+            obtain ⟨-, rfl⟩ := h
+            obtain ⟨htype, hfields⟩ := fields_of_ofFields ho
+            rw [Item.toItems_eq_ok] at hi
+            subst hi
+            have he := Serialization.Rlp.encode_decode _ _ hd
+            simp only [Message.encode, hfields, he, htype, bind, Except.bind, pure, Except.pure,
+              Except.ok.injEq]
+            apply ByteArray.ext
+            apply Array.toList_inj.mp
+            simp [ByteArray.data_append, hbytes]
+  · simp [throw, throwThe, MonadExceptOf.throw] at h
+
+/-- A plaintext that decodes is the encoding of its message. -/
+theorem encode_of_decode {bytes : ByteArray} {m : Message} (h : Message.decode bytes = .ok m) :
+    m.encode = .ok bytes := by
+  unfold Message.decode at h
+  cases hf : Message.decodeFields bytes with
+  | error e => simp [hf, bind, Except.bind] at h
+  | ok m' =>
+    by_cases hv : m'.valid = true
+    · simp [hf, hv, bind, Except.bind, pure, Except.pure] at h
+      exact h ▸ encode_of_decodeFields hf
+    · simp [hf, hv, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
+
+/-- A plaintext decodes to a message exactly when the message is valid and encodes to it. -/
+theorem decode_eq_ok_iff (bytes : ByteArray) (m : Message) :
+    Message.decode bytes = .ok m ↔ m.valid = true ∧ m.encode = .ok bytes :=
+  ⟨fun h => ⟨valid_of_decode h, encode_of_decode h⟩, fun ⟨hv, he⟩ => decode_encode he hv⟩
 
 /-! ## Error codes -/
 

@@ -68,6 +68,11 @@ theorem encode_injective {x y : α} {b : ByteArray} (hx : encode x = .ok b)
   cases h
   rfl
 
+/-- An item holds a value exactly when it is the item of that value. -/
+theorem ofItem_eq_ok_iff {item : Item} {x : α} :
+    Codec.ofItem item = .ok x ↔ Codec.toItem x = item :=
+  ⟨LawfulCodec.toItem_of_ofItem, fun h => h ▸ LawfulCodec.ofItem_toItem x⟩
+
 end Codec
 
 /-! ## The helpers -/
