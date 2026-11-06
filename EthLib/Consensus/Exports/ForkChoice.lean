@@ -106,13 +106,13 @@ def readForkChoiceSteps : (rounds : Nat) → ByteArray → Nat → Result (List 
   | 0, _, _ => throw (0, "steps do not end")
   | rounds + 1, bytes, offset =>
     if offset = bytes.size then return []
-    else if bytes.size < offset + 5 then throw (0, "a step is cut short")
+    else if short : bytes.size < offset + 5 then throw (0, "a step is cut short")
     else do
       let length := (← decodeInput UInt32 (bytes.extract (offset + 1) (offset + 5))).toNat
       let stop := offset + 5 + length
       if bytes.size < stop then throw (0, "the bytes of a step are cut short")
       let rest ← readForkChoiceSteps rounds bytes stop
-      return (bytes.get! offset, bytes.extract (offset + 5) stop) :: rest
+      return (bytes[offset]'(by omega), bytes.extract (offset + 5) stop) :: rest
 
 /-- The epoch and the root of a checkpoint, in 40 bytes. -/
 def checkpointRecord (checkpoint : Checkpoint) : ByteArray :=

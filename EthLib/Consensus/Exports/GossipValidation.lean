@@ -107,13 +107,14 @@ def readGossipBlocks : (rounds : Nat) → ByteArray → Nat → Result (List Gos
   | 0, _, _ => throw (0, "blocks do not end")
   | rounds + 1, bytes, offset =>
     if offset = bytes.size then return []
-    else if bytes.size < offset + 6 then throw (0, "a block is cut short")
+    else if short : bytes.size < offset + 6 then throw (0, "a block is cut short")
     else do
       let length := (← decodeInput UInt32 (bytes.extract (offset + 2) (offset + 6))).toNat
       let stop := offset + 6 + length
       if bytes.size < stop then throw (0, "the bytes of a block are cut short")
       let rest ← readGossipBlocks rounds bytes stop
-      return ⟨bytes[offset]!, bytes[offset + 1]!, bytes.extract (offset + 6) stop⟩ :: rest
+      return ⟨bytes[offset]'(by omega), bytes[offset + 1]'(by omega),
+        bytes.extract (offset + 6) stop⟩ :: rest
 
 /-- The store and the statuses after a block that follows the anchor.
 
