@@ -17,7 +17,9 @@ The generalized indices of the light client are those that the types give.
 
 They hold at every fork from Altair, for both presets.
 
-At Altair they hold at every preset, and the node at each index is the root of its field.
+From Altair to the forks before Gloas they hold at every preset.
+
+There the node at each index is the root of its field.
 
 So the length of each branch is the depth of the node it proves.
 -/
@@ -37,113 +39,176 @@ theorem LightClientHeader.names_nodup : (LightClientHeader.names fork).Nodup := 
   exact all.sublist ((((List.Sublist.refl ["beacon"]).append (duringNames_sublist _)).append
     (sinceNames_sublist _)).append (sinceNames_sublist _))
 
-/-- At Altair, the state type gives the three light client indices, at every preset.
+/-- From Altair to the forks before Gloas, the state type gives the three light client indices.
+
+This holds at every preset.
 
 The finalized root is the second field of the checkpoint at ordinal 20.
 
-The current and next committees occupy ordinals 22 and 23 of the 24-field state. -/
+The current and next committees occupy ordinals 22 and 23 of the state. -/
+theorem lightClientGindices_eq_of_lt (altair : .altair ≤ fork) (beforeGloas : fork < .glamsterdam) :
+    getGeneralizedIndex (SszType.desc (BeaconState preset fork))
+        [.position 20, .position 1] = .ok (finalizedRootGindex fork) ∧
+      getGeneralizedIndex (SszType.desc (BeaconState preset fork))
+        [.position 22] = .ok (currentSyncCommitteeGindex fork) ∧
+      getGeneralizedIndex (SszType.desc (BeaconState preset fork))
+        [.position 23] = .ok (nextSyncCommitteeGindex fork) := by
+  cases fork
+  all_goals try first
+    | exact absurd altair (by decide)
+    | exact absurd beforeGloas (by decide)
+  -- Field widths affect child trees but not the container's arity or field positions.
+  all_goals
+    unfold SszType.desc
+    simp +decide [BeaconState.instSszType, SszType.forkContainer, SszType.container,
+      getGeneralizedIndex, Desc.resolveStep, Desc.chunkPosition, Desc.elementType,
+      Desc.chunkCount, SszType.desc, SszFields.descs, BeaconState.names,
+      Bind.bind, Except.bind, Pure.pure, Except.pure, nextPow2, finalizedRootGindex,
+      currentSyncCommitteeGindex, nextSyncCommitteeGindex]
+    simp [gindexConcat, gindexDepth, depthFor, Bind.bind, Except.bind, Pure.pure, Except.pure]
+
+/-- At Altair, the state type gives the three light client indices, at every preset. -/
 theorem lightClientGindices_altair_eq :
     getGeneralizedIndex (SszType.desc (BeaconState preset .altair))
         [.position 20, .position 1] = .ok (finalizedRootGindex .altair) ∧
       getGeneralizedIndex (SszType.desc (BeaconState preset .altair))
         [.position 22] = .ok (currentSyncCommitteeGindex .altair) ∧
       getGeneralizedIndex (SszType.desc (BeaconState preset .altair))
-        [.position 23] = .ok (nextSyncCommitteeGindex .altair) := by
-  -- Field widths affect child trees but not the container's arity or field positions.
-  unfold SszType.desc
-  simp +decide [BeaconState.instSszType, SszType.forkContainer, SszType.container,
-    getGeneralizedIndex, Desc.resolveStep, Desc.chunkPosition, Desc.elementType,
-    Desc.chunkCount, SszType.desc, SszFields.descs, BeaconState.names,
-    Bind.bind, Except.bind, Pure.pure, Except.pure, nextPow2, finalizedRootGindex,
-    currentSyncCommitteeGindex, nextSyncCommitteeGindex]
-  simp [gindexConcat, gindexDepth, depthFor, Bind.bind, Except.bind, Pure.pure, Except.pure]
+        [.position 23] = .ok (nextSyncCommitteeGindex .altair) :=
+  lightClientGindices_eq_of_lt (by decide) (by decide)
 
-/-- In an Altair state, the next committee node is the root of the state's next committee.
+/-- From Altair to the forks before Gloas, the next committee node is the root of that field.
 
 The next committee branch of an update opens this node against the attested state root.
 
 It holds for every state of a lawful type with a nonempty committee, whatever the update. -/
+theorem BeaconState.nodeRoot_nextSyncCommittee_of_lt
+    [LawfulSszType (BeaconState preset fork)] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
+    (altair : .altair ≤ fork) (beforeGloas : fork < .glamsterdam)
+    (state : BeaconState preset fork) {root : Bytes32}
+    (rooted : SszType.hashTreeRoot (state.nextSyncCommittee altair) = .ok root) :
+    nodeRoot (SszType.desc (BeaconState preset fork)) (SszType.toValue state)
+      (nextSyncCommitteeGindex fork) = .ok root.toArray := by
+  -- Ordinal 23 of the state holds the next committee, at each of these forks.
+  have selected : PathSelects (SszType.desc (BeaconState preset fork))
+      (SszType.toValue state) [.position 23] root.toArray := by
+    cases fork
+    all_goals try first
+      | exact absurd altair (by decide)
+      | exact absurd beforeGloas (by decide)
+    all_goals
+      apply PathSelects.containerField
+        (LawfulSszType.wellFormed (α := type_of% state))
+        (LawfulSszType.fits state) (ordinal := 23)
+        (child := SszType.desc (SyncCommittee preset))
+        (inner := SszType.toValue (state.nextSyncCommittee altair))
+      · rfl
+      · rfl
+      · exact .root (SszType.hashTreeRoot_ok_iff.mp rooted)
+  -- The value path and the type path share the branch index of the fork.
+  obtain ⟨index, indexed, read⟩ := selected.reads
+  have index_eq : index = nextSyncCommitteeGindex fork :=
+    Except.ok.inj (indexed.symm.trans (lightClientGindices_eq_of_lt altair beforeGloas).2.2)
+  simpa [index_eq] using read
+
+/-- In an Altair state, the next committee node is the root of the state's next committee. -/
 theorem BeaconState.nodeRoot_nextSyncCommittee_altair
     [LawfulSszType (BeaconState preset .altair)] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
     (state : BeaconState preset .altair) {root : Bytes32}
     (rooted : SszType.hashTreeRoot (state.nextSyncCommittee (by decide)) = .ok root) :
     nodeRoot (SszType.desc (BeaconState preset .altair)) (SszType.toValue state)
-      (nextSyncCommitteeGindex .altair) = .ok root.toArray := by
-  -- Ordinal 23 of the state holds the next committee.
-  have selected : PathSelects (SszType.desc (BeaconState preset .altair))
-      (SszType.toValue state) [.position 23] root.toArray := by
-    apply PathSelects.containerField
-      (LawfulSszType.wellFormed (α := BeaconState preset .altair))
-      (LawfulSszType.fits state) (ordinal := 23)
-      (child := SszType.desc (SyncCommittee preset))
-      (inner := SszType.toValue (state.nextSyncCommittee (by decide)))
-    · rfl
-    · rfl
-    · exact .root (SszType.hashTreeRoot_ok_iff.mp rooted)
-  -- The value path and the type path share the Altair branch index.
-  obtain ⟨index, indexed, read⟩ := selected.reads
-  have index_eq : index = nextSyncCommitteeGindex .altair := by
-    exact Except.ok.inj (indexed.symm.trans lightClientGindices_altair_eq.2.2)
-  simpa [index_eq] using read
+      (nextSyncCommitteeGindex .altair) = .ok root.toArray :=
+  nodeRoot_nextSyncCommittee_of_lt (by decide) (by decide) state rooted
 
-/-- In an Altair state, the current committee node is the root of the state's current committee.
+/-- From Altair to the forks before Gloas, the current committee node is the root of that field.
 
 The branch of a bootstrap opens this node against the state root of its beacon header.
 
 It holds for every state with a lawful type and a nonempty committee. -/
+theorem BeaconState.nodeRoot_currentSyncCommittee_of_lt
+    [LawfulSszType (BeaconState preset fork)] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
+    (altair : .altair ≤ fork) (beforeGloas : fork < .glamsterdam)
+    (state : BeaconState preset fork) {root : Bytes32}
+    (rooted : SszType.hashTreeRoot (state.currentSyncCommittee altair) = .ok root) :
+    nodeRoot (SszType.desc (BeaconState preset fork)) (SszType.toValue state)
+      (currentSyncCommitteeGindex fork) = .ok root.toArray := by
+  -- Ordinal 22 of the state holds the current committee, at each of these forks.
+  have selected : PathSelects (SszType.desc (BeaconState preset fork))
+      (SszType.toValue state) [.position 22] root.toArray := by
+    cases fork
+    all_goals try first
+      | exact absurd altair (by decide)
+      | exact absurd beforeGloas (by decide)
+    all_goals
+      apply PathSelects.containerField
+        (LawfulSszType.wellFormed (α := type_of% state))
+        (LawfulSszType.fits state) (ordinal := 22)
+        (child := SszType.desc (SyncCommittee preset))
+        (inner := SszType.toValue (state.currentSyncCommittee altair))
+      · rfl
+      · rfl
+      · exact .root (SszType.hashTreeRoot_ok_iff.mp rooted)
+  -- The value path and the type path share the bootstrap index of the fork.
+  obtain ⟨index, indexed, read⟩ := selected.reads
+  have index_eq : index = currentSyncCommitteeGindex fork :=
+    Except.ok.inj (indexed.symm.trans (lightClientGindices_eq_of_lt altair beforeGloas).2.1)
+  simpa [index_eq] using read
+
+/-- In an Altair state, the current committee node is the root of the state's current committee.
+-/
 theorem BeaconState.nodeRoot_currentSyncCommittee_altair
     [LawfulSszType (BeaconState preset .altair)] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
     (state : BeaconState preset .altair) {root : Bytes32}
     (rooted : SszType.hashTreeRoot (state.currentSyncCommittee (by decide)) = .ok root) :
     nodeRoot (SszType.desc (BeaconState preset .altair)) (SszType.toValue state)
-      (currentSyncCommitteeGindex .altair) = .ok root.toArray := by
-  -- Ordinal 22 of the state holds the current committee.
-  have selected : PathSelects (SszType.desc (BeaconState preset .altair))
-      (SszType.toValue state) [.position 22] root.toArray := by
-    apply PathSelects.containerField
-      (LawfulSszType.wellFormed (α := BeaconState preset .altair))
-      (LawfulSszType.fits state) (ordinal := 22)
-      (child := SszType.desc (SyncCommittee preset))
-      (inner := SszType.toValue (state.currentSyncCommittee (by decide)))
-    · rfl
-    · rfl
-    · exact .root (SszType.hashTreeRoot_ok_iff.mp rooted)
-  -- The value path and the type path share the Altair bootstrap index.
-  obtain ⟨index, indexed, read⟩ := selected.reads
-  have index_eq : index = currentSyncCommitteeGindex .altair := by
-    exact Except.ok.inj (indexed.symm.trans lightClientGindices_altair_eq.2.1)
-  simpa [index_eq] using read
+      (currentSyncCommitteeGindex .altair) = .ok root.toArray :=
+  nodeRoot_currentSyncCommittee_of_lt (by decide) (by decide) state rooted
 
-/-- In an Altair state, the finality node is the root of the finalized checkpoint's root field.
+/-- From Altair to the forks before Gloas, the finality node is the root of the finalized root.
 
 The finality branch of an update opens this node against the attested state root. -/
+theorem BeaconState.nodeRoot_finalizedCheckpoint_root_of_lt
+    [LawfulSszType (BeaconState preset fork)]
+    (altair : .altair ≤ fork) (beforeGloas : fork < .glamsterdam)
+    (state : BeaconState preset fork) {root : Bytes32}
+    (rooted : SszType.hashTreeRoot state.finalizedCheckpoint.root = .ok root) :
+    nodeRoot (SszType.desc (BeaconState preset fork)) (SszType.toValue state)
+      (finalizedRootGindex fork) = .ok root.toArray := by
+  -- Finality descends through the checkpoint at ordinal 20, then its root at ordinal 1.
+  have selected : PathSelects (SszType.desc (BeaconState preset fork))
+      (SszType.toValue state) [.position 20, .position 1] root.toArray := by
+    cases fork
+    all_goals try first
+      | exact absurd altair (by decide)
+      | exact absurd beforeGloas (by decide)
+    all_goals
+      apply PathSelects.containerField
+        (LawfulSszType.wellFormed (α := type_of% state))
+        (LawfulSszType.fits state) (ordinal := 20)
+        (child := SszType.desc Checkpoint) (inner := SszType.toValue state.finalizedCheckpoint)
+      · rfl
+      · rfl
+      · apply PathSelects.containerField
+          (LawfulSszType.wellFormed (α := Checkpoint))
+          (LawfulSszType.fits state.finalizedCheckpoint) (ordinal := 1)
+          (child := SszType.desc Root) (inner := SszType.toValue state.finalizedCheckpoint.root)
+        · rfl
+        · rfl
+        · exact .root (SszType.hashTreeRoot_ok_iff.mp rooted)
+  -- The joined path is the finality branch index, not the checkpoint container's index.
+  obtain ⟨index, indexed, read⟩ := selected.reads
+  have index_eq : index = finalizedRootGindex fork :=
+    Except.ok.inj (indexed.symm.trans (lightClientGindices_eq_of_lt altair beforeGloas).1)
+  simpa [index_eq] using read
+
+/-- In an Altair state, the finality node is the root of the finalized checkpoint's root field. -/
 theorem BeaconState.nodeRoot_finalizedCheckpoint_root_altair
     [LawfulSszType (BeaconState preset .altair)]
     (state : BeaconState preset .altair) {root : Bytes32}
     (rooted : SszType.hashTreeRoot state.finalizedCheckpoint.root = .ok root) :
     nodeRoot (SszType.desc (BeaconState preset .altair)) (SszType.toValue state)
-      (finalizedRootGindex .altair) = .ok root.toArray := by
-  -- Finality descends through the checkpoint at ordinal 20, then its root at ordinal 1.
-  have selected : PathSelects (SszType.desc (BeaconState preset .altair))
-      (SszType.toValue state) [.position 20, .position 1] root.toArray := by
-    apply PathSelects.containerField
-      (LawfulSszType.wellFormed (α := BeaconState preset .altair))
-      (LawfulSszType.fits state) (ordinal := 20)
-      (child := SszType.desc Checkpoint) (inner := SszType.toValue state.finalizedCheckpoint)
-    · rfl
-    · rfl
-    · apply PathSelects.containerField
-        (LawfulSszType.wellFormed (α := Checkpoint))
-        (LawfulSszType.fits state.finalizedCheckpoint) (ordinal := 1)
-        (child := SszType.desc Root) (inner := SszType.toValue state.finalizedCheckpoint.root)
-      · rfl
-      · rfl
-      · exact .root (SszType.hashTreeRoot_ok_iff.mp rooted)
-  -- The joined path is the finality branch index, not the checkpoint container's index.
-  obtain ⟨index, indexed, read⟩ := selected.reads
-  have index_eq : index = finalizedRootGindex .altair := by
-    exact Except.ok.inj (indexed.symm.trans lightClientGindices_altair_eq.1)
-  simpa [index_eq] using read
+      (finalizedRootGindex .altair) = .ok root.toArray :=
+  nodeRoot_finalizedCheckpoint_root_of_lt (by decide) (by decide) state rooted
 
 variable [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
 
