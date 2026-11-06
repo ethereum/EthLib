@@ -82,19 +82,23 @@ def computeBalanceWeightedSelection (state : BeaconState preset fork)
   if indices.size = 0 then throw .noCandidates
   unless indices.size < 2 ^ 64 do throw (.arith .overflow)
   let balances ← indices.mapM fun index => return (← getValidator state index).effectiveBalance
+  -- Each draw shuffles only its own position, so a draw costs the same at any count.
   let order : Nat → Nat :=
-    if shuffleIndices then
-      let shuffled := computeShuffledPermutation preset indices.size.toUInt64 seed
-      fun position => (shuffled.getD position 0).toNat
+    if shuffleIndices then Shuffle.shuffledIndex preset.SHUFFLE_ROUND_COUNT.toNat seed indices.size
     else id
   balanceWeightedSearch preset fork indices balances order seed size.toNat #[] (Nat.zero_le _) 0
 
-/-- The members of the attestation committees of a slot, committee after committee. -/
+/-- The members of the attestation committees of a slot, committee after committee.
+
+The committees share one shuffle of the active validators, computed once for the slot. -/
 def slotCommitteeMembers (state : BeaconState preset fork) (slot : Slot) :
-    Except AccessorError (Array ValidatorIndex) :=
-  let count := getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)
-  (List.range count.toNat).foldlM
-    (fun members index => return members ++ (← getBeaconCommittee state slot index.toUInt64)) #[]
+    Except AccessorError (Array ValidatorIndex) := do
+  let epoch := computeEpochAtSlot preset slot
+  let seed ← getSeed state epoch DOMAIN_BEACON_ATTESTER
+  let active := (getActiveValidatorIndices state epoch).toArray
+  let shuffled := computeShuffledPermutation preset (UInt64.ofNat active.size) seed
+  (List.range (getCommitteeCountPerSlot state epoch).toNat).foldlM (fun members index => do
+    return members ++ (← beaconCommitteeOf state slot index.toUInt64 active shuffled)) #[]
 
 /-- The payload timeliness committee of a slot, which may hold a validator more than once.
 

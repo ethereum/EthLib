@@ -274,19 +274,30 @@ def getCommitteeCountPerSlot (state : BeaconState preset fork) (epoch : Epoch) :
     ((getActiveValidatorIndices state epoch).length.toUInt64 / preset.SLOTS_PER_EPOCH /
       preset.TARGET_COMMITTEE_SIZE))
 
+/-- The committee of a slot with a given index, cut from active validators in a shuffled order.
+
+The active validators and their shuffle are those of the epoch of the slot.
+
+The committees of an epoch are numbered across its slots, in the order of the slots. -/
+def beaconCommitteeOf (state : BeaconState preset fork) (slot : Slot) (index : CommitteeIndex)
+    (active : Array ValidatorIndex) (shuffled : Array UInt64) :
+    Except AccessorError (Array ValidatorIndex) := do
+  let perSlot := getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)
+  let position ← liftArith do
+    addChecked (← mulChecked (slot % preset.SLOTS_PER_EPOCH) perSlot) index
+  let count ← liftArith (mulChecked perSlot preset.SLOTS_PER_EPOCH)
+  (shuffledCommittee active shuffled position count).mapError .shuffle
+
 /-- The committee of a slot with a given index, cut from the shuffled active validators.
 
 The committees of an epoch are numbered across its slots, in the order of the slots. -/
 def getBeaconCommittee (state : BeaconState preset fork) (slot : Slot) (index : CommitteeIndex) :
     Except AccessorError (Array ValidatorIndex) := do
   let epoch := computeEpochAtSlot preset slot
-  let perSlot := getCommitteeCountPerSlot state epoch
   let seed ← getSeed state epoch DOMAIN_BEACON_ATTESTER
-  let position ← liftArith do
-    addChecked (← mulChecked (slot % preset.SLOTS_PER_EPOCH) perSlot) index
-  let count ← liftArith (mulChecked perSlot preset.SLOTS_PER_EPOCH)
-  (computeCommittee preset (getActiveValidatorIndices state epoch).toArray seed position
-    count).mapError .shuffle
+  let active := (getActiveValidatorIndices state epoch).toArray
+  beaconCommitteeOf state slot index active
+    (computeShuffledPermutation preset (UInt64.ofNat active.size) seed)
 
 /-- Whether the draw for candidate number `i` accepts a candidate of an effective balance.
 

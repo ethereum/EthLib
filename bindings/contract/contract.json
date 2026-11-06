@@ -3778,7 +3778,7 @@
       {"constructor": "overflow", "code": 3}]}],
    "error_class": "ConsensusError",
    "docstring":
-   "The shuffled position of one index, which must be below the count."},
+   "The shuffled position of one index, which must be below the count.\n\nIt runs the rounds on that index alone, so its cost does not grow with the count."},
   {"summary": "The protocol IDs of a fork, up to Fulu.",
    "signature": "(fork: str) -> bytes",
    "operation": "EthLib.Consensus.protocolIds",

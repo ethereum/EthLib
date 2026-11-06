@@ -295,7 +295,7 @@ theorem mem_getActiveValidatorIndices_of_getBeaconCommittee {state : BeaconState
     (computed : getBeaconCommittee state slot index = .ok committee)
     {member : ValidatorIndex} (mem : member ∈ committee) :
     member ∈ getActiveValidatorIndices state (computeEpochAtSlot preset slot) := by
-  simp only [getBeaconCommittee, bind, Except.bind] at computed
+  simp only [getBeaconCommittee, beaconCommitteeOf, bind, Except.bind] at computed
   split at computed
   · cases computed
   split at computed
@@ -309,8 +309,7 @@ theorem count_ne_zero_of_computeCommittee {indices : Array ValidatorIndex} {seed
     {index count : UInt64} {committee : Array ValidatorIndex}
     (computed : computeCommittee preset indices seed index count = .ok committee) : count ≠ 0 := by
   intro zero
-  simp [computeCommittee, zero, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
-    at computed
+  simp [computeCommittee, shuffledCommittee, zero, bind, Except.bind] at computed
 
 /-- A beacon committee that has a value is one committee cut from the active indices.
 
@@ -329,7 +328,7 @@ theorem getBeaconCommittee_ok {state : BeaconState preset fork} {slot : Slot}
       computeCommittee preset
         (getActiveValidatorIndices state (computeEpochAtSlot preset slot)).toArray seed position
         count = .ok committee := by
-  simp only [getBeaconCommittee, bind_ok_iff, liftArith, mapError_ok_iff,
+  simp only [getBeaconCommittee, beaconCommitteeOf, bind_ok_iff, liftArith, mapError_ok_iff,
     Base.Uint64.mulChecked_ok_iff, Base.Uint64.addChecked_ok_iff] at computed
   obtain ⟨seed, seedOk, position, ⟨product, ⟨_, productEq⟩, _, positionEq⟩, count, ⟨_, countEq⟩,
     committeeOk⟩ := computed
@@ -520,8 +519,9 @@ theorem exists_mem_getBeaconCommittee {state : BeaconState preset fork} {epoch :
     apply UInt64.toNat_inj.mp
     rw [Base.Uint64.toNat_add_of_lt (by rw [productNat, indexNat, split]; omega), productNat,
       indexNat, split, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (by omega)]
-  simp only [getBeaconCommittee, epochEq, seedOk, liftArith, productOk, sumOk, countOk, bind,
-    Except.bind, Except.mapError, positionEq]
+  unfold computeCommittee at computed
+  simp only [getBeaconCommittee, beaconCommitteeOf, epochEq, seedOk, liftArith, productOk, sumOk,
+    countOk, bind, Except.bind, Except.mapError, positionEq]
   rw [computed]
 
 /-- One step of the pass that drops repeats keeps its list decreasing, below the rest. -/
