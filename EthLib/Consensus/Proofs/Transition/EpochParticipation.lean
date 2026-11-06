@@ -84,13 +84,12 @@ theorem updateInactivityScore_size {config : Config} {hit : Array Bool} {leaking
     (computed : updateInactivityScore config hit leaking scores index = .ok scores') :
     scores'.data.size = scores.data.size := by
   unfold updateInactivityScore at computed
-  cases found : scores.data[index.toNat]? with
-  | none => simp [found, throw, throwThe, MonadExceptOf.throw] at computed
-  | some score =>
-    simp only [found, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  split at computed
+  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨_, _, same⟩ := computed
     subst same
     simp
+  · simp [throw, throwThe, MonadExceptOf.throw] at computed
 
 /-- In the first epoch, the inactivity scores change nothing. -/
 theorem processInactivityUpdates_genesis {config : Config} (altair : .altair ≤ fork)

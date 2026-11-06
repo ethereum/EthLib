@@ -42,9 +42,12 @@ def nextInactivityScore (config : Config) (hit leaking : Bool) (score : UInt64) 
 def updateInactivityScore (config : Config) (hit : Array Bool) (leaking : Bool)
     (scores : InactivityScores preset fork) (index : ValidatorIndex) :
     Except TransitionError (InactivityScores preset fork) := do
-  let some score := scores.data[index.toNat]? | throw (.accessor (.indexOutOfRange index))
-  let score ← nextInactivityScore config (hit.getD index.toNat false) leaking score
-  return ⟨scores.data.set! index.toNat score, fun before => by simpa using scores.bound before⟩
+  if inside : index.toNat < scores.data.size then
+    let score ← nextInactivityScore config (hit.getD index.toNat false) leaking
+      scores.data[index.toNat]
+    return ⟨scores.data.set index.toNat score inside,
+      fun before => by simpa using scores.bound before⟩
+  else throw (.accessor (.indexOutOfRange index))
 
 /-- From Altair: the state after the inactivity scores update.
 
