@@ -616,10 +616,26 @@ theorem processOperations_deposits (beforeElectra : fork < .pectra)
     have := mt UInt64.le_iff_toNat_le.mpr gt
     omega
 
-/-- From Fulu, a block holds no deposit. -/
+/-- From Fulu, the expected number of deposits is zero. -/
 theorem expectedDepositCount_of_fusaka (fulu : .fusaka ≤ fork) {before : fork < .hegota} :
     expectedDepositCount state before = .ok 0 := by
   simp only [expectedDepositCount, fulu, ↓reduceIte]
   rfl
+
+/-- From Fulu, a valid block holds no deposit. -/
+theorem processOperations_no_deposit (fulu : .fusaka ≤ fork) {body : BeaconBlockBody preset fork}
+    (computed : processOperations config checks state body = .ok after) :
+    ∀ before : fork < .hegota, (body.deposits before).data.size = 0 := by
+  intro before
+  unfold processOperations at computed
+  split at computed
+  · cases computed
+  simp only [bind_ok_iff, ensure_ok_iff] at computed
+  rw [expectedDepositCount_of_fusaka fulu] at computed
+  obtain ⟨_, zero, rest⟩ := computed
+  simp only [Except.ok.injEq] at zero
+  subst zero
+  obtain ⟨_, sized, _⟩ := rest
+  simpa using sized
 
 end EthLib.Consensus
