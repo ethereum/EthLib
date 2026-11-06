@@ -95,16 +95,11 @@ def pad (message : ByteArray) : List UInt8 :=
   message.data.toList ++ 0x80 :: List.replicate (paddingZeros message.size) 0 ++
     (lengthBytes message.size).data.toList
 
-/-! ## Parsing -/
+/-! ## Words of four bytes -/
 
 /-- Four bytes read as one big-endian word, FIPS 180-4 §3.1. -/
 @[inline] def big32 (b0 b1 b2 b3 : UInt8) : UInt32 :=
   b0.toUInt32 <<< 24 ||| b1.toUInt32 <<< 16 ||| b2.toUInt32 <<< 8 ||| b3.toUInt32
-
-/-- Bytes as 32-bit words, four bytes each, FIPS 180-4 §5.2.1. -/
-def words : List UInt8 → List UInt32
-  | b0 :: b1 :: b2 :: b3 :: rest => big32 b0 b1 b2 b3 :: words rest
-  | _ => []
 
 /-! ## One block -/
 
@@ -119,10 +114,16 @@ def initial : State := ⟨IV[0], IV[1], IV[2], IV[3], IV[4], IV[5], IV[6], IV[7]
 structure Window where
   (w0 w1 w2 w3 w4 w5 w6 w7 w8 w9 w10 w11 w12 w13 w14 w15 : UInt32)
 
-/-- The first sixteen words of the schedule are the block's, FIPS 180-4 §6.2.2, step 1. -/
-def Window.ofWords (block : List UInt32) : Window :=
-  ⟨block[0]!, block[1]!, block[2]!, block[3]!, block[4]!, block[5]!, block[6]!, block[7]!,
-    block[8]!, block[9]!, block[10]!, block[11]!, block[12]!, block[13]!, block[14]!, block[15]!⟩
+/--
+The first sixteen words of the schedule are the block's, FIPS 180-4 §6.2.2, step 1.
+
+Word `j` is bytes `4j` to `4j + 3` of the block, read big-endian, FIPS 180-4 §5.2.1.
+-/
+def Window.ofBlock (block : Array UInt8) (whole : block.size = 64) : Window :=
+  let word (j : Fin 16) : UInt32 :=
+    big32 block[4 * j.val] block[4 * j.val + 1] block[4 * j.val + 2] block[4 * j.val + 3]
+  ⟨word 0, word 1, word 2, word 3, word 4, word 5, word 6, word 7,
+    word 8, word 9, word 10, word 11, word 12, word 13, word 14, word 15⟩
 
 /--
 The schedule one word later, FIPS 180-4 §6.2.2, step 1.
@@ -148,9 +149,11 @@ def rounds : List UInt32 → Window → State → State
 The hash value after one more block, FIPS 180-4 §6.2.2, steps 2 to 4.
 
 The working variables start as the hash value, go through the rounds, and are added back to it.
+
+The block is the first 64 bytes of the list, which the hypothesis guarantees.
 -/
-def compress (s : State) (block : List UInt8) : State :=
-  let r := rounds K.toList (Window.ofWords (words (block.take 64))) s
+def compress (s : State) (block : List UInt8) (whole : 64 ≤ block.length) : State :=
+  let r := rounds K.toList (Window.ofBlock (block.take 64).toArray (by simp; omega)) s
   ⟨s.a + r.a, s.b + r.b, s.c + r.c, s.d + r.d, s.e + r.e, s.f + r.f, s.g + r.g, s.h + r.h⟩
 
 /--
@@ -158,9 +161,11 @@ The hash value after the first blocks of 64 bytes, each absorbed by one step.
 
 The step is an argument: with the compression inside, the kernel overflows on the equations.
 -/
-def chain (step : State → List UInt8 → State) : (count : Nat) → List UInt8 → State → State
-  | 0, _, s => s
-  | count + 1, block, s => chain step count (block.drop 64) (step s block)
+def chain (step : State → (block : List UInt8) → 64 ≤ block.length → State) :
+    (count : Nat) → (block : List UInt8) → 64 * count ≤ block.length → State → State
+  | 0, _, _, s => s
+  | count + 1, block, whole, s =>
+    chain step count (block.drop 64) (by simp; omega) (step s block (by omega))
 
 /-! ## The hash -/
 
@@ -176,7 +181,7 @@ def digest (s : State) : ByteArray :=
 /-- SHA-256 of a message, FIPS 180-4 §6.2: every block of the padded message, in order. -/
 def hash (message : ByteArray) : ByteArray :=
   let padded := pad message
-  digest (chain compress (padded.length / 64) padded initial)
+  digest (chain compress (padded.length / 64) padded (Nat.mul_div_le _ _) initial)
 
 end EthLib.Cryptography.Hash.Sha256
 
