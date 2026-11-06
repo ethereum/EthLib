@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Bls.Errors
 public import EthLib.Cryptography.Inverse
 public import EthLib.Cryptography.BaseField
+public import EthLib.Cryptography.Montgomery
 
 /-!
 # `Fp`
@@ -37,6 +38,64 @@ protected theorem Fp.modulus_pos : 0 < Fp.modulus := by decide
 
 -- Named explicitly, since the anonymous instances of `Fp` and `Fr` would get the same name.
 instance Fp.instNeZeroModulus : NeZero Fp.modulus := ⟨by decide⟩
+
+/-- The modulus `p` as twelve limbs of 32 bits, the lowest first.
+
+It is inline, so that the compiler sees each limb as a constant. -/
+@[inline] def Fp.pLimbs : Montgomery.Limbs12 :=
+  ⟨4294945451, 3120496639, 2975072255, 514588670, 4138792484, 1731252896, 4085584575, 1685539716,
+    1129032919, 1260103606, 964683418, 436277738⟩
+
+/-- `-p⁻¹ mod 2 ^ 32`. -/
+@[inline] def Fp.pinv : UInt64 := 4294770685
+
+/-- The limbs write the modulus. -/
+theorem Fp.val_pLimbs : Montgomery.Limbs.val (n := 12) Fp.pLimbs = modulus := by decide
+
+open Montgomery in
+/-- Rows `0` to `5` of the Montgomery product of the limbs `a` and `b`, as limbs.
+
+The product is compiled in two halves: unrolled whole, it exceeds the default compile budget. -/
+def Fp.mulLow (a b : Limbs12) : Limbs12 :=
+  Montgomery.mulLow (n := 12) 6 (Limbs.get (n := 12) Fp.pLimbs) Fp.pinv (Limbs.get (n := 12) a)
+    (Limbs.get (n := 12) b)
+
+open Montgomery in
+/-- Rows `6` to `11` of the Montgomery product of `a` and `b`, then the final reduction.
+
+The limbs `lo` hold rows `0` to `5`. -/
+def Fp.mulHigh (a b lo : Limbs12) : Limbs12 :=
+  Montgomery.mulHigh (n := 12) 6 (Limbs.get (n := 12) Fp.pLimbs) Fp.pinv (Limbs.get (n := 12) a)
+    (Limbs.get (n := 12) b) 6 lo Limbs.pack
+
+open Montgomery in
+/-- The modulus `p` with the constants of its Montgomery arithmetic, on twelve limbs.
+
+It is inline, so that the compiler sees its fields as constants at each use.
+
+The product runs in two halves, joined by twelve limbs alone.
+
+That holds because `2 p < 2 ^ 384`: the rows keep the state below `2 p`, so no word lies above. -/
+@[inline] def Fp.params : Modulus 12 where
+  p := modulus
+  pLimbs := Fp.pLimbs
+  pinv := Fp.pinv
+  r1 := ⟨196605, 1980301312, 3289120770, 3958636555, 1405573306, 1598593111, 1884444485,
+    2010011731, 2723605613, 1543969431, 4202751123, 368467651⟩
+  r2 := ⟨473175878, 4108263220, 164693233, 175564454, 1284880085, 2380613484, 2476573632,
+    1743489193, 3038352685, 2591637125, 2462770090, 295210981⟩
+  pm2 := ⟨4294945449, 3120496639, 2975072255, 514588670, 4138792484, 1731252896, 4085584575,
+    1685539716, 1129032919, 1260103606, 964683418, 436277738⟩
+  pLimbs_spec := Fp.val_pLimbs
+  pinv_spec := by decide
+  r1_spec := by decide +kernel
+  r2_spec := by decide +kernel
+  pm2_spec := by decide
+  mul a b := Fp.mulHigh a b (Fp.mulLow a b)
+  mul_spec a b ha := by
+    unfold Fp.mulHigh Fp.mulLow
+    exact mulHigh_mulLow (n := 12) (k := 6) (m := 6) rfl (Limbs.fits _ 0) (by decide)
+      (by decide +kernel) (Limbs.fits a 0) (Fp.val_pLimbs.symm ▸ ha :) (Limbs.fits b 0) _
 
 /-- An element of the BLS12-381 base field. -/
 abbrev Fp := Fin Fp.modulus

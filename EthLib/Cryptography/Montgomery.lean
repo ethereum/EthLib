@@ -235,6 +235,14 @@ theorem loop_induct {σ : Type} (P : Nat → σ → Prop) (f : Nat → σ → σ
     exact ih (k + 1) (f k s) (hs k s (Nat.le_refl k) (by omega) h0)
       (fun i s hi hi' => hs i s (by omega) (by omega))
 
+/-- `k + m` steps are `k` steps, then `m` steps from the index after them. -/
+theorem loop_add {σ : Type} (f : Nat → σ → σ) (k m i : Nat) (s : σ) :
+    loop (k + m) f i s = loop m f (i + k) (loop k f i s) := by
+  induction k generalizing i s with
+  | zero => rw [Nat.zero_add, Nat.add_zero]; rfl
+  | succ k ih =>
+    rw [show k + 1 + m = k + m + 1 by omega, loop, ih, loop, show i + 1 + k = i + (k + 1) by omega]
+
 /-! ## Unrolled words -/
 
 /-- Words of `n` limbs, each held in 64 bits, with the operations of the product.
@@ -303,6 +311,8 @@ class Words (n : Nat) where
         num n (word t) 0 + 2 ^ (32 * n) * (subb t p br k).2.toNat
   /-- The unrolled steps are the steps. -/
   fold_eq : ∀ {σ : Type} (f : Nat → σ → σ) k s, fold f k s = loop n f k s
+  /-- Words with the same words at each index below `n` are equal. -/
+  ext : ∀ s t, (∀ i < n, word s i = word t i) → s = t
 
 /-- No words. -/
 instance : Words 0 where
@@ -332,6 +342,7 @@ instance : Words 0 where
     omega
   subb_spec _ _ _ _ _ _ hb := ⟨trivial, hb, by simp [num]⟩
   fold_eq _ _ _ := rfl
+  ext _ _ _ := rfl
 
 section Succ
 
@@ -503,6 +514,12 @@ theorem subbS_spec (t : UInt64 × inst.W) (p : Nat → UInt64) (br : UInt64) (k 
   fold_eq f k s := by
     rw [Words.fold_eq]
     rfl
+  ext s t h := by
+    have h0 := h 0 (Nat.succ_pos n)
+    simp only [wordS, cons, ↓reduceIte] at h0
+    refine Prod.ext h0 (Words.ext _ _ fun i hi => ?_)
+    have e := h (i + 1) (by omega)
+    simpa only [wordS, cons, Nat.add_one_ne_zero, ↓reduceIte, Nat.add_sub_cancel] using e
 
 end Succ
 
@@ -847,6 +864,76 @@ theorem val_ofNat (x : Nat) : val (ofNat (n := n) x) = x % 2 ^ (32 * n) := by
 
 end Limbs
 
+/-! ## The product in two parts -/
+
+section Parts
+
+/-- Zeros load as the words of zero. -/
+theorem load_zero : Words.load (n := n) (fun _ => 0) 0 = Words.zero :=
+  Words.ext _ _ fun i hi => by rw [Words.word_load _ _ _ hi, Words.word_zero]
+
+variable [Limbs n]
+
+/-- `m` rows of the CIOS product from row `k`, from the words `acc` with `0` above them. -/
+@[inline] def mulRows (m : Nat) [Words m] (p : Nat → UInt64) (pinv : UInt64) (a b : Nat → UInt64)
+    (k : Nat) (acc : Nat → UInt64) : Words.W n × UInt64 :=
+  Words.fold (n := m) (step p pinv a b) k (Words.load (n := n) acc 0, 0)
+
+/-- The first `k` rows of the CIOS product, as stored limbs.
+
+The word above them is `0` when `2 p ≤ R`, so the limbs hold the whole state. -/
+@[inline] def mulLow (k : Nat) [Words k] (p : Nat → UInt64) (pinv : UInt64)
+    (a b : Nat → UInt64) : Limbs.T n :=
+  Limbs.pack (mulRows (n := n) k p pinv a b 0 fun _ => 0).1
+
+/-- The rows of the CIOS product from row `k`, from the limbs `lo` of the rows before them.
+
+The final reduction follows, and its result goes to `out`. -/
+@[inline] def mulHigh (m : Nat) [Words m] (p : Nat → UInt64) (pinv : UInt64) (a b : Nat → UInt64)
+    (k : Nat) (lo : Limbs.T n) {β : Type} (out : Words.W n → β) : β :=
+  let st := mulRows (n := n) m p pinv a b k (Limbs.get lo)
+  reduce p st.1 st.2 out
+
+/-- Fitting words, stored as limbs and loaded back, are the same words. -/
+theorem load_pack {t : Words.W n} (h : Fits n (Words.word t) 0) :
+    Words.load (n := n) (Limbs.get (Limbs.pack (n := n) t)) 0 = t := by
+  have hl := lt_of_fits h
+  refine Words.ext _ _ fun i hi => UInt64.toNat_inj.mp ?_
+  rw [Words.word_load _ _ _ hi, Nat.zero_add, Limbs.get_pack _ _ hi,
+    Nat.mod_eq_of_lt (by simpa using hl i hi)]
+
+/-- The product in two parts is the CIOS product, when `2 p ≤ R`.
+
+The rows keep the state below `2 p`, so the word above the limbs of the first part is `0`. -/
+theorem mulHigh_mulLow {k m : Nat} [Words k] [Words m] (hkm : k + m = n) {p : Nat → UInt64}
+    {pinv : UInt64} (hp : Fits n p 0) (hpinv : (num n p 0 * pinv.toNat + 1) % 2 ^ 32 = 0)
+    (hR : 2 * num n p 0 ≤ 2 ^ (32 * n)) {a : Nat → UInt64} (ha : Fits n a 0)
+    (hA : num n a 0 < num n p 0) {b : Nat → UInt64} (hb : Fits n b 0) {β : Type}
+    (out : Words.W n → β) :
+    mulHigh m p pinv a b k (mulLow (n := n) k p pinv a b) out = mulWords p pinv a b out := by
+  have hbi := lt_of_fits hb
+  have hlow := loop_induct (fun _ st => Fits n (Words.word st.1) 0 ∧ value st < 2 * num n p 0)
+    (step p pinv a b) k 0 ((Words.zero : Words.W n), 0) ⟨zero_spec.1, by
+      simp only [value, zero_spec.2, UInt64.toNat_zero, Nat.mul_zero, Nat.add_zero]
+      have := pos_of_pinv hpinv
+      omega⟩ fun i st _ hi ⟨hf, hv⟩ => by
+      obtain ⟨fs, vs, _⟩ := step_spec hp hpinv ha hA b (i := i)
+        (by have := hbi i (by omega); rwa [Nat.zero_add] at this) hf hv
+      exact ⟨fs, vs⟩
+  have e := loop_add (step p pinv a b) k m 0 ((Words.zero : Words.W n), 0)
+  rw [hkm, Nat.zero_add] at e
+  unfold mulHigh mulLow mulRows mulWords
+  rw [load_zero, Words.fold_eq, Words.fold_eq, Words.fold_eq, e]
+  generalize loop k (step p pinv a b) 0 ((Words.zero : Words.W n), 0) = st at hlow ⊢
+  obtain ⟨hf, hv⟩ := hlow
+  have htop : st.2 = 0 := by
+    simp only [value] at hv
+    have : 2 ^ (32 * n) * st.2.toNat < 2 ^ (32 * n) * 1 := by omega
+    exact UInt64.toNat_inj.mp (Nat.lt_one_iff.mp (Nat.lt_of_mul_lt_mul_left this))
+  rw [load_pack hf, show ((st.1, 0) : Words.W n × UInt64) = st from Prod.ext rfl htop.symm]
+
+end Parts
+
 end Generic
 
 /-! ## Eight limbs -/
@@ -908,7 +995,98 @@ instance : Limbs 8 where
       UInt32.toUInt64_inj.mp (g 4 (by decide)), UInt32.toUInt64_inj.mp (g 5 (by decide)),
       UInt32.toUInt64_inj.mp (g 6 (by decide)), UInt32.toUInt64_inj.mp (g 7 (by decide))⟩
 
+/-! ## Twelve limbs -/
+
+/-- An integer below `2 ^ 384`, as 12 limbs of 32 bits, the lowest first. -/
+structure Limbs12 where
+  l0 : UInt32
+  l1 : UInt32
+  l2 : UInt32
+  l3 : UInt32
+  l4 : UInt32
+  l5 : UInt32
+  l6 : UInt32
+  l7 : UInt32
+  l8 : UInt32
+  l9 : UInt32
+  l10 : UInt32
+  l11 : UInt32
+deriving DecidableEq, Inhabited
+
+/-- The limb at an index, and `0` past the last. -/
+@[inline] def Limbs12.get (a : Limbs12) : Nat → UInt64
+  | 0 => a.l0.toUInt64
+  | 1 => a.l1.toUInt64
+  | 2 => a.l2.toUInt64
+  | 3 => a.l3.toUInt64
+  | 4 => a.l4.toUInt64
+  | 5 => a.l5.toUInt64
+  | 6 => a.l6.toUInt64
+  | 7 => a.l7.toUInt64
+  | 8 => a.l8.toUInt64
+  | 9 => a.l9.toUInt64
+  | 10 => a.l10.toUInt64
+  | 11 => a.l11.toUInt64
+  | _ => 0
+
+/-- Twelve limbs, stored in a structure of twelve fields. -/
+instance : Limbs 12 where
+  T := Limbs12
+  get := Limbs12.get
+  pack t := ⟨t.1.toUInt32, t.2.1.toUInt32, t.2.2.1.toUInt32, t.2.2.2.1.toUInt32,
+    t.2.2.2.2.1.toUInt32, t.2.2.2.2.2.1.toUInt32, t.2.2.2.2.2.2.1.toUInt32,
+    t.2.2.2.2.2.2.2.1.toUInt32, t.2.2.2.2.2.2.2.2.1.toUInt32,
+    t.2.2.2.2.2.2.2.2.2.1.toUInt32, t.2.2.2.2.2.2.2.2.2.2.1.toUInt32,
+    t.2.2.2.2.2.2.2.2.2.2.2.1.toUInt32⟩
+  decEq := inferInstanceAs (DecidableEq Limbs12)
+  get_lt a k := by
+    unfold Limbs12.get
+    split <;> first | exact UInt32.toNat_lt _ | decide
+  get_pack t k hk := by
+    have e (x : UInt64) : x.toUInt32.toUInt64.toNat = x.toNat % 2 ^ 32 := by
+      rw [UInt32.toNat_toUInt64, UInt64.toNat_toUInt32]
+    match k, hk with
+    | 0, _ => exact e _
+    | 1, _ => exact e _
+    | 2, _ => exact e _
+    | 3, _ => exact e _
+    | 4, _ => exact e _
+    | 5, _ => exact e _
+    | 6, _ => exact e _
+    | 7, _ => exact e _
+    | 8, _ => exact e _
+    | 9, _ => exact e _
+    | 10, _ => exact e _
+    | 11, _ => exact e _
+  ext a b h := by
+    have g (k : Nat) (hk : k < 12) := h k hk
+    cases a
+    cases b
+    simp only [Limbs12.mk.injEq]
+    exact ⟨UInt32.toUInt64_inj.mp (g 0 (by decide)), UInt32.toUInt64_inj.mp (g 1 (by decide)),
+      UInt32.toUInt64_inj.mp (g 2 (by decide)), UInt32.toUInt64_inj.mp (g 3 (by decide)),
+      UInt32.toUInt64_inj.mp (g 4 (by decide)), UInt32.toUInt64_inj.mp (g 5 (by decide)),
+      UInt32.toUInt64_inj.mp (g 6 (by decide)), UInt32.toUInt64_inj.mp (g 7 (by decide)),
+      UInt32.toUInt64_inj.mp (g 8 (by decide)), UInt32.toUInt64_inj.mp (g 9 (by decide)),
+      UInt32.toUInt64_inj.mp (g 10 (by decide)), UInt32.toUInt64_inj.mp (g 11 (by decide))⟩
+
 /-! ## The modulus -/
+
+section Core
+
+variable {n : Nat} [Words n] [Limbs n]
+
+/-- The Montgomery product of the limbs `a` and `b`, for the modulus of limbs `p`.
+
+The compiler makes one copy for each limb count, with the code unrolled. -/
+@[specialize] def mulCore (a b : Limbs.T n) (p : @& Limbs.T n) (pinv : UInt64) : Limbs.T n :=
+  mulWords (Limbs.get p) pinv (Limbs.get a) (Limbs.get b) Limbs.pack
+
+/-- The product of the limbs is the CIOS product. -/
+theorem mulCore_eq (a b : Limbs.T n) (p : Limbs.T n) (pinv : UInt64) :
+    mulCore a b p pinv = mulWords (Limbs.get p) pinv (Limbs.get a) (Limbs.get b) Limbs.pack := rfl
+
+end Core
 
 /-- An odd modulus `p` below `R = 2 ^ (32 n)`, with the constants of its Montgomery arithmetic.
 
@@ -936,6 +1114,15 @@ structure Modulus (n : Nat) [Words n] [Limbs n] where
   r2_spec : Limbs.val r2 = 2 ^ (32 * n) * 2 ^ (32 * n) % p
   /-- The exponent of the inverse. -/
   pm2_spec : Limbs.val pm2 = p - 2
+  /-- The Montgomery product of the limbs `a`, below `p`, and `b`.
+
+  By default it is the CIOS product, unrolled whole. -/
+  mul : Limbs.T n → Limbs.T n → Limbs.T n := fun a b => mulCore a b pLimbs pinv
+  /-- The product is the CIOS product. -/
+  mul_spec : ∀ a b, Limbs.val a < p →
+      mul a b = mulWords (Limbs.get pLimbs) pinv (Limbs.get a) (Limbs.get b) Limbs.pack := by
+    intros
+    exact EthLib.Cryptography.Montgomery.mulCore_eq ..
 
 end Montgomery
 
@@ -989,16 +1176,10 @@ theorem mulLimbs_spec (M : Modulus n) (a : Limbs.T n) (ha : Limbs.val a < M.p) (
   rw [M.num_eq] at hl he
   exact ⟨hl, he⟩
 
-/-- The Montgomery product of the limbs `a` and `b`, for the modulus of limbs `p`.
-
-The compiler makes one copy for each limb count, with the code unrolled. -/
-@[specialize] def mulCore (a b : Limbs.T n) (p : @& Limbs.T n) (pinv : UInt64) : Limbs.T n :=
-  mulWords (Limbs.get p) pinv (Limbs.get a) (Limbs.get b) Limbs.pack
-
 /-- The Montgomery product of `a`, below `p`, and `b`: `a b R⁻¹ mod p`. -/
 @[inline] def mulLimbs (M : Modulus n) (a : Limbs.T n) (ha : Limbs.val a < M.p) (b : Limbs.T n) :
     Montgomery M :=
-  ⟨mulCore a b M.pLimbs M.pinv, (mulLimbs_spec M a ha b).1⟩
+  ⟨M.mul a b, by rw [M.mul_spec a b ha]; exact (mulLimbs_spec M a ha b).1⟩
 
 /-- Zero. -/
 @[inline] def zero : Montgomery M :=
@@ -1170,8 +1351,10 @@ theorem toNat_eq_val (a : Montgomery M) :
     toNat a = Limbs.val (mulLimbs M a.limbs a.lt (Limbs.ofNat 1)).limbs :=
   numPairs_eq (Limbs.fits _ 0)
 
-/-- `a ^ k`, by square and multiply. -/
-@[specialize] def pow (a : Montgomery M) (k : Nat) : Montgomery M :=
+/-- `a ^ k`, by square and multiply.
+
+The compiler makes one copy for each modulus, so each product is a direct call. -/
+@[specialize M] def pow (a : Montgomery M) (k : Nat) : Montgomery M :=
   if k = 0 then one
   else
     let half := pow (mul a a) (k / 2)
@@ -1179,8 +1362,11 @@ theorem toNat_eq_val (a : Montgomery M) :
 termination_by k
 decreasing_by omega
 
-/-- The powers `a ^ 0` to `a ^ 15`, from `t` holding the first powers. -/
-@[specialize] def powTableAux (a : Montgomery M) : Nat → Array (Montgomery M) → Array (Montgomery M)
+/-- The powers `a ^ 0` to `a ^ 15`, from `t` holding the first powers.
+
+The compiler makes one copy for each modulus, so each product is a direct call. -/
+@[specialize M] def powTableAux (a : Montgomery M) :
+    Nat → Array (Montgomery M) → Array (Montgomery M)
   | 0, t => t
   | k + 1, t => powTableAux a k (t.push (mul t.back! a))
 
@@ -1211,8 +1397,10 @@ decreasing_by omega
 
 /-- `acc ^ (2 ^ (32 k)) * a ^ e`, for the integer `e` of the low `k` limbs of `l`.
 
-The limbs go from the highest, with the powers `t` of `a`. -/
-@[specialize] def powDigits (t : Array (Montgomery M)) (l : Limbs.T n) :
+The limbs go from the highest, with the powers `t` of `a`.
+
+The compiler makes one copy for each modulus, so each product is a direct call. -/
+@[specialize M] def powDigits (t : Array (Montgomery M)) (l : Limbs.T n) :
     Nat → Montgomery M → Montgomery M
   | 0, acc => acc
   | k + 1, acc => powDigits t l k (powWord t acc (Limbs.get l k).toUInt32)
