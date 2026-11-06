@@ -184,9 +184,7 @@ def column (s : Block) (c : Fin 4) : Word :=
 
 /-- Each column of the state multiplied by the fixed matrix of `a`. -/
 def mixColumnsWith (a : Word) (s : Block) : Block :=
-  -- FIPS 197 §5.1.3 (5.7) applies the matrix independently to each column.
-  --
-  -- Keep the four products, so the rows of a column share one multiplication.
+  -- The matrix acts on each column alone, so the four rows of a column share one product.
   let columns : Vector Word 4 := Vector.ofFn fun c => mulWord a (column s c)
   -- Byte `s'[r, c]` at index `i` is row `r = i mod 4` of the product of column `c = i / 4`.
   Vector.ofFn fun i => (columns[i.val / 4]'(by omega))[i.val % 4]'(by omega)
