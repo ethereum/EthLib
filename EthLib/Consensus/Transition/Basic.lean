@@ -166,6 +166,12 @@ inductive TransitionError where
   | noCommitteeAttester (index : CommitteeIndex)
   /-- From Electra: the validator of a voluntary exit has a pending partial withdrawal. -/
   | exitPendingWithdrawal (index : ValidatorIndex)
+  /-- From Gloas: the parent payload is empty, but the block carries requests for it. -/
+  | parentRequestsNotEmpty
+  /-- From Gloas: the requests of the block are not those that the parent bid commits to. -/
+  | wrongParentRequestsRoot
+  /-- From Gloas: a list holds more entries than the most allowed. -/
+  | tooManyOperations (count limit : Nat)
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -246,6 +252,9 @@ def TransitionError.code : TransitionError → UInt32
   | .attestationIndexNotZero _ => 75
   | .noCommitteeAttester _ => 76
   | .exitPendingWithdrawal _ => 77
+  | .parentRequestsNotEmpty => 78
+  | .wrongParentRequestsRoot => 79
+  | .tooManyOperations .. => 80
 
 /-- An error of a state accessor, as an error of the transition. -/
 def liftAccessor {α : Type} (result : Except AccessorError α) : Except TransitionError α :=
