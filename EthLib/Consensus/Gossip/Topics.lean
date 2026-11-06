@@ -194,7 +194,7 @@ def computeSubnetForDataColumnSidecar (config : Config) (columnIndex : UInt64) :
 
 /-- The 32 bytes of a SHA-256 digest, as a seed of the shuffle. -/
 def seedOfDigest (digest : ByteArray) : Bytes32 :=
-  Vector.ofFn fun i => digest[i.val]!
+  Vector.ofFn fun i => digest.data.getD i.val 0
 
 /--
 The attestation subnets that a node subscribes to in an epoch.

@@ -54,7 +54,7 @@ def CustodyError.code : CustodyError → UInt32
 
 /-- The integer of the first eight bytes, least significant first. -/
 def firstUInt64 (bytes : ByteArray) : UInt64 :=
-  (List.range 8).foldr (fun i acc => acc <<< 8 ||| (bytes[i]!).toUInt64) 0
+  (List.range 8).foldr (fun i acc => acc <<< 8 ||| (bytes.data.getD i 0).toUInt64) 0
 
 /-- The group that one ID hashes to.
 
