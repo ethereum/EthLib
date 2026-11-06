@@ -722,6 +722,14 @@ theorem ne_of_model {a b : Fp2} (h : (a.map Fp.toModel).beq (b.map Fp.toModel) =
   rw [map_beq, (beq_iff_eq (a := a)).mpr rfl] at h
   exact Bool.noConfusion h
 
+/-- The image of the norm is the norm computed on the image. -/
+theorem toModel_norm (a : Fp2) :
+    Fp.toModel (norm a) =
+      (a.map Fp.toModel).c0 * (a.map Fp.toModel).c0 +
+        (a.map Fp.toModel).c1 * (a.map Fp.toModel).c1 := by
+  rw [norm, Fp.toModel_add, Fp.toModel_mul, Fp.toModel_mul]
+  rfl
+
 /-- One is not zero, so its zero test fails. -/
 theorem one_isZero : (one : Fp2).isZero = false :=
   Bool.eq_false_iff.mpr fun h => one_ne_zero (isZero_iff.mp h)
@@ -772,8 +780,8 @@ macro "decide_eq_at_model" "[" ids:Lean.Parser.Tactic.simpLemma,* "]" : tactic =
                Fp2.map_mulByOnePlusI, Fp.toModel_ofNat, Fp.toModel_zero, Fp.toModel_one,
                Fp.toModel_zero', Fp.toModel_one', Fp.toModel_numeral, Fp.toModel_add,
                Fp.toModel_sub, Fp.toModel_mul, Fp.toModel_neg, Fp.toModel_inverse,
-               Fp.toModel_powNat, Fp.baseField_ofNat, Fp.baseField_zero, Fp.baseField_one,
-               Fp.baseField_inverse, Fp.baseField_powNat, $ids,*]
+               Fp.toModel_powNat, Fp2.toModel_norm, Fp.baseField_ofNat, Fp.baseField_zero,
+               Fp.baseField_one, Fp.baseField_inverse, Fp.baseField_powNat, $ids,*]
              decide +kernel))
 
 end EthLib.Cryptography.Bls

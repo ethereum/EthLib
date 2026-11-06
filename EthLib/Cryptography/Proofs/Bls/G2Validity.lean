@@ -98,7 +98,10 @@ theorem cube_add_bTwist_ne_zero (x : Fp2) :
   have hcube : x * x * x = -bTwist := eq_neg_of_add_eq_zero_left h
   have hnorm : Fp2.norm (x * x * x) = Fp2.norm (-bTwist) := congrArg Fp2.norm hcube
   rw [Fp2.norm_mul, Fp2.norm_mul] at hnorm
-  have hbt : (Fp2.norm (-bTwist) : ZMod Fp.modulus) = 32 := by decide
+  have hbt : Fp.toZMod (Fp2.norm (-bTwist)) = 32 := by
+    rw [show Fp2.norm (-bTwist) = Fp.ofNat 32 by
+        decide_eq_at_model [Fp2.norm, Fp2.neg_c0, Fp2.neg_c1, bTwist],
+      Fp.toZMod_ofNat, Nat.cast_ofNat]
   exact cube_ne_32_zmod (Fp2.norm x) (hnorm.trans hbt)
 
 /-- Because `x^3 + bTwist` has no root, any affine solution has `2 * y != 0` and is nonsingular. -/
@@ -130,7 +133,7 @@ theorem valid_of_isOnTwist_of_z_one {p : G2}
   dsimp only at hz
   subst z
   have heq : y * y = x * x * x + bTwist := by
-    simpa [isOnTwist, isInfinity, show (1 : Fp2).isZero = false from rfl] using h
+    simpa [isOnTwist, isInfinity, show (1 : Fp2).isZero = false from Fp2.one_isZero] using h
   exact valid_of_affine_equation heq
 
 theorem valid_generator : Valid generator :=

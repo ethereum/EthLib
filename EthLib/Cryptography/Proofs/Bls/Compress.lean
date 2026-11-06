@@ -612,9 +612,12 @@ private theorem dy_ne_zero_zmod {x y : ZMod Fp.modulus} (h : y * y = x * x * x +
   exact mul_ne_zero h2 hy hdy'
 
 /-- A pair `(x, y)` with `y^2 = x^3 + 4` gives a nonsingular point with `z = 1`. -/
-theorem valid_of_affine_eq {x y : Fp}
-    (h : (y : ZMod Fp.modulus) * y = x * x * x + Fp.ofNat 4) :
+theorem valid_of_affine_eq {x y : Fp} (h : y * y = x * x * x + Fp.ofNat 4) :
     Valid ⟨x, y, Fp.one⟩ := by
+  -- Read the equation in `ZMod p`.
+  have hz : Fp.toZMod y * Fp.toZMod y = Fp.toZMod x * Fp.toZMod x * Fp.toZMod x + 4 := by
+    have h' := congrArg Fp.toZMod h
+    rwa [map_add, map_mul, map_mul, map_mul, Fp.toZMod_ofNat, Nat.cast_ofNat] at h'
   show curve.Nonsingular (rep ⟨x, y, Fp.one⟩)
   -- Nonsingular means: the equation holds and some partial derivative is nonzero.
   rw [nonsingular_iff, equation_iff]
@@ -624,7 +627,7 @@ theorem valid_of_affine_eq {x y : Fp}
     show curve.a₆ = (4 : ZMod Fp.modulus) from rfl,
     rep_x, rep_y, rep_z, show (Fp.one : ZMod Fp.modulus) = 1 from rfl]
   -- The equation holds, and the y-derivative is the nonzero partial.
-  exact ⟨valid_eq_zmod h, Or.inr (Or.inl (dy_ne_zero_zmod h))⟩
+  exact ⟨valid_eq_zmod hz, Or.inr (Or.inl (dy_ne_zero_zmod hz))⟩
 
 /-- Choosing `y` or `-y` does not change `y^2`. -/
 private theorem sq_select {yPos : Fp} {P : Prop} [Decidable P] :

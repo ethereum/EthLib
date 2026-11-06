@@ -214,7 +214,10 @@ open ListPoly
 /-! ## The isogeny identity -/
 
 /-- A coefficient list of the specification, seen in Mathlib's `ZMod p`. -/
-private def toFs (l : List Fp) : List F := l
+private def toFs (l : List Fp) : List F := l.map toF
+
+/-- A constant of the specification is the cast of its integer. -/
+private theorem toF_ofNat (n : Nat) : toF (BaseField.ofNat n) = (n : F) := Fp.toZMod_ofNat n
 
 -- The kernel multiplies the coefficient lists: about 5 s and 1.5 GB.
 private theorem coefficients_eq :
@@ -224,8 +227,14 @@ private theorem coefficients_eq :
       add (mul (mul (toFs K1) (mul (toFs K1) (toFs K1)))
           (mul (toFs K4 ++ [1]) (toFs K4 ++ [1])))
         (mul [4] (mul (mul (toFs K2 ++ [1]) (mul (toFs K2 ++ [1]) (toFs K2 ++ [1])))
-          (mul (toFs K4 ++ [1]) (toFs K4 ++ [1])))) :=
-  of_decide_eq_true (inst := instDecidableEqList _ _) (by decide +kernel)
+          (mul (toFs K4 ++ [1]) (toFs K4 ++ [1])))) := by
+  -- The coefficients become casts of integers, so the kernel computes only in `ZMod p`.
+  simp only [toFs, K1, K2, K3, K4, List.map_cons, List.map_nil, Aprime, Bprime, toF_ofNat,
+    k1_0, k1_1, k1_2, k1_3, k1_4, k1_5, k1_6, k1_7, k1_8, k1_9, k1_10, k1_11, k2_0, k2_1, k2_2,
+    k2_3, k2_4, k2_5, k2_6, k2_7, k2_8, k2_9, k3_0, k3_1, k3_2, k3_3, k3_4, k3_5, k3_6, k3_7,
+    k3_8, k3_9, k3_10, k3_11, k3_12, k3_13, k3_14, k3_15, k4_0, k4_1, k4_2, k4_3, k4_4, k4_5,
+    k4_6, k4_7, k4_8, k4_9, k4_10, k4_11, k4_12, k4_13, k4_14]
+  exact of_decide_eq_true (inst := instDecidableEqList _ _) (by decide +kernel)
 
 private theorem eval_monic (l : List F) (x : F) :
     eval (l ++ [1]) x = eval l x + x ^ l.length := by
