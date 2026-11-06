@@ -65,6 +65,11 @@ theorem mulChecked_ok_iff {a b c : UInt64} :
     simp only [reduceCtorEq, false_iff, not_and]
     omega
 
+/-- A product below `2^64` succeeds, and it returns the wrapping product. -/
+theorem mulChecked_of_lt {a b : UInt64} (h : a.toNat * b.toNat < 2 ^ 64) :
+    mulChecked a b = .ok (a * b) :=
+  mulChecked_ok_iff.mpr ⟨h, by rw [UInt64.toNat_mul, Nat.mod_eq_of_lt h]⟩
+
 /-- The quotient succeeds exactly when `b ≠ 0`, and then it is the quotient on `Nat`. -/
 theorem divChecked_ok_iff {a b c : UInt64} :
     divChecked a b = .ok c ↔ b ≠ 0 ∧ c.toNat = a.toNat / b.toNat := by

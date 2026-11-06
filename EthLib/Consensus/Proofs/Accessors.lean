@@ -428,11 +428,6 @@ theorem eq_of_mem_getBeaconCommittee {state : BeaconState preset fork}
   rw [← Nat.div_add_mod firstSlot.toNat length, ← Nat.div_add_mod secondSlot.toNat length,
     epochNat, sameMod]
 
-/-- A product below `2^64` succeeds, and it returns the wrapping product. -/
-theorem mulChecked_of_lt {a b : UInt64} (small : a.toNat * b.toNat < 2 ^ 64) :
-    mulChecked a b = .ok (a * b) :=
-  Base.Uint64.mulChecked_ok_iff.mpr ⟨small, by rw [UInt64.toNat_mul, Nat.mod_eq_of_lt small]⟩
-
 /-- Every active validator is in a committee of its epoch.
 
 The committee has a slot of the epoch and an index below the committees of a slot.
