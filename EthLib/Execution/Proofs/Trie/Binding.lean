@@ -368,7 +368,7 @@ theorem verifyProof_sound (hash : ByteArray → Hash32) {trie : Trie} {key : Byt
 
 Later entries replace earlier values, and an empty value removes its key.
 
-The construction supplies the unique keys required by Yellow Paper Appendix D. -/
+The construction gives distinct keys, which the trie of Yellow Paper Appendix D assumes. -/
 theorem verifyProof_sound_foldl_trieSet (hash : ByteArray → Hash32) (secured : Bool)
     (pairs : List (ByteArray × ByteArray)) :
     let trie := pairs.foldl (fun trie (key, value) => trieSet trie key value) ⟨secured, []⟩
@@ -451,7 +451,7 @@ theorem root_binding (hash : ByteArray → Hash32) {trie₁ trie₂ : Trie} {roo
 
 The lists may repeat keys or remove them with empty values.
 
-Each construction supplies the unique keys required by Yellow Paper Appendix D. -/
+Each construction gives distinct keys, which the trie of Yellow Paper Appendix D assumes. -/
 theorem root_binding_foldl_trieSet (hash : ByteArray → Hash32) (secured : Bool)
     (pairs₁ pairs₂ : List (ByteArray × ByteArray)) :
     let trie₁ := pairs₁.foldl (fun trie (key, value) => trieSet trie key value) ⟨secured, []⟩

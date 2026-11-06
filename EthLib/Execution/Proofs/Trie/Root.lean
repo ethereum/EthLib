@@ -270,7 +270,7 @@ theorem trieGet_trieSet_of_ne (trie : Trie) {key other : ByteArray} (value : Byt
         Bool.eq_false_iff.mpr fun hother => h ((sameBytes_iff key other).mp hother).symm
       simp [List.find?_append, hkey]
 
-/-- Setting or removing a key preserves the unique keys required by Yellow Paper Appendix D. -/
+/-- Setting or removing a key keeps the keys distinct, as Yellow Paper Appendix D assumes. -/
 theorem nodup_keys_trieSet {trie : Trie} (hkeys : (trie.data.map Prod.fst).Nodup)
     (key value : ByteArray) : ((trieSet trie key value).data.map Prod.fst).Nodup := by
   unfold trieSet
@@ -295,7 +295,9 @@ theorem nodup_keys_trieSet {trie : Trie} (hkeys : (trie.data.map Prod.fst).Nodup
       exact habsent (List.any_eq_true.mpr
         ⟨entry, hentry, (sameBytes_iff _ _).mpr (hkey.trans (heq.trans hnew))⟩)
 
-/-- Setting any list of pairs from an empty trie gives the unique keys of Yellow Paper Appendix D.
+/-- Setting any list of pairs from an empty trie gives distinct keys.
+
+Yellow Paper Appendix D assumes distinct keys.
 
 This is the construction used by the trie root export, including repeated keys and deletions. -/
 theorem nodup_keys_foldl_trieSet (secured : Bool) (pairs : List (ByteArray × ByteArray)) :
