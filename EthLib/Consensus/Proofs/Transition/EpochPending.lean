@@ -9,6 +9,10 @@ public import EthLib.Consensus.Transition.EpochPending
 The pending deposits of an epoch keep one balance for each validator.
 
 The queue never grows.
+
+A pass never credits more inside the churn than the churn available.
+
+From Gloas, the churn of deposits is the churn of activations alone.
 -/
 
 @[expose] public section
@@ -66,11 +70,55 @@ theorem balancesMatch_passPendingDeposits {stop : PendingDeposit → Bool} {next
     exact balancesMatch_passPendingDeposits (deposits := rest) ‹_›
       ((applyPendingDeposit_kept credited).1 holds)
 
+/-- A pass that starts within the churn available credits no more than that churn inside it. -/
+theorem passPendingDeposits_processed_le {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
+    {available : Gwei} :
+    ∀ {deposits : List PendingDeposit} {state : BeaconState preset fork} {processed : Gwei}
+      {count : Nat} {postponed : Array PendingDeposit} {pass},
+      passPendingDeposits config checks stop nextEpoch available state processed count postponed
+        deposits = .ok pass →
+      processed ≤ available → pass.1.processed ≤ available
+  | [], _, _, _, _, _, computed, within => by
+    simp only [passPendingDeposits, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact within
+  | deposit :: rest, state, processed, count, postponed, pass, computed, within => by
+    unfold passPendingDeposits at computed
+    simp only [bind, Except.bind, pure, Except.pure] at computed
+    split at computed
+    · cases computed
+      exact within
+    split at computed
+    · split at computed
+      · cases computed
+      split at computed
+      · cases computed
+      cases computed
+      exact passPendingDeposits_processed_le (deposits := rest) ‹_› within
+    split at computed
+    · split at computed
+      · cases computed
+      cases computed
+      exact passPendingDeposits_processed_le (deposits := rest) ‹_› within
+    split at computed
+    · cases computed
+    split at computed
+    · cases computed
+      exact within
+    rename_i fits
+    split at computed
+    · cases computed
+    split at computed
+    · cases computed
+    cases computed
+    exact passPendingDeposits_processed_le (deposits := rest) ‹_›
+      (UInt64.not_lt.mp fits)
+
 /-- The pending deposits of an epoch end with a pass over the queue from its front.
 
 The pass reads the next epoch and the churn available.
 
-That churn is the churn left from the last epoch and the activation churn.
+That churn is the churn left from the last epoch and the churn of deposits.
 
 It stops at a deposit that waits for the first slot of the finalized epoch.
 
@@ -81,7 +129,7 @@ theorem processPendingDeposits_pass {electra : .pectra ≤ fork}
     (computed : processPendingDeposits config checks state electra = .ok after) :
     ∃ nextEpoch churn available finalizedSlot pass,
       liftArith (addChecked (getCurrentEpoch state) 1) = .ok nextEpoch ∧
-      getActivationExitChurnLimit config state = .ok churn ∧
+      depositChurnLimit config state = .ok churn ∧
       liftArith (addChecked (state.depositBalanceToConsume electra) churn) = .ok available ∧
       liftArith (computeStartSlotAtEpoch preset state.finalizedCheckpoint.epoch) =
         .ok finalizedSlot ∧
@@ -91,8 +139,6 @@ theorem processPendingDeposits_pass {electra : .pectra ≤ fork}
         (after.pendingDeposits electra).data = pass.1.rest.toArray ++ pass.1.postponed := by
   unfold processPendingDeposits at computed
   simp only [bind, Except.bind, pure, Except.pure] at computed
-  split at computed
-  · cases computed
   repeat' (split at computed <;> try cases computed)
   all_goals exact ⟨_, _, _, _, _, liftAccessor_ok.mp ‹_›, liftAccessor_ok.mp ‹_›,
     liftAccessor_ok.mp ‹_›, liftAccessor_ok.mp ‹_›, ‹_›, rfl, rfl, rfl⟩

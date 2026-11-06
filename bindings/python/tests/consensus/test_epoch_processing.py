@@ -123,7 +123,8 @@ HANDLERS = {
     "ptc_window": ("gloas",),
     "builder_pending_payments": ("gloas",),
     "proposer_lookahead": ("fulu", "gloas"),
-    "pending_deposits": ("electra", "fulu"),
+    "pending_deposits": ("electra", "fulu", "gloas"),
+    "pending_deposits_churn": ("gloas",),
     "pending_consolidations": ("electra", "fulu", "gloas"),
 }
 

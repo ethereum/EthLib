@@ -95,6 +95,16 @@ def exitChurnLimit (config : Config) (state : BeaconState preset fork) :
   if .glamsterdam ≤ fork then getExitChurnLimit config state
   else getActivationExitChurnLimit config state
 
+/-- From Electra: the churn of pending deposits.
+
+Before Gloas it is the churn that activations and exits share.
+
+From Gloas it is the churn of activations alone. -/
+def depositChurnLimit (config : Config) (state : BeaconState preset fork) :
+    Except AccessorError Gwei :=
+  if .glamsterdam ≤ fork then getActivationChurnLimit config state
+  else getActivationExitChurnLimit config state
+
 /-- The place of an amount in a queue, and the churn left in its epoch.
 
 The queue holds its earliest open epoch and the churn left in it.

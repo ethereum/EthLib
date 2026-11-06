@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: operations
+handler: voluntary_exit_churn
+suite: pyspec_tests
+case: exit_churn__equal_to_activation_cap

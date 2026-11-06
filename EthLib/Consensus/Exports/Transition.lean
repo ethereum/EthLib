@@ -88,7 +88,7 @@ def runOperation {preset : Preset} {fork : Fork} (config : Config) (checks : Sig
       runTransition (processSyncAggregate config checks state altair
         (← decodeInput (SyncAggregate preset) operation))
     else throw (0, s!"no operation sync_aggregate at {fork.name}")
-  | "voluntary_exit" => do
+  | "voluntary_exit" | "voluntary_exit_churn" => do
     runTransition (processVoluntaryExit config checks state
       (← decodeInput SignedVoluntaryExit operation))
   | "execution_payload" =>
@@ -151,7 +151,7 @@ def runOperation {preset : Preset} {fork : Fork} (config : Config) (checks : Sig
 def gloasOperations : List String :=
   ["payload_attestation", "execution_payload_bid", "builder_deposit_request",
     "builder_exit_request", "withdrawals", "proposer_slashing", "attester_slashing",
-    "withdrawal_request", "consolidation_request", "voluntary_exit"]
+    "withdrawal_request", "consolidation_request", "voluntary_exit", "voluntary_exit_churn"]
 
 /-- The preset and the fork that UTF-8 names name, at a fork up to Gloas. -/
 def transitionPresetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do
@@ -197,7 +197,7 @@ def runEpochStep {preset : Preset} {fork : Fork} (config : Config) (handler : St
     if gloas : .glamsterdam ≤ fork then
       runTransition (liftAccessor (processBuilderPendingPayments state gloas))
     else throw (0, s!"no epoch step builder_pending_payments at {fork.name}")
-  | "pending_deposits" =>
+  | "pending_deposits" | "pending_deposits_churn" =>
     -- The deposits to new keys are checked with BLS, as the vectors expect.
     if electra : .pectra ≤ fork then
       runTransition (processPendingDeposits config .bls state electra)

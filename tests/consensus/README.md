@@ -98,7 +98,8 @@ Its cases also fix the answer of the execution layer, in `execution.yaml`.
 Bellatrix keeps two more of them: a payload with a transaction of no bytes, and a wrong parent hash.
 The withdrawals and the changes of BLS credentials run from Capella to Fulu.
 At Gloas they are the payload attestation, the execution payload bid, and the builder deposit and exit requests.
-From Gloas a slashing also removes the pending builder payments of the slashed proposer, which EthLib does not hold yet.
+From Gloas a slashing also removes the pending builder payments of the slashed proposer.
+The exit churn cases of Gloas run as voluntary exits, and the directory keeps one of them.
 Where the handler has both, one case is valid and one invalid.
 Every builder deposit or exit request case of the release has a state after it.
 So the second case of these two handlers is a request that leaves the state as it was.
@@ -117,6 +118,9 @@ The resets of the deposit votes, the slashings and the RANDAO mixes run from Pha
 The historical roots run from Phase 0 to Bellatrix, and the rotation of pending attestations at Phase 0.
 They are also the proposer lookahead at Fulu and Gloas.
 Then come the builder pending payments and the window of payload committees at Gloas.
+The pending deposits and the pending consolidations run from Electra to Gloas.
+Electra keeps three cases of the deposits and two of the consolidations, and Fulu and Gloas one each.
+The deposit churn cases of Gloas run as pending deposits, and the directory keeps two of them.
 The release has a single case of the window, so the directory keeps that one.
 Where a step has no case without a state after it, both kept cases are valid.
 The release has no mainnet case of the sync committee update, since its period is 256 epochs.

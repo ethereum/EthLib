@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: epoch_processing
+handler: pending_deposits_churn
+suite: pyspec_tests
+case: activation_churn__greater_than_cap
