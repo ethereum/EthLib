@@ -17,6 +17,8 @@ The request types are distinct bytes, so a request list names its type without d
 
 The list that the execution layer receives keeps the nonempty lists, in increasing order of type.
 
+Each of its entries has at least one byte, so its first byte exists.
+
 At Gloas, with no builder request, it is the list of Electra for the same requests.
 -/
 
@@ -123,6 +125,25 @@ theorem getExecutionRequestsList_length {preset : Preset} {fork : Fork}
     (made : getExecutionRequestsList requests = .ok out) :
     out.length = (requests.typedLists.filter (·.count != 0)).length :=
   (getExecutionRequestsList_spec made).length_eq.symm
+
+/-- In the list that the execution layer receives, every entry has at least one byte. -/
+theorem getExecutionRequestsList_size_pos {preset : Preset} {fork : Fork}
+    {requests : ExecutionRequests preset fork} {out : List ByteArray}
+    (made : getExecutionRequestsList requests = .ok out) :
+    ∀ b ∈ out, 0 < b.size := by
+  have spec := getExecutionRequestsList_spec made
+  clear made
+  generalize requests.typedLists.filter (·.count != 0) = lists at spec
+  induction spec with
+  | nil => simp
+  | @cons list _ _ _ head _ rest =>
+    obtain ⟨data, -, rfl⟩ := head
+    intro b hb
+    rcases List.mem_cons.mp hb with rfl | hb
+    · simp only [ByteArray.size_append]
+      have : (⟨list.type.toArray⟩ : ByteArray).size = 1 := by simp [ByteArray.size]
+      omega
+    · exact rest b hb
 
 /-- In the list that the execution layer receives, the type bytes strictly increase. -/
 theorem getExecutionRequestsList_increasing {preset : Preset} {fork : Fork}
