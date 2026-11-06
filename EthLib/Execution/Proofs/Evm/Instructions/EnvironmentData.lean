@@ -20,6 +20,8 @@ SLOTNUM pays the base price and pushes the slot of the block, from Glamsterdam o
 Each instruction exists exactly from the fork that adds its opcode.
 
 None of these instructions changes the message, the state or the substate of the frame.
+
+None of them changes memory either.
 -/
 
 @[expose] public section
@@ -146,5 +148,41 @@ theorem environmentStep_sameContext {op : Op}
     cases h
     exact (((popWord_sameContext h1).trans (chargeGas_sameContext h2)).trans
       (pushWord_sameContext h3)).advance
+
+/-- Each instruction of the environment keeps memory. -/
+theorem memory_environmentStep {op : Op}
+    {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    (hstep : environmentStep fork op = some step) {evm after : Evm fork Meter}
+    (h : step evm = .ok after) : after.memory = evm.memory := by
+  cases op <;> simp only [environmentStep, Option.some.injEq, reduceCtorEq] at hstep
+  all_goals first
+    | (subst hstep; exact memory_readFrame h)
+    | skip
+  case prevrandao =>
+    split at hstep <;> (simp only [Option.some.injEq] at hstep; subst hstep) <;>
+      exact memory_readFrame h
+  case chainid | basefee | blobbasefee | slotnum =>
+    split at hstep
+    · simp only [Option.some.injEq] at hstep
+      subst hstep
+      exact memory_readFrame h
+    · cases hstep
+  case blobhash =>
+    split at hstep
+    · simp only [Option.some.injEq] at hstep
+      subst hstep
+      obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+      obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+      obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
+      cases h
+      simp only [advance, memory_pushWord h3, memory_chargeGas h2, (popWord_eq_ok h1).2.1]
+    · cases hstep
+  case blockhash =>
+    subst hstep
+    obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    simp only [advance, memory_pushWord h3, memory_chargeGas h2, (popWord_eq_ok h1).2.1]
 
 end EthLib.Execution.Evm

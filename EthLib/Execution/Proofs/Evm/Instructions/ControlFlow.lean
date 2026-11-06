@@ -18,6 +18,8 @@ JUMPI with another condition fails exactly as JUMP does.
 When the frame holds the flags of its code, the valid destinations are the JUMPDEST opcodes.
 
 None of these instructions changes the message, the state or the substate of the frame.
+
+None of them changes memory either.
 -/
 
 @[expose] public section
@@ -133,6 +135,43 @@ theorem controlFlowStep_sameContext {op : Op}
     · split at h
       · cases h
         exact ⟨this.message, this.state, this.substate⟩
+      · cases h
+
+/-- Each instruction of control flow keeps memory. -/
+theorem memory_controlFlowStep {op : Op}
+    {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    (hstep : controlFlowStep op = some step) {evm after : Evm fork Meter}
+    (h : step evm = .ok after) : after.memory = evm.memory := by
+  cases op <;> simp only [controlFlowStep, Option.some.injEq, reduceCtorEq] at hstep <;>
+    subst hstep
+  case pc | gas => exact memory_readFrame h
+  case stop =>
+    cases h
+    rfl
+  case jumpdest =>
+    obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    simp only [advance, memory_chargeGas h1]
+  case jump =>
+    obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+    simp only [throw, throwThe, MonadExceptOf.throw] at h
+    split at h
+    · cases h
+      exact (memory_chargeGas h2).trans (popWord_eq_ok h1).2.1
+    · cases h
+  case jumpi =>
+    obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
+    have m3 := ((memory_chargeGas h3).trans (popWord_eq_ok h2).2.1).trans (popWord_eq_ok h1).2.1
+    simp only [throw, throwThe, MonadExceptOf.throw] at h
+    split at h
+    · cases h
+      exact m3
+    · split at h
+      · cases h
+        exact m3
       · cases h
 
 end EthLib.Execution.Evm

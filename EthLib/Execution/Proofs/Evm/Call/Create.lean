@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Call.MessageCall
+public import EthLib.Execution.Proofs.Evm.Call
 public import EthLib.Execution.Proofs.Evm.Gas.StateGas
 
 /-!
@@ -17,6 +18,10 @@ A creation whose init code fails gives back the state gas of the new account.
 From Glamsterdam, the code of a creation costs 1530 state gas a byte.
 
 No creation deploys code longer than 65536 bytes from Glamsterdam.
+
+A creation keeps the size of memory a multiple of 32, and so does the creator once it ends.
+
+So does every instruction that may send a message.
 -/
 
 @[expose] public section
@@ -149,5 +154,116 @@ theorem depositCode_size_le (h : fork ≥ .glamsterdam) {snapshot : TransactionS
   · rename_i _ fits
     simp only [hm, Option.any_some, decide_eq_true_eq, h, true_and, Nat.not_lt] at fits
     exact fits
+
+/-! ## The size of memory -/
+
+/-- The creator keeps its memory once the creation ends. -/
+theorem memory_resumeCreate {caller child after : Evm fork Meter} {newAccount : Nat}
+    {address : Address} (h : resumeCreate fork caller newAccount address child = .ok after) :
+    after.memory = caller.memory := by
+  obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
+  cases h
+  have hc : (incorporateChild fork caller child).memory = caller.memory := by
+    unfold incorporateChild
+    split <;> rfl
+  simp only [advance, memory_pushWord h1]
+  split <;> exact hc
+
+/-- A creation that has paid keeps the size of memory a multiple of 32.
+
+So does the creator once the creation ends. -/
+theorem memoryAligned_launchCreate {evm : Evm fork Meter} {value : U256} {initCode : ByteArray}
+    {salt : Option U256} {result : StepResult fork Meter} (hmod : evm.memory.size % 32 = 0)
+    (h : launchCreate evm value initCode salt = .ok result) : result.MemoryAligned := by
+  unfold launchCreate at h
+  dsimp only at h
+  split at h
+  · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
+    obtain ⟨stack, -, rfl⟩ := skipCall_eq_ok hs
+    exact hmod
+  obtain ⟨address, -, h⟩ := Base.bind_ok_iff.mp h
+  refine memoryAligned_keepReads ?_ (fun r hr => ?_) h
+  · simp only [recordAccountRead, memory_accessAddress]
+    exact hmod
+  obtain ⟨e1, h1, hr⟩ := Base.bind_ok_iff.mp hr
+  obtain ⟨e2, h2, hr⟩ := Base.bind_ok_iff.mp hr
+  obtain ⟨state, -, hr⟩ := Base.bind_ok_iff.mp hr
+  have m2 : e2.memory = evm.memory := by
+    rw [memory_chargeGas h2, memory_chargeStateGas h1]
+    exact memory_accessAddress _ _
+  split at hr
+  · cases hr
+    intro child after hresume
+    rw [memory_resumeCreate hresume]
+    exact m2 ▸ hmod
+  · obtain ⟨e3, h3, hr⟩ := Base.bind_ok_iff.mp hr
+    cases hr
+    show (advance e3).memory.size % 32 = 0
+    rw [show (advance e3).memory = e3.memory from rfl, memory_pushWord h3]
+    exact m2 ▸ hmod
+
+/-- A creation keeps the size of memory a multiple of 32, and so does the creator after it.
+
+It grows memory for its init code before the init code runs. -/
+theorem memoryAligned_createStep {create2 : Bool} {evm : Evm fork Meter}
+    {result : StepResult fork Meter} (hmod : evm.memory.size % 32 = 0)
+    (h : createStep create2 evm = .ok result) : result.MemoryAligned := by
+  unfold createStep at h
+  by_cases hs : fork ≥ .glamsterdam ∧ evm.message.isStatic = true
+  · simp [hs, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
+  rw [ite_eq_right_of_eq_false _ _ (eq_false hs)] at h
+  obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨salt, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
+  have m4 : e4.memory = e3.memory := by
+    unfold popSalt at h4
+    split at h4
+    · obtain ⟨⟨_, e⟩, he, h4⟩ := Base.bind_ok_iff.mp h4
+      cases h4
+      exact (popWord_eq_ok he).2.1
+    · cases h4
+      rfl
+  have hmod5 := size_chargeGasAndMemory_mod (by
+    rw [m4, (popWord_eq_ok h3).2.1, (popWord_eq_ok h2).2.1, (popWord_eq_ok h1).2.1]
+    exact hmod) h5
+  unfold genericCreate at h
+  split at h
+  · cases h
+  split at h
+  · cases h
+  exact memoryAligned_launchCreate hmod5 h
+
+/-- Each creation keeps the size of memory a multiple of 32, and so does the creator after it. -/
+theorem memoryAligned_createInstruction {op : Op}
+    {step : Evm fork Meter → Except EvmError (StepResult fork Meter)}
+    (hstep : createInstruction fork op = some step) {evm : Evm fork Meter}
+    {result : StepResult fork Meter} (hmod : evm.memory.size % 32 = 0)
+    (h : step evm = .ok result) : result.MemoryAligned := by
+  cases op <;> simp only [createInstruction, Option.some.injEq, reduceCtorEq] at hstep
+  all_goals (try split at hstep) <;> (try simp only [Option.some.injEq, reduceCtorEq] at hstep)
+  all_goals first
+    | exact memoryAligned_createStep hmod h
+    | (subst hstep; exact memoryAligned_createStep hmod h)
+    | cases hstep
+
+/-- Each instruction that may send a message keeps the size of memory a multiple of 32.
+
+So does the frame that sends it, once the message ends. -/
+theorem memoryAligned_messageInstruction {op : Op}
+    {step : Evm fork Meter → Except EvmError (StepResult fork Meter)}
+    (hstep : messageInstruction fork op = some step) {evm : Evm fork Meter}
+    {result : StepResult fork Meter} (hmod : evm.memory.size % 32 = 0)
+    (h : step evm = .ok result) : result.MemoryAligned := by
+  unfold messageInstruction at hstep
+  cases hc : callInstruction (Meter := Meter) fork op with
+  | some call =>
+    rw [hc] at hstep
+    cases hstep
+    exact memoryAligned_callInstruction hc hmod h
+  | none =>
+    rw [hc] at hstep
+    exact memoryAligned_createInstruction hstep hmod h
 
 end EthLib.Execution.Evm

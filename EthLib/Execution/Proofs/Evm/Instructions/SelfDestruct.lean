@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Instructions.SelfDestruct
+public import EthLib.Execution.Proofs.Evm.Instructions.AccountData
 public import EthLib.Execution.Proofs.State.Tracker
 
 /-!
@@ -23,6 +24,8 @@ An account that names itself keeps its balance.
 From Glamsterdam, a new beneficiary costs 9000 execution gas and 183600 state gas.
 
 No SELFDESTRUCT pays state gas before Glamsterdam.
+
+SELFDESTRUCT keeps memory.
 -/
 
 @[expose] public section
@@ -140,5 +143,42 @@ theorem selfdestructStateGas_eq_zero (h : fork < .glamsterdam ∨ createsAccount
   · have : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt h
     simp [this]
   · simp [h]
+
+omit [GasMeter Meter] in
+/-- The end of SELFDESTRUCT keeps memory. -/
+theorem memory_finishSelfdestruct {beneficiary : Address} {refund : Nat}
+    {evm after : Evm fork Meter} (h : finishSelfdestruct fork beneficiary refund evm = .ok after) :
+    after.memory = evm.memory := by
+  unfold finishSelfdestruct at h
+  split at h
+  · cases h
+  · obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    rfl
+
+/-- SELFDESTRUCT keeps memory. -/
+theorem memory_selfdestructOpStep {op : Op}
+    {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    (hstep : selfdestructOpStep fork op = some step) {evm after : Evm fork Meter}
+    (h : step evm = .ok after) : after.memory = evm.memory := by
+  cases op <;> simp only [selfdestructOpStep, Option.some.injEq, reduceCtorEq] at hstep
+  subst hstep
+  unfold selfdestructStep at h
+  split at h
+  · simp [bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
+  obtain ⟨⟨w, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  rcases hpair : accessAddress e1 (Base.toAddressMasked w) with ⟨cold, e2⟩
+  have m2 : e2.memory = evm.memory := by
+    have := memory_accessAddress e1 (Base.toAddressMasked w)
+    rw [hpair] at this
+    exact this.trans (popWord_eq_ok h1).2.1
+  simp only [hpair] at h
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+  rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
+  · obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
+    rw [memory_finishSelfdestruct h, memory_chargeStateGas h4, memory_chargeGas h3]
+    exact m2
+  · exact m2
 
 end EthLib.Execution.Evm

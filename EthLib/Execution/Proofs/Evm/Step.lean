@@ -18,7 +18,7 @@ Each part of an instruction keeps the message, the state and the substate of the
 
 A pop takes the top word of the stack and keeps memory and the return data.
 
-A push, a charge and an instruction that reads the frame keep memory too.
+A push, a charge, a charge of state gas and an instruction of up to three operands keep memory too.
 
 A charge for gas and memory grows memory to hold each range that is not empty.
 
@@ -27,6 +27,8 @@ That needs a size of memory that is a multiple of 32, and the charge keeps it so
 The charge keeps every byte of memory.
 
 A write of a range that the charge covers keeps the size a multiple of 32.
+
+An instruction that keeps its reads keeps that size when the rest of it keeps it.
 -/
 
 @[expose] public section
@@ -270,6 +272,46 @@ theorem memory_readFrame {cost : Nat} {value : Evm fork Meter → U256}
   cases h
   simp only [advance, memory_pushWord h2, memory_chargeGas h1]
 
+/-- A one-operand instruction keeps memory. -/
+theorem memory_unaryOp {cost : Nat} {f : U256 → U256} {evm after : Evm fork Meter}
+    (h : unaryOp cost f evm = .ok after) : after.memory = evm.memory := by
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
+  cases h
+  simp only [advance, memory_pushWord h3, memory_chargeGas h2, (popWord_eq_ok h1).2.1]
+
+/-- A two-operand instruction keeps memory. -/
+theorem memory_binaryOp {cost : Nat} {f : U256 → U256 → U256} {evm after : Evm fork Meter}
+    (h : binaryOp cost f evm = .ok after) : after.memory = evm.memory := by
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h4, h⟩ := Base.bind_ok_iff.mp h
+  cases h
+  simp only [advance, memory_pushWord h4, memory_chargeGas h3, (popWord_eq_ok h2).2.1,
+    (popWord_eq_ok h1).2.1]
+
+/-- A three-operand instruction keeps memory. -/
+theorem memory_ternaryOp {cost : Nat} {f : U256 → U256 → U256 → U256}
+    {evm after : Evm fork Meter} (h : ternaryOp cost f evm = .ok after) :
+    after.memory = evm.memory := by
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, _⟩, h3, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h4, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h5, h⟩ := Base.bind_ok_iff.mp h
+  cases h
+  simp only [advance, memory_pushWord h5, memory_chargeGas h4, (popWord_eq_ok h3).2.1,
+    (popWord_eq_ok h2).2.1, (popWord_eq_ok h1).2.1]
+
+/-- A charge of state gas keeps memory. -/
+theorem memory_chargeStateGas {evm after : Evm fork Meter} {amount : Nat}
+    (h : chargeStateGas evm amount = .ok after) : after.memory = evm.memory := by
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+  cases h
+  rfl
+
 /-! ## A charge for gas and memory -/
 
 /-- A charge for gas and memory grows memory by the growth for its ranges. -/
@@ -318,5 +360,27 @@ theorem size_memoryWrite_chargeGasAndMemory_mod {evm after : Evm fork Meter} {co
     hsize ▸ le_size_chargeGasAndMemory hmod h (start, size) (by simp)
       (fun e => hz (by simp only at e; rw [hsize, e]; rfl))]
   exact size_chargeGasAndMemory_mod hmod h
+
+/-! ## The size of memory after a step -/
+
+/-- The size of memory is a multiple of 32 after a step that gives `result`.
+
+Either the next frame has such a size, or each frame that the resume gives has it.
+
+The resume must give it from every frame that ends the message, whatever its memory. -/
+def StepResult.MemoryAligned : StepResult fork Meter → Prop
+  | .next evm => evm.memory.size % 32 = 0
+  | .child _ _ resume => ∀ child after, resume child = .ok after → after.memory.size % 32 = 0
+
+/-- The rest of an instruction that keeps its reads keeps the size of memory a multiple of 32.
+
+The rest must keep it, and so must the frame that a halt starts from. -/
+theorem memoryAligned_keepReads {evm : Evm fork Meter}
+    {rest : Except EvmError (StepResult fork Meter)} {result : StepResult fork Meter}
+    (hmod : evm.memory.size % 32 = 0) (hrest : ∀ r, rest = .ok r → r.MemoryAligned)
+    (h : keepReads evm .next rest = .ok result) : result.MemoryAligned := by
+  rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
+  · exact hrest _ h
+  · exact hmod
 
 end EthLib.Execution.Evm

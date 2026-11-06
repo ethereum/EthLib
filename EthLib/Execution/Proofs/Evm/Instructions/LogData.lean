@@ -147,4 +147,14 @@ theorem size_logStep_mod {n : Nat} {evm after : Evm fork Meter}
   · cases h
     exact m4
 
+/-- Each LOG instruction keeps the size of memory a multiple of 32. -/
+theorem size_logOpStep_mod {op : Op}
+    {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    (hstep : logOpStep op = some step) {evm after : Evm fork Meter}
+    (hmod : evm.memory.size % 32 = 0) (h : step evm = .ok after) :
+    after.memory.size % 32 = 0 := by
+  cases op <;> simp only [logOpStep, Option.some.injEq, reduceCtorEq] at hstep
+  subst hstep
+  exact size_logStep_mod hmod h
+
 end EthLib.Execution.Evm

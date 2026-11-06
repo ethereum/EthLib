@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Evm.Call
 public import EthLib.Execution.Proofs.Evm.Call.MessageCall
 public import EthLib.Execution.Proofs.Evm.Gas.StateGas
+public import EthLib.Execution.Proofs.Evm.Instructions.AccountData
 public import EthLib.Execution.Proofs.Evm.Machine.Memory
 public import EthLib.Execution.Proofs.Evm.Step
 
@@ -40,6 +41,8 @@ A message that fails leaves the caller a rollback to its state from before the c
 That rollback keeps the reads of the state it rolls back.
 
 The caller then pushes 0, and the output of the callee becomes its return data.
+
+A call keeps the size of memory a multiple of 32, and so does the caller once the callee ends.
 -/
 
 @[expose] public section
@@ -603,5 +606,155 @@ theorem resumeCall_processMessage_of_error [LawfulGasMeter Meter] {message : Mes
   exact ⟨ended, he, he ▸ sameWrites_restoreTxState _ _, he ▸ rfl, he ▸ rfl⟩
 
 end Failures
+
+section Memory
+
+variable [GasMeter Meter]
+
+/-! ## The size of memory -/
+
+/-- The caller's memory after a call has the size it had before the callee ran.
+
+The output range must fit in the caller's memory when `outputSize` is not zero. -/
+theorem size_resumeCall {caller child after : Evm fork Meter} {newAccount : Nat}
+    {outputStart outputSize : U256}
+    (fit : outputSize ≠ 0 → outputStart.toNat + outputSize.toNat ≤ caller.memory.size)
+    (h : resumeCall fork caller newAccount outputStart outputSize child = .ok after) :
+    after.memory.size = caller.memory.size := by
+  obtain ⟨e, h1, h⟩ := Base.bind_ok_iff.mp h
+  cases h
+  obtain ⟨_, -, h1⟩ := Base.bind_ok_iff.mp h1
+  cases h1
+  have hc : (incorporateChild fork caller child).memory = caller.memory := by
+    unfold incorporateChild
+    split <;> rfl
+  have hm : (if child.error.isNone then incorporateChild fork caller child
+      else refillStateGas (incorporateChild fork caller child) newAccount).memory =
+      caller.memory := by
+    split <;> exact hc
+  simp only [advance]
+  rw [hm]
+  refine size_memoryWrite_of_fit fun hz => ?_
+  have hsize : (child.output.extract 0 (min outputSize.toNat child.output.size)).size =
+      min outputSize.toNat child.output.size := by
+    simp only [ByteArray.size_extract]
+    omega
+  have hnz : outputSize ≠ 0 := by
+    rintro rfl
+    exact hz (by rw [hsize]; simp)
+  have := fit hnz
+  omega
+
+/-- The access to a delegate keeps memory. -/
+theorem memory_accessDelegation {evm after : Evm fork Meter} {address : Base.Address}
+    {known : Nat} {callee : Callee} (h : accessDelegation evm address known = .ok (callee, after)) :
+    after.memory = evm.memory := by
+  obtain ⟨code, -, h⟩ := Base.bind_ok_iff.mp h
+  dsimp only at h
+  split at h
+  · obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    exact memory_accessAddress _ _
+  · cases h
+    rfl
+
+/-- The payment of a call keeps memory. -/
+theorem memory_payCall {kind : CallKind} {call : CallOperands}
+    {memoryCost extraGas newAccount subCall : Nat} {evm after : Evm fork Meter}
+    (h : payCall kind call memoryCost extraGas newAccount evm = .ok (subCall, after)) :
+    after.memory = evm.memory := by
+  unfold payCall at h
+  split at h
+  · obtain ⟨e1, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨e2, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    rw [memory_chargeGas h3, memory_chargeStateGas h2, memory_chargeGas h1]
+  · obtain ⟨e1, h1, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    exact memory_chargeGas h1
+
+/-- A call keeps the size of memory a multiple of 32, and so does the caller after the callee.
+
+The call grows memory for its input and output ranges before the callee runs.
+
+So the output that the caller copies back fits in memory, whatever frame ends the callee. -/
+theorem memoryAligned_callStep {kind : CallKind} {evm : Evm fork Meter}
+    {result : StepResult fork Meter} (hmod : evm.memory.size % 32 = 0)
+    (h : callStep kind evm = .ok result) : result.MemoryAligned := by
+  obtain ⟨⟨call, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  have m1 : e1.memory = evm.memory := by rw [popCallOperands_eq_ok h1]
+  dsimp only at h
+  split at h
+  · cases h
+  rcases hacc : accessAddress e1 call.address with ⟨cold, e2⟩
+  have m2 : e2.memory = evm.memory := by
+    have := memory_accessAddress e1 call.address
+    rw [hacc] at this
+    exact this.trans m1
+  rw [hacc] at h
+  dsimp only at h
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+  refine memoryAligned_keepReads (evm := recordAccountRead e2 call.address)
+    (show e2.memory.size % 32 = 0 by rw [m2]; exact hmod) (fun r hr => ?_) h
+  obtain ⟨⟨callee, e3⟩, h3, hr⟩ := Base.bind_ok_iff.mp hr
+  have m3 : e3.memory = evm.memory := (memory_accessDelegation h3).trans (by exact m2)
+  refine memoryAligned_keepReads (show e3.memory.size % 32 = 0 by rw [m3]; exact hmod)
+    (fun r hr => ?_) hr
+  obtain ⟨⟨subCall, e4⟩, h4, hr⟩ := Base.bind_ok_iff.mp hr
+  have m4 : e4.memory = e1.memory := ((memory_payCall h4).trans m3).trans m1.symm
+  have hmod1 : e1.memory.size % 32 = 0 := by rw [m1]; exact hmod
+  -- Memory grows for both ranges, from a size that is a multiple of 32.
+  have grown : (memoryExtend e4.memory (extendMemory e1.memory.size
+      [(call.inputStart, call.inputSize), (call.outputStart, call.outputSize)]).expandBy).size %
+        32 = 0 := by
+    rw [m4]
+    exact size_memoryExtend_mod hmod1 _
+  have skip : ∀ {x : Evm fork Meter} {gas reservoir : Nat}, x.memory.size % 32 = 0 →
+      (.next <$> skipCall x gas reservoir) = .ok r → r.MemoryAligned := by
+    intro x gas reservoir hx hs
+    cases hc : skipCall x gas reservoir with
+    | error => simp [hc, Functor.map, Except.map] at hs
+    | ok after =>
+      simp only [hc, Functor.map, Except.map, Except.ok.injEq] at hs
+      subst hs
+      obtain ⟨stack, -, rfl⟩ := skipCall_eq_ok hc
+      exact hx
+  unfold finishCall at hr
+  split at hr
+  · cases hr
+  dsimp only at hr
+  split at hr
+  · exact skip (by exact grown) hr
+  unfold genericCall at hr
+  dsimp only at hr
+  split at hr
+  · exact skip (by exact grown) hr
+  cases hr
+  intro child after hresume
+  rw [size_resumeCall (fun hnz => ?_) hresume]
+  · exact grown
+  have cover := le_ceil32_add_expandBy e1.memory.size
+    [(call.inputStart, call.inputSize), (call.outputStart, call.outputSize)]
+    (call.outputStart, call.outputSize) (by simp) hnz
+  rw [ceil32_of_mod hmod1] at cover
+  simp only [recordAccountRead, size_memoryExtend, m4]
+  exact cover
+
+/-- Each call keeps the size of memory a multiple of 32, and so does its caller after it. -/
+theorem memoryAligned_callInstruction {op : Op}
+    {step : Evm fork Meter → Except EvmError (StepResult fork Meter)}
+    (hstep : callInstruction fork op = some step) {evm : Evm fork Meter}
+    {result : StepResult fork Meter} (hmod : evm.memory.size % 32 = 0)
+    (h : step evm = .ok result) : result.MemoryAligned := by
+  cases op <;> simp only [callInstruction, Option.some.injEq, reduceCtorEq] at hstep
+  all_goals (try split at hstep) <;> (try simp only [Option.some.injEq, reduceCtorEq] at hstep)
+  all_goals first
+    | exact memoryAligned_callStep hmod h
+    | (subst hstep; exact memoryAligned_callStep hmod h)
+    | cases hstep
+
+end Memory
 
 end EthLib.Execution.Evm

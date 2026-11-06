@@ -13,7 +13,7 @@ So a TLOAD of that key in the same frame reads it back.
 
 TSTORE never succeeds in a static frame.
 
-TLOAD and TSTORE exist exactly from Dencun.
+TLOAD and TSTORE exist exactly from Dencun, and keep memory.
 -/
 
 @[expose] public section
@@ -65,5 +65,27 @@ theorem isSome_transientStorageStep {op : Op} :
     (transientStorageStep (Meter := Meter) fork op).isSome ↔
       op ∈ [.tload, .tstore] ∧ op.since ≤ fork := by
   cases op <;> simp [transientStorageStep, Op.since] <;> split <;> simp_all
+
+/-- Each instruction of transient storage keeps memory. -/
+theorem memory_transientStorageStep {op : Op}
+    {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    (hstep : transientStorageStep fork op = some step) {evm after : Evm fork Meter}
+    (h : step evm = .ok after) : after.memory = evm.memory := by
+  cases op <;> simp only [transientStorageStep, reduceCtorEq] at hstep <;> split at hstep <;>
+    simp only [Option.some.injEq, reduceCtorEq] at hstep <;> subst hstep
+  case tload =>
+    obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    simp only [advance, memory_pushWord h3, memory_chargeGas h2, (popWord_eq_ok h1).2.1]
+  case tstore =>
+    obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
+    split at h
+    · cases h
+    · cases h
+      simp only [advance, memory_chargeGas h3, (popWord_eq_ok h2).2.1, (popWord_eq_ok h1).2.1]
 
 end EthLib.Execution.Evm
