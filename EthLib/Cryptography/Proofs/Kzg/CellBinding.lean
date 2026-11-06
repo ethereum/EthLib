@@ -35,6 +35,7 @@ The argument follows the proof of Theorem 3.4, the binding of batch openings, in
 
 namespace EthLib.Cryptography.Kzg
 
+open EthLib.Base (array_mapM_ok)
 open EthLib.Cryptography.Bls (G1 G2 Fr TargetGroup)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr

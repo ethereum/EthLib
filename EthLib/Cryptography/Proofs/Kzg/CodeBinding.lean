@@ -56,34 +56,6 @@ open Polynomial Lagrange
 
 /-! ## Points from the setup -/
 
-/-- The commitment to a polynomial: its first 4096 coefficients times the monomial points. -/
-def commitPoly (s : TrustedSetup) (p : Fr[X]) : G1 :=
-  G1.msm s.g1Monomial.toArray (Array.ofFn fun k : Fin FIELD_ELEMENTS_PER_BLOB => p.coeff k)
-
-/-- The commitment to a polynomial of degree below 4096 represents its value at the secret.
-
-Only the monomial points of `G1` must represent the powers of the secret. -/
-theorem represents_commitPoly_of_monomial {s : TrustedSetup} {τ : Fr}
-    (hm : ∀ i : Fin FIELD_ELEMENTS_PER_BLOB, G1.Represents s.g1Monomial[i] (τ ^ i.val))
-    {p : Fr[X]} (hp : p.natDegree < FIELD_ELEMENTS_PER_BLOB) :
-    G1.Represents (commitPoly s p) (p.eval τ) := by
-  have h := G1.represents_msm (points := s.g1Monomial.toArray)
-    (scalars := Array.ofFn fun k : Fin FIELD_ELEMENTS_PER_BLOB => p.coeff k)
-    (a := fun j => τ ^ j) (by simp) fun j hj => by
-      have hj' : j < FIELD_ELEMENTS_PER_BLOB := by simpa using hj
-      rw [getElem!_pos _ j hj, Vector.getElem_toArray]
-      exact hm ⟨j, hj'⟩
-  rw [commitPoly]
-  convert h using 1
-  rw [eval_eq_sum_range' hp, Vector.size_toArray]
-  refine Finset.sum_congr rfl fun j hj => ?_
-  rw [getElem!_pos _ j (by simpa using hj), Array.getElem_ofFn]
-
-/-- The commitment to a polynomial of degree below 4096 represents its value at the secret. -/
-theorem represents_commitPoly {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ) {p : Fr[X]}
-    (hp : p.natDegree < FIELD_ELEMENTS_PER_BLOB) : G1.Represents (commitPoly s p) (p.eval τ) :=
-  represents_commitPoly_of_monomial hs.monomial_g1 hp
-
 /-- The sum of the points `P j` times the weights `a j`, over a finite set `J` of indices. -/
 def weightedSum (J : Finset Nat) (P : Nat → G1) (a : Nat → Fr) : G1 :=
   G1.msm ((J.sort (· ≤ ·)).toArray.map P) ((J.sort (· ≤ ·)).toArray.map a)

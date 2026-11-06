@@ -41,6 +41,7 @@ So the batch check accepts the cells and proofs of blobs, and so does the verifi
 
 namespace EthLib.Cryptography.Kzg
 
+open EthLib.Base (array_mapM_ok array_mapM_exists_ok getElem!_mem_of_lt)
 open EthLib.Cryptography.Bls (G1 Fr)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr Polynomial
@@ -215,34 +216,6 @@ theorem cellOpeningValid_computeCellsAndKzgProofs {s : TrustedSetup} {τ : Fr}
       exact cellToCosetEvals_codewordCell _ _
     · rw [hproof]
       exact hPv
-
-/-! ## The scalar of a point -/
-
-/-- An entry of an array, read in range, is a member of the array. -/
-theorem getElem!_mem_of_lt {α : Type} [Inhabited α] {xs : Array α} {k : Nat} (hk : k < xs.size) :
-    xs[k]! ∈ xs := by
-  rw [getElem!_pos xs k hk]
-  exact Array.getElem_mem hk
-
-/-- The scalar of 48 bytes: the scalar that their point represents, if there is one. -/
-noncomputable def scalarOf (b : Bytes48) : Fr :=
-  Classical.epsilon fun a => ∀ P, uncompressG1 b = .ok P → G1.Represents P a
-
-/-- Bytes that pass KZG validation decode to a point that represents their scalar. -/
-theorem represents_scalarOf {b : Bytes48} (h : validateKzgG1 b = true) {P : G1}
-    (hP : uncompressG1 b = .ok P) : G1.Represents P (scalarOf b) := by
-  obtain ⟨a, ha⟩ := represents_of_validateKzgG1 h hP
-  refine Classical.epsilon_spec (p := fun a => ∀ P, uncompressG1 b = .ok P → G1.Represents P a)
-    ⟨a, fun P' hP' => ?_⟩ P hP
-  rw [hP] at hP'
-  cases hP'
-  exact ha
-
-/-- Bytes that decode to a point of the subgroup have the scalar of that point. -/
-theorem scalarOf_eq {b : Bytes48} {P : G1} {a : Fr} (hb : validateKzgG1Point b = .ok P)
-    (ha : G1.Represents P a) : scalarOf b = a :=
-  (represents_scalarOf (validateKzgG1_of_validateKzgG1Point hb)
-    (uncompressG1_of_validateKzgG1Point hb)).unique ha
 
 /-! ## Valid openings and the error polynomial -/
 

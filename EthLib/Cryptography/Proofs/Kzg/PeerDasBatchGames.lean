@@ -46,6 +46,8 @@ The game does not model that shape; another file states the games with such colu
 
 namespace EthLib.Cryptography.Kzg
 
+open EthLib.Base (getElem!_mem_of_lt)
+
 open EthLib.Cryptography.Bls (G1 G2 Fr TargetGroup)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr

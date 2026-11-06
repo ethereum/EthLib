@@ -27,6 +27,7 @@ The theorems of the core check then hold for the outer check, each cell with its
 
 namespace EthLib.Cryptography.Kzg
 
+open EthLib.Base (array_mapM_ok array_mapM_exists_ok)
 open EthLib.Cryptography.Bls (G1 G2 Fr TargetGroup)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
@@ -266,15 +267,6 @@ theorem verifyCellKzgProofBatchImpl_decodes {s : TrustedSetup}
 
 /-! ## The core check returns a verdict -/
 
-/-- A map over an array succeeds when the function succeeds on every entry. -/
-theorem array_mapM_exists_ok {ε α β : Type} {f : α → Except ε β} {xs : Array α}
-    (h : ∀ x ∈ xs, ∃ y, f x = .ok y) : ∃ ys, xs.mapM f = .ok ys := by
-  obtain ⟨ys, hys⟩ := Base.mapM_exists_ok (f := f) (xs := xs.toList)
-    fun x hx => h x (Array.mem_toList_iff.mp hx)
-  refine ⟨ys.toArray, ?_⟩
-  rw [Array.mapM_eq_mapM_toList, hys]
-  rfl
-
 /-- A map over an array that succeeds on every entry returns no error. -/
 theorem array_mapM_ne_error {ε α β : Type} {f : α → Except ε β} {xs : Array α} {e : ε}
     (h : ∀ x ∈ xs, ∃ y, f x = .ok y) : xs.mapM f ≠ .error e := by
@@ -453,40 +445,6 @@ theorem cellToCosetEvals_inj {a a' : Cell} {e : CosetEvals} (h : cellToCosetEval
   (cosetEvalsToCell_of_cellToCosetEvals h).symm.trans (cosetEvalsToCell_of_cellToCosetEvals h')
 
 /-! ## The outer check returns a verdict -/
-
-/-- Bytes that pass KZG validation decode to a point of the subgroup. -/
-theorem exists_validateKzgG1Point_of_validateKzgG1 {b : Bytes48} (h : validateKzgG1 b = true) :
-    ∃ P, validateKzgG1Point b = .ok P := by
-  unfold validateKzgG1 at h
-  unfold validateKzgG1Point
-  by_cases hb : (b == G1_POINT_AT_INFINITY) = true
-  · exact ⟨_, ite_eq_left hb⟩
-  · rw [ite_eq_right hb] at h ⊢
-    cases hk : G1.keyValidatePoint ⟨b.toArray⟩ with
-    | error e =>
-      simp [G1.keyValidate, hk, bind, Except.bind, Except.isOk, Except.toBool] at h
-    | ok q => exact ⟨q, rfl⟩
-
-/-- Bytes that decode to a point of the subgroup pass KZG validation. -/
-theorem validateKzgG1_of_validateKzgG1Point {b : Bytes48} {P : G1}
-    (h : validateKzgG1Point b = .ok P) : validateKzgG1 b = true := by
-  unfold validateKzgG1Point at h
-  unfold validateKzgG1
-  by_cases hb : (b == G1_POINT_AT_INFINITY) = true
-  · rw [ite_eq_left hb]
-  · rw [ite_eq_right hb] at h ⊢
-    cases hk : G1.keyValidatePoint ⟨b.toArray⟩ with
-    | error e => rw [hk] at h; cases h
-    | ok q =>
-      simp only [G1.keyValidate, hk, bind, Except.bind, Except.isOk, Except.toBool]
-      rfl
-
-/-- Bytes that decode to a point of the subgroup decompress to that point. -/
-theorem uncompressG1_of_validateKzgG1Point {b : Bytes48} {P : G1}
-    (h : validateKzgG1Point b = .ok P) : uncompressG1 b = .ok P := by
-  unfold uncompressG1
-  rw [(validateKzgG1Point_eq_ok_iff.mp h).1]
-  rfl
 
 /-- A fold whose steps all succeed returns no error. -/
 theorem list_foldlM_ne_error {ε σ α : Type} {f : σ → α → Except ε σ} {e : ε} :

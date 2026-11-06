@@ -445,8 +445,12 @@ Assume `PairingLaws`, a well-formed setup, and decoded points that represent the
 Then `verifyBlobKzgProofBatch_ok_iff_root` states that this verdict is true exactly when the batch challenge is a root of the error polynomial of the blob batch.
 `verifyBlobKzgProofBatch_valid_or_root` assumes the same and splits an accepted batch into two cases.
 Every entry satisfies `c_i - y_i = w_i (τ - z_i)` and passes `verifyBlobKzgProof`, or the batch challenge is a root of a nonzero error polynomial.
-`prEvent_batchErrorPoly_root_le` (`Proofs/Kzg/BatchChallenge.lean`) bounds the root case by `(q + 1) (n - 1) / r` for the batch of openings that the check builds.
-No theorem states that bound for an adversary that outputs blobs, commitments and proofs.
+`prEvent_blobInput_root_le` bounds the root case by `(q + 1) (n - 1) / r`, where the adversary outputs blobs, commitments and proofs.
+Its game takes the hash of the batch challenge as a random oracle on the batch of openings that the check builds.
+The adversary makes at most `q` queries, and its batch has at most `n` commitments.
+In `verifyBlobKzgProofBatch_ok_iff_root`, `verifyBlobKzgProofBatch_valid_or_root` and `prEvent_blobInput_root_le`, the scalar of a commitment or a proof is a function of its bytes.
+With `scalarOf`, the discrete logarithm of a validated point, this holds for every input, so it is no extra assumption.
+The bound takes any such functions, fixed before the adversary runs.
 `verifyBlobKzgProofBatch_of_blobOpeningValid` proves that the check accepts every batch of valid blob openings.
 So it accepts the commitments and proofs that `blobToKzgCommitment` and `computeBlobKzgProof` return (`verifyBlobKzgProofBatch_computeBlobKzgProof`).
 
@@ -766,7 +770,9 @@ The two theorems of Casper FFG share one bullet, as do the signature theorems of
   Then each value has probability at most `3 / 2^256`, which is below `1.36 / r`, and the bounds grow by that factor.
   The real hash reads an encoding of those inputs.
   The encoding is injective on the batches that the checks accept: their arrays have matching lengths, and each cell has 64 values.
-  In `prEvent_batchErrorPoly_root_le` and `prEvent_cellErrorPoly_root_le`, the adversary queries that oracle `q` times.
+  In `prEvent_batchErrorPoly_root_le`, `prEvent_cellErrorPoly_root_le`, `prEvent_cellInput_root_le` and `prEvent_blobInput_root_le`, the adversary queries that oracle at most `q` times.
+  In `prEvent_blobInput_root_le`, the evaluation challenges `computeChallenge` are a fixed function of the blobs and commitments, not part of the oracle.
+  Their hash input starts with a different 16-byte domain tag from that of the batch challenge, so the two hashes never read the same bytes.
   So the bound `(q + 1) (n - 1) / r` covers grinding, where the adversary hashes many batches and keeps one whose challenge is a root.
   The theorems say nothing about an attack that uses the structure of SHA-256.
 

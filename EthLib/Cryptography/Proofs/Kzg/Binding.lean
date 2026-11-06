@@ -14,6 +14,8 @@ So `(-z, (π - π') / (y' - y))` solves the strong Diffie–Hellman problem for 
 
 The setup also holds `[τ]_2`, so the instance is the asymmetric variant of the problem.
 
+The scalar of 48 bytes is the scalar that their point represents, if there is one.
+
 The search reads only the two openings, as in Appendix C.1 of the paper below.
 
 It is the extended version of Kate, Zaverucha and Goldberg, CACR 2010-10:
@@ -109,6 +111,34 @@ theorem represents_of_validateKzgG1Point {b : Bytes48} {P : G1}
   have hv := G1.uncompress_valid hu
   exact (G1.inSubgroup_iff_exists_represents hv).mp
     ((G1.inSubgroup_iff_modulus_smul_eq_zero hv).mpr hr)
+
+/-- Bytes that pass KZG validation decode to a point that represents some scalar. -/
+theorem represents_of_validateKzgG1 {b : Bytes48} (h : validateKzgG1 b = true) {P : G1}
+    (hP : uncompressG1 b = .ok P) : ∃ a, G1.Represents P a := by
+  obtain ⟨Q, hQ⟩ := exists_validateKzgG1Point_of_validateKzgG1 h
+  rw [uncompressG1_of_validateKzgG1Point hQ] at hP
+  cases hP
+  exact represents_of_validateKzgG1Point hQ
+
+/-- The scalar of 48 bytes: the scalar that their point represents, if there is one. -/
+noncomputable def scalarOf (b : Bytes48) : Fr :=
+  Classical.epsilon fun a => ∀ P, uncompressG1 b = .ok P → G1.Represents P a
+
+/-- Bytes that pass KZG validation decode to a point that represents their scalar. -/
+theorem represents_scalarOf {b : Bytes48} (h : validateKzgG1 b = true) {P : G1}
+    (hP : uncompressG1 b = .ok P) : G1.Represents P (scalarOf b) := by
+  obtain ⟨a, ha⟩ := represents_of_validateKzgG1 h hP
+  refine Classical.epsilon_spec (p := fun a => ∀ P, uncompressG1 b = .ok P → G1.Represents P a)
+    ⟨a, fun P' hP' => ?_⟩ P hP
+  rw [hP] at hP'
+  cases hP'
+  exact ha
+
+/-- Bytes that decode to a point of the subgroup have the scalar of that point. -/
+theorem scalarOf_eq {b : Bytes48} {P : G1} {a : Fr} (hb : validateKzgG1Point b = .ok P)
+    (ha : G1.Represents P a) : scalarOf b = a :=
+  (represents_scalarOf (validateKzgG1_of_validateKzgG1Point hb)
+    (uncompressG1_of_validateKzgG1Point hb)).unique ha
 
 /-- An accepted check from bytes decodes all four inputs, and the check of the points accepts. -/
 theorem verifyKzgProof_eq_ok_true {s : TrustedSetup} {commitmentBytes proofBytes : Bytes48}
