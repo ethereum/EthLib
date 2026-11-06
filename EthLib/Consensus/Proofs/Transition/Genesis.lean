@@ -52,10 +52,9 @@ theorem frame_genesisDeposit (altair : fork < .altair) {before : fork < .hegota}
 /-- Setting the effective balance and the activation at genesis changes no exit. -/
 theorem frame_activateAtGenesis {index : Nat}
     (computed : activateAtGenesis state index = .ok after) : Frame state after := by
-  simp only [activateAtGenesis, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨validator, found, _, _, rfl⟩ := computed
-  refine frame_setValidator fun ordered => ?_
+  simp only [activateAtGenesis, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨validator, found, _, _, set⟩ := computed
+  refine frame_setValidator set fun ordered => ?_
   have le := ordered validator (mem_of_getValidator found)
   split <;> exact le
 

@@ -38,17 +38,36 @@ open Base Uint64 Serialization.Ssz
 
 variable {preset : Preset} {fork : Base.Fork}
 
-/-- The state with the balance at an index replaced. -/
-def BeaconState.setBalance (state : BeaconState preset fork) (index : Nat) (balance : Gwei) :
-    BeaconState preset fork :=
-  { state with balances := ⟨state.balances.data.set! index balance, by
+/-- The state with the balance at an index of the balances replaced. -/
+def BeaconState.putBalance (state : BeaconState preset fork) (index : Nat)
+    (inside : index < state.balances.data.size) (balance : Gwei) : BeaconState preset fork :=
+  { state with balances := ⟨state.balances.data.set index balance inside, by
       simpa using state.balances.bound⟩ }
 
-/-- The state with the validator at an index replaced. -/
-def BeaconState.setValidator (state : BeaconState preset fork) (index : Nat)
-    (validator : Validator) : BeaconState preset fork :=
-  { state with validators := ⟨state.validators.data.set! index validator, by
+/-- The state with the balance of a validator replaced.
+
+An index past the balances is an error. -/
+def BeaconState.setBalance (state : BeaconState preset fork) (index : ValidatorIndex)
+    (balance : Gwei) : Except AccessorError (BeaconState preset fork) :=
+  if inside : index.toNat < state.balances.data.size then
+    .ok (state.putBalance index.toNat inside balance)
+  else .error (.indexOutOfRange index)
+
+/-- The state with the validator at an index of the registry replaced. -/
+def BeaconState.putValidator (state : BeaconState preset fork) (index : Nat)
+    (inside : index < state.validators.data.size) (validator : Validator) :
+    BeaconState preset fork :=
+  { state with validators := ⟨state.validators.data.set index validator inside, by
       simpa using state.validators.bound⟩ }
+
+/-- The state with a validator of the registry replaced.
+
+An index past the registry is an error. -/
+def BeaconState.setValidator (state : BeaconState preset fork) (index : ValidatorIndex)
+    (validator : Validator) : Except AccessorError (BeaconState preset fork) :=
+  if inside : index.toNat < state.validators.data.size then
+    .ok (state.putValidator index.toNat inside validator)
+  else .error (.indexOutOfRange index)
 
 /-- The balance of a validator. -/
 def getBalance (state : BeaconState preset fork) (index : ValidatorIndex) :
@@ -68,12 +87,12 @@ def getValidator (state : BeaconState preset fork) (index : ValidatorIndex) :
 def increaseBalance (state : BeaconState preset fork) (index : ValidatorIndex) (delta : Gwei) :
     Except AccessorError (BeaconState preset fork) := do
   let balance ← liftArith (addChecked (← getBalance state index) delta)
-  return state.setBalance index.toNat balance
+  state.setBalance index balance
 
 /-- The state with a balance lowered by an amount, or set to zero if the amount is larger. -/
 def decreaseBalance (state : BeaconState preset fork) (index : ValidatorIndex) (delta : Gwei) :
     Except AccessorError (BeaconState preset fork) := do
-  return state.setBalance index.toNat (saturatingSub (← getBalance state index) delta)
+  state.setBalance index (saturatingSub (← getBalance state index) delta)
 
 /-- The epoch at which a validator that starts to exit now leaves, before Electra.
 
@@ -117,7 +136,7 @@ def initiateValidatorExit (config : Config) (state : BeaconState preset fork)
     let (state, exitEpoch) ← exitQueue config state validator.effectiveBalance
     let withdrawableEpoch ←
       liftArith (addChecked exitEpoch config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY)
-    return state.setValidator index.toNat { validator with exitEpoch, withdrawableEpoch }
+    state.setValidator index { validator with exitEpoch, withdrawableEpoch }
 
 /-- A list of the state with one more element at its end.
 
@@ -153,8 +172,8 @@ def queueExcessActiveBalance (state : BeaconState preset fork) (electra : .pectr
       balance - preset.MIN_ACTIVATION_BALANCE,
       Cryptography.Bls.Signatures.infinitySignature, GENESIS_SLOT⟩
     let pending ← appendWithinLimit (state.pendingDeposits electra) deposit
-    return { state.setBalance index.toNat preset.MIN_ACTIVATION_BALANCE with
-      pendingDeposits := fun _ => pending }
+    let state ← state.setBalance index preset.MIN_ACTIVATION_BALANCE
+    return { state with pendingDeposits := fun _ => pending }
   else return state
 
 /-- From Electra: the state in which a validator has compounding credentials.
@@ -167,7 +186,7 @@ def switchToCompoundingValidator (state : BeaconState preset fork) (electra : .p
   let validator ← getValidator state index
   let withdrawalCredentials :=
     validator.withdrawalCredentials.set 0 COMPOUNDING_WITHDRAWAL_PREFIX[0]
-  queueExcessActiveBalance (state.setValidator index.toNat { validator with withdrawalCredentials })
+  queueExcessActiveBalance (← state.setValidator index { validator with withdrawalCredentials })
     electra index
 
 /-- The share of the whistleblower reward that goes to the proposer.
@@ -205,7 +224,7 @@ def slashValidator (config : Config) (state : BeaconState preset fork)
   let validator ← getValidator state slashedIndex
   let withdrawableEpoch := max validator.withdrawableEpoch
     (← liftArith (addChecked epoch preset.EPOCHS_PER_SLASHINGS_VECTOR))
-  let state := state.setValidator slashedIndex.toNat
+  let state ← state.setValidator slashedIndex
     { validator with slashed := true, withdrawableEpoch }
   let slashed ← readCircular state.slashings epoch
   let slashed ← liftArith (addChecked slashed validator.effectiveBalance)

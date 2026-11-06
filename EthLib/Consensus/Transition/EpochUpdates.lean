@@ -57,7 +57,7 @@ def updateRegistryEntry (config : Config) (state : BeaconState preset fork) (ind
     Except TransitionError (BeaconState preset fork) := do
   let validator ← liftAccessor (getValidator state index.toUInt64)
   let validator ← queueForActivation state validator
-  let state := state.setValidator index validator
+  let state ← liftAccessor (state.setValidator index.toUInt64 validator)
   if isActiveValidator validator (getCurrentEpoch state) &&
       validator.effectiveBalance ≤ config.EJECTION_BALANCE then
     liftAccessor (initiateValidatorExit config state index.toUInt64)
@@ -79,7 +79,7 @@ def activateValidator (state : BeaconState preset fork) (index : ValidatorIndex)
   let validator ← liftAccessor (getValidator state index)
   let activationEpoch ←
     liftAccessor (liftArith (computeActivationExitEpoch preset (getCurrentEpoch state)))
-  return state.setValidator index.toNat { validator with activationEpoch }
+  liftAccessor (state.setValidator index { validator with activationEpoch })
 
 /-- From Electra: the state after the registry updates of one validator, as [EIP-7251] specifies.
 
@@ -98,12 +98,12 @@ def updateRegistryEntryElectra (config : Config) (activationEpoch : Epoch)
   let currentEpoch := getCurrentEpoch state
   if isEligibleForActivationQueue preset fork validator then
     let activationEligibilityEpoch ← liftAccessor (liftArith (addChecked currentEpoch 1))
-    return state.setValidator index { validator with activationEligibilityEpoch }
+    liftAccessor (state.setValidator index.toUInt64 { validator with activationEligibilityEpoch })
   else if isActiveValidator validator currentEpoch &&
       validator.effectiveBalance ≤ config.EJECTION_BALANCE then
     liftAccessor (initiateValidatorExit config state index.toUInt64)
   else if isEligibleForActivation state validator then
-    return state.setValidator index { validator with activationEpoch }
+    liftAccessor (state.setValidator index.toUInt64 { validator with activationEpoch })
   else return state
 
 /-- The state after the registry updates.
@@ -262,7 +262,7 @@ def updateEffectiveBalance (state : BeaconState preset fork) (index : Nat) :
   let balance ← liftAccessor (getBalance state index.toUInt64)
   let effectiveBalance ← updatedEffectiveBalance preset
     (withdrawalMaxEffectiveBalance preset fork validator) balance validator.effectiveBalance
-  return state.setValidator index { validator with effectiveBalance }
+  liftAccessor (state.setValidator index.toUInt64 { validator with effectiveBalance })
 
 /-- The state after the update of the effective balances.
 

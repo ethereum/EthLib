@@ -56,10 +56,20 @@ def owedBy (index : BuilderIndex) (withdrawals : List BuilderPendingWithdrawal) 
 
 variable {preset : Preset} {fork : Base.Fork}
 
-/-- The state with the builder at an index replaced. -/
-def BeaconState.setBuilder (state : BeaconState preset fork) (index : Nat) (builder : Builder) :
+/-- The state with the builder at an index of the registry replaced. -/
+def BeaconState.putBuilder (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
+    (index : Nat) (inside : index < (state.builders gloas).data.size) (builder : Builder) :
     BeaconState preset fork :=
-  { state with builders := fun gloas => ⟨(state.builders gloas).data.set! index builder⟩ }
+  { state with builders := fun _ => ⟨(state.builders gloas).data.set index builder inside⟩ }
+
+/-- From Gloas: the state with a builder of the registry replaced.
+
+An index past the registry is an error. -/
+def BeaconState.setBuilder (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
+    (index : BuilderIndex) (builder : Builder) : Except AccessorError (BeaconState preset fork) :=
+  if inside : index.toNat < (state.builders gloas).data.size then
+    .ok (state.putBuilder gloas index.toNat inside builder)
+  else .error (.builderIndexOutOfRange index)
 
 /-- A builder of the registry. -/
 def getBuilder (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
@@ -124,7 +134,7 @@ def initiateBuilderExit (config : Config) (state : BeaconState preset fork)
   let builder ← getBuilder state gloas index
   let withdrawableEpoch ←
     liftArith (addChecked (getCurrentEpoch state) config.MIN_BUILDER_WITHDRAWABILITY_DELAY)
-  return state.setBuilder index.toNat { builder with withdrawableEpoch }
+  state.setBuilder gloas index { builder with withdrawableEpoch }
 
 /-- The state after the payment at a position of the pending payments is settled.
 

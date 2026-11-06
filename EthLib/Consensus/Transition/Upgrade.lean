@@ -246,8 +246,9 @@ def queuePreActivation {fork : Fork} (state : BeaconState preset fork) (electra 
   let pending ← liftAccessor (appendWithinLimit (state.pendingDeposits electra) deposit)
   let validator := { validator with
     effectiveBalance := 0, activationEligibilityEpoch := FAR_FUTURE_EPOCH }
-  return { (state.setBalance index.toNat 0).setValidator index.toNat validator with
-    pendingDeposits := fun _ => pending }
+  let state ← liftAccessor (state.setBalance index 0)
+  let state ← liftAccessor (state.setValidator index validator)
+  return { state with pendingDeposits := fun _ => pending }
 
 /-- The validators of a state that are not yet active.
 
@@ -346,7 +347,7 @@ def onboardDeposit (config : Config) (checks : SignatureChecks)
   | some index =>
     let builder := (state.builders gloas).data[index]
     let balance ← liftAccessor (liftArith (addChecked builder.balance deposit.amount))
-    return (state.setBuilder index { builder with balance }, kept)
+    return (state.putBuilder gloas index index.isLt { builder with balance }, kept)
   | none =>
     if isBuilderWithdrawalCredential deposit.withdrawalCredentials = false then
       return (state, kept.push deposit)

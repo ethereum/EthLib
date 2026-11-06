@@ -57,17 +57,17 @@ theorem balancesMatch_of_sameSizes (sizes : SameSizes state after)
 theorem balanceSum_increaseBalance {index : ValidatorIndex} {delta : Gwei}
     (computed : increaseBalance state index delta = .ok after) :
     balanceSum after = balanceSum state + delta.toNat := by
-  simp only [increaseBalance, bind_ok_iff, liftArith, mapError_ok_iff, addChecked_ok_iff, pure,
-    Except.pure, Except.ok.injEq] at computed
-  obtain ⟨balance, found, raised, ⟨_, summed⟩, rfl⟩ := computed
+  simp only [increaseBalance, bind_ok_iff, liftArith, mapError_ok_iff, addChecked_ok_iff]
+    at computed
+  obtain ⟨balance, found, raised, ⟨_, summed⟩, set⟩ := computed
+  obtain ⟨_, rfl⟩ := setBalance_ok set
   unfold getBalance at found
   split at found
   · rename_i read
     cases found
     obtain ⟨inside, rfl⟩ := Array.getElem?_eq_some_iff.mp read
-    unfold balanceSum BeaconState.setBalance
-    simp only [Array.set!_eq_setIfInBounds, Array.setIfInBounds, inside, ↓reduceDIte,
-      Array.toList_set, List.map_set]
+    unfold balanceSum BeaconState.putBalance
+    simp only [Array.toList_set, List.map_set]
     have := sum_set_add (l := state.balances.data.toList.map (·.toNat)) (i := index.toNat)
       (by simpa using inside) raised.toNat
     simp only [List.getElem_map, Array.getElem_toList] at this
@@ -79,17 +79,15 @@ theorem balanceSum_decreaseBalance {index : ValidatorIndex} {delta balance : Gwe
     (found : getBalance state index = .ok balance) (le : delta ≤ balance)
     (computed : decreaseBalance state index delta = .ok after) :
     balanceSum after + delta.toNat = balanceSum state := by
-  simp only [decreaseBalance, found, bind, Except.bind, pure, Except.pure,
-    Except.ok.injEq] at computed
-  subst computed
+  simp only [decreaseBalance, found, bind, Except.bind] at computed
+  obtain ⟨_, rfl⟩ := setBalance_ok computed
   unfold getBalance at found
   split at found
   · rename_i read
     cases found
     obtain ⟨inside, rfl⟩ := Array.getElem?_eq_some_iff.mp read
-    unfold balanceSum BeaconState.setBalance
-    simp only [Array.set!_eq_setIfInBounds, Array.setIfInBounds, inside, ↓reduceDIte,
-      Array.toList_set, List.map_set]
+    unfold balanceSum BeaconState.putBalance
+    simp only [Array.toList_set, List.map_set]
     have := sum_set_add (l := state.balances.data.toList.map (·.toNat)) (i := index.toNat)
       (by simpa using inside) (saturatingSub state.balances.data[index.toNat] delta).toNat
     simp only [List.getElem_map, Array.getElem_toList] at this
@@ -509,8 +507,8 @@ theorem applyPendingDeposit_kept {deposit : PendingDeposit}
       exact ⟨id, rfl, rfl⟩
   · rw [liftAccessor_ok] at computed
     refine ⟨balancesMatch_of_sameSizes (sameSizes_increaseBalance computed), ?_⟩
-    simp only [increaseBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, _, _, _, rfl⟩ := computed
+    obtain ⟨_, set⟩ := increaseBalance_ok computed
+    obtain ⟨_, rfl⟩ := setBalance_ok set
     exact ⟨rfl, rfl⟩
 
 /-- A new validator is the only change to the registry.
@@ -571,8 +569,8 @@ theorem applyPendingDeposit_blsValidator {deposit : PendingDeposit} (heze : .heg
     · cases computed
       exact found
   · rw [liftAccessor_ok] at computed
-    simp only [increaseBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, _, _, _, rfl⟩ := computed
+    obtain ⟨_, set⟩ := increaseBalance_ok computed
+    obtain ⟨_, rfl⟩ := setBalance_ok set
     exact found
 
 /-- From Electra, a deposit keeps one balance for each validator, and the deposit data. -/

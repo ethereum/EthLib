@@ -151,9 +151,14 @@ theorem ElectraKept.trans {fork : Fork} {first second third : BeaconState preset
 theorem electraKept_queuePreActivation {fork : Fork} {state after : BeaconState preset fork}
     {electra : .pectra ≤ fork} {index : ValidatorIndex}
     (computed : queuePreActivation state electra index = .ok after) : ElectraKept state after := by
-  simp only [queuePreActivation, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨_, -, _, -, _, -, rfl⟩ := computed
-  exact ⟨(sameSizes_setBalance _ _ _).trans (sameSizes_setValidator _ _ _), rfl, rfl⟩
+  simp only [queuePreActivation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
+    Except.ok.injEq] at computed
+  obtain ⟨_, -, _, -, _, -, _, set₁, _, set₂, rfl⟩ := computed
+  have sizes₁ := sameSizes_setBalance set₁
+  have sizes₂ := sameSizes_setValidator set₂
+  obtain ⟨_, rfl⟩ := setBalance_ok set₁
+  obtain ⟨_, rfl⟩ := setValidator_ok set₂
+  exact ⟨sizes₁.trans (sizes₂.trans ⟨rfl, rfl⟩), rfl, rfl⟩
 
 theorem electraKept_queueCompoundingExcess {fork : Fork} {state after : BeaconState preset fork}
     {electra : .pectra ≤ fork} {index : Nat}
@@ -168,7 +173,8 @@ theorem electraKept_queueCompoundingExcess {fork : Fork} {state after : BeaconSt
       obtain ⟨_, _, queued⟩ := queued
       split at queued
       · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at queued
-        obtain ⟨_, _, _, _, rfl⟩ := queued
+        obtain ⟨_, _, _, _, _, set, rfl⟩ := queued
+        obtain ⟨_, rfl⟩ := setBalance_ok set
         exact ⟨rfl, rfl⟩
       · cases queued
         exact ⟨rfl, rfl⟩
@@ -270,7 +276,7 @@ theorem onboardDeposit_cases {validatorKeys : List BLSPubkey}
     rw [liftAccessor_ok, liftArith, mapError_ok_iff, addChecked_ok_iff] at summed
     cases rest
     refine .inr (.inl ⟨rfl, ?_, _, rfl⟩)
-    have := builderBalanceSum_setBuilder (state := state) (gloas := by decide)
+    have := builderBalanceSum_putBuilder (state := state) (gloas := by decide)
       (builder := { (state.builders (by decide)).data[index] with balance }) index.isLt
     simp only [Fin.getElem_fin] at summed this ⊢
     omega
@@ -287,7 +293,7 @@ theorem onboardDeposit_cases {validatorKeys : List BLSPubkey}
   · -- A new key with a valid signature becomes a builder.
     cases rest
     refine .inr (.inl ⟨rfl, builderBalanceSum_addBuilderToRegistry, ?_⟩)
-    unfold addBuilderToRegistry BeaconState.setBuilder
+    unfold addBuilderToRegistry BeaconState.putBuilder
     dsimp only
     split
     · exact ⟨_, rfl⟩

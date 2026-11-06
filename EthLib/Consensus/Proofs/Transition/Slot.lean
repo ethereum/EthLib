@@ -34,9 +34,9 @@ theorem applyWithdrawal_slot {withdrawal : Withdrawal}
     (computed : applyWithdrawal state withdrawal = .ok after) : after.slot = state.slot := by
   unfold applyWithdrawal at computed
   split at computed
-  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, _, rfl⟩ := computed
-    rfl
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, set⟩ := computed
+    exact setBuilder_slot set
   · exact (frame_decreaseBalance computed).slot
 
 theorem updateNextWithdrawalIndex_slot {withdrawals : Array Withdrawal}
@@ -115,8 +115,8 @@ theorem processWithdrawals_slot {capella : .shapella ≤ fork}
 theorem processBlsToExecutionChange_slot {signed : SignedBLSToExecutionChange}
     (computed : processBlsToExecutionChange config checks state signed = .ok after) :
     after.slot = state.slot := by
-  obtain ⟨_, _, _, _, _, rfl⟩ := processBlsToExecutionChange_ok computed
-  rfl
+  obtain ⟨_, _, _, _, _, set⟩ := processBlsToExecutionChange_ok computed
+  exact setValidator_slot set
 
 /-! ## The execution payload -/
 
@@ -242,13 +242,13 @@ theorem switchToCompoundingValidator_slot {electra : .pectra ≤ fork} {index : 
     (computed : switchToCompoundingValidator state electra index = .ok after) :
     after.slot = state.slot := by
   simp only [switchToCompoundingValidator, queueExcessActiveBalance, bind_ok_iff] at computed
-  obtain ⟨_, _, _, _, computed⟩ := computed
+  obtain ⟨_, _, _, set, _, _, computed⟩ := computed
   split at computed
   · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, _, _, _, rfl⟩ := computed
-    rfl
+    obtain ⟨_, _, _, _, _, setB, rfl⟩ := computed
+    exact (setBalance_slot setB).trans (setValidator_slot set)
   · cases computed
-    rfl
+    exact setValidator_slot set
 
 theorem processDepositRequest_slot {electra : .pectra ≤ fork} {request : DepositRequest}
     (computed : processDepositRequest state electra request = .ok after) :
@@ -285,8 +285,8 @@ theorem queueConsolidation_slot {electra : .pectra ≤ fork} {sourcePosition : N
   simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, pure, Except.pure] at computed
   obtain ⟨⟨_, _⟩, churned, computed⟩ := computed
   simp only [Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, rfl⟩ := computed
-  exact (computeConsolidationEpochAndUpdateChurn_slot churned :)
+  obtain ⟨_, _, _, set, _, _, rfl⟩ := computed
+  exact (setValidator_slot set).trans (computeConsolidationEpochAndUpdateChurn_slot churned)
 
 theorem processConsolidationRequest_slot {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
@@ -353,7 +353,7 @@ theorem processBuilderDepositRequest_slot {gloas : .glamsterdam ≤ fork}
     {request : BuilderDepositRequest}
     (computed : processBuilderDepositRequest config checks state gloas request = .ok after) :
     after.slot = state.slot := by
-  unfold processBuilderDepositRequest addBuilderToRegistry BeaconState.setBuilder at computed
+  unfold processBuilderDepositRequest addBuilderToRegistry BeaconState.putBuilder at computed
   simp only [bind, Except.bind, pure, Except.pure] at computed
   repeat' split at computed
   all_goals first | (cases computed; done) | (cases computed; rfl)
@@ -364,10 +364,9 @@ theorem processBuilderExitRequest_slot {gloas : .glamsterdam ≤ fork}
     after.slot = state.slot := by
   rcases processBuilderExitRequest_cases computed with rfl | ⟨_, _, _, _, _, exited⟩
   · rfl
-  · unfold initiateBuilderExit BeaconState.setBuilder at exited
-    simp only [bind, Except.bind, pure, Except.pure] at exited
-    repeat' split at exited
-    all_goals first | (cases exited; done) | (cases exited; rfl)
+  · simp only [initiateBuilderExit, bind_ok_iff, liftArith, mapError_ok_iff] at exited
+    obtain ⟨_, _, _, _, set⟩ := exited
+    exact setBuilder_slot set
 
 theorem settleParentPayment_slot {gloas : .glamsterdam ≤ fork}
     (computed : settleParentPayment state gloas = .ok after) : after.slot = state.slot := by

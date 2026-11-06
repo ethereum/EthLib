@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Proofs.MapM
+public import EthLib.Consensus.Proofs.Builders
 public import EthLib.Consensus.Proofs.Mutators
 public import EthLib.Consensus.Proofs.Transition.Block
 public import EthLib.Consensus.Transition.Withdrawals
@@ -67,16 +68,16 @@ theorem processBlsToExecutionChange_ok {state after : BeaconState preset fork}
         computeSigningRoot signed.message domain = .ok signingRoot ∧
         checks.verify (packBytes signed.message.fromBlsPubkey) (packBytes signingRoot)
           (packBytes signed.signature) = true) ∧
-      after = state.setValidator signed.message.validatorIndex.toNat
+      state.setValidator signed.message.validatorIndex
         { validator with
-          withdrawalCredentials := executionCredentials signed.message.toExecutionAddress } := by
+          withdrawalCredentials := executionCredentials signed.message.toExecutionAddress } =
+        .ok after := by
   unfold processBlsToExecutionChange at computed
-  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok, pure, Except.pure,
-    Except.ok.injEq] at computed
+  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at computed
   obtain ⟨validator, found, _, blsPrefix, _, keyHash, domain, domainOk, signingRoot, rootOk, _,
-    signature, rfl⟩ := computed
+    signature, set⟩ := computed
   exact ⟨validator, found, blsPrefix, keyHash, ⟨domain, signingRoot, domainOk, rootOk, signature⟩,
-    rfl⟩
+    set⟩
 
 /-- After a change of BLS credentials, the validator has an execution address. -/
 theorem processBlsToExecutionChange_credentials {state after : BeaconState preset fork}
@@ -85,8 +86,8 @@ theorem processBlsToExecutionChange_credentials {state after : BeaconState prese
     ∃ validator : Validator, getValidator after signed.message.validatorIndex = .ok validator ∧
       hasEth1WithdrawalCredential validator = true ∧
       credentialAddress validator.withdrawalCredentials = signed.message.toExecutionAddress := by
-  obtain ⟨validator, found, _, _, _, rfl⟩ := processBlsToExecutionChange_ok computed
-  exact ⟨_, getValidator_setValidator_self found _,
+  obtain ⟨validator, found, _, _, _, set⟩ := processBlsToExecutionChange_ok computed
+  exact ⟨_, getValidator_setValidator_self set,
     hasEth1WithdrawalCredential_executionCredentials _ _,
     credentialAddress_executionCredentials _⟩
 
@@ -95,8 +96,8 @@ theorem sameSizes_processBlsToExecutionChange {state after : BeaconState preset 
     {signed : SignedBLSToExecutionChange}
     (computed : processBlsToExecutionChange config checks state signed = .ok after) :
     SameSizes state after := by
-  obtain ⟨_, _, _, _, _, rfl⟩ := processBlsToExecutionChange_ok computed
-  exact sameSizes_setValidator _ _ _
+  obtain ⟨_, _, _, _, _, set⟩ := processBlsToExecutionChange_ok computed
+  exact sameSizes_setValidator set
 
 /-! ## The withdrawals that a state expects -/
 
@@ -412,8 +413,9 @@ theorem sameSizes_applyWithdrawal {state after : BeaconState preset fork}
     SameSizes state after := by
   unfold applyWithdrawal at computed
   split at computed
-  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, _, rfl⟩ := computed
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, set⟩ := computed
+    obtain ⟨_, rfl⟩ := setBuilder_ok set
     exact ⟨rfl, rfl⟩
   · exact sameSizes_decreaseBalance computed
 
@@ -770,8 +772,9 @@ theorem applyWithdrawals_balance {index : ValidatorIndex} (before : fork < .glam
     have noGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
     unfold applyWithdrawal at step
     simp only [noGloas, false_and, ↓reduceDIte] at step
-    simp only [decreaseBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at step
-    obtain ⟨old, oldOk, rfl⟩ := step
+    simp only [decreaseBalance, bind_ok_iff] at step
+    obtain ⟨old, oldOk, set⟩ := step
+    obtain ⟨inside, rfl⟩ := setBalance_ok set
     rw [withdrawnFrom_cons] at bounded ⊢
     by_cases same : withdrawal.validatorIndex = index
     · simp only [same, ↓reduceIte] at bounded ⊢
@@ -780,7 +783,7 @@ theorem applyWithdrawals_balance {index : ValidatorIndex} (before : fork < .glam
       subst oldOk
       have inRange := (Array.getElem?_eq_some_iff.mp found).1
       rw [applyWithdrawals_balance before rest _ after (saturatingSub balance withdrawal.amount)
-        computed (by simp [BeaconState.setBalance, inRange])
+        computed (by simp [BeaconState.putBalance, inRange])
         (by rw [toNat_saturatingSub]; omega), toNat_saturatingSub]
       congr 1
       omega
@@ -788,7 +791,7 @@ theorem applyWithdrawals_balance {index : ValidatorIndex} (before : fork < .glam
       have apart : withdrawal.validatorIndex.toNat ≠ index.toNat :=
         fun h => same (UInt64.toNat_inj.mp h)
       exact applyWithdrawals_balance before rest _ after balance computed
-        (by simp [BeaconState.setBalance, apart, found]) bounded
+        (by simp [BeaconState.putBalance, apart, found]) bounded
 
 /-- Before Gloas, only the withdrawals themselves change the balances. -/
 theorem applyExpectedWithdrawals_balances {state after : BeaconState preset fork}

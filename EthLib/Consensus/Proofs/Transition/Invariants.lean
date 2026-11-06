@@ -94,33 +94,36 @@ theorem mem_of_getValidator {index : ValidatorIndex} {validator : Validator}
   · cases found
 
 /-- Replacing a validator by one that exits no later than it may withdraw keeps the order. -/
-theorem ExitsOrdered.setValidator {index : Nat} {validator : Validator}
+theorem ExitsOrdered.putValidator {index : Nat} {validator : Validator}
+    (inside : index < state.validators.data.size)
     (ordered : ExitsOrdered state) (le : validator.exitEpoch ≤ validator.withdrawableEpoch) :
-    ExitsOrdered (state.setValidator index validator) := by
+    ExitsOrdered (state.putValidator index inside validator) := by
   intro other member
-  rcases Array.mem_or_eq_of_mem_setIfInBounds member with old | rfl
+  rcases Array.mem_or_eq_of_mem_set (w := inside) member with old | rfl
   · exact ordered other old
   · exact le
 
-theorem frame_setValidator {index : Nat} {validator : Validator}
+theorem frame_setValidator {index : ValidatorIndex} {validator : Validator}
+    (set : state.setValidator index validator = .ok after)
     (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch) :
-    Frame state (state.setValidator index validator) :=
-  ⟨rfl, rfl, rfl, rfl, balancesMatch_of_sameSizes (sameSizes_setValidator _ _ _),
-    fun ordered => ordered.setValidator (le ordered)⟩
+    Frame state after := by
+  obtain ⟨inside, rfl⟩ := setValidator_ok set
+  exact ⟨rfl, rfl, rfl, rfl, balancesMatch_of_sameSizes (sameSizes_putValidator state inside _),
+    fun ordered => ordered.putValidator inside (le ordered)⟩
 
 theorem frame_increaseBalance {index : ValidatorIndex} {delta : Gwei}
     (computed : increaseBalance state index delta = .ok after) : Frame state after := by
-  simp only [increaseBalance, bind, Except.bind, pure, Except.pure] at computed
-  repeat' (split at computed; · cases computed)
-  cases computed
-  exact Frame.of_validators (sameSizes_setBalance _ _ _) rfl rfl rfl rfl rfl
+  obtain ⟨_, set⟩ := increaseBalance_ok computed
+  have sizes := sameSizes_setBalance set
+  obtain ⟨_, rfl⟩ := setBalance_ok set
+  exact Frame.of_validators sizes rfl rfl rfl rfl rfl
 
 theorem frame_decreaseBalance {index : ValidatorIndex} {delta : Gwei}
     (computed : decreaseBalance state index delta = .ok after) : Frame state after := by
-  simp only [decreaseBalance, bind, Except.bind, pure, Except.pure] at computed
-  repeat' (split at computed; · cases computed)
-  cases computed
-  exact Frame.of_validators (sameSizes_setBalance _ _ _) rfl rfl rfl rfl rfl
+  obtain ⟨_, set⟩ := decreaseBalance_ok computed
+  have sizes := sameSizes_setBalance set
+  obtain ⟨_, rfl⟩ := setBalance_ok set
+  exact Frame.of_validators sizes rfl rfl rfl rfl rfl
 
 theorem frame_exitQueue {exitBalance : Gwei} {exitEpoch : Epoch}
     (computed : exitQueue config state exitBalance = .ok (after, exitEpoch)) :
@@ -140,10 +143,10 @@ theorem frame_exitQueue {exitBalance : Gwei} {exitEpoch : Epoch}
 /-- Starting an exit sets a withdrawable epoch no earlier than the exit epoch. -/
 theorem frame_initiateValidatorExit {index : ValidatorIndex}
     (computed : initiateValidatorExit config state index = .ok after) : Frame state after := by
-  obtain ⟨_, _, ⟨_, rfl⟩ | ⟨_, queued, exitEpoch, withdrawableEpoch, queue, summed, rfl⟩⟩ :=
+  obtain ⟨_, _, ⟨_, rfl⟩ | ⟨_, queued, exitEpoch, withdrawableEpoch, queue, summed, set⟩⟩ :=
     initiateValidatorExit_ok computed
   · exact Frame.refl _
-  · refine (frame_exitQueue queue).trans (frame_setValidator fun _ => ?_)
+  · refine (frame_exitQueue queue).trans (frame_setValidator set fun _ => ?_)
     have sum := (addChecked_ok_iff.mp summed).2
     exact UInt64.le_iff_toNat_le.mpr (by simp only at sum ⊢; omega)
 
@@ -168,12 +171,11 @@ theorem frame_slashValidator {slashedIndex : ValidatorIndex}
     (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
     Frame state after := by
   simp only [slashValidator, bind_ok_iff, liftArith, mapError_ok_iff] at computed
-  obtain ⟨exited, exitedOk, validator, found, delay, _, _, _, _, _, _, _, lowered, loweredOk,
+  obtain ⟨exited, exitedOk, validator, found, delay, _, marked, markedOk, _, _, _, _, _, _,
+    lowered, loweredOk,
     proposer, _, _, _, raised, raisedOk, last, lastOk, done⟩ := computed
   refine (frame_initiateValidatorExit exitedOk).trans <|
-    ((frame_setValidator (index := slashedIndex.toNat)
-      (validator := { validator with
-        slashed := true, withdrawableEpoch := max validator.withdrawableEpoch delay })
+    ((frame_setValidator markedOk
       fun ordered => ?_).trans
       (frame_slashings _ _)).trans <|
     (frame_decreaseBalance loweredOk).trans <| (frame_increaseBalance raisedOk).trans <|
@@ -385,9 +387,9 @@ theorem queueForActivation_epochs {validator queued : Validator}
 theorem frame_updateRegistryEntry {index : Nat}
     (computed : updateRegistryEntry config state index = .ok after) : Frame state after := by
   simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨validator, found, queued, queuedOk, computed⟩ := computed
+  obtain ⟨validator, found, queued, queuedOk, marked, markedOk, computed⟩ := computed
   obtain ⟨exitSame, withdrawableSame⟩ := queueForActivation_epochs queuedOk
-  have set : Frame state (state.setValidator index queued) := frame_setValidator fun ordered => by
+  have set : Frame state marked := frame_setValidator markedOk fun ordered => by
     rw [exitSame, withdrawableSame]
     exact ordered validator (mem_of_getValidator found)
   split at computed
@@ -398,10 +400,9 @@ theorem frame_updateRegistryEntry {index : Nat}
 
 theorem frame_activateValidator {index : ValidatorIndex}
     (computed : activateValidator state index = .ok after) : Frame state after := by
-  simp only [activateValidator, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨validator, found, _, _, rfl⟩ := computed
-  exact frame_setValidator fun ordered => ordered validator (mem_of_getValidator found)
+  simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨validator, found, _, _, set⟩ := computed
+  exact frame_setValidator set fun ordered => ordered validator (mem_of_getValidator found)
 
 theorem frame_updateRegistryEntryElectra {activationEpoch : Epoch} {index : Nat}
     (computed : updateRegistryEntryElectra config activationEpoch state index = .ok after) :
@@ -411,15 +412,15 @@ theorem frame_updateRegistryEntryElectra {activationEpoch : Epoch} {index : Nat}
   have kept : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch :=
     fun ordered => ordered validator (mem_of_getValidator found)
   split at computed
-  · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, _, rfl⟩ := computed
-    exact frame_setValidator kept
+  · simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, _, set⟩ := computed
+    exact frame_setValidator set kept
   split at computed
   · rw [liftAccessor_ok] at computed
     exact frame_initiateValidatorExit computed
   split at computed
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ frame_setValidator kept
+  · rw [liftAccessor_ok] at computed
+    exact frame_setValidator computed kept
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ Frame.refl _
 
@@ -493,10 +494,9 @@ theorem frame_processEth1DataReset {before : fork < .hegota}
 
 theorem frame_updateEffectiveBalance {index : Nat}
     (computed : updateEffectiveBalance state index = .ok after) : Frame state after := by
-  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨validator, found, _, _, _, _, rfl⟩ := computed
-  exact frame_setValidator fun ordered => ordered validator (mem_of_getValidator found)
+  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨validator, found, _, _, _, _, set⟩ := computed
+  exact frame_setValidator set fun ordered => ordered validator (mem_of_getValidator found)
 
 theorem frame_processEffectiveBalanceUpdates
     (computed : processEffectiveBalanceUpdates state = .ok after) : Frame state after := by
