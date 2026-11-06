@@ -7,6 +7,7 @@ public import EthLib.Base.Hex
 # Proofs: the hex digits of the JSON decoders
 
 The decoders read a hex digit by its ASCII byte.
+
 They read back each digit that `hexDigitChar` writes, whichever case they allow.
 -/
 
