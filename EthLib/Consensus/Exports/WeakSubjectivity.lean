@@ -12,7 +12,9 @@ One export computes the period of a state.
 
 Another checks that a checkpoint is not stale.
 
-They take states as SSZ bytes, and accept forks up to Gloas.
+They take states as SSZ bytes, and accept forks up to Heze.
+
+Heze keeps the rule of Gloas.
 
 The check reads only the time of the store, so the export takes the two times of a store.
 

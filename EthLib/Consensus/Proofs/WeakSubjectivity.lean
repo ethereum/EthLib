@@ -18,7 +18,7 @@ In Phase 0, a computed period is one of the two expressions of the rule, on natu
 
 At every fork, the period is at least the withdrawal delay.
 
-From Electra, the period is at most a bound of the parameters alone: 3558 epochs on mainnet.
+In Electra and Fulu, the period is at most a bound of the parameters alone: 3558 epochs on mainnet.
 
 The check of a checkpoint needs a state that holds its root and is at its epoch.
 
@@ -215,7 +215,7 @@ theorem roundToIncrement_bounds {amount floor increment : Nat} (hincrement : 0 <
     Nat.mul_le_mul_left _ hcount
   omega
 
-/-- From Electra: the period is at most a bound that depends only on the parameters.
+/-- In Electra and Fulu: the period is at most a bound that depends only on the parameters.
 
 The churn is at least its minimum, and at least the total over the quotient, less one increment.
 
@@ -279,7 +279,7 @@ theorem computeWeakSubjectivityPeriodElectra_le {config : Config}
       _ = 10 * Q * (m + i) * c := by ac_rfl
   exact Nat.le_of_mul_le_mul_right hstep hpos
 
-/-- From Electra, at the mainnet parameters, the period is at most 3558 epochs. -/
+/-- In Electra and Fulu, at the mainnet parameters, the period is at most 3558 epochs. -/
 theorem computeWeakSubjectivityPeriodElectra_le_mainnet
     {state : BeaconState Preset.mainnet fork} {period : Epoch}
     (h : computeWeakSubjectivityPeriodElectra Config.mainnet state = .ok period) :
