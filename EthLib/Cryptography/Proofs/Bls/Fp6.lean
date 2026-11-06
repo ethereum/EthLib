@@ -193,7 +193,7 @@ theorem norm_mul (a b : Fp6) : norm (a * b) = norm a * norm b := by
 
 @[simp]
 theorem norm_v : norm v = Fp2.xi := by
-  decide
+  simp [norm, v]
 
 theorem norm_mulByV (a : Fp6) : norm a.mulByV = (norm a).mulByOnePlusI := by
   rw [mulByV_eq, norm_mul, norm_v, Fp2.mulByOnePlusI_eq]
@@ -207,7 +207,7 @@ theorem norm_mulByOnePlusI (a : Fp2) : Fp2.norm a.mulByOnePlusI = 2 * Fp2.norm a
 
 @[simp]
 theorem norm_xi : Fp2.norm Fp2.xi = Fp.ofNat 2 := by
-  decide
+  decide_eq_at_model [Fp2.norm, Fp2.xi]
 
 open scoped EthLib.Cryptography.Bls.Fp in
 set_option maxRecDepth 8000 in
@@ -260,6 +260,7 @@ private theorem norm_eq_zero_aux {a0 a1 a2 : Fp2}
   -- The `t_i` are the cofactors the library's inverse multiplies by.
   -- A zero norm forces `t0^3 = t1^3 * xi`, so `t1 = 0`, and then `t0 = t2 = 0`.
   -- The same cube argument on the `a_i` then forces each of them to zero.
+  have xi_ne_zero : Fp2.xi ≠ 0 := by decide_eq_at_model [Fp2.xi]
   set xi := Fp2.xi
   set t0 := a0 * a0 - a1 * a2 * xi
   set t1 := a2 * a2 * xi - a0 * a1
@@ -272,7 +273,7 @@ private theorem norm_eq_zero_aux {a0 a1 a2 : Fp2}
   have ht0 : t0 = 0 := mul_self_eq_zero.mp ht0_sq
   have ht2_xi : t2 * t2 * xi = 0 := by
     linear_combination a1 * h + t0 * ht1
-  have hxi_ne : xi ≠ 0 := by decide
+  have hxi_ne : xi ≠ 0 := xi_ne_zero
   have ht2_sq : t2 * t2 = 0 := (mul_eq_zero.mp ht2_xi).resolve_right hxi_ne
   have ht2 : t2 = 0 := mul_self_eq_zero.mp ht2_sq
   have ha01 : a0 * a0 * a0 = a1 * a1 * a1 * xi := by
@@ -380,8 +381,7 @@ theorem inverse_zero : (0 : Fp6).inverse = 0 := by
 instance : Field Fp6 where
   inv := inverse
   exists_pair_ne := ⟨0, 1, fun h => by
-    have := congrArg (fun x => x.c0.c0) h
-    revert this; decide⟩
+    exact zero_ne_one (α := Fp2) (congrArg c0 h)⟩
   mul_inv_cancel := fun _ h => mul_inverse_cancel h
   inv_zero := inverse_zero
   div_eq_mul_inv := fun _ _ => rfl

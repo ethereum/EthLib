@@ -333,7 +333,7 @@ private theorem beq_y_iff {P Q : G2} :
           = rep Q 1 * rep P 2 * (rep P 2 * rep P 2) :=
   beq_iff
 
-private theorem two_ne_zero' : (2 : Fp2) ≠ 0 := by decide
+private theorem two_ne_zero' : (2 : Fp2) ≠ 0 := by decide_eq_at_model []
 
 private theorem z_ne_zero {P : G2} (hz : ¬P.z.isZero = true) :
     rep P 2 ≠ 0 := fun h => hz (isZero_iff.mpr h)

@@ -62,8 +62,7 @@ theorem frobenius_eq_pow (a : Fp12) : a.frobenius = a ^ Fp.modulus := by
 
 The kernel computes it. -/
 theorem xi_pow_half : Fp2.xi ^ ((Fp.modulus ^ 2 - 1) / 2) = -1 := by
-  rw [← Fp2.powNat_eq_pow]
-  decide +kernel
+  decide_eq_at_model [Fp2.xi]
 
 /-- `w^(p^6) = -w`. -/
 private theorem w_pow_p6 : w ^ (Fp.modulus ^ 6) = -w := by

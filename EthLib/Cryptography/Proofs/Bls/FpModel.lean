@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Bls.Fp
 public import EthLib.Cryptography.Proofs.BaseField
+public import EthLib.Cryptography.Proofs.Bls.FpZMod
 
 /-!
 # Proofs: the base field that the kernel computes in
@@ -86,6 +87,49 @@ theorem toModel_zero : toModel Fp.zero = BaseField.zero := toModel.map_zero
 
 /-- The image of one is the one of the model. -/
 theorem toModel_one : toModel Fp.one = BaseField.one := toModel.map_one
+
+/-- The image of the numeral `0` is the zero of the model. -/
+theorem toModel_zero' : toModel (0 : Fp) = BaseField.zero := toModel.map_zero
+
+/-- The image of the numeral `1` is the one of the model. -/
+theorem toModel_one' : toModel (1 : Fp) = BaseField.one := toModel.map_one
+
+/-- The image of a numeral is the element of the same integer in the model. -/
+theorem toModel_numeral (n : Nat) :
+    toModel (no_index (OfNat.ofNat n : Fp)) = BaseField.ofNat n :=
+  toModel.map_ofNat n
+
+/-- The image of a sum is the sum of the images. -/
+theorem toModel_add (a b : Fp) : toModel (a + b) = toModel a + toModel b := toModel.map_add a b
+
+/-- The image of a difference is the difference of the images. -/
+theorem toModel_sub (a b : Fp) : toModel (a - b) = toModel a - toModel b := toModel.map_sub a b
+
+/-- The image of a product is the product of the images. -/
+theorem toModel_mul (a b : Fp) : toModel (a * b) = toModel a * toModel b := toModel.map_mul a b
+
+/-- The image of a negation is the negation of the image. -/
+theorem toModel_neg (a : Fp) : toModel (-a) = -toModel a := toModel.map_neg a
+
+/-- The image of an inverse is the inverse of the image. -/
+theorem toModel_inverse (a : Fp) : toModel a.inverse = BaseField.inverse (toModel a) :=
+  toModel.map_inverse a
+
+/-- The image of a power is the power of the image. -/
+theorem toModel_powNat (a : Fp) (n : Nat) :
+    toModel (a.powNat n) = BaseField.powNat (toModel a) n :=
+  toModel.map_powNat a n
+
+/-- Two elements are equal when their images in the model are. -/
+theorem eq_of_model {a b : Fp} (h : BaseField.beq (toModel a) (toModel b) = true) : a = b := by
+  rw [toModel.map_beq, baseField_beq, beq, beq_iff_eq] at h
+  exact ext h
+
+/-- Two elements differ when their images in the model do. -/
+theorem ne_of_model {a b : Fp} (h : BaseField.beq (toModel a) (toModel b) = false) : a ≠ b := by
+  rintro rfl
+  rw [toModel.map_beq, baseField_beq, beq, beq_self_eq_true] at h
+  exact Bool.noConfusion h
 
 end Fp
 

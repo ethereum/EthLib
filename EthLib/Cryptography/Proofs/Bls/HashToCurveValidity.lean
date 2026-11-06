@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Bls.Isogeny
+public import EthLib.Cryptography.Proofs.Bls.HashToCurveMap
 
 /-!
 # Proofs: the hash to G2 returns a valid point
@@ -21,14 +22,19 @@ namespace EthLib.Cryptography.Bls.HashToCurve
 open EthLib.Cryptography.Bls
 
 
--- Definitionally equal to `c1Psi`, `c2Psi`, `c1Psi2`, checked via `change` in `psi_valid` and `psi2_valid`.
-private def cp1 : Fp2 := (Fp2.powNat ⟨Fp.one, Fp.one⟩ ((Fp.modulus - 1) / 3)).inverse
-private def cp2 : Fp2 := (Fp2.powNat ⟨Fp.one, Fp.one⟩ ((Fp.modulus - 1) / 2)).inverse
-private def cp12 : Fp2 := ⟨(Fp.powNat (Fp.ofNat 2) ((Fp.modulus - 1) / 3)).inverse, Fp.zero⟩
+/-- The constant of `psi2` is a cube root of unity. -/
+theorem c1Psi2_cube : (c1Psi2 : Fp2) ^ 3 = 1 := by
+  decide_eq_at_model [map_c1Psi2]
 
-private theorem cp12_cube : cp12 ^ 3 = 1 := by decide +kernel
-private theorem cp1_cube : cp1 ^ 3 = cp2 ^ 2 := by decide +kernel
-private theorem cp2_twist : cp2 ^ 2 * G2.bTwist.conjugate = G2.bTwist := by decide +kernel
+/-- The cube of the first constant of `psi` is the square of the second. -/
+theorem c1Psi_cube : (c1Psi : Fp2) ^ 3 = c2Psi ^ 2 := by
+  decide_eq_at_model [map_c1Psi, map_c2Psi]
+
+/-- The square of the second constant of `psi` times the conjugate of `b'` is `b'`.
+
+Here `b' = 4 (1 + i)` is the coefficient of the twist. -/
+theorem c2Psi_twist : (c2Psi : Fp2) ^ 2 * G2.bTwist.conjugate = G2.bTwist := by
+  decide_eq_at_model [map_c2Psi, G2.map_bTwist]
 
 private theorem toAffine_equation {P : G2} (hP : G2.Valid P)
     (hz : P.z.isZero = false) :
@@ -56,13 +62,13 @@ theorem psi_valid {P : G2} (hP : G2.Valid P) : G2.Valid (psi P) := by
   · have hz' : P.z.isZero = false := Bool.eq_false_iff.mpr hz
     rw [hz']
     dsimp only
-    change G2.Valid ⟨cp1 * P.toAffine.1.conjugate, cp2 * P.toAffine.2.conjugate, Fp2.one⟩
+    change G2.Valid ⟨c1Psi * P.toAffine.1.conjugate, c2Psi * P.toAffine.2.conjugate, Fp2.one⟩
     apply G2.valid_of_affine_equation
     have heq := congrArg Fp2.conjugate (toAffine_equation hP hz')
     simp only [Fp2.conjugate_mul, Fp2.conjugate_add] at heq
-    have hc := cp1_cube
-    have hb := cp2_twist
-    linear_combination cp2 ^ 2 * heq - P.toAffine.1.conjugate ^ 3 * hc + hb
+    have hc := c1Psi_cube
+    have hb := c2Psi_twist
+    linear_combination c2Psi ^ 2 * heq - P.toAffine.1.conjugate ^ 3 * hc + hb
 
 /-- `psi2` preserves `G2.Valid` (`RFC 9380 Appendix G.3`). -/
 theorem psi2_valid {P : G2} (hP : G2.Valid P) : G2.Valid (psi2 P) := by
@@ -72,10 +78,10 @@ theorem psi2_valid {P : G2} (hP : G2.Valid P) : G2.Valid (psi2 P) := by
   · have hz' : P.z.isZero = false := Bool.eq_false_iff.mpr hz
     rw [hz']
     dsimp only
-    change G2.Valid ⟨cp12 * P.toAffine.1, -P.toAffine.2, Fp2.one⟩
+    change G2.Valid ⟨c1Psi2 * P.toAffine.1, -P.toAffine.2, Fp2.one⟩
     apply G2.valid_of_affine_equation
     have heq := toAffine_equation hP hz'
-    linear_combination heq - P.toAffine.1 ^ 3 * cp12_cube
+    linear_combination heq - P.toAffine.1 ^ 3 * c1Psi2_cube
 
 /-- Multiplication by the negative BLS parameter preserves `G2.Valid`. -/
 theorem mulNegX_valid {P : G2} (hP : G2.Valid P) : G2.Valid (mulNegX P) :=
@@ -98,14 +104,14 @@ theorem clearCofactor_valid {P : G2} (hP : G2.Valid P) : G2.Valid (clearCofactor
 @[simp]
 theorem psi_zero : psi (G2.zero : G2) = G2.zero := by
   unfold psi
-  have hz : (G2.zero : G2).z.isZero = true := by decide
+  have hz : (G2.zero : G2).z.isZero = true := Fp2.isZero_iff.mpr rfl
   simp [hz]
 
 /-- `psi2` fixes the point at infinity. -/
 @[simp]
 theorem psi2_zero : psi2 (G2.zero : G2) = G2.zero := by
   unfold psi2
-  have hz : (G2.zero : G2).z.isZero = true := by decide
+  have hz : (G2.zero : G2).z.isZero = true := Fp2.isZero_iff.mpr rfl
   simp [hz]
 
 /-- On finite points, `psi2` negates the affine `y` coordinate. -/

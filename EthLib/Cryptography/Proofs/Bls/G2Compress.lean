@@ -81,8 +81,8 @@ theorem projectiveEq_inf_iff {p q : G2} (hp : p.isInfinity = true) :
   unfold projectiveEq isInfinity at *
   rw [ite_eq_left hp]
 
-@[simp] theorem isInfinity_zero : (G2.zero : G2).isInfinity = true := by
-  decide
+@[simp] theorem isInfinity_zero : (G2.zero : G2).isInfinity = true :=
+  Fp2.isZero_iff.mpr rfl
 
 /-! ## Compression and decompression -/
 
@@ -167,7 +167,13 @@ private theorem ba_size_set! (b : ByteArray) (j : Nat) (v : UInt8) :
 
 /-- The 96-byte infinity encoding decodes to the zero point. -/
 theorem uncompress_infinityBytes : G2.uncompress G2.infinityBytes = .ok G2.zero := by
-  decide +kernel
+  have hsz : infinityBytes.size = 96 := by decide
+  have hhead : infinityBytes.get! 0 = 0xc0 := by decide
+  have htail : tailAllZero infinityBytes 1 = true := by decide +kernel
+  rw [uncompress, ite_eq_right (by rw [hsz]; decide)]
+  dsimp only
+  rw [hhead, htail]
+  rfl
 
 /-! ## Rejection of malformed compressed inputs -/
 
@@ -318,18 +324,6 @@ theorem uncompress_noncanonical_c0 {bytes : ByteArray} {e : BlsError}
   cases Fp.fromBytesBE ((bytes.set! 0 (bytes.get! 0 &&& 0x1f)).extract 0 48) <;> rfl
 
 /-! ## Curve membership of decoded points -/
-
-private theorem isOnTwist_of_z_one {x y : Fp2} (h : y * y = x * x * x + bTwist) :
-    G2.isOnTwist ⟨x, y, Fp2.one⟩ = true := by
-  unfold isOnTwist
-  have hinf : (⟨x, y, Fp2.one⟩ : G2).isInfinity = false :=
-    show (Fp2.one : Fp2).isZero = false by decide
-  rw [ite_eq_right (by rw [hinf]; decide)]
-  dsimp only
-  have h1 : (Fp2.one : Fp2) * Fp2.one = Fp2.one := by decide
-  have hb : (bTwist : Fp2) * Fp2.one = bTwist := mul_one (bTwist : Fp2)
-  rw [h1, h1, h1, hb, h]
-  exact beq_self_eq_true _
 
 private theorem sq_select_fp2 (yPos : Fp2) (P : Prop) [Decidable P] :
     (if P then yPos else -yPos) * (if P then yPos else -yPos) = yPos * yPos := by
@@ -514,10 +508,9 @@ theorem compress_eq_infinityBytes_iff (p : G2) :
 @[simp] theorem toAffine_of_z_one (x y : Fp2) :
     (⟨x, y, Fp2.one⟩ : G2).toAffine = (x, y) := by
   unfold toAffine
-  have h1z : (Fp2.one : Fp2).isZero = false := by decide
-  rw [ite_eq_right (by rw [h1z]; decide)]
+  rw [ite_eq_right (by rw [Fp2.one_isZero]; decide)]
   have hinv : (Fp2.one : Fp2).inverse = 1 := by
-    have h := Fp2.mul_inverse_cancel (a := 1) (by decide)
+    have h := Fp2.mul_inverse_cancel (a := 1) one_ne_zero
     rwa [one_mul] at h
   dsimp only
   rw [hinv, mul_one, mul_one, mul_one, mul_one]
@@ -558,7 +551,8 @@ theorem projectiveEq_toAffine {p : G2} (hinf : ¬ p.isInfinity = true) :
   have hzne : p.z ≠ 0 := fun hz0 => hinf (Fp2.isZero_iff.mpr hz0)
   have hw : p.z * p.z.inverse = 1 := Fp2.mul_inverse_cancel hzne
   unfold projectiveEq
-  rw [ite_eq_right (by decide : ¬ (Fp2.one : Fp2).isZero = true), ite_eq_right hpz]
+  rw [ite_eq_right (by rw [Fp2.one_isZero]; decide : ¬ (Fp2.one : Fp2).isZero = true),
+    ite_eq_right hpz]
   dsimp only [G2.toAffine]
   rw [ite_eq_right hpz]
   dsimp only
@@ -687,7 +681,9 @@ theorem uncompress_compress_of_z_one {p : G2} (hz : p.z = Fp2.one)
   dsimp only at hz
   subst hz
   have hinf : ¬ (⟨x, y, Fp2.one⟩ : G2).isInfinity = true := by
-    change ¬ (Fp2.one : Fp2).isZero = true; decide
+    change ¬ (Fp2.one : Fp2).isZero = true
+    rw [Fp2.one_isZero]
+    decide
   have hrt := uncompress_compress_noninf h hinf
   rwa [toAffine_of_z_one] at hrt
 
@@ -822,6 +818,7 @@ theorem compress_uncompress {b : ByteArray} {q : G2}
                 if (Fp2.signBit yPos = true) = ((b.get! 0 &&& 0x20) ≠ 0) then yPos else -yPos
               have hqinf : ¬ (⟨x, y, Fp2.one⟩ : G2).isInfinity = true := by
                 change ¬ (Fp2.one : Fp2).isZero = true
+                rw [Fp2.one_isZero]
                 decide
               have hpa : (⟨x, y, Fp2.one⟩ : G2).toAffine = (x, y) := toAffine_of_z_one x y
               rw [compress_noninf hqinf hpa]

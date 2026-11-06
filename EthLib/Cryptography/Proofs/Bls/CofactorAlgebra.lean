@@ -20,29 +20,27 @@ namespace EthLib.Cryptography.Bls.HashToCurve
 
 open EthLib.Cryptography.Bls
 
-private def c1 : Fp2 := (Fp2.powNat ⟨Fp.one, Fp.one⟩ ((Fp.modulus - 1) / 3)).inverse
-private def c2 : Fp2 := (Fp2.powNat ⟨Fp.one, Fp.one⟩ ((Fp.modulus - 1) / 2)).inverse
-private def c12 : Fp2 := ⟨(Fp.powNat (Fp.ofNat 2) ((Fp.modulus - 1) / 3)).inverse, Fp.zero⟩
+private theorem c1Psi_norm : (c1Psi : Fp2) * c1Psi.conjugate = c1Psi2 := by
+  decide_eq_at_model [map_c1Psi, map_c1Psi2]
 
-private theorem c1_norm : c1 * c1.conjugate = c12 := by decide +kernel
-private theorem c2_norm : c2 * c2.conjugate = -1 := by decide +kernel
-private theorem c12_cube : c12 ^ 3 = 1 := by decide +kernel
+private theorem c2Psi_norm : (c2Psi : Fp2) * c2Psi.conjugate = -1 := by
+  decide_eq_at_model [map_c2Psi]
 
 private theorem toAffine_one (x y : Fp2) :
     G2.toAffine ⟨x, y, Fp2.one⟩ = (x, y) := by
   unfold G2.toAffine
-  have hz : (Fp2.one : Fp2).isZero = false := by decide
+  have hz : (Fp2.one : Fp2).isZero = false := Fp2.one_isZero
   have hi : (Fp2.one : Fp2).inverse = (1 : Fp2) := inv_one
   simp only [hz, Bool.false_eq_true, ↓reduceIte, hi, mul_one]
 
 private theorem psi_noninf (P : G2) (hz : P.z.isZero = false) :
-    psi P = ⟨c1 * P.toAffine.1.conjugate, c2 * P.toAffine.2.conjugate, Fp2.one⟩ := by
+    psi P = ⟨c1Psi * P.toAffine.1.conjugate, c2Psi * P.toAffine.2.conjugate, Fp2.one⟩ := by
   unfold psi
   rw [hz]
   rfl
 
 private theorem psi2_noninf (P : G2) (hz : P.z.isZero = false) :
-    psi2 P = ⟨c12 * P.toAffine.1, -P.toAffine.2, Fp2.one⟩ := by
+    psi2 P = ⟨c1Psi2 * P.toAffine.1, -P.toAffine.2, Fp2.one⟩ := by
   unfold psi2
   rw [hz]
   rfl
@@ -56,8 +54,8 @@ theorem psi_psi_eq_psi2 (P : G2) : psi (psi P) = psi2 P := by
     rw [psi_noninf _ rfl, psi2_noninf P hz, toAffine_one]
     simp only [Fp2.conjugate_mul, Fp2.conjugate_conjugate]
     congr 1
-    · rw [← mul_assoc, c1_norm]
-    · rw [← mul_assoc, c2_norm, neg_one_mul]
+    · rw [← mul_assoc, c1Psi_norm]
+    · rw [← mul_assoc, c2Psi_norm, neg_one_mul]
 
 /-- Three applications of `psi2` on a finite representative normalize to affine negation. -/
 theorem psi2_cube_noninf (P : G2) (hz : P.z.isZero = false) :
@@ -65,7 +63,7 @@ theorem psi2_cube_noninf (P : G2) (hz : P.z.isZero = false) :
   rw [psi2_noninf P hz, psi2_noninf _ rfl, psi2_noninf _ rfl]
   simp only [toAffine_one, neg_neg]
   congr 1
-  have h := congrArg (fun c : Fp2 => c * P.toAffine.1) c12_cube
+  have h := congrArg (fun c : Fp2 => c * P.toAffine.1) c1Psi2_cube
   simpa only [pow_succ, pow_zero, one_mul, mul_assoc] using h
 
 private theorem isZero_eq_of_projectiveEq {p q : G2} (h : G2.projectiveEq p q = true) :
@@ -184,7 +182,7 @@ theorem psi2_cube_projectiveEq_neg (P : G2) :
     have hPz : P.z ≠ 0 := fun h0 => by
       rw [Fp2.isZero_iff.mpr h0] at hz
       cases hz
-    have hone_nz : ¬(Fp2.one : Fp2).isZero = true := by decide
+    have hone_nz : ¬(Fp2.one : Fp2).isZero = true := by rw [Fp2.one_isZero]; decide
     unfold G2.projectiveEq
     dsimp only
     rw [ite_eq_right hone_nz, ite_eq_right (by simp [hnz])]

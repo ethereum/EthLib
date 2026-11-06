@@ -127,8 +127,9 @@ theorem modulus_smul_generator :
 
 theorem toPoint_generator_ne_zero : toPoint generator ≠ 0 := by
   -- Because `z = 1 != 0`, `generator` maps to `Point.some ...`, which cannot equal `Point.zero`.
+  have hz : ¬ (Fp2.one : Fp2).isZero = true := by rw [Fp2.one_isZero]; decide
   rw [toPoint, Point.toAffine_of_Z_ne_zero valid_generator
-    (by exact fun h => absurd (isZero_iff.mpr h) (by decide))]
+    (by exact fun h => absurd (isZero_iff.mpr h) hz)]
   exact fun h => by cases h
 
 /-- Because `r` is prime and `[r] * g_2 = 0` with `g_2 != 0`, the order of `g_2` cannot be `1` and must be `r`. -/

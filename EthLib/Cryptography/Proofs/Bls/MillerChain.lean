@@ -75,12 +75,12 @@ theorem twist_x_ne_zero {x y : Fp2} (h : G2.curve.toAffine.Nonsingular x y) : x 
     have h1 := h.1
     rw [equation_iff] at h1
     simp only [G2.curve, WeierstrassCurve.Jacobian.toAffine] at h1
-    rw [show (2 : Fp2) * 2 * Fp2.xi = G2.bTwist by decide]
+    rw [show (2 : Fp2) * 2 * Fp2.xi = G2.bTwist by decide_eq_at_model [Fp2.xi, G2.map_bTwist]]
     linear_combination h1
   have hn := congrArg Fp2.norm he
   simp only [Fp2.norm_mul] at hn
   have h2 : Fp2.norm 2 = 0 := Fp12.sq_eq_two_mul_sq_zmod (nxi := Fp2.norm Fp2.xi) rfl hn
-  exact absurd h2 (by decide)
+  exact absurd h2 (by decide_eq_at_model [Fp2.norm])
 
 /-- The final exponentiation commutes with division. -/
 theorem finalExponentiation_div (a b : Fp12) :
@@ -131,7 +131,9 @@ theorem finalExponentiation_vertical {T : G2} (hT : G2.Valid T) (hz : T.z ≠ 0)
 private theorem fp2ToFp12_ne_zero {a : Fp2} (h : a ≠ 0) : fp2ToFp12 a ≠ 0 :=
   (map_ne_zero fp2ToFp12).mpr h
 
-private theorem two_ne_zero_fp12 : (2 : Fp12) ≠ 0 := by decide
+private theorem two_ne_zero_fp12 : (2 : Fp12) ≠ 0 := by
+  rw [← map_ofNat fp2ToFp12 2]
+  exact fp2ToFp12_ne_zero (by decide_eq_at_model [])
 
 /-- At a point with `Y ≠ 0`, the tangent of Miller's algorithm is the opposite of the loop's line.
 -/
@@ -193,7 +195,7 @@ theorem line_chord {T : G2} {xq yq : Fp2} (hT : G2.Valid T) (hz : T.z ≠ 0)
   have hX' := (ShortWeierstrass.scaled_x_eq_iff fp2ToFp12 (inv_ne_zero w_ne_zero) _ _).mp hX
   rw [← hX', div_mul_cancel₀ _ (pow_ne_zero 2 hz), sub_self]
 
-private theorem two_ne_zero_fp2 : (2 : Fp2) ≠ 0 := by decide
+private theorem two_ne_zero_fp2 : (2 : Fp2) ≠ 0 := by decide_eq_at_model []
 
 /-- After the final exponentiation, a doubling step multiplies by the square and by `g_{T,T}`. -/
 theorem finalExponentiation_millerDouble {T : G2} (hT : G2.Valid T) (hz : T.z ≠ 0)
@@ -372,8 +374,9 @@ theorem pairing_eq_finalExponentiation_loop {P : G1} {Q : G2} (hQ : G2.Valid Q)
     pairing P Q = finalExponentiation (Miller.loop ambientCurve blsX (g2Hom (G2.toPoint Q))
       (fpToFp12 P.toAffine.1) (fpToFp12 P.toAffine.2)).conjugate := by
   by_cases hQi : Q.isInfinity = true
-  · rw [(G2.isInfinity_eq_true_iff_toPoint_eq_zero hQ).mp hQi, map_zero, Miller.loop_zero,
-      pairing, hQi, Bool.or_true, ite_eq_left rfl, show (1 : Fp12).conjugate = 1 by decide,
+  · have h1 : (1 : Fp12).conjugate = 1 := by apply Fp12.ext <;> simp
+    rw [(G2.isInfinity_eq_true_iff_toPoint_eq_zero hQ).mp hQi, map_zero, Miller.loop_zero,
+      pairing, hQi, Bool.or_true, ite_eq_left rfl, h1,
       finalExponentiation_eq_pow, one_pow, Fp12.one_eq_one]
   rw [pairing, hP, Bool.false_or, ite_eq_right hQi]
   apply finalExponentiation_conjugate_congr
