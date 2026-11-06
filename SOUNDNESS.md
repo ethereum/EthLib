@@ -294,15 +294,19 @@ Aggregation and proofs of possession lie outside the game.
 
 `byteForgeAdvantage_le` (`Proofs/Bls/Security/Refinement.lean`) turns a forger on byte encodings into a named group-element forger with at least the same advantage.
 The byte forger receives a compressed key and compressed hash and signing answers, and returns arbitrary message and signature bytes.
-The game runs EthLib's signature decoder, subgroup check and key validation before the pairing check.
+The game runs EthLib's G2 decompression, signature subgroup check and key validation before the pairing check.
+This step needs no pairing law, because the byte check and the group test pair the same group elements.
 `encode_publicKey`, `encode_signature` with `sign_eq`, and `byteVerify_hashPoint` connect these operations to EthLib's public key, signing and verification when the oracle uses EthLib's hash.
 The bound still models that hash as a random oracle, not as the concrete hash function.
 
 Freshness is by message: a message submitted to signing cannot win with any signature bytes.
 `decodeSignature_encode` and `encode_eq_of_decodeSignature` prove both encoding round trips, so two accepted encodings of the same subgroup element cannot differ.
 The byte game keeps the group game's uniform scalar distribution, including zero, whose key validation rejects.
-It does not claim a bound for key generation conditioned on a nonzero scalar.
-Under the pairing law and the hash-call bound on the decoded forger, `byteForgeAdvantage_le_coCdhAdvantage` gives the same `q`-factor co-CDH bound.
+EthLib's secret keys exclude zero, and a zero key always loses.
+So against nonzero keys, a forger wins at most `r / (r - 1)` times its byte advantage; no theorem states this factor.
+Under the pairing law, `byteForgeAdvantage_le_coCdhAdvantage` gives the same `q`-factor co-CDH bound when the decoded forger makes at most `q` hash calls.
+`byteForgeAdvantage_le_coCdhAdvantage_of_byteHashCallBound` states the bound with the hash-call bound on the byte forger itself.
+`byteHashCallBound_iff` proves that the two bounds are equivalent, because the encoding forwards each query once.
 
 ### secp256k1
 

@@ -18,6 +18,8 @@ With that hash taken as a random oracle, the bound of the game applies to this s
 The byte game gives the adversary compressed keys, hashes and signatures.
 
 Decoding its output gives a group forger with at least the same advantage.
+
+That step needs no pairing law; only the bound from co-CDH uses it.
 -/
 
 @[expose] public section
@@ -278,13 +280,13 @@ theorem forgeAdvantage_blsScheme_le (laws : PairingLaws)
 
 The BLS draft-04, §1.3, §2.2 and Appendix A require compressed serialization.
 
-The format is ZCash's "BLS12-381 serialization", including its three flag bits.
+The format is Zcash's "BLS12-381 serialization", including its three flag bits.
 
 <https://docs.rs/bls12_381/0.8.0/bls12_381/notes/serialization/index.html>
 -/
 noncomputable def G1Sub.encode (P : G1Sub) : ByteArray := G1.compress (G1Sub.rep P)
 
-/-- The canonical bytes of a subgroup element of `G2`, in the same ZCash format. -/
+/-- The canonical bytes of a subgroup element of `G2`, in the same Zcash format. -/
 noncomputable def G2Sub.encode (Q : G2Sub) : ByteArray := G2.compress (G2Sub.rep Q)
 
 /-- Decode a signature, rejecting malformed bytes and points outside the subgroup.
@@ -313,7 +315,20 @@ theorem encode_publicKey (sk : SecretKey) :
   rw [G1Sub.dlog_smul_g1, Scalar.coe_ofFr]
   exact (pkBytes_eq sk).symm
 
-/-- The encoded signing answer compresses the point that `sign_eq` proves EthLib signs. -/
+/-- The representative of a subgroup element of `G1` has that group element. -/
+theorem G1Sub.toPoint_rep (x : G1Sub) : G1.toPoint (G1Sub.rep x) = x := by
+  rw [(G1Sub.represents_rep x).2, G1.toPoint_mul_generator, G1Sub.dlog, Scalar.coe_ofFr]
+  exact (G1Sub.exists_ofFr x).choose_spec
+
+/-- The encoding of a subgroup element of `G1` compresses any valid point of that element.
+
+So the encoded key is computable from a point, without its discrete logarithm.
+-/
+theorem G1Sub.encode_eq_compress {P : G1} {x : G1Sub} (hP : G1.Valid P)
+    (hx : G1.toPoint P = x) : G1Sub.encode x = G1.compress P :=
+  G1.compress_congr (G1Sub.represents_rep x).1 hP ((G1Sub.toPoint_rep x).trans hx.symm)
+
+/-- The encoded signing answer is the compressed point that EthLib signs with. -/
 theorem encode_signature (sk : SecretKey) (msg : ByteArray) :
     G2Sub.encode (Scalar.ofFr sk.val • hashPoint msg) =
       G2.compress (G2.mul (hashRep msg) sk.val) := by
@@ -348,7 +363,7 @@ theorem decodeSignature_encode (Q : G2Sub) : decodeSignature (G2Sub.encode Q) = 
       ⟨G2Sub.dlog Q, hR, hp.trans (G2Sub.represents_rep Q).2⟩
   exact decodeSignature_of_uncompress hu hs Q (hp.trans (G2Sub.toPoint_rep Q))
 
-/-- Accepted encodings cannot give two byte strings for the same subgroup element.
+/-- Every byte string that decodes to a subgroup element is the encoding of that element.
 
 This uses the decoder's canonical-encoding theorem, not the pairing law.
 -/
@@ -392,7 +407,7 @@ noncomputable def ByteAdversary.toGroup (adversary : ByteAdversary) :
     Adversary G1Sub G2Sub ByteArray where
   main pk := (fun (m, sig) => (m, (decodeSignature sig).getD 0)) <$> byteMain adversary pk
 
-/-- Verification on bytes with the random oracle's hash in place of `hashToG2`.
+/-- Verification on bytes with the random oracle's hash in place of the hash to G2.
 
 This is BLS draft-04, §2.7: decode, check the signature subgroup, validate the key, then pair.
 
@@ -406,22 +421,24 @@ noncomputable def byteVerify (pk sig : ByteArray) (h : G2Sub) : Bool :=
     | .error _ => false
     | .ok P => pairingCheck #[(G1.generator, R), (G1.neg P, G2Sub.rep h)]
 
-private theorem two_pairs_congr {P : G1} {R Q Q' : G2}
-    (hP : G1.Valid P) (hR : G2.Valid R) (hQ : G2.Valid Q) (hQ' : G2.Valid Q')
-    (he : G2.toPoint Q = G2.toPoint Q') :
+/-- The pairing check of verification reads only the group elements of its valid points. -/
+private theorem two_pairs_congr {P P' : G1} {R R' Q Q' : G2}
+    (hP : G1.Valid P) (hP' : G1.Valid P') (hPe : G1.toPoint (G1.neg P) = G1.toPoint (G1.neg P'))
+    (hR : G2.Valid R) (hR' : G2.Valid R') (hRe : G2.toPoint R = G2.toPoint R')
+    (hQ : G2.Valid Q) (hQ' : G2.Valid Q') (hQe : G2.toPoint Q = G2.toPoint Q') :
     pairingCheck #[(G1.generator, R), (G1.neg P, Q)] =
-      pairingCheck #[(G1.generator, R), (G1.neg P, Q')] := by
+      pairingCheck #[(G1.generator, R'), (G1.neg P', Q')] := by
   apply pairingCheck_congr
     (ps := #[(G1.generator, R), (G1.neg P, Q)])
-    (qs := #[(G1.generator, R), (G1.neg P, Q')]) rfl
+    (qs := #[(G1.generator, R'), (G1.neg P', Q')]) rfl
   intro i hi
   change i < 2 at hi
   cases i with
-  | zero => exact ⟨G1.valid_generator, G1.valid_generator, rfl, hR, hR, rfl⟩
+  | zero => exact ⟨G1.valid_generator, G1.valid_generator, rfl, hR, hR', hRe⟩
   | succ i =>
     have hi0 : i = 0 := by omega
     subst i
-    exact ⟨G1.valid_neg hP, G1.valid_neg hP, rfl, hQ, hQ', he⟩
+    exact ⟨G1.valid_neg hP, G1.valid_neg hP', hPe, hQ, hQ', hQe⟩
 
 /-- Replacing the random oracle with EthLib's hash gives EthLib's byte verification.
 
@@ -439,8 +456,9 @@ theorem byteVerify_hashPoint (pk msg sig : ByteArray) :
     | error e => rfl
     | ok P =>
       apply congrArg (fun b => signatureSubgroupCheck R && b)
-      exact two_pairs_congr (G1.keyValidatePoint_eq_ok_iff.mp hp).2.1
-        (G2.valid_of_uncompress hu) (G2Sub.represents_rep (hashPoint msg)).1 hv
+      have hPv := (G1.keyValidatePoint_eq_ok_iff.mp hp).2.1
+      have hRv := G2.valid_of_uncompress hu
+      exact two_pairs_congr hPv hPv rfl hRv hRv rfl (G2Sub.represents_rep (hashPoint msg)).1 hv
         (G2Sub.toPoint_rep (hashPoint msg))
 
 /-- The byte game keeps the group game's scalar distribution, including zero.
@@ -467,16 +485,19 @@ noncomputable def byteExperiment (adversary : ByteAdversary) :
 noncomputable def byteForgeAdvantage (adversary : ByteAdversary) : ℝ≥0∞ :=
   Pr{let z ← byteExperiment adversary}[z.1 = true]
 
-/-- Every accepted byte signature gives a winning group signature for the same key and hash. -/
-theorem isDh_of_byteVerify (laws : PairingLaws) (a : Scalar) (sig : ByteArray) (h : G2Sub)
+/-- Every accepted byte signature gives a winning group signature for the same key and hash.
+
+No pairing law is needed: both checks pair the same group elements.
+-/
+theorem isDh_of_byteVerify (a : Scalar) (sig : ByteArray) (h : G2Sub)
     (hv : byteVerify (G1Sub.encode (a • g1)) sig h = true) :
     blsScheme.isDh (a • g1) h (decodeSignature sig |>.getD 0) = true := by
   cases hu : G2.uncompress sig with
   | error e => simp [byteVerify, hu] at hv
   | ok R =>
     have hRv := G2.valid_of_uncompress hu
-    have hs : G2.inSubgroup R = true := by
-      exact (Bool.and_eq_true_iff.mp
+    have hs : G2.inSubgroup R = true :=
+      (Bool.and_eq_true_iff.mp
         (by simpa only [byteVerify, hu, signatureSubgroupCheck] using hv)).1
     cases hp : G1.keyValidatePoint (G1Sub.encode (a • g1)) with
     | error e => simp [byteVerify, hu, hp] at hv
@@ -486,40 +507,28 @@ theorem isDh_of_byteVerify (laws : PairingLaws) (a : Scalar) (sig : ByteArray) (
       obtain ⟨P', hp', he⟩ := G1.uncompress_compress hrep.1
       have hPP : P = P' := Except.ok.inj
         (((G1.keyValidatePoint_eq_ok_iff.mp hp).1).symm.trans hp')
-      have hPa : G1.Represents P (a : Fr) := by
+      have hPa : G1.Represents P (G1Sub.dlog (a • g1)) := by
         refine ⟨hPv, ?_⟩
-        rw [hPP, he, hrep.2, G1Sub.dlog_smul_g1]
-      obtain ⟨c, hc⟩ := (G2.inSubgroup_iff_exists_represents hRv).mp hs
+        rw [hPP, he, hrep.2]
       have hv' : pairingCheck #[(G1.generator, R), (G1.neg P, G2Sub.rep h)] = true := by
         simpa [byteVerify, hu, hp, signatureSubgroupCheck, hs] using hv
-      -- The pairing equation fixes the decoded signature's scalar.
-      have heq := (laws.two_pairs G1.represents_generator hc hPa.neg
-        (G2Sub.represents_rep h)).mp hv'
-      have hc' := (check_scalars_iff (Scalar.ofFr c) a (G2Sub.dlog h)).mp
-        (by simpa only [Scalar.coe_ofFr] using heq)
       have hd : (decodeSignature sig |>.getD 0).val = G2.toPoint R := by
-        unfold decodeSignature
-        split
-        · rename_i he
-          rw [hu] at he
-          cases he
-        · rename_i R' he
-          have heR : R' = R := Except.ok.inj (he.symm.trans hu)
-          subst R'
-          simp [hs]
-      apply (blsScheme_sound laws a h _).mpr
-      apply Subtype.ext
-      rw [hd, hc.2, G2.toPoint_mul_generator, ← Scalar.coe_ofFr c, hc',
-        G2Sub.coe_smul, ← G2Sub.ofFr_dlog h]
-      rw [show ((a * G2Sub.dlog h : Scalar) : Fr) =
-        (a : Fr) * (G2Sub.dlog h : Fr) from map_mul Fr.toZMod.symm _ _,
-        G2.ofFr_mul, Scalar.val_coe]
+        rw [decodeSignature_of_uncompress hu hs ⟨G2.toPoint R, by
+          obtain ⟨k, hk⟩ := G2.exists_mul_generator_of_inSubgroup hRv hs
+          rw [hk, G2.toPoint_mul_generator]
+          exact AddSubgroup.nsmul_mem _ (AddSubgroup.mem_zmultiples _) _⟩ rfl]
+        simp only [Option.getD_some]
+      -- The group test pairs the same group elements as the byte check.
+      refine Eq.trans ?_ hv'
+      exact two_pairs_congr hrep.1 hPv (hrep.neg.2.trans hPa.neg.2.symm)
+        (G2Sub.represents_rep _).1 hRv ((G2Sub.toPoint_rep _).trans hd)
+        (G2Sub.represents_rep h).1 (G2Sub.represents_rep h).1 rfl
 
 /-- A byte forger's advantage is at most that of its decoded group forger.
 
 The signing transcript is identical, so message freshness is unchanged.
 -/
-theorem byteForgeAdvantage_le (laws : PairingLaws) (adversary : ByteAdversary) :
+theorem byteForgeAdvantage_le (adversary : ByteAdversary) :
     byteForgeAdvantage adversary ≤ forgeAdvantage Scalar blsScheme adversary.toGroup := by
   classical
   unfold byteForgeAdvantage forgeAdvantage byteExperiment experiment
@@ -535,14 +544,58 @@ theorem byteForgeAdvantage_le (laws : PairingLaws) (adversary : ByteAdversary) :
   rintro ⟨h, st'⟩ hw
   obtain ⟨hf, hv⟩ := Bool.and_eq_true_iff.mp hw
   exact Bool.and_eq_true_iff.mpr ⟨by simpa only [decide_eq_true_eq] using hf,
-    isDh_of_byteVerify laws a sig h hv⟩
+    isDh_of_byteVerify a sig h hv⟩
+
+/-- Every run of the byte game makes at most `q` hash calls.
+
+That counts the forger's calls, those of signing, and the one of the final verification.
+-/
+def ByteHashCallBound (adversary : ByteAdversary) (q : ℕ) : Prop :=
+  ∀ z ∈ support (byteExperiment adversary), z.2.calls ≤ q
+
+/-- The byte game and the game of the decoded forger end in the same states.
+
+The encoding forwards each oracle query once, so both games make the same calls.
+-/
+theorem snd_map_byteExperiment (adversary : ByteAdversary) :
+    Prod.snd <$> byteExperiment adversary =
+      Prod.snd <$> experiment (F := Scalar) blsScheme adversary.toGroup := by
+  unfold byteExperiment experiment
+  simp only [run, ByteAdversary.toGroup, simulateQ_bind, simulateQ_map,
+    bind_map_left, StateT.run_bind, StateT.run_map,
+    bind_pure_comp, map_bind, Functor.map_map]
+  rfl
+
+/-- A byte forger has a hash-call bound exactly when its decoded forger has the same bound. -/
+theorem byteHashCallBound_iff (adversary : ByteAdversary) (q : ℕ) :
+    ByteHashCallBound adversary q ↔ HashCallBound Scalar blsScheme adversary.toGroup q := by
+  have h := congrArg support (snd_map_byteExperiment adversary)
+  simp only [support_map] at h
+  constructor
+  · intro hb z hz
+    obtain ⟨y, hy, hyz⟩ := (Set.ext_iff.mp h z.2).mpr ⟨z, hz, rfl⟩
+    exact hyz ▸ hb y hy
+  · intro hb z hz
+    obtain ⟨y, hy, hyz⟩ := (Set.ext_iff.mp h z.2).mp ⟨z, hz, rfl⟩
+    exact hyz ▸ hb y hy
 
 /-- The byte-game bound follows from the same named co-CDH solver as the group-game bound. -/
 theorem byteForgeAdvantage_le_coCdhAdvantage (laws : PairingLaws) (adversary : ByteAdversary)
     {q : ℕ} (hq0 : 0 < q) (hq : HashCallBound Scalar blsScheme adversary.toGroup q) :
     byteForgeAdvantage adversary ≤
       q * coCdhAdvantage Scalar g1 g2 (reduction (F := Scalar) g2 adversary.toGroup q) :=
-  (byteForgeAdvantage_le laws adversary).trans
+  (byteForgeAdvantage_le adversary).trans
     (forgeAdvantage_blsScheme_le laws adversary.toGroup hq0 hq)
+
+/-- **EthLib's BLS signatures on bytes are unforgeable from co-CDH**, in the random oracle model.
+
+The hash-call bound is on the byte forger itself, and the bound needs the pairing law.
+-/
+theorem byteForgeAdvantage_le_coCdhAdvantage_of_byteHashCallBound (laws : PairingLaws)
+    (adversary : ByteAdversary) {q : ℕ} (hq0 : 0 < q) (hq : ByteHashCallBound adversary q) :
+    byteForgeAdvantage adversary ≤
+      q * coCdhAdvantage Scalar g1 g2 (reduction (F := Scalar) g2 adversary.toGroup q) :=
+  byteForgeAdvantage_le_coCdhAdvantage laws adversary hq0
+    ((byteHashCallBound_iff adversary q).mp hq)
 
 end EthLib.Cryptography.Bls.Security
