@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Xmss.Sign
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.Bytes
+public import EthLib.Cryptography.Proofs.HashSig.Bytes
 public import VCVio.CryptoFoundations.SignatureAlg.CountedExperiment
 public import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 
@@ -10,13 +10,11 @@ public import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 
 Source: the leanXMSS specification draft, section "Security".
 
-The draft is pinned to leanVM commit `4af2cdddd7cd41b9df2cc7e123e314a91b0b4462`.
-
-The algorithms are EthLib's actual `keyGenWith`, `signWith` and `verifyWith`.
+The experiment runs EthLib's key generation, signing and verification over the oracle.
 
 The signer computes the full bottom tree root before the top layer.
 
-VCVio supplies the raw-reply interface and the counted experiment.
+VCVio supplies the counted experiment, whose signing replies may be errors.
 
 The winning condition also requires distinct signing-request leaf indices.
 
@@ -30,7 +28,9 @@ Private uniform sampling is free.
 
 This module states the experiment and its winning condition.
 
-It does not assert a security bound.
+It proves no security bound.
+
+The merged unforgeability theorem bounds a game whose signing replies drop the error.
 -/
 
 @[expose] public section
@@ -40,18 +40,14 @@ namespace EthLib.Cryptography.Xmss.Unforgeability.VCV
 open OracleComp OracleSpec
 open scoped ENNReal
 
-/-- The complete output of one hash call. -/
-abbrev HashOutput := BitVec 256
-
-/-- Raw byte strings index the single shared hash oracle. -/
-abbrev HashSpec := List UInt8 →ₒ HashOutput
+open HashSig (HashOutput HashSpec ofOutput)
 
 /-- The parties have private sampling and access to the same hash oracle. -/
-abbrev World := unifSpec + HashSpec
+abbrev World := HashSig.OracleWorld
 
 /-- Ask the shared oracle on exactly the bytes passed to EthLib's hashing definitions. -/
 def H (input : ByteArray) : OracleComp World (Vector UInt8 32) :=
-  wordBytesEquiv 32 <$> (liftM (HashSpec.query input.data.toList) : OracleComp World HashOutput)
+  ofOutput <$> (liftM (HashSpec.query input.data.toList) : OracleComp World HashOutput)
 
 /-- The adversary chooses both a leaf index and a message in each signing request. -/
 structure Request where
@@ -69,7 +65,7 @@ def readback : Reply → Option Signature
   | .ok signature => some signature
   | .error _ => none
 
-/-- EthLib's actual algorithms with separate signing-reply and forgery carriers.
+/-- EthLib's algorithms, with a signing reply that may be an error.
 
 A signing error is a normal reply, so the adversary may continue after it.
 
@@ -79,7 +75,7 @@ noncomputable def view :
     SignatureAlg.SigningView (OracleComp World) Request PublicKey SecretKey Signature Reply where
   keygen := do
     let seed ← (liftM ($ᵗ BitVec 256) : OracleComp World (BitVec 256))
-    let (sk, pk) ← EthLib.Cryptography.Xmss.keyGenWith H (wordBytesEquiv 32 seed)
+    let (sk, pk) ← EthLib.Cryptography.Xmss.keyGenWith H (ofOutput seed)
     return (pk, sk)
   sign _ sk request := EthLib.Cryptography.Xmss.signWith H sk request.leafIndex request.message
   verify pk request signature :=
@@ -91,7 +87,7 @@ noncomputable def view :
 /-- Key generation uses the actual seed sampler and oracle-parametric key generator. -/
 theorem view_keygen_eq : view.keygen = (do
     let seed ← (liftM ($ᵗ BitVec 256) : OracleComp World (BitVec 256))
-    let (sk, pk) ← EthLib.Cryptography.Xmss.keyGenWith H (wordBytesEquiv 32 seed)
+    let (sk, pk) ← EthLib.Cryptography.Xmss.keyGenWith H (ofOutput seed)
     return (pk, sk)) := rfl
 
 /-- The view exposes the complete actual signing result without converting errors. -/
@@ -182,12 +178,14 @@ noncomputable def forgeAdvantage (adversary : Adversary) : ℝ≥0∞ :=
 def HasHashQueryBound (adversary : Adversary) (q : ℕ) : Prop :=
   ∀ result ∈ support (experiment adversary), result.2 ≤ q
 
-/-- The complete experiment's security claim, with a budget covering every party. -/
+/-- Every adversary within `q ≥ 1` hash calls of all parties forges with chance `≤ q / 2^bits`. -/
 def HasClassicalSecurityBits (bits : ℕ) : Prop :=
   ∀ q, 1 ≤ q → ∀ adversary, HasHashQueryBound adversary q →
     forgeAdvantage adversary ≤ q / ((2 ^ bits : ℕ) : ℝ≥0∞)
 
-/-- The specification's target statement; this abbreviation supplies no proof of it. -/
+/-- The `q / 2^127` bound, stated for this experiment.
+
+No proof of it is given here. -/
 abbrev SecurityStatement : Prop := HasClassicalSecurityBits 127
 
 end EthLib.Cryptography.Xmss.Unforgeability.VCV

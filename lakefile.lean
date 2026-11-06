@@ -26,7 +26,7 @@ require "leanprover-community" / "mathlib" @ git "v4.35.0"
 --
 -- The library code never imports it.
 --
--- Shared signing-reply and all-party counting interfaces, built against the same Mathlib.
+-- An unmerged VCVio commit, from its draft pull request #1009, built against the same Mathlib.
 require VCVio from git "https://github.com/Verified-zkEVM/VCVio.git" @
   "516e8b8e9f249c830856fd53b4a05f272ea30d37"
 
