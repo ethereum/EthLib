@@ -18,4 +18,9 @@ def hexAlphabet : Array Char :=
 def hexDigitChar (n : Fin 16) : Char :=
   hexAlphabet[n]
 
+/-- The two lowercase hex digits of a byte, high digit first. -/
+def byteHexDigits (byte : UInt8) : List Char :=
+  [hexDigitChar ⟨byte.toNat / 16, by have := byte.toNat_lt; omega⟩,
+    hexDigitChar ⟨byte.toNat % 16, by omega⟩]
+
 end EthLib.Base

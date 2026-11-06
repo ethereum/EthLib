@@ -64,15 +64,15 @@ theorem hexDigit?_eq_some {c : Char} {k : Nat} (h : hexDigit? c = some k) :
   exact ⟨i.isLt, by simpa using List.find?_some hi⟩
 
 /-- The two hex digits of a byte read back as that byte. -/
-theorem hexByte?_hexDigitChar (byte : UInt8) (hHi : byte.toNat / 16 < 16)
-    (hLo : byte.toNat % 16 < 16) :
-    hexByte? (Base.hexDigitChar ⟨_, hHi⟩) (Base.hexDigitChar ⟨_, hLo⟩) = some byte := by
+theorem hexByte?_hexDigitChar (byte : UInt8) :
+    hexByte? (Base.hexDigitChar ⟨byte.toNat / 16, by have := byte.toNat_lt; omega⟩)
+      (Base.hexDigitChar ⟨byte.toNat % 16, by omega⟩) = some byte := by
   simp only [hexByte?, hexDigit?_hexDigitChar, Option.pure_def, Option.bind_eq_bind,
     Option.bind_some, Nat.div_add_mod, UInt8.ofNat_toNat]
 
 /-- Two characters that read as a byte are the two hex digits of that byte. -/
 theorem byteHexDigits_of_hexByte? {hi lo : Char} {byte : UInt8}
-    (h : hexByte? hi lo = some byte) : byteHexDigits byte = [hi, lo] := by
+    (h : hexByte? hi lo = some byte) : Base.byteHexDigits byte = [hi, lo] := by
   simp only [hexByte?, Option.pure_def, Option.bind_eq_bind, Option.bind_eq_some_iff,
     Option.some.injEq] at h
   obtain ⟨k, hk, l, hl, rfl⟩ := h
@@ -81,7 +81,7 @@ theorem byteHexDigits_of_hexByte? {hi lo : Char} {byte : UInt8}
   have : (UInt8.ofNat (16 * k + l)).toNat = 16 * k + l := by
     rw [UInt8.toNat_ofNat']
     omega
-  simp only [byteHexDigits, this]
+  simp only [Base.byteHexDigits, this]
   congr 4 <;> omega
 
 /-- A fork digest is its four bytes. -/
@@ -95,13 +95,13 @@ theorem vector_four (v : Vector UInt8 4) : v = #v[v[0], v[1], v[2], v[3]] := by
 theorem forkDigestChars_length (digest : Vector UInt8 4) :
     (forkDigestChars digest).length = 8 := by
   rw [vector_four digest]
-  simp [forkDigestChars, byteHexDigits]
+  simp [forkDigestChars, Base.byteHexDigits]
 
 /-- The hex digits of a fork digest read back as that digest. -/
 theorem parseForkDigest_forkDigestChars (digest : Vector UInt8 4) :
     parseForkDigest (forkDigestChars digest) = some digest := by
   rw [vector_four digest]
-  simp [forkDigestChars, byteHexDigits, parseForkDigest, hexByte?_hexDigitChar]
+  simp [forkDigestChars, Base.byteHexDigits, parseForkDigest, hexByte?_hexDigitChar]
 
 /-- Characters that read as a fork digest are the hex digits of that digest. -/
 theorem forkDigestChars_of_parseForkDigest {cs : List Char} {digest : Vector UInt8 4}

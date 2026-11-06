@@ -27,14 +27,9 @@ namespace EthLib.Networking.Gossip
 /-- The number of a gossip subnet. -/
 abbrev SubnetID := UInt64
 
-/-- The two lowercase hex digits of a byte, high digit first. -/
-def byteHexDigits (byte : UInt8) : List Char :=
-  [Base.hexDigitChar ⟨byte.toNat / 16, by have := byte.toNat_lt; omega⟩,
-    Base.hexDigitChar ⟨byte.toNat % 16, by omega⟩]
-
 /-- The characters of a fork digest: two lowercase hex digits per byte, high digit first. -/
 def forkDigestChars (digest : Vector UInt8 4) : List Char :=
-  digest.toList.flatMap byteHexDigits
+  digest.toList.flatMap Base.byteHexDigits
 
 /-- The topic string of a fork digest and a name. -/
 def topicString (digest : Vector UInt8 4) (name : String) : String :=
