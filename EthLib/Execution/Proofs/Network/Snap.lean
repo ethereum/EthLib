@@ -6,7 +6,7 @@ public import EthLib.Execution.Proofs.Network.Status
 /-!
 # Proofs: the snap capability
 
-A version and its number determine each other.
+A snap version and its number determine each other.
 
 An account reads back from its slim form.
 
