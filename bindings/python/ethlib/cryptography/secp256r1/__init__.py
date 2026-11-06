@@ -1,13 +1,4 @@
-"""
-secp256r1 ECDSA verification, also called P-256.
-
-- A public key is 64 bytes: x then y, each a 32-byte big-endian integer below p.
-- A hash is 32 bytes.
-- A signature is 64 bytes: r then s, each a 32-byte big-endian integer.
-
-Arguments that are not bytes raise TypeError.
-Bytes of the wrong length or range raise Secp256r1Error, a ValueError with a code.
-"""
+"""secp256r1 ECDSA verification, also called P-256."""
 
 from ethlib.cryptography._native import (
     SECP256R1_HASH_LEN as HASH_LEN,
@@ -16,6 +7,13 @@ from ethlib.cryptography._native import (
     secp256r1_verify,
 )
 from ethlib.errors import Secp256r1Error
+
+# A public key is 64 bytes: x then y, each a 32-byte big-endian integer below p.
+# A hash is 32 bytes.
+# A signature is 64 bytes: r then s, each a 32-byte big-endian integer.
+#
+# An argument that is not bytes raises `TypeError`.
+# Bytes of the wrong length or range raise `Secp256r1Error`, a `ValueError` with a code.
 
 
 def verify(public_key: bytes, msg_hash: bytes, signature: bytes) -> bool:

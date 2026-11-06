@@ -1,8 +1,4 @@
-"""
-Node distances, handshake cryptography and packets of discv5.
-
-An invalid input raises Discv5Error, a ValueError.
-"""
+"""Node distances, handshake cryptography and packets of discv5."""
 
 import json
 from typing import NamedTuple
@@ -11,6 +7,8 @@ from typing import NamedTuple
 # That module lives in the `cryptography` package.
 from ethlib.cryptography import _native
 from ethlib.errors import Discv5Error
+
+# An invalid input raises `Discv5Error`, a `ValueError`.
 
 
 class SessionKeys(NamedTuple):

@@ -1,8 +1,4 @@
-"""
-CRC-32C, the Castagnoli CRC of RFC 3720 §12.1.
-
-It detects errors and authenticates nothing: anyone can recompute it.
-"""
+"""CRC-32C, the Castagnoli CRC of RFC 3720 §12.1."""
 
 from ethlib.cryptography._native import crc32c as native_crc32c
 
@@ -12,6 +8,8 @@ def digest(data: bytes) -> bytes:
     The four CRC-32C digest bytes of the message, in the order of RFC 3720 §12.1.
 
     Every byte string has a digest.
+
+    It detects errors and authenticates nothing: anyone can recompute it.
 
     A non-`bytes` argument raises `TypeError`.
     """
