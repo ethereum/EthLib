@@ -109,6 +109,7 @@ public import EthLib.Serialization.Proofs.Ssz.Typed.ForkKind
 public import EthLib.Serialization.Proofs.Ssz.Typed.Root
 public import EthLib.Serialization.Proofs.Ssz.Typed.Gindex
 public import EthLib.Serialization.Proofs.Ssz.Typed.Since
+public import EthLib.Serialization.Proofs.Ssz.Typed.Rooted
 
 /-!
 # `EthLib.Serialization.Proofs.Ssz`

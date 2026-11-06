@@ -25,6 +25,7 @@ public import EthLib.Serialization.Ssz.Typed.Container
 public import EthLib.Serialization.Ssz.Typed.ForkKind
 public import EthLib.Serialization.Ssz.Typed.Gindex
 public import EthLib.Serialization.Ssz.Typed.Since
+public import EthLib.Serialization.Ssz.Typed.Rooted
 
 /-!
 # `EthLib.Serialization.Ssz`

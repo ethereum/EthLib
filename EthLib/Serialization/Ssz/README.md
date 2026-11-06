@@ -177,6 +177,8 @@ A length or a limit is part of the Lean type, so every typed value fits its decl
 Serialization, deserialization and the root then run the codec above, with no second codec.
 A container takes its root over its summary: the container of its field roots, each held as one 32-byte node.
 So a field type may keep the tree of its values and give its root without hashing them again.
+A rooted vector does this: it keeps every level of the tree over the roots of its elements.
+Writing one element then rehashes one node per level, on the path above that element.
 
 The basic types, byte vectors, byte lists, bitfields, vectors, lists, progressive lists and progressive bitlists have typed values.
 A container gets them from the types of its fields.
