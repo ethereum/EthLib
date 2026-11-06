@@ -197,6 +197,18 @@ theorem getBuilderPaymentQuorumThreshold_of_total {state : BeaconState preset fo
   simp [getBuilderPaymentQuorumThreshold, computed, liftArith, mulChecked, fits, bind,
     Except.bind, Except.mapError, pure, Except.pure]
 
+/-- A builder that is set is set in the registry. -/
+theorem setBuilder_ok {state after : BeaconState preset fork} {gloas : .glamsterdam ≤ fork}
+    {index : BuilderIndex} {builder : Builder}
+    (set : state.setBuilder gloas index builder = .ok after) :
+    ∃ inside, after = state.putBuilder gloas index.toNat inside builder := by
+  unfold BeaconState.setBuilder at set
+  split at set
+  · rename_i inside
+    cases set
+    exact ⟨inside, rfl⟩
+  · cases set
+
 /-- A builder that starts to exit may withdraw the delay after the current epoch. -/
 theorem getBuilder_initiateBuilderExit {config : Config} {state after : BeaconState preset fork}
     {gloas : .glamsterdam ≤ fork} {index : BuilderIndex}
@@ -205,17 +217,19 @@ theorem getBuilder_initiateBuilderExit {config : Config} {state after : BeaconSt
       withdrawableEpoch.toNat =
         (getCurrentEpoch state).toNat + config.MIN_BUILDER_WITHDRAWABILITY_DELAY.toNat ∧
       getBuilder after gloas index = .ok { builder with withdrawableEpoch } := by
-  simp only [initiateBuilderExit, bind_ok_iff, liftArith, mapError_ok_iff, addChecked_ok_iff,
-    pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨builder, found, withdrawableEpoch, ⟨_, sum⟩, rfl⟩ := computed
+  simp only [initiateBuilderExit, bind_ok_iff, liftArith, mapError_ok_iff, addChecked_ok_iff]
+    at computed
+  obtain ⟨builder, found, withdrawableEpoch, ⟨_, sum⟩, set⟩ := computed
   refine ⟨builder, withdrawableEpoch, found, sum, ?_⟩
-  have inRange : index.toNat < (state.builders gloas).data.size := by
-    unfold getBuilder at found
-    split at found
-    · rename_i present
-      exact (Array.getElem?_eq_some_iff.mp present).1
-    · cases found
-  simp [getBuilder, BeaconState.setBuilder, inRange]
+  obtain ⟨inside, rfl⟩ := setBuilder_ok set
+  simp [getBuilder, BeaconState.putBuilder, inside]
+
+/-- Setting a builder keeps the slot. -/
+theorem setBuilder_slot {state after : BeaconState preset fork} {gloas : .glamsterdam ≤ fork}
+    {index : BuilderIndex} {builder : Builder}
+    (set : state.setBuilder gloas index builder = .ok after) : after.slot = state.slot := by
+  obtain ⟨_, rfl⟩ := setBuilder_ok set
+  rfl
 
 /-- A builder that starts to exit is no longer active.
 

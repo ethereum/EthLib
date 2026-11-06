@@ -140,7 +140,8 @@ def queueConsolidation (config : Config) (state : BeaconState preset fork)
     (computeConsolidationEpochAndUpdateChurn config state electra source.effectiveBalance)
   let withdrawableEpoch ←
     liftAccessor (liftArith (addChecked exitEpoch config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY))
-  let state := state.setValidator sourcePosition { source with exitEpoch, withdrawableEpoch }
+  let state ← liftAccessor
+    (state.setValidator sourcePosition.toUInt64 { source with exitEpoch, withdrawableEpoch })
   let pending ← liftAccessor (appendWithinLimit (state.pendingConsolidations electra)
     ⟨sourcePosition.toUInt64, targetIndex⟩)
   return { state with pendingConsolidations := fun _ => pending }

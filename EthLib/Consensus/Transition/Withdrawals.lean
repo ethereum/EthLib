@@ -341,7 +341,7 @@ def applyWithdrawal (state : BeaconState preset fork) (withdrawal : Withdrawal) 
   if gloas : .glamsterdam ≤ fork ∧ isBuilderIndex withdrawal.validatorIndex = true then do
     let index := convertValidatorIndexToBuilderIndex withdrawal.validatorIndex
     let builder ← getBuilder state gloas.1 index
-    return state.setBuilder index.toNat
+    state.setBuilder gloas.1 index
       { builder with balance := saturatingSub builder.balance withdrawal.amount }
   else decreaseBalance state withdrawal.validatorIndex withdrawal.amount
 
@@ -518,7 +518,7 @@ def processBlsToExecutionChange (config : Config) (checks : SignatureChecks)
   let signingRoot ← liftSsz (computeSigningRoot change domain)
   ensure (checks.verify (packBytes change.fromBlsPubkey) (packBytes signingRoot)
     (packBytes signed.signature) = true) .invalidBlsChangeSignature
-  return state.setValidator index.toNat
-    { validator with withdrawalCredentials := executionCredentials change.toExecutionAddress }
+  liftAccessor (state.setValidator index
+    { validator with withdrawalCredentials := executionCredentials change.toExecutionAddress })
 
 end EthLib.Consensus

@@ -182,7 +182,7 @@ def activateAtGenesis (state : BeaconState preset fork) (index : Nat) :
       { validator with
         activationEligibilityEpoch := GENESIS_EPOCH, activationEpoch := GENESIS_EPOCH }
     else validator
-  return state.setValidator index validator
+  liftAccessor (state.setValidator index.toUInt64 validator)
 
 /-- The candidate genesis state of a block of the proof-of-work chain, before Altair.
 

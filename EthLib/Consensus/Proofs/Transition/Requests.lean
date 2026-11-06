@@ -122,10 +122,10 @@ theorem sameSizes_queueConsolidation {electra : .pectra ≤ fork} {sourcePositio
   simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, pure, Except.pure] at computed
   obtain ⟨⟨_, _⟩, churned, computed⟩ := computed
   simp only [Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, rfl⟩ := computed
+  obtain ⟨_, _, _, set, _, _, rfl⟩ := computed
   obtain ⟨_, validators, balances⟩ := computeConsolidationEpochAndUpdateChurn_earliest churned
   exact (SameSizes.trans ⟨congrArg (·.data.size) validators, congrArg (·.data.size) balances⟩
-    (sameSizes_setValidator _ _ _))
+    (sameSizes_setValidator set)).trans ⟨rfl, rfl⟩
 
 /-- A consolidation request keeps the sizes of the registry and the balances. -/
 theorem sameSizes_processConsolidationRequest {electra : .pectra ≤ fork}

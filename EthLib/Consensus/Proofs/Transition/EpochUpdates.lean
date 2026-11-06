@@ -63,14 +63,15 @@ theorem updatedEffectiveBalance_aligned {largest balance effectiveBalance result
     · exact ⟨maxAligned, UInt64.le_refl _⟩
 
 /-- Replacing a validator by an aligned one keeps the effective balances aligned. -/
-theorem effectiveBalancesAligned_setValidator {index : Nat} {validator : Validator}
+theorem effectiveBalancesAligned_setValidator {index : ValidatorIndex} {validator : Validator}
     (holds : EffectiveBalancesAligned state)
     (good : validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0 ∧
-      validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator) :
-    EffectiveBalancesAligned (state.setValidator index validator) := by
+      validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator)
+    (set : state.setValidator index validator = .ok after) :
+    EffectiveBalancesAligned after := by
+  obtain ⟨inside, rfl⟩ := setValidator_ok set
   intro other member
-  simp only [BeaconState.setValidator, Array.set!_eq_setIfInBounds, Array.toList_setIfInBounds]
-    at member
+  simp only [BeaconState.putValidator, Array.toList_set] at member
   rcases List.mem_or_eq_of_mem_set member with old | rfl
   · exact holds other old
   · exact good
@@ -82,10 +83,9 @@ theorem updateEffectiveBalance_aligned {index : Nat}
     (holds : EffectiveBalancesAligned state)
     (computed : updateEffectiveBalance state index = .ok after) :
     EffectiveBalancesAligned after := by
-  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨validator, found, _, _, effectiveBalance, updated, rfl⟩ := computed
-  apply effectiveBalancesAligned_setValidator holds
+  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨validator, found, _, _, effectiveBalance, updated, set⟩ := computed
+  refine effectiveBalancesAligned_setValidator holds ?_ set
   apply updatedEffectiveBalance_aligned (maxAligned validator) _ updated
   unfold getValidator at found
   split at found
@@ -111,10 +111,9 @@ theorem processEffectiveBalanceUpdates_aligned
 /-- The update of one effective balance keeps the sizes. -/
 theorem sameSizes_updateEffectiveBalance {index : Nat}
     (computed : updateEffectiveBalance state index = .ok after) : SameSizes state after := by
-  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, _, _, rfl⟩ := computed
-  exact sameSizes_setValidator _ _ _
+  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨_, _, _, _, _, _, set⟩ := computed
+  exact sameSizes_setValidator set
 
 theorem sameSizes_processEffectiveBalanceUpdates
     (computed : processEffectiveBalanceUpdates state = .ok after) : SameSizes state after := by
@@ -128,19 +127,18 @@ theorem sameSizes_processEffectiveBalanceUpdates
 theorem sameSizes_updateRegistryEntry {config : Config} {index : Nat}
     (computed : updateRegistryEntry config state index = .ok after) : SameSizes state after := by
   simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨_, _, _, _, computed⟩ := computed
+  obtain ⟨_, _, _, _, _, set, computed⟩ := computed
   split at computed
   · rw [liftAccessor_ok] at computed
-    exact (sameSizes_setValidator _ _ _).trans (sameSizes_initiateValidatorExit computed)
+    exact (sameSizes_setValidator set).trans (sameSizes_initiateValidatorExit computed)
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ sameSizes_setValidator _ _ _
+    exact computed ▸ sameSizes_setValidator set
 
 theorem sameSizes_activateValidator {index : ValidatorIndex}
     (computed : activateValidator state index = .ok after) : SameSizes state after := by
-  simp only [activateValidator, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, rfl⟩ := computed
-  exact sameSizes_setValidator _ _ _
+  simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨_, _, _, _, set⟩ := computed
+  exact sameSizes_setValidator set
 
 /-- From Deneb, an epoch activates at most the maximum, and at most the churn limit. -/
 theorem getValidatorActivationChurnLimit_le {config : Config} :
@@ -155,15 +153,15 @@ theorem sameSizes_updateRegistryEntryElectra {config : Config} {activationEpoch 
   simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨_, _, computed⟩ := computed
   split at computed
-  · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, _, rfl⟩ := computed
-    exact sameSizes_setValidator _ _ _
+  · simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, _, set⟩ := computed
+    exact sameSizes_setValidator set
   split at computed
   · rw [liftAccessor_ok] at computed
     exact sameSizes_initiateValidatorExit computed
   split at computed
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ sameSizes_setValidator _ _ _
+  · rw [liftAccessor_ok] at computed
+    exact sameSizes_setValidator computed
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ SameSizes.refl _
 

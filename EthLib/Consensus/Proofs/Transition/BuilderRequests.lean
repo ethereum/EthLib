@@ -68,14 +68,13 @@ theorem sum_set_add {l : List Nat} {i : Nat} (inside : i < l.length) (x : Nat) :
       omega
 
 /-- Setting a builder changes the sum of balances by the difference of the two balances. -/
-theorem builderBalanceSum_setBuilder {index : Nat} {builder : Builder}
+theorem builderBalanceSum_putBuilder {index : Nat} {builder : Builder}
     (inside : index < (state.builders gloas).data.size) :
-    builderBalanceSum (state.setBuilder index builder) gloas +
+    builderBalanceSum (state.putBuilder gloas index inside builder) gloas +
         ((state.builders gloas).data[index]).balance.toNat =
       builderBalanceSum state gloas + builder.balance.toNat := by
-  unfold builderBalanceSum BeaconState.setBuilder
-  simp only [Array.set!_eq_setIfInBounds, Array.setIfInBounds, inside, ↓reduceDIte,
-    Array.toList_set, List.map_set]
+  unfold builderBalanceSum BeaconState.putBuilder
+  simp only [Array.toList_set, List.map_set]
   have := sum_set_add (l := (state.builders gloas).data.toList.map (·.balance.toNat))
     (i := index) (by simpa using inside) builder.balance.toNat
   simpa using this
@@ -92,7 +91,8 @@ theorem builderBalanceSum_processBuilderDepositRequest_known {request : BuilderD
   -- Both branches end by adding the amount to the balance of the builder at the position.
   have added : ∃ balance : Gwei, balance.toNat =
       ((state.builders gloas).data[index]).balance.toNat + request.amount.toNat ∧
-      ∃ builder : Builder, builder.balance = balance ∧ after = state.setBuilder index builder := by
+      ∃ builder : Builder, builder.balance = balance ∧
+        after = state.putBuilder gloas index index.isLt builder := by
     split at computed
     all_goals
       obtain ⟨withdrawableEpoch, -, rest⟩ := bind_ok_iff.mp computed
@@ -100,7 +100,7 @@ theorem builderBalanceSum_processBuilderDepositRequest_known {request : BuilderD
       rw [liftAccessor_ok, liftArith, mapError_ok_iff, addChecked_ok_iff] at summed
       exact ⟨balance, summed.2, _, rfl, (Except.ok.inj kept).symm⟩
   obtain ⟨balance, summed, builder, rfl, rfl⟩ := added
-  have := builderBalanceSum_setBuilder (state := state) (gloas := gloas) (builder := builder)
+  have := builderBalanceSum_putBuilder (state := state) (gloas := gloas) (builder := builder)
     index.isLt
   rw [Fin.getElem_fin] at summed
   omega
@@ -120,7 +120,7 @@ theorem builderBalanceSum_addBuilderToRegistry {pubkey : BLSPubkey} {version : U
     have empty : ((state.builders gloas).data[getIndexForNewBuilder state gloas]).balance = 0 := by
       simp only [isReusableBuilder, Bool.and_eq_true, beq_iff_eq] at reusable
       exact reusable.2
-    have := builderBalanceSum_setBuilder (state := state) (gloas := gloas)
+    have := builderBalanceSum_putBuilder (state := state) (gloas := gloas)
       (builder := ⟨pubkey, version, executionAddress, amount, computeEpochAtSlot preset slot,
         FAR_FUTURE_EPOCH⟩) inside
     rw [empty] at this

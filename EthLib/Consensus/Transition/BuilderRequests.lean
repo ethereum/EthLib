@@ -85,7 +85,7 @@ def addBuilderToRegistry (state : BeaconState preset fork) (gloas : .glamsterdam
       FAR_FUTURE_EPOCH⟩
   let builders := (state.builders gloas).data
   let index := getIndexForNewBuilder state gloas
-  if index < builders.size then state.setBuilder index builder
+  if inside : index < builders.size then state.putBuilder gloas index inside builder
   else { state with builders := fun _ => ⟨builders.push builder⟩ }
 
 /-- The position of the first builder with a key in the registry, if any. -/
@@ -124,7 +124,7 @@ def processBuilderDepositRequest (config : Config) (checks : SignatureChecks)
           (addChecked (getCurrentEpoch state) config.MIN_BUILDER_WITHDRAWABILITY_DELAY))
       else pure builder.withdrawableEpoch
     let balance ← liftAccessor (liftArith (addChecked builder.balance request.amount))
-    return state.setBuilder index { builder with withdrawableEpoch, balance }
+    return state.putBuilder gloas index index.isLt { builder with withdrawableEpoch, balance }
 
 /-- The state after a builder exit request.
 
