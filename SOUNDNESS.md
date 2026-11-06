@@ -613,9 +613,16 @@ Neither precompile checks that its inputs lie in the subgroup, as EIP-2537 speci
 So the sum is taken in the full group of points of each curve.
 `exists_bls12G1Add_ok` and `exists_bls12G2Add_ok` apply this to two copies of each generator.
 
-For G1MSM, G2MSM, the pairing check and the two map precompiles, the proofs cover only input lengths, gas errors and output sizes (`Execution/Proofs/Evm/Precompiles/Bls12381/G1.lean`, `G2.lean` and `Pairing.lean`).
+`bls12G1Msm_eq_ok_iff` and `bls12G2Msm_eq_ok_iff` (`G1.lean` and `G2.lean`) prove that G1MSM and G2MSM return the encoding of the sum of their pairs.
+`g1Msm_eq_ok_iff` and `g2Msm_eq_ok_iff` (`Execution/Proofs/Evm/Precompiles/Bls12381/Msm.lean`) prove that this sum succeeds exactly when every point decodes with the subgroup check.
+`toPoint_of_g1Msm_eq_ok` and `toPoint_of_g2Msm_eq_ok` prove that it maps to the sum of `m_i • P_i` on the curve.
+Each scalar `m_i` is the integer of its 32 bytes, not reduced modulo the subgroup order, as EIP-2537 allows.
+`inSubgroup_of_mem_g1Msm` and `inSubgroup_of_mem_g2Msm` prove that every decoded point lies in the subgroup.
+`toPoint_g1Msm_generator` and `toPoint_g2Msm_generator` apply this to the generator with any scalar.
 `G1.lean` and `G2.lean` also bound the MSM discounts, so an MSM never costs more than its separate multiplications.
-No theorem relates the MSM precompiles to a sum of scalar multiples, `bls12Pairing` to the pairing law, or `bls12MapFpToG1` and `bls12MapFp2ToG2` to the curve maps.
+
+For the pairing check and the two map precompiles, the proofs cover only input lengths, gas errors and output sizes (`G1.lean`, `G2.lean` and `Pairing.lean`).
+No theorem relates `bls12Pairing` to the pairing law, or `bls12MapFpToG1` and `bls12MapFp2ToG2` to the curve maps.
 No theorem relates the module to the execution-specs code it follows.
 
 ### Merkle Patricia Trie

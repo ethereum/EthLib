@@ -90,6 +90,49 @@ theorem bls12G2Msm_outOfGas {data : ByteArray} (hsize : ¬(data.size = 0 ∨ dat
   rw [ite_eq_left_of_eq_true _ _ (eq_true hgas)]
   rfl
 
+/-- G2MSM succeeds exactly on a whole, nonzero number `k` of 288-byte pairs, with its price in gas.
+
+The padding of every point must be zero, and the sum of the pairs must succeed.
+
+The output is the padded encoding of that sum. -/
+theorem bls12G2Msm_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
+    bls12G2Msm data gas = .ok out ↔
+      ¬(data.size = 0 ∨ data.size % LENGTH_PER_PAIR_G2 ≠ 0) ∧
+        bls12G2MsmGas (data.size / LENGTH_PER_PAIR_G2) ≤ gas ∧
+        ∃ pairs q,
+          (chunks LENGTH_PER_PAIR_G2 (data.size / LENGTH_PER_PAIR_G2) data.data.toList).mapM
+              (fun pair => do return (← unpadG2 (pair.take 256), pair.drop 256)) = .ok pairs ∧
+            g2Msm pairs = .ok q ∧ out = ⟨(padG2 (g2ToBytes q)).toArray⟩ := by
+  by_cases hsize : data.size = 0 ∨ data.size % LENGTH_PER_PAIR_G2 ≠ 0
+  · rw [bls12G2Msm_invalidInputLength hsize gas]
+    exact iff_of_false (by simp) fun h => h.1 hsize
+  · by_cases hgas : gas < bls12G2MsmGas (data.size / LENGTH_PER_PAIR_G2)
+    · rw [bls12G2Msm_outOfGas hsize hgas]
+      exact iff_of_false (by simp) fun h => absurd h.2.1 (Nat.not_le.mpr hgas)
+    · unfold bls12G2Msm
+      rw [ite_eq_right_of_eq_false _ _ (eq_false hsize)]
+      dsimp only
+      rw [ite_eq_right_of_eq_false _ _ (eq_false hgas)]
+      simp only [hsize, not_false_eq_true, Nat.not_lt.mp hgas, true_and, bind, Except.bind]
+      split
+      · rename_i hm
+        simp [hm]
+      · rename_i pairs hm
+        split
+        · rename_i hq
+          simp [hm, hq]
+        · rename_i q hq
+          simp only [pure, Except.pure, Except.ok.injEq] at hm ⊢
+          constructor
+          · rintro rfl
+            exact ⟨pairs, q, hm, hq, rfl⟩
+          · rintro ⟨pairs', q', hm', hq', rfl⟩
+            rw [hm] at hm'
+            cases hm'
+            rw [hq] at hq'
+            cases hq'
+            rfl
+
 /-- Every output of G2MSM has 256 bytes. -/
 theorem bls12G2Msm_size {data : ByteArray} {gas : Nat} {out : ByteArray} (h : bls12G2Msm data gas = .ok out) :
     out.size = 256 := by
