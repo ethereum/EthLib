@@ -28,6 +28,8 @@ class SszFields (β : Type) where
   toValues : β → List Value
   /-- The typed fields that untyped field values stand for, or why they stand for none. -/
   ofValues : List Value → Except Err β
+  /-- The roots of the fields, in order. -/
+  roots : β → Except Err (List Bytes)
 
 open SszType
 
@@ -38,6 +40,7 @@ instance (priority := low) {α : Type} [SszType α] : SszFields α where
   ofValues
     | [value] => ofValue value
     | values => .error (.count 1 values.length)
+  roots a := return [← root a]
 
 /-- One field of a container, in front of the fields that follow it. -/
 instance {α β : Type} [SszType α] [SszFields β] : SszFields (α × β) where
@@ -46,6 +49,15 @@ instance {α β : Type} [SszType α] [SszFields β] : SszFields (α × β) where
   ofValues
     | value :: values => return (← ofValue value, ← SszFields.ofValues values)
     | [] => .error (.count (SszFields.descs β).length.succ 0)
+  roots pair := return (← root pair.1) :: (← SszFields.roots pair.2)
+
+/--
+The root of a container whose fields are the given roots, each held as one 32-byte node.
+
+It is the root of the container itself, since a field and its root give the same leaf.
+-/
+def summaryRoot (shape : List Desc → Desc) (roots : List Bytes) : Except Err Bytes :=
+  Ssz.hashTreeRoot (shape (roots.map fun _ => .byteVector bytesPerChunk)) (.seq (roots.map .bytes))
 
 /--
 The container with the given field names, over a structure and the tuple of its fields.
@@ -60,6 +72,7 @@ def SszType.container {σ β : Type} [SszFields β] (names : List String) (field
   ofValue
     | .seq values => build <$> SszFields.ofValues values
     | _ => .error .typeMismatch
+  root s := do summaryRoot (.container names) (← SszFields.roots (fields s))
 
 /--
 The progressive container with the given layout and field names.
@@ -76,5 +89,6 @@ def SszType.progressiveContainer {σ β : Type} [SszFields β] (active : List Bo
   ofValue
     | .seq values => build <$> SszFields.ofValues values
     | _ => .error .typeMismatch
+  root s := do summaryRoot (.progressiveContainer active names) (← SszFields.roots (fields s))
 
 end EthLib.Serialization.Ssz

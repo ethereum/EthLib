@@ -20,19 +20,17 @@ open SszType
 
 namespace SszType
 
-variable {α : Type} [SszType α]
+variable {α : Type} [SszType α] [LawfulSszType α]
 
 /-- The typed root is the untyped root of the value. -/
 theorem hashTreeRoot_ok_iff {a : α} {root : Vector UInt8 32} :
     hashTreeRoot a = .ok root ↔ Ssz.hashTreeRoot (desc α) (toValue a) = .ok root.toArray := by
-  unfold hashTreeRoot
+  rw [hashTreeRoot_eq]
   cases rooted : Ssz.hashTreeRoot (desc α) (toValue a) with
   | error fault => simp [bind, Except.bind]
   | ok bytes =>
     simp only [bind, Except.bind, Except.ok.injEq]
     exact toChunk_ok_iff
-
-variable [LawfulSszType α]
 
 /-- Every value has a root. -/
 theorem hashTreeRoot_total (a : α) : ∃ root, hashTreeRoot a = .ok root := by

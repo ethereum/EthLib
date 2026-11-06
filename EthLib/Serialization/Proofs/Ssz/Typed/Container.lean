@@ -2,6 +2,8 @@ module
 
 public import EthLib.Serialization.Ssz.Typed.Container
 public import EthLib.Serialization.Proofs.Ssz.Typed.Class
+public import EthLib.Serialization.Proofs.Ssz.Codec.RootDomain
+public import EthLib.Serialization.Proofs.Ssz.Codec.Summary
 
 /-!
 # Proofs: typed SSZ containers are lawful
@@ -29,6 +31,9 @@ class LawfulSszFields (β : Type) [SszFields β] : Prop where
   /-- Untyped fields that read back are the ones their typed fields stand for. -/
   toValues_of_ofValues : ∀ {values : List Value} {b : β}, ofValues values = .ok b →
     toValues b = values
+  /-- The roots of the fields are the roots of their untyped values. -/
+  roots_eq : ∀ b : β,
+    roots b = ((descs β).zip (toValues b)).mapM fun field => Ssz.hashTreeRoot field.1 field.2
 
 instance (priority := low) {α : Type} [SszType α] [LawfulSszType α] : LawfulSszFields α where
   allWellFormed := by
@@ -39,6 +44,7 @@ instance (priority := low) {α : Type} [SszType α] [LawfulSszType α] : LawfulS
     match values, read with
     | [value], read => simp [toValues, LawfulSszType.toValue_of_ofValue read]
     | [], read | _ :: _ :: _, read => cases read
+  roots_eq a := by simp [roots, descs, toValues, LawfulSszType.root_eq]
 
 instance {α β : Type} [SszType α] [LawfulSszType α] [SszFields β] [LawfulSszFields β] :
     LawfulSszFields (α × β) where
@@ -68,6 +74,29 @@ instance {α β : Type} [SszType α] [LawfulSszType α] [SszFields β] [LawfulSs
           subst read
           simp [toValues, LawfulSszType.toValue_of_ofValue head,
             LawfulSszFields.toValues_of_ofValues tail]
+  roots_eq pair := by
+    simp [roots, descs, toValues, LawfulSszType.root_eq, LawfulSszFields.roots_eq (β := β)]
+
+/-- Fields of well-formed types, each admitting its value, all have roots. -/
+theorem fieldRoots_total : ∀ {fields : List (Desc × Value)},
+    (∀ field ∈ fields, field.1.wellFormed = .ok () ∧ Fits field.1 field.2) →
+    ∃ roots, fields.mapM (fun field => Ssz.hashTreeRoot field.1 field.2) = .ok roots
+  | [], _ => ⟨[], rfl⟩
+  | field :: fields, sound => by
+    obtain ⟨root, rooted, -⟩ := Ssz.hashTreeRoot_total field.1 field.2
+      (sound field (by simp)).1 (sound field (by simp)).2
+    obtain ⟨roots, rest⟩ := fieldRoots_total fun other member =>
+      sound other (List.mem_cons_of_mem _ member)
+    exact ⟨root :: roots, by simp [List.mapM_cons, rooted, rest, bind, Except.bind, pure,
+      Except.pure]⟩
+
+/-- The fields of lawful types all have roots. -/
+theorem LawfulSszFields.roots_total {β : Type} [SszFields β] [LawfulSszFields β] (b : β) :
+    ∃ roots, ((descs β).zip (toValues b)).mapM
+      (fun field => Ssz.hashTreeRoot field.1 field.2) = .ok roots :=
+  fieldRoots_total fun field member =>
+    ⟨allWellFormed_mem _ LawfulSszFields.allWellFormed _ (List.of_mem_zip member).1,
+      (LawfulSszFields.fits b).2 field member⟩
 
 /--
 A container is lawful when its names are well formed and its two conversions undo each other.
@@ -99,7 +128,12 @@ theorem LawfulSszType.container {σ β : Type} [SszFields β] [LawfulSszFields �
       | ok b =>
         simp only [read, Functor.map, Except.map, Except.ok.injEq] at made
         subst made
-        simp [toValue, right, LawfulSszFields.toValues_of_ofValues read] }
+        simp [toValue, right, LawfulSszFields.toValues_of_ofValues read]
+    root_eq := fun s => by
+      -- Every field has a root, and the container of those roots has the container's root.
+      obtain ⟨roots, rooted⟩ := LawfulSszFields.roots_total (fields s)
+      simp only [root, LawfulSszFields.roots_eq, rooted, bind, Except.bind, summaryRoot]
+      exact hashTreeRoot_container_roots (LawfulSszFields.fits (fields s)).1 rooted }
 
 /--
 A progressive container is lawful when its layout and names are well formed.
@@ -139,6 +173,11 @@ theorem LawfulSszType.progressiveContainer {σ β : Type} [SszFields β] [Lawful
       | ok b =>
         simp only [read, Functor.map, Except.map, Except.ok.injEq] at made
         subst made
-        simp [toValue, right, LawfulSszFields.toValues_of_ofValues read] }
+        simp [toValue, right, LawfulSszFields.toValues_of_ofValues read]
+    root_eq := fun s => by
+      -- Every field has a root, and the container of those roots has the container's root.
+      obtain ⟨roots, rooted⟩ := LawfulSszFields.roots_total (fields s)
+      simp only [root, LawfulSszFields.roots_eq, rooted, bind, Except.bind, summaryRoot]
+      exact hashTreeRoot_progressiveContainer_roots (LawfulSszFields.fits (fields s)).1 rooted }
 
 end EthLib.Serialization.Ssz
