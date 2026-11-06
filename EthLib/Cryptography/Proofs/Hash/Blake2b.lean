@@ -62,7 +62,7 @@ theorem roundsFrom_add (m v : Vector UInt64 16) (start a b : Nat) :
 
 /-! ## The rotation -/
 
-/-- `rotr x n` is the right rotation of the 64-bit word by `n` bits, for `0 < n < 64`.
+/-- The rotation is the right rotation of the 64-bit word by `n` bits, for `0 < n < 64`.
 
 The RFC writes the rotation as a shift right by `n` and a shift left by `64 - n`. -/
 theorem rotr_toBitVec (x n : UInt64) (h0 : 0 < n.toNat) (h64 : n.toNat < 64) :
@@ -76,14 +76,21 @@ theorem rotr_toBitVec (x n : UInt64) (h0 : 0 < n.toNat) (h64 : n.toNat < 64) :
   · simp [hlt, BitVec.getLsbD_eq_getElem, (by omega : n.toNat + i < 64)]
   · simp [hlt, BitVec.getLsbD_of_ge _ _ (by omega : 64 ≤ n.toNat + i)]
 
-/-- Rotating right by `n` and then by `64 - n` returns the word, for `0 < n < 64`. -/
-theorem rotr_rotr (x n : UInt64) (h0 : 0 < n.toNat) (h64 : n.toNat < 64) :
-    rotr (rotr x n) (64 - n) = x := by
+/-- Subtracting a positive distance below 64 from 64 twice returns that distance. -/
+private theorem sixtyFour_sub_cancel {n : UInt64} (h0 : 0 < n.toNat) (h64 : n.toNat < 64) :
+    (64 - n).toNat = 64 - n.toNat ∧ 64 - (64 - n) = n := by
   have hsub : (64 - n).toNat = 64 - n.toNat := by
     rw [UInt64.toNat_sub_of_le]
     · simp
-    · rw [UInt64.le_iff_toNat_le]
-      exact Nat.le_of_lt h64
+    · exact UInt64.le_iff_toNat_le.mpr (Nat.le_of_lt h64)
+  refine ⟨hsub, UInt64.toBitVec_inj.mp (BitVec.eq_of_toNat_eq ?_)⟩
+  simp
+  omega
+
+/-- Rotating right by `n` and then by `64 - n` returns the word, for `0 < n < 64`. -/
+theorem rotr_rotr (x n : UInt64) (h0 : 0 < n.toNat) (h64 : n.toNat < 64) :
+    rotr (rotr x n) (64 - n) = x := by
+  have hsub := (sixtyFour_sub_cancel h0 h64).1
   apply UInt64.toBitVec_inj.mp
   rw [rotr_toBitVec _ _ (by omega) (by omega), rotr_toBitVec _ _ h0 h64, hsub]
   refine BitVec.eq_of_getLsbD_eq fun i hi => ?_
@@ -97,17 +104,6 @@ theorem rotr_rotr (x n : UInt64) (h0 : 0 < n.toNat) (h64 : n.toNat < 64) :
   · have hlt3 : i - n.toNat < 64 - n.toNat := by omega
     simp [hlt, hlt3, show n.toNat + (i - n.toNat) = i by omega]
 
-/-- Subtracting a positive distance below 64 from 64 twice returns that distance. -/
-private theorem sixtyFour_sub_cancel {n : UInt64} (h0 : 0 < n.toNat) (h64 : n.toNat < 64) :
-    (64 - n).toNat = 64 - n.toNat ∧ 64 - (64 - n) = n := by
-  have hsub : (64 - n).toNat = 64 - n.toNat := by
-    rw [UInt64.toNat_sub_of_le]
-    · simp
-    · exact UInt64.le_iff_toNat_le.mpr (Nat.le_of_lt h64)
-  refine ⟨hsub, UInt64.toBitVec_inj.mp (BitVec.eq_of_toNat_eq ?_)⟩
-  simp
-  omega
-
 /-- Right rotation by a fixed `n` with `0 < n < 64` permutes the 64-bit words. -/
 theorem rotr_left_bijective {n : UInt64} (h0 : 0 < n.toNat) (h64 : n.toNat < 64) :
     Function.Bijective (rotr · n) := by
@@ -115,11 +111,6 @@ theorem rotr_left_bijective {n : UInt64} (h0 : 0 < n.toNat) (h64 : n.toNat < 64)
   refine ⟨Function.LeftInverse.injective (g := (rotr · (64 - n))) fun x => rotr_rotr x n h0 h64,
     Function.RightInverse.surjective (g := (rotr · (64 - n))) fun x => ?_⟩
   simpa only [hcancel] using rotr_rotr x (64 - n) (by omega) (by omega)
-
-/-- Right rotation by a fixed `n` with `0 < n < 64` loses no bit of the word. -/
-theorem rotr_left_injective {n : UInt64} (h0 : 0 < n.toNat) (h64 : n.toNat < 64) :
-    Function.Injective (rotr · n) :=
-  (rotr_left_bijective h0 h64).1
 
 /-! ## One update of a work-vector word -/
 
@@ -193,12 +184,6 @@ theorem mix_bijective {a b c d : Fin 16} (x y : UInt64)
   -- G is the composition of those eight updates, in the order of the RFC.
   exact h8.comp (h7.comp (h6.comp (h5.comp (h4.comp (h3.comp (h2.comp h1))))))
 
-/-- G is injective on the work vector when adjacent indices in `(a, b, c, d)` differ. -/
-theorem mix_injective {a b c d : Fin 16} (x y : UInt64)
-    (hab : a ≠ b) (had : a ≠ d) (hbc : b ≠ c) (hcd : c ≠ d) :
-    Function.Injective (mix · a b c d x y) :=
-  (mix_bijective x y hab had hbc hcd).1
-
 /-- Round `i` of F permutes the work vector, for every message block.
 
 Each column and each diagonal of the 4 x 4 matrix has four distinct indices. -/
@@ -233,16 +218,5 @@ theorem roundsFrom_bijective (m : Vector UInt64 16) (start count : Nat) :
   | succ count ih =>
     -- One more round is one bijective round followed by a bijective run.
     simpa [roundsFrom, Function.comp_def] using (ih (start + 1)).comp (round_bijective m start)
-
-/-- Column `0, 4, 8, 12` of RFC 7693 §3.2 satisfies the cycle inequalities, and one round permutes.
-
-The four indices are the first column of the work matrix. -/
-theorem exists_mix_indices_and_round_bijective :
-    ∃ a b c d : Fin 16, a ≠ b ∧ a ≠ d ∧ b ≠ c ∧ c ≠ d ∧
-      (∀ x y : UInt64, Function.Bijective (mix · a b c d x y)) ∧
-      (∀ m : Vector UInt64 16, ∀ i : Nat, Function.Bijective (round m i)) :=
-  ⟨0, 4, 8, 12, by decide, by decide, by decide, by decide,
-    fun x y => mix_bijective x y (by decide) (by decide) (by decide) (by decide),
-    round_bijective⟩
 
 end EthLib.Cryptography.Hash.Blake2b
