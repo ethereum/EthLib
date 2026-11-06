@@ -33,7 +33,7 @@ theorem valid_of_bytesToG1_eq_ok {raw : List UInt8} {subgroupCheck : Bool} {p : 
     (h : bytesToG1 raw subgroupCheck = .ok p) : G1.Valid p := by
   obtain ⟨x, y, -, -, ⟨-, -, rfl⟩ | ⟨hon, -, rfl⟩⟩ := bytesToG1_eq_ok_iff.mp h
   · exact G1.valid_zero
-  · exact G1.valid_of_affine_eq (beq_iff_eq.mp hon)
+  · exact G1.valid_of_affine_eq (Fp.beq_iff.mp hon)
 
 /-- A G1 point decoded with the subgroup check lies in the subgroup. -/
 theorem inSubgroup_of_bytesToG1_eq_ok {raw : List UInt8} {p : G1}
@@ -49,7 +49,7 @@ theorem valid_of_bytesToG2_eq_ok {raw : List UInt8} {subgroupCheck : Bool} {p : 
     (h : bytesToG2 raw subgroupCheck = .ok p) : G2.Valid p := by
   obtain ⟨x, y, -, -, ⟨-, -, -, -, rfl⟩ | ⟨hon, -, rfl⟩⟩ := bytesToG2_eq_ok_iff.mp h
   · exact G2.valid_zero
-  · have heq : y * y = x * x * x + G2.bTwist := beq_iff_eq.mp hon
+  · have heq : y * y = x * x * x + G2.bTwist := Fp2.beq_iff_eq.mp hon
     exact G2.valid_of_affine_equation heq
 
 /-- A G2 point decoded with the subgroup check lies in the subgroup. -/

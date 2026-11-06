@@ -167,6 +167,18 @@ theorem natToBytes_bytesToFq2 {raw : List UInt8} (hlength : raw.length = 96) {a 
 
 /-! ## G1 points -/
 
+/-- Binding a success passes its value to the continuation. -/
+private theorem ok_bind {α β : Type} (a : α) (f : α → Except Bls12381Error β) :
+    (Except.ok a >>= f) = f a := rfl
+
+/-- Binding an error keeps the error. -/
+private theorem error_bind {α β : Type} (e : Bls12381Error) (f : α → Except Bls12381Error β) :
+    (Except.error e >>= f) = Except.error e := rfl
+
+/-- Binding a thrown error keeps the error. -/
+private theorem throw_bind {α β : Type} (e : Bls12381Error) (f : α → Except Bls12381Error β) :
+    (throw e >>= f) = throw e := rfl
+
 /-- The affine form of a point with `z = 1` is its `x` and `y`. -/
 theorem g1_toAffine_one (x y : Fp) : G1.toAffine ⟨x, y, Fp.one⟩ = (x, y) := by
   have hinv : Cryptography.BaseField.inverse Fp.one = Fp.one := Fp.toZMod.injective (by
@@ -199,32 +211,38 @@ theorem bytesToG1_eq_ok_iff {raw : List UInt8} {subgroupCheck : Bool} {p : G1} :
           (onCurveG1 x y = true ∧
             (subgroupCheck = true → G1.inSubgroup ⟨x, y, Fp.one⟩ = true) ∧
             p = ⟨x, y, Fp.one⟩)) := by
-  simp only [bytesToG1, bind, Except.bind, pure, Except.pure, throw, throwThe,
-    MonadExceptOf.throw]
-  cases hx : bytesToFieldElement (raw.take 48) with
-  | error => simp
+  -- Each step is rewritten, never reduced, so the kernel never evaluates field arithmetic.
+  rw [bytesToG1]
+  generalize bytesToFieldElement (raw.take 48) = dx
+  generalize bytesToFieldElement (raw.drop 48) = dy
+  cases dx with
+  | error e =>
+    rw [error_bind]
+    simp only [reduceCtorEq, false_and, exists_false]
   | ok x =>
-    cases hy : bytesToFieldElement (raw.drop 48) with
-    | error => simp
+    cases dy with
+    | error e =>
+      rw [ok_bind, error_bind]
+      simp only [reduceCtorEq, false_and, and_false, exists_false]
     | ok y =>
+      rw [ok_bind, ok_bind]
       simp only [Except.ok.injEq, exists_and_left, exists_eq_left']
-      split
-      · rename_i hz
-        simp only [Except.ok.injEq, hz, true_and, eq_comm (a := G1.zero)]
+      by_cases hz : x.val = 0 ∧ y.val = 0
+      · rw [ite_eq_left hz]
+        simp only [pure, Except.pure, Except.ok.injEq, hz, true_and, eq_comm (a := G1.zero)]
         refine ⟨.inl, ?_⟩
         rintro (h | ⟨hon, -, -⟩)
         · exact h
         · -- `(0, 0)` is not on the curve, so the second case cannot hold.
           have hx0 : x = 0 := Fp.ext (hz.1.trans Fp.val_zero.symm)
           have hy0 : y = 0 := Fp.ext (hz.2.trans Fp.val_zero.symm)
-          subst hx0 hy0
-          rw [onCurveG1, beq_eq_false_iff_ne.mpr (by decide_eq_at_model [])] at hon
-          cases hon
-      · rename_i hz
+          rw [onCurveG1, Fp.beq_iff, hx0, hy0] at hon
+          exact absurd hon (by decide_eq_at_model [])
+      · rw [ite_eq_right hz]
         have hnot : ¬(x.val = 0 ∧ y.val = 0 ∧ p = G1.zero) := fun h => hz ⟨h.1, h.2.1⟩
         simp only [hnot, false_or]
         cases hon : onCurveG1 x y <;> cases subgroupCheck <;>
-          cases hs : G1.inSubgroup ⟨x, y, Fp.one⟩ <;> simp [eq_comm]
+          cases hs : G1.inSubgroup ⟨x, y, Fp.one⟩ <;> simp [eq_comm, throw_bind, pure, Except.pure]
 
 -- The kernel compares 96 bytes one by one, deeper than the default recursion limit.
 set_option maxRecDepth 4000 in
@@ -264,6 +282,7 @@ theorem g1ToBytes_bytesToG1 {raw : List UInt8} (hlength : raw.length = 96) {subg
     have hx0' : x = 0 := Fp.ext (hx0.trans Fp.val_zero.symm)
     have hy0' : y = 0 := Fp.ext (hy0.trans Fp.val_zero.symm)
     subst hx0' hy0'
+    rw [Fp.val_zero]
     rfl
   · simp only [g1ToBytes, g1_toAffine_one]
     rw [hxb, hyb, List.take_append_drop]
@@ -275,7 +294,8 @@ set_option maxRecDepth 8000 in
 /-- The point at infinity encodes as 192 zero bytes. -/
 theorem g2ToBytes_of_isZero {p : G2} (h : p.z.isZero = true) :
     g2ToBytes p = List.replicate 192 0 := by
-  simp only [g2ToBytes, G2.toAffine, h, ↓reduceIte]
+  simp only [g2ToBytes, G2.toAffine, h, ↓reduceIte, Fp2.zero_eq_zero, Fp2.zero_c0, Fp2.zero_c1,
+    Fp.val_zero]
   rfl
 
 /-- The G2 decoder reads two elements `x` and `y` of `Fp2`, and succeeds in exactly two cases.
@@ -292,18 +312,25 @@ theorem bytesToG2_eq_ok_iff {raw : List UInt8} {subgroupCheck : Bool} {p : G2} :
           (onCurveG2 x y = true ∧
             (subgroupCheck = true → G2.inSubgroup ⟨x, y, Fp2.one⟩ = true) ∧
             p = ⟨x, y, Fp2.one⟩)) := by
-  simp only [bytesToG2, bind, Except.bind, pure, Except.pure, throw, throwThe,
-    MonadExceptOf.throw]
-  cases hx : bytesToFq2 (raw.take 96) with
-  | error => simp
+  -- Each step is rewritten, never reduced, so the kernel never evaluates field arithmetic.
+  rw [bytesToG2]
+  generalize bytesToFq2 (raw.take 96) = dx
+  generalize bytesToFq2 (raw.drop 96) = dy
+  cases dx with
+  | error e =>
+    rw [error_bind]
+    simp only [reduceCtorEq, false_and, exists_false]
   | ok x =>
-    cases hy : bytesToFq2 (raw.drop 96) with
-    | error => simp
+    cases dy with
+    | error e =>
+      rw [ok_bind, error_bind]
+      simp only [reduceCtorEq, false_and, and_false, exists_false]
     | ok y =>
+      rw [ok_bind, ok_bind]
       simp only [Except.ok.injEq, exists_and_left, exists_eq_left']
-      split
-      · rename_i hz
-        simp only [Except.ok.injEq, hz, true_and, eq_comm (a := G2.zero)]
+      by_cases hz : x.c0.val = 0 ∧ x.c1.val = 0 ∧ y.c0.val = 0 ∧ y.c1.val = 0
+      · rw [ite_eq_left hz]
+        simp only [pure, Except.pure, Except.ok.injEq, hz, true_and, eq_comm (a := G2.zero)]
         refine ⟨.inl, ?_⟩
         rintro (h | ⟨hon, -, -⟩)
         · exact h
@@ -315,15 +342,14 @@ theorem bytesToG2_eq_ok_iff {raw : List UInt8} {subgroupCheck : Bool} {p : G2} :
           have hy0 : y = ⟨0, 0⟩ := by
             cases y; simp only [Fp2.mk.injEq]
             exact ⟨Fp.ext (h2.trans Fp.val_zero.symm), Fp.ext (h3.trans Fp.val_zero.symm)⟩
-          subst hx0 hy0
-          rw [onCurveG2, beq_eq_false_iff_ne.mpr (by decide_eq_at_model [G2.bTwist])] at hon
-          cases hon
-      · rename_i hz
+          rw [onCurveG2, Fp2.beq_iff_eq, hx0, hy0] at hon
+          exact absurd hon (by decide_eq_at_model [G2.bTwist])
+      · rw [ite_eq_right hz]
         have hnot : ¬(x.c0.val = 0 ∧ x.c1.val = 0 ∧ y.c0.val = 0 ∧ y.c1.val = 0 ∧ p = G2.zero) :=
           fun h => hz ⟨h.1, h.2.1, h.2.2.1, h.2.2.2.1⟩
         simp only [hnot, false_or]
         cases hon : onCurveG2 x y <;> cases subgroupCheck <;>
-          cases hs : G2.inSubgroup ⟨x, y, Fp2.one⟩ <;> simp [eq_comm]
+          cases hs : G2.inSubgroup ⟨x, y, Fp2.one⟩ <;> simp [eq_comm, throw_bind, pure, Except.pure]
 
 -- The kernel compares 192 bytes one by one, deeper than the default recursion limit.
 set_option maxRecDepth 8000 in

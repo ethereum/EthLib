@@ -51,7 +51,7 @@ theorem bytesToG1_g1ToBytes {p : G1} (hp : G1.Valid p) {subgroupCheck : Bool}
     have henc : g1ToBytes p = natToBytes 48 x.val ++ natToBytes 48 y.val := by
       simp [g1ToBytes, hpa]
     rw [henc]
-    refine bytesToG1_affine (beq_iff_eq.mpr heq) fun hc => ?_
+    refine bytesToG1_affine (Fp.beq_iff.mpr heq) fun hc => ?_
     -- Membership of the subgroup depends only on the group element.
     rw [G1.inSubgroup_iff_modulus_smul_eq_zero hvalid, hq,
       ← G1.inSubgroup_iff_modulus_smul_eq_zero hp]
@@ -81,7 +81,7 @@ theorem bytesToG2_g2ToBytes {p : G2} (hp : G2.Valid p) {subgroupCheck : Bool}
         (natToBytes 48 y.c0.val ++ natToBytes 48 y.c1.val) := by
       simp [g2ToBytes, hpa]
     rw [henc]
-    refine bytesToG2_affine (beq_iff_eq.mpr heq) fun hc => ?_
+    refine bytesToG2_affine (Fp2.beq_iff_eq.mpr heq) fun hc => ?_
     -- Membership of the subgroup depends only on the group element.
     rw [G2.inSubgroup_iff_modulus_smul_eq_zero hvalid, hq,
       ← G2.inSubgroup_iff_modulus_smul_eq_zero hp]
