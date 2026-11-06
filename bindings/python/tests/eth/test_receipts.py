@@ -1,10 +1,4 @@
-"""The receipts of the eth capability, against the receipts of the blockchain tests.
-
-The receipts come from tests/execution/blocks/receipts.json, pinned as its README says.
-Each one is sent as eth/68 and eth/69 send it, and checked against the root of a block that holds
-it alone.
-The messages are built here as RLP, from caps/eth.md, EIP-7642 and EIP-7975.
-"""
+"""The receipts of the eth capability, against the receipts of the blockchain tests."""
 
 import pytest
 
@@ -21,6 +15,11 @@ from ethlib.execution.network import (
 )
 from ethlib.serialization import rlp
 from raising import raises
+
+# The receipts come from tests/execution/blocks/receipts.json, pinned as its README says.
+# Each one is sent as eth/68 and eth/69 send it.
+# Each one is checked against the root of a block that holds it alone.
+# The messages are RLP built here, from caps/eth.md, EIP-7642 and EIP-7975.
 
 
 def _p(n: int) -> bytes:

@@ -1,15 +1,4 @@
-"""Test-vector generator: `verify`.
-
-Every case is a test of the Wycheproof IEEE P1363 set for secp256r1 with SHA-256.
-
-File: testvectors_v1/ecdsa_secp256r1_sha256_p1363_test.json
-Repository: C2SP/wycheproof
-Commit: d17cc89fa5c8f4f4d378b5385ebf75da5d0926c9
-Licence: Apache 2.0 (wycheproof/LICENSE)
-
-The expected result of each case is Wycheproof's.
-The hash is EthLib's own SHA-256, which its NIST vectors pin.
-"""
+"""Test-vector generator: `verify`."""
 
 import json
 from pathlib import Path
@@ -20,6 +9,16 @@ from dumper import hex_str, write_case
 from ethlib.cryptography import secp256r1
 from ethlib.cryptography.sha256 import sha256
 from raising import raises
+
+# Every case is a test of the Wycheproof IEEE P1363 set for secp256r1 with SHA-256.
+#
+# File: testvectors_v1/ecdsa_secp256r1_sha256_p1363_test.json
+# Repository: C2SP/wycheproof
+# Commit: d17cc89fa5c8f4f4d378b5385ebf75da5d0926c9
+# Licence: Apache 2.0 (wycheproof/LICENSE)
+#
+# The expected result of each case is Wycheproof's.
+# The hash is EthLib's own SHA-256, which its NIST vectors pin.
 
 SET = Path(__file__).resolve().parent / "wycheproof" / "ecdsa_secp256r1_sha256_p1363_test.json"
 

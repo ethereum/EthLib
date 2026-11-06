@@ -362,10 +362,10 @@ def _check_rewards(network: str, decoded: list, data: bytes) -> None:
 
 
 def _fee(fork: str, decoded: list) -> int | None:
-    """The fees of a block's miner, or `None` when the header and transactions do not give them.
+    """
+    The fees of a block's miner, or `None` when the header and transactions do not give them.
 
-    Before London, a block whose legacy transactions share one gas price pays its gas used at
-    that price.
+    Before London, legacy transactions that share one gas price pay the gas used at that price.
     """
     header, transactions, _ = decoded
     if not transactions:

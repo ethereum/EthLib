@@ -1,7 +1,4 @@
-"""The draft operations against `py_ecc.bls.G2ProofOfPossession`.
-
-These tests write no vectors.
-"""
+"""The draft operations against `py_ecc.bls.G2ProofOfPossession`, writing no vectors."""
 
 from typing import cast
 

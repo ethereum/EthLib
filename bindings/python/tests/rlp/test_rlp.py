@@ -1,7 +1,4 @@
-"""RLP against the RLP tests of ethereum/tests, and the typed decoders against hand-built cases.
-
-`vectors/README.md` gives the origin of the JSON files and their licence.
-"""
+"""RLP against the RLP tests of ethereum/tests, and the typed decoders against hand-built cases."""
 
 import json
 from pathlib import Path
@@ -10,6 +7,8 @@ import pytest
 
 from ethlib.serialization import rlp
 from raising import raises
+
+# `vectors/README.md` gives the origin of the JSON files and their licence.
 
 _VECTORS = Path(__file__).resolve().parent / "vectors"
 _VALID = json.loads((_VECTORS / "rlptest.json").read_text())

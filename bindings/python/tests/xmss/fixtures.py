@@ -1,12 +1,4 @@
-"""
-Inputs shared by the leanXMSS test-vector generators.
-
-Key generation and signing build `2^16` one-time keys per tree, which takes the
-compiled specification minutes per case.
-
-So their cases are written only when `ETHLIB_SLOW_VECTORS=1`, and every other
-run reads the committed ones back.
-"""
+"""Inputs shared by the leanXMSS test-vector generators."""
 
 import os
 
@@ -14,6 +6,11 @@ import pytest
 from ruamel.yaml import YAML
 
 from dumper import ROOT
+
+# Key generation and signing build `2^16` one-time keys per tree.
+# That takes the compiled specification minutes per case.
+# So their cases are written only when `ETHLIB_SLOW_VECTORS=1`.
+# Every other run reads the committed ones back.
 
 # ---- Slow cases ------------------------------------------------------------
 

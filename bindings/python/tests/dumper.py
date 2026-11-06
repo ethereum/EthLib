@@ -1,17 +1,13 @@
-"""
-YAML emission and on-disk layout shared across spec test-vector
-generators.
-
-`write_case(spec, handler, case, data)` writes
-`tests/cryptography/<spec>/<handler>/<case>/data.yaml`. Emission uses `ruamel.yaml`
-with `default_flow_style=None` and a `0x…`-string representer forcing
-single-quotes.
-"""
+"""The YAML emission and the on-disk layout shared by the test-vector generators."""
 
 import io
 from pathlib import Path
 
 from ruamel.yaml import YAML
+
+# A case goes to `tests/cryptography/<spec>/<handler>/<case>/data.yaml`.
+# The emitter is `ruamel.yaml` with `default_flow_style=None`.
+# A representer writes each `0x…` string in single quotes.
 
 
 def _build_data_yaml() -> YAML:

@@ -1,13 +1,13 @@
-"""The consensus entries of a node record, against hand-built records.
-
-Each record is built here as RLP, with a placeholder signature, since the reader does not check it.
-Each value is written out by hand from its SSZ type, and each test names the rule that it pins.
-"""
+"""The consensus entries of a node record, against hand-built records."""
 
 from ethlib.networking import enr
 from raising import raises
 
 from .test_enr import _rlp_list
+
+# Each record is RLP built here, with a placeholder signature, since the reader does not check it.
+# Each value is written out by hand from its SSZ type.
+# Each test names the rule that it pins.
 
 SIGNATURE = bytes(64)
 

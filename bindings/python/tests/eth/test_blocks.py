@@ -1,9 +1,4 @@
-"""The block exchange of the eth capability, against hand-built messages.
-
-The forms come from "Protocol Messages" and "Block Encoding and Validity" of caps/eth.md in
-ethereum/devp2p at the pin, with the request ID of EIP-2481.
-No official vectors exist, so each message and each header is built here as RLP.
-"""
+"""The block exchange of the eth capability, against hand-built messages."""
 
 import pytest
 
@@ -21,6 +16,11 @@ from ethlib.execution.network import (
 )
 from ethlib.serialization import rlp
 from raising import raises
+
+# The forms come from caps/eth.md of ethereum/devp2p at the pin.
+# The sections are "Protocol Messages" and "Block Encoding and Validity".
+# The request ID comes from EIP-2481.
+# No official vectors exist, so each message and each header is RLP built here.
 
 
 def _p(n: int) -> bytes:

@@ -1,15 +1,14 @@
-"""Ethereum Node Records against the test vector of EIP-778.
-
-The record, its RLP structure and its node ID come from "Test Vectors" in EIP-778.
-
-File: EIPS/eip-778.md
-Repository: ethereum/EIPs
-Commit: 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445
-Licence: CC0-1.0
-"""
+"""Ethereum Node Records against the test vector of EIP-778."""
 
 from ethlib.networking import enr
 from raising import raises
+
+# The record, its RLP structure and its node ID come from "Test Vectors" in EIP-778.
+#
+# File: EIPS/eip-778.md
+# Repository: ethereum/EIPs
+# Commit: 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445
+# Licence: CC0-1.0
 
 TEXT = (
     "enr:-IS4QHCYrYZbAKWCBRlAy5zzaDZXJBGkcnh4MHcBFZntXNFrdvJjX04jRzjzCBOonrkTfj499SZuOh8R33Ls8RRc"

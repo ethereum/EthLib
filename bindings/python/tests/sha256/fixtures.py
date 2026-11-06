@@ -1,21 +1,16 @@
-"""
-The NIST SHA-256 test vectors, as (message, digest) pairs.
-
-- 65 vectors from `cavp/SHA256ShortMsg.rsp`.
-- 64 vectors from `cavp/SHA256LongMsg.rsp`.
-- 2 examples from FIPS 180-2, Appendix B.
-
-That is 131 distinct vectors.
-
-The files are parsed at import time.
-
-Every digest is then checked against `hashlib`.
-
-So a parsing bug fails collection, not a single test.
-"""
+"""The NIST SHA-256 test vectors, as (message, digest) pairs."""
 
 import hashlib
 from pathlib import Path
+
+# - 65 vectors from `cavp/SHA256ShortMsg.rsp`.
+# - 64 vectors from `cavp/SHA256LongMsg.rsp`.
+# - 2 examples from FIPS 180-2, Appendix B.
+#
+# That is 131 distinct vectors.
+#
+# The files are parsed at import time, and every digest is checked against `hashlib`.
+# So a parsing bug fails collection, not a single test.
 
 # The vendored NIST files sit next to this module.
 _CAVP_DIR = Path(__file__).resolve().parent / "cavp"

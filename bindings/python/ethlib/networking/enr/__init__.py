@@ -14,7 +14,8 @@ from ethlib.serialization import rlp
 # Its text form is "enr:", then the unpadded URL-safe base64 of those bytes.
 #
 # Each function decodes the record first.
-# A rejected record or a malformed text raises `EnrError`, a `ValueError` with the code.
+# A rejected record or a malformed text raises `EnrError`.
+# It is a `ValueError` with the code of the Lean error.
 MAX_RECORD_SIZE = _native.ENR_MAX_RECORD_SIZE
 
 

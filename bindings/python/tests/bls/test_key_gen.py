@@ -1,18 +1,16 @@
-"""Key generation against EIP-2333 and `py_ecc.bls.G2ProofOfPossession`.
-
-The `master_SK` cases of EIP-2333 run key generation with no key information.
-These tests write no vectors.
-
-File: ERCS/erc-2333.md
-Repository: ethereum/ERCs
-Commit: be307c948f28897adb8f25afcc253c2c909de35d
-"""
+"""Key generation against EIP-2333 and `py_ecc.bls.G2ProofOfPossession`, writing no vectors."""
 
 import pytest
 from py_ecc.bls import G2ProofOfPossession as RefBls
 
 from ethlib.cryptography import bls
 from raising import raises
+
+# The `master_SK` cases of EIP-2333 run key generation with no key information.
+#
+# File: ERCS/erc-2333.md
+# Repository: ethereum/ERCs
+# Commit: be307c948f28897adb8f25afcc253c2c909de35d
 
 EIP_2333 = [
     (

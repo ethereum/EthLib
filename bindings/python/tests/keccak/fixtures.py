@@ -1,25 +1,21 @@
-"""
-The Keccak team's Keccak-256, Keccak-512 and Keccak-f[1600] test vectors.
-
-The Keccak-256 vectors are (message, digest) pairs:
-
-- the byte-aligned cases of `kat/ShortMsgKAT_256.txt`, 256 vectors from 0 to 255 bytes;
-- two cases of `LongMsgKAT_256.txt`, of 256 and 319 bytes, copied below;
-- the message `abc`.
-
-The Keccak-512 vectors are the byte-aligned cases of `kat/ShortMsgKAT_512.txt`, and the same two
-long messages with the digests of `LongMsgKAT_512.txt`.
-
-The permutation vectors are (input, output) pairs of 200-byte states, from
-`kat/KeccakPermutationIntermediateValues.txt`.
-
-The files are parsed at import time, so a parsing bug fails collection, not a single test.
-
-No independent Keccak-256 is in the Python standard library, so the digests are the files' own.
-"""
+"""The Keccak team's Keccak-256, Keccak-512 and Keccak-f[1600] test vectors."""
 
 from itertools import pairwise
 from pathlib import Path
+
+# The Keccak-256 vectors are (message, digest) pairs:
+# - the byte-aligned cases of `kat/ShortMsgKAT_256.txt`, 256 vectors from 0 to 255 bytes;
+# - two cases of `LongMsgKAT_256.txt`, of 256 and 319 bytes, copied below;
+# - the message `abc`.
+#
+# The Keccak-512 vectors are the byte-aligned cases of `kat/ShortMsgKAT_512.txt`.
+# They add the same two long messages, with the digests of `LongMsgKAT_512.txt`.
+#
+# The permutation vectors are pairs of 200-byte states, from the intermediate values file.
+# That file is `kat/KeccakPermutationIntermediateValues.txt`.
+#
+# The files are parsed at import time, so a parsing bug fails collection, not a single test.
+# No independent Keccak-256 is in the standard library, so the digests are the files' own.
 
 # The vendored files sit next to this module.
 _KAT_DIR = Path(__file__).resolve().parent / "kat"

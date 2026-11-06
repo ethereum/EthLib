@@ -1,9 +1,4 @@
-"""Status and BlockRangeUpdate of the eth capability, against hand-built messages.
-
-The forms come from "Status (0x00)" and "BlockRangeUpdate (0x11)" of caps/eth.md in
-ethereum/devp2p at the pin, and from EIP-7642 "Status message changes".
-No official vectors exist, so each message is built here as RLP.
-"""
+"""Status and BlockRangeUpdate of the eth capability, against hand-built messages."""
 
 import pytest
 
@@ -18,6 +13,11 @@ from ethlib.networking import forkid
 from ethlib.networking.forkid import BLOCK
 from ethlib.serialization import rlp
 from raising import raises
+
+# The forms come from caps/eth.md of ethereum/devp2p at the pin.
+# The sections are "Status (0x00)" and "BlockRangeUpdate (0x11)".
+# EIP-7642 "Status message changes" gives the rest.
+# No official vectors exist, so each message is RLP built here.
 
 GENESIS = bytes.fromhex("d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3")
 LATEST_HASH = bytes(range(32))

@@ -1,8 +1,4 @@
-"""The ommer checks, on ommers made from a Frontier chain of the blockchain tests.
-
-No pinned test of the release holds an ommer, so each ommer here is a fixture header with one
-field changed, which keeps it a valid header of a block that the chain left out.
-"""
+"""The ommer checks, on ommers made from a Frontier chain of the blockchain tests."""
 
 import pytest
 
@@ -13,6 +9,10 @@ from ethlib.serialization import rlp
 from raising import raises
 
 from .test_blocks import CASES
+
+# No pinned test of the release holds an ommer.
+# So each ommer here is a fixture header with one field changed.
+# It stays a valid header of a block that the chain left out.
 
 # The genesis block and the three blocks of one Frontier chain, in order.
 _CHAIN = sorted(

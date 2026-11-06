@@ -1,12 +1,11 @@
-"""The ssz_snappy req/resp encoding against hand-built messages.
-
-Each message is built here from the framing format of google/snappy (framing_format.txt) and the
-protobuf varint, so no value comes from the code under test.
-Each test names the rule that its message pins.
-"""
+"""The ssz_snappy req/resp encoding against hand-built messages."""
 
 from ethlib.networking import reqresp
 from raising import raises
+
+# Each message is built from the framing format of google/snappy and the protobuf varint.
+# The framing format is framing_format.txt, so no value comes from the code under test.
+# Each test names the rule that its message pins.
 
 STREAM_IDENTIFIER = bytes([0xFF, 0x06, 0x00, 0x00]) + b"sNaPpY"
 
