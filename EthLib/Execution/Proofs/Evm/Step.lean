@@ -14,7 +14,7 @@ On a stack that holds its operands, it pays its price, then puts its result in p
 
 So it equals the pure function of the instruction, applied to the top words of the stack.
 
-Each part of an instruction keeps the message, the state and the substate of the frame.
+Each part of an instruction keeps the message, the state, the substate and the code of the frame.
 
 A pop takes the top word of the stack and keeps memory and the return data.
 
@@ -124,68 +124,70 @@ theorem ternaryOp_of_length_lt {cost : Nat} {f : U256 → U256 → U256 → U256
     simp only [List.length_cons] at h
     omega
 
-/-- The second frame has the message, the state and the substate of the first. -/
+/-- The second frame has the message, the state, the substate and the code of the first. -/
 structure SameContext {Meter : Type} (before after : Evm fork Meter) : Prop where
   message : after.message = before.message
   state : after.state = before.state
   substate : after.substate = before.substate
+  code : after.code = before.code
 
 omit [GasMeter Meter] in
 /-- A frame has its own message, state and substate. -/
-theorem SameContext.refl (evm : Evm fork Meter) : SameContext evm evm := ⟨rfl, rfl, rfl⟩
+theorem SameContext.refl (evm : Evm fork Meter) : SameContext evm evm := ⟨rfl, rfl, rfl, rfl⟩
 
 omit [GasMeter Meter] in
-/-- Two steps that each keep the message, the state and the substate keep them together. -/
+/-- Two steps that each keep the message, state, substate and code keep them together. -/
 theorem SameContext.trans {a b c : Evm fork Meter} (hab : SameContext a b)
     (hbc : SameContext b c) : SameContext a c :=
-  ⟨hbc.message.trans hab.message, hbc.state.trans hab.state, hbc.substate.trans hab.substate⟩
+  ⟨hbc.message.trans hab.message, hbc.state.trans hab.state, hbc.substate.trans hab.substate,
+    hbc.code.trans hab.code⟩
 
 omit [GasMeter Meter] in
-/-- A move of the program counter keeps the message, the state and the substate. -/
+/-- A move of the program counter keeps the message, the state, the substate and the code. -/
 theorem SameContext.advance {a b : Evm fork Meter} (h : SameContext a b) (n : Nat := 1) :
     SameContext a (Evm.advance b n) :=
-  ⟨h.message, h.state, h.substate⟩
+  ⟨h.message, h.state, h.substate, h.code⟩
 
 omit [GasMeter Meter] in
-/-- A pop keeps the message, the state and the substate. -/
+/-- A pop keeps the message, the state, the substate and the code. -/
 theorem popWord_sameContext {evm after : Evm fork Meter} {x : U256}
     (h : popWord evm = .ok (x, after)) : SameContext evm after := by
   obtain ⟨⟨_, _⟩, -, h⟩ := Base.bind_ok_iff.mp h
   cases h
-  exact ⟨rfl, rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl, rfl⟩
 
 omit [GasMeter Meter] in
-/-- A push keeps the message, the state and the substate. -/
+/-- A push keeps the message, the state, the substate and the code. -/
 theorem pushWord_sameContext {evm after : Evm fork Meter} {x : U256}
     (h : pushWord evm x = .ok after) : SameContext evm after := by
   obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
   cases h
-  exact ⟨rfl, rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl, rfl⟩
 
-/-- A charge keeps the message, the state and the substate. -/
+/-- A charge keeps the message, the state, the substate and the code. -/
 theorem chargeGas_sameContext {evm after : Evm fork Meter} {amount : Nat}
     (h : chargeGas evm amount = .ok after) : SameContext evm after := by
   obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
   cases h
-  exact ⟨rfl, rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl, rfl⟩
 
-/-- A charge of state gas keeps the message, the state and the substate. -/
+/-- A charge of state gas keeps the message, the state, the substate and the code. -/
 theorem chargeStateGas_sameContext {evm after : Evm fork Meter} {amount : Nat}
     (h : chargeStateGas evm amount = .ok after) : SameContext evm after := by
   obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
   cases h
-  exact ⟨rfl, rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl, rfl⟩
 
-/-- A charge for a price and memory keeps the message, the state and the substate. -/
+/-- A charge for a price and memory keeps the message, the state, the substate and the code. -/
 theorem chargeGasAndMemory_sameContext {evm after : Evm fork Meter} {cost : Nat}
     {ranges : List (U256 × U256)} (h : chargeGasAndMemory evm cost ranges = .ok after) :
     SameContext evm after := by
   obtain ⟨_, hc, h⟩ := Base.bind_ok_iff.mp h
   cases h
   have := chargeGas_sameContext hc
-  exact ⟨this.message, this.state, this.substate⟩
+  exact ⟨this.message, this.state, this.substate, this.code⟩
 
-/-- An instruction that reads the frame keeps the message, the state and the substate. -/
+/-- An instruction that reads the frame keeps the message, the state, the substate and the code. -/
 theorem readFrame_sameContext {cost : Nat} {value : Evm fork Meter → U256}
     {evm after : Evm fork Meter} (h : readFrame cost value evm = .ok after) :
     SameContext evm after := by
@@ -194,7 +196,7 @@ theorem readFrame_sameContext {cost : Nat} {value : Evm fork Meter → U256}
   cases h
   exact ((chargeGas_sameContext h1).trans (pushWord_sameContext h2)).advance
 
-/-- A one-operand instruction keeps the message, the state and the substate. -/
+/-- A one-operand instruction keeps the message, the state, the substate and the code. -/
 theorem unaryOp_sameContext {cost : Nat} {f : U256 → U256} {evm after : Evm fork Meter}
     (h : unaryOp cost f evm = .ok after) : SameContext evm after := by
   obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
@@ -204,7 +206,7 @@ theorem unaryOp_sameContext {cost : Nat} {f : U256 → U256} {evm after : Evm fo
   exact (((popWord_sameContext h1).trans (chargeGas_sameContext h2)).trans
     (pushWord_sameContext h3)).advance
 
-/-- A two-operand instruction keeps the message, the state and the substate. -/
+/-- A two-operand instruction keeps the message, the state, the substate and the code. -/
 theorem binaryOp_sameContext {cost : Nat} {f : U256 → U256 → U256} {evm after : Evm fork Meter}
     (h : binaryOp cost f evm = .ok after) : SameContext evm after := by
   obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
@@ -215,7 +217,7 @@ theorem binaryOp_sameContext {cost : Nat} {f : U256 → U256 → U256} {evm afte
   exact ((((popWord_sameContext h1).trans (popWord_sameContext h2)).trans
     (chargeGas_sameContext h3)).trans (pushWord_sameContext h4)).advance
 
-/-- A three-operand instruction keeps the message, the state and the substate. -/
+/-- A three-operand instruction keeps the message, the state, the substate and the code. -/
 theorem ternaryOp_sameContext {cost : Nat} {f : U256 → U256 → U256 → U256}
     {evm after : Evm fork Meter} (h : ternaryOp cost f evm = .ok after) :
     SameContext evm after := by

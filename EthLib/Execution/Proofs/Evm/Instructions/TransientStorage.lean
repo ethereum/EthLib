@@ -50,7 +50,7 @@ theorem tstoreStep_ne_ok_of_isStatic {evm after : Evm fork Meter}
     ((popWord_sameContext h2).message.trans (popWord_sameContext h1).message)
   simp [m, static, throw, throwThe, MonadExceptOf.throw] at h
 
-/-- TLOAD keeps the message, the state and the substate. -/
+/-- TLOAD keeps the message, the state, the substate and the code. -/
 theorem tloadStep_sameContext {evm after : Evm fork Meter} (h : tloadStep evm = .ok after) :
     SameContext evm after := by
   obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
