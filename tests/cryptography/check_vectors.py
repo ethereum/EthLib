@@ -1,28 +1,4 @@
-"""
-Check the pinned test vectors.
-
-The BLS, KZG, secp256k1 and secp256r1 vectors are pinned: each directory must hold a `SHA256SUMS`
-file, and a missing one is an error, so deleting it cannot switch the check
-off. Any other vector directory that holds a `SHA256SUMS` file is pinned too.
-Every `data.yaml` under a pinned directory must be listed there, with the
-listed digest.
-Regenerating a vector that changes its answer then fails this check.
-
-With `--upstream`, also check that the pinned digests are the ones
-upstream published, in the archives that `tests/sources.toml` pins.
-The archives are downloaded into the cache of scripts/fetch_archives.py.
-consensus-specs published most of the digests, in the general test archive of its last release
-before the KZG specification moved here (consensus-specs#5398). That archive has no BLS signing
-or verification cases, so those come from the ethereum/bls12-381-tests release archive.
-
-    uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py
-    uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py --upstream
-    uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py --upstream \
-        --archive general.tar.gz --bls-archive bls_tests_yaml.tar.gz
-
-Only the standard library is used, so the check needs no Lean and no
-install step.
-"""
+"""Check the pinned test vectors against their digests, and with `--upstream` against upstream."""
 
 import argparse
 import hashlib
@@ -34,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 
 # The suites that must be pinned. Their manifests are checked in CI.
+# A missing manifest is an error, so deleting one cannot switch the check off.
 REQUIRED = ("bls", "kzg", "secp256k1", "secp256r1")
 
 # The fetcher of the release archives that `tests/sources.toml` pins, loaded by path:
@@ -52,6 +29,7 @@ _spec.loader.exec_module(fetch_archives)
 UPSTREAM = "consensus-specs/v1.7.0-alpha.12/general"
 
 # The release archive of ethereum/bls12-381-tests v0.1.2.
+# The archive of consensus-specs has no BLS signing or verification cases, so they come from here.
 BLS_TESTS = "bls12-381-tests/v0.1.2/bls_tests_yaml"
 
 # The handlers of that archive that are pinned here, under `bls/`.
@@ -81,11 +59,10 @@ def sha256_file(path: Path) -> str:
 
 
 def read_sums(path: Path) -> dict[str, str]:
-    """The `SHA256SUMS` file at `path`, as a map from relative path to digest.
-
-    A line that starts with `#` names a source, and `sha256sum -c` skips it too."""
+    """The `SHA256SUMS` file at `path`, as a map from relative path to digest."""
     sums = {}
     for line in path.read_text().splitlines():
+        # A line that starts with `#` names a source, and `sha256sum -c` skips it too.
         if line.startswith("#"):
             continue
         digest, name = line.split(maxsplit=1)
@@ -120,13 +97,13 @@ def check_local(root: Path = ROOT) -> list[str]:
 
 
 def upstream_digests(archive: Path) -> dict[tuple[str, str], str]:
-    """Digests of the upstream vectors, keyed by pinned directory and relative path.
+    """
+    Digests of the upstream vectors, keyed by pinned directory and relative path.
 
-    Upstream lays a case out as
+    Upstream path: `tests/general/<fork>/<kind>/<handler>/<suite>/<case>/data.yaml`.
 
-        tests/general/<fork>/<kind>/<handler>/<suite>/<case>/data.yaml
+    Path here: `<kind>/<handler>/<case>/data.yaml`.
 
-    and this repository as `<kind>/<handler>/<case>/data.yaml`.
     The archive is read in place: no member is extracted to disk.
     """
     digests = {}
@@ -146,10 +123,12 @@ def upstream_digests(archive: Path) -> dict[tuple[str, str], str]:
 
 
 def bls_tests_digests(archive: Path) -> dict[tuple[str, str], str]:
-    """Digests of the pinned bls12-381-tests cases, keyed as `upstream_digests` keys them.
+    """
+    Digests of the pinned bls12-381-tests cases, keyed as for the upstream vectors.
 
-    That archive lays a case out as `./<handler>/<case>.yaml`, and this
-    repository as `bls/<handler>/<case>/data.yaml`.
+    Path in the archive: `./<handler>/<case>.yaml`.
+
+    Path here: `bls/<handler>/<case>/data.yaml`.
     """
     digests = {}
     with tarfile.open(archive, "r:gz") as tar:
@@ -168,11 +147,14 @@ def bls_tests_digests(archive: Path) -> dict[tuple[str, str], str]:
 
 
 def check_upstream(archive: Path, bls_archive: Path, root: Path = ROOT) -> tuple[list[str], int]:
-    """Every upstream case is pinned here, with the upstream digest.
+    """
+    Every upstream case is pinned here, with the upstream digest.
 
     A case that exists in no upstream archive is allowed, and counted.
+
     Returns the errors and the number of such cases.
     """
+
     archives = fetch_archives.load()
     if sha256_file(archive) != archives[UPSTREAM].sha256:
         return [f"{archive}: not the pinned upstream archive"], 0

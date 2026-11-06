@@ -1,33 +1,4 @@
-"""
-Check that the test vectors and fixtures cite only the pins of `tests/sources.toml`.
-
-`tests/sources.toml` records one pinned commit for each repository that tests read from, and
-the source of each pinned vector directory, a directory that holds a `SHA256SUMS` file.
-The check fails on each of these:
-
-- a pinned vector directory that the file does not list, or a listed one without `SHA256SUMS`;
-- a `SHA256SUMS` whose `# Source:` lines differ from the sources that list its directory;
-- a README describing a pinned directory that does not name the pinned commit of its repository;
-  the README is the one in the directory, or else the nearest one above it;
-- a commit that a test cites, in a Python file, a Markdown file or a `SHA256SUMS`, that is
-  not a recorded pin;
-- a recorded pin that no test cites;
-- a release archive whose repository is not recorded, whose URL is not an https URL, or whose
-  size or sha256 is malformed;
-- a release archive that no test names.
-
-A test cites a commit as "commit <sha>", as a "Commit: <sha>" line, or in a GitHub link with
-`/blob/<sha>` or `/tree/<sha>`.
-A hexadecimal word of 7 to 40 digits, with a letter and a digit, is a citation too.
-That holds when the word is in backticks or follows "at", as in "execution-specs at `2c0c8e7`".
-A short commit must be a prefix of a pin.
-A test names a release archive by its key in the table `archives`, in double quotes.
-An archive from no repository, such as a NIST zip file, gives a `source` in place of a repository.
-
-    uv run --no-project --python 3.12 python scripts/check_fixture_pins.py
-
-Only the standard library is used, so the check needs no Lean and no install step.
-"""
+"""Check that the test vectors and fixtures cite only the pins of `tests/sources.toml`."""
 
 import re
 import sys
@@ -38,8 +9,10 @@ ROOT = Path(__file__).resolve().parent.parent
 
 SOURCES = "tests/sources.toml"
 TREES = ("tests", "bindings/python/tests")
+# A commit cited as "commit <sha>", as a "Commit: <sha>" line, or in a `/blob/` or `/tree/` link.
 COMMIT = re.compile(r"(?:\b[Cc]ommit:?[\s#`]*|/(?:blob|tree)/)(?=[0-9a-f]*[0-9])([0-9a-f]{7,40})\b")
-# A word that reads as a commit: in backticks, or after "at".
+# A hexadecimal word of 7 to 40 digits, with a letter and a digit, that reads as a commit.
+# It is one in backticks, or after "at", as in "execution-specs at `2c0c8e7`".
 _HEX = r"(?=[0-9a-f]*[0-9])(?=[0-9a-f]*[a-f])([0-9a-f]{7,40})"
 HEX_QUOTED = re.compile(rf"`{_HEX}`")
 HEX_AT = re.compile(rf"\bat\s+{_HEX}\b")
@@ -130,6 +103,7 @@ def check(root: Path) -> list[str]:
 
     archives = config.get("archives", {})
     for name, entry in archives.items():
+        # An archive from no repository, such as a NIST zip file, gives a `source` instead.
         if "repository" in entry or not entry.get("source"):
             if entry.get("repository") not in repositories:
                 problems.append(
@@ -147,6 +121,7 @@ def check(root: Path) -> list[str]:
     cited, named = set(), set()
     for path in scanned_files(root):
         text = path.read_text(encoding="utf-8")
+        # A test names a release archive by its key in the table `archives`, in double quotes.
         named.update(name for name in archives if f'"{name}"' in text)
         starts = {}
         for pattern in (COMMIT, HEX_QUOTED, HEX_AT):
@@ -154,6 +129,7 @@ def check(root: Path) -> list[str]:
                 starts.setdefault(match.start(1), match.group(1))
         for start, short in sorted(starts.items()):
             line = text.count("\n", 0, start) + 1
+            # A short commit must be a prefix of a pin.
             owners = [name for name, commit in pins.items() if commit.startswith(short)]
             if owners:
                 cited.add(owners[0])

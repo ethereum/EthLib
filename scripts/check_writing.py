@@ -1,35 +1,5 @@
 #!/usr/bin/env -S uv run --no-project --python 3.12 python
-"""
-Report optional editing suggestions for EthLib prose.
-
-The guide is `WRITING.md`. This script reports patterns that a search can find:
-
-- S1: sentence length (20 words in agent/skill instructions and checklists, 25 elsewhere)
-- W6: phrasal verbs, and W7: Latin abbreviations
-- S5: contractions
-- Vocabulary: the words to avoid in `WRITING.md`.
-- C3: history words in library reference text
-
-Read each suggestion in context. Leave clear, correct text alone. Extraction and word counts
-are approximations. Known workflow paths and checklist items use the
-procedural estimate. Other prose uses the descriptive estimate; numbering alone does not choose
-the text type. Review each sentence's actual purpose. The checker exempts license text, quotations,
-code, formulas, headings, and HTML comments. It does not establish dictionary approval or meaning.
-
-The checker does not flag "now" and "new" alone, because both have ordinary meanings.
-
-Usage:
-  check_writing.py --base REF      the prose that changed since the merge base with REF
-  check_writing.py FILE...         all prose in each file
-  check_writing.py --stdin LABEL   all prose in standard input, for example a pull request body
-
-In `--base` mode, the checker reads the tracked files in the working tree. It checks each
-paragraph, list item, or table cell that contains an added line. It ignores untracked files.
-
-Options: `--github` prints GitHub annotations. `--strict` requests exit code 1 on suggestions.
-Without `--strict`, suggestions exit with 0. Usage, Git and configuration errors exit with 2.
-Non-UTF-8 source input and symlink sources produce advisory Input diagnostics.
-"""
+"""Report optional editing suggestions for EthLib prose."""
 
 from __future__ import annotations
 
@@ -47,6 +17,7 @@ VOCABULARY = ROOT / "WRITING.md"
 EXCLUDED_PREFIXES = (".lake/",)
 EXCLUDED_FILES = {"EthLib.lean"}
 
+# Rule S1: the most words in a sentence of instructions or a checklist, and in other prose.
 PROCEDURAL_LIMIT = 20
 DESCRIPTIVE_LIMIT = 25
 
@@ -139,8 +110,9 @@ def avoid_words(vocabulary: Path = VOCABULARY) -> tuple[list[str], list[str]]:
     """
     Return the general words to avoid and the history words (rule C3) from the vocabulary.
 
-    The words are the quoted terms in the first column of the "Words to avoid" table. A row whose
-    second column names rule C3 gives history words, which apply only to library text.
+    The words are the quoted terms in the first column of the "Words to avoid" table.
+
+    A row whose second column names rule C3 gives history words, which apply only to library text.
     """
     text = vocabulary.read_text(encoding="utf-8")
     table = vocabulary_section(text, "Words to avoid")
@@ -152,6 +124,7 @@ def avoid_words(vocabulary: Path = VOCABULARY) -> tuple[list[str], list[str]]:
             continue
         words = re.findall(r'"([^"]+)"', cells[0])
         (history if "rule C3" in cells[1] else general).extend(words)
+    # "Now" and "new" alone have ordinary meanings, so they are never flagged as history words.
     history = [word for word in history if word.lower() not in {"now", "new"}]
     if not general:
         raise ValueError(f"no words to avoid found in {vocabulary}")
@@ -762,9 +735,19 @@ def report(found: list[Finding], github: bool, label_is_file: bool) -> None:
 
 def main(argv: list[str]) -> int:
     """Check the prose that the arguments name, and return the exit code."""
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        epilog="Rules: S1 sentence length, W6 phrasal verbs, W7 Latin abbreviations, "
+        "S5 contractions, the words to avoid of the guide, and C3 history words in library text. "
+        "Exit status: 1 on suggestions with --strict, 2 on a usage, git or configuration error, "
+        "0 otherwise.",
+    )
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--base", help="check the prose that changed since the merge base")
+    mode.add_argument(
+        "--base",
+        help="check each paragraph, list item or table cell of a tracked file "
+        "with a line added since the merge base",
+    )
     mode.add_argument("--stdin", metavar="LABEL", help="check Markdown from standard input")
     mode.add_argument("files", nargs="*", default=[], help="check all prose in these files")
     parser.add_argument("--github", action="store_true", help="print GitHub annotations")

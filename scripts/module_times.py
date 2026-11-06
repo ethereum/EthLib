@@ -2,14 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Adapted for EthLib from Verified-zkEVM/ArkLib and Verified-zkEVM/VCVio.
 # Sources and license: scripts/BUILD_TIMING_SOURCES.md.
-"""
-Track the last recorded elaboration time of each EthLib module.
-
-The table travels with the cached build.
-An incremental build replaces samples only for modules Lake actually rebuilt.
-The sum describes recorded compile work, not a clean build's elapsed time.
-Native compilation and dependency modules are excluded.
-"""
+"""Track the last recorded elaboration time of each EthLib module."""
 
 from __future__ import annotations
 
@@ -96,7 +89,7 @@ def load_table(path: pathlib.Path) -> dict[str, Any] | None:
 
 
 def total_seconds(table: dict[str, Any]) -> float:
-    """Return the sum of the recorded times of the table."""
+    """Return the sum of the recorded times: compile work, not the elapsed time of a clean build."""
     return sum(entry["seconds"] for entry in table["modules"].values())
 
 
@@ -104,6 +97,7 @@ def update_table(
     table: dict[str, Any], built: dict[str, dict[str, Any]], commit: str | None, root: pathlib.Path
 ) -> dict[str, Any]:
     """Overlay the built modules onto the table, and drop modules with no source."""
+    # The table travels with the cached build, and an incremental build replaces only its samples.
     modules = dict(table["modules"])
     modules.update(built)
     modules = {

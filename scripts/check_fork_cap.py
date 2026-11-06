@@ -1,8 +1,4 @@
-"""
-Check that every C export which reads a fork name rejects the forks whose rules it lacks.
-
-uv run --no-project --python 3.12 python scripts/check_fork_cap.py
-"""
+"""Check that every C export which reads a fork name rejects the forks whose rules it lacks."""
 
 import importlib.util
 import re

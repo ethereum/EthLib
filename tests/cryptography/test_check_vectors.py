@@ -1,11 +1,4 @@
-"""
-Check `check_vectors.py` itself, on a small vector tree built in a temporary
-directory.
-
-    uv run --no-project --python 3.12 python -m unittest tests/cryptography/test_check_vectors.py
-
-Only the standard library is used, like the check.
-"""
+"""Tests of `check_vectors.py` on a small vector tree in a temporary directory."""
 
 import hashlib
 import importlib.util

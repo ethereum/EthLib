@@ -1,24 +1,4 @@
-"""
-Check the line length and the comment layout of the Lean lines that a branch changes.
-
-Two rules apply to each Lean line that the branch adds or changes since the merge base:
-
-- A line has at most 100 characters, the Mathlib limit.
-  A line that holds only a URL, optionally after a comment marker, may be longer.
-  So may a Markdown link reference definition `[label]: URL`.
-- In a doc comment or a comment, two sentence lines never touch: a blank line separates them.
-  A list item, a heading, a table row, a URL alone and a line of code are not sentence lines.
-
-The second rule reads the whole comment, and fails on a pair of touching sentence lines
-when the branch changes at least one of the two.
-Lines that the branch does not change are never checked, so existing files do not fail.
-
-    uv run --no-project --python 3.12 python scripts/check_lean_layout.py --base origin/master
-    uv run --no-project --python 3.12 python scripts/check_lean_layout.py EthLib/Base/Fork.lean
-
-With files instead of `--base`, every line of each file counts as changed.
-Only the standard library is used, so the check needs no Lean and no install step.
-"""
+"""Check the line length and the comment layout of the Lean lines that a branch changes."""
 
 import argparse
 import re
@@ -30,6 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# The Mathlib limit on the length of a line.
 MAX_LENGTH = 100
 
 # A URL alone, or a Markdown link reference definition `[label]: URL`.
@@ -64,8 +45,10 @@ def comments(text: str) -> list[list[tuple[int, str]]]:
 
     A block comment `/- … -/`, `/-- … -/` or `/-! … -/` is one comment, without its markers.
     Block comments nest.
+
     Line comments `--` on consecutive lines, each alone on its line, form one comment.
     A line comment after code is a comment of its own.
+
     Strings, raw strings and character literals are skipped, so a `--` inside them is not a comment.
     """
     found: list[list[tuple[int, str]]] = []
@@ -153,8 +136,8 @@ def sentence_lines(comment: list[tuple[int, str]]) -> list[tuple[int, bool]]:
     A sentence line holds a letter or a digit.
     It is not a heading, a table row, a URL alone or a link reference definition.
     It is not a list item or its continuation, and not a line of a fenced or an indented code block.
-    A line is indented code when it is indented by four spaces more than the least indented line,
-    leaving out the first line, which follows the comment opener.
+
+    Indented code is indented by four spaces more than the least indented line after the first.
     """
     rest = [content for _, content in comment[1:] if content.strip()]
     base = min(map(indentation, rest), default=0)
@@ -195,6 +178,7 @@ def check_text(path: str, text: str, changed: set[int] | None) -> list[Finding]:
             found.append(
                 Finding(path, number, f"line has {len(content)} characters, more than {MAX_LENGTH}")
             )
+    # Two sentence lines that touch fail when the branch changes at least one of them.
     for comment in comments(text):
         lines = sentence_lines(comment)
         for (first, first_sentence), (second, second_sentence) in pairwise(lines):

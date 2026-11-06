@@ -1,16 +1,4 @@
-"""
-Build the `ethlib.cryptography._native` CPython extension.
-
-Strategy: compile every Lean-generated `.c.o.export` object into the
-extension, dynamically link against Lean's `libleanshared`, and statically
-link the small native dependencies available in the active Lean toolchain
-(currently libgmp and libuv when present). Wheel repair tools bundle the
-Lean shared library for distribution, while local source builds find it via
-the runtime library path configured below.
-
-The build runs `lake build Exports` first to (re-)generate the Lean
-object files, then hands the full list to setuptools.Extension.
-"""
+"""Build the `ethlib.cryptography._native` CPython extension from the Lean exports."""
 
 import platform
 import subprocess
@@ -27,11 +15,9 @@ LAKE_IR = REPO_ROOT / ".lake" / "build" / "ir"
 
 def _lean_sysroot() -> Path | None:
     """
-    Active Lean toolchain prefix (`lean --print-prefix`), or `None`
-    if no `lean` is on PATH. The sdist build doesn't need Lean — it just
-    tars up source files — so we tolerate its absence at metadata time
-    and only require it when `LakeThenBuild.run` actually compiles the
-    extension.
+    The prefix of the active Lean toolchain, or `None` when no `lean` is on PATH.
+
+    The sdist build only archives source files, so Lean is needed only to compile the extension.
     """
     try:
         out = subprocess.check_output(["lean", "--print-prefix"], text=True).strip()
@@ -45,9 +31,10 @@ def _current_objects(ir: Path, src: Path, sub: str = "") -> list[str]:
     The `.c.o.export` objects under `ir / sub` whose module still exists.
 
     Lake never deletes the object of a module that was moved or removed.
-    Linking it beside its successor would define every export twice, so an
-    object counts only while `src` holds the module's `.lean` file, at the
-    same relative path.
+
+    Linking it beside its successor would define every export twice.
+
+    So an object counts only while `src` holds the module's `.lean` file, at the same path.
     """
     objects = []
     for obj in glob(str(ir / sub / "**" / "*.c.o.export"), recursive=True):
@@ -59,29 +46,28 @@ def _current_objects(ir: Path, src: Path, sub: str = "") -> list[str]:
 
 def _collect_lean_objects() -> list[str]:
     """
-    Every current `.c.o.export` Lake produced for the package.
+    Every current `.c.o.export` object that Lake produced for the modules under `EthLib/`.
 
-    Only objects under `EthLib/` are the package's modules. The top level
-    of `LAKE_IR` also holds tools such as `lake exe check-decls`, whose
-    object defines `main` and must not be linked into the extension.
+    The top level of the IR directory also holds tools such as `lake exe check-decls`.
+
+    Their objects define `main`, so they are never linked into the extension.
     """
     return sorted(_current_objects(LAKE_IR, REPO_ROOT, "EthLib"))
 
 
 def _lean_runtime_link(sysroot: Path) -> tuple[list[str], list[str], list[str]]:
     """
-    How to bring the Lean runtime into our shared extension. Returns
-    `(extra_objects, library_dirs, libraries)` to merge into the `Extension`.
+    The extra objects, library directories and libraries that link the Lean runtime.
 
-    We dynamically link against `libleanshared` on every platform: the
-    static archives Lean ships (`libleanrt.a`, `libInit.a`, `libStd.a`)
-    aren't `-fPIC` on Linux and refuse to link into a shared object,
-    and using one strategy across platforms keeps the build simple.
-    cibuildwheel's `auditwheel` (Linux) / `delocate` (macOS) passes
-    bundle the runtime `.so` / `.dylib` into the wheel and patch RPATH,
-    so installed wheels are self-contained — the user does NOT need
-    elan or any Lean toolchain on their machine. `libgmp.a` /
-    `libuv.a` stay as static inputs.
+    The extension links `libleanshared` dynamically, on every platform.
+
+    The static archives of Lean are not `-fPIC` on Linux, so they cannot go in a shared object.
+
+    `auditwheel` and `delocate` bundle the shared runtime into each wheel and patch its RPATH.
+
+    So an installed wheel needs no Lean toolchain.
+
+    `libgmp.a` and `libuv.a`, when the toolchain has them, stay static inputs.
     """
     gmp_uv = [
         str(p) for p in (sysroot / "lib" / "libgmp.a", sysroot / "lib" / "libuv.a") if p.exists()
@@ -91,10 +77,9 @@ def _lean_runtime_link(sysroot: Path) -> tuple[list[str], list[str], list[str]]:
 
 class LakeThenBuild(build_ext):
     """
-    Run `lake build Exports` to (re-)generate the Lean object files before
-    handing things to setuptools. Only the exports and the specification
-    they import are built: the extension links no proof code, and the proofs
-    pull in Mathlib.
+    Build the Lean exports with Lake, then the extension with setuptools.
+
+    Only the exports and the specification they import are built: the proofs link nothing.
     """
 
     def run(self):
