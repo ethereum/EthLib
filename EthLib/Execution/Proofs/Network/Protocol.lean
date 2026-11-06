@@ -11,7 +11,7 @@ So the number that a node announces in Hello or in Status names at most one vers
 
 The order of the versions is the order of their numbers.
 
-RLPx gives message IDs to a capability exactly when it is an eth version.
+The eth count of message IDs is nonzero exactly on the capabilities of the eth versions.
 -/
 
 @[expose] public section
@@ -52,7 +52,11 @@ theorem messageCount_pos (v : EthVersion) : 0 < v.messageCount := by
 
 end EthVersion
 
-/-- A capability has message IDs exactly when it is the capability of an eth version. -/
+/-- The multiplexing of RLPx gives an eth capability the message count of its version. -/
+theorem ethLength_capability (v : EthVersion) : ethLength v.capability = v.messageCount := by
+  cases v <;> rfl
+
+/-- The eth count of message IDs is nonzero exactly on the capability of an eth version. -/
 theorem ethLength_ne_zero_iff {c : Networking.Devp2p.Capability} :
     ethLength c ≠ 0 ↔ ∃ v : EthVersion, v.capability = c := by
   constructor
@@ -69,9 +73,7 @@ theorem ethLength_ne_zero_iff {c : Networking.Devp2p.Capability} :
         exact ⟨hname.symm, EthVersion.ofNumber?_eq_some_iff.mp hv⟩
     · exact absurd rfl h
   · rintro ⟨v, rfl⟩
-    unfold ethLength
-    simp only [EthVersion.capability, ↓reduceIte, EthVersion.ofNumber?_number, Option.map_some,
-      Option.getD_some]
+    rw [ethLength_capability]
     exact Nat.pos_iff_ne_zero.mp (EthVersion.messageCount_pos v)
 
 end EthLib.Execution.Network

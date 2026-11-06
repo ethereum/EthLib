@@ -64,10 +64,6 @@ theorem ofItem_of_eth68 {version : EthVersion} (hv : version ≠ .eth68) (v n td
 
 end Status
 
-/-- The multiplexing of RLPx gives an eth capability the message count of its version. -/
-theorem ethLength_capability (v : EthVersion) : ethLength v.capability = v.messageCount := by
-  cases v <;> rfl
-
 /-- Two errors with one code come from one constructor. -/
 theorem StatusError.code_injective (e₁ e₂ : StatusError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by

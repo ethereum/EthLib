@@ -9,7 +9,7 @@ public import EthLib.Execution.Proofs.Network.Status
 
 A snap version and its number determine each other.
 
-RLPx gives message IDs to a capability exactly when it is a snap or an eth version.
+The count of message IDs for snap and eth is nonzero exactly on the capabilities of their versions.
 
 An account reads back from its slim form.
 
@@ -77,6 +77,10 @@ theorem number_injective : Function.Injective number := fun a b h => by
   have := ofNumber?_number a
   rwa [h, ofNumber?_number, Option.some.injEq, eq_comm] at this
 
+/-- Every snap version has at least one message ID. -/
+theorem messageCount_pos (v : SnapVersion) : 0 < v.messageCount := by
+  cases v <;> decide
+
 end SnapVersion
 
 /-- The multiplexing of RLPx gives a snap capability the message count of its version. -/
@@ -89,15 +93,11 @@ theorem capabilityLength_eth (v : EthVersion) :
     capabilityLength v.capability = v.messageCount := by
   cases v <;> rfl
 
-/-- Every snap version has at least one message ID. -/
-theorem SnapVersion.messageCount_pos (v : SnapVersion) : 0 < v.messageCount := by
-  cases v <;> decide
-
 /-- The names of the two capabilities differ. -/
 theorem SNAP_NAME_ne_ETH_NAME : SNAP_NAME ≠ ETH_NAME := by
   decide
 
-/-- A capability has message IDs exactly when it is the capability of a snap or an eth version. -/
+/-- The snap and eth count of message IDs is nonzero exactly on a snap or an eth capability. -/
 theorem capabilityLength_ne_zero_iff {c : Networking.Devp2p.Capability} :
     capabilityLength c ≠ 0 ↔
       (∃ v : SnapVersion, v.capability = c) ∨ ∃ v : EthVersion, v.capability = c := by
