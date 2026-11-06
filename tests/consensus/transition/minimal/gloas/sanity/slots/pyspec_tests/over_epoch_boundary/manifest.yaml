@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: sanity
+handler: slots
+suite: pyspec_tests
+case: over_epoch_boundary
