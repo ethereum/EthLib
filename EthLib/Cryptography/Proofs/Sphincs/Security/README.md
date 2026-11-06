@@ -1,16 +1,16 @@
 # leanSPHINCS security proof
 
 This directory will hold a proof that leanSPHINCS is strongly unforgeable in the random oracle model.
-The bound will give 127 bits of classical security for up to `2^30` signatures with one key.
+Its target is about 127 bits of classical security for up to `2^30` signatures with one key.
 Strong unforgeability means that an adversary who sees signatures of messages of its choice cannot produce a new valid pair of message and signature.
 This includes a second signature of a message already signed.
 The random oracle model treats the hash as an ideal random function that everyone, the adversary included, can only query.
 
 The proof is a port, and it lands in parts.
-So far it holds the model of the scheme and its lemmas, generic probability bounds and the first step of the game hops.
-It also holds the first lemmas of the later steps.
-The theorem itself is not stated here yet.
-Nothing in this directory is a security claim about EthLib's leanSPHINCS until the last part connects the model to EthLib's algorithms.
+This directory now holds the whole proof about the model of the scheme.
+`SphincsSecurity/Main.lean` states its theorem: in the model's game, an adversary whose runs make at most `q >= 1` hash calls forges with probability at most `q / 2^127`.
+The model's game allows up to 1,182,000,000 signing requests.
+Nothing in this directory is a security claim about EthLib's leanSPHINCS until a later part connects the model to EthLib's algorithms.
 
 ## The model
 
@@ -36,16 +36,22 @@ The files in `SphincsSecurity/Seed/` prepare the step that removes the hidden ke
 `Seed/Model.lean` describes the hash outputs that key generation derives from the seed, and the cache that programs them.
 `Seed/Coupling.lean` proves that sampling these outputs and programming them into the cache before a computation leaves its distribution unchanged.
 
-The other directories hold the first files of the later steps.
-`Classification/` starts the description of what an accepted forgery must contain.
-`ScanSigner/`, `GraphView/` and `LazyRun/` start the analysis of the signer's hash calls, their cost, and a run whose hidden values are sampled only when read.
+The other directories hold the game hops and the bounds.
+`Classification/` describes what an accepted forgery must contain.
+`ScanSigner/`, `GraphView/` and `LazyRun/` analyse the signer's hash calls, their cost, and a run whose hidden values are sampled only when read.
 `Reduction/` moves the oracle and the seeds out of the game.
 `Reduction/SeedElimination.lean` bounds the advantage by any bound on the win probability of a game without seeds, plus `3 q / 2^256`.
 The extra term covers a hash call that names a hidden seed.
-`CoverBound/` and `CoverPotential/` start the bound on the chance that a forgery covers every FORS tree.
+`CoverBound/` and `CoverPotential/` bound the chance that a forgery covers every FORS tree.
+`SmallBudget/` and `LargeBudget/` bound the win for small and for large hash budgets.
+`Certificates/` holds the numeric certificates of the configuration, which the kernel checks in exact rational arithmetic.
+It also holds the closing argument that turns them into the theorem.
 `Configurations.lean` proves, for the configuration of the proof, the size of a serialized signature and the cost of a verification.
 
 A later part will bridge the model to EthLib's leanSPHINCS, in `EthLib/Cryptography/Sphincs/`.
+The model's signer signs the top layer of the hypertree first, and EthLib's signer signs the bottom layer first.
+So when a layer's signature fails, the two signers have made different numbers of hash calls.
+The bridge must account for that difference in the budget.
 Some hash calls are made by EthLib and not by the model, or the other way round.
 The bridge will treat them as calls answered from the oracle's cache.
 

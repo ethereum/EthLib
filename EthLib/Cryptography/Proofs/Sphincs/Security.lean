@@ -1,13 +1,7 @@
 module
 
-public import
-  EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.RefinedOutcome
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Configurations
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverBound.NearOption
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LargeBudget.HeavyRoute
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.ExposedUniform
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.ScanSigner.ScanReveals
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.SmallBudget.Linear.Payoff
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Main
 
 /-!
 # Proofs: the model of the leanSPHINCS security proof
@@ -26,7 +20,11 @@ They also remove the key's seed and the scheme seed from the game.
 
 A lazy run samples the hidden values only when a hash call reads them.
 
-The rest of the proof lands in later parts.
+The bounds for small and large budgets, and the checked numeric certificates, close the proof.
+
+Its theorem bounds the forgery chance by `q / 2^127`.
+
+That holds for an adversary whose runs make at most `q >= 1` hash calls.
 
 The README of the security proof says where the proof comes from and what changed here.
 -/
