@@ -219,7 +219,7 @@ theorem checkInclusionDeadline_ok_iff {slot : Slot} (before : fork < .dencun) :
     exact ⟨fits, sum ▸ UInt64.le_iff_toNat_le.mp le⟩
   · rintro ⟨fits, le⟩
     have sum : (slot + preset.SLOTS_PER_EPOCH).toNat = slot.toNat + preset.SLOTS_PER_EPOCH.toNat :=
-      by rw [UInt64.toNat_add, Nat.mod_eq_of_lt fits]
+      toNat_add_of_lt fits
     exact ⟨_, ⟨fits, sum⟩, UInt64.le_iff_toNat_le.mpr (sum ▸ le)⟩
 
 /-- From Deneb, the inclusion deadline always passes, whatever the slots. -/
