@@ -15,7 +15,7 @@ A list of hashes too short to reach a block gives 0 for it, never another hash.
 
 BLOBHASH gives the hash at its index, and 0 past the end of the list.
 
-BLOCKHASH and BLOBHASH, from Dencun, pay their price.
+BLOCKHASH pays its price, and so does BLOBHASH, which exists from Dencun.
 
 Then BLOCKHASH puts the hash of the block in place of the number.
 
