@@ -2,17 +2,7 @@ module
 
 public import EthLib.Serialization.Ssz.Type.Default
 
-/-!
-# Proofs: equality of SSZ values
-
-`Value.beq` is the comparison that `==` uses on values.
-
-- `Value.beq_eq`: two values compare equal exactly when they are equal.
-- `LawfulBEq Value`: `==` on values agrees with `=`.
-- `Desc.isZero_ok_iff`: a value is zeroed for a type exactly when the type's default is that value.
-
-No definition calls `Desc.isZero` yet, so these theorems are completeness, not a repair.
--/
+/-! Equality of values, and the values that are zeroed for their type. -/
 
 @[expose] public section
 
