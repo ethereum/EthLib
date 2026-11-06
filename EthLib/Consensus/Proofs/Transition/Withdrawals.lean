@@ -851,17 +851,27 @@ theorem getExpectedWithdrawals_withdrawnFrom {state : BeaconState preset fork}
   exact getValidatorsSweepWithdrawals_loop_withdrawnFrom found _ _ _ _ _ (by simpa using two)
     loopOk
 
+/-- Before Gloas, the payload of a withdrawal step never takes more than a balance. -/
+theorem processWithdrawals_withdrawnFrom {state after : BeaconState preset fork}
+    {capella : .shapella ≤ fork} {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
+    (before : fork < .glamsterdam)
+    (computed : processWithdrawals state capella payload = .ok after) {index : ValidatorIndex}
+    {balance : Gwei} (found : state.balances.data[index.toNat]? = some balance) :
+    withdrawnFrom ((payload before).withdrawals capella).data index ≤ balance.toNat := by
+  obtain ⟨expected, expectedOk, carried, -⟩ := processWithdrawals_expected before computed
+  rw [carried]
+  exact getExpectedWithdrawals_withdrawnFrom before expectedOk found
+
 /-- Before Gloas, the withdrawal step lowers each balance by exactly what the payload takes from it.
 
-The payload never takes more than the balance. -/
+The subtraction does not stop at zero, since the payload never takes more than the balance. -/
 theorem processWithdrawals_balance {state after : BeaconState preset fork}
     {capella : .shapella ≤ fork} {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
     (before : fork < .glamsterdam)
     (computed : processWithdrawals state capella payload = .ok after) {index : ValidatorIndex}
     {balance : Gwei} (found : state.balances.data[index.toNat]? = some balance) :
-    withdrawnFrom ((payload before).withdrawals capella).data index ≤ balance.toNat ∧
-      (after.balances.data[index.toNat]?).map UInt64.toNat =
-        some (balance.toNat - withdrawnFrom ((payload before).withdrawals capella).data index) := by
+    (after.balances.data[index.toNat]?).map UInt64.toNat =
+      some (balance.toNat - withdrawnFrom ((payload before).withdrawals capella).data index) := by
   obtain ⟨expected, expectedOk, carried, appliedOk⟩ := processWithdrawals_expected before computed
   have bounded := getExpectedWithdrawals_withdrawnFrom before expectedOk found
   obtain ⟨applied, appliedOk, same⟩ := applyExpectedWithdrawals_balances before appliedOk
@@ -870,6 +880,6 @@ theorem processWithdrawals_balance {state after : BeaconState preset fork}
   have lowered := applyWithdrawals_balance before _ _ _ _ appliedOk found
     (by simpa using bounded)
   rw [carried, same]
-  exact ⟨bounded, by simpa using lowered⟩
+  simpa using lowered
 
 end EthLib.Consensus
