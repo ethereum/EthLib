@@ -221,15 +221,21 @@ theorem ofNat_toNat (a : Montgomery M) : ofNat a.toNat = a := by
   rw [toZMod_ofNat, toNat_eq, ZMod.natCast_zmod_val]
 
 /-- The table holds the powers of `a`, from the first powers. -/
-theorem powTableAux_spec (a : Montgomery M) (k : ℕ) (t : Array (Montgomery M)) (ht : 0 < t.size)
+theorem powTableAux_spec (a : Montgomery M) (k : ℕ) (last : Montgomery M)
+    (t : Array (Montgomery M)) (hlast : toZMod last = toZMod a ^ (t.size - 1)) (ht : 0 < t.size)
     (h : ∀ i < t.size, toZMod t[i]! = toZMod a ^ i) :
-    (powTableAux a k t).size = t.size + k ∧
-      ∀ i < t.size + k, toZMod (powTableAux a k t)[i]! = toZMod a ^ i := by
-  induction k generalizing t with
-  | zero => exact ⟨rfl, h⟩
+    ∀ i < t.size + k, toZMod (powTableAux a k last t)[i]! = toZMod a ^ i := by
+  induction k generalizing last t with
+  | zero => exact h
   | succ k ih =>
-    have hb : toZMod t.back! = toZMod a ^ (t.size - 1) := h _ (by omega)
-    obtain ⟨hs, hv⟩ := ih (t.push (mul t.back! a)) (by simp) (by
+    -- The new entry is `last * a = a ^ t.size`.
+    have hnext : toZMod (mul last a) = toZMod a ^ t.size := by
+      change toZMod (last * a) = _
+      rw [toZMod_mul, hlast, ← pow_succ]
+      congr 1
+      omega
+    have hv := ih (mul last a) (t.push (mul last a)) (by rw [hnext, Array.size_push]; rfl)
+      (by simp) (by
       intro i hi
       rw [Array.size_push] at hi
       rcases Nat.lt_or_ge i t.size with hlt | hge
@@ -237,27 +243,24 @@ theorem powTableAux_spec (a : Montgomery M) (k : ℕ) (t : Array (Montgomery M))
           ← getElem!_pos t i hlt]
         exact h i hlt
       · obtain rfl : i = t.size := by omega
-        rw [getElem!_pos (t.push _) t.size (by simp), Array.getElem_push_eq]
-        change toZMod (t.back! * a) = _
-        rw [toZMod_mul, hb, ← pow_succ]
-        congr 1
-        omega)
+        rw [getElem!_pos (t.push _) t.size (by simp), Array.getElem_push_eq, hnext])
     rw [powTableAux]
-    refine ⟨by rw [hs, Array.size_push]; omega, fun i hi => hv i (by simp; omega)⟩
+    exact fun i hi => hv i (by simp; omega)
 
 /-- The table holds `a ^ 0` to `a ^ 15`. -/
 theorem powTable_spec (a : Montgomery M) {i : ℕ} (hi : i < 16) :
-    toZMod (powTable a)[i]! = toZMod a ^ i :=
-  (powTableAux_spec a 15 #[one] (by simp) (by
+    toZMod (powTable a)[i] = toZMod a ^ i := by
+  have h := powTableAux_spec a 15 one #[one] (toZMod_one.trans (pow_zero _).symm) (by simp) (by
     intro i hi
     obtain rfl : i = 0 := by simpa using hi
-    exact toZMod_one.trans (pow_zero _).symm)).2 i (by simpa using hi)
+    exact toZMod_one.trans (pow_zero _).symm) i (by simpa using hi)
+  rwa [getElem!_pos _ i (by rw [size_powTableAux]; simpa using hi)] at h
 
 /-- A window raises the accumulator to the 16th power and multiplies by `a ^ d`. -/
-theorem toZMod_window (a acc : Montgomery M) {d : UInt32} (hd : d.toNat < 16) :
-    toZMod (window (powTable a) acc d) = toZMod acc ^ 16 * toZMod a ^ d.toNat := by
+theorem toZMod_window (a acc : Montgomery M) (d : UInt32) (hd : d.toNat < 16) :
+    toZMod (window (powTable a) acc d hd) = toZMod acc ^ 16 * toZMod a ^ d.toNat := by
   change toZMod (acc * acc * (acc * acc) * (acc * acc * (acc * acc)) *
-    (acc * acc * (acc * acc) * (acc * acc * (acc * acc))) * (powTable a)[d.toNat]!) = _
+    (acc * acc * (acc * acc) * (acc * acc * (acc * acc))) * (powTable a)[d.toNat]) = _
   simp only [toZMod_mul, powTable_spec a hd]
   ring
 
@@ -277,13 +280,9 @@ theorem toZMod_powWord (a acc : Montgomery M) (w : UInt32) :
     exact Nat.and_two_pow_sub_one_eq_mod _ 4
   unfold powWord
   simp only
-  rw [toZMod_window _ _ (by rw [e0]; omega), toZMod_window _ _ (by rw [e 4 (by decide)]; omega),
-    toZMod_window _ _ (by rw [e 8 (by decide)]; omega),
-    toZMod_window _ _ (by rw [e 12 (by decide)]; omega),
-    toZMod_window _ _ (by rw [e 16 (by decide)]; omega),
-    toZMod_window _ _ (by rw [e 20 (by decide)]; omega),
-    toZMod_window _ _ (by rw [e 24 (by decide)]; omega),
-    toZMod_window _ _ (by rw [e7]; omega), e0, e 4 (by decide), e 8 (by decide),
+  -- Each window carries the bound of its digit.
+  rw [toZMod_window, toZMod_window, toZMod_window, toZMod_window, toZMod_window, toZMod_window,
+    toZMod_window, toZMod_window, e0, e 4 (by decide), e 8 (by decide),
     e 12 (by decide), e 16 (by decide), e 20 (by decide), e 24 (by decide), e7]
   simp only [UInt32.reduceToNat]
   have hsum : w.toNat = w.toNat % 16 + 16 * (w.toNat / 2 ^ 4 % 16 + 16 * (w.toNat / 2 ^ 8 % 16 +
