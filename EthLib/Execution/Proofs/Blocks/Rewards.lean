@@ -11,6 +11,10 @@ From Paris on, paying the rewards leaves the state unchanged.
 Before Paris, creating ether adds exactly the amount to one account and leaves the others.
 
 So when the beneficiaries are distinct, each gains exactly its reward, and nothing else changes.
+
+When some beneficiaries coincide, each address gains the sum of its rewards.
+
+Paying the rewards succeeds exactly when no balance would reach 2^256.
 -/
 
 @[expose] public section
@@ -134,5 +138,73 @@ theorem payRewards_spec {fork : Fork} (h : fork < .paris) {tx tx' : TransactionS
       rw [hall o ho, hrest o.1 hne]
     · simp only [List.mem_cons, not_or] at hno
       rw [hother other hno.2, hrest other hno.1]
+
+/-- The reward of an ommer, as a word, has the same value. -/
+private theorem toNat_ommerReward (fork : Fork) (age : Nat) :
+    (BitVec.ofNat 256 (ommerReward fork age)).toNat = ommerReward fork age := by
+  rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (ommerReward_lt fork age)]
+
+/-- Before Paris, with at most two ommers, each address gains the sum of its rewards.
+
+The beneficiaries need not be distinct.
+
+Every nonce and every code hash stays the same. -/
+theorem getAccount_payRewards {fork : Fork} (h : fork < .paris) {tx tx' : TransactionState}
+    {coinbase : Address} {number : Nat} {ommers : List (Address × Nat)}
+    (hn : ommers.length ≤ 2) (hp : payRewards fork tx coinbase number ommers = .ok tx')
+    (address : Address) :
+    (tx'.getAccount address).balance.toNat = (tx.getAccount address).balance.toNat +
+        (if coinbase = address then minerReward fork ommers.length else 0) +
+        ((ommers.filter (·.1 = address)).map fun o => ommerReward fork (number - o.2)).sum ∧
+      (tx'.getAccount address).nonce = (tx.getAccount address).nonce ∧
+      (tx'.getAccount address).codeHash = (tx.getAccount address).codeHash := by
+  have hnot : ¬ .paris ≤ fork := fun hle => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le h hle)
+  simp only [payRewards, hnot, ↓reduceIte, bind, Except.bind] at hp
+  cases hmine : tx.createEther fork coinbase (BitVec.ofNat 256 (minerReward fork ommers.length))
+    with
+  | error e => simp [hmine] at hp
+  | ok mid =>
+    rw [hmine] at hp
+    obtain ⟨hb, hnonce, hcode⟩ := getAccount_createEther hmine address
+    obtain ⟨hb', hnonce', hcode'⟩ :=
+      getAccount_foldlM_createEther _ _ ommers hp address
+    refine ⟨?_, hnonce'.trans hnonce, hcode'.trans hcode⟩
+    rw [hb', hb, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (minerReward_lt hn)]
+    simp only [toNat_ommerReward]
+
+/-- Before Paris, with at most two ommers, the rewards succeed exactly when no balance overflows.
+
+A balance overflows when it would reach 2^256.
+
+The balance of an address counts the sum of all its rewards. -/
+theorem payRewards_isOk_iff {fork : Fork} (h : fork < .paris) {tx : TransactionState}
+    {coinbase : Address} {number : Nat} {ommers : List (Address × Nat)}
+    (hn : ommers.length ≤ 2) :
+    (∃ tx', payRewards fork tx coinbase number ommers = .ok tx') ↔
+      ∀ address, (tx.getAccount address).balance.toNat +
+        (if coinbase = address then minerReward fork ommers.length else 0) +
+        ((ommers.filter (·.1 = address)).map fun o => ommerReward fork (number - o.2)).sum <
+          2 ^ 256 := by
+  have hnot : ¬ .paris ≤ fork := fun hle => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le h hle)
+  have hminer := minerReward_lt (fork := fork) hn
+  simp only [payRewards, hnot, ↓reduceIte, bind, Except.bind]
+  cases hmine : tx.createEther fork coinbase (BitVec.ofNat 256 (minerReward fork ommers.length))
+    with
+  | error e =>
+    simp only [reduceCtorEq, exists_false, false_iff, Classical.not_forall, Nat.not_lt]
+    -- The reward of the block already overflows the balance of its beneficiary.
+    have hover : ¬ (tx.getAccount coinbase).balance.toNat + minerReward fork ommers.length <
+        2 ^ 256 := fun hfit => by
+      obtain ⟨tx', hok⟩ := createEther_isOk_iff.mpr
+        (by rwa [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hminer])
+      rw [hmine] at hok
+      cases hok
+    exact ⟨coinbase, by simp only [↓reduceIte]; omega⟩
+  | ok mid =>
+    simp only
+    rw [foldlM_createEther_isOk_iff]
+    refine forall_congr' fun address => ?_
+    rw [(getAccount_createEther hmine address).1, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hminer]
+    simp only [toNat_ommerReward]
 
 end EthLib.Execution.Blocks
