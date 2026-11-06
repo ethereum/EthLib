@@ -162,6 +162,14 @@ In the first, the proofs show that the blobs match the commitments of each block
 In the second, a proof does not match, so the store rejects the block.
 `bindings/python/tests/consensus/test_fork_choice.py` runs each case on one store in Lean and compares each step with the case.
 
+The directory `gossip/` holds gossip validation cases from `minimal.tar.gz` in the same way.
+A case starts a store from an anchor state and an anchor block, then validates a list of messages of one topic in turn.
+Each message expects to be valid, ignored or rejected, and a failure names its reason.
+The directory keeps the cases of attester slashings, proposer slashings, voluntary exits and changes of BLS credentials.
+It keeps every case of these topics at Capella and Deneb, since Deneb changes the domain of an exit signature.
+At Altair, Bellatrix, Electra and Fulu it keeps the case with one valid message of each topic.
+`bindings/python/tests/consensus/test_gossip_validation.py` validates each message in Lean and compares the outcome and the reason with the case.
+
 The directory `genesis/` holds every genesis case of `minimal.tar.gz` in the same way.
 An `initialization` case builds the genesis state from a block hash, a time and some deposits.
 A `validity` case tells whether a candidate state launches the chain.

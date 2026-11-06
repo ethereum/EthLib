@@ -1,0 +1,9 @@
+topic: voluntary_exit
+blocks:
+- {block: 
+    block_0xb810e64c756e3c2d82cca7dab8d500e46067b897ceee07a16e6980d4adb1cf4b}
+messages:
+- {current_time_ms: 3072000, message: 
+    voluntary_exit_0xb0b5a33550523740fe976db505127150c4c25a65db3152d4eaf25728abebaab4,
+  expected: reject, reason: invalid voluntary exit signature}
+bls_setting: 1

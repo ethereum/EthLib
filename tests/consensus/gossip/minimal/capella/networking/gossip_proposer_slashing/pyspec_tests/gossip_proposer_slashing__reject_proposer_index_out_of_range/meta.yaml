@@ -1,0 +1,8 @@
+topic: proposer_slashing
+blocks:
+- {block: 
+    block_0x63b2597628536690d23830a4c8a1c5ccbccb6c49a0b2e1d043cf0a029863e681}
+messages:
+- {message: 
+    proposer_slashing_0x713d05587cf94eb36a01fdbfbf846b55e38cc12c9beb2cd73addd45913ab4b50,
+  expected: reject, reason: proposer index out of range}

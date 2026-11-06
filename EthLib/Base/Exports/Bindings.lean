@@ -349,6 +349,10 @@ def bindings : List Binding := [
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: bytes, " ++
       "config: bytes, verify: bool) -> bytes",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_gossip_validation", `EthLib.Consensus.Exports.gossipValidationExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, topic: bytes, " ++
+      "messages: bytes, config: bytes, verify: bool) -> bytes",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_light_client_sync", `EthLib.Consensus.Exports.lightClientSyncExport,
     "(name: str, fork: str, bootstrap_fork: str, config: bytes, trusted: bytes, " ++
       "genesis_validators_root: bytes, bootstrap: bytes, steps: bytes) -> bytes",

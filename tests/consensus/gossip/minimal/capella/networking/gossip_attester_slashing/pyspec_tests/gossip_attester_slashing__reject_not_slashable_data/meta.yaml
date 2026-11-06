@@ -1,0 +1,8 @@
+topic: attester_slashing
+blocks:
+- {block: 
+    block_0x63b2597628536690d23830a4c8a1c5ccbccb6c49a0b2e1d043cf0a029863e681}
+messages:
+- {message: 
+    attester_slashing_0x3301d69c00a48ceba2c4b91c5770c0c00a0096da48fe69ed9a44b6abe64dcf7c,
+  expected: reject, reason: attestation data is not slashable}

@@ -1,0 +1,8 @@
+topic: attester_slashing
+blocks:
+- {block: 
+    block_0xed6dce031339ad4d26cd80c06be657940b3c0bcf2eac9f2bd55241f0f5f64350}
+messages:
+- {message: 
+    attester_slashing_0xf54618608b126b6c8d28d6e051289a9927313f9135b3a09c4233c56e13877727,
+  expected: valid}

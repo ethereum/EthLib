@@ -49,6 +49,15 @@ def andThen (first : ValidationResult) (next : Unit → ValidationResult) : Vali
   | accept => next ()
   | other => other
 
+/-- Run the next checks, which may fail, only after an accepted outcome.
+
+The first outcome that ignores or rejects is the result, and the next checks do not run. -/
+def andThenM {m : Type → Type} [Monad m] (first : ValidationResult)
+    (next : Unit → m ValidationResult) : m ValidationResult :=
+  match first with
+  | accept => next ()
+  | other => pure other
+
 end ValidationResult
 
 /-- Ignore the message for the reason unless the condition holds. -/

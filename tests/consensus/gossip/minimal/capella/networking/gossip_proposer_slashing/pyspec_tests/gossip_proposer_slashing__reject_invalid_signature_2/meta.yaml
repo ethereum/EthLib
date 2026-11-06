@@ -1,0 +1,9 @@
+topic: proposer_slashing
+blocks:
+- {block: 
+    block_0x63b2597628536690d23830a4c8a1c5ccbccb6c49a0b2e1d043cf0a029863e681}
+messages:
+- {message: 
+    proposer_slashing_0x7384f449b6c8e2bdb31a60045f3c1a89c2cf880e8af27733261f3ec29c7b781b,
+  expected: reject, reason: invalid proposer slashing signature}
+bls_setting: 1

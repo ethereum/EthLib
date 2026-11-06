@@ -1,0 +1,8 @@
+topic: bls_to_execution_change
+blocks:
+- {block: 
+    block_0xecbb7c22404f24c3598afd8cc5699d9ee51723126fe486f0459d1ee74bc5b573}
+messages:
+- {current_time_ms: 0, message: 
+    bls_to_execution_change_0x60e362d8df994e80b74f88fb1c4b61f824bf59d43e136cd1ecf0376af2951aee,
+  expected: reject, reason: validator does not have BLS withdrawal credentials}

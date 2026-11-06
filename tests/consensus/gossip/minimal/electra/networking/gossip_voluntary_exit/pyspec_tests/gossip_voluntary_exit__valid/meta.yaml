@@ -1,0 +1,8 @@
+topic: voluntary_exit
+blocks:
+- {block: 
+    block_0x4f84f65dbefafdb393aa71e340fe25d9b778ebb725557790d5e0d913b1de5ce9}
+messages:
+- {current_time_ms: 3072000, message: 
+    voluntary_exit_0x8ced3e20aa2e3a0b95c08fbf71385a458e8c43c6d7ac6ffd296e0c372fad8369,
+  expected: valid}

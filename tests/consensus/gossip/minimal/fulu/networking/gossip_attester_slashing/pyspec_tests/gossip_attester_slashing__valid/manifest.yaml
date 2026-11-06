@@ -1,0 +1,6 @@
+preset: minimal
+fork: fulu
+runner: networking
+handler: gossip_attester_slashing
+suite: pyspec_tests
+case: gossip_attester_slashing__valid

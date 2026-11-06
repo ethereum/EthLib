@@ -1,0 +1,6 @@
+preset: minimal
+fork: deneb
+runner: networking
+handler: gossip_attester_slashing
+suite: pyspec_tests
+case: gossip_attester_slashing__reject_attesting_index_out_of_range_1

@@ -1,0 +1,9 @@
+topic: attester_slashing
+blocks:
+- {block: 
+    block_0x4ec4291b4093239db1cc3f54141579def42012be60398989d24f0884685a6942}
+messages:
+- {message: 
+    attester_slashing_0x5fb255d2113fa9ed43aa969d50f967ef3e4ef927d40f82e50f425cb271d1fffe,
+  expected: reject, reason: invalid indexed attestation 2}
+bls_setting: 1

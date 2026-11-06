@@ -1,0 +1,9 @@
+topic: bls_to_execution_change
+blocks:
+- {block: 
+    block_0x4ec4291b4093239db1cc3f54141579def42012be60398989d24f0884685a6942}
+messages:
+- {current_time_ms: 0, message: 
+    bls_to_execution_change_0xb17822ff239ce583f96b018f87765ff0792329d0ca5db2495de08708256b2f1b,
+  expected: reject, reason: pubkey does not match validator withdrawal 
+    credentials}

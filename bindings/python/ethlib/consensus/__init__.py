@@ -528,6 +528,42 @@ def fork_choice(
     return outcomes
 
 
+def gossip_validation(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    topic: str,
+    messages: list[tuple[int, int, bytes]],
+    verify: bool = True,
+    config: dict | None = None,
+) -> list[tuple[str, str | None]]:
+    """The outcome of each gossip message of a topic, in turn, with the reason of a failure."""
+    # A message is (arrival time in milliseconds, subnet ID, SSZ bytes).
+    records = b"".join(
+        time.to_bytes(8, "little")
+        + subnet.to_bytes(8, "little")
+        + len(data).to_bytes(4, "little")
+        + data
+        for time, subnet, data in messages
+    )
+    replacements = json.dumps(config).encode() if config else b""
+    out = _native.consensus_gossip_validation(
+        name, fork, anchor_state, anchor_block, topic.encode(), records, replacements, verify
+    )
+    outcomes, offset = [], 0
+    while offset < len(out):
+        status, offset = out[offset], offset + 1
+        if status == 0:
+            outcomes.append(("valid", None))
+            continue
+        length = int.from_bytes(out[offset : offset + 4], "little")
+        reason = out[offset + 4 : offset + 4 + length].decode()
+        outcomes.append(("ignore" if status == 1 else "reject", reason))
+        offset += 4 + length
+    return outcomes
+
+
 def _store_record(record: bytes) -> dict:
     """A read of the store, from its bytes."""
 
@@ -640,6 +676,7 @@ __all__ = [
     "LightClientError",
     "ForkChoiceError",
     "fork_choice",
+    "gossip_validation",
     "light_client_sync",
     "block_to_light_client_header",
     "light_client_update_proofs",

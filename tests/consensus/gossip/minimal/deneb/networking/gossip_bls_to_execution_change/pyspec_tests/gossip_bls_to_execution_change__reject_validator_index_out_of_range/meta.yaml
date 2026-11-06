@@ -1,0 +1,8 @@
+topic: bls_to_execution_change
+blocks:
+- {block: 
+    block_0x4ec4291b4093239db1cc3f54141579def42012be60398989d24f0884685a6942}
+messages:
+- {current_time_ms: 0, message: 
+    bls_to_execution_change_0x518ba01750b289f5376c029aa9b2e4840e5d183b324b3091f88854825b01cf7b,
+  expected: reject, reason: validator index out of range}
