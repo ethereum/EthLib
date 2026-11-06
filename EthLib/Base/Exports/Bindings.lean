@@ -643,7 +643,7 @@ def bindings : List Binding := [
   ⟨"snappy_decompress", `EthLib.Networking.Snappy.decompress,
     "(block: bytes) -> bytes",
     [`EthLib.Networking.Snappy.SnappyError], some "SnappyError"⟩,
-  ⟨"snappy_compress_literal", `EthLib.Networking.Snappy.compressLiteral,
+  ⟨"snappy_compress", `EthLib.Networking.Snappy.compress,
     "(data: bytes) -> bytes",
     [], none⟩,
   ⟨"snappy_decode_frames", `EthLib.Networking.Snappy.decodeFrames,

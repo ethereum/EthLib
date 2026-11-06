@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports
+public import EthLib.Networking.Snappy.Compress
 public import EthLib.Networking.Snappy.Frame
 
 /-!
@@ -29,10 +30,10 @@ def runSnappy {ε α : Type} [Repr ε] (code : ε → UInt32) (what : String) (a
 def decompressExport (block : ByteArray) : Result ByteArray :=
   runSnappy SnappyError.code "block rejected" (decompress block)
 
-/-- The block that holds the data as one literal. -/
-@[export eth_snappy_compress_literal]
-def compressLiteralExport (data : ByteArray) : Result ByteArray :=
-  pure (compressLiteral data)
+/-- The block that the compressor writes for the data, of at most 2^32 - 1 bytes. -/
+@[export eth_snappy_compress]
+def compressExport (data : ByteArray) : Result ByteArray :=
+  pure (compress data)
 
 /-- The data of a framed stream. -/
 @[export eth_snappy_decode_frames]

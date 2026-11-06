@@ -2,7 +2,6 @@ module
 
 public import EthLib.Base.Length
 public import EthLib.Base.LittleEndian
-public import EthLib.Networking.Encoding.Varint
 
 /-!
 # `Networking.Snappy.Block`
@@ -35,9 +34,9 @@ A copy then costs its length, amortized, however far back it reaches.
 
 The array grows as bytes arrive, and never reserves the declared length, which a peer controls.
 
-The encoder writes the data as one literal, so it never compresses.
+The bytes of one literal element are here too, for the compressor and the proofs (§2.1).
 
-Proofs, tests and bindings use it as the inverse of decompression.
+The compressor, which writes literals and copies, is in its own module.
 -/
 
 @[expose] public section
@@ -266,19 +265,5 @@ def literalHeader (n : Nat) : List UInt8 :=
 /-- One literal element that holds `data`, of 1 to 2^32 bytes: its header, then the data (§2.1). -/
 def literal (data : List UInt8) : List UInt8 :=
   literalHeader data.length ++ data
-
-/-- A Snappy block of `data`: the length as a varint, then the data as one literal.
-
-The data has at most 2^32 - 1 bytes, the most a preamble may declare (§1).
--/
-def compressLiteralList (data : List UInt8) : List UInt8 :=
-  -- A varint of the consensus layer has the same little-endian groups of seven bits.
-  EthLib.Networking.Encoding.Varint.encodeAux data.length preambleMaxLength ++
-    -- Empty data has no elements, since a literal holds at least one byte.
-    if data.isEmpty then [] else literal data
-
-/-- A Snappy block of `data` that holds one literal, for data of at most 2^32 - 1 bytes. -/
-def compressLiteral (data : ByteArray) : ByteArray :=
-  ⟨(compressLiteralList data.data.toList).toArray⟩
 
 end EthLib.Networking.Snappy

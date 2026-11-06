@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Networking.Snappy.Frame
-public import EthLib.Networking.Proofs.Snappy.Block
+public import EthLib.Networking.Proofs.Snappy.Compress
 
 /-!
 # `Networking.Proofs.Snappy.Frame`
@@ -85,19 +85,17 @@ theorem decodeChunk_compressed {block data : List UInt8}
   simp [decodeChunk, hpre, hb, verifyChecksum, EthLib.Base.bytesToUint_toVector,
     foldr_uintToBytes_uint32, show ¬ maxChunkLength < data.length by omega]
 
-/-- A compressed chunk whose block holds its data as one literal decodes to that data.
-
-For empty data, the block is the preamble alone.
+/-- A compressed chunk whose block is the compressor's output decodes to its data.
 
 So some compressed chunk of each length up to 65536 bytes decodes.
 -/
-theorem decodeChunk_compressed_compressLiteralList {data : List UInt8}
+theorem decodeChunk_compressed_compress {data : List UInt8}
     (h : data.length ≤ maxChunkLength) :
     decodeChunk compressedType
         ((uintToBytes 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++
-          compressLiteralList data) = .ok data :=
+          (compress ⟨data.toArray⟩).data.toList) = .ok data :=
   decodeChunk_compressed
-    (Block.decompressList_compressLiteralList
+    (Compress.decompressList_compress (src := ⟨data.toArray⟩)
       (Nat.le_trans h (by simp [maxChunkLength, maxUncompressedLength]))) h
 
 /-! ## The round trip -/

@@ -735,7 +735,7 @@ static PyMethodDef methods[] = {
   {"snap_access_lists_answer", py_snap_access_lists_answer, METH_VARARGS, DOC_snap_access_lists_answer},
   {"snap_full_account", py_snap_full_account, METH_VARARGS, DOC_snap_full_account},
   {"snappy_decompress", py_snappy_decompress, METH_VARARGS, DOC_snappy_decompress},
-  {"snappy_compress_literal", py_snappy_compress_literal, METH_VARARGS, DOC_snappy_compress_literal},
+  {"snappy_compress", py_snappy_compress, METH_VARARGS, DOC_snappy_compress},
   {"snappy_decode_frames", py_snappy_decode_frames, METH_VARARGS, DOC_snappy_decode_frames},
   {"snappy_encode_frames_literal", py_snappy_encode_frames_literal, METH_VARARGS, DOC_snappy_encode_frames_literal},
   {"snappy_masked_crc", py_snappy_masked_crc, METH_VARARGS, DOC_snappy_masked_crc},

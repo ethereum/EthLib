@@ -2,7 +2,7 @@ module
 
 public import EthLib.Networking.Devp2p.P2p
 public import EthLib.Networking.Proofs.Rlpx.Handshake
-public import EthLib.Networking.Proofs.Snappy.Block
+public import EthLib.Networking.Proofs.Snappy.Compress
 
 /-!
 # Proofs: the messages of the "p2p" capability
@@ -83,31 +83,25 @@ theorem decodeMessage_encodeMessage {snappy : Bool} {m : Message} {data frame : 
   · -- A compressed body: the reader checks the declared size, then decompresses.
     have hmax : data.size ≤ Snappy.maxUncompressedLength := by
       simp only [MAX_MESSAGE_SIZE, Snappy.maxUncompressedLength] at hsize ⊢; omega
-    obtain ⟨hRest, hd⟩ := decodeItem_encode _ _ hid (Snappy.compressLiteral data).data.toList
-    have hpre := Proofs.Snappy.Block.readPreamble_encode
-      (if data.data.toList.isEmpty then [] else Snappy.literal data.data.toList)
-      (n := data.data.toList.length) (by simpa using hmax)
-    have hd' : ((decodeItem (idE ++ Snappy.compressLiteral data).data.toList).map
+    obtain ⟨hRest, hd⟩ := decodeItem_encode _ _ hid (Snappy.compress data).data.toList
+    obtain ⟨rest, hpre⟩ := Proofs.Snappy.Compress.readPreamble_compress hmax
+    have hd' : ((decodeItem (idE ++ Snappy.compress data).data.toList).map
         fun r => (r.1, r.2.1)) =
-          .ok (Item.scalar m.id, (Snappy.compressLiteral data).data.toList) := by
-      generalize hL : (idE ++ Snappy.compressLiteral data).data.toList = L
-      obtain rfl : L = idE.data.toList ++ (Snappy.compressLiteral data).data.toList := by
+          .ok (Item.scalar m.id, (Snappy.compress data).data.toList) := by
+      generalize hL : (idE ++ Snappy.compress data).data.toList = L
+      obtain rfl : L = idE.data.toList ++ (Snappy.compress data).data.toList := by
         rw [← hL, ByteArray.data_append, Array.toList_append]
       rw [hd]
       rfl
-    have hframe : (if (snappy && m.id != 0x00) = true then Snappy.compressLiteral data else data) =
-        Snappy.compressLiteral data := by simp [hc]
+    have hframe : (if (snappy && m.id != 0x00) = true then Snappy.compress data else data) =
+        Snappy.compress data := by simp [hc]
     rw [hframe]
     unfold decodeMessage
     simp only [hd', Except.mapError, bind, Except.bind, toScalar_scalar, hc, ↓reduceIte]
-    have hlist : (Snappy.compressLiteral data).data.toList =
-        Encoding.Varint.encodeAux data.data.toList.length Snappy.preambleMaxLength ++
-          if data.data.toList.isEmpty = true then [] else Snappy.literal data.data.toList := rfl
-    have hlen : ¬ MAX_MESSAGE_SIZE < data.data.toList.length := by
-      simp only [Array.length_toList]; exact Nat.not_lt.mpr hsize
-    rw [hlist, hpre]
-    simp only [hlen, ↓reduceIte, ← hlist, Array.toArray_toList]
-    rw [Proofs.Snappy.Block.decompress_compressLiteral hmax]
+    have hlen : ¬ MAX_MESSAGE_SIZE < data.size := Nat.not_lt.mpr hsize
+    rw [hpre]
+    simp only [hlen, ↓reduceIte, Array.toArray_toList]
+    rw [Proofs.Snappy.Compress.decompress_compress hmax]
     simp only [hdec, Message.ofItem_toItem]
   · -- An uncompressed body is the RLP list itself.
     obtain ⟨hRest, hd⟩ := decodeItem_encode _ _ hid data.data.toList
@@ -118,7 +112,7 @@ theorem decodeMessage_encodeMessage {snappy : Bool} {m : Message} {data frame : 
         rw [← hL, ByteArray.data_append, Array.toList_append]
       rw [hd]
       rfl
-    have hframe : (if (snappy && m.id != 0x00) = true then Snappy.compressLiteral data else data) =
+    have hframe : (if (snappy && m.id != 0x00) = true then Snappy.compress data else data) =
         data := by simp [hc]
     rw [hframe]
     unfold decodeMessage

@@ -767,8 +767,8 @@ def snappy_decompress(block: bytes) -> bytes:
     """The bytes a Snappy block decompresses to, or why it is not a valid block."""
     ...
 
-def snappy_compress_literal(data: bytes) -> bytes:
-    """A Snappy block of `data` that holds one literal, for data of at most 2^32 - 1 bytes."""
+def snappy_compress(data: bytes) -> bytes:
+    """A Snappy block of the input: the length as a varint, then literals and copies."""
     ...
 
 def snappy_decode_frames(stream: bytes) -> bytes:

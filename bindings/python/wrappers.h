@@ -375,7 +375,7 @@ PyObject* py_ssz_serialize                                (PyObject* self, PyObj
 PyObject* py_ssz_deserialize                              (PyObject* self, PyObject* args);
 PyObject* py_ssz_hash_tree_root                           (PyObject* self, PyObject* args);
 PyObject* py_snappy_decompress                            (PyObject* self, PyObject* args);
-PyObject* py_snappy_compress_literal                      (PyObject* self, PyObject* args);
+PyObject* py_snappy_compress                              (PyObject* self, PyObject* args);
 PyObject* py_snappy_decode_frames                         (PyObject* self, PyObject* args);
 PyObject* py_snappy_encode_frames_literal                 (PyObject* self, PyObject* args);
 PyObject* py_snappy_masked_crc                            (PyObject* self, PyObject* args);
