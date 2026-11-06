@@ -205,7 +205,7 @@ theorem dupnStep_stack {evm after : Evm fork Meter} {n : Nat}
       · cases hv
         rfl
 
-/-- DUPN keeps the message, the state and the substate. -/
+/-- DUPN keeps the message, the state, the substate and the code. -/
 theorem dupnStep_sameContext {evm after : Evm fork Meter} (h : dupnStep evm = .ok after) :
     SameContext evm after := by
   obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
@@ -217,7 +217,7 @@ theorem dupnStep_sameContext {evm after : Evm fork Meter} (h : dupnStep evm = .o
       exact ((chargeGas_sameContext h1).trans (pushWord_sameContext h2)).advance _
   · cases h
 
-/-- SWAPN keeps the message, the state and the substate. -/
+/-- SWAPN keeps the message, the state, the substate and the code. -/
 theorem swapnStep_sameContext {evm after : Evm fork Meter} (h : swapnStep evm = .ok after) :
     SameContext evm after := by
   obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
@@ -225,11 +225,11 @@ theorem swapnStep_sameContext {evm after : Evm fork Meter} (h : swapnStep evm = 
   · split at h
     · cases h
       have := chargeGas_sameContext h1
-      exact ⟨this.message, this.state, this.substate⟩
+      exact ⟨this.message, this.state, this.substate, this.code⟩
     · cases h
   · cases h
 
-/-- EXCHANGE keeps the message, the state and the substate. -/
+/-- EXCHANGE keeps the message, the state, the substate and the code. -/
 theorem exchangeStep_sameContext {evm after : Evm fork Meter} (h : exchangeStep evm = .ok after) :
     SameContext evm after := by
   obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
@@ -237,7 +237,7 @@ theorem exchangeStep_sameContext {evm after : Evm fork Meter} (h : exchangeStep 
   · split at h
     · cases h
       have := chargeGas_sameContext h1
-      exact ⟨this.message, this.state, this.substate⟩
+      exact ⟨this.message, this.state, this.substate, this.code⟩
     · cases h
   · cases h
 

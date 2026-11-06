@@ -153,7 +153,7 @@ theorem keccak256Step_cons {evm : Evm fork Meter} {start size : U256} {rest : Li
       (extendMemory evm.memory.size [(start, size)]).cost) with _ | _ <;>
     simp [hc, bind, Except.bind, pure, Except.pure, Except.map, room]
 
-/-- Each stack instruction, and KECCAK256, keeps the message, the state and the substate. -/
+/-- Each stack instruction, and KECCAK256, keeps the message, state, substate and code. -/
 theorem stackOnlyStep_sameContext {op : Op}
     {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (hstep : stackOnlyStep fork op = some step) {evm after : Evm fork Meter}
@@ -206,7 +206,7 @@ theorem stackOnlyStep_sameContext {op : Op}
       · cases h
       · cases h
         have := chargeGas_sameContext h1
-        exact ⟨this.message, this.state, this.substate⟩
+        exact ⟨this.message, this.state, this.substate, this.code⟩
     · cases h
 
 /-- Each stack instruction, and KECCAK256, keeps the size of memory a multiple of 32. -/

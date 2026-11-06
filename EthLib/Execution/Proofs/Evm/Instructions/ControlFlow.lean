@@ -170,7 +170,7 @@ theorem jumpStep_eq_error_iff_of_code {evm : Evm fork Meter} {destination : U256
         byteAt evm.code destination.toNat = JUMPDEST) := by
   rw [jumpStep_eq_error_iff h paid, flags, ← isValidJumpDest_iff, Bool.not_eq_true]
 
-/-- Each instruction of control flow keeps the message, the state and the substate. -/
+/-- Each instruction of control flow keeps the message, the state, the substate and the code. -/
 theorem controlFlowStep_sameContext {op : Op}
     {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (hstep : controlFlowStep op = some step) {evm after : Evm fork Meter}
@@ -180,7 +180,7 @@ theorem controlFlowStep_sameContext {op : Op}
   case pc | gas => exact readFrame_sameContext h
   case stop =>
     cases h
-    exact ⟨rfl, rfl, rfl⟩
+    exact ⟨rfl, rfl, rfl, rfl⟩
   case jumpdest =>
     obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
     cases h
@@ -192,7 +192,7 @@ theorem controlFlowStep_sameContext {op : Op}
     split at h
     · cases h
       have := (popWord_sameContext h1).trans (chargeGas_sameContext h2)
-      exact ⟨this.message, this.state, this.substate⟩
+      exact ⟨this.message, this.state, this.substate, this.code⟩
     · cases h
   case jumpi =>
     obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
@@ -206,7 +206,7 @@ theorem controlFlowStep_sameContext {op : Op}
       exact this.advance
     · split at h
       · cases h
-        exact ⟨this.message, this.state, this.substate⟩
+        exact ⟨this.message, this.state, this.substate, this.code⟩
       · cases h
 
 /-- Each instruction of control flow keeps memory. -/

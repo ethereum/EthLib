@@ -111,7 +111,7 @@ theorem environmentStep_slotnum_of_lt (h : fork < .glamsterdam) :
   have hNot : ¬ .glamsterdam ≤ fork := fun hle => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le h hle)
   simp [environmentStep, hNot]
 
-/-- Each instruction of the environment keeps the message, the state and the substate. -/
+/-- Each instruction of the environment keeps the message, the state, the substate and the code. -/
 theorem environmentStep_sameContext {op : Op}
     {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (hstep : environmentStep fork op = some step) {evm after : Evm fork Meter}

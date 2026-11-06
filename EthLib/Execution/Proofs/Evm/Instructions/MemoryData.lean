@@ -87,7 +87,7 @@ theorem returndatacopyStep_eq_error_iff {evm : Evm fork Meter} {start offset siz
   by_cases past : evm.returnData.size < offset.toNat + size.toNat <;>
     simp [paid, past, bind, Except.bind, pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
 
-/-- Each instruction that moves bytes keeps the message, the state and the substate. -/
+/-- Each instruction that moves bytes keeps the message, the state, the substate and the code. -/
 theorem memoryDataStep_sameContext {op : Op}
     {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (hstep : memoryDataStep op = some step) {evm after : Evm fork Meter}
@@ -109,7 +109,7 @@ theorem memoryDataStep_sameContext {op : Op}
     cases h
     have := ((popWord_sameContext h1).trans (popWord_sameContext h2)).trans
       (chargeGasAndMemory_sameContext h3)
-    exact ⟨this.message, this.state, this.substate⟩
+    exact ⟨this.message, this.state, this.substate, this.code⟩
   case calldataload =>
     obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
     obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
@@ -128,7 +128,7 @@ theorem memoryDataStep_sameContext {op : Op}
     cases h
     have := (((popWord_sameContext h1).trans (popWord_sameContext h2)).trans
       (popWord_sameContext h3)).trans (chargeGasAndMemory_sameContext h4)
-    exact ⟨this.message, this.state, this.substate⟩
+    exact ⟨this.message, this.state, this.substate, this.code⟩
   case returndatacopy =>
     obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
     obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
@@ -140,7 +140,7 @@ theorem memoryDataStep_sameContext {op : Op}
     · cases h
       have := (((popWord_sameContext h1).trans (popWord_sameContext h2)).trans
         (popWord_sameContext h3)).trans (chargeGas_sameContext h4)
-      exact ⟨this.message, this.state, this.substate⟩
+      exact ⟨this.message, this.state, this.substate, this.code⟩
 
 /-! ## The bytes that each instruction leaves in memory -/
 
