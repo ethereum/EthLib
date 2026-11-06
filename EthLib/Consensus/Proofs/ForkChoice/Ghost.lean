@@ -24,6 +24,12 @@ Its stake is its effective balance, and an equivocator has no latest message.
 A tie between two children goes to the greater root, read as a big-endian number.
 
 That order is the order of roots as strings of bytes.
+
+The head is a viable leaf, unless no leaf is viable, and then it is the justified block.
+
+So when some leaf is viable, the chain of the head holds the finalized block.
+
+That is not required when the finalized epoch is genesis.
 -/
 
 @[expose] public section
@@ -466,6 +472,89 @@ theorem filterNodeTree_ancestor {config : Config} {node : ForkChoiceNode}
   · rw [step] at above
     exact between a below above
 
+/-- A viable node with no viable child is a viable leaf. -/
+theorem filterNodeTree_leaf {config : Config} :
+    ∀ {node : ForkChoiceNode} {nodes : List ForkChoiceNode},
+      store.filterNodeTree config node = .ok nodes →
+      ∀ n ∈ nodes, ∀ {children : List ForkChoiceNode}, store.getNodeChildren n = .ok children →
+        (∀ child ∈ children, child ∉ nodes) → store.isViableLeaf config n = .ok true := by
+  intro node
+  induction hrank : store.nodeRank node using Nat.strong_induction_on generalizing node with
+  | _ rank ih =>
+  intro nodes walk n mem leafChildren leafOk leaf
+  rw [filterNodeTree, bind_ok_iff] at walk
+  obtain ⟨children, childrenOk, walk⟩ := walk
+  by_cases empty : children.isEmpty
+  · simp only [empty, ↓reduceIte, bind_ok_iff] at walk
+    obtain ⟨isViable, viable, walk⟩ := walk
+    simp only [pure, Except.pure, Except.ok.injEq] at walk
+    subst walk
+    cases isViable
+    · cases mem
+    · rw [List.mem_singleton.mp mem]
+      exact viable
+  simp only [empty, Bool.false_eq_true, ↓reduceIte, bind_ok_iff] at walk
+  obtain ⟨viable, viableOk, walk⟩ := walk
+  simp only [pure, Except.pure, Except.ok.injEq] at walk
+  subst walk
+  have nonempty : viable ≠ [] := fun nil => by simp [nil] at mem
+  have nodesEq : (if viable.isEmpty then [] else viable ++ [node]) = viable ++ [node] := by
+    simp [List.isEmpty_iff, nonempty]
+  rw [nodesEq] at mem leaf
+  -- Each node below a child of the start is a viable node of the start.
+  have below : ∀ x ∈ viable, ∃ child ∈ children, ∃ nodesBelow,
+      store.nodeRank child < store.nodeRank node ∧
+      store.filterNodeTree config child = .ok nodesBelow ∧ x ∈ nodesBelow ∧
+      ∀ y ∈ nodesBelow, y ∈ viable := by
+    intro x hx
+    obtain ⟨child, childMem, nodesBelow, belowOk, xMem⟩ := (mem_of_flatMapM_ok viableOk x).mp hx
+    split at belowOk
+    · rename_i lowerRank
+      refine ⟨child, childMem, nodesBelow, lowerRank, belowOk, xMem, fun y hy => ?_⟩
+      exact (mem_of_flatMapM_ok viableOk y).mpr ⟨child, childMem, nodesBelow, by
+        simp [lowerRank, belowOk], hy⟩
+    · simp [throw, throwThe, MonadExceptOf.throw] at belowOk
+  rcases List.mem_append.mp mem with mem | same
+  · obtain ⟨child, -, nodesBelow, lowerRank, belowOk, nMem, lift⟩ := below n mem
+    exact ih _ (hrank ▸ lowerRank) rfl belowOk n nMem leafOk
+      fun c hc inBelow => leaf c hc (List.mem_append_left _ (lift c inBelow))
+  · -- The start has a viable child, so it is no leaf of the viable nodes.
+    rw [List.mem_singleton.mp same, childrenOk, Except.ok.injEq] at leafOk
+    subst leafOk
+    obtain ⟨x, hx⟩ := List.exists_mem_of_ne_nil _ nonempty
+    obtain ⟨child, childMem, nodesBelow, -, belowOk, xMem, lift⟩ := below x hx
+    have childPending := ((mem_getNodeChildren childrenOk).mp childMem).1
+    have childIn := (filterNodeTree_parent childPending belowOk x xMem).1
+    exact absurd (List.mem_append_left _ (lift child childIn)) (leaf child childMem)
+
+/-- A viable leaf agrees with the finalized checkpoint.
+
+Its checkpoint block at the finalized epoch is the finalized block, unless that epoch is genesis. -/
+theorem isViableLeaf_finalized {config : Config} {node : ForkChoiceNode}
+    (viable : store.isViableLeaf config node = .ok true) :
+    store.finalizedCheckpoint.epoch = GENESIS_EPOCH ∨
+      store.getCheckpointBlock node.root store.finalizedCheckpoint.epoch =
+        .ok store.finalizedCheckpoint.root := by
+  unfold isViableLeaf at viable
+  simp only [bind_ok_iff] at viable
+  obtain ⟨_, -, _, -, viable⟩ := viable
+  -- Both branches of the justified check end with the finalized check.
+  have checked : ∃ checkpointBlock,
+      store.getCheckpointBlock node.root store.finalizedCheckpoint.epoch = .ok checkpointBlock ∧
+        (store.finalizedCheckpoint.epoch = GENESIS_EPOCH ∨
+          store.finalizedCheckpoint.root = checkpointBlock) := by
+    split at viable <;>
+      simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Bool.and_eq_true,
+        Bool.or_eq_true, decide_eq_true_eq] at viable
+    · obtain ⟨_, -, checkpointBlock, checkpointOk, -, finalized⟩ := viable
+      exact ⟨checkpointBlock, checkpointOk, finalized⟩
+    · obtain ⟨_, -, _, -, checkpointBlock, checkpointOk, -, finalized⟩ := viable
+      exact ⟨checkpointBlock, checkpointOk, finalized⟩
+  obtain ⟨checkpointBlock, checkpointOk, finalized⟩ := checked
+  rcases finalized with genesis | same
+  · exact .inl genesis
+  · exact .inr (same ▸ checkpointOk)
+
 /-! ## The order of roots -/
 
 /-- A root read as a big-endian number, and the common root of the tree as 0. -/
@@ -680,6 +769,35 @@ theorem getHead_pending {head : ForkChoiceNode} (found : store.getHead config = 
     · rcases (filterNodeTree_parent rfl tree head mem).2 with rfl | ⟨pending, -⟩
       · rfl
       · exact pending
+
+/-- The head is a viable leaf, or no leaf is viable and the head is the justified block. -/
+theorem getHead_viable {head : ForkChoiceNode} (found : store.getHead config = .ok head) :
+    store.isViableLeaf config head = .ok true ∨
+      store.getFilteredNodeTree config = .ok [] ∧
+        head = ⟨store.justifiedCheckpoint.root, .pending⟩ := by
+  obtain ⟨nodes, children, tree, childrenOk, leaf⟩ := getHead_leaf found
+  have later : ¬ .glamsterdam ≤ fork := fun gloas => by
+    rw [getHead_of_gloas gloas] at found
+    cases found
+  simp only [getHead, later, ↓reduceIte, tree, bind, Except.bind] at found
+  rcases getHeadFrom_mem found with same | mem
+  · cases nodes with
+    | nil => exact .inr ⟨tree, same⟩
+    | cons first rest =>
+      -- A nonempty list of viable nodes holds the justified block.
+      have justified := (filterNodeTree_parent rfl tree first List.mem_cons_self).1
+      exact .inl (filterNodeTree_leaf tree head (same ▸ justified) childrenOk leaf)
+  · exact .inl (filterNodeTree_leaf tree head mem childrenOk leaf)
+
+/-- The head agrees with the finalized checkpoint when some leaf is viable.
+
+Its checkpoint block at the finalized epoch is the finalized block, unless that epoch is genesis. -/
+theorem getHead_finalized {head : ForkChoiceNode} (found : store.getHead config = .ok head)
+    (someViable : store.getFilteredNodeTree config ≠ .ok []) :
+    store.finalizedCheckpoint.epoch = GENESIS_EPOCH ∨
+      store.getCheckpointBlock head.root store.finalizedCheckpoint.epoch =
+        .ok store.finalizedCheckpoint.root :=
+  isViableLeaf_finalized ((getHead_viable found).resolve_right fun ⟨noLeaf, _⟩ => someViable noLeaf)
 
 variable (lower) in
 /-- Before Gloas and without a boost, the head of the store is the head of LMD-GHOST.

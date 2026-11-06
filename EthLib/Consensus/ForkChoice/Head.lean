@@ -179,7 +179,9 @@ def isViableLeaf (node : ForkChoiceNode) : Except ForkChoiceError Bool := do
   let correctJustified ←
     if store.justifiedCheckpoint.epoch = GENESIS_EPOCH ∨
         votingSource.epoch = store.justifiedCheckpoint.epoch then pure true
-    else return currentEpoch ≤ (← (addChecked votingSource.epoch 2).mapError .arith)
+    else do
+      let bound ← (addChecked votingSource.epoch 2).mapError .arith
+      pure (currentEpoch ≤ bound)
   let finalizedCheckpointBlock ← store.getCheckpointBlock node.root store.finalizedCheckpoint.epoch
   let correctFinalized := decide (store.finalizedCheckpoint.epoch = GENESIS_EPOCH) ||
     decide (store.finalizedCheckpoint.root = finalizedCheckpointBlock)
