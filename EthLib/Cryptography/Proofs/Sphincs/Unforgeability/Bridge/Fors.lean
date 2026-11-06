@@ -223,6 +223,7 @@ theorem forsKey_answers (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.Pu
     forsNode_answers f S P index _ _ _ (by decide)]
   simp only [ofForsKey, Vector.getElem_ofFn, ofTops, topsValue]
   rfl
+
 /-- Under fixed answers, the siblings above a FORS leaf are the model's nodes, level by level. -/
 theorem forsSiblings_answers (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.PublicParameter)
     (index : SphincsSecurity.Index) (κ : SphincsSecurity.FTree) (e : Nat) :
