@@ -4,21 +4,19 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.Model
 /-!
 # Connected signing prefixes under the raw random oracle
 
-A supported signing reply determines the actual intermediate replies and full raw caches.
+Each possible signer outcome comes with intermediate replies and caches that the signer reaches.
 
 The bottom layer may fail before the root, or succeed before the root and top layer run.
 
-The latter branch retains the chosen path's settlement and the local root reconstruction law.
+Then the cache after the chosen path answers every query of its sibling subtrees.
+
+So the root is the climb from the chosen leaf, with the same value and cache.
 
 Uniform queries are forwarded without being stored in the raw cache.
 
-Source: the leanXMSS draft at leanVM commit `4af2cdddd7cd41b9df2cc7e123e314a91b0b4462`.
+Source: the leanXMSS specification draft, section "The scheme", paragraph "Signing".
 
-The order and failure cases follow section "The scheme", paragraph "Signing".
-
-The local root law follows section "Trees".
-
-<https://github.com/leanEthereum/leanVM/blob/4af2cdddd7cd41b9df2cc7e123e314a91b0b4462/doc/lean_xmss/main.tex>
+The root reconstruction follows section "Trees".
 -/
 
 public section
@@ -38,7 +36,7 @@ private theorem collect_natural {Y : Type} : ∀ k (f : Fin k → m Y),
     simp only [Xmss.ofFnInOrder, MonadHom.mmap_bind, MonadHom.mmap_pure,
       collect_natural k]
 
--- Transport the existing bounded chain, with the same start and step bounds.
+-- Transport the bounded chain, with the same start and step bounds.
 private theorem chain_natural {Y : Type} {length : Nat}
     (step : Fin length → Y → m Y) (start : Nat) : ∀ steps (h : start + steps ≤ length) value,
     F (Wots.chain step start steps h value) =
@@ -53,7 +51,7 @@ private theorem th_natural (H : ByteArray → m (Vector UInt8 32))
     F (Xmss.th H pp addr payload) = Xmss.th (fun x => F (H x)) pp addr payload := by
   simp only [Xmss.th, MonadHom.mmap_bind, MonadHom.mmap_pure]
 
--- Both halves of each full PRF word remain available to the existing leaf program.
+-- Both halves of each full seed-hash word remain available to the leaf program.
 private theorem leaf_natural (H : ByteArray → m (Vector UInt8 32))
     (pp : Xmss.PublicParam) (seed : Xmss.Seed) (layer : Xmss.Layer) (key : UInt32) :
     F (Xmss.otsPublicLeaf H pp seed layer key) =
@@ -71,7 +69,7 @@ private theorem nodeHash_natural (H : ByteArray → m (Vector UInt8 32))
       Xmss.nodeHash (fun x => F (H x)) pp layer level idx left right :=
   th_natural F H pp _ _
 
--- Use the existing tree transport instead of a new traversal.
+-- Use the tree transport instead of a new traversal.
 private theorem node_natural (H : ByteArray → m (Vector UInt8 32))
     (pp : Xmss.PublicParam) (seed : Xmss.Seed) (layer : Xmss.Layer) (h idx : Nat) :
     F (Xmss.node H pp seed layer h idx) =
@@ -81,7 +79,7 @@ private theorem node_natural (H : ByteArray → m (Vector UInt8 32))
   simp only [nodeHash_natural, Xmss.leaves, leaf_natural]
   rfl
 
--- Use the existing path transport with the same global index.
+-- Use the path transport with the same global index.
 private theorem path_natural (H : ByteArray → m (Vector UInt8 32))
     (pp : Xmss.PublicParam) (seed : Xmss.Seed) (layer : Xmss.Layer) (idx : Nat) :
     F (Xmss.path H pp seed layer idx) =
@@ -92,7 +90,7 @@ private theorem path_natural (H : ByteArray → m (Vector UInt8 32))
   simp only [nodeHash_natural, Xmss.leaves, leaf_natural]
   rfl
 
--- The existing climb transports with its original leaf-to-root order.
+-- The climb transports with its leaf-to-root order.
 private theorem fold_natural (H : ByteArray → m (Vector UInt8 32))
     (pp : Xmss.PublicParam) (layer : Xmss.Layer) (idx : Nat) (leaf : Xmss.Digest)
     (pi : Vector Xmss.Digest Xmss.Constants.LAYER_HEIGHT) :
@@ -106,69 +104,70 @@ private theorem fold_natural (H : ByteArray → m (Vector UInt8 32))
 open Xmss.Unforgeability
 -- The raw query inclusion is exactly the model hash, retaining all 32 reply bytes.
 private theorem raw_callback_world :
-    (fun input : ByteArray => (simulateQ' (QueryImpl.ofLift VCV.HashSpec (OracleComp VCV.World)))
-      (VCV.wordBytesEquiv 32 <$> VCV.HashSpec.query input.data.toList)) = VCV.H := by
+    (fun input : ByteArray =>
+      (simulateQ' (QueryImpl.ofLift HashSig.HashSpec (OracleComp VCV.World)))
+      (HashSig.ofOutput <$> HashSig.HashSpec.query input.data.toList)) = VCV.H := by
   funext input
   simp only [simulateQ_map, simulateQ_spec_query, QueryImpl.ofLift_apply, VCV.H]
 
 -- The actual leaf uses only the raw summand of the world.
 private theorem world_leaf (pp : Xmss.PublicParam) (seed : Xmss.Seed)
     (layer : Xmss.Layer) (key : UInt32) :
-    simulateQ (QueryImpl.ofLift VCV.HashSpec (OracleComp VCV.World))
-      (Xmss.otsPublicLeaf (fun input => VCV.wordBytesEquiv 32 <$>
-        VCV.HashSpec.query input.data.toList) pp seed layer key) =
+    simulateQ (QueryImpl.ofLift HashSig.HashSpec (OracleComp VCV.World))
+      (Xmss.otsPublicLeaf (fun input => HashSig.ofOutput <$>
+        HashSig.HashSpec.query input.data.toList) pp seed layer key) =
       Xmss.otsPublicLeaf VCV.H pp seed layer key := by
   have h := leaf_natural
-    (simulateQ' (QueryImpl.ofLift VCV.HashSpec (OracleComp VCV.World)))
-    (fun input => VCV.wordBytesEquiv 32 <$> VCV.HashSpec.query input.data.toList)
+    (simulateQ' (QueryImpl.ofLift HashSig.HashSpec (OracleComp VCV.World)))
+    (fun input => HashSig.ofOutput <$> HashSig.HashSpec.query input.data.toList)
     pp seed layer key
   simpa only [simulateQ'_apply, raw_callback_world] using h
 
 -- The actual path uses the same raw inclusion as its leaves and nodes.
 private theorem world_path (pp : Xmss.PublicParam) (seed : Xmss.Seed)
     (layer : Xmss.Layer) (key : Nat) :
-    simulateQ (QueryImpl.ofLift VCV.HashSpec (OracleComp VCV.World))
-      (Xmss.path (fun input => VCV.wordBytesEquiv 32 <$>
-        VCV.HashSpec.query input.data.toList) pp seed layer key) =
+    simulateQ (QueryImpl.ofLift HashSig.HashSpec (OracleComp VCV.World))
+      (Xmss.path (fun input => HashSig.ofOutput <$>
+        HashSig.HashSpec.query input.data.toList) pp seed layer key) =
       Xmss.path VCV.H pp seed layer key := by
   have h := path_natural
-    (simulateQ' (QueryImpl.ofLift VCV.HashSpec (OracleComp VCV.World)))
-    (fun input => VCV.wordBytesEquiv 32 <$> VCV.HashSpec.query input.data.toList)
+    (simulateQ' (QueryImpl.ofLift HashSig.HashSpec (OracleComp VCV.World)))
+    (fun input => HashSig.ofOutput <$> HashSig.HashSpec.query input.data.toList)
     pp seed layer key
   simpa only [simulateQ'_apply, raw_callback_world] using h
 
 -- Uniform forwarding remains uncached; only raw queries reach the caching handler.
-private theorem raw_world_sim {Y : Type} (oa : OracleComp VCV.HashSpec Y) :
-    simulateQ VCV.HashSpec.romImpl
-      (simulateQ (QueryImpl.ofLift VCV.HashSpec (OracleComp VCV.World)) oa) =
-    simulateQ VCV.HashSpec.randomOracle oa := by
+private theorem raw_world_sim {Y : Type} (oa : OracleComp HashSig.HashSpec Y) :
+    simulateQ HashSig.HashSpec.romImpl
+      (simulateQ (QueryImpl.ofLift HashSig.HashSpec (OracleComp VCV.World)) oa) =
+    simulateQ HashSig.HashSpec.randomOracle oa := by
   apply QueryImpl.simulateQ_simulateQ_eq_of_apply
   intro t
-  change simulateQ (unifFwdImpl VCV.HashSpec + VCV.HashSpec.randomOracle)
-    (liftM (VCV.HashSpec.query t)) = _
+  change simulateQ (unifFwdImpl HashSig.HashSpec + HashSig.HashSpec.randomOracle)
+    (liftM (HashSig.HashSpec.query t)) = _
   exact QueryImpl.simulateQ_add_liftM_query_right _ _ t
 
 -- The actual full-root program is the inclusion of the same raw program.
 private theorem world_node (pp : Xmss.PublicParam) (seed : Xmss.Seed)
     (layer : Xmss.Layer) (h key : Nat) :
-    simulateQ (QueryImpl.ofLift VCV.HashSpec (OracleComp VCV.World))
-      (Xmss.node (fun input => VCV.wordBytesEquiv 32 <$>
-        VCV.HashSpec.query input.data.toList) pp seed layer h key) =
+    simulateQ (QueryImpl.ofLift HashSig.HashSpec (OracleComp VCV.World))
+      (Xmss.node (fun input => HashSig.ofOutput <$>
+        HashSig.HashSpec.query input.data.toList) pp seed layer h key) =
       Xmss.node VCV.H pp seed layer h key := by
   have hn := node_natural
-    (simulateQ' (QueryImpl.ofLift VCV.HashSpec (OracleComp VCV.World)))
-    (fun input => VCV.wordBytesEquiv 32 <$> VCV.HashSpec.query input.data.toList)
+    (simulateQ' (QueryImpl.ofLift HashSig.HashSpec (OracleComp VCV.World)))
+    (fun input => HashSig.ofOutput <$> HashSig.HashSpec.query input.data.toList)
     pp seed layer h key
   simpa only [simulateQ'_apply, raw_callback_world] using hn
 
 -- The selected leaf and fold use that same inclusion, in order.
 private theorem world_spine (pp : Xmss.PublicParam) (seed : Xmss.Seed)
     (layer : Xmss.Layer) (key : Nat) (pi : Vector Xmss.Digest Xmss.Constants.LAYER_HEIGHT) :
-    simulateQ (QueryImpl.ofLift VCV.HashSpec (OracleComp VCV.World)) (do
-      let leaf ← Xmss.leaves (fun input => VCV.wordBytesEquiv 32 <$>
-        VCV.HashSpec.query input.data.toList) pp seed layer key
-      Xmss.fold (fun input => VCV.wordBytesEquiv 32 <$>
-        VCV.HashSpec.query input.data.toList) pp layer key leaf pi) = (do
+    simulateQ (QueryImpl.ofLift HashSig.HashSpec (OracleComp VCV.World)) (do
+      let leaf ← Xmss.leaves (fun input => HashSig.ofOutput <$>
+        HashSig.HashSpec.query input.data.toList) pp seed layer key
+      Xmss.fold (fun input => HashSig.ofOutput <$>
+        HashSig.HashSpec.query input.data.toList) pp layer key leaf pi) = (do
       let leaf ← Xmss.leaves VCV.H pp seed layer key
       Xmss.fold VCV.H pp layer key leaf pi) := by
   rw [simulateQ_bind]
@@ -176,29 +175,29 @@ private theorem world_spine (pp : Xmss.PublicParam) (seed : Xmss.Seed)
   congr 1
   funext leaf
   have hf := fold_natural
-    (simulateQ' (QueryImpl.ofLift VCV.HashSpec (OracleComp VCV.World)))
-    (fun input => VCV.wordBytesEquiv 32 <$> VCV.HashSpec.query input.data.toList)
+    (simulateQ' (QueryImpl.ofLift HashSig.HashSpec (OracleComp VCV.World)))
+    (fun input => HashSig.ofOutput <$> HashSig.HashSpec.query input.data.toList)
     pp layer key leaf pi
   simpa only [simulateQ'_apply, raw_callback_world] using hf
 
 -- Settlement comes from this supported path endpoint, not from an independent completion.
 private theorem actual_world_root_joint (pp : Xmss.PublicParam) (seed : Xmss.Seed)
-    (layer : Xmss.Layer) (key : Nat) (initial known live : VCV.HashSpec.QueryCache)
+    (layer : Xmss.Layer) (key : Nat) (initial known live : HashSig.HashSpec.QueryCache)
     (hle : known ≤ live) (pi : Vector Xmss.Digest Xmss.Constants.LAYER_HEIGHT)
-    (hp : (pi, known) ∈ support ((simulateQ VCV.HashSpec.romImpl
+    (hp : (pi, known) ∈ support ((simulateQ HashSig.HashSpec.romImpl
       (Xmss.path VCV.H pp seed layer key)).run initial)) :
-    (simulateQ VCV.HashSpec.romImpl
+    (simulateQ HashSig.HashSpec.romImpl
       (Xmss.node VCV.H pp seed layer Xmss.Constants.LAYER_HEIGHT
         (key / 2 ^ Xmss.Constants.LAYER_HEIGHT))).run live =
-    (simulateQ VCV.HashSpec.romImpl (do
+    (simulateQ HashSig.HashSpec.romImpl (do
       let leaf ← Xmss.leaves VCV.H pp seed layer key
       Xmss.fold VCV.H pp layer key leaf pi)).run live := by
   rw [← world_path, raw_world_sim] at hp
   have settled := QueryImpl.simulateQ_toPartialImpl_snd_of_mem_support_run_simulateQ_withCaching
-    (uniformSampleImpl (spec := VCV.HashSpec)) _ hp
+    (uniformSampleImpl (spec := HashSig.HashSpec)) _ hp
   have joint := VCV.run_node_eq_run_selected_fold_of_path_settled
-    (uniformSampleImpl (spec := VCV.HashSpec))
-    (fun input => VCV.wordBytesEquiv 32 <$> VCV.HashSpec.query input.data.toList)
+    (uniformSampleImpl (spec := HashSig.HashSpec))
+    (fun input => HashSig.ofOutput <$> HashSig.HashSpec.query input.data.toList)
     pp seed layer key hle pi settled
   rw [← world_node, ← world_spine, raw_world_sim, raw_world_sim]
   exact joint
@@ -302,7 +301,7 @@ private theorem connected_support_of_root_joint
         (none, z.2) ∈ support ((simulateQ impl
           (Xmss.otsSign H pp seed .top (UInt32.ofNat (Xmss.bottomTree idx))
             (Xmss.packBytes root))).run afterRoot))) := by
-  -- These are the original signer's three sequential calls, including its early return.
+  -- These are the signer's three sequential calls, including its early return.
   rw [Xmss.signDerived, simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hz
   obtain ⟨⟨bottomReply, beforeRoot⟩, hbottom, hrest⟩ := hz
   cases bottomReply with
@@ -358,42 +357,42 @@ This is a support statement, not an equality of whole signer programs or their q
 -/
 theorem actual_signDerived_support_cases
     (pp : Xmss.PublicParam) (seed : Xmss.Seed) (idx : Xmss.LeafIndex) (msg : Xmss.Message)
-    (initial : VCV.HashSpec.QueryCache)
-    (z : Except Xmss.XmssError Xmss.Signature × VCV.HashSpec.QueryCache)
-    (hz : z ∈ support ((simulateQ VCV.HashSpec.romImpl
+    (initial : HashSig.HashSpec.QueryCache)
+    (z : Except Xmss.XmssError Xmss.Signature × HashSig.HashSpec.QueryCache)
+    (hz : z ∈ support ((simulateQ HashSig.HashSpec.romImpl
       (Xmss.signDerived VCV.H seed pp idx msg)).run initial)) :
     (z.1 = .error (.noAdmissibleEncoding .bottom idx.toNat) ∧
-      (none, z.2) ∈ support ((simulateQ VCV.HashSpec.romImpl
+      (none, z.2) ∈ support ((simulateQ HashSig.HashSpec.romImpl
         (Xmss.otsSign VCV.H pp seed .bottom (UInt32.ofNat idx.toNat)
           (Xmss.packBytes msg))).run initial)) ∨
     (∃ bottom afterOTS beforeRoot root afterRoot top,
-      (.ok bottom, beforeRoot) ∈ support ((simulateQ VCV.HashSpec.romImpl
+      (.ok bottom, beforeRoot) ∈ support ((simulateQ HashSig.HashSpec.romImpl
         (Xmss.signLayer VCV.H pp seed .bottom idx.toNat (Xmss.packBytes msg))).run initial) ∧
       (some (bottom.randomizer, bottom.chainValues), afterOTS) ∈ support
-        ((simulateQ VCV.HashSpec.romImpl (Xmss.otsSign VCV.H pp seed .bottom
+        ((simulateQ HashSig.HashSpec.romImpl (Xmss.otsSign VCV.H pp seed .bottom
           (UInt32.ofNat idx.toNat) (Xmss.packBytes msg))).run initial) ∧
-      (bottom.path, beforeRoot) ∈ support ((simulateQ VCV.HashSpec.romImpl
+      (bottom.path, beforeRoot) ∈ support ((simulateQ HashSig.HashSpec.romImpl
         (Xmss.path VCV.H pp seed .bottom idx.toNat)).run afterOTS) ∧
-      (root, afterRoot) ∈ support ((simulateQ VCV.HashSpec.romImpl
+      (root, afterRoot) ∈ support ((simulateQ HashSig.HashSpec.romImpl
         (Xmss.node VCV.H pp seed .bottom Xmss.Constants.LAYER_HEIGHT
           (Xmss.bottomTree idx))).run beforeRoot) ∧
-      (top, z.2) ∈ support ((simulateQ VCV.HashSpec.romImpl
+      (top, z.2) ∈ support ((simulateQ HashSig.HashSpec.romImpl
         (Xmss.signLayer VCV.H pp seed .top (Xmss.bottomTree idx)
           (Xmss.packBytes root))).run afterRoot) ∧
       z.1 = top.map (fun t => { leafIndex := idx, bottom, top := t }) ∧
-      (simulateQ VCV.HashSpec.romImpl
+      (simulateQ HashSig.HashSpec.romImpl
         (Xmss.node VCV.H pp seed .bottom Xmss.Constants.LAYER_HEIGHT
           (Xmss.bottomTree idx))).run beforeRoot =
-        (simulateQ VCV.HashSpec.romImpl (do
+        (simulateQ HashSig.HashSpec.romImpl (do
           let selected ← Xmss.leaves VCV.H pp seed .bottom idx.toNat
           Xmss.fold VCV.H pp .bottom idx.toNat selected bottom.path)).run beforeRoot ∧
       (∀ err, top = .error err →
         err = .noAdmissibleEncoding .top (Xmss.bottomTree idx) ∧
         VCV.readback z.1 = none ∧
-        (none, z.2) ∈ support ((simulateQ VCV.HashSpec.romImpl
+        (none, z.2) ∈ support ((simulateQ HashSig.HashSpec.romImpl
           (Xmss.otsSign VCV.H pp seed .top (UInt32.ofNat (Xmss.bottomTree idx))
             (Xmss.packBytes root))).run afterRoot))) := by
-  exact connected_support_of_root_joint VCV.HashSpec.romImpl VCV.H pp seed idx msg initial z hz
+  exact connected_support_of_root_joint HashSig.HashSpec.romImpl VCV.H pp seed idx msg initial z hz
     (fun afterOTS beforeRoot pi => actual_world_root_joint pp seed .bottom idx.toNat
       afterOTS beforeRoot beforeRoot le_rfl pi)
 
