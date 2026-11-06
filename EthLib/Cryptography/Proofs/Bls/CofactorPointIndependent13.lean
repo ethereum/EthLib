@@ -20,8 +20,10 @@ theorem independent13_nonzero : G2.toPoint independent13 ≠ 0 := by
   exact Bool.noConfusion h
 
 theorem independent13_annihilator : 13 • G2.toPoint independent13 = 0 :=
-  nsmul_zero_cert independent13 independent13_valid 13 5 (by decide +kernel) (by decide +kernel)
+  nsmul_zero_cert independent13 independent13_valid 13 5 (by decide +kernel)
+    (by decide_g2_at_model [independent13])
 
-theorem independent13_clear_zero : (clearAux independent13).isInfinity = true := by decide +kernel
+theorem independent13_clear_zero : (clearAux independent13).isInfinity = true := by
+  decide_g2_at_model [independent13, map_clearAux]
 
 end EthLib.Cryptography.Bls.CofactorCertificate

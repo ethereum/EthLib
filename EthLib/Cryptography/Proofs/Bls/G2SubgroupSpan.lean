@@ -86,7 +86,7 @@ theorem exists_nsmul_generator_of_modulus_smul_eq_zero {Q : curve.toAffine.Point
     by_contra hn
     have hq : Fr.modulus • (QuotientAddGroup.mk Q : curve.toAffine.Point ⧸ H) = 0 := by
       change Fr.modulus • (QuotientAddGroup.mk' H Q) = 0
-      rw [← map_nsmul, hQ, map_zero]
+      rw [← map_nsmul, hQ, _root_.map_zero]
     have hd := prime_dvd_card_of_annihilated Fr.modulus_prime _ hq hn
     change Fr.modulus ∣ Nat.card (curve.toAffine.Point ⧸ AddSubgroup.zmultiples (toPoint generator)) at hd
     rw [card_quotient_generator_span] at hd

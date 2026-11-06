@@ -54,7 +54,8 @@ theorem frobenius_eq_pow (a : Fp12) : a.frobenius = a ^ Fp.modulus := by
   rw [← primeFrobenius_apply]
   conv_rhs => rw [eq_sum a]
   rw [eq_sum a.frobenius]
-  simp only [map_add, map_mul, map_pow, primeFrobenius_fp2, primeFrobenius_w, frobenius]
+  simp only [_root_.map_add, _root_.map_mul, map_pow, primeFrobenius_fp2, primeFrobenius_w,
+    frobenius]
   ring
 
 /-- `ξ` is not a square in `Fp2`, so by Euler's criterion this power is `-1`.
@@ -69,7 +70,7 @@ private theorem w_pow_p6 : w ^ (Fp.modulus ^ 6) = -w := by
   rw [show Fp.modulus ^ 6 = 6 * ((Fp.modulus ^ 2 - 1) / 2 *
       (2 * ((Fp.modulus ^ 4 + Fp.modulus ^ 2 - 2) / 6) + 1)) + 1 by decide,
     pow_succ, pow_mul, w_sixth, ← map_pow, pow_mul, xi_pow_half, pow_succ, pow_mul, neg_one_sq,
-    one_pow, one_mul, map_neg, map_one, neg_one_mul]
+    one_pow, one_mul, _root_.map_neg, _root_.map_one, neg_one_mul]
 
 /-- The `p^6`-th power, a ring map. -/
 private noncomputable def frobenius6 : Fp12 →+* Fp12 := primeFrobenius ^ 6
@@ -90,8 +91,8 @@ theorem conjugate_eq_pow (a : Fp12) : a.conjugate = a ^ (Fp.modulus ^ 6) := by
   rw [← frobenius6_apply]
   conv_rhs => rw [eq_sum a]
   rw [eq_sum a.conjugate]
-  simp only [map_add, map_mul, map_pow, hfix, hw, conjugate_c0, conjugate_c1, Fp6.neg_c0,
-    Fp6.neg_c1, Fp6.neg_c2, map_neg]
+  simp only [_root_.map_add, _root_.map_mul, map_pow, hfix, hw, conjugate_c0, conjugate_c1,
+    Fp6.neg_c0, Fp6.neg_c1, Fp6.neg_c2, _root_.map_neg]
   ring
 
 /-- In a finite field the inverse is the power by the order minus two. -/

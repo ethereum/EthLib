@@ -47,8 +47,8 @@ namespace EthLib.Cryptography.Bls
 namespace Fp2
 
 /-- Boolean equality on `Fp2` is symmetric. -/
-theorem beq_symm (a b : Fp2) : (a == b) = (b == a) := by
-  rw [Bool.eq_iff_iff, _root_.beq_iff_eq, _root_.beq_iff_eq, eq_comm]
+theorem beq_symm (a b : Fp2) : a.beq b = b.beq a := by
+  rw [Bool.eq_iff_iff, Fp2.beq_iff_eq, Fp2.beq_iff_eq, eq_comm]
 
 end Fp2
 
@@ -61,7 +61,7 @@ open scoped EthLib.Cryptography.Bls.Fp
 /-- Projective equality on `G2` is reflexive. -/
 @[simp] theorem projectiveEq_refl (p : G2) : projectiveEq p p = true := by
   unfold projectiveEq
-  by_cases hz : p.z.isZero = true <;> simp [hz]
+  by_cases hz : p.z.isZero = true <;> simp [hz, Fp2.beq_iff_eq]
 
 /-- Projective equality on `G2` is symmetric. -/
 theorem projectiveEq_symm (p q : G2) : projectiveEq p q = projectiveEq q p := by
@@ -563,7 +563,7 @@ theorem projectiveEq_toAffine {p : G2} (hinf : ¬ p.isInfinity = true) :
   rw [ite_eq_right hpz]
   dsimp only
   -- Reduce both cross-multiplications to z * z.inverse = 1.
-  rw [Bool.and_eq_true, _root_.beq_iff_eq, _root_.beq_iff_eq]
+  rw [Bool.and_eq_true, Fp2.beq_iff_eq, Fp2.beq_iff_eq]
   exact ⟨xeq_fp2 p.x p.z p.z.inverse hw, yeq_fp2 p.y p.z p.z.inverse hw⟩
 
 private theorem sqrt_pm_fp2 {ya yPos : Fp2}

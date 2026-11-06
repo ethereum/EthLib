@@ -92,7 +92,7 @@ theorem toAffine_eq_of_projectiveEq {p q : G2} (h : G2.projectiveEq p q = true) 
     have hq0 : q.z ≠ 0 := fun hz => hq (Fp2.isZero_iff.mpr hz)
     unfold G2.projectiveEq at h
     rw [ite_eq_right hp, ite_eq_right hq, Bool.and_eq_true,
-      _root_.beq_iff_eq, _root_.beq_iff_eq] at h
+      Fp2.beq_iff_eq, Fp2.beq_iff_eq] at h
     unfold G2.toAffine
     rw [ite_eq_right hp, ite_eq_right hq]
     change (p.x * (p.z⁻¹ * p.z⁻¹), p.y * (p.z⁻¹ * p.z⁻¹ * p.z⁻¹)) =
@@ -105,7 +105,7 @@ theorem toAffine_eq_of_projectiveEq {p q : G2} (h : G2.projectiveEq p q = true) 
 
 private theorem projectiveEq_refl (p : G2) : G2.projectiveEq p p = true := by
   unfold G2.projectiveEq
-  by_cases hz : p.z.isZero = true <;> simp [hz]
+  by_cases hz : p.z.isZero = true <;> simp [hz, Fp2.beq_iff_eq]
 
 /-- `psi` respects `G2.projectiveEq`, including at infinity. -/
 theorem psi_projectiveEq_of_projectiveEq {p q : G2} (h : G2.projectiveEq p q = true) :
@@ -192,7 +192,7 @@ theorem psi2_cube_projectiveEq_neg (P : G2) :
     unfold G2.toAffine
     rw [hz]
     dsimp only
-    rw [Bool.and_eq_true, _root_.beq_iff_eq, _root_.beq_iff_eq]
+    rw [Bool.and_eq_true, Fp2.beq_iff_eq, Fp2.beq_iff_eq]
     change P.x * (P.z⁻¹ * P.z⁻¹) * (P.z * P.z) = P.x * (1 * 1) ∧
       -(P.y * (P.z⁻¹ * P.z⁻¹ * P.z⁻¹)) * (P.z * P.z * P.z) = -P.y * (1 * 1 * 1)
     constructor <;> field_simp

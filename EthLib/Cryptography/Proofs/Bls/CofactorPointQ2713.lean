@@ -20,8 +20,10 @@ theorem q2713_nonzero : G2.toPoint q2713 ≠ 0 := by
   exact Bool.noConfusion h
 
 theorem q2713_annihilator : 2713 • G2.toPoint q2713 = 0 :=
-  nsmul_zero_cert q2713 q2713_valid 2713 13 (by decide +kernel) (by decide +kernel)
+  nsmul_zero_cert q2713 q2713_valid 2713 13 (by decide +kernel)
+    (by decide_g2_at_model [q2713])
 
-theorem q2713_clear_zero : (clearAux q2713).isInfinity = true := by decide +kernel
+theorem q2713_clear_zero : (clearAux q2713).isInfinity = true := by
+  decide_g2_at_model [q2713, map_clearAux]
 
 end EthLib.Cryptography.Bls.CofactorCertificate

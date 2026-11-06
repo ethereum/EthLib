@@ -20,8 +20,10 @@ theorem large_nonzero : G2.toPoint large ≠ 0 := by
   exact Bool.noConfusion h
 
 theorem large_annihilator : 402096035359507321594726366720466575392706800671181159425656785868777272553337714697862511267018014931937703598282857976535744623203249 • G2.toPoint large = 0 :=
-  nsmul_zero_cert large large_valid 402096035359507321594726366720466575392706800671181159425656785868777272553337714697862511267018014931937703598282857976535744623203249 449 (by decide +kernel) (by decide +kernel)
+  nsmul_zero_cert large large_valid _ 449 (by decide +kernel)
+    (by decide_g2_at_model [large])
 
-theorem large_clear_zero : (clearAux large).isInfinity = true := by decide +kernel
+theorem large_clear_zero : (clearAux large).isInfinity = true := by
+  decide_g2_at_model [large, map_clearAux]
 
 end EthLib.Cryptography.Bls.CofactorCertificate
