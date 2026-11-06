@@ -51,9 +51,10 @@ private theorem decodePair_eq_ok_iff {rawG1 rawG2 : List UInt8} {pair : G1 × G2
 /-- A list of pairs with a discrete logarithm for each point has lists of them. -/
 private theorem exists_lists {pairs : List (G1 × G2)}
     (h : ∀ pair ∈ pairs, (∃ a, G1.Represents pair.1 a) ∧ ∃ b, G2.Represents pair.2 b) :
-    ∃ a b : List Fr, a.length = pairs.length ∧ b.length = pairs.length ∧
+    ∃ a b : List Fr, ∃ (ha : a.length = pairs.length) (hb : b.length = pairs.length),
       ∀ i (hi : i < pairs.length),
-        G1.Represents (pairs[i]).1 a[i]! ∧ G2.Represents (pairs[i]).2 b[i]! := by
+        G1.Represents (pairs[i]).1 (a[i]'(ha ▸ hi)) ∧
+          G2.Represents (pairs[i]).2 (b[i]'(hb ▸ hi)) := by
   induction pairs with
   | nil => exact ⟨[], [], rfl, rfl, fun i hi => absurd hi (Nat.not_lt_zero i)⟩
   | cons pair pairs ih =>
@@ -72,9 +73,10 @@ theorem exists_represents_of_decodePairs {rawPairs : List (List UInt8 × List UI
     {pairs : List (G1 × G2)}
     (hdec : rawPairs.mapM (fun (rawG1, rawG2) => do
         return (← bytesToG1 rawG1 true, ← bytesToG2 rawG2 true)) = .ok pairs) :
-    ∃ a b : List Fr, a.length = pairs.length ∧ b.length = pairs.length ∧
+    ∃ a b : List Fr, ∃ (ha : a.length = pairs.length) (hb : b.length = pairs.length),
       ∀ i (hi : i < pairs.length),
-        G1.Represents (pairs[i]).1 a[i]! ∧ G2.Represents (pairs[i]).2 b[i]! := by
+        G1.Represents (pairs[i]).1 (a[i]'(ha ▸ hi)) ∧
+          G2.Represents (pairs[i]).2 (b[i]'(hb ▸ hi)) := by
   refine exists_lists fun pair hpair => ?_
   obtain ⟨⟨rawG1, rawG2⟩, -, hraw⟩ := mapM_ok_mem hdec pair hpair
   obtain ⟨h1, h2⟩ := decodePair_eq_ok_iff.mp hraw
@@ -103,7 +105,7 @@ theorem bls12Pairing_eq_one_iff (hlaws : PairingLaws) {data : ByteArray} {gas : 
         return (← bytesToG1 rawG1 true, ← bytesToG2 rawG2 true)) = .ok pairs)
     {a b : List Fr} (ha : a.length = pairs.length) (hb : b.length = pairs.length)
     (hrep : ∀ i (hi : i < pairs.length),
-      G1.Represents (pairs[i]).1 a[i]! ∧ G2.Represents (pairs[i]).2 b[i]!) :
+      G1.Represents (pairs[i]).1 (a[i]'(ha ▸ hi)) ∧ G2.Represents (pairs[i]).2 (b[i]'(hb ▸ hi))) :
     out = ⟨(boolWord true).toArray⟩ ↔ (List.zipWith (· * ·) a b).sum = 0 := by
   obtain ⟨-, -, rawPairs', pairs', hraw', hdec', rfl⟩ := (bls12Pairing_eq_ok_iff data gas out).mp h
   rw [hraw] at hraw'
@@ -180,7 +182,7 @@ theorem bls12Pairing_encodePairs (hlaws : PairingLaws) {pairs : List (G1 × G2)}
     (hne : pairs ≠ []) {a b : List Fr} (ha : a.length = pairs.length)
     (hb : b.length = pairs.length)
     (hrep : ∀ i (hi : i < pairs.length),
-      G1.Represents (pairs[i]).1 a[i]! ∧ G2.Represents (pairs[i]).2 b[i]!)
+      G1.Represents (pairs[i]).1 (a[i]'(ha ▸ hi)) ∧ G2.Represents (pairs[i]).2 (b[i]'(hb ▸ hi)))
     {gas : Nat} (hgas : bls12PairingGas pairs.length ≤ gas) :
     bls12Pairing
         ⟨(pairs.map fun pair =>
@@ -223,8 +225,11 @@ theorem bls12Pairing_encodePairs (hlaws : PairingLaws) {pairs : List (G1 × G2)}
   have hlength : decoded.length = pairs.length := by
     rw [EthLib.Base.mapM_ok_length hdec, List.length_map]
   -- Each decoded point represents the same discrete logarithm as the encoded one.
+  have ha' : a.length = decoded.length := ha.trans hlength.symm
+  have hb' : b.length = decoded.length := hb.trans hlength.symm
   have hrep' : ∀ i (hi : i < decoded.length),
-      G1.Represents (decoded[i]).1 a[i]! ∧ G2.Represents (decoded[i]).2 b[i]! := by
+      G1.Represents (decoded[i]).1 (a[i]'(ha' ▸ hi)) ∧
+        G2.Represents (decoded[i]).2 (b[i]'(hb' ▸ hi)) := by
     intro i hi
     have hi' : i < pairs.length := hlength ▸ hi
     have hget := mapM_ok_getElem hdec i (by simpa using hi')
@@ -243,7 +248,7 @@ theorem bls12Pairing_encodePairs (hlaws : PairingLaws) {pairs : List (G1 × G2)}
       ⟨valid_of_bytesToG2_eq_ok h2, hqt.trans hQ.2⟩⟩
   have hcheck : pairingCheck decoded.toArray = decide ((List.zipWith (· * ·) a b).sum = 0) := by
     rw [Bool.eq_iff_iff, decide_eq_true_iff]
-    exact hlaws.pairingCheck_iff decoded a b (ha.trans hlength.symm) (hb.trans hlength.symm) hrep'
+    exact hlaws.pairingCheck_iff decoded a b ha' hb' hrep'
   refine (bls12Pairing_eq_ok_iff data gas _).mpr ⟨?_, hk ▸ hgas, _, decoded, ?_, hdec, ?_⟩
   · rw [hsize, LENGTH_PER_PAIRING_PAIR]
     omega

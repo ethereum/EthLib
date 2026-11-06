@@ -47,10 +47,10 @@ Let `P_i` represent `a_i • g1` and `Q_i` represent `b_i • g2`.
 The check of the pairs `(P_i, Q_i)` passes exactly when `sum_i a_i * b_i = 0`. -/
 structure PairingLaws : Prop where
   pairingCheck_iff :
-    ∀ (pairs : List (G1 × G2)) (a b : List Fr),
-      a.length = pairs.length → b.length = pairs.length →
+    ∀ (pairs : List (G1 × G2)) (a b : List Fr) (ha : a.length = pairs.length)
+      (hb : b.length = pairs.length),
       (∀ i (h : i < pairs.length),
-        G1.Represents (pairs[i]).1 a[i]! ∧ G2.Represents (pairs[i]).2 b[i]!) →
+        G1.Represents (pairs[i]).1 (a[i]'(ha ▸ h)) ∧ G2.Represents (pairs[i]).2 (b[i]'(hb ▸ h))) →
       (pairingCheck pairs.toArray = true ↔ (List.zipWith (· * ·) a b).sum = 0)
 
 namespace G1

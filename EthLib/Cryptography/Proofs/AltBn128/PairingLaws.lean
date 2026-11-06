@@ -38,10 +38,10 @@ Let `P_i = a_i P1` and `Q_i = b_i P2`.
 The check of the pairs `(P_i, Q_i)` passes exactly when `sum_i a_i b_i = 0`. -/
 structure PairingLaws : Prop where
   pairingCheck_iff :
-    ∀ (pairs : List (Point × Point2)) (a b : List (ZMod Fr.modulus)),
-      a.length = pairs.length → b.length = pairs.length →
+    ∀ (pairs : List (Point × Point2)) (a b : List (ZMod Fr.modulus)) (ha : a.length = pairs.length)
+      (hb : b.length = pairs.length),
       (∀ i (h : i < pairs.length),
-        (pairs[i]).1.Represents a[i]! ∧ (pairs[i]).2.Represents b[i]!) →
+        (pairs[i]).1.Represents (a[i]'(ha ▸ h)) ∧ (pairs[i]).2.Represents (b[i]'(hb ▸ h))) →
       (pairingCheck pairs = true ↔ (List.zipWith (· * ·) a b).sum = 0)
 
 /-! ## Pairs with a point at infinity -/

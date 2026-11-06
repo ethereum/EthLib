@@ -78,10 +78,10 @@ theorem pairingCheck_toArray_iff (l : List (G1 × G2)) :
 
 /-- Under bilinearity, the product of the pairings is a power of `e(g1, g2)`. -/
 private theorem prod_pairing (h : PairingBilinear) :
-    ∀ (pairs : List (G1 × G2)) (a b : List Fr),
-      a.length = pairs.length → b.length = pairs.length →
+    ∀ (pairs : List (G1 × G2)) (a b : List Fr) (ha : a.length = pairs.length)
+      (hb : b.length = pairs.length),
       (∀ i (hi : i < pairs.length),
-        G1.Represents (pairs[i]).1 a[i]! ∧ G2.Represents (pairs[i]).2 b[i]!) →
+        G1.Represents (pairs[i]).1 (a[i]'(ha ▸ hi)) ∧ G2.Represents (pairs[i]).2 (b[i]'(hb ▸ hi))) →
       (pairs.map fun pq => pairing pq.1 pq.2).prod =
         pairing G1.generator G2.generator ^ (List.zipWith (fun x y => x.val * y.val) a b).sum
   | [], [], [], _, _, _ => by simp
@@ -93,8 +93,8 @@ private theorem prod_pairing (h : PairingBilinear) :
     obtain ⟨hP, hQ⟩ := hr 0 (by simp)
     have ih := prod_pairing h ps xs ys (by simpa using ha) (by simpa using hb) fun i hi => by
       have := hr (i + 1) (Nat.succ_lt_succ hi)
-      simpa only [List.getElem_cons_succ, List.getElem!_cons_succ] using this
-    simp only [List.getElem_cons_zero, List.getElem!_cons_zero] at hP hQ
+      simpa only [List.getElem_cons_succ] using this
+    simp only [List.getElem_cons_zero] at hP hQ
     rw [List.map_cons, List.prod_cons, ih, List.zipWith_cons_cons, List.sum_cons, pow_add,
       pairing_congr hP hQ, h]
 
