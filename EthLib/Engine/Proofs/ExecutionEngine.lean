@@ -16,6 +16,10 @@ That block must carry the versioned hashes of the request from Deneb, and pass t
 A payload whose block decodes holds no transaction of no bytes.
 
 The beacon chain calls a version of the method at each fork from Bellatrix to Fulu.
+
+A field from a fork decodes exactly when it is present from that fork on and absent before.
+
+A field decodes from an option exactly when reading the field back gives that option.
 -/
 
 public section
@@ -174,5 +178,40 @@ theorem payloadBlock_of_glamsterdam (h : .glamsterdam ≤ fork) {config : ChainC
   unfold payloadBlock
   cases anyPayloadOf p <;> cases config.activeFork p.blockNumber.toNat p.timestamp.toNat <;>
     simp [zero, acceptsFork]
+
+/-! ## A field from a fork -/
+
+/-- A field from fork `f` decodes exactly when its presence agrees with `f ≤ fork`. -/
+theorem exists_since_iff {α : Type} {f : Fork} {what : String} {o : Option α} :
+    (∃ x : Since f fork α, Json.since what o = .ok x) ↔ (o.isSome ↔ f ≤ fork) := by
+  -- Each of the four cases either succeeds or fails with an invalid parameter.
+  cases o <;> unfold Json.since <;> by_cases h : f ≤ fork <;>
+    simp [h, Json.invalid, throw, throwThe, MonadExceptOf.throw, pure, Except.pure] <;>
+    exact ⟨_, rfl⟩
+
+/-- Reading back a decoded field from a fork gives the option it was decoded from. -/
+theorem sinceValue_of_since {α : Type} {f : Fork} {what : String} {o : Option α}
+    {x : Since f fork α} (h : Json.since what o = .ok x) : sinceValue x = o := by
+  -- The two cases that fail cannot give the field, and the other two give back the option.
+  cases o <;> unfold Json.since at h <;> by_cases hf : f ≤ fork <;>
+    simp [hf, Json.invalid, throw, throwThe, MonadExceptOf.throw, pure, Except.pure] at h
+  · simp [sinceValue, hf]
+  · cases h
+    simp [sinceValue, hf]
+
+/-- Decoding the value of a field from a fork gives back the field. -/
+theorem since_sinceValue {α : Type} {f : Fork} {what : String} (x : Since f fork α) :
+    Json.since what (sinceValue x) = .ok x := by
+  unfold sinceValue Json.since
+  by_cases hf : f ≤ fork
+  · simp only [hf, dite_true, ite_true]
+    rfl
+  · simp only [hf, dite_false]
+    exact congrArg Except.ok (funext fun h => absurd h hf)
+
+/-- A field from a fork decodes from an option exactly when reading it back gives that option. -/
+theorem since_eq_ok_iff {α : Type} {f : Fork} {what : String} {o : Option α}
+    {x : Since f fork α} : Json.since what o = .ok x ↔ sinceValue x = o :=
+  ⟨sinceValue_of_since, fun h => h ▸ since_sinceValue x⟩
 
 end EthLib.Engine
