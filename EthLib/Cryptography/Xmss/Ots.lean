@@ -114,28 +114,6 @@ end Internal
 
 /-! ## Signing and recovering the leaf -/
 
-/-- Sign through delayed callbacks for the base, search, chain starts and chain values.
-
-Source: leanXMSS draft at leanVM commit `4af2cdddd7cd41b9df2cc7e123e314a91b0b4462`.
-
-The callback order follows section "WOTS+C", paragraph "Signing".
-
-The search receives the computed base, and a failed search skips both chain callbacks.
-
-Each callback takes `Unit` so its computation starts only when the signer reaches it.
--/
-def otsSignWithCallbacks
-    (getBase : Unit → m Randomizer)
-    (getSearch : Randomizer → Unit → m (Option (Randomizer × Vector (Fin CHAIN_LENGTH) V)))
-    (getStarts : Unit → m (Vector Digest V))
-    (getValues : Vector Digest V → Vector (Fin CHAIN_LENGTH) V → Unit →
-      m (Vector Digest V)) : m (Option (Randomizer × Vector Digest V)) := do
-  let base ← getBase ()
-  let some (rho, digits) ← getSearch base () | return none
-  let starts ← getStarts ()
-  let values ← getValues starts digits ()
-  return some (rho, values)
-
 /-- `Ots.sign(l, e, M)`: the randomizer and the 58 chain values that sign `M`.
 
 Takes the least trial `c < 2^32` whose digest is a codeword `x`.

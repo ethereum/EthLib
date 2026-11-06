@@ -5,20 +5,44 @@ public import EthLib.Cryptography.Xmss.Ots
 /-!
 # Delayed callbacks of the one-time signer
 
-The default callbacks retain the signer's exact computation for every monad.
+The one-time signer has four stages: the base, the search, the chain starts and the chain values.
 
-A failed search returns before the chain callbacks, while success preserves their order.
+A reduction may replace a stage and keep the others.
 
-State and errors remain part of the complete result.
+This file writes the signer with one callback per stage, for the proofs only.
+
+The specification's signer is this form with its own stages, for every monad.
+
+A failed search returns before the chain callbacks, and success keeps their order.
+
+State and errors stay part of the result.
 -/
 
-public section
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss
 
 open Constants
 
-/-- The callbacks of the actual signer give its identical bind tree for any monad. -/
+/-- The one-time signer with one callback per stage.
+
+The search receives the base, and a failed search skips both chain callbacks.
+
+Each callback takes `Unit`, so its computation starts only when the signer reaches it.
+-/
+def otsSignWithCallbacks {m : Type → Type} [Monad m]
+    (getBase : Unit → m Randomizer)
+    (getSearch : Randomizer → Unit → m (Option (Randomizer × Vector (Fin CHAIN_LENGTH) V)))
+    (getStarts : Unit → m (Vector Digest V))
+    (getValues : Vector Digest V → Vector (Fin CHAIN_LENGTH) V → Unit →
+      m (Vector Digest V)) : m (Option (Randomizer × Vector Digest V)) := do
+  let base ← getBase ()
+  let some (rho, digits) ← getSearch base () | return none
+  let starts ← getStarts ()
+  let values ← getValues starts digits ()
+  return some (rho, values)
+
+/-- With the signer's own stages as callbacks, the callback form is the signer, in every monad. -/
 theorem otsSign_eq_otsSignWithCallbacks {m : Type → Type} [Monad m]
     (H : ByteArray → m (Vector UInt8 32)) (pp : PublicParam) (seed : Seed)
     (layer : Layer) (key : UInt32) (msg : ByteArray) :
@@ -54,7 +78,7 @@ theorem otsSignWithCallbacks_some (rho : Randomizer) (digits : Vector (Fin CHAIN
 
 end Branches
 
-/-- An exhausted search retains exactly its base and search effects at any initial trace. -/
+/-- A failed search keeps exactly the effects of the base and the search, from any trace. -/
 theorem otsSignWithCallbacks_none_trace {ε τ : Type} (initial : List τ)
     (base : Randomizer) (baseEvent : τ) (searchEvent : Randomizer → τ)
     (getStarts : Unit → ExceptT ε (StateT (List τ) Id) (Vector Digest V))
@@ -71,7 +95,7 @@ theorem otsSignWithCallbacks_none_trace {ε τ : Type} (initial : List τ)
   simp only [List.append_assoc]
   rfl
 
-/-- Successful callbacks retain order and the actual arguments in the complete result and trace. -/
+/-- On success, the trace lists the four callbacks in order, each with the arguments it got. -/
 theorem otsSignWithCallbacks_some_trace {ε τ : Type} (initial : List τ)
     (base rho : Randomizer) (digits : Vector (Fin CHAIN_LENGTH) V)
     (starts values : Vector Digest V) (baseEvent startsEvent : τ)
@@ -84,14 +108,14 @@ theorem otsSignWithCallbacks_some_trace {ε τ : Type} (initial : List τ)
       (fun s x () => do modify (· ++ [valuesEvent s x]); pure values)).run.run initial) =
         (.ok (some (rho, values)),
           initial ++ [baseEvent, searchEvent base, startsEvent, valuesEvent starts digits]) := by
-  -- The concrete transformers retain every callback's state before returning the result.
+  -- The state transformer keeps each callback's state before the result is returned.
   change ((Except.ok (some (rho, values)) : Except ε (Option (Randomizer × Vector Digest V))),
     (((initial ++ [baseEvent]) ++ [searchEvent base]) ++ [startsEvent]) ++
       [valuesEvent starts digits]) = _
   simp only [List.append_assoc]
   rfl
 
-/-- An outer error at any callback retains exactly the effects through that callback. -/
+/-- An error of the outer monad at a callback keeps exactly the effects up to that callback. -/
 theorem otsSignWithCallbacks_error_trace {ε τ : Type} (initial : List τ) (stop : Fin 4)
     (error : ε) (base rho : Randomizer) (digits : Vector (Fin CHAIN_LENGTH) V)
     (starts values : Vector Digest V) (baseEvent startsEvent : τ)
@@ -117,7 +141,7 @@ theorem otsSignWithCallbacks_error_trace {ε τ : Type} (initial : List τ) (sto
   have hcases : stop = 0 ∨ stop = 1 ∨ stop = 2 ∨ stop = 3 := by omega
   rcases hcases with rfl | rfl | rfl | rfl
   all_goals
-    -- Only the effects through the chosen callback have run in this concrete transformer.
+    -- Only the callbacks up to the failing one ran.
     change ((Except.error error : Except ε (Option (Randomizer × Vector Digest V))), _) = _
     simp only [List.append_assoc]
     rfl
