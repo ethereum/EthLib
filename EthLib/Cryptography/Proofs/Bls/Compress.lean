@@ -71,52 +71,60 @@ theorem sqrt_complete {a b : Fp} (h : b * b = a) :
 
 /-! ## Big-endian bytes
 
-The byte decoder of `Fp` reads the bytes as one big-endian integer.
+The encoder of `Fp` writes the integer of an element as 48 big-endian bytes.
 
-The KZG encoder writes that integer back, so its round trip gives that of a field element. -/
+The decoder reads them back, and it rejects an integer of at least `p`. -/
+
+/-- The bytes of an element are those of its integer. -/
+private theorem toBytesBE_data (x : Fp) :
+    (Fp.toBytesBE x).data.toList = Base.natToBytes 48 x.val := by
+  rw [show Fp.toBytesBE x = Montgomery.toBytesBE x from rfl, Montgomery.toBytesBE_eq]
+  unfold Fp.val
+  rfl
 
 /-- Decoding the encoding of a field element recovers its value. -/
 private theorem bytesToNat_toBytesBE (x : Fp) :
     Base.bytesToNat (Fp.toBytesBE x).data.toList = x.val := by
-  have heq : Fp.toBytesBE x = Kzg.intToBytesBE x.val 48 := rfl
-  rw [heq]
-  exact Kzg.bytesToNat_intToBytesBE_of_lt (calc x.val < Fp.modulus := x.isLt
-    _ < 256 ^ 48 := by decide)
-
-/-! ## Encoding size, byte 0, and the `fromBytesBE` round-trip -/
-
-set_option maxHeartbeats 1000000 in
-/-- Byte 0 (most significant) of the big-endian encoding, via `.get!`
-(the form `compress` uses). -/
-theorem get!_toBytesBE_zero (x : Fp) :
-    ((Fp.toBytesBE x).get! 0).toNat = (x.val >>> (47 * 8)) &&& 0xff := by
-  have hdata : (Fp.toBytesBE x).get! 0 = (Array.ofFn (n := 48) (fun j =>
-      UInt8.ofNat ((x.val >>> ((47 - j.val) * 8)) &&& 0xff)))[0]! := rfl
-  rw [hdata,
-    getElem!_pos (Array.ofFn (n := 48) fun j =>
-      UInt8.ofNat ((x.val >>> ((47 - j.val) * 8)) &&& 0xff)) 0
-      (by rw [Array.size_ofFn]; decide),
-    Array.getElem_ofFn, UInt8.toNat_ofNat',
-    show (0xff : Nat) = 2 ^ 8 - 1 by decide,
-    Nat.and_two_pow_sub_one_eq_mod, Nat.mod_mod, Nat.and_two_pow_sub_one_eq_mod]
-  norm_num
+  rw [toBytesBE_data]
+  exact Base.bytesToNat_natToBytes_of_lt (lt_of_lt_of_le (val_lt x) (by decide))
 
 set_option exponentiation.threshold 400 in
 /-- The most significant byte of a canonical field element has its top
 three bits clear (`< 0x20`), since `p < 2^381 = 32·2^376`. -/
 theorem toBytesBE_head_lt (x : Fp) : ((Fp.toBytesBE x).get! 0).toNat < 0x20 := by
-  rw [get!_toBytesBE_zero]
-  have hb : x.val < 32 * 2 ^ (47 * 8) := lt_of_lt_of_le x.isLt (by decide)
-  have hsr : x.val >>> (47 * 8) < 32 := by
-    rw [Nat.shiftRight_eq_div_pow]
-    exact Nat.div_lt_of_lt_mul (by rwa [Nat.mul_comm] at hb)
-  have hand : (x.val >>> (47 * 8)) &&& 0xff ≤ x.val >>> (47 * 8) := Nat.and_le_left
-  omega
+  have hv : x.val < 256 ^ 48 := lt_of_lt_of_le (val_lt x) (by decide)
+  -- Split the 48 bytes into the head byte and the 47 after it.
+  obtain ⟨b, rest, hbr⟩ : ∃ b rest, (Fp.toBytesBE x).data.toList = b :: rest := by
+    rw [toBytesBE_data]
+    cases h : Base.natToBytes 48 x.val with
+    | nil =>
+      have := congrArg List.length h
+      rw [Base.natToBytes_length] at this
+      simp at this
+    | cons b rest => exact ⟨b, rest, rfl⟩
+  have hlen : rest.length = 47 := by
+    have := congrArg List.length hbr
+    rw [toBytesBE_data, Base.natToBytes_length] at this
+    simp at this
+    omega
+  have hget : (Fp.toBytesBE x).get! 0 = b := by
+    show (Fp.toBytesBE x).data[0]! = b
+    rw [← Array.getElem!_toList, hbr]
+    rfl
+  have hval : b.toNat * 256 ^ 47 + Base.bytesToNat rest = x.val := by
+    rw [← hlen, ← Base.bytesToNat_cons, ← hbr, toBytesBE_data,
+      Base.bytesToNat_natToBytes_of_lt hv]
+  have hlt : x.val < 32 * 256 ^ 47 := lt_of_lt_of_le (val_lt x) (by decide)
+  rw [hget]
+  have : b.toNat * 256 ^ 47 < 32 * 256 ^ 47 := by omega
+  exact Nat.lt_of_mul_lt_mul_right this
 
+/-- Decoding the 48 bytes of an element gives it back. -/
 theorem fromBytesBE_toBytesBE (x : Fp) : Fp.fromBytesBE x.toBytesBE = .ok x := by
-  rw [Fp.fromBytesBE, ite_eq_right (by rw [size_toBytesBE]; decide),
-    dite_eq_left (by rw [bytesToNat_toBytesBE]; exact x.isLt)]
-  simp only [bytesToNat_toBytesBE]
+  unfold Fp.fromBytesBE
+  rw [size_toBytesBE]
+  simp only [ne_eq, not_true_eq_false, ↓reduceIte]
+  rw [show x.toBytesBE = Montgomery.toBytesBE x from rfl, Montgomery.ofBytesBE_toBytesBE]
 
 /-! ## Canonical byte encoding
 
@@ -132,18 +140,31 @@ theorem toBytesBE_fromBytesBE {b : ByteArray} {x : Fp}
   -- A size other than 48 is rejected, so it cannot produce a field element.
   · cases h
   · rename_i hsz
-    have hsz48 : b.size = 48 := by omega
-    dsimp only at h
-    split at h
-    -- An in-range value is the decoded element itself.
-    · cases h
-      -- The encoder is the KZG big-endian encoder at width 48.
-      show Kzg.intToBytesBE (Base.bytesToNat b.data.toList) 48 = b
-      rw [← hsz48]
-      -- Any byte array is the encoding of its own value at its own size.
-      exact Kzg.intToBytesBE_bytesToNat b
+    have hs : b.size = 48 := by omega
+    have hl : (List.ofFn (n := 4 * 12) fun k => b[0 + k.val]!) = b.data.toList := by
+      apply List.ext_getElem (by simp [hs])
+      intro i h1 h2
+      simp only [List.getElem_ofFn, Nat.zero_add, Array.getElem_toList]
+      rw [getElem!_pos b i (by simp at h1; omega)]
+      rfl
+    rw [Montgomery.ofBytesBE_eq, hl] at h
+    by_cases hlt : Base.bytesToNat b.data.toList < params.p
+    -- An in-range value is the decoded element itself, and it writes the same bytes.
+    · simp only [hlt, ↓reduceIte] at h
+      cases h
+      have hv : Montgomery.toNat (Montgomery.ofNat (M := params) (Base.bytesToNat b.data.toList)) =
+          Base.bytesToNat b.data.toList := by
+        have := val_ofNat_of_lt (n := Base.bytesToNat b.data.toList) hlt
+        unfold Fp.val at this
+        exact this
+      have hlen : b.data.toList.length = 4 * 12 := by simp [hs]
+      apply ByteArray.ext
+      apply Array.toList_inj.mp
+      show (Montgomery.toBytesBE _).data.toList = _
+      rw [Montgomery.toBytesBE_eq, hv, ← hlen, Base.natToBytes_bytesToNat]
     -- A value at or above p is rejected.
-    · cases h
+    · simp only [hlt, ↓reduceIte] at h
+      cases h
 
 /-- A decoded field element has the integer of the input bytes. -/
 theorem val_of_fromBytesBE {b : ByteArray} {x : Fp} (h : Fp.fromBytesBE b = .ok x) :

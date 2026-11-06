@@ -16,15 +16,15 @@ In hexadecimal, `p` is the 96 digits of these two lines, joined:
 - `1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f624`
 - `1eabfffeb153ffffb9feffffffffaaab`
 
-`Fp` is `Fin p`, so every element is below `p` by construction.
+An element is held in Montgomery form, as twelve limbs of 32 bits.
 
-Core gives `Fin` its `+`, `-`, `*` and negation, all reduced mod `p`.
+The limbs hold `a R mod p` for the element `a`, with `R = 2 ^ 384`.
 
-The inverse comes from the extended Euclidean algorithm.
+So a product needs no division by `p`, and an element reads and writes its bytes directly.
+
+The inverse comes from the extended Euclidean algorithm, on the integer of the element.
 
 Since `p = 3 mod 4`, a square root of a square `x` is `x^((p + 1) / 4)`.
-
-The code aims at clarity, so it has no Montgomery form and no other optimization.
 -/
 
 @[expose] public section
@@ -99,43 +99,39 @@ That holds because `2 p < 2 ^ 384`: the rows keep the state below `2 p`, so no w
       (by decide +kernel) (Limbs.fits a 0) (Fp.val_pLimbs.symm ▸ ha :) (Limbs.fits b 0) _
 
 /-- An element of the BLS12-381 base field. -/
-abbrev Fp := Fin Fp.modulus
+abbrev Fp := Montgomery Fp.params
 
 namespace Fp
 
-@[inline] def ofNat (n : Nat) : Fp := Fin.ofNat modulus n
+/-- The element that stands for `n mod p`. -/
+@[inline] def ofNat (n : Nat) : Fp := Montgomery.ofNat n
 
-@[inline] def zero : Fp := ⟨0, Fp.modulus_pos⟩
-@[inline] def one  : Fp := ⟨1, by decide⟩
+/-- The integer below `p` that the element stands for.
+
+Proofs use its lemmas, never its unfolding, which runs a Montgomery reduction. -/
+@[inline, irreducible] def val (a : Fp) : Nat := Montgomery.toNat a
+
+@[inline] def zero : Fp := Montgomery.zero
+@[inline] def one  : Fp := Montgomery.one
 
 @[inline] def add (a b : Fp) : Fp := a + b
 @[inline] def sub (a b : Fp) : Fp := a - b
 @[inline] def neg (a : Fp)   : Fp := -a
 @[inline] def mul (a b : Fp) : Fp := a * b
 
-@[inline] def beq (a b : Fp) : Bool := a.val == b.val
-@[inline] def isZero (a : Fp) : Bool := a.val == 0
+@[inline] def beq (a b : Fp) : Bool := a == b
+@[inline] def isZero (a : Fp) : Bool := a == zero
 
 /-- Square-and-multiply modular exponentiation. -/
-def powNat (base : Fp) (e : Nat) : Fp :=
-  if e = 0 then one
-  else
-    let half := powNat (base * base) (e / 2)
-    if e % 2 = 1 then base * half else half
-termination_by e
-decreasing_by omega
+@[inline] def powNat (base : Fp) (e : Nat) : Fp := Montgomery.pow base e
 
-/-- Multiplicative inverse by the extended Euclidean algorithm.
+/-- Multiplicative inverse by the extended Euclidean algorithm, on the integer of the element.
 
 The inverse of `0` is `0`. -/
-@[inline] def inverse (a : Fp) : Fp := Fin.inverse a
+@[inline] def inverse (a : Fp) : Fp := ofNat (euclid a.val modulus 1 0 % modulus).toNat
 
-/-- Field division `a * b⁻¹`.
-
-Core already has a division on `Fin n`, which divides the integers.
-
-That division is wrong for a field element, so this instance has high priority. -/
-instance (priority := high) : Div Fp := ⟨fun a b => a * b.inverse⟩
+/-- Field division `a * b⁻¹`. -/
+instance : Div Fp := ⟨fun a b => a * b.inverse⟩
 
 /-- Square root, valid since `p = 3 mod 4`.
 
@@ -164,13 +160,12 @@ It rejects an input of the wrong size, and an integer of at least `p`. -/
 def fromBytesBE (b : ByteArray) : Except BlsError Fp :=
   if b.size ≠ 48 then .error .nonCanonicalFieldElement
   else
-    let n := Base.bytesToNat b.data.toList
-    if h : n < modulus then .ok ⟨n, h⟩ else .error .nonCanonicalFieldElement
+    match Montgomery.ofBytesBE b 0 with
+    | some a => .ok a
+    | none => .error .nonCanonicalFieldElement
 
 /-- Encode as 48 big-endian bytes. -/
-def toBytesBE (a : Fp) : ByteArray :=
-  ByteArray.mk <| Array.ofFn (n := 48) fun i =>
-    UInt8.ofNat ((a.val >>> ((47 - i.val) * 8)) &&& 0xff)
+@[inline] def toBytesBE (a : Fp) : ByteArray := Montgomery.toBytesBE a
 
 end Fp
 

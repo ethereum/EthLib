@@ -8,11 +8,12 @@ public import Mathlib.Algebra.Field.ZMod
 public import Mathlib.NumberTheory.LucasPrimality
 public import Mathlib.Tactic.NormNum.Prime
 public import Mathlib.FieldTheory.Finite.Basic
+public import EthLib.Cryptography.Proofs.Montgomery
 
 /-!
 # Proofs: `Fp` as a Mathlib finite field
 
-This file maps `Fp`, which is `Fin p`, to Mathlib's `ZMod p`, as the scalar field proofs do.
+This file maps `Fp`, held in Montgomery form, to Mathlib's `ZMod p`, as the scalar field proofs do.
 
 The notes of the scalar field proofs on the scoped field instance apply here too.
 
@@ -453,36 +454,76 @@ theorem modulus_prime : Nat.Prime modulus :=
 
 instance : Fact (Nat.Prime modulus) := ⟨modulus_prime⟩
 
-/-- `Fp` is (definitionally) Mathlib's `ZMod Fp.modulus`, as rings. -/
-def toZMod : Fp ≃+* ZMod modulus := RingEquiv.refl _
+open EthLib.Cryptography.Montgomery (toZMod_injective toZMod_pow toZMod_inv toZMod_natCast)
+
+instance : Fact (Nat.Prime params.p) := ⟨modulus_prime⟩
+
+instance : Fact (1 < params.p) := ⟨by decide⟩
+
+/-! ## The map to `ZMod p` -/
+
+/-- The element of `Fp` that an element of `ZMod p` stands for. -/
+def ofZMod (z : ZMod modulus) : Fp := Fp.ofNat z.val
+
+/-- An element of `ZMod p` maps back to itself. -/
+theorem toZMod_ofZMod (z : ZMod modulus) : Montgomery.toZMod (ofZMod z) = z :=
+  (Montgomery.toZMod_ofNat z.val).trans (ZMod.natCast_zmod_val z)
+
+/-- An element of `Fp` maps back to itself. -/
+theorem ofZMod_toZMod (a : Fp) : ofZMod (Montgomery.toZMod a) = a :=
+  toZMod_injective (toZMod_ofZMod _)
+
+/-- `Fp` and Mathlib's `ZMod p` are isomorphic rings.
+
+The map sends an element to the integer mod `p` that it stands for. -/
+def toZMod : Fp ≃+* ZMod modulus where
+  toFun := Montgomery.toZMod
+  invFun := ofZMod
+  left_inv := ofZMod_toZMod
+  right_inv := toZMod_ofZMod
+  map_mul' := Montgomery.toZMod_mul
+  map_add' := Montgomery.toZMod_add
+
+/-- The isomorphism is the map of the Montgomery form. -/
+theorem toZMod_apply (a : Fp) : toZMod a = Montgomery.toZMod a := rfl
 
 /-- The map to `ZMod p` sends a sum to the sum. -/
 @[simp] theorem toZMod_add (a b : Fp) : toZMod (a + b) = toZMod a + toZMod b :=
-  map_add toZMod a b
+  Montgomery.toZMod_add a b
 
 /-- The map to `ZMod p` sends a product to the product. -/
 @[simp] theorem toZMod_mul (a b : Fp) : toZMod (a * b) = toZMod a * toZMod b :=
-  map_mul toZMod a b
+  Montgomery.toZMod_mul a b
 
 /-- The map to `ZMod p` sends a difference to the difference. -/
 @[simp] theorem toZMod_sub (a b : Fp) : toZMod (a - b) = toZMod a - toZMod b :=
-  map_sub toZMod a b
+  Montgomery.toZMod_sub a b
 
 /-- The map to `ZMod p` sends a negation to the negation. -/
 @[simp] theorem toZMod_neg (a : Fp) : toZMod (-a) = -toZMod a :=
-  map_neg toZMod a
+  Montgomery.toZMod_neg a
 
 /-- The map to `ZMod p` sends zero to zero. -/
-@[simp] theorem toZMod_zero : toZMod (0 : Fp) = 0 :=
-  map_zero toZMod
+@[simp] theorem toZMod_zero : toZMod (0 : Fp) = 0 := by
+  rw [toZMod_apply, Montgomery.toZMod_zero]
+  rfl
 
 /-- The map to `ZMod p` sends one to one. -/
-@[simp] theorem toZMod_one : toZMod (1 : Fp) = 1 :=
-  map_one toZMod
+@[simp] theorem toZMod_one : toZMod (1 : Fp) = 1 := by
+  rw [toZMod_apply, Montgomery.toZMod_one]
+  rfl
 
 /-- Two elements with the same image in `ZMod p` are equal. -/
 theorem toZMod_inj {a b : Fp} : toZMod a = toZMod b ↔ a = b :=
   toZMod.injective.eq_iff
+
+/-- The map to `ZMod p` sends the element of `n` to the cast of `n`. -/
+theorem toZMod_ofNat (n : Nat) : toZMod (Fp.ofNat n) = n := by
+  rw [toZMod_apply]
+  exact Montgomery.toZMod_ofNat n
+
+/-- `Fp` is finite, through the isomorphism. -/
+noncomputable instance : Fintype Fp := Fintype.ofEquiv _ toZMod.symm.toEquiv
 
 /-- `Fp` has `p` elements. -/
 theorem card_eq : Fintype.card Fp = modulus :=
@@ -494,35 +535,58 @@ These lemmas give the integer of each result, so a proof does not need the repre
 -/
 
 /-- The integer of an element is its value in `ZMod p`. -/
-theorem val_eq (a : Fp) : a.val = (toZMod a).val := rfl
+theorem val_eq (a : Fp) : a.val = (toZMod a).val := by
+  unfold val
+  exact Montgomery.toNat_eq a
 
 /-- The integer of an element is below `p`. -/
-theorem val_lt (a : Fp) : a.val < modulus := a.isLt
+theorem val_lt (a : Fp) : a.val < modulus := by
+  unfold val
+  exact Montgomery.toNat_lt a
 
 /-- Two elements with the same integer are equal. -/
-theorem ext {a b : Fp} (h : a.val = b.val) : a = b := Fin.ext h
+theorem ext {a b : Fp} (h : a.val = b.val) : a = b := by
+  rw [val_eq, val_eq] at h
+  exact toZMod.injective (ZMod.val_injective _ h)
 
 /-- The element of `n` has the integer `n mod p`. -/
-theorem val_ofNat (n : Nat) : (ofNat n).val = n % modulus := rfl
+theorem val_ofNat (n : Nat) : (ofNat n).val = n % modulus := by
+  rw [val_eq, toZMod_ofNat]
+  exact ZMod.val_natCast _ n
 
 /-- The element of an integer below `p` has that integer. -/
 theorem val_ofNat_of_lt {n : Nat} (h : n < modulus) : (ofNat n).val = n := by
   rw [val_ofNat, Nat.mod_eq_of_lt h]
 
 /-- Zero has the integer `0`. -/
-@[simp] theorem val_zero : (0 : Fp).val = 0 := rfl
+@[simp] theorem val_zero : (0 : Fp).val = 0 := by
+  rw [val_eq, toZMod_apply, Montgomery.toZMod_zero]
+  exact ZMod.val_zero
 
 /-- One has the integer `1`. -/
-@[simp] theorem val_one : (1 : Fp).val = 1 := rfl
+@[simp] theorem val_one : (1 : Fp).val = 1 := by
+  rw [val_eq, toZMod_apply, Montgomery.toZMod_one]
+  exact ZMod.val_one _
 
 /-- The integer of a sum is the sum mod `p`. -/
-theorem val_add (a b : Fp) : (a + b).val = (a.val + b.val) % modulus := rfl
+theorem val_add (a b : Fp) : (a + b).val = (a.val + b.val) % modulus := by
+  rw [val_eq, val_eq, val_eq, map_add]
+  exact ZMod.val_add _ _
 
 /-- The integer of a product is the product mod `p`. -/
-theorem val_mul (a b : Fp) : (a * b).val = a.val * b.val % modulus := rfl
+theorem val_mul (a b : Fp) : (a * b).val = a.val * b.val % modulus := by
+  rw [val_eq, val_eq, val_eq, map_mul]
+  exact ZMod.val_mul _ _
 
 /-- The integer of a negation is `p` minus the integer, mod `p`. -/
-theorem val_neg (a : Fp) : (-a).val = (modulus - a.val) % modulus := rfl
+theorem val_neg (a : Fp) : (-a).val = (modulus - a.val) % modulus := by
+  have hneg : toZMod (-a) = -toZMod a := Montgomery.toZMod_neg a
+  rw [val_eq, val_eq, hneg, ZMod.neg_val]
+  split_ifs with h
+  · rw [h, ZMod.val_zero, Nat.sub_zero, Nat.mod_self]
+  · have h0 : (toZMod a).val ≠ 0 := fun h0 => h ((ZMod.val_eq_zero _).mp h0)
+    have hlt := ZMod.val_lt (toZMod a)
+    rw [Nat.mod_eq_of_lt (by omega)]
 
 /-- The integer of a difference is `p` minus the second integer, plus the first, mod `p`. -/
 theorem val_sub (a b : Fp) : (a - b).val = (modulus - b.val + a.val) % modulus := by
@@ -533,13 +597,14 @@ theorem val_sub (a b : Fp) : (a - b).val = (modulus - b.val + a.val) % modulus :
 /-- The Boolean equality of `Fp` is equality.
 
 Proofs use it instead of unifying with the Boolean equality, which would compute its arguments. -/
-theorem beq_iff {a b : Fp} : a.beq b = true ↔ a = b := by
-  unfold beq
-  rw [beq_iff_eq]
-  exact ⟨ext, congrArg _⟩
+theorem beq_iff {a b : Fp} : a.beq b = true ↔ a = b := beq_iff_eq
 
 /-- The zero test reads the integer. -/
-theorem isZero_eq (a : Fp) : a.isZero = (a.val == 0) := rfl
+theorem isZero_eq (a : Fp) : a.isZero = (a.val == 0) := by
+  have h0 : (zero : Fp).val = 0 := val_zero
+  unfold isZero
+  rw [Bool.eq_iff_iff, beq_iff_eq, beq_iff_eq]
+  exact ⟨fun h => h ▸ h0, fun h => ext (h.trans h0.symm)⟩
 
 /-- The zero test of `Fp` holds exactly at zero. -/
 theorem isZero_iff {a : Fp} : a.isZero = true ↔ a = 0 := by
@@ -601,115 +666,74 @@ theorem sqrtOrError_eq (a : Fp) : sqrtOrError a = Fp.sqrt a := by
 
 /-! ## Bridge: spec operations = Mathlib operations -/
 
-/-- `Fp.powNat` is monoid power, phrased over `ZMod Fp.modulus`
-(definitionally `Fp`). Public (unlike `Fr`'s analogue): downstream
-proofs at large exponents must stay inside the `ZMod` instance world —
-a cross-instance defeq check on `x ^ ((p+1)/4)` would try to unfold
-the power. `Fp`-facing version: `powNat_eq_pow`. -/
-theorem powNat_eq_zmod_pow (a : ZMod modulus) (n : Nat) :
-    Fp.powNat a n = a ^ n := by
-  induction n using Nat.strongRecOn generalizing a with
-  | _ n ih =>
-    -- `a` is a `ZMod` element passed where `powNat` takes an `Fp`.
-    -- `rw` checks the rewritten goal at `implicit` transparency, where that
-    -- is ill-typed, so the equation and the recursive call go in by
-    -- `trans` and `erw`.
-    refine (Fp.powNat.eq_1 a n).trans ?_
-    split
-    · rename_i h
-      subst h
-      rw [pow_zero]
-      rfl
-    · rename_i h
-      dsimp only
-      erw [ih (n / 2) (by omega)]
-      -- `show` re-elaborates the goal with uniform `ZMod` instance
-      -- paths (the `*` inherited from `powNat`'s body is the spec's
-      -- `Fin` one), so the `pow` rewrites below can match.
-      show (if n % 2 = 1 then a * (a * a) ^ (n / 2) else (a * a) ^ (n / 2)) = a ^ n
-      by_cases h2 : n % 2 = 1
-      · rw [ite_eq_left h2, ← pow_two, ← pow_mul, ← pow_succ']
-        congr 1
-        omega
-      · rw [ite_eq_right h2, ← pow_two, ← pow_mul]
-        congr 1
-        omega
-
-/-- The Euclidean inverse is the field inverse of `ZMod p`, and both send `0` to `0`.
-
-It is stated over `ZMod p`, which the field instance below needs. -/
-private theorem inverse_eq_zmod_inv (a : ZMod modulus) :
-    Fp.inverse a = a⁻¹ :=
-  Fin.inverse_map toZMod (fun x => (ZMod.natCast_zmod_val (toZMod x)).symm) a
-
 /-- The map to `ZMod p` sends a power to the power. -/
 theorem toZMod_powNat (a : Fp) (n : Nat) : toZMod (a.powNat n) = toZMod a ^ n :=
-  powNat_eq_zmod_pow a n
+  toZMod_pow a n
 
 /-- The Euclidean inverse is the inverse of `ZMod p`, and both send `0` to `0`. -/
-theorem toZMod_inverse (a : Fp) : toZMod a.inverse = (toZMod a)⁻¹ :=
-  inverse_eq_zmod_inv a
+theorem toZMod_inverse (a : Fp) : toZMod a.inverse = (toZMod a)⁻¹ := by
+  have hx : (Fin.ofNat modulus a.val).val = a.val := by
+    rw [Fin.val_ofNat, Nat.mod_eq_of_lt (val_lt a)]
+  have h := Fin.inverse_val (Fin.ofNat modulus a.val)
+  rw [hx] at h
+  rw [show toZMod a = (a.val : ZMod modulus) by rw [val_eq, ZMod.natCast_zmod_val], ← h,
+    Fin.inverse, Fin.val_ofNat, ZMod.natCast_mod, hx]
+  exact toZMod_ofNat _
 
-/-- The Mathlib field structure on `ZMod Fp.modulus`, named so it can be
-used as the source of the structure update in `instField` below. -/
--- The exposed field instance reduces through this structure.
-@[reducible] def zmodField : Field (ZMod modulus) := inferInstance
+/-- The field structure of `ZMod p`, carried to `Fp` by the isomorphism.
 
-/-- The field structure of `ZMod p` on `Fp`, with the division of the specification.
+The operations are those of the specification: the sum, the product, the power and the division.
 
-The scalar field proofs explain why the division must be that one, and why the instance is scoped.
+The inverse is the one of the Montgomery form, equal to the inverse of the specification.
+
+The scalar actions and the casts from the integers and the rationals go through `ZMod p`.
+
+Proofs alone use them.
+
+It is scoped, as for the scalar field, to avoid coercion loops.
 
 Activate it with `open scoped EthLib.Cryptography.Bls.Fp`. -/
 scoped instance instField : Field Fp :=
-  { zmodField with
-    div := (· / ·)
-    -- A `by` field keeps its private proof dependencies out of the public data.
-    div_eq_mul_inv := by
-      intro a b
-      exact congrArg (fun x : ZMod modulus =>
-          @HMul.hMul (ZMod modulus) (ZMod modulus) (ZMod modulus) _ a x)
-        (inverse_eq_zmod_inv b)
-    nnratCast_def := fun q => by
-      have h : (q : ZMod modulus)
-          = (q.num : ZMod modulus) / (q.den : ZMod modulus) := NNRat.cast_def q
-      rw [div_eq_mul_inv, ← inverse_eq_zmod_inv] at h
-      exact h
-    ratCast_def := fun q => by
-      have h : (q : ZMod modulus)
-          = (q.num : ZMod modulus) / (q.den : ZMod modulus) := Rat.cast_def q
-      rw [div_eq_mul_inv, ← inverse_eq_zmod_inv] at h
-      exact h }
+  letI : SMul ℕ Fp := ⟨fun n a => ofZMod (n • Montgomery.toZMod a)⟩
+  letI : SMul ℤ Fp := ⟨fun n a => ofZMod (n • Montgomery.toZMod a)⟩
+  letI : SMul ℚ≥0 Fp := ⟨fun q a => ofZMod (q • Montgomery.toZMod a)⟩
+  letI : SMul ℚ Fp := ⟨fun q a => ofZMod (q • Montgomery.toZMod a)⟩
+  letI : Pow Fp ℤ := ⟨fun a n => ofZMod (Montgomery.toZMod a ^ n)⟩
+  letI : IntCast Fp := ⟨fun n => ofZMod n⟩
+  letI : NNRatCast Fp := ⟨fun q => ofZMod q⟩
+  letI : RatCast Fp := ⟨fun q => ofZMod q⟩
+  Function.Injective.field (Montgomery.toZMod : Fp → ZMod modulus) toZMod_injective
+    Montgomery.toZMod_zero Montgomery.toZMod_one Montgomery.toZMod_add Montgomery.toZMod_mul
+    Montgomery.toZMod_neg Montgomery.toZMod_sub toZMod_inv
+    (fun a b => by
+      change Montgomery.toZMod (a * b.inverse) = _
+      rw [Montgomery.toZMod_mul, ← toZMod_apply b.inverse, toZMod_inverse, div_eq_mul_inv]
+      rfl)
+    (fun _ _ => toZMod_ofZMod _) (fun _ _ => toZMod_ofZMod _) (fun _ _ => toZMod_ofZMod _)
+    (fun _ _ => toZMod_ofZMod _) toZMod_pow (fun _ _ => toZMod_ofZMod _)
+    toZMod_natCast (fun _ => toZMod_ofZMod _) (fun _ => toZMod_ofZMod _)
+    (fun _ => toZMod_ofZMod _)
 
 @[simp] theorem zero_def : Fp.zero = (0 : Fp) := rfl
 
 @[simp] theorem one_def : Fp.one = (1 : Fp) := rfl
 
 /-- The spec's `Fp.ofNat` is Mathlib's `Nat.cast`. -/
-theorem ofNat_eq_natCast (n : Nat) : Fp.ofNat n = (n : Fp) := by
-  apply Fin.ext
-  rw [ofNat, Fin.val_ofNat]
-  exact (ZMod.val_natCast modulus n).symm
-
-/-- The map to `ZMod p` sends the element of `n` to the cast of `n`. -/
-theorem toZMod_ofNat (n : Nat) : toZMod (Fp.ofNat n) = n := by
-  rw [← ZMod.natCast_zmod_val (toZMod (Fp.ofNat n)), show (toZMod (Fp.ofNat n)).val = n % modulus
-    from val_ofNat n, ZMod.natCast_mod]
+theorem ofNat_eq_natCast (n : Nat) : Fp.ofNat n = (n : Fp) := rfl
 
 /-- The map to `ZMod p` sends a numeral to the same numeral. -/
 @[simp] theorem toZMod_numeral (n : Nat) [n.AtLeastTwo] :
     toZMod (no_index (OfNat.ofNat n : Fp)) = OfNat.ofNat n :=
-  rfl
+  map_ofNat toZMod n
 
 /-- The spec's `Fp.powNat` is Mathlib's monoid power. -/
-theorem powNat_eq_pow (a : Fp) (n : Nat) : a.powNat n = a ^ n :=
-  powNat_eq_zmod_pow a n
+theorem powNat_eq_pow (a : Fp) (n : Nat) : a.powNat n = a ^ n := rfl
 
 /-- The Euclidean inverse is the field inverse, and both send `0` to `0`. -/
 theorem inverse_eq_inv (a : Fp) : a.inverse = a⁻¹ :=
-  inverse_eq_zmod_inv a
+  toZMod.injective (by rw [toZMod_inverse]; exact (toZMod_inv a).symm)
 
-/-- The spec's division (`a * b.inverse`, registered at high priority
-over core's `Fin` Nat-division) is field division. -/
+/-- The spec's division, a product by the inverse, is field division. -/
 theorem div_eq_mul_inv' (a b : Fp) : a / b = a * b⁻¹ := by
   show a * b.inverse = a * b⁻¹
   rw [inverse_eq_inv]
@@ -721,8 +745,7 @@ macro "push_toZMod" loc:(Lean.Parser.Tactic.location)? : tactic =>
   `(tactic| simp only [Fp.toZMod_add, Fp.toZMod_mul, Fp.toZMod_sub, Fp.toZMod_neg,
     Fp.toZMod_ofNat, Fp.toZMod_one, Fp.toZMod_zero, Nat.cast_ofNat] $[$loc]?)
 
--- Smoke tests: the scoped field structure interoperates with the
--- globally available `Fin` instances the executable spec uses.
+-- Smoke tests: the lemmas of the scoped field apply to the operations of the specification.
 example (a b : Fp) : a * b = b * a := mul_comm a b
 example (a b : Fp) : a - b = a + -b := sub_eq_add_neg a b
 example (a : Fp) (h : a ≠ 0) : a * a⁻¹ = 1 := mul_inv_cancel₀ h
