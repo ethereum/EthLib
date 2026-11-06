@@ -834,6 +834,30 @@ No theorem says that the period gives the safety margin that the rule intends.
 That margin is the claim of the analysis behind the rule, and EthLib does not model it.
 The Python suite checks the periods against the three tables of the rule, except for the rows whose states take minutes to build.
 
+### Honest validator duties
+
+`Consensus/HonestValidator.lean` holds what an honest validator computes for its duties.
+It finds the committee of a validator in an epoch, whether it proposes, and, from Altair, its sync committee seat and subnets.
+It also signs each message that a validator sends, under the domain type and the epoch that the receivers check.
+The theorems in `Consensus/Proofs/HonestValidator.lean` relate these duties to the checks of the transition and of gossip.
+
+The signature theorems assume `PairingLaws`, the hypothesis of BLS correctness listed under BLS12-381.
+Under it, `isValidSignatureAtEpoch_of_signAtEpoch` shows that a duty signature passes the check of a signature at the same domain type and epoch, under the public key of the secret key.
+`verifyBlockSignature_of_getBlockSignature` shows that a block signed by its proposer passes the check of the block signature.
+`processRandao_ne_invalidRandaoReveal` shows that the RANDAO reveal of the proposer never fails the RANDAO check.
+Both assume a block of the current epoch, and a proposer whose public key is that of the secret key.
+The gossip checks of a selection proof and of an aggregate and proof read the target epoch, so their theorems assume it is the epoch of the slot.
+
+The committee theorems need no such hypothesis.
+`getCommitteeAssignment_sound` shows that an assignment is a committee of the epoch that holds the validator.
+`getCommitteeAssignment_unique` shows that no other committee of the epoch holds it.
+It assumes that the registry stays within its limit, and that the active validators times the committees of the epoch fit in 64 bits.
+`getCommitteeAssignment_ne_none` shows that an active validator never gets the answer that it has no committee, under the hypotheses of `exists_mem_getBeaconCommittee`.
+The search can still fail, for an epoch after the next one or a committee without a value.
+
+No theorem says which subnets or sync committee seat a validator has.
+The Python suite checks each duty signature against py_ecc, on signing roots computed in the test, and each committee against the shuffle export.
+
 ### Light client
 
 A light client accepts an update that the sync committee signed, and moves its store by it.
