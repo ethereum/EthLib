@@ -104,6 +104,9 @@ private def ctorIdxOfCode : UInt32 → Nat
   | 75 => 69
   | 76 => 70
   | 77 => 71
+  | 78 => 72
+  | 79 => 73
+  | 80 => 74
   | _ => 0
 
 /-- Two errors with one code come from one constructor. -/

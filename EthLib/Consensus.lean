@@ -70,6 +70,7 @@ public import EthLib.Consensus.Transition.Execution
 public import EthLib.Consensus.Transition.ForkBoundary
 public import EthLib.Consensus.Transition.Genesis
 public import EthLib.Consensus.Transition.Operations
+public import EthLib.Consensus.Transition.ParentPayload
 public import EthLib.Consensus.Transition.Payload
 public import EthLib.Consensus.Transition.Requests
 public import EthLib.Consensus.Transition.StateTransition

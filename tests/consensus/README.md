@@ -90,7 +90,7 @@ The directory keeps two cases of each handler that EthLib runs, at each fork whe
 These are the block header from Phase 0 to Fulu, and the proposer and attester slashings from Phase 0 to Gloas.
 They are also the attestation from Phase 0 to Fulu, the deposit from Phase 0 to Electra, and the voluntary exit from Phase 0 to Gloas.
 The attestation at Electra and Fulu and the voluntary exit at Electra, Fulu and Gloas keep one case each.
-The deposit request runs at Electra and Fulu, and the withdrawal and consolidation requests from Electra to Gloas.
+The deposit, withdrawal and consolidation requests run from Electra to Gloas.
 After Electra the requests keep one case each.
 The sync aggregate runs from Altair to Fulu.
 The execution payload runs from Bellatrix to Fulu.
@@ -98,6 +98,7 @@ Its cases also fix the answer of the execution layer, in `execution.yaml`.
 Bellatrix keeps two more of them: a payload with a transaction of no bytes, and a wrong parent hash.
 The withdrawals and the changes of BLS credentials run from Capella to Fulu.
 At Gloas they are the payload attestation, the execution payload bid, and the builder deposit and exit requests.
+The parent execution payload also runs at Gloas, from a block whose payload is in its parent.
 From Gloas a slashing also removes the pending builder payments of the slashed proposer.
 The exit churn cases of Gloas run as voluntary exits, and the directory keeps one of them.
 Where the handler has both, one case is valid and one invalid.
