@@ -34,10 +34,13 @@ open EthLib.Cryptography.Hash.Keccak (keccak256)
 
 namespace Bloom
 
-/-- The three bits that an entry sets: three 16-bit words of its hash, each modulo 2048. -/
+/-- The three bits that an entry sets.
+
+They are the first three big-endian 16-bit words of its hash, each modulo 2048. -/
 def bits (entry : ByteArray) : List Nat :=
   let h := keccak256 entry
-  [0, 2, 4].map fun i => (h[i]!.toNat * 256 + h[i + 1]!.toNat) % 2048
+  [(h[0].toNat * 256 + h[1].toNat) % 2048, (h[2].toNat * 256 + h[3].toNat) % 2048,
+    (h[4].toNat * 256 + h[5].toNat) % 2048]
 
 /-- The filter of one entry: its three bits set. -/
 def ofEntry (entry : ByteArray) : BitVec 2048 :=
