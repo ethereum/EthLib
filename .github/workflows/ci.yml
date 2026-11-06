@@ -208,8 +208,9 @@ jobs:
           key: ethlib-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   # The vector suites run the library through the bindings, so they do not wait for the proofs.
-  # They run on each Python version that the wheels support, so a feature that an older version
-  # lacks fails here and not first in the wheel test of a release.
+  # They run on each Python version from 3.10 to 3.14, so a feature that an older version lacks
+  # fails here and not first in the wheel test of a release.
+  # The free-threaded 3.14t build runs only in that wheel test.
   suites:
     name: suites (Python ${{ matrix.python }})
     runs-on: ubuntu-24.04
