@@ -62,20 +62,6 @@ theorem inSubgroup_of_bytesToG2_eq_ok {raw : List UInt8} {p : G2}
       (by rw [G2.toPoint_zero, nsmul_zero])
   · exact hsub rfl
 
-/-- A decoded G1 point is valid, and lies in the subgroup when the check is enabled. -/
-@[deprecated valid_of_bytesToG1_eq_ok +typeChanged (since := "2026-11-06")]
-theorem bytesToG1_valid {raw : List UInt8} {subgroupCheck : Bool} {p : G1}
-    (h : bytesToG1 raw subgroupCheck = .ok p) :
-    G1.Valid p ∧ (subgroupCheck = true → G1.inSubgroup p = true) :=
-  ⟨valid_of_bytesToG1_eq_ok h, fun hc => inSubgroup_of_bytesToG1_eq_ok (hc ▸ h)⟩
-
-/-- A decoded G2 point is valid, and lies in the subgroup when the check is enabled. -/
-@[deprecated valid_of_bytesToG2_eq_ok +typeChanged (since := "2026-11-06")]
-theorem bytesToG2_valid {raw : List UInt8} {subgroupCheck : Bool} {p : G2}
-    (h : bytesToG2 raw subgroupCheck = .ok p) :
-    G2.Valid p ∧ (subgroupCheck = true → G2.inSubgroup p = true) :=
-  ⟨valid_of_bytesToG2_eq_ok h, fun hc => inSubgroup_of_bytesToG2_eq_ok (hc ▸ h)⟩
-
 /-! ## G1ADD and G2ADD -/
 
 /-- The sum of two decoded G1 points maps to the sum of their points on the curve.
@@ -93,48 +79,6 @@ theorem toPoint_add_of_bytesToG2_eq_ok {raw0 raw1 : List UInt8} {check0 check1 :
     {p0 p1 : G2} (h0 : bytesToG2 raw0 check0 = .ok p0) (h1 : bytesToG2 raw1 check1 = .ok p1) :
     G2.toPoint (G2.add p0 p1) = G2.toPoint p0 + G2.toPoint p1 :=
   G2.toPoint_add (valid_of_bytesToG2_eq_ok h0) (valid_of_bytesToG2_eq_ok h1)
-
-/-- A call of G1ADD that succeeds returns the encoding of the sum of its two decoded points.
-
-That sum is valid, and it maps to the sum of their points on the curve. -/
-@[deprecated toPoint_add_of_bytesToG1_eq_ok +typeChanged (since := "2026-11-06")]
-theorem bls12G1Add_toPoint {data : ByteArray} {gas : Nat} {out : ByteArray}
-    (h : bls12G1Add data gas = .ok out) :
-    data.size = 256 ∧ GAS_G1ADD ≤ gas ∧
-      ∃ raw0 raw1 p0 p1,
-        unpadG1 (data.data.toList.take 128) = .ok raw0 ∧
-        unpadG1 (data.data.toList.drop 128) = .ok raw1 ∧
-        bytesToG1 raw0 false = .ok p0 ∧
-        bytesToG1 raw1 false = .ok p1 ∧
-        out = ⟨(padG1 (g1ToBytes (G1.add p0 p1))).toArray⟩ ∧
-        G1.Valid (G1.add p0 p1) ∧
-        G1.toPoint (G1.add p0 p1) = G1.toPoint p0 + G1.toPoint p1 := by
-  obtain ⟨hsize, hgas, raw0, raw1, p0, p1, hu0, hu1, hp0, hp1, hout⟩ :=
-    (bls12G1Add_eq_ok_iff data gas out).mp h
-  exact ⟨hsize, hgas, raw0, raw1, p0, p1, hu0, hu1, hp0, hp1, hout,
-    G1.valid_add (valid_of_bytesToG1_eq_ok hp0) (valid_of_bytesToG1_eq_ok hp1),
-    toPoint_add_of_bytesToG1_eq_ok hp0 hp1⟩
-
-/-- A call of G2ADD that succeeds returns the encoding of the sum of its two decoded points.
-
-That sum is valid, and it maps to the sum of their points on the curve. -/
-@[deprecated toPoint_add_of_bytesToG2_eq_ok +typeChanged (since := "2026-11-06")]
-theorem bls12G2Add_toPoint {data : ByteArray} {gas : Nat} {out : ByteArray}
-    (h : bls12G2Add data gas = .ok out) :
-    data.size = 512 ∧ GAS_G2ADD ≤ gas ∧
-      ∃ raw0 raw1 p0 p1,
-        unpadG2 (data.data.toList.take 256) = .ok raw0 ∧
-        unpadG2 (data.data.toList.drop 256) = .ok raw1 ∧
-        bytesToG2 raw0 false = .ok p0 ∧
-        bytesToG2 raw1 false = .ok p1 ∧
-        out = ⟨(padG2 (g2ToBytes (G2.add p0 p1))).toArray⟩ ∧
-        G2.Valid (G2.add p0 p1) ∧
-        G2.toPoint (G2.add p0 p1) = G2.toPoint p0 + G2.toPoint p1 := by
-  obtain ⟨hsize, hgas, raw0, raw1, p0, p1, hu0, hu1, hp0, hp1, hout⟩ :=
-    (bls12G2Add_eq_ok_iff data gas out).mp h
-  exact ⟨hsize, hgas, raw0, raw1, p0, p1, hu0, hu1, hp0, hp1, hout,
-    G2.valid_add (valid_of_bytesToG2_eq_ok hp0) (valid_of_bytesToG2_eq_ok hp1),
-    toPoint_add_of_bytesToG2_eq_ok hp0 hp1⟩
 
 /-! ## Every two points on the curve -/
 
