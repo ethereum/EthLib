@@ -39,15 +39,6 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 theorem size_wordBytes (word : U256) : (wordBytes word).size = 32 := by
   simp [wordBytes, ← ByteArray.size_data]
 
-/-- A read of a whole buffer from its start gives its bytes. -/
-theorem bufferRead_zero_size (data : ByteArray) :
-    bufferRead data 0 data.size = data.data.toList := by
-  apply List.ext_getElem
-  · simp [bufferRead]
-  · intro i _ h
-    have hi : i < data.data.size := by simpa using h
-    simp [bufferRead, byteAt_eq_getD, Array.getD_eq_getD_getElem?, Array.getElem?_eq_getElem hi]
-
 /-- The word of 32 bytes that a write of a word puts in memory is that word. -/
 theorem loadWord_memoryWrite_wordBytes {memory : ByteArray} {start : Nat} (word : U256)
     (h : start + 32 ≤ memory.size) :
