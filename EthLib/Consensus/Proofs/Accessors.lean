@@ -939,6 +939,16 @@ theorem writeCircular_zero {α : Type} (buffer : Vector α (0 : UInt64).toNat) (
     (value : α) : writeCircular buffer i value = .error (.arith .divisionByZero) := by
   simp [writeCircular]
 
+/-- A write to a circular buffer holds its value at position `i mod n`. -/
+theorem getElem?_writeCircular {α : Type} {n : UInt64} {buffer written : Vector α n.toNat}
+    {i : UInt64} {value : α} (computed : writeCircular buffer i value = .ok written) :
+    written[(i % n).toNat]? = some value := by
+  unfold writeCircular at computed
+  split at computed
+  · cases computed
+  · cases computed
+    simp
+
 /-- A write to a circular buffer is read back at the position it wrote. -/
 theorem readCircular_writeCircular {α : Type} {n : UInt64} {buffer written : Vector α n.toNat}
     {i : UInt64} {value : α} (computed : writeCircular buffer i value = .ok written) :
