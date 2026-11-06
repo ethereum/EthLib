@@ -182,7 +182,7 @@ def ExecutionEngine.constant (valid : Bool) : ExecutionEngine preset fork where
 It is the version byte of KZG, then the last 31 bytes of the SHA-256 hash of the commitment. -/
 def commitmentVersionedHash (commitment : Cryptography.Kzg.KZGCommitment) : VersionedHash :=
   Vector.ofFn fun i =>
-    (Cryptography.Kzg.kzgCommitmentToVersionedHash ⟨commitment.toArray⟩)[i.val]!
+    (Cryptography.Kzg.kzgCommitmentToVersionedHash ⟨commitment.toArray⟩).data.getD i.val 0
 
 /-- The blob commitments of a block, of which there are none before Deneb. -/
 def BeaconBlockBody.blobCommitments (body : BeaconBlockBody preset fork)
