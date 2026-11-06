@@ -300,4 +300,25 @@ theorem verifySlot_getProof {trie : Trie} {storageRoot : Hash32} {index : Nat} {
 
 end AccountProof
 
+/-! ## The codes of the errors -/
+
+/-- Two errors with one code come from one constructor. -/
+theorem AccountProofError.code_injective (e₁ e₂ : AccountProofError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [AccountProofError.code] at h; exact absurd h (by decide))
+
+/-- An account proof error never has the code of a proof error, so one Python class carries both.
+-/
+theorem AccountProofError.code_ne_proof (e : AccountProofError) (r : Trie.ProofError) :
+    e.code ≠ r.code := by
+  cases e <;> cases r <;> simp only [AccountProofError.code, Trie.ProofError.code] <;> decide
+
+/-- An account proof error never has the code of a trie error, so one Python class carries both.
+-/
+theorem AccountProofError.code_ne_trie (e : AccountProofError) (r : Trie.TrieError) :
+    e.code ≠ r.code := by
+  cases e <;> cases r <;> simp only [AccountProofError.code, Trie.TrieError.code] <;> decide
+
 end EthLib.Execution.State
