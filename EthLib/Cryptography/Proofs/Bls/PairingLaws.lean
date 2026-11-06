@@ -114,7 +114,7 @@ theorem two_pairs (laws : PairingLaws) {P P' : G1} {Q Q' : G2} {a b c d : Fr}
 
 /-- A sanity consequence: the generators do not pair to 1. -/
 theorem nondegenerate (laws : PairingLaws) :
-    pairingCheck #[(G1.generator, G2.generator)] = false := by
+    pairingCheck #[((G1.generator : G1), G2.generator)] = false := by
   have h := laws.pairingCheck_iff [(G1.generator, G2.generator)] [1] [1] rfl rfl (by
     intro i hi
     match i, hi with

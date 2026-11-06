@@ -149,7 +149,7 @@ theorem pairingCheck_eq_finalExp_prod (pairs : Array (G1 × G2)) :
   unfold pairingCheck
   rw [← forIn_eq_foldl, Array.forIn_toList]
   -- Only the monadic plumbing differs; the final exponentiation stays abstract, never unfolded.
-  generalize finalExponentiation = fe
+  generalize (finalExponentiation : Fp12 → Fp12) = fe
   rfl
 
 /-- Pairs whose points have the same group elements have the same factor. -/

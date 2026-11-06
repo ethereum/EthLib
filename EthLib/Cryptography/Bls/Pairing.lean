@@ -22,11 +22,15 @@ On a set bit it also adds `Q'` to `R`, and multiplies by the line through them a
 Since `x` is negative, the result is then conjugated.
 
 The final exponentiation sends the result to the `r`-th roots of unity in `Fp12`.
+
+The code is generic in the base field, as for `Fp2`.
 -/
 
 @[expose] public section
 
 namespace EthLib.Cryptography.Bls
+
+variable {F : Type} [BaseField F]
 
 /-! ## Miller loop
 
@@ -50,7 +54,7 @@ The final exponentiation sends it to 1 when `c` is not zero.
 -/
 
 /-- The element `c0 + c2 w^2 + c3 w^3` of `Fp12`. -/
-def lineValue (c0 c2 c3 : Fp2) : Fp12 :=
+def lineValue (c0 c2 c3 : Fp2 F) : Fp12 F :=
   ⟨⟨c0, c2, Fp2.zero⟩, ⟨Fp2.zero, c3, Fp2.zero⟩⟩
 
 /-- Doubling step: `(T, f) ↦ (2T, f^2 l)`, with `l` the tangent at `T`, at `(xp, yp)`.
@@ -58,9 +62,9 @@ def lineValue (c0 c2 c3 : Fp2) : Fp12 :=
 With `T = (X, Y, Z)`, the slope is `λ = 3 X^2 / (2 Y Z)`.
 
 The line is multiplied by `2 Y Z^3`: `(3 X^3 - 2 Y^2) - 3 X^2 Z^2 xp w^2 + 2 Y Z^3 yp w^3`. -/
-def millerDouble (T : G2) (xp yp : Fp) (f : Fp12) : G2 × Fp12 :=
-  let two := Fp2.ofFp (Fp.ofNat 2)
-  let three := Fp2.ofFp (Fp.ofNat 3)
+def millerDouble (T : G2 F) (xp yp : F) (f : Fp12 F) : G2 F × Fp12 F :=
+  let two := Fp2.ofFp (BaseField.ofNat 2)
+  let three := Fp2.ofFp (BaseField.ofNat 3)
   let xx := T.x * T.x
   let zz := T.z * T.z
   let c0 := three * xx * T.x - two * (T.y * T.y)
@@ -73,7 +77,7 @@ def millerDouble (T : G2) (xp yp : Fp) (f : Fp12) : G2 × Fp12 :=
 With `N = yq Z^3 - Y` and `D = (xq Z^2 - X) Z`, the slope is `λ = N / D`.
 
 The line, written through `Q`, is multiplied by `D`: `(N xq - D yq) - N xp w^2 + D yp w^3`. -/
-def millerAdd (T : G2) (xq yq : Fp2) (xp yp : Fp) (f : Fp12) : G2 × Fp12 :=
+def millerAdd (T : G2 F) (xq yq : Fp2 F) (xp yp : F) (f : Fp12 F) : G2 F × Fp12 F :=
   let zz := T.z * T.z
   let n := yq * zz * T.z - T.y
   let d := (xq * zz - T.x) * T.z
@@ -85,7 +89,7 @@ def millerAdd (T : G2) (xq yq : Fp2) (xp yp : Fp) (f : Fp12) : G2 × Fp12 :=
 /-- Walk bits `n - 1` down to `0` of `s` from `(T, f)`.
 
 At each bit it doubles `T`, then adds `Q` if the bit is set. -/
-def millerSteps (s : Nat) (xq yq : Fp2) (xp yp : Fp) : Nat → G2 → Fp12 → Fp12
+def millerSteps (s : Nat) (xq yq : Fp2 F) (xp yp : F) : Nat → G2 F → Fp12 F → Fp12 F
   | 0, _, f => f
   | n + 1, T, f =>
     let (T, f) := millerDouble T xp yp f
@@ -99,7 +103,7 @@ The initial `T = Q` and `f = 1` consume the leading bit of `s`.
 So the steps start one bit below it.
 
 `Nat.log2 0 = 0`, so `s = 0` takes no steps. -/
-def millerLoop (s : Nat) (q : Fp2 × Fp2) (p : Fp × Fp) : Fp12 :=
+def millerLoop (s : Nat) (q : Fp2 F × Fp2 F) (p : F × F) : Fp12 F :=
   millerSteps s q.1 q.2 p.1 p.2 s.log2 ⟨q.1, q.2, Fp2.one⟩ Fp12.one
 
 /-! ## Final exponentiation -/
@@ -138,7 +142,7 @@ So `m^h` needs only powers by `|x|` and `(|x| + 1) / 3`, Frobenius maps and conj
 These exponents have at most 64 bits.
 
 The steps compute exactly `f^((p¹² − 1) / r)`, and a theorem proves it. -/
-def finalExponentiation (f : Fp12) : Fp12 :=
+def finalExponentiation (f : Fp12 F) : Fp12 F :=
   let t := f.conjugate * f.inverse
   let m := t.frobenius.frobenius * t
   -- `a = m^((|x| + 1)² / 3)`.
@@ -154,13 +158,13 @@ def finalExponentiation (f : Fp12) : Fp12 :=
 /-- The pairing `e(P, Q)`, an element of `Fp12`.
 
 A point at infinity gives 1. -/
-def pairing (P : G1) (Q : G2) : Fp12 :=
+def pairing (P : G1 F) (Q : G2 F) : Fp12 F :=
   if P.isInfinity || Q.isInfinity then Fp12.one
   else finalExponentiation (millerLoop blsX Q.toAffine P.toAffine).conjugate
 
 /-- Returns `true` iff `∏ e(P_i, Q_i) = 1`. -/
-def pairingCheck (pairs : Array (G1 × G2)) : Bool := Id.run do
-  let mut acc : Fp12 := Fp12.one
+def pairingCheck (pairs : Array (G1 F × G2 F)) : Bool := Id.run do
+  let mut acc : Fp12 F := Fp12.one
   for (p, q) in pairs do
     -- Identity pairs contribute 1.
     if p.isInfinity || q.isInfinity then continue
