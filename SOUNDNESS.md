@@ -680,8 +680,13 @@ Its node at the index of the finality branch is the root that the update proves.
 That root is the root of the finalized beacon header, or zero at the genesis slot.
 Otherwise the search `findBranchCollision` over the two climbs returns two different messages with one SHA-256 hash.
 `validateLightClientUpdate_nextSyncCommittee` states the same for the root of the next committee.
-`lightClientGindices_eq` shows that each index is the generalized index of the path of its field in the type of the beacon state, at every fork from Altair.
-No theorem yet reads the node at that index of a beacon state as the value of the field.
+`lightClientGindices_eq` shows that each index is the generalized index of the path of its field in the type of the beacon state, at every fork from Altair, for the mainnet and minimal presets.
+At the Altair fork, `lightClientGindices_altair_eq` shows the same three indices for every preset.
+On a state of that fork, `BeaconState.nodeRoot_finalizedCheckpoint_root_altair` reads the finality node as the root of `state.finalizedCheckpoint.root`.
+`BeaconState.nodeRoot_nextSyncCommittee_altair` and `BeaconState.nodeRoot_currentSyncCommittee_altair` read the committee nodes as the roots of those fields.
+These three take the lawful SSZ type of the state as an argument, and they name the root of the field, which always exists.
+Instance search does not yet find that lawful type at the mainnet or minimal preset, so a caller supplies it.
+The node results for every fork after Altair remain open, as do the statements that join them to the update validators.
 
 The signature theorems assume `SignatureChecks.AggregateSound`, listed in A4.
 Under it, `validateLightClientUpdate_signed` shows that every member whose bit is set signed the signing root.
