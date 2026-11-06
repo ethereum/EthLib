@@ -223,8 +223,8 @@ theorem ptcWindowPosition_of_le {config : Config} {state : BeaconState preset fo
     rw [UInt64.toNat_mod]
     exact Nat.mod_lt _ positive
   have last : (getCurrentEpoch state + preset.MIN_SEED_LOOKAHEAD).toNat =
-      (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat := by
-    rw [UInt64.toNat_add, Nat.mod_eq_of_lt fits]
+      (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat :=
+    toNat_add_of_lt fits
   have difference : (computeEpochAtSlot preset slot - getCurrentEpoch state).toNat =
       (computeEpochAtSlot preset slot).toNat - (getCurrentEpoch state).toNat :=
     UInt64.toNat_sub_of_le _ _ current

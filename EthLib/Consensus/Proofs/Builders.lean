@@ -164,10 +164,10 @@ theorem canBuilderCoverBid_eq_ok_true_iff {state : BeaconState preset fork}
     have bound := builder.balance.toNat_lt
     refine ⟨builder, found, pending, owed, preset.MIN_DEPOSIT_AMOUNT + pending,
       ⟨by omega, ?_⟩, ?_⟩
-    · rw [UInt64.toNat_add, Nat.mod_eq_of_lt (by omega)]
+    · exact toNat_add_of_lt (by omega)
     have sum : (preset.MIN_DEPOSIT_AMOUNT + pending).toNat =
-        preset.MIN_DEPOSIT_AMOUNT.toNat + pending.toNat := by
-      rw [UInt64.toNat_add, Nat.mod_eq_of_lt (by omega)]
+        preset.MIN_DEPOSIT_AMOUNT.toNat + pending.toNat :=
+      toNat_add_of_lt (by omega)
     have fits : preset.MIN_DEPOSIT_AMOUNT + pending ≤ builder.balance := by
       rw [UInt64.le_iff_toNat_le, sum]
       omega

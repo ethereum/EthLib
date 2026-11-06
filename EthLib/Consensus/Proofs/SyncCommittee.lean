@@ -33,7 +33,7 @@ theorem mem_getNextSyncCommitteeIndices {state : BeaconState preset fork}
   have epochEq : epoch = getCurrentEpoch state + 1 := by
     obtain ⟨fits, value⟩ := addChecked_ok_iff.mp next
     apply UInt64.toNat_inj.mp
-    rw [value, UInt64.toNat_add, Nat.mod_eq_of_lt (by simpa using fits)]
+    rw [value, toNat_add_of_lt (by simpa using fits)]
   subst epochEq
   intro index member
   simpa using mem_of_computeBalanceWeightedSelection selected index member
