@@ -96,12 +96,12 @@ def addAttesterFlags (state : BeaconState preset fork) (total : Gwei) (earned : 
     (step : EpochParticipation preset fork × Gwei) (index : ValidatorIndex) :
     Except TransitionError (EpochParticipation preset fork × Gwei) := do
   let (participation, numerator) := step
-  let some flags := participation.data[index.toNat]?
-    | throw (.accessor (.indexOutOfRange index))
-  let (flags, numerator) ← (List.finRange PARTICIPATION_FLAG_WEIGHTS.length).foldlM
-    (addFlagReward state total earned index) (flags, numerator)
-  return (⟨participation.data.set! index.toNat flags,
-    fun before => by simpa using participation.bound before⟩, numerator)
+  if inside : index.toNat < participation.data.size then
+    let (flags, numerator) ← (List.finRange PARTICIPATION_FLAG_WEIGHTS.length).foldlM
+      (addFlagReward state total earned index) (participation.data[index.toNat], numerator)
+    return (⟨participation.data.set index.toNat flags inside,
+      fun before => by simpa using participation.bound before⟩, numerator)
+  else throw (.accessor (.indexOutOfRange index))
 
 /-- From Altair: the state with the flags of the current epoch, or else of the previous epoch.
 -/
@@ -203,14 +203,15 @@ def recordPaymentWeight (state : BeaconState preset fork) (gloas : .glamsterdam 
     (attesters : List ValidatorIndex) : Except TransitionError (BeaconState preset fork) := do
   let position := attestationPaymentPosition preset current data.slot
   let payments := state.builderPendingPayments gloas
-  let some payment := payments[position]?
-    | throw (.accessor (.paymentIndexOutOfRange position.toUInt64))
-  let sameSlot ← liftAccessor (isAttestationSameSlot state data)
-  let weight ← (if sameSlot ∧ 0 < payment.withdrawal.amount then
-      attesters.foldlM (addPaymentWeight state before after) payment.weight
-    else pure payment.weight)
-  let payments := payments.set! position { payment with weight }
-  return { state with builderPendingPayments := fun _ => payments }
+  if inside : position < payments.size then
+    let payment := payments[position]
+    let sameSlot ← liftAccessor (isAttestationSameSlot state data)
+    let weight ← (if sameSlot ∧ 0 < payment.withdrawal.amount then
+        attesters.foldlM (addPaymentWeight state before after) payment.weight
+      else pure payment.weight)
+    let payments := payments.set position { payment with weight } inside
+    return { state with builderPendingPayments := fun _ => payments }
+  else throw (.accessor (.paymentIndexOutOfRange position.toUInt64))
 
 /-- From Altair: the state after an attestation.
 

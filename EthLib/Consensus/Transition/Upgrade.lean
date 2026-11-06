@@ -208,10 +208,11 @@ def translateAttestation {fork : Fork} (state : BeaconState preset fork)
   let attesters ← liftAccessor (getPendingAttestingIndices state attestation)
   let participation ← attesters.foldlM (init := state.previousEpochParticipation altair)
     fun participation index => do
-      let some old := participation.data[index.toNat]?
-        | throw (.accessor (.indexOutOfRange index))
-      return ⟨participation.data.set! index.toNat (flags.foldl addFlag old),
-        fun before => by simpa using participation.bound before⟩
+      if inside : index.toNat < participation.data.size then
+        let old := participation.data[index.toNat]
+        return ⟨participation.data.set index.toNat (flags.foldl addFlag old) inside,
+          fun before => by simpa using participation.bound before⟩
+      else throw (.accessor (.indexOutOfRange index))
   return { state with previousEpochParticipation := fun _ => participation }
 
 /-- The Altair state of a Phase 0 state, at the first slot of the fork epoch.

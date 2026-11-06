@@ -259,7 +259,7 @@ theorem recordPaymentWeight_other {gloas : .glamsterdam ≤ fork} {data : Attest
   · cases computed
   simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨_, _, _, _, rfl⟩ := computed
-  simp [Vector.set!, Ne.symm other]
+  simp [Ne.symm other]
 
 /-- From Gloas, a payment gains no weight unless the vote is for the block of its own slot.
 
@@ -280,31 +280,40 @@ theorem recordPaymentWeight_of_noWeight {gloas : .glamsterdam ≤ fork} {data : 
   split at computed
   rotate_left
   · cases computed
-  rename_i payment found
+  rename_i inside
   simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨sameSlot, sameOk, weight, weightOk, rfl⟩ := computed
-  have notWeighed : ¬(sameSlot = true ∧ 0 < payment.withdrawal.amount) := by
+  have found : (state.builderPendingPayments gloas)[
+      attestationPaymentPosition preset current data.slot]? =
+      some (state.builderPendingPayments gloas)[
+        attestationPaymentPosition preset current data.slot] :=
+    Vector.getElem?_eq_getElem inside
+  have notWeighed : ¬(sameSlot = true ∧ 0 <
+      (state.builderPendingPayments gloas)[
+        attestationPaymentPosition preset current data.slot].withdrawal.amount) := by
     rintro ⟨same, positive⟩
     rcases noWeight with notSame | zero
     · rw [notSame, same] at sameOk
       cases sameOk
-    · rw [zero payment found] at positive
+    · rw [zero _ found] at positive
       exact absurd positive (by decide)
   simp only [notWeighed, ↓reduceIte, Except.ok.injEq] at weightOk
   subst weightOk
-  have kept : (fun _ => (state.builderPendingPayments gloas).set!
+  have kept : (fun _ => (state.builderPendingPayments gloas).set
       (attestationPaymentPosition preset current data.slot)
-        { payment with weight := payment.weight }) = state.builderPendingPayments := by
+        { (state.builderPendingPayments gloas)[
+          attestationPaymentPosition preset current data.slot] with
+          weight := (state.builderPendingPayments gloas)[
+            attestationPaymentPosition preset current data.slot].weight } inside) =
+      state.builderPendingPayments := by
     funext gloas'
     have same : gloas' = gloas := rfl
     subst same
     ext index bound
     by_cases same : index = attestationPaymentPosition preset current data.slot
     · subst same
-      rw [Vector.getElem_set!_self bound]
-      simp only [Vector.getElem?_eq_getElem bound, Option.some.injEq] at found
-      rw [found]
-    · rw [Vector.getElem_set!_ne bound (Ne.symm same)]
+      simp
+    · exact Vector.getElem_set_ne _ _ (Ne.symm same)
   simp only [kept]
 
 /-- From Altair, an attestation keeps the sizes of the registry and the balances. -/
