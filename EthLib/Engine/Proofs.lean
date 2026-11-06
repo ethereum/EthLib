@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Engine.Proofs.Block
+public import EthLib.Engine.Proofs.ExecutionEngine
 public import EthLib.Engine.Proofs.ForkchoiceUpdated
 public import EthLib.Engine.Proofs.Json
 public import EthLib.Engine.Proofs.NewPayload
