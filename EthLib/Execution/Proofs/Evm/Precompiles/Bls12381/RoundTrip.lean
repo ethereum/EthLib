@@ -92,31 +92,15 @@ set_option maxRecDepth 8000 in
 /-- A decoded G2 point encodes back to the 192 bytes it came from: the encoding is canonical. -/
 theorem g2ToBytes_bytesToG2 {raw : List UInt8} (hlength : raw.length = 192) {subgroupCheck : Bool}
     {p : G2} (h : bytesToG2 raw subgroupCheck = .ok p) : g2ToBytes p = raw := by
-  simp only [bytesToG2, bind, Except.bind, pure, Except.pure, throw, throwThe,
-    MonadExceptOf.throw] at h
-  cases hx : bytesToFq2 (raw.take 96) with
-  | error => simp [hx] at h
-  | ok x =>
-    cases hy : bytesToFq2 (raw.drop 96) with
-    | error => simp [hx, hy] at h
-    | ok y =>
-      have hxb := natToBytes_bytesToFq2 (by simp [hlength]) hx
-      have hyb := natToBytes_bytesToFq2 (by simp [hlength]) hy
-      simp only [hx, hy] at h
-      split at h
-      · -- Every coordinate is zero: the point at infinity, and the bytes are all zero.
-        rename_i hzero
-        cases h
-        rw [g2ToBytes_of_isZero (by decide), ← List.take_append_drop 96 raw, ← hxb, ← hyb]
-        obtain ⟨h0, h1, h2, h3⟩ := hzero
-        rw [h0, h1, h2, h3]
-        rfl
-      · split at h
-        · cases h
-        · split at h
-          · cases h
-          · cases h
-            simp only [g2ToBytes, G2.toAffine_of_z_one]
-            rw [List.append_assoc, hxb, hyb, List.take_append_drop]
+  obtain ⟨x, y, hx, hy, hcase⟩ := bytesToG2_eq_ok_iff.mp h
+  have hxb := natToBytes_bytesToFq2 (by simp [hlength]) hx
+  have hyb := natToBytes_bytesToFq2 (by simp [hlength]) hy
+  rcases hcase with ⟨h0, h1, h2, h3, rfl⟩ | ⟨-, -, rfl⟩
+  · -- Every coordinate is zero: the point at infinity, and the bytes are all zero.
+    rw [g2ToBytes_of_isZero (by decide), ← List.take_append_drop 96 raw, ← hxb, ← hyb]
+    rw [h0, h1, h2, h3]
+    rfl
+  · simp only [g2ToBytes, G2.toAffine_of_z_one]
+    rw [List.append_assoc, hxb, hyb, List.take_append_drop]
 
 end EthLib.Execution.Evm.Precompiles.Bls12381

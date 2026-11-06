@@ -11,6 +11,7 @@ public import EthLib.Cryptography.Proofs.Inverse
 - The decoder removes exactly the padding that the encoder adds.
 - Field elements and affine points on the curve decode back to themselves.
 - The point at infinity is all zero bytes, in both directions.
+- A point decodes only from all zeros, or from an affine point on its curve.
 - A decoded field element or G1 point encodes back to its bytes, so that encoding is canonical.
 - The padding check and the field check of Amsterdam reject exactly the inputs that Prague's single field check rejects.
 -/
@@ -185,57 +186,72 @@ theorem bytesToG1_zeros (subgroupCheck : Bool) :
     bytesToG1 (List.replicate 96 0) subgroupCheck = .ok G1.zero := by
   cases subgroupCheck <;> rfl
 
+/-- The G1 decoder reads two field elements `x` and `y`, and succeeds in exactly two cases.
+
+In the first, both are zero and the point is at infinity.
+
+In the second, `(x, y)` is on the curve and the point is `(x, y, 1)`.
+
+With the subgroup check, that point must also be in the subgroup. -/
+theorem bytesToG1_eq_ok_iff {raw : List UInt8} {subgroupCheck : Bool} {p : G1} :
+    bytesToG1 raw subgroupCheck = .ok p ↔
+      ∃ x y, bytesToFieldElement (raw.take 48) = .ok x ∧
+        bytesToFieldElement (raw.drop 48) = .ok y ∧
+        ((x.val = 0 ∧ y.val = 0 ∧ p = G1.zero) ∨
+          (onCurveG1 x y = true ∧
+            (subgroupCheck = true → G1.inSubgroup ⟨x, y, Fp.one⟩ = true) ∧
+            p = ⟨x, y, Fp.one⟩)) := by
+  simp only [bytesToG1, bind, Except.bind, pure, Except.pure, throw, throwThe,
+    MonadExceptOf.throw]
+  cases hx : bytesToFieldElement (raw.take 48) with
+  | error => simp
+  | ok x =>
+    cases hy : bytesToFieldElement (raw.drop 48) with
+    | error => simp
+    | ok y =>
+      simp only [Except.ok.injEq, exists_and_left, exists_eq_left']
+      split
+      · rename_i hz
+        simp only [Except.ok.injEq, hz, true_and, eq_comm (a := G1.zero)]
+        refine ⟨.inl, ?_⟩
+        rintro (h | ⟨hon, -, -⟩)
+        · exact h
+        · -- `(0, 0)` is not on the curve, so the second case cannot hold.
+          have hx0 : x = 0 := Fin.ext hz.1
+          have hy0 : y = 0 := Fin.ext hz.2
+          subst hx0 hy0
+          exact absurd hon (by decide)
+      · rename_i hz
+        have hnot : ¬(x.val = 0 ∧ y.val = 0 ∧ p = G1.zero) := fun h => hz ⟨h.1, h.2.1⟩
+        simp only [hnot, false_or]
+        cases hon : onCurveG1 x y <;> cases subgroupCheck <;>
+          cases hs : G1.inSubgroup ⟨x, y, Fp.one⟩ <;> simp [eq_comm]
+
 /-- An affine point on the curve decodes back to itself, with `z = 1`.
 
 With the subgroup check, the point must also be in the subgroup. -/
 theorem bytesToG1_affine {x y : Fp} (hon : onCurveG1 x y = true) {subgroupCheck : Bool}
     (hsub : subgroupCheck = true → G1.inSubgroup ⟨x, y, Fp.one⟩ = true) :
     bytesToG1 (natToBytes 48 x.val ++ natToBytes 48 y.val) subgroupCheck = .ok ⟨x, y, Fp.one⟩ := by
-  -- `(0, 0)` is not on the curve, so the point is not read as the point at infinity.
-  have hne : ¬(x.val = 0 ∧ y.val = 0) := by
-    rintro ⟨hx, hy⟩
-    have hx' : x = 0 := Fin.ext hx
-    have hy' : y = 0 := Fin.ext hy
-    subst hx' hy'
-    exact absurd hon (by decide)
   have hlen := EthLib.Base.natToBytes_length 48 x.val
-  simp only [bytesToG1, List.take_left' hlen, List.drop_left' hlen, bytesToFieldElement_natToBytes,
-    bind, Except.bind, pure, Except.pure, hne, hon, ↓reduceIte, Bool.not_true, throw, throwThe,
-    MonadExceptOf.throw]
-  cases subgroupCheck with
-  | false => rfl
-  | true => simp [hsub rfl]
+  exact bytesToG1_eq_ok_iff.mpr ⟨x, y, by rw [List.take_left' hlen, bytesToFieldElement_natToBytes],
+    by rw [List.drop_left' hlen, bytesToFieldElement_natToBytes], .inr ⟨hon, hsub, rfl⟩⟩
 
 /-- A decoded point encodes back to the 96 bytes it came from: the encoding is canonical. -/
 theorem g1ToBytes_bytesToG1 {raw : List UInt8} (hlength : raw.length = 96) {subgroupCheck : Bool}
     {p : G1} (h : bytesToG1 raw subgroupCheck = .ok p) : g1ToBytes p = raw := by
-  simp only [bytesToG1, bind, Except.bind, pure, Except.pure, throw, throwThe,
-    MonadExceptOf.throw] at h
-  cases hx : bytesToFieldElement (raw.take 48) with
-  | error => simp [hx] at h
-  | ok x =>
-    cases hy : bytesToFieldElement (raw.drop 48) with
-    | error => simp [hx, hy] at h
-    | ok y =>
-      have hxb := natToBytes_bytesToFieldElement (by simp [hlength]) hx
-      have hyb := natToBytes_bytesToFieldElement (by simp [hlength]) hy
-      simp only [hx, hy] at h
-      split at h
-      · -- Both coordinates are zero: the point at infinity, and the bytes are all zero.
-        rename_i hzero
-        cases h
-        rw [g1ToBytes_of_isZero (by decide), ← List.take_append_drop 48 raw, ← hxb, ← hyb]
-        have hx0 : x = 0 := Fin.ext hzero.1
-        have hy0 : y = 0 := Fin.ext hzero.2
-        subst hx0 hy0
-        rfl
-      · split at h
-        · cases h
-        · split at h
-          · cases h
-          · cases h
-            simp only [g1ToBytes, g1_toAffine_one]
-            rw [hxb, hyb, List.take_append_drop]
+  obtain ⟨x, y, hx, hy, hcase⟩ := bytesToG1_eq_ok_iff.mp h
+  have hxb := natToBytes_bytesToFieldElement (by simp [hlength]) hx
+  have hyb := natToBytes_bytesToFieldElement (by simp [hlength]) hy
+  rcases hcase with ⟨hx0, hy0, rfl⟩ | ⟨-, -, rfl⟩
+  · -- Both coordinates are zero: the point at infinity, and the bytes are all zero.
+    rw [g1ToBytes_of_isZero (by decide), ← List.take_append_drop 48 raw, ← hxb, ← hyb]
+    have hx0' : x = 0 := Fin.ext hx0
+    have hy0' : y = 0 := Fin.ext hy0
+    subst hx0' hy0'
+    rfl
+  · simp only [g1ToBytes, g1_toAffine_one]
+    rw [hxb, hyb, List.take_append_drop]
 
 /-! ## G2 points -/
 
@@ -254,6 +270,50 @@ theorem bytesToG2_zeros (subgroupCheck : Bool) :
     bytesToG2 (List.replicate 192 0) subgroupCheck = .ok G2.zero := by
   cases subgroupCheck <;> rfl
 
+/-- The G2 decoder reads two elements `x` and `y` of `Fp2`, and succeeds in exactly two cases.
+
+In the first, all four coordinates are zero and the point is at infinity.
+
+In the second, `(x, y)` is on the twist and the point is `(x, y, 1)`.
+
+With the subgroup check, that point must also be in the subgroup. -/
+theorem bytesToG2_eq_ok_iff {raw : List UInt8} {subgroupCheck : Bool} {p : G2} :
+    bytesToG2 raw subgroupCheck = .ok p ↔
+      ∃ x y, bytesToFq2 (raw.take 96) = .ok x ∧ bytesToFq2 (raw.drop 96) = .ok y ∧
+        ((x.c0.val = 0 ∧ x.c1.val = 0 ∧ y.c0.val = 0 ∧ y.c1.val = 0 ∧ p = G2.zero) ∨
+          (onCurveG2 x y = true ∧
+            (subgroupCheck = true → G2.inSubgroup ⟨x, y, Fp2.one⟩ = true) ∧
+            p = ⟨x, y, Fp2.one⟩)) := by
+  simp only [bytesToG2, bind, Except.bind, pure, Except.pure, throw, throwThe,
+    MonadExceptOf.throw]
+  cases hx : bytesToFq2 (raw.take 96) with
+  | error => simp
+  | ok x =>
+    cases hy : bytesToFq2 (raw.drop 96) with
+    | error => simp
+    | ok y =>
+      simp only [Except.ok.injEq, exists_and_left, exists_eq_left']
+      split
+      · rename_i hz
+        simp only [Except.ok.injEq, hz, true_and, eq_comm (a := G2.zero)]
+        refine ⟨.inl, ?_⟩
+        rintro (h | ⟨hon, -, -⟩)
+        · exact h
+        · -- `(0, 0)` is not on the twist, so the second case cannot hold.
+          obtain ⟨h0, h1, h2, h3⟩ := hz
+          have hx0 : x = ⟨0, 0⟩ := by
+            cases x; simp only [Fp2.mk.injEq]; exact ⟨Fin.ext h0, Fin.ext h1⟩
+          have hy0 : y = ⟨0, 0⟩ := by
+            cases y; simp only [Fp2.mk.injEq]; exact ⟨Fin.ext h2, Fin.ext h3⟩
+          subst hx0 hy0
+          exact absurd hon (by decide)
+      · rename_i hz
+        have hnot : ¬(x.c0.val = 0 ∧ x.c1.val = 0 ∧ y.c0.val = 0 ∧ y.c1.val = 0 ∧ p = G2.zero) :=
+          fun h => hz ⟨h.1, h.2.1, h.2.2.1, h.2.2.2.1⟩
+        simp only [hnot, false_or]
+        cases hon : onCurveG2 x y <;> cases subgroupCheck <;>
+          cases hs : G2.inSubgroup ⟨x, y, Fp2.one⟩ <;> simp [eq_comm]
+
 /-- An affine point on the twist decodes back to itself, with `z = 1`.
 
 With the subgroup check, the point must also be in the subgroup. -/
@@ -261,20 +321,9 @@ theorem bytesToG2_affine {x y : Fp2} (hon : onCurveG2 x y = true) {subgroupCheck
     (hsub : subgroupCheck = true → G2.inSubgroup ⟨x, y, Fp2.one⟩ = true) :
     bytesToG2 ((natToBytes 48 x.c0.val ++ natToBytes 48 x.c1.val) ++
       (natToBytes 48 y.c0.val ++ natToBytes 48 y.c1.val)) subgroupCheck = .ok ⟨x, y, Fp2.one⟩ := by
-  -- `(0, 0)` is not on the twist, so the point is not read as the point at infinity.
-  have hne : ¬(x.c0.val = 0 ∧ x.c1.val = 0 ∧ y.c0.val = 0 ∧ y.c1.val = 0) := by
-    rintro ⟨h0, h1, h2, h3⟩
-    have hx : x = ⟨0, 0⟩ := by cases x; simp only [Fp2.mk.injEq]; exact ⟨Fin.ext h0, Fin.ext h1⟩
-    have hy : y = ⟨0, 0⟩ := by cases y; simp only [Fp2.mk.injEq]; exact ⟨Fin.ext h2, Fin.ext h3⟩
-    subst hx hy
-    exact absurd hon (by decide)
   have hlen : (natToBytes 48 x.c0.val ++ natToBytes 48 x.c1.val).length = 96 := by
     simp [EthLib.Base.natToBytes_length]
-  simp only [bytesToG2, List.take_left' hlen, List.drop_left' hlen, bytesToFq2_natToBytes,
-    bind, Except.bind, pure, Except.pure, hne, hon, ↓reduceIte, Bool.not_true, throw, throwThe,
-    MonadExceptOf.throw]
-  cases subgroupCheck with
-  | false => rfl
-  | true => simp [hsub rfl]
+  exact bytesToG2_eq_ok_iff.mpr ⟨x, y, by rw [List.take_left' hlen, bytesToFq2_natToBytes],
+    by rw [List.drop_left' hlen, bytesToFq2_natToBytes], .inr ⟨hon, hsub, rfl⟩⟩
 
 end EthLib.Execution.Evm.Precompiles.Bls12381

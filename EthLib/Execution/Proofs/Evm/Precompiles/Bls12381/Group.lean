@@ -32,81 +32,25 @@ open EthLib.Cryptography.Bls (Fp Fp2 G1 G2)
 theorem bytesToG1_valid {raw : List UInt8} {subgroupCheck : Bool} {p : G1}
     (h : bytesToG1 raw subgroupCheck = .ok p) :
     G1.Valid p ∧ (subgroupCheck = true → G1.inSubgroup p = true) := by
-  simp only [bytesToG1, bind, Except.bind, pure, Except.pure, throw, throwThe,
-    MonadExceptOf.throw] at h
-  cases hx : bytesToFieldElement (raw.take 48) with
-  | error => simp [hx] at h
-  | ok x =>
-    cases hy : bytesToFieldElement (raw.drop 48) with
-    | error => simp [hx, hy] at h
-    | ok y =>
-      simp only [hx, hy] at h
-      split at h
-      · -- Both coordinates are zero: the point at infinity is valid and in the subgroup.
-        cases h
-        exact ⟨G1.valid_zero, fun _ =>
-          (G1.inSubgroup_iff_modulus_smul_eq_zero G1.valid_zero).mpr
-            (by rw [G1.toPoint_zero, nsmul_zero])⟩
-      · split at h
-        · cases h
-        · rename_i hnot
-          have hon : onCurveG1 x y = true := by
-            cases hc : onCurveG1 x y
-            · simp [hc] at hnot
-            · rfl
-          have heq : (y : ZMod Fp.modulus) * y = x * x * x + Fp.ofNat 4 :=
-            beq_iff_eq.mp hon
-          split at h
-          · cases h
-          · rename_i hsub
-            cases h
-            refine ⟨G1.valid_of_affine_eq heq, fun hc => ?_⟩
-            cases hs : G1.inSubgroup ⟨x, y, Fp.one⟩
-            · exfalso
-              apply hsub
-              rw [hc, hs]
-              rfl
-            · rfl
+  obtain ⟨x, y, -, -, ⟨-, -, rfl⟩ | ⟨hon, hsub, rfl⟩⟩ := bytesToG1_eq_ok_iff.mp h
+  · -- The point at infinity is valid and in the subgroup.
+    exact ⟨G1.valid_zero, fun _ =>
+      (G1.inSubgroup_iff_modulus_smul_eq_zero G1.valid_zero).mpr
+        (by rw [G1.toPoint_zero, nsmul_zero])⟩
+  · have heq : (y : ZMod Fp.modulus) * y = x * x * x + Fp.ofNat 4 := beq_iff_eq.mp hon
+    exact ⟨G1.valid_of_affine_eq heq, hsub⟩
 
 /-- A decoded G2 point is valid, and lies in the subgroup when the check is enabled. -/
 theorem bytesToG2_valid {raw : List UInt8} {subgroupCheck : Bool} {p : G2}
     (h : bytesToG2 raw subgroupCheck = .ok p) :
     G2.Valid p ∧ (subgroupCheck = true → G2.inSubgroup p = true) := by
-  simp only [bytesToG2, bind, Except.bind, pure, Except.pure, throw, throwThe,
-    MonadExceptOf.throw] at h
-  cases hx : bytesToFq2 (raw.take 96) with
-  | error => simp [hx] at h
-  | ok x =>
-    cases hy : bytesToFq2 (raw.drop 96) with
-    | error => simp [hx, hy] at h
-    | ok y =>
-      simp only [hx, hy] at h
-      split at h
-      · -- Every coordinate is zero: the point at infinity is valid and in the subgroup.
-        cases h
-        exact ⟨G2.valid_zero, fun _ =>
-          (G2.inSubgroup_iff_modulus_smul_eq_zero G2.valid_zero).mpr
-            (by rw [G2.toPoint_zero, nsmul_zero])⟩
-      · split at h
-        · cases h
-        · rename_i hnot
-          have hon : onCurveG2 x y = true := by
-            cases hc : onCurveG2 x y
-            · simp [hc] at hnot
-            · rfl
-          have heq : y * y = x * x * x + G2.bTwist :=
-            beq_iff_eq.mp hon
-          split at h
-          · cases h
-          · rename_i hsub
-            cases h
-            refine ⟨G2.valid_of_affine_equation heq, fun hc => ?_⟩
-            cases hs : G2.inSubgroup ⟨x, y, Fp2.one⟩
-            · exfalso
-              apply hsub
-              rw [hc, hs]
-              rfl
-            · rfl
+  obtain ⟨x, y, -, -, ⟨-, -, -, -, rfl⟩ | ⟨hon, hsub, rfl⟩⟩ := bytesToG2_eq_ok_iff.mp h
+  · -- The point at infinity is valid and in the subgroup.
+    exact ⟨G2.valid_zero, fun _ =>
+      (G2.inSubgroup_iff_modulus_smul_eq_zero G2.valid_zero).mpr
+        (by rw [G2.toPoint_zero, nsmul_zero])⟩
+  · have heq : y * y = x * x * x + G2.bTwist := beq_iff_eq.mp hon
+    exact ⟨G2.valid_of_affine_equation heq, hsub⟩
 
 /-! ## G1ADD and G2ADD -/
 
