@@ -1,0 +1,6 @@
+preset: minimal
+fork: deneb
+runner: sync
+handler: optimistic
+suite: pyspec_tests
+case: from_syncing_to_invalid

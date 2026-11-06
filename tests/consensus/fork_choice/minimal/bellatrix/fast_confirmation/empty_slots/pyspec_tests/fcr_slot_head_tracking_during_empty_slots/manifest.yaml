@@ -1,0 +1,6 @@
+preset: minimal
+fork: bellatrix
+runner: fast_confirmation
+handler: empty_slots
+suite: pyspec_tests
+case: fcr_slot_head_tracking_during_empty_slots

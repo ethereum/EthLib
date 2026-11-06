@@ -451,6 +451,7 @@ _FORK_CHOICE_STEPS = {
     "checks": 4,
     "pow_block": 5,
     "payload": 8,
+    "fast_confirmation": 9,
 }
 
 # The verdicts of the execution layer that find a payload invalid.
@@ -474,12 +475,15 @@ def fork_choice(
     # and an empty list means that it cannot get them.
     # A "payload" step is (status, latest valid hash or None): the verdict of the execution
     # layer on the payload of the next block, by its Engine API name.
+    # A "fast_confirmation" step, with data None, runs the fast confirmation of the slot.
     records = b""
     for kind, data in steps:
         if kind == "tick":
             data = data.to_bytes(8, "little")
         elif kind == "checks":
             data = bytes([bool(data)])
+        elif kind == "fast_confirmation":
+            data = b""
         elif kind == "payload":
             status, latest_valid_hash = data
             invalid = status in _INVALID_PAYLOAD
@@ -511,6 +515,10 @@ def fork_choice(
             message = out[offset + 8 : offset + 8 + length].decode()
             outcomes.append(ForkChoiceError(code, message))
             offset += 8 + length
+        elif kind == "fast_confirmation":
+            size = 216 + 1 + 32 * out[offset + 216]
+            outcomes.append(_fast_confirmation_record(out[offset : offset + size]))
+            offset += size
         elif kind != "checks":
             outcomes.append(None)
         else:
@@ -539,6 +547,28 @@ def _store_record(record: bytes) -> dict:
     }
     if len(record) > 168:
         read["proposer_head"] = record[168:200]
+    return read
+
+
+def _fast_confirmation_record(record: bytes) -> dict:
+    """A read of the fast confirmation store, from its bytes."""
+
+    def checkpoint(start: int) -> dict:
+        return {
+            "epoch": int.from_bytes(record[start : start + 8], "little"),
+            "root": record[start + 8 : start + 40],
+        }
+
+    read = {
+        "previous_epoch_observed_justified_checkpoint": checkpoint(0),
+        "current_epoch_observed_justified_checkpoint": checkpoint(40),
+        "previous_epoch_greatest_unrealized_checkpoint": checkpoint(80),
+        "previous_slot_head": record[120:152],
+        "current_slot_head": record[152:184],
+        "confirmed_root": record[184:216],
+    }
+    if record[216]:
+        read["safe_execution_block_hash"] = record[217:249]
     return read
 
 

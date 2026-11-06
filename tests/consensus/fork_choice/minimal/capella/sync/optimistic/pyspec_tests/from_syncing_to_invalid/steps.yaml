@@ -1,0 +1,103 @@
+- {tick: 7728}
+- checks:
+    time: 7728
+    head:
+      slot: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    finalized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    proposer_boost_root: '0x0000000000000000000000000000000000000000000000000000000000000000'
+- block_hash: '0x8c3580d7a97bc6f5deb2b800c00a5f7da272976404ca316e493a08ca8041a041'
+  payload_status:
+    status: VALID
+    latest_valid_hash: '0x8c3580d7a97bc6f5deb2b800c00a5f7da272976404ca316e493a08ca8041a041'
+    validation_error: null
+- {block: 
+    block_0xc3760db5d22410698ea71756f0578e539edeb4f376acaa06330201a5136b8bae, 
+    valid: true}
+- checks:
+    head:
+      slot: 9
+      root: '0xc3760db5d22410698ea71756f0578e539edeb4f376acaa06330201a5136b8bae'
+- block_hash: '0xb8445129fcf472fb57c068cfd94a99540b2abc0bbfb21fde90c7bb24cc5b5c81'
+  payload_status:
+    status: VALID
+    latest_valid_hash: '0xb8445129fcf472fb57c068cfd94a99540b2abc0bbfb21fde90c7bb24cc5b5c81'
+    validation_error: null
+- {block: 
+    block_0x3f16e972193b8aebb9d201f985315d00e7de53f1eb726bb232e2424ee937d19a, 
+    valid: true}
+- checks:
+    head:
+      slot: 10
+      root: '0x3f16e972193b8aebb9d201f985315d00e7de53f1eb726bb232e2424ee937d19a'
+- block_hash: '0x66d45e6c726c0cd26201082afff8c0c443e4aa843c8dabc480a464482ae443ca'
+  payload_status:
+    status: VALID
+    latest_valid_hash: '0x66d45e6c726c0cd26201082afff8c0c443e4aa843c8dabc480a464482ae443ca'
+    validation_error: null
+- {block: 
+    block_0xc242815b78f868f307efc01f8bfc46e1a4be9e7b41a1564caa46a19b04b1464b, 
+    valid: true}
+- checks:
+    head:
+      slot: 11
+      root: '0xc242815b78f868f307efc01f8bfc46e1a4be9e7b41a1564caa46a19b04b1464b'
+- block_hash: '0xa81b9c8706f6784e76ded78ad021873f8477d50dae580dbc304e56393db25421'
+  payload_status:
+    status: VALID
+    latest_valid_hash: '0xa81b9c8706f6784e76ded78ad021873f8477d50dae580dbc304e56393db25421'
+    validation_error: null
+- {block: 
+    block_0xe04485ba653adc26afcd6d103aacfc4496703a92037dcb039c66ad19be4f4309, 
+    valid: true}
+- checks:
+    head:
+      slot: 12
+      root: '0xe04485ba653adc26afcd6d103aacfc4496703a92037dcb039c66ad19be4f4309'
+- block_hash: '0xd0bec3e9b616bc0fb32d69f905b08d7050223b311790540dc63daab2a96ae0fb'
+  payload_status: {status: SYNCING, latest_valid_hash: null, validation_error: 
+      null}
+- {block: 
+    block_0x8275178d5a828c85e3227466e676d532349c7da3c3380844df64d6ad42abad11, 
+    valid: true}
+- checks:
+    head:
+      slot: 10
+      root: '0x8275178d5a828c85e3227466e676d532349c7da3c3380844df64d6ad42abad11'
+- block_hash: '0x9714aeb7e916c0e9050e64c0cde289646d04134eae1bad721aba0303e5651cfa'
+  payload_status: {status: SYNCING, latest_valid_hash: null, validation_error: 
+      null}
+- {block: 
+    block_0x6e01b8b57cdd1b0e99b3b78cf3106e6478787a95746cbab82b19a84bf8616c79, 
+    valid: true}
+- checks:
+    head:
+      slot: 11
+      root: '0x6e01b8b57cdd1b0e99b3b78cf3106e6478787a95746cbab82b19a84bf8616c79'
+- block_hash: '0x2c64b99b42f25858b57c564e4cee2d6fae43ea5a381f5b36f451c7786620c250'
+  payload_status: {status: SYNCING, latest_valid_hash: null, validation_error: 
+      null}
+- {block: 
+    block_0xbc7d5368d2d4eb85f578c41aa0fb58d175b7d081fb7ffab5d56f7e1bc496642a, 
+    valid: true}
+- checks:
+    head:
+      slot: 12
+      root: '0xbc7d5368d2d4eb85f578c41aa0fb58d175b7d081fb7ffab5d56f7e1bc496642a'
+- block_hash: '0x953f1d09b7d5cf0915bf15318461879171814ff5086a569a69b675a540c29ac4'
+  payload_status:
+    status: INVALID
+    latest_valid_hash: '0x8c3580d7a97bc6f5deb2b800c00a5f7da272976404ca316e493a08ca8041a041'
+    validation_error: invalid
+- {block: 
+    block_0x09eb2b28f3a7d3d4aa6529001435d36edb3b2a59920e75c68eac6ce8c2ebda90, 
+    valid: false}
+- checks:
+    head:
+      slot: 12
+      root: '0xe04485ba653adc26afcd6d103aacfc4496703a92037dcb039c66ad19be4f4309'

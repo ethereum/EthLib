@@ -1,0 +1,348 @@
+- {tick: 0}
+- {tick: 6}
+- {attestation: 
+    attestation_0xc1beeb5f20a9812a6b13fd13a40f401efffc3856d6dd054ff95f4a775fdba0d9}
+- {attestation: 
+    attestation_0x9fcc1a03eb226f324d56ba144cc9f9f0d5072452fac6b917e425bc5171f012f8}
+- checks:
+    time: 6
+    head:
+      slot: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    finalized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    proposer_boost_root: '0x0000000000000000000000000000000000000000000000000000000000000000'
+    previous_epoch_observed_justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    current_epoch_observed_justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    previous_epoch_greatest_unrealized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    previous_slot_head: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    current_slot_head: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    confirmed_root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    safe_execution_block_hash: '0x0000000000000000000000000000000000000000000000000000000000000000'
+- {block: 
+    block_0x7537da63d7ccdea518a01f022cd802a56b02c9eeba2e240b9d78726dd6a8a378, 
+    valid: true}
+- checks:
+    time: 6
+    head:
+      slot: 1
+      root: '0x7537da63d7ccdea518a01f022cd802a56b02c9eeba2e240b9d78726dd6a8a378'
+    justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    finalized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    proposer_boost_root: '0x7537da63d7ccdea518a01f022cd802a56b02c9eeba2e240b9d78726dd6a8a378'
+- {tick: 12}
+- {attestation: 
+    attestation_0x05eb73c0e93ee84e4dbb64c1fb8a9c6ee30b4b6d0fc2b8e9ee192acfe46a5cbd}
+- {attestation: 
+    attestation_0x37880a5262c84312f8ce5a80e09b8ea63c1919162f064bcc03498018e4d2ddaa}
+- checks:
+    time: 12
+    head:
+      slot: 1
+      root: '0x7537da63d7ccdea518a01f022cd802a56b02c9eeba2e240b9d78726dd6a8a378'
+    justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    finalized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    proposer_boost_root: '0x0000000000000000000000000000000000000000000000000000000000000000'
+    previous_epoch_observed_justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    current_epoch_observed_justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    previous_epoch_greatest_unrealized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    previous_slot_head: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    current_slot_head: '0x7537da63d7ccdea518a01f022cd802a56b02c9eeba2e240b9d78726dd6a8a378'
+    confirmed_root: '0x7537da63d7ccdea518a01f022cd802a56b02c9eeba2e240b9d78726dd6a8a378'
+    safe_execution_block_hash: '0xb8fd0e0a80e0c45b7681360b1afa963930ccf704250cde58579ee6b551c47191'
+- {block: 
+    block_0x56fce759ce02e2019a2cfefe710abd63587deac8666264a1a2e43e0897814ded, 
+    valid: true}
+- checks:
+    time: 12
+    head:
+      slot: 2
+      root: '0x56fce759ce02e2019a2cfefe710abd63587deac8666264a1a2e43e0897814ded'
+    justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    finalized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    proposer_boost_root: '0x56fce759ce02e2019a2cfefe710abd63587deac8666264a1a2e43e0897814ded'
+- {tick: 18}
+- {attestation: 
+    attestation_0xb41cfd43536b60a64af1c770316bfcbcd1f301f678a66cf0f6cbdf4a6a798fcd}
+- {attestation: 
+    attestation_0x56d0264165a634531a571c1db19b3033e6f3a9ef1f9f5f951aa278ddd17bac49}
+- checks:
+    time: 18
+    head:
+      slot: 2
+      root: '0x56fce759ce02e2019a2cfefe710abd63587deac8666264a1a2e43e0897814ded'
+    justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    finalized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    proposer_boost_root: '0x0000000000000000000000000000000000000000000000000000000000000000'
+    previous_epoch_observed_justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    current_epoch_observed_justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    previous_epoch_greatest_unrealized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    previous_slot_head: '0x7537da63d7ccdea518a01f022cd802a56b02c9eeba2e240b9d78726dd6a8a378'
+    current_slot_head: '0x56fce759ce02e2019a2cfefe710abd63587deac8666264a1a2e43e0897814ded'
+    confirmed_root: '0x56fce759ce02e2019a2cfefe710abd63587deac8666264a1a2e43e0897814ded'
+    safe_execution_block_hash: '0xfcd5a13b345ea8101e9d621b0ab4b5b6399b08ab38da875b0041fff5349e0147'
+- {block: 
+    block_0x7716690d2ddc9773b4d5a909caab897c7e0b3988456292185f652a39bd00e7c3, 
+    valid: true}
+- checks:
+    time: 18
+    head:
+      slot: 3
+      root: '0x7716690d2ddc9773b4d5a909caab897c7e0b3988456292185f652a39bd00e7c3'
+    justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    finalized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    proposer_boost_root: '0x7716690d2ddc9773b4d5a909caab897c7e0b3988456292185f652a39bd00e7c3'
+- {tick: 24}
+- {attestation: 
+    attestation_0x7b59800d28ec551c85aab60ceb3625459edb276f8e7243c9da26859cd9c9a645}
+- {attestation: 
+    attestation_0x25735ba09bb816fc620c730ec6c781a7a6f64049ea20bc7e2ed16931c1d61fe6}
+- checks:
+    time: 24
+    head:
+      slot: 3
+      root: '0x7716690d2ddc9773b4d5a909caab897c7e0b3988456292185f652a39bd00e7c3'
+    justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    finalized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    proposer_boost_root: '0x0000000000000000000000000000000000000000000000000000000000000000'
+    previous_epoch_observed_justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    current_epoch_observed_justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    previous_epoch_greatest_unrealized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    previous_slot_head: '0x56fce759ce02e2019a2cfefe710abd63587deac8666264a1a2e43e0897814ded'
+    current_slot_head: '0x7716690d2ddc9773b4d5a909caab897c7e0b3988456292185f652a39bd00e7c3'
+    confirmed_root: '0x7716690d2ddc9773b4d5a909caab897c7e0b3988456292185f652a39bd00e7c3'
+    safe_execution_block_hash: '0xca191379b7ee9489820263583834cbf034a183e3557774044a1f710966c695b3'
+- {block: 
+    block_0x45e60d6ca28e64b96e98aac1c99e538495df2929ae78274054f1aac14c984984, 
+    valid: true}
+- checks:
+    time: 24
+    head:
+      slot: 4
+      root: '0x45e60d6ca28e64b96e98aac1c99e538495df2929ae78274054f1aac14c984984'
+    justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    finalized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    proposer_boost_root: '0x45e60d6ca28e64b96e98aac1c99e538495df2929ae78274054f1aac14c984984'
+- {tick: 30}
+- {attestation: 
+    attestation_0x5abd1c734656428d4888d0429b9459f24e0c27f7980e2fbbeee317194c8971b8}
+- {attestation: 
+    attestation_0x48e93635c3389b7c8564b1bc0e28196431f7f919223389192a76302da557f8ea}
+- checks:
+    time: 30
+    head:
+      slot: 4
+      root: '0x45e60d6ca28e64b96e98aac1c99e538495df2929ae78274054f1aac14c984984'
+    justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    finalized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    proposer_boost_root: '0x0000000000000000000000000000000000000000000000000000000000000000'
+    previous_epoch_observed_justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    current_epoch_observed_justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    previous_epoch_greatest_unrealized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    previous_slot_head: '0x7716690d2ddc9773b4d5a909caab897c7e0b3988456292185f652a39bd00e7c3'
+    current_slot_head: '0x45e60d6ca28e64b96e98aac1c99e538495df2929ae78274054f1aac14c984984'
+    confirmed_root: '0x45e60d6ca28e64b96e98aac1c99e538495df2929ae78274054f1aac14c984984'
+    safe_execution_block_hash: '0x216e6642ec951bbca11b2c6d3b2bff1433321097e30b805a8d4fc77a3f1b0964'
+- {block: 
+    block_0xb711c5f4fbcd856cb3b34fee067e38cb5c41073908828f2eae426d717c82cbd8, 
+    valid: true}
+- checks:
+    time: 30
+    head:
+      slot: 5
+      root: '0xb711c5f4fbcd856cb3b34fee067e38cb5c41073908828f2eae426d717c82cbd8'
+    justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    finalized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    proposer_boost_root: '0xb711c5f4fbcd856cb3b34fee067e38cb5c41073908828f2eae426d717c82cbd8'
+- {tick: 36}
+- checks:
+    time: 36
+    head:
+      slot: 5
+      root: '0xb711c5f4fbcd856cb3b34fee067e38cb5c41073908828f2eae426d717c82cbd8'
+    justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    finalized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    proposer_boost_root: '0x0000000000000000000000000000000000000000000000000000000000000000'
+    previous_epoch_observed_justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    current_epoch_observed_justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    previous_epoch_greatest_unrealized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    previous_slot_head: '0x45e60d6ca28e64b96e98aac1c99e538495df2929ae78274054f1aac14c984984'
+    current_slot_head: '0xb711c5f4fbcd856cb3b34fee067e38cb5c41073908828f2eae426d717c82cbd8'
+    confirmed_root: '0x45e60d6ca28e64b96e98aac1c99e538495df2929ae78274054f1aac14c984984'
+    safe_execution_block_hash: '0x216e6642ec951bbca11b2c6d3b2bff1433321097e30b805a8d4fc77a3f1b0964'
+- {block: 
+    block_0xbc66f355356b5102c9a1c33c2bab035e9845a9ebbda233d11205be4e588b78fe, 
+    valid: true}
+- checks:
+    time: 36
+    head:
+      slot: 6
+      root: '0xbc66f355356b5102c9a1c33c2bab035e9845a9ebbda233d11205be4e588b78fe'
+    justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    finalized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    proposer_boost_root: '0xbc66f355356b5102c9a1c33c2bab035e9845a9ebbda233d11205be4e588b78fe'
+- {tick: 42}
+- {attestation: 
+    attestation_0xee69007b35b895d2fb9ec044127e3434c368dd37623cc84f801dfa25e68103e1}
+- checks:
+    time: 42
+    head:
+      slot: 6
+      root: '0xbc66f355356b5102c9a1c33c2bab035e9845a9ebbda233d11205be4e588b78fe'
+    justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    finalized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    proposer_boost_root: '0x0000000000000000000000000000000000000000000000000000000000000000'
+    previous_epoch_observed_justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    current_epoch_observed_justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    previous_epoch_greatest_unrealized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    previous_slot_head: '0xb711c5f4fbcd856cb3b34fee067e38cb5c41073908828f2eae426d717c82cbd8'
+    current_slot_head: '0xbc66f355356b5102c9a1c33c2bab035e9845a9ebbda233d11205be4e588b78fe'
+    confirmed_root: '0x45e60d6ca28e64b96e98aac1c99e538495df2929ae78274054f1aac14c984984'
+    safe_execution_block_hash: '0x216e6642ec951bbca11b2c6d3b2bff1433321097e30b805a8d4fc77a3f1b0964'
+- {block: 
+    block_0x3aef92c6b1935449e3f2d5dc87c5bd8fb6ea21a4c229dcba17de2ccd2a62de3f, 
+    valid: true}
+- checks:
+    time: 42
+    head:
+      slot: 7
+      root: '0x3aef92c6b1935449e3f2d5dc87c5bd8fb6ea21a4c229dcba17de2ccd2a62de3f'
+    justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    finalized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    proposer_boost_root: '0x3aef92c6b1935449e3f2d5dc87c5bd8fb6ea21a4c229dcba17de2ccd2a62de3f'
+- {attestation: 
+    attestation_0xa2468c1701979a637f4e547e02166b871e2ed72e9836bc708586f49f034b41d3}
+- {attestation: 
+    attestation_0x1215d6cfce581ea2d3588221a78bf4999ea9667588361a603c8c7d0350cd9e4a}
+- {attestation: 
+    attestation_0x61e83e4a203a3d098d5ee8dbc9354c088d4a39e8fe1c6aba512ce946509c559c}
+- {attestation: 
+    attestation_0xcd7744b352451e731babbbf632b22011660aa9063b53cd199d8148d0c482a26e}
+- {tick: 48}
+- {attestation: 
+    attestation_0xa128c072bfda328f03d206958f5d1f39456e757bf9102d439c2f13ddaad26c31}
+- {attestation: 
+    attestation_0x3981148fcc088cee96fc193df725d8d92276b963852792ca853c11913425161d}
+- checks:
+    time: 48
+    head:
+      slot: 7
+      root: '0x3aef92c6b1935449e3f2d5dc87c5bd8fb6ea21a4c229dcba17de2ccd2a62de3f'
+    justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    finalized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    proposer_boost_root: '0x0000000000000000000000000000000000000000000000000000000000000000'
+    previous_epoch_observed_justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    current_epoch_observed_justified_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    previous_epoch_greatest_unrealized_checkpoint:
+      epoch: 0
+      root: '0xe769737de211bebd612f64fdda530b92944c36fceb3b21106c46cb9799b5c3d9'
+    previous_slot_head: '0xbc66f355356b5102c9a1c33c2bab035e9845a9ebbda233d11205be4e588b78fe'
+    current_slot_head: '0x3aef92c6b1935449e3f2d5dc87c5bd8fb6ea21a4c229dcba17de2ccd2a62de3f'
+    confirmed_root: '0xb711c5f4fbcd856cb3b34fee067e38cb5c41073908828f2eae426d717c82cbd8'
+    safe_execution_block_hash: '0xa6ccdcd6d60e35118ee0cf8aec1e9950bd519459de69044a2ea7ac73397c56a5'

@@ -1,0 +1,6 @@
+preset: minimal
+fork: capella
+runner: fast_confirmation
+handler: revert_finality
+suite: pyspec_tests
+case: fcr_reverts_to_finalized_when_confirmed_not_canonical_at_epoch_boundary

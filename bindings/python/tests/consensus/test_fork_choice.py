@@ -30,6 +30,32 @@ HANDLERS = (
 )
 SPECIFIED = ("altair", "bellatrix", "capella", "deneb")
 
+# The suites of the fast confirmation cases, which EthLib runs at the forks above.
+FAST_CONFIRMATION = (
+    "basic",
+    "current_epoch",
+    "empty_slots",
+    "ffg",
+    "is_one_confirmed",
+    "previous_epoch",
+    "reconfirmation",
+    "restart_gu",
+    "revert_finality",
+    "variables",
+)
+
+# The checks that read the store of the fast confirmation rule. A checks step with them follows a
+# run of that rule, which the case leaves implicit at the start of each slot.
+FAST_CONFIRMATION_CHECKS = (
+    "previous_epoch_observed_justified_checkpoint",
+    "current_epoch_observed_justified_checkpoint",
+    "previous_epoch_greatest_unrealized_checkpoint",
+    "previous_slot_head",
+    "current_slot_head",
+    "confirmed_root",
+    "safe_execution_block_hash",
+)
+
 # The Fulu cases that judge the columns of a block, which EthLib checks before the state
 # transition; that transition does not yet take a Fulu block.
 COLUMN_CASES = "on_block_peerdas__"
@@ -53,9 +79,10 @@ _FILE_STEPS = ("block", "attestation", "attester_slashing", "pow_block")
 _YAML = YAML(typ="safe")
 
 
-def runs(fork: str, handler: str) -> bool:
+def runs(fork: str, runner: str, handler: str) -> bool:
     """Whether EthLib runs the cases of a handler at a fork."""
-    return fork in SPECIFIED and handler in HANDLERS
+    suites = FAST_CONFIRMATION if runner == "fast_confirmation" else HANDLERS
+    return fork in SPECIFIED and handler in suites
 
 
 def checks_columns(fork: str, case: Path) -> bool:
@@ -75,6 +102,13 @@ def _read(case: Path, name: str) -> bytes:
 
 def _hex(value: str) -> bytes:
     return bytes.fromhex(value.removeprefix("0x"))
+
+
+def _inputs(case: Path, step: dict) -> list:
+    """The steps that the export runs for a step of a case."""
+    if "checks" in step and FAST_CONFIRMATION_CHECKS[0] in step["checks"]:
+        return [("fast_confirmation", None), _input(case, step)]
+    return [_input(case, step)]
 
 
 def _input(case: Path, step: dict) -> tuple:
@@ -122,6 +156,20 @@ def _check(read: dict, checks: dict) -> None:
                 assert read["proposer_boost_root"] == _hex(want)
             case "get_proposer_head":
                 assert read["proposer_head"] == _hex(want)
+            case (
+                "previous_epoch_observed_justified_checkpoint"
+                | "current_epoch_observed_justified_checkpoint"
+                | "previous_epoch_greatest_unrealized_checkpoint"
+            ):
+                assert read[key]["epoch"] == want["epoch"]
+                assert read[key]["root"] == _hex(want["root"])
+            case (
+                "previous_slot_head"
+                | "current_slot_head"
+                | "confirmed_root"
+                | "safe_execution_block_hash"
+            ):
+                assert read[key] == _hex(want)
             case _:
                 raise ValueError(f"no runner for the check {key}")
 
@@ -134,18 +182,24 @@ def run_case(preset: str, fork: str, case: Path) -> None:
     meta = _load(case / "meta.yaml") if (case / "meta.yaml").exists() else {}
     # Setting 2 marks placeholder signatures, which the case must not check.
     verify = (meta or {}).get("bls_setting", 0) != 2
-    outcomes = consensus.fork_choice(
-        preset,
-        FORKS[fork],
-        _read(case, "anchor_state"),
-        _read(case, "anchor_block"),
-        [_input(case, step) for step in steps],
-        verify,
-        config,
+    inputs = [_inputs(case, step) for step in steps]
+    outcomes = iter(
+        consensus.fork_choice(
+            preset,
+            FORKS[fork],
+            _read(case, "anchor_state"),
+            _read(case, "anchor_block"),
+            [one for step in inputs for one in step],
+            verify,
+            config,
+        )
     )
-    for index, (step, outcome) in enumerate(zip(steps, outcomes, strict=True)):
+    for index, step in enumerate(steps):
+        # A fast confirmation and the read after it make one checks step.
+        reads = [next(outcomes) for _ in inputs[index]]
+        outcome = reads[0] if len(reads) == 1 else reads[0] | reads[1]
         if "checks" in step:
-            assert isinstance(outcome, dict), (index, outcome)
+            assert all(isinstance(read, dict) for read in reads), (index, reads)
             _check(outcome, step["checks"])
         elif not checks_columns(fork, case):
             assert (outcome is None) == step.get("valid", True), (index, step, outcome)
@@ -157,6 +211,7 @@ def run_case(preset: str, fork: str, case: Path) -> None:
                 break
         else:
             assert outcome is not None and outcome.code in _DATA_CODES, (index, step, outcome)
+    assert next(outcomes, None) is None or checks_columns(fork, case)
 
 
 def _cases() -> list:
@@ -176,18 +231,21 @@ def _archive_cases() -> list:
     cases = []
     for preset, name in ARCHIVES.items():
         paths = [f"tests/{preset}/{fork}/fork_choice" for fork in (*SPECIFIED, "fulu")]
-        # The optimistic sync cases are mainnet only, from Bellatrix.
-        if preset == "mainnet":
-            paths += [f"tests/{preset}/{fork}/sync" for fork in SPECIFIED if fork != "altair"]
+        # The optimistic sync cases start at Bellatrix.
+        paths += [f"tests/{preset}/{fork}/sync" for fork in SPECIFIED if fork != "altair"]
+        # The fast confirmation cases are minimal only.
+        if preset == "minimal":
+            paths += [f"tests/{preset}/{fork}/fast_confirmation" for fork in SPECIFIED]
         base = archives.unpack(name, *paths) / "tests" / preset
         found = [
             *base.glob("*/fork_choice/*/*/*/steps.yaml"),
             *base.glob("*/sync/*/*/*/steps.yaml"),
+            *base.glob("*/fast_confirmation/*/*/*/steps.yaml"),
         ]
         for steps in sorted(found):
             case = steps.parent
-            fork, _, handler = case.relative_to(base).parts[:3]
-            if runs(fork, handler) or checks_columns(fork, case):
+            fork, runner, handler = case.relative_to(base).parts[:3]
+            if runs(fork, runner, handler) or checks_columns(fork, case):
                 cases.append(
                     pytest.param(
                         preset,
@@ -215,7 +273,7 @@ def test_digests():
 
 @pytest.mark.parametrize("preset, fork, case", _cases())
 def test_case(preset, fork, case):
-    assert runs(fork, case.parts[-3]) or checks_columns(fork, case)
+    assert runs(fork, case.parts[-4], case.parts[-3]) or checks_columns(fork, case)
     run_case(preset, fork, case)
 
 

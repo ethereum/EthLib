@@ -1,0 +1,6 @@
+preset: minimal
+fork: altair
+runner: fast_confirmation
+handler: reconfirmation
+suite: pyspec_tests
+case: reconfirmation_is_not_failing_till_epoch_start

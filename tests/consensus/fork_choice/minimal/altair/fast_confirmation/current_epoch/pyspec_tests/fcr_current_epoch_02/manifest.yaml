@@ -1,0 +1,6 @@
+preset: minimal
+fork: altair
+runner: fast_confirmation
+handler: current_epoch
+suite: pyspec_tests
+case: fcr_current_epoch_02
