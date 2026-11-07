@@ -131,9 +131,7 @@ A shorter slot can share its second with the next one.
 
 For example, with slots of 500 milliseconds, slots 2 and 3 start in the same second.
 
-The time of genesis must also fit in milliseconds.
-
-A time that saturates is not the time of genesis. -/
+The time of genesis must also fit in milliseconds, since a time that does not fit saturates. -/
 theorem computeSlotAtTime_computeTimeAtSlot {genesisTime time : UInt64} {slot : Slot}
     (positive : 0 < config.SLOT_DURATION_MS) (whole : config.SLOT_DURATION_MS % 1000 = 0)
     (genesis : genesisTime ≤ UINT64_MAX / 1000)
