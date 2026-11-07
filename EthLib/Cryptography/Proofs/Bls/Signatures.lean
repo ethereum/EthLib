@@ -69,7 +69,7 @@ theorem verify_badPubkeySize {pk : ByteArray} (h : pk.size ≠ 48) (msg sig : By
     verify pk msg sig = false :=
   coreVerify_badPubkeySize h msg sig DST
 
-/-- The secret key decoder accepts exactly the nonzero scalars that `Fr.fromBytesBE` decodes. -/
+/-- The secret key decoder gives a key exactly when the decoder of scalars gives its scalar. -/
 theorem SecretKey.fromBytes_eq_ok_iff {bytes : ByteArray} {sk : SecretKey} :
     SecretKey.fromBytes bytes = .ok sk ↔ Fr.fromBytesBE bytes = .ok sk.val := by
   obtain ⟨x, hx⟩ := sk
