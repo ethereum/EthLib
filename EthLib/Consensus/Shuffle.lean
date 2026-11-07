@@ -42,12 +42,16 @@ inductive ShuffleError where
 
 The code ignores the arguments of the constructor, which the message carries.
 
-A new constructor takes a new code, so that each code keeps its meaning. -/
+A new constructor takes a new code, so that each code keeps its meaning.
+
+The custody errors take the codes from 1, and the subnet errors from 101, in the same Python class.
+
+So the shuffle errors take the codes from 201. -/
 def ShuffleError.code : ShuffleError → UInt32
-  | .indexOutOfRange _ _ => 1
-  | .noCommittee => 2
-  | .overflow => 3
-  | .countTooLarge _ => 4
+  | .indexOutOfRange _ _ => 201
+  | .noCommittee => 202
+  | .overflow => 203
+  | .countTooLarge _ => 204
 
 namespace Shuffle
 

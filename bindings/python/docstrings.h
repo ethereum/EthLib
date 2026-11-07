@@ -381,7 +381,7 @@
   "All the column sidecars of a block, from the bytes of one of them and the rows of its blobs."
 
 #define DOC_consensus_compute_shuffled_permutation \
-  "The shuffled position of every index below the count."
+  "The shuffled position of every index below the count, which must be at most `2^40`."
 
 #define DOC_consensus_compute_shuffled_index \
   "The shuffled position of one index, which must be below the count."

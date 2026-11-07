@@ -1,6 +1,8 @@
 module
 
+public import EthLib.Consensus.DataAvailability.Custody
 public import EthLib.Consensus.Shuffle
+public import EthLib.Networking.Gossip.Subnet
 
 /-!
 # Proofs: the shuffle moves each index on its own
@@ -10,6 +12,8 @@ A round hashes each bucket of positions once, for all indices.
 It gives each index the value that one round of swap-or-not gives it alone.
 
 So the shuffled list holds, at each index, the result of every round on that index.
+
+The shuffle, custody and subnet errors share one Python class, and no two of them share a code.
 -/
 
 @[expose] public section
@@ -24,6 +28,25 @@ theorem ShuffleError.code_injective (e₁ e₂ : ShuffleError) (h : e₁.code = 
   -- Two distinct constructors have two distinct literal codes, which `decide` separates.
   cases e₁ <;> cases e₂ <;>
     first | rfl | (simp only [ShuffleError.code] at h; exact absurd h (by decide))
+
+/-- A shuffle error never has the code of a custody error, which shares its Python class. -/
+theorem ShuffleError.code_ne_custody (e : ShuffleError)
+    (c : DataAvailability.CustodyError) : e.code ≠ c.code := by
+  cases e <;> cases c <;> simp only [ShuffleError.code, DataAvailability.CustodyError.code] <;>
+    decide
+
+/-- A shuffle error never has the code of a subnet error, which shares its Python class. -/
+theorem ShuffleError.code_ne_subnet {ε : Type} (e : ShuffleError)
+    (s : Networking.Gossip.SubnetError ε) : e.code ≠ s.code := by
+  cases e <;> cases s <;> simp only [ShuffleError.code, Networking.Gossip.SubnetError.code] <;>
+    decide
+
+/-- A custody error never has the code of a subnet error, which shares its Python class. -/
+theorem _root_.EthLib.Consensus.DataAvailability.CustodyError.code_ne_subnet {ε : Type}
+    (c : DataAvailability.CustodyError) (s : Networking.Gossip.SubnetError ε) :
+    c.code ≠ s.code := by
+  cases c <;> cases s <;>
+    simp only [DataAvailability.CustodyError.code, Networking.Gossip.SubnetError.code] <;> decide
 
 namespace Shuffle
 
