@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Except
+public import EthLib.Base.Proofs.List
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Consensus.Gossip.Seen
 public import EthLib.Consensus.HonestValidator
@@ -519,24 +520,10 @@ theorem isAssignedToSyncCommittee_eq_error_of_ne {state : BeaconState preset for
 
 /-! ## Sync committee subnets -/
 
-/-- Removing duplicates leaves a list in which each element comes once. -/
-theorem nodup_eraseDups_of_length_le {α : Type} [BEq α] [LawfulBEq α] :
-    ∀ (n : Nat) (l : List α), l.length ≤ n → l.eraseDups.Nodup
-  | _, [], _ => by simp
-  | 0, _ :: _, h => absurd h (by simp)
-  | n + 1, a :: rest, h => by
-    rw [List.eraseDups_cons, List.nodup_cons]
-    have shorter : (rest.filter fun b => !b == a).length ≤ n :=
-      Nat.le_trans (List.length_filter_le _ _) (Nat.le_of_succ_le_succ h)
-    refine ⟨fun mem => ?_, nodup_eraseDups_of_length_le n _ shorter⟩
-    -- Every element that remains differs from `a`.
-    have := (List.mem_eraseDups.mp mem)
-    simp at this
-
 /-- The subnets of a key come once each. -/
 theorem syncSubnetsOfPubkey_nodup (committee : SyncCommittee preset) (pubkey : BLSPubkey) :
     (syncSubnetsOfPubkey committee pubkey).Nodup :=
-  nodup_eraseDups_of_length_le _ _ (Nat.le_refl _)
+  Base.nodup_eraseDups _
 
 /-- The subnets of a validator come from the committee of the next slot and the validator's key.
 
