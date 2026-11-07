@@ -158,6 +158,52 @@ theorem runFrame_of_step_eq_next {evm after : Evm fork Meter}
   split <;> rename_i heq <;> rw [next] at heq <;> cases heq
   rfl
 
+/-- A step that sends a message, whose resume gives a frame, lets the loop go on from that frame.
+
+The runner runs the message to the frame `child`. -/
+theorem runFrame_of_step_eq_child {evm caller after : Evm fork Meter} {message : Message fork}
+    {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    {child : { child : Evm fork Meter // GasMeter.gasHeld child.gas ≤ message.gas }}
+    {within : GasMeter.gasHeld evm.gas ≤ bound} (running : evm.running = true)
+    (sent : step evm = .ok (.child caller message resume)) (lt : message.gas < bound)
+    (ran : runChild caller message lt = .ok child) (resumed : resume child.1 = .ok after) :
+    runFrame step decreases bound runChild evm within =
+      runFrame step decreases bound runChild after
+        (Nat.le_trans (gasHeld_le_of_measure_lt
+          ((decreases running sent).2 child.1 after child.2 resumed)) within) := by
+  rw [runFrame]
+  simp only [running, dite_true]
+  split <;> rename_i heq <;> rw [sent] at heq <;> cases heq
+  split <;> rename_i hchild
+  · rw [ran] at hchild
+    cases hchild
+  · rw [ran] at hchild
+    cases hchild
+    split <;> rename_i hresume <;> rw [resumed] at hresume <;> cases hresume
+    rfl
+
+/-- A step that sends a message, whose resume fails with an error that does not abort, halts.
+
+The frame halts exceptionally with that error. -/
+theorem runFrame_of_step_eq_child_error {evm caller : Evm fork Meter} {message : Message fork}
+    {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    {child : { child : Evm fork Meter // GasMeter.gasHeld child.gas ≤ message.gas }}
+    {within : GasMeter.gasHeld evm.gas ≤ bound} {e : EvmError} (running : evm.running = true)
+    (sent : step evm = .ok (.child caller message resume)) (lt : message.gas < bound)
+    (ran : runChild caller message lt = .ok child) (failed : resume child.1 = .error e)
+    (halts : e.aborts = false) :
+    runFrame step decreases bound runChild evm within = .ok (exceptionalHalt evm e) := by
+  rw [runFrame]
+  simp only [running, dite_true]
+  split <;> rename_i heq <;> rw [sent] at heq <;> cases heq
+  split <;> rename_i hchild
+  · rw [ran] at hchild
+    cases hchild
+  · rw [ran] at hchild
+    cases hchild
+    split <;> rename_i hresume <;> rw [failed] at hresume <;> cases hresume
+    simp [halts]
+
 /-- Every run that succeeds ends with a stopped frame. -/
 theorem running_runFrame {evm after : Evm fork Meter} {within : GasMeter.gasHeld evm.gas ≤ bound}
     (h : runFrame step decreases bound runChild evm within = .ok after) :
