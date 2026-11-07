@@ -26,6 +26,10 @@ The on-chain aggregate joins the network aggregates in the order of their commit
 Reading the requests of the execution layer inverts the list that the execution layer receives.
 
 The signed header of a block carries the root of its body.
+
+The custody requirement of a node is at most the number of custody groups.
+
+It is at least the minimum for a node with validators, when that minimum is at most that number.
 -/
 
 @[expose] public section
@@ -945,5 +949,44 @@ theorem getExecutionRequests_eq_ok_iff {list : List ByteArray}
         simpa using notKept
       refine ⟨.empty, ?_, requestSlot_bytes_of_count_eq_zero member zero⟩
       rw [untouched type (firsts ▸ mem), requestSlot_empty]
+
+/-! ## Custody -/
+
+/-- The custody requirement is the count of balance increments, held between its two bounds.
+
+It succeeds when the sum of the effective balances has a value and the increment is not zero. -/
+theorem getValidatorsCustodyRequirement_eq_ok_iff {config : Config}
+    {state : BeaconState preset fork} {validatorIndices : List ValidatorIndex} {count : UInt64} :
+    getValidatorsCustodyRequirement config state validatorIndices = .ok count ↔
+      ∃ total, totalEffectiveBalance state validatorIndices = .ok total ∧
+        config.BALANCE_PER_ADDITIONAL_CUSTODY_GROUP ≠ 0 ∧
+        count = min (max (total / config.BALANCE_PER_ADDITIONAL_CUSTODY_GROUP)
+          config.VALIDATOR_CUSTODY_REQUIREMENT) config.NUMBER_OF_CUSTODY_GROUPS := by
+  unfold getValidatorsCustodyRequirement
+  simp only [bind_ok_iff, mapError_ok_iff, divChecked, pure, Except.pure, Except.ok.injEq]
+  constructor
+  · rintro ⟨total, summed, quotient, divided, rfl⟩
+    split at divided
+    · simp at divided
+    · rename_i nonzero
+      simp only [Except.ok.injEq] at divided
+      subst divided
+      exact ⟨total, summed, nonzero, rfl⟩
+  · rintro ⟨total, summed, nonzero, rfl⟩
+    exact ⟨total, summed, total / config.BALANCE_PER_ADDITIONAL_CUSTODY_GROUP, by simp [nonzero],
+      rfl⟩
+
+/-- The custody requirement is at most the number of custody groups.
+
+It is at least the minimum for a node with validators, when that minimum is at most the number. -/
+theorem getValidatorsCustodyRequirement_bounds {config : Config}
+    {state : BeaconState preset fork} {validatorIndices : List ValidatorIndex} {count : UInt64}
+    (made : getValidatorsCustodyRequirement config state validatorIndices = .ok count) :
+    count ≤ config.NUMBER_OF_CUSTODY_GROUPS ∧
+      (config.VALIDATOR_CUSTODY_REQUIREMENT ≤ config.NUMBER_OF_CUSTODY_GROUPS →
+        config.VALIDATOR_CUSTODY_REQUIREMENT ≤ count) := by
+  obtain ⟨total, -, -, rfl⟩ := getValidatorsCustodyRequirement_eq_ok_iff.mp made
+  refine ⟨Std.min_le_right, fun within => ?_⟩
+  exact Std.le_min_iff.mpr ⟨Std.right_le_max, within⟩
 
 end EthLib.Consensus
