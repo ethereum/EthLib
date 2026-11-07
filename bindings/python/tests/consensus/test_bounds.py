@@ -95,10 +95,19 @@ def test_request_unknown_protocol() -> None:
     assert info.value.code == 0
 
 
-def test_request_fork_not_yet_specified() -> None:
-    with raises(ConsensusError, "fork glamsterdam not yet specified") as info:
-        consensus.reqresp_request_bounds("glamsterdam", _id("status", 1))
+def test_request_unknown_fork() -> None:
+    with raises(ConsensusError, "no fork named nowhere") as info:
+        consensus.reqresp_request_bounds("nowhere", _id("status", 1))
     assert info.value.code == 0
+
+
+def test_inclusion_list_request_from_heze() -> None:
+    # The request protocol of inclusion lists is new in Heze.
+    with raises(
+        ConsensusError, f"{_id('inclusion_lists_by_indices', 1)} is not a protocol of glamsterdam"
+    ) as info:
+        consensus.reqresp_request_bounds("glamsterdam", _id("inclusion_lists_by_indices", 1))
+    assert info.value.code == 301
 
 
 def test_request_unknown_preset() -> None:

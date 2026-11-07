@@ -97,8 +97,7 @@ def computeMinEpochsForBlockRequestsExport (name : ByteArray) : Result UInt64 :=
 def protocolAtFork (fork : Fork) (text : ByteArray) : Result ProtocolId := do
   let text ← nameOf text
   let some id := ProtocolId.parse? text | throw (0, s!"{text} names no protocol")
-  let some ids := protocolIds fork | throw (0, s!"fork {fork.name} not yet specified")
-  unless ids.contains id do
+  unless (protocolIds fork).contains id do
     throw (BoundsError.notAtFork.code, s!"{text} is not a protocol of {fork.name}")
   return id
 
@@ -108,7 +107,7 @@ def reqRespRequestBoundsExport (name fork protocol : ByteArray) : Result ByteArr
   let name ← nameOf name
   let preset ← presetOf name
   let config ← configOf name
-  let fork ← forkUpTo .bpo5 fork
+  let fork ← forkUpTo .hegota fork
   let id ← protocolAtFork fork protocol
   let some (low, high) := requestBounds preset config fork id
     | throw (BoundsError.noRequest.code, s!"{id.toString} carries no request")
@@ -122,7 +121,7 @@ def reqRespResponseBoundsExport (name chunkFork protocol : ByteArray) : Result B
   let name ← nameOf name
   let preset ← presetOf name
   let config ← configOf name
-  let fork ← forkUpTo .bpo5 chunkFork
+  let fork ← forkUpTo .hegota chunkFork
   let id ← protocolAtFork fork protocol
   -- Every version that a fork defines has a response type.
   let some (low, high) := responseBounds preset config fork id
