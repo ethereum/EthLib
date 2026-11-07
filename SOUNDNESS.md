@@ -269,6 +269,35 @@ The law holds when the check tests `prod_i e(P_i, Q_i) = 1` for any bilinear map
 Its target is `Fp12` and its generator is `e(g_1, g_2)`.
 Under the law, `pairing P Q = e(g_1, g_2)^(a b)` when `P` represents `a * g_1` and `Q` represents `b * g_2`.
 An element of the model represents `t` in `Fr` when it is `e(g_1, g_2)^t`.
+The theorems that take `PairingLaws` as a hypothesis, or build a model of the target group from it, sit in these files:
+
+- `Consensus/Proofs/HonestAggregation.lean`
+- `Consensus/Proofs/HonestBuilder.lean`
+- `Consensus/Proofs/HonestValidator.lean`
+- `Consensus/Proofs/InclusionListCommittee.lean`
+- `Cryptography/Proofs/Bls/PairingLaws.lean`
+- `Cryptography/Proofs/Bls/Security/Refinement.lean`
+- `Cryptography/Proofs/Bls/SignaturesCorrect.lean`
+- `Cryptography/Proofs/Bls/SignaturesUnique.lean`
+- `Cryptography/Proofs/Bls/TargetGroup.lean`
+- `Cryptography/Proofs/Kzg/Arsdh.lean`
+- `Cryptography/Proofs/Kzg/BatchBinding.lean`
+- `Cryptography/Proofs/Kzg/Binding.lean`
+- `Cryptography/Proofs/Kzg/BlobVerifier.lean`
+- `Cryptography/Proofs/Kzg/CellBatchBinding.lean`
+- `Cryptography/Proofs/Kzg/CellBinding.lean`
+- `Cryptography/Proofs/Kzg/CellVerifier.lean`
+- `Cryptography/Proofs/Kzg/CeremonyChecks.lean`
+- `Cryptography/Proofs/Kzg/HonestCells.lean`
+- `Cryptography/Proofs/Kzg/PeerDasBatchGames.lean`
+- `Cryptography/Proofs/Kzg/PeerDasColumnGames.lean`
+- `Cryptography/Proofs/Kzg/PeerDasGames.lean`
+- `Cryptography/Proofs/Kzg/Verify.lean`
+- `Execution/Proofs/Evm/Precompiles/Bls12381/PairingProduct.lean`
+
+With `pairingLaws` passed for that hypothesis, none of them depends on the pairing law.
+Their other hypotheses, such as a well-formed setup, stay.
+
 `finalExponentiation_eq_pow` (`Proofs/Bls/FinalExponentiation.lean`) proves that the final exponentiation raises every element of `Fp12` to exactly `(p^12 - 1) / r`.
 `millerDouble_snd` and `millerAdd_snd` (`Proofs/Bls/MillerLoop.lean`) prove that each step of the Miller loop multiplies by the line through the untwisted points, times `c w^3` for some `c` in `Fp2`.
 The doubling step needs `T` finite with `Y ≠ 0`, and the addition step needs `T` finite with an `x` other than that of `Q`.
