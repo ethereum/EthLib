@@ -195,7 +195,7 @@ def fastConfirmationRecord {preset : Preset} {fork : Fork} (store : Store preset
     checkpointRecord fcr.previousEpochGreatestUnrealizedCheckpoint ++
     Base.packBytes fcr.previousSlotHead ++ Base.packBytes fcr.currentSlotHead ++
     Base.packBytes fcr.confirmedRoot
-  if bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam then
+  if bellatrix : .bellatrix ≤ fork then
     return record.push 1 ++ Base.packBytes (← store.getSafeExecutionBlockHash fcr bellatrix)
   return record.push 0
 

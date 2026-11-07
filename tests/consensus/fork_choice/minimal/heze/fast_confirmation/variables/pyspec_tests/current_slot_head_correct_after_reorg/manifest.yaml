@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: fast_confirmation
+handler: variables
+suite: pyspec_tests
+case: current_slot_head_correct_after_reorg
