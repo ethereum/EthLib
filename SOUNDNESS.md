@@ -330,7 +330,7 @@ Then the pairing is linear in a point `P` fixed by `pi`, when `N` is even, and l
 `ateValue_add_left` (`Proofs/Bls/PairingAte.lean`) proves that Miller's function of `|x|` and `Q`, at `P` and raised to `N`, is linear in a point `P` that `pi` fixes.
 `ateValue_add_right` proves that it is linear in `Q` on the untwist of `G2`.
 `pairing_eq_ateValue` proves that the pairing of a valid finite point `P` of `G1` and a valid point `Q` of the subgroup of `G2` is that value raised to `p^6`.
-No theorem applies these results to alt_bn128, so no theorem proves its bilinearity.
+The alt_bn128 section lists the same application to alt_bn128.
 
 The pairing of the two generators equals the value that [draft-irtf-cfrg-pairing-friendly-curves-11](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-pairing-friendly-curves-11) publishes in Appendix B.
 The Python suite checks it through the bindings (`bindings/python/tests/bls/test_pairing.py`), with a few bilinearity checks.
@@ -432,13 +432,22 @@ The others are the line through `(6 u + 2) Q'` and `pi(Q')`, and the line throug
 This is the optimal ate pairing of Beuchat et al. (ePrint 2010/354, §2).
 `untwist_frobenius` proves that the Frobenius map of the specification is `pi` under the untwist.
 
-No theorem proves that `pairingCheck` computes a bilinear pairing.
+`AltBn128.pairingBilinear` (`Proofs/AltBn128/PairingAte.lean`) proves that the pairing is bilinear on the multiples of the generators: `e(a P1, b P2) = e(P1, P2)^(a b)` for all `a` and `b` in `Fr`.
 `orderOf_pairing_generators` (`Proofs/AltBn128/Nondegenerate.lean`) proves that the pairing of `P1` and `P2` has order `q`, so it is not 1; the kernel evaluates that pairing.
 `pairingCheck_eq_true_iff` (`Proofs/AltBn128/PairingBilinear.lean`) proves that the check passes exactly when the product of the pairings of its pairs is 1.
 The pairing law is a hypothesis, `AltBn128.PairingLaws` (`Proofs/AltBn128/PairingLaws.lean`), in the shape of the BLS one.
 It states the check of EIP-197: the pairs `(a_i P1, b_i P2)` pass exactly when `sum_i a_i b_i = 0`.
 `PairingLaws.of_bilinear` (`Proofs/AltBn128/PairingBilinear.lean`) derives it from one smaller hypothesis, `PairingBilinear`: `e(a P1, b P2) = e(P1, P2)^(a b)` for all `a` and `b` in `Fr`.
-No theorem proves `PairingBilinear` yet.
+`AltBn128.pairingLaws` (`Proofs/AltBn128/PairingAte.lean`) proves `AltBn128.PairingLaws` from it, so every theorem that assumes it holds once it is supplied.
+`Ate.frobenius_generator` (`Proofs/AltBn128/PairingAte.lean`) proves, by a kernel computation on the twist, that the Frobenius map of the specification sends `P2` to `p P2`.
+`Ate.frobenius_of_mem` proves that `pi` acts as `p` on the untwist of `G_2`.
+`Ate.eq_zero_of_frobenius_eq` proves that `pi` fixes only `O` there, because `q` does not divide `p - 1`.
+`Ate.ratioDivisor_ateLines` proves that the three values of the pairing, with the verticals through the two sums, have the divisor `s ((Q') - (O)) + ((pi Q') - (O)) + ((pi^8 Q') - (O)) - ((pi^9 Q') - (O))`, with `s = 6 u + 2`.
+`Ate.pow_ateExponent` proves that `z^(N (s + p + p^8 - p^9))` is 1 for every nonzero `z` in `Fp12`, with `N = (p^12 - 1) / q`.
+`Ate.ateValue_add_left` proves that these lines at `P`, raised to `N`, are linear in a point `P` that `pi` fixes.
+`Ate.ateValue_add_right` proves that they are linear in `Q'` on the untwist of `G_2`.
+`Ate.pairing_eq_ateValue` proves that the pairing of a finite `P` on the curve and a `Q` on the twist whose untwist lies in `G_2` is that value.
+No theorem proves that every point `Q` with `q Q = O` on the twist is a multiple of `P2`, so the law covers the pairs of EIP-197 that are multiples of the generators.
 
 `ecadd_toPoint` and `ecmul_toPoint` (`Execution/Proofs/Evm/Precompiles/AltBn128/Group.lean`) carry this group law to the precompiles.
 A call of ECADD that succeeds returns the sum of its two points, and a call of ECMUL returns its point times its 32-byte scalar.
@@ -1459,7 +1468,7 @@ The ceremony theorem `checksSufficient_of_subgroupChecks` is one, and its hypoth
 `PairingLaws`, listed under BLS12-381 and alt_bn128, is the hypothesis of every theorem about the result of a pairing check.
 It is a `Prop` passed as an explicit argument, never an axiom, so `lake exe check-decls` still sees only the standard axioms.
 `pairingLaws` proves the BLS12-381 law, so the theorems that assume it hold once it is supplied.
-No theorem proves `AltBn128.PairingLaws`, and if it were false, every theorem that assumes it would hold vacuously.
+`AltBn128.pairingLaws` proves the alt_bn128 law in the same way.
 Whatever those hypotheses leave unproved is part of what a reader trusts.
 
 ### A3. Side channels
