@@ -618,4 +618,22 @@ theorem toPoint_mul {P : G1} (h : Valid P) (s : Fr) :
 theorem valid_mul {P : G1} (h : Valid P) (s : Fr) : Valid (mul P s) :=
   valid_mulNat h s.val
 
+theorem valid_mulModulus {P : G1} (h : Valid P) : Valid (mulModulus P) :=
+  valid_add (valid_mulNat (valid_mulNat (valid_add (valid_mulNat (valid_mulNat h _) _)
+    (valid_neg h)) _) _) h
+
+/-- The chain `[t^2] ([t^2] P - P) + P` of `mulModulus` is `[r] P`. -/
+theorem toPoint_mulModulus {P : G1} (h : Valid P) :
+    toPoint (mulModulus P) = Fr.modulus • toPoint P := by
+  have h₁ := valid_mulNat (valid_mulNat h blsX) blsX
+  have h₂ := valid_add h₁ (valid_neg h)
+  have h₃ := valid_mulNat (valid_mulNat h₂ blsX) blsX
+  simp only [mulModulus, toPoint_add h₃ h, toPoint_mulNat (valid_mulNat h₂ blsX),
+    toPoint_mulNat h₂, toPoint_add h₁ (valid_neg h), toPoint_mulNat (valid_mulNat h blsX),
+    toPoint_mulNat h, toPoint_neg h]
+  have hle : blsX ^ 2 ≤ blsX ^ 4 := Nat.pow_le_pow_right (by decide) (by decide)
+  rw [Fr.modulus_eq_blsX, add_smul, one_smul, sub_nsmul _ hle]
+  simp only [smul_smul, ← pow_two]
+  rw [nsmul_add, neg_nsmul, smul_smul, ← pow_add]
+
 end EthLib.Cryptography.Bls.G1

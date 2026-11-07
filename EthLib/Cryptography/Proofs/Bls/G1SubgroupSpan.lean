@@ -85,8 +85,8 @@ theorem inSubgroup_iff_modulus_smul_eq_zero {P : G1} (hP : Valid P) :
   by_cases hi : P.isInfinity = true
   · rw [ite_eq_left hi, (isInfinity_eq_true_iff_toPoint_eq_zero hP).mp hi]
     simp
-  · rw [ite_eq_right hi, isInfinity_eq_true_iff_toPoint_eq_zero (valid_mulNat hP _),
-      toPoint_mulNat hP]
+  · rw [ite_eq_right hi, isInfinity_eq_true_iff_toPoint_eq_zero (valid_mulModulus hP),
+      toPoint_mulModulus hP]
 
 /-- Rules out a rank-2 `r`-torsion subgroup inside `E(Fp)` once `#E(Fp) <= 2 * p + 1` meets Lagrange's theorem. -/
 theorem modulus_sq_gt_card_bound : 2 * Fp.modulus + 1 < Fr.modulus ^ 2 := by

@@ -108,9 +108,6 @@ def millerLoop (s : Nat) (q : Fp2 F × Fp2 F) (p : F × F) : Fp12 F :=
 
 /-! ## Final exponentiation -/
 
-/-- The BLS parameter `|x|`. -/
-def blsX : Nat := 0xD201000000010000
-
 /-- The exponent `(p¹² − 1) / r`. -/
 def finalExpExponent : Nat :=
   (Fp.modulus ^ 12 - 1) / Fr.modulus
