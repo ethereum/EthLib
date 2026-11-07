@@ -5,7 +5,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Rules
 /-!
 # Proofs: rules for the opcodes that read and write only the stack
 
-Each opcode of the stack has a rule, from one running frame of a code to the next.
+Each rule here goes from one running frame of a code to the next.
 
 A one-operand, two-operand or three-operand opcode puts its result in place of its operands.
 
@@ -22,6 +22,8 @@ Each SWAP costs 3 gas.
 EXP pays its base price and the price per byte of its exponent that the fork sets.
 
 The rules work out the charge of one counter of gas, at every fork.
+
+DUPN, SWAPN and EXCHANGE of Glamsterdam have no rule yet.
 -/
 
 @[expose] public section
