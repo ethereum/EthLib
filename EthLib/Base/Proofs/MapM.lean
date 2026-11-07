@@ -274,4 +274,16 @@ theorem foldlM_ok_invariant {g : β → α → Except ε β} (P : β → Prop)
     obtain ⟨middle, first, rest⟩ := computed
     exact foldlM_ok_invariant P step (step b x middle holds first) rest
 
+/-- Each input of a successful map has its output among the outputs. -/
+theorem exists_mem_of_mapM_ok {xs : List α} {ys : List β}
+    (made : xs.mapM f = .ok ys) {x : α} (member : x ∈ xs) : ∃ y ∈ ys, f x = .ok y := by
+  induction xs generalizing ys with
+  | nil => simp at member
+  | cons head tail ih =>
+    obtain ⟨y, rest, first, others, rfl⟩ := mapM_cons_ok.mp made
+    rcases List.mem_cons.mp member with rfl | member
+    · exact ⟨y, List.mem_cons_self, first⟩
+    · obtain ⟨y', member', step⟩ := ih others member
+      exact ⟨y', List.mem_cons_of_mem _ member', step⟩
+
 end EthLib.Base
