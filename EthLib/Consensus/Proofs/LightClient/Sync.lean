@@ -7,13 +7,13 @@ public import EthLib.Consensus.LightClient.Sync
 
 Each error of the light client has its own code.
 
-Updates form a strict weak order under `isBetterUpdate`.
+The ranking of updates is a strict weak order.
 
-The relation is irreflexive, asymmetric and transitive, and so is its negation.
+It is irreflexive, asymmetric and transitive, and its negation is transitive.
 
 Within one sync committee period, an earlier signature slot beats a later one when the rest matches.
 
-For an optimistic update no period hypothesis is needed, so the order has chains of any length.
+For an optimistic update, the earlier signature slot wins with no hypothesis on the period.
 
 Neither the new update nor the old best update ranks above a kept best valid update.
 
@@ -105,7 +105,7 @@ private theorem not_lexLt_trans {xs ys zs : List Nat}
 /-- One boolean step of the ranking, as a number: `1` for `true`, `0` for `false`. -/
 private def boolKey (b : Bool) : Nat := if b then 1 else 0
 
-/-- The ranking key of an update, in the order that `isBetterUpdate` compares.
+/-- The ranking key of an update, in the order of the comparison.
 
 A higher key ranks first, so the numeric form reverses the two slots. -/
 private def updateRank (update : LightClientUpdate preset fork) : List Nat :=
@@ -176,7 +176,7 @@ private theorem tiebreakTail_eq_lexLt (na no : Nat) (asn aso ssn sso : Slot) :
         [na, (2 ^ 64 - 1) - asn.toNat, (2 ^ 64 - 1) - ssn.toNat] :=
   step_nat na no _ (step_slot asn aso _ (last_slot ssn sso))
 
-/-- The pure boolean comparison at the body of `isBetterUpdate`, after projecting each field. -/
+/-- The comparison of two updates, written on their projected fields. -/
 private def betterFields (maxActive na no : Nat) (rn ro fn fo cfn cfo : Bool)
     (asn aso ssn sso : Slot) : Bool :=
   let sn := na * 3 ≥ maxActive * 2
@@ -190,7 +190,7 @@ private def betterFields (maxActive na no : Nat) (rn ro fn fo cfn cfo : Bool)
     else tiebreakTail na no asn aso ssn sso
   else tiebreakTail na no asn aso ssn sso
 
-/-- The key of the fields that `betterFields` compares, in that order. -/
+/-- The ranking key of the projected fields, in the order of the comparison. -/
 private def fieldRank (maxActive active : Nat) (relevant finality committee : Bool)
     (attested signature : Slot) : List Nat :=
   let supermajority := active * 3 ≥ maxActive * 2
@@ -265,7 +265,7 @@ theorem isBetterUpdate_trans {a b c : LightClientUpdate preset fork}
   (isBetterUpdate_eq_rank_lt a c).mpr
     (lexLt_trans ((isBetterUpdate_eq_rank_lt b c).mp bc) ((isBetterUpdate_eq_rank_lt a b).mp ab))
 
-/-- The negation of `isBetterUpdate` is transitive. -/
+/-- Not ranking above another update is transitive. -/
 theorem isBetterUpdate_false_trans {a b c : LightClientUpdate preset fork}
     (ab : isBetterUpdate a b = false) (bc : isBetterUpdate b c = false) :
     isBetterUpdate a c = false := by
