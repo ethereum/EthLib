@@ -16,8 +16,10 @@ public import EthLib.Execution.Proofs.Blocks.Requests
 public import EthLib.Execution.Proofs.Blocks.Roots
 public import EthLib.Execution.Proofs.Blocks.SystemCall
 public import EthLib.Execution.Proofs.Blocks.Transition
+public import EthLib.Execution.Proofs.Blocks.TypedRoots
 public import EthLib.Execution.Proofs.Blocks.Validate
 public import EthLib.Execution.Proofs.Blocks.Withdrawal
+public import EthLib.Execution.Proofs.Blocks.WithdrawalCodec
 
 /-!
 # `EthLib.Execution.Proofs.Blocks`
