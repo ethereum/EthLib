@@ -113,9 +113,11 @@ decreasing_by all_goals (have : minCopyLength = 4 := rfl; (try simp only [s, c, 
 The input must have at most 2^32 - 1 bytes, the largest length that a preamble can declare (§1).
 
 A longer input gives a preamble out of range, so decompression rejects the block.
+
+The scan writes its elements straight after the preamble, so the body is not copied a second time.
 -/
 def compress (src : ByteArray) : ByteArray :=
-  ⟨(EthLib.Networking.Encoding.Varint.encodeAux src.size preambleMaxLength).toArray⟩ ++
-    compressLoop src (Array.replicate (2 ^ tableBits) 0) 0 0 ByteArray.empty
+  compressLoop src (Array.replicate (2 ^ tableBits) 0) 0 0
+    ⟨(EthLib.Networking.Encoding.Varint.encodeAux src.size preambleMaxLength).toArray⟩
 
 end EthLib.Networking.Snappy
