@@ -211,6 +211,22 @@ def test_electra_bound_is_reached():
     assert consensus.compute_weak_subjectivity_period("mainnet", "pectra", state) == 3558
 
 
+def test_gloas_bound_is_reached():
+    # The proved bound at mainnet is 1658 epochs, from the 64-bit cap 10 * t < 2^64.
+    # The validators hold 1406271487 ether in all, so 10 * t is below 2^64 Gwei.
+    # The exit churn is 42915 ether, the activation churn 256 and the consolidation churn 21457.
+    # So the weighted churn is 50152333333333 Gwei, and 10 * t // (200 * churn) = 1402, by hand.
+    full = MAX_EFFECTIVE_BALANCE_ELECTRA * GWEI
+    count = 512
+    state = state_at("glamsterdam", count, full)
+    # The upgrades need a registry and overflow on such a total, so one validator takes it after.
+    record = PUBKEY + bytes(32) + struct.pack("<Q", full)
+    assert state.count(record) == count
+    rest = 1406271487 - (count - 1) * MAX_EFFECTIVE_BALANCE_ELECTRA
+    state = state.replace(record, PUBKEY + bytes(32) + struct.pack("<Q", rest * GWEI), 1)
+    assert consensus.compute_weak_subjectivity_period("mainnet", "glamsterdam", state) == 1658
+
+
 def test_no_active_validators():
     # The average balance divides by the number of active validators.
     with raises(

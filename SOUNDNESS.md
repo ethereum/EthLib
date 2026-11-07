@@ -873,7 +873,11 @@ In Phase 0, `phase0PeriodEpochs_eq_ok` shows that a computed period is one of th
 `computeWeakSubjectivityPeriodElectra_le` bounds the Electra period by a function of the parameters alone.
 It assumes a positive churn quotient, and a minimum churn that is a positive whole number of increments.
 At the mainnet parameters, `computeWeakSubjectivityPeriodElectra_le_mainnet` gives at most 3558 epochs, for every state.
-No theorem bounds the Phase 0 or the Gloas period.
+`gloasWeightedChurn_eq_ok_iff` gives the Gloas weighted churn in closed form when its three churns and sums stay below `2^64`.
+`computeWeakSubjectivityPeriodGloas_le` bounds the Gloas period by a function of the parameters alone when the activation floor covers the rounding losses.
+At the mainnet parameters, `computeWeakSubjectivityPeriodGloas_le_mainnet` gives at most 1658 epochs, and a Python test reaches that bound.
+Its state is not one that a chain can reach: one validator holds about 1.4 billion ether.
+No theorem bounds the Phase 0 period.
 
 `isWithinWeakSubjectivityPeriod_eq_ok_iff` states when the check of a checkpoint succeeds and what it answers.
 The state must hold the root of the checkpoint at its epoch and be at that epoch.

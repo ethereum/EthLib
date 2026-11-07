@@ -20,6 +20,8 @@ At every fork, the period is at least the withdrawal delay.
 
 In Electra and Fulu, the period is at most a bound of the parameters alone: 3558 epochs on mainnet.
 
+From Gloas, the period is at most a bound of the parameters alone: 1658 epochs on mainnet.
+
 The check of a checkpoint needs a state that holds its root and is at its epoch.
 
 It then answers whether the current epoch is at most the end of the period.
@@ -96,6 +98,37 @@ theorem computeWeakSubjectivityPeriodElectra_eq_ok_iff {config : Config}
   unfold computeWeakSubjectivityPeriodElectra
   simp only [bind_ok_iff, mapError_ok_iff]
   exact ⟨fun ⟨a, ha, b, hb, hc⟩ => ⟨a, b, ha, hb, hc⟩, fun ⟨a, b, ha, hb, hc⟩ => ⟨a, ha, b, hb, hc⟩⟩
+
+/-- From Gloas: the weighted churn succeeds when its three churns do and nothing overflows.
+
+It equals two thirds of the exit churn, one third of the activation churn, plus consolidations. -/
+theorem gloasWeightedChurn_eq_ok_iff {config : Config} {state : BeaconState preset fork}
+    {churn : Gwei} :
+    gloasWeightedChurn config state = .ok churn ↔
+      ∃ exit activation consolidation,
+        getExitChurnLimit config state = .ok exit ∧
+        getActivationChurnLimit config state = .ok activation ∧
+        getConsolidationChurnLimit config state = .ok consolidation ∧
+        2 * exit.toNat < 2 ^ 64 ∧
+        (2 * exit.toNat) / 3 + activation.toNat / 3 + consolidation.toNat < 2 ^ 64 ∧
+        churn.toNat = (2 * exit.toNat) / 3 + activation.toNat / 3 + consolidation.toNat := by
+  unfold gloasWeightedChurn
+  have h2 : (2 : UInt64).toNat = 2 := rfl
+  have h3 : (3 : UInt64).toNat = 3 := rfl
+  simp only [bind_ok_iff, mapError_ok_iff, mulChecked_ok_iff, addChecked_ok_iff, UInt64.toNat_div,
+    h2, h3]
+  constructor
+  · rintro ⟨exit, hex, act, hac, cons, hco, twoExit, ⟨h₂, hte⟩, sum, ⟨hsum, hs⟩, hfin, hch⟩
+    rw [hte] at hs hsum
+    rw [hs] at hfin hch
+    exact ⟨exit, act, cons, hex, hac, hco, h₂, hfin, hch⟩
+  · rintro ⟨exit, act, cons, hex, hac, hco, h₂, hfin, hch⟩
+    obtain ⟨twoExit, hte⟩ := exists_toNat_eq h₂
+    obtain ⟨sum, hs⟩ := exists_toNat_eq (n := (2 * exit.toNat) / 3 + act.toNat / 3) (by omega)
+    refine ⟨exit, hex, act, hac, cons, hco, twoExit, ⟨h₂, hte⟩, sum, ⟨by omega, ?_⟩,
+      by omega, ?_⟩
+    · rw [hs, hte]
+    · rw [hch, hs]
 
 /-- From Gloas: the period is the closed form, for the total active balance and the weighted churn.
 
@@ -286,6 +319,170 @@ theorem computeWeakSubjectivityPeriodElectra_le_mainnet
     period.toNat ≤ 3558 :=
   Nat.le_trans (computeWeakSubjectivityPeriodElectra_le (by decide) (by decide) (by decide)
     (by decide) h) (by decide)
+
+/-- The smaller of two 64-bit integers has the smaller value. -/
+private theorem toNat_min_eq (a b : UInt64) : (min a b).toNat = min a.toNat b.toNat := by
+  rw [UInt64.min_def, Nat.min_def]
+  by_cases h : a ≤ b
+  · simp [h, UInt64.le_iff_toNat_le.mp h]
+  · simp [h, mt UInt64.le_iff_toNat_le.mpr h]
+
+/-- From Gloas: the three churns follow from the total active balance, and bound it above.
+
+Let `Qe` and `Qc` be the quotients, `m` the minimum, `M` the cap and `i` the increment.
+
+When `m` is a multiple of `i`, the exit churn `e` is at least `m` and activations take `min M e`.
+
+Rounding loses less than `i` in each share, so `(2 Qc + 3 Qe) t < Qe Qc (2 e + 3 c + 5 i)`. -/
+private theorem gloasWeightedChurn_bounds {config : Config} {state : BeaconState preset fork}
+    {total churn : Gwei} (gloas : .glamsterdam ≤ fork)
+    (hincrement : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    (hwhole : config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat %
+      preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
+    (hexitQ : 0 < config.CHURN_LIMIT_QUOTIENT_GLOAS.toNat)
+    (hconsQ : 0 < config.CONSOLIDATION_CHURN_LIMIT_QUOTIENT.toNat)
+    (htotal : getTotalActiveBalance state = .ok total)
+    (hchurn : gloasWeightedChurn config state = .ok churn) :
+    ∃ e c : Nat,
+      config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat ≤ e ∧
+      total.toNat < config.CHURN_LIMIT_QUOTIENT_GLOAS.toNat *
+        (e + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ∧
+      (2 * config.CONSOLIDATION_CHURN_LIMIT_QUOTIENT.toNat +
+          3 * config.CHURN_LIMIT_QUOTIENT_GLOAS.toNat) * total.toNat <
+        config.CHURN_LIMIT_QUOTIENT_GLOAS.toNat *
+          config.CONSOLIDATION_CHURN_LIMIT_QUOTIENT.toNat *
+          (2 * e + 3 * c + 5 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ∧
+      churn.toNat = (2 * e) / 3 +
+        min config.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS.toNat e / 3 + c := by
+  obtain ⟨exit, act, cons, hex, hac, hco, -, -, hch⟩ := gloasWeightedChurn_eq_ok_iff.mp hchurn
+  simp only [getActivationChurnLimit, hex, bind, Except.bind, pure, Except.pure,
+    Except.ok.injEq] at hac
+  simp only [getExitChurnLimit, htotal, bind, Except.bind, pure, Except.pure,
+    Except.ok.injEq] at hex
+  simp only [getConsolidationChurnLimit, gloas, ↓reduceIte, htotal, bind, Except.bind, pure,
+    Except.pure, Except.ok.injEq] at hco
+  subst hac hex hco
+  generalize hQe : config.CHURN_LIMIT_QUOTIENT_GLOAS.toNat = Qe at *
+  generalize hQc : config.CONSOLIDATION_CHURN_LIMIT_QUOTIENT.toNat = Qc at *
+  generalize hm : config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat = m at *
+  generalize hM : config.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS.toNat = M at *
+  generalize hi : preset.EFFECTIVE_BALANCE_INCREMENT.toNat = i at *
+  generalize ht : total.toNat = t at *
+  rw [toNat_min_eq, toNat_roundToIncrement, toNat_roundToIncrement, toNat_max, UInt64.toNat_div,
+    UInt64.toNat_div, hQe, hQc, hm, hM, hi, ht] at hch
+  generalize hx : max m (t / Qe) = x at hch
+  obtain ⟨hem, hexHi⟩ :=
+    roundToIncrement_bounds hincrement hwhole (hx ▸ Nat.le_max_left m (t / Qe))
+  obtain ⟨-, hcoHi⟩ := roundToIncrement_bounds hincrement (Nat.zero_mod i) (Nat.zero_le (t / Qc))
+  generalize he : x - x % i = e at hem hexHi hch
+  generalize hc : t / Qc - (t / Qc) % i = c at hcoHi hch
+  have hexShare : t / Qe < e + i := Nat.lt_of_le_of_lt (hx ▸ Nat.le_max_right m (t / Qe)) hexHi
+  have htQe : t < Qe * (e + i) :=
+    Nat.lt_of_lt_of_le (Nat.lt_mul_div_succ t hexitQ) (Nat.mul_le_mul_left Qe hexShare)
+  have htQc : t < Qc * (c + i) :=
+    Nat.lt_of_lt_of_le (Nat.lt_mul_div_succ t hconsQ) (Nat.mul_le_mul_left Qc hcoHi)
+  refine ⟨e, c, hem, htQe, ?_, hch⟩
+  have hleft : 2 * Qc * t < 2 * Qe * Qc * (e + i) := by
+    calc 2 * Qc * t = 2 * Qc * t := rfl
+      _ < 2 * Qc * (Qe * (e + i)) := Nat.mul_lt_mul_of_pos_left htQe (by omega)
+      _ = 2 * Qe * Qc * (e + i) := by ac_rfl
+  have hright : 3 * Qe * t < 3 * Qe * Qc * (c + i) := by
+    calc 3 * Qe * t < 3 * Qe * (Qc * (c + i)) := Nat.mul_lt_mul_of_pos_left htQc (by omega)
+      _ = 3 * Qe * Qc * (c + i) := by ac_rfl
+  calc (2 * Qc + 3 * Qe) * t = 2 * Qc * t + 3 * Qe * t := Nat.add_mul _ _ _
+    _ < 2 * Qe * Qc * (e + i) + 3 * Qe * Qc * (c + i) := Nat.add_lt_add hleft hright
+    _ = Qe * Qc * (2 * e + 3 * c + 5 * i) := by
+      have : 2 * (e + i) + 3 * (c + i) = 2 * e + 3 * c + 5 * i := by omega
+      calc 2 * Qe * Qc * (e + i) + 3 * Qe * Qc * (c + i)
+          = Qe * Qc * (2 * (e + i)) + Qe * Qc * (3 * (c + i)) := by ac_rfl
+        _ = Qe * Qc * (2 * (e + i) + 3 * (c + i)) := (Nat.mul_add _ _ _).symm
+        _ = Qe * Qc * (2 * e + 3 * c + 5 * i) := by rw [this]
+
+/-- From Gloas: the period is at most a bound that depends only on the parameters.
+
+The exit churn is at least its minimum `m` and exceeds `t / Qe - i`.
+
+The consolidation churn exceeds `t / Qc - i`.
+
+When `5 i + 2 ≤ 3 (min M m / 3)`, activations cover the rounding: `2 e + 3 c + 5 i ≤ 3 churn`.
+
+The epochs that the churn needs are then at most `30 Qe Qc / (200 (2 Qc + 3 Qe))`. -/
+theorem computeWeakSubjectivityPeriodGloas_le {config : Config}
+    {state : BeaconState preset fork} {period : Epoch} (gloas : .glamsterdam ≤ fork)
+    (hincrement : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    (hwhole : config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat %
+      preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
+    (hexitQ : 0 < config.CHURN_LIMIT_QUOTIENT_GLOAS.toNat)
+    (hconsQ : 0 < config.CONSOLIDATION_CHURN_LIMIT_QUOTIENT.toNat)
+    (hactFloor : 5 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat + 2 ≤
+      3 * (min config.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS.toNat
+        config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat / 3))
+    (h : computeWeakSubjectivityPeriodGloas config state = .ok period) :
+    period.toNat ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat +
+      30 * config.CHURN_LIMIT_QUOTIENT_GLOAS.toNat *
+          config.CONSOLIDATION_CHURN_LIMIT_QUOTIENT.toNat /
+        (200 * (2 * config.CONSOLIDATION_CHURN_LIMIT_QUOTIENT.toNat +
+          3 * config.CHURN_LIMIT_QUOTIENT_GLOAS.toNat)) := by
+  obtain ⟨total, churn, htotal, hchurn, hperiod⟩ :=
+    computeWeakSubjectivityPeriodGloas_eq_ok_iff.mp h
+  obtain ⟨-, -, hpos, -, hvalue⟩ := balanceChurnPeriod_eq_ok_iff.mp hperiod
+  obtain ⟨e, c, hem, -, hsum, hch⟩ :=
+    gloasWeightedChurn_bounds gloas hincrement hwhole hexitQ hconsQ htotal hchurn
+  generalize hQe : config.CHURN_LIMIT_QUOTIENT_GLOAS.toNat = Qe at *
+  generalize hQc : config.CONSOLIDATION_CHURN_LIMIT_QUOTIENT.toNat = Qc at *
+  generalize hm : config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat = m at *
+  generalize hM : config.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS.toNat = M at *
+  generalize hi : preset.EFFECTIVE_BALANCE_INCREMENT.toNat = i at *
+  generalize ht : total.toNat = t at *
+  generalize hchNat : churn.toNat = w at *
+  rw [hvalue]
+  refine Nat.add_le_add_left ?_ _
+  have hminLe : min M m ≤ min M e := by omega
+  have hactLe : 5 * i + 2 ≤ 3 * (min M e / 3) :=
+    Nat.le_trans hactFloor (Nat.mul_le_mul_left 3 (Nat.div_le_div_right hminLe))
+  have hthree : 2 * e + 3 * c + 5 * i ≤ 3 * w := by omega
+  have htotalBound : (2 * Qc + 3 * Qe) * t < Qe * Qc * (3 * w) :=
+    Nat.lt_of_lt_of_le hsum (Nat.mul_le_mul_left (Qe * Qc) hthree)
+  apply (Nat.le_div_iff_mul_le (by omega)).mpr
+  generalize hq : 10 * t / (200 * w) = q
+  have hqw : q * (200 * w) ≤ 10 * t := hq ▸ Nat.div_mul_le_self _ _
+  have hstep : q * (200 * (2 * Qc + 3 * Qe)) * w ≤ 30 * Qe * Qc * w := by
+    calc q * (200 * (2 * Qc + 3 * Qe)) * w
+        = (2 * Qc + 3 * Qe) * (q * (200 * w)) := by ac_rfl
+      _ ≤ (2 * Qc + 3 * Qe) * (10 * t) := Nat.mul_le_mul_left _ hqw
+      _ = 10 * ((2 * Qc + 3 * Qe) * t) := by ac_rfl
+      _ ≤ 10 * (Qe * Qc * (3 * w)) := Nat.mul_le_mul_left 10 (Nat.le_of_lt htotalBound)
+      _ = 30 * Qe * Qc * w := by ac_rfl
+  exact Nat.le_of_mul_le_mul_right hstep hpos
+
+/-- From Gloas, at the mainnet parameters, the period is at most 1658 epochs.
+
+Below the activation cap of 256 ether, the exit churn is below 256 ether and `t < 8,421,376` ether.
+
+At or above the cap, the activation third contributes 256 / 3 ether, about 85.3.
+
+The precondition `10 t < 2^64` then bounds the total `t`. -/
+theorem computeWeakSubjectivityPeriodGloas_le_mainnet
+    {state : BeaconState Preset.mainnet fork} {period : Epoch} (gloas : .glamsterdam ≤ fork)
+    (h : computeWeakSubjectivityPeriodGloas Config.mainnet state = .ok period) :
+    period.toNat ≤ 1658 := by
+  obtain ⟨total, churn, htotal, hchurn, hperiod⟩ :=
+    computeWeakSubjectivityPeriodGloas_eq_ok_iff.mp h
+  obtain ⟨htOverflow, -, hpos, -, hvalue⟩ := balanceChurnPeriod_eq_ok_iff.mp hperiod
+  obtain ⟨e, c, hem, htQe, hsum, hch⟩ :=
+    gloasWeightedChurn_bounds gloas (by decide) (by decide) (by decide) (by decide) htotal hchurn
+  have hdelay : Config.mainnet.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat = 256 := rfl
+  have hQe : Config.mainnet.CHURN_LIMIT_QUOTIENT_GLOAS.toNat = 32768 := rfl
+  have hQc : Config.mainnet.CONSOLIDATION_CHURN_LIMIT_QUOTIENT.toNat = 65536 := rfl
+  have hm : Config.mainnet.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat = 128000000000 := rfl
+  have hM : Config.mainnet.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS.toNat = 256000000000 := rfl
+  have hi : Preset.mainnet.EFFECTIVE_BALANCE_INCREMENT.toNat = 1000000000 := rfl
+  simp only [hQe, hQc, hm, hM, hi] at hem htQe hsum hch
+  rw [hvalue, hdelay]
+  generalize total.toNat = t at htOverflow htQe hsum ⊢
+  generalize churn.toNat = w at hpos hch ⊢
+  have hdiv : 10 * t / (200 * w) < 1403 := (Nat.div_lt_iff_lt_mul (by omega)).mpr (by omega)
+  omega
 
 /-! ## The staleness check -/
 
