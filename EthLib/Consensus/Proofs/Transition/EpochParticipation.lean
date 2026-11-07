@@ -12,6 +12,8 @@ It then gives each validator an empty set of flags for the current epoch.
 
 The sync committee update moves the next committee to the current one, only at a period's end.
 
+There it stores as the next committee a draw from the state with that new current committee.
+
 The inactivity scores change nothing in the first epoch, and keep one score per entry.
 
 None of these steps changes the size of the registry or of the balances.
@@ -62,6 +64,29 @@ theorem processSyncCommitteeUpdates_current {altair : .altair ≤ fork} {next : 
   · cases computed
   · cases computed
     rfl
+
+/-- After a successful sync committee update at a period's end, the next committee is a new draw.
+
+The draw reads the state whose current committee is already the old next committee. -/
+theorem processSyncCommitteeUpdates_next {altair : .altair ≤ fork}
+    (boundary : (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0)
+    (computed : processSyncCommitteeUpdates state altair = .ok after) :
+    getNextSyncCommittee
+        { state with currentSyncCommittee := fun _ => state.nextSyncCommittee altair } =
+      .ok (after.nextSyncCommittee altair).value := by
+  unfold processSyncCommitteeUpdates at computed
+  simp only [bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨epoch, epochOk, computed⟩ := computed
+  -- The next epoch that the update computes is the wrapping sum, since the update succeeds.
+  rw [liftArith, mapError_ok_iff, addChecked_ok_iff] at epochOk
+  have sum : epoch = getCurrentEpoch state + 1 :=
+    UInt64.toNat_inj.mp (epochOk.2.trans (toNat_add_of_lt epochOk.1).symm)
+  subst sum
+  simp only [boundary, ↓reduceIte, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
+    Except.ok.injEq] at computed
+  obtain ⟨drawn, drawnOk, same⟩ := computed
+  subst same
+  exact drawnOk
 
 /-- The sync committee update keeps the sizes of the registry and the balances. -/
 theorem sameSizes_processSyncCommitteeUpdates {altair : .altair ≤ fork}
