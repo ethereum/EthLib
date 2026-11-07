@@ -191,17 +191,17 @@ The sync committee has topics from Altair, and changes of BLS credentials from C
 
 Blob sidecars travel at Deneb and Electra, and column sidecars at Fulu.
 
-At Gloas seven topics are specified here: blocks, votes, aggregates and the four new topics.
+At Gloas every topic but the partial column sidecars is specified here.
 
 At Heze no topic is specified yet. -/
 def gossipValidationSpecified (fork : Fork) : String → Bool
-  | "attester_slashing" | "proposer_slashing" | "voluntary_exit" => fork < .glamsterdam
-  | "beacon_block" | "beacon_attestation" | "beacon_aggregate_and_proof" => fork < .hegota
-  | "sync_committee" | "sync_committee_contribution_and_proof" =>
-    .altair ≤ fork && fork < .glamsterdam
-  | "bls_to_execution_change" => .shapella ≤ fork && fork < .glamsterdam
+  | "attester_slashing" | "proposer_slashing" | "voluntary_exit" | "beacon_block"
+  | "beacon_attestation" | "beacon_aggregate_and_proof" => fork < .hegota
+  | "sync_committee" | "sync_committee_contribution_and_proof" => .altair ≤ fork && fork < .hegota
+  | "bls_to_execution_change" => .shapella ≤ fork && fork < .hegota
   | "blob_sidecar" => .dencun ≤ fork && fork < .fusaka
-  | "data_column_sidecar" | "partial_data_column_sidecar" => .fusaka ≤ fork && fork < .glamsterdam
+  | "data_column_sidecar" => .fusaka ≤ fork && fork < .hegota
+  | "partial_data_column_sidecar" => .fusaka ≤ fork && fork < .glamsterdam
   | "proposer_preferences" | "execution_payload" | "payload_attestation_message"
   | "execution_payload_bid" => .glamsterdam ≤ fork && fork < .hegota
   | _ => false
@@ -285,12 +285,17 @@ def validateGossipInput {preset : Preset} {fork : Fork} (config : Config)
     else throw (0, "blob sidecars travel only at Deneb and Electra")
   | "data_column_sidecar" =>
     let sidecar ← decodeInput (DataColumnSidecar preset fork) input.data
-    if columns : .fusaka ≤ fork ∧ fork < .glamsterdam then
+    if gloas : .glamsterdam ≤ fork then
+      let setup ← runForkChoice (embeddedSetup.mapError .kzg)
+      let outcome ← runForkChoice (validateGloasDataColumnSidecar config setup seen store gloas
+        sidecar input.currentTimeMs input.subnetId)
+      return record outcome (·.recordGloasDataColumnSidecar gloas sidecar)
+    else if columns : .fusaka ≤ fork ∧ fork < .glamsterdam then
       let setup ← runForkChoice (embeddedSetup.mapError .kzg)
       let outcome ← runForkChoice (validateDataColumnSidecar config checks setup seen store columns
         sidecar input.currentTimeMs input.subnetId)
       return record outcome (·.recordDataColumnSidecar columns.2 sidecar)
-    else throw (0, "column sidecars travel only from Fulu, before Gloas")
+    else throw (0, "column sidecars travel only from Fulu")
   | "proposer_preferences" =>
     let signed ← decodeInput SignedProposerPreferences input.data
     if gloas : .glamsterdam ≤ fork then
@@ -354,7 +359,7 @@ def validatePartialInputs {preset : Preset} {fork : Fork} (config : Config)
 
 /-- Validate the messages of a topic in turn, against the store of an anchor and later blocks.
 
-At Gloas seven topics are specified here: blocks, votes, aggregates and the four new topics.
+At Gloas every topic but the partial column sidecars is specified here.
 
 At Heze no topic is specified yet. -/
 @[export eth_consensus_gossip_validation]

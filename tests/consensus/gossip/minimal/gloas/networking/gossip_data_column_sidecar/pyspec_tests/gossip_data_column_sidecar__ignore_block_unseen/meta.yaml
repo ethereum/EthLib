@@ -1,0 +1,9 @@
+topic: data_column_sidecar
+blocks:
+- {block: 
+    block_0x9f87a12d020fe5f111a8e388f428594715e83c39314fecf4b523dd7da27848b5}
+messages:
+- {subnet_id: 0, current_time_ms: 6500, message: 
+    data_column_sidecar_0x1a22afcd5b17cdee4ed636d9d15fb3a702999bfc79678e4025f5456daba0d3af,
+  expected: ignore, reason: block for sidecar's beacon block root has not been 
+    seen}

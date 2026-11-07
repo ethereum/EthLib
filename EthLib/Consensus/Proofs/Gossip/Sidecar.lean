@@ -25,6 +25,10 @@ A partial column sidecar is checked in three parts: its counts, its header, then
 The counts read nothing but the sidecar, so they decide first whatever the store holds.
 
 A header that passes is recorded before the cells, so it stays recorded when they fail.
+
+From Gloas a column sidecar has no header, and its chain reads the block that it names.
+
+A valid one has the slot of that block, and one cell per commitment of its bid.
 -/
 
 @[expose] public section
@@ -583,6 +587,99 @@ theorem validateDataColumnSidecar_rejected
   cases outcome <;> simp [UInt64.not_le] at accepted ignored ⊢ <;> grind
 
 end Column
+
+/-! ## Column sidecars from Gloas -/
+
+section GloasColumn
+
+variable {gloas : .glamsterdam ≤ fork} {sidecar : DataColumnSidecar preset fork}
+  {subnet : SubnetID} {future valid : Bool} {block : BeaconBlock preset fork}
+  {state : BeaconState preset fork}
+
+/-- From Gloas the commitments of a sidecar are those of the bid it is checked against. -/
+theorem DataColumnSidecar.commitments_of_gloas
+    {bidCommitments : Since .glamsterdam fork (BlobKZGCommitments preset fork)} :
+    sidecar.commitments bidCommitments = bidCommitments gloas := by
+  have notBefore : ¬ fork < .glamsterdam := Nat.not_lt_of_le gloas
+  simp [DataColumnSidecar.commitments, notBefore]
+
+/-- From Gloas a column sidecar whose block and column a valid sidecar had already is ignored. -/
+theorem validateGloasDataColumnSidecar_of_seen
+    (known : (sidecar.beaconBlockRoot gloas, sidecar.index) ∈ seen.dataColumnSidecarRoots) :
+    validateGloasDataColumnSidecar config setup seen store gloas sidecar currentTimeMs subnetId =
+      .ok (.ignore "already seen sidecar for this block root and index") := by
+  simp [validateGloasDataColumnSidecar, known, pure, Except.pure]
+
+/-- From Gloas a valid column sidecar records its key, so the same sidecar is then ignored. -/
+theorem validateGloasDataColumnSidecar_recordGloasDataColumnSidecar :
+    validateGloasDataColumnSidecar config setup (seen.recordGloasDataColumnSidecar gloas sidecar)
+        store gloas sidecar currentTimeMs subnetId =
+      .ok (.ignore "already seen sidecar for this block root and index") :=
+  validateGloasDataColumnSidecar_of_seen (by simp [Seen.recordGloasDataColumnSidecar])
+
+/-- From Gloas the outcome of a column sidecar is its chain of checks, in order.
+
+It holds once the subnet, the clock, the block with its state and the KZG check are computed. -/
+theorem validateGloasDataColumnSidecar_eq
+    (subnetOf : computeSubnetForDataColumnSidecar config sidecar.index = .ok subnet)
+    (clock : store.isFutureSlot config (sidecar.slot gloas) currentTimeMs = .ok future)
+    (known : store.blocks[sidecar.beaconBlockRoot gloas]? = some block)
+    (held : store.blockStates[sidecar.beaconBlockRoot gloas]? = some state)
+    (proofs : verifyDataColumnSidecarKzgProofs setup sidecar block.bidCommitments = .ok valid) :
+    validateGloasDataColumnSidecar config setup seen store gloas sidecar currentTimeMs subnetId =
+      .ok ((ignoreUnless (!seen.dataColumnSidecarRoots.contains
+          (sidecar.beaconBlockRoot gloas, sidecar.index))
+          "already seen sidecar for this block root and index").andThen fun _ =>
+        (rejectUnless (subnet == subnetId) "sidecar is for wrong subnet").andThen fun _ =>
+        (ignoreUnless (!future) "sidecar is from a future slot").andThen fun _ =>
+        (rejectUnless (sidecar.slot gloas == block.slot)
+          "sidecar's slot does not match block's slot").andThen fun _ =>
+        (rejectUnless (verifyDataColumnSidecar preset config sidecar block.bidCommitments)
+          "invalid sidecar").andThen fun _ =>
+        rejectUnless valid "invalid sidecar kzg proofs") := by
+  unfold validateGloasDataColumnSidecar
+  simp only [subnetOf, clock, known, held, proofs, bind, Except.bind, pure, Except.pure,
+    Except.mapError, ignoreUnless_andThenM, ignoreUnless_andThen, rejectUnless_andThenM,
+    rejectUnless_andThen, apply_ite (Except.ok (ε := ForkChoiceError))]
+
+/-- From Gloas a column sidecar is valid exactly when every check passes, once its inputs are set.
+-/
+theorem validateGloasDataColumnSidecar_eq_accept
+    (subnetOf : computeSubnetForDataColumnSidecar config sidecar.index = .ok subnet)
+    (clock : store.isFutureSlot config (sidecar.slot gloas) currentTimeMs = .ok future)
+    (known : store.blocks[sidecar.beaconBlockRoot gloas]? = some block)
+    (held : store.blockStates[sidecar.beaconBlockRoot gloas]? = some state)
+    (proofs : verifyDataColumnSidecarKzgProofs setup sidecar block.bidCommitments = .ok valid) :
+    validateGloasDataColumnSidecar config setup seen store gloas sidecar currentTimeMs subnetId =
+        .ok accept ↔
+      (sidecar.beaconBlockRoot gloas, sidecar.index) ∉ seen.dataColumnSidecarRoots ∧
+        subnet = subnetId ∧ future = false ∧ sidecar.slot gloas = block.slot ∧
+        verifyDataColumnSidecar preset config sidecar block.bidCommitments = true ∧
+        valid = true := by
+  rw [validateGloasDataColumnSidecar_eq subnetOf clock known held proofs]
+  simp only [Except.ok.injEq, andThen_eq_accept, ignoreUnless_eq_accept, rejectUnless_eq_accept]
+  simp
+
+/-- From Gloas a valid column sidecar has the slot of its block.
+
+It also has one cell per commitment of the bid of its block, and at least one. -/
+theorem validateGloasDataColumnSidecar_shape
+    (known : store.blocks[sidecar.beaconBlockRoot gloas]? = some block)
+    (accepted : validateGloasDataColumnSidecar config setup seen store gloas sidecar currentTimeMs
+      subnetId = .ok accept) :
+    sidecar.slot gloas = block.slot ∧
+      sidecar.column.data.size =
+        ((block.body.signedExecutionPayloadBid gloas).message.blobKzgCommitments).data.size ∧
+      sidecar.column.data.size ≠ 0 := by
+  unfold validateGloasDataColumnSidecar at accepted
+  simp only [known, ignoreUnless_andThenM, rejectUnless_andThenM, bind, Except.bind] at accepted
+  revert accepted
+  repeat' (first | split | intro)
+  all_goals simp_all [pure, Except.pure, Except.mapError, verifyDataColumnSidecar,
+    DataColumnSidecar.commitments_of_gloas (gloas := gloas), BeaconBlock.bidCommitments]
+  all_goals omega
+
+end GloasColumn
 
 /-! ## Partial column sidecars, at Fulu -/
 

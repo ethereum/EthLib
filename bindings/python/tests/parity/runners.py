@@ -54,7 +54,6 @@ NOT_YET = {
 # At these forks an entry here comes before the entry of NOT_YET.
 _GLOAS = {
     "fast_confirmation": "the Gloas fast confirmation (G73)",
-    "networking": "the Gloas data columns and unchanged topics (G77)",
     "networking/gossip_partial_data_column_sidecar": "Gloas partial data columns (G78)",
     "ssz_static": "the Gloas partial data column containers (G65)",
 }
@@ -567,7 +566,7 @@ def _gossip_data_column_sidecar(root: Path, case: Case) -> None:
     from consensus.test_data_column import run_gossip_case
     from consensus.test_gossip_validation import run_case
 
-    # Before Gloas the store is specified, so the whole validation runs; from Gloas only the
+    # Up to Gloas the store is specified, so the whole validation runs; at Heze only the
     # sidecar checks that read no store do.
     if runs_gossip(case.fork, "gossip_data_column_sidecar"):
         run_case(case.preset, case.fork, root / case.path)

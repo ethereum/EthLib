@@ -36,19 +36,11 @@ TOPICS = {
     "execution_payload_bid": "gloas",
 }
 SPECIFIED = ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas")
-# The topics whose cases stop at a fork other than Fulu, with their last fork.
+# The topics whose cases stop before Gloas, with their last fork.
 # Blob sidecars travel only at Deneb and Electra.
-# The topics that stop at Gloas wait for their Heze rules.
-LAST = {
-    "blob_sidecar": "electra",
-    "beacon_block": "gloas",
-    "beacon_attestation": "gloas",
-    "beacon_aggregate_and_proof": "gloas",
-    "proposer_preferences": "gloas",
-    "execution_payload_envelope": "gloas",
-    "payload_attestation_message": "gloas",
-    "execution_payload_bid": "gloas",
-}
+# Partial column sidecars change at Gloas, and EthLib does not specify that change yet.
+# The other topics run up to Gloas, and wait for their Heze rules.
+LAST = {"blob_sidecar": "electra", "partial_data_column_sidecar": "fulu"}
 
 # The release archives that hold the cases.
 ARCHIVES = {
@@ -77,7 +69,7 @@ def runs(fork: str, handler: str) -> bool:
         and topic in TOPICS
         and SPECIFIED.index(TOPICS[topic])
         <= SPECIFIED.index(fork)
-        <= SPECIFIED.index(LAST.get(topic, "fulu"))
+        <= SPECIFIED.index(LAST.get(topic, "gloas"))
     )
 
 
