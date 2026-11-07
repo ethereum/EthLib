@@ -157,14 +157,14 @@ section Unique
 variable {γ : Type*} {T : BlockTree γ} (V : Finset ν) (w : ν → ℕ) (G : View ν γ T)
   {key : γ → ρ}
 
-/-- With distinct roots among the children, the rule picks the child that beats every other. -/
-theorem heaviestChild_eq_of_max (hkey : Function.Injective key) {b c : γ}
+/-- With distinct keys among the children, the rule picks the child that beats every other. -/
+theorem heaviestChild_eq_of_max {b c : γ} (hkey : Set.InjOn key (children G b))
     (h : (children G b).Nonempty) (hc : c ∈ children G b)
     (hmax : ∀ c' ∈ children G b, toLex (weight V w G c', key c') ≤ toLex (weight V w G c, key c)) :
     heaviestChild V w G key b h = c := by
   obtain ⟨hmem, hle⟩ := heaviestChild_spec V w G key b h
   have heq := le_antisymm (hmax _ hmem) (hle c hc)
-  exact hkey (Prod.ext_iff.mp (toLex.injective heq)).2
+  exact hkey hmem hc (Prod.ext_iff.mp (toLex.injective heq)).2
 
 end Unique
 
@@ -179,12 +179,20 @@ def nodeKey (root : β → ρ) (n : β × Status) : Lex (ρ × ℕ) :=
   toLex (root n.1, n.2.code)
 
 omit [DecidableEq β] [LinearOrder ρ] in
-theorem nodeKey_injective {root : β → ρ} (hroot : Function.Injective root) :
-    Function.Injective (nodeKey root) := by
-  rintro ⟨r, x⟩ ⟨r', x'⟩ h
-  obtain ⟨h1, h2⟩ := Prod.ext_iff.mp (toLex.injective h)
-  obtain rfl := hroot h1
+/-- Two nodes of one block with one key are equal. -/
+theorem nodeKey_eq_of_fst {root : β → ρ} {a b : β × Status} (same : nodeKey root a = nodeKey root b)
+    (fst : a.1 = b.1) : a = b := by
+  obtain ⟨r, x⟩ := a
+  obtain ⟨r', x'⟩ := b
+  obtain ⟨-, codes⟩ := Prod.ext_iff.mp (toLex.injective same)
+  simp only at fst codes
+  subst fst
   rcases x with _ | _ | _ <;> rcases x' with _ | _ | _ <;> simp_all [Status.code]
+
+omit [DecidableEq β] [LinearOrder ρ] in
+theorem nodeKey_injective {root : β → ρ} (hroot : Function.Injective root) :
+    Function.Injective (nodeKey root) :=
+  fun _ _ same => nodeKey_eq_of_fst same (hroot (Prod.ext_iff.mp (toLex.injective same)).1)
 
 variable {G : View ν β T} {N : View ν (β × Status) (T.payloadTree full)}
 
@@ -228,14 +236,13 @@ Every block builds on a full parent, no vote names an empty node, and votes name
 
 Then from the pending node of a block, the rule over nodes reaches the full node of the head that
 the rule over blocks reaches. -/
-theorem ghost_payloadTree {root : β → ρ} (hroot : Function.Injective root)
+theorem ghost_payloadTree {root : β → ρ} (hroot : Set.InjOn root {r | r ≠ T.genesis})
     (hfull : ∀ r, r ≠ T.genesis → full r = true)
     (hpending : ∀ r, (r, none) ∈ N.blocks ↔ r ∈ G.blocks)
     (hpayload : ∀ r ∈ G.blocks, (r, some true) ∈ N.blocks)
     (hvote : ∀ v r, N.latest v ≠ some (r, some false))
     (hlatest : ∀ v, G.latest v = (N.latest v).map Prod.fst) {b : β} (hb : b ∈ G.blocks) :
     ghost V w N (nodeKey root) (b, none) = (ghost V w G root b, some true) := by
-  have hkey := nodeKey_injective hroot
   -- The full node of a block is the heaviest child of its pending node.
   have pend : ∀ r ∈ G.blocks, ghost V w N (nodeKey root) (r, none) =
       ghost V w N (nodeKey root) (r, some true) := by
@@ -244,7 +251,14 @@ theorem ghost_payloadTree {root : β → ρ} (hroot : Function.Injective root)
       mem_children.mpr ⟨hpayload r hr, payloadTree_isChild_some.mpr rfl⟩
     rw [ghost_of_nonempty V w N _ ⟨_, hmem⟩]
     congr 1
-    refine heaviestChild_eq_of_max V w N hkey _ hmem fun c hc => ?_
+    -- The children of a pending node are nodes of its own block.
+    have hblock : ∀ c ∈ children N (r, none), c.1 = r := by
+      rintro ⟨r', _ | x⟩ hc
+      · exact absurd (mem_children.mp hc).2 not_payloadTree_isChild_none_none
+      · exact (Prod.mk.inj (payloadTree_isChild_some.mp (mem_children.mp hc).2)).1.symm
+    refine heaviestChild_eq_of_max V w N
+      (fun a ha b hb same => nodeKey_eq_of_fst same ((hblock a ha).trans (hblock b hb).symm))
+      _ hmem fun c hc => ?_
     obtain ⟨-, hc⟩ := mem_children.mp hc
     obtain ⟨r', _ | _ | _⟩ := c
     · exact absurd hc not_payloadTree_isChild_none_none
@@ -275,8 +289,17 @@ theorem ghost_payloadTree {root : β → ρ} (hroot : Function.Injective root)
     obtain ⟨hcmem, hcmax⟩ := heaviestChild_spec V w G root b h
     have hnode : (c, none) ∈ children N (b, some true) := (kids b c).mpr hcmem
     rw [pend b hb, ghost_of_nonempty V w G root h, ghost_of_nonempty V w N _ ⟨_, hnode⟩]
+    -- The children of a full node are pending nodes of distinct blocks, none of them the genesis.
+    have hinj : Set.InjOn (nodeKey root) (children N (b, some true)) := by
+      rintro ⟨n, x⟩ hn ⟨n', x'⟩ hn' same
+      obtain rfl := kids_fst b n x hn
+      obtain rfl := kids_fst b n' x' hn'
+      have hg := (payloadTree_isChild_none.mp (mem_children.mp hn).2).1
+      have hg' := (payloadTree_isChild_none.mp (mem_children.mp hn').2).1
+      obtain ⟨roots, -⟩ := Prod.ext_iff.mp (toLex.injective same)
+      rw [hroot hg hg' roots]
     have hpick : heaviestChild V w N (nodeKey root) (b, some true) ⟨_, hnode⟩ = (c, none) := by
-      refine heaviestChild_eq_of_max V w N hkey _ hnode fun ⟨n, x⟩ hn => ?_
+      refine heaviestChild_eq_of_max V w N hinj _ hnode fun ⟨n, x⟩ hn => ?_
       obtain rfl := kids_fst b n x hn
       have hle := hcmax n ((kids b n).mp hn)
       rw [weight_none V w hlatest, weight_none V w hlatest]
@@ -315,7 +338,7 @@ def View.fullView (G : View ν β T) (hfull : ∀ r, r ≠ T.genesis → full r 
 
 Every block builds on a full parent, no vote names an empty node, and votes name the same
 blocks. -/
-theorem ghost_fullView {root : β → ρ} (hroot : Function.Injective root)
+theorem ghost_fullView {root : β → ρ} (hroot : Set.InjOn root {r | r ≠ T.genesis})
     (hfull : ∀ r, r ≠ T.genesis → full r = true) {latest : ν → Option (β × Status)}
     (hvote : ∀ v r, latest v ≠ some (r, some false))
     (hlatest : ∀ v, G.latest v = (latest v).map Prod.fst) {b : β} (hb : b ∈ G.blocks) :
