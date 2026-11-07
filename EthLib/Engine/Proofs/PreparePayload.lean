@@ -597,7 +597,7 @@ theorem processWithdrawals_eq_error_of_prepareExecutionPayload
   obtain ⟨_, _, stored⟩ := processBlockHeader_eq headed
   -- The header step does not touch what the expected withdrawals read.
   have foundAfter : getExpectedWithdrawals header capella = .ok expected := by
-    rw [stored, getExpectedWithdrawals_latestBlockHeader bellatrix.2]
+    rw [stored, getExpectedWithdrawals_latestBlockHeader]
     exact found
   rw [same] at carried
   have equal : ((payload bellatrix.2).withdrawals capella).data = expected.withdrawals :=

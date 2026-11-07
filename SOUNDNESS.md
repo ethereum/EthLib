@@ -1259,7 +1259,7 @@ The theorems that link the update to the checks of a block are the reason for th
 Its payload names the head of the update as its parent, and carries the mix, the timestamp and, from Capella, the withdrawals of the attributes.
 The execution part of the block then fails only on the number of blobs, the execution layer, a hash or an accessor, and never on the parent, the mix, the time or the withdrawals.
 It rests on `processExecutionPayload_eq_error_of_prepareExecutionPayload`, which assumes only that the checking state shares the slot, the genesis time, the RANDAO mixes and the latest payload header of the state of the proposer.
-It also rests on `getExpectedWithdrawals_latestBlockHeader`, which shows that before Gloas the expected withdrawals do not read the latest block header, and on `payloadInputs_processWithdrawals`.
+It also rests on `getExpectedWithdrawals_latestBlockHeader`, which shows that the expected withdrawals do not read the latest block header, and on `payloadInputs_processWithdrawals`.
 From Deneb, `parentBeaconBlockRoot_newPayloadRequest_of_prepareExecutionPayload` shows that the request to the execution layer names the parent root of the attributes.
 
 Before the merge, `validateMergeBlock_of_payloadHeadBlockHash_of_configured` and `validateMergeBlock_of_payloadHeadBlockHash_of_difficulty` show that the fork choice accepts a first payload on the head.
