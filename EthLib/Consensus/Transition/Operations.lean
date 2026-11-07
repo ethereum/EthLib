@@ -203,7 +203,7 @@ def recordPaymentWeight (state : BeaconState preset fork) (gloas : .glamsterdam 
     (attesters : List ValidatorIndex) : Except TransitionError (BeaconState preset fork) := do
   let position := attestationPaymentPosition preset current data.slot
   let payments := state.builderPendingPayments gloas
-  if inside : position < payments.size then
+  if inside : position < payments.elements.size then
     let payment := payments[position]
     let sameSlot ← liftAccessor (isAttestationSameSlot state data)
     let weight ← (if sameSlot ∧ 0 < payment.withdrawal.amount then

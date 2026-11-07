@@ -78,7 +78,7 @@ theorem settleParentPayment_payments
     rw [settled] at other
     simp only [Option.map_some, ne_eq, Option.some.injEq] at other
     simp only [payments]
-    exact Vector.getElem_set_ne _ _ other
+    exact Serialization.Ssz.RootedVector.getElem_set_ne _ _ _ _ other
   · dsimp only at computed
     split at computed <;> cases computed <;> rfl
 

@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Containers.Misc
+public import EthLib.Serialization.Ssz.Typed.Rooted
 
 /-!
 # `Consensus.Containers.Builder`
@@ -129,8 +130,10 @@ abbrev BuilderDepositRequests := ProgressiveList BuilderDepositRequest
 /-- The builder exit requests of one execution payload, in a list type with no limit. -/
 abbrev BuilderExitRequests := ProgressiveList BuilderExitRequest
 
-/-- The payments of the bids of the previous epoch, then of the current epoch, one per slot. -/
+/-- The payments of the bids of the previous epoch, then of the current epoch, one per slot.
+
+They keep their Merkle tree, since every slot takes the root of the state. -/
 abbrev BuilderPendingPayments (preset : Preset) :=
-  Vector BuilderPendingPayment (2 * preset.SLOTS_PER_EPOCH.toNat)
+  RootedVector BuilderPendingPayment (2 * preset.SLOTS_PER_EPOCH.toNat)
 
 end EthLib.Consensus

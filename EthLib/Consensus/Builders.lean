@@ -93,7 +93,7 @@ def isActiveBuilder (state : BeaconState preset fork) (gloas : .glamsterdam ≤ 
 def pendingBuilderTotal (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
     (index : BuilderIndex) : Nat :=
   owedBy index (state.builderPendingWithdrawals gloas).data.toList +
-    owedBy index ((state.builderPendingPayments gloas).toList.map (·.withdrawal))
+    owedBy index ((state.builderPendingPayments gloas).elements.toList.map (·.withdrawal))
 
 /-- The balance that a builder still owes: its queued withdrawals and the payments of its bids.
 

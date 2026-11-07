@@ -446,8 +446,9 @@ theorem slashValidator_payments {config : Config} {state after : BeaconState pre
     {slashedIndex : ValidatorIndex} {whistleblowerIndex : Option ValidatorIndex}
     (gloas : .glamsterdam ≤ fork)
     (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
-    after.builderPendingPayments gloas = (state.builderPendingPayments gloas).map fun payment =>
-      if payment.proposerIndex = slashedIndex then .empty else payment := by
+    after.builderPendingPayments gloas =
+      .ofVector ((state.builderPendingPayments gloas).elements.map fun payment =>
+        if payment.proposerIndex = slashedIndex then .empty else payment) := by
   unfold slashValidator at computed
   simp only [bind_ok_iff, liftArith, mapError_ok_iff] at computed
   obtain ⟨exited, exitedOk, _, _, _, _, marked, markedOk, _, _, _, _, _, _, _, lowered, _, _, _,
@@ -459,7 +460,7 @@ theorem slashValidator_payments {config : Config} {state after : BeaconState pre
     decreaseBalance_payments lowered]
   have kept := initiateValidatorExit_payments exitedOk
   obtain ⟨inside, rfl⟩ := setValidator_ok markedOk
-  show (exited.builderPendingPayments gloas).map _ = _
+  show RootedVector.ofVector ((exited.builderPendingPayments gloas).elements.map _) = _
   rw [kept]
 
 /-- A read of a replaced balance returns the new balance. -/

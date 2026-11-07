@@ -38,7 +38,7 @@ def releasedPayments (payments : List BuilderPendingPayment) (perEpoch : Nat) (q
 /-- The payments moved by one epoch: the second half becomes the first, and the second is empty.
 -/
 def shiftPayments (payments : BuilderPendingPayments preset) : BuilderPendingPayments preset :=
-  Vector.ofFn fun (position : Fin _) =>
+  .ofVector <| Vector.ofFn fun (position : Fin _) =>
     if early : position.val < preset.SLOTS_PER_EPOCH.toNat then
       payments[position.val + preset.SLOTS_PER_EPOCH.toNat]'(by omega)
     else BuilderPendingPayment.empty
@@ -50,10 +50,12 @@ def processBuilderPendingPayments (state : BeaconState preset fork)
     (gloas : .glamsterdam ≤ fork) : Except AccessorError (BeaconState preset fork) := do
   let quorum ← getBuilderPaymentQuorumThreshold state
   let payments := state.builderPendingPayments gloas
-  let released := releasedPayments payments.toList preset.SLOTS_PER_EPOCH.toNat quorum
+  let released := releasedPayments payments.elements.toList preset.SLOTS_PER_EPOCH.toNat quorum
   let withdrawals := (state.builderPendingWithdrawals gloas).data ++ released.toArray
+  -- The shifted payments are built here, once, so that a read of the field does not build them.
+  let shifted := shiftPayments payments
   return { state with
     builderPendingWithdrawals := fun _ => ⟨withdrawals⟩
-    builderPendingPayments := fun _ => shiftPayments payments }
+    builderPendingPayments := fun _ => shifted }
 
 end EthLib.Consensus

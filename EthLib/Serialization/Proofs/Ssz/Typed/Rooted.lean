@@ -99,6 +99,15 @@ variable {α : Type} [SszType α] {length : Nat}
     (inside : index < length) : (v.set index a inside).elements = v.elements.set index a inside :=
   rfl
 
+/-- An optional read of the vector is the optional read of its elements. -/
+@[simp] theorem getElem?_eq (v : RootedVector α length) (index : Nat) :
+    v[index]? = v.elements[index]? := by
+  by_cases inside : index < length
+  · rw [Vector.getElem?_eq_getElem inside]
+    exact dite_eq_left inside
+  · rw [Vector.getElem?_eq_none (Nat.le_of_not_lt inside)]
+    exact dite_eq_right inside
+
 /-- Reading the element just written gives it back. -/
 @[simp] theorem getElem_set_self (v : RootedVector α length) (index : Nat) (a : α)
     (inside : index < length) : (v.set index a inside)[index] = a := by
