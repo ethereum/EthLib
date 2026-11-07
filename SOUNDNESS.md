@@ -676,6 +676,11 @@ The caller discards that state; no theorem here states it.
 `Logic.invalid` is the rule for a byte that is no opcode at the fork, such as `0xfe` at every fork.
 `Logic.jump_invalid` and `Logic.jumpi_invalid` are the rules for a jump to a position that is not a valid jump destination.
 `Assert.runFrame_zero` proves a contract that halts at `0xfe` when its first word of call data is zero.
+`Logic.push_of_readFrame` is the rule for an opcode whose instruction pushes a word that the code, the message, the program counter and the memory fix.
+`Logic.callvalue`, `Logic.address`, `Logic.origin`, `Logic.caller`, `Logic.calldatasize`, `Logic.codesize`, `Logic.pc_rule` and `Logic.msize` are its cases.
+A size is pushed modulo 2^256, as the instruction pushes it.
+`Logic.jumpi_of_eq_zero` is the rule for JUMPI on a condition proved equal to 0.
+`NoValue.spec_nonzero` proves a contract that halts at `0xfe` when its message sends value.
 From Berlin, the rule for SLOAD takes as a hypothesis whether the slot is cold, and charges 2100 or 100 by EIP-2929.
 `Logic.sstore` is the rule for SSTORE from Berlin to before Glamsterdam, in a frame that may change the state and holds more than 2300 gas.
 It charges `sstoreCost` and adds `sstoreRefund` to the refund counter, from the original, current and new words and whether the slot is cold.

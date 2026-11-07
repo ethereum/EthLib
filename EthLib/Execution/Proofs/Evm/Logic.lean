@@ -28,6 +28,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Examples.HashedSlot
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.CallRevert
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.KeyBranch
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.Assert
+public import EthLib.Execution.Proofs.Evm.Logic.Examples.NoValue
 
 /-!
 # `EthLib.Execution.Proofs.Evm.Logic`

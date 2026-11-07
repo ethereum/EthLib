@@ -24,7 +24,11 @@ It steps over PUSH1 to PUSH32, POP, DUP1 to DUP16 and SWAP1 to SWAP16.
 
 It steps over each opcode of one, two or three operands that the fork runs on the stack alone.
 
-It steps over JUMPDEST, CALLDATALOAD, JUMP, and JUMPI on a condition that is a number.
+It steps over JUMPDEST, CALLDATALOAD and JUMP.
+
+It steps over JUMPI on a condition that is a number, or that a hypothesis proves zero or nonzero.
+
+It steps over each opcode that pushes a word fixed by the frame, such as CALLVALUE.
 
 It proves a jump destination valid by the walk along the opcodes.
 
@@ -104,7 +108,7 @@ macro_rules
          case h => assumption
          decide))
 
-/-- The prices of the opcodes of one, two or three operands that run on the stack alone. -/
+/-- The prices of the opcodes of the stack alone, and of those that push a word of the frame. -/
 syntax "evm_prices" : tactic
 
 macro_rules
@@ -112,13 +116,21 @@ macro_rules
       OPCODE_DIV, OPCODE_SDIV, OPCODE_MOD, OPCODE_SMOD, OPCODE_ADDMOD, OPCODE_MULMOD,
       OPCODE_SIGNEXTEND, OPCODE_LT, OPCODE_GT, OPCODE_SLT, OPCODE_SGT, OPCODE_EQ, OPCODE_ISZERO,
       OPCODE_AND, OPCODE_OR, OPCODE_XOR, OPCODE_NOT, OPCODE_BYTE, OPCODE_SHL, OPCODE_SHR,
-      OPCODE_SAR, OPCODE_CLZ, BASE, VERY_LOW, LOW, MID])
+      OPCODE_SAR, OPCODE_CLZ, OPCODE_ADDRESS, OPCODE_ORIGIN, OPCODE_CALLER, OPCODE_CALLVALUE,
+      OPCODE_CALLDATASIZE, OPCODE_CODESIZE, OPCODE_PC, OPCODE_MSIZE, BASE, VERY_LOW, LOW, MID])
 
-/-- Proves that the frame holds enough gas for a step, by linear arithmetic. -/
+/-- Proves that the frame holds enough gas for a step, by linear arithmetic.
+
+A goal `a ≤ g - b` is first turned into `a + b ≤ g`.
+
+On the first form with several atoms, linear arithmetic can exceed the recursion limit. -/
 syntax "evm_gas" : tactic
 
 macro_rules
-  | `(tactic| evm_gas) => `(tactic| first | omega | (evm_prices; omega))
+  | `(tactic| evm_gas) => `(tactic| first
+      | (apply Nat.le_sub_of_add_le; first | omega | (evm_prices; omega))
+      | omega
+      | (evm_prices; omega))
 
 /-- Proves that the stack has room for one more word. -/
 syntax "evm_room" : tactic
@@ -206,11 +218,21 @@ macro_rules
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
          case gas => evm_gas
-         case nz => decide
+         case nz => first | assumption | decide
          case dest => evm_dest [$ls,*])
-      | (with_reducible refine' Triple.seq (jumpi_zero ?lt ?op ?gas) ?next
+      | (refine' Triple.seq (jumpi_of_eq_zero ?lt ?op ?gas ?zero) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
-         case gas => evm_gas)) <;> evm_tidy))
+         case gas => evm_gas
+         case zero => first | assumption | decide)
+      | (refine' Triple.seq (push_of_readFrame ?lt ?op ?dec ?run ?word ?gas ?room) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case dec => refine ofByte_of_decode rfl ?_; evm_fork
+         case run => rfl
+         case word => intro _ hc hm hp hmem; (try simp only [hc, hm, hp, hmem]); rfl
+         case gas => evm_gas
+         case room => evm_room)
+      | fail "no rule of a step applies to the opcode at the program counter") <;> evm_tidy))
 
 end EthLib.Execution.Evm.Logic
