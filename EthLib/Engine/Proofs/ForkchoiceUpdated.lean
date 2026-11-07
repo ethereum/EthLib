@@ -15,6 +15,16 @@ Any other valid update selects a valid head that the execution layer holds.
 
 Its safe and finalized blocks are then zero, or the head or one of its known ancestors.
 
+The update fails in one case only.
+
+The head is valid and not below the known finalized block.
+
+But its safe or its finalized block is off the chain of the head.
+
+A head that the execution layer does not hold gives a syncing update.
+
+A valid head with its safe and finalized blocks on its chain is valid and becomes the head.
+
 An invalid head names as latest valid hash a valid block of its own chain.
 
 That block is the valid block nearest the head.
@@ -195,6 +205,51 @@ theorem forkchoiceUpdated_of_invalid {p : KnownPayload}
     forkchoiceUpdated tree finalized state =
       .ok (⟨.invalid, latestValid tree state.headBlockHash⟩, none) := by
   simp [forkchoiceUpdated, hp, hInvalid, pure, Except.pure]
+
+/-- An update of a head that the tree does not hold is syncing, and the head does not change. -/
+theorem forkchoiceUpdated_of_unknown (hNone : tree.lookup state.headBlockHash = none) :
+    forkchoiceUpdated tree finalized state = .ok (⟨.syncing, none⟩, none) := by
+  simp [forkchoiceUpdated, hNone, pure, Except.pure]
+
+/-- A valid head with its safe and finalized blocks on its chain becomes the head.
+
+The head must not be below the known finalized block. -/
+theorem forkchoiceUpdated_of_onChain {p : KnownPayload}
+    (hp : tree.lookup state.headBlockHash = some p) (hValid : p.valid = true)
+    (hAbove : belowFinalized tree finalized state.headBlockHash = false)
+    (hSafe : onChain tree state.headBlockHash state.safeBlockHash = true)
+    (hFinalized : onChain tree state.headBlockHash state.finalizedBlockHash = true) :
+    forkchoiceUpdated tree finalized state =
+      .ok (⟨.valid, some state.headBlockHash⟩, some state.headBlockHash) := by
+  simp [forkchoiceUpdated, hp, hValid, hAbove, hSafe, hFinalized, pure, Except.pure]
+
+/-- An update fails in one case only.
+
+The head is valid and not below the known finalized block.
+
+Its safe or its finalized block is then neither zero nor on the chain of the head.
+
+The error is then that of an invalid forkchoice state. -/
+theorem forkchoiceUpdated_eq_error_iff {e : EngineError} :
+    forkchoiceUpdated tree finalized state = .error e ↔
+      e = .invalidForkchoiceState ∧
+        ∃ p, tree.lookup state.headBlockHash = some p ∧ p.valid = true ∧
+          belowFinalized tree finalized state.headBlockHash = false ∧
+          ¬(onChain tree state.headBlockHash state.safeBlockHash = true ∧
+            onChain tree state.headBlockHash state.finalizedBlockHash = true) := by
+  unfold forkchoiceUpdated
+  cases hp : tree.lookup state.headBlockHash with
+  | none => simp [pure, Except.pure]
+  | some p =>
+    by_cases hv : p.valid = true
+    · by_cases hb : belowFinalized tree finalized state.headBlockHash = true
+      · simp [hv, hb, pure, Except.pure]
+      · by_cases hc : onChain tree state.headBlockHash state.safeBlockHash = true ∧
+            onChain tree state.headBlockHash state.finalizedBlockHash = true
+        · simp [hv, hb, hc, pure, Except.pure]
+        · simp [hv, hb, hc, throw, throwThe, MonadExceptOf.throw]
+          exact eq_comm
+    · simp [hv, pure, Except.pure]
 
 /-- Without a known finalized block, no head is below it. -/
 @[simp] theorem belowFinalized_none (h : Hash32) : belowFinalized tree none h = false := rfl
