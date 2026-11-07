@@ -107,21 +107,6 @@ theorem toValue_eq (payload : ExecutionPayload preset fork) :
     simp [toValue, SszType.progressiveContainer, SszType.container, SszFields.toValues,
       fieldValues, capella, deneb, gloas]
 
-/-- At every fork, the bytes of a payload are those of the plain list of its fields. -/
-theorem serialize_eq (payload : ExecutionPayload preset fork) :
-    SszType.serialize payload = (do
-      return ⟨← Serialization.Ssz.serialize (fieldsDesc preset fork)
-        (.seq (fieldValues payload))⟩) := by
-  -- At either shape of the container, the encoder is the default, the untyped serialization.
-  have encoded : SszType.serialize payload = (do return (ByteArray.mk
-      (← Serialization.Ssz.serialize (desc (ExecutionPayload preset fork)) (toValue payload))) :
-      Except _ ByteArray) := by
-    unfold SszType.serialize desc toValue instSszType SszType.forkContainer
-    by_cases gloas : Fork.glamsterdam ≤ fork
-    · rw [ite_eq_left gloas]; rfl
-    · rw [ite_eq_right gloas]; rfl
-  rw [encoded, desc_eq, toValue_eq]
-
 /-- The field names of a payload are distinct at every fork. -/
 theorem names_nodup : (names fork).Nodup := by
   have all : (["parent_hash", "fee_recipient", "state_root", "receipts_root", "logs_bloom",
@@ -160,6 +145,18 @@ theorem hashTreeRoot_eq [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
       toChunk (← Serialization.Ssz.hashTreeRoot (fieldsDesc preset fork)
         (.seq (fieldValues payload)))) := by
   rw [SszType.hashTreeRoot_eq, desc_eq, toValue_eq]
+
+/--
+At every fork, the bytes of a payload are those of the plain list of its fields.
+
+The logs bloom must have a byte, as for the payload's laws.
+-/
+theorem serialize_eq [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
+    (payload : ExecutionPayload preset fork) :
+    SszType.serialize payload = (do
+      return ⟨← Serialization.Ssz.serialize (fieldsDesc preset fork)
+        (.seq (fieldValues payload))⟩) := by
+  rw [SszType.serialize_eq, desc_eq, toValue_eq]
 
 /-- At every fork, the bytes of a payload decode back to it. -/
 theorem deserialize_serialize [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]

@@ -108,6 +108,20 @@ instance : LawfulSszType (ForkList switch fork α limit) where
         subst made
         simp [toValue, ← map_toValue_of_ofElements read]
       · cases made
+  ofValue_ne_error {value fault} fits made := by
+    simp only [desc] at fits
+    split at fits
+    · rename_i after
+      cases fits with
+      | progressiveList within each =>
+        obtain ⟨items, read, size⟩ := ofElements_ok each
+        have ok : fork < switch → items.size ≤ limit := fun h => absurd h (Nat.not_lt.mpr after)
+        simp only [ofValue, read, bind, Except.bind, dite_eq_left_of_eq_true (eq_true ok)] at made
+        cases made
+    · cases fits with
+      | list within each =>
+        obtain ⟨items, read, size⟩ := ofElements_ok each
+        simp [ofValue, read, bind, Except.bind, pure, Except.pure, size, within] at made
 
 /-- The empty list has empty SSZ bytes. -/
 theorem serialize_forkList_empty :
@@ -194,6 +208,20 @@ instance : LawfulSszType (ForkList switch fork UInt8 limit) where
         subst made
         simp [toValue, from_]
       · cases made
+  ofValue_ne_error {value fault} fits made := by
+    simp only [desc] at fits
+    split at fits
+    · rename_i after
+      cases fits with
+      | progressiveList within each =>
+        obtain ⟨items, read, size⟩ := ofElements_ok (α := UInt8) each
+        have ok : fork < switch → items.size ≤ limit := fun h => absurd h (Nat.not_lt.mpr after)
+        simp only [ofValue, after, ↓reduceIte, read, bind, Except.bind,
+          dite_eq_left_of_eq_true (eq_true ok)] at made
+        cases made
+    · rename_i before
+      cases fits with
+      | byteList within => simp [ofValue, before, within] at made
 
 end Bytes
 
@@ -242,6 +270,18 @@ instance : LawfulSszType (ForkBitlist switch fork limit) where
       subst made
       rfl
     · cases made
+  ofValue_ne_error {value fault} fits made := by
+    simp only [desc] at fits
+    split at fits
+    · rename_i after
+      cases fits with
+      | progressiveBitList within =>
+        rename_i data
+        have ok : fork < switch → data.size ≤ limit := fun h => absurd h (Nat.not_lt.mpr after)
+        simp only [ofValue, dite_eq_left_of_eq_true (eq_true ok)] at made
+        cases made
+    · cases fits with
+      | bitList within => simp [ofValue, within] at made
 
 end Bitlist
 

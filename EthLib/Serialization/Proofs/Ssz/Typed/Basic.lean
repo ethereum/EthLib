@@ -24,6 +24,17 @@ theorem SszType.ofUint_ok {α : Type} {width : Nat} {make : Nat → α} {value :
   | uint n => by_cases below : n < 2 ^ (8 * width) <;> simp [ofUint, below]
   | _ => simp [ofUint]
 
+/-- An integer read straight from its bytes is the one the untyped decoder reads. -/
+theorem SszType.decodeUint_eq {α : Type} (width : Nat) (make : Nat → α) (data : ByteArray) :
+    decodeUint width make data =
+      (do ofUint width make (← Ssz.deserialize (.uint width) data.data)) := by
+  unfold decodeUint
+  by_cases size : data.size = width
+  · have below := readUint_lt data.data 0 width
+    simp [Ssz.deserialize, ByteArray.size_data, size, readUintBytes_eq, ofUint, below]
+  · simp [Ssz.deserialize, ByteArray.size_data, size]
+    rfl
+
 /--
 An integer type is lawful when its numbers are exactly those below the bound of its width.
 
@@ -51,6 +62,12 @@ theorem LawfulSszType.ofUint {α : Type} [SszType α] {width : Nat} (toNat : α 
     rw [read, ofUint_ok] at made
     obtain ⟨n, rfl, below, rfl⟩ := made
     rw [written, right n below]
+  ofValue_ne_error {value fault} fits made := by
+    rw [declared] at fits
+    cases fits with
+    | uint bound =>
+      rw [read] at made
+      simp [SszType.ofUint, bound] at made
   root_eq := rooted
   encode_eq := encoded
   decode_eq := decoded
@@ -61,30 +78,52 @@ instance : LawfulSszType Bool where
   ofValue_toValue _ := rfl
   toValue_of_ofValue {value _} made := by
     cases value <;> cases made <;> rfl
+  ofValue_ne_error {value fault} fits made := by
+    cases fits
+    simp [ofValue] at made
+  decode_eq data := by
+    have get : data[0]? = data.data[0]? := by
+      by_cases h : 0 < data.size
+      · simp [h, ByteArray.size_data]
+        rfl
+      · simp [h, ByteArray.size_data]
+    have kind : SszType.desc Bool = .bool := rfl
+    by_cases size : data.size = 1
+    · simp only [decode, kind, Ssz.deserialize, ByteArray.size_data, get, size, bne_self_eq_false,
+        Bool.false_eq_true, ite_false]
+      split <;> split <;> simp_all [ofValue] <;> rfl
+    · simp [decode, kind, Ssz.deserialize, ByteArray.size_data, size]
+      rfl
 
 instance : LawfulSszType UInt8 :=
   .ofUint UInt8.toNat UInt8.ofNat rfl rfl (fun _ => rfl) rfl UInt8.toNat_lt
     (fun _ => UInt8.ofNat_toNat) (fun _ below => UInt8.toNat_ofNat_of_lt' below)
+    (decoded := decodeUint_eq 1 UInt8.ofNat)
 
 instance : LawfulSszType UInt16 :=
   .ofUint UInt16.toNat UInt16.ofNat rfl rfl (fun _ => rfl) rfl UInt16.toNat_lt
     (fun _ => UInt16.ofNat_toNat) (fun _ below => UInt16.toNat_ofNat_of_lt' below)
+    (decoded := decodeUint_eq 2 UInt16.ofNat)
 
 instance : LawfulSszType UInt32 :=
   .ofUint UInt32.toNat UInt32.ofNat rfl rfl (fun _ => rfl) rfl UInt32.toNat_lt
     (fun _ => UInt32.ofNat_toNat) (fun _ below => UInt32.toNat_ofNat_of_lt' below)
+    (decoded := decodeUint_eq 4 UInt32.ofNat)
 
 instance : LawfulSszType UInt64 :=
   .ofUint UInt64.toNat UInt64.ofNat rfl rfl (fun _ => rfl) rfl UInt64.toNat_lt
     (fun _ => UInt64.ofNat_toNat) (fun _ below => UInt64.toNat_ofNat_of_lt' below)
+    (decoded := decodeUint_eq 8 UInt64.ofNat)
 
 instance : LawfulSszType (BitVec 128) :=
   .ofUint BitVec.toNat (BitVec.ofNat 128) rfl rfl (fun _ => rfl) rfl BitVec.isLt
     (fun _ => by simp) (fun _ below => Nat.mod_eq_of_lt below)
+    (decoded := decodeUint_eq 16 (BitVec.ofNat 128))
 
 instance : LawfulSszType Base.U256 :=
   .ofUint BitVec.toNat (BitVec.ofNat 256) rfl rfl (fun _ => rfl) rfl BitVec.isLt
     (fun _ => by simp) (fun _ below => Nat.mod_eq_of_lt below)
+    (decoded := decodeUint_eq 32 (BitVec.ofNat 256))
 
 instance {n : Nat} [NeZero n] : LawfulSszType (Vector UInt8 n) where
   wellFormed := by simp [desc, Desc.wellFormed, NeZero.ne n]
@@ -99,5 +138,8 @@ instance {n : Nat} [NeZero n] : LawfulSszType (Vector UInt8 n) where
       subst made
       rfl
     · simp [exact] at made
+  ofValue_ne_error {value fault} fits made := by
+    cases fits with
+    | byteVector exact => simp [ofValue, exact] at made
 
 end EthLib.Serialization.Ssz
