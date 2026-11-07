@@ -189,7 +189,7 @@ inductive ForkChoiceError where
   | invalidAttestationIndex (index : UInt64)
   /-- An attestation from the slot of the block with the root says that the payload is present. -/
   | sameSlotPayloadVote (root : Root)
-  /-- An attestation for the full node of the block with the root comes before its payload. -/
+  /-- A vote or a block builds on the payload of the block with the root before it is verified. -/
   | payloadNotVerified (root : Root)
   /-- The validator is not in the payload committee of the slot that it votes for. -/
   | notInPtc (index : ValidatorIndex)

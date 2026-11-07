@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: fork_choice
+handler: get_head
+suite: pyspec_tests
+case: chain_no_attestations

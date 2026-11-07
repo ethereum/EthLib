@@ -20,6 +20,10 @@ At Deneb and Electra the node held its blobs, and their proofs matched its commi
 
 From Fulu the node got every column that it samples, and each column was valid.
 
+From Gloas the data comes with the payload, and the check of the block passes.
+
+From Gloas a block that builds on the payload of its parent finds that payload verified.
+
 At Bellatrix the first payload passes exactly when it follows a terminal block of proof of work.
 
 A known block leaves the store as it was.
@@ -33,6 +37,10 @@ From Gloas a block also records whether it came before the votes of the payload 
 A vote of the payload committee sets the votes of its validator at each of its positions.
 
 Such a vote for another slot than its block's, or carried by a block at slot 0, changes nothing.
+
+An accepted envelope had its data and passed its checks, and the store then keeps it.
+
+Its payload then counts as verified, and nothing else changes.
 -/
 
 @[expose] public section
@@ -397,7 +405,120 @@ theorem updateProposerBoostRoot_frame {head root : Root} {after : Store preset f
   split at updated <;> simp only [pure, Except.pure, Except.ok.injEq] at updated <;>
     subst updated <;> exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl⟩
 
+/-- The store changes at most in its two vote maps of the payload committee. -/
+def OnlyPtcVotes (before after : Store preset fork) : Prop :=
+  ∃ timeliness availability, after = { before with
+    payloadTimelinessVote := timeliness, payloadDataAvailabilityVote := availability }
+
+theorem OnlyPtcVotes.refl (store : Store preset fork) : OnlyPtcVotes store store :=
+  ⟨store.payloadTimelinessVote, store.payloadDataAvailabilityVote, rfl⟩
+
+theorem OnlyPtcVotes.trans {a b c : Store preset fork} (ab : OnlyPtcVotes a b)
+    (bc : OnlyPtcVotes b c) : OnlyPtcVotes a c := by
+  obtain ⟨_, _, rfl⟩ := ab
+  obtain ⟨t, v, rfl⟩ := bc
+  exact ⟨t, v, rfl⟩
+
+/-- A store that changes only in its votes keeps its checkpoints, blocks and states. -/
+theorem OnlyPtcVotes.frame {a b : Store preset fork} (only : OnlyPtcVotes a b) :
+    a.EpochsLe b ∧ b.blocks = a.blocks ∧ b.blockStates = a.blockStates := by
+  obtain ⟨_, _, rfl⟩ := only
+  exact ⟨EpochsLe.refl _, rfl, rfl⟩
+
+/-- Recording the votes of a payload vote changes only the vote maps. -/
+theorem recordPtcVotes_onlyPtcVotes {gloas : .glamsterdam ≤ fork}
+    {data : PayloadAttestationData} {positions : List (Fin preset.PTC_SIZE.toNat)}
+    {after : Store preset fork}
+    (recorded : store.recordPtcVotes gloas data positions = .ok after) :
+    OnlyPtcVotes store after := by
+  unfold recordPtcVotes at recorded
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at recorded
+  obtain ⟨_, _, _, _, rfl⟩ := recorded
+  exact ⟨_, _, rfl⟩
+
+/-- A vote of the payload committee changes only the vote maps. -/
+theorem onPayloadAttestationMessage_onlyPtcVotes {checks : SignatureChecks}
+    {gloas : .glamsterdam ≤ fork} {message : PayloadAttestationMessage} {isFromBlock : Bool}
+    {after : Store preset fork}
+    (accepted : store.onPayloadAttestationMessage config checks gloas message isFromBlock =
+      .ok after) :
+    OnlyPtcVotes store after := by
+  unfold onPayloadAttestationMessage at accepted
+  simp only [bind_ok_iff] at accepted
+  obtain ⟨_, _, accepted⟩ := accepted
+  split at accepted
+  · simp only [pure, Except.pure, Except.ok.injEq] at accepted
+    subst accepted
+    exact .refl _
+  · simp only [bind_ok_iff] at accepted
+    obtain ⟨_, _, _, _, accepted⟩ := accepted
+    -- Both kinds of vote end with the same record of the votes.
+    cases isFromBlock
+    · simp only [Bool.false_eq_true, ↓reduceIte, bind_ok_iff] at accepted
+      obtain ⟨_, -, accepted⟩ := accepted
+      exact recordPtcVotes_onlyPtcVotes accepted
+    · exact recordPtcVotes_onlyPtcVotes (by simpa using accepted)
+
+/-- The votes of the payload committee that a block carries change only the vote maps. -/
+theorem notifyPtcMessages_onlyPtcVotes {checks : SignatureChecks}
+    {gloas : .glamsterdam ≤ fork} {state : BeaconState preset fork}
+    {attestations : List (PayloadAttestation preset)} {after : Store preset fork}
+    (notified : store.notifyPtcMessages config checks gloas state attestations = .ok after) :
+    OnlyPtcVotes store after := by
+  unfold notifyPtcMessages at notified
+  split at notified
+  · simp only [pure, Except.pure, Except.ok.injEq] at notified
+    subst notified
+    exact .refl _
+  · refine foldlM_ok_invariant (OnlyPtcVotes store) (fun other attestation next held step => ?_)
+      (.refl _) notified
+    simp only [bind_ok_iff] at step
+    obtain ⟨_, _, step⟩ := step
+    exact foldlM_ok_invariant (OnlyPtcVotes store) (fun _ _ _ held step =>
+      held.trans (onPayloadAttestationMessage_onlyPtcVotes step)) held step
+
+/-- The votes of the payload committee on a new block change only the vote maps. -/
+theorem recordBlockPtcVotes_onlyPtcVotes {checks : SignatureChecks}
+    {signed : SignedBeaconBlock preset fork} {blockRoot : Root}
+    {state : BeaconState preset fork} {after : Store preset fork}
+    (recorded : store.recordBlockPtcVotes config checks signed blockRoot state = .ok after) :
+    OnlyPtcVotes store after := by
+  unfold recordBlockPtcVotes at recorded
+  split at recorded
+  · dsimp only at recorded
+    exact (OnlyPtcVotes.trans ⟨_, _, rfl⟩ (notifyPtcMessages_onlyPtcVotes recorded))
+  · simp only [pure, Except.pure, Except.ok.injEq] at recorded
+    subst recorded
+    exact .refl _
+
+/-- Before Gloas a block holds its own payload, and the check of its parent's payload passes. -/
+theorem validateParentPayload_of_lt {block : BeaconBlock preset fork}
+    (before : fork < .glamsterdam) : store.validateParentPayload block = .ok () := by
+  have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  simp [validateParentPayload, later, pure, Except.pure]
+
+/-- From Gloas the check passes exactly when the store holds the parent.
+
+A block that builds on the payload of its parent must also find that payload verified. -/
+theorem validateParentPayload_ok_iff {block : BeaconBlock preset fork}
+    (gloas : .glamsterdam ≤ fork) :
+    store.validateParentPayload block = .ok () ↔
+      ∃ parent, store.blocks[block.parentRoot]? = some parent ∧
+        (parentPayloadStatus block parent = .full →
+          store.isPayloadVerified gloas block.parentRoot = true) := by
+  unfold validateParentPayload isParentNodeFull getParentPayloadStatus
+  cases found : store.blocks[block.parentRoot]? with
+  | none =>
+    simp [gloas, Store.block, found, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+  | some parent =>
+    cases verified : store.isPayloadVerified gloas block.parentRoot <;>
+      by_cases full : parentPayloadStatus block parent = .full <;>
+      simp [gloas, Store.block, found, verified, full, bind, Except.bind, pure, Except.pure,
+        throw, throwThe, MonadExceptOf.throw]
+
 /-- A new block that passes the checks has a known parent, and its data is available.
+
+From Gloas the payload of its parent passed its check.
 
 Its state is the one that the state transition computes from the parent's. -/
 theorem validateOnBlock_ok {checks : SignatureChecks} {sources : BlockSources preset fork}
@@ -405,6 +526,7 @@ theorem validateOnBlock_ok {checks : SignatureChecks} {sources : BlockSources pr
     {blockRoot : Root} {state : BeaconState preset fork}
     (valid : store.validateOnBlock config checks sources signed blockRoot = .ok state) :
     ∃ pre, store.blockStates[signed.message.parentRoot]? = some pre ∧
+      store.validateParentPayload signed.message = .ok () ∧
       validateDataAvailability config sources signed.message blockRoot = .ok () ∧
       stateTransition config checks sources.engine pre signed true = .ok state := by
   unfold validateOnBlock at valid
@@ -413,9 +535,10 @@ theorem validateOnBlock_ok {checks : SignatureChecks} {sources : BlockSources pr
   | none =>
     simp [blockState, found, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at valid
   | some pre =>
-    refine ⟨pre, rfl, ?_⟩
     simp only [blockState, found, bind_ok_iff] at valid
-    obtain ⟨a, ha, _, _, valid⟩ := valid
+    obtain ⟨a, ha, checked, parent, _, _, valid⟩ := valid
+    cases checked
+    refine ⟨pre, rfl, parent, ?_⟩
     simp only [pure, Except.pure, Except.ok.injEq] at ha
     subst ha
     split at valid
@@ -441,6 +564,12 @@ theorem validateOnBlock_ok {checks : SignatureChecks} {sources : BlockSources pr
       · simpa [pure, Except.pure] using valid
     subst same
     exact ⟨available, mapError_ok_iff.mp transition⟩
+
+/-- From Gloas the data comes with the payload, so the check of a block passes. -/
+theorem validateDataAvailability_of_gloas {sources : BlockSources preset fork}
+    {block : BeaconBlock preset fork} {blockRoot : Root} (gloas : .glamsterdam ≤ fork) :
+    validateDataAvailability config sources block blockRoot = .ok () := by
+  simp [validateDataAvailability, gloas, pure, Except.pure]
 
 /-- Before Deneb a block has no blobs, and the check of their availability passes. -/
 theorem validateDataAvailability_of_lt {sources : BlockSources preset fork}
@@ -490,6 +619,45 @@ private theorem allM_ok_true {ε α : Type} {f : α → Except ε Bool} :
       · simp [h, bind, Except.bind, pure, Except.pure]
       · simp [h, bind, Except.bind, allM_ok_true l]
 
+/-- A check that fails with an error unless a test returns true passes exactly then. -/
+private theorem unless_ok_iff {ε : Type} {test : Except ε Bool} {e : ε} :
+    (do unless (← test) do throw e : Except ε Unit) = .ok () ↔ test = .ok true := by
+  cases test with
+  | error _ => simp [bind, Except.bind]
+  | ok b => cases b <;> simp [bind, Except.bind, throw, throwThe, MonadExceptOf.throw, pure,
+      Except.pure]
+
+/-- The columns are available exactly when the node gets every column that it samples.
+
+Each column must have a valid shape, and the proofs of its cells must match the commitments. -/
+theorem columnsAvailable_ok_iff {sources : BlockSources preset fork} {root : Root}
+    {bidCommitments : Since .glamsterdam fork (BlobKZGCommitments preset fork)} :
+    columnsAvailable config sources root bidCommitments = .ok true ↔
+      ∃ sidecars, sources.columns root = some sidecars ∧ ∀ sidecar ∈ sidecars,
+        verifyDataColumnSidecar preset config sidecar bidCommitments = true ∧
+          verifyDataColumnSidecarKzgProofs sources.setup sidecar bidCommitments = .ok true := by
+  unfold columnsAvailable
+  cases found : sources.columns root with
+  | none => simp [throw, throwThe, MonadExceptOf.throw]
+  | some sidecars =>
+    simp only [Option.some.injEq, exists_eq_left', ← Array.allM_toList]
+    -- One column passes exactly when its shape is valid and its proofs match.
+    have each : ∀ sidecar : DataColumnSidecar preset fork,
+        (if verifyDataColumnSidecar preset config sidecar bidCommitments then
+          (verifyDataColumnSidecarKzgProofs sources.setup sidecar bidCommitments).mapError
+            ForkChoiceError.kzg
+        else pure false) = .ok true ↔
+        verifyDataColumnSidecar preset config sidecar bidCommitments = true ∧
+          verifyDataColumnSidecarKzgProofs sources.setup sidecar bidCommitments = .ok true := by
+      intro sidecar
+      split
+      · cases verifyDataColumnSidecarKzgProofs sources.setup sidecar bidCommitments <;>
+          simp_all [Except.mapError]
+      · simp_all [pure, Except.pure]
+    rw [allM_ok_true]
+    exact ⟨fun all sidecar mem => (each sidecar).mp (all sidecar (Array.mem_toList_iff.mpr mem)),
+      fun valid sidecar mem => (each sidecar).mpr (valid sidecar (Array.mem_toList_iff.mp mem))⟩
+
 /-- At Fulu, the check passes exactly when the node gets every column that it samples.
 
 Each column must have a valid shape, and the proofs of its cells must match its commitments. -/
@@ -505,37 +673,23 @@ theorem validateDataAvailability_ok_of_fulu {sources : BlockSources preset fork}
   have deneb : .dencun ≤ fork := Nat.le_trans (by decide) fulu
   have gloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
   unfold validateDataAvailability isDataAvailable
-  cases found : sources.columns blockRoot with
-  | none => simp [fulu, gloas, deneb, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
-  | some sidecars =>
-    simp only [gloas, deneb, fulu, dite_false, dite_true, ite_true, Option.some.injEq,
-      exists_eq_left', bind_ok_iff, ← Array.allM_toList]
-    -- One column passes exactly when its shape is valid and its proofs match.
-    have each : ∀ sidecar : DataColumnSidecar preset fork,
-        (if verifyDataColumnSidecar preset config sidecar
-            (fun gloas => absurd gloas (not_glamsterdam_le before)) then
-          (verifyDataColumnSidecarKzgProofs sources.setup sidecar
-            (fun gloas => absurd gloas (not_glamsterdam_le before))).mapError ForkChoiceError.kzg
-        else pure false) = .ok true ↔
-        verifyDataColumnSidecar preset config sidecar
-            (fun gloas => absurd gloas (not_glamsterdam_le before)) = true ∧
+  simp only [gloas, deneb, fulu, dite_false, dite_true, ite_true]
+  rw [unless_ok_iff]
+  exact columnsAvailable_ok_iff
+
+/-- From Gloas the data of a payload is available exactly when each sampled column is valid.
+
+The commitments are those of the bid. -/
+theorem validatePayloadData_ok_iff {sources : BlockSources preset fork} {root : Root}
+    {bid : ExecutionPayloadBid preset fork} :
+    validatePayloadData config sources root bid = .ok () ↔
+      ∃ sidecars, sources.columns root = some sidecars ∧ ∀ sidecar ∈ sidecars,
+        verifyDataColumnSidecar preset config sidecar (fun _ => bid.blobKzgCommitments) = true ∧
           verifyDataColumnSidecarKzgProofs sources.setup sidecar
-            (fun gloas => absurd gloas (not_glamsterdam_le before)) = .ok true := by
-      intro sidecar
-      split
-      · cases verifyDataColumnSidecarKzgProofs sources.setup sidecar
-            (fun gloas => absurd gloas (not_glamsterdam_le before)) <;>
-          simp_all [Except.mapError]
-      · simp_all [pure, Except.pure]
-    constructor
-    · rintro ⟨b, all, rest⟩
-      cases b
-      · simp [throw, throwThe, MonadExceptOf.throw] at rest
-      intro sidecar mem
-      exact (each sidecar).mp ((allM_ok_true _).mp all sidecar (Array.mem_toList_iff.mpr mem))
-    · intro valid
-      exact ⟨true, (allM_ok_true _).mpr fun sidecar mem =>
-        (each sidecar).mpr (valid sidecar (Array.mem_toList_iff.mp mem)), rfl⟩
+            (fun _ => bid.blobKzgCommitments) = .ok true := by
+  unfold validatePayloadData
+  rw [unless_ok_iff]
+  exact columnsAvailable_ok_iff
 
 /-- The first payload passes exactly when it follows a terminal block of proof of work.
 
@@ -590,7 +744,7 @@ theorem validateOnBlock_merge {checks : SignatureChecks} {sources : BlockSources
   unfold validateOnBlock at valid
   dsimp only at valid
   simp only [blockState, found, bind_ok_iff] at valid
-  obtain ⟨a, ha, _, _, valid⟩ := valid
+  obtain ⟨a, ha, _, _, _, _, valid⟩ := valid
   simp only [pure, Except.pure, Except.ok.injEq] at ha
   subst ha
   split at valid
@@ -621,34 +775,27 @@ theorem addBlock_ok {checks : SignatureChecks} {sources : BlockSources preset fo
         after.blockStates[blockRoot]? = some state := by
   unfold addBlock at added
   simp only [bind_ok_iff] at added
-  obtain ⟨state, valid, head, -, recorded, record, boosted, boost, added⟩ := added
+  obtain ⟨state, valid, head, -, voted, vote, recorded, record, boosted, boost, added⟩ := added
+  obtain ⟨le0, b0, bs0⟩ := (recordBlockPtcVotes_onlyPtcVotes vote).frame
   obtain ⟨le1, b1, bs1⟩ := recordBlockTimeliness_frame record
   obtain ⟨le2, b2, bs2⟩ := updateProposerBoostRoot_frame boost
   obtain ⟨le3, b3, bs3⟩ := computePulledUpTip_frame added
-  refine ⟨(le1.trans le2).trans ((updateCheckpoints_epochsLe _ _).trans le3), ?_, ?_⟩
-  · rw [b3, updateCheckpoints_blocks, b2, b1]
+  refine ⟨((EpochsLe.of_eq rfl rfl).trans (le0.trans (le1.trans le2))).trans
+    ((updateCheckpoints_epochsLe _ _).trans le3), ?_, ?_⟩
+  · rw [b3, updateCheckpoints_blocks, b2, b1, b0]
     simp
-  · obtain ⟨pre, found, -, transition⟩ := validateOnBlock_ok valid
+  · obtain ⟨pre, found, -, -, transition⟩ := validateOnBlock_ok valid
     refine ⟨pre, state, found, transition, ?_⟩
-    rw [bs3, updateCheckpoints_blockStates, bs2, bs1]
+    rw [bs3, updateCheckpoints_blockStates, bs2, bs1, bs0]
     simp
-
-/-- From Gloas the rule for a block is not yet specified here. -/
-theorem onBlock_of_gloas {checks : SignatureChecks} {sources : BlockSources preset fork}
-    {signed : SignedBeaconBlock preset fork}
-    (gloas : .glamsterdam ≤ fork) :
-    store.onBlock config checks sources signed = .error (.forkNotYetSpecified fork) := by
-  simp [onBlock, gloas, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
 
 /-- A block that the store holds already leaves the store as it was. -/
 theorem onBlock_known {checks : SignatureChecks} {sources : BlockSources preset fork}
     {signed : SignedBeaconBlock preset fork}
-    {blockRoot : Root} (before : fork < .glamsterdam)
-    (root : SszType.hashTreeRoot signed.message = .ok blockRoot)
+    {blockRoot : Root} (root : SszType.hashTreeRoot signed.message = .ok blockRoot)
     (known : store.blocks.contains blockRoot) :
     store.onBlock config checks sources signed = .ok store := by
-  have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
-  simp [onBlock, later, root, known, bind, Except.bind, Except.mapError, pure, Except.pure]
+  simp [onBlock, root, known, bind, Except.bind, Except.mapError, pure, Except.pure]
 
 /-- A new block enters the store with the state after it, and no epoch falls.
 
@@ -663,10 +810,7 @@ theorem onBlock_new {checks : SignatureChecks} {sources : BlockSources preset fo
       ∃ pre state, store.blockStates[signed.message.parentRoot]? = some pre ∧
         stateTransition config checks sources.engine pre signed true = .ok state ∧
         after.blockStates[blockRoot]? = some state := by
-  by_cases gloas : .glamsterdam ≤ fork
-  · rw [onBlock_of_gloas gloas] at added
-    cases added
-  simp only [onBlock, gloas, root, new, bind, Except.bind, Except.mapError, ↓reduceIte,
+  simp only [onBlock, root, new, bind, Except.bind, Except.mapError, ↓reduceIte,
     Bool.false_eq_true] at added
   exact addBlock_ok added
 
@@ -683,20 +827,18 @@ theorem onBlock_insert {checks : SignatureChecks} {sources : BlockSources preset
       ∃ pre state, store.blockStates[signed.message.parentRoot]? = some pre ∧
         stateTransition config checks sources.engine pre signed true = .ok state ∧
         after.blockStates = store.blockStates.insert blockRoot state := by
-  by_cases gloas : .glamsterdam ≤ fork
-  · rw [onBlock_of_gloas gloas] at added
-    cases added
-  simp only [onBlock, gloas, root, new, bind, Except.bind, Except.mapError, ↓reduceIte,
+  simp only [onBlock, root, new, bind, Except.bind, Except.mapError, ↓reduceIte,
     Bool.false_eq_true] at added
   unfold addBlock at added
   simp only [bind_ok_iff] at added
-  obtain ⟨state, valid, head, -, recorded, record, boosted, boost, added⟩ := added
+  obtain ⟨state, valid, head, -, voted, vote, recorded, record, boosted, boost, added⟩ := added
+  obtain ⟨-, b0, bs0⟩ := (recordBlockPtcVotes_onlyPtcVotes vote).frame
   obtain ⟨-, b1, bs1⟩ := recordBlockTimeliness_frame record
   obtain ⟨-, b2, bs2⟩ := updateProposerBoostRoot_frame boost
   obtain ⟨-, b3, bs3⟩ := computePulledUpTip_frame added
-  obtain ⟨pre, found, -, transition⟩ := validateOnBlock_ok valid
-  refine ⟨by rw [b3, updateCheckpoints_blocks, b2, b1], pre, state, found, transition, ?_⟩
-  rw [bs3, updateCheckpoints_blockStates, bs2, bs1]
+  obtain ⟨pre, found, -, -, transition⟩ := validateOnBlock_ok valid
+  refine ⟨by rw [b3, updateCheckpoints_blocks, b2, b1, b0], pre, state, found, transition, ?_⟩
+  rw [bs3, updateCheckpoints_blockStates, bs2, bs1, bs0]
 
 /-- No block lowers the epoch of the justified or the finalized checkpoint. -/
 theorem onBlock_epochsLe {checks : SignatureChecks} {sources : BlockSources preset fork}
@@ -704,17 +846,10 @@ theorem onBlock_epochsLe {checks : SignatureChecks} {sources : BlockSources pres
     {after : Store preset fork} (added : store.onBlock config checks sources signed = .ok after) :
     store.EpochsLe after := by
   cases root : SszType.hashTreeRoot signed.message with
-  | error e =>
-    unfold onBlock at added
-    split at added
-    · cases added
-    · simp [root, bind, Except.bind, Except.mapError] at added
+  | error e => simp [onBlock, root, bind, Except.bind, Except.mapError] at added
   | ok blockRoot =>
     by_cases known : store.blocks.contains blockRoot
-    · by_cases gloas : .glamsterdam ≤ fork
-      · rw [onBlock_of_gloas gloas] at added
-        cases added
-      rw [onBlock_known (Nat.lt_of_not_le gloas) root known] at added
+    · rw [onBlock_known root known] at added
       cases added
       exact EpochsLe.refl _
     · exact (onBlock_new root known added).1
@@ -939,6 +1074,39 @@ theorem notifyPtcMessages_of_zero {checks : SignatureChecks} {gloas : .glamsterd
     (zero : state.slot = 0) :
     store.notifyPtcMessages config checks gloas state attestations = .ok store := by
   simp [notifyPtcMessages, zero, pure, Except.pure]
+
+/-- An accepted envelope names a block whose state the store holds.
+
+The data of the payload is available against the bid in that state.
+
+The envelope passes its checks against that state.
+
+The store then keeps the envelope at the root of its block, and nothing else changes. -/
+theorem onExecutionPayloadEnvelope_ok {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
+    {signed : SignedExecutionPayloadEnvelope preset fork} {after : Store preset fork}
+    (accepted : store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after) :
+    ∃ state, store.blockStates[signed.message.beaconBlockRoot]? = some state ∧
+      validatePayloadData config sources signed.message.beaconBlockRoot
+        (state.latestExecutionPayloadBid gloas) = .ok () ∧
+      verifyExecutionPayloadEnvelope config checks sources.engine state gloas signed = .ok () ∧
+      after = { store with payloads := fun _ =>
+        (store.payloads gloas).insert signed.message.beaconBlockRoot signed.message } := by
+  unfold onExecutionPayloadEnvelope at accepted
+  simp only [bind_ok_iff, mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at accepted
+  obtain ⟨state, found, available, data, checked, verified, rfl⟩ := accepted
+  cases available
+  cases checked
+  exact ⟨state, blockState_ok_iff.mp found, data, verified, rfl⟩
+
+/-- After an accepted envelope, the payload of its block counts as verified. -/
+theorem onExecutionPayloadEnvelope_verified {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
+    {signed : SignedExecutionPayloadEnvelope preset fork} {after : Store preset fork}
+    (accepted : store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after) :
+    after.isPayloadVerified gloas signed.message.beaconBlockRoot = true := by
+  obtain ⟨_, _, _, _, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
+  simp [isPayloadVerified]
 
 end Store
 

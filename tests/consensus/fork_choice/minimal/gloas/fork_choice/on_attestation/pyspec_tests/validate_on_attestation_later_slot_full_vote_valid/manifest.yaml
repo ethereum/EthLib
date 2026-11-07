@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: fork_choice
+handler: on_attestation
+suite: pyspec_tests
+case: validate_on_attestation_later_slot_full_vote_valid

@@ -44,7 +44,11 @@ It also votes on whether the blob data of the payload is available.
 
 Its vote counts for the block of its slot, from the wire or from a later block.
 
-From Gloas a block is not yet specified here.
+From Gloas the payload of a block comes later, in an envelope, with the data of its blobs.
+
+The node checks that data and the envelope against the state after the block, then keeps it.
+
+A block that builds on the payload of its parent needs that payload kept first.
 -/
 
 @[expose] public section
@@ -111,6 +115,21 @@ def validateMergeBlock (config : Config) (powBlock : Hash32 → Option PowBlock)
   let some parent := powBlock terminal.parentHash | throw (.unknownPowBlock terminal.parentHash)
   unless isValidTerminalPowBlock config terminal parent do throw (.notTerminalPowBlock parentHash)
 
+/-- From Fulu: whether the node gets every column that it samples for a block, each valid.
+
+Each column must have a valid shape, and the proofs of its cells must match the commitments.
+
+From Gloas the commitments are those of the bid of the block, and before they are in each column.
+-/
+def columnsAvailable (config : Config) (sources : BlockSources preset fork) (root : Root)
+    (bidCommitments : Since .glamsterdam fork (BlobKZGCommitments preset fork)) :
+    Except ForkChoiceError Bool := do
+  let some sidecars := sources.columns root | throw (.columnsUnavailable root)
+  sidecars.allM fun sidecar =>
+    if verifyDataColumnSidecar preset config sidecar bidCommitments then
+      (verifyDataColumnSidecarKzgProofs sources.setup sidecar bidCommitments).mapError .kzg
+    else pure false
+
 /-- From Deneb: whether the data of a block is available, as the node must check.
 
 At Deneb and Electra the node must hold the blobs of the block and a proof for each.
@@ -127,14 +146,8 @@ def isDataAvailable (config : Config) (sources : BlockSources preset fork)
     (block : BeaconBlock preset fork) (root : Root)
     (range : .dencun ≤ fork ∧ fork < .glamsterdam) : Except ForkChoiceError Bool := do
   if .fusaka ≤ fork then
-    let some sidecars := sources.columns root | throw (.columnsUnavailable root)
     -- Before Gloas a column carries its commitments, so the bid of the block is never read.
-    let noBid : Since .glamsterdam fork (BlobKZGCommitments preset fork) :=
-      fun gloas => absurd gloas (not_glamsterdam_le range.2)
-    sidecars.allM fun sidecar =>
-      if verifyDataColumnSidecar preset config sidecar noBid then
-        (verifyDataColumnSidecarKzgProofs sources.setup sidecar noBid).mapError .kzg
-      else pure false
+    columnsAvailable config sources root fun gloas => absurd gloas (not_glamsterdam_le range.2)
   else
     let some (blobs, proofs) := sources.blobsAndProofs root | throw (.blobsUnavailable root)
     (verifyBlobKzgProofBatch sources.setup blobs (block.body.blobKzgCommitments range).data
@@ -144,10 +157,10 @@ def isDataAvailable (config : Config) (sources : BlockSources preset fork)
 
 Before Deneb a block has no blobs, and the check passes.
 
-From Gloas the data travels apart from the block, which is not yet specified here, so it fails. -/
+From Gloas the data comes with the payload, so the check of the block passes. -/
 def validateDataAvailability (config : Config) (sources : BlockSources preset fork)
     (block : BeaconBlock preset fork) (blockRoot : Root) : Except ForkChoiceError Unit := do
-  if gloas : .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
+  if gloas : .glamsterdam ≤ fork then pure ()
   else if deneb : .dencun ≤ fork then
     unless ← isDataAvailable config sources block blockRoot ⟨deneb, Nat.lt_of_not_le gloas⟩ do
       throw (if .fusaka ≤ fork then .invalidColumns blockRoot else .blobsNotMatching blockRoot)
@@ -502,13 +515,27 @@ def updateProposerBoostRoot (head root : Root) : Except ForkChoiceError (Store p
     return { store with proposerBoostRoot := root }
   return store
 
+/-- From Gloas: check that the payload of the parent of a block is kept when the block builds on it.
+
+Before Gloas a block holds its own payload, and the check passes. -/
+def validateParentPayload (block : BeaconBlock preset fork) : Except ForkChoiceError Unit :=
+  if gloas : .glamsterdam ≤ fork then do
+    let full ← store.isParentNodeFull block
+    if full ∧ !store.isPayloadVerified gloas block.parentRoot then
+      throw (.payloadNotVerified block.parentRoot)
+  else pure ()
+
 /-- Check a new signed block, and return the state after it.
 
-The parent must be known, and the block must not be from the future.
+The state after the parent must be known.
+
+From Gloas, a block that builds on the payload of its parent needs that payload kept.
+
+The block must not be from the future.
 
 The block must be after the finalized slot, and its chain must hold the finalized block.
 
-From Deneb its data must be available.
+At Deneb, Electra and Fulu its data must be available.
 
 The state transition must accept the block, with its signatures and its state root.
 
@@ -518,6 +545,7 @@ def validateOnBlock (checks : SignatureChecks) (sources : BlockSources preset fo
     Except ForkChoiceError (BeaconState preset fork) := do
   let block := signed.message
   let preState ← store.blockState block.parentRoot
+  store.validateParentPayload block
   if (← store.getCurrentSlot config) < block.slot then throw (.futureBlock block.slot)
   let finalizedSlot ←
     (computeStartSlotAtEpoch preset store.finalizedCheckpoint.epoch).mapError .arith
@@ -535,9 +563,31 @@ def validateOnBlock (checks : SignatureChecks) (sources : BlockSources preset fo
       validateMergeBlock config sources.powBlock block range
   return state
 
+/-- From Gloas: the store with no vote yet of the payload committee on a new block.
+
+The votes of the committee that the block carries then go through their handler.
+
+They name the parent of the block, and the state after the block finds their members.
+
+Before Gloas the store is unchanged. -/
+def recordBlockPtcVotes (checks : SignatureChecks) (signed : SignedBeaconBlock preset fork)
+    (blockRoot : Root) (state : BeaconState preset fork) :
+    Except ForkChoiceError (Store preset fork) :=
+  if gloas : .glamsterdam ≤ fork then
+    let noVotes := Vector.replicate preset.PTC_SIZE.toNat none
+    let store := { store with
+      payloadTimelinessVote := fun _ => (store.payloadTimelinessVote gloas).insert blockRoot noVotes
+      payloadDataAvailabilityVote := fun _ =>
+        (store.payloadDataAvailabilityVote gloas).insert blockRoot noVotes }
+    store.notifyPtcMessages config checks gloas state
+      (signed.message.body.payloadAttestations gloas).data.toList
+  else pure store
+
 /-- The store with a new block, the state after it, and the updates that the block brings.
 
-Those are its timeliness, the boost and the checkpoints. -/
+From Gloas those start with the votes of the payload committee.
+
+Then come its timeliness, the boost and the checkpoints. -/
 def addBlock (checks : SignatureChecks) (sources : BlockSources preset fork)
     (signed : SignedBeaconBlock preset fork) (blockRoot : Root) :
     Except ForkChoiceError (Store preset fork) := do
@@ -546,17 +596,15 @@ def addBlock (checks : SignatureChecks) (sources : BlockSources preset fork)
   let store := { store with
     blocks := store.blocks.insert blockRoot signed.message
     blockStates := store.blockStates.insert blockRoot state }
+  let store ← store.recordBlockPtcVotes config checks signed blockRoot state
   let store ← store.recordBlockTimeliness config blockRoot
   let store ← store.updateProposerBoostRoot config head.root blockRoot
   let store := store.updateCheckpoints state.currentJustifiedCheckpoint state.finalizedCheckpoint
   store.computePulledUpTip config blockRoot
 
-/-- The store after a signed block: a known block changes nothing, and a new one is added.
-
-From Gloas the rule changes, and it fails there as not yet specified. -/
+/-- The store after a signed block: a known block changes nothing, and a new one is added. -/
 def onBlock (checks : SignatureChecks) (sources : BlockSources preset fork)
     (signed : SignedBeaconBlock preset fork) : Except ForkChoiceError (Store preset fork) := do
-  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
   let blockRoot ← (SszType.hashTreeRoot signed.message).mapError .ssz
   if store.blocks.contains blockRoot then pure store
   else store.addBlock config checks sources signed blockRoot
@@ -565,7 +613,9 @@ def onBlock (checks : SignatureChecks) (sources : BlockSources preset fork)
 
 The block comes first, then its attestations, then its attester slashings.
 
-The attestations come from a block, so the clock does not bound their epoch. -/
+The attestations come from a block, so the clock does not bound their epoch.
+
+From Gloas the block itself passes on the votes of the payload committee that it carries. -/
 def onBlockWithVotes (checks : SignatureChecks) (sources : BlockSources preset fork)
     (signed : SignedBeaconBlock preset fork) : Except ForkChoiceError (Store preset fork) := do
   let store ← store.onBlock config checks sources signed
@@ -573,6 +623,34 @@ def onBlockWithVotes (checks : SignatureChecks) (sources : BlockSources preset f
     (fun store attestation => store.onAttestation config checks attestation true) store
   signed.message.body.attesterSlashings.data.foldlM
     (fun store slashing => store.onAttesterSlashing config checks slashing) store
+
+/-- From Gloas: check that the node gets the data of the payload of a block.
+
+Each column that it samples must be valid against the commitments of the bid of the block. -/
+def validatePayloadData (config : Config) (sources : BlockSources preset fork) (root : Root)
+    (bid : ExecutionPayloadBid preset fork) :
+    Except ForkChoiceError Unit := do
+  unless ← columnsAvailable config sources root (fun _ => bid.blobKzgCommitments) do
+    throw (.invalidColumns root)
+
+/-- The store after a signed envelope, from Gloas: the payload of its block is then verified.
+
+The store must hold the state after the block that the envelope names.
+
+The node must get the data of the payload, against the bid that the state after the block holds.
+
+The envelope must pass its checks against that state.
+
+The store then keeps the envelope, by the root of its block. -/
+def onExecutionPayloadEnvelope (checks : SignatureChecks) (sources : BlockSources preset fork)
+    (gloas : .glamsterdam ≤ fork) (signed : SignedExecutionPayloadEnvelope preset fork) :
+    Except ForkChoiceError (Store preset fork) := do
+  let root := signed.message.beaconBlockRoot
+  let state ← store.blockState root
+  validatePayloadData config sources root (state.latestExecutionPayloadBid gloas)
+  (verifyExecutionPayloadEnvelope config checks sources.engine state gloas signed).mapError
+    .transition
+  return { store with payloads := fun _ => (store.payloads gloas).insert root signed.message }
 
 end Store
 

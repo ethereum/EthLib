@@ -174,6 +174,22 @@ inductive TransitionError where
   | tooManyOperations (count limit : Nat)
   /-- From Gloas: an attestation has an index other than zero or one. -/
   | attestationIndexAboveOne (index : CommitteeIndex)
+  /-- From Gloas: an envelope does not carry the signature of its signer. -/
+  | invalidEnvelopeSignature
+  /-- From Gloas: an envelope names another beacon block than the latest one of the state. -/
+  | envelopeWrongBlockRoot
+  /-- From Gloas: an envelope names another parent than that of the latest beacon block. -/
+  | envelopeWrongParentRoot
+  /-- From Gloas: an envelope names another builder than the bid of its block. -/
+  | envelopeWrongBuilder
+  /-- From Gloas: a payload has another gas limit than the bid of its block. -/
+  | wrongPayloadGasLimit
+  /-- From Gloas: a payload has another block hash than the bid of its block. -/
+  | wrongPayloadBlockHash
+  /-- From Gloas: the requests of a payload are not those that the bid of its block commits to. -/
+  | wrongPayloadRequestsRoot
+  /-- From Gloas: a payload is for another slot than that of the state. -/
+  | wrongPayloadSlot (slot stateSlot : Slot)
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -258,6 +274,14 @@ def TransitionError.code : TransitionError → UInt32
   | .wrongParentRequestsRoot => 79
   | .tooManyOperations .. => 80
   | .attestationIndexAboveOne _ => 81
+  | .invalidEnvelopeSignature => 82
+  | .envelopeWrongBlockRoot => 83
+  | .envelopeWrongParentRoot => 84
+  | .envelopeWrongBuilder => 85
+  | .wrongPayloadGasLimit => 86
+  | .wrongPayloadBlockHash => 87
+  | .wrongPayloadRequestsRoot => 88
+  | .wrongPayloadSlot .. => 89
 
 /-- An error of a state accessor, as an error of the transition. -/
 def liftAccessor {α : Type} (result : Except AccessorError α) : Except TransitionError α :=

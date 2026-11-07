@@ -205,23 +205,21 @@ theorem onBlock_ordered {checks : SignatureChecks}
     {sources : BlockSources preset fork} {signed : SignedBeaconBlock preset fork}
     (ordered : store.EpochsOrdered) (holds : store.StatesHold)
     (added : store.onBlock config checks sources signed = .ok after) : after.EpochsOrdered := by
-  by_cases gloas : .glamsterdam ≤ fork
-  · rw [onBlock_of_gloas gloas] at added
-    cases added
   cases root : SszType.hashTreeRoot signed.message with
   | error e =>
-    simp [onBlock, gloas, root, bind, Except.bind, Except.mapError] at added
+    simp [onBlock, root, bind, Except.bind, Except.mapError] at added
   | ok blockRoot =>
     by_cases known : store.blocks.contains blockRoot
-    · rw [onBlock_known (Nat.lt_of_not_le gloas) root known] at added
+    · rw [onBlock_known root known] at added
       cases added
       exact ordered
-    simp only [onBlock, gloas, root, known, bind, Except.bind, Except.mapError, ↓reduceIte,
+    simp only [onBlock, root, known, bind, Except.bind, Except.mapError, ↓reduceIte,
       Bool.false_eq_true] at added
     unfold addBlock at added
     simp only [bind_ok_iff] at added
-    obtain ⟨state, valid, head, -, recorded, record, boosted, boost, added⟩ := added
-    obtain ⟨pre, found, -, transition⟩ := validateOnBlock_ok valid
+    obtain ⟨state, valid, head, -, voted, vote, recorded, record, boosted, boost, added⟩ := added
+    obtain ⟨_, _, rfl⟩ := recordBlockPtcVotes_onlyPtcVotes vote
+    obtain ⟨pre, found, -, -, transition⟩ := validateOnBlock_ok valid
     have invariant := (stateTransition_invariant (holds found) transition).1
     have recordedOrdered : recorded.EpochsOrdered := by
       unfold recordBlockTimeliness at record

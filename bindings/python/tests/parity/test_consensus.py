@@ -7,7 +7,11 @@ from consensus.test_epoch_processing import (
     HANDLERS as EPOCH_STEPS,
     MINIMAL_ONLY as EPOCH_MINIMAL_ONLY,
 )
-from consensus.test_fork_choice import HANDLERS as FORK_CHOICE, SPECIFIED as FORK_CHOICE_FORKS
+from consensus.test_fork_choice import (
+    GLOAS_HANDLERS as GLOAS_FORK_CHOICE,
+    HANDLERS as FORK_CHOICE,
+    SPECIFIED as FORK_CHOICE_FORKS,
+)
 from consensus.test_gossip_validation import (
     SPECIFIED as GOSSIP_FORKS,
     TOPICS as GOSSIP_TOPICS,
@@ -55,6 +59,7 @@ def test_every_group_has_a_runner_or_a_plan() -> None:
 # A mainnet fork choice or optimistic sync case holds an anchor state of that size too; the
 # mainnet archive has no reorg, withholding or deposit reorg case, and merge blocks only at
 # Bellatrix.
+# At Gloas it has no proposer head, filtered tree or proposer boost case either.
 # A mainnet gossip case holds an anchor state of a few hundred kilobytes too.
 # The custody cases of Gloas and Heze repeat those of Fulu, and only the fork name in their
 # manifest differs, so only the Fulu cases are vendored.
@@ -96,13 +101,20 @@ NOT_VENDORED = (
     | {f"mainnet/{fork}/{group}" for group, forks in TRANSITION_GROUPS.items() for fork in forks}
     | {
         f"mainnet/{fork}/fork_choice/{handler}"
-        for handler in FORK_CHOICE
+        for handler in FORK_CHOICE + GLOAS_FORK_CHOICE
         for fork in FORK_CHOICE_FORKS
         # The optimistic cases sit under sync, not fork_choice.
         if handler not in ("deposit_with_reorg", "reorg", "withholding", "optimistic")
+        and handler not in ("filter_node_tree_variants", "should_apply_proposer_boost")
         and (handler != "on_merge_block" or fork == "bellatrix")
+        and (handler != "get_proposer_head" or fork != "gloas")
+        and (handler not in GLOAS_FORK_CHOICE or fork == "gloas")
     }
-    | {f"mainnet/{fork}/sync/optimistic" for fork in FORK_CHOICE_FORKS if fork != "altair"}
+    | {
+        f"mainnet/{fork}/sync/optimistic"
+        for fork in FORK_CHOICE_FORKS
+        if fork not in ("altair", "gloas")
+    }
     | {
         f"mainnet/{fork}/networking/gossip_{topic}"
         for topic in GOSSIP_TOPICS
