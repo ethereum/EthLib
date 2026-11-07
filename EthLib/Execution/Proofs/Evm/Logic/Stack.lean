@@ -39,11 +39,6 @@ theorem instruction_of_stackOnlyStep {Meter : Type} [GasMeter Meter] {op : Op}
     (h : stackOnlyStep fork op = some run) : instruction fork op = some run := by
   simp [instruction, h, HOrElse.hOrElse, OrElse.orElse, Option.orElse]
 
-/-- The byte `0x80 + n` decodes as DUP(n + 1). -/
-theorem decode_dup (n : Fin 16) : Op.decode (0x80 + n.val).toUInt8 = some (.dup n) := by
-  revert n
-  decide
-
 /-- The byte `0x90 + n` decodes as SWAP(n + 1). -/
 theorem decode_swap (n : Fin 16) : Op.decode (0x90 + n.val).toUInt8 = some (.swap n) := by
   revert n
@@ -75,21 +70,6 @@ theorem pop {x : U256} {rest : List U256} (hlt : pc < code.size) (hbyte : code[p
   rw [popStep_cons hst, charge_nat (by rw [hg]; exact hgas)]
   exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, hmem, by simp [hg, OPCODE_POP, BASE], hrun,
     herr, hs, hss⟩
-
-/-- DUP(n + 1) pushes a copy of the word `x` at depth `n`, for 3 gas, with room for a word. -/
-theorem dup (n : Fin 16) {x : U256} (hlt : pc < code.size)
-    (hbyte : code[pc] = (0x80 + n.val).toUInt8) (hx : stack[n.val]? = some x) (hgas : 3 ≤ gas)
-    (hstack : stack.length < STACK_LIMIT) :
-    Hoare fork (At code message pc stack memory gas state substate)
-      (At code message (pc + 1) (x :: stack) memory (gas - 3) state substate) := by
-  apply At.rule hlt hbyte (ofByte_of_decode (decode_dup n) (Fork.frontier_le _))
-    (instruction_of_stackOnlyStep rfl)
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
-  have hlen : evm.stack.val.length < STACK_LIMIT := by rw [hst]; exact hstack
-  rw [dupN_of_getElem? (x := x) (by rw [hst]; exact hx) hlen,
-    charge_nat (by rw [hg]; exact hgas)]
-  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], by simp [hst], hmem,
-    by simp [hg, OPCODE_DUP, VERY_LOW], hrun, herr, hs, hss⟩
 
 /-- SWAP(n + 1) exchanges the top word with the word `x` at depth `n + 1`, for 3 gas. -/
 theorem swap (n : Fin 16) {top x : U256} {rest : List U256} (hlt : pc < code.size)
