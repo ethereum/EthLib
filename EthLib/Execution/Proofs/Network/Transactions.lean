@@ -11,7 +11,7 @@ An announcement reads back from its RLP item on the versions that use its form.
 The transactions of an answer that passes the check have hashes that are requested hashes, in
 the order of the request.
 
-An answer passes exactly when its transactions hash, to a sublist of the requested hashes.
+An answer passes exactly when its transactions hash to a sublist of the requested hashes, in order.
 -/
 
 @[expose] public section
