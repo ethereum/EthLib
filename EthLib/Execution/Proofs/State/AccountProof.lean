@@ -33,7 +33,9 @@ The state and storage tries of a state have distinct keys, so soundness holds fo
 
 Completeness needs distinct paths, which in a secured trie means keys with distinct hashes.
 
-The account and slot checks pass exactly when the proof gives a value that matches the answer.
+Each of the two checks passes exactly when the proof gives no value, or a value matching the answer.
+
+A slot without a value also needs the word `0` in the answer.
 -/
 
 @[expose] public section
@@ -78,7 +80,7 @@ theorem verifyAccount_eq_ok {stateRoot : Hash32} {p : AccountProof} {present : B
           exact ⟨hd, h.symm⟩
         · simp [hm, throw, throwThe, MonadExceptOf.throw] at h
 
-/-- The account check passes exactly when the proof gives a value that matches the answer.
+/-- The account check passes exactly when the proof gives no value, or a matching value.
 
 A value must decode to the account and the storage root of the answer.
 
@@ -134,7 +136,7 @@ theorem verifySlot_eq_ok {storageRoot : Hash32} {index : Nat} {s : StorageProof}
           exact ⟨hd, h.symm⟩
         · simp [hm, throw, throwThe, MonadExceptOf.throw] at h
 
-/-- The slot check passes exactly when the proof gives a value that matches the answer.
+/-- The slot check passes exactly when the proof gives a matching value, or none and the word `0`.
 
 A value must decode to the word of the answer, and the check reports the slot set.
 
