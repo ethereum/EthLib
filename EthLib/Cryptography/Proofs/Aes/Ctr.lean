@@ -204,14 +204,28 @@ theorem xorKeystream_block (ciph : Block → Block) (m : Nat) {n j : Nat} (hj : 
 
 /-- Block `j` of a CTR output, counted from 0, is block `j` of the data XORed with a cipher output.
 
-The cipher takes the initial counter incremented `j` times, for every block `j` of the data. -/
-theorem ctr_block (ciph : Block → Block) (m : Nat) (T : Block) (data : ByteArray) {j : Nat}
-    (hj : j < (data.size + 15) / 16) :
+The cipher takes the initial counter incremented `j` times.
+
+It holds for every `j`: past the last block of the data, both sides are empty. -/
+theorem ctr_block (ciph : Block → Block) (m : Nat) (T : Block) (data : ByteArray) (j : Nat) :
     (((ctr ciph m T data).data.toList).drop (16 * j)).take 16
       = List.zipWith (· ^^^ ·) ((data.data.toList.drop (16 * j)).take 16)
           (ciph (Nat.repeat (inc m) j T)).toList := by
-  simp only [ctr, List.toList_toArray]
-  exact xorKeystream_block ciph m hj T data.data.toList
+  by_cases hj : j < (data.size + 15) / 16
+  · simp only [ctr, List.toList_toArray]
+    exact xorKeystream_block ciph m hj T data.data.toList
+  · -- Past the last block, the data and the output have no bytes left.
+    have hs := size_ctr ciph m T data
+    have hd : data.data.toList.length ≤ 16 * j := by
+      simp only [Array.length_toList]
+      show data.size ≤ 16 * j
+      omega
+    have ho : (ctr ciph m T data).data.toList.length ≤ 16 * j := by
+      simp only [Array.length_toList]
+      show (ctr ciph m T data).size ≤ 16 * j
+      omega
+    rw [List.drop_eq_nil_of_le ho, List.drop_eq_nil_of_le hd]
+    simp
 
 /-! ## Distinct counters
 
