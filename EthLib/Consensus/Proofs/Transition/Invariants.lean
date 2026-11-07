@@ -99,6 +99,7 @@ theorem ExitsOrdered.putValidator {index : Nat} {validator : Validator}
     (ordered : ExitsOrdered state) (le : validator.exitEpoch ≤ validator.withdrawableEpoch) :
     ExitsOrdered (state.putValidator index inside validator) := by
   intro other member
+  simp only [BeaconState.putValidator, RootedForkList.data_set] at member
   rcases Array.mem_or_eq_of_mem_set (w := inside) member with old | rfl
   · exact ordered other old
   · exact le
@@ -265,9 +266,10 @@ theorem frame_addValidatorToRegistry (altair : fork < .altair) {pubkey : BLSPubk
   split at computed
   · cases computed
     refine ⟨rfl, rfl, rfl, rfl, fun holds => ?_, fun ordered validator member => ?_⟩
-    · simp only [BalancesMatch, Array.size_push] at holds ⊢
+    · simp only [BalancesMatch, RootedForkList.data_push, Array.size_push] at holds ⊢
       omega
-    · rcases Array.mem_push.mp member with old | rfl
+    · rw [RootedForkList.data_push] at member
+      rcases Array.mem_push.mp member with old | rfl
       · exact ordered validator old
       · exact UInt64.le_refl _
   · cases computed

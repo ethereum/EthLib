@@ -57,8 +57,7 @@ def BeaconState.setBalance (state : BeaconState preset fork) (index : ValidatorI
 def BeaconState.putValidator (state : BeaconState preset fork) (index : Nat)
     (inside : index < state.validators.data.size) (validator : Validator) :
     BeaconState preset fork :=
-  { state with validators := ⟨state.validators.data.set index validator inside, by
-      simpa using state.validators.bound⟩ }
+  { state with validators := state.validators.set index validator inside }
 
 /-- The state with a validator of the registry replaced.
 

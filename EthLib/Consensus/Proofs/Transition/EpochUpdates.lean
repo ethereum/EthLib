@@ -71,7 +71,7 @@ theorem effectiveBalancesAligned_setValidator {index : ValidatorIndex} {validato
     EffectiveBalancesAligned after := by
   obtain ⟨inside, rfl⟩ := setValidator_ok set
   intro other member
-  simp only [BeaconState.putValidator, Array.toList_set] at member
+  simp only [BeaconState.putValidator, RootedForkList.data_set, Array.toList_set] at member
   rcases List.mem_or_eq_of_mem_set member with old | rfl
   · exact holds other old
   · exact good

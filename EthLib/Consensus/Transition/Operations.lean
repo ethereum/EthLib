@@ -364,7 +364,7 @@ def addValidatorToRegistryAltair (state : BeaconState preset fork) (altair : .al
   liftAccessor do
     let index := getIndexForNewValidator state
     let validator := getValidatorFromDeposit preset fork pubkey withdrawalCredentials amount
-    let validators ← setOrAppendList state.validators index validator
+    let validators ← setOrAppendRooted state.validators index validator
     let balances ← setOrAppendList state.balances index amount
     let previous ← setOrAppendList (state.previousEpochParticipation altair) index 0
     let current ← setOrAppendList (state.currentEpochParticipation altair) index 0
@@ -390,9 +390,9 @@ def addValidatorToRegistry (state : BeaconState preset fork) (pubkey : BLSPubkey
         state.balances.data.size < preset.VALIDATOR_REGISTRY_LIMIT.toNat then
       .ok { state with
         validators :=
-          ⟨state.validators.data.push
-              (getValidatorFromDeposit preset fork pubkey withdrawalCredentials amount),
-            fun _ => by simp only [Array.size_push]; omega⟩
+          state.validators.push
+            (getValidatorFromDeposit preset fork pubkey withdrawalCredentials amount)
+            fun _ => fits.1
         balances :=
           ⟨state.balances.data.push amount, fun _ => by simp only [Array.size_push]; omega⟩ }
     else .error .registryFull

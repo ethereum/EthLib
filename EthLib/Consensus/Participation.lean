@@ -69,6 +69,19 @@ def setOrAppendList {switch : Base.Fork} {α : Type} {limit : Nat}
     .ok ⟨list.data.set index.toNat value inside, fun before => by simpa using list.bound before⟩
   else .error (.indexOutOfRange index)
 
+/-- From Altair: a rooted list with the entry at an index set, or added at its end.
+
+The rules and the errors are those of a plain list, and the tree is rehashed along one path. -/
+def setOrAppendRooted {switch : Base.Fork} {α : Type} [SszType α] {limit : Nat}
+    (list : RootedForkList switch fork α limit) (index : UInt64) (value : α) :
+    Except AccessorError (RootedForkList switch fork α limit) :=
+  if index.toNat = list.data.size then
+    if fits : fork < switch → list.data.size + 1 ≤ limit then
+      .ok (list.push value fun before => fits before)
+    else .error (.listFull limit)
+  else if inside : index.toNat < list.data.size then .ok (list.set index.toNat value inside)
+  else .error (.indexOutOfRange index)
+
 /-- From Altair: the base reward of one increment of effective balance.
 
 It is a fixed factor of the increment over the square root of the total active balance.

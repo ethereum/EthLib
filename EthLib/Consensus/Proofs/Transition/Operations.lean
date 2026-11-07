@@ -404,6 +404,53 @@ theorem setOrAppendList_getElem? {switch : Base.Fork} {α : Type} {limit : Nat}
       simp only [Array.getElem?_set, eq_comm]
     · cases computed
 
+/-- A set or an append on a rooted list adds one entry exactly when the index is its size. -/
+theorem setOrAppendRooted_size {switch : Base.Fork} {α : Type} [SszType α] {limit : Nat}
+    {list list' : RootedForkList switch fork α limit} {index : UInt64} {value : α}
+    (computed : setOrAppendRooted list index value = .ok list') :
+    list'.data.size = if index.toNat = list.data.size then list.data.size + 1
+      else list.data.size := by
+  unfold setOrAppendRooted at computed
+  split at computed
+  · rename_i atEnd
+    split at computed
+    · cases computed
+      simp [atEnd]
+    · cases computed
+  · rename_i notEnd
+    split at computed
+    · cases computed
+      simp [notEnd]
+    · cases computed
+
+/-- A set or an append on a rooted list has the outcome of the plain one, on the elements. -/
+theorem setOrAppendRooted_toForkList {switch : Base.Fork} {α : Type} [SszType α] {limit : Nat}
+    (list : RootedForkList switch fork α limit) (index : UInt64) (value : α) :
+    RootedForkList.toForkList <$> setOrAppendRooted list index value
+      = setOrAppendList list.toForkList index value := by
+  unfold setOrAppendRooted setOrAppendList appendWithinLimit
+  by_cases atEnd : index.toNat = list.data.size
+  · have atEnd' : index.toNat = list.toForkList.data.size := atEnd
+    by_cases fits : fork < switch → list.data.size + 1 ≤ limit
+    · have fits' : fork < switch → list.toForkList.data.size + 1 ≤ limit := fits
+      rw [ite_eq_left atEnd, ite_eq_left atEnd', dite_eq_left fits, dite_eq_left fits']
+      rfl
+    · have fits' : ¬(fork < switch → list.toForkList.data.size + 1 ≤ limit) := fits
+      rw [ite_eq_left atEnd, ite_eq_left atEnd', dite_eq_right fits, dite_eq_right fits']
+      rfl
+  · by_cases inside : index.toNat < list.data.size
+    · simp [atEnd, inside, RootedForkList.toForkList, Functor.map, Except.map]
+    · simp [atEnd, inside, RootedForkList.toForkList, Functor.map, Except.map]
+
+/-- A set or an append on a rooted list puts the value at the index, and keeps the rest. -/
+theorem setOrAppendRooted_getElem? {switch : Base.Fork} {α : Type} [SszType α] {limit : Nat}
+    {list list' : RootedForkList switch fork α limit} {index : UInt64} {value : α}
+    (computed : setOrAppendRooted list index value = .ok list') (i : Nat) :
+    list'.data[i]? = if i = index.toNat then some value else list.data[i]? := by
+  have plain := setOrAppendRooted_toForkList list index value
+  rw [computed] at plain
+  exact setOrAppendList_getElem? plain.symm i
+
 /-- From Altair, a new validator keeps the deposit data and the next deposit index. -/
 theorem addValidatorToRegistryAltair_eth1 {altair : .altair ≤ fork} {pubkey : BLSPubkey}
     {withdrawalCredentials : Bytes32} {amount : Gwei}
@@ -424,7 +471,7 @@ theorem balancesMatch_addValidatorToRegistryAltair {altair : .altair ≤ fork} {
   simp only [liftAccessor_ok, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨validators, validatorsOk, balances, balancesOk, _, _, _, _, _, _, rfl⟩ := computed
   unfold BalancesMatch at holds ⊢
-  rw [setOrAppendList_size validatorsOk, setOrAppendList_size balancesOk, holds]
+  rw [setOrAppendRooted_size validatorsOk, setOrAppendList_size balancesOk, holds]
 
 /-- A new validator keeps one balance for each validator. -/
 theorem balancesMatch_addValidatorToRegistry {pubkey : BLSPubkey}
@@ -437,7 +484,7 @@ theorem balancesMatch_addValidatorToRegistry {pubkey : BLSPubkey}
   · split at computed
     · cases computed
       unfold BalancesMatch at holds ⊢
-      simp only [Array.size_push, holds]
+      simp only [Array.size_push, RootedForkList.data_push, holds]
     · cases computed
 
 /-- A new validator keeps the deposit data and the next deposit index. -/
@@ -526,13 +573,13 @@ theorem addValidatorToRegistry_validator {pubkey : BLSPubkey} {withdrawalCredent
   · unfold addValidatorToRegistryAltair at computed
     simp only [liftAccessor_ok, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨validators, validatorsOk, _, _, _, _, _, _, _, _, rfl⟩ := computed
-    rw [setOrAppendList_getElem? validatorsOk] at found
+    rw [setOrAppendRooted_getElem? validatorsOk] at found
     split at found
     · exact .inr (Option.some.inj found).symm
     · exact .inl found
   · split at computed
     · cases computed
-      rw [Array.getElem?_push] at found
+      rw [RootedForkList.data_push, Array.getElem?_push] at found
       split at found
       · exact .inr (Option.some.inj found).symm
       · exact .inl found
