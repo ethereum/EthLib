@@ -317,6 +317,44 @@ theorem toByte_ofByte (b : UInt8) : (ResponseCode.ofByte b).toByte = b := by
     by_cases h3 : b = 3 <;> by_cases h4 : b < 128 <;>
     simp [ResponseCode.ofByte, ResponseCode.toByte, h0, h1, h2, h3, h4]
 
+/-- A code byte, the context bytes and payload bytes that decode back make a chunk that decodes.
+
+The payload decodes at the bounds of its code.
+
+On a success those are the bounds of the message type, and otherwise those of an error message. -/
+private theorem decodeResponseChunk_append {contextBytes : Nat} {typeMin typeBound : UInt64}
+    {c : ResponseChunk} {p : ByteArray}
+    (hc : ResponseCode.ofByte c.code.toByte = c.code)
+    (hctx : c.context.size = if c.code = .success then contextBytes else 0)
+    (hd : decodePayload (if c.code = .success then typeMin else 0)
+      (if c.code = .success then typeBound else MAX_ERROR_MESSAGE_SIZE) p = .ok c.payload) :
+    decodeResponseChunk contextBytes typeMin typeBound (⟨#[c.code.toByte]⟩ ++ c.context ++ p) =
+      .ok c := by
+  obtain ⟨code, context, payload⟩ := c
+  simp only at hc hctx hd
+  have hbytes : (⟨#[code.toByte]⟩ ++ context ++ p : ByteArray).data.toList =
+      code.toByte :: (context.data.toList ++ p.data.toList) := by
+    simp [ByteArray.data_append]
+  simp only [decodeResponseChunk, hbytes, hc]
+  by_cases hs : code = .success
+  · subst hs
+    simp only [ite_true] at hctx hd
+    subst hctx
+    have hlen : context.data.toList.length = context.size := Array.length_toList
+    rw [List.drop_left' hlen, List.take_left' hlen, mk_toList, mk_toList]
+    simp [hlen, hd, bind, Except.bind, pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
+  · simp only [hs, ite_false] at hctx hd
+    have hctx' : context = ByteArray.empty := by
+      obtain ⟨⟨l⟩⟩ := context
+      cases l with
+      | nil => rfl
+      | cons _ _ => simp [ByteArray.size] at hctx
+    subst hctx'
+    rw [show ByteArray.empty.data.toList = [] from rfl, List.nil_append, mk_toList]
+    cases code with
+    | success => contradiction
+    | _ => simp [hd, bind, Except.bind, pure, Except.pure]
+
 /-- A response chunk of the literal encoder decodes back.
 
 Its code must be the code of its own byte, which excludes a reserved code outside 4 to 127.
@@ -334,33 +372,31 @@ theorem decodeResponseChunk_encodeResponseChunkLiteral {contextBytes : Nat}
     (hm : c.code = .success → typeMin.toNat ≤ c.payload.size) :
     decodeResponseChunk contextBytes typeMin typeBound (encodeResponseChunkLiteral c) =
       .ok c := by
-  obtain ⟨code, context, payload⟩ := c
-  simp only at hc hctx hp ht hm
-  have hbytes : (encodeResponseChunkLiteral ⟨code, context, payload⟩).data.toList =
-      code.toByte :: (context.data.toList ++ (encodePayloadLiteral payload).data.toList) := by
-    simp [encodeResponseChunkLiteral, ByteArray.data_append]
-  simp only [decodeResponseChunk, hbytes, hc]
-  by_cases hs : code = .success
-  · subst hs
-    simp only [ite_true] at hctx ht
-    subst hctx
-    have hlen : context.data.toList.length = context.size := Array.length_toList
-    rw [List.drop_left' hlen, List.take_left' hlen, mk_toList]
-    simp [hlen, decodePayload_encodePayloadLiteral hp ht (hm rfl), bind, Except.bind, pure,
-      Except.pure, throw, throwThe, MonadExceptOf.throw]
-  · simp only [hs, ite_false] at hctx ht
-    have hctx' : context = ByteArray.empty := by
-      obtain ⟨⟨l⟩⟩ := context
-      cases l with
-      | nil => rfl
-      | cons _ _ => simp [ByteArray.size] at hctx
-    subst hctx'
-    rw [show ByteArray.empty.data.toList = [] from rfl, List.nil_append, mk_toList]
-    cases code with
-    | success => contradiction
-    | _ =>
-      simp [decodePayload_encodePayloadLiteral (typeMin := 0) hp ht (Nat.zero_le _), bind,
-        Except.bind, pure, Except.pure]
+  refine decodeResponseChunk_append hc hctx (decodePayload_encodePayloadLiteral hp ht ?_)
+  split
+  · exact hm ‹_›
+  · exact Nat.zero_le _
+
+/-- A response chunk of the encoder that compresses decodes back.
+
+Its code must be the code of its own byte, which excludes a reserved code outside 4 to 127.
+
+A success carries the context bytes of the method, and an error carries none.
+
+The payload fits the bounds of its code. -/
+theorem decodeResponseChunk_encodeResponseChunk {contextBytes : Nat}
+    {typeMin typeBound : UInt64} {c : ResponseChunk}
+    (hc : ResponseCode.ofByte c.code.toByte = c.code)
+    (hctx : c.context.size = if c.code = .success then contextBytes else 0)
+    (hp : c.payload.size ≤ MAX_PAYLOAD_SIZE.toNat)
+    (ht : c.payload.size ≤
+      (if c.code = .success then typeBound else MAX_ERROR_MESSAGE_SIZE).toNat)
+    (hm : c.code = .success → typeMin.toNat ≤ c.payload.size) :
+    decodeResponseChunk contextBytes typeMin typeBound (encodeResponseChunk c) = .ok c := by
+  refine decodeResponseChunk_append hc hctx (decodePayload_encodePayload hp ht ?_)
+  split
+  · exact hm ‹_›
+  · exact Nat.zero_le _
 
 /-! ## Error codes -/
 

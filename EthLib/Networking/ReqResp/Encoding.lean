@@ -220,4 +220,12 @@ It is the inverse that proofs, tests and bindings use, not a compressor. -/
 def encodeResponseChunkLiteral (chunk : ResponseChunk) : ByteArray :=
   ⟨#[chunk.code.toByte]⟩ ++ chunk.context ++ encodePayloadLiteral chunk.payload
 
+/-- A response chunk that decodes to `chunk`, with its payload in a stream that compresses.
+
+The code and the context bytes are written as they are.
+
+It does not check that the context bytes or the payload fit the method or the code. -/
+def encodeResponseChunk (chunk : ResponseChunk) : ByteArray :=
+  ⟨#[chunk.code.toByte]⟩ ++ chunk.context ++ encodePayload chunk.payload
+
 end EthLib.Networking.ReqResp

@@ -12,7 +12,7 @@ The fork of a chunk is a parameter, which the caller reads from the context byte
 
 - Take a successful chunk that decodes at the bounds of its protocol.
   Its payload is within the bounds of its SSZ type.
-- A response value that a server serializes, within the payload cap, makes a chunk that decodes.
+- A value that a server serializes, within the payload cap, makes a compressed chunk that decodes.
 - That chunk decodes at those bounds, and its payload reads back as the value.
 -/
 
@@ -74,7 +74,7 @@ theorem withinBounds_of_decodeResponseChunk {shape : Desc} {contextBytes : Nat} 
   obtain ⟨rest, hp⟩ := decodePayload_of_decodeResponseChunk hd hs
   exact withinBounds_of_decodePayload hp
 
-/-- A response value that a server serializes, within the cap, makes a chunk that decodes.
+/-- A response value that a server serializes, within the cap, makes a compressed chunk.
 
 The chunk decodes at the bounds of its protocol, and its payload reads back as the value. -/
 theorem decodeResponseChunk_response {α : Type} [SszType α] [LawfulSszType α] {a : α}
@@ -84,14 +84,14 @@ theorem decodeResponseChunk_response {α : Type} [SszType α] [LawfulSszType α]
     (hctx : context.size = contextBytes) :
     ∃ lo hi, responseBounds preset config chunkFork id = some (lo, hi) ∧
       decodeResponseChunk contextBytes lo hi
-        (encodeResponseChunkLiteral ⟨.success, context, data⟩) = .ok ⟨.success, context, data⟩ ∧
+        (encodeResponseChunk ⟨.success, context, data⟩) = .ok ⟨.success, context, data⟩ ∧
       SszType.deserialize α data = .ok a := by
   have untyped := SszType.serialize_ok_iff.mp wrote
   have hsize : data.size = data.data.size := rfl
   obtain ⟨hlow, hhigh⟩ := withinBounds_of_serialize (LawfulSszType.fits a) untyped
   refine ⟨(payloadBounds (SszType.desc α)).1, (payloadBounds (SszType.desc α)).2,
     responseBounds_eq h, ?_, SszType.deserialize_serialize wrote⟩
-  apply decodeResponseChunk_encodeResponseChunkLiteral
+  apply decodeResponseChunk_encodeResponseChunk
   · rfl
   · simp [hctx]
   · exact hcap
