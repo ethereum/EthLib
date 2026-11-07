@@ -18,7 +18,9 @@ The check of a normalized branch reads those nodes as the zero front, so it give
 
 A bootstrap exists only for a state at the slot of its block.
 
-An update has the slot of its block and enough participants.
+An update takes the slot of its block as its signature slot.
+
+The aggregate of that block has enough participants.
 -/
 
 @[expose] public section
@@ -129,18 +131,5 @@ theorem createLightClientUpdate_signature {config : Config} {signatureFork final
     | split at tail
     | simp only [bind, Except.bind, pure, Except.pure] at tail)
   all_goals (simp only [Except.ok.injEq] at tail; subst tail; exact ⟨rfl, rfl⟩)
-
-/-- The optimistic update and the finality update of an update agree on what they share.
-
-They share the attested header, the aggregate and the signature slot. -/
-theorem createLightClientOptimisticUpdate_eq_finalityUpdate
-    (update : LightClientUpdate preset fork) :
-    (createLightClientOptimisticUpdate update).attestedHeader =
-        (createLightClientFinalityUpdate update).attestedHeader ∧
-      (createLightClientOptimisticUpdate update).syncAggregate =
-        (createLightClientFinalityUpdate update).syncAggregate ∧
-      (createLightClientOptimisticUpdate update).signatureSlot =
-        (createLightClientFinalityUpdate update).signatureSlot :=
-  ⟨rfl, rfl, rfl⟩
 
 end EthLib.Consensus
