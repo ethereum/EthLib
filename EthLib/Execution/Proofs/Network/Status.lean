@@ -12,6 +12,10 @@ The decoder of eth/68 rejects the Status of eth/69, and the decoder of each late
 the Status of eth/68.
 
 A node accepts a Status that carries its own version, its own fork identifier and a valid range.
+
+It accepts a Status exactly when the version matches and the fork identifier passes.
+
+From eth/69 the range must also be valid, and the network ID and genesis hash play no part.
 -/
 
 @[expose] public section
@@ -83,5 +87,32 @@ theorem checkStatus_own {version : EthVersion} {s : Schedule} {number timestamp 
       (.eth69 version.number networkId genesis (s.forkId number timestamp) r) = .ok () := by
   simp [checkStatus, Status.version, Status.forkId, s.validate_forkId_self number timestamp hs hn,
     hr, Except.mapError, bind, Except.bind, pure, Except.pure]
+
+/-- A node accepts a Status exactly when three conditions hold.
+
+The Status carries the version of the node, and its fork identifier passes the check of the node.
+
+From eth/69, the announced range does not start after it ends.
+
+The network ID and the genesis hash play no part, so a Status with any of them passes. -/
+theorem checkStatus_eq_ok_iff {version : EthVersion} {s : Schedule} {number timestamp : Nat}
+    {status : Status} :
+    checkStatus version s number timestamp status = .ok () ↔
+      status.version = version.number ∧ s.validate number timestamp status.forkId = .ok () ∧
+        match status with
+        | .eth68 .. => True
+        | .eth69 _ _ _ _ r => r.Valid := by
+  unfold checkStatus
+  by_cases hv : status.version = version.number
+  · cases hf : s.validate number timestamp status.forkId with
+    | error e => simp [hv, Except.mapError, bind, Except.bind]
+    | ok u =>
+      cases status with
+      | eth68 => simp [hv, Except.mapError, bind, Except.bind, pure, Except.pure]
+      | eth69 _ _ _ _ r =>
+        by_cases hr : r.Valid <;>
+          simp [hv, hr, Except.mapError, bind, Except.bind, pure, Except.pure, throw,
+            throwThe, MonadExceptOf.throw]
+  · simp [hv, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
 
 end EthLib.Execution.Network
