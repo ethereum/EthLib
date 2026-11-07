@@ -4,6 +4,7 @@ import pytest
 
 from dumper import hex_str, write_case
 from ethlib.cryptography import sha256
+from raising import raises
 
 from . import fixtures
 
@@ -22,3 +23,9 @@ def test_hash(i: int) -> None:
         fixtures.CASE_NAMES[i],
         {"input": {"message": hex_str(message)}, "output": hex_str(digest)},
     )
+
+
+def test_rejects_non_bytes() -> None:
+    # The binding takes only `bytes`.
+    with raises(TypeError, "data must be bytes"):
+        sha256.sha256("abc")  # ty: ignore[invalid-argument-type]

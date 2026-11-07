@@ -204,6 +204,13 @@ def test_concat_kdf_blocks() -> None:
 def test_rejects_non_bytes() -> None:
     with raises(TypeError, "key must be bytes"):
         hmac_sha256("key", b"message")  # ty: ignore[invalid-argument-type]
+    with raises(TypeError, "message must be bytes"):
+        hmac_sha256(b"key", "message")  # ty: ignore[invalid-argument-type]
+    # The extract step is HMAC-SHA-256 with the salt as key and the keying material as message.
+    with raises(TypeError, "key must be bytes"):
+        hkdf_extract("salt", b"ikm")  # ty: ignore[invalid-argument-type]
+    with raises(TypeError, "message must be bytes"):
+        hkdf_extract(b"salt", "ikm")  # ty: ignore[invalid-argument-type]
     with raises(TypeError, "ikm must be bytes"):
         hkdf(b"salt", "ikm", b"info", 32)  # ty: ignore[invalid-argument-type]
     with raises(TypeError, "fixed_info must be bytes"):

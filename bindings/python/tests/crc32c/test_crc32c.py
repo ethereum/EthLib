@@ -68,3 +68,5 @@ def test_reference() -> None:
 def test_rejects_non_bytes() -> None:
     with raises(TypeError, "data must be bytes"):
         crc32c.digest("abc")  # ty: ignore[invalid-argument-type]
+    with raises(TypeError, "data must be bytes"):
+        crc32c.crc32c("abc")  # ty: ignore[invalid-argument-type]
