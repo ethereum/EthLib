@@ -75,7 +75,7 @@ theorem runFrame_process (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
         evm within = .error e ∧ e.aborts = true := by
   rcases CallFlag.runFrame_spec hfork hglam hcode (fun _ => by decide) hdepth hcold hgas
     (meets bound) start within with ⟨stopped, ran, hr⟩ | aborted
-  · obtain ⟨caller, msg, child, hcallee, -, -, hmg, -, hmtg, hmca, hmcode, hmv, hhalt⟩ := hr
+  · obtain ⟨caller, msg, child, hcallee, -, -, hmg, -, hmtg, hmca, hmcode, hmv, -, -, hhalt⟩ := hr
     have hpre : precompileAddress fork msg = none := by
       simp [precompileAddress, hmca, hprecompile]
     have hg : 18 ≤ msg.gas := by
