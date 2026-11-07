@@ -73,16 +73,63 @@ theorem Meets.and {Meter : Type} [GasMeter Meter] {bound : Nat}
   ⟨fun caller message lt child ran => ⟨ha.ok caller message lt child ran,
     hb.ok caller message lt child ran⟩, ha.aborts⟩
 
+/-- The state and the substate that the frame of a message starts from, after those of its caller.
+
+Before Paris, the target of the message is touched first.
+
+A message that moves a value then moves it from its sender to its target, and logs the move.
+
+Any other message starts from there with the substate of its caller. -/
+def Entered (fork : Fork) (message : Message fork) (state : TransactionState)
+    (substate : Substate) (entry : TransactionState) (entrySubstate : Substate) : Prop :=
+  (¬(message.shouldTransferValue = true ∧ message.value ≠ 0) ∧
+      entry = startState fork message state ∧ entrySubstate = substate) ∨
+    ((message.shouldTransferValue = true ∧ message.value ≠ 0) ∧
+      (startState fork message state).moveEther fork message.caller message.currentTarget
+        message.value = .ok entry ∧
+      entrySubstate = { substate with
+        logs := pushTransferLog fork substate.logs message.caller message.currentTarget
+          message.value })
+
+/-- A message that moves no value starts from the start state and the substate of its caller. -/
+theorem Entered.of_not_transfers {message : Message fork} {state entry : TransactionState}
+    {substate entrySubstate : Substate}
+    (h : Entered fork message state substate entry entrySubstate)
+    (hno : ¬(message.shouldTransferValue = true ∧ message.value ≠ 0)) :
+    entry = startState fork message state ∧ entrySubstate = substate := by
+  rcases h with ⟨-, h⟩ | ⟨ht, -⟩
+  · exact h
+  · exact absurd ht hno
+
+/-- A message with code `code` runs as a specification of that code says.
+
+The message has a target and runs no precompile, and `G` holds of it and of its caller.
+
+It may move a value.
+
+Then the frame that ends it is a stopped frame of `Q`.
+
+That frame is the one that the callee stopped in, after the rollback of a failure. -/
+def RunsFrom (code : ByteArray) (G : Message fork → TransactionState → Substate → Prop)
+    (Q : Message fork → TransactionState → Substate → Evm fork Nat → Prop)
+    (caller : Evm fork Nat) (message : Message fork) (child : Evm fork Nat) : Prop :=
+  message.code = code → message.target.isSome → precompileAddress fork message = none →
+    G message caller.state caller.substate.child →
+    ∃ stopped, Q message caller.state caller.substate.child stopped ∧
+      child = rollbackOnError caller.state stopped
+
 /-- Each code of a family runs as its specification says, on each message with that code. -/
 def RunsAll {ι : Type} (code : ι → ByteArray)
     (G : ι → Message fork → TransactionState → Substate → Prop)
     (Q : ι → Message fork → TransactionState → Substate → Evm fork Nat → Prop)
     (caller : Evm fork Nat) (message : Message fork) (child : Evm fork Nat) : Prop :=
-  ∀ i, RunsAs (code i) (G i) (Q i) caller message child
+  ∀ i, RunsFrom (code i) (G i) (Q i) caller message child
 
 /-- The runner of the interpreter meets the specifications of a family of codes.
 
 Each specification holds of every message with its code and `G`, from the frame it starts.
+
+That frame starts after the move of the value of the message, if it has one.
 
 It is a triple under the assumption that the whole family runs as specified, together with `B`.
 
@@ -96,29 +143,45 @@ theorem meets_runsAll {ι : Type} {code : ι → ByteArray}
     {Q : ι → Message fork → TransactionState → Substate → Evm fork Nat → Prop}
     {B : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     (hB : ∀ bound, Meets B (processRunner fork bound))
-    (hspec : ∀ i message state substate, message.code = code i → G i message state substate →
+    (hspec : ∀ i message state substate entry entrySubstate, message.code = code i →
+      G i message state substate → Entered fork message state substate entry entrySubstate →
       SpecUnder fork (fun caller message child => RunsAll code G Q caller message child ∧
           B caller message child)
-        (At (code i) message 0 [] .empty message.gas (startState fork message state) substate)
+        (At (code i) message 0 [] .empty message.gas entry entrySubstate)
         (Q i message state substate))
     (bound : Nat) :
     Meets (fun caller message child => RunsAll code G Q caller message child ∧
       B caller message child) (processRunner fork bound) := by
   induction bound using Nat.strongRecOn with
   | _ bound ih =>
-  refine ⟨fun caller message lt child ran => ⟨fun i hcode htarget noValue noPrecompile hg => ?_,
+  refine ⟨fun caller message lt child ran => ⟨fun i hcode htarget noPrecompile hg => ?_,
     (hB bound).ok caller message lt child ran⟩, (meets_process fork bound).aborts⟩
   obtain ⟨target, ht⟩ := Option.isSome_iff_exists.mp htarget
   simp only [processRunner, ht] at ran
-  rcases (hspec i message caller.state caller.substate.child hcode hg).runFrame
-      (ih message.gas lt) (at_startFrame hcode _ _) (Nat.le_refl _) with
-    ⟨stopped, hrun, hq⟩ | ⟨e, hrun, -⟩
-  · have h := processMessage_map_val (state := caller.state) noValue noPrecompile hrun
-    rw [ran] at h
-    exact ⟨stopped, hq, Except.ok.inj h⟩
-  · have h := processMessage_map_val (state := caller.state) noValue noPrecompile hrun
-    rw [ran] at h
-    cases h
+  by_cases transfers : message.shouldTransferValue = true ∧ message.value ≠ 0
+  · obtain ⟨moved, hmoved⟩ := moveEther_of_processMessage_eq_ok transfers ran
+    rcases (hspec i message caller.state caller.substate.child _ _ hcode hg
+        (.inr ⟨transfers, hmoved, rfl⟩)).runFrame
+        (ih message.gas lt) (at_startFrame hcode _ _) (Nat.le_refl _) with
+      ⟨stopped, hrun, hq⟩ | ⟨e, hrun, -⟩
+    · have h := processMessage_map_val_value (state := caller.state) transfers hmoved
+        noPrecompile hrun
+      rw [ran] at h
+      exact ⟨stopped, hq, Except.ok.inj h⟩
+    · have h := processMessage_map_val_value (state := caller.state) transfers hmoved
+        noPrecompile hrun
+      rw [ran] at h
+      cases h
+  · rcases (hspec i message caller.state caller.substate.child _ _ hcode hg
+        (.inl ⟨transfers, rfl, rfl⟩)).runFrame
+        (ih message.gas lt) (at_startFrame hcode _ _) (Nat.le_refl _) with
+      ⟨stopped, hrun, hq⟩ | ⟨e, hrun, -⟩
+    · have h := processMessage_map_val (state := caller.state) transfers noPrecompile hrun
+      rw [ran] at h
+      exact ⟨stopped, hq, Except.ok.inj h⟩
+    · have h := processMessage_map_val (state := caller.state) transfers noPrecompile hrun
+      rw [ran] at h
+      cases h
 
 /-- A message to an account that exists starts from the state of its caller. -/
 theorem startState_of_isSome {message : Message fork} {state : TransactionState}
