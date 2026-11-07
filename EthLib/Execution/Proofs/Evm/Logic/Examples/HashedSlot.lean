@@ -27,7 +27,7 @@ The write pays the price of SSTORE from the original, current and new words, by 
 
 The slot is cold when the transaction has not accessed it yet, by EIP-2929.
 
-It adds the refund of the write to the refund counter, by EIP-2200, and from London by EIP-3529.
+The write adds its refund to the refund counter, by EIP-2200, and from London by EIP-3529.
 
 The frame must be one that may change the state, and the write must give a state.
 
@@ -55,14 +55,14 @@ def CODE : ByteArray := ⟨#[0x60, 0x00, 0x35, 0x33, 0x60, 0x00, 0x52, 0x60, 0x0
   0x52, 0x60, 0x40, 0x60, 0x00, 0x20, 0x55, 0x60, 0x00, 0x80, 0xf3]⟩
 
 /-- The base word that the code hashes after the key word. -/
-def BASE : U256 := 0
+def BASE_WORD : U256 := 0
 
 /-- The word of call data at offset 0, which the code writes. -/
 abbrev word (message : Message fork) : U256 := loadWord message.data 0 32
 
 /-- The 64 bytes that the code hashes: the address of the caller as a word, then the base word. -/
 def hashed (message : Message fork) : ByteArray :=
-  wordBytes message.caller.toU256 ++ wordBytes BASE
+  wordBytes message.caller.toU256 ++ wordBytes BASE_WORD
 
 /-- The slot that the code writes: the Keccak-256 hash of those 64 bytes. -/
 def slot (message : Message fork) : U256 := keccak (hashed message)
@@ -130,7 +130,7 @@ theorem hash {gas : Nat} (hgas : 77 ≤ gas) :
     (memory := wordBytes message.caller.toU256) (gas := gas - 3 - 3 - 2 - 3 - (3 + 3))
     (byte := 0x00) (by decide) rfl rfl (by omega) (by simp [STACK_LIMIT])
   have h7 := push1 (code := CODE) (fork := fork) (message := message) (state := state)
-    (substate := substate) (pc := 9) (stack := [BASE, word message])
+    (substate := substate) (pc := 9) (stack := [BASE_WORD, word message])
     (memory := wordBytes message.caller.toU256) (gas := gas - 3 - 3 - 2 - 3 - (3 + 3) - 3)
     (byte := 0x20) (by decide) rfl rfl (by omega) (by simp [STACK_LIMIT])
   -- Memory grows from one word to two words, for 3 more gas.
@@ -140,15 +140,15 @@ theorem hash {gas : Nat} (hgas : 77 ≤ gas) :
     decide
   have h8 := mstore (fork := fork) (code := CODE) (message := message) (state := state)
     (substate := substate) (memory := wordBytes message.caller.toU256) (pc := 11) (start := 32)
-    (value := BASE) (rest := [word message]) (gas := gas - 3 - 3 - 2 - 3 - (3 + 3) - 3 - 3)
+    (value := BASE_WORD) (rest := [word message]) (gas := gas - 3 - 3 - 2 - 3 - (3 + 3) - 3 - 3)
     (by decide) rfl (by rw [hg2]; simp only; omega)
   have hm2 : memoryWrite (memoryExtend (wordBytes message.caller.toU256)
       (extendMemory (wordBytes message.caller.toU256).size
         [((32 : U256), (32 : U256))]).expandBy)
-      (32 : U256).toNat (wordBytes BASE) = hashed message := by
+      (32 : U256).toNat (wordBytes BASE_WORD) = hashed message := by
     rw [hg2]
     have h := memoryWrite_extend_end (memory := wordBytes message.caller.toU256)
-      (value := wordBytes BASE)
+      (value := wordBytes BASE_WORD)
     rw [size_wordBytes, size_wordBytes] at h
     exact h
   have h8' := Hoare.memory_eq h8 hm2
