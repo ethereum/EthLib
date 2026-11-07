@@ -39,6 +39,10 @@ After the first epoch, the step applies the attestation deltas once before Altai
 
 From Altair it applies the deltas of each flag, then those of inactivity.
 
+Take a step that succeeds on a registry within its limit.
+
+Then each addition of a reward to a balance stays below `2^64`.
+
 The balances past the registry stay.
 -/
 
@@ -553,7 +557,11 @@ theorem applyAllDeltas_balances {rewards penalties : Array Gwei}
 
 /-- For a registry within its limit, a list of deltas acts on each balance in the order of the list.
 
+This holds when the deltas apply.
+
 Each one adds the reward of the validator, then subtracts its penalty, stopping at zero.
+
+Each of those sums stays below `2^64`, so a checked addition of each reward succeeds.
 
 The balances past the registry stay. -/
 theorem foldlM_applyAllDeltas_balances {deltas : List (Array Gwei × Array Gwei)}
@@ -562,12 +570,17 @@ theorem foldlM_applyAllDeltas_balances {deltas : List (Array Gwei × Array Gwei)
     (i < state.validators.data.size → after.balances.data[i]? =
       state.balances.data[i]?.map fun balance => deltas.foldl (fun balance delta =>
         saturatingSub (balance + delta.1.getD i 0) (delta.2.getD i 0)) balance) ∧
+    (i < state.validators.data.size → ∀ balance, state.balances.data[i]? = some balance →
+      deltas.foldlM (fun balance delta => (addChecked balance (delta.1.getD i 0)).map
+          fun raised => saturatingSub raised (delta.2.getD i 0)) balance =
+        .ok (deltas.foldl (fun balance delta =>
+          saturatingSub (balance + delta.1.getD i 0) (delta.2.getD i 0)) balance)) ∧
     (state.validators.data.size ≤ i → after.balances.data[i]? = state.balances.data[i]?) := by
   induction deltas generalizing state with
   | nil =>
     simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
     subst computed
-    exact ⟨fun _ => by cases state.balances.data[i]? <;> rfl, fun _ => rfl⟩
+    exact ⟨fun _ => by cases state.balances.data[i]? <;> rfl, fun _ _ _ => rfl, fun _ => rfl⟩
   | cons delta deltas ih =>
     rw [List.foldlM_cons, bind_ok_iff] at computed
     obtain ⟨middle, applied, folded⟩ := computed
@@ -578,14 +591,19 @@ theorem foldlM_applyAllDeltas_balances {deltas : List (Array Gwei × Array Gwei)
     rw [sizes.1] at later
     have first := applyAllDeltas_balances (rewards := delta.1) (penalties := delta.2) within
       applied i
-    refine ⟨fun lt => ?_, fun ge => (later.2 ge).trans (first.2 ge)⟩
-    obtain ⟨balance, found, -, raised⟩ := first.1 lt
-    rw [later.1 lt, raised, found]
-    rfl
+    refine ⟨fun lt => ?_, fun lt balance held => ?_, fun ge => (later.2.2 ge).trans (first.2 ge)⟩
+    · obtain ⟨balance, found, -, raised⟩ := first.1 lt
+      rw [later.1 lt, raised, found]
+      rfl
+    · obtain ⟨balance', found, fits, raised⟩ := first.1 lt
+      obtain rfl : balance' = balance := Option.some.inj (found.symm.trans held)
+      -- The first reward fits, so the checked addition gives the wrapping sum.
+      rw [List.foldlM_cons, addChecked_of_lt fits]
+      exact later.2.1 lt _ raised
 
 /-- Before Altair and after the first epoch, rewards and penalties apply the attestation deltas.
 
-The registry must be within its limit.
+This holds when the step succeeds.
 
 The balance of each validator becomes the old balance plus the reward, minus the penalty.
 
@@ -595,8 +613,7 @@ That old balance exists, and adding the reward to it stays below `2^64`.
 
 The balances past the registry stay. -/
 theorem processRewardsAndPenalties_balances_of_lt_altair {config : Config}
-    (before : fork < .altair) (within : state.RegistryWithinLimit)
-    (later : getCurrentEpoch state ≠ GENESIS_EPOCH)
+    (before : fork < .altair) (later : getCurrentEpoch state ≠ GENESIS_EPOCH)
     (computed : processRewardsAndPenalties config state = .ok after) :
     ∃ rewards penalties, getAttestationDeltas config state before = .ok (rewards, penalties) ∧
       ∀ i, (i < state.validators.data.size → ∃ balance, state.balances.data[i]? = some balance ∧
@@ -608,17 +625,22 @@ theorem processRewardsAndPenalties_balances_of_lt_altair {config : Config}
   simp only [processRewardsAndPenalties, later, notAltair, ↓reduceIte, ↓reduceDIte,
     bind_ok_iff] at computed
   obtain ⟨⟨rewards, penalties⟩, found, applied⟩ := computed
+  -- Before Gloas the type of the registry keeps it within its limit.
+  have within : state.RegistryWithinLimit :=
+    state.validators.bound (Nat.lt_trans before (by decide))
   exact ⟨rewards, penalties, found, applyAllDeltas_balances within applied⟩
 
 /-- From Altair and after the first epoch, rewards and penalties apply the deltas of each flag.
 
 They then apply the inactivity deltas.
 
-The registry must be within its limit.
+This holds when the step succeeds on a registry within its limit.
 
 Each set of deltas adds the reward of a validator to its balance, then subtracts its penalty.
 
 The balance stops at zero when the penalty is larger.
+
+Each of those sums stays below `2^64`, so a checked addition of each reward succeeds.
 
 The balances past the registry stay. -/
 theorem processRewardsAndPenalties_balances_of_altair {config : Config}
@@ -633,6 +655,12 @@ theorem processRewardsAndPenalties_balances_of_altair {config : Config}
         state.balances.data[i]?.map fun balance =>
           (flagDeltas ++ [inactivityDeltas]).foldl (fun balance delta =>
             saturatingSub (balance + delta.1.getD i 0) (delta.2.getD i 0)) balance) ∧
+      (i < state.validators.data.size → ∀ balance, state.balances.data[i]? = some balance →
+        (flagDeltas ++ [inactivityDeltas]).foldlM (fun balance delta =>
+            (addChecked balance (delta.1.getD i 0)).map
+              fun raised => saturatingSub raised (delta.2.getD i 0)) balance =
+          .ok ((flagDeltas ++ [inactivityDeltas]).foldl (fun balance delta =>
+            saturatingSub (balance + delta.1.getD i 0) (delta.2.getD i 0)) balance)) ∧
       (state.validators.data.size ≤ i → after.balances.data[i]? = state.balances.data[i]?) := by
   simp only [processRewardsAndPenalties, later, altair, ↓reduceIte, ↓reduceDIte,
     bind_ok_iff] at computed
