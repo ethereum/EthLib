@@ -426,7 +426,9 @@ They also check the CTR examples F.5.1, F.5.2, F.5.5 and F.5.6 of SP 800-38A.
 
 `decrypt_encrypt` (`Proofs/Aes/Gcm.lean`) proves that GCM decryption of SP 800-38D returns the plaintext of an honest ciphertext and tag.
 `decrypt_eq_ok` proves that decryption accepts no tag other than the honest one.
-Both hold for every forward cipher.
+`decrypt_eq_ok_iff` proves that decryption returns `p` exactly when `p` encrypts to the given ciphertext and tag.
+So every pair that decryption accepts is an honest encryption.
+The three hold for every forward cipher.
 `residue_mul` (`Proofs/Aes/GaloisField.lean`) proves that the block product of SP 800-38D §6.3, Algorithm 1, is the product of the two blocks read as polynomials over GF(2) modulo `1 + u + u^2 + u^7 + u^128`.
 `residue_xorBlock` proves that XOR is their sum, and `residue_injective` that two different blocks have two different residues.
 `residue_ghash` proves that GHASH of `X_1 ... X_m` is `X_1 H^m + ... + X_m H` on residues, the form that §6.4 states.
