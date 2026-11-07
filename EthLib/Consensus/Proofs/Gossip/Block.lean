@@ -17,6 +17,10 @@ Once these are computed, the outcome is that chain.
 From the chain follows which blocks the topic accepts and which it ignores.
 
 A valid block records its slot and proposer, and the same block is then ignored.
+
+From Gloas the topic runs its own chain of checks, with the same results.
+
+There a valid block on the full parent has the payload of its parent verified.
 -/
 
 @[expose] public section
@@ -81,11 +85,11 @@ theorem validateBeaconBlock_recordBeaconBlock (gloas : ¬ .glamsterdam ≤ fork)
       .ok (.ignore "block is not the first valid block for this slot and proposer") :=
   validateBeaconBlock_of_seen gloas (by simp [Seen.recordBeaconBlock])
 
-/-- From Gloas the rule is not yet specified here, so it fails. -/
+/-- From Gloas the rule is the Gloas chain of checks, which reads no status of payloads. -/
 theorem validateBeaconBlock_of_gloas (gloas : .glamsterdam ≤ fork) :
     validateBeaconBlock config checks seen store statuses signed currentTimeMs =
-      .error (.forkNotYetSpecified fork) := by
-  simp [validateBeaconBlock, gloas, throw, throwThe, MonadExceptOf.throw]
+      validateGloasBeaconBlock config checks seen store gloas signed currentTimeMs := by
+  simp [validateBeaconBlock, gloas]
 
 section Chain
 
@@ -224,5 +228,144 @@ theorem validateBeaconBlock_eq_accept (gloas : ¬ .glamsterdam ≤ fork)
   grind
 
 end Chain
+
+/-! ## Blocks from Gloas -/
+
+section Gloas
+
+variable {gloas : .glamsterdam ≤ fork} {future valid : Bool} {finalizedSlot : Slot}
+  {parent : BeaconBlock preset fork} {parentState state advanced : BeaconState preset fork}
+  {proposer : Validator} {finalizedBlock : Root} {expected : ValidatorIndex}
+  {bid : ExecutionPayloadBid preset fork}
+
+/-- From Gloas a block whose slot and proposer a valid block had already is ignored. -/
+theorem validateGloasBeaconBlock_of_seen
+    (known : (signed.message.slot, signed.message.proposerIndex) ∈ seen.proposerSlots) :
+    validateGloasBeaconBlock config checks seen store gloas signed currentTimeMs =
+      .ok (.ignore "block is not the first valid block for this slot and proposer") := by
+  simp [validateGloasBeaconBlock, known, pure, Except.pure]
+
+/-- From Gloas a valid block records its slot and proposer, so the same block is then ignored. -/
+theorem validateGloasBeaconBlock_recordBeaconBlock :
+    validateGloasBeaconBlock config checks (seen.recordBeaconBlock signed) store gloas signed
+        currentTimeMs =
+      .ok (.ignore "block is not the first valid block for this slot and proposer") :=
+  validateGloasBeaconBlock_of_seen (by simp [Seen.recordBeaconBlock])
+
+/-- From Gloas the outcome of a block is its chain of checks, in order.
+
+It holds once the parent and its state are known and the fallible steps are computed. -/
+theorem validateGloasBeaconBlock_eq
+    (clock : store.isFutureSlot config signed.message.slot currentTimeMs = .ok future)
+    (start : computeStartSlotAtEpoch preset store.finalizedCheckpoint.epoch = .ok finalizedSlot)
+    (known : store.blocks[signed.message.parentRoot]? = some parent)
+    (parentKnown : store.blockStates[signed.message.parentRoot]? = some parentState)
+    (head : store.headState config = .ok state)
+    (found : state.validators.data[signed.message.proposerIndex.toNat]? = some proposer)
+    (signature : isValidSignatureAtSlot config checks state DOMAIN_BEACON_PROPOSER
+      signed.message.slot signed.message proposer.pubkey signed.signature = .ok valid)
+    (checkpoint : store.getCheckpointBlock signed.message.parentRoot
+      store.finalizedCheckpoint.epoch = .ok finalizedBlock)
+    (slots : processSlots config checks parentState signed.message.slot = .ok advanced)
+    (proposerOf : getBeaconProposerIndex advanced = .ok expected)
+    (bidOf : (signed.message.body.signedExecutionPayloadBid gloas).message = bid) :
+    validateGloasBeaconBlock config checks seen store gloas signed currentTimeMs =
+      .ok ((ignoreUnless (!seen.proposerSlots.contains
+          (signed.message.slot, signed.message.proposerIndex))
+          "block is not the first valid block for this slot and proposer").andThen fun _ =>
+        (ignoreUnless (!future) "block is from a future slot").andThen fun _ =>
+        (ignoreUnless (decide (finalizedSlot < signed.message.slot))
+          "block is not from a slot greater than the latest finalized slot").andThen fun _ =>
+        (checkBlockBodyLimits gloas signed.message.body).andThen fun _ =>
+        (checkExecutionRequestsLimits gloas
+          (signed.message.body.parentExecutionRequests gloas)).andThen fun _ =>
+        (rejectUnless valid "invalid proposer signature").andThen fun _ =>
+        (ignoreUnless (!(Store.parentPayloadStatus signed.message parent == .full) ||
+            store.isPayloadVerified gloas signed.message.parentRoot)
+          "parent payload is not verified").andThen fun _ =>
+        (rejectUnless (decide (parent.slot < signed.message.slot))
+          "block is not from a higher slot than its parent").andThen fun _ =>
+        (rejectUnless (finalizedBlock == store.finalizedCheckpoint.root)
+          "finalized checkpoint is not an ancestor of block").andThen fun _ =>
+        (rejectUnless (decide (bid.blobKzgCommitments.data.size ≤ (config.getBlobParameters
+              (computeEpochAtSlot preset signed.message.slot)).maxBlobsPerBlock.toNat))
+          "too many blob kzg commitments").andThen fun _ =>
+        (rejectUnless (bid.parentBlockRoot == signed.message.parentRoot)
+          "bid's parent does not equal block's parent").andThen fun _ =>
+        (rejectUnless (signed.message.proposerIndex == expected)
+          "block proposer_index does not match expected proposer").andThen fun _ =>
+        rejectUnless (Store.parentPayloadStatus signed.message parent == .full ||
+            bid.parentBlockHash == advanced.latestBlockHash gloas)
+          "bid does not build on the parent's execution head") := by
+  unfold validateGloasBeaconBlock
+  simp only [clock, start, known, parentKnown, head, found, signature, checkpoint, slots,
+    proposerOf, bidOf, bind, Except.bind, pure, Except.pure, Except.mapError, ignoreUnless_andThenM,
+    ignoreUnless_andThen, rejectUnless_andThenM, rejectUnless_andThen,
+    apply_ite (Except.ok (ε := ForkChoiceError))]
+  cases checkBlockBodyLimits gloas signed.message.body <;>
+    cases checkExecutionRequestsLimits gloas (signed.message.body.parentExecutionRequests gloas) <;>
+    simp only [ValidationResult.andThenM, ValidationResult.andThen, pure, Except.pure,
+      apply_ite (Except.ok (ε := ForkChoiceError))]
+
+/-- From Gloas a block is valid exactly when every check passes, once its inputs are computed. -/
+theorem validateGloasBeaconBlock_eq_accept
+    (clock : store.isFutureSlot config signed.message.slot currentTimeMs = .ok future)
+    (start : computeStartSlotAtEpoch preset store.finalizedCheckpoint.epoch = .ok finalizedSlot)
+    (known : store.blocks[signed.message.parentRoot]? = some parent)
+    (parentKnown : store.blockStates[signed.message.parentRoot]? = some parentState)
+    (head : store.headState config = .ok state)
+    (found : state.validators.data[signed.message.proposerIndex.toNat]? = some proposer)
+    (signature : isValidSignatureAtSlot config checks state DOMAIN_BEACON_PROPOSER
+      signed.message.slot signed.message proposer.pubkey signed.signature = .ok valid)
+    (checkpoint : store.getCheckpointBlock signed.message.parentRoot
+      store.finalizedCheckpoint.epoch = .ok finalizedBlock)
+    (slots : processSlots config checks parentState signed.message.slot = .ok advanced)
+    (proposerOf : getBeaconProposerIndex advanced = .ok expected)
+    (bidOf : (signed.message.body.signedExecutionPayloadBid gloas).message = bid) :
+    validateGloasBeaconBlock config checks seen store gloas signed currentTimeMs = .ok accept ↔
+      (signed.message.slot, signed.message.proposerIndex) ∉ seen.proposerSlots ∧
+        future = false ∧ finalizedSlot < signed.message.slot ∧
+        checkBlockBodyLimits gloas signed.message.body = accept ∧
+        checkExecutionRequestsLimits gloas
+          (signed.message.body.parentExecutionRequests gloas) = accept ∧
+        valid = true ∧
+        (Store.parentPayloadStatus signed.message parent = .full →
+          store.isPayloadVerified gloas signed.message.parentRoot = true) ∧
+        parent.slot < signed.message.slot ∧ finalizedBlock = store.finalizedCheckpoint.root ∧
+        bid.blobKzgCommitments.data.size ≤
+          (config.getBlobParameters
+            (computeEpochAtSlot preset signed.message.slot)).maxBlobsPerBlock.toNat ∧
+        bid.parentBlockRoot = signed.message.parentRoot ∧
+        signed.message.proposerIndex = expected ∧
+        (Store.parentPayloadStatus signed.message parent ≠ .full →
+          bid.parentBlockHash = advanced.latestBlockHash gloas) := by
+  rw [validateGloasBeaconBlock_eq clock start known parentKnown head found signature checkpoint
+    slots proposerOf bidOf]
+  simp only [Except.ok.injEq, andThen_eq_accept, ignoreUnless_eq_accept, rejectUnless_eq_accept]
+  simp
+  grind
+
+/-- From Gloas a valid block on the full parent has the payload of its parent verified.
+
+The store then holds that payload. -/
+theorem isPayloadVerified_of_validateGloasBeaconBlock
+    (known : store.blocks[signed.message.parentRoot]? = some parent)
+    (full : Store.parentPayloadStatus signed.message parent = .full)
+    (accepted : validateGloasBeaconBlock config checks seen store gloas signed currentTimeMs =
+      .ok accept) :
+    store.isPayloadVerified gloas signed.message.parentRoot = true := by
+  cases verified : store.isPayloadVerified gloas signed.message.parentRoot
+  · unfold validateGloasBeaconBlock at accepted
+    simp only [known, full, verified, beq_self_eq_true, Bool.not_true, Bool.false_or,
+      ignoreUnless_andThenM, rejectUnless_andThenM, bind, Except.bind] at accepted
+    revert accepted
+    generalize checkExecutionRequestsLimits gloas _ = requestLimits
+    cases checkBlockBodyLimits gloas signed.message.body <;> cases requestLimits <;>
+      simp only [ValidationResult.andThenM] <;>
+      repeat' (first | split | intro)
+    all_goals simp_all [pure, Except.pure, Except.mapError]
+  · rfl
+
+end Gloas
 
 end EthLib.Consensus

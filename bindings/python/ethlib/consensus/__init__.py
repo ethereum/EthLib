@@ -560,6 +560,7 @@ def gossip_validation(
 ) -> list[tuple[str, str | None]]:
     """The outcome of each gossip message of a topic, in turn, with the reason of a failure."""
     # A block after the anchor is (1 if failed, 2 if pending, else 0; payload status; SSZ bytes).
+    # Kind 3 gives a block that the store holds already, such as the anchor, for its envelope.
     # From Gloas the SSZ bytes of the signed envelope of its payload may follow.
     block_records = b""
     for kind, status, data, *envelope in blocks or []:

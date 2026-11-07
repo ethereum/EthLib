@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: networking
+handler: gossip_beacon_attestation
+suite: pyspec_tests
+case: gossip_beacon_attestation__reject_payload_failed_el_validation

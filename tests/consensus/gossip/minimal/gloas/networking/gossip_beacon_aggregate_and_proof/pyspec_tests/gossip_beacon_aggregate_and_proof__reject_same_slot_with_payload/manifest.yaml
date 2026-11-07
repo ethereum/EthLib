@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: networking
+handler: gossip_beacon_aggregate_and_proof
+suite: pyspec_tests
+case: gossip_beacon_aggregate_and_proof__reject_same_slot_with_payload

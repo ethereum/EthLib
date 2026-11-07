@@ -196,6 +196,9 @@ It also keeps every Gloas case of the topics of payload envelopes and of payload
 From Gloas a block of a case may come with the envelope of its payload, which the store keeps.
 It keeps nine Gloas cases of the topic of bids.
 A bid case also sends the proposer preferences and the envelopes that its bids rely on.
+It keeps 24 Gloas cases of blocks, attestations and aggregates, for the checks that Gloas adds.
+Those checks read the bid of a block, its parent payload, and the payload that a vote sees.
+The anchor block of a case may come with the envelope of its payload too.
 `bindings/python/tests/consensus/test_gossip_validation.py` validates each message in Lean and compares the outcome and the reason with the case.
 
 The directory `genesis/` holds every genesis case of `minimal.tar.gz` in the same way.

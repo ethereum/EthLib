@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Consensus.Gossip.Seen
+public import EthLib.Consensus.Gossip.Block
 public import EthLib.Consensus.Gossip.Topics
 public import EthLib.Networking.Gossip.Validation
 
@@ -29,7 +29,11 @@ The checks run in a fixed order, and the first check that fails gives the outcom
 
 The checks that read the chain read the state after the head.
 
-From Gloas the rules are not yet specified here, so they fail.
+From Gloas the index in the data says whether the vote sees the payload of its block, 0 or 1.
+
+A vote in the slot of its block must say 0, since the payload cannot be there yet.
+
+A vote that says 1 needs the payload verified, and not optimistic or invalid.
 
 [EIP-7045]: https://eips.ethereum.org/EIPS/eip-7045#specification
 [EIP-7549]: https://eips.ethereum.org/EIPS/eip-7549#consensus-layer
@@ -90,6 +94,48 @@ def voteAncestryOutcome (store : Store preset fork) (root : Root) (target : Chec
   let finalizedBlock ← store.getCheckpointBlock root store.finalizedCheckpoint.epoch
   return ignoreUnless (finalizedBlock == store.finalizedCheckpoint.root)
     "finalized checkpoint is not an ancestor of block"
+
+/-- From Gloas: the checks of the payload that a vote sees, once its other checks pass.
+
+A vote in the slot of its block must say that it sees no payload.
+
+A vote that sees the payload needs it verified, and ignores it until then.
+
+A payload whose status is not validated is ignored, and an invalid one is rejected.
+
+Before Gloas there is nothing to check. -/
+def attestationPayloadOutcome (store : Store preset fork) (statuses : PayloadStatuses)
+    (data : AttestationData) : Except ForkChoiceError ValidationResult := do
+  if gloas : .glamsterdam ≤ fork then
+    let block ← store.block data.beaconBlockRoot
+    (rejectUnless (block.slot != data.slot || data.index == 0)
+      "same-slot attestation must attest with index 0").andThenM fun _ =>
+    if data.index != 1 then return .accept else
+    (ignoreUnless (store.isPayloadVerified gloas data.beaconBlockRoot)
+      "execution payload envelope has not been seen").andThenM fun _ =>
+    let status := statuses.get data.beaconBlockRoot
+    return (ignoreUnless (status != PAYLOAD_STATUS_NOT_VALIDATED)
+      "attested payload is optimistic").andThen fun _ =>
+      rejectUnless (status != PAYLOAD_STATUS_INVALIDATED) "attested payload is invalid"
+  else return .accept
+
+/-- The last checks of a vote: its ancestors, then from Gloas the payload it sees. -/
+def voteOutcome (store : Store preset fork) (statuses : PayloadStatuses) (data : AttestationData) :
+    Except ForkChoiceError ValidationResult := do
+  (← voteAncestryOutcome store data.beaconBlockRoot data.target).andThenM fun _ =>
+  attestationPayloadOutcome store statuses data
+
+/-- From Electra: whether the index in the data of a vote is allowed.
+
+Before Gloas it must be zero, and from Gloas it must be 0 or 1. -/
+def isValidDataIndex (fork : Fork) (index : CommitteeIndex) : Bool :=
+  if .glamsterdam ≤ fork then index ≤ 1 else index == 0
+
+/-- From Electra: the check of the index in the data of a vote, with the reasons of a topic. -/
+def dataIndexOutcome (fork : Fork) (index : CommitteeIndex) (zeroReason binaryReason : String) :
+    ValidationResult :=
+  rejectUnless (isValidDataIndex fork index)
+    (if .glamsterdam ≤ fork then binaryReason else zeroReason)
 
 /-- The member of a committee whose bit is set first, if a bit is set. -/
 def firstAttester (committee : Array ValidatorIndex) (bits : Array Bool) :
@@ -172,23 +218,28 @@ Its attester must not have a valid attestation for the target epoch already.
 
 The index in its data must be zero, since the attestation names its committee itself.
 
+From Gloas that index must be 0 or 1, and says whether the vote sees the payload.
+
 It must vote for a known valid block, from a committee of its slot, on the subnet of that committee.
 
 It must be recent, and its slot must be in the epoch of its target.
 
 Its attester must be a member of its committee, and must have signed its data.
 
-Its target and the finalized checkpoint must be ancestors of the block voted for. -/
+Its target and the finalized checkpoint must be ancestors of the block voted for.
+
+From Gloas the payload it sees must pass its checks, with the statuses of payloads. -/
 def validateSingleAttestation (config : Config) (checks : SignatureChecks) (seen : Seen)
-    (store : Store preset fork) (_electra : .pectra ≤ fork) (attestation : SingleAttestation)
-    (currentTimeMs subnetId : UInt64) : Except ForkChoiceError ValidationResult :=
-  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork) else
+    (store : Store preset fork) (statuses : PayloadStatuses) (_electra : .pectra ≤ fork)
+    (attestation : SingleAttestation) (currentTimeMs subnetId : UInt64) :
+    Except ForkChoiceError ValidationResult :=
   let data := attestation.data
   let index := attestation.committeeIndex
   (ignoreUnless
     (!seen.attestationValidatorEpochs.contains (data.target.epoch, attestation.attesterIndex))
     "already seen attestation for this epoch and validator").andThenM fun _ =>
-  (rejectUnless (data.index == 0) "attestation data index is non-zero").andThenM fun _ =>
+  (dataIndexOutcome fork data.index "attestation data index is non-zero"
+    "attestation data index must be 0 or 1").andThenM fun _ =>
   (votedBlockOutcome store data.beaconBlockRoot).andThenM fun _ => do
   let state ← store.headState config
   let committees := getCommitteeCountPerSlot state data.target.epoch
@@ -208,7 +259,7 @@ def validateSingleAttestation (config : Config) (checks : SignatureChecks) (seen
   let valid ← isValidSignatureAtEpoch config checks state DOMAIN_BEACON_ATTESTER data.target.epoch
     data attester.pubkey attestation.signature
   (rejectUnless valid "invalid attestation signature").andThenM fun _ =>
-  voteAncestryOutcome store data.beaconBlockRoot data.target
+  voteOutcome store statuses data
 
 /-! ## Aggregates -/
 
@@ -240,9 +291,12 @@ Its selection proof must select its aggregator, a member of the committee.
 
 The aggregator must have signed the slot and the aggregate, and the participants the data.
 
-Its target and the finalized checkpoint must be ancestors of the block voted for. -/
+Its target and the finalized checkpoint must be ancestors of the block voted for.
+
+From Gloas the payload it sees must pass its checks, with the statuses of payloads. -/
 def validateAggregateInCommittee (config : Config) (checks : SignatureChecks) (seen : Seen)
-    (store : Store preset fork) (signed : SignedAggregateAndProof preset fork)
+    (store : Store preset fork) (statuses : PayloadStatuses)
+    (signed : SignedAggregateAndProof preset fork)
     (index : CommitteeIndex) (currentTimeMs : UInt64) :
     Except ForkChoiceError ValidationResult := do
   let proof := signed.message
@@ -283,7 +337,7 @@ def validateAggregateInCommittee (config : Config) (checks : SignatureChecks) (s
   let indexed ← (getIndexedAttestation state aggregate).mapError .accessor
   let valid ← (isValidIndexedAttestation config checks state indexed).mapError .transition
   (rejectUnless valid "invalid aggregate signature").andThenM fun _ =>
-  voteAncestryOutcome store data.beaconBlockRoot data.target
+  voteOutcome store statuses data
 
 /-- The checks of a signed aggregate on its topic, at a time in milliseconds.
 
@@ -291,19 +345,20 @@ Before Electra the committee is the index in the data.
 
 From Electra that index must be zero, and the committee bits must name exactly one committee.
 
-From Gloas the rule is not yet specified here, so it fails. -/
+From Gloas that index must be 0 or 1, and says whether the vote sees the payload. -/
 def validateAggregateAndProof (config : Config) (checks : SignatureChecks) (seen : Seen)
-    (store : Store preset fork) (signed : SignedAggregateAndProof preset fork)
-    (currentTimeMs : UInt64) : Except ForkChoiceError ValidationResult :=
-  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork) else
+    (store : Store preset fork) (statuses : PayloadStatuses)
+    (signed : SignedAggregateAndProof preset fork) (currentTimeMs : UInt64) :
+    Except ForkChoiceError ValidationResult :=
   let aggregate := signed.message.aggregate
   if electra : .pectra ≤ fork then
-    (rejectUnless (aggregate.data.index == 0) "aggregate data index is non-zero").andThenM
-      fun _ =>
+    (dataIndexOutcome fork aggregate.data.index "aggregate data index is non-zero"
+      "aggregate data index must be 0 or 1").andThenM fun _ =>
     match getCommitteeIndices (aggregate.committeeBits electra) with
-    | [index] => validateAggregateInCommittee config checks seen store signed index currentTimeMs
+    | [index] =>
+      validateAggregateInCommittee config checks seen store statuses signed index currentTimeMs
     | _ => return .reject "aggregate committee bits must specify exactly one committee"
-  else validateAggregateInCommittee config checks seen store signed aggregate.data.index
+  else validateAggregateInCommittee config checks seen store statuses signed aggregate.data.index
     currentTimeMs
 
 /-- The committee in the key of an aggregate: from Electra the first that its committee bits name.

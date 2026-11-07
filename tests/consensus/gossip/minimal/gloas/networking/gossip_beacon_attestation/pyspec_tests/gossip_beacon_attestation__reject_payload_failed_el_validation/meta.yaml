@@ -1,0 +1,13 @@
+topic: beacon_attestation
+blocks:
+- {block: 
+    block_0x9f87a12d020fe5f111a8e388f428594715e83c39314fecf4b523dd7da27848b5}
+- {block: 
+    block_0x2bdd11129831a9f7045c6cba57db119b16c42192f8a0abd3f248bea2f21d15b2, 
+    payload: 
+    execution_payload_envelope_0x131ab93ae0a85b4dae8dd199874c24c136c7c8645f3a7b21bb0135cff179e47a,
+  payload_status: INVALIDATED}
+messages:
+- {subnet_id: 4, current_time_ms: 12500, message: 
+    single_attestation_0x1d652b262f932b0ec56fb699239c3824b4ab04597e2abfab4e840b55687bae22,
+  expected: reject, reason: attested payload is invalid}

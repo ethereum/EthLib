@@ -1,0 +1,8 @@
+topic: beacon_block
+blocks:
+- {block: 
+    block_0x9f87a12d020fe5f111a8e388f428594715e83c39314fecf4b523dd7da27848b5}
+messages:
+- {current_time_ms: 6500, message: 
+    block_0xfced68ecc921b9b49777ba3675f43de69869911c79fb6a051d9f59aa8b94768c, 
+    expected: reject, reason: block must not contain deposits}

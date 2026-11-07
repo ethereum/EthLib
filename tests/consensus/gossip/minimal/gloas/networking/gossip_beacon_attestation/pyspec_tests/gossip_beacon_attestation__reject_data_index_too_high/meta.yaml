@@ -1,0 +1,8 @@
+topic: beacon_attestation
+blocks:
+- {block: 
+    block_0x9f87a12d020fe5f111a8e388f428594715e83c39314fecf4b523dd7da27848b5}
+messages:
+- {subnet_id: 2, current_time_ms: 6500, message: 
+    single_attestation_0xed9c8773eef9ad1717d8c1fee908f4e90423c64a47ae4c05b1c527430f03cb1e,
+  expected: reject, reason: attestation data index must be 0 or 1}
