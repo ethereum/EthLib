@@ -743,6 +743,8 @@ These write rules ask for a range of some bytes.
 `Logic.mload_known` proves that MLOAD of a range that a fact covers with a word pushes that word.
 `Logic.return_known` proves that RETURN of a range that a fact covers returns the bytes of the fact.
 `Logic.revert_known` proves the same for REVERT from Byzantium.
+`Echo.runFrame_spec` proves a contract that copies its call data to memory and returns it, for call data of some bytes.
+`Pair.runFrame_spec` proves a contract that writes the words 2 and 1 in reverse order of address and returns both, 1 first.
 `memoryReadBytes_memoryWrite_eq_append` proves that a read that ends where a write ends gives the bytes before the write, then the value.
 `Logic.staticcallWith` is the rule for STATICCALL from Berlin to before Glamsterdam.
 Its message carries no value and is static.

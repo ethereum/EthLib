@@ -36,6 +36,8 @@ public import EthLib.Execution.Proofs.Evm.Logic.Examples.KeyBranch
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.Assert
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.NoValue
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.Deploy
+public import EthLib.Execution.Proofs.Evm.Logic.Examples.Echo
+public import EthLib.Execution.Proofs.Evm.Logic.Examples.Pair
 
 /-!
 # `EthLib.Execution.Proofs.Evm.Logic`
