@@ -85,7 +85,7 @@ theorem psi2_valid {P : G2} (hP : G2.Valid P) : G2.Valid (psi2 P) := by
 
 /-- Multiplication by the negative BLS parameter preserves `G2.Valid`. -/
 theorem mulNegX_valid {P : G2} (hP : G2.Valid P) : G2.Valid (mulNegX P) :=
-  G2.valid_neg (G2.valid_mulNat hP blsAbsX)
+  G2.valid_neg (G2.valid_mulNat hP blsX)
 
 /-- `clearCofactor` preserves `G2.Valid` (`RFC 9380 Appendix G.3`). -/
 theorem clearCofactor_valid {P : G2} (hP : G2.Valid P) : G2.Valid (clearCofactor P) := by

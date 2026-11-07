@@ -217,17 +217,17 @@ theorem psi_six_toPoint {P : G2} (hP : G2.Valid P) :
   rw [psi_psi_eq_psi2, psi_psi_eq_psi2, psi_psi_eq_psi2]
   exact psi2_cube_toPoint hP
 
-/-- Multiplication by the negative BLS parameter acts as `-[blsAbsX]` in `G2.curve.toAffine.Point`. -/
+/-- Multiplication by the negative BLS parameter acts as `-[|x|]` in `G2.curve.toAffine.Point`. -/
 theorem toPoint_mulNegX {P : G2} (hP : G2.Valid P) :
-    G2.toPoint (mulNegX P) = -(blsAbsX • G2.toPoint P) := by
+    G2.toPoint (mulNegX P) = -(blsX • G2.toPoint P) := by
   rw [mulNegX, G2.toPoint_neg (G2.valid_mulNat hP _), G2.toPoint_mulNat hP]
 
 /-- Group expression computed by `clearCofactor` (`RFC 9380 Appendix G.3`) on valid twist points. -/
 theorem clearCofactor_group_expression {P : G2} (hP : G2.Valid P) :
     G2.toPoint (clearCofactor P) =
       G2.toPoint (psi2 (G2.double P)) - G2.toPoint (psi P) +
-      (blsAbsX * blsAbsX + blsAbsX) • G2.toPoint P -
-      blsAbsX • G2.toPoint (psi P) - G2.toPoint P := by
+      (blsX * blsX + blsX) • G2.toPoint P -
+      blsX • G2.toPoint (psi P) - G2.toPoint P := by
   unfold clearCofactor
   rw [G2.toPoint_add (G2.valid_add (G2.valid_add
     (G2.valid_add (psi2_valid (G2.valid_double hP)) (G2.valid_neg (psi_valid hP)))
@@ -275,15 +275,15 @@ theorem clearCofactor_inSubgroup_of_inSubgroup {P : G2} (hP : G2.Valid P)
   have h2 := (G2.inSubgroup_iff_modulus_smul_eq_zero (psi2_valid (G2.valid_double hP))).mp
     (psi2_inSubgroup (G2.valid_double hP) hd)
   simp only [nsmul_sub, nsmul_add, h0, h1, h2]
-  rw [smul_comm Fr.modulus (blsAbsX * blsAbsX + blsAbsX),
-    smul_comm Fr.modulus blsAbsX, h0, h1]
+  rw [smul_comm Fr.modulus (blsX * blsX + blsX),
+    smul_comm Fr.modulus blsX, h0, h1]
   simp
 
 /-- The homomorphism `2 * psi^2 + (x - 1) * psi + (x^2 - x - 1)` computed by `clearCofactor`. -/
 noncomputable def cofactorHom : G2.curve.toAffine.Point →+ G2.curve.toAffine.Point :=
   TwistFrobenius.hom.comp TwistFrobenius.hom + TwistFrobenius.hom.comp TwistFrobenius.hom -
-    TwistFrobenius.hom + (blsAbsX * blsAbsX + blsAbsX) • AddMonoidHom.id _ -
-    blsAbsX • TwistFrobenius.hom - AddMonoidHom.id _
+    TwistFrobenius.hom + (blsX * blsX + blsX) • AddMonoidHom.id _ -
+    blsX • TwistFrobenius.hom - AddMonoidHom.id _
 
 /-- `clearCofactor` refines `cofactorHom` on all valid twist points. -/
 theorem toPoint_clearCofactor {P : G2} (hP : G2.Valid P) :

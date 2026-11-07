@@ -618,6 +618,7 @@ theorem toPoint_mul {P : G1} (h : Valid P) (s : Fr) :
 theorem valid_mul {P : G1} (h : Valid P) (s : Fr) : Valid (mul P s) :=
   valid_mulNat h s.val
 
+/-- The chain `[t^2] ([t^2] P - P) + P` keeps a valid point valid. -/
 theorem valid_mulModulus {P : G1} (h : Valid P) : Valid (mulModulus P) :=
   valid_add (valid_mulNat (valid_mulNat (valid_add (valid_mulNat (valid_mulNat h _) _)
     (valid_neg h)) _) _) h
