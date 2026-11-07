@@ -11,6 +11,10 @@ Two parties with keys `a` and `b` derive the same secret: `a (b G) = b (a G)`.
 The equality holds for every pair of keys, the zero key included, with the same error.
 
 Two nonzero keys always derive a secret.
+
+The primitive returns `z` exactly when the key `Q` is a point other than `O` and `d` is nonzero.
+
+Then `z` is the `x` of `d Q`, as 32 big-endian bytes.
 -/
 
 @[expose] public section
@@ -86,5 +90,56 @@ theorem exists_ecdh_eq_ok {a b : Fn} (ha : a ≠ 0) (hb : b ≠ 0) :
   cases hm : mul a (mul b generator) with
   | infinity => exact absurd hm (mul_ne_infinity ha (isOnCurve_mul _ hG) hP)
   | affine x y => exact ⟨_, rfl⟩
+
+
+/-- ECDH is the Diffie-Hellman primitive of SEC 1 v2 §3.3.1, read in the group of the curve.
+
+The private key `d` is a scalar modulo `n`, by its type.
+
+The primitive returns `z` exactly when these hold:
+
+- the public key `Q` lies on the curve and is not `O`;
+- `d` is not zero;
+- `z` is the `x` of the point `d Q`, as 32 big-endian bytes.
+
+The cofactor is 1, so no subgroup check is needed, and none is made.
+
+The result is the raw shared secret; no key derivation function is applied to it. -/
+theorem ecdh_eq_ok_iff {sk : Fn} {pk : Point} {z : Vector UInt8 32} :
+    ecdh sk pk = .ok z ↔
+      pk ≠ .infinity ∧ pk.isOnCurve = true ∧ sk ≠ 0 ∧
+        ∃ x y : Fp, (Point.affine x y).isOnCurve = true ∧
+          toPoint (.affine x y) = Fn.toZMod sk • toPoint pk ∧
+          z.toList = Base.natToBytes 32 x.val := by
+  constructor
+  · intro h
+    unfold ecdh at h
+    by_cases hinf : pk = .infinity
+    · simp [hinf] at h
+    by_cases hc : pk.isOnCurve = true
+    · simp only [hinf, hc, Bool.not_true, Bool.false_eq_true, ite_false] at h
+      by_cases hk : sk = 0
+      · subst hk
+        rw [mul_zero_left hc] at h
+        cases h
+      refine ⟨hinf, hc, hk, ?_⟩
+      cases hm : mul sk pk with
+      | infinity => exact absurd hm (mul_ne_infinity hk hc hinf)
+      | affine x y =>
+        rw [hm] at h
+        obtain rfl := Except.ok.inj h
+        refine ⟨x, y, hm ▸ isOnCurve_mul _ hc, ?_, rfl⟩
+        rw [← hm, toPoint_mul' _ hc]
+    · simp [hinf, hc] at h
+  · rintro ⟨hinf, hc, hk, x, y, hxy, hpt, hz⟩
+    -- The computed point is `(x, y)`, since both have the image `d Q` in the group.
+    have hm : mul sk pk = .affine x y :=
+      (toPoint_inj (isOnCurve_mul _ hc) hxy).mp ((toPoint_mul' _ hc).trans hpt.symm)
+    unfold ecdh
+    simp only [hinf, hc, Bool.not_true, Bool.false_eq_true, ite_false, hm]
+    congr 1
+    apply Vector.toList_inj.mp
+    rw [hz]
+    rfl
 
 end EthLib.Cryptography.Secp256k1

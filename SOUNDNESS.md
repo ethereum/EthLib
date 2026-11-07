@@ -366,6 +366,10 @@ The parity of `y` must be the recovery id.
 Under them, `(r, s')` verifies under the same key and hash exactly when `s'` is `s` or `n - s`.
 `verify_and_isLowS_iff` adds that `s` is low, and then that signature is the only valid low-s one with that `r`.
 
+`ecdh_eq_ok_iff` (`Proofs/Secp256k1/Ecdh.lean`) states ECDH in the group of the curve.
+It is the Diffie-Hellman primitive of SEC 1 v2 §3.3.1, with no key derivation function.
+By it, ECDH returns a secret exactly when the public key is a point of the curve other than `O` and the private key is nonzero.
+The secret is then the `x` of their product, as 32 big-endian bytes.
 No theorem states unforgeability, which rests on the discrete logarithm problem.
 
 ### alt_bn128
