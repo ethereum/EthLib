@@ -119,7 +119,7 @@ def _archive_cases() -> list:
     return cases
 
 
-@pytest.mark.parametrize("preset, fork, container, case", _archive_cases())
+@archives.parametrize("preset, fork, container, case", _archive_cases)
 def test_archive_case(preset, fork, container, case):
     _check(preset, fork, container, case)
 

@@ -1,5 +1,8 @@
 """Every case of consensus-spec-tests from Phase 0 to Heze, through the runners of EthLib."""
 
+from functools import cache
+from pathlib import Path
+
 import pytest
 
 import archives
@@ -25,14 +28,16 @@ from . import catalogue, harness
 
 SUITE = "consensus-spec-tests"
 CASES = catalogue.consensus_cases() if archives.CACHE else []
-ROOTS = (
-    {
-        preset: harness.unpack(name, [c for c in CASES if c.preset == preset], 5)
-        for preset, name in catalogue.CONSENSUS.items()
-    }
-    if archives.CACHE
-    else {}
-)
+
+
+# The archive of a preset, with its runnable cases unpacked on first use.
+# So the checks of the catalogue run without unpacking a case.
+@cache
+def root(preset: str) -> Path:
+    name = catalogue.CONSENSUS[preset]
+    return harness.unpack(name, [case for case in CASES if case.preset == preset], 5)
+
+
 DISAGREEMENTS = harness.disagreements(SUITE)
 
 pytestmark = pytest.mark.archive(catalogue.CONSENSUS["mainnet"])
@@ -40,7 +45,7 @@ pytestmark = pytest.mark.archive(catalogue.CONSENSUS["mainnet"])
 
 @pytest.mark.parametrize("case", harness.runnable(CASES), ids=lambda case: case.id)
 def test_case(case, request, record_property) -> None:
-    harness.run(ROOTS[case.preset], case, DISAGREEMENTS, request, record_property)
+    harness.run(root(case.preset), case, DISAGREEMENTS, request, record_property)
 
 
 def test_catalogue(record_property) -> None:

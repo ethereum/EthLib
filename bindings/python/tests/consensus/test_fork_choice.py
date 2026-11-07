@@ -294,7 +294,7 @@ def test_case(preset, fork, case):
     run_case(preset, fork, case)
 
 
-@pytest.mark.parametrize("preset, fork, case", _archive_cases())
+@archives.parametrize("preset, fork, case", _archive_cases)
 def test_archive_case(preset, fork, case):
     run_case(preset, fork, case)
 
