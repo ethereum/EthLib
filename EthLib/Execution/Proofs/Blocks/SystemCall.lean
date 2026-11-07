@@ -131,9 +131,9 @@ theorem checkedSystemCall_eq_systemContractEmpty_iff {address : Address} :
         simp only
         cases call.error <;> simp [throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
 
-/-- A checked system call fails with the error of its call exactly when the call stops with it.
+/-- A checked system call fails with the error of its call exactly in one case.
 
-The contract then has code. -/
+Its contract has code, and the call stops with that error. -/
 theorem checkedSystemCall_eq_systemCallFailed_iff {address : Address} {error : EvmError} :
     checkedSystemCall env block target data = .error (.systemCallFailed address error) ↔
       address = target ∧ (∃ code, codeAt block target = .ok code ∧ code.size ≠ 0) ∧
