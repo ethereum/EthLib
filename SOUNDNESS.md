@@ -715,6 +715,18 @@ It charges the prices of EIP-2929, and needs the state to hold the code of the a
 `Logic.returndatacopy` is the rule for RETURNDATACOPY from Byzantium, for a range that ends within the return data.
 `Logic.extcodecopy` is the rule for EXTCODECOPY from Berlin to before Glamsterdam.
 It charges the prices of EIP-2929 and 3 gas a word, and needs the state to hold the code of the account.
+`Logic.Holds` says that memory covers a range and that the range reads as given bytes.
+`Logic.holds_memoryWrite` proves that a write within memory holds the written bytes.
+`Logic.Holds.memoryWrite_of_disjoint` proves that such a write keeps every range it does not touch.
+`Logic.Holds.memoryExtend` proves that growth keeps every range.
+`Logic.Holds.append` proves that two adjacent ranges hold their bytes in order.
+`Logic.Holds.left` proves that a range that holds two blocks holds the first from its start.
+`Logic.Holds.right` proves that it holds the second after the first.
+`Logic.Holds.loadWord` proves that a range that holds the bytes of a word reads as that word.
+`Logic.extendMemory_of_le` proves that a range within memory grows nothing and costs nothing.
+`Logic.extendMemory_of_lt` proves that a range of some bytes past memory grows it to the rounded end of the range.
+That growth costs the price of the new size minus the price of the old size.
+`Logic.size_memoryExtend_extendMemory` proves that memory then has the greater of its old size and that rounded end.
 `memoryReadBytes_memoryWrite_eq_append` proves that a read that ends where a write ends gives the bytes before the write, then the value.
 `Logic.staticcallWith` is the rule for STATICCALL from Berlin to before Glamsterdam.
 Its message carries no value and is static.
