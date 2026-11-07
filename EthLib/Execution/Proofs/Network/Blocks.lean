@@ -12,6 +12,12 @@ Each request reads back from its RLP item.
 Headers that pass the check of a request are at most as many as asked.
 
 Each one is `skip + 1` blocks after the one before it, or before it when the request is reversed.
+
+An answer passes the check exactly when three conditions hold.
+
+It is not longer than asked, and its first header, if any, is the start block.
+
+Each header follows the one before it.
 -/
 
 @[expose] public section
@@ -136,6 +142,23 @@ theorem followsIn_of_followAll {r : HeaderRequest} :
         have := followsIn_of_followAll h i (by simpa using hi)
         simpa using this
 
+/-- A list passes `followAll` exactly when each header follows the one before it. -/
+theorem followAll_eq_ok_iff {r : HeaderRequest} :
+    ∀ {l : List Item}, followAll r l = .ok () ↔
+      ∀ (i : Nat) (hi : i + 1 < l.length), followsIn r l[i] l[i + 1] = .ok ()
+  | [] => by simp [followAll, pure, Except.pure]
+  | [_] => by simp [followAll, pure, Except.pure]
+  | a :: b :: rest => by
+    refine ⟨followsIn_of_followAll, fun h => ?_⟩
+    have hab := h 0 (by simp)
+    have hrest : followAll r (b :: rest) = .ok () :=
+      (followAll_eq_ok_iff (l := b :: rest)).mpr fun i hi => by
+        have := h (i + 1) (by simp only [List.length_cons] at hi ⊢; omega)
+        simp only [List.getElem_cons_succ] at this ⊢
+        exact this
+    simp only [List.getElem_cons_zero, List.getElem_cons_succ] at hab
+    simp [followAll, hab, hrest, bind, Except.bind]
+
 /-- An answer that passes the check holds at most as many headers as asked. -/
 theorem length_le_of_checkHeaders {r : HeaderRequest} {headers : List Item}
     (h : checkHeaders r headers = .ok ()) : headers.length ≤ r.limit := by
@@ -170,6 +193,46 @@ theorem numbers_of_checkHeaders {r : HeaderRequest} {headers : List Item}
     ∃ na nb, headerNumber headers[i] = .ok na ∧ headerNumber headers[i + 1] = .ok nb ∧
       r.next na = some nb :=
   numbers_of_followsIn (followsIn_of_followAll (followAll_of_checkHeaders h) i hi)
+
+/-- An answer passes the check of a request exactly when three conditions hold.
+
+It holds at most as many headers as asked, and its first header, if any, is the start block.
+
+Each header follows the one before it.
+
+The conditions do not ask for as many headers as asked, since a peer may send fewer.
+
+They read only the number, the hash and the parent hash of each header, not whether it is valid. -/
+theorem checkHeaders_eq_ok_iff {r : HeaderRequest} {headers : List Item} :
+    checkHeaders r headers = .ok () ↔
+      headers.length ≤ r.limit ∧ (∀ first ∈ headers.head?, isStart r.start first = .ok true) ∧
+        followAll r headers = .ok () := by
+  constructor
+  · intro h
+    refine ⟨length_le_of_checkHeaders h, fun first hfirst => ?_, followAll_of_checkHeaders h⟩
+    unfold checkHeaders at h
+    by_cases hlt : r.limit < headers.length
+    · simp [hlt, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+    · simp only [hlt, ↓reduceIte] at h
+      cases headers with
+      | nil => simp at hfirst
+      | cons f rest =>
+        simp only [List.head?_cons, Option.mem_def, Option.some.injEq] at hfirst
+        subst hfirst
+        cases hs : isStart r.start f with
+        | error e => simp [hs, bind, Except.bind] at h
+        | ok b =>
+          cases b
+          · simp [hs, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
+          · rfl
+  · rintro ⟨hle, hstart, hfollow⟩
+    unfold checkHeaders
+    simp only [Nat.not_lt.mpr hle, ↓reduceIte]
+    cases headers with
+    | nil => simp [hfollow]
+    | cons f rest =>
+      have hs := hstart f (by simp)
+      simp [hs, hfollow, bind, Except.bind]
 
 /-- The empty answer passes the check of every request. -/
 theorem checkHeaders_nil (r : HeaderRequest) : checkHeaders r [] = .ok () := by
