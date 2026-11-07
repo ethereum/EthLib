@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Containers.Bid
 public import EthLib.Consensus.Containers.Block
 public import EthLib.Consensus.LightClient.Containers
 public import EthLib.Consensus.ReqResp.Bounds
@@ -23,6 +24,7 @@ This module does not compute it, and it does not check that the protocol exists 
 - The four light client protocols carry their bootstrap or update of `chunkFork`.
 - Blob sidecars by range and by root carry a blob sidecar.
 - Data column sidecars by range and by root carry a data column sidecar of `chunkFork`.
+- From Gloas, payload envelopes by range and by root carry a signed envelope of `chunkFork`.
 
 An unknown version of the status or metadata protocol has no type.
 
@@ -55,6 +57,8 @@ def responseDesc (preset : Preset) (config : Config) (chunkFork : Fork) (id : Pr
   | .blobSidecarsByRange | .blobSidecarsByRoot => some (SszType.desc (BlobSidecar preset))
   | .dataColumnSidecarsByRange | .dataColumnSidecarsByRoot =>
     some (SszType.desc (DataColumnSidecar preset chunkFork))
+  | .executionPayloadEnvelopesByRange | .executionPayloadEnvelopesByRoot =>
+    some (SszType.desc (SignedExecutionPayloadEnvelope preset chunkFork))
 
 /-- The length bounds of one successful response chunk of a protocol version, for its fork. -/
 def responseBounds (preset : Preset) (config : Config) (chunkFork : Fork) (id : ProtocolId) :

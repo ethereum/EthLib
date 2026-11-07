@@ -600,7 +600,7 @@ def consensus_compute_shuffled_index(name: str, index: int, count: int, seed: by
     ...
 
 def consensus_reqresp_protocol_ids(fork: str) -> bytes:
-    """The protocol IDs of a fork, up to Fulu."""
+    """The protocol IDs of a fork, up to Gloas."""
     ...
 
 def consensus_reqresp_parse_protocol_id(text: str) -> bytes:

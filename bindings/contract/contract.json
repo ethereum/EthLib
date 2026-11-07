@@ -4426,14 +4426,14 @@
    "error_class": "ConsensusError",
    "docstring":
    "The shuffled position of one index, which must be below the count.\n\nThe count must be at most `2^40`.\n\nA shuffle of more indices reaches a position whose bucket number does not fit in 4 bytes.\n\nBoth checks come before any round.\n\nIt runs the rounds on that index alone, so its cost does not grow with the count."},
-  {"summary": "The protocol IDs of a fork, up to Fulu.",
+  {"summary": "The protocol IDs of a fork, up to Gloas.",
    "signature": "(fork: str) -> bytes",
    "operation": "EthLib.Consensus.protocolIds",
    "method": "consensus_reqresp_protocol_ids",
    "errors": [],
    "error_class": "ConsensusError",
    "docstring":
-   "The protocol IDs of a fork, up to Fulu.\n\nGloas adds the protocols of execution payload envelopes, which EthLib does not hold yet.\n\nSo from Gloas there is no list."},
+   "The protocol IDs of a fork, up to Gloas.\n\nHeze adds the protocol of inclusion lists, which EthLib does not hold yet.\n\nSo from Heze there is no list."},
   {"summary": "The protocol and the version that an ID names, if it names one.",
    "signature": "(text: str) -> bytes",
    "operation": "EthLib.Consensus.ProtocolId.parse?",

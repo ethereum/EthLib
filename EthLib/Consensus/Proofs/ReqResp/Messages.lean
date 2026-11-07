@@ -15,7 +15,7 @@ Properties of the request and response messages of the consensus layer.
 - Each protocol ID parses back to its protocol and its version.
 - So no two protocol IDs of a fork are one string.
 - A protocol ID of a fork is a protocol ID of every later fork up to Fulu.
-- From Gloas a fork has no list of protocol IDs yet.
+- From Heze a fork has no list of protocol IDs yet.
 - The status, the metadata and the container requests are lawful SSZ containers at every fork.
 - A goodbye code is recovered from the reason it names.
 -/
@@ -84,9 +84,9 @@ theorem parse?_toString (protocol : ReqRespProtocol) {version : Nat} (positive :
   simp only [Option.bind_eq_bind, Option.bind_some, dropSuffix?_append, find?_name, drop, digits,
     nonzero, ite_false, back]
 
-/-- The protocol IDs of a fork are missing exactly from Gloas on. -/
+/-- The protocol IDs of a fork are missing exactly from Heze on. -/
 theorem protocolIds_eq_none_iff {fork : Fork} :
-    protocolIds fork = none ↔ .glamsterdam ≤ fork := by
+    protocolIds fork = none ↔ .hegota ≤ fork := by
   unfold protocolIds
   split <;> simp_all
 
