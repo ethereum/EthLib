@@ -34,7 +34,7 @@ pytestmark = pytest.mark.archive
 
 @pytest.mark.parametrize(
     "case",
-    [case for cases in CASES.values() for case in harness.runnable(cases)],
+    [case for cases in CASES.values() for case in harness.in_shard(cases)],
     ids=lambda case: f"{case.suite}:{case.id}",
 )
 def test_case(case, request, record_property) -> None:
