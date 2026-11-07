@@ -852,11 +852,13 @@ The loop then needs the sum of those prices and the price of its exit.
 `Logic.holds_empty` proves that memory holds no bytes from an offset within it.
 `Logic.Stored` is a running frame that knows ranges of memory, the facts of some slots, and the refund counter.
 A fact of a slot gives its account, its key, its word before the transaction, its word now, and whether it is warm.
-`Logic.Agrees` says that a state and its accessed keys agree with a base outside a list of slots.
+`Logic.Agrees` says that a state and its accessed keys agree with a base outside a list of slots and a list of addresses.
 There each word reads as in the base state, and each slot is warm exactly when the base keys hold it.
-The words before the transaction, the accounts, the codes and the block are those of the base state.
-A `Stored` frame agrees with its base outside the slots of its facts.
-`Logic.Agrees.trans` proves that agreement composes, outside both lists of slots.
+The words before the transaction, the codes and the block are those of the base state.
+Outside the addresses each account is that of the base state.
+At every address an account exists exactly when it does in the base state, with its nonce and its code hash.
+A `Stored` frame agrees with its base outside the slots of its facts, and at every address.
+`Logic.Agrees.trans` proves that agreement composes, outside both lists of slots and both lists of addresses.
 `Logic.Stored.of_known` proves that a rule that keeps the state and the substate keeps every fact.
 `Logic.Stored.of_at` proves the same for a rule that also keeps memory.
 `Logic.sload_stored` proves that from Berlin, SLOAD of the key of a fact of the frame's account pushes its word now.
@@ -867,11 +869,15 @@ It pays the price of EIP-2200 with the prices of EIP-2929 from the facts of the 
 `Logic.StoppedStored.of_known` proves that a rule that halts and keeps the state and the substate keeps every fact.
 `Logic.stop_stored` proves that STOP keeps every fact.
 These frames say nothing of the logs, the accessed addresses and the other fields of the substate.
-`Logic.Change` names the slots that a message may touch, and the facts and the refund it gives on success.
-`Logic.Effect` (`Logic/Effect.lean`) is the effect of a message on storage, from the frame that sends it.
-Outside the slots it touches, the state after agrees with the state before, and a failed message touches no slot.
-A message that succeeds gives the facts of some slots and adds a refund.
-`Logic.effects_rollbackOnError` proves that a callee whose stopped frame agrees with its start outside some slots has such an effect after the rollback.
+`Logic.Change` names the slots that a message may touch and the addresses whose balances it may move.
+It also names the facts, the balances and the refund that the message gives on success.
+`Logic.Effect` (`Logic/Effect.lean`) is the effect of a message on storage and balances, from the frame that sends it.
+Outside the slots and the addresses of its change, the state after agrees with the state before.
+A failed message touches no slot and moves no balance.
+A message that succeeds gives the facts of some slots and some balances, and adds a refund.
+`Logic.effects_rollbackOnError` proves that a callee whose stopped frame agrees with the state of its caller outside a change has its effect after the rollback.
+`Logic.agrees_moveEther` proves that a move of a value that is not 0 between two accounts changes only their balances.
+It needs the two accounts to exist and the sender to have a nonce or a code.
 `Logic.CallMessage` is the message that a call sends when it sends no value of its own, by the kind of the call.
 `Logic.callKind_stored` proves that from Berlin to before Glamsterdam, such a call keeps the facts of a `Stored` frame.
 It keeps each fact of a slot that the effect of the callee does not touch.
@@ -886,8 +892,17 @@ Its new base agrees with the old one outside the touched slots and the slots of 
 `Logic.staticcall_stored` proves this for STATICCALL.
 `Logic.delegatecall_stored` proves this for DELEGATECALL.
 `Logic.callcode_stored` proves this for CALLCODE with no value.
+`Logic.ValueMessage` is the message that CALL sends with a value.
+`Logic.callValue_stored` proves that from Berlin to before Glamsterdam, CALL with a value that is not 0 keeps the facts of a `Stored` frame in the same way.
+It needs a frame that may change the state, and its account must hold the value in the base state.
+It needs the gas of a cold call, 9000 for the value, and 25000 more when the callee is dead in the base state.
+On success the new base also holds the balances of the effect.
+The new base agrees with the old one outside the addresses whose balances the effect moves, too.
+`Logic.Entered` gives the state and the substate that the frame of a message starts from, after the move of its value.
+`Logic.Entered.of_not_transfers` proves that a message that moves no value starts from the start state and the substate of its caller.
 `Logic.meets_runsAll` proves that the runner of the interpreter meets the specifications of a family of codes that call each other, at every bound.
 Each specification is a triple under the assumption that the whole family runs as specified, so a callee may call its caller back.
+Each specification holds from every frame that a message with its code enters, so a message may move a value.
 The proof is an induction on the bound on the gas of messages.
 `HoareUnder.of_exists` proves a triple from a precondition that gives a witness, with a triple for each witness.
 `StepBy` (`Logic/Message.lean`) adds the steps that send a message, which a runner of messages ends with a frame.
@@ -929,6 +944,7 @@ That assumption says that a message with no code, to an account that is no preco
 The frame must be one that may change the state.
 It pays the access of EIP-2929, 9000 for the value, 25000 more when the callee is dead by EIP-161, and the growth of memory.
 The message gets the gas that EIP-150 allows and the stipend of 2300, and carries the value.
+The message is not static.
 `Logic.callValueLow` is the rule for such a CALL when the current account holds less than the value.
 It sends no message, pushes 0, and gives back the gas it would pass on with the stipend.
 `Logic.callStep_value_low` also proves that this step empties the return data.

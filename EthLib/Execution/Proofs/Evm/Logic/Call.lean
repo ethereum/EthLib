@@ -302,7 +302,8 @@ theorem callStep_value (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       msg.code = calleeCode ∧
       msg.data = memoryReadBytes (memoryExtend evm.memory
         (extendMemory evm.memory.size [(i, isz), (o, osz)]).expandBy) i.toNat isz.toNat ∧
-      msg.value = v ∧ msg.shouldTransferValue = true ∧ msg.depth = evm.message.depth + 1 := by
+      msg.value = v ∧ msg.shouldTransferValue = true ∧ msg.depth = evm.message.depth + 1 ∧
+      msg.isStatic = false := by
   have hng : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hglam
   rcases evm with ⟨pc, ⟨l, hl⟩, memory, code, valid, gas, running, message, output, returnData,
     state, substate, error⟩
@@ -342,7 +343,7 @@ theorem callStep_value (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     GasMeter.gasLeft, GasMeter.drain, GasMeter.reservoir, Nat.not_lt.mpr hdepth, hstatic, hE,
     hgas', Nat.not_lt.mpr hmin, hbal']
   exact ⟨_, _, ⟨rfl, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl,
-    rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- The step of CALL with more value than the current account holds sends no message.
 
@@ -1003,6 +1004,8 @@ It passes on the gas it asks for, at most all but one 64th of the gas left, by E
 
 The message gets that gas and the stipend of 2300, and carries the value.
 
+The message is not static.
+
 The rule holds for every frame that ends the message and meets the assumption.
 
 It says nothing of the state beyond what that frame gives, as for CALL with no value. -/
@@ -1041,6 +1044,7 @@ theorem callValue (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
           (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).expandBy)
           inputStart.toNat inputSize.toNat ∧
         msg.value = v ∧ msg.shouldTransferValue = true ∧ msg.depth = message.depth + 1 ∧
+        msg.isStatic = false ∧
         At code message (pc + 1) ((if child.error.isNone then 1 else 0) :: rest)
           (memoryWrite (memoryExtend memory
             (extendMemory memory.size
@@ -1058,7 +1062,7 @@ theorem callValue (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
   rintro evm ⟨hc, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
   subst hm hg hs hss hcold hmem
   obtain ⟨caller, msg, hstep, c1, c2, c3, c4, c5, c6, c7, c8, c9, co, c10, c11, m1, m2, m3, mt,
-      mca, m4, md, m5, m6, m7⟩ :=
+      mca, m4, md, m5, m6, m7, m8⟩ :=
     callStep_value hfork hglam hst hv hstatic hbal hcode hdel hdepth hgas
   refine ⟨hrun, caller, msg, resumeCall fork caller 0 outputStart outputSize, ?_, ?_⟩
   · rw [step_of_messageInstruction (by rw [hc, hpc]; exact hlt)
@@ -1075,7 +1079,7 @@ theorem callValue (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     obtain ⟨after, hres, a1, a2, a3, a4, a5, a6, a7, a8, a9, ao, a10, a11⟩ :=
       resumeCall_eq (child := child) (o := outputStart) (osz := outputSize) hlen
     refine .inl ⟨after, hres, caller, msg, child, hcallee, hchild, c10, c11, m1, m2, m3, mt, mca,
-      m4, md, m5, m6, m7, ?_⟩
+      m4, md, m5, m6, m7, m8, ?_⟩
     exact ⟨by rw [a1, c1, hc], by rw [a2, c2, hj], by rw [a3, c3], by rw [a4, c4, hpc],
       by rw [a5, c5], by rw [a6, c6], by rw [a7, c7], by rw [a8, c8, hrun], by rw [a9, c9, herr],
       by rw [ao, co, hout], a10, a11⟩
