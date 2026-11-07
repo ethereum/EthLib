@@ -85,6 +85,10 @@ class ValidatorDutyError(EthLibError, ValueError):
     """A duty of an honest validator has no result for its state or its input."""
 
 
+class ProposerError(EthLibError, ValueError):
+    """A step of an honest proposer has no result for its state or its input."""
+
+
 class LightClientError(EthLibError, ValueError):
     """A light client rejected a bootstrap or an update."""
 
@@ -231,6 +235,7 @@ __all__ = [
     "TransitionError",
     "WeakSubjectivityError",
     "ValidatorDutyError",
+    "ProposerError",
     "LightClientError",
     "ForkChoiceError",
     "HkdfError",

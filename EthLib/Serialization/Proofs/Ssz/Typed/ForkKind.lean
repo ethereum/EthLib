@@ -67,6 +67,18 @@ theorem serialize_forkList_across {earlier later : Fork} (after : switch ≤ lat
   simp [Serialization.Ssz.serialize, boundCheck, b.bound before]
   rfl
 
+/-- The empty bytes decode to the empty list, before and after the switch. -/
+theorem deserialize_forkList_empty :
+    SszType.deserialize (ForkList switch fork α limit) ByteArray.empty =
+      .ok ⟨#[], fun _ => Nat.zero_le _⟩ := by
+  unfold SszType.deserialize
+  show (do SszType.ofValue (← Ssz.deserialize _ #[])) = _
+  simp only [SszType.desc]
+  split <;>
+  · rw [Ssz.deserialize]
+    simp [listSlices_empty, deserializeEach_nil, bind, Except.bind, pure, Except.pure,
+      SszType.ofValue, SszType.ofElements, SszType.ofElementsOnto]
+
 variable [LawfulSszType α]
 
 instance : LawfulSszType (ForkList switch fork α limit) where
@@ -96,6 +108,19 @@ instance : LawfulSszType (ForkList switch fork α limit) where
         subst made
         simp [toValue, ← map_toValue_of_ofElements read]
       · cases made
+
+/-- The empty list has empty SSZ bytes. -/
+theorem serialize_forkList_empty :
+    SszType.serialize (⟨#[], fun _ => Nat.zero_le _⟩ : ForkList switch fork α limit) =
+      .ok .empty :=
+  SszType.serialize_deserialize deserialize_forkList_empty
+
+/-- A list with SSZ bytes is empty exactly when its bytes are. -/
+theorem forkList_size_eq_zero_iff {list : ForkList switch fork α limit} {data : ByteArray}
+    (wrote : SszType.serialize list = .ok data) : list.data.size = 0 ↔ data.size = 0 := by
+  rw [SszType.size_eq_zero_iff_of_deserialize_empty deserialize_forkList_empty wrote]
+  cases list
+  simp [Array.size_eq_zero_iff]
 
 end List
 

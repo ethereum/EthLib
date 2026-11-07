@@ -145,7 +145,7 @@ parse_bytes(
 }
 
 /* Read a sequence of `bytes` of any lengths into a Lean `Array ByteArray`. */
-static int
+int
 parse_bytes_sequence(
   PyObject* seq,
   const char* name,

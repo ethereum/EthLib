@@ -2947,6 +2947,141 @@
    "docstring":
    "The signature of the object of a duty, by a secret key of 32 big-endian bytes.\n\nThe preset, the configuration, the fork and the duty are named in UTF-8.\n\nThe object comes as SSZ bytes, by duty:\n\n- `randao` and `block`: a block.\n- `attestation`: attestation data.\n- `slot`: a slot.\n- `aggregate_and_proof`: an aggregate and proof.\n- `sync_committee_message`: a block root.\n- `sync_committee_selection_proof`: sync aggregator selection data.\n- `contribution_and_proof`: a contribution and proof.\n\nThe three duties of the sync committee need Altair; before it they have code 0."},
   {"summary":
+   "Before Heze: the Eth1 vote of a proposer on a state, as the SSZ bytes of the Eth1 data.",
+   "signature":
+   "(name: str, fork: str, state: bytes, config: bytes, chain: list[bytes]) -> bytes",
+   "operation": "EthLib.Consensus.Exports.getEth1VoteExport",
+   "method": "consensus_get_eth1_vote",
+   "errors":
+   [{"type": "EthLib.Consensus.ProposerError",
+     "codes":
+     [{"constructor": "arith", "code": 1},
+      {"constructor": "accessor", "code": 2},
+      {"constructor": "ssz", "code": 3},
+      {"constructor": "bls", "code": 4},
+      {"constructor": "transition", "code": 5},
+      {"constructor": "noAggregates", "code": 6},
+      {"constructor": "noCommittee", "code": 7},
+      {"constructor": "tooManyBits", "code": 8},
+      {"constructor": "unknownRequestType", "code": 9},
+      {"constructor": "emptyRequest", "code": 10},
+      {"constructor": "requestTypeOrder", "code": 11}]}],
+   "error_class": "ProposerError",
+   "docstring":
+   "Before Heze: the Eth1 vote of a proposer on a state, as the SSZ bytes of the Eth1 data.\n\nEach block of the Eth1 chain is its timestamp and its Eth1 data, by increasing height."},
+  {"summary":
+   "In Electra: the number of deposits of the deposit contract that a proposer includes.",
+   "signature": "(name: str, fork: str, state: bytes) -> int",
+   "operation": "EthLib.Consensus.Exports.getEth1PendingDepositCountExport",
+   "method": "consensus_get_eth1_pending_deposit_count",
+   "errors":
+   [{"type": "EthLib.Consensus.ProposerError",
+     "codes":
+     [{"constructor": "arith", "code": 1},
+      {"constructor": "accessor", "code": 2},
+      {"constructor": "ssz", "code": 3},
+      {"constructor": "bls", "code": 4},
+      {"constructor": "transition", "code": 5},
+      {"constructor": "noAggregates", "code": 6},
+      {"constructor": "noCommittee", "code": 7},
+      {"constructor": "tooManyBits", "code": 8},
+      {"constructor": "unknownRequestType", "code": 9},
+      {"constructor": "emptyRequest", "code": 10},
+      {"constructor": "requestTypeOrder", "code": 11}]}],
+   "error_class": "ProposerError",
+   "docstring":
+   "In Electra: the number of deposits of the deposit contract that a proposer includes."},
+  {"summary":
+   "The root of the state after a block, to set as its state root, as 32 bytes.",
+   "signature":
+   "(name: str, fork: str, state: bytes, block: bytes, config: bytes, verify: bool) -> bytes",
+   "operation": "EthLib.Consensus.Exports.computeNewStateRootExport",
+   "method": "consensus_compute_new_state_root",
+   "errors":
+   [{"type": "EthLib.Consensus.ProposerError",
+     "codes":
+     [{"constructor": "arith", "code": 1},
+      {"constructor": "accessor", "code": 2},
+      {"constructor": "ssz", "code": 3},
+      {"constructor": "bls", "code": 4},
+      {"constructor": "transition", "code": 5},
+      {"constructor": "noAggregates", "code": 6},
+      {"constructor": "noCommittee", "code": 7},
+      {"constructor": "tooManyBits", "code": 8},
+      {"constructor": "unknownRequestType", "code": 9},
+      {"constructor": "emptyRequest", "code": 10},
+      {"constructor": "requestTypeOrder", "code": 11}]}],
+   "error_class": "ProposerError",
+   "docstring":
+   "The root of the state after a block, to set as its state root, as 32 bytes.\n\nThe signature checks of the operations run unless the last argument is false.\n\nThe execution layer accepts every payload, as in the vectors."},
+  {"summary":
+   "From Electra: the attestation on chain from network aggregates, as SSZ bytes.",
+   "signature": "(name: str, fork: str, aggregates: list[bytes]) -> bytes",
+   "operation": "EthLib.Consensus.Exports.computeOnChainAggregateExport",
+   "method": "consensus_compute_on_chain_aggregate",
+   "errors":
+   [{"type": "EthLib.Consensus.ProposerError",
+     "codes":
+     [{"constructor": "arith", "code": 1},
+      {"constructor": "accessor", "code": 2},
+      {"constructor": "ssz", "code": 3},
+      {"constructor": "bls", "code": 4},
+      {"constructor": "transition", "code": 5},
+      {"constructor": "noAggregates", "code": 6},
+      {"constructor": "noCommittee", "code": 7},
+      {"constructor": "tooManyBits", "code": 8},
+      {"constructor": "unknownRequestType", "code": 9},
+      {"constructor": "emptyRequest", "code": 10},
+      {"constructor": "requestTypeOrder", "code": 11}]}],
+   "error_class": "ProposerError",
+   "docstring":
+   "From Electra: the attestation on chain from network aggregates, as SSZ bytes."},
+  {"summary": "From Electra: the requests of an execution block, as SSZ bytes.",
+   "signature": "(name: str, fork: str, requests: list[bytes]) -> bytes",
+   "operation": "EthLib.Consensus.Exports.getExecutionRequestsExport",
+   "method": "consensus_get_execution_requests",
+   "errors":
+   [{"type": "EthLib.Consensus.ProposerError",
+     "codes":
+     [{"constructor": "arith", "code": 1},
+      {"constructor": "accessor", "code": 2},
+      {"constructor": "ssz", "code": 3},
+      {"constructor": "bls", "code": 4},
+      {"constructor": "transition", "code": 5},
+      {"constructor": "noAggregates", "code": 6},
+      {"constructor": "noCommittee", "code": 7},
+      {"constructor": "tooManyBits", "code": 8},
+      {"constructor": "unknownRequestType", "code": 9},
+      {"constructor": "emptyRequest", "code": 10},
+      {"constructor": "requestTypeOrder", "code": 11}]}],
+   "error_class": "ProposerError",
+   "docstring":
+   "From Electra: the requests of an execution block, as SSZ bytes.\n\nThey come from the list that the execution layer gives, one typed list per entry."},
+  {"summary":
+   "From Fulu: the number of custody groups of a node, from the indices of its validators.",
+   "signature":
+   "(name: str, fork: str, state: bytes, config: bytes, validator_indices: list[bytes]) -> int",
+   "operation":
+   "EthLib.Consensus.Exports.getValidatorsCustodyRequirementExport",
+   "method": "consensus_get_validators_custody_requirement",
+   "errors":
+   [{"type": "EthLib.Consensus.ProposerError",
+     "codes":
+     [{"constructor": "arith", "code": 1},
+      {"constructor": "accessor", "code": 2},
+      {"constructor": "ssz", "code": 3},
+      {"constructor": "bls", "code": 4},
+      {"constructor": "transition", "code": 5},
+      {"constructor": "noAggregates", "code": 6},
+      {"constructor": "noCommittee", "code": 7},
+      {"constructor": "tooManyBits", "code": 8},
+      {"constructor": "unknownRequestType", "code": 9},
+      {"constructor": "emptyRequest", "code": 10},
+      {"constructor": "requestTypeOrder", "code": 11}]}],
+   "error_class": "ProposerError",
+   "docstring":
+   "From Fulu: the number of custody groups of a node, from the indices of its validators.\n\nEach index is 8 bytes, little-endian."},
+  {"summary":
    "The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes.",
    "signature":
    "(name: str, fork: str, pre: bytes, config: bytes, verify: bool) -> bytes",

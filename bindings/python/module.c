@@ -100,6 +100,7 @@ PyObject* LIGHT_CLIENT_ERROR;
 PyObject* FORK_CHOICE_ERROR;
 PyObject* WEAK_SUBJECTIVITY_ERROR;
 PyObject* VALIDATOR_DUTY_ERROR;
+PyObject* PROPOSER_ERROR;
 
 /* ---- Lean externs: size accessors ------------------------------------ */
 
@@ -744,6 +745,19 @@ static PyMethodDef methods[] = {
    DOC_consensus_compute_subnets_for_sync_committee},
   {"consensus_get_validator_signature", py_consensus_get_validator_signature, METH_VARARGS,
    DOC_consensus_get_validator_signature},
+  {"consensus_get_eth1_vote", py_consensus_get_eth1_vote, METH_VARARGS,
+   DOC_consensus_get_eth1_vote},
+  {"consensus_get_eth1_pending_deposit_count", py_consensus_get_eth1_pending_deposit_count,
+   METH_VARARGS, DOC_consensus_get_eth1_pending_deposit_count},
+  {"consensus_compute_new_state_root", py_consensus_compute_new_state_root, METH_VARARGS,
+   DOC_consensus_compute_new_state_root},
+  {"consensus_compute_on_chain_aggregate", py_consensus_compute_on_chain_aggregate,
+   METH_VARARGS, DOC_consensus_compute_on_chain_aggregate},
+  {"consensus_get_execution_requests", py_consensus_get_execution_requests, METH_VARARGS,
+   DOC_consensus_get_execution_requests},
+  {"consensus_get_validators_custody_requirement",
+   py_consensus_get_validators_custody_requirement, METH_VARARGS,
+   DOC_consensus_get_validators_custody_requirement},
   {"pq_keys_ssz", py_pq_keys_ssz, METH_VARARGS, DOC_pq_keys_ssz},
   {"pq_keys_possession_signing_root", py_pq_keys_possession_signing_root, METH_VARARGS,
    DOC_pq_keys_possession_signing_root},
@@ -964,6 +978,7 @@ PyInit__native(void) {
     CHAIN_ERROR = PyObject_GetAttrString(errors, "ChainError");
     WEAK_SUBJECTIVITY_ERROR = PyObject_GetAttrString(errors, "WeakSubjectivityError");
     VALIDATOR_DUTY_ERROR = PyObject_GetAttrString(errors, "ValidatorDutyError");
+    PROPOSER_ERROR = PyObject_GetAttrString(errors, "ProposerError");
     Py_DECREF(errors);
     if (PyErr_Occurred()) return NULL;
 

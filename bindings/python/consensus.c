@@ -259,6 +259,33 @@ eth_consensus_get_validator_signature(
   lean_object* duty, lean_object* object, lean_object* secret_key);
 
 extern lean_object*
+eth_consensus_get_eth1_vote(
+  lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
+  lean_object* chain);
+
+extern lean_object*
+eth_consensus_get_eth1_pending_deposit_count(
+  lean_object* name, lean_object* fork, lean_object* state);
+
+extern lean_object*
+eth_consensus_compute_new_state_root(
+  lean_object* name, lean_object* fork, lean_object* state, lean_object* block,
+  lean_object* config, uint8_t verify);
+
+extern lean_object*
+eth_consensus_compute_on_chain_aggregate(
+  lean_object* name, lean_object* fork, lean_object* aggregates);
+
+extern lean_object*
+eth_consensus_get_execution_requests(
+  lean_object* name, lean_object* fork, lean_object* requests);
+
+extern lean_object*
+eth_consensus_get_validators_custody_requirement(
+  lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
+  lean_object* indices);
+
+extern lean_object*
 eth_consensus_state_transition_across(
   lean_object* name,
   lean_object* fork,
@@ -1492,6 +1519,159 @@ py_consensus_get_validator_signature(
     eth_consensus_get_validator_signature(a[0], a[1], a[2], a[3], duty,
       mk_bytearray(object, object_len), mk_bytearray(key, key_len)),
     VALIDATOR_DUTY_ERROR);
+}
+
+/* A sequence of `bytes` of one length as a Lean `Array ByteArray`, or NULL with an exception set.
+ */
+static lean_object*
+fixed_bytes_list_arg(
+  PyObject* seq,
+  Py_ssize_t stride,
+  const char* name
+) {
+  Py_ssize_t n;
+  uint8_t* buf = pack_bytes_sequence(seq, stride, &n, name);
+  if (!buf) return NULL;
+  lean_object* arr = mk_bytearray_array(buf, (size_t) n, (size_t) stride);
+  PyMem_Free(buf);
+  return arr;
+}
+
+/* The name, the fork and a list of a proposer export, or -1 with an exception set.
+ * On success the caller owns the three Lean objects. */
+static int
+named_list_args(
+  PyObject* name_obj, PyObject* fork_obj, PyObject* list_obj, const char* list_name,
+  lean_object** out
+) {
+  lean_object* list;
+  if (parse_bytes_sequence(list_obj, list_name, &list)) return -1;
+  lean_object* name = str_arg(name_obj, "name");
+  if (!name) {
+    lean_dec(list);
+    return -1;
+  }
+  lean_object* fork = str_arg(fork_obj, "fork");
+  if (!fork) {
+    lean_dec(name);
+    lean_dec(list);
+    return -1;
+  }
+  out[0] = name;
+  out[1] = fork;
+  out[2] = list;
+  return 0;
+}
+
+PyObject*
+py_consensus_get_eth1_vote(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *chain_obj;
+  const uint8_t *state, *config;
+  Py_ssize_t state_len, config_len;
+  if (!PyArg_ParseTuple(args, "OOy#y#O", &name_obj, &fork_obj, &state, &state_len, &config,
+                        &config_len, &chain_obj))
+    return NULL;
+  /* Each block is its 8-byte timestamp followed by its 72-byte Eth1 data. */
+  lean_object* chain = fixed_bytes_list_arg(chain_obj, 80, "chain");
+  if (!chain) return NULL;
+  lean_object* a[4];
+  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) {
+    lean_dec(chain);
+    return NULL;
+  }
+  return except_into_pybytes(eth_consensus_get_eth1_vote(a[0], a[1], a[2], a[3], chain),
+    PROPOSER_ERROR);
+}
+
+PyObject*
+py_consensus_get_eth1_pending_deposit_count(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj;
+  const uint8_t* state;
+  Py_ssize_t state_len;
+  if (!PyArg_ParseTuple(args, "OOy#", &name_obj, &fork_obj, &state, &state_len)) return NULL;
+  lean_object* a[4];
+  if (duty_args(name_obj, fork_obj, state, state_len, (const uint8_t*) "", 0, a) < 0)
+    return NULL;
+  /* The count reads no configuration. */
+  lean_dec(a[3]);
+  return except_into_pyint(eth_consensus_get_eth1_pending_deposit_count(a[0], a[1], a[2]),
+    PROPOSER_ERROR);
+}
+
+PyObject*
+py_consensus_compute_new_state_root(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj;
+  const uint8_t *state, *block, *config;
+  Py_ssize_t state_len, block_len, config_len;
+  int verify;
+  if (!PyArg_ParseTuple(args, "OOy#y#y#p", &name_obj, &fork_obj, &state, &state_len, &block,
+                        &block_len, &config, &config_len, &verify))
+    return NULL;
+  lean_object* a[4];
+  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) return NULL;
+  return except_into_pybytes(
+    eth_consensus_compute_new_state_root(a[0], a[1], a[2], mk_bytearray(block, block_len), a[3],
+      (uint8_t) verify),
+    PROPOSER_ERROR);
+}
+
+PyObject*
+py_consensus_compute_on_chain_aggregate(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *list_obj;
+  if (!PyArg_ParseTuple(args, "OOO", &name_obj, &fork_obj, &list_obj)) return NULL;
+  lean_object* a[3];
+  if (named_list_args(name_obj, fork_obj, list_obj, "aggregates", a) < 0) return NULL;
+  return except_into_pybytes(eth_consensus_compute_on_chain_aggregate(a[0], a[1], a[2]),
+    PROPOSER_ERROR);
+}
+
+PyObject*
+py_consensus_get_execution_requests(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *list_obj;
+  if (!PyArg_ParseTuple(args, "OOO", &name_obj, &fork_obj, &list_obj)) return NULL;
+  lean_object* a[3];
+  if (named_list_args(name_obj, fork_obj, list_obj, "requests", a) < 0) return NULL;
+  return except_into_pybytes(eth_consensus_get_execution_requests(a[0], a[1], a[2]),
+    PROPOSER_ERROR);
+}
+
+PyObject*
+py_consensus_get_validators_custody_requirement(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *indices_obj;
+  const uint8_t *state, *config;
+  Py_ssize_t state_len, config_len;
+  if (!PyArg_ParseTuple(args, "OOy#y#O", &name_obj, &fork_obj, &state, &state_len, &config,
+                        &config_len, &indices_obj))
+    return NULL;
+  /* Each validator index is 8 bytes, little-endian. */
+  lean_object* indices = fixed_bytes_list_arg(indices_obj, 8, "validator_indices");
+  if (!indices) return NULL;
+  lean_object* a[4];
+  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) {
+    lean_dec(indices);
+    return NULL;
+  }
+  return except_into_pyint(
+    eth_consensus_get_validators_custody_requirement(a[0], a[1], a[2], a[3], indices),
+    PROPOSER_ERROR);
 }
 
 PyObject*

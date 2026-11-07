@@ -1,6 +1,7 @@
 """The consensus layer: presets, configurations, containers, the shuffle, custody and networking."""
 
 import json
+import struct
 from typing import Any
 
 # Every domain links into one extension module.
@@ -10,6 +11,7 @@ from ethlib.errors import (
     ConsensusError,
     ForkChoiceError,
     LightClientError,
+    ProposerError,
     TransitionError,
     ValidatorDutyError,
     WeakSubjectivityError,
@@ -736,6 +738,53 @@ def get_validator_signature(
     )
 
 
+def get_eth1_vote(
+    name: str, fork: str, state: bytes, chain: list, config: dict | None = None
+) -> bytes:
+    """The Eth1 data that a proposer votes for, from Eth1 blocks as (timestamp, Eth1 data)."""
+    blocks = [struct.pack("<Q", timestamp) + data for timestamp, data in chain]
+    return _native.consensus_get_eth1_vote(name, fork, state, _replacements(config), blocks)
+
+
+def get_eth1_pending_deposit_count(name: str, fork: str, state: bytes) -> int:
+    """In Electra, the number of deposits of the deposit contract that a block holds."""
+    return _native.consensus_get_eth1_pending_deposit_count(name, fork, state)
+
+
+def compute_new_state_root(
+    name: str,
+    fork: str,
+    state: bytes,
+    block: bytes,
+    verify: bool = True,
+    config: dict | None = None,
+) -> bytes:
+    """The 32-byte root of the state after a block, to set as the state root of that block."""
+    return _native.consensus_compute_new_state_root(
+        name, fork, state, block, _replacements(config), verify
+    )
+
+
+def compute_on_chain_aggregate(name: str, fork: str, aggregates: list) -> bytes:
+    """The attestation on chain from network aggregates of the same data, as SSZ bytes."""
+    return _native.consensus_compute_on_chain_aggregate(name, fork, aggregates)
+
+
+def get_execution_requests(name: str, fork: str, requests: list) -> bytes:
+    """The requests of an execution block from the typed lists of the execution layer."""
+    return _native.consensus_get_execution_requests(name, fork, requests)
+
+
+def get_validators_custody_requirement(
+    name: str, fork: str, state: bytes, validator_indices: list, config: dict | None = None
+) -> int:
+    """The number of custody groups of a node with these validators."""
+    indices = [struct.pack("<Q", index) for index in validator_indices]
+    return _native.consensus_get_validators_custody_requirement(
+        name, fork, state, _replacements(config), indices
+    )
+
+
 def upgrade_state(
     name: str, fork: str, pre: bytes, verify: bool = True, config: dict | None = None
 ) -> bytes:
@@ -780,6 +829,7 @@ __all__ = [
     "TransitionError",
     "WeakSubjectivityError",
     "ValidatorDutyError",
+    "ProposerError",
     "process_operation",
     "LightClientError",
     "ForkChoiceError",
@@ -803,6 +853,12 @@ __all__ = [
     "is_assigned_to_sync_committee",
     "compute_subnets_for_sync_committee",
     "get_validator_signature",
+    "get_eth1_vote",
+    "get_eth1_pending_deposit_count",
+    "compute_new_state_root",
+    "compute_on_chain_aggregate",
+    "get_execution_requests",
+    "get_validators_custody_requirement",
     "process_slots",
     "state_transition",
     "state_transition_across",

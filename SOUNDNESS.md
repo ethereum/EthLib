@@ -870,6 +870,32 @@ The search can still fail, for an epoch after the next one or a committee withou
 No theorem says which subnets or sync committee seat a validator has.
 The Python suite checks each duty signature against py_ecc, on signing roots computed in the test, and each committee against the shuffle export.
 
+### Honest proposer
+
+`Consensus/HonestProposer.lean` holds what an honest validator computes to fill the block it proposes.
+Before Heze it votes on the Eth1 data, and in Electra it counts the deposits of the deposit contract that the block holds.
+It computes the state root of the block, and from Electra it joins the network aggregates of one vote and reads the requests of the execution layer from their bytes.
+From Fulu it counts the custody groups of a node with validators.
+The theorems are in `Consensus/Proofs/HonestProposer.lean`.
+
+The Eth1 data of an Eth1 block is not specified, so the vote takes the timestamp and the Eth1 data of a block as functions, and every theorem about it holds for all of them.
+`getEth1Vote_eq_or_candidate` shows that the vote is the data of the state or the data of a candidate block of the chain, and `depositCount_le_of_getEth1Vote` that its deposit count is never below that of the state.
+`getEth1Vote_most_voted` shows that, when the state already holds a vote for a candidate, the vote is such a vote with the most copies.
+`expectedDepositCount_eq_getEth1PendingDepositCount` shows that the pending deposit count of Electra is the count that block processing requires.
+From Fulu that count is zero, as `expectedDepositCount_of_fusaka` shows, so the pending count is defined in Electra only.
+
+`processBlock_stateRoot` shows that block processing never reads the state root of the block.
+So `stateTransition_of_computeNewStateRoot` shows that a block that carries the new state root passes the full transition, checks included, and that the state after it has that root.
+It assumes a signature that passes the block signature check.
+`computeOnChainAggregate_spec` shows that the on-chain aggregate joins the network aggregates sorted by their first committee, and `committeeBits_computeOnChainAggregate` that its committee bits mark exactly those committees.
+`getExecutionRequests_eq_ok_iff` shows that the requests read from a list are exactly the requests that give that list.
+It rests on the canonical SSZ decoder and on the empty bytes being the only encoding of an empty list.
+`signedHeader_eq_ok_iff` shows that the signed header of a block carries the root of its body, and `getValidatorsCustodyRequirement_bounds` that the custody requirement stays between its two bounds.
+
+No theorem says that the on-chain aggregate verifies, which rests on BLS and on the disjoint committees of the network aggregates.
+The Python suite checks the new state root against the state root of each valid sanity block case that the repository holds, at seven forks from Phase 0 to Heze.
+It checks the Eth1 vote, the pending deposit count, the custody requirement, the on-chain aggregate and the execution requests against values worked out in the test from the guides, with py_ecc for the aggregate signature.
+
 ### Light client
 
 A light client accepts an update that the sync committee signed, and moves its store by it.
@@ -1124,12 +1150,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 251 operations and 41 size constants.
-The Python extension calls 251 of the operations and 41 of the constants.
+Lean exports 257 operations and 41 size constants.
+The Python extension calls 257 of the operations and 41 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-8557 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (1637), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1105), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (469), `xmss.c` (134).
+8768 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (1817), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1120), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (485), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
