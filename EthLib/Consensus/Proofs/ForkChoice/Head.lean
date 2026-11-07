@@ -27,9 +27,9 @@ The head has no child among the viable nodes, so the walk stops only at a leaf.
 
 A viable node with children has a viable child, so from Gloas the head is never a pending node.
 
-From Gloas a block of the previous slot has an empty and a full node, both viable.
+From Gloas, let a block of the previous slot have a verified payload and both its nodes viable.
 
-The walk takes the full node exactly when the payload extends.
+The walk then takes the full node exactly when the payload extends.
 -/
 
 @[expose] public section
