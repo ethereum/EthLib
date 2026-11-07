@@ -387,15 +387,25 @@ theorem toBytesBE_eq (a : Montgomery M) :
   rw [bytesBE_length, bytesToNat_bytesBE (Limbs.fits _ 0), toNat_eq_val]
   rfl
 
+/-- Reading a byte past the end with `!` gives the default `0`, as `getD` does. -/
+private theorem getElem!_eq_getD (b : ByteArray) (i : ℕ) : b[i]! = b.data.getD i 0 := by
+  by_cases h : i < b.size
+  · rw [getElem!_pos b i h, Array.getD_eq_getD_getElem?, Array.getElem?_eq_getElem h]
+    rfl
+  · rw [getElem!_neg b i h, Array.getD_eq_getD_getElem?,
+      Array.getElem?_eq_none (Nat.le_of_not_lt h)]
+    rfl
+
 /-- A word read from four bytes is their big-endian integer. -/
 theorem wordBE_toNat (b : ByteArray) (i : ℕ) :
     (wordBE b i).toNat = b[i]!.toNat * 2 ^ 24 + b[i + 1]!.toNat * 2 ^ 16 +
       b[i + 2]!.toNat * 2 ^ 8 + b[i + 3]!.toNat := by
-  have := b[i]!.toNat_lt
-  have := b[i + 1]!.toNat_lt
-  have := b[i + 2]!.toNat_lt
-  have := b[i + 3]!.toNat_lt
-  simp only [wordBE, UInt32.toNat_add, UInt32.toNat_mul, UInt8.toNat_toUInt32]
+  simp only [wordBE, getElem!_eq_getD]
+  have := (b.data.getD i 0).toNat_lt
+  have := (b.data.getD (i + 1) 0).toNat_lt
+  have := (b.data.getD (i + 2) 0).toNat_lt
+  have := (b.data.getD (i + 3) 0).toNat_lt
+  simp only [UInt32.toNat_add, UInt32.toNat_mul, UInt8.toNat_toUInt32]
   simp only [UInt32.reduceToNat]
   omega
 

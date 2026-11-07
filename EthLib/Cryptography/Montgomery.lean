@@ -1446,8 +1446,8 @@ It is the inverse only when `p` is prime. -/
 
 A byte past the end reads as `0`. -/
 @[inline] def wordBE (b : ByteArray) (i : Nat) : UInt32 :=
-  b[i]!.toUInt32 * 16777216 + b[i + 1]!.toUInt32 * 65536 + b[i + 2]!.toUInt32 * 256 +
-    b[i + 3]!.toUInt32
+  (b.data.getD i 0).toUInt32 * 16777216 + (b.data.getD (i + 1) 0).toUInt32 * 65536 +
+    (b.data.getD (i + 2) 0).toUInt32 * 256 + (b.data.getD (i + 3) 0).toUInt32
 
 /-- Limb `i` of the `4 m` bytes of `b` from `off`, read big-endian, where limb `0` is the lowest. -/
 @[inline] def limbBE (m : Nat) (b : ByteArray) (off i : Nat) : UInt64 :=
