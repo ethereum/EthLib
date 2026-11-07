@@ -9,6 +9,12 @@ public import EthLib.Serialization.Proofs.Rlp.RoundTrip
 
 Each packet reads back from its bytes, with the signer's public key as its sender.
 
+A packet with its full field list reads back with any list items after it, as EIP-8 asks.
+
+For Ping and Pong the full list ends with the sequence number of EIP-868.
+
+Without that number, the first item after the fields is read as it, and the others are ignored.
+
 A packet whose hash does not match the bytes after it is rejected.
 
 Every packet that the reader accepts has at most 1280 bytes.
@@ -83,6 +89,57 @@ theorem Packet.ofItems_fields (p : Packet) : Packet.ofItems p.type p.fields = .o
   cases p <;>
     simp [Packet.ofItems, Packet.type, Packet.fields, LawfulCodec.ofItem_toItem,
       Packet.readEnrSeq_enrSeqItems, Except.mapError, bind, Except.bind, pure, Except.pure]
+
+/-! ## Further list items -/
+
+/--
+A packet with its full field list reads back with any items after it, as EIP-8 asks.
+
+For Ping and Pong the full list ends with the sequence number of EIP-868.
+-/
+theorem Packet.ofItems_fields_append (p : Packet) (extra : List Item)
+    (hping : ∀ v f t e, p ≠ .ping v f t e none) (hpong : ∀ t h e, p ≠ .pong t h e none) :
+    Packet.ofItems p.type (p.fields ++ extra) = .ok p := by
+  cases p with
+  | ping v f t e s =>
+    cases s with
+    | none => exact absurd rfl (hping v f t e)
+    | some s =>
+      simp [Packet.ofItems, Packet.type, Packet.fields, Packet.enrSeqItems, Packet.readEnrSeq,
+        LawfulCodec.ofItem_toItem, Except.mapError, bind, Except.bind, pure, Except.pure,
+        Functor.map, Except.map]
+  | pong t h e s =>
+    cases s with
+    | none => exact absurd rfl (hpong t h e)
+    | some s =>
+      simp [Packet.ofItems, Packet.type, Packet.fields, Packet.enrSeqItems, Packet.readEnrSeq,
+        LawfulCodec.ofItem_toItem, Except.mapError, bind, Except.bind, pure, Except.pure,
+        Functor.map, Except.map]
+  | _ =>
+    simp [Packet.ofItems, Packet.type, Packet.fields, LawfulCodec.ofItem_toItem,
+      Except.mapError, bind, Except.bind, pure, Except.pure]
+
+/--
+Ping without a sequence number reads the first item after its fields as that number, by EIP-868.
+
+The items after that one are ignored, as EIP-8 asks.
+-/
+theorem Packet.ofItems_ping_append (v : Nat) (f t : Endpoint) (e : Nat) (x : Item)
+    (rest : List Item) :
+    Packet.ofItems 0x01 ((ping v f t e none).fields ++ x :: rest) =
+      Packet.ofItems 0x01 ((ping v f t e none).fields ++ [x]) := by
+  simp [Packet.ofItems, Packet.fields, Packet.enrSeqItems, Packet.readEnrSeq]
+
+/--
+Pong without a sequence number reads the first item after its fields as that number, by EIP-868.
+
+The items after that one are ignored, as EIP-8 asks.
+-/
+theorem Packet.ofItems_pong_append (t : Endpoint) (h : Vector UInt8 32) (e : Nat) (x : Item)
+    (rest : List Item) :
+    Packet.ofItems 0x02 ((pong t h e none).fields ++ x :: rest) =
+      Packet.ofItems 0x02 ((pong t h e none).fields ++ [x]) := by
+  simp [Packet.ofItems, Packet.fields, Packet.enrSeqItems, Packet.readEnrSeq]
 
 /-! ## Packets -/
 
