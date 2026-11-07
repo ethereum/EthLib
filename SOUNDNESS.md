@@ -351,7 +351,8 @@ The secp256k1 theorems are correctness statements.
 `card_point` (`Proofs/Secp256k1/Order.lean`) proves that the group has `n` points, so the cofactor is 1.
 `decode_eq_ok_iff` (`Proofs/Secp256k1/Encoding.lean`) proves that the decoder accepts exactly the encodings of the points other than `O`.
 `verify_sign` (`Proofs/Secp256k1/Ecdsa.lean`) proves that a signature from the signing operation of SEC 1 verifies.
-`verify_eq_true_iff` (`Proofs/Secp256k1/Recovery.lean`) states verification against a key as the verifying operation of SEC 1 v2 §4.1.4, read in the group of the curve.
+`verify_eq_true_iff` (`Proofs/Secp256k1/Recovery.lean`) states verification against a key in the group of the curve.
+It is the verifying operation of SEC 1 v2 §4.1.4.
 By it, a signature is valid exactly when `r` and `s` lie in `[1, n - 1]` and the key is a point of the curve other than `O`.
 The point `(e / s) G + (r / s) Q` must also be other than `O`, with `x mod n = r`.
 `verify_recover` and `recover_of_verify` (`Proofs/Secp256k1/Recovery.lean`) prove that a recovered key verifies the signature, and that every key that verifies one is recovered, when `r + n >= p`.
