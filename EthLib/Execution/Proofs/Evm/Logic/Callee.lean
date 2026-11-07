@@ -23,6 +23,14 @@ The callee sends no message itself, since its specification is one with no messa
 The code is the one that the message names, and a rule for a call ties it to the address.
 
 The runner touches the target before Paris, moves no value, runs the code, and rolls back a failure.
+
+A message with value moves it from the caller to the target first, and its frame starts from there.
+
+A message that ends with a frame has moved its value.
+
+The runner meets one assumption on such messages.
+
+A message with value to no code ends with no error, in the state that the move gives.
 -/
 
 @[expose] public section
@@ -88,6 +96,72 @@ theorem processMessage_map_val {message : Message fork} {state : TransactionStat
         subst hr
         rfl
 
+/-- A message with value and no precompile ends as the run of its code from its frame ends.
+
+The value moves from the caller to the target first, and the frame starts from that state. -/
+theorem processMessage_map_val_value {message : Message fork} {state movedState : TransactionState}
+    {substate : Substate} {result : Except EvmError (Evm fork Nat)}
+    (transfers : message.shouldTransferValue = true ∧ message.value ≠ 0)
+    (moved : (startState fork message state).moveEther fork message.caller message.currentTarget
+      message.value = .ok movedState)
+    (noPrecompile : precompileAddress fork message = none)
+    (ran : runFrame (step fork) (step_decreases fork) message.gas (processRunner fork message.gas)
+      (startFrame message movedState
+        { substate with
+          logs := pushTransferLog fork substate.logs message.caller message.currentTarget
+            message.value }
+        (GasMeter.start message.gas message.reservoir)) (Nat.le_refl _) = result) :
+    (processMessage fork message state substate).map Subtype.val =
+      result.map (rollbackOnError state) := by
+  have ran' : ∀ within, runFrame (step fork) (step_decreases fork) message.gas
+      (processRunner fork message.gas)
+      (startFrame message movedState
+        (if message.shouldTransferValue = true ∧ message.value ≠ 0 then
+          { substate with
+            logs := pushTransferLog fork substate.logs message.caller message.currentTarget
+              message.value } else substate)
+        (GasMeter.start message.gas message.reservoir)) within = result := by
+    intro within
+    simp only [transfers, ne_eq, not_false_eq_true, and_self, ite_true]
+    exact ran
+  rw [processMessage]
+  simp only [Except.map, noPrecompile, transfers, ne_eq, not_false_eq_true, and_self, ite_true,
+    bind, pure, Except.bind, Except.pure, Except.mapError, moved]
+  split <;> rename_i heq
+  · split at heq <;> rename_i heq'
+    · split at heq' <;> rename_i h3
+      · cases heq'
+        cases heq
+        have hr := (ran' _).symm.trans h3
+        subst hr
+        rfl
+      · cases heq'
+    · cases heq
+  · split at heq <;> rename_i heq'
+    · cases heq
+    · split at heq' <;> rename_i h3
+      · cases heq'
+      · cases heq'
+        cases heq
+        have hr := (ran' _).symm.trans h3
+        subst hr
+        rfl
+
+/-- A message with value that ends with a frame has moved its value. -/
+theorem moveEther_of_processMessage_eq_ok {message : Message fork} {state : TransactionState}
+    {substate : Substate} {ended : { evm : Evm fork Nat // GasMeter.gasHeld evm.gas ≤ message.gas }}
+    (transfers : message.shouldTransferValue = true ∧ message.value ≠ 0)
+    (h : processMessage fork message state substate = .ok ended) :
+    ∃ movedState, (startState fork message state).moveEther fork message.caller
+      message.currentTarget message.value = .ok movedState := by
+  cases hmove : (startState fork message state).moveEther fork message.caller
+      message.currentTarget message.value with
+  | ok movedState => exact ⟨movedState, rfl⟩
+  | error e =>
+    have hv : ¬message.value = 0#256 := transfers.2
+    rw [processMessage] at h
+    simp [Except.map, transfers, hv, bind, Except.bind, Except.mapError, hmove] at h
+
 /-- A message with no value and no precompile runs its code to a stopped frame of a specification.
 
 The specification holds from the frame that the message starts, and sends no message.
@@ -110,6 +184,44 @@ theorem processMessage_of_spec {message : Message fork} {state : TransactionStat
 theorem rollbackOnError_of_error_eq_none {snapshot : TransactionState} {evm : Evm fork Nat}
     (h : evm.error = none) : rollbackOnError snapshot evm = evm := by
   simp [rollbackOnError, h]
+
+/-- A frame of no code stops at once, with no error and with the state it starts from. -/
+theorem runFrame_startFrame_empty {message : Message fork} {state : TransactionState}
+    {substate : Substate} (hcode : message.code = .empty) {bound : Nat}
+    {runChild : MessageRunner fork Nat bound} {within} :
+    ∃ stopped, runFrame (step fork) (step_decreases fork) bound runChild
+        (startFrame (Meter := Nat) message state substate
+          (GasMeter.start message.gas message.reservoir)) within =
+        .ok stopped ∧ stopped.error = none ∧ stopped.state = state := by
+  have hs : step fork (startFrame (Meter := Nat) message state substate
+      (GasMeter.start message.gas message.reservoir)) =
+      .ok (.next (advance { startFrame message state substate
+        (GasMeter.start message.gas message.reservoir) with running := false })) :=
+    step_of_size_le (by simp [startFrame, hcode])
+  refine ⟨advance { startFrame (Meter := Nat) message state substate
+    (GasMeter.start message.gas message.reservoir) with running := false }, ?_, rfl, rfl⟩
+  rw [runFrame_of_step_eq_next rfl hs, runFrame_of_running_eq_false rfl]
+
+/-- A message with value to no code ends with no error, in the state that the move gives. -/
+theorem processMessage_empty_value {message : Message fork} {state movedState : TransactionState}
+    {substate : Substate} {ended : { evm : Evm fork Nat // GasMeter.gasHeld evm.gas ≤ message.gas }}
+    (hcode : message.code = .empty)
+    (transfers : message.shouldTransferValue = true ∧ message.value ≠ 0)
+    (moved : (startState fork message state).moveEther fork message.caller message.currentTarget
+      message.value = .ok movedState)
+    (noPrecompile : precompileAddress fork message = none)
+    (h : processMessage fork message state substate = .ok ended) :
+    ended.val.error = none ∧ ended.val.state = movedState := by
+  obtain ⟨stopped, ran, herr, hst⟩ := runFrame_startFrame_empty (fork := fork) (state := movedState)
+    (substate := { substate with
+      logs := pushTransferLog fork substate.logs message.caller message.currentTarget
+        message.value })
+    (runChild := processRunner fork message.gas) (within := Nat.le_refl _) hcode
+  have hmap := processMessage_map_val_value transfers moved noPrecompile ran
+  rw [h] at hmap
+  have he : ended.val = rollbackOnError state stopped := Except.ok.inj hmap
+  rw [he, rollbackOnError_of_error_eq_none herr]
+  exact ⟨herr, hst⟩
 
 /-- The frame that a message starts is a running frame of its code, at 0, with nothing on it. -/
 theorem at_startFrame {code : ByteArray} {message : Message fork} (hcode : message.code = code)
@@ -184,5 +296,29 @@ theorem meets_of_spec {code : ByteArray} {G : Message fork → TransactionState 
     (fun message state substate hcode hg =>
       SpecUnder.of_spec (hspec message state substate hcode hg))
     (meets_process fork) bound
+
+/-- The assumption that a call with value to no code moves the value and ends with no error.
+
+The message has no code, a target and no precompile, and moves a value that is not 0.
+
+The frame that ends it has the state that the move of the value gives, from the start state. -/
+def PaidNoCode (caller : Evm fork Nat) (message : Message fork) (child : Evm fork Nat) : Prop :=
+  message.code = .empty → message.target.isSome → precompileAddress fork message = none →
+    message.shouldTransferValue = true ∧ message.value ≠ 0 →
+    ∃ movedState, (startState fork message caller.state).moveEther fork message.caller
+        message.currentTarget message.value = .ok movedState ∧
+      child.error = none ∧ child.state = movedState
+
+/-- The runner of the interpreter meets the assumption on calls with value to no code.
+
+That holds for every bound. -/
+theorem meets_paidNoCode (bound : Nat) :
+    Meets (PaidNoCode (fork := fork)) (processRunner fork bound) := by
+  refine ⟨fun caller message _ child ran hcode htarget noPrecompile transfers => ?_,
+    (meets_process fork bound).aborts⟩
+  obtain ⟨target, ht⟩ := Option.isSome_iff_exists.mp htarget
+  simp only [processRunner, ht] at ran
+  obtain ⟨movedState, moved⟩ := moveEther_of_processMessage_eq_ok transfers ran
+  exact ⟨movedState, moved, processMessage_empty_value hcode transfers moved noPrecompile ran⟩
 
 end EthLib.Execution.Evm.Logic

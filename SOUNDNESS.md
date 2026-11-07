@@ -719,7 +719,12 @@ It sends no message, pushes 0, and gives back the gas it would pass on with the 
 `Pay.spec_low` and `Pay.runFrame_process_noCode` prove a contract that sends the value in its call data to an address in its call data.
 It returns 0 when the balance is too small.
 With the runner of the interpreter, it returns 1 when the address holds no code, or the run aborts.
-No theorem yet states the balances after such a call, and no rule covers CREATE, DELEGATECALL or STATICCALL.
+`meets_paidNoCode` (`Logic/Callee.lean`) proves that the runner ends a message with value to no code with no error.
+Its frame ends in the state that the move of the value gives.
+`Pay.runFrame_process_paid` proves that the contract then returns 1, or the run aborts.
+When it returns, the current account holds the value less and the called address the value more.
+It needs the called address to differ from the current one, and holds from Berlin to before Glamsterdam.
+No rule covers CREATE, DELEGATECALL or STATICCALL.
 
 ### SHA-256 precompile
 
