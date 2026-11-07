@@ -14,11 +14,63 @@ The root is read from the top level, and the proofs show that it is the root of 
 Each leaf is the root of one element when the elements are composite.
 
 Basic elements are packed, several to a leaf, and a write rehashes the leaf that holds the element.
+
+A decoded vector builds its tree on the first read of the root or the first write.
+
+A call that never needs the tree then never hashes it.
 -/
 
 @[expose] public section
 
 namespace EthLib.Serialization.Ssz
+
+/-- A value held as computed, or as the code that computes it on its first read. -/
+inductive DeferredForm (α : Type) where
+  /-- A value already computed. -/
+  | now (value : α)
+  /-- A value that its first read computes and keeps. -/
+  | later (value : Thunk α)
+
+/-- The value of a form, computed if it is not yet. -/
+def DeferredForm.get {α : Type} : DeferredForm α → α
+  | .now value => value
+  | .later value => value.get
+
+/--
+A value computed now or on its first read.
+
+The two forms of one value are equal, so a deferred value is fixed by the value it gives.
+-/
+def Deferred (α : Type) : Type :=
+  Quot fun first second : DeferredForm α => first.get = second.get
+
+namespace Deferred
+
+variable {α : Type}
+
+/-- A value already computed. -/
+def now (value : α) : Deferred α :=
+  Quot.mk _ (.now value)
+
+/-- A value that its first read computes and keeps. -/
+def later (value : Unit → α) : Deferred α :=
+  Quot.mk _ (.later (Thunk.mk value))
+
+/-- The value, computed on the first read of a deferred one. -/
+def get (d : Deferred α) : α :=
+  Quot.lift DeferredForm.get (fun _ _ same => same) d
+
+@[simp] theorem get_now (value : α) : (now value).get = value := rfl
+
+@[simp] theorem get_later (value : Unit → α) : (later value).get = value () := rfl
+
+/-- Two deferred values that give the same value are the same. -/
+theorem ext {d e : Deferred α} (same : d.get = e.get) : d = e := by
+  induction d using Quot.ind
+  induction e using Quot.ind
+  exact Quot.sound same
+
+end Deferred
 
 /--
 The parent of entries `2 * index` and `2 * index + 1` of a level whose subtrees have a height.
@@ -374,20 +426,21 @@ theorem sequenceLeaves_write {α : Type} [SszType α] {elements written : Array 
 structure RootedVector (α : Type) [SszType α] (length : Nat) where
   /-- The elements, in order. -/
   elements : Vector α length
-  /-- The levels of the tree, from the leaves up to the top node. -/
-  levels : List (Array Bytes)
+  /-- The levels of the tree, from the leaves up to the top node, built on their first read. -/
+  levels : Deferred (List (Array Bytes))
   /-- The levels are those of the tree over the leaves of the elements. -/
   built :
-    levels = buildLevels 0 (sequenceLeaves elements.toArray) (depthFor (leafCapacity α length))
+    levels.get
+      = buildLevels 0 (sequenceLeaves elements.toArray) (depthFor (leafCapacity α length))
 
 namespace RootedVector
 
 variable {α : Type} [SszType α] {length : Nat}
 
-/-- A vector with the levels of its tree, built from the leaves up. -/
+/-- A vector with the levels of its tree, built from the leaves up on their first read. -/
 def ofVector (elements : Vector α length) : RootedVector α length :=
-  ⟨elements, buildLevels 0 (sequenceLeaves elements.toArray) (depthFor (leafCapacity α length)),
-    rfl⟩
+  let depth := depthFor (leafCapacity α length)
+  ⟨elements, .later fun _ => buildLevels 0 (sequenceLeaves elements.toArray) depth, rfl⟩
 
 /-- The element at an index. -/
 def get (v : RootedVector α length) (index : Nat) (inside : index < length := by get_elem_tactic) :
@@ -400,9 +453,12 @@ instance : GetElem (RootedVector α length) Nat α fun _ index => index < length
 /-- The vector with the element at an index replaced, its tree rehashed along one path. -/
 def set (v : RootedVector α length) (index : Nat) (a : α)
     (inside : index < length := by get_elem_tactic) : RootedVector α length :=
-  ⟨v.elements.set index a inside,
-    updateLevels 0 (leafIndex α index) (leafNode (v.elements.set index a inside).toArray index a)
-      v.levels, by
+  -- Read the tree first, so that the write finds the elements and the levels unshared.
+  let levels := v.levels.get
+  let elements := v.elements.set index a inside
+  let node := leafNode elements.toArray index a
+  ⟨elements, .now (updateLevels 0 (leafIndex α index) node levels), by
+    simp only [levels, elements, node, Deferred.get_now]
     rw [v.built, updateLevels_buildLevels _ 0 _ (leafIndex_le (by simp; omega))]
     congr 1
     symm
@@ -412,10 +468,13 @@ def set (v : RootedVector α length) (index : Nat) (a : α)
 
 /-- Two rooted vectors with the same elements are the same, since the elements fix the levels. -/
 theorem ext {v w : RootedVector α length} (same : v.elements = w.elements) : v = w := by
-  cases v
-  cases w
-  subst same
-  simp_all
+  cases v with
+  | mk elements levels built =>
+    cases w with
+    | mk _ other built' =>
+      subst same
+      cases Deferred.ext (built.trans built'.symm)
+      rfl
 
 instance [Repr α] : Repr (RootedVector α length) where
   reprPrec v := reprPrec v.elements
@@ -433,6 +492,6 @@ instance {α : Type} [SszType α] {length : Nat} : SszType (RootedVector α leng
   desc := desc (Vector α length)
   toValue v := toValue v.elements
   ofValue value := ofVector <$> ofValue value
-  root v := .ok (topOfLevels (depthFor (leafCapacity α length)) v.levels)
+  root v := .ok (topOfLevels (depthFor (leafCapacity α length)) v.levels.get)
 
 end EthLib.Serialization.Ssz

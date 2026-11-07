@@ -34,6 +34,11 @@ variable {switch fork : Fork} {α : Type} [SszType α] {limit : Nat}
 @[simp] theorem data_ofForkList (l : ForkList switch fork α limit) :
     (ofForkList l).data = l.data := rfl
 
+/-- The fork-chosen list of a list built from one is that list. -/
+@[simp] theorem toForkList_ofForkList (l : ForkList switch fork α limit) :
+    (ofForkList l).toForkList = l := by
+  simp [toForkList]
+
 /-- The elements after a write are the elements with that one replaced. -/
 @[simp] theorem data_set (l : RootedForkList switch fork α limit) (index : Nat) (a : α)
     (inside : index < l.data.size) : (l.set index a inside).data = l.data.set index a inside :=
@@ -181,7 +186,7 @@ instance : LawfulSszType (RootedForkList switch fork α limit) where
     change ofForkList <$>
       (ofValue (toValue l.toForkList) : Except Err (ForkList switch fork α limit)) = .ok l
     rw [LawfulSszType.ofValue_toValue]
-    exact congrArg Except.ok (ext rfl)
+    exact congrArg Except.ok (ext (data_ofForkList _))
   toValue_of_ofValue {value l} made := by
     change ofForkList <$> (ofValue value : Except Err (ForkList switch fork α limit)) = .ok l
       at made
@@ -190,6 +195,8 @@ instance : LawfulSszType (RootedForkList switch fork α limit) where
     | ok m =>
       simp only [read, Functor.map, Except.map, Except.ok.injEq] at made
       subst made
+      show toValue (ofForkList m).toForkList = value
+      rw [toForkList_ofForkList]
       exact LawfulSszType.toValue_of_ofValue (α := ForkList switch fork α limit) read
   root_eq := RootedForkList.root_eq
 

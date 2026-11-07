@@ -22,7 +22,7 @@ variable {α : Type} [SszType α] [LawfulSszType α]
 /-- The kept root of a rooted value is the root of its untyped value. -/
 theorem Rooted.root_eq (r : Rooted α) :
     root r = Ssz.hashTreeRoot (desc (Rooted α)) (toValue r) := by
-  change r.cached = _
+  change r.cached.get = _
   rw [r.built, LawfulSszType.root_eq]
   rfl
 

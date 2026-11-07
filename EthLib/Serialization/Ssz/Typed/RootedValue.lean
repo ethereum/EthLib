@@ -5,7 +5,9 @@ public import EthLib.Serialization.Ssz.Typed.Class
 /-!
 # Typed SSZ values: a value that keeps its root
 
-A rooted value holds a value of an SSZ type together with its root, computed once.
+A rooted value holds a value of an SSZ type together with its root.
+
+The root is computed once, on its first read.
 
 A field that the state roots often and writes rarely then gives its root without hashing again.
 
@@ -20,25 +22,28 @@ namespace EthLib.Serialization.Ssz
 structure Rooted (α : Type) [SszType α] where
   /-- The value. -/
   value : α
-  /-- The root of the value, or why it has none. -/
-  cached : Except Err Bytes
+  /-- The root of the value, or why it has none, computed on its first read. -/
+  cached : Thunk (Except Err Bytes)
   /-- The kept root is the root of the value. -/
-  built : cached = SszType.root value
+  built : cached.get = SszType.root value
 
 namespace Rooted
 
 variable {α : Type} [SszType α]
 
-/-- A value with its root, computed here. -/
+/-- A value with its root, computed on its first read. -/
 def of (value : α) : Rooted α :=
-  ⟨value, SszType.root value, rfl⟩
+  ⟨value, Thunk.mk fun _ => SszType.root value, rfl⟩
 
 /-- Two rooted values with the same value are the same, since the value fixes the root. -/
 theorem ext {r s : Rooted α} (same : r.value = s.value) : r = s := by
-  cases r
-  cases s
-  subst same
-  simp_all
+  cases r with
+  | mk value cached built =>
+    cases s with
+    | mk _ other built' =>
+      subst same
+      cases Thunk.ext (built.trans built'.symm)
+      rfl
 
 instance [Repr α] : Repr (Rooted α) where
   reprPrec r := reprPrec r.value
@@ -55,6 +60,6 @@ instance {α : Type} [SszType α] : SszType (Rooted α) where
   desc := desc α
   toValue r := toValue r.value
   ofValue value := Rooted.of <$> ofValue value
-  root r := r.cached
+  root r := r.cached.get
 
 end EthLib.Serialization.Ssz
