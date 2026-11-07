@@ -473,6 +473,69 @@ theorem mcopyStep_cons {evm : Evm fork Meter} {destination source length : U256}
       with _ | _ <;>
     simp [hc, bind, Except.bind, pure, Except.pure, Except.map]
 
+/-- A copy of a source to memory on a start, an offset and a size: pay and grow memory.
+
+It pays its base, 3 gas a word and the growth, then writes the bytes of the source from the offset.
+
+The source reads as zeros past its end.
+
+The write is made after memory has grown. -/
+theorem copyToMemory_cons {base : Nat} {data : ByteArray} {evm : Evm fork Meter}
+    {start offset size : U256} {rest : List U256}
+    (h : evm.stack.val = start :: offset :: size :: rest) :
+    copyToMemory base data evm =
+      let growth := extendMemory evm.memory.size [(start, size)]
+      let memory := memoryExtend evm.memory growth.expandBy
+      (GasMeter.charge evm.gas
+          (base + OPCODE_COPY_PER_WORD * wordCount size.toNat + growth.cost)).map fun gas =>
+        { evm with
+          stack := ⟨rest, by
+            have := evm.stack.property
+            rw [h, List.length_cons, List.length_cons, List.length_cons] at this
+            omega⟩,
+          gas,
+          memory := memoryWrite memory start.toNat
+            ⟨(bufferRead data offset.toNat size.toNat).toArray⟩,
+          pc := evm.pc + 1 } := by
+  have hstack : evm.stack =
+      ⟨start :: offset :: size :: rest, h ▸ evm.stack.property⟩ := Subtype.ext h
+  simp only [copyToMemory, popWord, chargeGasAndMemory, chargeGas, advance, hstack, Stack.pop]
+  rcases hc : GasMeter.charge evm.gas
+      (base + OPCODE_COPY_PER_WORD * wordCount size.toNat +
+        (extendMemory evm.memory.size [(start, size)]).cost) with _ | _ <;>
+    simp [hc, bind, Except.bind, pure, Except.pure, Except.map]
+
+/-- RETURNDATACOPY on a start, an offset and a size whose range fits in the return data.
+
+It pays 3, 3 gas a word and the growth of memory, then writes those bytes of the return data.
+
+The write is made after memory has grown. -/
+theorem returndatacopyStep_cons {evm : Evm fork Meter} {start offset size : U256}
+    {rest : List U256} (h : evm.stack.val = start :: offset :: size :: rest)
+    (fit : offset.toNat + size.toNat ≤ evm.returnData.size) :
+    returndatacopyStep evm =
+      let growth := extendMemory evm.memory.size [(start, size)]
+      let memory := memoryExtend evm.memory growth.expandBy
+      (GasMeter.charge evm.gas (OPCODE_RETURNDATACOPY_BASE +
+          OPCODE_RETURNDATACOPY_PER_WORD * wordCount size.toNat + growth.cost)).map fun gas =>
+        { evm with
+          stack := ⟨rest, by
+            have := evm.stack.property
+            rw [h, List.length_cons, List.length_cons, List.length_cons] at this
+            omega⟩,
+          gas,
+          memory := memoryWrite memory start.toNat
+            (memoryReadBytes evm.returnData offset.toNat size.toNat),
+          pc := evm.pc + 1 } := by
+  have hstack : evm.stack =
+      ⟨start :: offset :: size :: rest, h ▸ evm.stack.property⟩ := Subtype.ext h
+  have inside : ¬evm.returnData.size < offset.toNat + size.toNat := Nat.not_lt.mpr fit
+  simp only [returndatacopyStep, popWord, chargeGas, advance, hstack, Stack.pop]
+  rcases hc : GasMeter.charge evm.gas
+      (OPCODE_RETURNDATACOPY_BASE + OPCODE_RETURNDATACOPY_PER_WORD * wordCount size.toNat +
+        (extendMemory evm.memory.size [(start, size)]).cost) with _ | _ <;>
+    simp [hc, bind, Except.bind, pure, Except.pure, Except.map, inside]
+
 /-- Each instruction that moves bytes keeps the size of memory a multiple of 32. -/
 theorem size_memoryDataStep_mod {op : Op}
     {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
