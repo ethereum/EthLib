@@ -27,7 +27,9 @@ theorem SszType.ofUint_ok {α : Type} {width : Nat} {make : Nat → α} {value :
 /--
 An integer type is lawful when its numbers are exactly those below the bound of its width.
 
-The width must be one of the six that SSZ defines, and the root must be the untyped one.
+The width must be one of the six that SSZ defines.
+
+The root, the bytes and the decoding must be the untyped ones.
 -/
 theorem LawfulSszType.ofUint {α : Type} [SszType α] {width : Nat} (toNat : α → Nat)
     (ofNat : Nat → α) (declared : desc α = .uint width)
@@ -35,7 +37,12 @@ theorem LawfulSszType.ofUint {α : Type} [SszType α] {width : Nat} (toNat : α 
     (written : ∀ a, toValue a = .uint (toNat a)) (read : ofValue (α := α) = ofUint width ofNat)
     (bounded : ∀ a, toNat a < 2 ^ (8 * width)) (left : ∀ a, ofNat (toNat a) = a)
     (right : ∀ n, n < 2 ^ (8 * width) → toNat (ofNat n) = n)
-    (rooted : ∀ a : α, SszType.root a = Ssz.hashTreeRoot (desc α) (toValue a) := by intro; rfl) :
+    (rooted : ∀ a : α, SszType.root a = Ssz.hashTreeRoot (desc α) (toValue a) := by intro; rfl)
+    (encoded : ∀ a : α, SszType.encode a = (do return ⟨← Ssz.serialize (desc α) (toValue a)⟩) := by
+      intro; rfl)
+    (decoded : ∀ data : ByteArray,
+      SszType.decode data = (do ofValue (α := α) (← Ssz.deserialize (desc α) data.data)) := by
+      intro; rfl) :
     LawfulSszType α where
   wellFormed := by simp only [declared, Desc.wellFormed, sized, ↓reduceIte]
   fits a := by rw [declared, written]; exact .uint (bounded a)
@@ -45,6 +52,8 @@ theorem LawfulSszType.ofUint {α : Type} [SszType α] {width : Nat} (toNat : α 
     obtain ⟨n, rfl, below, rfl⟩ := made
     rw [written, right n below]
   root_eq := rooted
+  encode_eq := encoded
+  decode_eq := decoded
 
 instance : LawfulSszType Bool where
   wellFormed := rfl

@@ -112,7 +112,15 @@ theorem serialize_eq (payload : ExecutionPayload preset fork) :
     SszType.serialize payload = (do
       return ⟨← Serialization.Ssz.serialize (fieldsDesc preset fork)
         (.seq (fieldValues payload))⟩) := by
-  rw [SszType.serialize, desc_eq, toValue_eq]
+  -- At either shape of the container, the encoder is the default, the untyped serialization.
+  have encoded : SszType.serialize payload = (do return (ByteArray.mk
+      (← Serialization.Ssz.serialize (desc (ExecutionPayload preset fork)) (toValue payload))) :
+      Except _ ByteArray) := by
+    unfold SszType.serialize desc toValue instSszType SszType.forkContainer
+    by_cases gloas : Fork.glamsterdam ≤ fork
+    · rw [ite_eq_left gloas]; rfl
+    · rw [ite_eq_right gloas]; rfl
+  rw [encoded, desc_eq, toValue_eq]
 
 /-- The field names of a payload are distinct at every fork. -/
 theorem names_nodup : (names fork).Nodup := by

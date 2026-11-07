@@ -148,7 +148,7 @@ theorem SszList.deserialize_uint8_eq_ok_iff {limit : Nat} {data : ByteArray}
       data.size < 2 ^ (8 * bytesPerOffset) ∧ l.data = data.data := by
   obtain ⟨items, bound⟩ := l
   have size : data.size = data.data.size := rfl
-  simp only [SszType.deserialize, Ssz.deserialize, desc, ofValue, bind, Except.bind, pure,
+  simp only [SszType.deserialize, SszType.decode, Ssz.deserialize, bind, Except.bind, pure,
     Except.pure, throw, throwThe, MonadExceptOf.throw]
   by_cases wide : 2 ^ (8 * bytesPerOffset) ≤ data.size
   · simp [wide, Nat.not_lt.mpr wide]
@@ -213,9 +213,8 @@ theorem listSlices_empty (element : Desc) (limit : Option Nat) :
 /-- The empty bytes decode to the empty progressive list. -/
 theorem deserialize_progressiveList_empty {α : Type} [SszType α] :
     SszType.deserialize (ProgressiveList α) ByteArray.empty = .ok ⟨#[]⟩ := by
-  unfold SszType.deserialize
+  unfold SszType.deserialize SszType.decode
   show (do SszType.ofValue (← Ssz.deserialize _ #[])) = _
-  simp only [SszType.desc]
   rw [Ssz.deserialize]
   simp [listSlices_empty, deserializeEach_nil, bind, Except.bind, pure, Except.pure,
       SszType.ofValue, SszType.ofElements, SszType.ofElementsOnto, Functor.map, Except.map]
