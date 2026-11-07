@@ -55,12 +55,10 @@ NOT_YET = {
 _GLOAS = {
     "fast_confirmation": "the Gloas fast confirmation (G73)",
     "networking/gossip_partial_data_column_sidecar": "Gloas partial data columns (G78)",
-    "ssz_static": "the Gloas partial data column containers (G65)",
 }
 _HEZE = {
     "fast_confirmation": "the Gloas fast confirmation (G73) on the Heze fork choice (G86)",
     "networking": "the Heze gossip and req/resp rules (G87)",
-    "ssz_static": "the partial data column containers at Heze (G80, G81)",
 }
 NOT_YET_AT = {
     "gloas": _GLOAS,

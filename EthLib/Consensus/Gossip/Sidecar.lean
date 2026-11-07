@@ -290,7 +290,7 @@ def partialCellsOutcome (config : Config) (setup : TrustedSetup)
 The sidecar must carry a header or a cell, and one cell and one proof per set bit. -/
 def partialCountsOutcome (sidecar : PartialDataColumnSidecar preset fork) : ValidationResult :=
   let count := sidecar.cellsPresentBitmap.bits.count true
-  (rejectUnless (sidecar.header.data.size == 1 || count != 0)
+  (rejectUnless (sidecar.headers.size == 1 || count != 0)
     "partial message is semantically empty").andThen fun _ =>
   (rejectUnless (sidecar.partialColumn.data.size == count)
     "number of cells does not match number of set bits").andThen fun _ =>
@@ -305,13 +305,13 @@ A valid header is recorded before its cells are checked, so it stays recorded wh
 def validatePartialDataColumnSidecar (config : Config) (checks : SignatureChecks)
     (setup : TrustedSetup) (headers : PartialHeaders preset fork) (store : Store preset fork)
     (_fulu : .fusaka ≤ fork ∧ fork < .glamsterdam) (sidecar : PartialDataColumnSidecar preset fork)
-    (currentTimeMs : UInt64) (group : PartialDataColumnGroupID)
+    (currentTimeMs : UInt64) (group : PartialDataColumnGroupID fork)
     (columnIndex : DataAvailability.ColumnIndex) :
     Except ForkChoiceError (ValidationResult × PartialHeaders preset fork) := do
   let root := group.beaconBlockRoot
   match partialCountsOutcome sidecar with
   | .accept =>
-    let (outcome, headers) ← match sidecar.header.data[0]? with
+    let (outcome, headers) ← match sidecar.headers[0]? with
       | none => pure (ValidationResult.accept, headers)
       | some header => do
         match ← partialHeaderOutcome config checks headers store root header currentTimeMs with

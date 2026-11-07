@@ -132,16 +132,14 @@ def containerOf (preset : Preset) (fork : Fork) : String → Option Container
     if .fusaka ≤ fork then some ⟨DataColumnsByRootIdentifier preset⟩ else none
   | "MatrixEntry" => if .fusaka ≤ fork then some ⟨MatrixEntry⟩ else none
   | "PartialDataColumnSidecar" =>
-    if .fusaka ≤ fork ∧ fork < .glamsterdam then some ⟨PartialDataColumnSidecar preset fork⟩
-    else none
+    if .fusaka ≤ fork then some ⟨PartialDataColumnSidecar preset fork⟩ else none
   | "PartialDataColumnPartsMetadata" =>
-    if .fusaka ≤ fork ∧ fork < .glamsterdam then some ⟨PartialDataColumnPartsMetadata preset⟩
-    else none
+    if .fusaka ≤ fork then some ⟨PartialDataColumnPartsMetadata preset fork⟩ else none
   | "PartialDataColumnHeader" =>
     if .fusaka ≤ fork ∧ fork < .glamsterdam then some ⟨PartialDataColumnHeader preset fork⟩
     else none
   | "PartialDataColumnGroupID" =>
-    if .fusaka ≤ fork ∧ fork < .glamsterdam then some ⟨PartialDataColumnGroupID⟩ else none
+    if .fusaka ≤ fork then some ⟨PartialDataColumnGroupID fork⟩ else none
   | "Withdrawal" => if .shapella ≤ fork then some ⟨Withdrawal⟩ else none
   | "PowBlock" => if .bellatrix ≤ fork then some ⟨PowBlock⟩ else none
   | "ExecutionPayload" =>
@@ -198,7 +196,8 @@ def specifiedFromGlamsterdam : List String := [
   "SignedAggregateAndProof", "ExecutionPayload", "ExecutionRequests", "NewPayloadRequest",
   "ExecutionPayloadEnvelope", "SignedExecutionPayloadEnvelope", "PayloadAttestation",
   "IndexedPayloadAttestation", "DataColumnSidecar", "DataColumnsByRootIdentifier",
-  "MatrixEntry", "ExecutionPayloadBid", "SignedExecutionPayloadBid", "BeaconBlockBody",
+  "MatrixEntry", "PartialDataColumnSidecar", "PartialDataColumnPartsMetadata",
+  "PartialDataColumnGroupID", "ExecutionPayloadBid", "SignedExecutionPayloadBid", "BeaconBlockBody",
   "BeaconBlock", "SignedBeaconBlock", "BeaconState", "LightClientHeader", "LightClientBootstrap",
   "LightClientUpdate", "LightClientFinalityUpdate", "LightClientOptimisticUpdate"]
 

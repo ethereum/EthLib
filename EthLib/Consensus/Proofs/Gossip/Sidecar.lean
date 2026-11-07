@@ -708,11 +708,11 @@ theorem PartialHeaders.find?_record_of_ne (ne : other ≠ root) :
 /-- The counts reject a sidecar as empty exactly when it has no header and no set bit. -/
 theorem partialCountsOutcome_eq_empty :
     partialCountsOutcome sidecar = .reject "partial message is semantically empty" ↔
-      sidecar.header.data.size ≠ 1 ∧ sidecar.cellsPresentBitmap.bits.count true = 0 := by
+      sidecar.headers.size ≠ 1 ∧ sidecar.cellsPresentBitmap.bits.count true = 0 := by
   unfold partialCountsOutcome
   simp only [rejectUnless_andThen]
   by_cases first :
-      sidecar.header.data.size = 1 ∨ sidecar.cellsPresentBitmap.bits.count true ≠ 0 <;>
+      sidecar.headers.size = 1 ∨ sidecar.cellsPresentBitmap.bits.count true ≠ 0 <;>
     by_cases cells :
       sidecar.partialColumn.data.size = sidecar.cellsPresentBitmap.bits.count true <;>
     by_cases proofs :
@@ -722,12 +722,12 @@ theorem partialCountsOutcome_eq_empty :
 /-- The counts reject the cells exactly when the sidecar is not empty and its cells miscount. -/
 theorem partialCountsOutcome_eq_cells :
     partialCountsOutcome sidecar = .reject "number of cells does not match number of set bits" ↔
-      (sidecar.header.data.size = 1 ∨ sidecar.cellsPresentBitmap.bits.count true ≠ 0) ∧
+      (sidecar.headers.size = 1 ∨ sidecar.cellsPresentBitmap.bits.count true ≠ 0) ∧
         sidecar.partialColumn.data.size ≠ sidecar.cellsPresentBitmap.bits.count true := by
   unfold partialCountsOutcome
   simp only [rejectUnless_andThen]
   by_cases first :
-      sidecar.header.data.size = 1 ∨ sidecar.cellsPresentBitmap.bits.count true ≠ 0 <;>
+      sidecar.headers.size = 1 ∨ sidecar.cellsPresentBitmap.bits.count true ≠ 0 <;>
     by_cases cells :
       sidecar.partialColumn.data.size = sidecar.cellsPresentBitmap.bits.count true <;>
     by_cases proofs :
@@ -737,13 +737,13 @@ theorem partialCountsOutcome_eq_cells :
 /-- The counts reject the proofs exactly when the earlier counts pass and the proofs miscount. -/
 theorem partialCountsOutcome_eq_proofs :
     partialCountsOutcome sidecar = .reject "number of proofs does not match number of set bits" ↔
-      (sidecar.header.data.size = 1 ∨ sidecar.cellsPresentBitmap.bits.count true ≠ 0) ∧
+      (sidecar.headers.size = 1 ∨ sidecar.cellsPresentBitmap.bits.count true ≠ 0) ∧
         sidecar.partialColumn.data.size = sidecar.cellsPresentBitmap.bits.count true ∧
         sidecar.kzgProofs.data.size ≠ sidecar.cellsPresentBitmap.bits.count true := by
   unfold partialCountsOutcome
   simp only [rejectUnless_andThen]
   by_cases first :
-      sidecar.header.data.size = 1 ∨ sidecar.cellsPresentBitmap.bits.count true ≠ 0 <;>
+      sidecar.headers.size = 1 ∨ sidecar.cellsPresentBitmap.bits.count true ≠ 0 <;>
     by_cases cells :
       sidecar.partialColumn.data.size = sidecar.cellsPresentBitmap.bits.count true <;>
     by_cases proofs :
@@ -753,13 +753,13 @@ theorem partialCountsOutcome_eq_proofs :
 /-- The counts pass exactly when the sidecar is not empty and its cells and proofs count. -/
 theorem partialCountsOutcome_eq_accept :
     partialCountsOutcome sidecar = .accept ↔
-      (sidecar.header.data.size = 1 ∨ sidecar.cellsPresentBitmap.bits.count true ≠ 0) ∧
+      (sidecar.headers.size = 1 ∨ sidecar.cellsPresentBitmap.bits.count true ≠ 0) ∧
         sidecar.partialColumn.data.size = sidecar.cellsPresentBitmap.bits.count true ∧
         sidecar.kzgProofs.data.size = sidecar.cellsPresentBitmap.bits.count true := by
   unfold partialCountsOutcome
   simp only [rejectUnless_andThen]
   by_cases first :
-      sidecar.header.data.size = 1 ∨ sidecar.cellsPresentBitmap.bits.count true ≠ 0 <;>
+      sidecar.headers.size = 1 ∨ sidecar.cellsPresentBitmap.bits.count true ≠ 0 <;>
     by_cases cells :
       sidecar.partialColumn.data.size = sidecar.cellsPresentBitmap.bits.count true <;>
     by_cases proofs :
@@ -772,7 +772,7 @@ theorem partialCountsOutcome_ne_ignore {reason : String} :
   unfold partialCountsOutcome
   simp only [rejectUnless_andThen]
   by_cases first :
-      sidecar.header.data.size = 1 ∨ sidecar.cellsPresentBitmap.bits.count true ≠ 0 <;>
+      sidecar.headers.size = 1 ∨ sidecar.cellsPresentBitmap.bits.count true ≠ 0 <;>
     by_cases cells :
       sidecar.partialColumn.data.size = sidecar.cellsPresentBitmap.bits.count true <;>
     by_cases proofs :
@@ -781,25 +781,29 @@ theorem partialCountsOutcome_ne_ignore {reason : String} :
 
 /-- An empty partial sidecar: no bit, no cell, no proof and no header. -/
 def emptyPartialSidecar : PartialDataColumnSidecar preset fork :=
-  ⟨⟨#[], by simp⟩, ⟨#[], by simp⟩, ⟨#[], by simp⟩, ⟨#[], by simp⟩⟩
+  ⟨⟨#[], by simp⟩, ⟨#[], by simp⟩, ⟨#[], by simp⟩, fun _ => ⟨#[], by simp⟩⟩
 
 /-- An empty partial sidecar is rejected as empty, so that reason can occur. -/
 theorem partialCountsOutcome_emptyPartialSidecar :
     partialCountsOutcome (emptyPartialSidecar (preset := preset) (fork := fork)) =
       .reject "partial message is semantically empty" :=
-  partialCountsOutcome_eq_empty.mpr (by simp [emptyPartialSidecar])
+  partialCountsOutcome_eq_empty.mpr
+    (by simp only [emptyPartialSidecar, PartialDataColumnSidecar.headers]; split <;> simp)
 
-/-- A partial sidecar with only a header passes the counts, so their accept case can occur. -/
-theorem partialCountsOutcome_header_only :
+/-- Before Gloas, a partial sidecar with only a header passes the counts.
+
+So their accept case can occur. -/
+theorem partialCountsOutcome_header_only (before : fork < .glamsterdam) :
     partialCountsOutcome { (emptyPartialSidecar : PartialDataColumnSidecar preset fork) with
-      header := ⟨#[header], by simp⟩ } = .accept :=
-  partialCountsOutcome_eq_accept.mpr (by simp [emptyPartialSidecar])
+      header := fun _ => ⟨#[header], by simp⟩ } = .accept :=
+  partialCountsOutcome_eq_accept.mpr
+    (by simp [emptyPartialSidecar, PartialDataColumnSidecar.headers, before])
 
 /-- In the minimal preset, one set bit with no cell is rejected for its cell count. -/
 theorem partialCountsOutcome_bit_without_cell :
     partialCountsOutcome
         { (emptyPartialSidecar : PartialDataColumnSidecar Preset.minimal fork) with
-          cellsPresentBitmap := ⟨#[true], by decide⟩ } =
+          cellsPresentBitmap := ⟨#[true], fun _ => by decide⟩ } =
       .reject "number of cells does not match number of set bits" :=
   partialCountsOutcome_eq_cells.mpr (by simp [emptyPartialSidecar])
 
@@ -1118,7 +1122,7 @@ theorem partialCellsOutcome_rejected
 
 /-! ### The whole rule: counts, then header, then cells -/
 
-variable {fulu : .fusaka ≤ fork ∧ fork < .glamsterdam} {group : PartialDataColumnGroupID}
+variable {fulu : .fusaka ≤ fork ∧ fork < .glamsterdam} {group : PartialDataColumnGroupID fork}
   {outcome : ValidationResult}
 
 /-- A sidecar whose counts fail gets their outcome, and the headers stay as they were.
@@ -1138,7 +1142,7 @@ theorem validatePartialDataColumnSidecar_of_counts
 The headers stay as they were, and the cells are not checked. -/
 theorem validatePartialDataColumnSidecar_of_header_not_accept
     (counts : partialCountsOutcome sidecar = .accept)
-    (present : sidecar.header.data[0]? = some header)
+    (present : sidecar.headers[0]? = some header)
     (checked : partialHeaderOutcome config checks headers store group.beaconBlockRoot header
       currentTimeMs = .ok outcome)
     (notAccepted : outcome ≠ .accept) :
@@ -1153,7 +1157,7 @@ theorem validatePartialDataColumnSidecar_of_header_not_accept
 The outcome is then the outcome of the cells against the new headers, if any bit is set. -/
 theorem validatePartialDataColumnSidecar_of_header_accept
     (counts : partialCountsOutcome sidecar = .accept)
-    (present : sidecar.header.data[0]? = some header)
+    (present : sidecar.headers[0]? = some header)
     (checked : partialHeaderOutcome config checks headers store group.beaconBlockRoot header
       currentTimeMs = .ok .accept) :
     validatePartialDataColumnSidecar config checks setup headers store fulu sidecar currentTimeMs
@@ -1172,7 +1176,7 @@ theorem validatePartialDataColumnSidecar_of_header_accept
 /-- A sidecar with no header is the outcome of its cells, and the headers stay as they were. -/
 theorem validatePartialDataColumnSidecar_of_no_header
     (counts : partialCountsOutcome sidecar = .accept)
-    (absent : sidecar.header.data[0]? = none) :
+    (absent : sidecar.headers[0]? = none) :
     validatePartialDataColumnSidecar config checks setup headers store fulu sidecar currentTimeMs
         group columnIndex =
       (if sidecar.cellsPresentBitmap.bits.count true = 0 then .ok .accept else
@@ -1190,7 +1194,7 @@ theorem validatePartialDataColumnSidecar_of_no_header
 So a valid header followed by cells that fail is still the header of its block. -/
 theorem validatePartialDataColumnSidecar_records_header {after : PartialHeaders preset fork}
     (counts : partialCountsOutcome sidecar = .accept)
-    (present : sidecar.header.data[0]? = some header)
+    (present : sidecar.headers[0]? = some header)
     (checked : partialHeaderOutcome config checks headers store group.beaconBlockRoot header
       currentTimeMs = .ok .accept)
     (run : validatePartialDataColumnSidecar config checks setup headers store fulu sidecar
