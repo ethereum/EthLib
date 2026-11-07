@@ -5,7 +5,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Callee
 public import EthLib.Execution.Proofs.Evm.Logic.Call
 
 /-!
-# Proofs: the effect of a message on storage and balances
+# Proofs: the effect of a message on storage and accounts
 
 A frame that knows a few slots of storage can send a message, and go on knowing them.
 
@@ -13,17 +13,19 @@ The effect of a message names the slots that it may touch, from the frame that s
 
 It also names the addresses whose balances it may move.
 
+It also names the addresses whose accounts it may remake, by a creation or a change of a nonce.
+
 Outside those slots and addresses, the frame that ends the message agrees with the frame before it.
 
 So every word reads as before there, and every slot is warm exactly when it was.
 
-The words before the transaction, the codes and the block stay too.
+The words before the transaction and the block stay too.
 
-Every account still exists exactly when it did, with its nonce and its code hash.
+Every account that is not remade still exists exactly when it did, with its nonce and its code.
 
-A message that fails touches no slot and moves no balance.
+A message that fails touches no slot, moves no balance and remakes no account.
 
-A message that succeeds also gives the facts of some slots, some balances, and a refund to add.
+A message that succeeds also gives facts of slots, balances, facts of accounts, and a refund to add.
 
 - A callee whose stopped frame agrees with the state of its caller, outside the change, has one.
 - On success that stopped frame must give the facts, the balances and the refund of the effect.
@@ -56,10 +58,6 @@ Each specification may assume the specifications of the whole family on the mess
 Each starts from the frame of its message, after the move of the value of the message, if any.
 
 That holds by induction on the bound on the gas of messages, which each message is below.
-
-An effect keeps the codes, the words before the transaction, and which accounts exist.
-
-So it leaves out a callee that creates or deletes an account, or changes a code or a nonce.
 
 The frame after a call says nothing of its return data.
 -/
@@ -209,16 +207,38 @@ theorem startState_of_isSome {message : Message fork} {state : TransactionState}
 
 /-! ## The effect of a message -/
 
-/-- What a message may change in storage and in balances, and what it gives when it succeeds. -/
+/-- What a frame knows of one account: its address, its nonce, its balance and its code. -/
+structure AccountFact where
+  /-- The address of the account. -/
+  address : Address
+  /-- The nonce of the account. -/
+  nonce : Nat
+  /-- The balance of the account. -/
+  balance : U256
+  /-- The code of the account. -/
+  code : ByteArray
+
+/-- The state has the account of a fact, with its nonce, its balance and its code. -/
+def AccountFact.Holds (fact : AccountFact) (state : TransactionState) : Prop :=
+  (state.getAccountOptional fact.address).isSome = true ∧
+    (state.getAccount fact.address).nonce = fact.nonce ∧
+    (state.getAccount fact.address).balance = fact.balance ∧
+    state.getCode (state.getAccount fact.address).codeHash = .ok fact.code
+
+/-- What a message may change in storage and in accounts, and what it gives when it succeeds. -/
 structure Change where
   /-- The slots that the message may touch. -/
   touched : List (Address × U256)
   /-- The addresses whose balances the message may move. -/
   moved : List Address
+  /-- The addresses whose accounts the message may create, delete or change in every way. -/
+  remade : List Address
   /-- The facts of slots that the message gives when it succeeds. -/
   after : List SlotFact
   /-- The balances that the message gives when it succeeds, each with its address. -/
   funds : List (Address × U256)
+  /-- The facts of accounts that the message gives when it succeeds. -/
+  accounts : List AccountFact
   /-- The refund that the message adds when it succeeds. -/
   gain : Int
 
@@ -226,24 +246,27 @@ structure Change where
 
 `ok` says whether the message ended with no error.
 
-Outside the touched slots and the moved addresses of the change, the state after agrees with it.
+Outside the touched slots and the moved and remade addresses of the change, the state agrees.
 
-A message that fails touches no slot and moves no balance.
+A message that fails touches no slot, moves no balance and remakes no account.
 
-A message that succeeds gives the facts and the balances of the change.
+A message that succeeds gives the facts of slots, the balances and the accounts of the change.
 
 It also adds the refund of the change to the refund counter. -/
 structure Effect (change : Change) (state : TransactionState) (substate : Substate) (ok : Bool)
     (state' : TransactionState) (substate' : Substate) : Prop where
-  /-- Outside the touched slots and the moved addresses, the state agrees with the old one.
+  /-- Outside the touched slots and the moved and remade addresses, the state agrees with the old.
 
   On a failure it agrees everywhere. -/
-  agrees : Agrees (if ok then change.touched else []) (if ok then change.moved else []) state
-    substate.accessedStorageKeys state' substate'.accessedStorageKeys
+  agrees : Agrees (if ok then change.touched else []) (if ok then change.moved else [])
+    (if ok then change.remade else []) state substate.accessedStorageKeys state'
+    substate'.accessedStorageKeys
   /-- A message that succeeds gives the facts of the change. -/
   holds : ok = true → ∀ fact ∈ change.after, fact.Holds state' substate'
   /-- A message that succeeds gives the balances of the change. -/
   funds : ok = true → ∀ fund ∈ change.funds, (state'.getAccount fund.1).balance = fund.2
+  /-- A message that succeeds gives the facts of accounts of the change. -/
+  accounts : ok = true → ∀ fact ∈ change.accounts, fact.Holds state'
   /-- A message that succeeds adds the refund of the change to the refund counter. -/
   refund : substate'.refundCounter = substate.refundCounter + if ok then change.gain else 0
 
@@ -256,16 +279,19 @@ def Effects (change : Change) (caller child : Evm fork Nat) : Prop :=
 
 The frame that ends the message is the stopped frame, rolled back on a failure.
 
-On success, the stopped frame gives the facts and the balances of the change, and holds its refund.
+On success, the stopped frame gives the facts, the balances and the accounts of the change.
+
+It then holds the refund of the change.
 
 On a failure the rollback gives back the state of the caller, so nothing is touched. -/
 theorem effects_rollbackOnError {change : Change} {caller stopped : Evm fork Nat}
-    (hagree : Agrees change.touched change.moved caller.state caller.substate.accessedStorageKeys
-      stopped.state stopped.substate.accessedStorageKeys)
+    (hagree : Agrees change.touched change.moved change.remade caller.state
+      caller.substate.accessedStorageKeys stopped.state stopped.substate.accessedStorageKeys)
     (hholds : stopped.error = none →
       ∀ fact ∈ change.after, fact.Holds stopped.state stopped.substate)
     (hfunds : stopped.error = none →
       ∀ fund ∈ change.funds, (stopped.state.getAccount fund.1).balance = fund.2)
+    (haccounts : stopped.error = none → ∀ fact ∈ change.accounts, fact.Holds stopped.state)
     (hrefund : stopped.error = none → stopped.substate.refundCounter = change.gain) :
     Effects change caller (rollbackOnError caller.state stopped) := by
   unfold Effects
@@ -273,7 +299,8 @@ theorem effects_rollbackOnError {change : Change} {caller stopped : Evm fork Nat
   | none =>
     rw [rollbackOnError_of_error_eq_none herr]
     simp only [incorporateChild, herr, Option.isNone_none, ite_true]
-    exact ⟨hagree, fun _ => hholds herr, fun _ => hfunds herr, by simp [hrefund herr]⟩
+    exact ⟨hagree, fun _ => hholds herr, fun _ => hfunds herr, fun _ => haccounts herr,
+      by simp [hrefund herr]⟩
   | some e =>
     have hrb : rollbackOnError caller.state stopped =
         { stopped with
@@ -286,25 +313,27 @@ theorem effects_rollbackOnError {change : Change} {caller stopped : Evm fork Nat
     have hparent : stopped.state.parent = caller.state.parent := hagree.parent
     refine ⟨⟨fun address key _ => TransactionState.getStorage_restoreTxState hparent address key,
       fun _ _ _ => .rfl, hagree.original,
-      fun address _ => TransactionState.getAccountOptional_restoreTxState hparent address,
-      fun address => by rw [TransactionState.getAccountOptional_restoreTxState hparent address],
-      fun hash => TransactionState.getCode_restoreTxState hparent hash, hparent⟩,
-      fun h => (Bool.false_ne_true h).elim, fun h => (Bool.false_ne_true h).elim, by simp⟩
+      fun address _ _ => TransactionState.getAccountOptional_restoreTxState hparent address,
+      fun address _ => by rw [TransactionState.getAccountOptional_restoreTxState hparent address],
+      fun address _ => by
+        rw [TransactionState.getCode_restoreTxState hparent, TransactionState.getAccount,
+          TransactionState.getAccountOptional_restoreTxState hparent address]
+        rfl,
+      hparent⟩,
+      fun h => (Bool.false_ne_true h).elim, fun h => (Bool.false_ne_true h).elim,
+      fun h => (Bool.false_ne_true h).elim, by simp⟩
 
 /-! ## Moving ether -/
 
-/-- A change of one account that keeps it alive, its nonce and its code changes only that account.
-
-The account exists before the change. -/
-private theorem agrees_modifyState {tx tx' : TransactionState} {address : Address}
+/-- A change of one account that keeps it alive changes only that account, and every code stays. -/
+theorem agrees_modifyState {tx tx' : TransactionState} {address : Address}
     {f : State.Account → Except State.StateError State.Account} {account : State.Account}
     (keys : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32))
     (hf : f (tx.getAccount address) = .ok account)
-    (hex : (tx.getAccountOptional address).isSome = true)
-    (hshape : nonceAndCode account = nonceAndCode (tx.getAccount address))
     (hlive : ¬(account.nonce = 0 ∧ account.codeHash = State.EMPTY_CODE_HASH ∧ account.balance = 0))
     (h : tx.modifyState fork address f = .ok tx') :
-    Agrees [] [address] tx keys tx' keys ∧ tx'.getAccount address = account := by
+    Agrees [] [] [address] tx keys tx' keys ∧ tx'.getAccountOptional address = some account ∧
+      ∀ hash, tx'.getCode hash = tx.getCode hash := by
   obtain ⟨account', hf', rfl⟩ := TransactionState.modifyState_eq_ok_iff.mp h
   rw [hf, Except.ok.injEq] at hf'
   subst hf'
@@ -314,19 +343,46 @@ private theorem agrees_modifyState {tx tx' : TransactionState} {address : Addres
       TransactionState.getAccountOptional_setAccount_self]
     simpa [and_assoc] using hlive
   simp only [hempty, Bool.and_false, Bool.false_eq_true, ite_false]
+  have hne : ∀ other, other ∉ [address] → other ≠ address := fun other hm => by simpa using hm
+  have hset : ∀ other, other ∉ [address] →
+      ((tx.recordAccountRead address).setAccount address (some account)).getAccountOptional
+        other = tx.getAccountOptional other := fun other hm =>
+    TransactionState.getAccountOptional_setAccount_of_ne _ _ (hne other hm)
+  refine ⟨⟨fun _ _ _ => rfl, fun _ _ _ => .rfl, rfl, fun other _ hm => hset other hm,
+    fun other hm => by rw [hset other hm], fun other hm => by
+      rw [TransactionState.getAccount, hset other hm]
+      rfl,
+    rfl⟩, TransactionState.getAccountOptional_setAccount_self .., fun _ => rfl⟩
+
+/-- A change of one account that keeps it alive, its nonce and its code changes only that account.
+
+The account exists before the change. -/
+private theorem agrees_modifyState_shape {tx tx' : TransactionState} {address : Address}
+    {f : State.Account → Except State.StateError State.Account} {account : State.Account}
+    (keys : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32))
+    (hf : f (tx.getAccount address) = .ok account)
+    (hex : (tx.getAccountOptional address).isSome = true)
+    (hshape : nonceAndCode account = nonceAndCode (tx.getAccount address))
+    (hlive : ¬(account.nonce = 0 ∧ account.codeHash = State.EMPTY_CODE_HASH ∧ account.balance = 0))
+    (h : tx.modifyState fork address f = .ok tx') :
+    Agrees [] [address] [] tx keys tx' keys ∧ tx'.getAccount address = account := by
+  obtain ⟨h1, hself, hcode⟩ := agrees_modifyState keys hf hlive h
   obtain ⟨old, hold⟩ := Option.isSome_iff_exists.mp hex
-  refine ⟨⟨fun _ _ _ => rfl, fun _ _ _ => .rfl, rfl, fun other hm => ?_, fun other => ?_,
-    fun _ => rfl, rfl⟩, ?_⟩
-  · exact TransactionState.getAccountOptional_setAccount_of_ne _ _ (by simpa using hm)
+  have hget : tx.getAccount address = old := by simp [TransactionState.getAccount, hold]
+  have hshape' : nonceAndCode account = nonceAndCode old := hget ▸ hshape
+  have hhash : account.codeHash = old.codeHash := congrArg Prod.snd hshape'
+  refine ⟨⟨h1.storage, h1.warm, h1.original, fun other hm _ => h1.account other (by simp) hm,
+    fun other _ => ?_, fun other _ => ?_, h1.parent⟩, by simp [TransactionState.getAccount, hself]⟩
   · by_cases ho : other = address
     · subst ho
-      rw [TransactionState.getAccountOptional_setAccount_self, hold]
-      simp only [Option.map_some]
-      rw [hshape, TransactionState.getAccount, hold]
-      rfl
-    · rw [TransactionState.getAccountOptional_setAccount_of_ne _ _ ho]
-      rfl
-  · simp [TransactionState.getAccount, TransactionState.getAccountOptional_setAccount_self]
+      rw [hself, hold]
+      simp [hshape']
+    · exact h1.shape other (by simpa using ho)
+  · by_cases ho : other = address
+    · subst ho
+      simp only [TransactionState.getAccount, hself, hold, Option.getD_some, hhash]
+      exact hcode _
+    · exact h1.code other (by simpa using ho)
 
 /-- A move of a value that is not 0 between two accounts changes only their balances.
 
@@ -342,7 +398,7 @@ theorem agrees_moveEther {state moved : TransactionState} {sender recipient : Ad
     (hsender : (state.getAccount sender).nonce ≠ 0 ∨
       (state.getAccount sender).codeHash ≠ State.EMPTY_CODE_HASH)
     (hrecipient : (state.getAccountOptional recipient).isSome = true) :
-    Agrees [] [sender, recipient] state keys moved keys := by
+    Agrees [] [sender, recipient] [] state keys moved keys := by
   unfold TransactionState.moveEther at h
   rcases TransactionState.modifyState_debit fork state sender amount with
     ⟨-, hmid⟩ | ⟨hfunds, mid, hmid, -, -⟩
@@ -352,12 +408,12 @@ theorem agrees_moveEther {state moved : TransactionState} {sender recipient : Ad
     cases hs : state.getAccountOptional sender
     · simp [TransactionState.getAccount, hs, State.EMPTY_ACCOUNT] at hsender
     · rfl
-  obtain ⟨h1, -⟩ := agrees_modifyState (account :=
+  obtain ⟨h1, -⟩ := agrees_modifyState_shape (account :=
       { state.getAccount sender with balance := (state.getAccount sender).balance - amount })
     keys (by simp [State.Account.debit, hfunds]) hexS rfl
     (fun ⟨hn, hc, _⟩ => hsender.elim (fun h => h hn) fun h => h hc) hmid
   have hexR : (mid.getAccountOptional recipient).isSome = true := by
-    rw [h1.account recipient (by simpa using Ne.symm hne)]
+    rw [h1.account recipient (by simpa using Ne.symm hne) (List.not_mem_nil)]
     exact hrecipient
   obtain ⟨account, hf, -, -⟩ := TransactionState.modifyState_eq_ok h
   unfold State.Account.credit at hf
@@ -369,7 +425,7 @@ theorem agrees_moveEther {state moved : TransactionState} {sender recipient : Ad
       rcases Nat.eq_zero_or_pos amount.toNat with h0 | h0
       · exact absurd (BitVec.eq_of_toNat_eq (by simpa using h0)) hamount
       · exact h0
-    obtain ⟨h2, -⟩ := agrees_modifyState (account :=
+    obtain ⟨h2, -⟩ := agrees_modifyState_shape (account :=
         { mid.getAccount recipient with balance := (mid.getAccount recipient).balance + amount })
       keys (by simp [State.Account.credit, hfit]) hexR rfl
       (fun ⟨_, _, hb⟩ => by
@@ -377,10 +433,10 @@ theorem agrees_moveEther {state moved : TransactionState} {sender recipient : Ad
         rw [BitVec.toNat_add, Nat.mod_eq_of_lt hfit] at this
         simp at this
         omega) h
-    exact (h1.trans h2).mono (fun _ hs => by simp at hs) fun address hm => by
+    exact (h1.trans h2).mono (fun _ hs => by simp at hs) (fun address hm => by
       simp only [List.mem_append, List.mem_singleton] at hm
       simp only [List.mem_cons, List.not_mem_nil, or_false]
-      exact hm.symm
+      exact hm.symm) fun _ hr => by simp at hr
   · cases hf
 
 /-! ## A call from a frame that knows slots -/
@@ -409,10 +465,10 @@ theorem untouched_of_not_mem {touched : List (Address × U256)} {fact : SlotFact
   · exact .inl ha
 
 /-- A fact outside the touched slots holds after a state that agrees outside them. -/
-theorem SlotFact.Holds.of_agrees {touched : List (Address × U256)} {moved : List Address}
+theorem SlotFact.Holds.of_agrees {touched : List (Address × U256)} {moved remade : List Address}
     {fact : SlotFact} {state state' : TransactionState} {substate substate' : Substate}
     (hold : fact.Holds state substate)
-    (h : Agrees touched moved state substate.accessedStorageKeys state'
+    (h : Agrees touched moved remade state substate.accessedStorageKeys state'
       substate'.accessedStorageKeys)
     (hu : Untouched touched fact.address (U256.toBeBytes fact.key)) :
     fact.Holds state' substate' :=
@@ -462,7 +518,7 @@ def CallMessage (kind : CallKind) (message : Message fork) (to : Address) (code 
 
 The call succeeded, or it failed and `sure` is false.
 
-On success the new base holds the balances of the change.
+On success the new base holds the balances and the facts of accounts of the change.
 
 Memory keeps the facts apart from the output range.
 
@@ -474,9 +530,10 @@ def AfterCall (code : ByteArray) (message : Message fork) (pc : Nat) (rest : Lis
     (base : TransactionState) (accessed : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32))
     (change : Change) (sure : Bool) (evm : Evm fork Nat) : Prop :=
   ∃ cold left base' accessed', left ≤ callGas fork value asked gas extra cold ∧
-    Agrees (change.touched ++ slots.map SlotFact.slot) change.moved base accessed base'
-      accessed' ∧
+    Agrees (change.touched ++ slots.map SlotFact.slot) change.moved change.remade base accessed
+      base' accessed' ∧
     (((∀ fund ∈ change.funds, (base'.getAccount fund.1).balance = fund.2) ∧
+      (∀ fact ∈ change.accounts, fact.Holds base') ∧
       Stored code message (pc + 1) (1 :: rest) size
         ((outputStart.toNat, output) :: facts.filter (Apart outputStart.toNat outputSize.toNat))
         (gas - callCost fork value asked gas extra cold + left)
@@ -505,14 +562,14 @@ private theorem extendMemory_call {memory data : ByteArray}
 It also keeps the agreement with its base. -/
 private theorem stored_recordAccountRead {evm caller : Evm fork Nat} {address : Address}
     (hslots : ∀ fact ∈ slots, fact.Holds evm.state evm.substate)
-    (hagree : Agrees (slots.map SlotFact.slot) [] base accessed evm.state
+    (hagree : Agrees (slots.map SlotFact.slot) [] [] base accessed evm.state
       evm.substate.accessedStorageKeys)
     (hcs : caller.state =
       (evm.state.recordAccountRead address).recordAccountRead message.currentTarget)
     (hcss : caller.substate = { evm.substate with
       accessedAddresses := evm.substate.accessedAddresses.insert address }) :
     (∀ fact ∈ slots, fact.Holds caller.state caller.substate) ∧
-      Agrees (slots.map SlotFact.slot) [] base accessed caller.state
+      Agrees (slots.map SlotFact.slot) [] [] base accessed caller.state
         caller.substate.accessedStorageKeys := by
   rw [hcs, hcss]
   exact ⟨hslots, ⟨hagree.storage, hagree.warm, hagree.original, hagree.account, hagree.shape,
@@ -527,7 +584,7 @@ private theorem afterCall_of_at {evm caller child final : Evm fork Nat} {rest : 
     (hall : HoldsAll evm.memory facts) (hrefund : evm.substate.refundCounter = refund)
     (houtput : outputStart.toNat + outputSize.toNat ≤ size)
     (hslots : ∀ fact ∈ slots, fact.Holds caller.state caller.substate)
-    (hagree : Agrees (slots.map SlotFact.slot) [] base accessed caller.state
+    (hagree : Agrees (slots.map SlotFact.slot) [] [] base accessed caller.state
       caller.substate.accessedStorageKeys)
     (hcss : caller.substate.refundCounter = evm.substate.refundCounter)
     (hle : child.gas ≤ callGas fork value asked gas extra cold)
@@ -570,13 +627,14 @@ private theorem afterCall_of_at {evm caller child final : Evm fork Nat} {rest : 
   · cases hok : child.error.isNone
     · simp only [hok] at hagree'
       exact hagree'.mono (fun slot hs => List.mem_append_right _ (by simpa using hs))
-        fun address hm => by simp at hm
+        (fun address hm => by simp at hm) fun address hm => by simp at hm
     · simp only [hok, ite_true] at hagree'
-      exact hagree'.mono (fun _ hs => hs) fun address hm => by simpa using hm
+      exact hagree'.mono (fun _ hs => hs) (fun address hm => by simpa using hm)
+        fun address hm => by simpa using hm
   · cases hok : child.error.isNone
     · simp only [hok, Bool.false_eq_true, ite_false] at hk
       refine .inr ⟨?_, stored_of_known (hk.mono fun fact hfact => List.mem_cons_of_mem _ hfact)
-        ?_ ?_ (Agrees.refl _ _ _ _)⟩
+        ?_ ?_ (Agrees.refl _ _ _ _ _)⟩
       · cases sure
         · rfl
         · simp [hsure rfl] at hok
@@ -587,8 +645,8 @@ private theorem afterCall_of_at {evm caller child final : Evm fork Nat} {rest : 
         simp [hrefund]
     · have hnone : child.error = none := Option.isNone_iff_eq_none.mp hok
       rw [hout hnone] at hk
-      refine .inl ⟨heff.funds hok,
-        stored_of_known (by simpa [hok] using hk) ?_ ?_ (Agrees.refl _ _ _ _)⟩
+      refine .inl ⟨heff.funds hok, heff.accounts hok,
+        stored_of_known (by simpa [hok] using hk) ?_ ?_ (Agrees.refl _ _ _ _ _)⟩
       · intro fact hfact
         rcases List.mem_append.mp hfact with hfact | hfact
         · exact heff.holds hok fact hfact
@@ -651,7 +709,7 @@ theorem callKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       CallMessage kind message (toAddressMasked to) calleeCode data
         (callGas fork 0 asked gas 0 cold) msg →
       (∀ fact ∈ slots, fact.Holds caller.state caller.substate) →
-      Agrees (slots.map SlotFact.slot) [] base accessed caller.state
+      Agrees (slots.map SlotFact.slot) [] [] base accessed caller.state
         caller.substate.accessedStorageKeys →
       Effects change caller child ∧ (sure = true → child.error = none) ∧
         (child.error = none →
@@ -667,7 +725,7 @@ theorem callKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
   have hext := extendMemory_call hsize hold hlen houtput
   have hcode' : evm.state.getCode (evm.state.getAccount (toAddressMasked to)).codeHash =
       .ok calleeCode := by
-    rw [hagree.code, TransactionState.getAccount, hagree.account _ (by simp)]
+    rw [hagree.code _ List.not_mem_nil]
     exact hcode
   have hcall := callKindWith (callee := callee) (asked := asked) (inputStart := inputStart)
     (inputSize := inputSize) (outputStart := outputStart) (outputSize := outputSize)
@@ -709,7 +767,7 @@ theorem call_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       CallMessage .call message (toAddressMasked to) calleeCode data
         (callGas fork 0 asked gas 0 cold) msg →
       (∀ fact ∈ slots, fact.Holds caller.state caller.substate) →
-      Agrees (slots.map SlotFact.slot) [] base accessed caller.state
+      Agrees (slots.map SlotFact.slot) [] [] base accessed caller.state
         caller.substate.accessedStorageKeys →
       Effects change caller child ∧ (sure = true → child.error = none) ∧
         (child.error = none →
@@ -743,7 +801,7 @@ theorem staticcall_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
       CallMessage .staticcall message (toAddressMasked to) calleeCode data
         (callGas fork 0 asked gas 0 cold) msg →
       (∀ fact ∈ slots, fact.Holds caller.state caller.substate) →
-      Agrees (slots.map SlotFact.slot) [] base accessed caller.state
+      Agrees (slots.map SlotFact.slot) [] [] base accessed caller.state
         caller.substate.accessedStorageKeys →
       Effects change caller child ∧ (sure = true → child.error = none) ∧
         (child.error = none →
@@ -780,7 +838,7 @@ theorem delegatecall_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamster
       CallMessage .delegatecall message (toAddressMasked to) calleeCode data
         (callGas fork 0 asked gas 0 cold) msg →
       (∀ fact ∈ slots, fact.Holds caller.state caller.substate) →
-      Agrees (slots.map SlotFact.slot) [] base accessed caller.state
+      Agrees (slots.map SlotFact.slot) [] [] base accessed caller.state
         caller.substate.accessedStorageKeys →
       Effects change caller child ∧ (sure = true → child.error = none) ∧
         (child.error = none →
@@ -815,7 +873,7 @@ theorem callcode_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       CallMessage .callcode message (toAddressMasked to) calleeCode data
         (callGas fork 0 asked gas 0 cold) msg →
       (∀ fact ∈ slots, fact.Holds caller.state caller.substate) →
-      Agrees (slots.map SlotFact.slot) [] base accessed caller.state
+      Agrees (slots.map SlotFact.slot) [] [] base accessed caller.state
         caller.substate.accessedStorageKeys →
       Effects change caller child ∧ (sure = true → child.error = none) ∧
         (child.error = none →
@@ -904,7 +962,7 @@ theorem callValue_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
         (callGas fork v asked gas
           (callNewAccountCost fork base (toAddressMasked to) v + callValueCost fork v) cold) msg →
       (∀ fact ∈ slots, fact.Holds caller.state caller.substate) →
-      Agrees (slots.map SlotFact.slot) [] base accessed caller.state
+      Agrees (slots.map SlotFact.slot) [] [] base accessed caller.state
         caller.substate.accessedStorageKeys →
       Effects change caller child ∧ (sure = true → child.error = none) ∧
         (child.error = none →
@@ -920,10 +978,10 @@ theorem callValue_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
   have hold := hall _ hinput
   have hext := extendMemory_call hsize hold hlen houtput
   have hacc : ∀ address, evm.state.getAccountOptional address = base.getAccountOptional address :=
-    fun address => hagree.account address (by simp)
+    fun address => hagree.account address List.not_mem_nil List.not_mem_nil
   have hcode' : evm.state.getCode (evm.state.getAccount (toAddressMasked to)).codeHash =
       .ok calleeCode := by
-    rw [hagree.code, TransactionState.getAccount, hacc]
+    rw [hagree.code _ List.not_mem_nil]
     exact hcode
   have hbal' : v ≤ (evm.state.getAccount message.currentTarget).balance := by
     rw [TransactionState.getAccount, hacc]
