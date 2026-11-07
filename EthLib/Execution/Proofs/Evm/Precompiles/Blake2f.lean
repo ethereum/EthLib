@@ -22,6 +22,8 @@ The fields are decoded as EIP-152 encodes them, for every input:
 - the output words are little-endian too, the encoding of the input.
 
 With its gas, a 213-byte call fails exactly when the gas is below the number of rounds, and otherwise returns the precompile's result.
+
+A call succeeds exactly on a 213-byte input with enough gas and a flag byte of `0` or `1`.
 -/
 
 @[expose] public section
@@ -268,6 +270,55 @@ theorem readFlag_ok_iff (flag : UInt8) (f : Bool) : readFlag flag = .ok f ↔ fl
     split at h <;> cases h <;> rfl
   · rintro rfl
     cases f <;> rfl
+
+/-- The output step succeeds exactly on a 213-byte input whose flag byte decodes. -/
+theorem output_eq_ok_iff (data : ByteArray) (v : Vector UInt8 OUTPUT_BYTES) :
+    output data = .ok v ↔
+      ∃ h : data.size = INPUT_BYTES, ∃ f, readFlag (data.data.getD 212 0) = .ok f ∧
+        v = compute ⟨data.data, h⟩ f := by
+  by_cases hsize : data.size = INPUT_BYTES
+  · -- Byte 212 is in range, so reading it with a default gives the byte itself.
+    have hlt : 212 < data.data.size := by simp only [ByteArray.size_data, hsize, INPUT_BYTES]; omega
+    rw [Array.getD_eq_getD_getElem?, Array.getElem?_eq_getElem hlt, Option.getD_some]
+    simp only [output, hsize, dite_true, exists_true_left]
+    cases hf : readFlag data.data[212] <;> simp [hf, eq_comm]
+  · simp [output, hsize]
+
+/--
+A call succeeds exactly when the input is 213 bytes, the gas covers the price and the flag decodes.
+
+The flag byte is byte 212, and it must be `1` for a final block or `0` otherwise.
+
+The output is then the result of F on the decoded fields, with that flag.
+-/
+theorem blake2f_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
+    blake2f data gas = .ok out ↔
+      ∃ h : data.size = INPUT_BYTES, gasCost data ≤ gas ∧
+        ∃ f, data.data.getD 212 0 = (if f then 1 else 0) ∧
+          out = ⟨(compute ⟨data.data, h⟩ f).toArray⟩ := by
+  simp only [← readFlag_ok_iff]
+  by_cases hsize : data.size = INPUT_BYTES
+  · by_cases hgas : gas < gasCost data
+    · simp [blake2f_outOfGas data hsize hgas, hsize, Nat.not_le.mpr hgas]
+    · rw [blake2f_of_gas data hsize (Nat.le_of_not_lt hgas)]
+      cases hout : output data with
+      | error e =>
+        simp only [Except.map, reduceCtorEq, false_iff]
+        rintro ⟨h, -, f, hf, -⟩
+        have := (output_eq_ok_iff data (compute ⟨data.data, h⟩ f)).mpr ⟨h, f, hf, rfl⟩
+        rw [hout] at this
+        cases this
+      | ok v =>
+        obtain ⟨h, f, hf, rfl⟩ := (output_eq_ok_iff data v).mp hout
+        simp only [Except.map, Except.ok.injEq]
+        constructor
+        · rintro rfl
+          exact ⟨h, Nat.le_of_not_lt hgas, f, hf, rfl⟩
+        · rintro ⟨-, -, f', hf', rfl⟩
+          rw [hf] at hf'
+          cases hf'
+          rfl
+  · simp [blake2f_invalidInputLength data hsize, hsize]
 
 /-- Two errors with one code come from one constructor. -/
 theorem Blake2fError.code_injective (e₁ e₂ : Blake2fError) (h : e₁.code = e₂.code) :
