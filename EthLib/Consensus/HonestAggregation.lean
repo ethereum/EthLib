@@ -36,7 +36,7 @@ Its bits mark each seat of its subcommittee whose key signed, and a key can hold
 Its signature holds one signature for each seat it marks.
 
 [EIP-7549]: https://eips.ethereum.org/EIPS/eip-7549#consensus-layer
-[EIP-7732]: https://github.com/ethereum/EIPs/blob/f1ade090fd315895461fc3e249cb1a675aeb55a9/EIPS/eip-7732.md#state-transition
+[EIP-7732]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7732.md#state-transition
 
 The collection of the votes from the network is not specified here.
 -/
