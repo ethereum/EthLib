@@ -689,6 +689,8 @@ With the runner of the interpreter, the outer frame stops with no error and retu
 Before Paris, the call to the address of the word 0 may create its empty account.
 No frame writes the account of the called address or of the outer frame.
 So the result holds even when the two are the same address.
+`CallEcho.runFrame_process` proves a contract that sends a word to a callee that returns its call data, with an output range of 64 bytes.
+With the runner of the interpreter, it returns that word and 32 zero bytes, since the callee returns only 32, or the run aborts.
 No rule covers CREATE, a call with value, DELEGATECALL or STATICCALL.
 
 ### SHA-256 precompile
