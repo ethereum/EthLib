@@ -233,6 +233,136 @@ theorem isValidLightClientHeader_executionPayload {config : Config}
     (BeaconBlockBody.nodeRoot_executionPayload bodyCapella bodyBefore body payloadRooted)
   exact ⟨leaf, payloadRoot, root, payloadRooted, bound⟩
 
+/-! ## From Capella to Fulu: the fields of the execution header -/
+
+omit [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
+  [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat] [NeZero preset.PTC_SIZE.toNat]
+  [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat] in
+/-- Every count in a payload header fits the word mixed into its root.
+
+The only count is the length of the extra data, below the 64-bit limit of the preset. -/
+theorem ExecutionPayloadHeader.commitmentSized (header : ExecutionPayloadHeader preset fork) :
+    CommitmentSized (SszType.desc (ExecutionPayloadHeader preset fork))
+      (SszType.toValue header) := by
+  have extra : header.extraData.data.size < 2 ^ 256 :=
+    Nat.lt_of_le_of_lt header.extraData.bound
+      (Nat.lt_trans preset.MAX_EXTRA_DATA_BYTES.toNat_lt (by decide))
+  refine .container fun pair member => ?_
+  by_cases capella : Fork.shapella ≤ fork <;> by_cases deneb : Fork.dencun ≤ fork <;>
+    simp [SszType.desc, SszType.toValue, SszFields.descs, SszFields.toValues, capella, deneb]
+      at member
+  -- Each field is a fixed-size vector, an integer, or the extra data, which fits its word.
+  all_goals
+    repeat' rcases member with rfl | member
+    all_goals first
+      | exact .byteVector _ _
+      | exact .uint _ _
+      | exact .byteList extra
+
+omit [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
+  [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat] [NeZero preset.PTC_SIZE.toNat]
+  [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat] in
+/-- The Capella header of a Capella header is that header. -/
+theorem ExecutionPayloadHeader.toCapella_self (header : ExecutionPayloadHeader preset .shapella) :
+    header.toCapella (Nat.le_refl _) = header := by
+  cases header
+  simp only [ExecutionPayloadHeader.toCapella]
+  -- The fields of Deneb have no value at Capella, so only the withdrawals root remains.
+  congr 1 <;> funext later <;> exact absurd later (by decide)
+
+omit [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
+  [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat] [NeZero preset.PTC_SIZE.toNat]
+  [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat] in
+/-- From Capella to Fulu, the execution root of a header is the root of its execution header.
+
+This holds at a slot from the fork of the header: from Capella, and from Deneb at Deneb on. -/
+theorem getLcExecutionRoot_execution {config : Config} (capella : .shapella ≤ fork)
+    (beforeGloas : fork < .glamsterdam) {header : LightClientHeader preset fork}
+    (started : config.CAPELLA_FORK_EPOCH ≤ computeEpochAtSlot preset header.beacon.slot)
+    (full : .dencun ≤ fork →
+      config.DENEB_FORK_EPOCH ≤ computeEpochAtSlot preset header.beacon.slot) :
+    ∃ root, SszType.hashTreeRoot (header.execution ⟨capella, beforeGloas⟩) = .ok root ∧
+      getLcExecutionRoot config header = .ok root := by
+  have gloas : ¬ Fork.glamsterdam ≤ fork := Nat.not_le_of_lt beforeGloas
+  have altair : Fork.altair ≤ fork := Nat.le_trans (by decide) capella
+  obtain ⟨root, rooted⟩ := SszType.hashTreeRoot_total (header.execution ⟨capella, beforeGloas⟩)
+  refine ⟨root, rooted, ?_⟩
+  unfold getLcExecutionRoot
+  simp only [LightClientError.requireFork, altair, ↓reduceIte, gloas, dite_false, capella,
+    dite_true, bind, Except.bind]
+  by_cases deneb : Fork.dencun ≤ fork
+  · simp [deneb, full deneb, LightClientError.liftRoot, Except.mapError, rooted]
+  · -- Before Deneb the fork is Capella, whose header is its own Capella header.
+    have capellaFork : fork = .shapella := by
+      cases fork <;> first | rfl | exact absurd capella (by decide) | exact absurd deneb (by decide)
+    subst capellaFork
+    simp [deneb, started, LightClientError.liftRoot, Except.mapError,
+      ExecutionPayloadHeader.toCapella_self, rooted]
+
+/-- From Capella to Fulu, a valid header carries the execution header of its block, field by field.
+
+Take a body of the fork of the header whose root is the body root of the beacon header.
+
+At a slot from the fork of the header, its execution header is the header of the body's payload.
+
+Otherwise one of two searches names a SHA-256 collision.
+
+The first is over the climbs of the two branches to the body root.
+
+The second is over the hash inputs of the two roots of the execution headers. -/
+theorem isValidLightClientHeader_execution_eq {config : Config}
+    (capella : .shapella ≤ fork) (beforeGloas : fork < .glamsterdam)
+    {header : LightClientHeader preset fork}
+    (valid : isValidLightClientHeader config header = .ok true)
+    (started : config.CAPELLA_FORK_EPOCH ≤ computeEpochAtSlot preset header.beacon.slot)
+    (full : .dencun ≤ fork →
+      config.DENEB_FORK_EPOCH ≤ computeEpochAtSlot preset header.beacon.slot)
+    (body : BeaconBlockBody preset fork)
+    (rooted : SszType.hashTreeRoot body = .ok header.beacon.bodyRoot)
+    {payloadHeader : ExecutionPayloadHeader preset fork}
+    (made : (body.executionPayload
+      ⟨Nat.le_trans (by decide) capella, beforeGloas⟩).header = .ok payloadHeader) :
+    header.execution ⟨capella, beforeGloas⟩ = payloadHeader ∨
+      (∃ (leaf payloadRoot : Bytes32) (honest : List Bytes32) (a b : Array UInt8),
+        getLcExecutionRoot config header = .ok leaf ∧
+        SszType.hashTreeRoot payloadHeader = .ok payloadRoot ∧
+        computeMerkleProof body EXECUTION_PAYLOAD_GINDEX = .ok honest ∧
+        findBranchCollision EXECUTION_PAYLOAD_GINDEX 0 leaf.toArray payloadRoot.toArray
+            (((header.executionBranch capella).toList.drop
+              ((header.executionBranch capella).toList.length -
+                Nat.log2 EXECUTION_PAYLOAD_GINDEX)).map Vector.toArray)
+            ((honest.drop (honest.length - Nat.log2 EXECUTION_PAYLOAD_GINDEX)).map
+              Vector.toArray) = some (a, b) ∧
+        a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
+        Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
+          Cryptography.Hash.Sha256.hash (ByteArray.mk b)) ∨
+      ∃ leftTree rightTree,
+        valueTree (SszType.desc (ExecutionPayloadHeader preset fork))
+          (SszType.toValue (header.execution ⟨capella, beforeGloas⟩)) = .ok leftTree ∧
+        valueTree (SszType.desc (ExecutionPayloadHeader preset fork))
+          (SszType.toValue payloadHeader) = .ok rightTree ∧
+        ∃ x y, findMessageCollision leftTree.messages rightTree.messages = some (x, y) ∧
+          x ∈ leftTree.messages ∧ y ∈ rightTree.messages ∧ MessageCollision x y := by
+  obtain ⟨leaf, payloadRoot, executionRoot, payloadRooted, bound⟩ :=
+    isValidLightClientHeader_executionPayload capella beforeGloas valid started capella
+      beforeGloas body rooted
+  obtain ⟨root, headerRooted, sameRoot⟩ := getLcExecutionRoot_execution capella beforeGloas
+    started full
+  rw [sameRoot] at executionRoot
+  cases executionRoot
+  -- The header of the payload has the root of the payload.
+  have payloadHeaderRooted : SszType.hashTreeRoot payloadHeader = .ok payloadRoot := by
+    rw [ExecutionPayload.hashTreeRoot_header beforeGloas made, payloadRooted]
+  rcases bound with same | ⟨honest, a, b, built, found, rest⟩
+  · subst same
+    rcases SszType.hashTreeRoot_binding (ExecutionPayloadHeader.commitmentSized _)
+        (ExecutionPayloadHeader.commitmentSized _) headerRooted payloadHeaderRooted with
+      equal | collision
+    · exact .inl equal
+    · exact .inr (.inr collision)
+  · exact .inr (.inl ⟨leaf, payloadRoot, honest, a, b, sameRoot, payloadHeaderRooted, built,
+      found, rest⟩)
+
 /-! ## From Gloas: the block hash -/
 
 /-- From Gloas, node 2856 of a body is the parent block hash of its bid. -/
