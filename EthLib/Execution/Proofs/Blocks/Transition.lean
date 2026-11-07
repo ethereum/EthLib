@@ -32,6 +32,10 @@ When the hash of the last recent block succeeds, the recent blocks give hashes.
 They are the parent hashes of the last 255 blocks, then the hash of the last block.
 
 So there are at most 256 of them.
+
+Take at least 256 recent blocks, each the parent of the next.
+
+Then the hashes are those of the last 256 blocks.
 -/
 
 @[expose] public section
@@ -88,6 +92,43 @@ theorem length_of_recentHashes {recent : List RecentBlock} {hashes : List Hash32
   · have := (recent.drop (recent.length - 255)).length_map (f := (·.header.parentHash))
     rw [hh, List.length_append, this, List.length_drop, List.length_singleton]
     omega
+
+/-- The hashes of at least 256 linked recent blocks are the hashes of the last 256 of them.
+
+Linked means that the hash of each recent block is the parent hash of the next one.
+
+The statement assumes that the transition computes the hashes. -/
+theorem recentHashes_eq_mapM_hash {recent : List RecentBlock} {hashes : List Hash32}
+    (h : recentHashes recent = .ok hashes)
+    (hlink : ∀ (i : Nat) (hi : i + 1 < recent.length),
+      recent[i].header.hash = .ok recent[i + 1].header.parentHash)
+    (hlen : 256 ≤ recent.length) :
+    (recent.drop (recent.length - 256)).mapM (·.header.hash) = .ok hashes := by
+  rcases recentHashes_eq_ok_iff.mp h with ⟨hnil, -⟩ | ⟨last, hash, hr, hh, hhs⟩
+  · simp [hnil] at hlen
+  have h255 : 255 ≤ recent.length := by omega
+  rw [hhs, mapM_eq_ok_iff]
+  refine ⟨by simp [Nat.sub_sub_self hlen, Nat.sub_sub_self h255], fun i hi => ?_⟩
+  -- The kept blocks are the last 256, and their parent hashes skip the first of them.
+  simp only [List.length_drop, Nat.sub_sub_self hlen] at hi
+  rw [List.getElem_drop]
+  by_cases hi' : i < 255
+  · -- A kept block hashes to the parent hash of the block after it.
+    have hk : i < ((recent.drop (recent.length - 255)).map (·.header.parentHash)).length := by
+      simp only [List.length_map, List.length_drop, Nat.sub_sub_self h255]
+      omega
+    rw [List.getElem_append_left hk, List.getElem_map, List.getElem_drop]
+    have := hlink (recent.length - 256 + i) (by omega)
+    rwa [getElem_congr_idx (show recent.length - 256 + i + 1 = recent.length - 255 + i by omega)]
+      at this
+  · -- The last kept block is the last block, whose hash comes last.
+    have hk : ((recent.drop (recent.length - 255)).map (·.header.parentHash)).length ≤ i := by
+      simp only [List.length_map, List.length_drop, Nat.sub_sub_self h255]
+      omega
+    rw [List.getElem_append_right hk]
+    rw [List.getLast?_eq_getElem?, List.getElem?_eq_getElem (by omega), Option.some.injEq] at hr
+    rw [getElem_congr_idx (show recent.length - 256 + i = recent.length - 1 by omega), hr, hh]
+    simp only [List.length_map, List.length_drop, Nat.sub_sub_self h255, List.getElem_singleton]
 
 /-! ## The checks against the output -/
 
