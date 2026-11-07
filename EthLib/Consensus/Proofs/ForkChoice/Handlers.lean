@@ -631,9 +631,14 @@ private theorem unless_ok_iff {ε : Type} {test : Except ε Bool} {e : ε} :
   | ok b => cases b <;> simp [bind, Except.bind, throw, throwThe, MonadExceptOf.throw, pure,
       Except.pure]
 
-/-- The columns are available exactly when the node gets every column that it samples.
+/-- The columns are available exactly when the source returns columns, each of them valid.
 
-Each column must have a valid shape, and the proofs of its cells must match the commitments. -/
+Each column must have a valid shape, and the proofs of its cells must match the commitments.
+
+The source must return every column that the node samples, as `BlockSources.columns` states.
+
+The check takes that on trust: it reads no list of sampled columns, so it cannot find a missing one.
+-/
 theorem columnsAvailable_ok_iff {sources : BlockSources preset fork} {root : Root}
     {bidCommitments : Since .glamsterdam fork (BlobKZGCommitments preset fork)} :
     columnsAvailable config sources root bidCommitments = .ok true ↔
@@ -662,9 +667,14 @@ theorem columnsAvailable_ok_iff {sources : BlockSources preset fork} {root : Roo
     exact ⟨fun all sidecar mem => (each sidecar).mp (all sidecar (Array.mem_toList_iff.mpr mem)),
       fun valid sidecar mem => (each sidecar).mpr (valid sidecar (Array.mem_toList_iff.mp mem))⟩
 
-/-- At Fulu, the check passes exactly when the node gets every column that it samples.
+/-- At Fulu, the check passes exactly when the source returns columns, each of them valid.
 
-Each column must have a valid shape, and the proofs of its cells must match its commitments. -/
+Each column must have a valid shape, and the proofs of its cells must match its commitments.
+
+The source must return every column that the node samples, as `BlockSources.columns` states.
+
+The check takes that on trust: it reads no list of sampled columns, so it cannot find a missing one.
+-/
 theorem validateDataAvailability_ok_of_fulu {sources : BlockSources preset fork}
     {block : BeaconBlock preset fork} {blockRoot : Root}
     (fulu : .fusaka ≤ fork) (before : fork < .glamsterdam) :
@@ -681,9 +691,14 @@ theorem validateDataAvailability_ok_of_fulu {sources : BlockSources preset fork}
   rw [unless_ok_iff]
   exact columnsAvailable_ok_iff
 
-/-- From Gloas the data of a payload is available exactly when each sampled column is valid.
+/-- From Gloas the data of a payload is available exactly when the source returns valid columns.
 
-The commitments are those of the bid. -/
+The commitments are those of the bid.
+
+The source must return every column that the node samples, as `BlockSources.columns` states.
+
+The check takes that on trust: it reads no list of sampled columns, so it cannot find a missing one.
+-/
 theorem validatePayloadData_ok_iff {sources : BlockSources preset fork} {root : Root}
     {bid : ExecutionPayloadBid preset fork} :
     validatePayloadData config sources root bid = .ok () ↔

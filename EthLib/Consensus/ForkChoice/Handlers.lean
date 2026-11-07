@@ -107,9 +107,13 @@ def validateMergeBlock (config : Config) (powBlock : Hash32 → Option PowBlock)
   let some parent := powBlock terminal.parentHash | throw (.unknownPowBlock terminal.parentHash)
   unless isValidTerminalPowBlock config terminal parent do throw (.notTerminalPowBlock parentHash)
 
-/-- From Fulu: whether the node gets every column that it samples for a block, each valid.
+/-- From Fulu: whether the source returns columns for a block, each of them valid.
 
 Each column must have a valid shape, and the proofs of its cells must match the commitments.
+
+The source must return every column that the node samples, as `BlockSources.columns` states.
+
+The check takes that on trust: it reads no list of sampled columns, so it cannot find a missing one.
 
 From Gloas the commitments are those of the bid of the block, and before they are in each column.
 -/
