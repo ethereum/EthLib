@@ -11,6 +11,10 @@ A block passes its sync aggregate only with a valid signature of the members tha
 With no member signing, only the signature of the point at infinity passes.
 
 The step keeps the sizes of the registry and the balances.
+
+A reward changes only balances, so it keeps the proposer of the slot.
+
+With the proposer read before it, each reward step equals the step that reads it after the reward.
 -/
 
 @[expose] public section
@@ -63,10 +67,62 @@ theorem processSyncAggregate_signed {altair : .altair ≤ fork} {aggregate : Syn
     computed
   exact ⟨pubkeys, domain, root, signingRoot, found, inDomain, atSlot, signed, verified⟩
 
+/-- A balance write keeps the proposer of the slot, which reads no balance. -/
+private theorem getBeaconProposerIndex_putBalance {index : Nat}
+    (inside : index < state.balances.data.size) (balance : Gwei) :
+    getBeaconProposerIndex (state.putBalance index inside balance) =
+      getBeaconProposerIndex state :=
+  rfl
+
+/-- Raising a balance keeps the proposer of the slot. -/
+theorem getBeaconProposerIndex_increaseBalance {index : ValidatorIndex} {delta : Gwei}
+    (computed : increaseBalance state index delta = .ok after) :
+    getBeaconProposerIndex after = getBeaconProposerIndex state := by
+  obtain ⟨_, set⟩ := increaseBalance_ok computed
+  obtain ⟨inside, rfl⟩ := setBalance_ok set
+  exact getBeaconProposerIndex_putBalance inside _
+
+/-- Lowering a balance keeps the proposer of the slot. -/
+theorem getBeaconProposerIndex_decreaseBalance {index : ValidatorIndex} {delta : Gwei}
+    (computed : decreaseBalance state index delta = .ok after) :
+    getBeaconProposerIndex after = getBeaconProposerIndex state := by
+  obtain ⟨_, set⟩ := decreaseBalance_ok computed
+  obtain ⟨inside, rfl⟩ := setBalance_ok set
+  exact getBeaconProposerIndex_putBalance inside _
+
+/-- One step of the sync rewards keeps the proposer of the slot, whatever proposer it is given. -/
+theorem getBeaconProposerIndex_applySyncReward {reward proposerReward : Gwei}
+    {proposer : Except AccessorError ValidatorIndex} {member : ValidatorIndex × Bool}
+    (computed : applySyncReward reward proposerReward proposer state member = .ok after) :
+    getBeaconProposerIndex after = getBeaconProposerIndex state := by
+  unfold applySyncReward at computed
+  split at computed
+  · simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨middle, raised, _, _, paid⟩ := computed
+    rw [getBeaconProposerIndex_increaseBalance paid,
+      getBeaconProposerIndex_increaseBalance raised]
+  · exact getBeaconProposerIndex_decreaseBalance ((liftAccessor_ok).mp computed)
+
+/-- Given the proposer of the state, the step of a member that signed is the specification step.
+
+That step raises the member's balance, then reads the proposer of the new state and pays it. -/
+theorem applySyncReward_signed (reward proposerReward : Gwei) (index : ValidatorIndex) :
+    applySyncReward reward proposerReward (getBeaconProposerIndex state) state (index, true) =
+      (do
+        let raised ← liftAccessor (increaseBalance state index reward)
+        let proposer ← liftAccessor (getBeaconProposerIndex raised)
+        liftAccessor (increaseBalance raised proposer proposerReward)) := by
+  simp only [applySyncReward, ↓reduceIte]
+  cases raised : increaseBalance state index reward with
+  | error _ => simp only [liftAccessor, Except.mapError, bind, Except.bind]
+  | ok middle =>
+    simp only [liftAccessor, Except.mapError, bind, Except.bind,
+      getBeaconProposerIndex_increaseBalance raised]
+
 /-- One step of the sync rewards keeps the sizes of the registry and the balances. -/
 theorem sameSizes_applySyncReward {reward proposerReward : Gwei}
-    {member : ValidatorIndex × Bool}
-    (computed : applySyncReward reward proposerReward state member = .ok after) :
+    {proposer : Except AccessorError ValidatorIndex} {member : ValidatorIndex × Bool}
+    (computed : applySyncReward reward proposerReward proposer state member = .ok after) :
     SameSizes state after := by
   unfold applySyncReward at computed
   split at computed

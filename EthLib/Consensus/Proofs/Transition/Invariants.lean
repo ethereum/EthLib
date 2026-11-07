@@ -700,8 +700,9 @@ theorem frame_processBlockExecution {body : BeaconBlockBody preset fork}
 
 /-! ## The sync aggregate -/
 
-theorem frame_applySyncReward {reward proposerReward : Gwei} {member : ValidatorIndex × Bool}
-    (computed : applySyncReward reward proposerReward state member = .ok after) :
+theorem frame_applySyncReward {reward proposerReward : Gwei}
+    {proposer : Except AccessorError ValidatorIndex} {member : ValidatorIndex × Bool}
+    (computed : applySyncReward reward proposerReward proposer state member = .ok after) :
     Frame state after := by
   unfold applySyncReward at computed
   split at computed
