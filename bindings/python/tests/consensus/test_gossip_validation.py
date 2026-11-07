@@ -60,8 +60,8 @@ ARCHIVES = {
 _YAML = YAML(typ="safe")
 
 # The topics of the messages that a case of another topic sends, by the prefix of their file.
-# A bid case sends the preferences, the envelopes and from Heze the inclusion lists that its
-# bids rely on.
+# A bid case sends the preferences and the envelopes.
+# From Heze it also sends the inclusion lists that its bids rely on.
 _MESSAGE_TOPICS = {
     "proposer_preferences": "proposer_preferences",
     "execution_payload_envelope": "execution_payload",
