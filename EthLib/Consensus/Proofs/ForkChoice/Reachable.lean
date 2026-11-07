@@ -166,15 +166,12 @@ theorem onBlock_same_or_insert {config : Config} {checks : SignatureChecks}
       ∃ pre state, store.blockStates[signed.message.parentRoot]? = some pre ∧
         stateTransition config checks sources.engine pre signed true = .ok state ∧
         after.blockStates = store.blockStates.insert blockRoot state := by
-  by_cases gloas : .glamsterdam ≤ fork
-  · rw [onBlock_of_gloas gloas] at added
-    cases added
   cases root : SszType.hashTreeRoot signed.message with
   | error e =>
-    simp [onBlock, gloas, root, bind, Except.bind, Except.mapError] at added
+    simp [onBlock, root, bind, Except.bind, Except.mapError] at added
   | ok blockRoot =>
     by_cases known : store.blocks.contains blockRoot
-    · rw [onBlock_known (Nat.lt_of_not_le gloas) root known] at added
+    · rw [onBlock_known root known] at added
       cases added
       exact .inl rfl
     · obtain ⟨blocks, rest⟩ := onBlock_insert root known added

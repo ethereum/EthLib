@@ -461,6 +461,8 @@ _FORK_CHOICE_STEPS = {
     "pow_block": 5,
     "payload": 8,
     "fast_confirmation": 9,
+    "execution_payload": 10,
+    "payload_attestation_message": 11,
 }
 
 # The verdicts of the execution layer that find a payload invalid.
@@ -478,7 +480,12 @@ def fork_choice(
 ) -> list:
     """The outcome of each step of a fork choice case, from an anchor state and block."""
     # A step is (kind, data): the tick in seconds, the SSZ bytes of a block, an attestation, an
-    # attester slashing or a PoW block, or for "checks" whether to read the proposer head.
+    # attester slashing or a PoW block, or for "checks" what the read asks.
+    # A read asks for the proposer head when its data is true.
+    # It may also be (proposer head, viable leaves, root or None): the leaves of the filtered
+    # tree with their weights, and the votes of the payload committee on the block of the root.
+    # From Gloas an "execution_payload" step is a signed envelope, and a
+    # "payload_attestation_message" step a vote of the payload committee, both in SSZ.
     # From Deneb a block may come as (block, blobs, proofs): the node holds those for it.
     # From Fulu a block may come as (block, columns): the node samples those SSZ columns for it,
     # and an empty list means that it cannot get them.
@@ -490,7 +497,9 @@ def fork_choice(
         if kind == "tick":
             data = data.to_bytes(8, "little")
         elif kind == "checks":
-            data = bytes([bool(data)])
+            proposer_head, viable, root = data if isinstance(data, tuple) else (data, False, None)
+            flags = bool(proposer_head) | 2 * bool(viable) | 4 * (root is not None)
+            data = bytes([flags]) + (root or b"")
         elif kind == "fast_confirmation":
             data = b""
         elif kind == "payload":
@@ -531,9 +540,8 @@ def fork_choice(
         elif kind != "checks":
             outcomes.append(None)
         else:
-            size = 168 + 32 * bool(data)
-            outcomes.append(_store_record(out[offset : offset + size]))
-            offset += size
+            read, offset = _store_record(out, offset, data)
+            outcomes.append(read)
     return outcomes
 
 
@@ -590,11 +598,13 @@ def gossip_validation(
     return outcomes
 
 
-def _store_record(record: bytes) -> dict:
-    """A read of the store, from its bytes."""
+def _store_record(out: bytes, offset: int, asked) -> tuple[dict, int]:
+    """A read of the store from its bytes at an offset, and the offset after it."""
+    proposer_head, viable, root = asked if isinstance(asked, tuple) else (asked, False, None)
+    record = out[offset:]
 
-    def number(start: int) -> int:
-        return int.from_bytes(record[start : start + 8], "little")
+    def number(start: int, width: int = 8) -> int:
+        return int.from_bytes(record[start : start + width], "little")
 
     def checkpoint(start: int) -> dict:
         return {"epoch": number(start), "root": record[start + 8 : start + 40]}
@@ -607,9 +617,31 @@ def _store_record(record: bytes) -> dict:
         "finalized_checkpoint": checkpoint(96),
         "proposer_boost_root": record[136:168],
     }
-    if len(record) > 168:
-        read["proposer_head"] = record[168:200]
-    return read
+    at = 168
+    if proposer_head:
+        read["proposer_head"] = record[at : at + 32]
+        at += 32
+    read["head"]["payload_status"] = record[at]
+    at += 1
+    if viable:
+        count, at = number(at, 4), at + 4
+        read["viable_for_head_roots_and_weights"] = [
+            {
+                "root": record[at + 41 * i : at + 41 * i + 32],
+                "weight": number(at + 41 * i + 32),
+                "payload_status": record[at + 41 * i + 40],
+            }
+            for i in range(count)
+        ]
+        at += 41 * count
+    if root is not None:
+        # Each vote is a byte: 0 false, 1 true, 2 none.
+        size, at = number(at, 4), at + 4
+        votes = [None if vote == 2 else bool(vote) for vote in record[at : at + 2 * size]]
+        read["payload_timeliness_vote"] = votes[:size]
+        read["payload_data_availability_vote"] = votes[size:]
+        at += 2 * size
+    return read, offset + at
 
 
 def _fast_confirmation_record(record: bytes) -> dict:

@@ -29,7 +29,21 @@ HANDLERS = (
     "reorg",
     "withholding",
 )
-SPECIFIED = ("altair", "bellatrix", "capella", "deneb", "electra", "fulu")
+# The handlers whose cases start at Gloas.
+GLOAS_HANDLERS = (
+    "filter_node_tree_variants",
+    "get_parent_payload_status",
+    "on_attestation",
+    "on_execution_payload_envelope",
+    "on_payload_attestation_message",
+    "payload_data_availability",
+    "payload_timeliness",
+    "should_apply_proposer_boost",
+)
+SPECIFIED = ("altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas")
+
+# The forks of the fast confirmation cases, which wait at Gloas for its own rule.
+FAST_CONFIRMATION_FORKS = ("altair", "bellatrix", "capella", "deneb", "electra", "fulu")
 
 # The suites of the fast confirmation cases, which EthLib runs at the forks above.
 FAST_CONFIRMATION = (
@@ -64,15 +78,23 @@ ARCHIVES = {
 }
 
 # The step of each file kind of a case, as the export names it.
-_FILE_STEPS = ("block", "attestation", "attester_slashing", "pow_block")
+_FILE_STEPS = (
+    "block",
+    "attestation",
+    "attester_slashing",
+    "pow_block",
+    "execution_payload",
+    "payload_attestation_message",
+)
 
 _YAML = YAML(typ="safe")
 
 
 def runs(fork: str, runner: str, handler: str) -> bool:
     """Whether EthLib runs the cases of a handler at a fork."""
-    suites = FAST_CONFIRMATION if runner == "fast_confirmation" else HANDLERS
-    return fork in SPECIFIED and handler in suites
+    if runner == "fast_confirmation":
+        return fork in FAST_CONFIRMATION_FORKS and handler in FAST_CONFIRMATION
+    return fork in SPECIFIED and handler in HANDLERS + GLOAS_HANDLERS
 
 
 def _load(path: Path):
@@ -101,7 +123,14 @@ def _input(case: Path, step: dict) -> tuple:
     if "tick" in step:
         return "tick", step["tick"]
     if "checks" in step:
-        return "checks", "get_proposer_head" in step["checks"]
+        checks = step["checks"]
+        votes = checks.get("payload_timeliness_vote")
+        root = votes and _hex(votes["block_root"])
+        return "checks", (
+            "get_proposer_head" in checks,
+            "viable_for_head_roots_and_weights" in checks,
+            root,
+        )
     if "payload_status" in step:
         status = step["payload_status"]
         latest_valid_hash = status["latest_valid_hash"]
@@ -130,6 +159,18 @@ def _check(read: dict, checks: dict) -> None:
             case "head":
                 assert read["head"]["slot"] == want["slot"]
                 assert read["head"]["root"] == _hex(want["root"])
+                if "payload_status" in want:
+                    assert read["head"]["payload_status"] == want["payload_status"]
+            case "viable_for_head_roots_and_weights":
+                # The order of the leaves depends on the walk, so the sets are compared.
+                found = [(e["root"], e["weight"], e["payload_status"]) for e in read[key]]
+                wanted = [(_hex(e["root"]), e["weight"], e["payload_status"]) for e in want]
+                assert sorted(found) == sorted(wanted)
+            case "payload_timeliness_vote" | "payload_data_availability_vote":
+                # The read asks for the votes on the block of the timeliness check.
+                asked = checks["payload_timeliness_vote"]["block_root"]
+                assert want["block_root"] == asked
+                assert read[key] == want["votes"]
             case "time":
                 assert read["time_ms"] // 1000 == want
             case "genesis_time":
@@ -208,11 +249,14 @@ def _archive_cases() -> list:
     cases = []
     for preset, name in ARCHIVES.items():
         paths = [f"tests/{preset}/{fork}/fork_choice" for fork in SPECIFIED]
-        # The optimistic sync cases start at Bellatrix.
-        paths += [f"tests/{preset}/{fork}/sync" for fork in SPECIFIED if fork != "altair"]
+        # The optimistic sync cases run from Bellatrix to Fulu.
+        sync = [fork for fork in SPECIFIED if fork not in ("altair", "gloas")]
+        paths += [f"tests/{preset}/{fork}/sync" for fork in sync]
         # The fast confirmation cases are minimal only.
         if preset == "minimal":
-            paths += [f"tests/{preset}/{fork}/fast_confirmation" for fork in SPECIFIED]
+            paths += [
+                f"tests/{preset}/{fork}/fast_confirmation" for fork in FAST_CONFIRMATION_FORKS
+            ]
         base = archives.unpack(name, *paths) / "tests" / preset
         found = [
             *base.glob("*/fork_choice/*/*/*/steps.yaml"),

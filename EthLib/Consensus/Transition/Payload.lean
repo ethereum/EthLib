@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Builders
 public import EthLib.Consensus.Containers.Bid
 public import EthLib.Consensus.Transition.Basic
+public import EthLib.Consensus.Transition.Execution
 
 /-!
 # `Consensus.Transition.Payload`
@@ -26,6 +27,8 @@ An envelope is signed by its builder, or by the proposer of the latest block for
 The signature checks are an argument, as for the other steps of the transition.
 
 A builder or proposer index outside its registry is an error.
+
+A node checks an envelope against the state after its block, before it trusts the payload.
 
 [EIP-7732] adds the bid, the envelope and the builder domain.
 
@@ -74,6 +77,75 @@ def verifyExecutionPayloadEnvelopeSignature (config : Config) (checks : Signatur
   let pubkey ← envelopeSignerKey state gloas signed.message.builderIndex
   let signingRoot ← builderSigningRoot config state signed.message
   return checks.verify (packBytes pubkey) (packBytes signingRoot) (packBytes signed.signature)
+
+/-- From Gloas: the payload request of an envelope, for the execution layer.
+
+Its versioned hashes are those of the commitments of the bid.
+
+A request holds a bounded number of them. -/
+def ExecutionPayloadEnvelope.newPayloadRequest (envelope : ExecutionPayloadEnvelope preset fork)
+    (commitments : Array Cryptography.Kzg.KZGCommitment)
+    (bound : commitments.size ≤ preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat) :
+    NewPayloadRequest preset fork where
+  executionPayload := envelope.payload
+  versionedHashes _ := ⟨commitments.map commitmentVersionedHash, by simpa using bound⟩
+  parentBeaconBlockRoot _ := envelope.parentBeaconBlockRoot
+  executionRequests _ := envelope.executionRequests
+
+/-- From Gloas: check an envelope against the state after its block.
+
+The signature of its signer must verify.
+
+It must name the latest block of the state, whose header then holds the root of the state.
+
+It must also name the parent of that block.
+
+It must agree with the bid of that block on the builder, the RANDAO mix and the gas limit.
+
+It must also agree on the block hash and on the root of the requests.
+
+The payload must be for the slot of the state, and must extend the latest block hash.
+
+It must carry the time of the slot and the withdrawals that the state expects.
+
+The versioned hashes come from the commitments of the bid, and a request holds a bounded number.
+
+The execution layer must accept the payload request. -/
+def verifyExecutionPayloadEnvelope (config : Config) (checks : SignatureChecks)
+    (engine : ExecutionEngine preset fork) (state : BeaconState preset fork)
+    (gloas : .glamsterdam ≤ fork) (signed : SignedExecutionPayloadEnvelope preset fork) :
+    Except TransitionError Unit := do
+  let envelope := signed.message
+  let payload := envelope.payload
+  let signatureValid ← verifyExecutionPayloadEnvelopeSignature config checks state gloas signed
+  ensure (signatureValid = true) .invalidEnvelopeSignature
+  let stateRoot ← liftSsz (hashTreeRoot state)
+  let blockRoot ← liftSsz (hashTreeRoot { state.latestBlockHeader with stateRoot })
+  ensure (envelope.beaconBlockRoot = blockRoot) .envelopeWrongBlockRoot
+  ensure (envelope.parentBeaconBlockRoot = state.latestBlockHeader.parentRoot)
+    .envelopeWrongParentRoot
+  let bid := state.latestExecutionPayloadBid gloas
+  ensure (envelope.builderIndex = bid.builderIndex) .envelopeWrongBuilder
+  ensure (payload.prevRandao = bid.prevRandao) .wrongPayloadRandao
+  ensure (payload.gasLimit = bid.gasLimit) .wrongPayloadGasLimit
+  ensure (payload.blockHash = bid.blockHash) .wrongPayloadBlockHash
+  let requestsRoot ← liftSsz (hashTreeRoot envelope.executionRequests)
+  ensure (requestsRoot = bid.executionRequestsRoot) .wrongPayloadRequestsRoot
+  ensure (payload.slotNumber gloas = state.slot)
+    (.wrongPayloadSlot (payload.slotNumber gloas) state.slot)
+  ensure (payload.parentHash = state.latestBlockHash gloas) .wrongPayloadParentHash
+  let time ← liftAccessor (liftArith (computeTimeAtSlot config state.genesisTime state.slot))
+  ensure (payload.timestamp = time) (.wrongPayloadTimestamp payload.timestamp time)
+  have capella : .shapella ≤ fork := Nat.le_trans (by decide) gloas
+  let withdrawalsRoot ← liftSsz (hashTreeRoot (payload.withdrawals capella))
+  let expectedRoot ← liftSsz (hashTreeRoot (state.payloadExpectedWithdrawals gloas))
+  ensure (withdrawalsRoot = expectedRoot) .wrongWithdrawals
+  let commitments := bid.blobKzgCommitments.data
+  if bound : commitments.size ≤ preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat then
+    let request := envelope.newPayloadRequest commitments bound
+    let accepted ← liftSsz (engine.verifyAndNotifyNewPayload request)
+    ensure (accepted = true) .invalidExecutionPayload
+  else throw .tooManyBlobCommitments
 
 /-- The position in the pending payments of a bid for a slot, in the second epoch of the list.
 

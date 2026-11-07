@@ -15,6 +15,7 @@ from consensus.test_epoch_processing import HANDLERS as EPOCH_STEPS, runs as run
 from consensus.test_fork import runs as runs_upgrade
 from consensus.test_fork_choice import (
     FAST_CONFIRMATION,
+    GLOAS_HANDLERS as GLOAS_FORK_CHOICE,
     HANDLERS as FORK_CHOICE,
     runs as runs_fork_choice,
 )
@@ -54,7 +55,6 @@ NOT_YET = {
 # and Hegotá. A key is a runner, a runner and a handler, or a format, as in NOT_YET.
 # At these forks an entry here comes before the entry of NOT_YET.
 _GLOAS = {
-    "fork_choice": "the Gloas block and payload handlers (G70)",
     "fast_confirmation": "the Gloas fast confirmation (G73)",
     "networking": "the Gloas data columns and unchanged topics (G77)",
     "networking/gossip_execution_payload_bid": "bids and proposer preferences (G74)",
@@ -725,7 +725,7 @@ RUNNERS = {
     **{f"epoch_processing/{handler}": _epoch_step for handler in EPOCH_STEPS},
     **{f"rewards/{handler}": _rewards for handler in REWARDS},
     "fork/fork": _upgrade,
-    **{f"fork_choice/{handler}": _fork_choice for handler in FORK_CHOICE},
+    **{f"fork_choice/{handler}": _fork_choice for handler in FORK_CHOICE + GLOAS_FORK_CHOICE},
     # Optimistic sync runs as a fork choice case, with the verdicts of the execution layer.
     "sync/optimistic": _fork_choice,
     # The fast confirmation cases are fork choice cases whose checks also read the rule's store.

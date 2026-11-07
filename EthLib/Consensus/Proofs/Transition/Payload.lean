@@ -13,6 +13,8 @@ A self-built bid has no value, and a bid with no value records no payment.
 A bid with a value records one payment, at the position of its slot in the next epoch.
 
 That payment pays the bid's value from its builder to the proposer of the slot.
+
+An envelope passes its checks exactly when each check of the specification holds.
 -/
 
 @[expose] public section
@@ -102,5 +104,63 @@ theorem bidPayment_withdrawal (bid : ExecutionPayloadBid preset fork) (proposer 
     (bidPayment bid proposer).withdrawal = ⟨bid.feeRecipient, bid.value, bid.builderIndex⟩ ∧
       (bidPayment bid proposer).weight = 0 ∧ (bidPayment bid proposer).proposerIndex = proposer :=
   ⟨rfl, rfl, rfl⟩
+
+/-- An envelope passes its checks exactly when each of them holds.
+
+Its signer signed it, and it names the latest block of the state and that block's parent.
+
+It agrees with the bid of that block on the builder, the RANDAO mix and the gas limit.
+
+It also agrees on the block hash and the root of its requests.
+
+Its payload is for the slot of the state, extends the latest block hash and has the slot's time.
+
+Its withdrawals have the root of those that the state expects.
+
+The bid commits to a bounded number of blobs, and the execution layer accepts the request. -/
+theorem verifyExecutionPayloadEnvelope_ok_iff {engine : ExecutionEngine preset fork}
+    {signed : SignedExecutionPayloadEnvelope preset fork} :
+    verifyExecutionPayloadEnvelope config checks engine state gloas signed = .ok () ↔
+      let envelope := signed.message
+      let payload := envelope.payload
+      let bid := state.latestExecutionPayloadBid gloas
+      verifyExecutionPayloadEnvelopeSignature config checks state gloas signed = .ok true ∧
+      (∃ stateRoot, Serialization.Ssz.SszType.hashTreeRoot state = .ok stateRoot ∧
+        Serialization.Ssz.SszType.hashTreeRoot { state.latestBlockHeader with stateRoot } =
+          .ok envelope.beaconBlockRoot) ∧
+      envelope.parentBeaconBlockRoot = state.latestBlockHeader.parentRoot ∧
+      envelope.builderIndex = bid.builderIndex ∧ payload.prevRandao = bid.prevRandao ∧
+      payload.gasLimit = bid.gasLimit ∧ payload.blockHash = bid.blockHash ∧
+      Serialization.Ssz.SszType.hashTreeRoot envelope.executionRequests =
+        .ok bid.executionRequestsRoot ∧
+      payload.slotNumber gloas = state.slot ∧ payload.parentHash = state.latestBlockHash gloas ∧
+      computeTimeAtSlot config state.genesisTime state.slot = .ok payload.timestamp ∧
+      (∃ root, Serialization.Ssz.SszType.hashTreeRoot
+          (payload.withdrawals (Nat.le_trans (by decide) gloas)) = .ok root ∧
+        Serialization.Ssz.SszType.hashTreeRoot (state.payloadExpectedWithdrawals gloas) =
+          .ok root) ∧
+      ∃ bound, engine.verifyAndNotifyNewPayload
+        (envelope.newPayloadRequest bid.blobKzgCommitments.data bound) = .ok true := by
+  unfold verifyExecutionPayloadEnvelope
+  simp only [bind_ok_iff, ensure_ok_iff, liftSsz_ok, liftAccessor_ok, liftArith, mapError_ok_iff,
+    exists_const]
+  constructor
+  · rintro ⟨_, signature, rfl, stateRoot, stateRootOk, _, blockRootOk, rfl, parent, builder,
+      randao, gas, hash, _, requestsOk, rfl, slot, parentHash, _, timeOk, rfl, _, withdrawalsOk,
+      _, expectedOk, rfl, accepted⟩
+    refine ⟨signature, ⟨stateRoot, stateRootOk, blockRootOk⟩, parent, builder, randao, gas, hash,
+      requestsOk, slot, parentHash, timeOk, ⟨_, withdrawalsOk, expectedOk⟩, ?_⟩
+    split at accepted
+    · next bound =>
+      simp only [bind_ok_iff, liftSsz_ok, ensure_ok_iff] at accepted
+      obtain ⟨_, valid, rfl⟩ := accepted
+      exact ⟨bound, valid⟩
+    · simp [throw, throwThe, MonadExceptOf.throw] at accepted
+  · rintro ⟨signature, ⟨stateRoot, stateRootOk, blockRootOk⟩, parent, builder, randao, gas, hash,
+      requestsOk, slot, parentHash, timeOk, ⟨_, withdrawalsOk, expectedOk⟩, bound, accepted⟩
+    refine ⟨true, signature, rfl, stateRoot, stateRootOk, _, blockRootOk, rfl, parent, builder,
+      randao, gas, hash, _, requestsOk, rfl, slot, parentHash, _, timeOk, rfl, _, withdrawalsOk,
+      _, expectedOk, rfl, ?_⟩
+    simp [bound, accepted, bind, Except.bind, liftSsz, Except.mapError, ensure]
 
 end EthLib.Consensus

@@ -22,7 +22,13 @@ Kind 0 moves the clock to a time in seconds, given in 8 bytes.
 
 Kind 1 adds a signed block with its votes, kind 2 an attestation and kind 3 an attester slashing.
 
-Kind 4 reads the store, and a byte of 1 also asks where the proposer of the slot builds.
+Kind 4 reads the store, with one byte of flags.
+
+Flag 1 asks where the proposer of the slot builds.
+
+Flag 2 asks for the viable leaves of the filtered tree, each with its weight.
+
+Flag 4 asks for the votes of the payload committee on a block, whose root follows the flags.
 
 Kind 5 makes a block of proof of work known, in SSZ, for the merge check of later blocks.
 
@@ -32,13 +38,13 @@ It is a 4-byte count of blobs, then the blobs, then the proofs of 48 bytes each.
 
 Without it the node holds no blob and no proof for a block.
 
-Kind 7 gives the columns that the node samples for the next block.
+Kind 7 gives the columns that the node samples for the next block or envelope.
 
 It is a 4-byte count, then each column as a 4-byte length and its SSZ bytes.
 
 A count of zero means that the node cannot get the columns.
 
-Without it the node samples no column for a block.
+Without it the node samples no column for a block or an envelope.
 
 Kind 8 gives the verdict of the execution layer on the payload of the next block.
 
@@ -64,6 +70,10 @@ Before Bellatrix a byte of 0 ends it.
 
 From Bellatrix a byte of 1 and the hash of the safe execution block end it.
 
+From Gloas kind 10 adds a signed envelope, and the execution layer accepts its payload.
+
+From Gloas kind 11 adds a vote of a member of the payload committee, from the wire.
+
 After each step comes one byte: 0 when the store takes the step, 1 when it rejects it.
 
 A rejection carries its error code, a length and a message.
@@ -74,7 +84,15 @@ A read gives the head as a slot and a root, then the time and the genesis time i
 
 Then come the justified and the finalized checkpoints, each an epoch and a root.
 
-Last come the boosted root and, when asked, the root on which the proposer builds.
+Then come the boosted root and, when asked, the root on which the proposer builds.
+
+Then comes the status of the payload of the head: 0 empty, 1 full, 2 pending.
+
+When asked, a 4-byte count of viable leaves follows, each a root, a weight and a payload status.
+
+When asked, a 4-byte count of committee positions follows, then the votes on time.
+
+The votes on the data follow, each vote a byte: 0 false, 1 true, 2 none.
 
 Numbers are little-endian, and a code is 4 bytes.
 
@@ -118,18 +136,50 @@ def readForkChoiceSteps : (rounds : Nat) → ByteArray → Nat → Result (List 
 def checkpointRecord (checkpoint : Checkpoint) : ByteArray :=
   littleEndian 8 checkpoint.epoch.toNat ++ Base.packBytes checkpoint.root
 
-/-- What a read of the store gives, and if asked where the proposer of the slot builds. -/
+/-- The leaves of the filtered tree, which the vectors check with their weights.
+
+With no viable node, the pending node of the justified block stands alone. -/
+def viableLeaves {preset : Preset} {fork : Fork} (config : Config) (store : Store preset fork) :
+    Except ForkChoiceError (List ForkChoiceNode) := do
+  let nodes ← store.getFilteredNodeTree config
+  if nodes.isEmpty then return [⟨store.justifiedCheckpoint.root, .pending⟩]
+  nodes.filterM fun node => do
+    return (← store.getNodeChildren node).all (· ∉ nodes)
+
+/-- The bytes of the votes of the payload committee: 0 false, 1 true, 2 none. -/
+def ptcVoteRecord {n : Nat} (votes : Vector (Option Bool) n) : ByteArray :=
+  ⟨votes.toArray.map fun vote => match vote with
+    | some false => 0
+    | some true => 1
+    | none => 2⟩
+
+/-- What a read of the store gives, with what its flags ask. -/
 def storeRecord {preset : Preset} {fork : Fork} (config : Config) (store : Store preset fork)
-    (proposerHead : Bool) : Except ForkChoiceError ByteArray := do
+    (flags : UInt8) (root : Root) : Except ForkChoiceError ByteArray := do
   let head ← store.getHead config
   let headBlock ← store.block head.root
-  let record := littleEndian 8 headBlock.slot.toNat ++ Base.packBytes head.root ++
+  let mut record := littleEndian 8 headBlock.slot.toNat ++ Base.packBytes head.root ++
     littleEndian 8 store.timeMs.toNat ++ littleEndian 8 store.genesisTimeMs.toNat ++
     checkpointRecord store.justifiedCheckpoint ++ checkpointRecord store.finalizedCheckpoint ++
     Base.packBytes store.proposerBoostRoot
-  if proposerHead then
+  if flags &&& 1 ≠ 0 then
     let slot ← store.getCurrentSlot config
-    return record ++ Base.packBytes (← store.getProposerHead config head slot).root
+    record := record ++ Base.packBytes (← store.getProposerHead config head slot).root
+  record := record.push head.payloadStatus.code
+  if flags &&& 2 ≠ 0 then
+    let leaves ← viableLeaves config store
+    record := record ++ littleEndian 4 leaves.length
+    for leaf in leaves do
+      let weight ← store.getWeight config leaf
+      record := (record ++ Base.packBytes leaf.root ++ littleEndian 8 weight.toNat).push
+        leaf.payloadStatus.code
+  if flags &&& 4 ≠ 0 then
+    if gloas : .glamsterdam ≤ fork then
+      let timeliness ← Store.ptcVotes (store.payloadTimelinessVote gloas) root
+      let availability ← Store.ptcVotes (store.payloadDataAvailabilityVote gloas) root
+      record := record ++ littleEndian 4 preset.PTC_SIZE.toNat ++ ptcVoteRecord timeliness ++
+        ptcVoteRecord availability
+    else throw (.forkNotYetSpecified fork)
   return record
 
 /-- The bytes of a rejected step: a byte of 1, the error code, then the length and the message. -/
@@ -166,11 +216,24 @@ def runForkChoiceStep {preset : Preset} {fork : Fork} (config : Config) (checks 
     let slashing ← decodeInput (AttesterSlashing preset fork) data
     return (·, .empty) <$> store.onAttesterSlashing config checks slashing
   | (4, data) => do
-    let proposerHead ← match data.toList with
-      | [0] => pure false
-      | [1] => pure true
-      | _ => throw (0, "a read takes one byte, 0 or 1")
-    return (store, ·) <$> storeRecord config store proposerHead
+    let flags ← match data.toList with
+      | [flags] => if flags < 4 then pure flags else throw (0, "flag 4 needs a root")
+      | flags :: _ =>
+        if 4 ≤ flags ∧ flags < 8 then pure flags else throw (0, "flags are below 8")
+      | [] => throw (0, "a read takes its flags")
+    let root ← if 4 ≤ flags then decodeInput Root (data.extract 1 data.size)
+      else pure (Vector.replicate 32 0)
+    return (store, ·) <$> storeRecord config store flags root
+  | (10, data) => do
+    let signed ← decodeInput (SignedExecutionPayloadEnvelope preset fork) data
+    if gloas : .glamsterdam ≤ fork then
+      return (·, .empty) <$> store.onExecutionPayloadEnvelope config checks sources gloas signed
+    else throw (0, "an envelope needs Gloas or later")
+  | (11, data) => do
+    let message ← decodeInput PayloadAttestationMessage data
+    if gloas : .glamsterdam ≤ fork then
+      return (·, .empty) <$> store.onPayloadAttestationMessage config checks gloas message false
+    else throw (0, "a vote of the payload committee needs Gloas or later")
   | (kind, _) => throw (0, s!"no step of kind {kind}")
 
 /-- The blobs and the proofs of a step: a count of blobs, the blobs, then the proofs. -/
@@ -227,11 +290,7 @@ The preset, the configuration and the fork are named in UTF-8.
 
 The signature checks run unless the last argument is false.
 
-From Gloas the store starts, gives its head, and takes attestations and attester slashings.
-
-From Gloas a block or the node on which a proposer builds is not yet specified here.
-
-So such a step fails from Gloas. -/
+From Gloas the node on which a proposer builds is not yet specified here, so that read fails. -/
 @[export eth_consensus_fork_choice]
 def forkChoiceExport (name fork anchorState anchorBlock steps replacements : ByteArray)
     (verify : Bool) : Result ByteArray := do
@@ -292,6 +351,8 @@ def forkChoiceExport (name fork anchorState anchorBlock steps replacements : Byt
       blobData := (#[], #[])
       columnData := some #[]
       verdict := none
+    -- From Gloas the columns serve the envelope that follows them.
+    if step.1 = 10 then columnData := some #[]
     let mut outcome ← runForkChoiceStep config checks sources store step
     -- An invalid verdict removes blocks, whether the block itself fails or not.
     if let some latestValidHash := invalid then
