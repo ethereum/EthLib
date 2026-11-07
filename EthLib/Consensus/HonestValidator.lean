@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Containers.Attestation
 public import EthLib.Consensus.Containers.SyncCommittee
+public import EthLib.Consensus.Gossip.ProposerPreferences
 public import EthLib.Consensus.Gossip.SyncCommittee
 public import EthLib.Consensus.Mutators
 public import EthLib.Consensus.PayloadTimeliness
@@ -37,10 +38,13 @@ Each duty signs one object at one epoch:
 - A sync selection proof signs selection data, at the epoch of its slot.
 - A contribution and proof is signed at the epoch of its slot.
 - From Gloas, the data of a payload attestation message is signed at the epoch of its slot.
+- From Gloas, the preferences of a proposer are signed at the fork version of their slot's epoch.
 
 The guides of the later forks, up to Heze, change none of these duties and only add others.
 
-Gloas adds the payload timeliness duties, and Heze adds the inclusion list committee.
+Gloas adds the payload timeliness duties and the preferences of proposers.
+
+Heze adds the inclusion list committee.
 
 The steps that read the network or the execution layer are not specified here.
 
@@ -69,6 +73,8 @@ inductive ValidatorDutyError where
   | epochTooFar (epoch lastEpoch : Epoch)
   /-- A sync committee assignment is asked for a period other than the current or the next. -/
   | periodOutOfRange (period currentPeriod : UInt64)
+  /-- A step of the fork choice fails. -/
+  | forkChoice (error : ForkChoiceError)
 
 /-- The code of an error at the C boundary, one for each constructor. -/
 def ValidatorDutyError.code : ValidatorDutyError → UInt32
@@ -78,6 +84,7 @@ def ValidatorDutyError.code : ValidatorDutyError → UInt32
   | .arith _ => 4
   | .epochTooFar .. => 5
   | .periodOutOfRange .. => 6
+  | .forkChoice _ => 7
 
 /-! ## Assignments -/
 
@@ -286,5 +293,28 @@ def getPayloadAttestationMessageSignature (config : Config) (state : BeaconState
     Except ValidatorDutyError BLSSignature :=
   signAtEpoch config state DOMAIN_PTC_ATTESTER (computeEpochAtSlot preset message.data.slot)
     message.data key
+
+/-- From Gloas: the signature of the preferences of a proposer.
+
+The domain is that of preferences, at the fork version of the proposal epoch.
+
+So a proposer can sign its preferences for the first epoch of a fork in the epoch before it. -/
+def getProposerPreferencesSignature (config : Config) (state : BeaconState preset fork)
+    (preferences : ProposerPreferences) (key : Signatures.SecretKey) :
+    Except ValidatorDutyError BLSSignature := do
+  let root ← (proposerPreferencesSigningRoot config state preferences).mapError .ssz
+  (Signatures.sign key (packBytes root)).mapError .bls
+
+/-- From Gloas: the signed preferences of a proposer for a slot, on the chain of a head.
+
+The dependent root is the block that fixes the proposers of the epoch of the slot, on that chain. -/
+def getSignedProposerPreferences (config : Config) (store : Store preset fork)
+    (state : BeaconState preset fork) (headRoot : Root) (proposalSlot : Slot)
+    (validatorIndex : ValidatorIndex) (feeRecipient : ExecutionAddress) (targetGasLimit : UInt64)
+    (key : Signatures.SecretKey) : Except ValidatorDutyError SignedProposerPreferences := do
+  let dependentRoot ← (store.getShufflingDependentRoot headRoot
+    (computeEpochAtSlot preset proposalSlot)).mapError .forkChoice
+  let message := { dependentRoot, proposalSlot, validatorIndex, feeRecipient, targetGasLimit }
+  return { message, signature := ← getProposerPreferencesSignature config state message key }
 
 end EthLib.Consensus

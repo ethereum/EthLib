@@ -17,6 +17,7 @@ public import EthLib.Consensus.Containers.InclusionList
 public import EthLib.Consensus.Containers.Misc
 public import EthLib.Consensus.Containers.Operations
 public import EthLib.Consensus.Containers.PayloadAttestation
+public import EthLib.Consensus.Containers.ProposerPreferences
 public import EthLib.Consensus.Containers.Requests
 public import EthLib.Consensus.Containers.Signing
 public import EthLib.Consensus.Containers.State
@@ -36,6 +37,7 @@ public import EthLib.Consensus.ForkSchedule
 public import EthLib.Consensus.Gossip.Attestation
 public import EthLib.Consensus.Gossip.Block
 public import EthLib.Consensus.Gossip.Operations
+public import EthLib.Consensus.Gossip.ProposerPreferences
 public import EthLib.Consensus.Gossip.Seen
 public import EthLib.Consensus.Gossip.Sidecar
 public import EthLib.Consensus.Gossip.SyncCommittee

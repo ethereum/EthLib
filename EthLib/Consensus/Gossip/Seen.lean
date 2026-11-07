@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Containers.ProposerPreferences
 public import EthLib.Consensus.ForkChoice.Handlers
 public import Std.Data.TreeSet
 
@@ -61,6 +62,8 @@ structure Seen where
   blobSidecarTuples : List (Slot × ValidatorIndex × BlobIndex) := []
   /-- From Fulu: the slot, the proposer and the column index of each valid column sidecar. -/
   dataColumnSidecarTuples : List (Slot × ValidatorIndex × DataAvailability.ColumnIndex) := []
+  /-- From Gloas: the valid preferences of proposers, by proposal slot and dependent root. -/
+  proposerPreferences : List ((Slot × Root) × ProposerPreferences) := []
   deriving Inhabited
 
 namespace Store
@@ -105,6 +108,14 @@ def isFutureSlot (slot : Slot) (currentTimeMs : UInt64) : Except ForkChoiceError
   let start ← (computeTimeAtSlotMs config store.genesisTimeMs slot).mapError .arith
   let latest ← (addChecked currentTimeMs config.MAXIMUM_GOSSIP_CLOCK_DISPARITY).mapError .arith
   return latest < start
+
+/-- Whether a slot started more than the maximum gossip clock disparity before the clock.
+
+A time or a slot that leaves the 64-bit range is an error. -/
+def isPastSlot (slot : Slot) (currentTimeMs : UInt64) : Except ForkChoiceError Bool := do
+  let start ← (computeTimeAtSlotMs config store.genesisTimeMs slot).mapError .arith
+  let latest ← (addChecked start config.MAXIMUM_GOSSIP_CLOCK_DISPARITY).mapError .arith
+  return latest < currentTimeMs
 
 /-- From Deneb: whether the clock is in an epoch, with the maximum gossip disparity at both ends.
 

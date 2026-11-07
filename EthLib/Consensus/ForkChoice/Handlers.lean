@@ -499,6 +499,18 @@ def getShufflingDependentRoot (root : Root) (epoch : Epoch) : Except ForkChoiceE
   let slot ← (computeShufflingDependentSlot preset epoch).mapError .arith
   return (← store.getAncestor ⟨root, .pending⟩ slot).root
 
+/-- From Gloas: whether a block may be the last block at or before a slot, on some branch.
+
+It may be when it is the head of the fork choice.
+
+It may also be when a known block after the slot has it as parent.
+
+Every other block gives false. -/
+def isValidDependentRoot (root : Root) (dependentSlot : Slot) : Except ForkChoiceError Bool := do
+  if root = (← store.getHead config).root then return true
+  return store.blocks.toList.any fun (_, block) =>
+    block.parentRoot = root ∧ dependentSlot < block.slot
+
 /-- The store with a new block boosted when the boost applies.
 
 The block must be timely and first in its slot, and agree with the head on the proposer shuffling.

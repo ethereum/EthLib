@@ -2927,7 +2927,8 @@
       {"constructor": "bls", "code": 3},
       {"constructor": "arith", "code": 4},
       {"constructor": "epochTooFar", "code": 5},
-      {"constructor": "periodOutOfRange", "code": 6}]}],
+      {"constructor": "periodOutOfRange", "code": 6},
+      {"constructor": "forkChoice", "code": 7}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
    "The committee assignment of a validator in an epoch, as JSON.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nIt is `null` without an assignment, or the committee, its index and its slot."},
@@ -2944,7 +2945,8 @@
       {"constructor": "bls", "code": 3},
       {"constructor": "arith", "code": 4},
       {"constructor": "epochTooFar", "code": 5},
-      {"constructor": "periodOutOfRange", "code": 6}]}],
+      {"constructor": "periodOutOfRange", "code": 6},
+      {"constructor": "forkChoice", "code": 7}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
    "Whether a validator proposes the block of the slot of a state.\n\nThe preset, the configuration and the fork are named in UTF-8."},
@@ -2962,7 +2964,8 @@
       {"constructor": "bls", "code": 3},
       {"constructor": "arith", "code": 4},
       {"constructor": "epochTooFar", "code": 5},
-      {"constructor": "periodOutOfRange", "code": 6}]}],
+      {"constructor": "periodOutOfRange", "code": 6},
+      {"constructor": "forkChoice", "code": 7}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
    "From Altair: whether a validator serves on the sync committee of the period of an epoch.\n\nThe preset, the configuration and the fork are named in UTF-8."},
@@ -2980,7 +2983,8 @@
       {"constructor": "bls", "code": 3},
       {"constructor": "arith", "code": 4},
       {"constructor": "epochTooFar", "code": 5},
-      {"constructor": "periodOutOfRange", "code": 6}]}],
+      {"constructor": "periodOutOfRange", "code": 6},
+      {"constructor": "forkChoice", "code": 7}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
    "From Altair: the sync committee subnets of a validator for the next slot, as a JSON list.\n\nThe preset, the configuration and the fork are named in UTF-8."},
@@ -2998,7 +3002,8 @@
       {"constructor": "bls", "code": 3},
       {"constructor": "arith", "code": 4},
       {"constructor": "epochTooFar", "code": 5},
-      {"constructor": "periodOutOfRange", "code": 6}]}],
+      {"constructor": "periodOutOfRange", "code": 6},
+      {"constructor": "forkChoice", "code": 7}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
    "From Gloas: the slot of an epoch whose payload timeliness committee holds a validator, as JSON.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nIt is `null` without an assignment, or the slot."},
@@ -3016,7 +3021,8 @@
       {"constructor": "bls", "code": 3},
       {"constructor": "arith", "code": 4},
       {"constructor": "epochTooFar", "code": 5},
-      {"constructor": "periodOutOfRange", "code": 6}]}],
+      {"constructor": "periodOutOfRange", "code": 6},
+      {"constructor": "forkChoice", "code": 7}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
    "From Gloas: the slots after the slot of a state that a validator proposes, as a JSON list.\n\nThe preset, the configuration and the fork are named in UTF-8."},
@@ -3034,10 +3040,11 @@
       {"constructor": "bls", "code": 3},
       {"constructor": "arith", "code": 4},
       {"constructor": "epochTooFar", "code": 5},
-      {"constructor": "periodOutOfRange", "code": 6}]}],
+      {"constructor": "periodOutOfRange", "code": 6},
+      {"constructor": "forkChoice", "code": 7}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
-   "The signature of the object of a duty, by a secret key of 32 big-endian bytes.\n\nThe preset, the configuration, the fork and the duty are named in UTF-8.\n\nThe object comes as SSZ bytes, by duty:\n\n- `randao` and `block`: a block.\n- `attestation`: attestation data.\n- `slot`: a slot.\n- `aggregate_and_proof`: an aggregate and proof.\n- `sync_committee_message`: a block root.\n- `sync_committee_selection_proof`: sync aggregator selection data.\n- `contribution_and_proof`: a contribution and proof.\n- `payload_attestation_message`: a payload attestation message, whose data is signed.\n\nThe three duties of the sync committee need Altair; before it they have code 0.\n\nThe payload attestation message needs Gloas; before it, it has code 0."},
+   "The signature of the object of a duty, by a secret key of 32 big-endian bytes.\n\nThe preset, the configuration, the fork and the duty are named in UTF-8.\n\nThe object comes as SSZ bytes, by duty:\n\n- `randao` and `block`: a block.\n- `attestation`: attestation data.\n- `slot`: a slot.\n- `aggregate_and_proof`: an aggregate and proof.\n- `sync_committee_message`: a block root.\n- `sync_committee_selection_proof`: sync aggregator selection data.\n- `contribution_and_proof`: a contribution and proof.\n- `payload_attestation_message`: a payload attestation message, whose data is signed.\n- `proposer_preferences`: the preferences of a proposer.\n\nThe three duties of the sync committee need Altair; before it they have code 0.\n\nThe payload attestation message needs Gloas; before it, it has code 0.\n\nThe preferences of a proposer take a state of any fork.\n\nTheir domain reads only the root of the genesis validators of the state.\n\nSo a state of the epoch before Gloas can sign them for the first epoch of Gloas."},
   {"summary":
    "Before Heze: the Eth1 vote of a proposer on a state, as the SSZ bytes of the Eth1 data.",
    "signature":
@@ -3376,7 +3383,7 @@
       {"constructor": "invalidPayloadAttestation", "code": 42}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "Validate the messages of a topic in turn, against the store of an anchor and later blocks.\n\nFrom Gloas no topic is specified here yet."},
+   "Validate the messages of a topic in turn, against the store of an anchor and later blocks.\n\nAt Gloas only the preferences of proposers are specified here, and at Heze no topic yet."},
   {"summary":
    "The headers of a sync, step by step, from a bootstrap for a trusted block root.",
    "signature":
