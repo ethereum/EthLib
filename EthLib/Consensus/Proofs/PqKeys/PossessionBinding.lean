@@ -19,8 +19,9 @@ It runs in four steps:
 - a uniform seed `S_0` gives the key pair `(sk, pk)`;
 - the adversary gets `pk`, queries `H`, and requests signatures, never at one leaf index twice;
 - it returns a BLS key and a proof;
-- it wins when the check accepts the proof for that BLS key and `pk`, and no signing request for
-  their possession root returned that proof.
+- it wins when two things hold.
+  The check accepts the proof for that BLS key and `pk`.
+  No signing request for their possession root returned that proof.
 
 The signing oracle signs any message at any leaf index.
 

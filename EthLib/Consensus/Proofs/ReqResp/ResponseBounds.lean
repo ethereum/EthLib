@@ -10,8 +10,8 @@ A successful response chunk passes the length check of its protocol, for the for
 
 The fork of a chunk is a parameter, which the caller reads from the context bytes.
 
-- A successful chunk that decodes at the bounds of its protocol has a payload within the bounds
-  of its SSZ type.
+- Take a successful chunk that decodes at the bounds of its protocol.
+  Its payload is within the bounds of its SSZ type.
 - A response value that a server serializes, within the payload cap, makes a chunk that decodes.
 - That chunk decodes at those bounds, and its payload reads back as the value.
 -/

@@ -181,8 +181,7 @@ theorem computeSlotAtTime_computeTimeAtSlot {genesisTime time : UInt64} {slot : 
         rw [offsetValue, hk, Nat.mul_div_cancel _ (by omega : 0 < 1000 * k)]
       simp only [computeSlotAtTime, computeSlotAtTimeMs, elapsed, quotient, bind, Except.bind]
 
-/-- A part of a slot exists exactly when the product of its basis points and the slot fits in
-64 bits.
+/-- A part of a slot exists exactly when its basis points times the slot fits in 64 bits.
 
 It is then that product divided by the basis points of a whole. -/
 theorem getSlotComponentDurationMs_ok_iff {basisPoints duration : UInt64} :
@@ -254,8 +253,9 @@ theorem getContributionDueMs_of_lt {fork : Fork} (before : fork < .glamsterdam) 
   have later : ¬ fork ≥ .glamsterdam := Nat.not_le_of_lt before
   simp only [getContributionDueMs, later, ↓reduceIte]
 
-/-- From Gloas, the attestation, the payload and the payload attestation fall due in that order,
-within the slot.
+/-- From Gloas, the attestation, the payload and the payload attestation fall due in that order.
+
+All three fall due within the slot.
 
 The configuration orders their basis points below a whole, and its slot is nonempty. -/
 theorem gloas_deadlines_ordered {fork : Fork} {attestation payload payloadAttestation : UInt64}
@@ -285,8 +285,9 @@ theorem getSlotComponentDurationMs_ok_of_le {small large : UInt64} (le : small �
   refine getSlotComponentDurationMs_ok_iff.mpr ⟨fits', ?_⟩
   rw [UInt64.toNat_ofNat', Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt (Nat.div_le_self _ _) fits')]
 
-/-- On mainnet and on the minimal configuration, from Gloas, the attestation, the payload and the
-payload attestation fall due in that order, within the slot. -/
+/-- On mainnet and on the minimal configuration, from Gloas, three messages fall due in order.
+
+The order is the attestation, the payload, then the payload attestation, within the slot. -/
 theorem gloas_deadlines_ordered_of_named {fork : Fork} (gloas : fork ≥ .glamsterdam)
     (named : config = .mainnet ∨ config = .minimal) :
     ∃ attestation payload payloadAttestation,

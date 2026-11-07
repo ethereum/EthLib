@@ -12,8 +12,9 @@ A later block, with a number and a timestamp no smaller, has an active fork no e
 
 A fork that always activates with a later fork is never active.
 
-On mainnet, some fork is always active, never Constantinople and never a fork of the consensus
-layer alone.
+On mainnet, some fork is always active.
+
+It is never Constantinople, and never a fork of the consensus layer alone.
 
 A chain sets no blob schedule at a block exactly when the block reaches none of their activations.
 

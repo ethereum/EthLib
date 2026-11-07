@@ -9,10 +9,10 @@ public import EthLib.Serialization.Proofs.Ssz.Typed.Class
 
 The request of a protocol passes the length check of its protocol.
 
-- A request payload that decodes at the bounds of its protocol has a length within the bounds of
-  its SSZ type.
-- A request that a client serializes, within the payload cap, decodes at those bounds and reads
-  back as itself.
+- Take a request payload that decodes at the bounds of its protocol.
+  Its length is within the bounds of its SSZ type.
+- Take a request that a client serializes, within the payload cap.
+  It decodes at those bounds and reads back as itself.
 -/
 
 @[expose] public section
