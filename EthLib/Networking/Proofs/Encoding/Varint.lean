@@ -12,8 +12,6 @@ Properties of the unsigned protobuf varint codec, proved for every 64-bit value 
 - An encoding is always minimal.
 - The decoder accepts only these encodings, so exactly one byte string decodes to each value.
 - An input is too long exactly when it has over ten bytes and the first ten are continued.
-
-The kernel checks everything here, so no `native_decide` or `bv_decide` axiom appears.
 -/
 
 @[expose] public section
