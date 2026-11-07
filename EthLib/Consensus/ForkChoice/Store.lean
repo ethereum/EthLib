@@ -31,9 +31,13 @@ A parent at a slot no lower than its child cannot happen in a store that the han
 
 The walk fails there, so that it always ends.
 
-Gloas changes the store and the walk, and those rules are not yet specified here.
+From Gloas a node also says whether the payload of its block is known.
 
-So the store and the walk fail from Gloas on, rather than apply the earlier rule.
+The walk gives each parent the status of its payload as its child builds on it.
+
+Gloas changes the store too, and that rule is not yet specified here.
+
+So a new store fails from Gloas on, rather than apply the earlier rule.
 -/
 
 @[expose] public section
@@ -277,13 +281,37 @@ def block (root : Root) : Except ForkChoiceError (BeaconBlock preset fork) :=
   | some block => return block
   | none => throw (.unknownBlock root)
 
+/-- The status of the payload of a parent, as a child block builds on it.
+
+Before Gloas a block has no separate payload, so the parent is pending.
+
+From Gloas the parent is full when the child's bid builds on the block hash of the parent's bid.
+
+Otherwise the child builds on the parent without its payload, so the parent is empty. -/
+def parentPayloadStatus (block parent : BeaconBlock preset fork) : PayloadStatus :=
+  if gloas : .glamsterdam ≤ fork then
+    if (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash =
+        (parent.body.signedExecutionPayloadBid gloas).message.blockHash then .full
+    else .empty
+  else .pending
+
+/-- The status of the payload of the parent of a block, which the store must hold. -/
+def getParentPayloadStatus (block : BeaconBlock preset fork) :
+    Except ForkChoiceError PayloadStatus :=
+  return parentPayloadStatus block (← store.block block.parentRoot)
+
+/-- Whether a block builds on the full parent: its parent with its payload. -/
+def isParentNodeFull (block : BeaconBlock preset fork) : Except ForkChoiceError Bool :=
+  return (← store.getParentPayloadStatus block) == .full
+
 /-- The ancestor of a node at a slot: the node itself, or its latest ancestor at or below the slot.
 
-Before Gloas the walk follows parent roots, and every node is pending.
+The walk follows parent roots.
 
-From Gloas the walk is not yet specified here, so it fails. -/
+Each parent node gets the status of its payload as its child builds on it.
+
+Before Gloas that status is pending, so every node of the walk is pending. -/
 def getAncestor (node : ForkChoiceNode) (slot : Slot) : Except ForkChoiceError ForkChoiceNode :=
-  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork) else
   match _found : store.blocks[node.root]? with
   | none => throw (.unknownBlock node.root)
   | some block =>
@@ -293,17 +321,25 @@ def getAncestor (node : ForkChoiceNode) (slot : Slot) : Except ForkChoiceError F
       | none => throw (.unknownBlock block.parentRoot)
       | some parent =>
         if _lower : parent.slot < block.slot then
-          getAncestor ⟨block.parentRoot, .pending⟩ slot
+          getAncestor ⟨block.parentRoot, parentPayloadStatus block parent⟩ slot
         else throw (.parentSlotNotLower node.root)
 termination_by (store.blocks[node.root]?.map (·.slot.toNat)).getD 0
 decreasing_by
   simp only [_found, _parentFound, Option.map_some, Option.getD_some]
   exact UInt64.lt_iff_toNat_lt.mp _lower
 
-/-- Whether a node descends from another: its ancestor at the other's slot is that node. -/
+/-- Whether a node descends from another: its ancestor at the other's slot is that node.
+
+From Gloas the ancestor has the same root, and the same payload status or a pending one.
+
+A pending ancestor stands for its block, so both of its payload statuses descend from it. -/
 def isAncestor (node ancestor : ForkChoiceNode) : Except ForkChoiceError Bool := do
   let ancestorBlock ← store.block ancestor.root
-  return (← store.getAncestor node ancestorBlock.slot) == ancestor
+  let found ← store.getAncestor node ancestorBlock.slot
+  if .glamsterdam ≤ fork then
+    return found.root == ancestor.root &&
+      (found.payloadStatus == ancestor.payloadStatus || ancestor.payloadStatus == .pending)
+  else return found == ancestor
 
 /-- The checkpoint block of an epoch in the chain of a block: its ancestor at the epoch's start. -/
 def getCheckpointBlock (root : Root) (epoch : Epoch) : Except ForkChoiceError Root := do
