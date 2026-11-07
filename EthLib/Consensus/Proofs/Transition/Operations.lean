@@ -284,8 +284,9 @@ theorem recordPaymentWeight_of_noWeight {gloas : .glamsterdam ≤ fork} {data : 
   have found : (state.builderPendingPayments gloas)[
       attestationPaymentPosition preset current data.slot]? =
       some (state.builderPendingPayments gloas)[
-        attestationPaymentPosition preset current data.slot] :=
-    Vector.getElem?_eq_getElem inside
+        attestationPaymentPosition preset current data.slot] := by
+    rw [RootedVector.getElem?_eq]
+    exact Vector.getElem?_eq_getElem inside
   have notWeighed : ¬(sameSlot = true ∧ 0 <
       (state.builderPendingPayments gloas)[
         attestationPaymentPosition preset current data.slot].withdrawal.amount) := by
@@ -307,10 +308,13 @@ theorem recordPaymentWeight_of_noWeight {gloas : .glamsterdam ≤ fork} {data : 
     funext gloas'
     have same : gloas' = gloas := rfl
     subst same
+    apply RootedVector.ext
+    rw [RootedVector.elements_set]
     ext index bound
     by_cases same : index = attestationPaymentPosition preset current data.slot
     · subst same
       simp
+      rfl
     · exact Vector.getElem_set_ne _ _ (Ne.symm same)
   simp only [kept]
 

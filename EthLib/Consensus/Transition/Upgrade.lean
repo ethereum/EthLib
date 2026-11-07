@@ -405,6 +405,8 @@ The new fields are those of an empty registry of builders and of a self-built la
 def upgradeFields (config : Config) (pre : BeaconState preset .fusaka) (requestsRoot : Root) :
     BeaconState preset .glamsterdam :=
   let header := pre.latestExecutionPayloadHeader (by decide)
+  -- The empty payments are rooted here, once, so that a read of the field does not root them.
+  let payments : BuilderPendingPayments preset := .ofVector (Vector.replicate _ .empty)
   { genesisTime := pre.genesisTime
     genesisValidatorsRoot := pre.genesisValidatorsRoot
     slot := pre.slot
@@ -452,7 +454,7 @@ def upgradeFields (config : Config) (pre : BeaconState preset .fusaka) (requests
     builders := fun _ => ⟨#[]⟩
     nextWithdrawalBuilderIndex := fun _ => 0
     executionPayloadAvailability := fun _ => ⟨Vector.replicate _ true⟩
-    builderPendingPayments := fun _ => Vector.replicate _ BuilderPendingPayment.empty
+    builderPendingPayments := fun _ => payments
     builderPendingWithdrawals := fun _ => ⟨#[]⟩
     latestExecutionPayloadBid := fun _ => upgradeBid pre requestsRoot
     payloadExpectedWithdrawals := fun _ => ⟨#[], fun before => absurd before (by decide)⟩

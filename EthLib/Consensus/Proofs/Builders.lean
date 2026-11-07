@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.Builders
+public import EthLib.Serialization.Proofs.Ssz.Typed.Rooted
 
 /-!
 # Proofs: builder indices and builder rules
@@ -296,7 +297,7 @@ theorem pendingBuilderTotal_settleBuilderPayment {state after : BeaconState pres
     pendingBuilderTotal after gloas index = pendingBuilderTotal state gloas index := by
   obtain ⟨inRange, payments, withdrawals⟩ := settleBuilderPayment_spec computed
   have moved := owedBy_set (index := index)
-    (withdrawals := (state.builderPendingPayments gloas).toList.map (·.withdrawal))
+    (withdrawals := (state.builderPendingPayments gloas).elements.toList.map (·.withdrawal))
     (k := paymentIndex.toNat) (by simpa using inRange) BuilderPendingPayment.empty.withdrawal
   have empty : owedBy index [BuilderPendingPayment.empty.withdrawal] = 0 := by
     simp [owedBy, BuilderPendingPayment.empty]
@@ -313,10 +314,13 @@ theorem pendingBuilderTotal_settleBuilderPayment {state after : BeaconState pres
         simp only [UInt64.lt_iff_toNat_lt, UInt64.toNat_zero] at positive
         omega
       simp [owedBy, zero]
+  -- A read of the rooted payments is a read of their elements.
+  have read : (state.builderPendingPayments gloas)[paymentIndex.toNat] =
+      (state.builderPendingPayments gloas).elements[paymentIndex.toNat] := rfl
   simp only [List.getElem_map, Vector.getElem_toList, empty, Nat.add_zero] at moved
   unfold pendingBuilderTotal
-  rw [withdrawals, payments, Vector.toList_set, List.map_set]
-  simp only [owedBy, List.map_append, List.sum_append] at moved amount ⊢
+  rw [withdrawals, payments, RootedVector.elements_set, Vector.toList_set, List.map_set]
+  simp only [owedBy, List.map_append, List.sum_append, read] at moved amount ⊢
   omega
 
 end EthLib.Consensus
