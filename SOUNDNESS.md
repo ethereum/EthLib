@@ -834,6 +834,30 @@ No theorem says that the period gives the safety margin that the rule intends.
 That margin is the claim of the analysis behind the rule, and EthLib does not model it.
 The Python suite checks the periods against the three tables of the rule, except for the rows whose states take minutes to build.
 
+### Honest validator duties
+
+`Consensus/HonestValidator.lean` holds what an honest validator computes for its duties.
+It finds the committee of a validator in an epoch, whether it proposes, and, from Altair, its sync committee seat and subnets.
+It also signs each message that a validator sends, under the domain type and the epoch that the receivers check.
+The theorems in `Consensus/Proofs/HonestValidator.lean` relate these duties to the checks of the transition and of gossip.
+
+The signature theorems assume `PairingLaws`, the hypothesis of BLS correctness listed under BLS12-381.
+Under it, `isValidSignatureAtEpoch_of_signAtEpoch` shows that a duty signature passes the check of a signature at the same domain type and epoch, under the public key of the secret key.
+`verifyBlockSignature_of_getBlockSignature` shows that a block signed by its proposer passes the check of the block signature.
+`processRandao_ne_invalidRandaoReveal` shows that the RANDAO reveal of the proposer never fails the RANDAO check.
+Both assume a block of the current epoch, and a proposer whose public key is that of the secret key.
+The gossip checks of a selection proof and of an aggregate and proof read the target epoch, so their theorems assume it is the epoch of the slot.
+
+The committee theorems need no such hypothesis.
+`getCommitteeAssignment_sound` shows that an assignment is a committee of the epoch that holds the validator.
+`getCommitteeAssignment_unique` shows that no other committee of the epoch holds it.
+It assumes that the registry stays within its limit, and that the active validators times the committees of the epoch fit in 64 bits.
+`getCommitteeAssignment_ne_none` shows that an active validator never gets the answer that it has no committee, under the hypotheses of `exists_mem_getBeaconCommittee`.
+The search can still fail, for an epoch after the next one or a committee without a value.
+
+No theorem says which subnets or sync committee seat a validator has.
+The Python suite checks each duty signature against py_ecc, on signing roots computed in the test, and each committee against the shuffle export.
+
 ### Light client
 
 A light client accepts an update that the sync committee signed, and moves its store by it.
@@ -1084,13 +1108,13 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 244 operations and 35 size constants.
-The Python extension calls 244 of the operations and 26 of the constants.
+Lean exports 249 operations and 35 size constants.
+The Python extension calls 249 of the operations and 26 of the constants.
 Exported constants it does not call: `eth_sphincs_const_chains`, `eth_sphincs_const_n`, `eth_sphincs_const_public_param_len`, `eth_sphincs_const_randomizer_len`, `eth_xmss_const_chains`, `eth_xmss_const_digest_len`, `eth_xmss_const_layer_height`, `eth_xmss_const_public_param_len`, `eth_xmss_const_randomizer_len`.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-8195 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (1478), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (146), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (969), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (461), `xmss.c` (134).
+8374 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (1637), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (146), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (983), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (467), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

@@ -234,6 +234,31 @@ eth_consensus_is_within_weak_subjectivity_period(
 );
 
 extern lean_object*
+eth_consensus_get_committee_assignment(
+  lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
+  uint64_t epoch, uint64_t validator_index);
+
+extern lean_object*
+eth_consensus_is_proposer(
+  lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
+  uint64_t validator_index);
+
+extern lean_object*
+eth_consensus_is_assigned_to_sync_committee(
+  lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
+  uint64_t epoch, uint64_t validator_index);
+
+extern lean_object*
+eth_consensus_compute_subnets_for_sync_committee(
+  lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
+  uint64_t validator_index);
+
+extern lean_object*
+eth_consensus_get_validator_signature(
+  lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
+  lean_object* duty, lean_object* object, lean_object* secret_key);
+
+extern lean_object*
 eth_consensus_state_transition_across(
   lean_object* name,
   lean_object* fork,
@@ -1333,6 +1358,140 @@ py_consensus_is_valid_genesis_state(
     eth_consensus_is_valid_genesis_state(name, fork, mk_bytearray(state, state_len),
       mk_bytearray(config, config_len)),
     TRANSITION_ERROR);
+}
+
+/* The name, the fork, the state and the configuration of a duty export, or NULL with an
+ * exception set. On success the caller owns the four Lean objects. */
+static int
+duty_args(
+  PyObject* name_obj, PyObject* fork_obj, const uint8_t* state, Py_ssize_t state_len,
+  const uint8_t* config, Py_ssize_t config_len, lean_object** out
+) {
+  if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj)) {
+    PyErr_SetString(PyExc_TypeError, "name and fork must be str");
+    return -1;
+  }
+  lean_object* name = str_arg(name_obj, "name");
+  if (!name) return -1;
+  lean_object* fork = str_arg(fork_obj, "fork");
+  if (!fork) {
+    lean_dec(name);
+    return -1;
+  }
+  out[0] = name;
+  out[1] = fork;
+  out[2] = mk_bytearray(state, state_len);
+  out[3] = mk_bytearray(config, config_len);
+  return 0;
+}
+
+PyObject*
+py_consensus_get_committee_assignment(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *epoch_obj, *index_obj;
+  const uint8_t *state, *config;
+  Py_ssize_t state_len, config_len;
+  if (!PyArg_ParseTuple(args, "OOy#y#OO", &name_obj, &fork_obj, &state, &state_len, &config,
+                        &config_len, &epoch_obj, &index_obj))
+    return NULL;
+  uint64_t epoch, index;
+  if (parse_uint64(epoch_obj, "epoch", &epoch) < 0) return NULL;
+  if (parse_uint64(index_obj, "validator_index", &index) < 0) return NULL;
+  lean_object* a[4];
+  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) return NULL;
+  return except_into_pybytes(
+    eth_consensus_get_committee_assignment(a[0], a[1], a[2], a[3], epoch, index),
+    VALIDATOR_DUTY_ERROR);
+}
+
+PyObject*
+py_consensus_is_proposer(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *index_obj;
+  const uint8_t *state, *config;
+  Py_ssize_t state_len, config_len;
+  if (!PyArg_ParseTuple(args, "OOy#y#O", &name_obj, &fork_obj, &state, &state_len, &config,
+                        &config_len, &index_obj))
+    return NULL;
+  uint64_t index;
+  if (parse_uint64(index_obj, "validator_index", &index) < 0) return NULL;
+  lean_object* a[4];
+  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) return NULL;
+  return except_into_pybool(eth_consensus_is_proposer(a[0], a[1], a[2], a[3], index),
+    VALIDATOR_DUTY_ERROR);
+}
+
+PyObject*
+py_consensus_is_assigned_to_sync_committee(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *epoch_obj, *index_obj;
+  const uint8_t *state, *config;
+  Py_ssize_t state_len, config_len;
+  if (!PyArg_ParseTuple(args, "OOy#y#OO", &name_obj, &fork_obj, &state, &state_len, &config,
+                        &config_len, &epoch_obj, &index_obj))
+    return NULL;
+  uint64_t epoch, index;
+  if (parse_uint64(epoch_obj, "epoch", &epoch) < 0) return NULL;
+  if (parse_uint64(index_obj, "validator_index", &index) < 0) return NULL;
+  lean_object* a[4];
+  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) return NULL;
+  return except_into_pybool(
+    eth_consensus_is_assigned_to_sync_committee(a[0], a[1], a[2], a[3], epoch, index),
+    VALIDATOR_DUTY_ERROR);
+}
+
+PyObject*
+py_consensus_compute_subnets_for_sync_committee(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *index_obj;
+  const uint8_t *state, *config;
+  Py_ssize_t state_len, config_len;
+  if (!PyArg_ParseTuple(args, "OOy#y#O", &name_obj, &fork_obj, &state, &state_len, &config,
+                        &config_len, &index_obj))
+    return NULL;
+  uint64_t index;
+  if (parse_uint64(index_obj, "validator_index", &index) < 0) return NULL;
+  lean_object* a[4];
+  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) return NULL;
+  return except_into_pybytes(
+    eth_consensus_compute_subnets_for_sync_committee(a[0], a[1], a[2], a[3], index),
+    VALIDATOR_DUTY_ERROR);
+}
+
+PyObject*
+py_consensus_get_validator_signature(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *duty_obj;
+  const uint8_t *state, *config, *object, *key;
+  Py_ssize_t state_len, config_len, object_len, key_len;
+  if (!PyArg_ParseTuple(args, "OOy#y#Oy#y#", &name_obj, &fork_obj, &state, &state_len, &config,
+                        &config_len, &duty_obj, &object, &object_len, &key, &key_len))
+    return NULL;
+  if (!PyUnicode_Check(duty_obj)) {
+    PyErr_SetString(PyExc_TypeError, "duty must be str");
+    return NULL;
+  }
+  lean_object* a[4];
+  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) return NULL;
+  lean_object* duty = str_arg(duty_obj, "duty");
+  if (!duty) {
+    for (int i = 0; i < 4; i++) lean_dec(a[i]);
+    return NULL;
+  }
+  return except_into_pybytes(
+    eth_consensus_get_validator_signature(a[0], a[1], a[2], a[3], duty,
+      mk_bytearray(object, object_len), mk_bytearray(key, key_len)),
+    VALIDATOR_DUTY_ERROR);
 }
 
 PyObject*

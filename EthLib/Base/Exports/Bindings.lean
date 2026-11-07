@@ -382,6 +382,28 @@ def bindings : List Binding := [
     "(name: str, fork: str, state: bytes, checkpoint: bytes, config: bytes, " ++
       "genesis_time_ms: int, time_ms: int) -> bool",
     [`EthLib.Consensus.WeakSubjectivityError], some "WeakSubjectivityError"⟩,
+  ⟨"consensus_get_committee_assignment",
+    `EthLib.Consensus.Exports.getCommitteeAssignmentExport,
+    "(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) " ++
+      "-> bytes",
+    [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
+  ⟨"consensus_is_proposer", `EthLib.Consensus.Exports.isProposerExport,
+    "(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bool",
+    [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
+  ⟨"consensus_is_assigned_to_sync_committee",
+    `EthLib.Consensus.Exports.isAssignedToSyncCommitteeExport,
+    "(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) " ++
+      "-> bool",
+    [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
+  ⟨"consensus_compute_subnets_for_sync_committee",
+    `EthLib.Consensus.Exports.computeSubnetsForSyncCommitteeExport,
+    "(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bytes",
+    [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
+  ⟨"consensus_get_validator_signature",
+    `EthLib.Consensus.Exports.getValidatorSignatureExport,
+    "(name: str, fork: str, state: bytes, config: bytes, duty: str, object: bytes, " ++
+      "secret_key: bytes) -> bytes",
+    [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
   ⟨"consensus_upgrade_state", `EthLib.Consensus.Exports.upgradeStateExport,
     "(name: str, fork: str, pre: bytes, config: bytes, verify: bool) -> bytes",
     [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,

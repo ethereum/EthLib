@@ -84,6 +84,7 @@ PyObject* TRANSITION_ERROR;
 PyObject* LIGHT_CLIENT_ERROR;
 PyObject* FORK_CHOICE_ERROR;
 PyObject* WEAK_SUBJECTIVITY_ERROR;
+PyObject* VALIDATOR_DUTY_ERROR;
 
 /* ---- Lean externs: size accessors ------------------------------------ */
 
@@ -639,6 +640,18 @@ static PyMethodDef methods[] = {
   {"consensus_is_within_weak_subjectivity_period",
    py_consensus_is_within_weak_subjectivity_period, METH_VARARGS,
    DOC_consensus_is_within_weak_subjectivity_period},
+  {"consensus_get_committee_assignment", py_consensus_get_committee_assignment, METH_VARARGS,
+   DOC_consensus_get_committee_assignment},
+  {"consensus_is_proposer", py_consensus_is_proposer, METH_VARARGS,
+   DOC_consensus_is_proposer},
+  {"consensus_is_assigned_to_sync_committee",
+   py_consensus_is_assigned_to_sync_committee, METH_VARARGS,
+   DOC_consensus_is_assigned_to_sync_committee},
+  {"consensus_compute_subnets_for_sync_committee",
+   py_consensus_compute_subnets_for_sync_committee, METH_VARARGS,
+   DOC_consensus_compute_subnets_for_sync_committee},
+  {"consensus_get_validator_signature", py_consensus_get_validator_signature, METH_VARARGS,
+   DOC_consensus_get_validator_signature},
   {"pq_keys_ssz", py_pq_keys_ssz, METH_VARARGS, DOC_pq_keys_ssz},
   {"pq_keys_possession_signing_root", py_pq_keys_possession_signing_root, METH_VARARGS,
    DOC_pq_keys_possession_signing_root},
@@ -858,6 +871,7 @@ PyInit__native(void) {
     FORK_CHOICE_ERROR = PyObject_GetAttrString(errors, "ForkChoiceError");
     CHAIN_ERROR = PyObject_GetAttrString(errors, "ChainError");
     WEAK_SUBJECTIVITY_ERROR = PyObject_GetAttrString(errors, "WeakSubjectivityError");
+    VALIDATOR_DUTY_ERROR = PyObject_GetAttrString(errors, "ValidatorDutyError");
     Py_DECREF(errors);
     if (PyErr_Occurred()) return NULL;
 

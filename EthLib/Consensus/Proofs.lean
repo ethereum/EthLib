@@ -42,6 +42,7 @@ public import EthLib.Consensus.Proofs.Gossip.SyncCommittee
 public import EthLib.Consensus.Proofs.Gossip.Topics
 public import EthLib.Consensus.Proofs.InclusionList
 public import EthLib.Consensus.Proofs.HonestBuilder
+public import EthLib.Consensus.Proofs.HonestValidator
 public import EthLib.Consensus.Proofs.InclusionListCommittee
 public import EthLib.Consensus.Proofs.LightClient.Authenticate
 public import EthLib.Consensus.Proofs.LightClient.Containers

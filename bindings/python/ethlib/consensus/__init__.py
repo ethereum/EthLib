@@ -11,6 +11,7 @@ from ethlib.errors import (
     ForkChoiceError,
     LightClientError,
     TransitionError,
+    ValidatorDutyError,
     WeakSubjectivityError,
 )
 
@@ -677,6 +678,64 @@ def is_within_weak_subjectivity_period(
     )
 
 
+def _replacements(config: dict | None) -> bytes:
+    return json.dumps(config).encode() if config else b""
+
+
+def get_committee_assignment(
+    name: str, fork: str, state: bytes, epoch: int, validator_index: int, config: dict | None = None
+) -> tuple[list, int, int] | None:
+    """The committee, its index and its slot for a validator in an epoch, or None."""
+    out = json.loads(
+        _native.consensus_get_committee_assignment(
+            name, fork, state, _replacements(config), epoch, validator_index
+        )
+    )
+    return None if out is None else (out["committee"], out["index"], out["slot"])
+
+
+def is_proposer(
+    name: str, fork: str, state: bytes, validator_index: int, config: dict | None = None
+) -> bool:
+    """Whether a validator proposes the block of the slot of a state."""
+    return _native.consensus_is_proposer(name, fork, state, _replacements(config), validator_index)
+
+
+def is_assigned_to_sync_committee(
+    name: str, fork: str, state: bytes, epoch: int, validator_index: int, config: dict | None = None
+) -> bool:
+    """Whether a validator serves on the sync committee of the period of an epoch."""
+    return _native.consensus_is_assigned_to_sync_committee(
+        name, fork, state, _replacements(config), epoch, validator_index
+    )
+
+
+def compute_subnets_for_sync_committee(
+    name: str, fork: str, state: bytes, validator_index: int, config: dict | None = None
+) -> list:
+    """The sync committee subnets of a validator for the next slot, in increasing order."""
+    return json.loads(
+        _native.consensus_compute_subnets_for_sync_committee(
+            name, fork, state, _replacements(config), validator_index
+        )
+    )
+
+
+def get_validator_signature(
+    name: str,
+    fork: str,
+    state: bytes,
+    duty: str,
+    obj: bytes,
+    secret_key: bytes,
+    config: dict | None = None,
+) -> bytes:
+    """The 96-byte signature of the SSZ bytes of the object of a duty, by a secret key."""
+    return _native.consensus_get_validator_signature(
+        name, fork, state, _replacements(config), duty, obj, secret_key
+    )
+
+
 def upgrade_state(
     name: str, fork: str, pre: bytes, verify: bool = True, config: dict | None = None
 ) -> bytes:
@@ -720,6 +779,7 @@ __all__ = [
     "get_data_column_sidecars_from_column_sidecar",
     "TransitionError",
     "WeakSubjectivityError",
+    "ValidatorDutyError",
     "process_operation",
     "LightClientError",
     "ForkChoiceError",
@@ -738,6 +798,11 @@ __all__ = [
     "upgrade_state",
     "compute_weak_subjectivity_period",
     "is_within_weak_subjectivity_period",
+    "get_committee_assignment",
+    "is_proposer",
+    "is_assigned_to_sync_committee",
+    "compute_subnets_for_sync_committee",
+    "get_validator_signature",
     "process_slots",
     "state_transition",
     "state_transition_across",
