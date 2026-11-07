@@ -419,6 +419,7 @@ A list item and a field of a provenance record, such as `Commit: <hash>`, contin
 After a line that ends with a colon, a line that starts in lowercase continues the sentence.
 The check skips code blocks, table rows and lines that hold only a URL.
 With `--all` in place of `--base`, the check reads every Python file that git tracks.
+CI runs `--all`, so no Python file in the tree may hold a wrapped sentence.
 
 `pyproject.toml` configures each tool, and `uv.lock` pins its version.
 
