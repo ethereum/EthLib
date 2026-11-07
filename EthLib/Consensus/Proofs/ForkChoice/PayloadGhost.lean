@@ -23,14 +23,17 @@ The theorem holds away from the payload decisions of the previous slot.
 
 There the payload committee and the proposer decide, which the model leaves out.
 
-The proposer boost counts as one more vote, for the pending node of the boosted block, when the
-store applies the boost.
+When the store applies the boost, it counts as one more vote.
+
+That vote is for the pending node of the boosted block.
 
 A tie between two children goes to the greater root, then to the greater status number.
 
-When a viable node holds more than half of the stake in votes, the head descends from it.
+Take a viable node with more than half of the stake and the boost in votes.
 
-That holds away from the payload decisions of the previous slot, and without the boost.
+The head then descends from it.
+
+That holds away from the payload decisions of the previous slot.
 -/
 
 @[expose] public section
@@ -299,8 +302,9 @@ It is 0 when the boost does not apply.
 
 It is also 0 when the proposer score fails.
 
-Then the weight of each node in the chain of the boosted block fails, unless it is a payload
-decision of the previous slot.
+Then the weight of each node in the chain of the boosted block fails.
+
+A payload decision of the previous slot is the exception.
 
 So the head fails when the walk weighs such a node, and else the score does not count. -/
 def boostScoreOfGloas (gloas : .glamsterdam ≤ fork) : ℕ :=
@@ -312,8 +316,9 @@ def boostScoreOfGloas (gloas : .glamsterdam ≤ fork) : ℕ :=
 
 The node must not be a payload decision of the previous slot.
 
-The boost is a vote for the pending node of the boosted block, with the score of the boost as its
-stake. -/
+The boost is a vote for the pending node of the boosted block.
+
+Its stake is the score of the boost. -/
 theorem getWeight_eq_weight_withBoost_of_gloas {node : ForkChoiceNode}
     {block : BeaconBlock preset fork} {weightValue : Gwei} (gloas : .glamsterdam ≤ fork)
     (decision : store.isPreviousSlotPayloadDecision config node = .ok false)
@@ -416,8 +421,9 @@ theorem mem_children_nodeView {nodes : List ForkChoiceNode} (gloas : .glamsterda
 abbrev nodeOrder : Option Root × Status → Lex (ℕ × ℕ) :=
   nodeKey rootValue
 
-/-- From Gloas, the walk of the store ends where LMD-GHOST over nodes ends, in a model of its
-weights.
+/-- From Gloas, the walk of the store ends where LMD-GHOST over nodes ends.
+
+That holds in any model of its weights.
 
 The model has the blocks of the view.
 
@@ -561,8 +567,9 @@ theorem getHeadFrom_eq_ghost_of_gloas {nodes : List ForkChoiceNode} (gloas : .gl
 
 No viable node may be a payload decision of the previous slot.
 
-The boost is a vote for the pending node of the boosted block, with the score of the boost as its
-stake.
+The boost is a vote for the pending node of the boosted block.
+
+Its stake is the score of the boost.
 
 It starts from a node in the subtree of the pending node of the justified block. -/
 theorem getHeadFrom_eq_ghost_withBoost_of_gloas {nodes : List ForkChoiceNode}
@@ -625,8 +632,9 @@ Its voters are the validators active and not slashed in the justified state.
 
 Its stakes are their effective balances, and an equivocator has no vote.
 
-The boost is one more vote, for the pending node of the boosted block, and its stake is the score
-of the boost.
+The boost is one more vote, for the pending node of the boosted block.
+
+Its stake is the score of the boost.
 
 When the boost does not apply, that vote is absent.
 
@@ -702,11 +710,13 @@ theorem latestNode_ne_empty (gloas : .glamsterdam ≤ fork)
   · simp [getSupportedNode_of_same_slot gloas found (UInt64.not_lt.mp later), Except.toOption,
       ForkChoiceNode.toModel, PayloadStatus.toStatus] at vote
 
-/-- From Gloas, when every payload is present, the head of a model of nodes is the full node of
-the head of a model of blocks.
+/-- From Gloas, take every payload present.
 
-The model of nodes has the blocks of the view of nodes, and the model of blocks those of the view
-of blocks.
+The head of a model of nodes is then the full node of the head of a model of blocks.
+
+The model of nodes has the blocks of the view of nodes.
+
+The model of blocks has the blocks of the view of blocks.
 
 A vote of the model of blocks is the block of the vote of the model of nodes.
 
@@ -811,15 +821,17 @@ theorem getHead_eq_ghost_full_of_gloas {nodes : List ForkChoiceNode} {head : For
     (fun v r => latestNode_ne_empty gloas present v.toUInt64 r) (fun _ => rfl)
     (getHead_eq_ghost_of_gloas lower gloas noBoost noDecision justifiedState tree someViable found)
 
-/-- From Gloas, when every payload is present, the head is the full node of the head over blocks
-with the boost.
+/-- From Gloas, when every payload is present, the head is a full node.
+
+Its block is the head over blocks with the boost.
 
 That is the rule that the head follows before Gloas, over the view of the viable blocks.
 
 That view reads each vote as the block of the node that the store gives it.
 
-The boost is one more vote, for the boosted block when the boost applies, and its stake is the
-score of the boost.
+When the boost applies, it is one more vote, for the boosted block.
+
+Its stake is the score of the boost.
 
 Every known block builds on the full node of its known parent.
 
@@ -1088,8 +1100,9 @@ Its root is the head over blocks with the boost.
 
 That is the rule that the head follows before Gloas, over the view of the viable blocks.
 
-The boost is one more vote, for the boosted block when the boost applies, and its stake is the
-score of the boost.
+When the boost applies, it is one more vote, for the boosted block.
+
+Its stake is the score of the boost.
 
 Every known block builds on the full node of its known parent.
 
@@ -1198,23 +1211,27 @@ private theorem getAncestor_ok_of_viable_ancestor_of_gloas {nodes : List ForkCho
         belowJustified
 
 variable (lower) in
-/-- When a viable node has more than half of the stake in votes, the head is in its subtree.
+/-- Take a viable node with more than half of the stake and the boost in votes.
 
-That holds from Gloas, away from the payload decisions of the previous slot, and without a boost.
+The head is then in its subtree.
+
+That holds from Gloas, away from the payload decisions of the previous slot.
+
+When the boost does not apply, its score is 0.
 
 Each known block must sit at a later slot than its known parent.
 
 A validator counts when it is active and not slashed in the justified state.
 
 Its stake is its effective balance, and the votes of the node are counted at that node. -/
-theorem ancestor_getHead_of_majority_of_gloas {nodes : List ForkChoiceNode}
+theorem ancestor_getHead_of_majority_withBoost_of_gloas {nodes : List ForkChoiceNode}
     {node head : ForkChoiceNode} {score : Gwei} (gloas : .glamsterdam ≤ fork)
-    (noBoost : store.shouldApplyProposerBoost config gloas = .ok false)
     (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
     (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
     (tree : store.getFilteredNodeTree config = .ok nodes) (viable : node ∈ nodes)
     (votes : store.getAttestationScore node state = .ok score)
-    (majority : Models.stake (balanceAt state) (voters state) < 2 * score.toNat)
+    (majority : Models.stake (balanceAt state) (voters state) +
+      store.boostScoreOfGloas config gloas < 2 * score.toNat)
     (found : store.getHead config = .ok head) :
     (nodeTree lower).Ancestor node.toModel head.toModel := by
   obtain ⟨-, ⟨block, nodeFound⟩, -⟩ := filterNodeTree_mem tree node viable
@@ -1226,36 +1243,45 @@ theorem ancestor_getHead_of_majority_of_gloas {nodes : List ForkChoiceNode}
   have inView : node.toModel ∈ (nodeView lower nodes).blocks := by
     simp only [nodeView, View.mem_ofBlocks, List.mem_toFinset, List.mem_map]
     exact ⟨_, ⟨node, viable, rfl⟩, .refl _⟩
-  rw [getAttestationScore_eq_weight_of_gloas (lower := lower) gloas nodeFound nodes votes]
-    at majority
-  have model := ancestor_ghost_of_majority (voters state) (balanceAt state) (nodeView lower nodes)
-    nodeOrder inView belowJustified majority
-  rwa [getHead_eq_ghost_of_gloas lower gloas noBoost noDecision justifiedState tree
+  rw [getAttestationScore_eq_weight_of_gloas (lower := lower) gloas nodeFound nodes votes,
+    ← stake_boostStake] at majority
+  -- The boost only adds to the weight of the node.
+  replace majority := majority.trans_le (Nat.mul_le_mul_left 2 ((Nat.le_add_right _ _).trans_eq
+    (weight_withBoost (G := nodeView lower nodes) (store.boostedNode config gloas)
+      (store.boostScoreOfGloas config gloas) _).symm))
+  have model := ancestor_ghost_of_majority _ _
+    ((nodeView lower nodes).withBoost (store.boostedNode config gloas)) nodeOrder inView
+    belowJustified majority
+  rwa [getHead_eq_ghost_withBoost_of_gloas lower gloas noDecision justifiedState tree
     (List.ne_nil_of_mem viable) found] at model
 
-/-- When a viable node has more than half of the stake in votes, the head descends from it.
+/-- Take a viable node with more than half of the stake and the boost in votes.
+
+The head then descends from it.
 
 The ancestor check of the store returns true from the head back to that node.
 
-That holds from Gloas, away from the payload decisions of the previous slot, and without a boost.
+That holds from Gloas, away from the payload decisions of the previous slot.
+
+When the boost does not apply, its score is 0.
 
 Each known block must sit at a later slot than its known parent.
 
 A validator counts when it is active and not slashed in the justified state.
 
 Its stake is its effective balance, and the votes of the node are counted at that node. -/
-theorem isAncestor_getHead_of_majority_of_gloas {nodes : List ForkChoiceNode}
+theorem isAncestor_getHead_of_majority_withBoost_of_gloas {nodes : List ForkChoiceNode}
     {node head : ForkChoiceNode} {score : Gwei} (lower : store.ParentsBelow)
     (gloas : .glamsterdam ≤ fork)
-    (noBoost : store.shouldApplyProposerBoost config gloas = .ok false)
     (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
     (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
     (tree : store.getFilteredNodeTree config = .ok nodes) (viable : node ∈ nodes)
     (votes : store.getAttestationScore node state = .ok score)
-    (majority : Models.stake (balanceAt state) (voters state) < 2 * score.toNat)
+    (majority : Models.stake (balanceAt state) (voters state) +
+      store.boostScoreOfGloas config gloas < 2 * score.toNat)
     (found : store.getHead config = .ok head) :
     store.isAncestor head node = .ok true := by
-  have above := ancestor_getHead_of_majority_of_gloas lower gloas noBoost noDecision
+  have above := ancestor_getHead_of_majority_withBoost_of_gloas lower gloas noDecision
     justifiedState tree viable votes majority found
   obtain ⟨-, ⟨nodeBlock, nodeFound⟩, -⟩ := filterNodeTree_mem tree node viable
   have belowJustified :
@@ -1280,6 +1306,61 @@ theorem isAncestor_getHead_of_majority_of_gloas {nodes : List ForkChoiceNode}
       Except.pure]
   have same := (isAncestor_iff_of_gloas (lower := lower) gloas nodeFound computed).mpr above
   exact same ▸ computed
+
+/-- From Gloas, when the boost does not apply, its score is 0. -/
+theorem boostScoreOfGloas_of_not_boost {gloas : .glamsterdam ≤ fork}
+    (noBoost : store.shouldApplyProposerBoost config gloas = .ok false) :
+    store.boostScoreOfGloas config gloas = 0 := by
+  simp [boostScoreOfGloas, noBoost]
+
+variable (lower) in
+/-- When a viable node has more than half of the stake in votes, the head is in its subtree.
+
+That holds from Gloas, away from the payload decisions of the previous slot, and without a boost.
+
+Each known block must sit at a later slot than its known parent.
+
+A validator counts when it is active and not slashed in the justified state.
+
+Its stake is its effective balance, and the votes of the node are counted at that node. -/
+theorem ancestor_getHead_of_majority_of_gloas {nodes : List ForkChoiceNode}
+    {node head : ForkChoiceNode} {score : Gwei} (gloas : .glamsterdam ≤ fork)
+    (noBoost : store.shouldApplyProposerBoost config gloas = .ok false)
+    (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
+    (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
+    (tree : store.getFilteredNodeTree config = .ok nodes) (viable : node ∈ nodes)
+    (votes : store.getAttestationScore node state = .ok score)
+    (majority : Models.stake (balanceAt state) (voters state) < 2 * score.toNat)
+    (found : store.getHead config = .ok head) :
+    (nodeTree lower).Ancestor node.toModel head.toModel :=
+  ancestor_getHead_of_majority_withBoost_of_gloas lower gloas noDecision justifiedState tree viable
+    votes (by rw [boostScoreOfGloas_of_not_boost noBoost, Nat.add_zero]; exact majority) found
+
+/-- When a viable node has more than half of the stake in votes, the head descends from it.
+
+The ancestor check of the store returns true from the head back to that node.
+
+That holds from Gloas, away from the payload decisions of the previous slot, and without a boost.
+
+Each known block must sit at a later slot than its known parent.
+
+A validator counts when it is active and not slashed in the justified state.
+
+Its stake is its effective balance, and the votes of the node are counted at that node. -/
+theorem isAncestor_getHead_of_majority_of_gloas {nodes : List ForkChoiceNode}
+    {node head : ForkChoiceNode} {score : Gwei} (lower : store.ParentsBelow)
+    (gloas : .glamsterdam ≤ fork)
+    (noBoost : store.shouldApplyProposerBoost config gloas = .ok false)
+    (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
+    (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
+    (tree : store.getFilteredNodeTree config = .ok nodes) (viable : node ∈ nodes)
+    (votes : store.getAttestationScore node state = .ok score)
+    (majority : Models.stake (balanceAt state) (voters state) < 2 * score.toNat)
+    (found : store.getHead config = .ok head) :
+    store.isAncestor head node = .ok true :=
+  isAncestor_getHead_of_majority_withBoost_of_gloas lower gloas noDecision justifiedState tree
+    viable votes (by rw [boostScoreOfGloas_of_not_boost noBoost, Nat.add_zero]; exact majority)
+    found
 
 end Store
 
