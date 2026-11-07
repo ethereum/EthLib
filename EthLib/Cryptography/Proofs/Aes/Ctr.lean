@@ -176,7 +176,7 @@ private theorem div_mul_add_lt {x m r : Nat} (hx : x < 2 ^ 128) (hm : m ≤ 128)
     _ ≤ 2 ^ (128 - m) * 2 ^ m := Nat.mul_le_mul_right _ hq
     _ = 2 ^ 128 := hsplit.symm
 
-/-- After `k` increments, the low `m` bits hold `x + k mod 2^m`, and the bits above stay. -/
+/-- After `k` increments, the low `m` bits grew by `k` modulo `2^m`, and the bits above stay. -/
 theorem blockToNat_repeat_inc {m : Nat} (hm : m ≤ 128) (T : Block) (k : Nat) :
     blockToNat (Nat.repeat (inc m) k T)
       = blockToNat T / 2 ^ m * 2 ^ m + (blockToNat T % 2 ^ m + k) % 2 ^ m := by
