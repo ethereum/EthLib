@@ -14,8 +14,17 @@ What is proved about RIPEMD-160:
 - Each step with a rotation of 1 to 31 bits permutes the five-word state, and so do both lines.
 - Padding fills whole blocks, with the least zeros that do, and keeps the message and the `0x80` byte in place.
 - Every digest is 20 bytes.
+- One block's compression, read as 32-bit vectors, is the compression of a model of the pseudo-code.
 
-This does not prove that the hash equals a second, independent model of the algorithm.
+The model follows the authors' pseudo-code over 32-bit vectors.
+
+It runs both lines in one loop, as the pseudo-code does, and rotates bit vectors.
+
+It reads each message word with its least significant byte first, as MD4 does (RFC 1320 §2).
+
+It shares only the constants `K` and `K'`, the word orders and the rotation amounts with the code.
+
+No theorem states the whole hash, with its padding and its chain of blocks, against the model.
 
 The Python tests of the bindings check the hash against the published test vectors.
 -/
@@ -23,6 +32,80 @@ The Python tests of the bindings check the hash against the published test vecto
 @[expose] public section
 
 namespace EthLib.Cryptography.Hash.Ripemd160
+
+/-! ## The model -/
+
+namespace Spec
+
+/-- A word of RIPEMD-160, whose addition `[+]` is modulo `2^32`. -/
+abbrev Word := BitVec 32
+
+/-- The five variables `A` to `E` of one line of the pseudo-code. -/
+structure Vars where
+  /-- The variable `A`. -/
+  A : Word
+  /-- The variable `B`. -/
+  B : Word
+  /-- The variable `C`. -/
+  C : Word
+  /-- The variable `D`. -/
+  D : Word
+  /-- The variable `E`. -/
+  E : Word
+
+/-- The variables at the start of a block: `A` to `E` take `h0` to `h4`. -/
+def Vars.ofChain (h : Vector Word 5) : Vars := ⟨h[0], h[1], h[2], h[3], h[4]⟩
+
+/-- The nonlinear function `f(j, x, y, z)` of step `j`, chosen by the range of `j`. -/
+def f (j : Nat) (x y z : Word) : Word :=
+  if j ≤ 15 then x ^^^ y ^^^ z
+  else if j ≤ 31 then (x &&& y) ||| (~~~x &&& z)
+  else if j ≤ 47 then (x ||| ~~~y) ^^^ z
+  else if j ≤ 63 then (x &&& z) ||| (y &&& ~~~z)
+  else x ^^^ (y ||| ~~~z)
+
+/-- Step `j` of the left line: `f(j)`, the word `X[r(j)]`, `K(j)` and the rotation `s(j)`.
+
+Then `A := E`, `E := D`, `D := rol_10(C)`, `C := B` and `B := T`. -/
+def stepLeft (X : Vector Word 16) (v : Vars) (j : Fin 80) : Vars :=
+  let T := (v.A + f j v.B v.C v.D + X[r[j]] + (K[j.val / 16]'(by omega)).toBitVec).rotateLeft
+    s[j].toNat + v.E
+  ⟨v.E, T, v.B, v.C.rotateLeft 10, v.D⟩
+
+/-- Step `j` of the right line: `f(79 - j)`, the word `X[r'(j)]`, `K'(j)` and the rotation `s'(j)`.
+
+Then `A' := E'`, `E' := D'`, `D' := rol_10(C')`, `C' := B'` and `B' := T`. -/
+def stepRight (X : Vector Word 16) (v : Vars) (j : Fin 80) : Vars :=
+  let T :=
+    (v.A + f (79 - j.val) v.B v.C v.D + X[r'[j]] + (K'[j.val / 16]'(by omega)).toBitVec).rotateLeft
+      s'[j].toNat + v.E
+  ⟨v.E, T, v.B, v.C.rotateLeft 10, v.D⟩
+
+/-- The loop `for j := 0 to 79`: step `j` of the left line, then step `j` of the right line. -/
+def lines (X : Vector Word 16) (h : Vector Word 5) : Vars × Vars :=
+  (List.finRange 80).foldl (fun lr j => (stepLeft X lr.1 j, stepRight X lr.2 j))
+    (Vars.ofChain h, Vars.ofChain h)
+
+/-- The chaining variable after one block of the pseudo-code.
+
+- `T := h1 [+] C [+] D'`, `h1 := h2 [+] D [+] E'` and `h2 := h3 [+] E [+] A'`.
+- `h3 := h4 [+] A [+] B'`, `h4 := h0 [+] B [+] C'` and `h0 := T`. -/
+def compression (X : Vector Word 16) (h : Vector Word 5) : Vector Word 5 :=
+  let left := (lines X h).1
+  let right := (lines X h).2
+  #v[h[1] + left.C + right.D, h[2] + left.D + right.E, h[3] + left.E + right.A,
+    h[4] + left.A + right.B, h[0] + left.B + right.C]
+
+/-- The sixteen words `X[i][0..15]` of the block at a byte offset.
+
+Each word is four bytes, the least significant first (RFC 1320 §2). -/
+def inputWords (block : ByteArray) (start : Nat) (whole : start + 64 ≤ block.size) :
+    Vector Word 16 :=
+  Vector.ofFn fun i =>
+    block[start + 4 * i.val + 3].toBitVec ++ block[start + 4 * i.val + 2].toBitVec ++
+      block[start + 4 * i.val + 1].toBitVec ++ block[start + 4 * i.val].toBitVec
+
+end Spec
 
 /-! ## The constants -/
 
@@ -219,6 +302,164 @@ theorem line_left_bijective (X : Vector UInt32 16) :
 theorem line_right_bijective (X : Vector UInt32 16) :
     Function.Bijective (line X · K' r' s' true) :=
   line_bijective X K' r' s' true s'_bounds
+
+/-! ## Agreement with the model -/
+
+/-- A five-word state read as the variables of the model. -/
+def toVars (v : Vector UInt32 5) : Spec.Vars :=
+  ⟨v[0].toBitVec, v[1].toBitVec, v[2].toBitVec, v[3].toBitVec, v[4].toBitVec⟩
+
+/-- The function of group `g` is `f(j)` of the model for every step `j` in that group. -/
+private theorem f_toBitVec_of_div (g : Fin 5) (j : Nat) (hg : j / 16 = g.val) (x y z : UInt32) :
+    (f g x y z).toBitVec = Spec.f j x.toBitVec y.toBitVec z.toBitVec := by
+  match g with
+  | 0 =>
+    have : j / 16 = 0 := hg
+    rw [Spec.f, ite_eq_left (by omega)]
+    simp [f]
+  | 1 =>
+    have : j / 16 = 1 := hg
+    rw [Spec.f, ite_eq_right (by omega), ite_eq_left (by omega)]
+    simp [f]
+  | 2 =>
+    have : j / 16 = 2 := hg
+    rw [Spec.f, ite_eq_right (by omega), ite_eq_right (by omega), ite_eq_left (by omega)]
+    simp [f]
+  | 3 =>
+    have : j / 16 = 3 := hg
+    rw [Spec.f, ite_eq_right (by omega), ite_eq_right (by omega), ite_eq_right (by omega),
+      ite_eq_left (by omega)]
+    simp [f]
+  | 4 =>
+    have : j / 16 = 4 := hg
+    rw [Spec.f, ite_eq_right (by omega), ite_eq_right (by omega), ite_eq_right (by omega),
+      ite_eq_right (by omega)]
+    simp [f]
+
+/-- The group of step `j` gives `f(j)` of the model, and the reversed group gives `f(79 - j)`. -/
+theorem f_toBitVec (j : Fin 80) (x y z : UInt32) :
+    (f ⟨j.val / 16, by omega⟩ x y z).toBitVec = Spec.f j x.toBitVec y.toBitVec z.toBitVec ∧
+      (f ⟨4 - j.val / 16, by omega⟩ x y z).toBitVec =
+        Spec.f (79 - j.val) x.toBitVec y.toBitVec z.toBitVec :=
+  ⟨f_toBitVec_of_div _ j rfl x y z, f_toBitVec_of_div _ (79 - j.val) (by simp; omega) x y z⟩
+
+/-- Folding two independent updates over a pair is folding each over its own component. -/
+private theorem foldl_pair {α β γ : Type} (F : α → γ → α) (G : β → γ → β) :
+    ∀ (xs : List γ) (a : α) (b : β),
+      xs.foldl (fun p j => (F p.1 j, G p.2 j)) (a, b) = (xs.foldl F a, xs.foldl G b)
+  | [], _, _ => rfl
+  | j :: js, a, b => foldl_pair F G js (F a j) (G b j)
+
+/-- A map that turns each update into another carries a fold to the other fold. -/
+private theorem foldl_hom {α β γ : Type} (φ : α → β) (F : α → γ → α) (G : β → γ → β)
+    (hφ : ∀ a j, φ (F a j) = G (φ a) j) :
+    ∀ (xs : List γ) (a : α), φ (xs.foldl F a) = xs.foldl G (φ a)
+  | [], _ => rfl
+  | j :: js, a => by rw [List.foldl_cons, List.foldl_cons, foldl_hom φ F G hφ js, hφ]
+
+/-- Step `j` of the left line is step `j` of the left line of the model. -/
+theorem step_left_toVars (X : Vector UInt32 16) (v : Vector UInt32 5) (j : Fin 80) :
+    toVars (step ⟨j.val / 16, by omega⟩ v X[r[j]] K[(⟨j.val / 16, by omega⟩ : Fin 5)] s[j]) =
+      Spec.stepLeft (X.map UInt32.toBitVec) (toVars v) j := by
+  have hf (x y z : UInt32) := (f_toBitVec j x y z).1
+  have hs (x : UInt32) : (rol x s[j.val]).toBitVec = x.toBitVec.rotateLeft s[j.val].toNat :=
+    rol_toBitVec x s[j] (s_bounds j).1 (s_bounds j).2
+  have h10 (x : UInt32) : (rol x 10).toBitVec = x.toBitVec.rotateLeft 10 :=
+    rol_toBitVec x 10 (by decide) (by decide)
+  simp [step, toVars, Spec.stepLeft, hf, hs, h10]
+
+/-- Step `j` of the right line is step `j` of the right line of the model. -/
+theorem step_right_toVars (X : Vector UInt32 16) (v : Vector UInt32 5) (j : Fin 80) :
+    toVars (step ⟨4 - j.val / 16, by omega⟩ v X[r'[j]] K'[(⟨j.val / 16, by omega⟩ : Fin 5)] s'[j]) =
+      Spec.stepRight (X.map UInt32.toBitVec) (toVars v) j := by
+  have hf (x y z : UInt32) := (f_toBitVec j x y z).2
+  have hs (x : UInt32) : (rol x s'[j.val]).toBitVec = x.toBitVec.rotateLeft s'[j.val].toNat :=
+    rol_toBitVec x s'[j] (s'_bounds j).1 (s'_bounds j).2
+  have h10 (x : UInt32) : (rol x 10).toBitVec = x.toBitVec.rotateLeft 10 :=
+    rol_toBitVec x 10 (by decide) (by decide)
+  simp [step, toVars, Spec.stepRight, hf, hs, h10]
+
+/-- The loop of the model runs the left line and the right line of the code side by side. -/
+theorem lines_toVars (X : Vector UInt32 16) (h : Vector UInt32 5) :
+    Spec.lines (X.map UInt32.toBitVec) (h.map UInt32.toBitVec) =
+      (toVars (line X h K r s false), toVars (line X h K' r' s' true)) := by
+  have hstart : Spec.Vars.ofChain (h.map UInt32.toBitVec) = toVars h := by
+    simp [Spec.Vars.ofChain, toVars]
+  unfold Spec.lines line
+  rw [foldl_pair, hstart]
+  simp only [Bool.false_eq_true, ↓reduceIte]
+  rw [foldl_hom toVars _ _ (step_left_toVars X), foldl_hom toVars _ _ (step_right_toVars X)]
+
+/-- Four bytes read least significant first are the four bytes concatenated, the last highest. -/
+theorem little32_toBitVec (block : ByteArray) (start : Nat) (within : start + 4 ≤ block.size) :
+    (little32 block start within).toBitVec =
+      block[start + 3].toBitVec ++ block[start + 2].toBitVec ++ block[start + 1].toBitVec ++
+        block[start].toBitVec := by
+  refine BitVec.eq_of_getLsbD_eq fun i hi => ?_
+  simp only [little32, UInt32.toBitVec_or, UInt32.toBitVec_shiftLeft, BitVec.getLsbD_or]
+  simp only [BitVec.getLsbD_append]
+  -- Bit `i` comes from byte `i / 8`, and every other byte is zero there.
+  by_cases h8 : i < 8
+  · simp [hi, h8, (by omega : i < 16), (by omega : i < 24)]
+  by_cases h16 : i < 16
+  · simp [hi, h8, h16, (by omega : i < 24), (by omega : i - 8 < 8),
+      BitVec.getLsbD_of_ge _ i (by omega : 8 ≤ i)]
+  by_cases h24 : i < 24
+  · simp [hi, h8, h16, h24, decide_eq_false (by omega : ¬i - 8 < 8), (by omega : 8 ≤ i - 8),
+      (by omega : i - 8 - 8 = i - 16),
+      (by omega : i - 16 < 8), BitVec.getLsbD_of_ge _ i (by omega : 8 ≤ i)]
+  · simp [hi, h8, h16, h24, decide_eq_false (by omega : ¬i - 8 < 8), (by omega : 8 ≤ i - 8),
+      (by omega : i - 8 - 8 = i - 16),
+      decide_eq_false (by omega : ¬i - 16 < 8), (by omega : i - 16 - 8 = i - 24),
+      BitVec.getLsbD_of_ge _ i (by omega : 8 ≤ i),
+      BitVec.getLsbD_of_ge _ (i - 16) (by omega : 8 ≤ i - 16)]
+
+/-- The final mix of the chaining variable with both lines, read as 32-bit vectors. -/
+private theorem combine_toBitVec (h left right : Vector UInt32 5) :
+    (#v[h[1] + left[2] + right[3], h[2] + left[3] + right[4], h[3] + left[4] + right[0],
+        h[4] + left[0] + right[1], h[0] + left[1] + right[2]] : Vector UInt32 5).map
+      UInt32.toBitVec =
+      #v[(h.map UInt32.toBitVec)[1] + (toVars left).C + (toVars right).D,
+        (h.map UInt32.toBitVec)[2] + (toVars left).D + (toVars right).E,
+        (h.map UInt32.toBitVec)[3] + (toVars left).E + (toVars right).A,
+        (h.map UInt32.toBitVec)[4] + (toVars left).A + (toVars right).B,
+        (h.map UInt32.toBitVec)[0] + (toVars left).B + (toVars right).C] := by
+  simp [toVars]
+
+/-- The left line of the code, read as the variables of the model, is the left line of the model. -/
+private theorem toVars_line_left (X : Vector UInt32 16) (h : Vector UInt32 5) :
+    toVars (line X h K r s false) =
+      (Spec.lines (X.map UInt32.toBitVec) (h.map UInt32.toBitVec)).1 := by
+  rw [lines_toVars]
+
+/-- The right line of the code, read as variables of the model, is the right line of the model. -/
+private theorem toVars_line_right (X : Vector UInt32 16) (h : Vector UInt32 5) :
+    toVars (line X h K' r' s' true) =
+      (Spec.lines (X.map UInt32.toBitVec) (h.map UInt32.toBitVec)).2 := by
+  rw [lines_toVars]
+
+/-- The sixteen words the code reads from a block are the words of the model. -/
+private theorem words_toBitVec (block : ByteArray) (start : Nat) (whole : start + 64 ≤ block.size)
+    (within : ∀ j : Fin 16, start + 4 * j.val + 4 ≤ block.size) :
+    (Vector.ofFn fun j : Fin 16 => little32 block (start + 4 * j.val) (within j)).map
+      UInt32.toBitVec =
+      Spec.inputWords block start whole := by
+  ext i hi
+  simp [Spec.inputWords, little32_toBitVec]
+
+/-- The compression of one block, read as 32-bit vectors, is the compression of the model.
+
+The model reads the sixteen words of the block least significant byte first.
+
+This holds for every chaining variable and every block. -/
+theorem compress_toBitVec (h : Vector UInt32 5) (block : ByteArray) (start : Nat)
+    (whole : start + 64 ≤ block.size) :
+    (compress h block start whole).map UInt32.toBitVec =
+      Spec.compression (Spec.inputWords block start whole) (h.map UInt32.toBitVec) := by
+  simp only [compress]
+  -- Turn each line of the code into the line of the model, then read the words as the model does.
+  rw [combine_toBitVec, toVars_line_left, toVars_line_right, words_toBitVec block start whole,
+    Spec.compression]
 
 /-! ## Padding -/
 
