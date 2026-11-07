@@ -16,6 +16,12 @@ The withdrawal step and a change of credentials keep the sizes of the registry a
 A change of credentials checks the key and the signature of the change.
 
 It then gives the validator credentials that name the address of the change.
+
+A validator can withdraw its whole balance exactly when its credentials, epoch and balance allow it.
+
+A full payload starts the next sweep after its last withdrawal, before the wrap at the registry.
+
+Otherwise the next sweep starts one sweep after the start of the last one.
 -/
 
 @[expose] public section
@@ -884,5 +890,46 @@ theorem processWithdrawals_balance {state after : BeaconState preset fork}
     (by simpa using bounded)
   rw [carried, same]
   simpa using lowered
+
+/-! ## The next sweep -/
+
+/-- A full payload starts the next sweep after the validator of its last withdrawal.
+
+The index is that before the sweep wraps around the registry.
+
+An overflow of the index is an error. -/
+theorem nextSweepStart_of_full {state : BeaconState preset fork} {capella : .shapella ≤ fork}
+    {withdrawals : Array Withdrawal} {last : Withdrawal} (final : withdrawals.back? = some last)
+    (full : withdrawals.size = preset.MAX_WITHDRAWALS_PER_PAYLOAD.toNat) :
+    nextSweepStart state capella withdrawals = liftArith (addChecked last.validatorIndex 1) := by
+  simp [nextSweepStart, final, full]
+
+/-- A payload that is not full starts the next sweep one sweep after the start of this one.
+
+The index is that before the sweep wraps around the registry.
+
+An overflow of the index is an error. -/
+theorem nextSweepStart_of_ne {state : BeaconState preset fork} {capella : .shapella ≤ fork}
+    {withdrawals : Array Withdrawal}
+    (notFull : withdrawals.size ≠ preset.MAX_WITHDRAWALS_PER_PAYLOAD.toNat) :
+    nextSweepStart state capella withdrawals = liftArith
+      (addChecked (state.nextWithdrawalValidatorIndex capella)
+        preset.MAX_VALIDATORS_PER_WITHDRAWALS_SWEEP) := by
+  unfold nextSweepStart
+  split
+  · simp [notFull]
+  · rfl
+
+/-! ## Full withdrawals -/
+
+/-- A validator can withdraw its whole balance exactly under three conditions.
+
+Its credentials name an address, it is withdrawable by the epoch, and its balance is not zero. -/
+theorem isFullyWithdrawableValidator_eq_true_iff {fork : Base.Fork} {validator : Validator}
+    {balance : Gwei} {epoch : Epoch} :
+    isFullyWithdrawableValidator fork validator balance epoch = true ↔
+      hasWithdrawalAddress fork validator = true ∧ validator.withdrawableEpoch ≤ epoch ∧
+        0 < balance := by
+  simp [isFullyWithdrawableValidator, and_assoc]
 
 end EthLib.Consensus

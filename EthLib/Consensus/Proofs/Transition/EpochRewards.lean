@@ -24,6 +24,10 @@ The inactivity deltas hold no reward.
 From Altair, a validator with a timely target pays no inactivity penalty.
 
 The first epoch has no rewards, and the step keeps one balance for each validator.
+
+The finality delay is the distance from the finalized epoch, and the leak is a delay above a limit.
+
+The earliest inclusions have one entry for each validator, and each comes from a signed attestation.
 -/
 
 @[expose] public section
@@ -348,5 +352,77 @@ theorem processRewardsAndPenalties_sameSizes {config : Config}
   · simp only [bind_ok_iff] at computed
     obtain ⟨_, _, applied⟩ := computed
     exact sameSizes_applyAllDeltas applied
+
+/-! ## Finality delay and the inactivity leak -/
+
+/-- The finality delay exists exactly when the finalized epoch is not after the previous epoch.
+
+It is then the difference of the two. -/
+theorem getFinalityDelay_ok_iff {delay : Epoch} :
+    getFinalityDelay state = .ok delay ↔
+      state.finalizedCheckpoint.epoch.toNat ≤ (getPreviousEpoch state).toNat ∧
+        delay.toNat = (getPreviousEpoch state).toNat - state.finalizedCheckpoint.epoch.toNat := by
+  unfold getFinalityDelay
+  rw [liftAccessor_ok, liftArith, mapError_ok_iff, subChecked_ok_iff]
+
+/-- The chain leaks exactly when its finality delay exists and exceeds the fixed number of epochs.
+
+The answer says whether it does. -/
+theorem isInInactivityLeak_ok_iff {leak : Bool} :
+    isInInactivityLeak state = .ok leak ↔
+      ∃ delay, getFinalityDelay state = .ok delay ∧
+        (leak = true ↔ preset.MIN_EPOCHS_TO_INACTIVITY_PENALTY < delay) := by
+  unfold isInInactivityLeak
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq]
+  constructor
+  · rintro ⟨delay, found, rfl⟩
+    exact ⟨delay, found, by simp⟩
+  · rintro ⟨delay, found, iff⟩
+    refine ⟨delay, found, ?_⟩
+    cases leak <;> simp_all
+
+/-! ## The earliest inclusion of each signer -/
+
+/-- The earliest inclusions have one entry for each validator.
+
+An entry that holds an attestation holds the attestation of one of the signed pairs. -/
+theorem earliestInclusions_size_and_mem {size : Nat}
+    {signed : Array (PendingAttestation preset × List ValidatorIndex)} :
+    (earliestInclusions size signed).size = size ∧
+      ∀ (i : Nat) (a : PendingAttestation preset),
+        (earliestInclusions size signed)[i]? = some (some a) →
+          ∃ signers, (a, signers) ∈ signed.toList := by
+  let Inv (best : Array (Option (PendingAttestation preset))) : Prop :=
+    best.size = size ∧ ∀ (i : Nat) (a : PendingAttestation preset), best[i]? = some (some a) →
+      ∃ signers, (a, signers) ∈ signed.toList
+  suffices h : Inv (earliestInclusions size signed) from h
+  unfold earliestInclusions
+  rw [← Array.foldl_toList]
+  -- The start holds no attestation.
+  refine List.foldlRecOn (motive := Inv) _ _ ⟨by simp, fun i a found => ?_⟩ ?_
+  · rw [Array.getElem?_replicate] at found
+    split at found <;> cases found
+  rintro best ⟨sized, kept⟩ ⟨attestation, signers⟩ pair
+  refine List.foldlRecOn (motive := Inv) signers _ ⟨sized, kept⟩
+    fun best ⟨sized, kept⟩ index _ => ?_
+  -- Each way of updating the entry of a signer keeps the size and the origin of the entries.
+  have put : ∀ i, Inv (best.setIfInBounds i (some attestation)) := by
+    intro i
+    refine ⟨by simpa using sized, fun j a found => ?_⟩
+    rw [Array.getElem?_setIfInBounds] at found
+    split at found
+    · split at found
+      · exact ⟨signers, by cases found; exact pair⟩
+      · cases found
+    · exact kept j a found
+  show Inv (match best.getD index.toNat none with
+    | some kept => if attestation.inclusionDelay < kept.inclusionDelay then
+        best.setIfInBounds index.toNat (some attestation) else best
+    | none => best.setIfInBounds index.toNat (some attestation))
+  split
+  · split
+    · exact put _
+    · exact ⟨sized, kept⟩
+  · exact put _
 
 end EthLib.Consensus
