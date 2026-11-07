@@ -7,7 +7,7 @@ public import EthLib.Execution.Proofs.Evm.Interpreter
 
 A program logic over EVM bytecode reasons about the frames that one frame goes through.
 
-A step of the frame runs the opcode at the program counter, with `step` of the interpreter.
+A step of the frame runs the opcode at the program counter, with the step of the interpreter.
 
 It gives the next frame, or a failure that halts the frame exceptionally, as the loop does.
 
@@ -17,9 +17,9 @@ So the relation covers frames that send no message, and says nothing past a call
 
 External calls and reentrancy are out of the scope of this logic.
 
-`runFrame`, the loop of the interpreter, follows these steps.
+The loop of the interpreter follows these steps.
 
-So a frame that reaches a stopped frame is the result of `runFrame`.
+So a frame that reaches a stopped frame is the result of the loop.
 
 That holds whatever its runner of messages and its bound on their gas.
 

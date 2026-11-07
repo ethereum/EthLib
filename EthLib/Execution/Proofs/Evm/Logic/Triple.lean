@@ -5,7 +5,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Reach
 /-!
 # Proofs: triples over the frames of the EVM
 
-A triple `Hoare fork P Q` says: from every frame of `P`, the steps reach a frame of `Q`.
+A triple says that from every frame of its precondition, the steps reach one of its postcondition.
 
 It is total correctness for the frames that send no message: the reached frame exists.
 
@@ -15,9 +15,9 @@ But a run can end in an exceptional halt, such as out of gas.
 
 So a postcondition that asks for a normal halt needs a precondition with enough gas.
 
-`Spec fork P Q` asks for a stopped frame, the end of the run.
+A specification asks for a stopped frame, the end of the run.
 
-The steps are deterministic, so that frame is the one result of the run, which `runFrame` gives.
+The steps are deterministic, so that frame is the one result of the loop of the interpreter.
 
 The rules compose triples in sequence, weaken them, and carry an invariant of every step along.
 -/
@@ -65,8 +65,8 @@ theorem consequence {P P' Q Q' : Evm fork Meter → Prop} (h : Hoare fork P Q)
     let ⟨after, hr, hq⟩ := h evm (pre evm hp)
     ⟨after, hr, post after hq⟩
 
-/-- Frame: a predicate that every step keeps holds at both ends of a triple. -/
-theorem frame {P Q R : Evm fork Meter → Prop} (h : Hoare fork P Q)
+/-- Invariant: a predicate that every step keeps holds at both ends of a triple. -/
+theorem invariant {P Q R : Evm fork Meter → Prop} (h : Hoare fork P Q)
     (keeps : ∀ {a b}, Step fork a b → R a → R b) :
     Hoare fork (fun evm => P evm ∧ R evm) (fun evm => Q evm ∧ R evm) :=
   fun evm ⟨hp, hr⟩ =>
@@ -82,10 +82,6 @@ theorem cases {P₁ P₂ Q : Evm fork Meter → Prop} (h₁ : Hoare fork P₁ Q)
 end Hoare
 
 namespace Spec
-
-/-- A specification is a triple that ends in a stopped frame. -/
-theorem of_hoare {P Q : Evm fork Meter → Prop}
-    (h : Hoare fork P fun evm => evm.running = false ∧ Q evm) : Spec fork P Q := h
 
 /-- A triple to a frame from which the specification holds. -/
 theorem seq {P Q R : Evm fork Meter → Prop} (first : Hoare fork P Q) (second : Spec fork Q R) :

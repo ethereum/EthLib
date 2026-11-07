@@ -6,16 +6,16 @@ public import EthLib.Execution.Proofs.Evm.Instructions.MemoryData
 /-!
 # Proofs: a contract that returns 42
 
-The bytecode `0x602a60005260206000f3` is the program `mstore(0, 42) return(0, 32)`:
+This example shows that the logic proves the specification of a whole contract.
 
-```text
-0  60 2a   PUSH1 0x2a
-2  60 00   PUSH1 0
-4  52      MSTORE
-5  60 20   PUSH1 0x20
-7  60 00   PUSH1 0
-9  f3      RETURN
-```
+The bytecode `0x602a60005260206000f3` is the program `mstore(0, 42) return(0, 32)`.
+
+- At 0, `60 2a` is PUSH1 0x2a.
+- At 2, `60 00` is PUSH1 0.
+- At 4, `52` is MSTORE.
+- At 5, `60 20` is PUSH1 0x20.
+- At 7, `60 00` is PUSH1 0.
+- At 9, `f3` is RETURN.
 
 It writes the word 42 at offset 0 of memory, then returns those 32 bytes.
 
@@ -23,7 +23,9 @@ It costs 18 gas: four pushes of 3, an MSTORE of 3, and the growth of memory to o
 
 Its RETURN costs 0, and grows nothing.
 
-The prices are those of Appendix G of the Yellow Paper, Shanghai version, as `GasCosts` writes them.
+The prices are those of the gas constants of the library, with one counter of gas.
+
+That is the meter of every fork before Glamsterdam.
 
 The specification: a frame starts this code at the program counter 0, with an empty stack.
 
@@ -31,7 +33,7 @@ With empty memory and at least 18 gas, it halts normally.
 
 It returns the 32 big-endian bytes of 42, keeps 18 gas less, and keeps its state and substate.
 
-The proof runs the code one opcode at a time, then carries the result to `runFrame`.
+The proof runs the code one opcode at a time, then carries the result to the interpreter loop.
 -/
 
 @[expose] public section
@@ -56,9 +58,7 @@ def MEMORY : ByteArray := memoryWrite (memoryExtend .empty 32) 0 (wordBytes 42)
 
 variable {state : State.TransactionState} {substate : Substate}
 
-/-- The MSTORE of the code writes 42 to empty memory, which grows to one word, for 6 gas.
-
-It rests on `mstoreStep_cons`, with the growth of empty memory worked out. -/
+/-- The MSTORE of the code writes 42 to empty memory, which grows to one word, for 6 gas. -/
 theorem mstore {gas : Nat} (hgas : 6 ≤ gas) :
     Hoare fork (At 4 [0, 42] .empty gas state substate)
       (At 5 [] MEMORY (gas - 6) state substate) := by

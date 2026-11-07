@@ -19,9 +19,11 @@ They take the frame as it is, with its fields named, so a proof never unfolds a 
 
 This keeps the terms of a long run small: each step rewrites a few fields of the last frame.
 
-The equations are for the meter of one counter of gas, `Nat`, of every fork before Glamsterdam.
+The equations are for the meter of one counter of gas, the meter of every fork before Glamsterdam.
 
-A rule for an opcode is a triple from one frame of a code to the next, such as `push1`.
+At a later fork they hold of that meter, not of the meter of the fork.
+
+A rule for an opcode, such as the rule for PUSH1, is a triple from one frame of a code to the next.
 
 A run of straight-line code is a sequence of such rules, so each rule is checked once on its own.
 -/
@@ -52,11 +54,8 @@ theorem Step.of_code {evm after : Evm fork Meter} {code : ByteArray} {pc : Nat} 
     (running : evm.running = true) (hcode : evm.code = code) (hpc : evm.pc = pc)
     (hlt : pc < code.size) (hbyte : code[pc] = byte) (decoded : Op.ofByte fork byte = some op)
     (hrun : instruction fork op = some run) (ok : run evm = .ok after) : Step fork evm after := by
-  have h : evm.pc < evm.code.size := by rw [hcode, hpc]; exact hlt
-  have hb : evm.code[evm.pc] = byte := by
-    rw [← hbyte]
-    congr 1 <;> first | exact hcode | (subst hcode; exact hpc) | simp [hcode, hpc]
-  exact Step.of_instruction running h (hb ▸ decoded) hrun ok
+  subst hcode hpc
+  exact Step.of_instruction running hlt (by rw [hbyte]; exact decoded) hrun ok
 
 /-- A byte whose opcode dates from Frontier decodes to that opcode at every fork. -/
 theorem ofByte_of_decode {byte : UInt8} {op : Op} (h : Op.decode byte = some op)
@@ -83,41 +82,11 @@ theorem instruction_return : instruction (Meter := Meter) fork .«return» = som
 
 /-! ## The parts of an instruction, with one counter of gas -/
 
-/-- A charge that the gas covers takes it from the counter. -/
-theorem chargeGas_nat {evm : Evm fork Nat} {amount : Nat} (h : amount ≤ evm.gas) :
-    chargeGas evm amount = .ok { evm with gas := evm.gas - amount } := by
-  simp [chargeGas, GasMeter.charge, Nat.not_lt.mpr h, bind, Except.bind, pure, Except.pure]
-
-omit [GasMeter Meter] in
-/-- A push onto a stack that is not full puts the word on top. -/
-theorem pushWord_of_lt {evm : Evm fork Meter} {x : U256}
-    (h : evm.stack.val.length < STACK_LIMIT) :
-    pushWord evm x = .ok { evm with stack := ⟨x :: evm.stack.val, h⟩ } := by
-  simp [pushWord, Stack.push, Nat.ne_of_lt h, bind, Except.bind, pure, Except.pure]
-
-omit [GasMeter Meter] in
-/-- A pop of a stack with a word on top takes that word. -/
-theorem popWord_of_val {evm : Evm fork Meter} {x : U256} {rest : List U256}
-    (h : evm.stack.val = x :: rest) :
-    popWord evm = .ok (x, { evm with stack := ⟨rest, by
-      have := evm.stack.property; rw [h] at this; exact Nat.le_of_succ_le this⟩ }) := by
-  unfold popWord Stack.pop
-  split
-  · rename_i heq
-    rw [heq] at h
-    cases h
-  · rename_i y ys hy heq
-    rw [heq] at h
-    cases h
-    rfl
-
 /-! ## The instructions, with one counter of gas -/
 
 /-- PUSHn, for `n` from 1, with the gas and the room for one word: it pays 3 and pushes `n` bytes.
 
-It then skips those bytes of code.
-
-It is `pushN_of_length_lt` with the charge of one counter of gas worked out. -/
+It then skips those bytes of code. -/
 theorem pushN_nat {evm : Evm fork Nat} {n : Fin 33} (hn : n.val ≠ 0)
     (hgas : OPCODE_PUSH ≤ evm.gas) (hstack : evm.stack.val.length < STACK_LIMIT) :
     pushN n evm = .ok { evm with
