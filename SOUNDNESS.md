@@ -1015,6 +1015,32 @@ The Python suite checks the new state root against the state root of each valid 
 It checks the Eth1 vote, the pending deposit count, the custody requirement, the on-chain aggregate, the sync aggregate and the execution requests.
 The test works out the expected values from the guides, with py_ecc for the aggregate signatures.
 
+### Slashing protection
+
+`Consensus/SlashingProtection.lean` holds the slashing protection of a signer, and the interchange file of EIP-3076 that moves it between clients.
+At the pinned text of the EIP its status is Last Call.
+A signer checks a block against the first two conditions of the EIP, and a vote against the last three.
+The theorems are in `Consensus/Proofs/SlashingProtection.lean`.
+
+`checkBlockSigning_eq_ok_iff` and `checkAttestationSigning_eq_ok_iff` state exactly when each check passes.
+`signBlocks` and `signAttestations` model a signer that checks each message against its record and then records it, from any starting file.
+`signingRoot_eq_of_signAttestations` shows that two votes of such a signer that `isSlashableAttestationData` forbids together have the same signing root.
+`signingRoot_eq_of_signBlocks` shows that two block headers of one slot that it signed have the same signing root.
+`signingRoot_eq_of_processProposerSlashing` shows that the two headers of a valid proposer slashing, both signed by it, are different headers with one signing root.
+These theorems hold for every function that gives the signing root of a message.
+They assume only that every check of the signer passed.
+So a slashable pair of signed messages needs a collision of the signing root, and no theorem bounds the chance of one.
+
+`isSlashableWith_eq_false_of_signAttestations` shows that each signed vote is not slashable with a vote of the starting file, as a record sees it.
+A record holds the epochs of a vote and maybe its signing root, not its data.
+So that comparison reads a double vote through the signing root, and counts a record without a root as a different vote.
+No theorem says what conditions 2, 4 and 5 guarantee across two imported files, which the EIP leaves to the signer.
+`readUInt64_uint64Json` and `readBytes_bytesJson` show that each integer and each byte string of a file reads back as written.
+No theorem says that a whole file reads back.
+
+The Python suite checks each condition and each malformed field against cases worked out from the EIP.
+With release archives enabled, it runs the 38 interchange tests of `eth-clients/slashing-protection-interchange-tests` as a signer that keeps every message.
+
 ### Light client
 
 A light client accepts an update that the sync committee signed, and moves its store by it.
@@ -1269,12 +1295,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 266 operations and 41 size constants.
-The Python extension calls 266 of the operations and 41 of the constants.
+Lean exports 272 operations and 41 size constants.
+The Python extension calls 272 of the operations and 41 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-9014 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (2033), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1141), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (494), `xmss.c` (134).
+9163 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (2161), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1155), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (501), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
