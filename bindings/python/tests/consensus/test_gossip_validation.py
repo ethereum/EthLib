@@ -18,12 +18,12 @@ FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "gossip"
 
 # The topics that EthLib validates, with the first fork of their cases.
 TOPICS = {
-    "attester_slashing": "altair",
-    "proposer_slashing": "altair",
-    "voluntary_exit": "altair",
-    "beacon_block": "altair",
-    "beacon_attestation": "altair",
-    "beacon_aggregate_and_proof": "altair",
+    "attester_slashing": "phase0",
+    "proposer_slashing": "phase0",
+    "voluntary_exit": "phase0",
+    "beacon_block": "phase0",
+    "beacon_attestation": "phase0",
+    "beacon_aggregate_and_proof": "phase0",
     "sync_committee_message": "altair",
     "sync_committee_contribution_and_proof": "altair",
     "bls_to_execution_change": "capella",
@@ -35,7 +35,7 @@ TOPICS = {
     "payload_attestation_message": "gloas",
     "execution_payload_bid": "gloas",
 }
-SPECIFIED = ("altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas")
+SPECIFIED = ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas")
 # The topics whose cases stop at a fork other than Fulu, with their last fork.
 # Blob sidecars travel only at Deneb and Electra.
 # The topics that stop at Gloas wait for their Heze rules.

@@ -175,16 +175,16 @@ A case starts a store from an anchor state and an anchor block, then validates a
 Each message expects to be valid, ignored or rejected, and a failure names its reason.
 The directory keeps the cases of attester slashings, proposer slashings, voluntary exits and changes of BLS credentials.
 It keeps every case of these topics at Capella and Deneb, since Deneb changes the domain of an exit signature.
-At Altair, Bellatrix, Electra and Fulu it keeps the case with one valid message of each topic.
+At Phase 0, Altair, Bellatrix, Electra and Fulu it keeps the case with one valid message of each topic.
 It also keeps the cases of the two sync committee topics, which start at Altair.
 It keeps every case of these two topics at Altair, and the case with one valid message at each later fork.
 It keeps every case of the block topic from Altair to Deneb.
 A block case may import more blocks after the anchor, and mark some as failed or pending.
 It may also give the status of their payloads, and replace the finalized checkpoint.
-At Electra and Fulu it keeps the case with one valid block.
+At Phase 0, Electra and Fulu it keeps the case with one valid block.
 It keeps every case of the attestation and aggregate topics at Altair, Deneb and Electra.
 Deneb changes the window of time of a vote, and Electra moves the committee out of the attestation data.
-At Bellatrix, Capella and Fulu it keeps the case with one valid message of each of these topics.
+At Phase 0, Bellatrix, Capella and Fulu it keeps the case with one valid message of each of these topics.
 It keeps every blob sidecar case at Deneb, and at Electra the valid case and the case of an index past the limit.
 It keeps every Fulu case of the column sidecar topic, with its state.
 It keeps every Fulu case of the partial column topic too.
