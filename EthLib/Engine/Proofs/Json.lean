@@ -578,13 +578,16 @@ theorem uint64_toDigits (what : String) (x : UInt64) :
 
 /-! ## Only the canonical text decodes -/
 
-/-- A code that the decoder reads as a hex digit is the code of the digit of its value. -/
+/-- The fact below, checked by the kernel on each of the 256 codes. -/
 private theorem digitChar_digitValue_lt : ∀ n, n < 256 →
     (hexValue false n.toUInt8).isSome = true →
     digitValue n.toUInt8 < 16 ∧ (Nat.digitChar (digitValue n.toUInt8)).val.toUInt8 = n.toUInt8 ∧
       (n.toUInt8 ≠ 48 → 0 < digitValue n.toUInt8) := by
   decide +kernel
 
+/-- A code that the decoder reads as a hex digit is the code of the digit of its value.
+
+Only the code of `0` has the value zero. -/
 private theorem digitChar_digitValue (c : UInt8) (h : (hexValue false c).isSome = true) :
     digitValue c < 16 ∧ (Nat.digitChar (digitValue c)).val.toUInt8 = c ∧
       (c ≠ 48 → 0 < digitValue c) := by
