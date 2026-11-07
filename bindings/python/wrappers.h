@@ -115,8 +115,9 @@ except_into_pybytes(
   PyObject* error_class
 );
 
-/* The `Array ByteArray` of a successful result as a Python `list` of `bytes`,
- * or NULL with an exception set. */
+/* The `Array ByteArray` of a successful result as a Python `list` of `bytes`.
+ *
+ * On an error it returns NULL with an exception set. */
 PyObject*
 except_into_pybytes_list(
   lean_object* result,
