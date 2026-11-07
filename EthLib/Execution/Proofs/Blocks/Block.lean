@@ -4,6 +4,8 @@ public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Blocks.Block
 public import EthLib.Execution.Proofs.Blocks.Header
 public import EthLib.Execution.Proofs.Blocks.Withdrawal
+public import EthLib.Serialization.Proofs.Rlp.Canonical
+public import EthLib.Serialization.Proofs.Rlp.RoundTrip
 
 /-!
 # Proofs: blocks
@@ -15,6 +17,12 @@ That holds when the codec of its transactions is lawful.
 An item that decodes as a block is the item of that block.
 
 Each ommer that the decoder returns has the fork of its own number.
+
+The bytes of a block decode back to that block when each ommer has the fork of its number.
+
+Bytes that decode as a block are its encoding.
+
+So decoding accepts exactly the encodings of the blocks whose ommers have the fork of their numbers.
 -/
 
 @[expose] public section
@@ -133,5 +141,44 @@ theorem Block.ommer_fork_of_ofItem {forkOf : Nat → Fork} {item : Item} {b : Bl
   intro ommer hm
   obtain ⟨_, -, h⟩ := mapM_ok_mem (mapError_ok_iff.mp hOmmers) ommer hm
   exact (Header.ofItemAtNumber_eq_ok h).2
+
+/-! ## The bytes of a block -/
+
+/-- The bytes of a block decode back to it when each ommer has the fork of its own number. -/
+theorem Block.decode_encode (forkOf : Nat → Fork) {b : Block fork Tx} {bytes : ByteArray}
+    (hOmmers : ∀ ommer ∈ b.ommers, ommer.1 = forkOf ommer.2.number)
+    (h : b.encode = .ok bytes) : Block.decode forkOf bytes = .ok b := by
+  unfold Block.encode at h
+  simp only [Block.decode, Serialization.Rlp.decode_encode _ _ h, bind, Except.bind,
+    Block.ofItem_toItem forkOf b hOmmers]
+
+/-- Bytes that decode as a block are the encoding of that block. -/
+theorem Block.encode_of_decode {forkOf : Nat → Fork} {bytes : ByteArray} {b : Block fork Tx}
+    (h : Block.decode forkOf bytes = .ok b) : b.encode = .ok bytes := by
+  unfold Block.decode at h
+  cases hItem : Serialization.Rlp.decode bytes with
+  | error e => simp [hItem, bind, Except.bind] at h
+  | ok item =>
+    simp only [hItem, bind, Except.bind] at h
+    rw [Block.encode, Block.toItem_of_ofItem h]
+    exact Serialization.Rlp.encode_decode bytes item hItem
+
+/-- Decoding accepts exactly the encodings of the blocks whose ommers have the right forks.
+
+The right fork of an ommer is the fork of its own number. -/
+theorem Block.decode_eq_ok_iff (forkOf : Nat → Fork) (bytes : ByteArray) (b : Block fork Tx) :
+    Block.decode forkOf bytes = .ok b ↔
+      b.encode = .ok bytes ∧ ∀ ommer ∈ b.ommers, ommer.1 = forkOf ommer.2.number := by
+  constructor
+  · intro h
+    refine ⟨Block.encode_of_decode h, ?_⟩
+    unfold Block.decode at h
+    cases hItem : Serialization.Rlp.decode bytes with
+    | error e => simp [hItem, bind, Except.bind] at h
+    | ok item =>
+      simp only [hItem, bind, Except.bind] at h
+      exact Block.ommer_fork_of_ofItem h
+  · rintro ⟨h, hOmmers⟩
+    exact Block.decode_encode forkOf hOmmers h
 
 end EthLib.Execution.Blocks
