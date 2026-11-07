@@ -29,7 +29,7 @@ theorem mul_mul_generator_comm (a b : Fn) :
     toPoint_mul' _ hG, smul_smul, smul_smul, mul_comm]
 
 /-- `0 P = O`, for every point of the curve. -/
-private theorem mul_zero_left {p : Point} (hp : p.isOnCurve = true) : mul 0 p = .infinity := by
+theorem mul_zero_left {p : Point} (hp : p.isOnCurve = true) : mul 0 p = .infinity := by
   apply (toPoint_eq_zero (isOnCurve_mul _ hp)).mp
   rw [toPoint_mul' _ hp]
   simp
