@@ -24,7 +24,8 @@ SELF_BUILD = 2**64 - 1
 # No member of the case sent a list.
 NO_BITS = {"gloas": b"", "heze": bytes(2)}
 
-# The builder index and the value sit after 4 roots, an address and the gas limit of a bid.
+# The builder index sits after four 32-byte fields, an address and the gas limit of a bid.
+# The value sits after the builder index and the slot.
 BUILDER_AT = 4 * 32 + 20 + 8
 VALUE_AT = BUILDER_AT + 2 * 8
 

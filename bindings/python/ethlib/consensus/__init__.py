@@ -1143,7 +1143,7 @@ def get_self_built_execution_payload_bid(
 def get_execution_payload_envelope(
     name: str, fork: str, block: bytes, payload: bytes, requests: bytes
 ) -> bytes:
-    """From Gloas, the envelope of a payload after the block of its bid, as SSZ bytes."""
+    """From Gloas, the envelope that reveals a payload after the block of its bid, as SSZ bytes."""
     return _native.consensus_get_execution_payload_envelope(name, fork, block, payload, requests)
 
 
