@@ -18,6 +18,7 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - A function that returns a known value on every input maps to the list of those values.
 - A part of each output that its input fixes comes out in the order of the inputs.
 - Output `i` is the image of input `i`, for a list, an array or a vector.
+- Two functions that agree on every entry of a vector map it to one result.
 - A failed map fails on some input, and succeeds on every input before it.
 - A property that each step keeps holds after a successful fold.
 
@@ -162,6 +163,26 @@ theorem vector_mapM_ok_getElem {n : Nat} {xs : Vector α n} {ys : Vector β n}
     rfl
   have := mapM_ok_getElem onList i (by simpa using hi)
   simpa using this
+
+/-- Two functions that agree on every entry of a vector map it to one result. -/
+theorem vector_mapM_congr {n : Nat} {xs : Vector α n} {g : α → Except ε β}
+    (agree : ∀ (i : Nat) (hi : i < n), f xs[i] = g xs[i]) : xs.mapM f = xs.mapM g := by
+  have onList : ∀ ys : List α, (∀ x ∈ ys, f x = g x) → ys.mapM f = ys.mapM g := by
+    intro ys
+    induction ys with
+    | nil => intro _; rfl
+    | cons y ys ih =>
+      intro same
+      simp only [List.mapM_cons, same y (by simp), ih fun x member => same x (by simp [member])]
+  have onArray : Vector.toArray <$> xs.mapM f = Vector.toArray <$> xs.mapM g := by
+    rw [Vector.toArray_mapM, Vector.toArray_mapM, Array.mapM_eq_mapM_toList,
+      Array.mapM_eq_mapM_toList, onList]
+    intro x member
+    rw [Array.mem_toList_iff, Vector.mem_toArray_iff, Vector.mem_iff_getElem] at member
+    obtain ⟨i, hi, rfl⟩ := member
+    exact agree i hi
+  cases first : xs.mapM f <;> cases second : xs.mapM g <;>
+    simp_all [Functor.map, Except.map, Vector.toArray_inj]
 
 /-- A successful map over an array keeps its size, and output `i` is the image of input `i`. -/
 theorem array_mapM_ok {xs : Array α} {ys : Array β} (h : xs.mapM f = .ok ys) :

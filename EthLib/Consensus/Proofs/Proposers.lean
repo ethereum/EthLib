@@ -67,7 +67,7 @@ theorem proposerCandidates_spec (gloas : .glamsterdam ≤ fork) {epoch : Epoch}
 theorem proposerDraw_of_pectra {fork' : Base.Fork} (electra : .pectra ≤ fork)
     (electra' : .pectra ≤ fork') (seed : Bytes32) (i : Nat) (balance : Gwei) :
     proposerDraw preset fork seed i balance = proposerDraw preset fork' seed i balance := by
-  simp only [proposerDraw, electra, electra', ↓reduceIte]
+  simp only [proposerDraw, drawAccepts, drawHash, drawsPerHash, electra, electra', ↓reduceIte]
 
 /-- A selection of one candidate that succeeds draws the proposer that the proposer search draws.
 
@@ -82,16 +82,21 @@ theorem proposerSearch_of_balanceWeightedSearch
       validators[indices[k].toNat]? = some validator ∧
         balances.getD k 0 = validator.effectiveBalance) :
     ∀ {bound : (#[] : Array ValidatorIndex).size ≤ 1} {i : Nat}
-      {result : Vector ValidatorIndex 1},
+      {random : { random // random = drawHash fork seed i }} {result : Vector ValidatorIndex 1},
       balanceWeightedSearch preset fork indices balances
           (fun place => (shuffled.getD place 0).toNat)
-          seed 1 #[] bound i = .ok result →
+          seed 1 #[] bound i random = .ok result →
         proposerSearch preset fork validators indices shuffled seed i = .ok result[0] := by
-  intro bound i result found
+  intro bound i random result found
   obtain ⟨left, leftEq⟩ : ∃ left, left = 2 ^ 64 - i := ⟨_, rfl⟩
-  induction left using Nat.strongRecOn generalizing i with
+  induction left using Nat.strongRecOn generalizing i random with
   | _ left ih =>
     unfold balanceWeightedSearch at found
+    -- The carried hash is the hash of the block of the draw, so the draw is the proposer draw.
+    have carried : drawAccepts preset fork random.1 i =
+        proposerDraw preset fork seed i := by
+      rw [random.2]
+      rfl
     split at found
     · simp at *
     simp only [bind, Except.bind] at found
@@ -100,7 +105,7 @@ theorem proposerSearch_of_balanceWeightedSearch
     have candidate : indices.getD (shuffled.getD (i % indices.size) 0).toNat 0 =
         indices[(shuffled.getD (i % indices.size) 0).toNat] := by
       rw [Array.getD_eq_getD_getElem?, Array.getElem?_eq_getElem inside, Option.getD_some]
-    rw [weight] at found
+    rw [weight, carried] at found
     rw [proposerSearch, candidate, registered]
     simp only [bind, Except.bind]
     cases draw : proposerDraw preset fork seed i validator.effectiveBalance with

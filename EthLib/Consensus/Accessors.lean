@@ -277,7 +277,7 @@ def getCommitteeCountPerSlot (state : BeaconState preset fork) (epoch : Epoch) :
 
 /-- The committee of a slot with a given index, cut from active validators in a shuffled order.
 
-The active validators and their shuffle are those of the epoch of the slot.
+It is the committee of the rule when the validators and shuffle are those of the epoch of the slot.
 
 The committees of an epoch are numbered across its slots, in the order of the slots. -/
 def beaconCommitteeOf (state : BeaconState preset fork) (slot : Slot) (index : CommitteeIndex)
@@ -300,31 +300,53 @@ def getBeaconCommittee (state : BeaconState preset fork) (slot : Slot) (index : 
   beaconCommitteeOf state slot index active
     (computeShuffledPermutation preset (UInt64.ofNat active.size) seed)
 
-/-- Whether the draw for candidate number `i` accepts a candidate of an effective balance.
+/-- The number of draws that read one hash: 16 from Electra, 32 before. -/
+def drawsPerHash (fork : Base.Fork) : Nat :=
+  if .pectra ≤ fork then 16 else 32
+
+/-- The hash that draw number `i` reads its random bytes from.
+
+The draws come in blocks of the number of draws per hash, and each block has its own hash. -/
+def drawHash (fork : Base.Fork) (seed : Bytes32) (i : Nat) : Bytes32 :=
+  Cryptography.Hash.Sha256.hash32
+    ⟨seed.toArray ++ (uintToBytes 8 (i / drawsPerHash fork)).toArray⟩
+
+/-- A draw that does not start a block reads the hash of the draw before it. -/
+theorem drawHash_succ {fork : Base.Fork} {seed : Bytes32} {i : Nat}
+    (inside : (i + 1) % drawsPerHash fork ≠ 0) :
+    drawHash fork seed (i + 1) = drawHash fork seed i := by
+  have same : (i + 1) / drawsPerHash fork = i / drawsPerHash fork :=
+    Nat.succ_div_of_not_dvd fun divides => inside (Nat.mod_eq_zero_of_dvd divides)
+  simp only [drawHash, same]
+
+/-- Whether draw number `i` accepts a candidate of an effective balance, from its hash.
 
 The draw accepts with a chance of the balance over the largest effective balance.
 
-Before Electra it compares with one random byte.
+Before Electra it compares with byte `i mod 32` of the hash.
 
-From Electra it compares with two random bytes, little-endian, as [EIP-7251] specifies.
+From Electra it compares with the two bytes from `2 * (i mod 16)`, little-endian, per [EIP-7251].
 
 [EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#specification
 -/
-def proposerDraw (preset : Preset) (fork : Base.Fork) (seed : Bytes32) (i : Nat)
+def drawAccepts (preset : Preset) (fork : Base.Fork) (random : Bytes32) (i : Nat)
     (effectiveBalance : Gwei) : Except AccessorError Bool := liftArith do
   if .pectra ≤ fork then
-    -- One hash gives 16 random values of two bytes.
-    let random := Cryptography.Hash.Sha256.hash32 ⟨seed.toArray ++ (uintToBytes 8 (i / 16)).toArray⟩
     have small : i % 16 * 2 + 1 < 32 := by have := Nat.mod_lt i (show 16 > 0 by decide); omega
     let value := random[i % 16 * 2].toUInt64 + 256 * random[i % 16 * 2 + 1].toUInt64
     return (← mulChecked preset.MAX_EFFECTIVE_BALANCE_ELECTRA value) ≤
       (← mulChecked effectiveBalance (2 ^ 16 - 1))
   else
-    -- One hash gives 32 random bytes.
-    let random := Cryptography.Hash.Sha256.hash32 ⟨seed.toArray ++ (uintToBytes 8 (i / 32)).toArray⟩
     let value := (random[i % 32]'(Nat.mod_lt i (by decide))).toUInt64
     return (← mulChecked preset.MAX_EFFECTIVE_BALANCE value) ≤
       (← mulChecked effectiveBalance (2 ^ 8 - 1))
+
+/-- Whether the draw for candidate number `i` accepts a candidate of an effective balance.
+
+It reads the hash of the block of the draw. -/
+def proposerDraw (preset : Preset) (fork : Base.Fork) (seed : Bytes32) (i : Nat)
+    (effectiveBalance : Gwei) : Except AccessorError Bool :=
+  drawAccepts preset fork (drawHash fork seed i) i effectiveBalance
 
 /-- The search for a proposer, from candidate number `i` on.
 

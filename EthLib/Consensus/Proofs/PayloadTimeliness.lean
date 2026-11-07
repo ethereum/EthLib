@@ -23,6 +23,8 @@ Moving the window shifts every committee back by one epoch.
 
 The last epoch of the moved window holds the computed committees of the epoch after the lookahead.
 
+It computes them with one seed and one shuffle, and gives what each committee alone gives.
+
 A payload attestation changes nothing in the state.
 -/
 
@@ -41,8 +43,9 @@ theorem mem_of_balanceWeightedSearch {indices : Array ValidatorIndex} {balances 
     {order : Nat → Nat} {seed : Bytes32} {size : Nat} (nonempty : 0 < indices.size)
     (positions : ∀ place < indices.size, order place < indices.size) :
     ∀ {selected : Array ValidatorIndex} {bound : selected.size ≤ size} {i : Nat}
+      {random : { random // random = drawHash fork seed i }}
       {result : Vector ValidatorIndex size}, (∀ index ∈ selected, index ∈ indices) →
-      balanceWeightedSearch preset fork indices balances order seed size selected bound i =
+      balanceWeightedSearch preset fork indices balances order seed size selected bound i random =
         .ok result →
       ∀ index ∈ result.toList, index ∈ indices := by
   -- The candidate of every draw is one of the indices.
@@ -51,10 +54,10 @@ theorem mem_of_balanceWeightedSearch {indices : Array ValidatorIndex} {balances 
     have lt := positions _ (Nat.mod_lt j nonempty)
     rw [Array.getD_eq_getD_getElem?, Array.getElem?_eq_getElem lt, Option.getD_some]
     exact Array.getElem_mem lt
-  intro selected bound i result start found
+  intro selected bound i random result start found
   -- Each step either returns or moves closer to the end of the counter.
   obtain ⟨left, leftEq⟩ : ∃ left, left = 2 ^ 64 - i := ⟨_, rfl⟩
-  induction left using Nat.strongRecOn generalizing selected i with
+  induction left using Nat.strongRecOn generalizing selected i random with
   | _ left ih =>
     unfold balanceWeightedSearch at found
     split at found
@@ -81,12 +84,14 @@ The search reads the order only at a draw number modulo that number. -/
 theorem balanceWeightedSearch_congr {indices : Array ValidatorIndex} {balances : Array Gwei}
     {first second : Nat → Nat} {seed : Bytes32} {size : Nat} (nonempty : 0 < indices.size)
     (agree : ∀ place < indices.size, first place = second place) :
-    ∀ {selected : Array ValidatorIndex} {bound : selected.size ≤ size} {i : Nat},
-      balanceWeightedSearch preset fork indices balances first seed size selected bound i =
-        balanceWeightedSearch preset fork indices balances second seed size selected bound i := by
-  intro selected bound i
+    ∀ {selected : Array ValidatorIndex} {bound : selected.size ≤ size} {i : Nat}
+      {random : { random // random = drawHash fork seed i }},
+      balanceWeightedSearch preset fork indices balances first seed size selected bound i random =
+        balanceWeightedSearch preset fork indices balances second seed size selected bound i
+          random := by
+  intro selected bound i random
   obtain ⟨left, leftEq⟩ : ∃ left, left = 2 ^ 64 - i := ⟨_, rfl⟩
-  induction left using Nat.strongRecOn generalizing selected i with
+  induction left using Nat.strongRecOn generalizing selected i random with
   | _ left ih =>
     unfold balanceWeightedSearch
     split
@@ -143,7 +148,7 @@ theorem slotCommitteeMembers_eq (state : BeaconState preset fork) (slot : Slot) 
       (List.range (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat).foldlM
         (fun members index => return members ++ (← getBeaconCommittee state slot index.toUInt64))
         #[] := by
-  unfold slotCommitteeMembers
+  unfold slotCommitteeMembers attesterShuffle slotCommitteeMembersOf
   cases seedOk : getSeed state (computeEpochAtSlot preset slot) DOMAIN_BEACON_ATTESTER with
   | error e =>
     -- The first committee reads the same seed, so both sides fail with its error.
@@ -153,7 +158,7 @@ theorem slotCommitteeMembers_eq (state : BeaconState preset fork) (slot : Slot) 
     rw [count, List.range_succ_eq_map, List.foldlM_cons]
     simp [getBeaconCommittee, seedOk, bind, Except.bind]
   | ok seed =>
-    simp only [seedOk, bind, Except.bind]
+    simp only [bind, Except.bind, pure, Except.pure]
     congr 1
     funext members index
     simp [getBeaconCommittee, seedOk, bind, Except.bind]
@@ -164,9 +169,11 @@ theorem mem_of_computePtc {state : BeaconState preset fork} {slot : Slot}
     (computed : computePtc state slot = .ok committee) :
     ∃ members, slotCommitteeMembers state slot = .ok members ∧
       ∀ index ∈ committee.toList, index ∈ members := by
-  simp only [computePtc, bind_ok_iff] at computed
-  obtain ⟨_, _, members, found, selected⟩ := computed
-  exact ⟨members, found, mem_of_computeBalanceWeightedSelection selected⟩
+  simp only [computePtc, computePtcOf, bind_ok_iff] at computed
+  obtain ⟨_, _, ⟨active, shuffled⟩, shuffleOk, members, found, selected⟩ := computed
+  refine ⟨members, ?_, mem_of_computeBalanceWeightedSelection selected⟩
+  simp only [slotCommitteeMembers, shuffleOk, bind, Except.bind]
+  exact found
 
 /-- Each attester of a committee is a member of it. -/
 theorem mem_of_ptcAttesters {committee : PayloadTimelinessCommittee preset}
@@ -219,6 +226,70 @@ theorem processPayloadAttestation_eq {config : Config} {checks : SignatureChecks
   obtain ⟨_, _, _, _, _, _, _, _, _, _, same⟩ := computed
   exact same.symm
 
+/-- A position of the window within its first epoch names a slot of that epoch. -/
+theorem computeEpochAtSlot_ptcWindowSlot {epoch : Epoch} {position : Nat} {slot : Slot}
+    (first : position < preset.SLOTS_PER_EPOCH.toNat)
+    (computed : ptcWindowSlot preset epoch position = .ok slot) :
+    computeEpochAtSlot preset slot = epoch := by
+  simp only [ptcWindowSlot, liftArith, mapError_ok_iff, bind_ok_iff, addChecked_ok_iff,
+    computeStartSlotAtEpoch, mulChecked_ok_iff] at computed
+  obtain ⟨same, ⟨_, sameNat⟩, start, ⟨_, startNat⟩, _, slotNat⟩ := computed
+  have smallPosition : position < 2 ^ 64 :=
+    Nat.lt_trans first preset.SLOTS_PER_EPOCH.toNat_lt
+  rw [Nat.div_eq_of_lt first, Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.zero_mod,
+    Nat.add_zero] at sameNat
+  rw [Nat.mod_eq_of_lt first, Nat.toUInt64_eq, UInt64.toNat_ofNat',
+    Nat.mod_eq_of_lt smallPosition] at slotNat
+  apply UInt64.toNat_inj.mp
+  have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := Nat.lt_of_le_of_lt (Nat.zero_le _) first
+  rw [computeEpochAtSlot, UInt64.toNat_div, slotNat, startNat, sameNat, Nat.add_comm,
+    Nat.add_mul_div_right _ _ positive, Nat.div_eq_of_lt first, Nat.zero_add]
+
+/-- Moving the window computes each new committee as the committee of its slot.
+
+The new committees share the two seeds and the shuffle of their epoch, with the same result.
+
+The two sides fail with the same error too. -/
+theorem processPtcWindow_eq (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
+    processPtcWindow state gloas = (do
+      let window := state.ptcWindow gloas
+      let perEpoch := preset.SLOTS_PER_EPOCH.toNat
+      let nextEpoch ← liftArith do
+        addChecked (← addChecked (getCurrentEpoch state) preset.MIN_SEED_LOOKAHEAD) 1
+      let moved ← (Vector.range _).mapM fun position =>
+        if kept : position + perEpoch < _ then pure window[position + perEpoch]
+        else do
+          computePtc state (← ptcWindowSlot preset nextEpoch (position + perEpoch - window.size))
+      return { state with ptcWindow := fun _ => moved }) := by
+  unfold processPtcWindow
+  simp only [bind, Except.bind]
+  split
+  · rfl
+  rename_i nextEpoch _
+  rw [vector_mapM_congr (g := fun position =>
+      if kept : position + preset.SLOTS_PER_EPOCH.toNat < _ then
+        pure (state.ptcWindow gloas)[position + preset.SLOTS_PER_EPOCH.toNat]
+      else do
+        computePtc state (← ptcWindowSlot preset nextEpoch
+          (position + preset.SLOTS_PER_EPOCH.toNat - (state.ptcWindow gloas).size)))]
+  · rfl
+  intro position inRange
+  simp only [Vector.getElem_range]
+  split
+  · rfl
+  rename_i last
+  simp only [bind, Except.bind]
+  split
+  · rfl
+  rename_i slot computed
+  -- The slot is in the new epoch, so its committee reads the seeds and shuffle of that epoch.
+  have size : (state.ptcWindow gloas).size =
+      (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat := rfl
+  have epoch := computeEpochAtSlot_ptcWindowSlot (by omega) computed
+  cases seedOk : getSeed state nextEpoch DOMAIN_PTC_ATTESTER <;>
+    cases shuffleOk : attesterShuffle state nextEpoch <;>
+    simp [computePtc, epoch, seedOk, shuffleOk, bind, Except.bind, pure, Except.pure]
+
 /-- After the window is initialized, the state reads the computed committee of each slot it covers.
 
 The covered slots are those of the current epoch and of the lookahead.
@@ -241,7 +312,8 @@ theorem processPtcWindow_spec {state after : BeaconState preset fork}
         ∃ slot, ptcWindowSlot preset nextEpoch (position + preset.SLOTS_PER_EPOCH.toNat -
             (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat) = .ok slot ∧
           computePtc state slot = .ok (after.ptcWindow gloas)[position] := by
-  simp only [processPtcWindow, bind_ok_iff, liftArith, mapError_ok_iff, addChecked_ok_iff,
+  rw [processPtcWindow_eq] at computed
+  simp only [bind_ok_iff, liftArith, mapError_ok_iff, addChecked_ok_iff,
     pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨nextEpoch, ⟨lookahead, ⟨_, first⟩, _, second⟩, moved, movedOk, rfl⟩ := computed
   have one : (1 : UInt64).toNat = 1 := rfl
