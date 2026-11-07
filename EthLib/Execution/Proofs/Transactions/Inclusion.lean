@@ -71,74 +71,50 @@ theorem executionCapacity_le {fork : Fork} (hFork : fork ≥ .glamsterdam) (tx :
 
 /-! ## Steps of a passing check -/
 
-private theorem failIf_ok {c : Bool} {e : InclusionError} {u : Unit} (h : failIf c e = .ok u) :
-    c = false := by
-  cases c
-  · rfl
-  · cases h
+private theorem failIf_ok_iff {c : Bool} {e : InclusionError} {u : Unit} :
+    failIf c e = .ok u ↔ c = false := by
+  cases c <;> simp [failIf]
 
-/-- What a transaction that may enter its block satisfies, in terms of its block and the state.
-
-It passes the rules that need no state, and its signature names the sender.
-
-Its gas, capped at 2^24 from Glamsterdam, fits in the gas left of the block.
-
-Its blob gas fits in the blob gas left.
-
-From Glamsterdam, the gas left of the block is execution gas.
-
-From Glamsterdam, the gas limit also fits in the state gas left.
-
-Its maximum fee per gas covers the base fee.
-
-From Dencun, its maximum fee per blob gas covers the base fee per blob gas.
-
-Its nonce is the nonce of the sender, and the sender holds its most cost and its value. -/
-theorem checkInclusion_ok {fork : Fork} {chainId : UInt64} {env : BlockEnvironment fork}
-    {used : BlockGas} {state : TransactionState} {tx : Transaction} {inc : Included}
-    (h : checkInclusion chainId env used state tx = .ok inc) :
-    recoverSender fork tx = .ok inc.sender ∧
-      validateTransaction fork inc.sender tx = .ok inc.intrinsicGas ∧
+/-- A transaction fits in what its block has left exactly when each of its three gases fits. -/
+theorem checkBlockGas_ok_iff {fork : Fork} {env : BlockEnvironment fork} {used : BlockGas}
+    {tx : Transaction} {u : Unit} :
+    checkBlockGas env used tx = .ok u ↔
       executionCapacity fork tx ≤ env.gasLimit - used.execution ∧
-      inc.blobGasUsed = calculateTotalBlobGas tx ∧
-      inc.blobGasUsed ≤ maxBlobGasPerBlock env - used.blob ∧
-      baseFeeOf env ≤ tx.maxFeePerGas ∧
-      (0 < inc.blobGasUsed → blobGasPriceOf env ≤ tx.maxFeePerBlobGas) ∧
-      inc.gasPrice = effectiveGasPrice (baseFeeOf env) tx ∧
-      tx.nonce.toNat = (state.getAccount inc.sender).nonce ∧
-      tx.maxGasFee + tx.value.toNat ≤ (state.getAccount inc.sender).balance.toNat ∧
-      (fork ≥ .glamsterdam → tx.gas.toNat ≤ env.gasLimit - used.state) := by
-  unfold checkInclusion at h
-  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨s, hs, h⟩ := bind_ok_iff.mp h
-  obtain ⟨g, hv, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, hGas, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, hState, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, hBlob, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, hFee, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, hBlobFee, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, hLow, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, hHigh, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, hBal, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-  cases h
-  have hGas := failIf_ok hGas
-  have hState := failIf_ok hState
-  have hBlob := failIf_ok hBlob
-  have hFee := failIf_ok hFee
-  have hBlobFee := failIf_ok hBlobFee
-  have hLow := failIf_ok hLow
-  have hHigh := failIf_ok hHigh
-  have hBal := failIf_ok hBal
-  simp only [decide_eq_false_iff_not, Nat.not_lt] at hGas hBlob hFee hBlobFee hLow hHigh hBal
-  refine ⟨mapError_ok_iff.mp hs, mapError_ok_iff.mp hv, hGas, rfl, hBlob, hFee, ?_, rfl,
-    by dsimp only; omega, hBal, ?_⟩
-  · intro hPos
-    simpa [hPos] using hBlobFee
-  · intro hFork
-    simpa [hFork] using hState
+        (fork ≥ .glamsterdam → tx.gas.toNat ≤ env.gasLimit - used.state) ∧
+        calculateTotalBlobGas tx ≤ maxBlobGasPerBlock env - used.blob := by
+  simp only [checkBlockGas, bind_ok_iff, failIf_ok_iff, decide_eq_false_iff_not, Nat.not_lt,
+    not_and, exists_const]
+
+/-- A sender may send a transaction exactly when it passes the nonce, balance and code rules.
+
+The nonce is the sender's, and the balance covers the most cost and the value.
+
+The code of the sender exists, and it is empty or, from Pectra, a delegation indicator. -/
+theorem checkSender_ok_iff {fork : Fork} {state : TransactionState} {sender : Address}
+    {tx : Transaction} {u : Unit} :
+    checkSender fork state sender tx = .ok u ↔
+      tx.nonce.toNat = (state.getAccount sender).nonce ∧
+        tx.maxGasFee + tx.value.toNat ≤ (state.getAccount sender).balance.toNat ∧
+        ∃ code, state.getCode (state.getAccount sender).codeHash = .ok code ∧
+          ((state.getAccount sender).codeHash = State.EMPTY_CODE_HASH ∨
+            (fork ≥ .pectra ∧ Evm.isValidDelegation code = true)) := by
+  simp only [checkSender, bind_ok_iff, failIf_ok_iff, decide_eq_false_iff_not, Nat.not_lt,
+    exists_const]
+  constructor
+  · rintro ⟨hLow, hHigh, hBal, code, hCode, hEoa⟩
+    refine ⟨by omega, hBal, code, ?_, ?_⟩
+    · cases hc : state.getCode (state.getAccount sender).codeHash with
+      | error e => simp [hc, Except.mapError] at hCode
+      | ok c => simp_all [Except.mapError]
+    · by_cases hEmpty : (state.getAccount sender).codeHash = State.EMPTY_CODE_HASH
+      · exact .inl hEmpty
+      · right
+        simpa [hEmpty] using hEoa
+  · rintro ⟨hNonce, hBal, code, hCode, hEoa⟩
+    refine ⟨by omega, by omega, hBal, code, by simp [hCode, Except.mapError], ?_⟩
+    rcases hEoa with hempty | ⟨hp, hd⟩
+    · simp [hempty]
+    · simp [hp, hd]
 
 /-- A transaction may enter its block exactly when it passes every rule of the check.
 
@@ -179,51 +155,68 @@ theorem checkInclusion_eq_ok_iff {fork : Fork} {chainId : UInt64}
       ∃ code, state.getCode (state.getAccount inc.sender).codeHash = .ok code ∧
         ((state.getAccount inc.sender).codeHash = State.EMPTY_CODE_HASH ∨
           (fork ≥ .pectra ∧ Evm.isValidDelegation code = true)) := by
-  constructor
-  · intro h
-    obtain ⟨hs, hv, hGas, hBlobEq, hBlob, hFee, hBlobFee, hPrice, hNonce, hBal, hState⟩ :=
-      checkInclusion_ok h
-    unfold checkInclusion at h
-    obtain ⟨_, hChain, h⟩ := bind_ok_iff.mp h
-    obtain ⟨s, hs', h⟩ := bind_ok_iff.mp h
-    obtain ⟨g, -, h⟩ := bind_ok_iff.mp h
-    iterate 4 obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, hContents, h⟩ := bind_ok_iff.mp h
-    iterate 4 obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨code, hCode, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, hEoa, h⟩ := bind_ok_iff.mp h
-    cases h
-    have hEoa := failIf_ok hEoa
-    refine ⟨mapError_ok_iff.mp hChain, hs, hv, hGas, hState, hBlobEq, hBlob, hFee,
-      mapError_ok_iff.mp hContents, hBlobFee, hPrice, hNonce, hBal, code, ?_, ?_⟩
-    · cases hc : state.getCode (state.getAccount s).codeHash with
-      | error e => simp [hc, Except.mapError] at hCode
-      | ok c => simp_all [Except.mapError]
-    · by_cases hEmpty : (state.getAccount s).codeHash = State.EMPTY_CODE_HASH
-      · exact .inl hEmpty
-      · right
-        simpa [hEmpty] using hEoa
-  · rintro ⟨hChain, hs, hv, hGas, hState, hBlobEq, hBlob, hFee, hContents, hBlobFee, hPrice,
-      hNonce, hBal, code, hCode, hEoa⟩
-    obtain ⟨sender, intrinsic, gasPrice, blobGas⟩ := inc
-    dsimp only at *
-    subst hBlobEq hPrice
-    unfold checkInclusion
-    have hState' : ¬(fork ≥ .glamsterdam ∧ env.gasLimit - used.state < tx.gas.toNat) :=
-      fun ⟨hf, hlt⟩ => Nat.not_lt.mpr (hState hf) hlt
-    have hBlobFee' : ¬(0 < calculateTotalBlobGas tx ∧
-        tx.maxFeePerBlobGas < blobGasPriceOf env) :=
-      fun ⟨hp, hlt⟩ => Nat.not_lt.mpr (hBlobFee hp) hlt
-    have hEoa' : ¬((state.getAccount sender).codeHash ≠ State.EMPTY_CODE_HASH ∧
-        (!decide (fork ≥ .pectra ∧ Evm.isValidDelegation code = true)) = true) := by
-      rintro ⟨hne, hbad⟩
-      rcases hEoa with hempty | ⟨hp, hd⟩
-      · exact hne hempty
-      · simp [hp, hd] at hbad
-    simp only [hChain, hs, hv, hContents, hCode, Except.mapError, bind, Except.bind, failIf,
-      pure, Except.pure, Nat.not_lt.mpr hGas, Nat.not_lt.mpr hBlob,
-      Nat.not_lt.mpr hFee, hState', hBlobFee', hEoa', hNonce, Nat.lt_irrefl,
-      Nat.not_lt.mpr hBal, decide_false, Bool.false_eq_true, ↓reduceIte]
+  obtain ⟨sender, intrinsic, gasPrice, blobGas⟩ := inc
+  dsimp only
+  unfold checkInclusion
+  by_cases hg : fork ≥ .glamsterdam
+  · simp only [hg, ↓reduceIte, bind_ok_iff, mapError_ok_iff, checkBlockGas_ok_iff,
+      checkSender_ok_iff, failIf_ok_iff, decide_eq_false_iff_not, Nat.not_lt, not_and,
+      pure, Except.pure, Except.ok.injEq, Included.mk.injEq, exists_eq_left', exists_const]
+    constructor
+    · rintro ⟨⟨⟩, hc, a, hs, i, hv, ⟨hGas, hState, hBlob⟩, hFee, hBlobFee, hSender, rfl, rfl, rfl,
+        rfl⟩
+      -- From Glamsterdam the gas, nonce and fee rules check the contents.
+      exact ⟨hc, hs, hv, hGas, hState, rfl, hBlob, hFee,
+        ((validateTransaction_eq_ok_iff.mp hv).2.2.2.2.2.1 hg).2.2, hBlobFee, rfl, hSender⟩
+    · rintro ⟨hc, hs, hv, hGas, hState, rfl, hBlob, hFee, -, hBlobFee, rfl, hSender⟩
+      exact ⟨(), hc, sender, hs, intrinsic, hv, ⟨hGas, hState, hBlob⟩, hFee, hBlobFee, hSender,
+        rfl, rfl, rfl, rfl⟩
+  · rw [validateTransaction_sender_of_lt_glamsterdam (Nat.lt_of_not_le hg) default sender]
+    simp only [hg, ↓reduceIte, bind_ok_iff, mapError_ok_iff, checkBlockGas_ok_iff,
+      checkSender_ok_iff, failIf_ok_iff, decide_eq_false_iff_not, Nat.not_lt, not_and,
+      pure, Except.pure, Except.ok.injEq, Included.mk.injEq, exists_eq_left', exists_const]
+    constructor
+    · rintro ⟨i, hv, ⟨hGas, hState, hBlob⟩, ⟨⟩, hc, a, hs, hFee, ⟨⟩, hk, hBlobFee, hSender, rfl,
+        rfl, rfl, rfl⟩
+      exact ⟨hc, hs, hv, hGas, hState, rfl, hBlob, hFee, hk, hBlobFee, rfl, hSender⟩
+    · rintro ⟨hc, hs, hv, hGas, hState, rfl, hBlob, hFee, hk, hBlobFee, rfl, hSender⟩
+      exact ⟨intrinsic, hv, ⟨hGas, hState, hBlob⟩, (), hc, sender, hs, hFee, (), hk, hBlobFee,
+        hSender, rfl, rfl, rfl, rfl⟩
+
+/-- What a transaction that may enter its block satisfies, in terms of its block and the state.
+
+It passes the rules that need no state, and its signature names the sender.
+
+Its gas, capped at 2^24 from Glamsterdam, fits in the gas left of the block.
+
+Its blob gas fits in the blob gas left.
+
+From Glamsterdam, the gas left of the block is execution gas.
+
+From Glamsterdam, the gas limit also fits in the state gas left.
+
+Its maximum fee per gas covers the base fee.
+
+From Dencun, its maximum fee per blob gas covers the base fee per blob gas.
+
+Its nonce is the nonce of the sender, and the sender holds its most cost and its value. -/
+theorem checkInclusion_ok {fork : Fork} {chainId : UInt64} {env : BlockEnvironment fork}
+    {used : BlockGas} {state : TransactionState} {tx : Transaction} {inc : Included}
+    (h : checkInclusion chainId env used state tx = .ok inc) :
+    recoverSender fork tx = .ok inc.sender ∧
+      validateTransaction fork inc.sender tx = .ok inc.intrinsicGas ∧
+      executionCapacity fork tx ≤ env.gasLimit - used.execution ∧
+      inc.blobGasUsed = calculateTotalBlobGas tx ∧
+      inc.blobGasUsed ≤ maxBlobGasPerBlock env - used.blob ∧
+      baseFeeOf env ≤ tx.maxFeePerGas ∧
+      (0 < inc.blobGasUsed → blobGasPriceOf env ≤ tx.maxFeePerBlobGas) ∧
+      inc.gasPrice = effectiveGasPrice (baseFeeOf env) tx ∧
+      tx.nonce.toNat = (state.getAccount inc.sender).nonce ∧
+      tx.maxGasFee + tx.value.toNat ≤ (state.getAccount inc.sender).balance.toNat ∧
+      (fork ≥ .glamsterdam → tx.gas.toNat ≤ env.gasLimit - used.state) := by
+  obtain ⟨-, hs, hv, hGas, hState, hBlobEq, hBlob, hFee, -, hBlobFee, hPrice, hNonce, hBal, -⟩ :=
+    checkInclusion_eq_ok_iff.mp h
+  exact ⟨hs, hv, hGas, hBlobEq, hBlob, hFee, hBlobFee, hPrice, hNonce, hBal, hState⟩
 
 /-! ## What a passing transaction pays -/
 

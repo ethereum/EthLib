@@ -146,19 +146,13 @@ structure Included where
 def failIf (condition : Bool) (error : InclusionError) : Except InclusionError Unit :=
   if condition then .error error else .ok ()
 
-/-- Check that a transaction may enter its block at `fork`, on the chain `chainId`.
+/-- Check that a transaction fits in what its block has left, after the gas `used` before it.
 
-The block has used the gas `used` before it, and `state` is the state.
-
-The chain and the sender come first, then the rules that need no state.
-
-Then come the rules of the block, and last those of the sender. -/
-def checkInclusion {fork : Fork} (chainId : UInt64) (env : BlockEnvironment fork)
-    (used : BlockGas) (state : TransactionState) (tx : Transaction) :
-    Except InclusionError Included := do
-  (checkChainId fork chainId tx).mapError .transaction
-  let sender ← (recoverSender fork tx).mapError .transaction
-  let intrinsic ← (validateTransaction fork sender tx).mapError .transaction
+- The gas limit, capped from Glamsterdam, fits in the execution gas left.
+- From Glamsterdam, the gas limit fits in the state gas left.
+- The blob gas fits in the blob gas left. -/
+def checkBlockGas {fork : Fork} (env : BlockEnvironment fork) (used : BlockGas)
+    (tx : Transaction) : Except InclusionError Unit := do
   let available := env.gasLimit - used.execution
   let gas := executionCapacity fork tx
   failIf (available < gas) (.gasAllowanceExceeded gas available)
@@ -168,12 +162,14 @@ def checkInclusion {fork : Fork} (chainId : UInt64) (env : BlockEnvironment fork
   let blobGas := calculateTotalBlobGas tx
   let blobAvailable := maxBlobGasPerBlock env - used.blob
   failIf (blobAvailable < blobGas) (.blobGasLimitExceeded blobGas blobAvailable)
-  let baseFee := baseFeeOf env
-  failIf (tx.maxFeePerGas < baseFee) (.insufficientMaxFeePerGas tx.maxFeePerGas baseFee)
-  (checkContents fork tx).mapError .transaction
-  let blobGasPrice := blobGasPriceOf env
-  failIf (0 < blobGas ∧ tx.maxFeePerBlobGas < blobGasPrice)
-    (.insufficientMaxFeePerBlobGas tx.maxFeePerBlobGas blobGasPrice)
+
+/-- Check that `sender` may send a transaction at `fork`, in the state `state`.
+
+- The nonce is the nonce of the sender.
+- The sender holds the most that the transaction can cost, with the value it sends.
+- The sender has no code, and from Pectra it may have a delegation indicator. -/
+def checkSender (fork : Fork) (state : TransactionState) (sender : Address) (tx : Transaction) :
+    Except InclusionError Unit := do
   let account := state.getAccount sender
   failIf (tx.nonce.toNat < account.nonce) (.nonceTooLow account.nonce tx.nonce.toNat)
   failIf (account.nonce < tx.nonce.toNat) (.nonceTooHigh account.nonce tx.nonce.toNat)
@@ -182,6 +178,53 @@ def checkInclusion {fork : Fork} (chainId : UInt64) (env : BlockEnvironment fork
   let code ← (state.getCode account.codeHash).mapError fun _ => .missingCode account.codeHash
   failIf (account.codeHash ≠ EMPTY_CODE_HASH ∧ !(fork ≥ .pectra ∧ isValidDelegation code))
     .senderNotEoa
+
+/-- Check that a transaction may enter its block at `fork`, on the chain `chainId`.
+
+The block has used the gas `used` before it, and `state` is the state.
+
+The first check that fails gives the error, and the order depends on the fork.
+
+Before Glamsterdam:
+
+- the rules alone, which read no sender then, so any address stands in for it;
+- the gas of the block, the chain, the signature and the base fee;
+- the blobs and the authorizations.
+
+From Glamsterdam:
+
+- the chain and the signature;
+- the rules alone, which check the blobs and the authorizations too;
+- the gas of the block and the base fee.
+
+At every fork, the fee per blob gas and the sender come last. -/
+def checkInclusion {fork : Fork} (chainId : UInt64) (env : BlockEnvironment fork)
+    (used : BlockGas) (state : TransactionState) (tx : Transaction) :
+    Except InclusionError Included := do
+  let baseFee := baseFeeOf env
+  let coversBaseFee := failIf (tx.maxFeePerGas < baseFee)
+    (.insufficientMaxFeePerGas tx.maxFeePerGas baseFee)
+  let (sender, intrinsic) ←
+    if fork ≥ .glamsterdam then do
+      (checkChainId fork chainId tx).mapError .transaction
+      let sender ← (recoverSender fork tx).mapError .transaction
+      let intrinsic ← (validateTransaction fork sender tx).mapError .transaction
+      checkBlockGas env used tx
+      coversBaseFee
+      pure (sender, intrinsic)
+    else do
+      let intrinsic ← (validateTransaction fork default tx).mapError .transaction
+      checkBlockGas env used tx
+      (checkChainId fork chainId tx).mapError .transaction
+      let sender ← (recoverSender fork tx).mapError .transaction
+      coversBaseFee
+      (checkContents fork tx).mapError .transaction
+      pure (sender, intrinsic)
+  let blobGas := calculateTotalBlobGas tx
+  let blobGasPrice := blobGasPriceOf env
+  failIf (0 < blobGas ∧ tx.maxFeePerBlobGas < blobGasPrice)
+    (.insufficientMaxFeePerBlobGas tx.maxFeePerBlobGas blobGasPrice)
+  checkSender fork state sender tx
   return ⟨sender, intrinsic, effectiveGasPrice baseFee tx, blobGas⟩
 
 end EthLib.Execution.Transactions

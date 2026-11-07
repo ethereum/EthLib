@@ -6197,7 +6197,7 @@
       {"constructor": "missingCode", "code": 209}]}],
    "error_class": "TransactionError",
    "docstring":
-   "Check that a transaction may enter its block at `fork`, on the chain `chainId`.\n\nThe block has used the gas `used` before it, and `state` is the state.\n\nThe chain and the sender come first, then the rules that need no state.\n\nThen come the rules of the block, and last those of the sender."},
+   "Check that a transaction may enter its block at `fork`, on the chain `chainId`.\n\nThe block has used the gas `used` before it, and `state` is the state.\n\nThe first check that fails gives the error, and the order depends on the fork.\n\nBefore Glamsterdam:\n\n- the rules alone, which read no sender then, so any address stands in for it;\n- the gas of the block, the chain, the signature and the base fee;\n- the blobs and the authorizations.\n\nFrom Glamsterdam:\n\n- the chain and the signature;\n- the rules alone, which check the blobs and the authorizations too;\n- the gas of the block and the base fee.\n\nAt every fork, the fee per blob gas and the sender come last."},
   {"summary":
    "Settle the gas of a transaction that passes the gas, nonce and fee rules.",
    "signature":
