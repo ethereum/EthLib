@@ -156,13 +156,82 @@ theorem ctr_ctr (ciph : Block → Block) (m : Nat) (T : Block) (data : ByteArray
   simp only [ctr, List.toList_toArray]
   rw [xorKeystream_xorKeystream _ _ _ _ _ (by rw [Array.length_toList]; show data.size ≤ _; omega)]
 
+/-- Iterating `k` times from `f a` is iterating `k + 1` times from `a`. -/
+theorem repeat_apply_eq_repeat_succ {α : Type} (f : α → α) (k : Nat) (a : α) :
+    Nat.repeat f k (f a) = Nat.repeat f (k + 1) a := by
+  induction k with
+  | zero => rfl
+  | succ k ih => exact congrArg f ih
+
+/-- Block `j` of the output, counted from 0, is block `j` of the data XORed with a cipher output.
+
+It holds for each of the `n` blocks that the loop runs.
+
+The cipher takes the counter `T` incremented `j` times, as in SP 800-38A §6.5.
+
+A block is 16 bytes, and a partial last block of the data gives a partial last block. -/
+theorem xorKeystream_block (ciph : Block → Block) (m : Nat) {n j : Nat} (hj : j < n) (T : Block)
+    (data : List UInt8) :
+    ((xorKeystream ciph m n T data).drop (16 * j)).take 16
+      = List.zipWith (· ^^^ ·) ((data.drop (16 * j)).take 16)
+          (ciph (Nat.repeat (inc m) j T)).toList := by
+  induction j generalizing n T data with
+  | zero =>
+    obtain ⟨n, rfl⟩ : ∃ n', n = n' + 1 := ⟨n - 1, by omega⟩
+    rw [xorKeystream_succ, Nat.mul_zero, List.drop_zero, List.drop_zero, Nat.repeat]
+    by_cases full : 16 ≤ data.length
+    · -- A full first block: the output keeps its first 16 bytes.
+      rw [List.take_append_of_le_length (by simp; omega)]
+      exact List.take_of_length_le (by simp; omega)
+    · -- A partial first block: nothing of the data follows it.
+      rw [List.drop_eq_nil_of_le (by omega), xorKeystream_nil, List.append_nil]
+      exact List.take_of_length_le (by simp; omega)
+  | succ j ih =>
+    obtain ⟨n, rfl⟩ : ∃ n', n = n' + 1 := ⟨n - 1, by omega⟩
+    rw [xorKeystream_succ, ← repeat_apply_eq_repeat_succ]
+    by_cases full : 16 ≤ data.length
+    · -- The first output block has 16 bytes, so block `j + 1` is block `j` of the rest.
+      have hfirst :
+          (List.zipWith (· ^^^ ·) (data.take 16) (ciph T).toList).length = 16 := by simp; omega
+      rw [show 16 * (j + 1) = 16 + 16 * j by omega, ← List.drop_drop, ← List.drop_drop,
+        List.drop_left' hfirst]
+      exact ih (by omega) (inc m T) (data.drop 16)
+    · -- A short message has no block `j + 1`: both sides are empty.
+      have hrest : data.drop 16 = [] := List.drop_eq_nil_of_le (by omega)
+      rw [hrest, xorKeystream_nil, List.append_nil, List.drop_eq_nil_of_le (by simp; omega),
+        List.drop_eq_nil_of_le (as := data) (by omega)]
+      simp
+
+/-- Block `j` of a CTR output, counted from 0, is block `j` of the data XORed with a cipher output.
+
+The cipher takes the initial counter incremented `j` times.
+
+It holds for every `j`: past the last block of the data, both sides are empty. -/
+theorem ctr_block (ciph : Block → Block) (m : Nat) (T : Block) (data : ByteArray) (j : Nat) :
+    (((ctr ciph m T data).data.toList).drop (16 * j)).take 16
+      = List.zipWith (· ^^^ ·) ((data.data.toList.drop (16 * j)).take 16)
+          (ciph (Nat.repeat (inc m) j T)).toList := by
+  by_cases hj : j < (data.size + 15) / 16
+  · simp only [ctr, List.toList_toArray]
+    exact xorKeystream_block ciph m hj T data.data.toList
+  · -- Past the last block, the data and the output have no bytes left.
+    have hs := size_ctr ciph m T data
+    have hd : data.data.toList.length ≤ 16 * j := by
+      simp only [Array.length_toList]
+      show data.size ≤ 16 * j
+      omega
+    have ho : (ctr ciph m T data).data.toList.length ≤ 16 * j := by
+      simp only [Array.length_toList]
+      show (ctr ciph m T data).size ≤ 16 * j
+      omega
+    rw [List.drop_eq_nil_of_le ho, List.drop_eq_nil_of_le hd]
+    simp
+
 /-! ## Distinct counters
 
 SP 800-38A Appendix B.1: the standard increment gives distinct counters to `n <= 2^m` blocks.
 
-The mode moves to the next counter with one increment per block.
-
-So block `j` of a message, counted from 0, uses the first counter incremented `j` times. -/
+Block `j` of a message, counted from 0, uses the first counter incremented `j` times. -/
 
 /-- The bits of a block above `m`, with any `m` low bits, stay below `2^128`. -/
 private theorem div_mul_add_lt {x m r : Nat} (hx : x < 2 ^ 128) (hm : m ≤ 128) (hr : r < 2 ^ m) :
@@ -204,7 +273,7 @@ theorem blockToNat_repeat_inc {m : Nat} (hm : m ≤ 128) (T : Block) (k : Nat) :
 
 These are the counters of SP 800-38A Appendix B.1 for a message of at most `2^m` blocks.
 
-The keystream gives block `j` the counter of `j` increments, but no theorem states that yet. -/
+The keystream gives block `j` the counter of `j` increments. -/
 theorem repeat_inc_injOn {m : Nat} (hm : m ≤ 128) (T : Block) {i j : Nat} (hi : i < 2 ^ m)
     (hj : j < 2 ^ m) (h : Nat.repeat (inc m) i T = Nat.repeat (inc m) j T) : i = j := by
   have hv := congrArg blockToNat h
