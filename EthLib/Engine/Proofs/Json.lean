@@ -45,6 +45,8 @@ A byte string of a fixed size, such as an address, decodes exactly to the vector
 
 A number below the bound, written in lowercase hex without leading zeros, decodes to itself.
 
+No other text decodes to a number.
+
 The 64-bit decoder returns a number exactly when the decoder with the bound `2^64` returns it.
 
 The bounded byte decoder succeeds exactly when the byte decoder succeeds within the limit.
@@ -527,7 +529,7 @@ private theorem forIn_digits {ds : List UInt8}
 
 The text is `0x` and the digits of the number, without leading zeros, and `0x0` for zero.
 
-It covers that text only, and does not state which other texts decode. -/
+The converse also holds: no other text decodes to the number. -/
 theorem quantity_toDigits (what : String) {bits v : Nat} (hv : v < 2 ^ bits) :
     quantity what bits (.str ("0x" ++ String.ofList (Nat.toDigits 16 v))) = .ok v := by
   obtain ⟨hall, hval, hhead⟩ := toDigits_hex v
@@ -573,5 +575,189 @@ theorem quantity_toDigits (what : String) {bits v : Nat} (hv : v < 2 ^ bits) :
 theorem uint64_toDigits (what : String) (x : UInt64) :
     uint64 what (.str ("0x" ++ String.ofList (Nat.toDigits 16 x.toNat))) = .ok x :=
   uint64_eq_ok_iff.mpr (quantity_toDigits what x.toNat_lt)
+
+/-! ## Only the canonical text decodes -/
+
+/-- A code that the decoder reads as a hex digit is the code of the digit of its value. -/
+private theorem digitChar_digitValue_lt : ∀ n, n < 256 →
+    (hexValue false n.toUInt8).isSome = true →
+    digitValue n.toUInt8 < 16 ∧ (Nat.digitChar (digitValue n.toUInt8)).val.toUInt8 = n.toUInt8 ∧
+      (n.toUInt8 ≠ 48 → 0 < digitValue n.toUInt8) := by
+  decide +kernel
+
+private theorem digitChar_digitValue (c : UInt8) (h : (hexValue false c).isSome = true) :
+    digitValue c < 16 ∧ (Nat.digitChar (digitValue c)).val.toUInt8 = c ∧
+      (c ≠ 48 → 0 < digitValue c) := by
+  have := digitChar_digitValue_lt c.toNat c.toNat_lt
+  simp only [show c.toNat.toUInt8 = c from UInt8.ofNat_toNat] at this
+  exact this h
+
+/-- A loop whose step reads a hex digit and fails on any other code succeeds only on hex digits. -/
+private theorem forIn_digits_ok {ds : List UInt8}
+    {f : UInt8 → Nat → Except EngineError (ForInStep Nat)}
+    (hf : ∀ c s r, f c s = .ok r → (hexValue false c).isSome = true ∧
+      r = .yield (16 * s + digitValue c))
+    {acc w : Nat} (h : forIn ds acc f = .ok w) :
+    (∀ c ∈ ds, (hexValue false c).isSome = true) ∧
+      w = ds.foldl (fun a c => 16 * a + digitValue c) acc := by
+  induction ds generalizing acc with
+  | nil => exact ⟨by simp, by cases h; rfl⟩
+  | cons c ds ih =>
+    rw [List.forIn_cons] at h
+    obtain ⟨r, hr, h⟩ := bind_ok_iff.mp h
+    obtain ⟨hc, rfl⟩ := hf c acc r hr
+    obtain ⟨hall, hw⟩ := ih h
+    exact ⟨fun c' hc' => (List.mem_cons.mp hc').elim (· ▸ hc) (hall c'), hw⟩
+
+/-- Digits read from a positive first digit give a number at least that digit. -/
+private theorem foldl_digits_pos {ds : List UInt8} {acc : Nat} (h : 0 < acc) :
+    0 < ds.foldl (fun a c => 16 * a + digitValue c) acc := by
+  induction ds generalizing acc with
+  | nil => exact h
+  | cons c ds ih => exact ih (by simp only; omega)
+
+/-- Hex digits without a leading `0` are what `Nat.toDigits 16` writes for their value. -/
+private theorem digits_canonical : ∀ (k : Nat) (ds : List UInt8), ds.length = k → ds ≠ [] →
+    (∀ c ∈ ds, (hexValue false c).isSome = true) → (1 < ds.length → ds.head? ≠ some 48) →
+    ds = (Nat.toDigits 16 (ds.foldl (fun a c => 16 * a + digitValue c) 0)).map
+      fun c => c.val.toUInt8 := by
+  intro k
+  induction k with
+  | zero => intro ds hk hne; exact absurd (List.length_eq_zero_iff.mp hk) hne
+  | succ k ih =>
+    intro ds hk hne hall hlead
+    obtain ⟨l, c, rfl⟩ : ∃ l c, ds = l ++ [c] := by
+      rcases List.eq_nil_or_concat ds with h | ⟨l, c, h⟩
+      · exact absurd h hne
+      · exact ⟨l, c, by simpa using h⟩
+    have hc := digitChar_digitValue c (hall c (by simp))
+    rw [List.foldl_append, List.foldl_cons, List.foldl_nil]
+    by_cases hl : l = []
+    · -- One digit: its value is below sixteen and `Nat.toDigits` writes that digit.
+      subst hl
+      simp only [List.nil_append, List.foldl_nil, Nat.mul_zero, Nat.zero_add]
+      rw [Nat.toDigits_eq_ite (by decide), ite_eq_left hc.1]
+      simp only [List.map_cons, List.map_nil, List.cons.injEq, and_true]
+      exact hc.2.1.symm
+    · -- Several digits: the first is not `0`, so the digits before the last give a positive number.
+      obtain ⟨y, ys, hy⟩ := List.exists_cons_of_ne_nil hl
+      have hy48 : y ≠ 48 := by
+        have := hlead (by simp [hy])
+        subst hy
+        simpa using this
+      have hpos : 0 < l.foldl (fun a c => 16 * a + digitValue c) 0 := by
+        rw [hy, List.foldl_cons]
+        have := (digitChar_digitValue y (hall y (by simp [hy]))).2.2 hy48
+        exact foldl_digits_pos (by omega)
+      have hih := ih l (by simp at hk; omega) hl (fun c' hc' => hall c' (by simp [hc']))
+        (fun _ => by rw [hy]; simpa using hy48)
+      generalize l.foldl (fun a c => 16 * a + digitValue c) 0 = n at hpos hih
+      have hge : ¬ 16 * n + digitValue c < 16 := by omega
+      rw [Nat.toDigits_eq_ite (by decide), ite_eq_right hge,
+        show (16 * n + digitValue c) / 16 = n by omega,
+        show (16 * n + digitValue c) % 16 = digitValue c by omega, List.map_append]
+      congr 1
+      simp only [List.map_cons, List.map_nil, List.cons.injEq, and_true]
+      exact hc.2.1.symm
+
+/-- A text from which the decoder reads digits is `0x` and the codes of those digits. -/
+private theorem toUTF8_of_hexDigits {what s : String} {digits : ByteArray}
+    (h : hexDigits what (.str s) = .ok digits) :
+    s.toUTF8.data.toList = 48 :: 120 :: digits.data.toList := by
+  unfold hexDigits at h
+  dsimp only at h
+  split at h
+  · rename_i hm
+    cases h
+    obtain ⟨h0, h1⟩ := hm
+    generalize s.toUTF8 = b at h0 h1 ⊢
+    obtain ⟨arr⟩ := b
+    obtain ⟨l⟩ := arr
+    have hsize : (ByteArray.mk ⟨l⟩).size = l.length := rfl
+    have hx : (ByteArray.mk ⟨l⟩).extract 2 (ByteArray.mk ⟨l⟩).size = ByteArray.mk ⟨l.drop 2⟩ := by
+      apply ByteArray.ext
+      simp only [ByteArray.data_extract, hsize, List.extract_toArray]
+      simp [List.take_of_length_le]
+    rw [hx]
+    -- The first two bytes are those of `0` and `x`.
+    match l, h0, h1 with
+    | x :: y :: rest, h0, h1 =>
+      have e0 : (ByteArray.mk ⟨x :: y :: rest⟩)[0]? = some x := rfl
+      have e1 : (ByteArray.mk ⟨x :: y :: rest⟩)[1]? = some y := rfl
+      rw [e0] at h0
+      rw [e1] at h1
+      cases Option.some.inj h0
+      cases Option.some.inj h1
+      rfl
+  · cases h
+
+/-- The decoder of numbers returns a number exactly when the text is the canonical text of it.
+
+That text is `0x` and the lowercase hex digits of the number, without leading zeros.
+
+The number must also be below the bound of the decoder.
+
+So uppercase digits, leading zeros, `0x` alone and any other text are rejected. -/
+theorem quantity_eq_ok_iff {what : String} {bits : Nat} {j : Lean.Json} {v : Nat} :
+    quantity what bits j = .ok v ↔
+      v < 2 ^ bits ∧ j = .str ("0x" ++ String.ofList (Nat.toDigits 16 v)) := by
+  constructor
+  · intro h
+    refine ⟨lt_of_quantity h, ?_⟩
+    have h' := h
+    unfold quantity at h'
+    cases j with
+    | str s =>
+      obtain ⟨digits, hd, h'⟩ := bind_ok_iff.mp h'
+      dsimp only at h'
+      -- A text with no digits, or with a leading `0` before other digits, fails.
+      split at h'
+      · cases h'
+      rename_i hsize
+      split at h'
+      · cases h'
+      rename_i hlead
+      -- The loop reads every digit, and the value it returns is the number.
+      obtain ⟨w, hw, h'⟩ := bind_ok_iff.mp h'
+      have hwv : w = v := by
+        split at h'
+        · cases h'; rfl
+        · cases h'
+      subst hwv
+      rw [forIn_eq_forIn_toList] at hw
+      obtain ⟨hall, hval⟩ := forIn_digits_ok (fun c s r hr => by
+        cases hc : hexValue false c with
+        | none => simp [hc, invalid, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at hr
+        | some d =>
+          simp only [hc, pure, Except.pure, Except.ok.injEq] at hr
+          exact ⟨rfl, by rw [← hr, digitValue, hc]; rfl⟩) hw
+      -- Those digits are the canonical digits of the number.
+      have hcanon := digits_canonical _ _ rfl
+        (fun hnil => hsize (by simp [ByteArray.size, ← Array.length_toList, hnil]))
+        hall
+        (fun hlen hzero => hlead ⟨by simpa [ByteArray.size, ← Array.length_toList] using hlen,
+          by obtain ⟨arr⟩ := digits; obtain ⟨l⟩ := arr; cases l with
+            | nil => simp at hzero
+            | cons x xs =>
+              have hx : x = 48 := by simpa using hzero
+              subst hx
+              rfl⟩)
+      rw [← hval] at hcanon
+      -- So the text has the bytes of the canonical text, and is that text.
+      have ht := toUTF8_of_hexDigits (hexDigits_ascii what (Nat.toDigits 16 w) fun c hc => by
+        obtain ⟨d, hdl, rfl⟩ := (toDigits_hex w).1 c hc
+        exact (hexValue_digitChar d hdl).2)
+      have hs := toUTF8_of_hexDigits hd
+      rw [List.data_toByteArray, ← hcanon, ← hs] at ht
+      congr 1
+      apply String.toByteArray_inj.mp
+      rw [← String.toUTF8_eq_toByteArray, ← String.toUTF8_eq_toByteArray]
+      exact ByteArray.ext (Array.ext' ht.symm)
+    -- Any other JSON value is not a string, so the read fails at once.
+    | _ =>
+      obtain ⟨digits, hd, -⟩ := bind_ok_iff.mp h'
+      simp [hexDigits, invalid, throw, throwThe, MonadExceptOf.throw] at hd
+  · rintro ⟨hv, rfl⟩
+    exact quantity_toDigits what hv
 
 end EthLib.Engine.Json
