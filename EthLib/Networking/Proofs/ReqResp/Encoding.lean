@@ -317,6 +317,30 @@ theorem toByte_ofByte (b : UInt8) : (ResponseCode.ofByte b).toByte = b := by
     by_cases h3 : b = 3 <;> by_cases h4 : b < 128 <;>
     simp [ResponseCode.ofByte, ResponseCode.toByte, h0, h1, h2, h3, h4]
 
+/-- Two bytes with one response code are one byte. -/
+theorem ofByte_injective : Function.Injective ResponseCode.ofByte := fun a b h => by
+  rw [← toByte_ofByte a, ← toByte_ofByte b, h]
+
+/-- A response code reads back from its own byte exactly when its byte is in its range.
+
+A reserved code needs a byte from 4 to 127, and a request-specific code a byte from 128.
+
+The four named codes always read back. -/
+theorem ofByte_toByte_eq_iff (c : ResponseCode) :
+    ResponseCode.ofByte c.toByte = c ↔
+      (∀ k, c = .reserved k → 4 ≤ k.toNat ∧ k.toNat < 128) ∧
+        (∀ k, c = .requestSpecific k → 128 ≤ k.toNat) := by
+  cases c with
+  | reserved k | requestSpecific k =>
+    have h0 : k = 0 ↔ k.toNat = 0 := by rw [← UInt8.toNat_inj]; rfl
+    have h1 : k = 1 ↔ k.toNat = 1 := by rw [← UInt8.toNat_inj]; rfl
+    have h2 : k = 2 ↔ k.toNat = 2 := by rw [← UInt8.toNat_inj]; rfl
+    have h3 : k = 3 ↔ k.toNat = 3 := by rw [← UInt8.toNat_inj]; rfl
+    simp only [ResponseCode.ofByte, ResponseCode.toByte, h0, h1, h2, h3, UInt8.lt_iff_toNat_lt]
+    by_cases a : k.toNat = 0 <;> by_cases b : k.toNat = 1 <;> by_cases c : k.toNat = 2 <;>
+      by_cases d : k.toNat = 3 <;> by_cases e : k.toNat < 128 <;> simp [a, b, c, d, e] <;> omega
+  | _ => simp [ResponseCode.ofByte, ResponseCode.toByte]
+
 /-- A code byte, the context bytes and payload bytes that decode back make a chunk that decodes.
 
 The payload decodes at the bounds of its code.
