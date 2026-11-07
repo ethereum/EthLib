@@ -20,6 +20,8 @@ With a signature that passes its check, a block that carries the new state root 
 
 The state after it then has that root.
 
+The on-chain aggregate joins the network aggregates in the order of their committees.
+
 The signed header of a block carries the root of its body.
 -/
 
@@ -347,5 +349,118 @@ theorem signedHeader_eq_ok_iff {signed : SignedBeaconBlock preset fork}
       exact ⟨rfl, rfl⟩
     · rintro ⟨rfl, eq⟩
       exact eq.symm
+
+/-! ## The on-chain aggregate -/
+
+/-- The committee of a network aggregate is the first committee whose bit it sets. -/
+theorem committeeOfAggregate_eq_ok_iff {electra : .pectra ≤ fork}
+    {aggregate : Attestation preset fork} {keyed : CommitteeIndex × Attestation preset fork} :
+    committeeOfAggregate electra aggregate = .ok keyed ↔
+      (getCommitteeIndices (aggregate.committeeBits electra)).head? = some keyed.1 ∧
+        keyed.2 = aggregate := by
+  unfold committeeOfAggregate
+  split
+  · rename_i index named
+    rw [named]
+    constructor
+    · rintro ⟨⟩
+      exact ⟨rfl, rfl⟩
+    · rintro ⟨first, second⟩
+      cases keyed
+      simp_all
+  · rename_i none_
+    simp [none_]
+
+/-- The order of the aggregates by their committee is transitive. -/
+theorem committee_le_trans (a b c : CommitteeIndex × Attestation preset fork)
+    (ab : decide (a.1 ≤ b.1) = true) (bc : decide (b.1 ≤ c.1) = true) : decide (a.1 ≤ c.1) = true :=
+  decide_eq_true (UInt64.le_trans (of_decide_eq_true ab) (of_decide_eq_true bc))
+
+/-- Any two aggregates compare by their committee, one way or the other. -/
+theorem committee_le_total (a b : CommitteeIndex × Attestation preset fork) :
+    (decide (a.1 ≤ b.1) || decide (b.1 ≤ a.1)) = true := by
+  rcases UInt64.le_total a.1 b.1 with le | le <;> simp [le]
+
+/-- The on-chain aggregate joins the network aggregates in the order of their committees.
+
+There is an order of the aggregates, each with its first committee, sorted by that committee.
+
+The aggregation bits are those of each aggregate in that order.
+
+The signature is the aggregate of their signatures in that order, and the data is the first one's.
+-/
+theorem computeOnChainAggregate_spec {electra : .pectra ≤ fork}
+    {networkAggregates : List (Attestation preset fork)} {attestation : Attestation preset fork}
+    (joined : computeOnChainAggregate electra networkAggregates = .ok attestation) :
+    ∃ ordered : List (CommitteeIndex × Attestation preset fork),
+      (ordered.map (·.2)).Perm networkAggregates ∧
+      ordered.Pairwise (fun a b => a.1 ≤ b.1) ∧
+      (∀ keyed ∈ ordered,
+        (getCommitteeIndices (keyed.2.committeeBits electra)).head? = some keyed.1) ∧
+      attestation.aggregationBits.bits =
+        (ordered.map (·.2.aggregationBits.bits)).foldl (· ++ ·) #[] ∧
+      Signatures.aggregate (ordered.map fun entry => Base.packBytes entry.2.signature).toArray =
+        .ok attestation.signature ∧
+      ∃ first, ordered.head? = some first ∧ attestation.data = first.2.data := by
+  unfold computeOnChainAggregate at joined
+  obtain ⟨keyed, keyedOk, joined⟩ := bind_ok_iff.mp joined
+  have seconds : keyed.map (·.2) = networkAggregates := by
+    have := map_of_mapM_ok (p := (·.2)) (q := id)
+      (fun x y step => (committeeOfAggregate_eq_ok_iff.mp step).2) keyedOk
+    simpa using this
+  have perm := List.mergeSort_perm keyed fun a b => decide (a.1 ≤ b.1)
+  refine ⟨keyed.mergeSort fun a b => decide (a.1 ≤ b.1), ?_, ?_, ?_, ?_⟩
+  · rw [← seconds]
+    exact perm.map _
+  · exact (List.pairwise_mergeSort committee_le_trans committee_le_total keyed).imp
+      of_decide_eq_true
+  · intro entry member
+    obtain ⟨aggregate, -, step⟩ := mapM_ok_mem keyedOk entry (perm.mem_iff.mp member)
+    have ⟨named, same⟩ := committeeOfAggregate_eq_ok_iff.mp step
+    rw [same]
+    exact named
+  · dsimp only at joined
+    split at joined
+    · rename_i first headed
+      split at joined
+      · obtain ⟨signature, signed, joined⟩ := bind_ok_iff.mp joined
+        simp only [pure, Except.pure, Except.ok.injEq] at joined
+        subst joined
+        exact ⟨rfl, mapError_ok_iff.mp signed, first, headed, rfl⟩
+      · simp [throw, throwThe, MonadExceptOf.throw] at joined
+    · simp [throw, throwThe, MonadExceptOf.throw] at joined
+
+/-- The committee bits of the on-chain aggregate mark the committees of the network aggregates.
+
+A bit is set exactly when it is the first committee bit set by some network aggregate. -/
+theorem committeeBits_computeOnChainAggregate {electra : .pectra ≤ fork}
+    {networkAggregates : List (Attestation preset fork)} {attestation : Attestation preset fork}
+    (joined : computeOnChainAggregate electra networkAggregates = .ok attestation)
+    (index : Fin preset.MAX_COMMITTEES_PER_SLOT.toNat) :
+    (attestation.committeeBits electra).bits[index] = true ↔
+      ∃ aggregate ∈ networkAggregates,
+        (getCommitteeIndices (aggregate.committeeBits electra)).head? =
+          some index.val.toUInt64 := by
+  unfold computeOnChainAggregate at joined
+  obtain ⟨keyed, keyedOk, joined⟩ := bind_ok_iff.mp joined
+  have perm := List.mergeSort_perm keyed fun a b => decide (a.1 ≤ b.1)
+  dsimp only at joined
+  split at joined
+  · split at joined
+    · obtain ⟨signature, -, joined⟩ := bind_ok_iff.mp joined
+      simp only [pure, Except.pure, Except.ok.injEq] at joined
+      subst joined
+      simp only [Fin.getElem_fin, Vector.getElem_ofFn, List.contains_iff_mem, List.mem_map]
+      constructor
+      · rintro ⟨entry, member, named⟩
+        obtain ⟨aggregate, member', step⟩ := mapM_ok_mem keyedOk entry (perm.mem_iff.mp member)
+        have ⟨first, same⟩ := committeeOfAggregate_eq_ok_iff.mp step
+        exact ⟨aggregate, member', named ▸ first⟩
+      · rintro ⟨aggregate, member, named⟩
+        obtain ⟨entry, member', step⟩ := exists_mem_of_mapM_ok keyedOk member
+        obtain ⟨first, -⟩ := committeeOfAggregate_eq_ok_iff.mp step
+        exact ⟨entry, perm.mem_iff.mpr member', Option.some.inj (first.symm.trans named)⟩
+    · simp [throw, throwThe, MonadExceptOf.throw] at joined
+  · simp [throw, throwThe, MonadExceptOf.throw] at joined
 
 end EthLib.Consensus
