@@ -12,6 +12,8 @@ Decryption accepts no tag other than the honest one.
 
 Both functions reject the 64-bit and 32-bit tags.
 
+Under the length checks, the counters of the text differ from each other and from `J_0`.
+
 Both hold for every forward cipher, so for AES under every key.
 -/
 
@@ -112,5 +114,52 @@ theorem Error.code_injective (e₁ e₂ : Error) (h : e₁.code = e₂.code) : e
   -- Two distinct constructors have two distinct literal codes, which `decide` separates.
   cases e₁ <;> cases e₂ <;>
     first | rfl | (simp only [Error.code] at h; exact absurd h (by decide))
+
+/-! ## Distinct counters
+
+GCM encrypts block `k` of the text, counted from 0, under `J_0` incremented `k + 1` times.
+
+`J_0` itself masks the tag, so it must differ from every counter of the text. -/
+
+/-- A text that passes the length checks has at most `2^32 - 2` blocks, by §5.2.1.1. -/
+theorem blocks_le_of_checkLengths {t : Nat} {iv text aad : ByteArray}
+    (h : checkLengths t iv text aad = .ok ()) : (text.size + 15) / 16 ≤ 2 ^ 32 - 2 := by
+  by_cases hlen : 8 * text.size ≤ 2 ^ 39 - 256
+  · have h39 : (2 : Nat) ^ 39 - 256 = 549755813632 := by decide
+    have h32 : (2 : Nat) ^ 32 - 2 = 4294967294 := by decide
+    omega
+  · -- Every branch of the checks then throws, so they cannot succeed.
+    unfold checkLengths at h
+    simp only [hlen] at h
+    repeat' split at h
+    all_goals first | contradiction | cases h
+
+/-- Block `k` of GCTR from `inc_32(J_0)`, counted from 0, uses `J_0` incremented `k + 1` times.
+
+It is block `k` of the text XORed with the cipher of that counter.
+
+It holds for every `k`: past the last block of the text, both sides are empty. -/
+theorem gctr_inc_block (ciph : Block → Block) (J0 : Block) (text : ByteArray) (k : Nat) :
+    (((gctr ciph (inc 32 J0) text).data.toList).drop (16 * k)).take 16
+      = List.zipWith (· ^^^ ·) ((text.data.toList.drop (16 * k)).take 16)
+          (ciph (Nat.repeat (inc 32) (k + 1) J0)).toList := by
+  rw [gctr, ctr_block ciph 32 (inc 32 J0) text k, repeat_apply_eq_repeat_succ]
+
+/-- Under the length checks, no counter of the text is `J_0`, the counter of the tag. -/
+theorem counter_ne_preCounter {t : Nat} {iv text aad : ByteArray}
+    (h : checkLengths t iv text aad = .ok ()) (J0 : Block) {k : Nat}
+    (hk : k < (text.size + 15) / 16) : Nat.repeat (inc 32) (k + 1) J0 ≠ J0 := by
+  have hb := blocks_le_of_checkLengths h
+  intro heq
+  have := repeat_inc_injOn (by decide) J0 (i := k + 1) (j := 0) (by omega) (by decide) heq
+  omega
+
+/-- Under the length checks, two different blocks of the text have two different counters. -/
+theorem counter_injOn {t : Nat} {iv text aad : ByteArray} (h : checkLengths t iv text aad = .ok ())
+    (J0 : Block) {k k' : Nat} (hk : k < (text.size + 15) / 16) (hk' : k' < (text.size + 15) / 16)
+    (heq : Nat.repeat (inc 32) (k + 1) J0 = Nat.repeat (inc 32) (k' + 1) J0) : k = k' := by
+  have hb := blocks_le_of_checkLengths h
+  have := repeat_inc_injOn (by decide) J0 (by omega) (by omega) heq
+  omega
 
 end EthLib.Cryptography.Aes.Gcm
