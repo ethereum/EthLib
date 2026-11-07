@@ -923,6 +923,30 @@ Its answer is then whether the validator's key is in the current or the next com
 The Python suite checks each duty signature against py_ecc, on signing roots computed in the test, and each committee against the shuffle export.
 It checks each payload timeliness assignment and the upcoming proposal slots against the window and the lookahead that it reads from a Gloas state.
 
+### Honest aggregation
+
+`Consensus/HonestAggregation.lean` holds the vote of an honest attester and the aggregates that an honest aggregator builds from votes.
+Before Electra the vote is an attestation with one bit, and from Electra it is a single attestation.
+An aggregator joins the votes of one committee on the same data into one attestation.
+From Altair, a sync aggregator joins the messages on one block root into the contribution of its subcommittee.
+The theorems are in `Consensus/Proofs/HonestAggregation.lean`.
+Each of them assumes only that the construction succeeds, except the theorem on signatures.
+
+`getAttestingIndices_constructAttestation` shows that the attestation of a validator has that validator as its only attester.
+`mem_getAttestingIndices_constructAggregate` shows that the attesters of an aggregate are the attesters of its attestations with the same data.
+From Electra, `mem_getAttestingIndices_constructAggregateOfSingleAttestations` shows that the attesters of an aggregate are the attesters of its single attestations with the same data and committee.
+`getCommitteeIndices_constructAggregateOfSingleAttestations` shows that the committee bits of that aggregate name its one committee.
+`constructSyncCommitteeContribution_spec` shows that a contribution sets the bit of each seat whose key is the key of the validator of a message on its slot and root.
+Under `PairingLaws`, `fastAggregateVerify_getAggregateSignature` shows that honest signatures of attestations on one message aggregate to a signature that the fast aggregate verification accepts.
+That theorem assumes that the secret keys do not sum to zero.
+It verifies under the keys in the order of the attestations.
+
+No theorem shows that an aggregate passes the signature check of an indexed attestation, which reads the keys in the sorted order of the attesters.
+No theorem covers the signature of a contribution.
+The guide aggregates the signature of every vote, so an aggregate verifies only when no two votes share a seat, and no theorem states that condition.
+The contribution takes the sync committee as an argument, since the guide and gossip validation read different committees in the last slot of a period.
+The Python suite checks each vote and each aggregate against values worked out in the test from the guide, with py_ecc for the signatures.
+
 ### Honest proposer
 
 `Consensus/HonestProposer.lean` holds what an honest validator computes to fill the block it proposes.
@@ -944,10 +968,12 @@ It assumes a signature that passes the block signature check.
 `getExecutionRequests_eq_ok_iff` shows that the requests read from a list are exactly the requests that give that list.
 It rests on the canonical SSZ decoder and on the empty bytes being the only encoding of an empty list.
 `signedHeader_eq_ok_iff` shows that the signed header of a block carries the root of its body, and `getValidatorsCustodyRequirement_bounds` that the custody requirement stays between its two bounds.
+From Altair, `processSyncCommitteeContributions_spec` shows that the sync aggregate of a block sets exactly the bits that its contributions set, each at the seat of its subcommittee.
+It also shows that the contributions name distinct subcommittees below the number of subnets.
 
 No theorem says that the on-chain aggregate verifies, which rests on BLS and on the disjoint committees of the network aggregates.
 The Python suite checks the new state root against the state root of each valid sanity block case that the repository holds, at seven forks from Phase 0 to Heze.
-It checks the Eth1 vote, the pending deposit count, the custody requirement, the on-chain aggregate and the execution requests against values worked out in the test from the guides, with py_ecc for the aggregate signature.
+It checks the Eth1 vote, the pending deposit count, the custody requirement, the on-chain aggregate, the sync aggregate and the execution requests against values worked out in the test from the guides, with py_ecc for the aggregate signatures.
 
 ### Light client
 
