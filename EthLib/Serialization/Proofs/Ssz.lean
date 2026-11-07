@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Serialization.Ssz
+public import EthLib.Serialization.Proofs.Ssz.Type.Bounds
 public import EthLib.Serialization.Proofs.Ssz.Type.Compatibility
 public import EthLib.Serialization.Proofs.Ssz.Type.CompatibilityIndices
 public import EthLib.Serialization.Proofs.Ssz.Type.CompatibilitySymmetry
