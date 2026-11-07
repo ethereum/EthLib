@@ -9,6 +9,8 @@ public import EthLib.Networking.Proofs.Snappy.Compress
 
 Each message reads back from its frame data, compressed or not.
 
+Two peers use Snappy exactly when both announce version 5 or more.
+
 The message IDs of the shared capabilities do not overlap, and none is below `0x10`.
 
 Two errors with one code come from one constructor.
@@ -118,6 +120,19 @@ theorem decodeMessage_encodeMessage {snappy : Bool} {m : Message} {data frame : 
     unfold decodeMessage
     simp only [hd', Except.mapError, bind, Except.bind, toScalar_scalar, hc, Bool.false_eq_true,
       ↓reduceIte, pure, Except.pure, Array.toArray_toList, hdec, Message.ofItem_toItem]
+
+/-! ## Snappy -/
+
+/-- Two peers use Snappy exactly when both announce version 5 or more. -/
+theorem snappyEnabled_iff {ours theirs : Nat} :
+    snappyEnabled ours theirs = true ↔ 5 ≤ ours ∧ 5 ≤ theirs := by
+  unfold snappyEnabled SNAPPY_VERSION
+  simp only [Bool.and_eq_true, decide_eq_true_eq]
+
+/-- Snappy is used or not alike for both peers, whichever side asks. -/
+theorem snappyEnabled_comm (ours theirs : Nat) :
+    snappyEnabled ours theirs = snappyEnabled theirs ours := by
+  simp only [snappyEnabled, Bool.and_comm]
 
 /-! ## Message IDs of the shared capabilities -/
 
