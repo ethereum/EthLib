@@ -668,7 +668,7 @@ The write then gives a state that holds `new` in the slot.
 
 That state keeps every other slot of every address.
 
-It also keeps the words before the transaction, and the accounts.
+It also keeps the words before the transaction, the accounts, the codes and the block.
 
 The rest is as for SSTORE: a frame that may change the state, more than 2300 gas, and the price. -/
 theorem sstore_of_account (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
@@ -686,6 +686,8 @@ theorem sstore_of_account (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
         state'.getStorage other slot = state.getStorage other slot) ∧
       state'.getStorageOriginal = state.getStorageOriginal ∧
       (∀ other, state'.getAccountOptional other = state.getAccountOptional other) ∧
+      (∀ codeHash, state'.getCode codeHash = state.getCode codeHash) ∧
+      state'.parent = state.parent ∧
       Hoare fork (At code message pc (key :: new :: rest) memory gas state substate)
         (At code message (pc + 1) rest memory
           (gas - sstoreCost fork
@@ -705,7 +707,9 @@ theorem sstore_of_account (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
     (by rw [(State.TransactionState.recordStorageRead_reads state _ message.currentTarget _
       (U256.toBeBytes key) default).1]; exact hacc)
   refine ⟨state', State.TransactionState.getStorage_setStorage_self hset, fun other slot hne => ?_,
-    ?_, fun other => ?_, sstore hfork hglam hlt hbyte hstatic hcold hstipend hgas hset⟩
+    ?_, fun other => ?_, fun codeHash => ?_,
+    by rw [State.TransactionState.parent_setStorage hset]; rfl,
+    sstore hfork hglam hlt hbyte hstatic hcold hstipend hgas hset⟩
   · rw [State.TransactionState.getStorage_setStorage_of_ne hset hne]
     exact (State.TransactionState.recordStorageRead_reads state _ other _ slot default).2.1
   · rw [State.TransactionState.getStorageOriginal_setStorage hset]
@@ -714,6 +718,9 @@ theorem sstore_of_account (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
   · rw [State.TransactionState.getAccountOptional_setStorage hset]
     exact (State.TransactionState.recordStorageRead_reads state _ other _
       (U256.toBeBytes key) default).1
+  · rw [State.TransactionState.getCode_setStorage hset]
+    exact (State.TransactionState.recordStorageRead_reads state _ message.currentTarget _
+      (U256.toBeBytes key) codeHash).2.2.2.1
 
 /-- Recording the access of a slot twice records it once. -/
 theorem insert_insert_getD_self (substate : Substate) (address : Address) (key : Bytes32) :

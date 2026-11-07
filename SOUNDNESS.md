@@ -841,14 +841,20 @@ A run of the loop then ends by the measure, not by the gas.
 `Triple.loop_gas` proves a loop whose invariant carries the gas, with a price for each run that may depend on the runs left.
 The loop then needs the sum of those prices and the price of its exit.
 `Logic.holds_empty` proves that memory holds no bytes from an offset within it.
-`Logic.Stored` is a running frame that knows ranges of memory, the facts of some slots of its account, and the refund counter.
-A fact of a slot gives its key, its word before the transaction, its word now, and whether it is warm.
-Every other slot of every account, and every account, reads as in a base state.
+`Logic.Stored` is a running frame that knows ranges of memory, the facts of some slots, and the refund counter.
+A fact of a slot gives its account, its key, its word before the transaction, its word now, and whether it is warm.
+`Logic.Agrees` says that a state and its accessed keys agree with a base outside a list of slots.
+There each word reads as in the base state, and each slot is warm exactly when the base keys hold it.
+The words before the transaction, the accounts, the codes and the block are those of the base state.
+A `Stored` frame agrees with its base outside the slots of its facts.
+`Logic.Agrees.trans` proves that agreement composes, outside both lists of slots.
 `Logic.Stored.of_known` proves that a rule that keeps the state and the substate keeps every fact.
-`Logic.sload_stored` proves that from Berlin, SLOAD of the key of a fact pushes its word now and makes the slot warm.
-`Logic.sstore_stored` proves that from Berlin to before Glamsterdam, SSTORE to the key of a fact writes it and makes it warm.
+`Logic.Stored.of_at` proves the same for a rule that also keeps memory.
+`Logic.sload_stored` proves that from Berlin, SLOAD of the key of a fact of the account of the frame pushes its word now and makes the slot warm.
+`Logic.sstore_stored` proves that from Berlin to before Glamsterdam, SSTORE to the key of such a fact writes it and makes it warm.
 It needs a frame that may change the state, more than 2300 gas, and the account of the frame in the base state.
 It pays the price of EIP-2200 with the prices of EIP-2929 from the facts of the slot, and adds the refund of the write.
+`Logic.StoppedStored.of_known` proves that a rule that halts and keeps the state and the substate keeps every fact.
 `Logic.stop_stored` proves that STOP keeps every fact.
 These frames say nothing of the logs, the accessed addresses and the other fields of the substate.
 `StepBy` (`Logic/Message.lean`) adds the steps that send a message, which a runner of messages ends with a frame.
