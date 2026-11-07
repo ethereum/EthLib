@@ -123,10 +123,10 @@ def parityRecovery (yParity : U256) : Except TransactionError (Fin 2) :=
 /-- The chain of a transaction at `fork`, or none for a legacy transaction that signs no chain. -/
 def Transaction.chainId (fork : Fork) : Transaction → Except TransactionError (Option U256)
   | .legacy tx => Prod.fst <$> legacyRecovery fork tx.v
-  | .accessList tx => .ok (some tx.chainId)
-  | .feeMarket tx => .ok (some tx.chainId)
-  | .blob tx => .ok (some tx.chainId)
-  | .setCode tx => .ok (some tx.chainId)
+  | .accessList tx => .ok (some (.ofNat 256 tx.chainId.toNat))
+  | .feeMarket tx => .ok (some (.ofNat 256 tx.chainId.toNat))
+  | .blob tx => .ok (some (.ofNat 256 tx.chainId.toNat))
+  | .setCode tx => .ok (some (.ofNat 256 tx.chainId.toNat))
 
 /-- The first integer of the signature of a transaction. -/
 def Transaction.r : Transaction → U256

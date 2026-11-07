@@ -40,7 +40,7 @@ namespace ChainConfig
 variable {config : ChainConfig} {n t : Nat} {f : Fork}
 
 /-- The active fork of a configuration with one more fork in front. -/
-private theorem activeFork_cons (id : U256) (g : Fork) (a : Activation)
+private theorem activeFork_cons (id : UInt64) (g : Fork) (a : Activation)
     (l : List (Fork × Activation)) (bs : List (Activation × BlobSchedule)) :
     activeFork ⟨id, (g, a) :: l, bs⟩ n t =
       if a.reached n t then
@@ -183,7 +183,7 @@ theorem mem_of_blobScheduleAt_eq_some {s : BlobSchedule}
 /-- A schedule at the end of the list that the block has reached holds, whatever comes before.
 -/
 theorem blobScheduleAt_append_of_reached {a : Activation} {s : BlobSchedule}
-    (id : U256) (fs : List (Fork × Activation)) (l : List (Activation × BlobSchedule))
+    (id : UInt64) (fs : List (Fork × Activation)) (l : List (Activation × BlobSchedule))
     (hr : a.reached n t = true) :
     blobScheduleAt ⟨id, fs, l ++ [(a, s)]⟩ n t = some s := by
   simp [blobScheduleAt, hr]

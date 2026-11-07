@@ -164,8 +164,8 @@ def systemCall {fork : Fork} (env : BlockEnvironment fork) (block : BlockState)
   let message := systemMessage env target data
   let state := TransactionState.ofBlock block
   let out ← if fork ≥ .glamsterdam then
-      processMessageCall (Meter := StateGasMeter) env.chainId message state Substate.empty
-    else processMessageCall (Meter := Nat) env.chainId message state Substate.empty
+      processMessageCall (Meter := StateGasMeter) env.chainId.toNat message state Substate.empty
+    else processMessageCall (Meter := Nat) env.chainId.toNat message state Substate.empty
   return ⟨out.state, out.output, out.error⟩
 
 /-- The code of the account at `target`, in the block state `block`. -/

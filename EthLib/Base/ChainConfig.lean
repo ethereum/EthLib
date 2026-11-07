@@ -2,7 +2,6 @@ module
 
 public import EthLib.Base.BlobSchedule
 public import EthLib.Base.Fork
-public import EthLib.Base.U256
 
 /-!
 # `Base.ChainConfig`
@@ -64,8 +63,10 @@ end Activation
 
 /-- The chain ID of an execution chain, the activations of its forks, and its blob schedules. -/
 structure ChainConfig where
-  /-- The chain ID that a transaction signs, as EIP-155 introduces. -/
-  chainId : U256
+  /-- The chain ID that a transaction signs, as EIP-155 introduces.
+
+  It is a 64-bit number. -/
+  chainId : UInt64
   /-- Each fork of the chain with its activation, in the order of the timeline. -/
   activations : List (Fork × Activation)
   /-- The blob schedules that the chain sets itself, each with its activation, in order.

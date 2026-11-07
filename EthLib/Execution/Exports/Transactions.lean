@@ -182,7 +182,7 @@ def checkInBlockExport (fork : ByteArray) (chainId : UInt64)
     throw (0, "excess blob gas is 2^64 or more")
   -- The checks read no other field of the block, so the others hold 0.
   let env : Evm.BlockEnvironment fork := {
-    chainId := chainId.toNat, coinbase := 0, number := 0, gasLimit := numberOf gasLimit,
+    chainId, coinbase := 0, number := 0, gasLimit := numberOf gasLimit,
     timestamp := 0, difficulty := 0, blockHashes := [], baseFeePerGas := fun _ => baseFee,
     prevRandao := fun _ => 0, excessBlobGas := fun _ => UInt64.ofNat excess,
     parentBeaconBlockRoot := fun _ => 0, slotNumber := fun _ => 0 }
@@ -217,7 +217,7 @@ def ofEnvironmentItem (fork : Fork) (chainId : UInt64) (item : Item) :
     let excessBlobGas : UInt64 ← Codec.ofItem excessBlobGas
     let slotNumber : UInt64 ← Codec.ofItem slotNumber
     return {
-      chainId := chainId.toNat, coinbase := ← Codec.ofItem coinbase,
+      chainId, coinbase := ← Codec.ofItem coinbase,
       number := ← Codec.ofItem number, gasLimit := ← Codec.ofItem gasLimit,
       timestamp := ← Codec.ofItem timestamp, difficulty := ← Codec.ofItem difficulty,
       blockHashes := ← Codec.ofItem blockHashes, baseFeePerGas := fun _ => baseFee,

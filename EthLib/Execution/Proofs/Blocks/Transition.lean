@@ -123,7 +123,7 @@ theorem accessListHashOf_eq_ok {body : BodyState} {gasLimit : Nat} {hash : Optio
 /-- A transaction that cannot enter its block makes the block invalid, with its error. -/
 theorem applyTransaction_of_checkInclusion {env : BlockEnvironment fork} {index : Nat}
     {before : BodyOutput fork} {tx : Transaction} {e : InclusionError}
-    (h : checkInclusion (UInt64.ofNat env.chainId) env before.gas (.ofBlock before.block) tx =
+    (h : checkInclusion env.chainId env before.gas (.ofBlock before.block) tx =
       .error e) :
     applyTransaction env index before tx = .error (.invalidTransaction index e) := by
   simp [applyTransaction, h, Except.mapError, bind, Except.bind]

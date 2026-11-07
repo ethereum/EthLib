@@ -78,17 +78,17 @@ def blobScheduleOfJson (j : Json) : Result (Activation × BlobSchedule) := do
 
 /-- A chain configuration given as JSON, with no blob schedule of its own when none is given.
 
-The chain ID is a 256-bit number, so a larger one is rejected rather than reduced. -/
+The chain ID is a 64-bit number, so a larger one is rejected rather than reduced. -/
 def configOfJson (j : Json) : Result ChainConfig := do
   let some chainId := (j.getObjValAs? Nat "chainId").toOption | throw (0, "config: no chainId")
-  unless chainId < 2 ^ 256 do throw (0, "config: chainId is not below 2^256")
+  unless chainId < 2 ^ 64 do throw (0, "config: chainId is not below 2^64")
   let .arr activations := j.getObjValD "activations" | throw (0, "config: no activations")
   let activations ← activations.toList.mapM activationOfJson
   let schedules ← match j.getObjValD "blobSchedules" with
     | .arr entries => entries.toList.mapM blobScheduleOfJson
     | .null => pure []
     | _ => throw (0, "config: blobSchedules is not an array")
-  return { chainId := BitVec.ofNat 256 chainId, activations, blobSchedules := schedules }
+  return { chainId := UInt64.ofNat chainId, activations, blobSchedules := schedules }
 
 /-- The name of the active fork of a configured chain at a block, or no bytes when none is active.
 
