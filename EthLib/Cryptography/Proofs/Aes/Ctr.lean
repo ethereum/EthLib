@@ -202,7 +202,9 @@ theorem blockToNat_repeat_inc {m : Nat} (hm : m ≤ 128) (T : Block) (k : Nat) :
 
 /-- The counters `i` and `j` increments after `T` differ, for `i != j` below `2^m`.
 
-So a message of `n <= 2^m` blocks never repeats a counter block, SP 800-38A Appendix B.1. -/
+These are the counters of SP 800-38A Appendix B.1 for a message of at most `2^m` blocks.
+
+The keystream gives block `j` the counter of `j` increments, but no theorem states that yet. -/
 theorem repeat_inc_injOn {m : Nat} (hm : m ≤ 128) (T : Block) {i j : Nat} (hi : i < 2 ^ m)
     (hj : j < 2 ^ m) (h : Nat.repeat (inc m) i T = Nat.repeat (inc m) j T) : i = j := by
   have hv := congrArg blockToNat h
