@@ -55,7 +55,9 @@ theorem loop {I : Nat → Evm fork Meter → Prop} {Q : Evm fork Meter → Prop}
   loop_lt (fun k => (body k).consequence (fun _ h => h) fun _ h => ⟨k, Nat.lt_succ_self k, h⟩)
     exit n
 
-/-- The gas that `n` runs of a body take, when the run with `k` runs left costs `cost k`. -/
+/-- The gas that `n` runs of a body take.
+
+The run that starts with `k + 1` runs left costs `cost k`. -/
 def loopCost (cost : Nat → Nat) : Nat → Nat
   | 0 => 0
   | k + 1 => cost k + loopCost cost k
