@@ -36,8 +36,8 @@ from . import legacy
 from .catalogue import Case
 
 # The groups that no runner covers yet, with the pull requests of the plan that bring them.
-# A key is a runner, or a runner and a handler, of consensus-spec-tests, or a format of
-# execution-spec-tests.
+# A key is a runner, or a runner and a handler, of consensus-spec-tests.
+# A key may also be a format of execution-spec-tests.
 NOT_YET = {
     "epoch_processing": "beacon state transition (consensus track C13 to C40)",
     "finality": "the state transition after Phase 0 (consensus track C26 to C40)",
@@ -49,8 +49,8 @@ NOT_YET = {
     "transition": "the Electra and Fulu blocks (consensus track C35 to C40)",
 }
 
-# The plan at Gloas and Heze, by the steps of the track for Glamsterdam
-# and Hegotá. A key is a runner, a runner and a handler, or a format, as in NOT_YET.
+# The plan at Gloas and Heze, by the steps of the track for Glamsterdam and Hegotá.
+# A key is a runner, a runner and a handler, or a format, as in NOT_YET.
 # At these forks an entry here comes before the entry of NOT_YET.
 _GLOAS = {
     "fast_confirmation": "the Gloas fast confirmation (G73)",
@@ -566,8 +566,8 @@ def _gossip_data_column_sidecar(root: Path, case: Case) -> None:
     from consensus.test_data_column import run_gossip_case
     from consensus.test_gossip_validation import run_case
 
-    # Up to Gloas the store is specified, so the whole validation runs; at Heze only the
-    # sidecar checks that read no store do.
+    # Up to Gloas the store is specified, so the whole validation runs.
+    # At Heze only the sidecar checks that read no store run.
     if runs_gossip(case.fork, "gossip_data_column_sidecar"):
         run_case(case.preset, case.fork, root / case.path)
     else:

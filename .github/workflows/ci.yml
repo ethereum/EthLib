@@ -429,12 +429,8 @@ jobs:
 
       - run: uv run --no-project --python 3.12 python -m unittest scripts/test_check_lean_layout.py
 
-      # In a Python comment, no sentence runs onto a second line.
-      # The check reads the pairs of lines where the pull request changes at least one line.
-      - name: Python comments of the changed lines
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: uv run --no-project --python 3.12 python scripts/check_python_comments.py --base "origin/${BASE_REF}" --github
+      # No sentence of a Python comment runs onto a second line, in any file.
+      - name: Python comments, one sentence per line
+        run: uv run --no-project --python 3.12 python scripts/check_python_comments.py --all --github
 
       - run: uv run --no-project --python 3.12 python -m unittest scripts/test_check_python_comments.py
