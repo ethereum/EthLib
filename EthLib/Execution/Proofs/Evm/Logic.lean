@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Proofs.Evm.Logic.Reach
 public import EthLib.Execution.Proofs.Evm.Logic.Triple
 public import EthLib.Execution.Proofs.Evm.Logic.Symbolic
+public import EthLib.Execution.Proofs.Evm.Logic.Rules
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.Return42
 
 /-!
