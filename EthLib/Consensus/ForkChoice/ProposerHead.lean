@@ -22,7 +22,9 @@ Every condition must hold, so that the skip is safe and cheap:
 
 A weak head of the previous slot, from a proposer that proposed twice in it, is also skipped.
 
-Gloas changes the choice and its late and strong tests, which fail there as not yet specified.
+From Gloas the parent keeps the payload status that the head builds on.
+
+The late test reads the attestation deadline, and the strong test weighs the pending parent node.
 -/
 
 @[expose] public section
@@ -50,8 +52,7 @@ namespace Store
 variable (config : Config) (store : Store preset fork)
 
 /-- Whether a block arrived after the attestations of its slot were due. -/
-def isHeadLate (headRoot : Root) : Except ForkChoiceError Bool := do
-  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
+def isHeadLate (headRoot : Root) : Except ForkChoiceError Bool :=
   match store.blockTimeliness[headRoot]? with
   | some timely => return !timely
   | none => throw (.unknownBlockTimeliness headRoot)
@@ -77,9 +78,10 @@ def isProposingOnTime : Except ForkChoiceError Bool := do
   return (← store.getTimeIntoSlotMs config) ≤
     (← (getProposerReorgCutoffMs config).mapError .arith)
 
-/-- Whether the parent of a block holds more weight than a share of a committee. -/
+/-- Whether the parent of a block holds more weight than a share of a committee.
+
+The weight is that of the pending node of the parent, whatever its payload. -/
 def isParentStrong (root : Root) : Except ForkChoiceError Bool := do
-  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
   let justifiedState ← store.checkpointState store.justifiedCheckpoint
   let parentThreshold ←
     calculateCommitteeFraction justifiedState config.REORG_PARENT_WEIGHT_THRESHOLD
@@ -98,14 +100,15 @@ def isProposerEquivocation (root : Root) : Except ForkChoiceError Bool := do
 
 The parent replaces a late and weak head, or a weak head whose proposer equivocated.
 
+The parent node has the payload status that the head builds on: pending before Gloas.
+
 The boost must have worn off the head. -/
 def getProposerHead (headNode : ForkChoiceNode) (slot : Slot) :
-    Except ForkChoiceError ForkChoiceNode :=
-  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork) else do
+    Except ForkChoiceError ForkChoiceNode := do
   let headBlock ← store.block headNode.root
   let parentRoot := headBlock.parentRoot
   let parentBlock ← store.block parentRoot
-  let parentNode : ForkChoiceNode := ⟨parentRoot, .pending⟩
+  let parentNode : ForkChoiceNode := ⟨parentRoot, parentPayloadStatus headBlock parentBlock⟩
   let headLate ← store.isHeadLate headNode.root
   let shufflingStable ← shufflingAllowsReorg preset fork slot
   let ffgCompetitive ← store.isFfgCompetitive headNode.root parentRoot
