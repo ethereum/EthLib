@@ -14,8 +14,9 @@ The precompile does what EIP-198 and EIP-7823 say.
 - The output has exactly `len_mod` bytes.
 - A short input reads as if padded with zeros.
 - Data past the last field is ignored.
-- A length above 1024 fails before gas is charged.
+- From Fusaka, a length above 1024 fails before gas is charged.
 - Otherwise the call fails exactly when the gas given is below the price.
+- A call succeeds exactly when both checks pass, and it then returns the computed output.
 - The price always fits in 64 bits.
 -/
 
@@ -167,13 +168,118 @@ theorem modexp_append_excess (fork : Fork) (data extra : ByteArray) (gas : Nat)
 
 /-! ## Bounds and gas -/
 
+/-- From Fusaka, the bound of EIP-7823 fails on the first length above 1024. -/
+private theorem checkLengthsAt_eq_error_iff {fork : Fork} {l : Lengths} {e : ModexpError} :
+    checkLengthsAt fork l = .error e ↔
+      (fork ≥ .fusaka ∧ MAX_LENGTH_BYTES < l.base ∧ e = .lengthTooLarge .base l.base) ∨
+      (fork ≥ .fusaka ∧ l.base ≤ MAX_LENGTH_BYTES ∧ MAX_LENGTH_BYTES < l.exponent ∧
+        e = .lengthTooLarge .exponent l.exponent) ∨
+      (fork ≥ .fusaka ∧ l.base ≤ MAX_LENGTH_BYTES ∧ l.exponent ≤ MAX_LENGTH_BYTES ∧
+        MAX_LENGTH_BYTES < l.modulus ∧ e = .lengthTooLarge .modulus l.modulus) := by
+  unfold checkLengthsAt checkLengths
+  by_cases hf : fork ≥ .fusaka <;>
+    by_cases hb : MAX_LENGTH_BYTES < l.base <;>
+    by_cases he : MAX_LENGTH_BYTES < l.exponent <;>
+    by_cases hm : MAX_LENGTH_BYTES < l.modulus <;>
+    simp_all [Nat.not_le_of_lt, Nat.not_lt_of_le, eq_comm]
+
+/-- The bound of EIP-7823 passes exactly when, from Fusaka, each length is at most 1024. -/
+private theorem checkLengthsAt_eq_ok_iff {fork : Fork} {l : Lengths} :
+    checkLengthsAt fork l = .ok () ↔
+      (fork ≥ .fusaka →
+        l.base ≤ MAX_LENGTH_BYTES ∧ l.exponent ≤ MAX_LENGTH_BYTES ∧
+          l.modulus ≤ MAX_LENGTH_BYTES) := by
+  -- The check passes exactly when it raises none of its errors.
+  cases h : checkLengthsAt fork l with
+  | error e =>
+    have herr := checkLengthsAt_eq_error_iff.mp h
+    simp only [reduceCtorEq, false_iff]
+    intro hall
+    rcases herr with ⟨hf, hb, -⟩ | ⟨hf, -, he, -⟩ | ⟨hf, -, -, hm, -⟩ <;> have := hall hf <;> omega
+  | ok u =>
+    simp only [true_iff]
+    intro hf
+    have hn (e : ModexpError) : checkLengthsAt fork l ≠ .error e := by rw [h]; exact nofun
+    have hb : l.base ≤ MAX_LENGTH_BYTES := Nat.not_lt.mp fun hb =>
+      hn _ (checkLengthsAt_eq_error_iff.mpr (.inl ⟨hf, hb, rfl⟩))
+    have he : l.exponent ≤ MAX_LENGTH_BYTES := Nat.not_lt.mp fun he =>
+      hn _ (checkLengthsAt_eq_error_iff.mpr (.inr (.inl ⟨hf, hb, he, rfl⟩)))
+    have hm : l.modulus ≤ MAX_LENGTH_BYTES := Nat.not_lt.mp fun hm =>
+      hn _ (checkLengthsAt_eq_error_iff.mpr (.inr (.inr ⟨hf, hb, he, hm, rfl⟩)))
+    exact ⟨hb, he, hm⟩
+
+/--
+A call succeeds exactly when the lengths pass the bound of EIP-7823 and the gas covers the price.
+
+The bound applies from Fusaka only: each of the three lengths must then be at most 1024 bytes.
+
+The price is the one that the input sets at the fork.
+
+The output is then the computed one.
+-/
+theorem modexp_eq_ok_iff {fork : Fork} {data : ByteArray} {gas : Nat} {out : ByteArray} :
+    modexp fork data gas = .ok out ↔
+      (fork ≥ .fusaka →
+        (parseLengths data).base ≤ MAX_LENGTH_BYTES ∧
+          (parseLengths data).exponent ≤ MAX_LENGTH_BYTES ∧
+          (parseLengths data).modulus ≤ MAX_LENGTH_BYTES) ∧
+        requiredGas fork data (parseLengths data) ≤ gas ∧
+        out = compute data (parseLengths data) := by
+  rw [← checkLengthsAt_eq_ok_iff]
+  unfold modexp
+  dsimp only
+  split
+  · next e he => simp [he]
+  · next he =>
+    by_cases hg : gas < requiredGas fork data (parseLengths data)
+    · simp [he, hg, Nat.not_le.mpr hg]
+    · simp [he, Nat.not_lt.mp hg, hg, eq_comm]
+
+/--
+A call fails exactly in one of these ways, in the order the call checks them.
+
+From Fusaka, the first length above 1024 bytes fails, in the order base, exponent, modulus.
+
+EIP-7823 names no order, so the order fixes only which length the error reports.
+
+Otherwise the call fails when the gas is below the price.
+-/
+theorem modexp_eq_error_iff {fork : Fork} {data : ByteArray} {gas : Nat} {e : ModexpError} :
+    modexp fork data gas = .error e ↔
+      (fork ≥ .fusaka ∧ MAX_LENGTH_BYTES < (parseLengths data).base ∧
+        e = .lengthTooLarge .base (parseLengths data).base) ∨
+      (fork ≥ .fusaka ∧ (parseLengths data).base ≤ MAX_LENGTH_BYTES ∧
+        MAX_LENGTH_BYTES < (parseLengths data).exponent ∧
+        e = .lengthTooLarge .exponent (parseLengths data).exponent) ∨
+      (fork ≥ .fusaka ∧ (parseLengths data).base ≤ MAX_LENGTH_BYTES ∧
+        (parseLengths data).exponent ≤ MAX_LENGTH_BYTES ∧
+        MAX_LENGTH_BYTES < (parseLengths data).modulus ∧
+        e = .lengthTooLarge .modulus (parseLengths data).modulus) ∨
+      ((fork ≥ .fusaka →
+        (parseLengths data).base ≤ MAX_LENGTH_BYTES ∧
+          (parseLengths data).exponent ≤ MAX_LENGTH_BYTES ∧
+          (parseLengths data).modulus ≤ MAX_LENGTH_BYTES) ∧
+        gas < requiredGas fork data (parseLengths data) ∧
+        e = .outOfGas (requiredGas fork data (parseLengths data)) gas) := by
+  -- The three length errors are the errors of the bound, and the fourth is the gas.
+  have regroup (a b c d : Prop) : (a ∨ b ∨ c ∨ d) ↔ ((a ∨ b ∨ c) ∨ d) := by simp only [or_assoc]
+  rw [← checkLengthsAt_eq_ok_iff, regroup, ← checkLengthsAt_eq_error_iff]
+  unfold modexp
+  dsimp only
+  split
+  · next e' he => simp [he]
+  · next he =>
+    by_cases hg : gas < requiredGas fork data (parseLengths data)
+    · simp [he, hg, eq_comm]
+    · simp [he, hg]
+
 /-- From Fusaka, a base length above 1024 fails before gas is charged, whatever the gas.
 
 EIP-7823: "If any of these inputs are larger than the limit, the precompile execution stops, returns an error, and consumes all gas". -/
 theorem modexp_lengthTooLarge_base {fork : Fork} (hfork : fork ≥ .fusaka) (data : ByteArray)
     (gas : Nat) (h : MAX_LENGTH_BYTES < (parseLengths data).base) :
-    modexp fork data gas = .error (.lengthTooLarge .base (parseLengths data).base) := by
-  simp [modexp, checkLengthsAt, hfork, checkLengths, h]
+    modexp fork data gas = .error (.lengthTooLarge .base (parseLengths data).base) :=
+  modexp_eq_error_iff.mpr (.inl ⟨hfork, h, rfl⟩)
 
 /-- From Fusaka, an exponent length above 1024 fails before gas is charged, whatever the gas.
 
@@ -181,8 +287,8 @@ The base length is in bounds, so its check passes first. -/
 theorem modexp_lengthTooLarge_exponent {fork : Fork} (hfork : fork ≥ .fusaka) (data : ByteArray)
     (gas : Nat) (hb : (parseLengths data).base ≤ MAX_LENGTH_BYTES)
     (h : MAX_LENGTH_BYTES < (parseLengths data).exponent) :
-    modexp fork data gas = .error (.lengthTooLarge .exponent (parseLengths data).exponent) := by
-  simp [modexp, checkLengthsAt, hfork, checkLengths, Nat.not_lt.mpr hb, h]
+    modexp fork data gas = .error (.lengthTooLarge .exponent (parseLengths data).exponent) :=
+  modexp_eq_error_iff.mpr (.inr (.inl ⟨hfork, hb, h, rfl⟩))
 
 /-- From Fusaka, a modulus length above 1024 fails before gas is charged, whatever the gas.
 
@@ -191,8 +297,8 @@ theorem modexp_lengthTooLarge_modulus {fork : Fork} (hfork : fork ≥ .fusaka) (
     (gas : Nat) (hb : (parseLengths data).base ≤ MAX_LENGTH_BYTES)
     (he : (parseLengths data).exponent ≤ MAX_LENGTH_BYTES)
     (h : MAX_LENGTH_BYTES < (parseLengths data).modulus) :
-    modexp fork data gas = .error (.lengthTooLarge .modulus (parseLengths data).modulus) := by
-  simp [modexp, checkLengthsAt, hfork, checkLengths, Nat.not_lt.mpr hb, Nat.not_lt.mpr he, h]
+    modexp fork data gas = .error (.lengthTooLarge .modulus (parseLengths data).modulus) :=
+  modexp_eq_error_iff.mpr (.inr (.inr (.inl ⟨hfork, hb, he, h, rfl⟩)))
 
 /-- With every length in bounds, the call fails exactly when the gas is below the price.
 
@@ -202,10 +308,8 @@ theorem modexp_outOfGas (fork : Fork) (data : ByteArray) (gas : Nat)
     (he : (parseLengths data).exponent ≤ MAX_LENGTH_BYTES)
     (hm : (parseLengths data).modulus ≤ MAX_LENGTH_BYTES)
     (hg : gas < requiredGas fork data (parseLengths data)) :
-    modexp fork data gas = .error (.outOfGas (requiredGas fork data (parseLengths data)) gas) := by
-  unfold modexp checkLengthsAt
-  by_cases hf : fork ≥ .fusaka <;>
-    simp [hf, checkLengths, Nat.not_lt.mpr hb, Nat.not_lt.mpr he, Nat.not_lt.mpr hm, hg]
+    modexp fork data gas = .error (.outOfGas (requiredGas fork data (parseLengths data)) gas) :=
+  modexp_eq_error_iff.mpr (.inr (.inr (.inr ⟨fun _ => ⟨hb, he, hm⟩, hg, rfl⟩)))
 
 /-- With every length in bounds and enough gas, the call returns the computed output. -/
 theorem modexp_ok (fork : Fork) (data : ByteArray) (gas : Nat)
@@ -213,24 +317,14 @@ theorem modexp_ok (fork : Fork) (data : ByteArray) (gas : Nat)
     (he : (parseLengths data).exponent ≤ MAX_LENGTH_BYTES)
     (hm : (parseLengths data).modulus ≤ MAX_LENGTH_BYTES)
     (hg : requiredGas fork data (parseLengths data) ≤ gas) :
-    modexp fork data gas = .ok (compute data (parseLengths data)) := by
-  unfold modexp checkLengthsAt
-  by_cases hf : fork ≥ .fusaka <;>
-    simp [hf, checkLengths, Nat.not_lt.mpr hb, Nat.not_lt.mpr he, Nat.not_lt.mpr hm,
-      Nat.not_lt.mpr hg]
+    modexp fork data gas = .ok (compute data (parseLengths data)) :=
+  modexp_eq_ok_iff.mpr ⟨fun _ => ⟨hb, he, hm⟩, hg, rfl⟩
 
 /-- A successful call returns exactly `len_mod` bytes. -/
 theorem modexp_ok_size {fork : Fork} {data : ByteArray} {gas : Nat} {out : ByteArray}
     (h : modexp fork data gas = .ok out) : out.size = (parseLengths data).modulus := by
-  unfold modexp at h
-  dsimp only at h
-  -- The only success path returns the computed output.
-  split at h
-  · cases h
-  · split at h
-    · cases h
-    · cases h
-      exact compute_size _ _
+  rw [(modexp_eq_ok_iff.mp h).2.2]
+  exact compute_size _ _
 
 /-- The first 32 bytes of the exponent hold less than `2 ^ 256`. -/
 theorem exponentHead_lt (data : ByteArray) (l : Lengths) : exponentHead data l < 2 ^ 256 := by
