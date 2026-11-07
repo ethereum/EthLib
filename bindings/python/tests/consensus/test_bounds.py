@@ -1,12 +1,13 @@
-"""The length bounds of request, response and gossip payloads, against sizes restated here."""
-
-# Each size is the sum of the fixed fields of its container, worked out by hand:
-# a fork digest of 4 bytes, a root of 32, an integer of 8, a signature of 96.
+"""The length bounds of request, response and gossip payloads, against sizes worked out by hand."""
 
 from ethlib import consensus
 from ethlib.errors import ConsensusError
 from ethlib.networking import reqresp
 from raising import raises
+
+# Each size is the sum of the fixed fields of its container.
+#
+# A fork digest takes 4 bytes, a root 32, an integer 8 and a signature 96.
 
 PREFIX = "/eth2/beacon_chain/req/"
 
@@ -15,8 +16,11 @@ def _id(name: str, version: int) -> str:
     return f"{PREFIX}{name}/{version}/ssz_snappy"
 
 
-# A payload is built from the framing format of google/snappy (framing_format.txt) and the
-# protobuf varint, as in the req/resp tests, so no byte comes from the code under test.
+# A payload follows the framing format of google/snappy (framing_format.txt).
+#
+# Its length is a protobuf varint, as in the req/resp tests.
+#
+# So no byte comes from the code under test.
 STREAM_IDENTIFIER = bytes([0xFF, 0x06, 0x00, 0x00]) + b"sNaPpY"
 
 
@@ -43,9 +47,6 @@ def _payload(data: bytes) -> bytes:
         + len(body).to_bytes(3, "little")
         + body
     )
-
-
-# ---- Requests ----
 
 
 def test_status_v1_request() -> None:
@@ -114,9 +115,6 @@ def test_request_bounds_admit_the_request() -> None:
         reqresp.decode_payload(low, high, _payload(bytes(83)))
 
 
-# ---- Responses ----
-
-
 def test_ping_response() -> None:
     assert consensus.reqresp_response_bounds("phase0", _id("ping", 1)) == (8, 8)
 
@@ -137,9 +135,6 @@ def test_response_protocol_not_at_fork() -> None:
     ) as info:
         consensus.reqresp_response_bounds("altair", _id("blob_sidecars_by_range", 1))
     assert info.value.code == 301
-
-
-# ---- Gossip ----
 
 
 def test_voluntary_exit_topic() -> None:
