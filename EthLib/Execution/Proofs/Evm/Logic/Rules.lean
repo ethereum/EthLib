@@ -15,7 +15,9 @@ It then reads and writes its storage, and returns a word.
 
 The rule for SSTORE holds from Berlin to the fork before Glamsterdam, by EIP-2200 and EIP-2929.
 
-Its price and its refund are those of the write, by EIP-2200 and EIP-3529.
+Its price and its refund are those of EIP-2200, with the prices of EIP-2929.
+
+From London, the refund to clear a slot is that of EIP-3529.
 
 Each rule here is a triple for one opcode, from one running frame of a code to the next.
 

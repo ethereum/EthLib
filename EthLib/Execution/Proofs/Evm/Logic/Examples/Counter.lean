@@ -19,7 +19,7 @@ The read of the slot makes it warm, so the write pays no cold surcharge, by EIP-
 
 The write pays the price of SSTORE from the original, current and new words, by EIP-2200.
 
-It adds the refund of the write to the refund counter, by EIP-3529.
+It adds the refund of the write to the refund counter, by EIP-2200, and from London by EIP-3529.
 
 The frame must be one that may change the state, with the account of the current address.
 
