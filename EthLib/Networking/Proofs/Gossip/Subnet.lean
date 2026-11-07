@@ -161,10 +161,10 @@ theorem computeSubscribedSubnets_exists
 
 /-! ## Distinct subnets -/
 
-/-- The choice returns a subnet exactly when the shared prefix plus the index fits in 64 bits.
+/-- The choice returns a subnet exactly when the shuffled prefix plus the index fits in 64 bits.
 
 The subnet is then that sum modulo the count. -/
-private theorem computeSubscribedSubnet_eq_ok_iff {index : UInt64} {subnet : SubnetID} :
+theorem computeSubscribedSubnet_eq_ok_iff {index : UInt64} {subnet : SubnetID} :
     computeSubscribedSubnet config shuffle nodeId epoch index = .ok subnet ↔
       ∃ permuted, computeShuffledPrefix config shuffle nodeId epoch = .ok permuted ∧
         permuted.toNat + index.toNat < 2 ^ 64 ∧
