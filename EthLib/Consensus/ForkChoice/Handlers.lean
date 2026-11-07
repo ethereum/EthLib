@@ -444,11 +444,14 @@ def recordPtcVotes (gloas : .glamsterdam ≤ fork) (data : PayloadAttestationDat
     Except ForkChoiceError (Store preset fork) := do
   let timeliness ← ptcVotes (store.payloadTimelinessVote gloas) data.beaconBlockRoot
   let availability ← ptcVotes (store.payloadDataAvailabilityVote gloas) data.beaconBlockRoot
+  -- The new maps are built here, once, so that a read of a field does not insert again.
+  let timelinessVotes := (store.payloadTimelinessVote gloas).insert
+    data.beaconBlockRoot (setPtcVotes timeliness positions data.payloadPresent)
+  let availabilityVotes := (store.payloadDataAvailabilityVote gloas).insert
+    data.beaconBlockRoot (setPtcVotes availability positions data.blobDataAvailable)
   return { store with
-    payloadTimelinessVote := fun _ => (store.payloadTimelinessVote gloas).insert
-      data.beaconBlockRoot (setPtcVotes timeliness positions data.payloadPresent)
-    payloadDataAvailabilityVote := fun _ => (store.payloadDataAvailabilityVote gloas).insert
-      data.beaconBlockRoot (setPtcVotes availability positions data.blobDataAvailable) }
+    payloadTimelinessVote := fun _ => timelinessVotes
+    payloadDataAvailabilityVote := fun _ => availabilityVotes }
 
 /-- The store after a vote of a member of the payload committee, from Gloas.
 
@@ -503,8 +506,8 @@ def recordBlockTimeliness (root : Root) : Except ForkChoiceError (Store preset f
   if gloas : .glamsterdam ≤ fork then
     let ptcThresholdMs ← (getPayloadAttestationDueMs config).mapError .arith
     let isPtcTimely := isCurrentSlot ∧ timeIntoSlotMs < ptcThresholdMs
-    return { store with
-      ptcTimeliness := fun _ => (store.ptcTimeliness gloas).insert root (decide isPtcTimely) }
+    let ptcTimeliness := (store.ptcTimeliness gloas).insert root (decide isPtcTimely)
+    return { store with ptcTimeliness := fun _ => ptcTimeliness }
   else return store
 
 /-- The root that fixes the proposer shuffling of an epoch, in the chain of a block. -/
@@ -600,10 +603,11 @@ def recordBlockPtcVotes (checks : SignatureChecks) (signed : SignedBeaconBlock p
     Except ForkChoiceError (Store preset fork) :=
   if gloas : .glamsterdam ≤ fork then
     let noVotes := Vector.replicate preset.PTC_SIZE.toNat none
+    let timelinessVotes := (store.payloadTimelinessVote gloas).insert blockRoot noVotes
+    let availabilityVotes := (store.payloadDataAvailabilityVote gloas).insert blockRoot noVotes
     let store := { store with
-      payloadTimelinessVote := fun _ => (store.payloadTimelinessVote gloas).insert blockRoot noVotes
-      payloadDataAvailabilityVote := fun _ =>
-        (store.payloadDataAvailabilityVote gloas).insert blockRoot noVotes }
+      payloadTimelinessVote := fun _ => timelinessVotes
+      payloadDataAvailabilityVote := fun _ => availabilityVotes }
     store.notifyPtcMessages config checks gloas state
       (signed.message.body.payloadAttestations gloas).data.toList
   else pure store

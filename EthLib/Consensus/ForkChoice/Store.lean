@@ -343,6 +343,10 @@ def getForkchoiceStore (config : Config) (anchorState : BeaconState preset fork)
   let checkpoint : Checkpoint := ⟨anchorEpoch, anchorRoot⟩
   let genesisTimeMs := secondsToMilliseconds anchorState.genesisTime
   let timeMs ← (computeTimeAtSlotMs config genesisTimeMs anchorState.slot).mapError .arith
+  -- The maps of the fields from Gloas are built here, once, so that a read does not build them.
+  let ptcTimeliness := Std.TreeMap.empty.insert anchorRoot true
+  let noVotes : Std.TreeMap Root (Vector (Option Bool) preset.PTC_SIZE.toNat) :=
+    Std.TreeMap.empty.insert anchorRoot (Vector.replicate _ none)
   return {
     timeMs, genesisTimeMs
     justifiedCheckpoint := checkpoint
@@ -354,15 +358,13 @@ def getForkchoiceStore (config : Config) (anchorState : BeaconState preset fork)
     blocks := Std.TreeMap.empty.insert anchorRoot anchorBlock
     blockStates := Std.TreeMap.empty.insert anchorRoot anchorState
     blockTimeliness := if .glamsterdam ≤ fork then Std.TreeMap.empty.insert anchorRoot true else ∅
-    ptcTimeliness := fun _ => Std.TreeMap.empty.insert anchorRoot true
+    ptcTimeliness := fun _ => ptcTimeliness
     checkpointStates := Std.TreeMap.empty.insert checkpoint anchorState
     latestMessages := ∅
     unrealizedJustifications := Std.TreeMap.empty.insert anchorRoot checkpoint
     payloads := fun _ => ∅
-    payloadTimelinessVote := fun _ =>
-      Std.TreeMap.empty.insert anchorRoot (Vector.replicate _ none)
-    payloadDataAvailabilityVote := fun _ =>
-      Std.TreeMap.empty.insert anchorRoot (Vector.replicate _ none)
+    payloadTimelinessVote := fun _ => noVotes
+    payloadDataAvailabilityVote := fun _ => noVotes
     inclusionLists := fun _ => .empty
     payloadInclusionListSatisfaction := fun _ => ∅ }
 
