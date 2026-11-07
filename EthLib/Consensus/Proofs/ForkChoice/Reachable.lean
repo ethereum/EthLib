@@ -11,6 +11,10 @@ A store is reachable when the handlers build it from an anchor.
 
 The handlers are the tick, the block, the attestation and the attester slashing.
 
+From Gloas they also take a vote of the payload committee and a signed envelope.
+
+From Heze they also take an inclusion list.
+
 In a reachable store, each known parent sits at an earlier slot than its child.
 
 That needs two conditions.
@@ -209,6 +213,25 @@ inductive Reachable (config : Config) (anchorState : BeaconState preset fork)
     Reachable config anchorState anchorBlock store →
       store.onAttesterSlashing config checks slashing = .ok after →
       Reachable config anchorState anchorBlock after
+  /-- From Gloas, the store after a vote of a member of the payload committee. -/
+  | payloadAttestation {store after : Store preset fork} {checks : SignatureChecks}
+      {gloas : .glamsterdam ≤ fork} {message : PayloadAttestationMessage} {isFromBlock : Bool} :
+    Reachable config anchorState anchorBlock store →
+      store.onPayloadAttestationMessage config checks gloas message isFromBlock = .ok after →
+      Reachable config anchorState anchorBlock after
+  /-- From Gloas, the store after a signed envelope. -/
+  | envelope {store after : Store preset fork} {checks : SignatureChecks}
+      {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
+      {signed : SignedExecutionPayloadEnvelope preset fork} :
+    Reachable config anchorState anchorBlock store →
+      store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after →
+      Reachable config anchorState anchorBlock after
+  /-- From Heze, the store after an inclusion list. -/
+  | inclusionList {store after : Store preset fork} {checks : SignatureChecks}
+      {heze : .hegota ≤ fork} {signed : SignedInclusionList} :
+    Reachable config anchorState anchorBlock store →
+      store.onInclusionList config checks heze signed = .ok after →
+      Reachable config anchorState anchorBlock after
 
 variable {config : Config} {anchorState : BeaconState preset fork}
   {anchorBlock : BeaconBlock preset fork}
@@ -242,6 +265,11 @@ theorem Reachable.root (reachable : Reachable config anchorState anchorBlock sto
   | tick _ ticked holds => exact holds ((onTick_frame ticked).2.2.1 ▸ found)
   | attestation _ attested holds => exact holds ((onAttestation_frame attested).2.1 ▸ found)
   | attesterSlashing _ slashed holds => exact holds ((onAttesterSlashing_frame slashed).2.1 ▸ found)
+  | payloadAttestation _ voted holds =>
+    exact holds ((onPayloadAttestationMessage_onlyPtcVotes voted).frame.2.1 ▸ found)
+  | envelope _ accepted holds =>
+    exact holds ((onExecutionPayloadEnvelope_frame accepted).2.1 ▸ found)
+  | inclusionList _ accepted holds => exact holds ((onInclusionList_frame accepted).2.1 ▸ found)
   | @block before _ checks sources signed _ added holds =>
     rcases onBlock_same_or_insert added with same | ⟨blockRoot, hashed, -, blocks, -⟩
     · exact holds (same ▸ found)
@@ -268,6 +296,15 @@ theorem Reachable.linked (reachable : Reachable config anchorState anchorBlock s
     exact holds.imp (·.of_maps blocks states) (blocks ▸ ·)
   | attesterSlashing _ slashed holds =>
     obtain ⟨-, blocks, states⟩ := onAttesterSlashing_frame slashed
+    exact holds.imp (·.of_maps blocks states) (blocks ▸ ·)
+  | payloadAttestation _ voted holds =>
+    obtain ⟨-, blocks, states⟩ := (onPayloadAttestationMessage_onlyPtcVotes voted).frame
+    exact holds.imp (·.of_maps blocks states) (blocks ▸ ·)
+  | envelope _ accepted holds =>
+    obtain ⟨-, blocks, states⟩ := onExecutionPayloadEnvelope_frame accepted
+    exact holds.imp (·.of_maps blocks states) (blocks ▸ ·)
+  | inclusionList _ accepted holds =>
+    obtain ⟨-, blocks, states⟩ := onInclusionList_frame accepted
     exact holds.imp (·.of_maps blocks states) (blocks ▸ ·)
   | @block before after checks sources signed _ added holds =>
     rcases onBlock_same_or_insert added with same | ⟨blockRoot, -, new, blocks, inserted⟩
