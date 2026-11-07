@@ -150,10 +150,10 @@ def carryFields (config : Config) (post : Fork) {fork : Fork} (pre : BeaconState
       else zeroPerValidator upgrade pre.validators
     currentSyncCommittee := fun _ =>
       if altair : .altair ≤ fork then pre.currentSyncCommittee altair
-      else SyncCommittee.empty preset
+      else .of (SyncCommittee.empty preset)
     nextSyncCommittee := fun _ =>
       if altair : .altair ≤ fork then pre.nextSyncCommittee altair
-      else SyncCommittee.empty preset
+      else .of (SyncCommittee.empty preset)
     latestExecutionPayloadHeader := fun _ =>
       if bellatrix : .bellatrix ≤ fork then
         (pre.latestExecutionPayloadHeader ⟨bellatrix, early⟩).upgrade post
@@ -230,7 +230,7 @@ def upgradeToAltair (config : Config) (pre : BeaconState preset .phase0) :
   let post := carryFields config .altair pre (by decide) (by decide)
   let post ← (pre.previousEpochAttestations (by decide)).data.foldlM
     (fun state attestation => translateAttestation state (by decide) attestation) post
-  let committee ← liftAccessor (getNextSyncCommittee post)
+  let committee := Rooted.of (← liftAccessor (getNextSyncCommittee post))
   return { post with
     currentSyncCommittee := fun _ => committee
     nextSyncCommittee := fun _ => committee }

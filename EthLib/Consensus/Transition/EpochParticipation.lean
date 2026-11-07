@@ -103,7 +103,8 @@ def processSyncCommitteeUpdates (state : BeaconState preset fork) (altair : .alt
   if nextEpoch % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 then
     let next := state.nextSyncCommittee altair
     let state := { state with currentSyncCommittee := fun _ => next }
-    let drawn ← liftAccessor (getNextSyncCommittee state)
+    -- The new committee is rooted once here, and keeps its root until the next period.
+    let drawn := Serialization.Ssz.Rooted.of (← liftAccessor (getNextSyncCommittee state))
     return { state with nextSyncCommittee := fun _ => drawn }
   else return state
 

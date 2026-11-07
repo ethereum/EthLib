@@ -49,7 +49,7 @@ The signature check passed on those keys and that root. -/
 theorem processSyncAggregate_signed {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
     (computed : processSyncAggregate config checks state altair aggregate = .ok after) :
     ∃ pubkeys domain root signingRoot,
-      syncParticipantPubkeys (state.currentSyncCommittee altair) aggregate.syncCommitteeBits =
+      syncParticipantPubkeys (state.currentSyncCommittee altair).value aggregate.syncCommitteeBits =
         .ok pubkeys ∧
       getDomain config state DOMAIN_SYNC_COMMITTEE
         (some (computeEpochAtSlot preset (saturatingSub state.slot 1))) = .ok domain ∧

@@ -102,7 +102,7 @@ private theorem BeaconState.nodeRoot_nextSyncCommittee_of_lt
         (inner := SszType.toValue (state.nextSyncCommittee altair))
       · rfl
       · rfl
-      · exact .root (SszType.hashTreeRoot_ok_iff.mp rooted)
+      · exact .root ((SszType.hashTreeRoot_ok_iff (α := Rooted (SyncCommittee preset))).mp rooted)
   -- The value path and the type path share the branch index of the fork.
   exact nodeRoot_of_selects selected (lightClientGindices_eq_of_lt altair beforeGloas).2.2
 
@@ -133,7 +133,7 @@ private theorem BeaconState.nodeRoot_currentSyncCommittee_of_lt
         (inner := SszType.toValue (state.currentSyncCommittee altair))
       · rfl
       · rfl
-      · exact .root (SszType.hashTreeRoot_ok_iff.mp rooted)
+      · exact .root ((SszType.hashTreeRoot_ok_iff (α := Rooted (SyncCommittee preset))).mp rooted)
   -- The value path and the type path share the bootstrap index of the fork.
   exact nodeRoot_of_selects selected (lightClientGindices_eq_of_lt altair beforeGloas).2.1
 
@@ -218,7 +218,7 @@ private theorem BeaconState.nodeRoot_nextSyncCommittee_of_glamsterdam_le
         (inner := SszType.toValue (state.nextSyncCommittee (Nat.le_trans (by decide) gloas)))
       · rfl
       · rfl
-      · exact .root (SszType.hashTreeRoot_ok_iff.mp rooted)
+      · exact .root ((SszType.hashTreeRoot_ok_iff (α := Rooted (SyncCommittee preset))).mp rooted)
   exact nodeRoot_of_selects selected (lightClientGindices_eq_of_glamsterdam_le gloas).2.2
 
 /-- From Gloas, the current committee node is the root of the state's current committee. -/
@@ -241,7 +241,7 @@ private theorem BeaconState.nodeRoot_currentSyncCommittee_of_glamsterdam_le
         (inner := SszType.toValue (state.currentSyncCommittee (Nat.le_trans (by decide) gloas)))
       · rfl
       · rfl
-      · exact .root (SszType.hashTreeRoot_ok_iff.mp rooted)
+      · exact .root ((SszType.hashTreeRoot_ok_iff (α := Rooted (SyncCommittee preset))).mp rooted)
   exact nodeRoot_of_selects selected (lightClientGindices_eq_of_glamsterdam_le gloas).2.1
 
 /-- From Gloas, the finality node is the root of the finalized checkpoint's root field. -/

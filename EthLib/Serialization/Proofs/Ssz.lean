@@ -113,6 +113,7 @@ public import EthLib.Serialization.Proofs.Ssz.Typed.Gindex
 public import EthLib.Serialization.Proofs.Ssz.Typed.Since
 public import EthLib.Serialization.Proofs.Ssz.Typed.Rooted
 public import EthLib.Serialization.Proofs.Ssz.Typed.RootedList
+public import EthLib.Serialization.Proofs.Ssz.Typed.RootedValue
 
 /-!
 # `EthLib.Serialization.Proofs.Ssz`

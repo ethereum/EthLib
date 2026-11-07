@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Containers.Block
 public import EthLib.Consensus.Containers.Builder
 public import EthLib.Serialization.Ssz.Typed.RootedList
+public import EthLib.Serialization.Ssz.Typed.RootedValue
 public import EthLib.Serialization.Ssz.Typed.Since
 
 /-!
@@ -146,10 +147,10 @@ structure BeaconState (preset : Preset) (fork : Fork) where
   finalizedCheckpoint : Checkpoint
   /-- From Altair: the inactivity score of each validator. -/
   inactivityScores : Since .altair fork (InactivityScores preset fork)
-  /-- From Altair: the sync committee of the current period. -/
-  currentSyncCommittee : Since .altair fork (SyncCommittee preset)
-  /-- From Altair: the sync committee of the next period. -/
-  nextSyncCommittee : Since .altair fork (SyncCommittee preset)
+  /-- From Altair: the sync committee of the current period, with its root. -/
+  currentSyncCommittee : Since .altair fork (Rooted (SyncCommittee preset))
+  /-- From Altair: the sync committee of the next period, with its root. -/
+  nextSyncCommittee : Since .altair fork (Rooted (SyncCommittee preset))
   /-- From Bellatrix to Fulu: the header of the latest execution payload. -/
   latestExecutionPayloadHeader :
     During .bellatrix .glamsterdam fork (ExecutionPayloadHeader preset fork)

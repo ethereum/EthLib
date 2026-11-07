@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Containers.State
 public import EthLib.Consensus.Proofs.Containers.Block
 public import EthLib.Serialization.Proofs.Ssz.Typed.RootedList
+public import EthLib.Serialization.Proofs.Ssz.Typed.RootedValue
 
 /-!
 # Proofs: the beacon state is lawful at every fork

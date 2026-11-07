@@ -28,6 +28,7 @@ public import EthLib.Serialization.Ssz.Typed.Gindex
 public import EthLib.Serialization.Ssz.Typed.Since
 public import EthLib.Serialization.Ssz.Typed.Rooted
 public import EthLib.Serialization.Ssz.Typed.RootedList
+public import EthLib.Serialization.Ssz.Typed.RootedValue
 
 /-!
 # `EthLib.Serialization.Ssz`
