@@ -5,8 +5,8 @@
 # A test marked `archive` reads a release archive that tests/sources.toml pins, which
 # scripts/fetch_archives.py downloads and checks.
 # The parity jobs run every case of the official suites in scope, and report each case.
-# This workflow runs all of them every Monday and on manual dispatch, one job per suite, so
-# that no job nears the time limit.
+# This workflow runs all of them every Monday and on manual dispatch.
+# It runs one job per suite, or per shard of a long suite, so that no job nears the time limit.
 # A regenerated vector that differs from the committed one fails the job.
 
 name: vectors-slow
@@ -25,7 +25,7 @@ permissions:
 
 jobs:
   vectors:
-    name: ${{ matrix.suite }}
+    name: ${{ matrix.suite }}${{ matrix.shard && format(' {0}', matrix.shard) || '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     strategy:
@@ -54,10 +54,46 @@ jobs:
             run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/ssz/test_ssz_generic.py
           # Every case of execution-spec-tests and of consensus-spec-tests in scope, with a
           # report of the cases that pass, disagree, fail or wait for a runner.
+          # A suite whose run nears the time limit runs in shards, as `k/n`.
+          # On GitHub runners in November 2026, the execution cases took about 18 hours in all.
+          # A later harness change cut their local time by 43 percent.
+          # The consensus cases took about 2.9 hours, and the legacy cases about 5.3 hours.
+          # The slowest shard of a suite took up to 1.25 times its mean.
+          # So each shard aims at about 1.5 hours.
           - suite: parity-execution
+            shard: 1/7
+            bindings: true
+            run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/parity/test_execution.py
+          - suite: parity-execution
+            shard: 2/7
+            bindings: true
+            run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/parity/test_execution.py
+          - suite: parity-execution
+            shard: 3/7
+            bindings: true
+            run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/parity/test_execution.py
+          - suite: parity-execution
+            shard: 4/7
+            bindings: true
+            run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/parity/test_execution.py
+          - suite: parity-execution
+            shard: 5/7
+            bindings: true
+            run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/parity/test_execution.py
+          - suite: parity-execution
+            shard: 6/7
+            bindings: true
+            run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/parity/test_execution.py
+          - suite: parity-execution
+            shard: 7/7
             bindings: true
             run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/parity/test_execution.py
           - suite: parity-consensus
+            shard: 1/2
+            bindings: true
+            run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/parity/test_consensus.py
+          - suite: parity-consensus
+            shard: 2/2
             bindings: true
             run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/parity/test_consensus.py
           # The cases of the execution-spec-tests devnets that the pinned release lacks.
@@ -67,6 +103,19 @@ jobs:
           # Every legacy blockchain test from Frontier to London, with the proof of work of each
           # sealed block.
           - suite: parity-legacy
+            shard: 1/4
+            bindings: true
+            run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/parity/test_legacy.py
+          - suite: parity-legacy
+            shard: 2/4
+            bindings: true
+            run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/parity/test_legacy.py
+          - suite: parity-legacy
+            shard: 3/4
+            bindings: true
+            run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/parity/test_legacy.py
+          - suite: parity-legacy
+            shard: 4/4
             bindings: true
             run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/parity/test_legacy.py
           # Every AES-GCM case of the NIST CAVP files, of which ci.yml runs an excerpt.
@@ -122,15 +171,20 @@ jobs:
         env:
           ETHLIB_ARCHIVES: ${{ runner.temp }}/archives
           ETHLIB_PARITY_REPORT: ${{ runner.temp }}/parity.md
+          ETHLIB_PARITY_DATA: ${{ runner.temp }}/parity.json
+          ETHLIB_PARITY_SHARD: ${{ matrix.shard || '1/1' }}
         run: ${{ matrix.run }}
 
-      # The parity report is also in the job summary.
+      # The parity report of the shard is also in the job summary.
+      # The job parity-report merges the counts of the shards of each suite.
       - name: parity report
         if: ${{ always() && startsWith(matrix.suite, 'parity') }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ${{ matrix.suite }}
-          path: ${{ runner.temp }}/parity.md
+          name: ${{ matrix.suite }}-${{ strategy.job-index }}
+          path: |
+            ${{ runner.temp }}/parity.md
+            ${{ runner.temp }}/parity.json
           if-no-files-found: error
 
       # The suites write every case, so a changed or a new case shows up here.
@@ -141,3 +195,47 @@ jobs:
 
       - name: pinned digests
         run: uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py
+
+  # One report per parity suite, from the counts of its shards.
+  # A row whose shards report more or fewer outcomes than its runnable cases fails the job.
+  parity-report:
+    needs: vectors
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.13.6"
+          enable-cache: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: parity-*
+          path: ${{ runner.temp }}/shards
+
+      - name: merge
+        run: |
+          status=0
+          for suite in parity-execution parity-consensus parity-devnets parity-legacy; do
+            uv run --no-project --python 3.12 python scripts/merge_parity.py \
+              "$RUNNER_TEMP/$suite.md" "$RUNNER_TEMP"/shards/"$suite"-*/parity.json || status=1
+            if [ -f "$RUNNER_TEMP/$suite.md" ]; then
+              cat "$RUNNER_TEMP/$suite.md" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+          exit "$status"
+
+      - name: merged reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: parity-report
+          path: ${{ runner.temp }}/parity-*.md
+          if-no-files-found: error

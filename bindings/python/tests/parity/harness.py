@@ -1,6 +1,8 @@
 """What the parity tests share: the runnable cases, the disagreements and the catalogue."""
 
+import hashlib
 import json
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -21,6 +23,10 @@ else:
 
 DISAGREEMENTS_FILE = archives.REPO / "tests" / "parity" / "disagreements.toml"
 
+# The environment variable that names the shard of a run, as `k/n` with 1 <= k <= n.
+# Without it a run takes every case, as the one shard of one.
+SHARD = "ETHLIB_PARITY_SHARD"
+
 
 def disagreements(suite: str) -> dict[tuple[str, str | None], dict]:
     """The listed disagreements of a suite, by case and group.
@@ -36,6 +42,27 @@ def disagreements(suite: str) -> dict[tuple[str, str | None], dict]:
 def runnable(cases: list[Case]) -> list[Case]:
     """The cases that a runner covers."""
     return [case for case in cases if runner(case) is not None]
+
+
+def shard() -> tuple[int, int]:
+    """The shard of this run and the number of shards, from `ETHLIB_PARITY_SHARD`."""
+    value = os.environ.get(SHARD, "1/1")
+    index, _, count = value.partition("/")
+    if not (index.isdigit() and count.isdigit() and 1 <= int(index) <= int(count)):
+        raise ValueError(f"{SHARD} is {value!r}, not k/n with 1 <= k <= n")
+    return int(index), int(count)
+
+
+def shard_of(case: Case, count: int) -> int:
+    """The shard of a case among `count` shards, from a digest of its group and identifier."""
+    digest = hashlib.sha256(f"{case.group}\0{case.id}".encode()).digest()
+    return int.from_bytes(digest[:8], "big") % count + 1
+
+
+def in_shard(cases: list[Case]) -> list[Case]:
+    """The runnable cases of this run's shard."""
+    index, count = shard()
+    return [case for case in runnable(cases) if shard_of(case, count) == index]
 
 
 def unpack(name: str, cases: list[Case], depth: int) -> Path:

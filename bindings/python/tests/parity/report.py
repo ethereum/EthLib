@@ -7,6 +7,8 @@ from pathlib import Path
 
 # The environment variable that names the Markdown file of the report.
 ENVIRONMENT = "ETHLIB_PARITY_REPORT"
+# The environment variable that names the JSON file of the counts, which shards merge.
+DATA = "ETHLIB_PARITY_DATA"
 
 # The outcome of each run case, and the catalogue of each suite, as the tests record them.
 _outcomes: dict[str, Counter] = defaultdict(Counter)
@@ -72,10 +74,32 @@ def markdown() -> str:
     return "\n".join(lines)
 
 
+def merge(shards: list[dict]) -> list[str]:
+    """Add the counts of the shards of one run, and list each row whose outcomes miss its count."""
+    _catalogue.clear()
+    _outcomes.clear()
+    problems = []
+    for counts in shards:
+        if _catalogue and counts["catalogue"] != _catalogue:
+            problems.append("the shards hold different catalogues")
+        _catalogue.update(counts["catalogue"])
+        for row, done in counts["outcomes"].items():
+            _outcomes[row].update(done)
+    for row in sorted(set(_catalogue) | set(_outcomes)):
+        runnable = _catalogue.get(row, {}).get("runnable", 0)
+        ran = sum(_outcomes[row].values())
+        if ran != runnable:
+            problems.append(f"{row}: {ran} outcomes for {runnable} runnable cases")
+    return problems
+
+
 def write() -> None:
     """Write the report to the file that `ETHLIB_PARITY_REPORT` names, and to the job summary."""
     if not _catalogue:
         return
+    if path := os.environ.get(DATA):
+        counts = {"catalogue": _catalogue, "outcomes": _outcomes}
+        Path(path).write_text(json.dumps(counts, sort_keys=True), encoding="utf-8")
     text = markdown()
     for variable in (ENVIRONMENT, "GITHUB_STEP_SUMMARY"):
         if path := os.environ.get(variable):
