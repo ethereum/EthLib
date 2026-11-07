@@ -461,25 +461,30 @@ theorem byteVerify_hashPoint (pk msg sig : ByteArray) :
       exact two_pairs_congr hPv hPv rfl hRv hRv rfl (G2Sub.represents_rep (hashPoint msg)).1 hv
         (G2Sub.toPoint_rep (hashPoint msg))
 
-/-- The byte game keeps the group game's scalar distribution, including zero.
+/-- The byte game for the secret scalar `a`.
 
-Key validation rejects the zero key, so that run loses in the byte game.
+Key validation rejects the zero key, so the run with `a = 0` loses.
 
 Freshness means a message never submitted to signing, as in BLS01, §3, Definition 3.1.
 
 A signed message loses even with different signature bytes, not just with a repeated pair.
 -/
-noncomputable def byteExperiment (adversary : ByteAdversary) :
+noncomputable def byteExperimentAt (adversary : ByteAdversary) (a : Scalar) :
     ProbComp (Bool × State Scalar ByteArray) := by
   classical
   exact do
-    let a ← $ᵗ Scalar
     let pk := a • g1
     let ((m, sig, h), st) ← (simulateQ (impl g2 a) (do
       let (m, sig) ← byteMain adversary pk
       let h ← query (spec := Spec ByteArray G2Sub) (.inr (.inl m))
       return (m, sig, h))).run State.init
     return (decide (m ∉ st.signed) && byteVerify (G1Sub.encode pk) sig h, st)
+
+/-- The byte game keeps the group game's scalar distribution, including zero. -/
+noncomputable def byteExperiment (adversary : ByteAdversary) :
+    ProbComp (Bool × State Scalar ByteArray) := do
+  let a ← $ᵗ Scalar
+  byteExperimentAt adversary a
 
 /-- The probability of an accepted byte forgery on a fresh message. -/
 noncomputable def byteForgeAdvantage (adversary : ByteAdversary) : ℝ≥0∞ :=
@@ -531,7 +536,7 @@ The signing transcript is identical, so message freshness is unchanged.
 theorem byteForgeAdvantage_le (adversary : ByteAdversary) :
     byteForgeAdvantage adversary ≤ forgeAdvantage Scalar blsScheme adversary.toGroup := by
   classical
-  unfold byteForgeAdvantage forgeAdvantage byteExperiment experiment
+  unfold byteForgeAdvantage forgeAdvantage byteExperiment byteExperimentAt experiment
   rw [prEvent_bind_eq_lintegral_of_discrete, prEvent_bind_eq_lintegral_of_discrete]
   apply MeasureTheory.lintegral_mono
   intro a
@@ -560,7 +565,7 @@ The encoding forwards each oracle query once, so both games make the same calls.
 theorem snd_map_byteExperiment (adversary : ByteAdversary) :
     Prod.snd <$> byteExperiment adversary =
       Prod.snd <$> experiment (F := Scalar) blsScheme adversary.toGroup := by
-  unfold byteExperiment experiment
+  unfold byteExperiment byteExperimentAt experiment
   simp only [run, ByteAdversary.toGroup, simulateQ_bind, simulateQ_map,
     bind_map_left, StateT.run_bind, StateT.run_map,
     bind_pure_comp, map_bind, Functor.map_map]
@@ -597,5 +602,106 @@ theorem byteForgeAdvantage_le_coCdhAdvantage_of_byteHashCallBound (laws : Pairin
       q * coCdhAdvantage Scalar g1 g2 (reduction (F := Scalar) g2 adversary.toGroup q) :=
   byteForgeAdvantage_le_coCdhAdvantage laws adversary hq0
     ((byteHashCallBound_iff adversary q).mp hq)
+
+/-! ## Keys with a nonzero scalar -/
+
+/-- The nonzero scalars, the secret keys of EthLib. -/
+abbrev NonzeroScalar := { a : Scalar // a ≠ 0 }
+
+instance : Nonempty NonzeroScalar := ⟨⟨1, one_ne_zero⟩⟩
+
+noncomputable instance : SampleableType NonzeroScalar := SampleableType.ofFintype _
+
+/-- The byte game with a uniform nonzero secret scalar. -/
+noncomputable def nonzeroByteExperiment (adversary : ByteAdversary) :
+    ProbComp (Bool × State Scalar ByteArray) := do
+  let a ← $ᵗ NonzeroScalar
+  byteExperimentAt adversary a
+
+/-- The probability of an accepted byte forgery on a fresh message under a nonzero key. -/
+noncomputable def nonzeroByteForgeAdvantage (adversary : ByteAdversary) : ℝ≥0∞ :=
+  Pr{let z ← nonzeroByteExperiment adversary}[z.1 = true]
+
+/-- Every run of the byte game with the zero scalar loses. -/
+theorem byteExperimentAt_zero (adversary : ByteAdversary) :
+    ∀ z ∈ support (byteExperimentAt adversary 0), z.1 = false := by
+  classical
+  have hver : ∀ sig h, byteVerify (G1Sub.encode ((0 : Scalar) • g1)) sig h = false := by
+    intro sig h
+    by_contra hne
+    have hv := Bool.eq_true_of_not_eq_false hne
+    cases hu : G2.uncompress sig with
+    | error e => simp only [byteVerify, hu] at hv; cases hv
+    | ok R =>
+      cases hp : G1.keyValidatePoint (G1Sub.encode ((0 : Scalar) • g1)) with
+      | error e => simp only [byteVerify, hu, hp, Bool.and_false] at hv; cases hv
+      | ok P =>
+        obtain ⟨hPu, hPv, hne0, -⟩ := G1.keyValidatePoint_eq_ok_iff.mp hp
+        have hrep := G1Sub.represents_rep ((0 : Scalar) • g1)
+        obtain ⟨P', hp', he⟩ := G1.uncompress_compress hrep.1
+        have hPP : P = P' := Except.ok.inj (hPu.symm.trans hp')
+        apply hne0
+        rw [hPP, he, hrep.2, G1Sub.dlog_smul_g1]
+        simp [G1.toPoint_mul G1.valid_generator]
+  intro z hz
+  unfold byteExperimentAt at hz
+  simp only [support_bind, support_pure, Set.mem_iUnion, Set.mem_singleton_iff] at hz
+  obtain ⟨x, -, rfl⟩ := hz
+  simp only [hver, Bool.and_false]
+
+/-- The nonzero residues modulo `n` number `n - 1`. -/
+private theorem card_nonzero_zmod (n : ℕ) [NeZero n] :
+    Fintype.card { a : ZMod n // a ≠ 0 } = n - 1 := by
+  classical
+  have h := Fintype.card_subtype_compl (fun a : ZMod n => a = 0)
+  rw [Fintype.card_subtype_eq, ZMod.card] at h
+  convert h
+
+/-- Under a nonzero key, a byte forger wins `r / (r - 1)` times as often as in the byte game.
+
+The byte game draws zero with probability `1 / r`, and that run always loses.
+-/
+theorem nonzeroByteForgeAdvantage_eq (adversary : ByteAdversary) :
+    nonzeroByteForgeAdvantage adversary =
+      (Fr.modulus : ℝ≥0∞) / ((Fr.modulus - 1 : ℕ) : ℝ≥0∞) * byteForgeAdvantage adversary := by
+  classical
+  have hsum : ∀ (T : Type) [SampleableType T] [Fintype T]
+      (f : T → ProbComp (Bool × State Scalar ByteArray)),
+      Pr{let z ← ($ᵗ T >>= f)}[z.1 = true] =
+        (Fintype.card T : ℝ≥0∞)⁻¹ * ∑ t, Pr{let z ← f t}[z.1 = true] := by
+    intro T _ _ f
+    rw [prEvent_bind_eq_sum_fintype, Finset.mul_sum]
+    refine Finset.sum_congr rfl fun t _ => ?_
+    rw [SampleableType.prEvent_uniformSample_eq_singleton]
+  have h0 : Pr{let z ← byteExperimentAt adversary 0}[z.1 = true] = 0 :=
+    (prEvent_eq_zero_iff _ _).mpr fun z hz => by simp [byteExperimentAt_zero adversary z hz]
+  have hcard : (Fintype.card NonzeroScalar : ℝ≥0∞) = ((Fr.modulus - 1 : ℕ) : ℝ≥0∞) := by
+    rw [card_nonzero_zmod]
+  have hr : (Fr.modulus : ℝ≥0∞) ≠ 0 := by exact_mod_cast Fr.modulus_prime.ne_zero
+  have key : ∀ x y S : ℝ≥0∞, x ≠ 0 → x ≠ ⊤ → y⁻¹ * S = x / y * (x⁻¹ * S) := by
+    intro x y S hx hx'
+    rw [ENNReal.div_eq_inv_mul, ← mul_assoc, mul_assoc y⁻¹, ENNReal.mul_inv_cancel hx hx',
+      mul_one]
+  unfold nonzeroByteForgeAdvantage byteForgeAdvantage nonzeroByteExperiment byteExperiment
+  rewrite [hsum NonzeroScalar, hsum Scalar, Fintype.sum_eq_add_sum_subtype_ne _ (0 : Scalar), h0,
+    zero_add, hcard, ZMod.card]
+  exact key _ _ _ hr (ENNReal.natCast_ne_top _)
+
+/-- **EthLib's BLS signatures on bytes are unforgeable from co-CDH under nonzero keys.**
+
+This holds in the random oracle model.
+
+The bound is that of the byte game, times `r / (r - 1)`.
+
+The hash-call bound is on the byte game, and the bound needs the pairing law.
+-/
+theorem nonzeroByteForgeAdvantage_le_coCdhAdvantage (laws : PairingLaws)
+    (adversary : ByteAdversary) {q : ℕ} (hq0 : 0 < q) (hq : ByteHashCallBound adversary q) :
+    nonzeroByteForgeAdvantage adversary ≤
+      (Fr.modulus : ℝ≥0∞) / ((Fr.modulus - 1 : ℕ) : ℝ≥0∞) *
+        (q * coCdhAdvantage Scalar g1 g2 (reduction (F := Scalar) g2 adversary.toGroup q)) := by
+  rw [nonzeroByteForgeAdvantage_eq]
+  exact mul_le_mul_right
+    (byteForgeAdvantage_le_coCdhAdvantage_of_byteHashCallBound laws adversary hq0 hq) _
 
 end EthLib.Cryptography.Bls.Security
