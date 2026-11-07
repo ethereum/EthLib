@@ -13,6 +13,8 @@ public import EthLib.Execution.Proofs.Evm.Gas.Memory
 - A write within memory sets each byte of its range and keeps every other byte.
 - Growth keeps every byte, and a read gives the bytes of its range.
 - Growth by no byte, and a write or a read of a whole memory from offset 0, give simple forms.
+- A read of a range that a write does not touch gives the bytes before the write.
+- A read across two adjacent writes gives the two values in order.
 -/
 
 @[expose] public section
@@ -225,5 +227,46 @@ theorem memoryReadBytes_whole {memory : ByteArray} :
   · simp
   · rename_i hi
     rw [Base.byteAt_of_size_le (by omega)]
+
+/-- A read of a range that a write within memory does not touch gives the bytes before the write.
+
+The ranges are disjoint: the read ends before the write starts, or starts after it ends. -/
+theorem memoryReadBytes_memoryWrite_of_disjoint {memory value : ByteArray} {start size s : Nat}
+    (hw : s + value.size ≤ memory.size) (hd : start + size ≤ s ∨ s + value.size ≤ start) :
+    memoryReadBytes (memoryWrite memory s value) start size =
+      memoryReadBytes memory start size := by
+  have hs : (memoryWrite memory s value).size = memory.size := size_memoryWrite hw
+  unfold memoryReadBytes
+  split
+  · rfl
+  apply eq_of_byteAt (by simp [hs])
+  intro i
+  rw [byteAt_extract, byteAt_extract, hs]
+  split
+  · rw [byteAt_memoryWrite hw, ite_eq_right (by omega)]
+  · rfl
+
+/-- A read across two adjacent writes within memory gives the two values in order. -/
+theorem memoryReadBytes_memoryWrite_memoryWrite {memory a b : ByteArray} {s : Nat}
+    (hw : s + a.size + b.size ≤ memory.size) :
+    memoryReadBytes (memoryWrite (memoryWrite memory s a) (s + a.size) b) s (a.size + b.size) =
+      a ++ b := by
+  have h1 : (memoryWrite memory s a).size = memory.size := size_memoryWrite (by omega)
+  have h2 : (memoryWrite (memoryWrite memory s a) (s + a.size) b).size = memory.size := by
+    rw [size_memoryWrite (by omega), h1]
+  apply eq_of_byteAt
+  · rw [size_memoryReadBytes (by omega), ByteArray.size_append]
+  intro i
+  rw [byteAt_memoryReadBytes (by omega), byteAt_memoryWrite (by omega),
+    byteAt_memoryWrite (by omega), byteAt_append]
+  by_cases hi : i < a.size
+  · rw [ite_eq_left (by omega), ite_eq_right (by omega), ite_eq_left (by omega), ite_eq_left hi]
+    congr 1
+    omega
+  · by_cases hj : i < a.size + b.size
+    · rw [ite_eq_left hj, ite_eq_left (by omega), ite_eq_right hi]
+      congr 1
+      omega
+    · rw [ite_eq_right hj, ite_eq_right hi, byteAt_of_size_le (by omega)]
 
 end EthLib.Execution.Evm
