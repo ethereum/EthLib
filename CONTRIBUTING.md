@@ -198,6 +198,11 @@ These rules hold for both:
 
 - Write one sentence per line.
   A sentence that wraps onto a second line is too long, so split it.
+  This holds for list items too.
+- Keep a long link out of the sentence.
+  Write `[text][ref]` in the sentence, and the definition `[ref]: <url>` at the end of the comment.
+- Put formulas that span several lines in a fenced `text` block.
+  The layout check reads a line of a comment outside such a block as prose.
 - Leave a blank line between ideas.
   Space makes a dense subject readable.
 - Comment every non-obvious step of a definition or proof.
@@ -343,9 +348,13 @@ uv run --no-project --python 3.12 python scripts/check_lean_layout.py --base ori
 ```
 
 It fails on a changed line longer than 100 characters, unless the line holds only a URL.
-It also fails when two sentence lines of a comment touch, and one of them is changed.
+It also checks the pairs of lines in a comment where at least one line is changed.
+It fails when a sentence runs from one line onto the next, and when two sentence lines touch.
 Lines that your branch does not change are not checked.
 A Lean file that git does not track yet counts as changed on every line.
+
+With `--all` in place of `--base`, the check reads every line of every Lean file that git tracks.
+`--rule wrap` runs only the check of wrapped sentences; the other rules are `length` and `touching`.
 
 These commands use uv and Python 3.12, with only the standard library.
 See [prerequisites](README.md#prerequisites) for setup.

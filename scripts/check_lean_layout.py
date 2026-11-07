@@ -1,4 +1,4 @@
-"""Check the line length and the comment layout of the Lean lines that a branch changes."""
+"""Check the line length and the comment layout of Lean files, or of the lines a branch changes."""
 
 import argparse
 import re
@@ -23,6 +23,13 @@ RAW_STRING = re.compile(r'r(#*)"')
 CHAR_LITERAL = re.compile(r"'(?:\\(?:u\{[0-9A-Fa-f]+\}|x[0-9A-Fa-f]{2}|.)|[^\\'\n])'")
 LIST_ITEM = re.compile(r"(?:[-*+]|\d+[.)])(?:\s|$)")
 FENCE = re.compile(r"(```|~~~)")
+# A Markdown link reference definition `[label]: target`.
+REFERENCE = re.compile(r"\[[^\]\n]+\]:\s")
+# The end of a sentence: a full stop, a question mark, an exclamation mark or a colon,
+# optionally followed by closing brackets, quotes or emphasis.
+SENTENCE_END = re.compile(r"[.?!:][)\]\"'`*_]*$")
+
+RULES = ("length", "touching", "wrap")
 
 
 @dataclass(frozen=True)
@@ -166,22 +173,79 @@ def sentence_lines(comment: list[tuple[int, str]]) -> list[tuple[int, bool]]:
     return out
 
 
-def check_text(path: str, text: str, changed: set[int] | None) -> list[Finding]:
-    """The findings on the changed lines of one Lean file; `None` means every line changed."""
+def wrapped_lines(
+    comment: list[tuple[int, str]], line_comment: bool = False
+) -> list[tuple[int, int]]:
+    """
+    Each pair of lines of a comment where a sentence runs from the first line onto the second.
+
+    The first line is prose that does not end a sentence, and the second line continues it.
+    Prose is any line with a letter or a digit that is not a heading, a table row or a reference.
+
+    A blank line, a fenced or indented code block, and a line that is not prose end a paragraph.
+    A new list item continues nothing.
+    In a run of line comments, the first line also sets the indentation of the code.
+    """
+    rest = [content for _, content in comment[0 if line_comment else 1 :] if content.strip()]
+    base = min(map(indentation, rest), default=0)
+    out = []
+    in_fence = False
+    # The previous prose line of the paragraph, when it does not end a sentence.
+    open_line: int | None = None
+    for number, content in comment:
+        stripped = content.strip()
+        if FENCE.match(stripped):
+            in_fence = not in_fence
+            open_line = None
+            continue
+        first = number == comment[0][0] and not line_comment
+        code = in_fence or (not first and indentation(content) >= base + 4)
+        prose = (
+            bool(stripped)
+            and not code
+            and not stripped.startswith(("#", "|"))
+            and not REFERENCE.match(stripped)
+            and any(c.isalnum() for c in stripped)
+        )
+        if not prose:
+            open_line = None
+            continue
+        if open_line is not None and not LIST_ITEM.match(stripped):
+            out.append((open_line, number))
+        open_line = None if SENTENCE_END.search(stripped) else number
+    return out
+
+
+def check_text(
+    path: str, text: str, changed: set[int] | None, rules: tuple[str, ...] = RULES
+) -> list[Finding]:
+    """The findings of the rules on the changed lines of one Lean file; `None` means every line."""
 
     def is_changed(number: int) -> bool:
         return changed is None or number in changed
 
     found = []
-    for number, content in enumerate(text.split("\n"), start=1):
-        if is_changed(number) and len(content) > MAX_LENGTH and not URL_LINE.fullmatch(content):
-            found.append(
-                Finding(path, number, f"line has {len(content)} characters, more than {MAX_LENGTH}")
-            )
-    # Two sentence lines that touch fail when the branch changes at least one of them.
+    if "length" in rules:
+        for number, content in enumerate(text.split("\n"), start=1):
+            if is_changed(number) and len(content) > MAX_LENGTH and not URL_LINE.fullmatch(content):
+                message = f"line has {len(content)} characters, more than {MAX_LENGTH}"
+                found.append(Finding(path, number, message))
+    # A pair of lines fails when the branch changes at least one of them.
+    source = text.split("\n")
     for comment in comments(text):
+        line_comment = source[comment[0][0] - 1].lstrip().startswith("--")
+        wrapped = wrapped_lines(comment, line_comment) if "wrap" in rules else []
+        for first, second in wrapped:
+            if is_changed(first) or is_changed(second):
+                message = "sentence runs onto this line; give each sentence a line of its own"
+                found.append(Finding(path, second, message))
+        if "touching" not in rules:
+            continue
         lines = sentence_lines(comment)
         for (first, first_sentence), (second, second_sentence) in pairwise(lines):
+            # A wrapped sentence is already a finding of the wrap rule.
+            if (first, second) in wrapped:
+                continue
             if first_sentence and second_sentence and (is_changed(first) or is_changed(second)):
                 found.append(
                     Finding(
@@ -230,20 +294,32 @@ def main(argv: list[str]) -> int:
     """Print the layout findings of the files, and return the exit code."""
     parser = argparse.ArgumentParser(description=__doc__.strip().split("\n")[0])
     parser.add_argument("--base", help="check the lines changed since the merge base with BASE")
+    parser.add_argument("--all", action="store_true", help="check every tracked Lean file")
     parser.add_argument("files", nargs="*", help="check every line of these files")
+    parser.add_argument(
+        "--rule",
+        action="append",
+        choices=RULES,
+        help="run only this rule; repeat it to run several (default: every rule)",
+    )
     parser.add_argument("--github", action="store_true", help="print GitHub annotations")
     args = parser.parse_args(argv[1:])
-    if bool(args.base) == bool(args.files):
-        parser.error("give either --base or at least one file")
+    if sum((bool(args.base), bool(args.files), args.all)) != 1:
+        parser.error("give one of --base, --all or at least one file")
+    rules = tuple(args.rule or RULES)
     if args.base:
         targets = [(path, lines) for path, lines in sorted(changed_lines(args.base).items())]
+        root = ROOT
+    elif args.all:
+        tracked = git("ls-files", "-z", "--", "*.lean")
+        targets = [(path, None) for path in sorted(filter(None, tracked.split("\0")))]
         root = ROOT
     else:
         targets = [(name, None) for name in args.files]
         root = Path.cwd()
     found = []
     for path, lines in targets:
-        found += check_text(path, (root / path).read_text(encoding="utf-8"), lines)
+        found += check_text(path, (root / path).read_text(encoding="utf-8"), lines, rules)
     for item in found:
         if args.github:
             print(f"::error file={item.path},line={item.line},title=Lean layout::{item.message}")

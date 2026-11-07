@@ -414,8 +414,9 @@ jobs:
       # The fetcher of the release archives checks each digest and unpacks no unsafe member.
       - run: uv run --no-project --python 3.12 python -m unittest scripts/test_fetch_archives.py
 
-      # Each Lean line that a pull request changes has at most 100 characters, and no two
-      # sentence lines of a comment touch. Lines that it does not change are not checked.
+      # Each Lean line that a pull request changes has at most 100 characters.
+      # In a comment, no two sentence lines touch, and no sentence runs onto a second line.
+      # Lines that the pull request does not change are not checked.
       - name: Lean layout of the changed lines
         if: github.event_name == 'pull_request'
         env:
