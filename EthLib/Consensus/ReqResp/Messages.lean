@@ -12,7 +12,7 @@ public import EthLib.Serialization.Ssz.Typed.Since
 /-!
 # `Consensus.ReqResp.Messages`
 
-The messages of the request and response protocols of the consensus layer, up to Fulu.
+The messages of the request and response protocols of the consensus layer, up to Gloas.
 
 Each protocol has an ID, the string `/eth2/beacon_chain/req/N/V/ssz_snappy`.
 
@@ -31,6 +31,8 @@ Fulu adds the protocols of data column sidecars, by range and by root.
 Fulu also adds blocks by head, a second version of status and a third of metadata.
 
 Fulu deprecates the blob protocols at an epoch after its start, so they stay in its list.
+
+Gloas adds the protocols of execution payload envelopes, by range and by root.
 -/
 
 @[expose] public section
@@ -71,6 +73,10 @@ inductive ReqRespProtocol where
   | dataColumnSidecarsByRoot
   /-- From Fulu: blocks along the ancestry of a block root, newest first. -/
   | beaconBlocksByHead
+  /-- From Gloas: the payload envelopes of the blocks of a range of slots, on the head's chain. -/
+  | executionPayloadEnvelopesByRange
+  /-- From Gloas: payload envelopes by the roots of their blocks. -/
+  | executionPayloadEnvelopesByRoot
   deriving DecidableEq, Repr
 
 /-- The name of a protocol in its ID. -/
@@ -90,13 +96,16 @@ def ReqRespProtocol.name : ReqRespProtocol → String
   | .dataColumnSidecarsByRange => "data_column_sidecars_by_range"
   | .dataColumnSidecarsByRoot => "data_column_sidecars_by_root"
   | .beaconBlocksByHead => "beacon_blocks_by_head"
+  | .executionPayloadEnvelopesByRange => "execution_payload_envelopes_by_range"
+  | .executionPayloadEnvelopesByRoot => "execution_payload_envelopes_by_root"
 
 /-- Every protocol: those of Phase 0 in the order of its text, then the later ones by fork. -/
 def ReqRespProtocol.all : List ReqRespProtocol :=
   [.status, .goodbye, .beaconBlocksByRange, .beaconBlocksByRoot, .ping, .metadata,
     .lightClientBootstrap, .lightClientUpdatesByRange, .lightClientFinalityUpdate,
     .lightClientOptimisticUpdate, .blobSidecarsByRange, .blobSidecarsByRoot,
-    .dataColumnSidecarsByRange, .dataColumnSidecarsByRoot, .beaconBlocksByHead]
+    .dataColumnSidecarsByRange, .dataColumnSidecarsByRoot, .beaconBlocksByHead,
+    .executionPayloadEnvelopesByRange, .executionPayloadEnvelopesByRoot]
 
 /-- A protocol and its version. -/
 structure ProtocolId where
@@ -122,14 +131,16 @@ def ReqRespProtocol.versions (fork : Fork) : ReqRespProtocol → List Nat
   | .blobSidecarsByRange | .blobSidecarsByRoot => if .dencun ≤ fork then [1] else []
   | .dataColumnSidecarsByRange | .dataColumnSidecarsByRoot | .beaconBlocksByHead =>
     if .fusaka ≤ fork then [1] else []
+  | .executionPayloadEnvelopesByRange | .executionPayloadEnvelopesByRoot =>
+    if .glamsterdam ≤ fork then [1] else []
 
-/-- The protocol IDs of a fork, up to Fulu.
+/-- The protocol IDs of a fork, up to Gloas.
 
-Gloas adds the protocols of execution payload envelopes, which EthLib does not hold yet.
+Heze adds the protocol of inclusion lists, which EthLib does not hold yet.
 
-So from Gloas there is no list. -/
+So from Heze there is no list. -/
 def protocolIds (fork : Fork) : Option (List ProtocolId) :=
-  if .glamsterdam ≤ fork then none
+  if .hegota ≤ fork then none
   else some <| ReqRespProtocol.all.flatMap fun protocol =>
     (protocol.versions fork).map fun version => ⟨protocol, version⟩
 
@@ -310,6 +321,21 @@ structure BeaconBlocksByHeadRequest where
 
 instance : SszType BeaconBlocksByHeadRequest :=
   .container ["beacon_root", "count"] (fun r => (r.beaconRoot, r.count)) (fun (b, c) => ⟨b, c⟩)
+
+/-- From Gloas: a request for the payload envelopes of the blocks in a range of slots. -/
+structure ExecutionPayloadEnvelopesByRangeRequest where
+  /-- The first slot. -/
+  startSlot : Slot
+  /-- The number of slots. -/
+  count : UInt64
+  deriving DecidableEq, Repr
+
+instance : SszType ExecutionPayloadEnvelopesByRangeRequest :=
+  .container ["start_slot", "count"] (fun r => (r.startSlot, r.count)) (fun (s, c) => ⟨s, c⟩)
+
+/-- From Gloas: a request for payload envelopes by the roots of their blocks. -/
+abbrev ExecutionPayloadEnvelopesByRootRequest (config : Config) :=
+  SszList Root config.MAX_REQUEST_PAYLOADS.toNat
 
 /-- The message of an error response, at most 256 bytes. -/
 abbrev ErrorMessage := SszList UInt8 256

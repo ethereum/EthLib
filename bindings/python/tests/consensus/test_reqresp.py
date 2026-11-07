@@ -64,6 +64,10 @@ FULU = (
         _id("beacon_blocks_by_head", 1),
     ]
 )
+GLOAS = FULU + [
+    _id("execution_payload_envelopes_by_range", 1),
+    _id("execution_payload_envelopes_by_root", 1),
+]
 
 
 @pytest.mark.parametrize(
@@ -76,6 +80,7 @@ FULU = (
         ("pectra", DENEB),
         ("fusaka", FULU),
         ("bpo2", FULU),
+        ("glamsterdam", GLOAS),
     ],
 )
 def test_protocol_ids(fork: str, expected: list) -> None:
@@ -83,12 +88,12 @@ def test_protocol_ids(fork: str, expected: list) -> None:
 
 
 def test_protocol_ids_not_yet_specified() -> None:
-    with raises(ConsensusError, "fork glamsterdam not yet specified"):
-        consensus.reqresp_protocol_ids("glamsterdam")
+    with raises(ConsensusError, "fork hegota not yet specified"):
+        consensus.reqresp_protocol_ids("hegota")
 
 
 def test_parse_protocol_ids() -> None:
-    for text in FULU:
+    for text in GLOAS:
         name, version = consensus.reqresp_parse_protocol_id(text)
         assert _id(name, version) == text
 
