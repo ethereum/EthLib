@@ -459,6 +459,17 @@ Under them, the counters of the text differ from each other and from `J_0`, the 
 `encrypt_shortTag` and `decrypt_shortTag` prove that both functions reject the 64-bit and 32-bit tags, which SP 800-38D Appendix C restricts.
 The Python tests check seven test cases of the NIST CAVP file `gcmtestvectors.zip`, one of them a forged tag that decryption rejects.
 
+### RIPEMD-160
+
+`compress_toBitVec` (`Proofs/Hash/Ripemd160.lean`) proves that the compression of one block, read as 32-bit vectors, is the compression of a model of the authors' pseudo-code.
+The statement holds for every chaining variable and every 64-byte block.
+The model runs both lines in one loop, rotates 32-bit vectors, and reads each word least significant byte first.
+It shares the constants, the word orders and the rotation amounts with the code.
+`K_from_square_roots` and `K'_from_cube_roots` derive the constants from square and cube roots.
+`r_groups_permute` and `r'_groups_permute` check only that each group of a word order reads every word once.
+No theorem states the whole hash, with its padding and its chain of blocks, against the model.
+The Python tests (`bindings/python/tests/precompile/test_ripemd160.py`) check the hash against the test vectors on Bosselaers' RIPEMD-160 page.
+
 ### KZG
 
 Blobs, cells, commitments, proofs and field elements are byte vectors with their length in the type.
