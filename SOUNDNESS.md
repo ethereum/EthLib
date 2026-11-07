@@ -667,7 +667,10 @@ So `SpecUnder.runFrame` concludes that `runFrame` returns a stopped frame of `Q`
 `hoareUnder_iff_triple` states each triple under an assumption as a `Triple` over `StepBy` under each runner that meets it, so the two share their rules.
 The code that a message runs is arbitrary and may call the caller again.
 So the assumption is all that a triple says about a frame that ends a message, and about the state after it.
-`Logic.call` (`Logic/Call.lean`) is the rule for CALL with no value and empty ranges of input and output.
+`Logic.callWith` (`Logic/Call.lean`) is the rule for CALL with no value, a range of input and a range of output.
+It pays the growth of memory for both ranges, and the message carries the bytes of the input range.
+The caller writes the start of the output of the callee at the start of the output range, as far as both go.
+`Logic.call` is its case with empty ranges.
 It holds from Berlin to before Glamsterdam, with the one-counter meter.
 It pays 2600 or 100 for the access to the address, by EIP-2929.
 It passes on at most all but one 64th of the gas left, by EIP-150.
@@ -686,6 +689,8 @@ With the runner of the interpreter, the outer frame stops with no error and retu
 Before Paris, the call to the address of the word 0 may create its empty account.
 No frame writes the account of the called address or of the outer frame.
 So the result holds even when the two are the same address.
+`CallEcho.runFrame_process` proves a contract that sends a word to a callee that returns its call data, with an output range of 64 bytes.
+With the runner of the interpreter, it returns that word and 32 zero bytes, since the callee returns only 32, or the run aborts.
 No rule covers CREATE, a call with value, DELEGATECALL or STATICCALL.
 
 ### SHA-256 precompile
