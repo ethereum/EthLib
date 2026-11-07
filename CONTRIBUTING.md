@@ -275,8 +275,10 @@ The C exports and the Python package are the public surface for clients.
 
 `scripts/check_python_boundary.py` finds the usual forms of such conversions in `bindings/python/ethlib`.
 With `--base`, it fails on any conversion on a line added since the merge base, committed or not.
-Without it, it fails on any conversion that `scripts/check_python_boundary_allowlist.txt` does not list.
-That list names the conversions that remain from before the rule, and it only shrinks.
+Without it, it fails on any conversion in the package.
+Both forms skip the conversions that `scripts/check_python_boundary_allowlist.txt` lists.
+That list names the conversions that remain from before the rule.
+A new entry is an exception that a maintainer approves, so the list only shrinks otherwise.
 
 ## Checks
 

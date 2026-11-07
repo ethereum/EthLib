@@ -7,7 +7,7 @@
 # Code outside every function is named `<module>`.
 # Each entry goes once its export takes and returns typed values.
 # An entry that matches no conversion fails the check.
-# A pull request may add no conversion, even one that an entry covers.
+# A new entry is an exception that a maintainer approves, and the diff shows it.
 # A pull request that moves a conversion to another function renames its entry.
 
 bindings/python/ethlib/chain/__init__.py active_fork json

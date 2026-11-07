@@ -187,27 +187,43 @@ class CheckAll(unittest.TestCase):
 
 
 class CheckBase(unittest.TestCase):
-    def test_only_added_lines_are_reported_even_when_allowlisted(self) -> None:
+    def run_branch(self, config: tuple[str, str] | None = None) -> list[str]:
+        """The `--base` findings of a branch that changes a listed and an unlisted function."""
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             git(root, "init", "--quiet", "--initial-branch=master")
             git(root, "config", "user.email", "a@example.com")
             git(root, "config", "user.name", "A")
-            allowed = f"{WRAPPER} outer.inner slice\n"
-            write(root, {WRAPPER: NESTED, str(boundary.ALLOWLIST): allowed})
+            if config is not None:
+                git(root, "config", *config)
+            write(root, {WRAPPER: NESTED})
             git(root, "add", "-A")
             git(root, "commit", "--quiet", "-m", "base")
             git(root, "checkout", "--quiet", "-b", "branch")
-            write(root, {WRAPPER: NESTED + "\n\ndef added(out):\n    return out[:4]\n"})
-            git(root, "commit", "--quiet", "-am", "change")
+            changed = NESTED.replace("out[at:]", "out[at:-1]")
+            allowed = f"{WRAPPER} outer.inner slice\n"
+            added = "\n\ndef added(out):\n    return out[:4]\n"
+            write(root, {WRAPPER: changed + added, str(boundary.ALLOWLIST): allowed})
+            git(root, "add", "-A")
+            git(root, "commit", "--quiet", "-m", "change")
             write(root, {"bindings/python/ethlib/b.py": MODULE_LEVEL})
-            self.assertEqual(
-                boundary.check_base(root, "master"),
-                [
-                    problem(9, "added", "slice"),
-                    problem(1, "<module>", "slice", "bindings/python/ethlib/b.py"),
-                ],
-            )
+            # Bytes that are not UTF-8, which the check would fail to read as text.
+            (root / "bindings/python/ethlib/data.bin").write_bytes(b"\xff\xfe")
+            return boundary.check_base(root, "master")
+
+    def test_added_lines_are_reported_unless_allowlisted(self) -> None:
+        self.assertEqual(
+            self.run_branch(),
+            [
+                problem(9, "added", "slice"),
+                problem(1, "<module>", "slice", "bindings/python/ethlib/b.py"),
+            ],
+        )
+
+    def test_the_git_configuration_of_prefixes_changes_nothing(self) -> None:
+        expected = self.run_branch()
+        self.assertEqual(self.run_branch(("diff.noprefix", "true")), expected)
+        self.assertEqual(self.run_branch(("diff.mnemonicPrefix", "true")), expected)
 
 
 if __name__ == "__main__":
