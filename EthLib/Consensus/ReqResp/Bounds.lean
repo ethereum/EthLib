@@ -18,6 +18,7 @@ Each protocol has one request type, the same at every version, except the status
 - Data column sidecars by range and by root carry requests limited by the preset and the config.
 - Blocks by head carries a block root and a count.
 - From Gloas, payload envelopes by range carry a range, and by root a list of block roots.
+- From Heze, inclusion lists by indices carry a slot, a dependent root and seat bits.
 - Metadata and the two light client update protocols carry no request.
 
 The type of a response depends on the context bytes of each chunk, so it is not part of this module.
@@ -54,6 +55,7 @@ def requestDesc (preset : Preset) (config : Config) (fork : Fork) (id : Protocol
     some (SszType.desc ExecutionPayloadEnvelopesByRangeRequest)
   | .executionPayloadEnvelopesByRoot =>
     some (SszType.desc (ExecutionPayloadEnvelopesByRootRequest config))
+  | .inclusionListsByIndices => some (SszType.desc (InclusionListsByIndicesRequest preset))
 
 /-- The length bounds of the request payload of a protocol version at a fork, if it has one. -/
 def requestBounds (preset : Preset) (config : Config) (fork : Fork) (id : ProtocolId) :

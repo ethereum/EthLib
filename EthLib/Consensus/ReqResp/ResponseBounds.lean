@@ -25,6 +25,7 @@ This module does not compute it, and it does not check that the protocol exists 
 - Blob sidecars by range and by root carry a blob sidecar.
 - Data column sidecars by range and by root carry a data column sidecar of `chunkFork`.
 - From Gloas, payload envelopes by range and by root carry a signed envelope of `chunkFork`.
+- From Heze, inclusion lists by indices carry a signed inclusion list.
 
 An unknown version of the status or metadata protocol has no type.
 
@@ -59,6 +60,7 @@ def responseDesc (preset : Preset) (config : Config) (chunkFork : Fork) (id : Pr
     some (SszType.desc (DataColumnSidecar preset chunkFork))
   | .executionPayloadEnvelopesByRange | .executionPayloadEnvelopesByRoot =>
     some (SszType.desc (SignedExecutionPayloadEnvelope preset chunkFork))
+  | .inclusionListsByIndices => some (SszType.desc SignedInclusionList)
 
 /-- The length bounds of one successful response chunk of a protocol version, for its fork. -/
 def responseBounds (preset : Preset) (config : Config) (chunkFork : Fork) (id : ProtocolId) :

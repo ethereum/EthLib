@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Fork
 public import EthLib.Consensus.Config
+public import EthLib.Consensus.Containers.InclusionList
 public import EthLib.Consensus.DataAvailability.Blob
 public import EthLib.Consensus.DataAvailability.Column
 public import EthLib.Consensus.Types
@@ -12,7 +13,7 @@ public import EthLib.Serialization.Ssz.Typed.Since
 /-!
 # `Consensus.ReqResp.Messages`
 
-The messages of the request and response protocols of the consensus layer, up to Gloas.
+The messages of the request and response protocols of the consensus layer, up to Heze.
 
 Each protocol has an ID, the string `/eth2/beacon_chain/req/N/V/ssz_snappy`.
 
@@ -33,6 +34,8 @@ Fulu also adds blocks by head, a second version of status and a third of metadat
 Fulu deprecates the blob protocols at an epoch after its start, so they stay in its list.
 
 Gloas adds the protocols of execution payload envelopes, by range and by root.
+
+Heze adds the protocol of inclusion lists, by slot, dependent root and committee seats.
 -/
 
 @[expose] public section
@@ -77,6 +80,8 @@ inductive ReqRespProtocol where
   | executionPayloadEnvelopesByRange
   /-- From Gloas: payload envelopes by the roots of their blocks. -/
   | executionPayloadEnvelopesByRoot
+  /-- From Heze: the inclusion lists of some seats of the committee of a slot. -/
+  | inclusionListsByIndices
   deriving DecidableEq, Repr
 
 /-- The name of a protocol in its ID. -/
@@ -98,6 +103,7 @@ def ReqRespProtocol.name : ReqRespProtocol → String
   | .beaconBlocksByHead => "beacon_blocks_by_head"
   | .executionPayloadEnvelopesByRange => "execution_payload_envelopes_by_range"
   | .executionPayloadEnvelopesByRoot => "execution_payload_envelopes_by_root"
+  | .inclusionListsByIndices => "inclusion_lists_by_indices"
 
 /-- Every protocol: those of Phase 0 in the order of its text, then the later ones by fork. -/
 def ReqRespProtocol.all : List ReqRespProtocol :=
@@ -105,7 +111,7 @@ def ReqRespProtocol.all : List ReqRespProtocol :=
     .lightClientBootstrap, .lightClientUpdatesByRange, .lightClientFinalityUpdate,
     .lightClientOptimisticUpdate, .blobSidecarsByRange, .blobSidecarsByRoot,
     .dataColumnSidecarsByRange, .dataColumnSidecarsByRoot, .beaconBlocksByHead,
-    .executionPayloadEnvelopesByRange, .executionPayloadEnvelopesByRoot]
+    .executionPayloadEnvelopesByRange, .executionPayloadEnvelopesByRoot, .inclusionListsByIndices]
 
 /-- A protocol and its version. -/
 structure ProtocolId where
@@ -133,15 +139,11 @@ def ReqRespProtocol.versions (fork : Fork) : ReqRespProtocol → List Nat
     if .fusaka ≤ fork then [1] else []
   | .executionPayloadEnvelopesByRange | .executionPayloadEnvelopesByRoot =>
     if .glamsterdam ≤ fork then [1] else []
+  | .inclusionListsByIndices => if .hegota ≤ fork then [1] else []
 
-/-- The protocol IDs of a fork, up to Gloas.
-
-Heze adds the protocol of inclusion lists, which EthLib does not hold yet.
-
-So from Heze there is no list. -/
-def protocolIds (fork : Fork) : Option (List ProtocolId) :=
-  if .hegota ≤ fork then none
-  else some <| ReqRespProtocol.all.flatMap fun protocol =>
+/-- The protocol IDs of a fork: each protocol with each version that the fork defines. -/
+def protocolIds (fork : Fork) : List ProtocolId :=
+  ReqRespProtocol.all.flatMap fun protocol =>
     (protocol.versions fork).map fun version => ⟨protocol, version⟩
 
 /-- The protocol and the version that an ID names, if it names one.
@@ -336,6 +338,25 @@ instance : SszType ExecutionPayloadEnvelopesByRangeRequest :=
 /-- From Gloas: a request for payload envelopes by the roots of their blocks. -/
 abbrev ExecutionPayloadEnvelopesByRootRequest (config : Config) :=
   SszList Root config.MAX_REQUEST_PAYLOADS.toNat
+
+/-- From Heze: a request for the inclusion lists of some seats of the committee of a slot.
+
+The seats are bits over the committee that the dependent root fixes for that slot. -/
+structure InclusionListsByIndicesRequest (preset : Preset) where
+  /-- The slot of the lists. -/
+  slot : Slot
+  /-- The root of the dependent block of the committee. -/
+  dependentRoot : Root
+  /-- One bit for each seat of the committee, set for each list asked for. -/
+  indices : InclusionListBits preset
+
+instance {preset : Preset} : SszType (InclusionListsByIndicesRequest preset) :=
+  .container ["slot", "dependent_root", "indices"] (fun r => (r.slot, r.dependentRoot, r.indices))
+    (fun (slot, dependentRoot, indices) => ⟨slot, dependentRoot, indices⟩)
+
+/-- From Heze: the inclusion lists of a response, at most the request limit. -/
+abbrev SignedInclusionLists (config : Config) :=
+  SszList SignedInclusionList config.MAX_REQUEST_INCLUSION_LIST.toNat
 
 /-- The message of an error response, at most 256 bytes. -/
 abbrev ErrorMessage := SszList UInt8 256
