@@ -14,6 +14,10 @@ Request lists that pass the checks have distinct types, in increasing order.
 
 Without a JSON-RPC error, the parameters are an array of the values of the version, none null.
 
+A payload that fails the checks is invalid, or has an invalid block hash, with no latest valid hash.
+
+So without the parent's state a payload is never valid: it is syncing, or it failed the checks.
+
 If the last block of a chain is not the parent, a payload that passes the checks is syncing.
 
 If it is the parent, a payload whose block passes the state transition is valid.
@@ -141,6 +145,69 @@ theorem params_of_checkNewPayload_ok {config : ChainConfig} {version : Nat} {par
       cases hInvalid
   -- Any other JSON value is not an array, so the read fails at once.
   | _ => cases h
+
+/-! ## A payload that fails the checks -/
+
+/-- A payload that fails the checks is invalid, or has an invalid block hash.
+
+Its latest valid hash is null. -/
+theorem status_of_checkNewPayload {config : ChainConfig} {version : Nat} {params : Lean.Json}
+    {status : PayloadStatus} {reason : PayloadError}
+    (h : checkNewPayload config version params = .ok (.error (status, reason))) :
+    status.latestValidHash = none ∧
+      (status.status = .invalid ∨ status.status = .invalidBlockHash) := by
+  cases params with
+  | arr items =>
+    unfold checkNewPayload at h
+    rw [bind_ok_iff] at h
+    obtain ⟨l, hl, h⟩ := h
+    cases hl
+    by_cases hc : (items.toList.length == paramCount version) = true ∧
+        (items.toList.all fun x => !x.isNull) = true
+    · dsimp only at h
+      rw [ite_eq_left hc] at h
+      -- Walk every step: a failing step contradicts the result, and each value read is kept.
+      repeat' (first
+        | (cases h; done)
+        | (obtain ⟨_, step, h⟩ := bind_ok_iff.mp h
+           first | cases step | obtain ⟨_, -, rfl⟩ := map_ok_iff.mp step | skip)
+        | split at h)
+      -- Each status that the checks return is invalid, or an invalid block hash at version 1.
+      all_goals
+        cases h
+        exact ⟨rfl, by simp⟩
+    -- Parameters of the wrong shape fail with a JSON-RPC error, never with a status.
+    · dsimp -zeta only at h
+      rw [ite_eq_right hc, bind_ok_iff] at h
+      obtain ⟨_, hInvalid, -⟩ := h
+      cases hInvalid
+  -- Any other JSON value is not an array, so the read fails at once.
+  | _ => cases h
+
+/-- Without the parent's state, a payload is never valid, and its latest valid hash is null.
+
+It is syncing with no reason when it passes the checks, and invalid with a reason otherwise. -/
+theorem status_of_newPayloadWithoutState {config : ChainConfig} {version : Nat}
+    {params : Lean.Json} {status : PayloadStatus} {reason : Option PayloadError}
+    (h : newPayloadWithoutState config version params = .ok (status, reason)) :
+    status.latestValidHash = none ∧
+      (status.status = .syncing ∧ reason = none ∨
+        (status.status = .invalid ∨ status.status = .invalidBlockHash) ∧ reason.isSome) := by
+  unfold newPayloadWithoutState at h
+  cases hc : checkNewPayload config version params with
+  | error e => simp [hc, bind, Except.bind] at h
+  | ok r =>
+    cases r with
+    | error p =>
+      obtain ⟨st, re⟩ := p
+      simp only [hc, bind, Except.bind, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      obtain ⟨hn, hs⟩ := status_of_checkNewPayload hc
+      exact ⟨hn, .inr ⟨hs, rfl⟩⟩
+    | ok _ =>
+      simp only [hc, bind, Except.bind, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      exact ⟨rfl, .inl ⟨rfl, rfl⟩⟩
 
 /-! ## The status on a chain that holds the parent -/
 
