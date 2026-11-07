@@ -390,6 +390,56 @@ def test_no_on_chain_aggregate_before_electra():
         consensus.compute_on_chain_aggregate("mainnet", "dencun", [])
 
 
+# ---- The sync aggregate --------------------------------------------------------------------------
+
+SYNC_SUBCOMMITTEE_SIZE = 512 // 4
+
+
+def contribution(subcommittee: int, seats: list, signature: bytes) -> bytes:
+    """A contribution of slot 70 and a zero root, with the bits of some seats."""
+    bits = sum(1 << seat for seat in seats).to_bytes(SYNC_SUBCOMMITTEE_SIZE // 8, "little")
+    return struct.pack("<Q", 70) + bytes(32) + struct.pack("<Q", subcommittee) + bits + signature
+
+
+def test_sync_aggregate():
+    # Seat 0 and seat 127 of subcommittee 2, and seat 5 of subcommittee 0.
+    contributions = [(2, [0, 127], signature(1)), (0, [5], signature(2))]
+    got = consensus.process_sync_committee_contributions(
+        "mainnet", "altair", [contribution(*c) for c in contributions]
+    )
+    # Seat j of subcommittee i is seat 128 * i + j of the committee.
+    bits = sum(1 << (128 * 2 + j) for j in [0, 127]) | (1 << 5)
+    joined = aggregate_signatures([signature(1), signature(2)])
+    assert got == bits.to_bytes(64, "little") + joined
+
+
+@pytest.mark.parametrize(
+    ("contributions", "code"),
+    [
+        ([contribution(4, [0], signature(1))], 12),
+        ([contribution(1, [0], signature(1)), contribution(1, [1], signature(2))], 13),
+        ([], 4),
+        ([contribution(0, [0], bytes(96))], 4),
+    ],
+    ids=["subcommittee", "repeated", "none", "bad signature"],
+)
+def test_sync_aggregate_rejected(contributions: list, code: int):
+    with raises(ProposerError, f"proposer step failed with code {code}") as info:
+        consensus.process_sync_committee_contributions("mainnet", "altair", contributions)
+    assert info.value.code == code
+
+
+def test_no_sync_aggregate_before_altair():
+    with raises(ProposerError, "no sync aggregate at phase0") as info:
+        consensus.process_sync_committee_contributions("mainnet", "phase0", [])
+    assert info.value.code == 0
+
+
+def test_sync_aggregate_of_a_contribution_that_does_not_decode():
+    with raises(ProposerError, "input rejected: EthLib.Serialization.Ssz.Err.scope 160 159"):
+        consensus.process_sync_committee_contributions("mainnet", "altair", [bytes(159)])
+
+
 # ---- The state root ------------------------------------------------------------------------------
 
 VECTORS = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "transition" / "minimal"
