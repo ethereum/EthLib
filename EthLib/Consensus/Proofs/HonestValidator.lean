@@ -426,6 +426,8 @@ theorem mem_committeePositions_of_epoch {state : BeaconState preset fork} {epoch
 
 The search may still fail, for an epoch too far ahead or a committee without a value.
 
+It also fails for the epoch whose first slot plus the length of an epoch is `2^64`.
+
 The seed of the epoch must have a value, and an epoch must have at least one slot.
 
 The slots of the epoch must fit in 64 bits.
