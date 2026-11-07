@@ -382,4 +382,18 @@ theorem mem_of_flatMapM_ok {α β ε : Type} {f : α → Except ε (List β)} :
         exact .inl (ok' ▸ mem'')
       · exact .inr ⟨x', mem', zs', ok', mem''⟩
 
+/-- A monadic filter map in `Except` succeeds when each call succeeds. -/
+theorem filterMapM_ok_of_forall {α β ε : Type} {f : α → Except ε (Option β)} :
+    ∀ {l : List α}, (∀ x ∈ l, ∃ y, f x = .ok y) → ∃ out, l.filterMapM f = .ok out
+  | [], _ => ⟨[], rfl⟩
+  | x :: l, each => by
+    obtain ⟨y, first⟩ := each x List.mem_cons_self
+    obtain ⟨rest, restOk⟩ :=
+      filterMapM_ok_of_forall fun x' mem => each x' (List.mem_cons_of_mem _ mem)
+    cases y with
+    | none => exact ⟨rest, by simp [List.filterMapM_cons, first, restOk, bind, Except.bind]⟩
+    | some z =>
+      exact ⟨z :: rest, by simp [List.filterMapM_cons, first, restOk, bind, Except.bind, pure,
+        Except.pure]⟩
+
 end EthLib.Base
