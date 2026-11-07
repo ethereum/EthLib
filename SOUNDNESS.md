@@ -724,6 +724,12 @@ It needs the new address to hold no code and a nonce of 0, as EIP-684 asks.
 `Logic.create2With` is its case for CREATE2.
 `Logic.resumeCreate_eq` proves that the creator pushes the new address, or 0 when the frame that ends the creation has an error.
 `Logic.createMessageGas_of_tangerineWhistle` proves that from Tangerine Whistle a creation passes on all but one 64th of the gas left.
+`Logic.depositCode_of_ok` proves that from Berlin to before Glamsterdam a frame with no error deposits its output as code, at 200 gas a byte.
+It needs the output to hold at most 24576 bytes (EIP-170), and from London not to start with `0xEF` (EIP-3541).
+`Logic.depositCode_of_prefix` proves that from London an output that starts with `0xEF` fails with all the gas taken, the state put back and no output.
+`Logic.depositCode_of_outOfGas` proves that an output too long or too dear fails the same way, out of gas.
+`Logic.processCreateMessage_eq_ok` proves that a creation with no value and no precompile ends as its init code ends, then deposits.
+`Logic.meets_of_spec_create` proves that the runner of the interpreter meets `CreatesAs` for a specification of the init code.
 `Logic.running_eq_false_of_sstore_of_isStatic` proves that in a static frame, a step at SSTORE stops the frame.
 `Logic.running_eq_false_of_log_of_isStatic` proves the same for LOG0 to LOG4.
 `NoValue.spec_nonzero` proves a contract that halts at `0xfe` when its message sends value.
