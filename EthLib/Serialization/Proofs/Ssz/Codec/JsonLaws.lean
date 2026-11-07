@@ -31,6 +31,15 @@ theorem getObjVal?_mkObj {pairs : List (String × Json)} {name : String} {value 
   simp only [Json.mkObj, Json.getObjVal?, Std.TreeMap.Raw.get?_eq_getElem?, read]
   rfl
 
+/-- A name that was not written into an object is not found in it. -/
+theorem getObjVal?_mkObj_of_not_mem {pairs : List (String × Json)} {name : String}
+    (absent : name ∉ pairs.map Prod.fst) :
+    ∃ fault, (Json.mkObj pairs).getObjVal? name = .error fault := by
+  have none : (Std.TreeMap.Raw.ofList pairs (cmp := compare))[name]? = none :=
+    Std.TreeMap.Raw.getElem?_ofList_of_contains_eq_false (by simpa using absent)
+  simp only [Json.mkObj, Json.getObjVal?, Std.TreeMap.Raw.get?_eq_getElem?, none]
+  exact ⟨_, rfl⟩
+
 /--
 Every name an object carries is one of the names it was written from.
 

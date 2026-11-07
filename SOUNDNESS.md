@@ -1047,7 +1047,8 @@ A record holds the epochs of a vote and maybe its signing root, not its data.
 So that comparison reads a double vote through the signing root, and counts a record without a root as a different vote.
 No theorem says what conditions 2, 4 and 5 guarantee across two imported files, which the EIP leaves to the signer.
 `readUInt64_uint64Json` and `readBytes_bytesJson` show that each integer and each byte string of a file reads back as written.
-No theorem says that a whole file reads back.
+`ofJson_toJson` shows that a whole file reads back as itself from the document that `toJson` writes, whatever its records.
+No theorem says what `ofJson` does on a document that another client wrote.
 
 The Python suite checks each condition and each malformed field against cases worked out from the EIP.
 With release archives enabled, it runs the 38 interchange tests of `eth-clients/slashing-protection-interchange-tests` as a signer that keeps every message.
