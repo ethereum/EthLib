@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Call.MessageCall
+public import EthLib.Execution.Proofs.Evm.Interpreter
 
 /-!
 # Proofs: `Evm.Call.MessageCall`
@@ -20,6 +21,8 @@ Its touches stay undone, except at the precompile 0x03 from Spurious Dragon to P
 A message ends with no more execution gas than it was given.
 
 From Glamsterdam, a revert rolls the state gas of the frame back to its baseline.
+
+A message and a creation fail only with an error that aborts the run.
 -/
 
 @[expose] public section
@@ -141,5 +144,82 @@ theorem touchedOnError_of_outside {caller child : Evm fork Meter}
     revert h1 h2 outside
     cases fork <;> decide
   · rfl
+
+/-- Two steps in sequence fail when the first fails, or when the second fails on its value. -/
+private theorem bind_eq_error {ε α β : Type} {x : Except ε α} {g : α → Except ε β} {e : ε}
+    (h : x >>= g = .error e) : x = .error e ∨ ∃ a, x = .ok a ∧ g a = .error e := by
+  cases x <;> simp_all [bind, Except.bind]
+
+/-- An error of the state aborts the run. -/
+private theorem aborts_of_mapError_state {α : Type} {x : Except State.StateError α}
+    {e : EvmError} (h : x.mapError EvmError.state = .error e) : e.aborts = true := by
+  cases x <;> simp [Except.mapError] at h
+  subst h
+  rfl
+
+/-- A message and a creation fail only with an error that aborts the run.
+
+It is the induction on the gas of the message, as the messages of its code have less gas. -/
+theorem aborts_of_process_eq_error [LawfulGasMeter Meter] (n : Nat) :
+    ∀ message : Message fork, message.gas = n →
+      (∀ state substate (meter : Meter) held e,
+        processMessage fork message state substate meter held = .error e → e.aborts = true) ∧
+      ∀ state substate (meter : Meter) held e,
+        processCreateMessage fork message state substate meter held = .error e →
+          e.aborts = true := by
+  induction n using Nat.strongRecOn with
+  | _ n ih =>
+    intro message hn
+    -- The messages of its code have less gas, so they fail only with an error that aborts.
+    have runner : ∀ (caller : Evm fork Meter) (child : Message fork)
+        (lt : child.gas < message.gas) e, (match child.target with
+          | some _ => processMessage (Meter := Meter) fork child caller.state caller.substate.child
+          | none => processCreateMessage (Meter := Meter) fork child caller.state
+            caller.substate.child) = .error e → e.aborts = true := by
+      intro caller child lt e h
+      split at h
+      · exact (ih child.gas (hn ▸ lt) child rfl).1 _ _ _ _ _ h
+      · exact (ih child.gas (hn ▸ lt) child rfl).2 _ _ _ _ _ h
+    have call : ∀ state substate (meter : Meter) held e,
+        processMessage fork message state substate meter held = .error e → e.aborts = true := by
+      intro state substate meter held e h
+      rw [processMessage] at h
+      simp only [Except.map] at h
+      split at h
+      · rename_i hdo
+        cases h
+        split at hdo
+        all_goals
+          rcases bind_eq_error hdo with hm | ⟨state1, -, hdo⟩
+          · first
+              | exact aborts_of_mapError_state hm
+              | cases hm
+          · repeat' split at hdo
+            all_goals first
+              | (cases hdo; done)
+              | (rename_i hrun; cases hdo; exact aborts_of_runFrame_eq_error runner hrun)
+      · cases h
+    refine ⟨call, fun state substate meter held e h => ?_⟩
+    rw [processCreateMessage] at h
+    rcases bind_eq_error h with hp | ⟨prepared, -, h⟩
+    · unfold prepareCreation at hp
+      split at hp
+      · exact aborts_of_mapError_state hp
+      · cases hp
+    · rcases bind_eq_error h with hm | ⟨⟨evm, used⟩, -, h⟩
+      · exact call _ _ _ _ _ hm
+      · split at h
+        split at h
+        · rename_i hdep
+          cases h
+          unfold depositCode at hdep
+          dsimp only at hdep
+          repeat' split at hdep
+          all_goals first
+            | (cases hdep; done)
+            | (rcases bind_eq_error hdep with hm | ⟨_, -, hdep⟩
+               · exact aborts_of_mapError_state hm
+               · cases hdep)
+        · cases h
 
 end EthLib.Execution.Evm

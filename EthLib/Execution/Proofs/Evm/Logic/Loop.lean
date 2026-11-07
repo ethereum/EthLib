@@ -24,14 +24,16 @@ namespace EthLib.Execution.Evm.Logic
 
 open EthLib.Base (Fork)
 
-variable {fork : Fork} {Meter : Type} [GasMeter Meter]
+variable {fork : Fork} {Meter : Type}
 
-namespace Hoare
+namespace Triple
+
+variable {S : Evm fork Meter → Evm fork Meter → Prop}
 
 /-- A loop whose body may lower the measure by more than one. -/
 theorem loop_lt {I : Nat → Evm fork Meter → Prop} {Q : Evm fork Meter → Prop}
-    (body : ∀ k, Hoare fork (I (k + 1)) fun evm => ∃ j < k + 1, I j evm)
-    (exit : Hoare fork (I 0) Q) (n : Nat) : Hoare fork (I n) Q := by
+    (body : ∀ k, Triple S (I (k + 1)) fun evm => ∃ j < k + 1, I j evm)
+    (exit : Triple S (I 0) Q) (n : Nat) : Triple S (I n) Q := by
   induction n using Nat.strongRecOn with
   | _ n ih =>
     cases n with
@@ -44,11 +46,11 @@ theorem loop_lt {I : Nat → Evm fork Meter → Prop} {Q : Evm fork Meter → Pr
 
 /-- A loop: each run of the body lowers the measure by one, and the exit ends it at 0. -/
 theorem loop {I : Nat → Evm fork Meter → Prop} {Q : Evm fork Meter → Prop}
-    (body : ∀ k, Hoare fork (I (k + 1)) (I k)) (exit : Hoare fork (I 0) Q) (n : Nat) :
-    Hoare fork (I n) Q :=
+    (body : ∀ k, Triple S (I (k + 1)) (I k)) (exit : Triple S (I 0) Q) (n : Nat) :
+    Triple S (I n) Q :=
   loop_lt (fun k => (body k).consequence (fun _ h => h) fun _ h => ⟨k, Nat.lt_succ_self k, h⟩)
     exit n
 
-end Hoare
+end Triple
 
 end EthLib.Execution.Evm.Logic

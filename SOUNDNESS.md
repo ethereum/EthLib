@@ -623,9 +623,11 @@ So are the instructions that read only the stack, memory, call data, code and re
 They are in `Execution/Evm/Instructions/StackOnly.lean` and `Execution/Evm/Instructions/MemoryData.lean`.
 
 A program logic over bytecode is in `Execution/Proofs/Evm/Logic/`.
-It covers frames that send no message, so it says nothing past a call or a creation, and nothing about reentrancy.
-`Reaches` is the relation of the steps that `step` gives, other than requests for a message and errors that abort the run.
+Its first relation covers frames that send no message.
+`Reaches S` is the chain of steps of a relation `S`.
+`Step` is the relation of the steps that `step` gives, other than requests for a message and errors that abort the run.
 `runFrame_of_reaches` proves that a frame that reaches a stopped frame runs to it in `runFrame`, for every bound on the gas of messages and every runner of messages.
+`Triple S P Q` says that every frame of `P` reaches a frame of `Q` by the steps of `S`, and `Hoare fork` is `Triple` over `Step`.
 `Spec fork P Q` is total correctness for such frames: every frame of `P` reaches a stopped frame of `Q`.
 A run that ends out of gas ends in an exceptional halt, so a postcondition of a normal halt needs a precondition with enough gas.
 `Return42.runFrame_spec` proves the specification of one contract, `0x602a60005260206000f3`, which returns the word 42 for 18 gas with the one-counter meter of the forks before Glamsterdam.
@@ -634,10 +636,27 @@ From Berlin, the rule for SLOAD takes as a hypothesis whether the slot is cold, 
 `SlotOfCalldata.runFrame_match` proves a contract that compares the top four bytes of its call data with a constant, at the forks from Berlin with the one-counter meter.
 On a match, it returns the word of storage at the Keccak-256 hash of two words of its call data, for 122 gas and SLOAD.
 `SlotOfCalldata.runFrame_mismatch` proves that it reverts with no output otherwise, for 37 gas.
-`Hoare.loop` (`Logic/Loop.lean`) proves a loop from an invariant for each value of a natural measure.
+`Triple.loop` (`Logic/Loop.lean`) proves a loop from an invariant for each value of a natural measure.
 A run of the loop then ends by the measure, not by the gas.
 `SumLoop.runFrame_spec` proves a contract that loops `n` times, for the word `n` of its call data, with the one-counter meter.
 With at least `45 + 55 n` gas, it returns `n (n + 1) / 2` modulo `2^256`.
+`StepBy` (`Logic/Message.lean`) adds the steps that send a message, which a runner of messages ends with a frame.
+`runFrame_eq_of_reaches` proves that `runFrame` runs a frame as it runs each frame that it reaches.
+It holds for every relation whose steps `runFrame` runs alike at both ends, as `Step` and `StepBy` do.
+A runner can also fail on a message, and then `runFrame` fails with the error of the runner.
+`Meets callee runChild` says that each frame that the runner gives meets the assumption `callee`.
+It also says that the runner fails only with an error that aborts the run, and asks nothing more of such a message.
+`meets_process` proves that the runner of the code of a message meets the assumption that always holds, for every bound.
+It rests on `aborts_of_process_eq_error` (`Execution/Proofs/Evm/Call/MessageCall.lean`), which proves that a message and a creation fail only with an error that aborts.
+No theorem yet proves that this runner meets a stronger assumption.
+So a triple under a stronger assumption does not yet apply to the runs of `processMessage`.
+`SpecUnder fork callee P Q` holds under every runner that meets `callee`, and for every bound that holds the gas of the frame.
+From every frame of `P`, the steps of `StepBy` reach a stopped frame of `Q`, or a frame whose runner fails on its message.
+So `SpecUnder.runFrame` concludes that `runFrame` returns a stopped frame of `Q`, or fails with an error that aborts.
+`hoareUnder_iff_triple` states each triple under an assumption as a `Triple` over `StepBy` under each runner that meets it, so the two share their rules.
+The code that a message runs is arbitrary and may call the caller again.
+So the assumption is all that a triple says about a frame that ends a message, and about the state after it.
+No rule yet covers an opcode that sends a message, so no theorem yet proves a contract that calls or creates.
 
 ### SHA-256 precompile
 
