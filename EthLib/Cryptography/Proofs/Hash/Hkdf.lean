@@ -54,16 +54,15 @@ theorem expand_size {prk info okm : ByteArray} {length : Nat}
   simp only [ByteArray.size_extract, expandBlocks_size, HASH_LEN]
   omega
 
-/-- The pseudorandom key is 32 bytes, so HKDF fails only on an output longer than `255 * 32`. -/
-theorem hkdf_error {salt ikm info : ByteArray} {length : Nat} {e : HkdfError}
-    (h : hkdf salt ikm info length = .error e) :
-    e = .outputTooLong length ∧ 255 * HASH_LEN < length := by
-  unfold hkdf expand extract at h
-  simp only [hmac_size, HASH_LEN, show ¬ 32 < 32 by decide, ite_false] at h
+/-- The pseudorandom key is 32 bytes, so HKDF fails exactly on an output longer than `255 * 32`. -/
+theorem hkdf_eq_error_iff {salt ikm info : ByteArray} {length : Nat} {e : HkdfError} :
+    hkdf salt ikm info length = .error e ↔
+      e = .outputTooLong length ∧ 255 * HASH_LEN < length := by
+  unfold hkdf expand extract
+  simp only [hmac_size, HASH_LEN, show ¬ 32 < 32 by decide, ite_false]
   by_cases long : 255 * 32 < length
-  · simp only [long, ite_true] at h
-    exact ⟨(Except.error.inj h).symm, long⟩
-  · simp [long] at h
+  · simp [long, eq_comm]
+  · simp [long]
 
 /-! ## The blocks of RFC 5869 -/
 
@@ -128,23 +127,27 @@ theorem expand_eq {prk info : ByteArray} {length : Nat} (hprk : HASH_LEN ≤ prk
   unfold expand
   simp only [Nat.not_lt.mpr hprk, Nat.not_lt.mpr hlength, ↓reduceIte, expandBlocks_empty]
 
-/-- An accepted expansion has a key of at least `HashLen` bytes, and `L <= 255 * HashLen`. -/
-theorem expand_ok_bounds {prk info okm : ByteArray} {length : Nat}
-    (h : expand prk info length = .ok okm) :
-    HASH_LEN ≤ prk.size ∧ length ≤ 255 * HASH_LEN := by
-  unfold expand at h
-  by_cases h₁ : prk.size < HASH_LEN
-  · simp [h₁] at h
-  by_cases h₂ : 255 * HASH_LEN < length
-  · simp [h₁, h₂] at h
-  exact ⟨Nat.not_lt.mp h₁, Nat.not_lt.mp h₂⟩
+/-- An expansion succeeds exactly with a key of `HashLen` bytes or more and `L <= 255 * HashLen`. -/
+theorem expand_ok_iff {prk info : ByteArray} {length : Nat} :
+    (∃ okm, expand prk info length = .ok okm) ↔
+      HASH_LEN ≤ prk.size ∧ length ≤ 255 * HASH_LEN := by
+  constructor
+  · rintro ⟨okm, h⟩
+    unfold expand at h
+    by_cases h₁ : prk.size < HASH_LEN
+    · simp [h₁] at h
+    by_cases h₂ : 255 * HASH_LEN < length
+    · simp [h₁, h₂] at h
+    exact ⟨Nat.not_lt.mp h₁, Nat.not_lt.mp h₂⟩
+  · rintro ⟨hprk, hlength⟩
+    exact ⟨_, expand_eq hprk hlength⟩
 
 /-- For one key and one `info`, a shorter output of HKDF-Expand is a prefix of a longer one. -/
 theorem expand_prefix {prk info okm okm' : ByteArray} {length length' : Nat}
     (h : expand prk info length = .ok okm) (h' : expand prk info length' = .ok okm')
     (hle : length ≤ length') : okm = okm'.extract 0 length := by
-  obtain ⟨hprk, hL⟩ := expand_ok_bounds h
-  obtain ⟨-, hL'⟩ := expand_ok_bounds h'
+  obtain ⟨hprk, hL⟩ := expand_ok_iff.mp ⟨_, h⟩
+  obtain ⟨-, hL'⟩ := expand_ok_iff.mp ⟨_, h'⟩
   rw [expand_eq hprk hL, Except.ok.injEq] at h
   rw [expand_eq hprk hL', Except.ok.injEq] at h'
   subst h h'

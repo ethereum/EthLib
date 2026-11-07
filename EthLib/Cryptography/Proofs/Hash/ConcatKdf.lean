@@ -6,6 +6,10 @@ public import EthLib.Cryptography.Hash.ConcatKdf
 /-!
 # Proofs: the Concatenation KDF
 
+The derivation succeeds exactly for a nonzero length, a bounded count of blocks and a bounded input.
+
+It fails with the error of the first condition that breaks.
+
 A successful derivation has exactly the requested length.
 
 A shorter output is a prefix of a longer one.
@@ -46,6 +50,48 @@ theorem concatKdf_eq_extract {z fixedInfo key : ByteArray} {length : Nat}
   · simp [empty, long, input] at h
   simp only [empty, long, input, ite_false] at h
   exact (Except.ok.inj h).symm
+
+/--
+The derivation succeeds exactly when its three bounds hold.
+
+The key is then the cut blocks.
+-/
+theorem concatKdf_eq_ok_iff {z fixedInfo key : ByteArray} {length : Nat} :
+    concatKdf z fixedInfo length = .ok key ↔
+      (length ≠ 0 ∧ (length + HASH_LEN - 1) / HASH_LEN ≤ 2 ^ 32 - 1 ∧
+        4 + z.size + fixedInfo.size < 2 ^ 61) ∧
+      key = (blocks z fixedInfo 1 ((length + HASH_LEN - 1) / HASH_LEN)).extract 0 length := by
+  constructor
+  · intro h
+    refine ⟨?_, concatKdf_eq_extract h⟩
+    unfold concatKdf at h
+    by_cases empty : length = 0
+    · simp [empty] at h
+    by_cases long : 2 ^ 32 - 1 < (length + HASH_LEN - 1) / HASH_LEN
+    · simp [empty, long] at h
+    by_cases input : 2 ^ 61 ≤ 4 + z.size + fixedInfo.size
+    · simp [empty, long, input] at h
+    exact ⟨empty, Nat.not_lt.mp long, Nat.not_le.mp input⟩
+  · rintro ⟨⟨empty, long, input⟩, rfl⟩
+    unfold concatKdf
+    simp [empty, Nat.not_lt.mpr long, Nat.not_le.mpr input]
+
+/-- The derivation fails with the error of the first condition that breaks. -/
+theorem concatKdf_eq_error_iff {z fixedInfo : ByteArray} {length : Nat} {e : ConcatKdfError} :
+    concatKdf z fixedInfo length = .error e ↔
+      (length = 0 ∧ e = .emptyOutput) ∨
+      (length ≠ 0 ∧ 2 ^ 32 - 1 < (length + HASH_LEN - 1) / HASH_LEN ∧
+        e = .outputTooLong length) ∨
+      (length ≠ 0 ∧ (length + HASH_LEN - 1) / HASH_LEN ≤ 2 ^ 32 - 1 ∧
+        2 ^ 61 ≤ 4 + z.size + fixedInfo.size ∧ e = .inputTooLong) := by
+  unfold concatKdf
+  by_cases empty : length = 0
+  · simp [empty, eq_comm]
+  by_cases long : 2 ^ 32 - 1 < (length + HASH_LEN - 1) / HASH_LEN
+  · simp [empty, long, eq_comm, Nat.not_le.mpr long]
+  by_cases input : 2 ^ 61 ≤ 4 + z.size + fixedInfo.size
+  · simp [empty, long, input, eq_comm, Nat.not_lt.mp long]
+  simp [empty, long, input, Nat.not_lt.mp long]
 
 /-- A successful derivation has exactly the requested length. -/
 theorem concatKdf_size {z fixedInfo key : ByteArray} {length : Nat}
