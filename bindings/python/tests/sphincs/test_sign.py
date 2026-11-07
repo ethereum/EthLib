@@ -46,11 +46,11 @@ def test_zero_seed() -> None:
 
 
 def test_short_message() -> None:
-    # 31 bytes: rejected before any tree is built.
+    # One byte short: rejected before any tree is built.
     _emit(
-        f"{HANDLER}_short_message", fixtures.SEED_KNOWN_ANSWER, fixtures.MESSAGE_KNOWN_ANSWER[:31]
+        f"{HANDLER}_short_message", fixtures.SEED_KNOWN_ANSWER, fixtures.MESSAGE_KNOWN_ANSWER[:-1]
     )
 
 
 def test_short_seed() -> None:
-    _emit(f"{HANDLER}_short_seed", fixtures.SEED_KNOWN_ANSWER[:31], fixtures.MESSAGE_KNOWN_ANSWER)
+    _emit(f"{HANDLER}_short_seed", fixtures.SEED_KNOWN_ANSWER[:-1], fixtures.MESSAGE_KNOWN_ANSWER)

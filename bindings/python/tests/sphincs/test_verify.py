@@ -12,19 +12,31 @@ from . import fixtures
 
 HANDLER = "verify"
 
-# Where each field of a signature starts.
+# Where each field of a signature starts, from the sizes that Lean exports.
 #
-#     [ randomizer: 16 | FORS: 4224 | bottom: 1156 | middle: 1156 | top: 1188 ]
+#     [ randomizer | FORS | bottom layer | middle layer | top layer ]
 #
-#     FORS  = 24 openings, each [ secret: 16 | 10 path nodes: 160 ]
-#     layer = [ counter: 4 | 64 chain values: 1024 | h siblings: 16 h ]
-FORS = 16
-FORS_PATH = 16
-BOTTOM = FORS + 24 * 176
-MIDDLE = BOTTOM + 1156
-TOP = MIDDLE + 1156
-CHAINS = 4
-SIBLINGS = 4 + 64 * 16
+#     FORS  = FORS_TREES openings, each [ secret | FORS_HEIGHT path nodes ]
+#     layer = [ counter | CHAINS chain values | h siblings ]
+#
+# Each secret, path node, chain value and sibling has N bytes.
+# The bottom and middle layers have height LOWER_HEIGHT, and the top layer TOP_HEIGHT.
+# With the parameters of leanSPHINCS, the layers have 1156, 1156 and 1188 bytes.
+OPENING = sphincs.N + sphincs.FORS_HEIGHT * sphincs.N
+LOWER = sphincs.COUNTER_LEN + (sphincs.CHAINS + sphincs.LOWER_HEIGHT) * sphincs.N
+FORS = sphincs.RANDOMIZER_LEN
+FORS_PATH = sphincs.N
+BOTTOM = FORS + sphincs.FORS_TREES * OPENING
+MIDDLE = BOTTOM + LOWER
+TOP = MIDDLE + LOWER
+CHAINS = sphincs.COUNTER_LEN
+SIBLINGS = sphincs.COUNTER_LEN + sphincs.CHAINS * sphincs.N
+
+
+def test_layout_fills_signature() -> None:
+    """The fields of the layout, with the top layer last, fill the signature exactly."""
+    top = sphincs.COUNTER_LEN + (sphincs.CHAINS + sphincs.TOP_HEIGHT) * sphincs.N
+    assert TOP + top == sphincs.SIG_SIZE
 
 
 def _emit(
@@ -92,8 +104,8 @@ def test_valid_scheme_seed() -> None:
 
 
 def test_zeroed_scheme_seed_top_last_sibling() -> None:
-    # The sibling just below the key's root, the last 16 bytes, becomes all zero.
-    signature = fixtures.SIGNATURE_SCHEME_SEED[:-16] + bytes(16)
+    # The sibling just below the key's root, the last N bytes, becomes all zero.
+    signature = fixtures.SIGNATURE_SCHEME_SEED[: -sphincs.N] + bytes(sphincs.N)
     _emit(
         f"{HANDLER}_zeroed_scheme_seed_top_last_sibling",
         fixtures.PUBLIC_KEY_SCHEME_SEED,
@@ -106,7 +118,7 @@ def test_zeroed_scheme_seed_top_last_sibling() -> None:
 def test_zeroed_scheme_seed_fors_secret() -> None:
     # The secret of FORS tree 0 becomes all zero, so the bottom layer signed another FORS key.
     signature = fixtures.SIGNATURE_SCHEME_SEED
-    signature = signature[:FORS] + bytes(16) + signature[FORS + 16 :]
+    signature = signature[:FORS] + bytes(sphincs.N) + signature[FORS + sphincs.N :]
     _emit(
         f"{HANDLER}_zeroed_scheme_seed_fors_secret",
         fixtures.PUBLIC_KEY_SCHEME_SEED,
@@ -199,7 +211,7 @@ def test_wrong_root() -> None:
 def test_wrong_public_param() -> None:
     _emit(
         f"{HANDLER}_wrong_public_param",
-        fixtures.flip(_key(), 16),
+        fixtures.flip(_key(), sphincs.N),
         fixtures.MESSAGE_KNOWN_ANSWER,
         _signature(),
         expected=False,
@@ -223,7 +235,7 @@ def test_other_key() -> None:
 def test_short_public_key() -> None:
     _emit(
         f"{HANDLER}_short_public_key",
-        _key()[:31],
+        _key()[:-1],
         fixtures.MESSAGE_KNOWN_ANSWER,
         _signature(),
         expected=None,
@@ -234,7 +246,7 @@ def test_short_message() -> None:
     _emit(
         f"{HANDLER}_short_message",
         _key(),
-        fixtures.MESSAGE_KNOWN_ANSWER[:31],
+        fixtures.MESSAGE_KNOWN_ANSWER[:-1],
         _signature(),
         expected=None,
     )

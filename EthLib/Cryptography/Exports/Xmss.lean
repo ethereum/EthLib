@@ -63,6 +63,10 @@ def constChains (_ : Unit) : UInt64 :=
 def constLayerHeight (_ : Unit) : UInt64 :=
   UInt64.ofNat LAYER_HEIGHT
 
+@[export eth_xmss_const_leaf_index_size]
+def constLeafIndexSize (_ : Unit) : UInt64 :=
+  UInt64.ofNat LEAF_INDEX_SIZE
+
 @[export eth_xmss_const_pub_key_size]
 def constPubKeySize (_ : Unit) : UInt64 :=
   UInt64.ofNat PUB_KEY_SIZE

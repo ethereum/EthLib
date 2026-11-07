@@ -7,7 +7,7 @@ from ethlib.cryptography import xmss
 
 from . import fixtures
 
-# Each signature carries its leaf index in its first 4 bytes, little-endian.
+# Each signature carries its leaf index in its first LEAF_INDEX_SIZE bytes, little-endian.
 # The expected index of each signed case is the index it was signed at, not a value read back.
 
 HANDLER = "signature_index"
@@ -56,10 +56,11 @@ def test_signed(case: str, leaf_index: int) -> None:
 
 
 def test_tampered() -> None:
-    # A flipped bit in the bottom randomizer, at byte 4, breaks the signature.
+    # A flipped bit in the bottom randomizer, the first byte after the index, breaks the signature.
     #
-    # The index is bytes 0 to 3, so it reads the same.
-    tampered = fixtures.flip(fixtures.read_output("sign", "sign_known_answer"), 4)
+    # The index is before it, so it reads the same.
+    signature = fixtures.read_output("sign", "sign_known_answer")
+    tampered = fixtures.flip(signature, xmss.LEAF_INDEX_SIZE)
     _emit(f"{HANDLER}_tampered", tampered, expected=fixtures.LEAF_KNOWN_ANSWER)
 
 
@@ -67,7 +68,8 @@ def test_byte_order() -> None:
     # Bytes 01 02 03 04, then zeros.
     #
     # Little-endian, the first byte is the least significant: 0x04030201.
-    signature = bytes([1, 2, 3, 4]) + bytes(xmss.SIG_SIZE - 4)
+    index = bytes([1, 2, 3, 4])
+    signature = index + bytes(xmss.SIG_SIZE - len(index))
     _emit(f"{HANDLER}_byte_order", signature, expected=0x0403_0201)
 
 
