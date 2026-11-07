@@ -12,7 +12,7 @@ It then gives each validator an empty set of flags for the current epoch.
 
 The sync committee update moves the next committee to the current one, only at a period's end.
 
-There the new next committee is the committee drawn from the state with that current committee.
+There it stores as the next committee a draw from the state with that new current committee.
 
 The inactivity scores change nothing in the first epoch, and keep one score per entry.
 
@@ -67,7 +67,7 @@ theorem processSyncCommitteeUpdates_current {altair : .altair ≤ fork} {next : 
 
 /-- After a successful sync committee update at a period's end, the next committee is a new draw.
 
-It is the committee drawn from the state, whose next committee has become the current one. -/
+The draw reads the state whose current committee is already the old next committee. -/
 theorem processSyncCommitteeUpdates_next {altair : .altair ≤ fork}
     (boundary : (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0)
     (computed : processSyncCommitteeUpdates state altair = .ok after) :
