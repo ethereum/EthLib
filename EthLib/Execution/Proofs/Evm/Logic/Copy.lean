@@ -36,6 +36,7 @@ open GasCosts
 
 variable {fork : Fork} {code : ByteArray} {message : Message fork} {pc : Nat}
   {memory : ByteArray} {gas : Nat} {state : State.TransactionState} {substate : Substate}
+  {returnData : ByteArray}
 
 /-- MSTORE8 runs the store of a byte to memory. -/
 theorem instruction_mstore8 : instruction (Meter := Nat) fork .mstore8 = some mstore8Step := by
@@ -77,20 +78,20 @@ It pays 3 and the growth of memory. -/
 theorem mstore8 {start value : U256} {rest : List U256} (hlt : pc < code.size)
     (hbyte : code[pc] = 0x53)
     (hgas : 3 + (extendMemory memory.size [(start, 1)]).cost ≤ gas) :
-    Hoare fork (At code message pc (start :: value :: rest) memory gas state substate)
+    Hoare fork (At code message pc (start :: value :: rest) memory gas state substate returnData)
       (At code message (pc + 1) rest
         (memoryWrite (memoryExtend memory (extendMemory memory.size [(start, 1)]).expandBy)
           start.toNat ⟨#[UInt8.ofNat value.toNat]⟩)
-        (gas - (3 + (extendMemory memory.size [(start, 1)]).cost)) state substate) := by
+        (gas - (3 + (extendMemory memory.size [(start, 1)]).cost)) state substate returnData) := by
   apply At.rule hlt hbyte (ofByte_of_decode (op := .mstore8) rfl (Fork.frontier_le _))
     instruction_mstore8
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   subst hmem hg
   have hcost : OPCODE_MSTORE8_BASE = 3 := rfl
   rw [mstore8Step_cons hst]
   dsimp only
   rw [hcost, charge_nat hgas]
-  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, rfl, rfl, hrun, herr, hout, hs, hss⟩
+  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, rfl, rfl, hrun, herr, hout, hs, hss, hrd⟩
 
 /-- From Dencun, MCOPY copies a range of memory to a destination, by EIP-5656.
 
@@ -102,7 +103,7 @@ theorem mcopy (hfork : .dencun ≤ fork) {destination source length : U256} {res
     (hgas : 3 + 3 * wordCount length.toNat +
       (extendMemory memory.size [(source, length), (destination, length)]).cost ≤ gas) :
     Hoare fork (At code message pc (destination :: source :: length :: rest) memory gas state
-        substate)
+        substate returnData)
       (At code message (pc + 1) rest
         (memoryWrite (memoryExtend memory
             (extendMemory memory.size [(source, length), (destination, length)]).expandBy)
@@ -112,16 +113,16 @@ theorem mcopy (hfork : .dencun ≤ fork) {destination source length : U256} {res
             source.toNat length.toNat))
         (gas - (3 + 3 * wordCount length.toNat +
           (extendMemory memory.size [(source, length), (destination, length)]).cost))
-        state substate) := by
+        state substate returnData) := by
   apply At.rule hlt hbyte (ofByte_of_decode (op := .mcopy) rfl hfork) instruction_mcopy
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   subst hmem hg
   have hcost : OPCODE_MCOPY_BASE = 3 := rfl
   have hword : OPCODE_COPY_PER_WORD = 3 := rfl
   rw [mcopyStep_cons hst]
   dsimp only
   rw [hcost, hword, charge_nat hgas]
-  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, rfl, rfl, hrun, herr, hout, hs, hss⟩
+  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, rfl, rfl, hrun, herr, hout, hs, hss, hrd⟩
 
 /-- A copy of a buffer to memory, at the program counter of an opcode that runs it.
 
@@ -133,19 +134,20 @@ theorem copyWith {byte : UInt8} {op : Op} {base : Nat} {data : Evm fork Nat → 
     (hdata : ∀ evm, evm.code = code → evm.message = message → data evm = buffer)
     (hgas : base + 3 * wordCount size.toNat + (extendMemory memory.size [(start, size)]).cost ≤
       gas) :
-    Hoare fork (At code message pc (start :: offset :: size :: rest) memory gas state substate)
+    Hoare fork (At code message pc (start :: offset :: size :: rest) memory gas state substate
+        returnData)
       (At code message (pc + 1) rest
         (memoryWrite (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
           start.toNat ⟨(bufferRead buffer offset.toNat size.toNat).toArray⟩)
         (gas - (base + 3 * wordCount size.toNat + (extendMemory memory.size [(start, size)]).cost))
-        state substate) := by
+        state substate returnData) := by
   apply At.rule hlt hbyte decoded hrun
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun', herr, hout, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun', herr, hout, hs, hss, hrd⟩
   have hword : OPCODE_COPY_PER_WORD = 3 := rfl
   rw [copyToMemory_cons hst, hdata evm hcode hm]
   dsimp only
   rw [hword, hmem, hg, charge_nat hgas]
-  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, rfl, rfl, hrun', herr, hout, hs, hss⟩
+  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, rfl, rfl, hrun', herr, hout, hs, hss, hrd⟩
 
 /-- CALLDATACOPY copies a range of the call data to memory, with zeros past its end.
 
@@ -154,12 +156,13 @@ theorem calldatacopy {start offset size : U256} {rest : List U256} (hlt : pc < c
     (hbyte : code[pc] = 0x37)
     (hgas : 3 + 3 * wordCount size.toNat + (extendMemory memory.size [(start, size)]).cost ≤
       gas) :
-    Hoare fork (At code message pc (start :: offset :: size :: rest) memory gas state substate)
+    Hoare fork (At code message pc (start :: offset :: size :: rest) memory gas state substate
+        returnData)
       (At code message (pc + 1) rest
         (memoryWrite (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
           start.toNat ⟨(bufferRead message.data offset.toNat size.toNat).toArray⟩)
         (gas - (3 + 3 * wordCount size.toNat + (extendMemory memory.size [(start, size)]).cost))
-        state substate) :=
+        state substate returnData) :=
   copyWith (base := OPCODE_CALLDATACOPY_BASE) hlt hbyte
     (ofByte_of_decode (op := .calldatacopy) rfl (Fork.frontier_le _)) instruction_calldatacopy
     (fun _ _ hm => by rw [hm]) hgas
@@ -171,36 +174,36 @@ theorem codecopy {start offset size : U256} {rest : List U256} (hlt : pc < code.
     (hbyte : code[pc] = 0x39)
     (hgas : 3 + 3 * wordCount size.toNat + (extendMemory memory.size [(start, size)]).cost ≤
       gas) :
-    Hoare fork (At code message pc (start :: offset :: size :: rest) memory gas state substate)
+    Hoare fork (At code message pc (start :: offset :: size :: rest) memory gas state substate
+        returnData)
       (At code message (pc + 1) rest
         (memoryWrite (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
           start.toNat ⟨(bufferRead code offset.toNat size.toNat).toArray⟩)
         (gas - (3 + 3 * wordCount size.toNat + (extendMemory memory.size [(start, size)]).cost))
-        state substate) :=
+        state substate returnData) :=
   copyWith (base := OPCODE_CODECOPY_BASE) hlt hbyte
     (ofByte_of_decode (op := .codecopy) rfl (Fork.frontier_le _)) instruction_codecopy
     (fun _ hc _ => hc) hgas
 
 /-- From Byzantium, RETURNDATACOPY copies a range of the return data to memory, by EIP-211.
 
-The frame holds the return data `data`, and the range ends within it.
+The range ends within the return data.
 
 It pays 3, 3 gas a word and the growth of memory, and keeps the return data. -/
-theorem returndatacopy (hfork : .byzantium ≤ fork) {data : ByteArray} {start offset size : U256}
+theorem returndatacopy (hfork : .byzantium ≤ fork) {start offset size : U256}
     {rest : List U256} (hlt : pc < code.size) (hbyte : code[pc] = 0x3e)
-    (fit : offset.toNat + size.toNat ≤ data.size)
+    (fit : offset.toNat + size.toNat ≤ returnData.size)
     (hgas : 3 + 3 * wordCount size.toNat + (extendMemory memory.size [(start, size)]).cost ≤
       gas) :
     Hoare fork
-      (fun evm => At code message pc (start :: offset :: size :: rest) memory gas state substate
-        evm ∧ evm.returnData = data)
-      (fun evm => At code message (pc + 1) rest
+      (At code message pc (start :: offset :: size :: rest) memory gas state substate returnData)
+      (At code message (pc + 1) rest
         (memoryWrite (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
-          start.toNat (memoryReadBytes data offset.toNat size.toNat))
+          start.toNat (memoryReadBytes returnData offset.toNat size.toNat))
         (gas - (3 + 3 * wordCount size.toNat + (extendMemory memory.size [(start, size)]).cost))
-        state substate evm ∧ evm.returnData = data) := by
+        state substate returnData) := by
   apply Triple.of_step
-  rintro evm ⟨⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩, hrd⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   have hcost : OPCODE_RETURNDATACOPY_BASE = 3 := rfl
   have hword : OPCODE_RETURNDATACOPY_PER_WORD = 3 := rfl
   have ok := returndatacopyStep_cons hst (by rw [hrd]; exact fit)
@@ -209,7 +212,7 @@ theorem returndatacopy (hfork : .byzantium ≤ fork) {data : ByteArray} {start o
   rw [hcost, hword, hmem, hg, charge_nat hgas] at ok
   exact ⟨_, Step.of_code hrun hcode hpc hlt hbyte
       (ofByte_of_decode (op := .returndatacopy) rfl hfork) instruction_returndatacopy ok,
-    ⟨hcode, hj, hm, by simp [hpc], rfl, rfl, rfl, hrun, herr, hout, hs, hss⟩, rfl⟩
+    ⟨hcode, hj, hm, by simp [hpc], rfl, rfl, rfl, hrun, herr, hout, hs, hss, rfl⟩⟩
 
 /-- From Berlin to before Glamsterdam, EXTCODECOPY copies a range of the code of an account.
 
@@ -230,7 +233,8 @@ theorem extcodecopy (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     (hgas : (if cold then 2600 else 100) + 3 * wordCount size.toNat +
       (extendMemory memory.size [(start, size)]).cost ≤ gas) :
     Hoare fork
-      (At code message pc (word :: start :: offset :: size :: rest) memory gas state substate)
+      (At code message pc (word :: start :: offset :: size :: rest) memory gas state substate
+        returnData)
       (At code message (pc + 1) rest
         (memoryWrite (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
           start.toNat ⟨(bufferRead c offset.toNat size.toNat).toArray⟩)
@@ -239,10 +243,10 @@ theorem extcodecopy (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
         (state.recordAccountRead (Base.toAddressMasked word))
         { substate with
           accessedAddresses :=
-            substate.accessedAddresses.insert (Base.toAddressMasked word) }) := by
+            substate.accessedAddresses.insert (Base.toAddressMasked word) } returnData) := by
   apply At.rule hlt hbyte (ofByte_of_decode (op := .extcodecopy) rfl (Fork.frontier_le _))
     instruction_extcodecopy
-  rintro evm ⟨hc, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hc, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   have found : accountCode evm (Base.toAddressMasked word) = .ok c := by
     simp [accountCode, hs, hcode, Except.mapError]
   have hword : OPCODE_COPY_PER_WORD = 3 := rfl
@@ -250,6 +254,6 @@ theorem extcodecopy (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
   simp only [accessAddress, hfork, ↓reduceIte, hss, hcold,
     externalBaseCost_of_berlin hfork hglam, hword, hg, hmem, charge_nat hgas]
   exact ⟨_, rfl, hc, hj, hm, by simp [hpc], rfl, rfl, rfl, hrun, herr, hout, by simp [hs],
-    by simp⟩
+    by simp, hrd⟩
 
 end EthLib.Execution.Evm.Logic

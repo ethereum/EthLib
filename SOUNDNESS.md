@@ -735,8 +735,10 @@ Its first relation covers frames that send no message.
 `Triple S P Q` says that every frame of `P` reaches a frame of `Q` by the steps of `S`, and `Hoare fork` is `Triple` over `Step`.
 `Spec fork P Q` is total correctness for such frames: every frame of `P` reaches a stopped frame of `Q`.
 A run that ends out of gas ends in an exceptional halt, so a postcondition of a normal halt needs a precondition with enough gas.
+`Logic.At` is a running frame of a code that names every field of the frame, its return data included.
 `Logic/Rules.lean` gives rules for the opcodes that read call data and the caller, compare, jump, hash memory, read and write storage, and return or revert.
 `Logic/Stack.lean` gives rules for POP, SWAP1 to SWAP16, EXP and the opcodes of three operands, at every fork with the one-counter meter.
+The rules of `Logic/Rules.lean`, `Logic/Stack.lean`, `Logic/Copy.lean` and `Logic/Log.lean` keep the return data that `At` names.
 `Logic/Rules.lean` gives the rule for DUP1 to DUP16, and the rule for DUP1 is its case at depth 0.
 Every opcode whose instruction takes one, two or three operands runs by the matching rule, with its instruction from the fork.
 DUPN, SWAPN and EXCHANGE of Glamsterdam have no rule yet.
@@ -903,6 +905,8 @@ The assumption also gives the output of such a frame when it succeeds.
 On success the frame gains the facts and the refund of the effect, and that output as its return data.
 It also gains the fact of the start of that output in the output range.
 On failure it keeps its facts of slots, and the assumption may rule a failure out.
+The assumption may also describe the output of a frame that ends with an error, such as a revert.
+On failure the return data of the frame is such an output.
 Either way it keeps each fact of memory apart from the output range.
 Its new base agrees with the old one outside the touched slots and the slots of the facts.
 `Logic.call_stored` proves this for CALL with no value.
@@ -927,6 +931,7 @@ It also needs an assumption that gives the effect of each frame that ends the cr
 On success the frame pushes the new address, gains the facts and the refund of the effect, and its return data is empty.
 On success the new base holds the balances and the facts of accounts of the effect.
 On failure the frame pushes 0 and keeps its facts of slots, and the assumption may rule a failure out.
+Its return data is then an output that the assumption allows for a frame that ends with an error.
 The new base gives the creator its grown nonce, unless the effect remakes the creator.
 Its new base agrees with the old one outside the touched slots, the moved and remade addresses, and the creator.
 `Logic.create_stored` proves this for CREATE.
@@ -981,7 +986,7 @@ The message gets the gas that EIP-150 allows and the stipend of 2300, and carrie
 The message is not static.
 `Logic.callValueLow` is the rule for such a CALL when the current account holds less than the value.
 It sends no message, pushes 0, and gives back the gas it would pass on with the stipend.
-`Logic.callStep_value_low` also proves that this step empties the return data.
+Its return data is then empty.
 `meets_paidNoCode` (`Logic/Callee.lean`) proves that the runner ends a message with value to no code with no error.
 Its frame ends in the state that the move of the value gives.
 No rule covers CREATE, DELEGATECALL or STATICCALL.

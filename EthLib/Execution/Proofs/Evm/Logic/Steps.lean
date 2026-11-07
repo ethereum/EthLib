@@ -62,7 +62,7 @@ variable {fork : Fork}
 theorem reshape {code : ByteArray} {message : Message fork} {pc : Nat} {s s' : List U256}
     {m m' : ByteArray} {g g' : Nat} {st : State.TransactionState} {ss : Substate}
     (hs : s = s') (hm : m = m') (hg : g = g') :
-    Hoare fork (At code message pc s m g st ss) (At code message pc s' m' g' st ss) := by
+    Hoare fork (At code message pc s m g st ss rd) (At code message pc s' m' g' st ss rd) := by
   subst hs hm hg
   exact Triple.of_imp fun _ h => h
 
@@ -70,8 +70,8 @@ theorem reshape {code : ByteArray} {message : Message fork} {pc : Nat} {s s' : L
 theorem Spec.reshape {code : ByteArray} {message : Message fork} {pc : Nat} {s s' : List U256}
     {m m' : ByteArray} {g g' : Nat} {st : State.TransactionState} {ss : Substate}
     {Q : Evm fork Nat → Prop} (hs : s = s') (hm : m = m') (hg : g = g')
-    (h : Spec fork (At code message pc s' m' g' st ss) Q) :
-    Spec fork (At code message pc s m g st ss) Q :=
+    (h : Spec fork (At code message pc s' m' g' st ss rd) Q) :
+    Spec fork (At code message pc s m g st ss rd) Q :=
   Spec.seq (Logic.reshape hs hm hg) h
 
 open Lean.Parser.Tactic
