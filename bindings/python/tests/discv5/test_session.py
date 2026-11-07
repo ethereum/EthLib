@@ -98,13 +98,15 @@ def test_open_ping_packet():
 
 
 def test_open_message_of_another_source():
-    with raises(ValueError, "no session key for the source node ID"):
+    with raises(discv5.Discv5Error, "no session key for the source node ID") as info:
         discv5.open_message(bytes(16), DEST_ID, DEST_ID, PING_PACKET)
+    assert info.value.code == 205
 
 
 def test_open_message_of_a_whoareyou():
-    with raises(ValueError, "packet has flag 1, not 0"):
+    with raises(discv5.Discv5Error, "packet has flag 1, not 0") as info:
         discv5.open_message(bytes(16), SRC_ID, DEST_ID, WHOAREYOU_PACKET)
+    assert info.value.code == 204
 
 
 # ---- WHOAREYOU ----
@@ -127,8 +129,9 @@ def test_read_whoareyou_packet():
 
 
 def test_read_whoareyou_of_a_message():
-    with raises(ValueError, "packet has flag 0, not 1"):
+    with raises(discv5.Discv5Error, "packet has flag 0, not 1") as info:
         discv5.read_whoareyou(DEST_ID, PING_PACKET)
+    assert info.value.code == 204
 
 
 # ---- Handshake message packets ----
@@ -178,7 +181,7 @@ def test_open_handshake_packet_with_enr():
 
 def test_open_handshake_under_another_challenge():
     # The ID signature covers the challenge data, so another challenge fails to verify.
-    with raises(ValueError, "ID signature does not verify"):
+    with raises(discv5.Discv5Error, "ID signature does not verify") as info:
         discv5.open_handshake(
             NODE_B_KEY,
             WHOAREYOU_CHALLENGE_DATA,
@@ -186,10 +189,12 @@ def test_open_handshake_under_another_challenge():
             _public_key(NODE_A_KEY),
             HANDSHAKE_PACKET,
         )
+    assert info.value.code == 305
 
 
 def test_open_handshake_of_a_message():
-    with raises(ValueError, "packet has flag 0, not 2"):
+    with raises(discv5.Discv5Error, "packet has flag 0, not 2") as info:
         discv5.open_handshake(
             NODE_B_KEY, HANDSHAKE_CHALLENGE_DATA, DEST_ID, _public_key(NODE_A_KEY), PING_PACKET
         )
+    assert info.value.code == 310

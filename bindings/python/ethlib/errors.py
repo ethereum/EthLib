@@ -130,7 +130,7 @@ class GossipError(EthLibError, ValueError):
 
 
 class Discv5Error(EthLibError, ValueError):
-    """A discv5 input was rejected, with the code of a packet error, a message error, or 0."""
+    """A discv5 input was rejected, with the code of its error, or 0."""
 
 
 class RlpxError(EthLibError, ValueError):

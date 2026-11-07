@@ -22,9 +22,9 @@ A packet error or a message error comes back with its code.
 
 Any other rejected input comes back with code 0, including a failure of AES-GCM.
 
-A failure of the handshake or of a session packet comes back with the code of its packet error.
+A failure of the handshake or of a session packet comes back with its own code.
 
-Any other such failure comes back with code 0, and its message names the reason.
+When the failure is in the packet itself, the code is that of the packet error instead.
 -/
 
 public section
@@ -224,28 +224,28 @@ def vectorOf (n : Nat) (field : String) (bytes : ByteArray) : Result (Vector UIn
   if h : bytes.size = n then pure ⟨bytes.data, h⟩
   else throw (0, s!"{field} has {bytes.size} bytes, not {n}")
 
-/-- A session error, with the code of its packet error or 0, and the reason. -/
+/-- A session error, with its code or that of its packet error, and the reason. -/
 def runSession {α : Type} (act : Except SessionError α) : Result α :=
-  act.mapError fun
-    | .packet e => (e.code, s!"invalid packet: {repr e}")
-    | .encryption _ => (0, "encryption failed")
-    | .decryption _ => (0, "message does not authenticate")
-    | .wrongFlag flag expected => (0, s!"packet has flag {flag}, not {expected}")
-    | .noSession _ => (0, "no session key for the source node ID")
+  act.mapError fun e => match e with
+    | .packet p => (p.code, s!"invalid packet: {repr p}")
+    | .encryption _ => (e.code, "encryption failed")
+    | .decryption _ => (e.code, "message does not authenticate")
+    | .wrongFlag flag expected => (e.code, s!"packet has flag {flag}, not {expected}")
+    | .noSession _ => (e.code, "no session key for the source node ID")
 
-/-- A handshake error, with the code of its packet error or 0, and the reason. -/
+/-- A handshake error, with its code or that of its packet error, and the reason. -/
 def runHandshake {α : Type} (act : Except HandshakeError α) : Result α :=
-  act.mapError fun
-    | .packet e => (e.code, s!"invalid packet: {repr e}")
-    | .keyAgreement _ => (0, "no shared secret")
-    | .keyDerivation _ => (0, "key derivation failed")
-    | .signing _ => (0, "signing failed")
-    | .ephemeralKeySize size => (0, s!"ephemeral key has {size} bytes, not 33")
-    | .ephemeralKey _ => (0, "ephemeral key is not a point of secp256k1")
-    | .idSignature => (0, "ID signature does not verify")
-    | .encryption _ => (0, "encryption failed")
-    | .decryption _ => (0, "message does not authenticate")
-    | .notHandshake flag => (0, s!"packet has flag {flag}, not 2")
+  act.mapError fun e => match e with
+    | .packet p => (p.code, s!"invalid packet: {repr p}")
+    | .keyAgreement _ => (e.code, "no shared secret")
+    | .keyDerivation _ => (e.code, "key derivation failed")
+    | .signing _ => (e.code, "signing failed")
+    | .ephemeralKeySize size => (e.code, s!"ephemeral key has {size} bytes, not 33")
+    | .ephemeralKey _ => (e.code, "ephemeral key is not a point of secp256k1")
+    | .idSignature => (e.code, "ID signature does not verify")
+    | .encryption _ => (e.code, "encryption failed")
+    | .decryption _ => (e.code, "message does not authenticate")
+    | .notHandshake flag => (e.code, s!"packet has flag {flag}, not 2")
 
 /-- Node B's WHOAREYOU packet for node A, and its challenge data, as a JSON object.
 
@@ -269,14 +269,14 @@ def readWhoareyouExport (destId packet : ByteArray) : Result ByteArray := do
     ("enr_seq", toJson c.enrSeq.toNat), ("challenge_data", hex c.challengeData.data.toList)]
   return json.compress.toUTF8
 
-/-- An ordinary message packet from node `srcId` to node `destId`, under a session key. -/
+/-- An ordinary message packet from one node to another, under a session key. -/
 @[export eth_discv5_seal_message]
 def sealMessageExport (key srcId destId maskingIv nonce plaintext : ByteArray) :
     Result ByteArray := do
   runSession (sealMessage (← aesKeyOf key) (← nodeIdOf srcId) (← nodeIdOf destId)
     (← vectorOf 16 "masking IV" maskingIv) (← nonceOf nonce) plaintext)
 
-/-- The plaintext of an ordinary message packet from the node `srcId`, under its session key.
+/-- The plaintext of an ordinary message packet from a given node, under its session key.
 
 It fails when the packet names another source node ID. -/
 @[export eth_discv5_open_message]

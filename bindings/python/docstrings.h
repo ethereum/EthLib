@@ -264,10 +264,10 @@
   "Node A's reading of a WHOAREYOU packet, as a JSON object."
 
 #define DOC_discv5_seal_message \
-  "An ordinary message packet from node `srcId` to node `destId`, under a session key."
+  "An ordinary message packet from one node to another, under a session key."
 
 #define DOC_discv5_open_message \
-  "The plaintext of an ordinary message packet from the node `srcId`, under its session key."
+  "The plaintext of an ordinary message packet from a given node, under its session key."
 
 #define DOC_discv5_seal_handshake \
   "Node A's handshake message packet for node B, and its session keys, as a JSON object."

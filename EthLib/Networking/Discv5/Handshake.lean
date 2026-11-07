@@ -86,18 +86,20 @@ inductive HandshakeError where
 
 The code ignores the arguments of the constructor.
 
+The codes start at 301, since the packet, message and session errors share their Python class.
+
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def HandshakeError.code : HandshakeError → UInt32
-  | .keyAgreement _ => 1
-  | .keyDerivation _ => 2
-  | .signing _ => 3
-  | .ephemeralKey _ => 4
-  | .idSignature => 5
-  | .ephemeralKeySize _ => 6
-  | .packet _ => 7
-  | .encryption _ => 8
-  | .decryption _ => 9
-  | .notHandshake _ => 10
+  | .keyAgreement _ => 301
+  | .keyDerivation _ => 302
+  | .signing _ => 303
+  | .ephemeralKey _ => 304
+  | .idSignature => 305
+  | .ephemeralKeySize _ => 306
+  | .packet _ => 307
+  | .encryption _ => 308
+  | .decryption _ => 309
+  | .notHandshake _ => 310
 
 /-- Step 3, for node A: the ephemeral public key, the ID signature and the session keys.
 

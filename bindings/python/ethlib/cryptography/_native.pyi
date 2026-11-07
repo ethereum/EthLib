@@ -352,11 +352,11 @@ def discv5_read_whoareyou(dest_id: bytes, packet: bytes) -> bytes:
     ...
 
 def discv5_seal_message(key: bytes, src_id: bytes, dest_id: bytes, masking_iv: bytes, nonce: bytes, plaintext: bytes) -> bytes:
-    """An ordinary message packet from node `srcId` to node `destId`, under a session key."""
+    """An ordinary message packet from one node to another, under a session key."""
     ...
 
 def discv5_open_message(key: bytes, src_id: bytes, dest_id: bytes, packet: bytes) -> bytes:
-    """The plaintext of an ordinary message packet from the node `srcId`, under its session key."""
+    """The plaintext of an ordinary message packet from a given node, under its session key."""
     ...
 
 def discv5_seal_handshake(ephemeral_key: bytes, static_key: bytes, challenge_data: bytes, src_id: bytes, dest_id: bytes, dest_pubkey: bytes, masking_iv: bytes, nonce: bytes, record: bytes, plaintext: bytes) -> bytes:
