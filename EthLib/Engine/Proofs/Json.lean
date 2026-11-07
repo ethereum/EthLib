@@ -38,6 +38,8 @@ A withdrawal decodes exactly when its object holds exactly its four fields, each
 
 A list decodes exactly when the value is an array whose items each decode, in order.
 
+A byte string of a fixed size, such as an address, decodes exactly to the vector of its bytes.
+
 The 64-bit decoder returns a number exactly when the decoder with the bound `2^64` returns it.
 
 The bounded byte decoder succeeds exactly when the byte decoder succeeds within the limit.
@@ -402,5 +404,29 @@ theorem array_eq_ok_iff {α : Type} {what : String} {f : Lean.Json → Decode α
     simp
   -- Any other JSON value is not an array, so the read fails at once.
   | _ => simp [array, invalid, throw, throwThe, MonadExceptOf.throw]
+
+/-- A byte string of a fixed size decodes to a vector exactly when its bytes are the vector's.
+
+The decoder of byte strings must then return exactly those bytes, so their number is the size. -/
+theorem fixed_eq_ok_iff {what : String} {n : Nat} {j : Lean.Json} {upper : Bool}
+    {v : Vector UInt8 n} :
+    fixed what n j upper = .ok v ↔ bytesOf what upper j = .ok ⟨v.toArray⟩ := by
+  unfold fixed
+  constructor
+  · intro h
+    obtain ⟨b, hb, h⟩ := bind_ok_iff.mp h
+    -- A string of another size fails, so the bytes have the size and form the vector.
+    split at h
+    · cases h
+      rw [hb]
+    · cases h
+  · intro h
+    rw [h]
+    simp [bind, Except.bind, pure, Except.pure, v.size_toArray]
+
+/-- An address decodes exactly when its bytes are the address's, with uppercase digits allowed. -/
+theorem address_eq_ok_iff {what : String} {j : Lean.Json} {a : Address} :
+    address what j = .ok a ↔ bytesOf what true j = .ok ⟨a.toArray⟩ :=
+  fixed_eq_ok_iff
 
 end EthLib.Engine.Json
