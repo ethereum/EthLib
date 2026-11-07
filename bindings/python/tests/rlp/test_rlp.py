@@ -76,8 +76,8 @@ def test_random_case(name: str) -> None:
 # - bytesShouldBeSingleByte: a byte below 0x80 written with a prefix;
 # - nonOptimalLongLength and wrongSizeList: a length below 56 written in the long form;
 # - leadingZerosInLongLength and incorrectLengthInArray: a length with a leading zero byte;
-# - lessThan, int32Overflow and emptyEncoding: an input that ends before the bytes its prefix
-#   announces, given as the bytes announced, then the bytes available.
+# - lessThan, int32Overflow and emptyEncoding: an input shorter than its prefix announces.
+# A short input gives the bytes announced, then the bytes available.
 # randomRLP is a list, inside which a byte string writes its length with a leading zero byte.
 # The decoder prefixes each fault with the stage and the error type.
 _REJECTED = "input rejected: EthLib.Serialization.Rlp.RlpError."

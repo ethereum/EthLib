@@ -14,8 +14,8 @@ from .forks import since
 # Commit: 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445
 # Licence: CC0-1.0
 
-# Byzantium adds MODEXP, Berlin changes its price (EIP-2565), and Fusaka changes the price again
-# and bounds the lengths (EIP-7883 and EIP-7823).
+# Byzantium adds MODEXP, and Berlin changes its price (EIP-2565).
+# Fusaka changes the price again and bounds the lengths (EIP-7883 and EIP-7823).
 FORKS = since("byzantium")
 EIP_198_FORKS = since("byzantium", "berlin")
 EIP_2565_FORKS = since("berlin", "fusaka")
@@ -109,8 +109,8 @@ def test_example_3_length_too_large(fork: str, gas: int) -> None:
         run(fork, 0x05, EXAMPLE_3, gas)
 
 
-# The prices of example 3: a modulus of x = 2^256 - 1 bytes, and an exponent of 2^256 - 2, whose
-# highest bit has the index 255.
+# The prices of example 3: a modulus of x = 2^256 - 1 bytes, and an exponent of 2^256 - 2.
+# The highest bit of the exponent has the index 255.
 # EIP-198: mult_complexity(x) = x^2 // 16 + 480 * x - 199680 above 1024 bytes, times 255, over 20.
 # EIP-2565: ceil(x / 8)^2, times 255, over 3, and at least 200.
 EXAMPLE_3_LENGTH = 2**256 - 1
@@ -120,8 +120,8 @@ EXAMPLE_3_EIP_2565_PRICE = max(200, ((EXAMPLE_3_LENGTH + 7) // 8) ** 2 * 255 // 
 
 @pytest.mark.parametrize("fork", since("byzantium", "fusaka"))
 def test_example_3_before_fusaka(fork: str) -> None:
-    # Before EIP-7823, a modulus of 2^256 - 1 bytes is priced far above any gas, so the call
-    # runs out of gas.
+    # Before EIP-7823, a modulus of 2^256 - 1 bytes is priced far above any gas.
+    # So the call runs out of gas.
     assert price(fork, 0x05, EXAMPLE_3) > 2**64
     cost = EXAMPLE_3_EIP_198_PRICE if fork in EIP_198_FORKS else EXAMPLE_3_EIP_2565_PRICE
     with raises(
@@ -158,8 +158,8 @@ def test_iteration_count(fork: str, exponent: bytes, iterations: int) -> None:
 
 
 # The `modexp_nagydani_*` cases: the length of the base and of the modulus, and the exponent.
-# Then the prices of EIP-198 and EIP-2565 (EIP-2565, Test Cases) and of EIP-7883 (EIP-7883,
-# Test Cases).
+# Then the prices of EIP-198 and EIP-2565 (EIP-2565, Test Cases).
+# Then the price of EIP-7883 (EIP-7883, Test Cases).
 NAGYDANI = [
     (64, bytes([2]), 204, 200, 500),
     (64, bytes([3]), 204, 200, 500),
@@ -184,8 +184,8 @@ NAGYDANI = [
 def test_nagydani_prices(
     fork: str, size: int, exponent: bytes, eip198: int, eip2565: int, eip7883: int
 ) -> None:
-    # Only the lengths and the exponent enter the price, so zero bytes stand in for the base and
-    # the modulus of each case.
+    # Only the lengths and the exponent enter the price.
+    # So zero bytes stand in for the base and the modulus of each case.
     if fork in EIP_198_FORKS:
         expected = eip198
     elif fork in EIP_2565_FORKS:

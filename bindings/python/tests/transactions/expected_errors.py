@@ -34,8 +34,8 @@ FORKS = [
     "glamsterdam",
 ]
 
-# The fields of the payload of each type, by the names that the exceptions use (EIP-2718,
-# EIP-2930, EIP-1559, EIP-4844 and EIP-7702).
+# The fields of the payload of each type, by the names that the exceptions use.
+# The types come from EIP-2718, EIP-2930, EIP-1559, EIP-4844 and EIP-7702.
 _LEGACY = ["NONCE", "GASPRICE", "GASLIMIT", "TO", "VALUE", "DATA", "V", "R", "S"]
 _ACCESS = ["CHAINID", "NONCE", "GASPRICE", "GASLIMIT", "TO", "VALUE", "DATA", "ACCESS_LIST"]
 _FEE = ["CHAINID", "NONCE", "PRIORITY", "MAXFEE", "GASLIMIT", "TO", "VALUE", "DATA", "ACCESS_LIST"]
@@ -327,8 +327,8 @@ def expected_template(
         for name in names
         if (template := _one(name, fork, tx, kind, chain_id, intrinsic)) is not None
     }
-    # Of several names, the first check that fails reports: the decoding, then the chain, then
-    # the signature, as the checks of EthLib run.
+    # Of several names, the first check that fails reports.
+    # The checks run as in EthLib: the decoding, then the chain, then the signature.
     for first in ("decoding: ", "wrongChainId ", "invalidSignature"):
         earliest = {template for template in found if template.startswith(first)}
         if earliest:

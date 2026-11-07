@@ -78,8 +78,8 @@ def test_case_count() -> None:
 
 
 def test_driver_with_oracle() -> None:
-    # With the Python oracle as F, the driver meets the file too, so a failure below lies in the
-    # precompile, not in the driver.
+    # With the Python oracle as F, the driver meets the file too.
+    # So a failure below lies in the precompile, not in the driver.
     # hashlib's BLAKE2b agrees with the file as well.
     for c in CASES[::17]:
         data, key = bytes.fromhex(c["in"]), bytes.fromhex(c["key"])

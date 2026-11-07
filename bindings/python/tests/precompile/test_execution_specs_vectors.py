@@ -170,8 +170,8 @@ def test_p256_count():
 
 @pytest.mark.parametrize("case", P256_CASES)
 def test_p256verify(case: dict) -> None:
-    # Every input repeats one of EIP-7951, with the same output; a signature that does not
-    # verify returns no data, which both write as "".
+    # Every input repeats one of EIP-7951, with the same output.
+    # A signature that does not verify returns no data, which both write as "".
     data = _hex(case["Input"])
     assert EIP7951[data] == case["Expected"]
     for fork in ends("fusaka"):
@@ -214,8 +214,9 @@ def _kzg_key(case: dict) -> tuple:
 
 
 def test_point_evaluation_vectors_already_run():
-    # The file holds the same 122 cases as tests/cryptography/kzg/verify_kzg_proof, which
-    # `test_point_evaluation.py` runs through the precompile; this test checks that they agree.
+    # The file holds the same 122 cases as tests/cryptography/kzg/verify_kzg_proof.
+    # `test_point_evaluation.py` runs those cases through the precompile.
+    # This test checks that the two sets of cases agree.
     # Both repeat 12 inputs under a second name, so each holds 110 distinct cases.
     vectors = ROOT / "tests" / "cryptography" / "kzg" / "verify_kzg_proof"
     ours = {

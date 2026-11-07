@@ -21,8 +21,8 @@ from raising import raises
         (30_000_000, 30_000_000, 10**10, 11_250_000_000),
         # An empty parent: the same amount less.
         (30_000_000, 0, 10**10, 8_750_000_000),
-        # 5,000,000 above the target: 10^10 * 5000000 / 15000000 = 3333333333,
-        # and / 8 gives 416666666.
+        # 5,000,000 above the target: 10^10 * 5000000 / 15000000 = 3333333333.
+        # Divided by 8, it gives 416666666.
         (30_000_000, 20_000_000, 10**10, 10_416_666_666),
         # 5,000,000 below the target: the fall is the same 416666666.
         (30_000_000, 10_000_000, 10**10, 9_583_333_334),
@@ -88,8 +88,9 @@ def test_excess_blob_gas_dencun(excess: int, used: int, expected: int) -> None:
 @pytest.mark.parametrize(
     "excess, used, base_fee, expected",
     [
-        # The reserve price 2^13 * 17 is above the blob price 2^17, so the excess grows by
-        # 786432 * (9 - 6) // 9 = 262144, where dividing first would give 262143.
+        # The reserve price 2^13 * 17 is above the blob price 2^17.
+        # So the excess grows by 786432 * (9 - 6) // 9 = 262144.
+        # Dividing first would give 262143.
         (0, 786432, 17, 262144),
         # 7 blobs: 917504 * 3 // 9 = 305834, rounded down.
         (0, 917504, 17, 305834),
@@ -150,6 +151,7 @@ def test_blob_parameter_only_forks(fork: str, fraction: int) -> None:
 
 
 def test_excess_blob_gas_bpo2() -> None:
-    # BPO2 has target 14 and maximum 21. A full parent below the reserve price grows the excess
-    # by 21 * 2^17 * (21 - 14) // 21 = 917504.
+    # BPO2 has target 14 and maximum 21.
+    # A full parent below the reserve price grows the excess.
+    # The growth is 21 * 2^17 * (21 - 14) // 21 = 917504.
     assert calc_excess_blob_gas("bpo2", 0, 21 * 2**17, 17) == 917504

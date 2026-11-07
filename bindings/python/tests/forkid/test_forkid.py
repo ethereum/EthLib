@@ -78,8 +78,8 @@ GOERLI = forkid.schedule(
     ],
 )
 
-# The chain of EIP-6122 "Test Cases": mainnet to Gray Glacier, a merge netsplit block at
-# 18000000 and withdrawals at time 1668000000.
+# The chain of EIP-6122 "Test Cases": mainnet to Gray Glacier.
+# Then a merge netsplit block at 18000000, and withdrawals at time 1668000000.
 # Paris activates by total difficulty, so its block is not a fork of the identifier.
 # The netsplit block is the FORK_NEXT_VALUE of EIP-3675.
 WITHDRAWALS = forkid.schedule(

@@ -64,12 +64,15 @@ def _scalar(value: int) -> bytes:
 
 def verify_account_proof(state_root: bytes, answer: dict) -> list[bool] | None:
     """Check an answer of `eth_getProof` against a 32-byte state root, slot by slot."""
-    # The answer is the `result` object of the response, with the fields of `AccountProof` of
-    # execution-apis. A field that does not match the pattern of its type raises ValueError,
-    # and an answer that does not hold raises TrieError.
+    # The answer is the `result` object of the response.
+    # Its fields are those of `AccountProof` of execution-apis.
+    # A field that does not match the pattern of its type raises ValueError.
+    # An answer that does not hold raises TrieError.
+    #
     # None means that the proof shows no account at the address: no field or slot is judged.
-    # Otherwise the fields hold, and each slot is True when it is set and holds its value, or
-    # False when its proof shows that it is not set and its value is 0.
+    # Otherwise the fields hold.
+    # Each slot is True when it is set and holds its value.
+    # It is False when its proof shows that it is not set and its value is 0.
     slots = [
         [
             # A storage key is read as a number, which the trie writes on 32 bytes.

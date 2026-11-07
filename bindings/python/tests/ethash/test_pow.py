@@ -77,8 +77,8 @@ def test_header_result_is_above_its_target(name: str) -> None:
 
 @slow
 def test_sealed_header_passes(cache_epoch_0: bytes) -> None:
-    # Difficulty 1 accepts every result, so the first header sealed with its own mix digest
-    # passes.
+    # Difficulty 1 accepts every result.
+    # So the first header sealed with its own mix digest passes.
     fields = rlp.decode(bytes.fromhex(_POW["first"]["header"]))
     fields[7] = b"\x01"
     unsealed = rlp.encode(fields)

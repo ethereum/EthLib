@@ -26,8 +26,13 @@ BLOCKS = [
 ]
 
 # The first timestamp of each fork by time, with the fork before it.
-# EIP-6953 "Post-Merge Upgrades" gives Shapella, and the "Activation" table of each meta EIP the
-# others: EIP-7569, EIP-7600, EIP-7607 (with BPO1 and BPO2), EIP-8134 and EIP-8135.
+# EIP-6953 "Post-Merge Upgrades" gives Shapella.
+# The "Activation" table of each meta EIP gives the others:
+# - EIP-7569
+# - EIP-7600
+# - EIP-7607, with BPO1 and BPO2
+# - EIP-8134
+# - EIP-8135
 TIMES = [
     (1_681_338_455, "paris", "shapella"),
     (1_710_338_135, "shapella", "dencun"),
