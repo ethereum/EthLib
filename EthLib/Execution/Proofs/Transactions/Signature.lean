@@ -15,6 +15,10 @@ The `v` of a legacy transaction gives the chain and the recovery id, as EIP-155 
 A recovered sender is the address of a key that verifies the signature on the signing hash.
 
 An honest signer is the sender of the transaction that it signs.
+
+The signature of a transaction is not part of what it signs.
+
+So changing the signature of a transaction leaves its signing hash as it was.
 -/
 
 @[expose] public section
@@ -157,5 +161,31 @@ theorem recoverSender_sign {fork : Fork} {tx : Transaction} {hash : Vector UInt8
   simp only [recoverSender, hRange, hInput, bind, Except.bind]
   rw [hr, hsTx, hRecover, hQ]
   rfl
+
+/-! ## The signing hashes -/
+
+/-- The signing hash of a legacy transaction that signs no chain ignores `v`, `r` and `s`. -/
+theorem signingHashPre155_signature (tx : LegacyTransaction) (v r s : U256) :
+    signingHashPre155 { tx with v := v, r := r, s := s } = signingHashPre155 tx := rfl
+
+/-- The signing hash of a legacy transaction that signs a chain ignores `v`, `r` and `s`. -/
+theorem signingHash155_signature (tx : LegacyTransaction) (chainId v r s : U256) :
+    signingHash155 { tx with v := v, r := r, s := s } chainId = signingHash155 tx chainId := rfl
+
+/-- The signing hash of a transaction of type 1 ignores the parity, `r` and `s`. -/
+theorem signingHash2930_signature (tx : AccessListTransaction) (yParity r s : U256) :
+    signingHash2930 { tx with yParity := yParity, r := r, s := s } = signingHash2930 tx := rfl
+
+/-- The signing hash of a transaction of type 2 ignores the parity, `r` and `s`. -/
+theorem signingHash1559_signature (tx : FeeMarketTransaction) (yParity r s : U256) :
+    signingHash1559 { tx with yParity := yParity, r := r, s := s } = signingHash1559 tx := rfl
+
+/-- The signing hash of a transaction of type 3 ignores the parity, `r` and `s`. -/
+theorem signingHash4844_signature (tx : BlobTransaction) (yParity r s : U256) :
+    signingHash4844 { tx with yParity := yParity, r := r, s := s } = signingHash4844 tx := rfl
+
+/-- The signing hash of a transaction of type 4 ignores the parity, `r` and `s`. -/
+theorem signingHash7702_signature (tx : SetCodeTransaction) (yParity r s : U256) :
+    signingHash7702 { tx with yParity := yParity, r := r, s := s } = signingHash7702 tx := rfl
 
 end EthLib.Execution.Transactions

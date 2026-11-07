@@ -22,6 +22,8 @@ An authority that refuses an authorization, such as for a wrong nonce, is only m
 
 An authorization with no valid signature changes nothing.
 
+The hash that an authority signs ignores the signature of the authorization.
+
 Up to BPO5, a valid authorization gives back 12500 exactly when its authority has an account.
 
 From Glamsterdam, an authority pays for its first write and its new indicator at most once.
@@ -244,5 +246,12 @@ theorem meter_payAuthorization_of_paid {code : ByteArray} (hfork : .glamsterdam 
       Except.mapError, bind, Except.bind, pure, Except.pure]
   · simp [payAuthorization, chargeAuthorization, hfork, hexists, hpaid, hcode, hdel,
       Except.mapError, bind, Except.bind, pure, Except.pure]
+
+/-! ## The hash that an authority signs -/
+
+/-- The hash that an authority signs ignores the parity, `r` and `s`. -/
+theorem authorizationHash_signature (auth : Authorization) (yParity : UInt8) (r s : U256) :
+    authorizationHash { auth with yParity := yParity, r := r, s := s } = authorizationHash auth :=
+  rfl
 
 end EthLib.Execution.Transactions
