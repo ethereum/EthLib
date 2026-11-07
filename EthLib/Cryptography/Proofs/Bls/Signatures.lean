@@ -11,6 +11,8 @@ Source: draft-irtf-cfrg-bls-signature-04, §2.6 to §2.9 and §3.3.
 Signing never fails, because the hash to curve never fails.
 
 Each other theorem names an input that an operation rejects.
+
+The decoder of a secret key accepts exactly the 32-byte encodings of the nonzero scalars below `r`.
 -/
 
 @[expose] public section
@@ -66,5 +68,29 @@ theorem coreVerify_badPubkeySize {pk : ByteArray} (h : pk.size ≠ 48) (msg sig 
 theorem verify_badPubkeySize {pk : ByteArray} (h : pk.size ≠ 48) (msg sig : ByteArray) :
     verify pk msg sig = false :=
   coreVerify_badPubkeySize h msg sig DST
+
+/-- The secret key decoder accepts exactly the nonzero scalars that `Fr.fromBytesBE` decodes. -/
+theorem SecretKey.fromBytes_eq_ok_iff {bytes : ByteArray} {sk : SecretKey} :
+    SecretKey.fromBytes bytes = .ok sk ↔ Fr.fromBytesBE bytes = .ok sk.val := by
+  obtain ⟨x, hx⟩ := sk
+  unfold SecretKey.fromBytes
+  cases hd : Fr.fromBytesBE bytes with
+  | error e => simp
+  | ok y =>
+    by_cases hy : y = 0
+    · simp [hy, Ne.symm hx]
+    · simp [hy, Subtype.ext_iff, eq_comm]
+
+/-- Decoding the 32 bytes of a secret key gives it back. -/
+theorem SecretKey.fromBytes_toBytesBE (sk : SecretKey) :
+    SecretKey.fromBytes sk.val.toBytesBE = .ok sk :=
+  SecretKey.fromBytes_eq_ok_iff.mpr (Fr.fromBytesBE_toBytesBE sk.val)
+
+/-- The secret key decoder rejects the encoding of zero (§2.3). -/
+theorem SecretKey.fromBytes_zero :
+    SecretKey.fromBytes (0 : Fr).toBytesBE = .error .invalidSecretKey := by
+  unfold SecretKey.fromBytes
+  rw [Fr.fromBytesBE_toBytesBE]
+  simp
 
 end EthLib.Cryptography.Bls.Signatures
