@@ -656,7 +656,12 @@ So `SpecUnder.runFrame` concludes that `runFrame` returns a stopped frame of `Q`
 `hoareUnder_iff_triple` states each triple under an assumption as a `Triple` over `StepBy` under each runner that meets it, so the two share their rules.
 The code that a message runs is arbitrary and may call the caller again.
 So the assumption is all that a triple says about a frame that ends a message, and about the state after it.
-No rule yet covers an opcode that sends a message, so no theorem yet proves a contract that calls or creates.
+`Logic.call` (`Logic/Call.lean`) is the rule for CALL with no value and empty ranges of input and output.
+It holds from Berlin to before Glamsterdam, with the one-counter meter.
+It pays 2600 or 100 for the access to the address, by EIP-2929.
+It passes on at most all but one 64th of the gas left, by EIP-150.
+Its postcondition gives the state and substate that the frame that ends the message gives, and nothing more.
+No rule covers CREATE, a call with value, DELEGATECALL or STATICCALL.
 
 ### SHA-256 precompile
 
