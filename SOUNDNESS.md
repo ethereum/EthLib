@@ -712,6 +712,9 @@ It pays the access of EIP-2929, 9000 for the value, 25000 more when the callee i
 The message gets the gas that EIP-150 allows and the stipend of 2300, and carries the value.
 `Logic.callValueLow` is the rule for such a CALL when the current account holds less than the value.
 It sends no message, pushes 0, empties the return data, and gives back the gas it would pass on with the stipend.
+`Pay.spec_low` and `Pay.runFrame_process_noCode` prove a contract that sends the value in its call data to an address in its call data.
+It returns 0 when the balance is too small.
+With the runner of the interpreter, it returns 1 when the address holds no code, or the run aborts.
 No theorem yet states the balances after such a call, and no rule covers CREATE, DELEGATECALL or STATICCALL.
 
 ### SHA-256 precompile
