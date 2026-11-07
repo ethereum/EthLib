@@ -25,7 +25,7 @@ open EthLib.Serialization.Ssz
 
 A type without a largest size takes the payload cap as its largest length.
 
-Each bound is held to one byte past the cap, so it fits in 64 bits and keeps its meaning. -/
+The smallest is held to one byte past the cap and the largest to the cap, so both fit in 64 bits. -/
 def payloadBounds (shape : Desc) : UInt64 × UInt64 :=
   let cap := MAX_PAYLOAD_SIZE.toNat
   (UInt64.ofNat (min shape.minSize (cap + 1)), UInt64.ofNat (min (shape.maxSize.getD cap) cap))

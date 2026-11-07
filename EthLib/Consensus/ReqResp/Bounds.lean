@@ -30,7 +30,9 @@ open Base Serialization.Ssz
 
 /-- The SSZ type of the request of a protocol version at a fork, if the request has content.
 
-The status protocol carries the status of the fork of its version. -/
+The status protocol carries the status of the fork of its version, and an unknown version has none.
+
+It does not check that the fork defines the version. -/
 def requestDesc (preset : Preset) (config : Config) (fork : Fork) (id : ProtocolId) :
     Option Desc :=
   match id.protocol with
