@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.List
 public import EthLib.Networking.Devp2p.P2p
 public import EthLib.Networking.Proofs.Rlpx.Handshake
 public import EthLib.Networking.Proofs.Snappy.Compress
@@ -12,6 +13,10 @@ Each message reads back from its frame data, compressed or not.
 Two peers use Snappy exactly when both announce version 5 or more.
 
 The message IDs of the shared capabilities do not overlap, and none is below `0x10`.
+
+Of the versions of one name that both peers list, only the highest is negotiated.
+
+Both peers negotiate the same capabilities and message IDs, whichever of them asks.
 
 Two errors with one code come from one constructor.
 -/
@@ -173,11 +178,67 @@ theorem pairwise_negotiate (length : Capability → Nat) (ours theirs : List Cap
     (negotiate length ours theirs).Pairwise fun p q => p.2 + length p.1 ≤ q.2 :=
   pairwise_messageOffsets length _ _
 
+/--
+A capability is negotiated exactly when both peers list it and share no higher version of its name.
+-/
+theorem mem_sharedCapabilities_iff {ours theirs : List Capability} {c : Capability} :
+    c ∈ sharedCapabilities ours theirs ↔
+      c ∈ ours ∧ c ∈ theirs ∧
+        ∀ d ∈ ours, d ∈ theirs → d.name = c.name → d.version ≤ c.version := by
+  simp only [sharedCapabilities, List.mem_mergeSort, List.mem_filter, List.mem_eraseDups,
+    List.all_eq_true, decide_eq_true_eq, Bool.or_eq_true]
+  exact ⟨fun ⟨⟨ho, ht⟩, h⟩ => ⟨ho, ht, fun d hd hd' hn => (h d ⟨hd, hd'⟩).resolve_left (· hn)⟩,
+    fun ⟨ho, ht, h⟩ => ⟨⟨ho, ht⟩, fun d ⟨hd, hd'⟩ =>
+      (em (d.name = c.name)).elim (fun hn => .inr (h d hd hd' hn)) .inl⟩⟩
+
 /-- Every negotiated capability is in both lists, with the same name and version. -/
 theorem mem_sharedCapabilities {ours theirs : List Capability} {c : Capability}
-    (h : c ∈ sharedCapabilities ours theirs) : c ∈ ours ∧ c ∈ theirs := by
-  simp only [sharedCapabilities, List.mem_mergeSort, List.mem_filter, List.mem_eraseDups] at h
-  simpa using h.1
+    (h : c ∈ sharedCapabilities ours theirs) : c ∈ ours ∧ c ∈ theirs :=
+  ⟨(mem_sharedCapabilities_iff.mp h).1, (mem_sharedCapabilities_iff.mp h).2.1⟩
+
+/-- The names of the negotiated capabilities strictly increase, byte by byte. -/
+theorem pairwise_sharedCapabilities (ours theirs : List Capability) :
+    (sharedCapabilities ours theirs).Pairwise
+      fun a b => a.name.data.toList < b.name.data.toList := by
+  have sorted : (sharedCapabilities ours theirs).Pairwise (Capability.nameLe · ·) :=
+    List.pairwise_mergeSort
+      (fun a b c hab hbc => by
+        simp only [Capability.nameLe, decide_eq_true_eq] at *
+        exact List.le_trans hab hbc)
+      (fun a b => by
+        simpa [Capability.nameLe] using List.le_total a.name.data.toList b.name.data.toList) _
+  have nodup : (sharedCapabilities ours theirs).Nodup :=
+    ((Base.nodup_eraseDups _).filter _).perm (List.mergeSort_perm _ _).symm
+  refine (sorted.and nodup).imp_of_mem fun {a b} ha hb ⟨hle, hne⟩ => ?_
+  simp only [Capability.nameLe, decide_eq_true_eq] at hle
+  refine (List.le_iff_lt_or_eq.mp hle).resolve_right fun heq => hne ?_
+  -- Two negotiated capabilities of one name both have the highest version, so they are one.
+  have hname : a.name = b.name := ByteArray.ext (Array.ext' heq)
+  have ha := mem_sharedCapabilities_iff.mp ha
+  have hb := mem_sharedCapabilities_iff.mp hb
+  have hversion := Nat.le_antisymm (hb.2.2 a ha.1 ha.2.1 hname) (ha.2.2 b hb.1 hb.2.1 hname.symm)
+  cases a
+  cases b
+  simp only at hname hversion
+  rw [hname, hversion]
+
+/-- Both peers negotiate the same capabilities in the same order, whichever of them asks. -/
+theorem sharedCapabilities_comm (ours theirs : List Capability) :
+    sharedCapabilities ours theirs = sharedCapabilities theirs ours := by
+  have lt := pairwise_sharedCapabilities ours theirs
+  have lt' := pairwise_sharedCapabilities theirs ours
+  have ne : ∀ {a b : Capability}, a.name.data.toList < b.name.data.toList → a ≠ b :=
+    fun hab e => List.lt_irrefl _ (e ▸ hab)
+  refine List.Perm.eq_of_pairwise (fun _ _ _ _ hab hba => absurd hba (List.lt_asymm hab)) lt lt' ?_
+  refine (List.perm_ext_iff_of_nodup (lt.imp ne) (lt'.imp ne)).mpr fun c => ?_
+  simp only [mem_sharedCapabilities_iff]
+  exact ⟨fun ⟨h₁, h₂, h₃⟩ => ⟨h₂, h₁, fun d hd hd' => h₃ d hd' hd⟩,
+    fun ⟨h₁, h₂, h₃⟩ => ⟨h₂, h₁, fun d hd hd' => h₃ d hd' hd⟩⟩
+
+/-- Both peers give each shared capability the same message IDs, whichever of them asks. -/
+theorem negotiate_comm (length : Capability → Nat) (ours theirs : List Capability) :
+    negotiate length ours theirs = negotiate length theirs ours := by
+  rw [negotiate, negotiate, sharedCapabilities_comm]
 
 /-! ## Error codes -/
 
