@@ -14,6 +14,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Callee
 public import EthLib.Execution.Proofs.Evm.Logic.Rules
 public import EthLib.Execution.Proofs.Evm.Logic.Copy
 public import EthLib.Execution.Proofs.Evm.Logic.Region
+public import EthLib.Execution.Proofs.Evm.Logic.Known
 public import EthLib.Execution.Proofs.Evm.Logic.Branch
 public import EthLib.Execution.Proofs.Evm.Logic.Stack
 public import EthLib.Execution.Proofs.Evm.Logic.NatCode
@@ -35,6 +36,8 @@ public import EthLib.Execution.Proofs.Evm.Logic.Examples.KeyBranch
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.Assert
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.NoValue
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.Deploy
+public import EthLib.Execution.Proofs.Evm.Logic.Examples.Echo
+public import EthLib.Execution.Proofs.Evm.Logic.Examples.Pair
 
 /-!
 # `EthLib.Execution.Proofs.Evm.Logic`

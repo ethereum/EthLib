@@ -728,6 +728,23 @@ It charges the prices of EIP-2929 and 3 gas a word, and needs the state to hold 
 It needs a size of memory that is a multiple of 32.
 That growth costs the price of the new size minus the price of the old size.
 `Logic.size_memoryExtend_extendMemory` proves that memory then has the greater of its old size and that rounded end.
+`Logic.Known` is a running frame whose memory is named only by its size, a multiple of 32, and by facts that `Holds` states.
+`Logic.Known.of_at` proves that a rule that keeps memory, for every memory, keeps the size and every fact.
+`Logic.known_of_write` proves that after a write, memory holds the written fact and every fact apart from the write.
+`Logic.Known.join` proves that the facts of two adjacent ranges join into one.
+`Logic.mstore_known` gives MSTORE this form, with memory grown by the growth for its size.
+`Logic.mstore8_known` gives MSTORE8 this form.
+`Logic.mcopy_known` gives MCOPY this form, from Dencun, for a source that is the range of a fact.
+`Logic.calldatacopy_known` gives CALLDATACOPY this form.
+`Logic.codecopy_known` gives CODECOPY this form.
+`Logic.returndatacopy_known` gives RETURNDATACOPY this form, from Byzantium, for a range within the return data.
+`Logic.extcodecopy_known` gives EXTCODECOPY this form, from Berlin to before Glamsterdam.
+These write rules ask for a range of some bytes.
+`Logic.mload_known` proves that MLOAD of the range of a fact with a word pushes that word.
+`Logic.return_known` proves that RETURN of the range of a fact returns the bytes of the fact.
+`Logic.revert_known` proves the same for REVERT from Byzantium.
+`Echo.runFrame_spec` proves a contract that copies its call data to memory and returns it, for call data of some bytes.
+`Pair.runFrame_spec` proves a contract that writes the words 2 and 1 in reverse order of address and returns both, 1 first.
 `memoryReadBytes_memoryWrite_eq_append` proves that a read that ends where a write ends gives the bytes before the write, then the value.
 `Logic.staticcallWith` is the rule for STATICCALL from Berlin to before Glamsterdam.
 Its message carries no value and is static.
