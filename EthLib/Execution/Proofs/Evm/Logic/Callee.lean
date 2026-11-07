@@ -34,11 +34,6 @@ open EthLib.Execution.State (TransactionState)
 
 variable {fork : Fork}
 
-/-- The state that a message starts its frame from: before Paris, its target is touched. -/
-def startState (fork : Fork) (message : Message fork) (state : TransactionState) :
-    TransactionState :=
-  if fork < .paris then state.touchAccount message.currentTarget else state
-
 /-- A message with no value and no precompile runs its code to a stopped frame of a specification.
 
 The specification holds from the frame that the message starts, and sends no message.

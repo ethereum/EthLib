@@ -103,7 +103,7 @@ theorem processMessage_static [LawfulGasMeter Meter] (hfork : .paris ≤ fork) :
     intro message state substate meter held hn hmsg ended h
     rw [processMessage] at h
     obtain ⟨ended0, hdo, rolled⟩ := Base.map_ok_iff.mp h
-    simp only [show ¬fork < Fork.paris from Nat.not_lt.mpr hfork, ite_false] at hdo
+    simp only [startState, show ¬fork < Fork.paris from Nat.not_lt.mpr hfork, ite_false] at hdo
     split at hdo
     all_goals obtain ⟨state1, hm, hdo⟩ := Base.bind_ok_iff.mp hdo
     all_goals
