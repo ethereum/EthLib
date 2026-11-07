@@ -39,7 +39,7 @@
   "A compressed `G2` point, decoded, checked in the subgroup, and compressed again."
 
 #define DOC_bls_expand_message_xmd \
-  "Expand `msg` into `lenInBytes` pseudo-random bytes via XMD with SHA-256. Follows RFC 9380 §5.3.1 and §5.3.3: oversized DSTs are first shortened with SHA-256, and oversized output requests are rejected."
+  "Expand `msg` into `lenInBytes` pseudo-random bytes via XMD with SHA-256."
 
 #define DOC_bls_hash_to_g2 \
   "Hash a message + DST to a G2 point on BLS12-381."
@@ -627,7 +627,7 @@
   "The fork identifier, as RLP, of a mainnet node at a head."
 
 #define DOC_fork_id_validate \
-  "Whether a node at a head accepts the fork identifier of a peer, by the validation rules of [EIP-2124](https://eips.ethereum.org/EIPS/eip-2124#validation-rules)."
+  "Whether a node at a head accepts the fork identifier of a peer."
 
 #define DOC_eth_message_decode \
   "The canonical data of the message with the ID `id` and the data `data`, on a version."

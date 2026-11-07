@@ -52,7 +52,7 @@ def bls_decode_g2(point: bytes) -> bytes:
     ...
 
 def bls_expand_message_xmd(message: bytes, dst: bytes, length: int) -> bytes:
-    """Expand `msg` into `lenInBytes` pseudo-random bytes via XMD with SHA-256. Follows RFC 9380 §5.3.1 and §5.3.3: oversized DSTs are first shortened with SHA-256, and oversized output requests are rejected."""
+    """Expand `msg` into `lenInBytes` pseudo-random bytes via XMD with SHA-256."""
     ...
 
 def bls_hash_to_g2(message: bytes, dst: bytes) -> bytes:
@@ -836,7 +836,7 @@ def mainnet_fork_id(number: int, timestamp: int) -> bytes:
     ...
 
 def fork_id_validate(schedule: bytes, number: int, timestamp: int, remote: bytes) -> bool:
-    """Whether a node at a head accepts the fork identifier of a peer, by the validation rules of [EIP-2124](https://eips.ethereum.org/EIPS/eip-2124#validation-rules)."""
+    """Whether a node at a head accepts the fork identifier of a peer."""
     ...
 
 def eth_message_decode(version: int, id: int, data: bytes) -> bytes:
