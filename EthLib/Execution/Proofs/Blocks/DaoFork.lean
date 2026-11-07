@@ -67,6 +67,8 @@ private theorem balanceSum_moveEther_whole {fork : Fork} {tx mid : TransactionSt
 
 /-- Moving each listed balance to an outside recipient empties the list and credits the recipient.
 
+The listed accounts are distinct.
+
 Every other account is left alone. -/
 theorem foldlM_moveEther {fork : Fork} (recipient : Address) :
     ∀ (l : List Address) (tx tx' : TransactionState), l.Nodup → recipient ∉ l →
@@ -119,6 +121,8 @@ theorem applyDaoFork_spec {fork : Fork} {tx tx' : TransactionState}
   foldlM_moveEther DAO_RECOVERY DAO_ACCOUNTS tx tx' daoAccounts_nodup daoRecovery_not_mem h
 
 /-- Moving each listed balance to an outside recipient succeeds when a sum stays below 2^256.
+
+The listed accounts are distinct.
 
 The sum is the balance of the recipient plus the balances of the listed accounts. -/
 theorem foldlM_moveEther_isOk {fork : Fork} (recipient : Address) :
