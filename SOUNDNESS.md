@@ -725,6 +725,7 @@ It charges the prices of EIP-2929 and 3 gas a word, and needs the state to hold 
 `Logic.Holds.loadWord` proves that a range that holds the bytes of a word reads as that word.
 `Logic.extendMemory_of_le` proves that a range within memory grows nothing and costs nothing.
 `Logic.extendMemory_of_lt` proves that a range of some bytes past memory grows it to the rounded end of the range.
+It needs a size of memory that is a multiple of 32.
 That growth costs the price of the new size minus the price of the old size.
 `Logic.size_memoryExtend_extendMemory` proves that memory then has the greater of its old size and that rounded end.
 `memoryReadBytes_memoryWrite_eq_append` proves that a read that ends where a write ends gives the bytes before the write, then the value.

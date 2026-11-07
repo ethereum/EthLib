@@ -18,10 +18,12 @@ A range holds known bytes when memory covers the whole range and the range reads
 Memory grows in whole words, up to the greatest end of a range that an instruction touches.
 
 - A range within memory grows nothing and costs nothing.
-- Otherwise, from a size that is a multiple of 32, memory grows to the rounded end of the range.
+- A range of no bytes grows nothing and costs nothing.
+- A range of some bytes past memory grows it to the rounded end of the range.
+- That growth needs a size of memory that is a multiple of 32.
 - The growth costs the price of the new size minus the price of the old size.
 
-So a specification needs only the size of memory and the ranges it cares about.
+So a specification can track only the size of memory and the ranges it cares about.
 -/
 
 @[expose] public section

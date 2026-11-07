@@ -125,7 +125,7 @@ theorem mcopy (hfork : .dencun ≤ fork) {destination source length : U256} {res
 
 /-- A copy of a buffer to memory, at the program counter of an opcode that runs it.
 
-The buffer is the one that the copy reads from the frame, as the frame holds the code. -/
+The copy reads the same buffer from every state that has the code and the message of the frame. -/
 theorem copyWith {byte : UInt8} {op : Op} {base : Nat} {data : Evm fork Nat → ByteArray}
     {buffer : ByteArray} {start offset size : U256} {rest : List U256}
     (hlt : pc < code.size) (hbyte : code[pc] = byte) (decoded : Op.ofByte fork byte = some op)
