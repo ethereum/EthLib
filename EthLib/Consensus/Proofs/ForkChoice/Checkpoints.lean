@@ -5,7 +5,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.Reachable
 /-!
 # Proofs: the order of the checkpoints of a store
 
-Before Altair, the finalized epoch of a reachable store is at most its justified epoch.
+The finalized epoch of a reachable store is at most its justified epoch.
 
 The same holds for the unrealized checkpoints, which become those of the store at a new epoch.
 
@@ -16,6 +16,8 @@ Each valid block then keeps that invariant in the state after it, whose checkpoi
 A block writes the checkpoints of such a state, and those it reaches at the end of its epoch.
 
 A new epoch writes the unrealized checkpoints, which are in order too.
+
+From Gloas the store is not yet specified here, so no store is reachable there.
 
 The result does not say that the finalized block is an ancestor of the justified block.
 -/
@@ -182,8 +184,8 @@ theorem onAttesterSlashing_ordered {checks : SignatureChecks}
   subst slashed
   exact ordered
 
-/-- Before Altair, a block keeps the state of each block within the invariant. -/
-theorem onBlock_statesHold (altair : fork < .altair) {checks : SignatureChecks}
+/-- A block keeps the state of each block within the invariant. -/
+theorem onBlock_statesHold {checks : SignatureChecks}
     {sources : BlockSources preset fork} {signed : SignedBeaconBlock preset fork}
     (holds : store.StatesHold) (added : store.onBlock config checks sources signed = .ok after) :
     after.StatesHold := by
@@ -195,17 +197,17 @@ theorem onBlock_statesHold (altair : fork < .altair) {checks : SignatureChecks}
   rw [states, Std.TreeMap.getElem?_insert] at keptFound
   split at keptFound
   · cases keptFound
-    exact (stateTransition_invariant altair (holds found) transition).1
+    exact (stateTransition_invariant (holds found) transition).1
   · exact holds keptFound
 
-/-- Before Altair, a block keeps the checkpoints ordered. -/
-theorem onBlock_ordered (altair : fork < .altair) {checks : SignatureChecks}
+/-- A block keeps the checkpoints ordered, when each state of the store keeps the invariant. -/
+theorem onBlock_ordered {checks : SignatureChecks}
     {sources : BlockSources preset fork} {signed : SignedBeaconBlock preset fork}
     (ordered : store.EpochsOrdered) (holds : store.StatesHold)
     (added : store.onBlock config checks sources signed = .ok after) : after.EpochsOrdered := by
-  have order : Fork.altair ≤ Fork.glamsterdam := by decide
-  have gloas : ¬ .glamsterdam ≤ fork := fun le =>
-    Nat.lt_irrefl _ (Nat.lt_of_lt_of_le altair (Nat.le_trans order le))
+  by_cases gloas : .glamsterdam ≤ fork
+  · rw [onBlock_of_gloas gloas] at added
+    cases added
   cases root : SszType.hashTreeRoot signed.message with
   | error e =>
     simp [onBlock, gloas, root, bind, Except.bind, Except.mapError] at added
@@ -220,7 +222,7 @@ theorem onBlock_ordered (altair : fork < .altair) {checks : SignatureChecks}
     simp only [bind_ok_iff] at added
     obtain ⟨state, valid, head, -, recorded, record, boosted, boost, added⟩ := added
     obtain ⟨pre, found, -, transition⟩ := validateOnBlock_ok valid
-    have invariant := (stateTransition_invariant altair (holds found) transition).1
+    have invariant := (stateTransition_invariant (holds found) transition).1
     have recordedOrdered : recorded.EpochsOrdered := by
       unfold recordBlockTimeliness at record
       simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at record
@@ -258,10 +260,10 @@ end Store
 variable {config : Config} {anchorState : BeaconState preset fork}
   {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
 
-/-- Before Altair, a reachable store keeps its checkpoints ordered and its states in the invariant.
+/-- A reachable store keeps its checkpoints ordered and its states in the invariant.
 
 The anchor state must keep the invariant. -/
-theorem Store.Reachable.ordered (altair : fork < .altair) (anchor : Invariant anchorState)
+theorem Store.Reachable.ordered (anchor : Invariant anchorState)
     (reachable : Store.Reachable config anchorState anchorBlock store) :
     store.EpochsOrdered ∧ store.StatesHold := by
   induction reachable with
@@ -283,7 +285,7 @@ theorem Store.Reachable.ordered (altair : fork < .altair) (anchor : Invariant an
     exact ⟨Store.onTick_ordered ih.1 ticked,
       Store.StatesHold.of_eq ih.2 (Store.onTick_frame ticked).2.2.2⟩
   | block _ added ih =>
-    exact ⟨Store.onBlock_ordered altair ih.1 ih.2 added, Store.onBlock_statesHold altair ih.2 added⟩
+    exact ⟨Store.onBlock_ordered ih.1 ih.2 added, Store.onBlock_statesHold ih.2 added⟩
   | attestation _ attested ih =>
     exact ⟨Store.onAttestation_ordered ih.1 attested,
       Store.StatesHold.of_eq ih.2 (Store.onAttestation_frame attested).2.2⟩
@@ -291,13 +293,12 @@ theorem Store.Reachable.ordered (altair : fork < .altair) (anchor : Invariant an
     exact ⟨Store.onAttesterSlashing_ordered ih.1 slashed,
       Store.StatesHold.of_eq ih.2 (Store.onAttesterSlashing_frame slashed).2.2⟩
 
-/-- Before Altair, the finalized epoch of a reachable store is at most its justified epoch.
+/-- The finalized epoch of a reachable store is at most its justified epoch.
 
 The anchor state must keep the invariant of the state transition. -/
-theorem Store.Reachable.finalized_le_justified (altair : fork < .altair)
-    (anchor : Invariant anchorState)
+theorem Store.Reachable.finalized_le_justified (anchor : Invariant anchorState)
     (reachable : Store.Reachable config anchorState anchorBlock store) :
     store.finalizedCheckpoint.epoch ≤ store.justifiedCheckpoint.epoch :=
-  (reachable.ordered altair anchor).1.1
+  (reachable.ordered anchor).1.1
 
 end EthLib.Consensus
