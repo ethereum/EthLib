@@ -12,6 +12,7 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - The map has one output for each input.
 - Two lists that map to one list are equal, when the function is injective on their items.
 - A run of checks passes exactly when each check passes.
+- A loop that never stops early passes exactly when each step passes.
 - The function succeeds on every input.
 - Each output is the image of an input.
 - The map succeeds, and returns no error, when the function succeeds on every input.
@@ -83,6 +84,24 @@ theorem forM_ok_iff {xs : List α} {check : α → Except ε Unit} :
   | cons x xs ih =>
     simp only [List.forM, bind_unit_ok_iff, List.forall_mem_cons]
     exact and_congr_right fun _ => ih
+
+/-- A loop with no state passes exactly when each step passes.
+
+No step may stop the loop early. -/
+theorem forIn_unit_ok_iff {xs : List α} {body : α → PUnit → Except ε (ForInStep PUnit)}
+    (hnd : ∀ x, body x PUnit.unit ≠ .ok (.done PUnit.unit)) :
+    forIn xs PUnit.unit body = .ok PUnit.unit ↔
+      ∀ x ∈ xs, body x PUnit.unit = .ok (.yield PUnit.unit) := by
+  induction xs with
+  | nil => simp [pure, Except.pure]
+  | cons x xs ih =>
+    rw [List.forIn_cons, List.forall_mem_cons]
+    cases h : body x PUnit.unit with
+    | error e => simp [bind, Except.bind]
+    | ok s =>
+      cases s with
+      | done u => exact absurd h (hnd x)
+      | yield u => simpa [bind, Except.bind] using ih
 
 /-- A successful map succeeds on every input. -/
 theorem mapM_ok_of_mem {xs : List α} {ys : List β} (h : xs.mapM f = .ok ys) :
