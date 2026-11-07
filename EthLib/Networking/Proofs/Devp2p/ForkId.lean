@@ -19,9 +19,9 @@ It refuses a peer at its fork that announces a fork it has passed, and a hash it
 
 A head has passed a next fork exactly when the fork is not 0 and the head has reached it.
 
-The head reaches it when it is at most the block number.
+The head reaches it when the fork is at most the head's block number.
 
-It also reaches it when it is above the timestamp threshold and at most the timestamp.
+The head also reaches a fork above the timestamp threshold and at most its timestamp.
 -/
 
 @[expose] public section
@@ -152,9 +152,9 @@ theorem mem_forks {a : Activation} (h : a ∈ s.forks) :
 
 /-- A head has passed a next fork exactly when the fork is not 0 and the head has reached it.
 
-The head reaches it when it is at most the block number.
+The head reaches it when the fork is at most the head's block number.
 
-It also reaches it when it is above the timestamp threshold and at most the timestamp. -/
+The head also reaches a fork above the timestamp threshold and at most its timestamp. -/
 theorem passedNext_iff {number timestamp next : Nat} :
     passedNext number timestamp next = true ↔
       0 < next ∧ (next ≤ number ∨ (TIMESTAMP_THRESHOLD < next ∧ next ≤ timestamp)) := by

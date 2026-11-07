@@ -129,7 +129,7 @@ theorem snappyEnabled_iff {ours theirs : Nat} :
   unfold snappyEnabled SNAPPY_VERSION
   simp only [Bool.and_eq_true, decide_eq_true_eq]
 
-/-- Snappy is used or not alike for both peers, whichever side asks. -/
+/-- Both peers reach the same answer on Snappy, whichever of them asks. -/
 theorem snappyEnabled_comm (ours theirs : Nat) :
     snappyEnabled ours theirs = snappyEnabled theirs ours := by
   simp only [snappyEnabled, Bool.and_comm]
