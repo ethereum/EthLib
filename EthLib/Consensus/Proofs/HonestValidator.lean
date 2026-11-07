@@ -7,6 +7,7 @@ public import EthLib.Consensus.Gossip.Seen
 public import EthLib.Consensus.HonestValidator
 public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Consensus.Proofs.Gossip.SyncCommittee
+public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Transition.Block
 public import EthLib.Cryptography.Proofs.Bls.SignaturesCorrect
 
@@ -217,6 +218,28 @@ theorem findCommittee_sound {state : BeaconState preset fork} {validatorIndex : 
     · obtain ⟨mem, computed', member⟩ := findCommittee_sound h
       exact ⟨List.mem_cons_of_mem _ mem, computed', member⟩
 
+/-- No committee assignment exists for an epoch whose slots do not fit in 64 bits.
+
+The search fails there, before it reads any committee. -/
+theorem getCommitteeAssignment_eq_error_of_overflow {state : BeaconState preset fork}
+    {epoch : Epoch} {validatorIndex : ValidatorIndex}
+    (big : 2 ^ 64 ≤ epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_EPOCH.toNat)
+    (near : epoch.toNat ≤ (getCurrentEpoch state).toNat + 1) :
+    getCommitteeAssignment state epoch validatorIndex = .error (.arith .overflow) := by
+  unfold getCommitteeAssignment committeePositions
+  cases next : addChecked (getCurrentEpoch state) 1 with
+  | error e =>
+    -- The next epoch overflows too, with the same error.
+    have : e = .overflow := by
+      unfold addChecked at next
+      split at next <;> simp_all
+    subst this
+    simp [Except.mapError, bind, Except.bind]
+  | ok nextEpoch =>
+    have nextNat := (addChecked_ok_iff.mp next).2
+    have within : epoch ≤ nextEpoch := UInt64.le_iff_toNat_le.mpr (by simp at nextNat; omega)
+    simp [Except.mapError, bind, Except.bind, within, epochSlots_eq_error big]
+
 /-- Each position of an epoch is a slot of the epoch and an index below the committees of a slot. -/
 theorem mem_committeePositions {state : BeaconState preset fork} {epoch : Epoch}
     {positions : List (Slot × CommitteeIndex)}
@@ -224,30 +247,16 @@ theorem mem_committeePositions {state : BeaconState preset fork} {epoch : Epoch}
     (mem : (slot, index) ∈ positions) :
     computeEpochAtSlot preset slot = epoch ∧ index < getCommitteeCountPerSlot state epoch := by
   unfold committeePositions at h
-  obtain ⟨startSlot, started, h⟩ := bind_ok_iff.mp h
-  rw [mapError_ok_iff] at started
-  have start := (mulChecked_ok_iff.mp started)
-  split at h
-  · rename_i fits
-    simp only [pure, Except.pure, Except.ok.injEq] at h
-    subst h
-    simp only [List.mem_flatMap, List.mem_range, List.mem_map, Prod.mk.injEq] at mem
-    obtain ⟨offset, offsetLt, index', indexLt, rfl, rfl⟩ := mem
-    have perSmall := (getCommitteeCountPerSlot state epoch).toNat_lt
-    refine ⟨?_, UInt64.lt_iff_toNat_lt.mpr (by
-      rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (Nat.lt_trans indexLt perSmall)]
-      exact indexLt)⟩
-    -- The slot is the first slot of the epoch plus an offset below the length of an epoch.
-    have lengthPos : 0 < preset.SLOTS_PER_EPOCH.toNat := Nat.lt_of_le_of_lt (Nat.zero_le _) offsetLt
-    have offsetSmall : offset < 2 ^ 64 :=
-      Nat.lt_of_lt_of_le offsetLt (Nat.le_of_lt preset.SLOTS_PER_EPOCH.toNat_lt)
-    have sum : (startSlot + offset.toUInt64).toNat = startSlot.toNat + offset := by
-      rw [UInt64.toNat_add, Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt offsetSmall]
-      exact Nat.mod_eq_of_lt (by omega)
-    apply UInt64.toNat_inj.mp
-    simp only [computeEpochAtSlot, UInt64.toNat_div, sum, start.2]
-    rw [Nat.mul_comm, Nat.mul_add_div lengthPos, Nat.div_eq_of_lt offsetLt, Nat.add_zero]
-  · simp [throw, throwThe, MonadExceptOf.throw] at h
+  obtain ⟨slots, sloted, h⟩ := bind_ok_iff.mp h
+  rw [mapError_ok_iff] at sloted
+  simp only [pure, Except.pure, Except.ok.injEq] at h
+  subst h
+  simp only [List.mem_flatMap, List.mem_range, List.mem_map, Prod.mk.injEq] at mem
+  obtain ⟨slot', mem', index', indexLt, rfl, rfl⟩ := mem
+  have perSmall := (getCommitteeCountPerSlot state epoch).toNat_lt
+  refine ⟨mem_epochSlots sloted mem', UInt64.lt_iff_toNat_lt.mpr ?_⟩
+  rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (Nat.lt_trans indexLt perSmall)]
+  exact indexLt
 
 /-- A committee assignment is a committee of the epoch that holds the validator.
 
@@ -326,33 +335,19 @@ theorem mem_committeePositions_of_epoch {state : BeaconState preset fork} {epoch
     (indexLt : index < getCommitteeCountPerSlot state epoch) :
     (slot, index) ∈ positions := by
   unfold committeePositions at h
-  obtain ⟨startSlot, started, h⟩ := bind_ok_iff.mp h
-  rw [mapError_ok_iff] at started
-  have start := (mulChecked_ok_iff.mp started)
-  split at h
-  · simp only [pure, Except.pure, Except.ok.injEq] at h
-    subst h
-    have lengthPos : 0 < preset.SLOTS_PER_EPOCH.toNat :=
-      Nat.pos_of_ne_zero fun zero => positive (UInt64.toNat_inj.mp (by simpa using zero))
-    have epochNat := congrArg UInt64.toNat slotEpoch
-    simp only [computeEpochAtSlot, UInt64.toNat_div] at epochNat
-    -- The slot is the first slot of the epoch plus its place in the epoch.
-    have split := Nat.div_add_mod slot.toNat preset.SLOTS_PER_EPOCH.toNat
-    rw [epochNat] at split
-    have offsetLt := Nat.mod_lt slot.toNat lengthPos
-    simp only [List.mem_flatMap, List.mem_range, List.mem_map, Prod.mk.injEq]
-    refine ⟨slot.toNat % preset.SLOTS_PER_EPOCH.toNat, offsetLt, index.toNat,
-      UInt64.lt_iff_toNat_lt.mp indexLt, ?_, by simp⟩
-    apply UInt64.toNat_inj.mp
-    have offsetSmall : slot.toNat % preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 :=
-      Nat.lt_of_lt_of_le offsetLt (Nat.le_of_lt preset.SLOTS_PER_EPOCH.toNat_lt)
-    rw [UInt64.toNat_add, Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt offsetSmall,
-      start.2, Nat.mul_comm, split, Nat.mod_eq_of_lt slot.toNat_lt]
-  · simp [throw, throwThe, MonadExceptOf.throw] at h
+  obtain ⟨slots, sloted, h⟩ := bind_ok_iff.mp h
+  rw [mapError_ok_iff] at sloted
+  simp only [pure, Except.pure, Except.ok.injEq] at h
+  subst h
+  simp only [List.mem_flatMap, List.mem_range, List.mem_map, Prod.mk.injEq]
+  exact ⟨slot, mem_epochSlots_of_epoch positive sloted slotEpoch, index.toNat,
+    UInt64.lt_iff_toNat_lt.mp indexLt, rfl, by simp⟩
 
 /-- An active validator never gets the answer that it has no committee in its epoch.
 
 The search may still fail, for an epoch too far ahead or a committee without a value.
+
+It also fails for the epoch whose first slot plus the length of an epoch is `2^64`.
 
 The seed of the epoch must have a value, and an epoch must have at least one slot.
 

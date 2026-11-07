@@ -869,6 +869,8 @@ The committee theorems need no such hypothesis.
 It assumes that the registry stays within its limit, and that the active validators times the committees of the epoch fit in 64 bits.
 `getCommitteeAssignment_ne_none` shows that an active validator never gets the answer that it has no committee, under the hypotheses of `exists_mem_getBeaconCommittee`.
 The search can still fail, for an epoch after the next one or a committee without a value.
+It also fails for the epoch whose first slot plus the length of an epoch reaches 2^64.
+There the 64-bit sum of the guide overflows, as `getCommitteeAssignment_eq_error_of_overflow` shows.
 
 No theorem says which subnets or sync committee seat a validator has.
 The Python suite checks each duty signature against py_ecc, on signing roots computed in the test, and each committee against the shuffle export.

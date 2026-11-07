@@ -90,19 +90,20 @@ def findCommittee (state : BeaconState preset fork) (validatorIndex : ValidatorI
 /-- The slots of an epoch, each with the indices of its committees, in order. -/
 def committeePositions (state : BeaconState preset fork) (epoch : Epoch) :
     Except ValidatorDutyError (List (Slot × CommitteeIndex)) := do
-  let startSlot ← (computeStartSlotAtEpoch preset epoch).mapError .arith
-  -- The last slot of the epoch must be a 64-bit slot.
-  if startSlot.toNat + preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64 then
-    let perSlot := getCommitteeCountPerSlot state epoch
-    return (List.range preset.SLOTS_PER_EPOCH.toNat).flatMap fun offset =>
-      (List.range perSlot.toNat).map fun index => (startSlot + offset.toUInt64, index.toUInt64)
-  else throw (.arith .overflow)
+  let slots ← (epochSlots preset epoch).mapError .arith
+  let perSlot := getCommitteeCountPerSlot state epoch
+  return slots.flatMap fun slot =>
+    (List.range perSlot.toNat).map fun index => (slot, index.toUInt64)
 
 /-- The committee of a validator in an epoch, with the index and the slot of the committee.
 
 The epoch must be at most the next one, since later committees are not known yet.
 
-A validator that is not active in the epoch has no committee. -/
+A validator that is not active in the epoch has no committee.
+
+It fails for an epoch after the next one, and when a committee of the epoch has no value.
+
+It also fails when the next epoch, the first slot or that slot plus an epoch overflows 64 bits. -/
 def getCommitteeAssignment (state : BeaconState preset fork) (epoch : Epoch)
     (validatorIndex : ValidatorIndex) :
     Except ValidatorDutyError (Option (Array ValidatorIndex × CommitteeIndex × Slot)) := do

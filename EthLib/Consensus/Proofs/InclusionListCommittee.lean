@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.InclusionListCommittee
+public import EthLib.Consensus.Proofs.Time
 public import EthLib.Cryptography.Proofs.Bls.SignaturesCorrect
 
 /-!
@@ -233,7 +234,7 @@ theorem getInclusionListCommitteeAssignment_some {epoch : Epoch} {slot start : S
       SeatedAt state validator slot ∧
       ∀ earlier : Slot, start.toNat ≤ earlier.toNat → earlier < slot →
         ¬SeatedAt state validator earlier := by
-  simp only [getInclusionListCommitteeAssignment, liftArith, first, bind, Except.bind,
+  simp only [getInclusionListCommitteeAssignment, liftArith, bind, Except.bind,
     Except.mapError] at found
   split at found
   · cases found
@@ -241,11 +242,11 @@ theorem getInclusionListCommitteeAssignment_some {epoch : Epoch} {slot start : S
   · cases found
   split at found
   · cases found
-  rename_i last fitsOk
-  have fits : start.toNat + preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 := by
-    cases sum : addChecked start preset.SLOTS_PER_EPOCH with
-    | error e => simp [sum] at fitsOk
-    | ok v => exact (addChecked_ok_iff.mp sum).1
+  rename_i slots slotsOk
+  have listed : epochSlots preset epoch = .ok slots := by
+    revert slotsOk
+    cases epochSlots preset epoch <;> simp
+  obtain ⟨fits, rfl⟩ := epochSlots_eq_ok_of_start first listed
   obtain ⟨ascending, range⟩ := epochSlots_spec fits
   obtain ⟨member, seated, none⟩ := firstInclusionListSlot_some ascending found
   obtain ⟨low, high⟩ := (range slot).mp member
@@ -262,7 +263,7 @@ theorem getInclusionListCommitteeAssignment_none {epoch : Epoch} {start : Slot}
     ∀ slot : Slot, start.toNat ≤ slot.toNat →
       slot.toNat < start.toNat + preset.SLOTS_PER_EPOCH.toNat →
         ¬SeatedAt state validator slot := by
-  simp only [getInclusionListCommitteeAssignment, liftArith, first, bind, Except.bind,
+  simp only [getInclusionListCommitteeAssignment, liftArith, bind, Except.bind,
     Except.mapError] at found
   split at found
   · cases found
@@ -270,11 +271,11 @@ theorem getInclusionListCommitteeAssignment_none {epoch : Epoch} {start : Slot}
   · cases found
   split at found
   · cases found
-  rename_i last fitsOk
-  have fits : start.toNat + preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 := by
-    cases sum : addChecked start preset.SLOTS_PER_EPOCH with
-    | error e => simp [sum] at fitsOk
-    | ok v => exact (addChecked_ok_iff.mp sum).1
+  rename_i slots slotsOk
+  have listed : epochSlots preset epoch = .ok slots := by
+    revert slotsOk
+    cases epochSlots preset epoch <;> simp
+  obtain ⟨fits, rfl⟩ := epochSlots_eq_ok_of_start first listed
   intro slot low high
   exact firstInclusionListSlot_none found slot ((epochSlots_spec fits).2 slot |>.mpr ⟨low, high⟩)
 

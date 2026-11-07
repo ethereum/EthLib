@@ -242,6 +242,26 @@ def test_assignment_after_the_next_epoch():
     assert info.value.code == 5
 
 
+# The last epoch that the guide accepts. In the epoch after it, the first slot plus the length of
+# an epoch is 2^64, and the guide's 64-bit sum overflows.
+LAST_EPOCH = 2**64 // SLOTS_PER_EPOCH - 2
+
+
+def test_assignment_in_the_last_epoch():
+    # A state in the last epoch, so that the next epoch is in range.
+    state = phase0_state(64, slot=LAST_EPOCH * SLOTS_PER_EPOCH)
+    assignment = consensus.get_committee_assignment("mainnet", "phase0", state, LAST_EPOCH, 0)
+    assert assignment is not None
+    assert assignment[2] // SLOTS_PER_EPOCH == LAST_EPOCH
+
+
+def test_no_assignment_in_the_epoch_whose_slots_overflow():
+    state = phase0_state(64, slot=LAST_EPOCH * SLOTS_PER_EPOCH)
+    with raises(consensus.ValidatorDutyError, "validator duty failed with code 4") as info:
+        consensus.get_committee_assignment("mainnet", "phase0", state, LAST_EPOCH + 1, 0)
+    assert info.value.code == 4
+
+
 def test_one_proposer():
     state = phase0_state(64, slot=5)
     proposers = [v for v in range(64) if consensus.is_proposer("mainnet", "phase0", state, v)]
