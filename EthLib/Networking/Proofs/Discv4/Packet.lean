@@ -13,7 +13,7 @@ A packet with its full field list reads back with any list items after it, as EI
 
 For Ping and Pong the full list ends with the sequence number of EIP-868.
 
-Without that number, the first item after the fields is read as it, and the others are ignored.
+Without that number, the items after the first extra item are ignored.
 
 A packet whose hash does not match the bytes after it is rejected.
 
@@ -120,9 +120,9 @@ theorem Packet.ofItems_fields_append (p : Packet) (extra : List Item)
       Except.mapError, bind, Except.bind, pure, Except.pure]
 
 /--
-Ping without a sequence number reads the first item after its fields as that number, by EIP-868.
+Ping without a sequence number reads the same whatever follows the first item after its fields.
 
-The items after that one are ignored, as EIP-8 asks.
+That item is where EIP-868 puts the number, and EIP-8 asks to ignore the rest.
 -/
 theorem Packet.ofItems_ping_append (v : Nat) (f t : Endpoint) (e : Nat) (x : Item)
     (rest : List Item) :
@@ -131,9 +131,9 @@ theorem Packet.ofItems_ping_append (v : Nat) (f t : Endpoint) (e : Nat) (x : Ite
   simp [Packet.ofItems, Packet.fields, Packet.enrSeqItems, Packet.readEnrSeq]
 
 /--
-Pong without a sequence number reads the first item after its fields as that number, by EIP-868.
+Pong without a sequence number reads the same whatever follows the first item after its fields.
 
-The items after that one are ignored, as EIP-8 asks.
+That item is where EIP-868 puts the number, and EIP-8 asks to ignore the rest.
 -/
 theorem Packet.ofItems_pong_append (t : Endpoint) (h : Vector UInt8 32) (e : Nat) (x : Item)
     (rest : List Item) :
