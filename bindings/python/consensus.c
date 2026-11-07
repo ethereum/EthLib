@@ -365,6 +365,32 @@ eth_consensus_record_attestation_signing(
   lean_object* signing_root);
 
 extern lean_object*
+eth_consensus_is_execution_block(lean_object* name, lean_object* fork, lean_object* block);
+
+extern lean_object*
+eth_consensus_is_optimistic_candidate_block(
+  lean_object* name, lean_object* fork, lean_object* blocks, uint64_t current_slot,
+  uint64_t safe_slots, lean_object* block);
+
+extern lean_object*
+eth_consensus_latest_verified_ancestor(
+  lean_object* name, lean_object* fork, lean_object* blocks, lean_object* optimistic_roots,
+  lean_object* root);
+
+extern lean_object*
+eth_consensus_on_valid_payload(
+  lean_object* name, lean_object* fork, lean_object* blocks, lean_object* optimistic_roots,
+  lean_object* root);
+
+extern lean_object*
+eth_consensus_on_invalidated_payload(
+  lean_object* name, lean_object* fork, lean_object* blocks, lean_object* optimistic_roots,
+  lean_object* first);
+
+extern lean_object*
+eth_consensus_is_optimistic_restricted_domain(lean_object* domain_type);
+
+extern lean_object*
 eth_consensus_get_execution_requests(
   lean_object* name, lean_object* fork, lean_object* requests);
 
@@ -2000,6 +2026,119 @@ py_consensus_record_attestation_signing(
     eth_consensus_record_attestation_signing(mk_bytearray(text, text_len),
       mk_bytearray(pubkey, pubkey_len), source, target, mk_bytearray(root, root_len)),
     SLASHING_PROTECTION_ERROR);
+}
+
+PyObject*
+py_consensus_is_execution_block(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj;
+  const uint8_t* block;
+  Py_ssize_t block_len;
+  if (!PyArg_ParseTuple(args, "OOy#", &name_obj, &fork_obj, &block, &block_len)) return NULL;
+  lean_object* name = str_arg(name_obj, "name");
+  if (!name) return NULL;
+  lean_object* fork = str_arg(fork_obj, "fork");
+  if (!fork) {
+    lean_dec(name);
+    return NULL;
+  }
+  return except_into_pybool(
+    eth_consensus_is_execution_block(name, fork, mk_bytearray(block, block_len)),
+    FORK_CHOICE_ERROR);
+}
+
+PyObject*
+py_consensus_is_optimistic_candidate_block(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *list_obj, *current_obj, *safe_obj;
+  const uint8_t* block;
+  Py_ssize_t block_len;
+  if (!PyArg_ParseTuple(args, "OOOOOy#", &name_obj, &fork_obj, &list_obj, &current_obj,
+                        &safe_obj, &block, &block_len))
+    return NULL;
+  uint64_t current, safe;
+  if (parse_uint64(current_obj, "current_slot", &current) < 0) return NULL;
+  if (parse_uint64(safe_obj, "safe_slots", &safe) < 0) return NULL;
+  lean_object* a[3];
+  if (named_list_args(name_obj, fork_obj, list_obj, "blocks", a) < 0) return NULL;
+  return except_into_pybool(
+    eth_consensus_is_optimistic_candidate_block(a[0], a[1], a[2], current, safe,
+      mk_bytearray(block, block_len)),
+    FORK_CHOICE_ERROR);
+}
+
+PyObject*
+py_consensus_latest_verified_ancestor(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *list_obj;
+  const uint8_t *roots, *root;
+  Py_ssize_t roots_len, root_len;
+  if (!PyArg_ParseTuple(args, "OOOy#y#", &name_obj, &fork_obj, &list_obj, &roots, &roots_len,
+                        &root, &root_len))
+    return NULL;
+  lean_object* a[3];
+  if (named_list_args(name_obj, fork_obj, list_obj, "blocks", a) < 0) return NULL;
+  return except_into_pybytes(
+    eth_consensus_latest_verified_ancestor(a[0], a[1], a[2], mk_bytearray(roots, roots_len),
+      mk_bytearray(root, root_len)),
+    FORK_CHOICE_ERROR);
+}
+
+PyObject*
+py_consensus_on_valid_payload(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *list_obj;
+  const uint8_t *roots, *root;
+  Py_ssize_t roots_len, root_len;
+  if (!PyArg_ParseTuple(args, "OOOy#y#", &name_obj, &fork_obj, &list_obj, &roots, &roots_len,
+                        &root, &root_len))
+    return NULL;
+  lean_object* a[3];
+  if (named_list_args(name_obj, fork_obj, list_obj, "blocks", a) < 0) return NULL;
+  return except_into_pybytes(
+    eth_consensus_on_valid_payload(a[0], a[1], a[2], mk_bytearray(roots, roots_len),
+      mk_bytearray(root, root_len)),
+    FORK_CHOICE_ERROR);
+}
+
+PyObject*
+py_consensus_on_invalidated_payload(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *list_obj;
+  const uint8_t *roots, *root;
+  Py_ssize_t roots_len, root_len;
+  if (!PyArg_ParseTuple(args, "OOOy#y#", &name_obj, &fork_obj, &list_obj, &roots, &roots_len,
+                        &root, &root_len))
+    return NULL;
+  lean_object* a[3];
+  if (named_list_args(name_obj, fork_obj, list_obj, "blocks", a) < 0) return NULL;
+  return except_into_pybytes(
+    eth_consensus_on_invalidated_payload(a[0], a[1], a[2], mk_bytearray(roots, roots_len),
+      mk_bytearray(root, root_len)),
+    FORK_CHOICE_ERROR);
+}
+
+PyObject*
+py_consensus_is_optimistic_restricted_domain(
+  PyObject* self,
+  PyObject* args
+) {
+  const uint8_t* domain;
+  Py_ssize_t domain_len;
+  if (!PyArg_ParseTuple(args, "y#", &domain, &domain_len)) return NULL;
+  return except_into_pybool(
+    eth_consensus_is_optimistic_restricted_domain(mk_bytearray(domain, domain_len)),
+    FORK_CHOICE_ERROR);
 }
 
 PyObject*

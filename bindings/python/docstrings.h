@@ -392,6 +392,24 @@
 #define DOC_consensus_record_attestation_signing \
   "The record after a key signs a vote, as JSON text."
 
+#define DOC_consensus_is_execution_block \
+  "From Bellatrix: whether a block carries a payload other than the empty one."
+
+#define DOC_consensus_is_optimistic_candidate_block \
+  "From Bellatrix: whether a block may be imported optimistically, given the known blocks."
+
+#define DOC_consensus_latest_verified_ancestor \
+  "From Bellatrix: the root of the latest block of a chain that is not optimistic."
+
+#define DOC_consensus_on_valid_payload \
+  "From Bellatrix: the optimistic roots after the payload of a block is found valid."
+
+#define DOC_consensus_on_invalidated_payload \
+  "From Bellatrix: the optimistic roots after a block is found to be the first invalid one."
+
+#define DOC_consensus_is_optimistic_restricted_domain \
+  "Whether an optimistic validator may not sign under a domain type of 4 bytes."
+
 #define DOC_consensus_get_eth1_vote \
   "Before Heze: the Eth1 vote of a proposer on a state, as the SSZ bytes of the Eth1 data."
 

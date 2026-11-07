@@ -523,6 +523,30 @@ def consensus_record_attestation_signing(interchange: bytes, pubkey: bytes, sour
     """The record after a key signs a vote, as JSON text."""
     ...
 
+def consensus_is_execution_block(name: str, fork: str, block: bytes) -> bool:
+    """From Bellatrix: whether a block carries a payload other than the empty one."""
+    ...
+
+def consensus_is_optimistic_candidate_block(name: str, fork: str, blocks: list[bytes], current_slot: int, safe_slots: int, block: bytes) -> bool:
+    """From Bellatrix: whether a block may be imported optimistically, given the known blocks."""
+    ...
+
+def consensus_latest_verified_ancestor(name: str, fork: str, blocks: list[bytes], optimistic_roots: bytes, root: bytes) -> bytes:
+    """From Bellatrix: the root of the latest block of a chain that is not optimistic."""
+    ...
+
+def consensus_on_valid_payload(name: str, fork: str, blocks: list[bytes], optimistic_roots: bytes, root: bytes) -> bytes:
+    """From Bellatrix: the optimistic roots after the payload of a block is found valid."""
+    ...
+
+def consensus_on_invalidated_payload(name: str, fork: str, blocks: list[bytes], optimistic_roots: bytes, first: bytes) -> bytes:
+    """From Bellatrix: the optimistic roots after a block is found to be the first invalid one."""
+    ...
+
+def consensus_is_optimistic_restricted_domain(domain_type: bytes) -> bool:
+    """Whether an optimistic validator may not sign under a domain type of 4 bytes."""
+    ...
+
 def consensus_get_eth1_vote(name: str, fork: str, state: bytes, config: bytes, chain: list[bytes]) -> bytes:
     """Before Heze: the Eth1 vote of a proposer on a state, as the SSZ bytes of the Eth1 data."""
     ...
