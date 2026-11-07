@@ -999,7 +999,10 @@ def bindings : List Binding := [
       "config: bytes, head_root: bytes, state: bytes, safe_block_hash: bytes, " ++
       "finalized_block_hash: bytes, suggested_fee_recipient: bytes, head_status: int, " ++
       "target_gas_limit: int, verify: bool) -> bytes",
-    [`EthLib.Consensus.ProposerError], some "ProposerError"⟩
+    [`EthLib.Consensus.ProposerError], some "ProposerError"⟩,
+  ⟨"pyvalue_echo", `EthLib.Exports.pyValueEcho,
+    "(value: object) -> object",
+    [], some "BindingError"⟩
 ]
 
 /-- The table as plain data, which the generator reads without the structure.
