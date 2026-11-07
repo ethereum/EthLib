@@ -9,6 +9,10 @@ public import EthLib.Execution.Transactions.Network
 
 The network form reads back from its bytes, at each fork from Dencun.
 
+Bytes that decode to a network form are its encoding.
+
+So bytes decode to a network form exactly when they encode it and the fork is Dencun or later.
+
 The transaction it carries is the first item of its RLP list, so its hash ignores the blobs.
 
 The check of the blobs succeeds exactly when three conditions hold.
@@ -96,6 +100,42 @@ theorem decodeNetwork_encodeNetwork {fork : Fork} {w : NetworkBlobTransaction} {
   rw [show (⟨payload.data⟩ : ByteArray) = payload from rfl,
     Serialization.Rlp.decode_encode _ _ hPayload]
   exact NetworkBlobTransaction.ofItem_toItem fork w
+
+/-- Bytes that decode to a network form are the encoding of that form.
+
+So two different byte strings never decode to the same network form. -/
+theorem encodeNetwork_of_decodeNetwork {fork : Fork} {bytes : ByteArray}
+    {w : NetworkBlobTransaction} (h : decodeNetwork fork bytes = .ok w) :
+    encodeNetwork fork w = .ok bytes := by
+  unfold decodeNetwork at h
+  split at h
+  · exact nomatch h
+  rename_i type payload hbytes
+  split at h
+  · obtain ⟨item, hitem, h⟩ := bind_ok_iff.mp h
+    have hitem := mapError_ok_iff.mp hitem
+    have hw := NetworkBlobTransaction.toItem_of_ofItem h
+    obtain ⟨hType, -⟩ := ‹type = 3 ∧ fork ≥ .dencun›
+    subst hType
+    simp only [encodeNetwork, hw, Serialization.Rlp.encode_decode _ _ hitem, Functor.map,
+      Except.map, Except.ok.injEq]
+    apply ByteArray.ext
+    rw [← Array.toList_inj, hbytes]
+    simp [typedBytes]
+  · exact nomatch h
+
+/-- Bytes decode to a network form exactly when they encode it and the fork is Dencun or later. -/
+theorem decodeNetwork_eq_ok_iff (fork : Fork) (bytes : ByteArray) (w : NetworkBlobTransaction) :
+    decodeNetwork fork bytes = .ok w ↔ fork ≥ .dencun ∧ encodeNetwork fork w = .ok bytes := by
+  refine ⟨fun h => ⟨?_, encodeNetwork_of_decodeNetwork h⟩, fun ⟨hFork, h⟩ =>
+    decodeNetwork_encodeNetwork hFork h⟩
+  unfold decodeNetwork at h
+  split at h
+  · exact nomatch h
+  split at h
+  · rename_i hc
+    exact hc.2
+  · exact nomatch h
 
 /--
 The transaction of a decoded network form is the first item of its RLP list.
