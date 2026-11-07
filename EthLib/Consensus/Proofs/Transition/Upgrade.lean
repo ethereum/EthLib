@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.Transition.BuilderRequests
+public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Transition.Upgrade
 
 /-!
@@ -29,6 +30,8 @@ The upgrade of a Gloas state to Heze succeeds exactly when every contract deposi
 It then keeps every Gloas field that Heze keeps, each list as the same sequence.
 
 The latest bid differs from the Gloas bid only by its inclusion list bits, which are all unset.
+
+Each upgrade keeps the invariant that each valid block keeps, and the finalized checkpoint.
 -/
 
 @[expose] public section
@@ -509,5 +512,126 @@ theorem upgradeToHeze_error_iff {pre : BeaconState preset .glamsterdam}
   by_cases equal : pre.eth1DepositIndex (by decide) = pre.depositRequestsStartIndex (by decide)
   · simp [equal, bind, Except.bind, pure, Except.pure]
   · simp [equal, bind, Except.bind, eq_comm]
+
+/-! ## The invariant across an upgrade -/
+
+/-- A state of another fork keeps the invariant when it keeps what the invariant reads.
+
+That is the registry, the number of balances, the slot and the three checkpoints. -/
+theorem Invariant.of_carried {fork post : Fork} {pre : BeaconState preset fork}
+    {after : BeaconState preset post} (holds : Invariant pre)
+    (validators : after.validators.data = pre.validators.data)
+    (balances : after.balances.data.size = pre.balances.data.size) (slot : after.slot = pre.slot)
+    (finalized : after.finalizedCheckpoint = pre.finalizedCheckpoint)
+    (previousJustified : after.previousJustifiedCheckpoint = pre.previousJustifiedCheckpoint)
+    (currentJustified : after.currentJustifiedCheckpoint = pre.currentJustifiedCheckpoint) :
+    Invariant after where
+  balancesMatch := by
+    have := holds.balancesMatch
+    unfold BalancesMatch at this ⊢
+    rw [balances, validators]
+    exact this
+  exitsOrdered := by
+    have := holds.exitsOrdered
+    unfold ExitsOrdered at this ⊢
+    rw [validators]
+    exact this
+  ordered := by
+    have := holds.ordered
+    unfold CheckpointsOrdered at this ⊢
+    rw [finalized, previousJustified, currentJustified]
+    exact this
+  settled := by
+    have := holds.settled
+    unfold JustifiedSettled getPreviousEpoch getCurrentEpoch at this ⊢
+    rw [currentJustified, slot]
+    exact this
+
+/-- A carry-over upgrade before Gloas keeps the invariant and the finalized checkpoint. -/
+theorem carryFields_invariant {fork post : Fork} {pre : BeaconState preset fork}
+    (upgrade : fork < post) (before : post < .glamsterdam) (holds : Invariant pre) :
+    Invariant (carryFields config post pre upgrade before) ∧
+      (carryFields config post pre upgrade before).finalizedCheckpoint = pre.finalizedCheckpoint :=
+  ⟨holds.of_carried rfl rfl rfl rfl rfl rfl, rfl⟩
+
+/-- The upgrade to Altair keeps the invariant and the finalized checkpoint. -/
+theorem upgradeToAltair_invariant {pre : BeaconState preset .phase0}
+    {after : BeaconState preset .altair} (holds : Invariant pre)
+    (computed : upgradeToAltair config pre = .ok after) :
+    Invariant after ∧ after.finalizedCheckpoint = pre.finalizedCheckpoint := by
+  simp only [upgradeToAltair, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨_, folded, _, -, rfl⟩ := computed
+  rw [← Array.foldlM_toList] at folded
+  obtain ⟨participation, rfl, -⟩ := foldlM_translateAttestation folded
+  exact ⟨holds.of_carried rfl rfl rfl rfl rfl rfl, rfl⟩
+
+/-- Queueing a validator that is not yet active changes no exit epoch. -/
+theorem frame_queuePreActivation {fork : Fork} {state after : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {index : ValidatorIndex}
+    (computed : queuePreActivation state electra index = .ok after) : Frame state after := by
+  simp only [queuePreActivation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
+    Except.ok.injEq] at computed
+  obtain ⟨validator, found, _, -, _, -, _, set₁, _, set₂, rfl⟩ := computed
+  have sizes := sameSizes_setBalance set₁
+  obtain ⟨_, rfl⟩ := setBalance_ok set₁
+  have zeroed := Frame.of_validators sizes rfl rfl rfl rfl rfl
+  have reset := frame_setValidator set₂ fun ordered => ordered validator (mem_of_getValidator found)
+  exact (zeroed.trans reset).trans (Frame.of_validators ⟨rfl, rfl⟩ rfl rfl rfl rfl rfl)
+
+/-- Queueing the excess balance of a validator with compounding credentials keeps the frame. -/
+theorem frame_queueCompoundingExcess {fork : Fork} {state after : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {index : Nat}
+    (computed : queueCompoundingExcess state electra index = .ok after) : Frame state after := by
+  unfold queueCompoundingExcess at computed
+  split at computed
+  · split at computed
+    · exact frame_queueExcessActiveBalance (liftAccessor_ok.mp computed)
+    · cases computed
+      exact Frame.refl _
+  · cases computed
+    exact Frame.refl _
+
+/-- The upgrade to Electra keeps the invariant and the finalized checkpoint.
+
+It moves no exit epoch, and keeps one balance for each validator. -/
+theorem upgradeToElectra_invariant {pre : BeaconState preset .dencun}
+    {after : BeaconState preset .pectra} (holds : Invariant pre)
+    (computed : upgradeToElectra config pre = .ok after) :
+    Invariant after ∧ after.finalizedCheckpoint = pre.finalizedCheckpoint := by
+  simp only [upgradeToElectra, bind_ok_iff] at computed
+  obtain ⟨_, -, _, -, _, -, _, -, _, queued, compounded⟩ := computed
+  have frame := (Frame.foldlM (fun _ _ _ ok => frame_queuePreActivation ok) queued).trans
+    (Frame.foldlM (fun _ _ _ ok => frame_queueCompoundingExcess ok) compounded)
+  exact ⟨frame.invariant (holds.of_carried rfl rfl rfl rfl rfl rfl), frame.finalized⟩
+
+/-- The upgrade to Fulu keeps the invariant and the finalized checkpoint. -/
+theorem upgradeToFulu_invariant {pre : BeaconState preset .pectra}
+    {after : BeaconState preset .fusaka} (holds : Invariant pre)
+    (computed : upgradeToFulu config pre = .ok after) :
+    Invariant after ∧ after.finalizedCheckpoint = pre.finalizedCheckpoint := by
+  simp only [upgradeToFulu, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨_, -, rfl⟩ := computed
+  exact ⟨holds.of_carried rfl rfl rfl rfl rfl rfl, rfl⟩
+
+/-- The upgrade to Gloas keeps the invariant and the finalized checkpoint.
+
+The onboarding of builders changes only the builders and the queue of pending deposits. -/
+theorem upgradeToGloas_invariant {pre : BeaconState preset .fusaka}
+    {after : BeaconState preset .glamsterdam} (holds : Invariant pre)
+    (computed : upgradeToGloas config checks pre = .ok after) :
+    Invariant after ∧ after.finalizedCheckpoint = pre.finalizedCheckpoint := by
+  unfold upgradeToGloas at computed
+  obtain ⟨_, -, rest⟩ := bind_ok_iff.mp computed
+  obtain ⟨_, -, onboarded⟩ := bind_ok_iff.mp rest
+  obtain ⟨⟨_, _, rfl⟩, -⟩ := onboardBuildersFromPendingDeposits_spec onboarded
+  exact ⟨holds.of_carried rfl rfl rfl rfl rfl rfl, rfl⟩
+
+/-- The upgrade to Heze keeps the invariant and the finalized checkpoint. -/
+theorem upgradeToHeze_invariant {pre : BeaconState preset .glamsterdam}
+    {after : BeaconState preset .hegota} (holds : Invariant pre)
+    (computed : upgradeToHeze config pre = .ok after) :
+    Invariant after ∧ after.finalizedCheckpoint = pre.finalizedCheckpoint := by
+  obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp computed
+  exact ⟨holds.of_carried rfl rfl rfl rfl rfl rfl, rfl⟩
 
 end EthLib.Consensus
