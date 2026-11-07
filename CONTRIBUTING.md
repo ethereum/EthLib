@@ -416,6 +416,7 @@ Otherwise it has short sentences, one per line, with a blank line between groups
 A comment follows the same rule: each sentence fits on one line.
 `scripts/check_python_comments.py` fails when a sentence of a comment runs onto the next line, and at least one of the two lines is changed.
 A list item and a field of a provenance record, such as `Commit: <hash>`, continue no sentence.
+After a line that ends with a colon, a line that starts in lowercase continues the sentence.
 The check skips code blocks, table rows and lines that hold only a URL.
 With `--all` in place of `--base`, the check reads every Python file that git tracks.
 

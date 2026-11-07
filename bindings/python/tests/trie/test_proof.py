@@ -1,7 +1,7 @@
 """Proof verification against one `eth_getProof` response of ethereum/execution-apis."""
 
-# The response proves one account in the state of block 60 of the test chain, and one of its
-# slots. `getproof/README.md` gives the origin of the file and its licence.
+# The response proves one account in the state of block 60 of the test chain, and one of its slots.
+# `getproof/README.md` gives the origin of the file and its licence.
 
 import json
 from pathlib import Path

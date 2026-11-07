@@ -500,18 +500,24 @@ def fork_choice(
     config: dict | None = None,
 ) -> list:
     """The outcome of each step of a fork choice case, from an anchor state and block."""
-    # A step is (kind, data): the tick in seconds, the SSZ bytes of a block, an attestation, an
-    # attester slashing or a PoW block, or for "checks" what the read asks.
+    # A step is (kind, data), and its data is one of these:
+    # - the tick in seconds
+    # - the SSZ bytes of a block, an attestation, an attester slashing or a PoW block
+    # - for "checks", what the read asks
+    #
     # A read asks for the proposer head when its data is true.
-    # It may also be (proposer head, viable leaves, root or None): the leaves of the filtered
-    # tree with their weights, and the votes of the payload committee on the block of the root.
-    # From Gloas an "execution_payload" step is a signed envelope, and a
-    # "payload_attestation_message" step a vote of the payload committee, both in SSZ.
+    # It may also be (proposer head, viable leaves, root or None).
+    # Viable leaves asks for the leaves of the filtered tree with their weights.
+    # A root asks for the votes of the payload committee on the block of the root.
+    #
+    # From Gloas an "execution_payload" step is a signed envelope in SSZ.
+    # From Gloas a "payload_attestation_message" step is a vote of the payload committee in SSZ.
     # From Deneb a block may come as (block, blobs, proofs): the node holds those for it.
-    # From Fulu a block may come as (block, columns): the node samples those SSZ columns for it,
-    # and an empty list means that it cannot get them.
-    # A "payload" step is (status, latest valid hash or None): the verdict of the execution
-    # layer on the payload of the next block, by its Engine API name.
+    # From Fulu a block may come as (block, columns): the node samples those SSZ columns for it.
+    # An empty list of columns means that the node cannot get them.
+    # A "payload" step is (status, latest valid hash or None).
+    # It is the verdict of the execution layer on the payload of the next block.
+    # The status is given by its Engine API name.
     # A "fast_confirmation" step, with data None, runs the fast confirmation of the slot.
     records = b""
     for kind, data in steps:

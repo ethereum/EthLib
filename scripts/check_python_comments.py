@@ -82,6 +82,7 @@ def wrapped_lines(comment: list[tuple[int, str]]) -> list[int]:
 
     A blank line, a fenced or indented code block, and a line that is not prose end a paragraph.
     A new list item continues nothing.
+    A line that ends with a colon is open only to a next line that starts with a lowercase letter.
     Indented code is indented by four spaces more than the least indented line.
     """
     rest = [content for _, content in comment if content.strip()]
@@ -90,6 +91,8 @@ def wrapped_lines(comment: list[tuple[int, str]]) -> list[int]:
     in_fence = False
     # The previous prose line of the paragraph, when it does not end a sentence.
     open_line = False
+    # The previous prose line of the paragraph, when it ends with a colon.
+    after_colon = False
     for number, content in comment:
         stripped = content.strip()
         if FENCE.match(stripped):
@@ -106,11 +109,14 @@ def wrapped_lines(comment: list[tuple[int, str]]) -> list[int]:
             and any(c.isalnum() for c in stripped)
         )
         if not prose:
-            open_line = False
+            open_line = after_colon = False
             continue
-        if open_line and not LIST_ITEM.match(stripped):
+        # After a colon, a new sentence starts with a capital, and a run-on sentence does not.
+        run_on = after_colon and stripped[0].islower()
+        if (open_line or run_on) and not LIST_ITEM.match(stripped):
             out.append(number)
         open_line = not SENTENCE_END.search(stripped)
+        after_colon = stripped.endswith(":")
     return out
 
 
