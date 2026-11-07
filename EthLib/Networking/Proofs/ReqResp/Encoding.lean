@@ -398,6 +398,63 @@ theorem decodeResponseChunk_encodeResponseChunk {contextBytes : Nat}
   · exact hm ‹_›
   · exact Nat.zero_le _
 
+/-- The bytes that decode to a chunk are its code byte, its context bytes and a payload.
+
+The code is the code of its own byte, which excludes a reserved code outside 4 to 127.
+
+A success carries the context bytes of the method, and an error carries none.
+
+The payload decodes at the bounds of the code.
+
+On a success those are the bounds of the message type, and otherwise those of an error message. -/
+theorem decodeResponseChunk_eq_ok_iff {contextBytes : Nat} {typeMin typeBound : UInt64}
+    {bs : ByteArray} {c : ResponseChunk} :
+    decodeResponseChunk contextBytes typeMin typeBound bs = .ok c ↔
+      ResponseCode.ofByte c.code.toByte = c.code ∧
+        c.context.size = (if c.code = .success then contextBytes else 0) ∧
+        ∃ p : ByteArray, bs = ⟨#[c.code.toByte]⟩ ++ c.context ++ p ∧
+          decodePayload (if c.code = .success then typeMin else 0)
+            (if c.code = .success then typeBound else MAX_ERROR_MESSAGE_SIZE) p =
+            .ok c.payload := by
+  constructor
+  · intro h
+    obtain ⟨⟨l⟩⟩ := bs
+    unfold decodeResponseChunk at h
+    cases l with
+    | nil => simp [throw, throwThe, MonadExceptOf.throw] at h
+    | cons b rest =>
+      have hb : (ResponseCode.ofByte b).toByte = b := toByte_ofByte b
+      simp only at h
+      split at h
+      · rename_i hcode
+        rw [hcode] at hb
+        split at h
+        · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+        · rename_i long
+          cases hp : decodePayload typeMin typeBound ⟨(rest.drop contextBytes).toArray⟩ with
+          | error e => simp [hp, bind, Except.bind] at h
+          | ok payload =>
+            simp only [hp, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at h
+            subst h
+            refine ⟨rfl, ?_, ⟨(rest.drop contextBytes).toArray⟩, ?_, by simpa using hp⟩
+            · simp only [ite_true, ByteArray.size, List.size_toArray, List.length_take]
+              omega
+            · subst hb
+              apply ByteArray.ext
+              simp [ByteArray.data_append]
+      · rename_i _ hne
+        cases hp : decodePayload 0 MAX_ERROR_MESSAGE_SIZE ⟨rest.toArray⟩ with
+        | error e => simp [hp, bind, Except.bind] at h
+        | ok payload =>
+          simp only [hp, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at h
+          subst h
+          have hs : ResponseCode.ofByte b ≠ .success := hne
+          refine ⟨by rw [hb], by simp [hs], ⟨rest.toArray⟩, ?_, by simpa [hs] using hp⟩
+          apply ByteArray.ext
+          simp [ByteArray.data_append, hb]
+  · rintro ⟨hc, hctx, p, rfl, hd⟩
+    exact decodeResponseChunk_append hc hctx hd
+
 /-! ## Error codes -/
 
 /-- Two errors with one code come from one constructor. -/
