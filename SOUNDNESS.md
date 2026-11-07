@@ -797,17 +797,24 @@ No theorem relates the module to the execution-specs code it follows.
 
 ### BLAKE2F
 
-The theorems pin down the input format exactly, and leave the compression function F to test vectors.
+The theorems pin down the input format exactly, and state the compression function F against a model of RFC 7693.
 `output_invalidInputLength`, `output_invalidFlag` and `output_ok` (`Execution/Proofs/Evm/Precompiles/Blake2f.lean`) prove that a call fails exactly when the input is not 213 bytes long, or its flag byte is neither `0` nor `1`.
 Otherwise it returns `compute` of the input, which decodes the fields and runs F of RFC 7693 on them.
 `readWord_toNat`, `readRounds_toNat` and `writeState_word` state the encoding of EIP-152 for every input: the rounds field big-endian, every word little-endian, and the output in the encoding of the input.
 
 `roundsFrom_bijective` (`Cryptography/Proofs/Hash/Blake2b.lean`) proves that the rounds of F permute the work vector.
 The statement holds for every round count, message block and starting round.
-The output of F is checked by the Python tests (`bindings/python/tests/precompile/test_blake2f.py`).
+
+`compress_toBitVec` (`Cryptography/Proofs/Hash/Blake2b.lean`) proves that F, read word by word as 64-bit vectors, is the F of a model of RFC 7693 §3.1 and §3.2.
+The statement holds for every round count, state, message block, offset counter and flag.
+The model rotates 64-bit vectors, and takes the offset counter as one 128-bit vector whose high word is `t1`.
+It shares the IV and the message schedule with the code.
+`IV_sqrt` derives the IV from square roots, and `SIGMA_perm` checks only that each row of the schedule is a permutation.
+
+The output of F is also checked by the Python tests (`bindings/python/tests/precompile/test_blake2f.py`).
 They run test vectors 0 to 7 of EIP-152, and read the rounds field of test vector 8.
 They also run one full block of the BLAKE2 test vectors, and one call that sets `t1`.
-Test vector 8 asks for `2^32 - 1` rounds, so nothing checks its output.
+Test vector 8 asks for `2^32 - 1` rounds, so no test checks its output.
 
 ### ECRECOVER
 
