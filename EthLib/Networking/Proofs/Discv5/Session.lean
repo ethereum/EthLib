@@ -11,7 +11,7 @@ The WHOAREYOU challenge and the ordinary message packet read back.
 
 - A WHOAREYOU packet has 63 bytes, the smallest packet.
 - Node A reads the challenge of node B back, with the challenge data that node B keeps.
-- Node B reads an ordinary message packet of node A of at most 1280 bytes back, under its key.
+- Node B reads an ordinary message packet of node A back, under its key.
 - Two errors with one code come from one constructor.
 
 The theorems say nothing about the freshness of a nonce, an ID nonce or an `enr-seq`.
@@ -42,9 +42,9 @@ theorem length_of_header_encode {h : Header} {bytes : List UInt8} (he : h.encode
 theorem size_of_encode {destId : NodeId} {p : Packet} {bytes : ByteArray} {header : List UInt8}
     (he : p.encode destId = .ok bytes) (hh : p.header.encode = .ok header) :
     bytes.size = 16 + header.length + p.message.size := by
+  obtain ⟨header', hh', rfl, -⟩ := Packet.encode_eq_ok he
   obtain ⟨iv, h, msg⟩ := p
-  simp only [Packet.encode, hh, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at he
-  subst he
+  obtain rfl : header' = header := Except.ok.inj (hh'.symm.trans hh)
   simp only [ByteArray.size, List.size_toArray, List.length_append, Vector.length_toList,
     length_mask, Array.length_toList]
 
@@ -83,8 +83,7 @@ theorem readWhoareyou_makeWhoareyou {nodeIdA : NodeId} {maskingIv : Vector UInt8
           rw [hsize, hlen]
           rfl
         refine ⟨h63, ?_⟩
-        have hdec := Packet.decode_encode hb (by rw [h63]; decide) (by rw [h63]; decide)
-          (fun _ => rfl)
+        have hdec := Packet.decode_encode hb (by rw [h63]; decide) (fun _ => rfl)
         simp only [readWhoareyou, hdec, ha, Except.mapError, bind, Except.bind, pure,
           Except.pure]
 
@@ -92,12 +91,12 @@ theorem readWhoareyou_makeWhoareyou {nodeIdA : NodeId} {maskingIv : Vector UInt8
 
 /-- Node B reads node A's ordinary message packet back, under the session key of node A.
 
-The packet must fit in 1280 bytes, and node B must hold the same key for the ID of node A. -/
+Node B must hold the same key for the ID of node A. -/
 theorem openMessage_sealMessage {key : Aes.Key .aes128} {nodeIdA nodeIdB : NodeId}
     {maskingIv : Vector UInt8 16} {nonce : Vector UInt8 12} {plaintext bytes : ByteArray}
     {keyOf : NodeId → Option (Aes.Key .aes128)}
     (h : sealMessage key nodeIdA nodeIdB maskingIv nonce plaintext = .ok bytes)
-    (hmax : bytes.size ≤ MAX_PACKET_SIZE) (hkey : keyOf nodeIdA = some key) :
+    (hkey : keyOf nodeIdA = some key) :
     openMessage keyOf nodeIdB bytes = .ok (nodeIdA, plaintext) := by
   unfold sealMessage at h
   generalize hheader : (⟨nonce, .message nodeIdA⟩ : Header) = header at h
@@ -125,7 +124,7 @@ theorem openMessage_sealMessage {key : Aes.Key .aes128} {nodeIdA nodeIdB : NodeI
             rw [hsize, hlen]
             unfold MIN_PACKET_SIZE
             omega
-          have hdec := Packet.decode_encode hb hmin hmax (by
+          have hdec := Packet.decode_encode hb hmin (by
             intro hflag
             rw [← hheader] at hflag
             simp [Authdata.flag] at hflag)

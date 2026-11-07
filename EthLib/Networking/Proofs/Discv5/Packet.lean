@@ -217,96 +217,114 @@ theorem mask_masked_append (destId : NodeId) (iv : Vector UInt8 16) (header rest
   conv => lhs; rw [← List.take_append_drop header.length (mask destId iv _)]
   rw [← mask_take, List.take_left' (length_mask destId iv header), mask_mask]
 
+/-- A packet that the encoder writes is the masking IV, the masked header and the message.
+
+It has at most 1280 bytes. -/
+theorem Packet.encode_eq_ok {destId : NodeId} {p : Packet} {bytes : ByteArray}
+    (h : p.encode destId = .ok bytes) :
+    ∃ header, p.header.encode = .ok header ∧
+      bytes = ⟨(p.maskingIv.toList ++ mask destId p.maskingIv header ++
+        p.message.data.toList).toArray⟩ ∧ bytes.size ≤ MAX_PACKET_SIZE := by
+  unfold Packet.encode at h
+  cases hh : p.header.encode with
+  | error e => simp [hh, bind, Except.bind] at h
+  | ok header =>
+    simp only [hh, bind, Except.bind, pure, Except.pure] at h
+    split at h
+    · cases h
+    · rename_i hle
+      cases h
+      exact ⟨header, rfl, rfl, Nat.le_of_not_lt hle⟩
+
+/-- A packet that the encoder writes has at most 1280 bytes. -/
+theorem Packet.size_le_of_encode {destId : NodeId} {p : Packet} {bytes : ByteArray}
+    (h : p.encode destId = .ok bytes) : bytes.size ≤ MAX_PACKET_SIZE :=
+  (Packet.encode_eq_ok h).choose_spec.2.2
+
 /-- A packet that the encoder writes decodes back, within the size limits of a packet.
 
 A WHOAREYOU packet must also carry no message, as the decoder requires. -/
 theorem Packet.decode_encode {destId : NodeId} {p : Packet} {bytes : ByteArray}
     (h : p.encode destId = .ok bytes) (hmin : MIN_PACKET_SIZE ≤ bytes.size)
-    (hmax : bytes.size ≤ MAX_PACKET_SIZE)
     (hw : p.header.authdata.flag = 1 → p.message.size = 0) :
     Packet.decode destId bytes = .ok p := by
+  obtain ⟨hb, hh, rfl, hmax⟩ := Packet.encode_eq_ok h
   obtain ⟨iv, ⟨nonce, a⟩, msg⟩ := p
-  simp only at hw
-  simp only [Packet.encode] at h
-  cases hh : Header.encode ⟨nonce, a⟩ with
-  | error e => simp [hh, bind, Except.bind] at h
-  | ok hb =>
-    simp only [hh, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at h
-    subst h
-    -- The header bytes, with the length of the authdata below 2^16.
-    simp only [Header.encode] at hh
-    split at hh
-    case isFalse => cases hh
-    case isTrue hfit =>
-    simp only [Bool.and_eq_true, decide_eq_true_eq] at hfit
-    obtain ⟨hL, hfits⟩ := hfit
-    simp only [Except.ok.injEq] at hh
-    subst hh
-    -- Name the parts of the header.
-    generalize hae : a.encode = ae at hL hmin hmax ⊢
-    generalize hnb : Base.natToBytes 2 ae.length = nb at hmin hmax ⊢
-    have hnbl : nb.length = 2 := by rw [← hnb]; exact Base.natToBytes_length 2 _
-    have hnbv : Base.bytesToNat nb = ae.length := by
-      rw [← hnb]; exact Base.bytesToNat_natToBytes_of_lt (by simpa using hL)
-    have hnl : nonce.toList.length = 12 := by simp
-    let pre : List UInt8 := [0x64, 0x69, 0x73, 0x63, 0x76, 0x35, 0x00, 0x01, a.flag]
-    have hH : PROTOCOL_ID ++ VERSION ++ [a.flag] ++ nonce.toList ++ nb ++ ae =
-        pre ++ (nonce.toList ++ (nb ++ ae)) := by
-      simp [pre, PROTOCOL_ID, VERSION]
-    rw [hH, List.append_assoc] at hmin hmax ⊢
-    generalize hR : mask destId iv (pre ++ (nonce.toList ++ (nb ++ ae))) ++ msg.data.toList = R
-      at hmin hmax ⊢
-    have hRl : R.length = 23 + ae.length + msg.size := by
-      have hm : msg.size = msg.data.size := rfl
-      rw [← hR]
-      simp only [List.length_append, length_mask, pre, List.length_cons, List.length_nil, hnl,
-        hnbl, Array.length_toList]
-      omega
-    have hRdrop : R.drop (23 + ae.length) = msg.data.toList := by
-      rw [← hR]
-      refine List.drop_left' ?_
-      simp only [List.length_append, length_mask, pre, List.length_cons, List.length_nil, hnl,
-        hnbl]
-      omega
-    -- The unmasked bytes start with the header.
-    have hplain := mask_masked_append destId iv (pre ++ (nonce.toList ++ (nb ++ ae)))
-      msg.data.toList
-    rw [hR] at hplain
-    generalize (mask destId iv R).drop _ = X at hplain
-    have h8 : (pre ++ (nonce.toList ++ (nb ++ ae)) ++ X).take 8 = PROTOCOL_ID ++ VERSION := by
-      simp [pre, PROTOCOL_ID, VERSION]
-    have hflag : (pre ++ (nonce.toList ++ (nb ++ ae)) ++ X)[8]? = some a.flag := by
-      simp [pre]
-    have h9 : (pre ++ (nonce.toList ++ (nb ++ ae)) ++ X).drop 9 =
-        nonce.toList ++ (nb ++ (ae ++ X)) := by
-      rw [List.append_assoc, List.drop_left' (by simp [pre])]; simp
-    have hnonce : ((pre ++ (nonce.toList ++ (nb ++ ae)) ++ X).drop 9).take 12 = nonce.toList := by
-      rw [h9, List.take_left' hnl]
-    have h21 : (pre ++ (nonce.toList ++ (nb ++ ae)) ++ X).drop 21 = nb ++ (ae ++ X) := by
-      rw [show 21 = 9 + 12 from rfl, ← List.drop_drop, h9, List.drop_left' hnl]
-    have hsize : ((pre ++ (nonce.toList ++ (nb ++ ae)) ++ X).drop 21).take 2 = nb := by
-      rw [h21, List.take_left' hnbl]
-    have hauth : ((pre ++ (nonce.toList ++ (nb ++ ae)) ++ X).drop STATIC_HEADER_SIZE).take
-        ae.length = ae := by
-      rw [show STATIC_HEADER_SIZE = 21 + 2 from rfl, ← List.drop_drop, h21,
-        List.drop_left' hnbl, List.take_left' rfl]
-    have hdec : Authdata.decode a.flag ae = .ok a := hae ▸ Authdata.decode_encode a hfits
-    -- Each check of the decoder passes, and each field reads back.
-    have hsz : ¬ ((⟨(iv.toList ++ R).toArray⟩ : ByteArray).size < MIN_PACKET_SIZE ∨
-        MAX_PACKET_SIZE < (⟨(iv.toList ++ R).toArray⟩ : ByteArray).size) := by omega
-    have h16 : (iv.toList ++ R).take 16 = iv.toList := List.take_left' (by simp)
-    have hd16 : (iv.toList ++ R).drop 16 = R := List.drop_left' (by simp)
-    have hrest : ¬ R.length < STATIC_HEADER_SIZE + ae.length := by
-      rw [hRl]; unfold STATIC_HEADER_SIZE; omega
-    have hmsg : R.drop (STATIC_HEADER_SIZE + ae.length) = msg.data.toList := hRdrop
-    have hwho : ¬ (a.flag = 1 ∧ msg.data.toList ≠ []) := by
-      rintro ⟨h1, h2⟩
-      apply h2
-      exact List.eq_nil_of_length_eq_zero (by rw [Array.length_toList]; exact hw h1)
-    simp only [Packet.decode, hsz, ite_false, h16, hd16, vectorOf_toList,
-      hplain, h8, hflag, hnonce, hsize, hnbv, hauth, hdec, hrest, hmsg, hwho]
-    simp only [ite_true, Array.toArray_toList]
-    rfl
+  dsimp only at hw hh hmin hmax
+  -- The header bytes, with the length of the authdata below 2^16.
+  simp only [Header.encode] at hh
+  split at hh
+  case isFalse => cases hh
+  case isTrue hfit =>
+  simp only [Bool.and_eq_true, decide_eq_true_eq] at hfit
+  obtain ⟨hL, hfits⟩ := hfit
+  simp only [Except.ok.injEq] at hh
+  subst hh
+  -- Name the parts of the header.
+  generalize hae : a.encode = ae at hL hmin hmax ⊢
+  generalize hnb : Base.natToBytes 2 ae.length = nb at hmin hmax ⊢
+  have hnbl : nb.length = 2 := by rw [← hnb]; exact Base.natToBytes_length 2 _
+  have hnbv : Base.bytesToNat nb = ae.length := by
+    rw [← hnb]; exact Base.bytesToNat_natToBytes_of_lt (by simpa using hL)
+  have hnl : nonce.toList.length = 12 := by simp
+  let pre : List UInt8 := [0x64, 0x69, 0x73, 0x63, 0x76, 0x35, 0x00, 0x01, a.flag]
+  have hH : PROTOCOL_ID ++ VERSION ++ [a.flag] ++ nonce.toList ++ nb ++ ae =
+      pre ++ (nonce.toList ++ (nb ++ ae)) := by
+    simp [pre, PROTOCOL_ID, VERSION]
+  rw [hH, List.append_assoc] at hmin hmax ⊢
+  generalize hR : mask destId iv (pre ++ (nonce.toList ++ (nb ++ ae))) ++ msg.data.toList = R
+    at hmin hmax ⊢
+  have hRl : R.length = 23 + ae.length + msg.size := by
+    have hm : msg.size = msg.data.size := rfl
+    rw [← hR]
+    simp only [List.length_append, length_mask, pre, List.length_cons, List.length_nil, hnl,
+      hnbl, Array.length_toList]
+    omega
+  have hRdrop : R.drop (23 + ae.length) = msg.data.toList := by
+    rw [← hR]
+    refine List.drop_left' ?_
+    simp only [List.length_append, length_mask, pre, List.length_cons, List.length_nil, hnl,
+      hnbl]
+    omega
+  -- The unmasked bytes start with the header.
+  have hplain := mask_masked_append destId iv (pre ++ (nonce.toList ++ (nb ++ ae)))
+    msg.data.toList
+  rw [hR] at hplain
+  generalize (mask destId iv R).drop _ = X at hplain
+  have h8 : (pre ++ (nonce.toList ++ (nb ++ ae)) ++ X).take 8 = PROTOCOL_ID ++ VERSION := by
+    simp [pre, PROTOCOL_ID, VERSION]
+  have hflag : (pre ++ (nonce.toList ++ (nb ++ ae)) ++ X)[8]? = some a.flag := by
+    simp [pre]
+  have h9 : (pre ++ (nonce.toList ++ (nb ++ ae)) ++ X).drop 9 =
+      nonce.toList ++ (nb ++ (ae ++ X)) := by
+    rw [List.append_assoc, List.drop_left' (by simp [pre])]; simp
+  have hnonce : ((pre ++ (nonce.toList ++ (nb ++ ae)) ++ X).drop 9).take 12 = nonce.toList := by
+    rw [h9, List.take_left' hnl]
+  have h21 : (pre ++ (nonce.toList ++ (nb ++ ae)) ++ X).drop 21 = nb ++ (ae ++ X) := by
+    rw [show 21 = 9 + 12 from rfl, ← List.drop_drop, h9, List.drop_left' hnl]
+  have hsize : ((pre ++ (nonce.toList ++ (nb ++ ae)) ++ X).drop 21).take 2 = nb := by
+    rw [h21, List.take_left' hnbl]
+  have hauth : ((pre ++ (nonce.toList ++ (nb ++ ae)) ++ X).drop STATIC_HEADER_SIZE).take
+      ae.length = ae := by
+    rw [show STATIC_HEADER_SIZE = 21 + 2 from rfl, ← List.drop_drop, h21,
+      List.drop_left' hnbl, List.take_left' rfl]
+  have hdec : Authdata.decode a.flag ae = .ok a := hae ▸ Authdata.decode_encode a hfits
+  -- Each check of the decoder passes, and each field reads back.
+  have hsz : ¬ ((⟨(iv.toList ++ R).toArray⟩ : ByteArray).size < MIN_PACKET_SIZE ∨
+      MAX_PACKET_SIZE < (⟨(iv.toList ++ R).toArray⟩ : ByteArray).size) := by omega
+  have h16 : (iv.toList ++ R).take 16 = iv.toList := List.take_left' (by simp)
+  have hd16 : (iv.toList ++ R).drop 16 = R := List.drop_left' (by simp)
+  have hrest : ¬ R.length < STATIC_HEADER_SIZE + ae.length := by
+    rw [hRl]; unfold STATIC_HEADER_SIZE; omega
+  have hmsg : R.drop (STATIC_HEADER_SIZE + ae.length) = msg.data.toList := hRdrop
+  have hwho : ¬ (a.flag = 1 ∧ msg.data.toList ≠ []) := by
+    rintro ⟨h1, h2⟩
+    apply h2
+    exact List.eq_nil_of_length_eq_zero (by rw [Array.length_toList]; exact hw h1)
+  simp only [Packet.decode, hsz, ite_false, h16, hd16, vectorOf_toList,
+    hplain, h8, hflag, hnonce, hsize, hnbv, hauth, hdec, hrest, hmsg, hwho]
+  simp only [ite_true, Array.toArray_toList]
+  rfl
 
 /-- The additional data of a message is the masking IV, then the unmasked bytes that follow it.
 
@@ -315,21 +333,18 @@ theorem Packet.messageAd_eq {destId : NodeId} {p : Packet} {bytes ad : ByteArray
     (he : p.encode destId = .ok bytes) (ha : p.messageAd = .ok ad) :
     ad.data.toList = bytes.data.toList.take 16 ++
       mask destId p.maskingIv ((bytes.data.toList.drop 16).take (ad.size - 16)) := by
+  obtain ⟨hb, hh, rfl, -⟩ := Packet.encode_eq_ok he
   obtain ⟨iv, header, msg⟩ := p
-  simp only [Packet.encode] at he
-  simp only [Packet.messageAd] at ha
-  cases hh : header.encode with
-  | error e => simp [hh, bind, Except.bind] at ha
-  | ok hb =>
-    simp only [hh, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at he ha
-    subst he ha
-    have hlen := length_mask destId iv hb
-    have hiv : iv.toList.length = 16 := by simp
-    have hsize : (⟨(iv.toList ++ hb).toArray⟩ : ByteArray).size - 16 = hb.length := by
-      simp [ByteArray.size, hiv]
-    simp only [hsize]
-    rw [List.append_assoc, List.take_left' hiv, List.drop_left' hiv, List.take_left' hlen,
-      mask_mask]
+  simp only at hh
+  simp only [Packet.messageAd, hh, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at ha
+  subst ha
+  have hlen := length_mask destId iv hb
+  have hiv : iv.toList.length = 16 := by simp
+  have hsize : (⟨(iv.toList ++ hb).toArray⟩ : ByteArray).size - 16 = hb.length := by
+    simp [ByteArray.size, hiv]
+  simp only [hsize]
+  rw [List.append_assoc, List.take_left' hiv, List.drop_left' hiv, List.take_left' hlen,
+    mask_mask]
 
 /-- The additional data of a message and the message fill the whole packet.
 
@@ -337,16 +352,13 @@ So the unmasked part of the additional data ends where the message starts. -/
 theorem Packet.size_messageAd_add {destId : NodeId} {p : Packet} {bytes ad : ByteArray}
     (he : p.encode destId = .ok bytes) (ha : p.messageAd = .ok ad) :
     ad.size + p.message.size = bytes.size := by
+  obtain ⟨hb, hh, rfl, -⟩ := Packet.encode_eq_ok he
   obtain ⟨iv, header, msg⟩ := p
-  simp only [Packet.encode] at he
-  simp only [Packet.messageAd] at ha
-  cases hh : header.encode with
-  | error e => simp [hh, bind, Except.bind] at ha
-  | ok hb =>
-    simp only [hh, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at he ha
-    subst he ha
-    simp only [ByteArray.size, List.size_toArray, List.length_append, length_mask,
-      Array.length_toList]
+  simp only at hh
+  simp only [Packet.messageAd, hh, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at ha
+  subst ha
+  simp only [ByteArray.size, List.size_toArray, List.length_append, length_mask,
+    Array.length_toList]
 
 /-- Bytes that decode to a packet are its encoding, and they pass the checks of the decoder.
 
@@ -415,11 +427,15 @@ private theorem Packet.encode_and_checks_of_decode {destId : NodeId} {bytes : By
   -- Masking the header again gives the bytes of the packet before the message.
   have hmasked : mask destId iv (P.take (23 + L)) = R.take (23 + L) := by
     rw [mask_take, ← hP, mask_mask]
-  refine ⟨?_, by omega, by omega, fun hone => ?_⟩
-  · simp only [Packet.encode, hencode, hmasked, bind, Except.bind, pure, Except.pure,
-      Except.ok.injEq]
-    rw [toList_of_vectorOf hiv, List.append_assoc, List.take_append_drop, ← hR,
-      List.take_append_drop]
+  have hle : bytes.size ≤ MAX_PACKET_SIZE := by omega
+  refine ⟨?_, by omega, hle, fun hone => ?_⟩
+  · -- The bytes are the masking IV, the masked header and the message, within the size limit.
+    have hbytes : (⟨(iv.toList ++ R.take (23 + L) ++ R.drop (23 + L)).toArray⟩ : ByteArray) =
+        bytes := by
+      rw [toList_of_vectorOf hiv, List.append_assoc, List.take_append_drop, ← hR,
+        List.take_append_drop]
+    simp only [Packet.encode, hencode, hmasked, bind, Except.bind, pure, Except.pure,
+      hbytes, Nat.not_lt.mpr hle, ↓reduceIte]
   -- A WHOAREYOU packet passed the check that its message is empty.
   · have hempty : R.drop (23 + L) = [] :=
       Classical.byContradiction fun hne => hwho ⟨by rw [← hflagEq]; exact hone, hne⟩
@@ -438,7 +454,7 @@ theorem Packet.decode_eq_ok_iff (destId : NodeId) (bytes : ByteArray) (p : Packe
       p.encode destId = .ok bytes ∧ MIN_PACKET_SIZE ≤ bytes.size ∧
         bytes.size ≤ MAX_PACKET_SIZE ∧ (p.header.authdata.flag = 1 → p.message.size = 0) :=
   ⟨Packet.encode_and_checks_of_decode,
-    fun ⟨he, hmin, hmax, hw⟩ => Packet.decode_encode he hmin hmax hw⟩
+    fun ⟨he, hmin, _, hw⟩ => Packet.decode_encode he hmin hw⟩
 
 /-! ## Messages -/
 

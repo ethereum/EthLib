@@ -157,7 +157,9 @@ The message is AES-GCM under the initiator key, with the nonce of the header.
 
 Its additional data is the masking IV, then the unmasked header.
 
-The caller chooses the masking IV, the nonce and whether to send the record. -/
+The caller chooses the masking IV, the nonce and whether to send the record.
+
+It fails when the packet would exceed 1280 bytes. -/
 def sealHandshake (ephemeralKey staticKey : Fn) (challengeData : ByteArray)
     (nodeIdA nodeIdB : NodeId) (destPubkey : Point) (maskingIv : Vector UInt8 16)
     (nonce : Vector UInt8 12) (record plaintext : ByteArray) :

@@ -93,6 +93,20 @@ def test_seal_ping_packet():
     assert packet == PING_PACKET
 
 
+def test_seal_message_up_to_the_size_limit():
+    # The packet has 16 + 23 + 32 bytes before the message, and the message adds a 16-byte tag.
+    packet = discv5.seal_message(bytes(16), SRC_ID, DEST_ID, MASKING_IV, NONCE, bytes(1193))
+    assert len(packet) == 1280
+    assert discv5.open_message(bytes(16), SRC_ID, DEST_ID, packet) == bytes(1193)
+
+
+def test_seal_message_over_the_size_limit():
+    message = "invalid packet: EthLib.Networking.Discv5.PacketError.size 1281"
+    with raises(discv5.Discv5Error, message) as info:
+        discv5.seal_message(bytes(16), SRC_ID, DEST_ID, MASKING_IV, NONCE, bytes(1194))
+    assert info.value.code == 1
+
+
 def test_open_ping_packet():
     assert discv5.open_message(bytes(16), SRC_ID, DEST_ID, PING_PACKET) == PING_ENR_SEQ_2
 
