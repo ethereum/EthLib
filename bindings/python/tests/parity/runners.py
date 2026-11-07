@@ -489,9 +489,9 @@ def _engine_payload(fixture: dict, payload: dict, state: bytes, recent: list) ->
         assert status["status"] == "VALID", status
         assert status["latestValidHash"] == payload["params"][0]["blockHash"]
         # A valid payload gives its header and the accounts after it.
-        header, accounts = cast(bytes, header), cast(list, accounts)
+        header, accounts = cast(bytes, header), cast(bytes, accounts)
         fork = active_fork(chain_of(fixture)[1], rlp.decode(header))
-        return "valid", rlp.encode(accounts), (recent + [(fork, header, [])])[-256:]
+        return "valid", accounts, (recent + [(fork, header, [])])[-256:]
     names = expected.split("|")
     code, _, message = status["validationError"].partition(": ")
     if int(code) == 405:

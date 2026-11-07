@@ -7875,7 +7875,7 @@
       {"constructor": "invalidForkchoiceState", "code": 38002}]}],
    "error_class": "EngineError",
    "docstring":
-   "The payload status of an `engine_newPayload` request, on a chain that holds the parent.\n\nThe chain has the inputs of the state transition export: configuration, state, recent blocks.\n\nIt returns an RLP list of three items, the status as JSON first.\n\nFor a valid payload, the RLP form of its header and the accounts of the state after it follow.\n\nFor any other payload, two empty lists follow."},
+   "The payload status of an `engine_newPayload` request, on a chain that holds the parent.\n\nThe chain has the inputs of the state transition export: configuration, state, recent blocks.\n\nIt returns an RLP list of three byte strings, the status as JSON first.\n\nFor a valid payload, the RLP encodings of its header and of the accounts after it follow.\n\nThe caller can then pass the accounts to the next call without decoding them.\n\nFor any other payload, two empty byte strings follow."},
   {"summary":
    "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.",
    "signature": "(tree: bytes, finalized: bytes, request: bytes) -> bytes",
