@@ -2,6 +2,7 @@
 
 import json
 import struct
+from collections.abc import Sequence
 from typing import Any
 
 # Every domain links into one extension module.
@@ -551,10 +552,10 @@ def gossip_validation(
     anchor_state: bytes,
     anchor_block: bytes,
     topic: str,
-    messages: list[tuple[int, int, bytes] | tuple[int, int, bytes, str]],
+    messages: Sequence[tuple[int, int, bytes] | tuple[int, int, bytes, str]],
     verify: bool = True,
     config: dict | None = None,
-    blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes]]
+    blocks: Sequence[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes]]
     | None = None,
     finalized: tuple[int, bytes] | None = None,
 ) -> list[tuple[str, str | None]]:
