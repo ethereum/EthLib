@@ -213,6 +213,96 @@ theorem effects_rollbackOnError {change : Change} {caller stopped : Evm fork Nat
       fun hash => TransactionState.getCode_restoreTxState hparent hash, hparent⟩,
       fun h => (Bool.false_ne_true h).elim, fun h => (Bool.false_ne_true h).elim, by simp⟩
 
+/-! ## Moving ether -/
+
+/-- A change of one account that keeps it alive, its nonce and its code changes only that account.
+
+The account exists before the change. -/
+private theorem agrees_modifyState {tx tx' : TransactionState} {address : Address}
+    {f : State.Account → Except State.StateError State.Account} {account : State.Account}
+    (keys : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32))
+    (hf : f (tx.getAccount address) = .ok account)
+    (hex : (tx.getAccountOptional address).isSome = true)
+    (hshape : nonceAndCode account = nonceAndCode (tx.getAccount address))
+    (hlive : ¬(account.nonce = 0 ∧ account.codeHash = State.EMPTY_CODE_HASH ∧ account.balance = 0))
+    (h : tx.modifyState fork address f = .ok tx') :
+    Agrees [] [address] tx keys tx' keys ∧ tx'.getAccount address = account := by
+  obtain ⟨account', hf', rfl⟩ := TransactionState.modifyState_eq_ok_iff.mp h
+  rw [hf, Except.ok.injEq] at hf'
+  subst hf'
+  have hempty : ((tx.recordAccountRead address).setAccount address
+      (some account)).accountExistsAndIsEmpty address = false := by
+    simp only [TransactionState.accountExistsAndIsEmpty,
+      TransactionState.getAccountOptional_setAccount_self]
+    simpa [and_assoc] using hlive
+  simp only [hempty, Bool.and_false, Bool.false_eq_true, ite_false]
+  obtain ⟨old, hold⟩ := Option.isSome_iff_exists.mp hex
+  refine ⟨⟨fun _ _ _ => rfl, fun _ _ _ => .rfl, rfl, fun other hm => ?_, fun other => ?_,
+    fun _ => rfl, rfl⟩, ?_⟩
+  · exact TransactionState.getAccountOptional_setAccount_of_ne _ _ (by simpa using hm)
+  · by_cases ho : other = address
+    · subst ho
+      rw [TransactionState.getAccountOptional_setAccount_self, hold]
+      simp only [Option.map_some]
+      rw [hshape, TransactionState.getAccount, hold]
+      rfl
+    · rw [TransactionState.getAccountOptional_setAccount_of_ne _ _ ho]
+      rfl
+  · simp [TransactionState.getAccount, TransactionState.getAccountOptional_setAccount_self]
+
+/-- A move of a value that is not 0 between two accounts changes only their balances.
+
+The two accounts exist, and the sender has a nonce or a code, so that neither ends empty.
+
+Every word of storage, every slot that is warm, every other account and every code stays. -/
+theorem agrees_moveEther {state moved : TransactionState} {sender recipient : Address}
+    {amount : U256} (keys : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32))
+    (h : state.moveEther fork sender recipient amount = .ok moved) (hne : sender ≠ recipient)
+    (hamount : amount ≠ 0)
+    (hsender : (state.getAccount sender).nonce ≠ 0 ∨
+      (state.getAccount sender).codeHash ≠ State.EMPTY_CODE_HASH)
+    (hrecipient : (state.getAccountOptional recipient).isSome = true) :
+    Agrees [] [sender, recipient] state keys moved keys := by
+  unfold TransactionState.moveEther at h
+  rcases TransactionState.modifyState_debit fork state sender amount with
+    ⟨-, hmid⟩ | ⟨hfunds, mid, hmid, -, -⟩
+  · simp [hmid, bind, Except.bind] at h
+  simp only [hmid, bind, Except.bind] at h
+  have hexS : (state.getAccountOptional sender).isSome = true := by
+    cases hs : state.getAccountOptional sender
+    · simp [TransactionState.getAccount, hs, State.EMPTY_ACCOUNT] at hsender
+    · rfl
+  obtain ⟨h1, -⟩ := agrees_modifyState (account :=
+      { state.getAccount sender with balance := (state.getAccount sender).balance - amount })
+    keys (by simp [State.Account.debit, hfunds]) hexS rfl
+    (fun ⟨hn, hc, _⟩ => hsender.elim (fun h => h hn) fun h => h hc) hmid
+  have hexR : (mid.getAccountOptional recipient).isSome = true := by
+    rw [h1.account recipient (by simpa using Ne.symm hne)]
+    exact hrecipient
+  obtain ⟨account, hf, -, -⟩ := TransactionState.modifyState_eq_ok h
+  unfold State.Account.credit at hf
+  split at hf
+  · rename_i hfit
+    rw [Except.ok.injEq] at hf
+    subst hf
+    have hpos : 0 < amount.toNat := by
+      rcases Nat.eq_zero_or_pos amount.toNat with h0 | h0
+      · exact absurd (BitVec.eq_of_toNat_eq (by simpa using h0)) hamount
+      · exact h0
+    obtain ⟨h2, -⟩ := agrees_modifyState (account :=
+        { mid.getAccount recipient with balance := (mid.getAccount recipient).balance + amount })
+      keys (by simp [State.Account.credit, hfit]) hexR rfl
+      (fun ⟨_, _, hb⟩ => by
+        have := congrArg BitVec.toNat hb
+        rw [BitVec.toNat_add, Nat.mod_eq_of_lt hfit] at this
+        simp at this
+        omega) h
+    exact (h1.trans h2).mono (fun _ hs => by simp at hs) fun address hm => by
+      simp only [List.mem_append, List.mem_singleton] at hm
+      simp only [List.mem_cons, List.not_mem_nil, or_false]
+      exact hm.symm
+  · cases hf
+
 /-! ## A call from a frame that knows slots -/
 
 variable {code : ByteArray} {message : Message fork} {pc : Nat} {size : Nat}
