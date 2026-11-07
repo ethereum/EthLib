@@ -271,7 +271,7 @@ theorem validateLightClientUpdate_nextSyncCommittee {config : Config}
 
 Take a beacon state of a fork from Altair whose root is the attested state root.
 
-The client must read that state with the layout of its fork, at the index of its finality branch.
+At the attested slot, the client must read the finalized root at the index of that fork.
 
 The proved root is the root of the finalized beacon header, or zero at the genesis slot.
 
@@ -316,7 +316,7 @@ This holds for an update that carries a committee branch.
 
 Take a beacon state of a fork from Altair whose root is the attested state root.
 
-The client must read that state with the layout of its fork, at the index of its committee branch.
+At the attested slot, the client must read the committee at the index of that fork.
 
 The root of the committee of the update is the root of the next committee of the state.
 
