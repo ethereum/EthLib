@@ -18,7 +18,7 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - A function that returns a known value on every input maps to the list of those values.
 - A part of each output that its input fixes comes out in the order of the inputs.
 - Output `i` is the image of input `i`, for a list, an array or a vector.
-- A map over a list returns a list exactly when it has one output for each input, the image of it.
+- A map returns a list exactly when it has one output per input, each the image of its input.
 - Two functions that agree on every entry of a vector map it to one result.
 - A failed map fails on some input, and succeeds on every input before it.
 - A property that each step keeps holds after a successful fold.
@@ -153,9 +153,7 @@ theorem mapM_ok_getElem {xs : List α} {ys : List β} (h : xs.mapM f = .ok ys)
     | zero => exact head
     | succ i => exact ih tail i (Nat.lt_of_succ_lt_succ hi)
 
-/-- A map over a list returns a list exactly when it has one output for each input.
-
-Output `i` is then the image of input `i`. -/
+/-- A map returns a list exactly when it has one output per input, each the image of its input. -/
 theorem mapM_eq_ok_iff {xs : List α} {ys : List β} :
     xs.mapM f = .ok ys ↔
       ∃ h : ys.length = xs.length, ∀ (i : Nat) (hi : i < xs.length), f xs[i] = .ok ys[i] := by
