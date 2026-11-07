@@ -47,25 +47,27 @@ def Apart (start length : Nat) (fact : Nat × ByteArray) : Bool :=
 The size is a multiple of 32. -/
 def Known (code : ByteArray) (message : Message fork) (pc : Nat) (stack : List U256)
     (size : Nat) (facts : List (Nat × ByteArray)) (gas : Nat) (state : State.TransactionState)
-    (substate : Substate) (evm : Evm fork Nat) : Prop :=
-  At code message pc stack evm.memory gas state substate evm ∧ evm.memory.size = size ∧
-    size % 32 = 0 ∧ HoldsAll evm.memory facts
+    (substate : Substate) (returnData : ByteArray) (evm : Evm fork Nat) : Prop :=
+  At code message pc stack evm.memory gas state substate returnData evm ∧
+    evm.memory.size = size ∧ size % 32 = 0 ∧ HoldsAll evm.memory facts
 
 variable {code : ByteArray} {message : Message fork} {pc pc' : Nat} {stack stack' : List U256}
   {size : Nat} {facts : List (Nat × ByteArray)} {gas gas' : Nat}
   {state state' : State.TransactionState} {substate substate' : Substate}
+  {returnData returnData' : ByteArray}
 
 /-- A frame of empty memory, at the start of a message, knows no fact. -/
 theorem known_of_at_empty {evm : Evm fork Nat}
-    (h : At code message pc stack .empty gas state substate evm) :
-    Known code message pc stack 0 [] gas state substate evm :=
+    (h : At code message pc stack .empty gas state substate returnData evm) :
+    Known code message pc stack 0 [] gas state substate returnData evm :=
   ⟨by rw [h.2.2.2.2.2.1]; exact h, by rw [h.2.2.2.2.2.1]; rfl, rfl, fun _ hf => by cases hf⟩
 
 /-- Two facts of adjacent ranges give the fact of the two blocks of bytes in order. -/
 theorem Known.join {evm : Evm fork Nat} {start : Nat} {first second : ByteArray}
-    (h : Known code message pc stack size facts gas state substate evm)
+    (h : Known code message pc stack size facts gas state substate returnData evm)
     (h₁ : (start, first) ∈ facts) (h₂ : (start + first.size, second) ∈ facts) :
-    Known code message pc stack size ((start, first ++ second) :: facts) gas state substate evm :=
+    Known code message pc stack size ((start, first ++ second) :: facts) gas state substate
+      returnData evm :=
   ⟨h.1, h.2.1, h.2.2.1, fun fact hfact => by
     rcases List.mem_cons.mp hfact with rfl | hfact
     · exact (h.2.2.2 _ h₁).append (h.2.2.2 _ h₂)
@@ -73,9 +75,9 @@ theorem Known.join {evm : Evm fork Nat} {start : Nat} {first second : ByteArray}
 
 /-- A frame may forget facts. -/
 theorem Known.mono {evm : Evm fork Nat} {fewer : List (Nat × ByteArray)}
-    (h : Known code message pc stack size facts gas state substate evm)
+    (h : Known code message pc stack size facts gas state substate returnData evm)
     (sub : ∀ fact ∈ fewer, fact ∈ facts) :
-    Known code message pc stack size fewer gas state substate evm :=
+    Known code message pc stack size fewer gas state substate returnData evm :=
   ⟨h.1, h.2.1, h.2.2.1, fun fact hfact => h.2.2.2 fact (sub fact hfact)⟩
 
 /-- A write within memory keeps the facts apart from it, and holds what it writes. -/
@@ -97,10 +99,10 @@ theorem holdsAll_memoryExtend {memory : ByteArray} (h : HoldsAll memory facts) (
 
 /-- A rule that keeps memory, for every memory, keeps the size and every fact. -/
 theorem Known.of_at
-    (h : ∀ memory, Hoare fork (At code message pc stack memory gas state substate)
-      (At code message pc' stack' memory gas' state' substate')) :
-    Hoare fork (Known code message pc stack size facts gas state substate)
-      (Known code message pc' stack' size facts gas' state' substate') := by
+    (h : ∀ memory, Hoare fork (At code message pc stack memory gas state substate returnData)
+      (At code message pc' stack' memory gas' state' substate' returnData')) :
+    Hoare fork (Known code message pc stack size facts gas state substate returnData)
+      (Known code message pc' stack' size facts gas' state' substate' returnData') := by
   rintro evm ⟨hat, hsize, hmod, hall⟩
   obtain ⟨after, hreach, hat'⟩ := h evm.memory evm hat
   have hm : after.memory = evm.memory := hat'.2.2.2.2.2.1
@@ -118,10 +120,10 @@ theorem known_of_write {memory value : ByteArray} {start length : U256}
     (hsize : memory.size = size) (hmod : size % 32 = 0) (hall : HoldsAll memory facts)
     (h : At code message pc' stack'
       (memoryWrite (memoryExtend memory (extendMemory size ranges).expandBy) start.toNat value)
-      gas' state' substate' evm) :
+      gas' state' substate' returnData evm) :
     Known code message pc' stack' (size + (extendMemory size ranges).expandBy)
       ((start.toNat, value) :: facts.filter (Apart start.toNat length.toNat)) gas' state'
-      substate' evm := by
+      substate' returnData evm := by
   have cover := le_ceil32_add_expandBy size ranges (start, length) hmem hz
   rw [ceil32_of_mod hmod] at cover
   have fit : start.toNat + value.size ≤
@@ -141,10 +143,11 @@ variable {pc : Nat} {memory : ByteArray}
 It pays 3 and the growth of memory, which depends on its size. -/
 theorem mstore_known {start value : U256} {rest : List U256} (hlt : pc < code.size)
     (hbyte : code[pc] = 0x52) (hgas : 3 + (extendMemory size [(start, 32)]).cost ≤ gas) :
-    Hoare fork (Known code message pc (start :: value :: rest) size facts gas state substate)
+    Hoare fork (Known code message pc (start :: value :: rest) size facts gas state substate
+        returnData)
       (Known code message (pc + 1) rest (size + (extendMemory size [(start, 32)]).expandBy)
         ((start.toNat, wordBytes value) :: facts.filter (Apart start.toNat 32))
-        (gas - (3 + (extendMemory size [(start, 32)]).cost)) state substate) := by
+        (gas - (3 + (extendMemory size [(start, 32)]).cost)) state substate returnData) := by
   rintro evm ⟨hat, hsize, hmod, hall⟩
   rw [← hsize] at hgas
   obtain ⟨after, hreach, hat'⟩ := mstore hlt hbyte hgas evm hat
@@ -158,10 +161,11 @@ theorem mstore_known {start value : U256} {rest : List U256} (hlt : pc < code.si
 It pays 3 and the growth of memory, which depends on its size. -/
 theorem mstore8_known {start value : U256} {rest : List U256} (hlt : pc < code.size)
     (hbyte : code[pc] = 0x53) (hgas : 3 + (extendMemory size [(start, 1)]).cost ≤ gas) :
-    Hoare fork (Known code message pc (start :: value :: rest) size facts gas state substate)
+    Hoare fork (Known code message pc (start :: value :: rest) size facts gas state substate
+        returnData)
       (Known code message (pc + 1) rest (size + (extendMemory size [(start, 1)]).expandBy)
         ((start.toNat, ⟨#[UInt8.ofNat value.toNat]⟩) :: facts.filter (Apart start.toNat 1))
-        (gas - (3 + (extendMemory size [(start, 1)]).cost)) state substate) := by
+        (gas - (3 + (extendMemory size [(start, 1)]).cost)) state substate returnData) := by
   rintro evm ⟨hat, hsize, hmod, hall⟩
   rw [← hsize] at hgas
   obtain ⟨after, hreach, hat'⟩ := mstore8 hlt hbyte hgas evm hat
@@ -175,8 +179,9 @@ It pays 3, and memory does not grow. -/
 theorem mload_known {start word : U256} {rest : List U256} (hlt : pc < code.size)
     (hbyte : code[pc] = 0x51) (hfact : (start.toNat, wordBytes word) ∈ facts)
     (hgas : 3 ≤ gas) :
-    Hoare fork (Known code message pc (start :: rest) size facts gas state substate)
-      (Known code message (pc + 1) (word :: rest) size facts (gas - 3) state substate) := by
+    Hoare fork (Known code message pc (start :: rest) size facts gas state substate returnData)
+      (Known code message (pc + 1) (word :: rest) size facts (gas - 3) state substate
+        returnData) := by
   rintro evm ⟨hat, hsize, hmod, hall⟩
   have hold := hall _ hfact
   have hext : extendMemory evm.memory.size [(start, (32 : U256))] = ⟨0, 0⟩ :=
@@ -196,7 +201,8 @@ The size of the range is the size of those bytes, and memory does not grow. -/
 theorem return_known {start length : U256} {out : ByteArray} {rest : List U256}
     (hlt : pc < code.size) (hbyte : code[pc] = 0xf3) (hfact : (start.toNat, out) ∈ facts)
     (hlen : out.size = length.toNat) :
-    Spec fork (Known code message pc (start :: length :: rest) size facts gas state substate)
+    Spec fork (Known code message pc (start :: length :: rest) size facts gas state substate
+        returnData)
       (Halted false out gas state substate) := by
   rintro evm ⟨hat, hsize, hmod, hall⟩
   have hold := hall _ hfact
@@ -215,7 +221,8 @@ The size of the range is the size of those bytes, and memory does not grow. -/
 theorem revert_known (hfork : .byzantium ≤ fork) {start length : U256} {out : ByteArray}
     {rest : List U256} (hlt : pc < code.size) (hbyte : code[pc] = 0xfd)
     (hfact : (start.toNat, out) ∈ facts) (hlen : out.size = length.toNat) :
-    Spec fork (Known code message pc (start :: length :: rest) size facts gas state substate)
+    Spec fork (Known code message pc (start :: length :: rest) size facts gas state substate
+        returnData)
       (Halted true out gas state substate) := by
   rintro evm ⟨hat, hsize, hmod, hall⟩
   have hold := hall _ hfact
@@ -244,12 +251,13 @@ theorem mcopy_known (hfork : .dencun ≤ fork) {destination source length : U256
     (hgas : 3 + 3 * wordCount length.toNat +
       (extendMemory size [(source, length), (destination, length)]).cost ≤ gas) :
     Hoare fork (Known code message pc (destination :: source :: length :: rest) size facts gas
-        state substate)
+        state substate returnData)
       (Known code message (pc + 1) rest
         (size + (extendMemory size [(source, length), (destination, length)]).expandBy)
         ((destination.toNat, bytes) :: facts.filter (Apart destination.toNat length.toNat))
         (gas - (3 + 3 * wordCount length.toNat +
-          (extendMemory size [(source, length), (destination, length)]).cost)) state substate) := by
+          (extendMemory size [(source, length), (destination, length)]).cost)) state substate
+            returnData) := by
   rintro evm ⟨hat, hsize, hmod, hall⟩
   rw [← hsize] at hgas
   obtain ⟨after, hreach, hat'⟩ := mcopy hfork hlt hbyte hgas evm hat
@@ -269,12 +277,12 @@ theorem calldatacopy_known {start offset length : U256} {rest : List U256}
     (hlt : pc < code.size) (hbyte : code[pc] = 0x37) (hz : length ≠ 0)
     (hgas : 3 + 3 * wordCount length.toNat + (extendMemory size [(start, length)]).cost ≤ gas) :
     Hoare fork (Known code message pc (start :: offset :: length :: rest) size facts gas state
-        substate)
+        substate returnData)
       (Known code message (pc + 1) rest (size + (extendMemory size [(start, length)]).expandBy)
         ((start.toNat, ⟨(bufferRead message.data offset.toNat length.toNat).toArray⟩) ::
           facts.filter (Apart start.toNat length.toNat))
         (gas - (3 + 3 * wordCount length.toNat + (extendMemory size [(start, length)]).cost))
-        state substate) := by
+        state substate returnData) := by
   rintro evm ⟨hat, hsize, hmod, hall⟩
   rw [← hsize] at hgas
   obtain ⟨after, hreach, hat'⟩ := calldatacopy hlt hbyte hgas evm hat
@@ -291,12 +299,12 @@ theorem codecopy_known {start offset length : U256} {rest : List U256}
     (hlt : pc < code.size) (hbyte : code[pc] = 0x39) (hz : length ≠ 0)
     (hgas : 3 + 3 * wordCount length.toNat + (extendMemory size [(start, length)]).cost ≤ gas) :
     Hoare fork (Known code message pc (start :: offset :: length :: rest) size facts gas state
-        substate)
+        substate returnData)
       (Known code message (pc + 1) rest (size + (extendMemory size [(start, length)]).expandBy)
         ((start.toNat, ⟨(bufferRead code offset.toNat length.toNat).toArray⟩) ::
           facts.filter (Apart start.toNat length.toNat))
         (gas - (3 + 3 * wordCount length.toNat + (extendMemory size [(start, length)]).cost))
-        state substate) := by
+        state substate returnData) := by
   rintro evm ⟨hat, hsize, hmod, hall⟩
   rw [← hsize] at hgas
   obtain ⟨after, hreach, hat'⟩ := codecopy hlt hbyte hgas evm hat
@@ -306,31 +314,29 @@ theorem codecopy_known {start offset length : U256} {rest : List U256}
 
 /-- From Byzantium, RETURNDATACOPY of a range of some bytes writes the fact of the return data.
 
-The frame holds the return data `data`, and the range ends within it.
+The range ends within the return data.
 
 It keeps the facts apart from the range, and the return data.
 
 It pays 3, 3 gas a word and the growth of memory, which depends on its size. -/
-theorem returndatacopy_known (hfork : .byzantium ≤ fork) {data : ByteArray}
-    {start offset length : U256} {rest : List U256} (hlt : pc < code.size)
-    (hbyte : code[pc] = 0x3e) (hz : length ≠ 0) (fit : offset.toNat + length.toNat ≤ data.size)
+theorem returndatacopy_known (hfork : .byzantium ≤ fork) {start offset length : U256}
+    {rest : List U256} (hlt : pc < code.size) (hbyte : code[pc] = 0x3e) (hz : length ≠ 0)
+    (fit : offset.toNat + length.toNat ≤ returnData.size)
     (hgas : 3 + 3 * wordCount length.toNat + (extendMemory size [(start, length)]).cost ≤ gas) :
     Hoare fork
-      (fun evm => Known code message pc (start :: offset :: length :: rest) size facts gas state
-        substate evm ∧ evm.returnData = data)
-      (fun evm => Known code message (pc + 1) rest
-        (size + (extendMemory size [(start, length)]).expandBy)
-        ((start.toNat, memoryReadBytes data offset.toNat length.toNat) ::
+      (Known code message pc (start :: offset :: length :: rest) size facts gas state substate
+        returnData)
+      (Known code message (pc + 1) rest (size + (extendMemory size [(start, length)]).expandBy)
+        ((start.toNat, memoryReadBytes returnData offset.toNat length.toNat) ::
           facts.filter (Apart start.toNat length.toNat))
         (gas - (3 + 3 * wordCount length.toNat + (extendMemory size [(start, length)]).cost))
-        state substate evm ∧ evm.returnData = data) := by
-  rintro evm ⟨⟨hat, hsize, hmod, hall⟩, hrd⟩
+        state substate returnData) := by
+  rintro evm ⟨hat, hsize, hmod, hall⟩
   rw [← hsize] at hgas
-  obtain ⟨after, hreach, hat', hrd'⟩ :=
-    returndatacopy hfork hlt hbyte fit hgas evm ⟨hat, hrd⟩
+  obtain ⟨after, hreach, hat'⟩ := returndatacopy hfork hlt hbyte fit hgas evm hat
   rw [hsize] at hat'
   exact ⟨after, hreach, known_of_write hz (size_memoryReadBytes fit) (List.mem_singleton_self _)
-    hsize hmod hall hat', hrd'⟩
+    hsize hmod hall hat'⟩
 
 /-- From Berlin to before Glamsterdam, EXTCODECOPY of a range of some bytes writes a fact.
 
@@ -350,7 +356,7 @@ theorem extcodecopy_known (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
       (extendMemory size [(start, length)]).cost ≤ gas) :
     Hoare fork
       (Known code message pc (word :: start :: offset :: length :: rest) size facts gas state
-        substate)
+        substate returnData)
       (Known code message (pc + 1) rest (size + (extendMemory size [(start, length)]).expandBy)
         ((start.toNat, ⟨(bufferRead c offset.toNat length.toNat).toArray⟩) ::
           facts.filter (Apart start.toNat length.toNat))
@@ -359,7 +365,7 @@ theorem extcodecopy_known (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
         (state.recordAccountRead (Base.toAddressMasked word))
         { substate with
           accessedAddresses :=
-            substate.accessedAddresses.insert (Base.toAddressMasked word) }) := by
+            substate.accessedAddresses.insert (Base.toAddressMasked word) } returnData) := by
   rintro evm ⟨hat, hsize, hmod, hall⟩
   rw [← hsize] at hgas
   obtain ⟨after, hreach, hat'⟩ := extcodecopy hfork hglam hlt hbyte hcode hcold hgas evm hat

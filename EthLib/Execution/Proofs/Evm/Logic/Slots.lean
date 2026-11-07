@@ -202,8 +202,9 @@ Outside the slots of the facts, it agrees with the base state `base` and the key
 def Stored (code : ByteArray) (message : Message fork) (pc : Nat) (stack : List U256)
     (size : Nat) (facts : List (Nat × ByteArray)) (gas : Nat) (slots : List SlotFact)
     (refund : Int) (base : TransactionState)
-    (accessed : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32)) (evm : Evm fork Nat) : Prop :=
-  Known code message pc stack size facts gas evm.state evm.substate evm ∧
+    (accessed : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32)) (returnData : ByteArray)
+    (evm : Evm fork Nat) : Prop :=
+  Known code message pc stack size facts gas evm.state evm.substate returnData evm ∧
     (∀ fact ∈ slots, fact.Holds evm.state evm.substate) ∧
     evm.substate.refundCounter = refund ∧
     Agrees (slots.map SlotFact.slot) [] [] base accessed evm.state
@@ -212,37 +213,40 @@ def Stored (code : ByteArray) (message : Message fork) (pc : Nat) (stack : List 
 variable {code : ByteArray} {message : Message fork} {pc pc' : Nat} {stack stack' : List U256}
   {size size' : Nat} {facts facts' : List (Nat × ByteArray)} {gas gas' : Nat}
   {slots : List SlotFact} {refund : Int} {base : TransactionState}
-  {accessed : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32)}
+  {accessed : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32)} {returnData returnData' : ByteArray}
 
 /-- A frame that is known, with the facts of its slots, the refund counter and the agreement. -/
 theorem stored_of_known {evm : Evm fork Nat} {state : TransactionState} {substate : Substate}
-    (h : Known code message pc stack size facts gas state substate evm)
+    (h : Known code message pc stack size facts gas state substate returnData evm)
     (hslots : ∀ fact ∈ slots, fact.Holds state substate)
     (hrefund : substate.refundCounter = refund)
     (hagree : Agrees (slots.map SlotFact.slot) [] [] base accessed state
       substate.accessedStorageKeys) :
-    Stored code message pc stack size facts gas slots refund base accessed evm := by
+    Stored code message pc stack size facts gas slots refund base accessed returnData evm := by
   have hs : evm.state = state := h.1.2.2.2.2.2.2.2.2.2.2.1
-  have hss : evm.substate = substate := h.1.2.2.2.2.2.2.2.2.2.2.2
+  have hss : evm.substate = substate := h.1.2.2.2.2.2.2.2.2.2.2.2.1
   refine ⟨by rw [hs, hss]; exact h, by rw [hs, hss]; exact hslots, by rw [hss]; exact hrefund,
     by rw [hs, hss]; exact hagree⟩
 
 /-- A rule that keeps the state and the substate, for every state and substate, keeps every fact. -/
 theorem Stored.of_known
-    (h : ∀ state substate, Hoare fork (Known code message pc stack size facts gas state substate)
-      (Known code message pc' stack' size' facts' gas' state substate)) :
-    Hoare fork (Stored code message pc stack size facts gas slots refund base accessed)
-      (Stored code message pc' stack' size' facts' gas' slots refund base accessed) := by
+    (h : ∀ state substate, Hoare fork
+      (Known code message pc stack size facts gas state substate returnData)
+      (Known code message pc' stack' size' facts' gas' state substate returnData')) :
+    Hoare fork (Stored code message pc stack size facts gas slots refund base accessed returnData)
+      (Stored code message pc' stack' size' facts' gas' slots refund base accessed
+        returnData') := by
   rintro evm ⟨hk, hslots, hrefund, hagree⟩
   obtain ⟨after, hreach, hk'⟩ := h evm.state evm.substate evm hk
   exact ⟨after, hreach, stored_of_known hk' hslots hrefund hagree⟩
 
 /-- A rule that keeps memory, the state and the substate, for every one, keeps every fact. -/
 theorem Stored.of_at
-    (h : ∀ memory state substate, Hoare fork (At code message pc stack memory gas state substate)
-      (At code message pc' stack' memory gas' state substate)) :
-    Hoare fork (Stored code message pc stack size facts gas slots refund base accessed)
-      (Stored code message pc' stack' size facts gas' slots refund base accessed) :=
+    (h : ∀ memory state substate, Hoare fork
+      (At code message pc stack memory gas state substate returnData)
+      (At code message pc' stack' memory gas' state substate returnData')) :
+    Hoare fork (Stored code message pc stack size facts gas slots refund base accessed returnData)
+      (Stored code message pc' stack' size facts gas' slots refund base accessed returnData') :=
   Stored.of_known fun state substate => Known.of_at fun memory => h memory state substate
 
 /-- Two words with the same bytes are the same word. -/
@@ -348,10 +352,11 @@ theorem sload_stored (hfork : .berlin ≤ fork) {fact : SlotFact} {rest : List U
     (hlt : pc < code.size) (hbyte : code[pc] = 0x54) (hfact : fact ∈ slots)
     (haddress : fact.address = message.currentTarget)
     (hgas : (if fact.warm then 100 else 2100) ≤ gas) :
-    Hoare fork (Stored code message pc (fact.key :: rest) size facts gas slots refund base accessed)
+    Hoare fork (Stored code message pc (fact.key :: rest) size facts gas slots refund base accessed
+        returnData)
       (Stored code message (pc + 1) (fact.current :: rest) size facts
         (gas - if fact.warm then 100 else 2100) (touch { fact with warm := true } slots) refund
-        base accessed) := by
+        base accessed returnData) := by
   rintro evm ⟨⟨hat, hsize, hmod, hall⟩, hslots, hrefund, hagree⟩
   obtain ⟨ho, hc, hw⟩ := hslots fact hfact
   rw [haddress] at ho hc hw
@@ -405,11 +410,12 @@ theorem sstore_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {
     (hstipend : CALL_STIPEND < gas)
     (hgas : sstoreCost fork fact.original fact.current new (!fact.warm) ≤ gas) :
     Hoare fork
-      (Stored code message pc (fact.key :: new :: rest) size facts gas slots refund base accessed)
+      (Stored code message pc (fact.key :: new :: rest) size facts gas slots refund base accessed
+        returnData)
       (Stored code message (pc + 1) rest size facts
         (gas - sstoreCost fork fact.original fact.current new (!fact.warm))
         (touch { fact with current := new, warm := true } slots)
-        (refund + sstoreRefund fork fact.original fact.current new) base accessed) := by
+        (refund + sstoreRefund fork fact.original fact.current new) base accessed returnData) := by
   rintro evm ⟨⟨hat, hsize, hmod, hall⟩, hslots, hrefund, hagree⟩
   obtain ⟨ho, hc, hw⟩ := hslots fact hfact
   rw [haddress] at ho hc hw
@@ -453,48 +459,36 @@ theorem sstore_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {
         ((by rw [← haddress]; exact h : _ ∨ _).imp Ne.symm Ne.symm))
       horig haccount hcode hparent)⟩
 
-/-- From Byzantium, RETURNDATASIZE pushes the size of the return data `data`, for 2 gas.
+/-- From Byzantium, RETURNDATASIZE pushes the size of the return data, for 2 gas.
 
 The frame keeps the return data and every fact. -/
-theorem returndatasize_stored (hfork : .byzantium ≤ fork) {data : ByteArray}
-    (hlt : pc < code.size) (hbyte : code[pc] = 0x3d) (hgas : 2 ≤ gas)
-    (hstack : stack.length < STACK_LIMIT) :
-    Hoare fork
-      (fun evm => Stored code message pc stack size facts gas slots refund base accessed evm ∧
-        evm.returnData = data)
-      (fun evm => Stored code message (pc + 1) (BitVec.ofNat 256 data.size :: stack) size facts
-        (gas - 2) slots refund base accessed evm ∧ evm.returnData = data) := by
-  rintro evm ⟨⟨⟨hat, hsize, hmod, hall⟩, hslots, hrefund, hagree⟩, hrd⟩
-  obtain ⟨after, hreach, hat', hrd'⟩ := returndatasize hfork hlt hbyte hgas hstack evm ⟨hat, hrd⟩
-  have hm := hat'.2.2.2.2.2.1
-  exact ⟨after, hreach, stored_of_known
-    ⟨by rw [hm]; exact hat', by rw [hm]; exact hsize, hmod, by rw [hm]; exact hall⟩
-    hslots hrefund hagree, hrd'⟩
+theorem returndatasize_stored (hfork : .byzantium ≤ fork) (hlt : pc < code.size)
+    (hbyte : code[pc] = 0x3d) (hgas : 2 ≤ gas) (hstack : stack.length < STACK_LIMIT) :
+    Hoare fork (Stored code message pc stack size facts gas slots refund base accessed returnData)
+      (Stored code message (pc + 1) (BitVec.ofNat 256 returnData.size :: stack) size facts
+        (gas - 2) slots refund base accessed returnData) :=
+  Stored.of_at fun _ _ _ => returndatasize hfork hlt hbyte hgas hstack
 
-/-- From Byzantium, RETURNDATACOPY of a range of the return data `data` writes a fact.
+/-- From Byzantium, RETURNDATACOPY of a range of the return data writes a fact.
 
 The range ends within the return data.
 
 It keeps the facts of memory apart from the range, the return data and every fact of a slot.
 
 It pays 3, 3 gas a word and the growth of memory, which depends on its size. -/
-theorem returndatacopy_stored (hfork : .byzantium ≤ fork) {data : ByteArray}
-    {start offset length : U256} {rest : List U256} (hlt : pc < code.size)
-    (hbyte : code[pc] = 0x3e) (hz : length ≠ 0) (fit : offset.toNat + length.toNat ≤ data.size)
+theorem returndatacopy_stored (hfork : .byzantium ≤ fork) {start offset length : U256}
+    {rest : List U256} (hlt : pc < code.size) (hbyte : code[pc] = 0x3e) (hz : length ≠ 0)
+    (fit : offset.toNat + length.toNat ≤ returnData.size)
     (hgas : 3 + 3 * wordCount length.toNat + (extendMemory size [(start, length)]).cost ≤ gas) :
     Hoare fork
-      (fun evm => Stored code message pc (start :: offset :: length :: rest) size facts gas slots
-        refund base accessed evm ∧ evm.returnData = data)
-      (fun evm => Stored code message (pc + 1) rest
-        (size + (extendMemory size [(start, length)]).expandBy)
-        ((start.toNat, memoryReadBytes data offset.toNat length.toNat) ::
+      (Stored code message pc (start :: offset :: length :: rest) size facts gas slots refund base
+        accessed returnData)
+      (Stored code message (pc + 1) rest (size + (extendMemory size [(start, length)]).expandBy)
+        ((start.toNat, memoryReadBytes returnData offset.toNat length.toNat) ::
           facts.filter (Apart start.toNat length.toNat))
         (gas - (3 + 3 * wordCount length.toNat + (extendMemory size [(start, length)]).cost))
-        slots refund base accessed evm ∧ evm.returnData = data) := by
-  rintro evm ⟨⟨hk, hslots, hrefund, hagree⟩, hrd⟩
-  obtain ⟨after, hreach, hk', hrd'⟩ :=
-    returndatacopy_known hfork hlt hbyte hz fit hgas evm ⟨hk, hrd⟩
-  exact ⟨after, hreach, stored_of_known hk' hslots hrefund hagree, hrd'⟩
+        slots refund base accessed returnData) :=
+  Stored.of_known fun _ _ => returndatacopy_known hfork hlt hbyte hz fit hgas
 
 /-- A halted frame with its error, output and gas, and the facts of its slots.
 
@@ -511,9 +505,10 @@ def StoppedStored (reverted : Bool) (output : ByteArray) (gas : Nat) (slots : Li
 
 /-- A rule that halts and keeps the state and the substate, for every one, keeps every fact. -/
 theorem StoppedStored.of_known {reverted : Bool} {output : ByteArray}
-    (h : ∀ state substate, Spec fork (Known code message pc stack size facts gas state substate)
+    (h : ∀ state substate, Spec fork
+      (Known code message pc stack size facts gas state substate returnData)
       (Halted reverted output gas' state substate)) :
-    Spec fork (Stored code message pc stack size facts gas slots refund base accessed)
+    Spec fork (Stored code message pc stack size facts gas slots refund base accessed returnData)
       (StoppedStored reverted output gas' slots refund base accessed) := by
   rintro evm ⟨hk, hslots, hrefund, hagree⟩
   obtain ⟨after, hreach, -, hrun, herr, hout, hg, hs, hss⟩ := h evm.state evm.substate evm hk
@@ -522,7 +517,7 @@ theorem StoppedStored.of_known {reverted : Bool} {output : ByteArray}
 
 /-- STOP stops the frame with no error and an empty output, at no price, and keeps every fact. -/
 theorem stop_stored (hlt : pc < code.size) (hbyte : code[pc] = 0x00) :
-    Spec fork (Stored code message pc stack size facts gas slots refund base accessed)
+    Spec fork (Stored code message pc stack size facts gas slots refund base accessed returnData)
       (StoppedStored false .empty gas slots refund base accessed) :=
   StoppedStored.of_known fun _ _ evm hk => stop hlt hbyte evm hk.1
 

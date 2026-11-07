@@ -61,17 +61,17 @@ variable {fork : Fork}
 /-- A frame reaches itself, named with an equal stack, an equal memory and an equal gas. -/
 theorem reshape {code : ByteArray} {message : Message fork} {pc : Nat} {s s' : List U256}
     {m m' : ByteArray} {g g' : Nat} {st : State.TransactionState} {ss : Substate}
-    (hs : s = s') (hm : m = m') (hg : g = g') :
-    Hoare fork (At code message pc s m g st ss) (At code message pc s' m' g' st ss) := by
+    {rd : ByteArray} (hs : s = s') (hm : m = m') (hg : g = g') :
+    Hoare fork (At code message pc s m g st ss rd) (At code message pc s' m' g' st ss rd) := by
   subst hs hm hg
   exact Triple.of_imp fun _ h => h
 
 /-- A specification also holds from a frame with an equal stack, memory and gas. -/
 theorem Spec.reshape {code : ByteArray} {message : Message fork} {pc : Nat} {s s' : List U256}
     {m m' : ByteArray} {g g' : Nat} {st : State.TransactionState} {ss : Substate}
-    {Q : Evm fork Nat → Prop} (hs : s = s') (hm : m = m') (hg : g = g')
-    (h : Spec fork (At code message pc s' m' g' st ss) Q) :
-    Spec fork (At code message pc s m g st ss) Q :=
+    {rd : ByteArray} {Q : Evm fork Nat → Prop} (hs : s = s') (hm : m = m') (hg : g = g')
+    (h : Spec fork (At code message pc s' m' g' st ss rd) Q) :
+    Spec fork (At code message pc s m g st ss rd) Q :=
   Spec.seq (Logic.reshape hs hm hg) h
 
 open Lean.Parser.Tactic

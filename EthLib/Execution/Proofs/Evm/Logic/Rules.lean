@@ -44,18 +44,20 @@ variable {fork : Fork}
 
 variable {code : ByteArray} {message : Message fork} {pc : Nat} {stack : List U256}
   {memory : ByteArray} {gas : Nat} {state : State.TransactionState} {substate : Substate}
+  {returnData : ByteArray}
 
 /-- A triple whose postcondition holds of another memory, equal to the one it names. -/
 theorem Hoare.memory_eq {P : Evm fork Nat → Prop} {code : ByteArray} {pc : Nat}
     {stack : List U256} {m m' : ByteArray} {gas : Nat} {st : State.TransactionState}
-    {ss : Substate} (h : Hoare fork P (At code message pc stack m gas st ss)) (hm : m = m') :
-    Hoare fork P (At code message pc stack m' gas st ss) := hm ▸ h
+    {ss : Substate} (h : Hoare fork P (At code message pc stack m gas st ss returnData))
+    (hm : m = m') :
+    Hoare fork P (At code message pc stack m' gas st ss returnData) := hm ▸ h
 
 /-- A triple whose postcondition holds of another gas, equal to the one it names. -/
 theorem Hoare.gas_eq {P : Evm fork Nat → Prop} {code : ByteArray} {pc : Nat}
     {stack : List U256} {m : ByteArray} {gas gas' : Nat} {st : State.TransactionState}
-    {ss : Substate} (h : Hoare fork P (At code message pc stack m gas st ss))
-    (hg : gas = gas') : Hoare fork P (At code message pc stack m gas' st ss) := hg ▸ h
+    {ss : Substate} (h : Hoare fork P (At code message pc stack m gas st ss returnData))
+    (hg : gas = gas') : Hoare fork P (At code message pc stack m gas' st ss returnData) := hg ▸ h
 
 /-! ## The instruction table -/
 
@@ -153,15 +155,15 @@ theorem charge_nat {gas amount : Nat} (h : amount ≤ gas) :
 /-- CALLDATALOAD on an offset puts the word of call data there in its place, for 3 gas. -/
 theorem calldataload {start : U256} {rest : List U256} (hlt : pc < code.size)
     (hbyte : code[pc] = 0x35) (hgas : 3 ≤ gas) :
-    Hoare fork (At code message pc (start :: rest) memory gas state substate)
+    Hoare fork (At code message pc (start :: rest) memory gas state substate returnData)
       (At code message (pc + 1) (loadWord message.data start.toNat 32 :: rest) memory
-        (gas - 3) state substate) := by
+        (gas - 3) state substate returnData) := by
   apply At.rule hlt hbyte (ofByte_of_decode (op := .calldataload) rfl (Fork.frontier_le _))
     instruction_calldataload
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   rw [calldataloadStep_cons hst, charge_nat (by rw [hg]; exact hgas)]
   refine ⟨_, rfl, hcode, hj, hm, by simp [hpc], by simp [hm], hmem,
-    by simp [hg, OPCODE_CALLDATALOAD, VERY_LOW], hrun, herr, hout, hs, hss⟩
+    by simp [hg, OPCODE_CALLDATALOAD, VERY_LOW], hrun, herr, hout, hs, hss, hrd⟩
 
 /-- An opcode whose instruction reads the frame pushes the word it reads, and pays its price.
 
@@ -175,48 +177,49 @@ theorem push_of_readFrame {byte : UInt8} {op : Op} {cost : Nat} {f : Evm fork Na
     (hword : ∀ evm : Evm fork Nat, evm.code = code → evm.message = message → evm.pc = pc →
       evm.memory = memory → f evm = word)
     (hgas : cost ≤ gas) (hstack : stack.length < STACK_LIMIT) :
-    Hoare fork (At code message pc stack memory gas state substate)
-      (At code message (pc + 1) (word :: stack) memory (gas - cost) state substate) := by
+    Hoare fork (At code message pc stack memory gas state substate returnData)
+      (At code message (pc + 1) (word :: stack) memory (gas - cost) state substate returnData) := by
   apply At.rule hlt hbyte decoded hrun
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   rw [readFrame_of_length_lt (by rw [hst]; exact hstack), charge_nat (by rw [hg]; exact hgas)]
   exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], by
       dsimp only
       rw [hword { evm with gas := evm.gas - cost } hcode hm hpc hmem, hst], hmem,
-    by simp [hg], hrun, herr, hout, hs, hss⟩
+    by simp [hg], hrun, herr, hout, hs, hss, hrd⟩
 
 /-- CALLER pushes the address of the caller of the message as a word, for 2 gas. -/
 theorem caller (hlt : pc < code.size) (hbyte : code[pc] = 0x33) (hgas : 2 ≤ gas)
     (hstack : stack.length < STACK_LIMIT) :
-    Hoare fork (At code message pc stack memory gas state substate)
+    Hoare fork (At code message pc stack memory gas state substate returnData)
       (At code message (pc + 1) (message.caller.toU256 :: stack) memory (gas - 2) state
-        substate) :=
+        substate returnData) :=
   push_of_readFrame hlt hbyte (ofByte_of_decode (op := .caller) rfl (Fork.frontier_le _))
     instruction_caller (fun _ _ hm _ _ => by rw [hm]) hgas hstack
 
 /-- CALLVALUE pushes the value that the message sends, for 2 gas. -/
 theorem callvalue (hlt : pc < code.size) (hbyte : code[pc] = 0x34) (hgas : 2 ≤ gas)
     (hstack : stack.length < STACK_LIMIT) :
-    Hoare fork (At code message pc stack memory gas state substate)
-      (At code message (pc + 1) (message.value :: stack) memory (gas - 2) state substate) :=
+    Hoare fork (At code message pc stack memory gas state substate returnData)
+      (At code message (pc + 1) (message.value :: stack) memory (gas - 2) state substate
+        returnData) :=
   push_of_readFrame hlt hbyte (ofByte_of_decode (op := .callvalue) rfl (Fork.frontier_le _))
     rfl (fun _ _ hm _ _ => by rw [hm]) hgas hstack
 
 /-- ADDRESS pushes the address of the current account as a word, for 2 gas. -/
 theorem address (hlt : pc < code.size) (hbyte : code[pc] = 0x30) (hgas : 2 ≤ gas)
     (hstack : stack.length < STACK_LIMIT) :
-    Hoare fork (At code message pc stack memory gas state substate)
+    Hoare fork (At code message pc stack memory gas state substate returnData)
       (At code message (pc + 1) (message.currentTarget.toU256 :: stack) memory (gas - 2) state
-        substate) :=
+        substate returnData) :=
   push_of_readFrame hlt hbyte (ofByte_of_decode (op := .address) rfl (Fork.frontier_le _))
     rfl (fun _ _ hm _ _ => by rw [hm]) hgas hstack
 
 /-- ORIGIN pushes the address of the sender of the transaction as a word, for 2 gas. -/
 theorem origin (hlt : pc < code.size) (hbyte : code[pc] = 0x32) (hgas : 2 ≤ gas)
     (hstack : stack.length < STACK_LIMIT) :
-    Hoare fork (At code message pc stack memory gas state substate)
+    Hoare fork (At code message pc stack memory gas state substate returnData)
       (At code message (pc + 1) (message.txEnv.origin.toU256 :: stack) memory (gas - 2) state
-        substate) :=
+        substate returnData) :=
   push_of_readFrame hlt hbyte (ofByte_of_decode (op := .origin) rfl (Fork.frontier_le _))
     rfl (fun _ _ hm _ _ => by rw [hm]) hgas hstack
 
@@ -225,9 +228,9 @@ theorem origin (hlt : pc < code.size) (hbyte : code[pc] = 0x32) (hgas : 2 ≤ ga
 The word is the size modulo `2 ^ 256`. -/
 theorem calldatasize (hlt : pc < code.size) (hbyte : code[pc] = 0x36) (hgas : 2 ≤ gas)
     (hstack : stack.length < STACK_LIMIT) :
-    Hoare fork (At code message pc stack memory gas state substate)
+    Hoare fork (At code message pc stack memory gas state substate returnData)
       (At code message (pc + 1) (BitVec.ofNat 256 message.data.size :: stack) memory (gas - 2)
-        state substate) :=
+        state substate returnData) :=
   push_of_readFrame hlt hbyte (ofByte_of_decode (op := .calldatasize) rfl (Fork.frontier_le _))
     rfl (fun _ _ hm _ _ => by rw [hm]) hgas hstack
 
@@ -236,18 +239,18 @@ theorem calldatasize (hlt : pc < code.size) (hbyte : code[pc] = 0x36) (hgas : 2 
 The word is the size modulo `2 ^ 256`. -/
 theorem codesize (hlt : pc < code.size) (hbyte : code[pc] = 0x38) (hgas : 2 ≤ gas)
     (hstack : stack.length < STACK_LIMIT) :
-    Hoare fork (At code message pc stack memory gas state substate)
+    Hoare fork (At code message pc stack memory gas state substate returnData)
       (At code message (pc + 1) (BitVec.ofNat 256 code.size :: stack) memory (gas - 2) state
-        substate) :=
+        substate returnData) :=
   push_of_readFrame hlt hbyte (ofByte_of_decode (op := .codesize) rfl (Fork.frontier_le _))
     rfl (fun _ hc _ _ _ => by rw [hc]) hgas hstack
 
 /-- PC pushes the program counter of the opcode, for 2 gas. -/
 theorem pc_rule (hlt : pc < code.size) (hbyte : code[pc] = 0x58) (hgas : 2 ≤ gas)
     (hstack : stack.length < STACK_LIMIT) :
-    Hoare fork (At code message pc stack memory gas state substate)
+    Hoare fork (At code message pc stack memory gas state substate returnData)
       (At code message (pc + 1) (BitVec.ofNat 256 pc :: stack) memory (gas - 2) state
-        substate) :=
+        substate returnData) :=
   push_of_readFrame hlt hbyte (ofByte_of_decode (op := .pc) rfl (Fork.frontier_le _))
     rfl (fun _ _ _ hp _ => by rw [hp]) hgas hstack
 
@@ -256,25 +259,24 @@ theorem pc_rule (hlt : pc < code.size) (hbyte : code[pc] = 0x58) (hgas : 2 ≤ g
 The word is the size modulo `2 ^ 256`. -/
 theorem msize (hlt : pc < code.size) (hbyte : code[pc] = 0x59) (hgas : 2 ≤ gas)
     (hstack : stack.length < STACK_LIMIT) :
-    Hoare fork (At code message pc stack memory gas state substate)
+    Hoare fork (At code message pc stack memory gas state substate returnData)
       (At code message (pc + 1) (BitVec.ofNat 256 memory.size :: stack) memory (gas - 2) state
-        substate) :=
+        substate returnData) :=
   push_of_readFrame hlt hbyte (ofByte_of_decode (op := .msize) rfl (Fork.frontier_le _))
     rfl (fun _ _ _ _ hmem => by rw [hmem]) hgas hstack
 
 /-- From Byzantium, RETURNDATASIZE pushes the size of the return data, for 2 gas, by EIP-211.
 
-The frame holds the return data `data`, and keeps it.
+The frame keeps its return data.
 
 The word is the size modulo `2 ^ 256`. -/
-theorem returndatasize (hfork : .byzantium ≤ fork) {data : ByteArray} (hlt : pc < code.size)
+theorem returndatasize (hfork : .byzantium ≤ fork) (hlt : pc < code.size)
     (hbyte : code[pc] = 0x3d) (hgas : 2 ≤ gas) (hstack : stack.length < STACK_LIMIT) :
-    Hoare fork
-      (fun evm => At code message pc stack memory gas state substate evm ∧ evm.returnData = data)
-      (fun evm => At code message (pc + 1) (BitVec.ofNat 256 data.size :: stack) memory (gas - 2)
-        state substate evm ∧ evm.returnData = data) := by
+    Hoare fork (At code message pc stack memory gas state substate returnData)
+      (At code message (pc + 1) (BitVec.ofNat 256 returnData.size :: stack) memory (gas - 2)
+        state substate returnData) := by
   apply Triple.of_step
-  rintro evm ⟨⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩, hrd⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   have ok := readFrame_of_length_lt (cost := OPCODE_RETURNDATASIZE)
     (value := fun evm => BitVec.ofNat 256 evm.returnData.size) (by rw [hst]; exact hstack)
   have hcost : OPCODE_RETURNDATASIZE = 2 := rfl
@@ -282,45 +284,47 @@ theorem returndatasize (hfork : .byzantium ≤ fork) {data : ByteArray} (hlt : p
   exact ⟨_, Step.of_code hrun hcode hpc hlt hbyte
       (ofByte_of_decode (op := .returndatasize) rfl hfork) rfl ok,
     ⟨hcode, hj, hm, by simp [hpc], by simp [hst, hrd], hmem, rfl, hrun, herr, hout, hs,
-      hss⟩, hrd⟩
+      hss, hrd⟩⟩
 
 /-- A two-operand instruction of the stack, on `x` then `y`, puts `f x y` in their place. -/
 theorem binary {byte : UInt8} {op : Op} {cost : Nat} {f : U256 → U256 → U256} {x y : U256}
     {rest : List U256} (hlt : pc < code.size) (hbyte : code[pc] = byte)
     (decoded : Op.ofByte fork byte = some op)
     (hrun : instruction (Meter := Nat) fork op = some (binaryOp cost f)) (hgas : cost ≤ gas) :
-    Hoare fork (At code message pc (x :: y :: rest) memory gas state substate)
-      (At code message (pc + 1) (f x y :: rest) memory (gas - cost) state substate) := by
+    Hoare fork (At code message pc (x :: y :: rest) memory gas state substate returnData)
+      (At code message (pc + 1) (f x y :: rest) memory (gas - cost) state substate returnData) := by
   apply At.rule hlt hbyte decoded hrun
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   rw [binaryOp_cons hst, charge_nat (by rw [hg]; exact hgas)]
-  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, hmem, by simp [hg], hrun, herr, hout, hs, hss⟩
+  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, hmem, by simp [hg], hrun, herr, hout, hs, hss,
+    hrd⟩
 
 /-- A one-operand instruction of the stack, on `x`, puts `f x` in its place. -/
 theorem unary {byte : UInt8} {op : Op} {cost : Nat} {f : U256 → U256} {x : U256}
     {rest : List U256} (hlt : pc < code.size) (hbyte : code[pc] = byte)
     (decoded : Op.ofByte fork byte = some op)
     (hrun : instruction (Meter := Nat) fork op = some (unaryOp cost f)) (hgas : cost ≤ gas) :
-    Hoare fork (At code message pc (x :: rest) memory gas state substate)
-      (At code message (pc + 1) (f x :: rest) memory (gas - cost) state substate) := by
+    Hoare fork (At code message pc (x :: rest) memory gas state substate returnData)
+      (At code message (pc + 1) (f x :: rest) memory (gas - cost) state substate returnData) := by
   apply At.rule hlt hbyte decoded hrun
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   rw [unaryOp_cons hst, charge_nat (by rw [hg]; exact hgas)]
-  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, hmem, by simp [hg], hrun, herr, hout, hs, hss⟩
+  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, hmem, by simp [hg], hrun, herr, hout, hs, hss,
+    hrd⟩
 
 /-- JUMP to a JUMPDEST of the code goes there, for 8 gas. -/
 theorem jump {destination : U256} {rest : List U256} (hlt : pc < code.size)
     (hbyte : code[pc] = 0x56) (hgas : 8 ≤ gas)
     (valid : isValidJumpDest (validJumpDestinations code) destination.toNat = true) :
-    Hoare fork (At code message pc (destination :: rest) memory gas state substate)
-      (At code message destination.toNat rest memory (gas - 8) state substate) := by
+    Hoare fork (At code message pc (destination :: rest) memory gas state substate returnData)
+      (At code message destination.toNat rest memory (gas - 8) state substate returnData) := by
   apply At.rule hlt hbyte (ofByte_of_decode (op := .jump) rfl (Fork.frontier_le _))
     instruction_jump
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   rw [jumpStep_of_isValidJumpDest hst (charge_nat (by rw [hg]; exact hgas))
     (by rw [hj]; exact valid)]
   exact ⟨_, rfl, hcode, hj, hm, rfl, rfl, hmem, by simp [hg, OPCODE_JUMP, MID], hrun, herr, hout,
-    hs, hss⟩
+    hs, hss, hrd⟩
 
 /-- MLOAD puts the word of memory at an offset in its place, after memory grows to hold it.
 
@@ -328,22 +332,22 @@ It pays 3 and the growth of memory. -/
 theorem mload {start : U256} {rest : List U256} (hlt : pc < code.size)
     (hbyte : code[pc] = 0x51)
     (hgas : 3 + (extendMemory memory.size [(start, 32)]).cost ≤ gas) :
-    Hoare fork (At code message pc (start :: rest) memory gas state substate)
+    Hoare fork (At code message pc (start :: rest) memory gas state substate returnData)
       (At code message (pc + 1)
         (loadWord (memoryReadBytes
           (memoryExtend memory (extendMemory memory.size [(start, 32)]).expandBy)
           start.toNat 32) 0 32 :: rest)
         (memoryExtend memory (extendMemory memory.size [(start, 32)]).expandBy)
-        (gas - (3 + (extendMemory memory.size [(start, 32)]).cost)) state substate) := by
+        (gas - (3 + (extendMemory memory.size [(start, 32)]).cost)) state substate returnData) := by
   apply At.rule hlt hbyte (ofByte_of_decode (op := .mload) rfl (Fork.frontier_le _))
     instruction_mload
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   subst hmem hg
   have hcost : OPCODE_MLOAD_BASE = 3 := rfl
   rw [mloadStep_cons hst]
   dsimp only
   rw [hcost, charge_nat hgas]
-  refine ⟨_, rfl, hcode, hj, hm, by simp [hpc], ?_, ?_, ?_, hrun, herr, hout, hs, hss⟩
+  refine ⟨_, rfl, hcode, hj, hm, by simp [hpc], ?_, ?_, ?_, hrun, herr, hout, hs, hss, hrd⟩
   · show _ :: rest = _ :: rest
     rfl
   · simp
@@ -360,60 +364,60 @@ It pushes a copy of the word `x` at depth `n`, for 3 gas, with room for a word. 
 theorem dup_of_decode {byte : UInt8} {n : Fin 16} {x : U256} (hlt : pc < code.size)
     (hbyte : code[pc] = byte) (decoded : Op.decode byte = some (.dup n))
     (hx : stack[n.val]? = some x) (hgas : 3 ≤ gas) (hstack : stack.length < STACK_LIMIT) :
-    Hoare fork (At code message pc stack memory gas state substate)
-      (At code message (pc + 1) (x :: stack) memory (gas - 3) state substate) := by
+    Hoare fork (At code message pc stack memory gas state substate returnData)
+      (At code message (pc + 1) (x :: stack) memory (gas - 3) state substate returnData) := by
   apply At.rule hlt hbyte (ofByte_of_decode decoded (Fork.frontier_le _)) (instruction_dup n)
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   have hlen : evm.stack.val.length < STACK_LIMIT := by rw [hst]; exact hstack
   rw [dupN_of_getElem? (x := x) (by rw [hst]; exact hx) hlen,
     charge_nat (by rw [hg]; exact hgas)]
   exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], by simp [hst], hmem,
-    by simp [hg, OPCODE_DUP, VERY_LOW], hrun, herr, hout, hs, hss⟩
+    by simp [hg, OPCODE_DUP, VERY_LOW], hrun, herr, hout, hs, hss, hrd⟩
 
 /-- DUP(n + 1) pushes a copy of the word `x` at depth `n`, for 3 gas, with room for a word. -/
 theorem dup (n : Fin 16) {x : U256} (hlt : pc < code.size)
     (hbyte : code[pc] = (0x80 + n.val).toUInt8) (hx : stack[n.val]? = some x) (hgas : 3 ≤ gas)
     (hstack : stack.length < STACK_LIMIT) :
-    Hoare fork (At code message pc stack memory gas state substate)
-      (At code message (pc + 1) (x :: stack) memory (gas - 3) state substate) :=
+    Hoare fork (At code message pc stack memory gas state substate returnData)
+      (At code message (pc + 1) (x :: stack) memory (gas - 3) state substate returnData) :=
   dup_of_decode hlt hbyte (decode_dup n) hx hgas hstack
 
 /-- DUP1 pushes a copy of the top word, for 3 gas. -/
 theorem dup1 {x : U256} {rest : List U256} (hlt : pc < code.size) (hbyte : code[pc] = 0x80)
     (hgas : 3 ≤ gas) (hstack : (x :: rest).length < STACK_LIMIT) :
-    Hoare fork (At code message pc (x :: rest) memory gas state substate)
-      (At code message (pc + 1) (x :: x :: rest) memory (gas - 3) state substate) :=
+    Hoare fork (At code message pc (x :: rest) memory gas state substate returnData)
+      (At code message (pc + 1) (x :: x :: rest) memory (gas - 3) state substate returnData) :=
   dup 0 hlt (by rw [hbyte]; rfl) rfl hgas hstack
 
 /-- JUMPDEST costs 1 and goes on. -/
 theorem jumpdest (hlt : pc < code.size) (hbyte : code[pc] = 0x5b) (hgas : 1 ≤ gas) :
-    Hoare fork (At code message pc stack memory gas state substate)
-      (At code message (pc + 1) stack memory (gas - 1) state substate) := by
+    Hoare fork (At code message pc stack memory gas state substate returnData)
+      (At code message (pc + 1) stack memory (gas - 1) state substate returnData) := by
   apply At.rule hlt hbyte (ofByte_of_decode (op := .jumpdest) rfl (Fork.frontier_le _))
     instruction_jumpdest
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   rw [jumpdestStep_eq, charge_nat (by rw [hg]; exact hgas)]
   exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], hst, hmem, by simp [hg, OPCODE_JUMPDEST], hrun,
-    herr, hout, hs, hss⟩
+    herr, hout, hs, hss, hrd⟩
 
 /-- JUMPI on the condition 0 goes on to the next opcode, for 10 gas. -/
 theorem jumpi_zero {destination : U256} {rest : List U256} (hlt : pc < code.size)
     (hbyte : code[pc] = 0x57) (hgas : 10 ≤ gas) :
-    Hoare fork (At code message pc (destination :: 0 :: rest) memory gas state substate)
-      (At code message (pc + 1) rest memory (gas - 10) state substate) := by
+    Hoare fork (At code message pc (destination :: 0 :: rest) memory gas state substate returnData)
+      (At code message (pc + 1) rest memory (gas - 10) state substate returnData) := by
   apply At.rule hlt hbyte (ofByte_of_decode (op := .jumpi) rfl (Fork.frontier_le _))
     instruction_jumpi
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   rw [jumpiStep_zero hst, charge_nat (by rw [hg]; exact hgas)]
   exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, hmem, by simp [hg, OPCODE_JUMPI, HIGH],
-    hrun, herr, hout, hs, hss⟩
+    hrun, herr, hout, hs, hss, hrd⟩
 
 /-- JUMPI on a condition equal to 0 goes to the next opcode, for 10 gas. -/
 theorem jumpi_of_eq_zero {destination condition : U256} {rest : List U256}
     (hlt : pc < code.size) (hbyte : code[pc] = 0x57) (hgas : 10 ≤ gas) (zero : condition = 0) :
     Hoare fork
-      (At code message pc (destination :: condition :: rest) memory gas state substate)
-      (At code message (pc + 1) rest memory (gas - 10) state substate) := by
+      (At code message pc (destination :: condition :: rest) memory gas state substate returnData)
+      (At code message (pc + 1) rest memory (gas - 10) state substate returnData) := by
   subst zero
   exact jumpi_zero hlt hbyte hgas
 
@@ -422,15 +426,15 @@ theorem jumpi_taken {destination condition : U256} {rest : List U256} (hlt : pc 
     (hbyte : code[pc] = 0x57) (hgas : 10 ≤ gas) (nonzero : condition ≠ 0)
     (valid : isValidJumpDest (validJumpDestinations code) destination.toNat = true) :
     Hoare fork
-      (At code message pc (destination :: condition :: rest) memory gas state substate)
-      (At code message destination.toNat rest memory (gas - 10) state substate) := by
+      (At code message pc (destination :: condition :: rest) memory gas state substate returnData)
+      (At code message destination.toNat rest memory (gas - 10) state substate returnData) := by
   apply At.rule hlt hbyte (ofByte_of_decode (op := .jumpi) rfl (Fork.frontier_le _))
     instruction_jumpi
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   rw [jumpiStep_of_isValidJumpDest hst nonzero (charge_nat (by rw [hg]; exact hgas))
     (by rw [hj]; exact valid)]
   exact ⟨_, rfl, hcode, hj, hm, rfl, rfl, hmem, by simp [hg, OPCODE_JUMPI, HIGH], hrun, herr,
-    hout, hs, hss⟩
+    hout, hs, hss, hrd⟩
 
 /-- MSTORE writes a word at an offset of memory, after memory grows to hold it.
 
@@ -438,20 +442,20 @@ It pays 3 and the growth of memory. -/
 theorem mstore {start value : U256} {rest : List U256} (hlt : pc < code.size)
     (hbyte : code[pc] = 0x52)
     (hgas : 3 + (extendMemory memory.size [(start, 32)]).cost ≤ gas) :
-    Hoare fork (At code message pc (start :: value :: rest) memory gas state substate)
+    Hoare fork (At code message pc (start :: value :: rest) memory gas state substate returnData)
       (At code message (pc + 1) rest
         (memoryWrite (memoryExtend memory (extendMemory memory.size [(start, 32)]).expandBy)
           start.toNat (wordBytes value))
-        (gas - (3 + (extendMemory memory.size [(start, 32)]).cost)) state substate) := by
+        (gas - (3 + (extendMemory memory.size [(start, 32)]).cost)) state substate returnData) := by
   apply At.rule hlt hbyte (ofByte_of_decode (op := .mstore) rfl (Fork.frontier_le _))
     instruction_mstore
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   subst hmem hg
   have hcost : OPCODE_MSTORE_BASE = 3 := rfl
   rw [mstoreStep_cons hst]
   dsimp only
   rw [hcost, charge_nat hgas]
-  refine ⟨_, rfl, hcode, hj, hm, by simp [hpc], ?_, ?_, ?_, hrun, herr, hout, hs, hss⟩
+  refine ⟨_, rfl, hcode, hj, hm, by simp [hpc], ?_, ?_, ?_, hrun, herr, hout, hs, hss, hrd⟩
   · show rest = rest
     rfl
   · simp
@@ -464,22 +468,22 @@ theorem keccak256 {start size : U256} {rest : List U256} (hlt : pc < code.size)
     (hbyte : code[pc] = 0x20)
     (hgas :
       keccak256Cost size + (extendMemory memory.size [(start, size)]).cost ≤ gas) :
-    Hoare fork (At code message pc (start :: size :: rest) memory gas state substate)
+    Hoare fork (At code message pc (start :: size :: rest) memory gas state substate returnData)
       (At code message (pc + 1)
         (keccak (memoryReadBytes
           (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
           start.toNat size.toNat) :: rest)
         (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
         (gas - (keccak256Cost size + (extendMemory memory.size [(start, size)]).cost))
-        state substate) := by
+        state substate returnData) := by
   apply At.rule hlt hbyte (ofByte_of_decode (op := .keccak256) rfl (Fork.frontier_le _))
     instruction_keccak256
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   subst hmem hg
   rw [keccak256Step_cons hst]
   dsimp only
   rw [charge_nat hgas]
-  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, rfl, rfl, hrun, herr, hout, hs, hss⟩
+  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, rfl, rfl, hrun, herr, hout, hs, hss, hrd⟩
 
 /-- The price of SLOAD from Berlin: 2100 for a cold slot and 100 for a warm one, by EIP-2929. -/
 theorem sloadCost_of_berlin (h : .berlin ≤ fork) (cold : Bool) :
@@ -496,7 +500,7 @@ theorem sload (hfork : .berlin ≤ fork) {key : U256} {rest : List U256} {cold :
     (hcold : decide (U256.toBeBytes key ∉
       substate.accessedStorageKeys.getD message.currentTarget ∅) = cold)
     (hgas : (if cold then 2100 else 100) ≤ gas) :
-    Hoare fork (At code message pc (key :: rest) memory gas state substate)
+    Hoare fork (At code message pc (key :: rest) memory gas state substate returnData)
       (At code message (pc + 1)
         (state.getStorage message.currentTarget (U256.toBeBytes key) :: rest) memory
         (gas - if cold then 2100 else 100)
@@ -504,15 +508,15 @@ theorem sload (hfork : .berlin ≤ fork) {key : U256} {rest : List U256} {cold :
         { substate with
           accessedStorageKeys := (substate.accessedStorageKeys.insert message.currentTarget
             ((substate.accessedStorageKeys.getD message.currentTarget ∅).insert
-              (U256.toBeBytes key))) }) := by
+              (U256.toBeBytes key))) } returnData) := by
   apply At.rule hlt hbyte (ofByte_of_decode (op := .sload) rfl (Fork.frontier_le _))
     instruction_sload
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   subst hm hg hs hss
   rw [sloadStep_cons hst]
   simp only [accessStorageKey, hfork, ↓reduceIte, hcold, sloadCost_of_berlin hfork]
   rw [charge_nat hgas]
-  refine ⟨_, rfl, hcode, hj, rfl, by simp [hpc], ?_, hmem, ?_, hrun, herr, hout, rfl, rfl⟩
+  refine ⟨_, rfl, hcode, hj, rfl, by simp [hpc], ?_, hmem, ?_, hrun, herr, hout, rfl, rfl, hrd⟩
   · show _ :: rest = _ :: rest
     rfl
   · simp
@@ -525,32 +529,32 @@ def Halted (reverted : Bool) (output : ByteArray) (gas : Nat) (state : State.Tra
 
 /-- STOP stops the frame with no error and an empty output, at no price. -/
 theorem stop (hlt : pc < code.size) (hbyte : code[pc] = 0x00) :
-    Spec fork (At code message pc stack memory gas state substate)
+    Spec fork (At code message pc stack memory gas state substate returnData)
       (Halted false .empty gas state substate) := by
   apply At.rule hlt hbyte (ofByte_of_decode (op := .stop) rfl (Fork.frontier_le _)) rfl
-  rintro evm ⟨-, -, -, -, -, -, hg, -, herr, hout, hs, hss⟩
+  rintro evm ⟨-, -, -, -, -, -, hg, -, herr, hout, hs, hss, -⟩
   exact ⟨_, stopStep_eq evm, rfl, rfl, herr, hout, hg, hs, hss⟩
 
 /-- A frame at or past the end of its code stops as STOP does, at no price. -/
 theorem stop_of_size_le (hle : code.size ≤ pc) :
-    Spec fork (At code message pc stack memory gas state substate)
+    Spec fork (At code message pc stack memory gas state substate returnData)
       (Halted false .empty gas state substate) := by
   apply Triple.of_step
-  rintro evm ⟨hcode, -, -, hpc, -, -, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hcode, -, -, hpc, -, -, hg, hrun, herr, hout, hs, hss, -⟩
   exact ⟨_, .next hrun (step_of_size_le (by rw [hcode, hpc]; exact hle)), rfl, rfl, herr, hout,
     hg, hs, hss⟩
 
 /-- RETURN stops the frame with a range of memory as its output, and pays the growth of memory. -/
 theorem «return» {start size : U256} {rest : List U256} (hlt : pc < code.size)
     (hbyte : code[pc] = 0xf3) (hgas : (extendMemory memory.size [(start, size)]).cost ≤ gas) :
-    Spec fork (At code message pc (start :: size :: rest) memory gas state substate)
+    Spec fork (At code message pc (start :: size :: rest) memory gas state substate returnData)
       (Halted false
         (memoryReadBytes (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
           start.toNat size.toNat)
         (gas - (extendMemory memory.size [(start, size)]).cost) state substate) := by
   apply At.rule hlt hbyte (ofByte_of_decode (op := .«return») rfl (Fork.frontier_le _))
     instruction_return
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, -⟩
   subst hmem hg
   rw [returnStep_cons hst]
   dsimp only
@@ -563,14 +567,14 @@ It pays the growth of memory, and keeps the gas left. -/
 theorem revert (hfork : .byzantium ≤ fork) {start size : U256} {rest : List U256}
     (hlt : pc < code.size) (hbyte : code[pc] = 0xfd)
     (hgas : (extendMemory memory.size [(start, size)]).cost ≤ gas) :
-    Spec fork (At code message pc (start :: size :: rest) memory gas state substate)
+    Spec fork (At code message pc (start :: size :: rest) memory gas state substate returnData)
       (Halted true
         (memoryReadBytes (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
           start.toNat size.toNat)
         (gas - (extendMemory memory.size [(start, size)]).cost) state substate) := by
   apply At.rule hlt hbyte (ofByte_of_decode (op := .revert) rfl hfork)
     (instruction_revert hfork)
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, -⟩
   subst hmem hg
   rw [revertStep_eq, returnStep_cons hst]
   dsimp only
@@ -592,7 +596,7 @@ It pays the price of the write, from the original, current and new words and the
 
 It writes the word, and adds the refund of the write to the refund counter.
 
-The frame keeps its output. -/
+The frame keeps its output and its return data. -/
 theorem sstoreStep_eq (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     {evm : Evm fork Nat} {key new : U256} {rest : List U256} {state' : State.TransactionState}
     (hst : evm.stack.val = key :: new :: rest) (hstatic : evm.message.isStatic = false)
@@ -620,7 +624,8 @@ theorem sstoreStep_eq (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
             (U256.toBeBytes key))
         refundCounter := evm.substate.refundCounter + sstoreRefund fork
           (evm.state.getStorageOriginal evm.message.currentTarget (U256.toBeBytes key))
-          (evm.state.getStorage evm.message.currentTarget (U256.toBeBytes key)) new } := by
+          (evm.state.getStorage evm.message.currentTarget (U256.toBeBytes key)) new } ∧
+      after.returnData = evm.returnData := by
   have hng : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hglam
   have hist : Fork.istanbul ≤ fork := Nat.le_trans (by decide) hfork
   rcases evm with ⟨pc, ⟨l, hl⟩, memory, code, valid, gas, running, message, output, returnData,
@@ -662,7 +667,7 @@ theorem sstore (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {key new
       (state.getStorage message.currentTarget (U256.toBeBytes key)) new cold ≤ gas)
     (hset : (state.recordStorageRead message.currentTarget (U256.toBeBytes key)).setStorage
       message.currentTarget (U256.toBeBytes key) new = .ok state') :
-    Hoare fork (At code message pc (key :: new :: rest) memory gas state substate)
+    Hoare fork (At code message pc (key :: new :: rest) memory gas state substate returnData)
       (At code message (pc + 1) rest memory
         (gas - sstoreCost fork
           (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
@@ -674,15 +679,15 @@ theorem sstore (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {key new
               (U256.toBeBytes key))
           refundCounter := substate.refundCounter + sstoreRefund fork
             (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
-            (state.getStorage message.currentTarget (U256.toBeBytes key)) new }) := by
+            (state.getStorage message.currentTarget (U256.toBeBytes key)) new } returnData) := by
   apply At.rule hlt hbyte (ofByte_of_decode (op := .sstore) rfl (Fork.frontier_le _))
     instruction_sstore
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   subst hm hg hs hss hcold
-  obtain ⟨after, h, a1, a2, a3, a4, a5, a6, a7, a8, a9, ao, a10, a11⟩ :=
+  obtain ⟨after, h, a1, a2, a3, a4, a5, a6, a7, a8, a9, ao, a10, a11, a12⟩ :=
     sstoreStep_eq hfork hglam hst hstatic hstipend hgas hset
   exact ⟨after, h, by rw [a1, hcode], by rw [a2, hj], a3, by rw [a4, hpc], a5, by rw [a6, hmem],
-    a7, by rw [a8, hrun], by rw [a9, herr], by rw [ao, hout], a10, a11⟩
+    a7, by rw [a8, hrun], by rw [a9, herr], by rw [ao, hout], a10, a11, by rw [a12, hrd]⟩
 
 /-- From Berlin to before Glamsterdam, SSTORE to a slot of the current account, which exists.
 
@@ -710,7 +715,7 @@ theorem sstore_of_account (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
       (∀ other, state'.getAccountOptional other = state.getAccountOptional other) ∧
       (∀ codeHash, state'.getCode codeHash = state.getCode codeHash) ∧
       state'.parent = state.parent ∧
-      Hoare fork (At code message pc (key :: new :: rest) memory gas state substate)
+      Hoare fork (At code message pc (key :: new :: rest) memory gas state substate returnData)
         (At code message (pc + 1) rest memory
           (gas - sstoreCost fork
             (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
@@ -722,7 +727,7 @@ theorem sstore_of_account (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
                 (U256.toBeBytes key))
             refundCounter := substate.refundCounter + sstoreRefund fork
               (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
-              (state.getStorage message.currentTarget (U256.toBeBytes key)) new }) := by
+              (state.getStorage message.currentTarget (U256.toBeBytes key)) new } returnData) := by
   -- Recording the read keeps the account, so the write succeeds.
   obtain ⟨state', hset⟩ := State.TransactionState.exists_setStorage (U256.toBeBytes key) new
     (tx := state.recordStorageRead message.currentTarget (U256.toBeBytes key))
@@ -792,15 +797,15 @@ theorem le_sloadCost (hfork : .berlin ≤ fork) (cold : Bool) : 100 ≤ sloadCos
 The word is the gas left modulo `2 ^ 256`. -/
 theorem gas_rule (hlt : pc < code.size) (hbyte : code[pc] = 0x5a) (hgas : 2 ≤ gas)
     (hstack : stack.length < STACK_LIMIT) :
-    Hoare fork (At code message pc stack memory gas state substate)
+    Hoare fork (At code message pc stack memory gas state substate returnData)
       (At code message (pc + 1) (BitVec.ofNat 256 (gas - 2) :: stack) memory (gas - 2) state
-        substate) := by
+        substate returnData) := by
   apply At.rule hlt hbyte (ofByte_of_decode (op := .gas) rfl (Fork.frontier_le _)) rfl
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   rw [readFrame_of_length_lt (by rw [hst]; exact hstack),
     charge_nat (by rw [hg, show OPCODE_GAS = 2 from rfl]; exact hgas)]
   refine ⟨_, rfl, hcode, hj, hm, by simp [hpc], ?_, hmem, by simp [hg, OPCODE_GAS, BASE], hrun,
-    herr, hout, hs, hss⟩
+    herr, hout, hs, hss, hrd⟩
   simp [hst, hg, OPCODE_GAS, BASE, GasMeter.gasLeft]
 
 /-- From Berlin to before Glamsterdam, a read of another account costs 2600 cold and 100 warm.
@@ -826,21 +831,21 @@ theorem extcodesize (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {wo
     (hcode : state.getCode (state.getAccount (Base.toAddressMasked word)).codeHash = .ok c)
     (hcold : decide (Base.toAddressMasked word ∉ substate.accessedAddresses) = cold)
     (hgas : (if cold then 2600 else 100) ≤ gas) :
-    Hoare fork (At code message pc (word :: rest) memory gas state substate)
+    Hoare fork (At code message pc (word :: rest) memory gas state substate returnData)
       (At code message (pc + 1) (BitVec.ofNat 256 c.size :: rest) memory
         (gas - if cold then 2600 else 100)
         (state.recordAccountRead (Base.toAddressMasked word))
         { substate with
           accessedAddresses :=
-            substate.accessedAddresses.insert (Base.toAddressMasked word) }) := by
+            substate.accessedAddresses.insert (Base.toAddressMasked word) } returnData) := by
   apply At.rule hlt hbyte (ofByte_of_decode (op := .extcodesize) rfl (Fork.frontier_le _)) rfl
-  rintro evm ⟨hc, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hc, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   have found : accountCode evm (Base.toAddressMasked word) = .ok c := by
     simp [accountCode, hs, hcode, Except.mapError]
   rw [extcodesizeStep_of_accountCode hst found]
   simp only [accessAddress, hfork, ↓reduceIte, hss, hcold,
     externalBaseCost_of_berlin hfork hglam, hg, charge_nat hgas]
   exact ⟨_, rfl, hc, hj, hm, by simp [hpc], rfl, hmem, rfl, hrun, herr, hout, by simp [hs],
-    by simp⟩
+    by simp, hrd⟩
 
 end EthLib.Execution.Evm.Logic

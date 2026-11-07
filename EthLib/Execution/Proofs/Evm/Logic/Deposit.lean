@@ -165,7 +165,8 @@ theorem meets_of_spec_create {code : ByteArray}
     {G : Message fork → TransactionState → Substate → Prop}
     {Q : Message fork → TransactionState → Substate → Evm fork Nat → Prop}
     (hspec : ∀ message state substate, message.code = code → G message state substate →
-      Spec fork (At code message 0 [] .empty message.gas (startState fork message state) substate)
+      Spec fork
+        (At code message 0 [] .empty message.gas (startState fork message state) substate .empty)
         (Q message state substate))
     (bound : Nat) :
     Meets (CreatesAs code G Q) (processRunner fork bound) := by

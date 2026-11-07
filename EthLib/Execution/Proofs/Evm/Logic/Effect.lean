@@ -40,6 +40,7 @@ A message that succeeds also gives facts of slots, balances, facts of accounts, 
 - It also knows the output of the callee, which its assumption gives, as its return data.
 - It knows the start of that output in the output range, as far as both go.
 - On failure, it keeps every fact of a slot and the refund counter.
+- Its return data is then an output that the assumption allows for a failure, such as a revert.
 - Either way, it keeps each fact of memory apart from the output range.
 - Either way, its base agrees with the base before the call outside the touched slots and the facts.
 - From Berlin to before Glamsterdam, CALL with a value that is not 0 does the same.
@@ -59,8 +60,6 @@ Each specification may assume the specifications of the whole family on the mess
 Each starts from the frame of its message, after the move of the value of the message, if any.
 
 That holds by induction on the bound on the gas of messages, which each message is below.
-
-After a call that fails, the frame says nothing of its return data.
 -/
 
 @[expose] public section
@@ -161,7 +160,7 @@ theorem meets_runsAll {ι : Type} {code : ι → ByteArray}
       G i message state substate → Entered fork message state substate entry entrySubstate →
       SpecUnder fork (fun caller message child => RunsAll code G Q caller message child ∧
           B caller message child)
-        (At (code i) message 0 [] .empty message.gas entry entrySubstate)
+        (At (code i) message 0 [] .empty message.gas entry entrySubstate .empty)
         (Q i message state substate))
     (bound : Nat) :
     Meets (fun caller message child => RunsAll code G Q caller message child ∧
@@ -445,6 +444,7 @@ theorem agrees_moveEther {state moved : TransactionState} {sender recipient : Ad
 variable {code : ByteArray} {message : Message fork} {pc : Nat} {size : Nat}
   {facts : List (Nat × ByteArray)} {gas : Nat} {slots : List SlotFact} {refund : Int}
   {base : TransactionState} {accessed : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32)}
+  {returnData : ByteArray}
 
 /-- The facts of slots outside a list of touched slots. -/
 def keptFacts (touched : List (Address × U256)) (slots : List SlotFact) : List SlotFact :=
@@ -527,27 +527,30 @@ On success it also holds the start of `returned` at the start of that range.
 
 It holds as many bytes as both `returned` and the range hold.
 
-On success the return data is `returned`. -/
+On success the return data is `returned`.
+
+On a failure the return data is some output that `failed` holds of. -/
 def AfterCall (code : ByteArray) (message : Message fork) (pc : Nat) (rest : List U256)
     (size : Nat) (facts : List (Nat × ByteArray)) (outputStart outputSize : U256)
-    (returned : ByteArray) (gas : Nat) (value asked : U256) (extra : Nat) (slots : List SlotFact)
-    (refund : Int)
+    (returned : ByteArray) (failed : ByteArray → Prop) (gas : Nat) (value asked : U256)
+    (extra : Nat) (slots : List SlotFact) (refund : Int)
     (base : TransactionState) (accessed : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32))
     (change : Change) (sure : Bool) (evm : Evm fork Nat) : Prop :=
   ∃ cold left base' accessed', left ≤ callGas fork value asked gas extra cold ∧
     Agrees (change.touched ++ slots.map SlotFact.slot) change.moved change.remade base accessed
       base' accessed' ∧
     (((∀ fund ∈ change.funds, (base'.getAccount fund.1).balance = fund.2) ∧
-      (∀ fact ∈ change.accounts, fact.Holds base') ∧ evm.returnData = returned ∧
+      (∀ fact ∈ change.accounts, fact.Holds base') ∧
       Stored code message (pc + 1) (1 :: rest) size
         ((outputStart.toNat, returned.extract 0 (min outputSize.toNat returned.size)) ::
           facts.filter (Apart outputStart.toNat outputSize.toNat))
         (gas - callCost fork value asked gas extra cold + left)
         (change.after ++ keptFacts change.touched slots) (refund + change.gain) base' accessed'
-        evm) ∨
-      sure = false ∧ Stored code message (pc + 1) (0 :: rest) size
+        returned evm) ∨
+      sure = false ∧ ∃ out, failed out ∧ Stored code message (pc + 1) (0 :: rest) size
         (facts.filter (Apart outputStart.toNat outputSize.toNat))
-        (gas - callCost fork value asked gas extra cold + left) slots refund base' accessed' evm)
+        (gas - callCost fork value asked gas extra cold + left) slots refund base' accessed' out
+        evm)
 
 /-- A call whose ranges lie in memory, with an input range of a fact, grows no memory. -/
 private theorem extendMemory_call {memory data : ByteArray}
@@ -585,8 +588,9 @@ private theorem stored_recordAccountRead {evm caller : Evm fork Nat} {address : 
 
 The callee left `child`, and the call wrote its output into the output range, within memory. -/
 private theorem afterCall_of_at {evm caller child final : Evm fork Nat} {rest : List U256}
-    {outputStart outputSize value asked : U256} {returned : ByteArray} {extra : Nat} {cold : Bool}
-    {change : Change} {sure : Bool} (hsize : evm.memory.size = size) (hmod : size % 32 = 0)
+    {outputStart outputSize value asked : U256} {returned : ByteArray}
+    {failed : ByteArray → Prop} {extra : Nat} {cold : Bool} {change : Change} {sure : Bool}
+    (hsize : evm.memory.size = size) (hmod : size % 32 = 0)
     (hall : HoldsAll evm.memory facts) (hrefund : evm.substate.refundCounter = refund)
     (houtput : outputStart.toNat + outputSize.toNat ≤ size)
     (hslots : ∀ fact ∈ slots, fact.Holds caller.state caller.substate)
@@ -596,14 +600,15 @@ private theorem afterCall_of_at {evm caller child final : Evm fork Nat} {rest : 
     (hle : child.gas ≤ callGas fork value asked gas extra cold)
     (heff : Effects change caller child) (hsure : sure = true → child.error = none)
     (hout : child.error = none → child.output = returned)
+    (hfail : child.error ≠ none → failed child.output)
     (hat : At code message (pc + 1) ((if child.error.isNone then 1 else 0) :: rest)
       (memoryWrite evm.memory outputStart.toNat
         (child.output.extract 0 (min outputSize.toNat child.output.size)))
       (gas - callCost fork value asked gas extra cold + child.gas)
       (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
-      final ∧ final.returnData = child.output) :
-    AfterCall code message pc rest size facts outputStart outputSize returned gas value asked extra
-      slots refund base accessed change sure final := by
+      child.output final) :
+    AfterCall code message pc rest size facts outputStart outputSize returned failed gas value
+      asked extra slots refund base accessed change sure final := by
   have hfit : outputStart.toNat +
       (child.output.extract 0 (min outputSize.toNat child.output.size)).size ≤
         evm.memory.size := by
@@ -615,9 +620,9 @@ private theorem afterCall_of_at {evm caller child final : Evm fork Nat} {rest : 
         facts.filter (Apart outputStart.toNat outputSize.toNat))
       (gas - callCost fork value asked gas extra cold + child.gas)
       (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
-      final := by
-    have hm := hat.1.2.2.2.2.2.1
-    refine ⟨by rw [hm]; exact hat.1, by rw [hm, size_memoryWrite hfit, hsize], hmod, ?_⟩
+      child.output final := by
+    have hm := hat.2.2.2.2.2.1
+    refine ⟨by rw [hm]; exact hat, by rw [hm, size_memoryWrite hfit, hsize], hmod, ?_⟩
     rw [hm]
     refine fun fact hfact => holdsAll_memoryWrite hfit hall fact ?_
     rcases List.mem_cons.mp hfact with rfl | hfact
@@ -638,7 +643,9 @@ private theorem afterCall_of_at {evm caller child final : Evm fork Nat} {rest : 
         fun address hm => by simpa using hm
   · cases hok : child.error.isNone
     · simp only [hok, Bool.false_eq_true, ite_false] at hk
-      refine .inr ⟨?_, stored_of_known (hk.mono fun fact hfact => List.mem_cons_of_mem _ hfact)
+      have hsome : child.error ≠ none := fun h => by simp [h] at hok
+      refine .inr ⟨?_, child.output, hfail hsome,
+        stored_of_known (hk.mono fun fact hfact => List.mem_cons_of_mem _ hfact)
         ?_ ?_ (Agrees.refl _ _ _ _ _)⟩
       · cases sure
         · rfl
@@ -650,7 +657,7 @@ private theorem afterCall_of_at {evm caller child final : Evm fork Nat} {rest : 
         simp [hrefund]
     · have hnone : child.error = none := Option.isNone_iff_eq_none.mp hok
       rw [hout hnone] at hk
-      refine .inl ⟨heff.funds hok, heff.accounts hok, by rw [hat.2, hout hnone],
+      refine .inl ⟨heff.funds hok, heff.accounts hok,
         stored_of_known (by simpa [hok] using hk) ?_ ?_ (Agrees.refl _ _ _ _ _)⟩
       · intro fact hfact
         rcases List.mem_append.mp hfact with hfact | hfact
@@ -677,6 +684,8 @@ Each frame that ends such a message from the frame has the effect, by the assump
 
 The assumption also says that such a frame outputs `returned` when it ends with no error.
 
+It also says that `failed` holds of the output of such a frame that ends with an error.
+
 When `sure` is true, it says that such a frame ends with no error.
 
 The frame needs the gas of a call to a cold address.
@@ -693,6 +702,8 @@ Or, only when `sure` is false, the call fails.
 
 The frame then pushes 0 and keeps its facts of slots and its refund counter.
 
+Its return data is then an output that `failed` holds of.
+
 Either way, memory keeps the facts apart from the output range.
 
 The frame gets back the gas that the callee leaves, at most the gas it passed on.
@@ -701,7 +712,8 @@ The new base agrees with the old one outside the touched slots and the slots of 
 theorem callKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {kind : CallKind}
     {byte : UInt8} {op : Op} {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
-    {data returned calleeCode : ByteArray} {change : Change} {sure : Bool}
+    {data returned calleeCode : ByteArray} {failed : ByteArray → Prop} {change : Change}
+    {sure : Bool}
     (hlt : pc < code.size) (hbyte : code[pc] = byte)
     (decoded : Op.ofByte fork byte = some op) (hnone : instruction (Meter := Nat) fork op = none)
     (hrun : messageInstruction (Meter := Nat) fork op = some (callStep kind))
@@ -717,14 +729,14 @@ theorem callKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       Agrees (slots.map SlotFact.slot) [] [] base accessed caller.state
         caller.substate.accessedStorageKeys →
       Effects change caller child ∧ (sure = true → child.error = none) ∧
-        (child.error = none →
-          child.output = returned)) :
+        (child.error = none → child.output = returned) ∧
+        (child.error ≠ none → failed child.output)) :
     HoareUnder fork callee
       (Stored code message pc (asked :: to :: ((if kind.sendsValue then [0] else []) ++
           inputStart :: inputSize :: outputStart :: outputSize :: rest)) size facts gas
-        slots refund base accessed)
-      (AfterCall code message pc rest size facts outputStart outputSize returned gas 0 asked 0
-        slots refund base accessed change sure) := by
+        slots refund base accessed returnData)
+      (AfterCall code message pc rest size facts outputStart outputSize returned failed gas 0
+        asked 0 slots refund base accessed change sure) := by
   intro bound runChild meets evm ⟨⟨hat, hsize, hmod, hall⟩, hslots, hrefund, hagree⟩ within
   have hold := hall _ hinput
   have hext := extendMemory_call hsize hold hlen houtput
@@ -735,7 +747,8 @@ theorem callKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
   have hcall := callKindWith (callee := callee) (asked := asked) (inputStart := inputStart)
     (inputSize := inputSize) (outputStart := outputStart) (outputSize := outputSize)
     (rest := rest) (memory := evm.memory) (gas := gas) (state := evm.state)
-    (substate := evm.substate) hfork hglam hlt hbyte decoded hnone hrun hcode' hdel hdepth rfl
+    (substate := evm.substate) (returnData := returnData) hfork hglam hlt hbyte decoded hnone hrun
+    hcode' hdel hdepth rfl
     (by rw [hext]; split <;> simp only <;> omega)
   rw [hext] at hcall
   obtain ⟨final, hreach, hq | aborted⟩ := hcall bound runChild meets evm hat within
@@ -745,12 +758,12 @@ theorem callKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     have hdata : msg.data = data := by
       rw [hmd, memoryExtend_zero, ← hlen, hold.2]
     obtain ⟨hpre_slots, hpre_agree⟩ := stored_recordAccountRead hslots hagree hcs hcss
-    obtain ⟨heff, hsure, hout⟩ := heffect caller msg child
+    obtain ⟨heff, hsure, hout, hfail⟩ := heffect caller msg child
       (decide (toAddressMasked to ∉ evm.substate.accessedAddresses)) hc
       ⟨hmg, hmc, hmt, hmtg, hmca, hmcode, hdata, hmv, hmdep, hmst⟩ hpre_slots hpre_agree
     rw [memoryExtend_zero] at hat'
     exact afterCall_of_at hsize hmod hall hrefund houtput hpre_slots hpre_agree
-      (by rw [hcss]) (le_of_le_of_eq hle hmg) heff hsure hout hat'
+      (by rw [hcss]) (le_of_le_of_eq hle hmg) heff hsure hout hfail hat'
   · exact ⟨final, hreach, .inr aborted⟩
 
 /-- From Berlin to before Glamsterdam, CALL with no value from a frame that knows slots.
@@ -761,7 +774,8 @@ The rest is as for every call that sends no value of its own. -/
 theorem call_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
-    {data returned calleeCode : ByteArray} {change : Change} {sure : Bool}
+    {data returned calleeCode : ByteArray} {failed : ByteArray → Prop} {change : Change}
+    {sure : Bool}
     (hlt : pc < code.size) (hbyte : code[pc] = 0xf1)
     (hinput : (inputStart.toNat, data) ∈ facts) (hlen : data.size = inputSize.toNat)
     (houtput : outputStart.toNat + outputSize.toNat ≤ size)
@@ -775,14 +789,14 @@ theorem call_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       Agrees (slots.map SlotFact.slot) [] [] base accessed caller.state
         caller.substate.accessedStorageKeys →
       Effects change caller child ∧ (sure = true → child.error = none) ∧
-        (child.error = none →
-          child.output = returned)) :
+        (child.error = none → child.output = returned) ∧
+        (child.error ≠ none → failed child.output)) :
     HoareUnder fork callee
       (Stored code message pc
         (asked :: to :: 0 :: inputStart :: inputSize :: outputStart :: outputSize :: rest) size
-        facts gas slots refund base accessed)
-      (AfterCall code message pc rest size facts outputStart outputSize returned gas 0 asked 0
-        slots refund base accessed change sure) :=
+        facts gas slots refund base accessed returnData)
+      (AfterCall code message pc rest size facts outputStart outputSize returned failed gas 0
+        asked 0 slots refund base accessed change sure) :=
   callKind_stored (kind := .call) hfork hglam hlt hbyte
     (ofByte_of_decode (op := .call) rfl (Fork.frontier_le _)) instruction_call
     messageInstruction_call hinput hlen houtput hcode hdel hdepth hgas heffect
@@ -795,7 +809,8 @@ The rest is as for every call that sends no value of its own. -/
 theorem staticcall_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
-    {data returned calleeCode : ByteArray} {change : Change} {sure : Bool}
+    {data returned calleeCode : ByteArray} {failed : ByteArray → Prop} {change : Change}
+    {sure : Bool}
     (hlt : pc < code.size) (hbyte : code[pc] = 0xfa)
     (hinput : (inputStart.toNat, data) ∈ facts) (hlen : data.size = inputSize.toNat)
     (houtput : outputStart.toNat + outputSize.toNat ≤ size)
@@ -809,14 +824,14 @@ theorem staticcall_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
       Agrees (slots.map SlotFact.slot) [] [] base accessed caller.state
         caller.substate.accessedStorageKeys →
       Effects change caller child ∧ (sure = true → child.error = none) ∧
-        (child.error = none →
-          child.output = returned)) :
+        (child.error = none → child.output = returned) ∧
+        (child.error ≠ none → failed child.output)) :
     HoareUnder fork callee
       (Stored code message pc
         (asked :: to :: inputStart :: inputSize :: outputStart :: outputSize :: rest) size facts gas
-        slots refund base accessed)
-      (AfterCall code message pc rest size facts outputStart outputSize returned gas 0 asked 0
-        slots refund base accessed change sure) :=
+        slots refund base accessed returnData)
+      (AfterCall code message pc rest size facts outputStart outputSize returned failed gas 0
+        asked 0 slots refund base accessed change sure) :=
   callKind_stored (kind := .staticcall) hfork hglam hlt hbyte
     (ofByte_of_decode rfl (Nat.le_trans (by decide) hfork)) instruction_staticcall
     (messageInstruction_staticcall (Nat.le_trans (by decide) hfork)) hinput hlen houtput hcode hdel
@@ -832,7 +847,8 @@ The rest is as for every call that sends no value of its own. -/
 theorem delegatecall_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
-    {data returned calleeCode : ByteArray} {change : Change} {sure : Bool}
+    {data returned calleeCode : ByteArray} {failed : ByteArray → Prop} {change : Change}
+    {sure : Bool}
     (hlt : pc < code.size) (hbyte : code[pc] = 0xf4)
     (hinput : (inputStart.toNat, data) ∈ facts) (hlen : data.size = inputSize.toNat)
     (houtput : outputStart.toNat + outputSize.toNat ≤ size)
@@ -846,14 +862,14 @@ theorem delegatecall_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamster
       Agrees (slots.map SlotFact.slot) [] [] base accessed caller.state
         caller.substate.accessedStorageKeys →
       Effects change caller child ∧ (sure = true → child.error = none) ∧
-        (child.error = none →
-          child.output = returned)) :
+        (child.error = none → child.output = returned) ∧
+        (child.error ≠ none → failed child.output)) :
     HoareUnder fork callee
       (Stored code message pc
         (asked :: to :: inputStart :: inputSize :: outputStart :: outputSize :: rest) size facts gas
-        slots refund base accessed)
-      (AfterCall code message pc rest size facts outputStart outputSize returned gas 0 asked 0
-        slots refund base accessed change sure) :=
+        slots refund base accessed returnData)
+      (AfterCall code message pc rest size facts outputStart outputSize returned failed gas 0
+        asked 0 slots refund base accessed change sure) :=
   callKind_stored (kind := .delegatecall) hfork hglam hlt hbyte
     (ofByte_of_decode rfl (Nat.le_trans (by decide) hfork)) instruction_delegatecall
     (messageInstruction_delegatecall (Nat.le_trans (by decide) hfork)) hinput hlen houtput hcode
@@ -867,7 +883,8 @@ The rest is as for every call that sends no value of its own. -/
 theorem callcode_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
-    {data returned calleeCode : ByteArray} {change : Change} {sure : Bool}
+    {data returned calleeCode : ByteArray} {failed : ByteArray → Prop} {change : Change}
+    {sure : Bool}
     (hlt : pc < code.size) (hbyte : code[pc] = 0xf2)
     (hinput : (inputStart.toNat, data) ∈ facts) (hlen : data.size = inputSize.toNat)
     (houtput : outputStart.toNat + outputSize.toNat ≤ size)
@@ -881,14 +898,14 @@ theorem callcode_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       Agrees (slots.map SlotFact.slot) [] [] base accessed caller.state
         caller.substate.accessedStorageKeys →
       Effects change caller child ∧ (sure = true → child.error = none) ∧
-        (child.error = none →
-          child.output = returned)) :
+        (child.error = none → child.output = returned) ∧
+        (child.error ≠ none → failed child.output)) :
     HoareUnder fork callee
       (Stored code message pc
         (asked :: to :: 0 :: inputStart :: inputSize :: outputStart :: outputSize :: rest) size
-        facts gas slots refund base accessed)
-      (AfterCall code message pc rest size facts outputStart outputSize returned gas 0 asked 0
-        slots refund base accessed change sure) :=
+        facts gas slots refund base accessed returnData)
+      (AfterCall code message pc rest size facts outputStart outputSize returned failed gas 0
+        asked 0 slots refund base accessed change sure) :=
   callKind_stored (kind := .callcode) hfork hglam hlt hbyte
     (ofByte_of_decode (op := .callcode) rfl (Fork.frontier_le _)) instruction_callcode
     messageInstruction_callcode hinput hlen houtput hcode hdel hdepth hgas heffect
@@ -923,6 +940,8 @@ Each frame that ends such a message from the frame has the effect, by the assump
 
 The assumption also says that such a frame outputs `returned` when it ends with no error.
 
+It also says that `failed` holds of the output of such a frame that ends with an error.
+
 When `sure` is true, it says that such a frame ends with no error.
 
 The frame needs 2600 for a cold access and 9000 for the value.
@@ -941,6 +960,8 @@ Or, only when `sure` is false, the call fails.
 
 The frame then pushes 0 and keeps its facts of slots and its refund counter.
 
+Its return data is then an output that `failed` holds of.
+
 Either way, memory keeps the facts apart from the output range.
 
 The frame gets back the gas that the callee leaves, at most the gas it passed on with the stipend.
@@ -951,7 +972,8 @@ It also agrees outside the addresses whose balances the effect moves. -/
 theorem callValue_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to v inputStart inputSize outputStart outputSize : U256} {rest : List U256}
-    {data returned calleeCode : ByteArray} {change : Change} {sure : Bool}
+    {data returned calleeCode : ByteArray} {failed : ByteArray → Prop} {change : Change}
+    {sure : Bool}
     (hlt : pc < code.size) (hbyte : code[pc] = 0xf1) (hv : v ≠ 0)
     (hstatic : message.isStatic = false)
     (hbal : v ≤ (base.getAccount message.currentTarget).balance)
@@ -970,13 +992,13 @@ theorem callValue_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
       Agrees (slots.map SlotFact.slot) [] [] base accessed caller.state
         caller.substate.accessedStorageKeys →
       Effects change caller child ∧ (sure = true → child.error = none) ∧
-        (child.error = none →
-          child.output = returned)) :
+        (child.error = none → child.output = returned) ∧
+        (child.error ≠ none → failed child.output)) :
     HoareUnder fork callee
       (Stored code message pc
         (asked :: to :: v :: inputStart :: inputSize :: outputStart :: outputSize :: rest) size
-        facts gas slots refund base accessed)
-      (AfterCall code message pc rest size facts outputStart outputSize returned gas v asked
+        facts gas slots refund base accessed returnData)
+      (AfterCall code message pc rest size facts outputStart outputSize returned failed gas v asked
         (callNewAccountCost fork base (toAddressMasked to) v + callValueCost fork v) slots refund
         base accessed change sure) := by
   intro bound runChild meets evm ⟨⟨hat, hsize, hmod, hall⟩, hslots, hrefund, hagree⟩ within
@@ -1000,7 +1022,8 @@ theorem callValue_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
   have hcall := callValue (callee := callee) (asked := asked) (inputStart := inputStart)
     (inputSize := inputSize) (outputStart := outputStart) (outputSize := outputSize)
     (rest := rest) (memory := evm.memory) (gas := gas) (state := evm.state)
-    (substate := evm.substate) hfork hglam hlt hbyte hv hstatic hbal' hcode' hdel hdepth rfl
+    (substate := evm.substate) (returnData := returnData) hfork hglam hlt hbyte hv hstatic hbal'
+    hcode' hdel hdepth rfl
     (by rw [hext, hcost, hnew]; split <;> simp only <;> omega)
   rw [hext, hcost, hnew, Nat.add_assoc] at hcall
   obtain ⟨final, hreach, hq | aborted⟩ := hcall bound runChild meets evm hat within
@@ -1010,12 +1033,12 @@ theorem callValue_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
     have hdata : msg.data = data := by
       rw [hmd, memoryExtend_zero, ← hlen, hold.2]
     obtain ⟨hpre_slots, hpre_agree⟩ := stored_recordAccountRead hslots hagree hcs hcss
-    obtain ⟨heff, hsure, hout⟩ := heffect caller msg child
+    obtain ⟨heff, hsure, hout, hfail⟩ := heffect caller msg child
       (decide (toAddressMasked to ∉ evm.substate.accessedAddresses)) hc
       ⟨hmg, hmc, hmt, hmtg, hmca, hmcode, hdata, hmv, hmtr, hmdep, hmst⟩ hpre_slots hpre_agree
     rw [memoryExtend_zero] at hat'
     exact afterCall_of_at hsize hmod hall hrefund houtput hpre_slots hpre_agree
-      (by rw [hcss]) (le_of_le_of_eq hle hmg) heff hsure hout hat'
+      (by rw [hcss]) (le_of_le_of_eq hle hmg) heff hsure hout hfail hat'
   · exact ⟨final, hreach, .inr aborted⟩
 
 end EthLib.Execution.Evm.Logic

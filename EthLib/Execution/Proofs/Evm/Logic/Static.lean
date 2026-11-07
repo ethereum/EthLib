@@ -24,11 +24,13 @@ variable {fork : Fork}
 
 variable {code : ByteArray} {message : Message fork} {pc : Nat} {stack : List U256}
   {memory : ByteArray} {gas : Nat} {state : State.TransactionState} {substate : Substate}
+  {returnData : ByteArray}
 
 /-- In a static frame, a step at SSTORE stops the frame. -/
 theorem running_eq_false_of_sstore_of_isStatic (hlt : pc < code.size) (hbyte : code[pc] = 0x55)
     (hstatic : message.isStatic = true) {evm after : Evm fork Nat}
-    (hat : At code message pc stack memory gas state substate evm) (hs : Step fork evm after) :
+    (hat : At code message pc stack memory gas state substate returnData evm)
+    (hs : Step fork evm after) :
     after.running = false := by
   obtain ⟨hc, -, hm, hpc, -⟩ := hat
   cases hs with
@@ -50,7 +52,8 @@ theorem running_eq_false_of_sstore_of_isStatic (hlt : pc < code.size) (hbyte : c
 theorem running_eq_false_of_log_of_isStatic {n : Fin 5} {byte : UInt8} (hlt : pc < code.size)
     (hbyte : code[pc] = byte) (decoded : Op.decode byte = some (.log n))
     (hstatic : message.isStatic = true) {evm after : Evm fork Nat}
-    (hat : At code message pc stack memory gas state substate evm) (hs : Step fork evm after) :
+    (hat : At code message pc stack memory gas state substate returnData evm)
+    (hs : Step fork evm after) :
     after.running = false := by
   obtain ⟨hc, -, hm, hpc, -⟩ := hat
   cases hs with

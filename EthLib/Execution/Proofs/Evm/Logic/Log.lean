@@ -54,6 +54,7 @@ theorem popTopics_append {evm : Evm fork Meter} {words rest : List U256}
 
 variable {code : ByteArray} {message : Message fork} {pc : Nat} {memory : ByteArray} {gas : Nat}
   {state : State.TransactionState} {substate : Substate}
+  {returnData : ByteArray}
 
 /-- LOGn runs the append of a log with `n` topics. -/
 theorem instruction_log (n : Fin 5) :
@@ -71,7 +72,8 @@ theorem log {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List U2
     (hlen : words.length = n.val) (hlt : pc < code.size) (hbyte : code[pc] = byte)
     (decoded : Op.decode byte = some (.log n)) (hstatic : message.isStatic = false)
     (hgas : logCost n.val size + (extendMemory memory.size [(start, size)]).cost ≤ gas) :
-    Hoare fork (At code message pc (start :: size :: (words ++ rest)) memory gas state substate)
+    Hoare fork (At code message pc (start :: size :: (words ++ rest)) memory gas state substate
+        returnData)
       (At code message (pc + 1) rest
         (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
         (gas - (logCost n.val size + (extendMemory memory.size [(start, size)]).cost)) state
@@ -81,9 +83,9 @@ theorem log {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List U2
               topics := words.map U256.toBeBytes
               data := memoryReadBytes
                 (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
-                start.toNat size.toNat } }) := by
+                start.toNat size.toNat } } returnData) := by
   apply At.rule hlt hbyte (ofByte_of_decode decoded (Fork.frontier_le _)) (instruction_log n)
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   subst hm hg hs hss hmem
   have hl := evm.stack.property
   rw [hst] at hl
@@ -99,6 +101,6 @@ theorem log {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List U2
   simp only [Nat.not_lt.mpr hgas, ite_false, bind, Except.bind, pure, Except.pure, hstatic,
     Bool.false_eq_true]
   exact ⟨_, rfl, hcode, hj, rfl, by simp [advance, hpc], rfl, rfl, rfl, hrun, herr, hout, rfl,
-    rfl⟩
+    rfl, hrd⟩
 
 end EthLib.Execution.Evm.Logic

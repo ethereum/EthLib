@@ -209,6 +209,7 @@ theorem messageInstruction_create2 (hfork : .constantinople ≤ fork) :
 
 variable {code : ByteArray} {message : Message fork} {pc : Nat} {memory : ByteArray} {gas : Nat}
   {state : State.TransactionState} {substate : Substate}
+  {returnData : ByteArray}
 
 /-- From Berlin to before Glamsterdam, CREATE, or CREATE2 with a salt, of init code in memory.
 
@@ -259,7 +260,7 @@ theorem createKindWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) 
       (extendMemory memory.size [(start, size)]).cost ≤ gas) :
     HoareUnder fork callee
       (At code message pc (value :: start :: size :: ((if create2 then [salt] else []) ++ rest))
-        memory gas state substate)
+        memory gas state substate returnData)
       fun after => ∃ caller msg child, callee caller msg child ∧
         child.gas ≤ msg.gas ∧
         ((state.recordAccountRead message.currentTarget).recordAccountRead address).incrementNonce
@@ -287,9 +288,9 @@ theorem createKindWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) 
               (if fork ≥ .shapella then initCodeCost size.toNat else 0) +
             (extendMemory memory.size [(start, size)]).cost)) + child.gas)
           (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
-          after ∧ after.returnData = (if child.error.isNone then .empty else child.output) := by
+          (if child.error.isNone then .empty else child.output) after := by
   apply HoareUnder.of_child
-  rintro evm ⟨hc, hj, hm, hpc, hst, hmem, hg, hrun', herr, hout, hs, hss⟩
+  rintro evm ⟨hc, hj, hm, hpc, hst, hmem, hg, hrun', herr, hout, hs, hss, -⟩
   subst hm hg hs hss hmem
   obtain ⟨caller, msg, hstep, c1, c2, c3, c4, c5, c6, c7, c8, c9, co, c10, c11, m1, m2, m3, m4,
       m5, m6, m7, m8, m9, m10⟩ :=
@@ -308,9 +309,9 @@ theorem createKindWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) 
       resumeCreate_eq (child := child) (address := address) hlen
     refine .inl ⟨after, hres, caller, msg, child, hcallee, hchild, c10, c11, m1, m2, m3, m4, m5,
       m6, m7, m8, m9, m10, ?_⟩
-    exact ⟨⟨by rw [a1, c1, hc], by rw [a2, c2, hj], by rw [a3, c3], by rw [a4, c4, hpc],
+    exact ⟨by rw [a1, c1, hc], by rw [a2, c2, hj], by rw [a3, c3], by rw [a4, c4, hpc],
       by rw [a5, c5], by rw [a6, c6], by rw [a7, c7], by rw [a8, c8, hrun'], by rw [a9, c9, herr],
-      by rw [ao, co, hout], a10, a11⟩, a12⟩
+      by rw [ao, co, hout], a10, a11, a12⟩
 
 /-- From Berlin to before Glamsterdam, CREATE of the init code in memory.
 
@@ -338,7 +339,7 @@ theorem createWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       (extendMemory memory.size [(start, size)]).cost ≤ gas) :
     HoareUnder fork callee
       (At code message pc (value :: start :: size :: rest)
-        memory gas state substate)
+        memory gas state substate returnData)
       fun after => ∃ caller msg child, callee caller msg child ∧
         child.gas ≤ msg.gas ∧
         ((state.recordAccountRead message.currentTarget).recordAccountRead address).incrementNonce
@@ -363,7 +364,7 @@ theorem createWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
               (if fork ≥ .shapella then initCodeCost size.toNat else 0) +
             (extendMemory memory.size [(start, size)]).cost)) + child.gas)
           (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
-          after ∧ after.returnData = (if child.error.isNone then .empty else child.output) :=
+          (if child.error.isNone then .empty else child.output) after :=
   createKindWith (create2 := false) (salt := 0) hfork hglam hlt hbyte
     (ofByte_of_decode (op := .create) rfl (Fork.frontier_le _)) instruction_create
     messageInstruction_create hstatic hinit hbal hnonce hdepth haddr hdeploy hgas
@@ -395,7 +396,7 @@ theorem create2With (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       (extendMemory memory.size [(start, size)]).cost ≤ gas) :
     HoareUnder fork callee
       (At code message pc (value :: start :: size :: salt :: rest)
-        memory gas state substate)
+        memory gas state substate returnData)
       fun after => ∃ caller msg child, callee caller msg child ∧
         child.gas ≤ msg.gas ∧
         ((state.recordAccountRead message.currentTarget).recordAccountRead address).incrementNonce
@@ -423,7 +424,7 @@ theorem create2With (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
               (if fork ≥ .shapella then initCodeCost size.toNat else 0) +
             (extendMemory memory.size [(start, size)]).cost)) + child.gas)
           (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
-          after ∧ after.returnData = (if child.error.isNone then .empty else child.output) :=
+          (if child.error.isNone then .empty else child.output) after :=
   createKindWith (create2 := true) hfork hglam hlt hbyte
     (ofByte_of_decode (op := .create2) rfl (Nat.le_trans (by decide) hfork)) instruction_create2
     (messageInstruction_create2 (Nat.le_trans (by decide) hfork)) hstatic hinit hbal hnonce hdepth

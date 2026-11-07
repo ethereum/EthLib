@@ -34,13 +34,12 @@ That effect may remake accounts, such as the new one, and give facts of accounts
 - The new base gives the creator the grown nonce, unless the effect remakes the creator.
 - On failure the frame pushes 0, and keeps its facts of slots and its refund counter.
 - The new base then gives the creator the grown nonce.
+- Its return data is then an output that the assumption allows for a failure, such as a revert.
 - Either way, memory keeps every fact.
 - Either way, the new base agrees with the old one outside the touched slots and those of the facts.
 - It also agrees outside the addresses that the effect moves or remakes, and the creator.
 
 Out of scope: a creation that runs no message or runs in a static frame.
-
-The rule says nothing of the return data after a failure.
 
 Sources: EIP-150, EIP-684, EIP-1014, EIP-2929 and EIP-3860.
 -/
@@ -100,31 +99,34 @@ On failure the frame pushes 0 and keeps its facts of slots and its refund counte
 
 The new base then gives the creator the grown nonce.
 
+The return data is then some output that `failed` holds of.
+
 Memory keeps every fact. -/
 def AfterCreate (code : ByteArray) (message : Message fork) (pc : Nat) (rest : List U256)
     (size : Nat) (facts : List (Nat × ByteArray)) (gas cost : Nat) (address : Address)
-    (nonce : Nat) (slots : List SlotFact) (refund : Int) (base : TransactionState)
-    (accessed : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32)) (change : Change) (sure : Bool)
-    (evm : Evm fork Nat) : Prop :=
+    (failed : ByteArray → Prop) (nonce : Nat) (slots : List SlotFact) (refund : Int)
+    (base : TransactionState) (accessed : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32))
+    (change : Change) (sure : Bool) (evm : Evm fork Nat) : Prop :=
   ∃ left base' accessed', left ≤ createMessageGas fork (gas - cost) ∧
     Agrees (change.touched ++ slots.map SlotFact.slot) change.moved
       (change.remade ++ [message.currentTarget]) base accessed base' accessed' ∧
     (((∀ fund ∈ change.funds, (base'.getAccount fund.1).balance = fund.2) ∧
       (∀ fact ∈ change.accounts, fact.Holds base') ∧
       (message.currentTarget ∉ change.remade →
-        (base'.getAccount message.currentTarget).nonce = nonce + 1) ∧ evm.returnData = .empty ∧
+        (base'.getAccount message.currentTarget).nonce = nonce + 1) ∧
       Stored code message (pc + 1) (address.toU256 :: rest) size facts
         (gas - cost - createMessageGas fork (gas - cost) + left)
         (change.after ++ keptFacts change.touched slots) (refund + change.gain) base' accessed'
-        evm) ∨
+        .empty evm) ∨
       sure = false ∧ (base'.getAccount message.currentTarget).nonce = nonce + 1 ∧
-        Stored code message (pc + 1) (0 :: rest) size facts
+        ∃ out, failed out ∧ Stored code message (pc + 1) (0 :: rest) size facts
           (gas - cost - createMessageGas fork (gas - cost) + left) slots refund base' accessed'
-          evm)
+          out evm)
 
 variable {code : ByteArray} {message : Message fork} {pc : Nat} {size : Nat}
   {facts : List (Nat × ByteArray)} {gas : Nat} {slots : List SlotFact} {refund : Int}
   {base : TransactionState} {accessed : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32)}
+  {returnData : ByteArray} {failed : ByteArray → Prop}
 
 /-- Once the nonce of the creator grows, the state agrees with the one before outside the creator.
 
@@ -164,20 +166,22 @@ private theorem afterCreate_of_at {evm caller child final : Evm fork Nat} {rest 
     (hcss : caller.substate.refundCounter = evm.substate.refundCounter)
     (hle : child.gas ≤ createMessageGas fork (gas - cost))
     (heff : Effects change caller child) (hsure : sure = true → child.error = none)
+    (hfail : child.error ≠ none → failed child.output)
     (hat : At code message (pc + 1)
       ((if child.error.isNone then address.toU256 else 0) :: rest) evm.memory
       (gas - cost - createMessageGas fork (gas - cost) + child.gas)
       (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
-      final ∧ final.returnData = if child.error.isNone then .empty else child.output) :
-    AfterCreate code message pc rest size facts gas cost address
+      (if child.error.isNone then .empty else child.output) final) :
+    AfterCreate code message pc rest size facts gas cost address failed
       (base.getAccount message.currentTarget).nonce slots refund base accessed change sure
       final := by
-  have hm := hat.1.2.2.2.2.2.1
+  have hm := hat.2.2.2.2.2.1
   have hk : Known code message (pc + 1)
       ((if child.error.isNone then address.toU256 else 0) :: rest) size facts
       (gas - cost - createMessageGas fork (gas - cost) + child.gas)
       (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
-      final := ⟨by rw [hm]; exact hat.1, by rw [hm, hsize], hmod, by rw [hm]; exact hall⟩
+      (if child.error.isNone then .empty else child.output) final :=
+    ⟨by rw [hm]; exact hat, by rw [hm, hsize], hmod, by rw [hm]; exact hall⟩
   have hagree' := hagree.trans heff.agrees
   have hnonce : message.currentTarget ∉ (if child.error.isNone then change.remade else []) →
       ((incorporateChild fork caller child).state.getAccount message.currentTarget).nonce =
@@ -194,7 +198,9 @@ private theorem afterCreate_of_at {evm caller child final : Evm fork Nat} {rest 
         fun address hm => hm
   · cases hok : child.error.isNone
     · simp only [hok, Bool.false_eq_true, ite_false] at hk hnonce
-      refine .inr ⟨?_, hnonce List.not_mem_nil, stored_of_known hk ?_ ?_ (Agrees.refl _ _ _ _ _)⟩
+      have hsome : child.error ≠ none := fun h => by simp [h] at hok
+      refine .inr ⟨?_, hnonce List.not_mem_nil, child.output, hfail hsome,
+        stored_of_known hk ?_ ?_ (Agrees.refl _ _ _ _ _)⟩
       · cases sure
         · rfl
         · simp [hsure rfl] at hok
@@ -204,7 +210,7 @@ private theorem afterCreate_of_at {evm caller child final : Evm fork Nat} {rest 
       · rw [heff.refund, hok, hcss]
         simp [hrefund]
     · simp only [hok, ite_true] at hk hnonce
-      refine .inl ⟨heff.funds hok, heff.accounts hok, hnonce, by simp [hat.2, hok],
+      refine .inl ⟨heff.funds hok, heff.accounts hok, hnonce,
         stored_of_known hk ?_ ?_ (Agrees.refl _ _ _ _ _)⟩
       · intro fact hfact
         rcases List.mem_append.mp hfact with hfact | hfact
@@ -241,6 +247,8 @@ It may also use the account of the creator, which is that of the base with the g
 
 When `sure` is true, it says that such a frame ends with no error.
 
+It also says that `failed` holds of the output of such a frame that ends with an error.
+
 The frame after the creation is then one of `AfterCreate`, with the gas that the callee leaves. -/
 theorem createKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     {create2 : Bool} {byte : UInt8} {op : Op}
@@ -273,16 +281,17 @@ theorem createKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
       caller.state.getAccountOptional message.currentTarget =
         some { base.getAccount message.currentTarget with
           nonce := (base.getAccount message.currentTarget).nonce + 1 } →
-      Effects change caller child ∧ (sure = true → child.error = none)) :
+      Effects change caller child ∧ (sure = true → child.error = none) ∧
+        (child.error ≠ none → failed child.output)) :
     HoareUnder fork callee
       (Stored code message pc (value :: start :: len :: ((if create2 then [salt] else []) ++ rest))
-        size facts gas slots refund base accessed)
+        size facts gas slots refund base accessed returnData)
       (AfterCreate code message pc rest size facts gas
         (createBaseCost fork +
           (if create2 then OPCODE_KECCAK256_PER_WORD * wordCount len.toNat else 0) +
           (if fork ≥ .shapella then initCodeCost len.toNat else 0))
-        address (base.getAccount message.currentTarget).nonce slots refund base accessed change
-        sure) := by
+        address failed (base.getAccount message.currentTarget).nonce slots refund base accessed
+        change sure) := by
   intro bound runChild meets evm ⟨⟨hat, hsize, hmod, hall⟩, hslots, hrefund, hagree⟩ within
   have hold := hall _ hinput
   have hext : extendMemory evm.memory.size [(start, len)] = ⟨0, 0⟩ :=
@@ -303,7 +312,8 @@ theorem createKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
   have hcreate := createKindWith (callee := callee) (create2 := create2) (value := value)
     (start := start) (size := len) (salt := salt) (rest := rest) (address := address)
     (memory := evm.memory) (gas := gas) (state := evm.state) (substate := evm.substate)
-    hfork hglam hlt hbyte decoded hnone hrun hstatic hinit (by rw [hget]; exact hbal)
+    (returnData := returnData) hfork hglam hlt hbyte decoded hnone hrun hstatic hinit
+    (by rw [hget]; exact hbal)
     (by rw [hget]; exact hnonce) hdepth (by rw [hread, hget]; exact haddr) hdeploy'
     (by rw [hext]; exact hgas)
   rw [hread, hext, memoryExtend_zero] at hcreate
@@ -324,10 +334,10 @@ theorem createKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
         fun _ hm => by simpa using hm
     have hpre_slots : ∀ fact ∈ slots, fact.Holds caller.state caller.substate :=
       fun fact hfact => (hslots fact hfact).of_agrees hsame fun _ hs => by cases hs
-    obtain ⟨heff, hsure⟩ := heffect caller msg child hc
+    obtain ⟨heff, hsure, hfail⟩ := heffect caller msg child hc
       ⟨hmg, hmc, hmt, hmtg, hmca, hmcode, hmd, hmv, hmdep, hmst⟩ hpre_slots hpre_agree hself
     exact afterCreate_of_at hsize hmod hall hrefund hpre_slots hpre_agree hself
-      (by rw [hcss]) (le_of_le_of_eq hle hmg) heff hsure hat'
+      (by rw [hcss]) (le_of_le_of_eq hle hmg) heff hsure hfail hat'
   · exact ⟨final, hreach, .inr aborted⟩
 
 /-- From Berlin to before Glamsterdam, CREATE of the init code in a fact, from a frame of slots.
@@ -359,14 +369,15 @@ theorem create_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       caller.state.getAccountOptional message.currentTarget =
         some { base.getAccount message.currentTarget with
           nonce := (base.getAccount message.currentTarget).nonce + 1 } →
-      Effects change caller child ∧ (sure = true → child.error = none)) :
+      Effects change caller child ∧ (sure = true → child.error = none) ∧
+        (child.error ≠ none → failed child.output)) :
     HoareUnder fork callee
       (Stored code message pc (value :: start :: len :: rest) size facts gas slots refund base
-        accessed)
+        accessed returnData)
       (AfterCreate code message pc rest size facts gas
         (createBaseCost fork + (if fork ≥ .shapella then initCodeCost len.toNat else 0))
-        address (base.getAccount message.currentTarget).nonce slots refund base accessed change
-        sure) :=
+        address failed (base.getAccount message.currentTarget).nonce slots refund base accessed
+        change sure) :=
   createKind_stored (create2 := false) (salt := 0) hfork hglam hlt hbyte
     (ofByte_of_decode (op := .create) rfl (Fork.frontier_le _)) instruction_create
     messageInstruction_create hstatic hinput hlen hinit hbal hnonce hdepth haddr hdeploy hgas
@@ -405,15 +416,16 @@ theorem create2_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       caller.state.getAccountOptional message.currentTarget =
         some { base.getAccount message.currentTarget with
           nonce := (base.getAccount message.currentTarget).nonce + 1 } →
-      Effects change caller child ∧ (sure = true → child.error = none)) :
+      Effects change caller child ∧ (sure = true → child.error = none) ∧
+        (child.error ≠ none → failed child.output)) :
     HoareUnder fork callee
       (Stored code message pc (value :: start :: len :: salt :: rest) size facts gas slots refund
-        base accessed)
+        base accessed returnData)
       (AfterCreate code message pc rest size facts gas
         (createBaseCost fork + OPCODE_KECCAK256_PER_WORD * wordCount len.toNat +
           (if fork ≥ .shapella then initCodeCost len.toNat else 0))
-        address (base.getAccount message.currentTarget).nonce slots refund base accessed change
-        sure) :=
+        address failed (base.getAccount message.currentTarget).nonce slots refund base accessed
+        change sure) :=
   createKind_stored (create2 := true) hfork hglam hlt hbyte
     (ofByte_of_decode (op := .create2) rfl (Nat.le_trans (by decide) hfork)) instruction_create2
     (messageInstruction_create2 (Nat.le_trans (by decide) hfork)) hstatic hinput hlen hinit hbal

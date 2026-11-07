@@ -102,28 +102,33 @@ It also names the state, the substate and the error of the frame, none.
 
 Its output is empty.
 
+It names the return data that the last call or creation of the frame gave back.
+
+So it names every field of the frame.
+
 The interpreter sets the code, the flags and the message when it starts a frame.
 
 No step changes them, so they stay the same along a run. -/
 def At (code : ByteArray) (message : Message fork) (pc : Nat) (stack : List U256)
     (memory : ByteArray) (gas : Nat) (state : State.TransactionState) (substate : Substate)
-    (evm : Evm fork Nat) : Prop :=
+    (returnData : ByteArray) (evm : Evm fork Nat) : Prop :=
   evm.code = code ∧ evm.validJumpDestinations = validJumpDestinations code ∧
     evm.message = message ∧ evm.pc = pc ∧ evm.stack.val = stack ∧ evm.memory = memory ∧
     evm.gas = gas ∧ evm.running = true ∧ evm.error = none ∧ evm.output = .empty ∧
-    evm.state = state ∧ evm.substate = substate
+    evm.state = state ∧ evm.substate = substate ∧ evm.returnData = returnData
 
 variable {code : ByteArray} {message : Message fork} {pc : Nat} {stack : List U256}
   {memory : ByteArray} {gas : Nat} {state : State.TransactionState} {substate : Substate}
+  {returnData : ByteArray}
 
 /-- The rule of an opcode, from the instruction that its byte runs on a frame of the code. -/
 theorem At.rule {byte : UInt8} {op : Op}
     {run : Evm fork Nat → Except EvmError (Evm fork Nat)} {post : Evm fork Nat → Prop}
     (hlt : pc < code.size) (hbyte : code[pc] = byte) (decoded : Op.ofByte fork byte = some op)
     (hrun : instruction fork op = some run)
-    (h : ∀ evm, At code message pc stack memory gas state substate evm →
+    (h : ∀ evm, At code message pc stack memory gas state substate returnData evm →
       ∃ after, run evm = .ok after ∧ post after) :
-    Hoare fork (At code message pc stack memory gas state substate) post := by
+    Hoare fork (At code message pc stack memory gas state substate returnData) post := by
   apply Triple.of_step
   intro evm hp
   obtain ⟨after, ok, hpost⟩ := h evm hp
@@ -143,32 +148,34 @@ It pushes the word of the `n` bytes after it, for 3 gas. -/
 theorem push_of_decode {byte : UInt8} {n : Fin 33} {word : U256} (hlt : pc < code.size)
     (hbyte : code[pc] = byte) (decoded : Op.decode byte = some (.push n)) (hn : n.val ≠ 0)
     (hword : pushData code pc n = word) (hgas : 3 ≤ gas) (hstack : stack.length < STACK_LIMIT) :
-    Hoare fork (At code message pc stack memory gas state substate)
-      (At code message (pc + (1 + n)) (word :: stack) memory (gas - 3) state substate) := by
+    Hoare fork (At code message pc stack memory gas state substate returnData)
+      (At code message (pc + (1 + n)) (word :: stack) memory (gas - 3) state substate
+        returnData) := by
   have hn' : n ≠ 0 := fun h => hn (by simp [h])
   apply At.rule hlt hbyte
     (ofByte_of_decode decoded (by simp [Op.since, hn', Fork.frontier_le])) (instruction_push n)
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   have hlen : evm.stack.val.length < STACK_LIMIT := by rw [hst]; exact hstack
   rw [pushN_nat hn (by rw [hg]; exact hgas) hlen]
   refine ⟨_, rfl, hcode, hj, hm, by simp [hpc], by simp [hst, hcode, hpc, hword], hmem,
-    by simp [hg, OPCODE_PUSH, VERY_LOW], hrun, herr, hout, hs, hss⟩
+    by simp [hg, OPCODE_PUSH, VERY_LOW], hrun, herr, hout, hs, hss, hrd⟩
 
 /-- PUSHn, for `n` from 1, pushes the word of the `n` bytes after it, for 3 gas. -/
 theorem push {n : Fin 33} {word : U256} (hn : n.val ≠ 0) (hlt : pc < code.size)
     (hbyte : code[pc] = 0x5f + UInt8.ofNat n.val)
     (decoded : Op.decode (0x5f + UInt8.ofNat n.val) = some (.push n))
     (hword : pushData code pc n = word) (hgas : 3 ≤ gas) (hstack : stack.length < STACK_LIMIT) :
-    Hoare fork (At code message pc stack memory gas state substate)
-      (At code message (pc + (1 + n)) (word :: stack) memory (gas - 3) state substate) :=
+    Hoare fork (At code message pc stack memory gas state substate returnData)
+      (At code message (pc + (1 + n)) (word :: stack) memory (gas - 3) state substate
+        returnData) :=
   push_of_decode hlt hbyte decoded hn hword hgas hstack
 
 /-- PUSH1 pushes the byte after it and costs 3, with room on the stack. -/
 theorem push1 {byte : UInt8} (hlt : pc + 1 < code.size) (hop : code[pc]'(by omega) = 0x60)
     (hbyte : code[pc + 1] = byte) (hgas : 3 ≤ gas) (hstack : stack.length < STACK_LIMIT) :
-    Hoare fork (At code message pc stack memory gas state substate)
+    Hoare fork (At code message pc stack memory gas state substate returnData)
       (At code message (pc + 2) (BitVec.ofNat 256 byte.toNat :: stack) memory (gas - 3) state
-        substate) :=
+        substate returnData) :=
   push (n := 1) (by decide) (by omega) (by rw [hop]; decide) rfl
     (by simp [pushData, bufferRead, Base.byteAt, hlt, hbyte, Base.bytesToNat]) hgas hstack
 
