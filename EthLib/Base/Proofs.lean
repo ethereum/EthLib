@@ -6,6 +6,7 @@ public import EthLib.Base.Proofs.Bytes
 public import EthLib.Base.Proofs.ChainConfig
 public import EthLib.Base.Proofs.Fork
 public import EthLib.Base.Proofs.LittleEndian
+public import EthLib.Base.Proofs.List
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.U256
 public import EthLib.Base.Proofs.Uint64

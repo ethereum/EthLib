@@ -1,10 +1,12 @@
 module
 
 public import EthLib.Base.Except
+public import EthLib.Base.Proofs.List
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Consensus.Gossip.Seen
 public import EthLib.Consensus.HonestValidator
 public import EthLib.Consensus.Proofs.Accessors
+public import EthLib.Consensus.Proofs.Gossip.SyncCommittee
 public import EthLib.Consensus.Transition.Block
 public import EthLib.Cryptography.Proofs.Bls.SignaturesCorrect
 
@@ -20,6 +22,10 @@ A committee assignment is a committee of the epoch that holds the validator.
 It is the only one under two bounds.
 
 The registry stays within its limit, and its active validators times the committees fit in 64 bits.
+
+The proposer check and the sync committee seat check have their outcomes characterized.
+
+The sync committee subnets of a validator come once each, in increasing order.
 -/
 
 @[expose] public section
@@ -375,5 +381,179 @@ theorem getCommitteeAssignment_ne_none {state : BeaconState preset fork} {epoch 
     exact not_mem_of_findCommittee_none found (slot, index)
       (mem_committeePositions_of_epoch positive positioned slotEpoch indexLt) committee computed mem
   · simp [throw, throwThe, MonadExceptOf.throw] at h
+
+/-! ## Proposer and sync committee duties -/
+
+/-- The check of a proposer succeeds exactly when the proposer index of the state exists.
+
+It then returns whether that index is the validator. -/
+theorem isProposer_ok_iff {state : BeaconState preset fork} {validatorIndex : ValidatorIndex}
+    {b : Bool} :
+    isProposer state validatorIndex = .ok b ↔
+      ∃ proposer, getBeaconProposerIndex state = .ok proposer ∧
+        (proposer == validatorIndex) = b := by
+  unfold isProposer
+  rw [bind_ok_iff]
+  simp only [mapError_ok_iff, pure, Except.pure, Except.ok.injEq]
+
+/-- A validator is the proposer exactly when it is the proposer index of the state. -/
+theorem isProposer_eq_ok_true_iff {state : BeaconState preset fork}
+    {validatorIndex : ValidatorIndex} :
+    isProposer state validatorIndex = .ok true ↔
+      getBeaconProposerIndex state = .ok validatorIndex := by
+  rw [isProposer_ok_iff]
+  constructor
+  · rintro ⟨proposer, found, eq⟩
+    rw [beq_iff_eq] at eq
+    exact eq ▸ found
+  · intro found
+    exact ⟨validatorIndex, found, beq_self_eq_true _⟩
+
+/-- A validator other than the proposer index of the state gets the answer that it does not propose.
+
+The proposer index must exist. -/
+theorem isProposer_eq_ok_false_of_ne {state : BeaconState preset fork}
+    {validatorIndex proposer : ValidatorIndex}
+    (found : getBeaconProposerIndex state = .ok proposer) (ne : proposer ≠ validatorIndex) :
+    isProposer state validatorIndex = .ok false :=
+  isProposer_ok_iff.mpr ⟨proposer, found, by simpa using ne⟩
+
+/-- The check of a proposer fails exactly when the proposer index of the state fails.
+
+It fails with the same error, as an accessor error. -/
+theorem isProposer_eq_error_iff {state : BeaconState preset fork}
+    {validatorIndex : ValidatorIndex} {e : ValidatorDutyError} :
+    isProposer state validatorIndex = .error e ↔
+      ∃ accessorError, getBeaconProposerIndex state = .error accessorError ∧
+        e = .accessor accessorError := by
+  unfold isProposer
+  cases found : getBeaconProposerIndex state with
+  | ok proposer => simp [bind, Except.bind, Except.mapError, pure, Except.pure]
+  | error accessorError =>
+    simp [bind, Except.bind, Except.mapError, eq_comm]
+
+/-- The seat check succeeds exactly when the period is the current one or the next.
+
+The next period must not overflow, and the validator must exist.
+
+The answer says whether its key is in the current committee, or in the next one. -/
+theorem isAssignedToSyncCommittee_ok_iff {state : BeaconState preset fork}
+    {altair : .altair ≤ fork} {epoch : Epoch} {validatorIndex : ValidatorIndex} {b : Bool} :
+    isAssignedToSyncCommittee state altair epoch validatorIndex = .ok b ↔
+      (computeSyncCommitteePeriod preset (getCurrentEpoch state)).toNat + 1 < 2 ^ 64 ∧
+      ∃ validator, getValidator state validatorIndex = .ok validator ∧
+        ((computeSyncCommitteePeriod preset epoch =
+            computeSyncCommitteePeriod preset (getCurrentEpoch state) ∧
+          (state.currentSyncCommittee altair).pubkeys.contains validator.pubkey = b) ∨
+        (computeSyncCommitteePeriod preset epoch =
+            computeSyncCommitteePeriod preset (getCurrentEpoch state) + 1 ∧
+          (state.nextSyncCommittee altair).pubkeys.contains validator.pubkey = b)) := by
+  unfold isAssignedToSyncCommittee
+  simp only [bind_ok_iff, mapError_ok_iff]
+  generalize computeSyncCommitteePeriod preset epoch = p
+  generalize computeSyncCommitteePeriod preset (getCurrentEpoch state) = c
+  -- The next period of `c`, when it exists, is `c + 1`.
+  have next : ∀ a : UInt64, addChecked c 1 = .ok a ↔ c.toNat + 1 < 2 ^ 64 ∧ a = c + 1 := by
+    intro a
+    rw [addChecked_ok_iff]
+    constructor
+    · rintro ⟨fits, sum⟩
+      refine ⟨by simpa using fits, UInt64.toNat_inj.mp ?_⟩
+      rw [toNat_add_of_lt (by simpa using fits), sum]
+    · rintro ⟨fits, rfl⟩
+      exact ⟨by simpa using fits, toNat_add_of_lt (by simpa using fits)⟩
+  have ne : c + 1 ≠ c := by
+    intro eq
+    have := congrArg UInt64.toNat eq
+    rw [UInt64.toNat_add] at this
+    have := c.toNat_lt
+    simp at *
+  constructor
+  · rintro ⟨a, added, h⟩
+    obtain ⟨fits, rfl⟩ := (next a).mp added
+    refine ⟨fits, ?_⟩
+    by_cases hp : p = c ∨ p = c + 1
+    · simp only [hp, ↓reduceIte] at h
+      obtain ⟨validator, found, h⟩ := bind_ok_iff.mp h
+      rw [mapError_ok_iff] at found
+      refine ⟨validator, found, ?_⟩
+      rcases hp with rfl | rfl
+      · simp [pure, Except.pure] at h
+        exact Or.inl ⟨rfl, h⟩
+      · simp [ne, pure, Except.pure] at h
+        exact Or.inr ⟨rfl, h⟩
+    · simp only [hp, ↓reduceIte] at h
+      simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+  · rintro ⟨fits, validator, found, h⟩
+    refine ⟨c + 1, (next _).mpr ⟨fits, rfl⟩, ?_⟩
+    rcases h with ⟨rfl, h⟩ | ⟨rfl, h⟩
+    · simp only [true_or, ↓reduceIte]
+      refine bind_ok_iff.mpr ⟨validator, (mapError_ok_iff).mpr found, ?_⟩
+      simpa [pure, Except.pure] using h
+    · simp only [or_true, ↓reduceIte]
+      refine bind_ok_iff.mpr ⟨validator, (mapError_ok_iff).mpr found, ?_⟩
+      simpa [ne, pure, Except.pure] using h
+
+/-- A period other than the current one and the next is out of range.
+
+The next period must not overflow. -/
+theorem isAssignedToSyncCommittee_eq_error_of_ne {state : BeaconState preset fork}
+    {altair : .altair ≤ fork} {epoch : Epoch} {validatorIndex : ValidatorIndex}
+    (fits : (computeSyncCommitteePeriod preset (getCurrentEpoch state)).toNat + 1 < 2 ^ 64)
+    (notCurrent : computeSyncCommitteePeriod preset epoch ≠
+      computeSyncCommitteePeriod preset (getCurrentEpoch state))
+    (notNext : computeSyncCommitteePeriod preset epoch ≠
+      computeSyncCommitteePeriod preset (getCurrentEpoch state) + 1) :
+    isAssignedToSyncCommittee state altair epoch validatorIndex =
+      .error (.periodOutOfRange (computeSyncCommitteePeriod preset epoch)
+        (computeSyncCommitteePeriod preset (getCurrentEpoch state))) := by
+  unfold isAssignedToSyncCommittee
+  have : ¬(computeSyncCommitteePeriod preset epoch =
+      computeSyncCommitteePeriod preset (getCurrentEpoch state) ∨
+    computeSyncCommitteePeriod preset epoch =
+      computeSyncCommitteePeriod preset (getCurrentEpoch state) + 1) := by
+    rintro (h | h)
+    exacts [notCurrent h, notNext h]
+  have added := addChecked_of_lt (a := computeSyncCommitteePeriod preset (getCurrentEpoch state))
+    (b := 1) (by simpa using fits)
+  simp [this, added, Except.mapError, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+
+/-! ## Sync committee subnets -/
+
+/-- The subnets of a key come once each. -/
+theorem syncSubnetsOfPubkey_nodup (committee : SyncCommittee preset) (pubkey : BLSPubkey) :
+    (syncSubnetsOfPubkey committee pubkey).Nodup :=
+  Base.nodup_eraseDups _
+
+/-- The subnets of a validator come from the committee of the next slot and the validator's key.
+
+They come once each, in strictly increasing order.
+
+A subnet is among them exactly when a seat of the key falls in its subcommittee. -/
+theorem computeSubnetsForSyncCommittee_ok {state : BeaconState preset fork}
+    {altair : .altair ≤ fork} {validatorIndex : ValidatorIndex} {subnets : List UInt64}
+    (h : computeSubnetsForSyncCommittee state altair validatorIndex = .ok subnets) :
+    ∃ committee validator, syncCommitteeAtNextSlot state altair = .ok committee ∧
+      getValidator state validatorIndex = .ok validator ∧
+      subnets.Pairwise (· < ·) ∧
+      ∀ subnet, subnet ∈ subnets ↔
+        ∃ position, committee.pubkeys.toList[position]? = some validator.pubkey ∧
+          (position / syncSubcommitteeSize preset).toUInt64 = subnet := by
+  unfold computeSubnetsForSyncCommittee at h
+  obtain ⟨committee, committed, h⟩ := bind_ok_iff.mp h
+  obtain ⟨validator, validated, h⟩ := bind_ok_iff.mp h
+  rw [mapError_ok_iff] at committed validated
+  simp only [pure, Except.pure, Except.ok.injEq] at h
+  subst h
+  refine ⟨committee, validator, committed, validated, ?_, fun subnet => ?_⟩
+  · -- Sorted and without repeats, so strictly increasing.
+    have nodup : (List.mergeSort (syncSubnetsOfPubkey committee validator.pubkey)
+        (· ≤ ·)).Nodup :=
+      (List.mergeSort_perm _ _).nodup_iff.mpr (syncSubnetsOfPubkey_nodup _ _)
+    have sorted := List.pairwise_mergeSort (le := fun a b : UInt64 => decide (a ≤ b))
+      (by intro a b c; simpa using UInt64.le_trans) (by intro a b; simpa using UInt64.le_total a b)
+      (syncSubnetsOfPubkey committee validator.pubkey)
+    exact (sorted.and nodup).imp fun ⟨hle, hne⟩ => UInt64.lt_of_le_of_ne (by simpa using hle) hne
+  · rw [(List.mergeSort_perm _ _).mem_iff, mem_syncSubnetsOfPubkey]
 
 end EthLib.Consensus
