@@ -934,6 +934,58 @@ def record_attestation_signing(
     )
 
 
+def is_execution_block(name: str, fork: str, block: bytes) -> bool:
+    """From Bellatrix, whether a block carries a payload other than the empty one."""
+    return _native.consensus_is_execution_block(name, fork, block)
+
+
+def is_optimistic_candidate_block(
+    name: str, fork: str, blocks: list, current_slot: int, block: bytes, safe_slots: int = 128
+) -> bool:
+    """From Bellatrix, whether a block may be imported optimistically, given the known blocks."""
+    return _native.consensus_is_optimistic_candidate_block(
+        name, fork, blocks, current_slot, safe_slots, block
+    )
+
+
+def _roots(data: bytes) -> list:
+    return [data[i : i + 32] for i in range(0, len(data), 32)]
+
+
+def latest_verified_ancestor(
+    name: str, fork: str, blocks: list, optimistic_roots: list, root: bytes
+) -> bytes:
+    """From Bellatrix, the root of the latest block of a chain that is not optimistic."""
+    return _native.consensus_latest_verified_ancestor(
+        name, fork, blocks, b"".join(optimistic_roots), root
+    )
+
+
+def on_valid_payload(
+    name: str, fork: str, blocks: list, optimistic_roots: list, root: bytes
+) -> list:
+    """From Bellatrix, the optimistic roots after the payload of a block is found valid."""
+    return _roots(
+        _native.consensus_on_valid_payload(name, fork, blocks, b"".join(optimistic_roots), root)
+    )
+
+
+def on_invalidated_payload(
+    name: str, fork: str, blocks: list, optimistic_roots: list, first: bytes
+) -> list:
+    """From Bellatrix, the optimistic roots after a block is found to be the first invalid one."""
+    return _roots(
+        _native.consensus_on_invalidated_payload(
+            name, fork, blocks, b"".join(optimistic_roots), first
+        )
+    )
+
+
+def is_optimistic_restricted_domain(domain_type: bytes) -> bool:
+    """Whether an optimistic validator may not sign under a domain type of 4 bytes."""
+    return _native.consensus_is_optimistic_restricted_domain(domain_type)
+
+
 def get_eth1_vote(
     name: str, fork: str, state: bytes, chain: list, config: dict | None = None
 ) -> bytes:
@@ -1066,6 +1118,12 @@ __all__ = [
     "get_ptc_assignment",
     "get_upcoming_proposal_slots",
     "get_validator_signature",
+    "is_execution_block",
+    "is_optimistic_candidate_block",
+    "latest_verified_ancestor",
+    "on_valid_payload",
+    "on_invalidated_payload",
+    "is_optimistic_restricted_domain",
     "get_aggregate_signature",
     "construct_attestation",
     "construct_single_attestation",

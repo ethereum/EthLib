@@ -1057,6 +1057,27 @@ No theorem says what `ofJson` does on a document that another client wrote.
 The Python suite checks each condition and each malformed field against cases worked out from the EIP.
 With release archives enabled, it runs the 38 interchange tests of `eth-clients/slashing-protection-interchange-tests` as a signer that keeps every message.
 
+### Optimistic sync
+
+`Consensus/ForkChoice/OptimisticSync.lean` holds the optimistic sync of Bellatrix: the blocks that a node imports before the execution layer judges their payload.
+An optimistic store keeps their roots beside the blocks of the node, and the rules read only that store.
+The theorems are in `Consensus/Proofs/ForkChoice/OptimisticSync.lean`, and each assumes only that its function succeeds.
+
+`isOptimisticCandidateBlock_eq_ok_iff` states when a block may be imported optimistically: its known parent carries a payload, or its slot is far enough before the clock.
+`latestVerifiedAncestor_spec` shows that the latest verified ancestor of a block is reached through optimistic blocks only.
+The same theorem shows that this ancestor is not optimistic, or has the zero parent root.
+`onValidPayload_spec` shows that a valid payload removes exactly the block and its known ancestors from the optimistic set.
+`onInvalidatedPayload_spec` shows that the first invalid block removes exactly the optimistic roots whose chain holds it.
+`isOptimisticRestrictedDomain_iff` lists the seven domain types under which an optimistic validator may not sign.
+
+The rule of the latest valid hash in `Consensus/ForkChoice/Optimistic.lean` names the first invalid block.
+The theorems here take that block as given.
+No theorem relates the optimistic set to the blocks that the store of the fork choice removes.
+The second case of an optimistic node, a block tree without a viable branch, is not defined.
+Neither is the re-run of the merge block checks, nor the answer to an execution layer that fails to respond.
+From Gloas these rules are not specified.
+The Python suite checks each rule on Bellatrix blocks built in the test, with roots from the SSZ export.
+
 ### Light client
 
 A light client accepts an update that the sync committee signed, and moves its store by it.
@@ -1311,12 +1332,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 275 operations and 41 size constants.
-The Python extension calls 275 of the operations and 41 of the constants.
+Lean exports 281 operations and 41 size constants.
+The Python extension calls 281 of the operations and 41 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-9252 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (2241), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1161), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (504), `xmss.c` (134).
+9409 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (2380), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1173), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (510), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
