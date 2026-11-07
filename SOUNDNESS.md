@@ -1482,8 +1482,9 @@ Under it, `validateLightClientUpdate_signed` shows that every member whose bit i
 `validateLightClientUpdate_signed_outside` adds that a set of keys holding fewer seats of the committee than there are signers leaves a signer outside the set.
 `SignatureChecks.not_aggregateSound_acceptAll` shows that the assumption has content: the checks that accept every signature do not meet it.
 The header slots of the store never move back.
-`applyLightClientUpdate_slots`, `processLightClientUpdate_slots` and `processLightClientStoreForceUpdate_slots` show that the finalized and optimistic slots never decrease.
-They also show that a finalized slot at or below the optimistic slot stays there.
+`applyLightClientUpdate_finalizedSlot_le`, `processLightClientUpdate_finalizedSlot_le` and `processLightClientStoreForceUpdate_finalizedSlot_le` show that the finalized slot never decreases.
+`applyLightClientUpdate_optimisticSlot_le`, `processLightClientUpdate_optimisticSlot_le` and `processLightClientStoreForceUpdate_optimisticSlot_le` show the same for the optimistic slot.
+`applyLightClientUpdate_slot_order`, `processLightClientUpdate_slot_order` and `processLightClientStoreForceUpdate_slot_order` show that a finalized slot at or below the optimistic slot stays there.
 `initializeLightClientStore_headers` shows that a new store starts with one header for both.
 `LightClientStore.upgrade_beacon` shows that the upgrade of a store to a later fork keeps both beacon headers, so it keeps both slots too.
 So every store that these four steps reach from a bootstrap keeps that order.
