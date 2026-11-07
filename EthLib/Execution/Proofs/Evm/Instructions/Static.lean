@@ -104,7 +104,7 @@ theorem stateKept_recordStorageRead (evm : Evm fork Meter) (address : Address) (
 
 /-- A step of a static frame keeps its state, up to the records of its reads.
 
-It keeps its message and its code. -/
+It keeps its message, its code and the block of its state. -/
 structure StaticStep (before after : Evm fork Meter) : Prop where
   state : StateKept before after
   message : after.message = before.message

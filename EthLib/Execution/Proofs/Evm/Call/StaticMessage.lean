@@ -85,15 +85,6 @@ theorem StaticMessage.of_sameOutside {state state' : State.TransactionState}
   · obtain ⟨c, hc⟩ := m4 t v
     exact ⟨c, by rw [acc]; exact hc⟩
 
-omit [GasMeter Meter] in
-theorem sameOutside_nil_trans {a b c : State.TransactionState}
-    (h₁ : State.TransactionState.SameOutside [] a b)
-    (h₂ : State.TransactionState.SameOutside [] b c) :
-    State.TransactionState.SameOutside [] a c := fun address hmem => by
-  obtain ⟨x, y, z⟩ := h₁ address hmem
-  obtain ⟨x', y', z'⟩ := h₂ address hmem
-  exact ⟨x'.trans x, fun key => (y' key).trans (y key), fun key => (z' key).trans (z key)⟩
-
 /-- A message in a static frame leaves the state as it was, up to the records of its reads.
 
 It also keeps the block of the state.
@@ -135,7 +126,7 @@ theorem processMessage_static [LawfulGasMeter Meter] (hfork : .paris ≤ fork) :
             ended0.val.state.parent = state1.parent →
             State.TransactionState.SameOutside [] state ended0.val.state ∧
               ended0.val.state.parent = state.parent :=
-          fun so par => ⟨sameOutside_nil_trans hso so, par.trans hpar⟩
+          fun so par => ⟨hso.trans so, par.trans hpar⟩
         rcases hpa : precompileAddress fork message with _ | addr
         · simp only [hpa] at hdo
           split at hdo
