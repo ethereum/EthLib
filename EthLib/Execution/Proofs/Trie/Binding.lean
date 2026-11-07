@@ -368,6 +368,8 @@ theorem verifyProof_sound (hash : ByteArray → Hash32) {trie : Trie} {key : Byt
 
 Later entries replace earlier values, and an empty value removes its key.
 
+Verification hashes the key exactly when the empty trie does.
+
 The construction gives distinct keys, which the trie of Yellow Paper Appendix D assumes. -/
 theorem verifyProof_sound_foldl_trieSet (hash : ByteArray → Hash32) (secured : Bool)
     (pairs : List (ByteArray × ByteArray)) :
@@ -375,13 +377,15 @@ theorem verifyProof_sound_foldl_trieSet (hash : ByteArray → Hash32) (secured :
     ∀ {key : ByteArray} {root' : Hash32} {honestProof proof : List ByteArray}
       {result : Option ByteArray},
       root hash trie = .ok root' → getProof hash trie key = .ok honestProof →
-      verifyProof hash root' trie.secured key proof = .ok result →
+      verifyProof hash root' secured key proof = .ok result →
       (proof = honestProof ∧ result = valueAt hash trie key) ∨
         (∃ pair, findProofCollision hash proof honestProof = some pair ∧ IsCollision hash pair) ∨
         ∃ pair, findPathCollision hash trie = some pair ∧ IsCollision hash pair := by
   intro trie key root' honestProof proof result hroot hhonest hverify
+  -- Setting pairs keeps the flag of the empty trie.
+  have hsecured : trie.secured = secured := secured_foldl_trieSet pairs _
   exact verifyProof_sound hash hroot hhonest
-    (nodup_keys_foldl_trieSet secured pairs) hverify
+    (nodup_keys_foldl_trieSet secured pairs) (hsecured ▸ hverify)
 
 /-! ## Two tries with one root -/
 
