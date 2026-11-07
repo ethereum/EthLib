@@ -22,6 +22,7 @@ It also keeps every other slot, and every account, as a base state holds them.
 - From Berlin, SLOAD of the key of a fact pushes its word now, and makes the slot warm.
 - It pays 2100 for a cold slot and 100 for a warm one.
 - From Berlin to before Glamsterdam, SSTORE to the key of a fact writes the slot and makes it warm.
+- It needs a frame that may change the state, more than 2300 gas, and its account in the base state.
 - It pays the price of EIP-2200 with the prices of EIP-2929, from the facts of the slot.
 - It adds the refund of the write, from the same facts, to the refund counter.
 

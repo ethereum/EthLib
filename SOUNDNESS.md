@@ -882,6 +882,7 @@ Every other slot of every account, and every account, reads as in a base state.
 `Logic.Stored.of_known` proves that a rule that keeps the state and the substate keeps every fact.
 `Logic.sload_stored` proves that from Berlin, SLOAD of the key of a fact pushes its word now and makes the slot warm.
 `Logic.sstore_stored` proves that from Berlin to before Glamsterdam, SSTORE to the key of a fact writes it and makes it warm.
+It needs a frame that may change the state, more than 2300 gas, and the account of the frame in the base state.
 It pays the price of EIP-2200 with the prices of EIP-2929 from the facts of the slot, and adds the refund of the write.
 `Logic.stop_stored` proves that STOP keeps every fact.
 These frames say nothing of the logs, the accessed addresses and the other fields of the substate.
