@@ -83,12 +83,13 @@ theorem selfdestructTransfer_of_glamsterdam (h : fork ≥ .glamsterdam) (state :
   have : ¬fork < .glamsterdam := Nat.not_lt.mpr h
   simp only [selfdestructTransfer, dencun, this, false_and, ↓reduceIte, bind_pure]
 
-/-- From Glamsterdam, SELFDESTRUCT to another account keeps the sum of the two balances.
+/-- From Glamsterdam, SELFDESTRUCT keeps the sum of the balances of the originator and beneficiary.
+
+When they are one account, its balance is counted once for each name.
 
 Every other balance is unchanged, so no ether is gone. -/
 theorem selfdestructTransfer_balance_of_glamsterdam (h : fork ≥ .glamsterdam)
     {state after : TransactionState} {originator beneficiary : Address}
-    (hne : originator ≠ beneficiary)
     (ht : selfdestructTransfer fork state originator beneficiary = .ok after) :
     (after.getAccount originator).balance.toNat + (after.getAccount beneficiary).balance.toNat =
         (state.getAccount originator).balance.toNat +
@@ -96,7 +97,7 @@ theorem selfdestructTransfer_balance_of_glamsterdam (h : fork ≥ .glamsterdam)
       ∀ other, other ≠ originator → other ≠ beneficiary →
         after.getAccount other = state.getAccount other := by
   rw [selfdestructTransfer_of_glamsterdam h] at ht
-  exact TransactionState.moveEther_balance hne ht
+  exact TransactionState.moveEther_balance ht
 
 /-- From Glamsterdam, an account that names itself as beneficiary keeps its balance. -/
 theorem selfdestructTransfer_self_of_glamsterdam (h : fork ≥ .glamsterdam)
@@ -104,7 +105,7 @@ theorem selfdestructTransfer_self_of_glamsterdam (h : fork ≥ .glamsterdam)
     (ht : selfdestructTransfer fork state originator originator = .ok after) :
     (after.getAccount originator).balance = (state.getAccount originator).balance := by
   rw [selfdestructTransfer_of_glamsterdam h] at ht
-  exact TransactionState.moveEther_self ht
+  exact congrArg (·.balance) (TransactionState.moveEther_self ht).1
 
 /-- From Cancun to BPO5, an account created in the transaction that names itself burns its ether.
 
