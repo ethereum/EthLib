@@ -15,6 +15,8 @@ The domain types differ, so a signature of one kind of message never serves anot
 The types of the requests of the execution layer differ and increase.
 
 The flag of a builder index is the registry limit, so no validator index before Gloas has it.
+
+The reward weights add up to the weight denominator, without wrapping.
 -/
 
 @[expose] public section
@@ -61,6 +63,16 @@ theorem requestTypes_increasing :
 theorem BUILDER_INDEX_FLAG_eq_registry_limit :
     BUILDER_INDEX_FLAG = Preset.mainnet.VALIDATOR_REGISTRY_LIMIT ∧
       BUILDER_INDEX_FLAG = Preset.minimal.VALIDATOR_REGISTRY_LIMIT := by
+  decide
+
+/-- The three flag weights, the sync committee weight and the proposer weight add up to the total.
+
+The total is the weight denominator.
+
+The sum is taken on natural numbers, so it does not wrap in 64 bits. -/
+theorem reward_weights_sum_eq_WEIGHT_DENOMINATOR :
+    TIMELY_SOURCE_WEIGHT.toNat + TIMELY_TARGET_WEIGHT.toNat + TIMELY_HEAD_WEIGHT.toNat +
+      SYNC_REWARD_WEIGHT.toNat + PROPOSER_WEIGHT.toNat = WEIGHT_DENOMINATOR.toNat := by
   decide
 
 end EthLib.Consensus
