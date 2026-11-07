@@ -3,8 +3,10 @@
 from ethlib.cryptography import kzg
 from raising import raises
 
-# The inputs are all zero. Every case fails on a count or an index, and the checks of the counts and
-# of the indices come before the checks of the points, so the zero bytes never reach a point check.
+# The inputs are all zero.
+# Every case fails on a count or an index.
+# The checks of the counts and of the indices come before the checks of the points.
+# So the zero bytes never reach a point check.
 COMMITMENT = bytes(kzg.BYTES_PER_COMMITMENT)
 CELL = bytes(kzg.BYTES_PER_CELL)
 PROOF = bytes(kzg.BYTES_PER_PROOF)
@@ -79,7 +81,8 @@ def test_recover_repeated_index() -> None:
     assert info.value.code == 13
 
 
-# These two errors come from the C layer, before any Lean code runs, and are ValueErrors.
+# These two errors come from the C layer.
+# They are ValueErrors, and no Lean code has run when they are raised.
 def test_blob_batch_counts_differ() -> None:
     """A batch of two blobs with one commitment and one proof fails on the counts."""
     blob = bytes(kzg.BYTES_PER_BLOB)
