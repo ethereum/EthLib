@@ -5,11 +5,14 @@ public import EthLib.Execution.Proofs.Evm.Instructions.MemoryData
 public import EthLib.Execution.Proofs.Evm.Instructions.ControlFlow
 public import EthLib.Execution.Proofs.Evm.Instructions.Storage
 public import EthLib.Execution.Proofs.Evm.Instructions.Return
+public import EthLib.Execution.Proofs.Evm.Instructions.EnvironmentData
 
 /-!
 # Proofs: rules for the opcodes of a contract that reads its call data and uses its storage
 
-A contract that answers a call reads its call data, compares and jumps, and hashes memory.
+A contract that answers a call reads its call data and its caller, compares and jumps.
+
+It also hashes memory.
 
 It then reads and writes its storage, and returns a word.
 
@@ -63,6 +66,12 @@ theorem instruction_calldataload :
     instruction (Meter := Meter) fork .calldataload = some calldataloadStep := by
   simp [instruction, stackOnlyStep, controlFlowStep, memoryDataStep, HOrElse.hOrElse,
     OrElse.orElse, Option.orElse]
+
+/-- CALLER runs the read of the caller of the message. -/
+theorem instruction_caller : instruction (Meter := Meter) fork .caller =
+    some (readFrame OPCODE_CALLER fun evm => evm.message.caller.toU256) := by
+  simp [instruction, stackOnlyStep, controlFlowStep, memoryDataStep, returnOpStep,
+    environmentStep, HOrElse.hOrElse, OrElse.orElse, Option.orElse]
 
 /-- SHR runs the right shift. -/
 theorem instruction_shr :
@@ -146,6 +155,20 @@ theorem calldataload {start : U256} {rest : List U256} (hlt : pc < code.size)
   rw [calldataloadStep_cons hst, charge_nat (by rw [hg]; exact hgas)]
   refine ⟨_, rfl, hcode, hj, hm, by simp [hpc], by simp [hm], hmem,
     by simp [hg, OPCODE_CALLDATALOAD, VERY_LOW], hrun, herr, hs, hss⟩
+
+/-- CALLER pushes the address of the caller of the message as a word, for 2 gas. -/
+theorem caller (hlt : pc < code.size) (hbyte : code[pc] = 0x33) (hgas : 2 ≤ gas)
+    (hstack : stack.length < STACK_LIMIT) :
+    Hoare fork (At code message pc stack memory gas state substate)
+      (At code message (pc + 1) (message.caller.toU256 :: stack) memory (gas - 2) state
+        substate) := by
+  apply At.rule hlt hbyte (ofByte_of_decode (op := .caller) rfl (Fork.frontier_le _))
+    instruction_caller
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
+  rw [readFrame_of_length_lt (by rw [hst]; exact hstack),
+    charge_nat (by rw [hg, show OPCODE_CALLER = 2 from rfl]; exact hgas)]
+  refine ⟨_, rfl, hcode, hj, hm, by simp [hpc], by simp [hm, hst], hmem,
+    by simp [hg, OPCODE_CALLER, BASE], hrun, herr, hs, hss⟩
 
 /-- A two-operand instruction of the stack, on `x` then `y`, puts `f x y` in their place. -/
 theorem binary {byte : UInt8} {op : Op} {cost : Nat} {f : U256 → U256 → U256} {x y : U256}
