@@ -865,6 +865,44 @@ The new votes come from justified sources, and no honest validator becomes slash
 A vote names the validator that signed it, so both theorems assume that no one forges a vote.
 No theorem links the model to the beacon chain, so neither theorem is yet about what a client runs.
 
+### Engine API
+
+The Engine API is the interface through which the consensus layer drives the execution layer.
+`EthLib/Engine/` holds the checks of `engine_newPayload`, versions 1 to 5, and the choice of the head in `engine_forkchoiceUpdated`, versions 1 to 3.
+It also holds the execution engine that the beacon chain calls.
+The theorems are in `Engine/Proofs/`.
+
+A payload and its block determine each other.
+`ofBlock_toBlock` (`Proofs/Block.lean`) shows that a payload whose block hash is the hash of its header is the payload of its block.
+`toBlock_ofBlock` shows that a block of the shape that a payload gives comes back from its payload.
+`toBlock_shape` gives that shape: no ommers, a difficulty and a nonce of zero, and the RANDAO mix in place of the mix digest.
+
+The checks of `engine_newPayload` answer by the version of the method and the fork of the payload.
+`exists_acceptsFork_iff` (`Proofs/NewPayload.lean`) shows that some version takes a fork exactly when the fork is from Paris to Glamsterdam.
+`status_of_checkNewPayload` shows that a payload that fails the checks is `INVALID` or `INVALID_BLOCK_HASH`, with no latest valid hash.
+So `status_of_newPayloadWithoutState` shows that the method without the parent's state, which the C export runs, never answers `VALID`.
+With the state of a chain, `valid_iff_of_newPayloadOnChain` shows that the answer is `VALID` exactly when a block and a state come back.
+`of_newPayloadOnChain_some` adds that such a block passed the checks and the state transition, to that state.
+`newPayloadOnChain_of_stateTransition_ok` shows the converse for a block whose parent is the last block of the chain.
+
+The JSON decoders read back the hex encoding of any bytes (`bytesOf_hexString`, `Proofs/Json.lean`).
+A 64-bit number decodes to `x` exactly when the number read with the bound `2^64` is `x` (`uint64_eq_ok_iff`).
+A field that appears at a fork decodes exactly when it is present from that fork on and absent before (`exists_since_iff`, `Proofs/ExecutionEngine.lean`).
+
+The theorems about `engine_forkchoiceUpdated` are in `Proofs/ForkchoiceUpdated.lean`.
+`forkchoiceUpdated_valid` shows that a valid answer selects a valid head that the execution layer holds, with its safe and finalized blocks on its chain.
+The exception is step 2 of the method, which `forkchoiceUpdated_of_belowFinalized` covers.
+A valid head below the finalized block that the execution layer knows is `VALID` there, and the head does not change.
+`forkchoiceUpdated_of_invalid` gives the answer for an invalid head, and `latestValid_eq_some_iff` with `getElem?_succ_chainOf` shows that its latest valid hash is the valid ancestor nearest the head.
+
+`executionEngine_accepts_iff` (`Proofs/ExecutionEngine.lean`) states when the execution engine accepts a payload request of the beacon chain.
+The request lists must be well formed, and the payload must have a block at the active fork of the chain.
+From Deneb, the blob transactions of that block must carry the versioned hashes of the request.
+The block must pass the state transition.
+
+No payload build is specified, so `engine_getPayload` and payload attributes on a new head have no definition and no theorem.
+The tree of known payloads and the known finalized block are inputs of each call, not state that the model keeps between calls.
+
 ### What cannot be proved yet
 
 Some definitions cannot be unfolded by the kernel, so the kernel cannot evaluate them, and their intended computational properties remain unproved.
