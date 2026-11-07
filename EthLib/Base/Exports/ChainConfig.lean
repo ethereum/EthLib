@@ -78,12 +78,18 @@ def blobScheduleOfJson (j : Json) : Result (Activation × BlobSchedule) := do
 
 /-- A chain configuration given as JSON, with no blob schedule of its own when none is given.
 
+No fork by block number may come after a fork by timestamp in the timeline, as EIP-6122 requires.
+
 The chain ID is a 64-bit number, so a larger one is rejected rather than reduced. -/
 def configOfJson (j : Json) : Result ChainConfig := do
   let some chainId := (j.getObjValAs? Nat "chainId").toOption | throw (0, "config: no chainId")
   unless chainId < 2 ^ 64 do throw (0, "config: chainId is not below 2^64")
   let .arr activations := j.getObjValD "activations" | throw (0, "config: no activations")
   let activations ← activations.toList.mapM activationOfJson
+  -- EIP-6122 puts forks by time after forks by block, so none comes before a fork by block.
+  unless activations.all (fun (g, b) => !(b matches .block _) ||
+      activations.all fun (f, a) => a matches .block _ || !decide (f < g)) do
+    throw (0, "config: a fork by block comes after a fork by time")
   let schedules ← match j.getObjValD "blobSchedules" with
     | .arr entries => entries.toList.mapM blobScheduleOfJson
     | .null => pure []
