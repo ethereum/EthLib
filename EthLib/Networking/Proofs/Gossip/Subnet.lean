@@ -41,11 +41,11 @@ theorem computeSubscribedSubnet_lt {index : UInt64} {subnet : SubnetID}
     subnet < config.ATTESTATION_SUBNET_COUNT := by
   have count : config.ATTESTATION_SUBNET_COUNT ≠ 0 := by
     intro zero
-    simp [computeSubscribedSubnet, computeAttestationSubnetPrefixBits, zero, bind, Except.bind,
-      throw, throwThe, MonadExceptOf.throw] at h
+    simp [computeSubscribedSubnet, computeShuffledPrefix, computeAttestationSubnetPrefixBits, zero,
+      bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
   have positive : 0 < config.ATTESTATION_SUBNET_COUNT.toNat :=
     Nat.pos_of_ne_zero fun zero => count (UInt64.toNat_inj.mp (by simpa using zero))
-  unfold computeSubscribedSubnet at h
+  unfold computeSubscribedSubnet computeShuffledPrefix at h
   simp only [bind, Except.bind, pure, Except.pure, throw, throwThe, MonadExceptOf.throw,
     Except.mapError] at h
   repeat' split at h
@@ -113,7 +113,7 @@ theorem computeSubscribedSubnet_exists {index : UInt64}
   have shifted := Base.Uint64.addChecked_of_lt (a := epoch)
     (b := (nodeId.toNat % config.EPOCHS_PER_SUBNET_SUBSCRIPTION.toNat).toUInt64)
     (by rw [toNat_of_lt (by omega)]; omega)
-  unfold computeSubscribedSubnet
+  unfold computeSubscribedSubnet computeShuffledPrefix
   simp only [prefixBits, bind, Except.bind, pure, Except.pure, Except.mapError, epochs, bitsFit,
     shifted, ↓reduceIte]
   split
@@ -161,44 +161,15 @@ theorem computeSubscribedSubnets_exists
 
 /-! ## Distinct subnets -/
 
-/-- The shuffled prefix of a node in an epoch, the part of the choice that every index shares.
-
-It repeats the steps of the choice before the index, so the proofs can name their result. -/
-private def permutedPrefix (config : SubnetParameters)
-    (shuffle : UInt64 → UInt64 → Base.Bytes32 → Except ε UInt64)
-    (nodeId : NodeID) (epoch : UInt64) : Except (SubnetError ε) UInt64 := do
-  let bits ← computeAttestationSubnetPrefixBits config
-  let nodePrefix := nodeId.toNat >>> (NODE_ID_BITS - bits)
-  if config.EPOCHS_PER_SUBNET_SUBSCRIPTION = 0 then throw .zeroEpochsPerSubscription
-  let nodeOffset := (nodeId.toNat % config.EPOCHS_PER_SUBNET_SUBSCRIPTION.toNat).toUInt64
-  let shifted ← (Base.Uint64.addChecked epoch nodeOffset).mapError fun _ => .epochOverflow
-  let period := shifted / config.EPOCHS_PER_SUBNET_SUBSCRIPTION
-  let seed := Cryptography.Hash.Sha256.hash32 ⟨(Base.uintToBytes 8 period.toNat).toArray⟩
-  if 64 ≤ bits then throw (.prefixBitsTooLarge bits)
-  (shuffle nodePrefix.toUInt64 (2 ^ bits).toUInt64 seed).mapError .shuffle
-
-/-- The subnet of an index is the shared shuffled prefix plus the index, modulo the count. -/
-private theorem computeSubscribedSubnet_eq_bind (index : UInt64) :
-    computeSubscribedSubnet config shuffle nodeId epoch index =
-      permutedPrefix config shuffle nodeId epoch >>= fun permuted => do
-        let subnet ← (Base.Uint64.addChecked permuted index).mapError fun _ => .subnetOverflow
-        return subnet % config.ATTESTATION_SUBNET_COUNT := by
-  simp only [computeSubscribedSubnet, permutedPrefix, bind_assoc]
-  -- Both sides make the same checks, so the bind moves inside each branch.
-  congr 1
-  funext bits
-  by_cases epochs : config.EPOCHS_PER_SUBNET_SUBSCRIPTION = 0 <;>
-    by_cases wide : 64 ≤ bits <;> simp only [epochs, wide, ↓reduceIte, bind_assoc]
-
 /-- The choice returns a subnet exactly when the shared prefix plus the index fits in 64 bits.
 
 The subnet is then that sum modulo the count. -/
 private theorem computeSubscribedSubnet_eq_ok_iff {index : UInt64} {subnet : SubnetID} :
     computeSubscribedSubnet config shuffle nodeId epoch index = .ok subnet ↔
-      ∃ permuted, permutedPrefix config shuffle nodeId epoch = .ok permuted ∧
+      ∃ permuted, computeShuffledPrefix config shuffle nodeId epoch = .ok permuted ∧
         permuted.toNat + index.toNat < 2 ^ 64 ∧
         subnet.toNat = (permuted.toNat + index.toNat) % config.ATTESTATION_SUBNET_COUNT.toNat := by
-  rw [computeSubscribedSubnet_eq_bind, Base.bind_ok_iff]
+  rw [computeSubscribedSubnet, Base.bind_ok_iff]
   apply exists_congr
   intro permuted
   apply and_congr_right
