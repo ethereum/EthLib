@@ -111,7 +111,7 @@ theorem decodeMessage_encodeMessage {snappy : Bool} {m : Message} {data frame : 
   · -- A compressed body: the reader checks the declared size, then decompresses.
     have hmax : data.size ≤ Snappy.maxUncompressedLength := by
       simp only [MAX_MESSAGE_SIZE, Snappy.maxUncompressedLength] at hsize ⊢; omega
-    obtain ⟨rest, hpre⟩ := Proofs.Snappy.Compress.readPreamble_compress hmax
+    have hpre := Proofs.Snappy.Compress.readPreamble_compress hmax
     have hd' := decodeItem_id_append hid (Snappy.compress data)
     have hframe : (if (snappy && m.id != 0x00) = true then Snappy.compress data else data) =
         Snappy.compress data := by simp [hc]

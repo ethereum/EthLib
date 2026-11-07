@@ -87,10 +87,10 @@ theorem compressLoop_reads (src : ByteArray) (hsz : src.size ≤ maxUncompressed
       have hle := matchLength_le src c i hc.1 (by omega)
       have hmatch := matchLength_get src c i hc.1
       have hwin : i - c < copyTwoOffsetBound := hc.2
-      obtain ⟨e₁, he₁, hr₁⟩ := emitLiteral_reads (declared := src.size) out hli
-        (by omega) (by omega) (by omega)
-      obtain ⟨e₂, he₂, hr₂⟩ := emitCopies_reads (declared := src.size) (L := src.data.toList)
-        (offset := i - c) (by omega) hwin (matchLength src c i hc.1) i (emitLiteral out src lit i)
+      have hr₁ := emitLiteral_reads (declared := src.size) (src := src) (lo := lit) (hi := i)
+        hli (by omega) (by omega) (by omega)
+      have hr₂ := emitCopies_reads (declared := src.size) (L := src.data.toList)
+        (offset := i - c) (by omega) hwin (matchLength src c i hc.1) (p := i)
         (by omega) (by omega) (by omega) (fun j hj hjn h1 h2 => by
           have hA := hmatch (j - i) (by omega) (by omega) (by omega)
           have e₁ : c + (j - i) = j - (i - c) := by omega
@@ -98,16 +98,16 @@ theorem compressLoop_reads (src : ByteArray) (hsz : src.size ≤ maxUncompressed
           simp only [e₁, e₂] at hA
           simpa [ByteArray.getElem_eq_getElem_data] using hA.symm)
       refine ih (Nat.le_refl _) (by omega) ?_
-      rw [he₂, he₁]
-      exact ((hout.trans hr₁).trans hr₂)
+      rw [toList_emitCopies, toList_emitLiteral _ (by omega : i ≤ src.size)]
+      exact (hout.trans hr₁).trans hr₂
   | case2 tb i lit out hi s c tb' hc len hl ih => exact ih (by omega) (by omega) hout
   | case3 tb i lit out hi s c tb' hc ih => exact ih (by omega) (by omega) hout
   | case4 tb i lit out hi =>
-      obtain ⟨e, he, hr⟩ := emitLiteral_reads (declared := src.size) out (hi := src.size)
+      have hr := emitLiteral_reads (declared := src.size) (hi := src.size)
         (lo := lit) (src := src) (by omega) (Nat.le_refl _) (by omega) (Nat.le_refl _)
-      rw [he]
+      rw [toList_emitLiteral out (Nat.le_refl _)]
       have := hout.trans hr
-      rwa [List.take_of_length_le (by omega)] at this
+      rwa [List.take_of_length_le (l := src.data.toList) (by omega)] at this
 
 /-! ## The round trip -/
 
@@ -134,10 +134,14 @@ theorem decompressList_compress {src : ByteArray} (h : src.size ≤ maxUncompres
   rw [decompress, toList_eq_data_toList] at hd
   simp [decompressList, hd, Except.map]
 
-/-- The block of an input of at most 2^32 - 1 bytes declares the size of the input. -/
+/-- The block of an input of at most 2^32 - 1 bytes declares the size of the input.
+
+The elements that the scan writes follow the preamble.
+-/
 theorem readPreamble_compress {src : ByteArray} (h : src.size ≤ maxUncompressedLength) :
-    ∃ rest, readPreamble (compress src).data.toList = .ok (src.size, rest) := by
-  obtain ⟨rest, hpre⟩ := decompressList_length_eq_declared (decompressList_compress h)
-  exact ⟨rest, by simpa using hpre⟩
+    readPreamble (compress src).data.toList = .ok (src.size,
+      (compressLoop src (Array.replicate (2 ^ tableBits) 0) 0 0 ByteArray.empty).data.toList) := by
+  rw [compress, ByteArray.data_append, Array.toList_append, List.toList_toArray,
+    readPreamble_encode _ (by simpa using h)]
 
 end EthLib.Networking.Proofs.Snappy.Compress
