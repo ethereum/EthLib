@@ -451,6 +451,145 @@ theorem getHead_eq_ghost_of_gloas {nodes : List ForkChoiceNode} {head : ForkChoi
   simp only [getHead, tree, notEmpty, ↓reduceIte, bind, Except.bind] at found
   exact getHeadFrom_eq_ghost_of_gloas gloas noBoost noDecision justifiedState tree (.refl _) found
 
+/-! ## Every payload present -/
+
+variable (lower) in
+/-- The view of the blocks of the given nodes, their ancestors, and the block of each vote.
+
+A vote is the block of the node that the store gives it.
+
+So a vote for a block that the store does not hold is no vote here.
+
+The view before Gloas keeps such a vote, and differs from this one only there. -/
+noncomputable def blockView (nodes : List ForkChoiceNode) :
+    View ℕ (Option Root) (blockTree lower) :=
+  View.ofBlocks (nodes.map (some ·.root)).toFinset fun i => (store.latestNode i.toUInt64).map (·.1)
+
+/-- When every known block builds on the full node of its known parent, every root does. -/
+theorem buildsOnFull_of_full
+    (fullParents : ∀ (root : Root) (block parent : BeaconBlock preset fork),
+      store.blocks[root]? = some block → store.blocks[block.parentRoot]? = some parent →
+      parentPayloadStatus block parent = .full)
+    (root : Option Root) : store.buildsOnFull root = true := by
+  rcases root with _ | root
+  · rfl
+  simp only [buildsOnFull]
+  split
+  · rename_i block found
+    split
+    · rename_i parent parentFound
+      simp [fullParents root block parent found parentFound]
+    · rfl
+  · rfl
+
+/-- From Gloas no vote supports an empty node when each later vote says the payload is present. -/
+theorem latestNode_ne_empty (gloas : .glamsterdam ≤ fork)
+    (present : ∀ (index : ValidatorIndex) (message : LatestMessage fork)
+      (block : BeaconBlock preset fork),
+      store.latestMessages[index]? = some message → store.blocks[message.root]? = some block →
+      block.slot < message.slot gloas → message.payloadPresent gloas = true)
+    (index : ValidatorIndex) (root : Option Root) :
+    store.latestNode index ≠ some (root, some false) := by
+  intro vote
+  simp only [latestNode] at vote
+  split at vote
+  · cases vote
+  cases message : store.latestMessages[index]? with
+  | none => simp [message] at vote
+  | some message' =>
+  simp only [message, Option.bind_some] at vote
+  cases found : store.blocks[message'.root]? with
+  | none => simp [getSupportedNode_of_unknown gloas found, Except.toOption] at vote
+  | some block =>
+  by_cases later : block.slot < message'.slot gloas
+  · simp [getSupportedNode_of_lt_slot gloas found later, present index message' block message found
+      later, Except.toOption, ForkChoiceNode.toModel, PayloadStatus.toStatus] at vote
+  · simp [getSupportedNode_of_same_slot gloas found (UInt64.not_lt.mp later), Except.toOption,
+      ForkChoiceNode.toModel, PayloadStatus.toStatus] at vote
+
+/-- From Gloas, when every payload is present, the head is the full node of the head over blocks.
+
+That is the rule that the head follows before Gloas, over the view of the viable blocks.
+
+That view reads each vote as the block of the node that the store gives it.
+
+Every known block builds on the full node of its known parent.
+
+Each vote from a later slot than its block says the payload is present.
+
+The full node of each viable block is viable.
+
+No viable node is a payload decision of the previous slot, and the boost does not apply.
+
+Some node is viable. -/
+theorem getHead_eq_ghost_full_of_gloas {nodes : List ForkChoiceNode} {head : ForkChoiceNode}
+    (gloas : .glamsterdam ≤ fork)
+    (fullParents : ∀ (root : Root) (block parent : BeaconBlock preset fork),
+      store.blocks[root]? = some block → store.blocks[block.parentRoot]? = some parent →
+      parentPayloadStatus block parent = .full)
+    (present : ∀ (index : ValidatorIndex) (message : LatestMessage fork)
+      (block : BeaconBlock preset fork),
+      store.latestMessages[index]? = some message → store.blocks[message.root]? = some block →
+      block.slot < message.slot gloas → message.payloadPresent gloas = true)
+    (noBoost : store.shouldApplyProposerBoost config gloas = .ok false)
+    (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
+    (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
+    (tree : store.getFilteredNodeTree config = .ok nodes) (someViable : nodes ≠ [])
+    (fullViable : ∀ n ∈ nodes, ⟨n.root, .full⟩ ∈ nodes)
+    (found : store.getHead config = .ok head) :
+    head.payloadStatus = .full ∧
+      some head.root = ghost (voters state) (balanceAt state) (blockView lower nodes) rootValue
+        (some store.justifiedCheckpoint.root) := by
+  have hfull : ∀ r, r ≠ (blockTree lower).genesis → store.buildsOnFull r = true :=
+    fun r _ => buildsOnFull_of_full fullParents r
+  -- The order of roots is injective away from the common root.
+  have hroot : Set.InjOn rootValue {r | r ≠ (blockTree lower).genesis} := by
+    rintro (_ | a) ha (_ | b) hb same
+    · rfl
+    · exact (ha rfl).elim
+    · exact (hb rfl).elim
+    · rw [rootValue_some_injective same]
+  -- A pending node is in the view of nodes exactly when its block is in the view of blocks.
+  have hpending : ∀ r, (r, none) ∈ (nodeView lower nodes).blocks ↔
+      r ∈ (blockView lower nodes).blocks := by
+    intro r
+    simp only [nodeView, blockView, View.mem_ofBlocks, List.mem_toFinset, List.mem_map]
+    constructor
+    · rintro ⟨_, ⟨m, mMem, rfl⟩, above⟩
+      exact ⟨_, ⟨m, mMem, rfl⟩, payloadTree_ancestor_fst above⟩
+    · rintro ⟨_, ⟨m, mMem, rfl⟩, above⟩
+      exact ⟨_, ⟨m, mMem, rfl⟩, payloadTree_ancestor_none_of above⟩
+  -- The full node of each block of the view is in the view of nodes.
+  have hpayload : ∀ r ∈ (blockView lower nodes).blocks,
+      (r, some true) ∈ (nodeView lower nodes).blocks := by
+    intro r mem
+    simp only [blockView, View.mem_ofBlocks, List.mem_toFinset, List.mem_map] at mem
+    obtain ⟨_, ⟨m, mMem, rfl⟩, above⟩ := mem
+    simp only [nodeView, View.mem_ofBlocks, List.mem_toFinset, List.mem_map]
+    by_cases same : r = some m.root
+    · exact ⟨_, ⟨⟨m.root, .full⟩, fullViable m mMem, rfl⟩, by rw [same]; exact .refl _⟩
+    · -- A child of the block in the chain of the vote hangs under its full node.
+      obtain ⟨c, isChild, below⟩ := above.exists_child same
+      have parent : (nodeTree lower).parent (c, none) = (r, some true) := by
+        rw [nodeTree, payloadTree_parent_none isChild.1, isChild.2, hfull c isChild.1]
+      exact ⟨_, ⟨m, mMem, rfl⟩,
+        Ancestor.trans ⟨1, parent⟩ (payloadTree_ancestor_none_of (b := m.toModel) below)⟩
+  have hvote : ∀ v r, (nodeView lower nodes).latest v ≠ some (r, some false) :=
+    fun v r => latestNode_ne_empty gloas present v.toUInt64 r
+  have justified : some store.justifiedCheckpoint.root ∈ (blockView lower nodes).blocks := by
+    simp only [blockView, View.mem_ofBlocks, List.mem_toFinset, List.mem_map]
+    exact ⟨_, ⟨_, filterNodeTree_self tree someViable, rfl⟩, .refl _⟩
+  have model := getHead_eq_ghost_of_gloas lower gloas noBoost noDecision justifiedState tree
+    someViable found
+  have full : ghost (voters state) (balanceAt state) (nodeView lower nodes) nodeOrder
+      (some store.justifiedCheckpoint.root, none) =
+      (ghost (voters state) (balanceAt state) (blockView lower nodes) rootValue
+        (some store.justifiedCheckpoint.root), some true) :=
+    ghost_payloadTree _ _ hroot hfull hpending hpayload hvote (fun _ => rfl) justified
+  rw [full] at model
+  obtain ⟨roots, status⟩ := Prod.mk.inj model
+  exact ⟨PayloadStatus.toStatus_injective (status.symm.trans rfl), roots.symm⟩
+
 end Store
 
 end EthLib.Consensus
