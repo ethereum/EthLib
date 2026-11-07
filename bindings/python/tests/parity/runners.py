@@ -52,12 +52,8 @@ NOT_YET = {
 # The plan at Gloas and Heze, by the steps of the track for Glamsterdam and Hegotá.
 # A key is a runner, a runner and a handler, or a format, as in NOT_YET.
 # At these forks an entry here comes before the entry of NOT_YET.
-_GLOAS = {
-    "networking/gossip_partial_data_column_sidecar": "Gloas partial data columns (G78)",
-}
-_HEZE = {
-    "networking/gossip_partial_data_column_sidecar": "Gloas partial data columns (G78)",
-}
+_GLOAS: dict[str, str] = {}
+_HEZE: dict[str, str] = {}
 # The plan for the Bogota networks of each devnet, whose EIPs differ.
 # The steps wait for a merge into the Bogota fork branch, or a release of Bogota.
 _BOGOTA = {

@@ -29,6 +29,10 @@ A header that passes is recorded before the cells, so it stays recorded when the
 From Gloas a column sidecar has no header, and its chain reads the block that it names.
 
 A valid one has the slot of that block, and one cell per commitment of its bid.
+
+From Gloas a partial sidecar has no header either, and its chain also reads its block.
+
+It is ignored only when that block is unseen.
 -/
 
 @[expose] public section
@@ -1208,5 +1212,94 @@ theorem validatePartialDataColumnSidecar_records_header {after : PartialHeaders 
       simp_all [Except.map]
 
 end Partial
+
+/-! ## Partial column sidecars, from Gloas -/
+
+section GloasPartial
+
+variable {gloas : .glamsterdam ≤ fork} {sidecar : PartialDataColumnSidecar preset fork}
+  {group : PartialDataColumnGroupID fork} {columnIndex : DataAvailability.ColumnIndex}
+  {block : BeaconBlock preset fork} {state : BeaconState preset fork} {valid : Bool}
+  {reason : String}
+
+/-- From Gloas the outcome of a partial sidecar is its chain of checks, in order.
+
+It holds once the block of the group, its state and the KZG check are computed. -/
+theorem validateGloasPartialDataColumnSidecar_eq
+    (known : store.blocks[group.beaconBlockRoot]? = some block)
+    (held : store.blockStates[group.beaconBlockRoot]? = some state)
+    (proofs : verifyPartialDataColumnSidecarKzgProofs setup sidecar (block.bidCommitments gloas)
+      columnIndex = .ok valid) :
+    validateGloasPartialDataColumnSidecar setup store gloas sidecar group columnIndex =
+      .ok ((partialCountsOutcome sidecar).andThen fun _ =>
+        (rejectUnless (group.slot gloas == block.slot)
+          "group id's slot does not match the block's slot").andThen fun _ =>
+        (rejectUnless (sidecar.cellsPresentBitmap.bits.size ==
+            (block.bidCommitments gloas).data.size)
+          "bitmap length does not match commitments length").andThen fun _ =>
+        rejectUnless valid "invalid sidecar kzg proofs") := by
+  unfold validateGloasPartialDataColumnSidecar
+  by_cases counts : partialCountsOutcome sidecar = .accept
+  · simp only [counts, known, held, proofs, ValidationResult.accept_andThenM,
+      ValidationResult.accept_andThen, bind, Except.bind, pure, Except.pure, Except.mapError,
+      rejectUnless_andThenM, rejectUnless_andThen, apply_ite (Except.ok (ε := ForkChoiceError))]
+  · simp only [ValidationResult.andThenM_of_ne_accept counts, ValidationResult.andThen_of_ne_accept
+      counts, pure, Except.pure]
+
+/-- From Gloas a partial sidecar is valid exactly when every check passes, once its inputs are set.
+-/
+theorem validateGloasPartialDataColumnSidecar_eq_accept
+    (known : store.blocks[group.beaconBlockRoot]? = some block)
+    (held : store.blockStates[group.beaconBlockRoot]? = some state)
+    (proofs : verifyPartialDataColumnSidecarKzgProofs setup sidecar (block.bidCommitments gloas)
+      columnIndex = .ok valid) :
+    validateGloasPartialDataColumnSidecar setup store gloas sidecar group columnIndex =
+        .ok accept ↔
+      partialCountsOutcome sidecar = .accept ∧ group.slot gloas = block.slot ∧
+        sidecar.cellsPresentBitmap.bits.size = (block.bidCommitments gloas).data.size ∧
+        valid = true := by
+  rw [validateGloasPartialDataColumnSidecar_eq (gloas := gloas) known held proofs]
+  simp only [Except.ok.injEq, ValidationResult.andThen_eq_accept, rejectUnless_eq_accept]
+  simp
+
+/-- From Gloas a partial sidecar is ignored exactly when its counts pass and its block is unseen.
+
+So the rule ignores for no other reason, whatever the store and the KZG check give. -/
+theorem validateGloasPartialDataColumnSidecar_eq_ignore :
+    validateGloasPartialDataColumnSidecar setup store gloas sidecar group columnIndex =
+        .ok (.ignore reason) ↔
+      partialCountsOutcome sidecar = .accept ∧ store.blocks[group.beaconBlockRoot]? = none ∧
+        reason = "group id's block has not been seen" := by
+  unfold validateGloasPartialDataColumnSidecar
+  by_cases counts : partialCountsOutcome sidecar = .accept
+  · simp only [counts, ValidationResult.accept_andThenM, true_and]
+    cases known : store.blocks[group.beaconBlockRoot]? with
+    | none => simp [pure, Except.pure, eq_comm]
+    | some block =>
+      cases held : store.blockStates[group.beaconBlockRoot]? with
+      | none => simp [pure, Except.pure]
+      | some state =>
+        simp only [reduceCtorEq, false_and, iff_false]
+        simp only [bind, Except.bind, pure, Except.pure, Except.mapError, rejectUnless_andThenM]
+        split <;> try simp
+        split <;> try simp
+        cases verifyPartialDataColumnSidecarKzgProofs setup sidecar (block.bidCommitments gloas)
+          columnIndex <;> simp [rejectUnless] <;> split <;> simp
+  · simp only [ValidationResult.andThenM_of_ne_accept counts, pure, Except.pure, Except.ok.injEq]
+    cases h : partialCountsOutcome sidecar <;> simp_all [partialCountsOutcome_ne_ignore]
+
+/-- From Gloas a partial sidecar whose block is known without a state is rejected.
+
+That holds once its counts pass, since its block failed validation. -/
+theorem validateGloasPartialDataColumnSidecar_of_failed
+    (counts : partialCountsOutcome sidecar = .accept)
+    (known : store.blocks[group.beaconBlockRoot]? = some block)
+    (failed : store.blockStates[group.beaconBlockRoot]? = none) :
+    validateGloasPartialDataColumnSidecar setup store gloas sidecar group columnIndex =
+      .ok (.reject "group id's block failed validation") := by
+  unfold validateGloasPartialDataColumnSidecar
+  simp [counts, known, failed, pure, Except.pure]
+
+end GloasPartial
 
 end EthLib.Consensus

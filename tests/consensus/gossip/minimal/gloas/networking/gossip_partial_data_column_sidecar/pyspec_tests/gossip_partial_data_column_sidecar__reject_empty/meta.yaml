@@ -1,0 +1,12 @@
+topic: partial_data_column_sidecar
+blocks:
+- {block: 
+    block_0x9f87a12d020fe5f111a8e388f428594715e83c39314fecf4b523dd7da27848b5}
+- {block: 
+    block_0xf97e1966d9d5e9fcdf28e953ce45503f5f3c9125eab762e125f2c22c68961e58}
+messages:
+- {group_id: 
+    partial_data_column_group_id_0x38c73622fdb3277b7d406a027bbd30f7f140ec0a31fa0a09a2849ff8136e2e6f,
+  column_index: 0, message: 
+    partial_data_column_sidecar_0x9a22c8de0224e2dc2ee3e711b153568c26ddf976cb58c834eabbf42f111fe35e,
+  expected: reject, reason: partial message is semantically empty}

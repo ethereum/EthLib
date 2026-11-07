@@ -39,6 +39,10 @@ At Fulu a partial column sidecar carries some cells of a column, its header, or 
 Its header passes the same checks once, and the node records it for its block.
 
 Later cells of that block are checked against the recorded header.
+
+From Gloas a partial sidecar has no header, and its group names the slot of its block.
+
+Its cells are checked against the commitments of the bid of that block, which must be valid.
 -/
 
 @[expose] public section
@@ -324,5 +328,37 @@ def validatePartialDataColumnSidecar (config : Config) (checks : SignatureChecks
         columnIndex, headers)
     | other => return (other, headers)
   | other => return (other, headers)
+
+/-- From Gloas: the checks of a partial sidecar of a group and a column.
+
+The counts come first: at least one cell, and one cell and one proof per set bit.
+
+The block of the group must be known and valid, and in the slot that the group names.
+
+The bitmap must have one bit per commitment of the bid of that block.
+
+The cells must match those commitments, by their proofs.
+
+The rule reads no clock and records nothing. -/
+def validateGloasPartialDataColumnSidecar (setup : TrustedSetup) (store : Store preset fork)
+    (gloas : .glamsterdam ≤ fork) (sidecar : PartialDataColumnSidecar preset fork)
+    (group : PartialDataColumnGroupID fork) (columnIndex : DataAvailability.ColumnIndex) :
+    Except ForkChoiceError ValidationResult :=
+  let root := group.beaconBlockRoot
+  (partialCountsOutcome sidecar).andThenM fun _ =>
+  match store.blocks[root]? with
+  | none => return .ignore "group id's block has not been seen"
+  | some block =>
+  match store.blockStates[root]? with
+  | none => return .reject "group id's block failed validation"
+  | some _ =>
+  (rejectUnless (group.slot gloas == block.slot)
+    "group id's slot does not match the block's slot").andThenM fun _ =>
+  let commitments := block.bidCommitments gloas
+  (rejectUnless (sidecar.cellsPresentBitmap.bits.size == commitments.data.size)
+    "bitmap length does not match commitments length").andThenM fun _ => do
+  let valid ←
+    (verifyPartialDataColumnSidecarKzgProofs setup sidecar commitments columnIndex).mapError .kzg
+  return rejectUnless valid "invalid sidecar kzg proofs"
 
 end EthLib.Consensus
