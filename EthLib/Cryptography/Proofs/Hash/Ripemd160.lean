@@ -11,8 +11,7 @@ What is proved about RIPEMD-160:
 - The added constants are the ones the authors derive from square and cube roots.
 - Each group of sixteen steps of `r` and `r'` lists sixteen indices that include every message word, so it reads each once.
 - Rotating a word left by `n` bits with `0 < n < 32` has left rotation by `32 - n` as its inverse.
-- Each step with a rotation of 1 to 31 bits, and both eighty-step lines, permutes the five-word
-  state.
+- Each step with a rotation of 1 to 31 bits permutes the five-word state, and so do both lines.
 - Padding fills whole blocks, with the least zeros that do, and keeps the message and the `0x80` byte in place.
 - Every digest is 20 bytes.
 
