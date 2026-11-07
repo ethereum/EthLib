@@ -14,6 +14,8 @@ The ancestor of a node at a slot is a known block at or below that slot.
 
 A node at or below the slot is its own ancestor, so every known node descends from itself.
 
+The walk to a lower slot can stop at a higher slot on the way, and go on from there.
+
 From Gloas the walk gives each parent an empty or full status.
 
 It reaches the same blocks whatever the status of its start.
@@ -165,6 +167,50 @@ theorem getAncestor_le {node ancestor : ForkChoiceNode} {slot : Slot}
       split at walk <;> simp_all [throw, throwThe, MonadExceptOf.throw]
   | case4 node block found above parent parentFound lower ih =>
     rw [getAncestor_step found above parentFound lower] at walk
+    exact ih walk
+  | case5 node block found above parent parentFound notLower =>
+    rw [getAncestor] at walk
+    split at walk
+    · simp_all
+    · rename_i b same
+      rw [found, Option.some.injEq] at same
+      subst same
+      simp only [above, ↓reduceIte] at walk
+      split at walk
+      · simp_all
+      · rename_i p same
+        rw [parentFound, Option.some.injEq] at same
+        subst same
+        simp [notLower, throw, throwThe, MonadExceptOf.throw] at walk
+
+/-- The ancestor at a lower slot is the ancestor at that slot of the ancestor at a higher slot.
+
+So the walk to a slot can stop at any higher slot on the way. -/
+theorem getAncestor_trans {node ancestor : ForkChoiceNode} {higher lower : Slot}
+    (le : lower ≤ higher) (walk : store.getAncestor node higher = .ok ancestor) :
+    store.getAncestor node lower = store.getAncestor ancestor lower := by
+  induction node using getAncestor.induct (store := store) (slot := higher) with
+  | case1 node found =>
+    rw [getAncestor] at walk
+    split at walk <;> simp_all [throw, throwThe, MonadExceptOf.throw]
+  | case2 node block found atMost =>
+    rw [getAncestor_of_le found atMost] at walk
+    cases walk
+    rfl
+  | case3 node block found above parentFound =>
+    rw [getAncestor] at walk
+    split at walk
+    · simp_all
+    · rename_i b same
+      rw [found, Option.some.injEq] at same
+      subst same
+      simp only [above, ↓reduceIte] at walk
+      split at walk <;> simp_all [throw, throwThe, MonadExceptOf.throw]
+  | case4 node block found above parent parentFound parentLower ih =>
+    rw [getAncestor_step found above parentFound parentLower] at walk
+    -- The block is above the higher slot, so it is above the lower one, and both walks step up.
+    have aboveLower : ¬ block.slot ≤ lower := fun atMost => above (UInt64.le_trans atMost le)
+    rw [getAncestor_step found aboveLower parentFound parentLower]
     exact ih walk
   | case5 node block found above parent parentFound notLower =>
     rw [getAncestor] at walk
