@@ -30,6 +30,10 @@ def pairs(text: str, changed: set[int] | None = None) -> list[int]:
     ]
 
 
+def wraps(text: str, changed: set[int] | None = None) -> list[int]:
+    return [f.line for f in layout.check_text("T.lean", text, changed) if "runs onto" in f.message]
+
+
 class LineLength(unittest.TestCase):
     def test_limit(self):
         self.assertEqual(lines_of("x" * 100), [])
@@ -98,7 +102,7 @@ class CommentLayout(unittest.TestCase):
         self.assertEqual(pairs("-- One.\n-- ------"), [])
 
     def test_nested_block_comment(self):
-        self.assertEqual(pairs("/- One. /- inner -/\nTwo. -/"), [2])
+        self.assertEqual(lines_of("/- One. /- inner. -/\nTwo. -/"), [2])
 
     def test_strings_and_characters(self):
         self.assertEqual(pairs('def s := "-- One.\n-- Two."'), [])
@@ -111,6 +115,86 @@ class CommentLayout(unittest.TestCase):
         self.assertEqual(pairs(text, {4}), [5])
         self.assertEqual(pairs(text, {5}), [5])
         self.assertEqual(pairs(text, {3, 6}), [])
+
+
+# The two wrapped sentences of the network fork identifier that the rule was written for.
+FORK_ID_LINK = (
+    "/-- The header of that block has the timestamp 0, as\n"
+    "[`genesishashestest.json`](https://github.com/ethereum/tests/blob/c67e/genesishashestest.json)\n"
+    "of the Ethereum tests holds it. -/\ndef x := 1"
+)
+FORK_ID_RULE = (
+    "/-!\nEIP-6122 says that a node need not tell the two apart, but rule 1a must: it compares the"
+    " next\nfork of a peer with the local head.\n-/"
+)
+
+
+WRAP_MESSAGE = "sentence runs onto this line; give each sentence a line of its own"
+
+
+class WrappedSentences(unittest.TestCase):
+    def test_fork_id_examples(self):
+        self.assertEqual(wraps(FORK_ID_LINK), [2, 3])
+        self.assertEqual(wraps(FORK_ID_RULE), [3])
+        # The wrap is not also reported as two touching sentence lines.
+        self.assertEqual(pairs(FORK_ID_RULE), [])
+
+    def test_split_sentences_and_reference_links(self):
+        split = (
+            "/-!\nEIP-6122 says that a node need not tell the two apart.\n\n"
+            "Rule 1a must, since it compares a peer's next fork with the local head.\n-/"
+        )
+        reference = (
+            "/-- The header of that block has the timestamp 0, as [the file][genesis] holds it."
+            f"\n\n[genesis]: {URL}\n[other]: {URL} -/\ndef x := 1"
+        )
+        self.assertEqual(wraps(split), [])
+        self.assertEqual(wraps(reference), [])
+
+    def test_sentence_end(self):
+        for end in (".", "?", "!", ":", ".)", ".`", ".*", '."', ".]"):
+            with self.subTest(end=end):
+                self.assertEqual(wraps(f"/-- One{end}\nTwo. -/\ndef x := 1"), [])
+        self.assertEqual(wraps("/-- One,\nTwo. -/\ndef x := 1"), [2])
+        self.assertEqual(wraps("/-- One\nmore\nand more. -/\ndef x := 1"), [2, 3])
+
+    def test_list_items(self):
+        self.assertEqual(wraps("/-!\n- one\n- two,\n  continued.\n1. three\n-/"), [4])
+        # Each sentence of an item on a line of its own is not a wrap.
+        self.assertEqual(wraps("/-!\n- One.\n  Two.\n- Three.\n-/"), [])
+        self.assertEqual(wraps("/-!\nThe rules\n- one\n- two\n-/"), [])
+
+    def test_blocks_that_are_not_prose(self):
+        fenced = "/-!\nText\n```\nlet a := 1\nlet b := 2\n```\nMore\n-/"
+        indented = "/-!\nText\n\n    let a := 1\n    let b := 2\n-/"
+        table = "/-!\n| a | b\n| c | d\n-/"
+        heading = "/-!\n# Title\nText.\n-/"
+        self.assertEqual(wraps(fenced), [])
+        self.assertEqual(wraps(indented), [])
+        self.assertEqual(wraps(table), [])
+        self.assertEqual(wraps(heading), [])
+        self.assertEqual(wraps("-- One\n-- ------"), [])
+
+    def test_line_comments(self):
+        self.assertEqual(wraps("  -- One sentence that\n  -- goes on.\ndef x := 1"), [2])
+        self.assertEqual(wraps("def x := 1 -- One\n-- Two."), [])
+        self.assertEqual(wraps('def s := "-- One\n-- Two."'), [])
+        # An equation aligned under the line above is code, not a wrapped sentence.
+        self.assertEqual(wraps("  -- a * v = b * v + c\n  --       = d\ndef x := 1"), [])
+
+    def test_only_changed_pairs(self):
+        text = "/-- One\ntwo.\n\nThree\nfour. -/\ndef x := 1"
+        self.assertEqual(wraps(text, {1}), [2])
+        self.assertEqual(wraps(text, {5}), [5])
+        self.assertEqual(wraps(text, {3, 6}), [])
+
+    def test_rules(self):
+        text = "x" * 101 + "\n/-- One\ntwo.\nThree. -/\ndef x := 1"
+        messages = [f.message for f in layout.check_text("T.lean", text, None, ("wrap",))]
+        self.assertEqual(len(messages), 1)
+        self.assertIn("runs onto", messages[0])
+        self.assertEqual(len(layout.check_text("T.lean", text, None, ("length",))), 1)
+        self.assertEqual(len(layout.check_text("T.lean", text, None)), 3)
 
 
 class ChangedLines(unittest.TestCase):
@@ -166,6 +250,25 @@ class ChangedLines(unittest.TestCase):
             self.assertIn("New.lean:2:", out.getvalue())
             self.assertIn("New.lean:3:", out.getvalue())
             self.assertNotIn("Ignored.lean", out.getvalue())
+
+    def test_all_tracked_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.git(root, "init", "-q", "-b", "base")
+            (root / "Old.lean").write_text("-- One\n-- two.\n" + "x" * 101 + "\n")
+            self.git(root, "add", ".")
+            self.git(root, "commit", "-q", "-m", "base")
+            (root / "Untracked.lean").write_text("-- One\n-- two.\n")
+
+            with mock.patch.object(layout, "ROOT", root):
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    status = layout.main(["check_lean_layout.py", "--all", "--rule", "wrap"])
+            self.assertEqual(status, 1)
+            self.assertEqual(
+                out.getvalue().splitlines(),
+                [f"Old.lean:2: {WRAP_MESSAGE}", "1 layout finding(s)."],
+            )
 
 
 if __name__ == "__main__":
