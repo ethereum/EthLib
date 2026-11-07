@@ -13,6 +13,10 @@ So a TLOAD of that key in the same frame reads it back.
 
 TSTORE never succeeds in a static frame.
 
+TLOAD pays its price.
+
+Then it puts the transient word of the current account at the key in place of the key.
+
 TLOAD and TSTORE exist exactly from Dencun, and keep memory.
 -/
 
@@ -21,8 +25,26 @@ TLOAD and TSTORE exist exactly from Dencun, and keep memory.
 namespace EthLib.Execution.Evm
 
 open EthLib.Base (Fork U256)
+open GasCosts
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
+
+/-- TLOAD on a key: pay, then put the transient word at the key in its place. -/
+theorem tloadStep_cons {evm : Evm fork Meter} {word : U256} {rest : List U256}
+    (h : evm.stack.val = word :: rest) :
+    tloadStep evm = (GasMeter.charge evm.gas OPCODE_TLOAD).map fun gas =>
+      { evm with
+        stack := ⟨evm.state.getTransientStorage evm.message.currentTarget (U256.toBeBytes word) ::
+            rest, length_cons_le (dropped := [word]) h (by simp)⟩,
+        gas, pc := evm.pc + 1 } := by
+  have hstack : evm.stack = ⟨word :: rest, h ▸ evm.stack.property⟩ := Subtype.ext h
+  have room : ¬(rest.length = STACK_LIMIT) := by
+    have := length_cons_le (x := word) (dropped := [word]) h (by simp)
+    simp only [List.length_cons] at this
+    omega
+  simp only [tloadStep, popWord, chargeGas, pushWord, advance, hstack, Stack.pop, Stack.push]
+  rcases hc : GasMeter.charge evm.gas OPCODE_TLOAD with _ | _ <;>
+    simp [hc, bind, Except.bind, pure, Except.pure, Except.map, room]
 
 /-- After TSTORE of `value` at `key`, the transient storage holds `value` at `key`. -/
 theorem tstoreStep_getTransientStorage {evm after : Evm fork Meter} {key value : U256}

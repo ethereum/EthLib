@@ -15,6 +15,12 @@ MCOPY copies the old bytes of its source, also when the source and the destinati
 
 CALLDATALOAD reads the call data past its end as zeros.
 
+MLOAD pays its price and the growth of memory, and CALLDATALOAD pays its price.
+
+Then each puts the word it reads at the offset in place of the offset.
+
+MLOAD reads after the growth of memory.
+
 RETURNDATACOPY that pays fails exactly when its range ends past the return data.
 
 None of these instructions changes the message, the state or the substate of the frame.
@@ -338,6 +344,47 @@ theorem byteAt_returndatacopyStep {evm after : Evm fork Meter} {start offset siz
       · rw [byteAt_memoryExtend, hmem]
 
 /-! ## The size of memory -/
+
+/-- CALLDATALOAD on an offset: pay, then put the word of call data at the offset in its place. -/
+theorem calldataloadStep_cons {evm : Evm fork Meter} {start : U256} {rest : List U256}
+    (h : evm.stack.val = start :: rest) :
+    calldataloadStep evm = (GasMeter.charge evm.gas OPCODE_CALLDATALOAD).map fun gas =>
+      { evm with
+        stack := ⟨loadWord evm.message.data start.toNat 32 :: rest,
+          length_cons_le (dropped := [start]) h (by simp)⟩,
+        gas, pc := evm.pc + 1 } := by
+  have hstack : evm.stack = ⟨start :: rest, h ▸ evm.stack.property⟩ := Subtype.ext h
+  have room : ¬(rest.length = STACK_LIMIT) := by
+    have := length_cons_le (x := start) (dropped := [start]) h (by simp)
+    simp only [List.length_cons] at this
+    omega
+  simp only [calldataloadStep, popWord, chargeGas, pushWord, advance, hstack, Stack.pop, Stack.push]
+  rcases hc : GasMeter.charge evm.gas OPCODE_CALLDATALOAD with _ | _ <;>
+    simp [hc, bind, Except.bind, pure, Except.pure, Except.map, room]
+
+/-- MLOAD on an offset: pay and grow memory, then put the word of memory at the offset in its place.
+
+The word is read after memory has grown. -/
+theorem mloadStep_cons {evm : Evm fork Meter} {start : U256} {rest : List U256}
+    (h : evm.stack.val = start :: rest) :
+    mloadStep evm =
+      let growth := extendMemory evm.memory.size [(start, 32)]
+      let memory := memoryExtend evm.memory growth.expandBy
+      (GasMeter.charge evm.gas (OPCODE_MLOAD_BASE + growth.cost)).map fun gas =>
+        { evm with
+          stack := ⟨loadWord (memoryReadBytes memory start.toNat 32) 0 32 :: rest,
+            length_cons_le (dropped := [start]) h (by simp)⟩,
+          gas, memory, pc := evm.pc + 1 } := by
+  have hstack : evm.stack = ⟨start :: rest, h ▸ evm.stack.property⟩ := Subtype.ext h
+  have room : ¬(rest.length = STACK_LIMIT) := by
+    have := length_cons_le (x := start) (dropped := [start]) h (by simp)
+    simp only [List.length_cons] at this
+    omega
+  simp only [mloadStep, popWord, chargeGasAndMemory, chargeGas, pushWord, advance, hstack,
+    Stack.pop, Stack.push]
+  rcases hc : GasMeter.charge evm.gas
+      (OPCODE_MLOAD_BASE + (extendMemory evm.memory.size [(start, 32#256)]).cost) with _ | _ <;>
+    simp [hc, bind, Except.bind, pure, Except.pure, Except.map, room]
 
 /-- Each instruction that moves bytes keeps the size of memory a multiple of 32. -/
 theorem size_memoryDataStep_mod {op : Op}

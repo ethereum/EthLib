@@ -16,6 +16,12 @@ Before Berlin, an access changes nothing.
 
 BALANCE pays the price of its access, then pushes the balance of the account.
 
+EXTCODEHASH and EXTCODESIZE access the address and pay the cold or warm price of the fork.
+
+Then EXTCODEHASH puts the code hash of the account in place of the address.
+
+EXTCODESIZE puts the size of the code there, when the lookup of the code succeeds.
+
 EXTCODEHASH gives 0 for an address with no account.
 
 Each instruction exists exactly from the fork that adds its opcode.
@@ -92,6 +98,71 @@ theorem balanceStep_cons [GasMeter Meter] {evm : Evm fork Meter} {word : U256} {
     Stack.pop]
   simp only [bind, Except.bind, pure, Except.pure, hacc]
   rcases hc : GasMeter.charge _ _ with _ | _ <;> simp [Except.map, Stack.push, room] <;> rfl
+
+/-- EXTCODEHASH on an address word: access, pay, read, push the code hash of its account.
+
+An address with no account, or with the empty account, gives 0. -/
+theorem extcodehashStep_cons [GasMeter Meter] {evm : Evm fork Meter} {word : U256}
+    {rest : List U256} (h : evm.stack.val = word :: rest) :
+    extcodehashStep evm =
+      let accessed := accessAddress { evm with stack := ⟨rest, by
+        have := evm.stack.property; rw [h] at this; simp at this; omega⟩ } (toAddressMasked word)
+      (GasMeter.charge accessed.2.gas (extcodehashCost fork accessed.1)).map fun gas =>
+        { accessed.2 with
+          gas
+          state := accessed.2.state.recordAccountRead (toAddressMasked word)
+          stack := ⟨codeHashWord (evm.state.getAccount (toAddressMasked word)) :: rest,
+            by have := evm.stack.property; rw [h] at this; simpa using this⟩
+          pc := evm.pc + 1 } := by
+  have hstack : evm.stack = ⟨word :: rest, h ▸ evm.stack.property⟩ := Subtype.ext h
+  have room : ¬(rest.length = STACK_LIMIT) := by
+    have := evm.stack.property
+    rw [h] at this
+    simp only [List.length_cons] at this
+    omega
+  obtain ⟨accessed, hacc⟩ := accessAddress_snd
+    { evm with stack := ⟨rest, by have := evm.stack.property; rw [h] at this; simp at this; omega⟩ }
+    (toAddressMasked word)
+  simp only [extcodehashStep, popWord, chargeGas, recordAccountRead, pushWord, advance, hstack,
+    Stack.pop]
+  simp only [bind, Except.bind, pure, Except.pure, hacc]
+  rcases hc : GasMeter.charge _ _ with _ | _ <;> simp [Except.map, Stack.push, room] <;> rfl
+
+/-- EXTCODESIZE on an address word whose code is found: access, pay, push the size of the code.
+
+The lookup of the code can fail with a state error, which this theorem excludes. -/
+theorem extcodesizeStep_of_accountCode [GasMeter Meter] {evm : Evm fork Meter} {word : U256}
+    {rest : List U256} {code : ByteArray} (h : evm.stack.val = word :: rest)
+    (found : accountCode evm (toAddressMasked word) = .ok code) :
+    extcodesizeStep evm =
+      let accessed := accessAddress { evm with stack := ⟨rest, by
+        have := evm.stack.property; rw [h] at this; simp at this; omega⟩ } (toAddressMasked word)
+      (GasMeter.charge accessed.2.gas (externalBaseCost fork accessed.1)).map fun gas =>
+        { accessed.2 with
+          gas
+          state := accessed.2.state.recordAccountRead (toAddressMasked word)
+          stack := ⟨BitVec.ofNat 256 code.size :: rest,
+            by have := evm.stack.property; rw [h] at this; simpa using this⟩
+          pc := evm.pc + 1 } := by
+  have hstack : evm.stack = ⟨word :: rest, h ▸ evm.stack.property⟩ := Subtype.ext h
+  have room : ¬(rest.length = STACK_LIMIT) := by
+    have := evm.stack.property
+    rw [h] at this
+    simp only [List.length_cons] at this
+    omega
+  obtain ⟨accessed, hacc⟩ := accessAddress_snd
+    { evm with stack := ⟨rest, by have := evm.stack.property; rw [h] at this; simp at this; omega⟩ }
+    (toAddressMasked word)
+  simp only [extcodesizeStep, popWord, chargeGas, recordAccountRead, pushWord, advance, hstack,
+    Stack.pop]
+  simp only [bind, Except.bind, pure, Except.pure, hacc]
+  -- Recording the read leaves the account and its code as they are.
+  have recorded : Except.mapError EvmError.state
+      ((evm.state.recordAccountRead (toAddressMasked word)).getCode
+        ((evm.state.recordAccountRead (toAddressMasked word)).getAccount
+          (toAddressMasked word)).codeHash) = Except.ok code := found
+  rcases hc : GasMeter.charge _ _ with _ | _ <;>
+    simp [Except.map, Stack.push, room, accountCode, recorded]
 
 /-- EXTCODEHASH reads 0 for an address with no account. -/
 theorem codeHashWord_of_none {state : State.TransactionState} {a : Address}

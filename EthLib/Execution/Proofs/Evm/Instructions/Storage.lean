@@ -26,6 +26,10 @@ SSTORE never completes in a static frame, and from Istanbul fails with 2300 gas 
 
 From Glamsterdam, SSTORE in a static frame fails before it reads the stack.
 
+SLOAD accesses the slot of the current account and pays the cold or warm price of the fork.
+
+Then it puts the word of the slot in place of the key.
+
 SLOAD and SSTORE keep memory.
 -/
 
@@ -159,6 +163,38 @@ theorem accessStorageKey_snd (evm : Evm fork Meter) (a : Address) (key : Bytes32
   · exact ⟨evm.substate.accessedStorageKeys, rfl⟩
 
 variable [GasMeter Meter]
+
+/-- SLOAD on a key: access the slot, pay, read the slot, put its word in place of the key.
+
+From Berlin, the price depends on whether the slot is cold. -/
+theorem sloadStep_cons {evm : Evm fork Meter} {word : U256} {rest : List U256}
+    (h : evm.stack.val = word :: rest) :
+    sloadStep evm =
+      let accessed := accessStorageKey { evm with stack := ⟨rest, by
+        have := evm.stack.property; rw [h] at this; simp at this; omega⟩ }
+        evm.message.currentTarget (U256.toBeBytes word)
+      (GasMeter.charge accessed.2.gas (sloadCost fork accessed.1)).map fun gas =>
+        { accessed.2 with
+          gas
+          state := accessed.2.state.recordStorageRead evm.message.currentTarget
+            (U256.toBeBytes word)
+          stack := ⟨evm.state.getStorage evm.message.currentTarget (U256.toBeBytes word) :: rest,
+            by have := evm.stack.property; rw [h] at this; simpa using this⟩
+          pc := evm.pc + 1 } := by
+  have hstack : evm.stack = ⟨word :: rest, h ▸ evm.stack.property⟩ := Subtype.ext h
+  have room : ¬(rest.length = STACK_LIMIT) := by
+    have := evm.stack.property
+    rw [h] at this
+    simp only [List.length_cons] at this
+    omega
+  obtain ⟨accessed, hacc⟩ := accessStorageKey_snd
+    { evm with stack := ⟨rest, by have := evm.stack.property; rw [h] at this; simp at this; omega⟩ }
+    evm.message.currentTarget (U256.toBeBytes word)
+  simp only [sloadStep, popWord, chargeGas, recordStorageRead, pushWord, advance, hstack,
+    Stack.pop]
+  simp only [bind, Except.bind, pure, Except.pure, hacc]
+  rcases hc : GasMeter.charge _ _ with _ | _ <;> simp [Except.map, Stack.push, room] <;> rfl
+
 
 /-- SSTORE never completes in a static frame: it fails, or it halts with an error. -/
 theorem sstoreStep_halts_of_isStatic {evm after : Evm fork Meter}
