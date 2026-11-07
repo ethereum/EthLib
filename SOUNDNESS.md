@@ -618,6 +618,14 @@ The stack, the frame with its program counter and gas meter, and memory are mode
 So are the instructions that read only the stack, memory, call data, code and return data.
 They are in `Execution/Evm/Instructions/StackOnly.lean` and `Execution/Evm/Instructions/MemoryData.lean`.
 
+A program logic over bytecode is in `Execution/Proofs/Evm/Logic/`.
+It covers frames that send no message, so it says nothing past a call or a creation, and nothing about reentrancy.
+`Reaches` is the relation of the steps that `step` gives, other than requests for a message and errors that abort the run.
+`runFrame_of_reaches` proves that a frame that reaches a stopped frame runs to it in `runFrame`, for every bound on the gas of messages and every runner of messages.
+`Spec fork P Q` is total correctness for such frames: every frame of `P` reaches a stopped frame of `Q`.
+A run that ends out of gas ends in an exceptional halt, so a postcondition of a normal halt needs a precondition with enough gas.
+`Return42.runFrame_spec` proves the specification of one contract, `0x602a60005260206000f3`, which returns the word 42 for 18 gas with the one-counter meter of the forks before Glamsterdam.
+
 ### SHA-256 precompile
 
 The precompile reuses the SHA-256 of the cryptography layer, so its theorems are about the gas and the failure.
