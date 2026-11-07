@@ -1,0 +1,10 @@
+topic: execution_payload
+blocks:
+- {block: 
+    block_0x9f87a12d020fe5f111a8e388f428594715e83c39314fecf4b523dd7da27848b5}
+- {block: 
+    block_0x36b62ac28a10889341cc012bc415003213c1c39bd7ec7d8ea759e08349d59435}
+messages:
+- {message: 
+    execution_payload_envelope_0x741bfd68f387d52fbb0340d981a1c78f44a3c364a3ccc02597dc54d59e97b2f7,
+  expected: reject, reason: too many builder exit requests}

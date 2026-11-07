@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: networking
+handler: gossip_execution_payload_envelope
+suite: pyspec_tests
+case: gossip_execution_payload_envelope__reject_too_many_builder_deposit_requests

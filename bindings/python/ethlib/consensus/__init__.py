@@ -554,15 +554,23 @@ def gossip_validation(
     messages: list[tuple[int, int, bytes]],
     verify: bool = True,
     config: dict | None = None,
-    blocks: list[tuple[int, int | None, bytes]] | None = None,
+    blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes]]
+    | None = None,
     finalized: tuple[int, bytes] | None = None,
 ) -> list[tuple[str, str | None]]:
     """The outcome of each gossip message of a topic, in turn, with the reason of a failure."""
     # A block after the anchor is (1 if failed, 2 if pending, else 0; payload status; SSZ bytes).
-    block_records = b"".join(
-        bytes([kind, 255 if status is None else status]) + len(data).to_bytes(4, "little") + data
-        for kind, status, data in blocks or []
-    )
+    # From Gloas the SSZ bytes of the signed envelope of its payload may follow.
+    block_records = b""
+    for kind, status, data, *envelope in blocks or []:
+        payload = envelope[0] if envelope else b""
+        block_records += (
+            bytes([kind, 255 if status is None else status])
+            + len(data).to_bytes(4, "little")
+            + data
+            + len(payload).to_bytes(4, "little")
+            + payload
+        )
     checkpoint = b"" if finalized is None else finalized[0].to_bytes(8, "little") + finalized[1]
     # A message is (arrival time in milliseconds, subnet ID, SSZ bytes).
     records = b"".join(

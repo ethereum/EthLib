@@ -38,6 +38,7 @@ public import EthLib.Consensus.Proofs.ForkSchedule
 public import EthLib.Consensus.Proofs.Gossip.Attestation
 public import EthLib.Consensus.Proofs.Gossip.Block
 public import EthLib.Consensus.Proofs.Gossip.Operations
+public import EthLib.Consensus.Proofs.Gossip.Payload
 public import EthLib.Consensus.Proofs.Gossip.ProposerPreferences
 public import EthLib.Consensus.Proofs.Gossip.Sidecar
 public import EthLib.Consensus.Proofs.Gossip.SyncCommittee

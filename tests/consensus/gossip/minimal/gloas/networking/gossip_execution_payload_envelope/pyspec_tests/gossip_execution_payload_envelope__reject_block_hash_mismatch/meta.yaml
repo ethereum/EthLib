@@ -1,0 +1,11 @@
+topic: execution_payload
+blocks:
+- {block: 
+    block_0x9f87a12d020fe5f111a8e388f428594715e83c39314fecf4b523dd7da27848b5}
+- {block: 
+    block_0x2bdd11129831a9f7045c6cba57db119b16c42192f8a0abd3f248bea2f21d15b2}
+messages:
+- {message: 
+    execution_payload_envelope_0x8a164760b699c771b18f9237cd68de4c313dd78d765f3c81c7a7a6ecc3c6b254,
+  expected: reject, reason: payload's block hash does not match the bid's block 
+    hash}

@@ -31,12 +31,19 @@ TOPICS = {
     "data_column_sidecar": "fulu",
     "partial_data_column_sidecar": "fulu",
     "proposer_preferences": "gloas",
+    "execution_payload_envelope": "gloas",
+    "payload_attestation_message": "gloas",
 }
 SPECIFIED = ("altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas")
 # The topics whose cases stop at a fork other than Fulu, with their last fork.
 # Blob sidecars travel only at Deneb and Electra.
 # Gloas changes the other topics, and EthLib does not specify those changes yet.
-LAST = {"blob_sidecar": "electra", "proposer_preferences": "gloas"}
+LAST = {
+    "blob_sidecar": "electra",
+    "proposer_preferences": "gloas",
+    "execution_payload_envelope": "gloas",
+    "payload_attestation_message": "gloas",
+}
 
 # The release archives that hold the cases.
 ARCHIVES = {
@@ -104,6 +111,7 @@ def run_case(preset: str, fork: str, case: Path) -> None:
             1 if entry.get("failed") else 2 if entry.get("pending") else 0,
             _STATUSES.get(entry.get("payload_status")),
             _read(case, entry["block"]),
+            _read(case, entry["payload"]) if "payload" in entry else b"",
         )
         for entry in meta["blocks"][1:]
     ]

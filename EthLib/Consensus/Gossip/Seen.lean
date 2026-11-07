@@ -64,6 +64,14 @@ structure Seen where
   dataColumnSidecarTuples : List (Slot × ValidatorIndex × DataAvailability.ColumnIndex) := []
   /-- From Gloas: the valid preferences of proposers, by proposal slot and dependent root. -/
   proposerPreferences : List ((Slot × Root) × ProposerPreferences) := []
+  /-- From Gloas: the block root and the builder of each valid envelope. -/
+  executionPayloadEnvelopes : List (Root × BuilderIndex) := []
+  /-- From Gloas: the gas limit of the payload of each valid envelope, by the hash of the payload.
+
+  Gossip validation reads nothing else of these payloads. -/
+  executionPayloadGasLimits : List (Hash32 × UInt64) := []
+  /-- From Gloas: the slot and the committee member of each valid payload vote. -/
+  payloadAttestationValidators : List (Slot × ValidatorIndex) := []
   deriving Inhabited
 
 namespace Store
