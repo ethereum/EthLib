@@ -29,6 +29,8 @@ The finality delay is the distance from the finalized epoch, and the leak is a d
 
 The earliest inclusions have one entry for each validator, and each comes from a signed attestation.
 
+A fold whose steps each act on the balance at their own position acts on each of those balances.
+
 For a registry within its limit, deltas that apply add each reward to its balance below `2^64`.
 
 They then subtract each penalty, stopping at zero.
@@ -460,6 +462,49 @@ theorem applyDeltas_eq_ok_iff {rewards penalties : Array Gwei} {index : Nat} :
     exact ⟨_, ⟨inside, fits, rfl⟩, by simpa [BeaconState.putBalance] using inside,
       by simp [BeaconState.putBalance]⟩
 
+/-- A fold over the first positions whose step acts on the balance at its own position.
+
+Each step from a state with a kept property gives a state with that property.
+
+It relates the old and new entries at its position, and keeps the other entries.
+
+The fold then gives a state with that property.
+
+It relates the old and new entries at each of those positions, and keeps the entries past them. -/
+theorem foldlM_range_balances {ε : Type}
+    {step : BeaconState preset fork → Nat → Except ε (BeaconState preset fork)}
+    (Keep : BeaconState preset fork → Prop) (Relates : Nat → Option Gwei → Option Gwei → Prop)
+    {count : Nat}
+    (stepped : ∀ {last next : BeaconState preset fork} {j : Nat}, j < count → Keep last →
+      step last j = .ok next → Keep next ∧
+        Relates j last.balances.data[j]? next.balances.data[j]? ∧
+        ∀ k, k ≠ j → next.balances.data[k]? = last.balances.data[k]?)
+    (kept : Keep state)
+    (computed : (List.range count).foldlM step state = .ok after) :
+    Keep after ∧ ∀ i, (i < count → Relates i state.balances.data[i]? after.balances.data[i]?) ∧
+      (count ≤ i → after.balances.data[i]? = state.balances.data[i]?) := by
+  induction count generalizing after with
+  | zero =>
+    simp only [List.range_zero, List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact ⟨kept, fun _ => ⟨fun lt => absurd lt (Nat.not_lt_zero _), fun _ => rfl⟩⟩
+  | succ count ih =>
+    rw [List.range_succ, List.foldlM_append, bind_ok_iff] at computed
+    obtain ⟨middle, folded, last⟩ := computed
+    simp only [List.foldlM_cons, List.foldlM_nil, bind_ok_iff, pure, Except.pure,
+      Except.ok.injEq] at last
+    obtain ⟨final, step, rfl⟩ := last
+    obtain ⟨keptMiddle, low⟩ := ih (fun lt => stepped (Nat.lt_succ_of_lt lt)) folded
+    obtain ⟨keptFinal, atCount, other⟩ := stepped (Nat.lt_succ_self count) keptMiddle step
+    rw [(low count).2 (Nat.le_refl _)] at atCount
+    refine ⟨keptFinal, fun i => ⟨fun lt => ?_, fun ge => ?_⟩⟩
+    · rcases Nat.lt_succ_iff_lt_or_eq.mp lt with lt | rfl
+      · rw [other i (by omega)]
+        exact (low i).1 lt
+      · exact atCount
+    · rw [other i (by omega)]
+      exact (low i).2 (by omega)
+
 /-- The deltas of the first positions, at most `2^64` of them, each apply at their own position.
 
 The other balances stay. -/
@@ -471,42 +516,19 @@ private theorem foldlM_applyDeltas_balances {rewards penalties : Array Gwei} {co
       after.balances.data[i]? =
         some (saturatingSub (balance + rewards.getD i 0) (penalties.getD i 0))) ∧
     (count ≤ i → after.balances.data[i]? = state.balances.data[i]?) := by
-  induction count generalizing after with
-  | zero =>
-    simp only [List.range_zero, List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact fun _ => ⟨fun lt => absurd lt (Nat.not_lt_zero _), fun _ => rfl⟩
-  | succ count ih =>
-    rw [List.range_succ, List.foldlM_append, bind_ok_iff] at computed
-    obtain ⟨middle, folded, last⟩ := computed
-    simp only [List.foldlM_cons, List.foldlM_nil, bind_ok_iff, pure, Except.pure,
-      Except.ok.injEq] at last
-    obtain ⟨final, step, rfl⟩ := last
-    have low := ih (by omega) folded
-    have same : count.toUInt64.toNat = count := by
-      rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (by omega)]
-    -- The last position is below `2^64`, so it is its own validator index.
-    obtain ⟨balance, found, fits, atCount, other⟩ : ∃ balance,
-        middle.balances.data[count]? = some balance ∧
-          balance.toNat + (rewards.getD count 0).toNat < 2 ^ 64 ∧
-          final.balances.data[count]? =
-            some (saturatingSub (balance + rewards.getD count 0) (penalties.getD count 0)) ∧
-          ∀ j, j ≠ count → final.balances.data[j]? = middle.balances.data[j]? := by
-      obtain ⟨inside, fits, rfl⟩ := applyDeltas_eq_ok_iff.mp step
-      have inside' : count < middle.balances.data.size := same ▸ inside
-      refine ⟨middle.balances.data[count], Array.getElem?_eq_getElem inside',
-        by simpa [same] using fits, ?_, fun j ne => ?_⟩
-      · simp [BeaconState.putBalance, same, inside']
-      · simp [BeaconState.putBalance, same, Ne.symm ne]
-    rw [(low count).2 (Nat.le_refl _)] at found
-    intro i
-    refine ⟨fun lt => ?_, fun ge => ?_⟩
-    · rcases Nat.lt_succ_iff_lt_or_eq.mp lt with lt | rfl
-      · rw [other i (by omega)]
-        exact (low i).1 lt
-      · exact ⟨balance, found, fits, atCount⟩
-    · rw [other i (by omega)]
-      exact (low i).2 (by omega)
+  refine (foldlM_range_balances (fun _ => True) (fun i old new => ∃ balance, old = some balance ∧
+    balance.toNat + (rewards.getD i 0).toNat < 2 ^ 64 ∧
+    new = some (saturatingSub (balance + rewards.getD i 0) (penalties.getD i 0)))
+    (fun {middle final j} lt _ step => ?_) trivial computed).2
+  have same : j.toUInt64.toNat = j := by
+    rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (by omega)]
+  -- The position is below `2^64`, so it is its own validator index.
+  obtain ⟨inside, fits, rfl⟩ := applyDeltas_eq_ok_iff.mp step
+  have inside' : j < middle.balances.data.size := same ▸ inside
+  refine ⟨trivial, ⟨middle.balances.data[j], Array.getElem?_eq_getElem inside',
+    by simpa [same] using fits, ?_⟩, fun k ne => ?_⟩
+  · simp [BeaconState.putBalance, same, inside']
+  · simp [BeaconState.putBalance, same, Ne.symm ne]
 
 /-- For a registry within its limit, applying some deltas changes the balance of each validator.
 
