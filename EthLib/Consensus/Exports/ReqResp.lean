@@ -4,6 +4,7 @@ public import EthLib.Base.Exports
 public import EthLib.Consensus.Exports.Parameters
 public import EthLib.Consensus.Exports.Ssz
 public import EthLib.Consensus.ReqResp.Messages
+public import EthLib.Consensus.ReqResp.ResponseBounds
 
 /-!
 # `Exports.ReqResp`
@@ -13,6 +14,8 @@ C-ABI exports of the request and response protocols of the consensus layer.
 A list comes back as JSON, and a message as its root and its bytes encoded again.
 
 An unknown name, a fork with no rules yet, or an ID that names no protocol has code 0.
+
+A protocol that the fork does not define, or one without a request, has the code of its error.
 
 A preset and a configuration are named together, by `mainnet` or `minimal`.
 -/
@@ -89,5 +92,40 @@ def reqRespMessageExport (name fork type data : ByteArray) : Result ByteArray :=
 @[export eth_consensus_compute_min_epochs_for_block_requests]
 def computeMinEpochsForBlockRequestsExport (name : ByteArray) : Result UInt64 := do
   return (← configOf (← nameOf name)).computeMinEpochsForBlockRequests
+
+/-- A protocol ID that the fork defines, or the code of the error that says it does not. -/
+def protocolAtFork (fork : Fork) (text : ByteArray) : Result ProtocolId := do
+  let text ← nameOf text
+  let some id := ProtocolId.parse? text | throw (0, s!"{text} names no protocol")
+  unless (protocolIds fork).contains id do
+    throw (BoundsError.notAtFork.code, s!"{text} is not a protocol of {fork.name}")
+  return id
+
+/-- The smallest and the largest length of a request payload, as a JSON pair. -/
+@[export eth_consensus_reqresp_request_bounds]
+def reqRespRequestBoundsExport (name fork protocol : ByteArray) : Result ByteArray := do
+  let name ← nameOf name
+  let preset ← presetOf name
+  let config ← configOf name
+  let fork ← forkUpTo .hegota fork
+  let id ← protocolAtFork fork protocol
+  let some (low, high) := requestBounds preset config fork id
+    | throw (BoundsError.noRequest.code, s!"{id.toString} carries no request")
+  return jsonBytes (toJson (low.toNat, high.toNat))
+
+/-- The smallest and the largest length of the payload of a successful response chunk.
+
+The fork is the one that the context bytes of the chunk name, and it must define the protocol. -/
+@[export eth_consensus_reqresp_response_bounds]
+def reqRespResponseBoundsExport (name chunkFork protocol : ByteArray) : Result ByteArray := do
+  let name ← nameOf name
+  let preset ← presetOf name
+  let config ← configOf name
+  let fork ← forkUpTo .hegota chunkFork
+  let id ← protocolAtFork fork protocol
+  -- Every version that a fork defines has a response type.
+  let some (low, high) := responseBounds preset config fork id
+    | throw (BoundsError.notAtFork.code, s!"{id.toString} has no response at {fork.name}")
+  return jsonBytes (toJson (low.toNat, high.toNat))
 
 end EthLib.Consensus.Exports

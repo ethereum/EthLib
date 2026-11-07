@@ -2,6 +2,8 @@ module
 
 public import EthLib.Base.Exports
 public import EthLib.Consensus.Exports.Parameters
+public import EthLib.Consensus.Gossip.Bounds
+public import EthLib.Consensus.ReqResp.Bounds
 public import EthLib.Consensus.Gossip.Topics
 
 /-!
@@ -13,6 +15,8 @@ A list comes back as JSON, and a subnet as an integer, or as the code and the me
 
 A malformed node ID, an unknown name or a fork with no topic set has code 0.
 
+The bound of a topic that the fork does not list has the code of its error.
+
 A preset and a configuration are named together, by `mainnet` or `minimal`.
 -/
 
@@ -20,7 +24,7 @@ public section
 
 namespace EthLib.Consensus.Exports
 
-open EthLib.Exports (Result forkOfName)
+open EthLib.Exports (Result forkOfName forkUpTo)
 
 open Lean Base Networking.Gossip
 
@@ -68,5 +72,23 @@ def computeSubscribedSubnetsExport (name nodeId : ByteArray) (epoch : UInt64) :
   let subnets ← subnetResult
     (computeSubscribedSubnets (← presetOf name) (← configOf name) id epoch)
   return jsonBytes (toJson subnets)
+
+/-- The largest length of the payload of a gossip topic at a fork. -/
+@[export eth_consensus_gossip_topic_bound]
+def gossipTopicBoundExport (name fork topic : ByteArray) : Result UInt64 := do
+  let name ← nameOf name
+  let preset ← presetOf name
+  let config ← configOf name
+  let fork ← forkUpTo .hegota fork
+  let topicName ← nameOf topic
+  let some topic := GossipTopic.ofName? topicName | throw (0, s!"{topicName} names no topic")
+  let some topics := config.gossipTopics fork
+    | throw (BoundsError.topicsNotSpecified.code,
+        s!"the gossip topics of {fork.name} are not yet specified")
+  unless topics.contains topic do
+    throw (BoundsError.topicNotAtFork.code, s!"{topicName} is not a topic of {fork.name}")
+  let some bound := topicBound preset config fork topic
+    | throw (BoundsError.topicNotAtFork.code, s!"{topicName} is not a topic of {fork.name}")
+  return bound
 
 end EthLib.Consensus.Exports

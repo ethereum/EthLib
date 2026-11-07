@@ -110,6 +110,27 @@ eth_consensus_gossip_topics(
 );
 
 extern lean_object*
+eth_consensus_reqresp_request_bounds(
+  lean_object* name,
+  lean_object* fork,
+  lean_object* protocol
+);
+
+extern lean_object*
+eth_consensus_reqresp_response_bounds(
+  lean_object* name,
+  lean_object* chunk_fork,
+  lean_object* protocol
+);
+
+extern lean_object*
+eth_consensus_gossip_topic_bound(
+  lean_object* name,
+  lean_object* fork,
+  lean_object* topic
+);
+
+extern lean_object*
 eth_consensus_compute_subnet_for_attestation(
   lean_object* name,
   uint64_t committees_per_slot,
@@ -2158,4 +2179,63 @@ py_consensus_state_transition_across(
     eth_consensus_state_transition_across(name, fork, pre, block_fork, block, config,
                                           (uint8_t) verify),
     TRANSITION_ERROR);
+}
+
+/* Parse three `str` arguments into Lean byte arrays, or return 0 with an error set. */
+static int
+three_str_args(
+  PyObject* args,
+  const char* first,
+  const char* second,
+  const char* third,
+  lean_object** out
+) {
+  PyObject *a, *b, *c;
+  if (!PyArg_ParseTuple(args, "OOO", &a, &b, &c)) return 0;
+  out[0] = str_arg(a, first);
+  if (!out[0]) return 0;
+  out[1] = str_arg(b, second);
+  if (!out[1]) {
+    lean_dec(out[0]);
+    return 0;
+  }
+  out[2] = str_arg(c, third);
+  if (!out[2]) {
+    lean_dec(out[0]);
+    lean_dec(out[1]);
+    return 0;
+  }
+  return 1;
+}
+
+PyObject*
+py_consensus_reqresp_request_bounds(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* a[3];
+  if (!three_str_args(args, "name", "fork", "protocol", a)) return NULL;
+  return except_into_pybytes(
+    eth_consensus_reqresp_request_bounds(a[0], a[1], a[2]), CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_reqresp_response_bounds(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* a[3];
+  if (!three_str_args(args, "name", "chunk_fork", "protocol", a)) return NULL;
+  return except_into_pybytes(
+    eth_consensus_reqresp_response_bounds(a[0], a[1], a[2]), CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_gossip_topic_bound(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* a[3];
+  if (!three_str_args(args, "name", "fork", "topic", a)) return NULL;
+  return except_into_pyint(eth_consensus_gossip_topic_bound(a[0], a[1], a[2]), CONSENSUS_ERROR);
 }
