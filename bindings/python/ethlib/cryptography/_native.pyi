@@ -671,6 +671,18 @@ def consensus_gossip_topics(name: str, fork: str) -> bytes:
     """The gossip topics of a fork, in the order of the fork that adds each one."""
     ...
 
+def consensus_reqresp_request_bounds(name: str, fork: str, protocol: str) -> bytes:
+    """The smallest and the largest length of a request payload, as a JSON pair."""
+    ...
+
+def consensus_reqresp_response_bounds(name: str, chunk_fork: str, protocol: str) -> bytes:
+    """The smallest and the largest length of the payload of a successful response chunk."""
+    ...
+
+def consensus_gossip_topic_bound(name: str, fork: str, topic: str) -> int:
+    """The largest length of the payload of a gossip topic at a fork."""
+    ...
+
 def consensus_compute_subnet_for_attestation(name: str, committees_per_slot: int, slot: int, committee_index: int) -> int:
     """The subnet of an attestation, from the committees per slot, its slot and its committee index."""
     ...

@@ -58,4 +58,17 @@ theorem decodePayload_request {α : Type} [SszType α] [LawfulSszType α] {a : �
   have := decodePayload_encodePayload_of_serialize (LawfulSszType.fits a) untyped hcap
   simpa using this
 
+/-! ## Error codes -/
+
+/-- Two errors with one code come from one constructor. -/
+theorem _root_.EthLib.Consensus.BoundsError.code_injective (e₁ e₂ : BoundsError)
+    (h : e₁.code = e₂.code) : e₁.ctorIdx = e₂.ctorIdx := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [BoundsError.code] at h; exact absurd h (by decide))
+
+/-- Every code is above 300, past the codes of custody, subnet and shuffle errors. -/
+theorem _root_.EthLib.Consensus.BoundsError.code_gt (e : BoundsError) : 300 < e.code := by
+  cases e <;> decide
+
 end EthLib.Consensus.Proofs.ReqResp.Bounds

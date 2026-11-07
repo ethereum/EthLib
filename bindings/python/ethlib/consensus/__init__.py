@@ -135,6 +135,25 @@ def gossip_topics(fork: str, name: str = "mainnet") -> list:
     return json.loads(_native.consensus_gossip_topics(name, fork))
 
 
+def reqresp_request_bounds(fork: str, protocol: str, name: str = "mainnet") -> tuple[int, int]:
+    """The smallest and the largest length of the request payload of a protocol ID at a fork."""
+    low, high = json.loads(_native.consensus_reqresp_request_bounds(name, fork, protocol))
+    return low, high
+
+
+def reqresp_response_bounds(
+    chunk_fork: str, protocol: str, name: str = "mainnet"
+) -> tuple[int, int]:
+    """The smallest and the largest length of a successful response chunk at its fork."""
+    low, high = json.loads(_native.consensus_reqresp_response_bounds(name, chunk_fork, protocol))
+    return low, high
+
+
+def gossip_topic_bound(fork: str, topic: str, name: str = "mainnet") -> int:
+    """The largest payload length of a gossip topic at a fork."""
+    return _native.consensus_gossip_topic_bound(name, fork, topic)
+
+
 def compute_subnet_for_attestation(
     committees_per_slot: int, slot: int, committee_index: int, name: str = "mainnet"
 ) -> int:
@@ -993,6 +1012,9 @@ __all__ = [
     "reqresp_message",
     "compute_min_epochs_for_block_requests",
     "gossip_topics",
+    "gossip_topic_bound",
+    "reqresp_request_bounds",
+    "reqresp_response_bounds",
     "compute_subnet_for_attestation",
     "compute_subnet_for_blob_sidecar",
     "compute_subnet_for_data_column_sidecar",

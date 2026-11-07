@@ -4872,6 +4872,50 @@
    "docstring":
    "The gossip topics of a fork, in the order of the fork that adds each one.\n\nA fork before Altair has the topics of Phase 0.\n\nHeze has none yet, since its topics are not yet specified here."},
   {"summary":
+   "The smallest and the largest length of a request payload, as a JSON pair.",
+   "signature": "(name: str, fork: str, protocol: str) -> bytes",
+   "operation": "EthLib.Consensus.Exports.reqRespRequestBoundsExport",
+   "method": "consensus_reqresp_request_bounds",
+   "errors":
+   [{"type": "EthLib.Consensus.BoundsError",
+     "codes":
+     [{"constructor": "notAtFork", "code": 301},
+      {"constructor": "noRequest", "code": 302},
+      {"constructor": "topicNotAtFork", "code": 303},
+      {"constructor": "topicsNotSpecified", "code": 304}]}],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The smallest and the largest length of a request payload, as a JSON pair."},
+  {"summary":
+   "The smallest and the largest length of the payload of a successful response chunk.",
+   "signature": "(name: str, chunk_fork: str, protocol: str) -> bytes",
+   "operation": "EthLib.Consensus.Exports.reqRespResponseBoundsExport",
+   "method": "consensus_reqresp_response_bounds",
+   "errors":
+   [{"type": "EthLib.Consensus.BoundsError",
+     "codes":
+     [{"constructor": "notAtFork", "code": 301},
+      {"constructor": "noRequest", "code": 302},
+      {"constructor": "topicNotAtFork", "code": 303},
+      {"constructor": "topicsNotSpecified", "code": 304}]}],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The smallest and the largest length of the payload of a successful response chunk.\n\nThe fork is the one that the context bytes of the chunk name, and it must define the protocol."},
+  {"summary": "The largest length of the payload of a gossip topic at a fork.",
+   "signature": "(name: str, fork: str, topic: str) -> int",
+   "operation": "EthLib.Consensus.Exports.gossipTopicBoundExport",
+   "method": "consensus_gossip_topic_bound",
+   "errors":
+   [{"type": "EthLib.Consensus.BoundsError",
+     "codes":
+     [{"constructor": "notAtFork", "code": 301},
+      {"constructor": "noRequest", "code": 302},
+      {"constructor": "topicNotAtFork", "code": 303},
+      {"constructor": "topicsNotSpecified", "code": 304}]}],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The largest length of the payload of a gossip topic at a fork."},
+  {"summary":
    "The subnet of an attestation, from the committees per slot, its slot and its committee index.",
    "signature":
    "(name: str, committees_per_slot: int, slot: int, committee_index: int) -> int",

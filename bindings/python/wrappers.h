@@ -386,6 +386,9 @@ PyObject* py_consensus_reqresp_parse_protocol_id          (PyObject* self, PyObj
 PyObject* py_consensus_reqresp_message                    (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_min_epochs_for_block_requests(PyObject* self, PyObject* args);
 PyObject* py_consensus_gossip_topics                      (PyObject* self, PyObject* args);
+PyObject* py_consensus_reqresp_request_bounds             (PyObject* self, PyObject* args);
+PyObject* py_consensus_reqresp_response_bounds            (PyObject* self, PyObject* args);
+PyObject* py_consensus_gossip_topic_bound                 (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_subnet_for_attestation     (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_subnet_for_blob_sidecar    (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_subnet_for_data_column_sidecar(PyObject* self, PyObject* args);

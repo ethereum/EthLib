@@ -503,6 +503,15 @@
 #define DOC_consensus_gossip_topics \
   "The gossip topics of a fork, in the order of the fork that adds each one."
 
+#define DOC_consensus_reqresp_request_bounds \
+  "The smallest and the largest length of a request payload, as a JSON pair."
+
+#define DOC_consensus_reqresp_response_bounds \
+  "The smallest and the largest length of the payload of a successful response chunk."
+
+#define DOC_consensus_gossip_topic_bound \
+  "The largest length of the payload of a gossip topic at a fork."
+
 #define DOC_consensus_compute_subnet_for_attestation \
   "The subnet of an attestation, from the committees per slot, its slot and its committee index."
 

@@ -62,4 +62,27 @@ def requestBounds (preset : Preset) (config : Config) (fork : Fork) (id : Protoc
     Option (UInt64 × UInt64) :=
   (requestDesc preset config fork id).map Networking.ReqResp.payloadBounds
 
+/-- Why a protocol or a topic has no length bound. -/
+inductive BoundsError where
+  /-- The fork does not define the protocol version. -/
+  | notAtFork
+  /-- The protocol version carries no request. -/
+  | noRequest
+  /-- The fork does not list the gossip topic. -/
+  | topicNotAtFork
+  /-- The gossip topics of the fork are not yet written. -/
+  | topicsNotSpecified
+  deriving DecidableEq, Repr
+
+/-- The stable code of an error, one per constructor.
+
+The codes start at 301, since the consensus errors of the bindings share one class.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def BoundsError.code : BoundsError → UInt32
+  | .notAtFork => 301
+  | .noRequest => 302
+  | .topicNotAtFork => 303
+  | .topicsNotSpecified => 304
+
 end EthLib.Consensus
