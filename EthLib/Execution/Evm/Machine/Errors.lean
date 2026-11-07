@@ -16,6 +16,8 @@ So does a nonce too large for the address of a creation.
 
 So does an opcode whose instruction is not yet specified.
 
+So does a transaction at a fork whose rules are not yet specified.
+
 Every other error is an exceptional halt, which consumes all the gas of the frame.
 
 The subsection Exceptional Halting of the Yellow Paper, Shanghai version, lists most of them.
@@ -41,8 +43,6 @@ inductive EvmError where
   | invalidOpcode (code : UInt8)
   /-- A jump goes to a position that is not a valid jump destination. -/
   | invalidJumpDest
-  /-- A call or a creation goes deeper than 1024 frames. -/
-  | stackDepthLimit
   /-- An instruction changes the state in a static frame. -/
   | writeInStaticContext
   /-- RETURNDATACOPY reads past the end of the return data. -/
