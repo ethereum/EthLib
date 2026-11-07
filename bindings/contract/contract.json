@@ -1672,6 +1672,169 @@
    "error_class": "Discv5Error",
    "docstring":
    "The plaintext of the decoded message, written again by the encoder."},
+  {"summary":
+   "Node B's WHOAREYOU packet for node A, and its challenge data, as a JSON object.",
+   "signature":
+   "(dest_id: bytes, masking_iv: bytes, nonce: bytes, id_nonce: bytes, enr_seq: bytes) -> bytes",
+   "operation": "EthLib.Networking.Discv5.Exports.makeWhoareyouExport",
+   "method": "discv5_make_whoareyou",
+   "errors":
+   [{"type": "EthLib.Networking.Discv5.PacketError",
+     "codes":
+     [{"constructor": "size", "code": 1},
+      {"constructor": "protocolId", "code": 2},
+      {"constructor": "headerTruncated", "code": 3},
+      {"constructor": "flag", "code": 4},
+      {"constructor": "authdata", "code": 5},
+      {"constructor": "whoareyouMessage", "code": 6},
+      {"constructor": "fieldTooLong", "code": 7}]},
+    {"type": "EthLib.Networking.Discv5.SessionError",
+     "codes":
+     [{"constructor": "packet", "code": 201},
+      {"constructor": "encryption", "code": 202},
+      {"constructor": "decryption", "code": 203},
+      {"constructor": "wrongFlag", "code": 204},
+      {"constructor": "noSession", "code": 205}]}],
+   "error_class": "Discv5Error",
+   "docstring":
+   "Node B's WHOAREYOU packet for node A, and its challenge data, as a JSON object.\n\nThe `enr-seq` is 8 big-endian bytes."},
+  {"summary": "Node A's reading of a WHOAREYOU packet, as a JSON object.",
+   "signature": "(dest_id: bytes, packet: bytes) -> bytes",
+   "operation": "EthLib.Networking.Discv5.Exports.readWhoareyouExport",
+   "method": "discv5_read_whoareyou",
+   "errors":
+   [{"type": "EthLib.Networking.Discv5.PacketError",
+     "codes":
+     [{"constructor": "size", "code": 1},
+      {"constructor": "protocolId", "code": 2},
+      {"constructor": "headerTruncated", "code": 3},
+      {"constructor": "flag", "code": 4},
+      {"constructor": "authdata", "code": 5},
+      {"constructor": "whoareyouMessage", "code": 6},
+      {"constructor": "fieldTooLong", "code": 7}]},
+    {"type": "EthLib.Networking.Discv5.SessionError",
+     "codes":
+     [{"constructor": "packet", "code": 201},
+      {"constructor": "encryption", "code": 202},
+      {"constructor": "decryption", "code": 203},
+      {"constructor": "wrongFlag", "code": 204},
+      {"constructor": "noSession", "code": 205}]}],
+   "error_class": "Discv5Error",
+   "docstring": "Node A's reading of a WHOAREYOU packet, as a JSON object."},
+  {"summary":
+   "An ordinary message packet from one node to another, under a session key.",
+   "signature":
+   "(key: bytes, src_id: bytes, dest_id: bytes, masking_iv: bytes, nonce: bytes, plaintext: bytes) -> bytes",
+   "operation": "EthLib.Networking.Discv5.Exports.sealMessageExport",
+   "method": "discv5_seal_message",
+   "errors":
+   [{"type": "EthLib.Networking.Discv5.PacketError",
+     "codes":
+     [{"constructor": "size", "code": 1},
+      {"constructor": "protocolId", "code": 2},
+      {"constructor": "headerTruncated", "code": 3},
+      {"constructor": "flag", "code": 4},
+      {"constructor": "authdata", "code": 5},
+      {"constructor": "whoareyouMessage", "code": 6},
+      {"constructor": "fieldTooLong", "code": 7}]},
+    {"type": "EthLib.Networking.Discv5.SessionError",
+     "codes":
+     [{"constructor": "packet", "code": 201},
+      {"constructor": "encryption", "code": 202},
+      {"constructor": "decryption", "code": 203},
+      {"constructor": "wrongFlag", "code": 204},
+      {"constructor": "noSession", "code": 205}]}],
+   "error_class": "Discv5Error",
+   "docstring":
+   "An ordinary message packet from one node to another, under a session key."},
+  {"summary":
+   "The plaintext of an ordinary message packet from a given node, under its session key.",
+   "signature":
+   "(key: bytes, src_id: bytes, dest_id: bytes, packet: bytes) -> bytes",
+   "operation": "EthLib.Networking.Discv5.Exports.openMessageExport",
+   "method": "discv5_open_message",
+   "errors":
+   [{"type": "EthLib.Networking.Discv5.PacketError",
+     "codes":
+     [{"constructor": "size", "code": 1},
+      {"constructor": "protocolId", "code": 2},
+      {"constructor": "headerTruncated", "code": 3},
+      {"constructor": "flag", "code": 4},
+      {"constructor": "authdata", "code": 5},
+      {"constructor": "whoareyouMessage", "code": 6},
+      {"constructor": "fieldTooLong", "code": 7}]},
+    {"type": "EthLib.Networking.Discv5.SessionError",
+     "codes":
+     [{"constructor": "packet", "code": 201},
+      {"constructor": "encryption", "code": 202},
+      {"constructor": "decryption", "code": 203},
+      {"constructor": "wrongFlag", "code": 204},
+      {"constructor": "noSession", "code": 205}]}],
+   "error_class": "Discv5Error",
+   "docstring":
+   "The plaintext of an ordinary message packet from a given node, under its session key.\n\nIt fails when the packet names another source node ID."},
+  {"summary":
+   "Node A's handshake message packet for node B, and its session keys, as a JSON object.",
+   "signature":
+   "(ephemeral_key: bytes, static_key: bytes, challenge_data: bytes, src_id: bytes, dest_id: bytes, dest_pubkey: bytes, masking_iv: bytes, nonce: bytes, record: bytes, plaintext: bytes) -> bytes",
+   "operation": "EthLib.Networking.Discv5.Exports.sealHandshakeExport",
+   "method": "discv5_seal_handshake",
+   "errors":
+   [{"type": "EthLib.Networking.Discv5.PacketError",
+     "codes":
+     [{"constructor": "size", "code": 1},
+      {"constructor": "protocolId", "code": 2},
+      {"constructor": "headerTruncated", "code": 3},
+      {"constructor": "flag", "code": 4},
+      {"constructor": "authdata", "code": 5},
+      {"constructor": "whoareyouMessage", "code": 6},
+      {"constructor": "fieldTooLong", "code": 7}]},
+    {"type": "EthLib.Networking.Discv5.HandshakeError",
+     "codes":
+     [{"constructor": "keyAgreement", "code": 301},
+      {"constructor": "keyDerivation", "code": 302},
+      {"constructor": "signing", "code": 303},
+      {"constructor": "ephemeralKeySize", "code": 306},
+      {"constructor": "ephemeralKey", "code": 304},
+      {"constructor": "idSignature", "code": 305},
+      {"constructor": "packet", "code": 307},
+      {"constructor": "encryption", "code": 308},
+      {"constructor": "decryption", "code": 309},
+      {"constructor": "notHandshake", "code": 310}]}],
+   "error_class": "Discv5Error",
+   "docstring":
+   "Node A's handshake message packet for node B, and its session keys, as a JSON object."},
+  {"summary":
+   "Node B's reading of a handshake message packet, as a JSON object.",
+   "signature":
+   "(static_key: bytes, challenge_data: bytes, dest_id: bytes, src_pubkey: bytes, packet: bytes) -> bytes",
+   "operation": "EthLib.Networking.Discv5.Exports.openHandshakeExport",
+   "method": "discv5_open_handshake",
+   "errors":
+   [{"type": "EthLib.Networking.Discv5.PacketError",
+     "codes":
+     [{"constructor": "size", "code": 1},
+      {"constructor": "protocolId", "code": 2},
+      {"constructor": "headerTruncated", "code": 3},
+      {"constructor": "flag", "code": 4},
+      {"constructor": "authdata", "code": 5},
+      {"constructor": "whoareyouMessage", "code": 6},
+      {"constructor": "fieldTooLong", "code": 7}]},
+    {"type": "EthLib.Networking.Discv5.HandshakeError",
+     "codes":
+     [{"constructor": "keyAgreement", "code": 301},
+      {"constructor": "keyDerivation", "code": 302},
+      {"constructor": "signing", "code": 303},
+      {"constructor": "ephemeralKeySize", "code": 306},
+      {"constructor": "ephemeralKey", "code": 304},
+      {"constructor": "idSignature", "code": 305},
+      {"constructor": "packet", "code": 307},
+      {"constructor": "encryption", "code": 308},
+      {"constructor": "decryption", "code": 309},
+      {"constructor": "notHandshake", "code": 310}]}],
+   "error_class": "Discv5Error",
+   "docstring":
+   "Node B's reading of a handshake message packet, as a JSON object."},
   {"summary": "The preset of a name, as a JSON object.",
    "signature": "(name: str) -> bytes",
    "operation": "EthLib.Consensus.Exports.presetExport",

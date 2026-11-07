@@ -54,17 +54,19 @@ inductive SessionError where
   | noSession (srcId : NodeId)
   deriving DecidableEq
 
-/-- The stable code of an error, one per constructor.
+/-- The stable code of an error, one per constructor, for the C exports.
 
 The code ignores the arguments of the constructor.
 
+The codes start at 201, since the packet and message errors share their Python class.
+
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def SessionError.code : SessionError → UInt32
-  | .packet _ => 1
-  | .encryption _ => 2
-  | .decryption _ => 3
-  | .wrongFlag .. => 4
-  | .noSession _ => 5
+  | .packet _ => 201
+  | .encryption _ => 202
+  | .decryption _ => 203
+  | .wrongFlag .. => 204
+  | .noSession _ => 205
 
 /-- What node A reads from a WHOAREYOU packet. -/
 structure Challenge where

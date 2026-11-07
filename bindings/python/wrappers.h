@@ -292,6 +292,12 @@ PyObject* py_discv5_encrypt_message                       (PyObject* self, PyObj
 PyObject* py_discv5_decrypt_message                       (PyObject* self, PyObject* args);
 PyObject* py_discv5_decode_message                        (PyObject* self, PyObject* args);
 PyObject* py_discv5_reencode_message                      (PyObject* self, PyObject* args);
+PyObject* py_discv5_make_whoareyou                        (PyObject* self, PyObject* args);
+PyObject* py_discv5_read_whoareyou                        (PyObject* self, PyObject* args);
+PyObject* py_discv5_seal_message                          (PyObject* self, PyObject* args);
+PyObject* py_discv5_open_message                          (PyObject* self, PyObject* args);
+PyObject* py_discv5_seal_handshake                        (PyObject* self, PyObject* args);
+PyObject* py_discv5_open_handshake                        (PyObject* self, PyObject* args);
 PyObject* py_consensus_preset                             (PyObject* self, PyObject* args);
 PyObject* py_consensus_config                             (PyObject* self, PyObject* args);
 PyObject* py_consensus_parameters                         (PyObject* self, PyObject* args);
