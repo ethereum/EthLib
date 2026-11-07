@@ -334,7 +334,7 @@ private theorem forIn_committees_ok_iff {state justified : BeaconState preset fo
       refine ⟨committee, found, _, ⟨known.1, rfl⟩, ?_⟩
       rw [ite_eq_right_iff.mpr (fun above => absurd above (Nat.not_le_of_lt within))]
 
-/-- Before Gloas, a head is weak exactly when its votes and equivocators weigh below the threshold.
+/-- A head is weak exactly when its votes and equivocators weigh below the threshold.
 
 Its equivocators are those of the committees of its slot, in the state of the head.
 
@@ -345,7 +345,7 @@ That state must hold each equivocator.
 The weight must fit in 64 bits. -/
 theorem isHeadWeak_ok_iff {root : Root} {weak : Bool} :
     store.isHeadWeak config root = .ok weak ↔
-      fork < .glamsterdam ∧ ∃ justified threshold state block votes committees,
+      ∃ justified threshold state block votes committees,
         store.checkpointStates[store.justifiedCheckpoint]? = some justified ∧
         calculateCommitteeFraction justified config.REORG_HEAD_WEIGHT_THRESHOLD = .ok threshold ∧
         store.blockStates[root]? = some state ∧
@@ -361,12 +361,8 @@ theorem isHeadWeak_ok_iff {root : Root} {weak : Bool} :
           (committees.flatMap Array.toList) < 2 ^ 64 ∧
         weak = decide (votes.toNat + equivocatorWeight store.equivocatingIndices justified
             (committees.flatMap Array.toList) < threshold.toNat) := by
-  by_cases gloas : .glamsterdam ≤ fork
-  · have later : ¬ fork < .glamsterdam := Nat.not_lt_of_le gloas
-    simp [isHeadWeak, gloas, later, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
-  have before : fork < .glamsterdam := Nat.lt_of_not_le gloas
-  simp only [isHeadWeak, gloas, before, ↓reduceIte, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq, checkpointState_ok_iff, blockState_ok_iff, block_ok_iff, true_and]
+  simp only [isHeadWeak, bind_ok_iff, pure, Except.pure, Except.ok.injEq, checkpointState_ok_iff,
+    blockState_ok_iff, block_ok_iff]
   constructor
   · rintro ⟨justified, known, threshold, computed, state, stateKnown, block, blockKnown, votes,
       score, weight, walk, rfl⟩

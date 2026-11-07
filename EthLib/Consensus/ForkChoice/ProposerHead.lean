@@ -22,7 +22,7 @@ Every condition must hold, so that the skip is safe and cheap:
 
 A weak head of the previous slot, from a proposer that proposed twice in it, is also skipped.
 
-Gloas changes the choice and its late, weak and strong tests, which fail there as not yet specified.
+Gloas changes the choice and its late and strong tests, which fail there as not yet specified.
 -/
 
 @[expose] public section
@@ -76,28 +76,6 @@ def isFinalizationOk (slot : Slot) : Except ForkChoiceError Bool := do
 def isProposingOnTime : Except ForkChoiceError Bool := do
   return (← store.getTimeIntoSlotMs config) ≤
     (← (getProposerReorgCutoffMs config).mapError .arith)
-
-/-- Whether a head holds less weight than a share of a committee.
-
-Its weight counts its votes in the justified state, and every equivocator of its committees. -/
-def isHeadWeak (headRoot : Root) : Except ForkChoiceError Bool := do
-  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
-  let justifiedState ← store.checkpointState store.justifiedCheckpoint
-  let reorgThreshold ← calculateCommitteeFraction justifiedState config.REORG_HEAD_WEIGHT_THRESHOLD
-  let headState ← store.blockState headRoot
-  let headBlock ← store.block headRoot
-  let epoch := computeEpochAtSlot preset headBlock.slot
-  let votes ← store.getAttestationScore ⟨headRoot, .pending⟩ justifiedState
-  let mut headWeight : Nat := votes.toNat
-  for index in List.range (getCommitteeCountPerSlot headState epoch).toNat do
-    let committee ← (getBeaconCommittee headState headBlock.slot index.toUInt64).mapError .accessor
-    for validator in committee do
-      if store.equivocatingIndices.contains validator then
-        match justifiedState.validators.data[validator.toNat]? with
-        | some known => headWeight := headWeight + known.effectiveBalance.toNat
-        | none => throw (.accessor (.indexOutOfRange validator))
-    if 2 ^ 64 ≤ headWeight then throw (.arith .overflow)
-  return headWeight < reorgThreshold.toNat
 
 /-- Whether the parent of a block holds more weight than a share of a committee. -/
 def isParentStrong (root : Root) : Except ForkChoiceError Bool := do

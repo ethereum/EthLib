@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Consensus.ForkChoice.Store
+public import EthLib.Consensus.ForkChoice.PayloadVotes
 
 /-!
 # `Consensus.ForkChoice.Head`
@@ -25,9 +25,21 @@ The rule walks only through nodes with a viable leaf below them.
 
 A tie between two children goes to the greater root, compared as a string of bytes.
 
-Gloas changes the children of a node, the weight and the head.
+From Gloas a block has three nodes: pending, then empty or full.
 
-Those rules are not yet specified here, so they fail from Gloas on.
+The pending node has the empty node as a child, and the full node once the payload is verified.
+
+The empty or full node has as children the pending nodes of the blocks that build on it.
+
+The empty and the full node of a block from the previous slot weigh nothing.
+
+So the payload committee and the proposer decide that payload, and not the attestations.
+
+The boost does not apply on a weak parent of the slot before whose proposer equivocated early.
+
+A tie between the two nodes of one block goes to the greater tiebreaker of the payload status.
+
+The head is never a pending node.
 -/
 
 @[expose] public section
@@ -62,21 +74,25 @@ def computeProposerScore (config : Config) (state : BeaconState preset fork) :
     Except ForkChoiceError Gwei :=
   calculateCommitteeFraction state config.PROPOSER_SCORE_BOOST
 
-/-- The order of weighted nodes: by weight, then by root as a string of bytes. -/
-def compareWeighted : ForkChoiceNode × Gwei → ForkChoiceNode × Gwei → Ordering :=
-  compareLex (compareOn (·.2)) (compareOn (·.1.root))
+/-- A node with its weight and its tiebreaker. -/
+abbrev WeightedNode := ForkChoiceNode × Gwei × UInt8
+
+/-- The order of weighted nodes: by weight, then by root as bytes, then by tiebreaker. -/
+def compareWeighted : WeightedNode → WeightedNode → Ordering :=
+  compareLex (compareOn (·.2.1)) (compareLex (compareOn (·.1.root)) (compareOn (·.2.2)))
 
 instance : Std.TransCmp compareWeighted :=
-  inferInstanceAs (Std.TransCmp (compareLex (compareOn _) (compareOn _)))
+  inferInstanceAs
+    (Std.TransCmp (compareLex (compareOn _) (compareLex (compareOn _) (compareOn _))))
 
 /-- The larger of two weighted nodes.
 
 On equal keys the first one stays. -/
-def heavier (a b : ForkChoiceNode × Gwei) : ForkChoiceNode × Gwei :=
+def heavier (a b : WeightedNode) : WeightedNode :=
   if compareWeighted a b = .lt then b else a
 
 /-- The node of the largest weighted node of a list, or none when the list is empty. -/
-def chooseHeaviest : List (ForkChoiceNode × Gwei) → Option ForkChoiceNode
+def chooseHeaviest : List WeightedNode → Option ForkChoiceNode
   | [] => none
   | first :: rest => some (rest.foldl heavier first).1
 
@@ -89,6 +105,12 @@ def checkpointState (checkpoint : Checkpoint) : Except ForkChoiceError (BeaconSt
   match store.checkpointStates[checkpoint]? with
   | some state => return state
   | none => throw (.unknownCheckpointState checkpoint)
+
+/-- The state after a known block, or an error when the store holds none. -/
+def blockState (root : Root) : Except ForkChoiceError (BeaconState preset fork) :=
+  match store.blockStates[root]? with
+  | some state => return state
+  | none => throw (.unknownBlockState root)
 
 /-- The node that a latest vote supports.
 
@@ -128,16 +150,80 @@ def getAttestationScore (node : ForkChoiceNode) (state : BeaconState preset fork
 def getProposerScore : Except ForkChoiceError Gwei := do
   computeProposerScore config (← store.checkpointState store.justifiedCheckpoint)
 
+/-- Whether a head holds less weight than a share of a committee.
+
+Its weight counts its votes in the justified state, and every equivocator of its committees. -/
+def isHeadWeak (headRoot : Root) : Except ForkChoiceError Bool := do
+  let justifiedState ← store.checkpointState store.justifiedCheckpoint
+  let reorgThreshold ← calculateCommitteeFraction justifiedState config.REORG_HEAD_WEIGHT_THRESHOLD
+  let headState ← store.blockState headRoot
+  let headBlock ← store.block headRoot
+  let epoch := computeEpochAtSlot preset headBlock.slot
+  let votes ← store.getAttestationScore ⟨headRoot, .pending⟩ justifiedState
+  let mut headWeight : Nat := votes.toNat
+  for index in List.range (getCommitteeCountPerSlot headState epoch).toNat do
+    let committee ← (getBeaconCommittee headState headBlock.slot index.toUInt64).mapError .accessor
+    for validator in committee do
+      if store.equivocatingIndices.contains validator then
+        match justifiedState.validators.data[validator.toNat]? with
+        | some known => headWeight := headWeight + known.effectiveBalance.toNat
+        | none => throw (.accessor (.indexOutOfRange validator))
+    if 2 ^ 64 ≤ headWeight then throw (.arith .overflow)
+  return headWeight < reorgThreshold.toNat
+
+/-- Whether a block of the store arrived before the deadline of the payload committee.
+
+The store must hold that timeliness. -/
+def ptcTimely (gloas : .glamsterdam ≤ fork) (root : Root) : Except ForkChoiceError Bool :=
+  match (store.ptcTimeliness gloas)[root]? with
+  | some timely => return timely
+  | none => throw (.unknownBlockTimeliness root)
+
+/-- Whether the boost applies, from Gloas.
+
+There must be a boosted block.
+
+A parent older than the slot before the boosted block lets the boost apply.
+
+So does a parent that is not weak.
+
+A weak parent of the slot before lets it apply only when its proposer did not equivocate early.
+
+An early equivocation is another block of that proposer at the parent's slot.
+
+It arrived in its slot before the deadline of the payload committee.
+
+Every block of the store is tested, so each must have its timeliness. -/
+def shouldApplyProposerBoost (gloas : .glamsterdam ≤ fork) : Except ForkChoiceError Bool := do
+  if store.proposerBoostRoot = Vector.replicate 32 0 then return false
+  let block ← store.block store.proposerBoostRoot
+  let parentRoot := block.parentRoot
+  let parent ← store.block parentRoot
+  let slot := block.slot
+  if (← (addChecked parent.slot 1).mapError .arith) < slot then return true
+  if !(← store.isHeadWeak config parentRoot) then return true
+  let equivocations ← store.blocks.toList.filterM fun (root, other) => do
+    if !(← store.ptcTimely gloas root) || other.proposerIndex ≠ parent.proposerIndex then
+      return false
+    return (← (addChecked other.slot 1).mapError .arith) = slot && root ≠ parentRoot
+  return equivocations.isEmpty
+
 /-- The weight of a node: its votes in the justified state, plus the boost if it applies.
 
 The boost applies when the boosted block descends from the node.
 
-From Gloas the weight is not yet specified here. -/
+From Gloas the empty and the full node of a block from the previous slot weigh nothing.
+
+From Gloas the boost also needs the consent of the boosted block's parent. -/
 def getWeight (node : ForkChoiceNode) : Except ForkChoiceError Gwei := do
-  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
+  let decision ← if .glamsterdam ≤ fork then store.isPreviousSlotPayloadDecision config node
+    else pure false
+  if decision then return 0 else
   let state ← store.checkpointState store.justifiedCheckpoint
   let attestationScore ← store.getAttestationScore node state
-  if store.proposerBoostRoot = Vector.replicate 32 0 then return attestationScore
+  let boost ← if gloas : .glamsterdam ≤ fork then store.shouldApplyProposerBoost config gloas
+    else pure (store.proposerBoostRoot ≠ Vector.replicate 32 0)
+  if !boost then return attestationScore else
   let proposerScore ←
     if ← store.isAncestor ⟨store.proposerBoostRoot, .pending⟩ node then
       store.getProposerScore config
@@ -159,13 +245,29 @@ def getVotingSource (blockRoot : Root) : Except ForkChoiceError Checkpoint := do
     | some state => return state.currentJustifiedCheckpoint
     | none => throw (.unknownBlockState blockRoot)
 
-/-- The children of a node: the known blocks whose parent is the node's block.
+/-- The children of a node.
 
-From Gloas the children are not yet specified here. -/
-def getNodeChildren (node : ForkChoiceNode) : Except ForkChoiceError (List ForkChoiceNode) := do
-  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
-  return store.blocks.toList.filterMap fun (root, block) =>
-    if block.parentRoot = node.root then some ⟨root, .pending⟩ else none
+Before Gloas they are the pending nodes of the known blocks whose parent is the node's block.
+
+From Gloas a pending node has the empty node of its block as a child.
+
+It also has the full node when the store has verified the payload.
+
+From Gloas an empty or full node keeps only the blocks that build on its payload status.
+
+Their parent is the node's block, so the store must then hold that block. -/
+def getNodeChildren (node : ForkChoiceNode) : Except ForkChoiceError (List ForkChoiceNode) :=
+  if gloas : .glamsterdam ≤ fork ∧ node.payloadStatus = .pending then
+    return ⟨node.root, .empty⟩ ::
+      if store.isPayloadVerified gloas.1 node.root then [⟨node.root, .full⟩] else []
+  else
+    let built := store.blocks.toList.filter fun (_, block) => block.parentRoot = node.root
+    if .glamsterdam ≤ fork ∧ !built.isEmpty then do
+      let parent ← store.block node.root
+      return built.filterMap fun (root, block) =>
+        if parentPayloadStatus block parent = node.payloadStatus then some ⟨root, .pending⟩
+        else none
+    else return built.map fun (root, _) => ⟨root, .pending⟩
 
 /-- A rank that falls from a node to each child in a store that the handlers build.
 
@@ -213,13 +315,24 @@ termination_by store.nodeRank node
 def getFilteredNodeTree : Except ForkChoiceError (List ForkChoiceNode) :=
   store.filterNodeTree config ⟨store.justifiedCheckpoint.root, .pending⟩
 
-/-- The heaviest child of a node among the given nodes, by weight and then by root.
+/-- The tiebreaker of a node, from Gloas the one of its payload status.
+
+Before Gloas the order has no tiebreaker, so every node gets 0 and only weight and root count. -/
+def tiebreaker (node : ForkChoiceNode) : Except ForkChoiceError UInt8 :=
+  if gloas : .glamsterdam ≤ fork then store.getPayloadStatusTiebreaker config gloas node
+  else pure 0
+
+/-- A node with its weight and its tiebreaker. -/
+def weighNode (node : ForkChoiceNode) : Except ForkChoiceError WeightedNode :=
+  return (node, ← store.getWeight config node, ← store.tiebreaker config node)
+
+/-- The heaviest child of a node among the given nodes, by weight, then root, then tiebreaker.
 
 It is none when the node has no child among them. -/
 def heaviestChild (nodes : List ForkChoiceNode) (node : ForkChoiceNode) :
     Except ForkChoiceError (Option ForkChoiceNode) := do
   let children := (← store.getNodeChildren node).filter (· ∈ nodes)
-  let weighted ← children.mapM fun child => (child, ·) <$> store.getWeight config child
+  let weighted ← children.mapM (store.weighNode config)
   return chooseHeaviest weighted
 
 /-- LMD-GHOST from a node among the given nodes: move to the heaviest child until there is none.
@@ -236,11 +349,11 @@ termination_by store.nodeRank head
 
 /-- The head of the chain: LMD-GHOST from the justified block, over the viable nodes.
 
-From Gloas the head is not yet specified here. -/
+From Gloas, when no node is viable, the head is the empty node of the justified block. -/
 def getHead : Except ForkChoiceError ForkChoiceNode := do
-  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
   let nodes ← store.getFilteredNodeTree config
-  store.getHeadFrom config nodes ⟨store.justifiedCheckpoint.root, .pending⟩
+  if .glamsterdam ≤ fork ∧ nodes.isEmpty then return ⟨store.justifiedCheckpoint.root, .empty⟩
+  else store.getHeadFrom config nodes ⟨store.justifiedCheckpoint.root, .pending⟩
 
 end Store
 

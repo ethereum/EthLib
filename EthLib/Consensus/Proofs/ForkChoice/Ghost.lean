@@ -377,35 +377,10 @@ theorem getAttestationScore_eq_weight {node : ForkChoiceNode} {block : BeaconBlo
 
 /-! ## The viable nodes -/
 
-/-- An element of a monadic flat map comes from the list of one element, and each such counts. -/
-private theorem mem_of_flatMapM_ok {α β ε : Type} {f : α → Except ε (List β)} :
-    ∀ {xs : List α} {ys : List β}, xs.flatMapM f = .ok ys →
-      ∀ y, y ∈ ys ↔ ∃ x ∈ xs, ∃ zs, f x = .ok zs ∧ y ∈ zs
-  | [], ys, h, y => by
-    simp only [List.flatMapM_nil, pure, Except.pure, Except.ok.injEq] at h
-    simp [← h]
-  | x :: xs, ys, h, y => by
-    rw [List.flatMapM_cons, bind_ok_iff] at h
-    obtain ⟨zs, first, h⟩ := h
-    rw [bind_ok_iff] at h
-    obtain ⟨rest, restOk, h⟩ := h
-    simp only [pure, Except.pure, Except.ok.injEq] at h
-    subst h
-    rw [List.mem_append, mem_of_flatMapM_ok restOk]
-    constructor
-    · rintro (mem | ⟨x', mem', zs', ok', mem''⟩)
-      · exact ⟨x, List.mem_cons_self, zs, first, mem⟩
-      · exact ⟨x', List.mem_cons_of_mem _ mem', zs', ok', mem''⟩
-    · rintro ⟨x', mem', zs', ok', mem''⟩
-      rcases List.mem_cons.mp mem' with rfl | mem'
-      · rw [first, Except.ok.injEq] at ok'
-        exact .inl (ok' ▸ mem'')
-      · exact .inr ⟨x', mem', zs', ok', mem''⟩
-
 /-- Viable nodes below a pending node come with that node.
 
 Every other viable node is a known pending block whose parent is viable too. -/
-theorem filterNodeTree_parent {config : Config} :
+theorem filterNodeTree_parent {config : Config} (before : fork < .glamsterdam) :
     ∀ {node : ForkChoiceNode} {nodes : List ForkChoiceNode},
       node.payloadStatus = .pending → store.filterNodeTree config node = .ok nodes →
       ∀ n ∈ nodes, node ∈ nodes ∧ (n = node ∨ n.payloadStatus = .pending ∧
@@ -443,7 +418,7 @@ theorem filterNodeTree_parent {config : Config} :
     split at belowOk
     · rename_i lowerRank
       obtain ⟨childPending, block, childFound, parentRoot⟩ :=
-        (mem_getNodeChildren childrenOk).mp childMem
+        (mem_getNodeChildren before childrenOk).mp childMem
       obtain ⟨childIn, parent⟩ :=
         ih _ (hrank ▸ lowerRank) rfl childPending belowOk n belowMem
       -- Each node below the child is in the viable list of the node.
@@ -462,7 +437,8 @@ theorem filterNodeTree_parent {config : Config} :
 
 Every block between that node and a viable node is viable too. -/
 theorem filterNodeTree_ancestor {config : Config} {node : ForkChoiceNode}
-    {nodes : List ForkChoiceNode} (pending : node.payloadStatus = .pending)
+    {nodes : List ForkChoiceNode} (before : fork < .glamsterdam)
+    (pending : node.payloadStatus = .pending)
     (walk : store.filterNodeTree config node = .ok nodes) :
     ∀ n ∈ nodes, (blockTree lower).Ancestor (some node.root) (some n.root) ∧
       ∀ a, (blockTree lower).Ancestor (some node.root) a →
@@ -472,7 +448,7 @@ theorem filterNodeTree_ancestor {config : Config} {node : ForkChoiceNode}
     generalizing n with
   | _ height ih =>
   intro mem
-  obtain ⟨-, parent⟩ := filterNodeTree_parent pending walk n mem
+  obtain ⟨-, parent⟩ := filterNodeTree_parent before pending walk n mem
   rcases parent with rfl | ⟨-, block, found, parentMem⟩
   · exact ⟨.refl _, fun a below above => ⟨n, mem, (below.antisymm above).symm⟩⟩
   have step : (blockTree lower).parent (some n.root) = some block.parentRoot :=
@@ -563,8 +539,7 @@ theorem filterNodeTree_leaf {config : Config} :
     subst leafOk
     obtain ⟨x, hx⟩ := List.exists_mem_of_ne_nil _ nonempty
     obtain ⟨child, childMem, nodesBelow, -, belowOk, xMem, lift⟩ := below x hx
-    have childPending := ((mem_getNodeChildren childrenOk).mp childMem).1
-    have childIn := (filterNodeTree_parent childPending belowOk x xMem).1
+    have childIn := filterNodeTree_self belowOk (List.ne_nil_of_mem xMem)
     exact absurd (List.mem_append_left _ (lift child childIn)) (leaf child childMem)
 
 /-- A viable leaf agrees with the finalized checkpoint.
@@ -623,20 +598,25 @@ private theorem _root_.UInt64.compare_eq_compare_toNat (a b : UInt64) :
   simp only [compare, compareOfLessAndEq, UInt64.lt_iff_toNat_lt, ← UInt64.toNat_inj]
 
 /-- A weighted node at least as large as another is at least as large in the order of the model. -/
-theorem toLex_le_of_compareWeighted {x y : ForkChoiceNode × Gwei}
+theorem toLex_le_of_compareWeighted {x y : WeightedNode}
     (ge : (compareWeighted x y).isGE) :
-    toLex (y.2.toNat, rootValue (some y.1.root)) ≤
-      toLex (x.2.toNat, rootValue (some x.1.root)) := by
+    toLex (y.2.1.toNat, rootValue (some y.1.root)) ≤
+      toLex (x.2.1.toNat, rootValue (some x.1.root)) := by
   simp only [compareWeighted, compareLex, compareOn, UInt64.compare_eq_compare_toNat,
     compare_eq_compare_rootValue] at ge
-  generalize x.2.toNat = a, y.2.toNat = b, rootValue (some x.1.root) = c,
+  generalize x.2.1.toNat = a, y.2.1.toNat = b, rootValue (some x.1.root) = c,
     rootValue (some y.1.root) = d at ge ⊢
   rw [Prod.Lex.toLex_le_toLex]
   rcases Nat.lt_trichotomy a b with lt | rfl | gt
   · rw [Nat.compare_eq_lt.mpr lt] at ge
     cases ge
   · rw [Nat.compare_eq_eq.mpr rfl] at ge
-    exact .inr ⟨rfl, Nat.isGE_compare.mp ge⟩
+    refine .inr ⟨rfl, ?_⟩
+    rcases Nat.lt_trichotomy c d with lt | rfl | gt
+    · rw [Nat.compare_eq_lt.mpr lt] at ge
+      cases ge
+    · exact Nat.le_refl _
+    · exact Nat.le_of_lt gt
   · exact .inl gt
 
 /-! ## The head -/
@@ -671,17 +651,17 @@ theorem getWeight_eq_weight {node : ForkChoiceNode} {block : BeaconBlock preset 
 /-- The children of a node of the subtree of the justified block, in the view and in the store.
 
 A root is a child in the view exactly when its pending node is a viable child in the store. -/
-theorem mem_children_view {nodes : List ForkChoiceNode}
+theorem mem_children_view {nodes : List ForkChoiceNode} (before : fork < .glamsterdam)
     (tree : store.getFilteredNodeTree config = .ok nodes) {node : ForkChoiceNode}
     (below : (blockTree lower).Ancestor (some store.justifiedCheckpoint.root) (some node.root))
     {children : List ForkChoiceNode} (childrenOk : store.getNodeChildren node = .ok children)
     {root : Root} :
     some root ∈ Models.ForkChoice.children (view lower nodes) (some node.root) ↔
       ⟨root, .pending⟩ ∈ children.filter (· ∈ nodes) := by
-  have closed := filterNodeTree_ancestor (lower := lower) rfl tree
-  have pendingNodes := filterNodeTree_parent rfl tree
+  have closed := filterNodeTree_ancestor (lower := lower) before rfl tree
+  have pendingNodes := filterNodeTree_parent before rfl tree
   simp only [Models.ForkChoice.mem_children, view, View.mem_ofBlocks, blockTree_isChild_iff,
-    List.mem_filter, mem_getNodeChildren childrenOk, decide_eq_true_eq, List.mem_toFinset,
+    List.mem_filter, mem_getNodeChildren before childrenOk, decide_eq_true_eq, List.mem_toFinset,
     List.mem_map]
   constructor
   · rintro ⟨⟨_, ⟨n, nMem, rfl⟩, above⟩, block, found, parent⟩
@@ -735,7 +715,7 @@ theorem getHeadFrom_eq_ghost {nodes : List ForkChoiceNode} (before : fork < .gla
     have empty := List.length_eq_zero_iff.mp (mapM_ok_length weightedOk).symm
     refine ghost_of_not_nonempty _ _ _ _ fun ⟨c, mem⟩ => ?_
     obtain ⟨root, rfl⟩ := isSome c mem
-    have := (mem_children_view tree below childrenOk).mp mem
+    have := (mem_children_view before tree below childrenOk).mp mem
     rw [empty] at this
     cases this
   | some child =>
@@ -743,16 +723,15 @@ theorem getHeadFrom_eq_ghost {nodes : List ForkChoiceNode} (before : fork < .gla
     split at walk
     swap
     · cases walk
-    obtain ⟨childWeight, chosen, largest⟩ := chooseHeaviest_some choice
+    obtain ⟨childKey, chosen, largest⟩ := chooseHeaviest_some choice
     obtain ⟨source, sourceMem, sourceOk⟩ := mapM_ok_mem weightedOk _ chosen
-    obtain ⟨rfl, childOk⟩ : source = child ∧ store.getWeight config source = .ok childWeight := by
-      cases weighed : store.getWeight config source <;>
-        simp [weighed, Functor.map, Except.map] at sourceOk
-      obtain ⟨rfl, rfl⟩ := sourceOk
-      exact ⟨rfl, rfl⟩
+    obtain ⟨same, childOk, -⟩ := weighNode_ok_iff.mp sourceOk
+    replace same : source = child := same.symm
+    subst same
     obtain ⟨childMem, -⟩ := List.mem_filter.mp sourceMem
     have sourceIn := sourceMem
-    obtain ⟨childPending, block, childFound, parent⟩ := (mem_getNodeChildren childrenOk).mp childMem
+    obtain ⟨childPending, block, childFound, parent⟩ :=
+      (mem_getNodeChildren before childrenOk).mp childMem
     have childNode : source = ⟨source.root, .pending⟩ := by
       cases source
       simp_all
@@ -760,7 +739,7 @@ theorem getHeadFrom_eq_ghost {nodes : List ForkChoiceNode} (before : fork < .gla
       rw [blockTree_parent_of childFound, parent]
     have inView : some source.root ∈ Models.ForkChoice.children (view lower nodes)
         (some start.root) :=
-      (mem_children_view tree below childrenOk).mpr (childNode ▸ sourceIn)
+      (mem_children_view before tree below childrenOk).mpr (childNode ▸ sourceIn)
     -- The chosen child is above every other child, by weight and then by root.
     have largestModel : ∀ c ∈ Models.ForkChoice.children (view lower nodes) (some start.root),
         toLex (weight (voters state) (balanceAt state) (view lower nodes) c, rootValue c) ≤
@@ -768,17 +747,14 @@ theorem getHeadFrom_eq_ghost {nodes : List ForkChoiceNode} (before : fork < .gla
             rootValue (some source.root)) := by
       intro c mem
       obtain ⟨root, rfl⟩ := isSome c mem
-      have other := (mem_children_view tree below childrenOk).mp mem
+      have other := (mem_children_view before tree below childrenOk).mp mem
       obtain ⟨y, otherOk⟩ := mapM_ok_of_mem weightedOk _ other
       have yMem := mem_of_mapM_ok weightedOk other otherOk
       obtain ⟨otherMem, -⟩ := List.mem_filter.mp other
-      obtain ⟨-, otherBlock, otherFound, -⟩ := (mem_getNodeChildren childrenOk).mp otherMem
-      cases weighed : store.getWeight config ⟨root, .pending⟩ with
-      | error e => simp [weighed, Functor.map, Except.map] at otherOk
-      | ok otherWeight =>
-      simp only [weighed, Functor.map, Except.map, Except.ok.injEq] at otherOk
-      subst otherOk
+      obtain ⟨-, otherBlock, otherFound, -⟩ := (mem_getNodeChildren before childrenOk).mp otherMem
+      obtain ⟨yNode, weighed, -⟩ := weighNode_ok_iff.mp otherOk
       have le := toLex_le_of_compareWeighted (largest _ yMem)
+      rw [yNode] at le
       dsimp only at le
       rwa [getWeight_eq_weight before noBoost justifiedState otherFound rfl nodes weighed,
         getWeight_eq_weight before noBoost justifiedState childFound childPending nodes childOk]
@@ -794,19 +770,17 @@ theorem getHeadFrom_eq_ghost {nodes : List ForkChoiceNode} (before : fork < .gla
     exact ih source ‹_› childPending (below.trans ⟨1, step⟩) walk
 
 /-- Before Gloas, the head is a pending node. -/
-theorem getHead_pending {head : ForkChoiceNode} (found : store.getHead config = .ok head) :
-    head.payloadStatus = .pending := by
-  by_cases gloas : .glamsterdam ≤ fork
-  · rw [getHead_of_gloas gloas] at found
-    cases found
-  simp only [getHead, gloas, ↓reduceIte, bind, Except.bind] at found
+theorem getHead_pending {head : ForkChoiceNode} (before : fork < .glamsterdam)
+    (found : store.getHead config = .ok head) : head.payloadStatus = .pending := by
+  have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  simp only [getHead, later, false_and, ↓reduceIte, bind, Except.bind] at found
   cases tree : store.getFilteredNodeTree config with
   | error e => simp [tree] at found
   | ok nodes =>
     simp only [tree] at found
     rcases getHeadFrom_mem found with rfl | mem
     · rfl
-    · rcases (filterNodeTree_parent rfl tree head mem).2 with rfl | ⟨pending, -⟩
+    · rcases (filterNodeTree_parent before rfl tree head mem).2 with rfl | ⟨pending, -⟩
       · rfl
       · exact pending
 
@@ -838,12 +812,10 @@ theorem getHeadFrom_descends {nodes : List ForkChoiceNode} {ancestor : ForkChoic
     obtain ⟨children, weighted, childrenOk, weightedOk, choice⟩ := heaviestChild_eq found
     obtain ⟨_, chosen, -⟩ := chooseHeaviest_some choice
     obtain ⟨source, sourceMem, sourceOk⟩ := mapM_ok_mem weightedOk _ chosen
-    obtain rfl : source = child := by
-      cases weighed : store.getWeight config source <;>
-        simp [weighed, Functor.map, Except.map] at sourceOk
-      exact sourceOk.1
+    have same : source = child := (weighNode_ok_iff.mp sourceOk).1.symm
+    subst same
     obtain ⟨childPending, block, childFound, parent⟩ :=
-      (mem_getNodeChildren childrenOk).mp (List.mem_filter.mp sourceMem).1
+      (mem_getNodeChildren before childrenOk).mp (List.mem_filter.mp sourceMem).1
     -- A node that has a child of lower rank is a known block below that child.
     cases startFound : store.blocks[start.root]? with
     | none => simp [nodeRank, startFound] at lowerRank
@@ -863,14 +835,13 @@ theorem getHeadFrom_descends {nodes : List ForkChoiceNode} {ancestor : ForkChoic
     have step := isAncestor_of_parent before childFound parentFound lower (startNode ▸ descends)
     exact ih source lowerRank childPending (childNode ▸ step) walk
 
-/-- The head descends from the justified block, which counts as its own descendant. -/
-theorem getHead_descends {head : ForkChoiceNode} (found : store.getHead config = .ok head) :
+/-- Before Gloas, the head descends from the justified block, which counts as its own descendant.
+-/
+theorem getHead_descends {head : ForkChoiceNode} (before : fork < .glamsterdam)
+    (found : store.getHead config = .ok head) :
     store.isAncestor head ⟨store.justifiedCheckpoint.root, .pending⟩ = .ok true := by
-  by_cases gloas : .glamsterdam ≤ fork
-  · rw [getHead_of_gloas gloas] at found
-    cases found
-  have before := Nat.lt_of_not_le gloas
-  simp only [getHead, gloas, ↓reduceIte, bind, Except.bind] at found
+  have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  simp only [getHead, later, false_and, ↓reduceIte, bind, Except.bind] at found
   cases tree : store.getFilteredNodeTree config with
   | error e => simp [tree] at found
   | ok nodes =>
@@ -878,24 +849,31 @@ theorem getHead_descends {head : ForkChoiceNode} (found : store.getHead config =
     obtain ⟨_, known⟩ := filterNodeTree_known tree
     exact getHeadFrom_descends before rfl (isAncestor_self known) found
 
-/-- The head is a viable leaf, or no leaf is viable and the head is the justified block. -/
+/-- The head is a viable leaf, or no leaf is viable and the head is a node of the justified block.
+
+That node is pending before Gloas, and empty from Gloas. -/
 theorem getHead_viable {head : ForkChoiceNode} (found : store.getHead config = .ok head) :
     store.isViableLeaf config head = .ok true ∨
-      store.getFilteredNodeTree config = .ok [] ∧
-        head = ⟨store.justifiedCheckpoint.root, .pending⟩ := by
+      store.getFilteredNodeTree config = .ok [] ∧ head = ⟨store.justifiedCheckpoint.root,
+        if .glamsterdam ≤ fork then .empty else .pending⟩ := by
   obtain ⟨nodes, children, tree, childrenOk, leaf⟩ := getHead_leaf found
-  have later : ¬ .glamsterdam ≤ fork := fun gloas => by
-    rw [getHead_of_gloas gloas] at found
-    cases found
-  simp only [getHead, later, ↓reduceIte, tree, bind, Except.bind] at found
-  rcases getHeadFrom_mem found with same | mem
-  · cases nodes with
-    | nil => exact .inr ⟨tree, same⟩
-    | cons first rest =>
-      -- A nonempty list of viable nodes holds the justified block.
-      have justified := (filterNodeTree_parent rfl tree first List.mem_cons_self).1
-      exact .inl (filterNodeTree_leaf tree head (same ▸ justified) childrenOk leaf)
-  · exact .inl (filterNodeTree_leaf tree head mem childrenOk leaf)
+  simp only [getHead, tree, bind, Except.bind] at found
+  split at found
+  · rename_i empty
+    simp only [pure, Except.pure, Except.ok.injEq] at found
+    rw [List.isEmpty_iff.mp empty.2] at tree
+    exact .inr ⟨tree, by simp [← found, empty.1]⟩
+  · rename_i notEmpty
+    rcases getHeadFrom_mem found with same | mem
+    · cases nodes with
+      | nil =>
+        have later : ¬ .glamsterdam ≤ fork := fun gloas => notEmpty ⟨gloas, rfl⟩
+        exact .inr ⟨tree, by simp [same, later]⟩
+      | cons first rest =>
+        -- A nonempty list of viable nodes holds the justified block.
+        have justified := filterNodeTree_self tree (List.cons_ne_nil first rest)
+        exact .inl (filterNodeTree_leaf tree head (same ▸ justified) childrenOk leaf)
+    · exact .inl (filterNodeTree_leaf tree head mem childrenOk leaf)
 
 /-- The head agrees with the finalized checkpoint when some leaf is viable.
 
@@ -927,7 +905,7 @@ theorem getHead_eq_ghost {nodes : List ForkChoiceNode} {head : ForkChoiceNode}
     ghost (voters state) (balanceAt state) (view lower nodes) rootValue
       (some store.justifiedCheckpoint.root) = some head.root := by
   have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
-  simp only [getHead, later, ↓reduceIte, tree, bind, Except.bind] at found
+  simp only [getHead, later, false_and, ↓reduceIte, tree, bind, Except.bind] at found
   exact getHeadFrom_eq_ghost before noBoost justifiedState tree rfl (.refl _) found
 
 end Store
