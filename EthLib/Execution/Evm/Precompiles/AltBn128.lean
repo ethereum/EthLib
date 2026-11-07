@@ -35,7 +35,7 @@ inductive AltBn128Error where
   | notOnCurve
   /-- The call data of a pairing check is not a whole number of 192-byte pairs. -/
   | invalidInputLength (size : Nat)
-  /-- A point is not in the group of order `q`. -/
+  /-- A point of the twist is not in the group of order `q`. -/
   | notInSubgroup
   deriving Repr, DecidableEq
 
@@ -124,13 +124,20 @@ def bytesToG2 (raw : List UInt8) : Except AltBn128Error Point2 := do
   let point := Point2.affine x y
   if point.isOnCurve then return point else throw .notOnCurve
 
-/-- One pair of the call data, decoded and checked to be in the groups of order `q`. -/
+/-- One pair of the call data, decoded and checked to be in the groups of order `q`.
+
+For `G_1`, the encoding and the curve equation, or the encoding of infinity, are enough.
+
+So only the point of the twist has its order checked.
+
+Source: [EIP-197][eip197], section Specification.
+
+[eip197]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-197.md#specification
+-/
 def decodePair (data : ByteArray) (index : Nat) : Except AltBn128Error (Point × Point2) := do
   let p ← bytesToG1 (bufferRead data (192 * index) 64)
   let q ← bytesToG2 (bufferRead data (192 * index + 64) 128)
-  -- `q` has 254 bits, so 256 bits of the scalar cover it.
-  if Point.mulBits 256 Fr.modulus p ≠ .infinity then
-    throw .notInSubgroup
+  -- The order has 254 bits, so 256 bits of the scalar cover it.
   if Point2.mulBits 256 Fr.modulus q ≠ .infinity then
     throw .notInSubgroup
   return (p, q)
