@@ -6,7 +6,9 @@ public import EthLib.Consensus.Transition.Genesis
 /-!
 # Proofs: the genesis of the beacon chain
 
-A candidate genesis state satisfies the invariant that each valid block keeps before Altair.
+A candidate genesis state exists only before Altair.
+
+It satisfies the invariant that each valid block keeps.
 
 Its registry and balances have one entry for each validator.
 
@@ -38,8 +40,7 @@ theorem emptyGenesisState_invariant (before : fork < .altair) (genesisTime : UIn
   ordered := ⟨UInt64.le_refl _, UInt64.le_refl _⟩
   settled := UInt64.zero_le
 
-theorem frame_genesisDeposit (altair : fork < .altair) {before : fork < .hegota}
-    {leaves : Array DepositData}
+theorem frame_genesisDeposit {before : fork < .hegota} {leaves : Array DepositData}
     {entry : Deposit × Nat}
     (computed : genesisDeposit config checks before leaves state entry = .ok after) :
     Frame state after := by
@@ -47,7 +48,7 @@ theorem frame_genesisDeposit (altair : fork < .altair) {before : fork < .hegota}
   obtain ⟨depositRoot, _, deposited⟩ := computed
   exact (Frame.of_validators (state := state)
     (after := { state with eth1Data := fun _ => { state.eth1Data before with depositRoot } })
-    ⟨rfl, rfl⟩ rfl rfl rfl rfl rfl).trans (frame_processDeposit altair deposited)
+    ⟨rfl, rfl⟩ rfl rfl rfl rfl rfl).trans (frame_processDeposit deposited)
 
 /-- Setting the effective balance and the activation at genesis changes no exit. -/
 theorem frame_activateAtGenesis {index : Nat}
@@ -58,9 +59,11 @@ theorem frame_activateAtGenesis {index : Nat}
   have le := ordered validator (mem_of_getValidator found)
   split <;> exact le
 
-/-- A candidate genesis state satisfies the invariant that each valid block keeps before Altair.
+/-- A candidate genesis state exists only before Altair.
 
-The theorems on the state transition then apply to every chain that starts from it. -/
+It satisfies the invariant that each valid block keeps.
+
+The theorems on the state transition then apply to its chain, up to the first upgrade. -/
 theorem initializeBeaconStateFromEth1_invariant {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
     {deposits : Array Deposit}
     (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
@@ -76,7 +79,7 @@ theorem initializeBeaconStateFromEth1_invariant {eth1BlockHash : Hash32} {eth1Ti
     computed
   have before : fork < .altair := Nat.lt_of_not_le altair
   refine ⟨before, ?_⟩
-  have frame := (Frame.foldlM (fun _ _ _ ok => frame_genesisDeposit before ok) depositedOk).trans
+  have frame := (Frame.foldlM (fun _ _ _ ok => frame_genesisDeposit ok) depositedOk).trans
     (Frame.foldlM (fun _ _ _ ok => frame_activateAtGenesis ok) activatedOk)
   have rooted : Frame activated { activated with genesisValidatorsRoot := root } :=
     Frame.of_validators ⟨rfl, rfl⟩ rfl rfl rfl rfl rfl
