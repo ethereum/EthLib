@@ -291,8 +291,7 @@ theorem verify_iff_of_verify {q : Point} {e r s s' : Nat} (hv : verify q e r s =
   · obtain ⟨-, hs, -⟩ := verify_rebuilt hv
     rw [verify_neg_s q e r hs, hv]
 
-
-/-- A scalar read from an integer is that integer in `ZMod n`. -/
+/-- A scalar read from a natural number is that number in `ZMod n`. -/
 private theorem toZMod_ofNat (e : Nat) : Fn.toZMod (Fin.ofNat _ e) = (e : ZMod Fn.modulus) := by
   apply ZMod.val_injective
   simp [Fn.toZMod, ZMod.val_natCast]
@@ -316,7 +315,7 @@ A signature `(r, s)` is valid exactly when these hold:
 - the key `Q` lies on the curve and is not `O`;
 - `R = (e / s) G + (r / s) Q` is a point `(x, y)` other than `O`, with `x mod n = r`.
 
-The scalars `e / s` and `r / s` are taken modulo `n`, and `e` is any integer. -/
+The scalars `e / s` and `r / s` are taken modulo `n`, and `e` is any natural number. -/
 theorem verify_eq_true_iff {q : Point} {e r s : Nat} :
     verify q e r s = true ↔
       (0 < r ∧ r < Fn.modulus) ∧ (0 < s ∧ s < Fn.modulus) ∧ q ≠ .infinity ∧
