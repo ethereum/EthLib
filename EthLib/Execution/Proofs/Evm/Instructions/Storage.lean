@@ -66,6 +66,17 @@ theorem sstoreCost_noop (h : fork ≥ .istanbul) (hlt : fork < .glamsterdam)
   have hg : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hlt
   simp [sstoreCost, h, hg]
 
+/-- From Berlin to BPO5, a write costs at most a cold access and the price to fill a slot. -/
+theorem sstoreCost_le (h : fork ≥ .berlin) (hlt : fork < .glamsterdam)
+    (original current new : U256) (cold : Bool) :
+    sstoreCost fork original current new cold ≤ COLD_STORAGE_ACCESS + STORAGE_SET := by
+  have hg : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hlt
+  have hi : fork ≥ .istanbul := Nat.le_trans (by decide) h
+  unfold sstoreCost sstoreResetCost sstoreReadCost
+  simp only [hg, hi, h, ite_false, ite_true]
+  cases cold <;> simp only [ite_true, Bool.false_eq_true, ite_false, COLD_STORAGE_ACCESS,
+    STORAGE_SET, COLD_STORAGE_WRITE, WARM_ACCESS] <;> split <;> (try split) <;> omega
+
 /-- From Glamsterdam, a write and the write that restores the original value cost two accesses.
 
 That is net of refunds: the second write gives back the write price of the first.
