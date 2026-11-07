@@ -83,7 +83,7 @@ theorem readWhoareyou_makeWhoareyou {nodeIdA : NodeId} {maskingIv : Vector UInt8
           rw [hsize, hlen]
           rfl
         refine ⟨h63, ?_⟩
-        have hdec := Packet.decode_encode hb (by rw [h63]; decide) (fun _ => rfl)
+        have hdec := Packet.decode_encode hb (fun _ => rfl)
         simp only [readWhoareyou, hdec, ha, Except.mapError, bind, Except.bind, pure,
           Except.pure]
 
@@ -112,28 +112,16 @@ theorem openMessage_sealMessage {key : Aes.Key .aes128} {nodeIdA nodeIdB : NodeI
       | ok packetBytes =>
         simp only [hb, Except.ok.injEq] at h
         subst h
-        -- The header alone has 23 + 32 bytes, so the packet has at least 63.
-        cases hh : header.encode with
-        | error err => simp [Packet.encode, hh, bind, Except.bind] at hb
-        | ok headerBytes =>
-          have hlen := length_of_header_encode hh
-          have hsize := size_of_encode hb hh
-          rw [← hheader] at hlen
-          simp only [Authdata.encode, Vector.length_toList] at hlen
-          have hmin : MIN_PACKET_SIZE ≤ packetBytes.size := by
-            rw [hsize, hlen]
-            unfold MIN_PACKET_SIZE
-            omega
-          have hdec := Packet.decode_encode hb hmin (by
-            intro hflag
-            rw [← hheader] at hflag
-            simp [Authdata.flag] at hflag)
-          -- The additional data depends only on the masking IV and the header.
-          have had : Packet.messageAd ⟨maskingIv, header, message⟩ = .ok ad := by
-            simpa [Packet.messageAd] using ha
-          subst hheader
-          simp only [openMessage, hdec, hkey, had, decryptMessage_encryptMessage hm,
-            Except.mapError, bind, Except.bind, pure, Except.pure]
+        have hdec := Packet.decode_encode hb (by
+          intro hflag
+          rw [← hheader] at hflag
+          simp [Authdata.flag] at hflag)
+        -- The additional data depends only on the masking IV and the header.
+        have had : Packet.messageAd ⟨maskingIv, header, message⟩ = .ok ad := by
+          simpa [Packet.messageAd] using ha
+        subst hheader
+        simp only [openMessage, hdec, hkey, had, decryptMessage_encryptMessage hm,
+          Except.mapError, bind, Except.bind, pure, Except.pure]
 
 /-! ## Error codes -/
 

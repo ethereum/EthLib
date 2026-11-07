@@ -13,7 +13,7 @@ Properties of the discv5 packet encoding.
 - Masking twice under one key and IV gives the data back.
 - The mask of a prefix is the prefix of the mask.
 - The authdata of each flag decodes back from its bytes.
-- A packet that the encoder writes, within the size limits, decodes back.
+- A packet that the encoder writes decodes back.
 - Bytes decode to authdata or a packet exactly when they encode it and pass the decoder's checks.
 - The additional data of a message is the masking IV and the unmasked bytes up to the message.
 - A message that the encryption writes decrypts back.
@@ -217,6 +217,19 @@ theorem mask_masked_append (destId : NodeId) (iv : Vector UInt8 16) (header rest
   conv => lhs; rw [← List.take_append_drop header.length (mask destId iv _)]
   rw [← mask_take, List.take_left' (length_mask destId iv header), mask_mask]
 
+/-- The authdata of each flag has at least 24 bytes.
+
+A WHOAREYOU challenge has 24, an ordinary message 32, and a handshake at least 34. -/
+theorem Authdata.le_length_encode (a : Authdata) : 24 ≤ a.encode.length := by
+  cases a with
+  | message srcId => simp [Authdata.encode]
+  | whoareyou idNonce enrSeq =>
+    simp [Authdata.encode, Base.natToBytes_length]
+  | handshake srcId idSignature ephemeralPubkey record =>
+    simp only [Authdata.encode, List.length_append, List.length_cons, List.length_nil,
+      Vector.length_toList]
+    omega
+
 /-- A packet that the encoder writes is the masking IV, the masked header and the message.
 
 It has at most 1280 bytes. -/
@@ -241,16 +254,16 @@ theorem Packet.size_le_of_encode {destId : NodeId} {p : Packet} {bytes : ByteArr
     (h : p.encode destId = .ok bytes) : bytes.size ≤ MAX_PACKET_SIZE :=
   (Packet.encode_eq_ok h).choose_spec.2.2
 
-/-- A packet that the encoder writes decodes back, within the size limits of a packet.
+/-- A packet that the encoder writes decodes back.
 
 A WHOAREYOU packet must also carry no message, as the decoder requires. -/
 theorem Packet.decode_encode {destId : NodeId} {p : Packet} {bytes : ByteArray}
-    (h : p.encode destId = .ok bytes) (hmin : MIN_PACKET_SIZE ≤ bytes.size)
+    (h : p.encode destId = .ok bytes)
     (hw : p.header.authdata.flag = 1 → p.message.size = 0) :
     Packet.decode destId bytes = .ok p := by
   obtain ⟨hb, hh, rfl, hmax⟩ := Packet.encode_eq_ok h
   obtain ⟨iv, ⟨nonce, a⟩, msg⟩ := p
-  dsimp only at hw hh hmin hmax
+  dsimp only at hw hh hmax
   -- The header bytes, with the length of the authdata below 2^16.
   simp only [Header.encode] at hh
   split at hh
@@ -261,8 +274,8 @@ theorem Packet.decode_encode {destId : NodeId} {p : Packet} {bytes : ByteArray}
   simp only [Except.ok.injEq] at hh
   subst hh
   -- Name the parts of the header.
-  generalize hae : a.encode = ae at hL hmin hmax ⊢
-  generalize hnb : Base.natToBytes 2 ae.length = nb at hmin hmax ⊢
+  generalize hae : a.encode = ae at hL hmax ⊢
+  generalize hnb : Base.natToBytes 2 ae.length = nb at hmax ⊢
   have hnbl : nb.length = 2 := by rw [← hnb]; exact Base.natToBytes_length 2 _
   have hnbv : Base.bytesToNat nb = ae.length := by
     rw [← hnb]; exact Base.bytesToNat_natToBytes_of_lt (by simpa using hL)
@@ -271,9 +284,10 @@ theorem Packet.decode_encode {destId : NodeId} {p : Packet} {bytes : ByteArray}
   have hH : PROTOCOL_ID ++ VERSION ++ [a.flag] ++ nonce.toList ++ nb ++ ae =
       pre ++ (nonce.toList ++ (nb ++ ae)) := by
     simp [pre, PROTOCOL_ID, VERSION]
-  rw [hH, List.append_assoc] at hmin hmax ⊢
+  rw [hH, List.append_assoc] at hmax ⊢
   generalize hR : mask destId iv (pre ++ (nonce.toList ++ (nb ++ ae))) ++ msg.data.toList = R
-    at hmin hmax ⊢
+    at hmax ⊢
+  have hae24 : 24 ≤ ae.length := hae ▸ Authdata.le_length_encode a
   have hRl : R.length = 23 + ae.length + msg.size := by
     have hm : msg.size = msg.data.size := rfl
     rw [← hR]
@@ -310,8 +324,12 @@ theorem Packet.decode_encode {destId : NodeId} {p : Packet} {bytes : ByteArray}
       List.drop_left' hnbl, List.take_left' rfl]
   have hdec : Authdata.decode a.flag ae = .ok a := hae ▸ Authdata.decode_encode a hfits
   -- Each check of the decoder passes, and each field reads back.
+  have hsz16 : (⟨(iv.toList ++ R).toArray⟩ : ByteArray).size = 16 + R.length := by
+    simp [ByteArray.size]
   have hsz : ¬ ((⟨(iv.toList ++ R).toArray⟩ : ByteArray).size < MIN_PACKET_SIZE ∨
-      MAX_PACKET_SIZE < (⟨(iv.toList ++ R).toArray⟩ : ByteArray).size) := by omega
+      MAX_PACKET_SIZE < (⟨(iv.toList ++ R).toArray⟩ : ByteArray).size) := by
+    unfold MIN_PACKET_SIZE
+    omega
   have h16 : (iv.toList ++ R).take 16 = iv.toList := List.take_left' (by simp)
   have hd16 : (iv.toList ++ R).drop 16 = R := List.drop_left' (by simp)
   have hrest : ¬ R.length < STATIC_HEADER_SIZE + ae.length := by
@@ -446,15 +464,17 @@ theorem Packet.encode_of_decode {destId : NodeId} {bytes : ByteArray} {p : Packe
     (h : Packet.decode destId bytes = .ok p) : p.encode destId = .ok bytes :=
   (Packet.encode_and_checks_of_decode h).1
 
-/-- Bytes decode to a packet exactly when they are its encoding and pass the checks.
+/-- Bytes decode to a packet exactly when they are its encoding.
 
-The checks are the size limits, and a WHOAREYOU packet with no message. -/
+A WHOAREYOU packet must also carry no message.
+
+The size limits need no mention: every packet that the encoder writes is within them. -/
 theorem Packet.decode_eq_ok_iff (destId : NodeId) (bytes : ByteArray) (p : Packet) :
     Packet.decode destId bytes = .ok p ↔
-      p.encode destId = .ok bytes ∧ MIN_PACKET_SIZE ≤ bytes.size ∧
-        bytes.size ≤ MAX_PACKET_SIZE ∧ (p.header.authdata.flag = 1 → p.message.size = 0) :=
-  ⟨Packet.encode_and_checks_of_decode,
-    fun ⟨he, hmin, _, hw⟩ => Packet.decode_encode he hmin hw⟩
+      p.encode destId = .ok bytes ∧ (p.header.authdata.flag = 1 → p.message.size = 0) :=
+  ⟨fun h => ⟨(Packet.encode_and_checks_of_decode h).1,
+      (Packet.encode_and_checks_of_decode h).2.2.2⟩,
+    fun ⟨he, hw⟩ => Packet.decode_encode he hw⟩
 
 /-! ## Messages -/
 
