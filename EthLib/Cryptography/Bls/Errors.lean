@@ -20,9 +20,11 @@ inductive BlsError where
   | emptyPubkeyList
   /-- A pubkey was not `BYTES_PER_PUBKEY` bytes long. -/
   | badPubkeySize (actual : Nat)
-  /-- Pubkey bytes failed `KeyValidate` (bad encoding, off-curve, wrong
-  subgroup, or the point at infinity). When it came from an array,
-  `index` is its position. -/
+  /-- Pubkey bytes failed `KeyValidate`.
+
+  The cause is a bad encoding, a point off the curve, the wrong subgroup, or the point at infinity.
+
+  When the pubkey came from an array, `index` is its position. -/
   | invalidPubkey (index : Option Nat)
   /-- G1 point bytes could not be decompressed. -/
   | invalidG1Point
@@ -100,11 +102,15 @@ end EthLib.Cryptography.Bls
 
 namespace EthLib.Cryptography
 
-/-- `panic!` with an explicit fallback value: logically equal to `fallback`
-(so theorems about the surrounding definition are unaffected), but at
-runtime prints an error message — and aborts when the process runs with
-`LEAN_ABORT_ON_PANIC=1` — when reached. Used to transcribe spec-level
-runtime assertions into proof-covered pure code. -/
+/-- `panic!` with an explicit fallback value.
+
+Logically it equals `fallback`, so theorems about the surrounding definition are unaffected.
+
+When reached at runtime, it prints an error message.
+
+It also aborts when the process runs with `LEAN_ABORT_ON_PANIC=1`.
+
+It transcribes spec-level runtime assertions into proof-covered pure code. -/
 @[inline] def panicWith {α : Type _} (fallback : α) (msg : String) : α :=
   @panic α ⟨fallback⟩ msg
 

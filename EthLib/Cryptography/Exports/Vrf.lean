@@ -29,8 +29,9 @@ open EthLib.Cryptography.Vrf.Constants
 
 /-- The output of an opening at an index under a root, or no bytes when verification rejects.
 
-A root of another length than 32, an opening of another length than 1056,
-and an index from `2^32` on all reject. -/
+A root of another length than 32 rejects.
+
+So do an opening of another length than 1056 and an index from `2^32` on. -/
 @[export eth_vrf_verify]
 def verify (root : ByteArray) (index : UInt64) (opening : ByteArray) : ByteArray :=
   match verifyBytes root index.toNat opening with

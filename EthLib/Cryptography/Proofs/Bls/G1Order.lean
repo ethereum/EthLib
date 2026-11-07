@@ -38,9 +38,11 @@ theorem valid_generator : Valid generator :=
 
 /-! ## `[r]g₁ = 0` -/
 
-/-- Fuel-based double-and-add, structurally recursive so the kernel
-can evaluate it (the spec's `mulNat` is well-founded recursion, which
-does not reduce definitionally). Correctness: `mulNatAux_eq`. -/
+/-- Fuel-based double-and-add, structurally recursive so the kernel can evaluate it.
+
+The spec's `mulNat` is well-founded recursion, which does not reduce definitionally.
+
+Correctness: `mulNatAux_eq`. -/
 def mulNatAux {F : Type} [BaseField F] : Nat → G1 F → Nat → G1 F
   | 0, _, _ => zero
   | fuel + 1, p, k =>
@@ -123,8 +125,9 @@ theorem modulus_smul_generator :
     show ∀ p : G1, p.isInfinity = p.z.isZero from fun _ => rfl] at h
   exact h
 
-/-- The generator is not the identity (its representative has
-`z = 1 ≠ 0`, so it maps to an affine point). -/
+/-- The generator is not the identity.
+
+Its representative has `z = 1 ≠ 0`, so it maps to an affine point. -/
 theorem toPoint_generator_ne_zero : toPoint generator ≠ 0 := by
   rw [toPoint, Point.toAffine_of_Z_ne_zero valid_generator
     (by
@@ -155,8 +158,7 @@ theorem ofFr_zero : ofFr 0 = 0 := by rw [ofFr, Fr.val_zero, zero_nsmul]
 
 theorem ofFr_one : ofFr 1 = toPoint generator := by rw [ofFr, Fr.val_one, one_nsmul]
 
-/-- `ofFr` is additive: `Fr` addition (mod `r`) matches group
-addition. -/
+/-- `ofFr` is additive: `Fr` addition (mod `r`) matches group addition. -/
 theorem ofFr_add (s t : Fr) : ofFr (s + t) = ofFr s + ofFr t := by
   rw [ofFr, ofFr, ofFr, Fr.val_add,
       ← nsmul_generator_mod, add_nsmul]
@@ -173,13 +175,15 @@ theorem toPoint_mul_generator (s : Fr) :
 
 /-! ## Reference multi-scalar multiplication
 
-`msmRef` is the naive fold `Σ_i [sᵢ]Pᵢ`; `toPoint_msmRef` maps it to a
-`Finset.sum` in the curve group. The spec's windowed-Pippenger `msm`
-will be proved equal to `msmRef` separately (that proof is about the
-bucketing algorithm, not about the group). -/
+`msmRef` is the naive fold `Σ_i [sᵢ]Pᵢ`.
 
-/-- Naive multi-scalar multiplication: `Σ_i [scalars i] (points i)`
-over the first `n` indices. -/
+`toPoint_msmRef` maps it to a `Finset.sum` in the curve group.
+
+The spec's windowed-Pippenger `msm` will be proved equal to `msmRef` separately.
+
+That proof is about the bucketing algorithm, not about the group. -/
+
+/-- Naive multi-scalar multiplication: `Σ_i [scalars i] (points i)` over the first `n` indices. -/
 def msmRef (points : Nat → G1) (scalars : Nat → Fr) : Nat → G1
   | 0 => zero
   | n + 1 => add (msmRef points scalars n) (mul (points n) (scalars n))
@@ -191,8 +195,7 @@ theorem valid_msmRef {points : Nat → G1} (scalars : Nat → Fr)
   | zero => exact valid_zero
   | succ n ih => exact valid_add ih (valid_mul (hp n) _)
 
-/-- The reference MSM computes the sum of the scalar multiples in the
-curve group. -/
+/-- The reference MSM computes the sum of the scalar multiples in the curve group. -/
 theorem toPoint_msmRef {points : Nat → G1} (scalars : Nat → Fr)
     (hp : ∀ i, Valid (points i)) (n : Nat) :
     toPoint (msmRef points scalars n)

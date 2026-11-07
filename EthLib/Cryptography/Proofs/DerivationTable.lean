@@ -22,8 +22,8 @@ This file adds three facts to them, for every public oracle.
 - One hop: an event of the real game is at most the event in the ideal game, plus a term.
   The term is the number of queries at encodable points times the chance of the drawn seed.
 - A seed fixed by every point that encodes it is hit with probability at most `1 / |S|`.
-- Lazy to eager: drawing each derivation on its first query gives the distribution of drawing
-  the whole table first.
+- Lazy to eager: drawing each derivation on its first query, or the whole table first.
+  The two give one distribution.
 -/
 
 @[expose] public section

@@ -5,22 +5,30 @@ public import Mathlib.Data.ZMod.Basic
 /-!
 # Proofs: kernel-friendly modular exponentiation
 
-`powModAux fuel m b e` is `b ^ e % m` (for `e < 2 ^ fuel`), computed by
-a fuel-based square-and-multiply whose every step is a GMP-accelerated
-`Nat` operation, so the kernel can evaluate it via `decide` even for
-exponents hundreds of bits wide. `natCast_pow_eq_one_iff` and
-`natCast_pow_div_ne_one` convert such computations into the
-`(b : ZMod m) ^ e = 1` / `≠ 1` facts that Lucas primality certificates
-(`lucas_primality`) consume.
+`powModAux fuel m b e` is `b ^ e % m` (for `e < 2 ^ fuel`).
+
+It computes by a fuel-based square-and-multiply.
+
+Every step is a GMP-accelerated `Nat` operation.
+
+So the kernel can evaluate it via `decide`, even for exponents hundreds of bits wide.
+
+`natCast_pow_eq_one_iff` and `natCast_pow_div_ne_one` convert such computations into facts.
+
+The facts are `(b : ZMod m) ^ e = 1` / `≠ 1`, which Lucas primality certificates consume.
+
+The certificates are those of `lucas_primality`.
 -/
 
 @[expose] public section
 
 namespace EthLib.Cryptography.PowMod
 
-/-- Fuel-based modular square-and-multiply: `powModAux fuel m b e` is
-`b ^ e % m` provided `e < 2 ^ fuel`. Structural recursion on `fuel`
-keeps kernel reduction shallow. -/
+/-- Fuel-based modular square-and-multiply.
+
+`powModAux fuel m b e` is `b ^ e % m` provided `e < 2 ^ fuel`.
+
+Structural recursion on `fuel` keeps kernel reduction shallow. -/
 def powModAux : Nat → Nat → Nat → Nat → Nat
   | 0, m, _, _ => 1 % m
   | fuel+1, m, b, e =>
@@ -56,8 +64,9 @@ theorem natCast_pow_eq_one_iff (m fuel b e : Nat) (he : e < 2 ^ fuel) :
       ZMod.natCast_eq_natCast_iff]
   exact Iff.rfl
 
-/-- The `≠ 1` half of a Lucas certificate: refute
-`(b : ZMod m) ^ ((m - 1) / q) = 1` by one `powModAux` computation. -/
+/-- The `≠ 1` half of a Lucas certificate.
+
+It refutes `(b : ZMod m) ^ ((m - 1) / q) = 1` by one `powModAux` computation. -/
 theorem natCast_pow_div_ne_one (m fuel b q : Nat) (hm : m - 1 < 2 ^ fuel)
     (hne : powModAux fuel m b ((m - 1) / q) ≠ 1 % m) :
     ((b : ZMod m) ^ ((m - 1) / q)) ≠ 1 := fun h =>

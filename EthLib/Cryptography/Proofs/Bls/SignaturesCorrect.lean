@@ -13,8 +13,9 @@ Under the pairing law, an honest signature passes verification.
 
 So do an honest proof of possession and an aggregate of honest signatures.
 
-The source is [draft-04](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04),
-§2.6 to §2.9 and §3.3.
+The source is [draft-04][draft-04], §2.6 to §2.9 and §3.3.
+
+[draft-04]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04
 -/
 
 @[expose] public section

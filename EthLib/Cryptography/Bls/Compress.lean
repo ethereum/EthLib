@@ -55,8 +55,9 @@ def Fp2.sqrt (a : Fp2 F) : Except BlsError (Fp2 F) :=
     match sqrtOrError a.c0 with
     | .ok s => .ok ⟨s, BaseField.zero⟩
     | .error _ =>
-      -- −a₀ might be a square; if so, `sqrt(a) = 0 + sqrt(−a₀)·i`
-      -- because `(s·i)² = s²·(−1) = −s²`.
+      -- −a₀ might be a square.
+      --
+      -- If so, `sqrt(a) = 0 + sqrt(−a₀)·i`, because `(s·i)² = s²·(−1) = −s²`.
       match sqrtOrError (-a.c0) with
       | .ok s    => .ok ⟨BaseField.zero, s⟩
       | .error _ => .error .notASquare
