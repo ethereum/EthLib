@@ -180,55 +180,6 @@ theorem uncompress_infinityBytes : G2.uncompress G2.infinityBytes = .ok G2.zero 
 
 /-! ## Rejection of malformed compressed inputs -/
 
-/-- A fold that clears `ok` on any nonzero byte ends `true` only if every visited byte is zero. -/
-private theorem foldl_allZero (b : ByteArray) (s n : Nat) (init : Bool)
-    (h : (List.range' s n).foldl
-      (fun ok i => if b.get! i ≠ 0 then false else ok) init = true) :
-    init = true ∧ ∀ i, s ≤ i → i < s + n → b.get! i = 0 := by
-  induction n generalizing s init with
-  | zero => exact ⟨h, fun i h1 h2 => by omega⟩
-  | succ n ih =>
-    -- Peel off index s and apply the induction hypothesis to the tail.
-    rw [List.range'_succ, List.foldl_cons] at h
-    obtain ⟨hinit, hrest⟩ := ih (s + 1) _ h
-    -- If byte s were nonzero, the accumulator would enter the tail as false and stay false.
-    have hs : b.get! s = 0 := by
-      by_contra hne
-      rw [ite_eq_left hne] at hinit
-      cases hinit
-    refine ⟨by rwa [ite_eq_right (not_not.mpr hs)] at hinit, fun i h1 h2 => ?_⟩
-    rcases Nat.eq_or_lt_of_le h1 with rfl | hlt
-    · exact hs
-    · exact hrest i hlt (by omega)
-
-open EthLib.Cryptography.IdLoops in
-/-- The imperative `tailAllZero` scan succeeds only if bytes `1` through `b.size - 1` are zero. -/
-private theorem tailAllZero_ok (b : ByteArray)
-    (h : (Id.run do
-      let mut ok := true
-      for i in [1 : b.size] do
-        if b.get! i ≠ 0 then ok := false
-      return ok) = true) :
-    ∀ i, 1 ≤ i → i < b.size → b.get! i = 0 := by
-  -- Rewrite the Id.run range loop into List.foldl over List.range'.
-  dsimp only [Id.run, id_pure, id_bind] at h
-  rw [Std.Legacy.Range.forIn_eq_forIn_range'] at h
-  -- Pull ForInStep.yield outside the conditional so forIn_list_yield applies.
-  have hbody : (fun (i : Nat) (ok : Bool) =>
-      (if b.get! i ≠ 0 then ForInStep.yield false
-        else ForInStep.yield ok : Id (ForInStep Bool)))
-      = fun i ok => ForInStep.yield (if b.get! i ≠ 0 then false else ok) := by
-    funext i ok; split <;> rfl
-  change (forIn (m := Id) (List.range' 1 ([1 : b.size].size) 1) true
-      (fun i ok => if b.get! i ≠ 0 then ForInStep.yield false else ForInStep.yield ok)) = true at h
-  rw [hbody, forIn_list_yield] at h
-  -- The range [1 : b.size] covers b.size - 1 indices starting at 1.
-  have hsz : [1 : b.size].size = b.size - 1 := by
-    simp [Std.Legacy.Range.size]
-  rw [hsz] at h
-  intro i hi1 hi2
-  exact (foldl_allZero b 1 (b.size - 1) true h).2 i hi1 (by omega)
-
 /-- Decoding rejects any input that is not 96 bytes long (Section C.2). -/
 theorem uncompress_size_ne {bytes : ByteArray} (h : bytes.size ≠ 96) :
     G2.uncompress bytes = .error .invalidG2Point := by

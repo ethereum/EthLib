@@ -831,15 +831,29 @@ private theorem foldl_allZero (b : ByteArray) (s n : Nat) (init : Bool)
     · exact hs
     · exact hrest i hlt (by omega)
 
+/-- The scan over the tail agrees with the same scan read by `get!`. -/
+private theorem tailAllZero_eq (b : ByteArray) (s : Nat) :
+    tailAllZero b s = (Id.run do
+      let mut ok := true
+      for i in [s : b.size] do
+        if b.get! i ≠ 0 then ok := false
+      return ok) := by
+  dsimp only [tailAllZero, Id.run]
+  rw [forIn'_eq_forIn (g := fun i (acc : Bool) =>
+    (if b.get! i ≠ 0 then pure (ForInStep.yield false) else pure (ForInStep.yield acc) :
+      Id (ForInStep Bool)))]
+  intro i hi acc
+  have : b.get! i = b[i]'hi.upper := by
+    simp only [ByteArray.get!]
+    exact getElem!_pos b.data i hi.upper
+  rw [this]
+
 open EthLib.Cryptography.IdLoops in
 /-- The tail scan in decompression succeeds only if bytes `1` to the end are all zero. -/
-private theorem tailAllZero_ok (b : ByteArray)
-    (h : (Id.run do
-      let mut ok := true
-      for i in [1 : b.size] do
-        if b.get! i ≠ 0 then ok := false
-      return ok) = true) :
+theorem _root_.EthLib.Cryptography.Bls.tailAllZero_ok (b : ByteArray)
+    (h : tailAllZero b 1 = true) :
     ∀ i, 1 ≤ i → i < b.size → b.get! i = 0 := by
+  rw [tailAllZero_eq] at h
   -- Turn the imperative loop over the range into a fold over the list of indices.
   dsimp only [Id.run, id_pure, id_bind] at h
   rw [Std.Legacy.Range.forIn_eq_forIn_range'] at h
