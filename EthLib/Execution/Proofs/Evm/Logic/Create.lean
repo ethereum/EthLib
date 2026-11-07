@@ -24,7 +24,9 @@ For CREATE2 it hashes the sender, the salt and the init code.
 
 The address must hold no code and a nonce of 0, as EIP-684 asks.
 
-The creation accesses the new address, by EIP-2929, and the nonce of the frame grows by one.
+The creation accesses the new address, by EIP-2929.
+
+The nonce of the current account grows by one.
 
 It passes on all but one 64th of the gas left, by EIP-150.
 
