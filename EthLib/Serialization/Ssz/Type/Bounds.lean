@@ -9,11 +9,6 @@ The fewest and the most bytes that an encoding of a type can have.
 
 The request and response protocols of the consensus layer ask a payload to lie within them.
 
-The rule is that of "What are SSZ type size bounds?" in `specs/phase0/p2p-interface.md`.
-
-That file is in `ethereum/consensus-specs`, at `aa16bb4c`:
-<https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/phase0/p2p-interface.md>
-
 A static type has one size, so its two bounds are equal.
 
 A dynamic type takes its largest size from its limits.
