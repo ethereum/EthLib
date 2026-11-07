@@ -943,7 +943,8 @@ It verifies under the keys in the order of the attestations.
 
 No theorem shows that an aggregate passes the signature check of an indexed attestation, which reads the keys in the sorted order of the attesters.
 No theorem covers the signature of a contribution.
-The guide aggregates the signature of every vote, so an aggregate verifies only when no two votes share a seat, and no theorem states that condition.
+The guide aggregates the signature of every vote.
+So an aggregate verifies only when no two votes share a seat, a condition that no theorem states.
 The contribution takes the sync committee as an argument, since the guide and gossip validation read different committees in the last slot of a period.
 The Python suite checks each vote and each aggregate against values worked out in the test from the guide, with py_ecc for the signatures.
 
