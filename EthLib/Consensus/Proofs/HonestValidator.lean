@@ -17,7 +17,9 @@ They check it under the same domain type and epoch, against the public key of th
 
 A committee assignment is a committee of the epoch that holds the validator.
 
-It is the only one: two committees of one epoch never share a validator.
+It is the only one under two bounds.
+
+The registry stays within its limit, and its active validators times the committees fit in 64 bits.
 -/
 
 @[expose] public section
