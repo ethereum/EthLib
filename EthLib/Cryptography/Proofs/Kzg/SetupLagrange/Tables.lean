@@ -22,6 +22,10 @@ Each table, and each quarter of table `B`, is its own definition with its own el
 
 Each elaborator thus stays within the default limit of heartbeats.
 
+That needs the compiled specification, which `lake build`, `lake lean` and the editor load.
+
+A bare `lake env lean` does not load it, so this file then runs out of heartbeats.
+
 An elaborator reads the table of the previous round from the definition that holds it.
 
 The proofs do not trust the tables: a wrong entry only makes a kernel check fail.
