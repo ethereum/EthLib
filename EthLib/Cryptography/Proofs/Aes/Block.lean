@@ -10,6 +10,10 @@ The S-box table is the S-box that FIPS 197 §5.1.1 defines, and the inverse tabl
 The round constants are the ten values of FIPS 197 Table 5.
 
 The inverse cipher inverts the cipher for every key schedule, so for every key.
+
+Each word of the key schedule is a key word or follows the recurrence of FIPS 197 §5.2, Algorithm 2.
+
+That recurrence needs a key of at least one word.
 -/
 
 @[expose] public section
@@ -277,5 +281,85 @@ theorem invCipher_cipher (Nr : Nat) (w : Vector Word (4 * (Nr + 1))) (x : Block)
 /-- The inverse cipher of a key undoes the cipher of the same key, for AES-128 and AES-256. -/
 theorem ciphInv_ciph (k : KeySize) (key : Key k) (x : Block) : ciphInv k key (ciph k key x) = x :=
   invCipher_cipher _ _ x
+
+/-! ## The key expansion
+
+The code builds the key schedule in an array and reads it back with a default for a missing word.
+
+The two theorems below state Algorithm 2 on the schedule itself, so the default plays no part. -/
+
+/-- The array of the key expansion after the first `m` passes of its second loop. -/
+private def schedule (Nk : Nat) (key : Vector UInt8 (4 * Nk)) (m : Nat) : Array Word :=
+  (List.range' Nk m).foldl
+    (fun w i => w.push (nextWord Nk i (w.getD (i - 1) default) (w.getD (i - Nk) default)))
+    (Array.ofFn fun i : Fin Nk => Vector.ofFn fun j : Fin 4 => key[4 * i.val + j.val]'(by omega))
+
+private theorem keyExpansion_eq_schedule (Nk Nr : Nat) (key : Vector UInt8 (4 * Nk)) :
+    keyExpansion Nk Nr key =
+      Vector.ofFn fun i => (schedule Nk key (4 * (Nr + 1) - Nk)).getD i.val default :=
+  rfl
+
+private theorem schedule_succ (Nk : Nat) (key : Vector UInt8 (4 * Nk)) (m : Nat) :
+    schedule Nk key (m + 1) =
+      (schedule Nk key m).push (nextWord Nk (Nk + m)
+        ((schedule Nk key m).getD (Nk + m - 1) default) ((schedule Nk key m).getD m default)) := by
+  simp only [schedule, List.range'_concat, List.foldl_append, List.foldl_cons, List.foldl_nil,
+    Nat.one_mul, Nat.add_sub_cancel_left]
+
+private theorem size_schedule (Nk : Nat) (key : Vector UInt8 (4 * Nk)) (m : Nat) :
+    (schedule Nk key m).size = Nk + m := by
+  induction m with
+  | zero => simp [schedule]
+  | succ m ih => rw [schedule_succ, Array.size_push, ih, Nat.add_assoc]
+
+-- Later passes only push, so they keep every word already in the array.
+private theorem getElem?_schedule_add (Nk : Nat) (key : Vector UInt8 (4 * Nk)) (m k i : Nat)
+    (hi : i < Nk + m) : (schedule Nk key (m + k))[i]? = (schedule Nk key m)[i]? := by
+  induction k with
+  | zero => rfl
+  | succ k ih =>
+    rw [← Nat.add_assoc, schedule_succ, Array.getElem?_push, size_schedule,
+      ite_eq_right_iff.mpr (fun h => by omega), ih]
+
+private theorem getElem?_schedule_of_lt (Nk : Nat) (key : Vector UInt8 (4 * Nk)) (m i : Nat)
+    (hi : i < Nk) :
+    (schedule Nk key m)[i]? =
+      some (Vector.ofFn fun j : Fin 4 => key[4 * i + j.val]'(by omega)) := by
+  rw [show m = 0 + m by omega, getElem?_schedule_add Nk key 0 m i (by omega)]
+  simp [schedule, hi]
+
+private theorem getElem?_schedule_of_le (Nk : Nat) (key : Vector UInt8 (4 * Nk)) (hNk : 0 < Nk)
+    (m i : Nat) (hk : Nk ≤ i) (hi : i < Nk + m) :
+    (schedule Nk key m)[i]? = some (nextWord Nk i ((schedule Nk key m)[i - 1]?.getD default)
+      ((schedule Nk key m)[i - Nk]?.getD default)) := by
+  obtain ⟨n, rfl⟩ : ∃ n, i = Nk + n := ⟨i - Nk, by omega⟩
+  obtain ⟨k, rfl⟩ : ∃ k, m = n + 1 + k := ⟨m - (n + 1), by omega⟩
+  rw [getElem?_schedule_add Nk key (n + 1) k _ (by omega),
+    getElem?_schedule_add Nk key (n + 1) k _ (by omega),
+    getElem?_schedule_add Nk key (n + 1) k _ (by omega), schedule_succ]
+  simp only [Array.getElem?_push, size_schedule, Array.getD_eq_getD_getElem?,
+    show Nk + n - 1 ≠ Nk + n by omega, show n ≠ Nk + n by omega,
+    Nat.add_sub_cancel_left, ↓reduceIte]
+
+/-- Word `i < Nk` of the schedule is word `i` of the key, as lines 2 to 6 of Algorithm 2 state.
+
+Algorithm 2 is in FIPS 197 §5.2, and word `i` of the key is its bytes `4i` to `4i + 3`. -/
+theorem getElem_keyExpansion_of_lt (Nk Nr : Nat) (key : Vector UInt8 (4 * Nk)) (i : Nat)
+    (hi : i < 4 * (Nr + 1)) (hk : i < Nk) :
+    (keyExpansion Nk Nr key)[i] = Vector.ofFn fun j : Fin 4 => key[4 * i + j.val]'(by omega) := by
+  rw [keyExpansion_eq_schedule, Vector.getElem_ofFn, Array.getD_eq_getD_getElem?,
+    getElem?_schedule_of_lt Nk key _ i hk, Option.getD_some]
+
+/-- Each word `i >= Nk` comes from words `i - 1` and `i - Nk`, by lines 8 to 14 of Algorithm 2.
+
+Both are words of the schedule itself, so neither read of the code returns the default.
+
+A key of no words has no word `i - Nk` below `i`, so the key needs at least one word. -/
+theorem getElem_keyExpansion_of_le (Nk Nr : Nat) (key : Vector UInt8 (4 * Nk)) (hNk : 0 < Nk)
+    (i : Nat) (hi : i < 4 * (Nr + 1)) (hk : Nk ≤ i) :
+    (keyExpansion Nk Nr key)[i] =
+      nextWord Nk i (keyExpansion Nk Nr key)[i - 1] (keyExpansion Nk Nr key)[i - Nk] := by
+  simp only [keyExpansion_eq_schedule, Vector.getElem_ofFn, Array.getD_eq_getD_getElem?]
+  rw [getElem?_schedule_of_le Nk key hNk _ i hk (by omega), Option.getD_some]
 
 end EthLib.Cryptography.Aes
