@@ -61,7 +61,7 @@ variable {preset : Preset} {fork : Fork}
 
 /-- The block of a chain of proof of work with a hash, if the chain holds one.
 
-The chain is a list of blocks in the order the guide reads its map, each found by its own hash.
+The chain is a list of blocks, read in order, each found by its own hash.
 
 A hash that two blocks share finds the first of them. -/
 def findPowBlock (powChain : List PowBlock) (hash : Hash32) : Option PowBlock :=
@@ -101,7 +101,9 @@ where
 
 A configured terminal block hash names it, and it is the block of the chain with that hash, if any.
 
-Otherwise it is the first block of the chain that reaches the terminal total difficulty first. -/
+Otherwise it is the first valid terminal block of the chain.
+
+The search fails on a block that reaches the difficulty when the chain does not hold its parent. -/
 def getTerminalPowBlock (config : Config) (powChain : List PowBlock) :
     Except ProposerError (Option PowBlock) :=
   if config.TERMINAL_BLOCK_HASH ≠ EMPTY_BLOCK_HASH then
