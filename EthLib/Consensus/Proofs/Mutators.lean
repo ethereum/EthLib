@@ -14,6 +14,10 @@ Every mutator keeps the number of validators and the number of balances.
 
 So a state whose registry and balances have one length keeps that property.
 
+Raising a balance succeeds exactly when the balance exists and the sum stays below `2^64`.
+
+Lowering an existing balance always succeeds, and the result is zero when the amount is larger.
+
 A validator that starts to exit may withdraw a fixed delay after its exit epoch, with no overflow.
 
 Before Electra, an exit epoch other than the far future held fewer exits than the churn limit.
@@ -126,6 +130,39 @@ theorem decreaseBalance_ok {state after : BeaconState preset fork} {index : Vali
   simp only [decreaseBalance, bind_ok_iff] at computed
   obtain ⟨_, _, set⟩ := computed
   exact ⟨_, set⟩
+
+/-- Raising a balance succeeds exactly when the index names a balance and the sum is below `2^64`.
+
+The state then holds the sum in place of that balance. -/
+theorem increaseBalance_eq_ok_iff {state after : BeaconState preset fork}
+    {index : ValidatorIndex} {delta : Gwei} :
+    increaseBalance state index delta = .ok after ↔
+      ∃ inside : index.toNat < state.balances.data.size,
+        state.balances.data[index.toNat].toNat + delta.toNat < 2 ^ 64 ∧
+          after = state.putBalance index.toNat inside
+            (state.balances.data[index.toNat] + delta) := by
+  unfold increaseBalance getBalance BeaconState.setBalance
+  by_cases inside : index.toNat < state.balances.data.size
+  · simp only [inside, Array.getElem?_eq_getElem, bind_ok_iff, liftArith, mapError_ok_iff,
+      addChecked, exists_true_left]
+    by_cases fits : state.balances.data[index.toNat].toNat + delta.toNat < 2 ^ 64
+    · simp [fits, eq_comm]
+    · simp [fits]
+  · simp [inside, bind, Except.bind]
+
+/-- Lowering a balance succeeds exactly when the index names a balance.
+
+The state then holds the balance minus the amount, or zero if the amount is larger. -/
+theorem decreaseBalance_eq_ok_iff {state after : BeaconState preset fork}
+    {index : ValidatorIndex} {delta : Gwei} :
+    decreaseBalance state index delta = .ok after ↔
+      ∃ inside : index.toNat < state.balances.data.size,
+        after = state.putBalance index.toNat inside
+          (saturatingSub state.balances.data[index.toNat] delta) := by
+  unfold decreaseBalance getBalance BeaconState.setBalance
+  by_cases inside : index.toNat < state.balances.data.size
+  · simp [inside, bind, Except.bind, eq_comm]
+  · simp [inside, bind, Except.bind]
 
 /-- Raising a balance keeps the sizes. -/
 theorem sameSizes_increaseBalance {state after : BeaconState preset fork}
