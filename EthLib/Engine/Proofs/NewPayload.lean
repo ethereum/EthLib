@@ -241,7 +241,7 @@ theorem of_newPayloadOnChain_some {chain : BlockChain} {version : Nat} {params :
         · simp [pure, Except.pure] at h
       · simp [pure, Except.pure] at h
 
-/-- A payload on a chain that holds the parent is valid exactly when a block and a state come back.
+/-- A payload on a chain is valid exactly when a block and a state come back.
 
 So a valid answer always comes from a block that passed the state transition. -/
 theorem valid_iff_of_newPayloadOnChain {chain : BlockChain} {version : Nat} {params : Lean.Json}
