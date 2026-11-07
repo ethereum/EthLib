@@ -339,6 +339,10 @@ This evidence tests the compiled code against the published value.
 `keyValidatePoint_eq_ok_iff` (`Proofs/Bls/KeyValidate.lean`) proves that key validation accepts exactly the encodings of the nonzero points of order `r` in G1.
 The G1 and G2 subgroup checks accept exactly the valid points that represent a multiple of the generator.
 Every output of the maps to G1 and G2 is a valid point of that subgroup (`Proofs/Bls/MapToCurve.lean`).
+`hashToG2_total_inSubgroup` (`Proofs/Bls/CofactorSubgroupLanding.lean`) proves that the hash to G2 succeeds on every input and returns a valid point of that subgroup.
+`toPoint_clearCofactor_eq_hEff` (`Proofs/Bls/CofactorEffective.lean`) proves that the cofactor clearing of RFC 9380 Appendix G.3 is the multiplication by the `h_eff` of §8.8.2, on every valid point of the twist.
+`hashToG2_eq_hEff_smul` proves that each output of the hash to G2 is `h_eff` times a valid point of the twist.
+No theorem yet compares the message expansion, the hash to the field, the SSWU map or the isogeny with a model of RFC 9380.
 
 `sign_ok` and `popProve_ok` (`Proofs/Bls/Signatures.lean`) prove that BLS signing never fails.
 Under the pairing law, an honest signature, an honest proof of possession and an aggregate of honest signatures verify (`verify_sign`, `popVerify_popProve`, `aggregateVerify_aggregate`, `Proofs/Bls/SignaturesCorrect.lean`).
