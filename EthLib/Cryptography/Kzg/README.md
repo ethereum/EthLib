@@ -190,6 +190,7 @@ They force each point of a contribution to represent the expected power of the s
 A point represents a scalar when its group element is that multiple of the generator.
 The coordinates of the point do not matter, so the theorem applies to decoded points.
 It assumes the pairing law, the subgroup checks, and that two points are not at infinity.
+The BLS12-381 proofs prove the pairing law (`pairingLaws`, `Proofs/Bls/PairingAte.lean`).
 
 ## What is not proved
 
@@ -216,8 +217,6 @@ It assumes the pairing law, the subgroup checks, and that two points are not at 
   Each KZG vector of the Python suite runs an operation that first decodes the setup.
   The Python suite also checks that each point decodes and lies in the subgroup,
   in `bindings/python/tests/kzg/test_trusted_setup.py`.
-- The pairing law that the ceremony theorem assumes is not proved.
-  It is bilinearity together with non-degeneracy.
 
 ## What the kernel cannot evaluate
 
