@@ -14,6 +14,14 @@ When each largest value is itself a whole number of increments, the update keeps
 
 The registry updates, the slashings and the update of the effective balances keep the sizes.
 
+When the slashings succeed, each balance of the registry loses its penalty if it is due.
+
+That balance stops at zero.
+
+From Electra this holds for a registry within its limit.
+
+When the slashings succeed, the balances past the registry stay.
+
 The slashings reset clears the slashed balance of the next epoch.
 
 The RANDAO reset copies the mix of the current epoch to the next.
@@ -232,6 +240,299 @@ theorem sameSizes_processSlashings (computed : processSlashings state = .ok afte
   · exact foldlM_ok_invariant (SameSizes state)
       (fun _ _ _ sizes step => sizes.trans (sameSizes_applySlashingPenalty step))
       (SameSizes.refl state) computed
+
+/-! ## Balances after the slashings -/
+
+/-- Whether the slashing penalty of a validator is due at an epoch.
+
+It is due for a slashed validator halfway through its time before it may withdraw. -/
+def SlashingPenaltyDue (preset : Preset) (epoch : Epoch) (validator : Validator) : Prop :=
+  validator.slashed ∧ epoch + preset.EPOCHS_PER_SLASHINGS_VECTOR / 2 = validator.withdrawableEpoch
+
+instance (preset : Preset) (epoch : Epoch) (validator : Validator) :
+    Decidable (SlashingPenaltyDue preset epoch validator) := by
+  unfold SlashingPenaltyDue
+  infer_instance
+
+/-- A step that either lowers one balance by a due penalty, or keeps the state when none is due.
+
+The registry and the slot stay.
+
+The balance at its position loses the penalty if it is due, stopping at zero.
+
+The other balances stay. -/
+private theorem slashingStep_balances {last next : BeaconState preset fork} {j : Nat}
+    (small : j < 2 ^ 64) {validator : Validator} {penalty : Gwei}
+    (found : getValidator last j.toUInt64 = .ok validator)
+    (cases : (SlashingPenaltyDue preset (getCurrentEpoch last) validator ∧
+        decreaseBalance last j.toUInt64 penalty = .ok next) ∨
+      (¬ SlashingPenaltyDue preset (getCurrentEpoch last) validator ∧ next = last)) :
+    next.validators = last.validators ∧ next.slot = last.slot ∧
+      (last.validators.data[j]? = some validator ∧
+        next.balances.data[j]? = last.balances.data[j]?.map fun balance =>
+          if SlashingPenaltyDue preset (getCurrentEpoch last) validator then
+            saturatingSub balance penalty
+          else balance) ∧
+      ∀ k, k ≠ j → next.balances.data[k]? = last.balances.data[k]? := by
+  have same : j.toUInt64.toNat = j := by
+    rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt small]
+  have registered : last.validators.data[j]? = some validator := by
+    unfold getValidator at found
+    rw [same] at found
+    split at found
+    · cases found
+      assumption
+    · cases found
+  rcases cases with ⟨due, lowered⟩ | ⟨notDue, kept⟩
+  · obtain ⟨inside, rfl⟩ := decreaseBalance_eq_ok_iff.mp lowered
+    have inside' : j < last.balances.data.size := same ▸ inside
+    refine ⟨rfl, rfl, ⟨registered, ?_⟩, fun k ne => ?_⟩
+    · simp [BeaconState.putBalance, same, inside', due]
+    · simp [BeaconState.putBalance, same, Ne.symm ne]
+  · rw [kept]
+    refine ⟨rfl, rfl, ⟨registered, ?_⟩, fun _ _ => rfl⟩
+    cases last.balances.data[j]? <;> simp [notDue]
+
+/-- The due test of a step is the test of a due penalty, once the validator is slashed. -/
+private theorem slashingPenaltyDue_iff {state : BeaconState preset fork} {validator : Validator}
+    {due : Epoch} (slashed : validator.slashed = true)
+    (computed : liftAccessor (liftArith (addChecked (getCurrentEpoch state)
+      (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2))) = .ok due) :
+    SlashingPenaltyDue preset (getCurrentEpoch state) validator ↔
+      due = validator.withdrawableEpoch := by
+  rw [liftAccessor_ok, liftArith, mapError_ok_iff] at computed
+  have sum := Except.ok.inj ((addChecked_of_lt (addChecked_ok_iff.mp computed).1).symm.trans
+    computed)
+  simp [SlashingPenaltyDue, slashed, sum]
+
+/-- The penalty step used before Electra lowers the balance of one validator when it is due.
+
+This holds when the step succeeds at a position below `2^64`.
+
+The registry and the slot stay.
+
+The validator at that position exists.
+
+Its balance loses the penalty if it is due, stopping at zero.
+
+The penalty is its effective balance in increments, times the given adjusted slashed balance.
+
+That product is divided by the given active balance, then counted back in increments.
+
+The other balances stay. -/
+theorem applySlashingPenalty_balances {total adjusted : Gwei} {last next : BeaconState preset fork}
+    {j : Nat} (small : j < 2 ^ 64)
+    (computed : applySlashingPenalty last total adjusted j = .ok next) :
+    next.validators = last.validators ∧ next.slot = last.slot ∧
+      (∃ validator, last.validators.data[j]? = some validator ∧
+        next.balances.data[j]? = last.balances.data[j]?.map fun balance =>
+          if SlashingPenaltyDue preset (getCurrentEpoch last) validator then
+            saturatingSub balance (validator.effectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT *
+              adjusted / total * preset.EFFECTIVE_BALANCE_INCREMENT)
+          else balance) ∧
+      ∀ k, k ≠ j → next.balances.data[k]? = last.balances.data[k]? := by
+  simp only [applySlashingPenalty, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨validator, found, computed⟩ := computed
+  obtain ⟨kept, slot, ⟨registered, entry⟩, others⟩ := slashingStep_balances small found <| by
+    split at computed
+    · rename_i slashed
+      simp only [bind_ok_iff] at computed
+      obtain ⟨due, dueOk, computed⟩ := computed
+      have dueIff := slashingPenaltyDue_iff slashed dueOk
+      split at computed
+      · rename_i isDue
+        simp only [bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff] at computed
+        obtain ⟨numerator, product, penalty, scaled, lowered⟩ := computed
+        have product := Except.ok.inj
+          ((mulChecked_of_lt (mulChecked_ok_iff.mp product).1).symm.trans product)
+        have scaled := Except.ok.inj
+          ((mulChecked_of_lt (mulChecked_ok_iff.mp scaled).1).symm.trans scaled)
+        subst product scaled
+        exact .inl ⟨dueIff.mpr isDue, lowered⟩
+      · rename_i notDue
+        simp only [pure, Except.pure, Except.ok.injEq] at computed
+        exact .inr ⟨fun due => notDue (dueIff.mp due), computed.symm⟩
+    · rename_i notSlashed
+      simp only [pure, Except.pure, Except.ok.injEq] at computed
+      exact .inr ⟨fun due => notSlashed due.1, computed.symm⟩
+  exact ⟨kept, slot, ⟨validator, registered, entry⟩, others⟩
+
+/-- The penalty step used from Electra lowers the balance of one validator when it is due.
+
+This holds when the step succeeds at a position below `2^64`.
+
+The registry and the slot stay.
+
+The validator at that position exists.
+
+Its balance loses the penalty if it is due, stopping at zero.
+
+The penalty is the given penalty per increment, times its effective balance in increments.
+
+The other balances stay. -/
+theorem applySlashingPenaltyElectra_balances {perIncrement : Gwei}
+    {last next : BeaconState preset fork} {j : Nat} (small : j < 2 ^ 64)
+    (computed : applySlashingPenaltyElectra last perIncrement j = .ok next) :
+    next.validators = last.validators ∧ next.slot = last.slot ∧
+      (∃ validator, last.validators.data[j]? = some validator ∧
+        next.balances.data[j]? = last.balances.data[j]?.map fun balance =>
+          if SlashingPenaltyDue preset (getCurrentEpoch last) validator then
+            saturatingSub balance
+              (perIncrement * (validator.effectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT))
+          else balance) ∧
+      ∀ k, k ≠ j → next.balances.data[k]? = last.balances.data[k]? := by
+  simp only [applySlashingPenaltyElectra, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨validator, found, computed⟩ := computed
+  obtain ⟨kept, slot, ⟨registered, entry⟩, others⟩ := slashingStep_balances small found <| by
+    split at computed
+    · rename_i slashed
+      simp only [bind_ok_iff] at computed
+      obtain ⟨due, dueOk, computed⟩ := computed
+      have dueIff := slashingPenaltyDue_iff slashed dueOk
+      split at computed
+      · rename_i isDue
+        simp only [bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff] at computed
+        obtain ⟨penalty, product, lowered⟩ := computed
+        have product := Except.ok.inj
+          ((mulChecked_of_lt (mulChecked_ok_iff.mp product).1).symm.trans product)
+        subst product
+        exact .inl ⟨dueIff.mpr isDue, lowered⟩
+      · rename_i notDue
+        simp only [pure, Except.pure, Except.ok.injEq] at computed
+        exact .inr ⟨fun due => notDue (dueIff.mp due), computed.symm⟩
+    · rename_i notSlashed
+      simp only [pure, Except.pure, Except.ok.injEq] at computed
+      exact .inr ⟨fun due => notSlashed due.1, computed.symm⟩
+  exact ⟨kept, slot, ⟨validator, registered, entry⟩, others⟩
+
+/-- A fold of slashing steps over the registry lowers each balance by its penalty when it is due.
+
+Each step lowers the balance at its position below `2^64` by the penalty of its validator, if due.
+
+It keeps the registry, the slot and the other balances.
+
+The validators are those of the first state.
+
+The penalty is due at the epoch of the first state. -/
+private theorem foldlM_slashingSteps_balances {ε : Type}
+    {step : BeaconState preset fork → Nat → Except ε (BeaconState preset fork)}
+    (penalty : Validator → Gwei) (within : state.RegistryWithinLimit)
+    (stepped : ∀ {last next : BeaconState preset fork} {j : Nat}, j < 2 ^ 64 →
+      step last j = .ok next → next.validators = last.validators ∧ next.slot = last.slot ∧
+        (∃ validator, last.validators.data[j]? = some validator ∧
+          next.balances.data[j]? = last.balances.data[j]?.map fun balance =>
+            if SlashingPenaltyDue preset (getCurrentEpoch last) validator then
+              saturatingSub balance (penalty validator)
+            else balance) ∧
+        ∀ k, k ≠ j → next.balances.data[k]? = last.balances.data[k]?)
+    (computed : (List.range state.validators.data.size).foldlM step state = .ok after) (i : Nat) :
+    (i < state.validators.data.size → ∃ validator, state.validators.data[i]? = some validator ∧
+      after.balances.data[i]? = state.balances.data[i]?.map fun balance =>
+        if SlashingPenaltyDue preset (getCurrentEpoch state) validator then
+          saturatingSub balance (penalty validator)
+        else balance) ∧
+    (state.validators.data.size ≤ i → after.balances.data[i]? = state.balances.data[i]?) := by
+  have bound : state.validators.data.size ≤ _ := within
+  have limit := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
+  refine (foldlM_range_balances
+    (fun last => last.validators = state.validators ∧ last.slot = state.slot)
+    (fun j old new => ∃ validator, state.validators.data[j]? = some validator ∧
+      new = old.map fun balance =>
+        if SlashingPenaltyDue preset (getCurrentEpoch state) validator then
+          saturatingSub balance (penalty validator)
+        else balance)
+    (fun {last next j} lt ⟨sameRegistry, sameSlot⟩ step => ?_) ⟨rfl, rfl⟩ computed).2 i
+  obtain ⟨kept, slot, ⟨validator, registered, entry⟩, others⟩ := stepped (by omega) step
+  have sameEpoch : getCurrentEpoch last = getCurrentEpoch state := by
+    unfold getCurrentEpoch
+    rw [sameSlot]
+  rw [sameEpoch] at entry
+  exact ⟨⟨kept.trans sameRegistry, slot.trans sameSlot⟩,
+    ⟨validator, sameRegistry ▸ registered, entry⟩, others⟩
+
+/-- Before Electra, the slashings lower the balance of each validator by its penalty when it is due.
+
+This holds when the step succeeds.
+
+The penalty uses the active balance and the sum of the recent slashed balances.
+
+The sum is scaled by the multiplier of the fork, then capped by the active balance.
+
+The penalty is the effective balance in increments, times that adjusted balance.
+
+That product is divided by the active balance, then counted back in increments.
+
+The balance stops at zero when the penalty is larger.
+
+The balances past the registry stay. -/
+theorem processSlashings_balances_of_lt_electra (before : fork < .pectra)
+    (computed : processSlashings state = .ok after) :
+    ∃ total sum, getTotalActiveBalance state = .ok total ∧ slashingsSum state = .ok sum ∧
+      ∀ i, (i < state.validators.data.size → ∃ validator,
+        state.validators.data[i]? = some validator ∧
+        after.balances.data[i]? = state.balances.data[i]?.map fun balance =>
+          if SlashingPenaltyDue preset (getCurrentEpoch state) validator then
+            saturatingSub balance (validator.effectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT *
+              min (sum * (parameters preset fork).PROPORTIONAL_SLASHING_MULTIPLIER) total / total *
+              preset.EFFECTIVE_BALANCE_INCREMENT)
+          else balance) ∧
+      (state.validators.data.size ≤ i → after.balances.data[i]? = state.balances.data[i]?) := by
+  have notElectra : ¬ .pectra ≤ fork := Nat.not_le_of_lt before
+  simp only [processSlashings, notElectra, ↓reduceIte, bind_ok_iff, liftAccessor_ok, liftArith,
+    mapError_ok_iff] at computed
+  obtain ⟨total, totalOk, sum, sumOk, slashed, product, applied⟩ := computed
+  have product := Except.ok.inj
+    ((mulChecked_of_lt (mulChecked_ok_iff.mp product).1).symm.trans product)
+  subst product
+  -- Before Gloas the type of the registry keeps it within its limit.
+  have within : state.RegistryWithinLimit :=
+    state.validators.bound (Nat.lt_trans before (by decide))
+  exact ⟨total, sum, totalOk, sumOk, foldlM_slashingSteps_balances _ within
+    applySlashingPenalty_balances applied⟩
+
+/-- From Electra, the slashings lower the balance of each validator by its penalty when it is due.
+
+This holds when the step succeeds on a registry within its limit.
+
+The penalty uses the active balance and the sum of the recent slashed balances.
+
+The sum is scaled by the multiplier of the fork, then capped by the active balance.
+
+The penalty per increment divides that adjusted balance by the active balance in increments.
+
+The penalty is the penalty per increment, times the effective balance in increments.
+
+The balance stops at zero when the penalty is larger.
+
+The balances past the registry stay. -/
+theorem processSlashings_balances_of_electra (electra : .pectra ≤ fork)
+    (within : state.RegistryWithinLimit) (computed : processSlashings state = .ok after) :
+    ∃ total sum, getTotalActiveBalance state = .ok total ∧ slashingsSum state = .ok sum ∧
+      ∀ i, (i < state.validators.data.size → ∃ validator,
+        state.validators.data[i]? = some validator ∧
+        after.balances.data[i]? = state.balances.data[i]?.map fun balance =>
+          if SlashingPenaltyDue preset (getCurrentEpoch state) validator then
+            saturatingSub balance
+              (min (sum * (parameters preset fork).PROPORTIONAL_SLASHING_MULTIPLIER) total /
+                (total / preset.EFFECTIVE_BALANCE_INCREMENT) *
+                (validator.effectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT))
+          else balance) ∧
+      (state.validators.data.size ≤ i → after.balances.data[i]? = state.balances.data[i]?) := by
+  simp only [processSlashings, electra, ↓reduceIte, bind_ok_iff, liftAccessor_ok, liftArith,
+    mapError_ok_iff] at computed
+  obtain ⟨total, totalOk, sum, sumOk, slashed, product, perIncrement, ⟨increments, counted,
+    divided⟩, applied⟩ := computed
+  have product := Except.ok.inj
+    ((mulChecked_of_lt (mulChecked_ok_iff.mp product).1).symm.trans product)
+  have counted : increments = total / preset.EFFECTIVE_BALANCE_INCREMENT := by
+    rw [← UInt64.toNat_inj, UInt64.toNat_div]
+    exact (divChecked_ok_iff.mp counted).2
+  have divided : perIncrement = min slashed total / increments := by
+    rw [← UInt64.toNat_inj, UInt64.toNat_div]
+    exact (divChecked_ok_iff.mp divided).2
+  subst product counted divided
+  exact ⟨total, sum, totalOk, sumOk, foldlM_slashingSteps_balances _ within
+    applySlashingPenaltyElectra_balances applied⟩
 
 /-! ## Resets and rotations -/
 
