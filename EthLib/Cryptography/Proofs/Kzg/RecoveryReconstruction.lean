@@ -237,9 +237,15 @@ theorem recoverPolynomialcoeff_eq_pipeline
   unfold recoveryQuotient recoveryNumerator
   rw [ofFn_mul_batchInverse _ _ _ (by rw [size_cosetFftField, hzs])]
 
-/-- Exact executable recovery correctness: consistent samples with at most half the cells
-missing reconstruct the original 4096-coefficient polynomial. All FFT/product/division
-properties are proved above; the hypotheses specify only the supplied data. -/
+/-- Exact executable recovery correctness.
+
+Take consistent samples with at most half the cells missing.
+
+They reconstruct the original 4096-coefficient polynomial.
+
+All FFT/product/division properties are proved above.
+
+The hypotheses specify only the supplied data. -/
 theorem recoverPolynomialcoeff_correct
     {p : PolynomialCoeff} {indices : Array CellIndex} {cells : Array CosetEvals}
     (hp : p.size = FIELD_ELEMENTS_PER_BLOB)
@@ -281,8 +287,9 @@ theorem polynomialRecoverySamples_match (p : PolynomialCoeff) (indices : Array C
   rw [getElem!_pos _ k (by simpa only [Array.size_map] using hk), Array.getElem_map,
     getElem!_ofFn_fr _ _ j hj, getElem!_pos indices k hk]
 
-/-- Sampling any at-least-half subset of the valid cells and executing recovery returns
-exactly the original bounded-degree polynomial coefficient vector. -/
+/-- Sample any at-least-half subset of the valid cells, and execute recovery.
+
+The result is exactly the original bounded-degree polynomial coefficient vector. -/
 theorem recoverPolynomialcoeff_samples_correct
     (p : PolynomialCoeff) (indices : Array CellIndex)
     (hp : p.size = FIELD_ELEMENTS_PER_BLOB)

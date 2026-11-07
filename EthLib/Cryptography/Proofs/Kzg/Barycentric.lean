@@ -65,9 +65,11 @@ theorem getElem!_batchInverse_zip_denominators (polynomial domain : Array Fr) (z
     getElem!_pos domain k (by omega)]
   simp [Array.getElem_zip]
 
-/-- When `z` is not in the domain, evaluation follows the barycentric
-formula the docstring describes. Mirror of
-`evaluatePolynomialInEvaluationFormAux_fastPath`. -/
+/-- When `z` is not in the domain, evaluation follows the barycentric formula.
+
+That is the formula the docstring describes.
+
+Mirror of `evaluatePolynomialInEvaluationFormAux_fastPath`. -/
 theorem evaluatePolynomialInEvaluationFormAux_slowPath
     (polynomial domain : Array Fr) (z : Fr)
     (hsize : polynomial.size = domain.size)
@@ -81,8 +83,7 @@ theorem evaluatePolynomialInEvaluationFormAux_slowPath
       (fun k _ hk => getElem!_batchInverse_zip_denominators _ domain z k hsize (by omega)),
     barycentricSumAux_zero_eq_refSum]
 
-/-- When `z` is not in the evaluation domain, evaluating the polynomial
-at `z` follows the barycentric formula. -/
+/-- Off the evaluation domain, evaluating the polynomial at `z` follows the barycentric formula. -/
 theorem evaluatePolynomialInEvaluationForm_slowPath
     (polynomial : Polynomial) (z : Fr)
     (hsize : polynomial.size = FIELD_ELEMENTS_PER_BLOB)
@@ -108,23 +109,27 @@ theorem barycentricRefSum_eq_sum_div (p D : Array Fr) (z : Fr) (n : Nat) :
     show barycentricRefSum p D z n + _ = _
     rfl
 
-/-- The barycentric sum as a `Finset.sum` over field operations only
-(spec division unfolded to `* _⁻¹` via little Fermat). -/
+/-- The barycentric sum as a `Finset.sum` over field operations only.
+
+The spec division is unfolded to `* _⁻¹` via little Fermat. -/
 theorem barycentricRefSum_eq_sum (p D : Array Fr) (z : Fr) (n : Nat) :
     barycentricRefSum p D z n
       = ∑ i ∈ Finset.range n, p[i]! * D[i]! * (z - D[i]!)⁻¹ := by
   rw [barycentricRefSum_eq_sum_div]
   exact Finset.sum_congr rfl fun i _ => Bls.Fr.div_eq_mul_inv' _ _
 
-/-- The blob width is nonzero in `Fr` (it is `4096`, far below `r`), so
-dividing by it in the barycentric formula is meaningful. -/
+/-- The blob width is nonzero in `Fr` (it is `4096`, far below `r`).
+
+So dividing by it in the barycentric formula is meaningful. -/
 theorem natCast_field_elements_per_blob_ne_zero :
     ((FIELD_ELEMENTS_PER_BLOB : Nat) : Fr) ≠ 0 := by
   exact Bls.Fr.natCast_ne_zero (by decide) (by decide)
 
-/-- Slow path of `evaluatePolynomialInEvaluationFormAux` in Mathlib
-operations. Needs the width to be canonical (`p.size < r`) so the
-spec's detour of the exponent through `Fr` is invisible. -/
+/-- Slow path of `evaluatePolynomialInEvaluationFormAux` in Mathlib operations.
+
+Needs the width to be canonical (`p.size < r`).
+
+Then the spec's detour of the exponent through `Fr` is invisible. -/
 theorem evaluatePolynomialInEvaluationFormAux_slowPath_sum
     (p D : Array Fr) (z : Fr) (hw : p.size < Fr.modulus) (hsize : p.size = D.size)
     (h : D.idxOf? z = none) :
@@ -135,12 +140,13 @@ theorem evaluatePolynomialInEvaluationFormAux_slowPath_sum
       barycentricRefSum_eq_sum, Bls.Fr.hpow_ofNat_eq_pow z hw,
       Bls.Fr.inverse_eq_inv, Bls.Fr.ofNat_eq_natCast, Bls.Fr.one_def]
 
-/-- Slow path of `evaluatePolynomialInEvaluationForm` in Mathlib
-operations: for a full-width polynomial and `z` outside the domain,
+/-- Slow path of `evaluatePolynomialInEvaluationForm` in Mathlib operations.
 
-  `f(z) = (Σ_i p[i]·D[i]/(z − D[i])) · (z^4096 − 1) / 4096`
+Let `D` be the bit-reversed 4096th roots of unity.
 
-with `D` the bit-reversed 4096th roots of unity. -/
+Take a full-width polynomial and `z` outside the domain.
+
+Then `f(z) = (Σ_i p[i]·D[i]/(z − D[i])) · (z^4096 − 1) / 4096`. -/
 theorem evaluatePolynomialInEvaluationForm_slowPath_sum
     (p : Polynomial) (z : Fr) (hsize : p.size = FIELD_ELEMENTS_PER_BLOB)
     (h : (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB).idxOf? z = none) :

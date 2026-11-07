@@ -101,8 +101,10 @@ def g1LincombPoints
 
 The general quotient divides by zero at such a `z`, so this case has its own formula.
 
-It is the section "Dividing when one of the points is zero" of
-<https://dankradfeist.de/ethereum/2021/06/18/pcs-multiproofs.html>. -/
+It is the section "Dividing when one of the points is zero" of [the multiproofs note][feist].
+
+[feist]: https://dankradfeist.de/ethereum/2021/06/18/pcs-multiproofs.html
+-/
 def computeQuotientEvalWithinDomain
     (z : Fr) (polynomial : Polynomial) (y : Fr)
     : Fr :=

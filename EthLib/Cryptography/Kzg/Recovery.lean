@@ -103,10 +103,16 @@ def recoverPolynomialcoeff
   let extTimesZeroCoeffs := fftField extTimesZero rouExt (inv := true)
 
   -- Next step is to divide the polynomial (P*Z)(x) by polynomial Z(x) to get P(x).
-  -- We do this in evaluation form over a coset of the FFT domain to avoid division by 0,
-  -- i.e. because Z(x) vanishes on (part of) the FFT domain itself. If Z(x) were zero
-  -- anywhere on the coset too, the division below would silently produce 0 instead of
-  -- failing (see the `Div Fr` docstring), masking a broken vanishing polynomial.
+  --
+  -- We do this in evaluation form over a coset of the FFT domain to avoid division by 0.
+  --
+  -- On the FFT domain itself, division by 0 would happen, since Z(x) vanishes on part of it.
+  --
+  -- If Z(x) were zero anywhere on the coset too, the division below would silently produce 0.
+  --
+  -- It would not fail (see the `Div Fr` docstring).
+  --
+  -- So it would mask a broken vanishing polynomial.
 
   -- Convert (P*Z)(x) to evaluation form over a coset of the FFT domain.
   let pzOverCoset := cosetFftField extTimesZeroCoeffs rouExt
@@ -125,8 +131,10 @@ def recoverPolynomialcoeff
 
 The recovery uses FFTs, which is faster than Lagrange interpolation.
 
-The method is the one of
-<https://ethresear.ch/t/reed-solomon-erasure-code-recovery-in-n-log-2-n-time-with-ffts/3039>. -/
+The method is the one of [the note on Reed–Solomon recovery with FFTs][rs].
+
+[rs]: https://ethresear.ch/t/reed-solomon-erasure-code-recovery-in-n-log-2-n-time-with-ffts/3039
+-/
 def recoverCellsAndKzgProofs (setup : TrustedSetup)
     (cellIndices : Array CellIndex) (cells : Array Cell)
     : Except KzgError (Array Cell × Array KZGProof) := do
@@ -147,8 +155,9 @@ def recoverCellsAndKzgProofs (setup : TrustedSetup)
   if cellIndices.any (· ≥ CELLS_PER_EXT_BLOB) then
     throw .cellIndexOutOfBounds
 
-  -- Cell indices must be strictly ascending. This enforces two requirements
-  -- at once: no duplicates, and ascending order.
+  -- Cell indices must be strictly ascending.
+  --
+  -- This enforces two requirements at once: no duplicates, and ascending order.
   if (cellIndices.zip (cellIndices.extract 1)).any (fun (prev, next) => next ≤ prev) then
     throw .indicesNotAscending
 

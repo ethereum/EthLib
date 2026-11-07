@@ -41,9 +41,11 @@ open WeierstrassCurve (Jacobian)
 open WeierstrassCurve.Jacobian
 open scoped EthLib.Cryptography.Bls.Fp
 
-/-- Unfolding equation for `mulNat`. Stated here because the
-compiler-generated equations of a recursive definition are only
-available in its defining module. -/
+/-- Unfolding equation for `mulNat`.
+
+The compiler-generated equations of a recursive definition exist only in its defining module.
+
+So it is stated here. -/
 theorem mulNat_def (p : G1) (k : Nat) :
     mulNat p k = if k = 0 then zero
       else if k % 2 = 1 then add p (mulNat (double p) (k / 2))
@@ -161,8 +163,9 @@ theorem add_eq_addSpec : (add : G1 → G1 → G1) = addSpec := by
     exact (addSpec_eq_addMixed p qx qy hp hq).symm
   · exact (addSpec_eq_addGeneral p q hp hq).symm
 
-/-- The BLS12-381 curve `y² = x³ + 4`, as a Mathlib Weierstrass curve
-in Jacobian coordinates over `ZMod Fp.modulus`. -/
+/-- The BLS12-381 curve `y² = x³ + 4`.
+
+It is a Mathlib Weierstrass curve in Jacobian coordinates over `ZMod Fp.modulus`. -/
 def curve : Jacobian (ZMod Fp.modulus) :=
   { a₁ := 0, a₂ := 0, a₃ := 0, a₄ := 0, a₆ := 4 }
 
@@ -173,14 +176,18 @@ def rep (P : G1) : Fin 3 → ZMod Fp.modulus := ![Fp.toZMod P.x, Fp.toZMod P.y, 
 @[simp] theorem rep_y (P : G1) : rep P 1 = Fp.toZMod P.y := rfl
 @[simp] theorem rep_z (P : G1) : rep P 2 = Fp.toZMod P.z := rfl
 
-/-- Validity of a spec point: its representative is a nonsingular curve
-point. Spec-produced points satisfy this (see the `valid_*` lemmas);
-raw `G1.mk` triples need not. -/
+/-- Validity of a spec point: its representative is a nonsingular curve point.
+
+Spec-produced points satisfy this (see the `valid_*` lemmas).
+
+Raw `G1.mk` triples need not. -/
 def Valid (P : G1) : Prop := curve.Nonsingular (rep P)
 
-/-- The group element a spec point denotes: the affine Mathlib point of
-its representative. Total — singular representatives are sent to `0` —
-but only meaningful on `Valid` points. -/
+/-- The group element a spec point denotes: the affine Mathlib point of its representative.
+
+It is total: singular representatives are sent to `0`.
+
+It is only meaningful on `Valid` points. -/
 noncomputable def toPoint (P : G1) : curve.toAffine.Point :=
   WeierstrassCurve.Jacobian.Point.toAffine curve (rep P)
 
@@ -214,8 +221,9 @@ theorem toPoint_zero : toPoint zero = 0 := by
   rw [toPoint, rep_zero]
   exact Point.toAffine_zero
 
-/-- `negY` on our curve is plain negation (`a₁ = a₃ = 0`). Phrased over
-honest `ZMod` binders so the algebra stays in `ring`-friendly land. -/
+/-- `negY` on our curve is plain negation (`a₁ = a₃ = 0`).
+
+Phrased over honest `ZMod` binders, so the algebra stays in `ring`-friendly land. -/
 private theorem curve_negY (Q : Fin 3 → ZMod Fp.modulus) :
     curve.negY Q = -Q 1 := by
   rw [negY, show curve.a₁ = 0 from rfl, show curve.a₃ = 0 from rfl]
@@ -246,12 +254,17 @@ theorem toPoint_neg {P : G1} (h : Valid P) : toPoint (neg P) = -toPoint P := by
 
 /-! ## Doubling
 
-The spec's Bernstein–Lange `dbl-2009-l` formulas coincide with
-Mathlib's `dblXYZ` on our curve *on the nose* (scaling `u = 1`), as
-pure polynomial identities — no curve equation needed. Each component
-lemma is phrased over `ZMod` binders (so `ring` applies) with the
-spec's exact let-expansion on the left; `rep_double` hands the spec
-expressions over by definitional equality. -/
+The spec's Bernstein–Lange `dbl-2009-l` formulas coincide with Mathlib's `dblXYZ` on our curve.
+
+They agree *on the nose* (scaling `u = 1`), as pure polynomial identities.
+
+No curve equation is needed.
+
+Each component lemma is phrased over `ZMod` binders, so `ring` applies.
+
+It has the spec's exact let-expansion on the left.
+
+`rep_double` hands the spec expressions over by definitional equality. -/
 
 private theorem dblX_eq (x y z : ZMod Fp.modulus) :
     3 * (x * x) * (3 * (x * x))
@@ -319,16 +332,21 @@ theorem toPoint_double {P : G1} (h : Valid P) :
 
 /-! ## Addition
 
-The spec's Bernstein–Lange `add-2007-bl` formulas agree with Mathlib's
-`addXYZ` up to the weighted Jacobian scaling `u = -(2·z₁·z₂)`, *modulo
-the curve equations* of the two inputs (the `linear_combination`
-coefficients below were computed symbolically). The special branches
-(`z = 0`, doubling, opposite points) are handled through Mathlib's
-equivalence lemmas at the affine level. -/
+The spec's Bernstein–Lange `add-2007-bl` formulas agree with Mathlib's `addXYZ`.
 
-/-- The curve equation of a valid point, in `linear_combination`-ready
-form (`y² = x³ + 4z⁶`), phrased over `rep` projections so every
-operation is syntactically over `ZMod`. -/
+They agree up to the weighted Jacobian scaling `u = -(2·z₁·z₂)`.
+
+They agree *modulo the curve equations* of the two inputs.
+
+The `linear_combination` coefficients below were computed symbolically.
+
+The special branches (`z = 0`, doubling, opposite points) go through Mathlib's equivalence lemmas.
+
+Those lemmas work at the affine level. -/
+
+/-- The curve equation of a valid point, in `linear_combination`-ready form (`y² = x³ + 4z⁶`).
+
+It is phrased over `rep` projections, so every operation is syntactically over `ZMod`. -/
 theorem valid_equation {P : G1} (h : Valid P) :
     rep P 1 ^ 2 = rep P 0 ^ 3 + 4 * rep P 2 ^ 6 := by
   have heq := ((nonsingular_iff (rep P)).mp h).1
@@ -338,14 +356,19 @@ theorem valid_equation {P : G1} (h : Valid P) :
     show curve.a₆ = (4 : ZMod Fp.modulus) from rfl] at heq
   linear_combination heq
 
-/-- The three components of the spec's general-case addition, as
-weighted scalings of Mathlib's `addXYZ`, modulo the two curve
-equations. The intermediate values of the Bernstein–Lange formula are
-*binders* pinned by defining equations: the caller instantiates them
-with the spec's own subexpressions and discharges each equation by
-(cheap, small) definitional equality, keeping the elaborator away from
-one giant cross-instance comparison. The `linear_combination`
-coefficients were computed symbolically and checked numerically. -/
+/-- The three components of the spec's general-case addition.
+
+They are weighted scalings of Mathlib's `addXYZ`, modulo the two curve equations.
+
+The intermediate values of the Bernstein–Lange formula are *binders* pinned by defining equations.
+
+The caller instantiates them with the spec's own subexpressions.
+
+It discharges each equation by (cheap, small) definitional equality.
+
+This keeps the elaborator away from one giant cross-instance comparison.
+
+The `linear_combination` coefficients were computed symbolically and checked numerically. -/
 private theorem spec_add_components
     (x1 y1 z1 x2 y2 z2 z11 z22 u1 u2 s1 s2 h i j r v xp : ZMod Fp.modulus)
     (hz11 : z11 = z1 * z1) (hz22 : z22 = z2 * z2)
@@ -473,9 +496,11 @@ private theorem rep_add_general {P Q : G1} (hP : Valid P) (hQ : Valid Q)
 
 /-! ### The addition homomorphism -/
 
-/-- The two `beq` branch conditions of `G1.add`, restated over `rep`
-projections (definitionally equal, but with every operation
-syntactically over `ZMod`, as `linear_combination` needs). -/
+/-- The two `beq` branch conditions of `G1.add`, restated over `rep` projections.
+
+They are definitionally equal to the originals.
+
+But every operation is syntactically over `ZMod`, as `linear_combination` needs. -/
 private theorem beq_x_iff {P Q : G1} :
     (P.x * (Q.z * Q.z)).beq (Q.x * (P.z * P.z)) = true
       ↔ rep P 0 * (rep Q 2 * rep Q 2) = rep Q 0 * (rep P 2 * rep P 2) := by
@@ -583,8 +608,9 @@ theorem valid_mulNat {P : G1} (h : Valid P) (k : Nat) : Valid (mulNat P k) := by
       · rw [ite_eq_right h2]
         exact ih (k / 2) (by omega) (valid_double h)
 
-/-- The spec's double-and-add scalar multiplication is Mathlib's `ℕ`
-scalar action on the curve group. -/
+/-- The spec's double-and-add scalar multiplication is Mathlib's `ℕ` scalar action on the group.
+
+The group is the curve group. -/
 theorem toPoint_mulNat {P : G1} (h : Valid P) (k : Nat) :
     toPoint (mulNat P k) = k • toPoint P := by
   induction k using Nat.strongRecOn generalizing P with
@@ -609,8 +635,7 @@ theorem toPoint_mulNat {P : G1} (h : Valid P) (k : Nat) :
         rw [ite_eq_right h2, hm, ih m (by omega) (valid_double h), toPoint_double h]
         module
 
-/-- The spec's `Fr`-scalar multiplication acts through the scalar's
-value. -/
+/-- The spec's `Fr`-scalar multiplication acts through the scalar's value. -/
 theorem toPoint_mul {P : G1} (h : Valid P) (s : Fr) :
     toPoint (mul P s) = s.val • toPoint P :=
   toPoint_mulNat h s.val
