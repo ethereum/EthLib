@@ -70,9 +70,11 @@ abbrev PayloadTimelinessCommitteeBits (preset : Preset) := Bitvector preset.PTC_
 
 /-- The committees of the slots of the previous epoch, the current epoch and the lookahead.
 
-The lookahead is the epochs whose committees the seed already fixes. -/
+The lookahead is the epochs whose committees the seed already fixes.
+
+The window keeps its Merkle tree, since every slot takes the root of the state. -/
 abbrev PayloadTimelinessCommitteeWindow (preset : Preset) :=
-  Vector (PayloadTimelinessCommittee preset)
+  RootedVector (PayloadTimelinessCommittee preset)
     ((preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat)
 
 /-- One bit for each recent slot, at the slot modulo the length, set when its block has a payload.
