@@ -18,6 +18,7 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - A function that returns a known value on every input maps to the list of those values.
 - A part of each output that its input fixes comes out in the order of the inputs.
 - Output `i` is the image of input `i`, for a list, an array or a vector.
+- A map returns a list exactly when it has one output per input, each the image of its input.
 - Two functions that agree on every entry of a vector map it to one result.
 - A failed map fails on some input, and succeeds on every input before it.
 - A property that each step keeps holds after a successful fold.
@@ -151,6 +152,28 @@ theorem mapM_ok_getElem {xs : List α} {ys : List β} (h : xs.mapM f = .ok ys)
     cases i with
     | zero => exact head
     | succ i => exact ih tail i (Nat.lt_of_succ_lt_succ hi)
+
+/-- A map returns a list exactly when it has one output per input, each the image of its input. -/
+theorem mapM_eq_ok_iff {xs : List α} {ys : List β} :
+    xs.mapM f = .ok ys ↔
+      ∃ h : ys.length = xs.length, ∀ (i : Nat) (hi : i < xs.length), f xs[i] = .ok ys[i] := by
+  constructor
+  · intro h
+    exact ⟨mapM_ok_length h, fun i hi => mapM_ok_getElem h i hi⟩
+  · rintro ⟨hlen, hget⟩
+    induction xs generalizing ys with
+    | nil =>
+      cases ys with
+      | nil => rfl
+      | cons => simp at hlen
+    | cons x xs ih =>
+      cases ys with
+      | nil => simp at hlen
+      | cons y ys =>
+        -- The head maps to the head, and the tail to the tail, by the same index shifted by one.
+        refine mapM_cons_ok.mpr ⟨y, ys, hget 0 (by simp), ih (by simpa using hlen) ?_, rfl⟩
+        intro i hi
+        exact hget (i + 1) (by simpa using hi)
 
 /-- Output `i` of a successful map over a vector is the image of input `i`. -/
 theorem vector_mapM_ok_getElem {n : Nat} {xs : Vector α n} {ys : Vector β n}

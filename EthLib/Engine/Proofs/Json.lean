@@ -3,6 +3,7 @@ module
 public import EthLib.Engine.Json
 public import EthLib.Base.Hex
 public import EthLib.Base.Except
+public import EthLib.Base.Proofs.MapM
 
 /-!
 # Proofs: the JSON decoders
@@ -34,6 +35,8 @@ A byte string decoded with a limit on its size has at most that many bytes.
 A field of an object decodes to the value that the object holds under its name.
 
 A withdrawal decodes exactly when its object holds exactly its four fields, each of its type.
+
+A list decodes exactly when the value is an array whose items each decode, in order.
 
 The 64-bit decoder returns a number exactly when the decoder with the bound `2^64` returns it.
 
@@ -384,5 +387,20 @@ theorem withdrawal_eq_ok_iff {j : Lean.Json} {w : Execution.Blocks.Withdrawal} :
     rw [ite_eq_left hc]
     simp only [bind_ok_iff, field_eq_ok_iff]
     exact ⟨i, hl1, _, hf1, v, hl2, _, hf2, a, hl3, _, hf3, m, hl4, _, hf4, rfl⟩
+
+/-- A list decodes exactly when the value is an array whose items each decode, in order.
+
+Item `i` of the list is the decoded item `i` of the array. -/
+theorem array_eq_ok_iff {α : Type} {what : String} {f : Lean.Json → Decode α} {j : Lean.Json}
+    {l : List α} :
+    array what f j = .ok l ↔
+      ∃ items : Array Lean.Json, j = .arr items ∧
+        ∃ h : l.length = items.size, ∀ (i : Nat) (hi : i < items.size), f items[i] = .ok l[i] := by
+  cases j with
+  | arr items =>
+    simp only [array, Lean.Json.arr.injEq, exists_eq_left', mapM_eq_ok_iff]
+    simp
+  -- Any other JSON value is not an array, so the read fails at once.
+  | _ => simp [array, invalid, throw, throwThe, MonadExceptOf.throw]
 
 end EthLib.Engine.Json
