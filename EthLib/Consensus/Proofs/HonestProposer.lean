@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
+public import EthLib.Consensus.DataAvailability.Blob
 public import EthLib.Consensus.HonestProposer
 
 /-!
@@ -14,6 +15,12 @@ So it never moves the deposit count of the state back.
 When the votes of the state hold a candidate, the vote is one of them with the most copies there.
 
 In Electra, the pending deposit count is the number of deposits that block processing expects.
+
+With a signature that passes its check, a block that carries the new state root is valid.
+
+The state after it then has that root.
+
+The signed header of a block carries the root of its body.
 -/
 
 @[expose] public section
@@ -265,5 +272,80 @@ theorem expectedDepositCount_eq_getEth1PendingDepositCount (state : BeaconState 
   unfold expectedDepositCount getEth1PendingDepositCount
   simp only [notFulu, electra.1, ite_false, dite_true]
   split <;> rfl
+
+/-! ## The state root -/
+
+/-- The new state root is the root of the state after the block with an empty signature.
+
+The transition runs without the checks of the result. -/
+theorem computeNewStateRoot_eq_ok_iff {config : Config} {checks : SignatureChecks}
+    {engine : ExecutionEngine preset fork} {state : BeaconState preset fork}
+    {block : BeaconBlock preset fork} {root : Root} :
+    computeNewStateRoot config checks engine state block = .ok root ↔
+      ∃ post, stateTransition config checks engine state ⟨block, Vector.replicate 96 0⟩ false =
+        .ok post ∧ SszType.hashTreeRoot post = .ok root := by
+  unfold computeNewStateRoot
+  simp only [bind_ok_iff, mapError_ok_iff]
+
+/-- The block processing never reads the state root of the block. -/
+theorem processBlock_stateRoot (config : Config) (checks : SignatureChecks)
+    (engine : ExecutionEngine preset fork) (state : BeaconState preset fork)
+    (block : BeaconBlock preset fork) (root : Root) :
+    processBlock config checks engine state { block with stateRoot := root } =
+      processBlock config checks engine state block := by
+  cases block
+  rfl
+
+/-- A block that carries the new state root passes the full state transition, checks included.
+
+Its signature must pass the check of the block signature, on the state at the slot of the block.
+
+The state after it is the state whose root the block carries. -/
+theorem stateTransition_of_computeNewStateRoot {config : Config} {checks : SignatureChecks}
+    {engine : ExecutionEngine preset fork} {state : BeaconState preset fork}
+    {block : BeaconBlock preset fork} {root : Root}
+    (computed : computeNewStateRoot config checks engine state block = .ok root)
+    {signature : BLSSignature}
+    (signed : ∀ slotted, processSlots config checks state block.slot = .ok slotted →
+      verifyBlockSignature config checks slotted
+        ⟨{ block with stateRoot := root }, signature⟩ = .ok true) :
+    ∃ post, stateTransition config checks engine state
+        ⟨{ block with stateRoot := root }, signature⟩ = .ok post ∧
+      SszType.hashTreeRoot post = .ok root := by
+  obtain ⟨post, transitioned, rooted⟩ := computeNewStateRoot_eq_ok_iff.mp computed
+  refine ⟨post, ?_, rooted⟩
+  unfold stateTransition at transitioned ⊢
+  obtain ⟨slotted, slotsOk, applied⟩ := bind_ok_iff.mp transitioned
+  -- Without the checks of the result, the block only runs.
+  have processed : processBlock config checks engine slotted block = .ok post := by
+    simp only [applySignedBlock, checkBlockSignature, checkStateRoot, bind, Except.bind, pure,
+      Except.pure] at applied
+    cases ran : processBlock config checks engine slotted block <;> simp_all
+  simp only [slotsOk, bind, Except.bind]
+  simp only [applySignedBlock, checkBlockSignature, checkStateRoot, signed slotted slotsOk, ensure,
+    ite_true, processBlock_stateRoot, processed, bind, Except.bind, liftSsz, rooted,
+    Except.mapError, pure, Except.pure]
+
+/-! ## The signed block header -/
+
+/-- The signed header of a block carries the root of its body and the signature of the block.
+
+Its other fields are those of the block. -/
+theorem signedHeader_eq_ok_iff {signed : SignedBeaconBlock preset fork}
+    {header : SignedBeaconBlockHeader} :
+    signed.signedHeader = .ok header ↔
+      SszType.hashTreeRoot signed.message.body = .ok header.message.bodyRoot ∧
+        header = ⟨⟨signed.message.slot, signed.message.proposerIndex, signed.message.parentRoot,
+          signed.message.stateRoot, header.message.bodyRoot⟩, signed.signature⟩ := by
+  unfold SignedBeaconBlock.signedHeader
+  cases rooted : SszType.hashTreeRoot signed.message.body with
+  | error e => simp [bind, Except.bind]
+  | ok bodyRoot =>
+    simp only [bind, Except.bind, pure, Except.pure, Except.ok.injEq]
+    constructor
+    · rintro rfl
+      exact ⟨rfl, rfl⟩
+    · rintro ⟨rfl, eq⟩
+      exact eq.symm
 
 end EthLib.Consensus
