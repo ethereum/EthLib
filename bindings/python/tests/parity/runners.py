@@ -33,7 +33,7 @@ from transactions.test_inclusion_archive import names_in_block
 from transactions.test_transactions import CHAIN_ID, FORK_OF_NETWORK
 
 from . import legacy
-from .catalogue import Case
+from .catalogue import BOGOTA_NETWORKS, Case
 
 # The groups that no runner covers yet, with the pull requests of the plan that bring them.
 # A key is a runner, or a runner and a handler, of consensus-spec-tests.
@@ -57,6 +57,15 @@ _GLOAS = {
 }
 _HEZE = {
     "networking": "the Heze gossip and req/resp rules (G87)",
+}
+# The plan for the Bogota networks of each devnet, whose EIPs differ.
+# The steps wait for a merge into the Bogota fork branch, or a release of Bogota.
+_BOGOTA = {
+    "tests-heze-devnet": "the Bogota of the Heze devnet: EIP-7805 (G89) and EIP-8198 (G94)",
+    "tests-bogota-devnet": (
+        "the Bogota of the Bogota devnet: EIP-8141 (G90 to G93) and "
+        "EIP-8250, 8272, 7906, 8298, 8151, 4758 and 8253 (G95 to G101)"
+    ),
 }
 NOT_YET_AT = {
     "gloas": _GLOAS,
@@ -247,7 +256,7 @@ _TIME_FORKS = [
     "bpo5",
     "glamsterdam",
 ]
-_NETWORK_FORK = {**FORK_OF_NETWORK, "BPO1": "bpo1", "BPO2": "bpo2"}
+_NETWORK_FORK = {**FORK_OF_NETWORK, "BPO1": "bpo1", "BPO2": "bpo2", "BPO3": "bpo3", "BPO4": "bpo4"}
 
 # The block exceptions of the blockchain tests, by the error of the state transition.
 _BLOCK_EXCEPTIONS = {
@@ -721,6 +730,8 @@ RUNNERS = {
 
 def runner(case: Case):
     """The runner of a case, or `None` if EthLib cannot run it yet."""
+    if case.fork in BOGOTA_NETWORKS:
+        return None
     run = RUNNERS.get(case.group)
     if run is _ssz_static and case.fork not in _container_forks(case.group.split("/")[1]):
         return None
@@ -751,6 +762,8 @@ def runner(case: Case):
 
 def plan(case: Case) -> str | None:
     """The plan for a case that no runner covers: its fork's entry first, then the general one."""
+    if case.fork in BOGOTA_NETWORKS:
+        return _BOGOTA[case.suite]
     for table in (NOT_YET_AT.get(case.fork, {}), NOT_YET):
         if entry := table.get(case.group) or table.get(case.group.split("/")[0]):
             return entry

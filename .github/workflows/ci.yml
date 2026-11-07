@@ -355,6 +355,9 @@ jobs:
       - name: exception messages, unit tests
         run: uv run --no-sync python -m unittest scripts/test_check_raises.py
 
+      - name: release watcher, unit tests
+        run: uv run --no-sync python -m unittest scripts/test_check_spec_releases.py
+
       # A module docstring is one line, and no docstring wraps a sentence onto a second line.
       - name: docstrings
         run: uv run --no-sync python scripts/check_docstrings.py

@@ -60,6 +60,10 @@ jobs:
           - suite: parity-consensus
             bindings: true
             run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/parity/test_consensus.py
+          # The cases of the execution-spec-tests devnets that the pinned release lacks.
+          - suite: parity-devnets
+            bindings: true
+            run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/parity/test_devnets.py
           # Every legacy blockchain test from Frontier to London, with the proof of work of each
           # sealed block.
           - suite: parity-legacy
@@ -69,6 +73,10 @@ jobs:
           - suite: nist-cavp
             bindings: true
             run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/aes/test_cavp_gcm.py
+          # A newer release of a pinned suite, or the tests of the next execution fork, fails the job.
+          - suite: releases
+            bindings: false
+            run: uv run --no-project --python 3.12 python scripts/check_spec_releases.py
           # The pinned BLS and KZG digests against the releases that published them.
           - suite: cryptography
             bindings: false
