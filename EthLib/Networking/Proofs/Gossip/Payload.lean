@@ -85,20 +85,22 @@ theorem size_add_le_maxMessageSize_of_decodePayload {typeBound : UInt64}
       1024)).toNat = 32 + MAX_PAYLOAD_SIZE.toNat + MAX_PAYLOAD_SIZE.toNat / 6 + 1024 := by decide
   omega
 
-/-- The decoder accepts the block of the compressor for a payload within the cap and its type bound.
+/-- The decoder accepts the block of the compressor for a payload exactly when the payload fits.
 
-That block takes at most `32 + n + n / 6` bytes, within the worst-case compression of the cap.
+It fits when it is within the payload cap and the bound of its type.
+
+The block then takes at most `32 + n + n / 6` bytes, within the worst-case compression of the cap.
 -/
-theorem decodePayload_compress {typeBound : UInt64} {payload : ByteArray}
-    (within : payload.size ≤ (min typeBound MAX_PAYLOAD_SIZE).toNat) :
-    decodePayload typeBound (Snappy.compress payload) = .ok payload := by
-  have cap : MAX_PAYLOAD_SIZE.toNat = 10485760 := by decide
-  have hle : (min typeBound MAX_PAYLOAD_SIZE).toNat ≤ MAX_PAYLOAD_SIZE.toNat := by
-    exact UInt64.le_iff_toNat_le.mp (Std.min_le_right)
-  have hmax : payload.size ≤ Snappy.maxUncompressedLength := by
-    simp only [Snappy.maxUncompressedLength]; omega
+theorem decodePayload_compress_eq_ok_iff {typeBound : UInt64} {payload : ByteArray} :
+    decodePayload typeBound (Snappy.compress payload) = .ok payload ↔
+      payload.size ≤ (min typeBound MAX_PAYLOAD_SIZE).toNat := by
+  refine ⟨fun h => (decodePayload_eq_ok_iff.mp h).2.2, fun within => ?_⟩
+  have capmax : MAX_PAYLOAD_SIZE.toNat ≤ Snappy.maxUncompressedLength := by decide
+  have hle : (min typeBound MAX_PAYLOAD_SIZE).toNat ≤ MAX_PAYLOAD_SIZE.toNat :=
+    UInt64.le_iff_toNat_le.mp (Std.min_le_right)
+  have hmax : payload.size ≤ Snappy.maxUncompressedLength := by omega
   refine decodePayload_eq_ok_iff.mpr ⟨?_, Proofs.Snappy.Compress.decompress_compress hmax, within⟩
-  have := Proofs.Snappy.CompressSize.size_compress_le hmax
+  have := Proofs.Snappy.CompressSize.size_compress_le payload
   omega
 
 /-- Data longer than the worst-case compression of the payload cap is rejected. -/
