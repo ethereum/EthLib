@@ -16,6 +16,12 @@ A node accepts its own identifier.
 It accepts the identifier of a peer at an earlier or a later head of its chain.
 
 It refuses a peer at its fork that announces a fork it has passed, and a hash it never had.
+
+A head has passed a next fork exactly when the fork is not 0 and the head has reached it.
+
+The head reaches it when the fork is at most the head's block number.
+
+The head also reaches a fork above the timestamp threshold and at most its timestamp.
 -/
 
 @[expose] public section
@@ -143,6 +149,20 @@ theorem mem_forks {a : Activation} (h : a ∈ s.forks) :
   · exact .inr ⟨t, ht, rfl⟩
 
 /-! ## Validation -/
+
+/-- A head has passed a next fork exactly when the fork is not 0 and the head has reached it.
+
+The head reaches it when the fork is at most the head's block number.
+
+The head also reaches a fork above the timestamp threshold and at most its timestamp. -/
+theorem passedNext_iff {number timestamp next : Nat} :
+    passedNext number timestamp next = true ↔
+      0 < next ∧ (next ≤ number ∨ (TIMESTAMP_THRESHOLD < next ∧ next ≤ timestamp)) := by
+  simp [passedNext]
+
+/-- A next fork of 0 announces nothing, so no head has passed it. -/
+theorem passedNext_zero (number timestamp : Nat) : passedNext number timestamp 0 = false := by
+  simp [passedNext]
 
 /-- Rule 1: at one fork, a node refuses a peer exactly when it has passed the peer's next fork. -/
 theorem validate_of_hash_eq {remote : ForkId}
