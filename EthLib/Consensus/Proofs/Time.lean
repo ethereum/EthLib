@@ -8,6 +8,8 @@ public import EthLib.Consensus.Time
 
 The first slot of an epoch lies in that epoch, and every slot lies after its epoch's first slot.
 
+The slots of an epoch exist exactly when its first slot plus its length fits in 64 bits.
+
 The slot at the start time of a slot is that slot.
 
 Each conversion fails exactly when its result leaves the 64-bit range.
@@ -236,5 +238,105 @@ theorem gloas_deadlines_ordered_of_named {fork : Fork} (gloas : fork ≥ .glamst
   exact ⟨attestation, payload, payloadAttestation, attestationOk, payloadOk, payloadAttestationOk,
     gloas_deadlines_ordered gloas first second part positive attestationOk payloadOk
       payloadAttestationOk⟩
+
+/-! ## The slots of an epoch -/
+
+/-- The slots of an epoch are its first slot plus each offset below the length of an epoch.
+
+The sum of the first slot and that length is below `2^64`. -/
+theorem epochSlots_eq_ok_iff {epoch : Epoch} {slots : List Slot} :
+    epochSlots preset epoch = .ok slots ↔
+      epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 ∧
+        slots = (List.range preset.SLOTS_PER_EPOCH.toNat).map fun offset =>
+          epoch * preset.SLOTS_PER_EPOCH + offset.toUInt64 := by
+  unfold epochSlots computeStartSlotAtEpoch mulChecked addChecked
+  by_cases mul : epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64
+  · have product : (epoch * preset.SLOTS_PER_EPOCH).toNat =
+        epoch.toNat * preset.SLOTS_PER_EPOCH.toNat := by
+      rw [UInt64.toNat_mul, Nat.mod_eq_of_lt mul]
+    by_cases add : epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_EPOCH.toNat <
+        2 ^ 64
+    · simp only [mul, product, add, ite_true, bind, Except.bind, pure,
+        Except.pure, Except.ok.injEq, true_and, eq_comm]
+    · simp only [mul, product, add, ite_true, ite_false, bind, Except.bind,
+        false_and, reduceCtorEq]
+  · have add : ¬epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_EPOCH.toNat <
+        2 ^ 64 := by omega
+    simp only [mul, add, ite_false, bind, Except.bind, false_and, reduceCtorEq]
+
+/-- An epoch whose first slot plus the length of an epoch reaches `2^64` has no slots.
+
+The guides compute that sum as a 64-bit integer, which overflows there. -/
+theorem epochSlots_eq_error {epoch : Epoch}
+    (big : 2 ^ 64 ≤ epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_EPOCH.toNat) :
+    epochSlots preset epoch = .error .overflow := by
+  unfold epochSlots computeStartSlotAtEpoch mulChecked addChecked
+  by_cases mul : epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64
+  · have product : (epoch * preset.SLOTS_PER_EPOCH).toNat =
+        epoch.toNat * preset.SLOTS_PER_EPOCH.toNat := by
+      rw [UInt64.toNat_mul, Nat.mod_eq_of_lt mul]
+    have add : ¬epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_EPOCH.toNat <
+        2 ^ 64 := Nat.not_lt.mpr big
+    simp only [mul, product, add, ite_true, ite_false, bind, Except.bind]
+  · simp only [mul, ite_false, bind, Except.bind]
+
+/-- The slot at an offset below the length of an epoch, as a number. -/
+theorem toNat_epochSlot {epoch : Epoch}
+    (fits : epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    {offset : Nat} (offsetLt : offset < preset.SLOTS_PER_EPOCH.toNat) :
+    (epoch * preset.SLOTS_PER_EPOCH + offset.toUInt64).toNat =
+      epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + offset := by
+  have offsetSmall : offset < 2 ^ 64 :=
+    Nat.lt_of_lt_of_le offsetLt (Nat.le_of_lt preset.SLOTS_PER_EPOCH.toNat_lt)
+  have productSmall : epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 := by omega
+  rw [UInt64.toNat_add, UInt64.toNat_mul, Nat.toUInt64_eq, UInt64.toNat_ofNat',
+    Nat.mod_eq_of_lt offsetSmall, Nat.mod_eq_of_lt productSmall]
+  exact Nat.mod_eq_of_lt (by omega)
+
+/-- Each slot of an epoch has that epoch. -/
+theorem mem_epochSlots {epoch : Epoch} {slots : List Slot} (h : epochSlots preset epoch = .ok slots)
+    {slot : Slot} (mem : slot ∈ slots) : computeEpochAtSlot preset slot = epoch := by
+  obtain ⟨fits, rfl⟩ := epochSlots_eq_ok_iff.mp h
+  simp only [List.mem_map, List.mem_range] at mem
+  obtain ⟨offset, offsetLt, rfl⟩ := mem
+  -- The slot is the first slot of the epoch plus an offset below the length of an epoch.
+  have lengthPos : 0 < preset.SLOTS_PER_EPOCH.toNat := Nat.lt_of_le_of_lt (Nat.zero_le _) offsetLt
+  apply UInt64.toNat_inj.mp
+  simp only [computeEpochAtSlot, UInt64.toNat_div, toNat_epochSlot fits offsetLt]
+  rw [Nat.mul_comm, Nat.mul_add_div lengthPos, Nat.div_eq_of_lt offsetLt, Nat.add_zero]
+
+/-- Each slot of an epoch is among its slots, when an epoch has at least one slot. -/
+theorem mem_epochSlots_of_epoch {epoch : Epoch} {slots : List Slot}
+    (positive : preset.SLOTS_PER_EPOCH ≠ 0) (h : epochSlots preset epoch = .ok slots)
+    {slot : Slot} (slotEpoch : computeEpochAtSlot preset slot = epoch) : slot ∈ slots := by
+  obtain ⟨fits, rfl⟩ := epochSlots_eq_ok_iff.mp h
+  have lengthPos : 0 < preset.SLOTS_PER_EPOCH.toNat :=
+    Nat.pos_of_ne_zero fun zero => positive (UInt64.toNat_inj.mp (by simpa using zero))
+  have epochNat := congrArg UInt64.toNat slotEpoch
+  simp only [computeEpochAtSlot, UInt64.toNat_div] at epochNat
+  -- The slot is the first slot of the epoch plus its place in the epoch.
+  have split := Nat.div_add_mod slot.toNat preset.SLOTS_PER_EPOCH.toNat
+  rw [epochNat] at split
+  have offsetLt := Nat.mod_lt slot.toNat lengthPos
+  simp only [List.mem_map, List.mem_range]
+  refine ⟨slot.toNat % preset.SLOTS_PER_EPOCH.toNat, offsetLt, ?_⟩
+  apply UInt64.toNat_inj.mp
+  rw [toNat_epochSlot fits offsetLt, Nat.mul_comm, split]
+
+/-- The slots of an epoch, from its first slot, when that slot is known.
+
+The first slot plus the length of an epoch is then below `2^64`. -/
+theorem epochSlots_eq_ok_of_start {epoch : Epoch} {start : Slot} {slots : List Slot}
+    (first : computeStartSlotAtEpoch preset epoch = .ok start)
+    (h : epochSlots preset epoch = .ok slots) :
+    start.toNat + preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 ∧
+      slots = (List.range preset.SLOTS_PER_EPOCH.toNat).map fun k => start + k.toUInt64 := by
+  unfold epochSlots at h
+  rw [first] at h
+  cases sum : addChecked start preset.SLOTS_PER_EPOCH with
+  | error e => simp [sum, bind, Except.bind] at h
+  | ok v =>
+    simp only [sum, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at h
+    exact ⟨(addChecked_ok_iff.mp sum).1, h.symm⟩
 
 end EthLib.Consensus

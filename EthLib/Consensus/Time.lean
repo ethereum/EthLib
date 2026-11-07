@@ -75,6 +75,16 @@ def computeSyncCommitteePeriodAtSlot (preset : Preset) (slot : Slot) : UInt64 :=
 def computeStartSlotAtEpoch (preset : Preset) (epoch : Epoch) : Except ArithError Slot :=
   mulChecked epoch preset.SLOTS_PER_EPOCH
 
+/-- The slots of an epoch, in order.
+
+The guides add the length of an epoch to its first slot, as a 64-bit sum.
+
+So the slot after the last one must be a 64-bit slot too. -/
+def epochSlots (preset : Preset) (epoch : Epoch) : Except ArithError (List Slot) := do
+  let startSlot ← computeStartSlotAtEpoch preset epoch
+  let _ ← addChecked startSlot preset.SLOTS_PER_EPOCH
+  return (List.range preset.SLOTS_PER_EPOCH.toNat).map fun offset => startSlot + offset.toUInt64
+
 /-- The epoch in which an activation or an exit that starts in a given epoch takes effect.
 
 The delay keeps the validators of an epoch fixed once the seed of its committees is known. -/

@@ -7,6 +7,7 @@ public import EthLib.Consensus.Gossip.Seen
 public import EthLib.Consensus.HonestValidator
 public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Consensus.Proofs.Gossip.SyncCommittee
+public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Transition.Block
 public import EthLib.Cryptography.Proofs.Bls.SignaturesCorrect
 
@@ -217,45 +218,6 @@ theorem findCommittee_sound {state : BeaconState preset fork} {validatorIndex : 
     · obtain ⟨mem, computed', member⟩ := findCommittee_sound h
       exact ⟨List.mem_cons_of_mem _ mem, computed', member⟩
 
-/-- The slots of an epoch are its first slot plus each offset below the length of an epoch.
-
-The sum of the first slot and that length is below `2^64`. -/
-theorem epochSlots_eq_ok_iff {epoch : Epoch} {slots : List Slot} :
-    epochSlots preset epoch = .ok slots ↔
-      epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 ∧
-        slots = (List.range preset.SLOTS_PER_EPOCH.toNat).map fun offset =>
-          epoch * preset.SLOTS_PER_EPOCH + offset.toUInt64 := by
-  unfold epochSlots computeStartSlotAtEpoch mulChecked addChecked
-  by_cases mul : epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64
-  · have product : (epoch * preset.SLOTS_PER_EPOCH).toNat =
-        epoch.toNat * preset.SLOTS_PER_EPOCH.toNat := by
-      rw [UInt64.toNat_mul, Nat.mod_eq_of_lt mul]
-    by_cases add : epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_EPOCH.toNat <
-        2 ^ 64
-    · simp only [mul, product, add, ite_true, Except.mapError, bind, Except.bind, pure,
-        Except.pure, Except.ok.injEq, true_and, eq_comm]
-    · simp only [mul, product, add, ite_true, ite_false, Except.mapError, bind, Except.bind,
-        false_and, reduceCtorEq]
-  · have add : ¬epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_EPOCH.toNat <
-        2 ^ 64 := by omega
-    simp only [mul, add, ite_false, Except.mapError, bind, Except.bind, false_and, reduceCtorEq]
-
-/-- An epoch whose first slot plus the length of an epoch reaches `2^64` has no slots.
-
-The guide computes that sum as a 64-bit integer, which overflows there. -/
-theorem epochSlots_eq_error {epoch : Epoch}
-    (big : 2 ^ 64 ≤ epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_EPOCH.toNat) :
-    epochSlots preset epoch = .error (.arith .overflow) := by
-  unfold epochSlots computeStartSlotAtEpoch mulChecked addChecked
-  by_cases mul : epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64
-  · have product : (epoch * preset.SLOTS_PER_EPOCH).toNat =
-        epoch.toNat * preset.SLOTS_PER_EPOCH.toNat := by
-      rw [UInt64.toNat_mul, Nat.mod_eq_of_lt mul]
-    have add : ¬epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_EPOCH.toNat <
-        2 ^ 64 := Nat.not_lt.mpr big
-    simp only [mul, product, add, ite_true, ite_false, Except.mapError, bind, Except.bind]
-  · simp only [mul, ite_false, Except.mapError, bind, Except.bind]
-
 /-- No committee assignment exists for an epoch whose slots do not fit in 64 bits.
 
 The search fails there, before it reads any committee. -/
@@ -278,49 +240,6 @@ theorem getCommitteeAssignment_eq_error_of_overflow {state : BeaconState preset 
     have within : epoch ≤ nextEpoch := UInt64.le_iff_toNat_le.mpr (by simp at nextNat; omega)
     simp [Except.mapError, bind, Except.bind, within, epochSlots_eq_error big]
 
-/-- The slot at an offset below the length of an epoch, as a number. -/
-theorem toNat_epochSlot {epoch : Epoch}
-    (fits : epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
-    {offset : Nat} (offsetLt : offset < preset.SLOTS_PER_EPOCH.toNat) :
-    (epoch * preset.SLOTS_PER_EPOCH + offset.toUInt64).toNat =
-      epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + offset := by
-  have offsetSmall : offset < 2 ^ 64 :=
-    Nat.lt_of_lt_of_le offsetLt (Nat.le_of_lt preset.SLOTS_PER_EPOCH.toNat_lt)
-  have productSmall : epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 := by omega
-  rw [UInt64.toNat_add, UInt64.toNat_mul, Nat.toUInt64_eq, UInt64.toNat_ofNat',
-    Nat.mod_eq_of_lt offsetSmall, Nat.mod_eq_of_lt productSmall]
-  exact Nat.mod_eq_of_lt (by omega)
-
-/-- Each slot of an epoch has that epoch. -/
-theorem mem_epochSlots {epoch : Epoch} {slots : List Slot} (h : epochSlots preset epoch = .ok slots)
-    {slot : Slot} (mem : slot ∈ slots) : computeEpochAtSlot preset slot = epoch := by
-  obtain ⟨fits, rfl⟩ := epochSlots_eq_ok_iff.mp h
-  simp only [List.mem_map, List.mem_range] at mem
-  obtain ⟨offset, offsetLt, rfl⟩ := mem
-  -- The slot is the first slot of the epoch plus an offset below the length of an epoch.
-  have lengthPos : 0 < preset.SLOTS_PER_EPOCH.toNat := Nat.lt_of_le_of_lt (Nat.zero_le _) offsetLt
-  apply UInt64.toNat_inj.mp
-  simp only [computeEpochAtSlot, UInt64.toNat_div, toNat_epochSlot fits offsetLt]
-  rw [Nat.mul_comm, Nat.mul_add_div lengthPos, Nat.div_eq_of_lt offsetLt, Nat.add_zero]
-
-/-- Each slot of an epoch is among its slots, when an epoch has at least one slot. -/
-theorem mem_epochSlots_of_epoch {epoch : Epoch} {slots : List Slot}
-    (positive : preset.SLOTS_PER_EPOCH ≠ 0) (h : epochSlots preset epoch = .ok slots)
-    {slot : Slot} (slotEpoch : computeEpochAtSlot preset slot = epoch) : slot ∈ slots := by
-  obtain ⟨fits, rfl⟩ := epochSlots_eq_ok_iff.mp h
-  have lengthPos : 0 < preset.SLOTS_PER_EPOCH.toNat :=
-    Nat.pos_of_ne_zero fun zero => positive (UInt64.toNat_inj.mp (by simpa using zero))
-  have epochNat := congrArg UInt64.toNat slotEpoch
-  simp only [computeEpochAtSlot, UInt64.toNat_div] at epochNat
-  -- The slot is the first slot of the epoch plus its place in the epoch.
-  have split := Nat.div_add_mod slot.toNat preset.SLOTS_PER_EPOCH.toNat
-  rw [epochNat] at split
-  have offsetLt := Nat.mod_lt slot.toNat lengthPos
-  simp only [List.mem_map, List.mem_range]
-  refine ⟨slot.toNat % preset.SLOTS_PER_EPOCH.toNat, offsetLt, ?_⟩
-  apply UInt64.toNat_inj.mp
-  rw [toNat_epochSlot fits offsetLt, Nat.mul_comm, split]
-
 /-- Each position of an epoch is a slot of the epoch and an index below the committees of a slot. -/
 theorem mem_committeePositions {state : BeaconState preset fork} {epoch : Epoch}
     {positions : List (Slot × CommitteeIndex)}
@@ -329,6 +248,7 @@ theorem mem_committeePositions {state : BeaconState preset fork} {epoch : Epoch}
     computeEpochAtSlot preset slot = epoch ∧ index < getCommitteeCountPerSlot state epoch := by
   unfold committeePositions at h
   obtain ⟨slots, sloted, h⟩ := bind_ok_iff.mp h
+  rw [mapError_ok_iff] at sloted
   simp only [pure, Except.pure, Except.ok.injEq] at h
   subst h
   simp only [List.mem_flatMap, List.mem_range, List.mem_map, Prod.mk.injEq] at mem
@@ -416,6 +336,7 @@ theorem mem_committeePositions_of_epoch {state : BeaconState preset fork} {epoch
     (slot, index) ∈ positions := by
   unfold committeePositions at h
   obtain ⟨slots, sloted, h⟩ := bind_ok_iff.mp h
+  rw [mapError_ok_iff] at sloted
   simp only [pure, Except.pure, Except.ok.injEq] at h
   subst h
   simp only [List.mem_flatMap, List.mem_range, List.mem_map, Prod.mk.injEq]

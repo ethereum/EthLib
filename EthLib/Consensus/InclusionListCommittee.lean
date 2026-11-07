@@ -72,10 +72,7 @@ def getInclusionListCommitteeAssignment (state : BeaconState preset fork) (epoch
     (validator : ValidatorIndex) : Except AccessorError (Option Slot) := do
   let nextEpoch ← liftArith (addChecked (getCurrentEpoch state) 1)
   if nextEpoch < epoch then throw (.epochTooFar epoch nextEpoch)
-  let start ← liftArith (computeStartSlotAtEpoch preset epoch)
-  let _ ← liftArith (addChecked start preset.SLOTS_PER_EPOCH)
-  firstInclusionListSlot state validator
-    ((List.range preset.SLOTS_PER_EPOCH.toNat).map fun k => start + k.toUInt64)
+  firstInclusionListSlot state validator (← liftArith (epochSlots preset epoch))
 
 /-- The root that a member signs for an inclusion list, on the chain of a state.
 
