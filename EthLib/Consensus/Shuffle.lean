@@ -95,11 +95,25 @@ def indexRound (seed : Bytes32) (count roundNumber index : Nat) : Nat :=
   swapOrNot count (pivot seed roundNumber count)
     (fun position => bitAt (bucketBits seed roundNumber (position / 256)) position) index
 
+/-- The pivot of each round of a seed, for a count.
+
+A pivot does not depend on the index, so the indices of one seed can share them. -/
+def pivots (rounds : Nat) (seed : Bytes32) (count : Nat) : Array Nat :=
+  Array.ofFn (n := rounds) fun roundNumber => pivot seed roundNumber.val count
+
+/-- Every round on one index, in order, each with its pivot from the pivots of the seed.
+
+Each round hashes once, for the bucket of the position it reads. -/
+def shuffledIndexBy (pivots : Array Nat) (seed : Bytes32) (count index : Nat) : Nat :=
+  (List.range pivots.size).foldl (fun index roundNumber =>
+    swapOrNot count (pivots.getD roundNumber 0)
+      (fun position => bitAt (bucketBits seed roundNumber (position / 256)) position) index) index
+
 /-- Every round of a preset on one index, in order.
 
-Each round hashes twice, for the pivot and for the bucket, whatever the count. -/
+The pivots of the seed come first, then the rounds on the index. -/
 def shuffledIndex (rounds : Nat) (seed : Bytes32) (count index : Nat) : Nat :=
-  (List.range rounds).foldl (fun index roundNumber => indexRound seed count roundNumber index) index
+  shuffledIndexBy (pivots rounds seed count) seed count index
 
 /-- Every round on each index below the count, in order, one round at a time for all of them. -/
 def shuffledPositions (rounds : Nat) (seed : Bytes32) (count : Nat) : Array UInt64 :=

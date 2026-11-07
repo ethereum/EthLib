@@ -154,10 +154,12 @@ theorem computeProposerIndex_of_computeBalanceWeightedSelection
       simpa using mapM_ok_length onList
     -- Both read the shuffled position of each draw.
     have agree : ∀ place < indices.size,
-        Shuffle.shuffledIndex preset.SHUFFLE_ROUND_COUNT.toNat seed indices.size place =
+        Shuffle.shuffledIndexBy (Shuffle.pivots preset.SHUFFLE_ROUND_COUNT.toNat seed indices.size)
+            seed indices.size place =
           ((Shuffle.shuffledPositions preset.SHUFFLE_ROUND_COUNT.toNat seed indices.size).getD
             place 0).toNat := by
       intro place lt
+      change Shuffle.shuffledIndex preset.SHUFFLE_ROUND_COUNT.toNat seed indices.size place = _
       rw [Array.getD_eq_getD_getElem?, Shuffle.shuffledPositions_getElem lt, Option.getD_some,
         UInt64.toNat_ofNat', Nat.mod_eq_of_lt (Nat.lt_trans (Shuffle.shuffledIndex_lt lt) fits)]
     rw [balanceWeightedSearch_congr (Nat.pos_of_ne_zero empty) agree] at computed
