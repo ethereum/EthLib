@@ -708,6 +708,12 @@ It charges the prices of EIP-2929, and needs the state to hold the code of the a
 `Logic.staticcallWith` is the rule for STATICCALL from Berlin to before Glamsterdam.
 Its message carries no value and is static.
 `Logic.staticcall` is its case with empty ranges of input and output.
+`Logic.callStep_child` gives the step of a call that sends no value of its own, for each kind of call.
+`Logic.callKindWith` is the rule for such a call from Berlin to before Glamsterdam.
+`Logic.delegatecallWith` is the rule for DELEGATECALL from Berlin to before Glamsterdam.
+Its message runs the code of the address on the current account, with the sender and the value of the current message.
+`Logic.callcodeWith` is the rule for CALLCODE with no value from Berlin to before Glamsterdam.
+Its message runs the code of the address on the current account, as its sender.
 `Logic.running_eq_false_of_sstore_of_isStatic` proves that in a static frame, a step at SSTORE stops the frame.
 `Logic.running_eq_false_of_log_of_isStatic` proves the same for LOG0 to LOG4.
 `NoValue.spec_nonzero` proves a contract that halts at `0xfe` when its message sends value.
