@@ -19,6 +19,10 @@ The header is not the empty one, and its slot comes before Gloas.
 The configuration activates Capella no later than Deneb.
 
 The new branch joins the proof of the block hash in the execution header to the old branch.
+
+Before Gloas, an upgrade keeps a header valid when its slot needs no field that the header lacks.
+
+A header of an earlier fork reaches Gloas through its Electra form, so it stays valid as well.
 -/
 
 @[expose] public section
@@ -28,6 +32,18 @@ namespace EthLib.Consensus
 open Base Serialization.Ssz
 
 variable {preset : Preset} {fork : Fork}
+
+/-- An Electra header with the SSZ value of the empty one has the beacon header of the empty one. -/
+private theorem beacon_of_same {header : LightClientHeader preset .pectra}
+    (same : sameSszValue header (LightClientHeader.empty preset .pectra) = true) :
+    header.beacon = (LightClientHeader.empty preset .pectra).beacon := by
+  have values := beq_iff_eq.mp same
+  simp only [SszType.toValue, SszFields.toValues, Value.seq.injEq, List.cons.injEq] at values
+  obtain ⟨⟨slot, proposer, parent, state, body, -⟩, -⟩ := values
+  simp only [Value.uint.injEq, Value.bytes.injEq, UInt64.toNat_inj, Vector.toArray_inj]
+    at slot proposer parent state body
+  cases beacon : header.beacon
+  simp_all [LightClientHeader.empty]
 
 /-- The Gloas header of an Electra header keeps the beacon header. -/
 theorem LightClientHeader.toGloas_beacon {config : Config} {post : Fork}
@@ -40,14 +56,7 @@ theorem LightClientHeader.toGloas_beacon {config : Config} {post : Fork}
   · -- The empty header stays empty, and an Electra header equal to it has its beacon header.
     rename_i empty
     cases computed
-    -- The SSZ value of a header starts with the fields of its beacon header.
-    have values := beq_iff_eq.mp empty
-    simp only [SszType.toValue, SszFields.toValues, Value.seq.injEq, List.cons.injEq] at values
-    obtain ⟨⟨slot, proposer, parent, state, body, -⟩, -⟩ := values
-    simp only [Value.uint.injEq, Value.bytes.injEq, UInt64.toNat_inj, Vector.toArray_inj]
-      at slot proposer parent state body
-    cases beacon : header.beacon
-    simp_all [LightClientHeader.empty]
+    exact (beacon_of_same empty).symm
   simp only [bind, Except.bind, pure, Except.pure] at computed
   repeat' split at computed
   all_goals first
@@ -303,6 +312,239 @@ theorem LightClientHeader.upgrade_beacon {config : Config} {pre post : Fork}
   · exact (toGloas_beacon computed).trans rfl
   · cases computed
     rfl
+
+/-- A payload header with the empty SSZ value keeps it when upgraded.
+
+Both forks are from Capella.
+
+The fields that only the later fork has are zero, as in the empty header. -/
+private theorem sameSszValue_upgrade_empty {pre post : Fork} (capella : .shapella ≤ pre)
+    (postCapella : .shapella ≤ post) (header : ExecutionPayloadHeader preset pre)
+    (same : sameSszValue header (ExecutionPayloadHeader.empty preset pre) = true) :
+    sameSszValue (header.upgrade post) (ExecutionPayloadHeader.empty preset post) = true := by
+  unfold sameSszValue at same ⊢
+  rw [beq_iff_eq] at same ⊢
+  by_cases deneb : Fork.dencun ≤ pre <;> by_cases postDeneb : Fork.dencun ≤ post <;>
+  simp [SszType.toValue, SszFields.toValues, ExecutionPayloadHeader.upgrade,
+    ExecutionPayloadHeader.empty, capella, postCapella, deneb, postDeneb] at same ⊢ <;>
+  first | exact same | tauto
+
+/-- Dropping an upgraded payload header to Capella gives the same header as dropping the old one.
+
+Both forks are from Capella. -/
+private theorem ExecutionPayloadHeader.toCapella_upgrade {pre post : Fork}
+    (capella : .shapella ≤ pre) (postCapella : .shapella ≤ post)
+    (execution : ExecutionPayloadHeader preset pre) :
+    (execution.upgrade post).toCapella postCapella = execution.toCapella capella := by
+  simp [ExecutionPayloadHeader.upgrade, ExecutionPayloadHeader.toCapella, capella]
+
+/-- A payload header from Deneb keeps its root when upgraded to another fork from Deneb.
+
+The two forks give it the same fields and the same field names. -/
+private theorem ExecutionPayloadHeader.hashTreeRoot_upgrade {pre post : Fork}
+    (deneb : .dencun ≤ pre) (postDeneb : .dencun ≤ post)
+    (execution : ExecutionPayloadHeader preset pre) :
+    SszType.hashTreeRoot (execution.upgrade post) = SszType.hashTreeRoot execution := by
+  have capella : Fork.shapella ≤ pre := Nat.le_trans (by decide) deneb
+  have postCapella : Fork.shapella ≤ post := Nat.le_trans (by decide) postDeneb
+  simp [SszType.hashTreeRoot, SszType.root, SszFields.roots, ExecutionPayloadHeader.upgrade,
+    ExecutionPayloadHeader.names, sinceNames, capella, deneb, postCapella, postDeneb]
+
+/-- A vector cast to an equal length is all zero exactly when the vector is. -/
+private theorem cast_beq_replicate {n m : Nat} (h : n = m) (v : Vector Bytes32 n) :
+    (v.cast h == Vector.replicate m zeroBytes32) = (v == Vector.replicate n zeroBytes32) := by
+  subst h
+  rfl
+
+/-- A vector cast to an equal length keeps its list. -/
+private theorem cast_toList {n m : Nat} (h : n = m) (v : Vector Bytes32 n) :
+    (v.cast h).toList = v.toList := by
+  subst h
+  rfl
+
+/-- The execution root of an upgraded header is the root of the header.
+
+The header is from Capella, and so is its upgrade.
+
+A header of a slot from Deneb is from Deneb, and so is its upgrade. -/
+private theorem root_upgradeFields {config : Config}
+    {pre post : Fork} (capella : .shapella ≤ pre) (postCapella : .shapella ≤ post)
+    (before : pre < .glamsterdam)
+    (postBefore : post < .glamsterdam) {header : LightClientHeader preset pre}
+    (denebSlot : .dencun ≤ pre ∨
+      computeEpochAtSlot preset header.beacon.slot < config.DENEB_FORK_EPOCH)
+    (keepsDeneb : .dencun ≤ pre → .dencun ≤ post) :
+    getLcExecutionRoot config (header.upgradeFields post before postBefore) =
+      getLcExecutionRoot config header := by
+  have early : ¬ Fork.glamsterdam ≤ pre := Nat.not_le_of_lt before
+  have postEarly : ¬ Fork.glamsterdam ≤ post := Nat.not_le_of_lt postBefore
+  have exec : ∀ h, (header.upgradeFields post before postBefore).execution h =
+      (header.execution ⟨capella, before⟩).upgrade post := fun h => by
+    simp [LightClientHeader.upgradeFields, capella]
+  have beacon : (header.upgradeFields post before postBefore).beacon = header.beacon := rfl
+  have altair : Fork.altair ≤ pre := Nat.le_trans (by decide) capella
+  have postAltair : Fork.altair ≤ post := Nat.le_trans (by decide) postCapella
+  unfold getLcExecutionRoot
+  simp only [LightClientError.requireFork, altair, postAltair, beacon, early, postEarly, capella,
+    postCapella, ↓reduceIte, ↓reduceDIte, exec]
+  rcases denebSlot with deneb | deneb
+  · have postDeneb := keepsDeneb deneb
+    simp only [deneb, postDeneb, true_and,
+      ExecutionPayloadHeader.hashTreeRoot_upgrade deneb postDeneb,
+      ExecutionPayloadHeader.toCapella_upgrade capella postCapella]
+  · have notDeneb := UInt64.not_le.mpr deneb
+    simp only [notDeneb, and_false, ↓reduceIte,
+      ExecutionPayloadHeader.toCapella_upgrade capella postCapella]
+
+/-- Before Gloas, the header of another fork with the fields of a valid header is valid too.
+
+That fork must be Altair or later.
+
+It must keep the fields of Capella and of Deneb that the header has.
+
+The slot of the header must not belong to a fork whose fields the header lacks.
+
+So a header without the fields of Capella has a slot before Capella.
+
+A header without the fields of Deneb has a slot before Deneb. -/
+theorem LightClientHeader.isValidLightClientHeader_upgradeFields {config : Config}
+    {pre post : Fork} (postAltair : .altair ≤ post)
+    (keepsCapella : .shapella ≤ pre → .shapella ≤ post)
+    (keepsDeneb : .dencun ≤ pre → .dencun ≤ post) (before : pre < .glamsterdam)
+    (postBefore : post < .glamsterdam) {header : LightClientHeader preset pre}
+    (valid : isValidLightClientHeader config header = .ok true)
+    (capellaSlot : .shapella ≤ pre ∨
+      computeEpochAtSlot preset header.beacon.slot < config.CAPELLA_FORK_EPOCH)
+    (denebSlot : .dencun ≤ pre ∨
+      computeEpochAtSlot preset header.beacon.slot < config.DENEB_FORK_EPOCH) :
+    isValidLightClientHeader config (header.upgradeFields post before postBefore) = .ok true := by
+  have beacon : (header.upgradeFields post before postBefore).beacon = header.beacon := rfl
+  have early : ¬ Fork.glamsterdam ≤ pre := Nat.not_le_of_lt before
+  have postEarly : ¬ Fork.glamsterdam ≤ post := Nat.not_le_of_lt postBefore
+  by_cases altair : Fork.altair ≤ pre
+  swap
+  · simp [isValidLightClientHeader, LightClientError.requireFork, altair, bind, Except.bind]
+      at valid
+  by_cases capella : Fork.shapella ≤ pre
+  · have postCapella := keepsCapella capella
+    have exec : ∀ h, (header.upgradeFields post before postBefore).execution h =
+        (header.execution ⟨capella, before⟩).upgrade post := fun h => by
+      simp [LightClientHeader.upgradeFields, capella]
+    have branch : ∀ h, ((header.upgradeFields post before postBefore).executionBranch h).toList =
+        (header.executionBranch capella).toList := fun h => by
+      simp only [LightClientHeader.upgradeFields, capella, ↓reduceDIte]
+      exact cast_toList _ _
+    have same : ∀ h, ((header.upgradeFields post before postBefore).executionBranch h ==
+        Vector.replicate _ zeroBytes32) = (header.executionBranch capella ==
+        Vector.replicate _ zeroBytes32) := fun h => by
+      simp only [LightClientHeader.upgradeFields, capella, ↓reduceDIte]
+      exact cast_beq_replicate _ _
+    have root := root_upgradeFields (config := config) capella postCapella before postBefore
+      (header := header) denebSlot keepsDeneb
+    unfold isValidLightClientHeader at valid ⊢
+    simp only [LightClientError.requireFork, altair, postAltair, early, postEarly, ↓reduceIte,
+      ↓reduceDIte, beacon, capella, postCapella, exec, branch, same, root, bind, Except.bind]
+        at valid ⊢
+    by_cases pd : Fork.dencun ≤ pre
+    · have pd' := keepsDeneb pd
+      have blob : ∀ h, ((header.execution ⟨capella, before⟩).upgrade post).blobGasUsed h =
+          (header.execution ⟨capella, before⟩).blobGasUsed pd := fun h => by
+        simp [ExecutionPayloadHeader.upgrade, pd]
+      have excess : ∀ h, ((header.execution ⟨capella, before⟩).upgrade post).excessBlobGas h =
+          (header.execution ⟨capella, before⟩).excessBlobGas pd := fun h => by
+        simp [ExecutionPayloadHeader.upgrade, pd]
+      simp only [pd, pd', ↓reduceDIte, blob, excess] at valid ⊢
+      by_cases c1 : computeEpochAtSlot preset header.beacon.slot < config.DENEB_FORK_EPOCH ∧
+          ((header.execution ⟨capella, before⟩).blobGasUsed pd ≠ 0 ∨
+            (header.execution ⟨capella, before⟩).excessBlobGas pd ≠ 0)
+      · simp [c1, pure, Except.pure] at valid
+      · simp only [c1, ↓reduceIte] at valid ⊢
+        by_cases c2 : computeEpochAtSlot preset header.beacon.slot < config.CAPELLA_FORK_EPOCH
+        · simp only [c2, ↓reduceIte, pure, Except.pure, Except.ok.injEq, Bool.and_eq_true]
+            at valid ⊢
+          obtain ⟨h1, h2⟩ := valid
+          exact ⟨sameSszValue_upgrade_empty capella postCapella _ h1, h2⟩
+        · simp only [c2, ↓reduceIte] at valid ⊢
+          exact valid
+    · simp only [pd, ↓reduceDIte] at valid
+      have early := denebSlot.resolve_left pd
+      by_cases pd' : Fork.dencun ≤ post
+      · have blob : ∀ h, ((header.execution ⟨capella, before⟩).upgrade post).blobGasUsed h = 0 :=
+          fun h => by simp [ExecutionPayloadHeader.upgrade, pd]
+        have excess : ∀ h,
+            ((header.execution ⟨capella, before⟩).upgrade post).excessBlobGas h = 0 :=
+          fun h => by simp [ExecutionPayloadHeader.upgrade, pd]
+        simp only [pd', ↓reduceDIte, blob, excess, ne_eq, not_true_eq_false, or_self, and_false,
+          ↓reduceIte] at valid ⊢
+        by_cases c2 : computeEpochAtSlot preset header.beacon.slot < config.CAPELLA_FORK_EPOCH
+        · simp only [c2, ↓reduceIte, pure, Except.pure, Except.ok.injEq, Bool.and_eq_true]
+            at valid ⊢
+          obtain ⟨h1, h2⟩ := valid
+          exact ⟨sameSszValue_upgrade_empty capella postCapella _ h1, h2⟩
+        · simp only [c2, ↓reduceIte] at valid ⊢
+          exact valid
+      · simp only [pd', ↓reduceDIte] at ⊢
+        by_cases c2 : computeEpochAtSlot preset header.beacon.slot < config.CAPELLA_FORK_EPOCH
+        · simp only [c2, ↓reduceIte, pure, Except.pure, Except.ok.injEq, Bool.and_eq_true]
+            at valid ⊢
+          obtain ⟨h1, h2⟩ := valid
+          exact ⟨sameSszValue_upgrade_empty capella postCapella _ h1, h2⟩
+        · simp only [c2, ↓reduceIte] at valid ⊢
+          exact valid
+  · have exec : ∀ h, (header.upgradeFields post before postBefore).execution h =
+        ExecutionPayloadHeader.empty preset post := fun h => by
+      simp [LightClientHeader.upgradeFields, capella]
+    have branch : ∀ h, (header.upgradeFields post before postBefore).executionBranch h =
+        Vector.replicate _ zeroBytes32 := fun h => by
+      simp [LightClientHeader.upgradeFields, capella]
+    have slot := capellaSlot.resolve_left capella
+    unfold isValidLightClientHeader at valid ⊢
+    simp only [LightClientError.requireFork, altair, postAltair, early, postEarly, ↓reduceIte,
+      ↓reduceDIte, beacon, capella] at valid ⊢
+    simp [exec, branch, slot, ExecutionPayloadHeader.empty, sameSszValue, pure, Except.pure, bind,
+      Except.bind]
+
+/-- From Gloas, the upgrade of a valid header passes the header check too.
+
+The header is not the empty one, and its slot comes before Gloas.
+
+The slot must not belong to a fork whose fields the header lacks, as for an upgrade before Gloas.
+
+The configuration activates Capella no later than Deneb. -/
+theorem LightClientHeader.isValidLightClientHeader_upgrade {config : Config} {pre post : Fork}
+    {later : pre ≤ post} (gloas : .glamsterdam ≤ post) {header : LightClientHeader preset pre}
+    {upgraded : LightClientHeader preset post}
+    (valid : isValidLightClientHeader config header = .ok true)
+    (notEmpty : header.beacon ≠ (LightClientHeader.empty preset pre).beacon)
+    (capellaSlot : .shapella ≤ pre ∨
+      computeEpochAtSlot preset header.beacon.slot < config.CAPELLA_FORK_EPOCH)
+    (denebSlot : .dencun ≤ pre ∨
+      computeEpochAtSlot preset header.beacon.slot < config.DENEB_FORK_EPOCH)
+    (ordered : config.CAPELLA_FORK_EPOCH ≤ config.DENEB_FORK_EPOCH)
+    (beforeGloas : .glamsterdam ≤ pre ∨
+      computeEpochAtSlot preset header.beacon.slot < config.GLOAS_FORK_EPOCH)
+    (computed : header.upgrade config post later = .ok upgraded) :
+    isValidLightClientHeader config upgraded = .ok true := by
+  unfold LightClientHeader.upgrade at computed
+  by_cases preGloas : Fork.glamsterdam ≤ pre
+  · simp only [preGloas, ↓reduceDIte, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    have altair : Fork.altair ≤ pre := Nat.le_trans (by decide) preGloas
+    have postAltair : Fork.altair ≤ post := Nat.le_trans (by decide) gloas
+    unfold isValidLightClientHeader at valid ⊢
+    simp only [LightClientError.requireFork, altair, postAltair, preGloas, gloas, ↓reduceIte,
+      ↓reduceDIte, cast_toList] at valid ⊢
+    exact valid
+  · simp only [preGloas, gloas, ↓reduceDIte] at computed
+    have preBefore : pre < .glamsterdam := Nat.lt_of_not_le preGloas
+    have epoch := beforeGloas.resolve_left preGloas
+    refine LightClientHeader.isValidLightClientHeader_toGloas (header := header.upgradeFields
+      .pectra preBefore (by decide)) ?_ ?_ ordered epoch computed
+    · exact LightClientHeader.isValidLightClientHeader_upgradeFields (by decide)
+        (fun _ => by decide) (fun _ => by decide) preBefore (by decide) valid capellaSlot denebSlot
+    · rw [Bool.eq_false_iff]
+      intro same
+      exact notEmpty (beacon_of_same same)
 
 /-- An upgraded store keeps its finalized and optimistic beacon headers.
 
