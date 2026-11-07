@@ -2767,7 +2767,7 @@
       {"constructor": "invalidColumns", "code": 33}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "The outcome of each step of a fork choice case, from an anchor state and an anchor block.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nThe signature checks run unless the last argument is false.\n\nFrom Gloas the store is not specified here."},
+   "The outcome of each step of a fork choice case, from an anchor state and an anchor block.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nThe signature checks run unless the last argument is false.\n\nFrom Gloas the store starts, but a block, a vote or a head is not yet specified here.\n\nSo such a step fails from Gloas."},
   {"summary":
    "Validate the messages of a topic in turn, against the store of an anchor and later blocks.",
    "signature":
@@ -2812,7 +2812,7 @@
       {"constructor": "invalidColumns", "code": 33}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "Validate the messages of a topic in turn, against the store of an anchor and later blocks.\n\nFrom Gloas the store is not specified here."},
+   "Validate the messages of a topic in turn, against the store of an anchor and later blocks.\n\nFrom Gloas no topic is specified here yet."},
   {"summary":
    "The headers of a sync, step by step, from a bootstrap for a trusted block root.",
    "signature":
