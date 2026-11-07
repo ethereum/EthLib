@@ -417,15 +417,19 @@ theorem SlotFact.Holds.of_agrees {touched : List (Address × U256)} {moved : Lis
   ⟨by rw [h.original]; exact hold.1, by rw [h.storage _ _ hu]; exact hold.2.1,
     by rw [← hold.2.2]; exact decide_eq_decide.mpr (h.warm _ _ hu)⟩
 
-/-- The price of a call with a value and no growth of memory, from Berlin to before Glamsterdam.
+/-- The price of a call that sends `value` and grows no memory, from Berlin to before Glamsterdam.
+
+The value may be 0.
 
 It pays the access to the address, and `extra` for the value. -/
 abbrev callCost (fork : Fork) (value asked : U256) (gas extra : Nat) (cold : Bool) : Nat :=
   (messageCallGas fork value asked.toNat gas 0 ((if cold then 2600 else 100) + extra)).cost
 
-/-- The gas that a call with a value and no growth of memory passes on, from Berlin.
+/-- The gas that a call that sends `value` and grows no memory passes on, from Berlin.
 
-It holds until before Glamsterdam, and counts the stipend of a call with value. -/
+It holds until before Glamsterdam.
+
+It counts the stipend when the value is not 0. -/
 abbrev callGas (fork : Fork) (value asked : U256) (gas extra : Nat) (cold : Bool) : Nat :=
   (messageCallGas fork value asked.toNat gas 0 ((if cold then 2600 else 100) + extra)).subCall
 
