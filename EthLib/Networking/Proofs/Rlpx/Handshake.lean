@@ -10,6 +10,8 @@ public import EthLib.Serialization.Proofs.Rlp.Codec
 
 An honest initiator and an honest recipient derive the same secrets.
 
+A reader of `auth` or `ack` ignores the list items after the fields it knows, as EIP-8 asks.
+
 Each side's egress MAC state is the other side's ingress MAC state.
 
 Two errors with one code come from one constructor.
@@ -109,6 +111,29 @@ theorem AckMessage.ofItem_toItem (m : AckMessage) :
     Codec.ofItem (Codec.toItem m) = .ok m := by
   simp [Codec.toItem, Codec.ofItem, leadingFields, Item.toItems, Item.toBytes, ByteArray.size,
     toScalar_scalar, bind, Except.bind, pure, Except.pure]
+
+/-! ## Further list items -/
+
+/-- A list of at least `count` items gives the same leading fields, whatever items follow. -/
+theorem leadingFields_append {count : Nat} {fields : List Item} (extra : List Item)
+    (h : count ≤ fields.length) :
+    leadingFields count (.list (fields ++ extra)) = leadingFields count (.list fields) := by
+  simp [leadingFields, Item.toItems, bind, Except.bind, h, Nat.le_add_right_of_le h,
+    List.take_append_of_le_length h]
+
+/-- `auth` reads the same from four or more items, whatever items follow them, as EIP-8 asks. -/
+theorem AuthMessage.ofItem_append {fields : List Item} (extra : List Item)
+    (h : 4 ≤ fields.length) :
+    (Codec.ofItem (.list (fields ++ extra)) : Except RlpError AuthMessage) =
+      Codec.ofItem (.list fields) := by
+  simp only [Codec.ofItem, leadingFields_append extra h]
+
+/-- `ack` reads the same from three or more items, whatever items follow them, as EIP-8 asks. -/
+theorem AckMessage.ofItem_append {fields : List Item} (extra : List Item)
+    (h : 3 ≤ fields.length) :
+    (Codec.ofItem (.list (fields ++ extra)) : Except RlpError AckMessage) =
+      Codec.ofItem (.list fields) := by
+  simp only [Codec.ofItem, leadingFields_append extra h]
 
 /-! ## The two sides -/
 
