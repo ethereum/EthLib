@@ -25,8 +25,8 @@ LIST_ITEM = re.compile(r"(?:[-*+]|\d+[.)])(?:\s|$)")
 FENCE = re.compile(r"(```|~~~)")
 # A Markdown link reference definition `[label]: target`.
 REFERENCE = re.compile(r"\[[^\]\n]+\]:\s")
-# The end of a sentence: a full stop, a question mark, an exclamation mark or a colon,
-# optionally followed by closing brackets, quotes or emphasis.
+# The end of a sentence: a full stop, a question mark, an exclamation mark or a colon.
+# Closing brackets, quotes or emphasis may follow it.
 SENTENCE_END = re.compile(r"[.?!:][)\]\"'`*_]*$")
 
 RULES = ("length", "touching", "wrap")
