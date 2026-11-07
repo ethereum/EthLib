@@ -681,7 +681,8 @@ The caller discards that state; no theorem here states it.
 A size is pushed modulo 2^256, as the instruction pushes it.
 `Logic.jumpi_of_eq_zero` is the rule for JUMPI on a condition proved equal to 0.
 `NoValue.spec_nonzero` proves a contract that halts at `0xfe` when its message sends value.
-`memoryReadBytes_memoryWrite_of_disjoint` proves that a write within memory leaves a read of a disjoint range unchanged, and `memoryReadBytes_memoryWrite_memoryWrite` that a read across two adjacent writes gives both values in order.
+`memoryReadBytes_memoryWrite_of_disjoint` proves that a write within memory leaves a read of a disjoint range unchanged.
+`memoryReadBytes_memoryWrite_memoryWrite` proves that a read across two adjacent writes gives both values in order.
 From Berlin, the rule for SLOAD takes as a hypothesis whether the slot is cold, and charges 2100 or 100 by EIP-2929.
 `Logic.sstore` is the rule for SSTORE from Berlin to before Glamsterdam, in a frame that may change the state and holds more than 2300 gas.
 It charges `sstoreCost` and adds `sstoreRefund` to the refund counter, from the original, current and new words and whether the slot is cold.
