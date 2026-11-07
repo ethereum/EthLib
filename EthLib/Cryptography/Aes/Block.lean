@@ -257,10 +257,11 @@ def keyExpansion (Nk Nr : Nat) (key : Vector UInt8 (4 * Nk)) : Vector Word (4 * 
   let init : Array Word :=
     Array.ofFn fun i : Fin Nk => Vector.ofFn fun j : Fin 4 => key[4 * i.val + j.val]'(by omega)
   -- Lines 7 to 16: word `i` is computed from an array that holds `w[0 .. i - 1]`.
-  -- So both reads are in bounds, and the default is never read.
+  --
+  -- So both reads are in bounds when `Nk ≥ 1`, and a theorem proves that no default is read.
   let w := (List.range' Nk (4 * (Nr + 1) - Nk)).foldl
     (fun w i => w.push (nextWord Nk i (w.getD (i - 1) default) (w.getD (i - Nk) default))) init
-  -- The array has `4 (Nr + 1)` words when `Nk ≤ 4 (Nr + 1)`, as for both key sizes.
+  -- The array has at least `4 (Nr + 1)` words, so this read never returns the default either.
   Vector.ofFn fun i => w.getD i.val default
 
 /-- The round key of round `round`: the words `w[4 round .. 4 round + 3]`, laid out as the state. -/
