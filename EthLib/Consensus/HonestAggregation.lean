@@ -163,21 +163,25 @@ def constructAggregateOfSingleAttestations (state : BeaconState preset fork)
 
 /-- From Altair: the key of a seat of a subcommittee of a sync committee.
 
-The subcommittees are equal slices of the committee, in order. -/
+It is the key at that seat of the slice of the subcommittee, which gossip reads too. -/
 def syncSubcommitteeKey (committee : SyncCommittee preset) (subcommitteeIndex : UInt64)
     (inRange : subcommitteeIndex < SYNC_COMMITTEE_SUBNET_COUNT)
     (seat : Fin (syncSubcommitteeSize preset)) : BLSPubkey :=
-  committee.pubkeys[subcommitteeIndex.toNat * syncSubcommitteeSize preset + seat.val]'(by
+  (syncSubcommitteePubkeys committee subcommitteeIndex.toNat)[seat.val]'(by
     have below : subcommitteeIndex.toNat < Networking.Enr.SYNC_COMMITTEE_SUBNET_COUNT := by
       simpa [SYNC_COMMITTEE_SUBNET_COUNT, Networking.Enr.SYNC_COMMITTEE_SUBNET_COUNT,
         UInt64.lt_iff_toNat_lt] using inRange
     -- The slices before the last one end at most one slice before the end of the committee.
-    calc subcommitteeIndex.toNat * syncSubcommitteeSize preset + seat.val
-        < (subcommitteeIndex.toNat + 1) * syncSubcommitteeSize preset := by
-          rw [Nat.succ_mul]; exact Nat.add_lt_add_left seat.isLt _
-      _ ≤ Networking.Enr.SYNC_COMMITTEE_SUBNET_COUNT * syncSubcommitteeSize preset :=
-          Nat.mul_le_mul_right _ below
-      _ ≤ preset.SYNC_COMMITTEE_SIZE.toNat := Nat.mul_div_le _ _)
+    have room : (subcommitteeIndex.toNat + 1) * syncSubcommitteeSize preset ≤
+        preset.SYNC_COMMITTEE_SIZE.toNat :=
+      calc (subcommitteeIndex.toNat + 1) * syncSubcommitteeSize preset
+          ≤ Networking.Enr.SYNC_COMMITTEE_SUBNET_COUNT * syncSubcommitteeSize preset :=
+            Nat.mul_le_mul_right _ below
+        _ ≤ preset.SYNC_COMMITTEE_SIZE.toNat := Nat.mul_div_le _ _
+    rw [Nat.succ_mul] at room
+    have := seat.isLt
+    simp only [syncSubcommitteePubkeys, List.length_take, List.length_drop, Vector.length_toList]
+    omega)
 
 /-- From Altair: the contribution of a subcommittee from the messages on a block root.
 
