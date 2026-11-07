@@ -19,9 +19,9 @@ It then gives the validator credentials that name the address of the change.
 
 A validator can withdraw its whole balance exactly when its credentials, epoch and balance allow it.
 
-The next sweep starts after the last withdrawal of a full payload.
+A full payload starts the next sweep after its last withdrawal, before the wrap at the registry.
 
-Otherwise it starts one sweep after the start of the last one.
+Otherwise the next sweep starts one sweep after the start of the last one.
 -/
 
 @[expose] public section
@@ -895,6 +895,8 @@ theorem processWithdrawals_balance {state after : BeaconState preset fork}
 
 /-- A full payload starts the next sweep after the validator of its last withdrawal.
 
+The index is that before the sweep wraps around the registry.
+
 An overflow of the index is an error. -/
 theorem nextSweepStart_of_full {state : BeaconState preset fork} {capella : .shapella ≤ fork}
     {withdrawals : Array Withdrawal} {last : Withdrawal} (final : withdrawals.back? = some last)
@@ -903,6 +905,8 @@ theorem nextSweepStart_of_full {state : BeaconState preset fork} {capella : .sha
   simp [nextSweepStart, final, full]
 
 /-- A payload that is not full starts the next sweep one sweep after the start of this one.
+
+The index is that before the sweep wraps around the registry.
 
 An overflow of the index is an error. -/
 theorem nextSweepStart_of_ne {state : BeaconState preset fork} {capella : .shapella ≤ fork}

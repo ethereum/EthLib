@@ -383,15 +383,6 @@ theorem isInInactivityLeak_ok_iff {leak : Bool} :
 
 /-! ## The earliest inclusion of each signer -/
 
-/-- A fold keeps a property of its accumulator when each step from an item of the list keeps it. -/
-theorem list_foldl_invariant {α β : Type} (P : β → Prop) {f : β → α → β} {start : β}
-    (h : P start) :
-    ∀ xs : List α, (∀ b, P b → ∀ x ∈ xs, P (f b x)) → P (xs.foldl f start)
-  | [], _ => h
-  | x :: rest, step =>
-    list_foldl_invariant P (step _ h x (List.mem_cons_self ..)) rest
-      fun b hb y mem => step b hb y (List.mem_cons_of_mem _ mem)
-
 /-- The earliest inclusions have one entry for each validator.
 
 An entry that holds an attestation holds the attestation of one of the signed pairs. -/
@@ -408,11 +399,12 @@ theorem earliestInclusions_size_and_mem {size : Nat}
   unfold earliestInclusions
   rw [← Array.foldl_toList]
   -- The start holds no attestation.
-  refine list_foldl_invariant Inv ⟨by simp, fun i a found => ?_⟩ _ ?_
+  refine List.foldlRecOn (motive := Inv) _ _ ⟨by simp, fun i a found => ?_⟩ ?_
   · rw [Array.getElem?_replicate] at found
     split at found <;> cases found
   rintro best ⟨sized, kept⟩ ⟨attestation, signers⟩ pair
-  refine list_foldl_invariant Inv ⟨sized, kept⟩ signers fun best ⟨sized, kept⟩ index _ => ?_
+  refine List.foldlRecOn (motive := Inv) signers _ ⟨sized, kept⟩
+    fun best ⟨sized, kept⟩ index _ => ?_
   -- Each way of updating the entry of a signer keeps the size and the origin of the entries.
   have put : ∀ i, Inv (best.setIfInBounds i (some attestation)) := by
     intro i
