@@ -82,16 +82,19 @@ def syncParticipantReward (state : BeaconState preset fork) : Except TransitionE
     let perSlot ← divChecked (← divChecked weighted WEIGHT_DENOMINATOR) preset.SLOTS_PER_EPOCH
     divChecked perSlot preset.SYNC_COMMITTEE_SIZE)
 
-/-- From Altair: one member's step of the sync rewards.
+/-- From Altair: one member's step of the sync rewards, with the proposer of the slot given.
 
 A member that signed earns the reward, and the proposer earns its share.
 
-A member that did not sign pays the reward. -/
-def applySyncReward (reward proposerReward : Gwei) (state : BeaconState preset fork)
+A member that did not sign pays the reward.
+
+A reward changes only balances, so every step has the proposer of the state before the rewards. -/
+def applySyncReward (reward proposerReward : Gwei)
+    (proposer : Except AccessorError ValidatorIndex) (state : BeaconState preset fork)
     (member : ValidatorIndex × Bool) : Except TransitionError (BeaconState preset fork) :=
   if member.2 then do
     let state ← liftAccessor (increaseBalance state member.1 reward)
-    let proposer ← liftAccessor (getBeaconProposerIndex state)
+    let proposer ← liftAccessor proposer
     liftAccessor (increaseBalance state proposer proposerReward)
   else liftAccessor (decreaseBalance state member.1 reward)
 
@@ -132,6 +135,8 @@ def processSyncAggregate (config : Config) (checks : SignatureChecks)
   let proposerReward ← liftAccessor (liftArith do
     divChecked (← mulChecked reward PROPOSER_WEIGHT) (WEIGHT_DENOMINATOR - PROPOSER_WEIGHT))
   let members ← committee.pubkeys.toArray.mapM (validatorIndexOfPubkey state)
-  (members.zip bits.bits.toArray).foldlM (applySyncReward reward proposerReward) state
+  -- The proposer is read once: the rewards change only balances, which it does not read.
+  let proposer := getBeaconProposerIndex state
+  (members.zip bits.bits.toArray).foldlM (applySyncReward reward proposerReward proposer) state
 
 end EthLib.Consensus
