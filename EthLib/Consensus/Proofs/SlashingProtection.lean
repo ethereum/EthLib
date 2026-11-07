@@ -23,7 +23,7 @@ The two headers of a valid proposer slashing, both signed, are different with on
 
 Since slashable messages are different messages, each such pair is a collision of signing roots.
 
-Every message signed also passes the conditions against the records of the file it started from.
+No signed vote is slashable with a vote of the starting file, as a record sees it.
 -/
 
 @[expose] public section
@@ -164,7 +164,7 @@ def signBlocks (signingRootOf : BeaconBlockHeader → Root) (pubkey : BLSPubkey)
     signBlocks signingRootOf pubkey
       (interchange.recordBlock pubkey header.slot (signingRootOf header)) rest
 
-/-- Each vote that a signer signs passed its check against a record that holds the first one. -/
+/-- Each vote that a signer signs passed its check against a record that holds its starting one. -/
 theorem checked_of_signAttestations {signingRootOf : AttestationData → Root}
     {pubkey : BLSPubkey} {start finish : Interchange} {votes : List AttestationData}
     (signed : signAttestations signingRootOf pubkey start votes = .ok finish) :
@@ -184,7 +184,7 @@ theorem checked_of_signAttestations {signingRootOf : AttestationData → Root}
       rw [attestationsOf_recordAttestation]
       exact List.mem_append_left _ kept
 
-/-- Each block that a signer signs passed its check against a record that holds the first one. -/
+/-- Each block that a signer signs passed its check against a record that holds its starting one. -/
 theorem checked_of_signBlocks {signingRootOf : BeaconBlockHeader → Root} {pubkey : BLSPubkey}
     {start finish : Interchange} {headers : List BeaconBlockHeader}
     (signed : signBlocks signingRootOf pubkey start headers = .ok finish) :
@@ -203,9 +203,9 @@ theorem checked_of_signBlocks {signingRootOf : BeaconBlockHeader → Root} {pubk
       rw [blocksOf_recordBlock]
       exact List.mem_append_left _ kept
 
-/-- A recorded vote that is not slashable with a new one, as the record sees it, has its root.
+/-- Two votes slashable either way round have one signing root, if the record check passed.
 
-If the two votes are slashable either way round, they have the same signing root. -/
+The check compares the record of the earlier vote with the later vote. -/
 theorem signingRoot_eq_of_isSlashableWith_eq_false {signingRootOf : AttestationData → Root}
     {earlier later : AttestationData}
     (passed : (⟨earlier.source.epoch, earlier.target.epoch, some (signingRootOf earlier)⟩ :
