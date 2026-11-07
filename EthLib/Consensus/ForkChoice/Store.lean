@@ -35,9 +35,7 @@ From Gloas a node also says whether the payload of its block is known.
 
 The walk gives each parent the status of its payload as its child builds on it.
 
-Gloas changes the store too, and that rule is not yet specified here.
-
-So a new store fails from Gloas on, rather than apply the earlier rule.
+From Gloas the store also holds the payloads it has verified and the votes of the payload committee.
 -/
 
 @[expose] public section
@@ -70,13 +68,44 @@ structure ForkChoiceNode where
   payloadStatus : PayloadStatus := .pending
   deriving DecidableEq, Repr, Inhabited
 
-/-- The latest vote of a validator: its epoch and the root of the block it votes for. -/
-structure LatestMessage where
-  /-- The epoch of the vote. -/
-  epoch : Epoch
+/-- The latest vote of a validator: when it votes and the root of the block it votes for.
+
+Before Gloas the vote has its target epoch.
+
+From Gloas it has its slot instead, and whether it votes for the payload of the block. -/
+structure LatestMessage (fork : Fork) where
+  /-- The target epoch of the vote, before Gloas. -/
+  epoch : Until .glamsterdam fork Epoch
+  /-- The slot of the vote, from Gloas. -/
+  slot : Since .glamsterdam fork Slot
   /-- The root of the block of the vote. -/
   root : Root
-  deriving DecidableEq, Repr
+  /-- Whether the vote says that the payload of the block is present, from Gloas. -/
+  payloadPresent : Since .glamsterdam fork Bool
+
+/-- The epoch of a vote: its target epoch before Gloas, the epoch of its slot from Gloas. -/
+def getLatestMessageEpoch (preset : Preset) {fork : Fork} (message : LatestMessage fork) : Epoch :=
+  if gloas : .glamsterdam ≤ fork then computeEpochAtSlot preset (message.slot gloas)
+  else message.epoch (Nat.lt_of_not_le gloas)
+
+/-- The number that orders the votes of one validator: its epoch before Gloas, its slot from Gloas.
+
+A vote replaces an earlier one of the validator only when this number grows. -/
+def LatestMessage.rank {fork : Fork} (message : LatestMessage fork) : UInt64 :=
+  if gloas : .glamsterdam ≤ fork then message.slot gloas
+  else message.epoch (Nat.lt_of_not_le gloas)
+
+/-- The vote of an attestation.
+
+Before Gloas it has the target epoch.
+
+From Gloas it has the slot, and it votes for the payload when the committee index is 1. -/
+def LatestMessage.ofAttestation {preset : Preset} {fork : Fork}
+    (attestation : Attestation preset fork) : LatestMessage fork where
+  epoch := fun _ => attestation.data.target.epoch
+  slot := fun _ => attestation.data.slot
+  root := attestation.data.beaconBlockRoot
+  payloadPresent := fun _ => attestation.data.index == 1
 
 /-- The order of checkpoints by epoch, then by root, which keys the checkpoint states. -/
 def Checkpoint.compare (a b : Checkpoint) : Ordering :=
@@ -216,14 +245,24 @@ structure Store where
   blocks : Std.TreeMap Root (BeaconBlock preset fork)
   /-- The state after each known block, by root. -/
   blockStates : Std.TreeMap Root (BeaconState preset fork)
-  /-- Whether each block arrived on time in its slot. -/
+  /-- Whether each block arrived in its slot before the attestation deadline. -/
   blockTimeliness : Std.TreeMap Root Bool
+  /-- Whether each block arrived in its slot before the deadline of the payload committee. -/
+  ptcTimeliness : Since .glamsterdam fork (Std.TreeMap Root Bool)
   /-- The state at each checkpoint, with the checkpoint's epoch processed. -/
   checkpointStates : Std.TreeMap Checkpoint (BeaconState preset fork) Checkpoint.compare
   /-- The latest vote of each validator. -/
-  latestMessages : Std.TreeMap ValidatorIndex LatestMessage
+  latestMessages : Std.TreeMap ValidatorIndex (LatestMessage fork)
   /-- The unrealized justified checkpoint of each block. -/
   unrealizedJustifications : Std.TreeMap Root Checkpoint
+  /-- The verified payload of each block whose payload has arrived. -/
+  payloads : Since .glamsterdam fork (Std.TreeMap Root (ExecutionPayloadEnvelope preset fork))
+  /-- The vote of each member of the payload committee on whether the payload came on time. -/
+  payloadTimelinessVote :
+    Since .glamsterdam fork (Std.TreeMap Root (Vector (Option Bool) preset.PTC_SIZE.toNat))
+  /-- The vote of each member of the payload committee on whether the blob data is available. -/
+  payloadDataAvailabilityVote :
+    Since .glamsterdam fork (Std.TreeMap Root (Vector (Option Bool) preset.PTC_SIZE.toNat))
 
 variable {preset fork}
 
@@ -231,10 +270,9 @@ variable {preset fork}
 
 The anchor is justified and finalized at the epoch of its state.
 
-From Gloas the store is not yet specified here, so it fails. -/
+From Gloas the anchor is timely for both deadlines, and has no payload and no committee vote yet. -/
 def getForkchoiceStore (config : Config) (anchorState : BeaconState preset fork)
     (anchorBlock : BeaconBlock preset fork) : Except ForkChoiceError (Store preset fork) := do
-  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
   let stateRoot ← (SszType.hashTreeRoot anchorState).mapError .ssz
   if anchorBlock.stateRoot ≠ stateRoot then throw .anchorStateMismatch
   let anchorRoot ← (SszType.hashTreeRoot anchorBlock).mapError .ssz
@@ -252,10 +290,16 @@ def getForkchoiceStore (config : Config) (anchorState : BeaconState preset fork)
     equivocatingIndices := []
     blocks := Std.TreeMap.empty.insert anchorRoot anchorBlock
     blockStates := Std.TreeMap.empty.insert anchorRoot anchorState
-    blockTimeliness := ∅
+    blockTimeliness := if .glamsterdam ≤ fork then Std.TreeMap.empty.insert anchorRoot true else ∅
+    ptcTimeliness := fun _ => Std.TreeMap.empty.insert anchorRoot true
     checkpointStates := Std.TreeMap.empty.insert checkpoint anchorState
     latestMessages := ∅
-    unrealizedJustifications := Std.TreeMap.empty.insert anchorRoot checkpoint }
+    unrealizedJustifications := Std.TreeMap.empty.insert anchorRoot checkpoint
+    payloads := fun _ => ∅
+    payloadTimelinessVote := fun _ =>
+      Std.TreeMap.empty.insert anchorRoot (Vector.replicate _ none)
+    payloadDataAvailabilityVote := fun _ =>
+      Std.TreeMap.empty.insert anchorRoot (Vector.replicate _ none) }
 
 namespace Store
 
@@ -280,6 +324,10 @@ def block (root : Root) : Except ForkChoiceError (BeaconBlock preset fork) :=
   match store.blocks[root]? with
   | some block => return block
   | none => throw (.unknownBlock root)
+
+/-- Whether the store holds the verified payload of the block with a root, from Gloas. -/
+def isPayloadVerified (gloas : .glamsterdam ≤ fork) (root : Root) : Bool :=
+  (store.payloads gloas).contains root
 
 /-- The status of the payload of a parent, as a child block builds on it.
 

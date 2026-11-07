@@ -138,12 +138,15 @@ def importGossipBlock {preset : Preset} {fork : Fork} (config : Config)
 
 The sync committee has topics from Altair, and changes of BLS credentials from Capella.
 
-Blob sidecars travel at Deneb and Electra, and column sidecars from Fulu. -/
+Blob sidecars travel at Deneb and Electra, and column sidecars at Fulu.
+
+From Gloas no topic is specified here yet. -/
 def gossipValidationSpecified (fork : Fork) : String → Bool
   | "attester_slashing" | "proposer_slashing" | "voluntary_exit" | "beacon_block"
-  | "beacon_attestation" | "beacon_aggregate_and_proof" => true
-  | "sync_committee" | "sync_committee_contribution_and_proof" => .altair ≤ fork
-  | "bls_to_execution_change" => .shapella ≤ fork
+  | "beacon_attestation" | "beacon_aggregate_and_proof" => fork < .glamsterdam
+  | "sync_committee" | "sync_committee_contribution_and_proof" =>
+    .altair ≤ fork && fork < .glamsterdam
+  | "bls_to_execution_change" => .shapella ≤ fork && fork < .glamsterdam
   | "blob_sidecar" => .dencun ≤ fork && fork < .fusaka
   | "data_column_sidecar" | "partial_data_column_sidecar" => .fusaka ≤ fork && fork < .glamsterdam
   | _ => false
@@ -268,7 +271,7 @@ def validatePartialInputs {preset : Preset} {fork : Fork} (config : Config)
 
 /-- Validate the messages of a topic in turn, against the store of an anchor and later blocks.
 
-From Gloas the store is not specified here. -/
+From Gloas no topic is specified here yet. -/
 @[export eth_consensus_gossip_validation]
 def gossipValidationExport
     (name fork anchorState anchorBlock blocks finalized topic messages replacements : ByteArray)

@@ -227,7 +227,9 @@ The preset, the configuration and the fork are named in UTF-8.
 
 The signature checks run unless the last argument is false.
 
-From Gloas the store is not specified here. -/
+From Gloas the store starts, but a block, a vote or a head is not yet specified here.
+
+So such a step fails from Gloas. -/
 @[export eth_consensus_fork_choice]
 def forkChoiceExport (name fork anchorState anchorBlock steps replacements : ByteArray)
     (verify : Bool) : Result ByteArray := do

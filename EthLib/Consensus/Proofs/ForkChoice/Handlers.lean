@@ -669,12 +669,12 @@ theorem onBlockWithVotes_epochsLe {checks : SignatureChecks} {sources : BlockSou
     (fun _ _ _ le step => le.trans (onAttesterSlashing_frame step).1) (EpochsLe.refl _) slashed
   exact (onBlock_epochsLe block).trans (votes.trans slashings)
 
-/-- A vote keeps every other vote at or after its epoch at or after it. -/
-theorem recordVote_keeps {equivocating : List ValidatorIndex} {message : LatestMessage}
-    {messages : Std.TreeMap ValidatorIndex LatestMessage} {i j : ValidatorIndex}
-    {old : LatestMessage}
-    (found : messages[j]? = some old) (late : message.epoch ≤ old.epoch) :
-    ∃ m, (recordVote equivocating message messages i)[j]? = some m ∧ message.epoch ≤ m.epoch := by
+/-- A vote keeps every other vote at or after its rank at or after it. -/
+theorem recordVote_keeps {equivocating : List ValidatorIndex} {message : LatestMessage fork}
+    {messages : Std.TreeMap ValidatorIndex (LatestMessage fork)} {i j : ValidatorIndex}
+    {old : LatestMessage fork}
+    (found : messages[j]? = some old) (late : message.rank ≤ old.rank) :
+    ∃ m, (recordVote equivocating message messages i)[j]? = some m ∧ message.rank ≤ m.rank := by
   unfold recordVote
   split
   · exact ⟨old, found, late⟩
@@ -694,11 +694,11 @@ theorem recordVote_keeps {equivocating : List ValidatorIndex} {message : LatestM
         rw [Std.TreeMap.getElem?_insert]
         simp [same, found]
 
-/-- After the vote of a validator that does not equivocate, its vote is at or after the epoch. -/
-theorem recordVote_self {equivocating : List ValidatorIndex} {message : LatestMessage}
-    {messages : Std.TreeMap ValidatorIndex LatestMessage} {i : ValidatorIndex}
+/-- After the vote of a validator that does not equivocate, its vote is at or after the rank. -/
+theorem recordVote_self {equivocating : List ValidatorIndex} {message : LatestMessage fork}
+    {messages : Std.TreeMap ValidatorIndex (LatestMessage fork)} {i : ValidatorIndex}
     (honest : i ∉ equivocating) :
-    ∃ m, (recordVote equivocating message messages i)[i]? = some m ∧ message.epoch ≤ m.epoch := by
+    ∃ m, (recordVote equivocating message messages i)[i]? = some m ∧ message.rank ≤ m.rank := by
   unfold recordVote
   have : equivocating.contains i = false := by simpa using honest
   simp only [this, Bool.false_eq_true, ↓reduceIte]
@@ -710,17 +710,18 @@ theorem recordVote_self {equivocating : List ValidatorIndex} {message : LatestMe
       exact ⟨old, found, UInt64.not_lt.mp notLater⟩
   · exact ⟨message, by simp, UInt64.le_refl _⟩
 
-/-- After a run of votes, each voter that does not equivocate has a vote at or after the epoch. -/
-theorem foldl_recordVote {equivocating : List ValidatorIndex} {message : LatestMessage}
-    (indices : List ValidatorIndex) (messages : Std.TreeMap ValidatorIndex LatestMessage)
+/-- After a run of votes, each voter that does not equivocate has a vote at or after the rank. -/
+theorem foldl_recordVote {equivocating : List ValidatorIndex} {message : LatestMessage fork}
+    (indices : List ValidatorIndex) (messages : Std.TreeMap ValidatorIndex (LatestMessage fork))
     {i : ValidatorIndex} (voted : i ∈ indices) (honest : i ∉ equivocating) :
     ∃ m, (indices.foldl (recordVote equivocating message) messages)[i]? = some m ∧
-      message.epoch ≤ m.epoch := by
-  -- A vote at or after the epoch survives the rest of the run.
-  have keep : ∀ (rest : List ValidatorIndex) (messages : Std.TreeMap ValidatorIndex LatestMessage)
-      (old : LatestMessage), messages[i]? = some old → message.epoch ≤ old.epoch →
+      message.rank ≤ m.rank := by
+  -- A vote at or after the rank survives the rest of the run.
+  have keep : ∀ (rest : List ValidatorIndex)
+      (messages : Std.TreeMap ValidatorIndex (LatestMessage fork))
+      (old : LatestMessage fork), messages[i]? = some old → message.rank ≤ old.rank →
       ∃ m, (rest.foldl (recordVote equivocating message) messages)[i]? = some m ∧
-        message.epoch ≤ m.epoch := by
+        message.rank ≤ m.rank := by
     intro rest
     induction rest with
     | nil => exact fun messages old found late => ⟨old, found, late⟩
@@ -740,14 +741,17 @@ theorem foldl_recordVote {equivocating : List ValidatorIndex} {message : LatestM
 
 /-- After an attestation, each of its voters that does not equivocate has a recent vote.
 
-That vote is at the target epoch of the attestation or later. -/
+That vote is at the rank of the attestation's vote or later.
+
+Its rank is the target epoch before Gloas, and the slot of the attestation from Gloas. -/
 theorem onAttestation_voted {checks : SignatureChecks} {attestation : Attestation preset fork}
     {isFromBlock : Bool} {after : Store preset fork}
     (attested : store.onAttestation config checks attestation isFromBlock = .ok after) :
     ∃ targetState indexed, after.checkpointStates[attestation.data.target]? = some targetState ∧
       getIndexedAttestation targetState attestation = .ok indexed ∧
       ∀ i ∈ indexed.attestingIndices.data.toList, i ∉ after.equivocatingIndices →
-        ∃ m, after.latestMessages[i]? = some m ∧ attestation.data.target.epoch ≤ m.epoch := by
+        ∃ m, after.latestMessages[i]? = some m ∧
+          (LatestMessage.ofAttestation attestation).rank ≤ m.rank := by
   unfold onAttestation at attested
   simp only [bind_ok_iff] at attested
   obtain ⟨_, _, stored, _, targetState, found, indexed, mapped, valid, _, attested⟩ := attested

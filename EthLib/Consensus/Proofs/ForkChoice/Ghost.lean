@@ -290,7 +290,6 @@ private theorem countStep_ok {node : ForkChoiceNode} {block : BeaconBlock preset
           return total : Except ForkChoiceError ℕ) = .ok total') :
     total' = total + if ∃ m, store.latestVote index = some m ∧
       (blockTree lower).Ancestor (some node.root) m then balance.toNat else 0 := by
-  have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
   cases message : store.latestMessages[index]? with
   | none =>
     simp only [message, pure, Except.pure, Except.ok.injEq] at step
@@ -302,8 +301,8 @@ private theorem countStep_ok {node : ForkChoiceNode} {block : BeaconBlock preset
       have none : store.latestVote index = none := by
         simp only [latestVote, equivocating, ↓reduceIte]
       simp [none, step]
-    · simp only [equivocating, Bool.false_eq_true, ↓reduceIte, getSupportedNode, later, bind,
-        Except.bind, pure, Except.pure] at step
+    · simp only [equivocating, Bool.false_eq_true, ↓reduceIte, getSupportedNode_of_lt before,
+        bind, Except.bind, pure, Except.pure] at step
       cases computed : store.isAncestor ⟨message'.root, .pending⟩ node with
       | error e => simp [computed] at step
       | ok result =>
