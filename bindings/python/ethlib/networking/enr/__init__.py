@@ -52,6 +52,11 @@ def sign_v4(secret_key: bytes, record: bytes) -> bytes:
     return _native.enr_sign_v4(secret_key, record)
 
 
+def make_record_v4(secret_key: bytes, seq: int, pairs: bytes) -> bytes:
+    """A new "v4" record of a private key, a sequence number and the RLP list of other pairs."""
+    return _native.enr_make_record_v4(secret_key, seq, pairs)
+
+
 class EnrForkId(NamedTuple):
     """The eth2 entry: the fork digest now, and the version and epoch of the next fork."""
 
@@ -112,6 +117,7 @@ __all__ = [
     "verify_v4",
     "node_id",
     "sign_v4",
+    "make_record_v4",
     "EnrForkId",
     "ConsensusEntries",
     "consensus_entries",

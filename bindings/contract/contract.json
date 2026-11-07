@@ -1510,6 +1510,33 @@
    "docstring":
    "The bytes of a record, signed again with a private key by the \"v4\" scheme.\n\nThe decoder reads the record first, and its signature is replaced."},
   {"summary":
+   "The bytes of a new \"v4\" record of a private key, a sequence number and other pairs.",
+   "signature": "(secret_key: bytes, seq: int, pairs: bytes) -> bytes",
+   "operation": "EthLib.Networking.Enr.Exports.makeRecordV4Export",
+   "method": "enr_make_record_v4",
+   "errors":
+   [{"type": "EthLib.Networking.Enr.EnrError",
+     "codes":
+     [{"constructor": "tooLarge", "code": 1},
+      {"constructor": "rlp", "code": 2},
+      {"constructor": "notAList", "code": 3},
+      {"constructor": "tooFewItems", "code": 4},
+      {"constructor": "signatureNotBytes", "code": 5},
+      {"constructor": "invalidSeq", "code": 6},
+      {"constructor": "keyNotBytes", "code": 7},
+      {"constructor": "missingValue", "code": 8},
+      {"constructor": "repeatedKey", "code": 9},
+      {"constructor": "unsortedKeys", "code": 10},
+      {"constructor": "missingPrefix", "code": 11},
+      {"constructor": "base64", "code": 12},
+      {"constructor": "missingId", "code": 13},
+      {"constructor": "unknownScheme", "code": 14},
+      {"constructor": "invalidPublicKey", "code": 15},
+      {"constructor": "signing", "code": 16}]}],
+   "error_class": "EnrError",
+   "docstring":
+   "The bytes of a new \"v4\" record of a private key, a sequence number and other pairs.\n\nThe other pairs come as the RLP list `[k1, v1, k2, v2, ...]`, in key order."},
+  {"summary":
    "The consensus entries of a record at the named fork, with `count` attestation subnets.",
    "signature": "(fork: str, count: int, record: bytes) -> bytes",
    "operation": "EthLib.Networking.Enr.Exports.consensusEntriesExport",

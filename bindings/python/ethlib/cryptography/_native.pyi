@@ -295,6 +295,10 @@ def enr_sign_v4(secret_key: bytes, record: bytes) -> bytes:
     """The bytes of a record, signed again with a private key by the "v4" scheme."""
     ...
 
+def enr_make_record_v4(secret_key: bytes, seq: int, pairs: bytes) -> bytes:
+    """The bytes of a new "v4" record of a private key, a sequence number and other pairs."""
+    ...
+
 def enr_consensus_entries(fork: str, count: int, record: bytes) -> bytes:
     """The consensus entries of a record at the named fork, with `count` attestation subnets."""
     ...

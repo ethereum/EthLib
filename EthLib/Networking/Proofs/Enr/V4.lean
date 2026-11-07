@@ -20,6 +20,8 @@ The node ID exists exactly when the public key can be read, and it is the hash o
 
 A record that the signer signs verifies, keeps its pairs, and reads back from its bytes.
 
+A record that the builder makes reads back from its bytes, verifies, and has its key pairs.
+
 These are correctness statements: no theorem here states that a signature cannot be forged.
 -/
 
@@ -265,5 +267,92 @@ theorem nodeId_signV4 {sk : Fn} {r r' : Enr} (h : signV4 sk r = .ok r') :
     nodeId r' = nodeId r := by
   obtain ⟨_, _, _, _, _, _, rfl⟩ := signV4_eq_ok h
   rfl
+
+/-! ## Building a record -/
+
+/-- The pairs after an insertion are the inserted pair and the pairs before. -/
+theorem mem_insertPair {p x : ByteArray × Item} :
+    (pairs : List (ByteArray × Item)) → (x ∈ insertPair p pairs ↔ x = p ∨ x ∈ pairs)
+  | [] => by simp [insertPair]
+  | q :: rest => by
+    unfold insertPair
+    split
+    · simp
+    · simp only [List.mem_cons, mem_insertPair rest]
+      constructor
+      · rintro (h | h | h) <;> simp [h]
+      · rintro (h | h | h) <;> simp [h]
+
+/-- In pairs whose keys strictly increase, the value of a key is that of its one pair. -/
+theorem get_of_mem {r : Enr} {key : ByteArray} {value : Item}
+    (hk : r.pairs.Pairwise (fun p q => keyLt p.1 q.1)) (hmem : (key, value) ∈ r.pairs) :
+    r.get key = some value := by
+  unfold Enr.get
+  obtain ⟨_, _, pairs⟩ := r
+  simp only at hk hmem ⊢
+  induction pairs with
+  | nil => cases hmem
+  | cons q rest ih =>
+    rw [List.pairwise_cons] at hk
+    rcases List.mem_cons.mp hmem with rfl | hrest
+    · simp
+    · -- The key of `q` comes before the key, so it is another key.
+      have hlt := hk.1 _ hrest
+      have hne : q.1 ≠ key := fun h => by
+        rw [h] at hlt
+        exact List.lt_irrefl _ hlt
+      simp [hne, ih hk.2 hrest]
+
+/-- A record that the builder makes reads back from its bytes and verifies.
+
+It has the sequence number, the pair `id` with `v4`, and the pair `secp256k1` of `sk G`. -/
+theorem makeRecordV4_eq_ok {sk : Fn} {seq : UInt64} {pairs : List (ByteArray × Item)} {r : Enr}
+    (h : makeRecordV4 sk seq pairs = .ok r) :
+    ∃ bytes, r.encode = .ok bytes ∧ decode bytes = .ok r ∧ verifyV4 r = true ∧ r.seq = seq ∧
+      r.get KEY_ID = some (.bytes SCHEME_V4) ∧
+      r.get KEY_SECP256K1 = some (.bytes (Point.mul sk Point.generator).encodeCompressed) := by
+  unfold makeRecordV4 at h
+  dsimp only at h
+  generalize hall : insertPair (KEY_ID, .bytes SCHEME_V4)
+    (insertPair (KEY_SECP256K1, .bytes (Point.mul sk Point.generator).encodeCompressed) pairs)
+    = all at h
+  cases hc : checkKeys all with
+  | error e => simp [hc, bind, Except.bind] at h
+  | ok u =>
+    cases hs : signV4 sk ⟨.empty, seq, all⟩ with
+    | error e => simp [hc, hs, bind, Except.bind] at h
+    | ok signed =>
+      cases he : signed.encode with
+      | error e => simp [hc, hs, he, Except.mapError, bind, Except.bind] at h
+      | ok bytes =>
+        by_cases hsize : MAX_RECORD_SIZE < bytes.size
+        · simp [hc, hs, he, hsize, Except.mapError, bind, Except.bind, throw, throwThe,
+            MonadExceptOf.throw] at h
+        simp only [hc, hs, he, hsize, Except.mapError, bind, Except.bind, ↓reduceIte, pure,
+          Except.pure, Except.ok.injEq] at h
+        subst h
+        -- The keys strictly increase, and both key pairs are among the pairs.
+        have hk := pairwise_of_checkKeys all hc
+        have hid : (KEY_ID, Item.bytes SCHEME_V4) ∈ all := by
+          rw [← hall, mem_insertPair]
+          exact Or.inl rfl
+        have hkey : (KEY_SECP256K1,
+            Item.bytes (Point.mul sk Point.generator).encodeCompressed) ∈ all := by
+          rw [← hall, mem_insertPair, mem_insertPair]
+          exact Or.inr (Or.inl rfl)
+        have gid : (⟨.empty, seq, all⟩ : Enr).get KEY_ID = some (.bytes SCHEME_V4) :=
+          get_of_mem hk hid
+        have gkey : (⟨.empty, seq, all⟩ : Enr).get KEY_SECP256K1 =
+            some (.bytes (Point.mul sk Point.generator).encodeCompressed) :=
+          get_of_mem hk hkey
+        obtain ⟨hseq, hpairs⟩ := seq_pairs_signV4 hs
+        obtain ⟨hdec, hver⟩ := decode_encode_signV4 hs he (Nat.le_of_not_lt hsize) hk gid gkey
+        refine ⟨bytes, he, hdec, hver, hseq, ?_, ?_⟩
+        · unfold Enr.get at gid ⊢
+          rw [hpairs]
+          exact gid
+        · unfold Enr.get at gkey ⊢
+          rw [hpairs]
+          exact gkey
 
 end EthLib.Networking.Enr

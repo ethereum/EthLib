@@ -106,6 +106,18 @@ def signV4Export (secretKey record : ByteArray) : Result ByteArray := do
   let signed ← runEnr (signV4 sk r)
   signed.encode.mapError fun e => ((EnrError.rlp e).code, "record has no RLP encoding")
 
+/-- The bytes of a new "v4" record of a private key, a sequence number and other pairs.
+
+The other pairs come as the RLP list `[k1, v1, k2, v2, ...]`, in key order. -/
+@[export eth_enr_make_record_v4]
+def makeRecordV4Export (secretKey : ByteArray) (seq : UInt64) (pairs : ByteArray) :
+    Result ByteArray := do
+  let sk ← privateKeyOf secretKey
+  let items ← runEnr ((Serialization.Rlp.decode pairs).mapError .rlp)
+  let .list items := items | throw ((EnrError.notAList).code, message .notAList)
+  let r ← runEnr (makeRecordV4 sk seq (← runEnr (readPairs items)))
+  r.encode.mapError fun e => ((EnrError.rlp e).code, "record has no RLP encoding")
+
 /-- A message for a refused consensus entry. -/
 def entryMessage : EntryError → String
   | .missing key => s!"record has no {key.name} entry"

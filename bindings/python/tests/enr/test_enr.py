@@ -145,3 +145,46 @@ def test_sign_v4_rejects_a_short_key() -> None:
 def test_sign_v4_rejects_the_group_order() -> None:
     with raises(ValueError, "private key is not 32 bytes below the group order"):
         enr.sign_v4(ORDER.to_bytes(32, "big"), enr.from_text(TEXT))
+
+
+def _pairs_list(pairs: list[tuple[bytes, bytes]]) -> bytes:
+    # The pairs as one RLP list [k1, v1, k2, v2, ...], of fewer than 65536 bytes.
+    payload = b"".join(_rlp_bytes(x) for pair in pairs for x in pair)
+    if len(payload) < 56:
+        return bytes([0xC0 + len(payload)]) + payload
+    assert len(payload) < 65536
+    return bytes([0xF9]) + len(payload).to_bytes(2, "big") + payload
+
+
+def test_make_record_v4_eip_vector() -> None:
+    # The builder adds id and secp256k1 to ip and udp, and signs, giving the EIP's record.
+    pairs = _pairs_list([PAIRS[1], PAIRS[3]])
+    assert enr.make_record_v4(SECRET_KEY, 1, pairs) == enr.from_text(TEXT)
+
+
+def test_make_record_v4_rejects_its_own_keys() -> None:
+    # The pair id is the builder's own, so a second one repeats the key.
+    with raises(ValueError, "a key is repeated"):
+        enr.make_record_v4(SECRET_KEY, 1, _pairs_list([PAIRS[0], PAIRS[1], PAIRS[3]]))
+
+
+def test_make_record_v4_rejects_unsorted_pairs() -> None:
+    with raises(ValueError, "the keys are not sorted"):
+        enr.make_record_v4(SECRET_KEY, 1, _pairs_list([PAIRS[3], PAIRS[1]]))
+
+
+def test_make_record_v4_rejects_a_short_key() -> None:
+    with raises(ValueError, "private key is not 32 bytes below the group order"):
+        enr.make_record_v4(SECRET_KEY[1:], 1, _pairs_list([PAIRS[1], PAIRS[3]]))
+
+
+def test_make_record_v4_rejects_the_group_order() -> None:
+    with raises(ValueError, "private key is not 32 bytes below the group order"):
+        enr.make_record_v4(ORDER.to_bytes(32, "big"), 1, _pairs_list([PAIRS[1], PAIRS[3]]))
+
+
+def test_make_record_v4_rejects_a_large_record() -> None:
+    # A value of 250 bytes takes the signed record past the 300 bytes that EIP-778 allows.
+    pairs = _pairs_list([PAIRS[1], PAIRS[3], (b"z", bytes(250))])
+    with raises(ValueError, "record has 388 bytes, more than 300"):
+        enr.make_record_v4(SECRET_KEY, 1, pairs)

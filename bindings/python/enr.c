@@ -32,6 +32,13 @@ eth_enr_sign_v4(
 );
 
 extern lean_object*
+eth_enr_make_record_v4(
+  lean_object* secret_key,
+  uint64_t seq,
+  lean_object* pairs
+);
+
+extern lean_object*
 eth_enr_consensus_entries(
   lean_object* fork,
   uint64_t count,
@@ -129,6 +136,30 @@ py_enr_sign_v4(
     mk_bytearray((const uint8_t*) PyBytes_AS_STRING(key), PyBytes_GET_SIZE(key)),
     mk_bytearray((const uint8_t*) PyBytes_AS_STRING(record), PyBytes_GET_SIZE(record)));
   return except_into_pybytes(res, ENR_ERROR);
+}
+
+PyObject*
+py_enr_make_record_v4(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *key_obj, *seq_obj, *pairs_obj;
+  if (!PyArg_ParseTuple(args, "OOO", &key_obj, &seq_obj, &pairs_obj)) return NULL;
+  uint64_t seq;
+  if (parse_uint64(seq_obj, "seq", &seq)) return NULL;
+  if (!PyBytes_Check(key_obj)) {
+    PyErr_SetString(PyExc_TypeError, "secret_key must be bytes");
+    return NULL;
+  }
+  if (!PyBytes_Check(pairs_obj)) {
+    PyErr_SetString(PyExc_TypeError, "pairs must be bytes");
+    return NULL;
+  }
+  lean_object* key = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(key_obj), PyBytes_GET_SIZE(key_obj));
+  lean_object* pairs = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(pairs_obj), PyBytes_GET_SIZE(pairs_obj));
+  return except_into_pybytes(eth_enr_make_record_v4(key, seq, pairs), ENR_ERROR);
 }
 
 PyObject*
