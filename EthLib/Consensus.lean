@@ -31,6 +31,7 @@ public import EthLib.Consensus.ForkChoice.FastConfirmation
 public import EthLib.Consensus.ForkChoice.Handlers
 public import EthLib.Consensus.ForkChoice.Head
 public import EthLib.Consensus.ForkChoice.Optimistic
+public import EthLib.Consensus.ForkChoice.OptimisticSync
 public import EthLib.Consensus.ForkChoice.PayloadVotes
 public import EthLib.Consensus.ForkChoice.ProposerHead
 public import EthLib.Consensus.ForkChoice.Store
