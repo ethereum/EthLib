@@ -494,6 +494,31 @@ def Halted (reverted : Bool) (output : ByteArray) (gas : Nat) (state : State.Tra
   evm.running = false ∧ evm.error = (if reverted then some .revert else none) ∧
     evm.output = output ∧ evm.gas = gas ∧ evm.state = state ∧ evm.substate = substate
 
+/-- What a frame stopped by STOP holds: no error, its gas, its state and its substate.
+
+It says nothing of the output, since a frame of a code does not name its output. -/
+def Stopped (gas : Nat) (state : State.TransactionState) (substate : Substate)
+    (evm : Evm fork Nat) : Prop :=
+  evm.running = false ∧ evm.error = none ∧ evm.gas = gas ∧ evm.state = state ∧
+    evm.substate = substate
+
+/-- STOP stops the frame, at no price. -/
+theorem stop (hlt : pc < code.size) (hbyte : code[pc] = 0x00) :
+    Spec fork (At code message pc stack memory gas state substate)
+      (Stopped gas state substate) := by
+  apply At.rule hlt hbyte (ofByte_of_decode (op := .stop) rfl (Fork.frontier_le _)) rfl
+  rintro evm ⟨-, -, -, -, -, -, hg, -, herr, hs, hss⟩
+  exact ⟨_, stopStep_eq evm, rfl, rfl, herr, hg, hs, hss⟩
+
+/-- A frame at or past the end of its code stops, at no price, as STOP would. -/
+theorem stop_of_size_le (hle : code.size ≤ pc) :
+    Spec fork (At code message pc stack memory gas state substate)
+      (Stopped gas state substate) := by
+  apply Triple.of_step
+  rintro evm ⟨hcode, -, -, hpc, -, -, hg, hrun, herr, hs, hss⟩
+  exact ⟨_, .next hrun (step_of_size_le (by rw [hcode, hpc]; exact hle)), rfl, rfl, herr, hg, hs,
+    hss⟩
+
 /-- RETURN stops the frame with a range of memory as its output, and pays the growth of memory. -/
 theorem «return» {start size : U256} {rest : List U256} (hlt : pc < code.size)
     (hbyte : code[pc] = 0xf3) (hgas : (extendMemory memory.size [(start, size)]).cost ≤ gas) :
