@@ -127,7 +127,7 @@ def Fp.toModel : BaseField.Hom Fp Fp.Model where
   map_powNat a n := (Fp.powNat_toModelFun a n).symm
   map_sqrt a := by
     change Fp.Model.sqrt (Fp.toModelFun a) = (Fp.sqrt a).toOption.map Fp.toModelFun
-    rw [Fp.Model.sqrt, Fp.sqrt, Fp.powNat_toModelFun]
+    rw [Fp.Model.sqrt, Fp.sqrt, Fp.powLimbs_sqrtExponent, Fp.powNat_toModelFun]
     generalize Fp.powNat a ((modulus + 1) / 4) = c
     rw [Fp.toModelFun_mul]
     change (if ((c * c).val == a.val) = true then _ else _) = _
