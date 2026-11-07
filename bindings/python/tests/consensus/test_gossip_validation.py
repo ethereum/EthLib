@@ -34,12 +34,22 @@ TOPICS = {
     "execution_payload_envelope": "gloas",
     "payload_attestation_message": "gloas",
     "execution_payload_bid": "gloas",
+    "inclusion_list": "heze",
 }
-SPECIFIED = ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas")
-# The topics whose cases stop before Gloas, with their last fork.
+SPECIFIED = (
+    "phase0",
+    "altair",
+    "bellatrix",
+    "capella",
+    "deneb",
+    "electra",
+    "fulu",
+    "gloas",
+    "heze",
+)
+# The topics whose cases stop before Heze, with their last fork.
 # Blob sidecars travel only at Deneb and Electra.
 # Partial column sidecars change at Gloas, and EthLib does not specify that change yet.
-# The other topics run up to Gloas, and wait for their Heze rules.
 LAST = {"blob_sidecar": "electra", "partial_data_column_sidecar": "fulu"}
 
 # The release archives that hold the cases.
@@ -51,10 +61,12 @@ ARCHIVES = {
 _YAML = YAML(typ="safe")
 
 # The topics of the messages that a case of another topic sends, by the prefix of their file.
-# A bid case sends the preferences and the envelopes that its bids rely on.
+# A bid case sends the preferences, the envelopes and from Heze the inclusion lists that its
+# bids rely on.
 _MESSAGE_TOPICS = {
     "proposer_preferences": "proposer_preferences",
     "execution_payload_envelope": "execution_payload",
+    "inclusion_list": "inclusion_list",
 }
 
 # The statuses of a payload, as the specification numbers them.
@@ -69,7 +81,7 @@ def runs(fork: str, handler: str) -> bool:
         and topic in TOPICS
         and SPECIFIED.index(TOPICS[topic])
         <= SPECIFIED.index(fork)
-        <= SPECIFIED.index(LAST.get(topic, "gloas"))
+        <= SPECIFIED.index(LAST.get(topic, "heze"))
     )
 
 

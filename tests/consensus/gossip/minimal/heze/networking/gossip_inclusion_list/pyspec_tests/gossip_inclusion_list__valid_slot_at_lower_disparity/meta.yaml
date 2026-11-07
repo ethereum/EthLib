@@ -1,0 +1,40 @@
+topic: inclusion_list
+blocks:
+- {block: 
+    block_0xda6ee95f7984394ded4f5a66c0233a5cbb0d7bb429e1a00d00c24fd269f09199}
+- {block: 
+    block_0x97a28e666ce14f87a6e152301246f95327bf1f45441b20c24f3d3e1806bb504b}
+- {block: 
+    block_0xe288167ad549298928880fbcd13c3030b07fb7eb8f7e75aa468810b14e2bd977}
+- {block: 
+    block_0x01885f5b73778ae8fafaf03332ac1d1bf5e91357986426e41f738e3a96fcc118}
+- {block: 
+    block_0x04ae3f97535858170fa77ead2c3d23ecd05d7b88ab41a03b494ed7704acd04d8}
+- {block: 
+    block_0x65b1ce7a58ad64cdf2bcd97600f73c910d16ce24225c8e34be705059a8bb0443}
+- {block: 
+    block_0xb9872f56a3d0602981e9e5f1505f8a28de8120578b37923ed45523f124463b4b}
+- {block: 
+    block_0x9bb6e29b4ecf179984f56cf8bcbe215eee2a36f55f0a0e648f78da2f8362a56b}
+- {block: 
+    block_0xad9628f4c23d050a7baa5508a319ce1255807c02d3d39f5ef8223ba93c9ee6c6}
+- {block: 
+    block_0x670897d2a833636f5ec08c30262c7b51185259c560d3c956e1b9b13b5517dd42}
+- {block: 
+    block_0xb6301c28e9d420b52defb29a16e2d7d26dc9418bddd4d025b61bce50366f6d13}
+- {block: 
+    block_0x0c85447845cce8d6530675579d317e885465a63c8cba2c52bb3a0866f17b6438}
+- {block: 
+    block_0x1d092df1f242a5c7af84495a9676380be4a63734601bab57c6ffbe676ae8b919}
+- {block: 
+    block_0x67fb18b4316a0d2d383934b6b9917b47a023694aa8db68be8553f071174816e3}
+- {block: 
+    block_0x11bb8199a9c667cd79d4833d8c291dd0ad85d3a89578800a844892d7f1db14a7}
+- {block: 
+    block_0xbff1a33321a676449b3339e0ae0eb936982fe91783656e3b98c6061a41e2dc12}
+- {block: 
+    block_0x49a683847b0bc78b70c39624c7917c0e5ff2d4741641ecdb906472eb8a105c15}
+messages:
+- {current_time_ms: 95500, message: 
+    inclusion_list_0xe627074e2c383aa663be7ee960de66a122cd656f08263fa649dabd4e86d49d08,
+  expected: valid}

@@ -109,6 +109,26 @@ def builderMayExit (store : Store preset fork) (gloas : .glamsterdam ≤ fork)
   return (envelope.executionRequests.builderExits gloas).data.toList.any fun request =>
     request.pubkey == builder.pubkey && request.sourceAddress == builder.executionAddress
 
+/-- From Heze: whether the bits of a bid cover the timely inclusion lists that the node holds.
+
+The lists are those of the slot before the bid, for the dependent root on the chain of its parent.
+
+The committee of that slot comes from the state of the parent, advanced to the slot of the bid.
+
+A bid at slot 0 has no slot before it, and that is an error.
+
+Before Heze a bid has no such bits, and the check accepts. -/
+def bidInclusionListOutcome (store : Store preset fork) (state : BeaconState preset fork)
+    (bid : ExecutionPayloadBid preset fork) : Except ForkChoiceError ValidationResult :=
+  if heze : .hegota ≤ fork then do
+    let previous ← (subChecked bid.slot 1).mapError .arith
+    let committee ← (getInclusionListCommittee state previous).mapError .accessor
+    let dependentRoot ←
+      store.getShufflingDependentRoot bid.parentBlockRoot (computeEpochAtSlot preset previous)
+    return ignoreUnless ((store.inclusionLists heze).isInclusive committee previous dependentRoot
+      (bid.inclusionListBits heze) true) "bid's inclusion list bits is not inclusive"
+  else return .accept
+
 /-! ## The topic -/
 
 /-- From Gloas: the checks of a signed bid on its topic, at a time in ms.
@@ -136,6 +156,8 @@ The bid must build on the branch of the head, with the RANDAO mix of the parent 
 That state is advanced to the slot of the bid, and the builder is read there.
 
 It must be an active payload builder, able to pay the value, and not exiting by the parent payload.
+
+From Heze its inclusion list bits must cover the timely lists that the node holds.
 
 Last, the builder must have signed the bid. -/
 def validateExecutionPayloadBid (config : Config) (checks : SignatureChecks) (seen : Seen)
@@ -200,6 +222,7 @@ def validateExecutionPayloadBid (config : Config) (checks : SignatureChecks) (se
   (ignoreUnless covered "builder cannot cover bid value").andThenM fun _ => do
   let exiting ← builderMayExit store gloas state bid builder
   (ignoreUnless (!exiting) "builder may exit").andThenM fun _ => do
+  (← bidInclusionListOutcome store state bid).andThenM fun _ => do
   let valid ←
     (verifyExecutionPayloadBidSignature config checks state gloas signed).mapError .transition
   return rejectUnless valid "invalid bid signature"

@@ -1,0 +1,8 @@
+topic: inclusion_list
+blocks:
+- {block: 
+    block_0xda6ee95f7984394ded4f5a66c0233a5cbb0d7bb429e1a00d00c24fd269f09199}
+messages:
+- {current_time_ms: 100, message: 
+    inclusion_list_0xb9f6bc464d1edf7d4c27354f49b580e5a00ba2f4f093f32a714556027eb86aee,
+  expected: valid}

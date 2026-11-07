@@ -1,0 +1,10 @@
+topic: payload_attestation_message
+blocks:
+- {block: 
+    block_0xda6ee95f7984394ded4f5a66c0233a5cbb0d7bb429e1a00d00c24fd269f09199}
+- {block: 
+    block_0x97a28e666ce14f87a6e152301246f95327bf1f45441b20c24f3d3e1806bb504b}
+messages:
+- {current_time_ms: 6100, message: 
+    payload_attestation_message_0xb5a767c54ed975c2c1357cde823f515def375e0c759f79a88792257fd4aeebb0,
+  expected: valid}

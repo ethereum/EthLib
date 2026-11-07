@@ -1,0 +1,24 @@
+topic: inclusion_list
+blocks:
+- {block: 
+    block_0xda6ee95f7984394ded4f5a66c0233a5cbb0d7bb429e1a00d00c24fd269f09199}
+- {block: 
+    block_0x97a28e666ce14f87a6e152301246f95327bf1f45441b20c24f3d3e1806bb504b}
+- {block: 
+    block_0xe288167ad549298928880fbcd13c3030b07fb7eb8f7e75aa468810b14e2bd977}
+- {block: 
+    block_0x01885f5b73778ae8fafaf03332ac1d1bf5e91357986426e41f738e3a96fcc118}
+- {block: 
+    block_0x04ae3f97535858170fa77ead2c3d23ecd05d7b88ab41a03b494ed7704acd04d8}
+- {block: 
+    block_0x65b1ce7a58ad64cdf2bcd97600f73c910d16ce24225c8e34be705059a8bb0443}
+- {block: 
+    block_0xb9872f56a3d0602981e9e5f1505f8a28de8120578b37923ed45523f124463b4b}
+- {block: 
+    block_0x9bb6e29b4ecf179984f56cf8bcbe215eee2a36f55f0a0e648f78da2f8362a56b}
+- {block: 
+    block_0xfa0e59b696d1d0068a1e0d3a41e44bfd04d119c1fa8dad4d2c33ae452bae9442}
+messages:
+- {current_time_ms: 192100, message: 
+    inclusion_list_0x5e0ae3e726ce1bc64f0a202a90d58f1eb58cf763c2fb41891b8273baff670c9d,
+  expected: valid}

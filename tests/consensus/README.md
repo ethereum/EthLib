@@ -203,6 +203,10 @@ Those checks read the bid of a block, its parent payload, and the payload that a
 The anchor block of a case may come with the envelope of its payload too.
 At Gloas it keeps one valid case of each of the six topics that Gloas leaves unchanged.
 It keeps every minimal Gloas case of the column sidecar topic too.
+At Heze it keeps every minimal case of the inclusion list topic.
+It keeps the two Heze bid cases that read inclusion lists, too.
+It also keeps one valid Heze case of each other topic that runs at Heze.
+A valid inclusion list joins the inclusion lists of the store as timely, for the bids after it.
 `bindings/python/tests/consensus/test_gossip_validation.py` validates each message in Lean and compares the outcome and the reason with the case.
 
 The directory `genesis/` holds every genesis case of `minimal.tar.gz` in the same way.
