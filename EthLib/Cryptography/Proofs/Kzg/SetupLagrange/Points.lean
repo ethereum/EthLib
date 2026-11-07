@@ -15,8 +15,8 @@ Here the coordinates are naturals below `p`, with the field operations of the to
 
 So the check computes the same values as `Fp`, without reducing its representation.
 
-- A string of 96 hexadecimal digits encodes `(x, y)` if `x` is its value, `y^2 = x^3 + 4`, and
-  the sign flag is the sign of `y`.
+- A string of 96 hexadecimal digits encodes `(x, y)` under three conditions.
+  The value is `x`, `y^2 = x^3 + 4`, and the sign flag is the sign of `y`.
   Decompression of the string then gives `(x, y)`, since only one root of `x^3 + 4` has that sign.
 - A pair `(x, y)` below `p` with `y^2 = x^3 + 4` is a valid point with `z = 1`.
 - A point `(X, Y, Z)` with `Z ≠ 0`, `X = x Z^2` and `Y = y Z^3` is the point `(x, y, 1)`.

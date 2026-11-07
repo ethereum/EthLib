@@ -15,8 +15,8 @@ This file states two lemmas of §3.1 there as games, and proves them.
 
 - Lemma 3, position-binding: an adversary opens one cell index to two cells.
   Then a reduction wins bilinear strong Diffie–Hellman (BSDH) at least as often.
-- Lemma 4, code-binding: from an adversary that opens cells that no blob explains, two reductions
-  win BSDH and adaptive rational strong Diffie–Hellman (ARSDH).
+- Lemma 4, code-binding: an adversary opens cells that no blob explains.
+  Then two reductions win BSDH and adaptive rational strong Diffie–Hellman (ARSDH).
   The sum of their probabilities bounds the probability of the adversary.
 
 Lemma 3 is Lemma 2 of §3.1 of Wagner and Zapico, ePrint 2024/1362.

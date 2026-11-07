@@ -46,8 +46,9 @@ theorem nodal_sdiff_ne_zero {T : Finset κ} {part : κ → Finset ι} {v : ι �
   have := hv (Finset.mem_biUnion.mpr ⟨j, hj, hi⟩) hi'S heq
   exact (Finset.mem_sdiff.mp hi').2 (this ▸ hi)
 
-/-- Claim 1 of Lemma 2: the interpolation on a union is a weighted sum of the interpolations
-on its parts. -/
+/-- Claim 1 of Lemma 2.
+
+The interpolation on a union is a weighted sum of the interpolations on its parts. -/
 theorem interpolate_biUnion {T : Finset κ} {part : κ → Finset ι}
     (hdisj : (T : Set κ).PairwiseDisjoint part) {v : ι → F}
     (hv : Set.InjOn v (T.biUnion part)) {δ : κ → F}
@@ -117,11 +118,13 @@ Let `S` be the disjoint union of nonempty parts `S_j`, with distinct nodes `v_i`
 
 Let the vanishing polynomial of `S \ S_j` take one value `δ_j` at every node of `S_j`.
 
-Let each part satisfy `c - I_j(τ) = φ_j V_j(τ)`, for the interpolation `I_j` of the values `r` on
-`S_j` and the vanishing polynomial `V_j` of `S_j`.
+Let `I_j` interpolate the values `r` on `S_j`, and let `V_j` be the vanishing polynomial of `S_j`.
 
-Then `c - I(τ) = φ V(τ)` for the interpolation `I` and vanishing polynomial `V` of `S`, with
-`φ = sum_j φ_j / δ_j`. -/
+Let each part satisfy `c - I_j(τ) = φ_j V_j(τ)`.
+
+Let `I` be the interpolation and `V` the vanishing polynomial of `S`.
+
+Then `c - I(τ) = φ V(τ)`, with `φ = sum_j φ_j / δ_j`. -/
 theorem multiproof_batching {T : Finset κ} {part : κ → Finset ι}
     (hdisj : (T : Set κ).PairwiseDisjoint part) {v : ι → F}
     (hv : Set.InjOn v (T.biUnion part)) {δ : κ → F}

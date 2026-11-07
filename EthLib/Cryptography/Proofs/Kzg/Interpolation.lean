@@ -172,8 +172,8 @@ private theorem sum_delta {R : Type*} [AddCommMonoid R] (is : List Nat) (k : Nat
       simp [hnot]
     · simp [hik, Ne.symm hik]
 
-/-- Successful coefficient interpolation agrees with every supplied sample
-when the nodes are pairwise distinct.
+/-- For pairwise distinct nodes, successful coefficient interpolation matches every supplied sample.
+
 Size-limit failures are excluded by the success hypothesis, not silently ignored. -/
 theorem interpolatePolynomialcoeff_eval_at_of_distinct
     {xs ys out : Array Fr} (hsz : xs.size = ys.size)
@@ -355,9 +355,11 @@ private theorem outer_range_ok (xs ys : Array Fr)
       · simp [hk0]; omega
       · simp [hk0]
 
-/-- Any successful `interpolatePolynomialcoeff xs ys = .ok out` satisfies
-`xs.size = ys.size`, `xs.size < FIELD_ELEMENTS_PER_EXT_BLOB`, and
-`out.size = max xs.size 1`. -/
+/-- Take any successful `interpolatePolynomialcoeff xs ys = .ok out`.
+
+It satisfies `xs.size = ys.size` and `xs.size < FIELD_ELEMENTS_PER_EXT_BLOB`.
+
+It also satisfies `out.size = max xs.size 1`. -/
 theorem size_interpolatePolynomialcoeff {xs ys out : Array Fr}
     (h : interpolatePolynomialcoeff xs ys = .ok out) :
     xs.size = ys.size ∧ xs.size < Constants.FIELD_ELEMENTS_PER_EXT_BLOB ∧
@@ -375,9 +377,12 @@ theorem size_interpolatePolynomialcoeff {xs ys out : Array Fr}
     · rw [hout_sz]
       split <;> omega
 
-/-- `interpolatePolynomialcoeff xs ys` succeeds whenever `xs.size = ys.size` and
-`xs.size < FIELD_ELEMENTS_PER_EXT_BLOB`, returning a coefficient array of size
-`max xs.size 1`. -/
+/-- `interpolatePolynomialcoeff xs ys` succeeds whenever two conditions hold.
+
+- `xs.size = ys.size`.
+- `xs.size < FIELD_ELEMENTS_PER_EXT_BLOB`.
+
+It then returns a coefficient array of size `max xs.size 1`. -/
 theorem interpolatePolynomialcoeff_ok_of_lt {xs ys : Array Fr}
     (hsz : xs.size = ys.size)
     (hbound : xs.size < Constants.FIELD_ELEMENTS_PER_EXT_BLOB) :
@@ -390,8 +395,9 @@ theorem interpolatePolynomialcoeff_ok_of_lt {xs ys : Array Fr}
   · rw [hout_sz]
     split <;> omega
 
-/-- `interpolatePolynomialcoeff xs ys` succeeds iff `xs.size = ys.size` and
-`xs.size < FIELD_ELEMENTS_PER_EXT_BLOB`. -/
+/-- `interpolatePolynomialcoeff xs ys` succeeds iff two conditions hold.
+
+They are `xs.size = ys.size` and `xs.size < FIELD_ELEMENTS_PER_EXT_BLOB`. -/
 theorem interpolatePolynomialcoeff_ok_iff {xs ys : Array Fr} :
     (∃ out, interpolatePolynomialcoeff xs ys = .ok out) ↔
       xs.size = ys.size ∧ xs.size < Constants.FIELD_ELEMENTS_PER_EXT_BLOB :=
@@ -402,10 +408,13 @@ theorem interpolatePolynomialcoeff_ok_iff {xs ys : Array Fr} :
     let ⟨out, hout, _⟩ := interpolatePolynomialcoeff_ok_of_lt hsz hbd
     ⟨out, hout⟩⟩
 
-/-- Unconditional specification of `interpolatePolynomialcoeff`: for equal-sized
-arrays below `FIELD_ELEMENTS_PER_EXT_BLOB` with pairwise distinct nodes `xs`,
-interpolation succeeds with size `max xs.size 1` and evaluates to `ys[k]!` at
-every node `xs[k]!`. -/
+/-- Unconditional specification of `interpolatePolynomialcoeff`.
+
+Take equal-sized arrays below `FIELD_ELEMENTS_PER_EXT_BLOB`, with pairwise distinct nodes `xs`.
+
+Interpolation succeeds with size `max xs.size 1`.
+
+It evaluates to `ys[k]!` at every node `xs[k]!`. -/
 theorem interpolatePolynomialcoeff_spec_of_distinct {xs ys : Array Fr}
     (hsz : xs.size = ys.size)
     (hbound : xs.size < Constants.FIELD_ELEMENTS_PER_EXT_BLOB)

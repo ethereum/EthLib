@@ -16,8 +16,11 @@ So reversing twice gives back the index, and the permutation is an involution.
 
 namespace EthLib.Cryptography.Kzg.BitReversal
 
-/-- Bit `i` of `reverseBitsAux x r bits`: below `bits` it is the mirrored
-bit of `x`; at and above `bits` it comes from the accumulator `r`. -/
+/-- Bit `i` of `reverseBitsAux x r bits`.
+
+Below `bits` it is the mirrored bit of `x`.
+
+At and above `bits` it comes from the accumulator `r`. -/
 theorem testBit_reverseBitsAux (bits x r i : Nat) :
     (reverseBitsAux x r bits).testBit i =
       if i < bits then x.testBit (bits - 1 - i) else r.testBit (i - bits) := by
@@ -41,8 +44,7 @@ theorem testBit_reverseBitsAux (bits x r i : Nat) :
         Nat.testBit_lt_two_pow hand]
       simp [Nat.le_add_left]
 
-/-- Bit `i` of `reverseBits n (2 ^ k)` is bit `k - 1 - i` of `n`
-(and `false` at or above `k`). -/
+/-- Bit `i` of `reverseBits n (2 ^ k)` is bit `k - 1 - i` of `n` (and `false` at or above `k`). -/
 theorem testBit_reverseBits (n k i : Nat) :
     (reverseBits n (2 ^ k)).testBit i =
       if i < k then n.testBit (k - 1 - i) else false := by
@@ -58,8 +60,7 @@ theorem reverseBits_lt_two_pow (n k : Nat) :
     rw [testBit_reverseBits, ite_eq_right (by omega)] at hbit
     exact absurd hbit Bool.false_ne_true
 
-/-- `reverseBits _ order` is an involution on `[0, order)` for
-power-of-two `order`. -/
+/-- `reverseBits _ order` is an involution on `[0, order)` for power-of-two `order`. -/
 theorem reverseBits_reverseBits {n k : Nat} (h : n < 2 ^ k) :
     reverseBits (reverseBits n (2 ^ k)) (2 ^ k) = n := by
   apply Nat.eq_of_testBit_eq
@@ -78,8 +79,7 @@ theorem size_bitReversalPermutation {α : Type _} [Inhabited α]
     (bitReversalPermutation seq).size = seq.size := by
   simp [bitReversalPermutation]
 
-/-- Element `i` of `bitReversalPermutation seq` is element
-`reverseBits i seq.size` of `seq`. -/
+/-- Element `i` of `bitReversalPermutation seq` is element `reverseBits i seq.size` of `seq`. -/
 theorem getElem_bitReversalPermutation {α : Type _} [Inhabited α]
     (seq : Array α) (i : Nat) (h : i < (bitReversalPermutation seq).size) :
     (bitReversalPermutation seq)[i] = seq[reverseBits i seq.size]! := by
@@ -87,8 +87,9 @@ theorem getElem_bitReversalPermutation {α : Type _} [Inhabited α]
   rw [getElem!_pos seq _ (reverseBits_lt i (by omega))]
   simp [bitReversalPermutation]
 
-/-- `bitReversalPermutation` is an involution on arrays whose size is a
-power of two, as claimed in its docstring. -/
+/-- `bitReversalPermutation` is an involution on arrays whose size is a power of two.
+
+This is the claim of its docstring. -/
 theorem bitReversalPermutation_bitReversalPermutation {α : Type _}
     [Inhabited α] (seq : Array α) {k : Nat} (hsize : seq.size = 2 ^ k) :
     bitReversalPermutation (bitReversalPermutation seq) = seq := by

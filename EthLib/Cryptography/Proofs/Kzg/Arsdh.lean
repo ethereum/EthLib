@@ -96,8 +96,9 @@ def IsArsdhSolution (d : Nat) (τ : Fr) (sol : Finset Fr × G1 × G1) : Prop :=
   sol.1.card = d + 1 ∧ ∃ a b, G1.Represents sol.2.1 a ∧ G1.Represents sol.2.2 b ∧ a ≠ 0 ∧
     a = b * vanishingAt sol.1 τ
 
-/-- For points that represent `a` and `b`, a solution is a set of `d + 1` scalars with
-`a = b V_S(τ)` and `a ≠ 0`. -/
+/-- Take points that represent `a` and `b`.
+
+A solution is then a set of `d + 1` scalars with `a = b V_S(τ)` and `a ≠ 0`. -/
 theorem isArsdhSolution_iff {d : Nat} {τ : Fr} {S : Finset Fr} {g φ : G1} {a b : Fr}
     (hg : G1.Represents g a) (hφ : G1.Represents φ b) :
     IsArsdhSolution d τ (S, g, φ) ↔ S.card = d + 1 ∧ a ≠ 0 ∧ a = b * vanishingAt S τ := by

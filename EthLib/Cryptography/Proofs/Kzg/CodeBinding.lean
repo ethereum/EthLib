@@ -41,8 +41,9 @@ The bound of Lemma 4 on the advantages is proved for games in another file.
 
 The running times of the reductions are not formalized.
 
-The first search uses the sign of the extended KZG paper; `isBsdhSolution_iff_sub` relates it to
-the sign of ePrint 2025/1683.
+The first search uses the sign of the extended KZG paper.
+
+`isBsdhSolution_iff_sub` relates it to the sign of ePrint 2025/1683.
 -/
 
 @[expose] public section
@@ -122,8 +123,9 @@ theorem natDegree_cellsInterpolant_lt {J : Finset Nat} (hJ : ∀ j ∈ J, j < CE
     rw [cellsInterpolant, ← Nat.cast_lt (α := WithBot Nat), ← degree_eq_natDegree h0]
     exact h.trans_le (by exact_mod_cast hle)
 
-/-- The vanishing polynomial of the points of a set of cells, at `τ`, is the product over the
-cells of `τ^64 - h^64`. -/
+/-- The vanishing polynomial of the points of a set of cells, at `τ`.
+
+It is the product over the cells of `τ^64 - h^64`. -/
 theorem vanishingAt_cells {J : Finset Nat} (hJ : ∀ j ∈ J, j < CELLS_PER_EXT_BLOB) (τ : Fr) :
     vanishingAt ((J.biUnion cellNodes).image domainPoint) τ =
       ∏ j ∈ J, (τ ^ FIELD_ELEMENTS_PER_CELL - cellShift j ^ FIELD_ELEMENTS_PER_CELL) := by
@@ -152,8 +154,11 @@ noncomputable def honestProof (s : TrustedSetup) (J : Finset Nat) (ev : Nat → 
 
 /-- The candidate of the second reduction.
 
-It is the set of points of the cells of `J`, the commitment minus the commitment to their
-interpolation, and the sum of their proofs over their weights. -/
+It has three parts.
+
+- The set of points of the cells of `J`.
+- The commitment minus the commitment to their interpolation.
+- The sum of their proofs over their weights. -/
 noncomputable def arsdhCandidate (s : TrustedSetup) (J : Finset Nat) (ev : Nat → CosetEvals)
     (C : G1) (P : Nat → G1) : Finset Fr × G1 × G1 :=
   ((J.biUnion cellNodes).image domainPoint,
@@ -211,8 +216,11 @@ Let the commitment `C` represent `c`, and the proof `P j` of cell `j` represent 
 
 Let every cell of `J` and the cell `jx` satisfy the scalar equation of a valid cell for `c`.
 
-The values of a cell `j` are read as `(ev j)[m]!`, so a cell of `J` with fewer than 64 values is
-read with zeros; only the cell `jx` must have 64 values.
+The values of a cell `j` are read as `(ev j)[m]!`.
+
+So a cell of `J` with fewer than 64 values is read with zeros.
+
+Only the cell `jx` must have 64 values.
 
 Then one of three cases holds.
 

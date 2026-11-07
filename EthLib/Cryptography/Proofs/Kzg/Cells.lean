@@ -40,8 +40,9 @@ theorem cosetForCell_cellIndexOutOfBounds {cellIndex : CellIndex}
     cosetForCell cellIndex = .error .cellIndexOutOfBounds := by
   simp [cosetForCell, h, throw, throwThe, MonadExceptOf.throw]
 
-/-- `cosetForCell` succeeds for every `cellIndex < CELLS_PER_EXT_BLOB`,
-returning a coset of size `FIELD_ELEMENTS_PER_CELL`. -/
+/-- `cosetForCell` succeeds for every `cellIndex < CELLS_PER_EXT_BLOB`.
+
+It returns a coset of size `FIELD_ELEMENTS_PER_CELL`. -/
 theorem cosetForCell_ok_of_lt {cellIndex : CellIndex}
     (h : cellIndex < CELLS_PER_EXT_BLOB) :
     ∃ c, cosetForCell cellIndex = .ok c ∧
@@ -101,8 +102,7 @@ theorem val_computeVerifyCellKzgProofBatchChallenge_lt
 
 /-! ## `verifyCellKzgProofBatchImpl` validation -/
 
-/-- Rejects a `cellIndices` array whose length does not match
-`commitmentIndices`. -/
+/-- Rejects a `cellIndices` array whose length does not match `commitmentIndices`. -/
 theorem verifyCellKzgProofBatchImpl_cellIndices_mismatch (setup : TrustedSetup)
     {commitments : Array KZGCommitment}
     {commitmentIndices : Array CommitmentIndex} {cellIndices : Array CellIndex}
@@ -114,8 +114,7 @@ theorem verifyCellKzgProofBatchImpl_cellIndices_mismatch (setup : TrustedSetup)
           cellIndices.size) := by
   simp [verifyCellKzgProofBatchImpl, h, throw_bind]
 
-/-- Rejects a `cosetsEvals` array whose length does not match
-`commitmentIndices`. -/
+/-- Rejects a `cosetsEvals` array whose length does not match `commitmentIndices`. -/
 theorem verifyCellKzgProofBatchImpl_cosetsEvals_mismatch (setup : TrustedSetup)
     {commitments : Array KZGCommitment}
     {commitmentIndices : Array CommitmentIndex} {cellIndices : Array CellIndex}
@@ -128,8 +127,7 @@ theorem verifyCellKzgProofBatchImpl_cosetsEvals_mismatch (setup : TrustedSetup)
           cosetsEvals.size) := by
   simp [verifyCellKzgProofBatchImpl, hcell, h, throw_bind]
 
-/-- Rejects a `proofs` array whose length does not match
-`commitmentIndices`. -/
+/-- Rejects a `proofs` array whose length does not match `commitmentIndices`. -/
 theorem verifyCellKzgProofBatchImpl_proofs_mismatch (setup : TrustedSetup)
     {commitments : Array KZGCommitment}
     {commitmentIndices : Array CommitmentIndex} {cellIndices : Array CellIndex}
@@ -229,8 +227,7 @@ theorem computeVerifyCellKzgProofBatchChallenge_commitmentIndex_oob (setup : Tru
 
 /-! ## `verifyCellKzgProofBatch` validation -/
 
-/-- Rejects a `cells` array whose length does not match
-`commitmentsBytes`. -/
+/-- Rejects a `cells` array whose length does not match `commitmentsBytes`. -/
 theorem verifyCellKzgProofBatch_cells_mismatch (setup : TrustedSetup)
     {commitmentsBytes : Array Bytes48} {cellIndices : Array CellIndex}
     {cells : Array Cell} {proofsBytes : Array Bytes48}
@@ -240,8 +237,7 @@ theorem verifyCellKzgProofBatch_cells_mismatch (setup : TrustedSetup)
           cells.size) := by
   simp [verifyCellKzgProofBatch, h, throw_bind]
 
-/-- Rejects a `proofsBytes` array whose length does not match
-`commitmentsBytes`. -/
+/-- Rejects a `proofsBytes` array whose length does not match `commitmentsBytes`. -/
 theorem verifyCellKzgProofBatch_proofsBytes_mismatch (setup : TrustedSetup)
     {commitmentsBytes : Array Bytes48} {cellIndices : Array CellIndex}
     {cells : Array Cell} {proofsBytes : Array Bytes48}
@@ -252,8 +248,7 @@ theorem verifyCellKzgProofBatch_proofsBytes_mismatch (setup : TrustedSetup)
           proofsBytes.size) := by
   simp [verifyCellKzgProofBatch, hcells, h, throw_bind]
 
-/-- Rejects a `cellIndices` array whose length does not match
-`commitmentsBytes`. -/
+/-- Rejects a `cellIndices` array whose length does not match `commitmentsBytes`. -/
 theorem verifyCellKzgProofBatch_cellIndices_mismatch (setup : TrustedSetup)
     {commitmentsBytes : Array Bytes48} {cellIndices : Array CellIndex}
     {cells : Array Cell} {proofsBytes : Array Bytes48}

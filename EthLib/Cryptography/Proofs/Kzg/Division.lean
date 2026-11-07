@@ -96,8 +96,9 @@ private theorem eval_divisionSubtract (a b : PolynomialCoeff) (x quot : Fr)
       ih (by omega), Fr.powNat_add, evalCoeffPolyAux]
     exact subtract_step_identity _ _ _ _ _ _ _
 
-/-- The actual coefficient-update loop used by long division subtracts exactly
-`quot * X^shift * b(X)`. The fit condition ensures no `set!` is out of bounds. -/
+/-- The actual coefficient-update loop of long division subtracts exactly `quot * X^shift * b(X)`.
+
+The fit condition keeps every `set!` in bounds. -/
 theorem dividePolynomialcoeff_inner_eval (a b : PolynomialCoeff) (x quot : Fr)
     (shift : Nat) (hfit : shift + b.size ≤ a.size) :
     evalPolyAt ((Array.range b.size).foldl
@@ -128,8 +129,9 @@ private theorem cancel_leading_identity {R : Type*} [Field R] (c b : R)
     (hb : b ≠ 0) : c - b * (c * b⁻¹) = 0 := by
   rw [← mul_assoc, mul_comm b c, mul_assoc, mul_inv_cancel₀ hb, mul_one, sub_self]
 
-/-- A division subtraction with the selected quotient eliminates its leading
-coefficient; every index touched is in bounds. -/
+/-- A division subtraction with the selected quotient eliminates its leading coefficient.
+
+Every index touched is in bounds. -/
 theorem dividePolynomialcoeff_inner_leading_zero (a b : PolynomialCoeff)
     (shift : Nat) (hb : 0 < b.size) (hfit : shift + b.size ≤ a.size)
     (hlead : b[b.size - 1]! ≠ 0) :
@@ -215,9 +217,9 @@ private theorem outer_step_identity {R : Type*} [CommRing R]
 private theorem outer_zero_identity {R : Type*} [CommRing R] (a b p : R) :
     a + 0*b*p = a := by ring
 
-/-- The actual long-division state preserves the dividend evaluation. At an
-intermediate stage, the accumulated quotient still needs `steps-count`
-leading zero coefficients. -/
+/-- The actual long-division state preserves the dividend evaluation.
+
+Mid-way, the accumulated quotient still needs `steps-count` leading zero coefficients. -/
 theorem dividePolynomialcoeff_loop_invariant (a b : PolynomialCoeff) (x : Fr)
     (hb : 0 < b.size) (hab : b.size ≤ a.size) (count : Nat)
     (hc : count ≤ a.size + 1 - b.size) :
@@ -306,8 +308,10 @@ theorem dividePolynomialcoeff_eq_loop (a b : PolynomialCoeff)
 private theorem final_identity {R : Type*} [CommRing R] (r q b a : R)
     (h : r + q*b*1 = a) : a = q*b+r := by linear_combination -h
 
-/-- Successful long division satisfies the quotient/remainder evaluation
-identity, with the remainder equal to the actual final mutable dividend.
+/-- Successful long division satisfies the quotient/remainder evaluation identity.
+
+The remainder is the actual final mutable dividend.
+
 The degree bound for that remainder is a separate property. -/
 theorem dividePolynomialcoeff_eval_identity {a b q : PolynomialCoeff}
     (hb : 0 < b.size) (hab : b.size ≤ a.size)
@@ -339,8 +343,9 @@ private theorem divisionSubtract_leading_zero (a b : PolynomialCoeff)
   rw [← Array.foldl_toList, Array.toList_range] at h
   exact h
 
-/-- Each outer iteration clears its highest remaining coefficient, preserving
-all higher coefficients already cleared. -/
+/-- Each outer iteration clears its highest remaining coefficient.
+
+It preserves all higher coefficients already cleared. -/
 theorem dividePolynomialcoeff_loop_high_zero (a b : PolynomialCoeff)
     (hb : 0 < b.size) (hab : b.size ≤ a.size) (hlead : b[b.size-1]! ≠ 0)
     (count : Nat) (hc : count ≤ a.size+1-b.size) :
@@ -371,9 +376,11 @@ theorem dividePolynomialcoeff_loop_high_zero (a b : PolynomialCoeff)
       rw [ite_eq_right (by dsimp [shift]; omega)]
       exact ih (by omega) j hj (by omega)
 
-/-- The final mutable dividend has no coefficients at or above the divisor's
-leading index. This is the long-division remainder degree bound, stated
-without imposing a normalized array representation. -/
+/-- The final mutable dividend has no coefficients at or above the divisor's leading index.
+
+This is the long-division remainder degree bound.
+
+It is stated without imposing a normalized array representation. -/
 theorem dividePolynomialcoeff_remainder_degree_bound (a b : PolynomialCoeff)
     (hb : 0 < b.size) (hab : b.size ≤ a.size) (hlead : b[b.size-1]! ≠ 0)
     (j : Nat) (hj : b.size-1 ≤ j) :
@@ -388,10 +395,13 @@ theorem dividePolynomialcoeff_remainder_degree_bound (a b : PolynomialCoeff)
 private theorem empty_quotient_identity {R : Type*} [CommRing R] (a b : R) :
     a = 0*b+a := by ring
 
-/-- For a nonempty divisor with nonzero leading coefficient, a successful
-quotient has a remainder of strictly smaller coefficient degree and satisfies
-the evaluation identity at every field point. The witness is the final loop
-state (or the unchanged dividend when division has no iterations). -/
+/-- Take a nonempty divisor with nonzero leading coefficient, and a successful quotient.
+
+It has a remainder of strictly smaller coefficient degree.
+
+It satisfies the evaluation identity at every field point.
+
+The witness is the final loop state, or the unchanged dividend when division has no iterations. -/
 theorem dividePolynomialcoeff_quotient_remainder_spec {a b q : PolynomialCoeff}
     (hb : 0 < b.size) (hlead : b[b.size-1]! ≠ 0)
     (h : dividePolynomialcoeff a b = .ok q) :
