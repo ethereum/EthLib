@@ -21,6 +21,8 @@ The field names at Fulu and at Gloas are those of the specification, in their or
 At Heze four fields leave the state, and each field that stays keeps its place in the tree.
 
 The vectors whose length comes from the preset need that length to be positive.
+
+Each such length is positive in the mainnet and the minimal presets.
 -/
 
 @[expose] public section
@@ -154,6 +156,40 @@ theorem BeaconState.registryWithinLimit_of_lt (before : fork < .glamsterdam)
   state.validators.bound before
 
 instance : NeZero JUSTIFICATION_BITS_LENGTH.toNat := ⟨by decide⟩
+
+-- The lengths that the state takes from the preset are positive in the mainnet preset.
+
+instance : NeZero Preset.mainnet.BYTES_PER_LOGS_BLOOM.toNat := ⟨by decide⟩
+instance : NeZero Preset.mainnet.SYNC_COMMITTEE_SIZE.toNat := ⟨by decide⟩
+instance : NeZero Preset.mainnet.SLOTS_PER_HISTORICAL_ROOT.toNat := ⟨by decide⟩
+instance : NeZero Preset.mainnet.EPOCHS_PER_HISTORICAL_VECTOR.toNat := ⟨by decide⟩
+instance : NeZero Preset.mainnet.EPOCHS_PER_SLASHINGS_VECTOR.toNat := ⟨by decide⟩
+instance : NeZero
+    ((Preset.mainnet.MIN_SEED_LOOKAHEAD.toNat + 1) * Preset.mainnet.SLOTS_PER_EPOCH.toNat) :=
+  ⟨by decide⟩
+instance : NeZero Preset.mainnet.PTC_SIZE.toNat := ⟨by decide⟩
+instance : NeZero (2 * Preset.mainnet.SLOTS_PER_EPOCH.toNat) := ⟨by decide⟩
+instance : NeZero
+    ((Preset.mainnet.MIN_SEED_LOOKAHEAD.toNat + 2) * Preset.mainnet.SLOTS_PER_EPOCH.toNat) :=
+  ⟨by decide⟩
+instance : NeZero Preset.mainnet.INCLUSION_LIST_COMMITTEE_SIZE.toNat := ⟨by decide⟩
+
+-- They are positive in the minimal preset too.
+
+instance : NeZero Preset.minimal.BYTES_PER_LOGS_BLOOM.toNat := ⟨by decide⟩
+instance : NeZero Preset.minimal.SYNC_COMMITTEE_SIZE.toNat := ⟨by decide⟩
+instance : NeZero Preset.minimal.SLOTS_PER_HISTORICAL_ROOT.toNat := ⟨by decide⟩
+instance : NeZero Preset.minimal.EPOCHS_PER_HISTORICAL_VECTOR.toNat := ⟨by decide⟩
+instance : NeZero Preset.minimal.EPOCHS_PER_SLASHINGS_VECTOR.toNat := ⟨by decide⟩
+instance : NeZero
+    ((Preset.minimal.MIN_SEED_LOOKAHEAD.toNat + 1) * Preset.minimal.SLOTS_PER_EPOCH.toNat) :=
+  ⟨by decide⟩
+instance : NeZero Preset.minimal.PTC_SIZE.toNat := ⟨by decide⟩
+instance : NeZero (2 * Preset.minimal.SLOTS_PER_EPOCH.toNat) := ⟨by decide⟩
+instance : NeZero
+    ((Preset.minimal.MIN_SEED_LOOKAHEAD.toNat + 2) * Preset.minimal.SLOTS_PER_EPOCH.toNat) :=
+  ⟨by decide⟩
+instance : NeZero Preset.minimal.INCLUSION_LIST_COMMITTEE_SIZE.toNat := ⟨by decide⟩
 
 variable [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
   [NeZero preset.SLOTS_PER_HISTORICAL_ROOT.toNat]

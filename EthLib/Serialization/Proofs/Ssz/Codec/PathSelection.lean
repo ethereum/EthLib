@@ -165,4 +165,14 @@ theorem PathSelects.reads {shape : Desc} {value : Value} {path : List PathStep} 
       (by simpa [← height, position] using chosen)]
     exact read
 
+/-- A selected node is the node at the index that the type gives its path. -/
+theorem PathSelects.nodeRoot_eq {shape : Desc} {value : Value} {path : List PathStep}
+    {node : Bytes} {index : Nat} (selected : PathSelects shape value path node)
+    (indexed : getGeneralizedIndex shape path = .ok index) :
+    nodeRoot shape value index = .ok node := by
+  obtain ⟨found, located, read⟩ := selected.reads
+  rw [indexed] at located
+  cases located
+  exact read
+
 end EthLib.Serialization.Ssz
