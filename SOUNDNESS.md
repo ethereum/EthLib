@@ -671,6 +671,11 @@ It states the size of the code, its bytes and the data of a PUSH from that numbe
 `Logic/Steps.lean` defines the tactic `evm_step`, which applies the rule of the opcode at the program counter and proves the facts about the code by evaluation.
 The tactic proves nothing on its own: each step it takes applies one of the rules above, and the kernel checks the result.
 `SlotOfCalldata` stores its code as one number and runs its opcodes of the stack and its jumps with the tactic.
+`Logic/Fault.lean` gives the postcondition `Faulted` of a frame that halts exceptionally: no output, the error, no gas with the one-counter meter, and the state and substate the frame had.
+The caller discards that state; no theorem here states it.
+`Logic.invalid` is the rule for a byte that is no opcode at the fork, such as `0xfe` at every fork.
+`Logic.jump_invalid` and `Logic.jumpi_invalid` are the rules for a jump to a position that is not a valid jump destination.
+`Assert.runFrame_zero` proves a contract that halts at `0xfe` when its first word of call data is zero.
 From Berlin, the rule for SLOAD takes as a hypothesis whether the slot is cold, and charges 2100 or 100 by EIP-2929.
 `Logic.sstore` is the rule for SSTORE from Berlin to before Glamsterdam, in a frame that may change the state and holds more than 2300 gas.
 It charges `sstoreCost` and adds `sstoreRefund` to the refund counter, from the original, current and new words and whether the slot is cold.

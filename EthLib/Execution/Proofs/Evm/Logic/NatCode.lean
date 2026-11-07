@@ -141,4 +141,11 @@ theorem valid_of_walk {n size d : Nat} (hw : walk n size size 0 d = true)
   exact isValidJumpDest_iff_boundaryFrom.mpr
     ⟨boundaryFrom_of_walk n size d ht _ _ hw, by rw [byteAt_ofNat, hb]; rfl⟩
 
+/-- A position whose byte is not JUMPDEST is not a valid jump destination. -/
+theorem not_valid_of_natByte {n size d : Nat} (hb : natByte n size d ≠ 0x5b) :
+    isValidJumpDest (validJumpDestinations (ofNat n size)) d = false := by
+  cases h : isValidJumpDest (validJumpDestinations (ofNat n size)) d with
+  | false => rfl
+  | true => exact absurd (by rw [← byteAt_ofNat]; exact byteAt_of_isValidJumpDest h) hb
+
 end EthLib.Execution.Evm.Logic.NatCode
