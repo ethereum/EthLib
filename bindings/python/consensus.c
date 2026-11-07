@@ -11,6 +11,13 @@ eth_engine_prepare_execution_payload(
   lean_object* safe, lean_object* finalized, lean_object* fee_recipient, lean_object* pow_chain);
 
 extern lean_object*
+eth_engine_prepare_execution_payload_gloas(
+  lean_object* name, lean_object* fork, lean_object* anchor_state, lean_object* anchor_block,
+  lean_object* steps, lean_object* config, lean_object* head_root, lean_object* state,
+  lean_object* safe, lean_object* finalized, lean_object* fee_recipient, uint64_t head_status,
+  uint64_t target_gas_limit, uint8_t verify);
+
+extern lean_object*
 eth_consensus_preset(
   lean_object* name
 );
@@ -2612,5 +2619,32 @@ py_engine_prepare_execution_payload(
     eth_engine_prepare_execution_payload(name, fork, mk_bytearray(state, state_len),
       mk_bytearray(config, config_len), mk_bytearray(safe, safe_len),
       mk_bytearray(finalized, finalized_len), mk_bytearray(fee, fee_len), pow_chain),
+    PROPOSER_ERROR);
+}
+
+PyObject*
+py_engine_prepare_execution_payload_gloas(
+  PyObject* self,
+  PyObject* args
+) {
+  if (PyTuple_Size(args) != 14) {
+    PyErr_SetString(PyExc_TypeError, "expected 14 arguments");
+    return NULL;
+  }
+  unsigned long long head_status = PyLong_AsUnsignedLongLong(PyTuple_GET_ITEM(args, 11));
+  if (PyErr_Occurred()) return NULL;
+  unsigned long long target_gas_limit = PyLong_AsUnsignedLongLong(PyTuple_GET_ITEM(args, 12));
+  if (PyErr_Occurred()) return NULL;
+  int verify = PyObject_IsTrue(PyTuple_GET_ITEM(args, 13));
+  if (verify < 0) return NULL;
+  PyObject* inputs = PyTuple_GetSlice(args, 0, 11);
+  if (!inputs) return NULL;
+  lean_object* a[11];
+  int read = strs_bytes_args(inputs, 2, 9, a);
+  Py_DECREF(inputs);
+  if (!read) return NULL;
+  return except_into_pybytes(
+    eth_engine_prepare_execution_payload_gloas(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7],
+      a[8], a[9], a[10], (uint64_t) head_status, (uint64_t) target_gas_limit, (uint8_t) verify),
     PROPOSER_ERROR);
 }

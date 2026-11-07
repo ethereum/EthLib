@@ -992,6 +992,13 @@ def bindings : List Binding := [
     "(name: str, fork: str, state: bytes, config: bytes, safe_block_hash: bytes, " ++
       "finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes]) " ++
       "-> bytes",
+    [`EthLib.Consensus.ProposerError], some "ProposerError"⟩,
+  ⟨"engine_prepare_execution_payload_gloas",
+    `EthLib.Engine.Exports.prepareExecutionPayloadGloasExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: bytes, " ++
+      "config: bytes, head_root: bytes, state: bytes, safe_block_hash: bytes, " ++
+      "finalized_block_hash: bytes, suggested_fee_recipient: bytes, head_status: int, " ++
+      "target_gas_limit: int, verify: bool) -> bytes",
     [`EthLib.Consensus.ProposerError], some "ProposerError"⟩
 ]
 

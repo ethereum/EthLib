@@ -1259,7 +1259,7 @@ The theorems that link the update to the checks of a block are the reason for th
 Its payload names the head of the update as its parent, and carries the mix, the timestamp and, from Capella, the withdrawals of the attributes.
 The execution part of the block then fails only on the number of blobs, the execution layer, a hash or an accessor, and never on the parent, the mix, the time or the withdrawals.
 It rests on `processExecutionPayload_eq_error_of_prepareExecutionPayload`, which assumes only that the checking state shares the slot, the genesis time, the RANDAO mixes and the latest payload header of the state of the proposer.
-It also rests on `getExpectedWithdrawals_latestBlockHeader`, which shows that before Gloas the expected withdrawals do not read the latest block header, and on `payloadInputs_processWithdrawals`.
+It also rests on `getExpectedWithdrawals_latestBlockHeader`, which shows that the expected withdrawals do not read the latest block header, and on `payloadInputs_processWithdrawals`.
 From Deneb, `parentBeaconBlockRoot_newPayloadRequest_of_prepareExecutionPayload` shows that the request to the execution layer names the parent root of the attributes.
 
 Before the merge, `validateMergeBlock_of_payloadHeadBlockHash_of_configured` and `validateMergeBlock_of_payloadHeadBlockHash_of_difficulty` show that the fork choice accepts a first payload on the head.
@@ -1269,6 +1269,27 @@ The search of the guide accepts a terminal block whose parent is the zero hash, 
 No theorem covers the payload that the execution layer builds, or the safe and finalized blocks, which come from the fork choice.
 
 The Python suite checks each case of the terminal block search, the configured terminal block hash, the withdrawals and the parent root against values worked out in the test from the guides.
+
+From Gloas, `prepareExecutionPayloadGloas` reads the fork choice store and a head node.
+The proposer builds on the full node of the head when the fork choice says so at the current slot.
+It then applies the payload that the store holds for the head to a copy of the state, and reads the withdrawals of that copy.
+Otherwise it keeps the state and the withdrawals that the state records.
+From Heze it also reads the transactions of the inclusion lists of the slot before, which the payload attributes of the Engine API here do not carry.
+`prepareExecutionPayloadGloas_eq_ok` states each field of the update.
+`payloadParentGloas_eq_ok` states the two cases of the parent.
+
+The theorems that link the update to a block assume that the bid of the block builds on the head of the update.
+From a full parent the block must carry the requests of the payload that the store holds, and the two hashes of the latest bid must differ.
+`slot_of_prepareExecutionPayloadGloas` shows that the state after the parent, header and withdrawal steps has the slot, the time and the mix of the attributes.
+`parentRoot_of_prepareExecutionPayloadGloas` shows that the block names the parent root of the attributes.
+`latestBlockHash_of_prepareExecutionPayloadGloas` also assumes that the latest block hash is the parent hash of the latest bid.
+It shows that the state after those steps has the head as its latest block hash.
+`payloadExpectedWithdrawals_of_prepareExecutionPayloadGloas` makes the same assumption.
+It shows that this state records the withdrawals of the attributes.
+It rests on `applyParentExecutionPayload_latestExecutionPayloadBid`, which shows that the payload of a parent keeps the latest bid.
+No theorem covers the envelope that carries the payload, or the inclusion lists, which come from the store.
+
+The Python suite builds the store of a fork choice case and checks the update on the full and the empty parent at Gloas and Heze.
 
 ### Slashing protection
 
@@ -1577,12 +1598,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 286 operations and 41 size constants.
-The Python extension calls 286 of the operations and 41 of the constants.
+Lean exports 287 operations and 41 size constants.
+The Python extension calls 287 of the operations and 41 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-9695 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (2616), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1209), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (524), `xmss.c` (134).
+9732 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (2650), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1211), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (525), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

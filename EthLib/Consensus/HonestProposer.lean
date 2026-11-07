@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.HonestValidator
 public import EthLib.Consensus.Transition.StateTransition
 public import EthLib.Cryptography.Bls.Signatures
 
@@ -75,6 +76,10 @@ inductive ProposerError where
   | repeatedSubcommittee (index : UInt64)
   /-- From Bellatrix: a block of proof of work names a parent that the chain does not hold. -/
   | unknownPowBlock (hash : Hash32)
+  /-- From Gloas: a step of the fork choice fails. -/
+  | forkChoice (error : ForkChoiceError)
+  /-- From Heze: the inclusion lists of the payload cannot be read. -/
+  | duty (error : ValidatorDutyError)
 
 /-- The code of an error at the C boundary, one for each constructor. -/
 def ProposerError.code : ProposerError → UInt32
@@ -92,6 +97,8 @@ def ProposerError.code : ProposerError → UInt32
   | .subcommitteeOutOfRange _ => 12
   | .repeatedSubcommittee _ => 13
   | .unknownPowBlock _ => 14
+  | .forkChoice _ => 15
+  | .duty _ => 16
 
 /-! ## The Eth1 vote -/
 

@@ -963,14 +963,31 @@ theorem getPendingPartialWithdrawals_loop_latestBlockHeader {state : BeaconState
       getPendingPartialWithdrawals_loop_latestBlockHeader rest]
     rfl
 
-/-- Before Gloas, the withdrawals that a state expects do not read its latest block header. -/
+/-- The sweep of builders does not read the latest block header. -/
+theorem getBuildersSweepWithdrawals_loop_latestBlockHeader {state : BeaconState preset fork}
+    {header : BeaconBlockHeader} {gloas : .glamsterdam ≤ fork} {prior : Array Withdrawal}
+    {epoch : Epoch} {count : Nat} {limit : UInt64} :
+    ∀ (visits : Nat) (withdrawals : Array Withdrawal) (next : WithdrawalIndex)
+      (index : BuilderIndex) (processed : Nat),
+    getBuildersSweepWithdrawals.loop { state with latestBlockHeader := header } gloas prior epoch
+        count limit visits withdrawals next index processed =
+      getBuildersSweepWithdrawals.loop state gloas prior epoch count limit visits withdrawals next
+        index processed
+  | 0, _, _, _, _ => rfl
+  | visits + 1, withdrawals, next, index, processed => by
+    simp only [getBuildersSweepWithdrawals.loop,
+      getBuildersSweepWithdrawals_loop_latestBlockHeader visits]
+    rfl
+
+/-- The withdrawals that a state expects do not read its latest block header. -/
 theorem getExpectedWithdrawals_latestBlockHeader {state : BeaconState preset fork}
-    {header : BeaconBlockHeader} {capella : .shapella ≤ fork} (before : fork < .glamsterdam) :
+    {header : BeaconBlockHeader} {capella : .shapella ≤ fork} :
     getExpectedWithdrawals { state with latestBlockHeader := header } capella =
       getExpectedWithdrawals state capella := by
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
-  simp only [getExpectedWithdrawals, notGloas, ↓reduceDIte, getPendingPartialWithdrawals,
-    getValidatorsSweepWithdrawals, getPendingPartialWithdrawals_loop_latestBlockHeader,
+  simp only [getExpectedWithdrawals, getBuilderWithdrawals, getBuildersSweepWithdrawals,
+    getPendingPartialWithdrawals, getValidatorsSweepWithdrawals,
+    getBuildersSweepWithdrawals_loop_latestBlockHeader,
+    getPendingPartialWithdrawals_loop_latestBlockHeader,
     getValidatorsSweepWithdrawals_loop_latestBlockHeader]
   rfl
 
