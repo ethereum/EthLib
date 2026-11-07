@@ -3,10 +3,10 @@ module
 public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Consensus.Proofs.Builders
+public import EthLib.Consensus.Proofs.HonestBuilder
 public import EthLib.Consensus.Proofs.Mutators
 public import EthLib.Consensus.Proofs.Transition.Block
-public import EthLib.Consensus.Proofs.Transition.ParentPayload
-public import EthLib.Consensus.Proofs.Transition.Withdrawals
+public import EthLib.Consensus.Proofs.Transition.PayloadInputs
 public import EthLib.Engine.PreparePayload
 
 /-!
@@ -33,6 +33,16 @@ A block whose payload follows the update passes the parent, mix, time and withdr
 It must pass the header step on the state of the proposer.
 
 Its execution part then fails only on the blob count, the execution layer, a hash, or an accessor.
+
+From Gloas, take a bid built on the state of the proposer, from a payload that follows the update.
+
+The bid passes the checks of its parent hash, its parent root and its mix, in the bid step.
+
+The block that carries the bid must carry the requests of the stored payload, from a full parent.
+
+The hashes of the latest bid must differ, and the latest block hash must be its parent hash.
+
+The state must also record the root of its latest block header as the root of the slot before.
 -/
 
 @[expose] public section
@@ -357,135 +367,6 @@ theorem validateMergeBlock_of_payloadHeadBlockHash_of_difficulty {state : Beacon
 
 /-! ## The payload, in the transition -/
 
-/-- Two states that agree on what the checks of a payload read of them.
-
-They have one slot, one genesis time, one buffer of RANDAO mixes and one latest payload header.
-
-They also have one latest block header.
-
-From Gloas they have one latest block hash and one latest bid. -/
-structure PayloadInputs (state after : BeaconState preset fork) : Prop where
-  slot : after.slot = state.slot
-  genesisTime : after.genesisTime = state.genesisTime
-  randaoMixes : after.randaoMixes = state.randaoMixes
-  latestExecutionPayloadHeader :
-    after.latestExecutionPayloadHeader = state.latestExecutionPayloadHeader
-  latestBlockHeader : after.latestBlockHeader = state.latestBlockHeader
-  latestBlockHash : after.latestBlockHash = state.latestBlockHash
-  latestExecutionPayloadBid : after.latestExecutionPayloadBid = state.latestExecutionPayloadBid
-
-theorem PayloadInputs.refl (state : BeaconState preset fork) : PayloadInputs state state :=
-  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-
-theorem PayloadInputs.trans {first second third : BeaconState preset fork}
-    (one : PayloadInputs first second) (two : PayloadInputs second third) :
-    PayloadInputs first third :=
-  ⟨two.slot.trans one.slot, two.genesisTime.trans one.genesisTime,
-    two.randaoMixes.trans one.randaoMixes,
-    two.latestExecutionPayloadHeader.trans one.latestExecutionPayloadHeader,
-    two.latestBlockHeader.trans one.latestBlockHeader,
-    two.latestBlockHash.trans one.latestBlockHash,
-    two.latestExecutionPayloadBid.trans one.latestExecutionPayloadBid⟩
-
-/-- A withdrawal changes a balance, and none of the inputs of a payload. -/
-theorem payloadInputs_applyWithdrawal {state after : BeaconState preset fork}
-    {withdrawal : Consensus.Withdrawal}
-    (computed : applyWithdrawal state withdrawal = .ok after) : PayloadInputs state after := by
-  unfold applyWithdrawal at computed
-  split at computed
-  · obtain ⟨_, _, set⟩ := bind_ok_iff.mp computed
-    obtain ⟨_, rfl⟩ := setBuilder_ok set
-    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  · obtain ⟨_, set⟩ := decreaseBalance_ok computed
-    obtain ⟨_, rfl⟩ := setBalance_ok set
-    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-
-/-- Applying the expected withdrawals changes none of the inputs of a payload. -/
-theorem payloadInputs_applyExpectedWithdrawals {state after : BeaconState preset fork}
-    {capella : .shapella ≤ fork} {expected : ExpectedWithdrawals}
-    (computed : applyExpectedWithdrawals state capella expected = .ok after) :
-    PayloadInputs state after := by
-  unfold applyExpectedWithdrawals at computed
-  simp only [bind_ok_iff] at computed
-  obtain ⟨applied, appliedOk, indexed, indexedOk, finished, sweptOk, last⟩ := computed
-  have one : PayloadInputs state applied := by
-    unfold applyWithdrawals at appliedOk
-    rw [← Array.foldlM_toList] at appliedOk
-    exact foldlM_ok_invariant (PayloadInputs state)
-      (fun _ _ _ before ok => before.trans (payloadInputs_applyWithdrawal ok))
-      (PayloadInputs.refl state) appliedOk
-  have two : PayloadInputs applied indexed := by
-    unfold updateNextWithdrawalIndex at indexedOk
-    split at indexedOk
-    · obtain ⟨_, _, built⟩ := bind_ok_iff.mp indexedOk
-      cases built
-      exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-    · cases indexedOk
-      exact PayloadInputs.refl _
-  have three : ∀ kept : BeaconState preset fork,
-      (if gloas : .glamsterdam ≤ fork then
-        updateNextWithdrawalBuilderIndex kept gloas expected.processedBuildersSweepCount
-      else pure kept) = .ok finished → PayloadInputs kept finished := by
-    intro kept ok
-    split at ok
-    · unfold updateNextWithdrawalBuilderIndex at ok
-      dsimp only at ok
-      split at ok
-      · cases ok
-        exact PayloadInputs.refl _
-      · obtain ⟨_, _, built⟩ := bind_ok_iff.mp ok
-        cases built
-        exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-    · cases ok
-      exact PayloadInputs.refl _
-  have queued : PayloadInputs indexed (if electra : .pectra ≤ fork then
-      updatePendingPartialWithdrawals (if gloas : .glamsterdam ≤ fork then
-        updateBuilderPendingWithdrawals
-          (updatePayloadExpectedWithdrawals indexed gloas expected.withdrawals) gloas
-          expected.processedBuilderWithdrawalsCount
-      else indexed) electra expected.processedPartialWithdrawalsCount
-    else if gloas : .glamsterdam ≤ fork then
-        updateBuilderPendingWithdrawals
-          (updatePayloadExpectedWithdrawals indexed gloas expected.withdrawals) gloas
-          expected.processedBuilderWithdrawalsCount
-      else indexed) := by
-    split <;> split <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  have four : PayloadInputs finished after := by
-    unfold updateNextWithdrawalValidatorIndex at last
-    obtain ⟨_, _, last⟩ := bind_ok_iff.mp last
-    dsimp only at last
-    split at last
-    · cases last
-    · cases last
-      exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  exact one.trans (two.trans (queued.trans ((three _ sweptOk).trans four)))
-
-/-- The withdrawal step changes none of the inputs of a payload. -/
-theorem payloadInputs_processWithdrawals {state after : BeaconState preset fork}
-    {capella : .shapella ≤ fork}
-    {payload : Until .glamsterdam fork (Consensus.ExecutionPayload preset fork)}
-    (computed : processWithdrawals state capella payload = .ok after) :
-    PayloadInputs state after := by
-  unfold processWithdrawals at computed
-  split at computed
-  · split at computed
-    · obtain ⟨_, _, applied⟩ := bind_ok_iff.mp computed
-      exact payloadInputs_applyExpectedWithdrawals (liftAccessor_ok.mp applied)
-    · cases computed
-      exact PayloadInputs.refl _
-  · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, _, _, applied⟩ := computed
-    exact payloadInputs_applyExpectedWithdrawals applied
-
-/-- The header step changes only the latest block header. -/
-theorem payloadInputs_processBlockHeader {state after : BeaconState preset fork}
-    {block : BeaconBlock preset fork} (computed : processBlockHeader state block = .ok after) :
-    after.slot = state.slot ∧ after.genesisTime = state.genesisTime ∧
-      after.randaoMixes = state.randaoMixes ∧
-      after.latestExecutionPayloadHeader = state.latestExecutionPayloadHeader := by
-  obtain ⟨_, _, rfl⟩ := processBlockHeader_eq computed
-  exact ⟨rfl, rfl, rfl, rfl⟩
-
 /-- A payload on the update of a proposer passes the checks of its parent, mix and time.
 
 The state that checks it must agree with the state of the proposer on what those checks read.
@@ -682,7 +563,12 @@ theorem processBlockExecution_eq_error_of_prepareExecutionPayload
       .error error) :
     error = .tooManyBlobCommitments ∨ error = .invalidExecutionPayload ∨
       (∃ fault, error = .ssz fault) ∨ ∃ fault, error = .accessor fault := by
-  obtain ⟨slot, genesisTime, randaoMixes, latest⟩ := payloadInputs_processBlockHeader headed
+  have headerInputs := payloadInputs_processBlockHeader headed
+  have slot : header.slot = state.slot := headerInputs.slot
+  have genesisTime : header.genesisTime = state.genesisTime := headerInputs.genesisTime
+  have randaoMixes : header.randaoMixes = state.randaoMixes := headerInputs.randaoMixes
+  have latest : header.latestExecutionPayloadHeader = state.latestExecutionPayloadHeader :=
+    headerInputs.latestExecutionPayloadHeader
   have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt bellatrix.2
   unfold processBlockExecution at failed
   simp only [notGloas, ↓reduceDIte] at failed
@@ -1037,6 +923,76 @@ theorem parentRoot_of_prepareExecutionPayloadGloas {safe finalized : Hash32}
   have same := (rooted deneb).symm.trans parentRoot
   simp only [Except.ok.injEq] at same
   exact same.symm
+
+/-- A bid built from a payload on the update of its proposer passes three checks of the bid step.
+
+The payload names the head of the update as its parent, and carries the mix of the attributes.
+
+The bid is built on the state of the proposer, and the block carries it.
+
+From a full parent the block carries the requests of the payload that the store holds.
+
+The hashes of the latest bid differ, and the latest block hash is the parent hash of that bid.
+
+The state records the root of its latest block header as the root of the slot before it.
+
+The checks read the state after the parent, header and withdrawal steps of the block.
+
+The bid builds on the latest block hash of that state, and on its root of the slot before.
+
+It also carries the RANDAO mix of its current epoch. -/
+theorem checkExecutionPayloadBid_of_prepareExecutionPayloadGloas {safe finalized : Hash32}
+    {feeRecipient : ExecutionAddress} {targetGasLimit : UInt64} {update : ForkchoiceState}
+    {attributes : PayloadAttributes fork}
+    {transactions : Since .hegota fork (List InclusionListTransaction)}
+    {payload : Consensus.ExecutionPayload preset fork} {requests : ExecutionRequests preset fork}
+    {commitments : BlobKZGCommitments preset fork} {slot : Slot} {recipient : ExecutionAddress}
+    {builderIndex : BuilderIndex} {value : Gwei}
+    {bits : Since .hegota fork (InclusionListBits preset)} {bid : ExecutionPayloadBid preset fork}
+    {block : BeaconBlock preset fork} {parented header after : BeaconState preset fork}
+    {capella : .shapella ≤ fork}
+    {withdrawalsPayload : Until .glamsterdam fork (Consensus.ExecutionPayload preset fork)}
+    (prepared : prepareExecutionPayloadGloas config checks store head state gloas safe finalized
+      feeRecipient targetGasLimit = .ok (update, attributes, transactions))
+    (distinct : (state.latestExecutionPayloadBid gloas).blockHash ≠
+      (state.latestExecutionPayloadBid gloas).parentBlockHash)
+    (linked : state.latestBlockHash gloas = (state.latestExecutionPayloadBid gloas).parentBlockHash)
+    (parentHash : payload.parentHash = update.headBlockHash)
+    (randao : payload.prevRandao = attributes.prevRandao)
+    (built : getExecutionPayloadBid state payload requests commitments slot recipient builderIndex
+      value bits = .ok bid)
+    (carried : (block.body.signedExecutionPayloadBid gloas).message = bid)
+    (recorded : ∀ root, Serialization.Ssz.SszType.hashTreeRoot state.latestBlockHeader = .ok root →
+      getBlockRootAtSlot state (state.slot - 1) = .ok root)
+    (parentRequests : update.headBlockHash = (state.latestExecutionPayloadBid gloas).blockHash →
+      ∀ envelope, (store.payloads gloas)[head.root]? = some envelope →
+        block.body.parentExecutionRequests gloas = envelope.executionRequests)
+    (parent : processParentExecutionPayload config checks state gloas block.body = .ok parented)
+    (headed : processBlockHeader parented block = .ok header)
+    (withdrawn : processWithdrawals header capella withdrawalsPayload = .ok after) :
+    bid.parentBlockHash = after.latestBlockHash gloas ∧
+      getBlockRootAtSlot after (after.slot - 1) = .ok bid.parentBlockRoot ∧
+      getRandaoMix after (getCurrentEpoch after) = .ok bid.prevRandao := by
+  obtain ⟨rooted, -, builtParent, -, builtRandao, -⟩ := getExecutionPayloadBid_eq_ok_iff.mp built
+  have onHead : (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash =
+      update.headBlockHash := by
+    rw [carried, builtParent, parentHash]
+  refine ⟨?_, ?_, ?_⟩
+  · rw [latestBlockHash_of_prepareExecutionPayloadGloas prepared distinct linked onHead
+      parentRequests parent headed withdrawn, builtParent, parentHash]
+  · -- The parent, header and withdrawal steps keep the slot and the block roots.
+    have parentKept := payloadInputs_processParentExecutionPayload parent
+    have headerKept := payloadInputs_processBlockHeader headed
+    have withdrawalsKept := payloadInputs_processWithdrawals withdrawn
+    have slotKept : after.slot = state.slot :=
+      withdrawalsKept.slot.trans (headerKept.slot.trans parentKept.slot)
+    have rootsKept : after.blockRoots = state.blockRoots :=
+      withdrawalsKept.blockRoots.trans (headerKept.blockRoots.trans parentKept.blockRoots)
+    simpa [getBlockRootAtSlot, slotKept, rootsKept] using recorded _ rooted
+  · obtain ⟨-, -, mixed⟩ := slot_of_prepareExecutionPayloadGloas prepared distinct onHead
+      parentRequests parent headed withdrawn
+    rw [builtRandao, randao]
+    exact mixed
 
 end Gloas
 

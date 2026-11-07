@@ -6,6 +6,8 @@ public import EthLib.Consensus.Transition.Payload
 /-!
 # Proofs: the bid of a block
 
+A bid passes its checks exactly when each check of the specification holds.
+
 After a valid bid, the state keeps the bid.
 
 A self-built bid has no value, and a bid with no value records no payment.
@@ -43,6 +45,35 @@ theorem latestExecutionPayloadBid_processExecutionPayloadBid
     after.latestExecutionPayloadBid gloas = signed.message := by
   obtain ⟨_, _, _, rfl⟩ := processExecutionPayloadBid_ok computed
   rfl
+
+/-- A bid passes its checks exactly when each of them holds.
+
+Its builder passes its checks, and it commits to at most the blobs of a block.
+
+It is for the slot of the state, after genesis.
+
+It builds on the latest block hash, and its block hash differs from that parent hash.
+
+It builds on the root of the block at the slot before, and on the RANDAO mix of the current epoch.
+-/
+theorem checkExecutionPayloadBid_ok_iff {signed : SignedExecutionPayloadBid preset fork} :
+    checkExecutionPayloadBid config checks state gloas signed = .ok () ↔
+      let bid := signed.message
+      checkBidBuilder config checks state gloas signed = .ok () ∧
+      bid.blobKzgCommitments.data.size ≤
+        (config.getBlobParameters (getCurrentEpoch state)).maxBlobsPerBlock.toNat ∧
+      bid.slot = state.slot ∧ GENESIS_SLOT < state.slot ∧
+      bid.parentBlockHash = state.latestBlockHash gloas ∧ bid.blockHash ≠ bid.parentBlockHash ∧
+      getBlockRootAtSlot state (state.slot - 1) = .ok bid.parentBlockRoot ∧
+      getRandaoMix state (getCurrentEpoch state) = .ok bid.prevRandao := by
+  unfold checkExecutionPayloadBid
+  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, exists_const]
+  constructor
+  · rintro ⟨⟨⟩, builder, blobs, slot, genesis, parentHash, blockHash, root, rootOk, rootEq, mix,
+      mixOk, mixEq⟩
+    exact ⟨builder, blobs, slot, genesis, parentHash, blockHash, rootEq ▸ rootOk, mixEq ▸ mixOk⟩
+  · rintro ⟨builder, blobs, slot, genesis, parentHash, blockHash, rootOk, mixOk⟩
+    exact ⟨(), builder, blobs, slot, genesis, parentHash, blockHash, _, rootOk, rfl, _, mixOk, rfl⟩
 
 /-- A self-built bid that passes its checks has no value. -/
 theorem value_eq_zero_of_selfBuild {signed : SignedExecutionPayloadBid preset fork}

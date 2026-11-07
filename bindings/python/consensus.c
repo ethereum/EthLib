@@ -18,6 +18,23 @@ eth_engine_prepare_execution_payload_gloas(
   uint64_t target_gas_limit, uint8_t verify);
 
 extern lean_object*
+eth_consensus_get_execution_payload_bid(
+  lean_object* name, lean_object* fork, lean_object* state, lean_object* payload,
+  lean_object* requests, lean_object* commitments, lean_object* fee_recipient,
+  lean_object* inclusion_list_bits, uint64_t slot, uint64_t builder_index, uint64_t value);
+
+extern lean_object*
+eth_consensus_get_self_built_execution_payload_bid(
+  lean_object* name, lean_object* fork, lean_object* state, lean_object* payload,
+  lean_object* requests, lean_object* commitments, lean_object* fee_recipient,
+  lean_object* inclusion_list_bits);
+
+extern lean_object*
+eth_consensus_get_execution_payload_envelope(
+  lean_object* name, lean_object* fork, lean_object* block, lean_object* payload,
+  lean_object* requests);
+
+extern lean_object*
 eth_consensus_preset(
   lean_object* name
 );
@@ -2647,4 +2664,55 @@ py_engine_prepare_execution_payload_gloas(
     eth_engine_prepare_execution_payload_gloas(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7],
       a[8], a[9], a[10], (uint64_t) head_status, (uint64_t) target_gas_limit, (uint8_t) verify),
     PROPOSER_ERROR);
+}
+
+PyObject*
+py_consensus_get_execution_payload_bid(
+  PyObject* self,
+  PyObject* args
+) {
+  if (PyTuple_Size(args) != 11) {
+    PyErr_SetString(PyExc_TypeError, "expected 11 arguments");
+    return NULL;
+  }
+  unsigned long long slot = PyLong_AsUnsignedLongLong(PyTuple_GET_ITEM(args, 8));
+  if (PyErr_Occurred()) return NULL;
+  unsigned long long builder_index = PyLong_AsUnsignedLongLong(PyTuple_GET_ITEM(args, 9));
+  if (PyErr_Occurred()) return NULL;
+  unsigned long long value = PyLong_AsUnsignedLongLong(PyTuple_GET_ITEM(args, 10));
+  if (PyErr_Occurred()) return NULL;
+  PyObject* inputs = PyTuple_GetSlice(args, 0, 8);
+  if (!inputs) return NULL;
+  lean_object* a[8];
+  int read = strs_bytes_args(inputs, 2, 6, a);
+  Py_DECREF(inputs);
+  if (!read) return NULL;
+  return except_into_pybytes(
+    eth_consensus_get_execution_payload_bid(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7],
+      (uint64_t) slot, (uint64_t) builder_index, (uint64_t) value),
+    SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_get_self_built_execution_payload_bid(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* a[8];
+  if (!strs_bytes_args(args, 2, 6, a)) return NULL;
+  return except_into_pybytes(
+    eth_consensus_get_self_built_execution_payload_bid(a[0], a[1], a[2], a[3], a[4], a[5], a[6],
+      a[7]),
+    SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_get_execution_payload_envelope(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* a[5];
+  if (!strs_bytes_args(args, 2, 3, a)) return NULL;
+  return except_into_pybytes(
+    eth_consensus_get_execution_payload_envelope(a[0], a[1], a[2], a[3], a[4]), SSZ_ERROR);
 }

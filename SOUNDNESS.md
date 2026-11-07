@@ -1345,9 +1345,44 @@ It shows that the state after those steps has the head as its latest block hash.
 `payloadExpectedWithdrawals_of_prepareExecutionPayloadGloas` makes the same assumption.
 It shows that this state records the withdrawals of the attributes.
 It rests on `applyParentExecutionPayload_latestExecutionPayloadBid`, which shows that the payload of a parent keeps the latest bid.
-No theorem covers the envelope that carries the payload, or the inclusion lists, which come from the store.
+`checkExecutionPayloadBid_of_prepareExecutionPayloadGloas` takes a bid built on the state of the proposer from a payload that follows the update.
+It shows that the bid passes the checks of its parent hash, its parent root and its mix in the bid step.
+It makes the assumptions of `latestBlockHash_of_prepareExecutionPayloadGloas`.
+It also assumes that the state of the proposer records the root of its latest block header as the root of the slot before.
+No theorem here covers the inclusion lists, which come from the store.
 
 The Python suite builds the store of a fork choice case and checks the update on the full and the empty parent at Gloas and Heze.
+
+### Honest builder
+
+From Gloas, `Consensus/HonestBuilder.lean` holds the bid and the envelope of an honest builder, and the signatures on them.
+The payload, its requests and the commitments of its blobs come from the execution layer.
+The builder chooses the slot, the fee recipient and the value of its bid, and from Heze the bits of the inclusion lists.
+`getExecutionPayloadBid` takes the parent hash, the block hash, the RANDAO mix and the gas limit of the bid from the payload.
+Its parent root is the root of the latest block header of the state, and it asks for no payment on the execution layer.
+`getSelfBuiltExecutionPayloadBid` gives the bid of a proposer that builds its own payload the reserved builder index, no value and the signature at infinity.
+`getExecutionPayloadEnvelope` names the root of the block of the bid, the parent of that block and the builder of its bid.
+The theorems are in `Consensus/Proofs/HonestBuilder.lean`.
+
+`getExecutionPayloadBid_eq_ok_iff` states each field of a bid.
+`getExecutionPayloadEnvelope_eq_ok_iff` states each field of an envelope.
+`checkBidBuilder_of_getSelfBuiltExecutionPayloadBid` shows that a self-built bid passes the checks of the builder of a bid on every state.
+`getExecutionPayloadEnvelope_checks` takes a block from Gloas that passes block processing, with a bid that a builder built from a payload.
+The block must commit to the root of the state after it.
+The theorem shows that the envelope of that payload passes the checks of the block root and of the parent root against that state.
+It also shows that the envelope passes the checks of the builder, the mix, the gas limit, the block hash and the root of the requests.
+It shows that the payload builds on the latest block hash, and that the slot of the bid is the slot of the state.
+It assumes that the vectors whose length the preset sets have a positive length, as the root of the block needs.
+It rests on `BeaconBlock.hashTreeRoot_header`, which shows that a block has the root of its header.
+It also rests on `latestBlockHash_processBlock`, which shows that from Gloas the latest block hash after a block is the parent hash of the latest bid.
+`latestExecutionPayloadBid_processBlock` shows that from Gloas a block leaves its own bid as the latest bid.
+`latestBlockHeader_processBlock` shows that from Gloas a block leaves its header, with a zero state root, as the latest block header.
+These rest on `PayloadInputs`, the fields that the checks of a payload and of a bid read.
+From Gloas the parent, header, RANDAO and bid steps each change one of them, and the other steps keep them all.
+No theorem covers the signature, the time or the withdrawals of the envelope, or the answer of the execution layer.
+
+The Python suite builds the envelope of a fork choice case at Gloas and Heze from its block, payload and requests, and compares it with the envelope of the case.
+It also builds the self-built bid of that block and compares it with the bid of the block.
 
 ### Slashing protection
 
@@ -1656,12 +1691,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 290 operations and 41 size constants.
-The Python extension calls 290 of the operations and 41 of the constants.
+Lean exports 293 operations and 41 size constants.
+The Python extension calls 293 of the operations and 41 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10196 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (2650), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1223), `pow.c` (105), `precompile.c` (95), `pyvalue.c` (420), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (557), `xmss.c` (134).
+10274 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (2718), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1230), `pow.c` (105), `precompile.c` (95), `pyvalue.c` (420), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (560), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

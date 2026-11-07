@@ -6,6 +6,7 @@ public import EthLib.Consensus.Exports.ForkChoice
 public import EthLib.Consensus.Exports.Genesis
 public import EthLib.Consensus.Exports.Gossip
 public import EthLib.Consensus.Exports.HonestAggregation
+public import EthLib.Consensus.Exports.HonestBuilder
 public import EthLib.Consensus.Exports.HonestProposer
 public import EthLib.Consensus.Exports.HonestValidator
 public import EthLib.Consensus.Exports.GossipValidation

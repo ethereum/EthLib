@@ -440,6 +440,15 @@
 #define DOC_consensus_get_execution_requests \
   "From Electra: the requests of an execution block, as SSZ bytes."
 
+#define DOC_consensus_get_execution_payload_bid \
+  "From Gloas: the bid of a builder for a payload that it built on a state, as SSZ bytes."
+
+#define DOC_consensus_get_self_built_execution_payload_bid \
+  "From Gloas: the signed bid of a proposer that builds its own payload, as SSZ bytes."
+
+#define DOC_consensus_get_execution_payload_envelope \
+  "From Gloas: the envelope that reveals a payload after the block of its bid, as SSZ bytes."
+
 #define DOC_consensus_get_validators_custody_requirement \
   "From Fulu: the number of custody groups of a node, from the indices of its validators."
 
