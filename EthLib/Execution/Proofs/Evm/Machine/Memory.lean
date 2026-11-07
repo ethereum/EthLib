@@ -15,6 +15,7 @@ public import EthLib.Execution.Proofs.Evm.Gas.Memory
 - Growth by no byte, and a write or a read of a whole memory from offset 0, give simple forms.
 - A read of a range that a write does not touch gives the bytes before the write.
 - A read across two adjacent writes gives the two values in order.
+- A read that ends where a write ends gives the bytes before the write, then the value.
 -/
 
 @[expose] public section
@@ -268,5 +269,28 @@ theorem memoryReadBytes_memoryWrite_memoryWrite {memory a b : ByteArray} {s : Na
       congr 1
       omega
     · rw [ite_eq_right hj, ite_eq_right hi, byteAt_of_size_le (by omega)]
+
+/-- A read from `k` bytes before a write to its end gives those bytes, then the value.
+
+The write must lie within memory. -/
+theorem memoryReadBytes_memoryWrite_eq_append {memory value : ByteArray} {s k : Nat}
+    (hw : s + k + value.size ≤ memory.size) :
+    memoryReadBytes (memoryWrite memory (s + k) value) s (k + value.size) =
+      memoryReadBytes memory s k ++ value := by
+  have hs : (memoryWrite memory (s + k) value).size = memory.size := size_memoryWrite hw
+  apply eq_of_byteAt
+  · rw [size_memoryReadBytes (by omega), ByteArray.size_append, size_memoryReadBytes (by omega)]
+  · intro i
+    rw [byteAt_memoryReadBytes (by omega), byteAt_memoryWrite hw, byteAt_append,
+      size_memoryReadBytes (by omega)]
+    by_cases hi : i < k
+    · rw [ite_eq_left (by omega), ite_eq_left hi, byteAt_memoryReadBytes (by omega),
+        ite_eq_right (by omega), ite_eq_left hi]
+    · rw [ite_eq_right hi]
+      by_cases hj : i < k + value.size
+      · rw [ite_eq_left hj, ite_eq_left (by omega)]
+        congr 1
+        omega
+      · rw [ite_eq_right hj, byteAt_of_size_le (by omega)]
 
 end EthLib.Execution.Evm

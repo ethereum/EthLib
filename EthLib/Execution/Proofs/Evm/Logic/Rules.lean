@@ -7,6 +7,7 @@ public import EthLib.Execution.Proofs.Evm.Instructions.Storage
 public import EthLib.Execution.Proofs.Evm.Instructions.Return
 public import EthLib.Execution.Proofs.Evm.Instructions.EnvironmentData
 public import EthLib.Execution.Proofs.State.Tracker
+public import EthLib.Execution.Proofs.Evm.Instructions.AccountData
 
 /-!
 # Proofs: rules for the opcodes of a contract that reads its call data and uses its storage
@@ -757,5 +758,60 @@ theorem mem_insert_getD_of_ne (substate : Substate) {address other : Address}
 theorem le_sloadCost (hfork : .berlin ≤ fork) (cold : Bool) : 100 ≤ sloadCost fork cold := by
   rw [sloadCost_of_berlin hfork]
   cases cold <;> decide
+
+/-- GAS pushes the gas left after its own price of 2, for 2 gas.
+
+The word is the gas left modulo `2 ^ 256`. -/
+theorem gas_rule (hlt : pc < code.size) (hbyte : code[pc] = 0x5a) (hgas : 2 ≤ gas)
+    (hstack : stack.length < STACK_LIMIT) :
+    Hoare fork (At code message pc stack memory gas state substate)
+      (At code message (pc + 1) (BitVec.ofNat 256 (gas - 2) :: stack) memory (gas - 2) state
+        substate) := by
+  apply At.rule hlt hbyte (ofByte_of_decode (op := .gas) rfl (Fork.frontier_le _)) rfl
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
+  rw [readFrame_of_length_lt (by rw [hst]; exact hstack),
+    charge_nat (by rw [hg, show OPCODE_GAS = 2 from rfl]; exact hgas)]
+  refine ⟨_, rfl, hcode, hj, hm, by simp [hpc], ?_, hmem, by simp [hg, OPCODE_GAS, BASE], hrun,
+    herr, hs, hss⟩
+  simp [hst, hg, OPCODE_GAS, BASE, GasMeter.gasLeft]
+
+/-- From Berlin to before Glamsterdam, a read of another account costs 2600 cold and 100 warm.
+
+These are the prices of EIP-2929; from Glamsterdam, EIP-8038 changes them. -/
+theorem externalBaseCost_of_berlin (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+    (cold : Bool) : externalBaseCost fork cold = if cold then 2600 else 100 := by
+  have hng : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hglam
+  simp [externalBaseCost, hfork, hng, accountAccessCost, gasSchedule, WARM_ACCESS]
+
+/-- From Berlin to before Glamsterdam, EXTCODESIZE pushes the size of the code of an account.
+
+The address is the low 20 bytes of the word, and the state holds the code `c` of its account.
+
+The address is cold when the transaction has not accessed it yet, by EIP-2929.
+
+It pays 2600 for a cold address and 100 for a warm one.
+
+It then adds the address to the accessed addresses, and records the read of the account. -/
+theorem extcodesize (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {word : U256}
+    {rest : List U256} {cold : Bool} {c : ByteArray} (hlt : pc < code.size)
+    (hbyte : code[pc] = 0x3b)
+    (hcode : state.getCode (state.getAccount (Base.toAddressMasked word)).codeHash = .ok c)
+    (hcold : decide (Base.toAddressMasked word ∉ substate.accessedAddresses) = cold)
+    (hgas : (if cold then 2600 else 100) ≤ gas) :
+    Hoare fork (At code message pc (word :: rest) memory gas state substate)
+      (At code message (pc + 1) (BitVec.ofNat 256 c.size :: rest) memory
+        (gas - if cold then 2600 else 100)
+        (state.recordAccountRead (Base.toAddressMasked word))
+        { substate with
+          accessedAddresses :=
+            substate.accessedAddresses.insert (Base.toAddressMasked word) }) := by
+  apply At.rule hlt hbyte (ofByte_of_decode (op := .extcodesize) rfl (Fork.frontier_le _)) rfl
+  rintro evm ⟨hc, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
+  have found : accountCode evm (Base.toAddressMasked word) = .ok c := by
+    simp [accountCode, hs, hcode, Except.mapError]
+  rw [extcodesizeStep_of_accountCode hst found]
+  simp only [accessAddress, hfork, ↓reduceIte, hss, hcold,
+    externalBaseCost_of_berlin hfork hglam, hg, charge_nat hgas]
+  exact ⟨_, rfl, hc, hj, hm, by simp [hpc], rfl, hmem, rfl, hrun, herr, by simp [hs], by simp⟩
 
 end EthLib.Execution.Evm.Logic
