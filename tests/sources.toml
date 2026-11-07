@@ -118,6 +118,10 @@ commit = "7bce07ff7d51b1a3c66ff4e2bd3233ac248ede70"
 release = "v0.1.0"
 directories = ["tests/serialization/ssz"]
 
+[repositories."eth-clients/slashing-protection-interchange-tests"]
+commit = "bb7900688eecd287d8723154faac6addb5e63336"
+release = "v5.3.0"
+
 # The release archives, each from a repository above or from the source it names.
 [archives."consensus-specs/v1.7.0-alpha.12/general"]
 repository = "ethereum/consensus-specs"
@@ -160,6 +164,13 @@ repository = "ethereum/legacytests"
 url = "https://github.com/ethereum/legacytests/archive/1f581b8ccdc4c63acf5f2c5c1b155c690c32a8eb.tar.gz"
 size = 126768895
 sha256 = "ed16742e585db5ac4196bdf552ee126a68b777128e3e811bab179b36206dee35"
+
+# The repository has no licence, so its interchange tests are read from the source archive.
+[archives."slashing-protection-interchange-tests@bb790068/source"]
+repository = "eth-clients/slashing-protection-interchange-tests"
+url = "https://github.com/eth-clients/slashing-protection-interchange-tests/archive/bb7900688eecd287d8723154faac6addb5e63336.tar.gz"
+size = 7867
+sha256 = "f59908e927db1e5ceefec3a4d224cc6434b1a0e24eb5a57c8f31fc1b157cbfaf"
 
 # The pinned vector directories whose cases come from no repository, with their source.
 [other]
