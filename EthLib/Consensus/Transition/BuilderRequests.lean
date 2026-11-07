@@ -86,7 +86,9 @@ def addBuilderToRegistry (state : BeaconState preset fork) (gloas : .glamsterdam
   let builders := (state.builders gloas).data
   let index := getIndexForNewBuilder state gloas
   if inside : index < builders.size then state.putBuilder gloas index inside builder
-  else { state with builders := fun _ => ⟨builders.push builder⟩ }
+  else
+    let builders : Builders := ⟨builders.push builder⟩
+    { state with builders := fun _ => builders }
 
 /-- The position of the first builder with a key in the registry, if any. -/
 def findBuilderByPubkey (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
