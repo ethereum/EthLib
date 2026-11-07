@@ -695,6 +695,11 @@ That state keeps every other slot, the original words and the accounts.
 `Logic.extcodesize` is the rule for EXTCODESIZE from Berlin to before Glamsterdam.
 It charges the prices of EIP-2929, and needs the state to hold the code of the account.
 `memoryReadBytes_memoryWrite_eq_append` proves that a read that ends where a write ends gives the bytes before the write, then the value.
+`Logic.staticcallWith` is the rule for STATICCALL from Berlin to before Glamsterdam.
+Its message carries no value and is static.
+`Logic.staticcall` is its case with empty ranges of input and output.
+`Logic.running_eq_false_of_sstore_of_isStatic` proves that in a static frame, a step at SSTORE stops the frame.
+`Logic.running_eq_false_of_log_of_isStatic` proves the same for LOG0 to LOG4.
 `NoValue.spec_nonzero` proves a contract that halts at `0xfe` when its message sends value.
 `memoryReadBytes_memoryWrite_of_disjoint` proves that a write within memory leaves a read of a disjoint range unchanged.
 `memoryReadBytes_memoryWrite_memoryWrite` proves that a read across two adjacent writes gives both values in order.
