@@ -24,7 +24,7 @@ If it is the parent, a payload whose block passes the state transition is valid.
 
 A block that fails it without an abort makes the payload invalid, with the block error.
 
-A block and a state come back only for a valid payload.
+A block and a state come back exactly for a valid payload.
 -/
 
 public section
@@ -240,6 +240,37 @@ theorem of_newPayloadOnChain_some {chain : BlockChain} {version : Nat} {params :
           · simp [pure, Except.pure] at h
         · simp [pure, Except.pure] at h
       · simp [pure, Except.pure] at h
+
+/-- A payload on a chain is valid exactly when a block and a state come back.
+
+So a valid answer always comes from a block that passed the state transition. -/
+theorem valid_iff_of_newPayloadOnChain {chain : BlockChain} {version : Nat} {params : Lean.Json}
+    {status : PayloadStatus} {reason : Option PayloadError}
+    {next : Option (RecentBlock × Execution.State.State)}
+    (h : newPayloadOnChain chain version params = .ok (status, reason, next)) :
+    status.status = .valid ↔ ∃ block post, next = some (block, post) := by
+  constructor
+  · intro hValid
+    unfold newPayloadOnChain at h
+    cases hC : checkNewPayload chain.config version params with
+    | error e => simp [hC, bind, Except.bind] at h
+    | ok r =>
+      cases r with
+      | error p =>
+        -- A payload that fails the checks is invalid, never valid.
+        obtain ⟨st, re⟩ := p
+        simp only [hC, bind, Except.bind, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
+        obtain ⟨rfl, -, -⟩ := h
+        rcases (status_of_checkNewPayload hC).2 with hs | hs <;> rw [hs] at hValid <;> cases hValid
+      | ok checked =>
+        simp only [hC, bind, Except.bind] at h
+        -- Every answer of the execution is syncing or invalid, except the one with a block.
+        repeat' split at h
+        all_goals simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
+        all_goals obtain ⟨rfl, -, rfl⟩ := h
+        all_goals first | exact ⟨_, _, rfl⟩ | cases hValid
+  · rintro ⟨block, post, rfl⟩
+    exact (of_newPayloadOnChain_some h).1
 
 /-- A payload that passes the checks before execution is syncing without its parent.
 
