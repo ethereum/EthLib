@@ -419,6 +419,10 @@ def consensus_rewards_deltas(name: str, fork: str, component: str, pre: bytes, c
     """The rewards and the penalties of each validator for one kind of vote, as SSZ bytes."""
     ...
 
+def consensus_rewards_deltas_batch(name: str, fork: str, components: list[bytes], pre: bytes, config: bytes) -> list[bytes]:
+    """The deltas of several kinds of vote for one state, as SSZ bytes, in the order of the kinds."""
+    ...
+
 def consensus_process_slots(name: str, fork: str, pre: bytes, config: bytes, slots: int) -> bytes:
     """The state some slots later, as SSZ bytes."""
     ...

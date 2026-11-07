@@ -314,6 +314,9 @@
 #define DOC_consensus_rewards_deltas \
   "The rewards and the penalties of each validator for one kind of vote, as SSZ bytes."
 
+#define DOC_consensus_rewards_deltas_batch \
+  "The deltas of several kinds of vote for one state, as SSZ bytes, in the order of the kinds."
+
 #define DOC_consensus_process_slots \
   "The state some slots later, as SSZ bytes."
 

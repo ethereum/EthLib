@@ -198,6 +198,15 @@ eth_consensus_rewards_deltas(
 );
 
 extern lean_object*
+eth_consensus_rewards_deltas_batch(
+  lean_object* name,
+  lean_object* fork,
+  lean_object* components,
+  lean_object* pre,
+  lean_object* config
+);
+
+extern lean_object*
 eth_consensus_process_slots(
   lean_object* name,
   lean_object* fork,
@@ -1398,6 +1407,44 @@ py_consensus_rewards_deltas(
     (const uint8_t*) PyBytes_AS_STRING(config_obj), PyBytes_GET_SIZE(config_obj));
   return except_into_pybytes(
     eth_consensus_rewards_deltas(name, fork, component, pre, config), TRANSITION_ERROR);
+}
+
+PyObject*
+py_consensus_rewards_deltas_batch(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *components_obj, *pre_obj, *config_obj;
+  if (!PyArg_ParseTuple(args, "OOOOO", &name_obj, &fork_obj, &components_obj, &pre_obj,
+                        &config_obj)) return NULL;
+  /* Check every argument before any Lean object exists, so a failure leaks nothing. */
+  if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj)) {
+    PyErr_SetString(PyExc_TypeError, "name and fork must be str");
+    return NULL;
+  }
+  if (!PyBytes_Check(pre_obj) || !PyBytes_Check(config_obj)) {
+    PyErr_SetString(PyExc_TypeError, "pre and config must be bytes");
+    return NULL;
+  }
+  lean_object* components;
+  if (parse_bytes_sequence(components_obj, "components", &components)) return NULL;
+  lean_object* name = str_arg(name_obj, "name");
+  if (!name) {
+    lean_dec(components);
+    return NULL;
+  }
+  lean_object* fork = str_arg(fork_obj, "fork");
+  if (!fork) {
+    lean_dec(name);
+    lean_dec(components);
+    return NULL;
+  }
+  lean_object* pre = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(pre_obj), PyBytes_GET_SIZE(pre_obj));
+  lean_object* config = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(config_obj), PyBytes_GET_SIZE(config_obj));
+  return except_into_pybytes_list(
+    eth_consensus_rewards_deltas_batch(name, fork, components, pre, config), TRANSITION_ERROR);
 }
 
 PyObject*

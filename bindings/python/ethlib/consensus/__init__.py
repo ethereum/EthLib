@@ -441,6 +441,15 @@ def rewards_deltas(
     return _native.consensus_rewards_deltas(name, fork, component, pre, replacements)
 
 
+def rewards_deltas_batch(
+    name: str, fork: str, components: list[str], pre: bytes, config: dict | None = None
+) -> list[bytes]:
+    """The SSZ bytes of the deltas of each named kind of vote, from one decode of the state."""
+    replacements = json.dumps(config).encode() if config else b""
+    kinds = [component.encode() for component in components]
+    return _native.consensus_rewards_deltas_batch(name, fork, kinds, pre, replacements)
+
+
 def process_slots(
     name: str, fork: str, pre: bytes, slots: int, config: dict | None = None
 ) -> bytes:
@@ -1159,6 +1168,7 @@ __all__ = [
     "compute_fork_digest",
     "process_epoch",
     "rewards_deltas",
+    "rewards_deltas_batch",
     "upgrade_state",
     "compute_weak_subjectivity_period",
     "is_within_weak_subjectivity_period",

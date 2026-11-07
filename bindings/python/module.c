@@ -490,6 +490,32 @@ except_into_pybytes(
 }
 
 PyObject*
+except_into_pybytes_list(
+  lean_object* result,
+  PyObject* error_class
+) {
+  if (is_error(result)) {
+    raise_lean_error(result, error_class);
+    return NULL;
+  }
+  lean_object* items = lean_ctor_get(result, 0);
+  size_t n = lean_array_size(items);
+  PyObject* out = PyList_New((Py_ssize_t) n);
+  for (size_t i = 0; out && i < n; i++) {
+    lean_object* ba = lean_array_get_core(items, i);
+    PyObject* item = PyBytes_FromStringAndSize(
+      (const char*) lean_sarray_cptr(ba), (Py_ssize_t) lean_sarray_size(ba));
+    if (!item) {
+      Py_CLEAR(out);
+      break;
+    }
+    PyList_SET_ITEM(out, (Py_ssize_t) i, item);
+  }
+  lean_dec(result);
+  return out;
+}
+
+PyObject*
 except_into_pyint(
   lean_object* result,
   PyObject* error_class
@@ -714,6 +740,8 @@ static PyMethodDef methods[] = {
    DOC_consensus_process_epoch},
   {"consensus_rewards_deltas", py_consensus_rewards_deltas, METH_VARARGS,
    DOC_consensus_rewards_deltas},
+  {"consensus_rewards_deltas_batch", py_consensus_rewards_deltas_batch, METH_VARARGS,
+   DOC_consensus_rewards_deltas_batch},
   {"consensus_upgrade_state", py_consensus_upgrade_state, METH_VARARGS,
    DOC_consensus_upgrade_state},
   {"consensus_process_slots", py_consensus_process_slots, METH_VARARGS,
