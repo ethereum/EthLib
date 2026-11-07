@@ -256,6 +256,14 @@ The C exports and the Python package are the public surface for clients.
   Never hard-code a length in C or Python.
 - The generated C frees each argument itself.
   A wrapper must not free what it passes to an export.
+- A Python function passes its arguments to the export and returns its result.
+  It never encodes or decodes bytes by hand: no slices, no integers to or from bytes, no JSON text.
+  Lean then defines every value that crosses the boundary, and its proofs can cover that value.
+
+`scripts/check_python_boundary.py` finds the usual forms of such conversions in `bindings/python/ethlib`.
+With `--base`, it fails on any conversion on a line added since the merge base, committed or not.
+Without it, it fails on any conversion that `scripts/check_python_boundary_allowlist.txt` does not list.
+That list names the conversions that remain from before the rule, and it only shrinks.
 
 ## Checks
 
@@ -399,6 +407,7 @@ uv run --no-sync ty check
 git ls-files -z '*.py' | xargs -0 uv run --no-sync codespell
 uv run --no-sync python scripts/check_raises.py
 uv run --no-sync python scripts/check_docstrings.py
+uv run --no-project --python 3.12 python scripts/check_python_boundary.py --base origin/master
 uv run --no-project --python 3.12 python scripts/check_python_comments.py --base origin/master
 ```
 
