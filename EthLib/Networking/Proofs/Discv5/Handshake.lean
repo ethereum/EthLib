@@ -34,12 +34,8 @@ open EthLib.Networking.Proofs.Discv5.Identity
 theorem ne_zero_of_ecdh_eq_ok {e b : Fn} {secret : ByteArray}
     (h : Discv5.ecdh e (mul b generator) = .ok secret) : e ≠ 0 := by
   rintro rfl
-  have hG := isOnCurve_generator
   -- The multiple `0 P` is `O`, and the agreement rejects it.
-  have hzero : mul 0 (mul b generator) = .infinity := by
-    apply (toPoint_eq_zero (isOnCurve_mul _ (isOnCurve_mul _ hG))).mp
-    rw [toPoint_mul' _ (isOnCurve_mul _ hG)]
-    simp
+  have hzero := EthLib.Cryptography.Secp256k1.mul_zero_left (isOnCurve_mul b isOnCurve_generator)
   unfold Discv5.ecdh at h
   split at h
   · cases h
