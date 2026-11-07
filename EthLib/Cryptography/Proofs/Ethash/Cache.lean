@@ -8,6 +8,8 @@ public import EthLib.Cryptography.Proofs.Ethash.Sizes
 
 The seed of an epoch is the Keccak-256 digest of the seed of the epoch before.
 
+It has 32 bytes.
+
 The cache has one item per 64 bytes of its size, so a prime number of items.
 
 So the cache is never empty, and a dataset item never reads a default item.
@@ -32,6 +34,16 @@ theorem seed_of_lt {number : Nat} (h : number < EPOCH_LENGTH) :
 theorem seed_add_epoch (number : Nat) :
     seed (number + EPOCH_LENGTH) = ⟨(keccak256 (seed number)).toArray⟩ := by
   simp only [seed, epoch, Nat.add_div_right _ (by decide : 0 < EPOCH_LENGTH), Nat.repeat]
+
+/-- The seed of every epoch is 32 bytes. -/
+theorem size_seed (number : Nat) : (seed number).size = 32 := by
+  unfold seed
+  generalize epoch number = k
+  induction k with
+  | zero => simp [Nat.repeat, ByteArray.size]
+  | succ k ih =>
+    simp only [Nat.repeat, ByteArray.size]
+    exact (keccak256 _).size_toArray
 
 /-! ## The size of the cache -/
 
