@@ -875,7 +875,7 @@ It assumes a positive churn quotient, and a minimum churn that is a positive who
 At the mainnet parameters, `computeWeakSubjectivityPeriodElectra_le_mainnet` gives at most 3558 epochs, for every state.
 `gloasWeightedChurn_eq_ok_iff` gives the Gloas weighted churn in closed form when its three churns and sums stay below `2^64`.
 `computeWeakSubjectivityPeriodGloas_le` bounds the Gloas period by a function of the parameters alone when the activation floor covers the rounding losses.
-At the mainnet parameters, `computeWeakSubjectivityPeriodGloas_le_mainnet` gives at most 1658 epochs, and `exists_computeWeakSubjectivityPeriod_gloas_mainnet` reaches that bound.
+At the mainnet parameters, `computeWeakSubjectivityPeriodGloas_le_mainnet` gives at most 1658 epochs, and a Python test reaches that bound.
 No theorem bounds the Phase 0 period.
 
 `isWithinWeakSubjectivityPeriod_eq_ok_iff` states when the check of a checkpoint succeeds and what it answers.

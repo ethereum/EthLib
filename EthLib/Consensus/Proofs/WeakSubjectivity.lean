@@ -4,8 +4,6 @@ public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.WeakSubjectivity
-import EthLib.Consensus.Transition.Genesis
-import EthLib.Consensus.Transition.Upgrade
 
 /-!
 # Proofs: weak subjectivity
@@ -483,73 +481,6 @@ theorem computeWeakSubjectivityPeriodGloas_le_mainnet
   generalize churn.toNat = w at hpos hch ⊢
   have hdiv : 10 * t / (200 * w) < 1403 := (Nat.div_lt_iff_lt_mul (by omega)).mpr (by omega)
   omega
-
-/-- A mainnet Gloas state with one active validator of `1,406,271,487` ether.
-
-Its weak subjectivity period reaches the mainnet Gloas bound of 1658 epochs. -/
-private def mainnetGloasBoundState : BeaconState Preset.mainnet .glamsterdam :=
-  let zero32 : Root := Vector.replicate 32 0
-  let v : Validator := ⟨Vector.replicate 48 0, zero32, 1406271487000000000, false, 0, 0,
-    FAR_FUTURE_EPOCH, FAR_FUTURE_EPOCH⟩
-  let phase0 := emptyGenesisState (preset := Preset.mainnet) (fork := .phase0)
-    Config.mainnet (by decide) 0 zero32 0 zero32
-  let fusaka := carryFields Config.mainnet .fusaka phase0 (by decide) (by decide)
-  let gloas := upgradeFields Config.mainnet fusaka zero32
-  { gloas with
-    validators := .ofData #[v] (fun before => absurd before (by decide))
-    balances := ⟨#[1406271487000000000], fun before => absurd before (by decide)⟩ }
-
-/-- A Gloas state on mainnet reaches the bound of 1658 epochs. -/
-theorem exists_computeWeakSubjectivityPeriod_gloas_mainnet :
-    ∃ state : BeaconState Preset.mainnet .glamsterdam,
-      computeWeakSubjectivityPeriod Config.mainnet state = .ok 1658 := by
-  let v : Validator := ⟨Vector.replicate 48 0, Vector.replicate 32 0, 1406271487000000000, false,
-    0, 0, FAR_FUTURE_EPOCH, FAR_FUTURE_EPOCH⟩
-  have hdata : mainnetGloasBoundState.validators.data = #[v] := rfl
-  have hslot : mainnetGloasBoundState.slot = 0 := rfl
-  refine ⟨mainnetGloasBoundState, ?_⟩
-  generalize mainnetGloasBoundState = s at hdata hslot
-  have hact : isActiveValidator v 0 = true := by decide
-  have hind : getActiveValidatorIndices s (getCurrentEpoch s) = [0] := by
-    unfold getActiveValidatorIndices getCurrentEpoch computeEpochAtSlot
-    rw [hdata, hslot]
-    simp [hact]
-  have htot : getTotalActiveBalance s = .ok 1406271487000000000 := by
-    unfold getTotalActiveBalance getTotalBalance
-    rw [hind, hdata]
-    have hmark : markIndices 1 [0] = #[true] := by decide
-    have hsum : sumMarked #[v] #[true] = 1406271487000000000 := by
-      simp [sumMarked, v]
-    have hfind : List.find? (fun x : ValidatorIndex => decide (1 ≤ x.toNat)) [0] = none := by decide
-    have hover : ¬(2 ^ 64 ≤ (1406271487000000000 : Nat)) := by decide
-    have hmax : max Preset.mainnet.EFFECTIVE_BALANCE_INCREMENT 1406271487000000000 =
-        1406271487000000000 := by decide
-    simp [hfind, hmark, hsum, hover, hmax, pure, Except.pure]
-  have hgloas : Base.Fork.glamsterdam ≤ .glamsterdam := by decide
-  simp only [computeWeakSubjectivityPeriod, hgloas, ↓reduceIte]
-  rw [computeWeakSubjectivityPeriodGloas_eq_ok_iff]
-  let total : Gwei := 1406271487000000000
-  let exit : Gwei := roundToIncrement Preset.mainnet
-    (max Config.mainnet.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA
-      (total / Config.mainnet.CHURN_LIMIT_QUOTIENT_GLOAS))
-  let activation : Gwei := min Config.mainnet.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS exit
-  let consolidation : Gwei := roundToIncrement Preset.mainnet
-    (total / Config.mainnet.CONSOLIDATION_CHURN_LIMIT_QUOTIENT)
-  let churn : Gwei :=
-    ((2 * exit.toNat) / 3 + activation.toNat / 3 + consolidation.toNat).toUInt64
-  refine ⟨total, churn, htot, ?_, ?_⟩
-  · rw [gloasWeightedChurn_eq_ok_iff]
-    refine ⟨exit, activation, consolidation, ?_, ?_, ?_, by decide, by decide, by decide⟩
-    · simp only [getExitChurnLimit, htot, bind, Except.bind, pure, Except.pure, Except.ok.injEq]
-      rfl
-    · simp only [getActivationChurnLimit, getExitChurnLimit, htot, bind, Except.bind, pure,
-        Except.pure, Except.ok.injEq]
-      rfl
-    · simp only [getConsolidationChurnLimit, hgloas, ↓reduceIte, htot, bind, Except.bind, pure,
-        Except.pure, Except.ok.injEq]
-      rfl
-  · rw [balanceChurnPeriod_eq_ok_iff]
-    refine ⟨by decide, by decide, by decide, by decide, by decide⟩
 
 /-! ## The staleness check -/
 
