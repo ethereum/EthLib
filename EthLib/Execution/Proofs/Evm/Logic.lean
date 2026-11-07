@@ -8,6 +8,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Message
 public import EthLib.Execution.Proofs.Evm.Logic.Call
 public import EthLib.Execution.Proofs.Evm.Logic.Log
 public import EthLib.Execution.Proofs.Evm.Logic.Static
+public import EthLib.Execution.Proofs.Evm.Logic.Create
 public import EthLib.Execution.Proofs.Evm.Logic.Callee
 public import EthLib.Execution.Proofs.Evm.Logic.Rules
 public import EthLib.Execution.Proofs.Evm.Logic.Branch

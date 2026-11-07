@@ -717,6 +717,13 @@ Its message carries no value and is static.
 Its message runs the code of the address on the current account, with the sender and the value of the current message.
 `Logic.callcodeWith` is the rule for CALLCODE with no value from Berlin to before Glamsterdam.
 Its message runs the code of the address on the current account, as its sender.
+`Logic.createStep_child` gives the step of CREATE or CREATE2 that sends its message, from Berlin to before Glamsterdam.
+It needs the new address to hold no code and a nonce of 0, as EIP-684 asks.
+`Logic.createKindWith` is the rule for such a creation, under an assumption on the frame that ends it.
+`Logic.createWith` is its case for CREATE.
+`Logic.create2With` is its case for CREATE2.
+`Logic.resumeCreate_eq` proves that the creator pushes the new address, or 0 when the frame that ends the creation has an error.
+`Logic.createMessageGas_of_tangerineWhistle` proves that from Tangerine Whistle a creation passes on all but one 64th of the gas left.
 `Logic.running_eq_false_of_sstore_of_isStatic` proves that in a static frame, a step at SSTORE stops the frame.
 `Logic.running_eq_false_of_log_of_isStatic` proves the same for LOG0 to LOG4.
 `NoValue.spec_nonzero` proves a contract that halts at `0xfe` when its message sends value.
