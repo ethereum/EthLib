@@ -185,6 +185,8 @@ It joins the messages of the slot of the state on that root, and fails when ther
 
 The subcommittee is a slice of the sync committee given, and each signer must hold a seat in it.
 
+The caller gives the committee of the next slot, since gossip and the next block check that one.
+
 A bit is set at each seat whose key is the key of the validator of one of the messages.
 
 The signature is the aggregate of one signature for each set seat, in the order of the seats.
