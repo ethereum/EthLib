@@ -111,9 +111,9 @@ def test_attestation_of_a_validator():
 
 def test_attestation_of_a_validator_outside_its_committee():
     outside = next(v for v in range(COUNT) if v not in _expected_committee(COUNT, 2, SLOT))
-    with raises(DUTY_ERROR, "validator duty failed with code 7") as info:
+    with raises(DUTY_ERROR, "validator duty failed with code 8") as info:
         _attest(outside)
-    assert info.value.code == 7
+    assert info.value.code == 8
 
 
 def test_no_attestation_of_one_validator_from_electra():
@@ -164,9 +164,9 @@ def test_aggregate_of_attestations_with_the_attestation_of_a_validator():
 @pytest.mark.parametrize(
     ("attestations", "code"),
     [
-        ([], 8),
-        ([phase0_attestation([True, False], OTHER_DATA, vote(1))], 8),
-        ([phase0_attestation([True, False, False], DATA, vote(1))], 10),
+        ([], 9),
+        ([phase0_attestation([True, False], OTHER_DATA, vote(1))], 9),
+        ([phase0_attestation([True, False, False], DATA, vote(1))], 11),
         ([phase0_attestation([True, False], DATA, bytes(96))], 3),
     ],
     ids=["none", "other data", "three bits", "bad signature"],
@@ -289,10 +289,10 @@ def test_aggregate_of_single_attestations_rejected(pectra: bytes):
     first, _ = _committee(pectra)
     outside = next(v for v in range(COUNT) if v not in _committee(pectra))
     cases = [
-        ([single(64, first, DATA, vote(1))], 64, 11),
-        ([], 0, 8),
-        ([single(0, first, OTHER_DATA, vote(1))], 0, 8),
-        ([single(0, outside, DATA, vote(1))], 0, 7),
+        ([single(64, first, DATA, vote(1))], 64, 12),
+        ([], 0, 9),
+        ([single(0, first, OTHER_DATA, vote(1))], 0, 9),
+        ([single(0, outside, DATA, vote(1))], 0, 8),
         ([single(0, first, DATA, bytes(96))], 0, 3),
     ]
     for singles, committee, code in cases:
@@ -370,11 +370,11 @@ def test_sync_committee_contribution_takes_the_first_message_of_a_key():
 @pytest.mark.parametrize(
     ("messages", "subcommittee", "committee", "code"),
     [
-        ([message(SLOT, ROOT, 5, vote(1))], 4, MIXED, 11),
-        ([], 1, MIXED, 8),
-        ([message(SLOT, bytes(32), 5, vote(1))], 1, MIXED, 8),
+        ([message(SLOT, ROOT, 5, vote(1))], 4, MIXED, 12),
+        ([], 1, MIXED, 9),
+        ([message(SLOT, bytes(32), 5, vote(1))], 1, MIXED, 9),
         ([message(SLOT, ROOT, COUNT, vote(1))], 1, MIXED, 1),
-        ([message(SLOT, ROOT, 5, vote(1))], 1, sync_committee([OTHER_PUBKEY] * 512), 7),
+        ([message(SLOT, ROOT, 5, vote(1))], 1, sync_committee([OTHER_PUBKEY] * 512), 8),
         ([message(SLOT, ROOT, 5, bytes(96))], 1, MIXED, 3),
     ],
     ids=["subcommittee", "none", "other root", "unknown validator", "no seat", "bad signature"],
