@@ -451,4 +451,21 @@ theorem eq_filterMap_of_filterMapM_ok {α β ε : Type} {f : α → Except ε (O
       subst mapped
       simp only [eq_filterMap_of_filterMapM_ok rest tailOk]
 
+
+/-- A monadic filter map in `Except` that succeeds has succeeded on each element. -/
+theorem ok_of_filterMapM_ok {α β ε : Type} {f : α → Except ε (Option β)} :
+    ∀ {l : List α} {out : List β}, l.filterMapM f = .ok out → ∀ x ∈ l, ∃ y, f x = .ok y
+  | [], _, _, _, absent => absurd absent List.not_mem_nil
+  | x :: l, out, mapped, x', member => by
+    rw [List.filterMapM_cons, bind_ok_iff] at mapped
+    obtain ⟨image, first, mapped⟩ := mapped
+    rcases List.mem_cons.mp member with rfl | member
+    · exact ⟨image, first⟩
+    cases image with
+    | none => exact ok_of_filterMapM_ok mapped x' member
+    | some z =>
+      simp only [bind_ok_iff] at mapped
+      obtain ⟨_, tailOk, -⟩ := mapped
+      exact ok_of_filterMapM_ok tailOk x' member
+
 end EthLib.Base
