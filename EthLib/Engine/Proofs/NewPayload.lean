@@ -16,6 +16,8 @@ Without a JSON-RPC error, the parameters are an array of the values of the versi
 
 A payload that fails the checks is invalid, or has an invalid block hash at version 1.
 
+It has an invalid block hash exactly when its block hash is wrong and the version is 1.
+
 Its latest valid hash is null.
 
 So without the parent's state a payload is never valid: it is syncing, or it failed the checks.
@@ -182,6 +184,48 @@ theorem status_of_checkNewPayload {config : ChainConfig} {version : Nat} {params
         first
           | exact ⟨rfl, .inl rfl⟩
           | exact ⟨rfl, .inr ⟨rfl, ‹version = 1›⟩⟩
+    -- Parameters of the wrong shape fail with a JSON-RPC error, never with a status.
+    · dsimp -zeta only at h
+      rw [ite_eq_right hc, bind_ok_iff] at h
+      obtain ⟨_, hInvalid, -⟩ := h
+      cases hInvalid
+  -- Any other JSON value is not an array, so the read fails at once.
+  | _ => cases h
+
+/-- A failed check answers an invalid block hash exactly for a wrong block hash at version 1. -/
+theorem invalidBlockHash_iff_of_checkNewPayload {config : ChainConfig} {version : Nat}
+    {params : Lean.Json} {status : PayloadStatus} {reason : PayloadError}
+    (h : checkNewPayload config version params = .ok (.error (status, reason))) :
+    status.status = .invalidBlockHash ↔
+      version = 1 ∧ ∃ expected computed, reason = .wrongBlockHash expected computed := by
+  cases params with
+  | arr items =>
+    unfold checkNewPayload at h
+    rw [bind_ok_iff] at h
+    obtain ⟨l, hl, h⟩ := h
+    cases hl
+    by_cases hc : (items.toList.length == paramCount version) = true ∧
+        (items.toList.all fun x => !x.isNull) = true
+    · dsimp only at h
+      rw [ite_eq_left hc] at h
+      -- Walk every step: a failing step contradicts the result, and each value read is kept.
+      repeat' (first
+        | (cases h; done)
+        | (obtain ⟨_, step, h⟩ := bind_ok_iff.mp h
+           first | cases step | obtain ⟨_, -, rfl⟩ := map_ok_iff.mp step | skip)
+        | split at h)
+      -- Only a wrong block hash at version 1 has that status; every other case is invalid.
+      all_goals
+        cases h
+        first
+          | exact ⟨fun _ => ⟨‹version = 1›, _, _, rfl⟩, fun _ => rfl⟩
+          | (refine iff_of_false (by simp) ?_
+             rintro ⟨hv, a, b, he⟩
+             first
+               | exact ‹¬version = 1› hv
+               | solve_by_elim
+               | (cases he; done))
+          | ((by_cases hv : version = 1 <;> simp [hv]) <;> done)
     -- Parameters of the wrong shape fail with a JSON-RPC error, never with a status.
     · dsimp -zeta only at h
       rw [ite_eq_right hc, bind_ok_iff] at h
