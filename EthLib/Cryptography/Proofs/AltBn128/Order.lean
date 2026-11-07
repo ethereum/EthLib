@@ -179,7 +179,7 @@ namespace Point
 
 /-- `q P = O` for every point on the curve.
 
-So the subgroup check of ECPAIRING accepts every point of the curve over `Fp`. -/
+So the curve equation is enough for a point of `G_1`, as EIP-197 says. -/
 theorem mulBits_order {p : Point} (hp : p.isOnCurve = true) : mulBits 256 Fr.modulus p = infinity := by
   rw [← toPoint_eq_zero (isOnCurve_mulBits _ _ hp), toPoint_mulBits _ _ hp (by decide)]
   exact nsmul_order _
