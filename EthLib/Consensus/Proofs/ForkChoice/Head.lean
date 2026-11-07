@@ -26,6 +26,10 @@ The boost applies after a parent older than the previous slot, and after a paren
 The head has no child among the viable nodes, so the walk stops only at a leaf.
 
 A viable node with children has a viable child, so from Gloas the head is never a pending node.
+
+From Gloas, let a block of the previous slot have a verified payload and both its nodes viable.
+
+The walk then takes the full node exactly when the payload extends.
 -/
 
 @[expose] public section
@@ -559,6 +563,55 @@ theorem getHead_ne_pending {head : ForkChoiceNode} (gloas : .glamsterdam ≤ for
       obtain ⟨child, childMem, childIn⟩ :=
         filterNodeTree_child tree head headIn childrenOk someChild
       exact leaf child childMem childIn
+
+/-- From Gloas the empty and the full node of a block from the previous slot are a decision. -/
+theorem isPreviousSlotPayloadDecision_of_previous {root : Root} {status : PayloadStatus}
+    {block : BeaconBlock preset fork} {next : Slot}
+    (found : store.blocks[root]? = some block) (nextOk : Uint64.addChecked block.slot 1 = .ok next)
+    (current : store.getCurrentSlot config = .ok next) (decided : status ≠ .pending) :
+    store.isPreviousSlotPayloadDecision config ⟨root, status⟩ = .ok true := by
+  cases status <;>
+    simp_all [isPreviousSlotPayloadDecision, Store.block, Except.mapError, bind, Except.bind,
+      pure, Except.pure]
+
+/-- From Gloas, a verified block from the previous slot with both nodes among the viable ones.
+
+The walk then takes its full node exactly when the payload extends, and its empty node otherwise.
+
+Both nodes weigh nothing and have the same root, so the tiebreaker decides. -/
+theorem heaviestChild_of_previousSlot {gloas : .glamsterdam ≤ fork}
+    {nodes : List ForkChoiceNode} {root : Root} {block : BeaconBlock preset fork} {next : Slot}
+    {extend : Bool} (found : store.blocks[root]? = some block)
+    (nextOk : Uint64.addChecked block.slot 1 = .ok next)
+    (current : store.getCurrentSlot config = .ok next)
+    (verified : store.isPayloadVerified gloas root = true)
+    (emptyIn : ⟨root, .empty⟩ ∈ nodes) (fullIn : ⟨root, .full⟩ ∈ nodes)
+    (extendOk : store.shouldExtendPayload config gloas root = .ok extend) :
+    store.heaviestChild config nodes ⟨root, .pending⟩ =
+      .ok (some ⟨root, if extend then .full else .empty⟩) := by
+  have emptyDecision := isPreviousSlotPayloadDecision_of_previous (status := .empty) found nextOk
+    current (by decide)
+  have fullDecision := isPreviousSlotPayloadDecision_of_previous (status := .full) found nextOk
+    current (by decide)
+  have emptyWeighed : store.weighNode config ⟨root, .empty⟩ = .ok (⟨root, .empty⟩, 0, 1) :=
+    weighNode_ok_iff.mpr ⟨rfl, getWeight_of_payloadDecision gloas emptyDecision, by
+      simp [tiebreaker, gloas, getPayloadStatusTiebreaker, emptyDecision, bind, Except.bind,
+        pure, Except.pure]⟩
+  have fullWeighed : store.weighNode config ⟨root, .full⟩ =
+      .ok (⟨root, .full⟩, 0, if extend then 2 else 0) :=
+    weighNode_ok_iff.mpr ⟨rfl, getWeight_of_payloadDecision gloas fullDecision, by
+      cases extend <;> simp [tiebreaker, gloas, getPayloadStatusTiebreaker, fullDecision,
+        extendOk, bind, Except.bind, pure, Except.pure]⟩
+  unfold heaviestChild
+  rw [getNodeChildren_of_pending gloas rfl]
+  simp only [verified, ite_true, List.filter_cons, emptyIn, fullIn, decide_true,
+    List.filter_nil, List.mapM_cons, List.mapM_nil, emptyWeighed, fullWeighed, bind,
+    Except.bind, pure, Except.pure]
+  -- The tiebreakers compare as numbers: 1 is above 0 and below 2.
+  have above : compare (1 : UInt8) 0 = .gt := rfl
+  have below : compare (1 : UInt8) 2 = .lt := rfl
+  cases extend <;> simp [chooseHeaviest, heavier, compareWeighted, compareLex, compareOn,
+    Std.ReflCmp.compare_self, above, below]
 
 end Store
 
