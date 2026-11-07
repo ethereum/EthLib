@@ -72,11 +72,7 @@ theorem absorbBlocks_congr (f : State → State) {rate : Nat} (lanes : 8 ∣ rat
 
 /-- The padding reads its length only mod the rate. -/
 theorem padding_mod (rate len : Nat) : padding rate (len % rate) = padding rate len := by
-  apply ByteArray.ext
-  apply Array.ext
-  · simp [padding]
-  · intro i _ _
-    simp [padding, paddingByte]
+  simp only [padding, Nat.mod_mod]
 
 /-! ## The hasher -/
 

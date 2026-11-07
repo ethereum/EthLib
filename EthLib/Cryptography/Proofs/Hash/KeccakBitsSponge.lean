@@ -142,9 +142,9 @@ theorem paddingBits_eq (len : Nat) :
     rw [Keccak.size_padding] at hb
     omega
   have byteEq : (Keccak.padding 136 len).data[i / 8]'(by
-      simp only [Keccak.padding, Array.size_ofFn]
+      simp only [Keccak.padding_data, Array.size_ofFn]
       exact iByte) = Keccak.paddingByte 136 len (i / 8) := by
-    simp [Keccak.padding]
+    simp [Keccak.padding_data]
   rw [byteEq, paddingByte_testBit _ _ _ _ bitBound]
   have plen : (padding (8 * len)).length = 8 * (136 - len % 136) := by
     rw [← hl, messageBits_length, Keccak.size_padding]

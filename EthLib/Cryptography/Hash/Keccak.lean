@@ -222,14 +222,15 @@ Lane `(x, y)` becomes `A[x, y] ^ D[x]`, with `D[x] = C[x - 1] ^ rot(C[x + 1], 1)
 
 /-- Rho, FIPS 202 §3.2.2, Algorithm 2.
 
-Each lane is rotated by its own offset from the table above. -/
+Each lane is rotated by its own offset from the table above.
+
+The offsets are written as numbers, so that each rotation is by a constant. -/
 @[inline] def rho (A : State) : State :=
-  ⟨rotl A.a0 RHO[0], rotl A.a1 RHO[1], rotl A.a2 RHO[2], rotl A.a3 RHO[3], rotl A.a4 RHO[4],
-   rotl A.a5 RHO[5], rotl A.a6 RHO[6], rotl A.a7 RHO[7], rotl A.a8 RHO[8], rotl A.a9 RHO[9],
-   rotl A.a10 RHO[10], rotl A.a11 RHO[11], rotl A.a12 RHO[12], rotl A.a13 RHO[13],
-   rotl A.a14 RHO[14], rotl A.a15 RHO[15], rotl A.a16 RHO[16], rotl A.a17 RHO[17],
-   rotl A.a18 RHO[18], rotl A.a19 RHO[19], rotl A.a20 RHO[20], rotl A.a21 RHO[21],
-   rotl A.a22 RHO[22], rotl A.a23 RHO[23], rotl A.a24 RHO[24]⟩
+  ⟨rotl A.a0 0, rotl A.a1 1, rotl A.a2 62, rotl A.a3 28, rotl A.a4 27,
+   rotl A.a5 36, rotl A.a6 44, rotl A.a7 6, rotl A.a8 55, rotl A.a9 20,
+   rotl A.a10 3, rotl A.a11 10, rotl A.a12 43, rotl A.a13 25, rotl A.a14 39,
+   rotl A.a15 41, rotl A.a16 45, rotl A.a17 15, rotl A.a18 21, rotl A.a19 8,
+   rotl A.a20 18, rotl A.a21 2, rotl A.a22 61, rotl A.a23 56, rotl A.a24 14⟩
 
 /-- Pi, FIPS 202 §3.2.3, Algorithm 3.
 
@@ -346,7 +347,9 @@ On byte strings the bits become bytes, least significant bit first (Appendix B.1
 -/
 def padding (rate len : Nat) : ByteArray :=
   -- The padding fills the block the message ends in, and a whole block when it ends exactly.
-  ⟨Array.ofFn fun i : Fin (rate - len % rate) => paddingByte rate len i⟩
+  let k := rate - len % rate
+  -- Zeros, then bit 0 set in the first byte and bit 7 set in the last.
+  ⟨((Array.replicate k 0).modify 0 (· ||| 0x01)).modify (k - 1) (· ||| 0x80)⟩
 
 /-- The message followed by its padding: the string `P` of FIPS 202 §4, Algorithm 8, step 1. -/
 def pad (rate : Nat) (msg : ByteArray) : ByteArray :=
