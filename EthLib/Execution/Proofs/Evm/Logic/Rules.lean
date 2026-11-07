@@ -99,6 +99,26 @@ theorem instruction_revert (h : .byzantium ≤ fork) :
   simp [instruction, stackOnlyStep, controlFlowStep, memoryDataStep, returnOpStep, h,
     HOrElse.hOrElse, OrElse.orElse, Option.orElse]
 
+/-- ISZERO runs the test for zero. -/
+theorem instruction_iszero :
+    instruction (Meter := Meter) fork .iszero = some (unaryOp OPCODE_ISZERO isZero) := by
+  simp [instruction, stackOnlyStep, HOrElse.hOrElse, OrElse.orElse, Option.orElse]
+
+/-- ADD runs the sum. -/
+theorem instruction_add :
+    instruction (Meter := Meter) fork .add = some (binaryOp OPCODE_ADD add) := by
+  simp [instruction, stackOnlyStep, HOrElse.hOrElse, OrElse.orElse, Option.orElse]
+
+/-- MLOAD runs the read of a word of memory. -/
+theorem instruction_mload : instruction (Meter := Meter) fork .mload = some mloadStep := by
+  simp [instruction, stackOnlyStep, controlFlowStep, memoryDataStep, HOrElse.hOrElse,
+    OrElse.orElse, Option.orElse]
+
+/-- JUMP runs the jump. -/
+theorem instruction_jump : instruction (Meter := Meter) fork .jump = some jumpStep := by
+  simp [instruction, stackOnlyStep, controlFlowStep, HOrElse.hOrElse, OrElse.orElse,
+    Option.orElse]
+
 end Table
 
 /-- A charge that one counter of gas covers takes it from the counter. -/
@@ -132,6 +152,59 @@ theorem binary {byte : UInt8} {op : Op} {cost : Nat} {f : U256 → U256 → U256
   rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
   rw [binaryOp_cons hst, charge_nat (by rw [hg]; exact hgas)]
   exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, hmem, by simp [hg], hrun, herr, hs, hss⟩
+
+/-- A one-operand instruction of the stack, on `x`, puts `f x` in its place. -/
+theorem unary {byte : UInt8} {op : Op} {cost : Nat} {f : U256 → U256} {x : U256}
+    {rest : List U256} (hlt : pc < code.size) (hbyte : code[pc] = byte)
+    (decoded : Op.ofByte fork byte = some op)
+    (hrun : instruction (Meter := Nat) fork op = some (unaryOp cost f)) (hgas : cost ≤ gas) :
+    Hoare fork (At code message pc (x :: rest) memory gas state substate)
+      (At code message (pc + 1) (f x :: rest) memory (gas - cost) state substate) := by
+  apply At.rule hlt hbyte decoded hrun
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
+  rw [unaryOp_cons hst, charge_nat (by rw [hg]; exact hgas)]
+  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, hmem, by simp [hg], hrun, herr, hs, hss⟩
+
+/-- JUMP to a JUMPDEST of the code goes there, for 8 gas. -/
+theorem jump {destination : U256} {rest : List U256} (hlt : pc < code.size)
+    (hbyte : code[pc] = 0x56) (hgas : 8 ≤ gas)
+    (valid : isValidJumpDest (validJumpDestinations code) destination.toNat = true) :
+    Hoare fork (At code message pc (destination :: rest) memory gas state substate)
+      (At code message destination.toNat rest memory (gas - 8) state substate) := by
+  apply At.rule hlt hbyte (ofByte_of_decode (op := .jump) rfl (Fork.frontier_le _))
+    instruction_jump
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
+  rw [jumpStep_of_isValidJumpDest hst (charge_nat (by rw [hg]; exact hgas))
+    (by rw [hj]; exact valid)]
+  exact ⟨_, rfl, hcode, hj, hm, rfl, rfl, hmem, by simp [hg, OPCODE_JUMP, MID], hrun, herr, hs,
+    hss⟩
+
+/-- MLOAD puts the word of memory at an offset in its place, after memory grows to hold it.
+
+It pays 3 and the growth of memory. -/
+theorem mload {start : U256} {rest : List U256} (hlt : pc < code.size)
+    (hbyte : code[pc] = 0x51)
+    (hgas : 3 + (extendMemory memory.size [(start, 32)]).cost ≤ gas) :
+    Hoare fork (At code message pc (start :: rest) memory gas state substate)
+      (At code message (pc + 1)
+        (loadWord (memoryReadBytes
+          (memoryExtend memory (extendMemory memory.size [(start, 32)]).expandBy)
+          start.toNat 32) 0 32 :: rest)
+        (memoryExtend memory (extendMemory memory.size [(start, 32)]).expandBy)
+        (gas - (3 + (extendMemory memory.size [(start, 32)]).cost)) state substate) := by
+  apply At.rule hlt hbyte (ofByte_of_decode (op := .mload) rfl (Fork.frontier_le _))
+    instruction_mload
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
+  subst hmem hg
+  have hcost : OPCODE_MLOAD_BASE = 3 := rfl
+  rw [mloadStep_cons hst]
+  dsimp only
+  rw [hcost, charge_nat hgas]
+  refine ⟨_, rfl, hcode, hj, hm, by simp [hpc], ?_, ?_, ?_, hrun, herr, hs, hss⟩
+  · show _ :: rest = _ :: rest
+    rfl
+  · simp
+  · simp
 
 /-- DUP1 pushes a copy of the top word, for 3 gas. -/
 theorem dup1 {x : U256} {rest : List U256} (hlt : pc < code.size) (hbyte : code[pc] = 0x80)
