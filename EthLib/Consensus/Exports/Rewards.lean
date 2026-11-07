@@ -9,6 +9,8 @@ C-ABI export of the reward and penalty deltas of an epoch, for the consensus tes
 
 It takes a state as SSZ bytes, and returns the deltas of one kind of vote as SSZ bytes.
 
+A second export returns the deltas of several kinds from one decode of the state.
+
 The deltas hold two lists of amounts, one entry for each validator: the rewards, then the penalties.
 
 An input that does not decode, or an unknown name, has code 0.
@@ -61,6 +63,17 @@ def runDeltas {preset : Preset} {fork : Fork} (config : Config) (component : Str
     | "inactivity_penalty_deltas" => runTransition (getInactivityPenaltyDeltas config state)
     | component => throw (0, s!"no deltas {component} at {fork.name}")
 
+/-- The SSZ bytes of the rewards and the penalties of each validator.
+
+A list longer than the registry limit has code 0. -/
+def encodeDeltas (preset : Preset) (deltas : Array Gwei × Array Gwei) : Result ByteArray :=
+  let (rewards, penalties) := deltas
+  let limit := preset.VALIDATOR_REGISTRY_LIMIT.toNat
+  if within : rewards.size ≤ limit ∧ penalties.size ≤ limit then
+    let deltas : Deltas limit := ⟨⟨rewards, within.1⟩, ⟨penalties, within.2⟩⟩
+    (SszType.serialize deltas).mapError fun e => (0, s!"deltas rejected: {reprStr e}")
+  else throw (0, "deltas longer than the registry limit")
+
 /-- The rewards and the penalties of each validator for one kind of vote, as SSZ bytes.
 
 The preset, the configuration, the fork and the kind of vote are named in UTF-8.
@@ -74,11 +87,22 @@ def rewardsDeltasExport (name fork component pre replacements : ByteArray) :
   let (preset, fork) ← transitionPresetAndFork name fork
   let config ← configWith name replacements
   let state ← decodeInput (BeaconState preset fork) pre
-  let (rewards, penalties) ← runDeltas config (← nameOf component) state
-  let limit := preset.VALIDATOR_REGISTRY_LIMIT.toNat
-  if within : rewards.size ≤ limit ∧ penalties.size ≤ limit then
-    let deltas : Deltas limit := ⟨⟨rewards, within.1⟩, ⟨penalties, within.2⟩⟩
-    (SszType.serialize deltas).mapError fun e => (0, s!"deltas rejected: {reprStr e}")
-  else throw (0, "deltas longer than the registry limit")
+  encodeDeltas preset (← runDeltas config (← nameOf component) state)
+
+/-- The deltas of several kinds of vote for one state, as SSZ bytes, in the order of the kinds.
+
+The state is decoded once for all the kinds.
+
+Each kind gives the same bytes as the export for one kind.
+
+The first kind that fails gives the error. -/
+@[export eth_consensus_rewards_deltas_batch]
+def rewardsDeltasBatchExport (name fork : ByteArray) (components : Array ByteArray)
+    (pre replacements : ByteArray) : Result (Array ByteArray) := do
+  let (preset, fork) ← transitionPresetAndFork name fork
+  let config ← configWith name replacements
+  let state ← decodeInput (BeaconState preset fork) pre
+  components.mapM fun component => do
+    encodeDeltas preset (← runDeltas config (← nameOf component) state)
 
 end EthLib.Consensus.Exports

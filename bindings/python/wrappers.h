@@ -115,6 +115,14 @@ except_into_pybytes(
   PyObject* error_class
 );
 
+/* The `Array ByteArray` of a successful result as a Python `list` of `bytes`,
+ * or NULL with an exception set. */
+PyObject*
+except_into_pybytes_list(
+  lean_object* result,
+  PyObject* error_class
+);
+
 /* The `UInt64` of a successful result as a Python `int`, or NULL with an exception set. */
 PyObject*
 except_into_pyint(
@@ -324,6 +332,7 @@ PyObject* py_consensus_process_operation (PyObject* self, PyObject* args);
 PyObject* py_consensus_upgrade_state (PyObject* self, PyObject* args);
 PyObject* py_consensus_process_epoch (PyObject* self, PyObject* args);
 PyObject* py_consensus_rewards_deltas (PyObject* self, PyObject* args);
+PyObject* py_consensus_rewards_deltas_batch (PyObject* self, PyObject* args);
 PyObject* py_consensus_process_slots (PyObject* self, PyObject* args);
 PyObject* py_consensus_state_transition (PyObject* self, PyObject* args);
 PyObject* py_consensus_state_transition_across (PyObject* self, PyObject* args);
