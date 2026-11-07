@@ -33,10 +33,7 @@ def holds (condition : Prop) [Decidable condition] (message : String) :
 
 /-- The timestamp and the Eth1 data of one block of an Eth1 chain, from 80 bytes.
 
-```text
-    [ timestamp: 8, little-endian | Eth1 data: 72, SSZ ]
-```
--/
+The first 8 bytes are the timestamp, little-endian, and the other 72 the SSZ bytes of the data. -/
 def eth1BlockOf (bytes : ByteArray) : Result (UInt64 × Eth1Data) := do
   unless bytes.size = 80 do throw (0, s!"an Eth1 block is 80 bytes, not {bytes.size}")
   return (← decodeInput UInt64 (bytes.extract 0 8), ← decodeInput Eth1Data (bytes.extract 8 80))
