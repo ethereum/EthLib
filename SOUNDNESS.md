@@ -936,16 +936,19 @@ Each of them assumes only that the construction succeeds, except the theorem on 
 `mem_getAttestingIndices_constructAggregate` shows that the attesters of an aggregate are the attesters of its attestations with the same data.
 From Electra, `mem_getAttestingIndices_constructAggregateOfSingleAttestations` shows that the attesters of an aggregate are the attesters of its single attestations with the same data and committee.
 `getCommitteeIndices_constructAggregateOfSingleAttestations` shows that the committee bits of that aggregate name its one committee.
-`constructSyncCommitteeContribution_spec` shows that a contribution sets the bit of each seat whose key is the key of the validator of a message on its slot and root.
+`constructSyncCommitteeContribution_spec` states the bits of a contribution.
+The bit of a seat is set when its key is the key of the validator of a message on the slot and the root.
 Under `PairingLaws`, `fastAggregateVerify_getAggregateSignature` shows that honest signatures of attestations on one message aggregate to a signature that the fast aggregate verification accepts.
 That theorem assumes that the secret keys do not sum to zero.
 It verifies under the keys in the order of the attestations.
 
-No theorem shows that an aggregate passes the signature check of an indexed attestation, which reads the keys in the sorted order of the attesters.
+No theorem shows that an aggregate passes the signature check of an indexed attestation.
+That check reads the keys in the sorted order of the attesters.
 No theorem covers the signature of a contribution.
 The guide aggregates the signature of every vote.
 So an aggregate verifies only when no two votes share a seat, a condition that no theorem states.
-The contribution takes the sync committee as an argument, since the guide and gossip validation read different committees in the last slot of a period.
+The contribution takes the sync committee as an argument.
+The caller passes the committee of the next slot, which gossip and the next block check.
 The Python suite checks each vote and each aggregate against values worked out in the test from the guide, with py_ecc for the signatures.
 
 ### Honest proposer
@@ -969,12 +972,14 @@ It assumes a signature that passes the block signature check.
 `getExecutionRequests_eq_ok_iff` shows that the requests read from a list are exactly the requests that give that list.
 It rests on the canonical SSZ decoder and on the empty bytes being the only encoding of an empty list.
 `signedHeader_eq_ok_iff` shows that the signed header of a block carries the root of its body, and `getValidatorsCustodyRequirement_bounds` that the custody requirement stays between its two bounds.
-From Altair, `processSyncCommitteeContributions_spec` shows that the sync aggregate of a block sets exactly the bits that its contributions set, each at the seat of its subcommittee.
+From Altair, `processSyncCommitteeContributions_spec` states the bits of the sync aggregate of a block.
+They are exactly the bits that its contributions set, each at the seat of its subcommittee.
 It also shows that the contributions name distinct subcommittees below the number of subnets.
 
 No theorem says that the on-chain aggregate verifies, which rests on BLS and on the disjoint committees of the network aggregates.
 The Python suite checks the new state root against the state root of each valid sanity block case that the repository holds, at seven forks from Phase 0 to Heze.
-It checks the Eth1 vote, the pending deposit count, the custody requirement, the on-chain aggregate, the sync aggregate and the execution requests against values worked out in the test from the guides, with py_ecc for the aggregate signatures.
+It checks the Eth1 vote, the pending deposit count, the custody requirement, the on-chain aggregate, the sync aggregate and the execution requests.
+The test works out the expected values from the guides, with py_ecc for the aggregate signatures.
 
 ### Light client
 
