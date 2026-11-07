@@ -683,7 +683,9 @@ A size is pushed modulo 2^256, as the instruction pushes it.
 `Logic.stop` is the rule for STOP.
 `Logic.stop_of_size_le` is the rule for a frame at or past the end of its code, which stops the same way.
 Their postcondition `Stopped` names no output, since the frame of a code does not name it.
-`Logic.sstore_of_account` restates the rule for SSTORE when the current account exists: some state holds the new word in the slot, keeps every other slot, the original words and the accounts, and the frame reaches it.
+`Logic.sstore_of_account` restates the rule for SSTORE when the current account exists.
+It gives a state that holds the new word in the slot, and that the frame reaches.
+That state keeps every other slot, the original words and the accounts.
 `recordStorageRead_recordStorageRead` proves that recording a storage read twice records it once.
 `Logic.insert_insert_getD_self` proves that recording the access of a slot twice records it once.
 `Logic.mem_insert_getD_self` proves that a slot whose access is recorded is warm.
