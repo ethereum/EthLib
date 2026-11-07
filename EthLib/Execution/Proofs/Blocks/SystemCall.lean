@@ -7,9 +7,11 @@ public import EthLib.Execution.Blocks.SystemCall
 /-!
 # Proofs: the system calls of a block
 
-A checked system call fails when its contract has no code.
+A checked system call succeeds exactly when its contract has code and the call stops with no error.
 
-When it succeeds, its contract has code and the call stopped with no error.
+It fails as an empty contract exactly when the contract has no code.
+
+It fails with the error of its call exactly when the contract has code and the call stops with it.
 
 The requests of a block come in the order of their types, withdrawals before consolidations.
 
@@ -97,6 +99,62 @@ theorem checkedSystemCall_ok {out : SystemCallOutput}
       simp only [hError] at h
       cases h
       exact ⟨⟨code, mapError_ok_iff.mp hCode, hEmpty⟩, mapError_ok_iff.mp hCall, hError⟩
+
+/-- A checked system call succeeds exactly when its contract has code and the call stops cleanly.
+
+It then returns the output of the call. -/
+theorem checkedSystemCall_eq_ok_iff {out : SystemCallOutput} :
+    checkedSystemCall env block target data = .ok out ↔
+      (∃ code, codeAt block target = .ok code ∧ code.size ≠ 0) ∧
+        systemCall env block target data = .ok out ∧ out.error = none := by
+  refine ⟨checkedSystemCall_ok, fun ⟨⟨code, hCode, hSize⟩, hCall, hError⟩ => ?_⟩
+  simp [checkedSystemCall, hCode, hSize, hCall, hError, Except.mapError, bind, Except.bind, pure,
+    Except.pure]
+
+/-- A checked system call fails as an empty contract exactly when its contract has no code. -/
+theorem checkedSystemCall_eq_systemContractEmpty_iff {address : Address} :
+    checkedSystemCall env block target data = .error (.systemContractEmpty address) ↔
+      address = target ∧ ∃ code, codeAt block target = .ok code ∧ code.size = 0 := by
+  unfold checkedSystemCall
+  cases hCode : codeAt block target with
+  | error e => simp [Except.mapError, bind, Except.bind]
+  | ok code =>
+    by_cases hSize : code.size = 0
+    · have hEmpty := ByteArray.size_eq_zero_iff.mp hSize
+      simp [hEmpty, Except.mapError, bind, Except.bind, throw, throwThe, MonadExceptOf.throw,
+        eq_comm]
+    · simp only [Except.mapError, bind, Except.bind, hSize, ↓reduceIte, Except.ok.injEq,
+        exists_eq_left', and_false, iff_false]
+      cases systemCall env block target data with
+      | error e => simp
+      | ok call =>
+        simp only
+        cases call.error <;> simp [throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
+
+/-- A checked system call fails with the error of its call exactly in one case.
+
+Its contract has code, and the call stops with that error. -/
+theorem checkedSystemCall_eq_systemCallFailed_iff {address : Address} {error : EvmError} :
+    checkedSystemCall env block target data = .error (.systemCallFailed address error) ↔
+      address = target ∧ (∃ code, codeAt block target = .ok code ∧ code.size ≠ 0) ∧
+        ∃ out, systemCall env block target data = .ok out ∧ out.error = some error := by
+  unfold checkedSystemCall
+  cases hCode : codeAt block target with
+  | error e => simp [Except.mapError, bind, Except.bind]
+  | ok code =>
+    by_cases hSize : code.size = 0
+    · have hEmpty := ByteArray.size_eq_zero_iff.mp hSize
+      simp [hEmpty, Except.mapError, bind, Except.bind, throw, throwThe,
+        MonadExceptOf.throw]
+    · have hNe : code ≠ ByteArray.empty := fun h => hSize (ByteArray.size_eq_zero_iff.mpr h)
+      simp only [Except.mapError, bind, Except.bind, hSize, ↓reduceIte, Except.ok.injEq,
+        exists_eq_left']
+      cases systemCall env block target data with
+      | error e => simp
+      | ok call =>
+        simp only [Except.ok.injEq, exists_eq_left']
+        cases call.error <;>
+          simp [throw, throwThe, MonadExceptOf.throw, pure, Except.pure, eq_comm, hNe]
 
 /-! ## The requests -/
 
