@@ -1007,7 +1007,10 @@ At the mainnet parameters, `computeWeakSubjectivityPeriodElectra_le_mainnet` giv
 `computeWeakSubjectivityPeriodGloas_le` bounds the Gloas period by a function of the parameters alone when the activation floor covers the rounding losses.
 At the mainnet parameters, `computeWeakSubjectivityPeriodGloas_le_mainnet` gives at most 1658 epochs, and a Python test reaches that bound.
 Its state is not one that a chain can reach: one validator holds about 1.4 billion ether.
-No theorem bounds the Phase 0 period.
+`computeWeakSubjectivityPeriodPhase0_le` bounds the Phase 0 period by the withdrawal delay plus the longer of two terms, `160 N / (600 delta)` and `230 N / (600 Delta)`.
+Here `N` is the number of active validators, `delta` the churn of validators in one epoch and `Delta` the deposits that fit in one epoch.
+The bound needs no condition beyond success of the computation.
+It depends on the state through `N` and `delta`, so it gives no number for the parameters alone.
 
 `isWithinWeakSubjectivityPeriod_eq_ok_iff` states when the check of a checkpoint succeeds and what it answers.
 The state must hold the root of the checkpoint at its epoch and be at that epoch.
