@@ -10,6 +10,8 @@ public import EthLib.Networking.Proofs.Snappy.Compress
 
 Each message reads back from its frame data, compressed or not.
 
+A reader of Hello ignores the list items after the five fields it knows, as EIP-8 asks.
+
 With Snappy, a reader rejects a message other than Hello whose preamble declares more than 16 MiB.
 
 A message other than Hello that such a reader accepts decompresses to at most 16 MiB.
@@ -62,6 +64,12 @@ theorem Hello.ofItem_toItem (h : Hello) : Codec.ofItem (Codec.toItem h) = .ok h 
   simp only [Rlpx.leadingFields, Item.toItems, bind, Except.bind, List.length_cons,
     List.length_nil, List.take, Nat.zero_add, Nat.reduceAdd, Nat.le_refl, ↓reduceIte, hcaps, hcid,
     LawfulCodec.ofItem_toItem, pure, Except.pure]
+
+/-- Hello reads the same from five or more items, whatever items follow them, as EIP-8 asks. -/
+theorem Hello.ofItem_append {fields : List Item} (extra : List Item) (h : 5 ≤ fields.length) :
+    (Codec.ofItem (.list (fields ++ extra)) : Except RlpError Hello) =
+      Codec.ofItem (.list fields) := by
+  simp only [Codec.ofItem, Rlpx.leadingFields_append extra h]
 
 /-- Each message reads back from its ID and its RLP list. -/
 theorem Message.ofItem_toItem (m : Message) : Message.ofItem m.id m.toItem = .ok m := by
