@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: networking
+handler: gossip_inclusion_list
+suite: pyspec_tests
+case: gossip_inclusion_list__ignore_dependent_block_not_possible

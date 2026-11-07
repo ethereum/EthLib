@@ -1,0 +1,11 @@
+topic: inclusion_list
+blocks:
+- {block: 
+    block_0xda6ee95f7984394ded4f5a66c0233a5cbb0d7bb429e1a00d00c24fd269f09199}
+- {block: 
+    block_0x97a28e666ce14f87a6e152301246f95327bf1f45441b20c24f3d3e1806bb504b}
+messages:
+- {current_time_ms: 48100, message: 
+    inclusion_list_0xb3692563f420019f6d698a3bb5657eb077d4df82b8c064e03ee3779b1e12077b,
+  expected: reject, reason: dependent block is after the shuffling dependent 
+    slot}

@@ -20,6 +20,8 @@ Each valid bid beats the best value before it, for its slot and parents.
 So the best value recorded for a slot and its parents only grows.
 
 A compatible gas limit moves from the parent's limit by less than a 1024th of it.
+
+The check of the inclusion lists of Heze accepts before Heze, and never rejects.
 -/
 
 @[expose] public section
@@ -151,6 +153,27 @@ theorem lt_value_of_validateExecutionPayloadBid_eq_accept {best : Gwei}
       rw [validateExecutionPayloadBid_of_not_best seenKey recorded low] at valid
       cases valid
 
+/-! ## The inclusion lists of Heze -/
+
+/-- Before Heze a bid has no inclusion list bits, so their check accepts. -/
+theorem bidInclusionListOutcome_of_lt_heze {state : BeaconState preset fork}
+    {bid : ExecutionPayloadBid preset fork} (early : ¬ .hegota ≤ fork) :
+    bidInclusionListOutcome store state bid = .ok accept := by
+  simp [bidInclusionListOutcome, early, pure, Except.pure]
+
+/-- The check of the inclusion list bits of a bid never rejects. -/
+theorem bidInclusionListOutcome_ne_reject {state : BeaconState preset fork}
+    {bid : ExecutionPayloadBid preset fork} {reason : String} :
+    bidInclusionListOutcome store state bid ≠ .ok (.reject reason) := by
+  unfold bidInclusionListOutcome
+  split
+  · intro h
+    simp only [bind, Except.bind] at h
+    repeat' split at h
+    all_goals simp_all [ignoreUnless, pure, Except.pure, Except.mapError]
+    all_goals split at h <;> simp_all
+  · simp [pure, Except.pure]
+
 /-! ## The chain of checks -/
 
 section Chain
@@ -159,6 +182,7 @@ variable {timely onHead compatible active covered exiting valid : Bool}
   {parent : BeaconBlock preset fork} {state advanced : BeaconState preset fork}
   {lookahead : Epoch} {dependentRoot : Root} {preferences : ProposerPreferences}
   {parentGasLimit : UInt64} {randao : Bytes32} {builder : Builder}
+  {listCheck : ValidationResult}
 
 /-- The outcome of a bid is its chain of checks, in order.
 
@@ -188,6 +212,7 @@ theorem validateExecutionPayloadBid_eq
     (funds : canBuilderCoverBid advanced gloas signed.message.builderIndex signed.message.value =
       .ok covered)
     (exit : builderMayExit store gloas advanced signed.message builder = .ok exiting)
+    (lists : bidInclusionListOutcome store advanced signed.message = .ok listCheck)
     (signature : verifyExecutionPayloadBidSignature config checks advanced gloas signed =
       .ok valid) :
     validateExecutionPayloadBid config checks seen store gloas signed currentTimeMs =
@@ -225,12 +250,15 @@ theorem validateExecutionPayloadBid_eq
         (rejectUnless active "builder is not active").andThen fun _ =>
         (ignoreUnless covered "builder cannot cover bid value").andThen fun _ =>
         (ignoreUnless (!exiting) "builder may exit").andThen fun _ =>
+        listCheck.andThen fun _ =>
         rejectUnless valid "invalid bid signature") := by
   unfold validateExecutionPayloadBid
   simp only [clock, known, held, reach, dependent, preferred, payload, gas, branch, mix, slots,
-    found, activity, funds, exit, signature, bind, Except.bind, pure, Except.pure,
+    found, activity, funds, exit, lists, signature, bind, Except.bind, pure, Except.pure,
     Except.mapError, ignoreUnless_andThenM, ignoreUnless_andThen, rejectUnless_andThenM,
     rejectUnless_andThen, apply_ite (Except.ok (ε := ForkChoiceError))]
+  cases listCheck <;> simp only [ValidationResult.andThenM, ValidationResult.andThen, pure,
+    Except.pure]
 
 /-- Once its inputs are computed, a bid is valid exactly when every check passes. -/
 theorem validateExecutionPayloadBid_eq_accept
@@ -254,6 +282,7 @@ theorem validateExecutionPayloadBid_eq_accept
     (funds : canBuilderCoverBid advanced gloas signed.message.builderIndex signed.message.value =
       .ok covered)
     (exit : builderMayExit store gloas advanced signed.message builder = .ok exiting)
+    (lists : bidInclusionListOutcome store advanced signed.message = .ok listCheck)
     (signature : verifyExecutionPayloadBidSignature config checks advanced gloas signed =
       .ok valid) :
     validateExecutionPayloadBid config checks seen store gloas signed currentTimeMs = .ok accept ↔
@@ -271,9 +300,9 @@ theorem validateExecutionPayloadBid_eq_accept
         signed.message.feeRecipient = preferences.feeRecipient ∧ compatible = true ∧
         onHead = true ∧ signed.message.prevRandao = randao ∧
         builder.version = PAYLOAD_BUILDER_VERSION ∧ active = true ∧ covered = true ∧
-        exiting = false ∧ valid = true := by
+        exiting = false ∧ listCheck = accept ∧ valid = true := by
   rw [validateExecutionPayloadBid_eq clock known held reach dependent preferred payload gas branch
-    mix slots found activity funds exit signature]
+    mix slots found activity funds exit lists signature]
   simp only [Except.ok.injEq, andThen_eq_accept, ignoreUnless_eq_accept, rejectUnless_eq_accept]
   simp
 
@@ -299,6 +328,7 @@ theorem validateExecutionPayloadBid_ignored {reason : String}
     (funds : canBuilderCoverBid advanced gloas signed.message.builderIndex signed.message.value =
       .ok covered)
     (exit : builderMayExit store gloas advanced signed.message builder = .ok exiting)
+    (lists : bidInclusionListOutcome store advanced signed.message = .ok listCheck)
     (signature : verifyExecutionPayloadBidSignature config checks advanced gloas signed =
       .ok valid)
     (ignored : validateExecutionPayloadBid config checks seen store gloas signed currentTimeMs =
@@ -309,18 +339,20 @@ theorem validateExecutionPayloadBid_ignored {reason : String}
           signed.message.parentBlockRoot)).all (· < signed.message.value) = false ∨
         timely = false ∨ lookahead < computeEpochAtSlot preset signed.message.slot ∨
         signed.message.feeRecipient ≠ preferences.feeRecipient ∨ compatible = false ∨
-        onHead = false ∨ covered = false ∨ exiting = true := by
+        onHead = false ∨ covered = false ∨ exiting = true ∨
+        ∃ reason, listCheck = .ignore reason := by
   rw [validateExecutionPayloadBid_eq clock known held reach dependent preferred payload gas branch
-    mix slots found activity funds exit signature] at ignored
+    mix slots found activity funds exit lists signature] at ignored
   refine Classical.byContradiction fun none => ?_
   simp only [not_or, Bool.not_eq_false, Bool.not_eq_true, ne_eq, Decidable.not_not,
     UInt64.not_lt] at none
-  obtain ⟨fresh, best, current, inside, fee, gasOk, branchOk, coveredOk, staying⟩ := none
+  obtain ⟨fresh, best, current, inside, fee, gasOk, branchOk, coveredOk, staying, noIgnore⟩ :=
+    none
   simp only [Except.ok.injEq, ignoreUnless_andThen, rejectUnless_andThen, best, current,
     inside, fee, gasOk, branchOk, coveredOk, staying, beq_self_eq_true, decide_true, Bool.not_false,
     Bool.not_eq_true', ite_true] at ignored
   repeat' split at ignored
-  all_goals cases valid <;> simp_all
+  all_goals cases valid <;> cases listCheck <;> simp_all [ValidationResult.andThen, rejectUnless]
 
 end Chain
 

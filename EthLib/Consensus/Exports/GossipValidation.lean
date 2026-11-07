@@ -5,6 +5,7 @@ public import EthLib.Cryptography.Exports.Kzg
 public import EthLib.Consensus.Gossip.Attestation
 public import EthLib.Consensus.Gossip.Bid
 public import EthLib.Consensus.Gossip.Block
+public import EthLib.Consensus.Gossip.InclusionList
 public import EthLib.Consensus.Gossip.Operations
 public import EthLib.Consensus.Gossip.Payload
 public import EthLib.Consensus.Gossip.ProposerPreferences
@@ -59,6 +60,8 @@ After each message comes one byte: 0 when it is valid, 1 when it is ignored, 2 w
 An ignore or a reject carries a 4-byte length and its reason in UTF-8.
 
 Numbers are little-endian.
+
+From Heze a valid inclusion list also joins the inclusion lists of the store, as timely.
 
 An error of the fork choice, such as a head that cannot be computed, fails the whole run.
 
@@ -144,14 +147,20 @@ def readGossipBlocks : (rounds : Nat) → ByteArray → Nat → Result (List Gos
 
 /-- The store with the envelope of the payload of a block, from Gloas, when there is one.
 
-The envelope was verified when it arrived, so the store keeps it by the root of the block. -/
+The envelope was verified when it arrived, so the store keeps it by the root of the block.
+
+From Heze the execution layer answers that the payload satisfied its inclusion lists. -/
 def importGossipEnvelope {preset : Preset} {fork : Fork} (store : Store preset fork)
     (root : Root) (bytes : ByteArray) : Result (Store preset fork) := do
   if bytes.isEmpty then return store
   if gloas : .glamsterdam ≤ fork then
     let signed ← decodeInput (SignedExecutionPayloadEnvelope preset fork) bytes
     let payloads := (store.payloads gloas).insert root signed.message
-    return { store with payloads := fun _ => payloads }
+    let store := { store with payloads := fun _ => payloads }
+    if heze : .hegota ≤ fork then
+      let satisfaction := (store.payloadInclusionListSatisfaction heze).insert root true
+      return { store with payloadInclusionListSatisfaction := fun _ => satisfaction }
+    else return store
   else throw (0, "a block has the envelope of a payload only from Gloas")
 
 /-- The store and the statuses after a block that follows the anchor.
@@ -191,19 +200,20 @@ The sync committee has topics from Altair, and changes of BLS credentials from C
 
 Blob sidecars travel at Deneb and Electra, and column sidecars at Fulu.
 
-At Gloas every topic but the partial column sidecars is specified here.
+Gloas adds four topics, and Heze adds inclusion lists.
 
-At Heze no topic is specified yet. -/
+Partial column sidecars are specified here only at Fulu. -/
 def gossipValidationSpecified (fork : Fork) : String → Bool
   | "attester_slashing" | "proposer_slashing" | "voluntary_exit" | "beacon_block"
-  | "beacon_attestation" | "beacon_aggregate_and_proof" => fork < .hegota
-  | "sync_committee" | "sync_committee_contribution_and_proof" => .altair ≤ fork && fork < .hegota
-  | "bls_to_execution_change" => .shapella ≤ fork && fork < .hegota
+  | "beacon_attestation" | "beacon_aggregate_and_proof" => true
+  | "sync_committee" | "sync_committee_contribution_and_proof" => .altair ≤ fork
+  | "bls_to_execution_change" => .shapella ≤ fork
   | "blob_sidecar" => .dencun ≤ fork && fork < .fusaka
-  | "data_column_sidecar" => .fusaka ≤ fork && fork < .hegota
+  | "data_column_sidecar" => .fusaka ≤ fork
   | "partial_data_column_sidecar" => .fusaka ≤ fork && fork < .glamsterdam
   | "proposer_preferences" | "execution_payload" | "payload_attestation_message"
-  | "execution_payload_bid" => .glamsterdam ≤ fork && fork < .hegota
+  | "execution_payload_bid" => .glamsterdam ≤ fork
+  | "inclusion_list" => .hegota ≤ fork
   | _ => false
 
 /-- The outcome of one message of a topic, and the keys seen after it.
@@ -324,6 +334,11 @@ def validateGossipInput {preset : Preset} {fork : Fork} (config : Config)
         signed input.currentTimeMs)
       return record outcome (·.recordExecutionPayloadBid signed)
     else throw (0, "the bids of builders travel only from Gloas")
+  | "inclusion_list" =>
+    let signed ← decodeInput SignedInclusionList input.data
+    let outcome ← runForkChoice
+      (validateInclusionList config checks seen store signed input.currentTimeMs)
+    return record outcome (·.recordInclusionList signed)
   | _ => throw (0, s!"gossip validation of the topic {topic} is not yet specified")
 
 /-- At Fulu: the outcomes of the partial sidecars of a case, after the headers it records first.
@@ -358,11 +373,26 @@ def validatePartialInputs {preset : Preset} {fork : Fork} (config : Config)
     return out
   else throw (0, "partial column sidecars travel only at Fulu")
 
+/-- From Heze: the store after a message, which keeps a valid inclusion list as timely.
+
+The node passes a valid list to its fork choice, which the bids of later messages read.
+
+A list that arrives on gossip in its slot counts as timely, as the cases assume.
+
+Any other message leaves the store as it is. -/
+def recordGossipInclusionList {preset : Preset} {fork : Fork} (store : Store preset fork)
+    (topic : String) (outcome : ValidationResult) (input : GossipInput) :
+    Result (Store preset fork) := do
+  if heze : .hegota ≤ fork then
+    if topic = "inclusion_list" ∧ outcome.isAccept then
+      let signed ← decodeInput SignedInclusionList input.data
+      let lists := (store.inclusionLists heze).process signed true
+      return { store with inclusionLists := fun _ => lists }
+  return store
+
 /-- Validate the messages of a topic in turn, against the store of an anchor and later blocks.
 
-At Gloas every topic but the partial column sidecars is specified here.
-
-At Heze no topic is specified yet. -/
+Every topic is specified here up to Heze, but partial column sidecars only at Fulu. -/
 @[export eth_consensus_gossip_validation]
 def gossipValidationExport
     (name fork anchorState anchorBlock blocks finalized topic messages replacements : ByteArray)
@@ -401,6 +431,7 @@ def gossipValidationExport
       validateGossipInput config checks store statuses messageTopic seen input
     seen := next
     out := out ++ outcomeRecord outcome
+    store ← recordGossipInclusionList store messageTopic outcome input
   return out
 
 end EthLib.Consensus.Exports

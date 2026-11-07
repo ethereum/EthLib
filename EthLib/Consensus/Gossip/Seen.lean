@@ -81,6 +81,10 @@ structure Seen where
 
   Each valid bid beats the value before it, so the latest value is the best. -/
   bestExecutionPayloadBids : List ((Slot × Hash32 × Root) × Gwei) := []
+  /-- From Heze: the slot, the dependent root and the member of each valid inclusion list.
+
+  A key appears once for each valid list, so it counts them. -/
+  inclusionListKeys : List (Slot × Root × ValidatorIndex) := []
   deriving Inhabited
 
 namespace Store

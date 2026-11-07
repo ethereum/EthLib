@@ -1,0 +1,9 @@
+topic: sync_committee_contribution_and_proof
+blocks:
+- {block: 
+    block_0xda6ee95f7984394ded4f5a66c0233a5cbb0d7bb429e1a00d00c24fd269f09199}
+messages:
+- {current_time_ms: 500, message: 
+    contribution_0xdbe6d4100bd64bbd2001c07c018ecef73be06ccd1f72b0ae38f47336557cc798,
+  expected: valid}
+bls_setting: 1

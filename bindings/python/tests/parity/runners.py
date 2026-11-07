@@ -56,7 +56,7 @@ _GLOAS = {
     "networking/gossip_partial_data_column_sidecar": "Gloas partial data columns (G78)",
 }
 _HEZE = {
-    "networking": "the Heze gossip and req/resp rules (G87)",
+    "networking/gossip_partial_data_column_sidecar": "Gloas partial data columns (G78)",
 }
 # The plan for the Bogota networks of each devnet, whose EIPs differ.
 # The steps wait for a merge into the Bogota fork branch, or a release of Bogota.
@@ -571,8 +571,8 @@ def _gossip_data_column_sidecar(root: Path, case: Case) -> None:
     from consensus.test_data_column import run_gossip_case
     from consensus.test_gossip_validation import run_case
 
-    # Up to Gloas the store is specified, so the whole validation runs.
-    # At Heze only the sidecar checks that read no store run.
+    # Where the store is specified, the whole validation runs.
+    # Elsewhere only the sidecar checks that read no store do.
     if runs_gossip(case.fork, "gossip_data_column_sidecar"):
         run_case(case.preset, case.fork, root / case.path)
     else:

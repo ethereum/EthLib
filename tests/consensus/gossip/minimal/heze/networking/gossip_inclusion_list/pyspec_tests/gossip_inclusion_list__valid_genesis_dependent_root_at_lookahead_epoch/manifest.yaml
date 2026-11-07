@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: networking
+handler: gossip_inclusion_list
+suite: pyspec_tests
+case: gossip_inclusion_list__valid_genesis_dependent_root_at_lookahead_epoch
