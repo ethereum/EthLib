@@ -62,6 +62,12 @@ A decoded payload has version 1, 2 or 3 of the structure.
 It holds the withdrawals exactly from version 2.
 
 It holds the two blob gas fields exactly in version 3.
+
+A payload of version 4 decodes exactly when its object holds exactly the fields of that version.
+
+Its access list and its slot must then decode.
+
+The rest must decode as a payload of an earlier version.
 -/
 
 public section
@@ -425,6 +431,42 @@ theorem withdrawal_eq_ok_iff {j : Lean.Json} {w : Execution.Blocks.Withdrawal} :
     rw [ite_eq_left hc]
     simp only [bind_ok_iff, field_eq_ok_iff]
     exact ⟨i, hl1, _, hf1, v, hl2, _, hf2, a, hl3, _, hf3, m, hl4, _, hf4, rfl⟩
+
+/-- A payload of version 4 decodes exactly when its object holds exactly the fields of version 4.
+
+Fields whose value is null count as absent.
+
+The object without the access list and the slot must decode as a payload of version 1, 2 or 3.
+
+The access list must decode as a byte string, and the slot as a 64-bit number. -/
+theorem payloadV4_eq_ok_iff {j : Lean.Json} {p : AnyPayload} {blockAccessList : ByteArray}
+    {slotNumber : UInt64} :
+    payloadV4 j = .ok (p, blockAccessList, slotNumber) ↔
+      ∃ fs, fields "payload" j = .ok fs ∧ hasExactly fs payloadFieldsV4 = true ∧
+        anyPayload (Lean.Json.mkObj
+          (fs.filter fun (name, _) => !amsterdamFields.contains name)) = .ok p ∧
+        ∃ list slot, fs.lookup "blockAccessList" = some list ∧ fs.lookup "slotNumber" = some slot ∧
+          bytes "blockAccessList" list = .ok blockAccessList ∧
+          uint64 "slotNumber" slot = .ok slotNumber := by
+  unfold payloadV4
+  simp only [bind_ok_iff]
+  constructor
+  · rintro ⟨fs, hfs, h⟩
+    by_cases hc : hasExactly fs payloadFieldsV4 = true
+    · rw [ite_eq_left hc] at h
+      simp only [bind_ok_iff, field_eq_ok_iff] at h
+      obtain ⟨a, ha, l, hl, b, hb, s, hs, n, hn, hr⟩ := h
+      cases hr
+      exact ⟨fs, hfs, hc, ha, l, s, hl, hs, hb, hn⟩
+    -- An object with other fields fails with an invalid parameter, never with a payload.
+    · rw [ite_eq_right hc, bind_ok_iff] at h
+      obtain ⟨_, hInvalid, -⟩ := h
+      cases hInvalid
+  · rintro ⟨fs, hfs, hc, ha, l, s, hl, hs, hb, hn⟩
+    refine ⟨fs, hfs, ?_⟩
+    rw [ite_eq_left hc]
+    simp only [bind_ok_iff, field_eq_ok_iff]
+    exact ⟨p, ha, l, hl, _, hb, s, hs, _, hn, rfl⟩
 
 /-- A list decodes exactly when the value is an array whose items each decode, in order.
 
