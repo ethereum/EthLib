@@ -36,6 +36,14 @@ At Deneb and Electra the node must hold the blobs of a block, and they must matc
 
 From Fulu the node must get the columns of data that it samples, and each must be valid.
 
+From Gloas an attestation also votes on the payload of its block, through its index.
+
+From Gloas a member of the payload committee votes on whether a payload came on time.
+
+It also votes on whether the blob data of the payload is available.
+
+Its vote counts for the block of its slot, from the wire or from a later block.
+
 From Gloas a block is not yet specified here.
 -/
 
@@ -169,6 +177,18 @@ def recordVote (equivocating : List ValidatorIndex) (message : LatestMessage for
     | some old => if old.rank < message.rank then messages.insert index message else messages
     | none => messages.insert index message
 
+/-- The positions of a validator in a payload committee, in committee order.
+
+A validator may hold several positions, since the committee may draw it more than once. -/
+def ptcPositions (committee : PayloadTimelinessCommittee preset)
+    (validator : ValidatorIndex) : List (Fin preset.PTC_SIZE.toNat) :=
+  (List.finRange _).filter (committee[·] = validator)
+
+/-- The votes of a payload committee on one payload, with a value at the given positions. -/
+def setPtcVotes {n : Nat} (votes : Vector (Option Bool) n) (positions : List (Fin n))
+    (value : Bool) : Vector (Option Bool) n :=
+  positions.foldl (fun votes position => votes.set position.val (some value) position.isLt) votes
+
 namespace Store
 
 variable (config : Config) (store : Store preset fork)
@@ -260,6 +280,21 @@ def validateTargetEpochAgainstCurrentTime (attestation : Attestation preset fork
   unless target.epoch = currentEpoch ∨ target.epoch = previousEpoch do
     throw (.targetEpochNotRecent target.epoch)
 
+/-- Check the vote of an attestation on the payload of its block, from Gloas.
+
+The index of the attestation is that vote: 1 when the payload is present, else 0.
+
+It must be 0 in the slot of the block, and 1 needs the payload verified in the store. -/
+def validatePayloadVote (gloas : .glamsterdam ≤ fork) (attestation : Attestation preset fork)
+    (voted : BeaconBlock preset fork) : Except ForkChoiceError Unit :=
+  let index := attestation.data.index
+  if index ≠ 0 ∧ index ≠ 1 then throw (.invalidAttestationIndex index)
+  else if voted.slot = attestation.data.slot ∧ index ≠ 0 then
+    throw (.sameSlotPayloadVote attestation.data.beaconBlockRoot)
+  else if index = 1 ∧ !store.isPayloadVerified gloas attestation.data.beaconBlockRoot then
+    throw (.payloadNotVerified attestation.data.beaconBlockRoot)
+  else pure ()
+
 /-- Check that an attestation can count in the fork choice now.
 
 An attestation from a block skips the check of its epoch against the clock.
@@ -270,14 +305,13 @@ Both blocks must be known, and the vote must not be for a block after the attest
 
 It counts only from the slot after its own.
 
-From Gloas the check also reads the committee index and the payload.
+From Gloas the index of an attestation says whether the payload of its block is present.
 
-That rule is not yet specified here.
+It must be 0 or 1, and 0 in the slot of the block.
 
-So it fails from Gloas on, rather than apply the earlier rule. -/
+A vote for the payload needs the payload, verified in the store. -/
 def validateOnAttestation (attestation : Attestation preset fork) (isFromBlock : Bool) :
     Except ForkChoiceError Unit := do
-  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
   let target := attestation.data.target
   unless isFromBlock do store.validateTargetEpochAgainstCurrentTime config attestation
   if target.epoch ≠ computeEpochAtSlot preset attestation.data.slot then
@@ -286,6 +320,7 @@ def validateOnAttestation (attestation : Attestation preset fork) (isFromBlock :
   let voted ← store.block attestation.data.beaconBlockRoot
   if attestation.data.slot < voted.slot then
     throw (.futureVote attestation.data.beaconBlockRoot)
+  if gloas : .glamsterdam ≤ fork then store.validatePayloadVote gloas attestation voted
   if target.root ≠ (← store.getCheckpointBlock attestation.data.beaconBlockRoot target.epoch) then
     throw (.targetNotCheckpointBlock target.root)
   let due ← (addChecked attestation.data.slot 1).mapError .arith
@@ -361,14 +396,90 @@ def onAttesterSlashing (checks : SignatureChecks) (slashing : AttesterSlashing p
   store.validateOnAttesterSlashing config checks slashing
   return store.addEquivocators slashing
 
-/-- The store with whether a block arrived in its own slot, before the attestations are due. -/
+/-- Check a vote of the payload committee from the wire: it is for the current slot, and signed.
+
+The signature is checked as an indexed vote with the validator as its only signer. -/
+def validatePtcMessage (checks : SignatureChecks) (state : BeaconState preset fork)
+    (message : PayloadAttestationMessage) (bound : 0 < preset.PTC_SIZE.toNat) :
+    Except ForkChoiceError Unit := do
+  if message.data.slot ≠ (← store.getCurrentSlot config) then
+    throw (.ptcVoteNotCurrent message.data.slot)
+  let indexed : IndexedPayloadAttestation preset :=
+    ⟨⟨#[message.validatorIndex], by simpa using Nat.succ_le_of_lt bound⟩, message.data,
+      message.signature⟩
+  unless ← (isValidIndexedPayloadAttestation config checks state indexed).mapError .transition do
+    throw .invalidPayloadAttestation
+
+/-- The store with both votes of a payload vote at the given positions, for its block.
+
+The store must hold votes for that block. -/
+def recordPtcVotes (gloas : .glamsterdam ≤ fork) (data : PayloadAttestationData)
+    (positions : List (Fin preset.PTC_SIZE.toNat)) :
+    Except ForkChoiceError (Store preset fork) := do
+  let timeliness ← ptcVotes (store.payloadTimelinessVote gloas) data.beaconBlockRoot
+  let availability ← ptcVotes (store.payloadDataAvailabilityVote gloas) data.beaconBlockRoot
+  return { store with
+    payloadTimelinessVote := fun _ => (store.payloadTimelinessVote gloas).insert
+      data.beaconBlockRoot (setPtcVotes timeliness positions data.payloadPresent)
+    payloadDataAvailabilityVote := fun _ => (store.payloadDataAvailabilityVote gloas).insert
+      data.beaconBlockRoot (setPtcVotes availability positions data.blobDataAvailable) }
+
+/-- The store after a vote of a member of the payload committee, from Gloas.
+
+The store must hold the state after the block that the vote names.
+
+A vote for another slot than that block's changes nothing.
+
+The validator must be in the committee of that slot.
+
+A vote from the wire must be for the current slot, with a valid signature.
+
+A vote from a block skips both checks, since the block checked it.
+
+The vote then sets both votes of the validator, at each of its positions. -/
+def onPayloadAttestationMessage (checks : SignatureChecks) (gloas : .glamsterdam ≤ fork)
+    (message : PayloadAttestationMessage) (isFromBlock : Bool) :
+    Except ForkChoiceError (Store preset fork) := do
+  let state ← store.blockState message.data.beaconBlockRoot
+  if message.data.slot ≠ state.slot then pure store else
+  let ptc ← (getPtc config state gloas message.data.slot).mapError .accessor
+  let positions := ptcPositions ptc message.validatorIndex
+  let first ← positions.head?.elim (throw (.notInPtc message.validatorIndex)) pure
+  let () ← if isFromBlock then pure () else
+    store.validatePtcMessage config checks state message first.pos
+  store.recordPtcVotes gloas message.data positions
+
+/-- The store after the votes of the payload committee that a block carries, from Gloas.
+
+Each signer of each aggregate votes in turn, as a vote from a block.
+
+The state is the one after the block, and nothing changes at slot 0. -/
+def notifyPtcMessages (checks : SignatureChecks) (gloas : .glamsterdam ≤ fork)
+    (state : BeaconState preset fork) (attestations : List (PayloadAttestation preset)) :
+    Except ForkChoiceError (Store preset fork) := do
+  if state.slot = 0 then return store
+  attestations.foldlM (init := store) fun store attestation => do
+    let indexed ← (getIndexedPayloadAttestation config state gloas attestation).mapError .accessor
+    indexed.attestingIndices.data.toList.foldlM (init := store) fun store index =>
+      store.onPayloadAttestationMessage config checks gloas
+        ⟨index, attestation.data, Vector.replicate 96 0⟩ true
+
+/-- The store with whether a block arrived in its own slot, before the attestations are due.
+
+From Gloas it also records whether the block came before the votes of the payload committee. -/
 def recordBlockTimeliness (root : Root) : Except ForkChoiceError (Store preset fork) := do
   let block ← store.block root
   let timeIntoSlotMs ← store.getTimeIntoSlotMs config
   let attestationThresholdMs ← (getAttestationDueMs config fork).mapError .arith
-  let isTimely := (← store.getCurrentSlot config) = block.slot ∧
-    timeIntoSlotMs < attestationThresholdMs
-  return { store with blockTimeliness := store.blockTimeliness.insert root (decide isTimely) }
+  let isCurrentSlot := (← store.getCurrentSlot config) = block.slot
+  let isTimely := isCurrentSlot ∧ timeIntoSlotMs < attestationThresholdMs
+  let store := { store with blockTimeliness := store.blockTimeliness.insert root (decide isTimely) }
+  if gloas : .glamsterdam ≤ fork then
+    let ptcThresholdMs ← (getPayloadAttestationDueMs config).mapError .arith
+    let isPtcTimely := isCurrentSlot ∧ timeIntoSlotMs < ptcThresholdMs
+    return { store with
+      ptcTimeliness := fun _ => (store.ptcTimeliness gloas).insert root (decide isPtcTimely) }
+  else return store
 
 /-- The root that fixes the proposer shuffling of an epoch, in the chain of a block. -/
 def getShufflingDependentRoot (root : Root) (epoch : Epoch) : Except ForkChoiceError Root := do

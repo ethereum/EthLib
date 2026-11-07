@@ -185,6 +185,18 @@ inductive ForkChoiceError where
   | pendingNode (root : Root)
   /-- The block with the root is not from the slot before the current one. -/
   | notPreviousSlot (root : Root)
+  /-- From Gloas the index of an attestation, its vote on the payload, is neither 0 nor 1. -/
+  | invalidAttestationIndex (index : UInt64)
+  /-- An attestation from the slot of the block with the root says that the payload is present. -/
+  | sameSlotPayloadVote (root : Root)
+  /-- An attestation for the full node of the block with the root comes before its payload. -/
+  | payloadNotVerified (root : Root)
+  /-- The validator is not in the payload committee of the slot that it votes for. -/
+  | notInPtc (index : ValidatorIndex)
+  /-- A vote of the payload committee from the wire is not for the current slot. -/
+  | ptcVoteNotCurrent (slot : Slot)
+  /-- The signature of a vote of the payload committee does not verify. -/
+  | invalidPayloadAttestation
   deriving Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -229,6 +241,12 @@ def ForkChoiceError.code : ForkChoiceError → UInt32
   | .unknownPayloadVotes _ => 34
   | .pendingNode _ => 35
   | .notPreviousSlot _ => 36
+  | .invalidAttestationIndex _ => 37
+  | .sameSlotPayloadVote _ => 38
+  | .payloadNotVerified _ => 39
+  | .notInPtc _ => 40
+  | .ptcVoteNotCurrent _ => 41
+  | .invalidPayloadAttestation => 42
 
 variable (preset : Preset) (fork : Fork)
 

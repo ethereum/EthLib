@@ -225,10 +225,14 @@ theorem onBlock_ordered {checks : SignatureChecks}
     have invariant := (stateTransition_invariant (holds found) transition).1
     have recordedOrdered : recorded.EpochsOrdered := by
       unfold recordBlockTimeliness at record
-      simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at record
+      simp only [bind_ok_iff, pure, Except.pure] at record
       obtain ⟨_, _, _, _, _, _, _, _, record⟩ := record
-      subst record
-      exact ordered
+      split at record
+      · simp only [bind_ok_iff, Except.ok.injEq] at record
+        obtain ⟨_, _, rfl⟩ := record
+        exact ordered
+      · cases record
+        exact ordered
     have boostedOrdered : boosted.EpochsOrdered := by
       unfold updateProposerBoostRoot at boost
       split at boost
