@@ -73,8 +73,9 @@ An element copies 64 bytes while at least 68 remain, then 60 if more than 64 rem
 
 The last element copies the rest, so 4 to 64 bytes when `len` is at least 4.
 
-The reference compressor splits a copy the same way, in `EmitCopy` of `snappy.cc`, at
-<https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/snappy.cc>.
+The reference compressor splits a copy the same way, in `EmitCopy` of [`snappy.cc`][snappy.cc].
+
+[snappy.cc]: https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/snappy.cc
 -/
 def emitCopies (offset : Nat) (out : ByteArray) (len : Nat) : ByteArray :=
   if len = 0 then out

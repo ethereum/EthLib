@@ -11,8 +11,9 @@ An identifier reads back from its RLP item.
 
 Each fork continues the CRC from the hash before it, as a node updates its hash fork by fork.
 
-A node accepts its own identifier, and the identifier of a peer at an earlier or a later head of
-its chain.
+A node accepts its own identifier.
+
+It accepts the identifier of a peer at an earlier or a later head of its chain.
 
 It refuses a peer at its fork that announces a fork it has passed, and a hash it never had.
 -/

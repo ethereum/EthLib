@@ -8,8 +8,7 @@ public import EthLib.Base.LittleEndian
 
 Decompression of the Snappy block format.
 
-Source: `format_description.txt` of `google/snappy`, at
-<https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/format_description.txt>.
+Source: [`format_description.txt`][format] of `google/snappy`.
 
 Gossip on the consensus layer compresses every message with it.
 
@@ -37,6 +36,8 @@ The array grows as bytes arrive, and never reserves the declared length, which a
 The bytes of one literal element are here too, for the compressor and the proofs (§2.1).
 
 The compressor, which writes literals and copies, is in its own module.
+
+[format]: https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/format_description.txt
 -/
 
 @[expose] public section

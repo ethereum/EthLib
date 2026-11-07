@@ -10,8 +10,7 @@ public import EthLib.Cryptography.Secp256k1.Sign
 
 The "v4" identity scheme of EIP-778, from its section of that name.
 
-Source: EIP-778, at
-<https://github.com/ethereum/EIPs/blob/7622abc1c6569b7e7ade9ed957dde4ed2271cc40/EIPS/eip-778.md>.
+Source: [EIP-778][eip-778].
 
 The `id` pair names the scheme, and the `secp256k1` pair holds the compressed public key.
 
@@ -24,6 +23,8 @@ The EIP does not say which uncompressed form.
 Here it is the 64 bytes `x` then `y`, without the SEC 1 prefix `04`.
 
 That form gives the node ID of the EIP's test vector, and the form with `04` does not.
+
+[eip-778]: https://github.com/ethereum/EIPs/blob/7622abc1c6569b7e7ade9ed957dde4ed2271cc40/EIPS/eip-778.md
 -/
 
 @[expose] public section

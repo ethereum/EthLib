@@ -336,8 +336,12 @@ theorem decodeItem_encode (x : Item) (e : ByteArray) (h : encode x = .ok e) (res
 
 So a stream of encodings, one after another, splits in only one way, with no end marker.
 
-The theorem is `rlp-encode-tree-unamb-prefix` in Figure 5 of Coglio,
-[Ethereum's Recursive Length Prefix in ACL2](https://doi.org/10.4204/EPTCS.327.11). -/
+The theorem is `rlp-encode-tree-unamb-prefix` in Figure 5 of Coglio, [the RLP paper][coglio].
+
+That paper is "Ethereum's Recursive Length Prefix in ACL2".
+
+[coglio]: https://doi.org/10.4204/EPTCS.327.11
+-/
 theorem encode_prefix_free (x y : Item) (ex ey : ByteArray) (hx : encode x = .ok ex) (hy : encode y = .ok ey)
     (more : List UInt8) (hPrefix : ey.data.toList = ex.data.toList ++ more) : more = [] := by
   -- Read `ey` from the front in two ways: as `y` with nothing after, and as `x` with `more` after.

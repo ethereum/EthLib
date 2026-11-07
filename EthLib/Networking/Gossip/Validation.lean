@@ -5,9 +5,9 @@ module
 
 The outcome of validating one gossip message.
 
-Gossipsub v1.1 lets the application accept, reject or ignore each message, as its section
-"Extended Validators" says:
-[libp2p/specs `98c5aa9`](https://github.com/libp2p/specs/blob/98c5aa9421703fc31b0833ad8860a55db15be063/pubsub/gossipsub/gossipsub-v1.1.md#extended-validators).
+Gossipsub v1.1 lets the application accept, reject or ignore each message.
+
+Its section "Extended Validators" says so, in [libp2p/specs `98c5aa9`][gossipsub].
 
 An accepted message is delivered and forwarded.
 
@@ -18,6 +18,8 @@ An ignored message is neither delivered nor forwarded, and its sender is not pen
 Each consensus topic states its rules as conditions that ignore or reject a message.
 
 A message that meets no such condition is accepted.
+
+[gossipsub]: https://github.com/libp2p/specs/blob/98c5aa9421703fc31b0833ad8860a55db15be063/pubsub/gossipsub/gossipsub-v1.1.md#extended-validators
 -/
 
 @[expose] public section

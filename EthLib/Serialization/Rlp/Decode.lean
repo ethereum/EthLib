@@ -8,8 +8,7 @@ public import EthLib.Serialization.Rlp.Encode
 
 The strict RLP decoding: the inverse of the encoding, which rejects every other input.
 
-Source: Appendix B of the Yellow Paper, Shanghai version, in
-[`Paper.tex` at `efc5f9a`](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex).
+Source: Appendix B of the Yellow Paper, Shanghai version, in [`Paper.tex` at `efc5f9a`][paper].
 
 The Yellow Paper defines only the encoding.
 
@@ -26,6 +25,8 @@ There are three such forms, each longer than the real encoding:
 - A length written with a leading zero byte, as `b9 00 40` for `b8 40`.
 
 The decoder rejects all three, and any input that ends early or has bytes left after the item.
+
+[paper]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 -/
 
 @[expose] public section

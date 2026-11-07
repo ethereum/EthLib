@@ -9,8 +9,7 @@ public import EthLib.Serialization.Rlp.Scalar
 
 Typed values as RLP items.
 
-Source: Appendix B of the Yellow Paper, Shanghai version, in
-[`Paper.tex` at `efc5f9a`](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex).
+Source: Appendix B of the Yellow Paper, Shanghai version, in [`Paper.tex` at `efc5f9a`][paper].
 
 A codec writes a value as an item, and reads an item back as a value.
 
@@ -24,6 +23,8 @@ A codec writes a value as an item, and reads an item back as a value.
 - So the recipient of a transaction is 20 bytes, or the empty byte string for a contract creation.
 
 Decoding a value is strict: it accepts exactly the items that the codec writes.
+
+[paper]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 -/
 
 @[expose] public section

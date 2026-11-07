@@ -91,10 +91,13 @@ A fork at block 0 is part of the genesis rules, so it is not a fork.
 
 Paris activates when the chain reaches a total difficulty, so no one knows its block in advance.
 
-[EIP-3675](https://eips.ethereum.org/EIPS/eip-3675#fork-identifier) puts its `FORK_NEXT_VALUE`
-in its place, a block that the chain configuration sets.
+[EIP-3675][eip-3675] puts its `FORK_NEXT_VALUE` in its place.
+
+That value is a block that the chain configuration sets.
 
 So the block of Paris is not a fork block, and `FORK_NEXT_VALUE` is one when the chain sets it.
+
+[eip-3675]: https://eips.ethereum.org/EIPS/eip-3675#fork-identifier
 -/
 def blocks (s : Schedule) : List Nat :=
   let listed := s.config.activations.filterMap fun (fork, activation) =>
@@ -117,8 +120,10 @@ def times (s : Schedule) : List Nat :=
 
 /-- The forks of a chain: the forks by block, then the forks by time.
 
-[EIP-6122](https://eips.ethereum.org/EIPS/eip-6122#additional-rules) puts the forks by time after
-the forks by block. -/
+[EIP-6122][eip-6122] puts the forks by time after the forks by block.
+
+[eip-6122]: https://eips.ethereum.org/EIPS/eip-6122#additional-rules
+-/
 def forks (s : Schedule) : List Activation :=
   s.blocks.map .block ++ s.times.map .time
 
@@ -147,8 +152,9 @@ def passed (s : Schedule) (number timestamp : Nat) : List Activation :=
 
 /-- The fork identifier of a node at a head with a block number and a timestamp.
 
-`FORK_NEXT` is the first fork that the head has not reached, or 0 if the head has passed every
-fork. -/
+`FORK_NEXT` is the first fork that the head has not reached.
+
+It is 0 if the head has passed every fork. -/
 def forkId (s : Schedule) (number timestamp : Nat) : ForkId where
   hash := checksum s.genesisHash (s.passed number timestamp)
   next :=
@@ -182,13 +188,17 @@ def ForkIdError.code : ForkIdError → UInt32
 /--
 The value above which a `FORK_NEXT` is a timestamp, and at or below which it is a block number.
 
-EIP-6122 says that a node need not tell the two apart, but rule 1a must: it compares the next
-fork of a peer with the local head.
+EIP-6122 says that a node need not tell the two apart.
 
-EthLib takes the bound of go-ethereum, the implementation that EIP-2124 names:
-[`forkid.go` at `0d06140`](https://github.com/ethereum/go-ethereum/blob/0d061403cf53263b95f9beec48f07046e78e1bed/core/forkid/forkid.go#L47).
+Rule 1a must, since it compares a peer's next fork with the local head.
+
+EthLib takes the bound of go-ethereum, the implementation that EIP-2124 names.
+
+The bound is in [`forkid.go` at `0d06140`][forkid].
 
 Every block number of a real chain is far below it, and every fork timestamp far above it.
+
+[forkid]: https://github.com/ethereum/go-ethereum/blob/0d061403cf53263b95f9beec48f07046e78e1bed/core/forkid/forkid.go#L47
 -/
 def TIMESTAMP_THRESHOLD : Nat := 1438269973
 
@@ -201,8 +211,9 @@ def passedNext (number timestamp next : Nat) : Bool :=
 namespace Schedule
 
 /--
-Whether a node at a head accepts the fork identifier of a peer, by the validation rules of
-[EIP-2124](https://eips.ethereum.org/EIPS/eip-2124#validation-rules).
+Whether a node at a head accepts the fork identifier of a peer.
+
+The validation rules of [EIP-2124][eip-2124] decide.
 
 - 1: the two hashes match, so the nodes are at one fork.
   The node refuses only if it has passed the next fork that the peer announces (1a).
@@ -211,10 +222,12 @@ Whether a node at a head accepts the fork identifier of a peer, by the validatio
 - 3: the hash of the peer is one of the node's later hashes, so the node is syncing, and it accepts.
 - 4: the node refuses in every other case.
 
-[EIP-6122](https://eips.ethereum.org/EIPS/eip-6122#additional-rules) checks the forks by block
-before the forks by time, as the order of the forks does.
+[EIP-6122][eip-6122] checks the forks by block before the forks by time, as the order of forks does.
 
 The node compares its earlier hashes from the first one, so the first match decides rule 2.
+
+[eip-2124]: https://eips.ethereum.org/EIPS/eip-2124#validation-rules
+[eip-6122]: https://eips.ethereum.org/EIPS/eip-6122#additional-rules
 -/
 def validate (s : Schedule) (number timestamp : Nat) (remote : ForkId) :
     Except ForkIdError Unit :=
@@ -234,14 +247,16 @@ def validate (s : Schedule) (number timestamp : Nat) (remote : ForkId) :
 /--
 The schedule of Ethereum mainnet: its chain configuration from Frontier to BPO2.
 
-[EIP-1898](https://eips.ethereum.org/EIPS/eip-1898#specification) gives the hash of its genesis
-block.
+[EIP-1898][eip-1898] gives the hash of its genesis block.
 
-The header of that block has the timestamp 0, as
-[`genesishashestest.json`](https://github.com/ethereum/tests/blob/c67e485ff8b5be9abc8ad15345ec21aa22e290d9/BasicTests/genesishashestest.json)
-of the Ethereum tests holds it.
+The header of that block has the timestamp 0, as [`genesishashestest.json`][genesis] holds it.
+
+That file is part of the Ethereum tests.
 
 EIP-3675 sets no `FORK_NEXT_VALUE` for mainnet, so Paris adds no fork block.
+
+[eip-1898]: https://eips.ethereum.org/EIPS/eip-1898#specification
+[genesis]: https://github.com/ethereum/tests/blob/c67e485ff8b5be9abc8ad15345ec21aa22e290d9/BasicTests/genesishashestest.json
 -/
 def mainnet : Schedule where
   genesisHash := ⟨#[0xd4, 0xe5, 0x67, 0x40, 0xf8, 0x76, 0xae, 0xf8, 0xc0, 0x10, 0xb8, 0x6a,

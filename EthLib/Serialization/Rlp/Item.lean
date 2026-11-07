@@ -5,8 +5,7 @@ module
 
 The values that Recursive Length Prefix (RLP) encodes, and the big-endian bytes of a number.
 
-Source: Appendix B of the Yellow Paper, Shanghai version, in
-[`Paper.tex` at `efc5f9a`](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex).
+Source: Appendix B of the Yellow Paper, Shanghai version, in [`Paper.tex` at `efc5f9a`][paper].
 
 An item is a byte string or a list of items, so the items form a tree.
 
@@ -17,6 +16,8 @@ For example, `[ "cat", [ "dog" ], [] ]` is a list of three items:
 - The empty list.
 
 The empty byte string and the empty list are different items, with different encodings.
+
+[paper]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 -/
 
 @[expose] public section

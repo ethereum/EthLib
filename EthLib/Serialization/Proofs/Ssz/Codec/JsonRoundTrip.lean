@@ -104,8 +104,9 @@ theorem getObjVal?_zip {names : List String} {parts : List Json} (distinct : nam
 /--
 Each field of a struct reads back as the value it was written from.
 
-What the object yields at each position is a hypothesis, so only the recursion over the
-fields is proved here.
+What the object yields at each position is a hypothesis.
+
+So only the recursion over the fields is proved here.
 -/
 theorem valueOfFields_jsonOfFields (names : List String) (document : Json) (spelling : Spelling) :
     ∀ (fields : List Desc) (values : List Value) (documents : List Json) (position : Nat),

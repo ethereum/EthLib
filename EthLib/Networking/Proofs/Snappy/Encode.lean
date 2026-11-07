@@ -8,8 +8,7 @@ public import EthLib.Networking.Snappy.Encode
 
 The decoder reads the elements that the encoder writes.
 
-Source: `format_description.txt` of `google/snappy`, at
-<https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/format_description.txt>.
+Source: [`format_description.txt`][format] of `google/snappy`.
 
 Bytes `e` take the output `o` to the output `o'` in this sense.
 
@@ -21,6 +20,8 @@ It then reaches the end of `e` with the output `o'`.
 - A copy takes a prefix of a list `L` to a longer prefix, if it repeats bytes of `L` (§2.2).
 - The copies that the encoder writes for one offset do the same, one after the other.
 - The literal that the encoder writes for a range of the input takes it from its start to its end.
+
+[format]: https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/format_description.txt
 -/
 
 @[expose] public section

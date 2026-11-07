@@ -56,8 +56,9 @@ theorem progressiveChunkGindex_peel (chunk depth spine : Nat) (past : 2 ^ depth 
 /--
 The index of a chunk, in closed form, from any point of the walk.
 
-The widths seen from a given depth are that depth's own width times one, four, sixteen, and
-so on, which is why the level start is scaled by it.
+The widths seen from a given depth are that depth's own width times one, four, sixteen, and so on.
+
+This is why the level start is scaled by it.
 -/
 theorem progressiveChunkGindex_closed :
     ∀ (level position depth spine : Nat), position < 4 ^ level * 2 ^ depth →
@@ -88,8 +89,9 @@ theorem progressiveChunkGindex_closed :
 /--
 The index a chunk of a progressive collection sits at.
 
-A chunk keeps this index however long the collection grows, since nothing in it depends on
-the number of chunks held.
+A chunk keeps this index however long the collection grows.
+
+Nothing in it depends on the number of chunks held.
 -/
 theorem progressiveChunkGindex_level (level position : Nat) (inside : position < 4 ^ level) :
     progressiveChunkGindex (levelStart level + position)
@@ -103,11 +105,13 @@ theorem progressiveChunkGindex_level (level position : Nat) (inside : position <
 /--
 Levels a chunk sits below the value's own root, which is the node count of its proof.
 
-A chunk of level `level` sits three levels further down for each level along, plus the two
-the spine root and the mixed-in word take.
+A chunk of level `level` sits three levels further down for each level along.
 
-This is what fixes the cost of a proof about a progressive collection: it grows with the
-logarithm of the chunk number, at three hashes per factor of four.
+Add to this the two levels that the spine root and the mixed-in word take.
+
+This is what fixes the cost of a proof about a progressive collection.
+
+It grows with the logarithm of the chunk number, at three hashes per factor of four.
 -/
 theorem progressiveChunkGindex_depth (level position : Nat) (inside : position < 4 ^ level) :
     Nat.log2 (progressiveChunkGindex (levelStart level + position)) = 3 * level + 2 := by

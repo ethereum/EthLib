@@ -8,8 +8,7 @@ public import EthLib.Networking.Snappy.Encode
 
 Compression to the Snappy block format.
 
-Source: `format_description.txt` of `google/snappy`, at
-<https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/format_description.txt>.
+Source: [`format_description.txt`][format] of `google/snappy`.
 
 Its opening text describes the format, and not how the compressor works.
 
@@ -36,6 +35,8 @@ A match longer than 64 bytes is written as several copies of one offset (§2.2.2
 The input must have at most 2^32 - 1 bytes, the largest length that a preamble can declare (§1).
 
 A longer input gives a preamble out of range, so decompression rejects the block.
+
+[format]: https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/format_description.txt
 -/
 
 @[expose] public section
@@ -60,8 +61,9 @@ The four bytes, read little-endian, are multiplied by 0x1e35a7bd modulo 2^32.
 
 The reference compressor also hashes with this multiplier and the upper bits of the product.
 
-See `TableEntry` of `snappy.cc`, at
-<https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/snappy.cc>.
+See `TableEntry` of [`snappy.cc`][snappy.cc].
+
+[snappy.cc]: https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/snappy.cc
 -/
 def hashSlot (src : ByteArray) (i : Nat) (h : i + 4 ≤ src.size) : Nat :=
   let word := src[i].toNat + 256 * src[i + 1].toNat + 65536 * src[i + 2].toNat +
