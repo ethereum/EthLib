@@ -1,8 +1,9 @@
 """Snappy blocks and framed streams against hand-built cases and python-snappy output."""
 
-# The two accepted framed streams and the block of 123456789 come from python-snappy 0.7.3 on
-# cramjam 2.14.0. Every other case is built by hand from format_description.txt and
-# framing_format.txt of google/snappy.
+# The two accepted framed streams and the block of 123456789 come from python-snappy.
+# The version is python-snappy 0.7.3, on cramjam 2.14.0.
+# Every other case is built by hand from format_description.txt and framing_format.txt.
+# Both files are in google/snappy.
 
 import random
 

@@ -8,8 +8,9 @@ from ethlib.cryptography import bls
 from ethlib.errors import BlsError
 from raising import raises
 
-# e(G1, G2), the coefficients e_0 to e_11 of draft-irtf-cfrg-pairing-friendly-curves-11,
-# Appendix B, BLS12_381: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-pairing-friendly-curves-11
+# e(G1, G2): the coefficients e_0 to e_11 of draft-irtf-cfrg-pairing-friendly-curves-11.
+# Section: Appendix B, BLS12_381
+# https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-pairing-friendly-curves-11
 PAIRING_OF_GENERATORS = [
     0x11619B45F61EDFE3B47A15FAC19442526FF489DCDA25E59121D9931438907DFD448299A87DDE3A649BDBA96E84D54558,
     0x153CE14A76A53E205BA8F275EF1137C56A566F638B52D34BA3BF3BF22F277D70F76316218C0DFD583A394B8448D2BE7F,

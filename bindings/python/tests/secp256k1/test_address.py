@@ -64,7 +64,8 @@ KEYADDR = json.loads((Path(__file__).resolve().parent / "keyaddr" / "keyaddrtest
 
 @pytest.mark.parametrize("case", KEYADDR, ids=lambda c: c["seed"])
 def test_keyaddr(case: dict) -> None:
-    # The field `sig_of_emptystring` is not read: the file does not name the hash it signs, and no
-    # candidate hash recovers the address (keyaddr/README.md).
+    # The field `sig_of_emptystring` is not read.
+    # The file does not name the hash it signs, and no candidate hash recovers the address.
+    # See keyaddr/README.md.
     assert len(KEYADDR) == 2
     assert secp256k1.address(bytes.fromhex(case["key"])).hex() == case["addr"]

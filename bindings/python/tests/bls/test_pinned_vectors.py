@@ -84,10 +84,11 @@ def test_hash_to_g2(case: dict) -> None:
     assert bls.hash_to_g2(b(i["msg"]), b(i["dst"])) == expected
 
 
-# The error of each failing deserialization case: the point is malformed or off the curve, or it is
-# on the curve but outside the subgroup of order r.
-# The G1 case with the infinity flag cleared reads as x = 0, and 0^3 + 4 = 2^2, so it decodes to an
-# affine point on the curve, which is outside the subgroup.
+# The error of each failing deserialization case.
+# The point is malformed, off the curve, or on the curve but outside the subgroup of order r.
+#
+# The G1 case with the infinity flag cleared reads as x = 0.
+# Since 0^3 + 4 = 2^2, it decodes to an affine point on the curve, outside the subgroup.
 # In G2, x = 0 gives y^2 = 4(1 + i), which has no square root, so that case is off the curve.
 DESERIALIZATION_ERRORS = {
     ("G1", "deserialization_fails_not_in_G1"): ("point not in subgroup", 7),

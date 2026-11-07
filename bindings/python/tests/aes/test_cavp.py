@@ -46,8 +46,14 @@ CASES = [(name, *case) for name in FILES for case in _cases(name)]
 
 
 def test_case_count() -> None:
-    # GFSbox 7 and 5, KeySbox 21 and 16, VarKey 128 and 256, VarTxt 128 and 128 cases, each in
-    # an encrypt and a decrypt section; a parser that drops cases fails here.
+    # The cases of each file, at 128 and 256 bits:
+    # - GFSbox 7 and 5
+    # - KeySbox 21 and 16
+    # - VarKey 128 and 256
+    # - VarTxt 128 and 128
+    #
+    # Each case appears in an encrypt section and in a decrypt section.
+    # A parser that drops cases fails here.
     assert len(CASES) == 2 * (7 + 5 + 21 + 16 + 128 + 256 + 128 + 128)
 
 

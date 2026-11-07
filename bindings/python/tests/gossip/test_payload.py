@@ -7,8 +7,8 @@ from raising import raises
 MAX_PAYLOAD_SIZE = 10 * 1024 * 1024
 MAX_COMPRESSED = 32 + MAX_PAYLOAD_SIZE + MAX_PAYLOAD_SIZE // 6
 
-# 32 zero bytes as one Snappy block: the length 32, a literal of one zero byte, and a copy of
-# 31 bytes from 1 byte back (python-snappy 0.7.3 on cramjam 2.14.0).
+# 32 zero bytes as one Snappy block, from python-snappy 0.7.3 on cramjam 2.14.0.
+# The block is the length 32, a literal of one zero byte, and a copy of 31 bytes from 1 byte back.
 PAYLOAD = bytes(32)
 COMPRESSED = bytes.fromhex("2000007a0100")
 

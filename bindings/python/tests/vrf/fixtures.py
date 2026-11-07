@@ -1,8 +1,8 @@
 """Inputs and expected values shared by the VRF tree test-vector generators."""
 
 # The openings follow byte patterns, so they are written here as functions.
-# The roots, the outputs and the secrets were computed outside EthLib, by an independent
-# implementation of the specification.
+# The roots, the outputs and the secrets were computed outside EthLib.
+# An independent implementation of the specification computed them.
 
 
 # ---- Openings ----------------------------------------------------------------
@@ -10,8 +10,9 @@
 
 def pattern_opening(sa: int, sb: int, pa: int, pb: int, pc: int) -> bytes:
     """The 1056 bytes of an opening whose secret and siblings follow two byte patterns."""
-    # Byte k of the secret is (sa k + sb) mod 256, and byte k of sibling l is
-    # (pa l + pb k + pc) mod 256. The siblings follow the secret, from the leaf up to the root.
+    # Byte k of the secret is (sa k + sb) mod 256.
+    # Byte k of sibling l is (pa l + pb k + pc) mod 256.
+    # The siblings follow the secret, from the leaf up to the root.
     secret = bytes((sa * k + sb) % 256 for k in range(32))
     path = b"".join(bytes((pa * row + pb * k + pc) % 256 for k in range(32)) for row in range(32))
     return secret + path

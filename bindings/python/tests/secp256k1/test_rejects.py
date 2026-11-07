@@ -45,8 +45,8 @@ def _ids(case: dict) -> str:
 def test_verify_rejects_key(case: dict) -> None:
     q, m, s = (bytes.fromhex(case[k]) for k in ("Q", "m", "signature"))
     message, code = KEY_ERRORS[case["description"]]
-    # A compressed key with x = 0 meets a different error: 0^3 + 7 has no square root mod p,
-    # so no point has that x (SEC 1 v2 §2.3.4, step 2.4.1).
+    # A compressed key with x = 0 meets a different error.
+    # 0^3 + 7 has no square root mod p, so no point has that x (SEC 1 v2 §2.3.4, step 2.4.1).
     if len(q) == 33 and case["description"] == "Bad X coordinate (== 0)":
         message, code = "no point of the curve has this x", 5
     with raises(Secp256k1Error, message.format(prefix=q[0])) as error:
@@ -56,8 +56,9 @@ def test_verify_rejects_key(case: dict) -> None:
 
 @pytest.mark.parametrize("case", BAD_SIGNATURES, ids=_ids)
 def test_verify_rejects_signature(case: dict) -> None:
-    # r or s is 0 or at least n, which SEC 1 v2 §4.1.4 step 1 rejects; or s is high, which the
-    # strict mode of tiny-secp256k1 rejects and EthLib leaves to the EIP-2 check.
+    # r or s is 0 or at least n, which SEC 1 v2 §4.1.4 step 1 rejects.
+    # Or s is high, which the strict mode of tiny-secp256k1 rejects.
+    # EthLib leaves a high s to the EIP-2 check.
     q, m, s = (bytes.fromhex(case[k]) for k in ("Q", "m", "signature"))
     if case.get("strict"):
         assert secp256k1.verify(q, m, s)

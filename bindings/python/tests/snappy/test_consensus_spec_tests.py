@@ -1,7 +1,7 @@
 """Snappy blocks and framed streams against 50 ssz_snappy files of consensus-spec-tests."""
 
-# The size and sha256 of the data of each file come from cramjam 2.11.0, an independent Snappy
-# implementation, run once with `cramjam.snappy.decompress_raw`.
+# The size and sha256 of the data of each file come from cramjam 2.11.0.
+# cramjam is an independent Snappy implementation, run once with `cramjam.snappy.decompress_raw`.
 # `tests/consensus/snappy/README.md` gives the origin of the files and how they were chosen.
 
 import hashlib
