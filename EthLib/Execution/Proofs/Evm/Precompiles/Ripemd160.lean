@@ -83,8 +83,9 @@ theorem ripemd160_eq_error_iff (data : ByteArray) (gas : Nat) (e : Ripemd160Erro
 /-- Two errors with one code come from one constructor. -/
 theorem Ripemd160Error.code_injective (e₁ e₂ : Ripemd160Error) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [Ripemd160Error.code] at h; exact absurd h (by decide))
+  -- The error type has one constructor, so both errors have its index.
+  cases e₁
+  cases e₂
+  rfl
 
 end EthLib.Execution.Evm.Precompiles.Ripemd160
