@@ -25,6 +25,8 @@ Not yet released.
   Before, the index wrapped a bucket number that does not fit in 4 bytes and returned a value.
 - The C export `eth_engine_forkchoice_updated` now rejects a tree of known payloads that names one block hash twice, with code 0 ([#1102](https://github.com/ethereum/EthLib/pull/1102)).
   Before, it answered from the first entry of that hash and ignored the second.
+- A chain configuration that the exports read as JSON is now rejected, with code 0, when a fork by block number comes after a fork by timestamp ([#1110](https://github.com/ethereum/EthLib/pull/1110)).
+  EIP-6122 requires the forks by timestamp to be scheduled at or after the forks by block.
 
 ## 0.3.0
 
