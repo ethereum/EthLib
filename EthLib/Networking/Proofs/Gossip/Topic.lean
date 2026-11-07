@@ -10,7 +10,7 @@ The parser of topic strings inverts the printer.
 - Every topic string of a name without `/` parses back to its fork digest and its name.
 - Every string that parses is the topic string of what it parses to.
 - The same two facts hold for the subnet ID in the name of a subnet topic.
-- Each parser accepts exactly what its printer writes, for a topic name without `/`.
+- Each parser accepts exactly what its printer writes; a topic name must also contain no `/`.
 -/
 
 @[expose] public section
