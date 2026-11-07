@@ -4,6 +4,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Reach
 public import EthLib.Execution.Proofs.Evm.Logic.Triple
 public import EthLib.Execution.Proofs.Evm.Logic.Symbolic
 public import EthLib.Execution.Proofs.Evm.Logic.Loop
+public import EthLib.Execution.Proofs.Evm.Logic.Subroutine
 public import EthLib.Execution.Proofs.Evm.Logic.Message
 public import EthLib.Execution.Proofs.Evm.Logic.Call
 public import EthLib.Execution.Proofs.Evm.Logic.Log
