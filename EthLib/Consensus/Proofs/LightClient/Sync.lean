@@ -63,7 +63,7 @@ theorem initializeLightClientStore_headers {config : Config} {trustedBlockRoot :
     | (cases computed; done)
     | (cases computed; exact ⟨rfl, rfl⟩)
 
-/-- Applying an update moves the finalized and optimistic slots forward, never back.
+/-- Applying an update never moves the finalized slot or the optimistic slot back.
 
 A finalized slot at or below the optimistic slot stays at or below it. -/
 theorem applyLightClientUpdate_slots {store after : LightClientStore preset fork}
@@ -86,7 +86,7 @@ theorem applyLightClientUpdate_slots {store after : LightClientStore preset fork
       simp only [gt_iff_lt, UInt64.lt_iff_toNat_lt, UInt64.le_iff_toNat_le] at *
       omega
 
-/-- Processing an update moves the finalized and optimistic slots forward, never back.
+/-- Processing an update never moves the finalized slot or the optimistic slot back.
 
 A finalized slot at or below the optimistic slot stays at or below it. -/
 theorem processLightClientUpdate_slots {config : Config} {checks : SignatureChecks}
@@ -111,7 +111,7 @@ theorem processLightClientUpdate_slots {config : Config} {checks : SignatureChec
       simp only [gt_iff_lt, UInt64.lt_iff_toNat_lt, UInt64.le_iff_toNat_le] at *
       omega
 
-/-- A forced update moves the finalized and optimistic slots forward, never back.
+/-- A forced update never moves the finalized slot or the optimistic slot back.
 
 A finalized slot at or below the optimistic slot stays at or below it. -/
 theorem processLightClientStoreForceUpdate_slots {store after : LightClientStore preset fork}
