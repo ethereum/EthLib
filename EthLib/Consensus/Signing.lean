@@ -72,9 +72,9 @@ def computeForkDigest (config : Config) (genesisValidatorsRoot : Root) (epoch : 
   if epoch < config.FULU_FORK_EPOCH then
     return Vector.ofFn fun i => base[i.val]
   let parameters := config.getBlobParameters epoch
-  let mask := Cryptography.Hash.Sha256.hash
+  let mask := Cryptography.Hash.Sha256.hash32
     ⟨(uintToBytes 8 parameters.epoch.toNat).toArray ++
       (uintToBytes 8 parameters.maxBlobsPerBlock.toNat).toArray⟩
-  return Vector.ofFn fun i => base[i.val] ^^^ mask.data.getD i.val 0
+  return Vector.ofFn fun i => base[i.val] ^^^ mask[i.val]
 
 end EthLib.Consensus

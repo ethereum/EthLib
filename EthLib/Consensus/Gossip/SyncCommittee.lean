@@ -75,7 +75,7 @@ def isSyncCommitteeAggregator (preset : Preset) (signature : BLSSignature) : Boo
   let modulo := max 1
     (preset.SYNC_COMMITTEE_SIZE / SYNC_COMMITTEE_SUBNET_COUNT /
       TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE)
-  let hash := sha256Bytes32 (packBytes signature)
+  let hash := Cryptography.Hash.Sha256.hash32 (packBytes signature)
   bytesToUint64 (Vector.ofFn fun i : Fin 8 => hash[i.val]) % modulo == 0
 
 /-- From Altair: the bits of the valid contributions seen for a slot, a root and a subcommittee. -/

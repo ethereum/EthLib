@@ -104,7 +104,8 @@ Its seed is the hash of the seed of the epoch for this duty and the slot as 8 by
 def computePtc (state : BeaconState preset fork) (slot : Slot) :
     Except AccessorError (PayloadTimelinessCommittee preset) := do
   let epochSeed ← getSeed state (computeEpochAtSlot preset slot) DOMAIN_PTC_ATTESTER
-  let seed := sha256Bytes32 ⟨epochSeed.toArray ++ (uintToBytes 8 slot.toNat).toArray⟩
+  let seed :=
+    Cryptography.Hash.Sha256.hash32 ⟨epochSeed.toArray ++ (uintToBytes 8 slot.toNat).toArray⟩
   computeBalanceWeightedSelection state (← slotCommitteeMembers state slot) seed preset.PTC_SIZE
     false
 

@@ -130,12 +130,12 @@ def decodeNetwork (fork : Fork) (bytes : ByteArray) :
     else .error (.transaction (.unsupportedType type))
 
 /-- The versioned hash of a commitment: `0x01`, then the last 31 bytes of its SHA-256 hash. -/
-def versionedHash (commitment : KZGCommitment) : ByteArray :=
+def versionedHash (commitment : KZGCommitment) : Bytes32 :=
   Cryptography.Kzg.kzgCommitmentToVersionedHash ⟨commitment.toArray⟩
 
 /-- Whether each commitment hashes to the versioned hash at its position. -/
 def hashesMatch (hashes : List Bytes32) (commitments : List KZGCommitment) : Bool :=
-  (hashes.zip commitments).all fun (h, c) => decide (versionedHash c = ⟨h.toArray⟩)
+  (hashes.zip commitments).all fun (h, c) => decide (versionedHash c = h)
 
 /-- The number of proofs at `fork` for `count` blobs: one per blob, or one per cell from Fusaka. -/
 def proofCount (fork : Fork) (count : Nat) : Nat :=

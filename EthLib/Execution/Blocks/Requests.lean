@@ -144,12 +144,8 @@ def depositRequests (logs : List Log) : Except DepositError ByteArray := do
 /-- The requests hash: the SHA-256 hash of the SHA-256 hash of each list with data, in order.
 
 Each list is its type byte, then its data, and the lists come in the order of their types. -/
-def requestsHash (requests : List ByteArray) : ByteArray :=
-  Cryptography.Hash.sha256
+def requestsHash (requests : List ByteArray) : Hash32 :=
+  Cryptography.Hash.Sha256.hash32
     ((requests.filter (·.size > 1)).foldl (fun acc r => acc ++ Cryptography.Hash.sha256 r) .empty)
-
-/-- The requests hash of request lists, as the 32 bytes of a header field. -/
-def requestsCommitment (requests : List ByteArray) : Hash32 :=
-  Vector.ofFn fun i => (requestsHash requests).data.getD i.val 0
 
 end EthLib.Execution.Blocks

@@ -34,19 +34,6 @@ variable {fork : Fork}
 
 /-! ## Pieces -/
 
-/-- The requests commitment holds the bytes of the requests hash. -/
-theorem packBytes_requestsCommitment (requests : List ByteArray) :
-    packBytes (requestsCommitment requests) = requestsHash requests := by
-  have hSize : (requestsHash requests).size = 32 := Cryptography.Hash.Sha256.hash_size _
-  unfold requestsCommitment
-  generalize requestsHash requests = r at hSize ⊢
-  apply ByteArray.ext
-  apply Array.ext
-  · simp only [packBytes, Vector.toArray_ofFn, Array.size_ofFn]
-    exact hSize.symm
-  · intro i h₁ h₂
-    simp [packBytes, Array.getD_eq_getD_getElem?, Array.getElem?_eq_getElem h₂]
-
 /-- A field computed only at the forks that have it is the field of the step. -/
 theorem sinceM_eq_ok {ε α : Type} {f : Fork} {g : f ≤ fork → Except ε α} {x : Since f fork α}
     (h : ∀ hf, g hf = .ok (x hf)) : sinceM g = .ok x := by
@@ -201,7 +188,7 @@ theorem toBlock_ofBlock (hParis : .paris ≤ fork)
     (hTransactionsRoot : transactionsRoot b.transactions = .ok b.header.transactionsRoot)
     (hWithdrawalsRoot :
       ∀ hf, withdrawalsRoot (b.withdrawals hf) = .ok (b.header.withdrawalsRoot hf))
-    (hRequests : ∀ hf, b.header.requestsHash hf = requestsCommitment (requests hf))
+    (hRequests : ∀ hf, b.header.requestsHash hf = requestsHash (requests hf))
     (hAccessList :
       ∀ hf, blockAccessListHashOf (accessList hf) = .ok (b.header.blockAccessListHash hf))
     (hSlot : ∀ hf, slot hf = b.header.slotNumber hf) :
@@ -247,7 +234,7 @@ theorem toBlock_ofBlock (hParis : .paris ≤ fork)
         timestamp := BitVec.ofNat 256 b.header.timestamp.toNat.toUInt64.toNat,
         nonce := Vector.replicate 8 0,
         baseFeePerGas := fun x => (BitVec.ofNat 256 (b.header.baseFeePerGas x)).toNat,
-        requestsHash := fun hf => requestsCommitment (requests hf) } :
+        requestsHash := fun hf => requestsHash (requests hf) } :
         Header fork) = b.header := by
       obtain ⟨⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _⟩,
         txs, ommers, ws⟩ := b

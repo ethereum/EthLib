@@ -61,7 +61,7 @@ theorem processBlsToExecutionChange_ok {state after : BeaconState preset fork}
     ∃ validator : Validator, getValidator state signed.message.validatorIndex = .ok validator ∧
       validator.withdrawalCredentials[0] = BLS_WITHDRAWAL_PREFIX[0] ∧
       (∀ i : Fin 31, validator.withdrawalCredentials[i.val + 1] =
-        (sha256Bytes32 ⟨signed.message.fromBlsPubkey.toArray⟩)[i.val + 1]) ∧
+        (Cryptography.Hash.Sha256.hash32 ⟨signed.message.fromBlsPubkey.toArray⟩)[i.val + 1]) ∧
       (∃ (domain : Domain) (signingRoot : Root),
         computeDomain config DOMAIN_BLS_TO_EXECUTION_CHANGE
           (genesisValidatorsRoot := state.genesisValidatorsRoot) = .ok domain ∧

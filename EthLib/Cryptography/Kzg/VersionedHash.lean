@@ -22,7 +22,7 @@ namespace EthLib.Cryptography.Kzg
 def VERSIONED_HASH_VERSION_KZG : UInt8 := 0x01
 
 /-- The version byte, then the last 31 bytes of the SHA-256 of the commitment. -/
-def kzgCommitmentToVersionedHash (commitment : ByteArray) : ByteArray :=
-  ⟨#[VERSIONED_HASH_VERSION_KZG]⟩ ++ (Hash.sha256 commitment).extract 1 32
+def kzgCommitmentToVersionedHash (commitment : ByteArray) : Vector UInt8 32 :=
+  (Hash.Sha256.hash32 commitment).set 0 VERSIONED_HASH_VERSION_KZG
 
 end EthLib.Cryptography.Kzg

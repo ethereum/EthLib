@@ -236,7 +236,7 @@ Each list is its type byte, then its data. -/
 @[export eth_block_requests_hash]
 def requestsHashExport (requests : ByteArray) : Result ByteArray := do
   let requests : List ByteArray ← runRlp "requests rejected" (Codec.decode requests)
-  return requestsHash requests
+  return ⟨(requestsHash requests).toArray⟩
 
 /-- The hash of a block access list in RLP form, after the decoder accepts it. -/
 @[export eth_block_access_list_hash]

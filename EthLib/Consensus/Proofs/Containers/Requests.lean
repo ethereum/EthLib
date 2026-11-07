@@ -149,9 +149,9 @@ theorem getExecutionRequestsList_size_pos {preset : Preset} {fork : Fork}
 theorem getExecutionRequestsList_increasing {preset : Preset} {fork : Fork}
     {requests : ExecutionRequests preset fork} {out : List ByteArray}
     (made : getExecutionRequestsList requests = .ok out) :
-    (out.map (·.data.getD 0 0)).Pairwise (· < ·) := by
-  have first : (requests.typedLists.filter (·.count != 0)).map (·.type[0]) =
-      out.map (·.data.getD 0 0) := by
+    (out.map (·.data[0]?)).Pairwise (· < ·) := by
+  have first : ((requests.typedLists.filter (·.count != 0)).map (·.type[0])).map some =
+      out.map (·.data[0]?) := by
     have spec := getExecutionRequestsList_spec made
     clear made
     generalize requests.typedLists.filter (·.count != 0) = lists at spec ⊢
@@ -161,10 +161,10 @@ theorem getExecutionRequestsList_increasing {preset : Preset} {fork : Fork}
       obtain ⟨data, -, bytes⟩ := head
       subst bytes
       simp only [List.map_cons, rest, List.cons.injEq, and_true]
-      rw [ByteArray.data_append, Array.getD_eq_getD_getElem?,
-        Array.getElem?_append_left (by simp)]
+      rw [ByteArray.data_append, Array.getElem?_append_left (by simp)]
       simp
-  rw [← first]
+  rw [← first, List.pairwise_map]
+  simp only [Option.some_lt_some]
   exact (ExecutionRequests.typedLists_increasing requests).sublist
     ((List.filter_sublist).map _)
 

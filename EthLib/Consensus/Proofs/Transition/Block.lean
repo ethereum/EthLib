@@ -181,7 +181,8 @@ theorem processRandao_eq {config : Config} {checks : SignatureChecks}
         (packBytes body.randaoReveal) = true ∧
       getRandaoMix state (getCurrentEpoch state) = .ok mix ∧
       writeCircularRooted state.randaoMixes (getCurrentEpoch state)
-        (Vector.zipWith (· ^^^ ·) mix (sha256Bytes32 (packBytes body.randaoReveal))) =
+        (Vector.zipWith (· ^^^ ·) mix
+          (Cryptography.Hash.Sha256.hash32 (packBytes body.randaoReveal))) =
           .ok randaoMixes ∧
       after = { state with randaoMixes } := by
   simp only [processRandao, bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok, pure,

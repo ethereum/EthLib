@@ -124,7 +124,7 @@ def genesisHeader (fork : Fork) (params : GenesisParams) (root : Hash32) :
     blobGasUsed := fun _ => 0
     excessBlobGas := fun _ => params.excessBlobGas
     parentBeaconBlockRoot := fun _ => 0
-    requestsHash := fun _ => requestsCommitment []
+    requestsHash := fun _ => requestsHash []
     blockAccessListHash := fun _ => emptyAccessList
     slotNumber := fun _ => params.slotNumber
   }

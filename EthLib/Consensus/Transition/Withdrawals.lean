@@ -511,7 +511,7 @@ def processBlsToExecutionChange (config : Config) (checks : SignatureChecks)
   let validator ← liftAccessor (getValidator state index)
   let credentials := validator.withdrawalCredentials
   ensure (credentials[0] = BLS_WITHDRAWAL_PREFIX[0]) (.notBlsCredentials index)
-  let keyHash := sha256Bytes32 ⟨change.fromBlsPubkey.toArray⟩
+  let keyHash := Cryptography.Hash.Sha256.hash32 ⟨change.fromBlsPubkey.toArray⟩
   ensure (∀ i : Fin 31, credentials[i.val + 1] = keyHash[i.val + 1]) (.wrongBlsKey index)
   let domain ← liftSsz (computeDomain config DOMAIN_BLS_TO_EXECUTION_CHANGE
     (genesisValidatorsRoot := state.genesisValidatorsRoot))

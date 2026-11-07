@@ -331,7 +331,7 @@ def outputChecks {fork : Fork} (header : Header fork) (output : BlockOutput fork
       .wrongBlobGasUsed (header.blobGasUsed h).toNat output.gas.blob)]
   else []) ++
   (if h : .pectra ≤ fork then
-    [(decide ((requestsHash output.requests).data.toList = (header.requestsHash h).toList),
+    [(decide (requestsHash output.requests = header.requestsHash h),
       .wrongRequestsHash)]
   else []) ++
   (if h : .glamsterdam ≤ fork then

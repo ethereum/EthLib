@@ -114,7 +114,7 @@ def pointEvaluation (data : ByteArray) (gas : Nat) : Except PointEvaluationError
   let y := data.extract 64 96
   let commitment := data.extract 96 144
   let proof := data.extract 144 192
-  if (kzgCommitmentToVersionedHash commitment).data.toList ≠ versionedHash.data.toList then
+  if (kzgCommitmentToVersionedHash commitment).toArray ≠ versionedHash.data then
     throw .versionedHashMismatch
   if !(← verifyKzgProof commitment z y proof) then
     throw .proofRejected

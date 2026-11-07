@@ -37,7 +37,7 @@ variable {preset : Preset} {fork : Base.Fork}
 
 /-- The seed of the proposer draw of a slot: the hash of the epoch's seed and the slot. -/
 def proposerSlotSeed (seed : Bytes32) (slot : Slot) : Bytes32 :=
-  sha256Bytes32 ⟨seed.toArray ++ (uintToBytes 8 slot.toNat).toArray⟩
+  Cryptography.Hash.Sha256.hash32 ⟨seed.toArray ++ (uintToBytes 8 slot.toNat).toArray⟩
 
 /-- The proposer of a slot, drawn from candidates with the seed of the slot.
 
