@@ -691,6 +691,10 @@ That state keeps every other slot, the original words and the accounts.
 `Logic.mem_insert_getD_self` proves that a slot whose access is recorded is warm.
 `Logic.mem_insert_getD_of_ne` proves that the record leaves every other slot as cold or warm as it was.
 `Logic.le_sloadCost` proves that from Berlin, SLOAD costs at least 100.
+`Logic.gas_rule` is the rule for GAS, which pushes the gas left after its own price of 2.
+`Logic.extcodesize` is the rule for EXTCODESIZE from Berlin to before Glamsterdam.
+It charges the prices of EIP-2929, and needs the state to hold the code of the account.
+`memoryReadBytes_memoryWrite_eq_append` proves that a read that ends where a write ends gives the bytes before the write, then the value.
 `NoValue.spec_nonzero` proves a contract that halts at `0xfe` when its message sends value.
 `memoryReadBytes_memoryWrite_of_disjoint` proves that a write within memory leaves a read of a disjoint range unchanged.
 `memoryReadBytes_memoryWrite_memoryWrite` proves that a read across two adjacent writes gives both values in order.
