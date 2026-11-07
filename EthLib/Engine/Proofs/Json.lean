@@ -33,6 +33,8 @@ A byte string decoded with a limit on its size has at most that many bytes.
 
 A field of an object decodes to the value that the object holds under its name.
 
+A withdrawal decodes exactly when its object holds exactly its four fields, each of its type.
+
 The 64-bit decoder returns a number exactly when the decoder with the bound `2^64` returns it.
 
 The bounded byte decoder succeeds exactly when the byte decoder succeeds within the limit.
@@ -346,5 +348,41 @@ theorem field_eq_ok_iff {what name : String} {fs : List (String × Lean.Json)} {
   unfold field
   cases h : fs.lookup name <;>
     simp [pure, Except.pure, invalid, throw, throwThe, MonadExceptOf.throw]
+
+/-- A withdrawal decodes exactly when its object holds exactly its four fields.
+
+Its index, validator index and amount must decode as 64-bit numbers, and its address as 20 bytes.
+
+Each becomes that field of the withdrawal. -/
+theorem withdrawal_eq_ok_iff {j : Lean.Json} {w : Execution.Blocks.Withdrawal} :
+    withdrawal j = .ok w ↔
+      ∃ fs, fields "withdrawal" j = .ok fs ∧
+        hasExactly fs ["index", "validatorIndex", "address", "amount"] = true ∧
+        ∃ index validator recipient amount, fs.lookup "index" = some index ∧
+          fs.lookup "validatorIndex" = some validator ∧ fs.lookup "address" = some recipient ∧
+          fs.lookup "amount" = some amount ∧
+          uint64 "index" index = .ok w.index ∧
+          uint64 "validatorIndex" validator = .ok w.validatorIndex ∧
+          address "address" recipient = .ok w.address ∧
+          uint64 "amount" amount = .ok w.amount := by
+  unfold withdrawal
+  simp only [bind_ok_iff]
+  constructor
+  · rintro ⟨fs, hfs, h⟩
+    by_cases hc : hasExactly fs ["index", "validatorIndex", "address", "amount"] = true
+    · rw [ite_eq_left hc] at h
+      simp only [bind_ok_iff, field_eq_ok_iff] at h
+      obtain ⟨i, hl1, i', hf1, v, hl2, v', hf2, a, hl3, a', hf3, m, hl4, m', hf4, hw⟩ := h
+      cases hw
+      exact ⟨fs, hfs, hc, i, v, a, m, hl1, hl2, hl3, hl4, hf1, hf2, hf3, hf4⟩
+    -- An object with other fields fails with an invalid parameter, never with a withdrawal.
+    · rw [ite_eq_right hc, bind_ok_iff] at h
+      obtain ⟨_, hInvalid, -⟩ := h
+      cases hInvalid
+  · rintro ⟨fs, hfs, hc, i, v, a, m, hl1, hl2, hl3, hl4, hf1, hf2, hf3, hf4⟩
+    refine ⟨fs, hfs, ?_⟩
+    rw [ite_eq_left hc]
+    simp only [bind_ok_iff, field_eq_ok_iff]
+    exact ⟨i, hl1, _, hf1, v, hl2, _, hf2, a, hl3, _, hf3, m, hl4, _, hf4, rfl⟩
 
 end EthLib.Engine.Json
