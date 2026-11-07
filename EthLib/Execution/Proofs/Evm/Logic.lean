@@ -9,6 +9,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Call
 public import EthLib.Execution.Proofs.Evm.Logic.Log
 public import EthLib.Execution.Proofs.Evm.Logic.Callee
 public import EthLib.Execution.Proofs.Evm.Logic.Rules
+public import EthLib.Execution.Proofs.Evm.Logic.Branch
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.Return42
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.SlotOfCalldata
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.SumLoop
@@ -21,6 +22,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Examples.Emit
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.Pay
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.HashedSlot
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.CallRevert
+public import EthLib.Execution.Proofs.Evm.Logic.Examples.KeyBranch
 
 /-!
 # `EthLib.Execution.Proofs.Evm.Logic`
