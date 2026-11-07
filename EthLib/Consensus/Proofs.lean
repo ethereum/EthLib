@@ -59,6 +59,7 @@ public import EthLib.Consensus.Proofs.PqKeys.Containers
 public import EthLib.Consensus.Proofs.PqKeys.Gossip
 public import EthLib.Consensus.Proofs.PqKeys.Possession
 public import EthLib.Consensus.Proofs.PqKeys.PossessionBinding
+public import EthLib.Consensus.Proofs.ReqResp.Bounds
 public import EthLib.Consensus.Proofs.ReqResp.Messages
 public import EthLib.Consensus.Proofs.Shuffle
 public import EthLib.Consensus.Proofs.ShufflePermutation
