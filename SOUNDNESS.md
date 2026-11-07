@@ -382,7 +382,9 @@ Freshness is by message: a message submitted to signing cannot win with any sign
 `decodeSignature_encode` and `encode_eq_of_decodeSignature` prove both encoding round trips, so two accepted encodings of the same subgroup element cannot differ.
 The byte game keeps the group game's uniform scalar distribution, including zero, whose key validation rejects.
 EthLib's secret keys exclude zero, and a zero key always loses.
-So against nonzero keys, a forger wins at most `r / (r - 1)` times its byte advantage; no theorem states this factor.
+`nonzeroByteForgeAdvantage_eq` (`Proofs/Bls/Security/Refinement.lean`) draws a uniform nonzero key instead.
+Against that key, a forger wins exactly `r / (r - 1)` times its byte advantage.
+`nonzeroByteForgeAdvantage_le_coCdhAdvantage` carries this factor into the co-CDH bound below.
 Under the pairing law, `byteForgeAdvantage_le_coCdhAdvantage` gives the same `q`-factor co-CDH bound when the decoded forger makes at most `q` hash calls.
 `byteForgeAdvantage_le_coCdhAdvantage_of_byteHashCallBound` states the bound with the hash-call bound on the byte forger itself.
 `byteHashCallBound_iff` proves that the two bounds are equivalent, because the encoding forwards each query once.
