@@ -4,6 +4,7 @@ public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.ForkChoice.FastConfirmation
+public import EthLib.Consensus.Proofs.ForkChoice.Store
 
 /-!
 # Proofs: the fast confirmation rule
@@ -18,7 +19,11 @@ The update keeps the confirmed block.
 
 A restart keeps the old confirmed block or takes the one confirmed before the restart.
 
-From Gloas the rule fails as not yet specified.
+From Gloas the payload status of the head does not change which blocks are in its chain.
+
+The fast confirmation of a slot records the head of the store, at every fork.
+
+The safe execution block is the payload of the confirmed block, and from Gloas its bid's parent.
 -/
 
 @[expose] public section
@@ -122,10 +127,56 @@ theorem getRestartResilientConfirmedRoot_eq_or {fcr : FastConfirmationStore}
       · simp only [pure, Except.pure, Except.ok.injEq] at restarted
         exact Or.inr restarted.symm
 
-/-- From Gloas the fast confirmation rule is not yet specified here, so it fails. -/
-theorem onFastConfirmation_of_gloas {fcr : FastConfirmationStore} (gloas : .glamsterdam ≤ fork) :
-    store.onFastConfirmation config fcr = .error (.forkNotYetSpecified fork) := by
-  simp [onFastConfirmation, gloas, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+/-- From Gloas the payload status of the head does not change whether a block is in its chain.
+
+So a head given by its root, as a pending node, answers as the head that the fork choice finds. -/
+theorem isAncestor_head_pending (gloas : .glamsterdam ≤ fork) (head : ForkChoiceNode)
+    (root : Root) :
+    store.isAncestor head ⟨root, .pending⟩ =
+      store.isAncestor ⟨head.root, .pending⟩ ⟨root, .pending⟩ := by
+  rw [isAncestor_pending gloas, isAncestor_pending gloas]
+  simp only [bind, Except.bind]
+  split
+  · rfl
+  · rename_i ancestorBlock _
+    have same := getAncestor_root (store := store) head .pending ancestorBlock.slot
+    revert same
+    cases store.getAncestor head ancestorBlock.slot <;>
+      cases store.getAncestor ⟨head.root, .pending⟩ ancestorBlock.slot <;>
+      simp_all [Functor.map, Except.map, pure, Except.pure]
+
+/-- The fast confirmation of a slot records the head of the store as the head of the slot.
+
+The head of the slot before becomes the previous head. -/
+theorem onFastConfirmation_heads {fcr after : FastConfirmationStore}
+    (confirmed : store.onFastConfirmation config fcr = .ok after) :
+    ∃ head, store.getHead config = .ok head ∧
+      (after.previousSlotHead, after.currentSlotHead) = (fcr.currentSlotHead, head.root) := by
+  unfold onFastConfirmation at confirmed
+  simp only [bind_ok_iff] at confirmed
+  obtain ⟨head, found, updated, update, root, -, confirmed⟩ := confirmed
+  simp only [pure, Except.pure, Except.ok.injEq] at confirmed
+  subst confirmed
+  exact ⟨head, found, updateFastConfirmationVariables_heads (after := updated) update⟩
+
+/-- Before Gloas the safe execution block is the payload of the confirmed block. -/
+theorem getSafeExecutionBlockHash_of_lt {fcr : FastConfirmationStore}
+    {bellatrix : .bellatrix ≤ fork} (before : fork < .glamsterdam) :
+    store.getSafeExecutionBlockHash fcr bellatrix =
+      (fun block => (block.body.executionPayload ⟨bellatrix, before⟩).blockHash) <$>
+        store.block fcr.confirmedRoot := by
+  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le.mpr before
+  simp only [getSafeExecutionBlockHash, notGloas, ↓reduceDIte, bind, Except.bind, pure,
+    Except.pure, Functor.map, Except.map]
+
+/-- From Gloas the safe execution block is the parent payload of the bid of the confirmed block. -/
+theorem getSafeExecutionBlockHash_of_gloas {fcr : FastConfirmationStore}
+    {bellatrix : .bellatrix ≤ fork} (gloas : .glamsterdam ≤ fork) :
+    store.getSafeExecutionBlockHash fcr bellatrix =
+      (fun block => (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash) <$>
+        store.block fcr.confirmedRoot := by
+  simp only [getSafeExecutionBlockHash, gloas, ↓reduceDIte, bind, Except.bind, pure,
+    Except.pure, Functor.map, Except.map]
 
 end Store
 

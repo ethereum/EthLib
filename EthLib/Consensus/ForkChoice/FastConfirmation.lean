@@ -26,9 +26,13 @@ At the start of each slot the handler records the head, then moves the confirmed
 
 When the assumptions seem broken, it falls back to the finalized block.
 
+The rule names each block by its pending node.
+
+From Gloas a pending node counts the votes for the block whether its payload is present or not.
+
 From Bellatrix the payload of the confirmed block is the safe block of the execution layer.
 
-Every node is pending before Gloas, and from Gloas the rule fails as not yet specified.
+From Gloas the safe block is the parent payload that the bid of the confirmed block builds on.
 -/
 
 @[expose] public section
@@ -528,22 +532,26 @@ variable (config : Config) (store : Store preset fork)
 
 /-- The fast confirmation of a slot: record the head, then move the confirmed block.
 
-The store of the fork choice does not change meanwhile, so its head is computed once.
-
-From Gloas the rule is not yet specified here. -/
+The store of the fork choice does not change meanwhile, so its head is computed once. -/
 def onFastConfirmation (fcr : FastConfirmationStore) :
     Except ForkChoiceError FastConfirmationStore := do
-  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
   let head := (← store.getHead config).root
   let fcr ← store.updateFastConfirmationVariables config fcr head
   return { fcr with confirmedRoot := ← store.getLatestConfirmed config fcr head }
 
-/-- The hash of the payload in the confirmed block, which the execution layer takes as safe.
+/-- The hash of the execution block that the execution layer takes as safe.
 
-The rule starts at Bellatrix, and Gloas changes it. -/
-def getSafeExecutionBlockHash (fcr : FastConfirmationStore)
-    (bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam) : Except ForkChoiceError Hash32 :=
-  return ((← store.block fcr.confirmedRoot).body.executionPayload bellatrix).blockHash
+The rule starts at Bellatrix, with the payload of the confirmed block.
+
+From Gloas a block carries a bid instead of a payload.
+
+Only the parent payload that the bid builds on is safe then. -/
+def getSafeExecutionBlockHash (fcr : FastConfirmationStore) (bellatrix : .bellatrix ≤ fork) :
+    Except ForkChoiceError Hash32 := do
+  let safeBlock ← store.block fcr.confirmedRoot
+  if gloas : .glamsterdam ≤ fork then
+    return (safeBlock.body.signedExecutionPayloadBid gloas).message.parentBlockHash
+  else return (safeBlock.body.executionPayload ⟨bellatrix, Nat.lt_of_not_le gloas⟩).blockHash
 
 end Store
 

@@ -53,11 +53,9 @@ NOT_YET = {
 # A key is a runner, a runner and a handler, or a format, as in NOT_YET.
 # At these forks an entry here comes before the entry of NOT_YET.
 _GLOAS = {
-    "fast_confirmation": "the Gloas fast confirmation (G73)",
     "networking/gossip_partial_data_column_sidecar": "Gloas partial data columns (G78)",
 }
 _HEZE = {
-    "fast_confirmation": "the Gloas fast confirmation (G73) on the Heze fork choice (G86)",
     "networking": "the Heze gossip and req/resp rules (G87)",
 }
 NOT_YET_AT = {

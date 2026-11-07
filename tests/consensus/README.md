@@ -169,6 +169,7 @@ In the second, a proof does not match, so the store rejects the block.
 At Electra and Fulu it keeps the smallest case of each handler, of the optimistic sync and of each fast confirmation suite.
 Electra adds the handler `deposit_with_reorg`.
 At Fulu its `on_block` case is one whose block lacks the columns that the node samples.
+At Gloas and Heze it also keeps the smallest case of each fast confirmation suite.
 `bindings/python/tests/consensus/test_fork_choice.py` runs each case on one store in Lean and compares each step with the case.
 
 The directory `gossip/` holds gossip validation cases from `minimal.tar.gz` in the same way.
