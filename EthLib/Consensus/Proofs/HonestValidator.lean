@@ -8,6 +8,8 @@ public import EthLib.Consensus.ForkChoice.Handlers
 public import EthLib.Consensus.HonestValidator
 public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Consensus.Proofs.Gossip.SyncCommittee
+public import EthLib.Consensus.Proofs.InclusionList
+public import EthLib.Consensus.Proofs.InclusionListCommittee
 public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Transition.Block
 public import EthLib.Cryptography.Proofs.Bls.SignaturesCorrect
@@ -44,6 +46,10 @@ The validator must have the public key of the secret key.
 Under the pairing laws, signed preferences pass the check of their signature.
 
 They name the dependent root of the head and the slot, validator and values they were made for.
+
+From Heze, a signed inclusion list passes the check of its signature, under the same laws.
+
+A bid whose bits cover the proposer's view of the inclusion lists is inclusive for it.
 -/
 
 @[expose] public section
@@ -894,5 +900,60 @@ theorem getSignedProposerPreferences_ok (laws : PairingLaws) {config : Config}
   subst made
   exact ⟨rooted, rfl, rfl, rfl, rfl,
     isValidProposerPreferencesSignature_of_sign laws registered owned sameChain signedBy⟩
+
+/-- From Heze: a signed inclusion list names the dependent root of the head and the given values.
+
+Under the pairing laws, it passes the check of its signature in the state that signed it.
+
+The member must have the public key of the secret key in that state. -/
+theorem getSignedInclusionList_ok (laws : PairingLaws) {config : Config}
+    {store : Store preset fork} {state : BeaconState preset fork} {headRoot : Root} {slot : Slot}
+    {validatorIndex : ValidatorIndex} {transactions : List InclusionListTransaction}
+    {key : Signatures.SecretKey} {signed : SignedInclusionList}
+    (made : getSignedInclusionList config store state headRoot slot validatorIndex transactions
+      key = .ok signed)
+    {validator : Validator} (registered : getValidator state validatorIndex = .ok validator)
+    (owned : validator.pubkey = Signatures.skToPk key) :
+    store.getShufflingDependentRoot headRoot (computeEpochAtSlot preset slot) =
+        .ok signed.message.dependentRoot ∧
+      signed.message.slot = slot ∧ signed.message.validatorIndex = validatorIndex ∧
+      signed.message.transactions.data.toList = transactions ∧
+      isValidInclusionListSignature config state signed = .ok true := by
+  unfold getSignedInclusionList at made
+  obtain ⟨dependentRoot, rooted, made⟩ := bind_ok_iff.mp made
+  rw [mapError_ok_iff] at rooted
+  obtain ⟨signature, signedBy, made⟩ := bind_ok_iff.mp made
+  simp only [pure, Except.pure, Except.ok.injEq] at made
+  subst made
+  have signs : getInclusionListSignature config state
+      { slot, validatorIndex, dependentRoot, transactions := ⟨transactions.toArray⟩ } key =
+        .ok signature := by
+    revert signedBy
+    cases getInclusionListSignature config state
+      { slot, validatorIndex, dependentRoot, transactions := ⟨transactions.toArray⟩ } key with
+    | error e => cases e <;> simp [Except.mapError]
+    | ok value => simp [Except.mapError]
+  exact ⟨rooted, rfl, rfl, by simp,
+    isValidInclusionListSignature_of_sign laws registered owned signs⟩
+
+/-- From Heze: a bid whose bits set every seat that the proposer's view sets is inclusive for it.
+
+The builder's own bits, computed from the same view, are such bits. -/
+theorem isBidInclusionListInclusive_of_le {store : Store preset fork} (heze : .hegota ≤ fork)
+    {state : BeaconState preset fork} {bid : ExecutionPayloadBid preset fork}
+    {view : InclusionListBits preset}
+    (built : getBidInclusionListBits store heze state bid = .ok view)
+    (covers : ∀ i : Fin preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat,
+      view.bits[i] = true → (bid.inclusionListBits heze).bits[i] = true) :
+    isBidInclusionListInclusive store heze state bid = .ok true := by
+  unfold getBidInclusionListBits at built
+  obtain ⟨⟨previous, dependentRoot⟩, viewed, built⟩ := bind_ok_iff.mp built
+  obtain ⟨committee, seated, built⟩ := bind_ok_iff.mp built
+  simp only [pure, Except.pure, Except.ok.injEq] at built
+  subst built
+  unfold isBidInclusionListInclusive
+  simp only [viewed, seated, bind, Except.bind, pure, Except.pure]
+  exact congrArg Except.ok
+    (InclusionListStore.isInclusive_mono covers (InclusionListStore.isInclusive_self _ _))
 
 end EthLib.Consensus
