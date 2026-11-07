@@ -435,7 +435,6 @@ theorem earliestInclusions_size_and_mem {size : Nat}
     · exact ⟨sized, kept⟩
   · exact put _
 
-
 /-! ## Balances after the rewards and penalties -/
 
 /-- The deltas of one validator apply exactly when its position names a balance.
@@ -591,9 +590,11 @@ theorem processRewardsAndPenalties_balances_of_lt_altair {config : Config}
 
 /-- From Altair and after the first epoch, rewards and penalties apply the deltas of each flag.
 
-They then apply the inactivity deltas, and the registry must be within its limit.
+They then apply the inactivity deltas.
 
-Each one adds the reward of the validator to its balance, then subtracts its penalty.
+The registry must be within its limit.
+
+Each set of deltas adds the reward of a validator to its balance, then subtracts its penalty.
 
 The balance stops at zero when the penalty is larger.
 
