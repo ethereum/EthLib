@@ -876,6 +876,16 @@ The loop then needs the sum of those prices and the price of its exit.
 `Indices.store` proves a subroutine that writes the word `w` at offset `32 w` modulo `2^256`, for every size of memory.
 `Indices.runFrame_spec` proves a contract that writes the words 0 to `n - 1` from offset 0 in a loop that calls that subroutine, and returns them.
 It needs `n` below `2^251`, and `44 + 69 n` gas with the price of `32 n` bytes of memory.
+`Logic.Stored` is a running frame that knows ranges of memory, the facts of some slots of its account, and the refund counter.
+A fact of a slot gives its key, its word before the transaction, its word now, and whether it is warm.
+Every other slot of every account, and every account, reads as in a base state.
+`Logic.Stored.of_known` proves that a rule that keeps the state and the substate keeps every fact.
+`Logic.sload_stored` proves that from Berlin, SLOAD of the key of a fact pushes its word now and makes the slot warm.
+`Logic.sstore_stored` proves that from Berlin to before Glamsterdam, SSTORE to the key of a fact writes it and makes it warm.
+It needs a frame that may change the state, more than 2300 gas, and the account of the frame in the base state.
+It pays the price of EIP-2200 with the prices of EIP-2929 from the facts of the slot, and adds the refund of the write.
+`Logic.stop_stored` proves that STOP keeps every fact.
+These frames say nothing of the logs, the accessed addresses and the other fields of the substate.
 `StepBy` (`Logic/Message.lean`) adds the steps that send a message, which a runner of messages ends with a frame.
 `runFrame_eq_of_reaches` proves that `runFrame` runs a frame as it runs each frame that it reaches.
 It holds for every relation whose steps `runFrame` runs alike at both ends, as `Step` and `StepBy` do.
