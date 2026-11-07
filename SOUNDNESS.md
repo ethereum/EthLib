@@ -878,12 +878,16 @@ It also fails for the epoch whose first slot plus the length of an epoch reaches
 There the 64-bit sum of the guide overflows, as `getCommitteeAssignment_eq_error_of_overflow` shows.
 
 From Gloas, a validator also finds the slot of its payload timeliness committee and the slots it will propose.
-`getPtcAssignment_sound` shows that an assignment is the first slot of the epoch whose committee holds the validator, and `not_mem_of_getPtcAssignment_none` that no committee of the epoch holds a validator without one, when an epoch has a slot.
-`getUpcomingProposalSlots_spec` shows that the upcoming proposal slots are exactly the slots after the slot of the state whose proposer in the lookahead is the validator, in increasing order.
+`getPtcAssignment_sound` shows that an assignment is the first slot of the epoch whose committee holds the validator.
+`not_mem_of_getPtcAssignment_none` shows that no committee of the epoch holds a validator without one, when an epoch has a slot.
+`getUpcomingProposalSlots_spec` shows which slots are the upcoming proposal slots, in increasing order.
+They are exactly the slots after the slot of the state whose proposer in the lookahead is the validator.
 Under `PairingLaws`, `validatePtcMessage_getPayloadAttestationMessageSignature` shows that the fork choice accepts a payload attestation message for the current slot that its validator signed.
 It rests on `fastAggregateVerify_sign`: an honest signature passes the fast aggregate verification under its one key.
 
-No theorem says which subnets or sync committee seat a validator has.
+`isAssignedToSyncCommittee_ok_iff` states when the sync committee seat check succeeds.
+Its answer is then whether the validator's key is in the current or the next committee.
+`computeSubnetsForSyncCommittee_ok` shows that its sync committee subnets come once each, in increasing order, from the seats of its key.
 The Python suite checks each duty signature against py_ecc, on signing roots computed in the test, and each committee against the shuffle export.
 It checks each payload timeliness assignment and the upcoming proposal slots against the window and the lookahead that it reads from a Gloas state.
 
