@@ -19,12 +19,18 @@ def _int(n: int) -> bytes:
 
 
 def _fee_market(
-    to: bytes, value: int = 0, data: bytes = b"", gas: int = 10**6, access_list: list | None = None
+    to: bytes,
+    value: int = 0,
+    data: bytes = b"",
+    gas: int = 10**6,
+    access_list: list | None = None,
+    nonce: int = 0,
+    chain_id: int = CHAIN_ID,
 ) -> bytes:
-    """A signed type 2 transaction of the sender on chain 1."""
+    """A signed type 2 transaction of the sender, by default on chain 1."""
     fields = [
-        _int(CHAIN_ID),
-        b"",
+        _int(chain_id),
+        _int(nonce),
         _int(1),
         _int(10),
         _int(gas),
@@ -106,3 +112,16 @@ def test_init_code_size() -> None:
     too_large = _fee_market(b"", data=bytes(131_073), gas=2**24)
     with raises(transactions.TransactionError, "initCodeTooLarge 131073"):
         transactions.check("glamsterdam", CHAIN_ID, too_large)
+
+
+def test_order_of_checks() -> None:
+    # The first check that fails gives the error, and Glamsterdam changes the order.
+    # A gas limit of 20000 is below the intrinsic gas of 21000 at both forks.
+    # A nonce of 2^64 - 1 is above the last nonce that EIP-2681 allows.
+    tx = _fee_market(OTHER, 1, gas=20_000, nonce=2**64 - 1)
+    # Before Glamsterdam, the gas comes first.
+    with raises(transactions.TransactionError, "insufficientGas 21000 20000"):
+        transactions.check("pectra", CHAIN_ID, tx)
+    # From Glamsterdam, the nonce comes first and the gas last.
+    with raises(transactions.TransactionError, "nonceOverflow"):
+        transactions.check("glamsterdam", CHAIN_ID, tx)

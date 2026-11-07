@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Except
 public import EthLib.Execution.Evm.Gas.Prices
 public import EthLib.Cryptography.Kzg.VersionedHash
 public import EthLib.Execution.Transactions.Signature
@@ -243,58 +244,17 @@ def minimumGas (fork : Fork) (sender : Address) (tx : Transaction) : Nat :=
 [EIP-7594](https://eips.ethereum.org/EIPS/eip-7594#specification) sets it at Fusaka. -/
 def MAX_BLOBS_PER_TRANSACTION : Nat := 6
 
-/-- Check the fees, the gas limit and the nonce of a transaction from `sender` at `fork`.
-
-It returns the intrinsic gas.
-
-- The gas limit covers the least gas limit of the fork.
-- From Shapella, init code has at most the size that the fork allows.
-- From Fusaka to BPO5, the gas limit is at most `2^24`, as EIP-7825 asks.
-- From Glamsterdam, the gas limit is at most `2^32 - 1`, as EIP-8037 asks.
-- From Glamsterdam, the intrinsic gas and the floor are at most `2^24` each, as EIP-8037 asks.
-- The nonce is below `2^64 - 1`, as EIP-2681 asks.
-- The priority fee is at most the maximum fee, as EIP-1559 asks.
-
-Sources: [EIP-7825][eip-7825], [EIP-8037][eip-8037], [EIP-2681][eip-2681], [EIP-1559][eip-1559].
-
-[eip-7825]: https://eips.ethereum.org/EIPS/eip-7825#specification
-[eip-8037]: https://eips.ethereum.org/EIPS/eip-8037#transaction-validation
-[eip-2681]: https://eips.ethereum.org/EIPS/eip-2681#specification
-[eip-1559]: https://eips.ethereum.org/EIPS/eip-1559#specification -/
-def validateTransaction (fork : Fork) (sender : Address) (tx : Transaction) :
-    Except TransactionError Nat :=
-  if tx.gas.toNat < minimumGas fork sender tx then
-    .error (.insufficientGas (minimumGas fork sender tx) tx.gas.toNat)
-  else if fork ≥ .shapella ∧ tx.to.isNone ∧ maxInitCodeSize fork < tx.data.size then
-    .error (.initCodeTooLarge tx.data.size)
-  else if fork ≥ .glamsterdam ∧ TX_MAX_TOTAL_GAS_LIMIT < tx.gas.toNat then
-    .error (.gasLimitExceeded tx.gas.toNat)
-  else if fork ≥ .glamsterdam ∧ TX_MAX_GAS_LIMIT < minimumGas fork sender tx then
-    .error (.intrinsicGasAboveLimit (minimumGas fork sender tx))
-  else if fork ≥ .fusaka ∧ fork < .glamsterdam ∧ TX_MAX_GAS_LIMIT < tx.gas.toNat then
-    .error (.gasLimitExceeded tx.gas.toNat)
-  else if 2 ^ 64 - 1 ≤ tx.nonce.toNat then
-    .error .nonceOverflow
-  else if feesInverted tx then
-    .error .priorityFeeGreaterThanMaxFee
-  else .ok (intrinsicGas fork sender tx)
-where
-  /-- Whether the priority fee per gas is above the maximum fee per gas. -/
-  feesInverted : Transaction → Bool
-    | .feeMarket tx => tx.maxFeePerGas.toNat < tx.maxPriorityFeePerGas.toNat
-    | .blob tx => tx.maxFeePerGas.toNat < tx.maxPriorityFeePerGas.toNat
-    | .setCode tx => tx.maxFeePerGas.toNat < tx.maxPriorityFeePerGas.toNat
-    | _ => false
-
 /-- Check the blobs and the authorizations of a transaction at `fork`.
 
 - A blob transaction has at least one blob, and each versioned hash starts with `0x01`.
 - From Fusaka, it has at most 6 blobs.
 - A set code transaction has at least one authorization, as EIP-7702 asks.
 
-[EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#execution-layer-validation),
-[EIP-7594](https://eips.ethereum.org/EIPS/eip-7594#specification) and
-[EIP-7702](https://eips.ethereum.org/EIPS/eip-7702#set-code-transaction) state these rules. -/
+Sources: [EIP-4844][eip-4844], [EIP-7594][eip-7594], [EIP-7702][eip-7702].
+
+[eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#execution-layer-validation
+[eip-7594]: https://eips.ethereum.org/EIPS/eip-7594#specification
+[eip-7702]: https://eips.ethereum.org/EIPS/eip-7702#set-code-transaction -/
 def checkContents (fork : Fork) : Transaction → Except TransactionError Unit
   | .blob tx =>
     if tx.blobVersionedHashes.isEmpty then .error .noBlobData
@@ -306,6 +266,64 @@ def checkContents (fork : Fork) : Transaction → Except TransactionError Unit
     else .ok ()
   | .setCode tx => if tx.authorizations.isEmpty then .error .emptyAuthorizationList else .ok ()
   | _ => .ok ()
+
+/-- Check the fees, the gas limit and the nonce of a transaction from `sender` at `fork`.
+
+It returns the intrinsic gas.
+
+- The gas limit covers the least gas limit of the fork.
+- From Shapella, init code has at most the size that the fork allows.
+- From Fusaka to BPO5, the gas limit is at most `2^24`, as EIP-7825 asks.
+- From Glamsterdam, the gas limit is at most `2^32 - 1`, as EIP-8037 asks.
+- From Glamsterdam, the intrinsic gas and the floor are at most `2^24` each, as EIP-8037 asks.
+- The nonce is below `2^64 - 1`, as EIP-2681 asks.
+- The priority fee is at most the maximum fee, as EIP-1559 asks.
+- From Glamsterdam, the blobs and the authorizations pass their rules.
+
+The first rule that fails gives the error.
+
+Before Glamsterdam, the rules run in the order of the list.
+
+From Glamsterdam, the nonce comes first, and the least gas limit and its bound come last.
+
+The other rules keep the order of the list.
+
+Sources: [EIP-7825][eip-7825], [EIP-8037][eip-8037], [EIP-2681][eip-2681], [EIP-1559][eip-1559].
+
+[eip-7825]: https://eips.ethereum.org/EIPS/eip-7825#specification
+[eip-8037]: https://eips.ethereum.org/EIPS/eip-8037#transaction-validation
+[eip-2681]: https://eips.ethereum.org/EIPS/eip-2681#specification
+[eip-1559]: https://eips.ethereum.org/EIPS/eip-1559#specification -/
+def validateTransaction (fork : Fork) (sender : Address) (tx : Transaction) :
+    Except TransactionError Nat := do
+  let minimum := minimumGas fork sender tx
+  let coversMinimum := ensure (minimum ≤ tx.gas.toNat) (.insufficientGas minimum tx.gas.toNat)
+  let initCodeFits := ensure (fork ≥ .shapella → tx.to = none → tx.data.size ≤ maxInitCodeSize fork)
+    (.initCodeTooLarge tx.data.size)
+  let nonceFits := ensure (tx.nonce.toNat < 2 ^ 64 - 1) .nonceOverflow
+  let feesOrdered := ensure (feesInverted tx = false) .priorityFeeGreaterThanMaxFee
+  if fork ≥ .glamsterdam then
+    nonceFits
+    initCodeFits
+    ensure (tx.gas.toNat ≤ TX_MAX_TOTAL_GAS_LIMIT) (.gasLimitExceeded tx.gas.toNat)
+    feesOrdered
+    checkContents fork tx
+    coversMinimum
+    ensure (minimum ≤ TX_MAX_GAS_LIMIT) (.intrinsicGasAboveLimit minimum)
+  else
+    coversMinimum
+    initCodeFits
+    ensure (fork ≥ .fusaka → tx.gas.toNat ≤ TX_MAX_GAS_LIMIT) (.gasLimitExceeded tx.gas.toNat)
+    nonceFits
+    feesOrdered
+  return intrinsicGas fork sender tx
+where
+  /-- Whether the priority fee per gas is above the maximum fee per gas. -/
+  feesInverted : Transaction → Bool
+    | .feeMarket tx => tx.maxFeePerGas.toNat < tx.maxPriorityFeePerGas.toNat
+    | .blob tx => tx.maxFeePerGas.toNat < tx.maxPriorityFeePerGas.toNat
+    | .setCode tx => tx.maxFeePerGas.toNat < tx.maxPriorityFeePerGas.toNat
+    | _ => false
 
 /-- Check that a transaction signs no chain, or the chain `chainId` of the network. -/
 def checkChainId (fork : Fork) (chainId : UInt64) (tx : Transaction) :
@@ -321,13 +339,15 @@ It returns the sender and the intrinsic gas.
 
 The checks run in order: the chain, the signature, the gas and the nonce, then the contents.
 
-The signature comes before the gas, since from Glamsterdam the intrinsic gas reads the sender. -/
+The signature comes before the gas, since from Glamsterdam the intrinsic gas reads the sender.
+
+From Glamsterdam the gas and nonce rules check the contents already. -/
 def checkTransaction (fork : Fork) (chainId : UInt64) (tx : Transaction) :
     Except TransactionError (Address × Nat) := do
   checkChainId fork chainId tx
   let sender ← recoverSender fork tx
   let gas ← validateTransaction fork sender tx
-  checkContents fork tx
+  if fork < .glamsterdam then checkContents fork tx
   return (sender, gas)
 
 end EthLib.Execution.Transactions
