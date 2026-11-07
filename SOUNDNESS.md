@@ -656,7 +656,19 @@ So `SpecUnder.runFrame` concludes that `runFrame` returns a stopped frame of `Q`
 `hoareUnder_iff_triple` states each triple under an assumption as a `Triple` over `StepBy` under each runner that meets it, so the two share their rules.
 The code that a message runs is arbitrary and may call the caller again.
 So the assumption is all that a triple says about a frame that ends a message, and about the state after it.
-No rule yet covers an opcode that sends a message, so no theorem yet proves a contract that calls or creates.
+`Logic.call` (`Logic/Call.lean`) is the rule for CALL with no value and empty ranges of input and output.
+It holds from Berlin to before Glamsterdam, with the one-counter meter.
+It pays 2600 or 100 for the access to the address, by EIP-2929.
+It passes on at most all but one 64th of the gas left, by EIP-150.
+Its postcondition gives the state and substate that the frame that ends the message gives, and nothing more.
+`CallFlag.runFrame_spec` proves a contract that calls the address in its call data and returns 1 when the callee ends with no error, and 0 otherwise.
+With every runner that meets the assumption, the run returns that word or aborts with an error that aborts the run.
+`CallFlag.runFrame_process` states it for the runner of messages of the interpreter.
+`meets_process_noCode` proves that the runner of the interpreter meets one more assumption.
+That assumption says that a message with no code, to an account that is no precompile, ends with no error.
+So `CallFlag.runFrame_process_noCode` proves that the contract returns 1 when the address holds no code and is no precompile, unless the run aborts.
+No theorem yet gives the outcome of a call to code.
+No rule covers CREATE, a call with value, DELEGATECALL or STATICCALL.
 
 ### SHA-256 precompile
 
