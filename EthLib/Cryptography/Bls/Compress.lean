@@ -102,7 +102,7 @@ namespace G1
 
 /-- Canonical compressed-infinity encoding: `0xc0` then 47 zero bytes. -/
 def infinityBytes : ByteArray :=
-  ByteArray.mk <| #[(0xc0 : UInt8)] ++ Array.replicate 47 0
+  ByteArray.mk ((Vector.replicate 48 (0 : UInt8)).set 0 0xc0).toArray
 
 /-- Compressed 48-byte serialization. -/
 def compress (p : G1) : ByteArray := Id.run do
@@ -192,7 +192,7 @@ namespace G2
 
 /-- Canonical compressed-infinity encoding: `0xc0` then 95 zero bytes. -/
 def infinityBytes : ByteArray :=
-  ByteArray.mk <| #[(0xc0 : UInt8)] ++ Array.replicate 95 0
+  ByteArray.mk ((Vector.replicate 96 (0 : UInt8)).set 0 0xc0).toArray
 
 /-- Encode `Fp2` as 96 big-endian bytes (`c1 ‖ c0`). -/
 def fp2ToBytes (x : Fp2) : ByteArray :=

@@ -831,12 +831,8 @@ private theorem foldl_allZero (b : ByteArray) (s n : Nat) (init : Bool)
     · exact hs
     · exact hrest i hlt (by omega)
 
-/--
-The scan over the tail reads each byte at its checked index.
-
-So it agrees with the scan that reads by `get!`.
--/
-theorem tailAllZero_eq (b : ByteArray) (s : Nat) :
+/-- The scan over the tail agrees with the same scan read by `get!`. -/
+private theorem tailAllZero_eq (b : ByteArray) (s : Nat) :
     tailAllZero b s = (Id.run do
       let mut ok := true
       for i in [s : b.size] do
@@ -854,7 +850,8 @@ theorem tailAllZero_eq (b : ByteArray) (s : Nat) :
 
 open EthLib.Cryptography.IdLoops in
 /-- The tail scan in decompression succeeds only if bytes `1` to the end are all zero. -/
-theorem tailAllZero_ok (b : ByteArray) (h : tailAllZero b 1 = true) :
+theorem _root_.EthLib.Cryptography.Bls.tailAllZero_ok (b : ByteArray)
+    (h : tailAllZero b 1 = true) :
     ∀ i, 1 ≤ i → i < b.size → b.get! i = 0 := by
   rw [tailAllZero_eq] at h
   -- Turn the imperative loop over the range into a fold over the list of indices.

@@ -180,27 +180,6 @@ theorem uncompress_infinityBytes : G2.uncompress G2.infinityBytes = .ok G2.zero 
 
 /-! ## Rejection of malformed compressed inputs -/
 
-/-- A fold that clears `ok` on any nonzero byte ends `true` only if every visited byte is zero. -/
-private theorem foldl_allZero (b : ByteArray) (s n : Nat) (init : Bool)
-    (h : (List.range' s n).foldl
-      (fun ok i => if b.get! i ≠ 0 then false else ok) init = true) :
-    init = true ∧ ∀ i, s ≤ i → i < s + n → b.get! i = 0 := by
-  induction n generalizing s init with
-  | zero => exact ⟨h, fun i h1 h2 => by omega⟩
-  | succ n ih =>
-    -- Peel off index s and apply the induction hypothesis to the tail.
-    rw [List.range'_succ, List.foldl_cons] at h
-    obtain ⟨hinit, hrest⟩ := ih (s + 1) _ h
-    -- If byte s were nonzero, the accumulator would enter the tail as false and stay false.
-    have hs : b.get! s = 0 := by
-      by_contra hne
-      rw [ite_eq_left hne] at hinit
-      cases hinit
-    refine ⟨by rwa [ite_eq_right (not_not.mpr hs)] at hinit, fun i h1 h2 => ?_⟩
-    rcases Nat.eq_or_lt_of_le h1 with rfl | hlt
-    · exact hs
-    · exact hrest i hlt (by omega)
-
 /-- Decoding rejects any input that is not 96 bytes long (Section C.2). -/
 theorem uncompress_size_ne {bytes : ByteArray} (h : bytes.size ≠ 96) :
     G2.uncompress bytes = .error .invalidG2Point := by
@@ -246,7 +225,7 @@ theorem uncompress_infinity_nonzero_tail {bytes : ByteArray} (hsz : bytes.size =
   have htail : tailAllZero bytes 1 = false := by
     rw [Bool.eq_false_iff]
     intro hok
-    exact hne (G1.tailAllZero_ok bytes hok i hi1 (by omega))
+    exact hne (tailAllZero_ok bytes hok i hi1 (by omega))
   rw [uncompress, ite_eq_right (show ¬ bytes.size ≠ 96 from fun h => h hsz)]
   extract_lets head isC isI yS
   have hC : ¬ (!decide isC) = true := by simp [isC, head, hc]
@@ -789,7 +768,7 @@ theorem compress_uncompress {b : ByteArray} {q : G2}
     uncompress_ok_cases h
   -- Infinity: the header is 0xc0 and bytes 1..95 are zero.
   · rw [compress_inf isInfinity_zero]
-    have htail0 : ∀ i, 1 ≤ i → i < b.size → b.get! i = 0 := G1.tailAllZero_ok b htail
+    have htail0 : ∀ i, 1 ≤ i → i < b.size → b.get! i = 0 := tailAllZero_ok b htail
     refine ba_ext (by rw [hsz96]; decide) (fun i hi => ?_)
     have hi96 : i < 96 := by simpa [show infinityBytes.size = 96 by decide] using hi
     by_cases hi0 : i = 0
