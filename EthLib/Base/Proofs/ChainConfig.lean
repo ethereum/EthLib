@@ -19,6 +19,10 @@ A chain sets no blob schedule at a block exactly when the block reaches none of 
 
 The schedule that it sets is one of its schedules, and the block has reached its activation.
 
+The order check of EIP-6122 passes exactly when no fork by block follows a fork by timestamp.
+
+A chain whose forks are in the order of the timeline passes it.
+
 Mainnet and Hoodi set none.
 -/
 
@@ -209,6 +213,31 @@ theorem activationsOrdered_eq_true_iff {activations : List (Fork × Activation)}
       | block _ => left; simp
       | time t => right; exact h f t g n hf hg
     | time _ => left; simp
+
+/-- A chain whose forks are in the order of the timeline passes the order check of EIP-6122.
+
+A fork by timestamp activates no earlier than any fork before it, so no fork by block follows it. -/
+theorem activationsOrdered_of_ordered (ordered : config.Ordered) :
+    activationsOrdered config.activations = true := by
+  rw [activationsOrdered_eq_true_iff]
+  obtain ⟨pairwise, -⟩ := ordered
+  intro f t g n hf hg earlier
+  generalize config.activations = activations at pairwise hf hg
+  induction pairwise with
+  | nil => cases hf
+  | cons rel _ ih =>
+    rw [List.mem_cons] at hf hg
+    rcases hf with hf | hf <;> rcases hg with hg | hg
+    · subst hf
+      cases hg
+    -- A fork by block after a fork by timestamp would activate before it.
+    · subst hf
+      exact (rel _ hg).2
+    -- The fork by block comes first in the list, so it is the earlier fork.
+    · subst hg
+      have later : g < f := (rel _ hf).1
+      exact Nat.lt_asymm later earlier
+    · exact ih hf hg
 
 /-! ## Mainnet -/
 
