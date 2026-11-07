@@ -767,22 +767,17 @@ theorem quantity_eq_ok_iff {what : String} {bits : Nat} {j : Lean.Json} {v : Nat
 
 /-! ## Only the canonical text decodes to bytes -/
 
-/-- The fact below, checked by the kernel on each of the 256 codes. -/
-private theorem hexDigitChar_hexValue_lt : ∀ n, n < 256 →
-    (hexValue false n.toUInt8).isSome = true →
-    (hexDigitChar ⟨digitValue n.toUInt8 % 16, Nat.mod_lt _ (by decide)⟩).val.toUInt8 = n.toUInt8 ∧
-      digitValue n.toUInt8 < 16 := by
-  decide +kernel
-
 /-- A code that the decoder reads as a lowercase hex digit is the code of the digit of its value.
 
 That value is below sixteen. -/
 private theorem hexDigitChar_hexValue (c : UInt8) (h : (hexValue false c).isSome = true) :
     (hexDigitChar ⟨digitValue c % 16, Nat.mod_lt _ (by decide)⟩).val.toUInt8 = c ∧
       digitValue c < 16 := by
-  have := hexDigitChar_hexValue_lt c.toNat c.toNat_lt
-  simp only [show c.toNat.toUInt8 = c from UInt8.ofNat_toNat] at this
-  exact this h
+  obtain ⟨below, code, -⟩ := digitChar_digitValue c h
+  have digit : (⟨digitValue c % 16, Nat.mod_lt _ (by decide)⟩ : Fin 16) = ⟨digitValue c, below⟩ :=
+    Fin.ext (Nat.mod_eq_of_lt below)
+  rw [digit, ← digitChar_eq_hexDigitChar _ below]
+  exact ⟨code, below⟩
 
 /-- A loop over indices whose every step pushes one byte returns those bytes, each with its fact. -/
 private theorem forIn_range'_ok {Q : Nat → UInt8 → Prop} {s k : Nat}
