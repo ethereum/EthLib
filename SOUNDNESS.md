@@ -742,6 +742,8 @@ The new address holds no code and a nonce of 0.
 `NoValue.spec_nonzero` proves a contract that halts at `0xfe` when its message sends value.
 `memoryReadBytes_memoryWrite_of_disjoint` proves that a write within memory leaves a read of a disjoint range unchanged.
 `memoryReadBytes_memoryWrite_memoryWrite` proves that a read across two adjacent writes gives both values in order.
+`memoryWrite_comm_of_disjoint` proves that two writes within memory to disjoint ranges commute.
+`memoryReadBytes_memoryWrite_memoryWrite_rev` proves the same read when the higher write comes first.
 From Berlin, the rule for SLOAD takes as a hypothesis whether the slot is cold, and charges 2100 or 100 by EIP-2929.
 `Logic.sstore` is the rule for SSTORE from Berlin to before Glamsterdam, in a frame that may change the state and holds more than 2300 gas.
 It charges `sstoreCost` and adds `sstoreRefund` to the refund counter, from the original, current and new words and whether the slot is cold.
