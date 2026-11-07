@@ -216,6 +216,13 @@ def changed_lines(base: str) -> dict[str, set[int]]:
             first = int(hunk.group(1))
             count = int(hunk.group(2)) if hunk.group(2) is not None else 1
             result.setdefault(path, set()).update(range(first, first + count))
+    # `git diff` lists no untracked file, so a new file that is not yet added would go unchecked.
+    # Such a file is new, so every one of its lines counts as added.
+    # With -z, git gives each name as it is, without quoting the unusual ones.
+    untracked = git("ls-files", "-z", "--others", "--exclude-standard", "--", "*.lean")
+    for path in filter(None, untracked.split("\0")):
+        count = len((ROOT / path).read_text(encoding="utf-8").splitlines())
+        result[path] = set(range(1, count + 1))
     return result
 
 

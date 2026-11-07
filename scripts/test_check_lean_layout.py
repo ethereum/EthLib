@@ -145,6 +145,28 @@ class ChangedLines(unittest.TestCase):
             self.assertIn("New.lean:2:", out.getvalue())
             self.assertNotIn("Old.lean", out.getvalue())
 
+    def test_untracked_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.git(root, "init", "-q", "-b", "base")
+            (root / "Old.lean").write_text("def x := 1\n")
+            self.git(root, "add", ".")
+            self.git(root, "commit", "-q", "-m", "base")
+            # A new file that is not added: `git diff` alone does not list it.
+            (root / "New.lean").write_text("-- One.\n-- Two.\n" + "z" * 101 + "\n")
+            (root / "Ignored.lean").write_text("w" * 101 + "\n")
+            (root / ".gitignore").write_text("Ignored.lean\n")
+
+            with mock.patch.object(layout, "ROOT", root):
+                self.assertEqual(layout.changed_lines("base"), {"New.lean": {1, 2, 3}})
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    status = layout.main(["check_lean_layout.py", "--base", "base"])
+            self.assertEqual(status, 1)
+            self.assertIn("New.lean:2:", out.getvalue())
+            self.assertIn("New.lean:3:", out.getvalue())
+            self.assertNotIn("Ignored.lean", out.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -345,6 +345,7 @@ uv run --no-project --python 3.12 python scripts/check_lean_layout.py --base ori
 It fails on a changed line longer than 100 characters, unless the line holds only a URL.
 It also fails when two sentence lines of a comment touch, and one of them is changed.
 Lines that your branch does not change are not checked.
+A Lean file that git does not track yet counts as changed on every line.
 
 These commands use uv and Python 3.12, with only the standard library.
 See [prerequisites](README.md#prerequisites) for setup.
