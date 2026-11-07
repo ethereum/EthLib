@@ -135,7 +135,7 @@ theorem depositRequests_isOk_iff (logs : List Log) :
       fun log hlog => h log (List.mem_filter.mp hlog).1 (List.mem_filter.mp hlog).2
     exact ⟨_, by simp only [hrequests, bind, Except.bind, pure, Except.pure]; rfl⟩
 
-/-- The deposit requests of a block hold 192 bytes for each deposit log. -/
+/-- When the deposit requests of a block succeed, they hold 192 bytes for each deposit log. -/
 theorem size_of_depositRequests {logs : List Log} {data : ByteArray}
     (h : depositRequests logs = .ok data) :
     data.size = 192 * (logs.filter isDepositLog).length := by
