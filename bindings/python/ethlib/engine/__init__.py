@@ -1,10 +1,11 @@
 """The Engine API between the consensus and the execution layers."""
 
 import json
+from typing import Any
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
-from ethlib.consensus import _fork_choice_records
+from ethlib.consensus import ForkChoiceStep
 from ethlib.cryptography import _native
 from ethlib.errors import EngineError, ProposerError
 from ethlib.serialization import rlp
@@ -77,7 +78,7 @@ def prepare_execution_payload_gloas(
     fork: str,
     anchor_state: bytes,
     anchor_block: bytes,
-    steps: list,
+    steps: list[ForkChoiceStep],
     head_root: bytes,
     head_status: int,
     state: bytes,
@@ -86,29 +87,28 @@ def prepare_execution_payload_gloas(
     suggested_fee_recipient: bytes,
     target_gas_limit: int,
     verify: bool = True,
-    config: dict | None = None,
-) -> dict:
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """From Gloas: the forkchoice update and payload attributes of a proposer on a store."""
     # The steps take the form of those of `consensus.fork_choice`, which build the store.
     # The head status is 0 for empty, 1 for full and 2 for pending.
-    replacements = json.dumps(config).encode() if config else b""
-    update = _native.engine_prepare_execution_payload_gloas(
+    return _native.engine_prepare_execution_payload_gloas(
         name,
         fork,
         anchor_state,
         anchor_block,
-        _fork_choice_records(steps),
-        replacements,
+        steps,
         head_root,
+        head_status,
         state,
         safe_block_hash,
         finalized_block_hash,
         suggested_fee_recipient,
-        head_status,
         target_gas_limit,
         verify,
+        config,
     )
-    return json.loads(update)
 
 
 __all__ = [

@@ -4535,7 +4535,7 @@
   {"summary":
    "The outcome of each step of a fork choice case, from an anchor state and an anchor block.",
    "signature":
-   "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: bytes, config: bytes, verify: bool) -> bytes",
+   "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None) -> list",
    "operation": "EthLib.Consensus.Exports.forkChoiceExport",
    "method": "consensus_fork_choice",
    "errors":
@@ -4594,7 +4594,7 @@
       {"constructor": "invalidInclusionListSignature", "code": 51}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "The outcome of each step of a fork choice case, from an anchor state and an anchor block.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nThe signature checks run unless the last argument is false.\n\nFrom Gloas the node on which a proposer builds is not yet specified here, so that read fails."},
+   "The outcome of each step of a fork choice case, from an anchor state and an anchor block.\n\nThe arguments are the preset, the fork, the anchor state and the anchor block in SSZ, and the steps.\n\nThen come whether the signature checks run, and replacements of values of the configuration.\n\nFrom Gloas the node on which a proposer builds is not yet specified here, so that read fails."},
   {"summary":
    "Validate the messages of a topic in turn, against the store of an anchor and later blocks.",
    "signature":
@@ -8201,9 +8201,10 @@
    "error_class": "ProposerError",
    "docstring":
    "From Bellatrix to Fulu: the forkchoice update of a proposer, as JSON text.\n\nIt is `null` when the proposer asks for nothing, before the merge."},
-  {"summary": "From Gloas: the forkchoice update of a proposer, as JSON text.",
+  {"summary":
+   "From Gloas: the forkchoice update of a proposer, as the value of its JSON.",
    "signature":
-   "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: bytes, config: bytes, head_root: bytes, state: bytes, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, head_status: int, target_gas_limit: int, verify: bool) -> bytes",
+   "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, head_root: bytes, head_status: int, state: bytes, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, target_gas_limit: int, verify: bool, config: dict | None) -> dict",
    "operation": "EthLib.Engine.Exports.prepareExecutionPayloadGloasExport",
    "method": "engine_prepare_execution_payload_gloas",
    "errors":
@@ -8227,7 +8228,7 @@
       {"constructor": "duty", "code": 16}]}],
    "error_class": "ProposerError",
    "docstring":
-   "From Gloas: the forkchoice update of a proposer, as JSON text.\n\nThe store comes from an anchor state, an anchor block and steps of the fork choice export.\n\nThe signature checks run unless `verify` is false."},
+   "From Gloas: the forkchoice update of a proposer, as the value of its JSON.\n\nThe arguments are the preset, the fork, the anchor state and the anchor block, and the steps.\n\nThen come the head root and status, the state, the safe and finalized hashes and the fee recipient.\n\nThen come the target gas limit, whether the signature checks run, and configuration replacements."},
   {"summary":
    "The value that Python passes, back to Python, with each failure tuple read as a failure.",
    "signature": "(value: object) -> object",

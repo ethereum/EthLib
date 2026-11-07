@@ -547,8 +547,8 @@ def bindings : List Binding := [
     "(name: str, fork: str, pre: bytes, config: bytes, verify: bool) -> bytes",
     [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
   ⟨"consensus_fork_choice", `EthLib.Consensus.Exports.forkChoiceExport,
-    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: bytes, " ++
-      "config: bytes, verify: bool) -> bytes",
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, config: dict | None) -> list",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_gossip_validation", `EthLib.Consensus.Exports.gossipValidationExport,
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: bytes, " ++
@@ -1009,10 +1009,10 @@ def bindings : List Binding := [
     [`EthLib.Consensus.ProposerError], some "ProposerError"⟩,
   ⟨"engine_prepare_execution_payload_gloas",
     `EthLib.Engine.Exports.prepareExecutionPayloadGloasExport,
-    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: bytes, " ++
-      "config: bytes, head_root: bytes, state: bytes, safe_block_hash: bytes, " ++
-      "finalized_block_hash: bytes, suggested_fee_recipient: bytes, head_status: int, " ++
-      "target_gas_limit: int, verify: bool) -> bytes",
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "head_root: bytes, head_status: int, state: bytes, safe_block_hash: bytes, " ++
+      "finalized_block_hash: bytes, suggested_fee_recipient: bytes, target_gas_limit: int, " ++
+      "verify: bool, config: dict | None) -> dict",
     [`EthLib.Consensus.ProposerError], some "ProposerError"⟩,
   ⟨"pyvalue_echo", `EthLib.Exports.pyValueEcho,
     "(value: object) -> object",

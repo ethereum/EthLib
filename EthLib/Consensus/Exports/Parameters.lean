@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports
+public import EthLib.Base.Exports.PyValue
 public import Lean.Data.Json
 public import EthLib.Base.Hex
 public import EthLib.Serialization.Ssz.Codec.Json
@@ -26,7 +27,7 @@ public section
 
 namespace EthLib.Consensus.Exports
 
-open EthLib.Exports (Result forkUpTo)
+open EthLib.Exports (Result PyValue forkUpTo)
 
 open Lean Base
 
@@ -104,6 +105,21 @@ def configWith (name replacements : ByteArray) : Result Config := do
   let some text := String.fromUTF8? replacements | throw (0, "configuration is not UTF-8")
   let replaced ← (Json.parse text).mapError fun e => (0, s!"configuration: {e}")
   (fromJson? ((toJson config).mergeObj replaced)).mapError fun e => (0, s!"configuration: {e}")
+
+/-- The configuration of a name, with some of its values replaced.
+
+The replacements come as a `dict` with the names of the configuration file.
+
+Each value replaces its key in the JSON form of the configuration, bytes as `0x` and hex.
+
+None or an empty `dict` keeps the configuration of the name. -/
+def configWithValue (name : String) (replacements : Option PyValue) : Result Config := do
+  let config ← configOf name
+  match replacements with
+  | none | some (.dict #[]) => return config
+  | some replaced =>
+    (fromJson? ((toJson config).mergeObj replaced.toJson)).mapError fun e =>
+      (0, s!"configuration: {e}")
 
 /-- The fork of a name, for the forks from Phase 0 to Hegotá, whose beacon chain is Heze.
 
