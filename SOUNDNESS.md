@@ -1070,7 +1070,8 @@ The same theorem shows that this ancestor is not optimistic, or has the zero par
 `onInvalidatedPayload_spec` shows that the first invalid block removes exactly the optimistic roots whose chain holds it.
 `isOptimisticRestrictedDomain_iff` lists the seven domain types under which an optimistic validator may not sign.
 
-The rule of the latest valid hash, which names the first invalid block, is the one of `Consensus/ForkChoice/Optimistic.lean`, and these theorems take that block as given.
+The rule of the latest valid hash in `Consensus/ForkChoice/Optimistic.lean` names the first invalid block.
+The theorems here take that block as given.
 No theorem relates the optimistic set to the blocks that the store of the fork choice removes.
 The second case of an optimistic node, a block tree without a viable branch, is not defined.
 Neither is the re-run of the merge block checks, nor the answer to an execution layer that fails to respond.

@@ -13,9 +13,9 @@ The node keeps the roots of the optimistic blocks beside its blocks, in an optim
 
 A block may be imported optimistically when its parent carries a payload.
 
-It may also be imported once the clock is a number of slots past the slot of the block.
+It may also be imported once the clock is far enough past the slot of the block.
 
-That number protects a node from a chain that builds on a payload nobody can check.
+That distance protects a node from a chain that builds on a payload nobody can check.
 
 A valid payload makes the block and its known ancestors leave the optimistic set.
 
@@ -69,11 +69,13 @@ def isExecutionBlock (block : BeaconBlock preset fork) : Bool :=
 
 /-- From Bellatrix: whether a block may be imported optimistically at a slot of the clock.
 
-Its parent must be known, and carry a payload or have a slot at least a number of slots ago.
+Its parent must be known.
 
-The number is `SAFE_SLOTS_TO_IMPORT_OPTIMISTICALLY` unless the user sets another.
+The parent carries a payload, or the slot of the block plus a count is at most the clock's slot.
 
-It fails when the parent is not known, and when the slot plus the number overflows 64 bits.
+The count is `SAFE_SLOTS_TO_IMPORT_OPTIMISTICALLY` unless the user sets another.
+
+It fails when the parent is not known, and when the slot plus the count overflows 64 bits.
 
 It is computed only when the parent carries no payload. -/
 def OptimisticStore.isOptimisticCandidateBlock (store : OptimisticStore preset fork)
