@@ -882,7 +882,9 @@ From Gloas, a validator also finds the slot of its payload timeliness committee 
 `not_mem_of_getPtcAssignment_none` shows that no committee of the epoch holds a validator without one, when an epoch has a slot.
 `getUpcomingProposalSlots_spec` shows which slots are the upcoming proposal slots, in increasing order.
 They are exactly the slots after the slot of the state whose proposer in the lookahead is the validator.
-Under `PairingLaws`, `validatePtcMessage_getPayloadAttestationMessageSignature` shows that the fork choice accepts a payload attestation message for the current slot that its validator signed.
+Under `PairingLaws`, `validatePtcMessage_getPayloadAttestationMessageSignature` covers a payload attestation message for the current slot that its validator signed.
+It shows that the message passes the wire checks of the fork choice: its slot and its signature.
+No theorem covers the other checks of the handler: a known block, the slot of the state and a seat in the committee.
 It rests on `fastAggregateVerify_sign`: an honest signature passes the fast aggregate verification under its one key.
 
 `isAssignedToSyncCommittee_ok_iff` states when the sync committee seat check succeeds.

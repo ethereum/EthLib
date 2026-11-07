@@ -35,9 +35,11 @@ A validator without one is in no committee of the epoch, when an epoch has a slo
 
 The upcoming proposal slots are the later slots of the lookahead that the validator proposes.
 
-Under the pairing laws, the fork choice accepts a signed payload attestation message of the slot.
+Under the pairing laws, a signed payload attestation message passes the wire checks.
 
-The slot must be the current one, and the validator must have the public key of the secret key.
+These checks of the fork choice read only its slot, which must be current, and its signature.
+
+The validator must have the public key of the secret key.
 -/
 
 @[expose] public section
@@ -794,7 +796,11 @@ theorem isValidIndexedPayloadAttestation_getPayloadAttestationMessageSignature
     SignatureChecks.bls]
   exact congrArg Except.ok verifies
 
-/-- From Gloas: the fork choice accepts a signed payload attestation message of the current slot.
+/-- From Gloas: a signed payload attestation message of the current slot passes the wire checks.
+
+These checks of the fork choice read only the slot of the message and its signature.
+
+The handler of the message also needs a known block, the slot of the state and a committee seat.
 
 The validator must have the public key of the secret key.
 
