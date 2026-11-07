@@ -10,6 +10,8 @@ Decryption of an honest ciphertext returns its plaintext.
 
 Decryption accepts no tag other than the honest one.
 
+Decryption returns a plaintext exactly when it encrypts to the given ciphertext and tag.
+
 Both functions reject the 64-bit and 32-bit tags.
 
 Under the length checks, the counters of the text differ from each other and from `J_0`.
@@ -108,6 +110,44 @@ theorem decrypt_eq_ok (ciph : Block → Block) (t : Nat) (iv p aad c T T' q : By
     · rw [gctr] at same
       simp only [same, ite_false] at h'
       split at h' <;> cases h'
+
+/-- A plaintext that decryption returns encrypts back to the ciphertext and the tag it was given.
+
+So every pair `(c, T)` that decryption accepts is the encryption of its plaintext. -/
+theorem encrypt_eq_ok_of_decrypt_eq_ok (ciph : Block → Block) (t : Nat)
+    (iv c aad T p : ByteArray) (h : decrypt ciph t iv c aad T = .ok p) :
+    encrypt ciph t iv p aad = .ok (c, T) := by
+  unfold decrypt at h
+  cases hc : checkLengths t iv c aad with
+  | error e =>
+    rw [hc] at h
+    cases h
+  | ok u =>
+    rw [hc] at h
+    -- The tag has `t` bytes, and it is the tag of the given ciphertext.
+    by_cases hT : T.size = t
+    · by_cases same : T = tag ciph t (ciph zeroBlock) (preCounter (ciph zeroBlock) iv) aad c
+      · subst same
+        -- The plaintext is the CTR decryption of the ciphertext.
+        have hp : gctr ciph (inc 32 (preCounter (ciph zeroBlock) iv)) c = p := by
+          simp only [hT, ite_true] at h
+          exact Except.ok.inj h
+        subst hp
+        have hs : (gctr ciph (inc 32 (preCounter (ciph zeroBlock) iv)) c).size = c.size :=
+          size_ctr ciph 32 _ c
+        unfold encrypt
+        rw [checkLengths_congr t iv aad hs, hc]
+        simp only [gctr, ctr_ctr]
+        rfl
+      · simp only [hT, same, ite_true, ite_false] at h
+        cases h
+    · simp only [hT, ite_false] at h
+      cases h
+
+/-- Decryption returns `p` exactly when `p` encrypts to the ciphertext and the tag, §7. -/
+theorem decrypt_eq_ok_iff (ciph : Block → Block) (t : Nat) (iv c aad T p : ByteArray) :
+    decrypt ciph t iv c aad T = .ok p ↔ encrypt ciph t iv p aad = .ok (c, T) :=
+  ⟨encrypt_eq_ok_of_decrypt_eq_ok ciph t iv c aad T p, decrypt_encrypt ciph t iv p aad c T⟩
 
 /-- Two errors with one code are the same error. -/
 theorem Error.code_injective (e₁ e₂ : Error) (h : e₁.code = e₂.code) : e₁ = e₂ := by
