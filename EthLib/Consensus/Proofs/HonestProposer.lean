@@ -4,6 +4,7 @@ public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Consensus.DataAvailability.Blob
 public import EthLib.Consensus.HonestProposer
+public import EthLib.Consensus.Proofs.Containers.Requests
 
 /-!
 # Proofs: what an honest proposer computes
@@ -21,6 +22,8 @@ With a signature that passes its check, a block that carries the new state root 
 The state after it then has that root.
 
 The on-chain aggregate joins the network aggregates in the order of their committees.
+
+Reading the requests of the execution layer inverts the list that the execution layer receives.
 
 The signed header of a block carries the root of its body.
 -/
@@ -462,5 +465,485 @@ theorem committeeBits_computeOnChainAggregate {electra : .pectra ≤ fork}
         exact ⟨entry, perm.mem_iff.mpr member', Option.some.inj (first.symm.trans named)⟩
     · simp [throw, throwThe, MonadExceptOf.throw] at joined
   · simp [throw, throwThe, MonadExceptOf.throw] at joined
+
+/-! ## Execution requests -/
+
+/-- The first byte of a type byte followed by data is the type byte. -/
+theorem getElem?_zero_cons_append (type : UInt8) (data : ByteArray) :
+    (ByteArray.mk #[type] ++ data).data[0]? = some type := by
+  rw [ByteArray.data_append, Array.getElem?_append_left (Nat.succ_pos 0)]
+  rfl
+
+/-- The bytes after the type byte are the data. -/
+theorem extract_one_cons_append (type : UInt8) (data : ByteArray) :
+    (ByteArray.mk #[type] ++ data).extract 1 (ByteArray.mk #[type] ++ data).size = data := by
+  exact ByteArray.extract_append_eq_right (by rfl) ByteArray.size_append
+
+/-- Bytes with a first byte are that byte followed by the rest. -/
+theorem cons_append_extract_one {request : ByteArray} {type : UInt8}
+    (first : request.data[0]? = some type) :
+    ByteArray.mk #[type] ++ request.extract 1 request.size = request := by
+  cases request with
+  | mk bytes =>
+    have positive : 0 < bytes.size := by
+      cases bytes with
+      | mk list => cases list with
+        | nil => simp at first
+        | cons _ _ => exact Nat.succ_pos _
+    apply ByteArray.ext
+    rw [ByteArray.data_append, ByteArray.data_extract]
+    have whole := firstByte_append_tail bytes positive
+    have named : bytes[0]?.getD 0 = type := by
+      change bytes[0]? = some type at first
+      rw [first]
+      rfl
+    rw [named] at whole
+    exact whole
+
+/-- Two lists of bytes, each strictly increasing, with the same members are equal. -/
+theorem eq_of_pairwise_lt_of_mem_iff :
+    ∀ {l₁ l₂ : List UInt8}, l₁.Pairwise (· < ·) → l₂.Pairwise (· < ·) →
+      (∀ x, x ∈ l₁ ↔ x ∈ l₂) → l₁ = l₂
+  | [], [], _, _, _ => rfl
+  | [], b :: _, _, _, same => absurd ((same b).mpr (by simp)) (by simp)
+  | a :: _, [], _, _, same => absurd ((same a).mp (by simp)) (by simp)
+  | a :: as, b :: bs, sorted₁, sorted₂, same => by
+    rw [List.pairwise_cons] at sorted₁ sorted₂
+    have heads : a = b := by
+      rcases List.mem_cons.mp ((same a).mp (by simp)) with eq | mem
+      · exact eq
+      · rcases List.mem_cons.mp ((same b).mpr (by simp)) with eq | mem'
+        · exact eq.symm
+        · exact absurd (UInt8.lt_trans (sorted₂.1 a mem) (sorted₁.1 b mem')) (UInt8.lt_irrefl _)
+    subst heads
+    congr 1
+    refine eq_of_pairwise_lt_of_mem_iff sorted₁.2 sorted₂.2 fun x => ?_
+    constructor
+    · intro mem
+      rcases List.mem_cons.mp ((same x).mp (by simp [mem])) with rfl | mem'
+      · exact absurd (sorted₁.1 _ mem) (UInt8.lt_irrefl _)
+      · exact mem'
+    · intro mem
+      rcases List.mem_cons.mp ((same x).mpr (by simp [mem])) with rfl | mem'
+      · exact absurd (sorted₂.1 _ mem) (UInt8.lt_irrefl _)
+      · exact mem'
+
+/-- The request types strictly increase. -/
+theorem requestTypes_pairwise (fork : Fork) : (requestTypes fork).Pairwise (· < ·) := by
+  unfold requestTypes
+  split <;> decide
+
+/-- The count and the SSZ bytes of the list of one type; a type of no list has an empty slot. -/
+def requestSlot (requests : ExecutionRequests preset fork) (type : UInt8) :
+    Nat × Except Err ByteArray :=
+  if type = DEPOSIT_REQUEST_TYPE[0] then
+    (requests.deposits.data.size, SszType.serialize requests.deposits)
+  else if type = WITHDRAWAL_REQUEST_TYPE[0] then
+    (requests.withdrawals.data.size, SszType.serialize requests.withdrawals)
+  else if type = CONSOLIDATION_REQUEST_TYPE[0] then
+    (requests.consolidations.data.size, SszType.serialize requests.consolidations)
+  else if gloas : .glamsterdam ≤ fork then
+    if type = BUILDER_DEPOSIT_REQUEST_TYPE[0] then
+      ((requests.builderDeposits gloas).data.size,
+        SszType.serialize (requests.builderDeposits gloas))
+    else if type = BUILDER_EXIT_REQUEST_TYPE[0] then
+      ((requests.builderExits gloas).data.size, SszType.serialize (requests.builderExits gloas))
+    else (0, .ok .empty)
+  else (0, .ok .empty)
+
+/-- The lists of the requests, by type: the list of each request type in turn. -/
+theorem typedLists_eq_map (requests : ExecutionRequests preset fork) :
+    requests.typedLists = (requestTypes fork).map fun type =>
+      ⟨#v[type], (requestSlot requests type).1, (requestSlot requests type).2⟩ := by
+  unfold ExecutionRequests.typedLists requestTypes
+  by_cases gloas : Fork.glamsterdam ≤ fork <;>
+    simp [gloas, requestSlot, DEPOSIT_REQUEST_TYPE, WITHDRAWAL_REQUEST_TYPE,
+      CONSOLIDATION_REQUEST_TYPE, BUILDER_DEPOSIT_REQUEST_TYPE, BUILDER_EXIT_REQUEST_TYPE]
+
+/-- The list that the execution layer receives, by type. -/
+theorem getExecutionRequestsList_eq (requests : ExecutionRequests preset fork) :
+    getExecutionRequestsList requests =
+      ((requestTypes fork).filter fun type => (requestSlot requests type).1 != 0).mapM
+        fun type => do return ⟨#[type]⟩ ++ (← (requestSlot requests type).2) := by
+  unfold getExecutionRequestsList
+  rw [typedLists_eq_map, List.filter_map, List.mapM_map]
+  rfl
+
+/-- The empty requests have an empty list of each type. -/
+theorem requestSlot_empty (type : UInt8) :
+    requestSlot (ExecutionRequests.empty preset fork) type = (0, .ok .empty) := by
+  unfold requestSlot
+  have forkList : ∀ {α : Type} [SszType α] [LawfulSszType α] {limit : Nat},
+      SszType.serialize (⟨#[], fun _ => Nat.zero_le _⟩ : ForkList .glamsterdam fork α limit) =
+        .ok .empty := fun {_ _ _ _} => SszType.serialize_deserialize deserialize_forkList_empty
+  have progressive : ∀ {α : Type} [SszType α] [LawfulSszType α],
+      SszType.serialize (⟨#[]⟩ : ProgressiveList α) = .ok .empty :=
+    fun {_ _ _} => SszType.serialize_deserialize deserialize_progressiveList_empty
+  split_ifs <;> simp [ExecutionRequests.empty, forkList, progressive]
+
+/-- Setting the list of one type changes only the slot of that type.
+
+That slot then holds the bytes, with a count of zero exactly when the bytes are empty. -/
+theorem setRequestList_slot {requests updated : ExecutionRequests preset fork} {type : UInt8}
+    {data : ByteArray} (set : setRequestList requests type data = .ok updated) :
+    (∀ other, other ≠ type → requestSlot updated other = requestSlot requests other) ∧
+      (type ∈ requestTypes fork →
+        ∃ count, (count = 0 ↔ data.size = 0) ∧ requestSlot updated type = (count, .ok data)) := by
+  unfold setRequestList at set
+  split_ifs at set with deposit withdrawal consolidation gloas builderDeposit builderExit
+  · obtain ⟨list, read, made⟩ := bind_ok_iff.mp set
+    simp only [pure, Except.pure, Except.ok.injEq] at made
+    subst made
+    have wrote := SszType.serialize_deserialize (mapError_ok_iff.mp read)
+    refine ⟨fun other ne => ?_, fun _ => ⟨_, forkList_size_eq_zero_iff wrote, ?_⟩⟩
+    · unfold requestSlot
+      split_ifs <;> first | rfl | (exfalso; simp_all)
+    · simp [requestSlot, DEPOSIT_REQUEST_TYPE,  deposit, wrote]
+  · obtain ⟨list, read, made⟩ := bind_ok_iff.mp set
+    simp only [pure, Except.pure, Except.ok.injEq] at made
+    subst made
+    have wrote := SszType.serialize_deserialize (mapError_ok_iff.mp read)
+    refine ⟨fun other ne => ?_, fun _ => ⟨_, forkList_size_eq_zero_iff wrote, ?_⟩⟩
+    · unfold requestSlot
+      split_ifs <;> first | rfl | (exfalso; simp_all)
+    · simp [requestSlot, DEPOSIT_REQUEST_TYPE, WITHDRAWAL_REQUEST_TYPE,  withdrawal, wrote]
+  · obtain ⟨list, read, made⟩ := bind_ok_iff.mp set
+    simp only [pure, Except.pure, Except.ok.injEq] at made
+    subst made
+    have wrote := SszType.serialize_deserialize (mapError_ok_iff.mp read)
+    refine ⟨fun other ne => ?_, fun _ => ⟨_, forkList_size_eq_zero_iff wrote, ?_⟩⟩
+    · unfold requestSlot
+      split_ifs <;> first | rfl | (exfalso; simp_all)
+    · simp [requestSlot, DEPOSIT_REQUEST_TYPE, WITHDRAWAL_REQUEST_TYPE, CONSOLIDATION_REQUEST_TYPE,
+        consolidation, wrote]
+  · obtain ⟨list, read, made⟩ := bind_ok_iff.mp set
+    simp only [pure, Except.pure, Except.ok.injEq] at made
+    subst made
+    have wrote := SszType.serialize_deserialize (mapError_ok_iff.mp read)
+    refine ⟨fun other ne => ?_, fun _ => ⟨_, progressiveList_size_eq_zero_iff wrote, ?_⟩⟩
+    · unfold requestSlot
+      split_ifs <;> first | rfl | (exfalso; simp_all)
+    · simp [requestSlot, DEPOSIT_REQUEST_TYPE, WITHDRAWAL_REQUEST_TYPE, CONSOLIDATION_REQUEST_TYPE,
+        BUILDER_DEPOSIT_REQUEST_TYPE, builderDeposit, gloas, wrote]
+  · obtain ⟨list, read, made⟩ := bind_ok_iff.mp set
+    simp only [pure, Except.pure, Except.ok.injEq] at made
+    subst made
+    have wrote := SszType.serialize_deserialize (mapError_ok_iff.mp read)
+    refine ⟨fun other ne => ?_, fun _ => ⟨_, progressiveList_size_eq_zero_iff wrote, ?_⟩⟩
+    · unfold requestSlot
+      split_ifs <;> first | rfl | (exfalso; simp_all)
+    · simp [requestSlot, DEPOSIT_REQUEST_TYPE, WITHDRAWAL_REQUEST_TYPE, CONSOLIDATION_REQUEST_TYPE,
+        BUILDER_DEPOSIT_REQUEST_TYPE, BUILDER_EXIT_REQUEST_TYPE, builderExit, gloas, wrote]
+  · simp only [pure, Except.pure, Except.ok.injEq] at set
+    subst set
+    refine ⟨fun _ _ => rfl, fun member => ?_⟩
+    simp_all [requestTypes, DEPOSIT_REQUEST_TYPE, WITHDRAWAL_REQUEST_TYPE,
+      CONSOLIDATION_REQUEST_TYPE, BUILDER_DEPOSIT_REQUEST_TYPE, BUILDER_EXIT_REQUEST_TYPE]
+  · simp only [pure, Except.pure, Except.ok.injEq] at set
+    subst set
+    refine ⟨fun _ _ => rfl, fun member => ?_⟩
+    simp_all [requestTypes, DEPOSIT_REQUEST_TYPE, WITHDRAWAL_REQUEST_TYPE,
+      CONSOLIDATION_REQUEST_TYPE]
+
+/-- One step of reading the requests succeeds exactly when its checks pass and its list decodes.
+
+The entry needs a request type after the type before it, and data after its type byte. -/
+theorem getExecutionRequestsFrom_cons_eq_ok_iff {previous : Option UInt8}
+    {requests result : ExecutionRequests preset fork} {request : ByteArray}
+    {rest : List ByteArray} :
+    getExecutionRequestsFrom previous requests (request :: rest) = .ok result ↔
+      ∃ type updated, request.data[0]? = some type ∧ type ∈ requestTypes fork ∧
+        (request.extract 1 request.size).size ≠ 0 ∧ (∀ p, previous = some p → p < type) ∧
+        setRequestList requests type (request.extract 1 request.size) = .ok updated ∧
+        getExecutionRequestsFrom (some type) updated rest = .ok result := by
+  rw [getExecutionRequestsFrom]
+  generalize request.extract 1 request.size = data
+  cases first : request.data[0]? with
+  | none => simp [throw, throwThe, MonadExceptOf.throw]
+  | some type =>
+    by_cases member : type ∈ requestTypes fork
+    · by_cases empty : data.size = 0
+      · simp [member, empty, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+      · cases previous with
+        | none => simp [member, empty, bind_ok_iff]
+        | some p =>
+          by_cases lt : p < type
+          · simp [member, empty, lt, bind_ok_iff]
+          · simp [member, empty, lt, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+    · simp [member, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+
+/-- What reading the requests gives, when it succeeds.
+
+The types of the entries strictly increase, and each entry has a request type and data.
+
+The slot of each entry's type holds its data, with a nonzero count.
+
+The slot of every other type is unchanged. -/
+theorem getExecutionRequestsFrom_spec :
+    ∀ {list : List ByteArray} {previous : Option UInt8}
+      {requests result : ExecutionRequests preset fork},
+      getExecutionRequestsFrom previous requests list = .ok result →
+      (list.map (·.data[0]?.getD 0)).Pairwise (· < ·) ∧
+      (∀ request ∈ list, ∃ type, request.data[0]? = some type ∧ type ∈ requestTypes fork ∧
+        (∀ p, previous = some p → p < type) ∧ (request.extract 1 request.size).size ≠ 0 ∧
+        ∃ count, count ≠ 0 ∧
+          requestSlot result type = (count, .ok (request.extract 1 request.size))) ∧
+      (∀ type, type ∉ list.map (·.data[0]?.getD 0) →
+        requestSlot result type = requestSlot requests type)
+  | [], _, _, _, read => by
+    simp only [getExecutionRequestsFrom, pure, Except.pure, Except.ok.injEq] at read
+    subst read
+    simp
+  | request :: rest, previous, requests, result, read => by
+    obtain ⟨type, updated, first, member, nonempty, after, set, others⟩ :=
+      getExecutionRequestsFrom_cons_eq_ok_iff.mp read
+    obtain ⟨sorted, each, untouched⟩ := getExecutionRequestsFrom_spec others
+    obtain ⟨kept, placed⟩ := setRequestList_slot set
+    have head : request.data[0]?.getD 0 = type := by rw [first]; rfl
+    -- Every later type comes after this one.
+    have later : ∀ other ∈ rest.map (·.data[0]?.getD 0), type < other := by
+      intro other mem
+      obtain ⟨request', mem', rfl⟩ := List.mem_map.mp mem
+      obtain ⟨type', first', -, after', -⟩ := each request' mem'
+      rw [first']
+      exact after' type rfl
+    have notLater : type ∉ rest.map (·.data[0]?.getD 0) := fun mem =>
+      UInt8.lt_irrefl _ (later type mem)
+    refine ⟨?_, ?_, ?_⟩
+    · rw [List.map_cons, head, List.pairwise_cons]
+      exact ⟨later, sorted⟩
+    · intro request' mem
+      rcases List.mem_cons.mp mem with rfl | mem
+      · obtain ⟨count, sized, slot⟩ := placed member
+        refine ⟨type, first, member, after, nonempty, count, fun zero => nonempty (sized.mp zero),
+          ?_⟩
+        rw [untouched type notLater, slot]
+      · obtain ⟨type', first', member', after', nonempty', slot'⟩ := each request' mem
+        refine ⟨type', first', member', fun p named => ?_, nonempty', slot'⟩
+        have : type' ∈ rest.map (·.data[0]?.getD 0) :=
+          List.mem_map.mpr ⟨request', mem, by rw [first']; rfl⟩
+        exact UInt8.lt_trans (after p named) (later type' this)
+    · intro other notMem
+      rw [List.map_cons, head, List.mem_cons, not_or] at notMem
+      rw [untouched other notMem.2, kept other notMem.1]
+
+/-- The members of the request types: three, and from Gloas five. -/
+theorem mem_requestTypes {type : UInt8} :
+    type ∈ requestTypes fork ↔ type = 0 ∨ type = 1 ∨ type = 2 ∨
+      (.glamsterdam ≤ fork ∧ (type = 3 ∨ type = 4)) := by
+  unfold requestTypes
+  by_cases gloas : Fork.glamsterdam ≤ fork <;>
+    simp [gloas, DEPOSIT_REQUEST_TYPE, WITHDRAWAL_REQUEST_TYPE, CONSOLIDATION_REQUEST_TYPE,
+      BUILDER_DEPOSIT_REQUEST_TYPE, BUILDER_EXIT_REQUEST_TYPE]
+
+/-- The bytes of a slot of a request type decode, so they can set the list of that type. -/
+theorem setRequestList_of_requestSlot {requests start : ExecutionRequests preset fork}
+    {type : UInt8} {data : ByteArray} (member : type ∈ requestTypes fork)
+    (bytes : (requestSlot requests type).2 = .ok data) :
+    ∃ updated, setRequestList start type data = .ok updated := by
+  rcases mem_requestTypes.mp member with rfl | rfl | rfl | ⟨gloas, rfl | rfl⟩ <;>
+    simp [requestSlot, DEPOSIT_REQUEST_TYPE, WITHDRAWAL_REQUEST_TYPE, CONSOLIDATION_REQUEST_TYPE,
+      BUILDER_DEPOSIT_REQUEST_TYPE, BUILDER_EXIT_REQUEST_TYPE, *] at bytes <;>
+    simp [setRequestList, DEPOSIT_REQUEST_TYPE, WITHDRAWAL_REQUEST_TYPE,
+      CONSOLIDATION_REQUEST_TYPE, BUILDER_DEPOSIT_REQUEST_TYPE, BUILDER_EXIT_REQUEST_TYPE,
+      SszType.deserialize_serialize bytes, bind, Except.bind, Except.mapError, pure, Except.pure, *]
+
+/-- A slot of a request type with no request has empty bytes. -/
+theorem requestSlot_bytes_of_count_eq_zero {requests : ExecutionRequests preset fork}
+    {type : UInt8} (member : type ∈ requestTypes fork) (zero : (requestSlot requests type).1 = 0) :
+    (requestSlot requests type).2 = .ok .empty := by
+  rcases mem_requestTypes.mp member with rfl | rfl | rfl | ⟨gloas, rfl | rfl⟩ <;>
+    simp [requestSlot, DEPOSIT_REQUEST_TYPE, WITHDRAWAL_REQUEST_TYPE, CONSOLIDATION_REQUEST_TYPE,
+      BUILDER_DEPOSIT_REQUEST_TYPE, BUILDER_EXIT_REQUEST_TYPE, *] at zero ⊢
+  · generalize requests.deposits = list at zero ⊢
+    obtain ⟨data, bound⟩ := list
+    obtain rfl : data = #[] := zero
+    exact serialize_forkList_empty
+  · generalize requests.withdrawals = list at zero ⊢
+    obtain ⟨data, bound⟩ := list
+    obtain rfl : data = #[] := zero
+    exact serialize_forkList_empty
+  · generalize requests.consolidations = list at zero ⊢
+    obtain ⟨data, bound⟩ := list
+    obtain rfl : data = #[] := zero
+    exact serialize_forkList_empty
+  · generalize requests.builderDeposits gloas = list at zero ⊢
+    obtain ⟨data⟩ := list
+    obtain rfl : data = #[] := zero
+    exact serialize_progressiveList_empty
+  · generalize requests.builderExits gloas = list at zero ⊢
+    obtain ⟨data⟩ := list
+    obtain rfl : data = #[] := zero
+    exact serialize_progressiveList_empty
+
+/-- Two requests whose slots of every request type hold the same bytes are equal. -/
+theorem eq_of_requestSlot {requests other : ExecutionRequests preset fork}
+    (same : ∀ type ∈ requestTypes fork, ∃ data, (requestSlot requests type).2 = .ok data ∧
+      (requestSlot other type).2 = .ok data) : requests = other := by
+  obtain ⟨d0, l0, r0⟩ := same 0 (mem_requestTypes.mpr (.inl rfl))
+  obtain ⟨d1, l1, r1⟩ := same 1 (mem_requestTypes.mpr (.inr (.inl rfl)))
+  obtain ⟨d2, l2, r2⟩ := same 2 (mem_requestTypes.mpr (.inr (.inr (.inl rfl))))
+  simp [requestSlot, DEPOSIT_REQUEST_TYPE, WITHDRAWAL_REQUEST_TYPE,
+    CONSOLIDATION_REQUEST_TYPE] at l0 r0 l1 r1 l2 r2
+  have deposits := SszType.serialize_injective l0 r0
+  have withdrawals := SszType.serialize_injective l1 r1
+  have consolidations := SszType.serialize_injective l2 r2
+  have builders : ∀ gloas : .glamsterdam ≤ fork,
+      requests.builderDeposits gloas = other.builderDeposits gloas ∧
+        requests.builderExits gloas = other.builderExits gloas := by
+    intro gloas
+    obtain ⟨d3, l3, r3⟩ := same 3 (mem_requestTypes.mpr (.inr (.inr (.inr ⟨gloas, .inl rfl⟩))))
+    obtain ⟨d4, l4, r4⟩ := same 4 (mem_requestTypes.mpr (.inr (.inr (.inr ⟨gloas, .inr rfl⟩))))
+    simp [requestSlot, DEPOSIT_REQUEST_TYPE, WITHDRAWAL_REQUEST_TYPE, CONSOLIDATION_REQUEST_TYPE,
+      BUILDER_DEPOSIT_REQUEST_TYPE, BUILDER_EXIT_REQUEST_TYPE, gloas] at l3 r3 l4 r4
+    exact ⟨SszType.serialize_injective l3 r3, SszType.serialize_injective l4 r4⟩
+  cases requests
+  cases other
+  simp only at deposits withdrawals consolidations builders
+  subst deposits withdrawals consolidations
+  congr 1
+  · funext gloas
+    exact (builders gloas).1
+  · funext gloas
+    exact (builders gloas).2
+
+/-- Each member of the left list of a pairing has a partner in the right list. -/
+theorem exists_mem_of_forall₂ {α β : Type} {R : α → β → Prop} :
+    ∀ {xs : List α} {ys : List β}, List.Forall₂ R xs ys → ∀ {x}, x ∈ xs → ∃ y ∈ ys, R x y
+  | _, _, .nil, _, mem => by simp at mem
+  | _, _, .cons head tail, _, mem => by
+    rcases List.mem_cons.mp mem with rfl | mem
+    · exact ⟨_, List.mem_cons_self, head⟩
+    · obtain ⟨y, mem', related⟩ := exists_mem_of_forall₂ tail mem
+      exact ⟨y, List.mem_cons_of_mem _ mem', related⟩
+
+/-- A pairing that names each left member by its partner maps the right list onto the left. -/
+theorem map_eq_of_forall₂ {α β : Type} {f : β → α} :
+    ∀ {xs : List α} {ys : List β}, List.Forall₂ (fun x y => f y = x) xs ys → ys.map f = xs
+  | _, _, .nil => rfl
+  | _, _, .cons head tail => by rw [List.map_cons, head, map_eq_of_forall₂ tail]
+
+/-- A slot of a request type has no request exactly when its bytes are empty. -/
+theorem requestSlot_count_eq_zero_iff {requests : ExecutionRequests preset fork} {type : UInt8}
+    {data : ByteArray} (member : type ∈ requestTypes fork)
+    (bytes : (requestSlot requests type).2 = .ok data) :
+    (requestSlot requests type).1 = 0 ↔ data.size = 0 := by
+  rcases mem_requestTypes.mp member with rfl | rfl | rfl | ⟨gloas, rfl | rfl⟩ <;>
+    simp [requestSlot, DEPOSIT_REQUEST_TYPE, WITHDRAWAL_REQUEST_TYPE, CONSOLIDATION_REQUEST_TYPE,
+      BUILDER_DEPOSIT_REQUEST_TYPE, BUILDER_EXIT_REQUEST_TYPE, *] at bytes ⊢
+  · simpa using forkList_size_eq_zero_iff bytes
+  · simpa using forkList_size_eq_zero_iff bytes
+  · simpa using forkList_size_eq_zero_iff bytes
+  · simpa using progressiveList_size_eq_zero_iff bytes
+  · simpa using progressiveList_size_eq_zero_iff bytes
+
+/-- The bytes of the slots of some request types, in increasing order, read back. -/
+theorem getExecutionRequestsFrom_exists {requests : ExecutionRequests preset fork} :
+    ∀ {types : List UInt8} {list : List ByteArray} {previous : Option UInt8}
+      {start : ExecutionRequests preset fork},
+      List.Forall₂ (fun type request => ∃ data, (requestSlot requests type).2 = .ok data ∧
+        data.size ≠ 0 ∧ request = ⟨#[type]⟩ ++ data) types list →
+      types.Pairwise (· < ·) →
+      (∀ type ∈ types, type ∈ requestTypes fork ∧ ∀ p, previous = some p → p < type) →
+      ∃ result, getExecutionRequestsFrom previous start list = .ok result
+  | [], [], _, start, .nil, _, _ => ⟨start, rfl⟩
+  | type :: types, request :: list, previous, start, .cons head tail, sorted, known => by
+    obtain ⟨data, bytes, nonempty, rfl⟩ := head
+    obtain ⟨member, after⟩ := known type (by simp)
+    obtain ⟨updated, set⟩ := setRequestList_of_requestSlot (start := start) member bytes
+    rw [List.pairwise_cons] at sorted
+    obtain ⟨result, read⟩ := getExecutionRequestsFrom_exists (previous := some type)
+      (start := updated) tail sorted.2 fun other mem =>
+        ⟨(known other (by simp [mem])).1, fun p named => by
+          cases named
+          exact sorted.1 other mem⟩
+    refine ⟨result, getExecutionRequestsFrom_cons_eq_ok_iff.mpr
+      ⟨type, updated, getElem?_zero_cons_append type data, member, ?_, after, ?_, read⟩⟩
+    · rw [extract_one_cons_append]
+      exact nonempty
+    · rw [extract_one_cons_append]
+      exact set
+
+/-- The requests read from a list are exactly the requests that give that list.
+
+So reading inverts the list that the execution layer receives, and each list has one reading. -/
+theorem getExecutionRequests_eq_ok_iff {list : List ByteArray}
+    {requests : ExecutionRequests preset fork} :
+    getExecutionRequests list = .ok requests ↔ getExecutionRequestsList requests = .ok list := by
+  constructor
+  · intro read
+    obtain ⟨sorted, each, untouched⟩ := getExecutionRequestsFrom_spec read
+    -- A request type without an entry keeps the empty list.
+    have empty : ∀ type, type ∉ list.map (·.data[0]?.getD 0) →
+        requestSlot requests type = (0, .ok .empty) := fun type notMem => by
+      rw [untouched type notMem, requestSlot_empty]
+    -- The types with a request are the types of the entries, in the same order.
+    have types : (requestTypes fork).filter (fun type => (requestSlot requests type).1 != 0) =
+        list.map (·.data[0]?.getD 0) := by
+      refine eq_of_pairwise_lt_of_mem_iff
+        ((requestTypes_pairwise fork).sublist List.filter_sublist) sorted fun type => ?_
+      rw [List.mem_filter]
+      constructor
+      · rintro ⟨-, nonzero⟩
+        by_contra notMem
+        simp [empty type notMem] at nonzero
+      · intro mem
+        obtain ⟨request, mem', rfl⟩ := List.mem_map.mp mem
+        obtain ⟨type, first, member, -, -, count, nonzero, slot⟩ := each request mem'
+        rw [first]
+        simp [member, slot, nonzero]
+    rw [getExecutionRequestsList_eq, types, List.mapM_map]
+    refine (mapM_eq_ok_map (g := id) fun request mem => ?_).trans (by rw [List.map_id])
+    obtain ⟨type, first, -, -, -, count, -, slot⟩ := each request mem
+    simp only [Function.comp, first, Option.getD_some, slot, bind, Except.bind, pure, Except.pure,
+      id]
+    rw [cons_append_extract_one first]
+  · intro wrote
+    rw [getExecutionRequestsList_eq] at wrote
+    generalize filtered : (requestTypes fork).filter
+      (fun type => (requestSlot requests type).1 != 0) = types at wrote
+    -- Each entry is the type byte followed by the nonempty bytes of its slot.
+    have entries : List.Forall₂ (fun type request => ∃ data,
+        (requestSlot requests type).2 = .ok data ∧ data.size ≠ 0 ∧
+          request = ⟨#[type]⟩ ++ data) types list := by
+      refine (forall₂_mem_of_mapM_ok wrote).imp fun type request ⟨mem, step⟩ => ?_
+      rw [← filtered, List.mem_filter] at mem
+      cases bytes : (requestSlot requests type).2 with
+      | error e => simp [bytes, bind, Except.bind] at step
+      | ok data =>
+        simp only [bytes, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at step
+        refine ⟨data, rfl, fun zero => ?_, step.symm⟩
+        have := (requestSlot_count_eq_zero_iff mem.1 bytes).mpr zero
+        simp [this] at mem
+    have sorted : types.Pairwise (· < ·) :=
+      filtered ▸ (requestTypes_pairwise fork).sublist List.filter_sublist
+    have known : ∀ type ∈ types, type ∈ requestTypes fork := fun type mem =>
+      (List.mem_filter.mp (filtered ▸ mem)).1
+    obtain ⟨result, read⟩ := getExecutionRequestsFrom_exists (previous := none)
+      (start := ExecutionRequests.empty preset fork) entries sorted
+      fun type mem => ⟨known type mem, fun _ named => by cases named⟩
+    obtain ⟨-, each, untouched⟩ := getExecutionRequestsFrom_spec read
+    have firsts : list.map (·.data[0]?.getD 0) = types :=
+      map_eq_of_forall₂ (entries.imp fun type request ⟨data, _, _, made⟩ => by
+        rw [made, getElem?_zero_cons_append]
+        rfl)
+    suffices same : result = requests by
+      rw [← same]
+      exact read
+    refine eq_of_requestSlot fun type member => ?_
+    by_cases mem : type ∈ types
+    · obtain ⟨request, requestMem, data, bytes, -, made⟩ := exists_mem_of_forall₂ entries mem
+      obtain ⟨type', first, -, -, -, count, -, slot⟩ := each request requestMem
+      have : type' = type := by
+        rw [made, getElem?_zero_cons_append] at first
+        exact (Option.some.inj first).symm
+      subst this
+      refine ⟨data, ?_, bytes⟩
+      rw [slot, made, extract_one_cons_append]
+    · have zero : (requestSlot requests type).1 = 0 := by
+        have notKept := fun kept => mem (filtered ▸ List.mem_filter.mpr ⟨member, kept⟩)
+        simpa using notKept
+      refine ⟨.empty, ?_, requestSlot_bytes_of_count_eq_zero member zero⟩
+      rw [untouched type (firsts ▸ mem), requestSlot_empty]
 
 end EthLib.Consensus
