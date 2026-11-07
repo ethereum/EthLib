@@ -5,6 +5,7 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Encoding
 public import EthLib.Networking.Discv5.Handshake
 public import EthLib.Networking.Proofs.Discv5.Identity
 public import EthLib.Networking.Proofs.Discv5.Packet
+public import EthLib.Networking.Proofs.Discv5.Session
 
 /-!
 # `Networking.Proofs.Discv5.Handshake`
@@ -21,9 +22,9 @@ The theorem on step 4 assumes only that step 3 succeeded.
 
 That success already holds the key agreement, the key derivation and the ID signature.
 
-The theorem on the packet also assumes that the packet has 63 to 1280 bytes.
+The theorem on the packet also assumes that the packet has at most 1280 bytes.
 
-The decoder rejects every other size.
+The decoder rejects a larger packet.
 -/
 
 @[expose] public section
@@ -35,6 +36,7 @@ open EthLib.Cryptography.Secp256k1
 open EthLib.Cryptography.Secp256k1.Point
 open EthLib.Networking.Proofs.Discv5.Identity
 open EthLib.Networking.Proofs.Discv5.Packet
+open EthLib.Networking.Proofs.Discv5.Session
 
 /-! ## Key agreement -/
 
@@ -125,7 +127,7 @@ theorem toArray_sessionKey_of_deriveKeys {secret challengeData : ByteArray}
   subst hk
   exact ⟨toArray_sessionKey hi, toArray_sessionKey hr⟩
 
-/-- Node B reads node A's handshake message packet back, within the size limits of a packet.
+/-- Node B reads node A's handshake message packet back, of at most 1280 bytes.
 
 It gets the node ID and the record of node A, the plaintext, and the session keys of node A.
 
@@ -137,7 +139,7 @@ theorem openHandshake_sealHandshake {e a b : Fn} {challengeData : ByteArray}
     {record plaintext bytes : ByteArray} {keys : SessionKeys}
     (h : sealHandshake e a challengeData nodeIdA nodeIdB (mul b generator) maskingIv nonce record
       plaintext = .ok (bytes, keys))
-    (hmin : MIN_PACKET_SIZE ≤ bytes.size) (hmax : bytes.size ≤ MAX_PACKET_SIZE) :
+    (hmax : bytes.size ≤ MAX_PACKET_SIZE) :
     openHandshake b challengeData nodeIdB (mul a generator) bytes =
       .ok ⟨nodeIdA, record, plaintext, keys⟩ := by
   unfold sealHandshake at h
@@ -160,6 +162,19 @@ theorem openHandshake_sealHandshake {e a b : Fn} {challengeData : ByteArray}
         | ok packetBytes =>
           simp only [hb, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
           obtain ⟨rfl, rfl⟩ := h
+          -- The masking IV, the static header and the authdata take 16 + 23 + 34 bytes or more.
+          cases hh : header.encode with
+          | error err => simp [Packet.encode, hh, bind, Except.bind] at hb
+          | ok headerBytes =>
+          have hlen := length_of_header_encode hh
+          have hsize := size_of_encode hb hh
+          rw [← hheader] at hlen
+          simp only [Authdata.encode, List.length_append, Vector.length_toList,
+            List.length_cons, List.length_nil] at hlen
+          have hmin : MIN_PACKET_SIZE ≤ packetBytes.size := by
+            rw [hsize, hlen]
+            unfold MIN_PACKET_SIZE
+            omega
           -- The packet decodes back, since its flag is 2 and not that of WHOAREYOU.
           have hdec := Packet.decode_encode hb hmin hmax (by
             intro hflag
