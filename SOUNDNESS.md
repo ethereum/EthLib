@@ -829,7 +829,13 @@ On a state of any fork from Altair, `BeaconState.nodeRoot_finalizedCheckpoint_ro
 `BeaconState.nodeRoot_nextSyncCommittee` and `BeaconState.nodeRoot_currentSyncCommittee` read the committee nodes as the roots of those fields.
 These theorems take the lawful SSZ type of the state as an argument, and they name the root of the field, which always exists.
 Instance search does not yet find that lawful type at the mainnet or minimal preset, so a caller supplies it.
-The statements that join the node results to the update validators remain open.
+`validateLightClientUpdate_finalizedCheckpoint` joins the finality result to these nodes.
+Take an accepted update, and a beacon state whose root is the attested state root.
+The proved root is then the root in the finalized checkpoint of that state.
+Otherwise `findBranchCollision` returns a SHA-256 collision.
+`validateLightClientUpdate_nextSyncCommittee_state` states the same for the next committee.
+Both assume that the index of the slot is the index of the state's own fork.
+The client then reads the state with the layout of that fork.
 
 The signature theorems assume `SignatureChecks.AggregateSound`, listed in A4.
 Under it, `validateLightClientUpdate_signed` shows that every member whose bit is set signed the signing root.
