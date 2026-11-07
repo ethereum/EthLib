@@ -455,6 +455,19 @@ jobs:
 
       - run: uv run --no-project --python 3.12 python -m unittest scripts/test_check_lean_layout.py
 
+      # A pull request adds no hand conversion to the Python package.
+      # The allowlist names every conversion that remains.
+      - name: Python package, no hand conversion on the changed lines
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: uv run --no-project --python 3.12 python scripts/check_python_boundary.py --base "origin/${BASE_REF}"
+
+      - name: Python package, no hand conversion outside the allowlist
+        run: uv run --no-project --python 3.12 python scripts/check_python_boundary.py
+
+      - run: uv run --no-project --python 3.12 python -m unittest scripts/test_check_python_boundary.py
+
       # No sentence of a Python comment runs onto a second line, in any file.
       - name: Python comments, one sentence per line
         run: uv run --no-project --python 3.12 python scripts/check_python_comments.py --all --github
