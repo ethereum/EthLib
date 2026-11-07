@@ -345,7 +345,9 @@ def forkChoiceExport (name fork anchorState anchorBlock steps replacements : Byt
       powBlock := fun hash => known.find? (·.blockHash = hash)
       blobsAndProofs := fun _ => some held
       columns := fun _ => sampled
-      setup }
+      setup
+      -- The execution layer of the vectors finds that every payload satisfies its lists.
+      inclusionListSatisfied := fun _ _ => true }
     -- The blobs, the columns and the verdict of a step serve only the block that follows it.
     if step.1 = 1 then
       blobData := (#[], #[])

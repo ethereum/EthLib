@@ -59,7 +59,7 @@ def test_every_group_has_a_runner_or_a_plan() -> None:
 # A mainnet fork choice or optimistic sync case holds an anchor state of that size too; the
 # mainnet archive has no reorg, withholding or deposit reorg case, and merge blocks only at
 # Bellatrix.
-# At Gloas it has no proposer head, filtered tree or proposer boost case either.
+# At Gloas and Heze it has no proposer head, filtered tree or proposer boost case either.
 # A mainnet gossip case holds an anchor state of a few hundred kilobytes too.
 # The custody cases of Gloas and Heze repeat those of Fulu, and only the fork name in their
 # manifest differs, so only the Fulu cases are vendored.
@@ -107,13 +107,13 @@ NOT_VENDORED = (
         if handler not in ("deposit_with_reorg", "reorg", "withholding", "optimistic")
         and handler not in ("filter_node_tree_variants", "should_apply_proposer_boost")
         and (handler != "on_merge_block" or fork == "bellatrix")
-        and (handler != "get_proposer_head" or fork != "gloas")
-        and (handler not in GLOAS_FORK_CHOICE or fork == "gloas")
+        and (handler != "get_proposer_head" or fork not in ("gloas", "heze"))
+        and (handler not in GLOAS_FORK_CHOICE or fork in ("gloas", "heze"))
     }
     | {
         f"mainnet/{fork}/sync/optimistic"
         for fork in FORK_CHOICE_FORKS
-        if fork not in ("altair", "gloas")
+        if fork not in ("altair", "gloas", "heze")
     }
     | {
         f"mainnet/{fork}/networking/gossip_{topic}"

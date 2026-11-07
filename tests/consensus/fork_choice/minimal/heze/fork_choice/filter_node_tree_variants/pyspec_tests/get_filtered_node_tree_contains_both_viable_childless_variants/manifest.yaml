@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: fork_choice
+handler: filter_node_tree_variants
+suite: pyspec_tests
+case: get_filtered_node_tree_contains_both_viable_childless_variants

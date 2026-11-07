@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: fork_choice
+handler: on_block
+suite: pyspec_tests
+case: on_block_parent_full_rejects_unverified_payload

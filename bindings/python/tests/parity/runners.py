@@ -67,7 +67,6 @@ _GLOAS = {
     "ssz_static": "the remaining Gloas containers (G36 to G41, G65)",
 }
 _HEZE = {
-    "fork_choice": "inclusion lists in the Heze fork choice (G86)",
     "fast_confirmation": "the Gloas fast confirmation (G73) on the Heze fork choice (G86)",
     "networking": "the Heze gossip and req/resp rules (G87)",
     "ssz_static": "the Heze containers (G80, G81)",

@@ -1085,6 +1085,8 @@ The data of the payload is available against the bid in that state.
 
 The envelope passes its checks against that state.
 
+From Heze the store then records whether the payload satisfied its inclusion lists.
+
 The store then keeps the envelope at the root of its block, and nothing else changes. -/
 theorem onExecutionPayloadEnvelope_ok {checks : SignatureChecks}
     {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
@@ -1094,14 +1096,16 @@ theorem onExecutionPayloadEnvelope_ok {checks : SignatureChecks}
       validatePayloadData config sources signed.message.beaconBlockRoot
         (state.latestExecutionPayloadBid gloas) = .ok () ∧
       verifyExecutionPayloadEnvelope config checks sources.engine state gloas signed = .ok () ∧
-      after = { store with payloads := fun _ =>
-        (store.payloads gloas).insert signed.message.beaconBlockRoot signed.message } := by
+      ∃ recorded, store.recordEnvelope sources signed.message.beaconBlockRoot
+          signed.message.payload = .ok recorded ∧
+        after = { recorded with payloads := fun _ =>
+          (recorded.payloads gloas).insert signed.message.beaconBlockRoot signed.message } := by
   unfold onExecutionPayloadEnvelope at accepted
   simp only [bind_ok_iff, mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at accepted
-  obtain ⟨state, found, available, data, checked, verified, rfl⟩ := accepted
+  obtain ⟨state, found, available, data, checked, verified, recorded, record, rfl⟩ := accepted
   cases available
   cases checked
-  exact ⟨state, blockState_ok_iff.mp found, data, verified, rfl⟩
+  exact ⟨state, blockState_ok_iff.mp found, data, verified, recorded, record, rfl⟩
 
 /-- After an accepted envelope, the payload of its block counts as verified. -/
 theorem onExecutionPayloadEnvelope_verified {checks : SignatureChecks}
@@ -1109,8 +1113,76 @@ theorem onExecutionPayloadEnvelope_verified {checks : SignatureChecks}
     {signed : SignedExecutionPayloadEnvelope preset fork} {after : Store preset fork}
     (accepted : store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after) :
     after.isPayloadVerified gloas signed.message.beaconBlockRoot = true := by
-  obtain ⟨_, _, _, _, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
+  obtain ⟨_, _, _, _, _, _, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
   simp [isPayloadVerified]
+
+/-- From Heze: after an accepted envelope, the store holds the answer of the execution layer.
+
+The answer is for the payload and the timely transactions of the slot before its block.
+
+They are those of the dependent root of that slot, on the chain of the block. -/
+theorem onExecutionPayloadEnvelope_inclusionListSatisfied {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork} (heze : .hegota ≤ fork)
+    {signed : SignedExecutionPayloadEnvelope preset fork} {after : Store preset fork}
+    (accepted : store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after) :
+    ∃ block slot dependentRoot, store.blocks[signed.message.beaconBlockRoot]? = some block ∧
+      subChecked block.slot 1 = .ok slot ∧
+      store.getShufflingDependentRoot signed.message.beaconBlockRoot
+        (computeEpochAtSlot preset slot) = .ok dependentRoot ∧
+      after.isPayloadInclusionListSatisfied heze signed.message.beaconBlockRoot =
+        .ok (sources.inclusionListSatisfied signed.message.payload
+          ((store.inclusionLists heze).transactions slot dependentRoot true)) := by
+  obtain ⟨_, _, _, _, recorded, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
+  simp only [recordEnvelope, heze, dite_true, recordPayloadInclusionListSatisfaction, Store.block,
+    bind_ok_iff, mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at record
+  obtain ⟨block, found, slot, sub, dependentRoot, dependent, rfl⟩ := record
+  refine ⟨block, slot, dependentRoot, ?_, sub, dependent, ?_⟩
+  · revert found
+    split <;> simp_all [throw, throwThe, MonadExceptOf.throw]
+  · simp [isPayloadInclusionListSatisfied, isPayloadVerified, pure, Except.pure]
+
+/-- From Heze: an inclusion list that passes its checks passed those of its sender.
+
+Its dependent block may fix the committee of its slot, and that block's state is known.
+
+In that state, advanced to the start of the lookahead, its sender sits on the committee.
+
+The sender signed it with its key in that state. -/
+theorem checkInclusionList_ok {checks : SignatureChecks} {signed : SignedInclusionList}
+    {timely : Bool} (passed : store.checkInclusionList config checks signed = .ok timely) :
+    ∃ dependentSlot start dependentState state committee,
+      computeShufflingDependentSlot preset (computeEpochAtSlot preset signed.message.slot) =
+        .ok dependentSlot ∧
+      store.isValidDependentRoot config signed.message.dependentRoot dependentSlot = .ok true ∧
+      store.blockStates[signed.message.dependentRoot]? = some dependentState ∧
+      computeShufflingLookaheadStartSlot preset (computeEpochAtSlot preset signed.message.slot) =
+        .ok start ∧
+      lookaheadState config checks dependentState start = .ok state ∧
+      getInclusionListCommittee state signed.message.slot = .ok committee ∧
+      signed.message.validatorIndex ∈ committee.toList ∧
+      isValidInclusionListSignature config state signed = .ok true := by
+  unfold checkInclusionList at passed
+  simp only [bind_ok_iff, mapError_ok_iff, ensure_ok_iff] at passed
+  obtain ⟨_, -, -, -, _, -, -, -, -, -, -, -, _, -, dependentState, held, dependentSlot, dependent,
+    -, -, possible, checked, -, rfl, start, started, state, advanced, committee, made, -, seated,
+    valid, signature, _, isValid, -⟩ := passed
+  subst isValid
+  exact ⟨dependentSlot, start, dependentState, state, committee, dependent, checked,
+    blockState_ok_iff.mp held, started, advanced, made, seated, signature⟩
+
+/-- From Heze: an accepted inclusion list passed its checks, and the store then keeps it.
+
+Nothing else in the store changes. -/
+theorem onInclusionList_ok {checks : SignatureChecks} (heze : .hegota ≤ fork)
+    {signed : SignedInclusionList} {after : Store preset fork}
+    (accepted : store.onInclusionList config checks heze signed = .ok after) :
+    ∃ timely, store.checkInclusionList config checks signed = .ok timely ∧
+      after = { store with inclusionLists := fun _ =>
+        (store.inclusionLists heze).process signed timely } := by
+  unfold onInclusionList at accepted
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at accepted
+  obtain ⟨timely, checked, rfl⟩ := accepted
+  exact ⟨timely, checked, rfl⟩
 
 /-- From Gloas: the rule for a possible dependent block, once the head is computed.
 

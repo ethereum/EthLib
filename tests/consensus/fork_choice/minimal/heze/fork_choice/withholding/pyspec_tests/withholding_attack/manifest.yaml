@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: fork_choice
+handler: withholding
+suite: pyspec_tests
+case: withholding_attack

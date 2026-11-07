@@ -57,7 +57,8 @@ def storeAtTime (preset : Preset) (fork : Fork) (genesisTimeMs timeMs : UInt64) 
     blockStates := {}, blockTimeliness := {}, ptcTimeliness := fun _ => {},
     checkpointStates := {}, latestMessages := {}, unrealizedJustifications := {},
     payloads := fun _ => {}, payloadTimelinessVote := fun _ => {},
-    payloadDataAvailabilityVote := fun _ => {} }
+    payloadDataAvailabilityVote := fun _ => {}, inclusionLists := fun _ => .empty,
+    payloadInclusionListSatisfaction := fun _ => {} }
 
 /-- Whether a checkpoint is within the weak subjectivity period of its state, at a time.
 
