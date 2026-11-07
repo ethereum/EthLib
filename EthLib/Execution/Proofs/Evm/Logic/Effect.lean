@@ -131,46 +131,53 @@ theorem startState_of_isSome {message : Message fork} {state : TransactionState}
 
 /-! ## The effect of a message -/
 
+/-- What a message may change in storage, and what it gives when it succeeds. -/
+structure Change where
+  /-- The slots that the message may touch. -/
+  touched : List (Address × U256)
+  /-- The facts of slots that the message gives when it succeeds. -/
+  after : List SlotFact
+  /-- The refund that the message adds when it succeeds. -/
+  gain : Int
+
 /-- The effect of a message on storage, from the state and substate before it to those after it.
 
 `ok` says whether the message ended with no error.
 
-Outside the slots of `touched`, the state after agrees with the state before.
+Outside the touched slots of the change, the state after agrees with the state before.
 
 A message that fails touches no slot.
 
-A message that succeeds gives the facts of `after`, and adds `gain` to the refund counter. -/
-structure Effect (touched : List (Address × U256)) (after : List SlotFact) (gain : Int)
-    (state : TransactionState) (substate : Substate) (ok : Bool) (state' : TransactionState)
-    (substate' : Substate) : Prop where
+A message that succeeds gives the facts of the change, and adds its refund to the refund counter. -/
+structure Effect (change : Change) (state : TransactionState) (substate : Substate) (ok : Bool)
+    (state' : TransactionState) (substate' : Substate) : Prop where
   /-- Outside the touched slots, or at all slots on a failure, the state agrees with the old one. -/
-  agrees : Agrees (if ok then touched else []) state substate.accessedStorageKeys state'
+  agrees : Agrees (if ok then change.touched else []) state substate.accessedStorageKeys state'
     substate'.accessedStorageKeys
-  /-- A message that succeeds gives the facts of `after`. -/
-  holds : ok = true → ∀ fact ∈ after, fact.Holds state' substate'
-  /-- A message that succeeds adds `gain` to the refund counter. -/
-  refund : substate'.refundCounter = substate.refundCounter + if ok then gain else 0
+  /-- A message that succeeds gives the facts of the change. -/
+  holds : ok = true → ∀ fact ∈ change.after, fact.Holds state' substate'
+  /-- A message that succeeds adds the refund of the change to the refund counter. -/
+  refund : substate'.refundCounter = substate.refundCounter + if ok then change.gain else 0
 
 /-- The assumption that the frame that ends a message has an effect, as its caller takes it in. -/
-def Effects (touched : List (Address × U256)) (after : List SlotFact) (gain : Int)
-    (caller child : Evm fork Nat) : Prop :=
-  Effect touched after gain caller.state caller.substate child.error.isNone
+def Effects (change : Change) (caller child : Evm fork Nat) : Prop :=
+  Effect change caller.state caller.substate child.error.isNone
     (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
 
 /-- A callee that stops in a frame that agrees with its start, outside some slots, has an effect.
 
 The frame that ends the message is the stopped frame, rolled back on a failure.
 
-On success, the stopped frame gives the facts of `after` and holds the refund `gain`.
+On success, the stopped frame gives the facts of the change and holds its refund.
 
 On a failure the rollback gives back the state of the caller, so no slot is touched. -/
-theorem effects_rollbackOnError {touched : List (Address × U256)} {after : List SlotFact}
-    {gain : Int} {caller stopped : Evm fork Nat}
-    (hagree : Agrees touched caller.state caller.substate.accessedStorageKeys stopped.state
+theorem effects_rollbackOnError {change : Change} {caller stopped : Evm fork Nat}
+    (hagree : Agrees change.touched caller.state caller.substate.accessedStorageKeys stopped.state
       stopped.substate.accessedStorageKeys)
-    (hholds : stopped.error = none → ∀ fact ∈ after, fact.Holds stopped.state stopped.substate)
-    (hrefund : stopped.error = none → stopped.substate.refundCounter = gain) :
-    Effects touched after gain caller (rollbackOnError caller.state stopped) := by
+    (hholds : stopped.error = none →
+      ∀ fact ∈ change.after, fact.Holds stopped.state stopped.substate)
+    (hrefund : stopped.error = none → stopped.substate.refundCounter = change.gain) :
+    Effects change caller (rollbackOnError caller.state stopped) := by
   unfold Effects
   cases herr : stopped.error with
   | none =>
@@ -272,14 +279,14 @@ def AfterCall (code : ByteArray) (message : Message fork) (pc : Nat) (rest : Lis
     (size : Nat) (facts : List (Nat × ByteArray)) (outputStart outputSize : U256)
     (output : ByteArray) (gas : Nat) (asked : U256) (slots : List SlotFact) (refund : Int)
     (base : TransactionState) (accessed : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32))
-    (touched : List (Address × U256)) (after : List SlotFact) (gain : Int) (sure : Bool)
-    (evm : Evm fork Nat) : Prop :=
+    (change : Change) (sure : Bool) (evm : Evm fork Nat) : Prop :=
   ∃ cold left base' accessed', left ≤ callGas fork asked gas cold ∧
-    Agrees (touched ++ slots.map SlotFact.slot) base accessed base' accessed' ∧
+    Agrees (change.touched ++ slots.map SlotFact.slot) base accessed base' accessed' ∧
     (Stored code message (pc + 1) (1 :: rest) size
         ((outputStart.toNat, output) :: facts.filter (Apart outputStart.toNat outputSize.toNat))
         (gas - callCost fork asked gas cold + left)
-        (after ++ keptFacts touched slots) (refund + gain) base' accessed' evm ∨
+        (change.after ++ keptFacts change.touched slots) (refund + change.gain) base' accessed'
+        evm ∨
       sure = false ∧ Stored code message (pc + 1) (0 :: rest) size
         (facts.filter (Apart outputStart.toNat outputSize.toNat))
         (gas - callCost fork asked gas cold + left) slots refund base' accessed' evm)
@@ -324,8 +331,8 @@ The new base agrees with the old one outside the touched slots and the slots of 
 theorem callKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {kind : CallKind}
     {byte : UInt8} {op : Op} {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
-    {data output calleeCode : ByteArray} {touched : List (Address × U256)} {after : List SlotFact}
-    {gain : Int} {sure : Bool} (hlt : pc < code.size) (hbyte : code[pc] = byte)
+    {data output calleeCode : ByteArray} {change : Change} {sure : Bool}
+    (hlt : pc < code.size) (hbyte : code[pc] = byte)
     (decoded : Op.ofByte fork byte = some op) (hnone : instruction (Meter := Nat) fork op = none)
     (hrun : messageInstruction (Meter := Nat) fork op = some (callStep kind))
     (hinput : (inputStart.toNat, data) ∈ facts) (hlen : data.size = inputSize.toNat)
@@ -339,7 +346,7 @@ theorem callKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       (∀ fact ∈ slots, fact.Holds caller.state caller.substate) →
       Agrees (slots.map SlotFact.slot) base accessed caller.state
         caller.substate.accessedStorageKeys →
-      Effects touched after gain caller child ∧ (sure = true → child.error = none) ∧
+      Effects change caller child ∧ (sure = true → child.error = none) ∧
         (child.error = none →
           child.output.extract 0 (min outputSize.toNat child.output.size) = output)) :
     HoareUnder fork callee
@@ -347,7 +354,7 @@ theorem callKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
           inputStart :: inputSize :: outputStart :: outputSize :: rest)) size facts gas
         slots refund base accessed)
       (AfterCall code message pc rest size facts outputStart outputSize output gas asked slots
-        refund base accessed touched after gain sure) := by
+        refund base accessed change sure) := by
   intro bound runChild meets evm ⟨⟨hat, hsize, hmod, hall⟩, hslots, hrefund, hagree⟩ within
   have hold := hall _ hinput
   have hext : extendMemory evm.memory.size
@@ -455,8 +462,8 @@ The rest is as for every call that sends no value of its own. -/
 theorem call_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
-    {data output calleeCode : ByteArray} {touched : List (Address × U256)} {after : List SlotFact}
-    {gain : Int} {sure : Bool} (hlt : pc < code.size) (hbyte : code[pc] = 0xf1)
+    {data output calleeCode : ByteArray} {change : Change} {sure : Bool}
+    (hlt : pc < code.size) (hbyte : code[pc] = 0xf1)
     (hinput : (inputStart.toNat, data) ∈ facts) (hlen : data.size = inputSize.toNat)
     (houtput : outputStart.toNat + outputSize.toNat ≤ size)
     (hcode : base.getCode (base.getAccount (toAddressMasked to)).codeHash = .ok calleeCode)
@@ -468,7 +475,7 @@ theorem call_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       (∀ fact ∈ slots, fact.Holds caller.state caller.substate) →
       Agrees (slots.map SlotFact.slot) base accessed caller.state
         caller.substate.accessedStorageKeys →
-      Effects touched after gain caller child ∧ (sure = true → child.error = none) ∧
+      Effects change caller child ∧ (sure = true → child.error = none) ∧
         (child.error = none →
           child.output.extract 0 (min outputSize.toNat child.output.size) = output)) :
     HoareUnder fork callee
@@ -476,7 +483,7 @@ theorem call_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
         (asked :: to :: 0 :: inputStart :: inputSize :: outputStart :: outputSize :: rest) size
         facts gas slots refund base accessed)
       (AfterCall code message pc rest size facts outputStart outputSize output gas asked slots
-        refund base accessed touched after gain sure) :=
+        refund base accessed change sure) :=
   callKind_stored (kind := .call) hfork hglam hlt hbyte
     (ofByte_of_decode (op := .call) rfl (Fork.frontier_le _)) instruction_call
     messageInstruction_call hinput hlen houtput hcode hdel hdepth hgas heffect
@@ -489,8 +496,8 @@ The rest is as for every call that sends no value of its own. -/
 theorem staticcall_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
-    {data output calleeCode : ByteArray} {touched : List (Address × U256)} {after : List SlotFact}
-    {gain : Int} {sure : Bool} (hlt : pc < code.size) (hbyte : code[pc] = 0xfa)
+    {data output calleeCode : ByteArray} {change : Change} {sure : Bool}
+    (hlt : pc < code.size) (hbyte : code[pc] = 0xfa)
     (hinput : (inputStart.toNat, data) ∈ facts) (hlen : data.size = inputSize.toNat)
     (houtput : outputStart.toNat + outputSize.toNat ≤ size)
     (hcode : base.getCode (base.getAccount (toAddressMasked to)).codeHash = .ok calleeCode)
@@ -502,7 +509,7 @@ theorem staticcall_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
       (∀ fact ∈ slots, fact.Holds caller.state caller.substate) →
       Agrees (slots.map SlotFact.slot) base accessed caller.state
         caller.substate.accessedStorageKeys →
-      Effects touched after gain caller child ∧ (sure = true → child.error = none) ∧
+      Effects change caller child ∧ (sure = true → child.error = none) ∧
         (child.error = none →
           child.output.extract 0 (min outputSize.toNat child.output.size) = output)) :
     HoareUnder fork callee
@@ -510,7 +517,7 @@ theorem staticcall_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
         (asked :: to :: inputStart :: inputSize :: outputStart :: outputSize :: rest) size facts gas
         slots refund base accessed)
       (AfterCall code message pc rest size facts outputStart outputSize output gas asked slots
-        refund base accessed touched after gain sure) :=
+        refund base accessed change sure) :=
   callKind_stored (kind := .staticcall) hfork hglam hlt hbyte
     (ofByte_of_decode rfl (Nat.le_trans (by decide) hfork)) instruction_staticcall
     (messageInstruction_staticcall (Nat.le_trans (by decide) hfork)) hinput hlen houtput hcode hdel
@@ -526,8 +533,8 @@ The rest is as for every call that sends no value of its own. -/
 theorem delegatecall_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
-    {data output calleeCode : ByteArray} {touched : List (Address × U256)} {after : List SlotFact}
-    {gain : Int} {sure : Bool} (hlt : pc < code.size) (hbyte : code[pc] = 0xf4)
+    {data output calleeCode : ByteArray} {change : Change} {sure : Bool}
+    (hlt : pc < code.size) (hbyte : code[pc] = 0xf4)
     (hinput : (inputStart.toNat, data) ∈ facts) (hlen : data.size = inputSize.toNat)
     (houtput : outputStart.toNat + outputSize.toNat ≤ size)
     (hcode : base.getCode (base.getAccount (toAddressMasked to)).codeHash = .ok calleeCode)
@@ -539,7 +546,7 @@ theorem delegatecall_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamster
       (∀ fact ∈ slots, fact.Holds caller.state caller.substate) →
       Agrees (slots.map SlotFact.slot) base accessed caller.state
         caller.substate.accessedStorageKeys →
-      Effects touched after gain caller child ∧ (sure = true → child.error = none) ∧
+      Effects change caller child ∧ (sure = true → child.error = none) ∧
         (child.error = none →
           child.output.extract 0 (min outputSize.toNat child.output.size) = output)) :
     HoareUnder fork callee
@@ -547,7 +554,7 @@ theorem delegatecall_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamster
         (asked :: to :: inputStart :: inputSize :: outputStart :: outputSize :: rest) size facts gas
         slots refund base accessed)
       (AfterCall code message pc rest size facts outputStart outputSize output gas asked slots
-        refund base accessed touched after gain sure) :=
+        refund base accessed change sure) :=
   callKind_stored (kind := .delegatecall) hfork hglam hlt hbyte
     (ofByte_of_decode rfl (Nat.le_trans (by decide) hfork)) instruction_delegatecall
     (messageInstruction_delegatecall (Nat.le_trans (by decide) hfork)) hinput hlen houtput hcode
@@ -561,8 +568,8 @@ The rest is as for every call that sends no value of its own. -/
 theorem callcode_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
-    {data output calleeCode : ByteArray} {touched : List (Address × U256)} {after : List SlotFact}
-    {gain : Int} {sure : Bool} (hlt : pc < code.size) (hbyte : code[pc] = 0xf2)
+    {data output calleeCode : ByteArray} {change : Change} {sure : Bool}
+    (hlt : pc < code.size) (hbyte : code[pc] = 0xf2)
     (hinput : (inputStart.toNat, data) ∈ facts) (hlen : data.size = inputSize.toNat)
     (houtput : outputStart.toNat + outputSize.toNat ≤ size)
     (hcode : base.getCode (base.getAccount (toAddressMasked to)).codeHash = .ok calleeCode)
@@ -574,7 +581,7 @@ theorem callcode_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       (∀ fact ∈ slots, fact.Holds caller.state caller.substate) →
       Agrees (slots.map SlotFact.slot) base accessed caller.state
         caller.substate.accessedStorageKeys →
-      Effects touched after gain caller child ∧ (sure = true → child.error = none) ∧
+      Effects change caller child ∧ (sure = true → child.error = none) ∧
         (child.error = none →
           child.output.extract 0 (min outputSize.toNat child.output.size) = output)) :
     HoareUnder fork callee
@@ -582,7 +589,7 @@ theorem callcode_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
         (asked :: to :: 0 :: inputStart :: inputSize :: outputStart :: outputSize :: rest) size
         facts gas slots refund base accessed)
       (AfterCall code message pc rest size facts outputStart outputSize output gas asked slots
-        refund base accessed touched after gain sure) :=
+        refund base accessed change sure) :=
   callKind_stored (kind := .callcode) hfork hglam hlt hbyte
     (ofByte_of_decode (op := .callcode) rfl (Fork.frontier_le _)) instruction_callcode
     messageInstruction_callcode hinput hlen houtput hcode hdel hdepth hgas heffect

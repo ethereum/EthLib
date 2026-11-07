@@ -867,6 +867,7 @@ It pays the price of EIP-2200 with the prices of EIP-2929 from the facts of the 
 `Logic.StoppedStored.of_known` proves that a rule that halts and keeps the state and the substate keeps every fact.
 `Logic.stop_stored` proves that STOP keeps every fact.
 These frames say nothing of the logs, the accessed addresses and the other fields of the substate.
+`Logic.Change` names the slots that a message may touch, and the facts and the refund it gives on success.
 `Logic.Effect` (`Logic/Effect.lean`) is the effect of a message on storage, from the frame that sends it.
 Outside the slots it touches, the state after agrees with the state before, and a failed message touches no slot.
 A message that succeeds gives the facts of some slots and adds a refund.
