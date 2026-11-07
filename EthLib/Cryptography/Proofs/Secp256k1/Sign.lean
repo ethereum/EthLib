@@ -10,6 +10,8 @@ A signature from signing verifies under the signer's key.
 
 Recovery from it returns that key, and its `s` passes the low-s rule.
 
+Signing rejects the zero key, and a signature from it has nonzero `r` and `s`.
+
 Each fact follows from the matching fact about the signing operation of SEC 1 v2 §4.1.3.
 -/
 
@@ -137,10 +139,6 @@ theorem isLowS_sign {sk : Fn} {hash : Vector UInt8 32} {r s : Fn} {odd : Bool}
   · exact low
   · rw [val_neg hs0, isLowS_neg, high]
     rfl
-
-/-- The signing loop fails when it has no attempts left. -/
-theorem signWith_zero (d e : Fn) (state : NonceState) :
-    signWith d e 0 state = .error .noNonce := rfl
 
 /-- Signing rejects the zero private key. -/
 theorem sign_zero (hash : Vector UInt8 32) : sign 0 hash = .error .zeroPrivateKey := by
