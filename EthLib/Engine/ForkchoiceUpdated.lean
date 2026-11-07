@@ -36,11 +36,13 @@ Otherwise the state is invalid, with JSON-RPC code `-38002`.
 
 The parameters are the forkchoice state, with exactly its three fields, and the payload attributes.
 
+The payload attributes are an object or `null`; any other value is an invalid parameter.
+
 Payload attributes start a payload build only when the update selects a new valid head.
 
 That build is not specified here, so such a request is refused.
 
-With any other answer no build begins, so the payload attributes change nothing.
+With any other answer no build begins, so attributes that are an object or `null` change nothing.
 
 The method specifications state these rules, at commit `3284ee8` of execution-apis:
 
@@ -159,11 +161,18 @@ def forkchoiceStateOfJson (j : Json) : Decode ForkchoiceState := do
 
 /-- The parameters of a version of the method: the forkchoice state, then the payload attributes.
 
-It returns the state, and whether the attributes are not `null`. -/
+The attributes are an object or `null`, as the method types them; any other value is invalid.
+
+The source checks their fields only on a new valid head, where this model refuses the build.
+
+It returns the state, and whether the attributes are an object. -/
 def forkchoiceUpdatedParams (params : Json) : Decode (ForkchoiceState × Bool) := do
   let .arr items := params | invalid "params: not an array"
   let [state, attributes] := items.toList | invalid "params: not 2 values"
   let state ← forkchoiceStateOfJson state
-  return (state, !attributes.isNull)
+  match attributes with
+  | .null => return (state, false)
+  | .obj _ => return (state, true)
+  | _ => invalid "payloadAttributes: not an object"
 
 end EthLib.Engine

@@ -292,12 +292,15 @@ theorem forkchoiceStateOfJson_eq_ok_iff {j : Lean.Json} {s : ForkchoiceState} :
 
 The first value must also decode as a forkchoice state.
 
-The result is that state, and whether the payload attributes are not `null`. -/
+The second value must be `null` or an object.
+
+The result is that state, and whether the payload attributes are an object. -/
 theorem forkchoiceUpdatedParams_eq_ok_iff {params : Lean.Json} {r : ForkchoiceState × Bool} :
     forkchoiceUpdatedParams params = .ok r ↔
       ∃ stateJson attributes s, params = .arr #[stateJson, attributes] ∧
         forkchoiceStateOfJson stateJson = .ok s ∧
-          r = (s, !attributes.isNull) := by
+          (attributes = .null ∧ r = (s, false) ∨
+            ∃ kvs, attributes = .obj kvs ∧ r = (s, true)) := by
   unfold forkchoiceUpdatedParams
   cases params with
   | arr items =>
@@ -306,16 +309,26 @@ theorem forkchoiceUpdatedParams_eq_ok_iff {params : Lean.Json} {r : ForkchoiceSt
     match l with
     | [stateJson, attributes] =>
       simp only [bind_ok_iff]
-      constructor
-      · rintro ⟨s, hs, hr⟩
-        exact ⟨stateJson, attributes, s, rfl, hs, (Except.ok.inj hr).symm⟩
-      · rintro ⟨stateJson', attributes', s, heq, hs, rfl⟩
-        cases heq
-        exact ⟨s, hs, rfl⟩
+      -- The attributes decide the flag: `null`, an object, or any other value, which fails.
+      cases attributes <;>
+        simp [Json.invalid, throw, throwThe, MonadExceptOf.throw, pure, Except.pure, eq_comm,
+          and_assoc]
     | [] => simp [Json.invalid, throw, throwThe, MonadExceptOf.throw]
     | [_] => simp [Json.invalid, throw, throwThe, MonadExceptOf.throw]
     | _ :: _ :: _ :: _ => simp [Json.invalid, throw, throwThe, MonadExceptOf.throw]
   -- Any other JSON value is not an array.
   | _ => simp [Json.invalid, throw, throwThe, MonadExceptOf.throw]
+
+/-- Payload attributes that are neither `null` nor an object are an invalid parameter.
+
+That holds for every forkchoice state that decodes, before any rule reads the payload tree. -/
+theorem forkchoiceUpdatedParams_not_object {stateJson attributes : Lean.Json}
+    {s : ForkchoiceState} (hs : forkchoiceStateOfJson stateJson = .ok s)
+    (hNull : attributes ≠ .null) (hObj : ∀ kvs, attributes ≠ .obj kvs) :
+    forkchoiceUpdatedParams (.arr #[stateJson, attributes]) =
+      .error (.invalidParams "payloadAttributes: not an object") := by
+  unfold forkchoiceUpdatedParams
+  cases attributes <;> simp_all [Json.invalid, throw, throwThe, MonadExceptOf.throw, bind,
+    Except.bind]
 
 end EthLib.Engine
