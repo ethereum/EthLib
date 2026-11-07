@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Engine.Block
+public import EthLib.Execution.Proofs.Blocks.TypedRoots
 public import EthLib.Execution.Proofs.Transactions.Envelope
 public import EthLib.Cryptography.Proofs.Hash.Sha256
 
@@ -207,8 +208,8 @@ theorem toBlock_ofBlock (hParis : .paris ≤ fork)
     simp only [pure, Option.some.injEq] at h
     subst h
     have hDec := decodeTransactions_of_encode (index := 0) hBytes hForks
-    have hRoot : indexedRoot bytes = .ok b.header.transactionsRoot := by
-      simpa [transactionsRoot, hBytes, Except.mapError, bind, Except.bind] using hTransactionsRoot
+    obtain ⟨_, hBytes', hRoot⟩ := transactionsRoot_eq_ok_iff.mp hTransactionsRoot
+    cases hBytes.symm.trans hBytes'
     have hWr : sinceM (fork := fork) (fun hf => (withdrawalsRoot (b.withdrawals hf)).mapError
         fun _ => PayloadError.noEncoding) = .ok b.header.withdrawalsRoot :=
       sinceM_eq_ok fun hf => by simp [hWithdrawalsRoot hf, Except.mapError]

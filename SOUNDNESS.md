@@ -1142,8 +1142,9 @@ This construction is the path of Python `trie.root`, through `Execution/Exports/
 The state and storage roots in `Execution/State/Root.lean` build tries directly, and `stateEntries_nodup` and `storageEntries_nodup` supply their distinct keys.
 The indexed roots in `Execution/Blocks/Roots.lean` also build tries directly, with the RLP encoding of each index as its key.
 `indexedEntries_nodup` (`Execution/Proofs/Blocks/Roots.lean`) supplies their distinct keys, since the RLP decoder reads each index back from its encoding.
-With these distinct keys, `indexedRoot_binding_key` shows that two lists with one root give every key one value.
+Applied to the plain tries of two lists with these distinct keys, `root_binding` shows that two lists with one root give every key one value.
 Otherwise `findCollision` returns a collision in the proofs of that key.
+The path searches return nothing there, since the trie is not secured.
 `indexedRoot_binding` concludes that the two lists are equal, or `findIndexedCollision` returns a collision in the proofs of one index.
 Two transactions, or two withdrawals, with the same bytes are equal, so `transactionsRoot_binding` and `withdrawalsRoot_binding` conclude the same for the lists themselves.
 `receiptsRoot_binding` does so for receipts whose types are below `0xc0`, which holds for type 0 and for every type that a fork adds.
