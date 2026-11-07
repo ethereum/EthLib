@@ -14,8 +14,9 @@ from .forks import since
 # They are 500 for an addition, 40000 for a multiplication, and `100000 + 80000 * k` for k pairs.
 # From Istanbul, EIP-1108 lowers them to 150, 6000 and `45000 + 34000 * k`.
 
-# The prices change once, at Istanbul, so the calls run on each side of that change and at the
-# latest fork. The price test runs at every fork.
+# The prices change once, at Istanbul.
+# So the calls run on each side of that change and at the latest fork.
+# The price test runs at every fork.
 FORKS = ("byzantium", "petersburg", "istanbul", "bpo2")
 EIP_1108_FORKS = since("istanbul")
 

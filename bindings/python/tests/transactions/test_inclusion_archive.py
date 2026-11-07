@@ -63,8 +63,8 @@ _RULES = {
     "TYPE_3_TX_BLOB_COUNT_EXCEEDED": r"blobCountExceeded",
     "TYPE_3_TX_INVALID_BLOB_VERSIONED_HASH": r"invalidBlobVersionedHash",
     "TYPE_3_TX_ZERO_BLOBS": r"noBlobData",
-    # From Amsterdam, the fixtures also give this name to an intrinsic gas above the cap of
-    # EIP-7825, since the peer specification raises one error for both cases.
+    # From Amsterdam, the fixtures also give this name to an intrinsic gas above the EIP-7825 cap.
+    # Why: the peer specification raises one error for both cases.
     "INTRINSIC_GAS_TOO_LOW": r"insufficientGas|intrinsicGasAboveLimit",
     "INTRINSIC_GAS_BELOW_FLOOR_GAS_COST": r"insufficientGas",
     "GAS_LIMIT_EXCEEDS_MAXIMUM": r"gasLimitExceeded",

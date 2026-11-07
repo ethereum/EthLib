@@ -4,8 +4,8 @@ import pytest
 
 from ethlib.chain import hoodi_active_fork
 
-# The genesis file activates every fork up to London at block 0, and Shapella and Dencun at
-# time 0, so Hoodi starts at Dencun.
+# The genesis file activates every fork up to London at block 0.
+# It activates Shapella and Dencun at time 0, so Hoodi starts at Dencun.
 #
 # File: metadata/genesis.json
 # Repository: eth-clients/hoodi

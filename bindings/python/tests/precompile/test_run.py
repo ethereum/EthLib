@@ -36,8 +36,8 @@ def test_addresses() -> None:
 @pytest.mark.parametrize("address", ADDRESSES)
 @pytest.mark.parametrize("fork", FORKS)
 def test_fork_adds_precompile(fork: str, address: int) -> None:
-    # Before the fork that adds it, an address has no precompile, and neither run nor price
-    # reaches one.
+    # Before the fork that adds it, an address has no precompile.
+    # Neither run nor price reaches one.
     if fork in since(ADDED[address]):
         assert price(fork, address, b"") >= 0
     else:

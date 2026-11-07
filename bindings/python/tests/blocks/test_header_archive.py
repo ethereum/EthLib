@@ -53,8 +53,8 @@ def test_headers_of_every_fixture(archive: Path, directory: str) -> None:
                 header = _first_item(_hex(block["rlp"]))
                 exception = block.get("expectException")
                 if not exception:
-                    # A valid block passes every check but the proof of work, which the
-                    # fixtures do not carry.
+                    # A valid block passes every check but the proof of work.
+                    # The fixtures do not carry the proof of work.
                     blocks.check_header(
                         fork, fork, headers[block["blockHeader"]["parentHash"]], header
                     )

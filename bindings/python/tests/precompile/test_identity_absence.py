@@ -48,8 +48,8 @@ CALLS = [
     ("identity_6", ONES, 0x258, True),
 ]
 
-# The price of each call data length of the cases, from Appendix E of the Yellow Paper:
-# 15 gas, and 3 for each word or part of a word.
+# The price of each call data length of the cases, from Appendix E of the Yellow Paper.
+# The price is 15 gas, and 3 for each word or part of a word.
 PRICES = {0: 15, 32: 18, 37: 21, 0xF4240: 93_765}
 
 # The tests of these files run from Byzantium on.
@@ -109,8 +109,8 @@ def active(fork: str) -> set[int]:
 def test_precompile_absence(fork: str, size: int) -> None:
     # The test calls each address from 1 to 0x101 with no gas.
     # An address without a precompile is an empty account, which EthLib reports as code 0.
-    # A precompile runs: it succeeds, as MODEXP does for free before Berlin, or fails with its
-    # own error code.
+    # A precompile runs, and either succeeds or fails with its own error code.
+    # MODEXP, for example, succeeds for free before Berlin.
     for address in range(1, UPPER_BOUND + 1):
         try:
             run(fork, address, bytes(size), 0)

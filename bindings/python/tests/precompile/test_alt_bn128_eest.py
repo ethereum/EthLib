@@ -11,8 +11,8 @@ from raising import raises
 
 from .forks import since
 
-# The prices change once, at Istanbul (EIP-1108), so the cases run on each side of that change
-# and at the latest fork.
+# The prices change once, at Istanbul (EIP-1108).
+# So the cases run on each side of that change and at the latest fork.
 FORKS = ("byzantium", "petersburg", "istanbul", "bpo2")
 EIP_1108_FORKS = since("istanbul")
 
@@ -29,12 +29,12 @@ EIP_1108_FORKS = since("istanbul")
 # `extract_alt_bn128_cases.py` read the `pytest.param` lists with Python's `ast`.
 # It evaluated their expressions over the constants of each `spec.py`, without running the files.
 # An empty output marks a call that must fail, and a null output one that must succeed.
-# The gas modifier is added to the price: -1 must run out of gas, and an invalid input fails
-# with any extra gas.
+# The gas modifier is added to the price.
+# With -1 the call must run out of gas, and an invalid input fails with any extra gas.
 #
 # The `test_gas.py` files give no price; the price below is that of EIP-196, EIP-197 and EIP-1108.
-# The ported state test `stZeroKnowledge/test_pairing_test.py` calls the precompile from EVM code,
-# so it is not read.
+# The ported state test `stZeroKnowledge/test_pairing_test.py` calls the precompile from EVM code.
+# So it is not read.
 CASES = json.loads((Path(__file__).parent / "alt_bn128_cases.json").read_text())
 
 
@@ -146,8 +146,9 @@ def invalid_variant(address: int, data: bytes) -> str:
                 return variant
         raise AssertionError("an invalid case with a valid ECADD or ECMUL input")
     # A pairing input is a list of 192-byte pairs of a G1 point and a G2 point.
-    # EIP-197 fixes no order among the errors, so a case with several faults expects the first
-    # one that a reader meets, checking each pair in full before the next.
+    # EIP-197 fixes no order among the errors.
+    # So a case with several faults expects the first one that a reader meets.
+    # The reader checks each pair in full before the next.
     if len(data) % 192 != 0:
         return f"invalidInputLength {len(data)}"
     for offset in range(0, len(data), 192):

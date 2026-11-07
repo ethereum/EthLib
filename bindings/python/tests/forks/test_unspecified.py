@@ -73,9 +73,14 @@ EXPORTS = {
     "ssz_static": lambda f: consensus.ssz_static("mainnet", f, "Checkpoint", bytes(40)),
 }
 
-# The exports whose rules hold at Glamsterdam: the forms of transactions, blocks and receipts,
-# the checks of a header and of a transaction, the blob schedule, proof of work, the precompiles,
-# the preset parameters of Gloas, and the containers that Gloas keeps, such as a checkpoint.
+# The exports whose rules hold at Glamsterdam:
+# - the forms of transactions, blocks and receipts
+# - the checks of a header and of a transaction
+# - the blob schedule
+# - proof of work
+# - the precompiles
+# - the preset parameters of Gloas
+# - the containers that Gloas keeps, such as a checkpoint
 AT_GLAMSTERDAM = {
     "tx_type",
     "tx_hash",
@@ -105,8 +110,9 @@ AT_GLAMSTERDAM = {
     "ssz_static",
 }
 
-# The exports whose rules hold at Hegotá: the preset parameters of Heze, and the containers that
-# Heze keeps, such as a checkpoint.
+# The exports whose rules hold at Hegotá:
+# - the preset parameters of Heze
+# - the containers that Heze keeps, such as a checkpoint
 AT_HEGOTA = {"consensus_parameters", "ssz_static"}
 
 

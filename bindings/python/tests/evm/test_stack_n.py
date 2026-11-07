@@ -29,8 +29,8 @@ EIP_8024 = [
 ]
 
 
-# The reference decoders of EIP-8024, "Specification", from the same file, with `assert`
-# turned into a return of None.
+# The reference decoders of EIP-8024, "Specification", from the same file.
+# Each `assert` is turned into a return of None.
 def decode_single(x: int) -> tuple[int, ...] | None:
     if not (0 <= x <= 90 or 128 <= x <= 255):
         return None

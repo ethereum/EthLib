@@ -10,8 +10,9 @@ from raising import raises
 # Commit: 88f1c80800d622cc3a542a2125bbe33cc18c9f9c
 #
 # The vectors do not list the masking IV as an input.
-# Every packet of the vectors starts with 16 zero bytes, and the masking IV is the first 16 bytes
-# of a packet, sent in the clear, so the tests take it to be 16 zero bytes.
+# Every packet of the vectors starts with 16 zero bytes.
+# The masking IV is the first 16 bytes of a packet, sent in the clear.
+# So the tests take it to be 16 zero bytes.
 
 H = bytes.fromhex
 

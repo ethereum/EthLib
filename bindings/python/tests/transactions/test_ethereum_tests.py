@@ -40,10 +40,11 @@ CHAIN_ID = 1
 # The results that ethereum/tests rejects and EthLib accepts, by file and exception.
 #
 # The fixtures reject a gas limit of 2^64 and a gas limit times gas price above 2^256 - 1.
-# The Yellow Paper (Berlin version, section 4.2) types the gas limit and gas price as scalars
-# below 2^256.
-# Its section 6.2 computes the up-front cost in the naturals, and checks it against the balance.
-# Its section 6.2 also checks the gas limit against the gas left in the block.
+# The Yellow Paper (Berlin version, section 4.2) types the gas limit and gas price as scalars.
+# Such a scalar is below 2^256.
+# Section 6.2 of the paper computes the up-front cost in the naturals.
+# It checks that cost against the balance.
+# The same section checks the gas limit against the gas left in the block.
 # So a block or the sender's balance rejects these transactions, and no rule rejects one alone.
 # EIP-7825 caps the gas limit only from Fusaka, after the last fork of these fixtures.
 # The suite asserts that EthLib accepts them, so that any change shows.

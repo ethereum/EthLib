@@ -343,8 +343,9 @@ def test_too_many_items(case) -> None:
 
 
 # The tests whose payloads keep the form of a list but disagree with the block.
-# They record an access that the block does not make, miss one that it makes, or carry a wrong
-# value, so only executing the block can reject them.
+# They record an access that the block does not make, or miss one that it makes.
+# Or they carry a wrong value.
+# So only executing the block can reject them.
 EXECUTION = {
     "test_bal_cross_tx_coinbase_funds_sender",
     "test_bal_cross_tx_funding_chain",
@@ -380,8 +381,8 @@ EXECUTION = {
 }
 
 
-# The payloads of those tests that also break the form: an extra or reordered entry lands out of
-# order, or reads and writes one slot.
+# The payloads of those tests that also break the form.
+# An extra or reordered entry lands out of order, or reads and writes one slot.
 FORM_ALSO = {
     "test_bal_invalid_account",
     "test_bal_invalid_complex_corruption",
@@ -411,8 +412,8 @@ def test_cases_cover_each_kind() -> None:
     assert sum(_function(c) in FORM for c in INVALID) == 17
     assert sum(_function(c) in ENCODING for c in INVALID) == 18
     assert sum(c["error"].endswith("GAS_LIMIT_EXCEEDED") for c in INVALID) == 5
-    # Every other invalid case belongs to a test that needs block execution, so a new kind of
-    # case that no test reads fails here.
+    # Every other invalid case belongs to a test that needs block execution.
+    # So a new kind of case that no test reads fails here.
     read = FORM | ENCODING
     rest = [
         c

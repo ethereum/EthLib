@@ -13,11 +13,13 @@ from .test_transactions import FORK_OF_NETWORK
 
 ARCHIVE = "execution-specs/tests@v21.0.2/fixtures"
 
-# A block qualifies when no transaction runs code, so the gas left is the gas limit minus the
-# intrinsic gas, and the refund counter is 0.
+# A block qualifies when no transaction runs code.
+# So the gas left is the gas limit minus the intrinsic gas, and the refund counter is 0.
 #
-# These directories hold such blocks: plain transfers, the call data floor of EIP-7623, and the
-# blob fees of EIP-4844.
+# These directories hold such blocks:
+# - plain transfers
+# - the call data floor of EIP-7623
+# - the blob fees of EIP-4844
 _ROOT = "fixtures/blockchain_tests"
 _EARLY = [
     "frontier",
@@ -51,8 +53,8 @@ _PRECOMPILES = {i.to_bytes(20, "big") for i in [*range(1, 0x12), 0x100]}
 
 # The block reward in wei before Paris, which the beneficiary also receives.
 #
-# It is 5 ether in the Yellow Paper, 3 from Byzantium by EIP-649, and 2 from Constantinople by
-# EIP-1234.
+# It is 5 ether in the Yellow Paper, and 3 from Byzantium by EIP-649.
+# It is 2 from Constantinople by EIP-1234.
 # EIP-3675 ends it at Paris.
 _REWARD = {
     "Frontier": 5,
@@ -176,8 +178,10 @@ def test_settle_rejects(archive) -> None:
     block = fixture["blocks"][0]
     tx = _raw_transactions(bytes.fromhex(block["rlp"].removeprefix("0x")))[0]
     gas, max_fee = _int(block["transactions"][0]["gasLimit"]), _price(block["transactions"][0], 0)
-    # A maximum fee below the base fee, more gas left than the gas limit, and a base fee before
-    # London are inputs that no block accepts.
+    # No block accepts these inputs:
+    # - a maximum fee below the base fee
+    # - more gas left than the gas limit
+    # - a base fee before London
     for fork, base_fee, gas_left, message in [
         ("pectra", max_fee + 1, 0, "the price per gas is below the base fee"),
         ("pectra", 0, gas + 1, "the gas left is above the gas limit"),

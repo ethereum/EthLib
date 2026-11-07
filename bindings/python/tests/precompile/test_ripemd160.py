@@ -31,8 +31,9 @@ VECTORS = [
     (b"a" * 1_000_000, "52783243c1697bdbe16d37f97f68f08325dc1528"),
 ]
 
-# Digests of `a` repeated n times, for the lengths at which the padding changes
-# its number of blocks. They agree between OpenSSL and Python's hashlib.
+# Digests of `a` repeated n times.
+# Each length n is one at which the padding changes its number of blocks.
+# The digests agree between OpenSSL and Python's hashlib.
 PADDING_VECTORS = [
     (55, "0d8a8c9063a48576a7c97e9f95253a6e53ff6765"),
     (56, "e72334b46c83cc70bef979e15453706c95b888be"),
