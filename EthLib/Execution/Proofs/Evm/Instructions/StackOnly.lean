@@ -130,11 +130,11 @@ theorem expStep_cons {fork : Fork} (hfork : fork ≥ .spuriousDragon) {evm : Evm
     _ | _ <;>
     simp [hc, bind, Except.bind, pure, Except.pure, Except.map, room]
 
-/-- KECCAK256 pays 30, plus 6 per hashed word, plus the growth of memory to hold the bytes. -/
+/-- KECCAK256 pays its price on the hashed bytes, plus the growth of memory to hold them. -/
 theorem keccak256Step_cons {evm : Evm fork Meter} {start size : U256} {rest : List U256}
     (h : evm.stack.val = start :: size :: rest) :
     keccak256Step evm =
-      (GasMeter.charge evm.gas (30 + 6 * wordCount size.toNat +
+      (GasMeter.charge evm.gas (keccak256Cost size +
         (extendMemory evm.memory.size [(start, size)]).cost)).map fun gas =>
         let memory :=
           memoryExtend evm.memory (extendMemory evm.memory.size [(start, size)]).expandBy
@@ -148,8 +148,8 @@ theorem keccak256Step_cons {evm : Evm fork Meter} {start size : U256} {rest : Li
     simp only [List.length_cons] at this
     omega
   simp only [keccak256Step, popWord, chargeGasAndMemory, chargeGas, pushWord, advance, hstack,
-    Stack.pop, Stack.push, OPCODE_KECCAK256_BASE, OPCODE_KECCAK256_PER_WORD]
-  rcases hc : GasMeter.charge evm.gas (30 + 6 * wordCount size.toNat +
+    Stack.pop, Stack.push]
+  rcases hc : GasMeter.charge evm.gas (keccak256Cost size +
       (extendMemory evm.memory.size [(start, size)]).cost) with _ | _ <;>
     simp [hc, bind, Except.bind, pure, Except.pure, Except.map, room]
 

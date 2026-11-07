@@ -290,18 +290,18 @@ theorem mstore {start value : U256} {rest : List U256} (hlt : pc < code.size)
 
 /-- KECCAK256 puts the hash of a range of memory in place of its start and its size.
 
-It pays 30, 6 for each word it hashes, and the growth of memory. -/
+It pays its price on the bytes it hashes, and the growth of memory. -/
 theorem keccak256 {start size : U256} {rest : List U256} (hlt : pc < code.size)
     (hbyte : code[pc] = 0x20)
     (hgas :
-      30 + 6 * wordCount size.toNat + (extendMemory memory.size [(start, size)]).cost ≤ gas) :
+      keccak256Cost size + (extendMemory memory.size [(start, size)]).cost ≤ gas) :
     Hoare fork (At code message pc (start :: size :: rest) memory gas state substate)
       (At code message (pc + 1)
         (keccak (memoryReadBytes
           (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
           start.toNat size.toNat) :: rest)
         (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
-        (gas - (30 + 6 * wordCount size.toNat + (extendMemory memory.size [(start, size)]).cost))
+        (gas - (keccak256Cost size + (extendMemory memory.size [(start, size)]).cost))
         state substate) := by
   apply At.rule hlt hbyte (ofByte_of_decode (op := .keccak256) rfl (Fork.frontier_le _))
     instruction_keccak256
