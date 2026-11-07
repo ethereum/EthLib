@@ -173,12 +173,6 @@ namespace Store
 
 variable (config : Config) (store : Store preset fork)
 
-/-- The state after a known block, or an error when the store holds none. -/
-def blockState (root : Root) : Except ForkChoiceError (BeaconState preset fork) :=
-  match store.blockStates[root]? with
-  | some state => return state
-  | none => throw (.unknownBlockState root)
-
 /-- The store with each checkpoint replaced when the new one has a greater epoch. -/
 def updateCheckpoints (justified finalized : Checkpoint) : Store preset fork :=
   let store := if store.justifiedCheckpoint.epoch < justified.epoch then
