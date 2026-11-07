@@ -29,9 +29,8 @@ theorem uncompress_G1_POINT_AT_INFINITY :
   have hhead : (⟨G1_POINT_AT_INFINITY.toArray⟩ : ByteArray).get! 0 = 0xc0 := by decide
   have htail : Bls.tailAllZero ⟨G1_POINT_AT_INFINITY.toArray⟩ 1 = true := by decide +kernel
   rw [G1.uncompress, ite_eq_right (by rw [hsz]; decide)]
-  dsimp only
-  rw [hhead, htail]
-  rfl
+  -- Select the branch by the flags, so the kernel does not reduce the decoding of a coordinate.
+  simp (config := { decide := true }) only [hhead, htail]
 
 /-- KZG validation accepts exactly the decodable points of order dividing `r`. -/
 theorem validateKzgG1Point_eq_ok_iff {b : Bytes48} {P : G1} :
