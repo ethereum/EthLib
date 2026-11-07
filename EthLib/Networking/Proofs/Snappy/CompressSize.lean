@@ -8,7 +8,7 @@ public import EthLib.Networking.Proofs.Encoding.Varint
 
 The block that the compressor writes for `n` bytes takes at most `32 + n + n / 6` bytes.
 
-The input has at most 2^32 - 1 bytes.
+The bound holds for every input.
 
 The proof bounds six times the output by seven times the input, plus 10:
 
@@ -60,7 +60,7 @@ private theorem size_emitCopies_le (offset : Nat) :
         omega
 
 /-- Six times the header of a literal of `n` bytes is at most `n + 10`. -/
-private theorem length_literalHeader_le {n : Nat} (h1 : 1 ≤ n) (h2 : n ≤ 2 ^ 32) :
+private theorem length_literalHeader_le {n : Nat} (h1 : 1 ≤ n) :
     6 * (literalHeader n).length ≤ n + 10 := by
   unfold literalHeader
   split
@@ -75,12 +75,12 @@ private theorem length_literalHeader_le {n : Nat} (h1 : 1 ≤ n) (h2 : n ≤ 2 ^
 /-- After a literal over a range, six times the output grows by at most 7 times the range plus 10.
 -/
 private theorem size_emitLiteral_le (out src : ByteArray) {lo hi : Nat}
-    (hhi : hi ≤ src.size) (hlen : hi - lo ≤ 2 ^ 32) :
+    (hhi : hi ≤ src.size) :
     6 * (emitLiteral out src lo hi).size ≤ 6 * out.size + 7 * (hi - lo) + 10 := by
   unfold emitLiteral
   split
   · rename_i hlt
-    have hh := length_literalHeader_le (n := hi - lo) (by omega) hlen
+    have hh := length_literalHeader_le (n := hi - lo) (by omega)
     rw [ByteArray.copySlice_eq_append]
     simp only [ByteArray.size_append, ByteArray.size_extract, size_mk_toArray, ByteArray.size_data]
     omega
@@ -92,37 +92,45 @@ private theorem size_emitLiteral_le (out src : ByteArray) {lo hi : Nat}
 
 The invariant is that six times the bytes written so far is at most seven times `lit`.
 -/
-private theorem size_compressLoop_le (src : ByteArray) (hsz : src.size ≤ maxUncompressedLength)
-    (table : Array Nat) (i lit : Nat) (out : ByteArray) (hli : lit ≤ i) (his : i ≤ src.size)
-    (hout : 6 * out.size ≤ 7 * lit) :
+private theorem size_compressLoop_le (src : ByteArray) (table : Array Nat) (i lit : Nat)
+    (out : ByteArray) (hli : lit ≤ i) (his : i ≤ src.size) (hout : 6 * out.size ≤ 7 * lit) :
     6 * (compressLoop src table i lit out).size ≤ 7 * src.size + 10 := by
   have hmin : minCopyLength = 4 := rfl
-  have hmax : src.size ≤ 2 ^ 32 := by simp only [maxUncompressedLength] at hsz; omega
   fun_induction compressLoop src table i lit out with
   | case1 tb i lit out hi s c tb' hc len hl ih =>
       have hle : i + len ≤ src.size := matchLength_le src c i hc.1 (by omega)
-      have h1 := size_emitLiteral_le out src (lo := lit) his (by omega)
+      have h1 := size_emitLiteral_le out src (lo := lit) his
       have h2 := size_emitCopies_le (i - c) len (emitLiteral out src lit i) (Or.inr (by omega))
       exact ih (Nat.le_refl _) (by omega) (by omega)
   | case2 tb i lit out hi s c tb' hc len hl ih => exact ih (by omega) (by omega) hout
   | case3 tb i lit out hi s c tb' hc ih => exact ih (by omega) (by omega) hout
   | case4 tb i lit out hi =>
       have h1 := size_emitLiteral_le out src (lo := lit) (hi := src.size)
-        (Nat.le_refl _) (by omega)
+        (Nat.le_refl _)
       omega
 
 /-! ## The bound -/
 
-/-- An input of `n` bytes, with `n` at most 2^32 - 1, compresses to at most `32 + n + n / 6` bytes.
+/-- Six times the block of an input of `n` bytes is at most `7 n + 40` bytes.
+
+The bound holds for every input.
+
+Only the block of an input of at most 2^32 - 1 bytes decompresses back to the input.
 -/
-theorem size_compress_le {src : ByteArray} (h : src.size ≤ maxUncompressedLength) :
-    (compress src).size ≤ src.size + src.size / 6 + 32 := by
-  have hloop := size_compressLoop_le src h (Array.replicate (2 ^ tableBits) 0) 0 0
+theorem six_mul_size_compress_le (src : ByteArray) :
+    6 * (compress src).size ≤ 7 * src.size + 40 := by
+  have hloop := size_compressLoop_le src (Array.replicate (2 ^ tableBits) 0) 0 0
     ByteArray.empty (Nat.le_refl _) (Nat.zero_le _) (by simp)
   have hpre : (EthLib.Networking.Encoding.Varint.encodeAux src.size preambleMaxLength).length ≤ 5 :=
     EthLib.Networking.Proofs.Encoding.Varint.length_encodeAux_le _ _
   unfold compress
   simp only [ByteArray.size_append, size_mk_toArray]
+  omega
+
+/-- The block of an input of `n` bytes takes at most `32 + n + n / 6` bytes. -/
+theorem size_compress_le (src : ByteArray) :
+    (compress src).size ≤ 32 + src.size + src.size / 6 := by
+  have := six_mul_size_compress_le src
   omega
 
 end EthLib.Networking.Proofs.Snappy.CompressSize

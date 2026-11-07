@@ -60,7 +60,7 @@ theorem decodePayload_message {α : Type} [SszType α] [LawfulSszType α] {a : �
   obtain ⟨-, hhigh⟩ := withinBounds_of_serialize (LawfulSszType.fits a) untyped
   refine ⟨(payloadBounds (SszType.desc α)).2, topicBound_eq h, ?_,
     SszType.deserialize_serialize wrote⟩
-  apply Networking.Proofs.Gossip.Payload.decodePayload_compress
+  apply Networking.Proofs.Gossip.Payload.decodePayload_compress_eq_ok_iff.mpr
   -- The length is within the type's largest size and the cap, so within their minimum.
   have hbound : data.size ≤ (payloadBounds (SszType.desc α)).2.toNat := by
     rw [toNat_payloadBounds_snd]
