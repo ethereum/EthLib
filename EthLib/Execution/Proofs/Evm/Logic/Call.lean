@@ -578,10 +578,9 @@ theorem instruction_staticcall : instruction (Meter := Nat) fork .staticcall = n
     selfdestructOpStep, HOrElse.hOrElse, OrElse.orElse, Option.orElse]
 
 /-- From Byzantium, STATICCALL runs the step of a static call. -/
-theorem messageInstruction_staticcall (hfork : .berlin ≤ fork) :
+theorem messageInstruction_staticcall (hfork : .byzantium ≤ fork) :
     messageInstruction (Meter := Nat) fork .staticcall = some (callStep .staticcall) := by
-  have h : Fork.byzantium ≤ fork := Nat.le_trans (by decide) hfork
-  simp [messageInstruction, callInstruction, HOrElse.hOrElse, OrElse.orElse, Option.orElse, h]
+  simp [messageInstruction, callInstruction, HOrElse.hOrElse, OrElse.orElse, Option.orElse, hfork]
 
 /-- From Berlin to before Glamsterdam, STATICCALL to `to`, with a range of input and one of output.
 
@@ -658,7 +657,7 @@ theorem staticcallWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       simp only [hc, hpc, hbyte]
       exact ofByte_of_decode rfl (Nat.le_trans (by decide) hfork)
     rw [step_of_messageInstruction hin hdec instruction_staticcall
-      (messageInstruction_staticcall hfork)]
+      (messageInstruction_staticcall (Nat.le_trans (by decide) hfork))]
     exact hstep
   · intro child hchild hcallee
     have hlen : caller.stack.val.length < STACK_LIMIT := by
@@ -681,13 +680,13 @@ theorem staticcallWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
 
 The callee runs the code of `to`, which the state holds, and is no delegation.
 
+The message carries no value, and it is static.
+
 The rule holds for every frame that ends the message and meets the assumption.
 
 The caller pushes 1 when the callee ends with no error, and 0 otherwise.
 
 It gets back the gas that the callee leaves, and its state and substate come from the callee.
-
-The message carries no value, and it is static.
 
 The rule says nothing more of them, since the callee is arbitrary. -/
 theorem staticcall (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)

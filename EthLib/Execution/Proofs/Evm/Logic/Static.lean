@@ -5,13 +5,11 @@ public import EthLib.Execution.Proofs.Evm.Logic.Log
 /-!
 # Proofs: a static frame does not write storage or emit a log
 
-A message that STATICCALL sends is static, and so is every message that a static frame sends.
+A message that STATICCALL sends is static.
 
 In a static frame, SSTORE and LOG0 to LOG4 do not complete.
 
 Every step of such a frame at one of these opcodes stops the frame.
-
-The step then fails with an error, or stops the frame with an error.
 
 A failed step that aborts the run gives no step at all, so it is not covered here.
 -/
