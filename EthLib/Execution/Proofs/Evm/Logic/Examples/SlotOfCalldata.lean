@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Proofs.Evm.Logic.Rules
+public import EthLib.Execution.Proofs.Evm.Logic.Steps
 public import EthLib.Execution.Proofs.Evm.Machine.Memory
 
 /-!
@@ -39,6 +39,12 @@ The run costs 122 gas besides SLOAD, and 37 gas on the path that reverts.
 SLOAD costs 2100 for a slot that the transaction has not accessed, and 100 for one it has.
 
 The rules are those of one counter of gas, the meter of every fork before Glamsterdam, from Berlin.
+
+The code is stored as one number, so a fact about its bytes is evaluated on that number.
+
+A tactic runs the opcodes of the stack and the jumps.
+
+The proofs apply the rules for memory, storage and the halts by hand.
 -/
 
 @[expose] public section
@@ -52,11 +58,21 @@ variable {fork : Fork}
 
 /-! ## The code -/
 
-/-- The bytecode of the contract. -/
-def CODE : ByteArray := ⟨#[0x60, 0x00, 0x35, 0x60, 0xe0, 0x1c, 0x63, 0x12, 0x34, 0x56, 0x78, 0x14,
-  0x60, 0x13, 0x57, 0x60, 0x00, 0x80, 0xfd, 0x5b, 0x60, 0x04, 0x35, 0x60, 0x00, 0x52, 0x60, 0x24,
-  0x35, 0x60, 0x20, 0x52, 0x60, 0x40, 0x60, 0x00, 0x20, 0x54, 0x60, 0x00, 0x52, 0x60, 0x20, 0x60,
-  0x00, 0xf3]⟩
+/-- The bytecode as one number, whose highest byte is the first byte of the code. -/
+def CODE_NAT : Nat :=
+  0x60003560e01c631234567814601357600080fd5b60043560005260243560205260406000205460005260206000f3
+
+/-- The bytecode of the contract: the 46 bytes of its number.
+
+No proof unfolds it: proofs rewrite it by its equation, and evaluate its bytes on the number. -/
+@[irreducible] def CODE : ByteArray := NatCode.ofNat CODE_NAT 46
+
+theorem CODE_eq : CODE = NatCode.ofNat CODE_NAT 46 := by
+  unfold CODE
+  rfl
+
+/-- Proves a fact about the bytes of the code, by evaluation on its number. -/
+local macro "code_fact" : tactic => `(tactic| evm_code [CODE_eq, CODE_NAT])
 
 /-- The word that the code compares with the top four bytes of its call data. -/
 def TAG : U256 := 0x12345678
@@ -71,38 +87,8 @@ theorem compare (hfork : .berlin ≤ fork) {gas : Nat} (hgas : 21 ≤ gas) :
     Hoare fork (At CODE message 0 [] .empty gas state substate)
       (At CODE message 14 [0x13, equal TAG (prefixOf message.data)] .empty (gas - 21) state
         substate) := by
-  have h1 := push1 (code := CODE) (fork := fork) (message := message) (state := state)
-    (substate := substate) (pc := 0) (stack := []) (memory := .empty) (gas := gas) (byte := 0x00)
-    (by decide) rfl rfl (by omega) (by decide)
-  have h2 := calldataload (fork := fork) (code := CODE) (message := message) (state := state)
-    (substate := substate) (memory := .empty) (pc := 2) (start := 0) (rest := [])
-    (gas := gas - 3) (by decide) rfl (by omega)
-  have h3 := push1 (code := CODE) (fork := fork) (message := message) (state := state)
-    (substate := substate) (pc := 3) (stack := [loadWord message.data 0 32]) (memory := .empty)
-    (gas := gas - 3 - 3) (byte := 0xe0) (by decide) rfl rfl (by omega) (by simp [STACK_LIMIT])
-  have h4 := binary (fork := fork) (code := CODE) (message := message) (state := state)
-    (substate := substate) (memory := .empty) (pc := 5) (x := 0xe0)
-    (y := loadWord message.data 0 32) (rest := []) (gas := gas - 3 - 3 - 3)
-    (by decide) rfl (ofByte_of_decode (op := .shr) rfl (Nat.le_trans (by decide) hfork))
-    instruction_shr
-    (by simp [OPCODE_SHR, VERY_LOW]; omega)
-  have h5 := Logic.push (fork := fork) (code := CODE) (message := message) (pc := 6)
-    (stack := [prefixOf message.data]) (memory := .empty) (gas := gas - 3 - 3 - 3 - 3)
-    (state := state) (substate := substate) (n := 4) (word := TAG) (by decide) (by decide)
-    rfl rfl (by decide) (by omega) (by simp [STACK_LIMIT])
-  have h6 := binary (fork := fork) (code := CODE) (message := message) (state := state)
-    (substate := substate) (memory := .empty) (pc := 11) (x := TAG) (y := prefixOf message.data)
-    (rest := []) (gas := gas - 3 - 3 - 3 - 3 - 3)
-    (by decide) rfl (ofByte_of_decode (op := .eq) rfl (Fork.frontier_le _)) instruction_eq
-    (by simp [OPCODE_EQ, VERY_LOW]; omega)
-  have h7 := push1 (code := CODE) (fork := fork) (message := message) (state := state)
-    (substate := substate) (pc := 12) (stack := [equal TAG (prefixOf message.data)])
-    (memory := .empty) (gas := gas - 3 - 3 - 3 - 3 - 3 - 3) (byte := 0x13) (by decide) rfl rfl
-    (by omega) (by simp [STACK_LIMIT])
-  have hg : gas - 3 - 3 - 3 - 3 - 3 - 3 - 3 = gas - 21 := by omega
-  have h := ((((((h1.seq h2).seq h3).seq h4).seq h5).seq h6).seq h7)
-  rw [hg] at h
-  simpa [OPCODE_SHR, OPCODE_EQ, VERY_LOW, prefixOf] using h
+  iterate 7 evm_step [CODE_eq, CODE_NAT]
+  exact Triple.of_imp fun _ h => h
 
 /-! ## The path that reverts -/
 
@@ -112,20 +98,11 @@ theorem mismatch (hfork : .berlin ≤ fork) {gas : Nat} (hgas : 37 ≤ gas) :
       (Halted true .empty (gas - 37) state substate) := by
   -- A range of size 0 does not grow memory.
   have hz : extendMemory ByteArray.empty.size [((0 : U256), (0 : U256))] = ⟨0, 0⟩ := by decide
-  have h1 := jumpi_zero (fork := fork) (code := CODE) (message := message) (state := state)
-    (substate := substate) (memory := .empty) (pc := 14) (destination := 0x13) (rest := [])
-    (gas := gas - 21) (by decide) rfl (by omega)
-  have h2 := push1 (code := CODE) (fork := fork) (message := message) (state := state)
-    (substate := substate) (pc := 15) (stack := []) (memory := .empty) (gas := gas - 21 - 10)
-    (byte := 0x00) (by decide) rfl rfl (by omega) (by decide)
-  have h3 := dup1 (fork := fork) (code := CODE) (message := message) (state := state)
-    (substate := substate) (memory := .empty) (pc := 17) (x := 0) (rest := [])
-    (gas := gas - 21 - 10 - 3) (by decide) rfl (by omega) (by decide)
-  have h4 := Logic.revert (fork := fork) (code := CODE) (message := message) (state := state)
+  iterate 3 evm_step [CODE_eq, CODE_NAT]
+  have h := Logic.revert (fork := fork) (code := CODE) (message := message) (state := state)
     (substate := substate) (memory := .empty) (pc := 18) (start := 0) (size := 0) (rest := [])
-    (gas := gas - 21 - 10 - 3 - 3) (Nat.le_trans (by decide) hfork) (by decide) rfl
-    (by rw [hz]; exact Nat.zero_le _)
-  have h := ((h1.seq h2).seq h3).seq h4
+    (gas := gas - 37) (Nat.le_trans (by decide) hfork) (by code_fact)
+    (by code_fact) (by rw [hz]; exact Nat.zero_le _)
   refine Spec.consequence h (fun _ x => x) fun evm ⟨hr, he, ho, hg, hs, hss⟩ =>
     ⟨hr, he, by simpa [hz, memoryReadBytes] using ho, by
       have hc : (extendMemory ByteArray.empty.size [(0, 0)]).cost = 0 := by decide
@@ -145,67 +122,37 @@ def key (data : ByteArray) : U256 := keccak (hashed data)
 theorem copy {gas : Nat} (hgas : 30 ≤ gas) :
     Hoare fork (At CODE message 20 [] .empty gas state substate)
       (At CODE message 32 [] (hashed message.data) (gas - 30) state substate) := by
-  have h1 := push1 (code := CODE) (fork := fork) (message := message) (state := state)
-    (substate := substate) (pc := 20) (stack := []) (memory := .empty) (gas := gas) (byte := 0x04)
-    (by decide) rfl rfl (by omega) (by decide)
-  have h2 := calldataload (fork := fork) (code := CODE) (message := message) (state := state)
-    (substate := substate) (memory := .empty) (pc := 22) (start := 4) (rest := [])
-    (gas := gas - 3) (by decide) rfl (by omega)
-  have h3 := push1 (code := CODE) (fork := fork) (message := message) (state := state)
-    (substate := substate) (pc := 23) (stack := [loadWord message.data 4 32]) (memory := .empty)
-    (gas := gas - 3 - 3) (byte := 0x00) (by decide) rfl rfl (by omega) (by simp [STACK_LIMIT])
-  -- Memory grows from no word to one word, for 3 gas.
-  have hg1 : extendMemory ByteArray.empty.size [((0 : U256), (32 : U256))] = ⟨3, 32⟩ := by
-    decide
-  have h4 := mstore (fork := fork) (code := CODE) (message := message) (state := state)
-    (substate := substate) (memory := .empty) (pc := 25) (start := 0)
-    (value := loadWord message.data 4 32) (rest := []) (gas := gas - 3 - 3 - 3) (by decide) rfl
-    (by rw [hg1]; simp only; omega)
+  iterate 3 evm_step [CODE_eq, CODE_NAT]
+  -- Memory grows from no word to one word, for 3 gas, and a pushed word reads as `n#256`.
+  have hg1 : extendMemory ByteArray.empty.size [(0#256, (32 : U256))] = ⟨3, 32⟩ := by decide
   have hm1 : memoryWrite (memoryExtend ByteArray.empty
-      (extendMemory ByteArray.empty.size [((0 : U256), (32 : U256))]).expandBy)
+      (extendMemory ByteArray.empty.size [(0#256, (32 : U256))]).expandBy)
       (0 : U256).toNat (wordBytes (loadWord message.data 4 32)) =
       wordBytes (loadWord message.data 4 32) := by
     rw [hg1]
     exact memoryWrite_whole (by simp [size_memoryExtend, size_wordBytes])
-  have h4' := Hoare.memory_eq h4 hm1
-  rw [hg1] at h4'
-  dsimp only at h4'
-  have h5 := push1 (code := CODE) (fork := fork) (message := message) (state := state)
-    (substate := substate) (pc := 26) (stack := [])
-    (memory := wordBytes (loadWord message.data 4 32)) (gas := gas - 3 - 3 - 3 - (3 + 3))
-    (byte := 0x24) (by decide) rfl rfl (by omega) (by decide)
-  have h6 := calldataload (fork := fork) (code := CODE) (message := message) (state := state)
-    (substate := substate) (memory := wordBytes (loadWord message.data 4 32)) (pc := 28)
-    (start := 36) (rest := [])
-    (gas := gas - 3 - 3 - 3 - (3 + 3) - 3)
-    (by decide) rfl (by omega)
-  have h7 := push1 (code := CODE) (fork := fork) (message := message) (state := state)
-    (substate := substate) (pc := 29) (stack := [loadWord message.data 36 32])
-    (memory := wordBytes (loadWord message.data 4 32)) (gas := gas - 3 - 3 - 3 - (3 + 3) - 3 - 3)
-    (byte := 0x20) (by decide) rfl rfl (by omega) (by simp [STACK_LIMIT])
+  refine Triple.seq (Hoare.gas_eq (Hoare.memory_eq (mstore (by code_fact)
+    (by code_fact) (by rw [hg1]; simp only; omega)) hm1)
+    (show _ = gas - 15 by rw [hg1]; simp only; omega)) ?_
+  iterate 3 evm_step [CODE_eq, CODE_NAT]
   -- Memory grows from one word to two words, for 3 more gas.
   have hg2 : extendMemory (wordBytes (loadWord message.data 4 32)).size
-      [((32 : U256), (32 : U256))] = ⟨3, 32⟩ := by
+      [(32#256, (32 : U256))] = ⟨3, 32⟩ := by
     rw [size_wordBytes]
     decide
-  have h8 := mstore (fork := fork) (code := CODE) (message := message) (state := state)
-    (substate := substate) (memory := wordBytes (loadWord message.data 4 32)) (pc := 31)
-    (start := 32) (value := loadWord message.data 36 32) (rest := [])
-    (gas := gas - 3 - 3 - 3 - (3 + 3) - 3 - 3 - 3)
-    (by decide) rfl (by rw [hg2]; simp only; omega)
   have hm2 : memoryWrite (memoryExtend (wordBytes (loadWord message.data 4 32))
       (extendMemory (wordBytes (loadWord message.data 4 32)).size
-        [((32 : U256), (32 : U256))]).expandBy)
+        [(32#256, (32 : U256))]).expandBy)
       (32 : U256).toNat (wordBytes (loadWord message.data 36 32)) = hashed message.data := by
     rw [hg2]
     have h := memoryWrite_extend_end (memory := wordBytes (loadWord message.data 4 32))
       (value := wordBytes (loadWord message.data 36 32))
     rw [size_wordBytes, size_wordBytes] at h
     exact h
-  have h8' := Hoare.memory_eq h8 hm2
-  have h := Hoare.gas_eq (((((((h1.seq h2).seq h3).seq h4').seq h5).seq h6).seq h7).seq h8')
-    (by rw [hg2])
-  exact h
+  refine Triple.seq (Hoare.gas_eq (Hoare.memory_eq (mstore (by code_fact)
+    (by code_fact) (by rw [hg2]; simp only; omega)) hm2)
+    (show _ = gas - 30 by rw [hg2]; simp only; omega)) ?_
+  exact Triple.of_imp fun _ h => h
 
 /-- The size of the hashed bytes: two words. -/
 theorem size_hashed (data : ByteArray) : (hashed data).size = 64 := by
@@ -239,10 +186,11 @@ theorem lookup (hfork : .berlin ≤ fork) {cold : Bool}
   have hs := size_hashed message.data
   have h1 := push1 (code := CODE) (fork := fork) (message := message) (state := state)
     (substate := substate) (pc := 32) (stack := []) (memory := hashed message.data) (gas := gas)
-    (byte := 0x40) (by decide) rfl rfl (by omega) (by decide)
+    (byte := 0x40) (by code_fact) (by code_fact) (by code_fact) (by omega) (by decide)
   have h2 := push1 (code := CODE) (fork := fork) (message := message) (state := state)
     (substate := substate) (pc := 34) (stack := [64]) (memory := hashed message.data)
-    (gas := gas - 3) (byte := 0x00) (by decide) rfl rfl (by omega) (by decide)
+    (gas := gas - 3) (byte := 0x00) (by code_fact) (by code_fact) (by code_fact) (by omega)
+    (by decide)
   have hw : keccak256Cost (64 : U256) = 30 + 6 * 2 := by decide
   -- The 64 bytes are in memory already, so hashing them grows nothing.
   have hk : extendMemory (hashed message.data).size [((0 : U256), (64 : U256))] = ⟨0, 0⟩ := by
@@ -250,7 +198,8 @@ theorem lookup (hfork : .berlin ≤ fork) {cold : Bool}
     decide
   have h3 := keccak256 (fork := fork) (code := CODE) (message := message) (state := state)
     (substate := substate) (memory := hashed message.data) (pc := 36) (start := 0) (size := 64)
-    (rest := []) (gas := gas - 3 - 3) (by decide) rfl (by rw [hk, hw]; simp only; omega)
+    (rest := []) (gas := gas - 3 - 3) (by code_fact) (by code_fact)
+    (by rw [hk, hw]; simp only; omega)
   have hread : memoryReadBytes (memoryExtend (hashed message.data)
       (extendMemory (hashed message.data).size [((0 : U256), (64 : U256))]).expandBy)
       (0 : U256).toNat (64 : U256).toNat = hashed message.data := by
@@ -271,14 +220,16 @@ theorem lookup (hfork : .berlin ≤ fork) {cold : Bool}
     h1.seq h2
   have h4 := sload (fork := fork) (code := CODE) (message := message) (state := state)
     (substate := substate) (memory := hashed message.data) (pc := 37) (key := key message.data)
-    (rest := []) (cold := cold) (gas := gas - 3 - 3 - (30 + 6 * 2 + 0)) hfork (by decide) rfl
+    (rest := []) (cold := cold) (gas := gas - 3 - 3 - (30 + 6 * 2 + 0)) hfork (by code_fact)
+    (by code_fact)
     hcold (by omega)
   -- From here the frame holds the state and the substate that record the read.
   have h5 := push1 (code := CODE) (fork := fork) (message := message)
     (state := readState state message) (substate := readSubstate substate message) (pc := 38)
     (stack := [slotWord state message]) (memory := hashed message.data)
-    (gas := gas - 3 - 3 - (30 + 6 * 2 + 0) - if cold then 2100 else 100) (byte := 0x00) (by decide)
-    rfl rfl (by omega) (by simp [STACK_LIMIT])
+    (gas := gas - 3 - 3 - (30 + 6 * 2 + 0) - if cold then 2100 else 100) (byte := 0x00)
+    (by code_fact)
+    (by code_fact) (by code_fact) (by omega) (by simp [STACK_LIMIT])
   have hm : extendMemory (hashed message.data).size [((0 : U256), (32 : U256))] = ⟨0, 0⟩ := by
     rw [hs]
     decide
@@ -286,7 +237,7 @@ theorem lookup (hfork : .berlin ≤ fork) {cold : Bool}
     (state := readState state message) (substate := readSubstate substate message)
     (memory := hashed message.data) (pc := 40) (start := 0) (value := slotWord state message)
     (rest := []) (gas := gas - 3 - 3 - (30 + 6 * 2 + 0) - (if cold then 2100 else 100) - 3)
-    (by decide) rfl (by rw [hm]; simp only; omega)
+    (by code_fact) (by code_fact) (by rw [hm]; simp only; omega)
   rw [hm, memoryExtend_zero] at h6
   have hs3 : (memoryWrite (hashed message.data) (0 : U256).toNat
       (wordBytes (slotWord state message))).size = 64 := by
@@ -297,14 +248,14 @@ theorem lookup (hfork : .berlin ≤ fork) {cold : Bool}
     (memory := memoryWrite (hashed message.data) (0 : U256).toNat
       (wordBytes (slotWord state message)))
     (gas := gas - 3 - 3 - (30 + 6 * 2 + 0) - (if cold then 2100 else 100) - 3 - (3 + 0))
-    (byte := 0x20) (by decide) rfl rfl (by omega) (by decide)
+    (byte := 0x20) (by code_fact) (by code_fact) (by code_fact) (by omega) (by decide)
   have h8 := push1 (code := CODE) (fork := fork) (message := message)
     (state := readState state message) (substate := readSubstate substate message) (pc := 43)
     (stack := [32])
     (memory := memoryWrite (hashed message.data) (0 : U256).toNat
       (wordBytes (slotWord state message)))
     (gas := gas - 3 - 3 - (30 + 6 * 2 + 0) - (if cold then 2100 else 100) - 3 - (3 + 0) - 3)
-    (byte := 0x00) (by decide) rfl rfl (by omega) (by decide)
+    (byte := 0x00) (by code_fact) (by code_fact) (by code_fact) (by omega) (by decide)
   have hr : extendMemory (memoryWrite (hashed message.data) (0 : U256).toNat
       (wordBytes (slotWord state message))).size [((0 : U256), (32 : U256))] = ⟨0, 0⟩ := by
     rw [hs3]
@@ -314,7 +265,7 @@ theorem lookup (hfork : .berlin ≤ fork) {cold : Bool}
     (memory := memoryWrite (hashed message.data) (0 : U256).toNat
       (wordBytes (slotWord state message))) (pc := 45) (start := 0) (size := 32) (rest := [])
     (gas := gas - 3 - 3 - (30 + 6 * 2 + 0) - (if cold then 2100 else 100) - 3 - (3 + 0) - 3 - 3)
-    (by decide) rfl (by rw [hr]; exact Nat.zero_le _)
+    (by code_fact) (by code_fact) (by rw [hr]; exact Nat.zero_le _)
   rw [hr, memoryExtend_zero] at h9
   have hout : memoryReadBytes (memoryWrite (hashed message.data) (0 : U256).toNat
       (wordBytes (slotWord state message))) (0 : U256).toNat (32 : U256).toNat =
@@ -357,10 +308,11 @@ theorem spec_match (hfork : .berlin ≤ fork) (hprefix : prefixOf message.data =
   rw [heq] at hc
   have hj := jumpi_taken (fork := fork) (code := CODE) (message := message) (state := state)
     (substate := substate) (memory := .empty) (pc := 14) (destination := 0x13) (condition := 1)
-    (rest := []) (gas := gas - 21) (by decide) rfl (by omega) (by decide) (by decide)
+    (rest := []) (gas := gas - 21) (by code_fact) (by code_fact) (by omega) (by decide)
+    (by evm_dest [CODE_eq, CODE_NAT])
   have hd := jumpdest (fork := fork) (code := CODE) (message := message) (state := state)
     (substate := substate) (memory := .empty) (pc := 19) (stack := []) (gas := gas - 21 - 10)
-    (by decide) rfl (by omega)
+    (by code_fact) (by code_fact) (by omega)
   have hcp := copy (fork := fork) (message := message) (state := state) (substate := substate)
     (gas := gas - 21 - 10 - 1) (by omega)
   have hl := lookup (fork := fork) (message := message) (state := state) (substate := substate)
