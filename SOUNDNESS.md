@@ -630,6 +630,10 @@ From Berlin, the rule for SLOAD takes as a hypothesis whether the slot is cold, 
 `SlotOfCalldata.runFrame_match` proves a contract that compares the top four bytes of its call data with a constant, at the forks from Berlin with the one-counter meter.
 On a match, it returns the word of storage at the Keccak-256 hash of two words of its call data, for 122 gas and SLOAD.
 `SlotOfCalldata.runFrame_mismatch` proves that it reverts with no output otherwise, for 37 gas.
+`Hoare.loop` (`Logic/Loop.lean`) proves a loop from an invariant for each value of a natural measure.
+A run of the loop then ends by the measure, not by the gas.
+`SumLoop.runFrame_spec` proves a contract that loops `n` times, for the word `n` of its call data, with the one-counter meter.
+With at least `45 + 55 n` gas, it returns `n (n + 1) / 2` modulo `2^256`.
 
 ### SHA-256 precompile
 
