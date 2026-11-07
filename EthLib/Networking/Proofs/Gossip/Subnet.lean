@@ -107,7 +107,7 @@ theorem computeSubscribedSubnet_exists {index : UInt64}
   have key := fun seed => shuffled (nodeId.toNat >>> (NODE_ID_BITS - b)).toUInt64
     (2 ^ b).toUInt64 seed (by
       rw [UInt64.lt_iff_toNat_lt, toNat_of_lt (by omega), toNat_of_lt below]
-      exact nodePrefix) (by rw [toNat_of_lt below]; exact Nat.le_refl _)
+      exact nodePrefix) (toNat_of_lt below).le
   have bitsFit : ¬64 ≤ b := by omega
   have half : 2 ^ b ≤ 2 ^ 63 := Nat.pow_le_pow_right (by decide) (by omega)
   have shifted := Base.Uint64.addChecked_of_lt (a := epoch)
