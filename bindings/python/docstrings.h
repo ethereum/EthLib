@@ -362,6 +362,9 @@
 #define DOC_consensus_get_validator_signature \
   "The signature of the object of a duty, by a secret key of 32 big-endian bytes."
 
+#define DOC_consensus_get_attestation_data \
+  "The attestation data of an attester, from the head block and the state at its slot, as SSZ."
+
 #define DOC_consensus_get_aggregate_signature \
   "The aggregate of the signatures of attestations, as 96 bytes."
 

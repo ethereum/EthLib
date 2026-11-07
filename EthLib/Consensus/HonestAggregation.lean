@@ -7,6 +7,16 @@ public import EthLib.Consensus.HonestValidator
 
 The vote of an honest attester, and the aggregates that an honest aggregator builds from votes.
 
+An attester builds attestation data from the head block and the state of its slot.
+
+The data votes for the head block, and from the justified checkpoint to the start of the epoch.
+
+Its index is the committee before Electra and zero from Electra, as [EIP-7549] specifies.
+
+From Gloas the index of a vote on a block of an earlier slot says whether its payload is present.
+
+That is the rule of [EIP-7732], and a vote on a block of its own slot keeps index zero.
+
 An attester signs attestation data, and sends its vote on the subnet of its committee.
 
 Before Electra the vote is an attestation, with the one bit of the attester's seat in its committee.
@@ -26,6 +36,7 @@ Its bits mark each seat of its subcommittee whose key signed, and a key can hold
 Its signature holds one signature for each seat it marks.
 
 [EIP-7549]: https://eips.ethereum.org/EIPS/eip-7549#consensus-layer
+[EIP-7732]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7732.md#state-transition
 
 The collection of the votes from the network is not specified here.
 -/
@@ -37,6 +48,72 @@ namespace EthLib.Consensus
 open Base Cryptography.Bls Serialization.Ssz
 
 variable {preset : Preset} {fork : Base.Fork}
+
+/-! ## Attestation data -/
+
+/-- The root of the block at the first slot of the epoch of a state.
+
+At the first slot the head block is that block, and the root of the head block is given.
+
+Otherwise it is the root that the state records for that slot.
+
+It fails when that slot is out of the range of the recorded roots, or a 64-bit operation overflows.
+-/
+def getEpochBoundaryBlockRoot (state : BeaconState preset fork) (headRoot : Root) :
+    Except ValidatorDutyError Root := do
+  let epoch := getCurrentEpoch state
+  let startSlot ← (computeStartSlotAtEpoch preset epoch).mapError .arith
+  if startSlot = state.slot then return headRoot
+  else (getBlockRoot state epoch).mapError .accessor
+
+/-- The index in attestation data, from the fork, the slot of the data and the head block.
+
+Before Electra it is the index of the committee of the attester.
+
+From Electra it is zero, since the attestation names the committee itself.
+
+From Gloas it is zero for a head block of the slot of the data.
+
+For a head block of an earlier slot it is the status of its payload in the fork choice.
+
+It is 0 for an empty payload and 1 for a full one, and it fails for a pending status. -/
+def attestationDataIndex (fork : Base.Fork) (slot headSlot : Slot)
+    (committeeIndex : CommitteeIndex) (payloadStatus : PayloadStatus) :
+    Except ValidatorDutyError CommitteeIndex :=
+  if .glamsterdam ≤ fork then
+    if headSlot = slot then .ok 0
+    else
+      match payloadStatus with
+      | .empty => .ok 0
+      | .full => .ok 1
+      | .pending => .error .pendingPayloadStatus
+  else if .pectra ≤ fork then .ok 0
+  else .ok committeeIndex
+
+/-- The attestation data of an attester, from the head block and the state at its slot.
+
+The guide takes the state of the head block through the empty slots up to the slot of the duty.
+
+So the slot of the data is the slot of the state.
+
+The data votes for the root of the head block, which the fork choice gives.
+
+Its source is the current justified checkpoint of the state.
+
+Its target is the current epoch of the state, at the root of the block at the first slot of it.
+
+The slot of the head block and the status of its payload are read only from Gloas.
+
+It fails when the index fails, or the root of the target fails. -/
+def getAttestationData (state : BeaconState preset fork) (headRoot : Root) (headSlot : Slot)
+    (committeeIndex : CommitteeIndex) (payloadStatus : PayloadStatus) :
+    Except ValidatorDutyError AttestationData := do
+  let index ← attestationDataIndex fork state.slot headSlot committeeIndex payloadStatus
+  let targetRoot ← getEpochBoundaryBlockRoot state headRoot
+  return {
+    slot := state.slot, index, beaconBlockRoot := headRoot
+    source := state.currentJustifiedCheckpoint
+    target := { epoch := getCurrentEpoch state, root := targetRoot } }
 
 /-! ## Attestations -/
 

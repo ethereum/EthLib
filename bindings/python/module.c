@@ -754,6 +754,8 @@ static PyMethodDef methods[] = {
    METH_VARARGS, DOC_consensus_get_upcoming_proposal_slots},
   {"consensus_get_validator_signature", py_consensus_get_validator_signature, METH_VARARGS,
    DOC_consensus_get_validator_signature},
+  {"consensus_get_attestation_data", py_consensus_get_attestation_data, METH_VARARGS,
+   DOC_consensus_get_attestation_data},
   {"consensus_get_aggregate_signature", py_consensus_get_aggregate_signature, METH_VARARGS,
    DOC_consensus_get_aggregate_signature},
   {"consensus_construct_attestation", py_consensus_construct_attestation, METH_VARARGS,

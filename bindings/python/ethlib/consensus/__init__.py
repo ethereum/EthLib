@@ -868,6 +868,21 @@ def get_aggregate_signature(name: str, fork: str, attestations: list) -> bytes:
     return _native.consensus_get_aggregate_signature(name, fork, attestations)
 
 
+def get_attestation_data(
+    name: str,
+    fork: str,
+    state: bytes,
+    head_root: bytes,
+    head_slot: int,
+    committee_index: int,
+    payload_status: int,
+) -> bytes:
+    """The attestation data of an attester from the head block and the state at its slot, as SSZ."""
+    return _native.consensus_get_attestation_data(
+        name, fork, state, head_root, head_slot, committee_index, payload_status
+    )
+
+
 def construct_attestation(
     name: str,
     fork: str,
@@ -1161,6 +1176,7 @@ __all__ = [
     "on_invalidated_payload",
     "is_optimistic_restricted_domain",
     "get_aggregate_signature",
+    "get_attestation_data",
     "construct_attestation",
     "construct_single_attestation",
     "construct_aggregate",

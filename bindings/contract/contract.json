@@ -3125,7 +3125,8 @@
       {"constructor": "noMessages", "code": 9},
       {"constructor": "tooManyBits", "code": 10},
       {"constructor": "bitsLength", "code": 11},
-      {"constructor": "indexOutOfRange", "code": 12}]}],
+      {"constructor": "indexOutOfRange", "code": 12},
+      {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
    "The committee assignment of a validator in an epoch, as JSON.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nIt is `null` without an assignment, or the committee, its index and its slot."},
@@ -3148,7 +3149,8 @@
       {"constructor": "noMessages", "code": 9},
       {"constructor": "tooManyBits", "code": 10},
       {"constructor": "bitsLength", "code": 11},
-      {"constructor": "indexOutOfRange", "code": 12}]}],
+      {"constructor": "indexOutOfRange", "code": 12},
+      {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
    "Whether a validator proposes the block of the slot of a state.\n\nThe preset, the configuration and the fork are named in UTF-8."},
@@ -3172,7 +3174,8 @@
       {"constructor": "noMessages", "code": 9},
       {"constructor": "tooManyBits", "code": 10},
       {"constructor": "bitsLength", "code": 11},
-      {"constructor": "indexOutOfRange", "code": 12}]}],
+      {"constructor": "indexOutOfRange", "code": 12},
+      {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
    "From Altair: whether a validator serves on the sync committee of the period of an epoch.\n\nThe preset, the configuration and the fork are named in UTF-8."},
@@ -3196,7 +3199,8 @@
       {"constructor": "noMessages", "code": 9},
       {"constructor": "tooManyBits", "code": 10},
       {"constructor": "bitsLength", "code": 11},
-      {"constructor": "indexOutOfRange", "code": 12}]}],
+      {"constructor": "indexOutOfRange", "code": 12},
+      {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
    "From Altair: the sync committee subnets of a validator for the next slot, as a JSON list.\n\nThe preset, the configuration and the fork are named in UTF-8."},
@@ -3220,7 +3224,8 @@
       {"constructor": "noMessages", "code": 9},
       {"constructor": "tooManyBits", "code": 10},
       {"constructor": "bitsLength", "code": 11},
-      {"constructor": "indexOutOfRange", "code": 12}]}],
+      {"constructor": "indexOutOfRange", "code": 12},
+      {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
    "From Gloas: the slot of an epoch whose payload timeliness committee holds a validator, as JSON.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nIt is `null` without an assignment, or the slot."},
@@ -3244,7 +3249,8 @@
       {"constructor": "noMessages", "code": 9},
       {"constructor": "tooManyBits", "code": 10},
       {"constructor": "bitsLength", "code": 11},
-      {"constructor": "indexOutOfRange", "code": 12}]}],
+      {"constructor": "indexOutOfRange", "code": 12},
+      {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
    "From Gloas: the slots after the slot of a state that a validator proposes, as a JSON list.\n\nThe preset, the configuration and the fork are named in UTF-8."},
@@ -3268,10 +3274,36 @@
       {"constructor": "noMessages", "code": 9},
       {"constructor": "tooManyBits", "code": 10},
       {"constructor": "bitsLength", "code": 11},
-      {"constructor": "indexOutOfRange", "code": 12}]}],
+      {"constructor": "indexOutOfRange", "code": 12},
+      {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
    "The signature of the object of a duty, by a secret key of 32 big-endian bytes.\n\nThe preset, the configuration, the fork and the duty are named in UTF-8.\n\nThe object comes as SSZ bytes, by duty:\n\n- `randao` and `block`: a block.\n- `attestation`: attestation data.\n- `slot`: a slot.\n- `aggregate_and_proof`: an aggregate and proof.\n- `sync_committee_message`: a block root.\n- `sync_committee_selection_proof`: sync aggregator selection data.\n- `contribution_and_proof`: a contribution and proof.\n- `payload_attestation_message`: a payload attestation message, whose data is signed.\n- `proposer_preferences`: the preferences of a proposer.\n\nThe three duties of the sync committee need Altair; before it they have code 0.\n\nThe payload attestation message needs Gloas; before it, it has code 0.\n\nThe preferences of a proposer take a state of any fork.\n\nTheir domain reads only the root of the genesis validators of the state.\n\nSo a state of the epoch before Gloas can sign them for the first epoch of Gloas."},
+  {"summary":
+   "The attestation data of an attester, from the head block and the state at its slot, as SSZ.",
+   "signature":
+   "(name: str, fork: str, state: bytes, head_root: bytes, head_slot: int, committee_index: int, payload_status: int) -> bytes",
+   "operation": "EthLib.Consensus.Exports.getAttestationDataExport",
+   "method": "consensus_get_attestation_data",
+   "errors":
+   [{"type": "EthLib.Consensus.ValidatorDutyError",
+     "codes":
+     [{"constructor": "accessor", "code": 1},
+      {"constructor": "ssz", "code": 2},
+      {"constructor": "bls", "code": 3},
+      {"constructor": "arith", "code": 4},
+      {"constructor": "epochTooFar", "code": 5},
+      {"constructor": "periodOutOfRange", "code": 6},
+      {"constructor": "forkChoice", "code": 7},
+      {"constructor": "notInCommittee", "code": 8},
+      {"constructor": "noMessages", "code": 9},
+      {"constructor": "tooManyBits", "code": 10},
+      {"constructor": "bitsLength", "code": 11},
+      {"constructor": "indexOutOfRange", "code": 12},
+      {"constructor": "pendingPayloadStatus", "code": 13}]}],
+   "error_class": "ValidatorDutyError",
+   "docstring":
+   "The attestation data of an attester, from the head block and the state at its slot, as SSZ.\n\nThe preset and the fork are named in UTF-8, and the root of the head block comes as 32 bytes.\n\nThe slot of the head block and the status of its payload change the data only from Gloas.\n\nThe code of the status is 0 for empty, 1 for full and 2 for pending.\n\nAny other code has code 0, at every fork."},
   {"summary": "The aggregate of the signatures of attestations, as 96 bytes.",
    "signature": "(name: str, fork: str, attestations: list[bytes]) -> bytes",
    "operation": "EthLib.Consensus.Exports.getAggregateSignatureExport",
@@ -3290,7 +3322,8 @@
       {"constructor": "noMessages", "code": 9},
       {"constructor": "tooManyBits", "code": 10},
       {"constructor": "bitsLength", "code": 11},
-      {"constructor": "indexOutOfRange", "code": 12}]}],
+      {"constructor": "indexOutOfRange", "code": 12},
+      {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
    "The aggregate of the signatures of attestations, as 96 bytes.\n\nThe preset and the fork are named in UTF-8, and each attestation comes as SSZ bytes."},
@@ -3314,7 +3347,8 @@
       {"constructor": "noMessages", "code": 9},
       {"constructor": "tooManyBits", "code": 10},
       {"constructor": "bitsLength", "code": 11},
-      {"constructor": "indexOutOfRange", "code": 12}]}],
+      {"constructor": "indexOutOfRange", "code": 12},
+      {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
    "Before Electra: the attestation of a validator on attestation data, as SSZ bytes.\n\nThe preset, the configuration and the fork are named in UTF-8."},
@@ -3338,7 +3372,8 @@
       {"constructor": "noMessages", "code": 9},
       {"constructor": "tooManyBits", "code": 10},
       {"constructor": "bitsLength", "code": 11},
-      {"constructor": "indexOutOfRange", "code": 12}]}],
+      {"constructor": "indexOutOfRange", "code": 12},
+      {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
    "From Electra: the single attestation of a validator in a committee, as SSZ bytes.\n\nThe preset, the configuration and the fork are named in UTF-8."},
@@ -3362,7 +3397,8 @@
       {"constructor": "noMessages", "code": 9},
       {"constructor": "tooManyBits", "code": 10},
       {"constructor": "bitsLength", "code": 11},
-      {"constructor": "indexOutOfRange", "code": 12}]}],
+      {"constructor": "indexOutOfRange", "code": 12},
+      {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
    "Before Electra: the aggregate of the attestations that vote for attestation data, as SSZ bytes.\n\nThe preset and the fork are named in UTF-8, and each attestation comes as SSZ bytes."},
@@ -3387,7 +3423,8 @@
       {"constructor": "noMessages", "code": 9},
       {"constructor": "tooManyBits", "code": 10},
       {"constructor": "bitsLength", "code": 11},
-      {"constructor": "indexOutOfRange", "code": 12}]}],
+      {"constructor": "indexOutOfRange", "code": 12},
+      {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
    "From Electra: the aggregate of the single attestations of a committee, as SSZ bytes.\n\nThe preset and the fork are named in UTF-8, and each single attestation comes as SSZ bytes."},
@@ -3412,7 +3449,8 @@
       {"constructor": "noMessages", "code": 9},
       {"constructor": "tooManyBits", "code": 10},
       {"constructor": "bitsLength", "code": 11},
-      {"constructor": "indexOutOfRange", "code": 12}]}],
+      {"constructor": "indexOutOfRange", "code": 12},
+      {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
    "From Altair: the contribution of a subcommittee from sync committee messages, as SSZ bytes.\n\nThe preset and the fork are named in UTF-8.\n\nThe sync committee, the block root and each message come as SSZ bytes."},

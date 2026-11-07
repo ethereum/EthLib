@@ -308,6 +308,11 @@ eth_consensus_compute_on_chain_aggregate(
   lean_object* name, lean_object* fork, lean_object* aggregates);
 
 extern lean_object*
+eth_consensus_get_attestation_data(
+  lean_object* name, lean_object* fork, lean_object* state, lean_object* head_root,
+  uint64_t head_slot, uint64_t committee_index, uint64_t payload_status);
+
+extern lean_object*
 eth_consensus_get_aggregate_signature(
   lean_object* name, lean_object* fork, lean_object* attestations);
 
@@ -1824,6 +1829,38 @@ py_consensus_process_sync_committee_contributions(
   if (named_list_args(name_obj, fork_obj, list_obj, "contributions", a) < 0) return NULL;
   return except_into_pybytes(
     eth_consensus_process_sync_committee_contributions(a[0], a[1], a[2]), PROPOSER_ERROR);
+}
+
+PyObject*
+py_consensus_get_attestation_data(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *slot_obj, *committee_obj, *status_obj;
+  const uint8_t *state, *head_root;
+  Py_ssize_t state_len, head_root_len;
+  if (!PyArg_ParseTuple(args, "OOy#y#OOO", &name_obj, &fork_obj, &state, &state_len, &head_root,
+                        &head_root_len, &slot_obj, &committee_obj, &status_obj))
+    return NULL;
+  uint64_t head_slot, committee, status;
+  if (parse_uint64(slot_obj, "head_slot", &head_slot) < 0) return NULL;
+  if (parse_uint64(committee_obj, "committee_index", &committee) < 0) return NULL;
+  if (parse_uint64(status_obj, "payload_status", &status) < 0) return NULL;
+  if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj)) {
+    PyErr_SetString(PyExc_TypeError, "name and fork must be str");
+    return NULL;
+  }
+  lean_object* name = str_arg(name_obj, "name");
+  if (!name) return NULL;
+  lean_object* fork = str_arg(fork_obj, "fork");
+  if (!fork) {
+    lean_dec(name);
+    return NULL;
+  }
+  return except_into_pybytes(
+    eth_consensus_get_attestation_data(name, fork, mk_bytearray(state, state_len),
+      mk_bytearray(head_root, head_root_len), head_slot, committee, status),
+    VALIDATOR_DUTY_ERROR);
 }
 
 PyObject*

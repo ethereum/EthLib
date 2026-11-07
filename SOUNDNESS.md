@@ -1010,14 +1010,28 @@ It checks each payload timeliness assignment and the upcoming proposal slots aga
 
 ### Honest aggregation
 
-`Consensus/HonestAggregation.lean` holds the vote of an honest attester and the aggregates that an honest aggregator builds from votes.
+`Consensus/HonestAggregation.lean` holds the attestation data and the vote of an honest attester, and the aggregates that an honest aggregator builds from votes.
 Before Electra the vote is an attestation with one bit, and from Electra it is a single attestation.
 An aggregator joins the votes of one committee on the same data into one attestation.
 From Altair, a sync aggregator joins the messages on one block root into the contribution of its subcommittee.
 The theorems are in `Consensus/Proofs/HonestAggregation.lean`.
-Each of them assumes only that the construction succeeds, except the theorem on signatures.
+Each of them assumes only that the construction succeeds, except the theorem on signatures and the two that attestation data and the root of its target have a value.
+
+An attester first builds attestation data from the head block and the state at its slot.
+`getAttestationData_eq_ok_iff` states that data: its slot is the slot of the state, it votes for the root of the head block, its source is the current justified checkpoint and its target epoch is the current epoch.
+`getEpochBoundaryBlockRoot_eq_ok_iff` states the root of the target.
+At a slot that the length of an epoch divides, it is the root of the head block, and otherwise the root that the state records for the first slot of the epoch.
+`target_epoch_eq_of_getAttestationData` shows that the target epoch is the epoch of the slot, which the processing of an attestation checks.
+The index follows its fork: the committee index before Electra and zero from Electra (`attestationDataIndex_of_lt_pectra`, `attestationDataIndex_of_pectra_of_lt_glamsterdam`).
+From Gloas it is zero for a head block of the slot, and otherwise 0 or 1 for an empty or a full payload, while a pending status fails (`attestationDataIndex_of_glamsterdam_of_eq`, `attestationDataIndex_of_glamsterdam_of_ne`).
+`isValidDataIndex_of_attestationDataIndex` shows that from Electra the index passes the check of the index of a vote.
+`exists_getAttestationData_eq_ok_iff` shows that the data has a value unless that index fails.
+It assumes that the length of an epoch is positive and at most the number of recorded roots, and that the slot plus that number fits in 64 bits.
+The data takes the head block and the status of its payload as arguments, since the fork choice computes them.
+The slot of the data is the slot of the state, so the caller passes the state of the head block processed up to the slot of the duty, as the guide does.
 
 `getAttestingIndices_constructAttestation` shows that the attestation of a validator has that validator as its only attester.
+Before Electra, `getAttestingIndices_constructAttestation_getAttestationData` composes it with the data: the attestation names the committee of the slot at the index given, which holds the validator.
 `mem_getAttestingIndices_constructAggregate` shows that the attesters of an aggregate are the attesters of its attestations with the same data.
 From Electra, `mem_getAttestingIndices_constructAggregateOfSingleAttestations` shows that the attesters of an aggregate are the attesters of its single attestations with the same data and committee.
 `getCommitteeIndices_constructAggregateOfSingleAttestations` shows that the committee bits of that aggregate name its one committee.
@@ -1369,12 +1383,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 283 operations and 41 size constants.
-The Python extension calls 283 of the operations and 41 of the constants.
+Lean exports 284 operations and 41 size constants.
+The Python extension calls 284 of the operations and 41 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-9526 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (2491), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1177), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (512), `xmss.c` (134).
+9566 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (2528), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1179), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (513), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

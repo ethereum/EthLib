@@ -2,12 +2,30 @@ module
 
 public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
+public import EthLib.Consensus.Gossip.Attestation
 public import EthLib.Consensus.HonestAggregation
 public import EthLib.Consensus.Proofs.Accessors
+public import EthLib.Consensus.Proofs.Time
 public import EthLib.Cryptography.Proofs.Bls.SignaturesCorrect
 
 /-!
 # Proofs: the votes of an honest attester and their aggregates
+
+Attestation data votes for the head block, and its source is the current justified checkpoint.
+
+Its target epoch is the current epoch, which is the epoch of its slot.
+
+Its target root is the root that the state records for the first slot of that epoch.
+
+At that first slot itself, it is the root of the head block.
+
+Its index follows the rule of its fork, which from Electra passes the check of the index of a vote.
+
+It has a value unless, from Gloas, a head block of an earlier slot has a pending payload status.
+
+That holds when the length of an epoch is positive and at most the number of recorded roots.
+
+The slot of the state plus that number must also fit in 64 bits.
 
 Under the pairing laws, honest signatures on one message aggregate to a signature that verifies.
 
@@ -28,9 +46,216 @@ The contribution of a sync subcommittee sets the bit of each seat whose key sign
 
 namespace EthLib.Consensus
 
-open Base Cryptography.Bls Serialization.Ssz
+open Base Uint64 Cryptography.Bls Serialization.Ssz
 
 variable {preset : Preset} {fork : Base.Fork}
+
+/-! ## Attestation data -/
+
+/-- The first slot of the epoch of a slot is that slot when the length of an epoch divides it. -/
+theorem div_mul_eq_self_iff {slot length : UInt64} :
+    slot / length * length = slot ↔ slot % length = 0 := by
+  -- The product is at most the slot, so it does not wrap around.
+  have product : (slot / length * length).toNat = slot.toNat / length.toNat * length.toNat := by
+    rw [UInt64.toNat_mul, UInt64.toNat_div,
+      Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt (Nat.div_mul_le_self _ _) slot.toNat_lt)]
+  rw [← UInt64.toNat_inj, product, ← UInt64.toNat_inj, UInt64.toNat_mod, UInt64.toNat_zero]
+  constructor
+  · intro whole
+    have split := Nat.mod_add_div slot.toNat length.toNat
+    rw [Nat.mul_comm, whole] at split
+    omega
+  · intro divides
+    exact Nat.div_mul_cancel (Nat.dvd_of_mod_eq_zero divides)
+
+/-- The root of the block at the start of the epoch.
+
+At a slot that the length of an epoch divides, it is the root of the head block.
+
+At any other slot, it is the root that the state records for the first slot of the epoch. -/
+theorem getEpochBoundaryBlockRoot_eq_ok_iff {state : BeaconState preset fork}
+    {headRoot root : Root} :
+    getEpochBoundaryBlockRoot state headRoot = .ok root ↔
+      (state.slot % preset.SLOTS_PER_EPOCH = 0 ∧ root = headRoot) ∨
+        (state.slot % preset.SLOTS_PER_EPOCH ≠ 0 ∧
+          getBlockRoot state (getCurrentEpoch state) = .ok root) := by
+  unfold getEpochBoundaryBlockRoot
+  dsimp only
+  rw [getCurrentEpoch, computeStartSlotAtEpoch_computeEpochAtSlot]
+  simp only [Except.mapError, bind, Except.bind, div_mul_eq_self_iff]
+  by_cases first : state.slot % preset.SLOTS_PER_EPOCH = 0
+  · simp [first, pure, Except.pure, eq_comm]
+  · simp only [first, ↓reduceIte, false_and, false_or]
+    cases getBlockRoot state (computeEpochAtSlot preset state.slot) <;> simp [first]
+
+/-- The root of the block at the start of the epoch has a value.
+
+The length of an epoch must be positive and at most the number of recorded roots.
+
+The slot of the state plus the number of recorded roots must fit in 64 bits. -/
+theorem getEpochBoundaryBlockRoot_ok {state : BeaconState preset fork} {headRoot : Root}
+    (positive : 0 < preset.SLOTS_PER_EPOCH)
+    (covered : preset.SLOTS_PER_EPOCH ≤ preset.SLOTS_PER_HISTORICAL_ROOT)
+    (fits : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat < 2 ^ 64) :
+    ∃ root, getEpochBoundaryBlockRoot state headRoot = .ok root := by
+  by_cases first : state.slot % preset.SLOTS_PER_EPOCH = 0
+  · exact ⟨headRoot, getEpochBoundaryBlockRoot_eq_ok_iff.mpr (.inl ⟨first, rfl⟩)⟩
+  -- The first slot of the epoch is before the slot of the state, by less than an epoch.
+  have start := computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) state.slot
+  obtain ⟨atMost, within⟩ := computeStartSlotAtEpoch_le_lt positive start
+  have before : (state.slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH).toNat <
+      state.slot.toNat := by
+    refine Nat.lt_of_le_of_ne atMost fun same => first ?_
+    exact div_mul_eq_self_iff.mp (UInt64.toNat_inj.mp same)
+  have covered := UInt64.le_iff_toNat_le.mp covered
+  have nonzero : preset.SLOTS_PER_HISTORICAL_ROOT ≠ 0 := by
+    intro zero
+    have := UInt64.lt_iff_toNat_lt.mp positive
+    simp [zero] at covered
+    omega
+  -- The first slot plus the number of recorded roots fits in 64 bits, and reaches the slot.
+  have sum : (state.slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH +
+      preset.SLOTS_PER_HISTORICAL_ROOT).toNat =
+        (state.slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH).toNat +
+          preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
+    rw [UInt64.toNat_add, Nat.mod_eq_of_lt (by omega)]
+  have lastOk := addChecked_ok_iff.mpr ⟨by omega, sum⟩
+  have lower := UInt64.lt_iff_toNat_lt.mpr before
+  have upper : state.slot ≤ state.slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH +
+      preset.SLOTS_PER_HISTORICAL_ROOT := UInt64.le_iff_toNat_le.mpr (by omega)
+  obtain ⟨root, rooted⟩ : ∃ root, getBlockRoot state (getCurrentEpoch state) = .ok root := by
+    unfold getBlockRoot getBlockRootAtSlot
+    simp only [getCurrentEpoch, start, liftArith, Except.mapError, bind, Except.bind, lastOk,
+      lower, upper, ↓reduceIte]
+    simp [readCircular, nonzero]
+  exact ⟨root, getEpochBoundaryBlockRoot_eq_ok_iff.mpr (.inr ⟨first, rooted⟩)⟩
+
+/-- The index in attestation data before Electra is the index of the committee. -/
+theorem attestationDataIndex_of_lt_pectra {slot headSlot : Slot}
+    {committeeIndex : CommitteeIndex} {payloadStatus : PayloadStatus} (before : fork < .pectra) :
+    attestationDataIndex fork slot headSlot committeeIndex payloadStatus = .ok committeeIndex := by
+  have notElectra : ¬ .pectra ≤ fork := Nat.not_le_of_lt before
+  have notGloas : ¬ .glamsterdam ≤ fork := fun gloas => notElectra (Nat.le_trans (by decide) gloas)
+  simp [attestationDataIndex, notGloas, notElectra]
+
+/-- The index in attestation data from Electra and before Gloas is zero. -/
+theorem attestationDataIndex_of_pectra_of_lt_glamsterdam {slot headSlot : Slot}
+    {committeeIndex : CommitteeIndex} {payloadStatus : PayloadStatus} (electra : .pectra ≤ fork)
+    (before : fork < .glamsterdam) :
+    attestationDataIndex fork slot headSlot committeeIndex payloadStatus = .ok 0 := by
+  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  simp [attestationDataIndex, notGloas, electra]
+
+/-- From Gloas, the index in attestation data whose head block is of its slot is zero. -/
+theorem attestationDataIndex_of_glamsterdam_of_eq {slot headSlot : Slot}
+    {committeeIndex : CommitteeIndex} {payloadStatus : PayloadStatus} (gloas : .glamsterdam ≤ fork)
+    (same : headSlot = slot) :
+    attestationDataIndex fork slot headSlot committeeIndex payloadStatus = .ok 0 := by
+  simp [attestationDataIndex, gloas, same]
+
+/-- From Gloas, the index for a head block of an earlier slot is the status of its payload.
+
+It is 0 for an empty payload and 1 for a full one, and a pending status fails. -/
+theorem attestationDataIndex_of_glamsterdam_of_ne {slot headSlot : Slot}
+    {committeeIndex : CommitteeIndex} {payloadStatus : PayloadStatus} (gloas : .glamsterdam ≤ fork)
+    (earlier : headSlot ≠ slot) :
+    attestationDataIndex fork slot headSlot committeeIndex payloadStatus =
+      match payloadStatus with
+      | .empty => .ok 0
+      | .full => .ok 1
+      | .pending => .error .pendingPayloadStatus := by
+  cases payloadStatus <;> simp [attestationDataIndex, gloas, earlier]
+
+/-- From Electra, the index in attestation data passes the check of the index of a vote. -/
+theorem isValidDataIndex_of_attestationDataIndex {slot headSlot : Slot}
+    {committeeIndex index : CommitteeIndex} {payloadStatus : PayloadStatus}
+    (electra : .pectra ≤ fork)
+    (indexed : attestationDataIndex fork slot headSlot committeeIndex payloadStatus = .ok index) :
+    isValidDataIndex fork index = true := by
+  unfold attestationDataIndex at indexed
+  unfold isValidDataIndex
+  by_cases gloas : Fork.glamsterdam ≤ fork
+  · simp only [gloas, ↓reduceIte] at indexed ⊢
+    split at indexed
+    · cases indexed
+      decide
+    · split at indexed <;> cases indexed <;> decide
+  · simp only [gloas, electra, ↓reduceIte, Except.ok.injEq] at indexed ⊢
+    simp [← indexed]
+
+/-- From Electra, the index in attestation data whose head block is of its slot is zero. -/
+theorem eq_zero_of_attestationDataIndex_of_eq {slot headSlot : Slot}
+    {committeeIndex index : CommitteeIndex} {payloadStatus : PayloadStatus}
+    (electra : .pectra ≤ fork)
+    (indexed : attestationDataIndex fork slot headSlot committeeIndex payloadStatus = .ok index)
+    (same : headSlot = slot) : index = 0 := by
+  subst same
+  unfold attestationDataIndex at indexed
+  by_cases gloas : Fork.glamsterdam ≤ fork <;>
+    simp [gloas, electra] at indexed <;> exact indexed.symm
+
+/-- The attestation data of an attester, from what it is built of.
+
+Its index and the root of its target are those of their rules.
+
+Its slot is the slot of the state, and it votes for the head block.
+
+Its source is the current justified checkpoint, and its target epoch is the current epoch. -/
+theorem getAttestationData_eq_ok_iff {state : BeaconState preset fork} {headRoot : Root}
+    {headSlot : Slot} {committeeIndex : CommitteeIndex} {payloadStatus : PayloadStatus}
+    {data : AttestationData} :
+    getAttestationData state headRoot headSlot committeeIndex payloadStatus = .ok data ↔
+      attestationDataIndex fork state.slot headSlot committeeIndex payloadStatus =
+          .ok data.index ∧
+        getEpochBoundaryBlockRoot state headRoot = .ok data.target.root ∧
+        data.slot = state.slot ∧ data.beaconBlockRoot = headRoot ∧
+        data.source = state.currentJustifiedCheckpoint ∧
+        data.target.epoch = getCurrentEpoch state := by
+  unfold getAttestationData
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq]
+  constructor
+  · rintro ⟨index, indexed, root, rooted, rfl⟩
+    exact ⟨indexed, rooted, rfl, rfl, rfl, rfl⟩
+  · rintro ⟨indexed, rooted, slot, block, source, epoch⟩
+    refine ⟨_, indexed, _, rooted, ?_⟩
+    rcases data with ⟨_, _, _, _, ⟨_, _⟩⟩
+    simp_all
+
+/-- The target epoch of attestation data is the epoch of its slot, as processing checks. -/
+theorem target_epoch_eq_of_getAttestationData {state : BeaconState preset fork}
+    {headRoot : Root} {headSlot : Slot} {committeeIndex : CommitteeIndex}
+    {payloadStatus : PayloadStatus} {data : AttestationData}
+    (made : getAttestationData state headRoot headSlot committeeIndex payloadStatus = .ok data) :
+    data.target.epoch = computeEpochAtSlot preset data.slot := by
+  obtain ⟨-, -, slot, -, -, epoch⟩ := getAttestationData_eq_ok_iff.mp made
+  rw [epoch, slot, getCurrentEpoch]
+
+/-- The attestation data of an attester has a value, unless its index fails.
+
+The index fails only from Gloas, for a head block of an earlier slot with a pending status.
+
+The length of an epoch must be positive and at most the number of recorded roots.
+
+The slot of the state plus the number of recorded roots must fit in 64 bits. -/
+theorem exists_getAttestationData_eq_ok_iff {state : BeaconState preset fork} {headRoot : Root}
+    {headSlot : Slot} {committeeIndex : CommitteeIndex} {payloadStatus : PayloadStatus}
+    (positive : 0 < preset.SLOTS_PER_EPOCH)
+    (covered : preset.SLOTS_PER_EPOCH ≤ preset.SLOTS_PER_HISTORICAL_ROOT)
+    (fits : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat < 2 ^ 64) :
+    (∃ data, getAttestationData state headRoot headSlot committeeIndex payloadStatus = .ok data) ↔
+      ¬ (.glamsterdam ≤ fork ∧ headSlot ≠ state.slot ∧ payloadStatus = .pending) := by
+  obtain ⟨root, rooted⟩ := getEpochBoundaryBlockRoot_ok (headRoot := headRoot) positive covered fits
+  simp only [getAttestationData, bind_ok_iff, rooted, pure, Except.pure, Except.ok.injEq]
+  unfold attestationDataIndex
+  split
+  · rename_i gloas
+    split
+    · rename_i same
+      simp [same]
+    · rename_i earlier
+      cases payloadStatus <;> simp [gloas, earlier]
+  · rename_i notGloas
+    split <;> simp [notGloas]
 
 /-! ## Signatures -/
 
@@ -180,6 +405,32 @@ theorem getAttestingIndices_constructAttestation {config : Config}
     exact getElem_idxOf seated
   · rintro rfl
     exact ⟨_, seated, getElem_idxOf seated, by simp [seated]⟩
+
+/-- Before Electra, the attestation of a validator on its attestation data.
+
+The data names the committee of the slot of the state at the index given.
+
+That committee holds the validator.
+
+The attestation shows that validator as its only attester. -/
+theorem getAttestingIndices_constructAttestation_getAttestationData {config : Config}
+    {state : BeaconState preset fork} {before : fork < .pectra} {headRoot : Root}
+    {headSlot : Slot} {committeeIndex : CommitteeIndex} {payloadStatus : PayloadStatus}
+    {data : AttestationData} {validatorIndex : ValidatorIndex} {key : Signatures.SecretKey}
+    {attestation : Attestation preset fork}
+    (made : getAttestationData state headRoot headSlot committeeIndex payloadStatus = .ok data)
+    (built : constructAttestation config state before data validatorIndex key = .ok attestation) :
+    attestation.data = data ∧
+      (∃ committee, getBeaconCommittee state state.slot committeeIndex = .ok committee ∧
+        validatorIndex ∈ committee) ∧
+      getAttestingIndices state attestation = .ok [validatorIndex] := by
+  obtain ⟨indexed, -, slot, -⟩ := getAttestationData_eq_ok_iff.mp made
+  rw [attestationDataIndex_of_lt_pectra before, Except.ok.injEq] at indexed
+  obtain ⟨committee, committeeOk, seated, -, sameData, -⟩ := constructAttestation_spec built
+  refine ⟨sameData, ⟨committee, ?_, ?_⟩, getAttestingIndices_constructAttestation built⟩
+  · rwa [slot, ← indexed] at committeeOk
+  · rw [← getElem_idxOf seated]
+    exact Array.getElem_mem seated
 
 /-- Before Electra, the attesters of an attestation whose bits have the size of its committee.
 

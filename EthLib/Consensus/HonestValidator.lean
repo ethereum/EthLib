@@ -87,6 +87,8 @@ inductive ValidatorDutyError where
   | bitsLength (count expected : Nat)
   /-- A committee or a subcommittee index is not below the number of them. -/
   | indexOutOfRange (index limit : UInt64)
+  /-- From Gloas, a vote on a block of an earlier slot is given no empty or full payload status. -/
+  | pendingPayloadStatus
 
 /-- The code of an error at the C boundary, one for each constructor. -/
 def ValidatorDutyError.code : ValidatorDutyError → UInt32
@@ -102,6 +104,7 @@ def ValidatorDutyError.code : ValidatorDutyError → UInt32
   | .tooManyBits .. => 10
   | .bitsLength .. => 11
   | .indexOutOfRange .. => 12
+  | .pendingPayloadStatus => 13
 
 /-! ## Assignments -/
 
