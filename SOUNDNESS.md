@@ -868,6 +868,10 @@ The signature theorems assume `SignatureChecks.AggregateSound`, listed in A4.
 Under it, `validateLightClientUpdate_signed` shows that every member whose bit is set signed the signing root.
 `validateLightClientUpdate_signed_outside` adds that a set of keys holding fewer seats of the committee than there are signers leaves a signer outside the set.
 `SignatureChecks.not_aggregateSound_acceptAll` shows that the assumption has content: the checks that accept every signature do not meet it.
+The store itself only moves forward.
+`applyLightClientUpdate_slots`, `processLightClientUpdate_slots` and `processLightClientStoreForceUpdate_slots` show that the finalized and optimistic slots never decrease.
+They also show that a finalized slot at or below the optimistic slot stays there.
+`initializeLightClientStore_headers` shows that a new store starts with one header for both, so every store that a client reaches keeps that order.
 No theorem links an honest signer to the canonical chain; that is a property of the validators, not of the protocol text.
 
 ### Casper FFG
