@@ -87,7 +87,7 @@ def test_aggregate_signature_rejected(attestations: list):
 
 
 def test_aggregate_signature_of_an_attestation_that_does_not_decode():
-    with raises(DUTY_ERROR, "input rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 0 228"):
+    with raises(DUTY_ERROR, "input rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 228 0"):
         consensus.get_aggregate_signature("mainnet", "phase0", [b""])
 
 
@@ -183,20 +183,16 @@ def test_no_aggregate_of_attestations_from_electra():
     assert info.value.code == 0
 
 
-@pytest.mark.parametrize(
-    ("state", "data", "message"),
-    [
-        (b"", DATA, "input rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 0 2687377"),
-        (None, DATA[:127], "input rejected: EthLib.Serialization.Ssz.Err.scope 128 127"),
-    ],
-    ids=["state", "data"],
-)
-def test_aggregate_of_attestations_with_an_input_that_does_not_decode(
-    state: bytes | None, data: bytes, message: str
-):
-    state = phase0_state(COUNT, SLOT) if state is None else state
-    with raises(DUTY_ERROR, message):
-        consensus.construct_aggregate("mainnet", "phase0", state, data, [])
+def test_aggregate_of_attestations_with_a_state_that_does_not_decode():
+    with raises(DUTY_ERROR, "input rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 2687377 0"):
+        consensus.construct_aggregate("mainnet", "phase0", b"", DATA, [])
+
+
+def test_aggregate_of_attestations_with_data_that_does_not_decode():
+    with raises(DUTY_ERROR, "input rejected: EthLib.Serialization.Ssz.Err.scope 128 127"):
+        consensus.construct_aggregate(
+            "mainnet", "phase0", phase0_state(COUNT, SLOT), DATA[:127], []
+        )
 
 
 # ---- Single attestations and their aggregate -----------------------------------------------------
@@ -414,4 +410,35 @@ def test_sync_committee_contribution_with_an_input_that_does_not_decode(
     with raises(DUTY_ERROR, message):
         consensus.construct_sync_committee_contribution(
             "mainnet", "altair", altair_state(COUNT, SLOT), committee, root, 1, messages
+        )
+
+
+# ---- Inputs that do not decode, for each export that reads a state and data ----------------------
+
+BAD_DATA = "input rejected: EthLib.Serialization.Ssz.Err.scope 128 127"
+
+
+def test_attestation_with_inputs_that_do_not_decode():
+    state = phase0_state(COUNT, SLOT)
+    with raises(DUTY_ERROR, "input rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 2687377 0"):
+        consensus.construct_attestation("mainnet", "phase0", b"", DATA, 0, SECRET_KEY)
+    with raises(DUTY_ERROR, BAD_DATA):
+        consensus.construct_attestation("mainnet", "phase0", state, DATA[:127], 0, SECRET_KEY)
+
+
+def test_single_attestation_with_inputs_that_do_not_decode(pectra: bytes):
+    with raises(DUTY_ERROR, BAD_DATA):
+        consensus.construct_single_attestation(
+            "mainnet", "pectra", pectra, DATA[:127], 0, 0, SECRET_KEY
+        )
+    with raises(DUTY_ERROR, BAD_DATA):
+        consensus.construct_aggregate_of_single_attestations(
+            "mainnet", "pectra", pectra, DATA[:127], 0, []
+        )
+
+
+def test_sync_committee_contribution_with_a_state_that_does_not_decode():
+    with raises(DUTY_ERROR, "input rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 2736629 0"):
+        consensus.construct_sync_committee_contribution(
+            "mainnet", "altair", b"", MIXED, ROOT, 1, []
         )
