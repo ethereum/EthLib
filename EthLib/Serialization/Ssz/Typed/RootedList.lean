@@ -32,6 +32,8 @@ An append past the last tree opens a new one.
 
 The root folds the tops of the trees along the spine, then mixes in the length.
 
+A decoded list builds its trees on the first read of the root or the first write.
+
 A list of basic elements packs them into shared leaves, several to a leaf.
 -/
 
@@ -218,23 +220,29 @@ structure RootedForkList (switch fork : Fork) (α : Type) [SszType α] (limit : 
   /-- Before the switch, the count stays within the limit. -/
   bound : fork < switch → data.size ≤ limit
   /-- Before the switch, the levels of the tree, from the leaves up to the top node. -/
-  levels : List (Array Bytes)
+  levels : Deferred (List (Array Bytes))
   /-- The levels are those of the tree over the leaves of the elements. -/
-  built : levels = forkListLevels switch fork (sequenceLeaves data)
+  built : levels.get = forkListLevels switch fork (sequenceLeaves data)
   /-- From the switch on, the levels of each tree on the spine, in spine order. -/
-  spine : List (List (Array Bytes))
+  spine : Deferred (List (List (Array Bytes)))
   /-- The spine trees are those over the leaves of the elements. -/
-  spineBuilt : spine = forkListSpine switch fork (sequenceLeaves data)
+  spineBuilt : spine.get = forkListSpine switch fork (sequenceLeaves data)
 
 namespace RootedForkList
 
 variable {switch fork : Fork} {α : Type} [SszType α] {limit : Nat}
 
-/-- A list with the levels of its trees, built from the leaves up. -/
+/-- A list with the levels of its trees, built from the leaves up on their first read. -/
 def ofData (data : Array α) (bound : fork < switch → data.size ≤ limit) :
     RootedForkList switch fork α limit :=
-  let leaves := sequenceLeaves data
-  ⟨data, bound, forkListLevels switch fork leaves, rfl, forkListSpine switch fork leaves, rfl⟩
+  -- Only one of the two holds trees, so only that one is built.
+  ⟨data, bound,
+    if fork < switch then .later fun _ => forkListLevels switch fork (sequenceLeaves data)
+    else .now [], by
+    split <;> simp_all [forkListLevels],
+    if fork < switch then .now []
+    else .later fun _ => forkListSpine switch fork (sequenceLeaves data), by
+    split <;> simp_all [forkListSpine]⟩
 
 /-- The fork-chosen list with the same elements, without its tree. -/
 def toForkList (l : RootedForkList switch fork α limit) : ForkList switch fork α limit :=
@@ -248,8 +256,8 @@ def ofForkList (l : ForkList switch fork α limit) : RootedForkList switch fork 
 def set (l : RootedForkList switch fork α limit) (index : Nat) (a : α)
     (inside : index < l.data.size := by get_elem_tactic) : RootedForkList switch fork α limit :=
   -- Read the trees before the write, so that the write finds the elements unshared.
-  let levels := l.levels
-  let spine := l.spine
+  let levels := l.levels.get
+  let spine := l.spine.get
   let data := l.data.set index a inside
   let node := leafNode data index a
   -- Only one of the two holds trees: the levels before the switch, the spine from it on.
@@ -260,15 +268,15 @@ def set (l : RootedForkList switch fork α limit) (index : Nat) (a : α)
     intro other differ
     simp [data, Ne.symm differ]
   ⟨data, by simpa [data] using l.bound,
-    if before then updateLevels 0 (leafIndex α index) node levels else levels, by
-    simp only [levels, before]
+    .now (if before then updateLevels 0 (leafIndex α index) node levels else levels), by
+    simp only [levels, before, Deferred.get_now]
     rw [l.built, forkListLevels, forkListLevels]
     split
     · rw [size_sequenceLeaves, size_sequenceLeaves, Array.size_set,
         updateLevels_buildLevels _ 0 _ (leafIndex_le (by omega)), leaves]
     · rfl,
-    if before then spine else spineWrite 0 (leafIndex α index) node spine, by
-    simp only [spine, before]
+    .now (if before then spine else spineWrite 0 (leafIndex α index) node spine), by
+    simp only [spine, before, Deferred.get_now]
     rw [l.spineBuilt, forkListSpine, forkListSpine]
     split
     · rfl
@@ -286,9 +294,9 @@ def push (l : RootedForkList switch fork α limit) (a : α)
     (room : fork < switch → l.data.size < limit) : RootedForkList switch fork α limit :=
   let size := l.data.size
   let depth := depthFor (leafCount α size)
-  let levels := l.levels
-  let spine := l.spine
   -- Every read of the old list comes first, so that the append finds the elements unshared.
+  let levels := l.levels.get
+  let spine := l.spine.get
   let data := l.data.push a
   let node := leafNode data size a
   -- Only one of the two holds trees: the levels before the switch, the spine from it on.
@@ -299,19 +307,19 @@ def push (l : RootedForkList switch fork α limit) (a : α)
     intro other differ
     simp only [data, Array.getElem?_push, ite_eq_right differ]
   ⟨data, fun early => by simpa [data] using Nat.succ_le_of_lt (room early),
-    if before then updateLevels 0 (leafIndex α size) node
+    .now (if before then updateLevels 0 (leafIndex α size) node
       (raiseLevels depth levels (depthFor (leafCount α (size + 1)) - depth))
-    else levels, by
+    else levels), by
     have grows := depthFor_le_depthFor (leafCount_le_succ α l.data.size)
-    simp only [levels, depth, size, before]
+    simp only [levels, depth, size, before, Deferred.get_now]
     rw [l.built, forkListLevels, forkListLevels]
     split
     · rw [size_sequenceLeaves, size_sequenceLeaves, Array.size_push,
         raiseLevels_buildLevels_leaves, Nat.add_sub_cancel' grows,
         updateLevels_buildLevels _ 0 _ (leafIndex_le (Nat.le_refl _)), leaves]
     · rfl,
-    if before then spine else spineWrite 0 (leafIndex α size) node spine, by
-    simp only [spine, before]
+    .now (if before then spine else spineWrite 0 (leafIndex α size) node spine), by
+    simp only [spine, before, Deferred.get_now]
     rw [l.spineBuilt, forkListSpine, forkListSpine]
     split
     · rfl
@@ -320,10 +328,14 @@ def push (l : RootedForkList switch fork α limit) (a : α)
 
 /-- Two rooted lists with the same elements are the same, since the elements fix the trees. -/
 theorem ext {l m : RootedForkList switch fork α limit} (same : l.data = m.data) : l = m := by
-  cases l
-  cases m
-  subst same
-  simp_all
+  cases l with
+  | mk data bound levels built spine spineBuilt =>
+    cases m with
+    | mk _ _ levels' built' spine' spineBuilt' =>
+      subst same
+      cases Deferred.ext (built.trans built'.symm)
+      cases Deferred.ext (spineBuilt.trans spineBuilt'.symm)
+      rfl
 
 instance [DecidableEq α] : DecidableEq (RootedForkList switch fork α limit) := fun l m =>
   if same : l.data = m.data then isTrue (ext same)
@@ -351,8 +363,8 @@ instance {switch fork : Fork} {α : Type} [SszType α] {limit : Nat} :
     if fork < switch then
       let depth := depthFor (leafCount α l.data.size)
       let full := depthFor (leafCapacity α limit)
-      .ok (mixIn (topOfLevels full (raiseLevels depth l.levels (full - depth)))
+      .ok (mixIn (topOfLevels full (raiseLevels depth l.levels.get (full - depth)))
         (lengthWord l.data.size))
-    else .ok (mixIn (spineRoot 0 l.spine) (lengthWord l.data.size))
+    else .ok (mixIn (spineRoot 0 l.spine.get) (lengthWord l.data.size))
 
 end EthLib.Serialization.Ssz
