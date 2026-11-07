@@ -101,7 +101,9 @@ def readWhoareyou (nodeIdA : NodeId) (bytes : ByteArray) : Except SessionError C
   let challengeData ← packet.messageAd.mapError .packet
   return ⟨packet.header.nonce, idNonce, enrSeq, challengeData⟩
 
-/-- An ordinary message packet from node A to node B, encrypted under a session key. -/
+/-- An ordinary message packet from node A to node B, encrypted under a session key.
+
+It fails when the packet would exceed 1280 bytes. -/
 def sealMessage (key : Aes.Key .aes128) (nodeIdA nodeIdB : NodeId) (maskingIv : Vector UInt8 16)
     (nonce : Vector UInt8 12) (plaintext : ByteArray) : Except SessionError ByteArray := do
   let header : Header := ⟨nonce, .message nodeIdA⟩

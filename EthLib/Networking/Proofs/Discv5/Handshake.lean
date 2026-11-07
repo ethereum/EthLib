@@ -22,9 +22,7 @@ The theorem on step 4 assumes only that step 3 succeeded.
 
 That success already holds the key agreement, the key derivation and the ID signature.
 
-The theorem on the packet also assumes that the packet has at most 1280 bytes.
-
-The decoder rejects a larger packet.
+The sealing fails on a packet of more than 1280 bytes, which the decoder rejects.
 -/
 
 @[expose] public section
@@ -127,7 +125,7 @@ theorem toArray_sessionKey_of_deriveKeys {secret challengeData : ByteArray}
   subst hk
   exact ⟨toArray_sessionKey hi, toArray_sessionKey hr⟩
 
-/-- Node B reads node A's handshake message packet back, of at most 1280 bytes.
+/-- Node B reads node A's handshake message packet back.
 
 It gets the node ID and the record of node A, the plaintext, and the session keys of node A.
 
@@ -138,8 +136,7 @@ theorem openHandshake_sealHandshake {e a b : Fn} {challengeData : ByteArray}
     {nodeIdA nodeIdB : NodeId} {maskingIv : Vector UInt8 16} {nonce : Vector UInt8 12}
     {record plaintext bytes : ByteArray} {keys : SessionKeys}
     (h : sealHandshake e a challengeData nodeIdA nodeIdB (mul b generator) maskingIv nonce record
-      plaintext = .ok (bytes, keys))
-    (hmax : bytes.size ≤ MAX_PACKET_SIZE) :
+      plaintext = .ok (bytes, keys)) :
     openHandshake b challengeData nodeIdB (mul a generator) bytes =
       .ok ⟨nodeIdA, record, plaintext, keys⟩ := by
   unfold sealHandshake at h
@@ -176,7 +173,7 @@ theorem openHandshake_sealHandshake {e a b : Fn} {challengeData : ByteArray}
             unfold MIN_PACKET_SIZE
             omega
           -- The packet decodes back, since its flag is 2 and not that of WHOAREYOU.
-          have hdec := Packet.decode_encode hb hmin hmax (by
+          have hdec := Packet.decode_encode hb hmin (by
             intro hflag
             rw [← hheader] at hflag
             simp [Authdata.flag] at hflag)

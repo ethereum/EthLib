@@ -180,10 +180,15 @@ def mask (destId : NodeId) (maskingIv : Vector UInt8 16) (data : List UInt8) : L
 
 /-- The bytes of a packet for a destination node.
 
-It fails when a field is too long for its size field. -/
+It fails when a field is too long for its size field.
+
+It fails with the size when the packet has more than 1280 bytes, which the decoder rejects. -/
 def Packet.encode (destId : NodeId) (p : Packet) : Except PacketError ByteArray := do
   let header ← p.header.encode
-  return ⟨(p.maskingIv.toList ++ mask destId p.maskingIv header ++ p.message.data.toList).toArray⟩
+  let bytes : ByteArray :=
+    ⟨(p.maskingIv.toList ++ mask destId p.maskingIv header ++ p.message.data.toList).toArray⟩
+  if MAX_PACKET_SIZE < bytes.size then throw (.size bytes.size)
+  return bytes
 
 /-- The packet that a destination node reads from bytes.
 
