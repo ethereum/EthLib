@@ -25,6 +25,8 @@ The boost applies after a parent older than the previous slot, and after a paren
 
 The head has no child among the viable nodes, so the walk stops only at a leaf.
 
+Before Gloas, the head descends from the justified block.
+
 A viable node with children has a viable child, so from Gloas the head is never a pending node.
 
 From Gloas, let a block of the previous slot have a verified payload and both its nodes viable.
@@ -516,6 +518,92 @@ theorem getNodeChildren_empty_ok {node : ForkChoiceNode} {nodes : List ForkChoic
     obtain ⟨children, childrenOk, -⟩ := below
     exact ⟨children, childrenOk⟩
   · simp [throw, throwThe, MonadExceptOf.throw] at below
+
+/-- Before Gloas, the walk from a known pending node ends at a node that descends from it.
+
+The walk from the end node back to the slot of the start reaches the start. -/
+theorem getAncestor_getHeadFrom (before : fork < .glamsterdam) {nodes : List ForkChoiceNode}
+    {start head : ForkChoiceNode} (walk : store.getHeadFrom config nodes start = .ok head)
+    (pending : start.payloadStatus = .pending) {startBlock : BeaconBlock preset fork}
+    (found : store.blocks[start.root]? = some startBlock) :
+    store.getAncestor head startBlock.slot = .ok start := by
+  induction start using getHeadFrom.induct store generalizing startBlock with
+  | _ start ih =>
+    rw [getHeadFrom] at walk
+    cases chosen : store.heaviestChild config nodes start with
+    | error e => simp [chosen, bind, Except.bind] at walk
+    | ok result =>
+      cases result with
+      | none =>
+        simp [chosen, bind, Except.bind, pure, Except.pure] at walk
+        subst walk
+        exact getAncestor_of_le found (UInt64.le_refl _)
+      | some child =>
+        simp only [chosen, bind, Except.bind] at walk
+        split at walk
+        · rename_i lower
+          -- The chosen node is a child of the start: a pending node whose parent is the start.
+          obtain ⟨children, weighted, hc, hw, choice⟩ := heaviestChild_eq chosen
+          obtain ⟨key, mem, -⟩ := chooseHeaviest_some choice
+          obtain ⟨source, member, pair⟩ := mapM_ok_mem hw _ mem
+          obtain ⟨rfl, -⟩ := weighNode_ok_iff.mp pair
+          obtain ⟨childPending, childBlock, childFound, parent⟩ :=
+            (mem_getNodeChildren before hc).mp (List.mem_filter.mp member).1
+          -- A lower rank between two pending nodes is a higher slot.
+          have higher : startBlock.slot < childBlock.slot := by
+            dsimp only at childPending childFound
+            simp only [nodeRank, childFound, found, childPending, pending, ↓reduceIte] at lower
+            have := childBlock.slot.toNat_lt
+            have := startBlock.slot.toNat_lt
+            rw [UInt64.lt_iff_toNat_lt]
+            omega
+          have upper := ih child lower walk childPending childFound
+          rw [getAncestor_trans (UInt64.le_of_lt higher) upper,
+            getAncestor_step childFound (UInt64.not_le.mpr higher) (parent ▸ found) higher,
+            parentPayloadStatus_of_lt before, parent, ← pending,
+            getAncestor_of_le found (UInt64.le_refl _)]
+        · cases walk
+
+/-- A node whose viable subtree can be computed is a known block.
+
+An unknown node has no voting source, and no child can rank below it. -/
+theorem filterNodeTree_known {node : ForkChoiceNode} {nodes : List ForkChoiceNode}
+    (walk : store.filterNodeTree config node = .ok nodes) :
+    ∃ block, store.blocks[node.root]? = some block := by
+  cases found : store.blocks[node.root]? with
+  | some block => exact ⟨block, rfl⟩
+  | none =>
+  exfalso
+  rw [filterNodeTree, bind_ok_iff] at walk
+  obtain ⟨children, -, walk⟩ := walk
+  cases children with
+  | nil =>
+    simp only [List.isEmpty_nil, ↓reduceIte, bind_ok_iff] at walk
+    obtain ⟨_, viable, -⟩ := walk
+    simp only [isViableLeaf, getVotingSource, Store.block, found, bind_ok_iff] at viable
+    simp [throw, throwThe, MonadExceptOf.throw] at viable
+  | cons child rest =>
+    simp only [List.isEmpty_cons, Bool.false_eq_true, ↓reduceIte, bind_ok_iff] at walk
+    obtain ⟨_, viable, -⟩ := walk
+    rw [List.flatMapM_cons, bind_ok_iff] at viable
+    obtain ⟨_, below, -⟩ := viable
+    simp [nodeRank, found, throw, throwThe, MonadExceptOf.throw] at below
+
+/-- Before Gloas, the head descends from the justified checkpoint block. -/
+theorem isAncestor_getHead (before : fork < .glamsterdam) {head : ForkChoiceNode}
+    (found : store.getHead config = .ok head) :
+    store.isAncestor head ⟨store.justifiedCheckpoint.root, .pending⟩ = .ok true := by
+  have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  unfold getHead at found
+  cases tree : store.getFilteredNodeTree config with
+  | error e => simp [tree, bind, Except.bind] at found
+  | ok nodes =>
+    -- The walk from the justified node succeeded, so its block is known.
+    obtain ⟨justifiedBlock, justifiedFound⟩ := filterNodeTree_known tree
+    simp only [tree, bind, Except.bind, later, false_and, ↓reduceIte] at found
+    have walked := getAncestor_getHeadFrom before found rfl justifiedFound
+    simp [isAncestor, block_ok_iff.mpr justifiedFound, walked, later, bind, Except.bind, pure,
+      Except.pure]
 
 /-- The head has no child among the viable nodes. -/
 theorem getHead_leaf {head : ForkChoiceNode} (found : store.getHead config = .ok head) :

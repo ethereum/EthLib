@@ -463,31 +463,6 @@ theorem filterNodeTree_ancestor {config : Config} {node : ForkChoiceNode}
   · rw [step] at above
     exact between a below above
 
-/-- A node whose viable subtree can be computed is a known block.
-
-An unknown node has no voting source, and no child can rank below it. -/
-theorem filterNodeTree_known {config : Config} {node : ForkChoiceNode}
-    {nodes : List ForkChoiceNode} (walk : store.filterNodeTree config node = .ok nodes) :
-    ∃ block, store.blocks[node.root]? = some block := by
-  cases found : store.blocks[node.root]? with
-  | some block => exact ⟨block, rfl⟩
-  | none =>
-  exfalso
-  rw [filterNodeTree, bind_ok_iff] at walk
-  obtain ⟨children, -, walk⟩ := walk
-  cases children with
-  | nil =>
-    simp only [List.isEmpty_nil, ↓reduceIte, bind_ok_iff] at walk
-    obtain ⟨_, viable, -⟩ := walk
-    simp only [isViableLeaf, getVotingSource, Store.block, found, bind_ok_iff] at viable
-    simp [throw, throwThe, MonadExceptOf.throw] at viable
-  | cons child rest =>
-    simp only [List.isEmpty_cons, Bool.false_eq_true, ↓reduceIte, bind_ok_iff] at walk
-    obtain ⟨_, viable, -⟩ := walk
-    rw [List.flatMapM_cons, bind_ok_iff] at viable
-    obtain ⟨_, below, -⟩ := viable
-    simp [nodeRank, found, throw, throwThe, MonadExceptOf.throw] at below
-
 /-- A viable node with no viable child is a viable leaf. -/
 theorem filterNodeTree_leaf {config : Config} :
     ∀ {node : ForkChoiceNode} {nodes : List ForkChoiceNode},
