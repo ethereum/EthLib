@@ -101,7 +101,9 @@ def shouldBuildOnFull (gloas : .glamsterdam ≤ fork) (head : ForkChoiceNode) (s
 
 /-- Whether to extend the payload of a block from the previous slot.
 
-The store must have verified the payload.
+The block must be from the previous slot.
+
+A payload that the store has not verified is not extended.
 
 It extends a payload that the committee finds on time and with its data available.
 
