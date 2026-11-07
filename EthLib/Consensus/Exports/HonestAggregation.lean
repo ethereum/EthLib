@@ -11,6 +11,8 @@ C-ABI exports of the vote of an honest attester and of the aggregates of votes.
 
 A state, attestation data, a vote and a sync committee come as SSZ bytes, at a fork up to Heze.
 
+One export builds the attestation data of an attester, from the head block and its state.
+
 Two exports build the vote of a validator.
 
 It is an attestation before Electra, and a single attestation from Electra.
@@ -37,6 +39,35 @@ open EthLib.Exports (Result)
 def secretKeyOf (bytes : ByteArray) : Result Signatures.SecretKey :=
   (Signatures.SecretKey.fromBytes bytes).mapError fun _ =>
     (0, "the secret key is not a nonzero scalar below the group order")
+
+/-- A status of a payload in the fork choice, from its code, or code 0.
+
+Code 0 is empty, 1 is full and 2 is pending. -/
+def payloadStatusOf (code : UInt64) : Result PayloadStatus :=
+  match code with
+  | 0 => return .empty
+  | 1 => return .full
+  | 2 => return .pending
+  | _ => throw (0, s!"unknown payload status {code}")
+
+/-- The attestation data of an attester, from the head block and the state at its slot, as SSZ.
+
+The preset and the fork are named in UTF-8, and the root of the head block comes as 32 bytes.
+
+The slot of the head block and the status of its payload change the data only from Gloas.
+
+The code of the status is 0 for empty, 1 for full and 2 for pending.
+
+Any other code has code 0, at every fork. -/
+@[export eth_consensus_get_attestation_data]
+def getAttestationDataExport (name fork state headRoot : ByteArray)
+    (headSlot committeeIndex payloadStatus : UInt64) : Result ByteArray := do
+  let (preset, fork) ← transitionPresetAndFork name fork
+  let state ← decodeInput (BeaconState preset fork) state
+  let headRoot ← decodeInput Root headRoot
+  let payloadStatus ← payloadStatusOf payloadStatus
+  let data ← runDuty (getAttestationData state headRoot headSlot committeeIndex payloadStatus)
+  (SszType.serialize data).mapError fun e => (0, s!"attestation data rejected: {reprStr e}")
 
 /-- The aggregate of the signatures of attestations, as 96 bytes.
 

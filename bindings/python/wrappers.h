@@ -355,6 +355,7 @@ PyObject* py_consensus_check_block_signing (PyObject* self, PyObject* args);
 PyObject* py_consensus_check_attestation_signing (PyObject* self, PyObject* args);
 PyObject* py_consensus_record_block_signing (PyObject* self, PyObject* args);
 PyObject* py_consensus_record_attestation_signing (PyObject* self, PyObject* args);
+PyObject* py_consensus_get_attestation_data (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_aggregate_signature (PyObject* self, PyObject* args);
 PyObject* py_consensus_construct_attestation (PyObject* self, PyObject* args);
 PyObject* py_consensus_construct_single_attestation (PyObject* self, PyObject* args);

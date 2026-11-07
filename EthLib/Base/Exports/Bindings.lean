@@ -427,6 +427,10 @@ def bindings : List Binding := [
     "(name: str, fork: str, state: bytes, config: bytes, duty: str, object: bytes, " ++
       "secret_key: bytes) -> bytes",
     [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
+  ⟨"consensus_get_attestation_data", `EthLib.Consensus.Exports.getAttestationDataExport,
+    "(name: str, fork: str, state: bytes, head_root: bytes, head_slot: int, " ++
+      "committee_index: int, payload_status: int) -> bytes",
+    [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
   ⟨"consensus_get_aggregate_signature",
     `EthLib.Consensus.Exports.getAggregateSignatureExport,
     "(name: str, fork: str, attestations: list[bytes]) -> bytes",

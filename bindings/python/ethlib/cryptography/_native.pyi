@@ -483,6 +483,10 @@ def consensus_get_validator_signature(name: str, fork: str, state: bytes, config
     """The signature of the object of a duty, by a secret key of 32 big-endian bytes."""
     ...
 
+def consensus_get_attestation_data(name: str, fork: str, state: bytes, head_root: bytes, head_slot: int, committee_index: int, payload_status: int) -> bytes:
+    """The attestation data of an attester, from the head block and the state at its slot, as SSZ."""
+    ...
+
 def consensus_get_aggregate_signature(name: str, fork: str, attestations: list[bytes]) -> bytes:
     """The aggregate of the signatures of attestations, as 96 bytes."""
     ...
