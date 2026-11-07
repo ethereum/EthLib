@@ -356,6 +356,11 @@ It is the verifying operation of SEC 1 v2 §4.1.4.
 By it, a signature is valid exactly when `r` and `s` lie in `[1, n - 1]` and the key is a point of the curve other than `O`.
 The point `(e / s) G + (r / s) Q` must also be other than `O`, with `x mod n = r`.
 `verify_recover` and `recover_of_verify` (`Proofs/Secp256k1/Recovery.lean`) prove that a recovered key verifies the signature, and that every key that verifies one is recovered, when `r + n >= p`.
+`recover_eq_ok_iff` states recovery in the group of the curve.
+It is the public key recovery of SEC 1 v2 §4.1.6, with `x_R = r` only.
+By it, recovery returns `Q` exactly when `r` and `s` lie in `[1, n - 1]` and `R = (r, y)` lies on the curve.
+The parity of `y` must be the recovery id.
+`Q` must be a point of the curve other than `O`, equal to `(s / r) R - (e / r) G`.
 `verify_lowS_unique` (`Proofs/Secp256k1/Malleability.lean`) proves that two low-s signatures with one `r` that verify are equal, under the same bound.
 `verify_iff_of_verify` assumes the same bound and a valid signature `(r, s)`.
 Under them, `(r, s')` verifies under the same key and hash exactly when `s'` is `s` or `n - s`.
