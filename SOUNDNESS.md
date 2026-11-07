@@ -877,8 +877,15 @@ The search can still fail, for an epoch after the next one or a committee withou
 It also fails for the epoch whose first slot plus the length of an epoch reaches 2^64.
 There the 64-bit sum of the guide overflows, as `getCommitteeAssignment_eq_error_of_overflow` shows.
 
+From Gloas, a validator also finds the slot of its payload timeliness committee and the slots it will propose.
+`getPtcAssignment_sound` shows that an assignment is the first slot of the epoch whose committee holds the validator, and `not_mem_of_getPtcAssignment_none` that no committee of the epoch holds a validator without one, when an epoch has a slot.
+`getUpcomingProposalSlots_spec` shows that the upcoming proposal slots are exactly the slots after the slot of the state whose proposer in the lookahead is the validator, in increasing order.
+Under `PairingLaws`, `validatePtcMessage_getPayloadAttestationMessageSignature` shows that the fork choice accepts a payload attestation message for the current slot that its validator signed.
+It rests on `fastAggregateVerify_sign`: an honest signature passes the fast aggregate verification under its one key.
+
 No theorem says which subnets or sync committee seat a validator has.
 The Python suite checks each duty signature against py_ecc, on signing roots computed in the test, and each committee against the shuffle export.
+It checks each payload timeliness assignment and the upcoming proposal slots against the window and the lookahead that it reads from a Gloas state.
 
 ### Honest proposer
 
@@ -1160,12 +1167,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 257 operations and 41 size constants.
-The Python extension calls 257 of the operations and 41 of the constants.
+Lean exports 259 operations and 41 size constants.
+The Python extension calls 259 of the operations and 41 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-8768 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (1817), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1120), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (485), `xmss.c` (134).
+8825 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (1868), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1124), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (487), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
