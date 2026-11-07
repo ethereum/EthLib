@@ -406,7 +406,7 @@ def runTransaction {fork : Fork} (Meter : Type) [GasMeter Meter] [LawfulGasMeter
       blobVersionedHashes := fun _ => tx.blobHashes }
   let gas := allocateGas fork tx included.intrinsicGas
   let message ← transactionMessage env txEnv state sender target gas.execution tx
-  let output ← processMessageCall (Meter := Meter) env.chainId
+  let output ← processMessageCall (Meter := Meter) env.chainId.toNat
     { message with reservoir := gas.reservoir } state
     (startSubstate fork env.coinbase sender target tx) tx.authorizations
     (paidWrites sender target tx)

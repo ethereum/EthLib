@@ -118,7 +118,7 @@ def recentHashes (recent : List RecentBlock) : Except BlockError (List Hash32) :
 `hashes` are the hashes of the blocks before it, oldest first. -/
 def blockEnvironment {fork : Fork} (config : ChainConfig) (hashes : List Hash32)
     (header : Header fork) : BlockEnvironment fork where
-  chainId := config.chainId.toNat
+  chainId := config.chainId
   coinbase := header.coinbase
   number := header.number
   gasLimit := header.gasLimit
@@ -165,7 +165,7 @@ Its receipt adds up the gas used after the refunds, as EIP-8037 keeps it.
 Before Byzantium, its receipt holds the state root after it. -/
 def applyTransaction {fork : Fork} (env : BlockEnvironment fork) (index : Nat)
     (before : BodyOutput fork) (tx : Transaction) : Except BlockError (BodyOutput fork) := do
-  let included ← (checkInclusion (UInt64.ofNat env.chainId) env before.gas
+  let included ← (checkInclusion env.chainId env before.gas
     (.ofBlock before.block) tx).mapError (.invalidTransaction index)
   let out ← (processTransaction env before.block included tx).mapError .aborted
   let body ← ((before.body.beginIndex (index + 1)).join out.state).mapError .state

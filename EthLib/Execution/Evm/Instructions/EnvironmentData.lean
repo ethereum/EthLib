@@ -113,7 +113,7 @@ def environmentStep (fork : Fork) : Op → Option (Evm fork Meter → Except Evm
     some (readFrame OPCODE_GASLIMIT fun evm => BitVec.ofNat 256 evm.message.blockEnv.gasLimit)
   | .chainid =>
     if .istanbul ≤ fork then
-      some (readFrame OPCODE_CHAINID fun evm => BitVec.ofNat 256 evm.message.blockEnv.chainId)
+      some (readFrame OPCODE_CHAINID fun evm => BitVec.ofNat 256 evm.message.blockEnv.chainId.toNat)
     else none
   | .basefee =>
     if h : .london ≤ fork then

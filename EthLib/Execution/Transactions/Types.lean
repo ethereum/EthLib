@@ -85,8 +85,8 @@ structure LegacyTransaction where
 
 [EIP-2930](https://eips.ethereum.org/EIPS/eip-2930#specification) adds it at Berlin. -/
 structure AccessListTransaction where
-  /-- The chain of the transaction. -/
-  chainId : U256
+  /-- The chain of the transaction, a 64-bit number. -/
+  chainId : UInt64
   /-- The number of transactions that the sender sent before. -/
   nonce : U256
   /-- The price in wei of one unit of gas. -/
@@ -113,8 +113,8 @@ structure AccessListTransaction where
 
 [EIP-1559](https://eips.ethereum.org/EIPS/eip-1559#specification) adds it at London. -/
 structure FeeMarketTransaction where
-  /-- The chain of the transaction. -/
-  chainId : U256
+  /-- The chain of the transaction, a 64-bit number. -/
+  chainId : UInt64
   /-- The number of transactions that the sender sent before. -/
   nonce : U256
   /-- The most wei per unit of gas that goes to the fee recipient of the block. -/
@@ -145,8 +145,8 @@ structure FeeMarketTransaction where
 
 It always has a recipient, so it never creates a contract. -/
 structure BlobTransaction where
-  /-- The chain of the transaction. -/
-  chainId : U256
+  /-- The chain of the transaction, a 64-bit number. -/
+  chainId : UInt64
   /-- The number of transactions that the sender sent before. -/
   nonce : U256
   /-- The most wei per unit of gas that goes to the fee recipient of the block. -/
@@ -181,8 +181,8 @@ structure BlobTransaction where
 
 It always has a recipient, so it never creates a contract. -/
 structure SetCodeTransaction where
-  /-- The chain of the transaction. -/
-  chainId : U256
+  /-- The chain of the transaction, a 64-bit number. -/
+  chainId : UInt64
   /-- The number of transactions that the sender sent before. -/
   nonce : U256
   /-- The most wei per unit of gas that goes to the fee recipient of the block. -/

@@ -7,17 +7,17 @@ from raising import raises
 ACTIVATIONS = [["paris", "block", 0]]
 
 
-def test_chain_id_above_256_bits() -> None:
-    """A chain ID of 2^256 does not fit the 256-bit type, so the configuration is rejected."""
-    config = {"chainId": 2**256, "activations": ACTIVATIONS}
-    with raises(engine.EngineError, "config: chainId is not below 2^256") as error:
+def test_chain_id_above_64_bits() -> None:
+    """A chain ID of 2^64 does not fit the 64-bit type, so the configuration is rejected."""
+    config = {"chainId": 2**64, "activations": ACTIVATIONS}
+    with raises(engine.EngineError, "config: chainId is not below 2^64") as error:
         engine.new_payload(config, "engine_newPayloadV1", [])
     assert error.value.code == 0
 
 
 def test_largest_chain_id() -> None:
-    """A chain ID of 2^256 - 1 is accepted, and the request is checked next."""
-    config = {"chainId": 2**256 - 1, "activations": ACTIVATIONS}
+    """A chain ID of 2^64 - 1 is accepted, and the request is checked next."""
+    config = {"chainId": 2**64 - 1, "activations": ACTIVATIONS}
     with raises(
         engine.EngineError,
         'engine error: EthLib.Engine.EngineError.invalidParams "params: not 1 values"',

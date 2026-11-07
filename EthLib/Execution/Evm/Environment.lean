@@ -45,8 +45,8 @@ open EthLib.Base (Address BlobSchedule Bytes32 Fork Hash32 Since U256)
 
 /-- The block that runs the code, at fork `fork`. -/
 structure BlockEnvironment (fork : Fork) where
-  /-- The identifier of the chain. -/
-  chainId : Nat
+  /-- The identifier of the chain, a 64-bit number. -/
+  chainId : UInt64
   /-- The address that receives the fees of the block. -/
   coinbase : Address
   /-- The number of the block. -/

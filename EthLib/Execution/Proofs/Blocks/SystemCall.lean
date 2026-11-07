@@ -57,21 +57,21 @@ theorem systemReservoir_of_glamsterdam (h : .glamsterdam ≤ fork) :
 /-- Up to BPO5, a system call runs its message with one counter of the gas left. -/
 theorem systemCall_of_lt_glamsterdam (h : fork < .glamsterdam) :
     systemCall env block target data =
-      (processMessageCall (Meter := Nat) env.chainId (systemMessage env target data)
+      (processMessageCall (Meter := Nat) env.chainId.toNat (systemMessage env target data)
         (.ofBlock block) Substate.empty).map fun out => ⟨out.state, out.output, out.error⟩ := by
   have hpre : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt h
   simp only [systemCall, hpre, ↓reduceIte]
-  cases processMessageCall (Meter := Nat) env.chainId (systemMessage env target data)
+  cases processMessageCall (Meter := Nat) env.chainId.toNat (systemMessage env target data)
     (.ofBlock block) Substate.empty <;> rfl
 
 /-- From Glamsterdam, a system call runs its message with the meter of EIP-8037. -/
 theorem systemCall_of_glamsterdam (h : .glamsterdam ≤ fork) :
     systemCall env block target data =
-      (processMessageCall (Meter := StateGasMeter) env.chainId (systemMessage env target data)
+      (processMessageCall (Meter := StateGasMeter) env.chainId.toNat (systemMessage env target data)
         (.ofBlock block) Substate.empty).map fun out => ⟨out.state, out.output, out.error⟩ := by
   simp only [systemCall, h, ↓reduceIte]
-  cases processMessageCall (Meter := StateGasMeter) env.chainId (systemMessage env target data)
-    (.ofBlock block) Substate.empty <;> rfl
+  cases processMessageCall (Meter := StateGasMeter) env.chainId.toNat
+    (systemMessage env target data) (.ofBlock block) Substate.empty <;> rfl
 
 /-- A checked system call to a contract with no code makes the block invalid. -/
 theorem checkedSystemCall_of_size_eq_zero {code : ByteArray}
