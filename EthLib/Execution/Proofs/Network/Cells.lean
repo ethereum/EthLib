@@ -5,8 +5,9 @@ public import EthLib.Execution.Network.Cells
 /-!
 # Proofs: the cells of eth/72
 
-A response of cells that passes the check holds only requested cell indices and requested
-transactions, in order, with one group of cells for each transaction.
+A response of cells that passes the check holds only requested cell indices.
+
+It holds only requested transactions, in order, with one group of cells for each transaction.
 -/
 
 @[expose] public section
@@ -15,8 +16,9 @@ namespace EthLib.Execution.Network
 
 open EthLib.Base
 
-/-- A response that passes the check marks only indices that the request asks for, holds
-requested transactions in order, and has one group of cells for each. -/
+/-- A response that passes the check marks only indices that the request asks for.
+
+It holds requested transactions in order, and has one group of cells for each. -/
 theorem of_checkCells {requested : List Hash32} {requestMask : CellMask} {blobs : List Nat}
     {hashes : List Hash32} {groups : List (List ByteArray)} {mask : CellMask}
     (h : checkCells requested requestMask blobs hashes groups mask = .ok ()) :

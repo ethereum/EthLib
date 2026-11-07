@@ -170,8 +170,9 @@ theorem sublist_of_codesAnswer {requested : List Hash32} {codes : List ByteArray
     (codes.map Cryptography.Hash.Keccak.keccak256).Sublist requested :=
   List.isSublist_iff_sublist.mp h
 
-/-- Each access list of a checked answer is absent, or hashes to the access list hash of the
-block at its position. -/
+/-- Each access list of a checked answer is absent, or hashes to the access list hash of its block.
+
+That block is the one at its position. -/
 theorem of_accessListsAnswer {expected : List Hash32} {lists : List Item}
     (h : accessListsAnswer expected lists) :
     lists.length ≤ expected.length ∧

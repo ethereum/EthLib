@@ -10,8 +10,7 @@ A Merkle proof for one key: the nodes on the path of the key.
 
 A client checks the value of the key against a root alone.
 
-Source: the account and storage proofs of EIP-1186, at
-<https://github.com/ethereum/EIPs/blob/7622abc1c6569b7e7ade9ed957dde4ed2271cc40/EIPS/eip-1186.md>.
+Source: the account and storage proofs of [EIP-1186][eip-1186].
 
 The EIP describes a proof as the RLP-serialized nodes from the root, along the path of the key.
 
@@ -27,6 +26,8 @@ A proof shows either the value of the key or its absence:
 - The path leaves the trie: the key is not set.
 
 The module checks a proof, and builds the proof of a key from a trie.
+
+[eip-1186]: https://github.com/ethereum/EIPs/blob/7622abc1c6569b7e7ade9ed957dde4ed2271cc40/EIPS/eip-1186.md
 -/
 
 @[expose] public section

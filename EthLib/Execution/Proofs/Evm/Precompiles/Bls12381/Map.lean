@@ -9,8 +9,8 @@ public import EthLib.Cryptography.Proofs.Bls.MapToCurve
 # Proofs: MAP_FP_TO_G1 and MAP_FP2_TO_G2 of EIP-2537 land in the subgroup
 
 - The maps of RFC 9380 succeed on every field element.
-- So, with the right length and enough gas, each precompile succeeds exactly when its padded field
-  element decodes.
+- So take the right length and enough gas.
+  Each precompile then succeeds exactly when its padded field element decodes.
 - Every output encodes a valid point of the subgroup of order `r`.
 - That output passes the point decoder of EIP-2537 with the subgroup check.
 - The padded encoding of every field element is accepted.

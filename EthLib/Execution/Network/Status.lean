@@ -9,8 +9,9 @@ public import EthLib.Networking.Devp2p.ForkId
 
 The handshake of the eth capability, Status (0x00), and the notice BlockRangeUpdate (0x11).
 
-The source is "Status (0x00)" and "BlockRangeUpdate (0x11)" of [`caps/eth.md`][eth], with the
-Status of eth/68 from [EIP-7642](https://eips.ethereum.org/EIPS/eip-7642#status-message-changes).
+The source is "Status (0x00)" and "BlockRangeUpdate (0x11)" of [`caps/eth.md`][eth].
+
+The Status of eth/68 comes from [EIP-7642][eip-7642].
 
 [eth]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#status-0x00
 
@@ -19,8 +20,12 @@ Status of eth/68 from [EIP-7642](https://eips.ethereum.org/EIPS/eip-7642#status-
 
 From eth/69 on, a node announces the blocks it can serve, in Status and in BlockRangeUpdate.
 
-Each peer validates the fork identifier of the other, and disconnects when they are
-incompatible, as [EIP-2364](https://eips.ethereum.org/EIPS/eip-2364#specification) requires.
+Each peer validates the fork identifier of the other.
+
+It disconnects when they are incompatible, as [EIP-2364][eip-2364] requires.
+
+[eip-7642]: https://eips.ethereum.org/EIPS/eip-7642#status-message-changes
+[eip-2364]: https://eips.ethereum.org/EIPS/eip-2364#specification
 -/
 
 @[expose] public section
@@ -150,8 +155,9 @@ The node has the schedule `s`, and its head has a block number and a timestamp.
 - The fork identifier must pass the rules of EIP-2124.
 - From eth/69 on, the announced range must be valid.
 
-The network ID and the genesis hash are left to the node, since no rule of the specification
-reads them.
+The network ID and the genesis hash are left to the node.
+
+No rule of the specification reads them.
 -/
 def checkStatus (version : EthVersion) (s : Schedule) (number timestamp : Nat)
     (status : Status) : Except StatusError Unit := do

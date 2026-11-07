@@ -648,10 +648,10 @@
   "Whether the receipts of a block, as a version sends them, match the receipts root of its header."
 
 #define DOC_eth_access_lists_answer \
-  "Whether the BlockAccessLists data `response` answers the GetBlockAccessLists data `request` of eth/71 on, given the access list hash of each requested block."
+  "Whether `response` answers a GetBlockAccessLists `request`, given each block's access list hash."
 
 #define DOC_eth_check_partial_receipts \
-  "The checks that [EIP-7975](https://eips.ethereum.org/EIPS/eip-7975#specification) asks of the receipts of a block that arrive in parts."
+  "The checks that EIP-7975 asks of the receipts of a block that arrive in parts."
 
 #define DOC_snap_message_decode \
   "The canonical data of the message with the ID `id` and the data `data`, on a version."
@@ -660,7 +660,7 @@
   "Whether the ByteCodes data `response` answers the GetByteCodes data `request`."
 
 #define DOC_snap_access_lists_answer \
-  "Whether the BlockAccessLists data `response` answers the GetBlockAccessLists data `request`, given the access list hash of each requested block."
+  "Whether `response` answers a GetBlockAccessLists `request`, given each block's access list hash."
 
 #define DOC_snap_full_account \
   "The full RLP form of an account in slim form."

@@ -20,12 +20,15 @@ Since the Merge, a node must discard NewBlockHashes and NewBlock, as EIP-3675 sa
 
 The messages keep their IDs, so a reader still decodes them.
 
-A request carries a request ID, a 64-bit integer, and its response repeats it, as
-[EIP-2481](https://eips.ethereum.org/EIPS/eip-2481#specification) adds.
+A request carries a request ID, a 64-bit integer, and its response repeats it.
+
+[EIP-2481][eip-2481] adds the request ID.
 
 A header, a body and a block cross the wire as RLP items.
 
 Their fields depend on the fork of each block, so the messages carry them as items.
+
+[eip-2481]: https://eips.ethereum.org/EIPS/eip-2481#specification
 -/
 
 @[expose] public section
@@ -59,8 +62,9 @@ inductive BlockId where
 
   `eth.md` writes the number as `P`, with no bound.
 
-  EthLib bounds it below 2^64, a choice it shares with go-ethereum, so that a number never has
-  the 32 bytes of a hash. -/
+  EthLib bounds it below 2^64, a choice it shares with go-ethereum.
+
+  So a number never has the 32 bytes of a hash. -/
   | number (n : UInt64)
   /-- The block with this hash. -/
   | hash (h : Hash32)
@@ -193,8 +197,9 @@ The number of `b` must be the next number after the number of `a`.
 
 When the headers are consecutive, they must also chain.
 
-The parent of the later one is then the hash of the earlier one, as "Block Encoding and
-Validity" asks of headers in sequence. -/
+The parent of the later one is then the hash of the earlier one.
+
+"Block Encoding and Validity" asks this of headers in sequence. -/
 def followsIn (r : HeaderRequest) (a b : Item) : Except HeadersError Unit := do
   let na ← (headerNumber a).mapError .rlp
   let nb ← (headerNumber b).mapError .rlp

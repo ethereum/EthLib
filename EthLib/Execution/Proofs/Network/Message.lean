@@ -12,8 +12,9 @@ public import EthLib.Execution.Proofs.Network.Transactions
 
 Each message reads back from its ID and its RLP item, on every version that uses its form.
 
-eth/68 rejects BlockRangeUpdate, and every version rejects an announcement whose lists differ in
-length.
+eth/68 rejects BlockRangeUpdate.
+
+Every version rejects an announcement whose lists differ in length.
 
 A response answers a request only when it repeats the request ID.
 
@@ -57,8 +58,9 @@ theorem lists_eq_toItem (lists : List (List Item)) :
   intro l _
   exact list_eq_toItem l
 
-/-- The envelope of a version reads back as its request ID, its part and its payload, when the
-part is present exactly from eth/70 on. -/
+/-- The envelope of a version reads back as its request ID, its part and its payload.
+
+This needs the part to be present exactly from eth/70 on. -/
 theorem readWithPart_withPart {α β : Type} [Codec α] [LawfulCodec α] [Codec β] [LawfulCodec β]
     {version : EthVersion} (i : UInt64) (part : Option α) (x : β)
     (h : part.isSome ↔ EthVersion.eth70 ≤ version) :
@@ -78,8 +80,9 @@ theorem readWithPart_withPart {α β : Type} [Codec α] [LawfulCodec α] [Codec 
 
 /-- A message has the form of a version.
 
-Status and announcements have the form of their version, and an announcement has as many
-types and sizes as hashes.
+Status and announcements have the form of their version.
+
+An announcement has as many types and sizes as hashes.
 
 BlockRangeUpdate exists from eth/69 on, and the receipt messages carry their part from eth/70 on.
 

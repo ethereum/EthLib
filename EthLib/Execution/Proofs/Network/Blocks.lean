@@ -185,8 +185,9 @@ theorem followAll_of_checkHeaders {r : HeaderRequest} {headers : List Item}
         · simpa [hs, bind, Except.bind] using h
 
 /--
-In an answer that passes the check, each header has the number `skip + 1` blocks after the one
-before it, or before it when reversed.
+In an answer that passes the check, each header is `skip + 1` blocks after the one before it.
+
+When the answer is reversed, it is `skip + 1` blocks before it.
 -/
 theorem numbers_of_checkHeaders {r : HeaderRequest} {headers : List Item}
     (h : checkHeaders r headers = .ok ()) (i : Nat) (hi : i + 1 < headers.length) :
