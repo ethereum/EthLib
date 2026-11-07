@@ -13,6 +13,10 @@ A new store holds its anchor, justified and finalized, and its clock is at the a
 The ancestor of a node at a slot is a known block at or below that slot.
 
 A node at or below the slot is its own ancestor, so every known node descends from itself.
+
+From Gloas the walk gives each parent an empty or full status.
+
+It reaches the same blocks whatever the status of its start.
 -/
 
 @[expose] public section
@@ -43,19 +47,26 @@ theorem block_ok_iff {root : Root} {block : BeaconBlock preset fork} :
   cases store.blocks[root]? <;>
     simp [throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
 
-/-- From Gloas the ancestor walk is not yet specified here, so it fails. -/
-theorem getAncestor_of_gloas {node : ForkChoiceNode} {slot : Slot} (gloas : .glamsterdam ≤ fork) :
-    store.getAncestor node slot = .error (.forkNotYetSpecified fork) := by
-  rw [getAncestor]
-  simp [gloas, throw, throwThe, MonadExceptOf.throw]
+/-- Before Gloas a parent is pending. -/
+theorem parentPayloadStatus_of_lt {block parent : BeaconBlock preset fork}
+    (before : fork < .glamsterdam) : parentPayloadStatus block parent = .pending := by
+  unfold parentPayloadStatus
+  split
+  · rename_i gloas
+    exact absurd gloas (Nat.not_le_of_lt before)
+  · rfl
 
-/-- Before Gloas, a known node at or below the slot is its own ancestor there. -/
+/-- From Gloas a parent is empty or full, never pending. -/
+theorem parentPayloadStatus_ne_pending {block parent : BeaconBlock preset fork}
+    (gloas : .glamsterdam ≤ fork) : parentPayloadStatus block parent ≠ .pending := by
+  simp only [parentPayloadStatus, gloas, ↓reduceDIte]
+  split <;> simp
+
+/-- A known node at or below the slot is its own ancestor there. -/
 theorem getAncestor_of_le {node : ForkChoiceNode} {slot : Slot} {block : BeaconBlock preset fork}
-    (before : fork < .glamsterdam) (found : store.blocks[node.root]? = some block)
+    (found : store.blocks[node.root]? = some block)
     (le : block.slot ≤ slot) : store.getAncestor node slot = .ok node := by
-  have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
   rw [getAncestor]
-  simp only [later, ↓reduceIte]
   split
   · simp_all
   · rename_i b same
@@ -63,25 +74,55 @@ theorem getAncestor_of_le {node : ForkChoiceNode} {slot : Slot} {block : BeaconB
     subst same
     simp [le, pure, Except.pure]
 
+/-- The walk from a known block above the slot moves to the node of its parent.
+
+The parent node has the status of its payload as the block builds on it. -/
+theorem getAncestor_step {node : ForkChoiceNode} {slot : Slot}
+    {block parent : BeaconBlock preset fork}
+    (found : store.blocks[node.root]? = some block) (above : ¬ block.slot ≤ slot)
+    (parentFound : store.blocks[block.parentRoot]? = some parent)
+    (parentLower : parent.slot < block.slot) :
+    store.getAncestor node slot =
+      store.getAncestor ⟨block.parentRoot, parentPayloadStatus block parent⟩ slot := by
+  conv => lhs; rw [getAncestor]
+  split
+  · simp_all
+  · rename_i b same
+    rw [found, Option.some.injEq] at same
+    subst same
+    simp only [above, ↓reduceIte]
+    split
+    · simp_all
+    · rename_i p same
+      rw [parentFound, Option.some.injEq] at same
+      subst same
+      simp [parentLower]
+
+/-- The root that the walk reaches does not depend on the payload status of the start.
+
+So from Gloas the walk reaches the blocks that the earlier walk reaches. -/
+theorem getAncestor_root (node : ForkChoiceNode) (status : PayloadStatus) (slot : Slot) :
+    (·.root) <$> store.getAncestor node slot =
+      (·.root) <$> store.getAncestor ⟨node.root, status⟩ slot := by
+  conv => lhs; rw [getAncestor]
+  conv => rhs; rw [getAncestor]
+  repeat' split
+  all_goals (simp_all [UInt64.lt_iff_toNat_lt, UInt64.le_iff_toNat_le]; try omega)
+
 /-- The ancestor of a node at a slot is a known block at or below that slot. -/
 theorem getAncestor_le {node ancestor : ForkChoiceNode} {slot : Slot}
     (walk : store.getAncestor node slot = .ok ancestor) :
     ∃ block, store.blocks[ancestor.root]? = some block ∧ block.slot ≤ slot := by
   induction node using getAncestor.induct (store := store) (slot := slot) with
-  | case1 node gloas =>
-    rw [getAncestor_of_gloas gloas] at walk
-    cases walk
-  | case2 node later found =>
+  | case1 node found =>
     rw [getAncestor] at walk
-    simp only [later, ↓reduceIte] at walk
     split at walk <;> simp_all [throw, throwThe, MonadExceptOf.throw]
-  | case3 node later block found le =>
-    rw [getAncestor_of_le (Nat.lt_of_not_le later) found le] at walk
+  | case2 node block found le =>
+    rw [getAncestor_of_le found le] at walk
     cases walk
     exact ⟨block, found, le⟩
-  | case4 node later block found above parentFound =>
+  | case3 node block found above parentFound =>
     rw [getAncestor] at walk
-    simp only [later, ↓reduceIte] at walk
     split at walk
     · simp_all
     · rename_i b same
@@ -89,25 +130,11 @@ theorem getAncestor_le {node ancestor : ForkChoiceNode} {slot : Slot}
       subst same
       simp only [above, ↓reduceIte] at walk
       split at walk <;> simp_all [throw, throwThe, MonadExceptOf.throw]
-  | case5 node later block found above parent parentFound lower ih =>
-    apply ih
+  | case4 node block found above parent parentFound lower ih =>
+    rw [getAncestor_step found above parentFound lower] at walk
+    exact ih walk
+  | case5 node block found above parent parentFound notLower =>
     rw [getAncestor] at walk
-    simp only [later, ↓reduceIte] at walk
-    split at walk
-    · simp_all
-    · rename_i b same
-      rw [found, Option.some.injEq] at same
-      subst same
-      simp only [above, ↓reduceIte] at walk
-      split at walk
-      · simp_all
-      · rename_i p same
-        rw [parentFound, Option.some.injEq] at same
-        subst same
-        simpa [lower] using walk
-  | case6 node later block found above parent parentFound notLower =>
-    rw [getAncestor] at walk
-    simp only [later, ↓reduceIte] at walk
     split at walk
     · simp_all
     · rename_i b same
@@ -121,13 +148,26 @@ theorem getAncestor_le {node ancestor : ForkChoiceNode} {slot : Slot}
         subst same
         simp [notLower, throw, throwThe, MonadExceptOf.throw] at walk
 
-/-- Before Gloas, every known node descends from itself. -/
+/-- Every known node descends from itself. -/
 theorem isAncestor_self {node : ForkChoiceNode} {block : BeaconBlock preset fork}
-    (before : fork < .glamsterdam) (found : store.blocks[node.root]? = some block) :
+    (found : store.blocks[node.root]? = some block) :
     store.isAncestor node node = .ok true := by
   have known : store.block node.root = .ok block := block_ok_iff.mpr found
-  simp [isAncestor, known, getAncestor_of_le before found (UInt64.le_refl _), bind, Except.bind,
-    pure, Except.pure]
+  by_cases gloas : .glamsterdam ≤ fork <;>
+    simp [isAncestor, known, getAncestor_of_le found (UInt64.le_refl _), gloas, bind,
+      Except.bind, pure, Except.pure]
+
+/-- From Gloas a node descends from a pending node when its walk reaches the same root.
+
+The payload status of the node that the walk reaches does not matter then. -/
+theorem isAncestor_pending (gloas : .glamsterdam ≤ fork) (node : ForkChoiceNode) (root : Root) :
+    store.isAncestor node ⟨root, .pending⟩ = (do
+      let ancestorBlock ← store.block root
+      return (← store.getAncestor node ancestorBlock.slot).root == root) := by
+  simp only [isAncestor, gloas, ↓reduceIte, bind, Except.bind, pure, Except.pure]
+  split
+  · rfl
+  · split <;> simp
 
 end Store
 

@@ -117,21 +117,7 @@ theorem getAncestor_of_gt {node : ForkChoiceNode} {slot : Slot}
     (parentFound : store.blocks[block.parentRoot]? = some parent)
     (parentLower : parent.slot < block.slot) :
     store.getAncestor node slot = store.getAncestor ⟨block.parentRoot, .pending⟩ slot := by
-  have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
-  conv => lhs; rw [getAncestor]
-  simp only [later, ↓reduceIte]
-  split
-  · simp_all
-  · rename_i b same
-    rw [found, Option.some.injEq] at same
-    subst same
-    simp only [above, ↓reduceIte]
-    split
-    · simp_all
-    · rename_i p same
-      rw [parentFound, Option.some.injEq] at same
-      subst same
-      simp [parentLower]
+  rw [getAncestor_step found above parentFound parentLower, parentPayloadStatus_of_lt before]
 
 /-- Before Gloas, a block whose parent descends from a node descends from it too.
 
@@ -143,7 +129,8 @@ theorem isAncestor_of_parent {root : Root} {block parent : BeaconBlock preset fo
     (lower : parent.slot < block.slot)
     (descends : store.isAncestor ⟨block.parentRoot, .pending⟩ ancestor = .ok true) :
     store.isAncestor ⟨root, .pending⟩ ancestor = .ok true := by
-  simp only [isAncestor, bind, Except.bind] at descends ⊢
+  have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  simp only [isAncestor, later, ↓reduceIte, bind, Except.bind] at descends ⊢
   cases known : store.block ancestor.root with
   | error e => simp [known] at descends
   | ok ancestorBlock =>
@@ -151,7 +138,7 @@ theorem isAncestor_of_parent {root : Root} {block parent : BeaconBlock preset fo
     -- The ancestor sits at or below the parent, so the walk from the block passes the parent.
     have below : ancestorBlock.slot < block.slot := by
       by_cases le : parent.slot ≤ ancestorBlock.slot
-      · rw [getAncestor_of_le before parentFound le] at descends
+      · rw [getAncestor_of_le parentFound le] at descends
         simp only [pure, Except.pure, Except.ok.injEq, beq_iff_eq] at descends
         have same : ancestor.root = block.parentRoot := by rw [← descends]
         simp only [Store.block, same, parentFound, pure, Except.pure, Except.ok.injEq] at known
@@ -175,18 +162,15 @@ theorem getAncestor_climbs {node ancestor : ForkChoiceNode} {slot : Slot}
         (blockTree lower).Ancestor a (some node.root) → a ≠ some ancestor.root →
         ∃ root block, a = some root ∧ store.blocks[root]? = some block ∧ slot < block.slot := by
   induction node using getAncestor.induct (store := store) (slot := slot) with
-  | case1 node gloas => exact absurd gloas (Nat.not_le_of_lt before)
-  | case2 node later found =>
+  | case1 node found =>
     rw [getAncestor] at walk
-    simp only [later, ↓reduceIte] at walk
     split at walk <;> simp_all [throw, throwThe, MonadExceptOf.throw]
-  | case3 node later block found le =>
-    rw [getAncestor_of_le before found le] at walk
+  | case2 node block found le =>
+    rw [getAncestor_of_le found le] at walk
     cases walk
     refine ⟨.refl _, .inl rfl, fun a below above ne => absurd (below.antisymm above).symm ne⟩
-  | case4 node later block found above parentFound =>
+  | case3 node block found above parentFound =>
     rw [getAncestor] at walk
-    simp only [later, ↓reduceIte] at walk
     split at walk
     · simp_all
     · rename_i b same
@@ -194,18 +178,19 @@ theorem getAncestor_climbs {node ancestor : ForkChoiceNode} {slot : Slot}
       subst same
       simp only [above, ↓reduceIte] at walk
       split at walk <;> simp_all [throw, throwThe, MonadExceptOf.throw]
-  | case5 node later block found above parent parentFound parentLower ih =>
-    rw [getAncestor_of_gt before found above parentFound parentLower] at walk
+  | case4 node block found above parent parentFound parentLower ih =>
+    rw [getAncestor_step found above parentFound parentLower] at walk
     obtain ⟨chain, status, between⟩ := ih walk
     have step : (blockTree lower).parent (some node.root) = some block.parentRoot :=
       blockTree_parent_of found
-    refine ⟨chain.trans ⟨1, step⟩, .inr (status.elim (fun same => same ▸ rfl) id), ?_⟩
+    refine ⟨chain.trans ⟨1, step⟩,
+      .inr (status.elim (fun same => same ▸ parentPayloadStatus_of_lt before) id), ?_⟩
     intro a below aboveA ne
     rcases aboveA.eq_or_parent with same | aboveParent
     · exact ⟨node.root, block, same, found, Nat.lt_of_not_le above⟩
     · rw [step] at aboveParent
       exact between a below aboveParent ne
-  | case6 node later block found above parent parentFound notLower =>
+  | case5 node block found above parent parentFound notLower =>
     exact absurd (lower _ block parent found parentFound) notLower
 
 /-- Before Gloas, a pending node descends from a known pending node exactly as in the tree. -/
@@ -215,7 +200,8 @@ theorem isAncestor_iff {root : Root} {node : ForkChoiceNode} {block : BeaconBloc
     (computed : store.isAncestor ⟨root, .pending⟩ node = .ok result) :
     result = true ↔ (blockTree lower).Ancestor (some node.root) (some root) := by
   have known : store.block node.root = .ok block := block_ok_iff.mpr found
-  simp only [isAncestor, known, bind, Except.bind] at computed
+  have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  simp only [isAncestor, known, later, ↓reduceIte, bind, Except.bind] at computed
   cases walk : store.getAncestor ⟨root, .pending⟩ block.slot with
   | error e => simp [walk] at computed
   | ok ancestor =>
@@ -891,7 +877,7 @@ theorem getHead_descends {head : ForkChoiceNode} (found : store.getHead config =
   | ok nodes =>
     simp only [tree] at found
     obtain ⟨_, known⟩ := filterNodeTree_known tree
-    exact getHeadFrom_descends before rfl (isAncestor_self before known) found
+    exact getHeadFrom_descends before rfl (isAncestor_self known) found
 
 /-- The head is a viable leaf, or no leaf is viable and the head is the justified block. -/
 theorem getHead_viable {head : ForkChoiceNode} (found : store.getHead config = .ok head) :
