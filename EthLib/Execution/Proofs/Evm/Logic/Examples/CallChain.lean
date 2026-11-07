@@ -39,18 +39,6 @@ variable {fork : Fork}
 /-- The address of the word 0, which the middle frame calls, since it has no call data. -/
 def ZERO : Base.Address := toAddressMasked (CallFlag.target .empty)
 
-/-- A touch of an account keeps the code of every code hash. -/
-theorem getCode_touchAccount (tx : TransactionState) (address : Base.Address)
-    (hash : Base.Hash32) : (tx.touchAccount address).getCode hash = tx.getCode hash := by
-  unfold TransactionState.touchAccount
-  split <;> rfl
-
-/-- A touch of an account keeps the account at every other address. -/
-theorem getAccount_touchAccount {tx : TransactionState} {address other : Base.Address}
-    (hne : other ≠ address) : (tx.touchAccount address).getAccount other = tx.getAccount other := by
-  unfold TransactionState.getAccount
-  rw [(TransactionState.sameOutside_touchAccount tx address other (by simpa using hne)).1]
-
 /-- The assumption on the middle frame: it runs with no call data, the depth and the gas it needs.
 
 The address of the word 0 holds no code in the state it starts from. -/
@@ -157,7 +145,8 @@ theorem runFrame_process (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
         exact hzero
       unfold startState
       split
-      · rw [getCode_touchAccount, hmt, getAccount_touchAccount hne]
+      · rw [TransactionState.getCode_touchAccount, hmt,
+          TransactionState.getAccount_touchAccount hne]
         exact hread
       · exact hread
     obtain ⟨ended, ⟨hnone, -⟩, hchild⟩ := hcallee hmcode (by simp [hmtg]) (by simp [hmv]) hpre
