@@ -37,26 +37,27 @@ open scoped EthLib.Cryptography.Bls.Fr
 theorem field_elements_per_blob_eq_two_pow :
     FIELD_ELEMENTS_PER_BLOB = 2 ^ 12 := rfl
 
-/-- The blob width divides `r - 1`, so a primitive
-`FIELD_ELEMENTS_PER_BLOB`-th root of unity exists. -/
+/-- The blob width divides `r - 1`.
+
+So a primitive `FIELD_ELEMENTS_PER_BLOB`-th root of unity exists. -/
 theorem field_elements_per_blob_dvd_modulus_sub_one :
     FIELD_ELEMENTS_PER_BLOB ∣ BLS_MODULUS - 1 :=
   Nat.dvd_of_mod_eq_zero (by decide)
 
-/-- The root of unity `computeRootsOfUnity order` builds its powers
-from: `7 ^ ((r - 1) / order)`. -/
+/-- The root of unity `computeRootsOfUnity order` builds its powers from: `7 ^ ((r - 1) / order)`.
+-/
 def domainRoot (order : Nat) : Fr :=
   Fr.ofNat PRIMITIVE_ROOT_OF_UNITY ^ Fr.ofNat ((BLS_MODULUS - 1) / order)
 
-/-- `domainRoot order` is a primitive `order`-th root of unity whenever
-`order ∣ r - 1`. -/
+/-- `domainRoot order` is a primitive `order`-th root of unity whenever `order ∣ r - 1`. -/
 theorem isPrimitiveRoot_domainRoot {order : Nat}
     (h : order ∣ BLS_MODULUS - 1) :
     IsPrimitiveRoot (domainRoot order) order :=
   Bls.Fr.isPrimitiveRoot_ofNat_seven_pow h
 
-/-- `computeRootsOfUnity order` lists the powers of `domainRoot order`
-in order: element `i` is `ω ^ i`. -/
+/-- `computeRootsOfUnity order` lists the powers of `domainRoot order` in order.
+
+Element `i` is `ω ^ i`. -/
 theorem getElem_computeRootsOfUnity (order i : Nat)
     (h : i < (computeRootsOfUnity order).size) :
     (computeRootsOfUnity order)[i] = domainRoot order ^ i := by
@@ -67,9 +68,10 @@ theorem getElem_computeRootsOfUnity (order i : Nat)
   exact Bls.Fr.powNat_eq_pow _ _
 
 /-- Element `i` of the bit-reversed domain is `ω ^ reverseBits i n`.
-The power-of-two hypothesis is phrased as an equation so the lemma
-applies directly to width constants like `FIELD_ELEMENTS_PER_BLOB`
-(with `hnk := field_elements_per_blob_eq_two_pow`). -/
+
+The power-of-two hypothesis is an equation, so the lemma applies directly to width constants.
+
+An example is `FIELD_ELEMENTS_PER_BLOB`, with `hnk := field_elements_per_blob_eq_two_pow`. -/
 theorem getElem_rootsOfUnityBrp {n k : Nat} (hnk : n = 2 ^ k) (i : Nat)
     (h : i < (rootsOfUnityBrp n).size) :
     (rootsOfUnityBrp n)[i] = domainRoot n ^ reverseBits i n := by
@@ -102,8 +104,9 @@ theorem getElem_rootsOfUnityBrp_inj {n k : Nat} (hnk : n = 2 ^ k)
   have := congrArg (reverseBits · (2 ^ k)) hrev
   simpa [reverseBits_reverseBits hi, reverseBits_reverseBits hj] using this
 
-/-- The bit-reversed domain enumerates exactly the `2 ^ k`-th roots of
-unity: `z` occurs in it iff `z ^ (2 ^ k) = 1`. -/
+/-- The bit-reversed domain enumerates exactly the `2 ^ k`-th roots of unity.
+
+So `z` occurs in it iff `z ^ (2 ^ k) = 1`. -/
 theorem mem_rootsOfUnityBrp {n k : Nat} (hnk : n = 2 ^ k)
     (hdvd : n ∣ BLS_MODULUS - 1) (z : Fr) :
     z ∈ rootsOfUnityBrp n ↔ z ^ n = 1 := by
@@ -112,8 +115,9 @@ theorem mem_rootsOfUnityBrp {n k : Nat} (hnk : n = 2 ^ k)
   constructor
   · intro hz
     obtain ⟨i, hi, rfl⟩ := Array.mem_iff_getElem.mp hz
-    -- Restated `have`s pin Mathlib facts to this goal's instance path
-    -- so the `rw`s below match (see the elaboration notes in the plan).
+    -- Restated `have`s pin Mathlib facts to this goal's instance path.
+    --
+    -- So the `rw`s below match (see the elaboration notes in the plan).
     have hone : domainRoot (2 ^ k) ^ 2 ^ k = 1 := hprim.pow_eq_one
     rw [getElem_rootsOfUnityBrp rfl i hi, ← pow_mul, Nat.mul_comm, pow_mul,
         hone]
@@ -127,9 +131,11 @@ theorem mem_rootsOfUnityBrp {n k : Nat} (hnk : n = 2 ^ k)
     · rw [getElem_rootsOfUnityBrp rfl, reverseBits_reverseBits hik]
       exact hi
 
-/-- A domain hit locates `z`: if `idxOf?` answers `some i`, then `i` is
-in range and `z` is element `i` of the domain. Generic in the domain
-size (no power-of-two hypothesis needed). -/
+/-- A domain hit locates `z`.
+
+If `idxOf?` answers `some i`, then `i` is in range and `z` is element `i` of the domain.
+
+Generic in the domain size (no power-of-two hypothesis needed). -/
 theorem idxOf?_rootsOfUnityBrp_eq_some {n : Nat} {z : Fr} {i : Nat}
     (h : (rootsOfUnityBrp n).idxOf? z = some i) :
     i < n ∧ (rootsOfUnityBrp n)[i]! = z := by

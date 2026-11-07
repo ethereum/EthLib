@@ -88,8 +88,11 @@ private theorem size_flatten_prefix (indices : Array CellIndex) (cells : Array C
     rw [List.range_succ, List.foldl_append]
     simp only [List.foldl_cons, List.foldl_nil, size_writeRecoveryCell, ih]
 
-/-- Lookup invariant for the actual outer recovery flattening loop. Consistent repeated
-indices are harmless: every write to a location writes the same specified value. -/
+/-- Lookup invariant for the actual outer recovery flattening loop.
+
+Consistent repeated indices are harmless.
+
+Every write to a location writes the same specified value. -/
 theorem getElem!_flatten_prefix (indices : Array CellIndex) (cells : Array CosetEvals)
     (init : Array Fr) (f : Nat → Fr)
     (hvals : ∀ k < indices.size, ∀ j < FIELD_ELEMENTS_PER_CELL,

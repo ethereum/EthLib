@@ -195,9 +195,13 @@ private theorem foldl_vanishing_extend_size_and_getElem!
     · rw [getElem!_set!_ne _ _ (by rw [hcell_pos]; omega) (by rw [hsz, hext_eq, hcell_pos]; omega)]
       exact hget j hlt
 
-/-- On success, `constructVanishingPolynomial missingCellIndices` has fewer than
-`CELLS_PER_EXT_BLOB` missing cells and has coefficient `Fr.one` (hence non-zero)
-at degree `missingCellIndices.size * FIELD_ELEMENTS_PER_CELL`. -/
+/-- Take a successful `constructVanishingPolynomial missingCellIndices`.
+
+Then there are fewer than `CELLS_PER_EXT_BLOB` missing cells.
+
+The polynomial has coefficient `Fr.one` (hence non-zero) at a known degree.
+
+That degree is `missingCellIndices.size * FIELD_ELEMENTS_PER_CELL`. -/
 theorem leadingCoeff_constructVanishingPolynomial
     {missingCellIndices : Array CellIndex} {p : PolynomialCoeff}
     (h : constructVanishingPolynomial missingCellIndices = .ok p) :
@@ -236,10 +240,11 @@ theorem leadingCoeff_constructVanishingPolynomial
       rw [hshort_lead] at hval
       exact ⟨hlt', hval, by rw [hval]; rfl⟩
 
-/-- `constructVanishingPolynomial` succeeds whenever fewer than
-`CELLS_PER_EXT_BLOB` cell indices are missing, returning a polynomial of size
-`FIELD_ELEMENTS_PER_EXT_BLOB` with coefficient `Fr.one` at degree
-`missingCellIndices.size * FIELD_ELEMENTS_PER_CELL`. -/
+/-- `constructVanishingPolynomial` succeeds when fewer than `CELLS_PER_EXT_BLOB` cells miss.
+
+It returns a polynomial of size `FIELD_ELEMENTS_PER_EXT_BLOB`.
+
+Its coefficient at degree `missingCellIndices.size * FIELD_ELEMENTS_PER_CELL` is `Fr.one`. -/
 theorem constructVanishingPolynomial_ok_of_lt
     {missingCellIndices : Array CellIndex}
     (h : missingCellIndices.size < CELLS_PER_EXT_BLOB) :
@@ -267,8 +272,9 @@ theorem constructVanishingPolynomial_ok_of_lt
   exact ⟨p, hp, size_constructVanishingPolynomial hp,
     (leadingCoeff_constructVanishingPolynomial hp).2.1⟩
 
-/-- `constructVanishingPolynomial missingCellIndices` succeeds iff
-`missingCellIndices.size < CELLS_PER_EXT_BLOB`. -/
+/-- `constructVanishingPolynomial missingCellIndices` succeeds iff there are few enough indices.
+
+The condition is `missingCellIndices.size < CELLS_PER_EXT_BLOB`. -/
 theorem constructVanishingPolynomial_ok_iff
     {missingCellIndices : Array CellIndex} :
     (∃ p, constructVanishingPolynomial missingCellIndices = .ok p) ↔
@@ -442,9 +448,10 @@ private theorem evalCoeffPolyAux_extend_tail
         p[k * FIELD_ELEMENTS_PER_CELL + d]! * x.powNat (k * FIELD_ELEMENTS_PER_CELL + d) = _
     rw [hget, h0mul, hadd0]
 
-/-- Evaluating the extended vanishing polynomial `p` constructed from
-`missingCellIndices` at `x` equals evaluating the reduced vanishing polynomial
-at `x ^ FIELD_ELEMENTS_PER_CELL`. -/
+/-- Let `p` be the extended vanishing polynomial constructed from `missingCellIndices`.
+
+Its value at `x` is the value of the reduced vanishing polynomial at `x ^ FIELD_ELEMENTS_PER_CELL`.
+-/
 theorem evalPolyAt_constructVanishingPolynomial
     {missingCellIndices : Array CellIndex} {p : PolynomialCoeff}
     (h : constructVanishingPolynomial missingCellIndices = .ok p) (x : Fr) :
@@ -500,9 +507,11 @@ theorem evalPolyAt_constructVanishingPolynomial
           evalCoeffPolyAux_extend_prefix shortZeroPoly shortZeroPoly.size hk x
             shortZeroPoly.size (Nat.le_refl _)]
 
-/-- `constructVanishingPolynomial missingCellIndices` vanishes at every point `x`
-whose `FIELD_ELEMENTS_PER_CELL`-th power is the bit-reversed root corresponding
-to a missing cell index `mci ∈ missingCellIndices.toList`. -/
+/-- Take a missing cell index `mci ∈ missingCellIndices.toList`, and its bit-reversed root.
+
+`constructVanishingPolynomial missingCellIndices` vanishes at every point `x` of one kind.
+
+The `FIELD_ELEMENTS_PER_CELL`-th power of such an `x` is that root. -/
 theorem constructVanishingPolynomial_eval_eq_zero
     {missingCellIndices : Array CellIndex} {p : PolynomialCoeff}
     (h : constructVanishingPolynomial missingCellIndices = .ok p)
@@ -517,8 +526,7 @@ theorem constructVanishingPolynomial_eval_eq_zero
   rw [Array.toList_map, hx]
   exact List.mem_map_of_mem hmci
 
-/-- `recoverPolynomialcoeff` rejects mismatched `cellIndices` and `cosetsEvals`
-lengths. -/
+/-- `recoverPolynomialcoeff` rejects mismatched `cellIndices` and `cosetsEvals` lengths. -/
 theorem recoverPolynomialcoeff_length_mismatch
     {cellIndices : Array CellIndex} {cosetsEvals : Array CosetEvals}
     (h : cosetsEvals.size ≠ cellIndices.size) :
@@ -537,8 +545,9 @@ private theorem length_batchInverseAux (pre : Fr) (xs : List Fr) :
 private theorem size_batchInverse (xs : Array Fr) : (Fr.batchInverse xs).size = xs.size := by
   simp [Fr.batchInverse, length_batchInverseAux]
 
-/-- On success, the recovered polynomial has exactly
-`FIELD_ELEMENTS_PER_BLOB` coefficients, whatever the inputs. -/
+/-- On success, the recovered polynomial has exactly `FIELD_ELEMENTS_PER_BLOB` coefficients.
+
+This holds whatever the inputs. -/
 theorem size_recoverPolynomialcoeff
     {cellIndices : Array CellIndex} {cosetsEvals : Array CosetEvals}
     {p : PolynomialCoeff}
@@ -580,9 +589,12 @@ private theorem missing_size_lt_iff (cellIndices : Array CellIndex) :
   rw [hiff]
   simp only [List.mem_range, Bool.not_eq_false']
 
-/-- `recoverPolynomialcoeff` succeeds whenever `cosetsEvals.size = cellIndices.size`
-and `cellIndices` contains at least one valid cell index `< CELLS_PER_EXT_BLOB`,
-returning a coefficient array of size `FIELD_ELEMENTS_PER_BLOB`. -/
+/-- `recoverPolynomialcoeff` succeeds whenever two conditions hold.
+
+- `cosetsEvals.size = cellIndices.size`.
+- `cellIndices` contains at least one valid cell index `< CELLS_PER_EXT_BLOB`.
+
+It then returns a coefficient array of size `FIELD_ELEMENTS_PER_BLOB`. -/
 theorem recoverPolynomialcoeff_ok_of_contains
     {cellIndices : Array CellIndex} {cosetsEvals : Array CosetEvals}
     (hlen : cosetsEvals.size = cellIndices.size)
@@ -602,9 +614,10 @@ theorem recoverPolynomialcoeff_ok_of_contains
   rcases hok with ⟨p, hp⟩
   exact ⟨p, hp, size_recoverPolynomialcoeff hp⟩
 
-/-- `recoverPolynomialcoeff cellIndices cosetsEvals` succeeds iff
-`cosetsEvals.size = cellIndices.size` and `cellIndices` contains at least one
-cell index `< CELLS_PER_EXT_BLOB`. -/
+/-- `recoverPolynomialcoeff cellIndices cosetsEvals` succeeds iff two conditions hold.
+
+- `cosetsEvals.size = cellIndices.size`.
+- `cellIndices` contains at least one cell index `< CELLS_PER_EXT_BLOB`. -/
 theorem recoverPolynomialcoeff_ok_iff
     {cellIndices : Array CellIndex} {cosetsEvals : Array CosetEvals} :
     (∃ p, recoverPolynomialcoeff cellIndices cosetsEvals = .ok p) ↔
@@ -625,8 +638,8 @@ theorem recoverPolynomialcoeff_ok_iff
     obtain ⟨p, hp, _⟩ := recoverPolynomialcoeff_ok_of_contains hlen hci
     exact ⟨p, hp⟩
 
-/-- `recoverCellsAndKzgProofs` rejects a cells array whose length does
-not match the indices array. -/
+/-- `recoverCellsAndKzgProofs` rejects a cells array whose length does not match the indices array.
+-/
 theorem recoverCellsAndKzgProofs_length_mismatch (setup : TrustedSetup)
     {cellIndices : Array CellIndex} {cells : Array Cell}
     (h : cells.size ≠ cellIndices.size) :
@@ -680,8 +693,7 @@ theorem recoverCellsAndKzgProofs_cellIndexOutOfBounds (setup : TrustedSetup)
     rw [getElem!_pos a (i + 1) (by omega), getElem!_pos a i (by omega)] at h
     simpa [Nat.add_comm] using h
 
-/-- `recoverCellsAndKzgProofs` rejects cell indices that are not
-strictly ascending. -/
+/-- `recoverCellsAndKzgProofs` rejects cell indices that are not strictly ascending. -/
 theorem recoverCellsAndKzgProofs_indicesNotAscending (setup : TrustedSetup)
     {cellIndices : Array CellIndex} {cells : Array Cell}
     (hlen : cells.size = cellIndices.size)

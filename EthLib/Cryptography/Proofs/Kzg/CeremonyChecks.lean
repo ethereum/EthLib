@@ -137,8 +137,10 @@ theorem isInfinity_eq_true_iff_toPoint_eq_zero {p : G1} (hp : G1.Valid p) :
     cases h
 
 /-- A `G1` generator multiple is non-infinity exactly when its scalar is nonzero.
-Discharges the `G1` non-infinity law unconditionally using the kernel-verified
-generator order (`G1.addOrderOf_toPoint_generator`). -/
+
+It discharges the `G1` non-infinity law unconditionally.
+
+It uses the kernel-verified generator order (`G1.addOrderOf_toPoint_generator`). -/
 theorem g1Mul_nonzero_iff (s : Fr) :
     G1.isInfinity (G1.mul (G1.generator : G1) s) = false ↔ s ≠ 0 := by
   rw [Bool.eq_false_iff, Ne, isInfinity_eq_true_iff_toPoint_eq_zero
@@ -168,13 +170,13 @@ theorem g2Mul_ne_zero_of_isInfinity_eq_false {p : G2} {x : Fr}
 
 /-- Equality of two pairings, expressed using the repository's product-pairing checker.
 
-`pairingEq p₁ q₁ p₂ q₂` represents `e(p₁, q₁) = e(p₂, q₂)` as
-`e(p₁, q₁) * e(-p₂, q₂) = 1`. -/
+`pairingEq p₁ q₁ p₂ q₂` represents `e(p₁, q₁) = e(p₂, q₂)` as `e(p₁, q₁) * e(-p₂, q₂) = 1`. -/
 def pairingEq (p₁ : G1) (q₁ : G2) (p₂ : G1) (q₂ : G2) : Prop :=
   EthLib.Cryptography.Bls.pairingCheck #[(p₁, q₁), (G1.neg p₂, q₂)] = true
 
-/-- A single submitted ceremony contribution, using the repository's concrete point
-representations. -/
+/-- A single submitted ceremony contribution.
+
+It uses the repository's concrete point representations. -/
 structure Contribution where
   g1Powers : Array G1
   g2Powers : Array G2
@@ -186,8 +188,9 @@ structure Transcript where
 
 /-- The three sequencer pairing checks over concrete G1/G2 points.
 
-The size hypotheses make every checked index explicit and avoid the silent-truncation
-behavior of pseudocode `zip`. -/
+The size hypotheses make every checked index explicit.
+
+They avoid the silent-truncation behavior of pseudocode `zip`. -/
 structure Checks (contribution : Contribution) (transcript : Transcript) : Prop where
   one_lt_g1 : 1 < contribution.g1Powers.size
   one_lt_g2 : 1 < contribution.g2Powers.size

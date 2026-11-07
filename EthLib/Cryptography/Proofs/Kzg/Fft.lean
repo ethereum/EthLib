@@ -122,8 +122,7 @@ theorem getElem_fftFieldAux_step (vals roots : Array Fr)
     (shiftVals vals factor).size = vals.size := by
   simp [shiftVals]
 
-/-- Element `i` of `shiftValsAux factor shift l` is
-`l[i] * (shift * factor ^ i)`. -/
+/-- Element `i` of `shiftValsAux factor shift l` is `l[i] * (shift * factor ^ i)`. -/
 theorem getElem_shiftValsAux (factor shift : Fr) (l : List Fr) (i : Nat)
     (h : i < (shiftValsAux factor shift l).length) :
     (shiftValsAux factor shift l)[i] =

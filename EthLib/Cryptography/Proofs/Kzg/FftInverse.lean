@@ -32,8 +32,9 @@ open scoped EthLib.Cryptography.Bls.Fr
 
 /-! ## Even/odd splitting of a range sum -/
 
-/-- A sum over `range (2 * m)` splits into its even- and odd-indexed
-parts. The backbone of the Cooley–Tukey induction. -/
+/-- A sum over `range (2 * m)` splits into its even- and odd-indexed parts.
+
+The backbone of the Cooley–Tukey induction. -/
 theorem sum_range_split_even_odd {M : Type*} [AddCommMonoid M]
     (m : Nat) (f : Nat → M) :
     ∑ i ∈ Finset.range (2 * m), f i
@@ -58,8 +59,9 @@ section Orthogonality
 
 variable {F : Type*} [Field F]
 
-/-- The geometric sum of the powers of a root of unity that is not `1`
-vanishes: if `c ^ n = 1` and `c ≠ 1` then `∑_{j < n} c ^ j = 0`. -/
+/-- The geometric sum of the powers of a root of unity that is not `1` vanishes.
+
+If `c ^ n = 1` and `c ≠ 1` then `∑_{j < n} c ^ j = 0`. -/
 theorem geom_sum_root_ne_one {c : F} {n : Nat} (hcn : c ^ n = 1)
     (hc : c ≠ 1) : ∑ j ∈ Finset.range n, c ^ j = 0 := by
   rw [geom_sum_eq hc n, hcn, sub_self, zero_div]
@@ -70,11 +72,15 @@ theorem geom_sum_one (n : Nat) :
   simp only [one_pow, Finset.sum_const, Finset.card_range, nsmul_eq_mul,
     mul_one]
 
-/-- Orthogonality relation. For `ω` a primitive `n`-th root of unity and
-`a b < n`, the sum `∑_{j < n} (ω ^ a * (ω⁻¹) ^ b) ^ j` is `n` when
-`a = b` and `0` otherwise. This is the exact shape produced by composing
-the forward transform (root `ω`) with the inverse transform (root
-`ω⁻¹`). -/
+/-- Orthogonality relation.
+
+Let `ω` be a primitive `n`-th root of unity and `a b < n`.
+
+The sum `∑_{j < n} (ω ^ a * (ω⁻¹) ^ b) ^ j` is `n` when `a = b` and `0` otherwise.
+
+This is the exact shape produced by composing the forward and the inverse transforms.
+
+The forward transform has root `ω`, and the inverse transform root `ω⁻¹`. -/
 theorem sum_pow_orthogonal {ω : F} {n : Nat} (hω : IsPrimitiveRoot ω n)
     {a b : Nat} (ha : a < n) (hb : b < n) :
     ∑ j ∈ Finset.range n, (ω ^ a * (ω⁻¹) ^ b) ^ j
@@ -100,10 +106,11 @@ theorem sum_pow_orthogonal {ω : F} {n : Nat} (hω : IsPrimitiveRoot ω n)
       exact hab (hω.pow_inj ha hb ((mul_inv_eq_one₀ hbne).mp h))
     exact geom_sum_root_ne_one hcn hc1
 
-/-- A primitive `2 * m`-th root of unity, raised to the `m`, is `-1`:
-its square is `1` but it is not `1`, and in a field the only other
-square root of `1` is `-1`. Used for the odd-half sign flip in the
-Cooley–Tukey butterfly. -/
+/-- A primitive `2 * m`-th root of unity, raised to the `m`, is `-1`.
+
+Its square is `1` but it is not `1`, and in a field the only other square root of `1` is `-1`.
+
+Used for the odd-half sign flip in the Cooley–Tukey butterfly. -/
 theorem pow_half_eq_neg_one {ω : F} {m : Nat} (hm : 0 < m)
     (hω : IsPrimitiveRoot ω (2 * m)) : ω ^ m = -1 := by
   have hsq : ω ^ m * ω ^ m = 1 := by
@@ -115,8 +122,9 @@ theorem pow_half_eq_neg_one {ω : F} {m : Nat} (hm : 0 < m)
 
 end Orthogonality
 
-/-- `getElem!` form of `getElem_fftHalve`: for `i` in range, `fftHalve`
-selects element `start + 2 * i`. -/
+/-- `getElem!` form of `getElem_fftHalve`.
+
+For `i` in range, `fftHalve` selects element `start + 2 * i`. -/
 theorem getElem!_fftHalve (xs : Array Fr) (start i : Nat)
     (h : i < xs.size / 2) :
     (fftHalve xs start)[i]! = xs[start + 2 * i]! := by
@@ -144,12 +152,15 @@ private theorem fr_mul_right_comm (a b c : Fr) : a * b * c = a * c * b :=
 
 /-! ## The forward transform computes the DFT
 
-`fftFieldAux vals roots`, with `roots[i] = ω ^ i` for a primitive
-`2 ^ k`-th root `ω`, evaluates the polynomial with coefficients `vals`
-at the powers of `ω`: output `j` is `∑ i, vals[i] * ω ^ (i * j)`. Proved
-by strong induction on `k` via the butterfly step lemma and the even/odd
-split, using that `ω ^ 2` is a primitive `2 ^ (k-1)`-th root and
-`ω ^ 2 ^ (k-1) = -1`. -/
+Take `roots[i] = ω ^ i` for a primitive `2 ^ k`-th root `ω`.
+
+`fftFieldAux vals roots` evaluates the polynomial with coefficients `vals` at the powers of `ω`.
+
+Output `j` is `∑ i, vals[i] * ω ^ (i * j)`.
+
+The proof is by strong induction on `k`, via the butterfly step lemma and the even/odd split.
+
+It uses that `ω ^ 2` is a primitive `2 ^ (k-1)`-th root and `ω ^ 2 ^ (k-1) = -1`. -/
 
 theorem getElem!_fftFieldAux_dft {k : Nat} {ω : Fr}
     (hω : IsPrimitiveRoot ω (2 ^ k))
@@ -241,10 +252,13 @@ theorem getElem!_fftFieldAux_dft {k : Nat} {ω : Fr}
 
 /-! ## The inverse transform inverts the forward transform
 
-`fftField _ _ true` reverses the root table (turning `ω` into `ω⁻¹`) and
-divides by `n`; composing it after `fftField _ _ false` recovers the
-input. The proof characterises both directions with the DFT lemma and
-collapses the resulting double sum with `sum_pow_orthogonal`. -/
+`fftField _ _ true` reverses the root table (turning `ω` into `ω⁻¹`) and divides by `n`.
+
+Composing it after `fftField _ _ false` recovers the input.
+
+The proof characterises both directions with the DFT lemma.
+
+It collapses the resulting double sum with `sum_pow_orthogonal`. -/
 
 /-- Indexing into `Array.map (· * c)`. -/
 private theorem getElem!_map_mul (arr : Array Fr) (c : Fr) (m : Nat)
@@ -252,8 +266,9 @@ private theorem getElem!_map_mul (arr : Array Fr) (c : Fr) (m : Nat)
   rw [getElem!_pos (arr.map (· * c)) m (by rw [Array.size_map]; exact h),
       Array.getElem_map, ← getElem!_pos arr m h]
 
-/-- The reversed root table used by the inverse transform is the root
-table for `ω⁻¹`: element `i` is `(ω⁻¹) ^ i`. -/
+/-- The reversed root table used by the inverse transform is the root table for `ω⁻¹`.
+
+Element `i` is `(ω⁻¹) ^ i`. -/
 private theorem getElem!_reversedRoots {k : Nat} {ω : Fr}
     (hω : IsPrimitiveRoot ω (2 ^ k)) (roots : Array Fr) (hrs : roots.size = 2 ^ k)
     (hroots : ∀ i, i < 2 ^ k → roots[i]! = ω ^ i) (i : Nat) (hi : i < 2 ^ k) :
@@ -271,9 +286,11 @@ private theorem getElem!_reversedRoots {k : Nat} {ω : Fr}
     rw [← pow_add, Nat.sub_add_cancel (by rw [hrs]; omega : i ≤ roots.size), hrs]
     exact hω.pow_eq_one
 
-/-- `Fr`-form of `sum_pow_orthogonal`: the DFT orthogonality relation with
-the exponents split as `a * j` and `b * j`, matching the double sum that
-arises when composing the two transforms. -/
+/-- `Fr`-form of `sum_pow_orthogonal`.
+
+It is the DFT orthogonality relation with the exponents split as `a * j` and `b * j`.
+
+This matches the double sum that arises when composing the two transforms. -/
 private theorem sum_pow_orthogonal_fr {k : Nat} {ω : Fr}
     (hω : IsPrimitiveRoot ω (2 ^ k)) {a b : Nat} (ha : a < 2 ^ k) (hb : b < 2 ^ k) :
     ∑ j ∈ Finset.range (2 ^ k), ω ^ (a * j) * (ω⁻¹) ^ (b * j)
@@ -284,11 +301,15 @@ private theorem sum_pow_orthogonal_fr {k : Nat} {ω : Fr}
         rw [fr_mul_pow, ← fr_pow_mul, ← fr_pow_mul])]
   exact sum_pow_orthogonal hω ha hb
 
-/-- **FFT round-trip.** For a length-`2 ^ k` vector `vals` and a root
-table `roots[i] = ω ^ i` with `ω` a primitive `2 ^ k`-th root of unity,
-the inverse transform recovers the input. This is the correctness of
-NTT-based interpolation: evaluating a polynomial on the roots of unity
-and interpolating back is the identity. -/
+/-- **FFT round-trip.**
+
+Take a length-`2 ^ k` vector `vals`, and a primitive `2 ^ k`-th root of unity `ω`.
+
+With the root table `roots[i] = ω ^ i`, the inverse transform recovers the input.
+
+This is the correctness of NTT-based interpolation.
+
+Evaluating a polynomial on the roots of unity and interpolating back is the identity. -/
 theorem fftField_fftField_inv {k : Nat} {ω : Fr}
     (hω : IsPrimitiveRoot ω (2 ^ k))
     (vals roots : Array Fr) (hn : vals.size = 2 ^ k) (hrs : roots.size = 2 ^ k)
@@ -360,11 +381,15 @@ theorem fftField_fftField_inv {k : Nat} {ω : Fr}
           mul_inv_cancel₀ hn0]
     exact fr_mul_one _
 
-/-- **FFT round-trip, the other order.** Applying the forward transform
-after the inverse transform is also the identity. Same ingredients as
-`fftField_fftField_inv`, with the two directions swapped: the inverse
-transform (root `ω⁻¹`, scaled by `1 / n`) runs first, the forward
-transform (root `ω`) second. -/
+/-- **FFT round-trip, the other order.**
+
+Applying the forward transform after the inverse transform is also the identity.
+
+Same ingredients as `fftField_fftField_inv`, with the two directions swapped.
+
+The inverse transform (root `ω⁻¹`, scaled by `1 / n`) runs first.
+
+The forward transform (root `ω`) runs second. -/
 theorem fftField_inv_fftField {k : Nat} {ω : Fr}
     (hω : IsPrimitiveRoot ω (2 ^ k))
     (vals roots : Array Fr) (hn : vals.size = 2 ^ k) (hrs : roots.size = 2 ^ k)
@@ -394,8 +419,9 @@ theorem fftField_inv_fftField {k : Nat} {ω : Fr}
     have hm : m < 2 ^ k := by
       rw [size_fftField, size_fftField, hn] at h1; exact h1
     rw [← getElem!_pos _ m h1, ← getElem!_pos vals m (by rw [hn]; exact hm)]
-    -- forward transform (the `false` branch of the unguarded body is
-    -- definitionally `fftFieldAux`)
+    -- The forward transform.
+    --
+    -- The `false` branch of the unguarded body is definitionally `fftFieldAux`.
     rw [fftField_def _ roots false (by rw [size_fftField, hn]) hrs]
     show (fftFieldAux (fftField vals roots true) roots)[m]! = vals[m]!
     rw [getElem!_fftFieldAux_dft hω (fftField vals roots true) roots

@@ -7,8 +7,9 @@ public import EthLib.Cryptography.Proofs.Kzg.Fk20Proofs
 /-!
 # Proofs: Lemmas 1 and 2 of ePrint 2025/1683 for the cells of PeerDAS
 
-Cell `j` holds the values of a polynomial on the coset `h_j μ_64`, where `μ_64` is the group of
-64th roots of unity.
+Cell `j` holds the values of a polynomial on the coset `h_j μ_64`.
+
+Here `μ_64` is the group of 64th roots of unity.
 
 Its point `m` is `h_j ω^(rev m)`, for a primitive 64th root `ω` and the 6-bit reversal `rev`.
 
@@ -140,8 +141,9 @@ theorem eval_nodal_cellNodes {j j' i : Nat} (hj : j < CELLS_PER_EXT_BLOB)
   rw [nodal_cellNodes hj', eval_sub, eval_pow, eval_X, eval_C, domainPoint_cellNode,
     cellPoint_pow hj hm]
 
-/-- The weight of cell `j` in a set `J` of cells: the product of `h_j^64 - h_{j'}^64` over the
-other cells `j'`.
+/-- The weight of cell `j` in a set `J` of cells.
+
+It is the product of `h_j^64 - h_{j'}^64` over the other cells `j'`.
 
 It is the value of the vanishing polynomial of the other cells on cell `j`. -/
 def cellWeight (J : Finset Nat) (j : Nat) : Fr :=
