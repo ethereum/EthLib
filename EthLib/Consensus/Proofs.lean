@@ -68,6 +68,7 @@ public import EthLib.Consensus.Proofs.ReqResp.Bounds
 public import EthLib.Consensus.Proofs.ReqResp.Messages
 public import EthLib.Consensus.Proofs.ReqResp.ResponseBounds
 public import EthLib.Consensus.Proofs.Shuffle
+public import EthLib.Consensus.Proofs.SlashingProtection
 public import EthLib.Consensus.Proofs.ShufflePermutation
 public import EthLib.Consensus.Proofs.Signing
 public import EthLib.Consensus.Proofs.Time

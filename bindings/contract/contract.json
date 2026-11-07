@@ -3225,6 +3225,114 @@
    "docstring":
    "From Altair: the contribution of a subcommittee from sync committee messages, as SSZ bytes.\n\nThe preset and the fork are named in UTF-8.\n\nThe sync committee, the block root and each message come as SSZ bytes."},
   {"summary":
+   "An interchange file as the format writes it again, from its JSON text.",
+   "signature": "(text: bytes) -> bytes",
+   "operation": "EthLib.Consensus.Exports.readSlashingInterchangeExport",
+   "method": "consensus_read_slashing_interchange",
+   "errors":
+   [{"type": "EthLib.Consensus.SlashingProtectionError",
+     "codes":
+     [{"constructor": "field", "code": 1},
+      {"constructor": "version", "code": 2},
+      {"constructor": "slashableBlock", "code": 3},
+      {"constructor": "blockSlotTooLow", "code": 4},
+      {"constructor": "slashableAttestation", "code": 5},
+      {"constructor": "sourceEpochTooLow", "code": 6},
+      {"constructor": "targetEpochTooLow", "code": 7}]}],
+   "error_class": "SlashingProtectionError",
+   "docstring":
+   "An interchange file as the format writes it again, from its JSON text."},
+  {"summary":
+   "The record of a signer that keeps every message, after it imports a file, as JSON text.",
+   "signature": "(held: bytes, file: bytes) -> bytes",
+   "operation": "EthLib.Consensus.Exports.importSlashingInterchangeExport",
+   "method": "consensus_import_slashing_interchange",
+   "errors":
+   [{"type": "EthLib.Consensus.SlashingProtectionError",
+     "codes":
+     [{"constructor": "field", "code": 1},
+      {"constructor": "version", "code": 2},
+      {"constructor": "slashableBlock", "code": 3},
+      {"constructor": "blockSlotTooLow", "code": 4},
+      {"constructor": "slashableAttestation", "code": 5},
+      {"constructor": "sourceEpochTooLow", "code": 6},
+      {"constructor": "targetEpochTooLow", "code": 7}]}],
+   "error_class": "SlashingProtectionError",
+   "docstring":
+   "The record of a signer that keeps every message, after it imports a file, as JSON text."},
+  {"summary":
+   "Whether a key may sign a block of a slot with a signing root, given a record.",
+   "signature":
+   "(interchange: bytes, pubkey: bytes, slot: int, signing_root: bytes) -> bool",
+   "operation": "EthLib.Consensus.Exports.checkBlockSigningExport",
+   "method": "consensus_check_block_signing",
+   "errors":
+   [{"type": "EthLib.Consensus.SlashingProtectionError",
+     "codes":
+     [{"constructor": "field", "code": 1},
+      {"constructor": "version", "code": 2},
+      {"constructor": "slashableBlock", "code": 3},
+      {"constructor": "blockSlotTooLow", "code": 4},
+      {"constructor": "slashableAttestation", "code": 5},
+      {"constructor": "sourceEpochTooLow", "code": 6},
+      {"constructor": "targetEpochTooLow", "code": 7}]}],
+   "error_class": "SlashingProtectionError",
+   "docstring":
+   "Whether a key may sign a block of a slot with a signing root, given a record.\n\nIt returns true, or the code of the condition that the block breaks."},
+  {"summary":
+   "Whether a key may sign a vote of two epochs with a signing root, given a record.",
+   "signature":
+   "(interchange: bytes, pubkey: bytes, source_epoch: int, target_epoch: int, signing_root: bytes) -> bool",
+   "operation": "EthLib.Consensus.Exports.checkAttestationSigningExport",
+   "method": "consensus_check_attestation_signing",
+   "errors":
+   [{"type": "EthLib.Consensus.SlashingProtectionError",
+     "codes":
+     [{"constructor": "field", "code": 1},
+      {"constructor": "version", "code": 2},
+      {"constructor": "slashableBlock", "code": 3},
+      {"constructor": "blockSlotTooLow", "code": 4},
+      {"constructor": "slashableAttestation", "code": 5},
+      {"constructor": "sourceEpochTooLow", "code": 6},
+      {"constructor": "targetEpochTooLow", "code": 7}]}],
+   "error_class": "SlashingProtectionError",
+   "docstring":
+   "Whether a key may sign a vote of two epochs with a signing root, given a record.\n\nIt returns true, or the code of the condition that the vote breaks."},
+  {"summary": "The record after a key signs a block, as JSON text.",
+   "signature":
+   "(interchange: bytes, pubkey: bytes, slot: int, signing_root: bytes) -> bytes",
+   "operation": "EthLib.Consensus.Exports.recordBlockSigningExport",
+   "method": "consensus_record_block_signing",
+   "errors":
+   [{"type": "EthLib.Consensus.SlashingProtectionError",
+     "codes":
+     [{"constructor": "field", "code": 1},
+      {"constructor": "version", "code": 2},
+      {"constructor": "slashableBlock", "code": 3},
+      {"constructor": "blockSlotTooLow", "code": 4},
+      {"constructor": "slashableAttestation", "code": 5},
+      {"constructor": "sourceEpochTooLow", "code": 6},
+      {"constructor": "targetEpochTooLow", "code": 7}]}],
+   "error_class": "SlashingProtectionError",
+   "docstring": "The record after a key signs a block, as JSON text."},
+  {"summary": "The record after a key signs a vote, as JSON text.",
+   "signature":
+   "(interchange: bytes, pubkey: bytes, source_epoch: int, target_epoch: int, signing_root: bytes) -> bytes",
+   "operation": "EthLib.Consensus.Exports.recordAttestationSigningExport",
+   "method": "consensus_record_attestation_signing",
+   "errors":
+   [{"type": "EthLib.Consensus.SlashingProtectionError",
+     "codes":
+     [{"constructor": "field", "code": 1},
+      {"constructor": "version", "code": 2},
+      {"constructor": "slashableBlock", "code": 3},
+      {"constructor": "blockSlotTooLow", "code": 4},
+      {"constructor": "slashableAttestation", "code": 5},
+      {"constructor": "sourceEpochTooLow", "code": 6},
+      {"constructor": "targetEpochTooLow", "code": 7}]}],
+   "error_class": "SlashingProtectionError",
+   "docstring": "The record after a key signs a vote, as JSON text."},
+  {"summary":
    "Before Heze: the Eth1 vote of a proposer on a state, as the SSZ bytes of the Eth1 data.",
    "signature":
    "(name: str, fork: str, state: bytes, config: bytes, chain: list[bytes]) -> bytes",

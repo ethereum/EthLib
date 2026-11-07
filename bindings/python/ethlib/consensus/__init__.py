@@ -13,6 +13,7 @@ from ethlib.errors import (
     ForkChoiceError,
     LightClientError,
     ProposerError,
+    SlashingProtectionError,
     TransitionError,
     ValidatorDutyError,
     WeakSubjectivityError,
@@ -874,6 +875,46 @@ def construct_sync_committee_contribution(
     )
 
 
+def read_slashing_interchange(text: bytes) -> bytes:
+    """An EIP-3076 interchange file read and written again, as JSON text."""
+    return _native.consensus_read_slashing_interchange(text)
+
+
+def import_slashing_interchange(held: bytes, file: bytes) -> bytes:
+    """The record of a signer that keeps every message, after it imports a file."""
+    return _native.consensus_import_slashing_interchange(held, file)
+
+
+def check_block_signing(interchange: bytes, pubkey: bytes, slot: int, signing_root: bytes) -> None:
+    """Return if a key may sign a block, or raise the SlashingProtectionError of its condition."""
+    _native.consensus_check_block_signing(interchange, pubkey, slot, signing_root)
+
+
+def check_attestation_signing(
+    interchange: bytes, pubkey: bytes, source_epoch: int, target_epoch: int, signing_root: bytes
+) -> None:
+    """Return if a key may sign a vote, or raise the SlashingProtectionError of its condition."""
+    _native.consensus_check_attestation_signing(
+        interchange, pubkey, source_epoch, target_epoch, signing_root
+    )
+
+
+def record_block_signing(
+    interchange: bytes, pubkey: bytes, slot: int, signing_root: bytes
+) -> bytes:
+    """The record after a key signs a block, as JSON text."""
+    return _native.consensus_record_block_signing(interchange, pubkey, slot, signing_root)
+
+
+def record_attestation_signing(
+    interchange: bytes, pubkey: bytes, source_epoch: int, target_epoch: int, signing_root: bytes
+) -> bytes:
+    """The record after a key signs a vote, as JSON text."""
+    return _native.consensus_record_attestation_signing(
+        interchange, pubkey, source_epoch, target_epoch, signing_root
+    )
+
+
 def get_eth1_vote(
     name: str, fork: str, state: bytes, chain: list, config: dict | None = None
 ) -> bytes:
@@ -971,6 +1012,13 @@ __all__ = [
     "WeakSubjectivityError",
     "ValidatorDutyError",
     "ProposerError",
+    "SlashingProtectionError",
+    "read_slashing_interchange",
+    "import_slashing_interchange",
+    "check_block_signing",
+    "check_attestation_signing",
+    "record_block_signing",
+    "record_attestation_signing",
     "process_operation",
     "LightClientError",
     "ForkChoiceError",

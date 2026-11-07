@@ -89,6 +89,10 @@ class ProposerError(EthLibError, ValueError):
     """A step of an honest proposer has no result for its state or its input."""
 
 
+class SlashingProtectionError(EthLibError, ValueError):
+    """An interchange file does not read, or a signer must refuse a message."""
+
+
 class LightClientError(EthLibError, ValueError):
     """A light client rejected a bootstrap or an update."""
 
@@ -236,6 +240,7 @@ __all__ = [
     "WeakSubjectivityError",
     "ValidatorDutyError",
     "ProposerError",
+    "SlashingProtectionError",
     "LightClientError",
     "ForkChoiceError",
     "HkdfError",

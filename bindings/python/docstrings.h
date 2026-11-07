@@ -374,6 +374,24 @@
 #define DOC_consensus_construct_sync_committee_contribution \
   "From Altair: the contribution of a subcommittee from sync committee messages, as SSZ bytes."
 
+#define DOC_consensus_read_slashing_interchange \
+  "An interchange file as the format writes it again, from its JSON text."
+
+#define DOC_consensus_import_slashing_interchange \
+  "The record of a signer that keeps every message, after it imports a file, as JSON text."
+
+#define DOC_consensus_check_block_signing \
+  "Whether a key may sign a block of a slot with a signing root, given a record."
+
+#define DOC_consensus_check_attestation_signing \
+  "Whether a key may sign a vote of two epochs with a signing root, given a record."
+
+#define DOC_consensus_record_block_signing \
+  "The record after a key signs a block, as JSON text."
+
+#define DOC_consensus_record_attestation_signing \
+  "The record after a key signs a vote, as JSON text."
+
 #define DOC_consensus_get_eth1_vote \
   "Before Heze: the Eth1 vote of a proposer on a state, as the SSZ bytes of the Eth1 data."
 

@@ -320,6 +320,30 @@ eth_consensus_process_sync_committee_contributions(
   lean_object* name, lean_object* fork, lean_object* contributions);
 
 extern lean_object*
+eth_consensus_read_slashing_interchange(lean_object* text);
+
+extern lean_object*
+eth_consensus_import_slashing_interchange(lean_object* held, lean_object* file);
+
+extern lean_object*
+eth_consensus_check_block_signing(
+  lean_object* text, lean_object* pubkey, uint64_t slot, lean_object* signing_root);
+
+extern lean_object*
+eth_consensus_check_attestation_signing(
+  lean_object* text, lean_object* pubkey, uint64_t source_epoch, uint64_t target_epoch,
+  lean_object* signing_root);
+
+extern lean_object*
+eth_consensus_record_block_signing(
+  lean_object* text, lean_object* pubkey, uint64_t slot, lean_object* signing_root);
+
+extern lean_object*
+eth_consensus_record_attestation_signing(
+  lean_object* text, lean_object* pubkey, uint64_t source_epoch, uint64_t target_epoch,
+  lean_object* signing_root);
+
+extern lean_object*
 eth_consensus_get_execution_requests(
   lean_object* name, lean_object* fork, lean_object* requests);
 
@@ -1851,6 +1875,110 @@ py_consensus_construct_sync_committee_contribution(
       mk_bytearray(state, state_len), mk_bytearray(committee, committee_len),
       mk_bytearray(root, root_len), index, a[2]),
     VALIDATOR_DUTY_ERROR);
+}
+
+PyObject*
+py_consensus_read_slashing_interchange(
+  PyObject* self,
+  PyObject* args
+) {
+  const uint8_t* text;
+  Py_ssize_t text_len;
+  if (!PyArg_ParseTuple(args, "y#", &text, &text_len)) return NULL;
+  return except_into_pybytes(eth_consensus_read_slashing_interchange(mk_bytearray(text, text_len)),
+    SLASHING_PROTECTION_ERROR);
+}
+
+PyObject*
+py_consensus_import_slashing_interchange(
+  PyObject* self,
+  PyObject* args
+) {
+  const uint8_t *held, *file;
+  Py_ssize_t held_len, file_len;
+  if (!PyArg_ParseTuple(args, "y#y#", &held, &held_len, &file, &file_len)) return NULL;
+  return except_into_pybytes(
+    eth_consensus_import_slashing_interchange(mk_bytearray(held, held_len),
+      mk_bytearray(file, file_len)),
+    SLASHING_PROTECTION_ERROR);
+}
+
+PyObject*
+py_consensus_check_block_signing(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject* slot_obj;
+  const uint8_t *text, *pubkey, *root;
+  Py_ssize_t text_len, pubkey_len, root_len;
+  if (!PyArg_ParseTuple(args, "y#y#Oy#", &text, &text_len, &pubkey, &pubkey_len, &slot_obj, &root,
+                        &root_len))
+    return NULL;
+  uint64_t slot;
+  if (parse_uint64(slot_obj, "slot", &slot) < 0) return NULL;
+  return except_into_pybool(
+    eth_consensus_check_block_signing(mk_bytearray(text, text_len),
+      mk_bytearray(pubkey, pubkey_len), slot, mk_bytearray(root, root_len)),
+    SLASHING_PROTECTION_ERROR);
+}
+
+PyObject*
+py_consensus_check_attestation_signing(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *source_obj, *target_obj;
+  const uint8_t *text, *pubkey, *root;
+  Py_ssize_t text_len, pubkey_len, root_len;
+  if (!PyArg_ParseTuple(args, "y#y#OOy#", &text, &text_len, &pubkey, &pubkey_len, &source_obj,
+                        &target_obj, &root, &root_len))
+    return NULL;
+  uint64_t source, target;
+  if (parse_uint64(source_obj, "source_epoch", &source) < 0) return NULL;
+  if (parse_uint64(target_obj, "target_epoch", &target) < 0) return NULL;
+  return except_into_pybool(
+    eth_consensus_check_attestation_signing(mk_bytearray(text, text_len),
+      mk_bytearray(pubkey, pubkey_len), source, target, mk_bytearray(root, root_len)),
+    SLASHING_PROTECTION_ERROR);
+}
+
+PyObject*
+py_consensus_record_block_signing(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject* slot_obj;
+  const uint8_t *text, *pubkey, *root;
+  Py_ssize_t text_len, pubkey_len, root_len;
+  if (!PyArg_ParseTuple(args, "y#y#Oy#", &text, &text_len, &pubkey, &pubkey_len, &slot_obj, &root,
+                        &root_len))
+    return NULL;
+  uint64_t slot;
+  if (parse_uint64(slot_obj, "slot", &slot) < 0) return NULL;
+  return except_into_pybytes(
+    eth_consensus_record_block_signing(mk_bytearray(text, text_len),
+      mk_bytearray(pubkey, pubkey_len), slot, mk_bytearray(root, root_len)),
+    SLASHING_PROTECTION_ERROR);
+}
+
+PyObject*
+py_consensus_record_attestation_signing(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *source_obj, *target_obj;
+  const uint8_t *text, *pubkey, *root;
+  Py_ssize_t text_len, pubkey_len, root_len;
+  if (!PyArg_ParseTuple(args, "y#y#OOy#", &text, &text_len, &pubkey, &pubkey_len, &source_obj,
+                        &target_obj, &root, &root_len))
+    return NULL;
+  uint64_t source, target;
+  if (parse_uint64(source_obj, "source_epoch", &source) < 0) return NULL;
+  if (parse_uint64(target_obj, "target_epoch", &target) < 0) return NULL;
+  return except_into_pybytes(
+    eth_consensus_record_attestation_signing(mk_bytearray(text, text_len),
+      mk_bytearray(pubkey, pubkey_len), source, target, mk_bytearray(root, root_len)),
+    SLASHING_PROTECTION_ERROR);
 }
 
 PyObject*

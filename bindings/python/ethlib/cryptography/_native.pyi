@@ -499,6 +499,30 @@ def consensus_construct_sync_committee_contribution(name: str, fork: str, state:
     """From Altair: the contribution of a subcommittee from sync committee messages, as SSZ bytes."""
     ...
 
+def consensus_read_slashing_interchange(text: bytes) -> bytes:
+    """An interchange file as the format writes it again, from its JSON text."""
+    ...
+
+def consensus_import_slashing_interchange(held: bytes, file: bytes) -> bytes:
+    """The record of a signer that keeps every message, after it imports a file, as JSON text."""
+    ...
+
+def consensus_check_block_signing(interchange: bytes, pubkey: bytes, slot: int, signing_root: bytes) -> bool:
+    """Whether a key may sign a block of a slot with a signing root, given a record."""
+    ...
+
+def consensus_check_attestation_signing(interchange: bytes, pubkey: bytes, source_epoch: int, target_epoch: int, signing_root: bytes) -> bool:
+    """Whether a key may sign a vote of two epochs with a signing root, given a record."""
+    ...
+
+def consensus_record_block_signing(interchange: bytes, pubkey: bytes, slot: int, signing_root: bytes) -> bytes:
+    """The record after a key signs a block, as JSON text."""
+    ...
+
+def consensus_record_attestation_signing(interchange: bytes, pubkey: bytes, source_epoch: int, target_epoch: int, signing_root: bytes) -> bytes:
+    """The record after a key signs a vote, as JSON text."""
+    ...
+
 def consensus_get_eth1_vote(name: str, fork: str, state: bytes, config: bytes, chain: list[bytes]) -> bytes:
     """Before Heze: the Eth1 vote of a proposer on a state, as the SSZ bytes of the Eth1 data."""
     ...
