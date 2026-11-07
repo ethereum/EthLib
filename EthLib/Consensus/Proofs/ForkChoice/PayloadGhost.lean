@@ -24,6 +24,10 @@ The theorem holds away from the payload decisions of the previous slot, and with
 There the payload committee and the proposer decide, which the model leaves out.
 
 A tie between two children goes to the greater root, then to the greater status number.
+
+When a viable node holds more than half of the stake in votes, the head descends from it.
+
+That holds away from the payload decisions of the previous slot, and without the boost.
 -/
 
 @[expose] public section
@@ -812,6 +816,160 @@ theorem getHead_eq_ghost_full_of_verified {nodes : List ForkChoiceNode} {head : 
   exact getHead_eq_ghost_full_of_gloas gloas fullParents present noBoost noDecision
     justifiedState tree someViable
     (full_mem_getFilteredNodeTree gloas verified viable tree) found
+
+/-! ## A majority of votes -/
+
+/-- From Gloas, the walk from a viable node reaches the slot of each viable ancestor.
+
+Every block of the chain is viable, so the walk never meets an unknown parent. -/
+private theorem getAncestor_ok_of_viable_ancestor_of_gloas {nodes : List ForkChoiceNode}
+    (gloas : .glamsterdam ≤ fork)
+    (tree : store.getFilteredNodeTree config = .ok nodes) :
+    ∀ {n : ℕ} {start : ForkChoiceNode}, start ∈ nodes →
+      ∀ {root : Root} {rootBlock : BeaconBlock preset fork},
+        (blockTree lower).parent^[n] (some start.root) = some root →
+        store.blocks[root]? = some rootBlock →
+        (blockTree lower).Ancestor (some store.justifiedCheckpoint.root) (some root) →
+        ∃ found, store.getAncestor start rootBlock.slot = .ok found
+  | 0, start, startMem, root, rootBlock, step, rootFound, _ => by
+    obtain ⟨-, ⟨startBlock, startFound⟩, -⟩ := filterNodeTree_mem tree start startMem
+    cases step
+    rw [rootFound, Option.some.injEq] at startFound
+    subst startFound
+    exact ⟨_, getAncestor_of_le rootFound (UInt64.le_refl _)⟩
+  | n + 1, start, startMem, root, rootBlock, step, rootFound, belowJustified => by
+    obtain ⟨-, ⟨startBlock, startFound⟩, -⟩ := filterNodeTree_mem tree start startMem
+    by_cases le : startBlock.slot ≤ rootBlock.slot
+    · exact ⟨_, getAncestor_of_le startFound le⟩
+    · rw [Function.iterate_succ_apply, blockTree_parent_of startFound] at step
+      have closed := filterNodeTree_closed (T := nodeTree lower) (·.toModel) tree
+        (fun _ _ _ childrenOk _ nMem => isChild_of_mem_getNodeChildren gloas childrenOk nMem)
+        start startMem
+      have parentAbove : (blockTree lower).Ancestor (some root) (some startBlock.parentRoot) :=
+        ⟨n, step⟩
+      have justifiedAbove :
+          (nodeTree lower).Ancestor (some store.justifiedCheckpoint.root, none)
+            (some startBlock.parentRoot, none) :=
+        payloadTree_ancestor_none_of (belowJustified.trans parentAbove)
+      have parentAboveStart :
+          (nodeTree lower).Ancestor (some startBlock.parentRoot, none) start.toModel :=
+        payloadTree_ancestor_none_of ⟨1, blockTree_parent_of startFound⟩
+      obtain ⟨p, pMem, pModel⟩ := closed.2 (some startBlock.parentRoot, none) justifiedAbove
+        parentAboveStart
+      have pRoot : p.root = startBlock.parentRoot :=
+        Option.some.inj (Prod.mk.inj pModel).1.symm
+      obtain ⟨-, ⟨parentBlock, parentFound⟩, -⟩ := filterNodeTree_mem tree p pMem
+      rw [pRoot] at parentFound
+      -- The parent node that the start block builds on lies between that parent and the start.
+      have builtNode : (nodeTree lower).parent (some start.root, none) =
+          (some startBlock.parentRoot,
+            (parentPayloadStatus startBlock parentBlock).toStatus) := by
+        rw [nodeTree_parent_of startFound parentFound,
+          PayloadStatus.toStatus_of_ne_pending (parentPayloadStatus_ne_pending gloas)]
+      have builtBelow :
+          (nodeTree lower).Ancestor (some store.justifiedCheckpoint.root, none)
+            (some startBlock.parentRoot,
+              (parentPayloadStatus startBlock parentBlock).toStatus) :=
+        justifiedAbove.trans ⟨1, by
+          simp [nodeTree, payloadTree, statusParent,
+            PayloadStatus.toStatus_of_ne_pending (parentPayloadStatus_ne_pending gloas)]⟩
+      have builtAbove :
+          (nodeTree lower).Ancestor
+            (some startBlock.parentRoot,
+              (parentPayloadStatus startBlock parentBlock).toStatus) start.toModel :=
+        Ancestor.trans ⟨1, builtNode⟩ (payloadTree_ancestor_none_of (.refl _))
+      obtain ⟨q, qMem, qModel⟩ := closed.2 _ builtBelow builtAbove
+      have qEq : q = ⟨startBlock.parentRoot, parentPayloadStatus startBlock parentBlock⟩ :=
+        ForkChoiceNode.toModel_injective qModel.symm
+      subst qEq
+      rw [getAncestor_step startFound le parentFound
+        (lower start.root startBlock parentBlock startFound parentFound)]
+      exact getAncestor_ok_of_viable_ancestor_of_gloas gloas tree qMem step rootFound
+        belowJustified
+
+variable (lower) in
+/-- When a viable node has more than half of the stake in votes, the head is in its subtree.
+
+That holds from Gloas, away from the payload decisions of the previous slot, and without a boost.
+
+Each known block must sit at a later slot than its known parent.
+
+A validator counts when it is active and not slashed in the justified state.
+
+Its stake is its effective balance, and the votes of the node are counted at that node. -/
+theorem ancestor_getHead_of_majority_of_gloas {nodes : List ForkChoiceNode}
+    {node head : ForkChoiceNode} {score : Gwei} (gloas : .glamsterdam ≤ fork)
+    (noBoost : store.shouldApplyProposerBoost config gloas = .ok false)
+    (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
+    (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
+    (tree : store.getFilteredNodeTree config = .ok nodes) (viable : node ∈ nodes)
+    (votes : store.getAttestationScore node state = .ok score)
+    (majority : Models.stake (balanceAt state) (voters state) < 2 * score.toNat)
+    (found : store.getHead config = .ok head) :
+    (nodeTree lower).Ancestor node.toModel head.toModel := by
+  obtain ⟨-, ⟨block, nodeFound⟩, -⟩ := filterNodeTree_mem tree node viable
+  have belowJustified :
+      (nodeTree lower).Ancestor (some store.justifiedCheckpoint.root, none) node.toModel :=
+    (filterNodeTree_closed (T := nodeTree lower) (·.toModel) tree
+      (fun _ _ _ childrenOk _ nMem => isChild_of_mem_getNodeChildren gloas childrenOk nMem) node
+      viable).1
+  have inView : node.toModel ∈ (nodeView lower nodes).blocks := by
+    simp only [nodeView, View.mem_ofBlocks, List.mem_toFinset, List.mem_map]
+    exact ⟨_, ⟨node, viable, rfl⟩, .refl _⟩
+  rw [getAttestationScore_eq_weight_of_gloas (lower := lower) gloas nodeFound nodes votes]
+    at majority
+  have model := ancestor_ghost_of_majority (voters state) (balanceAt state) (nodeView lower nodes)
+    nodeOrder inView belowJustified majority
+  rwa [getHead_eq_ghost_of_gloas lower gloas noBoost noDecision justifiedState tree
+    (List.ne_nil_of_mem viable) found] at model
+
+/-- When a viable node has more than half of the stake in votes, the head descends from it.
+
+The ancestor check of the store returns true from the head back to that node.
+
+That holds from Gloas, away from the payload decisions of the previous slot, and without a boost.
+
+Each known block must sit at a later slot than its known parent.
+
+A validator counts when it is active and not slashed in the justified state.
+
+Its stake is its effective balance, and the votes of the node are counted at that node. -/
+theorem isAncestor_getHead_of_majority_of_gloas {nodes : List ForkChoiceNode}
+    {node head : ForkChoiceNode} {score : Gwei} (lower : store.ParentsBelow)
+    (gloas : .glamsterdam ≤ fork)
+    (noBoost : store.shouldApplyProposerBoost config gloas = .ok false)
+    (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
+    (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
+    (tree : store.getFilteredNodeTree config = .ok nodes) (viable : node ∈ nodes)
+    (votes : store.getAttestationScore node state = .ok score)
+    (majority : Models.stake (balanceAt state) (voters state) < 2 * score.toNat)
+    (found : store.getHead config = .ok head) :
+    store.isAncestor head node = .ok true := by
+  have above := ancestor_getHead_of_majority_of_gloas lower gloas noBoost noDecision
+    justifiedState tree viable votes majority found
+  obtain ⟨-, ⟨nodeBlock, nodeFound⟩, -⟩ := filterNodeTree_mem tree node viable
+  have belowJustified :
+      (blockTree lower).Ancestor (some store.justifiedCheckpoint.root) (some node.root) :=
+    payloadTree_ancestor_fst ((filterNodeTree_closed (T := nodeTree lower) (·.toModel) tree
+      (fun _ _ _ childrenOk _ nMem => isChild_of_mem_getNodeChildren gloas childrenOk nMem) node
+      viable).1)
+  have headIn : head ∈ nodes := by
+    have notEmpty : ¬ (.glamsterdam ≤ fork ∧ nodes.isEmpty = true) :=
+      fun ⟨_, empty⟩ => List.ne_nil_of_mem viable (List.isEmpty_iff.mp empty)
+    have headFrom := found
+    simp only [getHead, tree, notEmpty, ↓reduceIte, bind, Except.bind] at headFrom
+    rcases getHeadFrom_mem headFrom with rfl | mem
+    · exact (filterNodeTree_mem tree node viable).1
+    · exact mem
+  obtain ⟨n, step⟩ := payloadTree_ancestor_fst above
+  obtain ⟨ancestor, walk⟩ := getAncestor_ok_of_viable_ancestor_of_gloas (lower := lower) gloas tree
+    headIn step nodeFound belowJustified
+  have computed : store.isAncestor head node = .ok (ancestor.root == node.root &&
+      (ancestor.payloadStatus == node.payloadStatus || node.payloadStatus == .pending)) := by
+    simp [isAncestor, block_ok_iff.mpr nodeFound, gloas, walk, bind, Except.bind, pure,
+      Except.pure]
+  have same := (isAncestor_iff_of_gloas (lower := lower) gloas nodeFound computed).mpr above
+  exact same ▸ computed
 
 end Store
 
