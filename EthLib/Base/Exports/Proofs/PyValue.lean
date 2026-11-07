@@ -173,18 +173,30 @@ instance {α β : Type} [ToPy α] [FromPy α] [LawfulPy α] [ToPyItems β] [From
 instance {α β : Type} [ToPy α] [ToPyItems β] : PlainPy (α × β) where
   isPlain_toPy := fun _ => rfl
 
+/-- A value that is never `None` nor an error is never an error. -/
+instance (priority := low) {α : Type} [ToPy α] [PlainPy α] : NoFailurePy α where
+  isFailure_toPy a := by
+    have hp := PlainPy.isPlain_toPy a
+    cases h : toPy a <;> simp_all [PyValue.isPlain, PyValue.isFailure]
+
+/-- An option is `None` or its value, and neither is an error. -/
+instance {α : Type} [ToPy α] [NoFailurePy α] : NoFailurePy (Option α) where
+  isFailure_toPy
+    | none => rfl
+    | some a => NoFailurePy.isFailure_toPy a
+
 /-- A result is a failure or its value, so the value must never be a failure itself. -/
-instance {α : Type} [ToPy α] [FromPy α] [LawfulPy α] [PlainPy α] :
+instance {α : Type} [ToPy α] [FromPy α] [LawfulPy α] [NoFailurePy α] :
     LawfulPy (Except (UInt32 × String) α) where
   fromPy_toPy := by
     intro r
     cases r with
     | error e => rfl
     | ok a =>
-      have hp := PlainPy.isPlain_toPy a
+      have hp := NoFailurePy.isFailure_toPy a
       have key : fromPy (α := Except (UInt32 × String) α) (toPy a) =
           .ok <$> fromPy (toPy a) := by
-        cases h : toPy a <;> simp_all [fromPy, PyValue.isPlain]
+        cases h : toPy a <;> simp_all [fromPy, PyValue.isFailure]
       show fromPy (α := Except (UInt32 × String) α) (toPy a) = _
       rw [key, LawfulPy.fromPy_toPy]
       rfl

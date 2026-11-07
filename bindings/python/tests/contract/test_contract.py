@@ -38,6 +38,8 @@ RESULT_MARKERS = {
     "tuple[bytes, bytes]": ("PyTuple_Pack",),
     "tuple[list[bytes], list[bytes]]": ("PyTuple_Pack", "cells_and_proofs("),
     "object": ("call_pyvalue_export",),
+    "list": ("call_pyvalue_export",),
+    "dict": ("call_pyvalue_export",),
 }
 
 

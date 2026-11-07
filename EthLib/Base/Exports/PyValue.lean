@@ -1,6 +1,8 @@
 module
 
 public import EthLib.Base.Exports
+public import EthLib.Base.Hex
+public import Lean.Data.Json
 
 /-!
 # `EthLib.Base.Exports.PyValue`
@@ -59,6 +61,83 @@ def isPlain : PyValue → Bool
   | .none | .failure _ => Bool.false
   | _ => Bool.true
 
+/-- Whether a value is an error. -/
+def isFailure : PyValue → Bool
+  | .failure _ => Bool.true
+  | _ => Bool.false
+
+open Lean (Json)
+
+mutual
+
+/-- A value as JSON, as `json.dumps` writes it, with bytes as `0x` and lowercase hex.
+
+A list and a tuple become an array, and an error becomes `null`. -/
+def toJson : PyValue → Json
+  | .none | .failure _ => .null
+  | .false => .bool Bool.false
+  | .true => .bool Bool.true
+  | .int n => .num n
+  | .bytes data => .str (Base.hexString data.toList)
+  | .str s => .str s
+  | .list items | .tuple items => .arr (toJsonArray items)
+  | .dict entries => Json.mkObj (toJsonEntries entries)
+termination_by structural v => v
+
+/-- The items of a sequence as JSON. -/
+def toJsonArray : Array PyValue → Array Json
+  | ⟨items⟩ => (toJsonList items).toArray
+
+/-- The items of a sequence as JSON. -/
+def toJsonList : List PyValue → List Json
+  | [] => []
+  | v :: vs => toJson v :: toJsonList vs
+
+/-- The entries of a `dict` as JSON. -/
+def toJsonEntries : Array (String × PyValue) → List (String × Json)
+  | ⟨entries⟩ => toJsonPairs entries
+
+/-- The entries of a `dict` as JSON. -/
+def toJsonPairs : List (String × PyValue) → List (String × Json)
+  | [] => []
+  | (key, v) :: rest => (key, toJson v) :: toJsonPairs rest
+
+end
+
+mutual
+
+/-- The value of JSON, as `json.loads` reads it for the JSON that the exports write.
+
+A number that is an integer and not negative becomes an `int`.
+
+Any other number becomes its text, and an object becomes a `dict` in the order of its keys. -/
+def ofJson : Json → PyValue
+  | .null => .none
+  | .bool b => if b then .true else .false
+  | .num n => if n.exponent = 0 ∧ 0 ≤ n.mantissa then .int n.mantissa.toNat else .str n.toString
+  | .str s => .str s
+  | .arr items => .list (ofJsonArray items)
+  | .obj entries => .dict (ofJsonTree entries.inner.inner #[])
+termination_by structural j => j
+
+/-- The values of the items of a JSON array. -/
+def ofJsonArray : Array Json → Array PyValue
+  | ⟨items⟩ => (ofJsonList items).toArray
+
+/-- The values of the items of a JSON array. -/
+def ofJsonList : List Json → List PyValue
+  | [] => []
+  | j :: js => ofJson j :: ofJsonList js
+
+/-- The entries of a JSON object, in the order of its keys, after some entries. -/
+def ofJsonTree : Std.DTreeMap.Internal.Impl String (fun _ => Json) →
+    Array (String × PyValue) → Array (String × PyValue)
+  | .leaf, entries => entries
+  | .inner _ key j left right, entries =>
+    ofJsonTree right ((ofJsonTree left entries).push (key, ofJson j))
+
+end
+
 end PyValue
 
 /-- A type whose values Python can receive. -/
@@ -87,6 +166,13 @@ An optional value, or a result that may be an error, then tells its cases apart.
 class PlainPy (α : Type) [ToPy α] : Prop where
   /-- No value becomes `None` or an error. -/
   isPlain_toPy (a : α) : (toPy a).isPlain = Bool.true
+
+/-- No value of the type becomes an error.
+
+A result that may be an error then tells its cases apart. -/
+class NoFailurePy (α : Type) [ToPy α] : Prop where
+  /-- No value becomes an error. -/
+  isFailure_toPy (a : α) : (toPy a).isFailure = Bool.false
 
 instance : ToPy PyValue := ⟨id⟩
 

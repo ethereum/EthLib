@@ -29,6 +29,8 @@ The export from Gloas builds its store from an anchor state, an anchor block and
 
 Those steps take the form of the fork choice export.
 
+Its arguments and its result are typed Python values, and the result is the `dict` of that JSON.
+
 The head is a block root and a payload status: 0 empty, 1 full or 2 pending.
 
 From Heze the result also holds the transactions of the inclusion lists, in hex.
@@ -45,7 +47,7 @@ public section
 namespace EthLib.Engine.Exports
 
 open Lean (Json)
-open EthLib.Exports (Result)
+open EthLib.Exports (Result PyValue pyExport)
 open EthLib.Base
 open EthLib.Consensus
 open EthLib.Consensus.Exports
@@ -119,18 +121,19 @@ def payloadStatusOfCode : UInt64 → Result Consensus.PayloadStatus
   | 2 => return .pending
   | _ => throw (0, "a payload status is 0, 1 or 2")
 
-/-- From Gloas: the forkchoice update of a proposer, as JSON text.
+/-- From Gloas: the forkchoice update of a proposer, as the value of its JSON.
 
 The store comes from an anchor state, an anchor block and steps of the fork choice export.
 
-The signature checks run unless `verify` is false. -/
-@[export eth_engine_prepare_execution_payload_gloas]
-def prepareExecutionPayloadGloasExport
-    (name fork anchorState anchorBlock steps replacements headRoot state safe finalized : ByteArray)
-    (feeRecipient : ByteArray) (headStatus targetGasLimit : UInt64) (verify : Bool) :
-    Result ByteArray := do
-  let (preset, fork) ← transitionPresetAndFork name fork
-  let config ← configWith name replacements
+The signature checks run unless the flag is false. -/
+def preparePayloadOnStore
+    (args : String × String × ByteArray × ByteArray × List ForkChoiceStep × ByteArray × UInt64 ×
+      ByteArray × ByteArray × ByteArray × ByteArray × UInt64 × Bool × Option PyValue) :
+    Result PyValue := do
+  let (name, fork, anchorState, anchorBlock, steps, headRoot, headStatus, state, safe, finalized,
+    feeRecipient, targetGasLimit, verify, replacements) := args
+  let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
+  let config ← configWithValue name replacements
   let ⟨gloas⟩ ← holds (.glamsterdam ≤ fork) s!"no payload preparation on a store at {fork.name}"
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   let anchorState ← decodeInput (BeaconState preset fork) anchorState
@@ -148,6 +151,17 @@ def prepareExecutionPayloadGloasExport
     | some list =>
       [("inclusionListTransactions", Json.arr (list.map (dataJson ·.data.toList)).toArray)]
     | none => []
-  return (updateJson update attributes (("custodyColumns", Json.null) :: lists)).compress.toUTF8
+  return .ofJson (updateJson update attributes (("custodyColumns", Json.null) :: lists))
+
+/-- From Gloas: the forkchoice update of a proposer, as the value of its JSON.
+
+The arguments are the preset, the fork, the anchor state and the anchor block, and the steps.
+
+Then come the head root and status, the state, the safe and finalized hashes and the fee recipient.
+
+Then come the target gas limit, whether the signature checks run, and configuration replacements. -/
+@[export eth_engine_prepare_execution_payload_gloas]
+def prepareExecutionPayloadGloasExport (args : PyValue) : Result PyValue :=
+  pyExport preparePayloadOnStore args
 
 end EthLib.Engine.Exports

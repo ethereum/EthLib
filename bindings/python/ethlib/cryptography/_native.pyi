@@ -607,7 +607,7 @@ def consensus_upgrade_state(name: str, fork: str, pre: bytes, config: bytes, ver
     """The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes."""
     ...
 
-def consensus_fork_choice(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: bytes, config: bytes, verify: bool) -> bytes:
+def consensus_fork_choice(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None) -> list:
     """The outcome of each step of a fork choice case, from an anchor state and an anchor block."""
     ...
 
@@ -1159,8 +1159,8 @@ def engine_prepare_execution_payload(name: str, fork: str, state: bytes, config:
     """From Bellatrix to Fulu: the forkchoice update of a proposer, as JSON text."""
     ...
 
-def engine_prepare_execution_payload_gloas(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: bytes, config: bytes, head_root: bytes, state: bytes, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, head_status: int, target_gas_limit: int, verify: bool) -> bytes:
-    """From Gloas: the forkchoice update of a proposer, as JSON text."""
+def engine_prepare_execution_payload_gloas(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, head_root: bytes, head_status: int, state: bytes, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, target_gas_limit: int, verify: bool, config: dict | None) -> dict:
+    """From Gloas: the forkchoice update of a proposer, as the value of its JSON."""
     ...
 
 def pyvalue_echo(value: object) -> object:

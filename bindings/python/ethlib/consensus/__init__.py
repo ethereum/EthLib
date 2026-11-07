@@ -3,7 +3,7 @@
 import json
 import struct
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Literal, TypeAlias
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
@@ -512,21 +512,31 @@ def state_transitions_across(
     )
 
 
-_FORK_CHOICE_STEPS = {
-    "tick": 0,
-    "block": 1,
-    "attestation": 2,
-    "attester_slashing": 3,
-    "checks": 4,
-    "pow_block": 5,
-    "payload": 8,
-    "fast_confirmation": 9,
-    "execution_payload": 10,
-    "payload_attestation_message": 11,
-}
-
-# The verdicts of the execution layer that find a payload invalid.
-_INVALID_PAYLOAD = ("INVALID", "INVALID_BLOCK_HASH")
+# A step of a fork choice case: its kind, then its data.
+#
+# A block may come alone, or with the blobs and proofs, or with the columns, that the node holds.
+# A read is one bool, or the three parts it asks for.
+# A payload verdict is the Engine API status and the latest valid hash, or None.
+ForkChoiceStep: TypeAlias = (
+    tuple[Literal["tick"], int]
+    | tuple[
+        Literal["block"],
+        bytes | tuple[bytes, list[bytes], list[bytes]] | tuple[bytes, list[bytes]],
+    ]
+    | tuple[
+        Literal[
+            "attestation",
+            "attester_slashing",
+            "pow_block",
+            "execution_payload",
+            "payload_attestation_message",
+        ],
+        bytes,
+    ]
+    | tuple[Literal["checks"], bool | tuple[bool, bool, bytes | None]]
+    | tuple[Literal["payload"], tuple[str, bytes | None]]
+    | tuple[Literal["fast_confirmation"], None]
+)
 
 
 def fork_choice(
@@ -534,48 +544,18 @@ def fork_choice(
     fork: str,
     anchor_state: bytes,
     anchor_block: bytes,
-    steps: list,
+    steps: list[ForkChoiceStep],
     verify: bool = True,
-    config: dict | None = None,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
 ) -> list:
     """The outcome of each step of a fork choice case, from an anchor state and block."""
-    records = _fork_choice_records(steps)
-    replacements = json.dumps(config).encode() if config else b""
-    out = _native.consensus_fork_choice(
-        name, fork, anchor_state, anchor_block, records, replacements, verify
-    )
-    outcomes, offset = [], 0
-    for kind, data in steps:
-        if kind == "block" and isinstance(data, tuple):
-            # The blobs or the columns that the node holds take no part in the outcome.
-            offset += 1
-        status, offset = out[offset], offset + 1
-        if status == 1:
-            code = int.from_bytes(out[offset : offset + 4], "little")
-            length = int.from_bytes(out[offset + 4 : offset + 8], "little")
-            message = out[offset + 8 : offset + 8 + length].decode()
-            outcomes.append(ForkChoiceError(code, message))
-            offset += 8 + length
-        elif kind == "fast_confirmation":
-            size = 216 + 1 + 32 * out[offset + 216]
-            outcomes.append(_fast_confirmation_record(out[offset : offset + size]))
-            offset += size
-        elif kind != "checks":
-            outcomes.append(None)
-        else:
-            read, offset = _store_record(out, offset, data)
-            outcomes.append(read)
-    return outcomes
-
-
-def _fork_choice_records(steps: list) -> bytes:
-    """The steps of a fork choice case as the records that the native exports read."""
     # A step is (kind, data), and its data is one of these:
     # - the tick in seconds
     # - the SSZ bytes of a block, an attestation, an attester slashing or a PoW block
     # - for "checks", what the read asks
     #
-    # A read asks for the proposer head when its data is true.
+    # A read given as one bool asks for the proposer head when it is True.
     # It may also be (proposer head, viable leaves, root or None).
     # Viable leaves asks for the leaves of the filtered tree with their weights.
     # A root asks for the votes of the payload committee on the block of the root.
@@ -589,32 +569,9 @@ def _fork_choice_records(steps: list) -> bytes:
     # It is the verdict of the execution layer on the payload of the next block.
     # The status is given by its Engine API name.
     # A "fast_confirmation" step, with data None, runs the fast confirmation of the slot.
-    records = b""
-    for kind, data in steps:
-        if kind == "tick":
-            data = data.to_bytes(8, "little")
-        elif kind == "checks":
-            proposer_head, viable, root = data if isinstance(data, tuple) else (data, False, None)
-            flags = bool(proposer_head) | 2 * bool(viable) | 4 * (root is not None)
-            data = bytes([flags]) + (root or b"")
-        elif kind == "fast_confirmation":
-            data = b""
-        elif kind == "payload":
-            status, latest_valid_hash = data
-            invalid = status in _INVALID_PAYLOAD
-            data = bytes([invalid]) + (latest_valid_hash or b"" if invalid else b"")
-        elif kind == "block" and isinstance(data, tuple) and len(data) == 3:
-            data, blobs, proofs = data
-            held = len(blobs).to_bytes(4, "little") + b"".join(blobs) + b"".join(proofs)
-            records += bytes([6]) + len(held).to_bytes(4, "little") + held
-        elif kind == "block" and isinstance(data, tuple):
-            data, columns = data
-            held = len(columns).to_bytes(4, "little") + b"".join(
-                len(column).to_bytes(4, "little") + column for column in columns
-            )
-            records += bytes([7]) + len(held).to_bytes(4, "little") + held
-        records += bytes([_FORK_CHOICE_STEPS[kind]]) + len(data).to_bytes(4, "little") + data
-    return records
+    return _native.consensus_fork_choice(
+        name, fork, anchor_state, anchor_block, steps, verify, config
+    )
 
 
 def gossip_validation(
@@ -682,74 +639,6 @@ def gossip_validation(
         outcomes.append(("ignore" if status == 1 else "reject", reason))
         offset += 4 + length
     return outcomes
-
-
-def _store_record(out: bytes, offset: int, asked) -> tuple[dict, int]:
-    """A read of the store from its bytes at an offset, and the offset after it."""
-    proposer_head, viable, root = asked if isinstance(asked, tuple) else (asked, False, None)
-    record = out[offset:]
-
-    def number(start: int, width: int = 8) -> int:
-        return int.from_bytes(record[start : start + width], "little")
-
-    def checkpoint(start: int) -> dict:
-        return {"epoch": number(start), "root": record[start + 8 : start + 40]}
-
-    read = {
-        "head": {"slot": number(0), "root": record[8:40]},
-        "time_ms": number(40),
-        "genesis_time_ms": number(48),
-        "justified_checkpoint": checkpoint(56),
-        "finalized_checkpoint": checkpoint(96),
-        "proposer_boost_root": record[136:168],
-    }
-    at = 168
-    if proposer_head:
-        read["proposer_head"] = record[at : at + 32]
-        at += 32
-    read["head"]["payload_status"] = record[at]
-    at += 1
-    if viable:
-        count, at = number(at, 4), at + 4
-        read["viable_for_head_roots_and_weights"] = [
-            {
-                "root": record[at + 41 * i : at + 41 * i + 32],
-                "weight": number(at + 41 * i + 32),
-                "payload_status": record[at + 41 * i + 40],
-            }
-            for i in range(count)
-        ]
-        at += 41 * count
-    if root is not None:
-        # Each vote is a byte: 0 false, 1 true, 2 none.
-        size, at = number(at, 4), at + 4
-        votes = [None if vote == 2 else bool(vote) for vote in record[at : at + 2 * size]]
-        read["payload_timeliness_vote"] = votes[:size]
-        read["payload_data_availability_vote"] = votes[size:]
-        at += 2 * size
-    return read, offset + at
-
-
-def _fast_confirmation_record(record: bytes) -> dict:
-    """A read of the fast confirmation store, from its bytes."""
-
-    def checkpoint(start: int) -> dict:
-        return {
-            "epoch": int.from_bytes(record[start : start + 8], "little"),
-            "root": record[start + 8 : start + 40],
-        }
-
-    read = {
-        "previous_epoch_observed_justified_checkpoint": checkpoint(0),
-        "current_epoch_observed_justified_checkpoint": checkpoint(40),
-        "previous_epoch_greatest_unrealized_checkpoint": checkpoint(80),
-        "previous_slot_head": record[120:152],
-        "current_slot_head": record[152:184],
-        "confirmed_root": record[184:216],
-    }
-    if record[216]:
-        read["safe_execution_block_hash"] = record[217:249]
-    return read
 
 
 def initialize_genesis(

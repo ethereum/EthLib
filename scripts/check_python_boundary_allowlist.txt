@@ -12,20 +12,10 @@
 
 bindings/python/ethlib/chain/__init__.py active_fork json
 bindings/python/ethlib/consensus/__init__.py <module> struct
-bindings/python/ethlib/consensus/__init__.py _fast_confirmation_record slice
-bindings/python/ethlib/consensus/__init__.py _fast_confirmation_record.checkpoint from_bytes
-bindings/python/ethlib/consensus/__init__.py _fast_confirmation_record.checkpoint slice
-bindings/python/ethlib/consensus/__init__.py _fork_choice_records bytes
-bindings/python/ethlib/consensus/__init__.py _fork_choice_records join
-bindings/python/ethlib/consensus/__init__.py _fork_choice_records to_bytes
 bindings/python/ethlib/consensus/__init__.py _list_items from_bytes
 bindings/python/ethlib/consensus/__init__.py _list_items slice
 bindings/python/ethlib/consensus/__init__.py _replacements json
 bindings/python/ethlib/consensus/__init__.py _roots slice
-bindings/python/ethlib/consensus/__init__.py _store_record slice
-bindings/python/ethlib/consensus/__init__.py _store_record.checkpoint slice
-bindings/python/ethlib/consensus/__init__.py _store_record.number from_bytes
-bindings/python/ethlib/consensus/__init__.py _store_record.number slice
 bindings/python/ethlib/consensus/__init__.py _sync_step bytes
 bindings/python/ethlib/consensus/__init__.py _sync_step to_bytes
 bindings/python/ethlib/consensus/__init__.py block_to_light_client_header json
@@ -42,9 +32,6 @@ bindings/python/ethlib/consensus/__init__.py compute_weak_subjectivity_period js
 bindings/python/ethlib/consensus/__init__.py config json
 bindings/python/ethlib/consensus/__init__.py create_light_client_bootstrap json
 bindings/python/ethlib/consensus/__init__.py create_light_client_update json
-bindings/python/ethlib/consensus/__init__.py fork_choice from_bytes
-bindings/python/ethlib/consensus/__init__.py fork_choice json
-bindings/python/ethlib/consensus/__init__.py fork_choice slice
 bindings/python/ethlib/consensus/__init__.py get_committee_assignment json
 bindings/python/ethlib/consensus/__init__.py get_custody_groups json
 bindings/python/ethlib/consensus/__init__.py get_custody_groups to_bytes
@@ -105,7 +92,6 @@ bindings/python/ethlib/engine/__init__.py forkchoice_updated json
 bindings/python/ethlib/engine/__init__.py new_payload json
 bindings/python/ethlib/engine/__init__.py new_payload_on_chain json
 bindings/python/ethlib/engine/__init__.py prepare_execution_payload json
-bindings/python/ethlib/engine/__init__.py prepare_execution_payload_gloas json
 bindings/python/ethlib/execution/blocks/__init__.py _blob_schedules to_bytes
 bindings/python/ethlib/execution/blocks/__init__.py genesis_block.scalar to_bytes
 bindings/python/ethlib/execution/blocks/__init__.py state_transition json
