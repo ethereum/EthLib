@@ -121,6 +121,11 @@ theorem instruction_iszero :
     instruction (Meter := Meter) fork .iszero = some (unaryOp OPCODE_ISZERO isZero) := by
   simp [instruction, stackOnlyStep, HOrElse.hOrElse, OrElse.orElse, Option.orElse]
 
+/-- SUB runs the difference. -/
+theorem instruction_sub :
+    instruction (Meter := Meter) fork .sub = some (binaryOp OPCODE_SUB sub) := by
+  simp [instruction, stackOnlyStep, HOrElse.hOrElse, OrElse.orElse, Option.orElse]
+
 /-- ADD runs the sum. -/
 theorem instruction_add :
     instruction (Meter := Meter) fork .add = some (binaryOp OPCODE_ADD add) := by

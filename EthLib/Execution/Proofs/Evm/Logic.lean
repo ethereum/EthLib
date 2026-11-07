@@ -4,6 +4,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Reach
 public import EthLib.Execution.Proofs.Evm.Logic.Triple
 public import EthLib.Execution.Proofs.Evm.Logic.Symbolic
 public import EthLib.Execution.Proofs.Evm.Logic.Loop
+public import EthLib.Execution.Proofs.Evm.Logic.Subroutine
 public import EthLib.Execution.Proofs.Evm.Logic.Message
 public import EthLib.Execution.Proofs.Evm.Logic.Call
 public import EthLib.Execution.Proofs.Evm.Logic.Log
@@ -38,6 +39,8 @@ public import EthLib.Execution.Proofs.Evm.Logic.Examples.NoValue
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.Deploy
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.Echo
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.Pair
+public import EthLib.Execution.Proofs.Evm.Logic.Examples.Twice
+public import EthLib.Execution.Proofs.Evm.Logic.Examples.SumTo
 
 /-!
 # `EthLib.Execution.Proofs.Evm.Logic`
