@@ -855,6 +855,7 @@ No theorem relates the module to the execution-specs code it follows.
 The theorems pin down the input format exactly, and state the compression function F against a model of RFC 7693.
 `output_invalidInputLength`, `output_invalidFlag` and `output_ok` (`Execution/Proofs/Evm/Precompiles/Blake2f.lean`) prove that a call fails exactly when the input is not 213 bytes long, or its flag byte is neither `0` nor `1`.
 Otherwise it returns `compute` of the input, which decodes the fields and runs F of RFC 7693 on them.
+`blake2f_eq_ok_iff` (`Execution/Proofs/Evm/Precompiles/Blake2f.lean`) proves that a call succeeds exactly on a 213-byte input with enough gas and a flag byte of `0` or `1`, returning `compute` of the input with that flag.
 `readWord_toNat`, `readRounds_toNat` and `writeState_word` state the encoding of EIP-152 for every input: the rounds field big-endian, every word little-endian, and the output in the encoding of the input.
 
 `roundsFrom_bijective` (`Cryptography/Proofs/Hash/Blake2b.lean`) proves that the rounds of F permute the work vector.

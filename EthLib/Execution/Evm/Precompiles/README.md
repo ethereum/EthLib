@@ -499,6 +499,7 @@ The proofs are in `EthLib/Execution/Proofs/Evm/Precompiles/Blake2f.lean` and
 A call fails exactly on a wrong length, too little gas or a wrong flag byte, in that order
 (`blake2f_eq_error_iff`).
 Otherwise it returns F on the decoded fields (`blake2f_of_gas`, `output_ok`).
+A call succeeds exactly on a 213-byte input with enough gas and a flag byte of `0` or `1` (`blake2f_eq_ok_iff`).
 Every field is decoded with its own byte order, and the output words keep the order of the input
 (`readRounds_toNat`, `readWord_toNat`, `writeState_word`).
 Each word of the initialization vector is the square root of its prime, and each row of the
