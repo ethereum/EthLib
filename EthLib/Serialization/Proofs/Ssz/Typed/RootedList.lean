@@ -9,7 +9,9 @@ public import EthLib.Serialization.Proofs.Ssz.Typed.Rooted
 
 Before the switch, the top of the levels, raised to the depth of the limit, is the bounded root.
 
-With the length mixed in, it is the root of the list.
+From the switch on, the tops of the spine trees fold to the progressive root.
+
+With the length mixed in, either is the root of the list.
 
 A rooted list has the SSZ type and the values of the fork-chosen list with its elements.
 -/
@@ -98,6 +100,50 @@ theorem hashTreeRoot_list_packed {limit : Nat} (basic : (desc α).isBasic = true
     serializeEach_elementBytes basic, finishLayout, merkleizeBoundedUnchecked,
     bind, Except.bind, pure, Except.pure, packed, fit, within]
 
+/-- The leaves of a progressive list are those of its elements, packed or rooted. -/
+theorem hashTreeRoot_progressiveList_leaves (data : Array α) :
+    Ssz.hashTreeRoot (.progressiveList (desc α) none) (.seq (data.toList.map toValue))
+      = .ok (mixIn (merkleizeProgressiveUnchecked (sequenceLeaves data).toList)
+          (lengthWord data.size)) := by
+  rw [hashTreeRoot_unfold]
+  by_cases basic : (desc α).isBasic
+  · have packed := packElements_elementBytes basic data
+    simp [merkleLayout, sequenceLayout, basic, MerkleLayout.packing, leafChunks, boundCheck,
+      serializeEach_elementBytes basic, finishLayout, bind, Except.bind, pure, Except.pure, packed,
+      sequenceLeaves]
+  · have rooted := mapM_hashTreeRoot_toValue data.toList
+    have leaves : (data.toList.map leafRoot).toArray = leafRoots data := by
+      apply Array.ext_getElem?
+      intro index
+      simp [getElem?_leafRoots]
+    simp [merkleLayout, sequenceLayout, basic, MerkleLayout.nesting, leafChunks, boundCheck,
+      slotRoot, List.mapM_map, Function.comp_def, rooted, finishLayout, bind, Except.bind, pure,
+      Except.pure, leaves, sequenceLeaves]
+
+/-- The spine trees from a leaf on fold to the progressive root of the leaves from there on. -/
+theorem spineRoot_spineLevels (leaves : Array Bytes) :
+    ∀ (start level : Nat), spineRoot level (spineLevels leaves start level)
+      = merkleizeProgressiveUnchecked (leaves.toList.drop start) level := by
+  intro start level
+  induction start, level using spineLevels.induct leaves with
+  | case1 start level inside ih =>
+    have nonempty : (leaves.toList.drop start).isEmpty = false := by simp; omega
+    have slice : ((leaves.toList.drop start).take (4 ^ level)).toArray
+        = leaves.extract start (start + 4 ^ level) := by
+      apply Array.toList_inj.mp
+      simp
+    -- A tree of `4 ^ level` leaves has twice as many levels.
+    have depth : depthFor (4 ^ level) = 2 * level := by
+      rw [show 4 ^ level = 2 ^ (2 * level) by rw [Nat.pow_mul]]
+      exact depthFor_pow _
+    rw [spineLevels.eq_1 leaves, ite_eq_left inside, spineRoot, ih,
+      merkleizeProgressiveUnchecked.eq_1 (leaves.toList.drop start), nonempty]
+    simp only [Bool.false_eq_true, ↓reduceIte, slice, depth, List.drop_drop, topOfLevels_eq]
+  | case2 start level outside =>
+    rw [spineLevels.eq_1 leaves, ite_eq_right outside, spineRoot, merkleizeProgressiveUnchecked,
+      List.drop_eq_nil_of_le (by simp; omega)]
+    rfl
+
 namespace RootedForkList
 
 variable {switch fork : Fork} {limit : Nat}
@@ -118,7 +164,10 @@ theorem root_eq (l : RootedForkList switch fork α limit) :
         hashTreeRoot_list_packed basic _ (l.bound before)]
     · rw [ite_eq_right basic, ite_eq_right basic,
         hashTreeRoot_list_leafRoots (by simpa using basic) _ (l.bound before)]
-  · simp [root, before, desc, toValue]
+  · simp only [root, before, ite_false, desc, toValue, toForkList]
+    rw [ite_eq_left (show switch ≤ fork from Nat.le_of_not_lt before), l.spineBuilt,
+      forkListSpine, ite_eq_right before, spineRoot_spineLevels, List.drop_zero,
+      hashTreeRoot_progressiveList_leaves]
 
 end RootedForkList
 
