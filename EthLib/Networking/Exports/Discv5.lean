@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports
+public import EthLib.Networking.Exports.Enr
 public import Lean.Data.Json
 public import EthLib.Base.Hex
 public import EthLib.Networking.Discv5.Identity
@@ -34,18 +35,13 @@ namespace EthLib.Networking.Discv5.Exports
 open EthLib.Exports (Result)
 
 open EthLib.Cryptography.Secp256k1
+open EthLib.Networking.Enr.Exports (privateKeyOf)
 open Lean (Json ToJson toJson)
 
 /-- A node ID of 32 bytes. -/
 def nodeIdOf (bytes : ByteArray) : Result NodeId :=
   if h : bytes.size = 32 then pure ⟨bytes.data, h⟩
   else throw (0, s!"node ID has {bytes.size} bytes, not 32")
-
-/-- A private key of 32 big-endian bytes, below the group order. -/
-def privateKeyOf (bytes : ByteArray) : Result Fn :=
-  let k := Base.bytesToNat bytes.data.toList
-  if bytes.size = 32 ∧ k < Fn.modulus then pure (Fin.ofNat _ k)
-  else throw (0, "private key is not 32 bytes below the group order")
 
 /-- A public key in a SEC 1 encoding. -/
 def publicKeyOf (bytes : ByteArray) : Result Point :=

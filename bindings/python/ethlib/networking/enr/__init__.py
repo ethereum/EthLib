@@ -48,11 +48,7 @@ def node_id(record: bytes) -> bytes:
 
 
 def sign_v4(secret_key: bytes, record: bytes) -> bytes:
-    """
-    The record, signed again by the "v4" scheme with a 32-byte private key.
-
-    The signature is deterministic, with the nonce of RFC 6979 and a low s.
-    """
+    """The record, signed again by the "v4" scheme with a 32-byte private key."""
     return _native.enr_sign_v4(secret_key, record)
 
 

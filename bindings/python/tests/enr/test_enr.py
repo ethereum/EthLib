@@ -131,3 +131,17 @@ def test_sign_v4_with_another_key_does_not_verify() -> None:
 def test_sign_v4_rejects_a_zero_key() -> None:
     with raises(ValueError, "the record could not be signed"):
         enr.sign_v4(bytes(32), enr.from_text(TEXT))
+
+
+# The order of the group of secp256k1.
+ORDER = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+
+
+def test_sign_v4_rejects_a_short_key() -> None:
+    with raises(ValueError, "private key is not 32 bytes below the group order"):
+        enr.sign_v4(SECRET_KEY[1:], enr.from_text(TEXT))
+
+
+def test_sign_v4_rejects_the_group_order() -> None:
+    with raises(ValueError, "private key is not 32 bytes below the group order"):
+        enr.sign_v4(ORDER.to_bytes(32, "big"), enr.from_text(TEXT))
