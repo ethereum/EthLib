@@ -1507,6 +1507,8 @@ The execution root of the header is then the root of the execution payload of th
 So `isValidLightClientHeader_execution_eq` takes the binding to the fields, for a body of the fork of the header at a slot from that fork.
 The execution header of the light client header is then the header of the payload of the body, field by field.
 Otherwise a search over the two branch climbs, or one over the hash inputs of the two header roots, names a SHA-256 collision.
+From Deneb, `isValidLightClientHeader_blobGas` applies this to the blob gas used and the excess blob gas, at a slot from Deneb.
+`isValidLightClientHeader_blobGas_zero` shows that a valid header of an earlier slot has zero for both.
 From Gloas, `isValidLightClientHeader_parentBlockHash` binds the block hash of a header at a slot from Gloas to the parent block hash of the bid of a Gloas body.
 `isValidLightClientHeader_executionBlockHash` binds it, for an earlier slot from Capella, to the block hash of the payload of a body of the fork of that slot.
 The headers that the client checks are valid: `initializeLightClientStore_header_valid`, `validateLightClientUpdate_attestedHeader_valid`, and `validateLightClientUpdate_finalizedHeader_valid` after the genesis slot.

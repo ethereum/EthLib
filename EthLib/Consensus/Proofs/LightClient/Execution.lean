@@ -29,6 +29,12 @@ The headers that the client checks are valid: the header of a bootstrap and the 
 
 So is the finalized header of an update that proves finality, after the genesis slot.
 
+From Deneb the execution header carries the blob gas of its block.
+
+So a valid header at a slot from Deneb binds the blob gas used and the excess blob gas to the block.
+
+A valid header at an earlier slot has zero for both.
+
 Each theorem holds at every preset.
 
 The blob gas fields of the execution header come from [EIP-4844].
@@ -362,6 +368,105 @@ theorem isValidLightClientHeader_execution_eq {config : Config}
     · exact .inr (.inr collision)
   · exact .inr (.inl ⟨leaf, payloadRoot, honest, a, b, sameRoot, payloadHeaderRooted, built,
       found, rest⟩)
+
+/-! ## From Deneb: the blob gas of the execution header -/
+
+omit [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
+  [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat] [NeZero preset.PTC_SIZE.toNat]
+  [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat] in
+/-- The header of a payload keeps the blob gas used and the excess blob gas of the payload. -/
+theorem ExecutionPayload.header_blobGas {payload : ExecutionPayload preset fork}
+    {header : ExecutionPayloadHeader preset fork} (made : payload.header = .ok header) :
+    header.blobGasUsed = payload.blobGasUsed ∧ header.excessBlobGas = payload.excessBlobGas := by
+  unfold ExecutionPayload.header at made
+  obtain ⟨_, -, rest⟩ := Base.bind_ok_iff.mp made
+  dsimp only at rest
+  split at rest
+  · obtain ⟨_, -, rest⟩ := Base.bind_ok_iff.mp rest
+    cases rest
+    exact ⟨rfl, rfl⟩
+  · cases rest
+    exact ⟨rfl, rfl⟩
+
+omit [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
+  [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat] [NeZero preset.PTC_SIZE.toNat]
+  [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat] in
+/-- From Deneb to Fulu, a valid header of a slot before Deneb uses no blob gas.
+
+Its execution header has zero blob gas used and zero excess blob gas, as the check requires. -/
+theorem isValidLightClientHeader_blobGas_zero {config : Config}
+    (deneb : .dencun ≤ fork) (beforeGloas : fork < .glamsterdam)
+    {header : LightClientHeader preset fork}
+    (valid : isValidLightClientHeader config header = .ok true)
+    (early : computeEpochAtSlot preset header.beacon.slot < config.DENEB_FORK_EPOCH) :
+    (header.execution ⟨Nat.le_trans (by decide) deneb, beforeGloas⟩).blobGasUsed deneb = 0 ∧
+      (header.execution ⟨Nat.le_trans (by decide) deneb, beforeGloas⟩).excessBlobGas deneb = 0 := by
+  have gloas : ¬ Fork.glamsterdam ≤ fork := Nat.not_le_of_lt beforeGloas
+  have altair : Fork.altair ≤ fork := Nat.le_trans (by decide) deneb
+  have capella : Fork.shapella ≤ fork := Nat.le_trans (by decide) deneb
+  unfold isValidLightClientHeader at valid
+  simp only [LightClientError.requireFork, altair, ↓reduceIte, gloas, dite_false, capella,
+    dite_true, deneb, early, true_and, bind, Except.bind] at valid
+  by_contra nonzero
+  rw [not_and_or] at nonzero
+  simp only [nonzero, ↓reduceIte, pure, Except.pure] at valid
+  cases valid
+
+/-- From Deneb to Fulu, a valid header carries the blob gas of the payload of its block.
+
+Take a body of the fork of the header whose root is the body root, at a slot from Deneb.
+
+The blob gas used and the excess blob gas of the header are those of the payload of the body.
+
+Otherwise one of the two searches of `isValidLightClientHeader_execution_eq` names a collision.
+
+The schedule must start Capella no later than Deneb. -/
+theorem isValidLightClientHeader_blobGas {config : Config}
+    (deneb : .dencun ≤ fork) (beforeGloas : fork < .glamsterdam)
+    {header : LightClientHeader preset fork}
+    (valid : isValidLightClientHeader config header = .ok true)
+    (started : config.DENEB_FORK_EPOCH ≤ computeEpochAtSlot preset header.beacon.slot)
+    (ordered : config.CAPELLA_FORK_EPOCH ≤ config.DENEB_FORK_EPOCH)
+    (body : BeaconBlockBody preset fork)
+    (rooted : SszType.hashTreeRoot body = .ok header.beacon.bodyRoot)
+    {payloadHeader : ExecutionPayloadHeader preset fork}
+    (made : (body.executionPayload
+      ⟨Nat.le_trans (by decide) deneb, beforeGloas⟩).header = .ok payloadHeader) :
+    ((header.execution ⟨Nat.le_trans (by decide) deneb, beforeGloas⟩).blobGasUsed deneb =
+        (body.executionPayload ⟨Nat.le_trans (by decide) deneb, beforeGloas⟩).blobGasUsed deneb ∧
+      (header.execution ⟨Nat.le_trans (by decide) deneb, beforeGloas⟩).excessBlobGas deneb =
+        (body.executionPayload
+          ⟨Nat.le_trans (by decide) deneb, beforeGloas⟩).excessBlobGas deneb) ∨
+      (∃ (leaf payloadRoot : Bytes32) (honest : List Bytes32) (a b : Array UInt8),
+        getLcExecutionRoot config header = .ok leaf ∧
+        SszType.hashTreeRoot payloadHeader = .ok payloadRoot ∧
+        computeMerkleProof body EXECUTION_PAYLOAD_GINDEX = .ok honest ∧
+        findBranchCollision EXECUTION_PAYLOAD_GINDEX 0 leaf.toArray payloadRoot.toArray
+            (((header.executionBranch (Nat.le_trans (by decide) deneb)).toList.drop
+              ((header.executionBranch (Nat.le_trans (by decide) deneb)).toList.length -
+                Nat.log2 EXECUTION_PAYLOAD_GINDEX)).map Vector.toArray)
+            ((honest.drop (honest.length - Nat.log2 EXECUTION_PAYLOAD_GINDEX)).map
+              Vector.toArray) = some (a, b) ∧
+        a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
+        Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
+          Cryptography.Hash.Sha256.hash (ByteArray.mk b)) ∨
+      ∃ leftTree rightTree,
+        valueTree (SszType.desc (ExecutionPayloadHeader preset fork))
+          (SszType.toValue (header.execution ⟨Nat.le_trans (by decide) deneb, beforeGloas⟩)) =
+            .ok leftTree ∧
+        valueTree (SszType.desc (ExecutionPayloadHeader preset fork))
+          (SszType.toValue payloadHeader) = .ok rightTree ∧
+        ∃ x y, findMessageCollision leftTree.messages rightTree.messages = some (x, y) ∧
+          x ∈ leftTree.messages ∧ y ∈ rightTree.messages ∧ MessageCollision x y := by
+  have capellaSlot : config.CAPELLA_FORK_EPOCH ≤ computeEpochAtSlot preset header.beacon.slot :=
+    UInt64.le_trans ordered started
+  rcases isValidLightClientHeader_execution_eq (Nat.le_trans (by decide) deneb) beforeGloas valid
+      capellaSlot (fun _ => started) body rooted made with same | collision
+  · obtain ⟨used, excess⟩ := ExecutionPayload.header_blobGas made
+    left
+    rw [same, used, excess]
+    exact ⟨rfl, rfl⟩
+  · exact .inr collision
 
 /-! ## From Gloas: the block hash -/
 
