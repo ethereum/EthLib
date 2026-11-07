@@ -583,21 +583,23 @@ theorem createdAccounts_moveEther {fork : Fork} {tx tx' : TransactionState}
   · simp only [hmid, bind, Except.bind] at h
     rw [createdAccounts_modifyState h, createdAccounts_modifyState hmid]
 
-/-- Moving ether from an address to itself keeps its balance. -/
+/-- Moving ether from an address to itself leaves every account reading as it did. -/
 theorem moveEther_self {fork : Fork} {tx tx' : TransactionState} {address : Address}
     {amount : U256} (h : tx.moveEther fork address address amount = .ok tx') :
-    (tx'.getAccount address).balance = (tx.getAccount address).balance := by
+    tx'.getAccount address = tx.getAccount address ∧
+      ∀ other, other ≠ address → tx'.getAccount other = tx.getAccount other := by
   unfold moveEther at h
-  rcases modifyState_debit fork tx address amount with ⟨-, hmid⟩ | ⟨-, mid, hmid, hread, -⟩
+  rcases modifyState_debit fork tx address amount with ⟨-, hmid⟩ | ⟨-, mid, hmid, hread, hrest⟩
   · simp [hmid, bind, Except.bind] at h
   · simp only [hmid, bind, Except.bind] at h
-    obtain ⟨credited, hcredit, hread', -⟩ := modifyState_eq_ok h
+    obtain ⟨credited, hcredit, hread', hrest'⟩ := modifyState_eq_ok h
     rw [hread] at hcredit
     unfold Account.credit at hcredit
     split at hcredit
     · cases hcredit
-      rw [hread']
-      exact BitVec.sub_add_cancel _ _
+      refine ⟨?_, fun other hne => ?_⟩
+      · rw [hread', BitVec.sub_add_cancel]
+      · rw [hrest' other hne, hrest other hne]
     · cases hcredit
 
 /-! ## Failure, storage and code of a change of an account -/
@@ -746,16 +748,21 @@ theorem moveEther_eq_ok {fork : Fork} {tx tx' : TransactionState} {sender recipi
       · rw [hrest' other hr, hrest other hs]
     · cases hcredit
 
-/-- Moving ether between two addresses keeps the sum of their balances.
+/-- Moving ether keeps the sum of the balances of the sender and the recipient.
+
+When they are one address, its balance is counted once for each name.
 
 Every other balance is unchanged. -/
 theorem moveEther_balance {fork : Fork} {tx tx' : TransactionState} {sender recipient : Address}
-    {amount : U256} (hne : sender ≠ recipient)
-    (h : tx.moveEther fork sender recipient amount = .ok tx') :
+    {amount : U256} (h : tx.moveEther fork sender recipient amount = .ok tx') :
     (tx'.getAccount sender).balance.toNat + (tx'.getAccount recipient).balance.toNat =
         (tx.getAccount sender).balance.toNat + (tx.getAccount recipient).balance.toNat ∧
       ∀ other, other ≠ sender → other ≠ recipient →
         tx'.getAccount other = tx.getAccount other := by
+  by_cases hne : sender = recipient
+  · subst hne
+    obtain ⟨hself, hrest⟩ := moveEther_self h
+    exact ⟨by rw [hself], fun other hs _ => hrest other hs⟩
   obtain ⟨hfunds, hfit, hsender, hrecipient, hrest⟩ := moveEther_eq_ok hne h
   refine ⟨?_, hrest⟩
   rw [hsender, hrecipient]
