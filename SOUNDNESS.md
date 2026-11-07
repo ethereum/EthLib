@@ -623,7 +623,7 @@ So are the instructions that read only the stack, memory, call data, code and re
 They are in `Execution/Evm/Instructions/StackOnly.lean` and `Execution/Evm/Instructions/MemoryData.lean`.
 
 A program logic over bytecode is in `Execution/Proofs/Evm/Logic/`.
-It covers frames that send no message, so it says nothing past a call or a creation, and nothing about reentrancy.
+Its first relation covers frames that send no message.
 `Reaches` is the relation of the steps that `step` gives, other than requests for a message and errors that abort the run.
 `runFrame_of_reaches` proves that a frame that reaches a stopped frame runs to it in `runFrame`, for every bound on the gas of messages and every runner of messages.
 `Spec fork P Q` is total correctness for such frames: every frame of `P` reaches a stopped frame of `Q`.
@@ -638,6 +638,13 @@ On a match, it returns the word of storage at the Keccak-256 hash of two words o
 A run of the loop then ends by the measure, not by the gas.
 `SumLoop.runFrame_spec` proves a contract that loops `n` times, for the word `n` of its call data, with the one-counter meter.
 With at least `45 + 55 n` gas, it returns `n (n + 1) / 2` modulo `2^256`.
+`ReachesBy` (`Logic/Message.lean`) adds the steps that send a message, which a runner of messages runs.
+`runFrame_of_reachesBy` proves that a frame that reaches a stopped frame under a runner runs to it in `runFrame` with that runner.
+`SpecUnder fork callee P Q` holds under every runner that ends each message with a frame that meets the assumption `callee`.
+It holds for every bound that holds the gas of the frame.
+The callee is arbitrary and may call the caller again.
+So the assumption is all that a triple says about a frame that ends a message, and about the state after it.
+No rule yet covers an opcode that sends a message, so no theorem yet proves a contract that calls or creates.
 
 ### SHA-256 precompile
 

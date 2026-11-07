@@ -15,7 +15,7 @@ A step that asks for a message, a call or a creation, has no rule here.
 
 So the relation covers frames that send no message, and says nothing past a call.
 
-External calls and reentrancy are out of the scope of this logic.
+The frames that send messages have their own relation, under a runner of messages.
 
 The loop of the interpreter follows these steps.
 
