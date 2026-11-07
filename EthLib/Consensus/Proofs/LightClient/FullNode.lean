@@ -16,7 +16,7 @@ An upgrade puts zero nodes in front of a branch.
 
 The check of a normalized branch reads those nodes as the zero front, so it gives the same verdict.
 
-A bootstrap exists only for a state at the slot of its block.
+A bootstrap exists only for a state at the slot of its latest block header.
 
 An update takes the slot of its block as its signature slot.
 
@@ -88,11 +88,9 @@ theorem isValidNormalizedMerkleBranch_normalize {leaf root : Bytes32} {branch : 
         List.all_eq_true.mpr fun node member => by simp [zeroed node member, zeroBytes32]
       rw [front, Bool.true_and]
 
-open LightClientError (require liftRoot specifiedFork)
-
 variable {preset : Preset} {fork : Fork}
 
-/-- A bootstrap exists only for a state at the slot of its block. -/
+/-- A bootstrap exists only for a state at the slot of its latest block header. -/
 theorem createLightClientBootstrap_stateAtBlock {config : Config} {state : BeaconState preset fork}
     {block : SignedBeaconBlock preset fork} {bootstrap : LightClientBootstrap preset fork}
     (created : createLightClientBootstrap config state block = .ok bootstrap) :
