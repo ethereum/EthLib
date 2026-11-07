@@ -141,7 +141,7 @@ def processRegistryUpdates (config : Config) (state : BeaconState preset fork) :
 
 A sum that reaches `2^64` is an error. -/
 def slashingsSum (state : BeaconState preset fork) : Except TransitionError Gwei :=
-  liftAccessor (liftArith (state.slashings.toList.foldlM addChecked 0))
+  liftAccessor (liftArith (state.slashings.elements.toList.foldlM addChecked 0))
 
 /-- The state after the slashing penalty of one validator, if it is due.
 
@@ -280,7 +280,7 @@ If the buffer of slashed balances has length zero, the reset fails, since it has
 def processSlashingsReset (state : BeaconState preset fork) :
     Except TransitionError (BeaconState preset fork) := do
   let nextEpoch ← liftAccessor (liftArith (addChecked (getCurrentEpoch state) 1))
-  let slashings ← liftAccessor (writeCircular state.slashings nextEpoch 0)
+  let slashings ← liftAccessor (writeCircularRooted state.slashings nextEpoch 0)
   return { state with slashings }
 
 /-- The state with the RANDAO mix of the next epoch set to that of the current epoch.

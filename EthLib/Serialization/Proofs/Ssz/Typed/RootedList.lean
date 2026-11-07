@@ -63,6 +63,27 @@ theorem hashTreeRoot_list_leafRoots {limit : Nat} (composite : (desc α).isBasic
     slotRoot, List.mapM_map, Function.comp_def, rooted, finishLayout, merkleizeBoundedUnchecked,
     bind, Except.bind, pure, Except.pure, within, leaves, size]
 
+/-- A list of basic elements within its limit has the root of its packed leaves. -/
+theorem hashTreeRoot_list_packed {limit : Nat} (basic : (desc α).isBasic = true)
+    (data : Array α) (bound : data.size ≤ limit) :
+    Ssz.hashTreeRoot (.list (desc α) limit) (.seq (data.toList.map toValue))
+      = .ok (mixIn (subtreeAt (packedChunks data)
+          (depthFor (chunksForBytes (limit * (desc α).itemLength))) 0) (lengthWord data.size)) := by
+  have within : ¬limit < data.size := by omega
+  have packed := packElements_elementBytes basic data
+  have fit : ¬chunksForBytes (limit * (desc α).itemLength) < (packedChunks data).size := by
+    rw [← packed, packElements, fold_parts_eq_concat, Array.empty_append, packBytes_size,
+      concatParts_size _ _ (fun part member => by
+        obtain ⟨a, -, rfl⟩ := List.mem_map.mp member
+        exact (serialize_elementBytes basic a).2)]
+    simp only [List.length_map, Array.length_toList, chunksForBytes, Nat.not_lt]
+    exact Nat.div_le_div_right (Nat.sub_le_sub_right
+      (Nat.add_le_add_right (Nat.mul_le_mul_right _ bound) _) _)
+  rw [hashTreeRoot_unfold]
+  simp [merkleLayout, sequenceLayout, basic, MerkleLayout.packing, leafChunks,
+    serializeEach_elementBytes basic, finishLayout, merkleizeBoundedUnchecked,
+    bind, Except.bind, pure, Except.pure, packed, fit, within]
+
 namespace RootedForkList
 
 variable {switch fork : Fork} {limit : Nat}
@@ -70,13 +91,17 @@ variable {switch fork : Fork} {limit : Nat}
 /-- The root of a rooted list is the root of its elements as a fork-chosen list. -/
 theorem root_eq (l : RootedForkList switch fork α limit) :
     root l = Ssz.hashTreeRoot (desc (RootedForkList switch fork α limit)) (toValue l) := by
-  by_cases cached : fork < switch ∧ (desc α).isBasic = false
-  · obtain ⟨before, composite⟩ := cached
-    simp only [root, before, composite, and_self, ite_true, desc, toValue, toForkList,
-      not_switch_of_lt before, ite_false]
-    rw [hashTreeRoot_list_leafRoots composite _ (l.bound before), l.built, forkListLevels,
-      ite_eq_left before, topOfLevels_eq]
-  · simp [root, cached, desc, toValue]
+  by_cases before : fork < switch
+  · simp only [root, before, ite_true, desc, toValue, toForkList, not_switch_of_lt before,
+      ite_false]
+    rw [l.built, forkListLevels, ite_eq_left before, topOfLevels_eq, sequenceLeaves,
+      leafCapacity]
+    by_cases basic : (desc α).isBasic
+    · rw [ite_eq_left basic, ite_eq_left basic,
+        hashTreeRoot_list_packed basic _ (l.bound before)]
+    · rw [ite_eq_right basic, ite_eq_right basic,
+        hashTreeRoot_list_leafRoots (by simpa using basic) _ (l.bound before)]
+  · simp [root, before, desc, toValue]
 
 end RootedForkList
 

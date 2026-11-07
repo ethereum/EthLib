@@ -121,7 +121,7 @@ structure BeaconState (preset : Preset) (fork : Fork) where
   /-- The RANDAO mixes of the recent epochs, in a circular buffer. -/
   randaoMixes : RootedVector Bytes32 preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat
   /-- The slashed balances of the recent epochs, in a circular buffer. -/
-  slashings : Vector Gwei preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat
+  slashings : RootedVector Gwei preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat
   /-- Before Altair: the attestations that the previous epoch's blocks included. -/
   previousEpochAttestations :
     Until .altair fork
