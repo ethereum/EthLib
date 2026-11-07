@@ -428,6 +428,9 @@ Both hold for every forward cipher.
 `residue_xorBlock` proves that XOR is their sum, and `residue_injective` that two different blocks have two different residues.
 `residue_ghash` proves that GHASH of `X_1 ... X_m` is `X_1 H^m + ... + X_m H` on residues, the form that §6.4 states.
 No theorem proves that the modulus is irreducible, so none proves that these residues form a field.
+`gctr_inc_block` proves that GCM encrypts block `k` of the text under `J_0` incremented `k + 1` times.
+`counter_ne_preCounter` and `counter_injOn` assume the length checks of §5.2.1.1.
+Under them, the counters of the text differ from each other and from `J_0`, the counter of the tag.
 `encrypt_shortTag` and `decrypt_shortTag` prove that both functions reject the 64-bit and 32-bit tags, which SP 800-38D Appendix C restricts.
 The Python tests check seven test cases of the NIST CAVP file `gcmtestvectors.zip`, one of them a forged tag that decryption rejects.
 
