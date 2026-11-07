@@ -97,14 +97,14 @@ theorem getActiveValidatorIndices_sorted {state : BeaconState preset fork}
 
 /-- Marking indices one after the other sets exactly the entries that some index names. -/
 theorem getElem?_foldl_mark (indices : List ValidatorIndex) (init : Array Bool) (j : Nat) :
-    (indices.foldl (fun marked index => marked.set! index.toNat true) init)[j]? =
+    (indices.foldl (fun marked index => marked.setIfInBounds index.toNat true) init)[j]? =
       init[j]?.map (· || indices.any (·.toNat == j)) := by
   induction indices generalizing init with
   | nil =>
     simp only [List.foldl_nil, List.any_nil, Bool.or_false]
     cases init[j]? <;> rfl
   | cons index rest ih =>
-    rw [List.foldl_cons, ih, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
+    rw [List.foldl_cons, ih, Array.getElem?_setIfInBounds]
     by_cases same : index.toNat = j
     · subst same
       by_cases inside : index.toNat < init.size

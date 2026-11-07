@@ -97,7 +97,8 @@ def getActiveValidatorIndices (state : BeaconState preset fork) (epoch : Epoch) 
 
 An index outside the registry marks nothing. -/
 def markIndices (size : Nat) (indices : List ValidatorIndex) : Array Bool :=
-  indices.foldl (fun marked index => marked.set! index.toNat true) (Array.replicate size false)
+  indices.foldl (fun marked index => marked.setIfInBounds index.toNat true)
+    (Array.replicate size false)
 
 /-- The sum of the effective balances of the marked validators, on natural numbers. -/
 def sumMarked (validators : Array Validator) (marked : Array Bool) : Nat :=
