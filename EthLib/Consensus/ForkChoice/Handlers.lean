@@ -158,13 +158,15 @@ def computeShufflingDependentSlot (preset : Preset) (epoch : Epoch) : Except Ari
 
 /-- The latest votes after one more vote of a validator.
 
-An equivocator keeps no vote, and a vote replaces another only with a later epoch. -/
-def recordVote (equivocating : List ValidatorIndex) (message : LatestMessage)
-    (messages : Std.TreeMap ValidatorIndex LatestMessage) (index : ValidatorIndex) :
-    Std.TreeMap ValidatorIndex LatestMessage :=
+An equivocator keeps no vote.
+
+A vote replaces another only with a later epoch before Gloas, and a later slot from Gloas. -/
+def recordVote (equivocating : List ValidatorIndex) (message : LatestMessage fork)
+    (messages : Std.TreeMap ValidatorIndex (LatestMessage fork)) (index : ValidatorIndex) :
+    Std.TreeMap ValidatorIndex (LatestMessage fork) :=
   if equivocating.contains index then messages
   else match messages[index]? with
-    | some old => if old.epoch < message.epoch then messages.insert index message else messages
+    | some old => if old.rank < message.rank then messages.insert index message else messages
     | none => messages.insert index message
 
 namespace Store
@@ -272,9 +274,16 @@ Its target must be the checkpoint block of the chain of its vote, in the epoch o
 
 Both blocks must be known, and the vote must not be for a block after the attestation.
 
-It counts only from the slot after its own. -/
+It counts only from the slot after its own.
+
+From Gloas the check also reads the committee index and the payload.
+
+That rule is not yet specified here.
+
+So it fails from Gloas on, rather than apply the earlier rule. -/
 def validateOnAttestation (attestation : Attestation preset fork) (isFromBlock : Bool) :
     Except ForkChoiceError Unit := do
+  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
   let target := attestation.data.target
   unless isFromBlock do store.validateTargetEpochAgainstCurrentTime config attestation
   if target.epoch ≠ computeEpochAtSlot preset attestation.data.slot then
@@ -305,10 +314,12 @@ def storeTargetCheckpointState (checks : SignatureChecks) (target : Checkpoint) 
 
 /-- The store with the vote of an attestation as the latest vote of its validators.
 
-An equivocator keeps no vote, and a vote replaces another only with a later target epoch. -/
+An equivocator keeps no vote.
+
+A vote replaces another only with a later target epoch before Gloas, and a later slot from Gloas. -/
 def updateLatestMessages (attestingIndices : List ValidatorIndex)
     (attestation : Attestation preset fork) : Store preset fork :=
-  let message : LatestMessage := ⟨attestation.data.target.epoch, attestation.data.beaconBlockRoot⟩
+  let message := LatestMessage.ofAttestation attestation
   let latestMessages :=
     attestingIndices.foldl (recordVote store.equivocatingIndices message) store.latestMessages
   { store with latestMessages }

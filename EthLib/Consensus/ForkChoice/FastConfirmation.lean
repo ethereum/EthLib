@@ -332,7 +332,8 @@ def getCurrentTargetScore (head : Root) : Except ForkChoiceError Gwei := do
     | none => return 0
     | some message =>
       if index ∈ store.equivocatingIndices then return 0
-      if target = (← store.getCheckpointForBlock message.root message.epoch) then
+      let epoch := getLatestMessageEpoch preset message
+      if target = (← store.getCheckpointForBlock message.root epoch) then
         return (← validatorAt state index).effectiveBalance
       else return 0
 

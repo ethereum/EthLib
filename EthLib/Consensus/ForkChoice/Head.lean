@@ -90,13 +90,22 @@ def checkpointState (checkpoint : Checkpoint) : Except ForkChoiceError (BeaconSt
   | some state => return state
   | none => throw (.unknownCheckpointState checkpoint)
 
-/-- The node that a latest vote supports: its block, whatever the payload.
+/-- The node that a latest vote supports.
 
-From Gloas the payload of the vote matters, and that rule is not yet specified here. -/
-def getSupportedNode (_store : Store preset fork) (message : LatestMessage) :
-    Except ForkChoiceError ForkChoiceNode := do
-  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
-  return ⟨message.root, .pending⟩
+Before Gloas it is the block of the vote, whatever the payload.
+
+From Gloas a vote from a later slot than its block also says whether the payload is present.
+
+It then supports the full or the empty node of the block.
+
+A vote from the slot of its block supports the pending node, and the store must hold the block. -/
+def getSupportedNode (message : LatestMessage fork) : Except ForkChoiceError ForkChoiceNode := do
+  if gloas : .glamsterdam ≤ fork then
+    let block ← store.block message.root
+    if block.slot < message.slot gloas then
+      return ⟨message.root, if message.payloadPresent gloas then .full else .empty⟩
+    else return ⟨message.root, .pending⟩
+  else return ⟨message.root, .pending⟩
 
 /-- The votes for a node: the effective balance of the validators that vote in its subtree.
 

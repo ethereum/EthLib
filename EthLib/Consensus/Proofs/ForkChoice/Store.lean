@@ -36,6 +36,39 @@ theorem ForkChoiceError.code_injective (e₁ e₂ : ForkChoiceError) (h : e₁.c
     cases e <;> rfl
   rw [← back e₁, ← back e₂, h]
 
+/-- Before Gloas the epoch of a vote is its target epoch. -/
+theorem getLatestMessageEpoch_of_lt {message : LatestMessage fork} (before : fork < .glamsterdam) :
+    getLatestMessageEpoch preset message = message.epoch before := by
+  have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  simp only [getLatestMessageEpoch, later, ↓reduceDIte]
+
+/-- From Gloas the epoch of a vote is the epoch of its slot. -/
+theorem getLatestMessageEpoch_of_gloas {message : LatestMessage fork}
+    (gloas : .glamsterdam ≤ fork) :
+    getLatestMessageEpoch preset message = computeEpochAtSlot preset (message.slot gloas) := by
+  simp [getLatestMessageEpoch, gloas]
+
+/-- Before Gloas the vote of an attestation ranks by its target epoch. -/
+theorem LatestMessage.ofAttestation_rank_of_lt {attestation : Attestation preset fork}
+    (before : fork < .glamsterdam) :
+    (LatestMessage.ofAttestation attestation).rank = attestation.data.target.epoch := by
+  have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  simp only [LatestMessage.rank, later, ↓reduceDIte]
+  rfl
+
+/-- From Gloas the vote of an attestation ranks by its slot. -/
+theorem LatestMessage.ofAttestation_rank_of_gloas {attestation : Attestation preset fork}
+    (gloas : .glamsterdam ≤ fork) :
+    (LatestMessage.ofAttestation attestation).rank = attestation.data.slot := by
+  simp [LatestMessage.rank, LatestMessage.ofAttestation, gloas]
+
+/-- From Gloas the vote of an attestation is for the payload exactly when its index is 1. -/
+theorem LatestMessage.ofAttestation_payloadPresent {attestation : Attestation preset fork}
+    (gloas : .glamsterdam ≤ fork) :
+    (LatestMessage.ofAttestation attestation).payloadPresent gloas = true ↔
+      attestation.data.index = 1 := by
+  simp [LatestMessage.ofAttestation]
+
 namespace Store
 
 variable {store : Store preset fork}
@@ -171,12 +204,6 @@ theorem isAncestor_pending (gloas : .glamsterdam ≤ fork) (node : ForkChoiceNod
 
 end Store
 
-/-- From Gloas the store is not yet specified here, so a new store fails. -/
-theorem getForkchoiceStore_of_gloas {config : Config} {anchorState : BeaconState preset fork}
-    {anchorBlock : BeaconBlock preset fork} (gloas : .glamsterdam ≤ fork) :
-    getForkchoiceStore config anchorState anchorBlock = .error (.forkNotYetSpecified fork) := by
-  simp [getForkchoiceStore, gloas, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
-
 /-- A new store holds its anchor block and state.
 
 Each of its checkpoints, realized or not, is the anchor block at the anchor's epoch. -/
@@ -191,8 +218,6 @@ theorem getForkchoiceStore_anchor {config : Config} {anchorState : BeaconState p
       store.unrealizedJustifiedCheckpoint = ⟨getCurrentEpoch anchorState, anchorRoot⟩ ∧
       store.unrealizedFinalizedCheckpoint = ⟨getCurrentEpoch anchorState, anchorRoot⟩ := by
   unfold getForkchoiceStore at made
-  split at made
-  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at made
   cases stateRoot : SszType.hashTreeRoot anchorState with
   | error e => simp [stateRoot, bind, Except.bind, Except.mapError] at made
   | ok stateRoot' =>
@@ -221,8 +246,6 @@ theorem getForkchoiceStore_maps {config : Config} {anchorState : BeaconState pre
       store.blockStates =
         (∅ : Std.TreeMap Root (BeaconState preset fork)).insert anchorRoot anchorState := by
   unfold getForkchoiceStore at made
-  split at made
-  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at made
   cases stateRoot : SszType.hashTreeRoot anchorState with
   | error e => simp [stateRoot, bind, Except.bind, Except.mapError] at made
   | ok stateRoot' =>
@@ -241,14 +264,51 @@ theorem getForkchoiceStore_maps {config : Config} {anchorState : BeaconState pre
           subst made
           exact ⟨anchorRoot, rfl, rfl, rfl⟩
 
+/-- A new store holds no vote, and holds the timeliness of its anchor from Gloas only.
+
+From Gloas the anchor is timely for the attestation deadline and for the committee deadline.
+
+It has no verified payload, and each member of the payload committee has no vote on it yet. -/
+theorem getForkchoiceStore_fields {config : Config} {anchorState : BeaconState preset fork}
+    {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
+    (made : getForkchoiceStore config anchorState anchorBlock = .ok store) :
+    ∃ anchorRoot, SszType.hashTreeRoot anchorBlock = .ok anchorRoot ∧
+      store.latestMessages = ∅ ∧
+      store.blockTimeliness =
+        (if .glamsterdam ≤ fork then (∅ : Std.TreeMap Root Bool).insert anchorRoot true else ∅) ∧
+      ∀ gloas : .glamsterdam ≤ fork,
+        store.ptcTimeliness gloas = (∅ : Std.TreeMap Root Bool).insert anchorRoot true ∧
+        store.payloads gloas = ∅ ∧
+        store.payloadTimelinessVote gloas = (∅ : Std.TreeMap Root _).insert anchorRoot
+          (Vector.replicate preset.PTC_SIZE.toNat none) ∧
+        store.payloadDataAvailabilityVote gloas = (∅ : Std.TreeMap Root _).insert anchorRoot
+          (Vector.replicate preset.PTC_SIZE.toNat none) := by
+  unfold getForkchoiceStore at made
+  cases stateRoot : SszType.hashTreeRoot anchorState with
+  | error e => simp [stateRoot, bind, Except.bind, Except.mapError] at made
+  | ok stateRoot' =>
+    simp only [stateRoot, Except.mapError, bind, Except.bind] at made
+    split at made
+    · simp [throw, throwThe, MonadExceptOf.throw] at made
+    · cases blockRoot : SszType.hashTreeRoot anchorBlock with
+      | error e => simp [blockRoot] at made
+      | ok anchorRoot =>
+        simp only [blockRoot] at made
+        cases time : computeTimeAtSlotMs config (secondsToMilliseconds anchorState.genesisTime)
+            anchorState.slot with
+        | error e => simp [time] at made
+        | ok timeMs =>
+          simp only [time, pure, Except.pure, Except.ok.injEq] at made
+          subst made
+          exact ⟨anchorRoot, rfl, rfl, rfl, fun _ => ⟨rfl, rfl, rfl, rfl⟩⟩
+
 /-- A new store fails when the anchor block does not commit to the anchor state. -/
 theorem getForkchoiceStore_mismatch {config : Config} {anchorState : BeaconState preset fork}
-    {anchorBlock : BeaconBlock preset fork} {stateRoot : Root} (before : fork < .glamsterdam)
+    {anchorBlock : BeaconBlock preset fork} {stateRoot : Root}
     (root : SszType.hashTreeRoot anchorState = .ok stateRoot)
     (differ : anchorBlock.stateRoot ≠ stateRoot) :
     getForkchoiceStore config anchorState anchorBlock = .error .anchorStateMismatch := by
-  have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
-  simp [getForkchoiceStore, later, root, differ, Except.mapError, bind, Except.bind, throw,
+  simp [getForkchoiceStore, root, differ, Except.mapError, bind, Except.bind, throw,
     throwThe, MonadExceptOf.throw]
 
 /-- The clock of a new store is at the slot of the anchor state, on a chain with nonempty slots. -/
@@ -258,8 +318,6 @@ theorem getCurrentSlot_getForkchoiceStore {config : Config}
     (made : getForkchoiceStore config anchorState anchorBlock = .ok store) :
     store.getCurrentSlot config = .ok anchorState.slot := by
   unfold getForkchoiceStore at made
-  split at made
-  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at made
   cases stateRoot : SszType.hashTreeRoot anchorState with
   | error e => simp [stateRoot, bind, Except.bind, Except.mapError] at made
   | ok stateRoot' =>

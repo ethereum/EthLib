@@ -118,6 +118,38 @@ theorem checkpointState_ok_iff {checkpoint : Checkpoint} {state : BeaconState pr
   cases store.checkpointStates[checkpoint]? <;>
     simp [throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
 
+/-- Before Gloas a vote supports the pending node of its block. -/
+theorem getSupportedNode_of_lt {message : LatestMessage fork} (before : fork < .glamsterdam) :
+    store.getSupportedNode message = .ok ⟨message.root, .pending⟩ := by
+  have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  simp [getSupportedNode, later, pure, Except.pure]
+
+/-- From Gloas a vote from the slot of its known block supports the pending node of the block. -/
+theorem getSupportedNode_of_same_slot {message : LatestMessage fork}
+    {block : BeaconBlock preset fork} (gloas : .glamsterdam ≤ fork)
+    (found : store.blocks[message.root]? = some block)
+    (notLater : message.slot gloas ≤ block.slot) :
+    store.getSupportedNode message = .ok ⟨message.root, .pending⟩ := by
+  simp [getSupportedNode, gloas, Store.block, found, UInt64.not_lt.mpr notLater, bind, Except.bind,
+    pure, Except.pure]
+
+/-- From Gloas a vote from a later slot than its known block supports the full or the empty node.
+
+It is full when the vote says that the payload is present. -/
+theorem getSupportedNode_of_lt_slot {message : LatestMessage fork}
+    {block : BeaconBlock preset fork} (gloas : .glamsterdam ≤ fork)
+    (found : store.blocks[message.root]? = some block) (later : block.slot < message.slot gloas) :
+    store.getSupportedNode message =
+      .ok ⟨message.root, if message.payloadPresent gloas then .full else .empty⟩ := by
+  simp [getSupportedNode, gloas, Store.block, found, later, bind, Except.bind, pure, Except.pure]
+
+/-- From Gloas a vote for a block the store does not hold supports no node. -/
+theorem getSupportedNode_of_unknown {message : LatestMessage fork} (gloas : .glamsterdam ≤ fork)
+    (missing : store.blocks[message.root]? = none) :
+    store.getSupportedNode message = .error (.unknownBlock message.root) := by
+  simp [getSupportedNode, gloas, Store.block, missing, bind, Except.bind, throw, throwThe,
+    MonadExceptOf.throw]
+
 /-- From Gloas the children of a node are not yet specified here, so they fail. -/
 theorem getNodeChildren_of_gloas {node : ForkChoiceNode} (gloas : .glamsterdam ≤ fork) :
     store.getNodeChildren node = .error (.forkNotYetSpecified fork) := by
