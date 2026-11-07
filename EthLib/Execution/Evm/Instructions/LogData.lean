@@ -39,13 +39,16 @@ def popTopics (evm : Evm fork Meter) : Nat → Except EvmError (List Hash32 × E
     let (topics, evm) ← popTopics evm k
     return (U256.toBeBytes word :: topics, evm)
 
+/-- The price of LOGn with `size` bytes of data: 375, 8 for each byte, and 375 for each topic. -/
+def logCost (n : Nat) (size : U256) : Nat :=
+  OPCODE_LOG_BASE + OPCODE_LOG_DATA_PER_BYTE * size.toNat + OPCODE_LOG_TOPIC * n
+
 /-- LOGn: append a log of `size` bytes of memory from `start`, with `n` topics. -/
 def logStep (n : Nat) (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let (start, evm) ← popWord evm
   let (size, evm) ← popWord evm
   let (topics, evm) ← popTopics evm n
-  let cost := OPCODE_LOG_BASE + OPCODE_LOG_DATA_PER_BYTE * size.toNat + OPCODE_LOG_TOPIC * n
-  let evm ← chargeGasAndMemory evm cost [(start, size)]
+  let evm ← chargeGasAndMemory evm (logCost n size) [(start, size)]
   if evm.message.isStatic then
     throw .writeInStaticContext
   else
