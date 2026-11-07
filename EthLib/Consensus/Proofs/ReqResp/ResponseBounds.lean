@@ -46,30 +46,8 @@ private theorem decodePayload_of_decodeResponseChunk_code {contextBytes : Nat} {
     (h : decodeResponseChunk contextBytes lo hi bs = .ok chunk) :
     ∃ rest : ByteArray, decodePayload (if chunk.code = .success then lo else 0)
       (if chunk.code = .success then hi else MAX_ERROR_MESSAGE_SIZE) rest = .ok chunk.payload := by
-  unfold decodeResponseChunk at h
-  split at h
-  · cases h
-  · rename_i b rest _
-    split at h
-    · split at h
-      · cases h
-      · cases hp : decodePayload lo hi ⟨(rest.drop contextBytes).toArray⟩ with
-        | error e => simp [hp, bind, Except.bind] at h
-        | ok payload =>
-          simp only [hp, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at h
-          subst h
-          refine ⟨⟨(rest.drop contextBytes).toArray⟩, ?_⟩
-          rw [ite_eq_left_of_eq_true _ _ (eq_self _), ite_eq_left_of_eq_true _ _ (eq_self _)]
-          exact hp
-    · cases hp : decodePayload 0 MAX_ERROR_MESSAGE_SIZE ⟨rest.toArray⟩ with
-      | error e => simp [hp, bind, Except.bind] at h
-      | ok payload =>
-        simp only [hp, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at h
-        subst h
-        refine ⟨⟨rest.toArray⟩, ?_⟩
-        split
-        · simp_all
-        · exact hp
+  obtain ⟨-, -, rest, -, hd⟩ := decodeResponseChunk_eq_ok_iff.mp h
+  exact ⟨rest, hd⟩
 
 /-- The payload of a successful chunk is a payload that decodes at the bounds of the chunk. -/
 theorem decodePayload_of_decodeResponseChunk {contextBytes : Nat} {lo hi : UInt64}
