@@ -53,9 +53,9 @@ theorem At.fault {e : EvmError} (halts : e.aborts = false)
       step fork evm = .error e) :
     Spec fork (At code message pc stack memory gas state substate) (Faulted e state substate) := by
   apply Triple.of_step
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
-  exact ⟨_, Step.halt hrun (h evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩) halts,
-    rfl, rfl, rfl, rfl, rfl, hs, hss⟩
+  intro evm hat
+  obtain ⟨-, -, -, -, -, -, -, hrun, -, -, hs, hss⟩ := id hat
+  exact ⟨_, Step.halt hrun (h evm hat) halts, rfl, rfl, rfl, rfl, rfl, hs, hss⟩
 
 /-- A byte that is no opcode at the fork halts the frame with that byte as an invalid opcode. -/
 theorem invalid {byte : UInt8} (hlt : pc < code.size) (hbyte : code[pc] = byte)

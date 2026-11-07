@@ -57,9 +57,9 @@ theorem ternary {byte : UInt8} {op : Op} {cost : Nat} {f : U256 → U256 → U25
     Hoare fork (At code message pc (x :: y :: z :: rest) memory gas state substate)
       (At code message (pc + 1) (f x y z :: rest) memory (gas - cost) state substate) := by
   apply At.rule hlt hbyte decoded hrun
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
   rw [ternaryOp_cons hst, charge_nat (by rw [hg]; exact hgas)]
-  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, hmem, by simp [hg], hrun, herr, hs, hss⟩
+  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, hmem, by simp [hg], hrun, herr, hout, hs, hss⟩
 
 /-- POP drops the top word, for 2 gas. -/
 theorem pop {x : U256} {rest : List U256} (hlt : pc < code.size) (hbyte : code[pc] = 0x50)
@@ -68,10 +68,10 @@ theorem pop {x : U256} {rest : List U256} (hlt : pc < code.size) (hbyte : code[p
       (At code message (pc + 1) rest memory (gas - 2) state substate) := by
   apply At.rule hlt hbyte (ofByte_of_decode (op := .pop) rfl (Fork.frontier_le _))
     (instruction_of_stackOnlyStep rfl)
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
   rw [popStep_cons hst, charge_nat (by rw [hg]; exact hgas)]
   exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, hmem, by simp [hg, OPCODE_POP, BASE], hrun,
-    herr, hs, hss⟩
+    herr, hout, hs, hss⟩
 
 /-- SWAP(n + 1), for the `n` that the byte at the program counter decodes to.
 
@@ -83,10 +83,10 @@ theorem swap_of_decode {byte : UInt8} {n : Fin 16} {top x : U256} {rest : List U
       (At code message (pc + 1) (x :: rest.set n.val top) memory (gas - 3) state substate) := by
   apply At.rule hlt hbyte (ofByte_of_decode decoded (Fork.frontier_le _))
     (instruction_of_stackOnlyStep rfl)
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
   rw [swapN_of_getElem? hst hx, charge_nat (by rw [hg]; exact hgas)]
   exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, hmem,
-    by simp [hg, OPCODE_SWAP, VERY_LOW], hrun, herr, hs, hss⟩
+    by simp [hg, OPCODE_SWAP, VERY_LOW], hrun, herr, hout, hs, hss⟩
 
 /-- SWAP(n + 1) exchanges the top word with the word `x` at depth `n + 1`, for 3 gas. -/
 theorem swap (n : Fin 16) {top x : U256} {rest : List U256} (hlt : pc < code.size)
@@ -108,8 +108,8 @@ theorem exp {base exponent : U256} {rest : List U256} (hlt : pc < code.size)
           exponentBytes exponent)) state substate) := by
   apply At.rule hlt hbyte (ofByte_of_decode (op := .exp) rfl (Fork.frontier_le _))
     (instruction_of_stackOnlyStep rfl)
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
   rw [expStep_of_cons hst, charge_nat (by rw [hg]; exact hgas)]
-  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, hmem, by simp [hg], hrun, herr, hs, hss⟩
+  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, hmem, by simp [hg], hrun, herr, hout, hs, hss⟩
 
 end EthLib.Execution.Evm.Logic
