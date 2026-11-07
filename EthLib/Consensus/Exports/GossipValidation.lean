@@ -24,6 +24,8 @@ The first byte marks a block that failed its transition with 1, or a pending blo
 
 The node knows such a block but holds no state after it.
 
+A first byte of 3 gives a block that the store holds already, such as the anchor, for its envelope.
+
 The state after any other block is the state transition of the state of its parent.
 
 The second byte gives the status of the payload of the block, or 255 for none.
@@ -112,7 +114,7 @@ def outcomeRecord : ValidationResult → ByteArray
 
 /-- A block that follows the anchor of a case, with what the node knows of it. -/
 structure GossipBlockInput where
-  /-- 1 for a block that failed its transition, 2 for a pending block, 0 otherwise. -/
+  /-- 1 for a failed block, 2 for a pending block, 3 for a block already held, 0 otherwise. -/
   kind : UInt8
   /-- The status of the payload of the block, or 255 for none. -/
   status : UInt8
@@ -154,7 +156,7 @@ def importGossipEnvelope {preset : Preset} {fork : Fork} (store : Store preset f
 
 /-- The store and the statuses after a block that follows the anchor.
 
-A failed or a pending block joins the known blocks only.
+A failed or a pending block joins the known blocks only, and a block already held stays as it is.
 
 Another block also gets its state, by the state transition of the state of its parent.
 
@@ -176,10 +178,11 @@ def importGossipBlock {preset : Preset} {fork : Fork} (config : Config)
   let store := { store with blockStates := store.blockStates.insert root state }
   if gloas : .glamsterdam ≤ fork then
     let noVotes := Vector.replicate preset.PTC_SIZE.toNat none
+    let timeliness := (store.payloadTimelinessVote gloas).insert root noVotes
+    let availability := (store.payloadDataAvailabilityVote gloas).insert root noVotes
     return ({ store with
-      payloadTimelinessVote := fun _ => (store.payloadTimelinessVote gloas).insert root noVotes
-      payloadDataAvailabilityVote := fun _ =>
-        (store.payloadDataAvailabilityVote gloas).insert root noVotes }, statuses)
+      payloadTimelinessVote := fun _ => timeliness
+      payloadDataAvailabilityVote := fun _ => availability }, statuses)
   else return (store, statuses)
 
 /-- Whether gossip validation of a topic is specified here at a fork.
@@ -188,12 +191,12 @@ The sync committee has topics from Altair, and changes of BLS credentials from C
 
 Blob sidecars travel at Deneb and Electra, and column sidecars at Fulu.
 
-At Gloas four topics are specified here: proposer preferences, envelopes, payload votes and bids.
+At Gloas seven topics are specified here: blocks, votes, aggregates and the four new topics.
 
 At Heze no topic is specified yet. -/
 def gossipValidationSpecified (fork : Fork) : String → Bool
-  | "attester_slashing" | "proposer_slashing" | "voluntary_exit" | "beacon_block"
-  | "beacon_attestation" | "beacon_aggregate_and_proof" => fork < .glamsterdam
+  | "attester_slashing" | "proposer_slashing" | "voluntary_exit" => fork < .glamsterdam
+  | "beacon_block" | "beacon_attestation" | "beacon_aggregate_and_proof" => fork < .hegota
   | "sync_committee" | "sync_committee_contribution_and_proof" =>
     .altair ≤ fork && fork < .glamsterdam
   | "bls_to_execution_change" => .shapella ≤ fork && fork < .glamsterdam
@@ -238,8 +241,8 @@ def validateGossipInput {preset : Preset} {fork : Fork} (config : Config)
   | "beacon_attestation" =>
     if electra : .pectra ≤ fork then
       let attestation ← decodeInput SingleAttestation input.data
-      let outcome ← runForkChoice (validateSingleAttestation config checks seen store electra
-        attestation input.currentTimeMs input.subnetId)
+      let outcome ← runForkChoice (validateSingleAttestation config checks seen store statuses
+        electra attestation input.currentTimeMs input.subnetId)
       return record outcome
         (·.recordAttestation attestation.data.target.epoch attestation.attesterIndex)
     else
@@ -254,7 +257,7 @@ def validateGossipInput {preset : Preset} {fork : Fork} (config : Config)
   | "beacon_aggregate_and_proof" =>
     let signed ← decodeInput (SignedAggregateAndProof preset fork) input.data
     let outcome ← runForkChoice
-      (validateAggregateAndProof config checks seen store signed input.currentTimeMs)
+      (validateAggregateAndProof config checks seen store statuses signed input.currentTimeMs)
     if !outcome.isAccept then return (outcome, seen)
     let root ← runSsz "aggregate rejected" (SszType.hashTreeRoot signed.message.aggregate.data)
     return (outcome, seen.recordAggregateAndProof signed root)
@@ -351,7 +354,7 @@ def validatePartialInputs {preset : Preset} {fork : Fork} (config : Config)
 
 /-- Validate the messages of a topic in turn, against the store of an anchor and later blocks.
 
-At Gloas four topics are specified here: proposer preferences, envelopes, payload votes and bids.
+At Gloas seven topics are specified here: blocks, votes, aggregates and the four new topics.
 
 At Heze no topic is specified yet. -/
 @[export eth_consensus_gossip_validation]

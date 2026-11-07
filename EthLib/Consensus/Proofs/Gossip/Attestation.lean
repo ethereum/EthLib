@@ -17,6 +17,8 @@ Once these are computed, the outcome is that chain.
 From the chain follows which votes each topic accepts and which it ignores.
 
 A valid vote records its keys, and the same vote is then ignored.
+
+From Gloas a vote whose payload checks pass also passes those of the fork choice.
 -/
 
 @[expose] public section
@@ -26,7 +28,8 @@ namespace EthLib.Consensus
 open Base Uint64 Cryptography.Bls Networking.Gossip Networking.Gossip.ValidationResult
 
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
-  {seen : Seen} {store : Store preset fork} {currentTimeMs subnetId : UInt64}
+  {seen : Seen} {store : Store preset fork} {statuses : PayloadStatuses}
+  {currentTimeMs subnetId : UInt64}
 
 /-! ## Helpers -/
 
@@ -131,32 +134,129 @@ theorem isAggregator_of_small {size : Nat} {proof : BLSSignature} (small : size 
     · rfl
   simp [isAggregator, one]
 
+/-- The check of the index in the data accepts exactly when the index is allowed at the fork. -/
+@[simp] theorem dataIndexOutcome_eq_accept {index : CommitteeIndex}
+    {zeroReason binaryReason : String} :
+    dataIndexOutcome fork index zeroReason binaryReason = accept ↔
+      isValidDataIndex fork index = true := by
+  simp [dataIndexOutcome]
+
+/-- The check of the index in the data never ignores. -/
+@[simp] theorem dataIndexOutcome_ne_ignore {index : CommitteeIndex}
+    {zeroReason binaryReason reason : String} :
+    dataIndexOutcome fork index zeroReason binaryReason ≠ .ignore reason := by
+  simp [dataIndexOutcome]
+
+/-- From Gloas the index in the data of a vote is allowed exactly when it is 0 or 1. -/
+theorem isValidDataIndex_of_gloas {index : CommitteeIndex} (gloas : .glamsterdam ≤ fork) :
+    isValidDataIndex fork index = true ↔ index ≤ 1 := by
+  simp [isValidDataIndex, gloas]
+
+/-- Before Gloas the index in the data of a vote is allowed exactly when it is zero. -/
+theorem isValidDataIndex_of_lt_gloas {index : CommitteeIndex} (early : ¬ .glamsterdam ≤ fork) :
+    isValidDataIndex fork index = true ↔ index = 0 := by
+  simp [isValidDataIndex, early]
+
+/-- Before Gloas a vote sees no payload, so its payload checks accept. -/
+theorem attestationPayloadOutcome_of_lt_gloas {data : AttestationData}
+    (early : ¬ .glamsterdam ≤ fork) :
+    attestationPayloadOutcome store statuses data = .ok accept := by
+  simp [attestationPayloadOutcome, early, pure, Except.pure]
+
+/-- Before Gloas the last checks of a vote are those of its ancestors. -/
+theorem voteOutcome_of_lt_gloas {data : AttestationData} (early : ¬ .glamsterdam ≤ fork) :
+    voteOutcome store statuses data =
+      voteAncestryOutcome store data.beaconBlockRoot data.target := by
+  unfold voteOutcome
+  rw [attestationPayloadOutcome_of_lt_gloas early]
+  cases voteAncestryOutcome store data.beaconBlockRoot data.target with
+  | error e => rfl
+  | ok outcome => cases outcome <;> rfl
+
+/-- From Gloas the payload checks of a vote on a known block accept exactly in these cases.
+
+A vote in the slot of its block says 0.
+
+A vote that says 1 has its payload verified, with a status neither unvalidated nor invalid. -/
+theorem attestationPayloadOutcome_eq_accept {data : AttestationData}
+    {voted : BeaconBlock preset fork} (gloas : .glamsterdam ≤ fork)
+    (known : store.block data.beaconBlockRoot = .ok voted) :
+    attestationPayloadOutcome store statuses data = .ok accept ↔
+      (voted.slot = data.slot → data.index = 0) ∧
+        (data.index = 1 → store.isPayloadVerified gloas data.beaconBlockRoot = true ∧
+          statuses.get data.beaconBlockRoot ≠ PAYLOAD_STATUS_NOT_VALIDATED ∧
+          statuses.get data.beaconBlockRoot ≠ PAYLOAD_STATUS_INVALIDATED) := by
+  unfold attestationPayloadOutcome
+  simp only [gloas, dite_true, known, bind, Except.bind, rejectUnless_andThenM,
+    ignoreUnless_andThenM, pure, Except.pure]
+  by_cases same : voted.slot = data.slot <;> by_cases one : data.index = 1 <;>
+    by_cases zero : data.index = 0 <;>
+    by_cases verifiedRoot : store.isPayloadVerified gloas data.beaconBlockRoot = true <;>
+    by_cases optimistic : statuses.get data.beaconBlockRoot = PAYLOAD_STATUS_NOT_VALIDATED <;>
+    by_cases invalid : statuses.get data.beaconBlockRoot = PAYLOAD_STATUS_INVALIDATED <;>
+    simp_all [ignoreUnless, rejectUnless, ValidationResult.andThen]
+
+/-- From Gloas a vote whose payload checks pass, with an allowed index, passes the fork choice.
+
+The fork choice checks the payload that the vote sees, on the same block. -/
+theorem validatePayloadVote_of_attestationPayloadOutcome {attestation : Attestation preset fork}
+    {voted : BeaconBlock preset fork} (gloas : .glamsterdam ≤ fork)
+    (known : store.block attestation.data.beaconBlockRoot = .ok voted)
+    (index : isValidDataIndex fork attestation.data.index = true)
+    (accepted : attestationPayloadOutcome store statuses attestation.data = .ok accept) :
+    store.validatePayloadVote gloas attestation voted = .ok () := by
+  rw [isValidDataIndex_of_gloas gloas] at index
+  obtain ⟨sameSlot, verified⟩ := (attestationPayloadOutcome_eq_accept gloas known).mp accepted
+  unfold Store.validatePayloadVote
+  have binary : ¬ (attestation.data.index ≠ 0 ∧ attestation.data.index ≠ 1) := by
+    rintro ⟨zero, one⟩
+    rw [UInt64.le_iff_toNat_le] at index
+    have : attestation.data.index.toNat ≠ 0 := fun h => zero (UInt64.toNat_inj.mp h)
+    have : attestation.data.index.toNat ≠ 1 := fun h => one (UInt64.toNat_inj.mp h)
+    simp at index
+    omega
+  have notSame : ¬ (voted.slot = attestation.data.slot ∧ attestation.data.index ≠ 0) :=
+    fun ⟨same, nonzero⟩ => nonzero (sameSlot same)
+  simp only [binary, notSame, ite_false]
+  by_cases one : attestation.data.index = 1
+  · simp [one, (verified one).1, pure, Except.pure]
+  · simp [one, pure, Except.pure]
+
 /-! ## Single attestations, from Electra -/
 
 /-- A single attestation whose attester has a valid one for its target epoch is ignored. -/
 theorem validateSingleAttestation_of_seen {electra : .pectra ≤ fork}
-    {attestation : SingleAttestation} (gloas : ¬ .glamsterdam ≤ fork)
+    {attestation : SingleAttestation}
     (known : (attestation.data.target.epoch, attestation.attesterIndex) ∈
       seen.attestationValidatorEpochs) :
-    validateSingleAttestation config checks seen store electra attestation currentTimeMs subnetId =
+    validateSingleAttestation config checks seen store statuses electra attestation currentTimeMs
+        subnetId =
       .ok (.ignore "already seen attestation for this epoch and validator") := by
-  simp [validateSingleAttestation, gloas, known, pure, Except.pure]
+  simp [validateSingleAttestation, dataIndexOutcome, known, pure, Except.pure]
 
 /-- A valid single attestation records its key, so the same attestation is then ignored. -/
 theorem validateSingleAttestation_recordAttestation {electra : .pectra ≤ fork}
-    {attestation : SingleAttestation} (gloas : ¬ .glamsterdam ≤ fork) :
+    {attestation : SingleAttestation} :
     validateSingleAttestation config checks
         (seen.recordAttestation attestation.data.target.epoch attestation.attesterIndex) store
-        electra attestation currentTimeMs subnetId =
+        statuses electra attestation currentTimeMs subnetId =
       .ok (.ignore "already seen attestation for this epoch and validator") :=
-  validateSingleAttestation_of_seen gloas (by simp [Seen.recordAttestation])
+  validateSingleAttestation_of_seen (by simp [Seen.recordAttestation])
 
-/-- From Gloas the rule is not yet specified here, so it fails. -/
-theorem validateSingleAttestation_of_gloas {electra : .pectra ≤ fork}
-    {attestation : SingleAttestation} (gloas : .glamsterdam ≤ fork) :
-    validateSingleAttestation config checks seen store electra attestation currentTimeMs subnetId =
-      .error (.forkNotYetSpecified fork) := by
-  simp [validateSingleAttestation, gloas, throw, throwThe, MonadExceptOf.throw]
+/-- From Gloas a single attestation whose data index is above 1 is rejected.
+
+That check comes right after the check of the seen keys. -/
+theorem validateSingleAttestation_of_gloas_index {electra : .pectra ≤ fork}
+    {attestation : SingleAttestation} (gloas : .glamsterdam ≤ fork)
+    (fresh : (attestation.data.target.epoch, attestation.attesterIndex) ∉
+      seen.attestationValidatorEpochs)
+    (large : 1 < attestation.data.index) :
+    validateSingleAttestation config checks seen store statuses electra attestation currentTimeMs
+        subnetId =
+      .ok (.reject "attestation data index must be 0 or 1") := by
+  have notSmall : ¬ attestation.data.index ≤ 1 := UInt64.not_le.mpr large
+  simp [validateSingleAttestation, dataIndexOutcome, isValidDataIndex, gloas, fresh, notSmall,
+    pure, Except.pure]
 
 section Single
 
@@ -169,8 +269,7 @@ variable {electra : .pectra ≤ fork} {attestation : SingleAttestation}
 This holds once the head state, the subnet, the committee and the signature are computed.
 
 The checks of the clock and of the ancestors are computed too, and have their own lemmas. -/
-theorem validateSingleAttestation_eq (gloas : ¬ .glamsterdam ≤ fork)
-    (head : store.headState config = .ok state)
+theorem validateSingleAttestation_eq (head : store.headState config = .ok state)
     (subnetOf : computeSubnetForAttestation preset config
       (getCommitteeCountPerSlot state attestation.data.target.epoch) attestation.data.slot
       attestation.committeeIndex = .ok subnet)
@@ -183,14 +282,14 @@ theorem validateSingleAttestation_eq (gloas : ¬ .glamsterdam ≤ fork)
     (signature : isValidSignatureAtEpoch config checks state DOMAIN_BEACON_ATTESTER
       attestation.data.target.epoch attestation.data attester.pubkey attestation.signature =
       .ok valid)
-    (ancestryOf : voteAncestryOutcome store attestation.data.beaconBlockRoot
-      attestation.data.target = .ok ancestry) :
-    validateSingleAttestation config checks seen store electra attestation currentTimeMs subnetId =
+    (ancestryOf : voteOutcome store statuses attestation.data = .ok ancestry) :
+    validateSingleAttestation config checks seen store statuses electra attestation currentTimeMs
+        subnetId =
       .ok ((ignoreUnless (!seen.attestationValidatorEpochs.contains
           (attestation.data.target.epoch, attestation.attesterIndex))
           "already seen attestation for this epoch and validator").andThen fun _ =>
-        (rejectUnless (attestation.data.index == 0)
-          "attestation data index is non-zero").andThen fun _ =>
+        (dataIndexOutcome fork attestation.data.index "attestation data index is non-zero"
+          "attestation data index must be 0 or 1").andThen fun _ =>
         (votedBlockOutcome store attestation.data.beaconBlockRoot).andThen fun _ =>
         (rejectUnless (decide (attestation.committeeIndex <
           getCommitteeCountPerSlot state attestation.data.target.epoch))
@@ -205,7 +304,7 @@ theorem validateSingleAttestation_eq (gloas : ¬ .glamsterdam ≤ fork)
         (rejectUnless valid "invalid attestation signature").andThen fun _ =>
         ancestry) := by
   unfold validateSingleAttestation
-  simp only [gloas, ite_false, head, subnetOf, clock, committeeOf, found, signature, ancestryOf,
+  simp only [dataIndexOutcome, head, subnetOf, clock, committeeOf, found, signature, ancestryOf,
     bind, Except.bind, pure, Except.pure, Except.mapError, ignoreUnless_andThenM,
     ignoreUnless_andThen, rejectUnless_andThenM, rejectUnless_andThen,
     apply_ite (Except.ok (ε := ForkChoiceError))]
@@ -216,8 +315,7 @@ theorem validateSingleAttestation_eq (gloas : ¬ .glamsterdam ≤ fork)
 /-- A single attestation is valid exactly when every check passes.
 
 This holds once its inputs are computed. -/
-theorem validateSingleAttestation_eq_accept (gloas : ¬ .glamsterdam ≤ fork)
-    (head : store.headState config = .ok state)
+theorem validateSingleAttestation_eq_accept (head : store.headState config = .ok state)
     (subnetOf : computeSubnetForAttestation preset config
       (getCommitteeCountPerSlot state attestation.data.target.epoch) attestation.data.slot
       attestation.committeeIndex = .ok subnet)
@@ -230,12 +328,12 @@ theorem validateSingleAttestation_eq_accept (gloas : ¬ .glamsterdam ≤ fork)
     (signature : isValidSignatureAtEpoch config checks state DOMAIN_BEACON_ATTESTER
       attestation.data.target.epoch attestation.data attester.pubkey attestation.signature =
       .ok valid)
-    (ancestryOf : voteAncestryOutcome store attestation.data.beaconBlockRoot
-      attestation.data.target = .ok ancestry) :
-    validateSingleAttestation config checks seen store electra attestation currentTimeMs subnetId =
+    (ancestryOf : voteOutcome store statuses attestation.data = .ok ancestry) :
+    validateSingleAttestation config checks seen store statuses electra attestation currentTimeMs
+        subnetId =
         .ok accept ↔
       (attestation.data.target.epoch, attestation.attesterIndex) ∉
-        seen.attestationValidatorEpochs ∧ attestation.data.index = 0 ∧
+        seen.attestationValidatorEpochs ∧ isValidDataIndex fork attestation.data.index = true ∧
         attestation.data.beaconBlockRoot ∈ store.blocks ∧
         attestation.data.beaconBlockRoot ∈ store.blockStates ∧
         attestation.committeeIndex <
@@ -243,7 +341,7 @@ theorem validateSingleAttestation_eq_accept (gloas : ¬ .glamsterdam ≤ fork)
         subnet = subnetId ∧ time = accept ∧
         attestation.data.target.epoch = computeEpochAtSlot preset attestation.data.slot ∧
         attestation.attesterIndex ∈ committee ∧ valid = true ∧ ancestry = accept := by
-  rw [validateSingleAttestation_eq gloas head subnetOf clock committeeOf found signature
+  rw [validateSingleAttestation_eq head subnetOf clock committeeOf found signature
     ancestryOf]
   simp only [Except.ok.injEq, andThen_eq_accept, ignoreUnless_eq_accept, rejectUnless_eq_accept,
     votedBlockOutcome_eq_accept]
@@ -257,8 +355,7 @@ Its attester has a valid one for its target epoch, or the block it votes for is 
 Or the clock ignores it, or the finalized checkpoint is not an ancestor of its block.
 
 Each case after the first needs the checks before it to pass. -/
-theorem validateSingleAttestation_ignored (gloas : ¬ .glamsterdam ≤ fork)
-    (head : store.headState config = .ok state)
+theorem validateSingleAttestation_ignored (head : store.headState config = .ok state)
     (subnetOf : computeSubnetForAttestation preset config
       (getCommitteeCountPerSlot state attestation.data.target.epoch) attestation.data.slot
       attestation.committeeIndex = .ok subnet)
@@ -271,13 +368,13 @@ theorem validateSingleAttestation_ignored (gloas : ¬ .glamsterdam ≤ fork)
     (signature : isValidSignatureAtEpoch config checks state DOMAIN_BEACON_ATTESTER
       attestation.data.target.epoch attestation.data attester.pubkey attestation.signature =
       .ok valid)
-    (ancestryOf : voteAncestryOutcome store attestation.data.beaconBlockRoot
-      attestation.data.target = .ok ancestry) :
-    (∃ reason, validateSingleAttestation config checks seen store electra attestation
+    (ancestryOf : voteOutcome store statuses attestation.data = .ok ancestry) :
+    (∃ reason, validateSingleAttestation config checks seen store statuses electra attestation
         currentTimeMs subnetId = .ok (.ignore reason)) ↔
       (attestation.data.target.epoch, attestation.attesterIndex) ∈
           seen.attestationValidatorEpochs ∨
-        attestation.data.index = 0 ∧ (attestation.data.beaconBlockRoot ∉ store.blocks ∨
+        isValidDataIndex fork attestation.data.index = true ∧
+          (attestation.data.beaconBlockRoot ∉ store.blocks ∨
           attestation.data.beaconBlockRoot ∈ store.blocks ∧
           attestation.data.beaconBlockRoot ∈ store.blockStates ∧
           attestation.committeeIndex <
@@ -286,7 +383,7 @@ theorem validateSingleAttestation_ignored (gloas : ¬ .glamsterdam ≤ fork)
             attestation.data.target.epoch = computeEpochAtSlot preset attestation.data.slot ∧
             attestation.attesterIndex ∈ committee ∧ valid = true ∧
             ∃ reason, ancestry = .ignore reason)) := by
-  rw [validateSingleAttestation_eq gloas head subnetOf clock committeeOf found signature
+  rw [validateSingleAttestation_eq head subnetOf clock committeeOf found signature
     ancestryOf]
   simp only [Except.ok.injEq, andThen_eq_ignore, ignoreUnless_eq_ignore, rejectUnless_ne_ignore,
     ignoreUnless_eq_accept, rejectUnless_eq_accept, votedBlockOutcome_eq_accept,
@@ -489,38 +586,42 @@ variable {signed : SignedAggregateAndProof preset fork} {index : CommitteeIndex}
   {aggregator : Validator} {selected byAggregator valid : Bool}
   {indexed : IndexedAttestation preset fork}
 
-/-- From Gloas the rule is not yet specified here, so it fails. -/
-theorem validateAggregateAndProof_of_gloas (gloas : .glamsterdam ≤ fork) :
-    validateAggregateAndProof config checks seen store signed currentTimeMs =
-      .error (.forkNotYetSpecified fork) := by
-  simp [validateAggregateAndProof, gloas, throw, throwThe, MonadExceptOf.throw]
-
 /-- Before Electra the committee of an aggregate is the index in its data. -/
-theorem validateAggregateAndProof_of_lt_electra (gloas : ¬ .glamsterdam ≤ fork)
-    (early : ¬ .pectra ≤ fork) :
-    validateAggregateAndProof config checks seen store signed currentTimeMs =
-      validateAggregateInCommittee config checks seen store signed
+theorem validateAggregateAndProof_of_lt_electra (early : ¬ .pectra ≤ fork) :
+    validateAggregateAndProof config checks seen store statuses signed currentTimeMs =
+      validateAggregateInCommittee config checks seen store statuses signed
         signed.message.aggregate.data.index currentTimeMs := by
-  simp [validateAggregateAndProof, gloas, early]
+  simp [validateAggregateAndProof, early]
 
 /-- From Electra an aggregate whose data has a nonzero index is rejected first. -/
 theorem validateAggregateAndProof_of_index_ne_zero (gloas : ¬ .glamsterdam ≤ fork)
     (electra : .pectra ≤ fork) (nonzero : signed.message.aggregate.data.index ≠ 0) :
-    validateAggregateAndProof config checks seen store signed currentTimeMs =
+    validateAggregateAndProof config checks seen store statuses signed currentTimeMs =
       .ok (.reject "aggregate data index is non-zero") := by
-  simp [validateAggregateAndProof, gloas, electra, nonzero, pure, Except.pure]
+  simp [validateAggregateAndProof, dataIndexOutcome, isValidDataIndex, gloas, electra, nonzero,
+    pure, Except.pure]
+
+/-- From Gloas an aggregate whose data index is above 1 is rejected first. -/
+theorem validateAggregateAndProof_of_gloas_index (gloas : .glamsterdam ≤ fork)
+    (large : 1 < signed.message.aggregate.data.index) :
+    validateAggregateAndProof config checks seen store statuses signed currentTimeMs =
+      .ok (.reject "aggregate data index must be 0 or 1") := by
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) gloas
+  have notSmall : ¬ signed.message.aggregate.data.index ≤ 1 := UInt64.not_le.mpr large
+  simp [validateAggregateAndProof, dataIndexOutcome, isValidDataIndex, gloas, electra, notSmall,
+    pure, Except.pure]
 
 /-- From Electra an aggregate whose committee bits do not name exactly one committee is rejected.
 
 That check comes right after the check of the index in its data. -/
-theorem validateAggregateAndProof_of_not_one_committee (gloas : ¬ .glamsterdam ≤ fork)
-    (electra : .pectra ≤ fork) (zero : signed.message.aggregate.data.index = 0)
+theorem validateAggregateAndProof_of_not_one_committee (electra : .pectra ≤ fork)
+    (validIndex : isValidDataIndex fork signed.message.aggregate.data.index = true)
     (notOne : ∀ index,
       getCommitteeIndices (signed.message.aggregate.committeeBits electra) ≠ [index]) :
-    validateAggregateAndProof config checks seen store signed currentTimeMs =
+    validateAggregateAndProof config checks seen store statuses signed currentTimeMs =
       .ok (.reject "aggregate committee bits must specify exactly one committee") := by
-  simp only [validateAggregateAndProof, gloas, electra, zero, ite_false, dite_true,
-    beq_self_eq_true, rejectUnless_andThenM, ite_true]
+  simp only [validateAggregateAndProof, dataIndexOutcome, electra, validIndex, dite_true,
+    rejectUnless_andThenM, ite_true]
   first
     | rfl
     | split <;> first | exact absurd ‹_› (notOne _) | rfl
@@ -528,12 +629,13 @@ theorem validateAggregateAndProof_of_not_one_committee (gloas : ¬ .glamsterdam 
 /-- From Electra the committee of an aggregate is the one that its committee bits name.
 
 This holds when the index in its data is zero. -/
-theorem validateAggregateAndProof_of_electra (gloas : ¬ .glamsterdam ≤ fork)
-    (electra : .pectra ≤ fork) (zero : signed.message.aggregate.data.index = 0)
+theorem validateAggregateAndProof_of_electra (electra : .pectra ≤ fork)
+    (validIndex : isValidDataIndex fork signed.message.aggregate.data.index = true)
     (one : getCommitteeIndices (signed.message.aggregate.committeeBits electra) = [index]) :
-    validateAggregateAndProof config checks seen store signed currentTimeMs =
-      validateAggregateInCommittee config checks seen store signed index currentTimeMs := by
-  simp [validateAggregateAndProof, gloas, electra, zero, one]
+    validateAggregateAndProof config checks seen store statuses signed currentTimeMs =
+      validateAggregateInCommittee config checks seen store statuses signed index
+        currentTimeMs := by
+  simp [validateAggregateAndProof, dataIndexOutcome, electra, validIndex, one]
 
 /-- An aggregate whose bits a valid aggregate for its data and committee covers is ignored.
 
@@ -542,7 +644,7 @@ theorem validateAggregateInCommittee_of_covered
     (rootOf : Serialization.Ssz.SszType.hashTreeRoot signed.message.aggregate.data = .ok root)
     (covered : isNonStrictSuperset (seen.aggregateBitsFor (aggregateKey fork root index))
       signed.message.aggregate.aggregationBits.bits.toList = true) :
-    validateAggregateInCommittee config checks seen store signed index currentTimeMs =
+    validateAggregateInCommittee config checks seen store statuses signed index currentTimeMs =
       .ok (.ignore "already seen aggregate for this data") := by
   simp [validateAggregateInCommittee, rootOf, covered, bind, Except.bind, Except.mapError, pure,
     Except.pure]
@@ -567,7 +669,7 @@ theorem validateAggregateInCommittee_recordAggregateAndProof
     (keyOf : aggregateKeyCommittee signed.message.aggregate =
       if .pectra ≤ fork then index else 0) :
     validateAggregateInCommittee config checks (seen.recordAggregateAndProof signed root) store
-        signed index currentTimeMs =
+        statuses signed index currentTimeMs =
       .ok (.ignore "already seen aggregate for this data") := by
   apply validateAggregateInCommittee_of_covered rootOf
   apply isNonStrictSuperset_of_mem
@@ -598,9 +700,8 @@ theorem validateAggregateInCommittee_eq
       signed.signature = .ok byAggregator)
     (indexedOf : getIndexedAttestation state signed.message.aggregate = .ok indexed)
     (signature : isValidIndexedAttestation config checks state indexed = .ok valid)
-    (ancestryOf : voteAncestryOutcome store signed.message.aggregate.data.beaconBlockRoot
-      signed.message.aggregate.data.target = .ok ancestry) :
-    validateAggregateInCommittee config checks seen store signed index currentTimeMs =
+    (ancestryOf : voteOutcome store statuses signed.message.aggregate.data = .ok ancestry) :
+    validateAggregateInCommittee config checks seen store statuses signed index currentTimeMs =
       .ok ((ignoreUnless
           (!isNonStrictSuperset (seen.aggregateBitsFor (aggregateKey fork root index))
             signed.message.aggregate.aggregationBits.bits.toList)
@@ -657,9 +758,8 @@ theorem validateAggregateInCommittee_eq_accept
       signed.signature = .ok byAggregator)
     (indexedOf : getIndexedAttestation state signed.message.aggregate = .ok indexed)
     (signature : isValidIndexedAttestation config checks state indexed = .ok valid)
-    (ancestryOf : voteAncestryOutcome store signed.message.aggregate.data.beaconBlockRoot
-      signed.message.aggregate.data.target = .ok ancestry) :
-    validateAggregateInCommittee config checks seen store signed index currentTimeMs =
+    (ancestryOf : voteOutcome store statuses signed.message.aggregate.data = .ok ancestry) :
+    validateAggregateInCommittee config checks seen store statuses signed index currentTimeMs =
         .ok accept ↔
       isNonStrictSuperset (seen.aggregateBitsFor (aggregateKey fork root index))
           signed.message.aggregate.aggregationBits.bits.toList = false ∧
@@ -709,9 +809,8 @@ theorem validateAggregateInCommittee_ignored
       signed.signature = .ok byAggregator)
     (indexedOf : getIndexedAttestation state signed.message.aggregate = .ok indexed)
     (signature : isValidIndexedAttestation config checks state indexed = .ok valid)
-    (ancestryOf : voteAncestryOutcome store signed.message.aggregate.data.beaconBlockRoot
-      signed.message.aggregate.data.target = .ok ancestry) :
-    (∃ reason, validateAggregateInCommittee config checks seen store signed index
+    (ancestryOf : voteOutcome store statuses signed.message.aggregate.data = .ok ancestry) :
+    (∃ reason, validateAggregateInCommittee config checks seen store statuses signed index
         currentTimeMs = .ok (.ignore reason)) ↔
       isNonStrictSuperset (seen.aggregateBitsFor (aggregateKey fork root index))
           signed.message.aggregate.aggregationBits.bits.toList = true ∨

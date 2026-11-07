@@ -38,9 +38,12 @@ TOPICS = {
 SPECIFIED = ("altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas")
 # The topics whose cases stop at a fork other than Fulu, with their last fork.
 # Blob sidecars travel only at Deneb and Electra.
-# Gloas changes the other topics, and EthLib does not specify those changes yet.
+# The topics that stop at Gloas wait for their Heze rules.
 LAST = {
     "blob_sidecar": "electra",
+    "beacon_block": "gloas",
+    "beacon_attestation": "gloas",
+    "beacon_aggregate_and_proof": "gloas",
     "proposer_preferences": "gloas",
     "execution_payload_envelope": "gloas",
     "payload_attestation_message": "gloas",
@@ -124,6 +127,10 @@ def run_case(preset: str, fork: str, case: Path) -> None:
         )
         for entry in meta["blocks"][1:]
     ]
+    # Kind 3 gives the anchor again, for the envelope of its payload.
+    anchor = meta["blocks"][0]
+    if "payload" in anchor:
+        blocks.insert(0, (3, None, _read(case, anchor["block"]), _read(case, anchor["payload"])))
     finalized = meta.get("finalized_checkpoint")
     if finalized is not None:
         # A checkpoint names its root, or the signed block whose message has the root.

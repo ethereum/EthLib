@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: networking
+handler: gossip_beacon_block
+suite: pyspec_tests
+case: gossip_beacon_block__ignore_parent_payload_not_verified

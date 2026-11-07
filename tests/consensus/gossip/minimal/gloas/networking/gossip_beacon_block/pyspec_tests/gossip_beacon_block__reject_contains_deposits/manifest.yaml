@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: networking
+handler: gossip_beacon_block
+suite: pyspec_tests
+case: gossip_beacon_block__reject_contains_deposits

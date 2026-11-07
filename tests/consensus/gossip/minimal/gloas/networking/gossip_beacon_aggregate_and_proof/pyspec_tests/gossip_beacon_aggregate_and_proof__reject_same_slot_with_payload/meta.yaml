@@ -1,0 +1,10 @@
+topic: beacon_aggregate_and_proof
+blocks:
+- {block: 
+    block_0x9f87a12d020fe5f111a8e388f428594715e83c39314fecf4b523dd7da27848b5}
+- {block: 
+    block_0x2bdd11129831a9f7045c6cba57db119b16c42192f8a0abd3f248bea2f21d15b2}
+messages:
+- {current_time_ms: 6500, message: 
+    aggregate_0xcd3880dbe6b03c2ca20d09dc3a61451b3f0af0198a9762a7aad40c8629f5f48f,
+  expected: reject, reason: same-slot attestation must attest with index 0}
