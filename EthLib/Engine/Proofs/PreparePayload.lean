@@ -5,8 +5,7 @@ public import EthLib.Base.Proofs.MapM
 public import EthLib.Consensus.Proofs.Builders
 public import EthLib.Consensus.Proofs.Mutators
 public import EthLib.Consensus.Proofs.Transition.Block
-public import EthLib.Consensus.Proofs.Transition.ParentPayload
-public import EthLib.Consensus.Proofs.Transition.Withdrawals
+public import EthLib.Consensus.Proofs.Transition.PayloadInputs
 public import EthLib.Engine.PreparePayload
 
 /-!
@@ -357,135 +356,6 @@ theorem validateMergeBlock_of_payloadHeadBlockHash_of_difficulty {state : Beacon
 
 /-! ## The payload, in the transition -/
 
-/-- Two states that agree on what the checks of a payload read of them.
-
-They have one slot, one genesis time, one buffer of RANDAO mixes and one latest payload header.
-
-They also have one latest block header.
-
-From Gloas they have one latest block hash and one latest bid. -/
-structure PayloadInputs (state after : BeaconState preset fork) : Prop where
-  slot : after.slot = state.slot
-  genesisTime : after.genesisTime = state.genesisTime
-  randaoMixes : after.randaoMixes = state.randaoMixes
-  latestExecutionPayloadHeader :
-    after.latestExecutionPayloadHeader = state.latestExecutionPayloadHeader
-  latestBlockHeader : after.latestBlockHeader = state.latestBlockHeader
-  latestBlockHash : after.latestBlockHash = state.latestBlockHash
-  latestExecutionPayloadBid : after.latestExecutionPayloadBid = state.latestExecutionPayloadBid
-
-theorem PayloadInputs.refl (state : BeaconState preset fork) : PayloadInputs state state :=
-  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-
-theorem PayloadInputs.trans {first second third : BeaconState preset fork}
-    (one : PayloadInputs first second) (two : PayloadInputs second third) :
-    PayloadInputs first third :=
-  ⟨two.slot.trans one.slot, two.genesisTime.trans one.genesisTime,
-    two.randaoMixes.trans one.randaoMixes,
-    two.latestExecutionPayloadHeader.trans one.latestExecutionPayloadHeader,
-    two.latestBlockHeader.trans one.latestBlockHeader,
-    two.latestBlockHash.trans one.latestBlockHash,
-    two.latestExecutionPayloadBid.trans one.latestExecutionPayloadBid⟩
-
-/-- A withdrawal changes a balance, and none of the inputs of a payload. -/
-theorem payloadInputs_applyWithdrawal {state after : BeaconState preset fork}
-    {withdrawal : Consensus.Withdrawal}
-    (computed : applyWithdrawal state withdrawal = .ok after) : PayloadInputs state after := by
-  unfold applyWithdrawal at computed
-  split at computed
-  · obtain ⟨_, _, set⟩ := bind_ok_iff.mp computed
-    obtain ⟨_, rfl⟩ := setBuilder_ok set
-    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  · obtain ⟨_, set⟩ := decreaseBalance_ok computed
-    obtain ⟨_, rfl⟩ := setBalance_ok set
-    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-
-/-- Applying the expected withdrawals changes none of the inputs of a payload. -/
-theorem payloadInputs_applyExpectedWithdrawals {state after : BeaconState preset fork}
-    {capella : .shapella ≤ fork} {expected : ExpectedWithdrawals}
-    (computed : applyExpectedWithdrawals state capella expected = .ok after) :
-    PayloadInputs state after := by
-  unfold applyExpectedWithdrawals at computed
-  simp only [bind_ok_iff] at computed
-  obtain ⟨applied, appliedOk, indexed, indexedOk, finished, sweptOk, last⟩ := computed
-  have one : PayloadInputs state applied := by
-    unfold applyWithdrawals at appliedOk
-    rw [← Array.foldlM_toList] at appliedOk
-    exact foldlM_ok_invariant (PayloadInputs state)
-      (fun _ _ _ before ok => before.trans (payloadInputs_applyWithdrawal ok))
-      (PayloadInputs.refl state) appliedOk
-  have two : PayloadInputs applied indexed := by
-    unfold updateNextWithdrawalIndex at indexedOk
-    split at indexedOk
-    · obtain ⟨_, _, built⟩ := bind_ok_iff.mp indexedOk
-      cases built
-      exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-    · cases indexedOk
-      exact PayloadInputs.refl _
-  have three : ∀ kept : BeaconState preset fork,
-      (if gloas : .glamsterdam ≤ fork then
-        updateNextWithdrawalBuilderIndex kept gloas expected.processedBuildersSweepCount
-      else pure kept) = .ok finished → PayloadInputs kept finished := by
-    intro kept ok
-    split at ok
-    · unfold updateNextWithdrawalBuilderIndex at ok
-      dsimp only at ok
-      split at ok
-      · cases ok
-        exact PayloadInputs.refl _
-      · obtain ⟨_, _, built⟩ := bind_ok_iff.mp ok
-        cases built
-        exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-    · cases ok
-      exact PayloadInputs.refl _
-  have queued : PayloadInputs indexed (if electra : .pectra ≤ fork then
-      updatePendingPartialWithdrawals (if gloas : .glamsterdam ≤ fork then
-        updateBuilderPendingWithdrawals
-          (updatePayloadExpectedWithdrawals indexed gloas expected.withdrawals) gloas
-          expected.processedBuilderWithdrawalsCount
-      else indexed) electra expected.processedPartialWithdrawalsCount
-    else if gloas : .glamsterdam ≤ fork then
-        updateBuilderPendingWithdrawals
-          (updatePayloadExpectedWithdrawals indexed gloas expected.withdrawals) gloas
-          expected.processedBuilderWithdrawalsCount
-      else indexed) := by
-    split <;> split <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  have four : PayloadInputs finished after := by
-    unfold updateNextWithdrawalValidatorIndex at last
-    obtain ⟨_, _, last⟩ := bind_ok_iff.mp last
-    dsimp only at last
-    split at last
-    · cases last
-    · cases last
-      exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  exact one.trans (two.trans (queued.trans ((three _ sweptOk).trans four)))
-
-/-- The withdrawal step changes none of the inputs of a payload. -/
-theorem payloadInputs_processWithdrawals {state after : BeaconState preset fork}
-    {capella : .shapella ≤ fork}
-    {payload : Until .glamsterdam fork (Consensus.ExecutionPayload preset fork)}
-    (computed : processWithdrawals state capella payload = .ok after) :
-    PayloadInputs state after := by
-  unfold processWithdrawals at computed
-  split at computed
-  · split at computed
-    · obtain ⟨_, _, applied⟩ := bind_ok_iff.mp computed
-      exact payloadInputs_applyExpectedWithdrawals (liftAccessor_ok.mp applied)
-    · cases computed
-      exact PayloadInputs.refl _
-  · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, _, _, applied⟩ := computed
-    exact payloadInputs_applyExpectedWithdrawals applied
-
-/-- The header step changes only the latest block header. -/
-theorem payloadInputs_processBlockHeader {state after : BeaconState preset fork}
-    {block : BeaconBlock preset fork} (computed : processBlockHeader state block = .ok after) :
-    after.slot = state.slot ∧ after.genesisTime = state.genesisTime ∧
-      after.randaoMixes = state.randaoMixes ∧
-      after.latestExecutionPayloadHeader = state.latestExecutionPayloadHeader := by
-  obtain ⟨_, _, rfl⟩ := processBlockHeader_eq computed
-  exact ⟨rfl, rfl, rfl, rfl⟩
-
 /-- A payload on the update of a proposer passes the checks of its parent, mix and time.
 
 The state that checks it must agree with the state of the proposer on what those checks read.
@@ -682,7 +552,12 @@ theorem processBlockExecution_eq_error_of_prepareExecutionPayload
       .error error) :
     error = .tooManyBlobCommitments ∨ error = .invalidExecutionPayload ∨
       (∃ fault, error = .ssz fault) ∨ ∃ fault, error = .accessor fault := by
-  obtain ⟨slot, genesisTime, randaoMixes, latest⟩ := payloadInputs_processBlockHeader headed
+  have headerInputs := payloadInputs_processBlockHeader headed
+  have slot : header.slot = state.slot := headerInputs.slot
+  have genesisTime : header.genesisTime = state.genesisTime := headerInputs.genesisTime
+  have randaoMixes : header.randaoMixes = state.randaoMixes := headerInputs.randaoMixes
+  have latest : header.latestExecutionPayloadHeader = state.latestExecutionPayloadHeader :=
+    headerInputs.latestExecutionPayloadHeader
   have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt bellatrix.2
   unfold processBlockExecution at failed
   simp only [notGloas, ↓reduceDIte] at failed
