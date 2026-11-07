@@ -56,6 +56,7 @@ public import EthLib.Consensus.Proofs.HonestProposer
 public import EthLib.Consensus.Proofs.InclusionListCommittee
 public import EthLib.Consensus.Proofs.LightClient.Authenticate
 public import EthLib.Consensus.Proofs.LightClient.Containers
+public import EthLib.Consensus.Proofs.LightClient.Execution
 public import EthLib.Consensus.Proofs.LightClient.FullNode
 public import EthLib.Consensus.Proofs.LightClient.Sync
 public import EthLib.Consensus.Proofs.LightClient.Upgrade

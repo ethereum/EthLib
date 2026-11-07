@@ -17,7 +17,7 @@ The indices of the finalized root and of the sync committees are those that the 
 
 They hold at every fork from Altair, at every preset.
 
-The execution indices hold from Capella, in the mainnet and the minimal presets.
+The execution indices hold from Capella, at every preset.
 
 At each of these forks the node at each index is the root of its field.
 
@@ -196,6 +196,186 @@ theorem BeaconState.nodeRoot_finalizedCheckpoint_root
           (LawfulSszType.fits state) rfl rfl checkpoint
   exact selected.nodeRoot_eq (lightClientGindices_eq altair).1
 
+/-- From Capella to the forks before Gloas, the execution payload is field 9 of a body. -/
+theorem BeaconBlockBody.idxOf_executionPayload (capella : .shapella ≤ fork)
+    (beforeGloas : fork < .glamsterdam) :
+    (BeaconBlockBody.names fork).idxOf "execution_payload" = 9 := by
+  cases fork <;>
+    first | exact absurd capella (by decide) | exact absurd beforeGloas (by decide) | decide
+
+/-- The block hash is field 12 of an execution payload header. -/
+theorem ExecutionPayloadHeader.idxOf_blockHash :
+    (ExecutionPayloadHeader.names fork).idxOf "block_hash" = 12 := by
+  cases fork <;> decide
+
+/-- The block hash is field 12 of an execution payload. -/
+theorem ExecutionPayload.idxOf_blockHash :
+    (ExecutionPayload.names fork).idxOf "block_hash" = 12 := by
+  cases fork <;> decide
+
+/-- From Capella to the forks before Gloas, a body has 11 to 13 fields, so 16 leaves.
+
+The execution payload is field 9. -/
+theorem BeaconBlockBody.desc_executionPayload (capella : .shapella ≤ fork)
+    (beforeGloas : fork < .glamsterdam) :
+    ∃ fields, SszType.desc (BeaconBlockBody preset fork) =
+        .container (BeaconBlockBody.names fork) fields ∧ nextPow2 fields.length = 16 ∧
+      fields[9]? = some (SszType.desc (ExecutionPayload preset fork)) := by
+  have counted : ∃ fields, SszType.desc (BeaconBlockBody preset fork) =
+        .container (BeaconBlockBody.names fork) fields ∧
+      (fields.length = 11 ∨ fields.length = 12 ∨ fields.length = 13) ∧
+      fields[9]? = some (SszType.desc (ExecutionPayload preset fork)) := by
+    cases fork <;> first
+      | exact absurd capella (by decide)
+      | exact absurd beforeGloas (by decide)
+      | exact ⟨_, rfl, by first | exact .inl rfl | exact .inr (.inl rfl) | exact .inr (.inr rfl),
+          rfl⟩
+  obtain ⟨fields, desc, count, chosen⟩ := counted
+  refine ⟨fields, desc, ?_, chosen⟩
+  rcases count with count | count | count <;> rw [count] <;> simp [nextPow2, depthFor]
+
+/-- From Capella to the forks before Gloas, the block hash is field 12 of an execution payload.
+
+The payload has 15 fields at Capella, so 16 leaves, and 17 from Deneb, so 32 leaves. -/
+theorem ExecutionPayload.desc_blockHash (capella : .shapella ≤ fork)
+    (beforeGloas : fork < .glamsterdam) :
+    ∃ names fields, SszType.desc (ExecutionPayload preset fork) = .container names fields ∧
+      nextPow2 fields.length = (if .dencun ≤ fork then 32 else 16) ∧
+      fields[12]? = some (SszType.desc Hash32) := by
+  have counted : ∃ names fields, SszType.desc (ExecutionPayload preset fork) =
+        .container names fields ∧
+      fields.length = (if .dencun ≤ fork then 17 else 15) ∧
+      fields[12]? = some (SszType.desc Hash32) := by
+    cases fork <;> first
+      | exact absurd capella (by decide)
+      | exact absurd beforeGloas (by decide)
+      | exact ⟨_, _, rfl, rfl, rfl⟩
+  obtain ⟨names, fields, desc, count, chosen⟩ := counted
+  refine ⟨names, fields, desc, ?_, chosen⟩
+  rw [count]
+  split <;> simp [nextPow2, depthFor]
+
+/-- From Capella to the forks before Gloas, field 9 of a body is node 25 of its tree.
+
+This holds at every preset. -/
+theorem executionPayloadGindex_eq_of_lt (capella : .shapella ≤ fork)
+    (beforeGloas : fork < .glamsterdam) :
+    getGeneralizedIndex (SszType.desc (BeaconBlockBody preset fork)) [.position 9] =
+      .ok EXECUTION_PAYLOAD_GINDEX := by
+  obtain ⟨fields, desc, filled, chosen⟩ :=
+    BeaconBlockBody.desc_executionPayload (preset := preset) capella beforeGloas
+  rw [desc]
+  exact getGeneralizedIndex_step (filled ▸ resolveStep_container _ _ _ _ chosen)
+    (getGeneralizedIndex_nil _) (gindexConcat_root_right (by decide))
+
+/-- From Capella to the forks before Gloas, the block hash of the payload of a body is node 412.
+
+From Deneb the payload has 32 leaves, so the node is 812.
+
+This holds at every preset. -/
+theorem executionBlockHashGindex_eq_of_lt (capella : .shapella ≤ fork)
+    (beforeGloas : fork < .glamsterdam) :
+    getGeneralizedIndex (SszType.desc (BeaconBlockBody preset fork)) [.position 9, .position 12] =
+      .ok (if .dencun ≤ fork then EXECUTION_BLOCK_HASH_GINDEX_DENEB
+        else EXECUTION_BLOCK_HASH_GINDEX) := by
+  obtain ⟨fields, desc, filled, chosen⟩ :=
+    BeaconBlockBody.desc_executionPayload (preset := preset) capella beforeGloas
+  obtain ⟨names, payloadFields, payloadDesc, payloadFilled, hashChosen⟩ :=
+    ExecutionPayload.desc_blockHash (preset := preset) capella beforeGloas
+  rw [desc]
+  rw [payloadDesc] at chosen
+  -- The payload has 16 leaves at Capella and 32 from Deneb, and the hash is leaf 12.
+  by_cases deneb : Fork.dencun ≤ fork <;> simp only [deneb, ↓reduceIte] at payloadFilled ⊢
+  · exact getGeneralizedIndex_step (filled ▸ resolveStep_container _ _ _ _ chosen)
+      (getGeneralizedIndex_step (payloadFilled ▸ resolveStep_container _ _ _ _ hashChosen)
+        (getGeneralizedIndex_nil _) (gindexConcat_root_right (by decide)))
+      (by rw [gindexConcat_eq (by decide) (by decide)]; exact congrArg Except.ok (by decide))
+  · exact getGeneralizedIndex_step (filled ▸ resolveStep_container _ _ _ _ chosen)
+      (getGeneralizedIndex_step (payloadFilled ▸ resolveStep_container _ _ _ _ hashChosen)
+        (getGeneralizedIndex_nil _) (gindexConcat_root_right (by decide)))
+      (by rw [gindexConcat_eq (by decide) (by decide)]; exact congrArg Except.ok (by decide))
+
+/-- From Capella to the forks before Gloas, the value of a body holds its payload at field 9. -/
+theorem BeaconBlockBody.values_executionPayload (capella : .shapella ≤ fork)
+    (beforeGloas : fork < .glamsterdam) (body : BeaconBlockBody preset fork) :
+    ∃ values, SszType.toValue body = .seq values ∧ values[9]? =
+      some (SszType.toValue
+        (body.executionPayload ⟨Nat.le_trans (by decide) capella, beforeGloas⟩)) := by
+  cases fork <;> first
+    | exact absurd capella (by decide)
+    | exact absurd beforeGloas (by decide)
+    | exact ⟨_, rfl, rfl⟩
+
+/-- From Gloas, the signed bid of a body follows the fields of the body before it.
+
+It is field 10, and field 8 from Heze, where the deposits and the eth1 data are gone. -/
+theorem BeaconBlockBody.idxOf_signedBid (gloas : .glamsterdam ≤ fork) :
+    (BeaconBlockBody.names fork).idxOf "signed_execution_payload_bid" =
+      if .hegota ≤ fork then 8 else 10 := by
+  cases fork <;> first | exact absurd gloas (by decide) | decide
+
+/-- From Gloas, the bid of a body below the root of the body is node 357 of its tree.
+
+This holds at every preset. -/
+theorem BeaconBlockBody.resolveStep_signedBid (gloas : .glamsterdam ≤ fork) :
+    (SszType.desc (BeaconBlockBody preset fork)).resolveStep
+      (.position (if .hegota ≤ fork then 8 else 10)) =
+      .ok (357, some (SszType.desc (SignedExecutionPayloadBid preset fork))) := by
+  have shaped : ∃ active names fields position,
+      SszType.desc (BeaconBlockBody preset fork) = .progressiveContainer active names fields ∧
+      fields[if .hegota ≤ fork then 8 else 10]? =
+        some (SszType.desc (SignedExecutionPayloadBid preset fork)) ∧
+      layoutPosition active (if .hegota ≤ fork then 8 else 10) = .ok position ∧
+      progressiveChunkGindex position = 357 := by
+    cases fork
+    all_goals try exact absurd gloas (by decide)
+    all_goals exact ⟨_, _, _, _, rfl, rfl, rfl, by
+      simp +decide [progressiveChunkGindex]⟩
+  obtain ⟨active, names, fields, position, desc, chosen, placed, gindex⟩ := shaped
+  rw [desc, ← gindex]
+  exact resolveStep_progressiveContainer active names fields _ position _ chosen placed
+
+/-- The parent block hash is the first field of a bid, node 4 of its tree. -/
+theorem ExecutionPayloadBid.resolveStep_parentBlockHash :
+    (SszType.desc (ExecutionPayloadBid preset fork)).resolveStep (.position 0) =
+      .ok (4, some (SszType.desc Hash32)) := by
+  have shaped : ∃ active names fields position,
+      SszType.desc (ExecutionPayloadBid preset fork) = .progressiveContainer active names fields ∧
+      fields[0]? = some (SszType.desc Hash32) ∧
+      layoutPosition active 0 = .ok position ∧ progressiveChunkGindex position = 4 := by
+    cases fork
+    all_goals exact ⟨_, _, _, _, rfl, rfl, rfl, by
+      simp +decide [progressiveChunkGindex]⟩
+  obtain ⟨active, names, fields, position, desc, chosen, placed, gindex⟩ := shaped
+  rw [desc, ← gindex]
+  exact resolveStep_progressiveContainer active names fields _ position _ chosen placed
+
+/-- From Gloas, the parent block hash of the bid of a body is node 2856 of the body.
+
+The path goes through the bid, its message, then its first field.
+
+This holds at every preset. -/
+theorem executionBlockHashGindexGloas_eq_of_le (gloas : .glamsterdam ≤ fork) :
+    getGeneralizedIndex (SszType.desc (BeaconBlockBody preset fork))
+      [.position (if .hegota ≤ fork then 8 else 10), .position 0, .position 0] =
+      .ok EXECUTION_BLOCK_HASH_GINDEX_GLOAS := by
+  have signed : (SszType.desc (SignedExecutionPayloadBid preset fork)).resolveStep (.position 0) =
+      .ok (2, some (SszType.desc (ExecutionPayloadBid preset fork))) := by
+    have desc : SszType.desc (SignedExecutionPayloadBid preset fork) =
+        .container ["message", "signature"]
+          [SszType.desc (ExecutionPayloadBid preset fork),
+            SszType.desc Cryptography.Bls.BLSSignature] := rfl
+    rw [desc]
+    simpa [nextPow2, depthFor] using resolveStep_container ["message", "signature"]
+      [SszType.desc (ExecutionPayloadBid preset fork), SszType.desc Cryptography.Bls.BLSSignature]
+      0 _ rfl
+  exact getGeneralizedIndex_step (BeaconBlockBody.resolveStep_signedBid gloas)
+    (getGeneralizedIndex_step signed
+      (getGeneralizedIndex_step ExecutionPayloadBid.resolveStep_parentBlockHash
+        (getGeneralizedIndex_nil _) (gindexConcat_root_right (by decide)))
+      (by rw [gindexConcat_eq (by decide) (by decide)]))
+    (by rw [gindexConcat_eq (by decide) (by decide)]; exact congrArg Except.ok (by decide))
+
 variable [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
 
 instance : NeZero (Nat.log2 (executionBranchGindex fork)) :=
@@ -240,43 +420,54 @@ instance : LawfulSszType (LightClientOptimisticUpdate preset fork) :=
 
 /-- The execution payload sits at the generalized index that the type of the body gives.
 
-This holds from Capella to the forks before Gloas, for both presets. -/
-theorem executionPayloadGindex_eq {preset : Preset} {fork : Fork}
-    (named : preset = .mainnet ∨ preset = .minimal) (capella : .shapella ≤ fork)
+This holds from Capella to the forks before Gloas, at every preset. -/
+theorem executionPayloadGindex_eq {preset : Preset} {fork : Fork} (capella : .shapella ≤ fork)
     (beforeGloas : fork < .glamsterdam) :
     (SszType.getGeneralizedIndex (BeaconBlockBody preset fork)
         [.position ((BeaconBlockBody.names fork).idxOf "execution_payload")]).toOption =
       some EXECUTION_PAYLOAD_GINDEX := by
-  rcases named with rfl | rfl <;> cases fork <;> first
-    | exact absurd capella (by decide) | exact absurd beforeGloas (by decide) | decide +kernel
+  rw [BeaconBlockBody.idxOf_executionPayload capella beforeGloas]
+  simp [SszType.getGeneralizedIndex, executionPayloadGindex_eq_of_lt (preset := preset) capella
+    beforeGloas, Except.toOption]
 
 /-- The block hash sits at the index that the type of an execution payload header gives.
 
-This holds from Capella to the forks before Gloas, for both presets. -/
+This holds from Capella to the forks before Gloas, at every preset. -/
 theorem payloadHeaderBlockHashGindex_eq {preset : Preset} {fork : Fork}
-    (named : preset = .mainnet ∨ preset = .minimal) (capella : .shapella ≤ fork)
-    (beforeGloas : fork < .glamsterdam) :
+    (capella : .shapella ≤ fork) (beforeGloas : fork < .glamsterdam) :
     (SszType.getGeneralizedIndex (ExecutionPayloadHeader preset fork)
         [.position ((ExecutionPayloadHeader.names fork).idxOf "block_hash")]).toOption =
       some (payloadHeaderBlockHashGindex fork) := by
-  rcases named with rfl | rfl <;> cases fork <;> first
-    | exact absurd capella (by decide) | exact absurd beforeGloas (by decide) | decide +kernel
+  rw [ExecutionPayloadHeader.idxOf_blockHash]
+  cases fork
+  all_goals try first
+    | exact absurd capella (by decide)
+    | exact absurd beforeGloas (by decide)
+  -- The header is a plain container, so its field 12 is a leaf of its tree of fields.
+  all_goals
+    unfold SszType.getGeneralizedIndex SszType.desc
+    simp +decide [ExecutionPayloadHeader.instSszType, SszType.container,
+      getGeneralizedIndex, Desc.resolveStep, Desc.chunkPosition, Desc.elementType,
+      Desc.chunkCount, SszType.desc, SszFields.descs, ExecutionPayloadHeader.names,
+      Bind.bind, Except.bind, Pure.pure, Except.pure, nextPow2, payloadHeaderBlockHashGindex]
+    simp [gindexConcat, gindexDepth, depthFor, Bind.bind, Except.bind, Pure.pure, Except.pure,
+      Except.toOption]
 
 /-- The block hash of the payload sits at the index that the type of the body gives.
 
 The index is that of Capella in a Capella body, and that of Deneb from Deneb to Fulu.
 
-This holds for both presets. -/
+This holds at every preset. -/
 theorem executionBlockHashGindex_eq {preset : Preset} {fork : Fork}
-    (named : preset = .mainnet ∨ preset = .minimal) (capella : .shapella ≤ fork)
-    (beforeGloas : fork < .glamsterdam) :
+    (capella : .shapella ≤ fork) (beforeGloas : fork < .glamsterdam) :
     (SszType.getGeneralizedIndex (BeaconBlockBody preset fork)
         [.position ((BeaconBlockBody.names fork).idxOf "execution_payload"),
           .position ((ExecutionPayload.names fork).idxOf "block_hash")]).toOption =
       some (if .dencun ≤ fork then EXECUTION_BLOCK_HASH_GINDEX_DENEB
         else EXECUTION_BLOCK_HASH_GINDEX) := by
-  rcases named with rfl | rfl <;> cases fork <;> first
-    | exact absurd capella (by decide) | exact absurd beforeGloas (by decide) | decide +kernel
+  rw [BeaconBlockBody.idxOf_executionPayload capella beforeGloas, ExecutionPayload.idxOf_blockHash]
+  simp [SszType.getGeneralizedIndex, executionBlockHashGindex_eq_of_lt (preset := preset) capella
+    beforeGloas, Except.toOption]
 
 /-- A node at the depth of the leaves of a container is the root of the field there.
 
@@ -337,15 +528,18 @@ theorem ExecutionPayloadHeader.nodeRoot_blockHash (capella : .shapella ≤ fork)
 
 The bid is the message of the signed bid, and the parent block hash is its first field.
 
-This holds for both presets. -/
+This holds at every preset. -/
 theorem executionBlockHashGindexGloas_eq {preset : Preset} {fork : Fork}
-    (named : preset = .mainnet ∨ preset = .minimal) (gloas : .glamsterdam ≤ fork) :
+    (gloas : .glamsterdam ≤ fork) :
     (SszType.getGeneralizedIndex (BeaconBlockBody preset fork)
         [.position ((BeaconBlockBody.names fork).idxOf "signed_execution_payload_bid"),
           .position 0,
           .position ((ExecutionPayloadBid.names fork).idxOf "parent_block_hash")]).toOption =
       some EXECUTION_BLOCK_HASH_GINDEX_GLOAS := by
-  rcases named with rfl | rfl <;> cases fork <;> first
-    | exact absurd gloas (by decide) | decide +kernel
+  have first : (ExecutionPayloadBid.names fork).idxOf "parent_block_hash" = 0 := by
+    cases fork <;> decide
+  rw [BeaconBlockBody.idxOf_signedBid gloas, first]
+  simp [SszType.getGeneralizedIndex,
+    executionBlockHashGindexGloas_eq_of_le (preset := preset) gloas, Except.toOption]
 
 end EthLib.Consensus

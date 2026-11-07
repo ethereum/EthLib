@@ -317,6 +317,51 @@ theorem validateLightClientUpdate_nextSyncCommittee {config : Config}
     isValidNormalizedMerkleBranch_value (nextSyncCommitteeGindexAtSlot_named indexed) valid state
       rooted read⟩
 
+/-- The client reads each light client node at the index of the fork that the schedule gives.
+
+Take a slot whose fork in the schedule is from Altair, and a store of that fork or later.
+
+The finalized root and the two committees then sit at the indices of the fork of the slot.
+
+So from Electra the client reads the deeper indices of Electra, and from Gloas those of Gloas.
+
+The schedule must start Electra no later than Fulu, and Gloas no later than Heze.
+
+This gives the index hypothesis of the theorems below for a state of the fork of the slot. -/
+theorem stateForkAtSlot_gindices {config : Config} {slot : Slot} {stateFork : Fork}
+    (altair : .altair ≤ stateFork) (later : stateFork ≤ fork)
+    (scheduled : config.forkAtEpoch (computeEpochAtSlot preset slot) = stateFork)
+    (electraFulu : config.ELECTRA_FORK_EPOCH ≤ config.FULU_FORK_EPOCH)
+    (gloasHeze : config.GLOAS_FORK_EPOCH ≤ config.HEZE_FORK_EPOCH) :
+    finalizedRootGindexAtSlot (preset := preset) (fork := fork) config slot =
+        .ok (finalizedRootGindex stateFork) ∧
+      currentSyncCommitteeGindexAtSlot (preset := preset) (fork := fork) config slot =
+        .ok (currentSyncCommitteeGindex stateFork) ∧
+      nextSyncCommitteeGindexAtSlot (preset := preset) (fork := fork) config slot =
+        .ok (nextSyncCommitteeGindex stateFork) := by
+  have storeAltair : Fork.altair ≤ fork := Nat.le_trans altair later
+  have forkAt : stateForkAtSlot (preset := preset) (fork := fork) config slot =
+      .ok (if .glamsterdam ≤ stateFork then .glamsterdam
+        else if .pectra ≤ stateFork then .pectra else .altair) := by
+    simp only [stateForkAtSlot, LightClientError.requireFork, storeAltair, ↓reduceIte, bind,
+      Except.bind, pure, Except.pure]
+    unfold Config.forkAtEpoch at scheduled
+    generalize computeEpochAtSlot preset slot = epoch at scheduled ⊢
+    have order : ∀ a b : Fork, (a ≤ b) = (a.ctorIdx ≤ b.ctorIdx) := fun _ _ => rfl
+    split_ifs at scheduled <;> subst scheduled <;> split_ifs <;>
+      first
+      | rfl
+      | (exfalso
+         simp only [order, Fork.ctorIdx, UInt64.le_iff_toNat_le,
+           not_and, Nat.not_le] at *
+         omega)
+  unfold finalizedRootGindexAtSlot currentSyncCommitteeGindexAtSlot nextSyncCommitteeGindexAtSlot
+  rw [forkAt]
+  -- The three indices depend only on whether the fork is from Gloas, or else from Electra.
+  simp only [Functor.map, Except.map, Except.ok.injEq]
+  split_ifs <;>
+    simp_all +decide [finalizedRootGindex, currentSyncCommitteeGindex, nextSyncCommitteeGindex]
+
 /-- The finalized root of an accepted update is the finalized root of the attested beacon state.
 
 Take a beacon state of a fork from Altair whose root is the attested state root.
