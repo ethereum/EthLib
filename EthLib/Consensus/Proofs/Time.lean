@@ -323,6 +323,16 @@ theorem mem_epochSlots_of_epoch {epoch : Epoch} {slots : List Slot}
   apply UInt64.toNat_inj.mp
   rw [toNat_epochSlot fits offsetLt, Nat.mul_comm, split]
 
+/-- The slots of an epoch strictly increase. -/
+theorem epochSlots_pairwise {epoch : Epoch} {slots : List Slot}
+    (h : epochSlots preset epoch = .ok slots) : slots.Pairwise (· < ·) := by
+  obtain ⟨fits, rfl⟩ := epochSlots_eq_ok_iff.mp h
+  rw [List.pairwise_map]
+  refine (List.Pairwise.and_mem.mp List.pairwise_lt_range).imp fun ⟨first, second, lt⟩ => ?_
+  rw [UInt64.lt_iff_toNat_lt, toNat_epochSlot fits (List.mem_range.mp first),
+    toNat_epochSlot fits (List.mem_range.mp second)]
+  omega
+
 /-- The slots of an epoch, from its first slot, when that slot is known.
 
 The first slot plus the length of an epoch is then below `2^64`. -/

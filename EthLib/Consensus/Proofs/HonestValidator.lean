@@ -4,6 +4,7 @@ public import EthLib.Base.Except
 public import EthLib.Base.Proofs.List
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Consensus.Gossip.Seen
+public import EthLib.Consensus.ForkChoice.Handlers
 public import EthLib.Consensus.HonestValidator
 public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Consensus.Proofs.Gossip.SyncCommittee
@@ -27,6 +28,16 @@ The registry stays within its limit, and its active validators times the committ
 The proposer check and the sync committee seat check have their outcomes characterized.
 
 The sync committee subnets of a validator come once each, in increasing order.
+
+From Gloas, a payload timeliness assignment is the first slot of the epoch that has the validator.
+
+A validator without one is in no committee of the epoch, when an epoch has a slot.
+
+The upcoming proposal slots are the later slots of the lookahead that the validator proposes.
+
+Under the pairing laws, the fork choice accepts a signed payload attestation message of the slot.
+
+The slot must be the current one, and the validator must have the public key of the secret key.
 -/
 
 @[expose] public section
@@ -550,5 +561,258 @@ theorem computeSubnetsForSyncCommittee_ok {state : BeaconState preset fork}
       (syncSubnetsOfPubkey committee validator.pubkey)
     exact (sorted.and nodup).imp fun ⟨hle, hne⟩ => UInt64.lt_of_le_of_ne (by simpa using hle) hne
   · rw [(List.mergeSort_perm _ _).mem_iff, mem_syncSubnetsOfPubkey]
+
+/-! ## Gloas duties -/
+
+/-- A slot that the search returns is one of its slots, whose committee holds the validator. -/
+theorem findPtcSlot_sound {config : Config} {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {validatorIndex : ValidatorIndex} :
+    ∀ {slots : List Slot} {slot : Slot},
+      findPtcSlot config state gloas validatorIndex slots = .ok (some slot) →
+      slot ∈ slots ∧ ∃ committee, getPtc config state gloas slot = .ok committee ∧
+        validatorIndex ∈ committee.toList
+  | [], _, h => by simp [findPtcSlot, pure, Except.pure] at h
+  | first :: rest, slot, h => by
+    unfold findPtcSlot at h
+    obtain ⟨committee, computed, h⟩ := bind_ok_iff.mp h
+    rw [mapError_ok_iff] at computed
+    split at h
+    · rename_i mem
+      simp only [pure, Except.pure, Except.ok.injEq, Option.some.injEq] at h
+      subst h
+      exact ⟨List.mem_cons_self, committee, computed, mem⟩
+    · obtain ⟨mem, found⟩ := findPtcSlot_sound h
+      exact ⟨List.mem_cons_of_mem _ mem, found⟩
+
+/-- When the search finds no slot, the committee of each of its slots leaves the validator out. -/
+theorem not_mem_of_findPtcSlot_none {config : Config} {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {validatorIndex : ValidatorIndex} :
+    ∀ {slots : List Slot}, findPtcSlot config state gloas validatorIndex slots = .ok none →
+      ∀ slot ∈ slots, ∀ committee, getPtc config state gloas slot = .ok committee →
+        validatorIndex ∉ committee.toList
+  | [], _, _, mem => by simp at mem
+  | first :: rest, h, slot, mem => by
+    unfold findPtcSlot at h
+    obtain ⟨committee, computed, h⟩ := bind_ok_iff.mp h
+    rw [mapError_ok_iff] at computed
+    split at h
+    · simp [pure, Except.pure] at h
+    · rename_i notMem
+      rcases List.mem_cons.mp mem with rfl | mem
+      · intro other computed'
+        rw [computed, Except.ok.injEq] at computed'
+        exact computed' ▸ notMem
+      · exact not_mem_of_findPtcSlot_none h slot mem
+
+/-- Along increasing slots, no committee before the slot that the search finds has the validator. -/
+theorem not_mem_of_findPtcSlot_lt {config : Config} {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {validatorIndex : ValidatorIndex} :
+    ∀ {slots : List Slot} {slot : Slot}, slots.Pairwise (· < ·) →
+      findPtcSlot config state gloas validatorIndex slots = .ok (some slot) →
+      ∀ earlier ∈ slots, earlier < slot → ∀ committee,
+        getPtc config state gloas earlier = .ok committee → validatorIndex ∉ committee.toList
+  | [], _, _, _, _, mem => by simp at mem
+  | first :: rest, slot, sorted, h, earlier, mem => by
+    rw [List.pairwise_cons] at sorted
+    unfold findPtcSlot at h
+    obtain ⟨committee, computed, h⟩ := bind_ok_iff.mp h
+    rw [mapError_ok_iff] at computed
+    split at h
+    · simp only [pure, Except.pure, Except.ok.injEq, Option.some.injEq] at h
+      subst h
+      intro before
+      rcases List.mem_cons.mp mem with rfl | mem
+      · exact absurd before (UInt64.lt_irrefl _)
+      · exact absurd (UInt64.lt_trans before (sorted.1 _ mem)) (UInt64.lt_irrefl _)
+    · rename_i notMem
+      rcases List.mem_cons.mp mem with rfl | mem
+      · intro _ other computed'
+        rw [computed, Except.ok.injEq] at computed'
+        exact computed' ▸ notMem
+      · exact not_mem_of_findPtcSlot_lt sorted.2 h earlier mem
+
+/-- From Gloas: a payload timeliness assignment is a slot of the epoch.
+
+Its committee holds the validator, and no committee of an earlier slot of the epoch does. -/
+theorem getPtcAssignment_sound {config : Config} {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {epoch : Epoch} {validatorIndex : ValidatorIndex} {slot : Slot}
+    (h : getPtcAssignment config state gloas epoch validatorIndex = .ok (some slot)) :
+    computeEpochAtSlot preset slot = epoch ∧
+      (∃ committee, getPtc config state gloas slot = .ok committee ∧
+        validatorIndex ∈ committee.toList) ∧
+      ∀ earlier, computeEpochAtSlot preset earlier = epoch → earlier < slot → ∀ committee,
+        getPtc config state gloas earlier = .ok committee → validatorIndex ∉ committee.toList := by
+  unfold getPtcAssignment at h
+  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  dsimp only at h
+  split at h
+  swap
+  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+  obtain ⟨slots, sloted, found⟩ := bind_ok_iff.mp h
+  rw [mapError_ok_iff] at sloted
+  obtain ⟨mem, held⟩ := findPtcSlot_sound found
+  -- An epoch with a slot has at least one slot, so each of its slots is among them.
+  have positive : preset.SLOTS_PER_EPOCH ≠ 0 := by
+    intro zero
+    obtain ⟨_, rfl⟩ := epochSlots_eq_ok_iff.mp sloted
+    simp [zero] at mem
+  refine ⟨mem_epochSlots sloted mem, held, fun earlier earlierEpoch before =>
+    not_mem_of_findPtcSlot_lt (epochSlots_pairwise sloted) found earlier
+      (mem_epochSlots_of_epoch positive sloted earlierEpoch) before⟩
+
+/-- From Gloas: a validator without a payload timeliness assignment is in no committee of the epoch.
+
+An epoch must have at least one slot. -/
+theorem not_mem_of_getPtcAssignment_none {config : Config} {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {epoch : Epoch} {validatorIndex : ValidatorIndex}
+    (positive : preset.SLOTS_PER_EPOCH ≠ 0)
+    (h : getPtcAssignment config state gloas epoch validatorIndex = .ok none) {slot : Slot}
+    (slotEpoch : computeEpochAtSlot preset slot = epoch)
+    {committee : PayloadTimelinessCommittee preset}
+    (computed : getPtc config state gloas slot = .ok committee) :
+    validatorIndex ∉ committee.toList := by
+  unfold getPtcAssignment at h
+  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  dsimp only at h
+  split at h
+  swap
+  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+  obtain ⟨slots, sloted, found⟩ := bind_ok_iff.mp h
+  rw [mapError_ok_iff] at sloted
+  exact not_mem_of_findPtcSlot_none found slot (mem_epochSlots_of_epoch positive sloted slotEpoch)
+    committee computed
+
+/-- From Gloas: the upcoming proposal slots are the later slots that the validator proposes.
+
+They are the slots after the slot of the state whose proposer in the lookahead is the validator.
+
+Each slot is the first slot of the current epoch plus its offset in the lookahead.
+
+The slots strictly increase. -/
+theorem getUpcomingProposalSlots_spec {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {validatorIndex : ValidatorIndex} {slots : List Slot}
+    (h : getUpcomingProposalSlots state gloas validatorIndex = .ok slots) {start : Slot}
+    (started : computeStartSlotAtEpoch preset (getCurrentEpoch state) = .ok start) :
+    (∀ slot, slot ∈ slots ↔ ∃ offset : Fin ((preset.MIN_SEED_LOOKAHEAD.toNat + 1) *
+        preset.SLOTS_PER_EPOCH.toNat), slot.toNat = start.toNat + offset.val ∧
+        state.slot < slot ∧
+        (state.proposerLookahead (Nat.le_trans (by decide) gloas))[offset] = validatorIndex) ∧
+      slots.Pairwise (· < ·) := by
+  unfold getUpcomingProposalSlots at h
+  rw [started] at h
+  simp only [Except.mapError, bind, Except.bind, -Nat.reducePow] at h
+  generalize lookahead : state.proposerLookahead (Nat.le_trans (by decide) gloas) = proposers
+    at h ⊢
+  cases made : (List.finRange proposers.size).mapM fun offset =>
+      (if start.toNat + offset.val < 2 ^ 64 then
+        Except.ok (start + offset.val.toUInt64, proposers[offset])
+      else Except.error (ValidatorDutyError.arith .overflow)) with
+  | error e => simp only [made, reduceCtorEq] at h
+  | ok pairs =>
+    simp only [made, pure, Except.pure, Except.ok.injEq] at h
+    subst h
+    -- Every offset gives a 64-bit slot, so the pairs are the slots with their proposers.
+    have fits : ∀ offset ∈ List.finRange proposers.size, start.toNat + offset.val < 2 ^ 64 :=
+      fun offset mem => by
+        obtain ⟨pair, step⟩ := mapM_ok_of_mem made offset mem
+        by_contra big
+        simp only [big, ite_false, reduceCtorEq, -Nat.reducePow] at step
+    have pairsEq : pairs = (List.finRange proposers.size).map fun offset =>
+        (start + offset.val.toUInt64, proposers[offset]) := by
+      have each : ∀ offset ∈ List.finRange proposers.size,
+          (if start.toNat + offset.val < 2 ^ 64 then
+            Except.ok (start + offset.val.toUInt64, proposers[offset])
+          else Except.error (ValidatorDutyError.arith .overflow)) =
+            Except.ok (start + offset.val.toUInt64, proposers[offset]) := fun offset mem =>
+        by rw [ite_eq_left_iff]; exact fun big => absurd (fits offset mem) big
+      have := mapM_eq_ok_map each
+      exact Except.ok.inj (made.symm.trans this)
+    subst pairsEq
+    have toNat : ∀ offset : Fin proposers.size,
+        (start + offset.val.toUInt64).toNat = start.toNat + offset.val := fun offset => by
+      have small := fits offset (List.mem_finRange offset)
+      have offsetSmall : offset.val < 2 ^ 64 := by omega
+      rw [UInt64.toNat_add, Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt offsetSmall,
+        Nat.mod_eq_of_lt small]
+    refine ⟨fun slot => ?_, ?_⟩
+    · simp only [List.mem_map, List.mem_filter, List.mem_finRange, true_and,
+        decide_eq_true_eq]
+      constructor
+      · rintro ⟨pair, ⟨⟨offset, rfl⟩, later, named⟩, rfl⟩
+        exact ⟨offset, toNat offset, later, named⟩
+      · rintro ⟨offset, slotNat, later, named⟩
+        have slotEq : slot = start + offset.val.toUInt64 :=
+          UInt64.toNat_inj.mp (slotNat.trans (toNat offset).symm)
+        subst slotEq
+        exact ⟨_, ⟨⟨offset, rfl⟩, later, named⟩, rfl⟩
+    · refine List.Pairwise.map _ (fun a b lt => lt) ?_
+      refine List.Pairwise.sublist List.filter_sublist ?_
+      rw [List.pairwise_map]
+      refine (List.pairwise_lt_finRange _).imp fun {a b} lt => ?_
+      show start + a.val.toUInt64 < start + b.val.toUInt64
+      rw [UInt64.lt_iff_toNat_lt, toNat a, toNat b]
+      exact Nat.add_lt_add_left lt _
+
+/-- From Gloas: a signed payload attestation message passes the check at the epoch of its slot.
+
+The statement holds under the laws of the pairing, as BLS correctness does. -/
+theorem isValidSignatureAtSlot_getPayloadAttestationMessageSignature (laws : PairingLaws)
+    {config : Config} {state : BeaconState preset fork} {message : PayloadAttestationMessage}
+    {key : Signatures.SecretKey} {signature : BLSSignature}
+    (signed : getPayloadAttestationMessageSignature config state message key = .ok signature) :
+    isValidSignatureAtSlot config .bls state DOMAIN_PTC_ATTESTER message.data.slot message.data
+      (Signatures.skToPk key) signature = .ok true :=
+  isValidSignatureAtEpoch_of_signAtEpoch laws signed
+
+/-- From Gloas: a signed payload attestation message passes the signature check of the fork choice.
+
+The fork choice checks it as an indexed vote whose one signer is the validator.
+
+The validator must have the public key of the secret key.
+
+The statement holds under the laws of the pairing, as BLS correctness does. -/
+theorem isValidIndexedPayloadAttestation_getPayloadAttestationMessageSignature
+    (laws : PairingLaws) {config : Config} {state : BeaconState preset fork}
+    {message : PayloadAttestationMessage} {key : Signatures.SecretKey} {signature : BLSSignature}
+    (signed : getPayloadAttestationMessageSignature config state message key = .ok signature)
+    {validator : Validator} (found : getValidator state message.validatorIndex = .ok validator)
+    (keyed : validator.pubkey = Signatures.skToPk key) (bound : 0 < preset.PTC_SIZE.toNat) :
+    isValidIndexedPayloadAttestation config .bls state
+      ⟨⟨#[message.validatorIndex], by simpa using Nat.succ_le_of_lt bound⟩, message.data,
+        signature⟩ = .ok true := by
+  unfold getPayloadAttestationMessageSignature signAtEpoch at signed
+  -- Split the binds with lemmas, so the kernel never evaluates the signature.
+  obtain ⟨domain, domained, signed⟩ := bind_ok_iff.mp signed
+  obtain ⟨root, rooted, signs⟩ := bind_ok_iff.mp signed
+  rw [mapError_ok_iff] at domained rooted signs
+  have verifies := Signatures.fastAggregateVerify_sign laws key (packBytes root) signs
+  unfold isValidIndexedPayloadAttestation
+  simp only [List.mergeSort_singleton, List.toArray, ne_eq, not_true_eq_false, or_false,
+    reduceCtorEq, ite_false, liftAccessor, liftSsz, domained, rooted, Except.mapError, bind,
+    Except.bind, pure, Except.pure, List.mapM_toArray]
+  simp only [List.mapM_cons, List.mapM_nil, found, keyed, bind, Except.bind, pure, Except.pure,
+    SignatureChecks.bls]
+  exact congrArg Except.ok verifies
+
+/-- From Gloas: the fork choice accepts a signed payload attestation message of the current slot.
+
+The validator must have the public key of the secret key.
+
+The statement holds under the laws of the pairing, as BLS correctness does. -/
+theorem validatePtcMessage_getPayloadAttestationMessageSignature (laws : PairingLaws)
+    {config : Config} {store : Store preset fork} {state : BeaconState preset fork}
+    {message : PayloadAttestationMessage} {key : Signatures.SecretKey} {signature : BLSSignature}
+    (signed : getPayloadAttestationMessageSignature config state message key = .ok signature)
+    {validator : Validator} (found : getValidator state message.validatorIndex = .ok validator)
+    (keyed : validator.pubkey = Signatures.skToPk key) (bound : 0 < preset.PTC_SIZE.toNat)
+    (current : store.getCurrentSlot config = .ok message.data.slot) :
+    store.validatePtcMessage config .bls state { message with signature } bound = .ok () := by
+  have valid :=
+    isValidIndexedPayloadAttestation_getPayloadAttestationMessageSignature laws signed found keyed
+      bound
+  unfold Store.validatePtcMessage
+  simp only [current, bind, Except.bind, ne_eq, not_true_eq_false, ite_false, valid,
+    Except.mapError, pure, Except.pure]
+  rfl
 
 end EthLib.Consensus
