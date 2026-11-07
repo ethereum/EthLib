@@ -154,9 +154,9 @@ theorem size_compress (p : G1) : (compress p).size = 48 := by
     · exact (size_set! ..).trans ((size_set! ..).trans (Fp.size_toBytesBE _))
     · exact (size_set! ..).trans (Fp.size_toBytesBE _)
 
-/-- Subgroup-membership check via `[r]·P = O`. -/
+/-- Subgroup-membership check via `[r]·P = O`, with `[r]·P` computed by `mulModulus`. -/
 def inSubgroup (p : G1) : Bool :=
-  if p.isInfinity then true else (mulNat p Fr.modulus).isInfinity
+  if p.isInfinity then true else (mulModulus p).isInfinity
 
 /-- Validate a compressed public key and return its point.
 
@@ -262,9 +262,9 @@ def uncompress (bytes : ByteArray) : Except BlsError G2 :=
           .ok ⟨x, y, Fp2.one⟩
       | _, _ => .error .invalidG2Point
 
-/-- Subgroup-membership check via `[r]·P = O`. -/
+/-- Subgroup-membership check via `[r]·P = O`, with `[r]·P` computed by `mulModulus`. -/
 def inSubgroup (p : G2) : Bool :=
-  if p.isInfinity then true else (mulNat p Fr.modulus).isInfinity
+  if p.isInfinity then true else (mulModulus p).isInfinity
 
 end G2
 

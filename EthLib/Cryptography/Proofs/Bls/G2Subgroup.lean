@@ -41,8 +41,8 @@ theorem inSubgroup_iff_modulus_smul_eq_zero {p : G2} (hp : Valid p) :
   by_cases hi : p.isInfinity = true
   · rw [ite_eq_left hi, (isInfinity_eq_true_iff_toPoint_eq_zero hp).mp hi]
     simp
-  · rw [ite_eq_right hi, isInfinity_eq_true_iff_toPoint_eq_zero (valid_mulNat hp _),
-      toPoint_mulNat hp]
+  · rw [ite_eq_right hi, isInfinity_eq_true_iff_toPoint_eq_zero (valid_mulModulus hp),
+      toPoint_mulModulus hp]
 
 theorem inSubgroup_generator : inSubgroup generator = true :=
   (inSubgroup_iff_modulus_smul_eq_zero valid_generator).mpr modulus_smul_generator

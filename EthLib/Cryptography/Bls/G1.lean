@@ -166,6 +166,17 @@ decreasing_by omega
 
 @[inline] def mul (p : G1 F) (s : Fr) : G1 F := mulNat p s.val
 
+/-- `[r] p`, computed as `[t^2] ([t^2] p - p) + p`, since `r = t^4 - t^2 + 1`.
+
+Here `t` is the BLS parameter, and `|t|` has 64 bits, six of them set.
+
+So the four products by `|t|` take at most 256 doublings and 24 additions.
+
+One product by `r` would take up to 255 doublings and 134 additions. -/
+def mulModulus (p : G1 F) : G1 F :=
+  let a := mulNat (mulNat p blsX) blsX
+  add (mulNat (mulNat (add a (neg p)) blsX) blsX) p
+
 /-! ## Multi-scalar multiplication
 
 Pippenger's algorithm splits each scalar into 8-bit windows.

@@ -267,9 +267,6 @@ def powMod : Nat → Nat → Nat → Nat
       let half := powMod fuel (fmul b b) (e / 2)
       bif Nat.beq (e % 2) 1 then fmul b half else half
 
-/-- The subgroup order `r` is `|t|^4 - |t|^2 + 1`, for the BLS parameter `t`. -/
-private theorem modulus_eq_blsX : Fr.modulus = blsX ^ 4 - blsX ^ 2 + 1 := by decide
-
 /-- The chain `[t^2] ([t^2] q - q) + q`, which is `[r] q` for a valid point `q`.
 
 Double and add takes at most one doubling for each bit of the scalar.
@@ -298,31 +295,12 @@ def check (x : Nat) : Bool :=
     fmul y y == fadd (fmul (fmul x x) x) (4 % Fp.modulus) &&
     (mulModulus (x, y, 1)).2.2 == 0
 
-/-- The chain `[t^2] ([t^2] q - q) + q` in `G1`, step for step as the check runs it. -/
-private def mulModulusChain (q : G1) : G1 :=
-  let a := G1.mulNat (G1.mulNat q blsX) blsX
-  G1.add (G1.mulNat (G1.mulNat (G1.add a (G1.neg q)) blsX) blsX) q
-
-/-- The check computes the coordinates of the chain. -/
-private theorem coords_mulModulusChain (q : G1) :
-    coords (mulModulusChain q) = mulModulus (coords q) := by
+/-- The check computes the coordinates of the chain `G1.mulModulus`, step for step. -/
+private theorem coords_mulModulus (q : G1) :
+    coords (G1.mulModulus q) = mulModulus (coords q) := by
   have hz (p : G1) : G1.mulNat p blsX = G1.mulNatAux 64 p blsX :=
     (mulNatAux_eq 64 p blsX (by decide)).symm
-  simp only [mulModulusChain, mulModulus, hz, coords_add, coords_mulNatAux, coords_neg]
-
-/-- For a valid point `q`, the chain represents `[r] q`. -/
-private theorem toPoint_mulModulusChain {q : G1} (h : Valid q) :
-    toPoint (mulModulusChain q) = Fr.modulus • toPoint q := by
-  have h₁ := valid_mulNat (valid_mulNat h blsX) blsX
-  have h₂ := valid_add h₁ (valid_neg h)
-  have h₃ := valid_mulNat (valid_mulNat h₂ blsX) blsX
-  simp only [mulModulusChain, toPoint_add h₃ h, toPoint_mulNat (valid_mulNat h₂ blsX),
-    toPoint_mulNat h₂, toPoint_add h₁ (valid_neg h), toPoint_mulNat (valid_mulNat h blsX),
-    toPoint_mulNat h, toPoint_neg h]
-  have hle : blsX ^ 2 ≤ blsX ^ 4 := Nat.pow_le_pow_right (by decide) (by decide)
-  rw [modulus_eq_blsX, add_smul, one_smul, sub_nsmul _ hle]
-  simp only [smul_smul, ← pow_two]
-  rw [nsmul_add, neg_nsmul, smul_smul, ← pow_add]
+  simp only [G1.mulModulus, mulModulus, hz, coords_add, coords_mulNatAux, coords_neg]
 
 /-- A point `(x, y, 1)` of the curve whose `x` passes the check has order dividing `r`. -/
 theorem modulus_smul_eq_zero {x y : Fp} (hc : check x.val = true)
@@ -340,12 +318,12 @@ theorem modulus_smul_eq_zero {x y : Fp} (hc : check x.val = true)
   have hv : Valid ⟨x, y₀, Fp.one⟩ := valid_of_affine_eq hy₀
   -- The chain reaches the point at infinity, so `[r] (x, y₀, 1) = 0`.
   have hr : Fr.modulus • toPoint ⟨x, y₀, Fp.one⟩ = 0 := by
-    rw [← toPoint_mulModulusChain hv]
+    rw [← toPoint_mulModulus hv]
     have hc : coords ⟨x, y₀, Fp.one⟩ = (x.val, rootCandidate x.val, 1) := by
       simp only [coords, hy₀v, Fp.one_def, Fp.val_one]
-    have h := congrArg (fun c : Coords => c.2.2) (coords_mulModulusChain ⟨x, y₀, Fp.one⟩)
+    have h := congrArg (fun c : Coords => c.2.2) (coords_mulModulus ⟨x, y₀, Fp.one⟩)
     rw [hc, hz] at h
-    generalize mulModulusChain ⟨x, y₀, Fp.one⟩ = X at h ⊢
+    generalize G1.mulModulus ⟨x, y₀, Fp.one⟩ = X at h ⊢
     apply Point.toAffine_of_Z_eq_zero
     rw [rep_z]
     apply (isZero_iff (a := X.z)).mp

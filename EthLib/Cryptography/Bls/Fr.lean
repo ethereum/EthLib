@@ -33,6 +33,12 @@ protected theorem Fr.modulus_pos : 0 < Fr.modulus := by decide
 
 instance : NeZero Fr.modulus := ⟨by decide⟩
 
+/-- `|t|` for the BLS parameter `t = -0xd201000000010000`, which the pairing calls `x`. -/
+def blsX : Nat := 0xD201000000010000
+
+/-- The subgroup order `r` is `|t|^4 - |t|^2 + 1`, for the BLS parameter `t`. -/
+theorem Fr.modulus_eq_blsX : Fr.modulus = blsX ^ 4 - blsX ^ 2 + 1 := by decide
+
 /-- The modulus `r` with the constants of its Montgomery arithmetic, on eight limbs.
 
 It is inline, so that the compiler sees its fields as constants at each use. -/
