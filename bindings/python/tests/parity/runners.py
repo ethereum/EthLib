@@ -3,7 +3,8 @@
 import json
 import re
 from collections import Counter
-from functools import lru_cache
+from collections.abc import Callable
+from functools import cache, lru_cache
 from pathlib import Path
 from typing import cast
 
@@ -501,16 +502,40 @@ def _engine_payload(fixture: dict, payload: dict, state: bytes, recent: list) ->
     return "invalid", state, recent
 
 
-def run_engine_chain(fixture: dict, pre: dict, genesis: dict) -> Counter:
-    """Run every payload of an engine fixture on its chain; return the kind of each outcome."""
+def _start(pre: dict, genesis: dict, fork: str) -> tuple[bytes, bytes]:
+    """The state of a chain before its first payload, and the header of its genesis block."""
+    from ethlib.serialization import rlp
+
+    return _pre_state(pre), rlp.encode(rlp.decode(genesis_of(fork, genesis, pre))[0])
+
+
+# The fixtures of a group of blockchain_test_engine_x share one state, of up to 14 MB of JSON.
+# Their state and genesis block take most of the time of a case, so a process computes them once.
+@cache
+def _shared_start(path: Path, fork: str) -> tuple[bytes, bytes]:
+    shared = _fixtures(path)
+    return _start(shared["pre"], shared["genesis"], fork)
+
+
+def run_engine_chain(
+    fixture: dict,
+    pre: dict,
+    genesis: dict,
+    start: Callable[[str], tuple[bytes, bytes]] | None = None,
+) -> Counter:
+    """Run every payload of an engine fixture on its chain; return the kind of each outcome.
+
+    The function `start` gives the state and the genesis header at a fork, when they are known.
+    """
     from ethlib.cryptography.keccak import keccak256
     from ethlib.serialization import rlp
 
     header = _header_of_json(genesis)
     assert "0x" + keccak256(header).hex() == genesis["hash"]
-    state = _pre_state(pre)
-    recent = [(active_fork(chain_of(fixture)[1], rlp.decode(header)), header, [])]
-    assert rlp.encode(rlp.decode(genesis_of(recent[0][0], genesis, pre))[0]) == header
+    fork = active_fork(chain_of(fixture)[1], rlp.decode(header))
+    state, computed = start(fork) if start else _start(pre, genesis, fork)
+    recent = [(fork, header, [])]
+    assert computed == header
     kinds = Counter()
     for payload in fixture["engineNewPayloads"]:
         kind, state, recent = _engine_payload(fixture, payload, state, recent)
@@ -528,8 +553,11 @@ def _blockchain_test_engine_x(root: Path, case: Case) -> None:
     # The fixtures of one group share their state and genesis in a file named by its hash.
     fixture = _fixtures(root / case.path)[case.id]
     directory = root.joinpath(*case.path.split("/")[:2])
-    shared = _fixtures(directory / "pre_alloc" / f"{fixture['preHash']}.json")
-    run_engine_chain(fixture, shared["pre"], shared["genesis"])
+    path = directory / "pre_alloc" / f"{fixture['preHash']}.json"
+    shared = _fixtures(path)
+    run_engine_chain(
+        fixture, shared["pre"], shared["genesis"], lambda fork: _shared_start(path, fork)
+    )
 
 
 def _shuffle(root: Path, case: Case) -> None:
