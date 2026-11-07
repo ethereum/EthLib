@@ -341,19 +341,7 @@ theorem runFrame_process_paid (hfork : .berlin ≤ fork) (hglam : fork < .glamst
       simp [incorporateChild, hnone]
     rw [hmc, hmt, hmv] at hmove
     obtain ⟨-, -, hsender, hrecipient, -⟩ := TransactionState.moveEther_eq_ok hne hmove
-    -- The start state reads each account as the state of the frame does.
-    have hread : ∀ a, (startState fork msg caller.state).getAccount a = state.getAccount a ∨
-        a = toAddressMasked (target message.data) := by
-      intro a
-      by_cases ha : a = toAddressMasked (target message.data)
-      · exact .inr ha
-      · left
-        unfold startState
-        split
-        · rw [hmt, TransactionState.getAccount_touchAccount ha, hst]
-          rfl
-        · rw [hst]
-          rfl
+    -- The start state reads both accounts as the state of the frame does.
     have hB : (startState fork msg caller.state).getAccount
         (toAddressMasked (target message.data)) =
           state.getAccount (toAddressMasked (target message.data)) := by
@@ -365,9 +353,12 @@ theorem runFrame_process_paid (hfork : .berlin ≤ fork) (hglam : fork < .glamst
         rfl
     have hP : (startState fork msg caller.state).getAccount message.currentTarget =
         state.getAccount message.currentTarget := by
-      rcases hread message.currentTarget with h | h
-      · exact h
-      · exact absurd h hne
+      unfold startState
+      split
+      · rw [hmt, TransactionState.getAccount_touchAccount hne, hst]
+        rfl
+      · rw [hst]
+        rfl
     refine .inl ⟨stopped, ran, hhalt.2.1, by rw [hhalt.2.2.1, hflag], ?_, ?_⟩
     · rw [hstate, hsender, hP]
     · rw [hstate, hrecipient, hB]

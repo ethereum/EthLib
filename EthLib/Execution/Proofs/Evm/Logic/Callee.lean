@@ -26,7 +26,7 @@ The runner touches the target before Paris, moves no value, runs the code, and r
 
 A message with value moves it from the caller to the target first, and its frame starts from there.
 
-A move that fails is a state error, which aborts the run.
+A message that ends with a frame has moved its value.
 
 The runner meets one assumption on such messages.
 
@@ -98,9 +98,7 @@ theorem processMessage_map_val {message : Message fork} {state : TransactionStat
 
 /-- A message with value and no precompile ends as the run of its code from its frame ends.
 
-The value moves from the caller to the target first, and the frame starts from that state.
-
-A move that fails makes the message fail with a state error. -/
+The value moves from the caller to the target first, and the frame starts from that state. -/
 theorem processMessage_map_val_value {message : Message fork} {state movedState : TransactionState}
     {substate : Substate} {result : Except EvmError (Evm fork Nat)}
     (transfers : message.shouldTransferValue = true ∧ message.value ≠ 0)
@@ -149,7 +147,7 @@ theorem processMessage_map_val_value {message : Message fork} {state movedState 
         subst hr
         rfl
 
-/-- A message with value whose frame the interpreter returns moved its value first. -/
+/-- A message with value that ends with a frame has moved its value. -/
 theorem moveEther_of_processMessage_eq_ok {message : Message fork} {state : TransactionState}
     {substate : Substate} {ended : { evm : Evm fork Nat // GasMeter.gasHeld evm.gas ≤ message.gas }}
     (transfers : message.shouldTransferValue = true ∧ message.value ≠ 0)
@@ -187,7 +185,7 @@ theorem rollbackOnError_of_error_eq_none {snapshot : TransactionState} {evm : Ev
     (h : evm.error = none) : rollbackOnError snapshot evm = evm := by
   simp [rollbackOnError, h]
 
-/-- A frame of no code stops at once, with no error, its state, and all its gas. -/
+/-- A frame of no code stops at once, with no error and with the state it starts from. -/
 theorem runFrame_startFrame_empty {message : Message fork} {state : TransactionState}
     {substate : Substate} (hcode : message.code = .empty) {bound : Nat}
     {runChild : MessageRunner fork Nat bound} {within} :
