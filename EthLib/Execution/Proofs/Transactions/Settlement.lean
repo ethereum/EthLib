@@ -36,6 +36,16 @@ So it is at least the gas that the sender pays, minus the state gas.
 Before Glamsterdam, a block counts the gas that the sender pays.
 
 So the gas used in the header is the sum of the gas of the transactions.
+
+Crediting an amount below `2^256` creates that ether at the address.
+
+Crediting at least `2^256` fails as an overflow of the balance.
+
+Settling the gas reports the gas used that the settlement counts.
+
+Buying the gas takes exactly the fee from the sender and adds one to its nonce.
+
+It fails if the sender does not hold the fee.
 -/
 
 @[expose] public section
@@ -289,5 +299,103 @@ theorem BlockGas.gasUsed_sum {parts : List BlockGas} (h : ∀ p ∈ parts, p.sta
   | cons p rest ih =>
     simp only [List.mem_cons, forall_eq_or_imp] at h
     simp [h.1, ih h.2]
+
+/-! ## The changes to the state -/
+
+/-- An amount below `2^256` is created as ether at the address. -/
+theorem creditEther_of_lt {fork : Fork} {state : TransactionState} {address : Address}
+    {amount : Nat} (h : amount < 2 ^ 256) :
+    creditEther fork state address amount =
+      state.createEther fork address (BitVec.ofNat 256 amount) := by
+  simp only [creditEther, h, ↓reduceIte]
+
+/-- Crediting an amount of at least `2^256` fails as an overflow of the balance. -/
+theorem creditEther_of_le {fork : Fork} {state : TransactionState} {address : Address}
+    {amount : Nat} (h : 2 ^ 256 ≤ amount) :
+    creditEther fork state address amount = .error (.balanceOverflow address) := by
+  simp only [creditEther, Nat.not_lt.mpr h, ↓reduceIte]
+
+/-- A successful credit adds the amount to the balance of the address, and to no other. -/
+theorem creditEther_balance {fork : Fork} {state state' : TransactionState}
+    {target : Address} {amount : Nat} (h : creditEther fork state target amount = .ok state')
+    (address : Address) :
+    amount < 2 ^ 256 ∧ (state'.getAccount address).balance.toNat =
+      (state.getAccount address).balance.toNat + (if target = address then amount else 0) := by
+  by_cases hlt : amount < 2 ^ 256
+  · rw [creditEther_of_lt hlt] at h
+    refine ⟨hlt, ?_⟩
+    have := (TransactionState.getAccount_createEther h address).1
+    simpa [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt] using this
+  · rw [creditEther_of_le (Nat.not_lt.mp hlt)] at h
+    cases h
+
+/-- Settling the gas reports the gas used that the settlement counts. -/
+theorem settleGas_gasUsed {fork : Fork} {env : Evm.BlockEnvironment fork}
+    {state state' : TransactionState} {sender : Address} {tx : Transaction}
+    {gasLeft refundCounter used : Nat}
+    (h : settleGas env state sender tx gasLeft refundCounter = .ok (state', used)) :
+    used = gasUsed fork sender tx gasLeft refundCounter := by
+  unfold settleGas at h
+  cases h₁ : creditEther fork state sender
+      (settlement fork (baseFeeOf env) sender tx gasLeft refundCounter).senderRefund with
+  | error e => simp [h₁, bind, Except.bind] at h
+  | ok mid =>
+    cases h₂ : payBeneficiary fork mid env.coinbase
+        (settlement fork (baseFeeOf env) sender tx gasLeft refundCounter).priorityFee with
+    | error e => simp [h₁, h₂, bind, Except.bind] at h
+    | ok final =>
+      simp only [h₁, h₂, bind, Except.bind, pure, Except.pure, Except.ok.injEq,
+        Prod.mk.injEq] at h
+      rw [← h.2]
+      rfl
+
+/-- Buying the gas adds one to the nonce of the sender and takes exactly the fee from its balance.
+
+The sender holds the fee. -/
+theorem buyGas_sender {fork : Fork} {env : Evm.BlockEnvironment fork}
+    {state state' : TransactionState} {sender : Address} {tx : Transaction} {fee : Nat}
+    (hfee : fee = tx.gas.toNat * effectiveGasPrice (baseFeeOf env) tx +
+      calculateTotalBlobGas tx * blobGasPriceOf env)
+    (h : buyGas env state sender tx = .ok state') :
+    fee ≤ (state.getAccount sender).balance.toNat ∧
+      (state'.getAccount sender).balance.toNat = (state.getAccount sender).balance.toNat - fee ∧
+      (state'.getAccount sender).nonce = (state.getAccount sender).nonce + 1 := by
+  subst hfee
+  unfold buyGas at h
+  obtain ⟨mid, hmid⟩ := TransactionState.incrementNonce_isOk fork state sender
+  simp only [hmid, bind, Except.bind] at h
+  obtain ⟨hself, -⟩ := TransactionState.getAccount_incrementNonce hmid
+  obtain ⟨account, hf, hread, -⟩ := TransactionState.modifyState_eq_ok h
+  rw [hself] at hf
+  dsimp only at hf
+  split at hf
+  · rename_i hle
+    cases hf
+    refine ⟨hle, ?_, ?_⟩
+    · rw [hread]
+      simp only [BitVec.toNat_ofNat]
+      exact Nat.mod_eq_of_lt
+        (Nat.lt_of_le_of_lt (Nat.sub_le _ _) (state.getAccount sender).balance.isLt)
+    · rw [hread]
+  · cases hf
+
+/-- A sender that does not hold the fee cannot buy the gas. -/
+theorem buyGas_of_lt {fork : Fork} {env : Evm.BlockEnvironment fork}
+    {state : TransactionState} {sender : Address} {tx : Transaction}
+    (h : (state.getAccount sender).balance.toNat <
+      tx.gas.toNat * effectiveGasPrice (baseFeeOf env) tx +
+        calculateTotalBlobGas tx * blobGasPriceOf env) :
+    buyGas env state sender tx = .error (.insufficientBalance sender) := by
+  unfold buyGas
+  obtain ⟨mid, hmid⟩ := TransactionState.incrementNonce_isOk fork state sender
+  obtain ⟨hself, -⟩ := TransactionState.getAccount_incrementNonce hmid
+  have hbal : (mid.getAccount sender).balance = (state.getAccount sender).balance := by
+    rw [hself]
+  have hnle : ¬ (tx.gas.toNat * effectiveGasPrice (baseFeeOf env) tx +
+      calculateTotalBlobGas tx * blobGasPriceOf env ≤ (mid.getAccount sender).balance.toNat) := by
+    rw [hbal]
+    exact Nat.not_le.mpr h
+  simp only [hmid, bind, Except.bind, TransactionState.modifyState,
+    TransactionState.getAccount_recordAccountRead, hnle, ↓reduceIte]
 
 end EthLib.Execution.Transactions
