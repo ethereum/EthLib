@@ -4002,7 +4002,8 @@
       {"constructor": "emptyRequest", "code": 10},
       {"constructor": "requestTypeOrder", "code": 11},
       {"constructor": "subcommitteeOutOfRange", "code": 12},
-      {"constructor": "repeatedSubcommittee", "code": 13}]}],
+      {"constructor": "repeatedSubcommittee", "code": 13},
+      {"constructor": "unknownPowBlock", "code": 14}]}],
    "error_class": "ProposerError",
    "docstring":
    "Before Heze: the Eth1 vote of a proposer on a state, as the SSZ bytes of the Eth1 data.\n\nEach block of the Eth1 chain is its timestamp and its Eth1 data, by increasing height."},
@@ -4026,7 +4027,8 @@
       {"constructor": "emptyRequest", "code": 10},
       {"constructor": "requestTypeOrder", "code": 11},
       {"constructor": "subcommitteeOutOfRange", "code": 12},
-      {"constructor": "repeatedSubcommittee", "code": 13}]}],
+      {"constructor": "repeatedSubcommittee", "code": 13},
+      {"constructor": "unknownPowBlock", "code": 14}]}],
    "error_class": "ProposerError",
    "docstring":
    "In Electra: the number of deposits of the deposit contract that a proposer includes."},
@@ -4051,7 +4053,8 @@
       {"constructor": "emptyRequest", "code": 10},
       {"constructor": "requestTypeOrder", "code": 11},
       {"constructor": "subcommitteeOutOfRange", "code": 12},
-      {"constructor": "repeatedSubcommittee", "code": 13}]}],
+      {"constructor": "repeatedSubcommittee", "code": 13},
+      {"constructor": "unknownPowBlock", "code": 14}]}],
    "error_class": "ProposerError",
    "docstring":
    "The root of the state after a block, to set as its state root, as 32 bytes.\n\nThe signature checks of the operations run unless the last argument is false.\n\nThe execution layer accepts every payload, as in the vectors."},
@@ -4075,7 +4078,8 @@
       {"constructor": "emptyRequest", "code": 10},
       {"constructor": "requestTypeOrder", "code": 11},
       {"constructor": "subcommitteeOutOfRange", "code": 12},
-      {"constructor": "repeatedSubcommittee", "code": 13}]}],
+      {"constructor": "repeatedSubcommittee", "code": 13},
+      {"constructor": "unknownPowBlock", "code": 14}]}],
    "error_class": "ProposerError",
    "docstring":
    "From Electra: the attestation on chain from network aggregates, as SSZ bytes."},
@@ -4100,7 +4104,8 @@
       {"constructor": "emptyRequest", "code": 10},
       {"constructor": "requestTypeOrder", "code": 11},
       {"constructor": "subcommitteeOutOfRange", "code": 12},
-      {"constructor": "repeatedSubcommittee", "code": 13}]}],
+      {"constructor": "repeatedSubcommittee", "code": 13},
+      {"constructor": "unknownPowBlock", "code": 14}]}],
    "error_class": "ProposerError",
    "docstring":
    "From Altair: the sync aggregate of a block from the contributions of subcommittees.\n\nIt comes as SSZ bytes, and so does each contribution."},
@@ -4123,7 +4128,8 @@
       {"constructor": "emptyRequest", "code": 10},
       {"constructor": "requestTypeOrder", "code": 11},
       {"constructor": "subcommitteeOutOfRange", "code": 12},
-      {"constructor": "repeatedSubcommittee", "code": 13}]}],
+      {"constructor": "repeatedSubcommittee", "code": 13},
+      {"constructor": "unknownPowBlock", "code": 14}]}],
    "error_class": "ProposerError",
    "docstring":
    "From Electra: the requests of an execution block, as SSZ bytes.\n\nThey come from the list that the execution layer gives, one typed list per entry."},
@@ -4149,7 +4155,8 @@
       {"constructor": "emptyRequest", "code": 10},
       {"constructor": "requestTypeOrder", "code": 11},
       {"constructor": "subcommitteeOutOfRange", "code": 12},
-      {"constructor": "repeatedSubcommittee", "code": 13}]}],
+      {"constructor": "repeatedSubcommittee", "code": 13},
+      {"constructor": "unknownPowBlock", "code": 14}]}],
    "error_class": "ProposerError",
    "docstring":
    "From Fulu: the number of custody groups of a node, from the indices of its validators.\n\nEach index is 8 bytes, little-endian."},
@@ -7889,4 +7896,30 @@
       {"constructor": "invalidForkchoiceState", "code": 38002}]}],
    "error_class": "EngineError",
    "docstring":
-   "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.\n\nThe execution layer may know a finalized block, from an earlier update."}]}
+   "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.\n\nThe execution layer may know a finalized block, from an earlier update."},
+  {"summary":
+   "From Bellatrix to Fulu: the forkchoice update of a proposer, as JSON text.",
+   "signature":
+   "(name: str, fork: str, state: bytes, config: bytes, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes]) -> bytes",
+   "operation": "EthLib.Engine.Exports.prepareExecutionPayloadExport",
+   "method": "engine_prepare_execution_payload",
+   "errors":
+   [{"type": "EthLib.Consensus.ProposerError",
+     "codes":
+     [{"constructor": "arith", "code": 1},
+      {"constructor": "accessor", "code": 2},
+      {"constructor": "ssz", "code": 3},
+      {"constructor": "bls", "code": 4},
+      {"constructor": "transition", "code": 5},
+      {"constructor": "noAggregates", "code": 6},
+      {"constructor": "noCommittee", "code": 7},
+      {"constructor": "tooManyBits", "code": 8},
+      {"constructor": "unknownRequestType", "code": 9},
+      {"constructor": "emptyRequest", "code": 10},
+      {"constructor": "requestTypeOrder", "code": 11},
+      {"constructor": "subcommitteeOutOfRange", "code": 12},
+      {"constructor": "repeatedSubcommittee", "code": 13},
+      {"constructor": "unknownPowBlock", "code": 14}]}],
+   "error_class": "ProposerError",
+   "docstring":
+   "From Bellatrix to Fulu: the forkchoice update of a proposer, as JSON text.\n\nIt is `null` when the proposer asks for nothing, before the merge."}]}

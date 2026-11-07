@@ -987,7 +987,12 @@ def bindings : List Binding := [
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
   ⟨"engine_forkchoice_updated", `EthLib.Engine.Exports.forkchoiceUpdatedExport,
     "(tree: bytes, finalized: bytes, request: bytes) -> bytes",
-    [`EthLib.Engine.EngineError], some "EngineError"⟩
+    [`EthLib.Engine.EngineError], some "EngineError"⟩,
+  ⟨"engine_prepare_execution_payload", `EthLib.Engine.Exports.prepareExecutionPayloadExport,
+    "(name: str, fork: str, state: bytes, config: bytes, safe_block_hash: bytes, " ++
+      "finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes]) " ++
+      "-> bytes",
+    [`EthLib.Consensus.ProposerError], some "ProposerError"⟩
 ]
 
 /-- The table as plain data, which the generator reads without the structure.

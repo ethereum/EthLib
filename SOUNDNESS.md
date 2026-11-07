@@ -1138,6 +1138,38 @@ The Python suite checks the new state root against the state root of each valid 
 It checks the Eth1 vote, the pending deposit count, the custody requirement, the on-chain aggregate, the sync aggregate and the execution requests.
 The test works out the expected values from the guides, with py_ecc for the aggregate signatures.
 
+### Payload preparation
+
+`Engine/PreparePayload.lean` holds the forkchoice update that an honest proposer sends to the execution layer, from Bellatrix to Fulu.
+The update names the parent of the payload as its head, and carries the payload attributes: the time of the slot, the RANDAO mix of its epoch and the suggested fee recipient.
+From Capella the attributes add the withdrawals that the state expects, and from Deneb the root of the latest block header.
+Before the merge the head is the terminal block of proof of work, which the proposer looks for in a chain that it is given as a list.
+The module lives in the Engine layer because it builds the payload attributes of the Engine API from a beacon state.
+The theorems are in `Engine/Proofs/PreparePayload.lean`.
+
+The search for the terminal block reads the list in order, and finds a block by its own hash.
+When two blocks share a hash it finds the first, and when two blocks are terminal it returns the first.
+`getPowBlockAtTerminalTotalDifficulty_go_eq_ok_some` shows that a block it returns reaches the terminal total difficulty, and that its parent is the zero hash or a block of the chain below that difficulty.
+`getPowBlockAtTerminalTotalDifficulty_go_eq_ok_none_iff` states exactly when it returns none, and `getPowBlockAtTerminalTotalDifficulty_go_eq_error` that it fails only on a block that reaches the difficulty with a parent the chain does not hold.
+`prepareExecutionPayload_eq_ok_some` states each field of the update, and `prepareExecutionPayload_eq_ok_none_iff` when the proposer asks for nothing.
+`payloadHeadBlockHash_of_merged`, `payloadHeadBlockHash_of_inactive` and `payloadHeadBlockHash_of_premerge` state the head before and after the merge.
+
+The theorems that link the update to the checks of a block are the reason for the module.
+`processBlockExecution_eq_error_of_prepareExecutionPayload` takes a block that passes the header step on the state of the proposer.
+Its payload names the head of the update as its parent, and carries the mix, the timestamp and, from Capella, the withdrawals of the attributes.
+The execution part of the block then fails only on the number of blobs, the execution layer, a hash or an accessor, and never on the parent, the mix, the time or the withdrawals.
+It rests on `processExecutionPayload_eq_error_of_prepareExecutionPayload`, which assumes only that the checking state shares the slot, the genesis time, the RANDAO mixes and the latest payload header of the state of the proposer.
+It also rests on `getExpectedWithdrawals_latestBlockHeader`, which shows that before Gloas the expected withdrawals do not read the latest block header, and on `payloadInputs_processWithdrawals`.
+From Deneb, `parentBeaconBlockRoot_newPayloadRequest_of_prepareExecutionPayload` shows that the request to the execution layer names the parent root of the attributes.
+
+Before the merge, `validateMergeBlock_of_payloadHeadBlockHash_of_configured` and `validateMergeBlock_of_payloadHeadBlockHash_of_difficulty` show that the fork choice accepts a first payload on the head.
+With a configured terminal block hash, the block must be of the slot of the state.
+Without one, the fork choice must look blocks up in the same chain, its hashes must differ, and no block may name the zero hash as its parent.
+The search of the guide accepts a terminal block whose parent is the zero hash, while the merge check of the fork choice looks that parent up, so the theorem leaves such blocks out.
+No theorem covers the payload that the execution layer builds, or the safe and finalized blocks, which come from the fork choice.
+
+The Python suite checks each case of the terminal block search, the configured terminal block hash, the withdrawals and the parent root against values worked out in the test from the guides.
+
 ### Slashing protection
 
 `Consensus/SlashingProtection.lean` holds the slashing protection of a signer, and the interchange file of EIP-3076 that moves it between clients.
@@ -1443,12 +1475,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 285 operations and 41 size constants.
-The Python extension calls 285 of the operations and 41 of the constants.
+Lean exports 286 operations and 41 size constants.
+The Python extension calls 286 of the operations and 41 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-9651 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (2575), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1207), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (523), `xmss.c` (134).
+9695 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (2616), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1209), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (524), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
