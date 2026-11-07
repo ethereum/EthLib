@@ -413,9 +413,7 @@ theorem aggregateVerify_aggregate (laws : PairingLaws) (l : List (SecretKey × B
       | zero => exact ⟨G1.represents_generator, hrep⟩
       | succ i =>
         simp only [List.length_cons, List.length_map, Nat.add_lt_add_iff_right] at hi
-        simp only [List.getElem_cons_succ, List.getElem_map, List.getElem!_cons_succ]
-        rw [getElem!_pos _ i (by simpa using hi), getElem!_pos _ i (by simpa using hi)]
-        simp only [List.getElem_map]
+        simp only [List.getElem_cons_succ, List.getElem_map]
         exact ⟨(keyPoint_spec _).2.neg, hashScalar_spec _⟩
     · exact aggregate_scalars l (fun p => p.1.val) (fun p => hashScalar p.2)
 

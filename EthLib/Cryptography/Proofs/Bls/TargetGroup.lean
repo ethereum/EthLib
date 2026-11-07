@@ -97,7 +97,8 @@ end TargetGroup
 The check accepts them, so the product of their pairings is 1. -/
 private theorem pairing_mul_eq_one (laws : PairingLaws) (l : List (G1 × G2)) (a b : List Fr)
     (ha : a.length = l.length) (hb : b.length = l.length)
-    (hr : ∀ i (h : i < l.length), G1.Represents (l[i]).1 a[i]! ∧ G2.Represents (l[i]).2 b[i]!)
+    (hr : ∀ i (h : i < l.length),
+      G1.Represents (l[i]).1 (a[i]'(ha ▸ h)) ∧ G2.Represents (l[i]).2 (b[i]'(hb ▸ h)))
     (hsum : (List.zipWith (· * ·) a b).sum = 0) :
     (l.map fun pq => pairing pq.1 pq.2).prod = 1 :=
   (pairingCheck_toArray_iff l).mp ((laws.pairingCheck_iff l a b ha hb hr).mpr hsum)
@@ -118,9 +119,10 @@ private theorem sum_replicate (c : Fr) :
   ring
 
 /-- Entry `i` of `n` copies of `x` followed by `y` is `x` below `n`, and `y` at `n`. -/
-private theorem getElem!_replicate_append {α : Type} [Inhabited α] {n i : Nat} (x y : α)
-    (hi : i < n + 1) : (List.replicate n x ++ [y])[i]! = if i < n then x else y := by
-  rw [getElem!_pos _ i (by simpa using hi)]
+private theorem getElem_replicate_append {α : Type} {n i : Nat} (x y : α)
+    (hi : i < (List.replicate n x ++ [y]).length) :
+    (List.replicate n x ++ [y])[i] = if i < n then x else y := by
+  have hi' : i < n + 1 := by simpa using hi
   by_cases h : i < n
   · simp only [h, ↓reduceIte]
     rw [List.getElem_append_left (by simpa using h), List.getElem_replicate]
@@ -149,9 +151,7 @@ theorem pairing_eq_pow_of_laws (laws : PairingLaws) {P : G1} {Q : G2} {a b : Fr}
     (by simp)
     (by simp)
     (fun i hi => by
-      have hi' : i < c.val + 1 := by simpa using hi
-      rw [← getElem!_pos _ i hi, getElem!_replicate_append _ _ hi',
-        getElem!_replicate_append _ _ hi', getElem!_replicate_append _ _ hi']
+      rw [getElem_replicate_append, getElem_replicate_append, getElem_replicate_append]
       split
       · exact ⟨G1.represents_generator, G2.represents_generator⟩
       · exact ⟨hN, G2.represents_generator⟩)
