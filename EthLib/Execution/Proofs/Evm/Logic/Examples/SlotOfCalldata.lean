@@ -243,7 +243,7 @@ theorem lookup (hfork : .berlin ≤ fork) {cold : Bool}
   have h2 := push1 (code := CODE) (fork := fork) (message := message) (state := state)
     (substate := substate) (pc := 34) (stack := [64]) (memory := hashed message.data)
     (gas := gas - 3) (byte := 0x00) (by decide) rfl rfl (by omega) (by decide)
-  have hw : wordCount (64 : U256).toNat = 2 := by decide
+  have hw : keccak256Cost (64 : U256) = 30 + 6 * 2 := by decide
   -- The 64 bytes are in memory already, so hashing them grows nothing.
   have hk : extendMemory (hashed message.data).size [((0 : U256), (64 : U256))] = ⟨0, 0⟩ := by
     rw [hs]

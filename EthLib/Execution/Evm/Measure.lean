@@ -354,7 +354,8 @@ theorem keccak256Step_pays {evm after : Evm fork Meter} (h : keccak256Step evm =
   obtain ⟨_, h4, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact (((((popWord_pays h1).trans (popWord_pays h2)).trans (chargeGasAndMemory_pays h3)).trans
-    (pushWord_pays h4)).mono (m := OPCODE_KECCAK256_BASE) (by omega)).congr rfl rfl
+    (pushWord_pays h4)).mono (m := OPCODE_KECCAK256_BASE)
+      (by simp only [keccak256Cost]; omega)).congr rfl rfl
 
 /-- Each instruction that reads and writes only the stack, and KECCAK256, lowers the measure. -/
 theorem stackOnlyStep_measure_lt {op : Op}

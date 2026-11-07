@@ -19,6 +19,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Examples.CallEcho
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.Counter
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.Emit
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.Pay
+public import EthLib.Execution.Proofs.Evm.Logic.Examples.HashedSlot
 
 /-!
 # `EthLib.Execution.Proofs.Evm.Logic`

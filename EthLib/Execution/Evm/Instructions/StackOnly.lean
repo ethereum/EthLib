@@ -92,12 +92,15 @@ def expStep (fork : Fork) (evm : Evm fork Meter) : Except EvmError (Evm fork Met
   let evm ← pushWord evm (exp base exponent)
   return advance evm
 
+/-- The price of KECCAK256 on `size` bytes, before the growth of memory: 30 and 6 for each word. -/
+def keccak256Cost (size : U256) : Nat :=
+  OPCODE_KECCAK256_BASE + OPCODE_KECCAK256_PER_WORD * wordCount size.toNat
+
 /-- KECCAK256: hash `size` bytes of memory from `start`, after the memory grows to hold them. -/
 def keccak256Step (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let (start, evm) ← popWord evm
   let (size, evm) ← popWord evm
-  let cost := OPCODE_KECCAK256_BASE + OPCODE_KECCAK256_PER_WORD * wordCount size.toNat
-  let evm ← chargeGasAndMemory evm cost [(start, size)]
+  let evm ← chargeGasAndMemory evm (keccak256Cost size) [(start, size)]
   let data := memoryReadBytes evm.memory start.toNat size.toNat
   let evm ← pushWord evm (keccak data)
   return advance evm
