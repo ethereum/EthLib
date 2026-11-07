@@ -246,10 +246,6 @@ theorem upgradeFields_payload (pre : BeaconState preset .fusaka) (requestsRoot :
         ⟨pre.forkVersions.currentVersion, config.GLOAS_FORK_VERSION, getCurrentEpoch pre⟩ :=
   ⟨rfl, rfl, rfl⟩
 
-/-- The sum of the amounts of a list of pending deposits, on natural numbers. -/
-def pendingAmount (deposits : List PendingDeposit) : Nat :=
-  (deposits.map (·.amount.toNat)).sum
-
 /-- One pending deposit stays in the queue, funds a builder with its amount, or is dropped.
 
 It is dropped only when it has builder credentials and an invalid signature.

@@ -22,6 +22,8 @@ A valid deposit to a new key adds one validator and its balance.
 
 An invalid deposit to a new key changes nothing.
 
+A deposit to a known key raises the balance at the index of that key, and no other.
+
 From Electra a deposit request joins the end of the pending deposits.
 
 A voluntary exit is signed by an active validator, which then has an exit epoch.
@@ -43,6 +45,10 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
 /-- The sum of the balances, on natural numbers. -/
 def balanceSum (state : BeaconState preset fork) : Nat :=
   (state.balances.data.toList.map (·.toNat)).sum
+
+/-- The sum of the amounts of a list of pending deposits, on natural numbers. -/
+def pendingAmount (deposits : List PendingDeposit) : Nat :=
+  (deposits.map (·.amount.toNat)).sum
 
 /-- The registry and the balances have one entry for each validator. -/
 def BalancesMatch (state : BeaconState preset fork) : Prop :=
@@ -491,6 +497,73 @@ theorem balancesMatch_addValidatorToRegistry {pubkey : BLSPubkey}
       simp only [Array.size_push, RootedForkList.data_push, holds]
     · cases computed
 
+/-- A new validator joins the end of the registry, and its balance joins the end of the balances.
+
+That needs one balance for each validator, and an index that fits 64 bits. -/
+theorem addValidatorToRegistry_push {pubkey : BLSPubkey}
+    {withdrawalCredentials : Bytes32} {amount : Gwei}
+    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after)
+    (holds : BalancesMatch state) (small : state.validators.data.size < 2 ^ 64) :
+    after.validators.data = state.validators.data.push
+        (getValidatorFromDeposit preset fork pubkey withdrawalCredentials amount) ∧
+      after.balances.data = state.balances.data.push amount := by
+  unfold addValidatorToRegistry at computed
+  split at computed
+  · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
+      Except.ok.injEq] at computed
+    obtain ⟨_, validatorsOk, _, balancesOk, _, _, _, _, _, _, rfl⟩ := computed
+    -- The index of a new validator is the size of the registry, since that size fits 64 bits.
+    have atEnd : (getIndexForNewValidator state).toNat = state.validators.data.size := by
+      rw [getIndexForNewValidator, Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small]
+    -- With one balance for each validator, it is also the size of the balances.
+    have atBalances : (getIndexForNewValidator state).toNat = state.balances.data.size := by
+      rw [atEnd, holds]
+    simp only [setOrAppendRooted, atEnd, ↓reduceIte] at validatorsOk
+    simp only [setOrAppendList, atBalances, ↓reduceIte, appendWithinLimit] at balancesOk
+    split at validatorsOk
+    · split at balancesOk
+      · cases validatorsOk
+        cases balancesOk
+        exact ⟨rfl, rfl⟩
+      · cases balancesOk
+    · cases validatorsOk
+  · split at computed
+    · cases computed
+      exact ⟨rfl, rfl⟩
+    · cases computed
+
+/-- A new validator raises the sum of the balances by at most its amount. -/
+private theorem balanceSum_addValidatorToRegistry_le {pubkey : BLSPubkey}
+    {withdrawalCredentials : Bytes32} {amount : Gwei}
+    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
+    balanceSum after ≤ balanceSum state + amount.toNat := by
+  unfold addValidatorToRegistry at computed
+  split at computed
+  · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
+      Except.ok.injEq] at computed
+    obtain ⟨_, _, balances, balancesOk, _, _, _, _, _, _, rfl⟩ := computed
+    unfold setOrAppendList at balancesOk
+    split at balancesOk
+    · simp only [appendWithinLimit] at balancesOk
+      split at balancesOk
+      · cases balancesOk
+        simp [balanceSum]
+      · cases balancesOk
+    · split at balancesOk
+      · rename_i inside
+        cases balancesOk
+        -- Overwriting one balance raises the sum by at most the amount.
+        unfold balanceSum
+        simp only [Array.toList_set, List.map_set]
+        have := sum_set_add (l := state.balances.data.toList.map (·.toNat))
+          (i := (getIndexForNewValidator state).toNat) (by simpa using inside) amount.toNat
+        omega
+      · cases balancesOk
+  · split at computed
+    · cases computed
+      simp [balanceSum]
+    · cases computed
+
 /-- A new validator keeps the deposit data and the next deposit index. -/
 theorem addValidatorToRegistry_eth1 {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32}
     {amount : Gwei}
@@ -623,6 +696,218 @@ theorem applyPendingDeposit_blsValidator {deposit : PendingDeposit} (heze : .heg
     obtain ⟨_, set⟩ := increaseBalance_ok computed
     obtain ⟨_, rfl⟩ := setBalance_ok set
     exact found
+
+/-- A pending deposit is droppable at a state under two conditions.
+
+No validator has its key.
+
+Its signature is invalid or, from Heze, it has BLS withdrawal credentials. -/
+def DepositDroppable (config : Config) (checks : SignatureChecks) (state : BeaconState preset fork)
+    (deposit : PendingDeposit) : Prop :=
+  state.validators.data.findIdx? (·.pubkey == deposit.pubkey) = none ∧
+    (isValidDepositSignature config checks deposit.pubkey deposit.withdrawalCredentials
+        deposit.amount deposit.signature = .ok false ∨
+      .hegota ≤ fork ∧ deposit.withdrawalCredentials[0] = BLS_WITHDRAWAL_PREFIX[0])
+
+/-- A deposit droppable at a state is droppable at an earlier one whose validators all stay. -/
+private theorem DepositDroppable.of_kept {earlier : BeaconState preset fork}
+    {deposit : PendingDeposit}
+    (kept : ∀ validator ∈ earlier.validators.data, validator ∈ state.validators.data)
+    (droppable : DepositDroppable config checks state deposit) :
+    DepositDroppable config checks earlier deposit := by
+  refine ⟨?_, droppable.2⟩
+  have unknown := Array.findIdx?_eq_none_iff.mp droppable.1
+  exact Array.findIdx?_eq_none_iff.mpr fun validator member => unknown validator (kept _ member)
+
+/-- Applying a droppable deposit changes nothing. -/
+theorem applyPendingDeposit_of_droppable {deposit : PendingDeposit}
+    (droppable : DepositDroppable config checks state deposit) :
+    applyPendingDeposit config checks state deposit = .ok state := by
+  obtain ⟨new, invalid | ⟨heze, bls⟩⟩ := droppable
+  · simp [applyPendingDeposit, new, invalid, bind, Except.bind, pure, Except.pure]
+  · exact applyPendingDeposit_of_blsCredentials heze new bls
+
+/-- A deposit adds its amount to the sum of the balances, or it is droppable and changes nothing.
+
+That needs one balance for each validator, and an index that fits 64 bits. -/
+theorem balanceSum_applyPendingDeposit {deposit : PendingDeposit}
+    (computed : applyPendingDeposit config checks state deposit = .ok after)
+    (holds : BalancesMatch state) (small : state.validators.data.size < 2 ^ 64) :
+    balanceSum after = balanceSum state + deposit.amount.toNat ∨
+      after = state ∧ DepositDroppable config checks state deposit := by
+  unfold applyPendingDeposit at computed
+  split at computed
+  · rename_i unknown
+    split at computed
+    · rename_i bls
+      cases computed
+      exact .inr ⟨rfl, unknown, .inr bls⟩
+    simp only [bind_ok_iff] at computed
+    obtain ⟨valid, checked, computed⟩ := computed
+    split at computed
+    · have pushed := (addValidatorToRegistry_push computed holds small).2
+      exact .inl (by simp [balanceSum, pushed])
+    · rename_i invalid
+      simp only [pure, Except.pure, Except.ok.injEq] at computed
+      simp only [Bool.not_eq_true] at invalid
+      subst invalid
+      exact .inr ⟨computed.symm, unknown, .inl checked⟩
+  · rw [liftAccessor_ok] at computed
+    exact .inl (balanceSum_increaseBalance computed)
+
+/-- A deposit raises the sum of the balances by at most its amount. -/
+private theorem balanceSum_applyPendingDeposit_le {deposit : PendingDeposit}
+    (computed : applyPendingDeposit config checks state deposit = .ok after) :
+    balanceSum after ≤ balanceSum state + deposit.amount.toNat := by
+  unfold applyPendingDeposit at computed
+  split at computed
+  · split at computed
+    · cases computed
+      exact Nat.le_add_right _ _
+    simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    split at computed
+    · exact balanceSum_addValidatorToRegistry_le computed
+    · simp only [pure, Except.pure, Except.ok.injEq] at computed
+      subst computed
+      exact Nat.le_add_right _ _
+  · rw [liftAccessor_ok] at computed
+    exact Nat.le_of_eq (balanceSum_increaseBalance computed)
+
+/-- A valid deposit to a new key adds its validator and its amount at the ends of their lists.
+
+From Heze that needs withdrawal credentials other than BLS.
+
+It also needs one balance for each validator, and an index that fits 64 bits. -/
+theorem applyPendingDeposit_new_valid {deposit : PendingDeposit}
+    (new : state.validators.data.findIdx? (·.pubkey == deposit.pubkey) = none)
+    (notBls : ¬(.hegota ≤ fork ∧ deposit.withdrawalCredentials[0] = BLS_WITHDRAWAL_PREFIX[0]))
+    (valid : isValidDepositSignature config checks deposit.pubkey deposit.withdrawalCredentials
+      deposit.amount deposit.signature = .ok true)
+    (computed : applyPendingDeposit config checks state deposit = .ok after)
+    (holds : BalancesMatch state) (small : state.validators.data.size < 2 ^ 64) :
+    after.validators.data = state.validators.data.push (getValidatorFromDeposit preset fork
+        deposit.pubkey deposit.withdrawalCredentials deposit.amount) ∧
+      after.balances.data = state.balances.data.push deposit.amount := by
+  simp only [applyPendingDeposit, new, notBls, ↓reduceIte, bind, Except.bind, valid] at computed
+  exact addValidatorToRegistry_push computed holds small
+
+/-- A deposit adds at most one entry to the registry, and keeps each validator there.
+
+That needs one balance for each validator, and an index that fits 64 bits. -/
+private theorem applyPendingDeposit_grows {deposit : PendingDeposit}
+    (computed : applyPendingDeposit config checks state deposit = .ok after)
+    (holds : BalancesMatch state) (small : state.validators.data.size < 2 ^ 64) :
+    after.validators.data.size ≤ state.validators.data.size + 1 ∧
+      ∀ validator ∈ state.validators.data, validator ∈ after.validators.data := by
+  unfold applyPendingDeposit at computed
+  split at computed
+  · split at computed
+    · cases computed
+      exact ⟨Nat.le_succ _, fun _ member => member⟩
+    simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    split at computed
+    · rw [(addValidatorToRegistry_push computed holds small).1]
+      exact ⟨by simp, fun _ member => Array.mem_push.mpr (.inl member)⟩
+    · simp only [pure, Except.pure, Except.ok.injEq] at computed
+      subst computed
+      exact ⟨Nat.le_succ _, fun _ member => member⟩
+  · rw [liftAccessor_ok] at computed
+    rw [increaseBalance_validators computed]
+    exact ⟨Nat.le_succ _, fun _ member => member⟩
+
+/-- A deposit to a known key raises the balance at the index of that key by its amount.
+
+No other balance changes.
+
+That needs an index that fits 64 bits. -/
+theorem applyPendingDeposit_known_balances {deposit : PendingDeposit} {index : Nat}
+    (known : state.validators.data.findIdx? (·.pubkey == deposit.pubkey) = some index)
+    (computed : applyPendingDeposit config checks state deposit = .ok after)
+    (small : state.validators.data.size < 2 ^ 64) :
+    (∃ balance raised : Gwei, state.balances.data[index]? = some balance ∧
+      after.balances.data[index]? = some raised ∧
+        raised.toNat = balance.toNat + deposit.amount.toNat) ∧
+      ∀ i, i ≠ index → after.balances.data[i]? = state.balances.data[i]? := by
+  obtain ⟨below, _⟩ := Array.findIdx?_eq_some_iff_getElem.mp known
+  have same : index.toUInt64.toNat = index := by
+    rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' (Nat.lt_trans below small)]
+  simp only [applyPendingDeposit, known, liftAccessor_ok, increaseBalance, bind_ok_iff, liftArith,
+    mapError_ok_iff, addChecked_ok_iff] at computed
+  obtain ⟨balance, found, raised, ⟨_, summed⟩, set⟩ := computed
+  obtain ⟨inside, rfl⟩ := setBalance_ok set
+  unfold getBalance at found
+  split at found
+  · rename_i read
+    cases found
+    rw [same] at read inside
+    refine ⟨⟨_, raised, read, ?_, summed⟩, fun i other => ?_⟩
+    · simp [BeaconState.putBalance, same, inside]
+    · simp [BeaconState.putBalance, same, Ne.symm other]
+  · cases found
+
+/-- Applying deposits in order adds the amounts of some of them to the balances.
+
+The others are droppable at the start, and the sum of the balances rises by the amounts added.
+
+That needs one balance for each validator, and room in 64 bits for the registry and the deposits.
+-/
+theorem foldlM_applyPendingDeposit_partition :
+    ∀ {deposits : List PendingDeposit} {state after : BeaconState preset fork},
+      deposits.foldlM (applyPendingDeposit config checks) state = .ok after →
+      BalancesMatch state →
+      state.validators.data.size + deposits.length < 2 ^ 64 →
+      ∃ added dropped : List PendingDeposit,
+        (added ++ dropped).Perm deposits ∧
+          (∀ deposit ∈ dropped, DepositDroppable config checks state deposit) ∧
+          balanceSum after = balanceSum state + pendingAmount added
+  | [], _, _, computed, _, _ => by
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact ⟨[], [], List.Perm.refl _, by simp, by simp [pendingAmount]⟩
+  | deposit :: rest, state, after, computed, holds, room => by
+    simp only [List.length_cons] at room
+    simp only [List.foldlM_cons, bind, Except.bind] at computed
+    split at computed
+    · cases computed
+    rename_i next applied
+    have grown := applyPendingDeposit_grows applied holds (by omega)
+    obtain ⟨added, dropped, perm, all, sum⟩ :=
+      foldlM_applyPendingDeposit_partition computed ((applyPendingDeposit_kept applied).1 holds)
+        (by omega)
+    rcases balanceSum_applyPendingDeposit applied holds (by omega) with raised | ⟨same, lost⟩
+    · have front : pendingAmount (deposit :: added) =
+          deposit.amount.toNat + pendingAmount added := by
+        simp [pendingAmount]
+      -- A key that no validator has after this deposit had none before it.
+      exact ⟨deposit :: added, dropped, perm.cons deposit,
+        fun _ member => DepositDroppable.of_kept grown.2 (all _ member), by omega⟩
+    · subst same
+      refine ⟨added, deposit :: dropped, List.perm_middle.trans (perm.cons deposit), ?_, sum⟩
+      intro _ member
+      rcases List.mem_cons.mp member with rfl | member
+      · exact lost
+      · exact all _ member
+
+/-- Deposits applied in order raise the sum of the balances by at most their amounts. -/
+theorem foldlM_applyPendingDeposit_le :
+    ∀ {deposits : List PendingDeposit} {state after : BeaconState preset fork},
+      deposits.foldlM (applyPendingDeposit config checks) state = .ok after →
+      balanceSum after ≤ balanceSum state + pendingAmount deposits
+  | [], _, _, computed => by
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    simp [pendingAmount]
+  | deposit :: rest, state, after, computed => by
+    simp only [List.foldlM_cons, bind, Except.bind] at computed
+    split at computed
+    · cases computed
+    rename_i next applied
+    have first := balanceSum_applyPendingDeposit_le applied
+    have later := foldlM_applyPendingDeposit_le computed
+    simp only [pendingAmount, List.map_cons, List.sum_cons] at later ⊢
+    omega
 
 /-- From Electra, a deposit keeps one balance for each validator, and the deposit data. -/
 theorem applyDepositElectra_kept {electra : .pectra ≤ fork} {pubkey : BLSPubkey}
