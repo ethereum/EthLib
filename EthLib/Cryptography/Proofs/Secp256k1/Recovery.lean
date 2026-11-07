@@ -423,6 +423,61 @@ theorem recover_ne {hash : Vector UInt8 32} {r s : Nat} {q0 q1 : Point} (h0 : re
     exact absurd h2 (by decide)
   · exact absurd ((toPoint_eq_zero hc0).mp h2) (by simp)
 
+/-- The scalars `s / r` and `e / r` that recovery computes, in `ZMod n`. -/
+private theorem toZMod_recover_scalars (e r s : Nat) (hr : r < Fn.modulus) (hs : s < Fn.modulus) :
+    Fn.toZMod (Fn.inv ⟨r, hr⟩) * Fn.toZMod ⟨s, hs⟩ = (s : ZMod Fn.modulus) / r ∧
+      Fn.toZMod (Fn.inv ⟨r, hr⟩) * Fn.toZMod (Fin.ofNat _ e) = (e : ZMod Fn.modulus) / r := by
+  have hs' : (⟨s, hs⟩ : Fn) = Fin.ofNat _ s := Fin.ext (Nat.mod_eq_of_lt hs).symm
+  have hr' : (⟨r, hr⟩ : Fn) = Fin.ofNat _ r := Fin.ext (Nat.mod_eq_of_lt hr).symm
+  rw [Fn.toZMod_inv, hs', hr', toZMod_ofNat, toZMod_ofNat, toZMod_ofNat, div_eq_mul_inv,
+    div_eq_mul_inv, mul_comm, mul_comm (e : ZMod Fn.modulus)]
+  exact ⟨rfl, rfl⟩
+
+/-- Recovery is the public key recovery of SEC 1 v2 §4.1.6, read in the group of the curve.
+
+Let `e` be the hash read as a natural number, and `R` the point `(r, y)` of the curve.
+
+Recovery returns the key `Q` exactly when these hold:
+
+- `r` and `s` lie in `[1, n - 1]`;
+- `R` lies on the curve, and the parity of `y` is the recovery id;
+- `Q` is not `O`, and `Q = (s / r) R - (e / r) G`.
+
+The scalars `s / r` and `e / r` are taken modulo `n`.
+
+The recovery ids are 0 and 1, so `R` always has `x = r`.
+
+SEC 1 also tries `x = r + n`, for `x_R >= n`; recovery never does, so it leaves that case out. -/
+theorem recover_eq_ok_iff {hash : Vector UInt8 32} {r s : Nat} {id : Fin 2} {q : Point} :
+    recover hash r s id = .ok q ↔
+      (0 < r ∧ r < Fn.modulus) ∧ (0 < s ∧ s < Fn.modulus) ∧ q ≠ .infinity ∧
+        q.isOnCurve = true ∧
+        ∃ y : Fp, (affine (Fin.ofNat _ r) y).isOnCurve = true ∧
+          decide (y.val % 2 = 1) = (id == 1) ∧
+          toPoint q = ((s : ZMod Fn.modulus) / r) • toPoint (affine (Fin.ofNat _ r) y)
+            - ((hashToInt hash : ZMod Fn.modulus) / r) • toPoint generator := by
+  constructor
+  · intro h
+    obtain ⟨hr, hs⟩ := recover_range h
+    obtain ⟨hqc, hqi⟩ := recover_valid h
+    obtain ⟨h1, h2⟩ := toZMod_recover_scalars (hashToInt hash) r s hr.2 hs.2
+    refine ⟨hr, hs, hqi, hqc, ?_⟩
+    rw [recover_eq hash r s id hr hs] at h
+    cases hd : decompress (Fin.ofNat _ r) (id == 1) with
+    | error e => rw [hd] at h; cases h
+    | ok R =>
+      rw [hd] at h
+      simp only [Except.bind] at h
+      obtain ⟨y, rfl, hc, hpar⟩ := decompress_eq_ok_iff.mp hd
+      split_ifs at h
+      obtain rfl := Except.ok.inj h
+      refine ⟨y, hc, hpar, ?_⟩
+      rw [toPoint_recovered _ _ _ hc, h1, h2]
+  · rintro ⟨hr, hs, hqi, hqc, y, hc, hpar, hq⟩
+    obtain ⟨h1, h2⟩ := toZMod_recover_scalars (hashToInt hash) r s hr.2 hs.2
+    refine recover_of_decompress hr hs (decompress_eq_ok_iff.mpr ⟨y, rfl, hc, hpar⟩) hqc hqi ?_
+    rw [h1, h2, hq]
+
 end Ecdsa
 
 end EthLib.Cryptography.Secp256k1
