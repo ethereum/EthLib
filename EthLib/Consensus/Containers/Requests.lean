@@ -163,6 +163,14 @@ structure ExecutionRequests (preset : Preset) (fork : Fork) where
 
 namespace ExecutionRequests
 
+/-- The requests with every list empty. -/
+def empty (preset : Preset) (fork : Fork) : ExecutionRequests preset fork where
+  deposits := ⟨#[], fun _ => Nat.zero_le _⟩
+  withdrawals := ⟨#[], fun _ => Nat.zero_le _⟩
+  consolidations := ⟨#[], fun _ => Nat.zero_le _⟩
+  builderDeposits := fun _ => ⟨#[]⟩
+  builderExits := fun _ => ⟨#[]⟩
+
 /-- The names of the fields of the requests at a fork, in their order. -/
 def names (fork : Fork) : List String :=
   ["deposits", "withdrawals", "consolidations"] ++

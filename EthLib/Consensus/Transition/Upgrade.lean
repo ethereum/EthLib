@@ -399,14 +399,6 @@ def upgradeBid (pre : BeaconState preset .fusaka) (requestsRoot : Root) :
     executionRequestsRoot := requestsRoot
     inclusionListBits := fun later => absurd later (by decide) }
 
-/-- The requests of a payload with no request. -/
-def ExecutionRequests.empty (preset : Preset) : ExecutionRequests preset .glamsterdam where
-  deposits := ⟨#[], fun before => absurd before (by decide)⟩
-  withdrawals := ⟨#[], fun before => absurd before (by decide)⟩
-  consolidations := ⟨#[], fun before => absurd before (by decide)⟩
-  builderDeposits := fun _ => ⟨#[]⟩
-  builderExits := fun _ => ⟨#[]⟩
-
 /-- The Gloas state of a Fulu state, with its fields carried over and the new fields added.
 
 The new fields are those of an empty registry of builders and of a self-built latest payload. -/
@@ -473,7 +465,7 @@ The fields carry over, and the window of payload committees is computed.
 Then the pending deposits of builders become builders. -/
 def upgradeToGloas (config : Config) (checks : SignatureChecks) (pre : BeaconState preset .fusaka) :
     Except TransitionError (BeaconState preset .glamsterdam) := do
-  let requestsRoot ← liftSsz (SszType.hashTreeRoot (ExecutionRequests.empty preset))
+  let requestsRoot ← liftSsz (SszType.hashTreeRoot (ExecutionRequests.empty preset .glamsterdam))
   let post := upgradeFields config pre requestsRoot
   let window ← liftAccessor (initializePtcWindow post)
   onboardBuildersFromPendingDeposits config checks { post with ptcWindow := fun _ => window }
