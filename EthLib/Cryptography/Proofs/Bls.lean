@@ -49,6 +49,7 @@ public import EthLib.Cryptography.Proofs.Bls.PairingCongr
 public import EthLib.Cryptography.Proofs.Bls.FinalExponentiation
 public import EthLib.Cryptography.Proofs.Bls.MillerLoop
 public import EthLib.Cryptography.Proofs.Bls.MillerChain
+public import EthLib.Cryptography.Proofs.Bls.AteFrobenius
 public import EthLib.Cryptography.Proofs.Bls.Nondegenerate
 public import EthLib.Cryptography.Proofs.Bls.PairingBilinear
 public import EthLib.Cryptography.Proofs.Bls.TargetGroup
