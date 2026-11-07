@@ -179,6 +179,12 @@ inductive ForkChoiceError where
   | columnsUnavailable (root : Root)
   /-- A column of the block with the root has a wrong shape, or its proofs do not match. -/
   | invalidColumns (root : Root)
+  /-- The store holds no votes of the payload committee for the block with the root. -/
+  | unknownPayloadVotes (root : Root)
+  /-- A choice between the full and the empty node is asked of the pending node of a block. -/
+  | pendingNode (root : Root)
+  /-- The block with the root is not from the slot before the current one. -/
+  | notPreviousSlot (root : Root)
   deriving Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -220,6 +226,9 @@ def ForkChoiceError.code : ForkChoiceError → UInt32
   | .blobsNotMatching _ => 31
   | .columnsUnavailable _ => 32
   | .invalidColumns _ => 33
+  | .unknownPayloadVotes _ => 34
+  | .pendingNode _ => 35
+  | .notPreviousSlot _ => 36
 
 variable (preset : Preset) (fork : Fork)
 

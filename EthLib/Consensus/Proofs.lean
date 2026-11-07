@@ -29,6 +29,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.Ghost
 public import EthLib.Consensus.Proofs.ForkChoice.Handlers
 public import EthLib.Consensus.Proofs.ForkChoice.Head
 public import EthLib.Consensus.Proofs.ForkChoice.Optimistic
+public import EthLib.Consensus.Proofs.ForkChoice.PayloadVotes
 public import EthLib.Consensus.Proofs.ForkChoice.ProposerHead
 public import EthLib.Consensus.Proofs.ForkChoice.Reachable
 public import EthLib.Consensus.Proofs.ForkChoice.Store
