@@ -175,7 +175,8 @@ theorem resumeCreate_eq {caller child : Evm fork Nat} {address : Address}
       after.memory = caller.memory ∧ after.gas = caller.gas + child.gas ∧
       after.running = caller.running ∧ after.error = caller.error ∧ after.output = caller.output ∧
       after.state = (incorporateChild fork caller child).state ∧
-      after.substate = (incorporateChild fork caller child).substate := by
+      after.substate = (incorporateChild fork caller child).substate ∧
+      after.returnData = if child.error.isNone then .empty else child.output := by
   have hne : caller.stack.val.length ≠ STACK_LIMIT := Nat.ne_of_lt hlen
   unfold resumeCreate incorporateChild
   by_cases h : child.error.isNone <;>
@@ -286,7 +287,7 @@ theorem createKindWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) 
               (if fork ≥ .shapella then initCodeCost size.toNat else 0) +
             (extendMemory memory.size [(start, size)]).cost)) + child.gas)
           (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
-          after := by
+          after ∧ after.returnData = (if child.error.isNone then .empty else child.output) := by
   apply HoareUnder.of_child
   rintro evm ⟨hc, hj, hm, hpc, hst, hmem, hg, hrun', herr, hout, hs, hss⟩
   subst hm hg hs hss hmem
@@ -303,13 +304,13 @@ theorem createKindWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) 
       rw [hst] at this
       rw [c5]
       cases create2 <;> simp at this <;> omega
-    obtain ⟨after, hres, a1, a2, a3, a4, a5, a6, a7, a8, a9, ao, a10, a11⟩ :=
+    obtain ⟨after, hres, a1, a2, a3, a4, a5, a6, a7, a8, a9, ao, a10, a11, a12⟩ :=
       resumeCreate_eq (child := child) (address := address) hlen
     refine .inl ⟨after, hres, caller, msg, child, hcallee, hchild, c10, c11, m1, m2, m3, m4, m5,
       m6, m7, m8, m9, m10, ?_⟩
-    exact ⟨by rw [a1, c1, hc], by rw [a2, c2, hj], by rw [a3, c3], by rw [a4, c4, hpc],
+    exact ⟨⟨by rw [a1, c1, hc], by rw [a2, c2, hj], by rw [a3, c3], by rw [a4, c4, hpc],
       by rw [a5, c5], by rw [a6, c6], by rw [a7, c7], by rw [a8, c8, hrun'], by rw [a9, c9, herr],
-      by rw [ao, co, hout], a10, a11⟩
+      by rw [ao, co, hout], a10, a11⟩, a12⟩
 
 /-- From Berlin to before Glamsterdam, CREATE of the init code in memory.
 
@@ -362,7 +363,7 @@ theorem createWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
               (if fork ≥ .shapella then initCodeCost size.toNat else 0) +
             (extendMemory memory.size [(start, size)]).cost)) + child.gas)
           (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
-          after :=
+          after ∧ after.returnData = (if child.error.isNone then .empty else child.output) :=
   createKindWith (create2 := false) (salt := 0) hfork hglam hlt hbyte
     (ofByte_of_decode (op := .create) rfl (Fork.frontier_le _)) instruction_create
     messageInstruction_create hstatic hinit hbal hnonce hdepth haddr hdeploy hgas
@@ -422,7 +423,7 @@ theorem create2With (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
               (if fork ≥ .shapella then initCodeCost size.toNat else 0) +
             (extendMemory memory.size [(start, size)]).cost)) + child.gas)
           (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
-          after :=
+          after ∧ after.returnData = (if child.error.isNone then .empty else child.output) :=
   createKindWith (create2 := true) hfork hglam hlt hbyte
     (ofByte_of_decode (op := .create2) rfl (Nat.le_trans (by decide) hfork)) instruction_create2
     (messageInstruction_create2 (Nat.le_trans (by decide) hfork)) hstatic hinit hbal hnonce hdepth

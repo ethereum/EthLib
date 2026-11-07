@@ -262,6 +262,28 @@ theorem msize (hlt : pc < code.size) (hbyte : code[pc] = 0x59) (hgas : 2 ≤ gas
   push_of_readFrame hlt hbyte (ofByte_of_decode (op := .msize) rfl (Fork.frontier_le _))
     rfl (fun _ _ _ _ hmem => by rw [hmem]) hgas hstack
 
+/-- From Byzantium, RETURNDATASIZE pushes the size of the return data, for 2 gas, by EIP-211.
+
+The frame holds the return data `data`, and keeps it.
+
+The word is the size modulo `2 ^ 256`. -/
+theorem returndatasize (hfork : .byzantium ≤ fork) {data : ByteArray} (hlt : pc < code.size)
+    (hbyte : code[pc] = 0x3d) (hgas : 2 ≤ gas) (hstack : stack.length < STACK_LIMIT) :
+    Hoare fork
+      (fun evm => At code message pc stack memory gas state substate evm ∧ evm.returnData = data)
+      (fun evm => At code message (pc + 1) (BitVec.ofNat 256 data.size :: stack) memory (gas - 2)
+        state substate evm ∧ evm.returnData = data) := by
+  apply Triple.of_step
+  rintro evm ⟨⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩, hrd⟩
+  have ok := readFrame_of_length_lt (cost := OPCODE_RETURNDATASIZE)
+    (value := fun evm => BitVec.ofNat 256 evm.returnData.size) (by rw [hst]; exact hstack)
+  have hcost : OPCODE_RETURNDATASIZE = 2 := rfl
+  rw [hcost, hg, charge_nat hgas] at ok
+  exact ⟨_, Step.of_code hrun hcode hpc hlt hbyte
+      (ofByte_of_decode (op := .returndatasize) rfl hfork) rfl ok,
+    ⟨hcode, hj, hm, by simp [hpc], by simp [hst, hrd], hmem, rfl, hrun, herr, hout, hs,
+      hss⟩, hrd⟩
+
 /-- A two-operand instruction of the stack, on `x` then `y`, puts `f x y` in their place. -/
 theorem binary {byte : UInt8} {op : Op} {cost : Nat} {f : U256 → U256 → U256} {x y : U256}
     {rest : List U256} (hlt : pc < code.size) (hbyte : code[pc] = byte)

@@ -777,6 +777,7 @@ It charges the prices of EIP-2929, and needs the state to hold the code of the a
 `Logic.calldatacopy` is its case for CALLDATACOPY.
 `Logic.codecopy` is its case for CODECOPY.
 `Logic.returndatacopy` is the rule for RETURNDATACOPY from Byzantium, for a range that ends within the return data.
+`Logic.returndatasize` is the rule for RETURNDATASIZE from Byzantium, which pushes the size of the return data and keeps it.
 `Logic.extcodecopy` is the rule for EXTCODECOPY from Berlin to before Glamsterdam.
 It charges the prices of EIP-2929 and 3 gas a word, and needs the state to hold the code of the account.
 `Logic.Holds` says that memory covers a range and that the range reads as given bytes.
@@ -813,6 +814,7 @@ Its message carries no value and is static.
 `Logic.staticcall` is its case with empty ranges of input and output.
 `Logic.callStep_child` gives the step of a call that sends no value of its own, for each kind of call.
 `Logic.callKindWith` is the rule for such a call from Berlin to before Glamsterdam.
+After the call, the return data is the output of the frame that ends the message.
 `Logic.delegatecallWith` is the rule for DELEGATECALL from Berlin to before Glamsterdam.
 Its message runs the code of the address on the current account, with the sender and the value of the current message.
 `Logic.callcodeWith` is the rule for CALLCODE with no value from Berlin to before Glamsterdam.
@@ -823,6 +825,7 @@ It needs the new address to hold no code and a nonce of 0, as EIP-684 asks.
 `Logic.createWith` is its case for CREATE.
 `Logic.create2With` is its case for CREATE2.
 `Logic.resumeCreate_eq` proves that the creator pushes the new address, or 0 when the frame that ends the creation has an error.
+After a creation with no error the return data is empty, and otherwise it is the output of that frame.
 `Logic.createMessageGas_of_tangerineWhistle` proves that from Tangerine Whistle a creation passes on all but one 64th of the gas left.
 `Logic.depositCode_of_ok` proves that from Berlin to before Glamsterdam a frame with no error deposits its output as code, at 200 gas a byte.
 It needs the output to hold at most 24576 bytes (EIP-170), and from London not to start with `0xEF` (EIP-3541).
@@ -856,13 +859,15 @@ The loop then needs the sum of those prices and the price of its exit.
 `Logic.holds_empty` proves that memory holds no bytes from an offset within it.
 `Logic.Stored` is a running frame that knows ranges of memory, the facts of some slots, and the refund counter.
 A fact of a slot gives its account, its key, its word before the transaction, its word now, and whether it is warm.
-`Logic.Agrees` says that a state and its accessed keys agree with a base outside a list of slots and a list of addresses.
+`Logic.Agrees` says that a state and its accessed keys agree with a base outside a list of slots and two lists of addresses.
 There each word reads as in the base state, and each slot is warm exactly when the base keys hold it.
-The words before the transaction, the codes and the block are those of the base state.
-Outside the addresses each account is that of the base state.
-At every address an account exists exactly when it does in the base state, with its nonce and its code hash.
+The words before the transaction and the block are those of the base state.
+Outside the addresses of both lists each account is that of the base state.
+Outside the second list, of remade addresses, an account exists exactly when it does in the base state.
+There it also has the nonce, the code hash and the code of the base state.
 A `Stored` frame agrees with its base outside the slots of its facts, and at every address.
-`Logic.Agrees.trans` proves that agreement composes, outside both lists of slots and both lists of addresses.
+`Logic.Agrees.trans` proves that agreement composes, outside both lists of slots and both lists of addresses of each kind.
+`Logic.Agrees.getAccount` proves that outside both lists of addresses an account is that of the base state.
 `Logic.Stored.of_known` proves that a rule that keeps the state and the substate keeps every fact.
 `Logic.Stored.of_at` proves the same for a rule that also keeps memory.
 `Logic.sload_stored` proves that from Berlin, SLOAD of the key of a fact of the frame's account pushes its word now.
@@ -872,23 +877,29 @@ It needs a frame that may change the state, more than 2300 gas, and the account 
 It pays the price of EIP-2200 with the prices of EIP-2929 from the facts of the slot, and adds the refund of the write.
 `Logic.StoppedStored.of_known` proves that a rule that halts and keeps the state and the substate keeps every fact.
 `Logic.stop_stored` proves that STOP keeps every fact.
+`Logic.returndatasize_stored` proves that from Byzantium RETURNDATASIZE pushes the size of the return data and keeps every fact.
+`Logic.returndatacopy_stored` proves that from Byzantium RETURNDATACOPY of a range within the return data writes it as a fact of memory.
 These frames say nothing of the logs, the accessed addresses and the other fields of the substate.
+`Logic.AccountFact` gives the address, the nonce, the balance and the code of an account that exists.
 `Logic.Change` names the slots that a message may touch and the addresses whose balances it may move.
-It also names the facts, the balances and the refund that the message gives on success.
-`Logic.Effect` (`Logic/Effect.lean`) is the effect of a message on storage and balances, from the frame that sends it.
+It also names the addresses whose accounts it may remake, by a creation or a change of a nonce or a code.
+It also names the facts of slots, the balances, the facts of accounts and the refund that the message gives on success.
+`Logic.Effect` (`Logic/Effect.lean`) is the effect of a message on storage and accounts, from the frame that sends it.
 Outside the slots and the addresses of its change, the state after agrees with the state before.
-A failed message touches no slot and moves no balance.
-A message that succeeds gives the facts of some slots and some balances, and adds a refund.
+A failed message touches no slot, moves no balance and remakes no account.
+A message that succeeds gives the facts of some slots, some balances and some accounts, and adds a refund.
 `Logic.effects_rollbackOnError` proves that a callee whose stopped frame agrees with the state of its caller outside a change has its effect after the rollback.
 `Logic.agrees_moveEther` proves that a move of a value that is not 0 between two accounts changes only their balances.
 It needs the two accounts to exist and the sender to have a nonce or a code.
+`Logic.agrees_modifyState` proves that a change of one account that keeps it alive changes only that account and keeps every code.
 `Logic.CallMessage` is the message that a call sends when it sends no value of its own, by the kind of the call.
 `Logic.callKind_stored` proves that from Berlin to before Glamsterdam, such a call keeps the facts of a `Stored` frame.
 It keeps each fact of a slot that the effect of the callee does not touch.
 It needs an input range that a fact of memory holds, an output range within memory, and the gas of a cold call.
 It also needs an assumption that gives the effect of each frame that ends the message.
-The assumption also gives the bytes that such a frame writes into the output range when it succeeds.
-On success the frame gains the facts and the refund of the effect, and the fact of those bytes.
+The assumption also gives the output of such a frame when it succeeds.
+On success the frame gains the facts and the refund of the effect, and that output as its return data.
+It also gains the fact of the start of that output in the output range.
 On failure it keeps its facts of slots, and the assumption may rule a failure out.
 Either way it keeps each fact of memory apart from the output range.
 Its new base agrees with the old one outside the touched slots and the slots of the facts.
@@ -900,8 +911,23 @@ Its new base agrees with the old one outside the touched slots and the slots of 
 `Logic.callValue_stored` proves that from Berlin to before Glamsterdam, CALL with a value that is not 0 keeps the facts of a `Stored` frame in the same way.
 It needs a frame that may change the state, and its account must hold the value in the base state.
 It needs the gas of a cold call, 9000 for the value, and 25000 more when the callee is dead in the base state.
-On success the new base also holds the balances of the effect.
-The new base agrees with the old one outside the addresses whose balances the effect moves, too.
+On success the new base also holds the balances and the facts of accounts of the effect.
+The new base agrees with the old one outside the addresses whose balances the effect moves or whose accounts it remakes, too.
+`Logic.CreateMessage` is the message that a creation sends, to run its init code at the new address.
+`Logic.AfterCreate` is the frame after a creation from a `Stored` frame.
+`Logic.createKind_stored` proves that from Berlin to before Glamsterdam, CREATE or CREATE2 keeps the facts of a `Stored` frame.
+It needs init code that a fact of memory holds, and a frame that may change the state.
+The creator must hold the value in the base state.
+It needs the new address from the base state to hold no code and a nonce of 0, and the price of the creation.
+It also needs an assumption that gives the effect of each frame that ends the creation.
+On success the frame pushes the new address, gains the facts and the refund of the effect, and its return data is empty.
+On success the new base holds the facts of accounts of the effect.
+On failure the frame pushes 0 and keeps its facts of slots, and the assumption may rule a failure out.
+The new base gives the creator its grown nonce, unless the effect remakes the creator.
+Its new base agrees with the old one outside the touched slots, the moved and remade addresses, and the creator.
+`Logic.create_stored` proves this for CREATE.
+`Logic.create2_stored` proves this for CREATE2.
+`Logic.nonce_of_shape` proves that an account with the nonce and the code hash of an account that exists has its nonce.
 `Logic.Entered` gives the state and the substate that the frame of a message starts from, after the move of its value.
 `Logic.Entered.of_not_transfers` proves that a message that moves no value starts from the start state and the substate of its caller.
 `Logic.meets_runsAll` proves that the runner of the interpreter meets the specifications of a family of codes that call each other, at every bound.

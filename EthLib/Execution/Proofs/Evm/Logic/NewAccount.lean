@@ -30,6 +30,7 @@ That effect may remake accounts, such as the new one, and give facts of accounts
 
 - On success the frame pushes the new address and knows the facts that the effect gives.
 - It adds the refund of the effect, and the new base holds the balances and the accounts of it.
+- Its return data is then empty.
 - The new base gives the creator the grown nonce, unless the effect remakes the creator.
 - On failure the frame pushes 0, and keeps its facts of slots and its refund counter.
 - The new base then gives the creator the grown nonce.
@@ -37,7 +38,9 @@ That effect may remake accounts, such as the new one, and give facts of accounts
 - Either way, the new base agrees with the old one outside the touched slots and those of the facts.
 - It also agrees outside the addresses that the effect moves or remakes, and the creator.
 
-Out of scope: a creation that runs no message, a creation in a static frame, and the return data.
+Out of scope: a creation that runs no message or runs in a static frame.
+
+The rule says nothing of the return data after a failure.
 
 Sources: EIP-150, EIP-684, EIP-1014, EIP-2929 and EIP-3860.
 -/
@@ -91,6 +94,8 @@ The new base then holds the balances and the accounts of the change.
 
 It also gives the creator the grown nonce, unless the change remakes the creator.
 
+The return data is then empty.
+
 On failure the frame pushes 0 and keeps its facts of slots and its refund counter.
 
 The new base then gives the creator the grown nonce.
@@ -107,7 +112,7 @@ def AfterCreate (code : ByteArray) (message : Message fork) (pc : Nat) (rest : L
     (((∀ fund ∈ change.funds, (base'.getAccount fund.1).balance = fund.2) ∧
       (∀ fact ∈ change.accounts, fact.Holds base') ∧
       (message.currentTarget ∉ change.remade →
-        (base'.getAccount message.currentTarget).nonce = nonce + 1) ∧
+        (base'.getAccount message.currentTarget).nonce = nonce + 1) ∧ evm.returnData = .empty ∧
       Stored code message (pc + 1) (address.toU256 :: rest) size facts
         (gas - cost - createMessageGas fork (gas - cost) + left)
         (change.after ++ keptFacts change.touched slots) (refund + change.gain) base' accessed'
@@ -145,8 +150,7 @@ private theorem agrees_incrementNonce {state caller : TransactionState} {address
   exact ⟨(hread.trans h).mono (fun _ hs => by simp at hs) (fun _ hm => by simp at hm)
     fun _ hm => by simpa using hm, hself⟩
 
-/-- The frame after a creation, from the frame that the creation resumes with the effect of its
-callee. -/
+/-- The frame after a creation, from the frame that it resumes with the effect of its callee. -/
 private theorem afterCreate_of_at {evm caller child final : Evm fork Nat} {rest : List U256}
     {cost : Nat} {address : Address} {change : Change} {sure : Bool}
     (hsize : evm.memory.size = size) (hmod : size % 32 = 0) (hall : HoldsAll evm.memory facts)
@@ -164,16 +168,16 @@ private theorem afterCreate_of_at {evm caller child final : Evm fork Nat} {rest 
       ((if child.error.isNone then address.toU256 else 0) :: rest) evm.memory
       (gas - cost - createMessageGas fork (gas - cost) + child.gas)
       (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
-      final) :
+      final ∧ final.returnData = if child.error.isNone then .empty else child.output) :
     AfterCreate code message pc rest size facts gas cost address
       (base.getAccount message.currentTarget).nonce slots refund base accessed change sure
       final := by
-  have hm := hat.2.2.2.2.2.1
+  have hm := hat.1.2.2.2.2.2.1
   have hk : Known code message (pc + 1)
       ((if child.error.isNone then address.toU256 else 0) :: rest) size facts
       (gas - cost - createMessageGas fork (gas - cost) + child.gas)
       (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
-      final := ⟨by rw [hm]; exact hat, by rw [hm, hsize], hmod, by rw [hm]; exact hall⟩
+      final := ⟨by rw [hm]; exact hat.1, by rw [hm, hsize], hmod, by rw [hm]; exact hall⟩
   have hagree' := hagree.trans heff.agrees
   have hnonce : message.currentTarget ∉ (if child.error.isNone then change.remade else []) →
       ((incorporateChild fork caller child).state.getAccount message.currentTarget).nonce =
@@ -200,7 +204,7 @@ private theorem afterCreate_of_at {evm caller child final : Evm fork Nat} {rest 
       · rw [heff.refund, hok, hcss]
         simp [hrefund]
     · simp only [hok, ite_true] at hk hnonce
-      refine .inl ⟨heff.funds hok, heff.accounts hok, hnonce,
+      refine .inl ⟨heff.funds hok, heff.accounts hok, hnonce, by simp [hat.2, hok],
         stored_of_known hk ?_ ?_ (Agrees.refl _ _ _ _ _)⟩
       · intro fact hfact
         rcases List.mem_append.mp hfact with hfact | hfact

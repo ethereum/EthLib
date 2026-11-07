@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Proofs.Evm.Logic.Known
+public import EthLib.Execution.Proofs.Evm.Logic.Copy
 public import EthLib.Execution.Proofs.State.Tracker
 
 /-!
@@ -37,6 +38,9 @@ Every other account still exists exactly when it does in the base, with its nonc
 - It needs a frame that may change the state, more than 2300 gas, and its account in the base state.
 - It pays the price of EIP-2200 with the prices of EIP-2929, from the facts of the slot.
 - It adds the refund of the write, from the same facts, to the refund counter.
+- From Byzantium, RETURNDATASIZE of a frame that holds some return data pushes its size.
+- RETURNDATACOPY of a range within that return data writes its bytes as a fact of memory.
+- Both keep the return data and every fact of a slot.
 - A rule that halts and keeps the state and the substate keeps every fact in the halted frame.
 
 These frames say nothing of the logs, the accessed addresses and the other fields of the substate.
@@ -448,6 +452,49 @@ theorem sstore_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {
       (fun _ _ h => mem_insert_getD_of_ne evm.substate
         ((by rw [← haddress]; exact h : _ ∨ _).imp Ne.symm Ne.symm))
       horig haccount hcode hparent)⟩
+
+/-- From Byzantium, RETURNDATASIZE pushes the size of the return data `data`, for 2 gas.
+
+The frame keeps the return data and every fact. -/
+theorem returndatasize_stored (hfork : .byzantium ≤ fork) {data : ByteArray}
+    (hlt : pc < code.size) (hbyte : code[pc] = 0x3d) (hgas : 2 ≤ gas)
+    (hstack : stack.length < STACK_LIMIT) :
+    Hoare fork
+      (fun evm => Stored code message pc stack size facts gas slots refund base accessed evm ∧
+        evm.returnData = data)
+      (fun evm => Stored code message (pc + 1) (BitVec.ofNat 256 data.size :: stack) size facts
+        (gas - 2) slots refund base accessed evm ∧ evm.returnData = data) := by
+  rintro evm ⟨⟨⟨hat, hsize, hmod, hall⟩, hslots, hrefund, hagree⟩, hrd⟩
+  obtain ⟨after, hreach, hat', hrd'⟩ := returndatasize hfork hlt hbyte hgas hstack evm ⟨hat, hrd⟩
+  have hm := hat'.2.2.2.2.2.1
+  exact ⟨after, hreach, stored_of_known
+    ⟨by rw [hm]; exact hat', by rw [hm]; exact hsize, hmod, by rw [hm]; exact hall⟩
+    hslots hrefund hagree, hrd'⟩
+
+/-- From Byzantium, RETURNDATACOPY of a range of the return data `data` writes a fact.
+
+The range ends within the return data.
+
+It keeps the facts of memory apart from the range, the return data and every fact of a slot.
+
+It pays 3, 3 gas a word and the growth of memory, which depends on its size. -/
+theorem returndatacopy_stored (hfork : .byzantium ≤ fork) {data : ByteArray}
+    {start offset length : U256} {rest : List U256} (hlt : pc < code.size)
+    (hbyte : code[pc] = 0x3e) (hz : length ≠ 0) (fit : offset.toNat + length.toNat ≤ data.size)
+    (hgas : 3 + 3 * wordCount length.toNat + (extendMemory size [(start, length)]).cost ≤ gas) :
+    Hoare fork
+      (fun evm => Stored code message pc (start :: offset :: length :: rest) size facts gas slots
+        refund base accessed evm ∧ evm.returnData = data)
+      (fun evm => Stored code message (pc + 1) rest
+        (size + (extendMemory size [(start, length)]).expandBy)
+        ((start.toNat, memoryReadBytes data offset.toNat length.toNat) ::
+          facts.filter (Apart start.toNat length.toNat))
+        (gas - (3 + 3 * wordCount length.toNat + (extendMemory size [(start, length)]).cost))
+        slots refund base accessed evm ∧ evm.returnData = data) := by
+  rintro evm ⟨⟨hk, hslots, hrefund, hagree⟩, hrd⟩
+  obtain ⟨after, hreach, hk', hrd'⟩ :=
+    returndatacopy_known hfork hlt hbyte hz fit hgas evm ⟨hk, hrd⟩
+  exact ⟨after, hreach, stored_of_known hk' hslots hrefund hagree, hrd'⟩
 
 /-- A halted frame with its error, output and gas, and the facts of its slots.
 
