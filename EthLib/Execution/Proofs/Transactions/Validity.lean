@@ -22,6 +22,8 @@ From Glamsterdam its gas limit is at most `2^32 - 1`, and its least gas limit at
 A transaction passes the rules exactly when it meets these bounds and its fees are not inverted.
 
 Its fees are inverted when its priority fee per gas is above its maximum fee per gas.
+
+Exact conditions also state when the chain check, the contents check and the whole check pass.
 -/
 
 @[expose] public section
@@ -274,5 +276,87 @@ theorem checkTransaction_ok {fork : Fork} {chainId : UInt64} {tx : Transaction}
             Prod.mk.injEq] at h
           obtain ⟨rfl, rfl⟩ := h
           exact ⟨rfl, rfl, hv, rfl⟩
+
+/-- A transaction alone passes exactly when each of its four checks passes.
+
+They check the chain, the signature, the gas, nonce and fee rules, and the contents. -/
+theorem checkTransaction_eq_ok_iff {fork : Fork} {chainId : UInt64} {tx : Transaction}
+    {sender : Address} {gas : Nat} :
+    checkTransaction fork chainId tx = .ok (sender, gas) ↔
+      checkChainId fork chainId tx = .ok () ∧ recoverSender fork tx = .ok sender ∧
+        validateTransaction fork sender tx = .ok gas ∧ checkContents fork tx = .ok () := by
+  refine ⟨checkTransaction_ok, fun ⟨hc, hs, hv, hk⟩ => ?_⟩
+  simp only [checkTransaction, hc, hs, hv, hk, bind, Except.bind, pure, Except.pure]
+
+/-- A transaction passes the chain check exactly when it signs no chain or the chain `chainId`.
+
+Reading the chain of a legacy transaction can fail, and the check then fails too. -/
+theorem checkChainId_eq_ok_iff {fork : Fork} {chainId : UInt64} {tx : Transaction} :
+    checkChainId fork chainId tx = .ok () ↔
+      ∃ signed, tx.chainId fork = .ok signed ∧
+        ∀ c, signed = some c → c.toNat = chainId.toNat := by
+  unfold checkChainId
+  cases hc : tx.chainId fork with
+  | error e => simp [bind, Except.bind]
+  | ok signed =>
+    cases signed with
+    | none => simp [bind, Except.bind]
+    | some c =>
+      by_cases heq : c.toNat = chainId.toNat <;> simp [bind, Except.bind, heq]
+
+/-- The blobs and authorizations of a transaction pass exactly when three rules hold.
+
+A blob transaction has at least one blob, and at most 6 from Fusaka.
+
+Each of its versioned hashes starts with the KZG version byte.
+
+A set code transaction has at least one authorization.
+
+Every other transaction passes. -/
+theorem checkContents_eq_ok_iff {fork : Fork} {tx : Transaction} :
+    checkContents fork tx = .ok () ↔
+      (∀ b, tx = .blob b → b.blobVersionedHashes ≠ [] ∧
+        (fork ≥ .fusaka → b.blobVersionedHashes.length ≤ MAX_BLOBS_PER_TRANSACTION) ∧
+        ∀ h ∈ b.blobVersionedHashes, h[0] = Cryptography.Kzg.VERSIONED_HASH_VERSION_KZG) ∧
+      ∀ a, tx = .setCode a → a.authorizations ≠ [] := by
+  cases tx with
+  | blob b =>
+    have key : checkContents fork (.blob b) = .ok () ↔ b.blobVersionedHashes ≠ [] ∧
+        (fork ≥ .fusaka → b.blobVersionedHashes.length ≤ MAX_BLOBS_PER_TRANSACTION) ∧
+        ∀ h ∈ b.blobVersionedHashes, h[0] = Cryptography.Kzg.VERSIONED_HASH_VERSION_KZG := by
+      simp only [checkContents]
+      by_cases hempty : b.blobVersionedHashes.isEmpty = true
+      · simp [List.isEmpty_iff.mp hempty]
+      simp only [hempty, Bool.false_eq_true, ↓reduceIte]
+      have hne : b.blobVersionedHashes ≠ [] := fun h => hempty (List.isEmpty_iff.mpr h)
+      by_cases hcount : fork ≥ .fusaka ∧ MAX_BLOBS_PER_TRANSACTION < b.blobVersionedHashes.length
+      · have hlt := hcount.2
+        simp only [hcount, and_self, ↓reduceIte, reduceCtorEq, false_iff, not_and]
+        intro _ hle
+        exact absurd (hle trivial) (Nat.not_le.mpr hlt)
+      simp only [hcount, ↓reduceIte]
+      have hle : fork ≥ .fusaka → b.blobVersionedHashes.length ≤ MAX_BLOBS_PER_TRANSACTION :=
+        fun hf => Nat.not_lt.mp fun hlt => hcount ⟨hf, hlt⟩
+      by_cases hhash :
+          (b.blobVersionedHashes.any fun h => h[0] != Cryptography.Kzg.VERSIONED_HASH_VERSION_KZG)
+            = true
+      · simp only [hhash, ↓reduceIte, reduceCtorEq, false_iff, not_and]
+        simp only [List.any_eq_true, bne_iff_ne, ne_eq] at hhash
+        obtain ⟨x, hx, hbad⟩ := hhash
+        exact fun _ _ hall => hbad (hall x hx)
+      simp only [hhash, Bool.false_eq_true, ↓reduceIte, true_iff]
+      simp only [List.any_eq_true, bne_iff_ne, ne_eq, not_exists, not_and,
+        Classical.not_not] at hhash
+      exact ⟨hne, hle, hhash⟩
+    simpa using key
+  | setCode a =>
+    have key : checkContents fork (.setCode a) = .ok () ↔ a.authorizations ≠ [] := by
+      simp only [checkContents]
+      by_cases hempty : a.authorizations.isEmpty = true
+      · simp [List.isEmpty_iff.mp hempty]
+      simp only [hempty, Bool.false_eq_true, ↓reduceIte, true_iff]
+      exact fun h => hempty (List.isEmpty_iff.mpr h)
+    simpa using key
+  | _ => simp [checkContents]
 
 end EthLib.Execution.Transactions
