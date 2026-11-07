@@ -24,7 +24,7 @@ Here it is the 64 bytes `x` then `y`, without the SEC 1 prefix `04`.
 
 That form gives the node ID of the EIP's test vector, and the form with `04` does not.
 
-[eip-778]: https://github.com/ethereum/EIPs/blob/7622abc1c6569b7e7ade9ed957dde4ed2271cc40/EIPS/eip-778.md
+[eip-778]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-778.md
 -/
 
 @[expose] public section
