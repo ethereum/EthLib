@@ -405,6 +405,14 @@ def bindings : List Binding := [
     `EthLib.Consensus.Exports.computeSubnetsForSyncCommitteeExport,
     "(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bytes",
     [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
+  ⟨"consensus_get_ptc_assignment", `EthLib.Consensus.Exports.getPtcAssignmentExport,
+    "(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) " ++
+      "-> bytes",
+    [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
+  ⟨"consensus_get_upcoming_proposal_slots",
+    `EthLib.Consensus.Exports.getUpcomingProposalSlotsExport,
+    "(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bytes",
+    [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
   ⟨"consensus_get_validator_signature",
     `EthLib.Consensus.Exports.getValidatorSignatureExport,
     "(name: str, fork: str, state: bytes, config: bytes, duty: str, object: bytes, " ++

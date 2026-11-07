@@ -755,6 +755,28 @@ def compute_subnets_for_sync_committee(
     )
 
 
+
+def get_ptc_assignment(
+    name: str, fork: str, state: bytes, epoch: int, validator_index: int, config: dict | None = None
+) -> int | None:
+    """The slot of an epoch whose payload timeliness committee holds a validator, or None."""
+    return json.loads(
+        _native.consensus_get_ptc_assignment(
+            name, fork, state, _replacements(config), epoch, validator_index
+        )
+    )
+
+
+def get_upcoming_proposal_slots(
+    name: str, fork: str, state: bytes, validator_index: int, config: dict | None = None
+) -> list:
+    """The slots after the slot of a state that a validator proposes, in increasing order."""
+    return json.loads(
+        _native.consensus_get_upcoming_proposal_slots(
+            name, fork, state, _replacements(config), validator_index
+        )
+    )
+
 def get_validator_signature(
     name: str,
     fork: str,
@@ -884,6 +906,8 @@ __all__ = [
     "is_proposer",
     "is_assigned_to_sync_committee",
     "compute_subnets_for_sync_committee",
+    "get_ptc_assignment",
+    "get_upcoming_proposal_slots",
     "get_validator_signature",
     "get_eth1_vote",
     "get_eth1_pending_deposit_count",

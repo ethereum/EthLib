@@ -254,6 +254,16 @@ eth_consensus_compute_subnets_for_sync_committee(
   uint64_t validator_index);
 
 extern lean_object*
+eth_consensus_get_ptc_assignment(
+  lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
+  uint64_t epoch, uint64_t validator_index);
+
+extern lean_object*
+eth_consensus_get_upcoming_proposal_slots(
+  lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
+  uint64_t validator_index);
+
+extern lean_object*
 eth_consensus_get_validator_signature(
   lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
   lean_object* duty, lean_object* object, lean_object* secret_key);
@@ -1490,6 +1500,47 @@ py_consensus_compute_subnets_for_sync_committee(
   if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) return NULL;
   return except_into_pybytes(
     eth_consensus_compute_subnets_for_sync_committee(a[0], a[1], a[2], a[3], index),
+    VALIDATOR_DUTY_ERROR);
+}
+
+PyObject*
+py_consensus_get_ptc_assignment(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *epoch_obj, *index_obj;
+  const uint8_t *state, *config;
+  Py_ssize_t state_len, config_len;
+  if (!PyArg_ParseTuple(args, "OOy#y#OO", &name_obj, &fork_obj, &state, &state_len, &config,
+                        &config_len, &epoch_obj, &index_obj))
+    return NULL;
+  uint64_t epoch, index;
+  if (parse_uint64(epoch_obj, "epoch", &epoch) < 0) return NULL;
+  if (parse_uint64(index_obj, "validator_index", &index) < 0) return NULL;
+  lean_object* a[4];
+  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) return NULL;
+  return except_into_pybytes(
+    eth_consensus_get_ptc_assignment(a[0], a[1], a[2], a[3], epoch, index),
+    VALIDATOR_DUTY_ERROR);
+}
+
+PyObject*
+py_consensus_get_upcoming_proposal_slots(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *index_obj;
+  const uint8_t *state, *config;
+  Py_ssize_t state_len, config_len;
+  if (!PyArg_ParseTuple(args, "OOy#y#O", &name_obj, &fork_obj, &state, &state_len, &config,
+                        &config_len, &index_obj))
+    return NULL;
+  uint64_t index;
+  if (parse_uint64(index_obj, "validator_index", &index) < 0) return NULL;
+  lean_object* a[4];
+  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) return NULL;
+  return except_into_pybytes(
+    eth_consensus_get_upcoming_proposal_slots(a[0], a[1], a[2], a[3], index),
     VALIDATOR_DUTY_ERROR);
 }
 

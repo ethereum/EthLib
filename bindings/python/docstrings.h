@@ -347,6 +347,12 @@
 #define DOC_consensus_compute_subnets_for_sync_committee \
   "From Altair: the sync committee subnets of a validator for the next slot, as a JSON list."
 
+#define DOC_consensus_get_ptc_assignment \
+  "From Gloas: the slot of an epoch whose payload timeliness committee holds a validator, as JSON."
+
+#define DOC_consensus_get_upcoming_proposal_slots \
+  "From Gloas: the slots after the slot of a state that a validator proposes, as a JSON list."
+
 #define DOC_consensus_get_validator_signature \
   "The signature of the object of a duty, by a secret key of 32 big-endian bytes."
 

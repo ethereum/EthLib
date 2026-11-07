@@ -463,6 +463,14 @@ def consensus_compute_subnets_for_sync_committee(name: str, fork: str, state: by
     """From Altair: the sync committee subnets of a validator for the next slot, as a JSON list."""
     ...
 
+def consensus_get_ptc_assignment(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) -> bytes:
+    """From Gloas: the slot of an epoch whose payload timeliness committee holds a validator, as JSON."""
+    ...
+
+def consensus_get_upcoming_proposal_slots(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bytes:
+    """From Gloas: the slots after the slot of a state that a validator proposes, as a JSON list."""
+    ...
+
 def consensus_get_validator_signature(name: str, fork: str, state: bytes, config: bytes, duty: str, object: bytes, secret_key: bytes) -> bytes:
     """The signature of the object of a duty, by a secret key of 32 big-endian bytes."""
     ...
