@@ -707,6 +707,14 @@ That state keeps every other slot, the original words and the accounts.
 `Logic.gas_rule` is the rule for GAS, which pushes the gas left after its own price of 2.
 `Logic.extcodesize` is the rule for EXTCODESIZE from Berlin to before Glamsterdam.
 It charges the prices of EIP-2929, and needs the state to hold the code of the account.
+`Logic.mstore8` is the rule for MSTORE8, which writes the lowest byte of a word.
+`Logic.mcopy` is the rule for MCOPY from Dencun, which grows memory for both ranges before it reads the source.
+`Logic.copyWith` is the rule for a copy of a buffer of the frame to memory, with zeros past its end.
+`Logic.calldatacopy` is its case for CALLDATACOPY.
+`Logic.codecopy` is its case for CODECOPY.
+`Logic.returndatacopy` is the rule for RETURNDATACOPY from Byzantium, for a range that ends within the return data.
+`Logic.extcodecopy` is the rule for EXTCODECOPY from Berlin to before Glamsterdam.
+It charges the prices of EIP-2929 and 3 gas a word, and needs the state to hold the code of the account.
 `memoryReadBytes_memoryWrite_eq_append` proves that a read that ends where a write ends gives the bytes before the write, then the value.
 `Logic.staticcallWith` is the rule for STATICCALL from Berlin to before Glamsterdam.
 Its message carries no value and is static.

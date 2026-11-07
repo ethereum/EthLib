@@ -12,6 +12,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Create
 public import EthLib.Execution.Proofs.Evm.Logic.Deposit
 public import EthLib.Execution.Proofs.Evm.Logic.Callee
 public import EthLib.Execution.Proofs.Evm.Logic.Rules
+public import EthLib.Execution.Proofs.Evm.Logic.Copy
 public import EthLib.Execution.Proofs.Evm.Logic.Branch
 public import EthLib.Execution.Proofs.Evm.Logic.Stack
 public import EthLib.Execution.Proofs.Evm.Logic.NatCode
