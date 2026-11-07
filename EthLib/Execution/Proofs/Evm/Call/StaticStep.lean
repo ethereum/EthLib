@@ -135,7 +135,7 @@ theorem state_incorporateChild (caller child : Evm fork Meter) :
   unfold incorporateChild
   split <;> rfl
 
-/-- The caller that takes in a child keeps its message. -/
+/-- The caller that takes in a child keeps its code. -/
 theorem code_incorporateChild (caller child : Evm fork Meter) :
     (incorporateChild fork caller child).code = caller.code := by
   unfold incorporateChild
@@ -418,7 +418,9 @@ theorem staticResult_messageInstruction {op : Op}
 
 /-- A step of a static frame gives a static step, or a static child.
 
-The code of the frame is the code of its message, and runs at an account that holds code. -/
+The code of the frame is the code of its message.
+
+When that code is not empty, it runs at an account that holds code. -/
 theorem staticResult_step {evm : Evm fork Meter} {result : StepResult fork Meter}
     (static : evm.message.isStatic = true) (hcode : evm.code = evm.message.code)
     (hhold : StaticCode evm.state evm.message) (h : step fork evm = .ok result) :
