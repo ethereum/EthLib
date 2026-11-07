@@ -22,6 +22,10 @@ There it reads the words of the base state, and it is warm exactly when the base
 
 It also has the words before the transaction, the accounts, the codes and the block of the base.
 
+Agreement in general may leave out the accounts of some addresses, whose balances may move.
+
+Each account still exists exactly when it does in the base, with its nonce and its code hash.
+
 - A rule that keeps the state and the substate, for every state and substate, keeps every fact.
 - From Berlin, SLOAD of the key of a fact of the account of the frame pushes its word now.
 - It makes the slot warm, and pays 2100 for a cold slot and 100 for a warm one.

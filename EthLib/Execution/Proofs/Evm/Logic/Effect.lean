@@ -5,25 +5,31 @@ public import EthLib.Execution.Proofs.Evm.Logic.Callee
 public import EthLib.Execution.Proofs.Evm.Logic.Call
 
 /-!
-# Proofs: the effect of a message on the slots of storage
+# Proofs: the effect of a message on storage and balances
 
 A frame that knows a few slots of storage can send a message, and go on knowing them.
 
 The effect of a message names the slots that it may touch, from the frame that sends it.
 
-Outside those slots, the frame that ends the message agrees with the frame before it.
+It also names the addresses whose balances it may move.
+
+Outside those slots and addresses, the frame that ends the message agrees with the frame before it.
 
 So every word reads as before there, and every slot is warm exactly when it was.
 
-The words before the transaction, the accounts, the codes and the block stay too.
+The words before the transaction, the codes and the block stay too.
 
-A message that fails touches no slot at all.
+Every account still exists exactly when it did, with its nonce and its code hash.
 
-A message that succeeds also gives the facts of some slots, and a refund to add.
+A message that fails touches no slot and moves no balance.
 
-- A callee whose stopped frame agrees with the state it started from, outside some slots, has one.
-- On success that stopped frame must give the facts and the refund of the effect.
-- A failure rolls the state back, so the callee then touches no slot.
+A message that succeeds also gives the facts of some slots, some balances, and a refund to add.
+
+- A callee whose stopped frame agrees with the state of its caller, outside the change, has one.
+- On success that stopped frame must give the facts, the balances and the refund of the effect.
+- A failure rolls the state back, so the callee then touches nothing.
+- A move of a value that is not 0 between two accounts that exist moves only their balances.
+- It needs a sender with a nonce or a code, so that neither account ends empty.
 - CALL and CALLCODE with no value, STATICCALL and DELEGATECALL send no value of their own.
 - From Berlin to before Glamsterdam, such a call keeps each fact of a slot it does not touch.
 - It needs an input range that a fact of memory holds, and an output range within memory.
@@ -33,6 +39,11 @@ A message that succeeds also gives the facts of some slots, and a refund to add.
 - On failure, it keeps every fact of a slot and the refund counter.
 - Either way, it keeps each fact of memory apart from the output range.
 - Either way, its base agrees with the base before the call outside the touched slots and the facts.
+- From Berlin to before Glamsterdam, CALL with a value that is not 0 does the same.
+- It needs a frame that may change the state, and an account that holds the value in the base.
+- It also needs the gas of a cold call, of the value, and of a dead callee.
+- On success, its new base also holds the balances that the effect gives.
+- Its new base agrees with the old one outside the addresses whose balances the effect moves, too.
 
 A callee may call its caller again, before it ends.
 
@@ -42,11 +53,13 @@ The runner of the interpreter meets the specifications of a family of codes that
 
 Each specification may assume the specifications of the whole family on the messages it sends.
 
+Each starts from the frame of its message, after the move of the value of the message, if any.
+
 That holds by induction on the bound on the gas of messages, which each message is below.
 
-An effect keeps the accounts, the codes and the words before the transaction.
+An effect keeps the codes, the words before the transaction, and which accounts exist.
 
-So it leaves out a callee that moves ether, creates an account or changes a code.
+So it leaves out a callee that creates or deletes an account, or changes a code or a nonce.
 
 The frame after a call says nothing of its return data.
 -/
@@ -77,7 +90,9 @@ theorem Meets.and {Meter : Type} [GasMeter Meter] {bound : Nat}
 
 Before Paris, the target of the message is touched first.
 
-A message that moves a value then moves it from its sender to its target, and logs the move.
+A message that moves a value then moves it from its sender to its target.
+
+From Glamsterdam, it also logs a move to another account, by EIP-7708.
 
 Any other message starts from there with the substate of its caller. -/
 def Entered (fork : Fork) (message : Message fork) (state : TransactionState)
@@ -839,13 +854,13 @@ Each frame that ends such a message from the frame has the effect, by the assump
 
 The assumption also says what such a frame writes into the output range when it ends with no error.
 
-That is the start of its output, as long as the range, and it must be `output`.
+That is the start of its output, at most as long as the range, and it must be `output`.
 
 When `sure` is true, it says that such a frame ends with no error.
 
-The frame needs the gas of a cold access, the price of the value, and 25000 for a dead callee.
+The frame needs 2600 for a cold access and 9000 for the value.
 
-The price of the value is 9000, and the callee is dead in the base state, by EIP-161.
+It also needs 25000 when the callee is dead in the base state, by EIP-161.
 
 The frame then pushes 1 and knows the facts of the effect and of the slots it does not touch.
 
