@@ -14,7 +14,9 @@ Request lists that pass the checks have distinct types, in increasing order.
 
 Without a JSON-RPC error, the parameters are an array of the values of the version, none null.
 
-A payload that fails the checks is invalid, or has an invalid block hash, with no latest valid hash.
+A payload that fails the checks is invalid, or has an invalid block hash at version 1.
+
+Its latest valid hash is null.
 
 So without the parent's state a payload is never valid: it is syncing, or it failed the checks.
 
@@ -148,14 +150,16 @@ theorem params_of_checkNewPayload_ok {config : ChainConfig} {version : Nat} {par
 
 /-! ## A payload that fails the checks -/
 
-/-- A payload that fails the checks is invalid, or has an invalid block hash.
+/-- A payload that fails the checks is invalid, or has an invalid block hash at version 1.
+
+At any other version, its status is invalid.
 
 Its latest valid hash is null. -/
 theorem status_of_checkNewPayload {config : ChainConfig} {version : Nat} {params : Lean.Json}
     {status : PayloadStatus} {reason : PayloadError}
     (h : checkNewPayload config version params = .ok (.error (status, reason))) :
     status.latestValidHash = none ∧
-      (status.status = .invalid ∨ status.status = .invalidBlockHash) := by
+      (status.status = .invalid ∨ status.status = .invalidBlockHash ∧ version = 1) := by
   cases params with
   | arr items =>
     unfold checkNewPayload at h
@@ -175,7 +179,9 @@ theorem status_of_checkNewPayload {config : ChainConfig} {version : Nat} {params
       -- Each status that the checks return is invalid, or an invalid block hash at version 1.
       all_goals
         cases h
-        exact ⟨rfl, by simp⟩
+        first
+          | exact ⟨rfl, .inl rfl⟩
+          | exact ⟨rfl, .inr ⟨rfl, ‹version = 1›⟩⟩
     -- Parameters of the wrong shape fail with a JSON-RPC error, never with a status.
     · dsimp -zeta only at h
       rw [ite_eq_right hc, bind_ok_iff] at h
@@ -186,13 +192,16 @@ theorem status_of_checkNewPayload {config : ChainConfig} {version : Nat} {params
 
 /-- Without the parent's state, a payload is never valid, and its latest valid hash is null.
 
-It is syncing with no reason when it passes the checks, and invalid with a reason otherwise. -/
+It is syncing with no reason when it passes the checks, and invalid with a reason otherwise.
+
+The status of an invalid block hash comes only at version 1. -/
 theorem status_of_newPayloadWithoutState {config : ChainConfig} {version : Nat}
     {params : Lean.Json} {status : PayloadStatus} {reason : Option PayloadError}
     (h : newPayloadWithoutState config version params = .ok (status, reason)) :
     status.latestValidHash = none ∧
       (status.status = .syncing ∧ reason = none ∨
-        (status.status = .invalid ∨ status.status = .invalidBlockHash) ∧ reason.isSome) := by
+        (status.status = .invalid ∨ status.status = .invalidBlockHash ∧ version = 1) ∧
+          reason.isSome) := by
   unfold newPayloadWithoutState at h
   cases hc : checkNewPayload config version params with
   | error e => simp [hc, bind, Except.bind] at h
@@ -261,7 +270,8 @@ theorem valid_iff_of_newPayloadOnChain {chain : BlockChain} {version : Nat} {par
         obtain ⟨st, re⟩ := p
         simp only [hC, bind, Except.bind, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
         obtain ⟨rfl, -, -⟩ := h
-        rcases (status_of_checkNewPayload hC).2 with hs | hs <;> rw [hs] at hValid <;> cases hValid
+        rcases (status_of_checkNewPayload hC).2 with hs | ⟨hs, -⟩ <;> rw [hs] at hValid <;>
+          cases hValid
       | ok checked =>
         simp only [hC, bind, Except.bind] at h
         -- Every answer of the execution is syncing or invalid, except the one with a block.
