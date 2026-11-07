@@ -355,6 +355,7 @@ A Lean file that git does not track yet counts as changed on every line.
 
 With `--all` in place of `--base`, the check reads every line of every Lean file that git tracks.
 `--rule wrap` runs only the check of wrapped sentences; the other rules are `length` and `touching`.
+CI also runs `--all --rule wrap`, so no Lean file in the tree may hold a wrapped sentence.
 
 These commands use uv and Python 3.12, with only the standard library.
 See [prerequisites](README.md#prerequisites) for setup.
