@@ -41,13 +41,13 @@ from .catalogue import BOGOTA_NETWORKS, Case
 # A key may also be a format of execution-spec-tests.
 NOT_YET = {
     "epoch_processing": "beacon state transition (consensus track C13 to C40)",
-    "finality": "the state transition after Phase 0 (consensus track C26 to C40)",
+    "finality": "a fork or handler that the runner of finality does not cover yet",
     "fork": "beacon state transition (consensus track C13 to C40)",
     "genesis": "the genesis after Phase 0 (consensus track C26 to C40)",
     "operations": "beacon state transition (consensus track C13 to C40)",
-    "random": "the state transition after Phase 0 (consensus track C26 to C40)",
-    "sanity": "the state transition after Phase 0 (consensus track C26 to C40)",
-    "transition": "the Electra and Fulu blocks (consensus track C35 to C40)",
+    "random": "a fork or handler that the runner of random does not cover yet",
+    "sanity": "a fork or handler that the runner of sanity does not cover yet",
+    "transition": "a fork or handler that the runner of transition does not cover yet",
 }
 
 # The plan at Gloas and Heze, by the steps of the track for Glamsterdam and Hegotá.
