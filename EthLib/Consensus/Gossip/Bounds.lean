@@ -17,7 +17,7 @@ The SSZ type of the message of each gossip topic, and the bound on the length of
 
 The fork is that of the fork digest of the topic.
 
-A topic that `Config.gossipTopics` does not list at the fork has no type.
+A topic that the configuration does not list at the fork has no type.
 
 A fork for which that list is not written has no type for any topic.
 
