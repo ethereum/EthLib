@@ -22,9 +22,7 @@ An authority that refuses an authorization, such as for a wrong nonce, is only m
 
 An authorization with no valid signature changes nothing.
 
-The hash that an authority signs starts with the byte 5.
-
-It ignores the signature of the authorization.
+The hash that an authority signs ignores the signature of the authorization.
 
 Up to BPO5, a valid authorization gives back 12500 exactly when its authority has an account.
 
@@ -250,12 +248,6 @@ theorem meter_payAuthorization_of_paid {code : ByteArray} (hfork : .glamsterdam 
       Except.mapError, bind, Except.bind, pure, Except.pure]
 
 /-! ## The hash that an authority signs -/
-
-open EthLib.Serialization.Rlp in
-/-- The hash that an authority signs hashes the byte 5, then its chain, address and nonce. -/
-theorem authorizationHash_eq (auth : Authorization) :
-    authorizationHash auth = hashTypedItems 5
-      [Codec.toItem auth.chainId, Codec.toItem auth.address, Codec.toItem auth.nonce] := rfl
 
 /-- The hash that an authority signs ignores the parity, `r` and `s`. -/
 theorem authorizationHash_signature (auth : Authorization) (yParity : UInt8) (r s : U256) :
