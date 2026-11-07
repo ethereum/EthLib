@@ -80,8 +80,6 @@ theorem instruction_return : instruction (Meter := Meter) fork .«return» = som
   simp [instruction, stackOnlyStep, controlFlowStep, memoryDataStep, returnOpStep,
     HOrElse.hOrElse, OrElse.orElse, Option.orElse]
 
-/-! ## The parts of an instruction, with one counter of gas -/
-
 /-! ## The instructions, with one counter of gas -/
 
 /-- PUSHn, for `n` from 1, with the gas and the room for one word: it pays 3 and pushes `n` bytes.
