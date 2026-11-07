@@ -2,6 +2,7 @@ module
 
 public import EthLib.Engine.ForkchoiceUpdated
 public import EthLib.Base.Except
+public import EthLib.Engine.Proofs.Json
 
 /-!
 # Proofs: the parameters and the head of `engine_forkchoiceUpdated`
@@ -21,6 +22,10 @@ That block is the valid block nearest the head.
 There is none when no block of the chain is valid.
 
 Each block of a chain after the first is the parent of the block before it.
+
+The forkchoice state decodes exactly when its object holds exactly its three fields.
+
+Each of them is a hash of 32 bytes.
 
 The parameters decode exactly when they are a JSON array of two values.
 
@@ -195,6 +200,38 @@ theorem forkchoiceUpdated_of_invalid {p : KnownPayload}
 @[simp] theorem belowFinalized_none (h : Hash32) : belowFinalized tree none h = false := rfl
 
 /-! ## The parameters -/
+
+/-- The forkchoice state decodes exactly when its object holds exactly its three fields.
+
+Each of them must decode as a hash of 32 bytes, which becomes that field of the state. -/
+theorem forkchoiceStateOfJson_eq_ok_iff {j : Lean.Json} {s : ForkchoiceState} :
+    forkchoiceStateOfJson j = .ok s ↔
+      ∃ fs, Json.fields "forkchoiceState" j = .ok fs ∧
+        Json.hasExactly fs ["headBlockHash", "safeBlockHash", "finalizedBlockHash"] = true ∧
+        ∃ head safe finalized, fs.lookup "headBlockHash" = some head ∧
+          fs.lookup "safeBlockHash" = some safe ∧ fs.lookup "finalizedBlockHash" = some finalized ∧
+          Json.fixed "headBlockHash" 32 head = .ok s.headBlockHash ∧
+          Json.fixed "safeBlockHash" 32 safe = .ok s.safeBlockHash ∧
+          Json.fixed "finalizedBlockHash" 32 finalized = .ok s.finalizedBlockHash := by
+  unfold forkchoiceStateOfJson
+  simp only [bind_ok_iff]
+  constructor
+  · rintro ⟨fs, hfs, h⟩
+    by_cases hc : Json.hasExactly fs ["headBlockHash", "safeBlockHash", "finalizedBlockHash"] = true
+    · rw [ite_eq_left hc] at h
+      simp only [bind_ok_iff, Json.field_eq_ok_iff] at h
+      obtain ⟨head, hl1, h1, hf1, safe, hl2, h2, hf2, fin, hl3, h3, hf3, hs⟩ := h
+      cases hs
+      exact ⟨fs, hfs, hc, head, safe, fin, hl1, hl2, hl3, hf1, hf2, hf3⟩
+    -- An object with other fields fails with an invalid parameter, never with a state.
+    · rw [ite_eq_right hc, bind_ok_iff] at h
+      obtain ⟨_, hInvalid, -⟩ := h
+      cases hInvalid
+  · rintro ⟨fs, hfs, hc, head, safe, fin, hl1, hl2, hl3, hf1, hf2, hf3⟩
+    refine ⟨fs, hfs, ?_⟩
+    rw [ite_eq_left hc]
+    simp only [bind_ok_iff, Json.field_eq_ok_iff]
+    exact ⟨head, hl1, _, hf1, safe, hl2, _, hf2, fin, hl3, _, hf3, rfl⟩
 
 /-- The parameters decode exactly when they are a JSON array of two values.
 
