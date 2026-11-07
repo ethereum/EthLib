@@ -10,6 +10,32 @@ Each eligible validator appears once among the eligible indices, and the others 
 So a fold of the deltas over those indices touches the entry of each validator at most once.
 
 That entry holds the amount that the step for its validator adds, and zero if no step adds one.
+
+The registry must be within its limit, so that each position is its own 64-bit index.
+
+From Altair, a flag earns its weight of the base reward, scaled by the participating increments.
+
+A missed flag other than the head costs its weight of the base reward.
+
+A missed target also costs the effective balance times the inactivity score, over a fixed divisor.
+
+Before Altair, each kind of vote earns the base reward scaled by the attesting increments.
+
+In a leak it earns the whole base reward instead.
+
+A missed vote costs the base reward, in a leak or not.
+
+In a leak, every eligible validator also pays four base rewards less the proposer share.
+
+A missed target then also costs the effective balance times the finality delay, over a quotient.
+
+The inclusion rewards sum, for each validator, the shares of the signers whose votes it included.
+
+The earliest inclusion of a signer is the first attestation with its least inclusion delay.
+
+The attestation deltas are the sums of these parts.
+
+Every quotient rounds down, and no sum or product overflows.
 -/
 
 @[expose] public section
@@ -687,6 +713,220 @@ theorem addDelta_getD {deltas result : Array Gwei} {index : ValidatorIndex} {amo
   · subst same
     simpa using addDelta_getD_self computed
   · simp [addDelta_getD_of_ne computed (Ne.symm same), same]
+
+/-- The earliest inclusion kept after one more attestation: the old one, unless it is later. -/
+def keepEarliest (attestation : PendingAttestation preset) :
+    Option (PendingAttestation preset) → Option (PendingAttestation preset)
+  | some kept => if attestation.inclusionDelay < kept.inclusionDelay then some attestation
+      else some kept
+  | none => some attestation
+
+/-- Keeping the earliest of the same attestation twice keeps it once. -/
+private theorem keepEarliest_keepEarliest (attestation : PendingAttestation preset)
+    (kept : Option (PendingAttestation preset)) :
+    keepEarliest attestation (keepEarliest attestation kept) = keepEarliest attestation kept := by
+  cases kept with
+  | none => simp [keepEarliest]
+  | some kept =>
+    by_cases earlier : attestation.inclusionDelay < kept.inclusionDelay
+    · simp [keepEarliest, earlier]
+    · simp [keepEarliest, earlier]
+
+/-- The signers of one attestation each keep the earlier of their inclusion and this one. -/
+private theorem foldl_signers_getElem? (attestation : PendingAttestation preset) (i : Nat) :
+    ∀ (signers : List ValidatorIndex) (best : Array (Option (PendingAttestation preset))),
+      (signers.foldl (init := best) fun best index =>
+          match best.getD index.toNat none with
+          | some kept => if attestation.inclusionDelay < kept.inclusionDelay then
+              best.setIfInBounds index.toNat (some attestation) else best
+          | none => best.setIfInBounds index.toNat (some attestation))[i]? =
+        if signers.any (·.toNat == i) then best[i]?.map (keepEarliest attestation) else best[i]?
+  | [], best => by simp
+  | index :: signers, best => by
+    rw [List.foldl_cons, foldl_signers_getElem? attestation i signers]
+    -- The step changes the entry of its own signer only, and keeps the earliest there.
+    have step : (match best.getD index.toNat none with
+        | some kept => if attestation.inclusionDelay < kept.inclusionDelay then
+            best.setIfInBounds index.toNat (some attestation) else best
+        | none => best.setIfInBounds index.toNat (some attestation))[i]? =
+        if index.toNat = i then best[i]?.map (keepEarliest attestation) else best[i]? := by
+      by_cases same : index.toNat = i
+      · subst same
+        rw [Array.getD_eq_getD_getElem?]
+        by_cases inside : index.toNat < best.size
+        · rw [Array.getElem?_eq_getElem inside, Option.getD_some]
+          cases found : best[index.toNat] with
+          | none => simp [keepEarliest, inside]
+          | some kept =>
+            by_cases earlier : attestation.inclusionDelay < kept.inclusionDelay
+            · simp [keepEarliest, earlier, inside]
+            · simp [keepEarliest, earlier, Array.getElem?_eq_getElem inside, found]
+        · have outside : best[index.toNat]? = none := Array.getElem?_eq_none (by omega)
+          simp [Nat.le_of_not_lt inside]
+      · simp only [same, ↓reduceIte]
+        split
+        · split <;> simp [same]
+        · simp [same]
+    rw [step]
+    by_cases same : index.toNat = i
+    · simp only [same, ↓reduceIte, List.any_cons, beq_self_eq_true, Bool.true_or]
+      split
+      · rw [Option.map_map]
+        congr 1
+        funext kept
+        exact keepEarliest_keepEarliest attestation kept
+      · rfl
+    · simp [same]
+
+/-- Keeping the earliest over a list of attestations of some length. -/
+private theorem foldl_keepEarliest_of_length (count : Nat) :
+    ∀ attestations : List (PendingAttestation preset), attestations.length = count →
+      (attestations.foldl (fun kept attestation => keepEarliest attestation kept) none = none ↔
+        attestations = []) ∧
+      ∀ earliest, attestations.foldl (fun kept attestation => keepEarliest attestation kept) none =
+          some earliest →
+        ∃ k, ∃ inside : k < attestations.length, attestations[k] = earliest ∧
+          (∀ other ∈ attestations, earliest.inclusionDelay ≤ other.inclusionDelay) ∧
+          ∀ k' (before : k' < k), earliest.inclusionDelay < attestations[k'].inclusionDelay := by
+  -- The fold reads the attestations from the left, so take off the last one.
+  induction count with
+  | zero =>
+    intro attestations counted
+    obtain rfl := List.eq_nil_of_length_eq_zero counted
+    simp
+  | succ count ih =>
+    intro attestations counted
+    obtain rfl | ⟨attestations, last, rfl⟩ := List.eq_nil_or_concat attestations
+    · cases counted
+    rw [List.concat_eq_append, List.length_append, List.length_singleton,
+      Nat.add_right_cancel_iff] at counted
+    have ih := ih attestations counted
+    rw [List.concat_eq_append, List.foldl_append, List.foldl_cons, List.foldl_nil]
+    refine ⟨?_, fun earliest kept => ?_⟩
+    · cases attestations.foldl (fun kept attestation => keepEarliest attestation kept) none with
+      | none => simp [keepEarliest]
+      | some first =>
+        simp only [keepEarliest]
+        split <;> simp
+    cases found : attestations.foldl (fun kept attestation => keepEarliest attestation kept)
+      none with
+    | none =>
+      rw [found] at kept
+      obtain rfl := ih.1.mp found
+      simp only [keepEarliest, Option.some.injEq] at kept
+      subst kept
+      exact ⟨0, by simp, rfl, by simp, fun _ before => absurd before (Nat.not_lt_zero _)⟩
+    | some first =>
+      obtain ⟨k, inside, named, least, strictly⟩ := ih.2 first found
+      rw [found] at kept
+      simp only [keepEarliest] at kept
+      split at kept
+      · rename_i earlier
+        simp only [Option.some.injEq] at kept
+        subst kept
+        refine ⟨attestations.length, by simp, by simp, fun other member => ?_,
+          fun k' before => ?_⟩
+        · rcases List.mem_append.mp member with member | member
+          · exact Nat.le_of_lt (Nat.lt_of_lt_of_le earlier (least other member))
+          · simp only [List.mem_singleton] at member
+            subst member
+            exact Nat.le_refl _
+        · rw [List.getElem_append_left before]
+          exact Nat.lt_of_lt_of_le earlier (least _ (List.getElem_mem _))
+      · rename_i later
+        simp only [Option.some.injEq] at kept
+        subst kept
+        refine ⟨k, (by simp; omega), (by rw [List.getElem_append_left inside]; exact named),
+          fun other member => ?_, fun k' before => ?_⟩
+        · rcases List.mem_append.mp member with member | member
+          · exact least other member
+          · simp only [List.mem_singleton] at member
+            subst member
+            exact Nat.le_of_not_lt later
+        · rw [List.getElem_append_left (by omega)]
+          exact strictly k' before
+
+/-- Keeping the earliest over a list of attestations, from none, keeps the first earliest one.
+
+It keeps none exactly when the list is empty.
+
+Otherwise it keeps one with the least inclusion delay, before which every one has a larger delay. -/
+theorem foldl_keepEarliest (attestations : List (PendingAttestation preset)) :
+    (attestations.foldl (fun kept attestation => keepEarliest attestation kept) none = none ↔
+      attestations = []) ∧
+    ∀ earliest, attestations.foldl (fun kept attestation => keepEarliest attestation kept) none =
+        some earliest →
+      ∃ k, ∃ inside : k < attestations.length, attestations[k] = earliest ∧
+        (∀ other ∈ attestations, earliest.inclusionDelay ≤ other.inclusionDelay) ∧
+        ∀ k' (before : k' < k), earliest.inclusionDelay < attestations[k'].inclusionDelay :=
+  foldl_keepEarliest_of_length _ attestations rfl
+
+/-- The attestations of some signed pairs that list a validator as a signer, in their order. -/
+def attestationsListing (signed : List (PendingAttestation preset × List ValidatorIndex))
+    (i : Nat) : List (PendingAttestation preset) :=
+  (signed.filter fun pair => pair.2.any fun signer => signer.toNat == i).map Prod.fst
+
+/-- The earliest inclusion of a validator, among the signed attestations, in their order.
+
+A validator of the registry has none exactly when no attestation lists it as a signer.
+
+Otherwise it has one of the attestations that list it, with the least inclusion delay.
+
+Every attestation before it in the list that lists the validator has a larger delay. -/
+theorem earliestInclusions_getD {size : Nat}
+    {signed : Array (PendingAttestation preset × List ValidatorIndex)} {i : Nat}
+    (inside : i < size) :
+    ((earliestInclusions size signed).getD i none = none ↔
+      ∀ pair ∈ signed.toList, ∀ signer ∈ pair.2, signer.toNat ≠ i) ∧
+    ∀ earliest, (earliestInclusions size signed).getD i none = some earliest →
+      ∃ k, ∃ listed : k < (attestationsListing signed.toList i).length,
+        (attestationsListing signed.toList i)[k] = earliest ∧
+        (∀ other ∈ attestationsListing signed.toList i,
+          earliest.inclusionDelay ≤ other.inclusionDelay) ∧
+        ∀ k' (before : k' < k), earliest.inclusionDelay <
+          (attestationsListing signed.toList i)[k'].inclusionDelay := by
+  -- The entry of the validator keeps the earliest over the attestations that list it.
+  have entry : ∀ (pairs : List (PendingAttestation preset × List ValidatorIndex))
+      (best : Array (Option (PendingAttestation preset))),
+      (pairs.foldl (init := best) fun best (attestation, signers) =>
+          signers.foldl (init := best) fun best index =>
+            match best.getD index.toNat none with
+            | some kept => if attestation.inclusionDelay < kept.inclusionDelay then
+                best.setIfInBounds index.toNat (some attestation) else best
+            | none => best.setIfInBounds index.toNat (some attestation))[i]? =
+        best[i]?.map fun kept => (attestationsListing pairs i).foldl
+          (fun kept attestation => keepEarliest attestation kept) kept := by
+    intro pairs
+    induction pairs with
+    | nil =>
+      intro best
+      simp [attestationsListing]
+    | cons pair pairs ih =>
+      intro best
+      obtain ⟨attestation, signers⟩ := pair
+      rw [List.foldl_cons, ih, foldl_signers_getElem?]
+      by_cases listed : signers.any (·.toNat == i)
+      · simp only [listed, ↓reduceIte, Option.map_map, attestationsListing, List.filter_cons,
+          List.map_cons, List.foldl_cons]
+        rfl
+      · simp only [listed, Bool.false_eq_true, ↓reduceIte, attestationsListing, List.filter_cons]
+  have kept : (earliestInclusions size signed)[i]? =
+      some ((attestationsListing signed.toList i).foldl
+        (fun kept attestation => keepEarliest attestation kept) none) := by
+    unfold earliestInclusions
+    rw [← Array.foldl_toList]
+    refine (entry signed.toList (Array.replicate size none)).trans ?_
+    simp [inside]
+  have found : (earliestInclusions size signed).getD i none =
+      (attestationsListing signed.toList i).foldl
+        (fun kept attestation => keepEarliest attestation kept) none := by
+    rw [Array.getD_eq_getD_getElem?, kept, Option.getD_some]
+  rw [found]
+  obtain ⟨empty, chosen⟩ := foldl_keepEarliest
+    (attestationsListing signed.toList i)
+  refine ⟨empty.trans ?_, chosen⟩
+  simp only [attestationsListing, List.map_eq_nil_iff, List.filter_eq_nil_iff, List.any_eq_true,
+    beq_iff_eq, not_exists, not_and]
 
 /-- One step of the inclusion rewards, for one attester.
 
