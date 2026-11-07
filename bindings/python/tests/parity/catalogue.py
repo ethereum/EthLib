@@ -1,5 +1,6 @@
 """The cases of the official test suites at every fork in scope."""
 
+import hashlib
 import json
 from dataclasses import dataclass
 from functools import cache
@@ -8,6 +9,11 @@ from pathlib import Path
 import archives
 
 EXECUTION = "execution-specs/tests@v21.0.2/fixtures"
+# The devnet pre-releases of execution-spec-tests, by the suite name of their report.
+DEVNETS = {
+    "tests-heze-devnet": "execution-specs/tests-heze-devnet@v3.0.0/fixtures",
+    "tests-bogota-devnet": "execution-specs/tests-bogota-devnet@v2.0.0/fixtures",
+}
 CONSENSUS = {
     "mainnet": "consensus-specs/v1.7.0-beta.4/mainnet",
     "minimal": "consensus-specs/v1.7.0-beta.4/minimal",
@@ -114,12 +120,25 @@ EXECUTION_FORKS = (
     "BPO1",
     "BPO1ToBPO2AtTime15k",
     "BPO2",
+    "BPO2ToBPO3AtTime15k",
+    "BPO3ToBPO4AtTime15k",
     "BPO2ToAmsterdamAtTime15k",
     "Amsterdam",
     "AmsterdamToBPOIncreaseAtTime15k",
     "AmsterdamBPOIncrease",
     "AmsterdamToBPODecreaseAtTime15k",
     "AmsterdamBPODecrease",
+)
+
+# The networks of the devnets from Bogota on, whose rules EthLib does not hold yet.
+# Each devnet gives Bogota its own EIPs, so no case of these networks runs.
+BOGOTA_NETWORKS = (
+    "AmsterdamToBogotaAtTime15k",
+    "Bogota",
+    "BogotaToBPOIncreaseAtTime15k",
+    "BogotaBPOIncrease",
+    "BogotaToBPODecreaseAtTime15k",
+    "BogotaBPODecrease",
 )
 
 # The forks of consensus-specs from Phase 0 to Heze.
@@ -155,14 +174,26 @@ class Case:
     @property
     def rank(self) -> int:
         """The place of the case's fork on the timeline."""
-        forks = {"execution-spec-tests": EXECUTION_FORKS, "legacytests": tuple(LEGACY_FORKS)}
+        execution = EXECUTION_FORKS + BOGOTA_NETWORKS
+        forks = {
+            "execution-spec-tests": execution,
+            **dict.fromkeys(DEVNETS, execution),
+            "legacytests": tuple(LEGACY_FORKS),
+        }
         return forks.get(self.suite, CONSENSUS_FORKS).index(self.fork)
 
 
-def execution_index() -> list[dict]:
-    """The entries of the index of the release: one fixture each, with its format and network."""
-    root = archives.unpack(EXECUTION, "fixtures/.meta/index.json")
-    return json.loads((root / "fixtures/.meta/index.json").read_text())["test_cases"]
+# The index of a release of execution-spec-tests, in its archive.
+INDEX = "fixtures/.meta/index.json"
+
+
+def execution_index(name: str = EXECUTION) -> list[dict]:
+    """The entries of the index of a release: one fixture each, with its format and network."""
+    return _read_index(archives.unpack(name, INDEX))
+
+
+def _read_index(root: Path) -> list[dict]:
+    return json.loads((root / INDEX).read_text())["test_cases"]
 
 
 def execution_cases() -> list[Case]:
@@ -178,6 +209,41 @@ def execution_cases() -> list[Case]:
         )
         for entry in execution_index()
         if entry["format"] in FORMATS and entry["fork"] in EXECUTION_FORKS
+    ]
+
+
+def devnet_cases(suite: str) -> list[Case]:
+    """The cases of a devnet whose identifier the pinned release lacks.
+
+    The list is computed once and kept in the cache, since both indexes take gigabytes to read.
+    """
+    # A case that the pinned release holds with another hash is a refill of the same test.
+    # The Heze devnet refills about 134,000 cases, which take about 11 hours on four workers.
+    name = DEVNETS[suite]
+    pinned = archives.fetch_archives.load(archives.REPO)[EXECUTION]
+    devnet = archives.fetch_archives.load(archives.REPO)[name]
+    scope = json.dumps([FORMATS, EXECUTION_FORKS, BOGOTA_NETWORKS]).encode()
+    key = hashlib.sha256(pinned.sha256.encode() + devnet.sha256.encode() + scope).hexdigest()
+    listing = archives.CACHE / f"{devnet.sha256}.new-cases-{key[:16]}.json"
+    # Both indexes are unpacked before the lock, since unpacking takes the same lock.
+    roots = archives.unpack(EXECUTION, INDEX), archives.unpack(name, INDEX)
+    # One process computes the list while the others wait, so one process reads the indexes.
+    with archives.fetch_archives.locked(archives.CACHE, devnet):
+        if not listing.is_file():
+            known = {
+                (entry["id"], entry["format"], entry["fork"]) for entry in _read_index(roots[0])
+            }
+            entries = [
+                (entry["fork"], entry["format"], entry["id"], "fixtures/" + entry["json_path"])
+                for entry in _read_index(roots[1])
+                if entry["format"] in FORMATS
+                and entry["fork"] in EXECUTION_FORKS + BOGOTA_NETWORKS
+                and (entry["id"], entry["format"], entry["fork"]) not in known
+            ]
+            listing.write_text(json.dumps(entries))
+    return [
+        Case(suite, "", fork, group, ident, path)
+        for fork, group, ident, path in json.loads(listing.read_text())
     ]
 
 

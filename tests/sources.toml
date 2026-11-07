@@ -12,6 +12,7 @@
 # A release archive that is too large to vendor is pinned in the table `archives`.
 # Its entry gives the URL, the size in bytes and the sha256 of the file.
 # An archive can come from an older release than the pin of its repository.
+# An archive of another release line, such as a devnet release, names its release.
 # A repository without releases gives the source archive of its pinned commit.
 # A test names the archive by its key, and reads it through scripts/fetch_archives.py.
 # The fetcher checks the size and the digest.
@@ -152,6 +153,21 @@ repository = "ethereum/execution-specs"
 url = "https://github.com/ethereum/execution-specs/releases/download/tests%40v21.0.2/fixtures.tar.gz"
 size = 939189561
 sha256 = "e2fa7ea2ea516459f9ab92284b2927892f318f4e1f78ca802cb05a6c3b479ed9"
+
+# The devnet pre-releases of execution-spec-tests, beside the pinned release line.
+[archives."execution-specs/tests-heze-devnet@v3.0.0/fixtures"]
+repository = "ethereum/execution-specs"
+release = "tests-heze-devnet@v3.0.0"
+url = "https://github.com/ethereum/execution-specs/releases/download/tests-heze-devnet%40v3.0.0/fixtures_heze-devnet.tar.gz"
+size = 1362887469
+sha256 = "dec34d67d34a0b51bfb0a2b82305aec9935188263d9b87fe386fa2f5dca91386"
+
+[archives."execution-specs/tests-bogota-devnet@v2.0.0/fixtures"]
+repository = "ethereum/execution-specs"
+release = "tests-bogota-devnet@v2.0.0"
+url = "https://github.com/ethereum/execution-specs/releases/download/tests-bogota-devnet%40v2.0.0/fixtures_bogota-devnet.tar.gz"
+size = 1541726145
+sha256 = "ce07656975fdd80bd2308453ab0910487ec452e380f2562b54aec2cff988c441"
 
 [archives."nist-cavp/gcmtestvectors"]
 source = "NIST CAVP"
