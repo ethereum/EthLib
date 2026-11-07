@@ -29,7 +29,7 @@ The finality delay is the distance from the finalized epoch, and the leak is a d
 
 The earliest inclusions have one entry for each validator, and each comes from a signed attestation.
 
-For a registry within its limit, the deltas add each reward to its balance without overflow.
+For a registry within its limit, deltas that apply add each reward to its balance below `2^64`.
 
 They then subtract each penalty, stopping at zero.
 
