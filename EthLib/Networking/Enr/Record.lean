@@ -83,6 +83,10 @@ inductive EnrError where
   | unknownScheme
   /-- The `secp256k1` value is missing, or it is not a compressed point of the curve. -/
   | invalidPublicKey
+  /-- The signature could not be made.
+
+  This happens for the private key zero, and with negligible probability when no nonce is usable. -/
+  | signing
   deriving DecidableEq
 
 /-- The key `id`, in ASCII. -/
@@ -109,6 +113,7 @@ def EnrError.code : EnrError → UInt32
   | .missingId => 13
   | .unknownScheme => 14
   | .invalidPublicKey => 15
+  | .signing => 16
 
 /-- Whether the key `a` comes before the key `b`, in lexicographic byte order. -/
 def keyLt (a b : ByteArray) : Prop := a.data.toList < b.data.toList

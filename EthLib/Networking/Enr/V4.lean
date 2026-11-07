@@ -3,6 +3,7 @@ module
 public import EthLib.Networking.Enr.Record
 public import EthLib.Cryptography.Secp256k1.Address
 public import EthLib.Cryptography.Secp256k1.Ecdsa
+public import EthLib.Cryptography.Secp256k1.Sign
 
 /-!
 # `Networking.Enr.V4`
@@ -86,5 +87,19 @@ def nodeId (r : Enr) : Except EnrError (Vector UInt8 32) := do
   | .affine x y => return Hash.Keccak.keccak256 (publicKeyBytes x y)
   -- The point decoder never returns the point at infinity.
   | .infinity => throw .invalidPublicKey
+
+/-- The record, signed with the private key `sk` by the "v4" scheme.
+
+It signs the Keccak-256 hash of the RLP encoding of the content, with the nonce of RFC 6979.
+
+The signature is `r` then `s`, each in 32 big-endian bytes, and `s` is low.
+
+It keeps the sequence number and the pairs.
+
+So the caller puts the `id` pair and the `secp256k1` pair of `sk G` among them, in key order. -/
+def signV4 (sk : Fn) (r : Enr) : Except EnrError Enr := do
+  let content ← (Serialization.Rlp.encode r.content).mapError .rlp
+  let (rr, ss, _) ← (Ecdsa.sign sk (Hash.Keccak.keccak256 content)).mapError fun _ => .signing
+  return { r with signature := ⟨(Base.natToBytes 32 rr.val ++ Base.natToBytes 32 ss.val).toArray⟩ }
 
 end EthLib.Networking.Enr

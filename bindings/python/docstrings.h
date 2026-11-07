@@ -218,6 +218,9 @@
 #define DOC_enr_node_id \
   "The node ID of a \"v4\" record: the Keccak-256 hash of `x` then `y` of its public key."
 
+#define DOC_enr_sign_v4 \
+  "The bytes of a record, signed again with a private key by the \"v4\" scheme."
+
 #define DOC_enr_consensus_entries \
   "The consensus entries of a record at the named fork, with `count` attestation subnets."
 

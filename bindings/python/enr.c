@@ -26,6 +26,12 @@ eth_enr_node_id(
 );
 
 extern lean_object*
+eth_enr_sign_v4(
+  lean_object* secret_key,
+  lean_object* record
+);
+
+extern lean_object*
 eth_enr_consensus_entries(
   lean_object* fork,
   uint64_t count,
@@ -101,6 +107,28 @@ py_enr_node_id(
   lean_object* record = parse_record_arg(args, "record");
   if (!record) return NULL;
   return except_into_pybytes(eth_enr_node_id(record), ENR_ERROR);
+}
+
+PyObject*
+py_enr_sign_v4(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject* key;
+  PyObject* record;
+  if (!PyArg_ParseTuple(args, "OO", &key, &record)) return NULL;
+  if (!PyBytes_Check(key)) {
+    PyErr_SetString(PyExc_TypeError, "secret_key must be bytes");
+    return NULL;
+  }
+  if (!PyBytes_Check(record)) {
+    PyErr_SetString(PyExc_TypeError, "record must be bytes");
+    return NULL;
+  }
+  lean_object* res = eth_enr_sign_v4(
+    mk_bytearray((const uint8_t*) PyBytes_AS_STRING(key), PyBytes_GET_SIZE(key)),
+    mk_bytearray((const uint8_t*) PyBytes_AS_STRING(record), PyBytes_GET_SIZE(record)));
+  return except_into_pybytes(res, ENR_ERROR);
 }
 
 PyObject*
