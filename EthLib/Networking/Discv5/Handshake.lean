@@ -54,7 +54,9 @@ inductive HandshakeError where
   | keyAgreement (error : Secp256k1Error)
   /-- The key derivation failed. -/
   | keyDerivation (error : Hkdf.HkdfError)
-  /-- The ID signature could not be made, which happens only for the private key zero. -/
+  /-- The ID signature could not be made.
+
+  This happens for the private key zero, and with negligible probability when no nonce is usable. -/
   | signing (error : Secp256k1Error)
   /-- The ephemeral public key has `size` bytes, not the 33 of a compressed point. -/
   | ephemeralKeySize (size : Nat)
