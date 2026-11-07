@@ -1057,6 +1057,26 @@ No theorem says what `ofJson` does on a document that another client wrote.
 The Python suite checks each condition and each malformed field against cases worked out from the EIP.
 With release archives enabled, it runs the 38 interchange tests of `eth-clients/slashing-protection-interchange-tests` as a signer that keeps every message.
 
+### Optimistic sync
+
+`Consensus/ForkChoice/OptimisticSync.lean` holds the optimistic sync of Bellatrix: the blocks that a node imports before the execution layer judges their payload.
+An optimistic store keeps their roots beside the blocks of the node, and the rules read only that store.
+The theorems are in `Consensus/Proofs/ForkChoice/OptimisticSync.lean`, and each assumes only that its function succeeds.
+
+`isOptimisticCandidateBlock_eq_ok_iff` states when a block may be imported optimistically: its known parent carries a payload, or its slot is far enough before the clock.
+`latestVerifiedAncestor_spec` shows that the latest verified ancestor of a block is reached through optimistic blocks only.
+The same theorem shows that this ancestor is not optimistic, or has the zero parent root.
+`onValidPayload_spec` shows that a valid payload removes exactly the block and its known ancestors from the optimistic set.
+`onInvalidatedPayload_spec` shows that the first invalid block removes exactly the optimistic roots whose chain holds it.
+`isOptimisticRestrictedDomain_iff` lists the seven domain types under which an optimistic validator may not sign.
+
+The rule of the latest valid hash, which names the first invalid block, is the one of `Consensus/ForkChoice/Optimistic.lean`, and these theorems take that block as given.
+No theorem relates the optimistic set to the blocks that the store of the fork choice removes.
+The second case of an optimistic node, a block tree without a viable branch, is not defined.
+Neither is the re-run of the merge block checks, nor the answer to an execution layer that fails to respond.
+From Gloas these rules are not specified.
+The Python suite checks each rule on Bellatrix blocks built in the test, with roots from the SSZ export.
+
 ### Light client
 
 A light client accepts an update that the sync committee signed, and moves its store by it.
