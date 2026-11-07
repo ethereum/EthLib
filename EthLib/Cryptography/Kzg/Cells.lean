@@ -255,13 +255,16 @@ def verifyCellKzgProofBatchImpl (setup : TrustedSetup)
   if commitments.zipIdx.any (fun (c, i) => commitments.idxOf? c ≠ some i) then
     throw .duplicateCommitments
 
-  -- The verification equation that we will check is pairing (LL, LR) = pairing (RL, [1]), where
+  -- The verification equation that we will check is pairing (LL, LR) = pairing (RL, [1]), where:
+  --
+  -- ```text
   -- LL = sum_k r^k proofs[k],
   -- LR = [s^n]
   -- RL = RLC - RLI + RLP, where
   --   RLC = sum_i weights[i] commitments[i]
   --   RLI = [sum_k r^k interpolation_poly_k(s)]
   --   RLP = sum_k (r^k * h_k^n) proofs[k]
+  -- ```
   --
   -- Here, the variables have the following meaning:
   -- - k < cellIndices.size is an index iterating over all cells in the input
@@ -338,10 +341,12 @@ Each cell comes with a commitment, a cell index and a proof.
 
 The proof shows that the cell holds the values of the committed polynomial on its coset.
 
-The check is the universal verification equation of
-<https://ethresear.ch/t/a-universal-verification-equation-for-data-availability-sampling/13240>.
+The check is the [universal verification equation][uve] of data availability sampling.
 
-It removes repeated commitments, then runs the core check. -/
+It removes repeated commitments, then runs the core check.
+
+[uve]: https://ethresear.ch/t/a-universal-verification-equation-for-data-availability-sampling/13240
+-/
 def verifyCellKzgProofBatch (setup : TrustedSetup)
     (commitmentsBytes : Array Bytes48)
     (cellIndices : Array CellIndex)

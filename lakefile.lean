@@ -4,15 +4,18 @@ open Lake DSL System
 /-!
 Lake build for `EthLib`.
 
-The package is pure Lean — no external C dependencies. Lake produces:
+The package is pure Lean, with no external C dependencies.
+
+Lake produces:
 
 * per-Lean-module `.c.o.export` object files in `.lake/build/ir/`,
 * per-module `.olean` files in `.lake/build/lib/lean/`.
 
-The Python C extension under `bindings/python/` is built by `setup.py`
-(not Lake): it enumerates the `.c.o.export` files and the Lean
-toolchain's static archives and statically links them all into a single
-self-contained Python extension.
+`setup.py` builds the Python C extension under `bindings/python/`, not Lake.
+
+It enumerates the `.c.o.export` files and the Lean toolchain's static archives.
+
+It links them all statically into a single self-contained Python extension.
 -/
 
 package «EthLib» where
@@ -73,9 +76,11 @@ lean_lib «Exports» where
     `EthLib.Serialization.Exports, `EthLib.Engine.Exports]
   precompileModules := true
 
-/-- Checks the compiled declarations of every library: their axioms, and any
-construct the kernel cannot unfold or the compiler runs differently. Run it
-after `lake build` with `lake exe check-decls`. -/
+/-- Checks the compiled declarations of every library.
+
+It checks their axioms, and any construct the kernel cannot unfold or the compiler runs differently.
+
+Run it after `lake build` with `lake exe check-decls`. -/
 lean_exe «check-decls» where
   srcDir := "scripts"
   root := `CheckDecls
@@ -93,8 +98,9 @@ lean_exe «gen-bindings» where
   root := `GenBindings
   supportInterpreter := true
 
-/-- Declarations the check must catch, and one module it must pass. Not a
-default target: `scripts/test_check_decls.sh` builds and checks it. -/
+/-- Declarations the check must catch, and one module it must pass.
+
+Not a default target: `scripts/test_check_decls.sh` builds and checks it. -/
 lean_lib «CheckDeclsTest» where
   srcDir := "scripts"
   roots := #[`CheckDeclsTest, `CheckDeclsForeign]

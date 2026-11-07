@@ -130,8 +130,9 @@ private theorem msmMaxBits_bound (vals : Array Nat) (n : Nat) :
   exact maxBitsF_bound vals (List.range' 0 n) 0 j
     (List.mem_range'_1.mpr ⟨Nat.zero_le j, by omega⟩)
 
-/-- The base-`2⁸` digit decomposition that drives the window
-recomposition: shifting eight fewer bits is `256·(shift) + window`. -/
+/-- The base-`2⁸` digit decomposition that drives the window recomposition.
+
+Shifting eight fewer bits is `256·(shift) + window`. -/
 private theorem shift_window (s a : Nat) :
     s >>> a = (1 <<< 8) * (s >>> (a + 8)) + ((s >>> a) &&& (1 <<< 8 - 1)) := by
   rw [Nat.shiftRight_add, show ((1 : Nat) <<< 8 - 1) = 2 ^ 8 - 1 from rfl,
@@ -153,8 +154,10 @@ private theorem doubleFold_spec {a : G1} (h : Valid a) (m : Nat) :
     rw [toPoint_double ih.1, ih.2, ← two_nsmul, ← mul_nsmul', ← pow_succ']
 
 /-- The bucket fold: sizes, validity, and the partition sums.
-Bucket `0` is never written and stays `zero`; bucket `v > 0` collects
-exactly the points whose window value is `v`. -/
+
+Bucket `0` is never written and stays `zero`.
+
+Bucket `v > 0` collects exactly the points whose window value is `v`. -/
 private theorem msmBuckets_spec (points : Array G1) (vals : Array Nat)
     (n k : Nat) (hval : ∀ j, j < n → Valid points[j]!) :
     (msmBuckets points vals n k).size = 1 <<< 8
@@ -275,8 +278,10 @@ private def msmRunningT (bs : Array G1) (t : Nat) : MProd G1 G1 :=
 private theorem msmRunning_eq_T (bs : Array G1) :
     msmRunning bs = msmRunningT bs (1 <<< 8 - 1) := rfl
 
-/-- The running-sum invariant: after `t` iterations the second
-component is the plain suffix sum and the first the weighted one. -/
+/-- The running-sum invariant.
+
+After `t` iterations the second component is the plain suffix sum and the first the weighted one.
+-/
 private theorem msmRunningT_spec (bs : Array G1)
     (hval : ∀ v, v < 1 <<< 8 → Valid bs[v]!) :
     ∀ t, t ≤ 1 <<< 8 - 1 →
@@ -411,8 +416,9 @@ private def msmAcc (points : Array G1) (vals : Array Nat)
     (n nW t : Nat) : G1 :=
   (List.range' 0 t).foldl (msmWindowStep points vals n nW) zero
 
-/-- The window-recomposition invariant: after `t` windows, the
-accumulator holds `Σ_j (sⱼ >>> ((nW − t)·8)) · Pⱼ`. -/
+/-- The window-recomposition invariant.
+
+After `t` windows, the accumulator holds `Σ_j (sⱼ >>> ((nW − t)·8)) · Pⱼ`. -/
 private theorem msmAcc_spec (points : Array G1) (vals : Array Nat)
     (n nW : Nat) (hval : ∀ j, j < n → Valid points[j]!)
     (hbound : ∀ j, j < n → vals[j]! < 2 ^ (nW * 8)) :
@@ -492,8 +498,9 @@ private theorem getElem!_map_val (scalars : Array Fr) (j : Nat) (hj : j < scalar
   rw [getElem!_pos (scalars.map Fr.val) j (by simpa using hj), getElem!_pos scalars j hj,
     Array.getElem_map]
 
-/-- **Correctness of the spec's Pippenger MSM**: for valid points,
-`msm` computes `Σ_j [scalars[j]] points[j]` in the curve group. -/
+/-- **Correctness of the spec's Pippenger MSM**.
+
+For valid points, `msm` computes `Σ_j [scalars[j]] points[j]` in the curve group. -/
 theorem toPoint_msm (points : Array G1) (scalars : Array Fr)
     (hval : ∀ j, j < (if points.size ≤ scalars.size then points.size
       else scalars.size) → Valid points[j]!) :

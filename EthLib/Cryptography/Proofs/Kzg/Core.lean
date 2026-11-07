@@ -20,8 +20,7 @@ namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 
-/-- `validateKzgG1` agrees with `validateKzgG1Point` on whether the input
-bytes are valid. -/
+/-- `validateKzgG1` agrees with `validateKzgG1Point` on whether the input bytes are valid. -/
 theorem validateKzgG1_eq_validateKzgG1Point (b : Bytes48) :
     validateKzgG1 b = (validateKzgG1Point b).isOk := by
   rw [validateKzgG1, validateKzgG1Point]
@@ -30,8 +29,9 @@ theorem validateKzgG1_eq_validateKzgG1Point (b : Bytes48) :
   · rw [Bls.G1.keyValidate]
     cases Bls.G1.keyValidatePoint ⟨b.toArray⟩ <;> rfl
 
-/-- A successful `validateKzgG1Point` implies that `validateKzgG1` holds on
-the input bytes and the returned `G1` point is in the prime-order subgroup. -/
+/-- A successful `validateKzgG1Point` implies that `validateKzgG1` holds on the input bytes.
+
+It also implies that the returned `G1` point is in the prime-order subgroup. -/
 theorem validateKzgG1Point_ok_valid {b : Bytes48} {p : Bls.G1}
     (h : validateKzgG1Point b = .ok p) :
     validateKzgG1 b = true ∧ Bls.G1.inSubgroup p = true := by
@@ -98,8 +98,7 @@ theorem parseBytes_eq_error_iff {n : Nat} {err : Nat → KzgError} {b : ByteArra
     · rintro ⟨_, rfl⟩
       rfl
 
-/-- `bytesToKzgCommitment` succeeds exactly on valid bytes, and returns
-them unchanged. -/
+/-- `bytesToKzgCommitment` succeeds exactly on valid bytes, and returns them unchanged. -/
 theorem bytesToKzgCommitment_ok_iff {b : Bytes48} {c : KZGCommitment} :
     bytesToKzgCommitment b = .ok c ↔ validateKzgG1 b ∧ c = b := by
   rw [bytesToKzgCommitment]
@@ -118,8 +117,7 @@ theorem bytesToKzgCommitment_ok_iff {b : Bytes48} {c : KZGCommitment} :
     · rintro ⟨hv, _⟩
       exact absurd hv h
 
-/-- `bytesToKzgProof` succeeds exactly on valid bytes, and returns them
-unchanged. -/
+/-- `bytesToKzgProof` succeeds exactly on valid bytes, and returns them unchanged. -/
 theorem bytesToKzgProof_ok_iff {b : Bytes48} {p : KZGProof} :
     bytesToKzgProof b = .ok p ↔ validateKzgG1 b ∧ p = b := by
   rw [bytesToKzgProof]
@@ -170,8 +168,8 @@ theorem g1LincombPoints_eq_msm {points : Array Bls.G1} {scalars : Array Fr}
     rw [hm]
   · rw [ite_eq_right h0]
 
-/-- `verifyBlobKzgProofBatch` rejects a commitments array whose length
-does not match the blobs array. -/
+/-- `verifyBlobKzgProofBatch` rejects a commitments array whose length differs from the blobs array.
+-/
 theorem verifyBlobKzgProofBatch_commitments_mismatch (setup : TrustedSetup)
     {blobs : Array Blob} {commitmentsBytes : Array Bytes48}
     (proofsBytes : Array Bytes48)
@@ -181,8 +179,8 @@ theorem verifyBlobKzgProofBatch_commitments_mismatch (setup : TrustedSetup)
           commitmentsBytes.size) := by
   simp [verifyBlobKzgProofBatch, h, throw_bind]
 
-/-- `verifyBlobKzgProofBatch` rejects a proofs array whose length does
-not match the blobs array. -/
+/-- `verifyBlobKzgProofBatch` rejects a proofs array whose length does not match the blobs array.
+-/
 theorem verifyBlobKzgProofBatch_proofs_mismatch (setup : TrustedSetup)
     {blobs : Array Blob} {commitmentsBytes proofsBytes : Array Bytes48}
     (hc : commitmentsBytes.size = blobs.size)

@@ -762,7 +762,7 @@
       {"constructor": "invalidTrustedSetup", "code": 23}]}],
    "error_class": "KzgError",
    "docstring":
-   "Verify that a set of cells belong to their commitments.\n\nEach cell comes with a commitment, a cell index and a proof.\n\nThe proof shows that the cell holds the values of the committed polynomial on its coset.\n\nThe check is the universal verification equation of\n<https://ethresear.ch/t/a-universal-verification-equation-for-data-availability-sampling/13240>.\n\nIt removes repeated commitments, then runs the core check."},
+   "Verify that a set of cells belong to their commitments.\n\nEach cell comes with a commitment, a cell index and a proof.\n\nThe proof shows that the cell holds the values of the committed polynomial on its coset.\n\nThe check is the [universal verification equation][uve] of data availability sampling.\n\nIt removes repeated commitments, then runs the core check.\n\n[uve]: https://ethresear.ch/t/a-universal-verification-equation-for-data-availability-sampling/13240"},
   {"summary":
    "Recover every cell and every cell proof from at least half of the cells.",
    "signature":
@@ -797,7 +797,7 @@
       {"constructor": "invalidTrustedSetup", "code": 23}]}],
    "error_class": "KzgError",
    "docstring":
-   "Recover every cell and every cell proof from at least half of the cells.\n\nThe recovery uses FFTs, which is faster than Lagrange interpolation.\n\nThe method is the one of\n<https://ethresear.ch/t/reed-solomon-erasure-code-recovery-in-n-log-2-n-time-with-ffts/3039>."},
+   "Recover every cell and every cell proof from at least half of the cells.\n\nThe recovery uses FFTs, which is faster than Lagrange interpolation.\n\nThe method is the one of [the note on Reed–Solomon recovery with FFTs][rs].\n\n[rs]: https://ethresear.ch/t/reed-solomon-erasure-code-recovery-in-n-log-2-n-time-with-ffts/3039"},
   {"summary": "The public key grown from a seed.",
    "signature": "(seed: bytes) -> bytes",
    "operation": "EthLib.Cryptography.Xmss.Exports.keyGenExport",

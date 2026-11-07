@@ -312,8 +312,9 @@ private theorem dite_lt_size_getElem! (p : PolynomialCoeff) (i : Nat) :
   · rw [dite_eq_left h, getElem!_pos p i h]
   · rw [dite_eq_right h, getElem!_of_ge_size p h]
 
-/-- Coefficient `i` of `addPolynomialcoeff a b` is `a[i]! + b[i]!` for all `i`
-(since out-of-bounds accesses default to `Fr.zero`). -/
+/-- Coefficient `i` of `addPolynomialcoeff a b` is `a[i]! + b[i]!` for all `i`.
+
+This holds since out-of-bounds accesses default to `Fr.zero`. -/
 @[simp] theorem addPolynomialcoeff_getElem! (a b : PolynomialCoeff) (i : Nat) :
     (addPolynomialcoeff a b)[i]! = a[i]! + b[i]! := by
   rw [addPolynomialcoeff]
@@ -340,8 +341,9 @@ private theorem dite_lt_size_getElem! (p : PolynomialCoeff) (i : Nat) :
       exact (Fr.add_zero _).symm
 
 
-/-- Direct monomial sum evaluation `∑_{i < n} p[i] * x^i` of the first `n`
-coefficients of `p` at `x`. -/
+/-- Direct monomial sum evaluation `∑_{i < n} p[i] * x^i`.
+
+It evaluates the first `n` coefficients of `p` at `x`. -/
 def evalCoeffPolyAux (p : PolynomialCoeff) (x : Fr) : Nat → Fr
   | 0 => Fr.zero
   | n + 1 => evalCoeffPolyAux p x n + p[n]! * Fr.powNat x n
@@ -375,8 +377,7 @@ private theorem evalCoeffPolyAux_of_le (p : PolynomialCoeff) (x : Fr) {n : Nat}
       rw [evalCoeffPolyAux, ih hn, getElem!_of_ge_size p (by omega),
           Fr.zero_mul, Fr.add_zero]
 
-/-- Evaluating the sum of two coefficient-form polynomials equals the sum of
-their evaluations. -/
+/-- Evaluating the sum of two coefficient-form polynomials equals the sum of their evaluations. -/
 theorem evalCoeffPoly_addPolynomialcoeff (a b : PolynomialCoeff) (x : Fr) :
     evalCoeffPoly (addPolynomialcoeff a b) x =
       evalCoeffPoly a x + evalCoeffPoly b x := by
@@ -452,8 +453,9 @@ private theorem addPolynomialcoeff_replicate_zero (m n : Nat) :
       rw [getElem!_pos _ i hi2, Array.getElem_replicate]
     rw [hm, hn, hmn, Fr.add_zero]
 
-/-- `multiplyPolynomialcoeff` rejects polynomials whose combined length
-exceeds `FIELD_ELEMENTS_PER_EXT_BLOB`. -/
+/-- `multiplyPolynomialcoeff` rejects polynomials of too great a combined length.
+
+That is a combined length above `FIELD_ELEMENTS_PER_EXT_BLOB`. -/
 theorem multiplyPolynomialcoeff_too_large {a b : PolynomialCoeff}
     (h : a.size + b.size > FIELD_ELEMENTS_PER_EXT_BLOB) :
     multiplyPolynomialcoeff a b =
@@ -475,8 +477,8 @@ private theorem foldl_mulFoldStep_empty_right (a : PolynomialCoeff) (k : Nat) :
     congr 1
     omega
 
-/-- Multiplying a bounded polynomial by `#[]` produces a zero polynomial of size
-`max (a.size - 1) 1`. -/
+/-- Multiplying a bounded polynomial by `#[]` gives a zero polynomial of size `max (a.size - 1) 1`.
+-/
 @[simp] theorem multiplyPolynomialcoeff_empty_right {a : PolynomialCoeff}
     (ha : a.size ≤ FIELD_ELEMENTS_PER_EXT_BLOB) :
     multiplyPolynomialcoeff a #[] =
@@ -505,8 +507,9 @@ private theorem size_foldl_mulFoldStep (a b : PolynomialCoeff) (k : Nat) :
     · rw [ite_eq_right hk]
       omega
 
-/-- A successful `multiplyPolynomialcoeff` returns `#[Fr.zero]` (size `1`) when
-`a` is empty, and a polynomial of size `max (a.size + b.size - 1) 1` otherwise. -/
+/-- A successful `multiplyPolynomialcoeff` returns `#[Fr.zero]` (size `1`) when `a` is empty.
+
+Otherwise it returns a polynomial of size `max (a.size + b.size - 1) 1`. -/
 theorem size_multiplyPolynomialcoeff {a b p : PolynomialCoeff}
     (h : multiplyPolynomialcoeff a b = .ok p) :
     p.size = if a.isEmpty then 1 else max (a.size + b.size - 1) 1 := by
@@ -543,8 +546,9 @@ private theorem getElem!_foldl_mulFoldStep_before_top (a b : PolynomialCoeff)
     rw [size_foldl_mulFoldStep a b k, ite_eq_right hk]
     omega
 
-/-- For non-empty inputs `a` and `b`, the leading coefficient of
-`multiplyPolynomialcoeff a b` is `a[a.size - 1]! * b[b.size - 1]!`. -/
+/-- Take non-empty inputs `a` and `b`.
+
+The leading coefficient of `multiplyPolynomialcoeff a b` is `a[a.size - 1]! * b[b.size - 1]!`. -/
 theorem leadingCoeff_multiplyPolynomialcoeff {a b p : PolynomialCoeff}
     (ha : a.isEmpty = false) (hb : b.isEmpty = false)
     (h : multiplyPolynomialcoeff a b = .ok p) :
@@ -609,8 +613,9 @@ private theorem foldlM_vanishing_size_and_lead (xs : List Fr)
       simp only [hsz, hq_sz, List.length_cons]
       omega
 
-/-- A successful `vanishingPolynomialcoeff xs` produces a polynomial of size
-`xs.size + 1` with leading coefficient `Fr.one`. -/
+/-- A successful `vanishingPolynomialcoeff xs` produces a polynomial of size `xs.size + 1`.
+
+Its leading coefficient is `Fr.one`. -/
 theorem size_and_leadingCoeff_vanishingPolynomialcoeff
     {xs : Array Fr} {p : PolynomialCoeff}
     (h : vanishingPolynomialcoeff xs = .ok p) :
@@ -622,8 +627,9 @@ theorem size_and_leadingCoeff_vanishingPolynomialcoeff
   refine ⟨hsz', ?_⟩
   simpa [hsz'] using hlead
 
-/-- A successful `multiplyPolynomialcoeff` implies the input sizes sum to at
-most `FIELD_ELEMENTS_PER_EXT_BLOB`. -/
+/-- A successful `multiplyPolynomialcoeff` implies a bound on the input sizes.
+
+They sum to at most `FIELD_ELEMENTS_PER_EXT_BLOB`. -/
 theorem multiplyPolynomialcoeff_le_of_ok {a b p : PolynomialCoeff}
     (h : multiplyPolynomialcoeff a b = .ok p) :
     a.size + b.size ≤ FIELD_ELEMENTS_PER_EXT_BLOB :=
@@ -631,8 +637,9 @@ theorem multiplyPolynomialcoeff_le_of_ok {a b p : PolynomialCoeff}
     rw [multiplyPolynomialcoeff_too_large (by omega)] at h
     cases h
 
-/-- `multiplyPolynomialcoeff` succeeds whenever the input sizes sum to at
-most `FIELD_ELEMENTS_PER_EXT_BLOB`. -/
+/-- `multiplyPolynomialcoeff` succeeds whenever the input sizes sum to at most a bound.
+
+The bound is `FIELD_ELEMENTS_PER_EXT_BLOB`. -/
 theorem multiplyPolynomialcoeff_ok_of_le {a b : PolynomialCoeff}
     (h : a.size + b.size ≤ FIELD_ELEMENTS_PER_EXT_BLOB) :
     ∃ p, multiplyPolynomialcoeff a b = .ok p ∧
@@ -704,8 +711,9 @@ theorem vanishingPolynomialcoeff_lt_of_ok {xs : Array Fr} {p : PolynomialCoeff}
     decide
   · simpa [Nat.add_comm] using hlt
 
-/-- `vanishingPolynomialcoeff xs` succeeds with a monic polynomial of size
-`xs.size + 1` whenever `xs.size + 1 < FIELD_ELEMENTS_PER_EXT_BLOB`. -/
+/-- `vanishingPolynomialcoeff xs` succeeds with a monic polynomial of size `xs.size + 1`.
+
+This holds whenever `xs.size + 1 < FIELD_ELEMENTS_PER_EXT_BLOB`. -/
 theorem vanishingPolynomialcoeff_ok_of_lt {xs : Array Fr}
     (h : xs.size + 1 < FIELD_ELEMENTS_PER_EXT_BLOB) :
     ∃ p, vanishingPolynomialcoeff xs = .ok p ∧
@@ -819,8 +827,9 @@ private theorem evalCoeffPoly_foldl_mulFoldStep (a b : PolynomialCoeff) (x : Fr)
     congr 1
     rw [Fr.mul_assoc, Fr.mul_comm (evalCoeffPoly b x)]
 
-/-- Evaluating the product of two coefficient-form polynomials at `x` equals the
-product of their evaluations at `x`. -/
+/-- Evaluating the product of two coefficient-form polynomials at `x` gives a product.
+
+It is the product of their evaluations at `x`. -/
 theorem evalPolyAt_mulPoly {a b p : PolynomialCoeff} (x : Fr)
     (h : multiplyPolynomialcoeff a b = .ok p) :
     evalPolyAt p x = evalPolyAt a x * evalPolyAt b x := by
@@ -886,8 +895,9 @@ theorem vanishingPolynomialcoeff_eval_root {zs : Array Fr} {v : PolynomialCoeff}
   rw [vanishingPolynomialcoeff, ← Array.foldlM_toList] at hv
   exact foldlM_vanishing_eval_root zs.toList #[Fr.one] v hz hv
 
-/-- `dividePolynomialcoeff` rejects an empty divisor, or a divisor whose
-leading coefficient is zero when `b.size ≤ a.size`. -/
+/-- `dividePolynomialcoeff` rejects an empty divisor.
+
+When `b.size ≤ a.size`, it also rejects a divisor whose leading coefficient is zero. -/
 theorem dividePolynomialcoeff_zero_divisor (a b : PolynomialCoeff)
     (h : b.size = 0 ∨ (b.size ≤ a.size ∧ b[b.size - 1]!.isZero = true)) :
     dividePolynomialcoeff a b = .error .zeroDivisorPolynomial := by
@@ -902,8 +912,9 @@ theorem dividePolynomialcoeff_zero_divisor (a b : PolynomialCoeff)
       simp [dividePolynomialcoeff, hb0, hnotlt, hz, Bind.bind, Except.bind,
         throw, throwThe, MonadExceptOf.throw]
 
-/-- When the dividend has strictly fewer coefficients than the divisor,
-`dividePolynomialcoeff` returns the empty quotient `#[]`. -/
+/-- Let the dividend have strictly fewer coefficients than the divisor.
+
+Then `dividePolynomialcoeff` returns the empty quotient `#[]`. -/
 theorem dividePolynomialcoeff_lt_size {a b : PolynomialCoeff}
     (hlt : a.size < b.size) :
     dividePolynomialcoeff a b = .ok #[] := by
@@ -919,9 +930,11 @@ theorem interpolatePolynomialcoeff_size_mismatch {xs ys : Array Fr}
   rw [dite_eq_left h]
   rfl
 
-/-- Element `i` of `computePowersAux x current n` is `current * x ^ i`
-(stated with an `if` so that it also holds for non-canonical `current`,
-which is returned unchanged at index `0`). -/
+/-- Element `i` of `computePowersAux x current n` is `current * x ^ i`.
+
+It is stated with an `if`, so that it also holds for non-canonical `current`.
+
+Such a `current` is returned unchanged at index `0`. -/
 theorem getElem_computePowersAux (x current : Fr) (n i : Nat)
     (h : i < (computePowersAux x current n).length) :
     (computePowersAux x current n)[i] =
@@ -942,8 +955,7 @@ theorem getElem_computePowersAux (x current : Fr) (n i : Nat)
         rw [ite_eq_right (Nat.succ_ne_zero i), ite_eq_right (Nat.succ_ne_zero (i + 1)),
           Fr.powNat_succ x (i + 1), ← Fr.mul_assoc]
 
-/-- `computePowers x n` is `[x^0, x^1, ..., x^(n-1)]`, as its docstring
-claims. -/
+/-- `computePowers x n` is `[x^0, x^1, ..., x^(n-1)]`, as its docstring claims. -/
 theorem getElem_computePowers (x : Fr) (n i : Nat)
     (h : i < (computePowers x n).size) :
     (computePowers x n)[i] = Fr.powNat x i := by
@@ -965,8 +977,7 @@ theorem computeRootsOfUnity_def (order : Nat) :
           (Fr.ofNat ((BLS_MODULUS - 1) / order))) order := by
   rfl
 
-/-- A successful `blobToPolynomial` returns exactly
-`FIELD_ELEMENTS_PER_BLOB` field elements. -/
+/-- A successful `blobToPolynomial` returns exactly `FIELD_ELEMENTS_PER_BLOB` field elements. -/
 theorem size_blobToPolynomial (blob : Blob) (poly : Polynomial)
     (h : blobToPolynomial blob = .ok poly) :
     poly.size = FIELD_ELEMENTS_PER_BLOB :=
@@ -1052,8 +1063,7 @@ theorem foldl_zip_zip_eq_barycentricSumInvAux (polynomial domain inverses : Arra
   rw [getElem!_pos polynomial k (by omega), getElem!_pos domain k hk',
     getElem!_pos inverses k (by omega)]
 
-/-- When `z` is the `i`-th element of `domain`, evaluation is a table
-lookup. -/
+/-- When `z` is the `i`-th element of `domain`, evaluation is a table lookup. -/
 theorem evaluatePolynomialInEvaluationFormAux_fastPath
     (polynomial domain : Array Fr) (z : Fr) (i : Nat)
     (hsize : polynomial.size = domain.size)
@@ -1073,8 +1083,8 @@ theorem evaluatePolynomialInEvaluationFormAux_fastPath
   simp only [hfind]
   rw [getElem!_pos polynomial _ hi]
 
-/-- When `z` is the `i`-th element of the evaluation domain, evaluating
-the polynomial at `z` is a table lookup. -/
+/-- When `z` is the `i`-th element of the evaluation domain, evaluating at `z` is a table lookup.
+-/
 theorem evaluatePolynomialInEvaluationForm_fastPath
     (polynomial : Polynomial) (z : Fr) (i : Nat)
     (hsize : polynomial.size = FIELD_ELEMENTS_PER_BLOB)
@@ -1087,16 +1097,18 @@ theorem evaluatePolynomialInEvaluationForm_fastPath
 
 -- Proofs about barycentricSumAux and evaluation outside of the fast path--
 
-/-- Base case of the barycentric-sum fold: with no remaining terms, the
-accumulator is returned unchanged. Registered as `simp` so downstream
-reasoning normalizes the empty-count case automatically. -/
+/-- Base case of the barycentric-sum fold.
+
+With no remaining terms, the accumulator is returned unchanged.
+
+Registered as `simp`, so downstream reasoning normalizes the empty-count case automatically. -/
 @[simp] theorem barycentricSumAux_zero
     (polynomial domain : Array Fr) (z acc : Fr) (i : Nat) :
     barycentricSumAux polynomial domain z acc i 0 = acc := rfl
 
-/-- The initial accumulator contributes additively to the barycentric fold:
-adding `extra` to the starting accumulator is the same as adding `extra` to
-the final result. -/
+/-- The initial accumulator contributes additively to the barycentric fold.
+
+Adding `extra` to the starting accumulator is the same as adding `extra` to the final result. -/
 theorem barycentricSumAux_acc_add
     (polynomial domain : Array Fr) (z acc extra : Fr) (i count : Nat) :
     barycentricSumAux polynomial domain z (acc + extra) i count =
@@ -1108,11 +1120,15 @@ theorem barycentricSumAux_acc_add
     rw [Fr.add_right_comm]
     exact ih _ _
 
-/-- Splitting the count decomposes the fold: summing over `a + b` terms
-starting at `i` equals summing over the first `a` (yielding some
-intermediate accumulator), then summing over the next `b` starting at
-`i + a`. The workhorse for reasoning about `barycentricSumAux`
-inductively. -/
+/-- Splitting the count decomposes the fold.
+
+Summing over `a + b` terms starting at `i` equals two steps.
+
+First sum over the first `a` terms, which yields some intermediate accumulator.
+
+Then sum over the next `b` terms, starting at `i + a`.
+
+The workhorse for reasoning about `barycentricSumAux` inductively. -/
 theorem barycentricSumAux_add
     (polynomial domain : Array Fr) (z acc : Fr) (i a b : Nat) :
     barycentricSumAux polynomial domain z acc i (a + b) =
@@ -1125,19 +1141,25 @@ theorem barycentricSumAux_add
     simp only [barycentricSumAux]
     rw [ih, show i + 1 + n = i + (n + 1) from by omega]
 
-/-- Direct recursive form of the barycentric sum: the sum of chunks
-`polynomial[i]! * domain[i]! / (z - domain[i]!)` for `i ∈ [0, n)`.
-Structurally a "sum from the right" — expressing the intended
-mathematical shape of `barycentricSumAux`. -/
+/-- Direct recursive form of the barycentric sum.
+
+It is the sum of chunks `polynomial[i]! * domain[i]! / (z - domain[i]!)` for `i ∈ [0, n)`.
+
+Structurally it is a "sum from the right".
+
+It expresses the intended mathematical shape of `barycentricSumAux`. -/
 def barycentricRefSum (polynomial domain : Array Fr) (z : Fr) : Nat → Fr
   | 0 => Fr.zero
   | n + 1 => barycentricRefSum polynomial domain z n +
              polynomial[n]! * domain[n]! / (z - domain[n]!)
 
-/-- `barycentricSumAux` starting from `Fr.zero` at index `0` equals the
-direct sum `barycentricRefSum`. This is the mathematically natural
-formulation the docstring on `evaluatePolynomialInEvaluationFormAux`
-refers to. -/
+/-- `barycentricSumAux` starting from `Fr.zero` at index `0` equals the direct sum.
+
+The direct sum is `barycentricRefSum`.
+
+This is the mathematically natural formulation that a docstring refers to.
+
+That docstring is the one on `evaluatePolynomialInEvaluationFormAux`. -/
 theorem barycentricSumAux_zero_eq_refSum
     (polynomial domain : Array Fr) (z : Fr) (n : Nat) :
     barycentricSumAux polynomial domain z Fr.zero 0 n =
