@@ -34,6 +34,18 @@ variable {fork : Fork}
 variable {code : ByteArray} {message : Message fork} {pc : Nat} {stack : List U256}
   {memory : ByteArray} {gas : Nat} {state : State.TransactionState} {substate : Substate}
 
+/-- A triple whose postcondition holds of another memory, equal to the one it names. -/
+theorem Hoare.memory_eq {P : Evm fork Nat → Prop} {code : ByteArray} {pc : Nat}
+    {stack : List U256} {m m' : ByteArray} {gas : Nat} {st : State.TransactionState}
+    {ss : Substate} (h : Hoare fork P (At code message pc stack m gas st ss)) (hm : m = m') :
+    Hoare fork P (At code message pc stack m' gas st ss) := hm ▸ h
+
+/-- A triple whose postcondition holds of another gas, equal to the one it names. -/
+theorem Hoare.gas_eq {P : Evm fork Nat → Prop} {code : ByteArray} {pc : Nat}
+    {stack : List U256} {m : ByteArray} {gas gas' : Nat} {st : State.TransactionState}
+    {ss : Substate} (h : Hoare fork P (At code message pc stack m gas st ss))
+    (hg : gas = gas') : Hoare fork P (At code message pc stack m gas' st ss) := hg ▸ h
+
 /-! ## The instruction table -/
 
 section Table
