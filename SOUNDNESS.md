@@ -720,7 +720,6 @@ Its first relation covers frames that send no message.
 `Triple S P Q` says that every frame of `P` reaches a frame of `Q` by the steps of `S`, and `Hoare fork` is `Triple` over `Step`.
 `Spec fork P Q` is total correctness for such frames: every frame of `P` reaches a stopped frame of `Q`.
 A run that ends out of gas ends in an exceptional halt, so a postcondition of a normal halt needs a precondition with enough gas.
-`Return42.runFrame_spec` proves the specification of one contract, `0x602a60005260206000f3`, which returns the word 42 for 18 gas with the one-counter meter of the forks before Glamsterdam.
 `Logic/Rules.lean` gives rules for the opcodes that read call data and the caller, compare, jump, hash memory, read and write storage, and return or revert.
 `Logic/Stack.lean` gives rules for POP, SWAP1 to SWAP16, EXP and the opcodes of three operands, at every fork with the one-counter meter.
 `Logic/Rules.lean` gives the rule for DUP1 to DUP16, and the rule for DUP1 is its case at depth 0.
@@ -732,12 +731,10 @@ It states the size of the code, its bytes and the data of a PUSH from that numbe
 `decide +kernel` checks the walk.
 `Logic/Steps.lean` defines the tactic `evm_step`, which applies the rule of the opcode at the program counter and proves the facts about the code by evaluation.
 The tactic proves nothing on its own: each step it takes applies one of the rules above, and the kernel checks the result.
-`SlotOfCalldata` stores its code as one number and runs its opcodes of the stack and its jumps with the tactic.
 `Logic/Fault.lean` gives the postcondition `Faulted` of a frame that halts exceptionally: no output, the error, no gas with the one-counter meter, and the state and substate the frame had.
 The caller discards that state; no theorem here states it.
 `Logic.invalid` is the rule for a byte that is no opcode at the fork, such as `0xfe` at every fork.
 `Logic.jump_invalid` and `Logic.jumpi_invalid` are the rules for a jump to a position that is not a valid jump destination.
-`Assert.runFrame_zero` proves a contract that halts at `0xfe` when its first word of call data is zero.
 `Logic.push_of_readFrame` is the rule for an opcode whose instruction pushes a word that the code, the message, the program counter and the memory fix.
 `Logic.callvalue`, `Logic.address`, `Logic.origin`, `Logic.caller`, `Logic.calldatasize`, `Logic.codesize`, `Logic.pc_rule` and `Logic.msize` are its cases.
 A size is pushed modulo 2^256, as the instruction pushes it.
@@ -746,11 +743,6 @@ A size is pushed modulo 2^256, as the instruction pushes it.
 It holds for every return address that is a JUMPDEST of the code, and every stack under it that leaves room for the block.
 `Logic.callSubroutine` proves that a push of the address of the block and a JUMP reach the return address with the results.
 It needs both addresses to be JUMPDESTs of the code, and room on the stack below 1024 words.
-`Twice.double` proves a subroutine that doubles a word, for 18 gas.
-`Twice.runFrame_spec` proves a contract that calls it at two places and returns 4 times the word of its call data.
-`SumTo.sum` proves a recursive subroutine that sums the numbers from 1 to `k`, by induction on `k`.
-It needs room for `2 k + 2` words on the stack, and `32 + 61 k` gas.
-`SumTo.runFrame_spec` proves a contract that returns that sum for the word of its call data, when the word is at most 510.
 `Logic.KnownSubroutine` is the same specification over frames that know only the size of memory and some facts.
 `Logic.callKnownSubroutine` proves its call, with the push and the jump keeping the size and every fact.
 `Logic.stop` is the rule for STOP, which stops the frame with no error and an empty output.
@@ -802,8 +794,6 @@ These write rules ask for a range of some bytes.
 `Logic.mload_known` proves that MLOAD of the range of a fact with a word pushes that word.
 `Logic.return_known` proves that RETURN of the range of a fact returns the bytes of the fact.
 `Logic.revert_known` proves the same for REVERT from Byzantium.
-`Echo.runFrame_spec` proves a contract that copies its call data to memory and returns it, for call data of some bytes.
-`Pair.runFrame_spec` proves a contract that writes the words 2 and 1 in reverse order of address and returns both, 1 first.
 `memoryReadBytes_memoryWrite_eq_append` proves that a read that ends where a write ends gives the bytes before the write, then the value.
 `Logic.staticcallWith` is the rule for STATICCALL from Berlin to before Glamsterdam.
 Its message carries no value and is static.
@@ -827,16 +817,8 @@ It needs the output to hold at most 24576 bytes (EIP-170), and from London not t
 `Logic.depositCode_of_outOfGas` proves that an output too long or too dear fails the same way, out of gas.
 `Logic.processCreateMessage_eq_ok` proves that a creation with no value and no precompile ends as its init code ends, then deposits.
 `Logic.meets_of_spec_create` proves that the runner of the interpreter meets `CreatesAs` for a specification of the init code.
-`Deploy.specInit` proves init code that returns the byte 0 for 9 gas, and keeps its message.
-`Deploy.runFrame_process` proves a contract that creates a contract from that init code and returns the size of its code.
-With the runner of the interpreter, it stops with no error and returns the word 1, or the run aborts.
-When it returns, the new account holds the code of the byte 0.
-It holds from Berlin to before Glamsterdam, with at least 32344 gas.
-The frame may change the state, its nonce is below the greatest, and its depth leaves room for one more frame.
-The new address holds no code and a nonce of 0.
 `Logic.running_eq_false_of_sstore_of_isStatic` proves that in a static frame, a step at SSTORE stops the frame.
 `Logic.running_eq_false_of_log_of_isStatic` proves the same for LOG0 to LOG4.
-`NoValue.spec_nonzero` proves a contract that halts at `0xfe` when its message sends value.
 `memoryReadBytes_memoryWrite_of_disjoint` proves that a write within memory leaves a read of a disjoint range unchanged.
 `memoryReadBytes_memoryWrite_memoryWrite` proves that a read across two adjacent writes gives both values in order.
 `memoryWrite_comm_of_disjoint` proves that two writes within memory to disjoint ranges commute.
@@ -845,37 +827,20 @@ From Berlin, the rule for SLOAD takes as a hypothesis whether the slot is cold, 
 `Logic.sstore` is the rule for SSTORE from Berlin to before Glamsterdam, in a frame that may change the state and holds more than 2300 gas.
 It charges `sstoreCost` and adds `sstoreRefund` to the refund counter, from the original, current and new words and whether the slot is cold.
 It takes the state that the write gives as a hypothesis, since the write needs the account of the current address.
-`Counter.runFrame_spec` proves a contract that reads the slot at key 0, adds 1, writes the sum back and returns it.
-The slot then holds the sum, and the gas and the refund are those of SLOAD and SSTORE.
 `Logic.log` (`Logic/Log.lean`) is the rule for LOG0 to LOG4, at every fork with the one-counter meter, in a frame that may change the state.
 It appends one log of the current address with the topics and the range of memory.
 It pays 375, 8 for each byte, 375 for each topic and the growth of memory.
 It says nothing of the order of the logs of several frames, or of logs that a revert drops.
-`Emit.runFrame_spec` proves a contract that appends one log with a topic and a word of its call data, for 1036 gas.
-`SlotOfCalldata.runFrame_match` proves a contract that compares the top four bytes of its call data with a constant, at the forks from Berlin with the one-counter meter.
-On a match, it returns the word of storage at the Keccak-256 hash of two words of its call data, for 122 gas and SLOAD.
-`SlotOfCalldata.runFrame_mismatch` proves that it reverts with no output otherwise, for 37 gas.
-`HashedSlot.runFrame_spec` proves a contract that writes the word of its call data to a slot it derives.
-The slot is the Keccak-256 hash of the address of the caller as a word and then the word 0.
-The slot then holds the word, for 83 gas and SSTORE, from Berlin to before Glamsterdam.
-No theorem covers a read at a slot derived from another key word, which needs the two hashes to differ.
 `Logic.branchTable` (`Logic/Branch.lean`) is the rule for a table of entries that branches on the top word of the stack.
 It holds at every fork with the one-counter meter.
 Each entry is DUP1, a push of a key of `n` bytes, EQ, a push of a destination of `m` bytes, and JUMPI.
 The run jumps to the destination of the first entry whose key is the word, or goes on past the table.
 It pays 22 gas for each entry it tests, and needs each destination to be a valid destination of a jump.
-`KeyBranch.runFrame_key1` and `KeyBranch.runFrame_key2` prove a contract with a table of two keys of 4 bytes, which returns 1 or 2.
-`KeyBranch.runFrame_miss` proves that it reverts with no output on any other word, from Byzantium.
 `Triple.loop` (`Logic/Loop.lean`) proves a loop from an invariant for each value of a natural measure.
 A run of the loop then ends by the measure, not by the gas.
-`SumLoop.runFrame_spec` proves a contract that loops `n` times, for the word `n` of its call data, with the one-counter meter.
-With at least `45 + 55 n` gas, it returns `n (n + 1) / 2` modulo `2^256`.
 `Triple.loop_gas` proves a loop whose invariant carries the gas, with a price for each run that may depend on the runs left.
 The loop then needs the sum of those prices and the price of its exit.
 `Logic.holds_empty` proves that memory holds no bytes from an offset within it.
-`Indices.store` proves a subroutine that writes the word `w` at offset `32 w` modulo `2^256`, for every size of memory.
-`Indices.runFrame_spec` proves a contract that writes the words 0 to `n - 1` from offset 0 in a loop that calls that subroutine, and returns them.
-It needs `n` below `2^251`, and `44 + 69 n` gas with the price of `32 n` bytes of memory.
 `Logic.Stored` is a running frame that knows ranges of memory, the facts of some slots of its account, and the refund counter.
 A fact of a slot gives its key, its word before the transaction, its word now, and whether it is warm.
 Every other slot of every account, and every account, reads as in a base state.
@@ -918,27 +883,9 @@ It holds from Berlin to before Glamsterdam, with the one-counter meter.
 It pays 2600 or 100 for the access to the address, by EIP-2929.
 It passes on at most all but one 64th of the gas left, by EIP-150.
 Its postcondition gives the state and substate that the frame that ends the message gives, and nothing more.
-`CallFlag.runFrame_spec` proves a contract that calls the address in its call data and returns 1 when the callee ends with no error, and 0 otherwise.
-With every runner that meets the assumption, the run returns that word or aborts with an error that aborts the run.
-`CallFlag.runFrame_process` states it for the runner of messages of the interpreter.
 `meets_process_noCode` proves that the runner of the interpreter meets one more assumption.
 That assumption says that a message with no code, to an account that is no precompile, ends with no error.
-So `CallFlag.runFrame_process_noCode` proves that the contract returns 1 when the address holds no code and is no precompile, unless the run aborts.
-`CallReturn42.runFrame_process` composes the contract with the contract that returns 42 at the called address, through `meets_of_spec`.
-With the runner of the interpreter, the caller then stops with no error and returns the word 1, or the run aborts.
-`CallChain.runFrame_process` chains three frames.
-The contract calls an address that holds its own code, which calls the address of the word 0, which holds no code.
-With the runner of the interpreter, the outer frame stops with no error and returns the word 1, or the run aborts.
-Before Paris, the call to the address of the word 0 may create its empty account.
-No frame writes the account of the called address or of the outer frame.
-So the result holds even when the two are the same address.
-`CallEcho.runFrame_process` proves a contract that sends a word to a callee that returns its call data, with an output range of 64 bytes.
-With the runner of the interpreter, it returns that word and 32 zero bytes, since the callee returns only 32, or the run aborts.
 `Logic.callWith` and `Logic.call` also state that the message is static when the frame is.
-`CallRevert.runFrame_process` proves a contract that calls a callee that writes a slot and then reverts with the word 42.
-With the runner of the interpreter, it returns the word 42 and then the word 0 that CALL pushes, or the run aborts.
-When it returns, every word of storage reads as before the call, from Berlin to before Glamsterdam.
-It states nothing of the gas that the callee leaves.
 `Logic.callValue` is the rule for CALL with a value that is not 0, from Berlin to before Glamsterdam.
 The frame must be one that may change the state.
 It pays the access of EIP-2929, 9000 for the value, 25000 more when the callee is dead by EIP-161, and the growth of memory.
@@ -946,14 +893,8 @@ The message gets the gas that EIP-150 allows and the stipend of 2300, and carrie
 `Logic.callValueLow` is the rule for such a CALL when the current account holds less than the value.
 It sends no message, pushes 0, and gives back the gas it would pass on with the stipend.
 `Logic.callStep_value_low` also proves that this step empties the return data.
-`Pay.spec_low` and `Pay.runFrame_process_noCode` prove a contract that sends the value in its call data to an address in its call data.
-It returns 0 when the balance is too small.
-With the runner of the interpreter, it returns 1 when the address holds no code, or the run aborts.
 `meets_paidNoCode` (`Logic/Callee.lean`) proves that the runner ends a message with value to no code with no error.
 Its frame ends in the state that the move of the value gives.
-`Pay.runFrame_process_paid` proves that the contract then returns 1, or the run aborts.
-When it returns, the current account holds the value less and the called address the value more.
-It needs the called address to differ from the current one, and holds from Berlin to before Glamsterdam.
 No rule covers CREATE, DELEGATECALL or STATICCALL.
 
 ### SHA-256 precompile

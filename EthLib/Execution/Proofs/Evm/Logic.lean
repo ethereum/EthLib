@@ -22,27 +22,6 @@ public import EthLib.Execution.Proofs.Evm.Logic.Stack
 public import EthLib.Execution.Proofs.Evm.Logic.NatCode
 public import EthLib.Execution.Proofs.Evm.Logic.Steps
 public import EthLib.Execution.Proofs.Evm.Logic.Fault
-public import EthLib.Execution.Proofs.Evm.Logic.Examples.Return42
-public import EthLib.Execution.Proofs.Evm.Logic.Examples.SlotOfCalldata
-public import EthLib.Execution.Proofs.Evm.Logic.Examples.SumLoop
-public import EthLib.Execution.Proofs.Evm.Logic.Examples.CallFlag
-public import EthLib.Execution.Proofs.Evm.Logic.Examples.CallReturn42
-public import EthLib.Execution.Proofs.Evm.Logic.Examples.CallChain
-public import EthLib.Execution.Proofs.Evm.Logic.Examples.CallEcho
-public import EthLib.Execution.Proofs.Evm.Logic.Examples.Counter
-public import EthLib.Execution.Proofs.Evm.Logic.Examples.Emit
-public import EthLib.Execution.Proofs.Evm.Logic.Examples.Pay
-public import EthLib.Execution.Proofs.Evm.Logic.Examples.HashedSlot
-public import EthLib.Execution.Proofs.Evm.Logic.Examples.CallRevert
-public import EthLib.Execution.Proofs.Evm.Logic.Examples.KeyBranch
-public import EthLib.Execution.Proofs.Evm.Logic.Examples.Assert
-public import EthLib.Execution.Proofs.Evm.Logic.Examples.NoValue
-public import EthLib.Execution.Proofs.Evm.Logic.Examples.Deploy
-public import EthLib.Execution.Proofs.Evm.Logic.Examples.Echo
-public import EthLib.Execution.Proofs.Evm.Logic.Examples.Pair
-public import EthLib.Execution.Proofs.Evm.Logic.Examples.Twice
-public import EthLib.Execution.Proofs.Evm.Logic.Examples.SumTo
-public import EthLib.Execution.Proofs.Evm.Logic.Examples.Indices
 
 /-!
 # `EthLib.Execution.Proofs.Evm.Logic`
@@ -56,6 +35,4 @@ A triple over frames that send messages takes an assumption on the frames that e
 Its run may also abort, when the runner of messages fails.
 
 A code can be stored as one number, and a tactic steps through its opcodes.
-
-Worked examples prove whole contracts.
 -/

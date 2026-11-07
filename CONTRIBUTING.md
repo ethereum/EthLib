@@ -136,6 +136,19 @@ Next to the vectors, record their pinned origin, such as the commit they come fr
 
 Never regenerate an expected value from the code under test and call it a check.
 
+### No examples
+
+EthLib proves general statements about the specification, and it keeps no examples.
+An example is a proof about one particular program, contract, state or value, written to show how a rule or a tool works.
+Do not add files of such proofs, and do not add them to other modules.
+
+Example logic belongs outside the repository, with the project that needs it.
+EthLib keeps the general rules and lemmas that such a proof uses.
+If an example needs a general lemma that EthLib lacks, add the lemma, stated for all inputs.
+
+A new rule or tactic is justified by its general statement.
+Show its example in the description of the pull request, not in the tree.
+
 ## Writing
 
 Developers all over the world read EthLib, many of them in their second language.
