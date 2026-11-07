@@ -154,6 +154,257 @@ theorem getValidatorActivationChurnLimit_le {config : Config} :
       getValidatorActivationChurnLimit config state ≤ getValidatorChurnLimit config state :=
   ⟨Std.min_le_left, Std.min_le_right⟩
 
+/-- The activation epoch at an index, or the accessor error outside the registry. -/
+def activationEpochAt (state : BeaconState preset fork) (index : ValidatorIndex) :
+    Except AccessorError Epoch :=
+  (getValidator state index).map (·.activationEpoch)
+
+/-- A write of one validator leaves every other activation epoch unchanged. -/
+theorem activationEpochAt_setValidator {index : ValidatorIndex} {validator : Validator}
+    (set : state.setValidator index validator = .ok after) (other : ValidatorIndex) :
+    activationEpochAt after other =
+      if other = index then .ok validator.activationEpoch else activationEpochAt state other := by
+  by_cases equal : other = index
+  · subst other
+    simp [activationEpochAt, getValidator_setValidator_self set, Except.map]
+  · simp [activationEpochAt, getValidator_setValidator_of_ne set equal, equal]
+
+/-- An index in the activation queue names a validator that is not activated yet. -/
+theorem activationEpochAt_of_mem_activationQueue (within : state.RegistryWithinLimit)
+    {index : ValidatorIndex} (member : index ∈ activationQueue state) :
+    activationEpochAt state index = .ok FAR_FUTURE_EPOCH := by
+  simp only [activationQueue, List.mem_map] at member
+  obtain ⟨⟨eligibility, found⟩, sorted, rfl⟩ := member
+  have inEligible := (List.mergeSort_perm _ _).mem_iff.mp sorted
+  simp only [List.mem_filterMap, Option.ite_none_right_eq_some, Option.some.injEq,
+    List.mem_zipIdx_iff_getElem?, Prod.exists, Prod.mk.injEq] at inEligible
+  obtain ⟨validator, i, atI, eligible, -, rfl⟩ := inEligible
+  have lt : i < state.validators.data.size := by
+    have := (List.getElem?_eq_some_iff.mp atI).1
+    simpa using this
+  -- The queue holds only validators whose activation epoch is still the far future.
+  simp only [isEligibleForActivation, Bool.and_eq_true, beq_iff_eq] at eligible
+  simp only [activationEpochAt, getValidator, toNat_toUInt64_of_lt within lt]
+  simp only [Array.getElem?_toList] at atI
+  simp only [atI]
+  exact congrArg Except.ok eligible.2
+
+/-- Before Electra, starting an exit keeps the slot and all activation epochs. -/
+theorem initiateValidatorExit_activationEpochs {config : Config} {index : ValidatorIndex}
+    (before : fork < .pectra)
+    (computed : initiateValidatorExit config state index = .ok after) :
+    after.slot = state.slot ∧
+      ∀ other, activationEpochAt after other = activationEpochAt state other := by
+  obtain ⟨validator, found, ⟨_, rfl⟩ | ⟨_, queued, _, _, queue, _, set⟩⟩ :=
+    initiateValidatorExit_ok computed
+  · exact ⟨rfl, fun _ => rfl⟩
+  have notElectra : ¬Fork.pectra ≤ fork := Nat.not_le_of_lt before
+  -- Before Electra the exit queue changes no state field.
+  simp only [exitQueue, notElectra, ↓reduceDIte, bind_ok_iff, pure, Except.pure,
+    Except.ok.injEq, Prod.mk.injEq] at queue
+  obtain ⟨_, _, rfl, _⟩ := queue
+  refine ⟨setValidator_slot set, fun other => ?_⟩
+  rw [activationEpochAt_setValidator set]
+  split
+  · rename_i equal
+    subst other
+    simp [activationEpochAt, found, Except.map]
+  · rfl
+
+/-- The first registry pass keeps the slot and all activation epochs. -/
+theorem updateRegistryEntry_activationEpochs {config : Config} {index : Nat}
+    (before : fork < .pectra)
+    (computed : updateRegistryEntry config state index = .ok after) :
+    after.slot = state.slot ∧
+      ∀ other, activationEpochAt after other = activationEpochAt state other := by
+  simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨validator, found, queued, joined, middle, set, rest⟩ := computed
+  -- Joining the queue changes eligibility, not the activation epoch.
+  have kept : queued.activationEpoch = validator.activationEpoch := by
+    unfold queueForActivation at joined
+    split at joined
+    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at joined
+      obtain ⟨_, _, rfl⟩ := joined
+      rfl
+    · cases joined
+      rfl
+  have first : ∀ other, activationEpochAt middle other = activationEpochAt state other := by
+    intro other
+    rw [activationEpochAt_setValidator set]
+    split
+    · rename_i equal
+      subst other
+      simp [activationEpochAt, found, kept, Except.map]
+    · rfl
+  split at rest
+  · rw [liftAccessor_ok] at rest
+    obtain ⟨slot, epochs⟩ := initiateValidatorExit_activationEpochs before rest
+    exact ⟨slot.trans (setValidator_slot set), fun other => (epochs other).trans (first other)⟩
+  · simp only [pure, Except.pure, Except.ok.injEq] at rest
+    subst after
+    exact ⟨setValidator_slot set, first⟩
+
+/-- Activating one validator writes the computed epoch and leaves every other activation epoch. -/
+theorem activateValidator_activationEpochs {index : ValidatorIndex}
+    (computed : activateValidator state index = .ok after) :
+    ∃ epoch, computeActivationExitEpoch preset (getCurrentEpoch state) = .ok epoch ∧
+      after.slot = state.slot ∧
+      ∀ other, activationEpochAt after other =
+        if other = index then .ok epoch else activationEpochAt state other := by
+  simp only [activateValidator, bind_ok_iff, liftAccessor_ok, liftArith,
+    mapError_ok_iff] at computed
+  obtain ⟨_, _, epoch, calculated, set⟩ := computed
+  exact ⟨epoch, calculated, setValidator_slot set, activationEpochAt_setValidator set⟩
+
+/-- A successful activation pass writes the computed epoch at its selected indices.
+
+With no selected index the computation need not succeed, since the pass never calls it. -/
+theorem foldlM_activateValidator_activationEpochs {indices : List ValidatorIndex}
+    (computed : indices.foldlM activateValidator state = .ok after) :
+    after.slot = state.slot ∧
+      (∀ other, other ∉ indices → activationEpochAt after other = activationEpochAt state other) ∧
+      (∀ other, other ∈ indices → ∃ epoch,
+        computeActivationExitEpoch preset (getCurrentEpoch state) = .ok epoch ∧
+          activationEpochAt after other = .ok epoch) := by
+  induction indices generalizing state with
+  | nil =>
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
+    subst after
+    exact ⟨rfl, fun _ _ => rfl, by simp⟩
+  | cons index indices ih =>
+    rw [List.foldlM_cons, bind_ok_iff] at computed
+    obtain ⟨middle, step, rest⟩ := computed
+    obtain ⟨epoch, calculated, slot, epochs⟩ := activateValidator_activationEpochs step
+    obtain ⟨lastSlot, unchanged, selected⟩ := ih rest
+    have current : getCurrentEpoch middle = getCurrentEpoch state := by
+      simp [getCurrentEpoch, slot]
+    refine ⟨lastSlot.trans slot, ?_, ?_⟩
+    · intro other outside
+      have ne : other ≠ index := fun equal => outside (by simp [equal])
+      rw [unchanged other (fun member => outside (by simp [member])), epochs other,
+        ite_eq_right ne]
+    · intro other member
+      -- A later write wins, and the unchanged slot makes its computed epoch the same.
+      by_cases tail : other ∈ indices
+      · obtain ⟨value, valueOk, written⟩ := selected other tail
+        exact ⟨value, current ▸ valueOk, written⟩
+      · have equal : other = index := (List.mem_cons.mp member).resolve_right tail
+        subst other
+        exact ⟨epoch, calculated, by rw [unchanged index tail, epochs index, ite_eq_left rfl]⟩
+
+/-- Before Electra, the registry writes activation epochs only in a bounded queue prefix.
+
+The queue of the first pass sorts by eligibility epoch, then by validator index.
+
+Phase 0 uses validator churn, and Deneb caps it as [EIP-7514] specifies.
+
+Each selected validator had the activation epoch FAR_FUTURE_EPOCH before the step.
+
+With an empty prefix, the step does not compute an activation epoch at all.
+
+[EIP-7514]: https://eips.ethereum.org/EIPS/eip-7514#specification
+-/
+theorem processRegistryUpdates_activationEpochs {config : Config}
+    (before : fork < .pectra)
+    (computed : processRegistryUpdates config state = .ok after) :
+    ∃ updated : BeaconState preset fork,
+      (List.range state.validators.data.size).foldlM (updateRegistryEntry config) state =
+        .ok updated ∧
+      let limit := if .dencun ≤ fork then getValidatorActivationChurnLimit config updated
+        else getValidatorChurnLimit config updated
+      let selected := (activationQueue updated).take limit.toNat
+      selected.length ≤ limit.toNat ∧
+      limit ≤ getValidatorChurnLimit config updated ∧
+      (.dencun ≤ fork → limit ≤ config.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT) ∧
+      (∀ index, index ∉ selected →
+        activationEpochAt after index = activationEpochAt state index) ∧
+      (∀ index, index ∈ selected → ∃ epoch,
+        computeActivationExitEpoch preset (getCurrentEpoch state) = .ok epoch ∧
+          activationEpochAt after index = .ok epoch) ∧
+      (∀ index, index ∈ selected → activationEpochAt state index = .ok FAR_FUTURE_EPOCH) := by
+  have notElectra : ¬Fork.pectra ≤ fork := Nat.not_le_of_lt before
+  simp only [processRegistryUpdates, notElectra, ↓reduceIte, bind_ok_iff] at computed
+  obtain ⟨updated, first, last⟩ := computed
+  -- The first pass leaves every input activation epoch and the current epoch unchanged.
+  have kept := foldlM_ok_invariant
+    (fun next : BeaconState preset fork => next.slot = state.slot ∧
+      ∀ index, activationEpochAt next index = activationEpochAt state index)
+    (fun _ _ _ holds step => by
+      obtain ⟨slot, epochs⟩ := updateRegistryEntry_activationEpochs before step
+      exact ⟨slot.trans holds.1, fun index => (epochs index).trans (holds.2 index)⟩)
+    ⟨rfl, fun _ => rfl⟩ first
+  obtain ⟨_, unchanged, written⟩ := foldlM_activateValidator_activationEpochs last
+  refine ⟨updated, first, List.length_take_le .., ?_, ?_, ?_, ?_, ?_⟩
+  · split
+    · exact (getValidatorActivationChurnLimit_le).2
+    · exact UInt64.le_refl _
+  · intro deneb
+    simp only [deneb, ↓reduceIte]
+    exact (getValidatorActivationChurnLimit_le).1
+  · intro index outside
+    exact (unchanged index outside).trans (kept.2 index)
+  · intro index member
+    obtain ⟨epoch, calculated, value⟩ := written index member
+    refine ⟨epoch, ?_, value⟩
+    simpa only [getCurrentEpoch, kept.1] using calculated
+  · intro index member
+    rw [← kept.2 index]
+    exact activationEpochAt_of_mem_activationQueue
+      (updated.validators.bound (Nat.lt_trans before (by decide))) (List.mem_of_mem_take member)
+
+/-- Before Electra, the limit of activations bounds each list of distinct changed indices.
+
+A changed index is one whose activation epoch differs after the step. -/
+theorem processRegistryUpdates_changedActivationCount {config : Config}
+    (before : fork < .pectra)
+    (computed : processRegistryUpdates config state = .ok after) :
+    ∃ updated : BeaconState preset fork,
+      (List.range state.validators.data.size).foldlM (updateRegistryEntry config) state =
+        .ok updated ∧
+      let limit := if .dencun ≤ fork then getValidatorActivationChurnLimit config updated
+        else getValidatorChurnLimit config updated
+      ∀ changed : List ValidatorIndex, changed.Nodup →
+        (∀ index ∈ changed, activationEpochAt after index ≠ activationEpochAt state index) →
+        changed.length ≤ limit.toNat := by
+  obtain ⟨updated, first, bounded, _, _, unchanged, _, _⟩ :=
+    processRegistryUpdates_activationEpochs before computed
+  refine ⟨updated, first, fun changed distinct differ => ?_⟩
+  -- An index outside the prefix keeps its activation epoch, so each changed index is in it.
+  refine Nat.le_trans (distinct.length_le_of_subset fun index member => ?_) bounded
+  exact Classical.byContradiction fun outside => differ index member (unchanged index outside)
+
+/-- Before Electra, unless the computed epoch is FAR_FUTURE_EPOCH, exactly the prefix changes. -/
+theorem processRegistryUpdates_changedActivationEpochs_exact {config : Config}
+    (before : fork < .pectra)
+    (computed : processRegistryUpdates config state = .ok after) :
+    ∃ updated : BeaconState preset fork,
+      (List.range state.validators.data.size).foldlM (updateRegistryEntry config) state =
+        .ok updated ∧
+      let limit := if .dencun ≤ fork then getValidatorActivationChurnLimit config updated
+        else getValidatorChurnLimit config updated
+      let selected := (activationQueue updated).take limit.toNat
+      ∀ epoch, computeActivationExitEpoch preset (getCurrentEpoch state) = .ok epoch →
+        epoch ≠ FAR_FUTURE_EPOCH →
+        ∀ index, activationEpochAt after index ≠ activationEpochAt state index ↔
+          index ∈ selected := by
+  obtain ⟨updated, first, _, _, _, unchanged, written, unactivated⟩ :=
+    processRegistryUpdates_activationEpochs before computed
+  refine ⟨updated, first, ?_⟩
+  dsimp only
+  intro epoch calculated finite index
+  constructor
+  · intro changed
+    by_cases member : index ∈ (activationQueue updated).take
+        (if .dencun ≤ fork then getValidatorActivationChurnLimit config updated
+          else getValidatorChurnLimit config updated).toNat
+    · exact member
+    · exact False.elim (changed (unchanged index member))
+  · intro member
+    obtain ⟨value, valueOk, atIndex⟩ := written index member
+    have equal : value = epoch := Except.ok.inj (valueOk.symm.trans calculated)
+    rw [atIndex, equal, unactivated index member]
+    exact fun same => finite (Except.ok.inj same)
+
 theorem sameSizes_updateRegistryEntryElectra {config : Config} {activationEpoch : Epoch}
     {index : Nat}
     (computed : updateRegistryEntryElectra config activationEpoch state index = .ok after) :
