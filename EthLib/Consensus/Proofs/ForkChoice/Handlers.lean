@@ -1184,6 +1184,38 @@ theorem onInclusionList_ok {checks : SignatureChecks} (heze : .hegota ≤ fork)
   obtain ⟨timely, checked, rfl⟩ := accepted
   exact ⟨timely, checked, rfl⟩
 
+/-- Recording an envelope changes at most the answers on the inclusion lists. -/
+theorem recordEnvelope_frame {sources : BlockSources preset fork} {root : Root}
+    {payload : ExecutionPayload preset fork} {recorded : Store preset fork}
+    (record : store.recordEnvelope sources root payload = .ok recorded) :
+    ∃ satisfaction, recorded = { store with payloadInclusionListSatisfaction := satisfaction } := by
+  unfold recordEnvelope at record
+  split at record
+  · unfold recordPayloadInclusionListSatisfaction at record
+    simp only [bind_ok_iff, mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at record
+    obtain ⟨_, _, _, _, _, _, rfl⟩ := record
+    exact ⟨_, rfl⟩
+  · simp only [pure, Except.pure, Except.ok.injEq] at record
+    exact ⟨_, record.symm⟩
+
+/-- An accepted envelope lowers no epoch, and keeps the blocks and their states. -/
+theorem onExecutionPayloadEnvelope_frame {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
+    {signed : SignedExecutionPayloadEnvelope preset fork} {after : Store preset fork}
+    (accepted : store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after) :
+    store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates := by
+  obtain ⟨_, _, _, _, _, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
+  obtain ⟨_, rfl⟩ := recordEnvelope_frame record
+  exact ⟨EpochsLe.refl _, rfl, rfl⟩
+
+/-- From Heze: an accepted inclusion list lowers no epoch, and keeps the blocks and their states. -/
+theorem onInclusionList_frame {checks : SignatureChecks} {heze : .hegota ≤ fork}
+    {signed : SignedInclusionList} {after : Store preset fork}
+    (accepted : store.onInclusionList config checks heze signed = .ok after) :
+    store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates := by
+  obtain ⟨_, _, rfl⟩ := onInclusionList_ok heze accepted
+  exact ⟨EpochsLe.refl _, rfl, rfl⟩
+
 /-- From Gloas: the rule for a possible dependent block, once the head is computed.
 
 A block may be the last one at or before a slot when it is the head.

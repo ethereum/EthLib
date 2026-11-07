@@ -17,7 +17,9 @@ A block writes the checkpoints of such a state, and those it reaches at the end 
 
 A new epoch writes the unrealized checkpoints, which are in order too.
 
-From Gloas the store is not yet specified here, so no store is reachable there.
+From Gloas, a vote of the payload committee and an envelope keep the checkpoints.
+
+From Heze, an inclusion list keeps them too.
 
 The result does not say that the finalized block is an ancestor of the justified block.
 -/
@@ -184,6 +186,34 @@ theorem onAttesterSlashing_ordered {checks : SignatureChecks}
   subst slashed
   exact ordered
 
+/-- From Gloas, a vote of the payload committee keeps the checkpoints. -/
+theorem onPayloadAttestationMessage_ordered {checks : SignatureChecks}
+    {gloas : .glamsterdam ≤ fork} {message : PayloadAttestationMessage} {isFromBlock : Bool}
+    (ordered : store.EpochsOrdered)
+    (voted : store.onPayloadAttestationMessage config checks gloas message isFromBlock =
+      .ok after) :
+    after.EpochsOrdered := by
+  obtain ⟨_, _, rfl⟩ := onPayloadAttestationMessage_onlyPtcVotes voted
+  exact ordered
+
+/-- From Gloas, an accepted envelope keeps the checkpoints. -/
+theorem onExecutionPayloadEnvelope_ordered {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
+    {signed : SignedExecutionPayloadEnvelope preset fork} (ordered : store.EpochsOrdered)
+    (accepted : store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after) :
+    after.EpochsOrdered := by
+  obtain ⟨_, _, _, _, _, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
+  obtain ⟨_, rfl⟩ := recordEnvelope_frame record
+  exact ordered
+
+/-- From Heze, an accepted inclusion list keeps the checkpoints. -/
+theorem onInclusionList_ordered {checks : SignatureChecks} {heze : .hegota ≤ fork}
+    {signed : SignedInclusionList} (ordered : store.EpochsOrdered)
+    (accepted : store.onInclusionList config checks heze signed = .ok after) :
+    after.EpochsOrdered := by
+  obtain ⟨_, _, rfl⟩ := onInclusionList_ok heze accepted
+  exact ordered
+
 /-- A block keeps the state of each block within the invariant. -/
 theorem onBlock_statesHold {checks : SignatureChecks}
     {sources : BlockSources preset fork} {signed : SignedBeaconBlock preset fork}
@@ -294,6 +324,15 @@ theorem Store.Reachable.ordered (anchor : Invariant anchorState)
   | attesterSlashing _ slashed ih =>
     exact ⟨Store.onAttesterSlashing_ordered ih.1 slashed,
       Store.StatesHold.of_eq ih.2 (Store.onAttesterSlashing_frame slashed).2.2⟩
+  | payloadAttestation _ voted ih =>
+    exact ⟨Store.onPayloadAttestationMessage_ordered ih.1 voted,
+      Store.StatesHold.of_eq ih.2 (onPayloadAttestationMessage_onlyPtcVotes voted).frame.2.2⟩
+  | envelope _ accepted ih =>
+    exact ⟨Store.onExecutionPayloadEnvelope_ordered ih.1 accepted,
+      Store.StatesHold.of_eq ih.2 (Store.onExecutionPayloadEnvelope_frame accepted).2.2⟩
+  | inclusionList _ accepted ih =>
+    exact ⟨Store.onInclusionList_ordered ih.1 accepted,
+      Store.StatesHold.of_eq ih.2 (Store.onInclusionList_frame accepted).2.2⟩
 
 /-- The finalized epoch of a reachable store is at most its justified epoch.
 
