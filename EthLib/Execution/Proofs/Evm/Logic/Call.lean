@@ -602,7 +602,9 @@ The frame may change the state, and the call pays as with enough value.
 
 It gets back the gas that it would pass on, with the stipend of 2300.
 
-Its return data is empty, and its memory has grown for both ranges. -/
+Its memory has grown for both ranges.
+
+The rule does not state the return data; the step lemma above states that it is empty. -/
 theorem callValueLow (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     {asked to v inputStart inputSize outputStart outputSize : U256} {rest : List U256}
     {cold : Bool} {calleeCode : ByteArray} (hlt : pc < code.size) (hbyte : code[pc] = 0xf1)
