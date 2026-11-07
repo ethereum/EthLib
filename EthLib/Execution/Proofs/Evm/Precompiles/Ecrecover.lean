@@ -13,7 +13,9 @@ Conversely, a signature made with a private key returns that key's address.
 
 Each documented cause of an empty output gives one, and only the first 128 bytes count.
 
-A call fails exactly when the gas is below 3000.
+A call fails exactly when the gas is below 3000, and the error carries both.
+
+A call succeeds exactly when the gas is at least 3000, and then returns the output of the operation.
 
 The price of an authorization of EIP-8037 is the sum of its parts, ECRECOVER among them.
 -/
@@ -178,6 +180,40 @@ theorem ecrecover_outOfGas (data : ByteArray) {gas : Nat} (h : gas < GAS_ECRECOV
 theorem ecrecover_ok (data : ByteArray) {gas : Nat} (h : GAS_ECRECOVER ≤ gas) :
     ecrecover data gas = .ok (compute data) := by
   rw [ecrecover, ite_eq_right (by omega)]
+
+/-- A call succeeds exactly when the gas covers the price, and then returns the output. -/
+theorem ecrecover_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
+    ecrecover data gas = .ok out ↔ GAS_ECRECOVER ≤ gas ∧ out = compute data := by
+  by_cases short : gas < GAS_ECRECOVER
+  · rw [ecrecover_outOfGas data short]
+    constructor
+    · intro wrong
+      simp at wrong
+    · intro ⟨enough, _⟩
+      omega
+  · rw [ecrecover_ok data (by omega)]
+    constructor
+    · intro same
+      exact ⟨by omega, (Except.ok.inj same).symm⟩
+    · intro ⟨_, same⟩
+      rw [same]
+
+/-- A call fails exactly when the gas is below the price, and the error carries both. -/
+theorem ecrecover_eq_error_iff (data : ByteArray) (gas : Nat) (e : EcrecoverError) :
+    ecrecover data gas = .error e ↔ gas < GAS_ECRECOVER ∧ e = .outOfGas GAS_ECRECOVER gas := by
+  by_cases short : gas < GAS_ECRECOVER
+  · rw [ecrecover_outOfGas data short]
+    constructor
+    · intro same
+      exact ⟨short, (Except.error.inj same).symm⟩
+    · intro ⟨_, same⟩
+      rw [same]
+  · rw [ecrecover_ok data (by omega)]
+    constructor
+    · intro wrong
+      simp at wrong
+    · intro ⟨below, _⟩
+      exact absurd below short
 
 /-! ## The three empty outputs -/
 
