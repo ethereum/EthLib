@@ -943,8 +943,8 @@ The header slots of the store never move back.
 `applyLightClientUpdate_slots`, `processLightClientUpdate_slots` and `processLightClientStoreForceUpdate_slots` show that the finalized and optimistic slots never decrease.
 They also show that a finalized slot at or below the optimistic slot stays there.
 `initializeLightClientStore_headers` shows that a new store starts with one header for both.
-So every store that these three steps reach from a bootstrap keeps that order.
-No theorem covers the upgrade of a store to a later fork.
+`LightClientStore.upgrade_beacon` shows that the upgrade of a store to a later fork keeps both beacon headers, so it keeps both slots too.
+So every store that these four steps reach from a bootstrap keeps that order.
 No theorem links an honest signer to the canonical chain; that is a property of the validators, not of the protocol text.
 
 ### Casper FFG
