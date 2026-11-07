@@ -265,6 +265,11 @@ theorem gasHeld_depositCode_le [LawfulGasMeter Meter] {snapshot : TransactionSta
   cases h
   exact gasHeld_chargeCodeDeposit_le hc
 
+/-- The state that a message starts its frame from: before Paris, its target is touched. -/
+def startState (fork : Fork) (message : Message fork) (state : TransactionState) :
+    TransactionState :=
+  if fork < .paris then state.touchAccount message.currentTarget else state
+
 mutual
 
 /-- Run a message at fork `fork`, from the state and the substate it starts from.
@@ -291,7 +296,7 @@ def processMessage [LawfulGasMeter Meter] (fork : Fork) (message : Message fork)
         · exact ended.property
       · exact ended.property⟩
   Except.map rollback do
-    let state := if fork < .paris then state.touchAccount message.currentTarget else state
+    let state := startState fork message state
     let transfers := message.shouldTransferValue ∧ message.value ≠ 0
     let state ←
       if transfers then

@@ -651,8 +651,12 @@ A runner can also fail on a message, and then `runFrame` fails with the error of
 It also says that the runner fails only with an error that aborts the run, and asks nothing more of such a message.
 `meets_process` proves that the runner of the code of a message meets the assumption that always holds, for every bound.
 It rests on `aborts_of_process_eq_error` (`Execution/Proofs/Evm/Call/MessageCall.lean`), which proves that a message and a creation fail only with an error that aborts.
-No theorem yet proves that this runner meets a stronger assumption.
-So a triple under a stronger assumption does not yet apply to the runs of `processMessage`.
+`meets_of_spec` (`Logic/Callee.lean`) proves that this runner meets a stronger assumption, `RunsAs`, for a callee code with a specification.
+The specification is one with no message, from the frame that a message with that code starts, so the callee sends no message itself.
+The assumption covers a message with that code and a target, with no value and no precompile.
+Its frame starts from the state of the caller, with its target touched before Paris, as `processMessage` does.
+The frame that ends the message is a stopped frame of the specification, rolled back on a failure.
+No theorem yet proves that this runner meets an assumption for a callee that sends messages, sends value, or is a precompile.
 `SpecUnder fork callee P Q` holds under every runner that meets `callee`, and for every bound that holds the gas of the frame.
 From every frame of `P`, the steps of `StepBy` reach a stopped frame of `Q`, or a frame whose runner fails on its message.
 So `SpecUnder.runFrame` concludes that `runFrame` returns a stopped frame of `Q`, or fails with an error that aborts.
@@ -670,7 +674,8 @@ With every runner that meets the assumption, the run returns that word or aborts
 `meets_process_noCode` proves that the runner of the interpreter meets one more assumption.
 That assumption says that a message with no code, to an account that is no precompile, ends with no error.
 So `CallFlag.runFrame_process_noCode` proves that the contract returns 1 when the address holds no code and is no precompile, unless the run aborts.
-No theorem yet gives the outcome of a call to code.
+`CallReturn42.runFrame_process` composes the contract with the contract that returns 42 at the called address, through `meets_of_spec`.
+With the runner of the interpreter, the caller then stops with no error and returns the word 1, or the run aborts.
 No rule covers CREATE, a call with value, DELEGATECALL or STATICCALL.
 
 ### SHA-256 precompile
