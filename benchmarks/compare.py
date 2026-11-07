@@ -2,8 +2,9 @@
 
 # python compare.py <results directory>
 #
-# Each row gives the best time over the rounds, the spread (the slowest round's best over the
-# fastest's), the ratio of EthLib to the reference, and whether the output digests agree.
+# Each row gives the best time over the rounds and the spread.
+# The spread is the slowest round's best over the fastest's.
+# The row also gives the ratio of EthLib to the reference, and whether the output digests agree.
 
 import glob
 import json

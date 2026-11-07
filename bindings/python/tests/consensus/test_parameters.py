@@ -40,8 +40,9 @@ TIMELINE = {
     "hegota": "heze",
 }
 
-# The preset values that a fork replaces. A replacement carries the name of its fork as a suffix,
-# such as INACTIVITY_PENALTY_QUOTIENT_ALTAIR, in the preset file of that fork.
+# The preset values that a fork replaces.
+# A replacement takes its fork's name as a suffix, such as INACTIVITY_PENALTY_QUOTIENT_ALTAIR.
+# It sits in the preset file of that fork.
 REPLACED = (
     "INACTIVITY_PENALTY_QUOTIENT",
     "MIN_SLASHING_PENALTY_QUOTIENT",
@@ -52,9 +53,9 @@ REPLACED = (
     "MAX_SIGNED_EXECUTION_PAYLOAD_BID_SIZE",
 )
 
-# A suffixed preset value that is a new value, not a replacement: from Electra, the largest
-# effective balance of a compounding validator. MIN_ACTIVATION_BALANCE takes the other role of
-# MAX_EFFECTIVE_BALANCE.
+# A suffixed preset value that is a new value, not a replacement.
+# From Electra, it is the largest effective balance of a compounding validator.
+# MIN_ACTIVATION_BALANCE takes the other role of MAX_EFFECTIVE_BALANCE.
 NEW_WITH_SUFFIX = {"MAX_EFFECTIVE_BALANCE_ELECTRA"}
 
 # Configuration values that EthLib does not hold in the configuration.

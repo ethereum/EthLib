@@ -1,8 +1,10 @@
 """Check that the release versions agree, and write the release manifest."""
 
-# uv run --no-project --python 3.12 python scripts/release_manifest.py --check
-# uv run --no-project --python 3.12 python scripts/release_manifest.py --check --tag v0.2.0
-# uv run --no-project --python 3.12 python scripts/release_manifest.py --output manifest.json
+# Usage:
+#
+#     uv run --no-project --python 3.12 python scripts/release_manifest.py --check
+#     uv run --no-project --python 3.12 python scripts/release_manifest.py --check --tag v0.2.0
+#     uv run --no-project --python 3.12 python scripts/release_manifest.py --output manifest.json
 
 from __future__ import annotations
 

@@ -84,16 +84,16 @@ class LakeThenBuild(build_ext):
 
     def run(self):
         """Build the Lean exports, then link their objects into each extension."""
-        # The exports import the specification, so this builds both, and
-        # skips the proofs, which link nothing.
+        # The exports import the specification, so this builds both.
+        # It skips the proofs, which link nothing.
         subprocess.check_call(["lake", "build", "Exports"], cwd=str(REPO_ROOT))
         sysroot = _lean_sysroot()
         if sysroot is None:
             raise RuntimeError(
                 "lean toolchain not found on PATH; install elan before building the C extension"
             )
-        # Re-resolve include_dirs and link inputs lazily: at metadata time
-        # (e.g. `uv build --sdist`) Lean may not be installed.
+        # Re-resolve include_dirs and link inputs lazily.
+        # At metadata time (e.g. `uv build --sdist`) Lean may not be installed.
         runtime_objs, library_dirs, libraries = _lean_runtime_link(sysroot)
         for ext in self.extensions:
             if str(sysroot / "include") not in ext.include_dirs:
@@ -102,8 +102,8 @@ class LakeThenBuild(build_ext):
             for d in library_dirs:
                 if d not in ext.library_dirs:
                     ext.library_dirs.append(d)
-                # Also add to runtime_library_dirs so local dev (without
-                # auditwheel) finds libleanshared at runtime via RPATH.
+                # Also add to runtime_library_dirs.
+                # This lets local dev (without auditwheel) find libleanshared at runtime via RPATH.
                 if d not in ext.runtime_library_dirs:
                     ext.runtime_library_dirs.append(d)
             for lib in libraries:
@@ -126,9 +126,9 @@ def _make_extension() -> Extension:
         libraries.append("dl")
         libraries.append("m")
 
-    # The Lean-toolchain include dir and `.c.o.export` objects are appended
-    # in `LakeThenBuild.run`. We don't resolve them here so that
-    # metadata-only invocations (sdist) work without elan installed.
+    # `LakeThenBuild.run` appends the Lean-toolchain include dir and the `.c.o.export` objects.
+    # They are not resolved here.
+    # This lets metadata-only invocations (sdist) work without elan installed.
     return Extension(
         name="ethlib.cryptography._native",
         sources=[

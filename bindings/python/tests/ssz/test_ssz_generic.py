@@ -78,8 +78,8 @@ UINT32 = {"uint": 4}
 UINT64 = {"uint": 8}
 PROGRESSIVE_BITLIST_FIELD = {"progressive_bitlist": None}
 
-# The structures of the `containers` and `progressive_containers` handlers, as the format of the
-# suite defines them.
+# The structures of the `containers` and `progressive_containers` handlers.
+# The format of the suite defines them.
 SMALL = _container([("A", UINT16), ("B", UINT16)])
 FIXED = _container([("A", UINT8), ("B", UINT64), ("C", UINT32)])
 VAR_STRUCT = _container([("A", UINT16), ("B", {"list": [UINT16, 1024]}), ("C", UINT8)])
