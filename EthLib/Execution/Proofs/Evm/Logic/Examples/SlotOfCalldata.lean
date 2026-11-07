@@ -148,7 +148,7 @@ theorem compare (hfork : .berlin ≤ fork) {gas : Nat} (hgas : 21 ≤ gas) :
   have h4 := binary (fork := fork) (code := CODE) (message := message) (state := state)
     (substate := substate) (memory := .empty) (pc := 5) (x := 0xe0)
     (y := loadWord message.data 0 32) (rest := []) (gas := gas - 3 - 3 - 3)
-    (by decide) rfl (ofByte_of_decode_le (op := .shr) rfl (Nat.le_trans (by decide) hfork))
+    (by decide) rfl (ofByte_of_decode (op := .shr) rfl (Nat.le_trans (by decide) hfork))
     instruction_shr
     (by simp [OPCODE_SHR, VERY_LOW]; omega)
   have h5 := Logic.push (fork := fork) (code := CODE) (message := message) (pc := 6)
@@ -158,7 +158,7 @@ theorem compare (hfork : .berlin ≤ fork) {gas : Nat} (hgas : 21 ≤ gas) :
   have h6 := binary (fork := fork) (code := CODE) (message := message) (state := state)
     (substate := substate) (memory := .empty) (pc := 11) (x := TAG) (y := prefixOf message.data)
     (rest := []) (gas := gas - 3 - 3 - 3 - 3 - 3)
-    (by decide) rfl (ofByte_of_decode_le (op := .eq) rfl (Fork.frontier_le _)) instruction_eq
+    (by decide) rfl (ofByte_of_decode (op := .eq) rfl (Fork.frontier_le _)) instruction_eq
     (by simp [OPCODE_EQ, VERY_LOW]; omega)
   have h7 := push1 (fork := fork) (message := message) (state := state) (substate := substate)
     (pc := 12) (stack := [equal TAG (prefixOf message.data)]) (memory := .empty)

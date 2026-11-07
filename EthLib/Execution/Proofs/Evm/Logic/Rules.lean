@@ -46,11 +46,6 @@ def Running (code : ByteArray) (message : Message fork) (pc : Nat) (stack : List
     evm.gas = gas ∧ evm.running = true ∧ evm.error = none ∧ evm.state = state ∧
     evm.substate = substate
 
-/-- A byte whose opcode a fork has decodes to that opcode at the fork. -/
-theorem ofByte_of_decode_le {byte : UInt8} {op : Op} (h : Op.decode byte = some op)
-    (since : op.since ≤ fork) : Op.ofByte fork byte = some op := by
-  simp [Op.ofByte, h, Option.filter, since]
-
 variable {code : ByteArray} {message : Message fork} {pc : Nat} {stack : List U256}
   {memory : ByteArray} {gas : Nat} {state : State.TransactionState} {substate : Substate}
 
@@ -136,7 +131,7 @@ theorem calldataload {start : U256} {rest : List U256} (hlt : pc < code.size)
     Hoare fork (Running code message pc (start :: rest) memory gas state substate)
       (Running code message (pc + 1) (loadWord message.data start.toNat 32 :: rest) memory
         (gas - 3) state substate) := by
-  apply Running.rule hlt hbyte (ofByte_of_decode_le (op := .calldataload) rfl (Fork.frontier_le _))
+  apply Running.rule hlt hbyte (ofByte_of_decode (op := .calldataload) rfl (Fork.frontier_le _))
     instruction_calldataload
   rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
   rw [calldataloadStep_cons hst, charge_nat (by rw [hg]; exact hgas)]
@@ -152,7 +147,7 @@ theorem push {n : Fin 33} {word : U256} (hn : n.val ≠ 0) (hlt : pc < code.size
       (Running code message (pc + (1 + n)) (word :: stack) memory (gas - 3) state substate) := by
   have hn' : n ≠ 0 := fun h => hn (by simp [h])
   apply Running.rule hlt hbyte
-    (ofByte_of_decode_le decoded (by simp [Op.since, hn', Fork.frontier_le])) (instruction_push n)
+    (ofByte_of_decode decoded (by simp [Op.since, hn', Fork.frontier_le])) (instruction_push n)
   rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
   have hlen : evm.stack.val.length < STACK_LIMIT := by rw [hst]; exact hstack
   rw [pushN_nat hn (by rw [hg]; exact hgas) hlen]
@@ -176,7 +171,7 @@ theorem dup1 {x : U256} {rest : List U256} (hlt : pc < code.size) (hbyte : code[
     (hgas : 3 ≤ gas) (hstack : (x :: rest).length < STACK_LIMIT) :
     Hoare fork (Running code message pc (x :: rest) memory gas state substate)
       (Running code message (pc + 1) (x :: x :: rest) memory (gas - 3) state substate) := by
-  apply Running.rule hlt hbyte (ofByte_of_decode_le (op := .dup 0) rfl (Fork.frontier_le _))
+  apply Running.rule hlt hbyte (ofByte_of_decode (op := .dup 0) rfl (Fork.frontier_le _))
     (instruction_dup 0)
   rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
   have hlen : evm.stack.val.length < STACK_LIMIT := by rw [hst]; exact hstack
@@ -188,7 +183,7 @@ theorem dup1 {x : U256} {rest : List U256} (hlt : pc < code.size) (hbyte : code[
 theorem jumpdest (hlt : pc < code.size) (hbyte : code[pc] = 0x5b) (hgas : 1 ≤ gas) :
     Hoare fork (Running code message pc stack memory gas state substate)
       (Running code message (pc + 1) stack memory (gas - 1) state substate) := by
-  apply Running.rule hlt hbyte (ofByte_of_decode_le (op := .jumpdest) rfl (Fork.frontier_le _))
+  apply Running.rule hlt hbyte (ofByte_of_decode (op := .jumpdest) rfl (Fork.frontier_le _))
     instruction_jumpdest
   rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
   rw [jumpdestStep_eq, charge_nat (by rw [hg]; exact hgas)]
@@ -200,7 +195,7 @@ theorem jumpi_zero {destination : U256} {rest : List U256} (hlt : pc < code.size
     (hbyte : code[pc] = 0x57) (hgas : 10 ≤ gas) :
     Hoare fork (Running code message pc (destination :: 0 :: rest) memory gas state substate)
       (Running code message (pc + 1) rest memory (gas - 10) state substate) := by
-  apply Running.rule hlt hbyte (ofByte_of_decode_le (op := .jumpi) rfl (Fork.frontier_le _))
+  apply Running.rule hlt hbyte (ofByte_of_decode (op := .jumpi) rfl (Fork.frontier_le _))
     instruction_jumpi
   rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
   rw [jumpiStep_zero hst, charge_nat (by rw [hg]; exact hgas)]
@@ -214,7 +209,7 @@ theorem jumpi_taken {destination condition : U256} {rest : List U256} (hlt : pc 
     Hoare fork
       (Running code message pc (destination :: condition :: rest) memory gas state substate)
       (Running code message destination.toNat rest memory (gas - 10) state substate) := by
-  apply Running.rule hlt hbyte (ofByte_of_decode_le (op := .jumpi) rfl (Fork.frontier_le _))
+  apply Running.rule hlt hbyte (ofByte_of_decode (op := .jumpi) rfl (Fork.frontier_le _))
     instruction_jumpi
   rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
   rw [jumpiStep_of_isValidJumpDest hst nonzero (charge_nat (by rw [hg]; exact hgas))
@@ -233,7 +228,7 @@ theorem mstore {start value : U256} {rest : List U256} (hlt : pc < code.size)
         (memoryWrite (memoryExtend memory (extendMemory memory.size [(start, 32)]).expandBy)
           start.toNat (wordBytes value))
         (gas - (3 + (extendMemory memory.size [(start, 32)]).cost)) state substate) := by
-  apply Running.rule hlt hbyte (ofByte_of_decode_le (op := .mstore) rfl (Fork.frontier_le _))
+  apply Running.rule hlt hbyte (ofByte_of_decode (op := .mstore) rfl (Fork.frontier_le _))
     instruction_mstore
   rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
   subst hmem hg
@@ -262,7 +257,7 @@ theorem keccak256 {start size : U256} {rest : List U256} (hlt : pc < code.size)
         (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
         (gas - (30 + 6 * wordCount size.toNat + (extendMemory memory.size [(start, size)]).cost))
         state substate) := by
-  apply Running.rule hlt hbyte (ofByte_of_decode_le (op := .keccak256) rfl (Fork.frontier_le _))
+  apply Running.rule hlt hbyte (ofByte_of_decode (op := .keccak256) rfl (Fork.frontier_le _))
     instruction_keccak256
   rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
   subst hmem hg
@@ -295,7 +290,7 @@ theorem sload (hfork : .berlin ≤ fork) {key : U256} {rest : List U256} {cold :
           accessedStorageKeys := (substate.accessedStorageKeys.insert message.currentTarget
             ((substate.accessedStorageKeys.getD message.currentTarget ∅).insert
               (U256.toBeBytes key))) }) := by
-  apply Running.rule hlt hbyte (ofByte_of_decode_le (op := .sload) rfl (Fork.frontier_le _))
+  apply Running.rule hlt hbyte (ofByte_of_decode (op := .sload) rfl (Fork.frontier_le _))
     instruction_sload
   rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
   subst hm hg hs hss
@@ -321,7 +316,7 @@ theorem «return» {start size : U256} {rest : List U256} (hlt : pc < code.size)
         (memoryReadBytes (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
           start.toNat size.toNat)
         (gas - (extendMemory memory.size [(start, size)]).cost) state substate) := by
-  apply Running.rule hlt hbyte (ofByte_of_decode_le (op := .«return») rfl (Fork.frontier_le _))
+  apply Running.rule hlt hbyte (ofByte_of_decode (op := .«return») rfl (Fork.frontier_le _))
     instruction_return
   rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
   subst hmem hg
@@ -341,7 +336,7 @@ theorem revert (hfork : .byzantium ≤ fork) {start size : U256} {rest : List U2
         (memoryReadBytes (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
           start.toNat size.toNat)
         (gas - (extendMemory memory.size [(start, size)]).cost) state substate) := by
-  apply Running.rule hlt hbyte (ofByte_of_decode_le (op := .revert) rfl hfork)
+  apply Running.rule hlt hbyte (ofByte_of_decode (op := .revert) rfl hfork)
     (instruction_revert hfork)
   rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
   subst hmem hg

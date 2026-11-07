@@ -70,7 +70,7 @@ theorem mstore {gas : Nat} (hgas : 6 ≤ gas) :
   refine ⟨⟨5, ⟨[], Nat.zero_le _⟩, MEMORY, CODE, jumps, g - 6, true, message, output,
       returnData, st, ss, none⟩,
     Step.of_code (code := CODE) (pc := 4) (byte := 0x52) rfl rfl rfl (by decide) (by decide)
-      (ofByte_of_decode (op := .mstore) rfl rfl) instruction_mstore ?_,
+      (ofByte_of_decode (op := .mstore) rfl (Fork.frontier_le _)) instruction_mstore ?_,
     rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   have hcharge : ¬g < OPCODE_MSTORE_BASE + 3 := by
     simp only [OPCODE_MSTORE_BASE, VERY_LOW]
@@ -104,7 +104,7 @@ theorem «return» {gas : Nat} :
   refine ⟨⟨9, ⟨[], Nat.zero_le _⟩, memoryExtend MEMORY 0, CODE, jumps, g, false, message,
       memoryReadBytes (memoryExtend MEMORY 0) 0 32, returnData, st, ss, none⟩,
     Step.of_code (code := CODE) (pc := 9) (byte := 0xf3) rfl rfl rfl (by decide) (by decide)
-      (ofByte_of_decode (op := .«return») rfl rfl) instruction_return ?_,
+      (ofByte_of_decode (op := .«return») rfl (Fork.frontier_le _)) instruction_return ?_,
     rfl, rfl, memoryReadBytes_memory, rfl, rfl, rfl⟩
   -- Memory already holds the word, so it does not grow.
   have hext : extendMemory MEMORY.size [((0 : U256), (32 : U256))] = ⟨0, 0⟩ := by

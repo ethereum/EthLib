@@ -57,11 +57,10 @@ theorem Step.of_code {evm after : Evm fork Meter} {code : ByteArray} {pc : Nat} 
   subst hcode hpc
   exact Step.of_instruction running hlt (by rw [hbyte]; exact decoded) hrun ok
 
-/-- A byte whose opcode dates from Frontier decodes to that opcode at every fork. -/
+/-- A byte whose opcode a fork has decodes to that opcode at the fork. -/
 theorem ofByte_of_decode {byte : UInt8} {op : Op} (h : Op.decode byte = some op)
-    (since : op.since = .frontier) : Op.ofByte fork byte = some op := by
-  simp only [Op.ofByte, h, Option.filter, since]
-  simp [Fork.frontier_le fork]
+    (since : op.since ≤ fork) : Op.ofByte fork byte = some op := by
+  simp [Op.ofByte, h, Option.filter, since]
 
 /-! ## The instruction table -/
 
@@ -118,7 +117,7 @@ theorem push1 {code : ByteArray} {pc : Nat} {stack : List U256} {memory : ByteAr
   have hlen : evm.stack.val.length < STACK_LIMIT := by rw [hst]; exact hstack
   have hg3 : OPCODE_PUSH ≤ evm.gas := by rw [hg]; exact hgas
   refine ⟨_, Step.of_code hrun hcode hpc (by omega) hop
-    (ofByte_of_decode (op := .push 1) rfl rfl) (instruction_push 1)
+    (ofByte_of_decode (op := .push 1) rfl (Fork.frontier_le _)) (instruction_push 1)
     (pushN_nat (n := 1) (by decide) hg3 hlen), ?_⟩
   refine ⟨hcode, ?_, ?_, hmem, ?_, hrun, herr, hs, hss⟩
   · simp [hpc]
