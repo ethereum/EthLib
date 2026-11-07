@@ -16,7 +16,9 @@ The 64-bit computation gives that value exactly when nothing reaches `2^64` and 
 
 In Phase 0, a computed period is one of the two expressions of the rule, on natural numbers.
 
-In Phase 0, the period is at most the delay plus the longer of two terms in the validators.
+In Phase 0, the period is at most the delay plus the larger of two terms.
+
+Both terms grow with the number of validators.
 
 At every fork, the period is at least the withdrawal delay.
 
@@ -206,7 +208,7 @@ theorem phase0PeriodEpochs_eq_ok {N t T delta Delta epochs : UInt64}
 
 The first is `160 N / (600 delta)`, the churn of validators with the balance term dropped.
 
-The second is `230 N / (600 Delta)`, the top-up bound for small balances.
+The second is `230 N / (600 Delta)`, the top-up term, which also bounds the case of small balances.
 
 There is no condition beyond success of the computation. -/
 theorem phase0PeriodEpochs_le {N t T delta Delta epochs : UInt64}
