@@ -16,6 +16,8 @@ Each operation decodes the record first.
 
 A rejected record comes back as the code and the message of its error.
 
+A private key crosses the boundary as 32 big-endian bytes, and a bad one comes back with code 0.
+
 Booleans come back as `UInt8`.
 
 The consensus entries hold up to BPO2.
@@ -50,6 +52,7 @@ def message : EnrError → String
   | .missingId => "record has no id"
   | .unknownScheme => "identity scheme is not v4"
   | .invalidPublicKey => "secp256k1 value is not a valid compressed public key"
+  | .signing => "the record could not be signed"
 
 /-- Run a fallible computation, with its error as a code and a message. -/
 def runEnr {α : Type} (act : Except EnrError α) : Result α :=
@@ -86,6 +89,22 @@ def nodeIdExport (record : ByteArray) : Result ByteArray := do
   let r ← runEnr (decode record)
   let id ← runEnr (nodeId r)
   return ⟨id.toArray⟩
+
+/-- A private key of 32 big-endian bytes, below the group order. -/
+def privateKeyOf (bytes : ByteArray) : Result Cryptography.Secp256k1.Fn :=
+  let k := Base.bytesToNat bytes.data.toList
+  if bytes.size = 32 ∧ k < Cryptography.Secp256k1.Fn.modulus then pure (Fin.ofNat _ k)
+  else throw (0, "private key is not 32 bytes below the group order")
+
+/-- The bytes of a record, signed again with a private key by the "v4" scheme.
+
+The decoder reads the record first, and its signature is replaced. -/
+@[export eth_enr_sign_v4]
+def signV4Export (secretKey record : ByteArray) : Result ByteArray := do
+  let sk ← privateKeyOf secretKey
+  let r ← runEnr (decode record)
+  let signed ← runEnr (signV4 sk r)
+  signed.encode.mapError fun e => ((EnrError.rlp e).code, "record has no RLP encoding")
 
 /-- A message for a refused consensus entry. -/
 def entryMessage : EntryError → String

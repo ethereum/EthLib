@@ -102,3 +102,46 @@ def test_nonzero_pad_bits_rejected() -> None:
 def test_padded_text_rejected() -> None:
     with raises(ValueError, "text is not unpadded URL-safe base64"):
         enr.from_text(TEXT + "=")
+
+
+# The private key of the record of "Test Vectors" in EIP-778.
+SECRET_KEY = bytes.fromhex("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+
+
+def test_sign_v4_eip_vector() -> None:
+    # Signing the record again with its private key gives the record of the EIP, byte for byte.
+    record = enr.from_text(TEXT)
+    assert enr.sign_v4(SECRET_KEY, record) == record
+
+
+def test_sign_v4_replaces_the_signature() -> None:
+    # A record with any other signature comes back with the signature of the EIP.
+    record = _rlp_list([bytes(64), b"\x01"] + [x for pair in PAIRS for x in pair])
+    signed = enr.sign_v4(SECRET_KEY, record)
+    assert signed == enr.from_text(TEXT)
+    assert enr.verify_v4(signed)
+
+
+def test_sign_v4_with_another_key_does_not_verify() -> None:
+    # The signature of another key does not verify under the secp256k1 pair of the record.
+    other = (1).to_bytes(32, "big")
+    assert not enr.verify_v4(enr.sign_v4(other, enr.from_text(TEXT)))
+
+
+def test_sign_v4_rejects_a_zero_key() -> None:
+    with raises(ValueError, "the record could not be signed"):
+        enr.sign_v4(bytes(32), enr.from_text(TEXT))
+
+
+# The order of the group of secp256k1.
+ORDER = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+
+
+def test_sign_v4_rejects_a_short_key() -> None:
+    with raises(ValueError, "private key is not 32 bytes below the group order"):
+        enr.sign_v4(SECRET_KEY[1:], enr.from_text(TEXT))
+
+
+def test_sign_v4_rejects_the_group_order() -> None:
+    with raises(ValueError, "private key is not 32 bytes below the group order"):
+        enr.sign_v4(ORDER.to_bytes(32, "big"), enr.from_text(TEXT))

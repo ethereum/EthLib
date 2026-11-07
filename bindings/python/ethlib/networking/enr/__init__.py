@@ -47,6 +47,11 @@ def node_id(record: bytes) -> bytes:
     return _native.enr_node_id(record)
 
 
+def sign_v4(secret_key: bytes, record: bytes) -> bytes:
+    """The record, signed again by the "v4" scheme with a 32-byte private key."""
+    return _native.enr_sign_v4(secret_key, record)
+
+
 class EnrForkId(NamedTuple):
     """The eth2 entry: the fork digest now, and the version and epoch of the next fork."""
 
@@ -106,6 +111,7 @@ __all__ = [
     "seq",
     "verify_v4",
     "node_id",
+    "sign_v4",
     "EnrForkId",
     "ConsensusEntries",
     "consensus_entries",

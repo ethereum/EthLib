@@ -3,6 +3,7 @@ module
 public import EthLib.Networking.Enr.V4
 public import EthLib.Cryptography.Proofs.Secp256k1.Sign
 public import EthLib.Cryptography.Proofs.Secp256k1.Encoding
+public import EthLib.Networking.Proofs.Enr.Record
 
 /-!
 # Proofs: the "v4" identity scheme
@@ -16,6 +17,8 @@ So any ECDSA signature of the hash of its content, under the key of its pair, ma
 The deterministic signer, with the nonce of RFC 6979 and the low-s rule of EIP-2, is one case.
 
 The node ID exists exactly when the public key can be read, and it is the hash of that key.
+
+A record that the signer signs verifies, keeps its pairs, and reads back from its bytes.
 
 These are correctness statements: no theorem here states that a signature cannot be forged.
 -/
@@ -200,5 +203,67 @@ theorem nodeId_ok_of_verifyV4 {r : Enr} (h : verifyV4 r = true) : ∃ id, nodeId
   cases q with
   | infinity => exact absurd rfl (publicKeyV4_ne_infinity hq)
   | affine x y => exact ⟨_, nodeId_of_publicKeyV4 hq⟩
+
+/-! ## Signing -/
+
+/-- A signed record is the record with the deterministic signature of its content. -/
+theorem signV4_eq_ok {sk : Fn} {r r' : Enr} (h : signV4 sk r = .ok r') :
+    ∃ content rr ss odd, Serialization.Rlp.encode r.content = .ok content ∧
+      Ecdsa.sign sk (Hash.Keccak.keccak256 content) = .ok (rr, ss, odd) ∧
+      r' = { r with signature :=
+        ⟨(Base.natToBytes 32 rr.val ++ Base.natToBytes 32 ss.val).toArray⟩ } := by
+  unfold signV4 at h
+  cases hc : Serialization.Rlp.encode r.content with
+  | error e => simp [hc, Except.mapError, bind, Except.bind] at h
+  | ok content =>
+    cases hs : Ecdsa.sign sk (Hash.Keccak.keccak256 content) with
+    | error e => simp [hc, hs, Except.mapError, bind, Except.bind] at h
+    | ok sig =>
+      obtain ⟨rr, ss, odd⟩ := sig
+      simp only [hc, hs, Except.mapError, bind, Except.bind, pure, Except.pure,
+        Except.ok.injEq] at h
+      exact ⟨content, rr, ss, odd, rfl, hs, h.symm⟩
+
+/-- Signing keeps the sequence number and the pairs. -/
+theorem seq_pairs_signV4 {sk : Fn} {r r' : Enr} (h : signV4 sk r = .ok r') :
+    r'.seq = r.seq ∧ r'.pairs = r.pairs := by
+  obtain ⟨_, _, _, _, _, _, rfl⟩ := signV4_eq_ok h
+  exact ⟨rfl, rfl⟩
+
+/-- A record signed with `sk` verifies, when its `id` is `v4` and its key pair holds `sk G`. -/
+theorem verifyV4_signV4 {sk : Fn} {r r' : Enr} (h : signV4 sk r = .ok r')
+    (hid : r.get KEY_ID = some (.bytes SCHEME_V4))
+    (hkey : r.get KEY_SECP256K1 = some (.bytes (Point.mul sk Point.generator).encodeCompressed)) :
+    verifyV4 r' = true := by
+  obtain ⟨content, rr, ss, odd, hc, hs, rfl⟩ := signV4_eq_ok h
+  exact verifyV4_of_sign hid hkey hc hs rfl
+
+/-- A signed record reads back from its bytes, and it verifies.
+
+Its encoding must fit in 300 bytes, and its keys must strictly increase.
+
+Its `id` is `v4`, and its `secp256k1` pair holds `sk G`. -/
+theorem decode_encode_signV4 {sk : Fn} {r r' : Enr} {bytes : ByteArray}
+    (h : signV4 sk r = .ok r') (he : r'.encode = .ok bytes)
+    (hs : bytes.size ≤ MAX_RECORD_SIZE) (hk : r.pairs.Pairwise (fun p q => keyLt p.1 q.1))
+    (hid : r.get KEY_ID = some (.bytes SCHEME_V4))
+    (hkey : r.get KEY_SECP256K1 = some (.bytes (Point.mul sk Point.generator).encodeCompressed)) :
+    decode bytes = .ok r' ∧ verifyV4 r' = true := by
+  have hpairs := (seq_pairs_signV4 h).2
+  -- The pair `id` is among the pairs, since the record has a value for it.
+  have hmem : ∃ value, (KEY_ID, value) ∈ r'.pairs := by
+    rw [hpairs]
+    unfold Enr.get at hid
+    obtain ⟨⟨key, value⟩, hfind, -⟩ := Option.map_eq_some_iff.mp hid
+    have hkey' := List.find?_some hfind
+    simp only [decide_eq_true_eq] at hkey'
+    exact ⟨value, hkey' ▸ List.mem_of_find?_eq_some hfind⟩
+  exact ⟨decode_encode r' bytes he hs (hpairs ▸ hk) hmem, verifyV4_signV4 h hid hkey⟩
+
+/-- Signing keeps the node ID, which depends only on the pairs. -/
+theorem nodeId_signV4 {sk : Fn} {r r' : Enr} (h : signV4 sk r = .ok r') :
+    nodeId r' = nodeId r := by
+  obtain ⟨_, _, _, _, _, _, rfl⟩ := signV4_eq_ok h
+  rfl
 
 end EthLib.Networking.Enr
