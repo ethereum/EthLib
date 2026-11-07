@@ -6,6 +6,7 @@ public import EthLib.Execution.Proofs.Evm.Instructions.ControlFlow
 public import EthLib.Execution.Proofs.Evm.Instructions.Storage
 public import EthLib.Execution.Proofs.Evm.Instructions.Return
 public import EthLib.Execution.Proofs.Evm.Instructions.EnvironmentData
+public import EthLib.Execution.Proofs.State.Tracker
 
 /-!
 # Proofs: rules for the opcodes of a contract that reads its call data and uses its storage
@@ -35,7 +36,7 @@ That is the meter of every fork before Glamsterdam.
 
 namespace EthLib.Execution.Evm.Logic
 
-open EthLib.Base (Fork U256)
+open EthLib.Base (Fork U256 Address Bytes32)
 open GasCosts
 
 variable {fork : Fork}
@@ -660,5 +661,101 @@ theorem sstore (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {key new
     sstoreStep_eq hfork hglam hst hstatic hstipend hgas hset
   exact ⟨after, h, by rw [a1, hcode], by rw [a2, hj], a3, by rw [a4, hpc], a5, by rw [a6, hmem],
     a7, by rw [a8, hrun], by rw [a9, herr], a10, a11⟩
+
+/-- From Berlin to before Glamsterdam, SSTORE to a slot of the current account, which exists.
+
+The write then gives a state that holds `new` in the slot.
+
+That state keeps every other slot of every address.
+
+It also keeps the words before the transaction, and the accounts.
+
+The rest is as for SSTORE: a frame that may change the state, more than 2300 gas, and the price. -/
+theorem sstore_of_account (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+    {key new : U256} {rest : List U256} {cold : Bool}
+    (hlt : pc < code.size) (hbyte : code[pc] = 0x55) (hstatic : message.isStatic = false)
+    (hcold : decide (U256.toBeBytes key ∉
+      substate.accessedStorageKeys.getD message.currentTarget ∅) = cold)
+    (hstipend : CALL_STIPEND < gas)
+    (hgas : sstoreCost fork (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
+      (state.getStorage message.currentTarget (U256.toBeBytes key)) new cold ≤ gas)
+    (hacc : (state.getAccountOptional message.currentTarget).isSome = true) :
+    ∃ state' : State.TransactionState,
+      state'.getStorage message.currentTarget (U256.toBeBytes key) = new ∧
+      (∀ other slot, other ≠ message.currentTarget ∨ slot ≠ U256.toBeBytes key →
+        state'.getStorage other slot = state.getStorage other slot) ∧
+      state'.getStorageOriginal = state.getStorageOriginal ∧
+      (∀ other, state'.getAccountOptional other = state.getAccountOptional other) ∧
+      Hoare fork (At code message pc (key :: new :: rest) memory gas state substate)
+        (At code message (pc + 1) rest memory
+          (gas - sstoreCost fork
+            (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
+            (state.getStorage message.currentTarget (U256.toBeBytes key)) new cold)
+          state'
+          { substate with
+            accessedStorageKeys := substate.accessedStorageKeys.insert message.currentTarget
+              ((substate.accessedStorageKeys.getD message.currentTarget ∅).insert
+                (U256.toBeBytes key))
+            refundCounter := substate.refundCounter + sstoreRefund fork
+              (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
+              (state.getStorage message.currentTarget (U256.toBeBytes key)) new }) := by
+  -- Recording the read keeps the account, so the write succeeds.
+  obtain ⟨state', hset⟩ := State.TransactionState.exists_setStorage (U256.toBeBytes key) new
+    (tx := state.recordStorageRead message.currentTarget (U256.toBeBytes key))
+    (by rw [(State.TransactionState.recordStorageRead_reads state _ message.currentTarget _
+      (U256.toBeBytes key) default).1]; exact hacc)
+  refine ⟨state', State.TransactionState.getStorage_setStorage_self hset, fun other slot hne => ?_,
+    ?_, fun other => ?_, sstore hfork hglam hlt hbyte hstatic hcold hstipend hgas hset⟩
+  · rw [State.TransactionState.getStorage_setStorage_of_ne hset hne]
+    exact (State.TransactionState.recordStorageRead_reads state _ other _ slot default).2.1
+  · rw [State.TransactionState.getStorageOriginal_setStorage hset]
+    funext other slot
+    exact (State.TransactionState.recordStorageRead_reads state _ other _ slot default).2.2.1
+  · rw [State.TransactionState.getAccountOptional_setStorage hset]
+    exact (State.TransactionState.recordStorageRead_reads state _ other _
+      (U256.toBeBytes key) default).1
+
+/-- Recording the access of a slot twice records it once. -/
+theorem insert_insert_getD_self (substate : Substate) (address : Address) (key : Bytes32) :
+    (substate.accessedStorageKeys.insert address
+        ((substate.accessedStorageKeys.getD address ∅).insert key)).insert address
+        (((substate.accessedStorageKeys.insert address
+          ((substate.accessedStorageKeys.getD address ∅).insert key)).getD address ∅).insert key) =
+      substate.accessedStorageKeys.insert address
+        ((substate.accessedStorageKeys.getD address ∅).insert key) := by
+  apply Std.ExtTreeMap.ext_getElem?
+  intro other
+  by_cases h : other = address
+  · subst h
+    simp only [Std.ExtTreeMap.getElem?_insert_self, Std.ExtTreeMap.getD_insert_self]
+    congr 1
+    ext x
+    simp only [Std.ExtTreeSet.mem_insert]
+    exact or_self_left
+  · simp [Std.ExtTreeMap.getElem?_insert, Ne.symm h]
+
+/-- A slot whose access is recorded is warm: it is among the accessed keys of its address. -/
+theorem mem_insert_getD_self (substate : Substate) (address : Address) (key : Bytes32) :
+    key ∈ (substate.accessedStorageKeys.insert address
+      ((substate.accessedStorageKeys.getD address ∅).insert key)).getD address ∅ := by
+  simp [Std.ExtTreeMap.getD_insert_self]
+
+/-- Recording the access of a slot leaves every other slot as cold or warm as it was. -/
+theorem mem_insert_getD_of_ne (substate : Substate) {address other : Address}
+    {key slot : Bytes32} (hne : other ≠ address ∨ slot ≠ key) :
+    slot ∈ (substate.accessedStorageKeys.insert address
+      ((substate.accessedStorageKeys.getD address ∅).insert key)).getD other ∅ ↔
+      slot ∈ substate.accessedStorageKeys.getD other ∅ := by
+  by_cases h : other = address
+  · subst h
+    have hk : slot ≠ key := hne.resolve_left (fun h => h rfl)
+    simp only [Std.ExtTreeMap.getD_insert_self, Std.ExtTreeSet.mem_insert]
+    exact ⟨fun h => h.resolve_left fun he => hk (Std.compare_eq_iff_eq.mp he).symm, Or.inr⟩
+  · simp [Std.ExtTreeMap.getD_insert, Ne.symm h]
+
+/-- From Berlin, SLOAD costs at least 100, the price of a warm slot. -/
+theorem le_sloadCost (hfork : .berlin ≤ fork) (cold : Bool) : 100 ≤ sloadCost fork cold := by
+  rw [sloadCost_of_berlin hfork]
+  cases cold <;> decide
 
 end EthLib.Execution.Evm.Logic

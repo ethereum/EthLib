@@ -1279,6 +1279,44 @@ theorem reads_incorporateTxIntoBlock (tx : TransactionState) :
     tx.incorporateTxIntoBlock.accountReads = ∅ ∧ tx.incorporateTxIntoBlock.storageReads = ∅ :=
   ⟨rfl, rfl⟩
 
+/-! ## A write to a slot of an account that exists -/
+
+/-- A storage write to an address with an account succeeds. -/
+theorem exists_setStorage {tx : TransactionState} {address : Address} (key : Bytes32)
+    (value : U256) (h : (tx.getAccountOptional address).isSome = true) :
+    ∃ tx', tx.setStorage address key value = .ok tx' := by
+  unfold setStorage
+  rw [ite_eq_right (by simpa [Option.isNone_iff_eq_none, Option.isSome_iff_ne_none] using h)]
+  exact ⟨_, rfl⟩
+
+/-- A storage write leaves the account of every address. -/
+theorem getAccountOptional_setStorage {tx tx' : TransactionState} {address other : Address}
+    {key : Bytes32} {value : U256} (h : tx.setStorage address key value = .ok tx') :
+    tx'.getAccountOptional other = tx.getAccountOptional other := by
+  unfold setStorage at h
+  split at h
+  · cases h
+  · cases h
+    rfl
+
+/-- Recording a storage read twice records it once. -/
+theorem recordStorageRead_recordStorageRead (tx : TransactionState) (address : Address)
+    (key : Bytes32) :
+    (tx.recordStorageRead address key).recordStorageRead address key =
+      tx.recordStorageRead address key := by
+  simp only [recordStorageRead]
+  congr 1
+  apply Std.ExtTreeMap.ext_getElem?
+  intro other
+  by_cases h : other = address
+  · subst h
+    simp only [Std.ExtTreeMap.getElem?_insert_self, Std.ExtTreeMap.getD_insert_self]
+    congr 1
+    ext x
+    simp only [Std.ExtTreeSet.mem_insert]
+    exact or_self_left
+  · simp [Std.ExtTreeMap.getElem?_insert, Ne.symm h]
+
 end EthLib.Execution.State.TransactionState
 
 /-! ## Folds of writes -/
