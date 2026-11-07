@@ -1,6 +1,7 @@
 """Tests of `check_raises.py` on small repositories in a temporary directory."""
 
 import importlib.util
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -144,6 +145,7 @@ class CheckRaises(unittest.TestCase):
     def run_check(self, files: dict[str, str]) -> list[str]:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            subprocess.run(["git", "init", "--quiet"], cwd=root, check=True)
             for name, text in files.items():
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -201,8 +203,12 @@ class CheckRaises(unittest.TestCase):
             ],
         )
 
-    def test_hidden_and_cache_directories_are_skipped(self) -> None:
-        files = {".venv/lib/test_f.py": NO_MATCH, "a/__pycache__/test_g.py": NO_MATCH}
+    def test_ignored_files_are_skipped(self) -> None:
+        files = {
+            ".gitignore": "build/\nvenv/\n",
+            "build/lib/test_f.py": NO_MATCH,
+            "venv/lib/test_g.py": NO_MATCH,
+        }
         self.assertEqual(self.run_check(files), [])
 
     def test_every_file_is_reported_in_order(self) -> None:

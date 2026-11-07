@@ -1,8 +1,8 @@
 """Check that every Python module docstring is one line, and that no docstring wraps a sentence."""
 
 import ast
-import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -22,18 +22,18 @@ FENCE = re.compile(r"(```|~~~)")
 
 
 def python_files(root: Path) -> list[Path]:
-    """The Python files under the root, outside hidden and cache directories, by relative path."""
-    found = []
-    for directory, subdirectories, files in os.walk(root):
-        subdirectories[:] = sorted(
-            name for name in subdirectories if not name.startswith(".") and name != "__pycache__"
-        )
-        found += [
-            Path(directory, name).relative_to(root)
-            for name in sorted(files)
-            if name.endswith(".py")
-        ]
-    return [path for path in found if path not in EXCLUDED]
+    """The Python files that git tracks or would add under the root, by relative path."""
+    # Ignored files, such as a build or a virtual environment, are never listed.
+    listed = subprocess.run(
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "*.py"],
+        cwd=root,
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout
+    # A tracked file deleted from the working tree stays in the index until its deletion is staged.
+    paths = sorted({Path(name) for name in listed.split("\0") if name})
+    return [path for path in paths if (root / path).is_file() and path not in EXCLUDED]
 
 
 def wrapped_lines(docstring: str) -> list[int]:
