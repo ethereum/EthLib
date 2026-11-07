@@ -57,7 +57,6 @@ NOT_YET = {
 _GLOAS = {
     "fast_confirmation": "the Gloas fast confirmation (G73)",
     "networking": "the Gloas data columns and unchanged topics (G77)",
-    "networking/gossip_execution_payload_bid": "bids and proposer preferences (G74)",
     "networking/gossip_beacon_block": "Gloas blocks and attestations (G76)",
     "networking/gossip_beacon_attestation": "Gloas blocks and attestations (G76)",
     "networking/gossip_beacon_aggregate_and_proof": "Gloas blocks and attestations (G76)",

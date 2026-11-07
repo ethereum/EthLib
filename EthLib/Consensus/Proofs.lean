@@ -36,6 +36,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.Reachable
 public import EthLib.Consensus.Proofs.ForkChoice.Store
 public import EthLib.Consensus.Proofs.ForkSchedule
 public import EthLib.Consensus.Proofs.Gossip.Attestation
+public import EthLib.Consensus.Proofs.Gossip.Bid
 public import EthLib.Consensus.Proofs.Gossip.Block
 public import EthLib.Consensus.Proofs.Gossip.Bounds
 public import EthLib.Consensus.Proofs.Gossip.Operations

@@ -551,7 +551,7 @@ def gossip_validation(
     anchor_state: bytes,
     anchor_block: bytes,
     topic: str,
-    messages: list[tuple[int, int, bytes]],
+    messages: list[tuple[int, int, bytes] | tuple[int, int, bytes, str]],
     verify: bool = True,
     config: dict | None = None,
     blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes]]
@@ -573,13 +573,18 @@ def gossip_validation(
         )
     checkpoint = b"" if finalized is None else finalized[0].to_bytes(8, "little") + finalized[1]
     # A message is (arrival time in milliseconds, subnet ID, SSZ bytes).
-    records = b"".join(
-        time.to_bytes(8, "little")
-        + subnet.to_bytes(8, "little")
-        + len(data).to_bytes(4, "little")
-        + data
-        for time, subnet, data in messages
-    )
+    # A topic may follow, for a message of another topic than the case.
+    records = b""
+    for time, subnet, data, *rest in messages:
+        own_topic = rest[0].encode() if rest else b""
+        records += (
+            time.to_bytes(8, "little")
+            + subnet.to_bytes(8, "little")
+            + bytes([len(own_topic)])
+            + own_topic
+            + len(data).to_bytes(4, "little")
+            + data
+        )
     replacements = json.dumps(config).encode() if config else b""
     out = _native.consensus_gossip_validation(
         name,

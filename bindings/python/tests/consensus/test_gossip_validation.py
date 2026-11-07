@@ -33,6 +33,7 @@ TOPICS = {
     "proposer_preferences": "gloas",
     "execution_payload_envelope": "gloas",
     "payload_attestation_message": "gloas",
+    "execution_payload_bid": "gloas",
 }
 SPECIFIED = ("altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas")
 # The topics whose cases stop at a fork other than Fulu, with their last fork.
@@ -43,6 +44,7 @@ LAST = {
     "proposer_preferences": "gloas",
     "execution_payload_envelope": "gloas",
     "payload_attestation_message": "gloas",
+    "execution_payload_bid": "gloas",
 }
 
 # The release archives that hold the cases.
@@ -52,6 +54,13 @@ ARCHIVES = {
 }
 
 _YAML = YAML(typ="safe")
+
+# The topics of the messages that a case of another topic sends, by the prefix of their file.
+# A bid case sends the preferences and the envelopes that its bids rely on.
+_MESSAGE_TOPICS = {
+    "proposer_preferences": "proposer_preferences",
+    "execution_payload_envelope": "execution_payload",
+}
 
 # The statuses of a payload, as the specification numbers them.
 _STATUSES = {"VALID": 0, "INVALIDATED": 1, "NOT_VALIDATED": 2}
@@ -141,6 +150,7 @@ def run_case(preset: str, fork: str, case: Path) -> None:
                 message.get("current_time_ms", 0),
                 message.get("subnet_id", 0),
                 _read(case, message["message"]),
+                _MESSAGE_TOPICS.get(message["message"].rsplit("_0x", 1)[0], ""),
             )
             for message in meta["messages"]
         ]

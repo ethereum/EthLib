@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: networking
+handler: gossip_execution_payload_bid
+suite: pyspec_tests
+case: gossip_execution_payload_bid__ignore_not_highest_value

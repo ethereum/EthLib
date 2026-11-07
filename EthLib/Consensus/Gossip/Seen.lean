@@ -72,6 +72,13 @@ structure Seen where
   executionPayloadGasLimits : List (Hash32 × UInt64) := []
   /-- From Gloas: the slot and the committee member of each valid payload vote. -/
   payloadAttestationValidators : List (Slot × ValidatorIndex) := []
+  /-- From Gloas: the slot, the parent payload, the parent block and the builder of each valid bid.
+  -/
+  executionPayloadBids : List (Slot × Hash32 × Root × BuilderIndex) := []
+  /-- From Gloas: the value of the latest valid bid, by its slot, parent payload and parent block.
+
+  Each valid bid beats the value before it, so the latest value is the best. -/
+  bestExecutionPayloadBids : List ((Slot × Hash32 × Root) × Gwei) := []
   deriving Inhabited
 
 namespace Store

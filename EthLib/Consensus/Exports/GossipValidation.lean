@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Exports.ForkChoice
 public import EthLib.Cryptography.Exports.Kzg
 public import EthLib.Consensus.Gossip.Attestation
+public import EthLib.Consensus.Gossip.Bid
 public import EthLib.Consensus.Gossip.Block
 public import EthLib.Consensus.Gossip.Operations
 public import EthLib.Consensus.Gossip.Payload
@@ -33,11 +34,17 @@ It follows the block as a 4-byte length and that many bytes, and a length of 0 m
 
 An optional 40-byte checkpoint, an epoch and a root, replaces the finalized checkpoint.
 
+It replaces it in the store and in the state after each block, wherever the rules read it.
+
 A JSON object may replace values of the configuration, and an empty one keeps it.
 
 The messages arrive one after another in one byte string.
 
 Each message is the time of its arrival in milliseconds and a subnet ID, 8 bytes each.
+
+Then comes the topic of the message, as one byte of length and that many bytes of UTF-8.
+
+An empty topic is the topic of the case, and another topic must be specified at the fork too.
 
 Then come a 4-byte length and that many bytes of SSZ.
 
@@ -65,31 +72,37 @@ open EthLib.Exports (Result)
 open Serialization.Ssz.Exports (runSsz)
 open Cryptography.Kzg.Exports (embeddedSetup)
 
-/-- A gossip message of a case: its time of arrival in milliseconds, its subnet and its bytes. -/
+/-- A gossip message of a case: its time of arrival in ms, its subnet, its topic and its bytes. -/
 structure GossipInput where
   /-- The time of arrival, in milliseconds since the Unix epoch. -/
   currentTimeMs : UInt64
   /-- The subnet ID, for a topic that has subnets. -/
   subnetId : UInt64
+  /-- The topic of the message, or the empty string for the topic of the case. -/
+  topic : String
   /-- The SSZ bytes of the message. -/
   data : ByteArray
 
 /-- The messages that the bytes hold from an offset.
 
-Each message reads at least 20 bytes, so one round more than the bytes suffices. -/
+Each message reads at least 21 bytes, so one round more than the bytes suffices. -/
 def readGossipInputs : (rounds : Nat) → ByteArray → Nat → Result (List GossipInput)
   | 0, _, _ => throw (0, "messages do not end")
   | rounds + 1, bytes, offset =>
     if offset = bytes.size then return []
-    else if bytes.size < offset + 20 then throw (0, "a message is cut short")
+    else if short : bytes.size < offset + 21 then throw (0, "a message is cut short")
     else do
       let currentTimeMs ← decodeInput UInt64 (bytes.extract offset (offset + 8))
       let subnetId ← decodeInput UInt64 (bytes.extract (offset + 8) (offset + 16))
-      let length := (← decodeInput UInt32 (bytes.extract (offset + 16) (offset + 20))).toNat
-      let stop := offset + 20 + length
+      let named := offset + 17 + (bytes[offset + 16]'(by omega)).toNat
+      if bytes.size < named + 4 then throw (0, "the topic of a message is cut short")
+      let some topic := String.fromUTF8? (bytes.extract (offset + 17) named)
+        | throw (0, "the topic of a message is not UTF-8")
+      let length := (← decodeInput UInt32 (bytes.extract named (named + 4))).toNat
+      let stop := named + 4 + length
       if bytes.size < stop then throw (0, "the bytes of a message are cut short")
       let rest ← readGossipInputs rounds bytes stop
-      return ⟨currentTimeMs, subnetId, bytes.extract (offset + 20) stop⟩ :: rest
+      return ⟨currentTimeMs, subnetId, topic, bytes.extract (named + 4) stop⟩ :: rest
 
 /-- The byte of an outcome, then the length and the text of its reason. -/
 def outcomeRecord : ValidationResult → ByteArray
@@ -145,7 +158,9 @@ A failed or a pending block joins the known blocks only.
 
 Another block also gets its state, by the state transition of the state of its parent.
 
-From Gloas the store also keeps the envelope of its payload, when there is one. -/
+From Gloas the store also keeps the envelope of its payload, when there is one.
+
+From Gloas a block with a state starts with no vote of the payload committee. -/
 def importGossipBlock {preset : Preset} {fork : Fork} (config : Config)
     (checks : SignatureChecks) (store : Store preset fork) (statuses : PayloadStatuses)
     (input : GossipBlockInput) : Result (Store preset fork × PayloadStatuses) := do
@@ -158,7 +173,14 @@ def importGossipBlock {preset : Preset} {fork : Fork} (config : Config)
   let parentState ← runForkChoice (store.blockState signed.message.parentRoot)
   let state ← runForkChoice
     ((stateTransition config checks (.constant true) parentState signed).mapError .transition)
-  return ({ store with blockStates := store.blockStates.insert root state }, statuses)
+  let store := { store with blockStates := store.blockStates.insert root state }
+  if gloas : .glamsterdam ≤ fork then
+    let noVotes := Vector.replicate preset.PTC_SIZE.toNat none
+    return ({ store with
+      payloadTimelinessVote := fun _ => (store.payloadTimelinessVote gloas).insert root noVotes
+      payloadDataAvailabilityVote := fun _ =>
+        (store.payloadDataAvailabilityVote gloas).insert root noVotes }, statuses)
+  else return (store, statuses)
 
 /-- Whether gossip validation of a topic is specified here at a fork.
 
@@ -166,7 +188,7 @@ The sync committee has topics from Altair, and changes of BLS credentials from C
 
 Blob sidecars travel at Deneb and Electra, and column sidecars at Fulu.
 
-At Gloas three topics are specified here: proposer preferences, envelopes and payload votes.
+At Gloas four topics are specified here: proposer preferences, envelopes, payload votes and bids.
 
 At Heze no topic is specified yet. -/
 def gossipValidationSpecified (fork : Fork) : String → Bool
@@ -177,8 +199,8 @@ def gossipValidationSpecified (fork : Fork) : String → Bool
   | "bls_to_execution_change" => .shapella ≤ fork && fork < .glamsterdam
   | "blob_sidecar" => .dencun ≤ fork && fork < .fusaka
   | "data_column_sidecar" | "partial_data_column_sidecar" => .fusaka ≤ fork && fork < .glamsterdam
-  | "proposer_preferences" | "execution_payload" | "payload_attestation_message" =>
-    .glamsterdam ≤ fork && fork < .hegota
+  | "proposer_preferences" | "execution_payload" | "payload_attestation_message"
+  | "execution_payload_bid" => .glamsterdam ≤ fork && fork < .hegota
   | _ => false
 
 /-- The outcome of one message of a topic, and the keys seen after it.
@@ -287,6 +309,13 @@ def validateGossipInput {preset : Preset} {fork : Fork} (config : Config)
         gloas message input.currentTimeMs)
       return record outcome (·.recordPayloadAttestationMessage message)
     else throw (0, "the votes on payloads travel only from Gloas")
+  | "execution_payload_bid" =>
+    let signed ← decodeInput (SignedExecutionPayloadBid preset fork) input.data
+    if gloas : .glamsterdam ≤ fork then
+      let outcome ← runForkChoice (validateExecutionPayloadBid config checks seen store gloas
+        signed input.currentTimeMs)
+      return record outcome (·.recordExecutionPayloadBid signed)
+    else throw (0, "the bids of builders travel only from Gloas")
   | _ => throw (0, s!"gossip validation of the topic {topic} is not yet specified")
 
 /-- At Fulu: the outcomes of the partial sidecars of a case, after the headers it records first.
@@ -322,7 +351,7 @@ def validatePartialInputs {preset : Preset} {fork : Fork} (config : Config)
 
 /-- Validate the messages of a topic in turn, against the store of an anchor and later blocks.
 
-At Gloas three topics are specified here: proposer preferences, envelopes and payload votes.
+At Gloas four topics are specified here: proposer preferences, envelopes, payload votes and bids.
 
 At Heze no topic is specified yet. -/
 @[export eth_consensus_gossip_validation]
@@ -344,7 +373,10 @@ def gossipValidationExport
   for input in ← readGossipBlocks (blocks.size + 1) blocks 0 do
     (store, statuses) ← importGossipBlock config checks store statuses input
   if finalized.size = 40 then
-    store := { store with finalizedCheckpoint := ← decodeInput Checkpoint finalized }
+    let checkpoint ← decodeInput Checkpoint finalized
+    let blockStates := store.blockStates.map fun _ state =>
+      { state with finalizedCheckpoint := checkpoint }
+    store := { store with finalizedCheckpoint := checkpoint, blockStates }
   else if finalized.size ≠ 0 then throw (0, "the finalized checkpoint is not 40 bytes")
   let inputs ← readGossipInputs (messages.size + 1) messages 0
   if topic = "partial_data_column_sidecar" then
@@ -352,7 +384,12 @@ def gossipValidationExport
   let mut seen : Seen := {}
   let mut out := ByteArray.empty
   for input in inputs do
-    let (outcome, next) ← validateGossipInput config checks store statuses topic seen input
+    let messageTopic := if input.topic.isEmpty then topic else input.topic
+    unless gossipValidationSpecified fork messageTopic do
+      throw (0, s!"gossip validation of the topic {messageTopic} at {fork.name} is not yet \
+        specified")
+    let (outcome, next) ←
+      validateGossipInput config checks store statuses messageTopic seen input
     seen := next
     out := out ++ outcomeRecord outcome
   return out
