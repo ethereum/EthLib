@@ -12,13 +12,15 @@ public import EthLib.Execution.Proofs.Evm.Gas.Memory
 - Memory grows in whole words, so its size stays a multiple of 32.
 - A write within memory sets each byte of its range and keeps every other byte.
 - Growth keeps every byte, and a read gives the bytes of its range.
+- Growth by no byte, and a write or a read of a whole memory from offset 0, give simple forms.
 -/
 
 @[expose] public section
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (U256 byteAt byteAt_append byteAt_append_zeros byteAt_extract byteAt_of_size_le)
+open EthLib.Base (U256 byteAt byteAt_append byteAt_append_zeros byteAt_extract byteAt_of_size_le
+  eq_of_byteAt)
 
 /-- A read has exactly the `size` bytes asked for. -/
 theorem bufferRead_length (data : ByteArray) (start size : Nat) :
@@ -172,5 +174,56 @@ theorem byteAt_bufferRead (data : ByteArray) (offset size j : Nat) :
   · rw [dite_eq_right_of_eq_false
       (eq_false (by simpa [ByteArray.size, bufferRead_length] using hj)),
       ite_eq_right_of_eq_false _ _ (eq_false hj)]
+
+/-- Growth by no byte leaves memory as it is. -/
+theorem memoryExtend_zero (memory : ByteArray) : memoryExtend memory 0 = memory := by
+  apply eq_of_byteAt (by simp [size_memoryExtend])
+  intro i
+  exact byteAt_memoryExtend memory 0 i
+
+/-- A write of a whole memory from offset 0 gives the written bytes. -/
+theorem memoryWrite_whole {memory value : ByteArray} (h : memory.size = value.size) :
+    memoryWrite memory 0 value = value := by
+  have hs : (memoryWrite memory 0 value).size = value.size := by
+    rw [size_memoryWrite (by omega)]
+    omega
+  apply eq_of_byteAt hs
+  intro i
+  rw [byteAt_memoryWrite (by omega)]
+  split
+  · simp
+  · rename_i hi
+    rw [Base.byteAt_of_size_le (by omega), Base.byteAt_of_size_le (by omega)]
+
+/-- A write past the end of a memory, into bytes that it grew by, appends the written bytes. -/
+theorem memoryWrite_extend_end {memory value : ByteArray} :
+    memoryWrite (memoryExtend memory value.size) memory.size value = memory ++ value := by
+  have hs : (memoryWrite (memoryExtend memory value.size) memory.size value).size =
+      (memory ++ value).size := by
+    rw [size_memoryWrite (by simp [size_memoryExtend])]
+    simp [size_memoryExtend]
+  apply eq_of_byteAt hs
+  intro i
+  rw [byteAt_memoryWrite (by simp [size_memoryExtend]), byteAt_append]
+  split
+  · rename_i hi
+    rw [ite_eq_right (by omega)]
+  · rename_i hi
+    by_cases hlt : i < memory.size
+    · rw [ite_eq_left hlt, byteAt_memoryExtend]
+    · rw [ite_eq_right hlt]
+      rw [Base.byteAt_of_size_le (by simp [size_memoryExtend]; omega),
+        Base.byteAt_of_size_le (by omega)]
+
+/-- A read of a whole memory from offset 0 gives the memory. -/
+theorem memoryReadBytes_whole {memory : ByteArray} :
+    memoryReadBytes memory 0 memory.size = memory := by
+  apply eq_of_byteAt (by rw [size_memoryReadBytes (by omega)])
+  intro i
+  rw [byteAt_memoryReadBytes (by omega)]
+  split
+  · simp
+  · rename_i hi
+    rw [Base.byteAt_of_size_le (by omega)]
 
 end EthLib.Execution.Evm

@@ -28,14 +28,6 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 namespace Hoare
 
-/-- A loop: each run of the body lowers the measure by one, and the exit ends it at 0. -/
-theorem loop {I : Nat → Evm fork Meter → Prop} {Q : Evm fork Meter → Prop}
-    (body : ∀ k, Hoare fork (I (k + 1)) (I k)) (exit : Hoare fork (I 0) Q) (n : Nat) :
-    Hoare fork (I n) Q := by
-  induction n with
-  | zero => exact exit
-  | succ k ih => exact (body k).seq ih
-
 /-- A loop whose body may lower the measure by more than one. -/
 theorem loop_lt {I : Nat → Evm fork Meter → Prop} {Q : Evm fork Meter → Prop}
     (body : ∀ k, Hoare fork (I (k + 1)) fun evm => ∃ j < k + 1, I j evm)
@@ -49,6 +41,13 @@ theorem loop_lt {I : Nat → Evm fork Meter → Prop} {Q : Evm fork Meter → Pr
       obtain ⟨mid, hreach, j, hj, hi⟩ := body k evm hp
       obtain ⟨after, hreach', hq⟩ := ih j hj mid hi
       exact ⟨after, hreach.trans hreach', hq⟩
+
+/-- A loop: each run of the body lowers the measure by one, and the exit ends it at 0. -/
+theorem loop {I : Nat → Evm fork Meter → Prop} {Q : Evm fork Meter → Prop}
+    (body : ∀ k, Hoare fork (I (k + 1)) (I k)) (exit : Hoare fork (I 0) Q) (n : Nat) :
+    Hoare fork (I n) Q :=
+  loop_lt (fun k => (body k).consequence (fun _ h => h) fun _ h => ⟨k, Nat.lt_succ_self k, h⟩)
+    exit n
 
 end Hoare
 

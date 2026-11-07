@@ -4,7 +4,6 @@ public import EthLib.Execution.Proofs.Evm.Logic.Reach
 public import EthLib.Execution.Proofs.Evm.Logic.Triple
 public import EthLib.Execution.Proofs.Evm.Logic.Symbolic
 public import EthLib.Execution.Proofs.Evm.Logic.Loop
-public import EthLib.Execution.Proofs.Evm.Logic.Memory
 public import EthLib.Execution.Proofs.Evm.Logic.Rules
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.Return42
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.SlotOfCalldata
