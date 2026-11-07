@@ -674,6 +674,8 @@ With every runner that meets the assumption, the run returns that word or aborts
 `meets_process_noCode` proves that the runner of the interpreter meets one more assumption.
 That assumption says that a message with no code, to an account that is no precompile, ends with no error.
 So `CallFlag.runFrame_process_noCode` proves that the contract returns 1 when the address holds no code and is no precompile, unless the run aborts.
+`CallReturn42.runFrame_process` composes the contract with the contract that returns 42 at the called address, through `meets_of_spec`.
+With the runner of the interpreter, the caller then stops with no error and returns the word 1, or the run aborts.
 No rule covers CREATE, a call with value, DELEGATECALL or STATICCALL.
 
 ### SHA-256 precompile
