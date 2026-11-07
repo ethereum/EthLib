@@ -867,17 +867,25 @@ It pays the price of EIP-2200 with the prices of EIP-2929 from the facts of the 
 `Logic.StoppedStored.of_known` proves that a rule that halts and keeps the state and the substate keeps every fact.
 `Logic.stop_stored` proves that STOP keeps every fact.
 These frames say nothing of the logs, the accessed addresses and the other fields of the substate.
+`Logic.Change` names the slots that a message may touch, and the facts and the refund it gives on success.
 `Logic.Effect` (`Logic/Effect.lean`) is the effect of a message on storage, from the frame that sends it.
 Outside the slots it touches, the state after agrees with the state before, and a failed message touches no slot.
 A message that succeeds gives the facts of some slots and adds a refund.
 `Logic.effects_rollbackOnError` proves that a callee whose stopped frame agrees with its start outside some slots has such an effect after the rollback.
-`Logic.call_stored` proves that from Berlin to before Glamsterdam, CALL with no value keeps the facts of a `Stored` frame.
+`Logic.CallMessage` is the message that a call sends when it sends no value of its own, by the kind of the call.
+`Logic.callKind_stored` proves that from Berlin to before Glamsterdam, such a call keeps the facts of a `Stored` frame.
 It keeps each fact of a slot that the effect of the callee does not touch.
-It needs an input range that a fact of memory holds, an empty output range, and the gas of a cold call.
+It needs an input range that a fact of memory holds, an output range within memory, and the gas of a cold call.
 It also needs an assumption that gives the effect of each frame that ends the message.
-On success the frame gains the facts and the refund of the effect.
-On failure it keeps its facts, and the assumption may rule a failure out.
+The assumption also gives the bytes that such a frame writes into the output range when it succeeds.
+On success the frame gains the facts and the refund of the effect, and the fact of those bytes.
+On failure it keeps its facts of slots, and the assumption may rule a failure out.
+Either way it keeps each fact of memory apart from the output range.
 Its new base agrees with the old one outside the touched slots and the slots of the facts.
+`Logic.call_stored` proves this for CALL with no value.
+`Logic.staticcall_stored` proves this for STATICCALL.
+`Logic.delegatecall_stored` proves this for DELEGATECALL.
+`Logic.callcode_stored` proves this for CALLCODE with no value.
 `Logic.meets_runsAll` proves that the runner of the interpreter meets the specifications of a family of codes that call each other, at every bound.
 Each specification is a triple under the assumption that the whole family runs as specified, so a callee may call its caller back.
 The proof is an induction on the bound on the gas of messages.
