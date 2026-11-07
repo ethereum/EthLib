@@ -75,6 +75,29 @@ theorem mem_of_balanceWeightedSearch {indices : Array ValidatorIndex} {balances 
       · exact start
     · simp [throw, throwThe, MonadExcept.throw, MonadExceptOf.throw] at found
 
+/-- Two orders that agree on the positions below the number of candidates give one search.
+
+The search reads the order only at a draw number modulo that number. -/
+theorem balanceWeightedSearch_congr {indices : Array ValidatorIndex} {balances : Array Gwei}
+    {first second : Nat → Nat} {seed : Bytes32} {size : Nat} (nonempty : 0 < indices.size)
+    (agree : ∀ place < indices.size, first place = second place) :
+    ∀ {selected : Array ValidatorIndex} {bound : selected.size ≤ size} {i : Nat},
+      balanceWeightedSearch preset fork indices balances first seed size selected bound i =
+        balanceWeightedSearch preset fork indices balances second seed size selected bound i := by
+  intro selected bound i
+  obtain ⟨left, leftEq⟩ : ∃ left, left = 2 ^ 64 - i := ⟨_, rfl⟩
+  induction left using Nat.strongRecOn generalizing selected i with
+  | _ left ih =>
+    unfold balanceWeightedSearch
+    split
+    · rfl
+    simp only [agree _ (Nat.mod_lt i nonempty), bind, Except.bind]
+    split
+    · rfl
+    split
+    · exact ih _ (by omega) rfl
+    · rfl
+
 /-- Each validator that a balance-weighted selection draws is one of its candidates. -/
 theorem mem_of_computeBalanceWeightedSelection {state : BeaconState preset fork}
     {indices : Array ValidatorIndex} {seed : Bytes32} {size : UInt64} {shuffleIndices : Bool}
@@ -90,17 +113,50 @@ theorem mem_of_computeBalanceWeightedSelection {state : BeaconState preset fork}
   · simp only [empty, fits, ↓reduceIte, bind, Except.bind, pure, Except.pure] at computed
     split at computed
     · cases computed
-    have sizeEq : indices.size.toUInt64.toNat = indices.size := by
-      rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt fits]
     refine mem_of_balanceWeightedSearch (Nat.pos_of_ne_zero empty) ?_ (by simp) computed
     intro place lt
     split
-    · have entry := computeShuffledPermutation_getD_lt (preset := preset) (seed := seed)
-        (count := indices.size.toUInt64) (place := place) (by rw [sizeEq]; exact lt)
-      rwa [sizeEq] at entry
+    · exact Shuffle.shuffledIndex_lt lt
     · exact lt
   · simp [empty, fits, bind, Except.bind, throw, throwThe, MonadExcept.throw,
       MonadExceptOf.throw] at computed
+
+/-- A slot has at least one attestation committee. -/
+theorem getCommitteeCountPerSlot_pos (state : BeaconState preset fork) (epoch : Epoch) :
+    0 < (getCommitteeCountPerSlot state epoch).toNat := by
+  have atLeastOne : ∀ x : UInt64, 0 < (max 1 x).toNat := by
+    intro x
+    simp only [max]
+    split
+    · rename_i le
+      rw [UInt64.le_iff_toNat_le] at le
+      simp only [UInt64.toNat_one] at le
+      exact le
+    · simp
+  exact atLeastOne _
+
+/-- The members of the committees of a slot are those of each committee, one after the other.
+
+The committees of the slot share one shuffle, and each committee alone gives the same members. -/
+theorem slotCommitteeMembers_eq (state : BeaconState preset fork) (slot : Slot) :
+    slotCommitteeMembers state slot =
+      (List.range (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat).foldlM
+        (fun members index => return members ++ (← getBeaconCommittee state slot index.toUInt64))
+        #[] := by
+  unfold slotCommitteeMembers
+  cases seedOk : getSeed state (computeEpochAtSlot preset slot) DOMAIN_BEACON_ATTESTER with
+  | error e =>
+    -- The first committee reads the same seed, so both sides fail with its error.
+    obtain ⟨n, count⟩ : ∃ n,
+        (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat = n + 1 :=
+      ⟨_, (Nat.succ_pred_eq_of_pos (getCommitteeCountPerSlot_pos _ _)).symm⟩
+    rw [count, List.range_succ_eq_map, List.foldlM_cons]
+    simp [getBeaconCommittee, seedOk, bind, Except.bind]
+  | ok seed =>
+    simp only [seedOk, bind, Except.bind]
+    congr 1
+    funext members index
+    simp [getBeaconCommittee, seedOk, bind, Except.bind]
 
 /-- Each member of the payload committee of a slot is on an attestation committee of the slot. -/
 theorem mem_of_computePtc {state : BeaconState preset fork} {slot : Slot}

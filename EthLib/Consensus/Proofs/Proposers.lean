@@ -143,6 +143,16 @@ theorem computeProposerIndex_of_computeBalanceWeightedSelection
     change _ = Except.ok balances.toList at onList
     have sizes : balances.size = indices.size := by
       simpa using mapM_ok_length onList
+    -- Both read the shuffled position of each draw.
+    have agree : ∀ place < indices.size,
+        Shuffle.shuffledIndex preset.SHUFFLE_ROUND_COUNT.toNat seed indices.size place =
+          ((computeShuffledPermutation preset indices.size.toUInt64 seed).getD place 0).toNat := by
+      intro place lt
+      have below : place < indices.size.toUInt64.toNat := by rw [sizeEq]; exact lt
+      rw [Array.getD_eq_getD_getElem?, computeShuffledPermutation_getElem below, Option.getD_some,
+        UInt64.toNat_ofNat', sizeEq,
+        Nat.mod_eq_of_lt (Nat.lt_trans (Shuffle.shuffledIndex_lt lt) fits)]
+    rw [balanceWeightedSearch_congr (Nat.pos_of_ne_zero empty) agree] at computed
     unfold computeProposerIndex
     simp only [empty, fits, ↓reduceIte]
     refine proposerSearch_of_balanceWeightedSearch (Nat.pos_of_ne_zero empty)

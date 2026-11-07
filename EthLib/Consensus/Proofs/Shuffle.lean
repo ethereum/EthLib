@@ -27,15 +27,6 @@ theorem ShuffleError.code_injective (e₁ e₂ : ShuffleError) (h : e₁.code = 
 
 namespace Shuffle
 
-/-- One round of swap-or-not on one index, hashing the bucket of its position directly. -/
-def indexRound (seed : Bytes32) (count roundNumber index : Nat) : Nat :=
-  swapOrNot count (pivot seed roundNumber count)
-    (fun position => bitAt (bucketBits seed roundNumber (position / 256)) position) index
-
-/-- Every round of a preset on one index, in order. -/
-def shuffledIndex (rounds : Nat) (seed : Bytes32) (count index : Nat) : Nat :=
-  (List.range rounds).foldl (fun index roundNumber => indexRound seed count roundNumber index) index
-
 /-- Swap-or-not keeps an index below the count. -/
 theorem swapOrNot_lt {count pivot index : Nat} {bit : Nat → Bool} (lt : index < count) :
     swapOrNot count pivot bit index < count := by
@@ -119,9 +110,7 @@ theorem computeShuffledIndex_eq {preset : Preset} {index count : UInt64} {seed :
     computeShuffledIndex preset index count seed =
       .ok (UInt64.ofNat
         (Shuffle.shuffledIndex preset.SHUFFLE_ROUND_COUNT.toNat seed count.toNat index.toNat)) := by
-  have natLt : index.toNat < count.toNat := UInt64.lt_iff_toNat_lt.mp lt
-  simp [computeShuffledIndex, lt, Array.getD_eq_getD_getElem?,
-    computeShuffledPermutation_getElem natLt]
+  simp [computeShuffledIndex, lt]
 
 /-- An index at or above the count has no shuffled position. -/
 theorem computeShuffledIndex_of_le {preset : Preset} {index count : UInt64} {seed : Bytes32}

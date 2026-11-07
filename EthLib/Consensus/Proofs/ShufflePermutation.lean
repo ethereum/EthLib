@@ -231,7 +231,8 @@ theorem computeCommittee_eq {preset : Preset} {indices : Array ValidatorIndex} {
   have stopLe : indices.size * (index.toNat + 1) / count.toNat ≤ indices.size := by
     exact Nat.div_le_of_le_mul (Nat.le_trans bound (Nat.le_of_eq (Nat.mul_comm _ _)))
   have below : index.toNat + 1 < 2 ^ 64 := Nat.lt_of_le_of_lt natLt count.toNat_lt
-  simp only [computeCommittee, positive, below, Nat.lt_of_le_of_lt bound fits, and_self,
+  simp only [computeCommittee, shuffledCommittee, positive, below,
+    Nat.lt_of_le_of_lt bound fits, and_self,
     Nat.not_lt.mpr stopLe, and_false, ↓reduceIte]
   congr 2
   apply List.ext_getElem (by simp [Shuffle.shuffledIndices]; omega)
@@ -251,7 +252,8 @@ theorem computeCommittee_past_end {preset : Preset} {indices : Array ValidatorIn
       .error (.indexOutOfRange
         (UInt64.ofNat (max (indices.size * index.toNat / count.toNat) indices.size))
         (UInt64.ofNat indices.size)) := by
-  simp only [computeCommittee, positive, below, fits, and_self, nonempty, past, ↓reduceIte]
+  simp only [computeCommittee, shuffledCommittee, positive, below, fits, and_self, nonempty, past,
+    ↓reduceIte]
   rfl
 
 /-- A committee with an empty range of positions is empty, wherever the range lies. -/
@@ -261,8 +263,8 @@ theorem computeCommittee_empty {preset : Preset} {indices : Array ValidatorIndex
     (empty : indices.size * (index.toNat + 1) / count.toNat ≤
       indices.size * index.toNat / count.toNat) :
     computeCommittee preset indices seed index count = .ok #[] := by
-  simp only [computeCommittee, positive, below, fits, and_self, Nat.not_lt.mpr empty,
-    false_and, ↓reduceIte, Nat.sub_eq_zero_of_le empty]
+  simp only [computeCommittee, shuffledCommittee, positive, below, fits, and_self,
+    Nat.not_lt.mpr empty, false_and, ↓reduceIte, Nat.sub_eq_zero_of_le empty]
   rfl
 
 namespace Shuffle
@@ -343,7 +345,7 @@ theorem mem_of_computeCommittee {preset : Preset} {indices : Array ValidatorInde
     {seed : Bytes32} {index count : UInt64} {committee : Array ValidatorIndex}
     (computed : computeCommittee preset indices seed index count = .ok committee)
     {member : ValidatorIndex} (mem : member ∈ committee) : member ∈ indices := by
-  unfold computeCommittee at computed
+  unfold computeCommittee shuffledCommittee at computed
   by_cases zero : count = 0
   · simp [zero, bind, Except.bind, throw, throwThe, MonadExcept.throw,
       MonadExceptOf.throw] at computed

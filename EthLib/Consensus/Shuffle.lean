@@ -83,6 +83,17 @@ def round (seed : Bytes32) (count roundNumber : Nat) (indices : Array Nat) : Arr
   let bit position := bitAt (buckets.getD (position / 256) .empty) position
   indices.map (swapOrNot count (pivot seed roundNumber count) bit)
 
+/-- One round of swap-or-not on one index, hashing the bucket of its position directly. -/
+def indexRound (seed : Bytes32) (count roundNumber index : Nat) : Nat :=
+  swapOrNot count (pivot seed roundNumber count)
+    (fun position => bitAt (bucketBits seed roundNumber (position / 256)) position) index
+
+/-- Every round of a preset on one index, in order.
+
+Each round hashes twice, for the pivot and for the bucket, whatever the count. -/
+def shuffledIndex (rounds : Nat) (seed : Bytes32) (count index : Nat) : Nat :=
+  (List.range rounds).foldl (fun index roundNumber => indexRound seed count roundNumber index) index
+
 end Shuffle
 
 /-- The shuffled position of each index below the count, after every round of the preset. -/
@@ -93,22 +104,28 @@ def computeShuffledPermutation (preset : Preset) (count : UInt64) (seed : Bytes3
     (Array.range count.toNat)
   rounds.map UInt64.ofNat
 
-/-- The shuffled position of one index, which must be below the count. -/
+/-- The shuffled position of one index, which must be below the count.
+
+It runs the rounds on that index alone, so its cost does not grow with the count. -/
 def computeShuffledIndex (preset : Preset) (index count : UInt64) (seed : Bytes32) :
     Except ShuffleError UInt64 :=
-  if index < count then .ok ((computeShuffledPermutation preset count seed).getD index.toNat 0)
+  if index < count then
+    .ok (UInt64.ofNat
+      (Shuffle.shuffledIndex preset.SHUFFLE_ROUND_COUNT.toNat seed count.toNat index.toNat))
   else .error (.indexOutOfRange index count)
 
-/-- Committee `index` of `count`, cut from the shuffled list of indices.
+/-- Committee `index` of `count`, cut from a list of indices in the order of shuffled positions.
 
-It holds the shuffled indices from `len * index / count` up to `len * (index + 1) / count`.
+It reads the shuffled positions from `len * index / count` up to `len * (index + 1) / count`.
 
 A position past the last index is out of range, which happens only when `index ≥ count`.
 
 An empty range has no position to read, so it gives an empty committee, even past the end.
 
-The default value is never read, since each shuffled position is below the length. -/
-def computeCommittee (preset : Preset) (indices : Array ValidatorIndex) (seed : Bytes32)
+The default value is never read when each shuffled position is below the length.
+
+The committees of an epoch share one shuffle, so it is computed once and passed here. -/
+def shuffledCommittee (indices : Array ValidatorIndex) (shuffled : Array UInt64)
     (index count : UInt64) : Except ShuffleError (Array ValidatorIndex) := do
   if count = 0 then throw .noCommittee
   unless index.toNat + 1 < 2 ^ 64 ∧ indices.size * (index.toNat + 1) < 2 ^ 64 do
@@ -118,8 +135,13 @@ def computeCommittee (preset : Preset) (indices : Array ValidatorIndex) (seed : 
   -- The first position to shuffle at or past the length is the larger of the two.
   if start < stop ∧ indices.size < stop then
     throw (.indexOutOfRange (UInt64.ofNat (max start indices.size)) (UInt64.ofNat indices.size))
-  let shuffled := computeShuffledPermutation preset (UInt64.ofNat indices.size) seed
   return ((List.range (stop - start)).map fun i =>
     indices.getD (shuffled.getD (start + i) 0).toNat 0).toArray
+
+/-- Committee `index` of `count`, cut from the shuffled list of indices. -/
+def computeCommittee (preset : Preset) (indices : Array ValidatorIndex) (seed : Bytes32)
+    (index count : UInt64) : Except ShuffleError (Array ValidatorIndex) :=
+  shuffledCommittee indices (computeShuffledPermutation preset (UInt64.ofNat indices.size) seed)
+    index count
 
 end EthLib.Consensus
