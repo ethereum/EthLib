@@ -21,6 +21,10 @@ Otherwise the two climbs to the state root hash two different messages to one SH
 
 In the state of the attested block, the two nodes are its finalized root and its next committee.
 
+A new store trusts a block.
+
+Its committee, which the bootstrap proves, is the current committee of the state of that block.
+
 The signature needs an assumption, since EthLib proves no unforgeability of BLS here.
 
 The assumption says that an aggregate signature verifies only if every signer signed the message.
@@ -142,6 +146,52 @@ theorem nextSyncCommitteeGindexAtSlot_named {config : Config} {slot : Slot} {gin
     subst indexed
     unfold nextSyncCommitteeGindex
     split <;> (try split) <;> decide
+
+/-- The index of the current committee at a slot names a node below the root. -/
+theorem currentSyncCommitteeGindexAtSlot_named {config : Config} {slot : Slot} {gindex : Nat}
+    (indexed : currentSyncCommitteeGindexAtSlot (preset := preset) (fork := fork) config slot =
+      .ok gindex) : 2 ≤ gindex := by
+  unfold currentSyncCommitteeGindexAtSlot at indexed
+  cases forked : stateForkAtSlot (preset := preset) (fork := fork) config slot with
+  | error => simp [forked, Functor.map, Except.map] at indexed
+  | ok state =>
+    simp only [forked, Functor.map, Except.map, Except.ok.injEq] at indexed
+    subst indexed
+    unfold currentSyncCommitteeGindex
+    split <;> (try split) <;> decide
+
+/-- What a new store proves about its bootstrap.
+
+The header of the bootstrap has the trusted block root.
+
+The store keeps the committee of the bootstrap.
+
+Its committee branch verifies the root of its committee against the state root of the header. -/
+theorem initializeLightClientStore_proves {config : Config} {trustedBlockRoot : Root}
+    {bootstrap : LightClientBootstrap preset fork} {store : LightClientStore preset fork}
+    (computed : initializeLightClientStore config trustedBlockRoot bootstrap = .ok store) :
+    SszType.hashTreeRoot bootstrap.header.beacon = .ok trustedBlockRoot ∧
+      store.currentSyncCommittee = bootstrap.currentSyncCommittee ∧
+      ∃ gindex leaf, currentSyncCommitteeGindexAtSlot (preset := preset) (fork := fork) config
+          bootstrap.header.beacon.slot = .ok gindex ∧
+        SszType.hashTreeRoot bootstrap.currentSyncCommittee = .ok leaf ∧
+        isValidNormalizedMerkleBranch leaf bootstrap.currentSyncCommitteeBranch.toList gindex
+          bootstrap.header.beacon.stateRoot = .ok true := by
+  unfold initializeLightClientStore at computed
+  obtain ⟨_, _, rest⟩ := Base.bind_ok_iff.mp computed
+  obtain ⟨_, _, rest⟩ := Base.bind_ok_iff.mp rest
+  obtain ⟨_, _, rest⟩ := Base.bind_ok_iff.mp rest
+  obtain ⟨headerRoot, headerRooted, rest⟩ := Base.bind_ok_iff.mp rest
+  obtain ⟨_, trusted, rest⟩ := Base.bind_ok_iff.mp rest
+  obtain ⟨leaf, leafRooted, rest⟩ := Base.bind_ok_iff.mp rest
+  obtain ⟨gindex, indexed, rest⟩ := Base.bind_ok_iff.mp rest
+  obtain ⟨verdict, checked, rest⟩ := Base.bind_ok_iff.mp rest
+  obtain ⟨_, accepted, built⟩ := Base.bind_ok_iff.mp rest
+  obtain rfl := LightClientError.require_ok.mp trusted
+  obtain rfl := LightClientError.require_ok.mp accepted
+  cases built
+  exact ⟨LightClientError.liftRoot_ok.mp headerRooted, rfl, gindex, leaf, indexed,
+    LightClientError.liftRoot_ok.mp leafRooted, LightClientError.liftRoot_ok.mp checked⟩
 
 /-- What an accepted update proves, before any assumption on the signature.
 
@@ -352,6 +402,50 @@ theorem validateLightClientUpdate_nextSyncCommittee_state {config : Config}
   obtain ⟨node, nodeRooted⟩ := SszType.hashTreeRoot_total (state.nextSyncCommittee altair)
   exact ⟨leaf, node, committeeRooted, nodeRooted,
     bound node (BeaconState.nodeRoot_nextSyncCommittee altair state nodeRooted)⟩
+
+/-- The committee of a new store is the current sync committee of the trusted beacon state.
+
+Take a beacon state of a fork from Altair whose root is the state root of the bootstrap header.
+
+At the slot of that header, the client must read the committee at the index of that fork.
+
+The root of the committee of the store is the root of the current committee of the state.
+
+The branch of the bootstrap proves it.
+
+Otherwise the search names a SHA-256 collision. -/
+theorem initializeLightClientStore_currentSyncCommittee {config : Config}
+    {trustedBlockRoot : Root} {bootstrap : LightClientBootstrap preset fork}
+    {store : LightClientStore preset fork}
+    (computed : initializeLightClientStore config trustedBlockRoot bootstrap = .ok store)
+    {stateFork : Fork} [LawfulSszType (BeaconState preset stateFork)]
+    [NeZero preset.SYNC_COMMITTEE_SIZE.toNat] (altair : .altair ≤ stateFork)
+    (state : BeaconState preset stateFork)
+    (rooted : SszType.hashTreeRoot state = .ok bootstrap.header.beacon.stateRoot)
+    (layout : currentSyncCommitteeGindexAtSlot (preset := preset) (fork := fork) config
+      bootstrap.header.beacon.slot = .ok (currentSyncCommitteeGindex stateFork)) :
+    ∃ leaf node, SszType.hashTreeRoot store.currentSyncCommittee = .ok leaf ∧
+      SszType.hashTreeRoot (state.currentSyncCommittee altair) = .ok node ∧
+      (leaf = node ∨ ∃ honest a b,
+        computeMerkleProof state (currentSyncCommitteeGindex stateFork) = .ok honest ∧
+        findBranchCollision (currentSyncCommitteeGindex stateFork) 0 leaf.toArray node.toArray
+            ((bootstrap.currentSyncCommitteeBranch.toList.drop
+              (bootstrap.currentSyncCommitteeBranch.toList.length -
+                Nat.log2 (currentSyncCommitteeGindex stateFork))).map Vector.toArray)
+            ((honest.drop (honest.length - Nat.log2 (currentSyncCommitteeGindex stateFork))).map
+              Vector.toArray) = some (a, b) ∧
+        a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
+        Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
+          Cryptography.Hash.Sha256.hash (ByteArray.mk b)) := by
+  obtain ⟨_, kept, gindex, leaf, indexed, leafRooted, valid⟩ :=
+    initializeLightClientStore_proves computed
+  rw [kept]
+  rw [layout, Except.ok.injEq] at indexed
+  subst indexed
+  obtain ⟨node, nodeRooted⟩ := SszType.hashTreeRoot_total (state.currentSyncCommittee altair)
+  exact ⟨leaf, node, leafRooted, nodeRooted,
+    isValidNormalizedMerkleBranch_value (currentSyncCommitteeGindexAtSlot_named layout) valid state
+      rooted (BeaconState.nodeRoot_currentSyncCommittee altair state nodeRooted)⟩
 
 /-- The assumption on an aggregate signature check: it accepts only messages that all keys signed.
 
