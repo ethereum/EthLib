@@ -22,7 +22,7 @@ SELF_BUILD = 2**64 - 1
 
 # From Heze a bid has one bit for each of the 16 members of the inclusion list committee.
 # No member of the case sent a list.
-NO_BITS = {"gloas": b"", "heze": bytes(2)}
+NO_BITS = {"gloas": None, "heze": bytes(2)}
 
 # The builder index sits after four 32-byte fields, an address and the gas limit of a bid.
 # The value sits after the builder index and the slot.
@@ -88,11 +88,13 @@ def self_built(fork: str, bits: bytes | None = None) -> bytes:
         requests,
         b"",
         fee_recipient(fork),
-        NO_BITS[fork] if bits is None else bits,
+        bits,
     )
 
 
-def bid(fork: str, builder_index: int, value: int, slot: int = 1) -> bytes:
+def bid(
+    fork: str, builder_index: int, value: int, slot: int = 1, bits: bytes | None = None
+) -> bytes:
     _, payload, requests = envelope(fork)
     return consensus.get_execution_payload_bid(
         "minimal",
@@ -105,7 +107,7 @@ def bid(fork: str, builder_index: int, value: int, slot: int = 1) -> bytes:
         fee_recipient(fork),
         builder_index,
         value,
-        NO_BITS[fork],
+        bits,
     )
 
 
@@ -121,7 +123,7 @@ def test_envelope_of_the_case(fork: str):
 @pytest.mark.parametrize("fork", ["gloas", "heze"])
 def test_self_built_bid_of_the_case(fork: str):
     # The block of the case carries the self-built bid of its proposer.
-    signed = self_built(fork)
+    signed = self_built(fork, NO_BITS[fork])
     assert signed in signed_block(fork)
     # The signature is the signature at infinity.
     assert signed[4:SIGNED_BID_HEAD] == bytes([0xC0]) + bytes(95)
@@ -129,9 +131,10 @@ def test_self_built_bid_of_the_case(fork: str):
 
 @pytest.mark.parametrize("fork", ["gloas", "heze"])
 def test_bid_of_a_builder(fork: str):
-    message = self_built(fork)[SIGNED_BID_HEAD:]
-    assert bid(fork, SELF_BUILD, 0) == message
-    built = bid(fork, 7, 1_000)
+    bits = NO_BITS[fork]
+    message = self_built(fork, bits)[SIGNED_BID_HEAD:]
+    assert bid(fork, SELF_BUILD, 0, bits=bits) == message
+    built = bid(fork, 7, 1_000, bits=bits)
     assert built[:BUILDER_AT] == message[:BUILDER_AT]
     assert built[BUILDER_AT : BUILDER_AT + 8] == (7).to_bytes(8, "little")
     assert built[BUILDER_AT + 8 : VALUE_AT] == message[BUILDER_AT + 8 : VALUE_AT]
@@ -169,15 +172,47 @@ def test_inclusion_list_bits_before_heze():
     with raises(SszError, "no inclusion list bits at glamsterdam") as info:
         self_built("gloas", bytes(2))
     assert info.value.code == 0
+    with raises(SszError, "no inclusion list bits at glamsterdam") as info:
+        bid("gloas", 7, 0, bits=bytes(2))
+    assert info.value.code == 0
+
+
+@pytest.mark.parametrize("bits", [None, b""], ids=["omitted", "empty"])
+def test_inclusion_list_bits_missing_from_heze(bits: bytes | None):
+    with raises(SszError, "inclusion list bits are required at hegota") as info:
+        self_built("heze", bits)
+    assert info.value.code == 0
+    with raises(SszError, "inclusion list bits are required at hegota") as info:
+        bid("heze", 7, 0, bits=bits)
+    assert info.value.code == 0
+
+
+def test_inclusion_list_bits_left_out_at_heze():
+    _, payload, requests = envelope("heze")
+    inputs = (builder_state("heze"), payload, requests, b"")
+    with raises(SszError, "inclusion list bits are required at hegota") as info:
+        consensus.get_self_built_execution_payload_bid(
+            "minimal", "hegota", *inputs, fee_recipient("heze")
+        )
+    assert info.value.code == 0
+    with raises(SszError, "inclusion list bits are required at hegota") as info:
+        consensus.get_execution_payload_bid(
+            "minimal", "hegota", *inputs, 1, fee_recipient("heze"), 7, 0
+        )
+    assert info.value.code == 0
+
+
+def test_inclusion_list_bits_in_the_bid():
+    # The bits are the last fixed field of the bid, and no blob commitment follows them.
+    bits = bytes([0x01, 0x80])
+    assert bid("heze", 7, 0, bits=bits).endswith(bits)
+    assert self_built("heze", bits).endswith(bits)
 
 
 def test_inclusion_list_bits_from_heze():
     # The bits of the 16 members take 2 bytes.
     with raises(SszError, "input rejected: EthLib.Serialization.Ssz.Err.scope 2 1") as info:
         self_built("heze", bytes(1))
-    assert info.value.code == 0
-    with raises(SszError, "input rejected: EthLib.Serialization.Ssz.Err.scope 2 0") as info:
-        self_built("heze", b"")
     assert info.value.code == 0
 
 
