@@ -9,8 +9,9 @@ The decoder rejects every non-canonical form, whatever bytes follow it.
 
 Each theorem is stated on the front of an input, and a lemma lifts it to a whole input.
 
-The theorems cover the five quasi-encodings in §4.2.1 of Coglio,
-[Ethereum's Recursive Length Prefix in ACL2](https://doi.org/10.4204/EPTCS.327.11).
+The theorems cover the five quasi-encodings in §4.2.1 of Coglio, [the RLP paper][coglio].
+
+That paper is "Ethereum's Recursive Length Prefix in ACL2".
 
 Each one could be read as an item, but the encoding writes that item with fewer bytes:
 
@@ -19,6 +20,8 @@ Each one could be read as an item, but the encoding writes that item with fewer 
 - `b8 l`, with `0 < l < 56`, for a byte string of `l` bytes, which encodes as `80 + l`.
 - `f7 + k`, then a length with a leading zero byte, for a list.
 - `f8 l`, with `0 < l < 56`, for a list payload of `l` bytes, which encodes as `c0 + l`.
+
+[coglio]: https://doi.org/10.4204/EPTCS.327.11
 -/
 
 @[expose] public section

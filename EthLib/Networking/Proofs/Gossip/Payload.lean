@@ -11,8 +11,8 @@ public import EthLib.Networking.Proofs.Snappy.CompressSize
 Properties of the size limits on gossip, and of the gossipsub parameters.
 
 - The worst-case compression of the payload cap is `32 + n + n / 6` bytes, with no overflow.
-- The payload decoder accepts exactly the data within that length which decompresses to a
-  payload within the cap and the bound of its type.
+- Take data within that length.
+  The decoder accepts it exactly when it decompresses to a payload within the cap and type bound.
 - It rejects data above either bound.
 - It accepts the block of the compressor for a payload within the cap and its type bound.
 - It rejects a payload length above the bounds from the preamble alone, before it decompresses.

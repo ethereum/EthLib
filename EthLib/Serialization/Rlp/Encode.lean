@@ -7,8 +7,9 @@ public import EthLib.Serialization.Rlp.Item
 
 The RLP encoding of an item.
 
-Source: `R_b`, `R_l` and `s` in Appendix B of the Yellow Paper, Shanghai version, in
-[`Paper.tex` at `efc5f9a`](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex).
+Source: `R_b`, `R_l` and `s` in Appendix B of the Yellow Paper, Shanghai version.
+
+The file is [`Paper.tex` at `efc5f9a`][paper].
 
 An encoding is a prefix, then a payload.
 
@@ -41,6 +42,8 @@ That keeps the first byte of a long byte string at most `0xb7 + 8 = 0xbf`, below
 It also keeps the first byte of a long list at most `0xf7 + 8 = 0xff`, which is still a byte.
 
 A payload of `2^64` bytes or more has no encoding.
+
+[paper]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 -/
 
 @[expose] public section

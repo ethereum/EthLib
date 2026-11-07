@@ -8,8 +8,7 @@ public import EthLib.Networking.Snappy.Compress
 
 The block that the compressor writes decompresses to its input.
 
-Source: `format_description.txt` of `google/snappy`, at
-<https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/format_description.txt>.
+Source: [`format_description.txt`][format] of `google/snappy`.
 
 - A proposal that counts matches the input on every byte the copy writes (§2.2).
 - After each step, the elements written so far decode to the input before the pending literal.
@@ -22,6 +21,8 @@ The compressor reads the input to count the bytes a proposal matches.
 So the theorem holds for every table.
 
 One input has many blocks, so the round trip goes one way only.
+
+[format]: https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/format_description.txt
 -/
 
 @[expose] public section

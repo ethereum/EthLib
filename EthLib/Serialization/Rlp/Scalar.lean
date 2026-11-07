@@ -7,8 +7,9 @@ public import EthLib.Serialization.Rlp.Decode
 
 The strict decoding of a scalar, a non-negative integer.
 
-Source: the equation for `RLP(i)` in Appendix B of the Yellow Paper, Shanghai version, in
-[`Paper.tex` at `efc5f9a`](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex).
+Source: the equation for `RLP(i)` in Appendix B of the Yellow Paper, Shanghai version.
+
+The file is [`Paper.tex` at `efc5f9a`][paper].
 
 A scalar `i` is encoded as the byte string `BE(i)`, which has no leading zero byte.
 
@@ -22,6 +23,8 @@ For example:
 - `80`, the empty byte string, holds 0.
 - `00`, the byte string `[00]`, holds no scalar, since 0 encodes as `80`.
 - `82 00 01` holds no scalar, since 1 encodes as `01`.
+
+[paper]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 -/
 
 @[expose] public section

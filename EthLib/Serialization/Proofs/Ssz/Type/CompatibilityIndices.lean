@@ -175,12 +175,16 @@ Compatible progressive containers address a field of one name at one node.
     right  active [1,1,1]    names ["a","b","c"]    "b" sits at position 1
 
 Appending a field leaves every earlier field where it was.
+
 A proof of "b" written against the shorter declaration therefore reads against the longer one.
+
 Where no name is shared the two say nothing about each other, which is the other half of the rule.
 
 The two declarations are required to differ.
-A declaration that repeats a field name disagrees with its own layout, and is compatible
-with itself only because a declaration is compared with itself before its layout is read.
+
+A declaration that repeats a field name disagrees with its own layout.
+
+It is compatible with itself only because the self-comparison comes before its layout is read.
 -/
 theorem compatible_named_field_index
     {leftActive rightActive : List Bool} {leftNames rightNames : List String}

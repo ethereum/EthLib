@@ -62,8 +62,9 @@ theorem valueOf_jsonOf_bool {spelling : Spelling} {b : Bool} {document : Json}
 /--
 An unsigned integer document reads back as the integer it was written from.
 
-The alias marks a one-byte integer, so the one byte its hex names is the whole value, and
-every other spelling writes the digits, which read back at any width.
+The alias marks a one-byte integer, so the one byte its hex names is the whole value.
+
+Every other spelling writes the digits, which read back at any width.
 -/
 theorem valueOf_jsonOf_uint {spelling : Spelling} {width n : Nat} {document : Json}
     (fitted : n < 2 ^ (8 * width))
@@ -165,8 +166,9 @@ theorem valueOf_jsonOf_progressiveBitList {spelling : Spelling} {limit : Option 
 /--
 The mapping is not canonical: two documents give one value.
 
-A hex digit is read in either letter case, so a byte array has as many documents as its
-bytes have spellings.
+A hex digit is read in either letter case.
+
+So a byte array has as many documents as its bytes have spellings.
 
 The byte encoding pins one string per value, and nothing here does the same for documents.
 -/

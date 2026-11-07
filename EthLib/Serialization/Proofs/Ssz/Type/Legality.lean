@@ -19,8 +19,11 @@ theorem wellFormed_container_iff (names : List String) (fields : List Desc) :
     cases d : firstDuplicate names <;> cases a : Desc.allWellFormed fields <;>
     simp_all [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
 
-/-- A legal progressive container declares a layout ending on a field, one set position per field, and fields each
-under one name of its own and each legal. -/
+/-- A legal progressive container declares a layout ending on a field.
+
+It has one set position per field.
+
+Its fields are each under one name of its own, and each legal. -/
 theorem wellFormed_progressiveContainer_iff (active : List Bool) (names : List String) (fields : List Desc) :
     (Desc.progressiveContainer active names fields).wellFormed = .ok () ↔
       active ≠ [] ∧ active.getLast? = some true ∧ active.length ≤ maxActiveFields ∧ fields ≠ [] ∧

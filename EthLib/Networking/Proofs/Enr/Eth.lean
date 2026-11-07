@@ -8,8 +8,9 @@ public import EthLib.Networking.Proofs.Devp2p.ForkId
 
 The fork identifier reads back from the value of the entry.
 
-A reader ignores the elements after the first, and it reads exactly the values whose first
-element is a fork identifier.
+A reader ignores the elements after the first.
+
+It reads exactly the values whose first element is a fork identifier.
 -/
 
 @[expose] public section
@@ -28,8 +29,8 @@ theorem readEthEntry_cons (id : ForkId) (rest : List Item) :
 theorem readEthEntry_ethEntry (id : ForkId) : readEthEntry (ethEntry id) = .ok id :=
   readEthEntry_cons id []
 
-/-- A value reads as an identifier only when it is a list whose first element is that
-identifier. -/
+/-- A value reads as an identifier only when it is a list whose first element is that identifier.
+-/
 theorem eq_of_readEthEntry {item : Item} {id : ForkId} (h : readEthEntry item = .ok id) :
     ∃ rest, item = .list (Codec.toItem id :: rest) := by
   unfold readEthEntry at h
