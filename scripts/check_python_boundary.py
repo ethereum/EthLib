@@ -155,8 +155,20 @@ def package_files(root: Path) -> list[str]:
 def changed_lines(root: Path, base: str) -> dict[str, set[int]]:
     """Map each Python file of the package to the lines that the branch adds to it."""
     merge_base = git(root, "merge-base", base, "HEAD").strip()
+    # Fixed prefixes and unquoted paths, whatever the git configuration of the checkout says.
     diff = git(
-        root, "diff", "--unified=0", "--no-color", "--no-ext-diff", merge_base, "--", str(PACKAGE)
+        root,
+        "-c",
+        "core.quotePath=false",
+        "diff",
+        "--unified=0",
+        "--no-color",
+        "--no-ext-diff",
+        "--src-prefix=a/",
+        "--dst-prefix=b/",
+        merge_base,
+        "--",
+        str(PACKAGE),
     )
     result: dict[str, set[int]] = {}
     path = None
@@ -173,6 +185,8 @@ def changed_lines(root: Path, base: str) -> dict[str, set[int]]:
     # `git diff` lists no untracked file, so every line of a new file counts.
     untracked = git(root, "ls-files", "-z", "--others", "--exclude-standard", "--", str(PACKAGE))
     for path in filter(None, untracked.split("\0")):
+        if not path.endswith(".py"):
+            continue
         count = len((root / path).read_text(encoding="utf-8").splitlines())
         result[path] = set(range(1, count + 1))
     return result
@@ -195,13 +209,13 @@ def check_all(root: Path) -> list[str]:
 
 
 def check_base(root: Path, base: str) -> list[str]:
-    """Each conversion on a line that the branch adds, allowlisted or not."""
-    problems: list[str] = []
+    """Each conversion on a line that the branch adds, unless the allowlist names it."""
+    allowed, problems = read_allowlist(root)
     for path, lines in sorted(changed_lines(root, base).items()):
         if not path.endswith(".py") or not (root / path).is_file():
             continue
         for item in findings(path, (root / path).read_text(encoding="utf-8")):
-            if item.line in lines:
+            if item.line in lines and (item.path, item.function, item.rule) not in allowed:
                 problems.append(message(item))
     return problems
 
