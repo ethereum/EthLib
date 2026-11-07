@@ -24,6 +24,8 @@ The two headers of a valid proposer slashing, both signed, are different with on
 Since slashable messages are different messages, each such pair is a collision of signing roots.
 
 No signed vote is slashable with a vote of the starting file, as a record sees it.
+
+An interchange file reads back as itself from the document that writes it.
 -/
 
 @[expose] public section
@@ -119,6 +121,131 @@ theorem readUInt64_uint64Json (path : String) (value : UInt64) :
 theorem readBytes_bytesJson (path : String) {size : Nat} (bytes : Vector UInt8 size) :
     readBytes path size (bytesJson bytes) = .ok bytes := by
   simp [readBytes, bytesJson, readString, bind, Except.bind, Serialization.Ssz.ofHex_toHex]
+
+/-- The signing root of a record that the file writes reads back as itself.
+
+A record without a root is written without the name, and reads back as having none. -/
+theorem readSigningRoot_signingRootFields (path : String) (base : List (String × Json))
+    (root : Option Root) (named : ∀ pair ∈ base, pair.1 ≠ "signing_root")
+    (distinct : base.Pairwise fun a b => a.1 ≠ b.1) :
+    readSigningRoot path (Json.mkObj (base ++ signingRootFields root)) = .ok root := by
+  cases root with
+  | none =>
+    obtain ⟨fault, absent⟩ := Serialization.Ssz.getObjVal?_mkObj_of_not_mem
+      (pairs := base ++ signingRootFields none) (name := "signing_root") (by
+        simp only [signingRootFields, List.append_nil, List.mem_map, not_exists, not_and]
+        exact fun pair mem eq => named pair mem eq)
+    simp [readSigningRoot, absent]
+  | some root =>
+    have found := Serialization.Ssz.getObjVal?_mkObj
+      (pairs := base ++ signingRootFields (some root)) (name := "signing_root")
+      (value := bytesJson root) (by
+        simp only [signingRootFields, List.pairwise_append, distinct, List.mem_singleton,
+          forall_eq, ne_eq, List.pairwise_singleton, true_and]
+        exact fun a mem => named a mem) (by simp [signingRootFields])
+    simp [readSigningRoot, found, readBytes_bytesJson, bind, Except.bind, pure, Except.pure]
+
+/-- A block that the file writes reads back as itself. -/
+theorem readBlock_blockJson (path : String) (block : SignedBlockRecord) :
+    readBlock path (blockJson block) = .ok block := by
+  have slot := Serialization.Ssz.getObjVal?_mkObj
+    (pairs := [("slot", uint64Json block.slot)] ++ signingRootFields block.signingRoot)
+    (name := "slot") (value := uint64Json block.slot)
+    (by cases block.signingRoot <;> simp [signingRootFields]) (by simp)
+  have root := readSigningRoot_signingRootFields path [("slot", uint64Json block.slot)]
+    block.signingRoot (by simp) (by simp)
+  simp only [readBlock, blockJson, field, slot, readUInt64_uint64Json, root, bind, Except.bind,
+    pure, Except.pure]
+
+/-- A vote that the file writes reads back as itself. -/
+theorem readAttestation_attestationJson (path : String) (attestation : SignedAttestationRecord) :
+    readAttestation path (attestationJson attestation) = .ok attestation := by
+  have distinct : ∀ root : Option Root, ([("source_epoch", uint64Json attestation.sourceEpoch),
+      ("target_epoch", uint64Json attestation.targetEpoch)] ++ signingRootFields root).Pairwise
+        fun a b => a.1 ≠ b.1 := by
+    intro root
+    cases root <;> simp [signingRootFields]
+  have source := Serialization.Ssz.getObjVal?_mkObj
+    (pairs := [("source_epoch", uint64Json attestation.sourceEpoch),
+      ("target_epoch", uint64Json attestation.targetEpoch)] ++
+        signingRootFields attestation.signingRoot)
+    (name := "source_epoch") (value := uint64Json attestation.sourceEpoch)
+    (distinct _) (by simp)
+  have target := Serialization.Ssz.getObjVal?_mkObj
+    (pairs := [("source_epoch", uint64Json attestation.sourceEpoch),
+      ("target_epoch", uint64Json attestation.targetEpoch)] ++
+        signingRootFields attestation.signingRoot)
+    (name := "target_epoch") (value := uint64Json attestation.targetEpoch)
+    (distinct _) (by simp)
+  have root := readSigningRoot_signingRootFields path
+    [("source_epoch", uint64Json attestation.sourceEpoch),
+      ("target_epoch", uint64Json attestation.targetEpoch)]
+    attestation.signingRoot (by simp) (by simp)
+  simp only [readAttestation, attestationJson, field, source, target, readUInt64_uint64Json, root,
+    bind, Except.bind, pure, Except.pure]
+
+/-- An array that the file writes, from elements that each read back, reads back as the list. -/
+theorem readArray_arr {α : Type} (path : String)
+    (read : String → Json → Except SlashingProtectionError α) (write : α → Json)
+    (back : ∀ path x, read path (write x) = .ok x) (xs : List α) :
+    readArray path read (.arr (xs.map write).toArray) = .ok xs := by
+  unfold readArray
+  -- Count the positions from any start, as the recursion on the list does.
+  suffices ∀ n, (((xs.map write).zipIdx n).mapM fun (element, index) =>
+      read s!"{path}[{index}]" element) = .ok xs from this 0
+  intro n
+  induction xs generalizing n with
+  | nil => rfl
+  | cons x rest ih =>
+    simp only [List.map_cons, List.zipIdx_cons, List.mapM_cons, back, ih, bind, Except.bind, pure,
+      Except.pure]
+
+/-- What one key signed, as the file writes it, reads back as itself. -/
+theorem readEntry_entryJson (path : String) (entry : InterchangeEntry) :
+    readEntry path (entryJson entry) = .ok entry := by
+  have distinct : ([("pubkey", bytesJson entry.pubkey),
+      ("signed_blocks", Json.arr (entry.signedBlocks.map blockJson).toArray),
+      ("signed_attestations", Json.arr (entry.signedAttestations.map attestationJson).toArray)] :
+        List (String × Json)).Pairwise fun a b => a.1 ≠ b.1 := by simp
+  have pubkey := Serialization.Ssz.getObjVal?_mkObj distinct
+    (name := "pubkey") (value := bytesJson entry.pubkey) (by simp)
+  have blocks := Serialization.Ssz.getObjVal?_mkObj distinct (name := "signed_blocks")
+    (value := Json.arr (entry.signedBlocks.map blockJson).toArray) (by simp)
+  have attestations := Serialization.Ssz.getObjVal?_mkObj distinct (name := "signed_attestations")
+    (value := Json.arr (entry.signedAttestations.map attestationJson).toArray) (by simp)
+  simp only [readEntry, entryJson, field, pubkey, blocks, attestations, readBytes_bytesJson,
+    readArray_arr _ readBlock blockJson readBlock_blockJson,
+    readArray_arr _ readAttestation attestationJson readAttestation_attestationJson, bind,
+    Except.bind, pure, Except.pure]
+
+/-- An interchange file reads back as itself from the document that writes it. -/
+theorem ofJson_toJson (interchange : Interchange) :
+    ofJson interchange.toJson = .ok interchange := by
+  have metadataDistinct : ([("interchange_format_version", Json.str INTERCHANGE_FORMAT_VERSION),
+      ("genesis_validators_root", bytesJson interchange.genesisValidatorsRoot)] :
+        List (String × Json)).Pairwise fun a b => a.1 ≠ b.1 := by simp
+  have version := Serialization.Ssz.getObjVal?_mkObj metadataDistinct
+    (name := "interchange_format_version") (value := Json.str INTERCHANGE_FORMAT_VERSION)
+    (by simp)
+  have root := Serialization.Ssz.getObjVal?_mkObj metadataDistinct
+    (name := "genesis_validators_root") (value := bytesJson interchange.genesisValidatorsRoot)
+    (by simp)
+  have distinct : ([("metadata", Json.mkObj [
+      ("interchange_format_version", Json.str INTERCHANGE_FORMAT_VERSION),
+      ("genesis_validators_root", bytesJson interchange.genesisValidatorsRoot)]),
+      ("data", Json.arr (interchange.data.map entryJson).toArray)] :
+        List (String × Json)).Pairwise fun a b => a.1 ≠ b.1 := by simp
+  have metadata := Serialization.Ssz.getObjVal?_mkObj distinct (name := "metadata")
+    (value := Json.mkObj [
+      ("interchange_format_version", Json.str INTERCHANGE_FORMAT_VERSION),
+      ("genesis_validators_root", bytesJson interchange.genesisValidatorsRoot)]) (by simp)
+  have data := Serialization.Ssz.getObjVal?_mkObj distinct (name := "data")
+    (value := Json.arr (interchange.data.map entryJson).toArray) (by simp)
+  simp only [ofJson, toJson, field, metadata, data, version, root, readString,
+    readBytes_bytesJson, readArray_arr _ readEntry entryJson readEntry_entryJson,
+    bind, Except.bind, pure, Except.pure]
+  -- The version is the one of the format, and the rebuilt file is the file.
+  simp
 
 end Interchange
 
