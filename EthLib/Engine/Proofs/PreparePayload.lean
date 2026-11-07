@@ -716,7 +716,7 @@ section Gloas
 variable {checks : SignatureChecks} {store : Store preset fork} {head : ForkChoiceNode}
   {state base : BeaconState preset fork} {gloas : .glamsterdam ≤ fork}
 
-/-- The parent on which a proposer builds, as the fork choice decides at the current slot.
+/-- The parent on which a proposer builds, as the fork choice decides at the slot of the state.
 
 On the full node, the head is the hash of the latest bid.
 
@@ -730,21 +730,18 @@ The state then stays, with the withdrawals that it records. -/
 theorem payloadParentGloas_eq_ok {withdrawals : Array Consensus.Withdrawal} {headBlockHash : Hash32}
     (computed : payloadParentGloas config checks store head state gloas =
       .ok (base, withdrawals, headBlockHash)) :
-    ∃ slot, store.getCurrentSlot config = .ok slot ∧
-      ((store.shouldBuildOnFull gloas head slot = .ok true ∧
+    (store.shouldBuildOnFull gloas head state.slot = .ok true ∧
         headBlockHash = (state.latestExecutionPayloadBid gloas).blockHash ∧
         ∃ envelope, (store.payloads gloas)[head.root]? = some envelope ∧
           applyParentExecutionPayload config checks state gloas envelope.executionRequests =
             .ok base ∧
           ∃ expected, getExpectedWithdrawals base (Nat.le_trans (by decide) gloas) = .ok expected ∧
             withdrawals = expected.withdrawals) ∨
-       (store.shouldBuildOnFull gloas head slot = .ok false ∧
+      (store.shouldBuildOnFull gloas head state.slot = .ok false ∧
         headBlockHash = (state.latestExecutionPayloadBid gloas).parentBlockHash ∧ base = state ∧
-        withdrawals = (state.payloadExpectedWithdrawals gloas).data)) := by
+        withdrawals = (state.payloadExpectedWithdrawals gloas).data) := by
   unfold payloadParentGloas at computed
-  obtain ⟨slot, slotted, computed⟩ := bind_ok_iff.mp computed
   obtain ⟨full, chosen, computed⟩ := bind_ok_iff.mp computed
-  refine ⟨slot, mapError_ok_iff.mp slotted, ?_⟩
   cases full with
   | true =>
     simp only [↓reduceIte] at computed
@@ -824,14 +821,15 @@ private theorem processParentExecutionPayload_of_payloadParentGloas
     (distinct : (state.latestExecutionPayloadBid gloas).blockHash ≠
       (state.latestExecutionPayloadBid gloas).parentBlockHash)
     (parentHash : (body.signedExecutionPayloadBid gloas).message.parentBlockHash = headBlockHash)
-    (requests : ∀ envelope, (store.payloads gloas)[head.root]? = some envelope →
-      body.parentExecutionRequests gloas = envelope.executionRequests)
+    (requests : headBlockHash = (state.latestExecutionPayloadBid gloas).blockHash →
+      ∀ envelope, (store.payloads gloas)[head.root]? = some envelope →
+        body.parentExecutionRequests gloas = envelope.executionRequests)
     (parent : processParentExecutionPayload config checks state gloas body = .ok after) :
     after = base := by
-  obtain ⟨_, _, ⟨_, rfl, envelope, found, applied, _⟩ | ⟨_, rfl, rfl, _⟩⟩ :=
+  obtain ⟨_, rfl, envelope, found, applied, _⟩ | ⟨_, rfl, rfl, _⟩ :=
     payloadParentGloas_eq_ok parented
   · simp only [processParentExecutionPayload, parentHash, ne_eq, not_true_eq_false,
-      ↓reduceIte, bind_ok_iff, ensure_ok_iff, requests envelope found] at parent
+      ↓reduceIte, bind_ok_iff, ensure_ok_iff, requests rfl envelope found] at parent
     obtain ⟨_, _, _, _, appliedAgain⟩ := parent
     rw [applied, Except.ok.injEq] at appliedAgain
     exact appliedAgain.symm
@@ -858,8 +856,9 @@ private theorem withdrawals_of_prepareExecutionPayloadGloas
     (linked : state.latestBlockHash gloas = (state.latestExecutionPayloadBid gloas).parentBlockHash)
     (parentHash :
       (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash = headBlockHash)
-    (requests : ∀ envelope, (store.payloads gloas)[head.root]? = some envelope →
-      block.body.parentExecutionRequests gloas = envelope.executionRequests)
+    (requests : headBlockHash = (state.latestExecutionPayloadBid gloas).blockHash →
+      ∀ envelope, (store.payloads gloas)[head.root]? = some envelope →
+        block.body.parentExecutionRequests gloas = envelope.executionRequests)
     (parent : processParentExecutionPayload config checks state gloas block.body = .ok parented)
     (headed : processBlockHeader parented block = .ok header)
     (withdrawn : processWithdrawals header capella payload = .ok after) :
@@ -872,7 +871,7 @@ private theorem withdrawals_of_prepareExecutionPayloadGloas
   have hashKept : header.latestBlockHash = parented.latestBlockHash := by rw [stored]
   have bidKept : header.latestExecutionPayloadBid = parented.latestExecutionPayloadBid := by
     rw [stored]
-  obtain ⟨_, _, ⟨_, rfl, envelope, _, applied, expected, found, rfl⟩ | ⟨_, rfl, rfl, rfl⟩⟩ :=
+  obtain ⟨_, rfl, envelope, _, applied, expected, found, rfl⟩ | ⟨_, rfl, rfl, rfl⟩ :=
     payloadParentGloas_eq_ok computed
   · have hash := applyParentExecutionPayload_latestBlockHash applied
     have bid := applyParentExecutionPayload_latestExecutionPayloadBid applied
@@ -915,8 +914,9 @@ theorem latestBlockHash_of_prepareExecutionPayloadGloas {safe finalized : Hash32
     (linked : state.latestBlockHash gloas = (state.latestExecutionPayloadBid gloas).parentBlockHash)
     (parentHash :
       (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash = update.headBlockHash)
-    (requests : ∀ envelope, (store.payloads gloas)[head.root]? = some envelope →
-      block.body.parentExecutionRequests gloas = envelope.executionRequests)
+    (requests : update.headBlockHash = (state.latestExecutionPayloadBid gloas).blockHash →
+      ∀ envelope, (store.payloads gloas)[head.root]? = some envelope →
+        block.body.parentExecutionRequests gloas = envelope.executionRequests)
     (parent : processParentExecutionPayload config checks state gloas block.body = .ok parented)
     (headed : processBlockHeader parented block = .ok header)
     (withdrawn : processWithdrawals header capella payload = .ok after) :
@@ -948,8 +948,9 @@ theorem payloadExpectedWithdrawals_of_prepareExecutionPayloadGloas {safe finaliz
     (linked : state.latestBlockHash gloas = (state.latestExecutionPayloadBid gloas).parentBlockHash)
     (parentHash :
       (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash = update.headBlockHash)
-    (requests : ∀ envelope, (store.payloads gloas)[head.root]? = some envelope →
-      block.body.parentExecutionRequests gloas = envelope.executionRequests)
+    (requests : update.headBlockHash = (state.latestExecutionPayloadBid gloas).blockHash →
+      ∀ envelope, (store.payloads gloas)[head.root]? = some envelope →
+        block.body.parentExecutionRequests gloas = envelope.executionRequests)
     (parent : processParentExecutionPayload config checks state gloas block.body = .ok parented)
     (headed : processBlockHeader parented block = .ok header)
     (withdrawn : processWithdrawals header capella payload = .ok after) :
@@ -981,8 +982,9 @@ theorem slot_of_prepareExecutionPayloadGloas {safe finalized : Hash32}
       (state.latestExecutionPayloadBid gloas).parentBlockHash)
     (parentHash :
       (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash = update.headBlockHash)
-    (requests : ∀ envelope, (store.payloads gloas)[head.root]? = some envelope →
-      block.body.parentExecutionRequests gloas = envelope.executionRequests)
+    (requests : update.headBlockHash = (state.latestExecutionPayloadBid gloas).blockHash →
+      ∀ envelope, (store.payloads gloas)[head.root]? = some envelope →
+        block.body.parentExecutionRequests gloas = envelope.executionRequests)
     (parent : processParentExecutionPayload config checks state gloas block.body = .ok parented)
     (headed : processBlockHeader parented block = .ok header)
     (withdrawn : processWithdrawals header capella payload = .ok after) :
@@ -1018,8 +1020,9 @@ theorem parentRoot_of_prepareExecutionPayloadGloas {safe finalized : Hash32}
       (state.latestExecutionPayloadBid gloas).parentBlockHash)
     (parentHash :
       (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash = update.headBlockHash)
-    (requests : ∀ envelope, (store.payloads gloas)[head.root]? = some envelope →
-      block.body.parentExecutionRequests gloas = envelope.executionRequests)
+    (requests : update.headBlockHash = (state.latestExecutionPayloadBid gloas).blockHash →
+      ∀ envelope, (store.payloads gloas)[head.root]? = some envelope →
+        block.body.parentExecutionRequests gloas = envelope.executionRequests)
     (parent : processParentExecutionPayload config checks state gloas block.body = .ok parented)
     (headed : processBlockHeader parented block = .ok header) (deneb : .dencun ≤ fork) :
     block.parentRoot = attributes.parentBeaconBlockRoot deneb := by

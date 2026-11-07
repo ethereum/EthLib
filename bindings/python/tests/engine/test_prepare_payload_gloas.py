@@ -57,7 +57,7 @@ def payload_hashes(fork: str) -> tuple[bytes, bytes]:
     message = _offset(signed, 0)
     payload = message + _offset(signed, message)
     # The parent hash opens the payload.
-    # The block hash follows 13 fields: 4 hashes, an address, a bloom, 4 numbers, an offset, a fee.
+    # The block hash follows 12 fields: 4 hashes, an address, a bloom, 4 numbers, an offset, a fee.
     block_hash = payload + 32 + 20 + 32 + 32 + 256 + 32 + 4 * 8 + 4 + 32
     return signed[payload : payload + 32], signed[block_hash : block_hash + 32]
 

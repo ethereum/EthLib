@@ -44,6 +44,8 @@ From Gloas a block and its payload arrive apart, so the proposer first chooses a
 
 The fork choice says whether it builds on the full node of its head or on the empty one.
 
+It decides at the slot of the state, the slot of the proposal, not at the time of the store.
+
 On the full node, the payload that the store holds for the head applies to a copy of the state.
 
 The head of the update is then the hash of the latest bid, else the parent hash of that bid.
@@ -200,7 +202,9 @@ def prepareExecutionPayload (config : Config) (state : BeaconState preset fork)
 
 The result is the state that the attributes read, the withdrawals and the head of the update.
 
-The proposer builds on the full node of its head when the fork choice says so at the current slot.
+The proposer builds on the full node of its head when the fork choice says so.
+
+The fork choice decides at the slot of the state, which is the slot of the proposal.
 
 It then applies the payload that the store holds for the block of the head to a copy of the state.
 
@@ -210,15 +214,14 @@ Otherwise the state stays with the withdrawals that it records.
 
 The head is then the parent hash of the latest bid.
 
-It fails when the current slot or the choice fails, or when the store holds no payload to build on.
+It fails when the choice fails, or when the store holds no payload to build on.
 
 It also fails when that payload or its withdrawals fail. -/
 def payloadParentGloas (config : Config) (checks : SignatureChecks) (store : Store preset fork)
     (head : ForkChoiceNode) (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
     Except ProposerError (BeaconState preset fork × Array Consensus.Withdrawal × Hash32) := do
   let parentBid := state.latestExecutionPayloadBid gloas
-  let slot ← (store.getCurrentSlot config).mapError .forkChoice
-  if ← (store.shouldBuildOnFull gloas head slot).mapError .forkChoice then
+  if ← (store.shouldBuildOnFull gloas head state.slot).mapError .forkChoice then
     let some envelope := (store.payloads gloas)[head.root]?
       | throw (.forkChoice (.payloadNotVerified head.root))
     let state ← (applyParentExecutionPayload config checks state gloas
