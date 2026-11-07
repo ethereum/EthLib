@@ -16,6 +16,17 @@ The integer square root is the floor of the square root, the largest `x` with `x
 
 namespace EthLib.Base.Uint64
 
+/-- Every natural number below `2^64` is the value of a 64-bit integer. -/
+theorem exists_toNat_eq {n : Nat} (h : n < 2 ^ 64) : ∃ a : UInt64, a.toNat = n :=
+  ⟨UInt64.ofNatLT n h, rfl⟩
+
+/-- The larger of two 64-bit integers has the larger value. -/
+theorem toNat_max (a b : UInt64) : (max a b).toNat = max a.toNat b.toNat := by
+  rw [UInt64.max_def, Nat.max_def]
+  by_cases h : a ≤ b
+  · simp [h, UInt64.le_iff_toNat_le.mp h]
+  · simp [h, mt UInt64.le_iff_toNat_le.mpr h]
+
 /-- The sum succeeds exactly when it is below `2^64`, and then it is the sum on `Nat`. -/
 theorem addChecked_ok_iff {a b c : UInt64} :
     addChecked a b = .ok c ↔ a.toNat + b.toNat < 2 ^ 64 ∧ c.toNat = a.toNat + b.toNat := by

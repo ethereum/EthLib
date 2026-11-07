@@ -78,6 +78,7 @@ public import EthLib.Consensus.Transition.SyncAggregate
 public import EthLib.Consensus.Transition.Upgrade
 public import EthLib.Consensus.Transition.Withdrawals
 public import EthLib.Consensus.Types
+public import EthLib.Consensus.WeakSubjectivity
 
 /-!
 # `EthLib.Consensus`

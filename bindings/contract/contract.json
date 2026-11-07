@@ -2586,6 +2586,38 @@
    "error_class": "TransitionError",
    "docstring":
    "Whether a candidate genesis state launches the chain.\n\nThe preset, the configuration and the fork are named in UTF-8."},
+  {"summary": "The weak subjectivity period of a state, in epochs.",
+   "signature": "(name: str, fork: str, state: bytes, config: bytes) -> int",
+   "operation": "EthLib.Consensus.Exports.computeWeakSubjectivityPeriodExport",
+   "method": "consensus_compute_weak_subjectivity_period",
+   "errors":
+   [{"type": "EthLib.Consensus.WeakSubjectivityError",
+     "codes":
+     [{"constructor": "accessor", "code": 1},
+      {"constructor": "forkChoice", "code": 2},
+      {"constructor": "arith", "code": 3},
+      {"constructor": "blockRootMismatch", "code": 4},
+      {"constructor": "epochMismatch", "code": 5}]}],
+   "error_class": "WeakSubjectivityError",
+   "docstring":
+   "The weak subjectivity period of a state, in epochs.\n\nThe preset, the configuration and the fork are named in UTF-8."},
+  {"summary":
+   "Whether a checkpoint is within the weak subjectivity period of its state, at a time.",
+   "signature":
+   "(name: str, fork: str, state: bytes, checkpoint: bytes, config: bytes, genesis_time_ms: int, time_ms: int) -> bool",
+   "operation": "EthLib.Consensus.Exports.isWithinWeakSubjectivityPeriodExport",
+   "method": "consensus_is_within_weak_subjectivity_period",
+   "errors":
+   [{"type": "EthLib.Consensus.WeakSubjectivityError",
+     "codes":
+     [{"constructor": "accessor", "code": 1},
+      {"constructor": "forkChoice", "code": 2},
+      {"constructor": "arith", "code": 3},
+      {"constructor": "blockRootMismatch", "code": 4},
+      {"constructor": "epochMismatch", "code": 5}]}],
+   "error_class": "WeakSubjectivityError",
+   "docstring":
+   "Whether a checkpoint is within the weak subjectivity period of its state, at a time.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nThe checkpoint comes as its SSZ bytes, and the state as the state at the checkpoint.\n\nThe two times are those of a store, in milliseconds since the Unix epoch."},
   {"summary":
    "The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes.",
    "signature":

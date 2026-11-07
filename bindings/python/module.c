@@ -83,6 +83,7 @@ PyObject* FEES_ERROR;
 PyObject* TRANSITION_ERROR;
 PyObject* LIGHT_CLIENT_ERROR;
 PyObject* FORK_CHOICE_ERROR;
+PyObject* WEAK_SUBJECTIVITY_ERROR;
 
 /* ---- Lean externs: size accessors ------------------------------------ */
 
@@ -626,6 +627,11 @@ static PyMethodDef methods[] = {
    DOC_consensus_initialize_genesis},
   {"consensus_is_valid_genesis_state", py_consensus_is_valid_genesis_state, METH_VARARGS,
    DOC_consensus_is_valid_genesis_state},
+  {"consensus_compute_weak_subjectivity_period", py_consensus_compute_weak_subjectivity_period,
+   METH_VARARGS, DOC_consensus_compute_weak_subjectivity_period},
+  {"consensus_is_within_weak_subjectivity_period",
+   py_consensus_is_within_weak_subjectivity_period, METH_VARARGS,
+   DOC_consensus_is_within_weak_subjectivity_period},
   {"pq_keys_ssz", py_pq_keys_ssz, METH_VARARGS, DOC_pq_keys_ssz},
   {"pq_keys_possession_signing_root", py_pq_keys_possession_signing_root, METH_VARARGS,
    DOC_pq_keys_possession_signing_root},
@@ -844,6 +850,7 @@ PyInit__native(void) {
     LIGHT_CLIENT_ERROR = PyObject_GetAttrString(errors, "LightClientError");
     FORK_CHOICE_ERROR = PyObject_GetAttrString(errors, "ForkChoiceError");
     CHAIN_ERROR = PyObject_GetAttrString(errors, "ChainError");
+    WEAK_SUBJECTIVITY_ERROR = PyObject_GetAttrString(errors, "WeakSubjectivityError");
     Py_DECREF(errors);
     if (PyErr_Occurred()) return NULL;
 

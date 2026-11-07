@@ -6,7 +6,13 @@ from typing import Any
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
 from ethlib.cryptography import _native
-from ethlib.errors import ConsensusError, ForkChoiceError, LightClientError, TransitionError
+from ethlib.errors import (
+    ConsensusError,
+    ForkChoiceError,
+    LightClientError,
+    TransitionError,
+    WeakSubjectivityError,
+)
 
 
 def _value(value: Any) -> Any:
@@ -647,6 +653,30 @@ def is_valid_genesis_state(name: str, fork: str, state: bytes, config: dict | No
     return _native.consensus_is_valid_genesis_state(name, fork, state, replacements)
 
 
+def compute_weak_subjectivity_period(
+    name: str, fork: str, state: bytes, config: dict | None = None
+) -> int:
+    """The weak subjectivity period of a state, in epochs, or WeakSubjectivityError."""
+    replacements = json.dumps(config).encode() if config else b""
+    return _native.consensus_compute_weak_subjectivity_period(name, fork, state, replacements)
+
+
+def is_within_weak_subjectivity_period(
+    name: str,
+    fork: str,
+    ws_state: bytes,
+    ws_checkpoint: bytes,
+    genesis_time_ms: int,
+    time_ms: int,
+    config: dict | None = None,
+) -> bool:
+    """Whether a checkpoint and its state are within the period at the two times of a store."""
+    replacements = json.dumps(config).encode() if config else b""
+    return _native.consensus_is_within_weak_subjectivity_period(
+        name, fork, ws_state, ws_checkpoint, replacements, genesis_time_ms, time_ms
+    )
+
+
 def upgrade_state(
     name: str, fork: str, pre: bytes, verify: bool = True, config: dict | None = None
 ) -> bytes:
@@ -689,6 +719,7 @@ __all__ = [
     "get_data_column_sidecars_from_block",
     "get_data_column_sidecars_from_column_sidecar",
     "TransitionError",
+    "WeakSubjectivityError",
     "process_operation",
     "LightClientError",
     "ForkChoiceError",
@@ -705,6 +736,8 @@ __all__ = [
     "process_epoch",
     "rewards_deltas",
     "upgrade_state",
+    "compute_weak_subjectivity_period",
+    "is_within_weak_subjectivity_period",
     "process_slots",
     "state_transition",
     "state_transition_across",

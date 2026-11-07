@@ -753,6 +753,31 @@ Two transactions, or two withdrawals, with the same bytes are equal, so `transac
 `receiptsRoot_binding` does so for receipts whose types are 0 or types that the fork has, as the receipt decoder requires.
 No theorem bounds the probability of finding a collision.
 
+### Weak subjectivity
+
+A node that starts from a recent checkpoint trusts it only for a limited time, the weak subjectivity period.
+`Consensus/WeakSubjectivity.lean` computes the period with the rule of each fork: Phase 0 counts validators, Electra the churn of the balance, and Gloas three weighted churns.
+The theorems in `Consensus/Proofs/WeakSubjectivity.lean` say what the 64-bit computation returns.
+
+From Electra, `balanceChurnPeriod_eq_ok_iff` gives the period in closed form, the withdrawal delay plus `10 t / (200 c)` epochs for a total active balance `t` and a churn `c`.
+It succeeds exactly when no product or sum reaches `2^64` and the churn is not zero.
+In Phase 0, `phase0PeriodEpochs_eq_ok` shows that a computed period is one of the two expressions of the rule, on natural numbers.
+`min_le_computeWeakSubjectivityPeriod` shows that, at every fork, the period is at least the withdrawal delay.
+
+`computeWeakSubjectivityPeriodElectra_le` bounds the Electra period by a function of the parameters alone.
+It assumes a positive churn quotient, and a minimum churn that is a positive whole number of increments.
+At the mainnet parameters, `computeWeakSubjectivityPeriodElectra_le_mainnet` gives at most 3558 epochs, for every state.
+No theorem bounds the Phase 0 or the Gloas period.
+
+`isWithinWeakSubjectivityPeriod_eq_ok_iff` states when the check of a checkpoint succeeds and what it answers.
+The state must hold the root of the checkpoint at its epoch and be at that epoch.
+The answer is then whether the current epoch is at most the epoch of the checkpoint plus the period.
+By `isWithinWeakSubjectivityPeriod_of_slot_le`, a checkpoint within its period at some slot is within it at every earlier slot.
+
+No theorem says that the period gives the safety margin that the rule intends.
+That margin is the claim of the analysis behind the rule, and EthLib does not model it.
+The Python suite checks the periods against the three tables of the rule, except for the rows whose states take minutes to build.
+
 ### Light client
 
 A light client accepts an update that the sync committee signed, and moves its store by it.
@@ -952,13 +977,13 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 235 operations and 35 size constants.
-The Python extension calls 235 of the operations and 26 of the constants.
+Lean exports 237 operations and 35 size constants.
+The Python extension calls 237 of the operations and 26 of the constants.
 Exported constants it does not call: `eth_sphincs_const_chains`, `eth_sphincs_const_n`, `eth_sphincs_const_public_param_len`, `eth_sphincs_const_randomizer_len`, `eth_xmss_const_chains`, `eth_xmss_const_digest_len`, `eth_xmss_const_layer_height`, `eth_xmss_const_public_param_len`, `eth_xmss_const_randomizer_len`.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-7943 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (1396), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (223), `engine.c` (88), `enr.c` (146), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (955), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (96), `vrf.c` (119), `wrappers.h` (451), `xmss.c` (134).
+8035 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (1478), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (223), `engine.c` (88), `enr.c` (146), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (962), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (96), `vrf.c` (119), `wrappers.h` (454), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
