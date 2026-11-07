@@ -303,3 +303,144 @@ def test_no_sync_committee_before_altair():
     with raises(consensus.ValidatorDutyError, "no sync committee at phase0") as info:
         consensus.compute_subnets_for_sync_committee("mainnet", "phase0", phase0_state(1), 0)
     assert info.value.code == 0
+
+
+# ---- Gloas ----------------------------------------------------------------------------------
+
+# Mainnet does not schedule Gloas yet, so the tests start it at epoch 0.
+GLOAS = {"GLOAS_FORK_EPOCH": "0"}
+GLOAS_FORK_VERSION = bytes([7, 0, 0, 0])
+DOMAIN_PTC_ATTESTER = bytes([12, 0, 0, 0])
+MIN_SEED_LOOKAHEAD = 1
+PTC_SIZE = 512
+
+
+def gloas_state(count: int, slot: int) -> bytes:
+    """An Altair state of `count` validators at a slot, upgraded fork by fork to Gloas."""
+    state = altair_state(count, slot)
+    for fork in ["bellatrix", "shapella", "dencun", "pectra", "fusaka", "glamsterdam"]:
+        state = consensus.upgrade_state("mainnet", fork, state, verify=False, config=GLOAS)
+    return state
+
+
+def _fixed_end(state: bytes) -> int:
+    """Where the fixed part of a state ends: the first offset, that of the historical roots."""
+    return struct.unpack_from("<I", state, 8 + 32 + 8 + 16 + 112 + 2 * 8192 * 32)[0]
+
+
+# The window of payload committees is the last field of a Gloas state, of a fixed size.
+WINDOW_SIZE = (MIN_SEED_LOOKAHEAD + 2) * SLOTS_PER_EPOCH * PTC_SIZE * 8
+# Between the lookahead of proposers and the window sit the offset of the builders, the next
+# builder index, the availability bits of 8192 slots, the 64 pending payments of 52 bytes, and
+# the offsets of the pending withdrawals, the latest bid and the expected withdrawals.
+BETWEEN = 4 + 8 + 8192 // 8 + 2 * SLOTS_PER_EPOCH * 52 + 3 * 4
+LOOKAHEAD_SIZE = (MIN_SEED_LOOKAHEAD + 1) * SLOTS_PER_EPOCH * 8
+
+
+def ptc_window(state: bytes) -> list:
+    """The payload committees of a Gloas state, for the previous, current and next epochs."""
+    start = _fixed_end(state) - WINDOW_SIZE
+    return [
+        list(struct.unpack_from(f"<{PTC_SIZE}Q", state, start + i * PTC_SIZE * 8))
+        for i in range((MIN_SEED_LOOKAHEAD + 2) * SLOTS_PER_EPOCH)
+    ]
+
+
+def proposer_lookahead(state: bytes) -> list:
+    """The proposers of a Gloas state, from the start of its current epoch."""
+    start = _fixed_end(state) - WINDOW_SIZE - BETWEEN - LOOKAHEAD_SIZE
+    return list(struct.unpack_from(f"<{LOOKAHEAD_SIZE // 8}Q", state, start))
+
+
+# A state in epoch 1, whose window holds the committees of epochs 0, 1 and 2.
+GLOAS_SLOT = 40
+
+
+@pytest.fixture(scope="module")
+def gloas() -> bytes:
+    return gloas_state(64, GLOAS_SLOT)
+
+
+@pytest.mark.parametrize("epoch", [1, 2])
+def test_ptc_assignment(gloas: bytes, epoch: int):
+    # The guide takes the first slot of the epoch whose committee holds the validator.
+    window = ptc_window(gloas)
+    current = GLOAS_SLOT // SLOTS_PER_EPOCH
+    slots = range(epoch * SLOTS_PER_EPOCH, (epoch + 1) * SLOTS_PER_EPOCH)
+    for validator in range(64):
+        expected = next(
+            (
+                slot
+                for slot in slots
+                if validator in window[(epoch - current + 1) * SLOTS_PER_EPOCH + slot % 32]
+            ),
+            None,
+        )
+        got = consensus.get_ptc_assignment(
+            "mainnet", "glamsterdam", gloas, epoch, validator, config=GLOAS
+        )
+        assert got == expected
+
+
+def test_ptc_assignment_after_the_lookahead(gloas: bytes):
+    with raises(consensus.ValidatorDutyError, "validator duty failed with code 5") as info:
+        consensus.get_ptc_assignment("mainnet", "glamsterdam", gloas, 3, 0, config=GLOAS)
+    assert info.value.code == 5
+
+
+def test_no_ptc_assignment_before_gloas():
+    with raises(consensus.ValidatorDutyError, "no payload timeliness committee at fusaka") as info:
+        consensus.get_ptc_assignment("mainnet", "fusaka", b"", 0, 0)
+    assert info.value.code == 0
+
+
+def test_upcoming_proposal_slots(gloas: bytes):
+    lookahead = proposer_lookahead(gloas)
+    # The proposer of the slot of the state, as the transition reads it, checks the layout.
+    epoch_start = GLOAS_SLOT // SLOTS_PER_EPOCH * SLOTS_PER_EPOCH
+    proposer = lookahead[GLOAS_SLOT - epoch_start]
+    assert consensus.is_proposer("mainnet", "glamsterdam", gloas, proposer, GLOAS)
+    for validator in range(64):
+        # The guide keeps the slots of the lookahead after the slot of the state.
+        expected = [
+            epoch_start + offset
+            for offset, chosen in enumerate(lookahead)
+            if epoch_start + offset > GLOAS_SLOT and chosen == validator
+        ]
+        got = consensus.get_upcoming_proposal_slots(
+            "mainnet", "glamsterdam", gloas, validator, config=GLOAS
+        )
+        assert got == expected
+
+
+def test_no_upcoming_proposal_slots_before_gloas():
+    with raises(consensus.ValidatorDutyError, "no payload timeliness committee at fusaka") as info:
+        consensus.get_upcoming_proposal_slots("mainnet", "fusaka", b"", 0)
+    assert info.value.code == 0
+
+
+def _payload_attestation_data(slot: int) -> bytes:
+    return bytes([9]) * 32 + struct.pack("<Q", slot) + b"\x01\x00"
+
+
+def test_payload_attestation_message_signature(gloas: bytes):
+    # The message is the validator index, the data and a signature; only the data is signed.
+    data = _payload_attestation_data(GLOAS_SLOT)
+    message = struct.pack("<Q", 3) + data + bytes(96)
+    chunks = [bytes([9]) * 32, _uint64_root(GLOAS_SLOT), b"\x01" + bytes(31), bytes(32)]
+    data_root = _sha256(_sha256(chunks[0] + chunks[1]) + _sha256(chunks[2] + chunks[3]))
+    # The upgrade sets the fork of the state to Gloas, from the epoch of the state.
+    fork_data_root = _sha256(GLOAS_FORK_VERSION + bytes(28) + bytes(32))
+    domain = DOMAIN_PTC_ATTESTER + fork_data_root[:28]
+    expected = G2ProofOfPossession.Sign(1, _sha256(data_root + domain))
+    got = consensus.get_validator_signature(
+        "mainnet", "glamsterdam", gloas, "payload_attestation_message", message, SECRET_KEY, GLOAS
+    )
+    assert got == expected
+
+
+def test_no_payload_attestation_message_before_gloas():
+    message = struct.pack("<Q", 3) + _payload_attestation_data(0) + bytes(96)
+    with raises(consensus.ValidatorDutyError, "no payload timeliness committee at phase0") as info:
+        _sign(phase0_state(1), "payload_attestation_message", message)
+    assert info.value.code == 0

@@ -755,7 +755,6 @@ def compute_subnets_for_sync_committee(
     )
 
 
-
 def get_ptc_assignment(
     name: str, fork: str, state: bytes, epoch: int, validator_index: int, config: dict | None = None
 ) -> int | None:
@@ -776,6 +775,7 @@ def get_upcoming_proposal_slots(
             name, fork, state, _replacements(config), validator_index
         )
     )
+
 
 def get_validator_signature(
     name: str,
