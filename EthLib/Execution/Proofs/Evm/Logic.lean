@@ -6,6 +6,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Symbolic
 public import EthLib.Execution.Proofs.Evm.Logic.Loop
 public import EthLib.Execution.Proofs.Evm.Logic.Message
 public import EthLib.Execution.Proofs.Evm.Logic.Call
+public import EthLib.Execution.Proofs.Evm.Logic.Log
 public import EthLib.Execution.Proofs.Evm.Logic.Callee
 public import EthLib.Execution.Proofs.Evm.Logic.Rules
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.Return42

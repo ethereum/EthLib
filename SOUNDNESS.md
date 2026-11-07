@@ -646,6 +646,10 @@ It charges `sstoreCost` and adds `sstoreRefund` to the refund counter, from the 
 It takes the state that the write gives as a hypothesis, since the write needs the account of the current address.
 `Counter.runFrame_spec` proves a contract that reads the slot at key 0, adds 1, writes the sum back and returns it.
 The slot then holds the sum, and the gas and the refund are those of SLOAD and SSTORE.
+`Logic.log` (`Logic/Log.lean`) is the rule for LOG0 to LOG4, at every fork with the one-counter meter, in a frame that may change the state.
+It appends one log of the current address with the topics and the range of memory.
+It pays 375, 8 for each byte, 375 for each topic and the growth of memory.
+It says nothing of the order of the logs of several frames, or of logs that a revert drops.
 `SlotOfCalldata.runFrame_match` proves a contract that compares the top four bytes of its call data with a constant, at the forks from Berlin with the one-counter meter.
 On a match, it returns the word of storage at the Keccak-256 hash of two words of its call data, for 122 gas and SLOAD.
 `SlotOfCalldata.runFrame_mismatch` proves that it reverts with no output otherwise, for 37 gas.
