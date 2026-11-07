@@ -17,7 +17,7 @@ Before Paris, the difficulty of a block is at least the parent's less 99 steps.
 
 For a block no earlier than its parent, it is at most the parent's plus two steps and the bomb.
 
-The minimum still bounds it from below, so it is at most the larger of the two.
+If the minimum difficulty is larger than that sum, the minimum is the bound instead.
 
 A step is the parent's difficulty over 2048.
 
