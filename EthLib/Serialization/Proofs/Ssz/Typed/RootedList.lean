@@ -7,7 +7,7 @@ public import EthLib.Serialization.Proofs.Ssz.Typed.Rooted
 /-!
 # Proofs: rooted fork-chosen lists are lawful
 
-Before the switch, the top of the levels is the bounded root of the leaves.
+Before the switch, the top of the levels, raised to the depth of the limit, is the bounded root.
 
 With the length mixed in, it is the root of the list.
 
@@ -63,6 +63,26 @@ theorem hashTreeRoot_list_leafRoots {limit : Nat} (composite : (desc α).isBasic
     slotRoot, List.mapM_map, Function.comp_def, rooted, finishLayout, merkleizeBoundedUnchecked,
     bind, Except.bind, pure, Except.pure, within, leaves, size]
 
+/-- The packed leaves of basic elements within a limit fit in the leaves of that limit. -/
+theorem size_packedChunks_le {limit : Nat} (basic : (desc α).isBasic = true) (data : Array α)
+    (bound : data.size ≤ limit) :
+    (packedChunks data).size ≤ chunksForBytes (limit * (desc α).itemLength) := by
+  rw [← packElements_elementBytes basic data, packElements, fold_parts_eq_concat,
+    Array.empty_append, packBytes_size, concatParts_size _ _ (fun part member => by
+      obtain ⟨a, -, rfl⟩ := List.mem_map.mp member
+      exact (serialize_elementBytes basic a).2)]
+  simp only [List.length_map, Array.length_toList, chunksForBytes]
+  exact Nat.div_le_div_right (Nat.sub_le_sub_right
+    (Nat.add_le_add_right (Nat.mul_le_mul_right _ bound) _) _)
+
+/-- The leaves of a sequence within a limit fit in the leaves of that limit. -/
+theorem size_sequenceLeaves_le {limit : Nat} (data : Array α) (bound : data.size ≤ limit) :
+    (sequenceLeaves data).size ≤ leafCapacity α limit := by
+  unfold sequenceLeaves leafCapacity
+  split
+  · next basic => exact size_packedChunks_le basic data bound
+  · simpa [leafRoots] using bound
+
 /-- A list of basic elements within its limit has the root of its packed leaves. -/
 theorem hashTreeRoot_list_packed {limit : Nat} (basic : (desc α).isBasic = true)
     (data : Array α) (bound : data.size ≤ limit) :
@@ -71,14 +91,8 @@ theorem hashTreeRoot_list_packed {limit : Nat} (basic : (desc α).isBasic = true
           (depthFor (chunksForBytes (limit * (desc α).itemLength))) 0) (lengthWord data.size)) := by
   have within : ¬limit < data.size := by omega
   have packed := packElements_elementBytes basic data
-  have fit : ¬chunksForBytes (limit * (desc α).itemLength) < (packedChunks data).size := by
-    rw [← packed, packElements, fold_parts_eq_concat, Array.empty_append, packBytes_size,
-      concatParts_size _ _ (fun part member => by
-        obtain ⟨a, -, rfl⟩ := List.mem_map.mp member
-        exact (serialize_elementBytes basic a).2)]
-    simp only [List.length_map, Array.length_toList, chunksForBytes, Nat.not_lt]
-    exact Nat.div_le_div_right (Nat.sub_le_sub_right
-      (Nat.add_le_add_right (Nat.mul_le_mul_right _ bound) _) _)
+  have fit : ¬chunksForBytes (limit * (desc α).itemLength) < (packedChunks data).size :=
+    Nat.not_lt.mpr (size_packedChunks_le basic data bound)
   rw [hashTreeRoot_unfold]
   simp [merkleLayout, sequenceLayout, basic, MerkleLayout.packing, leafChunks,
     serializeEach_elementBytes basic, finishLayout, merkleizeBoundedUnchecked,
@@ -94,8 +108,11 @@ theorem root_eq (l : RootedForkList switch fork α limit) :
   by_cases before : fork < switch
   · simp only [root, before, ite_true, desc, toValue, toForkList, not_switch_of_lt before,
       ite_false]
-    rw [l.built, forkListLevels, ite_eq_left before, topOfLevels_eq, sequenceLeaves,
-      leafCapacity]
+    have fits := size_sequenceLeaves_le l.data (l.bound before)
+    rw [size_sequenceLeaves] at fits
+    rw [l.built, forkListLevels, ite_eq_left before, size_sequenceLeaves,
+      raiseLevels_buildLevels_leaves, Nat.add_sub_cancel' (depthFor_le_depthFor fits),
+      topOfLevels_eq, sequenceLeaves, leafCapacity]
     by_cases basic : (desc α).isBasic
     · rw [ite_eq_left basic, ite_eq_left basic,
         hashTreeRoot_list_packed basic _ (l.bound before)]

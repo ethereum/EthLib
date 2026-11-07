@@ -137,6 +137,46 @@ theorem updateLevels_buildLevels :
     rw [nonempty]
     simp only [updateLevels]
 
+/--
+The levels with a count of levels added on top, each pairing up the one below it.
+
+The height is that of the subtrees in the top level given.
+-/
+def raiseLevels (height : Nat) (levels : List (Array Bytes)) : Nat → List (Array Bytes)
+  | 0 => levels
+  | count + 1 =>
+    raiseLevels (height + 1) (levels ++ [pairUp height (levels.getLast?.getD #[])]) count
+
+/-- One more level on top of a tree pairs up its top level. -/
+theorem buildLevels_succ :
+    ∀ (above height : Nat) (level : Array Bytes),
+      buildLevels height level (above + 1) = buildLevels height level above
+        ++ [pairUp (height + above) ((buildLevels height level above).getLast?.getD #[])]
+  | 0, height, level => by simp [buildLevels]
+  | above + 1, height, level => by
+    rw [buildLevels, buildLevels_succ above (height + 1), buildLevels]
+    -- The levels above the first are never empty, so the top is theirs.
+    obtain ⟨first, rest, nonempty⟩ :
+        ∃ first rest, buildLevels (height + 1) (pairUp height level) above = first :: rest := by
+      cases above <;> exact ⟨_, _, rfl⟩
+    rw [nonempty, show height + 1 + above = height + (above + 1) by omega]
+    simp
+
+/-- Raising the levels of a tree gives the levels of the same leaves up to a greater height. -/
+theorem raiseLevels_buildLevels (height : Nat) (level : Array Bytes) :
+    ∀ (count above : Nat), raiseLevels (height + above) (buildLevels height level above) count
+      = buildLevels height level (above + count)
+  | 0, above => rfl
+  | count + 1, above => by
+    rw [raiseLevels, ← buildLevels_succ, show height + above + 1 = height + (above + 1) by omega,
+      raiseLevels_buildLevels height level count (above + 1),
+      show above + 1 + count = above + (count + 1) by omega]
+
+/-- Raising the levels over the leaves gives their levels up to a greater height. -/
+theorem raiseLevels_buildLevels_leaves (level : Array Bytes) (above count : Nat) :
+    raiseLevels above (buildLevels 0 level above) count = buildLevels 0 level (above + count) := by
+  simpa using raiseLevels_buildLevels 0 level count above
+
 /-- The top node of a tree from its levels, or the zero subtree of its depth if it has no leaf. -/
 def topOfLevels (depth : Nat) (levels : List (Array Bytes)) : Bytes :=
   ((levels.getLast?.bind fun top => top[0]?)).getD (zeroSubtree depth)
@@ -196,6 +236,10 @@ def leafCapacity (α : Type) [SszType α] (count : Nat) : Nat :=
 /-- The position of the leaf that holds the element at an index. -/
 def leafIndex (α : Type) [SszType α] (index : Nat) : Nat :=
   if (desc α).isBasic then index / perChunk α else index
+
+/-- The count of leaves that a count of elements fills. -/
+def leafCount (α : Type) [SszType α] (count : Nat) : Nat :=
+  if (desc α).isBasic then (count + perChunk α - 1) / perChunk α else count
 
 /-- The leaf that holds the element at an index, once that element is the one given. -/
 def leafNode {α : Type} [SszType α] (elements : Array α) (index : Nat) (a : α) : Bytes :=
@@ -259,6 +303,20 @@ theorem leafIndex_le {α : Type} [SszType α] {elements : Array α} {index : Nat
     have := perChunk_pos α
     omega
   · simpa [leafRoots] using within
+
+/-- The leaves of a sequence are as many as its count of elements fills. -/
+theorem size_sequenceLeaves {α : Type} [SszType α] (elements : Array α) :
+    (sequenceLeaves elements).size = leafCount α elements.size := by
+  unfold sequenceLeaves leafCount
+  split <;> simp [packedChunks, leafRoots]
+
+/-- One more element fills at least as many leaves. -/
+theorem leafCount_le_succ (α : Type) [SszType α] (count : Nat) :
+    leafCount α count ≤ leafCount α (count + 1) := by
+  unfold leafCount
+  split
+  · exact Nat.div_le_div_right (by omega)
+  · omega
 
 /--
 Writing one element, inside or just past the end, writes the one leaf that holds it.
