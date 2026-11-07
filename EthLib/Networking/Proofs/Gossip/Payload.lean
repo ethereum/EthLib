@@ -11,9 +11,11 @@ public import EthLib.Networking.Proofs.Snappy.CompressSize
 Properties of the size limits on gossip, and of the gossipsub parameters.
 
 - The worst-case compression of the payload cap is `32 + n + n / 6` bytes, with no overflow.
+- The largest gossip message is that compression plus 1024 bytes, above the floor of 1 MiB.
 - Take data within that length.
   The decoder accepts it exactly when it decompresses to a payload within the cap and type bound.
 - It rejects data above either bound.
+- Data that it accepts leaves 1024 bytes of the largest gossip message for framing.
 - It accepts the block of the compressor for a payload within the cap and its type bound.
 - It rejects a payload length above the bounds from the preamble alone, before it decompresses.
 - The mesh bounds and the message cache windows are ordered.
@@ -24,12 +26,20 @@ Properties of the size limits on gossip, and of the gossipsub parameters.
 namespace EthLib.Networking.Proofs.Gossip.Payload
 
 open EthLib.Networking.Gossip
-open EthLib.Networking.ReqResp (MAX_PAYLOAD_SIZE maxCompressedLen)
+open EthLib.Networking.ReqResp (MAX_PAYLOAD_SIZE maxCompressedLen maxMessageSize)
 
 /-- The worst-case compression of the payload cap fits 64 bits: `32 + n + n / 6` bytes. -/
 theorem maxCompressedLen_maxPayloadSize :
     maxCompressedLen MAX_PAYLOAD_SIZE =
       .ok (UInt64.ofNat (32 + MAX_PAYLOAD_SIZE.toNat + MAX_PAYLOAD_SIZE.toNat / 6)) := by
+  rfl
+
+/-- The largest gossip message is the worst-case compression of the payload cap plus 1024 bytes.
+
+That sum is above 1 MiB, so the floor of 1 MiB does not apply, and it fits 64 bits. -/
+theorem maxMessageSize_eq :
+    maxMessageSize =
+      .ok (UInt64.ofNat (32 + MAX_PAYLOAD_SIZE.toNat + MAX_PAYLOAD_SIZE.toNat / 6 + 1024)) := by
   rfl
 
 /-- The decoder accepts exactly the data within both bounds that decompresses. -/
@@ -64,6 +74,16 @@ theorem decodePayload_eq_ok_iff {typeBound : UInt64} {data payload : ByteArray} 
           exact ⟨rfl, by omega⟩
         · rintro ⟨rfl, _⟩
           rfl
+
+/-- Data that the decoder accepts leaves 1024 bytes of the largest gossip message for framing. -/
+theorem size_add_le_maxMessageSize_of_decodePayload {typeBound : UInt64}
+    {data payload : ByteArray} (h : decodePayload typeBound data = .ok payload) :
+    ∃ limit, maxMessageSize = .ok limit ∧ data.size + 1024 ≤ limit.toNat := by
+  refine ⟨_, maxMessageSize_eq, ?_⟩
+  have within := (decodePayload_eq_ok_iff.mp h).1
+  have value : (UInt64.ofNat (32 + MAX_PAYLOAD_SIZE.toNat + MAX_PAYLOAD_SIZE.toNat / 6 +
+      1024)).toNat = 32 + MAX_PAYLOAD_SIZE.toNat + MAX_PAYLOAD_SIZE.toNat / 6 + 1024 := by decide
+  omega
 
 /-- The decoder accepts the block of the compressor for a payload within the cap and its type bound.
 
