@@ -44,6 +44,16 @@ class SszType (α : Type) where
   -/
   decode : ByteArray → Except Err α := fun data => do ofValue (← Ssz.deserialize desc data.data)
 
+/--
+Little-endian bytes of a byte array read back as an unsigned integer.
+
+The read takes `width` bytes from `start`.
+
+A byte past the end of the data reads as zero.
+-/
+def readUintBytes (data : ByteArray) (start width : Nat) : Nat :=
+  Base.bytesToUint (Vector.ofFn fun i : Fin width => data[start + i.val]?.getD 0)
+
 namespace SszType
 
 variable {α : Type} [SszType α]

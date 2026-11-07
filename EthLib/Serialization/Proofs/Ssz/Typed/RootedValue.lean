@@ -42,6 +42,11 @@ instance : LawfulSszType (Rooted α) where
       simp only [read, Functor.map, Except.map, Except.ok.injEq] at made
       subst made
       exact LawfulSszType.toValue_of_ofValue (α := α) read
+  ofValue_ne_error {value fault} fits made := by
+    change Rooted.of <$> (ofValue value : Except Err α) = .error fault at made
+    cases read : (ofValue value : Except Err α) with
+    | error fault => exact LawfulSszType.ofValue_ne_error (α := α) fits read
+    | ok w => simp [read, Functor.map, Except.map] at made
   root_eq := Rooted.root_eq
 
 end EthLib.Serialization.Ssz

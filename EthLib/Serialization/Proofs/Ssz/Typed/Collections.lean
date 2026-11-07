@@ -80,6 +80,23 @@ theorem map_toValue_of_ofElements {elements : List Value} {items : Array α}
         subst read
         simp [LawfulSszType.toValue_of_ofValue head, ih tail]
 
+/-- Elements that fit the element type all read, and the array has one item for each. -/
+theorem ofElements_ok {elements : List Value} (each : ∀ value ∈ elements, Fits (desc α) value) :
+    ∃ items : Array α, ofElements elements = .ok items ∧ items.size = elements.length := by
+  suffices read : ∃ items : List α, elements.mapM (ofValue (α := α)) = .ok items ∧
+      items.length = elements.length by
+    obtain ⟨items, read, size⟩ := read
+    exact ⟨items.toArray, by simp [ofElements_eq, read, Functor.map, Except.map], size⟩
+  induction elements with
+  | nil => exact ⟨[], rfl, rfl⟩
+  | cons element rest ih =>
+    obtain ⟨others, tail, size⟩ := ih fun value mem => each value (List.mem_cons_of_mem _ mem)
+    cases head : ofValue (α := α) element with
+    | error fault => exact absurd head (LawfulSszType.ofValue_ne_error (each _ List.mem_cons_self))
+    | ok item =>
+      exact ⟨item :: others, by simp [List.mapM_cons, head, tail, bind, Except.bind, pure,
+        Except.pure], by simp [size]⟩
+
 /-- Every converted element fits the element type. -/
 theorem forall_fits_map (items : List α) : ∀ value ∈ items.map toValue, Fits (desc α) value := by
   simpa using fun item _ => LawfulSszType.fits item
@@ -106,6 +123,11 @@ instance {α : Type} [SszType α] [LawfulSszType α] {length : Nat} [NeZero leng
         subst made
         simp [toValue, ← map_toValue_of_ofElements read]
       · simp [read, exact, bind, Except.bind] at made
+  ofValue_ne_error {value fault} fits made := by
+    cases fits with
+    | vector count each =>
+      obtain ⟨items, read, size⟩ := ofElements_ok each
+      simp [ofValue, read, count, size, bind, Except.bind, pure, Except.pure] at made
 
 instance {α : Type} [SszType α] [LawfulSszType α] {limit : Nat} :
     LawfulSszType (SszList α limit) where
@@ -125,6 +147,11 @@ instance {α : Type} [SszType α] [LawfulSszType α] {limit : Nat} :
         subst made
         simp [toValue, ← map_toValue_of_ofElements read]
       · simp [read, within, bind, Except.bind] at made
+  ofValue_ne_error {value fault} fits made := by
+    cases fits with
+    | list within each =>
+      obtain ⟨items, read, size⟩ := ofElements_ok each
+      simp [ofValue, read, within, size, bind, Except.bind, pure, Except.pure] at made
 
 instance {limit : Nat} : LawfulSszType (SszList UInt8 limit) where
   wellFormed := rfl
@@ -138,6 +165,9 @@ instance {limit : Nat} : LawfulSszType (SszList UInt8 limit) where
       subst made
       rfl
     · simp [within] at made
+  ofValue_ne_error {value fault} fits made := by
+    cases fits with
+    | byteList within => simp [ofValue, within] at made
 
 /-- A byte list reads back from bytes exactly when they fit the offset width, as those same bytes.
 
@@ -169,6 +199,9 @@ instance {length : Nat} [NeZero length] : LawfulSszType (Bitvector length) where
       subst made
       rfl
     · simp [exact] at made
+  ofValue_ne_error {value fault} fits made := by
+    cases fits with
+    | bitVector exact => simp [ofValue, exact] at made
 
 instance {limit : Nat} : LawfulSszType (Bitlist limit) where
   wellFormed := rfl
@@ -182,6 +215,9 @@ instance {limit : Nat} : LawfulSszType (Bitlist limit) where
       subst made
       rfl
     · simp [within] at made
+  ofValue_ne_error {value fault} fits made := by
+    cases fits with
+    | bitList within => simp [ofValue, within] at made
 
 instance {α : Type} [SszType α] [LawfulSszType α] : LawfulSszType (ProgressiveList α) where
   wellFormed := LawfulSszType.wellFormed (α := α)
@@ -196,6 +232,11 @@ instance {α : Type} [SszType α] [LawfulSszType α] : LawfulSszType (Progressiv
       simp only [read, Functor.map, Except.map, Except.ok.injEq] at made
       subst made
       simp [toValue, ← map_toValue_of_ofElements read]
+  ofValue_ne_error {value fault} fits made := by
+    cases fits with
+    | progressiveList within each =>
+      obtain ⟨items, read, size⟩ := ofElements_ok each
+      simp [ofValue, read, Functor.map, Except.map] at made
 
 instance : LawfulSszType ProgressiveBitlist where
   wellFormed := rfl
@@ -204,6 +245,9 @@ instance : LawfulSszType ProgressiveBitlist where
   toValue_of_ofValue {value b} made := by
     cases value <;> simp only [ofValue] at made <;> try cases made
     rfl
+  ofValue_ne_error {value fault} fits made := by
+    cases fits
+    simp [ofValue] at made
 
 /-- An empty encoding has no slices. -/
 theorem listSlices_empty (element : Desc) (limit : Option Nat) :

@@ -198,6 +198,13 @@ instance : LawfulSszType (RootedForkList switch fork α limit) where
       show toValue (ofForkList m).toForkList = value
       rw [toForkList_ofForkList]
       exact LawfulSszType.toValue_of_ofValue (α := ForkList switch fork α limit) read
+  ofValue_ne_error {value fault} fits made := by
+    change ofForkList <$> (ofValue value : Except Err (ForkList switch fork α limit)) =
+      .error fault at made
+    cases read : (ofValue value : Except Err (ForkList switch fork α limit)) with
+    | error fault =>
+      exact LawfulSszType.ofValue_ne_error (α := ForkList switch fork α limit) fits read
+    | ok w => simp [read, Functor.map, Except.map] at made
   root_eq := RootedForkList.root_eq
 
 end EthLib.Serialization.Ssz
