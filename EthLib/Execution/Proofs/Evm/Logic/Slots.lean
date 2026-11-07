@@ -196,7 +196,7 @@ theorem mem_getD_insert (keys : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32))
       · exact .inr h
   · simp [Std.ExtTreeMap.getD_insert, h, Ne.symm h]
 
-/-- The facts of the slots after an access to the slot of `fact'`, which becomes `fact'`.
+/-- The facts of the slots after an access to one slot, whose fact becomes `fact'`.
 
 The facts of the other slots stay. -/
 def touch (fact' : SlotFact) (slots : List SlotFact) : List SlotFact :=
