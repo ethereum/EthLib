@@ -14,6 +14,10 @@ A deposit log in the layout of the Solidity ABI gives back its five fields, in o
 The parser accepts a log exactly when it has 576 bytes and the ten words of the layout.
 
 So an accepted log gives a request of 192 bytes.
+
+The deposit requests of a block succeed exactly when the parser accepts every deposit log.
+
+They then hold 192 bytes for each deposit log.
 -/
 
 @[expose] public section
@@ -106,5 +110,46 @@ theorem size_of_depositRequestOfEvent {data request : ByteArray}
   obtain ⟨hlen, -, rfl⟩ := (depositRequestOfEvent_eq_ok_iff data request).mp h
   have hbytes : data.data.toList.length = 576 := hlen
   simp [ByteArray.size, DEPOSIT_EVENT_FIELDS, fieldAt, hbytes]
+
+/-- Joining byte strings onto a start adds up their sizes. -/
+private theorem size_foldl_append (requests : List ByteArray) (start : ByteArray) :
+    (requests.foldl (· ++ ·) start).size = start.size + (requests.map (·.size)).sum := by
+  induction requests generalizing start with
+  | nil => simp
+  | cons r rest ih =>
+    simp only [List.foldl_cons, ih, ByteArray.size_append, List.map_cons, List.sum_cons]
+    omega
+
+/-- The deposit requests of a block succeed exactly when the parser accepts every deposit log. -/
+theorem depositRequests_isOk_iff (logs : List Log) :
+    (∃ data, depositRequests logs = .ok data) ↔
+      ∀ log ∈ logs, isDepositLog log = true →
+        ∃ request, depositRequestOfEvent log.data = .ok request := by
+  unfold depositRequests
+  constructor
+  · rintro ⟨data, h⟩ log hlog hdeposit
+    obtain ⟨requests, hrequests, -⟩ := bind_ok_iff.mp h
+    exact mapM_ok_of_mem hrequests log (List.mem_filter.mpr ⟨hlog, hdeposit⟩)
+  · intro h
+    obtain ⟨requests, hrequests⟩ := mapM_exists_ok (f := fun log => depositRequestOfEvent log.data)
+      fun log hlog => h log (List.mem_filter.mp hlog).1 (List.mem_filter.mp hlog).2
+    exact ⟨_, by simp only [hrequests, bind, Except.bind, pure, Except.pure]; rfl⟩
+
+/-- The deposit requests of a block hold 192 bytes for each deposit log. -/
+theorem size_of_depositRequests {logs : List Log} {data : ByteArray}
+    (h : depositRequests logs = .ok data) :
+    data.size = 192 * (logs.filter isDepositLog).length := by
+  unfold depositRequests at h
+  obtain ⟨requests, hrequests, h⟩ := bind_ok_iff.mp h
+  simp only [pure, Except.pure, Except.ok.injEq] at h
+  subst h
+  -- Each request has 192 bytes, and there is one request for each deposit log.
+  have hsizes : requests.map (·.size) = requests.map fun _ => 192 := by
+    apply List.map_congr_left
+    intro r hr
+    obtain ⟨log, -, hlog⟩ := mapM_ok_mem hrequests r hr
+    exact size_of_depositRequestOfEvent hlog
+  rw [size_foldl_append, hsizes, ← mapM_ok_length hrequests, List.map_const']
+  simp [Nat.mul_comm]
 
 end EthLib.Execution.Blocks
