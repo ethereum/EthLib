@@ -180,7 +180,7 @@ def ptcWindowPosition (config : Config) (state : BeaconState preset fork) (slot 
 def getPtc (config : Config) (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
     (slot : Slot) : Except AccessorError (PayloadTimelinessCommittee preset) := do
   let position ← ptcWindowPosition config state slot
-  match (state.ptcWindow gloas)[position.toNat]? with
+  match (state.ptcWindow gloas).elements[position.toNat]? with
   | some committee => return committee
   | none => throw (.ptcSlotOutOfRange slot state.slot)
 
@@ -260,7 +260,7 @@ The previous epoch holds committees of index zero, and the other epochs their co
 -/
 def initializePtcWindow (state : BeaconState preset fork) :
     Except AccessorError (PayloadTimelinessCommitteeWindow preset) :=
-  (Vector.range _).mapM fun position => do
+  RootedVector.ofVector <$> (Vector.range _).mapM fun position => do
     let perEpoch := preset.SLOTS_PER_EPOCH.toNat
     if position < perEpoch then return Vector.replicate _ 0
     computePtc state (← ptcWindowSlot preset (getCurrentEpoch state) (position - perEpoch))
@@ -271,7 +271,7 @@ The last epoch of the window becomes the epoch after the lookahead, with its com
 -/
 def processPtcWindow (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
     Except AccessorError (BeaconState preset fork) := do
-  let window := state.ptcWindow gloas
+  let window := (state.ptcWindow gloas).elements
   let perEpoch := preset.SLOTS_PER_EPOCH.toNat
   let nextEpoch ← liftArith do
     addChecked (← addChecked (getCurrentEpoch state) preset.MIN_SEED_LOOKAHEAD) 1
@@ -284,6 +284,8 @@ def processPtcWindow (state : BeaconState preset fork) (gloas : .glamsterdam ≤
       let slot ← ptcWindowSlot preset nextEpoch (position + perEpoch - window.size)
       let (epochSeed, active, shuffled) ← inputs
       computePtcOf state slot epochSeed active shuffled
+  -- The tree is built here, once, so that each read of the field does not build it again.
+  let moved := RootedVector.ofVector moved
   return { state with ptcWindow := fun _ => moved }
 
 end EthLib.Consensus

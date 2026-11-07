@@ -262,7 +262,7 @@ The new committees share the two seeds and the shuffle of their epoch, with the 
 The two sides fail with the same error too. -/
 theorem processPtcWindow_eq (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
     processPtcWindow state gloas = (do
-      let window := state.ptcWindow gloas
+      let window := (state.ptcWindow gloas).elements
       let perEpoch := preset.SLOTS_PER_EPOCH.toNat
       let nextEpoch ← liftArith do
         addChecked (← addChecked (getCurrentEpoch state) preset.MIN_SEED_LOOKAHEAD) 1
@@ -270,7 +270,7 @@ theorem processPtcWindow_eq (state : BeaconState preset fork) (gloas : .glamster
         if kept : position + perEpoch < _ then pure window[position + perEpoch]
         else do
           computePtc state (← ptcWindowSlot preset nextEpoch (position + perEpoch - window.size))
-      return { state with ptcWindow := fun _ => moved }) := by
+      return { state with ptcWindow := fun _ => .ofVector moved }) := by
   unfold processPtcWindow
   simp only [bind, Except.bind]
   split
@@ -278,10 +278,10 @@ theorem processPtcWindow_eq (state : BeaconState preset fork) (gloas : .glamster
   rename_i nextEpoch _
   rw [vector_mapM_congr (g := fun position =>
       if kept : position + preset.SLOTS_PER_EPOCH.toNat < _ then
-        pure (state.ptcWindow gloas)[position + preset.SLOTS_PER_EPOCH.toNat]
+        pure (state.ptcWindow gloas).elements[position + preset.SLOTS_PER_EPOCH.toNat]
       else do
         computePtc state (← ptcWindowSlot preset nextEpoch
-          (position + preset.SLOTS_PER_EPOCH.toNat - (state.ptcWindow gloas).size)))]
+          (position + preset.SLOTS_PER_EPOCH.toNat - (state.ptcWindow gloas).elements.size)))]
   · rfl
   intro position inRange
   simp only [Vector.getElem_range]
@@ -293,7 +293,7 @@ theorem processPtcWindow_eq (state : BeaconState preset fork) (gloas : .glamster
   · rfl
   rename_i slot computed
   -- The slot is in the new epoch, so its committee reads the seeds and shuffle of that epoch.
-  have size : (state.ptcWindow gloas).size =
+  have size : (state.ptcWindow gloas).elements.size =
       (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat := rfl
   have epoch := computeEpochAtSlot_ptcWindowSlot (by omega) computed
   cases seedOk : getSeed state nextEpoch DOMAIN_PTC_ATTESTER <;>
@@ -431,6 +431,9 @@ theorem getPtc_initializePtcWindow {config : Config} {state : BeaconState preset
       (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64) :
     getPtc config { state with ptcWindow := fun _ => window } gloas slot =
       computePtc state slot := by
+  -- The window is the vector of computed committees, with its tree.
+  unfold initializePtcWindow at initialized
+  obtain ⟨committees, mapped, rfl⟩ := map_ok_iff.mp initialized
   obtain ⟨position, positionOk, positionNat⟩ :=
     ptcWindowPosition_of_le (state := state) positive forkEpoch current lookahead fits windowFits
   -- The names of the epochs and of the slot as natural numbers.
@@ -446,7 +449,7 @@ theorem getPtc_initializePtcWindow {config : Config} {state : BeaconState preset
   have inRange : position.toNat <
       (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat := by omega
   -- The entry of the window at that position is the computed committee of some slot.
-  have entry := vector_mapM_ok_getElem initialized position.toNat inRange
+  have entry := vector_mapM_ok_getElem mapped position.toNat inRange
   simp only [Vector.getElem_range] at entry
   split at entry
   · rw [positionNat] at *
@@ -488,8 +491,10 @@ theorem getPtc_initializePtcWindow {config : Config} {state : BeaconState preset
     exact Nat.div_add_mod' _ _
   subst same
   rw [computed]
-  have moved : ptcWindowPosition config { state with ptcWindow := fun _ => window } other =
+  have moved : ptcWindowPosition config
+      { state with ptcWindow := fun _ => .ofVector committees } other =
       .ok position := positionOk
-  simp [getPtc, moved, bind, Except.bind, pure, Except.pure, inRange]
+  have read : (RootedVector.ofVector committees).elements = committees := rfl
+  simp [getPtc, moved, read, bind, Except.bind, pure, Except.pure, inRange]
 
 end EthLib.Consensus

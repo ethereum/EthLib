@@ -456,7 +456,7 @@ def upgradeFields (config : Config) (pre : BeaconState preset .fusaka) (requests
     builderPendingWithdrawals := fun _ => ⟨#[]⟩
     latestExecutionPayloadBid := fun _ => upgradeBid pre requestsRoot
     payloadExpectedWithdrawals := fun _ => ⟨#[], fun before => absurd before (by decide)⟩
-    ptcWindow := fun _ => Vector.replicate _ (Vector.replicate _ 0) }
+    ptcWindow := fun _ => .ofVector (Vector.replicate _ (Vector.replicate _ 0)) }
 
 /-- The Gloas state of a Fulu state, at the first slot of the fork epoch.
 
