@@ -706,7 +706,13 @@ No frame writes the account of the called address or of the outer frame.
 So the result holds even when the two are the same address.
 `CallEcho.runFrame_process` proves a contract that sends a word to a callee that returns its call data, with an output range of 64 bytes.
 With the runner of the interpreter, it returns that word and 32 zero bytes, since the callee returns only 32, or the run aborts.
-No rule covers CREATE, a call with value, DELEGATECALL or STATICCALL.
+`Logic.callValue` is the rule for CALL with a value that is not 0, from Berlin to before Glamsterdam.
+The frame must be one that may change the state.
+It pays the access of EIP-2929, 9000 for the value, 25000 more when the callee is dead by EIP-161, and the growth of memory.
+The message gets the gas that EIP-150 allows and the stipend of 2300, and carries the value.
+`Logic.callValueLow` is the rule for such a CALL when the current account holds less than the value.
+It sends no message, pushes 0, empties the return data, and gives back the gas it would pass on with the stipend.
+No theorem yet states the balances after such a call, and no rule covers CREATE, DELEGATECALL or STATICCALL.
 
 ### SHA-256 precompile
 

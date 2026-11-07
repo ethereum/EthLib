@@ -134,6 +134,186 @@ theorem callStep_call (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
   exact ⟨_, _, ⟨rfl, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl,
     rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
+/-- The gas that CALL passes on: what it asks for, at most all but one 64th of what is left. -/
+def callGas (asked : U256) (gas cost : Nat) : Nat :=
+  min asked.toNat (maxMessageCallGas (gas - cost))
+
+/-- The step of CALL with value sends a message with that value, with its input as data.
+
+The frame may change the state, and the current account holds at least the value.
+
+The caller has paid the extra price, the growth of memory, and the gas it passes on.
+
+The extra price is the access of EIP-2929, 2600 when cold and 100 when warm, from Berlin.
+
+It adds 9000 for the value, from Frontier.
+
+It adds 25000 when the callee is dead, by EIP-161 from Spurious Dragon.
+
+The message gets that gas and the stipend of 2300. -/
+theorem callStep_value (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+    {evm : Evm fork Nat} {g a v i isz o osz : U256} {rest : List U256} {calleeCode : ByteArray}
+    (hst : evm.stack.val = g :: a :: v :: i :: isz :: o :: osz :: rest) (hv : v ≠ 0)
+    (hstatic : evm.message.isStatic = false)
+    (hbal : v ≤ (evm.state.getAccount evm.message.currentTarget).balance)
+    (hcode : evm.state.getCode (evm.state.getAccount (toAddressMasked a)).codeHash = .ok calleeCode)
+    (hdel : .pectra ≤ fork → delegatedAddress calleeCode = none)
+    (hdepth : evm.message.depth + 1 ≤ STACK_DEPTH_LIMIT)
+    (hgas : (callBaseCost fork (decide (toAddressMasked a ∉ evm.substate.accessedAddresses)) +
+          callNewAccountCost fork evm.state (toAddressMasked a) v + callValueCost fork v) +
+      (extendMemory evm.memory.size [(i, isz), (o, osz)]).cost ≤ evm.gas) :
+    ∃ caller msg, callStep .call evm = .ok (.child caller msg (resumeCall fork caller 0 o osz)) ∧
+      caller.code = evm.code ∧ caller.validJumpDestinations = evm.validJumpDestinations ∧
+      caller.message = evm.message ∧ caller.pc = evm.pc ∧ caller.stack.val = rest ∧
+      caller.memory = memoryExtend evm.memory
+        (extendMemory evm.memory.size [(i, isz), (o, osz)]).expandBy ∧
+      caller.gas = evm.gas - (callGas g evm.gas
+        ((callBaseCost fork (decide (toAddressMasked a ∉ evm.substate.accessedAddresses)) +
+          callNewAccountCost fork evm.state (toAddressMasked a) v + callValueCost fork v) +
+          (extendMemory evm.memory.size [(i, isz), (o, osz)]).cost) +
+        ((callBaseCost fork (decide (toAddressMasked a ∉ evm.substate.accessedAddresses)) +
+          callNewAccountCost fork evm.state (toAddressMasked a) v + callValueCost fork v) +
+          (extendMemory evm.memory.size [(i, isz), (o, osz)]).cost)) ∧
+      caller.running = evm.running ∧ caller.error = evm.error ∧
+      caller.state = (evm.state.recordAccountRead (toAddressMasked a)).recordAccountRead
+        evm.message.currentTarget ∧
+      caller.substate = { evm.substate with
+        accessedAddresses := evm.substate.accessedAddresses.insert (toAddressMasked a) } ∧
+      msg.gas = callGas g evm.gas
+        ((callBaseCost fork (decide (toAddressMasked a ∉ evm.substate.accessedAddresses)) +
+          callNewAccountCost fork evm.state (toAddressMasked a) v + callValueCost fork v) +
+          (extendMemory evm.memory.size [(i, isz), (o, osz)]).cost) + CALL_STIPEND ∧
+      msg.caller = evm.message.currentTarget ∧ msg.currentTarget = toAddressMasked a ∧
+      msg.target = some (toAddressMasked a) ∧ msg.codeAddress = some (toAddressMasked a) ∧
+      msg.code = calleeCode ∧
+      msg.data = memoryReadBytes (memoryExtend evm.memory
+        (extendMemory evm.memory.size [(i, isz), (o, osz)]).expandBy) i.toNat isz.toNat ∧
+      msg.value = v ∧ msg.shouldTransferValue = true ∧ msg.depth = evm.message.depth + 1 := by
+  have hng : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hglam
+  rcases evm with ⟨pc, ⟨l, hl⟩, memory, code, valid, gas, running, message, output, returnData,
+    state, substate, error⟩
+  simp only at hst
+  subst hst
+  have hgc : ∀ (tx : State.TransactionState) (x : Base.Address) h,
+      (tx.recordAccountRead x).getCode h = tx.getCode h := fun _ _ _ => rfl
+  have hga : ∀ (tx : State.TransactionState) (x y : Base.Address),
+      (tx.recordAccountRead x).getAccount y = tx.getAccount y := fun _ _ _ => rfl
+  have hal : ∀ (tx : State.TransactionState) (x y : Base.Address),
+      (tx.recordAccountRead x).isAccountAlive y = tx.isAccountAlive y := fun _ _ _ => rfl
+  simp only at hcode hgas hdepth hstatic hbal ⊢
+  have hdel' : (if Fork.pectra ≤ fork then delegatedAddress calleeCode else none) = none := by
+    split
+    · exact hdel ‹_›
+    · rfl
+  have htw : Fork.tangerineWhistle ≤ fork := Nat.le_trans (by decide) hfork
+  have hsd : Fork.spuriousDragon ≤ fork := Nat.le_trans (by decide) hfork
+  have hv' : ¬v = 0#256 := hv
+  generalize hE : callBaseCost fork (!decide (toAddressMasked a ∈ substate.accessedAddresses)) +
+    (if state.isAccountAlive (toAddressMasked a) = true then 0 else NEW_ACCOUNT) + CALL_VALUE = E
+  have hgas' : E + (extendMemory memory.size [(i, isz), (o, osz)]).cost ≤ gas := by
+    rw [← hE]; simpa [callNewAccountCost, callValueCost, hv', hng, hsd] using hgas
+  have hmin : min g.toNat (maxMessageCallGas
+      (gas - (extendMemory memory.size [(i, isz), (o, osz)]).cost - E)) + E +
+      (extendMemory memory.size [(i, isz), (o, osz)]).cost ≤ gas := by
+    have : maxMessageCallGas (gas - (extendMemory memory.size [(i, isz), (o, osz)]).cost - E) ≤
+        gas - (extendMemory memory.size [(i, isz), (o, osz)]).cost - E := Nat.sub_le _ _
+    omega
+  have hbal' : ¬(state.getAccount message.currentTarget).balance < v := by
+    simpa [BitVec.lt_def, BitVec.le_def] using hbal
+  simp [callStep, popCallOperands, popCallValue, CallKind.sendsValue, popWord, Stack.pop, bind,
+    Except.bind, pure, Except.pure, accessAddress, hfork, checkGas, hng, accessDelegation,
+    accountCode, recordAccountRead, hgc, hga, hal, hcode, hdel', htw, hsd, Except.mapError,
+    callExtraGas, callNewAccountCost, callNewAccountStateGas, callValueCost, hv',
+    payCall, messageCallGas, chargeGas, GasMeter.charge, finishCall, genericCall, keepReads,
+    GasMeter.gasLeft, GasMeter.drain, GasMeter.reservoir, Nat.not_lt.mpr hdepth, hstatic, hE,
+    hgas', Nat.not_lt.mpr hmin, hbal']
+  have hsub : ∀ x y : Nat, gas - y - x = gas - (x + y) := fun x y => by omega
+  refine ⟨_, _, ⟨rfl, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, ?_, rfl, rfl, rfl, rfl, ?_, rfl,
+    rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  · dsimp only
+    rw [callGas, hsub, Nat.add_assoc]
+  · dsimp only
+    rw [callGas, hsub]
+
+/-- The step of CALL with more value than the current account holds sends no message.
+
+The caller pays the extra price and the growth of memory.
+
+It gets back the gas it would pass on, with the stipend of 2300.
+
+It pushes 0, and its return data is empty. -/
+theorem callStep_value_low (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+    {evm : Evm fork Nat} {g a v i isz o osz : U256} {rest : List U256} {calleeCode : ByteArray}
+    (hst : evm.stack.val = g :: a :: v :: i :: isz :: o :: osz :: rest) (hv : v ≠ 0)
+    (hstatic : evm.message.isStatic = false)
+    (hbal : (evm.state.getAccount evm.message.currentTarget).balance < v)
+    (hcode : evm.state.getCode (evm.state.getAccount (toAddressMasked a)).codeHash = .ok calleeCode)
+    (hdel : .pectra ≤ fork → delegatedAddress calleeCode = none)
+    (hgas : (callBaseCost fork (decide (toAddressMasked a ∉ evm.substate.accessedAddresses)) +
+          callNewAccountCost fork evm.state (toAddressMasked a) v + callValueCost fork v) +
+      (extendMemory evm.memory.size [(i, isz), (o, osz)]).cost ≤ evm.gas) :
+    ∃ after, callStep .call evm = .ok (.next after) ∧
+      after.code = evm.code ∧ after.validJumpDestinations = evm.validJumpDestinations ∧
+      after.message = evm.message ∧ after.pc = evm.pc + 1 ∧ after.stack.val = 0 :: rest ∧
+      after.memory = memoryExtend evm.memory
+        (extendMemory evm.memory.size [(i, isz), (o, osz)]).expandBy ∧
+      after.gas = evm.gas - (callGas g evm.gas
+        ((callBaseCost fork (decide (toAddressMasked a ∉ evm.substate.accessedAddresses)) +
+          callNewAccountCost fork evm.state (toAddressMasked a) v + callValueCost fork v) +
+          (extendMemory evm.memory.size [(i, isz), (o, osz)]).cost) +
+        ((callBaseCost fork (decide (toAddressMasked a ∉ evm.substate.accessedAddresses)) +
+          callNewAccountCost fork evm.state (toAddressMasked a) v + callValueCost fork v) +
+          (extendMemory evm.memory.size [(i, isz), (o, osz)]).cost)) +
+        (callGas g evm.gas
+          ((callBaseCost fork (decide (toAddressMasked a ∉ evm.substate.accessedAddresses)) +
+          callNewAccountCost fork evm.state (toAddressMasked a) v + callValueCost fork v) +
+            (extendMemory evm.memory.size [(i, isz), (o, osz)]).cost) + CALL_STIPEND) ∧
+      after.running = evm.running ∧ after.error = evm.error ∧ after.returnData = .empty ∧
+      after.state = (evm.state.recordAccountRead (toAddressMasked a)).recordAccountRead
+        evm.message.currentTarget ∧
+      after.substate = { evm.substate with
+        accessedAddresses := evm.substate.accessedAddresses.insert (toAddressMasked a) } := by
+  have hng : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hglam
+  rcases evm with ⟨pc, ⟨l, hl⟩, memory, code, valid, gas, running, message, output, returnData,
+    state, substate, error⟩
+  simp only at hst
+  subst hst
+  have hgc : ∀ (tx : State.TransactionState) (x : Base.Address) h,
+      (tx.recordAccountRead x).getCode h = tx.getCode h := fun _ _ _ => rfl
+  have hga : ∀ (tx : State.TransactionState) (x y : Base.Address),
+      (tx.recordAccountRead x).getAccount y = tx.getAccount y := fun _ _ _ => rfl
+  have hal : ∀ (tx : State.TransactionState) (x y : Base.Address),
+      (tx.recordAccountRead x).isAccountAlive y = tx.isAccountAlive y := fun _ _ _ => rfl
+  simp only at hcode hgas hstatic hbal ⊢
+  have hdel' : (if Fork.pectra ≤ fork then delegatedAddress calleeCode else none) = none := by
+    split
+    · exact hdel ‹_›
+    · rfl
+  have htw : Fork.tangerineWhistle ≤ fork := Nat.le_trans (by decide) hfork
+  have hsd : Fork.spuriousDragon ≤ fork := Nat.le_trans (by decide) hfork
+  have hv' : ¬v = 0#256 := hv
+  generalize hE : callBaseCost fork (!decide (toAddressMasked a ∈ substate.accessedAddresses)) +
+    (if state.isAccountAlive (toAddressMasked a) = true then 0 else NEW_ACCOUNT) + CALL_VALUE = E
+  have hgas' : E + (extendMemory memory.size [(i, isz), (o, osz)]).cost ≤ gas := by
+    rw [← hE]; simpa [callNewAccountCost, callValueCost, hv', hng, hsd] using hgas
+  have hmin : min g.toNat (maxMessageCallGas
+      (gas - (extendMemory memory.size [(i, isz), (o, osz)]).cost - E)) + E +
+      (extendMemory memory.size [(i, isz), (o, osz)]).cost ≤ gas := by
+    have : maxMessageCallGas (gas - (extendMemory memory.size [(i, isz), (o, osz)]).cost - E) ≤
+        gas - (extendMemory memory.size [(i, isz), (o, osz)]).cost - E := Nat.sub_le _ _
+    omega
+  have hlen : rest.length ≠ STACK_LIMIT := by simp at hl; omega
+  simp [callStep, popCallOperands, popCallValue, CallKind.sendsValue, popWord, Stack.pop, bind,
+    Except.bind, pure, Except.pure, accessAddress, hfork, checkGas, hng, accessDelegation,
+    accountCode, recordAccountRead, hgc, hga, hal, hcode, hdel', htw, hsd, Except.mapError,
+    callExtraGas, callNewAccountCost, callValueCost, hv',
+    payCall, messageCallGas, chargeGas, GasMeter.charge, finishCall, keepReads,
+    GasMeter.gasLeft, GasMeter.drain, hstatic, hE,
+    hgas', Nat.not_lt.mpr hmin, hbal, skipCall, refillStateGas, GasMeter.refill, GasMeter.credit,
+    pushWord, Stack.push, hlen, advance, Functor.map, Except.map]
+  have hsub : ∀ x y : Nat, gas - y - x = gas - (x + y) := fun x y => by omega
+  rw [callGas, hsub, Nat.add_assoc]
+
 /-- A caller with room on its stack resumes from every frame that ends its message.
 
 It pushes 1 for a frame with no error and 0 otherwise, and gets back the gas of the frame.
@@ -178,10 +358,6 @@ theorem messageInstruction_call :
 
 variable {code : ByteArray} {message : Message fork} {pc : Nat} {memory : ByteArray} {gas : Nat}
   {state : State.TransactionState} {substate : Substate}
-
-/-- The gas that CALL passes on: what it asks for, at most all but one 64th of what is left. -/
-def callGas (asked : U256) (gas cost : Nat) : Nat :=
-  min asked.toNat (maxMessageCallGas (gas - cost))
 
 /-- CALL with no value, to the address `to`, with a range of input and a range of output.
 
@@ -325,6 +501,151 @@ theorem call (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
   obtain ⟨m1, m2, m3, m4, m5, md, m6, m7, hat⟩ := rest'
   refine ⟨m1, m2, m3, m4, m5, by simpa [memoryExtend_zero, memoryReadBytes] using md, m6, m7, ?_⟩
   simpa [memoryExtend_zero, memoryWrite] using hat
+
+/-- CALL with a value `v`, which is not 0, to the address `to`, with ranges of input and output.
+
+The frame may change the state, and the current account holds at least `v`.
+
+The call pays its extra price and the growth of memory.
+
+Its extra price is the access of EIP-2929, 2600 when cold and 100 when warm, from Berlin.
+
+It adds 9000 for the value, from Frontier.
+
+It adds 25000 when the callee is dead, by EIP-161 from Spurious Dragon.
+
+It passes on the gas it asks for, at most all but one 64th of the gas left, by EIP-150.
+
+The message gets that gas and the stipend of 2300, and carries the value.
+
+The rule holds for every frame that ends the message and meets the assumption.
+
+It says nothing of the state beyond what that frame gives, as for CALL with no value. -/
+theorem callValue (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+    {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
+    {asked to v inputStart inputSize outputStart outputSize : U256} {rest : List U256}
+    {cold : Bool} {calleeCode : ByteArray} (hlt : pc < code.size) (hbyte : code[pc] = 0xf1)
+    (hv : v ≠ 0) (hstatic : message.isStatic = false)
+    (hbal : v ≤ (state.getAccount message.currentTarget).balance)
+    (hcode : state.getCode (state.getAccount (toAddressMasked to)).codeHash = .ok calleeCode)
+    (hdel : .pectra ≤ fork → delegatedAddress calleeCode = none)
+    (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
+    (hcold : decide (toAddressMasked to ∉ substate.accessedAddresses) = cold)
+    (hgas : (callBaseCost fork cold +
+            callNewAccountCost fork state (toAddressMasked to) v + callValueCost fork v) +
+      (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost ≤
+        gas) :
+    HoareUnder fork callee
+      (At code message pc
+        (asked :: to :: v :: inputStart :: inputSize :: outputStart :: outputSize :: rest)
+        memory gas state substate)
+      fun after => ∃ caller msg child, callee caller msg child ∧
+        child.gas ≤ msg.gas ∧
+        caller.state = (state.recordAccountRead (toAddressMasked to)).recordAccountRead
+          message.currentTarget ∧
+        caller.substate = { substate with
+          accessedAddresses := substate.accessedAddresses.insert (toAddressMasked to) } ∧
+        msg.gas = callGas asked gas ((callBaseCost fork cold +
+            callNewAccountCost fork state (toAddressMasked to) v + callValueCost fork v) +
+          (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
+          CALL_STIPEND ∧
+        msg.caller = message.currentTarget ∧ msg.currentTarget = toAddressMasked to ∧
+        msg.target = some (toAddressMasked to) ∧ msg.codeAddress = some (toAddressMasked to) ∧
+        msg.code = calleeCode ∧
+        msg.data = memoryReadBytes (memoryExtend memory
+          (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).expandBy)
+          inputStart.toNat inputSize.toNat ∧
+        msg.value = v ∧ msg.shouldTransferValue = true ∧ msg.depth = message.depth + 1 ∧
+        At code message (pc + 1) ((if child.error.isNone then 1 else 0) :: rest)
+          (memoryWrite (memoryExtend memory
+            (extendMemory memory.size
+              [(inputStart, inputSize), (outputStart, outputSize)]).expandBy)
+            outputStart.toNat (child.output.extract 0 (min outputSize.toNat child.output.size)))
+          (gas - (callGas asked gas ((callBaseCost fork cold +
+            callNewAccountCost fork state (toAddressMasked to) v + callValueCost fork v) +
+            (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
+            ((callBaseCost fork cold +
+            callNewAccountCost fork state (toAddressMasked to) v + callValueCost fork v) +
+            (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost)) +
+            child.gas)
+          (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
+          after := by
+  apply HoareUnder.of_child
+  rintro evm ⟨hc, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
+  subst hm hg hs hss hcold hmem
+  obtain ⟨caller, msg, hstep, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, m1, m2, m3, mt, mca, m4,
+      md, m5, m6, m7⟩ :=
+    callStep_value hfork hglam hst hv hstatic hbal hcode hdel hdepth hgas
+  refine ⟨hrun, caller, msg, resumeCall fork caller 0 outputStart outputSize, ?_, ?_⟩
+  · rw [step_of_messageInstruction (by rw [hc, hpc]; exact hlt)
+      (by simp only [hc, hpc, hbyte]; exact ofByte_of_decode (op := .call) rfl (Fork.frontier_le _))
+      instruction_call messageInstruction_call]
+    exact hstep
+  · intro child hchild hcallee
+    have hlen : caller.stack.val.length < STACK_LIMIT := by
+      have := evm.stack.property
+      rw [hst] at this
+      rw [c5]
+      simp at this
+      omega
+    obtain ⟨after, hres, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11⟩ :=
+      resumeCall_eq (child := child) (o := outputStart) (osz := outputSize) hlen
+    refine .inl ⟨after, hres, caller, msg, child, hcallee, hchild, c10, c11, m1, m2, m3, mt, mca,
+      m4, md, m5, m6, m7, ?_⟩
+    exact ⟨by rw [a1, c1, hc], by rw [a2, c2, hj], by rw [a3, c3], by rw [a4, c4, hpc],
+      by rw [a5, c5], by rw [a6, c6], by rw [a7, c7], by rw [a8, c8, hrun], by rw [a9, c9, herr],
+      a10, a11⟩
+
+/-- CALL with more value than the current account holds sends no message, and pushes 0.
+
+The frame may change the state, and the call pays as with enough value.
+
+It gets back the gas that it would pass on, with the stipend of 2300.
+
+Its return data is empty, and its memory has grown for both ranges. -/
+theorem callValueLow (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+    {asked to v inputStart inputSize outputStart outputSize : U256} {rest : List U256}
+    {cold : Bool} {calleeCode : ByteArray} (hlt : pc < code.size) (hbyte : code[pc] = 0xf1)
+    (hv : v ≠ 0) (hstatic : message.isStatic = false)
+    (hbal : (state.getAccount message.currentTarget).balance < v)
+    (hcode : state.getCode (state.getAccount (toAddressMasked to)).codeHash = .ok calleeCode)
+    (hdel : .pectra ≤ fork → delegatedAddress calleeCode = none)
+    (hcold : decide (toAddressMasked to ∉ substate.accessedAddresses) = cold)
+    (hgas : (callBaseCost fork cold +
+            callNewAccountCost fork state (toAddressMasked to) v + callValueCost fork v) +
+      (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost ≤
+        gas) :
+    Hoare fork
+      (At code message pc
+        (asked :: to :: v :: inputStart :: inputSize :: outputStart :: outputSize :: rest)
+        memory gas state substate)
+      (At code message (pc + 1) (0 :: rest)
+        (memoryExtend memory
+          (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).expandBy)
+        (gas - (callGas asked gas ((callBaseCost fork cold +
+            callNewAccountCost fork state (toAddressMasked to) v + callValueCost fork v) +
+          (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
+          ((callBaseCost fork cold +
+            callNewAccountCost fork state (toAddressMasked to) v + callValueCost fork v) +
+          (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost)) +
+          (callGas asked gas ((callBaseCost fork cold +
+            callNewAccountCost fork state (toAddressMasked to) v + callValueCost fork v) +
+          (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
+          CALL_STIPEND))
+        ((state.recordAccountRead (toAddressMasked to)).recordAccountRead message.currentTarget)
+        { substate with
+          accessedAddresses := substate.accessedAddresses.insert (toAddressMasked to) }) := by
+  apply Triple.of_step
+  rintro evm ⟨hc, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
+  subst hm hg hs hss hcold hmem
+  obtain ⟨after, hstep, a1, a2, a3, a4, a5, a6, a7, a8, a9, -, a10, a11⟩ :=
+    callStep_value_low hfork hglam hst hv hstatic hbal hcode hdel hgas
+  refine ⟨after, .next hrun ?_, by rw [a1, hc], by rw [a2, hj], a3, by rw [a4, hpc], a5, a6, a7,
+    by rw [a8, hrun], by rw [a9, herr], a10, a11⟩
+  rw [step_of_messageInstruction (by rw [hc, hpc]; exact hlt)
+    (by simp only [hc, hpc, hbyte]; exact ofByte_of_decode (op := .call) rfl (Fork.frontier_le _))
+    instruction_call messageInstruction_call]
+  exact hstep
 
 /-- The assumption that a call that runs no code, and reaches no precompile, ends with no error. -/
 def NoCodeSucceeds {Meter : Type} [GasMeter Meter] (_caller : Evm fork Meter)
