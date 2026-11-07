@@ -141,6 +141,10 @@ theorem computeProposerIndex_of_computeBalanceWeightedSelection
     split at computed
     · cases computed
     rename_i balances read
+    split at computed
+    · cases computed
+    rename_i guard
+    have small : indices.size ≤ 2 ^ 40 := Nat.le_of_not_lt fun large => guard (by simp [large])
     have sizeEq : indices.size.toUInt64.toNat = indices.size := by
       rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt fits]
     have onList := congrArg (Array.toList <$> ·) read
@@ -151,20 +155,18 @@ theorem computeProposerIndex_of_computeBalanceWeightedSelection
     -- Both read the shuffled position of each draw.
     have agree : ∀ place < indices.size,
         Shuffle.shuffledIndex preset.SHUFFLE_ROUND_COUNT.toNat seed indices.size place =
-          ((computeShuffledPermutation preset indices.size.toUInt64 seed).getD place 0).toNat := by
+          ((Shuffle.shuffledPositions preset.SHUFFLE_ROUND_COUNT.toNat seed indices.size).getD
+            place 0).toNat := by
       intro place lt
-      have below : place < indices.size.toUInt64.toNat := by rw [sizeEq]; exact lt
-      rw [Array.getD_eq_getD_getElem?, computeShuffledPermutation_getElem below, Option.getD_some,
-        UInt64.toNat_ofNat', sizeEq,
-        Nat.mod_eq_of_lt (Nat.lt_trans (Shuffle.shuffledIndex_lt lt) fits)]
+      rw [Array.getD_eq_getD_getElem?, Shuffle.shuffledPositions_getElem lt, Option.getD_some,
+        UInt64.toNat_ofNat', Nat.mod_eq_of_lt (Nat.lt_trans (Shuffle.shuffledIndex_lt lt) fits)]
     rw [balanceWeightedSearch_congr (Nat.pos_of_ne_zero empty) agree] at computed
     unfold computeProposerIndex
-    simp only [empty, fits, ↓reduceIte]
+    simp only [empty, fits, ↓reduceIte, computeShuffledPermutation_eq (by rw [sizeEq]; exact small),
+      sizeEq, Except.mapError, bind, Except.bind]
     refine proposerSearch_of_balanceWeightedSearch (Nat.pos_of_ne_zero empty)
       (fun place lt => ?_) (fun k lt => ?_) computed
-    · have entry := computeShuffledPermutation_getD_lt (preset := preset) (seed := seed)
-        (count := indices.size.toUInt64) (place := place) (by rw [sizeEq]; exact lt)
-      rwa [sizeEq] at entry
+    · exact Shuffle.shuffledPositions_getD_lt fits lt
     · have entry := mapM_ok_getElem onList k (by simpa using lt)
       simp only [Array.getElem_toList] at entry
       cases found : getValidator state indices[k] with

@@ -289,27 +289,14 @@ theorem getCommitteeCountPerSlot_le (state : BeaconState preset fork) (epoch : E
   all_goals simp_all [UInt64.le_iff_toNat_le]
   all_goals omega
 
-/-- Each member of a committee is active in the epoch of its slot. -/
-theorem mem_getActiveValidatorIndices_of_getBeaconCommittee {state : BeaconState preset fork}
-    {slot : Slot} {index : CommitteeIndex} {committee : Array ValidatorIndex}
-    (computed : getBeaconCommittee state slot index = .ok committee)
-    {member : ValidatorIndex} (mem : member ∈ committee) :
-    member ∈ getActiveValidatorIndices state (computeEpochAtSlot preset slot) := by
-  simp only [getBeaconCommittee, beaconCommitteeOf, bind, Except.bind] at computed
-  split at computed
-  · cases computed
-  split at computed
-  · cases computed
-  split at computed
-  · cases computed
-  simpa using mem_of_computeCommittee (mapError_ok_iff.mp computed) mem
-
 /-- A committee that has a value comes from a positive count. -/
 theorem count_ne_zero_of_computeCommittee {indices : Array ValidatorIndex} {seed : Bytes32}
     {index count : UInt64} {committee : Array ValidatorIndex}
     (computed : computeCommittee preset indices seed index count = .ok committee) : count ≠ 0 := by
   intro zero
-  simp [computeCommittee, shuffledCommittee, zero, bind, Except.bind] at computed
+  cases shuffle : computeShuffledPermutation preset (UInt64.ofNat indices.size) seed <;>
+    simp [computeCommittee, shuffledCommittee, shuffle, zero, bind, Except.bind, throw, throwThe,
+      MonadExcept.throw, MonadExceptOf.throw] at computed
 
 /-- A beacon committee that has a value is one committee cut from the active indices.
 
@@ -330,9 +317,20 @@ theorem getBeaconCommittee_ok {state : BeaconState preset fork} {slot : Slot}
         count = .ok committee := by
   simp only [getBeaconCommittee, beaconCommitteeOf, bind_ok_iff, liftArith, mapError_ok_iff,
     Base.Uint64.mulChecked_ok_iff, Base.Uint64.addChecked_ok_iff] at computed
-  obtain ⟨seed, seedOk, position, ⟨product, ⟨_, productEq⟩, _, positionEq⟩, count, ⟨_, countEq⟩,
-    committeeOk⟩ := computed
-  exact ⟨seed, position, count, seedOk, by rw [positionEq, productEq], countEq, committeeOk⟩
+  obtain ⟨seed, seedOk, shuffled, shuffleOk, position, ⟨product, ⟨_, productEq⟩, _, positionEq⟩,
+    count, ⟨_, countEq⟩, committeeOk⟩ := computed
+  refine ⟨seed, position, count, seedOk, by rw [positionEq, productEq], countEq, ?_⟩
+  rw [computeCommittee, shuffleOk]
+  exact committeeOk
+
+/-- Each member of a committee is active in the epoch of its slot. -/
+theorem mem_getActiveValidatorIndices_of_getBeaconCommittee {state : BeaconState preset fork}
+    {slot : Slot} {index : CommitteeIndex} {committee : Array ValidatorIndex}
+    (computed : getBeaconCommittee state slot index = .ok committee)
+    {member : ValidatorIndex} (mem : member ∈ committee) :
+    member ∈ getActiveValidatorIndices state (computeEpochAtSlot preset slot) := by
+  obtain ⟨_, _, _, _, _, _, committeeOk⟩ := getBeaconCommittee_ok computed
+  simpa using mem_of_computeCommittee committeeOk mem
 
 /-- No validator is in two committees of one epoch.
 
@@ -435,11 +433,14 @@ The seed of the epoch must have a value, and an epoch must have at least one slo
 
 The slots of the epoch must fit in 64 bits.
 
-The number of active validators times the number of committees of the epoch must fit too. -/
+There must be at most `2^40` active validators.
+
+Their number times the number of committees of the epoch must fit in 64 bits. -/
 theorem exists_mem_getBeaconCommittee {state : BeaconState preset fork} {epoch : Epoch}
     {seed : Bytes32} (seedOk : getSeed state epoch DOMAIN_BEACON_ATTESTER = .ok seed)
     (positive : preset.SLOTS_PER_EPOCH ≠ 0)
     (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64)
+    (small : (getActiveValidatorIndices state epoch).length ≤ 2 ^ 40)
     (fits : (getActiveValidatorIndices state epoch).length *
       ((getCommitteeCountPerSlot state epoch).toNat * preset.SLOTS_PER_EPOCH.toNat) < 2 ^ 64)
     {member : ValidatorIndex} (active : member ∈ getActiveValidatorIndices state epoch) :
@@ -462,7 +463,7 @@ theorem exists_mem_getBeaconCommittee {state : BeaconState preset fork} {epoch :
   obtain ⟨position, positionLt, committee, computed, mem⟩ :=
     exists_mem_computeCommittee (preset := preset) (seed := seed)
       (indices := (getActiveValidatorIndices state epoch).toArray)
-      (by simpa [countEq] using fits) countPos (by simpa using active)
+      (by simpa using small) (by simpa [countEq] using fits) countPos (by simpa using active)
   rw [countEq] at positionLt
   have perSmall := (getCommitteeCountPerSlot state epoch).toNat_lt
   generalize perEq : (getCommitteeCountPerSlot state epoch).toNat = perSlot at *
@@ -519,9 +520,15 @@ theorem exists_mem_getBeaconCommittee {state : BeaconState preset fork} {epoch :
     apply UInt64.toNat_inj.mp
     rw [Base.Uint64.toNat_add_of_lt (by rw [productNat, indexNat, split]; omega), productNat,
       indexNat, split, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (by omega)]
-  unfold computeCommittee at computed
-  simp only [getBeaconCommittee, beaconCommitteeOf, epochEq, seedOk, liftArith, productOk, sumOk,
-    countOk, bind, Except.bind, Except.mapError, positionEq]
+  have activeSize : (UInt64.ofNat (getActiveValidatorIndices state epoch).toArray.size).toNat =
+      (getActiveValidatorIndices state epoch).toArray.size :=
+    Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt (by simpa using small) (by decide))
+  have shuffleOk := computeShuffledPermutation_eq (preset := preset) (seed := seed)
+    (count := UInt64.ofNat (getActiveValidatorIndices state epoch).toArray.size)
+    (by rw [activeSize]; simpa using small)
+  rw [computeCommittee_of_le (by simpa using small)] at computed
+  simp only [getBeaconCommittee, beaconCommitteeOf, epochEq, seedOk, shuffleOk, activeSize,
+    liftArith, productOk, sumOk, countOk, bind, Except.bind, Except.mapError, positionEq]
   rw [computed]
 
 /-- One step of the pass that drops repeats keeps its list decreasing, below the rest. -/
@@ -896,13 +903,17 @@ theorem mem_of_computeProposerIndex {state : BeaconState preset fork}
   · simp [empty, bind, Except.bind, throw, throwThe, MonadExcept.throw,
       MonadExceptOf.throw] at computed
   by_cases fits : indices.size < 2 ^ 64
-  · simp only [empty, fits, ↓reduceIte] at computed
+  · simp only [empty, fits, ↓reduceIte, bind, Except.bind] at computed
+    split at computed
+    · cases computed
+    rename_i shuffled shuffleOk
+    obtain ⟨_, shuffledEq⟩ := computeShuffledPermutation_ok (mapError_ok_iff.mp shuffleOk)
+    subst shuffledEq
     have sizeEq : indices.size.toUInt64.toNat = indices.size := by
       rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt fits]
     refine mem_of_proposerSearch (Nat.pos_of_ne_zero empty) (fun place lt => ?_) computed
-    have entry := computeShuffledPermutation_getD_lt (preset := preset) (seed := seed)
-      (count := indices.size.toUInt64) (place := place) (by rw [sizeEq]; exact lt)
-    rwa [sizeEq] at entry
+    rw [sizeEq]
+    exact Shuffle.shuffledPositions_getD_lt fits lt
   · simp [empty, fits, bind, Except.bind, throw, throwThe, MonadExcept.throw,
       MonadExceptOf.throw] at computed
 

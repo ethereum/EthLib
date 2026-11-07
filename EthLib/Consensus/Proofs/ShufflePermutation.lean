@@ -128,24 +128,24 @@ theorem shuffledIndex_injective {rounds : Nat} {seed : Bytes32} {count first sec
   rw [← unshuffledIndex_shuffledIndex (rounds := rounds) (seed := seed) firstLt, same,
     unshuffledIndex_shuffledIndex secondLt]
 
-end Shuffle
+/-- The batch of shuffled positions is a permutation of the indices below the count.
 
-/-- The shuffled list is a permutation of the indices below the count. -/
-theorem computeShuffledPermutation_perm (preset : Preset) (count : UInt64) (seed : Bytes32) :
-    List.Perm ((computeShuffledPermutation preset count seed).toList.map UInt64.toNat)
-      (List.range count.toNat) := by
-  let shuffle := Shuffle.shuffledIndex preset.SHUFFLE_ROUND_COUNT.toNat seed count.toNat
+The count must be below `2^64`, so that each position fits in 64 bits. -/
+theorem shuffledPositions_perm (rounds : Nat) (seed : Bytes32) {count : Nat}
+    (countFits : count < 2 ^ 64) :
+    List.Perm ((shuffledPositions rounds seed count).toList.map UInt64.toNat)
+      (List.range count) := by
+  let shuffle := shuffledIndex rounds seed count
   -- The list is the shuffle of each index below the count.
-  have listed : (computeShuffledPermutation preset count seed).toList.map UInt64.toNat =
-      (List.range count.toNat).map shuffle := by
+  have listed : (shuffledPositions rounds seed count).toList.map UInt64.toNat =
+      (List.range count).map shuffle := by
     apply List.ext_getElem?
     intro index
-    by_cases lt : index < count.toNat
-    · have fits : shuffle index < 2 ^ 64 :=
-        Nat.lt_trans (Shuffle.shuffledIndex_lt lt) count.toNat_lt
-      simp [List.getElem?_map, computeShuffledPermutation_getElem lt, lt, shuffle,
+    by_cases lt : index < count
+    · have fits : shuffle index < 2 ^ 64 := Nat.lt_trans (shuffledIndex_lt lt) countFits
+      simp [List.getElem?_map, shuffledPositions_getElem lt, lt, shuffle,
         Nat.mod_eq_of_lt fits]
-    · have size := computeShuffledPermutation_size preset count seed
+    · have size := shuffledPositions_size rounds seed count
       simp [List.getElem?_map, lt]
       omega
   rw [listed]
@@ -154,32 +154,26 @@ theorem computeShuffledPermutation_perm (preset : Preset) (count : UInt64) (seed
     simp only [List.mem_map, List.mem_range]
     constructor
     · rintro ⟨original, lt, rfl⟩
-      exact Shuffle.shuffledIndex_lt lt
+      exact shuffledIndex_lt lt
     · intro lt
-      exact ⟨_, Shuffle.unshuffledIndex_lt lt, Shuffle.shuffledIndex_unshuffledIndex lt⟩
+      exact ⟨_, unshuffledIndex_lt lt, shuffledIndex_unshuffledIndex lt⟩
   · rw [List.Nodup, List.pairwise_map]
     exact List.nodup_range.imp_of_mem fun firstMem secondMem differ same =>
-      differ (Shuffle.shuffledIndex_injective (List.mem_range.mp firstMem)
+      differ (shuffledIndex_injective (List.mem_range.mp firstMem)
         (List.mem_range.mp secondMem) same)
-
-namespace Shuffle
 
 /-- The indices in shuffled order: at each place, the index at the shuffled position. -/
 def shuffledIndices (preset : Preset) (indices : Array ValidatorIndex) (seed : Bytes32) :
     List ValidatorIndex :=
-  let shuffled := computeShuffledPermutation preset (UInt64.ofNat indices.size) seed
+  let shuffled := shuffledPositions preset.SHUFFLE_ROUND_COUNT.toNat seed indices.size
   (List.range indices.size).map fun place => indices.getD (shuffled.getD place 0).toNat 0
 
 /-- The indices in shuffled order are a permutation of the indices. -/
 theorem shuffledIndices_perm (preset : Preset) {indices : Array ValidatorIndex} (seed : Bytes32)
     (fits : indices.size < 2 ^ 64) :
     List.Perm (shuffledIndices preset indices seed) indices.toList := by
-  have perm := computeShuffledPermutation_perm preset (UInt64.ofNat indices.size) seed
-  have size : (UInt64.ofNat indices.size).toNat = indices.size := by
-    simp [Nat.mod_eq_of_lt fits]
-  rw [size] at perm
-  have size' := computeShuffledPermutation_size preset (UInt64.ofNat indices.size) seed
-  rw [size] at size'
+  have perm := shuffledPositions_perm preset.SHUFFLE_ROUND_COUNT.toNat seed fits
+  have size' := shuffledPositions_size preset.SHUFFLE_ROUND_COUNT.toNat seed indices.size
   -- Reading the indices at a permutation of their positions permutes them.
   have read := perm.map fun position => indices.getD position 0
   rw [List.map_map] at read
@@ -213,9 +207,35 @@ theorem flatMap_slices {α : Type} (list : List α) (bound : Nat → Nat) (zero 
 
 end Shuffle
 
+/-- A committee cut from at most `2^40` indices reads the batch of shuffled positions. -/
+theorem computeCommittee_of_le {preset : Preset} {indices : Array ValidatorIndex}
+    {seed : Bytes32} {index count : UInt64} (small : indices.size ≤ 2 ^ 40) :
+    computeCommittee preset indices seed index count =
+      shuffledCommittee indices
+        (Shuffle.shuffledPositions preset.SHUFFLE_ROUND_COUNT.toNat seed indices.size) index
+        count := by
+  have sizeEq : (UInt64.ofNat indices.size).toNat = indices.size :=
+    Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt small (by decide))
+  rw [computeCommittee, computeShuffledPermutation_eq (by rw [sizeEq]; exact small), sizeEq]
+  rfl
+
+/-- A committee that has a value is cut from at most `2^40` indices.
+
+The number of indices must be below `2^64`. -/
+theorem le_of_computeCommittee {preset : Preset} {indices : Array ValidatorIndex}
+    {seed : Bytes32} {index count : UInt64} {committee : Array ValidatorIndex}
+    (sizeFits : indices.size < 2 ^ 64)
+    (computed : computeCommittee preset indices seed index count = .ok committee) :
+    indices.size ≤ 2 ^ 40 := by
+  have sizeEq : (UInt64.ofNat indices.size).toNat = indices.size := Nat.mod_eq_of_lt sizeFits
+  refine Nat.le_of_not_lt fun large => ?_
+  rw [computeCommittee, computeShuffledPermutation_countTooLarge
+    (by rw [sizeEq]; exact large)] at computed
+  cases computed
+
 /-- Committee `index` of `count` is the slice of the shuffled indices between its bounds. -/
 theorem computeCommittee_eq {preset : Preset} {indices : Array ValidatorIndex} {seed : Bytes32}
-    {index count : UInt64} (lt : index < count)
+    {index count : UInt64} (lt : index < count) (small : indices.size ≤ 2 ^ 40)
     (fits : indices.size * count.toNat < 2 ^ 64) :
     computeCommittee preset indices seed index count =
       .ok (((Shuffle.shuffledIndices preset indices seed).drop
@@ -231,7 +251,8 @@ theorem computeCommittee_eq {preset : Preset} {indices : Array ValidatorIndex} {
   have stopLe : indices.size * (index.toNat + 1) / count.toNat ≤ indices.size := by
     exact Nat.div_le_of_le_mul (Nat.le_trans bound (Nat.le_of_eq (Nat.mul_comm _ _)))
   have below : index.toNat + 1 < 2 ^ 64 := Nat.lt_of_le_of_lt natLt count.toNat_lt
-  simp only [computeCommittee, shuffledCommittee, positive, below,
+  rw [computeCommittee_of_le small]
+  simp only [shuffledCommittee, positive, below,
     Nat.lt_of_le_of_lt bound fits, and_self,
     Nat.not_lt.mpr stopLe, and_false, ↓reduceIte]
   congr 2
@@ -243,7 +264,7 @@ theorem computeCommittee_eq {preset : Preset} {indices : Array ValidatorIndex} {
 
 The error names the first such position, as the spec's bound check on the shuffle does. -/
 theorem computeCommittee_past_end {preset : Preset} {indices : Array ValidatorIndex}
-    {seed : Bytes32} {index count : UInt64} (positive : count ≠ 0)
+    {seed : Bytes32} {index count : UInt64} (small : indices.size ≤ 2 ^ 40) (positive : count ≠ 0)
     (below : index.toNat + 1 < 2 ^ 64) (fits : indices.size * (index.toNat + 1) < 2 ^ 64)
     (nonempty : indices.size * index.toNat / count.toNat <
       indices.size * (index.toNat + 1) / count.toNat)
@@ -252,18 +273,19 @@ theorem computeCommittee_past_end {preset : Preset} {indices : Array ValidatorIn
       .error (.indexOutOfRange
         (UInt64.ofNat (max (indices.size * index.toNat / count.toNat) indices.size))
         (UInt64.ofNat indices.size)) := by
-  simp only [computeCommittee, shuffledCommittee, positive, below, fits, and_self, nonempty, past,
-    ↓reduceIte]
+  rw [computeCommittee_of_le small]
+  simp only [shuffledCommittee, positive, below, fits, and_self, nonempty, past, ↓reduceIte]
   rfl
 
 /-- A committee with an empty range of positions is empty, wherever the range lies. -/
 theorem computeCommittee_empty {preset : Preset} {indices : Array ValidatorIndex}
-    {seed : Bytes32} {index count : UInt64} (positive : count ≠ 0)
+    {seed : Bytes32} {index count : UInt64} (small : indices.size ≤ 2 ^ 40) (positive : count ≠ 0)
     (below : index.toNat + 1 < 2 ^ 64) (fits : indices.size * (index.toNat + 1) < 2 ^ 64)
     (empty : indices.size * (index.toNat + 1) / count.toNat ≤
       indices.size * index.toNat / count.toNat) :
     computeCommittee preset indices seed index count = .ok #[] := by
-  simp only [computeCommittee, shuffledCommittee, positive, below, fits, and_self,
+  rw [computeCommittee_of_le small]
+  simp only [shuffledCommittee, positive, below, fits, and_self,
     Nat.not_lt.mpr empty, false_and, ↓reduceIte, Nat.sub_eq_zero_of_le empty]
   rfl
 
@@ -277,9 +299,12 @@ def committeeSlice (preset : Preset) (indices : Array ValidatorIndex) (seed : By
 
 end Shuffle
 
-/-- Each committee index below the count gives its slice, when the bounds fit in 64 bits. -/
+/-- Each committee index below the count gives its slice.
+
+There must be at most `2^40` indices, and the bounds must fit in 64 bits. -/
 theorem computeCommittee_of_mem {preset : Preset} {indices : Array ValidatorIndex}
-    {seed : Bytes32} {count : UInt64} (fits : indices.size * count.toNat < 2 ^ 64) :
+    {seed : Bytes32} {count : UInt64} (small : indices.size ≤ 2 ^ 40)
+    (fits : indices.size * count.toNat < 2 ^ 64) :
     ∀ index ∈ List.range count.toNat,
       computeCommittee preset indices seed (UInt64.ofNat index) count =
         .ok (Shuffle.committeeSlice preset indices seed count.toNat index).toArray := by
@@ -290,17 +315,18 @@ theorem computeCommittee_of_mem {preset : Preset} {indices : Array ValidatorInde
   have ult : UInt64.ofNat index < count := by
     rw [UInt64.lt_iff_toNat_lt, natEq]
     exact lt
-  rw [computeCommittee_eq ult fits, natEq]
+  rw [computeCommittee_eq ult small fits, natEq]
   rfl
 
-/-- All committees exist, when the bounds fit in 64 bits. -/
+/-- All committees exist, when there are at most `2^40` indices and the bounds fit in 64 bits. -/
 theorem computeCommittee_mapM {preset : Preset} {indices : Array ValidatorIndex}
-    {seed : Bytes32} {count : UInt64} (fits : indices.size * count.toNat < 2 ^ 64) :
+    {seed : Bytes32} {count : UInt64} (small : indices.size ≤ 2 ^ 40)
+    (fits : indices.size * count.toNat < 2 ^ 64) :
     (List.range count.toNat).mapM
         (fun index => computeCommittee preset indices seed (UInt64.ofNat index) count) =
       .ok ((List.range count.toNat).map fun index =>
         (Shuffle.committeeSlice preset indices seed count.toNat index).toArray) :=
-  Base.mapM_eq_ok_map (computeCommittee_of_mem fits)
+  Base.mapM_eq_ok_map (computeCommittee_of_mem small fits)
 
 /-- The `count` committees cut from a list of indices partition it.
 
@@ -315,8 +341,16 @@ theorem computeCommittee_partition {preset : Preset} {indices : Array ValidatorI
   have sizeFits : indices.size < 2 ^ 64 := by
     have : 1 ≤ count.toNat := UInt64.lt_iff_toNat_lt.mp positive
     exact Nat.lt_of_le_of_lt (Nat.le_mul_of_pos_right _ this) fits
+  -- The first committee has a value, so the shuffle has one.
+  have small : indices.size ≤ 2 ^ 40 := by
+    obtain ⟨n, countEq⟩ : ∃ n, count.toNat = n + 1 :=
+      ⟨_, (Nat.succ_pred_eq_of_pos (UInt64.lt_iff_toNat_lt.mp positive)).symm⟩
+    rw [countEq, List.range_succ_eq_map, List.mapM_cons] at computed
+    cases first : computeCommittee preset indices seed 0 count with
+    | error e => simp [first, bind, Except.bind] at computed
+    | ok committee => exact le_of_computeCommittee sizeFits first
   let bound := fun part => indices.size * part / count.toNat
-  have listed := computeCommittee_mapM (preset := preset) (seed := seed) fits
+  have listed := computeCommittee_mapM (preset := preset) (seed := seed) small fits
   rw [computed, Except.ok.injEq] at listed
   subst listed
   rw [List.flatMap_map]
@@ -330,14 +364,15 @@ theorem computeCommittee_partition {preset : Preset} {indices : Array ValidatorI
   rw [whole, ← length, List.take_length]
   exact Shuffle.shuffledIndices_perm preset seed sizeFits
 
-/-- The shuffled position read at a place below the count is below the count. -/
-theorem computeShuffledPermutation_getD_lt {preset : Preset} {count : UInt64} {seed : Bytes32}
-    {place : Nat} (lt : place < count.toNat) :
-    ((computeShuffledPermutation preset count seed).getD place 0).toNat < count.toNat := by
-  have below := Shuffle.shuffledIndex_lt (rounds := preset.SHUFFLE_ROUND_COUNT.toNat)
-    (seed := seed) lt
-  rw [Array.getD_eq_getD_getElem?, computeShuffledPermutation_getElem lt, Option.getD_some,
-    UInt64.toNat_ofNat', Nat.mod_eq_of_lt (Nat.lt_trans below count.toNat_lt)]
+/-- The shuffled position read at a place below the count is below the count.
+
+The count must be below `2^64`, so that each position fits in 64 bits. -/
+theorem Shuffle.shuffledPositions_getD_lt {rounds : Nat} {seed : Bytes32} {count place : Nat}
+    (countFits : count < 2 ^ 64) (lt : place < count) :
+    ((Shuffle.shuffledPositions rounds seed count).getD place 0).toNat < count := by
+  have below := Shuffle.shuffledIndex_lt (rounds := rounds) (seed := seed) lt
+  rw [Array.getD_eq_getD_getElem?, Shuffle.shuffledPositions_getElem lt, Option.getD_some,
+    UInt64.toNat_ofNat', Nat.mod_eq_of_lt (Nat.lt_trans below countFits)]
   exact below
 
 /-- Each member of a committee is one of the indices it is cut from. -/
@@ -345,7 +380,14 @@ theorem mem_of_computeCommittee {preset : Preset} {indices : Array ValidatorInde
     {seed : Bytes32} {index count : UInt64} {committee : Array ValidatorIndex}
     (computed : computeCommittee preset indices seed index count = .ok committee)
     {member : ValidatorIndex} (mem : member ∈ committee) : member ∈ indices := by
-  unfold computeCommittee shuffledCommittee at computed
+  unfold computeCommittee at computed
+  cases shuffle : computeShuffledPermutation preset (UInt64.ofNat indices.size) seed with
+  | error e => simp [shuffle, bind, Except.bind] at computed
+  | ok shuffled =>
+  obtain ⟨_, shuffledEq⟩ := computeShuffledPermutation_ok shuffle
+  subst shuffledEq
+  simp only [shuffle, bind, Except.bind] at computed
+  unfold shuffledCommittee at computed
   by_cases zero : count = 0
   · simp [zero, bind, Except.bind, throw, throwThe, MonadExcept.throw,
       MonadExceptOf.throw] at computed
@@ -363,10 +405,13 @@ theorem mem_of_computeCommittee {preset : Preset} {indices : Array ValidatorInde
         Nat.lt_of_le_of_lt (Nat.le_mul_of_pos_right _ (Nat.succ_pos _)) fits.2
       have sizeEq : (UInt64.ofNat indices.size).toNat = indices.size := by
         rw [UInt64.toNat_ofNat', Nat.mod_eq_of_lt sizeFits]
-      have entry := computeShuffledPermutation_getD_lt (preset := preset) (seed := seed)
-        (count := UInt64.ofNat indices.size)
-        (place := indices.size * index.toNat / count.toNat + i) (by rw [sizeEq]; omega)
-      rw [sizeEq, Array.getD_eq_getD_getElem?] at entry
+      have entry := Shuffle.shuffledPositions_getD_lt (rounds := preset.SHUFFLE_ROUND_COUNT.toNat)
+        (seed := seed) sizeFits (place := indices.size * index.toNat / count.toNat + i)
+        (by omega)
+      have sizeMod : indices.size % 18446744073709551616 = indices.size :=
+        Nat.mod_eq_of_lt sizeFits
+      rw [Array.getD_eq_getD_getElem?] at entry
+      rw [sizeMod]
       rw [Array.getElem?_eq_getElem entry, Option.getD_some]
       exact Array.getElem_mem entry
   · simp [zero, fits, bind, Except.bind, throw, throwThe, MonadExcept.throw,
@@ -374,20 +419,23 @@ theorem mem_of_computeCommittee {preset : Preset} {indices : Array ValidatorInde
 
 /-- Each entry of a list of indices is in one of the `count` committees cut from it.
 
+There must be at most `2^40` indices.
+
 The bounds must fit in 64 bits, and the count must be positive. -/
 theorem exists_mem_computeCommittee {preset : Preset} {indices : Array ValidatorIndex}
-    {seed : Bytes32} {count : UInt64} (fits : indices.size * count.toNat < 2 ^ 64)
-    (positive : 0 < count) {member : ValidatorIndex} (mem : member ∈ indices) :
+    {seed : Bytes32} {count : UInt64} (small : indices.size ≤ 2 ^ 40)
+    (fits : indices.size * count.toNat < 2 ^ 64) (positive : 0 < count)
+    {member : ValidatorIndex} (mem : member ∈ indices) :
     ∃ index < count.toNat, ∃ committee,
       computeCommittee preset indices seed (UInt64.ofNat index) count = .ok committee ∧
         member ∈ committee := by
   have perm := computeCommittee_partition fits positive
-    (computeCommittee_mapM (preset := preset) (seed := seed) fits)
+    (computeCommittee_mapM (preset := preset) (seed := seed) small fits)
   have inFlat := perm.symm.mem_iff.mp (Array.mem_toList_iff.mpr mem)
   obtain ⟨committee, listed, inCommittee⟩ := List.mem_flatMap.mp inFlat
   obtain ⟨index, inRange, rfl⟩ := List.mem_map.mp listed
   exact ⟨index, List.mem_range.mp inRange, _,
-    computeCommittee_of_mem fits index inRange, Array.mem_toList_iff.mp inCommittee⟩
+    computeCommittee_of_mem small fits index inRange, Array.mem_toList_iff.mp inCommittee⟩
 
 /-- No entry of a list of indices without repeats is in two of the committees cut from it.
 
@@ -406,16 +454,19 @@ theorem eq_of_mem_computeCommittee {preset : Preset} {indices : Array ValidatorI
     {member : ValidatorIndex} (firstMem : member ∈ firstCommittee)
     (secondMem : member ∈ secondCommittee) : first = second := by
   have positive : 0 < count := UInt64.lt_iff_toNat_lt.mpr (Nat.zero_lt_of_lt firstLt)
+  have sizeFits : indices.size < 2 ^ 64 :=
+    Nat.lt_of_le_of_lt (Nat.le_mul_of_pos_right _ (Nat.zero_lt_of_lt firstLt)) fits
+  have small := le_of_computeCommittee sizeFits firstComputed
   let slice := fun index =>
     (Shuffle.committeeSlice preset indices seed count.toNat index).toArray.toList
   -- The concatenated committees are a permutation of the list, so they have no repeat either.
   have perm := computeCommittee_partition fits positive
-    (computeCommittee_mapM (preset := preset) (seed := seed) fits)
+    (computeCommittee_mapM (preset := preset) (seed := seed) small fits)
   rw [List.flatMap_map] at perm
   have apart := (List.pairwise_flatMap.mp (perm.nodup_iff.mpr nodup)).2
-  have firstEq := computeCommittee_of_mem (preset := preset) (seed := seed) fits first
+  have firstEq := computeCommittee_of_mem (preset := preset) (seed := seed) small fits first
     (List.mem_range.mpr firstLt)
-  have secondEq := computeCommittee_of_mem (preset := preset) (seed := seed) fits second
+  have secondEq := computeCommittee_of_mem (preset := preset) (seed := seed) small fits second
     (List.mem_range.mpr secondLt)
   rw [firstComputed, Except.ok.injEq] at firstEq
   rw [secondComputed, Except.ok.injEq] at secondEq

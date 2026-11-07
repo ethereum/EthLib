@@ -84,13 +84,19 @@ The candidates are read in their order, or in the order of the shuffle of their 
 
 A candidate may be drawn more than once.
 
-There must be at least one candidate, and each must name a validator. -/
+There must be at least one candidate, and each must name a validator.
+
+A shuffled draw takes the shuffled position of its candidate, which has no value above `2^40`.
+
+So a shuffled selection fails for more than `2^40` candidates, before its first draw. -/
 def computeBalanceWeightedSelection (state : BeaconState preset fork)
     (indices : Array ValidatorIndex) (seed : Bytes32) (size : UInt64) (shuffleIndices : Bool) :
     Except AccessorError (Vector ValidatorIndex size.toNat) := do
   if indices.size = 0 then throw .noCandidates
   unless indices.size < 2 ^ 64 do throw (.arith .overflow)
   let balances ← indices.mapM fun index => return (← getValidator state index).effectiveBalance
+  if shuffleIndices ∧ size ≠ 0 ∧ 2 ^ 40 < indices.size then
+    throw (.shuffle (.countTooLarge indices.size.toUInt64))
   -- Each draw shuffles only its own position, so a draw costs the same at any count.
   let order : Nat → Nat :=
     if shuffleIndices then Shuffle.shuffledIndex preset.SHUFFLE_ROUND_COUNT.toNat seed indices.size
@@ -98,12 +104,15 @@ def computeBalanceWeightedSelection (state : BeaconState preset fork)
   balanceWeightedSearch preset fork indices balances order seed size.toNat #[] (Nat.zero_le _) 0
     ⟨drawHash fork seed 0, rfl⟩
 
-/-- The active validators of an epoch, and their shuffle for the attestation committees. -/
+/-- The active validators of an epoch, and their shuffle for the attestation committees.
+
+It fails as the shuffle does, for more than `2^40` active validators. -/
 def attesterShuffle (state : BeaconState preset fork) (epoch : Epoch) :
     Except AccessorError (Array ValidatorIndex × Array UInt64) := do
   let seed ← getSeed state epoch DOMAIN_BEACON_ATTESTER
   let active := (getActiveValidatorIndices state epoch).toArray
-  return (active, computeShuffledPermutation preset (UInt64.ofNat active.size) seed)
+  return (active,
+    ← (computeShuffledPermutation preset (UInt64.ofNat active.size) seed).mapError .shuffle)
 
 /-- The members of the attestation committees of a slot, committee after committee.
 

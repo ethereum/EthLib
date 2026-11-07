@@ -118,6 +118,8 @@ theorem mem_of_computeBalanceWeightedSelection {state : BeaconState preset fork}
   · simp only [empty, fits, ↓reduceIte, bind, Except.bind, pure, Except.pure] at computed
     split at computed
     · cases computed
+    split at computed
+    · cases computed
     refine mem_of_balanceWeightedSearch (Nat.pos_of_ne_zero empty) ?_ (by simp) computed
     intro place lt
     split
@@ -149,19 +151,27 @@ theorem slotCommitteeMembers_eq (state : BeaconState preset fork) (slot : Slot) 
         (fun members index => return members ++ (← getBeaconCommittee state slot index.toUInt64))
         #[] := by
   unfold slotCommitteeMembers attesterShuffle slotCommitteeMembersOf
+  -- The first committee reads the same seed and shuffle, so a failure of either is on both sides.
+  obtain ⟨n, count⟩ : ∃ n,
+      (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat = n + 1 :=
+    ⟨_, (Nat.succ_pred_eq_of_pos (getCommitteeCountPerSlot_pos _ _)).symm⟩
   cases seedOk : getSeed state (computeEpochAtSlot preset slot) DOMAIN_BEACON_ATTESTER with
   | error e =>
-    -- The first committee reads the same seed, so both sides fail with its error.
-    obtain ⟨n, count⟩ : ∃ n,
-        (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat = n + 1 :=
-      ⟨_, (Nat.succ_pred_eq_of_pos (getCommitteeCountPerSlot_pos _ _)).symm⟩
     rw [count, List.range_succ_eq_map, List.foldlM_cons]
     simp [getBeaconCommittee, seedOk, bind, Except.bind]
   | ok seed =>
-    simp only [bind, Except.bind, pure, Except.pure]
-    congr 1
-    funext members index
-    simp [getBeaconCommittee, seedOk, bind, Except.bind]
+    cases shuffleOk : computeShuffledPermutation preset
+        (UInt64.ofNat (getActiveValidatorIndices state (computeEpochAtSlot preset slot)).length)
+        seed with
+    | error e =>
+      rw [count, List.range_succ_eq_map, List.foldlM_cons]
+      simp [getBeaconCommittee, seedOk, shuffleOk, bind, Except.bind, Except.mapError]
+    | ok shuffled =>
+      simp only [List.size_toArray, shuffleOk, Except.mapError, bind, Except.bind, pure,
+        Except.pure]
+      congr 1
+      funext members index
+      simp [getBeaconCommittee, seedOk, shuffleOk, bind, Except.bind, Except.mapError]
 
 /-- Each member of the payload committee of a slot is on an attestation committee of the slot. -/
 theorem mem_of_computePtc {state : BeaconState preset fork} {slot : Slot}

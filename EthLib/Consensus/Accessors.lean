@@ -291,14 +291,17 @@ def beaconCommitteeOf (state : BeaconState preset fork) (slot : Slot) (index : C
 
 /-- The committee of a slot with a given index, cut from the shuffled active validators.
 
-The committees of an epoch are numbered across its slots, in the order of the slots. -/
+The committees of an epoch are numbered across its slots, in the order of the slots.
+
+It fails as the shuffle does, for more than `2^40` active validators. -/
 def getBeaconCommittee (state : BeaconState preset fork) (slot : Slot) (index : CommitteeIndex) :
     Except AccessorError (Array ValidatorIndex) := do
   let epoch := computeEpochAtSlot preset slot
   let seed ← getSeed state epoch DOMAIN_BEACON_ATTESTER
   let active := (getActiveValidatorIndices state epoch).toArray
-  beaconCommitteeOf state slot index active
-    (computeShuffledPermutation preset (UInt64.ofNat active.size) seed)
+  let shuffled ← (computeShuffledPermutation preset (UInt64.ofNat active.size) seed).mapError
+    .shuffle
+  beaconCommitteeOf state slot index active shuffled
 
 /-- The number of draws that read one hash: 16 from Electra, 32 before. -/
 def drawsPerHash (fork : Base.Fork) : Nat :=
@@ -369,12 +372,14 @@ termination_by 2 ^ 64 - i
 
 /-- A proposer drawn from some indices, with a chance that grows with its effective balance.
 
-The draw walks the indices in shuffled order, and each candidate passes a weighted draw. -/
+The draw walks the indices in shuffled order, and each candidate passes a weighted draw.
+
+It fails as the shuffle does, for more than `2^40` indices. -/
 def computeProposerIndex (state : BeaconState preset fork) (indices : Array ValidatorIndex)
     (seed : Bytes32) : Except AccessorError ValidatorIndex := do
   if indices.size = 0 then throw .noCandidates
   unless indices.size < 2 ^ 64 do throw (.arith .overflow)
-  let shuffled := computeShuffledPermutation preset indices.size.toUInt64 seed
+  let shuffled ← (computeShuffledPermutation preset indices.size.toUInt64 seed).mapError .shuffle
   proposerSearch preset fork state.validators.data indices shuffled seed 0
 
 /-- The proposer of the slot of a state.
