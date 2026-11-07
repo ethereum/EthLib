@@ -13,11 +13,86 @@ The constants and the rounds of F, against [RFC 7693](https://www.rfc-editor.org
 - Round `i` uses row `i mod 10`, and a run of rounds splits into two runs.
 - Rotating a word by `n` bits with `0 < n < 64` has rotation by `64 - n` as its inverse.
 - G on a four-word cycle, one round, and every run of rounds permute the work vector.
+- F, read as 64-bit vectors, is the F of a model of §3.1 and §3.2, for every round count.
+
+The model works on 64-bit vectors and rotates with the rotation of bit vectors.
+
+It takes the offset counter as one 128-bit vector, as §3.2 does.
+
+It shares only the IV and the message schedule with the executable code.
 -/
 
 @[expose] public section
 
 namespace EthLib.Cryptography.Hash.Blake2b
+
+/-! ## The model -/
+
+namespace Spec
+
+/-- A word of BLAKE2b, `w = 64` bits, RFC 7693 §2.1.
+
+Its addition is modulo `2^64`, as in §3.1. -/
+abbrev Word := BitVec 64
+
+/-- The mixing function G, RFC 7693 §3.1.
+
+It rotates by the constants 32, 24, 16 and 63 of §2.1. -/
+def mix (v : Vector Word 16) (a b c d : Fin 16) (x y : Word) : Vector Word 16 :=
+  let v := v.set a (v[a] + v[b] + x)
+  let v := v.set d ((v[d] ^^^ v[a]).rotateRight 32)
+  let v := v.set c (v[c] + v[d])
+  let v := v.set b ((v[b] ^^^ v[c]).rotateRight 24)
+  let v := v.set a (v[a] + v[b] + y)
+  let v := v.set d ((v[d] ^^^ v[a]).rotateRight 16)
+  let v := v.set c (v[c] + v[d])
+  v.set b ((v[b] ^^^ v[c]).rotateRight 63)
+
+/-- Round `i` of the loop of RFC 7693 §3.2.
+
+It applies G to the four columns and then to the four diagonals of the work vector.
+
+It reads the message words in the order of row `i mod 10` of the message schedule. -/
+def round (m : Vector Word 16) (i : Nat) (v : Vector Word 16) : Vector Word 16 :=
+  let s := SIGMA[i % 10]
+  let v := mix v 0 4  8 12 m[s[0]]  m[s[1]]
+  let v := mix v 1 5  9 13 m[s[2]]  m[s[3]]
+  let v := mix v 2 6 10 14 m[s[4]]  m[s[5]]
+  let v := mix v 3 7 11 15 m[s[6]]  m[s[7]]
+  let v := mix v 0 5 10 15 m[s[8]]  m[s[9]]
+  let v := mix v 1 6 11 12 m[s[10]] m[s[11]]
+  let v := mix v 2 7  8 13 m[s[12]] m[s[13]]
+  mix v 3 4  9 14 m[s[14]] m[s[15]]
+
+/-- The work vector after rounds `0` to `n - 1` of the loop of RFC 7693 §3.2. -/
+def rounds (m : Vector Word 16) (v : Vector Word 16) : Nat → Vector Word 16
+  | 0 => v
+  | n + 1 => round m n (rounds m v n)
+
+/-- The compression function F of RFC 7693 §3.2, with `r` rounds.
+
+- `h` is the state and `m` is the message block.
+- `t` is the 128-bit offset counter and `f` is the final block flag.
+
+The work vector starts as the state followed by the IV.
+
+Word 12 takes `t mod 2^64` and word 13 takes `t >> 64`, both by exclusive-or.
+
+The final block inverts all bits of word 14.
+
+After the rounds, word `i` of the result is `h[i] ^ v[i] ^ v[i + 8]`.
+
+The RFC fixes `r = 12`, and EIP-152 lets the caller choose `r`. -/
+def compress (r : Nat) (h : Vector Word 8) (m : Vector Word 16) (t : BitVec 128) (f : Bool) :
+    Vector Word 8 :=
+  let v : Vector Word 16 := h ++ IV.map UInt64.toBitVec
+  let v := v.set 12 (v[12] ^^^ t.setWidth 64)
+  let v := v.set 13 (v[13] ^^^ (t >>> 64).setWidth 64)
+  let v := if f then v.set 14 (~~~v[14]) else v
+  let v := rounds m v r
+  Vector.ofFn fun i => h[i] ^^^ v[i] ^^^ v[i.val + 8]
+
+end Spec
 
 /-! ## The constants -/
 
@@ -218,5 +293,71 @@ theorem roundsFrom_bijective (m : Vector UInt64 16) (start count : Nat) :
   | succ count ih =>
     -- One more round is one bijective round followed by a bijective run.
     simpa [roundsFrom, Function.comp_def] using (ih (start + 1)).comp (round_bijective m start)
+
+/-! ## Agreement with the model -/
+
+/-- An entry of a work vector, as a bit vector, is that entry of the vector read as bit vectors. -/
+private theorem toBitVec_getElem (v : Vector UInt64 16) (i : Nat) (hi : i < 16) :
+    v[i].toBitVec = (v.map UInt64.toBitVec)[i] :=
+  (Vector.getElem_map _ _).symm
+
+/-- G, read word by word as 64-bit vectors, is the G of the model. -/
+theorem mix_toBitVec (v : Vector UInt64 16) (a b c d : Fin 16) (x y : UInt64) :
+    (mix v a b c d x y).map UInt64.toBitVec =
+      Spec.mix (v.map UInt64.toBitVec) a b c d x.toBitVec y.toBitVec := by
+  have r32 (z : UInt64) : (rotr z 32).toBitVec = z.toBitVec.rotateRight 32 :=
+    rotr_toBitVec z 32 (by decide) (by decide)
+  have r24 (z : UInt64) : (rotr z 24).toBitVec = z.toBitVec.rotateRight 24 :=
+    rotr_toBitVec z 24 (by decide) (by decide)
+  have r16 (z : UInt64) : (rotr z 16).toBitVec = z.toBitVec.rotateRight 16 :=
+    rotr_toBitVec z 16 (by decide) (by decide)
+  have r63 (z : UInt64) : (rotr z 63).toBitVec = z.toBitVec.rotateRight 63 :=
+    rotr_toBitVec z 63 (by decide) (by decide)
+  simp only [mix, Spec.mix, Fin.getElem_fin, UInt64.toBitVec_add, UInt64.toBitVec_xor,
+    r32, r24, r16, r63, toBitVec_getElem, Vector.map_set]
+
+/-- Round `i`, read word by word as 64-bit vectors, is round `i` of the model. -/
+theorem round_toBitVec (m v : Vector UInt64 16) (i : Nat) :
+    (round m i v).map UInt64.toBitVec =
+      Spec.round (m.map UInt64.toBitVec) i (v.map UInt64.toBitVec) := by
+  simp only [round, Spec.round, mix_toBitVec, Fin.getElem_fin, Vector.getElem_map]
+
+/-- The first `n` rounds, read as 64-bit vectors, are the first `n` rounds of the model. -/
+theorem roundsFrom_zero_toBitVec (m v : Vector UInt64 16) (n : Nat) :
+    (roundsFrom m 0 n v).map UInt64.toBitVec =
+      Spec.rounds (m.map UInt64.toBitVec) (v.map UInt64.toBitVec) n := by
+  induction n with
+  | zero => rfl
+  | succ n ih =>
+    -- Round `n` comes after the first `n` rounds.
+    rw [roundsFrom_add, Nat.zero_add, roundsFrom, roundsFrom, round_toBitVec, ih, Spec.rounds]
+
+/-- The low and high halves of a 128-bit vector made of two 64-bit vectors. -/
+private theorem append_halves (hi lo : BitVec 64) :
+    (hi ++ lo).setWidth 64 = lo ∧ ((hi ++ lo) >>> 64).setWidth 64 = hi := by
+  refine ⟨BitVec.setWidth_append_eq_right, BitVec.eq_of_getLsbD_eq fun i hi64 => ?_⟩
+  simp only [BitVec.getLsbD_setWidth, BitVec.getLsbD_ushiftRight, BitVec.getLsbD_append, hi64]
+  simp
+
+/-- F, read word by word as 64-bit vectors, is the F of the model.
+
+The counter of the model is the 128-bit vector whose high word is `t1` and whose low word is `t0`.
+
+This holds for every round count, state, message block, counter and flag. -/
+theorem compress_toBitVec (r : Nat) (h : Vector UInt64 8) (m : Vector UInt64 16) (t0 t1 : UInt64)
+    (f : Bool) :
+    (compress r h m t0 t1 f).map UInt64.toBitVec =
+      Spec.compress r (h.map UInt64.toBitVec) (m.map UInt64.toBitVec)
+        (t1.toBitVec ++ t0.toBitVec) f := by
+  obtain ⟨hlo, hhi⟩ := append_halves t1.toBitVec t0.toBitVec
+  have hinv (z : UInt64) : (z ^^^ 0xFFFFFFFFFFFFFFFF).toBitVec = ~~~z.toBitVec := by
+    rw [UInt64.toBitVec_xor, show (0xFFFFFFFFFFFFFFFF : UInt64).toBitVec = BitVec.allOnes 64 by
+      decide, BitVec.xor_allOnes]
+  cases f <;>
+  · refine Vector.ext fun i hi => ?_
+    simp only [compress, Spec.compress, Vector.getElem_map, Vector.getElem_ofFn, ↓reduceIte,
+      Bool.false_eq_true]
+    simp only [Fin.getElem_fin, UInt64.toBitVec_xor, toBitVec_getElem, roundsFrom_zero_toBitVec,
+      Vector.map_set, Vector.map_append, Vector.getElem_map, hinv, hlo, hhi]
 
 end EthLib.Cryptography.Hash.Blake2b
