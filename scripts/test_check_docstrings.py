@@ -1,6 +1,7 @@
 """Tests of `check_docstrings.py` on small repositories in a temporary directory."""
 
 import importlib.util
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -97,6 +98,7 @@ class CheckDocstrings(unittest.TestCase):
     def run_check(self, files: dict[str, str]) -> list[str]:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            subprocess.run(["git", "init", "--quiet"], cwd=root, check=True)
             for name, text in files.items():
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -142,10 +144,11 @@ class CheckDocstrings(unittest.TestCase):
             ],
         )
 
-    def test_hidden_cache_and_excluded_files_are_skipped(self) -> None:
+    def test_ignored_and_excluded_files_are_skipped(self) -> None:
         files = {
-            ".venv/lib/e.py": MODULE_LINES,
-            "a/__pycache__/f.py": MODULE_LINES,
+            ".gitignore": "build/\nvenv/\n",
+            "build/lib/e.py": MODULE_LINES,
+            "venv/lib/f.py": MODULE_LINES,
             "tests/consensus/pq_keys/generate.py": MODULE_LINES,
         }
         self.assertEqual(self.run_check(files), [])
