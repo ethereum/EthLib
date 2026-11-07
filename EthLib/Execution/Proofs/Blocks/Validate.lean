@@ -17,6 +17,10 @@ From Dencun, it also has the excess blob gas that its parent gives under its blo
 Before Paris, it has the difficulty that its parent gives, and a valid proof of work.
 
 From Fusaka, a block passes the size check exactly when its RLP form fits in the limit.
+
+The checks of a header, other than its proof of work, hold exactly when each rule of the list holds.
+
+A header passes validation exactly when it passes those checks and, before Paris, its proof of work.
 -/
 
 @[expose] public section
@@ -152,6 +156,67 @@ theorem checkProofOfWork_of_validateHeader (h : fork < .paris)
   cases hp : checkProofOfWork header with
   | error e => simp [hp, Except.mapError] at hv
   | ok u => rfl
+
+/-- A header passes every check but the proof of work exactly when each rule holds.
+
+- From Paris, the parent is at London or later.
+- The number is at least 1, and is the parent's plus one.
+- From Dencun, with a parent from London, the excess blob gas is the expected one.
+- The gas used is at most the gas limit, and the gas limit passes its check against the parent's.
+- From London, the base fee is the expected one.
+- The timestamp is after the parent's, and the extra data has at most 32 bytes.
+- Before Paris, the difficulty is the expected one.
+- From Paris, the difficulty and the nonce are 0, and the ommers hash is that of no ommers.
+- The parent hash is the hash of the parent.
+
+The rules read only the header and its parent, not the body of the block or the state. -/
+theorem checkHeader_eq_ok_iff :
+    checkHeader hFork parent header schedule = .ok () ↔
+      (.paris ≤ fork → .london ≤ parentFork) ∧ 1 ≤ header.number ∧
+      (∀ (h : .dencun ≤ fork) (hLondon : .london ≤ parentFork),
+        (header.excessBlobGas h).toNat = expectedExcessBlobGas hLondon h parent schedule) ∧
+      header.gasUsed ≤ header.gasLimit ∧
+      GasLimit.checkGasLimitAcross parentFork fork header.gasLimit parent.gasLimit = true ∧
+      (∀ h : .london ≤ fork, header.baseFeePerGas h = expectedBaseFeeAcross parent) ∧
+      parent.timestamp.toNat < header.timestamp.toNat ∧ header.number = parent.number + 1 ∧
+      header.extraData.size ≤ MAX_EXTRA_DATA_BYTES ∧
+      (fork < .paris → header.difficulty = expectedDifficulty parent header) ∧
+      (¬fork < .paris → header.difficulty = 0 ∧ header.nonce = Vector.replicate 8 0 ∧
+        header.ommersHash = EMPTY_OMMER_HASH) ∧
+      parent.hash = .ok header.parentHash := by
+  rw [checkHeader, firstFailure_eq_ok_iff]
+  cases hh : parent.hash with
+  | error e =>
+    simp only [headerChecks, hh, reduceCtorEq, and_false, iff_false]
+    intro h
+    exact Bool.false_ne_true (h _ (List.mem_append_right _ (List.mem_singleton_self _)))
+  | ok parentHash =>
+    have hlt : fork < .paris ↔ ¬.paris ≤ fork := Nat.not_le.symm
+    by_cases hp : .paris ≤ fork <;> by_cases hd : .dencun ≤ fork <;>
+      by_cases hl : .london ≤ fork <;> by_cases hpl : .london ≤ parentFork <;>
+      simp only [headerChecks, hh, hp, hd, hl, hpl, hlt, ↓reduceIte, ↓reduceDIte,
+        List.mem_append, List.mem_cons, List.not_mem_nil, or_false, or_imp, forall_and, forall_eq,
+        decide_eq_true_eq, true_implies, implies_true, true_and, and_true, decide_true,
+        decide_false, Bool.false_eq_true, false_implies, and_assoc, not_true_eq_false, imp_false,
+        not_false_eq_true, Except.ok.injEq, eq_comm (a := parentHash), forall_false,
+        forall_prop_of_true trivial]
+
+/-- A header passes validation exactly when it passes every check of its header.
+
+Before Paris it must also pass the check of its proof of work. -/
+theorem validateHeader_eq_ok_iff :
+    validateHeader hFork parent header schedule = .ok () ↔
+      checkHeader hFork parent header schedule = .ok () ∧
+        (fork < .paris → checkProofOfWork header = .ok ()) := by
+  constructor
+  · intro hv
+    exact ⟨checkHeader_of_validateHeader hv, fun h => checkProofOfWork_of_validateHeader h hv⟩
+  · rintro ⟨hc, hp⟩
+    unfold validateHeader
+    rw [hc]
+    by_cases h : fork < .paris
+    · simp [h, hp h, Except.mapError, bind, Except.bind]
+    · simp [h, bind, Except.bind, pure, Except.pure]
 
 /-- A block passes the size check exactly when its fork is before Fusaka, or its RLP form fits.
 
