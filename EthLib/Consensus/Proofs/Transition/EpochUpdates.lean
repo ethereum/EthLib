@@ -148,7 +148,7 @@ theorem sameSizes_activateValidator {index : ValidatorIndex}
   obtain ⟨_, _, _, _, set⟩ := computed
   exact sameSizes_setValidator set
 
-/-- From Deneb, an epoch activates at most the maximum, and at most the churn limit. -/
+/-- The activation churn limit is at most the configured maximum and the validator churn limit. -/
 theorem getValidatorActivationChurnLimit_le {config : Config} :
     getValidatorActivationChurnLimit config state ≤ config.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT ∧
       getValidatorActivationChurnLimit config state ≤ getValidatorChurnLimit config state :=
