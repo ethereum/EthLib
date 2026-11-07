@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Blocks.Genesis
+public import EthLib.Execution.Proofs.Blocks.Roots
 
 /-!
 # Proofs: the genesis block
@@ -13,6 +14,10 @@ The genesis block of an allocation commits to the root of that allocation.
 It is block 0, with no parent and an empty body.
 
 Its header holds the fields that the chain chooses.
+
+The genesis header of every state root exists, and it holds the roots of empty lists.
+
+So the genesis block of an allocation exists exactly when the state root of the allocation does.
 -/
 
 @[expose] public section
@@ -63,6 +68,45 @@ theorem of_genesisHeader_since {root : Hash32} {header : Header fork}
   obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
   cases h
   exact ⟨rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl⟩
+
+/-- The empty block access list hashes to the Keccak-256 hash of `0xc0`. -/
+theorem BlockAccessList.hash_nil : BlockAccessList.hash [] = .ok (keccak256 ⟨#[0xc0]⟩) := rfl
+
+/-- The genesis header of every state root exists. -/
+theorem genesisHeader_isOk (root : Hash32) :
+    ∃ header, genesisHeader fork params root = .ok header := by
+  simp only [genesisHeader, transactionsRoot_nil, receiptsRoot_nil, withdrawalsRoot_nil,
+    BlockAccessList.hash_nil, Except.mapError, bind, Except.bind, pure, Except.pure]
+  exact ⟨_, rfl⟩
+
+/-- A genesis header commits to empty lists.
+
+Its transactions, receipts and withdrawals roots are the root of the empty trie.
+
+That root is the hash of `0x80`.
+
+Its block access list hash is the hash of `0xc0`, the RLP form of the empty list. -/
+theorem roots_of_genesisHeader {root : Hash32} {header : Header fork}
+    (h : genesisHeader fork params root = .ok header) :
+    header.transactionsRoot = keccak256 ⟨#[0x80]⟩ ∧ header.receiptRoot = keccak256 ⟨#[0x80]⟩ ∧
+      (∀ hf, header.withdrawalsRoot hf = keccak256 ⟨#[0x80]⟩) ∧
+      (∀ hf, header.blockAccessListHash hf = keccak256 ⟨#[0xc0]⟩) := by
+  simp only [genesisHeader, transactionsRoot_nil, receiptsRoot_nil, withdrawalsRoot_nil,
+    BlockAccessList.hash_nil, Except.mapError, bind, Except.bind, pure, Except.pure,
+    Except.ok.injEq] at h
+  subst h
+  exact ⟨rfl, rfl, fun _ => rfl, fun _ => rfl⟩
+
+/-- The genesis block of an allocation exists exactly when the state root of the allocation does. -/
+theorem genesis_isOk_iff {alloc : State} :
+    (∃ block, genesis fork params alloc = .ok block) ↔
+      ∃ root, stateRoot keccak256 alloc = .ok root := by
+  unfold genesis
+  cases hs : stateRoot keccak256 alloc with
+  | error e => simp [Except.mapError, bind, Except.bind]
+  | ok root =>
+    obtain ⟨header, hh⟩ := genesisHeader_isOk (fork := fork) (params := params) root
+    simp [Except.mapError, hh, bind, Except.bind, pure, Except.pure]
 
 /-- The genesis block of an allocation commits to the state root of the allocation.
 
