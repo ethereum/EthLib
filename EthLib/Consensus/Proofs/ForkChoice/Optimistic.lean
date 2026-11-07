@@ -182,6 +182,58 @@ theorem removeDescendants_eq {first : Root} {after : Store preset fork}
   · simp only [known, Bool.not_false, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at removed
     exact .inl ⟨Bool.eq_false_iff.mpr known, removed.symm⟩
 
+/-- The removal of a root and its descendants succeeds on a store whose chains are well formed.
+
+Each known parent must sit below its child.
+
+Each known block whose parent is unknown must sit at or below every known block. -/
+theorem removeDescendants_ok (lower : store.ParentsBelow)
+    (orphansLe : ∀ (root other : Root) (block otherBlock : BeaconBlock preset fork),
+      store.blocks[root]? = some block → store.blocks[block.parentRoot]? = none →
+      store.blocks[other]? = some otherBlock → block.slot ≤ otherBlock.slot)
+    (first : Root) : ∃ after, store.removeDescendants first = .ok after := by
+  by_cases known : store.blocks.contains first
+  · have knownSome : (store.blocks[first]?).isSome = true := by
+      rw [← Std.TreeMap.contains_eq_isSome_getElem?]
+      exact known
+    obtain ⟨firstBlock, firstFound⟩ := Option.isSome_iff_exists.mp knownSome
+    obtain ⟨out, mapped⟩ := filterMapM_ok_of_forall (f := fun known => do
+        return if ← store.isAncestor ⟨known, .pending⟩ ⟨first, .pending⟩ then some known
+          else none) (l := store.blocks.keys) fun other mem => by
+      obtain ⟨otherBlock, otherFound⟩ := Option.isSome_iff_exists.mp
+        (Std.TreeMap.mem_iff_isSome_getElem?.mp (Std.TreeMap.mem_keys.mp mem))
+      obtain ⟨ancestor, walk⟩ := getAncestor_ok_of_orphans_le lower (slot := firstBlock.slot)
+        (fun r b found parentUnknown => orphansLe r first b firstBlock found parentUnknown
+          firstFound) (node := ⟨other, .pending⟩) otherFound
+      have blockOk : store.block first = .ok firstBlock := by simp [Store.block, firstFound]; rfl
+      have decided : ∃ b, store.isAncestor ⟨other, .pending⟩ ⟨first, .pending⟩ = .ok b := by
+        unfold Store.isAncestor
+        simp only [blockOk, walk, bind, Except.bind]
+        split <;> exact ⟨_, rfl⟩
+      obtain ⟨b, decided⟩ := decided
+      refine ⟨if b then some other else none, ?_⟩
+      simp [decided, bind, Except.bind, pure, Except.pure]
+    refine ⟨store.removeBlocks out, ?_⟩
+    simp only [bind, Except.bind, pure, Except.pure] at mapped
+    simp only [Store.removeDescendants, known, Bool.not_true, Bool.false_eq_true, ↓reduceIte,
+      bind, Except.bind, pure, Except.pure, mapped]
+  · exact ⟨store, by simp [Store.removeDescendants, known, pure, Except.pure]⟩
+
+/-- The removal of a root and its descendants succeeds on a reachable store.
+
+The anchor block must sit at or before the slot of the anchor state.
+
+The parent root of the anchor must name no known block. -/
+theorem Reachable.removeDescendants_ok {config : Config} {anchorState : BeaconState preset fork}
+    {anchorBlock : BeaconBlock preset fork}
+    (reachable : Reachable config anchorState anchorBlock store)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (unknown : store.blocks[anchorBlock.parentRoot]? = none) (first : Root) :
+    ∃ after, store.removeDescendants first = .ok after :=
+  Store.removeDescendants_ok (reachable.parentsBelow anchorSlot unknown)
+    (fun _ _ _ _ found parentUnknown otherFound =>
+      reachable.orphans_le anchorSlot found parentUnknown otherFound) first
+
 /-- The store after an invalid payload is the store as it was, or a removal of descendants. -/
 theorem onInvalidPayload_eq {block : BeaconBlock preset fork} {latestValidHash : Option Hash32}
     {after : Store preset fork}

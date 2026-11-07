@@ -153,6 +153,36 @@ theorem isAncestor_of_parent {root : Root} {block parent : BeaconBlock preset fo
       (UInt64.lt_irrefl _)) parentFound lower]
     exact descends
 
+/-- The ancestor walk to a slot succeeds from every known block.
+
+Each known parent must sit below its child.
+
+Each known block whose parent is unknown must sit at or below the slot. -/
+theorem getAncestor_ok_of_orphans_le (lower : store.ParentsBelow) {slot : Slot}
+    (orphansLe : ∀ (root : Root) (block : BeaconBlock preset fork),
+      store.blocks[root]? = some block → store.blocks[block.parentRoot]? = none →
+      block.slot ≤ slot)
+    {node : ForkChoiceNode} {block : BeaconBlock preset fork}
+    (found : store.blocks[node.root]? = some block) :
+    ∃ ancestor, store.getAncestor node slot = .ok ancestor := by
+  suffices ∀ (n : ℕ) (node : ForkChoiceNode) (block : BeaconBlock preset fork),
+      block.slot.toNat = n → store.blocks[node.root]? = some block →
+      ∃ ancestor, store.getAncestor node slot = .ok ancestor from
+    this _ node block rfl found
+  intro n
+  induction n using Nat.strong_induction_on with
+  | _ n ih =>
+    intro node block size found
+    by_cases le : block.slot ≤ slot
+    · exact ⟨node, getAncestor_of_le found le⟩
+    · cases parentFound : store.blocks[block.parentRoot]? with
+      | none => exact absurd (orphansLe _ block found parentFound) le
+      | some parent =>
+        have parentLower := lower _ block parent found parentFound
+        rw [getAncestor_step found le parentFound parentLower]
+        exact ih parent.slot.toNat (size ▸ UInt64.lt_iff_toNat_lt.mp parentLower) _ parent rfl
+          parentFound
+
 /-- The ancestor walk climbs the tree of the store.
 
 It returns the node itself, or the parent of a block in the chain of the start.

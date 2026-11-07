@@ -336,6 +336,125 @@ theorem Reachable.parentsBelow (reachable : Reachable config anchorState anchorB
   · rw [Std.TreeMap.contains_eq_isSome_getElem?, unknown] at known
     cases known
 
+/-- The facts that keep orphans low in a store that the handlers build.
+
+Each state belongs to a known block, at or after the slot of that block.
+
+A known block with an unknown parent sits at or below every known block. -/
+private structure OrphansLow (store : Store preset fork) : Prop where
+  stateAfter : ∀ (root : Root) (state : BeaconState preset fork),
+    store.blockStates[root]? = some state →
+      ∃ block, store.blocks[root]? = some block ∧ block.slot ≤ state.slot
+  orphansLe : ∀ (root other : Root) (block otherBlock : BeaconBlock preset fork),
+    store.blocks[root]? = some block → store.blocks[block.parentRoot]? = none →
+    store.blocks[other]? = some otherBlock → block.slot ≤ otherBlock.slot
+
+/-- A store with the same blocks and states keeps the facts. -/
+private theorem OrphansLow.of_maps {store after : Store preset fork} (low : OrphansLow store)
+    (blocks : after.blocks = store.blocks) (states : after.blockStates = store.blockStates) :
+    OrphansLow after := by
+  obtain ⟨stateAfter, orphansLe⟩ := low
+  refine ⟨fun r s found => ?_, fun r o b ob found unknown otherFound => ?_⟩
+  · rw [states] at found
+    rw [blocks]
+    exact stateAfter r s found
+  · rw [blocks] at found unknown otherFound
+    exact orphansLe r o b ob found unknown otherFound
+
+/-- A reachable store keeps the facts.
+
+That needs the anchor block at or before the slot of the anchor state. -/
+private theorem Reachable.orphansLow (reachable : Reachable config anchorState anchorBlock store)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot) : OrphansLow store := by
+  induction reachable with
+  | @anchor st made =>
+    obtain ⟨anchorRoot, -, blocks, states⟩ := getForkchoiceStore_maps made
+    have only : ∀ (r : Root) (b : BeaconBlock preset fork), st.blocks[r]? = some b →
+        b = anchorBlock := by
+      intro r b found
+      rw [blocks, getElem?_insert_root] at found
+      by_cases same : anchorRoot = r
+      · simp only [same, ↓reduceIte, Option.some.injEq] at found
+        exact found.symm
+      · simp [same] at found
+    refine ⟨fun r s found => ?_, fun r o b ob found _ otherFound => ?_⟩
+    · rw [states, getElem?_insert_root] at found
+      by_cases same : anchorRoot = r
+      · simp only [same, ↓reduceIte, Option.some.injEq] at found
+        refine ⟨anchorBlock, ?_, found ▸ anchorSlot⟩
+        rw [blocks, getElem?_insert_root]
+        simp [same]
+      · simp [same] at found
+    · rw [only r b found, only o ob otherFound]
+      exact UInt64.le_refl _
+  | tick _ ticked holds =>
+    obtain ⟨-, -, blocks, states⟩ := onTick_frame ticked
+    exact holds.of_maps blocks states
+  | attestation _ attested holds =>
+    obtain ⟨-, blocks, states⟩ := onAttestation_frame attested
+    exact holds.of_maps blocks states
+  | attesterSlashing _ slashed holds =>
+    obtain ⟨-, blocks, states⟩ := onAttesterSlashing_frame slashed
+    exact holds.of_maps blocks states
+  | payloadAttestation _ voted holds =>
+    obtain ⟨-, blocks, states⟩ := (onPayloadAttestationMessage_onlyPtcVotes voted).frame
+    exact holds.of_maps blocks states
+  | envelope _ accepted holds =>
+    obtain ⟨-, blocks, states⟩ := onExecutionPayloadEnvelope_frame accepted
+    exact holds.of_maps blocks states
+  | inclusionList _ accepted holds =>
+    obtain ⟨-, blocks, states⟩ := onInclusionList_frame accepted
+    exact holds.of_maps blocks states
+  | @block before after checks sources signed _ added holds =>
+    rcases onBlock_same_or_insert added with same | ⟨blockRoot, -, new, blocks, inserted⟩
+    · exact same ▸ holds
+    obtain ⟨pre, state, parentState, transition, states⟩ := inserted
+    obtain ⟨parent, parentFound, parentLe⟩ := holds.stateAfter _ _ parentState
+    obtain ⟨earlier, atSlot⟩ := stateTransition_slot transition
+    have parentNe : signed.message.parentRoot ≠ blockRoot := fun same => by
+      rw [same, new] at parentFound
+      cases parentFound
+    have parentBelow := UInt64.lt_of_le_of_lt parentLe earlier
+    refine ⟨fun r s found => ?_, fun r o b ob found unknown otherFound => ?_⟩
+    · rw [states, getElem?_insert_root] at found
+      rw [blocks, getElem?_insert_root]
+      by_cases same : blockRoot = r
+      · simp only [same, ↓reduceIte, Option.some.injEq] at found ⊢
+        exact ⟨signed.message, rfl, found ▸ atSlot ▸ UInt64.le_refl _⟩
+      · simp only [same, ↓reduceIte] at found ⊢
+        exact holds.stateAfter r s found
+    · rw [blocks, getElem?_insert_root] at found unknown otherFound
+      by_cases same : blockRoot = r
+      · simp only [same, ↓reduceIte, Option.some.injEq] at found
+        subst found
+        simp only [Ne.symm parentNe, ↓reduceIte, parentFound] at unknown
+        cases unknown
+      · simp only [same, ↓reduceIte] at found
+        by_cases hits : blockRoot = b.parentRoot
+        · simp [hits] at unknown
+        · simp only [hits, ↓reduceIte] at unknown
+          have base := fun (o' : Root) (ob' : BeaconBlock preset fork) =>
+            holds.orphansLe r o' b ob' found unknown
+          by_cases same' : blockRoot = o
+          · simp only [same', ↓reduceIte, Option.some.injEq] at otherFound
+            subst otherFound
+            exact UInt64.le_trans (base _ parent parentFound) (UInt64.le_iff_toNat_le.mpr
+              (by have := UInt64.lt_iff_toNat_lt.mp parentBelow; omega))
+          · simp only [same', ↓reduceIte] at otherFound
+            exact base _ _ otherFound
+
+/-- In a reachable store, a known block whose parent is unknown sits at or below every known block.
+
+Each block that a handler adds has a known parent at an earlier slot.
+
+That needs the anchor block at or before the slot of the anchor state. -/
+theorem Reachable.orphans_le (reachable : Reachable config anchorState anchorBlock store)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot) {root other : Root}
+    {block otherBlock : BeaconBlock preset fork}
+    (found : store.blocks[root]? = some block) (orphan : store.blocks[block.parentRoot]? = none)
+    (otherFound : store.blocks[other]? = some otherBlock) : block.slot ≤ otherBlock.slot :=
+  (reachable.orphansLow anchorSlot).orphansLe root other block otherBlock found orphan otherFound
+
 /-- Before Gloas and without a boost, the head of a reachable store is the head of LMD-GHOST.
 
 That needs the anchor block at or before the slot of the anchor state.
