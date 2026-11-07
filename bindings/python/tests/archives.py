@@ -1,6 +1,7 @@
 """The release archives of `tests/sources.toml`, in the cache that `ETHLIB_ARCHIVES` names."""
 
 import importlib.util
+from collections.abc import Callable, Sequence
 from importlib.machinery import ModuleSpec, SourceFileLoader
 from pathlib import Path
 from typing import cast
@@ -25,3 +26,14 @@ CACHE = fetch_archives.cache_from_environment()
 def unpack(name: str, *paths: str) -> Path:
     """The directory of the archive `name`, with every member under `paths` unpacked."""
     return fetch_archives.unpack(fetch_archives.load(REPO)[name], CACHE, list(paths))
+
+
+def parametrize(argnames: str | Sequence[str], cases: Callable[[], list]):
+    """Parametrize a test with the cases of an archive, built when pytest collects the test."""
+    # A module that imports this test module for its tables then reads no archive.
+
+    def mark(test):
+        test.archive_parameters = (argnames, cases)
+        return test
+
+    return mark
