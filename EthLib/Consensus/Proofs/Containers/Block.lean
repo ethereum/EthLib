@@ -26,6 +26,8 @@ Each field that Heze keeps sits at the place it has at Gloas.
 The vectors whose length comes from the preset need that length to be positive.
 
 The genesis block holds the state root, and the defaults of every other field.
+
+A block has the root of its header, whose last field is the root of the body of the block.
 -/
 
 @[expose] public section
@@ -195,5 +197,26 @@ instance : LawfulSszType (BeaconBlock preset fork) :=
 
 instance : LawfulSszType (SignedBeaconBlock preset fork) :=
   .container ⟨rfl, by simp, by decide⟩ (fun _ => rfl) (fun _ => rfl)
+
+/-- A block has the root of its header, whose last field is the root of the body of the block. -/
+theorem BeaconBlock.hashTreeRoot_header {block : BeaconBlock preset fork} {bodyRoot : Root}
+    (rooted : SszType.hashTreeRoot block.body = .ok bodyRoot) :
+    SszType.hashTreeRoot (BeaconBlockHeader.mk block.slot block.proposerIndex block.parentRoot
+      block.stateRoot bodyRoot) = SszType.hashTreeRoot block := by
+  rw [SszType.hashTreeRoot_ok_iff] at rooted
+  rw [SszType.hashTreeRoot_eq, SszType.hashTreeRoot_eq]
+  simp only [SszType.desc, SszType.toValue]
+  -- The body is the fifth field, which its root replaces in the header.
+  have summary := hashTreeRoot_summary
+    (names := ["slot", "proposer_index", "parent_root", "state_root", "body"]) (position := 4)
+    (fields := SszFields.descs (Slot × ValidatorIndex × Root × Root × BeaconBlockBody preset fork))
+    (values :=
+      SszFields.toValues (block.slot, block.proposerIndex, block.parentRoot, block.stateRoot,
+        block.body))
+    rfl rfl rfl rooted
+  rw [← summary, hashTreeRoot_container_names
+    ["slot", "proposer_index", "parent_root", "state_root", "body_root"]
+    ["slot", "proposer_index", "parent_root", "state_root", "body"]]
+  rfl
 
 end EthLib.Consensus
