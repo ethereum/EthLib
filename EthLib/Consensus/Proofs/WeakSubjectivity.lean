@@ -16,6 +16,8 @@ The 64-bit computation gives that value exactly when nothing reaches `2^64` and 
 
 In Phase 0, a computed period is one of the two expressions of the rule, on natural numbers.
 
+In Phase 0, the period is at most the delay plus the longer of two terms in the validators.
+
 At every fork, the period is at least the withdrawal delay.
 
 In Electra and Fulu, the period is at most a bound of the parameters alone: 3558 epochs on mainnet.
@@ -199,6 +201,93 @@ theorem phase0PeriodEpochs_eq_ok {N t T delta Delta epochs : UInt64}
       simp only [Nat.reducePow, Nat.reduceMod]
       omega
     rw [hfactor]
+
+/-- Phase 0: the epochs are at most the longer of two bounds that grow with the validators.
+
+The first is `160 N / (600 delta)`, the churn of validators with the balance term dropped.
+
+The second is `230 N / (600 Delta)`, the top-up bound for small balances.
+
+There is no condition beyond success of the computation. -/
+theorem phase0PeriodEpochs_le {N t T delta Delta epochs : UInt64}
+    (h : phase0PeriodEpochs N t T delta Delta = .ok epochs) :
+    epochs.toNat ≤ max (160 * N.toNat / (600 * delta.toNat))
+      (230 * N.toNat / (600 * Delta.toNat)) := by
+  have closed := phase0PeriodEpochs_eq_ok h
+  generalize N.toNat = n at *
+  generalize t.toNat = t' at *
+  generalize T.toNat = T' at *
+  generalize delta.toNat = d at *
+  generalize Delta.toNat = D at *
+  split at closed
+  · -- Large balances: the churn term is at most `160 n / (600 d)`, or the top-up term is the max.
+    rename_i hlt
+    rw [closed]
+    refine Nat.max_le.mpr ⟨Nat.le_trans ?_ (Nat.le_max_left _ _), Nat.le_max_right _ _⟩
+    by_cases hz : 600 * d * (2 * t' + T') = 0
+    · rw [hz, Nat.div_zero]
+      exact Nat.zero_le _
+    · have hd : 0 < 600 * d := Nat.pos_of_ne_zero fun zero => hz (by rw [zero, Nat.zero_mul])
+      have hw : 0 < 2 * t' + T' := Nat.pos_of_ne_zero fun zero => hz (by rw [zero, Nat.mul_zero])
+      apply (Nat.le_div_iff_mul_le hd).mpr
+      have hq := Nat.div_mul_le_self (n * (320 * t' - 230 * T')) (600 * d * (2 * t' + T'))
+      generalize n * (320 * t' - 230 * T') / (600 * d * (2 * t' + T')) = x at hq ⊢
+      refine Nat.le_of_mul_le_mul_right (c := 2 * t' + T') ?_ hw
+      calc x * (600 * d) * (2 * t' + T') = x * (600 * d * (2 * t' + T')) := by ac_rfl
+        _ ≤ n * (320 * t' - 230 * T') := hq
+        _ ≤ n * (160 * (2 * t' + T')) := Nat.mul_le_mul_left n (by omega)
+        _ = 160 * n * (2 * t' + T') := by ac_rfl
+  · -- Small balances: the top-up term for small balances.
+    rename_i hle
+    rw [closed]
+    refine Nat.le_trans ?_ (Nat.le_max_right _ _)
+    by_cases hz : 200 * D * (T' - t') = 0
+    · rw [hz, Nat.div_zero]
+      exact Nat.zero_le _
+    · have hD : 0 < 600 * D := by
+        refine Nat.pos_of_ne_zero fun zero => hz ?_
+        have : D = 0 := by omega
+        rw [this]
+        simp
+      have hs : 0 < T' - t' := Nat.pos_of_ne_zero fun zero => hz (by rw [zero, Nat.mul_zero])
+      apply (Nat.le_div_iff_mul_le hD).mpr
+      have hq := Nat.div_mul_le_self (30 * n * t') (200 * D * (T' - t'))
+      generalize 30 * n * t' / (200 * D * (T' - t')) = x at hq ⊢
+      refine Nat.le_of_mul_le_mul_right (c := T' - t') ?_ hs
+      have hbal : 90 * t' ≤ 230 * (T' - t') := by omega
+      have hthree : x * (600 * D) * (T' - t') = 3 * (x * (200 * D * (T' - t'))) := by
+        rw [show 600 * D = 3 * (200 * D) by omega]
+        ac_rfl
+      calc x * (600 * D) * (T' - t') = 3 * (x * (200 * D * (T' - t'))) := hthree
+        _ ≤ 3 * (30 * n * t') := Nat.mul_le_mul_left 3 hq
+        _ = n * (90 * t') := by ac_rfl
+        _ ≤ n * (230 * (T' - t')) := Nat.mul_le_mul_left n hbal
+        _ = 230 * n * (T' - t') := by ac_rfl
+
+/-- Phase 0: the period is at most the withdrawal delay plus the longer of two bounds.
+
+The first is `160 N / (600 delta)` and the second is `230 N / (600 Delta)`.
+
+Here `N` is the number of active validators.
+
+The churn of validators in one epoch is `delta`, and `Delta` is the deposits that fit in one epoch.
+
+The bound needs no condition beyond success of the computation. -/
+theorem computeWeakSubjectivityPeriodPhase0_le {config : Config}
+    {state : BeaconState preset fork} {period : Epoch}
+    (h : computeWeakSubjectivityPeriodPhase0 config state = .ok period) :
+    period.toNat ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat +
+      max (160 * (getActiveValidatorIndices state (getCurrentEpoch state)).length.toUInt64.toNat /
+          (600 * (getValidatorChurnLimit config state).toNat))
+        (230 * (getActiveValidatorIndices state (getCurrentEpoch state)).length.toUInt64.toNat /
+          (600 * (preset.MAX_DEPOSITS.toNat * preset.SLOTS_PER_EPOCH.toNat))) := by
+  unfold computeWeakSubjectivityPeriodPhase0 at h
+  simp only [bind_ok_iff, mapError_ok_iff] at h
+  obtain ⟨_, _, _, _, Delta, hDelta, epochs, hepochs, hadd⟩ := h
+  have hsum := (addChecked_ok_iff.mp hadd).2
+  have hbound := phase0PeriodEpochs_le hepochs
+  rw [hsum, (mulChecked_ok_iff.mp hDelta).2] at *
+  exact Nat.add_le_add_left hbound _
 
 /-! ## The withdrawal delay is a lower bound -/
 
