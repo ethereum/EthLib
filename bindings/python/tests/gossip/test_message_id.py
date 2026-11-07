@@ -9,10 +9,10 @@ from ethlib.networking import gossip
 from raising import raises
 
 # The payload is 32 zero bytes.
-# python-snappy 0.7.3 (on cramjam 2.14.0) compresses it to 20 00 00 7a 01 00: the length 32,
-# a literal of one zero byte, and a copy of 31 bytes from 1 byte back.
-# The raw payload is not a Snappy block: its first byte declares an empty block, and 31 more
-# bytes follow.
+# python-snappy 0.7.3 (on cramjam 2.14.0) compresses it to 20 00 00 7a 01 00.
+# They are the length 32, a literal of one zero byte, and a copy of 31 bytes from 1 byte back.
+# The raw payload is not a Snappy block.
+# Its first byte declares an empty block, and 31 more bytes follow.
 PAYLOAD = bytes(32)
 COMPRESSED = bytes.fromhex("2000007a0100")
 RAW = PAYLOAD

@@ -9,8 +9,8 @@ from ethlib.errors import VrfError
 
 def verify(root: bytes, index: int, opening: bytes) -> bytes | None:
     """The 32-byte output at an index, or None when the opening does not verify."""
-    # A root that is not 32 bytes, an opening that is not 1056 bytes,
-    # and an index from 2^32 on all give None.
+    # A root that is not 32 bytes gives None.
+    # So does an opening that is not 1056 bytes, or an index from 2^32 on.
     return vrf_verify(root, index, opening)
 
 

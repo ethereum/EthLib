@@ -137,8 +137,8 @@ def test_excerpt_of_the_archive(archive: Path, name: str) -> None:
 @pytest.mark.archive(ARCHIVE, *ENCRYPT, *DECRYPT)
 @pytest.mark.parametrize("name", ENCRYPT + DECRYPT)
 def test_whole_file(archive: Path, name: str) -> None:
-    # Each file has 7875 cases: 525 sections of 15, every pairing of the IV, text, data and tag
-    # lengths of the file.
+    # Each file has 7875 cases: 525 sections of 15.
+    # The sections cover every combination of the IV, text, data and tag lengths of the file.
     _, sections = _sections((archive / name).read_text())
     assert len(sections) == 525
     check = _encrypt if name in ENCRYPT else _decrypt

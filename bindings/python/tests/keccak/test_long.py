@@ -78,8 +78,8 @@ def test_monte_carlo(width: int) -> None:
         assert digest == bytes.fromhex(checkpoints[2 * j + 1][1]), f"checkpoint {j}"
 
 
-# The one case of ExtremelyLongMsgKAT_256.txt and of ExtremelyLongMsgKAT_512.txt: a 64-byte text
-# repeated 2^24 times, 1 GiB.
+# The one case of ExtremelyLongMsgKAT_256.txt and of ExtremelyLongMsgKAT_512.txt.
+# Its text is 64 bytes repeated 2^24 times, 1 GiB.
 EXTREMELY_LONG_TEXT = b"abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmno"
 EXTREMELY_LONG_REPEAT = 16777216
 EXTREMELY_LONG_DIGEST = {

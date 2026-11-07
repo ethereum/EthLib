@@ -70,8 +70,8 @@ _CASES = _parse_kat(_KAT_FILE)
 # Invariant: the file holds one byte-aligned case per byte length from 0 to 255.
 assert [len(message) for _, message, _ in _CASES] == list(range(256)), "unexpected cases"
 
-# `Len = 2048` and `Len = 2552` of `KeccakKAT/LongMsgKAT_256.txt`, in the same archive as
-# `kat/ShortMsgKAT_256.txt`: two and three blocks.
+# `Len = 2048` and `Len = 2552` of `KeccakKAT/LongMsgKAT_256.txt`: two and three blocks.
+# The file is in the same archive as `kat/ShortMsgKAT_256.txt`.
 #
 # The file is 2.3 MB, so only these two cases are copied, as (case name, message, digest).
 _LONG_CASES = [

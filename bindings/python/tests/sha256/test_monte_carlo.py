@@ -24,8 +24,9 @@ def _read() -> tuple[bytes, list[bytes]]:
 
 
 def test_monte_carlo() -> None:
-    # SHAVS §6.4: each checkpoint hashes 1000 messages, each the last three digests joined,
-    # and the last digest is the seed of the next checkpoint.
+    # SHAVS §6.4: each checkpoint hashes 1000 messages.
+    # Each message is the last three digests joined.
+    # The last digest is the seed of the next checkpoint.
     seed, checkpoints = _read()
     for j, expected in enumerate(checkpoints):
         md = [seed, seed, seed]
@@ -36,8 +37,8 @@ def test_monte_carlo() -> None:
 
 
 def test_procedure_agrees_with_hashlib() -> None:
-    # The same chain with hashlib's SHA-256 meets the first checkpoint, so the loop above follows
-    # SHAVS and the file is read right.
+    # The same chain with hashlib's SHA-256 meets the first checkpoint.
+    # So the loop above follows SHAVS and the file is read right.
     seed, checkpoints = _read()
     md = [seed, seed, seed]
     for _ in range(1000):

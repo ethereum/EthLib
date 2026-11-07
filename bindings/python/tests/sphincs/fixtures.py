@@ -25,8 +25,8 @@ slow = pytest.mark.skipif(not SLOW, reason="set ETHLIB_SLOW_VECTORS=1 to regener
 # ---- Seeds and messages ----------------------------------------------------
 
 # Byte i is 37 i + 11 mod 256.
-# The proofs pin the key of this scheme seed;
-# as a key's seed, it is first hashed with the scheme's name.
+# The proofs pin the key of this scheme seed.
+# As a key's seed, it is first hashed with the scheme's name.
 SEED_KNOWN_ANSWER = bytes((37 * i + 11) % 256 for i in range(sphincs.SEED_LEN))
 
 # The all-zero seed, a second key.
@@ -49,8 +49,8 @@ SCHEME_SEED_KNOWN_ANSWER = bytes.fromhex(
 
 # A public key and a signature that an independent implementation of the note computed.
 #
-# The key grows from SEED_KNOWN_ANSWER taken as the scheme seed, with no name hashed in, so it
-# differs from the key that key_gen gives for SEED_KNOWN_ANSWER.
+# The key grows from SEED_KNOWN_ANSWER taken as the scheme seed, with no name hashed in.
+# So it differs from the key that key_gen gives for SEED_KNOWN_ANSWER.
 # The signature signs MESSAGE_KNOWN_ANSWER, at index 65963065.
 PUBLIC_KEY_SCHEME_SEED = bytes.fromhex(
     "d60b5920f071c6aa61418552bb166390658dd4f91407a109b6ecb2f3c149d50a"

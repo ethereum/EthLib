@@ -9,8 +9,9 @@ from ethlib.cryptography import aes
 
 CAVP = Path(__file__).resolve().parent / "cavp"
 
-# Each section has 100 checkpoints of 1000 block operations; the pull-request tier runs the first
-# PR_CHECKPOINTS of each section, and the weekly tier all of them.
+# Each section has 100 checkpoints of 1000 block operations.
+# The pull-request tier runs the first PR_CHECKPOINTS of each section.
+# The weekly tier runs all of them.
 CHECKPOINTS = 100
 PR_CHECKPOINTS = 10
 SLOW = os.environ.get("ETHLIB_SLOW_VECTORS") == "1"
@@ -43,9 +44,11 @@ def _sections(bits: int) -> dict[str, list[tuple[bytes, bytes, bytes]]]:
 @pytest.mark.parametrize("bits", [128, 256])
 @pytest.mark.parametrize("direction", ["ENCRYPT", "DECRYPT"])
 def test_monte_carlo(bits: int, direction: str) -> None:
-    # AESAVS §6.4.1: from each checkpoint's key and input, 1000 operations each feed their output
-    # to the next. The last output is the checkpoint's answer and the next checkpoint's input.
-    # The next key is the key XOR the last output; a 256-bit key takes the last two outputs.
+    # AESAVS §6.4.1: each checkpoint starts from its key and input.
+    # Each of its 1000 operations feeds its output to the next.
+    # The last output is the checkpoint's answer and the next checkpoint's input.
+    # The next key is the key XOR the last output.
+    # A 256-bit key takes the last two outputs.
     checkpoints = _sections(bits)[direction]
     assert len(checkpoints) == CHECKPOINTS
     run = aes.encrypt_block if direction == "ENCRYPT" else aes.decrypt_block

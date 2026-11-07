@@ -36,8 +36,9 @@ HKDF = _tests("hkdf_sha256_test.json")
 
 @pytest.mark.parametrize("test", HMAC, ids=lambda t: t["tcId"])
 def test_hmac(test: dict) -> None:
-    # The binding returns the full 32-byte tag; a set with 128-bit tags keeps its first 16 bytes,
-    # as RFC 2104 §5 truncates. A modified tag must differ from the tag EthLib computes.
+    # The binding returns the full 32-byte tag.
+    # A set with 128-bit tags keeps its first 16 bytes, as RFC 2104 §5 truncates.
+    # A modified tag must differ from the tag EthLib computes.
     tag = hmac_sha256(bytes.fromhex(test["key"]), bytes.fromhex(test["msg"]))
     assert len(tag) == 32
     truncated = tag[: test["tagSize"] // 8]
