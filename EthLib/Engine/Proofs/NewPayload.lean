@@ -10,6 +10,10 @@ Each fork from Paris to Glamsterdam has a version of the method, and no other fo
 
 Version 5 takes Glamsterdam alone.
 
+Below version 5 the payload decodes exactly as a structure of a version that the method takes.
+
+From version 5 it decodes exactly as a payload of version 4, with its access list and its slot.
+
 Request lists that pass the checks have distinct types, in increasing order.
 
 Without a JSON-RPC error, the parameters are an array of the values of the version, none null.
@@ -87,6 +91,49 @@ theorem payloadParam_five_of_not_mem {j : Lean.Json} {fs : List (String × Lean.
     simp [Json.hasExactly, Json.payloadFieldsV4, Json.amsterdamFields, hany]
   simp [payloadParam, Json.payloadV4, hfs, hfields, Json.invalid, bind, Except.bind, throw,
     throwThe, MonadExceptOf.throw]
+
+/-- Below version 5, the payload decodes exactly as a structure of a version that the method takes.
+
+Version 1 takes structure version 1, version 2 takes 1 or 2, and versions 3 and 4 take 3.
+
+No access list or slot comes with it. -/
+theorem payloadParam_eq_ok_iff_of_lt {version : Nat} {j : Lean.Json}
+    {r : Json.AnyPayload × Option (ByteArray × UInt64)} (hv : version < 5) :
+    payloadParam version j = .ok r ↔
+      Json.anyPayload j = .ok r.1 ∧ acceptsStructure version r.1.version = true ∧ r.2 = none := by
+  obtain ⟨any, extra⟩ := r
+  have hlt : ¬ version ≥ 5 := by omega
+  simp only [payloadParam, hlt, ↓reduceIte]
+  constructor
+  · intro h
+    obtain ⟨a, ha, h⟩ := bind_ok_iff.mp h
+    -- A structure version that the method does not take fails with an invalid parameter.
+    by_cases hs : acceptsStructure version a.version = true
+    · simp only [hs, ↓reduceIte, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      exact ⟨ha, hs, rfl⟩
+    · simp [hs, Json.invalid, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+  · rintro ⟨ha, hs, rfl⟩
+    simp [ha, hs, bind, Except.bind, pure, Except.pure]
+
+/-- From version 5, the payload decodes exactly as a payload of version 4.
+
+Its access list and its slot come with it. -/
+theorem payloadParam_eq_ok_iff_of_le {version : Nat} {j : Lean.Json}
+    {r : Json.AnyPayload × Option (ByteArray × UInt64)} (hv : 5 ≤ version) :
+    payloadParam version j = .ok r ↔
+      ∃ blockAccessList slotNumber, Json.payloadV4 j = .ok (r.1, blockAccessList, slotNumber) ∧
+        r.2 = some (blockAccessList, slotNumber) := by
+  obtain ⟨any, extra⟩ := r
+  have hge : version ≥ 5 := hv
+  simp only [payloadParam, hge, ↓reduceIte]
+  constructor
+  · intro h
+    obtain ⟨⟨a, bal, slot⟩, ha, h⟩ := bind_ok_iff.mp h
+    cases h
+    exact ⟨bal, slot, ha, rfl⟩
+  · rintro ⟨bal, slot, ha, rfl⟩
+    simp [ha, bind, Except.bind, pure, Except.pure]
 
 /-- Request lists that pass the check have strictly increasing types. -/
 theorem pairwise_of_validRequests {requests : List ByteArray}
