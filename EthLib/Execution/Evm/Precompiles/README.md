@@ -375,10 +375,8 @@ From Fusaka, each oversized length fails the call whatever the gas (`modexp_leng
 `modexp_lengthTooLarge_exponent`, `modexp_lengthTooLarge_modulus`).
 With every length in bounds, a call fails exactly when the gas is below the price, at every fork
 (`modexp_outOfGas`, `modexp_ok`).
-A call succeeds exactly when, from Fusaka, every length is in bounds and the gas covers the price
-(`modexp_eq_ok_iff`).
-It fails exactly on the first oversized length, from Fusaka, or else on too little gas
-(`modexp_eq_error_iff`).
+A call succeeds exactly when, from Fusaka, every length is in bounds and the gas covers the price (`modexp_eq_ok_iff`).
+It fails exactly on the first oversized length, from Fusaka, or else on too little gas (`modexp_eq_error_iff`).
 
 The price of each fork has its theorem (`gasCost_of_lt_berlin`, `gasCost_of_berlin_le`).
 From Fusaka, the price is at least 500, does not fall when a length grows, and is at most
