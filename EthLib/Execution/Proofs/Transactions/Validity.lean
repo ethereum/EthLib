@@ -23,7 +23,7 @@ A transaction passes the rules exactly when it meets these bounds and its fees a
 
 Its fees are inverted when its priority fee per gas is above its maximum fee per gas.
 
-The checks of the chain and of the contents are equivalences too, and so is the whole check.
+Exact conditions also state when the chain check, the contents check and the whole check pass.
 -/
 
 @[expose] public section
