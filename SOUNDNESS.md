@@ -897,11 +897,11 @@ A valid head below the finalized block that the execution layer knows is `VALID`
 `forkchoiceUpdated_of_invalid` gives the answer for an invalid head, and `latestValid_eq_some_iff` with `getElem?_succ_chainOf` shows that its latest valid hash is the valid ancestor nearest the head.
 
 `executionEngine_accepts_iff` (`Proofs/ExecutionEngine.lean`) states when the execution engine accepts a payload request of the beacon chain.
-The request lists must be well formed, and the payload must have a block at the active fork of the chain.
+The request lists must be well formed, and the payload must have a block at the active fork of the chain, which must be before Glamsterdam.
 From Deneb, the blob transactions of that block must carry the versioned hashes of the request.
 The block must pass the state transition.
 
-No payload build is specified, so `engine_getPayload` and payload attributes on a new head have no definition and no theorem.
+No payload build is specified, so `engine_getPayload` has no definition, and the export refuses payload attributes on a new valid head.
 The tree of known payloads and the known finalized block are inputs of each call, not state that the model keeps between calls.
 
 ### What cannot be proved yet
