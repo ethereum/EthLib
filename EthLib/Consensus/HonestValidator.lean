@@ -44,7 +44,9 @@ The guides of the later forks, up to Heze, change none of these duties and only 
 
 Gloas adds the payload timeliness duties and the preferences of proposers.
 
-Heze adds the inclusion list committee.
+Heze adds the inclusion list committee and the signed inclusion list.
+
+It also adds the view of the lists that a proposer and a builder put in the payload and the bid.
 
 The steps that read the network or the execution layer are not specified here.
 
@@ -316,5 +318,71 @@ def getSignedProposerPreferences (config : Config) (store : Store preset fork)
     (computeEpochAtSlot preset proposalSlot)).mapError .forkChoice
   let message := { dependentRoot, proposalSlot, validatorIndex, feeRecipient, targetGasLimit }
   return { message, signature := ← getProposerPreferencesSignature config state message key }
+
+/-! ## Inclusion lists -/
+
+/-- From Heze: the signed inclusion list of a committee member for a slot, on the chain of a head.
+
+The dependent root is the block that fixes the committees of the epoch of the slot, on that chain.
+
+The transactions are those that the execution layer offers from its mempool. -/
+def getSignedInclusionList (config : Config) (store : Store preset fork)
+    (state : BeaconState preset fork) (headRoot : Root) (slot : Slot)
+    (validatorIndex : ValidatorIndex) (transactions : List InclusionListTransaction)
+    (key : Signatures.SecretKey) : Except ValidatorDutyError SignedInclusionList := do
+  let dependentRoot ← (store.getShufflingDependentRoot headRoot
+    (computeEpochAtSlot preset slot)).mapError .forkChoice
+  let message : InclusionList :=
+    { slot, validatorIndex, dependentRoot, transactions := ⟨transactions.toArray⟩ }
+  let signature ← (getInclusionListSignature config state message key).mapError fun
+    | .root error => .ssz error
+    | .bls error => .bls error
+  return { message, signature }
+
+/-- From Heze: the key of the inclusion lists that a payload of a slot answers to.
+
+The key is the slot before, with the dependent root of that slot on the chain of a parent block.
+
+A slot 0 has no slot before it, and that is an error. -/
+def inclusionListView (store : Store preset fork) (parentRoot : Root) (slot : Slot) :
+    Except ValidatorDutyError (Slot × Root) := do
+  let previous ← (subChecked slot 1).mapError .arith
+  let dependentRoot ← (store.getShufflingDependentRoot parentRoot
+    (computeEpochAtSlot preset previous)).mapError .forkChoice
+  return (previous, dependentRoot)
+
+/-- From Heze: the transactions that a proposer asks its payload to include, on a head.
+
+The payload is for the slot of the state.
+
+They come from every valid list that the proposer saw, timely or not, without equivocators. -/
+def getPayloadInclusionListTransactions (store : Store preset fork) (heze : .hegota ≤ fork)
+    (state : BeaconState preset fork) (headRoot : Root) :
+    Except ValidatorDutyError (List InclusionListTransaction) := do
+  let (previous, dependentRoot) ← inclusionListView store headRoot state.slot
+  return (store.inclusionLists heze).transactions previous dependentRoot false
+
+/-- From Heze: the bits that a builder sets in its bid, from the lists it saw.
+
+A seat of the committee of the slot before the bid is set when its member sent a list.
+
+The list must count, timely or not. -/
+def getBidInclusionListBits (store : Store preset fork) (heze : .hegota ≤ fork)
+    (state : BeaconState preset fork) (bid : ExecutionPayloadBid preset fork) :
+    Except ValidatorDutyError (InclusionListBits preset) := do
+  let (previous, dependentRoot) ← inclusionListView store bid.parentBlockRoot bid.slot
+  let committee ← (getInclusionListCommittee state previous).mapError .accessor
+  return (store.inclusionLists heze).bits committee previous dependentRoot false
+
+/-- From Heze: whether the bits of a bid cover every list that the proposer saw.
+
+A proposer includes only a bid whose bits set every seat whose member sent a list that counts. -/
+def isBidInclusionListInclusive (store : Store preset fork) (heze : .hegota ≤ fork)
+    (state : BeaconState preset fork) (bid : ExecutionPayloadBid preset fork) :
+    Except ValidatorDutyError Bool := do
+  let (previous, dependentRoot) ← inclusionListView store bid.parentBlockRoot bid.slot
+  let committee ← (getInclusionListCommittee state previous).mapError .accessor
+  return (store.inclusionLists heze).isInclusive committee previous dependentRoot
+    (bid.inclusionListBits heze) false
 
 end EthLib.Consensus
