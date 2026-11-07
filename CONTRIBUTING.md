@@ -399,6 +399,7 @@ uv run --no-sync ty check
 git ls-files -z '*.py' | xargs -0 uv run --no-sync codespell
 uv run --no-sync python scripts/check_raises.py
 uv run --no-sync python scripts/check_docstrings.py
+uv run --no-project --python 3.12 python scripts/check_python_comments.py --base origin/master
 ```
 
 A test expects an exception through `raises` of `bindings/python/tests/raising.py`, which matches the whole message.
@@ -411,6 +412,12 @@ A fact that the code needs goes in a comment next to that code, or in the `--hel
 A class or function docstring is one line when possible.
 Otherwise it has short sentences, one per line, with a blank line between groups.
 `scripts/check_docstrings.py` fails on a module docstring of more than one line, and on a docstring sentence that wraps onto a second line.
+
+A comment follows the same rule: each sentence fits on one line.
+`scripts/check_python_comments.py` fails when a sentence of a comment runs onto the next line, and at least one of the two lines is changed.
+A list item and a field of a provenance record, such as `Commit: <hash>`, continue no sentence.
+The check skips code blocks, table rows and lines that hold only a URL.
+With `--all` in place of `--base`, the check reads every Python file that git tracks.
 
 `pyproject.toml` configures each tool, and `uv.lock` pins its version.
 
