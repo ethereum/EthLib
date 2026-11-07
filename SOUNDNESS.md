@@ -416,7 +416,7 @@ The AES theorems are correctness statements, and none states a security property
 `ctr_ctr` (`Proofs/Aes/Ctr.lean`) proves that CTR decryption of SP 800-38A returns the plaintext, for every forward cipher and initial counter.
 `repeat_inc_injOn` proves that, for `m <= 128`, the first `2^m` counters that the standard increment gives from one block are distinct.
 The CTR keystream applies one increment per block, so these are the counters of the first `2^m` blocks of a message, as Appendix B.1 states.
-No theorem states that link yet.
+`ctr_block` states that link: block `j` of the output is block `j` of the data XORed with the cipher of the first counter incremented `j` times.
 `repeat_inc_two_pow` proves that the counter after `2^m` increments is the first one again.
 The Python tests (`bindings/python/tests/aes/test_aes.py`) check FIPS 197 Appendix B and the AES-128 and AES-256 vectors of its 2001 Appendix C.
 They also check the CTR examples F.5.1, F.5.2, F.5.5 and F.5.6 of SP 800-38A.
