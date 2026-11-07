@@ -100,20 +100,23 @@ theorem foldl_reverse_foldl {seed : Bytes32} {count : Nat} (rounds : List Nat) {
 /-- The reverse rounds undo the shuffle of an index below the count. -/
 theorem unshuffledIndex_shuffledIndex {rounds : Nat} {seed : Bytes32} {count index : Nat}
     (lt : index < count) :
-    unshuffledIndex rounds seed count (shuffledIndex rounds seed count index) = index :=
-  foldl_reverse_foldl _ lt
+    unshuffledIndex rounds seed count (shuffledIndex rounds seed count index) = index := by
+  rw [shuffledIndex_eq_foldl]
+  exact foldl_reverse_foldl _ lt
 
 /-- The shuffle undoes the reverse rounds on an index below the count. -/
 theorem shuffledIndex_unshuffledIndex {rounds : Nat} {seed : Bytes32} {count index : Nat}
     (lt : index < count) :
     shuffledIndex rounds seed count (unshuffledIndex rounds seed count index) = index := by
+  rw [shuffledIndex_eq_foldl]
   have := foldl_reverse_foldl (seed := seed) (count := count) (List.range rounds).reverse lt
   rwa [List.reverse_reverse] at this
 
 /-- The shuffle keeps an index below the count. -/
 theorem shuffledIndex_lt {rounds : Nat} {seed : Bytes32} {count index : Nat}
-    (lt : index < count) : shuffledIndex rounds seed count index < count :=
-  foldl_indexRound_lt _ lt
+    (lt : index < count) : shuffledIndex rounds seed count index < count := by
+  rw [shuffledIndex_eq_foldl]
+  exact foldl_indexRound_lt _ lt
 
 /-- The reverse rounds keep an index below the count. -/
 theorem unshuffledIndex_lt {rounds : Nat} {seed : Bytes32} {count index : Nat}

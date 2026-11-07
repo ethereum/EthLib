@@ -108,6 +108,29 @@ theorem foldl_round_eq_map {seed : Bytes32} {count : Nat} (rounds : List Nat)
     rw [ih (round_bounded bounded), round_eq_map bounded, Array.map_map]
     rfl
 
+/-- A fold gives the same result with two steps that agree on each element of the list. -/
+theorem foldl_congr_mem {α β : Type} {f g : α → β → α} :
+    ∀ (list : List β) (init : α), (∀ b ∈ list, ∀ a, f a b = g a b) →
+      list.foldl f init = list.foldl g init
+  | [], _, _ => rfl
+  | b :: rest, init, agree => by
+    rw [List.foldl_cons, List.foldl_cons, agree b List.mem_cons_self init]
+    exact foldl_congr_mem rest _ fun b' mem => agree b' (List.mem_cons_of_mem _ mem)
+
+/-- The shuffle of one index with the pivots computed first is each round in turn on that index.
+
+Each round there hashes its pivot again, as the rule for one index does. -/
+theorem shuffledIndex_eq_foldl (rounds : Nat) (seed : Bytes32) (count index : Nat) :
+    shuffledIndex rounds seed count index =
+      (List.range rounds).foldl (fun index roundNumber => indexRound seed count roundNumber index)
+        index := by
+  unfold shuffledIndex shuffledIndexBy
+  rw [pivots, Array.size_ofFn]
+  apply foldl_congr_mem
+  intro roundNumber mem position
+  have lt := List.mem_range.mp mem
+  simp [indexRound, Array.getD_eq_getD_getElem?, lt]
+
 /-- The batch holds, at each index below the count, every round applied to that index. -/
 theorem shuffledPositions_getElem {rounds : Nat} {seed : Bytes32} {count index : Nat}
     (lt : index < count) :
@@ -115,7 +138,7 @@ theorem shuffledPositions_getElem {rounds : Nat} {seed : Bytes32} {count index :
       some (UInt64.ofNat (shuffledIndex rounds seed count index)) := by
   unfold shuffledPositions
   rw [foldl_round_eq_map _ (fun i mem => Array.mem_range.mp mem)]
-  simp [lt, shuffledIndex]
+  simp [lt, shuffledIndex_eq_foldl]
 
 /-- The batch has one entry for each index below the count. -/
 theorem shuffledPositions_size (rounds : Nat) (seed : Bytes32) (count : Nat) :

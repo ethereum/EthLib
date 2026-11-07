@@ -98,9 +98,13 @@ def computeBalanceWeightedSelection (state : BeaconState preset fork)
   if shuffleIndices ∧ size ≠ 0 ∧ 2 ^ 40 < indices.size then
     throw (.shuffle (.countTooLarge indices.size.toUInt64))
   -- Each draw shuffles only its own position, so a draw costs the same at any count.
+  --
+  -- The pivots depend only on the seed and the count, so the draws share them.
+  let pivots := if shuffleIndices then
+      Shuffle.pivots preset.SHUFFLE_ROUND_COUNT.toNat seed indices.size
+    else #[]
   let order : Nat → Nat :=
-    if shuffleIndices then Shuffle.shuffledIndex preset.SHUFFLE_ROUND_COUNT.toNat seed indices.size
-    else id
+    if shuffleIndices then Shuffle.shuffledIndexBy pivots seed indices.size else id
   balanceWeightedSearch preset fork indices balances order seed size.toNat #[] (Nat.zero_le _) 0
     ⟨drawHash fork seed 0, rfl⟩
 
