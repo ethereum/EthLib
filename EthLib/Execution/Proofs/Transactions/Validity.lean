@@ -15,6 +15,8 @@ A transaction that passes the rules has a gas limit that covers its least gas li
 
 Its nonce is below `2^64 - 1`, and from Fusaka to BPO5 its gas limit is at most `2^24`.
 
+From Shapella the init code of a creation has at most the size that the fork allows.
+
 From Glamsterdam its gas limit is at most `2^32 - 1`, and its least gas limit at most `2^24`.
 
 A transaction passes the rules exactly when it meets these bounds and its fees are not inverted.
