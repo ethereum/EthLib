@@ -24,11 +24,26 @@ size_t XMSS_MESSAGE_LEN;
 size_t XMSS_SEED_LEN;
 size_t XMSS_PUB_KEY_SIZE;
 size_t XMSS_SIG_SIZE;
+size_t XMSS_DIGEST_LEN;
+size_t XMSS_PUBLIC_PARAM_LEN;
+size_t XMSS_RANDOMIZER_LEN;
+size_t XMSS_CHAINS;
+size_t XMSS_LAYER_HEIGHT;
+size_t XMSS_LEAF_INDEX_SIZE;
 
 size_t SPHINCS_MESSAGE_LEN;
 size_t SPHINCS_SEED_LEN;
 size_t SPHINCS_PUB_KEY_SIZE;
 size_t SPHINCS_SIG_SIZE;
+size_t SPHINCS_N;
+size_t SPHINCS_PUBLIC_PARAM_LEN;
+size_t SPHINCS_RANDOMIZER_LEN;
+size_t SPHINCS_CHAINS;
+size_t SPHINCS_COUNTER_LEN;
+size_t SPHINCS_TOP_HEIGHT;
+size_t SPHINCS_LOWER_HEIGHT;
+size_t SPHINCS_FORS_TREES;
+size_t SPHINCS_FORS_HEIGHT;
 
 
 size_t ENR_MAX_RECORD_SIZE;
@@ -175,6 +190,81 @@ eth_sphincs_const_pub_key_size(
 
 extern uint64_t
 eth_sphincs_const_sig_size(
+  lean_object* unit
+);
+
+extern uint64_t
+eth_xmss_const_digest_len(
+  lean_object* unit
+);
+
+extern uint64_t
+eth_xmss_const_public_param_len(
+  lean_object* unit
+);
+
+extern uint64_t
+eth_xmss_const_randomizer_len(
+  lean_object* unit
+);
+
+extern uint64_t
+eth_xmss_const_chains(
+  lean_object* unit
+);
+
+extern uint64_t
+eth_xmss_const_layer_height(
+  lean_object* unit
+);
+
+extern uint64_t
+eth_xmss_const_leaf_index_size(
+  lean_object* unit
+);
+
+extern uint64_t
+eth_sphincs_const_n(
+  lean_object* unit
+);
+
+extern uint64_t
+eth_sphincs_const_public_param_len(
+  lean_object* unit
+);
+
+extern uint64_t
+eth_sphincs_const_randomizer_len(
+  lean_object* unit
+);
+
+extern uint64_t
+eth_sphincs_const_chains(
+  lean_object* unit
+);
+
+extern uint64_t
+eth_sphincs_const_counter_len(
+  lean_object* unit
+);
+
+extern uint64_t
+eth_sphincs_const_top_height(
+  lean_object* unit
+);
+
+extern uint64_t
+eth_sphincs_const_lower_height(
+  lean_object* unit
+);
+
+extern uint64_t
+eth_sphincs_const_fors_trees(
+  lean_object* unit
+);
+
+extern uint64_t
+eth_sphincs_const_fors_height(
   lean_object* unit
 );
 
@@ -937,6 +1027,21 @@ PyInit__native(void) {
     SPHINCS_SEED_LEN     = (size_t) eth_sphincs_const_seed_len(lean_box(0));
     SPHINCS_PUB_KEY_SIZE = (size_t) eth_sphincs_const_pub_key_size(lean_box(0));
     SPHINCS_SIG_SIZE     = (size_t) eth_sphincs_const_sig_size(lean_box(0));
+    XMSS_DIGEST_LEN = (size_t) eth_xmss_const_digest_len(lean_box(0));
+    XMSS_PUBLIC_PARAM_LEN = (size_t) eth_xmss_const_public_param_len(lean_box(0));
+    XMSS_RANDOMIZER_LEN = (size_t) eth_xmss_const_randomizer_len(lean_box(0));
+    XMSS_CHAINS = (size_t) eth_xmss_const_chains(lean_box(0));
+    XMSS_LAYER_HEIGHT = (size_t) eth_xmss_const_layer_height(lean_box(0));
+    XMSS_LEAF_INDEX_SIZE = (size_t) eth_xmss_const_leaf_index_size(lean_box(0));
+    SPHINCS_N = (size_t) eth_sphincs_const_n(lean_box(0));
+    SPHINCS_PUBLIC_PARAM_LEN = (size_t) eth_sphincs_const_public_param_len(lean_box(0));
+    SPHINCS_RANDOMIZER_LEN = (size_t) eth_sphincs_const_randomizer_len(lean_box(0));
+    SPHINCS_CHAINS = (size_t) eth_sphincs_const_chains(lean_box(0));
+    SPHINCS_COUNTER_LEN = (size_t) eth_sphincs_const_counter_len(lean_box(0));
+    SPHINCS_TOP_HEIGHT = (size_t) eth_sphincs_const_top_height(lean_box(0));
+    SPHINCS_LOWER_HEIGHT = (size_t) eth_sphincs_const_lower_height(lean_box(0));
+    SPHINCS_FORS_TREES = (size_t) eth_sphincs_const_fors_trees(lean_box(0));
+    SPHINCS_FORS_HEIGHT = (size_t) eth_sphincs_const_fors_height(lean_box(0));
 
     SECP256K1_HASH_LEN      = (size_t) eth_secp256k1_const_hash_len(lean_box(0));
     SECP256K1_SIGNATURE_LEN = (size_t) eth_secp256k1_const_signature_len(lean_box(0));
@@ -973,6 +1078,21 @@ PyInit__native(void) {
   PyModule_AddIntConstant(m, "SPHINCS_SEED_LEN", SPHINCS_SEED_LEN);
   PyModule_AddIntConstant(m, "SPHINCS_PUB_KEY_SIZE", SPHINCS_PUB_KEY_SIZE);
   PyModule_AddIntConstant(m, "SPHINCS_SIG_SIZE", SPHINCS_SIG_SIZE);
+  PyModule_AddIntConstant(m, "XMSS_DIGEST_LEN", XMSS_DIGEST_LEN);
+  PyModule_AddIntConstant(m, "XMSS_PUBLIC_PARAM_LEN", XMSS_PUBLIC_PARAM_LEN);
+  PyModule_AddIntConstant(m, "XMSS_RANDOMIZER_LEN", XMSS_RANDOMIZER_LEN);
+  PyModule_AddIntConstant(m, "XMSS_CHAINS", XMSS_CHAINS);
+  PyModule_AddIntConstant(m, "XMSS_LAYER_HEIGHT", XMSS_LAYER_HEIGHT);
+  PyModule_AddIntConstant(m, "XMSS_LEAF_INDEX_SIZE", XMSS_LEAF_INDEX_SIZE);
+  PyModule_AddIntConstant(m, "SPHINCS_N", SPHINCS_N);
+  PyModule_AddIntConstant(m, "SPHINCS_PUBLIC_PARAM_LEN", SPHINCS_PUBLIC_PARAM_LEN);
+  PyModule_AddIntConstant(m, "SPHINCS_RANDOMIZER_LEN", SPHINCS_RANDOMIZER_LEN);
+  PyModule_AddIntConstant(m, "SPHINCS_CHAINS", SPHINCS_CHAINS);
+  PyModule_AddIntConstant(m, "SPHINCS_COUNTER_LEN", SPHINCS_COUNTER_LEN);
+  PyModule_AddIntConstant(m, "SPHINCS_TOP_HEIGHT", SPHINCS_TOP_HEIGHT);
+  PyModule_AddIntConstant(m, "SPHINCS_LOWER_HEIGHT", SPHINCS_LOWER_HEIGHT);
+  PyModule_AddIntConstant(m, "SPHINCS_FORS_TREES", SPHINCS_FORS_TREES);
+  PyModule_AddIntConstant(m, "SPHINCS_FORS_HEIGHT", SPHINCS_FORS_HEIGHT);
   PyModule_AddIntConstant(m, "SECP256K1_HASH_LEN", SECP256K1_HASH_LEN);
   PyModule_AddIntConstant(m, "SECP256K1_SIGNATURE_LEN", SECP256K1_SIGNATURE_LEN);
   PyModule_AddIntConstant(m, "SECP256R1_PUBLIC_KEY_LEN", SECP256R1_PUBLIC_KEY_LEN);

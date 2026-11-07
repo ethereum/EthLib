@@ -1,10 +1,19 @@
 """leanSPHINCS signatures: key generation, signing and verification."""
 
 from ethlib.cryptography._native import (
+    SPHINCS_CHAINS as CHAINS,
+    SPHINCS_COUNTER_LEN as COUNTER_LEN,
+    SPHINCS_FORS_HEIGHT as FORS_HEIGHT,
+    SPHINCS_FORS_TREES as FORS_TREES,
+    SPHINCS_LOWER_HEIGHT as LOWER_HEIGHT,
     SPHINCS_MESSAGE_LEN as MESSAGE_LEN,
+    SPHINCS_N as N,
     SPHINCS_PUB_KEY_SIZE as PUB_KEY_SIZE,
+    SPHINCS_PUBLIC_PARAM_LEN as PUBLIC_PARAM_LEN,
+    SPHINCS_RANDOMIZER_LEN as RANDOMIZER_LEN,
     SPHINCS_SEED_LEN as SEED_LEN,
     SPHINCS_SIG_SIZE as SIG_SIZE,
+    SPHINCS_TOP_HEIGHT as TOP_HEIGHT,
     sphincs_key_gen,
     sphincs_sign,
     sphincs_verify,
@@ -43,6 +52,15 @@ def verify(public_key: bytes, message: bytes, signature: bytes) -> bool:
 
 
 __all__ = [
+    "N",
+    "PUBLIC_PARAM_LEN",
+    "RANDOMIZER_LEN",
+    "CHAINS",
+    "COUNTER_LEN",
+    "TOP_HEIGHT",
+    "LOWER_HEIGHT",
+    "FORS_TREES",
+    "FORS_HEIGHT",
     "key_gen",
     "sign",
     "verify",

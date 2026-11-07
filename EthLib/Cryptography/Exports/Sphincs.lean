@@ -62,6 +62,26 @@ def constSeedLen (_ : Unit) : UInt64 :=
 def constChains (_ : Unit) : UInt64 :=
   UInt64.ofNat V
 
+@[export eth_sphincs_const_counter_len]
+def constCounterLen (_ : Unit) : UInt64 :=
+  UInt64.ofNat COUNTER_LEN
+
+@[export eth_sphincs_const_top_height]
+def constTopHeight (_ : Unit) : UInt64 :=
+  UInt64.ofNat TOP_HEIGHT
+
+@[export eth_sphincs_const_lower_height]
+def constLowerHeight (_ : Unit) : UInt64 :=
+  UInt64.ofNat LOWER_HEIGHT
+
+@[export eth_sphincs_const_fors_trees]
+def constForsTrees (_ : Unit) : UInt64 :=
+  UInt64.ofNat FORS_TREES
+
+@[export eth_sphincs_const_fors_height]
+def constForsHeight (_ : Unit) : UInt64 :=
+  UInt64.ofNat FORS_HEIGHT
+
 @[export eth_sphincs_const_pub_key_size]
 def constPubKeySize (_ : Unit) : UInt64 :=
   UInt64.ofNat PUB_KEY_SIZE

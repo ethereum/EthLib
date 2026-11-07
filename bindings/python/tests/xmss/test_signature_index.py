@@ -56,10 +56,11 @@ def test_signed(case: str, leaf_index: int) -> None:
 
 
 def test_tampered() -> None:
-    # A flipped bit in the bottom randomizer, at byte 4, breaks the signature.
+    # A flipped bit in the bottom randomizer, the first byte after the index, breaks the signature.
     #
-    # The index is bytes 0 to 3, so it reads the same.
-    tampered = fixtures.flip(fixtures.read_output("sign", "sign_known_answer"), 4)
+    # The index is before it, so it reads the same.
+    signature = fixtures.read_output("sign", "sign_known_answer")
+    tampered = fixtures.flip(signature, xmss.LEAF_INDEX_SIZE)
     _emit(f"{HANDLER}_tampered", tampered, expected=fixtures.LEAF_KNOWN_ANSWER)
 
 

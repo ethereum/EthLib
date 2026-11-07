@@ -12,15 +12,24 @@ from . import fixtures
 
 HANDLER = "verify"
 
-# Where each field of a signature starts.
+# Where each field of a signature starts, from the sizes that Lean exports.
 #
-#     [ leaf index: 4 | bottom layer: 1200 | top layer: 1200 ]
+#     [ leaf index | bottom layer | top layer ]
 #
-#     layer = [ randomizer: 16 | 58 chain values: 928 | 16 siblings: 256 ]
-BOTTOM = 4
-TOP = 4 + 1200
-CHAINS = 16
-SIBLINGS = 16 + 58 * 16
+#     layer = [ randomizer | CHAINS chain values | LAYER_HEIGHT siblings ]
+#
+# Each chain value and each sibling is a digest.
+# With the parameters of leanXMSS, the leaf index has 4 bytes and a layer 1200.
+LAYER = xmss.RANDOMIZER_LEN + (xmss.CHAINS + xmss.LAYER_HEIGHT) * xmss.DIGEST_LEN
+BOTTOM = xmss.LEAF_INDEX_SIZE
+TOP = BOTTOM + LAYER
+CHAINS = xmss.RANDOMIZER_LEN
+SIBLINGS = xmss.RANDOMIZER_LEN + xmss.CHAINS * xmss.DIGEST_LEN
+
+
+def test_layout_fills_signature() -> None:
+    """The leaf index and the two layers fill the signature exactly."""
+    assert TOP + LAYER == xmss.SIG_SIZE
 
 
 def _emit(
@@ -142,8 +151,9 @@ def test_zeroed_message_byte() -> None:
 
 def test_next_leaf_index() -> None:
     # 0xA5C37E19 becomes 0xA5C37E1A, the next leaf: every bottom address changes.
-    # The leaf index is the first 4 bytes of the signature, least significant first.
-    signature = (fixtures.LEAF_KNOWN_ANSWER + 1).to_bytes(4, "little") + _signature()[4:]
+    # The leaf index is the first bytes of the signature, least significant first.
+    index = (fixtures.LEAF_KNOWN_ANSWER + 1).to_bytes(xmss.LEAF_INDEX_SIZE, "little")
+    signature = index + _signature()[xmss.LEAF_INDEX_SIZE :]
     _emit(
         f"{HANDLER}_next_leaf_index",
         _key(),
@@ -154,8 +164,8 @@ def test_next_leaf_index() -> None:
 
 
 def test_zeroed_top_last_sibling() -> None:
-    # The sibling just below the key's root, the last 16 bytes, becomes all zero.
-    signature = _signature()[:-16] + bytes(16)
+    # The sibling just below the key's root, the last digest, becomes all zero.
+    signature = _signature()[: -xmss.DIGEST_LEN] + bytes(xmss.DIGEST_LEN)
     _emit(
         f"{HANDLER}_zeroed_top_last_sibling",
         _key(),
@@ -179,7 +189,7 @@ def test_wrong_root() -> None:
 def test_wrong_public_param() -> None:
     _emit(
         f"{HANDLER}_wrong_public_param",
-        fixtures.flip(_key(), 16),
+        fixtures.flip(_key(), xmss.DIGEST_LEN),
         fixtures.MESSAGE_KNOWN_ANSWER,
         _signature(),
         expected=False,
@@ -203,7 +213,7 @@ def test_other_key() -> None:
 def test_short_public_key() -> None:
     _emit(
         f"{HANDLER}_short_public_key",
-        _key()[:31],
+        _key()[:-1],
         fixtures.MESSAGE_KNOWN_ANSWER,
         _signature(),
         expected=None,
@@ -214,7 +224,7 @@ def test_short_message() -> None:
     _emit(
         f"{HANDLER}_short_message",
         _key(),
-        fixtures.MESSAGE_KNOWN_ANSWER[:31],
+        fixtures.MESSAGE_KNOWN_ANSWER[:-1],
         _signature(),
         expected=None,
     )

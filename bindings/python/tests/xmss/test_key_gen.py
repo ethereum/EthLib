@@ -37,7 +37,7 @@ def test_zero_seed() -> None:
 
 def test_short_seed() -> None:
     # 31 bytes: rejected before any hashing.
-    _emit(f"{HANDLER}_short_seed", fixtures.SEED_KNOWN_ANSWER[:31])
+    _emit(f"{HANDLER}_short_seed", fixtures.SEED_KNOWN_ANSWER[:-1])
 
 
 def test_long_seed() -> None:

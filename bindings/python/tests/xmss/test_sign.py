@@ -75,14 +75,14 @@ def test_short_message() -> None:
         f"{HANDLER}_short_message",
         fixtures.SEED_KNOWN_ANSWER,
         fixtures.LEAF_FIRST,
-        fixtures.MESSAGE_KNOWN_ANSWER[:31],
+        fixtures.MESSAGE_KNOWN_ANSWER[:-1],
     )
 
 
 def test_short_seed() -> None:
     _emit(
         f"{HANDLER}_short_seed",
-        fixtures.SEED_KNOWN_ANSWER[:31],
+        fixtures.SEED_KNOWN_ANSWER[:-1],
         fixtures.LEAF_FIRST,
         fixtures.MESSAGE_KNOWN_ANSWER,
     )
