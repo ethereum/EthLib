@@ -13,7 +13,7 @@ The finalized and optimistic slots of a store never move back.
 
 A new store starts with one header for both.
 
-The finalized header then stays at or below the optimistic header.
+The finalized slot then stays at or below the optimistic slot.
 -/
 
 @[expose] public section
