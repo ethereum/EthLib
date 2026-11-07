@@ -680,6 +680,10 @@ That assumption says that a message with no code, to an account that is no preco
 So `CallFlag.runFrame_process_noCode` proves that the contract returns 1 when the address holds no code and is no precompile, unless the run aborts.
 `CallReturn42.runFrame_process` composes the contract with the contract that returns 42 at the called address, through `meets_of_spec`.
 With the runner of the interpreter, the caller then stops with no error and returns the word 1, or the run aborts.
+`CallChain.runFrame_process` chains three frames.
+The contract calls an address that holds its own code, which calls the address of the word 0, which holds no code.
+With the runner of the interpreter, the outer frame stops with no error and returns the word 1, or the run aborts.
+No frame of the chain writes an account, so the result holds even when the called address is the address of the outer frame.
 No rule covers CREATE, a call with value, DELEGATECALL or STATICCALL.
 
 ### SHA-256 precompile
