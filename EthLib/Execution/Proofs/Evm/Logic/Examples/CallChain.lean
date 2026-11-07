@@ -19,7 +19,9 @@ That call ends with no error, so the middle frame returns 1, and so does the out
 
 The logic does not reason about a callee that calls back into its caller and depends on its state.
 
-Here no frame writes an account, and each frame records only reads and accesses.
+Before Paris, the call to the address of the word 0 may create its empty account.
+
+No frame writes the account of `B` or of the outer address.
 
 So the chain needs no such reasoning, and the result holds even when `B` is the outer address.
 

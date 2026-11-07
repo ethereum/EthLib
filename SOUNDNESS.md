@@ -683,7 +683,9 @@ With the runner of the interpreter, the caller then stops with no error and retu
 `CallChain.runFrame_process` chains three frames.
 The contract calls an address that holds its own code, which calls the address of the word 0, which holds no code.
 With the runner of the interpreter, the outer frame stops with no error and returns the word 1, or the run aborts.
-No frame of the chain writes an account, so the result holds even when the called address is the address of the outer frame.
+Before Paris, the call to the address of the word 0 may create its empty account.
+No frame writes the account of the called address or of the outer frame.
+So the result holds even when the two are the same address.
 No rule covers CREATE, a call with value, DELEGATECALL or STATICCALL.
 
 ### SHA-256 precompile
