@@ -10,6 +10,12 @@ The filter of no logs is 0.
 The filter of two lists of logs, one after the other, is the OR of their filters.
 
 The filter has no false negative: it has every bit of the address and of each topic of each log.
+
+A bit of the filter of an entry is set exactly when it is one of the bits of the entry.
+
+A bit of the filter of some logs is set exactly when it is a bit of an entry of one of the logs.
+
+The entries of a log are its address and its topics.
 -/
 
 @[expose] public section
@@ -37,21 +43,51 @@ theorem lt_of_mem_bits {entry : ByteArray} {k : Nat} (hk : k ∈ bits entry) : k
   simp only [bits, List.mem_cons, List.not_mem_nil, or_false] at hk
   omega
 
+/-- A fold that sets some bits sets exactly the bits of the list below 2048. -/
+theorem getLsbD_foldr_twoPow_iff (l : List Nat) (k : Nat) :
+    (l.foldr (fun j acc => BitVec.twoPow 2048 j ||| acc) 0).getLsbD k = true ↔
+      k ∈ l ∧ k < 2048 := by
+  induction l with
+  | nil => simp
+  | cons j js ih =>
+    rw [List.foldr_cons, BitVec.getLsbD_or, Bool.or_eq_true, ih, BitVec.getLsbD_twoPow]
+    simp only [Bool.and_eq_true, decide_eq_true_eq, List.mem_cons]
+    constructor
+    · rintro (⟨hk, rfl⟩ | ⟨hk, hlt⟩)
+      · exact ⟨.inl rfl, hk⟩
+      · exact ⟨.inr hk, hlt⟩
+    · rintro ⟨rfl | hk, hlt⟩
+      · exact .inl ⟨hlt, rfl⟩
+      · exact .inr ⟨hk, hlt⟩
+
 /-- A fold that sets some bits below 2048 sets each of them. -/
 theorem getLsbD_foldr_twoPow {l : List Nat} {k : Nat} (hk : k ∈ l) (hlt : k < 2048) :
-    (l.foldr (fun j acc => BitVec.twoPow 2048 j ||| acc) 0).getLsbD k = true := by
-  induction l with
-  | nil => simp at hk
-  | cons j js ih =>
-    rw [List.foldr_cons, BitVec.getLsbD_or, Bool.or_eq_true]
-    rcases List.mem_cons.mp hk with rfl | hk
-    · exact Or.inl (by simp [hlt])
-    · exact Or.inr (ih hk)
+    (l.foldr (fun j acc => BitVec.twoPow 2048 j ||| acc) 0).getLsbD k = true :=
+  (getLsbD_foldr_twoPow_iff l k).mpr ⟨hk, hlt⟩
+
+/-- A bit of the filter of an entry is set exactly when it is a bit of the entry. -/
+theorem getLsbD_ofEntry_iff (entry : ByteArray) (k : Nat) :
+    (ofEntry entry).getLsbD k = true ↔ k ∈ bits entry := by
+  rw [ofEntry, getLsbD_foldr_twoPow_iff]
+  exact ⟨And.left, fun hk => ⟨hk, lt_of_mem_bits hk⟩⟩
 
 /-- The filter of an entry has each bit of the entry. -/
 theorem getLsbD_ofEntry {entry : ByteArray} {k : Nat} (hk : k ∈ bits entry) :
     (ofEntry entry).getLsbD k = true :=
-  getLsbD_foldr_twoPow hk (lt_of_mem_bits hk)
+  (getLsbD_ofEntry_iff entry k).mpr hk
+
+/-- A bit of the filter of some logs is set exactly when it is a bit of an entry of one of them.
+
+The entries of a log are its address and its topics. -/
+theorem getLsbD_ofLogs_iff (logs : List Log) (k : Nat) :
+    (ofLogs logs).getLsbD k = true ↔ ∃ log ∈ logs, ∃ entry ∈ entries log, k ∈ bits entry := by
+  rw [ofLogs, getLsbD_foldr_or, List.any_eq_true]
+  simp only [List.mem_map, List.mem_flatMap]
+  constructor
+  · rintro ⟨_, ⟨entry, ⟨log, hlog, hentry⟩, rfl⟩, hk⟩
+    exact ⟨log, hlog, entry, hentry, (getLsbD_ofEntry_iff entry k).mp hk⟩
+  · rintro ⟨log, hlog, entry, hentry, hk⟩
+    exact ⟨_, ⟨entry, ⟨log, hlog, hentry⟩, rfl⟩, (getLsbD_ofEntry_iff entry k).mpr hk⟩
 
 /-- The filter of no logs is 0. -/
 theorem ofLogs_nil : ofLogs [] = 0 := rfl
