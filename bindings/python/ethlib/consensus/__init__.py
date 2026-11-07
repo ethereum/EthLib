@@ -792,6 +792,73 @@ def get_validator_signature(
     )
 
 
+def get_aggregate_signature(name: str, fork: str, attestations: list) -> bytes:
+    """The 96-byte aggregate of the signatures of attestations given as SSZ bytes."""
+    return _native.consensus_get_aggregate_signature(name, fork, attestations)
+
+
+def construct_attestation(
+    name: str,
+    fork: str,
+    state: bytes,
+    data: bytes,
+    validator_index: int,
+    secret_key: bytes,
+    config: dict | None = None,
+) -> bytes:
+    """Before Electra, the attestation of a validator on attestation data, as SSZ bytes."""
+    return _native.consensus_construct_attestation(
+        name, fork, state, _replacements(config), data, validator_index, secret_key
+    )
+
+
+def construct_single_attestation(
+    name: str,
+    fork: str,
+    state: bytes,
+    data: bytes,
+    committee_index: int,
+    validator_index: int,
+    secret_key: bytes,
+    config: dict | None = None,
+) -> bytes:
+    """From Electra, the single attestation of a validator in a committee, as SSZ bytes."""
+    return _native.consensus_construct_single_attestation(
+        name, fork, state, _replacements(config), data, committee_index, validator_index, secret_key
+    )
+
+
+def construct_aggregate(
+    name: str, fork: str, state: bytes, data: bytes, attestations: list
+) -> bytes:
+    """Before Electra, the aggregate of the attestations that vote for some data, as SSZ bytes."""
+    return _native.consensus_construct_aggregate(name, fork, state, data, attestations)
+
+
+def construct_aggregate_of_single_attestations(
+    name: str, fork: str, state: bytes, data: bytes, committee_index: int, singles: list
+) -> bytes:
+    """From Electra, the aggregate of the single attestations of a committee, as SSZ bytes."""
+    return _native.consensus_construct_aggregate_of_single_attestations(
+        name, fork, state, data, committee_index, singles
+    )
+
+
+def construct_sync_committee_contribution(
+    name: str,
+    fork: str,
+    state: bytes,
+    committee: bytes,
+    block_root: bytes,
+    subcommittee_index: int,
+    messages: list,
+) -> bytes:
+    """From Altair, the contribution of a subcommittee from its messages, as SSZ bytes."""
+    return _native.consensus_construct_sync_committee_contribution(
+        name, fork, state, committee, block_root, subcommittee_index, messages
+    )
+
+
 def get_eth1_vote(
     name: str, fork: str, state: bytes, chain: list, config: dict | None = None
 ) -> bytes:
@@ -822,6 +889,11 @@ def compute_new_state_root(
 def compute_on_chain_aggregate(name: str, fork: str, aggregates: list) -> bytes:
     """The attestation on chain from network aggregates of the same data, as SSZ bytes."""
     return _native.consensus_compute_on_chain_aggregate(name, fork, aggregates)
+
+
+def process_sync_committee_contributions(name: str, fork: str, contributions: list) -> bytes:
+    """From Altair, the sync aggregate of a block from contributions, as SSZ bytes."""
+    return _native.consensus_process_sync_committee_contributions(name, fork, contributions)
 
 
 def get_execution_requests(name: str, fork: str, requests: list) -> bytes:
@@ -909,10 +981,17 @@ __all__ = [
     "get_ptc_assignment",
     "get_upcoming_proposal_slots",
     "get_validator_signature",
+    "get_aggregate_signature",
+    "construct_attestation",
+    "construct_single_attestation",
+    "construct_aggregate",
+    "construct_aggregate_of_single_attestations",
+    "construct_sync_committee_contribution",
     "get_eth1_vote",
     "get_eth1_pending_deposit_count",
     "compute_new_state_root",
     "compute_on_chain_aggregate",
+    "process_sync_committee_contributions",
     "get_execution_requests",
     "get_validators_custody_requirement",
     "process_slots",

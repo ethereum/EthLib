@@ -23,6 +23,8 @@ The state after it then has that root.
 
 The on-chain aggregate joins the network aggregates in the order of their committees.
 
+From Altair, the sync aggregate sets the bits that the contributions set, each in its subcommittee.
+
 Reading the requests of the execution layer inverts the list that the execution layer receives.
 
 The signed header of a block carries the root of its body.
@@ -390,6 +392,8 @@ theorem committee_le_total (a b : CommitteeIndex × Attestation preset fork) :
 
 /-- The on-chain aggregate joins the network aggregates in the order of their committees.
 
+From Altair, the sync aggregate sets the bits that the contributions set, each in its subcommittee.
+
 There is an order of the aggregates, each with its first committee, sorted by that committee.
 
 The aggregation bits are those of each aggregate in that order.
@@ -469,6 +473,72 @@ theorem committeeBits_computeOnChainAggregate {electra : .pectra ≤ fork}
         exact ⟨entry, perm.mem_iff.mpr member', Option.some.inj (first.symm.trans named)⟩
     · simp [throw, throwThe, MonadExceptOf.throw] at joined
   · simp [throw, throwThe, MonadExceptOf.throw] at joined
+
+/-! ## The sync aggregate -/
+
+/-- From Altair, the sync aggregate of contributions, from what it is built of.
+
+Each contribution names a subcommittee below the number of subnets, and no two name the same one.
+
+A bit is set exactly when the contribution of its subcommittee sets the bit of its seat there.
+
+The signature is the aggregate of the signatures of the contributions, in their order. -/
+theorem processSyncCommitteeContributions_spec
+    {contributions : List (SyncCommitteeContribution preset)} {aggregate : SyncAggregate preset}
+    (built : processSyncCommitteeContributions contributions = .ok aggregate) :
+    (∀ contribution ∈ contributions,
+      contribution.subcommitteeIndex.toNat < Networking.Enr.SYNC_COMMITTEE_SUBNET_COUNT) ∧
+    (contributions.map (·.subcommitteeIndex)).Nodup ∧
+    (∀ participant : Fin preset.SYNC_COMMITTEE_SIZE.toNat,
+      aggregate.syncCommitteeBits.bits[participant.val] = true ↔
+        ∃ contribution ∈ contributions, ∃ seat : Fin (syncSubcommitteeSize preset),
+          participant.val =
+            contribution.subcommitteeIndex.toNat * syncSubcommitteeSize preset + seat.val ∧
+          contribution.aggregationBits.bits[seat.val] = true) ∧
+    Signatures.aggregate (contributions.map fun contribution =>
+      Base.packBytes contribution.signature).toArray = .ok aggregate.syncCommitteeSignature := by
+  unfold processSyncCommitteeContributions at built
+  split at built
+  · simp [throw, throwThe, MonadExceptOf.throw] at built
+  rename_i inRange
+  dsimp only at built
+  split at built
+  · simp [throw, throwThe, MonadExceptOf.throw] at built
+  rename_i once
+  obtain ⟨signature, signed, built⟩ := bind_ok_iff.mp built
+  simp only [pure, Except.pure, Except.ok.injEq] at built
+  subst built
+  refine ⟨fun contribution member => ?_, ?_, fun participant => ?_, mapError_ok_iff.mp signed⟩
+  · have below := List.find?_eq_none.mp inRange contribution member
+    simpa using below
+  · refine List.nodup_iff_count.mpr fun index => ?_
+    by_cases member : index ∈ contributions.map (·.subcommitteeIndex)
+    · have once := List.find?_eq_none.mp once index member
+      simpa using once
+    · rw [List.count_eq_zero_of_not_mem member]
+      exact Nat.zero_le _
+  · simp only [Vector.getElem_ofFn, List.any_eq_true, Bool.and_eq_true, decide_eq_true_eq]
+    constructor
+    · rintro ⟨contribution, member, quotient, set⟩
+      -- A set bit lies inside the bits of the subcommittee, so the subcommittee has a seat.
+      have inside : participant.val % syncSubcommitteeSize preset <
+          syncSubcommitteeSize preset := by
+        by_contra outside
+        rw [Array.getD_eq_getD_getElem?,
+          Array.getElem?_eq_none (by rw [Vector.size_toArray]; omega)] at set
+        simp at set
+      refine ⟨contribution, member, ⟨_, inside⟩, ?_, ?_⟩
+      · rw [quotient, Nat.mul_comm]
+        exact (Nat.div_add_mod _ _).symm
+      · simpa [Array.getD_eq_getD_getElem?, inside] using set
+    · rintro ⟨contribution, member, seat, position, set⟩
+      have positive : 0 < syncSubcommitteeSize preset :=
+        Nat.lt_of_le_of_lt (Nat.zero_le _) seat.isLt
+      refine ⟨contribution, member, ?_, ?_⟩
+      · rw [position, Nat.add_comm, Nat.add_mul_div_right _ _ positive,
+          Nat.div_eq_of_lt seat.isLt, Nat.zero_add]
+      · rw [position, Nat.add_comm, Nat.add_mul_mod_self_right, Nat.mod_eq_of_lt seat.isLt]
+        simpa [Array.getD_eq_getD_getElem?, seat.isLt] using set
 
 /-! ## Execution requests -/
 

@@ -20,6 +20,8 @@ The proposer computes that root by running the state transition without the chec
 
 In Electra, the block holds the deposits of the deposit contract up to the first deposit request.
 
+From Altair, the proposer joins the contributions of the sync subcommittees into one aggregate.
+
 From Electra, the proposer joins the network aggregates of one vote into one attestation.
 
 It also reads the requests of the execution layer from their bytes, as [EIP-7685] gives them.
@@ -67,6 +69,10 @@ inductive ProposerError where
   | emptyRequest (type : UInt8)
   /-- A request type does not come after the type before it. -/
   | requestTypeOrder (previous type : UInt8)
+  /-- A contribution names a subcommittee that is not below the number of subnets. -/
+  | subcommitteeOutOfRange (index : UInt64)
+  /-- Two contributions name the same subcommittee. -/
+  | repeatedSubcommittee (index : UInt64)
 
 /-- The code of an error at the C boundary, one for each constructor. -/
 def ProposerError.code : ProposerError → UInt32
@@ -81,6 +87,8 @@ def ProposerError.code : ProposerError → UInt32
   | .unknownRequestType _ => 9
   | .emptyRequest _ => 10
   | .requestTypeOrder .. => 11
+  | .subcommitteeOutOfRange _ => 12
+  | .repeatedSubcommittee _ => 13
 
 /-! ## The Eth1 vote -/
 
@@ -261,6 +269,37 @@ def computeOnChainAggregate (electra : .pectra ≤ fork)
         ⟨Vector.ofFn fun index : Fin preset.MAX_COMMITTEES_PER_SLOT.toNat =>
           committees.contains index.val.toUInt64⟩ }
   else throw (.tooManyBits bits.size (maxAttesters preset fork))
+
+/-! ## The sync aggregate -/
+
+/-- From Altair: the sync aggregate of a block, from the contributions of some subcommittees.
+
+A bit of the aggregate is set when the contribution of its subcommittee sets the bit of that seat.
+
+The signature is the aggregate of the signatures of the contributions.
+
+It fails on a subcommittee that is not below the number of subnets, and on one named twice.
+
+It also fails on an empty list, and when a signature does not decode. -/
+def processSyncCommitteeContributions (contributions : List (SyncCommitteeContribution preset)) :
+    Except ProposerError (SyncAggregate preset) := do
+  match contributions.find? fun contribution =>
+      Networking.Enr.SYNC_COMMITTEE_SUBNET_COUNT ≤ contribution.subcommitteeIndex.toNat with
+  | some other => throw (.subcommitteeOutOfRange other.subcommitteeIndex)
+  | none =>
+  let indices := contributions.map (·.subcommitteeIndex)
+  match indices.find? fun index => 1 < indices.count index with
+  | some index => throw (.repeatedSubcommittee index)
+  | none =>
+  let size := syncSubcommitteeSize preset
+  -- A seat of the committee is a seat of the subcommittee of its quotient, at its remainder.
+  let bits := Vector.ofFn fun participant : Fin preset.SYNC_COMMITTEE_SIZE.toNat =>
+    contributions.any fun contribution =>
+      contribution.subcommitteeIndex.toNat = participant.val / size &&
+        contribution.aggregationBits.bits.toArray.getD (participant.val % size) false
+  let signatures := contributions.map fun contribution => Base.packBytes contribution.signature
+  let signature ← (Signatures.aggregate signatures.toArray).mapError .bls
+  return { syncCommitteeBits := ⟨bits⟩, syncCommitteeSignature := signature }
 
 /-! ## Execution requests -/
 

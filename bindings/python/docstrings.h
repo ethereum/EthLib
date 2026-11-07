@@ -356,6 +356,24 @@
 #define DOC_consensus_get_validator_signature \
   "The signature of the object of a duty, by a secret key of 32 big-endian bytes."
 
+#define DOC_consensus_get_aggregate_signature \
+  "The aggregate of the signatures of attestations, as 96 bytes."
+
+#define DOC_consensus_construct_attestation \
+  "Before Electra: the attestation of a validator on attestation data, as SSZ bytes."
+
+#define DOC_consensus_construct_single_attestation \
+  "From Electra: the single attestation of a validator in a committee, as SSZ bytes."
+
+#define DOC_consensus_construct_aggregate \
+  "Before Electra: the aggregate of the attestations that vote for attestation data, as SSZ bytes."
+
+#define DOC_consensus_construct_aggregate_of_single_attestations \
+  "From Electra: the aggregate of the single attestations of a committee, as SSZ bytes."
+
+#define DOC_consensus_construct_sync_committee_contribution \
+  "From Altair: the contribution of a subcommittee from sync committee messages, as SSZ bytes."
+
 #define DOC_consensus_get_eth1_vote \
   "Before Heze: the Eth1 vote of a proposer on a state, as the SSZ bytes of the Eth1 data."
 
@@ -367,6 +385,9 @@
 
 #define DOC_consensus_compute_on_chain_aggregate \
   "From Electra: the attestation on chain from network aggregates, as SSZ bytes."
+
+#define DOC_consensus_process_sync_committee_contributions \
+  "From Altair: the sync aggregate of a block from the contributions of subcommittees."
 
 #define DOC_consensus_get_execution_requests \
   "From Electra: the requests of an execution block, as SSZ bytes."

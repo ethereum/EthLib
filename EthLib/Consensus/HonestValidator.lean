@@ -77,6 +77,16 @@ inductive ValidatorDutyError where
   | periodOutOfRange (period currentPeriod : UInt64)
   /-- A step of the fork choice fails. -/
   | forkChoice (error : ForkChoiceError)
+  /-- A validator holds no seat in the committee or the subcommittee of its message. -/
+  | notInCommittee (validatorIndex : ValidatorIndex)
+  /-- No message matches the one to aggregate. -/
+  | noMessages
+  /-- The bits of a committee exceed the limit of an attestation. -/
+  | tooManyBits (count limit : Nat)
+  /-- The bits of an attestation do not have one bit for each member of its committee. -/
+  | bitsLength (count expected : Nat)
+  /-- A committee or a subcommittee index is not below the number of them. -/
+  | indexOutOfRange (index limit : UInt64)
 
 /-- The code of an error at the C boundary, one for each constructor. -/
 def ValidatorDutyError.code : ValidatorDutyError → UInt32
@@ -87,6 +97,11 @@ def ValidatorDutyError.code : ValidatorDutyError → UInt32
   | .epochTooFar .. => 5
   | .periodOutOfRange .. => 6
   | .forkChoice _ => 7
+  | .notInCommittee _ => 8
+  | .noMessages => 9
+  | .tooManyBits .. => 10
+  | .bitsLength .. => 11
+  | .indexOutOfRange .. => 12
 
 /-! ## Assignments -/
 

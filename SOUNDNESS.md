@@ -923,6 +923,34 @@ Its answer is then whether the validator's key is in the current or the next com
 The Python suite checks each duty signature against py_ecc, on signing roots computed in the test, and each committee against the shuffle export.
 It checks each payload timeliness assignment and the upcoming proposal slots against the window and the lookahead that it reads from a Gloas state.
 
+### Honest aggregation
+
+`Consensus/HonestAggregation.lean` holds the vote of an honest attester and the aggregates that an honest aggregator builds from votes.
+Before Electra the vote is an attestation with one bit, and from Electra it is a single attestation.
+An aggregator joins the votes of one committee on the same data into one attestation.
+From Altair, a sync aggregator joins the messages on one block root into the contribution of its subcommittee.
+The theorems are in `Consensus/Proofs/HonestAggregation.lean`.
+Each of them assumes only that the construction succeeds, except the theorem on signatures.
+
+`getAttestingIndices_constructAttestation` shows that the attestation of a validator has that validator as its only attester.
+`mem_getAttestingIndices_constructAggregate` shows that the attesters of an aggregate are the attesters of its attestations with the same data.
+From Electra, `mem_getAttestingIndices_constructAggregateOfSingleAttestations` shows that the attesters of an aggregate are the attesters of its single attestations with the same data and committee.
+`getCommitteeIndices_constructAggregateOfSingleAttestations` shows that the committee bits of that aggregate name its one committee.
+`constructSyncCommitteeContribution_spec` states the bits of a contribution.
+The bit of a seat is set when its key is the key of the validator of a message on the slot and the root.
+Under `PairingLaws`, `fastAggregateVerify_getAggregateSignature` shows that honest signatures of attestations on one message aggregate to a signature that the fast aggregate verification accepts.
+That theorem assumes that the secret keys do not sum to zero.
+It verifies under the keys in the order of the attestations.
+
+No theorem shows that an aggregate passes the signature check of an indexed attestation.
+That check reads the keys in the sorted order of the attesters.
+No theorem covers the signature of a contribution.
+The guide aggregates the signature of every vote.
+So an aggregate verifies only when no two votes share a seat, a condition that no theorem states.
+The contribution takes the sync committee as an argument.
+The caller passes the committee of the next slot, which gossip and the next block check.
+The Python suite checks each vote and each aggregate against values worked out in the test from the guide, with py_ecc for the signatures.
+
 ### Honest proposer
 
 `Consensus/HonestProposer.lean` holds what an honest validator computes to fill the block it proposes.
@@ -944,10 +972,14 @@ It assumes a signature that passes the block signature check.
 `getExecutionRequests_eq_ok_iff` shows that the requests read from a list are exactly the requests that give that list.
 It rests on the canonical SSZ decoder and on the empty bytes being the only encoding of an empty list.
 `signedHeader_eq_ok_iff` shows that the signed header of a block carries the root of its body, and `getValidatorsCustodyRequirement_bounds` that the custody requirement stays between its two bounds.
+From Altair, `processSyncCommitteeContributions_spec` states the bits of the sync aggregate of a block.
+They are exactly the bits that its contributions set, each at the seat of its subcommittee.
+It also shows that the contributions name distinct subcommittees below the number of subnets.
 
 No theorem says that the on-chain aggregate verifies, which rests on BLS and on the disjoint committees of the network aggregates.
 The Python suite checks the new state root against the state root of each valid sanity block case that the repository holds, at seven forks from Phase 0 to Heze.
-It checks the Eth1 vote, the pending deposit count, the custody requirement, the on-chain aggregate and the execution requests against values worked out in the test from the guides, with py_ecc for the aggregate signature.
+It checks the Eth1 vote, the pending deposit count, the custody requirement, the on-chain aggregate, the sync aggregate and the execution requests.
+The test works out the expected values from the guides, with py_ecc for the aggregate signatures.
 
 ### Light client
 
@@ -1203,12 +1235,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 259 operations and 41 size constants.
-The Python extension calls 259 of the operations and 41 of the constants.
+Lean exports 266 operations and 41 size constants.
+The Python extension calls 266 of the operations and 41 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-8825 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (1868), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1124), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (487), `xmss.c` (134).
+9014 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (2033), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1141), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (494), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

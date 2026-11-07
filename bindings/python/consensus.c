@@ -287,6 +287,39 @@ eth_consensus_compute_on_chain_aggregate(
   lean_object* name, lean_object* fork, lean_object* aggregates);
 
 extern lean_object*
+eth_consensus_get_aggregate_signature(
+  lean_object* name, lean_object* fork, lean_object* attestations);
+
+extern lean_object*
+eth_consensus_construct_attestation(
+  lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
+  lean_object* data, uint64_t validator_index, lean_object* secret_key);
+
+extern lean_object*
+eth_consensus_construct_single_attestation(
+  lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
+  lean_object* data, uint64_t committee_index, uint64_t validator_index, lean_object* secret_key);
+
+extern lean_object*
+eth_consensus_construct_aggregate(
+  lean_object* name, lean_object* fork, lean_object* state, lean_object* data,
+  lean_object* attestations);
+
+extern lean_object*
+eth_consensus_construct_aggregate_of_single_attestations(
+  lean_object* name, lean_object* fork, lean_object* state, lean_object* data,
+  uint64_t committee_index, lean_object* singles);
+
+extern lean_object*
+eth_consensus_construct_sync_committee_contribution(
+  lean_object* name, lean_object* fork, lean_object* state, lean_object* committee,
+  lean_object* block_root, uint64_t subcommittee_index, lean_object* messages);
+
+extern lean_object*
+eth_consensus_process_sync_committee_contributions(
+  lean_object* name, lean_object* fork, lean_object* contributions);
+
+extern lean_object*
 eth_consensus_get_execution_requests(
   lean_object* name, lean_object* fork, lean_object* requests);
 
@@ -1686,6 +1719,138 @@ py_consensus_compute_on_chain_aggregate(
   if (named_list_args(name_obj, fork_obj, list_obj, "aggregates", a) < 0) return NULL;
   return except_into_pybytes(eth_consensus_compute_on_chain_aggregate(a[0], a[1], a[2]),
     PROPOSER_ERROR);
+}
+
+PyObject*
+py_consensus_process_sync_committee_contributions(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *list_obj;
+  if (!PyArg_ParseTuple(args, "OOO", &name_obj, &fork_obj, &list_obj)) return NULL;
+  lean_object* a[3];
+  if (named_list_args(name_obj, fork_obj, list_obj, "contributions", a) < 0) return NULL;
+  return except_into_pybytes(
+    eth_consensus_process_sync_committee_contributions(a[0], a[1], a[2]), PROPOSER_ERROR);
+}
+
+PyObject*
+py_consensus_get_aggregate_signature(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *list_obj;
+  if (!PyArg_ParseTuple(args, "OOO", &name_obj, &fork_obj, &list_obj)) return NULL;
+  lean_object* a[3];
+  if (named_list_args(name_obj, fork_obj, list_obj, "attestations", a) < 0) return NULL;
+  return except_into_pybytes(eth_consensus_get_aggregate_signature(a[0], a[1], a[2]),
+    VALIDATOR_DUTY_ERROR);
+}
+
+PyObject*
+py_consensus_construct_attestation(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *index_obj;
+  const uint8_t *state, *config, *data, *key;
+  Py_ssize_t state_len, config_len, data_len, key_len;
+  if (!PyArg_ParseTuple(args, "OOy#y#y#Oy#", &name_obj, &fork_obj, &state, &state_len, &config,
+                        &config_len, &data, &data_len, &index_obj, &key, &key_len))
+    return NULL;
+  uint64_t index;
+  if (parse_uint64(index_obj, "validator_index", &index) < 0) return NULL;
+  lean_object* a[4];
+  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) return NULL;
+  return except_into_pybytes(
+    eth_consensus_construct_attestation(a[0], a[1], a[2], a[3], mk_bytearray(data, data_len),
+      index, mk_bytearray(key, key_len)),
+    VALIDATOR_DUTY_ERROR);
+}
+
+PyObject*
+py_consensus_construct_single_attestation(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *committee_obj, *index_obj;
+  const uint8_t *state, *config, *data, *key;
+  Py_ssize_t state_len, config_len, data_len, key_len;
+  if (!PyArg_ParseTuple(args, "OOy#y#y#OOy#", &name_obj, &fork_obj, &state, &state_len, &config,
+                        &config_len, &data, &data_len, &committee_obj, &index_obj, &key,
+                        &key_len))
+    return NULL;
+  uint64_t committee, index;
+  if (parse_uint64(committee_obj, "committee_index", &committee) < 0) return NULL;
+  if (parse_uint64(index_obj, "validator_index", &index) < 0) return NULL;
+  lean_object* a[4];
+  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) return NULL;
+  return except_into_pybytes(
+    eth_consensus_construct_single_attestation(a[0], a[1], a[2], a[3],
+      mk_bytearray(data, data_len), committee, index, mk_bytearray(key, key_len)),
+    VALIDATOR_DUTY_ERROR);
+}
+
+PyObject*
+py_consensus_construct_aggregate(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *list_obj;
+  const uint8_t *state, *data;
+  Py_ssize_t state_len, data_len;
+  if (!PyArg_ParseTuple(args, "OOy#y#O", &name_obj, &fork_obj, &state, &state_len, &data,
+                        &data_len, &list_obj))
+    return NULL;
+  lean_object* a[3];
+  if (named_list_args(name_obj, fork_obj, list_obj, "attestations", a) < 0) return NULL;
+  return except_into_pybytes(
+    eth_consensus_construct_aggregate(a[0], a[1], mk_bytearray(state, state_len),
+      mk_bytearray(data, data_len), a[2]),
+    VALIDATOR_DUTY_ERROR);
+}
+
+PyObject*
+py_consensus_construct_aggregate_of_single_attestations(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *committee_obj, *list_obj;
+  const uint8_t *state, *data;
+  Py_ssize_t state_len, data_len;
+  if (!PyArg_ParseTuple(args, "OOy#y#OO", &name_obj, &fork_obj, &state, &state_len, &data,
+                        &data_len, &committee_obj, &list_obj))
+    return NULL;
+  uint64_t committee;
+  if (parse_uint64(committee_obj, "committee_index", &committee) < 0) return NULL;
+  lean_object* a[3];
+  if (named_list_args(name_obj, fork_obj, list_obj, "singles", a) < 0) return NULL;
+  return except_into_pybytes(
+    eth_consensus_construct_aggregate_of_single_attestations(a[0], a[1],
+      mk_bytearray(state, state_len), mk_bytearray(data, data_len), committee, a[2]),
+    VALIDATOR_DUTY_ERROR);
+}
+
+PyObject*
+py_consensus_construct_sync_committee_contribution(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *index_obj, *list_obj;
+  const uint8_t *state, *committee, *root;
+  Py_ssize_t state_len, committee_len, root_len;
+  if (!PyArg_ParseTuple(args, "OOy#y#y#OO", &name_obj, &fork_obj, &state, &state_len, &committee,
+                        &committee_len, &root, &root_len, &index_obj, &list_obj))
+    return NULL;
+  uint64_t index;
+  if (parse_uint64(index_obj, "subcommittee_index", &index) < 0) return NULL;
+  lean_object* a[3];
+  if (named_list_args(name_obj, fork_obj, list_obj, "messages", a) < 0) return NULL;
+  return except_into_pybytes(
+    eth_consensus_construct_sync_committee_contribution(a[0], a[1],
+      mk_bytearray(state, state_len), mk_bytearray(committee, committee_len),
+      mk_bytearray(root, root_len), index, a[2]),
+    VALIDATOR_DUTY_ERROR);
 }
 
 PyObject*

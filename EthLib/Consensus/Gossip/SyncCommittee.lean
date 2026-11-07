@@ -45,17 +45,26 @@ def syncCommitteeAtNextSlot (state : BeaconState preset fork) (altair : .altair 
       computeSyncCommitteePeriodAtSlot preset nextSlot
     then (state.currentSyncCommittee altair).value else (state.nextSyncCommittee altair).value
 
-/-- From Altair: the keys of the members of a subcommittee, in committee order.
+/-- From Altair: the keys of the members of a subcommittee of a sync committee, in committee order.
 
 The committee splits into equal slices, one for each subcommittee, in order.
 
 A slice past the end of the committee is empty. -/
+def syncSubcommitteePubkeys (committee : SyncCommittee preset) (subcommitteeIndex : Nat) :
+    List BLSPubkey :=
+  let size := syncSubcommitteeSize preset
+  (committee.pubkeys.toList.drop (subcommitteeIndex * size)).take size
+
+/-- From Altair: the keys of the members of a subcommittee, in committee order.
+
+They come from the sync committee of the next slot.
+
+It fails when the start of the slice does not fit in 64 bits. -/
 def getSyncSubcommitteePubkeys (state : BeaconState preset fork) (altair : .altair ≤ fork)
     (subcommitteeIndex : UInt64) : Except ArithError (List BLSPubkey) := do
   let committee ← syncCommitteeAtNextSlot state altair
-  let size := syncSubcommitteeSize preset
-  let start ← mulChecked subcommitteeIndex size.toUInt64
-  return (committee.pubkeys.toList.drop start.toNat).take size
+  let _ ← mulChecked subcommitteeIndex (syncSubcommitteeSize preset).toUInt64
+  return syncSubcommitteePubkeys committee subcommitteeIndex.toNat
 
 /-- From Altair: the subnets of the subcommittees that hold a key, each once.
 
