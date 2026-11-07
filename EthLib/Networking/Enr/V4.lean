@@ -102,4 +102,26 @@ def signV4 (sk : Fn) (r : Enr) : Except EnrError Enr := do
   let (rr, ss, _) ← (Ecdsa.sign sk (Hash.Keccak.keccak256 content)).mapError fun _ => .signing
   return { r with signature := ⟨(Base.natToBytes 32 rr.val ++ Base.natToBytes 32 ss.val).toArray⟩ }
 
+/-- The pairs with one more pair, placed before the first pair whose key is larger. -/
+def insertPair (p : ByteArray × Item) : List (ByteArray × Item) → List (ByteArray × Item)
+  | [] => [p]
+  | q :: rest => if keyLt p.1 q.1 then p :: q :: rest else q :: insertPair p rest
+
+/-- A signed "v4" record of the private key `sk`, with a sequence number and other pairs.
+
+It adds the pair `id` with `v4` and the pair `secp256k1` with the compressed form of `sk G`.
+
+The keys must then strictly increase, so the other pairs come in key order and use neither key.
+
+It fails on a record of more than 300 bytes, which the decoder rejects. -/
+def makeRecordV4 (sk : Fn) (seq : UInt64) (pairs : List (ByteArray × Item)) :
+    Except EnrError Enr := do
+  let key := (Point.mul sk Point.generator).encodeCompressed
+  let all := insertPair (KEY_ID, .bytes SCHEME_V4) (insertPair (KEY_SECP256K1, .bytes key) pairs)
+  checkKeys all
+  let r ← signV4 sk ⟨.empty, seq, all⟩
+  let bytes ← r.encode.mapError .rlp
+  if MAX_RECORD_SIZE < bytes.size then throw (.tooLarge bytes.size)
+  return r
+
 end EthLib.Networking.Enr

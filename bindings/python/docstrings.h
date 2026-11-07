@@ -221,6 +221,9 @@
 #define DOC_enr_sign_v4 \
   "The bytes of a record, signed again with a private key by the \"v4\" scheme."
 
+#define DOC_enr_make_record_v4 \
+  "The bytes of a new \"v4\" record of a private key, a sequence number and other pairs."
+
 #define DOC_enr_consensus_entries \
   "The consensus entries of a record at the named fork, with `count` attestation subnets."
 
