@@ -344,4 +344,17 @@ theorem exists_mem_of_mapM_ok {xs : List α} {ys : List β}
     · obtain ⟨y', member', step⟩ := ih others member
       exact ⟨y', List.mem_cons_of_mem _ member', step⟩
 
+/-- Each element of a list gives a result when the monadic flat map over the list succeeds. -/
+theorem flatMapM_ok_of_mem {α β ε : Type} {f : α → Except ε (List β)} :
+    ∀ {xs : List α} {ys : List β}, xs.flatMapM f = .ok ys → ∀ x ∈ xs, ∃ zs, f x = .ok zs
+  | [], _, _, _, mem => by cases mem
+  | x :: xs, ys, h, y, mem => by
+    rw [List.flatMapM_cons, bind_ok_iff] at h
+    obtain ⟨zs, first, h⟩ := h
+    rw [bind_ok_iff] at h
+    obtain ⟨rest, restOk, -⟩ := h
+    rcases List.mem_cons.mp mem with rfl | mem
+    · exact ⟨zs, first⟩
+    · exact flatMapM_ok_of_mem restOk y mem
+
 end EthLib.Base
