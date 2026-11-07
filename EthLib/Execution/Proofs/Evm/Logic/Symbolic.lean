@@ -135,10 +135,11 @@ theorem decode_push (n : Fin 33) (hn : n.val ≠ 0) :
   revert n
   decide
 
-/-- PUSHn, for `n` from 1, pushes the word of the `n` bytes after it, for 3 gas. -/
-theorem push {n : Fin 33} {word : U256} (hn : n.val ≠ 0) (hlt : pc < code.size)
-    (hbyte : code[pc] = 0x5f + UInt8.ofNat n.val)
-    (decoded : Op.decode (0x5f + UInt8.ofNat n.val) = some (.push n))
+/-- PUSHn, for the `n` from 1 that the byte at the program counter decodes to.
+
+It pushes the word of the `n` bytes after it, for 3 gas. -/
+theorem push_of_decode {byte : UInt8} {n : Fin 33} {word : U256} (hlt : pc < code.size)
+    (hbyte : code[pc] = byte) (decoded : Op.decode byte = some (.push n)) (hn : n.val ≠ 0)
     (hword : pushData code pc n = word) (hgas : 3 ≤ gas) (hstack : stack.length < STACK_LIMIT) :
     Hoare fork (At code message pc stack memory gas state substate)
       (At code message (pc + (1 + n)) (word :: stack) memory (gas - 3) state substate) := by
@@ -150,6 +151,15 @@ theorem push {n : Fin 33} {word : U256} (hn : n.val ≠ 0) (hlt : pc < code.size
   rw [pushN_nat hn (by rw [hg]; exact hgas) hlen]
   refine ⟨_, rfl, hcode, hj, hm, by simp [hpc], by simp [hst, hcode, hpc, hword], hmem,
     by simp [hg, OPCODE_PUSH, VERY_LOW], hrun, herr, hs, hss⟩
+
+/-- PUSHn, for `n` from 1, pushes the word of the `n` bytes after it, for 3 gas. -/
+theorem push {n : Fin 33} {word : U256} (hn : n.val ≠ 0) (hlt : pc < code.size)
+    (hbyte : code[pc] = 0x5f + UInt8.ofNat n.val)
+    (decoded : Op.decode (0x5f + UInt8.ofNat n.val) = some (.push n))
+    (hword : pushData code pc n = word) (hgas : 3 ≤ gas) (hstack : stack.length < STACK_LIMIT) :
+    Hoare fork (At code message pc stack memory gas state substate)
+      (At code message (pc + (1 + n)) (word :: stack) memory (gas - 3) state substate) :=
+  push_of_decode hlt hbyte decoded hn hword hgas hstack
 
 /-- PUSH1 pushes the byte after it and costs 3, with room on the stack. -/
 theorem push1 {byte : UInt8} (hlt : pc + 1 < code.size) (hop : code[pc]'(by omega) = 0x60)

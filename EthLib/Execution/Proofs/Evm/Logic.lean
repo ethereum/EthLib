@@ -11,6 +11,8 @@ public import EthLib.Execution.Proofs.Evm.Logic.Callee
 public import EthLib.Execution.Proofs.Evm.Logic.Rules
 public import EthLib.Execution.Proofs.Evm.Logic.Branch
 public import EthLib.Execution.Proofs.Evm.Logic.Stack
+public import EthLib.Execution.Proofs.Evm.Logic.NatCode
+public import EthLib.Execution.Proofs.Evm.Logic.Steps
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.Return42
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.SlotOfCalldata
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.SumLoop
@@ -35,6 +37,8 @@ It has the frames that a frame reaches, triples over them, rules for opcodes and
 A triple over frames that send messages takes an assumption on the frames that end the messages.
 
 Its run may also abort, when the runner of messages fails.
+
+A code can be stored as one number, and a tactic steps through its opcodes.
 
 Worked examples prove whole contracts.
 -/

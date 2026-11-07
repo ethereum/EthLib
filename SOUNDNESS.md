@@ -659,6 +659,13 @@ A run that ends out of gas ends in an exceptional halt, so a postcondition of a 
 `Logic/Rules.lean` gives the rule for DUP1 to DUP16, and the rule for DUP1 is its case at depth 0.
 Every opcode whose instruction takes one, two or three operands runs by the matching rule, with its instruction from the fork.
 DUPN, SWAPN and EXCHANGE of Glamsterdam have no rule yet.
+`Logic/NatCode.lean` stores a code of `size` bytes as one natural number.
+It states the size of the code, its bytes and the data of a PUSH from that number.
+`NatCode.valid_of_walk` proves that a JUMPDEST is a valid jump destination when a walk along the opcodes from position 0 reaches it.
+`decide +kernel` checks the walk.
+`Logic/Steps.lean` defines the tactic `evm_step`, which applies the rule of the opcode at the program counter and proves the facts about the code by evaluation.
+The tactic proves nothing on its own: each step it takes applies one of the rules above, and the kernel checks the result.
+`SlotOfCalldata` stores its code as one number and runs its opcodes of the stack and its jumps with the tactic.
 From Berlin, the rule for SLOAD takes as a hypothesis whether the slot is cold, and charges 2100 or 100 by EIP-2929.
 `Logic.sstore` is the rule for SSTORE from Berlin to before Glamsterdam, in a frame that may change the state and holds more than 2300 gas.
 It charges `sstoreCost` and adds `sstoreRefund` to the refund counter, from the original, current and new words and whether the slot is cold.
