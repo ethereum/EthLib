@@ -13,11 +13,11 @@ The opcodes that the fork gives such an instruction run by the rules for one, tw
 
 POP drops the top word, for 2 gas.
 
-DUP1 to DUP16 push a copy of the word at their depth, and need room for one more word.
+The rule for DUP1 to DUP16 sits with the other rules, and pushes a copy of the word at a depth.
 
 SWAP1 to SWAP16 exchange the top word with the word at their depth.
 
-Each DUP and SWAP costs 3 gas.
+Each SWAP costs 3 gas.
 
 EXP pays its base price and the price per byte of its exponent that the fork sets.
 
