@@ -235,18 +235,32 @@ theorem mload {start : U256} {rest : List U256} (hlt : pc < code.size)
   · simp
   · simp
 
+/-- The byte `0x80 + n` decodes as DUP(n + 1). -/
+theorem decode_dup (n : Fin 16) : Op.decode (0x80 + n.val).toUInt8 = some (.dup n) := by
+  revert n
+  decide
+
+/-- DUP(n + 1) pushes a copy of the word `x` at depth `n`, for 3 gas, with room for a word. -/
+theorem dup (n : Fin 16) {x : U256} (hlt : pc < code.size)
+    (hbyte : code[pc] = (0x80 + n.val).toUInt8) (hx : stack[n.val]? = some x) (hgas : 3 ≤ gas)
+    (hstack : stack.length < STACK_LIMIT) :
+    Hoare fork (At code message pc stack memory gas state substate)
+      (At code message (pc + 1) (x :: stack) memory (gas - 3) state substate) := by
+  apply At.rule hlt hbyte (ofByte_of_decode (decode_dup n) (Fork.frontier_le _))
+    (instruction_dup n)
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
+  have hlen : evm.stack.val.length < STACK_LIMIT := by rw [hst]; exact hstack
+  rw [dupN_of_getElem? (x := x) (by rw [hst]; exact hx) hlen,
+    charge_nat (by rw [hg]; exact hgas)]
+  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], by simp [hst], hmem,
+    by simp [hg, OPCODE_DUP, VERY_LOW], hrun, herr, hs, hss⟩
+
 /-- DUP1 pushes a copy of the top word, for 3 gas. -/
 theorem dup1 {x : U256} {rest : List U256} (hlt : pc < code.size) (hbyte : code[pc] = 0x80)
     (hgas : 3 ≤ gas) (hstack : (x :: rest).length < STACK_LIMIT) :
     Hoare fork (At code message pc (x :: rest) memory gas state substate)
-      (At code message (pc + 1) (x :: x :: rest) memory (gas - 3) state substate) := by
-  apply At.rule hlt hbyte (ofByte_of_decode (op := .dup 0) rfl (Fork.frontier_le _))
-    (instruction_dup 0)
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
-  have hlen : evm.stack.val.length < STACK_LIMIT := by rw [hst]; exact hstack
-  rw [dupN_of_getElem? (x := x) (by simp [hst]) hlen, charge_nat (by rw [hg]; exact hgas)]
-  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], by simp [hst], hmem,
-    by simp [hg, OPCODE_DUP, VERY_LOW], hrun, herr, hs, hss⟩
+      (At code message (pc + 1) (x :: x :: rest) memory (gas - 3) state substate) :=
+  dup 0 hlt (by rw [hbyte]; rfl) rfl hgas hstack
 
 /-- JUMPDEST costs 1 and goes on. -/
 theorem jumpdest (hlt : pc < code.size) (hbyte : code[pc] = 0x5b) (hgas : 1 ≤ gas) :

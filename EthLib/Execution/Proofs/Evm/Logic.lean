@@ -10,6 +10,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Log
 public import EthLib.Execution.Proofs.Evm.Logic.Callee
 public import EthLib.Execution.Proofs.Evm.Logic.Rules
 public import EthLib.Execution.Proofs.Evm.Logic.Branch
+public import EthLib.Execution.Proofs.Evm.Logic.Stack
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.Return42
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.SlotOfCalldata
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.SumLoop

@@ -73,6 +73,21 @@ theorem swapN_of_length_le {n : Fin 16} {evm : Evm fork Meter} {gas : Meter}
     simp [swapN, chargeGas, paid, bind, Except.bind, pure, Except.pure, hs,
       List.getElem?_eq_none_iff.mpr (show rest.length ≤ n.val by omega)]
 
+/-- SWAP(n + 1) on a stack with `top` on top and `x` at depth `n + 1`: pay, then exchange them. -/
+theorem swapN_of_getElem? {n : Fin 16} {evm : Evm fork Meter} {top x : U256} {rest : List U256}
+    (h : evm.stack.val = top :: rest) (hx : rest[n.val]? = some x) :
+    swapN n evm = (GasMeter.charge evm.gas OPCODE_SWAP).map fun gas =>
+      { evm with
+        stack := ⟨x :: rest.set n.val top, by
+          have := evm.stack.property
+          rw [h] at this
+          simpa using this⟩,
+        gas, pc := evm.pc + 1 } := by
+  have hstack : evm.stack = ⟨top :: rest, h ▸ evm.stack.property⟩ := Subtype.ext h
+  rcases hc : GasMeter.charge evm.gas OPCODE_SWAP with _ | _ <;>
+    simp [hc, swapN, chargeGas, bind, Except.bind, pure, Except.pure, Except.map, hstack, hx,
+      advance]
+
 /-- POP on a stack with `x` on top: pay, then drop `x`. -/
 theorem popStep_cons {evm : Evm fork Meter} {x : U256} {rest : List U256}
     (h : evm.stack.val = x :: rest) :
@@ -107,10 +122,12 @@ theorem pushN_of_length_lt {n : Fin 33} {evm : Evm fork Meter}
     simp [hc, chargeGas, bind, Except.bind, pure, Except.pure, Except.map, pushWord,
       Stack.push, full, advance]
 
-/-- From Spurious Dragon, EXP costs 10 plus 50 per byte of the exponent, by EIP-160. -/
-theorem expStep_cons {fork : Fork} (hfork : fork ≥ .spuriousDragon) {evm : Evm fork Meter}
-    {base exponent : U256} {rest : List U256} (h : evm.stack.val = base :: exponent :: rest) :
-    expStep fork evm = (GasMeter.charge evm.gas (10 + 50 * exponentBytes exponent)).map fun gas =>
+/-- EXP pays its base price and its price per byte of the exponent, which the fork sets. -/
+theorem expStep_of_cons {fork : Fork} {evm : Evm fork Meter} {base exponent : U256}
+    {rest : List U256} (h : evm.stack.val = base :: exponent :: rest) :
+    expStep fork evm = (GasMeter.charge evm.gas
+      (OPCODE_EXP_BASE + (gasSchedule fork).OPCODE_EXP_PER_BYTE * exponentBytes exponent)).map
+        fun gas =>
       { evm with
         stack := ⟨exp base exponent :: rest,
           length_cons_le (dropped := [base, exponent]) h (by simp)⟩,
@@ -120,15 +137,24 @@ theorem expStep_cons {fork : Fork} (hfork : fork ≥ .spuriousDragon) {evm : Evm
     have := length_cons_le (x := base) (dropped := [base, exponent]) h (by simp)
     simp only [List.length_cons] at this
     omega
-  have price : OPCODE_EXP_BASE + (gasSchedule fork).OPCODE_EXP_PER_BYTE * exponentBytes exponent =
-      10 + 50 * exponentBytes exponent := by
-    simp [OPCODE_EXP_BASE, gasSchedule, hfork]
-  rw [← price]
   simp only [expStep, popWord, chargeGas, pushWord, advance, hstack, Stack.pop, Stack.push]
   rcases hc : GasMeter.charge evm.gas
       (OPCODE_EXP_BASE + (gasSchedule fork).OPCODE_EXP_PER_BYTE * exponentBytes exponent) with
     _ | _ <;>
     simp [hc, bind, Except.bind, pure, Except.pure, Except.map, room]
+
+/-- From Spurious Dragon, EXP costs 10 plus 50 per byte of the exponent, by EIP-160. -/
+theorem expStep_cons {fork : Fork} (hfork : fork ≥ .spuriousDragon) {evm : Evm fork Meter}
+    {base exponent : U256} {rest : List U256} (h : evm.stack.val = base :: exponent :: rest) :
+    expStep fork evm = (GasMeter.charge evm.gas (10 + 50 * exponentBytes exponent)).map fun gas =>
+      { evm with
+        stack := ⟨exp base exponent :: rest,
+          length_cons_le (dropped := [base, exponent]) h (by simp)⟩,
+        gas, pc := evm.pc + 1 } := by
+  have price : OPCODE_EXP_BASE + (gasSchedule fork).OPCODE_EXP_PER_BYTE * exponentBytes exponent =
+      10 + 50 * exponentBytes exponent := by
+    simp [OPCODE_EXP_BASE, gasSchedule, hfork]
+  rw [expStep_of_cons h, price]
 
 /-- KECCAK256 pays its price on the hashed bytes, plus the growth of memory to hold them. -/
 theorem keccak256Step_cons {evm : Evm fork Meter} {start size : U256} {rest : List U256}
