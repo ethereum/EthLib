@@ -6,6 +6,7 @@ import pytest
 from ruamel.yaml import YAML
 
 from dumper import ROOT
+from ethlib.cryptography import xmss
 
 # Key generation and signing build `2^16` one-time keys per tree.
 # That takes the compiled specification minutes per case.
@@ -23,13 +24,13 @@ slow = pytest.mark.skipif(not SLOW, reason="set ETHLIB_SLOW_VECTORS=1 to regener
 # ---- Seeds and messages ----------------------------------------------------
 
 # The seed of the known answer the proofs pin: byte i is 37 i + 11 mod 256.
-SEED_KNOWN_ANSWER = bytes((37 * i + 11) % 256 for i in range(32))
+SEED_KNOWN_ANSWER = bytes((37 * i + 11) % 256 for i in range(xmss.SEED_LEN))
 
 # The all-zero seed, a second key.
-SEED_ZERO = bytes(32)
+SEED_ZERO = bytes(xmss.SEED_LEN)
 
 # The message of the known answer: byte i is 7 i + 3.
-MESSAGE_KNOWN_ANSWER = bytes(7 * i + 3 for i in range(32))
+MESSAGE_KNOWN_ANSWER = bytes(7 * i + 3 for i in range(xmss.MESSAGE_LEN))
 
 
 # ---- Leaf indices ----------------------------------------------------------

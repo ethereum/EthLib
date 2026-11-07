@@ -6,6 +6,7 @@ import pytest
 from ruamel.yaml import YAML
 
 from dumper import ROOT
+from ethlib.cryptography import sphincs
 
 # Key generation builds the top tree, `2^10` one-time keys.
 # Signing builds the FORS key and three trees.
@@ -26,16 +27,16 @@ slow = pytest.mark.skipif(not SLOW, reason="set ETHLIB_SLOW_VECTORS=1 to regener
 # Byte i is 37 i + 11 mod 256.
 # The proofs pin the key of this scheme seed;
 # as a key's seed, it is first hashed with the scheme's name.
-SEED_KNOWN_ANSWER = bytes((37 * i + 11) % 256 for i in range(32))
+SEED_KNOWN_ANSWER = bytes((37 * i + 11) % 256 for i in range(sphincs.SEED_LEN))
 
 # The all-zero seed, a second key.
-SEED_ZERO = bytes(32)
+SEED_ZERO = bytes(sphincs.SEED_LEN)
 
 # The message of the known answer: byte i is 7 i + 3.
-MESSAGE_KNOWN_ANSWER = bytes(7 * i + 3 for i in range(32))
+MESSAGE_KNOWN_ANSWER = bytes(7 * i + 3 for i in range(sphincs.MESSAGE_LEN))
 
 # The all-zero message, which the digest sends to another FORS instance.
-MESSAGE_ZERO = bytes(32)
+MESSAGE_ZERO = bytes(sphincs.MESSAGE_LEN)
 
 
 # ---- The key of a scheme seed ----------------------------------------------

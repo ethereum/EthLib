@@ -68,7 +68,8 @@ def test_byte_order() -> None:
     # Bytes 01 02 03 04, then zeros.
     #
     # Little-endian, the first byte is the least significant: 0x04030201.
-    signature = bytes([1, 2, 3, 4]) + bytes(xmss.SIG_SIZE - 4)
+    index = bytes([1, 2, 3, 4])
+    signature = index + bytes(xmss.SIG_SIZE - len(index))
     _emit(f"{HANDLER}_byte_order", signature, expected=0x0403_0201)
 
 
