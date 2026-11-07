@@ -261,6 +261,18 @@ def clearCofactor (P : G2 F) : G2 F :=
   let t3 := G2.add t3 (G2.neg t1)
   G2.add t3 (G2.neg P)
 
+/-- The scalar `h_eff` of the suites for `G2` of BLS12-381, RFC 9380 §8.8.2.
+
+RFC 9380 §7 defines the cofactor clearing as the multiplication by `h_eff`.
+
+The cofactor clearing above uses the faster method of Appendix G.3 instead.
+
+The three hexadecimal parts are the three lines of the value in the RFC. -/
+def H_EFF_G2 : Nat :=
+  0xbc69f08f2ee75b3584c6a0ea91b352888e2a8e9145ad7689986ff0315 * 16 ^ 102 +
+    0x08ffe1329c2f178731db956d82bf015d1212b02ec0ec69d7477c1ae954cbc06689 * 16 ^ 36 +
+    0xf6a359894c0adebbf6b4e8020005aaa95551
+
 /-! ## Top-level pipeline -/
 
 /-- Hash a message + DST to a G2 point on BLS12-381. -/

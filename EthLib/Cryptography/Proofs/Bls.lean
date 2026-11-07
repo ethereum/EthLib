@@ -44,6 +44,7 @@ public import EthLib.Cryptography.Proofs.Bls.CofactorIndependence
 public import EthLib.Cryptography.Proofs.Bls.CofactorPrimes
 public import EthLib.Cryptography.Proofs.Bls.CofactorSpan
 public import EthLib.Cryptography.Proofs.Bls.CofactorSubgroupLanding
+public import EthLib.Cryptography.Proofs.Bls.CofactorEffective
 public import EthLib.Cryptography.Proofs.Bls.G2SubgroupSpan
 public import EthLib.Cryptography.Proofs.Bls.PairingCongr
 public import EthLib.Cryptography.Proofs.Bls.FinalExponentiation
