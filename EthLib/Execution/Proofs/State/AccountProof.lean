@@ -32,6 +32,10 @@ The same holds for each slot, when the answer gives the word `0` to a slot witho
 The state and storage tries of a state have distinct keys, so soundness holds for them as stated.
 
 Completeness needs distinct paths, which in a secured trie means keys with distinct hashes.
+
+Each of the two checks passes exactly when the proof gives no value, or a value matching the answer.
+
+A slot without a value also needs the word `0` in the answer.
 -/
 
 @[expose] public section
@@ -76,6 +80,30 @@ theorem verifyAccount_eq_ok {stateRoot : Hash32} {p : AccountProof} {present : B
           exact ⟨hd, h.symm⟩
         · simp [hm, throw, throwThe, MonadExceptOf.throw] at h
 
+/-- The account check passes exactly when the proof gives no value, or a matching value.
+
+A value must decode to the account and the storage root of the answer.
+
+The check then reports the account present.
+
+No value means the account is absent. -/
+theorem verifyAccount_eq_ok_iff {stateRoot : Hash32} {p : AccountProof} {present : Bool} :
+    p.verifyAccount hash stateRoot = .ok present ↔
+      ∃ value,
+        verifyProof hash stateRoot true ⟨p.address.toArray⟩ p.accountProof = .ok value ∧
+        match value with
+        | some bytes => decodeAccount bytes = .ok (p.account, p.storageHash) ∧ present = true
+        | none => present = false := by
+  refine ⟨verifyAccount_eq_ok, fun ⟨value, hv, hmatch⟩ => ?_⟩
+  unfold verifyAccount
+  cases value with
+  | none =>
+    subst hmatch
+    simp [hv, Except.mapError, bind, Except.bind, pure, Except.pure]
+  | some bytes =>
+    obtain ⟨hd, rfl⟩ := hmatch
+    simp [hv, hd, Except.mapError, bind, Except.bind, pure, Except.pure]
+
 /-- The value that the slot check reads, and the outcome that it gives on that value. -/
 theorem verifySlot_eq_ok {storageRoot : Hash32} {index : Nat} {s : StorageProof}
     {outcome : SlotOutcome} (h : verifySlot hash storageRoot index s = .ok outcome) :
@@ -107,6 +135,28 @@ theorem verifySlot_eq_ok {storageRoot : Hash32} {index : Nat} {s : StorageProof}
           simp only [↓reduceIte, pure, Except.pure, Except.ok.injEq] at h
           exact ⟨hd, h.symm⟩
         · simp [hm, throw, throwThe, MonadExceptOf.throw] at h
+
+/-- The slot check passes exactly when the proof gives a matching value, or none and the word `0`.
+
+A value must decode to the word of the answer, and the check reports the slot set.
+
+No value means the slot is absent, and the answer must give it the word `0`. -/
+theorem verifySlot_eq_ok_iff {storageRoot : Hash32} {index : Nat} {s : StorageProof}
+    {outcome : SlotOutcome} :
+    verifySlot hash storageRoot index s = .ok outcome ↔
+      ∃ value, verifyProof hash storageRoot true ⟨s.key.toArray⟩ s.proof = .ok value ∧
+        match value with
+        | some bytes => (Codec.decode bytes : Except RlpError U256) = .ok s.value ∧ outcome = .set
+        | none => s.value = 0 ∧ outcome = .absent := by
+  refine ⟨verifySlot_eq_ok, fun ⟨value, hv, hmatch⟩ => ?_⟩
+  unfold verifySlot
+  cases value with
+  | none =>
+    obtain ⟨hz, rfl⟩ := hmatch
+    simp [hv, hz, Except.mapError, bind, Except.bind, pure, Except.pure]
+  | some bytes =>
+    obtain ⟨hd, rfl⟩ := hmatch
+    simp [hv, hd, Except.mapError, bind, Except.bind, pure, Except.pure]
 
 /-- An account whose proven fields differ from those of the answer fails with `accountMismatch`. -/
 theorem verifyAccount_eq_accountMismatch {stateRoot : Hash32} {p : AccountProof}
