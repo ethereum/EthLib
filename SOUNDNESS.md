@@ -664,8 +664,10 @@ Its postcondition gives the state and substate that the frame that ends the mess
 `CallFlag.runFrame_spec` proves a contract that calls the address in its call data and returns 1 when the callee ends with no error, and 0 otherwise.
 With every runner that meets the assumption, the run returns that word or aborts with an error that aborts the run.
 `CallFlag.runFrame_process` states it for the runner of messages of the interpreter.
-`CallFlag.spec_success` proves that it returns 1 under the assumption that the callee ends with no error.
-That assumption is stronger than the one that `meets_process` proves, so `spec_success` does not yet apply to the runs of `processMessage`.
+`meets_process_noCode` proves that the runner of the interpreter meets one more assumption.
+That assumption says that a message with no code, to an account that is no precompile, ends with no error.
+So `CallFlag.runFrame_process_noCode` proves that the contract returns 1 when the address holds no code and is no precompile, unless the run aborts.
+No theorem yet gives the outcome of a call to code.
 No rule covers CREATE, a call with value, DELEGATECALL or STATICCALL.
 
 ### SHA-256 precompile

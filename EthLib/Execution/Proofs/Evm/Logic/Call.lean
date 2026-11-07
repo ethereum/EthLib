@@ -21,9 +21,7 @@ The call pays the access to the address: 2600 when cold and 100 when warm, by EI
 
 It passes on the gas it asks for, at most all but one 64th of the gas left after that, by EIP-150.
 
-The call of the execution specifications for Prague pays and passes on the same.
-
-Source: EIP-150, EIP-2929, EIP-7702, and `call` in `vm/instructions/system.py` for Prague.
+Sources: EIP-150, EIP-2929 and EIP-7702.
 
 The callee runs arbitrary code, so the rule takes an assumption on the frame that ends the message.
 
@@ -34,6 +32,10 @@ It gets back the gas that the frame leaves, and its state and substate are those
 The callee may even call the caller again.
 
 So the rule says nothing more about the state after the call.
+
+The runner of the interpreter meets one assumption beyond the trivial one.
+
+A message with no code, to an account that is no precompile, ends with no error.
 
 Out of scope: CREATE, a call with value, DELEGATECALL, STATICCALL, and a call out of gas.
 -/
@@ -77,6 +79,7 @@ theorem callStep_call_of_empty (hfork : .berlin ≤ fork) (hglam : fork < .glams
       msg.gas = min g.toNat (maxMessageCallGas (evm.gas -
         callBaseCost fork (decide (toAddressMasked a ∉ evm.substate.accessedAddresses)))) ∧
       msg.caller = evm.message.currentTarget ∧ msg.currentTarget = toAddressMasked a ∧
+      msg.target = some (toAddressMasked a) ∧ msg.codeAddress = some (toAddressMasked a) ∧
       msg.code = calleeCode ∧ msg.data = .empty ∧ msg.value = 0 ∧
       msg.depth = evm.message.depth + 1 := by
   have hng : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hglam
@@ -113,7 +116,7 @@ theorem callStep_call_of_empty (hfork : .berlin ≤ fork) (hglam : fork < .glams
     GasMeter.gasLeft, GasMeter.drain, GasMeter.reservoir, hgas', Nat.not_lt.mpr hmin,
     Nat.not_lt.mpr hdepth, memoryExtend_zero, memoryReadBytes]
   exact ⟨_, _, ⟨rfl, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl,
-    rfl, rfl, rfl, rfl, rfl⟩
+    rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- A caller with room on its stack resumes from every frame that ends its message.
 
@@ -189,6 +192,7 @@ theorem call (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
           accessedAddresses := substate.accessedAddresses.insert (toAddressMasked to) } ∧
         msg.gas = callGas asked gas (if cold then 2600 else 100) ∧
         msg.caller = message.currentTarget ∧ msg.currentTarget = toAddressMasked to ∧
+        msg.target = some (toAddressMasked to) ∧ msg.codeAddress = some (toAddressMasked to) ∧
         msg.code = calleeCode ∧ msg.data = .empty ∧ msg.value = 0 ∧
         msg.depth = message.depth + 1 ∧
         At code message (pc + 1) ((if child.error.isNone then 1 else 0) :: rest) memory
@@ -200,8 +204,9 @@ theorem call (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
   rintro evm ⟨hc, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
   have hcost := callBaseCost_of_berlin hfork hglam cold
   subst hm hg hs hss hcold
-  obtain ⟨caller, msg, hstep, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, m1, m2, m3, m4, m5, m6,
-      m7⟩ := callStep_call_of_empty hfork hglam hst hcode hdel hdepth (by rw [hcost]; exact hgas)
+  obtain ⟨caller, msg, hstep, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, m1, m2, m3, mt, mca, m4,
+      m5, m6, m7⟩ :=
+    callStep_call_of_empty hfork hglam hst hcode hdel hdepth (by rw [hcost]; exact hgas)
   refine ⟨hrun, caller, msg, resumeCall fork caller 0 outputStart 0, ?_, ?_⟩
   · rw [step_of_messageInstruction (by rw [hc, hpc]; exact hlt)
       (by simp only [hc, hpc, hbyte]; exact ofByte_of_decode (op := .call) rfl (Fork.frontier_le _))
@@ -216,8 +221,8 @@ theorem call (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       omega
     obtain ⟨after, hres, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11⟩ :=
       resumeCall_of_empty (child := child) (o := outputStart) hlen
-    refine .inl ⟨after, hres, caller, msg, child, hcallee, hchild, c10, c11, ?_, m2, m3, m4, m5,
-      m6, m7, ?_⟩
+    refine .inl ⟨after, hres, caller, msg, child, hcallee, hchild, c10, c11, ?_, m2, m3, mt, mca,
+      m4, m5, m6, m7, ?_⟩
     · rw [m1, hcost]
       rfl
     · refine ⟨by rw [a1, c1, hc], by rw [a2, c2, hj], by rw [a3, c3], by rw [a4, c4, hpc],
@@ -225,5 +230,63 @@ theorem call (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
         a10, a11⟩
       rw [a7, c7, hcost]
       rfl
+
+/-- The assumption that a call that runs no code, and reaches no precompile, ends with no error. -/
+def NoCodeSucceeds {Meter : Type} [GasMeter Meter] (_caller : Evm fork Meter)
+    (message : Message fork) (child : Evm fork Meter) : Prop :=
+  message.code = .empty → message.target.isSome = true → precompileAddress fork message = none →
+    child.error = none
+
+/-- A running frame past the end of its code stops at once, with no error when it had none. -/
+theorem error_runFrame_of_code_le {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter]
+    {bound : Nat} {runChild : MessageRunner fork Meter bound} {evm after : Evm fork Meter}
+    {within : GasMeter.gasHeld evm.gas ≤ bound} (hsize : evm.code.size ≤ evm.pc)
+    (running : evm.running = true) (herr : evm.error = none)
+    (h : runFrame (step fork) (step_decreases fork) bound runChild evm within = .ok after) :
+    after.error = none := by
+  have hs : step fork evm = .ok (.next (advance { evm with running := false })) := by
+    unfold step
+    simp only [Nat.not_lt.mpr hsize, dite_false]
+    rfl
+  rw [runFrame_of_step_eq_next running hs, runFrame_of_running_eq_false rfl] at h
+  cases h
+  simpa [advance] using herr
+
+/-- A message with no code, to an account that is no precompile, ends with no error.
+
+That holds whenever the interpreter returns a frame for it. -/
+theorem error_processMessage_of_empty {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter]
+    {message : Message fork} {state : State.TransactionState} {substate : Substate}
+    {ended : { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas }}
+    (hcode : message.code = .empty) (hpre : precompileAddress fork message = none)
+    (h : processMessage fork message state substate = .ok ended) : ended.val.error = none := by
+  rw [processMessage] at h
+  obtain ⟨ended0, hdo, rfl⟩ := Base.map_ok_iff.mp h
+  split at hdo <;> (dsimp only at hdo; split at hdo)
+  all_goals
+    obtain ⟨state1, -, hdo⟩ := Base.bind_ok_iff.mp hdo
+    simp only [hpre] at hdo
+    split at hdo
+    · cases hdo
+    · rename_i after hrun
+      cases hdo
+      have hnone := error_runFrame_of_code_le (by simp [startFrame, hcode]) rfl rfl hrun
+      simp [rollbackOnError, hnone]
+
+/-- The runner of the interpreter meets the assumption that a call to no code ends with no error.
+
+It runs a call or a creation, as the code of a message runs them, for every bound on their gas. -/
+theorem meets_process_noCode {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter] (fork : Fork)
+    (bound : Nat) :
+    Meets (bound := bound) (NoCodeSucceeds (fork := fork) (Meter := Meter))
+      fun (caller : Evm fork Meter) message _ =>
+        match message.target with
+        | some _ => processMessage fork message caller.state caller.substate.child
+        | none => processCreateMessage fork message caller.state caller.substate.child := by
+  refine ⟨fun caller message _ child h hcode htarget hpre => ?_, (meets_process fork bound).aborts⟩
+  split at h
+  · exact error_processMessage_of_empty hcode hpre h
+  · rename_i hnone
+    simp [hnone] at htarget
 
 end EthLib.Execution.Evm.Logic

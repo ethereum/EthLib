@@ -30,7 +30,9 @@ It says nothing of the state and substate after the call beyond what the frame o
 
 With the assumption that always holds, it says only that the contract returns 1 or 0 by that frame.
 
-With the assumption that the callee ends with no error, it returns 1.
+When the address holds no code and is no precompile, the call ends with no error.
+
+The runner of the interpreter meets that assumption, and then the contract returns 1.
 
 The rules are those of one counter of gas, from Berlin to the fork before Glamsterdam.
 
@@ -155,21 +157,25 @@ theorem finish {word : U256} {gas : Nat} {state : State.TransactionState} {subst
     rw [hread, hg] at hq
     exact hq)
 
-/-- What the run ends with, for an assumption on the callee.
+/-- What the run ends with, for an assumption on the callee and the code `calleeCode` it runs.
 
 Some caller and some frame that ends the message meet the assumption.
+
+The message calls the address and runs `calleeCode`.
 
 The contract returns the word that CALL pushed for that frame.
 
 The gas, the state and the substate are those that CALL gives. -/
-def Returned (callee : Evm fork Nat → Message fork → Evm fork Nat → Prop) (cold : Bool)
-    (gas : Nat) (evm : Evm fork Nat) : Prop :=
+def Returned (callee : Evm fork Nat → Message fork → Evm fork Nat → Prop) (calleeCode : ByteArray)
+    (cold : Bool) (gas : Nat) (evm : Evm fork Nat) : Prop :=
   ∃ caller msg child, callee caller msg child ∧ child.gas ≤ msg.gas ∧
     caller.state =
       (state.recordAccountRead (toAddressMasked (target message.data))).recordAccountRead
         message.currentTarget ∧
     msg.gas = callGas 65535 (gas - 24) (accessCost cold) ∧
     msg.currentTarget = toAddressMasked (target message.data) ∧
+    msg.target = some (toAddressMasked (target message.data)) ∧
+    msg.codeAddress = some (toAddressMasked (target message.data)) ∧ msg.code = calleeCode ∧
     Halted false (wordBytes (flag child))
       (gas - 24 - (callGas 65535 (gas - 24) (accessCost cold) + accessCost cold) + child.gas - 15)
       (incorporateChild fork caller child).state (incorporateChild fork caller child).substate evm
@@ -193,7 +199,7 @@ theorem spec (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     (hcold : decide (toAddressMasked (target message.data) ∉ substate.accessedAddresses) = cold)
     {gas : Nat} (hgas : 24 + accessCost cold + 960 ≤ gas) :
     SpecUnder fork callee (At CODE message 0 [] .empty gas state substate)
-      (Returned (state := state) (message := message) callee cold gas) := by
+      (Returned (state := state) (message := message) callee calleeCode cold gas) := by
   have hcall := Logic.call (fork := fork) (code := CODE) (message := message) (pc := 16)
     (memory := .empty) (gas := gas - 24) (state := state) (substate := substate) (callee := callee)
     (asked := 65535) (to := target message.data) (inputStart := 0) (outputStart := 0) (rest := [])
@@ -203,7 +209,8 @@ theorem spec (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
   refine SpecUnder.seq (HoareUnder.of_hoare (operands (by omega))) (HoareUnder.seq hcall ?_)
   apply HoareUnder.of_hoare
   rintro evm
-    ⟨caller, msg, child, hcallee, hle, hst, hss, hmg, hmc, hmt, hmcode, hmd, hmv, hmdep, hat⟩
+    ⟨caller, msg, child, hcallee, hle, hst, hss, hmg, hmc, hmt, hmtg, hmca, hmcode, hmd, hmv, hmdep,
+      hat⟩
   have hleft : 15 ≤ gas - 24 - (callGas 65535 (gas - 24) (if cold then 2600 else 100) +
       if cold then 2600 else 100) + child.gas := by
     have hmax : callGas 65535 (gas - 24) (if cold then 2600 else 100) ≤
@@ -215,7 +222,8 @@ theorem spec (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       simp only [accessCost, ite_true, Bool.false_eq_true, ite_false] at hgas hmax ⊢ <;> omega
   obtain ⟨stopped, hreach, halted, hq⟩ := finish (fork := fork) (message := message)
     (word := flag child) hleft evm hat
-  exact ⟨stopped, hreach, halted, caller, msg, child, hcallee, hle, hst, hmg, hmt, hq⟩
+  exact ⟨stopped, hreach, halted, caller, msg, child, hcallee, hle, hst, hmg, hmt, hmtg, hmca,
+    hmcode, hq⟩
 
 /-- The loop of the interpreter runs the code to its specification, or the run aborts.
 
@@ -237,7 +245,8 @@ theorem runFrame_spec (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     {evm : Evm fork Nat} (start : At CODE message 0 [] .empty gas state substate evm)
     (within : GasMeter.gasHeld evm.gas ≤ bound) :
     (∃ stopped, runFrame (step fork) (step_decreases fork) bound runChild evm within =
-      .ok stopped ∧ Returned (state := state) (message := message) callee cold gas stopped) ∨
+      .ok stopped ∧
+      Returned (state := state) (message := message) callee calleeCode cold gas stopped) ∨
     ∃ e, runFrame (step fork) (step_decreases fork) bound runChild evm within = .error e ∧
       e.aborts = true :=
   (spec hfork hglam hcode hdel hdepth hcold hgas).runFrame meets start within
@@ -262,7 +271,8 @@ theorem runFrame_process (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
           | some _ => processMessage fork message caller.state caller.substate.child
           | none => processCreateMessage fork message caller.state caller.substate.child)
         evm within = .ok stopped ∧
-      Returned (state := state) (message := message) (fun _ _ _ => True) cold gas stopped) ∨
+      Returned (state := state) (message := message) (fun _ _ _ => True) calleeCode cold gas
+        stopped) ∨
     ∃ e, runFrame (step fork) (step_decreases fork) bound
         (fun caller message _ => match message.target with
           | some _ => processMessage fork message caller.state caller.substate.child
@@ -270,24 +280,58 @@ theorem runFrame_process (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
         evm within = .error e ∧ e.aborts = true :=
   runFrame_spec hfork hglam hcode hdel hdepth hcold hgas (meets_process fork bound) start within
 
-/-- With a callee that ends with no error, the contract returns the word 1. -/
-theorem spec_success (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {cold : Bool}
-    {calleeCode : ByteArray}
+/-- When the address holds no code and is no precompile, the contract returns the word 1.
+
+That holds under the assumption that a call to no code ends with no error. -/
+theorem spec_noCode (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {cold : Bool}
     (hcode : state.getCode (state.getAccount (toAddressMasked (target message.data))).codeHash =
-      .ok calleeCode)
-    (hdel : .pectra ≤ fork → delegatedAddress calleeCode = none)
+      .ok .empty)
+    (hpre : Precompiles.isPrecompile fork
+      (toAddressMasked (target message.data)).toU256.toNat = false)
     (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
     (hcold : decide (toAddressMasked (target message.data) ∉ substate.accessedAddresses) = cold)
     {gas : Nat} (hgas : 24 + accessCost cold + 960 ≤ gas) :
-    SpecUnder fork (fun _ _ child => child.error = none)
-      (At CODE message 0 [] .empty gas state substate)
-      fun evm => Returned (state := state) (message := message)
-        (fun _ _ child => child.error = none) cold gas evm ∧ evm.output = wordBytes 1 := by
+    SpecUnder fork NoCodeSucceeds (At CODE message 0 [] .empty gas state substate)
+      fun evm => Returned (state := state) (message := message) NoCodeSucceeds .empty cold gas evm ∧
+        evm.output = wordBytes 1 := by
+  have hdel : Fork.pectra ≤ fork → delegatedAddress ByteArray.empty = none := fun _ => by
+    simp [delegatedAddress, isValidDelegation, DELEGATION_SIZE]
   apply (spec hfork hglam hcode hdel hdepth hcold hgas).consequence (fun _ hp => hp)
   intro evm hr
   refine ⟨hr, ?_⟩
-  obtain ⟨_, _, child, hnone, -, -, -, -, hhalt⟩ := hr
+  obtain ⟨_, msg, child, hcallee, -, -, -, -, htarget, hca, hmcode, hhalt⟩ := hr
+  have hnone : child.error = none :=
+    hcallee hmcode (by simp [htarget]) (by simp [precompileAddress, hca, hpre])
   have hflag : flag child = 1 := by simp [flag, hnone]
   rw [hhalt.2.2.1, hflag]
+
+/-- With the runner of messages of the interpreter, a call to no code makes the code return 1.
+
+The address holds no code and is no precompile, and the run may still abort. -/
+theorem runFrame_process_noCode (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+    {cold : Bool}
+    (hcode : state.getCode (state.getAccount (toAddressMasked (target message.data))).codeHash =
+      .ok .empty)
+    (hpre : Precompiles.isPrecompile fork
+      (toAddressMasked (target message.data)).toU256.toNat = false)
+    (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
+    (hcold : decide (toAddressMasked (target message.data) ∉ substate.accessedAddresses) = cold)
+    {gas : Nat} (hgas : 24 + accessCost cold + 960 ≤ gas) {bound : Nat} {evm : Evm fork Nat}
+    (start : At CODE message 0 [] .empty gas state substate evm)
+    (within : GasMeter.gasHeld evm.gas ≤ bound) :
+    (∃ stopped, runFrame (step fork) (step_decreases fork) bound
+        (fun caller message _ => match message.target with
+          | some _ => processMessage fork message caller.state caller.substate.child
+          | none => processCreateMessage fork message caller.state caller.substate.child)
+        evm within = .ok stopped ∧ stopped.output = wordBytes 1) ∨
+    ∃ e, runFrame (step fork) (step_decreases fork) bound
+        (fun caller message _ => match message.target with
+          | some _ => processMessage fork message caller.state caller.substate.child
+          | none => processCreateMessage fork message caller.state caller.substate.child)
+        evm within = .error e ∧ e.aborts = true := by
+  rcases (spec_noCode hfork hglam hcode hpre hdepth hcold hgas).runFrame
+      (meets_process_noCode fork bound) start within with ⟨stopped, hrun, -, hout⟩ | aborted
+  · exact .inl ⟨stopped, hrun, hout⟩
+  · exact .inr aborted
 
 end EthLib.Execution.Evm.Logic.CallFlag
