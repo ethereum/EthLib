@@ -49,6 +49,10 @@ No other text decodes to a number.
 
 A byte string without uppercase digits decodes exactly from `0x` and two lowercase digits per byte.
 
+An address, whose digits may be uppercase, decodes exactly from `0x` and two digits per byte.
+
+Each of those digits is in either case, and their lowercase forms are the hex encoding.
+
 The 64-bit decoder returns a number exactly when the decoder with the bound `2^64` returns it.
 
 The bounded byte decoder succeeds exactly when the byte decoder succeeds within the limit.
@@ -284,33 +288,33 @@ private def highDigit (b : UInt8) : Fin 16 := ⟨b.toNat / 16, by have := b.toNa
 /-- The low digit of a byte. -/
 private def lowDigit (b : UInt8) : Fin 16 := ⟨b.toNat % 16, by omega⟩
 
-/-- The decoder reads back the bytes of their hex encoding.
+/-- The two digits of each byte of a list, at positions `2 * i` and `2 * i + 1` of its encoding. -/
+private theorem flatMap_byteHexDigits_getElem? (data : List UInt8) (i : Nat) :
+    (data.flatMap byteHexDigits)[2 * i]? = data[i]?.map (fun b => hexDigitChar (highDigit b)) ∧
+    (data.flatMap byteHexDigits)[2 * i + 1]? = data[i]?.map (fun b => hexDigitChar (lowDigit b)) :=
+  flatMap_pair_getElem? (fun b => hexDigitChar (highDigit b)) (fun b => hexDigitChar (lowDigit b))
+    data i
 
-This holds whether or not it accepts uppercase digits. -/
-theorem bytesOf_hexString (what : String) (upper : Bool) (data : List UInt8) :
-    bytesOf what upper (.str (hexString data)) = .ok data.toByteArray := by
+/-- The hex encoding writes two digits for each byte. -/
+private theorem length_flatMap_byteHexDigits (data : List UInt8) :
+    (data.flatMap byteHexDigits).length = 2 * data.length := by
+  rw [List.length_flatMap]
+  simp only [byteHexDigits, List.length_cons, List.length_nil]
+  exact sum_two data
+
+/-- The decoder returns the bytes whose two digits it reads at positions `2 * i` and `2 * i + 1`.
+
+This holds when the text after `0x` has exactly two digit codes for each byte. -/
+private theorem bytesOf_of_hexDigits {what : String} {upper : Bool} {j : Lean.Json}
+    {ds data : List UInt8} (hj : hexDigits what j = .ok ds.toByteArray)
+    (hlen : ds.length = 2 * data.length)
+    (hidx : ∀ (i : Nat) (hi : i < data.length),
+      ds[2 * i]?.bind (hexValue upper) = some (highDigit data[i]).val.toUInt8 ∧
+        ds[2 * i + 1]?.bind (hexValue upper) = some (lowDigit data[i]).val.toUInt8) :
+    bytesOf what upper j = .ok data.toByteArray := by
   unfold bytesOf
-  rw [hexDigits_hexString]
+  rw [hj]
   simp only [bind, Except.bind, pure, Except.pure]
-  have hflat : data.flatMap byteHexDigits =
-      data.flatMap fun b => [hexDigitChar (highDigit b), hexDigitChar (lowDigit b)] := rfl
-  have hidx : ∀ i, ((data.flatMap byteHexDigits).map fun c => c.val.toUInt8)[2 * i]? =
-        data[i]?.map (fun b => (hexDigitChar (highDigit b)).val.toUInt8) ∧
-      ((data.flatMap byteHexDigits).map fun c => c.val.toUInt8)[2 * i + 1]? =
-        data[i]?.map (fun b => (hexDigitChar (lowDigit b)).val.toUInt8) := by
-    intro i
-    rw [hflat, List.getElem?_map, List.getElem?_map]
-    obtain ⟨h1, h2⟩ := flatMap_pair_getElem? (fun b => hexDigitChar (highDigit b))
-      (fun b => hexDigitChar (lowDigit b)) data i
-    rw [h1, h2]
-    simp only [Option.map_map]
-    exact ⟨rfl, rfl⟩
-  have hlen : ((data.flatMap byteHexDigits).map fun c => c.val.toUInt8).length =
-      2 * data.length := by
-    rw [List.length_map, hflat, List.length_flatMap]
-    simp
-    exact sum_two data
-  generalize hds : (data.flatMap byteHexDigits).map (fun c => c.val.toUInt8) = ds at hidx hlen ⊢
   have hsz : ds.toByteArray.size = 2 * data.length := by simpa using hlen
   have hne : ¬ (ds.toByteArray.size % 2 ≠ 0) := by omega
   simp only [hne, ↓reduceIte]
@@ -338,14 +342,27 @@ theorem bytesOf_hexString (what : String) (upper : Bool) (data : List UInt8) :
       intro j
       rw [getElem?_def, getElem?_def]
       simp
-    obtain ⟨h0, h1⟩ := hidx i
-    rw [e, e, h0, h1, List.getElem?_eq_getElem hi']
-    simp only [Option.map_some]
-    have hv1 := hexValue_hexDigitChar upper (highDigit data[i])
-    have hv2 := hexValue_hexDigitChar upper (lowDigit data[i])
-    simp only [Char.toUInt8] at hv1 hv2
+    obtain ⟨h0, h1⟩ := hidx i hi'
+    obtain ⟨c, hc, hv1⟩ := Option.bind_eq_some_iff.mp h0
+    obtain ⟨d, hd, hv2⟩ := Option.bind_eq_some_iff.mp h1
+    rw [e, e, hc, hd]
+    simp only
     rw [hv1, hv2, List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hi']
     exact congrArg (fun x => Except.ok (ForInStep.yield (out.push x))) (byte_split data[i])
+
+/-- The decoder reads back the bytes of their hex encoding.
+
+This holds whether or not it accepts uppercase digits. -/
+theorem bytesOf_hexString (what : String) (upper : Bool) (data : List UInt8) :
+    bytesOf what upper (.str (hexString data)) = .ok data.toByteArray := by
+  refine bytesOf_of_hexDigits (hexDigits_hexString what data)
+    (by rw [List.length_map, length_flatMap_byteHexDigits]) fun i hi => ?_
+  obtain ⟨h0, h1⟩ := flatMap_byteHexDigits_getElem? data i
+  rw [List.getElem?_map, List.getElem?_map, h0, h1, List.getElem?_eq_getElem hi]
+  have hv1 := hexValue_hexDigitChar upper (highDigit data[i])
+  have hv2 := hexValue_hexDigitChar upper (lowDigit data[i])
+  simp only [Char.toUInt8] at hv1 hv2
+  exact ⟨hv1, hv2⟩
 
 /-- The decoder of byte strings reads back the bytes of their hex encoding. -/
 theorem bytes_hexString (what : String) (data : List UInt8) :
@@ -819,29 +836,103 @@ private theorem getElem?_eq_data_toList (b : ByteArray) (i : Nat) : b[i]? = b.da
     rfl
   · rw [getElem?_neg b i h, List.getElem?_eq_none (by omega)]
 
-/-- The byte that two lowercase hex digit codes write has those codes as its two digits. -/
-private theorem digits_of_byte {c d : UInt8} (hc : (hexValue false c).isSome = true)
-    (hd : (hexValue false d).isSome = true) :
-    let x := 16 * (hexValue false c).getD 0 + (hexValue false d).getD 0
-    (hexDigitChar (highDigit x)).val.toUInt8 = c ∧ (hexDigitChar (lowDigit x)).val.toUInt8 = d := by
-  intro x
-  obtain ⟨ec, lc⟩ := hexDigitChar_hexValue c hc
-  obtain ⟨ed, ld⟩ := hexDigitChar_hexValue d hd
-  have hv : (16 * (hexValue false c).getD 0 + (hexValue false d).getD 0).toNat =
-      16 * digitValue c + digitValue d := by
-    simp only [digitValue] at lc ld ⊢
+/-- The fact below, checked by the kernel on each of the 256 codes, with and without uppercase. -/
+private theorem hexValue_lt_lt : ∀ n, n < 256 → ∀ upper : Bool,
+    (hexValue upper n.toUInt8).isSome = true →
+      n < 128 ∧ ((hexValue upper n.toUInt8).getD 0).toNat < 16 := by
+  decide +kernel
+
+/-- A code that the decoder reads as a hex digit is ASCII, and its value is below sixteen. -/
+private theorem hexValue_lt {upper : Bool} {c v : UInt8} (h : hexValue upper c = some v) :
+    c.toNat < 128 ∧ v.toNat < 16 := by
+  have := hexValue_lt_lt c.toNat c.toNat_lt upper
+  simp only [show c.toNat.toUInt8 = c from UInt8.ofNat_toNat, h, Option.isSome_some,
+    Option.getD_some, forall_const] at this
+  exact this
+
+/-- A byte of two digits below sixteen has those digits as its high and low digit. -/
+private theorem highDigit_lowDigit {u v : UInt8} (hu : u.toNat < 16) (hv : v.toNat < 16) :
+    (highDigit (16 * u + v)).val.toUInt8 = u ∧ (lowDigit (16 * u + v)).val.toUInt8 = v := by
+  have hx : (16 * u + v).toNat = 16 * u.toNat + v.toNat := by
     simp only [UInt8.toNat_add, UInt8.toNat_mul]
     simp
     omega
   constructor
-  · have : highDigit (16 * (hexValue false c).getD 0 + (hexValue false d).getD 0) =
-        ⟨digitValue c % 16, Nat.mod_lt _ (by decide)⟩ := by
-      apply Fin.ext; simp only [highDigit, hv]; omega
-    rw [this]; exact ec
-  · have : lowDigit (16 * (hexValue false c).getD 0 + (hexValue false d).getD 0) =
-        ⟨digitValue d % 16, Nat.mod_lt _ (by decide)⟩ := by
-      apply Fin.ext; simp only [lowDigit, hv]; omega
-    rw [this]; exact ed
+  · apply UInt8.toNat_inj.mp
+    simp only [highDigit, hx, Nat.toUInt8_eq, UInt8.toNat_ofNat']
+    omega
+  · apply UInt8.toNat_inj.mp
+    simp only [lowDigit, hx, Nat.toUInt8_eq, UInt8.toNat_ofNat']
+    omega
+
+/-- The decoder returns bytes only from text after `0x` with two digit codes for each byte.
+
+The codes at positions `2 * i` and `2 * i + 1` have the values of the two digits of byte `i`. -/
+private theorem bytesOf_eq_ok_digits {what : String} {upper : Bool} {j : Lean.Json}
+    {b : ByteArray} (h : bytesOf what upper j = .ok b) :
+    ∃ s digits, j = .str s ∧ hexDigits what (.str s) = .ok digits ∧
+      digits.data.toList.length = 2 * b.data.toList.length ∧
+      ∀ (i : Nat) (hi : i < b.data.toList.length),
+        digits.data.toList[2 * i]?.bind (hexValue upper) =
+            some (highDigit b.data.toList[i]).val.toUInt8 ∧
+          digits.data.toList[2 * i + 1]?.bind (hexValue upper) =
+            some (lowDigit b.data.toList[i]).val.toUInt8 := by
+  unfold bytesOf at h
+  cases j with
+  | str s =>
+    obtain ⟨digits, hd, h⟩ := bind_ok_iff.mp h
+    dsimp only at h
+    split at h
+    · cases h
+    rename_i heven
+    obtain ⟨res, hloop, hres⟩ := bind_ok_iff.mp h
+    have hb : res = b := by cases hres; rfl
+    subst hb
+    have hr : List.range' [:digits.size / 2].start [:digits.size / 2].size
+        [:digits.size / 2].step = List.range' 0 (digits.size / 2) 1 := by
+      rw [show [:digits.size / 2].size = digits.size / 2 by simp [Std.Legacy.Range.size]]
+    rw [Std.Legacy.Range.forIn_eq_forIn_range', hr] at hloop
+    -- Each step reads two digit codes and pushes the byte that they write.
+    obtain ⟨xs, hlen, hxs, hq⟩ := forIn_range'_ok
+      (Q := fun i x => ∃ c d, digits[2 * i]? = some c ∧ digits[2 * i + 1]? = some d ∧
+        hexValue upper c = some (highDigit x).val.toUInt8 ∧
+        hexValue upper d = some (lowDigit x).val.toUInt8)
+      (fun i out r hr' => by
+        split at hr'
+        · rename_i c d hc hd'
+          split at hr'
+          · rename_i high low hh hl
+            simp only [pure, Except.pure, Except.ok.injEq] at hr'
+            obtain ⟨eh, el⟩ := highDigit_lowDigit (hexValue_lt hh).2 (hexValue_lt hl).2
+            exact ⟨_, hr'.symm, c, d, hc, hd', by rw [hh, eh], by rw [hl, el]⟩
+          · simp [invalid, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at hr'
+        · simp [invalid, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at hr')
+      hloop
+    have hres' : res.data.toList = xs := by
+      rw [hxs]; simp [ByteArray.emptyWithCapacity] <;> rfl
+    refine ⟨s, digits, rfl, hd, ?_, fun i hi => ?_⟩
+    · have : digits.data.toList.length = digits.size := Array.length_toList
+      rw [hres']
+      omega
+    · obtain ⟨c, d, hc, hd2, hcs, hds⟩ := hq i (by rw [← hres']; exact hi)
+      simp only [Nat.zero_add] at hc hd2
+      rw [getElem?_eq_data_toList] at hc hd2
+      rw [hc, hd2, List.getElem_of_eq hres' hi]
+      exact ⟨hcs, hds⟩
+  | _ =>
+    obtain ⟨digits, hd, -⟩ := bind_ok_iff.mp h
+    simp [hexDigits, invalid, throw, throwThe, MonadExceptOf.throw] at hd
+
+/-- A code that the decoder reads as a lowercase hex digit of a value is the code of that digit. -/
+private theorem eq_of_hexValue_false {c : UInt8} {n : Fin 16}
+    (h : hexValue false c = some n.val.toUInt8) : c = (hexDigitChar n).val.toUInt8 := by
+  obtain ⟨code, -⟩ := hexDigitChar_hexValue c (by simp [h])
+  have digit : (⟨digitValue c % 16, Nat.mod_lt _ (by decide)⟩ : Fin 16) = n := by
+    apply Fin.ext
+    simp only [digitValue, h, Option.getD_some, Nat.toUInt8_eq, UInt8.toNat_ofNat']
+    omega
+  rw [digit] at code
+  exact code.symm
 
 /-- The byte decoder without uppercase digits returns bytes exactly when the text encodes them.
 
@@ -852,87 +943,33 @@ theorem bytesOf_false_eq_ok_iff {what : String} {j : Lean.Json} {b : ByteArray} 
     bytesOf what false j = .ok b ↔ j = .str (hexString b.data.toList) := by
   constructor
   · intro h
-    have h' := h
-    unfold bytesOf at h'
-    cases j with
-    | str s =>
-      obtain ⟨digits, hd, h'⟩ := bind_ok_iff.mp h'
-      dsimp only at h'
-      split at h'
-      · cases h'
-      rename_i heven
-      obtain ⟨res, hloop, hres⟩ := bind_ok_iff.mp h'
-      have hb : res = b := by cases hres; rfl
-      subst hb
-      have hr : List.range' [:digits.size / 2].start [:digits.size / 2].size
-          [:digits.size / 2].step = List.range' 0 (digits.size / 2) 1 := by
-        rw [show [:digits.size / 2].size = digits.size / 2 by simp [Std.Legacy.Range.size]]
-      rw [Std.Legacy.Range.forIn_eq_forIn_range', hr] at hloop
-      -- Each step reads two digit codes and pushes the byte that they write.
-      obtain ⟨xs, hlen, hxs, hq⟩ := forIn_range'_ok
-        (Q := fun i x => ∃ c d, digits[2 * i]? = some c ∧ digits[2 * i + 1]? = some d ∧
-          (hexValue false c).isSome = true ∧ (hexValue false d).isSome = true ∧
-          x = 16 * (hexValue false c).getD 0 + (hexValue false d).getD 0)
-        (fun i out r hr' => by
-          split at hr'
-          · rename_i c d hc hd'
-            split at hr'
-            · rename_i high low hh hl
-              simp only [pure, Except.pure, Except.ok.injEq] at hr'
-              exact ⟨_, hr'.symm, c, d, hc, hd', by simp [hh], by simp [hl], by simp [hh, hl]⟩
-            · simp [invalid, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at hr'
-          · simp [invalid, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at hr')
-        hloop
-      have hres' : res.data.toList = xs := by
-        rw [hxs]; simp [ByteArray.emptyWithCapacity] <;> rfl
-      rw [hres']
-      have hdl : digits.data.toList.length = 2 * xs.length := by
-        have : digits.data.toList.length = digits.size := Array.length_toList
-        omega
-      -- The digit codes are the hex encoding of the bytes, two digits per byte.
-      have hdig : digits.data.toList = (xs.flatMap byteHexDigits).map fun c => c.val.toUInt8 := by
-        have hflat : xs.flatMap byteHexDigits =
-            xs.flatMap fun b => [hexDigitChar (highDigit b), hexDigitChar (lowDigit b)] := rfl
-        have hpair : ∀ j, ((xs.flatMap byteHexDigits).map fun c => c.val.toUInt8)[2 * j]? =
-              xs[j]?.map (fun b => (hexDigitChar (highDigit b)).val.toUInt8) ∧
-            ((xs.flatMap byteHexDigits).map fun c => c.val.toUInt8)[2 * j + 1]? =
-              xs[j]?.map (fun b => (hexDigitChar (lowDigit b)).val.toUInt8) := by
-          intro j
-          rw [hflat, List.getElem?_map, List.getElem?_map]
-          obtain ⟨e1, e2⟩ := flatMap_pair_getElem? (fun b => hexDigitChar (highDigit b))
-            (fun b => hexDigitChar (lowDigit b)) xs j
-          rw [e1, e2]
-          simp only [Option.map_map]
-          exact ⟨rfl, rfl⟩
-        apply List.ext_getElem?
-        intro k
-        obtain ⟨j, hk⟩ : ∃ j, k = 2 * j ∨ k = 2 * j + 1 := ⟨k / 2, by omega⟩
-        by_cases hj : j < xs.length
-        · obtain ⟨c, d, hc, hd2, hcs, hds, hx⟩ := hq j hj
-          simp only [Nat.zero_add] at hc hd2
-          rw [getElem?_eq_data_toList] at hc hd2
-          obtain ⟨eh, el⟩ := digits_of_byte hcs hds
-          rcases hk with rfl | rfl
-          · rw [hc, (hpair j).1, List.getElem?_eq_getElem hj, Option.map_some, hx, eh]
-          · rw [hd2, (hpair j).2, List.getElem?_eq_getElem hj, Option.map_some, hx, el]
-        · -- Past the last byte, neither list has an entry.
-          have hlen2 : ((xs.flatMap byteHexDigits).map fun c => c.val.toUInt8).length =
-              2 * xs.length := by
-            rw [List.length_map, hflat, List.length_flatMap]
-            simp
-            exact sum_two xs
-          rw [List.getElem?_eq_none (by omega), List.getElem?_eq_none (by omega)]
-      -- So the text has the bytes of the hex encoding, and is that encoding.
-      have ht := toUTF8_of_hexDigits (hexDigits_hexString what xs)
-      have hs := toUTF8_of_hexDigits hd
-      rw [List.data_toByteArray, ← hdig, ← hs] at ht
-      congr 1
-      apply String.toByteArray_inj.mp
-      rw [← String.toUTF8_eq_toByteArray, ← String.toUTF8_eq_toByteArray]
-      exact ByteArray.ext (Array.ext' ht.symm)
-    | _ =>
-      obtain ⟨digits, hd, -⟩ := bind_ok_iff.mp h'
-      simp [hexDigits, invalid, throw, throwThe, MonadExceptOf.throw] at hd
+    obtain ⟨s, digits, rfl, hd, hdl, hidx⟩ := bytesOf_eq_ok_digits h
+    generalize b.data.toList = xs at hdl hidx ⊢
+    -- The digit codes are the hex encoding of the bytes, two digits per byte.
+    have hdig : digits.data.toList = (xs.flatMap byteHexDigits).map fun c => c.val.toUInt8 := by
+      apply List.ext_getElem?
+      intro k
+      obtain ⟨j, hk⟩ : ∃ j, k = 2 * j ∨ k = 2 * j + 1 := ⟨k / 2, by omega⟩
+      obtain ⟨e1, e2⟩ := flatMap_byteHexDigits_getElem? xs j
+      by_cases hj : j < xs.length
+      · obtain ⟨h0, h1⟩ := hidx j hj
+        rw [List.getElem?_eq_getElem hj, Option.map_some] at e1 e2
+        rcases hk with rfl | rfl
+        · obtain ⟨c, hc, hv⟩ := Option.bind_eq_some_iff.mp h0
+          rw [hc, List.getElem?_map, e1, Option.map_some, eq_of_hexValue_false hv]
+        · obtain ⟨d, hd2, hv⟩ := Option.bind_eq_some_iff.mp h1
+          rw [hd2, List.getElem?_map, e2, Option.map_some, eq_of_hexValue_false hv]
+      · -- Past the last byte, neither list has an entry.
+        rw [List.getElem?_eq_none (by omega), List.getElem?_eq_none (by
+          rw [List.length_map, length_flatMap_byteHexDigits]; omega)]
+    -- So the text has the bytes of the hex encoding, and is that encoding.
+    have ht := toUTF8_of_hexDigits (hexDigits_hexString what xs)
+    have hs := toUTF8_of_hexDigits hd
+    rw [List.data_toByteArray, ← hdig, ← hs] at ht
+    congr 1
+    apply String.toByteArray_inj.mp
+    rw [← String.toUTF8_eq_toByteArray, ← String.toUTF8_eq_toByteArray]
+    exact ByteArray.ext (Array.ext' ht.symm)
   · rintro rfl
     rw [bytesOf_hexString]
     congr 1
@@ -950,6 +987,146 @@ It applies to the hashes, roots and the logs bloom, which take lowercase digits 
 theorem fixed_false_eq_ok_iff {what : String} {n : Nat} {j : Lean.Json} {v : Vector UInt8 n} :
     fixed what n j false = .ok v ↔ j = .str (hexString v.toList) := by
   rw [fixed_eq_ok_iff, bytesOf_false_eq_ok_iff]
+  exact Iff.rfl
+
+/-! ## Uppercase digits -/
+
+/-- The fact below, checked by the kernel on each of the 128 ASCII codes and the 16 digits. -/
+private theorem toLower_ofNat_lt : ∀ m, m < 128 → (Char.ofNat m).val.toUInt8 = m.toUInt8 ∧
+    ∀ n : Fin 16, ((Char.ofNat m).toLower = hexDigitChar n ↔
+      hexValue true m.toUInt8 = some n.val.toUInt8) := by
+  decide +kernel
+
+/-- A character whose lowercase form is a hex digit is ASCII, and the decoder reads its value. -/
+private theorem hexValue_of_toLower {c : Char} {n : Fin 16} (h : c.toLower = hexDigitChar n) :
+    c.val ≤ 0x7F ∧ hexValue true c.val.toUInt8 = some n.val.toUInt8 := by
+  by_cases hc : c.val ≤ 0x7F
+  · have hm : c.toNat < 128 := by
+      have := UInt32.le_iff_toNat_le.mp hc
+      simp at this
+      omega
+    have := ((toLower_ofNat_lt c.toNat hm).2 n).mp (by rw [Char.ofNat_toNat]; exact h)
+    exact ⟨hc, this⟩
+  · -- Above ASCII, the lowercase form is the character itself, which is not a hex digit.
+    exfalso
+    have hz : ¬ (c.val ≥ 'A'.val ∧ c.val ≤ 'Z'.val) := by
+      intro hz
+      apply hc
+      have := UInt32.le_iff_toNat_le.mp hz.2
+      apply UInt32.le_iff_toNat_le.mpr
+      simp at this ⊢
+      omega
+    have hl : c.toLower = c := by
+      unfold Char.toLower
+      exact dite_eq_right_of_eq_false (eq_false hz)
+    have := hexDigitChar_ascii n
+    rw [← h, hl] at this
+    exact hc this
+
+/-- A code that the decoder reads as a hex digit, in either case, lowercases to that digit. -/
+private theorem toLower_ofNat_of_hexValue {c : UInt8} {n : Fin 16}
+    (h : hexValue true c = some n.val.toUInt8) :
+    (Char.ofNat c.toNat).toLower = hexDigitChar n ∧ (Char.ofNat c.toNat).val.toUInt8 = c := by
+  have hm := toLower_ofNat_lt c.toNat (hexValue_lt h).1
+  simp only [show c.toNat.toUInt8 = c from UInt8.ofNat_toNat] at hm
+  exact ⟨(hm.2 n).mpr h, hm.1⟩
+
+/-- The byte decoder with uppercase digits returns bytes exactly when the text encodes them.
+
+That text is `0x` and two hex digits for each byte, high digit first, each digit in either case.
+
+So the digits in lowercase are the hex encoding of the bytes.
+
+The marker must still be `0x` with a lowercase `x`. -/
+theorem bytesOf_true_eq_ok_iff {what : String} {j : Lean.Json} {b : ByteArray} :
+    bytesOf what true j = .ok b ↔ ∃ ds : List Char,
+      j = .str ("0x" ++ String.ofList ds) ∧
+        ds.map Char.toLower = b.data.toList.flatMap byteHexDigits := by
+  constructor
+  · intro h
+    obtain ⟨s, digits, rfl, hd, hdl, hidx⟩ := bytesOf_eq_ok_digits h
+    generalize b.data.toList = xs at hdl hidx ⊢
+    -- Each digit code is the code of an ASCII character, whose lowercase form the encoding writes.
+    have hpos : ∀ k : Nat,
+        ((digits.data.toList.map fun c => Char.ofNat c.toNat).map Char.toLower)[k]? =
+          (xs.flatMap byteHexDigits)[k]? ∧
+        ((digits.data.toList.map fun c => Char.ofNat c.toNat).map fun c => c.val.toUInt8)[k]? =
+          digits.data.toList[k]? := by
+      intro k
+      simp only [List.map_map, List.getElem?_map]
+      obtain ⟨j, hk⟩ : ∃ j, k = 2 * j ∨ k = 2 * j + 1 := ⟨k / 2, by omega⟩
+      obtain ⟨e1, e2⟩ := flatMap_byteHexDigits_getElem? xs j
+      by_cases hj : j < xs.length
+      · obtain ⟨h0, h1⟩ := hidx j hj
+        rw [List.getElem?_eq_getElem hj, Option.map_some] at e1 e2
+        rcases hk with rfl | rfl
+        · obtain ⟨c, hc, hv⟩ := Option.bind_eq_some_iff.mp h0
+          obtain ⟨el, ec⟩ := toLower_ofNat_of_hexValue hv
+          rw [hc, e1]
+          exact ⟨congrArg some el, congrArg some ec⟩
+        · obtain ⟨d, hd2, hv⟩ := Option.bind_eq_some_iff.mp h1
+          obtain ⟨el, ec⟩ := toLower_ofNat_of_hexValue hv
+          rw [hd2, e2]
+          exact ⟨congrArg some el, congrArg some ec⟩
+      · -- Past the last byte, no list has an entry.
+        rw [List.getElem?_eq_none (by omega), List.getElem?_eq_none (by
+          rw [length_flatMap_byteHexDigits]; omega)]
+        exact ⟨rfl, rfl⟩
+    generalize hds : digits.data.toList.map (fun c => Char.ofNat c.toNat) = ds at hpos
+    have hlower : ds.map Char.toLower = xs.flatMap byteHexDigits :=
+      List.ext_getElem? fun k => (hpos k).1
+    have hcodes : ds.map (fun c => c.val.toUInt8) = digits.data.toList :=
+      List.ext_getElem? fun k => (hpos k).2
+    refine ⟨ds, ?_, hlower⟩
+    -- The characters are ASCII, so the text has the bytes `0x` and the digit codes.
+    have hascii : ∀ c ∈ ds, c.val ≤ 0x7F := by
+      intro c hc
+      have hm : c.toLower ∈ xs.flatMap byteHexDigits := hlower ▸ List.mem_map_of_mem hc
+      simp only [List.mem_flatMap, byteHexDigits, List.mem_cons, List.not_mem_nil,
+        or_false] at hm
+      obtain ⟨x, -, hx | hx⟩ := hm
+      · exact (hexValue_of_toLower hx).1
+      · exact (hexValue_of_toLower hx).1
+    have ht := toUTF8_of_hexDigits (hexDigits_ascii what ds hascii)
+    have hs := toUTF8_of_hexDigits hd
+    rw [List.data_toByteArray, hcodes, ← hs] at ht
+    congr 1
+    apply String.toByteArray_inj.mp
+    rw [← String.toUTF8_eq_toByteArray, ← String.toUTF8_eq_toByteArray]
+    exact ByteArray.ext (Array.ext' ht.symm)
+  · rintro ⟨ds, rfl, hlower⟩
+    have hascii : ∀ c ∈ ds, c.val ≤ 0x7F := by
+      intro c hc
+      have hm : c.toLower ∈ b.data.toList.flatMap byteHexDigits :=
+        hlower ▸ List.mem_map_of_mem hc
+      simp only [List.mem_flatMap, byteHexDigits, List.mem_cons, List.not_mem_nil,
+        or_false] at hm
+      obtain ⟨x, -, hx | hx⟩ := hm
+      · exact (hexValue_of_toLower hx).1
+      · exact (hexValue_of_toLower hx).1
+    have hlen : ds.length = 2 * b.data.toList.length := by
+      rw [← length_flatMap_byteHexDigits, ← hlower, List.length_map]
+    have hb := bytesOf_of_hexDigits (upper := true) (data := b.data.toList)
+      (hexDigits_ascii what ds hascii) (by rw [List.length_map, hlen]) fun i hi => by
+        obtain ⟨e1, e2⟩ := flatMap_byteHexDigits_getElem? b.data.toList i
+        rw [List.getElem?_eq_getElem hi, Option.map_some, ← hlower, List.getElem?_map] at e1 e2
+        obtain ⟨c, hc, hcl⟩ := Option.map_eq_some_iff.mp e1
+        obtain ⟨d, hd, hdl⟩ := Option.map_eq_some_iff.mp e2
+        rw [List.getElem?_map, List.getElem?_map, hc, hd]
+        exact ⟨(hexValue_of_toLower hcl).2, (hexValue_of_toLower hdl).2⟩
+    rw [hb]
+    congr 1
+    apply ByteArray.ext
+    simp
+
+/-- An address decodes exactly when its text encodes its bytes, with digits in either case.
+
+That text is `0x` and two hex digits for each of the 20 bytes, whose lowercase forms encode them. -/
+theorem address_eq_ok_iff_map_toLower {what : String} {j : Lean.Json} {a : Address} :
+    address what j = .ok a ↔ ∃ ds : List Char,
+      j = .str ("0x" ++ String.ofList ds) ∧
+        ds.map Char.toLower = a.toList.flatMap byteHexDigits := by
+  rw [address_eq_ok_iff, bytesOf_true_eq_ok_iff]
   exact Iff.rfl
 
 end EthLib.Engine.Json
