@@ -1270,6 +1270,27 @@ No theorem covers the payload that the execution layer builds, or the safe and f
 
 The Python suite checks each case of the terminal block search, the configured terminal block hash, the withdrawals and the parent root against values worked out in the test from the guides.
 
+From Gloas, `prepareExecutionPayloadGloas` reads the fork choice store and a head node.
+The proposer builds on the full node of the head when the fork choice says so at the current slot.
+It then applies the payload that the store holds for the head to a copy of the state, and reads the withdrawals of that copy.
+Otherwise it keeps the state and the withdrawals that the state records.
+From Heze it also reads the transactions of the inclusion lists of the slot before, which the payload attributes of the Engine API here do not carry.
+`prepareExecutionPayloadGloas_eq_ok` states each field of the update.
+`payloadParentGloas_eq_ok` states the two cases of the parent.
+
+The theorems that link the update to a block assume that the bid of the block builds on the head of the update.
+From a full parent the block must carry the requests of the payload that the store holds, and the two hashes of the latest bid must differ.
+`slot_of_prepareExecutionPayloadGloas` shows that the state after the parent, header and withdrawal steps has the slot, the time and the mix of the attributes.
+`parentRoot_of_prepareExecutionPayloadGloas` shows that the block names the parent root of the attributes.
+`latestBlockHash_of_prepareExecutionPayloadGloas` also assumes that the latest block hash is the parent hash of the latest bid.
+It shows that the state after those steps has the head as its latest block hash.
+`payloadExpectedWithdrawals_of_prepareExecutionPayloadGloas` makes the same assumption.
+It shows that this state records the withdrawals of the attributes.
+It rests on `applyParentExecutionPayload_latestExecutionPayloadBid`, which shows that the payload of a parent keeps the latest bid.
+No theorem covers the envelope that carries the payload, or the inclusion lists, which come from the store.
+
+The Python suite builds the store of a fork choice case and checks the update on the full and the empty parent at Gloas and Heze.
+
 ### Slashing protection
 
 `Consensus/SlashingProtection.lean` holds the slashing protection of a signer, and the interchange file of EIP-3076 that moves it between clients.
