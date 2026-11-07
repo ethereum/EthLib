@@ -127,6 +127,19 @@ theorem getAccount_touchAccount {tx : TransactionState} {address other : Address
   unfold getAccount
   rw [(sameOutside_touchAccount tx address other (by simpa using hne)).1]
 
+/-- A touch of an account keeps the account it reads at that address.
+
+An address with no account reads as the empty account before and after. -/
+theorem getAccount_touchAccount_self (tx : TransactionState) (address : Address) :
+    (tx.touchAccount address).getAccount address = tx.getAccount address := by
+  unfold touchAccount
+  split
+  · rfl
+  · rename_i hnot
+    have hnone : tx.getAccountOptional address = none := by
+      simpa [accountExists, Option.isSome_iff_ne_none] using hnot
+    simp [getAccount, getAccountOptional_setAccount_self, hnone]
+
 /-- A write of transient storage touches the address it names only. -/
 theorem sameOutside_setTransientStorage (tx : TransactionState) (address : Address)
     (key : Bytes32) (value : U256) :
