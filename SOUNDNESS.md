@@ -638,11 +638,17 @@ On a match, it returns the word of storage at the Keccak-256 hash of two words o
 A run of the loop then ends by the measure, not by the gas.
 `SumLoop.runFrame_spec` proves a contract that loops `n` times, for the word `n` of its call data, with the one-counter meter.
 With at least `45 + 55 n` gas, it returns `n (n + 1) / 2` modulo `2^256`.
-`ReachesBy` (`Logic/Message.lean`) adds the steps that send a message, which a runner of messages runs.
+`ReachesBy` (`Logic/Message.lean`) adds the steps that send a message, which a runner of messages ends with a frame.
 `runFrame_of_reachesBy` proves that a frame that reaches a stopped frame under a runner runs to it in `runFrame` with that runner.
-`SpecUnder fork callee P Q` holds under every runner that ends each message with a frame that meets the assumption `callee`.
-It holds for every bound that holds the gas of the frame.
-The callee is arbitrary and may call the caller again.
+A runner can also fail on a message, and then `runFrame` fails with the error of the runner.
+`Meets callee runChild` says that each frame that the runner gives meets the assumption `callee`, and that the runner fails only with an error that aborts the run.
+It says nothing of a message on which the runner fails.
+`meets_process` proves that the runner of the code of a message meets the assumption that always holds, for every bound.
+It rests on `aborts_of_process_eq_error` (`Execution/Proofs/Evm/Call/MessageCall.lean`), which proves that a message and a creation fail only with an error that aborts.
+`SpecUnder fork callee P Q` holds under every runner that meets `callee`, and for every bound that holds the gas of the frame.
+From every frame of `P`, the frame reaches a stopped frame of `Q`, or a frame whose runner fails on its message.
+So `SpecUnder.runFrame` concludes that `runFrame` returns a stopped frame of `Q`, or fails with an error that aborts.
+The code that a message runs is arbitrary and may call the caller again.
 So the assumption is all that a triple says about a frame that ends a message, and about the state after it.
 No rule yet covers an opcode that sends a message, so no theorem yet proves a contract that calls or creates.
 

@@ -17,7 +17,9 @@ A program logic over EVM bytecode.
 
 It has the frames that a frame reaches, triples over them, rules for opcodes and for loops.
 
-Frames that send messages have triples under an assumption on the frames that end them.
+A triple over frames that send messages takes an assumption on the frames that end the messages.
+
+Its run may also abort, when the runner of messages fails.
 
 Worked examples prove whole contracts.
 -/

@@ -204,6 +204,33 @@ theorem runFrame_of_step_eq_child_error {evm caller : Evm fork Meter} {message :
     split <;> rename_i hresume <;> rw [failed] at hresume <;> cases hresume
     simp [halts]
 
+/-- A step that sends a message, which the runner fails to run, makes the run fail.
+
+The run fails with the error of the runner. -/
+theorem runFrame_of_runChild_eq_error {evm caller : Evm fork Meter} {message : Message fork}
+    {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    {within : GasMeter.gasHeld evm.gas ≤ bound} {e : EvmError} (running : evm.running = true)
+    (sent : step evm = .ok (.child caller message resume)) (lt : message.gas < bound)
+    (failed : runChild caller message lt = .error e) :
+    runFrame step decreases bound runChild evm within = .error e := by
+  rw [runFrame]
+  simp only [running, dite_true]
+  split <;> rename_i heq <;> rw [sent] at heq <;> cases heq
+  split <;> rename_i hchild <;> rw [failed] at hchild <;> cases hchild
+  rfl
+
+/-- A run fails only with an error that aborts, when its runner of messages fails only so. -/
+theorem aborts_of_runFrame_eq_error
+    (aborts : ∀ caller message lt e, runChild caller message lt = .error e → e.aborts = true)
+    {evm : Evm fork Meter} {within : GasMeter.gasHeld evm.gas ≤ bound} {e : EvmError}
+    (h : runFrame step decreases bound runChild evm within = .error e) : e.aborts = true := by
+  fun_induction runFrame step decreases bound runChild evm within
+  all_goals first
+    | (cases h; done)
+    | (rename_i ih; exact ih h)
+    | (cases h; assumption)
+    | (cases h; exact aborts _ _ _ _ (by assumption))
+
 /-- Every run that succeeds ends with a stopped frame. -/
 theorem running_runFrame {evm after : Evm fork Meter} {within : GasMeter.gasHeld evm.gas ≤ bound}
     (h : runFrame step decreases bound runChild evm within = .ok after) :

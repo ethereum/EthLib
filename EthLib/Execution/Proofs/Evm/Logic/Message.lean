@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Proofs.Evm.Logic.Loop
+public import EthLib.Execution.Proofs.Evm.Call.MessageCall
 
 /-!
 # Proofs: the frames that a frame reaches through its messages
@@ -9,25 +10,37 @@ A step of a frame can ask for a message, a call or a creation, before the frame 
 
 The loop of the interpreter hands each such message to a runner of messages.
 
-The frame then goes on with the frame that ends the message.
+The runner ends the message with a frame, and the frame of the caller goes on from it.
+
+The runner can also fail, and then the whole run fails with its error.
 
 So the frames that a frame reaches depend on that runner, and on its bound on the gas of messages.
 
-A step under a runner is a step that sends no message, or a message that the runner runs.
+A step under a runner is a step that sends no message, or a message that the runner ends.
 
 The steps under one runner are deterministic, as the loop is.
 
 A frame that reaches a stopped frame under a runner is the result of the loop with that runner.
 
-The code of the callee is arbitrary, and a triple does not reason about it.
+The code that a message runs is arbitrary, and a triple does not reason about it.
 
-It takes an assumption instead, on the frame that ends each message, the callee.
+It takes an assumption instead, on each frame that ends a message.
 
-A runner meets the assumption when it ends each message, and its frame meets the assumption.
+A runner meets the assumption when each frame that it gives meets the assumption.
+
+The runner must also fail only with an error that aborts the run.
+
+The runner of the messages of a frame of a message meets the assumption that always holds.
+
+That runner can fail, but only with an error that aborts, such as an error of the state.
 
 A triple under an assumption holds for every runner that meets it, and for every bound.
 
-A callee may change the state, and may even call the caller again.
+From each frame of its precondition, the frame reaches a frame of its postcondition.
+
+Or it reaches a frame whose runner fails on its message, and then the run aborts.
+
+The message may change the state, and may even call the caller again.
 
 So a triple says about the state after a message only what the assumption says.
 
@@ -217,52 +230,100 @@ theorem stopped_unique {a b c : Evm fork Meter} (hb : ReachesBy fork bound runCh
 
 end ReachesBy
 
+/-- The frame sends a message, and the runner fails to run it. -/
+def AbortsBy (fork : Fork) (bound : Nat) (runChild : MessageRunner fork Meter bound)
+    (evm : Evm fork Meter) : Prop :=
+  evm.running = true ∧ ∃ caller message resume,
+    step fork evm = .ok (.child caller message resume) ∧
+      ∃ lt e, runChild caller message lt = .error e
+
 /-! ## The loop of the interpreter -/
 
-/-- A frame that reaches a stopped frame under a runner runs to it in the loop with that runner. -/
-theorem runFrame_of_reachesBy [LawfulGasMeter Meter] {evm stopped : Evm fork Meter}
-    (h : ReachesBy fork bound runChild evm stopped) (halted : stopped.running = false)
-    (within : GasMeter.gasHeld evm.gas ≤ bound) :
-    runFrame (step fork) (step_decreases fork) bound runChild evm within = .ok stopped := by
+/-- The loop runs a frame as it runs each frame that the frame reaches under its runner. -/
+theorem runFrame_eq_of_reachesBy [LawfulGasMeter Meter] {evm mid : Evm fork Meter}
+    (h : ReachesBy fork bound runChild evm mid) (within : GasMeter.gasHeld evm.gas ≤ bound) :
+    runFrame (step fork) (step_decreases fork) bound runChild evm within =
+      runFrame (step fork) (step_decreases fork) bound runChild mid
+        (Nat.le_trans h.gasHeld_le within) := by
   induction h with
-  | refl => exact runFrame_of_running_eq_false halted
-  | step hs _ ih =>
+  | refl => rfl
+  | step hs rest ih =>
     cases hs with
     | step hs =>
       cases hs with
       | next running next =>
         rw [runFrame_of_step_eq_next running next]
-        exact ih halted _
+        exact ih _
       | halt running failed halts =>
-        rename_i rest
-        rw [runFrame_of_step_eq_error running failed halts]
         -- The halted frame is stopped, so the rest of the reach is that frame itself.
-        exact congrArg Except.ok (rest.eq_of_stopped rfl).symm
+        obtain rfl := rest.eq_of_stopped rfl
+        rw [runFrame_of_step_eq_error running failed halts, runFrame_of_running_eq_false rfl]
     | child running sent lt ran resumed =>
       rw [runFrame_of_step_eq_child running sent lt ran resumed]
-      exact ih halted _
+      exact ih _
     | childHalt running sent lt ran failed halts =>
-      rename_i rest
-      rw [runFrame_of_step_eq_child_error running sent lt ran failed halts]
       -- The halted frame is stopped, so the rest of the reach is that frame itself.
-      exact congrArg Except.ok (rest.eq_of_stopped rfl).symm
+      obtain rfl := rest.eq_of_stopped rfl
+      rw [runFrame_of_step_eq_child_error running sent lt ran failed halts,
+        runFrame_of_running_eq_false rfl]
 
-/-! ## Triples under an assumption on the callee -/
+/-- A frame that reaches a stopped frame under a runner runs to it in the loop with that runner. -/
+theorem runFrame_of_reachesBy [LawfulGasMeter Meter] {evm stopped : Evm fork Meter}
+    (h : ReachesBy fork bound runChild evm stopped) (halted : stopped.running = false)
+    (within : GasMeter.gasHeld evm.gas ≤ bound) :
+    runFrame (step fork) (step_decreases fork) bound runChild evm within = .ok stopped :=
+  (runFrame_eq_of_reachesBy h within).trans (runFrame_of_running_eq_false halted)
 
-/-- The runner ends each message, from a caller, with a frame that the assumption holds of. -/
-def Meets (callee : Evm fork Meter → Message fork → Evm fork Meter → Prop)
-    (runChild : MessageRunner fork Meter bound) : Prop :=
-  ∀ caller message lt, ∃ child, runChild caller message lt = .ok child ∧
+/-- A frame whose runner fails on its message makes the loop fail with the error of the runner.
+
+The error aborts the run when the runner fails only with such errors. -/
+theorem runFrame_of_abortsBy [LawfulGasMeter Meter]
+    (aborts : ∀ caller message lt e, runChild caller message lt = .error e → e.aborts = true)
+    {evm : Evm fork Meter} (h : AbortsBy fork bound runChild evm)
+    (within : GasMeter.gasHeld evm.gas ≤ bound) :
+    ∃ e, runFrame (step fork) (step_decreases fork) bound runChild evm within = .error e ∧
+      e.aborts = true := by
+  obtain ⟨running, caller, message, resume, sent, lt, e, failed⟩ := h
+  exact ⟨e, runFrame_of_runChild_eq_error running sent lt failed,
+    aborts caller message lt e failed⟩
+
+/-! ## Triples under an assumption on the frames that end messages -/
+
+/-- The runner meets an assumption on the frames that end its messages.
+
+Each frame that it gives meets the assumption, and it fails only with an error that aborts. -/
+structure Meets (callee : Evm fork Meter → Message fork → Evm fork Meter → Prop)
+    (runChild : MessageRunner fork Meter bound) : Prop where
+  /-- The frame that ends a message, from a caller, meets the assumption. -/
+  ok : ∀ caller message lt child, runChild caller message lt = .ok child →
     callee caller message child.1
+  /-- The runner fails only with an error that aborts the run. -/
+  aborts : ∀ caller message lt e, runChild caller message lt = .error e → e.aborts = true
+
+/-- The runner of the messages of a frame of a message meets the assumption that always holds.
+
+It runs a call or a creation, as the code of a message runs them, for every bound on their gas. -/
+theorem meets_process [LawfulGasMeter Meter] (fork : Fork) (bound : Nat) :
+    Meets (bound := bound) (fun _ _ _ => True) fun (caller : Evm fork Meter) message _ =>
+      match message.target with
+      | some _ => processMessage fork message caller.state caller.substate.child
+      | none => processCreateMessage fork message caller.state caller.substate.child := by
+  refine ⟨fun _ _ _ _ _ => trivial, fun caller message _ e h => ?_⟩
+  split at h
+  · exact (aborts_of_process_eq_error message.gas message rfl).1 _ _ _ _ _ h
+  · exact (aborts_of_process_eq_error message.gas message rfl).2 _ _ _ _ _ h
 
 /-- Under every runner that meets the assumption, each frame of `P` reaches a frame of `Q`.
+
+Or it reaches a frame whose runner fails on its message, so that the run aborts.
 
 That holds for every bound on the gas of messages, at least the gas of the frame. -/
 def HoareUnder (fork : Fork) (callee : Evm fork Meter → Message fork → Evm fork Meter → Prop)
     (P Q : Evm fork Meter → Prop) : Prop :=
   ∀ bound (runChild : MessageRunner fork Meter bound), Meets callee runChild →
     ∀ evm, P evm → GasMeter.gasHeld evm.gas ≤ bound →
-      ∃ after, ReachesBy fork bound runChild evm after ∧ Q after
+      ∃ after, ReachesBy fork bound runChild evm after ∧
+        (Q after ∨ AbortsBy fork bound runChild after)
 
 /-- A triple under an assumption whose postcondition is a stopped frame. -/
 def SpecUnder (fork : Fork) (callee : Evm fork Meter → Message fork → Evm fork Meter → Prop)
@@ -277,7 +338,7 @@ namespace HoareUnder
 theorem of_hoare {P Q : Evm fork Meter → Prop} (h : Hoare fork P Q) :
     HoareUnder fork callee P Q := fun _ _ _ evm hp _ =>
   let ⟨after, hreach, hq⟩ := h evm hp
-  ⟨after, .of_reaches hreach, hq⟩
+  ⟨after, .of_reaches hreach, .inl hq⟩
 
 /-- A step that sends a message, to a frame of `Q` from every frame that ends it.
 
@@ -285,46 +346,55 @@ From each frame of `P`, the step asks for a message.
 
 Each frame that ends the message with at most its gas, and that meets the assumption, resumes.
 
-The resume gives a frame of `Q`. -/
+The resume gives a frame of `Q`, or fails with an error that does not abort.
+
+Then the frame halts exceptionally with that error, and the halted frame is in `Q`. -/
 theorem of_child [LawfulGasMeter Meter] {P Q : Evm fork Meter → Prop}
     (h : ∀ evm, P evm → evm.running = true ∧ ∃ caller message resume,
       step fork evm = .ok (.child caller message resume) ∧
       ∀ child, GasMeter.gasHeld child.gas ≤ message.gas → callee caller message child →
-        ∃ after, resume child = .ok after ∧ Q after) :
+        (∃ after, resume child = .ok after ∧ Q after) ∨
+          ∃ e, resume child = .error e ∧ e.aborts = false ∧ Q (exceptionalHalt evm e)) :
     HoareUnder fork callee P Q := by
   intro bound runChild meets evm hp within
   obtain ⟨running, caller, message, resume, sent, hresume⟩ := h evm hp
   have lt : message.gas < bound := by
     have := (step_decreases fork running sent).1
     omega
-  obtain ⟨child, ran, hcallee⟩ := meets caller message lt
-  obtain ⟨after, resumed, hq⟩ := hresume child.1 child.2 hcallee
-  exact ⟨after, .single (.child running sent lt ran resumed), hq⟩
+  cases ran : runChild caller message lt with
+  | error e => exact ⟨evm, .refl evm, .inr ⟨running, caller, message, resume, sent, lt, e, ran⟩⟩
+  | ok child =>
+    rcases hresume child.1 child.2 (meets.ok caller message lt child ran) with
+      ⟨after, resumed, hq⟩ | ⟨e, failed, halts, hq⟩
+    · exact ⟨after, .single (.child running sent lt ran resumed), .inl hq⟩
+    · exact ⟨_, .single (.childHalt running sent lt ran failed halts), .inl hq⟩
 
 /-- Sequence: reach the middle condition, then the postcondition from it. -/
 theorem seq [LawfulGasMeter Meter] {P Q R : Evm fork Meter → Prop}
     (first : HoareUnder fork callee P Q) (second : HoareUnder fork callee Q R) :
-    HoareUnder fork callee P R := fun bound runChild meets evm hp within =>
-  let ⟨mid, h₁, hq⟩ := first bound runChild meets evm hp within
-  let ⟨after, h₂, hr⟩ := second bound runChild meets mid hq (Nat.le_trans h₁.gasHeld_le within)
-  ⟨after, h₁.trans h₂, hr⟩
+    HoareUnder fork callee P R := fun bound runChild meets evm hp within => by
+  obtain ⟨mid, h₁, hq | aborted⟩ := first bound runChild meets evm hp within
+  · obtain ⟨after, h₂, hr⟩ :=
+      second bound runChild meets mid hq (Nat.le_trans h₁.gasHeld_le within)
+    exact ⟨after, h₁.trans h₂, hr⟩
+  · exact ⟨mid, h₁, .inr aborted⟩
 
 /-- Consequence: a stronger precondition and a weaker postcondition. -/
 theorem consequence {P P' Q Q' : Evm fork Meter → Prop} (h : HoareUnder fork callee P Q)
     (pre : ∀ evm, P' evm → P evm) (post : ∀ evm, Q evm → Q' evm) :
     HoareUnder fork callee P' Q' := fun bound runChild meets evm hp within =>
   let ⟨after, hr, hq⟩ := h bound runChild meets evm (pre evm hp) within
-  ⟨after, hr, post after hq⟩
+  ⟨after, hr, hq.imp (post after) id⟩
 
-/-- A stronger assumption on the callee keeps a triple. -/
+/-- A stronger assumption on the frames that end messages keeps a triple. -/
 theorem assumption {callee' : Evm fork Meter → Message fork → Evm fork Meter → Prop}
     {P Q : Evm fork Meter → Prop} (h : HoareUnder fork callee P Q)
     (stronger : ∀ caller message child, callee' caller message child →
       callee caller message child) :
     HoareUnder fork callee' P Q := fun bound runChild meets =>
-  h bound runChild fun caller message lt =>
-    let ⟨child, ran, hc⟩ := meets caller message lt
-    ⟨child, ran, stronger _ _ _ hc⟩
+  h bound runChild
+    ⟨fun caller message lt child ran => stronger _ _ _ (meets.ok caller message lt child ran),
+      meets.aborts⟩
 
 /-- Each case of the precondition with its own triple. -/
 theorem cases {P₁ P₂ Q : Evm fork Meter → Prop} (h₁ : HoareUnder fork callee P₁ Q)
@@ -344,10 +414,11 @@ theorem loop_lt [LawfulGasMeter Meter] {I : Nat → Evm fork Meter → Prop}
     | zero => exact exit
     | succ k =>
       intro bound runChild meets evm hp within
-      obtain ⟨mid, hreach, j, hj, hi⟩ := body k bound runChild meets evm hp within
-      obtain ⟨after, hreach', hq⟩ :=
-        ih j hj bound runChild meets mid hi (Nat.le_trans hreach.gasHeld_le within)
-      exact ⟨after, hreach.trans hreach', hq⟩
+      obtain ⟨mid, hreach, ⟨j, hj, hi⟩ | aborted⟩ := body k bound runChild meets evm hp within
+      · obtain ⟨after, hreach', hq⟩ :=
+          ih j hj bound runChild meets mid hi (Nat.le_trans hreach.gasHeld_le within)
+        exact ⟨after, hreach.trans hreach', hq⟩
+      · exact ⟨mid, hreach, .inr aborted⟩
 
 /-- A loop: each run of the body lowers the measure by one, and the exit ends it at 0. -/
 theorem loop [LawfulGasMeter Meter] {I : Nat → Evm fork Meter → Prop}
@@ -375,18 +446,24 @@ theorem consequence {P P' Q Q' : Evm fork Meter → Prop} (h : SpecUnder fork ca
 theorem of_spec {P Q : Evm fork Meter → Prop} (h : Spec fork P Q) : SpecUnder fork callee P Q :=
   HoareUnder.of_hoare h
 
-/-- From a frame of the precondition, the loop gives a frame of the postcondition.
+/-- From a frame of the precondition, the loop gives a frame of the postcondition, or aborts.
 
 It holds for every runner that meets the assumption.
+
+The loop aborts only when the runner fails, with an error that aborts the run.
 
 The bound on the gas of messages is any bound that holds the gas of the frame. -/
 theorem runFrame [LawfulGasMeter Meter] {P Q : Evm fork Meter → Prop}
     (h : SpecUnder fork callee P Q) (meets : Meets callee runChild) {evm : Evm fork Meter}
     (hp : P evm) (within : GasMeter.gasHeld evm.gas ≤ bound) :
-    ∃ stopped, runFrame (step fork) (step_decreases fork) bound runChild evm within =
-      .ok stopped ∧ Q stopped :=
-  let ⟨stopped, hreach, halted, hq⟩ := h bound runChild meets evm hp within
-  ⟨stopped, runFrame_of_reachesBy hreach halted within, hq⟩
+    (∃ stopped, runFrame (step fork) (step_decreases fork) bound runChild evm within =
+      .ok stopped ∧ Q stopped) ∨
+    ∃ e, runFrame (step fork) (step_decreases fork) bound runChild evm within = .error e ∧
+      e.aborts = true := by
+  obtain ⟨after, hreach, ⟨halted, hq⟩ | aborted⟩ := h bound runChild meets evm hp within
+  · exact .inl ⟨after, runFrame_of_reachesBy hreach halted within, hq⟩
+  · rw [runFrame_eq_of_reachesBy hreach within]
+    exact .inr (runFrame_of_abortsBy meets.aborts aborted _)
 
 end SpecUnder
 
