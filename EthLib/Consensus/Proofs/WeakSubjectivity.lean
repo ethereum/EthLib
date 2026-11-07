@@ -261,7 +261,6 @@ Here `Q` is the churn quotient, `m` the minimum churn and `i` the increment.
 The minimum must be a positive whole number of increments, and the quotient positive. -/
 theorem computeWeakSubjectivityPeriodElectra_le {config : Config}
     {state : BeaconState preset fork} {period : Epoch}
-    (hincrement : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     (hminimum : 0 < config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat)
     (hwhole : config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat %
       preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
@@ -283,6 +282,10 @@ theorem computeWeakSubjectivityPeriodElectra_le {config : Config}
   generalize hm : config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat = m at *
   generalize hi : preset.EFFECTIVE_BALANCE_INCREMENT.toNat = i at *
   generalize ht : total.toNat = t at *
+  -- A zero increment would make the minimum churn zero, since `m % 0 = m`.
+  have hincrement : 0 < i := Nat.pos_of_ne_zero fun zero => by
+    rw [zero, Nat.mod_zero] at hwhole
+    omega
   rw [toNat_roundToIncrement, toNat_max, UInt64.toNat_div, hQ, hm, hi, ht] at hvalue hpos
   rw [hvalue]
   refine Nat.add_le_add_left ?_ _
@@ -317,8 +320,8 @@ theorem computeWeakSubjectivityPeriodElectra_le_mainnet
     {state : BeaconState Preset.mainnet fork} {period : Epoch}
     (h : computeWeakSubjectivityPeriodElectra Config.mainnet state = .ok period) :
     period.toNat ≤ 3558 :=
-  Nat.le_trans (computeWeakSubjectivityPeriodElectra_le (by decide) (by decide) (by decide)
-    (by decide) h) (by decide)
+  Nat.le_trans (computeWeakSubjectivityPeriodElectra_le (by decide) (by decide) (by decide) h)
+    (by decide)
 
 /-- The smaller of two 64-bit integers has the smaller value. -/
 private theorem toNat_min_eq (a b : UInt64) : (min a b).toNat = min a.toNat b.toNat := by
@@ -409,7 +412,6 @@ When `5 i + 2 ≤ 3 (min M m / 3)`, activations cover the rounding: `2 e + 3 c +
 The epochs that the churn needs are then at most `30 Qe Qc / (200 (2 Qc + 3 Qe))`. -/
 theorem computeWeakSubjectivityPeriodGloas_le {config : Config}
     {state : BeaconState preset fork} {period : Epoch} (gloas : .glamsterdam ≤ fork)
-    (hincrement : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     (hwhole : config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat %
       preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
     (hexitQ : 0 < config.CHURN_LIMIT_QUOTIENT_GLOAS.toNat)
@@ -426,6 +428,12 @@ theorem computeWeakSubjectivityPeriodGloas_le {config : Config}
   obtain ⟨total, churn, htotal, hchurn, hperiod⟩ :=
     computeWeakSubjectivityPeriodGloas_eq_ok_iff.mp h
   obtain ⟨-, -, hpos, -, hvalue⟩ := balanceChurnPeriod_eq_ok_iff.mp hperiod
+  -- A zero increment would make the minimum churn zero, and the activation floor then fails.
+  have hincrement : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
+    Nat.pos_of_ne_zero fun zero => by
+      rw [zero, Nat.mod_zero] at hwhole
+      rw [zero, hwhole] at hactFloor
+      omega
   obtain ⟨e, c, hem, -, hsum, hch⟩ :=
     gloasWeightedChurn_bounds gloas hincrement hwhole hexitQ hconsQ htotal hchurn
   generalize hQe : config.CHURN_LIMIT_QUOTIENT_GLOAS.toNat = Qe at *
