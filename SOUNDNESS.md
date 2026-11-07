@@ -648,6 +648,8 @@ A runner can also fail on a message, and then `runFrame` fails with the error of
 It also says that the runner fails only with an error that aborts the run, and asks nothing more of such a message.
 `meets_process` proves that the runner of the code of a message meets the assumption that always holds, for every bound.
 It rests on `aborts_of_process_eq_error` (`Execution/Proofs/Evm/Call/MessageCall.lean`), which proves that a message and a creation fail only with an error that aborts.
+No theorem yet proves that this runner meets a stronger assumption.
+So a triple under a stronger assumption does not yet apply to the runs of `processMessage`.
 `SpecUnder fork callee P Q` holds under every runner that meets `callee`, and for every bound that holds the gas of the frame.
 From every frame of `P`, the steps of `StepBy` reach a stopped frame of `Q`, or a frame whose runner fails on its message.
 So `SpecUnder.runFrame` concludes that `runFrame` returns a stopped frame of `Q`, or fails with an error that aborts.
