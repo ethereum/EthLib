@@ -17,6 +17,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Examples.CallReturn42
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.CallChain
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.CallEcho
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.Counter
+public import EthLib.Execution.Proofs.Evm.Logic.Examples.Emit
 
 /-!
 # `EthLib.Execution.Proofs.Evm.Logic`

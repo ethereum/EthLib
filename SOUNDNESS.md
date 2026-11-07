@@ -650,6 +650,7 @@ The slot then holds the sum, and the gas and the refund are those of SLOAD and S
 It appends one log of the current address with the topics and the range of memory.
 It pays 375, 8 for each byte, 375 for each topic and the growth of memory.
 It says nothing of the order of the logs of several frames, or of logs that a revert drops.
+`Emit.runFrame_spec` proves a contract that appends one log with a topic and a word of its call data, for 1036 gas.
 `SlotOfCalldata.runFrame_match` proves a contract that compares the top four bytes of its call data with a constant, at the forks from Berlin with the one-counter meter.
 On a match, it returns the word of storage at the Keccak-256 hash of two words of its call data, for 122 gas and SLOAD.
 `SlotOfCalldata.runFrame_mismatch` proves that it reverts with no output otherwise, for 37 gas.
