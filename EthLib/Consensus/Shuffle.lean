@@ -167,7 +167,9 @@ def shuffledCommittee (indices : Array ValidatorIndex) (shuffled : Array UInt64)
 
 /-- Committee `index` of `count`, cut from the shuffled list of indices.
 
-It fails as the shuffle does, before it cuts the committee. -/
+It fails as the shuffle does, before it cuts the committee.
+
+So above `2^40` indices it fails even for an empty committee, where the rule shuffles nothing. -/
 def computeCommittee (preset : Preset) (indices : Array ValidatorIndex) (seed : Bytes32)
     (index count : UInt64) : Except ShuffleError (Array ValidatorIndex) := do
   shuffledCommittee indices
