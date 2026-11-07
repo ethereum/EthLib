@@ -5,7 +5,6 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Encoding
 public import EthLib.Networking.Discv5.Handshake
 public import EthLib.Networking.Proofs.Discv5.Identity
 public import EthLib.Networking.Proofs.Discv5.Packet
-public import EthLib.Networking.Proofs.Discv5.Session
 
 /-!
 # `Networking.Proofs.Discv5.Handshake`
@@ -34,7 +33,6 @@ open EthLib.Cryptography.Secp256k1
 open EthLib.Cryptography.Secp256k1.Point
 open EthLib.Networking.Proofs.Discv5.Identity
 open EthLib.Networking.Proofs.Discv5.Packet
-open EthLib.Networking.Proofs.Discv5.Session
 
 /-! ## Key agreement -/
 
@@ -159,21 +157,8 @@ theorem openHandshake_sealHandshake {e a b : Fn} {challengeData : ByteArray}
         | ok packetBytes =>
           simp only [hb, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
           obtain ⟨rfl, rfl⟩ := h
-          -- The masking IV, the static header and the authdata take 16 + 23 + 34 bytes or more.
-          cases hh : header.encode with
-          | error err => simp [Packet.encode, hh, bind, Except.bind] at hb
-          | ok headerBytes =>
-          have hlen := length_of_header_encode hh
-          have hsize := size_of_encode hb hh
-          rw [← hheader] at hlen
-          simp only [Authdata.encode, List.length_append, Vector.length_toList,
-            List.length_cons, List.length_nil] at hlen
-          have hmin : MIN_PACKET_SIZE ≤ packetBytes.size := by
-            rw [hsize, hlen]
-            unfold MIN_PACKET_SIZE
-            omega
           -- The packet decodes back, since its flag is 2 and not that of WHOAREYOU.
-          have hdec := Packet.decode_encode hb hmin (by
+          have hdec := Packet.decode_encode hb (by
             intro hflag
             rw [← hheader] at hflag
             simp [Authdata.flag] at hflag)
