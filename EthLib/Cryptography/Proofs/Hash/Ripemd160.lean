@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Hash.Ripemd160
+public import Mathlib.Logic.Function.Defs
 
 /-!
 # Proofs: `Hash.Ripemd160`
@@ -9,6 +10,9 @@ What is proved about RIPEMD-160:
 
 - The added constants are the ones the authors derive from square and cube roots.
 - Each group of sixteen steps of `r` and `r'` lists sixteen indices that include every message word, so it reads each once.
+- Rotating a word left by `n` bits with `0 < n < 32` has left rotation by `32 - n` as its inverse.
+- Each step with a rotation of 1 to 31 bits, and both eighty-step lines, permutes the five-word
+  state.
 - Padding fills whole blocks, with the least zeros that do, and keeps the message and the `0x80` byte in place.
 - Every digest is 20 bytes.
 
@@ -79,6 +83,143 @@ theorem r_groups_permute :
 theorem r'_groups_permute :
     (List.range 5).all (fun g => (group r' g).length == 16 && (List.range 16).all (group r' g).contains) = true := by
   decide +kernel
+
+/-! ## The rotation -/
+
+/--
+The rotation is the left rotation of the 32-bit word by `n` bits, for `0 < n < 32`.
+
+The pseudo-code writes the rotation as a shift left by `n` and a shift right by `32 - n`.
+-/
+theorem rol_toBitVec (x n : UInt32) (h0 : 0 < n.toNat) (h32 : n.toNat < 32) :
+    (rol x n).toBitVec = x.toBitVec.rotateLeft n.toNat := by
+  refine BitVec.eq_of_getLsbD_eq fun i hi => ?_
+  unfold rol
+  -- The right shift wraps modulo `2^32`, so its distance is `32 - n` bits.
+  simp [hi, Nat.mod_eq_of_lt h32,
+    show (4294967296 - n.toNat) % 32 = 32 - n.toNat by omega]
+  by_cases hlt : i < n.toNat
+  · simp [hlt, BitVec.getLsbD_eq_getElem, (by omega : 32 - n.toNat + i < 32)]
+  · simp [hlt, BitVec.getLsbD_of_ge _ _ (by omega : 32 ≤ 32 - n.toNat + i)]
+
+/-- Subtracting a positive distance below 32 from 32 twice returns that distance. -/
+private theorem thirtyTwo_sub_cancel {n : UInt32} (h0 : 0 < n.toNat) (h32 : n.toNat < 32) :
+    (32 - n).toNat = 32 - n.toNat ∧ 32 - (32 - n) = n := by
+  have hsub : (32 - n).toNat = 32 - n.toNat := by
+    rw [UInt32.toNat_sub_of_le]
+    · simp
+    · exact UInt32.le_iff_toNat_le.mpr (Nat.le_of_lt h32)
+  refine ⟨hsub, UInt32.toBitVec_inj.mp (BitVec.eq_of_toNat_eq ?_)⟩
+  simp
+  omega
+
+/-- Rotating left by `n` and then by `32 - n` returns the word, for `0 < n < 32`. -/
+theorem rol_rol (x n : UInt32) (h0 : 0 < n.toNat) (h32 : n.toNat < 32) :
+    rol (rol x n) (32 - n) = x := by
+  have hsub := (thirtyTwo_sub_cancel h0 h32).1
+  apply UInt32.toBitVec_inj.mp
+  rw [rol_toBitVec _ _ (by omega) (by omega), rol_toBitVec _ _ h0 h32, hsub]
+  refine BitVec.eq_of_getLsbD_eq fun i hi => ?_
+  simp only [BitVec.getLsbD_rotateLeft, Nat.mod_eq_of_lt (by omega : 32 - n.toNat < 32),
+    Nat.mod_eq_of_lt h32, hi, decide_true, Bool.true_and]
+  rw [show 32 - (32 - n.toNat) = n.toNat by omega]
+  by_cases hlt : i < 32 - n.toNat
+  · have hlt2 : n.toNat + i < 32 := by omega
+    have hge2 : ¬ (n.toNat + i < n.toNat) := by omega
+    simp [hlt, hlt2, hge2, show n.toNat + i - n.toNat = i by omega]
+  · have hlt3 : i - (32 - n.toNat) < n.toNat := by omega
+    simp [hlt, hlt3, show 32 - n.toNat + (i - (32 - n.toNat)) = i by omega]
+
+/-- Left rotation by a fixed `n` with `0 < n < 32` permutes the 32-bit words. -/
+theorem rol_left_bijective {n : UInt32} (h0 : 0 < n.toNat) (h32 : n.toNat < 32) :
+    Function.Bijective (rol · n) := by
+  obtain ⟨hsub, hcancel⟩ := thirtyTwo_sub_cancel h0 h32
+  refine ⟨Function.LeftInverse.injective (g := (rol · (32 - n))) fun x => rol_rol x n h0 h32,
+    Function.RightInverse.surjective (g := (rol · (32 - n))) fun x => ?_⟩
+  simpa only [hcancel] using rol_rol x (32 - n) (by omega) (by omega)
+
+/-- Every rotation amount of the left line is between 1 and 31. -/
+theorem s_bounds (j : Fin 80) : 0 < s[j].toNat ∧ s[j].toNat < 32 := by
+  revert j
+  decide +kernel
+
+/-- Every rotation amount of the right line is between 1 and 31. -/
+theorem s'_bounds (j : Fin 80) : 0 < s'[j].toNat ∧ s'[j].toNat < 32 := by
+  revert j
+  decide +kernel
+
+/-! ## One step and the two lines -/
+
+/--
+The inverse of one step for a rotation of 1 to 31 bits.
+
+From `#v[E, T, B, rol_10(C), D]`, left rotation by 22 recovers `C`.
+
+Left rotation of `T - E` by `32 - amount`, then subtraction, recovers `A`.
+-/
+private def unstep (g : Fin 5) (state : Vector UInt32 5) (word constant amount : UInt32) :
+    Vector UInt32 5 :=
+  let c := rol state[3] 22
+  let a := rol (state[1] - state[0]) (32 - amount) - constant - word - f g state[2] c state[4]
+  #v[a, state[2], c, state[4], state[0]]
+
+/-- One step with a rotation of 1 to 31 bits permutes the five-word state. -/
+theorem step_bijective (g : Fin 5) (word constant amount : UInt32)
+    (h0 : 0 < amount.toNat) (h32 : amount.toNat < 32) :
+    Function.Bijective (step g · word constant amount) := by
+  obtain ⟨hsub, hcancel⟩ := thirtyTwo_sub_cancel h0 h32
+  have hc1 : ∀ x : UInt32, rol (rol x 10) 22 = x := fun x =>
+    rol_rol x 10 (by decide) (by decide)
+  have hc2 : ∀ x : UInt32, rol (rol x 22) 10 = x := fun x =>
+    rol_rol x 22 (by decide) (by decide)
+  refine ⟨Function.LeftInverse.injective (g := (unstep g · word constant amount)) fun v => ?_,
+    Function.RightInverse.surjective (g := (unstep g · word constant amount)) fun v => ?_⟩
+  · ext k hk
+    match k, hk with
+    | 0, _ => simp [step, unstep, UInt32.add_sub_cancel, rol_rol _ _ h0 h32, hc1]
+    | 1, _ => simp [step, unstep]
+    | 2, _ => simp [step, unstep, hc1]
+    | 3, _ => simp [step, unstep]
+    | 4, _ => simp [step, unstep]
+  · ext k hk
+    match k, hk with
+    | 0, _ => simp [step, unstep]
+    | 1, _ =>
+      have hrot : ∀ u : UInt32, rol (rol u (32 - amount)) amount = u := fun u => by
+        simpa only [hcancel] using rol_rol u (32 - amount) (by omega) (by omega)
+      simp [step, unstep, UInt32.sub_add_cancel, hrot]
+    | 2, _ => simp [step, unstep]
+    | 3, _ => simp [step, unstep, hc2]
+    | 4, _ => simp [step, unstep]
+
+/-- Folding a list of bijective updates permutes the state. -/
+private theorem foldl_bijective {α β : Type} (stepFn : β → α → β) :
+    ∀ (xs : List α), (∀ j ∈ xs, Function.Bijective (stepFn · j)) →
+      Function.Bijective (fun start => xs.foldl stepFn start)
+  | [], _ => Function.bijective_id
+  | j :: js, hbij => by
+    have hj := hbij j List.mem_cons_self
+    have hjs := foldl_bijective stepFn js fun k hk => hbij k (List.mem_cons_of_mem j hk)
+    simpa only [List.foldl_cons, Function.comp_def] using hjs.comp hj
+
+/-- An eighty-step line permutes the five-word state when every rotation is 1 to 31 bits. -/
+theorem line_bijective (X : Vector UInt32 16) (constants : Vector UInt32 5)
+    (index : Vector (Fin 16) 80) (rotation : Vector UInt32 80) (reversed : Bool)
+    (hrot : ∀ j : Fin 80, 0 < rotation[j].toNat ∧ rotation[j].toNat < 32) :
+    Function.Bijective (line X · constants index rotation reversed) := by
+  unfold line
+  exact foldl_bijective _ (List.finRange 80) fun j _ =>
+    step_bijective _ _ _ _ (hrot j).1 (hrot j).2
+
+/-- The left line permutes the five-word state, for every message block. -/
+theorem line_left_bijective (X : Vector UInt32 16) :
+    Function.Bijective (line X · K r s false) :=
+  line_bijective X K r s false s_bounds
+
+/-- The right line permutes the five-word state, for every message block. -/
+theorem line_right_bijective (X : Vector UInt32 16) :
+    Function.Bijective (line X · K' r' s' true) :=
+  line_bijective X K' r' s' true s'_bounds
 
 /-! ## Padding -/
 
