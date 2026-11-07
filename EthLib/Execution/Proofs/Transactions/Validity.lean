@@ -23,6 +23,8 @@ A transaction passes the rules exactly when it meets these bounds and its fees a
 
 Its fees are inverted when its priority fee per gas is above its maximum fee per gas.
 
+From Glamsterdam the rules also check its blobs and its authorizations.
+
 Exact conditions also state when the chain check, the contents check and the whole check pass.
 -/
 
@@ -147,6 +149,8 @@ From Fusaka to BPO5 its gas limit is at most `2^24`.
 
 From Glamsterdam its gas limit is at most `2^32 - 1`, and its least gas limit at most `2^24`.
 
+From Glamsterdam its blobs and its authorizations pass their rules.
+
 Its priority fee per gas is at most its maximum fee per gas. -/
 theorem validateTransaction_eq_ok_iff {fork : Fork} {sender : Address} {tx : Transaction}
     {gas : Nat} :
@@ -156,67 +160,27 @@ theorem validateTransaction_eq_ok_iff {fork : Fork} {sender : Address} {tx : Tra
         (fork ≥ .shapella → tx.to = none → tx.data.size ≤ maxInitCodeSize fork) ∧
         (fork ≥ .fusaka → fork < .glamsterdam → tx.gas.toNat ≤ TX_MAX_GAS_LIMIT) ∧
         (fork ≥ .glamsterdam →
-          tx.gas.toNat ≤ TX_MAX_TOTAL_GAS_LIMIT ∧ minimumGas fork sender tx ≤ TX_MAX_GAS_LIMIT) ∧
+          tx.gas.toNat ≤ TX_MAX_TOTAL_GAS_LIMIT ∧ minimumGas fork sender tx ≤ TX_MAX_GAS_LIMIT ∧
+            checkContents fork tx = .ok ()) ∧
         validateTransaction.feesInverted tx = false := by
   unfold validateTransaction
-  constructor
-  · intro h
-    split at h
-    · cases h
-    rename_i hGas
-    split at h
-    · cases h
-    rename_i hInit
-    split at h
-    · cases h
-    rename_i hTotal
-    split at h
-    · cases h
-    rename_i hIntrinsic
-    split at h
-    · cases h
-    rename_i hCap
-    split at h
-    · cases h
-    rename_i hNonce
-    split at h
-    · cases h
-    rename_i hFees
-    cases h
-    refine ⟨rfl, by omega, by omega, ?_, ?_, ?_, by simpa using hFees⟩
-    · intro hShapella hTo
-      simp only [hTo, Option.isNone_none, true_and] at hInit
-      exact Nat.not_lt.mp fun hlt => hInit ⟨hShapella, hlt⟩
-    · intro hFusaka hBefore
-      exact Nat.not_lt.mp fun hlt => hCap ⟨hFusaka, hBefore, hlt⟩
-    · intro hAfter
-      exact ⟨Nat.not_lt.mp fun hlt => hTotal ⟨hAfter, hlt⟩,
-        Nat.not_lt.mp fun hlt => hIntrinsic ⟨hAfter, hlt⟩⟩
-  · rintro ⟨rfl, hMin, hNonce, hInit, hCap, hAfter, hFees⟩
-    split
-    · omega
-    split
-    · rename_i hbad
-      obtain ⟨hShapella, hTo, hlt⟩ := hbad
-      have := hInit hShapella (Option.isNone_iff_eq_none.mp hTo)
-      omega
-    split
-    · rename_i hbad
-      have := (hAfter hbad.1).1
-      omega
-    split
-    · rename_i hbad
-      have := (hAfter hbad.1).2
-      omega
-    split
-    · rename_i hbad
-      have := hCap hbad.1 hbad.2.1
-      omega
-    split
-    · omega
-    split
-    · simp_all
-    rfl
+  by_cases hg : fork ≥ .glamsterdam
+  · have hlt : ¬ fork < .glamsterdam := Nat.not_lt.mpr hg
+    simp only [hg, ↓reduceIte, bind_unit_ok_iff, ensure_ok_iff, pure, Except.pure,
+      Except.ok.injEq, hlt, false_implies, implies_true, forall_const, true_and]
+    constructor
+    · rintro ⟨hNonce, hInit, hTotal, hFees, hContents, hMin, hBound, rfl⟩
+      exact ⟨rfl, hMin, hNonce, hInit, ⟨hTotal, hBound, hContents⟩, hFees⟩
+    · rintro ⟨rfl, hMin, hNonce, hInit, ⟨hTotal, hBound, hContents⟩, hFees⟩
+      exact ⟨hNonce, hInit, hTotal, hFees, hContents, hMin, hBound, rfl⟩
+  · have hlt : fork < .glamsterdam := Nat.lt_of_not_le hg
+    simp only [hg, ↓reduceIte, bind_unit_ok_iff, ensure_ok_iff, pure, Except.pure,
+      Except.ok.injEq, hlt, false_implies, forall_const, true_and]
+    constructor
+    · rintro ⟨hMin, hInit, hCap, hNonce, hFees, rfl⟩
+      exact ⟨rfl, hMin, hNonce, hInit, hCap, hFees⟩
+    · rintro ⟨rfl, hMin, hNonce, hInit, hCap, hFees⟩
+      exact ⟨hMin, hInit, hCap, hNonce, hFees, rfl⟩
 
 /-- What a transaction that passes the gas, nonce and fee rules satisfies.
 
@@ -238,7 +202,7 @@ theorem validateTransaction_ok {fork : Fork} {sender : Address} {tx : Transactio
       (fork ≥ .glamsterdam →
         tx.gas.toNat ≤ TX_MAX_TOTAL_GAS_LIMIT ∧ minimumGas fork sender tx ≤ TX_MAX_GAS_LIMIT) := by
   obtain ⟨hGas, hMin, hNonce, hInit, hCap, hAfter, -⟩ := validateTransaction_eq_ok_iff.mp h
-  exact ⟨hGas, hMin, hNonce, hInit, hCap, hAfter⟩
+  exact ⟨hGas, hMin, hNonce, hInit, hCap, fun hg => ⟨(hAfter hg).1, (hAfter hg).2.1⟩⟩
 
 /-- A valid transaction has a gas limit of at least 12000, the price of its sender. -/
 theorem validateTransaction_gas_ge {fork : Fork} {sender : Address} {tx : Transaction} {gas : Nat}
@@ -260,22 +224,16 @@ theorem checkTransaction_ok {fork : Fork} {chainId : UInt64} {tx : Transaction}
     checkChainId fork chainId tx = .ok () ∧ recoverSender fork tx = .ok sender ∧
       validateTransaction fork sender tx = .ok gas ∧ checkContents fork tx = .ok () := by
   unfold checkTransaction at h
-  cases hc : checkChainId fork chainId tx with
-  | error e => simp [hc, bind, Except.bind] at h
-  | ok u =>
-    cases hs : recoverSender fork tx with
-    | error e => simp [hc, hs, bind, Except.bind] at h
-    | ok a =>
-      cases hv : validateTransaction fork a tx with
-      | error e => simp [hc, hs, hv, bind, Except.bind] at h
-      | ok g =>
-        cases hk : checkContents fork tx with
-        | error e => simp [hc, hs, hv, hk, bind, Except.bind] at h
-        | ok w =>
-          simp only [hc, hs, hv, hk, bind, Except.bind, pure, Except.pure, Except.ok.injEq,
-            Prod.mk.injEq] at h
-          obtain ⟨rfl, rfl⟩ := h
-          exact ⟨rfl, rfl, hv, rfl⟩
+  by_cases hg : fork < .glamsterdam
+  · simp only [hg, ↓reduceIte, bind_ok_iff, pure, Except.pure, Except.ok.injEq,
+      Prod.mk.injEq] at h
+    obtain ⟨⟨⟩, hc, a, hs, g, hv, ⟨⟩, hk, rfl, rfl⟩ := h
+    exact ⟨hc, hs, hv, hk⟩
+  · simp only [hg, ↓reduceIte, bind_ok_iff, pure, Except.pure, Except.ok.injEq,
+      Prod.mk.injEq] at h
+    obtain ⟨⟨⟩, hc, a, hs, g, hv, rfl, rfl⟩ := h
+    exact ⟨hc, hs, hv,
+      ((validateTransaction_eq_ok_iff.mp hv).2.2.2.2.2.1 (Nat.le_of_not_lt hg)).2.2⟩
 
 /-- A transaction alone passes exactly when each of its four checks passes.
 
@@ -286,7 +244,9 @@ theorem checkTransaction_eq_ok_iff {fork : Fork} {chainId : UInt64} {tx : Transa
       checkChainId fork chainId tx = .ok () ∧ recoverSender fork tx = .ok sender ∧
         validateTransaction fork sender tx = .ok gas ∧ checkContents fork tx = .ok () := by
   refine ⟨checkTransaction_ok, fun ⟨hc, hs, hv, hk⟩ => ?_⟩
-  simp only [checkTransaction, hc, hs, hv, hk, bind, Except.bind, pure, Except.pure]
+  by_cases hg : fork < .glamsterdam <;>
+    simp only [checkTransaction, hc, hs, hv, hk, hg, ↓reduceIte, bind, Except.bind, pure,
+      Except.pure]
 
 /-- A transaction passes the chain check exactly when it signs no chain or the chain `chainId`.
 
