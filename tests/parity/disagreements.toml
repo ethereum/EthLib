@@ -20,139 +20,141 @@
 # A block whose gas limit is 2^63, one above the gas limit of its parent.
 # Clients cap the gas limit at 2^63 - 1, and the tests reject the block.
 # The Yellow Paper bounds the gas limit only against the parent's, and from below by 5000.
+# EIP-1985 would bound it by 2^63 - 1, but it is Stagnant, and no fork activates it.
+# execution-specs accepts the block as well, and lists these tests as expected failures.
 
 [[disagreement]]
 suite = "legacytests"
 case = "Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Frontier"
 group = "legacy_header"
-reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
-source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no activated rule bounds it"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 
 [[disagreement]]
 suite = "legacytests"
 case = "Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Homestead"
 group = "legacy_header"
-reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
-source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no activated rule bounds it"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 
 [[disagreement]]
 suite = "legacytests"
 case = "Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_EIP150"
 group = "legacy_header"
-reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
-source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no activated rule bounds it"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 
 [[disagreement]]
 suite = "legacytests"
 case = "Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_EIP158"
 group = "legacy_header"
-reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
-source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no activated rule bounds it"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 
 [[disagreement]]
 suite = "legacytests"
 case = "Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Byzantium"
 group = "legacy_header"
-reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
-source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no activated rule bounds it"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 
 [[disagreement]]
 suite = "legacytests"
 case = "Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Constantinople"
 group = "legacy_header"
-reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
-source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no activated rule bounds it"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 
 [[disagreement]]
 suite = "legacytests"
 case = "Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_ConstantinopleFix"
 group = "legacy_header"
-reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
-source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no activated rule bounds it"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 
 [[disagreement]]
 suite = "legacytests"
 case = "Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::LegacyTests/Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Istanbul"
 group = "legacy_header"
-reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
-source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no activated rule bounds it"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 
 [[disagreement]]
 suite = "legacytests"
 case = "Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::LegacyTests/Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Berlin"
 group = "legacy_header"
-reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
-source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no activated rule bounds it"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 
 [[disagreement]]
 suite = "legacytests"
 case = "Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::LegacyTests/Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_London"
 group = "legacy_header"
-reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
-source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no activated rule bounds it"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 
 [[disagreement]]
 suite = "legacytests"
 case = "Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Frontier"
 group = "legacy_blockchain"
-reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
-source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no activated rule bounds it"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 
 [[disagreement]]
 suite = "legacytests"
 case = "Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Homestead"
 group = "legacy_blockchain"
-reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
-source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no activated rule bounds it"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 
 [[disagreement]]
 suite = "legacytests"
 case = "Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_EIP150"
 group = "legacy_blockchain"
-reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
-source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no activated rule bounds it"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 
 [[disagreement]]
 suite = "legacytests"
 case = "Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_EIP158"
 group = "legacy_blockchain"
-reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
-source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no activated rule bounds it"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 
 [[disagreement]]
 suite = "legacytests"
 case = "Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Byzantium"
 group = "legacy_blockchain"
-reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
-source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no activated rule bounds it"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 
 [[disagreement]]
 suite = "legacytests"
 case = "Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_ConstantinopleFix"
 group = "legacy_blockchain"
-reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
-source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no activated rule bounds it"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 
 [[disagreement]]
 suite = "legacytests"
 case = "Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::LegacyTests/Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Istanbul"
 group = "legacy_blockchain"
-reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
-source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no activated rule bounds it"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 
 [[disagreement]]
 suite = "legacytests"
 case = "Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::LegacyTests/Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Berlin"
 group = "legacy_blockchain"
-reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
-source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no activated rule bounds it"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 
 [[disagreement]]
 suite = "legacytests"
 case = "Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::LegacyTests/Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_London"
 group = "legacy_blockchain"
-reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
-source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no activated rule bounds it"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 
 # A creation at an address that has storage but no code and a nonce of zero.
 # These tests were filled with EIP-7610 applied, so the creation fails.
