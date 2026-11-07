@@ -122,7 +122,7 @@ theorem At.rule {byte : UInt8} {op : Op}
     (h : ∀ evm, At code message pc stack memory gas state substate evm →
       ∃ after, run evm = .ok after ∧ post after) :
     Hoare fork (At code message pc stack memory gas state substate) post := by
-  apply Hoare.of_step
+  apply Triple.of_step
   intro evm hp
   obtain ⟨after, ok, hpost⟩ := h evm hp
   exact ⟨after,

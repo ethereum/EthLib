@@ -358,7 +358,7 @@ theorem spec {gas : Nat} (hgas : 45 + 55 * count message.data ≤ gas) :
     Spec fork (At CODE message 0 [] .empty gas state substate)
       (Halted false (wordBytes (total message.data)) (gas - 45 - 55 * count message.data) state
         substate) :=
-  (start (by omega)).seq (Hoare.loop (body hgas) (exit hgas) (count message.data))
+  (start (by omega)).seq (Triple.loop (body hgas) (exit hgas) (count message.data))
 
 /-- The loop of the interpreter runs the call to the sum.
 

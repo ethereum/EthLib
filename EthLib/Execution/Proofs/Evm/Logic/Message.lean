@@ -83,15 +83,6 @@ inductive StepBy (fork : Fork) (bound : Nat) (runChild : MessageRunner fork Mete
       resume child.1 = .error e → e.aborts = false →
       StepBy fork bound runChild evm (exceptionalHalt evm e)
 
-/-- The frames that a frame reaches by steps under a runner of messages, itself included. -/
-inductive ReachesBy (fork : Fork) (bound : Nat) (runChild : MessageRunner fork Meter bound) :
-    Evm fork Meter → Evm fork Meter → Prop where
-  /-- A frame reaches itself. -/
-  | refl (evm : Evm fork Meter) : ReachesBy fork bound runChild evm evm
-  /-- A step, then the frames that its result reaches. -/
-  | step {a b c : Evm fork Meter} : StepBy fork bound runChild a b →
-      ReachesBy fork bound runChild b c → ReachesBy fork bound runChild a c
-
 variable {bound : Nat} {runChild : MessageRunner fork Meter bound}
 
 /-- A stopped frame takes no step. -/
@@ -106,12 +97,7 @@ theorem StepBy.running {a b : Evm fork Meter} (h : StepBy fork bound runChild a 
 theorem StepBy.gasHeld_le [LawfulGasMeter Meter] {a b : Evm fork Meter}
     (h : StepBy fork bound runChild a b) : GasMeter.gasHeld b.gas ≤ GasMeter.gasHeld a.gas := by
   cases h with
-  | step hs =>
-    cases hs with
-    | next running next =>
-      exact gasHeld_le_of_measure_lt (show measure _ < measure _ from
-        step_decreases fork running next)
-    | halt => rw [gasHeld_exceptionalHalt]; omega
+  | step hs => exact hs.gasHeld_le
   | child running sent lt ran resumed =>
     rename_i child
     exact gasHeld_le_of_measure_lt
@@ -172,64 +158,6 @@ theorem StepBy.deterministic {a b c : Evm fork Meter} (hb : StepBy fork bound ru
       cases failed'
       rfl
 
-namespace ReachesBy
-
-/-- A single step reaches its result. -/
-theorem single {a b : Evm fork Meter} (h : StepBy fork bound runChild a b) :
-    ReachesBy fork bound runChild a b :=
-  .step h (.refl b)
-
-/-- The frames reached from a reached frame are reached. -/
-theorem trans {a b c : Evm fork Meter} (hab : ReachesBy fork bound runChild a b)
-    (hbc : ReachesBy fork bound runChild b c) : ReachesBy fork bound runChild a c := by
-  induction hab with
-  | refl => exact hbc
-  | step h _ ih => exact .step h (ih hbc)
-
-/-- A frame reached with no message is reached under every runner. -/
-theorem of_reaches {a b : Evm fork Meter} (h : Reaches fork a b) :
-    ReachesBy fork bound runChild a b := by
-  induction h with
-  | refl => exact .refl _
-  | step hs _ ih => exact .step (.step hs) ih
-
-/-- A predicate that every step keeps holds at every reached frame. -/
-theorem invariant {R : Evm fork Meter → Prop}
-    (keeps : ∀ {a b}, StepBy fork bound runChild a b → R a → R b) {a b : Evm fork Meter}
-    (h : ReachesBy fork bound runChild a b) (start : R a) : R b := by
-  induction h with
-  | refl => exact start
-  | step hs _ ih => exact ih (keeps hs start)
-
-/-- A reached frame holds at most the gas of the frame it starts from. -/
-theorem gasHeld_le [LawfulGasMeter Meter] {a b : Evm fork Meter}
-    (h : ReachesBy fork bound runChild a b) : GasMeter.gasHeld b.gas ≤ GasMeter.gasHeld a.gas := by
-  induction h with
-  | refl => exact Nat.le_refl _
-  | step hs _ ih => exact Nat.le_trans ih hs.gasHeld_le
-
-/-- A stopped frame reaches only itself. -/
-theorem eq_of_stopped {a b : Evm fork Meter} (h : ReachesBy fork bound runChild a b)
-    (stopped : a.running = false) : b = a := by
-  cases h with
-  | refl => rfl
-  | step hs _ => rw [hs.running] at stopped; cases stopped
-
-/-- Two stopped frames that one frame reaches are one frame. -/
-theorem stopped_unique {a b c : Evm fork Meter} (hb : ReachesBy fork bound runChild a b)
-    (hc : ReachesBy fork bound runChild a c) (sb : b.running = false)
-    (sc : c.running = false) : b = c := by
-  induction hb generalizing c with
-  | refl => exact (hc.eq_of_stopped sb).symm
-  | step hs _ ih =>
-    cases hc with
-    | refl => rw [hs.running] at sc; cases sc
-    | step hs' hc' =>
-      rw [StepBy.deterministic hs hs'] at *
-      exact ih hc' sb sc
-
-end ReachesBy
-
 /-- The frame sends a message, and the runner fails to run it. -/
 def AbortsBy (fork : Fork) (bound : Nat) (runChild : MessageRunner fork Meter bound)
     (evm : Evm fork Meter) : Prop :=
@@ -239,40 +167,18 @@ def AbortsBy (fork : Fork) (bound : Nat) (runChild : MessageRunner fork Meter bo
 
 /-! ## The loop of the interpreter -/
 
-/-- The loop runs a frame as it runs each frame that the frame reaches under its runner. -/
-theorem runFrame_eq_of_reachesBy [LawfulGasMeter Meter] {evm mid : Evm fork Meter}
-    (h : ReachesBy fork bound runChild evm mid) (within : GasMeter.gasHeld evm.gas ≤ bound) :
-    runFrame (step fork) (step_decreases fork) bound runChild evm within =
-      runFrame (step fork) (step_decreases fork) bound runChild mid
+/-- The loop runs a frame as it runs the frame that its step under the runner gives. -/
+theorem StepBy.runFrame_eq [LawfulGasMeter Meter] {a b : Evm fork Meter}
+    (h : StepBy fork bound runChild a b) (within : GasMeter.gasHeld a.gas ≤ bound) :
+    runFrame (Evm.step fork) (step_decreases fork) bound runChild a within =
+      runFrame (Evm.step fork) (step_decreases fork) bound runChild b
         (Nat.le_trans h.gasHeld_le within) := by
-  induction h with
-  | refl => rfl
-  | step hs rest ih =>
-    cases hs with
-    | step hs =>
-      cases hs with
-      | next running next =>
-        rw [runFrame_of_step_eq_next running next]
-        exact ih _
-      | halt running failed halts =>
-        -- The halted frame is stopped, so the rest of the reach is that frame itself.
-        obtain rfl := rest.eq_of_stopped rfl
-        rw [runFrame_of_step_eq_error running failed halts, runFrame_of_running_eq_false rfl]
-    | child running sent lt ran resumed =>
-      rw [runFrame_of_step_eq_child running sent lt ran resumed]
-      exact ih _
-    | childHalt running sent lt ran failed halts =>
-      -- The halted frame is stopped, so the rest of the reach is that frame itself.
-      obtain rfl := rest.eq_of_stopped rfl
-      rw [runFrame_of_step_eq_child_error running sent lt ran failed halts,
-        runFrame_of_running_eq_false rfl]
-
-/-- A frame that reaches a stopped frame under a runner runs to it in the loop with that runner. -/
-theorem runFrame_of_reachesBy [LawfulGasMeter Meter] {evm stopped : Evm fork Meter}
-    (h : ReachesBy fork bound runChild evm stopped) (halted : stopped.running = false)
-    (within : GasMeter.gasHeld evm.gas ≤ bound) :
-    runFrame (step fork) (step_decreases fork) bound runChild evm within = .ok stopped :=
-  (runFrame_eq_of_reachesBy h within).trans (runFrame_of_running_eq_false halted)
+  cases h with
+  | step hs => exact hs.runFrame_eq within
+  | child running sent lt ran resumed => exact runFrame_of_step_eq_child running sent lt ran resumed
+  | childHalt running sent lt ran failed halts =>
+    rw [runFrame_of_step_eq_child_error running sent lt ran failed halts,
+      runFrame_of_running_eq_false rfl]
 
 /-- A frame whose runner fails on its message makes the loop fail with the error of the runner.
 
@@ -322,7 +228,7 @@ def HoareUnder (fork : Fork) (callee : Evm fork Meter → Message fork → Evm f
     (P Q : Evm fork Meter → Prop) : Prop :=
   ∀ bound (runChild : MessageRunner fork Meter bound), Meets callee runChild →
     ∀ evm, P evm → GasMeter.gasHeld evm.gas ≤ bound →
-      ∃ after, ReachesBy fork bound runChild evm after ∧
+      ∃ after, Reaches (StepBy fork bound runChild) evm after ∧
         (Q after ∨ AbortsBy fork bound runChild after)
 
 /-- A triple under an assumption whose postcondition is a stopped frame. -/
@@ -330,7 +236,31 @@ def SpecUnder (fork : Fork) (callee : Evm fork Meter → Message fork → Evm fo
     (P Q : Evm fork Meter → Prop) : Prop :=
   HoareUnder fork callee P fun evm => evm.running = false ∧ Q evm
 
+/-- The frame meets `P` and its gas is within the bound, or its runner fails on its message. -/
+def OrAborts (fork : Fork) (bound : Nat) (runChild : MessageRunner fork Meter bound)
+    (P : Evm fork Meter → Prop) (evm : Evm fork Meter) : Prop :=
+  (P evm ∧ GasMeter.gasHeld evm.gas ≤ bound) ∨ AbortsBy fork bound runChild evm
+
 variable {callee : Evm fork Meter → Message fork → Evm fork Meter → Prop}
+
+/-- A triple under an assumption is a triple over the steps under each runner that meets it.
+
+Its conditions also hold of a frame whose runner fails, and ask for the gas within the bound. -/
+theorem hoareUnder_iff_triple [LawfulGasMeter Meter] {P Q : Evm fork Meter → Prop} :
+    HoareUnder fork callee P Q ↔ ∀ bound (runChild : MessageRunner fork Meter bound),
+      Meets callee runChild →
+        Triple (StepBy fork bound runChild) (OrAborts fork bound runChild P)
+          (OrAborts fork bound runChild Q) := by
+  constructor
+  · intro h bound runChild meets evm hp
+    rcases hp with ⟨hp, within⟩ | aborted
+    · obtain ⟨after, hreach, hq⟩ := h bound runChild meets evm hp within
+      refine ⟨after, hreach, hq.imp_left fun hq => ⟨hq, ?_⟩⟩
+      exact Nat.le_trans (hreach.gasHeld_le StepBy.gasHeld_le) within
+    · exact ⟨evm, .refl evm, .inr aborted⟩
+  · intro h bound runChild meets evm hp within
+    obtain ⟨after, hreach, hq⟩ := h bound runChild meets evm (.inl ⟨hp, within⟩)
+    exact ⟨after, hreach, hq.imp_left And.left⟩
 
 namespace HoareUnder
 
@@ -338,7 +268,7 @@ namespace HoareUnder
 theorem of_hoare {P Q : Evm fork Meter → Prop} (h : Hoare fork P Q) :
     HoareUnder fork callee P Q := fun _ _ _ evm hp _ =>
   let ⟨after, hreach, hq⟩ := h evm hp
-  ⟨after, .of_reaches hreach, .inl hq⟩
+  ⟨after, hreach.mono fun hs => .step hs, .inl hq⟩
 
 /-- A step that sends a message, to a frame of `Q` from every frame that ends it.
 
@@ -369,23 +299,6 @@ theorem of_child [LawfulGasMeter Meter] {P Q : Evm fork Meter → Prop}
     · exact ⟨after, .single (.child running sent lt ran resumed), .inl hq⟩
     · exact ⟨_, .single (.childHalt running sent lt ran failed halts), .inl hq⟩
 
-/-- Sequence: reach the middle condition, then the postcondition from it. -/
-theorem seq [LawfulGasMeter Meter] {P Q R : Evm fork Meter → Prop}
-    (first : HoareUnder fork callee P Q) (second : HoareUnder fork callee Q R) :
-    HoareUnder fork callee P R := fun bound runChild meets evm hp within => by
-  obtain ⟨mid, h₁, hq | aborted⟩ := first bound runChild meets evm hp within
-  · obtain ⟨after, h₂, hr⟩ :=
-      second bound runChild meets mid hq (Nat.le_trans h₁.gasHeld_le within)
-    exact ⟨after, h₁.trans h₂, hr⟩
-  · exact ⟨mid, h₁, .inr aborted⟩
-
-/-- Consequence: a stronger precondition and a weaker postcondition. -/
-theorem consequence {P P' Q Q' : Evm fork Meter → Prop} (h : HoareUnder fork callee P Q)
-    (pre : ∀ evm, P' evm → P evm) (post : ∀ evm, Q evm → Q' evm) :
-    HoareUnder fork callee P' Q' := fun bound runChild meets evm hp within =>
-  let ⟨after, hr, hq⟩ := h bound runChild meets evm (pre evm hp) within
-  ⟨after, hr, hq.imp (post after) id⟩
-
 /-- A stronger assumption on the frames that end messages keeps a triple. -/
 theorem assumption {callee' : Evm fork Meter → Message fork → Evm fork Meter → Prop}
     {P Q : Evm fork Meter → Prop} (h : HoareUnder fork callee P Q)
@@ -396,36 +309,58 @@ theorem assumption {callee' : Evm fork Meter → Message fork → Evm fork Meter
     ⟨fun caller message lt child ran => stronger _ _ _ (meets.ok caller message lt child ran),
       meets.aborts⟩
 
+variable [LawfulGasMeter Meter]
+
+/-- Sequence: reach the middle condition, then the postcondition from it. -/
+theorem seq {P Q R : Evm fork Meter → Prop} (first : HoareUnder fork callee P Q)
+    (second : HoareUnder fork callee Q R) : HoareUnder fork callee P R :=
+  hoareUnder_iff_triple.mpr fun bound runChild meets =>
+    (hoareUnder_iff_triple.mp first bound runChild meets).seq
+      (hoareUnder_iff_triple.mp second bound runChild meets)
+
+/-- Consequence: a stronger precondition and a weaker postcondition. -/
+theorem consequence {P P' Q Q' : Evm fork Meter → Prop} (h : HoareUnder fork callee P Q)
+    (pre : ∀ evm, P' evm → P evm) (post : ∀ evm, Q evm → Q' evm) :
+    HoareUnder fork callee P' Q' :=
+  hoareUnder_iff_triple.mpr fun bound runChild meets =>
+    (hoareUnder_iff_triple.mp h bound runChild meets).consequence
+      (fun evm => Or.imp_left (And.imp_left (pre evm)))
+      (fun evm => Or.imp_left (And.imp_left (post evm)))
+
 /-- Each case of the precondition with its own triple. -/
 theorem cases {P₁ P₂ Q : Evm fork Meter → Prop} (h₁ : HoareUnder fork callee P₁ Q)
     (h₂ : HoareUnder fork callee P₂ Q) :
     HoareUnder fork callee (fun evm => P₁ evm ∨ P₂ evm) Q :=
-  fun bound runChild meets evm hp within =>
-    hp.elim (h₁ bound runChild meets evm · within) (h₂ bound runChild meets evm · within)
+  hoareUnder_iff_triple.mpr fun bound runChild meets =>
+    ((hoareUnder_iff_triple.mp h₁ bound runChild meets).cases
+      (hoareUnder_iff_triple.mp h₂ bound runChild meets)).consequence
+      (fun _ hp => match hp with
+        | .inl ⟨.inl hp, within⟩ => .inl (.inl ⟨hp, within⟩)
+        | .inl ⟨.inr hp, within⟩ => .inr (.inl ⟨hp, within⟩)
+        | .inr aborted => .inl (.inr aborted))
+      fun _ hq => hq
 
 /-- A loop whose body may lower the measure by more than one. -/
-theorem loop_lt [LawfulGasMeter Meter] {I : Nat → Evm fork Meter → Prop}
-    {Q : Evm fork Meter → Prop}
+theorem loop_lt {I : Nat → Evm fork Meter → Prop} {Q : Evm fork Meter → Prop}
     (body : ∀ k, HoareUnder fork callee (I (k + 1)) fun evm => ∃ j < k + 1, I j evm)
-    (exit : HoareUnder fork callee (I 0) Q) (n : Nat) : HoareUnder fork callee (I n) Q := by
-  induction n using Nat.strongRecOn with
-  | _ n ih =>
-    cases n with
-    | zero => exact exit
-    | succ k =>
-      intro bound runChild meets evm hp within
-      obtain ⟨mid, hreach, ⟨j, hj, hi⟩ | aborted⟩ := body k bound runChild meets evm hp within
-      · obtain ⟨after, hreach', hq⟩ :=
-          ih j hj bound runChild meets mid hi (Nat.le_trans hreach.gasHeld_le within)
-        exact ⟨after, hreach.trans hreach', hq⟩
-      · exact ⟨mid, hreach, .inr aborted⟩
+    (exit : HoareUnder fork callee (I 0) Q) (n : Nat) : HoareUnder fork callee (I n) Q :=
+  hoareUnder_iff_triple.mpr fun bound runChild meets =>
+    Triple.loop_lt (I := fun k => OrAborts fork bound runChild (I k))
+      (fun k => (hoareUnder_iff_triple.mp (body k) bound runChild meets).consequence
+        (fun _ hp => hp)
+        fun _ hq => match hq with
+          | .inl ⟨⟨j, hj, hi⟩, within⟩ => ⟨j, hj, .inl ⟨hi, within⟩⟩
+          | .inr aborted => ⟨0, Nat.succ_pos k, .inr aborted⟩)
+      (hoareUnder_iff_triple.mp exit bound runChild meets) n
 
 /-- A loop: each run of the body lowers the measure by one, and the exit ends it at 0. -/
-theorem loop [LawfulGasMeter Meter] {I : Nat → Evm fork Meter → Prop}
-    {Q : Evm fork Meter → Prop} (body : ∀ k, HoareUnder fork callee (I (k + 1)) (I k))
+theorem loop {I : Nat → Evm fork Meter → Prop} {Q : Evm fork Meter → Prop}
+    (body : ∀ k, HoareUnder fork callee (I (k + 1)) (I k))
     (exit : HoareUnder fork callee (I 0) Q) (n : Nat) : HoareUnder fork callee (I n) Q :=
-  loop_lt (fun k => (body k).consequence (fun _ h => h) fun _ h => ⟨k, Nat.lt_succ_self k, h⟩)
-    exit n
+  hoareUnder_iff_triple.mpr fun bound runChild meets =>
+    Triple.loop (I := fun k => OrAborts fork bound runChild (I k))
+      (fun k => hoareUnder_iff_triple.mp (body k) bound runChild meets)
+      (hoareUnder_iff_triple.mp exit bound runChild meets) n
 
 end HoareUnder
 
@@ -437,9 +372,9 @@ theorem seq [LawfulGasMeter Meter] {P Q R : Evm fork Meter → Prop}
     SpecUnder fork callee P R := HoareUnder.seq first second
 
 /-- Consequence for a specification. -/
-theorem consequence {P P' Q Q' : Evm fork Meter → Prop} (h : SpecUnder fork callee P Q)
-    (pre : ∀ evm, P' evm → P evm) (post : ∀ evm, Q evm → Q' evm) :
-    SpecUnder fork callee P' Q' :=
+theorem consequence [LawfulGasMeter Meter] {P P' Q Q' : Evm fork Meter → Prop}
+    (h : SpecUnder fork callee P Q) (pre : ∀ evm, P' evm → P evm)
+    (post : ∀ evm, Q evm → Q' evm) : SpecUnder fork callee P' Q' :=
   HoareUnder.consequence h pre fun evm ⟨hs, hq⟩ => ⟨hs, post evm hq⟩
 
 /-- A specification with no message holds under every assumption. -/
@@ -461,8 +396,10 @@ theorem runFrame [LawfulGasMeter Meter] {P Q : Evm fork Meter → Prop}
     ∃ e, runFrame (step fork) (step_decreases fork) bound runChild evm within = .error e ∧
       e.aborts = true := by
   obtain ⟨after, hreach, ⟨halted, hq⟩ | aborted⟩ := h bound runChild meets evm hp within
-  · exact .inl ⟨after, runFrame_of_reachesBy hreach halted within, hq⟩
-  · rw [runFrame_eq_of_reachesBy hreach within]
+  · rw [runFrame_eq_of_reaches StepBy.gasHeld_le StepBy.runFrame_eq hreach within,
+      runFrame_of_running_eq_false halted]
+    exact .inl ⟨after, rfl, hq⟩
+  · rw [runFrame_eq_of_reaches StepBy.gasHeld_le StepBy.runFrame_eq hreach within]
     exact .inr (runFrame_of_abortsBy meets.aborts aborted _)
 
 end SpecUnder
