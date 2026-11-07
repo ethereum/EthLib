@@ -200,17 +200,14 @@ The sync committee has topics from Altair, and changes of BLS credentials from C
 
 Blob sidecars travel at Deneb and Electra, and column sidecars at Fulu.
 
-Gloas adds four topics, and Heze adds inclusion lists.
-
-Partial column sidecars are specified here only at Fulu. -/
+Gloas adds four topics, and Heze adds inclusion lists. -/
 def gossipValidationSpecified (fork : Fork) : String → Bool
   | "attester_slashing" | "proposer_slashing" | "voluntary_exit" | "beacon_block"
   | "beacon_attestation" | "beacon_aggregate_and_proof" => true
   | "sync_committee" | "sync_committee_contribution_and_proof" => .altair ≤ fork
   | "bls_to_execution_change" => .shapella ≤ fork
   | "blob_sidecar" => .dencun ≤ fork && fork < .fusaka
-  | "data_column_sidecar" => .fusaka ≤ fork
-  | "partial_data_column_sidecar" => .fusaka ≤ fork && fork < .glamsterdam
+  | "data_column_sidecar" | "partial_data_column_sidecar" => .fusaka ≤ fork
   | "proposer_preferences" | "execution_payload" | "payload_attestation_message"
   | "execution_payload_bid" => .glamsterdam ≤ fork
   | "inclusion_list" => .hegota ≤ fork
@@ -341,37 +338,48 @@ def validateGossipInput {preset : Preset} {fork : Fork} (config : Config)
     return record outcome (·.recordInclusionList signed)
   | _ => throw (0, s!"gossip validation of the topic {topic} is not yet specified")
 
-/-- At Fulu: the outcomes of the partial sidecars of a case, after the headers it records first.
+/-- From Fulu: the outcomes of the partial sidecars of a case, after the headers it records first.
 
-The bytes of a message start with a kind byte, then the root of its group.
+The bytes of a message start with a kind byte, then the group of the message.
+
+The group holds the root of a block, and from Gloas also its slot.
 
 Kind 1 is a header that the node validated before the case, and gives no outcome.
 
-Kind 0 is a partial sidecar, whose column is the subnet field of the message. -/
+Kind 0 is a partial sidecar, whose column is the subnet field of the message.
+
+At Fulu a sidecar is checked against the recorded headers, and from Gloas against its block. -/
 def validatePartialInputs {preset : Preset} {fork : Fork} (config : Config)
     (checks : SignatureChecks) (store : Store preset fork) (inputs : List GossipInput) :
     Result ByteArray := do
-  if fulu : .fusaka ≤ fork ∧ fork < .glamsterdam then
+  if fulu : .fusaka ≤ fork then
     let setup ← runForkChoice (embeddedSetup.mapError .kzg)
+    let groupEnd := if .glamsterdam ≤ fork then 41 else 33
     let mut headers : PartialHeaders preset fork := []
     let mut out := ByteArray.empty
     for input in inputs do
-      if input.data.size < 33 then throw (0, "a partial message is cut short")
-      let root ← decodeInput Root (input.data.extract 1 33)
-      let rest := input.data.extract 33 input.data.size
+      if input.data.size < groupEnd then throw (0, "a partial message is cut short")
+      let group ← decodeInput (PartialDataColumnGroupID fork) (input.data.extract 1 groupEnd)
+      let rest := input.data.extract groupEnd input.data.size
       match (input.data.data[0]? : Option UInt8) with
       | some 1 =>
-        headers := headers.record root (← decodeInput (PartialDataColumnHeader preset fork) rest)
+        headers := headers.record group.beaconBlockRoot
+          (← decodeInput (PartialDataColumnHeader preset fork) rest)
       | some 0 =>
         let sidecar ← decodeInput (PartialDataColumnSidecar preset fork) rest
-        let (outcome, next) ← runForkChoice (validatePartialDataColumnSidecar config checks setup
-          headers store fulu sidecar input.currentTimeMs
-          ⟨root, fun gloas => absurd gloas (not_glamsterdam_le fulu.2)⟩ input.subnetId)
-        headers := next
-        out := out ++ outcomeRecord outcome
+        if gloas : .glamsterdam ≤ fork then
+          let outcome ← runForkChoice (validateGloasPartialDataColumnSidecar setup store gloas
+            sidecar group input.subnetId)
+          out := out ++ outcomeRecord outcome
+        else
+          let (outcome, next) ← runForkChoice (validatePartialDataColumnSidecar config checks
+            setup headers store ⟨fulu, Nat.lt_of_not_le gloas⟩ sidecar input.currentTimeMs group
+            input.subnetId)
+          headers := next
+          out := out ++ outcomeRecord outcome
       | _ => throw (0, "the kind of a partial message is 0 or 1")
     return out
-  else throw (0, "partial column sidecars travel only at Fulu")
+  else throw (0, "partial column sidecars travel only from Fulu")
 
 /-- From Heze: the store after a message, which keeps a valid inclusion list as timely.
 
@@ -392,7 +400,7 @@ def recordGossipInclusionList {preset : Preset} {fork : Fork} (store : Store pre
 
 /-- Validate the messages of a topic in turn, against the store of an anchor and later blocks.
 
-Every topic is specified here up to Heze, but partial column sidecars only at Fulu. -/
+Every topic is specified here up to Heze. -/
 @[export eth_consensus_gossip_validation]
 def gossipValidationExport
     (name fork anchorState anchorBlock blocks finalized topic messages replacements : ByteArray)

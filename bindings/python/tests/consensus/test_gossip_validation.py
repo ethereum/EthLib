@@ -49,8 +49,7 @@ SPECIFIED = (
 )
 # The topics whose cases stop before Heze, with their last fork.
 # Blob sidecars travel only at Deneb and Electra.
-# Partial column sidecars change at Gloas, and EthLib does not specify that change yet.
-LAST = {"blob_sidecar": "electra", "partial_data_column_sidecar": "fulu"}
+LAST = {"blob_sidecar": "electra"}
 
 # The release archives that hold the cases.
 ARCHIVES = {
@@ -100,7 +99,7 @@ def _partial_messages(case: Path, meta: dict) -> list:
 
     Each message starts with its kind, 1 for such a header and 0 for a sidecar.
 
-    The root of its block follows.
+    The group of the message follows: the root of its block, and from Gloas its slot.
 
     The column of a sidecar takes the place of the subnet.
     """
