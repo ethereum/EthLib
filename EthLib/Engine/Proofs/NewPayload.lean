@@ -16,6 +16,8 @@ Without a JSON-RPC error, the parameters are an array of the values of the versi
 
 A payload that fails the checks is invalid, or has an invalid block hash at version 1.
 
+It has an invalid block hash exactly when its block hash is wrong and the version is 1.
+
 Its latest valid hash is null.
 
 So without the parent's state a payload is never valid: it is syncing, or it failed the checks.
@@ -150,16 +152,19 @@ theorem params_of_checkNewPayload_ok {config : ChainConfig} {version : Nat} {par
 
 /-! ## A payload that fails the checks -/
 
-/-- A payload that fails the checks is invalid, or has an invalid block hash at version 1.
+/-- A payload that fails the checks has an invalid block hash for a wrong block hash at version 1.
 
-At any other version, its status is invalid.
+Otherwise it is invalid.
 
 Its latest valid hash is null. -/
-theorem status_of_checkNewPayload {config : ChainConfig} {version : Nat} {params : Lean.Json}
-    {status : PayloadStatus} {reason : PayloadError}
+private theorem status_cases_of_checkNewPayload {config : ChainConfig} {version : Nat}
+    {params : Lean.Json} {status : PayloadStatus} {reason : PayloadError}
     (h : checkNewPayload config version params = .ok (.error (status, reason))) :
     status.latestValidHash = none ∧
-      (status.status = .invalid ∨ status.status = .invalidBlockHash ∧ version = 1) := by
+      (status.status = .invalidBlockHash ∧
+          (version = 1 ∧ ∃ expected computed, reason = .wrongBlockHash expected computed) ∨
+        status.status = .invalid ∧
+          ¬(version = 1 ∧ ∃ expected computed, reason = .wrongBlockHash expected computed)) := by
   cases params with
   | arr items =>
     unfold checkNewPayload at h
@@ -176,12 +181,18 @@ theorem status_of_checkNewPayload {config : ChainConfig} {version : Nat} {params
         | (obtain ⟨_, step, h⟩ := bind_ok_iff.mp h
            first | cases step | obtain ⟨_, -, rfl⟩ := map_ok_iff.mp step | skip)
         | split at h)
-      -- Each status that the checks return is invalid, or an invalid block hash at version 1.
+      -- Only a wrong block hash at version 1 has that status; every other case is invalid.
       all_goals
         cases h
         first
-          | exact ⟨rfl, .inl rfl⟩
-          | exact ⟨rfl, .inr ⟨rfl, ‹version = 1›⟩⟩
+          | exact ⟨rfl, .inl ⟨rfl, ‹version = 1›, _, _, rfl⟩⟩
+          | (refine ⟨rfl, .inr ⟨rfl, ?_⟩⟩
+             rintro ⟨hv, a, b, he⟩
+             first
+               | exact ‹¬version = 1› hv
+               | solve_by_elim
+               | (cases he; done))
+          | ((by_cases hv : version = 1 <;> simp [hv]) <;> done)
     -- Parameters of the wrong shape fail with a JSON-RPC error, never with a status.
     · dsimp -zeta only at h
       rw [ite_eq_right hc, bind_ok_iff] at h
@@ -189,6 +200,31 @@ theorem status_of_checkNewPayload {config : ChainConfig} {version : Nat} {params
       cases hInvalid
   -- Any other JSON value is not an array, so the read fails at once.
   | _ => cases h
+
+/-- A payload that fails the checks is invalid, or has an invalid block hash at version 1.
+
+At any other version, its status is invalid.
+
+Its latest valid hash is null. -/
+theorem status_of_checkNewPayload {config : ChainConfig} {version : Nat} {params : Lean.Json}
+    {status : PayloadStatus} {reason : PayloadError}
+    (h : checkNewPayload config version params = .ok (.error (status, reason))) :
+    status.latestValidHash = none ∧
+      (status.status = .invalid ∨ status.status = .invalidBlockHash ∧ version = 1) := by
+  obtain ⟨hn, ⟨hs, hv, -⟩ | ⟨hs, -⟩⟩ := status_cases_of_checkNewPayload h
+  · exact ⟨hn, .inr ⟨hs, hv⟩⟩
+  · exact ⟨hn, .inl hs⟩
+
+/-- A failed check answers an invalid block hash exactly for a wrong block hash at version 1. -/
+theorem invalidBlockHash_iff_of_checkNewPayload {config : ChainConfig} {version : Nat}
+    {params : Lean.Json} {status : PayloadStatus} {reason : PayloadError}
+    (h : checkNewPayload config version params = .ok (.error (status, reason))) :
+    status.status = .invalidBlockHash ↔
+      version = 1 ∧ ∃ expected computed, reason = .wrongBlockHash expected computed := by
+  obtain ⟨-, ⟨hs, hw⟩ | ⟨hs, hw⟩⟩ := status_cases_of_checkNewPayload h
+  · exact iff_of_true hs hw
+  · rw [hs]
+    exact iff_of_false (by simp) hw
 
 /-- Without the parent's state, a payload is never valid, and its latest valid hash is null.
 
