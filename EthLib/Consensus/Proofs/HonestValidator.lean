@@ -40,6 +40,10 @@ Under the pairing laws, a signed payload attestation message passes the wire che
 These checks of the fork choice read only its slot, which must be current, and its signature.
 
 The validator must have the public key of the secret key.
+
+Under the pairing laws, signed preferences pass the check of their signature.
+
+They name the dependent root of the head and the slot, validator and values they were made for.
 -/
 
 @[expose] public section
@@ -820,5 +824,75 @@ theorem validatePtcMessage_getPayloadAttestationMessageSignature (laws : Pairing
   simp only [current, bind, Except.bind, ne_eq, not_true_eq_false, ite_false, valid,
     Except.mapError, pure, Except.pure]
   rfl
+
+/-- The root of preferences reads only the root of the genesis validators of the state. -/
+theorem proposerPreferencesSigningRoot_of_genesisValidatorsRoot {config : Config}
+    {state other : BeaconState preset fork} {preferences : ProposerPreferences}
+    (sameChain : other.genesisValidatorsRoot = state.genesisValidatorsRoot) :
+    proposerPreferencesSigningRoot config other preferences =
+      proposerPreferencesSigningRoot config state preferences := by
+  unfold proposerPreferencesSigningRoot
+  rw [sameChain]
+
+/-- From Gloas: preferences signed by their validator pass the check of their signature.
+
+The validator must have the public key of the secret key in the state of the check.
+
+The signer may hold another state, of the same chain: the states share the genesis validators.
+
+The statement holds under the laws of the pairing, as BLS correctness does. -/
+theorem isValidProposerPreferencesSignature_of_sign (laws : PairingLaws) {config : Config}
+    {state signer : BeaconState preset fork} {signed : SignedProposerPreferences}
+    {key : Signatures.SecretKey} {validator : Validator}
+    (registered : getValidator state signed.message.validatorIndex = .ok validator)
+    (owned : validator.pubkey = Signatures.skToPk key)
+    (sameChain : signer.genesisValidatorsRoot = state.genesisValidatorsRoot)
+    (signedBy : getProposerPreferencesSignature config signer signed.message key =
+      .ok signed.signature) :
+    isValidProposerPreferencesSignature config .bls state signed = .ok true := by
+  unfold getProposerPreferencesSignature at signedBy
+  rw [proposerPreferencesSigningRoot_of_genesisValidatorsRoot sameChain] at signedBy
+  -- Split the bind with lemmas, so the kernel never evaluates the signature.
+  obtain ⟨root, rooted, signs⟩ := bind_ok_iff.mp signedBy
+  rw [mapError_ok_iff] at rooted signs
+  obtain ⟨signature, signs', verifies⟩ := Signatures.verify_sign laws key (packBytes root)
+  rw [signs', Except.ok.injEq] at signs
+  subst signs
+  unfold isValidProposerPreferencesSignature
+  simp only [registered, rooted, Except.mapError, bind, Except.bind, pure, Except.pure, owned,
+    SignatureChecks.bls]
+  exact congrArg Except.ok verifies
+
+/-- From Gloas: signed preferences name the dependent root of the head and the given values.
+
+The dependent root is the ancestor of the head at the dependent slot of the proposal epoch.
+
+Under the pairing laws, the preferences pass the check of their signature.
+
+The state of the check must be of the same chain, and give the validator the key's public key. -/
+theorem getSignedProposerPreferences_ok (laws : PairingLaws) {config : Config}
+    {store : Store preset fork} {signer state : BeaconState preset fork} {headRoot : Root}
+    {proposalSlot : Slot} {validatorIndex : ValidatorIndex} {feeRecipient : ExecutionAddress}
+    {targetGasLimit : UInt64} {key : Signatures.SecretKey} {signed : SignedProposerPreferences}
+    (made : getSignedProposerPreferences config store signer headRoot proposalSlot validatorIndex
+      feeRecipient targetGasLimit key = .ok signed)
+    {validator : Validator} (registered : getValidator state validatorIndex = .ok validator)
+    (owned : validator.pubkey = Signatures.skToPk key)
+    (sameChain : signer.genesisValidatorsRoot = state.genesisValidatorsRoot) :
+    store.getShufflingDependentRoot headRoot (computeEpochAtSlot preset proposalSlot) =
+        .ok signed.message.dependentRoot ∧
+      signed.message.proposalSlot = proposalSlot ∧
+      signed.message.validatorIndex = validatorIndex ∧
+      signed.message.feeRecipient = feeRecipient ∧
+      signed.message.targetGasLimit = targetGasLimit ∧
+      isValidProposerPreferencesSignature config .bls state signed = .ok true := by
+  unfold getSignedProposerPreferences at made
+  obtain ⟨dependentRoot, rooted, made⟩ := bind_ok_iff.mp made
+  rw [mapError_ok_iff] at rooted
+  obtain ⟨signature, signedBy, made⟩ := bind_ok_iff.mp made
+  simp only [pure, Except.pure, Except.ok.injEq] at made
+  subst made
+  exact ⟨rooted, rfl, rfl, rfl, rfl,
+    isValidProposerPreferencesSignature_of_sign laws registered owned sameChain signedBy⟩
 
 end EthLib.Consensus

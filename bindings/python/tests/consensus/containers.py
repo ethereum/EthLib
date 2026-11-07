@@ -92,6 +92,8 @@ CONTAINERS = {
     "SignedExecutionPayloadBid": ("gloas", None),
     "ExecutionPayloadEnvelope": ("gloas", None),
     "SignedExecutionPayloadEnvelope": ("gloas", None),
+    "ProposerPreferences": ("gloas", None),
+    "SignedProposerPreferences": ("gloas", None),
     "InclusionList": ("heze", None),
     "SignedInclusionList": ("heze", None),
 }

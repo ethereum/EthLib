@@ -41,6 +41,10 @@ Such a vote for another slot than its block's, or carried by a block at slot 0, 
 An accepted envelope had its data and passed its checks, and the store then keeps it.
 
 Its payload then counts as verified, and nothing else changes.
+
+From Gloas a block may fix the proposers of a slot when it is the head.
+
+So may a block that a known block after the slot has as parent.
 -/
 
 @[expose] public section
@@ -1107,6 +1111,31 @@ theorem onExecutionPayloadEnvelope_verified {checks : SignatureChecks}
     after.isPayloadVerified gloas signed.message.beaconBlockRoot = true := by
   obtain ⟨_, _, _, _, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
   simp [isPayloadVerified]
+
+/-- From Gloas: the rule for a possible dependent block, once the head is computed.
+
+A block may be the last one at or before a slot when it is the head.
+
+It may also be when a known block after the slot has it as parent.
+
+The rule fails exactly when the head fails. -/
+theorem isValidDependentRoot_ok_iff {root : Root} {dependentSlot : Slot} {possible : Bool} :
+    store.isValidDependentRoot config root dependentSlot = .ok possible ↔
+      ∃ head, store.getHead config = .ok head ∧
+        (possible = true ↔ root = head.root ∨ ∃ childRoot : Root, ∃ child : BeaconBlock preset fork,
+          store.blocks[childRoot]? = some child ∧ child.parentRoot = root ∧
+            dependentSlot < child.slot) := by
+  unfold isValidDependentRoot
+  cases headOk : store.getHead config with
+  | error e => simp [bind, Except.bind]
+  | ok head =>
+    simp only [bind, Except.bind, Except.ok.injEq, exists_eq_left']
+    split
+    · rename_i isHead
+      cases possible <;> simp [pure, Except.pure, isHead]
+    · rename_i isHead
+      cases possible <;> simp [pure, Except.pure, isHead, List.any_eq_true,
+        Std.TreeMap.mem_toList_iff_getElem?_eq_some]
 
 end Store
 

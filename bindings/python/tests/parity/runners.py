@@ -58,7 +58,6 @@ _GLOAS = {
     "fast_confirmation": "the Gloas fast confirmation (G73)",
     "networking": "the Gloas data columns and unchanged topics (G77)",
     "networking/gossip_execution_payload_bid": "bids and proposer preferences (G74)",
-    "networking/gossip_proposer_preferences": "bids and proposer preferences (G74)",
     "networking/gossip_execution_payload_envelope": "envelopes and payload attestations (G75)",
     "networking/gossip_payload_attestation_message": "envelopes and payload attestations (G75)",
     "networking/gossip_beacon_block": "Gloas blocks and attestations (G76)",

@@ -444,3 +444,58 @@ def test_no_payload_attestation_message_before_gloas():
     with raises(consensus.ValidatorDutyError, "no payload timeliness committee at phase0") as info:
         _sign(phase0_state(1), "payload_attestation_message", message)
     assert info.value.code == 0
+
+
+DOMAIN_PROPOSER_PREFERENCES = bytes([13, 0, 0, 0])
+GAS_LIMIT = 60_000_000
+
+
+def _proposer_preferences(slot: int) -> bytes:
+    """Preferences of validator 3 for a slot, with bytes 9 as root and bytes 5 as fee recipient."""
+    fields = struct.pack("<QQ", slot, 3) + bytes([5]) * 20 + struct.pack("<Q", GAS_LIMIT)
+    return bytes([9]) * 32 + fields
+
+
+def _proposer_preferences_root(slot: int) -> bytes:
+    """The root of the preferences: five chunks, padded with zero chunks to eight."""
+    chunks = [
+        bytes([9]) * 32,
+        _uint64_root(slot),
+        _uint64_root(3),
+        bytes([5]) * 20 + bytes(12),
+        _uint64_root(GAS_LIMIT),
+        bytes(32),
+        bytes(32),
+        bytes(32),
+    ]
+    while len(chunks) > 1:
+        chunks = [_sha256(chunks[i] + chunks[i + 1]) for i in range(0, len(chunks), 2)]
+    return chunks[0]
+
+
+def test_proposer_preferences_signature():
+    # The fork version of the proposal epoch is the genesis version on mainnet at epoch 0.
+    expected = _signature(_proposer_preferences_root(5), DOMAIN_PROPOSER_PREFERENCES)
+    assert _sign(phase0_state(1), "proposer_preferences", _proposer_preferences(5)) == expected
+
+
+def test_proposer_preferences_signature_in_the_epoch_before_gloas():
+    # A Fulu state signs preferences for the first slot of Gloas at the Gloas fork version.
+    config = {"GLOAS_FORK_EPOCH": "1"}
+    state = altair_state(1)
+    for fork in ["bellatrix", "shapella", "dencun", "pectra", "fusaka"]:
+        state = consensus.upgrade_state("mainnet", fork, state, verify=False, config=config)
+    fork_data_root = _sha256(GLOAS_FORK_VERSION + bytes(28) + bytes(32))
+    domain = DOMAIN_PROPOSER_PREFERENCES + fork_data_root[:28]
+    root = _proposer_preferences_root(SLOTS_PER_EPOCH)
+    expected = G2ProofOfPossession.Sign(1, _sha256(root + domain))
+    got = consensus.get_validator_signature(
+        "mainnet",
+        "fusaka",
+        state,
+        "proposer_preferences",
+        _proposer_preferences(SLOTS_PER_EPOCH),
+        SECRET_KEY,
+        config,
+    )
+    assert got == expected

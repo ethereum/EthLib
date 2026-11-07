@@ -5,6 +5,7 @@ public import EthLib.Cryptography.Exports.Kzg
 public import EthLib.Consensus.Gossip.Attestation
 public import EthLib.Consensus.Gossip.Block
 public import EthLib.Consensus.Gossip.Operations
+public import EthLib.Consensus.Gossip.ProposerPreferences
 public import EthLib.Consensus.Gossip.Sidecar
 public import EthLib.Consensus.Gossip.SyncCommittee
 
@@ -140,7 +141,7 @@ The sync committee has topics from Altair, and changes of BLS credentials from C
 
 Blob sidecars travel at Deneb and Electra, and column sidecars at Fulu.
 
-From Gloas no topic is specified here yet. -/
+At Gloas only the preferences of proposers are specified here, and at Heze no topic yet. -/
 def gossipValidationSpecified (fork : Fork) : String → Bool
   | "attester_slashing" | "proposer_slashing" | "voluntary_exit" | "beacon_block"
   | "beacon_attestation" | "beacon_aggregate_and_proof" => fork < .glamsterdam
@@ -149,6 +150,7 @@ def gossipValidationSpecified (fork : Fork) : String → Bool
   | "bls_to_execution_change" => .shapella ≤ fork && fork < .glamsterdam
   | "blob_sidecar" => .dencun ≤ fork && fork < .fusaka
   | "data_column_sidecar" | "partial_data_column_sidecar" => .fusaka ≤ fork && fork < .glamsterdam
+  | "proposer_preferences" => .glamsterdam ≤ fork && fork < .hegota
   | _ => false
 
 /-- The outcome of one message of a topic, and the keys seen after it.
@@ -236,6 +238,13 @@ def validateGossipInput {preset : Preset} {fork : Fork} (config : Config)
         sidecar input.currentTimeMs input.subnetId)
       return record outcome (·.recordDataColumnSidecar columns.2 sidecar)
     else throw (0, "column sidecars travel only from Fulu, before Gloas")
+  | "proposer_preferences" =>
+    let signed ← decodeInput SignedProposerPreferences input.data
+    if gloas : .glamsterdam ≤ fork then
+      let outcome ← runForkChoice (validateProposerPreferences config checks seen store gloas
+        signed input.currentTimeMs)
+      return record outcome (·.recordProposerPreferences signed)
+    else throw (0, "the preferences of proposers travel only from Gloas")
   | _ => throw (0, s!"gossip validation of the topic {topic} is not yet specified")
 
 /-- At Fulu: the outcomes of the partial sidecars of a case, after the headers it records first.
@@ -271,7 +280,7 @@ def validatePartialInputs {preset : Preset} {fork : Fork} (config : Config)
 
 /-- Validate the messages of a topic in turn, against the store of an anchor and later blocks.
 
-From Gloas no topic is specified here yet. -/
+At Gloas only the preferences of proposers are specified here, and at Heze no topic yet. -/
 @[export eth_consensus_gossip_validation]
 def gossipValidationExport
     (name fork anchorState anchorBlock blocks finalized topic messages replacements : ByteArray)

@@ -30,11 +30,13 @@ TOPICS = {
     "blob_sidecar": "deneb",
     "data_column_sidecar": "fulu",
     "partial_data_column_sidecar": "fulu",
+    "proposer_preferences": "gloas",
 }
-SPECIFIED = ("altair", "bellatrix", "capella", "deneb", "electra", "fulu")
-# The topics whose cases stop at an earlier fork, with their last fork.
+SPECIFIED = ("altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas")
+# The topics whose cases stop at a fork other than Fulu, with their last fork.
 # Blob sidecars travel only at Deneb and Electra.
-LAST = {"blob_sidecar": "electra"}
+# Gloas changes the other topics, and EthLib does not specify those changes yet.
+LAST = {"blob_sidecar": "electra", "proposer_preferences": "gloas"}
 
 # The release archives that hold the cases.
 ARCHIVES = {
@@ -56,7 +58,7 @@ def runs(fork: str, handler: str) -> bool:
         and topic in TOPICS
         and SPECIFIED.index(TOPICS[topic])
         <= SPECIFIED.index(fork)
-        <= SPECIFIED.index(LAST.get(topic, SPECIFIED[-1]))
+        <= SPECIFIED.index(LAST.get(topic, "fulu"))
     )
 
 

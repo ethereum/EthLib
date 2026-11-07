@@ -8,6 +8,7 @@ public import EthLib.Consensus.Containers.Execution
 public import EthLib.Consensus.Containers.InclusionList
 public import EthLib.Consensus.Containers.Operations
 public import EthLib.Consensus.Containers.PayloadAttestation
+public import EthLib.Consensus.Containers.ProposerPreferences
 public import EthLib.Consensus.Containers.Requests
 public import EthLib.Consensus.Containers.Signing
 public import EthLib.Consensus.Containers.State
@@ -169,6 +170,9 @@ def containerOf (preset : Preset) (fork : Fork) : String → Option Container
     if .glamsterdam ≤ fork then some ⟨ExecutionPayloadEnvelope preset fork⟩ else none
   | "SignedExecutionPayloadEnvelope" =>
     if .glamsterdam ≤ fork then some ⟨SignedExecutionPayloadEnvelope preset fork⟩ else none
+  | "ProposerPreferences" => if .glamsterdam ≤ fork then some ⟨ProposerPreferences⟩ else none
+  | "SignedProposerPreferences" =>
+    if .glamsterdam ≤ fork then some ⟨SignedProposerPreferences⟩ else none
   | "InclusionList" => if .hegota ≤ fork then some ⟨InclusionList⟩ else none
   | "SignedInclusionList" => if .hegota ≤ fork then some ⟨SignedInclusionList⟩ else none
   | _ => none
@@ -186,7 +190,8 @@ def specifiedFromGlamsterdam : List String := [
   "PendingPartialWithdrawal", "PendingConsolidation", "DepositRequest", "WithdrawalRequest",
   "ConsolidationRequest", "Withdrawal", "Builder", "BuilderPendingPayment",
   "BuilderPendingWithdrawal", "BuilderDepositRequest", "BuilderExitRequest",
-  "PayloadAttestationData", "PayloadAttestationMessage", "InclusionList", "SignedInclusionList",
+  "PayloadAttestationData", "PayloadAttestationMessage", "ProposerPreferences",
+  "SignedProposerPreferences", "InclusionList", "SignedInclusionList",
   "Attestation", "IndexedAttestation", "AttesterSlashing", "AggregateAndProof",
   "SignedAggregateAndProof", "ExecutionPayload", "ExecutionRequests", "NewPayloadRequest",
   "ExecutionPayloadEnvelope", "SignedExecutionPayloadEnvelope", "PayloadAttestation",

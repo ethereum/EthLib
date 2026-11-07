@@ -111,10 +111,17 @@ The object comes as SSZ bytes, by duty:
 - `sync_committee_selection_proof`: sync aggregator selection data.
 - `contribution_and_proof`: a contribution and proof.
 - `payload_attestation_message`: a payload attestation message, whose data is signed.
+- `proposer_preferences`: the preferences of a proposer.
 
 The three duties of the sync committee need Altair; before it they have code 0.
 
-The payload attestation message needs Gloas; before it, it has code 0. -/
+The payload attestation message needs Gloas; before it, it has code 0.
+
+The preferences of a proposer take a state of any fork.
+
+Their domain reads only the root of the genesis validators of the state.
+
+So a state of the epoch before Gloas can sign them for the first epoch of Gloas. -/
 @[export eth_consensus_get_validator_signature]
 def getValidatorSignatureExport (name fork state replacements duty object secretKey : ByteArray) :
     Result ByteArray := do
@@ -152,6 +159,9 @@ def getValidatorSignatureExport (name fork state replacements duty object secret
       let ⟨_⟩ ← gloasOf fork
       runDuty (getPayloadAttestationMessageSignature config state
         (← decodeInput PayloadAttestationMessage object) key)
+    | "proposer_preferences" => do
+      runDuty (getProposerPreferencesSignature config state
+        (← decodeInput ProposerPreferences object) key)
     | other => throw (0, s!"unknown duty {other}")
   return packBytes signature
 
