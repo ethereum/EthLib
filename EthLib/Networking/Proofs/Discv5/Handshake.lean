@@ -17,9 +17,13 @@ Node B accepts what node A sends in a handshake, and both sides derive the same 
 - Node B reads node A's handshake message packet back: the ID, the record, the message, the keys.
 - Two errors with one code come from one constructor.
 
-The theorem assumes only that step 3 succeeded.
+The theorem on step 4 assumes only that step 3 succeeded.
 
 That success already holds the key agreement, the key derivation and the ID signature.
+
+The theorem on the packet also assumes that the packet has 63 to 1280 bytes.
+
+The decoder rejects every other size.
 -/
 
 @[expose] public section

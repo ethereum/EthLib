@@ -29,7 +29,14 @@ The ephemeral public key is the 33-byte compressed point.
 
 The challenge data, the node IDs and the public key of each peer are inputs here.
 
-The packet of the handshake, the record of node A and the message are not part of this module.
+The module also seals and opens the handshake message packet of node A.
+
+"Handshake Message Packet" of `discv5-wire.md` defines it:
+<https://github.com/ethereum/devp2p/blob/88f1c80800d6/discv5/discv5-wire.md>
+
+Node B verifies the ID signature under a public key of node A that it already holds.
+
+It does not check the record of node A that the packet carries.
 -/
 
 @[expose] public section
@@ -142,9 +149,7 @@ structure HandshakeReceived where
 
 "Handshake Message Packet" of `discv5-wire.md` gives the authdata.
 
-```text
-    [ src-id: 32 | sig-size: 1 | eph-key-size: 1 | id-signature | eph-pubkey | record ]
-```
+It holds the ID of node A, two sizes, the ID signature, the ephemeral key, then the record.
 
 The message is AES-GCM under the initiator key, with the nonce of the header.
 
