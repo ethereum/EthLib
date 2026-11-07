@@ -221,7 +221,7 @@ The byte at `pc` runs the creation, which sends a message.
 
 The frame may change the state, and its account holds the value in the base state.
 
-Its nonce in the base state is below the greatest, and its depth leaves room for one more frame.
+Its nonce in the base state is not the greatest, and its depth leaves room for one more frame.
 
 The init code is the bytes `init` of a fact of memory, of the size on the stack.
 

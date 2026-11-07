@@ -918,10 +918,12 @@ The new base agrees with the old one outside the addresses whose balances the ef
 `Logic.createKind_stored` proves that from Berlin to before Glamsterdam, CREATE or CREATE2 keeps the facts of a `Stored` frame.
 It needs init code that a fact of memory holds, and a frame that may change the state.
 The creator must hold the value in the base state.
+Its nonce in the base state must not be the greatest, and its depth must leave room for one more frame.
+From Shanghai the init code must hold at most the greatest size of EIP-3860.
 It needs the new address from the base state to hold no code and a nonce of 0, and the price of the creation.
 It also needs an assumption that gives the effect of each frame that ends the creation.
 On success the frame pushes the new address, gains the facts and the refund of the effect, and its return data is empty.
-On success the new base holds the facts of accounts of the effect.
+On success the new base holds the balances and the facts of accounts of the effect.
 On failure the frame pushes 0 and keeps its facts of slots, and the assumption may rule a failure out.
 The new base gives the creator its grown nonce, unless the effect remakes the creator.
 Its new base agrees with the old one outside the touched slots, the moved and remade addresses, and the creator.
