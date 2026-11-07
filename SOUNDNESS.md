@@ -713,6 +713,8 @@ It needs both addresses to be JUMPDESTs of the code, and room on the stack below
 `SumTo.sum` proves a recursive subroutine that sums the numbers from 1 to `k`, by induction on `k`.
 It needs room for `2 k + 2` words on the stack, and `32 + 61 k` gas.
 `SumTo.runFrame_spec` proves a contract that returns that sum for the word of its call data, when the word is at most 510.
+`Logic.KnownSubroutine` is the same specification over frames that know only the size of memory and some facts.
+`Logic.callKnownSubroutine` proves its call, with the push and the jump keeping the size and every fact.
 `Logic.stop` is the rule for STOP, which stops the frame with no error and an empty output.
 `Logic.stop_of_size_le` is the rule for a frame at or past the end of its code, which stops the same way.
 `Logic.sstore_of_account` restates the rule for SSTORE when the current account exists.
@@ -830,6 +832,12 @@ It pays 22 gas for each entry it tests, and needs each destination to be a valid
 A run of the loop then ends by the measure, not by the gas.
 `SumLoop.runFrame_spec` proves a contract that loops `n` times, for the word `n` of its call data, with the one-counter meter.
 With at least `45 + 55 n` gas, it returns `n (n + 1) / 2` modulo `2^256`.
+`Triple.loop_gas` proves a loop whose invariant carries the gas, with a price for each run that may depend on the runs left.
+The loop then needs the sum of those prices and the price of its exit.
+`Logic.holds_empty` proves that memory holds no bytes from an offset within it.
+`Indices.store` proves a subroutine that writes the word `w` at offset `32 w` modulo `2^256`, for every size of memory.
+`Indices.runFrame_spec` proves a contract that writes the words 0 to `n - 1` from offset 0 in a loop that calls that subroutine, and returns them.
+It needs `n` below `2^251`, and `44 + 69 n` gas with the price of `32 n` bytes of memory.
 `StepBy` (`Logic/Message.lean`) adds the steps that send a message, which a runner of messages ends with a frame.
 `runFrame_eq_of_reaches` proves that `runFrame` runs a frame as it runs each frame that it reaches.
 It holds for every relation whose steps `runFrame` runs alike at both ends, as `Step` and `StepBy` do.

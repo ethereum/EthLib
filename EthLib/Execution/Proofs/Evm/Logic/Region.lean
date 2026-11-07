@@ -40,6 +40,11 @@ def Holds (memory : ByteArray) (start : Nat) (bytes : ByteArray) : Prop :=
 theorem holds_self (memory : ByteArray) : Holds memory 0 memory :=
   ⟨by omega, memoryReadBytes_whole⟩
 
+/-- Memory holds no bytes from an offset within it. -/
+theorem holds_empty {memory : ByteArray} {start : Nat} (h : start ≤ memory.size) :
+    Holds memory start .empty :=
+  ⟨by simpa using h, by simp [memoryReadBytes]⟩
+
 /-- A write within memory holds the written bytes. -/
 theorem holds_memoryWrite {memory value : ByteArray} {start : Nat}
     (h : start + value.size ≤ memory.size) : Holds (memoryWrite memory start value) start value :=
