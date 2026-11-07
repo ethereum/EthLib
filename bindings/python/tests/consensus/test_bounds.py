@@ -1,8 +1,7 @@
-"""The length bounds of request, response and gossip payloads, against sizes restated here.
+"""The length bounds of request, response and gossip payloads, against sizes restated here."""
 
-Each size is the sum of the fixed fields of its container, worked out by hand:
-a fork digest of 4 bytes, a root of 32, an integer of 8, a signature of 96.
-"""
+# Each size is the sum of the fixed fields of its container, worked out by hand:
+# a fork digest of 4 bytes, a root of 32, an integer of 8, a signature of 96.
 
 from ethlib import consensus
 from ethlib.errors import ConsensusError
