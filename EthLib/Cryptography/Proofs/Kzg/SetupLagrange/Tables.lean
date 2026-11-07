@@ -78,6 +78,14 @@ meta def tableANat (tM : Array (Nat × Nat)) : Array (Nat × Nat) := Id.run do
         out := out.set! (256 * k1 + 16 * j2 + j3) (affineNat ys[k1]!)
   return out
 
+/-- The product `s p`, as the first output of the transform of size 2 of `(0, p)` with root `s`.
+
+The elaborators run interpreted, and a call to the curve code here would run interpreted too.
+
+The transform is compiled with the specification, so the product runs as compiled code. -/
+meta def mulCompiled (p : G1) (s : Fr) : G1 :=
+  (fftG1Vector 1 #v[G1.zero, p] #v[s, s])[0]
+
 /-- Quarter `q` of table `B` from table `A`: entry `256 k1 + 16 k2 + j3` for `k1 / 4 = q`.
 
 Entry `n` of the table is entry `n % 1024` of quarter `n / 1024`. -/
@@ -87,7 +95,7 @@ meta def tableBNat (tA : Array (Nat × Nat)) (q : Nat) : Array (Nat × Nat) := I
     let k1 := 4 * q + i
     for j3 in [0:16] do
       let vals : Vector G1 16 := Vector.ofFn fun j2 =>
-        G1.mul (pointNat tA[256 * k1 + 16 * j2.val + j3]!) (Fr.ofNat (scalarB k1 j2.val))
+        mulCompiled (pointNat tA[256 * k1 + 16 * j2.val + j3]!) (Fr.ofNat (scalarB k1 j2.val))
       let ys := fftG1Vector 4 vals rootsFr
       for k2 in [0:16] do
         out := out.set! (256 * i + 16 * k2 + j3) (affineNat ys[k2]!)
