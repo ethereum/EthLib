@@ -645,7 +645,7 @@ Its first relation covers frames that send no message.
 `Spec fork P Q` is total correctness for such frames: every frame of `P` reaches a stopped frame of `Q`.
 A run that ends out of gas ends in an exceptional halt, so a postcondition of a normal halt needs a precondition with enough gas.
 `Return42.runFrame_spec` proves the specification of one contract, `0x602a60005260206000f3`, which returns the word 42 for 18 gas with the one-counter meter of the forks before Glamsterdam.
-`Logic/Rules.lean` gives rules for the opcodes that read call data, compare, jump, hash memory, read and write storage, and return or revert.
+`Logic/Rules.lean` gives rules for the opcodes that read call data and the caller, compare, jump, hash memory, read and write storage, and return or revert.
 From Berlin, the rule for SLOAD takes as a hypothesis whether the slot is cold, and charges 2100 or 100 by EIP-2929.
 `Logic.sstore` is the rule for SSTORE from Berlin to before Glamsterdam, in a frame that may change the state and holds more than 2300 gas.
 It charges `sstoreCost` and adds `sstoreRefund` to the refund counter, from the original, current and new words and whether the slot is cold.
@@ -660,6 +660,10 @@ It says nothing of the order of the logs of several frames, or of logs that a re
 `SlotOfCalldata.runFrame_match` proves a contract that compares the top four bytes of its call data with a constant, at the forks from Berlin with the one-counter meter.
 On a match, it returns the word of storage at the Keccak-256 hash of two words of its call data, for 122 gas and SLOAD.
 `SlotOfCalldata.runFrame_mismatch` proves that it reverts with no output otherwise, for 37 gas.
+`HashedSlot.runFrame_spec` proves a contract that writes the word of its call data to a slot it derives.
+The slot is the Keccak-256 hash of the address of the caller as a word and then the word 0.
+The slot then holds the word, for 83 gas and SSTORE, from Berlin to before Glamsterdam.
+No theorem covers a read at a slot derived from another key word, which needs the two hashes to differ.
 `Triple.loop` (`Logic/Loop.lean`) proves a loop from an invariant for each value of a natural measure.
 A run of the loop then ends by the measure, not by the gas.
 `SumLoop.runFrame_spec` proves a contract that loops `n` times, for the word `n` of its call data, with the one-counter meter.
