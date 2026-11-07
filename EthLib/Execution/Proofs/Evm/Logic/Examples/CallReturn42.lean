@@ -76,11 +76,11 @@ theorem runFrame_process (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
     have hpre : precompileAddress fork msg = none := by
       simp [precompileAddress, hmca, hprecompile]
     have hg : 18 ≤ msg.gas := by
-      rw [hmg]
-      unfold callGas maxMessageCallGas
-      rw [show (65535 : U256).toNat = 65535 from rfl]
+      have htw : fork ≥ .tangerineWhistle := Nat.le_trans (by decide) hfork
+      rw [hmg, show (65535 : U256).toNat = 65535 from rfl]
       cases cold <;> simp only [CallFlag.accessCost, ite_true, Bool.false_eq_true, ite_false]
-        at hgas ⊢ <;> omega
+        at hgas ⊢ <;> rw [messageCallGas_of_le htw (by omega)] <;>
+        simp only [maxMessageCallGas] <;> omega
     obtain ⟨ended, hret, hchild⟩ := hcallee hmcode (by simp [hmtg]) (by simp [hmv]) hpre hg
     have hnone : child.error = none := by
       rw [hchild, rollbackOnError_of_error_eq_none hret.2.1]

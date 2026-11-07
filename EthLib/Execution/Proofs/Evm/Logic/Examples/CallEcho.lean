@@ -7,7 +7,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Examples.SumLoop
 /-!
 # Proofs: a contract that sends a word to a callee and reads back what it returns
 
-This example proves a call with call data and return data, through the runner of the interpreter.
+This example proves a call with call data and an output range, with the runner of the interpreter.
 
 The callee returns the first word of its call data.
 
@@ -285,7 +285,8 @@ theorem runFrame_process (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
         caller.substate = { substate with
           accessedAddresses := substate.accessedAddresses.insert
             (toAddressMasked (target message.data)) } ∧
-        msg.gas = callGas 65535 (gas - 39) ((if cold then 2600 else 100) + 6) ∧
+        msg.gas = (messageCallGas fork 0 (65535 : U256).toNat (gas - 39) 6
+          (if cold then 2600 else 100)).subCall ∧
         msg.caller = message.currentTarget ∧
         msg.currentTarget = toAddressMasked (target message.data) ∧
         msg.target = some (toAddressMasked (target message.data)) ∧
@@ -296,8 +297,9 @@ theorem runFrame_process (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
         At CODE message (22 + 1) ((if child.error.isNone then 1 else 0) :: [])
           (memoryWrite (memoryExtend (wordBytes (word message.data)) 64) (32 : U256).toNat
             (child.output.extract 0 (min (64 : U256).toNat child.output.size)))
-          (gas - 39 - (callGas 65535 (gas - 39) ((if cold then 2600 else 100) + 6) +
-            ((if cold then 2600 else 100) + 6)) + child.gas)
+          (gas - 39 - ((messageCallGas fork 0 (65535 : U256).toNat (gas - 39) 6
+            (if cold then 2600 else 100)).cost + 6) +
+            child.gas)
           (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
           evm)
       (fun evm => evm.running = false ∧ evm.error = none ∧
@@ -306,13 +308,13 @@ theorem runFrame_process (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
       hat⟩
     have hpre : precompileAddress fork msg = none := by
       simp [precompileAddress, hmca, hprecompile]
-    have hsub : 21 ≤ msg.gas ∧ 6 ≤ gas - 39 - (callGas 65535 (gas - 39)
-        ((if cold then 2600 else 100) + 6) + ((if cold then 2600 else 100) + 6)) := by
-      rw [hmg]
-      unfold callGas maxMessageCallGas
-      rw [show (65535 : U256).toNat = 65535 from rfl]
+    have hsub : 21 ≤ msg.gas ∧ 6 ≤ gas - 39 - ((messageCallGas fork 0 (65535 : U256).toNat
+        (gas - 39) 6 (if cold then 2600 else 100)).cost + 6) := by
+      have htw : fork ≥ .tangerineWhistle := Nat.le_trans (by decide) hfork
+      rw [hmg, show (65535 : U256).toNat = 65535 from rfl]
       cases cold <;> simp only [CallFlag.accessCost, ite_true, Bool.false_eq_true, ite_false]
-        at hgas ⊢ <;> omega
+        at hgas ⊢ <;> rw [messageCallGas_of_le htw (by omega)] <;>
+        simp only [maxMessageCallGas] <;> omega
     obtain ⟨ended, hret, hchild⟩ := hcallee hmcode (by simp [hmtg]) (by simp [hmv]) hpre hsub.1
     have hdata : msg.data = memoryReadBytes (wordBytes (word message.data)) 0 32 := by
       rw [hmd]

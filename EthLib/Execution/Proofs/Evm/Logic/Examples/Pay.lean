@@ -159,9 +159,10 @@ theorem spec_low (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {cold 
     {gas : Nat} (hgas : 27 + price fork state message cold + 15 ≤ gas) :
     Spec fork (At CODE message 0 [] .empty gas state substate)
       (Halted false (wordBytes 0)
-        (gas - 27 - (callGas 65535 (gas - 27) (price fork state message cold + 0) +
-          (price fork state message cold + 0)) +
-          (callGas 65535 (gas - 27) (price fork state message cold + 0) + CALL_STIPEND) - 15)
+        (gas - 27 - ((messageCallGas fork (value message.data) (65535 : U256).toNat (gas - 27) 0
+          (price fork state message cold)).cost + 0) +
+          (messageCallGas fork (value message.data) (65535 : U256).toNat (gas - 27) 0
+          (price fork state message cold)).subCall - 15)
         ((state.recordAccountRead (toAddressMasked (target message.data))).recordAccountRead
           message.currentTarget)
         { substate with
@@ -173,19 +174,23 @@ theorem spec_low (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {cold 
     (outputStart := 0) (outputSize := 0) (rest := []) hfork hglam (by decide) rfl hv hstatic hbal
     hcode hdel hcold (by rw [extendMemory_empty]; show _ + 0 ≤ _; unfold price at hgas; omega)
   rw [extendMemory_empty, memoryExtend_zero] at h
-  have hcall : callGas 65535 (gas - 27) (price fork state message cold + 0) ≤
-      gas - 27 - (price fork state message cold + 0) := by
-    unfold callGas maxMessageCallGas
-    omega
+  have htw : fork ≥ .tangerineWhistle := Nat.le_trans (by decide) hfork
+  have hle := cost_add_memoryCost_le htw (value := value message.data)
+    (gas := (65535 : U256).toNat) (stipend := CALL_STIPEND)
+    (enough := show price fork state message cold + 0 ≤ gas - 27 by unfold price at hgas ⊢; omega)
   have hfin := finish (fork := fork) (message := message) (word := 0) (memory := .empty) rfl
     (state := (state.recordAccountRead (toAddressMasked (target message.data))).recordAccountRead
       message.currentTarget)
     (substate := { substate with
       accessedAddresses :=
         substate.accessedAddresses.insert (toAddressMasked (target message.data)) })
-    (gas := gas - 27 - (callGas 65535 (gas - 27) (price fork state message cold + 0) +
-      (price fork state message cold + 0)) +
-      (callGas 65535 (gas - 27) (price fork state message cold + 0) + CALL_STIPEND)) (by omega)
+    (gas := gas - 27 - ((messageCallGas fork (value message.data) (65535 : U256).toNat (gas - 27) 0
+          (price fork state message cold)).cost + 0) +
+      (messageCallGas fork (value message.data) (65535 : U256).toNat (gas - 27) 0
+          (price fork state message cold)).subCall) (by
+        rw [messageCallGas_of_le htw (by unfold price at hgas ⊢; omega)] at hle ⊢
+        simp only [CALL_STIPEND] at hle ⊢
+        split <;> omega)
   exact Spec.seq ((operands (by omega)).seq h) hfin
 
 /-- What the run with enough value ends with, for an assumption on the callee.
@@ -204,8 +209,9 @@ def Returned (callee : Evm fork Nat → Message fork → Evm fork Nat → Prop) 
     msg.codeAddress = some (toAddressMasked (target message.data)) ∧ msg.code = calleeCode ∧
     msg.value = value message.data ∧
     Halted false (wordBytes (CallFlag.flag child))
-      (gas - 27 - (callGas 65535 (gas - 27) (price fork state message cold + 0) +
-        (price fork state message cold + 0)) + child.gas - 15)
+      (gas - 27 - ((messageCallGas fork (value message.data) (65535 : U256).toNat (gas - 27) 0
+          (price fork state message cold)).cost + 0) +
+        child.gas - 15)
       (incorporateChild fork caller child).state (incorporateChild fork caller child).substate evm
 
 /-- When the current account holds at least the value, the contract sends it.
@@ -234,13 +240,12 @@ theorem spec (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
   apply HoareUnder.of_hoare
   rintro evm ⟨caller, msg, child, hcallee, -, -, -, -, -, -, hmtg, hmca, hmcode, -, hmv, -, -,
     hat⟩
-  have hleft : 15 ≤ gas - 27 - (callGas 65535 (gas - 27) (price fork state message cold + 0) +
-      (price fork state message cold + 0)) + child.gas := by
-    have : callGas 65535 (gas - 27) (price fork state message cold + 0) ≤
-        gas - 27 - (price fork state message cold + 0) -
-          (gas - 27 - (price fork state message cold + 0)) / 64 := by
-      unfold callGas maxMessageCallGas
-      exact Nat.min_le_right _ _
+  have hleft : 15 ≤ gas - 27 - ((messageCallGas fork (value message.data) (65535 : U256).toNat
+      (gas - 27) 0 (price fork state message cold)).cost + 0) + child.gas := by
+    have htw : fork ≥ .tangerineWhistle := Nat.le_trans (by decide) hfork
+    rw [messageCallGas_of_le htw (by unfold price at hgas ⊢; omega)]
+    simp only [maxMessageCallGas]
+    unfold price at hgas ⊢
     omega
   have hmem : memoryWrite ByteArray.empty (0 : U256).toNat
       (child.output.extract 0 (min (0 : U256).toNat child.output.size)) = .empty := by
