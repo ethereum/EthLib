@@ -330,6 +330,8 @@ private theorem agrees_modifyState {tx tx' : TransactionState} {address : Addres
 
 /-- A move of a value that is not 0 between two accounts changes only their balances.
 
+The sender and the recipient differ.
+
 The two accounts exist, and the sender has a nonce or a code, so that neither ends empty.
 
 Every word of storage, every slot that is warm, every other account and every code stays. -/
