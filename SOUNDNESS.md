@@ -467,7 +467,10 @@ The model runs both lines in one loop, rotates 32-bit vectors, and reads each wo
 It shares the constants, the word orders and the rotation amounts with the code.
 `K_from_square_roots` and `K'_from_cube_roots` derive the constants from square and cube roots.
 `r_groups_permute` and `r'_groups_permute` check only that each group of a word order reads every word once.
-No theorem states the whole hash, with its padding and its chain of blocks, against the model.
+`hash_eq_spec` proves that the hash of every message is the hash of the model, with no bound on the length.
+The model pads the message as MD4 does (RFC 1320 §3.1 and §3.2), with the low 64 bits of the bit length.
+It runs the blocks from its own initial value, and its digest puts the least significant byte of each word first.
+`pad_eq_spec` proves that the padding of the code is the padding of the model.
 The Python tests (`bindings/python/tests/precompile/test_ripemd160.py`) check the hash against the test vectors on Bosselaers' RIPEMD-160 page.
 
 ### KZG
