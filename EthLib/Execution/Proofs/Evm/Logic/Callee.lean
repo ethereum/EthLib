@@ -22,7 +22,7 @@ The callee sends no message itself, since its specification is one with no messa
 
 The code is the one that the message names, and a rule for a call ties it to the address.
 
-It touches the target before Paris, moves no value, runs the code, and rolls back a failure.
+The runner touches the target before Paris, moves no value, runs the code, and rolls back a failure.
 -/
 
 @[expose] public section

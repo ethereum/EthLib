@@ -654,7 +654,7 @@ It rests on `aborts_of_process_eq_error` (`Execution/Proofs/Evm/Call/MessageCall
 `meets_of_spec` (`Logic/Callee.lean`) proves that this runner meets a stronger assumption, `RunsAs`, for a callee code with a specification.
 The specification is one with no message, from the frame that a message with that code starts, so the callee sends no message itself.
 The assumption covers a message with that code and a target, with no value and no precompile.
-Its frame starts from the state of the caller, with its target touched before Paris, as `process_message` does.
+Its frame starts from the state of the caller, with its target touched before Paris, as `processMessage` does.
 The frame that ends the message is a stopped frame of the specification, rolled back on a failure.
 No theorem yet proves that this runner meets an assumption for a callee that sends messages, sends value, or is a precompile.
 `SpecUnder fork callee P Q` holds under every runner that meets `callee`, and for every bound that holds the gas of the frame.
