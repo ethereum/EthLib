@@ -300,7 +300,6 @@ theorem callStep_value_low (hfork : .berlin ≤ fork) (hglam : fork < .glamsterd
     GasMeter.gasLeft, GasMeter.drain, hstatic, hE,
     hgas', Nat.not_lt.mpr hmin, hbal, skipCall, refillStateGas, GasMeter.refill, GasMeter.credit,
     pushWord, Stack.push, hlen, advance, Functor.map, Except.map]
-  done
 
 /-- A caller with room on its stack resumes from every frame that ends its message.
 
