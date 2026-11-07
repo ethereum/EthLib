@@ -39,7 +39,9 @@ After the first epoch, the step applies the attestation deltas once before Altai
 
 From Altair it applies the deltas of each flag, then those of inactivity.
 
-When the step succeeds on a registry within its limit, each reward it adds stays below `2^64`.
+Take a step that succeeds on a registry within its limit.
+
+Then each addition of a reward to a balance stays below `2^64`.
 
 The balances past the registry stay.
 -/
