@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Consensus.Proofs.Builders
+public import EthLib.Consensus.Proofs.HonestBuilder
 public import EthLib.Consensus.Proofs.Mutators
 public import EthLib.Consensus.Proofs.Transition.Block
 public import EthLib.Consensus.Proofs.Transition.PayloadInputs
@@ -32,6 +33,16 @@ A block whose payload follows the update passes the parent, mix, time and withdr
 It must pass the header step on the state of the proposer.
 
 Its execution part then fails only on the blob count, the execution layer, a hash, or an accessor.
+
+From Gloas, take a bid built on the state of the proposer, from a payload that follows the update.
+
+The bid passes the checks of its parent hash, its parent root and its mix, in the bid step.
+
+The block that carries the bid must carry the requests of the stored payload, from a full parent.
+
+The hashes of the latest bid must differ, and the latest block hash must be its parent hash.
+
+The state must also record the root of its latest block header as the root of the slot before.
 -/
 
 @[expose] public section
@@ -912,6 +923,76 @@ theorem parentRoot_of_prepareExecutionPayloadGloas {safe finalized : Hash32}
   have same := (rooted deneb).symm.trans parentRoot
   simp only [Except.ok.injEq] at same
   exact same.symm
+
+/-- A bid built from a payload on the update of its proposer passes three checks of the bid step.
+
+The payload names the head of the update as its parent, and carries the mix of the attributes.
+
+The bid is built on the state of the proposer, and the block carries it.
+
+From a full parent the block carries the requests of the payload that the store holds.
+
+The hashes of the latest bid differ, and the latest block hash is the parent hash of that bid.
+
+The state records the root of its latest block header as the root of the slot before it.
+
+The checks read the state after the parent, header and withdrawal steps of the block.
+
+The bid builds on the latest block hash of that state, and on its root of the slot before.
+
+It also carries the RANDAO mix of its current epoch. -/
+theorem checkExecutionPayloadBid_of_prepareExecutionPayloadGloas {safe finalized : Hash32}
+    {feeRecipient : ExecutionAddress} {targetGasLimit : UInt64} {update : ForkchoiceState}
+    {attributes : PayloadAttributes fork}
+    {transactions : Since .hegota fork (List InclusionListTransaction)}
+    {payload : Consensus.ExecutionPayload preset fork} {requests : ExecutionRequests preset fork}
+    {commitments : BlobKZGCommitments preset fork} {slot : Slot} {recipient : ExecutionAddress}
+    {builderIndex : BuilderIndex} {value : Gwei}
+    {bits : Since .hegota fork (InclusionListBits preset)} {bid : ExecutionPayloadBid preset fork}
+    {block : BeaconBlock preset fork} {parented header after : BeaconState preset fork}
+    {capella : .shapella ≤ fork}
+    {withdrawalsPayload : Until .glamsterdam fork (Consensus.ExecutionPayload preset fork)}
+    (prepared : prepareExecutionPayloadGloas config checks store head state gloas safe finalized
+      feeRecipient targetGasLimit = .ok (update, attributes, transactions))
+    (distinct : (state.latestExecutionPayloadBid gloas).blockHash ≠
+      (state.latestExecutionPayloadBid gloas).parentBlockHash)
+    (linked : state.latestBlockHash gloas = (state.latestExecutionPayloadBid gloas).parentBlockHash)
+    (parentHash : payload.parentHash = update.headBlockHash)
+    (randao : payload.prevRandao = attributes.prevRandao)
+    (built : getExecutionPayloadBid state payload requests commitments slot recipient builderIndex
+      value bits = .ok bid)
+    (carried : (block.body.signedExecutionPayloadBid gloas).message = bid)
+    (recorded : ∀ root, Serialization.Ssz.SszType.hashTreeRoot state.latestBlockHeader = .ok root →
+      getBlockRootAtSlot state (state.slot - 1) = .ok root)
+    (parentRequests : update.headBlockHash = (state.latestExecutionPayloadBid gloas).blockHash →
+      ∀ envelope, (store.payloads gloas)[head.root]? = some envelope →
+        block.body.parentExecutionRequests gloas = envelope.executionRequests)
+    (parent : processParentExecutionPayload config checks state gloas block.body = .ok parented)
+    (headed : processBlockHeader parented block = .ok header)
+    (withdrawn : processWithdrawals header capella withdrawalsPayload = .ok after) :
+    bid.parentBlockHash = after.latestBlockHash gloas ∧
+      getBlockRootAtSlot after (after.slot - 1) = .ok bid.parentBlockRoot ∧
+      getRandaoMix after (getCurrentEpoch after) = .ok bid.prevRandao := by
+  obtain ⟨rooted, -, builtParent, -, builtRandao, -⟩ := getExecutionPayloadBid_eq_ok_iff.mp built
+  have onHead : (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash =
+      update.headBlockHash := by
+    rw [carried, builtParent, parentHash]
+  refine ⟨?_, ?_, ?_⟩
+  · rw [latestBlockHash_of_prepareExecutionPayloadGloas prepared distinct linked onHead
+      parentRequests parent headed withdrawn, builtParent, parentHash]
+  · -- The parent, header and withdrawal steps keep the slot and the block roots.
+    have parentKept := payloadInputs_processParentExecutionPayload parent
+    have headerKept := payloadInputs_processBlockHeader headed
+    have withdrawalsKept := payloadInputs_processWithdrawals withdrawn
+    have slotKept : after.slot = state.slot :=
+      withdrawalsKept.slot.trans (headerKept.slot.trans parentKept.slot)
+    have rootsKept : after.blockRoots = state.blockRoots :=
+      withdrawalsKept.blockRoots.trans (headerKept.blockRoots.trans parentKept.blockRoots)
+    simpa [getBlockRootAtSlot, slotKept, rootsKept] using recorded _ rooted
+  · obtain ⟨-, -, mixed⟩ := slot_of_prepareExecutionPayloadGloas prepared distinct onHead
+      parentRequests parent headed withdrawn
+    rw [builtRandao, randao]
+    exact mixed
 
 end Gloas
 
