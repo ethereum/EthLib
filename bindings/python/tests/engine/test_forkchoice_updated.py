@@ -213,3 +213,12 @@ def test_finalized_not_a_hash() -> None:
             TREE, "engine_forkchoiceUpdatedV3", [state, None], finalized="0x00"
         )
     assert error.value.code == 0
+
+
+def test_duplicate_block_hash() -> None:
+    """A tree with two payloads of one block hash is malformed input, with code 0."""
+    tree = [*TREE, {"blockHash": _hash(2), "parentHash": _hash(1), "valid": False}]
+    state = {"headBlockHash": _hash(3), "safeBlockHash": ZERO, "finalizedBlockHash": ZERO}
+    with raises(engine.EngineError, "tree: two payloads with one block hash") as error:
+        engine.forkchoice_updated(tree, "engine_forkchoiceUpdatedV3", [state, None])
+    assert error.value.code == 0

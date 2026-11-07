@@ -12,6 +12,8 @@ The payload tree and the request cross the boundary as JSON text in UTF-8.
 
 The tree is a list of objects, each with a block hash, a parent hash and a validity flag.
 
+No two of them have the same block hash.
+
 The finalized block that the execution layer knows is a block hash, or `null` for none.
 
 The request is a JSON-RPC request object, with its method and its parameters.
@@ -51,6 +53,8 @@ The execution layer may know a finalized block, from an earlier update. -/
 def forkchoiceUpdatedExport (tree finalized request : ByteArray) : Result ByteArray := do
   let .arr tree ← parseJson "tree" tree | throw (0, "tree: not an array")
   let tree ← tree.toList.mapM knownOfJson
+  -- A tree holds each block once, so two payloads with one block hash are malformed input.
+  unless (tree.map (·.1)).Nodup do throw (0, "tree: two payloads with one block hash")
   let finalized ← parseJson "finalized" finalized
   -- The known finalized block is an input that the export reads itself, so its errors have code 0.
   let finalized : Option Hash32 ← if finalized.isNull then pure none else

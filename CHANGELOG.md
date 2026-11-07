@@ -23,6 +23,8 @@ Not yet released.
   The new code 204 is a count above 2^40.
 - `compute_shuffled_index` and `compute_shuffled_permutation` now fail for a count above 2^40, as the consensus specification does ([#1072](https://github.com/ethereum/EthLib/pull/1072) and [#1087](https://github.com/ethereum/EthLib/pull/1087)).
   Before, the index wrapped a bucket number that does not fit in 4 bytes and returned a value.
+- The C export `eth_engine_forkchoice_updated` now rejects a tree of known payloads that names one block hash twice, with code 0 ([#1102](https://github.com/ethereum/EthLib/pull/1102)).
+  Before, it answered from the first entry of that hash and ignored the second.
 
 ## 0.3.0
 
