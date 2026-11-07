@@ -18,6 +18,12 @@ So the queue splits into the deposits added to the balances, those dropped, and 
 
 The balances plus the amounts in the queue never rise.
 
+The pass of an epoch reads only deposits with a slot at most the first slot of the finalized epoch.
+
+In Electra, while deposits of the old mechanism remain, it reads no request either.
+
+So only such deposits leave the queue.
+
 From Gloas, the churn of deposits is the churn of activations alone.
 -/
 
@@ -172,7 +178,9 @@ theorem processPendingDeposits_size_le {electra : .pectra ≤ fork}
 
 /-- A pass reads a prefix of its deposits, at most what the limit per epoch still allows.
 
-It applies some of those in order, and postpones the others in order. -/
+It applies some of those in order, and postpones the others in order.
+
+It reads no deposit for which `stop` is true. -/
 theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
     {available : Gwei} :
     ∀ {deposits : List PendingDeposit} {state : BeaconState preset fork} {processed : Gwei}
@@ -184,24 +192,25 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
           pass.1.postponed.toList = postponed.toList ++ moved ∧
           read.length ≤ preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat - count ∧
           applied.Sublist read ∧ moved.Sublist read ∧ (applied ++ moved).Perm read ∧
-          applied.foldlM (applyPendingDeposit config checks) state = .ok pass.1.state
+          applied.foldlM (applyPendingDeposit config checks) state = .ok pass.1.state ∧
+          ∀ deposit ∈ read, stop deposit = false
   | [], _, _, _, _, _, computed => by
     simp only [passPendingDeposits, pure, Except.pure, Except.ok.injEq] at computed
     subst computed
     exact ⟨[], [], [], rfl, by simp, by simp, List.nil_sublist _, List.nil_sublist _,
-      List.Perm.refl _, rfl⟩
+      List.Perm.refl _, rfl, by simp⟩
   | deposit :: rest, state, processed, count, postponed, pass, computed => by
     unfold passPendingDeposits at computed
     simp only [bind, Except.bind, pure, Except.pure] at computed
     split at computed
     · cases computed
       exact ⟨[], [], [], rfl, by simp, by simp, List.nil_sublist _, List.nil_sublist _,
-        List.Perm.refl _, rfl⟩
+        List.Perm.refl _, rfl, by simp⟩
     rename_i continues
-    -- The pass reads this deposit, so the count is below the limit per epoch.
-    have below : count < preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat := by
-      simp only [Bool.or_eq_true, decide_eq_true_eq, not_or, Nat.not_le] at continues
-      exact continues.2
+    -- The pass reads this deposit, so `stop` is false there and the count is below the limit.
+    simp only [Bool.or_eq_true, decide_eq_true_eq, not_or, Bool.not_eq_true,
+      Nat.not_le] at continues
+    obtain ⟨reads, below⟩ := continues
     split at computed
     · split at computed
       · cases computed
@@ -210,10 +219,10 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
       · cases computed
       cases computed
       obtain ⟨read, applied, moved, queue, pushed, length, inRead, movedInRead, perm,
-        later⟩ := passPendingDeposits_applied (deposits := rest) ‹_›
+        later, noneStop⟩ := passPendingDeposits_applied (deposits := rest) ‹_›
       refine ⟨deposit :: read, deposit :: applied, moved, congrArg (deposit :: ·) queue, pushed,
         by simp only [List.length_cons]; omega, inRead.cons_cons _, movedInRead.cons _,
-        perm.cons deposit, ?_⟩
+        perm.cons deposit, ?_, List.forall_mem_cons.mpr ⟨reads, noneStop⟩⟩
       simp only [List.foldlM_cons, bind, Except.bind, step]
       exact later
     split at computed
@@ -221,10 +230,11 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
       · cases computed
       cases computed
       obtain ⟨read, applied, moved, queue, pushed, length, inRead, movedInRead, perm,
-        later⟩ := passPendingDeposits_applied (deposits := rest) ‹_›
+        later, noneStop⟩ := passPendingDeposits_applied (deposits := rest) ‹_›
       refine ⟨deposit :: read, applied, deposit :: moved, congrArg (deposit :: ·) queue, ?_,
         by simp only [List.length_cons]; omega, inRead.cons _, movedInRead.cons_cons _,
-        List.perm_middle.trans (perm.cons deposit), later⟩
+        List.perm_middle.trans (perm.cons deposit), later,
+        List.forall_mem_cons.mpr ⟨reads, noneStop⟩⟩
       -- The deposit waits after those that earlier steps postponed.
       rw [pushed, Array.toList_push, List.append_assoc]
       rfl
@@ -233,7 +243,7 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
     split at computed
     · cases computed
       exact ⟨[], [], [], rfl, by simp, by simp, List.nil_sublist _, List.nil_sublist _,
-        List.Perm.refl _, rfl⟩
+        List.Perm.refl _, rfl, by simp⟩
     split at computed
     · cases computed
     rename_i step
@@ -241,10 +251,10 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
     · cases computed
     cases computed
     obtain ⟨read, applied, moved, queue, pushed, length, inRead, movedInRead, perm,
-      later⟩ := passPendingDeposits_applied (deposits := rest) ‹_›
+      later, noneStop⟩ := passPendingDeposits_applied (deposits := rest) ‹_›
     refine ⟨deposit :: read, deposit :: applied, moved, congrArg (deposit :: ·) queue, pushed,
       by simp only [List.length_cons]; omega, inRead.cons_cons _, movedInRead.cons _,
-      perm.cons deposit, ?_⟩
+      perm.cons deposit, ?_, List.forall_mem_cons.mpr ⟨reads, noneStop⟩⟩
     simp only [List.foldlM_cons, bind, Except.bind, step]
     exact later
 
@@ -271,7 +281,7 @@ theorem processPendingDeposits_applied {electra : .pectra ≤ fork}
   repeat' (split at computed <;> try cases computed)
   all_goals
     obtain ⟨read, applied, postponed, queue, pushed, length, inRead, postponedInRead, perm,
-      later⟩ := passPendingDeposits_applied ‹_›
+      later, _⟩ := passPendingDeposits_applied ‹_›
     exact ⟨read, _, applied, postponed, _, _, _, queue, by simpa using pushed,
       by simpa using length, inRead, postponedInRead, perm, later, rfl⟩
 
@@ -319,5 +329,50 @@ theorem processPendingDeposits_total_le {electra : .pectra ≤ fork}
   rw [queue, kept]
   simp only [pendingAmount, List.map_append, List.sum_append_nat] at amounts raised ⊢
   omega
+
+/-- A deposit waits when its slot is after `finalizedSlot`.
+
+It also waits when `bridgeDepositsPending` holds and its slot is after the genesis slot.
+
+It waits in no other case. -/
+theorem depositWaits_eq_false_iff {finalizedSlot : Slot} {deposit : PendingDeposit} :
+    depositWaits state finalizedSlot deposit = false ↔
+      deposit.slot ≤ finalizedSlot ∧
+        (bridgeDepositsPending state = true → deposit.slot ≤ GENESIS_SLOT) := by
+  simp only [depositWaits, Bool.or_eq_false_iff, Bool.and_eq_false_iff,
+    decide_eq_false_iff_not, UInt64.not_lt]
+  cases bridgeDepositsPending state <;> simp [and_comm]
+
+/-- A deposit leaves the queue of an epoch only if its slot is at most `finalizedSlot`.
+
+That slot is the first slot of the finalized epoch.
+
+In Electra, while deposits of the old mechanism remain, no request leaves it.
+
+A deposit leaves when the queue after holds fewer copies of it than the queue before. -/
+theorem processPendingDeposits_finalized {electra : .pectra ≤ fork} {finalizedSlot : Slot}
+    {deposit : PendingDeposit}
+    (computed : processPendingDeposits config checks state electra = .ok after)
+    (start : computeStartSlotAtEpoch preset state.finalizedCheckpoint.epoch = .ok finalizedSlot)
+    (fewer : (after.pendingDeposits electra).data.toList.count deposit <
+      (state.pendingDeposits electra).data.toList.count deposit) :
+    deposit.slot ≤ finalizedSlot ∧
+      (bridgeDepositsPending state = true → deposit.slot ≤ GENESIS_SLOT) := by
+  obtain ⟨_, _, _, waitSlot, pass, _, _, _, waitSlotOk, passed, _, _, queue⟩ :=
+    processPendingDeposits_pass computed
+  -- The pass waits for the first slot of the finalized epoch.
+  obtain rfl : waitSlot = finalizedSlot :=
+    Except.ok.inj ((mapError_ok_iff.mp waitSlotOk).symm.trans start)
+  obtain ⟨read, _, moved, split, pushed, _, _, movedInRead, _, _, ready⟩ :=
+    passPendingDeposits_applied passed
+  -- The queue after holds the deposits not reached, then some of those read.
+  have kept : (after.pendingDeposits electra).data.toList = pass.1.rest ++ moved := by
+    rw [queue]
+    simpa using pushed
+  have before := congrArg (List.count deposit) split
+  rw [kept] at fewer
+  simp only [List.count_append] at fewer before
+  have bound := movedInRead.count_le deposit
+  exact depositWaits_eq_false_iff.mp (ready deposit (List.count_pos_iff.mp (by omega)))
 
 end EthLib.Consensus
