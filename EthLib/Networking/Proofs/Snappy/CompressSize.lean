@@ -123,7 +123,7 @@ theorem six_mul_size_compress_le (src : ByteArray) :
     ByteArray.empty (Nat.le_refl _) (Nat.zero_le _) (by simp)
   have hpre : (EthLib.Networking.Encoding.Varint.encodeAux src.size preambleMaxLength).length ≤ 5 :=
     EthLib.Networking.Proofs.Encoding.Varint.length_encodeAux_le _ _
-  unfold compress
+  rw [compress_eq]
   simp only [ByteArray.size_append, size_mk_toArray]
   omega
 
