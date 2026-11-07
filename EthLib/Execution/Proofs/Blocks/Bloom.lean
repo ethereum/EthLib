@@ -18,6 +18,8 @@ A bit of the filter of some logs is set exactly when it is a bit of an entry of 
 
 The entries of a log are its address and its topics.
 
+A query for an entry passes exactly when each bit of the entry is a bit of an entry of a log.
+
 The 256 bytes of a filter read back, most significant byte first, as the number of the filter.
 
 So two filters with the same bytes are the same filter.
@@ -94,6 +96,14 @@ theorem getLsbD_ofLogs_iff (logs : List Log) (k : Nat) :
   · rintro ⟨log, hlog, entry, hentry, hk⟩
     exact ⟨_, ⟨entry, ⟨log, hlog, hentry⟩, rfl⟩, (getLsbD_ofEntry_iff entry k).mpr hk⟩
 
+/-- A query passes on the filter of some logs exactly when each bit of its entry is set there.
+
+A bit is set there exactly when it is a bit of an entry of one of the logs. -/
+theorem mayContain_ofLogs_iff (logs : List Log) (entry : ByteArray) :
+    mayContain (ofLogs logs) entry = true ↔
+      ∀ k ∈ bits entry, ∃ log ∈ logs, ∃ other ∈ entries log, k ∈ bits other := by
+  simp only [mayContain, List.all_eq_true, getLsbD_ofLogs_iff]
+
 /-- The filter of no logs is 0. -/
 theorem ofLogs_nil : ofLogs [] = 0 := rfl
 
@@ -104,12 +114,8 @@ theorem ofLogs_append (a b : List Log) : ofLogs (a ++ b) = ofLogs a ||| ofLogs b
 
 /-- No false negative: the filter of some logs has every bit of every entry of each log. -/
 theorem mayContain_ofLogs {logs : List Log} {log : Log} (hLog : log ∈ logs) {entry : ByteArray}
-    (hEntry : entry ∈ entries log) : mayContain (ofLogs logs) entry = true := by
-  simp only [mayContain, List.all_eq_true]
-  intro k hk
-  rw [ofLogs, getLsbD_foldr_or, List.any_eq_true]
-  exact ⟨ofEntry entry, List.mem_map_of_mem (List.mem_flatMap.mpr ⟨log, hLog, hEntry⟩),
-    getLsbD_ofEntry hk⟩
+    (hEntry : entry ∈ entries log) : mayContain (ofLogs logs) entry = true :=
+  (mayContain_ofLogs_iff logs entry).mpr fun _ hk => ⟨log, hLog, entry, hEntry, hk⟩
 
 /-- The filter of some logs has every bit of the address of each log. -/
 theorem mayContain_address {logs : List Log} {log : Log} (hLog : log ∈ logs) :
