@@ -10,7 +10,7 @@ The first slot of an epoch lies in that epoch, and every slot lies after its epo
 
 The slots of an epoch exist exactly when its first slot plus its length fits in 64 bits.
 
-The slot at the start time of a slot is that slot.
+The slot at the start time of a slot is that slot, in milliseconds and in seconds.
 
 Each conversion fails exactly when its result leaves the 64-bit range.
 
@@ -107,6 +107,79 @@ theorem computeSlotAtTimeMs_computeTimeAtSlotMs {genesisTimeMs timeMs : UInt64} 
       refine divChecked_ok_iff.mpr ⟨by intro zero; simp [zero] at positive, ?_⟩
       rw [offsetValue, Nat.mul_div_cancel _ positive]
     simp only [computeSlotAtTimeMs, elapsed, quotient, bind, Except.bind]
+
+/-- A whole number of seconds that fits keeps its value, in milliseconds.
+
+It fits when it is at most the largest 64-bit integer divided by 1000. -/
+theorem toNat_secondsToMilliseconds {seconds : UInt64} (fits : seconds ≤ UINT64_MAX / 1000) :
+    (secondsToMilliseconds seconds).toNat = seconds.toNat * 1000 := by
+  have max : UINT64_MAX.toNat = 2 ^ 64 - 1 := by decide
+  have thousand : (1000 : UInt64).toNat = 1000 := rfl
+  have fits' : seconds.toNat ≤ (2 ^ 64 - 1) / 1000 := by
+    have := UInt64.le_iff_toNat_le.mp fits
+    rwa [UInt64.toNat_div, max, thousand] at this
+  have notLt : ¬ UINT64_MAX / 1000 < seconds := UInt64.not_lt.mpr fits
+  simp only [secondsToMilliseconds, notLt, ↓reduceIte]
+  rw [UInt64.toNat_mul, thousand]
+  exact Nat.mod_eq_of_lt (by omega)
+
+/-- The start time of a slot, in seconds, maps back to the slot.
+
+A slot lasts a positive whole number of seconds.
+
+A shorter slot can share its second with the next one.
+
+For example, with slots of 500 milliseconds, slots 2 and 3 start in the same second.
+
+The time of genesis must also fit in milliseconds, since a time that does not fit saturates. -/
+theorem computeSlotAtTime_computeTimeAtSlot {genesisTime time : UInt64} {slot : Slot}
+    (positive : 0 < config.SLOT_DURATION_MS) (whole : config.SLOT_DURATION_MS % 1000 = 0)
+    (genesis : genesisTime ≤ UINT64_MAX / 1000)
+    (start : computeTimeAtSlot config genesisTime slot = .ok time) :
+    computeSlotAtTime config genesisTime time = .ok slot := by
+  have genesisMs := toNat_secondsToMilliseconds genesis
+  have max : UINT64_MAX.toNat = 2 ^ 64 - 1 := by decide
+  have thousand : (1000 : UInt64).toNat = 1000 := rfl
+  have positive : 0 < config.SLOT_DURATION_MS.toNat := UInt64.lt_iff_toNat_lt.mp positive
+  -- The slot lasts `1000 * k` milliseconds, that is `k` seconds.
+  obtain ⟨k, hk⟩ : ∃ k, config.SLOT_DURATION_MS.toNat = 1000 * k := by
+    refine ⟨config.SLOT_DURATION_MS.toNat / 1000, ?_⟩
+    have := congrArg UInt64.toNat whole
+    rw [UInt64.toNat_mod, thousand] at this
+    simp only [UInt64.toNat_zero] at this
+    omega
+  unfold computeTimeAtSlot at start
+  cases started : computeTimeAtSlotMs config (secondsToMilliseconds genesisTime) slot with
+  | error fault => simp [started, bind, Except.bind] at start
+  | ok timeMs =>
+    simp only [started, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at start
+    unfold computeTimeAtSlotMs at started
+    cases product : mulChecked slot config.SLOT_DURATION_MS with
+    | error fault => simp [product, bind, Except.bind] at started
+    | ok offset =>
+      simp only [product, bind, Except.bind] at started
+      obtain ⟨-, offsetValue⟩ := mulChecked_ok_iff.mp product
+      obtain ⟨fitsMs, timeValue⟩ := addChecked_ok_iff.mp started
+      rw [genesisMs] at fitsMs timeValue
+      rw [hk] at offsetValue
+      have regroup : slot.toNat * (1000 * k) = 1000 * (slot.toNat * k) := by
+        rw [Nat.mul_left_comm]
+      -- The time in seconds is the genesis time plus `k` seconds for each slot.
+      have timeNat : time.toNat = genesisTime.toNat + slot.toNat * k := by
+        rw [← start, millisecondsToSeconds, UInt64.toNat_div, thousand]
+        omega
+      have timeLe : time ≤ UINT64_MAX / 1000 := by
+        apply UInt64.le_iff_toNat_le.mpr
+        rw [UInt64.toNat_div, max, thousand]
+        omega
+      have timeMsValue := toNat_secondsToMilliseconds timeLe
+      have elapsed : subChecked (secondsToMilliseconds time) (secondsToMilliseconds genesisTime) =
+          .ok offset :=
+        subChecked_ok_iff.mpr ⟨by omega, by omega⟩
+      have quotient : divChecked offset config.SLOT_DURATION_MS = .ok slot := by
+        refine divChecked_ok_iff.mpr ⟨by intro zero; simp [zero] at positive, ?_⟩
+        rw [offsetValue, hk, Nat.mul_div_cancel _ (by omega : 0 < 1000 * k)]
+      simp only [computeSlotAtTime, computeSlotAtTimeMs, elapsed, quotient, bind, Except.bind]
 
 /-- A part of a slot exists exactly when the product of its basis points and the slot fits in
 64 bits.
