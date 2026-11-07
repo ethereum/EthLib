@@ -667,7 +667,10 @@ So `SpecUnder.runFrame` concludes that `runFrame` returns a stopped frame of `Q`
 `hoareUnder_iff_triple` states each triple under an assumption as a `Triple` over `StepBy` under each runner that meets it, so the two share their rules.
 The code that a message runs is arbitrary and may call the caller again.
 So the assumption is all that a triple says about a frame that ends a message, and about the state after it.
-`Logic.call` (`Logic/Call.lean`) is the rule for CALL with no value and empty ranges of input and output.
+`Logic.callWith` (`Logic/Call.lean`) is the rule for CALL with no value, a range of input and a range of output.
+It pays the growth of memory for both ranges, and the message carries the bytes of the input range.
+The caller writes the start of the output of the callee at the start of the output range, as far as both go.
+`Logic.call` is its case with empty ranges.
 It holds from Berlin to before Glamsterdam, with the one-counter meter.
 It pays 2600 or 100 for the access to the address, by EIP-2929.
 It passes on at most all but one 64th of the gas left, by EIP-150.
