@@ -83,7 +83,7 @@ def computeAttestationSubnetPrefixBits (config : SubnetParameters) :
     return Serialization.Ssz.depthFor config.ATTESTATION_SUBNET_COUNT.toNat +
       config.ATTESTATION_SUBNET_EXTRA_BITS.toNat
 
-/-- The subnet with a given index among the subnets of a node in an epoch.
+/-- The shuffled prefix of a node in an epoch, which every index of the node shares.
 
 `shuffle i n seed` is the position of `i` in a permutation of `0, …, n - 1` that the seed selects.
 
@@ -96,12 +96,10 @@ The offset is the node ID modulo the epochs per subscription.
 The period is `(epoch + offset) / epochs per subscription`.
 
 The seed is the SHA-256 hash of the period as eight little-endian bytes.
-
-The subnet is the shuffled prefix plus the index, modulo the number of subnets.
 -/
-def computeSubscribedSubnet (config : SubnetParameters)
+def computeShuffledPrefix (config : SubnetParameters)
     (shuffle : UInt64 → UInt64 → Base.Bytes32 → Except ε UInt64)
-    (nodeId : NodeID) (epoch index : UInt64) : Except (SubnetError ε) SubnetID := do
+    (nodeId : NodeID) (epoch : UInt64) : Except (SubnetError ε) UInt64 := do
   let bits ← computeAttestationSubnetPrefixBits config
   let nodePrefix := nodeId.toNat >>> (NODE_ID_BITS - bits)
   if config.EPOCHS_PER_SUBNET_SUBSCRIPTION = 0 then throw .zeroEpochsPerSubscription
@@ -110,7 +108,16 @@ def computeSubscribedSubnet (config : SubnetParameters)
   let period := shifted / config.EPOCHS_PER_SUBNET_SUBSCRIPTION
   let seed := Cryptography.Hash.Sha256.hash32 ⟨(Base.uintToBytes 8 period.toNat).toArray⟩
   if 64 ≤ bits then throw (.prefixBitsTooLarge bits)
-  let permuted ← (shuffle nodePrefix.toUInt64 (2 ^ bits).toUInt64 seed).mapError .shuffle
+  (shuffle nodePrefix.toUInt64 (2 ^ bits).toUInt64 seed).mapError .shuffle
+
+/-- The subnet with a given index among the subnets of a node in an epoch.
+
+The subnet is the shuffled prefix plus the index, modulo the number of subnets.
+-/
+def computeSubscribedSubnet (config : SubnetParameters)
+    (shuffle : UInt64 → UInt64 → Base.Bytes32 → Except ε UInt64)
+    (nodeId : NodeID) (epoch index : UInt64) : Except (SubnetError ε) SubnetID := do
+  let permuted ← computeShuffledPrefix config shuffle nodeId epoch
   let subnet ← (Base.Uint64.addChecked permuted index).mapError fun _ => .subnetOverflow
   return subnet % config.ATTESTATION_SUBNET_COUNT
 

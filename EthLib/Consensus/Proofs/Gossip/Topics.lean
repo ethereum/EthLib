@@ -114,10 +114,7 @@ theorem gossipTopics_beaconAttestation {config : Config} {fork : Fork}
     rcases member with ((((⟨a, lt, same⟩ | other) | other) | other) | other) | other
     · cases same
       exact ofNat_lt lt
-    all_goals
-      first
-      | simp [GossipTopic.gloas] at other
-      | (split at other <;> simp [List.mem_append, List.mem_cons, List.mem_map] at other)
+    all_goals simp [GossipTopic.gloas] at other
 
 /-- The topics of Gloas are those of Fulu, then the four topics that Gloas adds. -/
 theorem gossipTopics_gloas {config : Config} {fork : Fork} (gloas : .glamsterdam ≤ fork)
