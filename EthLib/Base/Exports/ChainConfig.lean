@@ -87,8 +87,7 @@ def configOfJson (j : Json) : Result ChainConfig := do
   let .arr activations := j.getObjValD "activations" | throw (0, "config: no activations")
   let activations ← activations.toList.mapM activationOfJson
   -- EIP-6122 puts forks by time after forks by block, so none comes before a fork by block.
-  unless activations.all (fun (g, b) => !(b matches .block _) ||
-      activations.all fun (f, a) => a matches .block _ || !decide (f < g)) do
+  unless activationsOrdered activations do
     throw (0, "config: a fork by block comes after a fork by time")
   let schedules ← match j.getObjValD "blobSchedules" with
     | .arr entries => entries.toList.mapM blobScheduleOfJson

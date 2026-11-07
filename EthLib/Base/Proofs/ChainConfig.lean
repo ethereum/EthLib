@@ -19,6 +19,10 @@ A chain sets no blob schedule at a block exactly when the block reaches none of 
 
 The schedule that it sets is one of its schedules, and the block has reached its activation.
 
+The order check of EIP-6122 passes exactly when no fork by block follows a fork by timestamp.
+
+A chain whose forks are in the order of the timeline passes it.
+
 Mainnet and Hoodi set none.
 -/
 
@@ -187,6 +191,53 @@ theorem blobScheduleAt_append_of_reached {a : Activation} {s : BlobSchedule}
     (hr : a.reached n t = true) :
     blobScheduleAt ⟨id, fs, l ++ [(a, s)]⟩ n t = some s := by
   simp [blobScheduleAt, hr]
+
+/-- The forks are ordered exactly when no fork by block is later than a fork by timestamp. -/
+theorem activationsOrdered_eq_true_iff {activations : List (Fork × Activation)} :
+    activationsOrdered activations = true ↔
+      ∀ f t g n, (f, Activation.time t) ∈ activations → (g, Activation.block n) ∈ activations →
+        ¬ f < g := by
+  simp only [activationsOrdered, List.all_eq_true, Bool.or_eq_true, Bool.not_eq_true',
+    decide_eq_false_iff_not, Prod.forall]
+  constructor
+  · intro h f t g n hf hg
+    rcases h g _ hg with h1 | h1
+    · simp at h1
+    · rcases h1 f _ hf with h2 | h2 <;> simp_all
+  · intro h g b hg
+    cases b with
+    | block n =>
+      right
+      intro f a hf
+      cases a with
+      | block _ => left; simp
+      | time t => right; exact h f t g n hf hg
+    | time _ => left; simp
+
+/-- A chain whose forks are in the order of the timeline passes the order check of EIP-6122.
+
+A fork by timestamp activates no earlier than any fork before it, so no fork by block follows it. -/
+theorem activationsOrdered_of_ordered (ordered : config.Ordered) :
+    activationsOrdered config.activations = true := by
+  rw [activationsOrdered_eq_true_iff]
+  obtain ⟨pairwise, -⟩ := ordered
+  intro f t g n hf hg earlier
+  generalize config.activations = activations at pairwise hf hg
+  induction pairwise with
+  | nil => cases hf
+  | cons rel _ ih =>
+    rw [List.mem_cons] at hf hg
+    rcases hf with hf | hf <;> rcases hg with hg | hg
+    · subst hf
+      cases hg
+    -- A fork by block after a fork by timestamp would activate before it.
+    · subst hf
+      exact (rel _ hg).2
+    -- The fork by block comes first in the list, so it is the earlier fork.
+    · subst hg
+      have later : g < f := (rel _ hf).1
+      exact Nat.lt_asymm later earlier
+    · exact ih hf hg
 
 /-! ## Mainnet -/
 

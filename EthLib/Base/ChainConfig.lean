@@ -96,6 +96,13 @@ def Ordered (config : ChainConfig) : Prop :=
 instance (config : ChainConfig) : Decidable config.Ordered :=
   inferInstanceAs (Decidable (List.Pairwise _ _ ∧ List.Pairwise _ _))
 
+/-- Whether no fork by block number comes after a fork by timestamp in the order of the forks.
+
+[EIP-6122](https://eips.ethereum.org/EIPS/eip-6122#additional-rules) requires this order. -/
+def activationsOrdered (activations : List (Fork × Activation)) : Bool :=
+  activations.all fun (g, b) => !(b matches .block _) ||
+    activations.all fun (f, a) => a matches .block _ || !decide (f < g)
+
 /-- The active fork at a block: the latest fork whose activation the block has reached.
 
 Two forks can activate at one block, and then the later fork is active.
