@@ -407,6 +407,9 @@ That proof needs one more fact than the proof for secp256k1: `x^3 - 3 x + b` has
 The kernel checks it by an inverse of `X^p - X` modulo the cubic.
 
 `verify_sign` (`Proofs/Secp256r1/Ecdsa.lean`) proves that a signature from the signing operation of SEC 1 verifies.
+`verify_eq_true_iff` states verification as the verifying operation of SEC 1 v2 §4.1.4, read in the group of the curve.
+By it, a signature is valid exactly when `r` and `s` lie in `[1, n - 1]` and the key is a point of the curve other than `O`.
+The point `(e / s) G + (r / s) Q` must also be other than `O`, with `x mod n = r`.
 `verify_iff_of_verify` proves that, next to a valid signature `(r, s)` under a key and a message, the signatures `(r, s')` under the same key and message that verify are exactly those with `s' = s` or `s' = n - s`, when `r + n >= p`.
 For P-256, `p - n` is about `2^126`, so the bound excludes only the values of `r` below it.
 No theorem states unforgeability.
