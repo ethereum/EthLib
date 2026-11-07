@@ -162,7 +162,7 @@ theorem openHandshake_sealHandshake {e a b : Fn} {challengeData : ByteArray}
         | ok packetBytes =>
           simp only [hb, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
           obtain ⟨rfl, rfl⟩ := h
-          -- The header alone has 23 + 34 bytes, so the packet has at least 63.
+          -- The masking IV, the static header and the authdata take 16 + 23 + 34 bytes or more.
           cases hh : header.encode with
           | error err => simp [Packet.encode, hh, bind, Except.bind] at hb
           | ok headerBytes =>
