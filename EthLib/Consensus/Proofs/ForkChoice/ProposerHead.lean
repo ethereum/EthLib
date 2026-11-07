@@ -15,9 +15,11 @@ It skips the head only when the head is weak.
 
 It never answers while the head still holds the boost.
 
-From Gloas the choice fails as not yet specified.
+An exact statement gives when it answers and which node it takes, from its tests.
 
-Before Gloas an exact statement gives when it answers and which node it takes, from its tests.
+The parent node has the payload status that the head builds on.
+
+So from Gloas a proposer whose head is not pending never builds on a pending node.
 
 Each test has an exact statement of when it answers and what it returns.
 
@@ -71,18 +73,15 @@ namespace Store
 
 variable {config : Config} {store : Store preset fork}
 
-/-- Before Gloas, a head is late exactly when the store records that it was not timely. -/
+/-- A head is late exactly when the store records that it was not timely.
+
+From Gloas that record is the timeliness for the attestation deadline. -/
 theorem isHeadLate_ok_iff {root : Root} {late : Bool} :
     store.isHeadLate root = .ok late ↔
-      fork < .glamsterdam ∧
-        ∃ timely, store.blockTimeliness[root]? = some timely ∧ late = !timely := by
+      ∃ timely, store.blockTimeliness[root]? = some timely ∧ late = !timely := by
   unfold isHeadLate
-  by_cases gloas : .glamsterdam ≤ fork
-  · have later : ¬ fork < .glamsterdam := Nat.not_lt_of_le gloas
-    simp [gloas, later, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
-  · have before : fork < .glamsterdam := Nat.lt_of_not_le gloas
-    cases store.blockTimeliness[root]? <;>
-      simp [gloas, before, throw, throwThe, MonadExceptOf.throw, pure, Except.pure, eq_comm]
+  cases store.blockTimeliness[root]? <;>
+    simp [throw, throwThe, MonadExceptOf.throw, pure, Except.pure, eq_comm]
 
 /-- A head and a parent compete exactly when their unrealized justified checkpoints are equal. -/
 theorem isFfgCompetitive_ok_iff {head parent : Root} {competitive : Bool} :
@@ -139,24 +138,20 @@ theorem isProposingOnTime_ok_iff {onTime : Bool} :
   · rintro ⟨time, cutoff, clock, computed, rfl⟩
     exact ⟨time, clock, cutoff, computed, rfl⟩
 
-/-- Before Gloas, a parent is strong exactly when its votes exceed the threshold.
+/-- A parent is strong exactly when the votes for its pending node exceed the threshold.
 
 Both come from the justified state. -/
 theorem isParentStrong_ok_iff {root : Root} {strong : Bool} :
     store.isParentStrong config root = .ok strong ↔
-      fork < .glamsterdam ∧ ∃ justified threshold block votes,
+      ∃ justified threshold block votes,
         store.checkpointStates[store.justifiedCheckpoint]? = some justified ∧
         calculateCommitteeFraction justified config.REORG_PARENT_WEIGHT_THRESHOLD =
           .ok threshold ∧
         store.blocks[root]? = some block ∧
         store.getAttestationScore ⟨block.parentRoot, .pending⟩ justified = .ok votes ∧
         strong = decide (threshold < votes) := by
-  by_cases gloas : .glamsterdam ≤ fork
-  · have later : ¬ fork < .glamsterdam := Nat.not_lt_of_le gloas
-    simp [isParentStrong, gloas, later, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
-  have before : fork < .glamsterdam := Nat.lt_of_not_le gloas
-  simp only [isParentStrong, gloas, before, ↓reduceIte, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq, checkpointState_ok_iff, block_ok_iff, true_and]
+  simp only [isParentStrong, bind_ok_iff, pure, Except.pure, Except.ok.injEq,
+    checkpointState_ok_iff, block_ok_iff]
   constructor
   · rintro ⟨justified, known, threshold, computed, block, found, votes, score, rfl⟩
     exact ⟨justified, threshold, block, votes, known, computed, found, score, rfl⟩
@@ -377,12 +372,6 @@ theorem isHeadWeak_ok_iff {root : Root} {weak : Bool} :
       score, _, (forIn_committees_ok_iff votes.toNat_lt).mpr
         ⟨committees, mapped, each, rfl, fits⟩, rfl⟩
 
-/-- From Gloas the choice of the proposer is not yet specified here, so it fails. -/
-theorem getProposerHead_of_gloas {headNode : ForkChoiceNode} {slot : Slot}
-    (gloas : .glamsterdam ≤ fork) :
-    store.getProposerHead config headNode slot = .error (.forkNotYetSpecified fork) := by
-  simp [getProposerHead, gloas, throw, throwThe, MonadExceptOf.throw]
-
 /-- The checked sum of a slot and one answers exactly when the sum fits in 64 bits. -/
 private theorem next_slot_ok_iff {first next : Slot} :
     (Uint64.addChecked first 1).mapError ForkChoiceError.arith = .ok next ↔
@@ -400,18 +389,20 @@ private theorem ite_ite_eq_ite_or {α : Type} {first second firstNat secondNat :
 
 /-- The exact choice of a proposer.
 
-Before Gloas it answers when the boost has worn off and the store holds the head and its parent.
+It answers when the boost has worn off and the store holds the head and its parent.
 
 Each test must answer, and the slot of each block plus one must fit in 64 bits.
 
 It takes the parent when either list of tests passes, and the head otherwise.
+
+The parent node has the payload status that the head builds on.
 
 The first list is for a late head.
 
 The second list is for a weak head of the previous slot whose proposer equivocated. -/
 theorem getProposerHead_ok_iff {headNode chosen : ForkChoiceNode} {slot : Slot} :
     store.getProposerHead config headNode slot = .ok chosen ↔
-      fork < .glamsterdam ∧ store.proposerBoostRoot ≠ headNode.root ∧
+      store.proposerBoostRoot ≠ headNode.root ∧
       ∃ head parent late shuffling competitive recent onTime weak strong equivocation,
         store.blocks[headNode.root]? = some head ∧
         store.blocks[head.parentRoot]? = some parent ∧
@@ -430,13 +421,9 @@ theorem getProposerHead_ok_iff {headNode chosen : ForkChoiceNode} {slot : Slot} 
                 (parent.slot.toNat + 1 = head.slot.toNat ∧ head.slot.toNat + 1 = slot.toNat) ∧
                 weak ∧ strong) ∨
               (weak ∧ head.slot.toNat + 1 = slot.toNat ∧ equivocation)
-          then ⟨head.parentRoot, .pending⟩
+          then ⟨head.parentRoot, parentPayloadStatus head parent⟩
           else headNode := by
-  by_cases gloas : .glamsterdam ≤ fork
-  · have later : ¬ fork < .glamsterdam := Nat.not_lt_of_le gloas
-    simp [getProposerHead_of_gloas gloas, later]
-  have before : fork < .glamsterdam := Nat.lt_of_not_le gloas
-  simp only [getProposerHead, gloas, before, ↓reduceIte, bind_ok_iff, block_ok_iff, true_and]
+  simp only [getProposerHead, bind_ok_iff, block_ok_iff]
   constructor
   · rintro ⟨head, headKnown, parent, parentKnown, late, lateFound, shuffling, shufflingFound,
       competitive, competitiveFound, recent, recentFound, onTime, onTimeFound, parentNext,
@@ -479,7 +466,7 @@ theorem getProposerHead_ok_iff {headNode chosen : ForkChoiceNode} {slot : Slot} 
 
 /-- The choice of a proposer, from the answers of its tests.
 
-Before Gloas, let the boost have worn off, and let the store hold the head and its parent.
+Let the boost have worn off, and let the store hold the head and its parent.
 
 Let each test answer, and let the slot of each block plus one fit in 64 bits.
 
@@ -487,7 +474,7 @@ Then the choice is the parent when either list of tests passes, and the head oth
 theorem getProposerHead_eq {headNode : ForkChoiceNode} {slot : Slot}
     {head parent : BeaconBlock preset fork}
     {late shuffling competitive recent onTime weak strong equivocation : Bool}
-    (before : fork < .glamsterdam) (unboosted : store.proposerBoostRoot ≠ headNode.root)
+    (unboosted : store.proposerBoostRoot ≠ headNode.root)
     (headKnown : store.blocks[headNode.root]? = some head)
     (parentKnown : store.blocks[head.parentRoot]? = some parent)
     (lateFound : store.isHeadLate headNode.root = .ok late)
@@ -504,36 +491,48 @@ theorem getProposerHead_eq {headNode : ForkChoiceNode} {slot : Slot}
             (parent.slot.toNat + 1 = head.slot.toNat ∧ head.slot.toNat + 1 = slot.toNat) ∧
             weak ∧ strong) ∨
           (weak ∧ head.slot.toNat + 1 = slot.toNat ∧ equivocation)
-        then ⟨head.parentRoot, .pending⟩
+        then ⟨head.parentRoot, parentPayloadStatus head parent⟩
         else headNode) :=
-  getProposerHead_ok_iff.mpr ⟨before, unboosted, head, parent, late, shuffling, competitive,
+  getProposerHead_ok_iff.mpr ⟨unboosted, head, parent, late, shuffling, competitive,
     recent, onTime, weak, strong, equivocation, headKnown, parentKnown, lateFound, shufflingFound,
     competitiveFound, recentFound, onTimeFound, parentFits, headFits, weakFound, strongFound,
     equivocationFound, rfl⟩
 
 /-- The proposer builds on the head, or on the parent of its block.
 
-It builds on the parent only when the head is weak. -/
+It builds on the parent only when the head is weak.
+
+The parent node has the payload status that the head builds on. -/
 theorem getProposerHead_ok {headNode chosen : ForkChoiceNode} {slot : Slot}
     (found : store.getProposerHead config headNode slot = .ok chosen) :
     chosen = headNode ∨
-      ∃ block, store.blocks[headNode.root]? = some block ∧
-        chosen = ⟨block.parentRoot, .pending⟩ ∧
+      ∃ block parent, store.blocks[headNode.root]? = some block ∧
+        store.blocks[block.parentRoot]? = some parent ∧
+        chosen = ⟨block.parentRoot, parentPayloadStatus block parent⟩ ∧
         store.isHeadWeak config headNode.root = .ok true := by
-  obtain ⟨_, _, head, _, _, _, _, _, _, weak, _, _, known, _, _, _, _, _, _, _, _, weakFound, _, _,
-    rfl⟩ := getProposerHead_ok_iff.mp found
+  obtain ⟨_, head, parent, _, _, _, _, _, weak, _, _, known, parentKnown, _, _, _, _, _, _, _,
+    weakFound, _, _, rfl⟩ := getProposerHead_ok_iff.mp found
   split
   · rename_i passed
     have isWeak : weak = true := by
       rcases passed with ⟨_, _, _, _, _, _, isWeak, _⟩ | ⟨isWeak, _, _⟩ <;> exact isWeak
-    exact .inr ⟨head, known, rfl, isWeak ▸ weakFound⟩
+    exact .inr ⟨head, parent, known, parentKnown, rfl, isWeak ▸ weakFound⟩
   · exact .inl rfl
+
+/-- From Gloas a proposer whose head is not pending never builds on a pending node. -/
+theorem getProposerHead_ne_pending {headNode chosen : ForkChoiceNode} {slot : Slot}
+    (gloas : .glamsterdam ≤ fork) (notPending : headNode.payloadStatus ≠ .pending)
+    (found : store.getProposerHead config headNode slot = .ok chosen) :
+    chosen.payloadStatus ≠ .pending := by
+  rcases getProposerHead_ok found with rfl | ⟨_, _, _, _, rfl, _⟩
+  · exact notPending
+  · exact parentPayloadStatus_ne_pending gloas
 
 /-- The proposer gets no answer while the head still holds the boost. -/
 theorem getProposerHead_boosted {headNode chosen : ForkChoiceNode} {slot : Slot}
     (boosted : store.proposerBoostRoot = headNode.root) :
     store.getProposerHead config headNode slot ≠ .ok chosen :=
-  fun found => (getProposerHead_ok_iff.mp found).2.1 boosted
+  fun found => (getProposerHead_ok_iff.mp found).1 boosted
 
 end Store
 
