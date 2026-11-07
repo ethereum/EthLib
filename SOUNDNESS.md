@@ -730,6 +730,13 @@ It needs the output to hold at most 24576 bytes (EIP-170), and from London not t
 `Logic.depositCode_of_outOfGas` proves that an output too long or too dear fails the same way, out of gas.
 `Logic.processCreateMessage_eq_ok` proves that a creation with no value and no precompile ends as its init code ends, then deposits.
 `Logic.meets_of_spec_create` proves that the runner of the interpreter meets `CreatesAs` for a specification of the init code.
+`Deploy.specInit` proves init code that returns the byte 0 for 9 gas, and keeps its message.
+`Deploy.runFrame_process` proves a contract that creates a contract from that init code and returns the size of its code.
+With the runner of the interpreter, it stops with no error and returns the word 1, or the run aborts.
+When it returns, the new account holds the code of the byte 0.
+It holds from Berlin to before Glamsterdam, with at least 32344 gas.
+The frame may change the state, its nonce is below the greatest, and its depth leaves room for one more frame.
+The new address holds no code and a nonce of 0.
 `Logic.running_eq_false_of_sstore_of_isStatic` proves that in a static frame, a step at SSTORE stops the frame.
 `Logic.running_eq_false_of_log_of_isStatic` proves the same for LOG0 to LOG4.
 `NoValue.spec_nonzero` proves a contract that halts at `0xfe` when its message sends value.
