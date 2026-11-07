@@ -62,10 +62,6 @@ theorem instruction_log (n : Fin 5) :
     environmentStep, accountStep, storageStep, transientStorageStep, logOpStep,
     HOrElse.hOrElse, OrElse.orElse, Option.orElse]
 
-/-- The price of LOGn with `size` bytes of data: 375, 8 for each byte, and 375 for each topic. -/
-def logCost (n : Nat) (size : U256) : Nat :=
-  OPCODE_LOG_BASE + OPCODE_LOG_DATA_PER_BYTE * size.toNat + OPCODE_LOG_TOPIC * n
-
 /-- LOGn appends a log of the current address, with the `n` words below the range as its topics.
 
 The data of the log is the range of memory from `start`, after memory grows to hold it.

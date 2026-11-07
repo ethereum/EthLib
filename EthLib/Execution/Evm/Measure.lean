@@ -791,7 +791,8 @@ theorem logStep_pays {n : Nat} {evm after : Evm fork Meter} (h : logStep n evm =
   · cases h
   · cases h
     exact (((((popWord_pays h1).trans (popWord_pays h2)).trans (popTopics_pays h3)).trans
-      (chargeGasAndMemory_pays h4)).mono (m := OPCODE_LOG_BASE) (by omega)).congr rfl rfl
+      (chargeGasAndMemory_pays h4)).mono (m := OPCODE_LOG_BASE)
+        (by simp only [logCost]; omega)).congr rfl rfl
 
 /-- Each LOG instruction lowers the measure. -/
 theorem logOpStep_measure_lt {op : Op}
