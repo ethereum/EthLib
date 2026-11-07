@@ -32,6 +32,17 @@ if ! grep -q "$expected" "$fixture_dir/fixture.log"; then
 fi
 echo "leanchecker rejects the unchecked fixture theorem"
 
+# A restored build cache can hold the files of a module whose source is gone.
+# leanchecker replays every module under the name that it gets, so it would replay such a module.
+# Its imports may have changed, so remove its files first.
+find .lake/build/lib/lean/EthLib -name '*.olean' | while read -r olean; do
+  source="${olean#.lake/build/lib/lean/}"
+  if [ ! -f "${source%.olean}.lean" ]; then
+    echo "removing the build of a deleted module: ${olean%.olean}"
+    rm -f "${olean%.olean}".*
+  fi
+done
+
 # A module that only imports declares nothing, so it is not replayed.
 # A module with other content and submodules is replayed with its submodules.
 jobs="${REPLAY_JOBS:-2}"
@@ -67,7 +78,22 @@ while read -r m; do
 done < "$modules"
 echo "replaying $(wc -l < "$targets") of $(wc -l < "$modules") modules, $jobs at a time"
 start=$SECONDS
+# A proof can make the kernel evaluate a large computation that the build did not evaluate.
+# Its replay can then run for hours and fill the memory of the runner.
+# So each module has a time budget, and a module that exceeds it fails the replay by name.
+budget="${REPLAY_BUDGET:-300}"
 # `xargs` runs every module and fails if one fails.
-# leanchecker names the module that fails.
-LEAN_NUM_THREADS=1 lake env xargs -P "$jobs" -n 1 leanchecker < "$targets"
+# leanchecker names the module that it rejects.
+LEAN_NUM_THREADS=1 lake env xargs -P "$jobs" -n 1 bash -c '
+  begin=$SECONDS
+  status=0
+  timeout "$1" leanchecker "$2" || status=$?
+  if [ "$status" -eq 0 ]; then
+    echo "$2 replayed in $((SECONDS - begin)) s"
+  elif [ "$status" -eq 124 ]; then
+    echo "$2 did not replay within the budget of $1 s" >&2
+  else
+    echo "$2 failed to replay after $((SECONDS - begin)) s" >&2
+  fi
+  exit "$((status != 0))"' _ "$budget" < "$targets"
 echo "replayed in $((SECONDS - start)) s"
