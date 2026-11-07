@@ -42,21 +42,10 @@ open GasCosts
 
 variable {fork : Fork} {Meter : Type}
 
-/-- From Istanbul to BPO5, a write and the write that restores the original value cost two reads.
-
-That is net of refunds, and a cold first access adds its price. -/
-theorem sstore_restore (h : fork ≥ .istanbul) (hlt : fork < .glamsterdam) {original new : U256}
-    (hne : original ≠ new) (cold : Bool) :
-    ((sstoreCost fork original original new cold + sstoreCost fork original new original false :
-      Nat) : Int) -
-      (sstoreRefund fork original original new + sstoreRefund fork original new original) =
-      (if cold then COLD_STORAGE_ACCESS else 0) + 2 * sstoreReadCost fork := by
-  have hne' : new ≠ original := Ne.symm hne
-  have hg : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hlt
-  unfold sstoreCost sstoreRefund sstoreResetCost sstoreReadCost
-  simp only [hg, ite_false]
-  by_cases hb : fork ≥ .berlin <;> by_cases h0 : original = 0 <;> by_cases h1 : new = 0 <;>
-    cases cold <;> simp [h, hb, h0, h1, hne, hne'] <;> simp_all <;> omega
+/-- From Istanbul, a write of the current value changes no refund. -/
+theorem sstoreRefund_noop (h : fork ≥ .istanbul) (original current : U256) :
+    sstoreRefund fork original current current = 0 := by
+  simp [sstoreRefund, h]
 
 /-- From Istanbul to BPO5, a write of the current value costs a read, and the cold surcharge. -/
 theorem sstoreCost_noop (h : fork ≥ .istanbul) (hlt : fork < .glamsterdam)
@@ -65,6 +54,37 @@ theorem sstoreCost_noop (h : fork ≥ .istanbul) (hlt : fork < .glamsterdam)
       (if cold then COLD_STORAGE_ACCESS else 0) + sstoreReadCost fork := by
   have hg : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hlt
   simp [sstoreCost, h, hg]
+
+/-- From Glamsterdam, a write of the current value costs one access, and no state gas. -/
+theorem sstore_noop_of_glamsterdam (h : fork ≥ .glamsterdam) (original current : U256)
+    (cold : Bool) :
+    sstoreCost fork original current current cold =
+        (if cold then COLD_STORAGE_ACCESS else WARM_ACCESS) ∧
+      sstoreStateGas fork original current current = 0 ∧
+      sstoreStateRefill fork original current current = 0 := by
+  refine ⟨by simp [sstoreCost, h], ?_, ?_⟩ <;>
+    simp only [sstoreStateGas, sstoreStateRefill] <;> split <;> simp_all
+
+/-- From Istanbul to BPO5, a write and the write that restores the original value cost two reads.
+
+That is net of refunds, and a cold first access adds its price. -/
+theorem sstore_restore (h : fork ≥ .istanbul) (hlt : fork < .glamsterdam) (original new : U256)
+    (cold : Bool) :
+    ((sstoreCost fork original original new cold + sstoreCost fork original new original false :
+      Nat) : Int) -
+      (sstoreRefund fork original original new + sstoreRefund fork original new original) =
+      (if cold then COLD_STORAGE_ACCESS else 0) + 2 * sstoreReadCost fork := by
+  by_cases hne : original = new
+  · subst hne
+    rw [sstoreCost_noop h hlt, sstoreCost_noop h hlt, sstoreRefund_noop h]
+    cases cold <;> simp <;> omega
+  have hne : original ≠ new := hne
+  have hne' : new ≠ original := Ne.symm hne
+  have hg : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hlt
+  unfold sstoreCost sstoreRefund sstoreResetCost sstoreReadCost
+  simp only [hg, ite_false]
+  by_cases hb : fork ≥ .berlin <;> by_cases h0 : original = 0 <;> by_cases h1 : new = 0 <;>
+    cases cold <;> simp [h, hb, h0, h1, hne, hne'] <;> simp_all <;> omega
 
 /-- From Berlin to BPO5, a write costs at most a cold access and the price to fill a slot. -/
 theorem sstoreCost_le (h : fork ≥ .berlin) (hlt : fork < .glamsterdam)
@@ -84,8 +104,8 @@ That is net of refunds: the second write gives back the write price of the first
 The first access may be cold, and the second is warm.
 
 The state gas that the first write charges, the second refills. -/
-theorem sstore_restore_of_glamsterdam (h : fork ≥ .glamsterdam) {original new : U256}
-    (hne : original ≠ new) (cold : Bool) :
+theorem sstore_restore_of_glamsterdam (h : fork ≥ .glamsterdam) (original new : U256)
+    (cold : Bool) :
     ((sstoreCost fork original original new cold + sstoreCost fork original new original false :
       Nat) : Int) -
       (sstoreRefund fork original original new + sstoreRefund fork original new original) =
@@ -93,21 +113,17 @@ theorem sstore_restore_of_glamsterdam (h : fork ≥ .glamsterdam) {original new 
     sstoreStateGas fork original original new + sstoreStateGas fork original new original =
       sstoreStateRefill fork original original new + sstoreStateRefill fork original new original
   := by
-  have hne' : new ≠ original := Ne.symm hne
   have hi : fork ≥ .istanbul := Nat.le_trans (by decide) h
+  by_cases hne : original = new
+  · subst hne
+    obtain ⟨c₁, g₁, r₁⟩ := sstore_noop_of_glamsterdam h original original cold
+    obtain ⟨c₂, -, -⟩ := sstore_noop_of_glamsterdam h original original false
+    rw [c₁, c₂, g₁, r₁, sstoreRefund_noop hi]
+    cases cold <;> simp
+  have hne' : new ≠ original := Ne.symm hne
   unfold sstoreCost sstoreRefund sstoreStateGas sstoreStateRefill
   by_cases h0 : original = 0 <;> by_cases h1 : new = 0 <;>
     cases cold <;> simp [h, hi, h0, h1, hne, hne'] <;> simp_all <;> omega
-
-/-- From Glamsterdam, a write of the current value costs one access, and no state gas. -/
-theorem sstore_noop_of_glamsterdam (h : fork ≥ .glamsterdam) (original current : U256)
-    (cold : Bool) :
-    sstoreCost fork original current current cold =
-        (if cold then COLD_STORAGE_ACCESS else WARM_ACCESS) ∧
-      sstoreStateGas fork original current current = 0 ∧
-      sstoreStateRefill fork original current current = 0 := by
-  refine ⟨by simp [sstoreCost, h], ?_, ?_⟩ <;>
-    simp only [sstoreStateGas, sstoreStateRefill] <;> split <;> simp_all
 
 /-- SSTORE charges state gas only to set a slot that is zero now and was at the start. -/
 theorem sstoreStateGas_ne_zero {original current new : U256}
@@ -129,11 +145,6 @@ theorem sstoreStateRefill_ne_zero {original current new : U256}
 
 /-- The state gas of a new slot: 64 bytes at 1530 gas a byte. -/
 theorem storageSetStateGas_eq : STORAGE_SET_STATE_GAS = 97920 := rfl
-
-/-- From Istanbul, a write of the current value changes no refund. -/
-theorem sstoreRefund_noop (h : fork ≥ .istanbul) (original current : U256) :
-    sstoreRefund fork original current current = 0 := by
-  simp [sstoreRefund, h]
 
 /-- Before Istanbul, a write costs 20000 to fill a zero slot, and 5000 otherwise. -/
 theorem sstoreCost_of_lt_istanbul (h : fork < .istanbul) (original current new : U256)
