@@ -17,8 +17,6 @@ Properties of Snappy block decompression, against `format_description.txt` of `g
 - Its first five bytes alone declare that length.
 - The fuel that bounds the element loop never changes the result.
 - A literal element appends its data to the output (§2.1).
-
-The kernel checks everything here, so no `native_decide` or `bv_decide` axiom appears.
 -/
 
 @[expose] public section
