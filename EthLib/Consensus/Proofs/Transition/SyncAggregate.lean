@@ -14,7 +14,7 @@ The step keeps the sizes of the registry and the balances.
 
 A reward changes only balances, so it keeps the proposer of the slot.
 
-So reading the proposer once before the rewards gives what the specification reads at each reward.
+With the proposer read before it, each reward step equals the step that reads it after the reward.
 -/
 
 @[expose] public section
