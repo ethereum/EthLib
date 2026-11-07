@@ -3824,10 +3824,11 @@
      "codes":
      [{"constructor": "indexOutOfRange", "code": 1},
       {"constructor": "noCommittee", "code": 2},
-      {"constructor": "overflow", "code": 3}]}],
+      {"constructor": "overflow", "code": 3},
+      {"constructor": "countTooLarge", "code": 4}]}],
    "error_class": "ConsensusError",
    "docstring":
-   "The shuffled position of one index, which must be below the count.\n\nIt runs the rounds on that index alone, so its cost does not grow with the count."},
+   "The shuffled position of one index, which must be below the count.\n\nThe count must be at most `2^40`.\n\nA shuffle of more indices reaches a position whose bucket number does not fit in 4 bytes.\n\nBoth checks come before any round.\n\nIt runs the rounds on that index alone, so its cost does not grow with the count."},
   {"summary": "The protocol IDs of a fork, up to Fulu.",
    "signature": "(fork: str) -> bytes",
    "operation": "EthLib.Consensus.protocolIds",

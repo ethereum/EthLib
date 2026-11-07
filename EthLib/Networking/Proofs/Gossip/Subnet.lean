@@ -72,14 +72,18 @@ theorem nodePrefix_lt (nodeId : NodeID) {bits : Nat} (h : bits ≤ NODE_ID_BITS)
 
 /-- The choice of one subnet succeeds when the parameters fit and the shuffle succeeds.
 
-The shuffle must succeed on every index below the count, with a position below the count. -/
+The shuffle must succeed on every index below a count of at most `2^b`, for `b` prefix bits.
+
+Its position must be below the count. -/
 theorem computeSubscribedSubnet_exists {index : UInt64}
     (count : config.ATTESTATION_SUBNET_COUNT ≠ 0)
     (epochs : config.EPOCHS_PER_SUBNET_SUBSCRIPTION ≠ 0)
     (bits : Serialization.Ssz.depthFor config.ATTESTATION_SUBNET_COUNT.toNat +
       config.ATTESTATION_SUBNET_EXTRA_BITS.toNat < 64)
     (period : epoch.toNat + config.EPOCHS_PER_SUBNET_SUBSCRIPTION.toNat ≤ 2 ^ 64)
-    (shuffled : ∀ i n seed, i < n → ∃ p, shuffle i n seed = .ok p ∧ p < n)
+    (shuffled : ∀ i n seed, i < n → n.toNat ≤ 2 ^ (Serialization.Ssz.depthFor
+      config.ATTESTATION_SUBNET_COUNT.toNat + config.ATTESTATION_SUBNET_EXTRA_BITS.toNat) →
+      ∃ p, shuffle i n seed = .ok p ∧ p < n)
     (small : index.toNat ≤ 2 ^ 63) :
     ∃ subnet, computeSubscribedSubnet config shuffle nodeId epoch index = .ok subnet := by
   have prefixBits : computeAttestationSubnetPrefixBits (ε := ε) config =
@@ -87,7 +91,7 @@ theorem computeSubscribedSubnet_exists {index : UInt64}
         config.ATTESTATION_SUBNET_EXTRA_BITS.toNat) := by
     simp [computeAttestationSubnetPrefixBits, count, pure, Except.pure]
   generalize Serialization.Ssz.depthFor config.ATTESTATION_SUBNET_COUNT.toNat +
-    config.ATTESTATION_SUBNET_EXTRA_BITS.toNat = b at prefixBits bits
+    config.ATTESTATION_SUBNET_EXTRA_BITS.toNat = b at prefixBits bits shuffled
   have below : 2 ^ b < 2 ^ 64 := Nat.pow_lt_pow_right (by decide) bits
   have nodePrefix : nodeId.toNat >>> (NODE_ID_BITS - b) < 2 ^ b :=
     nodePrefix_lt nodeId (by unfold NODE_ID_BITS; omega)
@@ -100,7 +104,7 @@ theorem computeSubscribedSubnet_exists {index : UInt64}
   have key := fun seed => shuffled (nodeId.toNat >>> (NODE_ID_BITS - b)).toUInt64
     (2 ^ b).toUInt64 seed (by
       rw [UInt64.lt_iff_toNat_lt, toNat_of_lt (by omega), toNat_of_lt below]
-      exact nodePrefix)
+      exact nodePrefix) (by rw [toNat_of_lt below]; exact Nat.le_refl _)
   have bitsFit : ¬64 ≤ b := by omega
   have half : 2 ^ b ≤ 2 ^ 63 := Nat.pow_le_pow_right (by decide) (by omega)
   have shifted := Base.Uint64.addChecked_of_lt (a := epoch)
@@ -131,14 +135,18 @@ theorem computeSubscribedSubnet_exists {index : UInt64}
 
 /-- The choice of the subnets of a node succeeds when the parameters fit and the shuffle succeeds.
 
-The shuffle must succeed on every index below the count, with a position below the count. -/
+The shuffle must succeed on every index below a count of at most `2^b`, for `b` prefix bits.
+
+Its position must be below the count. -/
 theorem computeSubscribedSubnets_exists
     (count : config.ATTESTATION_SUBNET_COUNT ≠ 0)
     (epochs : config.EPOCHS_PER_SUBNET_SUBSCRIPTION ≠ 0)
     (bits : Serialization.Ssz.depthFor config.ATTESTATION_SUBNET_COUNT.toNat +
       config.ATTESTATION_SUBNET_EXTRA_BITS.toNat < 64)
     (period : epoch.toNat + config.EPOCHS_PER_SUBNET_SUBSCRIPTION.toNat ≤ 2 ^ 64)
-    (shuffled : ∀ i n seed, i < n → ∃ p, shuffle i n seed = .ok p ∧ p < n)
+    (shuffled : ∀ i n seed, i < n → n.toNat ≤ 2 ^ (Serialization.Ssz.depthFor
+      config.ATTESTATION_SUBNET_COUNT.toNat + config.ATTESTATION_SUBNET_EXTRA_BITS.toNat) →
+      ∃ p, shuffle i n seed = .ok p ∧ p < n)
     (perNode : config.SUBNETS_PER_NODE.toNat ≤ 2 ^ 63) :
     ∃ subnets, computeSubscribedSubnets config shuffle nodeId epoch = .ok subnets :=
   Base.mapM_exists_ok fun index member =>

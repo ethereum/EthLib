@@ -34,6 +34,8 @@ inductive ShuffleError where
   | noCommittee
   /-- A bound of the committee is `2^64` or more. -/
   | overflow
+  /-- The count is above `2^40`, so a position has a bucket number of more than 4 bytes. -/
+  | countTooLarge (count : UInt64)
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -45,6 +47,7 @@ def ShuffleError.code : ShuffleError → UInt32
   | .indexOutOfRange _ _ => 1
   | .noCommittee => 2
   | .overflow => 3
+  | .countTooLarge _ => 4
 
 namespace Shuffle
 
@@ -106,12 +109,20 @@ def computeShuffledPermutation (preset : Preset) (count : UInt64) (seed : Bytes3
 
 /-- The shuffled position of one index, which must be below the count.
 
+The count must be at most `2^40`.
+
+A shuffle of more indices reaches a position whose bucket number does not fit in 4 bytes.
+
+Both checks come before any round.
+
 It runs the rounds on that index alone, so its cost does not grow with the count. -/
 def computeShuffledIndex (preset : Preset) (index count : UInt64) (seed : Bytes32) :
     Except ShuffleError UInt64 :=
   if index < count then
-    .ok (UInt64.ofNat
-      (Shuffle.shuffledIndex preset.SHUFFLE_ROUND_COUNT.toNat seed count.toNat index.toNat))
+    if count.toNat ≤ 2 ^ 40 then
+      .ok (UInt64.ofNat
+        (Shuffle.shuffledIndex preset.SHUFFLE_ROUND_COUNT.toNat seed count.toNat index.toNat))
+    else .error (.countTooLarge count)
   else .error (.indexOutOfRange index count)
 
 /-- Committee `index` of `count`, cut from a list of indices in the order of shuffled positions.

@@ -106,11 +106,17 @@ theorem computeShuffledPermutation_size (preset : Preset) (count : UInt64) (seed
 
 /-- The shuffled position of an index below the count is every round applied to it. -/
 theorem computeShuffledIndex_eq {preset : Preset} {index count : UInt64} {seed : Bytes32}
-    (lt : index < count) :
+    (lt : index < count) (fits : count.toNat ≤ 2 ^ 40) :
     computeShuffledIndex preset index count seed =
       .ok (UInt64.ofNat
         (Shuffle.shuffledIndex preset.SHUFFLE_ROUND_COUNT.toNat seed count.toNat index.toNat)) := by
-  simp [computeShuffledIndex, lt]
+  simp [computeShuffledIndex, lt, fits]
+
+/-- An index below a count above `2^40` has no shuffled position. -/
+theorem computeShuffledIndex_of_large {preset : Preset} {index count : UInt64} {seed : Bytes32}
+    (lt : index < count) (large : 2 ^ 40 < count.toNat) :
+    computeShuffledIndex preset index count seed = .error (.countTooLarge count) := by
+  simp [computeShuffledIndex, lt, Nat.not_le.mpr large]
 
 /-- An index at or above the count has no shuffled position. -/
 theorem computeShuffledIndex_of_le {preset : Preset} {index count : UInt64} {seed : Bytes32}

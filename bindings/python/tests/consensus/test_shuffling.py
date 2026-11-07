@@ -57,6 +57,24 @@ def test_index_out_of_range():
     assert info.value.code == 1
 
 
+def test_count_above_bound():
+    # The bucket number of a position is 4 bytes, so a count above 2^40 fails.
+    with raises(consensus.ConsensusError, "the index count 1099511627777 is above 2^40") as info:
+        consensus.compute_shuffled_index(0, 2**40 + 1, bytes(32))
+    assert info.value.code == 4
+
+
+def test_index_checked_first():
+    # The spec asserts the index before it shuffles, so this index error comes first.
+    count = 2**40 + 1
+    with raises(consensus.ConsensusError, f"index {count} is not below the index count {count}"):
+        consensus.compute_shuffled_index(count, count, bytes(32))
+
+
+def test_count_at_bound():
+    assert consensus.compute_shuffled_index(2**40 - 1, 2**40, bytes(32)) < 2**40
+
+
 def test_seed_length():
     with raises(consensus.ConsensusError, "a seed is 32 bytes") as info:
         consensus.compute_shuffled_permutation(5, bytes(31))
