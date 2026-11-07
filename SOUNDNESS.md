@@ -255,11 +255,12 @@ The BLS theorems check the constants, because a wrong digit in a modulus or in t
 `seven_pow_card_sub_one` and `seven_pow_div_prime_ne_one` (`Proofs/Bls/FrZMod.lean`) prove that `7` generates the multiplicative group of the scalar field; `7` is also the KZG constant `PRIMITIVE_ROOT_OF_UNITY`.
 `addOrderOf_toPoint_generator` (`Proofs/Bls/G1Order.lean`) proves that the G1 generator has order `r`.
 
-No theorem proves that `pairingCheck` computes a bilinear pairing.
+`pairingBilinear` (`Proofs/Bls/PairingAte.lean`) proves that the pairing is bilinear on the multiples of the generators: `e(a g_1, b g_2) = e(g_1, g_2)^(a b)` for all `a` and `b` in `Fr`.
 `orderOf_pairing_generators` (`Proofs/Bls/Nondegenerate.lean`) proves that the pairing of the two generators has order `r`, so it is not 1; the kernel evaluates that pairing.
 `PairingLaws.of_bilinear` (`Proofs/Bls/PairingBilinear.lean`) derives `PairingLaws` from one smaller hypothesis, `PairingBilinear`: `e(a g_1, b g_2) = e(g_1, g_2)^(a b)` for all `a` and `b` in `Fr`.
-No theorem proves `PairingBilinear` yet.
+`pairingBilinear` proves `PairingBilinear`.
 `PairingLaws` (`Proofs/Bls/PairingLaws.lean`) states the consequence that verification needs, as one hypothesis.
+`pairingLaws` (`Proofs/Bls/PairingAte.lean`) proves `PairingLaws`, so every theorem that assumes it holds once it is supplied.
 Let `P_i` represent `a_i * g_1` and `Q_i` represent `b_i * g_2`, where a representative is any valid point with that group element.
 Then the check of the pairs `(P_i, Q_i)` passes exactly when `sum_i a_i * b_i = 0` in `Fr`.
 The law holds when the check tests `prod_i e(P_i, Q_i) = 1` for any bilinear map `e` with `e(g_1, g_2) != 1` into a group of order `r`.
@@ -268,6 +269,35 @@ The law holds when the check tests `prod_i e(P_i, Q_i) = 1` for any bilinear map
 Its target is `Fp12` and its generator is `e(g_1, g_2)`.
 Under the law, `pairing P Q = e(g_1, g_2)^(a b)` when `P` represents `a * g_1` and `Q` represents `b * g_2`.
 An element of the model represents `t` in `Fr` when it is `e(g_1, g_2)^t`.
+The theorems that take `PairingLaws` as a hypothesis, or build a model of the target group from it, sit in these files:
+
+- `Consensus/Proofs/HonestAggregation.lean`
+- `Consensus/Proofs/HonestBuilder.lean`
+- `Consensus/Proofs/HonestValidator.lean`
+- `Consensus/Proofs/InclusionListCommittee.lean`
+- `Cryptography/Proofs/Bls/PairingLaws.lean`
+- `Cryptography/Proofs/Bls/Security/Refinement.lean`
+- `Cryptography/Proofs/Bls/SignaturesCorrect.lean`
+- `Cryptography/Proofs/Bls/SignaturesUnique.lean`
+- `Cryptography/Proofs/Bls/TargetGroup.lean`
+- `Cryptography/Proofs/Kzg/Arsdh.lean`
+- `Cryptography/Proofs/Kzg/BatchBinding.lean`
+- `Cryptography/Proofs/Kzg/Binding.lean`
+- `Cryptography/Proofs/Kzg/BlobVerifier.lean`
+- `Cryptography/Proofs/Kzg/CellBatchBinding.lean`
+- `Cryptography/Proofs/Kzg/CellBinding.lean`
+- `Cryptography/Proofs/Kzg/CellVerifier.lean`
+- `Cryptography/Proofs/Kzg/CeremonyChecks.lean`
+- `Cryptography/Proofs/Kzg/HonestCells.lean`
+- `Cryptography/Proofs/Kzg/PeerDasBatchGames.lean`
+- `Cryptography/Proofs/Kzg/PeerDasColumnGames.lean`
+- `Cryptography/Proofs/Kzg/PeerDasGames.lean`
+- `Cryptography/Proofs/Kzg/Verify.lean`
+- `Execution/Proofs/Evm/Precompiles/Bls12381/PairingProduct.lean`
+
+With `pairingLaws` passed for that hypothesis, none of them depends on the pairing law.
+Their other hypotheses, such as a well-formed setup, stay.
+
 `finalExponentiation_eq_pow` (`Proofs/Bls/FinalExponentiation.lean`) proves that the final exponentiation raises every element of `Fp12` to exactly `(p^12 - 1) / r`.
 `millerDouble_snd` and `millerAdd_snd` (`Proofs/Bls/MillerLoop.lean`) prove that each step of the Miller loop multiplies by the line through the untwisted points, times `c w^3` for some `c` in `Fp2`.
 The doubling step needs `T` finite with `Y ≠ 0`, and the addition step needs `T` finite with an `x` other than that of `Q`.
@@ -292,11 +322,19 @@ Let `pi` be the map `(x, y) -> (x^q, y^q)`, and let the quotient for `Q` have th
 Let `z^(N n)` be 1 for every nonzero `z`, with `n = sum_j c_j q^j`.
 Then the pairing is linear in a point `P` fixed by `pi`, when `N` is even, and linear in `Q`.
 `Q` lies in a group that `pi` maps into itself, and where `pi` fixes only `O`.
-No theorem yet applies these results to BLS12-381 or alt_bn128, so no theorem yet proves their bilinearity.
+`frobenius_of_mem` (`Proofs/Bls/AteFrobenius.lean`) applies these results to BLS12-381, where `pi` acts as the BLS parameter `x = -|x|` on the untwist of `G2`.
+`eq_zero_of_frobenius_eq` proves that `pi` fixes only `O` there, because `r` does not divide `|x| + 1`.
+`frobenius_iterate_seven` proves that `pi^7` acts as `|x|` there, because `r` divides `|x|^7 + |x|`.
+`ratioDivisor_lines` proves that Miller's function of `|x|` and a point `Q` of the untwist of `G2` has the divisor `|x| ((Q) - (O)) - ((pi^7 Q) - (O))`.
+`pow_ateExponent` proves that `z^(N (|x| - p^7))` is 1 for every nonzero `z` in `Fp12`, with `N = (p^12 - 1) / r`.
+`ateValue_add_left` (`Proofs/Bls/PairingAte.lean`) proves that Miller's function of `|x|` and `Q`, at `P` and raised to `N`, is linear in a point `P` that `pi` fixes.
+`ateValue_add_right` proves that it is linear in `Q` on the untwist of `G2`.
+`pairing_eq_ateValue` proves that the pairing of a valid finite point `P` of `G1` and a valid point `Q` of the subgroup of `G2` is that value raised to `p^6`.
+No theorem applies these results to alt_bn128, so no theorem proves its bilinearity.
 
 The pairing of the two generators equals the value that [draft-irtf-cfrg-pairing-friendly-curves-11](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-pairing-friendly-curves-11) publishes in Appendix B.
 The Python suite checks it through the bindings (`bindings/python/tests/bls/test_pairing.py`), with a few bilinearity checks.
-This evidence supports the pairing law but does not prove it.
+This evidence tests the compiled code against the published value.
 
 `keyValidatePoint_eq_ok_iff` (`Proofs/Bls/KeyValidate.lean`) proves that key validation accepts exactly the encodings of the nonzero points of order `r` in G1.
 The G1 and G2 subgroup checks accept exactly the valid points that represent a multiple of the generator.
@@ -1004,7 +1042,7 @@ Each scalar `m_i` is the integer of its 32 bytes, not reduced modulo the subgrou
 It then returns the word of `pairingCheck` on the decoded pairs.
 `exists_represents_of_decodePairs` (`PairingProduct.lean`) proves that each decoded `P_i` represents some `a_i • g_1`, and each `Q_i` some `b_i • g_2`.
 `bls12Pairing_eq_one_iff` proves that the output is the word 1 exactly when `sum_i a_i * b_i = 0`, that is, when the product of the pairings is 1.
-It assumes `PairingLaws`, which EthLib states but does not prove for its Miller loop.
+It assumes `PairingLaws`, which `pairingLaws` proves.
 `bls12Pairing_encodePairs` computes the output on the encodings of any represented pairs.
 `bls12Pairing_generators` and `bls12Pairing_generator_neg` apply it to reach both outputs: 0 for `(g_1, g_2)`, and 1 for `(g_1, g_2)` with `(-g_1, g_2)`.
 
@@ -1114,7 +1152,7 @@ It finds the committee of a validator in an epoch, whether it proposes, and, fro
 It also signs each message that a validator sends, under the domain type and the epoch that the receivers check.
 The theorems in `Consensus/Proofs/HonestValidator.lean` relate these duties to the checks of the transition and of gossip.
 
-The signature theorems assume `PairingLaws`, the hypothesis of BLS correctness listed under BLS12-381.
+The signature theorems assume `PairingLaws`, the hypothesis of BLS correctness that `pairingLaws` proves under BLS12-381.
 Under it, `isValidSignatureAtEpoch_of_signAtEpoch` shows that a duty signature passes the check of a signature at the same domain type and epoch, under the public key of the secret key.
 `verifyBlockSignature_of_getBlockSignature` shows that a block signed by its proposer passes the check of the block signature.
 `processRandao_ne_invalidRandaoReveal` shows that the RANDAO reveal of the proposer never fails the RANDAO check.
@@ -1447,7 +1485,8 @@ A conditional theorem is only as strong as its hypotheses.
 The ceremony theorem `checksSufficient_of_subgroupChecks` is one, and its hypotheses are listed under KZG.
 `PairingLaws`, listed under BLS12-381 and alt_bn128, is the hypothesis of every theorem about the result of a pairing check.
 It is a `Prop` passed as an explicit argument, never an axiom, so `lake exe check-decls` still sees only the standard axioms.
-If it were false, every theorem that assumes it would hold vacuously.
+`pairingLaws` proves the BLS12-381 law, so the theorems that assume it hold once it is supplied.
+No theorem proves `AltBn128.PairingLaws`, and if it were false, every theorem that assumes it would hold vacuously.
 Whatever those hypotheses leave unproved is part of what a reader trusts.
 
 ### A3. Side channels
