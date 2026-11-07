@@ -6,6 +6,9 @@
 import json
 from pathlib import Path
 
+import pytest
+
+from ethlib.errors import TrieError
 from ethlib.execution import trie
 from ethlib.serialization import rlp
 from raising import raises
@@ -69,3 +72,70 @@ def test_rejects_short_root() -> None:
     proof = [_hex(node) for node in _RESPONSE["accountProof"]]
     with raises(ValueError, "bad root size: 31, expected 32"):
         trie.verify_proof(STATE_ROOT[:31], _hex(_RESPONSE["address"]), proof, secured=True)
+
+
+# Hand-built proofs of the key 0x01 in a trie that does not hash its keys, one node each. The root
+# is the hash of the node, so the proof gets past the hash and fails on the shape of the node.
+_KEY = bytes([1])
+
+_NODE_ERRORS = [
+    pytest.param(
+        # A leaf whose path starts with the nibble 4, which no flag and parity give.
+        "4fa752b07e557b1947c490ba35fd16c769a0d3438f6dec179798210a7b74f6e7",
+        "c24001",
+        104,
+        "EthLib.Execution.Trie.ProofError.hexPrefix "
+        "(EthLib.Execution.Trie.HexPrefixError.invalidFirstNibble)",
+        id="hex_prefix",
+    ),
+    pytest.param(
+        # A list of three items, which is neither a leaf, an extension nor a branch.
+        "8d3fc38cad3086ab848b1d779e0a7c77b164869d4546e1b6b9a4feb717dd8686",
+        "c3010203",
+        105,
+        "EthLib.Execution.Trie.ProofError.invalidNode",
+        id="invalid_node",
+    ),
+    pytest.param(
+        # A branch whose child at the nibble 0, where the key goes, is a string of 5 bytes.
+        "c8d66ee53b41a50fbf8280e8e0c5972d54fe8543bfa52a630b0b9e38234aecc1",
+        "d685070707070780808080808080808080808080808080",
+        106,
+        "EthLib.Execution.Trie.ProofError.invalidReference",
+        id="invalid_reference",
+    ),
+    pytest.param(
+        # An extension whose path is empty, with the 32-byte reference 0x09 repeated as its child.
+        "9241117e4ec9e0713a2e7db7d44fbb7347f42337308ee0fee823168c181cad79",
+        "e200a0" + "09" * 32,
+        107,
+        "EthLib.Execution.Trie.ProofError.emptyExtension",
+        id="empty_extension",
+    ),
+]
+
+
+@pytest.mark.parametrize(("root", "node", "code", "name"), _NODE_ERRORS)
+def test_rejects_malformed_node(root: str, node: str, code: int, name: str) -> None:
+    """A node of a shape that no trie builds is rejected, with the code of its kind."""
+    with raises(TrieError, f"proof does not verify: {name}") as error:
+        trie.verify_proof(bytes.fromhex(root), _KEY, [bytes.fromhex(node)], secured=False)
+    assert error.value.code == code
+
+
+# A leaf at the path 0x01 with the value 0x05: the list of the path 0x2001 and the string 0x05.
+_LEAF_ROOT = bytes.fromhex("5aa296fd5f7f7632ea2aa4071c09ffc08a6135c58510573f83c1e0c49dc276c4")
+_LEAF = bytes.fromhex("c482200105")
+
+
+def test_leaf_proof() -> None:
+    assert trie.verify_proof(_LEAF_ROOT, _KEY, [_LEAF], secured=False) == bytes([5])
+
+
+def test_rejects_unused_node() -> None:
+    """A proof that holds a node beyond those of the path is rejected, even if the path holds."""
+    with raises(
+        TrieError, "proof does not verify: EthLib.Execution.Trie.ProofError.unusedNodes"
+    ) as error:
+        trie.verify_proof(_LEAF_ROOT, _KEY, [_LEAF, _LEAF], secured=False)
+    assert error.value.code == 108
