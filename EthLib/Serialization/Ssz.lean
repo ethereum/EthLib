@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Serialization.Ssz.Type.Desc
+public import EthLib.Serialization.Ssz.Type.Bounds
 public import EthLib.Serialization.Ssz.Type.Value
 public import EthLib.Serialization.Ssz.Type.Valid
 public import EthLib.Serialization.Ssz.Type.Default
