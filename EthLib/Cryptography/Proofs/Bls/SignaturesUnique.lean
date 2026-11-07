@@ -62,10 +62,9 @@ theorem coreVerify_iff (laws : PairingLaws) {pk msg sig dst : ByteArray} {P : G1
   | error e => exact iff_of_false (fun h => by cases h) (fun ⟨R, hR, _⟩ => by cases hR)
   | ok R =>
     have hRv := G2.valid_of_uncompress hu
+    -- Rewrite every discriminant first, or the kernel evaluates the hash on a variable message.
+    rw [hP, hQ]
     dsimp only
-    rw [hP]
-    dsimp only
-    rw [hQ]
     constructor
     · intro h
       rw [Bool.and_eq_true] at h

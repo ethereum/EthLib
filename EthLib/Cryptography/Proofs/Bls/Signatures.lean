@@ -24,7 +24,10 @@ theorem coreSign_ok (sk : SecretKey) (msg dst : ByteArray) :
     ∃ sig, coreSign sk msg dst = .ok sig := by
   obtain ⟨q, hq, -⟩ := HashToCurve.hashToG2_total msg dst
   refine ⟨pointToSignature (G2.mul q sk.val), ?_⟩
-  simp [coreSign, hq, bind, Except.bind, pure, Except.pure]
+  -- Rewrite the hash first, so the kernel never evaluates it on a variable message.
+  unfold coreSign
+  rw [hq]
+  rfl
 
 /-- Signing never fails. -/
 theorem sign_ok (sk : SecretKey) (msg : ByteArray) : ∃ sig, sign sk msg = .ok sig :=

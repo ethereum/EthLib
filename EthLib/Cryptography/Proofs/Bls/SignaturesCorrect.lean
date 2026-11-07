@@ -89,12 +89,11 @@ theorem coreVerify_of_represents (laws : PairingLaws) {P : G1} {S Q : G2} {a b :
   have hcheck := (laws.two_pairs G1.represents_generator hrep hP'rep.neg hb).mpr
     (one_mul_add_neg_mul a b)
   unfold coreVerify
-  rw [hr]
-  dsimp only
-  rw [show signatureSubgroupCheck r = true from hsub, hP']
+  -- Rewrite every discriminant first, or the kernel evaluates the hash on a variable message.
+  rw [hr, hP', hQ]
   dsimp only
   -- Rewrite `true && _` first, so the kernel does not unfold the pairing check.
-  rw [hQ, Bool.true_and]
+  rw [show signatureSubgroupCheck r = true from hsub, Bool.true_and]
   exact hcheck
 
 /-- An honest core signature passes the core verification under the same tag. -/
