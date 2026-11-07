@@ -65,6 +65,16 @@ theorem lightClientGindices_eq_of_lt (altair : .altair ≤ fork) (beforeGloas : 
       currentSyncCommitteeGindex, nextSyncCommitteeGindex]
     simp [gindexConcat, gindexDepth, depthFor, Bind.bind, Except.bind, Pure.pure, Except.pure]
 
+/-- A selected node is the node at the index that the type gives its path. -/
+private theorem nodeRoot_of_selects {shape value path node} {index : Nat}
+    (selected : PathSelects shape value path node)
+    (indexed : getGeneralizedIndex shape path = .ok index) :
+    nodeRoot shape value index = .ok node := by
+  obtain ⟨found, located, read⟩ := selected.reads
+  rw [indexed] at located
+  cases located
+  exact read
+
 /-- From Altair to the forks before Gloas, the next committee node is the root of that field.
 
 The next committee branch of an update opens this node against the attested state root.
@@ -94,10 +104,7 @@ private theorem BeaconState.nodeRoot_nextSyncCommittee_of_lt
       · rfl
       · exact .root (SszType.hashTreeRoot_ok_iff.mp rooted)
   -- The value path and the type path share the branch index of the fork.
-  obtain ⟨index, indexed, read⟩ := selected.reads
-  have index_eq : index = nextSyncCommitteeGindex fork :=
-    Except.ok.inj (indexed.symm.trans (lightClientGindices_eq_of_lt altair beforeGloas).2.2)
-  simpa [index_eq] using read
+  exact nodeRoot_of_selects selected (lightClientGindices_eq_of_lt altair beforeGloas).2.2
 
 /-- From Altair to the forks before Gloas, the current committee node is the root of that field.
 
@@ -128,10 +135,7 @@ private theorem BeaconState.nodeRoot_currentSyncCommittee_of_lt
       · rfl
       · exact .root (SszType.hashTreeRoot_ok_iff.mp rooted)
   -- The value path and the type path share the bootstrap index of the fork.
-  obtain ⟨index, indexed, read⟩ := selected.reads
-  have index_eq : index = currentSyncCommitteeGindex fork :=
-    Except.ok.inj (indexed.symm.trans (lightClientGindices_eq_of_lt altair beforeGloas).2.1)
-  simpa [index_eq] using read
+  exact nodeRoot_of_selects selected (lightClientGindices_eq_of_lt altair beforeGloas).2.1
 
 /-- From Altair to the forks before Gloas, the finality node is the root of the finalized root.
 
@@ -165,16 +169,13 @@ private theorem BeaconState.nodeRoot_finalizedCheckpoint_root_of_lt
         · rfl
         · exact .root (SszType.hashTreeRoot_ok_iff.mp rooted)
   -- The joined path is the finality branch index, not the checkpoint container's index.
-  obtain ⟨index, indexed, read⟩ := selected.reads
-  have index_eq : index = finalizedRootGindex fork :=
-    Except.ok.inj (indexed.symm.trans (lightClientGindices_eq_of_lt altair beforeGloas).1)
-  simpa [index_eq] using read
+  exact nodeRoot_of_selects selected (lightClientGindices_eq_of_lt altair beforeGloas).1
 
 /-- From Gloas, the state type gives the three light client indices, at every preset.
 
 The state is a progressive container, so a field sits at its place in the layout.
 
-From Heze the three removed eth1 fields leave gaps, so the ordinals drop by three.
+From Heze the three eth1 fields before them are gone, so the ordinals drop by three.
 
 The places, and so the indices, stay those of Gloas. -/
 theorem lightClientGindices_eq_of_glamsterdam_le (gloas : .glamsterdam ≤ fork) :
@@ -218,10 +219,7 @@ private theorem BeaconState.nodeRoot_nextSyncCommittee_of_glamsterdam_le
       · rfl
       · rfl
       · exact .root (SszType.hashTreeRoot_ok_iff.mp rooted)
-  obtain ⟨index, indexed, read⟩ := selected.reads
-  have index_eq : index = nextSyncCommitteeGindex fork :=
-    Except.ok.inj (indexed.symm.trans (lightClientGindices_eq_of_glamsterdam_le gloas).2.2)
-  simpa [index_eq] using read
+  exact nodeRoot_of_selects selected (lightClientGindices_eq_of_glamsterdam_le gloas).2.2
 
 /-- From Gloas, the current committee node is the root of the state's current committee. -/
 private theorem BeaconState.nodeRoot_currentSyncCommittee_of_glamsterdam_le
@@ -244,10 +242,7 @@ private theorem BeaconState.nodeRoot_currentSyncCommittee_of_glamsterdam_le
       · rfl
       · rfl
       · exact .root (SszType.hashTreeRoot_ok_iff.mp rooted)
-  obtain ⟨index, indexed, read⟩ := selected.reads
-  have index_eq : index = currentSyncCommitteeGindex fork :=
-    Except.ok.inj (indexed.symm.trans (lightClientGindices_eq_of_glamsterdam_le gloas).2.1)
-  simpa [index_eq] using read
+  exact nodeRoot_of_selects selected (lightClientGindices_eq_of_glamsterdam_le gloas).2.1
 
 /-- From Gloas, the finality node is the root of the finalized checkpoint's root field. -/
 private theorem BeaconState.nodeRoot_finalizedCheckpoint_root_of_glamsterdam_le
@@ -275,10 +270,7 @@ private theorem BeaconState.nodeRoot_finalizedCheckpoint_root_of_glamsterdam_le
         · rfl
         · rfl
         · exact .root (SszType.hashTreeRoot_ok_iff.mp rooted)
-  obtain ⟨index, indexed, read⟩ := selected.reads
-  have index_eq : index = finalizedRootGindex fork :=
-    Except.ok.inj (indexed.symm.trans (lightClientGindices_eq_of_glamsterdam_le gloas).1)
-  simpa [index_eq] using read
+  exact nodeRoot_of_selects selected (lightClientGindices_eq_of_glamsterdam_le gloas).1
 
 /-- At every fork from Altair, the next committee node is the root of the state's next committee.
 
@@ -293,7 +285,7 @@ theorem BeaconState.nodeRoot_nextSyncCommittee
     nodeRoot_nextSyncCommittee_of_lt altair beforeGloas state rooted
   else nodeRoot_nextSyncCommittee_of_glamsterdam_le (Nat.le_of_not_lt beforeGloas) state rooted
 
-/-- At every fork from Altair, the current committee node is the root of that field.
+/-- At every fork from Altair, the current committee node is the root of the current committee.
 
 The branch of a bootstrap opens this node against the state root of its beacon header. -/
 theorem BeaconState.nodeRoot_currentSyncCommittee
