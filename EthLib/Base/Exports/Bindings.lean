@@ -525,6 +525,20 @@ def bindings : List Binding := [
   ⟨"consensus_get_execution_requests", `EthLib.Consensus.Exports.getExecutionRequestsExport,
     "(name: str, fork: str, requests: list[bytes]) -> bytes",
     [`EthLib.Consensus.ProposerError], some "ProposerError"⟩,
+  ⟨"consensus_get_execution_payload_bid", `EthLib.Consensus.Exports.getExecutionPayloadBidExport,
+    "(name: str, fork: str, state: bytes, payload: bytes, requests: bytes, " ++
+      "commitments: bytes, fee_recipient: bytes, inclusion_list_bits: bytes, slot: int, " ++
+      "builder_index: int, value: int) -> bytes",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_get_self_built_execution_payload_bid",
+    `EthLib.Consensus.Exports.getSelfBuiltExecutionPayloadBidExport,
+    "(name: str, fork: str, state: bytes, payload: bytes, requests: bytes, " ++
+      "commitments: bytes, fee_recipient: bytes, inclusion_list_bits: bytes) -> bytes",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_get_execution_payload_envelope",
+    `EthLib.Consensus.Exports.getExecutionPayloadEnvelopeExport,
+    "(name: str, fork: str, block: bytes, payload: bytes, requests: bytes) -> bytes",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
   ⟨"consensus_get_validators_custody_requirement",
     `EthLib.Consensus.Exports.getValidatorsCustodyRequirementExport,
     "(name: str, fork: str, state: bytes, config: bytes, validator_indices: list[bytes]) -> int",

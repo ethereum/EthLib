@@ -378,6 +378,9 @@ PyObject* py_consensus_get_eth1_pending_deposit_count (PyObject* self, PyObject*
 PyObject* py_consensus_compute_new_state_root (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_on_chain_aggregate (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_execution_requests (PyObject* self, PyObject* args);
+PyObject* py_consensus_get_execution_payload_bid          (PyObject* self, PyObject* args);
+PyObject* py_consensus_get_self_built_execution_payload_bid (PyObject* self, PyObject* args);
+PyObject* py_consensus_get_execution_payload_envelope     (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_validators_custody_requirement (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_ssz                                  (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_possession_signing_root              (PyObject* self, PyObject* args);

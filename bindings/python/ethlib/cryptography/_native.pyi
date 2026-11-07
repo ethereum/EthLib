@@ -587,6 +587,18 @@ def consensus_get_execution_requests(name: str, fork: str, requests: list[bytes]
     """From Electra: the requests of an execution block, as SSZ bytes."""
     ...
 
+def consensus_get_execution_payload_bid(name: str, fork: str, state: bytes, payload: bytes, requests: bytes, commitments: bytes, fee_recipient: bytes, inclusion_list_bits: bytes, slot: int, builder_index: int, value: int) -> bytes:
+    """From Gloas: the bid of a builder for a payload that it built on a state, as SSZ bytes."""
+    ...
+
+def consensus_get_self_built_execution_payload_bid(name: str, fork: str, state: bytes, payload: bytes, requests: bytes, commitments: bytes, fee_recipient: bytes, inclusion_list_bits: bytes) -> bytes:
+    """From Gloas: the signed bid of a proposer that builds its own payload, as SSZ bytes."""
+    ...
+
+def consensus_get_execution_payload_envelope(name: str, fork: str, block: bytes, payload: bytes, requests: bytes) -> bytes:
+    """From Gloas: the envelope that reveals a payload after the block of its bid, as SSZ bytes."""
+    ...
+
 def consensus_get_validators_custody_requirement(name: str, fork: str, state: bytes, config: bytes, validator_indices: list[bytes]) -> int:
     """From Fulu: the number of custody groups of a node, from the indices of its validators."""
     ...
