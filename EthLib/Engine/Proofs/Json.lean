@@ -31,6 +31,8 @@ So the 64-bit decoder returns the decoded number itself, without wrapping.
 
 A byte string decoded with a limit on its size has at most that many bytes.
 
+A field of an object decodes to the value that the object holds under its name.
+
 The 64-bit decoder returns a number exactly when the decoder with the bound `2^64` returns it.
 
 The bounded byte decoder succeeds exactly when the byte decoder succeeds within the limit.
@@ -337,5 +339,12 @@ theorem fixed_hexString (what : String) (n : Nat) (v : Vector UInt8 n) (upper : 
   exact Vector.toArray_inj.mp (by
     simp only [List.data_toByteArray]
     rw [← Vector.toArray_toList])
+
+/-- A field of an object decodes to a value exactly when the object holds it under that name. -/
+theorem field_eq_ok_iff {what name : String} {fs : List (String × Lean.Json)} {v : Lean.Json} :
+    field what fs name = .ok v ↔ fs.lookup name = some v := by
+  unfold field
+  cases h : fs.lookup name <;>
+    simp [pure, Except.pure, invalid, throw, throwThe, MonadExceptOf.throw]
 
 end EthLib.Engine.Json
