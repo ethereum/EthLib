@@ -91,7 +91,7 @@ theorem latestValid_eq_none_iff {h : Hash32} :
   simp [List.find?_eq_none]
 
 /-- Each block of the ancestors of a block, after the first, is the parent of the one before. -/
-theorem parent_of_ancestors {fuel : Nat} {start b : Hash32} {i : Nat}
+theorem getElem?_succ_ancestors {fuel : Nat} {start b : Hash32} {i : Nat}
     (h : (ancestors tree fuel start)[i + 1]? = some b) :
     ∃ a p, (ancestors tree fuel start)[i]? = some a ∧ tree.lookup a = some p ∧
       b = p.parentHash := by
@@ -118,9 +118,9 @@ theorem parent_of_ancestors {fuel : Nat} {start b : Hash32} {i : Nat}
         exact ih h
 
 /-- Each block of the chain of a block, after the first, is the parent of the one before. -/
-theorem parent_of_chainOf {h b : Hash32} {i : Nat} (hb : (chainOf tree h)[i + 1]? = some b) :
+theorem getElem?_succ_chainOf {h b : Hash32} {i : Nat} (hb : (chainOf tree h)[i + 1]? = some b) :
     ∃ a p, (chainOf tree h)[i]? = some a ∧ tree.lookup a = some p ∧ b = p.parentHash :=
-  parent_of_ancestors hb
+  getElem?_succ_ancestors hb
 
 /-- The update is syncing exactly when the tree does not hold the head. -/
 theorem forkchoiceUpdated_syncing_iff {result : PayloadStatus × Option Hash32}
@@ -183,6 +183,13 @@ theorem forkchoiceUpdated_of_belowFinalized {p : KnownPayload}
     (hBelow : belowFinalized tree finalized state.headBlockHash = true) :
     forkchoiceUpdated tree finalized state = .ok (⟨.valid, some state.headBlockHash⟩, none) := by
   simp [forkchoiceUpdated, hp, hValid, hBelow, pure, Except.pure]
+
+/-- An invalid head that the tree holds is invalid, with the latest valid block of its chain. -/
+theorem forkchoiceUpdated_of_invalid {p : KnownPayload}
+    (hp : tree.lookup state.headBlockHash = some p) (hInvalid : p.valid = false) :
+    forkchoiceUpdated tree finalized state =
+      .ok (⟨.invalid, latestValid tree state.headBlockHash⟩, none) := by
+  simp [forkchoiceUpdated, hp, hInvalid, pure, Except.pure]
 
 /-- Without a known finalized block, no head is below it. -/
 @[simp] theorem belowFinalized_none (h : Hash32) : belowFinalized tree none h = false := rfl
