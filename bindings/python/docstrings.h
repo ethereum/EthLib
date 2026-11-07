@@ -627,7 +627,7 @@
   "The fork identifier, as RLP, of a mainnet node at a head."
 
 #define DOC_fork_id_validate \
-  "Whether a node at a head accepts the fork identifier of a peer."
+  "Whether a node at a head accepts the fork identifier of a peer, by the rules of EIP-2124."
 
 #define DOC_eth_message_decode \
   "The canonical data of the message with the ID `id` and the data `data`, on a version."
