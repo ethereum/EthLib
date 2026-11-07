@@ -410,6 +410,61 @@ theorem executionBlockHashGindex_eq {preset : Preset} {fork : Fork}
   rcases named with rfl | rfl <;> cases fork <;> first
     | exact absurd capella (by decide) | exact absurd beforeGloas (by decide) | decide +kernel
 
+/-- A node at the depth of the leaves of a container is the root of the field there.
+
+The type and the value need the same number of fields, and nothing else of the other fields. -/
+private theorem nodeRoot_containerLeaf {names : List String} {fields : List Desc}
+    {values : List Value} {count index ordinal : Nat} {child : Desc} {inner : Value}
+    {root : Bytes} (counted : fields.length = count) (paired : fields.length = values.length)
+    (named : 2 ≤ index) (depth : Nat.log2 index = depthFor count)
+    (placed : gindexBelow index (depthFor count) = ordinal)
+    (selectedType : fields[ordinal]? = some child) (selectedValue : values[ordinal]? = some inner)
+    (rooted : hashTreeRoot child inner = .ok root) :
+    nodeRoot (.container names fields) (.seq values) index = .ok root := by
+  have laid : merkleLayout (.container names fields) (.seq values) =
+      .ok (.nesting ((fields.zip values).map some) (some fields.length)) := by
+    simp [merkleLayout, paired, Pure.pure, Except.pure]
+  -- A container mixes nothing in, so the walk stays in its bounded tree of fields.
+  rw [nodeRoot_left_contents _ _ _ laid index named
+    (fun _ mixed => by simp [MerkleLayout.nesting] at mixed)]
+  simp only [MerkleLayout.nesting, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, depth,
+    ← counted]
+  rw [boundedNode_nested_leaf _ _ _ rfl child inner ?enough index 0 fields.length ?selected,
+    rooted]
+  · -- The field is no deeper than the deepest field, one level under the container.
+    have member : child ∈ fields := List.mem_of_getElem? selectedType
+    have := nesting_le_deepest child fields member
+    simp only [Desc.nesting]
+    omega
+  · rw [Nat.zero_add, counted, placed]
+    simpa only [List.getElem?_map, Option.map_eq_some_iff] using
+      ⟨(child, inner), List.getElem?_zip_eq_some.mpr ⟨selectedType, selectedValue⟩, rfl⟩
+
+omit [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat] in
+/-- From Capella to the forks before Gloas, the block hash node of a payload header is the hash.
+
+It sits at the index that the light client reads for the fork of the header.
+
+This holds at every preset. -/
+theorem ExecutionPayloadHeader.nodeRoot_blockHash (capella : .shapella ≤ fork)
+    (beforeGloas : fork < .glamsterdam) (header : ExecutionPayloadHeader preset fork) :
+    nodeRoot (SszType.desc (ExecutionPayloadHeader preset fork)) (SszType.toValue header)
+      (payloadHeaderBlockHashGindex fork) = .ok header.blockHash.toArray := by
+  -- The block hash is field 12 at each of these forks, a leaf of the tree of fields.
+  cases fork
+  all_goals try first
+    | exact absurd capella (by decide)
+    | exact absurd beforeGloas (by decide)
+  all_goals first
+    | exact nodeRoot_containerLeaf (count := 15) (ordinal := 12)
+        (child := .byteVector bytesPerChunk) (inner := .bytes header.blockHash.toArray)
+        rfl rfl (by decide) (by decide +kernel) (by decide +kernel) rfl rfl
+        (hashTreeRoot_chunk (by simp [bytesPerChunk]))
+    | exact nodeRoot_containerLeaf (count := 17) (ordinal := 12)
+        (child := .byteVector bytesPerChunk) (inner := .bytes header.blockHash.toArray)
+        rfl rfl (by decide) (by decide +kernel) (by decide +kernel) rfl rfl
+        (hashTreeRoot_chunk (by simp [bytesPerChunk]))
+
 /-- From Gloas, the parent block hash of the bid sits at the index that the type of the body gives.
 
 The bid is the message of the signed bid, and the parent block hash is its first field.

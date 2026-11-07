@@ -3,6 +3,7 @@ module
 public import EthLib.Serialization.Ssz.Merkle.Branch
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Authentication
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Tree
+public import EthLib.Serialization.Proofs.Ssz.Type.PathLaws
 
 /-!
 # Proofs: Merkle branches by depth and index
@@ -230,5 +231,115 @@ theorem isValidNormalizedMerkleBranch_binding {leaf other root : Vector UInt8 32
   · exact .inl (Vector.toArray_inj.mp same)
   · obtain ⟨a, b, found, -, -, rest⟩ := collision
     exact .inr ⟨a, b, found, rest⟩
+
+/-- A branch over an index that names no node, or names the root, rebuilds nothing. -/
+private theorem calculateMerkleRootUnchecked_two {leaf root : Bytes} {proof : List Bytes}
+    {index : Nat} (built : calculateMerkleRootUnchecked leaf proof index = .ok root) :
+    2 ≤ index := by
+  -- The length check refuses the zero index and the root before any climb.
+  unfold calculateMerkleRootUnchecked at built
+  cases measured : gindexLength index with
+  | error fault => simp [measured, Bind.bind, Except.bind] at built
+  | ok depth =>
+    obtain ⟨depthIs, named, nonzero⟩ := gindexLength_ok measured
+    have upper := (gindexDepth_bounds named).2
+    rcases Nat.lt_or_ge index 2 with small | two
+    · have one : index = 1 := by omega
+      subst one
+      simp at depthIs
+      omega
+    · exact two
+
+/-- A branch as long as the depth of an index of at least two rebuilds the root it climbs to. -/
+private theorem calculateMerkleRootUnchecked_of_length {leaf : Bytes} {proof : List Bytes}
+    {index : Nat} (two : 2 ≤ index) (length : proof.length = Nat.log2 index) :
+    calculateMerkleRootUnchecked leaf proof index = .ok (climbBranch index 0 leaf proof) := by
+  -- An index of at least two has a nonzero depth, which the branch length matches.
+  have positive : Nat.log2 index ≠ 0 := by
+    intro zero
+    have upper := (gindexDepth_bounds (index := index) (by omega)).2
+    rw [zero] at upper
+    simp at upper
+    omega
+  simp [calculateMerkleRootUnchecked, gindexLength, gindexDepth, positive, length,
+    show ¬ index < 1 by omega, Bind.bind, Except.bind, pure, Except.pure]
+
+/-- Climbing a joined branch climbs the front, then the back from where the front ends. -/
+private theorem climbBranch_append_front (index : Nat) :
+    ∀ (level : Nat) (node : Bytes) (front back : List Bytes),
+    climbBranch index level node (front ++ back)
+      = climbBranch index (level + front.length) (climbBranch index level node front) back
+  | level, node, [], back => by simp
+  | level, node, sibling :: rest, back => by
+    rw [List.cons_append, climbBranch_cons, climbBranch_cons,
+      climbBranch_append_front index (level + 1),
+      show level + 1 + rest.length = level + (sibling :: rest).length by simp; omega]
+
+/-- Climbing from a raised level reads the index with its bottom turns dropped. -/
+private theorem climbBranch_shift (index shift : Nat) :
+    ∀ (level : Nat) (node : Bytes) (branch : List Bytes),
+    climbBranch index (level + shift) node branch
+      = climbBranch (index >>> shift) level node branch
+  | level, node, [] => by simp
+  | level, node, sibling :: rest => by
+    have bit : gindexBit index (level + shift) = gindexBit (index >>> shift) level := by
+      simp [gindexBit, Nat.testBit_shiftRight, Nat.add_comm]
+    rw [climbBranch_cons, climbBranch_cons, bit,
+      show level + shift + 1 = level + 1 + shift by omega,
+      climbBranch_shift index shift (level + 1)]
+
+/-- Two branches that verify one after the other verify as one branch, at the joined index.
+
+The first branch climbs from the leaf to a middle node, at an index inside the subtree of that node.
+
+The second branch climbs from the middle node to the root, at the index of that subtree.
+
+The joined branch is the first branch followed by the second. -/
+theorem verifyMerkleProof_append {leaf middle root : Bytes} {inner outer : List Bytes}
+    {innerIndex outerIndex index : Nat}
+    (joined : gindexConcat outerIndex innerIndex = .ok index)
+    (first : verifyMerkleProof leaf inner innerIndex middle = .ok true)
+    (second : verifyMerkleProof middle outer outerIndex root = .ok true) :
+    verifyMerkleProof leaf (inner ++ outer) index root = .ok true := by
+  obtain ⟨leafWidth, innerWidths, innerBuilt⟩ := (verifyMerkleProof_eq_true_iff ..).mp first
+  obtain ⟨-, outerWidths, outerBuilt⟩ := (verifyMerkleProof_eq_true_iff ..).mp second
+  obtain ⟨innerLength, innerRoot⟩ := calculateMerkleRootUnchecked_shape innerBuilt
+  obtain ⟨outerLength, outerRoot⟩ := calculateMerkleRootUnchecked_shape outerBuilt
+  have innerTwo := calculateMerkleRootUnchecked_two innerBuilt
+  have outerTwo := calculateMerkleRootUnchecked_two outerBuilt
+  obtain ⟨-, -, value⟩ := gindexConcat_facts joined
+  have indexDepth := gindexConcat_depth joined
+  -- The inner index is its leading bit plus a rest below it.
+  obtain ⟨innerLow, innerHigh⟩ := gindexDepth_bounds (index := innerIndex) (by omega)
+  rw [Nat.pow_succ] at innerHigh
+  generalize Nat.log2 innerIndex = depth at innerLength innerLow innerHigh value indexDepth
+  have powPos : 0 < 2 ^ depth := Nat.two_pow_pos depth
+  have rest : innerIndex - 2 ^ depth < 2 ^ depth := by omega
+  have indexTwo : 2 ≤ index := by
+    have := Nat.mul_le_mul outerTwo (Nat.one_le_two_pow (n := depth))
+    omega
+  -- Below the inner depth, the joined index has the bits of the inner index.
+  have lowEq : index % 2 ^ depth = innerIndex % 2 ^ depth := by
+    rw [value, Nat.add_comm, Nat.add_mul_mod_self_right,
+      show innerIndex = 2 ^ depth + (innerIndex - 2 ^ depth) by omega, Nat.add_mod_left]
+    simp
+  have bits : ∀ i < inner.length, gindexBit index (0 + i) = gindexBit innerIndex (0 + i) := by
+    intro i below
+    have same := congrArg (fun x => x.testBit i) lowEq
+    simp only [Nat.testBit_mod_two_pow] at same
+    simpa [gindexBit, show i < depth by omega] using same
+  -- Above the inner depth, the joined index reads as the outer index.
+  have high : index >>> depth = outerIndex := by
+    rw [Nat.shiftRight_eq_div_pow, value, Nat.add_comm, Nat.add_mul_div_right _ _ powPos,
+      Nat.div_eq_of_lt rest, Nat.zero_add]
+  rw [verifyMerkleProof_eq_true_iff]
+  refine ⟨leafWidth, fun node mem => ?_, ?_⟩
+  · rcases List.mem_append.mp mem with inside | outside
+    · exact innerWidths _ inside
+    · exact outerWidths _ outside
+  · have length : (inner ++ outer).length = Nat.log2 index := by
+      rw [List.length_append, innerLength, outerLength, indexDepth, Nat.add_comm]
+    rw [calculateMerkleRootUnchecked_of_length indexTwo length, climbBranch_append_front,
+      climbBranch_congr bits, innerRoot, innerLength, climbBranch_shift, high, outerRoot]
 
 end EthLib.Serialization.Ssz

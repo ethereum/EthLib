@@ -119,7 +119,8 @@ theorem verifyMerkleProof_eq_true_iff (leaf : Bytes) (proof : List Bytes) (index
     by_cases leafWidth : leaf.size = bytesPerChunk <;>
     simp_all [checkChunk, Bind.bind, Except.bind, pure, Except.pure]
 
-private theorem calculateMerkleRootUnchecked_shape {leaf root : Bytes} {proof : List Bytes} {index : Nat}
+/-- A branch that rebuilds a root has the depth of its index, and climbs to that root. -/
+theorem calculateMerkleRootUnchecked_shape {leaf root : Bytes} {proof : List Bytes} {index : Nat}
     (built : calculateMerkleRootUnchecked leaf proof index = .ok root) :
     proof.length = Nat.log2 index ∧ climbBranch index 0 leaf proof = root := by
   -- The validated index fixes the branch length before reconstruction can return a root.
