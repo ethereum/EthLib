@@ -174,6 +174,7 @@ extern PyObject* CHAIN_ERROR;
 extern PyObject* WEAK_SUBJECTIVITY_ERROR;
 extern PyObject* VALIDATOR_DUTY_ERROR;
 extern PyObject* PROPOSER_ERROR;
+extern PyObject* SLASHING_PROTECTION_ERROR;
 
 /* ---- Argument parsing helpers ---------------------------------------- */
 
@@ -340,6 +341,12 @@ PyObject* py_consensus_get_ptc_assignment (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_upcoming_proposal_slots (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_validator_signature (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_eth1_vote (PyObject* self, PyObject* args);
+PyObject* py_consensus_read_slashing_interchange (PyObject* self, PyObject* args);
+PyObject* py_consensus_import_slashing_interchange (PyObject* self, PyObject* args);
+PyObject* py_consensus_check_block_signing (PyObject* self, PyObject* args);
+PyObject* py_consensus_check_attestation_signing (PyObject* self, PyObject* args);
+PyObject* py_consensus_record_block_signing (PyObject* self, PyObject* args);
+PyObject* py_consensus_record_attestation_signing (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_aggregate_signature (PyObject* self, PyObject* args);
 PyObject* py_consensus_construct_attestation (PyObject* self, PyObject* args);
 PyObject* py_consensus_construct_single_attestation (PyObject* self, PyObject* args);

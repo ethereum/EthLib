@@ -101,6 +101,7 @@ PyObject* FORK_CHOICE_ERROR;
 PyObject* WEAK_SUBJECTIVITY_ERROR;
 PyObject* VALIDATOR_DUTY_ERROR;
 PyObject* PROPOSER_ERROR;
+PyObject* SLASHING_PROTECTION_ERROR;
 
 /* ---- Lean externs: size accessors ------------------------------------ */
 
@@ -766,6 +767,18 @@ static PyMethodDef methods[] = {
   {"consensus_process_sync_committee_contributions",
    py_consensus_process_sync_committee_contributions, METH_VARARGS,
    DOC_consensus_process_sync_committee_contributions},
+  {"consensus_read_slashing_interchange", py_consensus_read_slashing_interchange, METH_VARARGS,
+   DOC_consensus_read_slashing_interchange},
+  {"consensus_import_slashing_interchange", py_consensus_import_slashing_interchange,
+   METH_VARARGS, DOC_consensus_import_slashing_interchange},
+  {"consensus_check_block_signing", py_consensus_check_block_signing, METH_VARARGS,
+   DOC_consensus_check_block_signing},
+  {"consensus_check_attestation_signing", py_consensus_check_attestation_signing, METH_VARARGS,
+   DOC_consensus_check_attestation_signing},
+  {"consensus_record_block_signing", py_consensus_record_block_signing, METH_VARARGS,
+   DOC_consensus_record_block_signing},
+  {"consensus_record_attestation_signing", py_consensus_record_attestation_signing,
+   METH_VARARGS, DOC_consensus_record_attestation_signing},
   {"consensus_get_eth1_vote", py_consensus_get_eth1_vote, METH_VARARGS,
    DOC_consensus_get_eth1_vote},
   {"consensus_get_eth1_pending_deposit_count", py_consensus_get_eth1_pending_deposit_count,
@@ -1000,6 +1013,7 @@ PyInit__native(void) {
     WEAK_SUBJECTIVITY_ERROR = PyObject_GetAttrString(errors, "WeakSubjectivityError");
     VALIDATOR_DUTY_ERROR = PyObject_GetAttrString(errors, "ValidatorDutyError");
     PROPOSER_ERROR = PyObject_GetAttrString(errors, "ProposerError");
+    SLASHING_PROTECTION_ERROR = PyObject_GetAttrString(errors, "SlashingProtectionError");
     Py_DECREF(errors);
     if (PyErr_Occurred()) return NULL;
 
