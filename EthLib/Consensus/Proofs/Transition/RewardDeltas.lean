@@ -422,4 +422,473 @@ theorem getInactivityPenaltyDeltas_getD_of_altair {config : Config} (altair : .a
     rw [result, penalty, start]
     simp
 
+/-! ## The deltas of each kind of vote before Altair -/
+
+/-- A validator whose vote matches reads the leak, and pays no penalty for that kind of vote.
+
+In a leak it earns its base reward.
+
+Otherwise it earns its base reward times the attesting increments, over the active increments.
+
+That quotient rounds down, and so do the increments. -/
+theorem componentDelta_matched {base attestingBalance total reward penalty : Gwei}
+    (computed : componentDelta state true base attestingBalance total = .ok (reward, penalty)) :
+    ∃ leak, isInInactivityLeak state = .ok leak ∧ penalty = 0 ∧
+      reward.toNat = if leak then base.toNat else
+        base.toNat * (attestingBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) /
+          (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
+  simp only [componentDelta, ↓reduceIte, bind_ok_iff] at computed
+  obtain ⟨leak, leakOk, computed⟩ := computed
+  refine ⟨leak, leakOk, ?_⟩
+  cases leak
+  · simp only [Bool.false_eq_true, ↓reduceIte, bind_ok_iff, liftAccessor_ok, liftArith,
+      mapError_ok_iff, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at computed
+    obtain ⟨numerator, numeratorOk, rfl, rfl⟩ := computed
+    rw [mulChecked_ok_iff] at numeratorOk
+    simp [UInt64.toNat_div, numeratorOk.2]
+  · simp only [↓reduceIte, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at computed
+    obtain ⟨rfl, rfl⟩ := computed
+    simp
+
+/-- For a registry within its limit, the deltas of each validator for one kind of vote.
+
+The matching votes are those of some pending attestations.
+
+A validator that is not eligible has no reward and no penalty.
+
+An eligible validator among the unslashed signers reads the leak, and pays no penalty.
+
+In a leak it earns its base reward.
+
+Otherwise it earns its base reward times the attesting increments, over the active increments.
+
+That quotient rounds down, and so do the increments.
+
+An eligible validator that is not among them earns nothing and pays its base reward. -/
+theorem getAttestationComponentDeltas_getD {attestations : Array (PendingAttestation preset)}
+    {rewards penalties : Array Gwei} (within : state.RegistryWithinLimit)
+    (computed : getAttestationComponentDeltas state attestations = .ok (rewards, penalties)) :
+    ∃ total attesters attestingBalance, getTotalActiveBalance state = .ok total ∧
+      getUnslashedAttestingIndices state attestations = .ok attesters ∧
+      getTotalBalance state attesters = .ok attestingBalance ∧
+      ∀ j (inside : j < state.validators.data.size), ∃ eligible,
+        isEligibleValidator (getPreviousEpoch state) state.validators.data[j] = .ok eligible ∧
+        (eligible = false → rewards.getD j 0 = 0 ∧ penalties.getD j 0 = 0) ∧
+        (eligible = true → ∃ base, getBaseReward state total j.toUInt64 = .ok base ∧
+          (j.toUInt64 ∈ attesters → ∃ leak, isInInactivityLeak state = .ok leak ∧
+            (rewards.getD j 0).toNat = (if leak then base.toNat else
+              base.toNat * (attestingBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) /
+                (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ∧
+            penalties.getD j 0 = 0) ∧
+          (j.toUInt64 ∉ attesters → rewards.getD j 0 = 0 ∧ penalties.getD j 0 = base)) := by
+  simp only [getAttestationComponentDeltas, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨total, totalOk, attesters, attestersOk, attestingBalance, balanceOk, eligible,
+    eligibleOk, folded⟩ := computed
+  obtain ⟨distinct, decided⟩ := getEligibleValidatorIndices_ok within eligibleOk
+  refine ⟨total, attesters, attestingBalance, totalOk, attestersOk, balanceOk,
+    fun j inside => ?_⟩
+  obtain ⟨isEligible, eligibleJ, named⟩ := decided j inside
+  have small := toNat_toUInt64_of_lt within inside
+  -- Only the step of the validator itself changes its entries, and they start at zero.
+  have entry := foldlM_entry (entry := fun deltas : Array Gwei × Array Gwei =>
+      (deltas.1.getD j 0, deltas.2.getD j 0)) (j := j) (fun ⟨rewards, penalties⟩ index next step
+        other => by
+      simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at step
+      obtain ⟨_, _, ⟨_, _⟩, _, _, rewardsOk, _, penaltiesOk, rfl⟩ := step
+      rw [addDelta_getD_of_ne rewardsOk (Ne.symm other),
+        addDelta_getD_of_ne penaltiesOk (Ne.symm other)]) distinct folded
+  simp only [Array.getD_eq_getD_getElem?, Array.getElem?_replicate, inside, ↓reduceIte,
+    Option.getD_some] at entry
+  refine ⟨isEligible, eligibleJ, fun no => ?_, fun yes => ?_⟩
+  · have := entry.1 fun index member same =>
+      Bool.false_ne_true (no ▸ named.mp ⟨index, member, same⟩)
+    simp only [Prod.mk.injEq] at this
+    simp only [Array.getD_eq_getD_getElem?, this, and_self]
+  · obtain ⟨index, member, same⟩ := named.mpr yes
+    obtain ⟨⟨lastRewards, lastPenalties⟩, next, start, step, result⟩ := entry.2 index member same
+    obtain rfl : index = j.toUInt64 := UInt64.toNat_inj.mp (same.trans small.symm)
+    simp only [Prod.mk.injEq] at start result
+    simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at step
+    obtain ⟨base, baseOk, ⟨reward, penalty⟩, delta, newRewards, rewardsOk, newPenalties,
+      penaltiesOk, rfl⟩ := step
+    have rewardAdded := addDelta_getD_self rewardsOk
+    have penaltyAdded := addDelta_getD_self penaltiesOk
+    simp only [small, Array.getD_eq_getD_getElem?, start] at rewardAdded penaltyAdded
+    refine ⟨base, baseOk, fun present => ?_, fun absent => ?_⟩
+    · have marked := (markIndices_getD_iff within inside attesters).mpr present
+      rw [Array.getD_eq_getD_getElem?] at marked
+      rw [small, marked] at delta
+      obtain ⟨leak, leakOk, rfl, value⟩ := componentDelta_matched delta
+      refine ⟨leak, leakOk, ?_, ?_⟩
+      · simp only [Array.getD_eq_getD_getElem?, result.1, rewardAdded, value]
+        simp
+      · apply UInt64.toNat_inj.mp
+        simp only [Array.getD_eq_getD_getElem?, result.2, penaltyAdded]
+        simp
+    · have unmarked : (markIndices state.validators.data.size attesters).getD j false = false := by
+        simpa using mt (markIndices_getD_iff within inside attesters).mp absent
+      rw [Array.getD_eq_getD_getElem?] at unmarked
+      rw [small, unmarked, componentDelta_unmatched, Except.ok.injEq, Prod.mk.injEq] at delta
+      obtain ⟨rfl, rfl⟩ := delta
+      refine ⟨?_, ?_⟩
+      · apply UInt64.toNat_inj.mp
+        simp only [Array.getD_eq_getD_getElem?, result.1, rewardAdded]
+        simp
+      · apply UInt64.toNat_inj.mp
+        simp only [Array.getD_eq_getD_getElem?, result.2, penaltyAdded]
+        simp
+
+/-- One step of the inactivity penalties before Altair keeps the entries of the other validators. -/
+theorem addInactivityPenalty_getD_of_ne {total : Gwei} {delay : Epoch}
+    {targetMatched : Array Bool} {penalties next : Array Gwei} {index : ValidatorIndex}
+    (computed : addInactivityPenalty state total delay targetMatched penalties index = .ok next)
+    {j : Nat} (other : j ≠ index.toNat) : next.getD j 0 = penalties.getD j 0 := by
+  simp only [addInactivityPenalty, bind_ok_iff] at computed
+  obtain ⟨_, _, _, _, _, _, paid, paidOk, computed⟩ := computed
+  rw [← addDelta_getD_of_ne paidOk other]
+  split at computed
+  · cases computed
+    rfl
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, _, _, added⟩ := computed
+    exact addDelta_getD_of_ne added other
+
+/-- One step of the inactivity penalties before Altair, read at the index of its own validator.
+
+The validator pays four base rewards less the proposer share of one.
+
+If it missed the target, it also pays its effective balance times the finality delay.
+
+That product is divided by the penalty quotient, rounding down.
+
+The amounts are added to the entry, without overflow or underflow. -/
+theorem addInactivityPenalty_getD_self {total : Gwei} {delay : Epoch}
+    {targetMatched : Array Bool} {penalties next : Array Gwei} {index : ValidatorIndex}
+    (computed : addInactivityPenalty state total delay targetMatched penalties index = .ok next) :
+    ∃ base, getBaseReward state total index = .ok base ∧
+      (targetMatched.getD index.toNat false = true →
+        (next.getD index.toNat 0).toNat = (penalties.getD index.toNat 0).toNat +
+          (BASE_REWARDS_PER_EPOCH.toNat * base.toNat -
+            base.toNat / preset.PROPOSER_REWARD_QUOTIENT.toNat)) ∧
+      (targetMatched.getD index.toNat false = false → ∃ validator,
+        getValidator state index = .ok validator ∧
+        (next.getD index.toNat 0).toNat = (penalties.getD index.toNat 0).toNat +
+          (BASE_REWARDS_PER_EPOCH.toNat * base.toNat -
+            base.toNat / preset.PROPOSER_REWARD_QUOTIENT.toNat) +
+          validator.effectiveBalance.toNat * delay.toNat /
+            (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat) := by
+  simp only [addInactivityPenalty, bind_ok_iff, liftAccessor_ok, liftArith,
+    mapError_ok_iff] at computed
+  obtain ⟨base, baseOk, full, fullOk, paidBack, paidBackOk, paid, paidOk, computed⟩ := computed
+  rw [mulChecked_ok_iff] at fullOk
+  rw [subChecked_ok_iff] at paidBackOk
+  have first := addDelta_getD_self paidOk
+  rw [paidBackOk.2, fullOk.2, proposerReward, UInt64.toNat_div] at first
+  refine ⟨base, baseOk, fun matched => ?_, fun missed => ?_⟩
+  · simp only [matched, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact first
+  · simp only [missed, Bool.false_eq_true, ↓reduceIte, bind_ok_iff, liftAccessor_ok,
+      mapError_ok_iff] at computed
+    obtain ⟨validator, validatorOk, scaled, scaledOk, added⟩ := computed
+    rw [mulChecked_ok_iff] at scaledOk
+    refine ⟨validator, validatorOk, ?_⟩
+    rw [addDelta_getD_self added, first, UInt64.toNat_div, scaledOk.2]
+
+/-- For a registry within its limit, the inactivity deltas of each validator, before Altair.
+
+They hold no reward, and outside a leak no penalty.
+
+In a leak, a validator that is not eligible pays nothing.
+
+An eligible validator pays four base rewards less the proposer share of one.
+
+If it is not among the unslashed signers of the target, it also pays more.
+
+That amount is its effective balance times the finality delay, over the penalty quotient.
+
+The quotients round down. -/
+theorem getInactivityPenaltyDeltas_getD_of_lt_altair {config : Config} (before : fork < .altair)
+    {rewards penalties : Array Gwei} (within : state.RegistryWithinLimit)
+    (computed : getInactivityPenaltyDeltas config state = .ok (rewards, penalties)) :
+    (∀ j, rewards.getD j 0 = 0) ∧ ∃ leak, isInInactivityLeak state = .ok leak ∧
+      (leak = false → ∀ j, penalties.getD j 0 = 0) ∧
+      (leak = true → ∃ attestations attesters total delay,
+        getMatchingTargetAttestations state before (getPreviousEpoch state) = .ok attestations ∧
+        getUnslashedAttestingIndices state attestations = .ok attesters ∧
+        getTotalActiveBalance state = .ok total ∧ getFinalityDelay state = .ok delay ∧
+        ∀ j (inside : j < state.validators.data.size), ∃ eligible,
+          isEligibleValidator (getPreviousEpoch state) state.validators.data[j] = .ok eligible ∧
+          (eligible = false → penalties.getD j 0 = 0) ∧
+          (eligible = true → ∃ base, getBaseReward state total j.toUInt64 = .ok base ∧
+            (penalties.getD j 0).toNat = BASE_REWARDS_PER_EPOCH.toNat * base.toNat -
+              base.toNat / preset.PROPOSER_REWARD_QUOTIENT.toNat +
+              (if j.toUInt64 ∈ attesters then 0 else
+                state.validators.data[j].effectiveBalance.toNat * delay.toNat /
+                  (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat))) := by
+  refine ⟨getInactivityPenaltyDeltas_rewards computed, ?_⟩
+  have notAltair : ¬ .altair ≤ fork := Nat.not_le_of_lt before
+  unfold getInactivityPenaltyDeltas at computed
+  dsimp only at computed
+  simp only [notAltair, ↓reduceDIte, bind_ok_iff] at computed
+  obtain ⟨leak, leakOk, computed⟩ := computed
+  refine ⟨leak, leakOk, fun outside j => ?_, fun leaking => ?_⟩
+  · subst outside
+    simp only [Bool.false_eq_true, ↓reduceIte, pure, Except.pure, Except.ok.injEq,
+      Prod.mk.injEq] at computed
+    obtain ⟨-, rfl⟩ := computed
+    simp only [Array.getD_eq_getD_getElem?, Array.getElem?_replicate]
+    split <;> rfl
+  subst leaking
+  simp only [↓reduceIte, bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq,
+    Prod.mk.injEq] at computed
+  obtain ⟨attestations, attestationsOk, attesters, attestersOk, total, totalOk, delay, delayOk,
+    eligible, eligibleOk, penalties, folded, -, rfl⟩ := computed
+  obtain ⟨distinct, decided⟩ := getEligibleValidatorIndices_ok within eligibleOk
+  refine ⟨attestations, attesters, total, delay, attestationsOk, attestersOk, totalOk, delayOk,
+    fun j inside => ?_⟩
+  obtain ⟨isEligible, eligibleJ, named⟩ := decided j inside
+  have small := toNat_toUInt64_of_lt within inside
+  -- Only the step of the validator itself changes its entry, and it starts at zero.
+  have entry := foldlM_entry (entry := fun deltas : Array Gwei => deltas.getD j 0) (j := j)
+    (fun _ _ _ step other => addInactivityPenalty_getD_of_ne step (Ne.symm other))
+    distinct folded
+  have zero : (Array.replicate state.validators.data.size (0 : Gwei)).getD j 0 = 0 := by
+    simp [Array.getD_eq_getD_getElem?, inside]
+  rw [zero] at entry
+  refine ⟨isEligible, eligibleJ, fun no => ?_, fun yes => ?_⟩
+  · exact entry.1 fun index member same =>
+      Bool.false_ne_true (no ▸ named.mp ⟨index, member, same⟩)
+  · obtain ⟨index, member, same⟩ := named.mpr yes
+    obtain ⟨last, next, start, step, result⟩ := entry.2 index member same
+    obtain rfl : index = j.toUInt64 := UInt64.toNat_inj.mp (same.trans small.symm)
+    obtain ⟨base, baseOk, matched, missed⟩ := addInactivityPenalty_getD_self step
+    refine ⟨base, baseOk, ?_⟩
+    rw [small] at matched missed
+    rw [result]
+    by_cases present : j.toUInt64 ∈ attesters
+    · rw [matched ((markIndices_getD_iff within inside attesters).mpr present), start]
+      simp [present]
+    · obtain ⟨validator, validatorOk, value⟩ :=
+        missed (by simpa using mt (markIndices_getD_iff within inside attesters).mp present)
+      rw [getValidator_toUInt64 within inside, Except.ok.injEq] at validatorOk
+      subst validatorOk
+      rw [value, start]
+      simp [present]
+
+/-! ## The inclusion rewards before Altair -/
+
+/-- Adding a delta adds the amount to the entry at its index, and keeps the other entries. -/
+theorem addDelta_getD {deltas result : Array Gwei} {index : ValidatorIndex} {amount : Gwei}
+    (computed : addDelta deltas index amount = .ok result) (j : Nat) :
+    (result.getD j 0).toNat =
+      (deltas.getD j 0).toNat + if index.toNat = j then amount.toNat else 0 := by
+  by_cases same : index.toNat = j
+  · subst same
+    simpa using addDelta_getD_self computed
+  · simp [addDelta_getD_of_ne computed (Ne.symm same), same]
+
+/-- One step of the inclusion rewards, for one attester.
+
+The attester has an earliest inclusion, with a nonzero inclusion delay.
+
+The proposer of that inclusion earns the proposer share of the base reward of the attester.
+
+The attester earns the rest of its base reward, divided by the inclusion delay, rounding down.
+
+The amounts are added to the entries, without overflow or underflow. -/
+theorem addInclusionReward_getD {total : Gwei}
+    {earliest : Array (Option (PendingAttestation preset))} {rewards next : Array Gwei}
+    {index : ValidatorIndex}
+    (computed : addInclusionReward state total earliest rewards index = .ok next) :
+    ∃ attestation base, earliest.getD index.toNat none = some attestation ∧
+      getBaseReward state total index = .ok base ∧ attestation.inclusionDelay ≠ 0 ∧
+      ∀ j, (next.getD j 0).toNat = (rewards.getD j 0).toNat +
+        ((if attestation.proposerIndex.toNat = j then
+            base.toNat / preset.PROPOSER_REWARD_QUOTIENT.toNat else 0) +
+          if index.toNat = j then
+            (base.toNat - base.toNat / preset.PROPOSER_REWARD_QUOTIENT.toNat) /
+              attestation.inclusionDelay.toNat else 0) := by
+  unfold addInclusionReward at computed
+  split at computed
+  · rename_i attestation found
+    simp only [bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff] at computed
+    obtain ⟨base, baseOk, raised, raisedOk, rest, restOk, _, checked, added⟩ := computed
+    have nonzero := ensure_ok_iff.mp checked
+    rw [subChecked_ok_iff] at restOk
+    refine ⟨attestation, base, found, baseOk, nonzero, fun j => ?_⟩
+    rw [addDelta_getD added, addDelta_getD raisedOk, UInt64.toNat_div, restOk.2, proposerReward,
+      UInt64.toNat_div, Nat.add_assoc]
+  · cases computed
+
+/-- A fold of inclusion rewards over some attesters adds the share of each one to each entry.
+
+Each attester has an earliest inclusion, with a nonzero inclusion delay, and a base reward.
+
+Its share goes to the proposer of that inclusion and to the attester itself. -/
+theorem foldlM_addInclusionReward_getD {total : Gwei}
+    {earliest : Array (Option (PendingAttestation preset))} :
+    ∀ {attesters : List ValidatorIndex} {start result : Array Gwei},
+      attesters.foldlM (addInclusionReward state total earliest) start = .ok result →
+      ∃ shares : List (ValidatorIndex × PendingAttestation preset × Gwei),
+        shares.map (·.1) = attesters ∧
+        (∀ share ∈ shares, earliest.getD share.1.toNat none = some share.2.1 ∧
+          getBaseReward state total share.1 = .ok share.2.2 ∧ share.2.1.inclusionDelay ≠ 0) ∧
+        ∀ j, (result.getD j 0).toNat = (start.getD j 0).toNat + (shares.map fun share =>
+          (if share.2.1.proposerIndex.toNat = j then
+            share.2.2.toNat / preset.PROPOSER_REWARD_QUOTIENT.toNat else 0) +
+          if share.1.toNat = j then
+            (share.2.2.toNat - share.2.2.toNat / preset.PROPOSER_REWARD_QUOTIENT.toNat) /
+              share.2.1.inclusionDelay.toNat else 0).sum
+  | [], start, result, computed => by
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact ⟨[], rfl, fun _ absent => absurd absent List.not_mem_nil, fun _ => by simp⟩
+  | index :: rest, start, result, computed => by
+    rw [List.foldlM_cons, bind_ok_iff] at computed
+    obtain ⟨middle, stepped, folded⟩ := computed
+    obtain ⟨attestation, base, found, baseOk, nonzero, added⟩ := addInclusionReward_getD stepped
+    obtain ⟨shares, named, facts, sums⟩ := foldlM_addInclusionReward_getD folded
+    refine ⟨(index, attestation, base) :: shares, by simp [named], fun share member => ?_,
+      fun j => ?_⟩
+    · rcases List.mem_cons.mp member with rfl | member
+      · exact ⟨found, baseOk, nonzero⟩
+      · exact facts share member
+    · rw [sums j, added j, List.map_cons, List.sum_cons, Nat.add_assoc]
+
+/-- The inclusion rewards before Altair, at each entry.
+
+They hold no penalty.
+
+Each unslashed signer of the matching source attestations has an earliest inclusion.
+
+That inclusion has a nonzero inclusion delay, and the signer has a base reward.
+
+The proposer of that inclusion earns the proposer share of that base reward.
+
+The signer earns the rest of its base reward, divided by the inclusion delay, rounding down.
+
+So a reward entry is the sum of these amounts over the signers, for the validator of that entry.
+
+A proposer earns the shares of every signer whose earliest inclusion it proposed. -/
+theorem getInclusionDelayDeltas_getD (before : fork < .altair) {rewards penalties : Array Gwei}
+    (computed : getInclusionDelayDeltas state before = .ok (rewards, penalties)) :
+    (∀ j, penalties.getD j 0 = 0) ∧
+    ∃ attestations signers attesters total,
+      getMatchingSourceAttestations state before (getPreviousEpoch state) = .ok attestations ∧
+      attestations.toList.mapM (getPendingAttestingIndices state) = .ok signers ∧
+      unslashedAmong state signers = .ok attesters ∧
+      getTotalActiveBalance state = .ok total ∧
+      ∃ shares : List (ValidatorIndex × PendingAttestation preset × Gwei),
+        shares.map (·.1) = attesters ∧
+        (∀ share ∈ shares, (earliestInclusions state.validators.data.size
+            (attestations.zip signers.toArray)).getD share.1.toNat none = some share.2.1 ∧
+          getBaseReward state total share.1 = .ok share.2.2 ∧ share.2.1.inclusionDelay ≠ 0) ∧
+        ∀ j, (rewards.getD j 0).toNat = (shares.map fun share =>
+          (if share.2.1.proposerIndex.toNat = j then
+            share.2.2.toNat / preset.PROPOSER_REWARD_QUOTIENT.toNat else 0) +
+          if share.1.toNat = j then
+            (share.2.2.toNat - share.2.2.toNat / preset.PROPOSER_REWARD_QUOTIENT.toNat) /
+              share.2.1.inclusionDelay.toNat else 0).sum := by
+  simp only [getInclusionDelayDeltas, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
+    Except.ok.injEq, Prod.mk.injEq] at computed
+  obtain ⟨attestations, attestationsOk, signers, signersOk, attesters, attestersOk, total,
+    totalOk, rewards, folded, rfl, rfl⟩ := computed
+  have zero (j : Nat) : (Array.replicate state.validators.data.size (0 : Gwei)).getD j 0 = 0 := by
+    simp only [Array.getD_eq_getD_getElem?, Array.getElem?_replicate]
+    split <;> rfl
+  obtain ⟨shares, named, facts, sums⟩ := foldlM_addInclusionReward_getD folded
+  refine ⟨zero, attestations, signers, attesters, total, attestationsOk, signersOk, attestersOk,
+    totalOk, shares, named, facts, fun j => ?_⟩
+  rw [sums j, zero j]
+  simp
+
+/-! ## The attestation deltas before Altair -/
+
+/-- Adding a delta keeps the number of entries. -/
+theorem addDelta_size {deltas result : Array Gwei} {index : ValidatorIndex} {amount : Gwei}
+    (computed : addDelta deltas index amount = .ok result) : result.size = deltas.size := by
+  unfold addDelta at computed
+  split at computed
+  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, rfl⟩ := computed
+    simp
+  · cases computed
+
+/-- The deltas for one kind of vote have one reward and one penalty for each validator. -/
+theorem getAttestationComponentDeltas_size {attestations : Array (PendingAttestation preset)}
+    {rewards penalties : Array Gwei}
+    (computed : getAttestationComponentDeltas state attestations = .ok (rewards, penalties)) :
+    rewards.size = state.validators.data.size ∧ penalties.size = state.validators.data.size := by
+  simp only [getAttestationComponentDeltas, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨_, _, _, _, _, _, _, _, folded⟩ := computed
+  refine foldlM_ok_invariant (fun deltas : Array Gwei × Array Gwei =>
+      deltas.1.size = state.validators.data.size ∧ deltas.2.size = state.validators.data.size)
+    (fun ⟨rewards, penalties⟩ index next sizes step => ?_) (by simp) folded
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at step
+  obtain ⟨_, _, _, _, _, rewardsOk, _, penaltiesOk, rfl⟩ := step
+  exact ⟨(addDelta_size rewardsOk).trans sizes.1, (addDelta_size penaltiesOk).trans sizes.2⟩
+
+/-- The sums of four lists of deltas have one entry for each entry of the first list.
+
+Each entry is the sum of the four entries at its index, without overflow.
+
+An entry past the end of a list counts as zero. -/
+theorem sumDeltas_getD {first second third fourth result : Array Gwei}
+    (computed : sumDeltas first second third fourth = .ok result) (j : Nat) :
+    (result.getD j 0).toNat = if j < first.size then (first.getD j 0).toNat +
+      (second.getD j 0).toNat + (third.getD j 0).toNat + (fourth.getD j 0).toNat else 0 := by
+  obtain ⟨sizes, entries⟩ := array_mapM_ok computed
+  rw [Array.size_range] at sizes
+  by_cases inside : j < first.size
+  · simp only [inside, ↓reduceIte]
+    have entry := entries j (by simpa using inside) (sizes ▸ inside)
+    simp only [Array.getElem_range, liftAccessor_ok, liftArith, mapError_ok_iff,
+      bind_ok_iff] at entry
+    obtain ⟨pair, pairOk, triple, tripleOk, totalOk⟩ := entry
+    rw [addChecked_ok_iff] at pairOk tripleOk totalOk
+    rw [Array.getD_eq_getD_getElem?, Array.getElem?_eq_getElem (sizes ▸ inside),
+      Option.getD_some, totalOk.2, tripleOk.2, pairOk.2]
+  · simp [Array.getD_eq_getD_getElem?, sizes, inside]
+
+/-- Before Altair, the attestation deltas of each validator are the sums of their parts.
+
+The rewards are those of the source, target and head votes, and of the inclusion.
+
+The penalties are those of the source, target and head votes, and of inactivity.
+
+The sums do not overflow. -/
+theorem getAttestationDeltas_getD {config : Config} (before : fork < .altair)
+    {rewards penalties : Array Gwei}
+    (computed : getAttestationDeltas config state before = .ok (rewards, penalties)) :
+    ∃ source target head inclusion inactivity,
+      getSourceDeltas state before = .ok source ∧ getTargetDeltas state before = .ok target ∧
+      getHeadDeltas state before = .ok head ∧
+      getInclusionDelayDeltas state before = .ok inclusion ∧
+      getInactivityPenaltyDeltas config state = .ok inactivity ∧
+      ∀ j, j < state.validators.data.size →
+        (rewards.getD j 0).toNat = (source.1.getD j 0).toNat + (target.1.getD j 0).toNat +
+          (head.1.getD j 0).toNat + (inclusion.1.getD j 0).toNat ∧
+        (penalties.getD j 0).toNat = (source.2.getD j 0).toNat + (target.2.getD j 0).toNat +
+          (head.2.getD j 0).toNat + (inactivity.2.getD j 0).toNat := by
+  simp only [getAttestationDeltas, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨⟨sourceRewards, sourcePenalties⟩, sourceOk, ⟨targetRewards, targetPenalties⟩, targetOk,
+    ⟨headRewards, headPenalties⟩, headOk, ⟨inclusionRewards, inclusionPenalties⟩, inclusionOk,
+    ⟨inactivityRewards, inactivityPenalties⟩, inactivityOk, summedRewards, rewardsOk,
+    summedPenalties, penaltiesOk, computed⟩ := computed
+  simp only [Prod.mk.injEq] at computed
+  obtain ⟨rfl, rfl⟩ := computed
+  -- The source deltas have one entry for each validator, so every validator has a sum.
+  have sizes : sourceRewards.size = state.validators.data.size ∧
+      sourcePenalties.size = state.validators.data.size := by
+    simp only [getSourceDeltas, bind_ok_iff] at sourceOk
+    obtain ⟨_, _, sourceOk⟩ := sourceOk
+    exact getAttestationComponentDeltas_size sourceOk
+  refine ⟨_, _, _, _, _, sourceOk, targetOk, headOk, inclusionOk, inactivityOk,
+    fun j inside => ⟨?_, ?_⟩⟩
+  · rw [sumDeltas_getD rewardsOk j]
+    simp only [show j < sourceRewards.size from sizes.1 ▸ inside, ↓reduceIte]
+  · rw [sumDeltas_getD penaltiesOk j]
+    simp only [show j < sourcePenalties.size from sizes.2 ▸ inside, ↓reduceIte]
+
 end EthLib.Consensus
