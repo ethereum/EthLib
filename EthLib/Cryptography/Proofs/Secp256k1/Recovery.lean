@@ -441,7 +441,7 @@ Recovery returns the key `Q` exactly when these hold:
 
 - `r` and `s` lie in `[1, n - 1]`;
 - `R` lies on the curve, and the parity of `y` is the recovery id;
-- `Q` is not `O`, and `Q = (s / r) R - (e / r) G`.
+- `Q` is a point of the curve other than `O`, and `Q = (s / r) R - (e / r) G`.
 
 The scalars `s / r` and `e / r` are taken modulo `n`.
 
