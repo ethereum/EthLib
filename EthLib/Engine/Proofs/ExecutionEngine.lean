@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Transition.Execution
 public import EthLib.Engine.ExecutionEngine
 public import EthLib.Engine.Proofs.Block
+public import EthLib.Engine.Proofs.Json
 
 /-!
 # Proofs: the execution layer of the beacon chain
@@ -20,6 +21,14 @@ The beacon chain calls a version of the method at each fork from Bellatrix to Fu
 A field from a fork decodes exactly when it is present from that fork on and absent before.
 
 A field decodes from an option exactly when reading the field back gives that option.
+
+A payload takes a fork exactly when its optional fields are present from their forks on.
+
+The withdrawals are from Shapella, and the two blob gas fields from Dencun.
+
+So a decoded payload of version 1 takes the forks before Shapella.
+
+Version 2 takes Shapella, and version 3 the forks from Dencun.
 -/
 
 public section
@@ -214,5 +223,63 @@ theorem since_sinceValue {α : Type} {f : Fork} {what : String} (x : Since f for
 theorem since_eq_ok_iff {α : Type} {f : Fork} {what : String} {o : Option α}
     {x : Since f fork α} : Json.since what o = .ok x ↔ sinceValue x = o :=
   ⟨sinceValue_of_since, fun h => h ▸ since_sinceValue x⟩
+
+/-! ## A payload at a fork -/
+
+/-- A payload takes a fork exactly when its optional fields are present from their forks on.
+
+The withdrawals must be present exactly from Shapella.
+
+The two blob gas fields must be present exactly from Dencun.
+
+The block access list and the slot number of version 4 are not part of the payload here.
+
+The fork is not checked to be from Paris on. -/
+theorem exists_atFork_iff {p : Json.AnyPayload} :
+    (∃ q : ExecutionPayload fork, p.atFork fork = .ok q) ↔
+      (p.withdrawals.isSome ↔ .shapella ≤ fork) ∧ (p.blobGasUsed.isSome ↔ .dencun ≤ fork) ∧
+        (p.excessBlobGas.isSome ↔ .dencun ≤ fork) := by
+  constructor
+  · rintro ⟨q, h⟩
+    simp only [Json.AnyPayload.atFork, bind_ok_iff] at h
+    obtain ⟨w, hw, b, hb, e, he, -⟩ := h
+    exact ⟨exists_since_iff.mp ⟨w, hw⟩, exists_since_iff.mp ⟨b, hb⟩, exists_since_iff.mp ⟨e, he⟩⟩
+  · rintro ⟨h1, h2, h3⟩
+    obtain ⟨w, hw⟩ := exists_since_iff (what := "withdrawals") |>.mpr h1
+    obtain ⟨b, hb⟩ := exists_since_iff (what := "blobGasUsed") |>.mpr h2
+    obtain ⟨e, he⟩ := exists_since_iff (what := "excessBlobGas") |>.mpr h3
+    simp only [Json.AnyPayload.atFork, hw, hb, he, bind, Except.bind, pure, Except.pure]
+    exact ⟨_, rfl⟩
+
+/-- A payload at a fork reads back the optional fields of the structure that it comes from. -/
+theorem sinceValue_of_atFork {p : Json.AnyPayload} {q : ExecutionPayload fork}
+    (h : p.atFork fork = .ok q) :
+    sinceValue q.withdrawals = p.withdrawals ∧ sinceValue q.blobGasUsed = p.blobGasUsed ∧
+      sinceValue q.excessBlobGas = p.excessBlobGas := by
+  simp only [Json.AnyPayload.atFork, bind_ok_iff] at h
+  obtain ⟨w, hw, b, hb, e, he, h⟩ := h
+  cases h
+  exact ⟨sinceValue_of_since hw, sinceValue_of_since hb, sinceValue_of_since he⟩
+
+/-- A decoded payload takes a fork exactly when its version is the version of that fork.
+
+Version 1 takes the forks before Shapella.
+
+Version 2 takes Shapella, and version 3 the forks from Dencun.
+
+At Glamsterdam the payload here holds the fields of version 3 of a payload of version 4.
+
+So version 3 also takes Glamsterdam.
+
+The fork is not checked to be from Paris on. -/
+theorem exists_atFork_iff_of_anyPayload {j : Lean.Json} {p : Json.AnyPayload}
+    (h : Json.anyPayload j = .ok p) :
+    (∃ q : ExecutionPayload fork, p.atFork fork = .ok q) ↔
+      (p.version = 1 ∧ fork < .shapella) ∨ (p.version = 2 ∧ fork = .shapella) ∨
+        (p.version = 3 ∧ .dencun ≤ fork) := by
+  obtain ⟨hv, hw, hb, he⟩ := Json.shape_of_anyPayload h
+  rw [exists_atFork_iff]
+  -- Each version fixes which fields are present, and the order of the forks does the rest.
+  rcases hv with hv | hv | hv <;> simp only [hw, hb, he, hv] <;> cases fork <;> decide
 
 end EthLib.Engine
