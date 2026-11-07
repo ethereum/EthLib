@@ -436,6 +436,16 @@ No theorem states unforgeability.
 The AES theorems are correctness statements, and none states a security property.
 `invCipher_cipher` and `ciphInv_ciph` (`Proofs/Aes/Block.lean`) prove that the inverse cipher of FIPS 197 undoes the cipher, for every key schedule and so for every key.
 `sbox_eq` proves that each entry of the S-box table equals the inverse in GF(2^8) followed by the affine map of FIPS 197 §5.1.1.
+`ciph_eq_spec` proves that AES-128 and AES-256 equal a model of FIPS 197, for every key and every block.
+The model follows Algorithms 1 and 2 of FIPS 197 over the state `s[r, c]` of §3.4.
+It multiplies bytes as polynomials modulo `m(x)`, and it builds its S-box from the inverse `b^254` and the affine map of §5.1.1.
+So the model shares no table and no GF(2^8) arithmetic with the code.
+`sbox_eq_spec` proves that each entry of the S-box table equals the S-box of the model.
+`getElem_keyExpansion_of_lt` proves that the first `Nk` words of the key schedule are the words of the key.
+`getElem_keyExpansion_of_le` proves that each later word follows the recurrence of Algorithm 2, for a key of at least one word.
+EthLib has no AES-192, so no theorem covers it.
+No theorem compares the inverse cipher with a model of Algorithm 3.
+`ciphInv_spec_ciph` proves only that the inverse cipher undoes the cipher of the model.
 `ctr_ctr` (`Proofs/Aes/Ctr.lean`) proves that CTR decryption of SP 800-38A returns the plaintext, for every forward cipher and initial counter.
 `repeat_inc_injOn` proves that, for `m <= 128`, the first `2^m` counters that the standard increment gives from one block are distinct.
 The CTR keystream applies one increment per block, so these are the counters of the first `2^m` blocks of a message, as Appendix B.1 states.
