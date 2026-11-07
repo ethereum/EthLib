@@ -44,10 +44,10 @@ LEAF_KNOWN_ANSWER = 0xA5C3_7E19
 LEAF_FIRST = 0
 
 # The first leaf of the second bottom tree, so the top key changes.
-LEAF_SECOND_TREE = 1 << 16
+LEAF_SECOND_TREE = 1 << xmss.LAYER_HEIGHT
 
 # The last leaf of the last bottom tree.
-LEAF_LAST = (1 << 32) - 1
+LEAF_LAST = (1 << (8 * xmss.LEAF_INDEX_SIZE)) - 1
 
 
 # ---- Committed cases -------------------------------------------------------

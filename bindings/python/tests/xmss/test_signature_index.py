@@ -7,7 +7,7 @@ from ethlib.cryptography import xmss
 
 from . import fixtures
 
-# Each signature carries its leaf index in its first 4 bytes, little-endian.
+# Each signature carries its leaf index in its first LEAF_INDEX_SIZE bytes, little-endian.
 # The expected index of each signed case is the index it was signed at, not a value read back.
 
 HANDLER = "signature_index"
