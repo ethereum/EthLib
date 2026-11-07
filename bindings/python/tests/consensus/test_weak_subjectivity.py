@@ -213,7 +213,7 @@ def test_electra_bound_is_reached():
 
 def test_gloas_bound_is_reached():
     # The proved bound at mainnet is 1658 epochs, from the 64-bit cap 10 * t < 2^64.
-    # The validators hold 1406271487 ether in all, so 10 * t is just below 2^64 Gwei.
+    # The validators hold 1406271487 ether in all, so 10 * t is below 2^64 Gwei.
     # The exit churn is 42915 ether, the activation churn 256 and the consolidation churn 21457.
     # So the weighted churn is 50152333333333 Gwei, and 10 * t // (200 * churn) = 1402, by hand.
     full = MAX_EFFECTIVE_BALANCE_ELECTRA * GWEI

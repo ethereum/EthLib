@@ -459,7 +459,9 @@ theorem computeWeakSubjectivityPeriodGloas_le {config : Config}
 
 Below the activation cap of 256 ether, the exit churn is below 256 ether and `t < 8,421,376` ether.
 
-At or above the cap, the activation third contributes 85 ether, and `10 t < 2^64` caps the churn. -/
+At or above the cap, the activation third contributes 256 / 3 ether, about 85.3.
+
+The precondition `10 t < 2^64` then bounds the total `t`. -/
 theorem computeWeakSubjectivityPeriodGloas_le_mainnet
     {state : BeaconState Preset.mainnet fork} {period : Epoch} (gloas : .glamsterdam ≤ fork)
     (h : computeWeakSubjectivityPeriodGloas Config.mainnet state = .ok period) :
