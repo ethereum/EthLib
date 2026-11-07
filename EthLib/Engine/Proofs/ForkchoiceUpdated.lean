@@ -19,11 +19,11 @@ The update fails in one case only.
 
 The head is valid and not below the known finalized block.
 
-But its safe or its finalized block is off the chain of the head.
+But its safe or its finalized block is neither zero nor on the chain of the head.
+
+Otherwise such a head is valid and becomes the head.
 
 A head that the execution layer does not hold gives a syncing update.
-
-A valid head with its safe and finalized blocks on its chain is valid and becomes the head.
 
 An invalid head names as latest valid hash a valid block of its own chain.
 
@@ -211,7 +211,7 @@ theorem forkchoiceUpdated_of_unknown (hNone : tree.lookup state.headBlockHash = 
     forkchoiceUpdated tree finalized state = .ok (⟨.syncing, none⟩, none) := by
   simp [forkchoiceUpdated, hNone, pure, Except.pure]
 
-/-- A valid head with its safe and finalized blocks on its chain becomes the head.
+/-- A valid head with its safe and finalized blocks zero or on its chain becomes the head.
 
 The head must not be below the known finalized block. -/
 theorem forkchoiceUpdated_of_onChain {p : KnownPayload}
