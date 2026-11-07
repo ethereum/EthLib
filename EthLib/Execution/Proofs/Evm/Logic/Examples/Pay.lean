@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Proofs.Evm.Logic.Callee
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.CallFlag
+public import EthLib.Execution.Proofs.State.Frame
 
 /-!
 # Proofs: a contract that sends value to an address and returns whether the call succeeded
@@ -23,6 +24,8 @@ When it holds at least `v`, the call sends `v` with the message.
 When the address holds no code and is no precompile, that message ends with no error.
 
 Then, with the runner of messages of the interpreter, the contract returns 1, or the run aborts.
+
+In the state that the run ends in, the current account holds `v` less and the address `v` more.
 
 The call pays 9000 for the value, and 25000 more when the callee is dead, by EIP-161.
 
@@ -205,9 +208,14 @@ The gas, the state and the substate are those that CALL gives. -/
 def Returned (callee : Evm fork Nat → Message fork → Evm fork Nat → Prop) (calleeCode : ByteArray)
     (cold : Bool) (gas : Nat) (evm : Evm fork Nat) : Prop :=
   ∃ caller msg child, callee caller msg child ∧
+    caller.state =
+      (state.recordAccountRead (toAddressMasked (target message.data))).recordAccountRead
+        message.currentTarget ∧
+    msg.caller = message.currentTarget ∧
+    msg.currentTarget = toAddressMasked (target message.data) ∧
     msg.target = some (toAddressMasked (target message.data)) ∧
     msg.codeAddress = some (toAddressMasked (target message.data)) ∧ msg.code = calleeCode ∧
-    msg.value = value message.data ∧
+    msg.value = value message.data ∧ msg.shouldTransferValue = true ∧
     Halted false (wordBytes (CallFlag.flag child))
       (gas - 27 - ((messageCallGas fork (value message.data) (65535 : U256).toNat (gas - 27) 0
           (price fork state message cold)).cost + 0) +
@@ -238,8 +246,8 @@ theorem spec (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
   rw [extendMemory_empty, memoryExtend_zero] at h
   refine SpecUnder.seq (HoareUnder.of_hoare (operands (by omega))) (HoareUnder.seq h ?_)
   apply HoareUnder.of_hoare
-  rintro evm ⟨caller, msg, child, hcallee, -, -, -, -, -, -, hmtg, hmca, hmcode, -, hmv, -, -,
-    hat⟩
+  rintro evm ⟨caller, msg, child, hcallee, -, hst, -, -, hmc, hmt, hmtg, hmca, hmcode, -, hmv,
+    hmst, -, hat⟩
   have hleft : 15 ≤ gas - 27 - ((messageCallGas fork (value message.data) (65535 : U256).toNat
       (gas - 27) 0 (price fork state message cold)).cost + 0) + child.gas := by
     have htw : fork ≥ .tangerineWhistle := Nat.le_trans (by decide) hfork
@@ -253,7 +261,8 @@ theorem spec (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
   rw [hmem] at hat
   obtain ⟨stopped, hreach, halted, hq⟩ := finish (fork := fork) (message := message)
     (word := CallFlag.flag child) rfl hleft evm hat
-  exact ⟨stopped, hreach, halted, caller, msg, child, hcallee, hmtg, hmca, hmcode, hmv, hq⟩
+  exact ⟨stopped, hreach, halted, caller, msg, child, hcallee, hst, hmc, hmt, hmtg, hmca, hmcode,
+    hmv, hmst, hq⟩
 
 /-- The contract sends the value to an address with no code and returns 1, or the run aborts.
 
@@ -280,11 +289,88 @@ theorem runFrame_process_noCode (hfork : .berlin ≤ fork) (hglam : fork < .glam
     simp [delegatedAddress, isValidDelegation, DELEGATION_SIZE]
   rcases (spec (callee := NoCodeSucceeds) hfork hglam hv hstatic hbal hcode hdel hdepth hcold
       hgas).runFrame (meets_process_noCode fork bound) start within with
-    ⟨stopped, ran, caller, msg, child, hcallee, hmtg, hmca, hmcode, -, hhalt⟩ | aborted
+    ⟨stopped, ran, caller, msg, child, hcallee, -, -, -, hmtg, hmca, hmcode, -, -, hhalt⟩ |
+      aborted
   · have hnone : child.error = none :=
       hcallee hmcode (by simp [hmtg]) (by simp [precompileAddress, hmca, hpre])
     have hflag : CallFlag.flag child = 1 := by simp [CallFlag.flag, hnone]
     exact .inl ⟨stopped, ran, hhalt.2.1, by rw [hhalt.2.2.1, hflag]⟩
+  · exact .inr aborted
+
+/-- The contract sends the value to an address with no code, and the balances move by it.
+
+That holds with the runner of messages of the interpreter, or the run aborts.
+
+The address is no precompile and is not the current address.
+
+The current account holds at least the value.
+
+In the state that the run ends in, the current account holds `v` less and the address `v` more. -/
+theorem runFrame_process_paid (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+    {cold : Bool} (hv : value message.data ≠ 0) (hstatic : message.isStatic = false)
+    (hbal : value message.data ≤ (state.getAccount message.currentTarget).balance)
+    (hcode : state.getCode (state.getAccount (toAddressMasked (target message.data))).codeHash =
+      .ok .empty)
+    (hpre : Precompiles.isPrecompile fork
+      (toAddressMasked (target message.data)).toU256.toNat = false)
+    (hne : message.currentTarget ≠ toAddressMasked (target message.data))
+    (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
+    (hcold : decide (toAddressMasked (target message.data) ∉ substate.accessedAddresses) = cold)
+    {gas : Nat} (hgas : 27 + price fork state message cold + 960 ≤ gas) {bound : Nat}
+    {evm : Evm fork Nat} (start : At CODE message 0 [] .empty gas state substate evm)
+    (within : GasMeter.gasHeld evm.gas ≤ bound) :
+    (∃ stopped, runFrame (step fork) (step_decreases fork) bound (processRunner fork bound) evm
+        within = .ok stopped ∧ stopped.error = none ∧ stopped.output = wordBytes 1 ∧
+      (stopped.state.getAccount message.currentTarget).balance =
+        (state.getAccount message.currentTarget).balance - value message.data ∧
+      (stopped.state.getAccount (toAddressMasked (target message.data))).balance =
+        (state.getAccount (toAddressMasked (target message.data))).balance + value message.data) ∨
+    ∃ e, runFrame (step fork) (step_decreases fork) bound (processRunner fork bound) evm
+        within = .error e ∧ e.aborts = true := by
+  have hdel : Fork.pectra ≤ fork → delegatedAddress ByteArray.empty = none := fun _ => by
+    simp [delegatedAddress, isValidDelegation, DELEGATION_SIZE]
+  rcases (spec (callee := PaidNoCode) hfork hglam hv hstatic hbal hcode hdel hdepth hcold
+      hgas).runFrame (meets_paidNoCode bound) start within with
+    ⟨stopped, ran, caller, msg, child, hcallee, hst, hmc, hmt, hmtg, hmca, hmcode, hmv, hmst,
+      hhalt⟩ | aborted
+  · obtain ⟨moved, hmove, hnone, hcs⟩ := hcallee hmcode (by simp [hmtg])
+      (by simp [precompileAddress, hmca, hpre]) ⟨hmst, by rw [hmv]; exact hv⟩
+    have hflag : CallFlag.flag child = 1 := by simp [CallFlag.flag, hnone]
+    have hstate : stopped.state = moved := by
+      rw [hhalt.2.2.2.2.1, ← hcs]
+      simp [incorporateChild, hnone]
+    rw [hmc, hmt, hmv] at hmove
+    obtain ⟨-, -, hsender, hrecipient, -⟩ := TransactionState.moveEther_eq_ok hne hmove
+    -- The start state reads each account as the state of the frame does.
+    have hread : ∀ a, (startState fork msg caller.state).getAccount a = state.getAccount a ∨
+        a = toAddressMasked (target message.data) := by
+      intro a
+      by_cases ha : a = toAddressMasked (target message.data)
+      · exact .inr ha
+      · left
+        unfold startState
+        split
+        · rw [hmt, TransactionState.getAccount_touchAccount ha, hst]
+          rfl
+        · rw [hst]
+          rfl
+    have hB : (startState fork msg caller.state).getAccount
+        (toAddressMasked (target message.data)) =
+          state.getAccount (toAddressMasked (target message.data)) := by
+      unfold startState
+      split
+      · rw [hmt, TransactionState.getAccount_touchAccount_self, hst]
+        rfl
+      · rw [hst]
+        rfl
+    have hP : (startState fork msg caller.state).getAccount message.currentTarget =
+        state.getAccount message.currentTarget := by
+      rcases hread message.currentTarget with h | h
+      · exact h
+      · exact absurd h hne
+    refine .inl ⟨stopped, ran, hhalt.2.1, by rw [hhalt.2.2.1, hflag], ?_, ?_⟩
+    · rw [hstate, hsender, hP]
+    · rw [hstate, hrecipient, hB]
   · exact .inr aborted
 
 end EthLib.Execution.Evm.Logic.Pay
