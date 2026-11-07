@@ -53,4 +53,19 @@ theorem cost_add_memoryCost_le {fork : Fork} (h : fork ≥ .tangerineWhistle)
   simp only [h, enough, and_self, ite_true]
   omega
 
+/-- The gas of a call, from Tangerine Whistle, when the frame can pay the extra price and memory.
+
+The call passes on at most all but one 64th of what is left, and pays that and the extra price.
+
+The stipend comes on top of the gas it passes on, for a call with value. -/
+theorem messageCallGas_of_le {fork : Fork} (h : fork ≥ .tangerineWhistle)
+    {value : U256} {gas gasLeft memoryCost extraGas stipend : Nat}
+    (enough : extraGas + memoryCost ≤ gasLeft) :
+    messageCallGas fork value gas gasLeft memoryCost extraGas stipend =
+      ⟨min gas (maxMessageCallGas (gasLeft - memoryCost - extraGas)) + extraGas,
+        min gas (maxMessageCallGas (gasLeft - memoryCost - extraGas)) +
+          if value = 0 then 0 else stipend⟩ := by
+  unfold messageCallGas
+  simp only [h, enough, and_self, ite_true]
+
 end EthLib.Execution.Evm
