@@ -133,13 +133,25 @@ The inverse of `0` is `0`. -/
 /-- Field division `a * b⁻¹`. -/
 instance : Div Fp := ⟨fun a b => a * b.inverse⟩
 
+open Montgomery in
+/-- The exponent `(p + 1) / 4` of the square root, as twelve 32-bit limbs, the lowest first. -/
+@[inline] def sqrtExponent : Limbs.T 12 :=
+  ⟨4294961835, 4001349631, 2891251711, 128647167, 1034698121, 3654038696, 1021396143,
+    3642610401, 2429741877, 2462509549, 2388654502, 109069434⟩
+
+open Montgomery in
+/-- The limbs of the exponent write `(p + 1) / 4`. -/
+theorem val_sqrtExponent : Limbs.val sqrtExponent = (modulus + 1) / 4 := by decide
+
 /-- Square root, valid since `p = 3 mod 4`.
 
 The root it returns is `a ^ ((p + 1) / 4)`.
 
+The power runs four bits of the exponent at a time.
+
 It fails when `a` is not a square. -/
 def sqrt (a : Fp) : Except BlsError Fp :=
-  let cand := powNat a ((modulus + 1) / 4)
+  let cand : Fp := Montgomery.powLimbs a sqrtExponent
   if (cand * cand).beq a then .ok cand else .error .notASquare
 
 /-- The operations that the extensions and curves of BLS12-381 read from `Fp`. -/

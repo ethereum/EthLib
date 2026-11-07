@@ -66,8 +66,9 @@ theorem sqrt_complete {a b : Fp} (h : b * b = a) :
     apply toZMod.injective
     rw [toZMod_mul, toZMod_powNat]
     exact pow_sqrt_exponent (by rw [← toZMod_mul, h])
-  rw [Fp.sqrt, ite_eq_left (show (Fp.powNat a ((Fp.modulus + 1) / 4) *
-    Fp.powNat a ((Fp.modulus + 1) / 4)).beq a = true from Fp.beq_iff.mpr hcand)]
+  rw [Fp.sqrt, Fp.powLimbs_sqrtExponent,
+    ite_eq_left (show (Fp.powNat a ((Fp.modulus + 1) / 4) *
+      Fp.powNat a ((Fp.modulus + 1) / 4)).beq a = true from Fp.beq_iff.mpr hcand)]
 
 /-! ## Big-endian bytes
 
