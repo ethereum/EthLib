@@ -13,6 +13,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Examples.SlotOfCalldata
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.SumLoop
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.CallFlag
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.CallReturn42
+public import EthLib.Execution.Proofs.Evm.Logic.Examples.CallChain
 
 /-!
 # `EthLib.Execution.Proofs.Evm.Logic`

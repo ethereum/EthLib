@@ -22,6 +22,8 @@ They say nothing about the original words of storage, the created accounts or th
 The end of a transaction clears the transient storage of every address, so it is left out.
 
 Code is kept under its hash and not under an address, so the statements leave it out.
+
+A touch of an account keeps every code, and the account at every other address.
 -/
 
 @[expose] public section
@@ -112,6 +114,18 @@ theorem sameOutside_touchAccount (tx : TransactionState) (address : Address) :
   split
   · exact SameOutside.refl _ tx
   · exact sameOutside_setAccount tx address _
+
+/-- A touch of an account keeps the code of every code hash. -/
+theorem getCode_touchAccount (tx : TransactionState) (address : Address) (hash : Hash32) :
+    (tx.touchAccount address).getCode hash = tx.getCode hash := by
+  unfold touchAccount
+  split <;> rfl
+
+/-- A touch of an account keeps the account at every other address. -/
+theorem getAccount_touchAccount {tx : TransactionState} {address other : Address}
+    (hne : other ≠ address) : (tx.touchAccount address).getAccount other = tx.getAccount other := by
+  unfold getAccount
+  rw [(sameOutside_touchAccount tx address other (by simpa using hne)).1]
 
 /-- A write of transient storage touches the address it names only. -/
 theorem sameOutside_setTransientStorage (tx : TransactionState) (address : Address)

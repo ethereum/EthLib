@@ -36,15 +36,12 @@ variable {fork : Fork} {message : Message fork} {state : TransactionState} {subs
 
 /-- The assumption that the callee runs the code that returns 42, as its specification says. -/
 abbrev Callee : Evm fork Nat → Message fork → Evm fork Nat → Prop :=
-  RunsAs Return42.CODE (fun message => 18 ≤ message.gas) fun message state substate =>
+  RunsAs Return42.CODE (fun message _ _ => 18 ≤ message.gas) fun message state substate =>
     Return42.Returned (message.gas - 18) (startState fork message state) substate
 
 /-- The runner of the interpreter meets the assumption, for every bound. -/
 theorem meets (bound : Nat) :
-    Meets (bound := bound) (Callee (fork := fork)) fun (caller : Evm fork Nat) message _ =>
-      match message.target with
-      | some _ => processMessage fork message caller.state caller.substate.child
-      | none => processCreateMessage fork message caller.state caller.substate.child :=
+    Meets (Callee (fork := fork)) (processRunner fork bound) :=
   meets_of_spec (fun _ _ _ _ hg => Return42.spec hg) bound
 
 /-- The caller returns the word 1 when the address holds the code that returns 42.
@@ -75,7 +72,7 @@ theorem runFrame_process (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
         evm within = .error e ∧ e.aborts = true := by
   rcases CallFlag.runFrame_spec hfork hglam hcode (fun _ => by decide) hdepth hcold hgas
     (meets bound) start within with ⟨stopped, ran, hr⟩ | aborted
-  · obtain ⟨caller, msg, child, hcallee, -, -, hmg, -, hmtg, hmca, hmcode, hmv, hhalt⟩ := hr
+  · obtain ⟨caller, msg, child, hcallee, -, -, hmg, -, hmtg, hmca, hmcode, hmv, -, -, hhalt⟩ := hr
     have hpre : precompileAddress fork msg = none := by
       simp [precompileAddress, hmca, hprecompile]
     have hg : 18 ≤ msg.gas := by

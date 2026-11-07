@@ -656,7 +656,11 @@ The specification is one with no message, from the frame that a message with tha
 The assumption covers a message with that code and a target, with no value and no precompile.
 Its frame starts from the state of the caller, with its target touched before Paris, as `processMessage` does.
 The frame that ends the message is a stopped frame of the specification, rolled back on a failure.
-No theorem yet proves that this runner meets an assumption for a callee that sends messages, sends value, or is a precompile.
+`meets_of_specUnder` proves the same for a callee that sends messages, from a triple under an assumption `A` on its own messages.
+It asks that the runner meet `A` at every bound.
+`meets_of_spec` is its case with the assumption that always holds.
+No theorem yet proves that this runner meets an assumption for a callee that sends value or is a precompile.
+No theorem reasons about a callee that calls back into its caller and depends on the state that the caller wrote.
 `SpecUnder fork callee P Q` holds under every runner that meets `callee`, and for every bound that holds the gas of the frame.
 From every frame of `P`, the steps of `StepBy` reach a stopped frame of `Q`, or a frame whose runner fails on its message.
 So `SpecUnder.runFrame` concludes that `runFrame` returns a stopped frame of `Q`, or fails with an error that aborts.
@@ -676,6 +680,12 @@ That assumption says that a message with no code, to an account that is no preco
 So `CallFlag.runFrame_process_noCode` proves that the contract returns 1 when the address holds no code and is no precompile, unless the run aborts.
 `CallReturn42.runFrame_process` composes the contract with the contract that returns 42 at the called address, through `meets_of_spec`.
 With the runner of the interpreter, the caller then stops with no error and returns the word 1, or the run aborts.
+`CallChain.runFrame_process` chains three frames.
+The contract calls an address that holds its own code, which calls the address of the word 0, which holds no code.
+With the runner of the interpreter, the outer frame stops with no error and returns the word 1, or the run aborts.
+Before Paris, the call to the address of the word 0 may create its empty account.
+No frame writes the account of the called address or of the outer frame.
+So the result holds even when the two are the same address.
 No rule covers CREATE, a call with value, DELEGATECALL or STATICCALL.
 
 ### SHA-256 precompile

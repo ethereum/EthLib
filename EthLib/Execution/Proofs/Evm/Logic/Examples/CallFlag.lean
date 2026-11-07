@@ -161,7 +161,7 @@ theorem finish {word : U256} {gas : Nat} {state : State.TransactionState} {subst
 
 Some caller and some frame that ends the message meet the assumption.
 
-The message calls the address and runs `calleeCode`, with no value.
+The message calls the address and runs `calleeCode`, with no value and no data, one frame deeper.
 
 The contract returns the word that CALL pushed for that frame.
 
@@ -176,7 +176,8 @@ def Returned (callee : Evm fork Nat → Message fork → Evm fork Nat → Prop) 
     msg.currentTarget = toAddressMasked (target message.data) ∧
     msg.target = some (toAddressMasked (target message.data)) ∧
     msg.codeAddress = some (toAddressMasked (target message.data)) ∧ msg.code = calleeCode ∧
-    msg.value = 0 ∧ Halted false (wordBytes (flag child))
+    msg.value = 0 ∧ msg.data = .empty ∧ msg.depth = message.depth + 1 ∧
+    Halted false (wordBytes (flag child))
       (gas - 24 - (callGas 65535 (gas - 24) (accessCost cold) + accessCost cold) + child.gas - 15)
       (incorporateChild fork caller child).state (incorporateChild fork caller child).substate evm
 
@@ -223,7 +224,7 @@ theorem spec (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
   obtain ⟨stopped, hreach, halted, hq⟩ := finish (fork := fork) (message := message)
     (word := flag child) hleft evm hat
   exact ⟨stopped, hreach, halted, caller, msg, child, hcallee, hle, hst, hmg, hmt, hmtg, hmca,
-    hmcode, hmv, hq⟩
+    hmcode, hmv, hmd, hmdep, hq⟩
 
 /-- The loop of the interpreter runs the code to its specification, or the run aborts.
 
@@ -299,7 +300,7 @@ theorem spec_noCode (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {co
   apply (spec hfork hglam hcode hdel hdepth hcold hgas).consequence (fun _ hp => hp)
   intro evm hr
   refine ⟨hr, ?_⟩
-  obtain ⟨_, msg, child, hcallee, -, -, -, -, htarget, hca, hmcode, -, hhalt⟩ := hr
+  obtain ⟨_, msg, child, hcallee, -, -, -, -, htarget, hca, hmcode, -, -, -, hhalt⟩ := hr
   have hnone : child.error = none :=
     hcallee hmcode (by simp [htarget]) (by simp [precompileAddress, hca, hpre])
   have hflag : flag child = 1 := by simp [flag, hnone]
