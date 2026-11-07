@@ -32,13 +32,7 @@ namespace EthLib.Execution.Evm.Precompiles.AltBn128
 
 open EthLib.Cryptography.AltBn128
 open EthLib.Base (bytesToNat natToBytes natToBytes_length bytesToNat_natToBytes
-  bytesToNat_natToBytes_of_lt natToBytes_bytesToNat)
-
-/-- Zero on `len` bytes is `len` zero bytes. -/
-private theorem natToBytes_zero (len : Nat) : natToBytes len 0 = List.replicate len 0 := by
-  induction len with
-  | zero => rfl
-  | succ len ih => rw [natToBytes, Nat.zero_div, ih, List.replicate_succ']; rfl
+  bytesToNat_natToBytes_of_lt natToBytes_bytesToNat natToBytes_zero_right)
 
 /-- The point `(0, 0)` is not on the curve, since `0 ≠ 3` in `Fp`. -/
 theorem isOnCurve_affine_zero : (Point.affine 0 0).isOnCurve = false := by decide
@@ -55,7 +49,7 @@ theorem bytesToG1_g1ToBytes {p : Point} (hp : p.isOnCurve = true) :
     -- Both halves are 32 zero bytes, which read as `(0, 0)`.
     have hhalf : bytesToNat (natToBytes 32 0) = 0 := bytesToNat_natToBytes_of_lt (by decide)
     have hbytes : g1ToBytes .infinity = natToBytes 32 0 ++ natToBytes 32 0 := by
-      rw [natToBytes_zero, List.replicate_append_replicate]
+      rw [natToBytes_zero_right, List.replicate_append_replicate]
       rfl
     have hpos : 0 < Fp.modulus := by decide
     simp only [bytesToG1, hbytes, List.take_left' (natToBytes_length 32 0),
@@ -95,7 +89,7 @@ theorem g1ToBytes_of_bytesToG1 {raw : List UInt8} {p : Point} (hlen : raw.length
         cases h
         rw [hzero.1] at htake
         rw [hzero.2] at hdrop
-        rw [← hsplit, ← htake, ← hdrop, natToBytes_zero, List.replicate_append_replicate]
+        rw [← hsplit, ← htake, ← hdrop, natToBytes_zero_right, List.replicate_append_replicate]
         rfl
       · split at h
         · cases h

@@ -182,7 +182,7 @@ private theorem ofFn_toUInt8_eq_natToBytes (n z : Nat) :
   | zero => rfl
   | succ n ih =>
     -- The last byte is `z mod 256`, and the bytes before it write `z / 256`.
-    rw [List.ofFn_succ_last, Base.natToBytes, ← ih (z / 256)]
+    rw [List.ofFn_succ_last, Base.natToBytes_succ, ← ih (z / 256)]
     congr 1
     · apply List.ofFn_inj.mpr
       funext i

@@ -81,7 +81,7 @@ def bytesToKzgProof (b : Bytes48) : Except KzgError KZGProof :=
 
 /-- Fiat-Shamir challenge for a (blob, commitment) pair. -/
 def computeChallenge (blob : Blob) (commitment : KZGCommitment) : Fr :=
-  let degreePoly := intToBytesBE FIELD_ELEMENTS_PER_BLOB 16
+  let degreePoly : ByteArray := ⟨(Base.natToBytes 16 FIELD_ELEMENTS_PER_BLOB).toArray⟩
   let data := FIAT_SHAMIR_PROTOCOL_DOMAIN ++ degreePoly ++ ⟨blob.toArray⟩ ++ ⟨commitment.toArray⟩
   Fr.hashToBlsField data
 
@@ -196,8 +196,8 @@ def verifyKzgProof (setup : TrustedSetup)
 It hashes the domain, the degree bound, the number of openings, and each opening in order. -/
 def computeVerifyKzgProofBatchChallenge (commitments : Array KZGCommitment) (zs ys : Array Fr)
     (proofs : Array KZGProof) : Fr :=
-  let degreePoly := intToBytesBE FIELD_ELEMENTS_PER_BLOB 8
-  let numCommitments := intToBytesBE commitments.size 8
+  let degreePoly : ByteArray := ⟨(Base.natToBytes 8 FIELD_ELEMENTS_PER_BLOB).toArray⟩
+  let numCommitments : ByteArray := ⟨(Base.natToBytes 8 commitments.size).toArray⟩
   let data := ((commitments.zip zs).zip (ys.zip proofs)).foldl
     (init := RANDOM_CHALLENGE_KZG_BATCH_DOMAIN ++ degreePoly ++ numCommitments)
     fun data ((commitment, z), (y, proof)) => data

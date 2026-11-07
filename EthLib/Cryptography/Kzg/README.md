@@ -110,9 +110,9 @@ Big-endian decoding is injective on byte strings of one length (`Base.bytesToNat
 The length matters: without it decoding is not injective, since `00` and `00 00` both decode to 0.
 
 In the other direction, take the `len`-byte encoding of `n`.
-Its decoding is `n` when `n < 256^len` (`bytesToNat_intToBytesBE_of_lt`).
-Otherwise it is `n mod 256^len` (`bytesToNat_intToBytesBE`).
-Encoding a decoded string at its own length returns that string (`intToBytesBE_bytesToNat`).
+Its decoding is `n` when `n < 256^len` (`Base.bytesToNat_natToBytes_of_lt`).
+Otherwise it is `n mod 256^len` (`Base.bytesToNat_natToBytes`).
+Encoding a decoded string at its own length returns that string (`Base.natToBytes_bytesToNat`).
 
 **Bit reversal.**
 A blob stores its values in bit-reversed order of the roots of unity.
