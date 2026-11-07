@@ -136,16 +136,21 @@ def test_short_root() -> None:
         trie.verify_account_proof(STATE_ROOT[:31], _WITH_STORAGE)
 
 
-# The two proofs below are one leaf each, built by hand so that the value under the key is not what
-# the check reads. The leaf of an address is the list of 0x20 followed by the hash of the address
-# (the leaf flag of the hex-prefix encoding, then all 64 nibbles) and the value.
+# The two proofs below are built by hand, with one leaf each.
+# In each, the value under the key is not what the check reads.
+#
+# The leaf of an address is a list of two items: its path and its value.
+# The path is 0x20 followed by the hash of the address.
+# 0x20 is the leaf flag of the hex-prefix encoding.
+# The hash then gives all 64 nibbles of the path.
 _ADDRESS = "0x" + "11" * 20
 _ZERO = "0x" + "00" * 32
 
 
 def test_account_not_rlp() -> None:
     """A leaf whose value is not the RLP encoding of an account does not hold."""
-    # The value is the string 0x01, which is an RLP item but no list of an account's four fields.
+    # Fixture: the value of the leaf is the string 0x01.
+    # Why: 0x01 is an RLP item, but not the list of the four fields of an account.
     node = "e3a120e2c07404b8c1df4c46226425cac68c28d27a766bbddce62309f36724839b22c001"
     root = bytes.fromhex("474cd3297ebe904d4ec8b9a233561a8729f8f3c2994fb1e046346ed9ab3b647a")
     answer = {
@@ -166,8 +171,10 @@ def test_account_not_rlp() -> None:
 
 def test_slot_not_rlp_word() -> None:
     """A slot whose value is not the RLP encoding of a word does not hold, with its index."""
-    # The account is valid and its storage root is that of a trie with one leaf, whose value is
-    # 0xc0, the empty list. The balance and the nonce are 0, so the answer's fields match.
+    # Fixture: a valid account whose storage root is that of a trie with one leaf.
+    # The value of that leaf is 0xc0, the empty list.
+    # The balance and the nonce are 0, so the fields of the answer match.
+    # Why: the account check passes, so the check of the slot is reached.
     account_node = (
         "f86aa120e2c07404b8c1df4c46226425cac68c28d27a766bbddce62309f36724839b22c0"
         "b846f8448080a0786f633dca032934929785b4c30dec1afc9f7fa80cb6f77aa90a08d7dc45385f"

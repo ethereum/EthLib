@@ -74,13 +74,16 @@ def test_rejects_short_root() -> None:
         trie.verify_proof(STATE_ROOT[:31], _hex(_RESPONSE["address"]), proof, secured=True)
 
 
-# Hand-built proofs of the key 0x01 in a trie that does not hash its keys, one node each. The root
-# is the hash of the node, so the proof gets past the hash and fails on the shape of the node.
+# Proofs of the key 0x01, built by hand, with one node each.
+# The trie does not hash its keys.
+# The root is the hash of the node, so each proof passes the hash check.
+# Each proof then fails on the shape of its node.
 _KEY = bytes([1])
 
 _NODE_ERRORS = [
     pytest.param(
-        # A leaf whose path starts with the nibble 4, which no flag and parity give.
+        # A leaf whose path starts with the nibble 4.
+        # No flag and parity give the nibble 4.
         "4fa752b07e557b1947c490ba35fd16c769a0d3438f6dec179798210a7b74f6e7",
         "c24001",
         104,
@@ -89,7 +92,8 @@ _NODE_ERRORS = [
         id="hex_prefix",
     ),
     pytest.param(
-        # A list of three items, which is neither a leaf, an extension nor a branch.
+        # A list of three items.
+        # It is neither a leaf, an extension nor a branch.
         "8d3fc38cad3086ab848b1d779e0a7c77b164869d4546e1b6b9a4feb717dd8686",
         "c3010203",
         105,
@@ -97,7 +101,8 @@ _NODE_ERRORS = [
         id="invalid_node",
     ),
     pytest.param(
-        # A branch whose child at the nibble 0, where the key goes, is a string of 5 bytes.
+        # A branch whose child at the nibble 0 is a string of 5 bytes.
+        # The key goes through the nibble 0.
         "c8d66ee53b41a50fbf8280e8e0c5972d54fe8543bfa52a630b0b9e38234aecc1",
         "d685070707070780808080808080808080808080808080",
         106,
@@ -105,7 +110,8 @@ _NODE_ERRORS = [
         id="invalid_reference",
     ),
     pytest.param(
-        # An extension whose path is empty, with the 32-byte reference 0x09 repeated as its child.
+        # An extension whose path is empty.
+        # Its child is a 32-byte reference: the byte 0x09, 32 times.
         "9241117e4ec9e0713a2e7db7d44fbb7347f42337308ee0fee823168c181cad79",
         "e200a0" + "09" * 32,
         107,
@@ -123,12 +129,14 @@ def test_rejects_malformed_node(root: str, node: str, code: int, name: str) -> N
     assert error.value.code == code
 
 
-# A leaf at the path 0x01 with the value 0x05: the list of the path 0x2001 and the string 0x05.
+# A leaf at the path 0x01 with the value 0x05.
+# It is the list of the path 0x2001 and the string 0x05.
 _LEAF_ROOT = bytes.fromhex("5aa296fd5f7f7632ea2aa4071c09ffc08a6135c58510573f83c1e0c49dc276c4")
 _LEAF = bytes.fromhex("c482200105")
 
 
 def test_leaf_proof() -> None:
+    """A proof of one leaf gives the value of the leaf."""
     assert trie.verify_proof(_LEAF_ROOT, _KEY, [_LEAF], secured=False) == bytes([5])
 
 
