@@ -664,6 +664,13 @@ On a match, it returns the word of storage at the Keccak-256 hash of two words o
 The slot is the Keccak-256 hash of the address of the caller as a word and then the word 0.
 The slot then holds the word, for 83 gas and SSTORE, from Berlin to before Glamsterdam.
 No theorem covers a read at a slot derived from another key word, which needs the two hashes to differ.
+`Logic.branchTable` (`Logic/Branch.lean`) is the rule for a table of entries that branches on the top word of the stack.
+It holds at every fork with the one-counter meter.
+Each entry is DUP1, a push of a key of `n` bytes, EQ, a push of a destination of `m` bytes, and JUMPI.
+The run jumps to the destination of the first entry whose key is the word, or goes on past the table.
+It pays 22 gas for each entry it tests, and needs each destination to be a valid destination of a jump.
+`KeyBranch.runFrame_key1` and `KeyBranch.runFrame_key2` prove a contract with a table of two keys of 4 bytes, which returns 1 or 2.
+`KeyBranch.runFrame_miss` proves that it reverts with no output on any other word, from Byzantium.
 `Triple.loop` (`Logic/Loop.lean`) proves a loop from an invariant for each value of a natural measure.
 A run of the loop then ends by the measure, not by the gas.
 `SumLoop.runFrame_spec` proves a contract that loops `n` times, for the word `n` of its call data, with the one-counter meter.

@@ -128,6 +128,13 @@ theorem At.rule {byte : UInt8} {op : Op}
   exact ⟨after,
     Step.of_code hp.2.2.2.2.2.2.2.1 hp.1 hp.2.2.2.1 hlt hbyte decoded hrun ok, hpost⟩
 
+/-- The byte `0x5f + n`, for `n` from 1 to 32, decodes as PUSHn. -/
+theorem decode_push (n : Fin 33) (hn : n.val ≠ 0) :
+    Op.decode (0x5f + UInt8.ofNat n.val) = some (.push n) := by
+  revert hn
+  revert n
+  decide
+
 /-- PUSHn, for `n` from 1, pushes the word of the `n` bytes after it, for 3 gas. -/
 theorem push {n : Fin 33} {word : U256} (hn : n.val ≠ 0) (hlt : pc < code.size)
     (hbyte : code[pc] = 0x5f + UInt8.ofNat n.val)
