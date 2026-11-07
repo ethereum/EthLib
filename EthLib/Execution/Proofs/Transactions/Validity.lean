@@ -25,6 +25,8 @@ Its fees are inverted when its priority fee per gas is above its maximum fee per
 
 From Glamsterdam the rules also check its blobs and its authorizations.
 
+Before Glamsterdam the rules give the same result for every sender.
+
 Exact conditions also state when the chain check, the contents check and the whole check pass.
 -/
 
@@ -181,6 +183,14 @@ theorem validateTransaction_eq_ok_iff {fork : Fork} {sender : Address} {tx : Tra
       exact ⟨rfl, hMin, hNonce, hInit, hCap, hFees⟩
     · rintro ⟨rfl, hMin, hNonce, hInit, hCap, hFees⟩
       exact ⟨hMin, hInit, hCap, hNonce, hFees, rfl⟩
+
+/-- Before Glamsterdam, the gas, nonce and fee rules give the same result for every sender. -/
+theorem validateTransaction_sender_of_lt_glamsterdam {fork : Fork} (h : fork < .glamsterdam)
+    (sender sender' : Address) (tx : Transaction) :
+    validateTransaction fork sender tx = validateTransaction fork sender' tx := by
+  unfold validateTransaction
+  rw [minimumGas_sender_of_lt_glamsterdam h sender sender' tx,
+    intrinsicGas_sender_of_lt_glamsterdam h sender sender' tx]
 
 /-- What a transaction that passes the gas, nonce and fee rules satisfies.
 
