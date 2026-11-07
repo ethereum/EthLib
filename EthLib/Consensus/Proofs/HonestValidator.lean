@@ -456,10 +456,10 @@ theorem isAssignedToSyncCommittee_ok_iff {state : BeaconState preset fork}
       ∃ validator, getValidator state validatorIndex = .ok validator ∧
         ((computeSyncCommitteePeriod preset epoch =
             computeSyncCommitteePeriod preset (getCurrentEpoch state) ∧
-          (state.currentSyncCommittee altair).pubkeys.contains validator.pubkey = b) ∨
+          (state.currentSyncCommittee altair).value.pubkeys.contains validator.pubkey = b) ∨
         (computeSyncCommitteePeriod preset epoch =
             computeSyncCommitteePeriod preset (getCurrentEpoch state) + 1 ∧
-          (state.nextSyncCommittee altair).pubkeys.contains validator.pubkey = b)) := by
+          (state.nextSyncCommittee altair).value.pubkeys.contains validator.pubkey = b)) := by
   unfold isAssignedToSyncCommittee
   simp only [bind_ok_iff, mapError_ok_iff]
   generalize computeSyncCommitteePeriod preset epoch = p

@@ -43,7 +43,7 @@ def syncCommitteeAtNextSlot (state : BeaconState preset fork) (altair : .altair 
   let nextSlot ← addChecked state.slot 1
   return if computeSyncCommitteePeriod preset (getCurrentEpoch state) ==
       computeSyncCommitteePeriodAtSlot preset nextSlot
-    then state.currentSyncCommittee altair else state.nextSyncCommittee altair
+    then (state.currentSyncCommittee altair).value else (state.nextSyncCommittee altair).value
 
 /-- From Altair: the keys of the members of a subcommittee, in committee order.
 

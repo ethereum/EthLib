@@ -118,7 +118,7 @@ A member key that no validator holds is an error. -/
 def processSyncAggregate (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (altair : .altair ≤ fork)
     (aggregate : SyncAggregate preset) : Except TransitionError (BeaconState preset fork) := do
-  let committee := state.currentSyncCommittee altair
+  let committee := (state.currentSyncCommittee altair).value
   let bits := aggregate.syncCommitteeBits
   let pubkeys ← syncParticipantPubkeys committee bits
   let previousSlot := saturatingSub state.slot 1

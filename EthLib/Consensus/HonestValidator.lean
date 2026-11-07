@@ -183,9 +183,9 @@ def isAssignedToSyncCommittee (state : BeaconState preset fork) (altair : .altai
     throw (.periodOutOfRange period currentPeriod)
   let pubkey := (← (getValidator state validatorIndex).mapError .accessor).pubkey
   if period = currentPeriod then
-    return (state.currentSyncCommittee altair).pubkeys.contains pubkey
+    return (state.currentSyncCommittee altair).value.pubkeys.contains pubkey
   else
-    return (state.nextSyncCommittee altair).pubkeys.contains pubkey
+    return (state.nextSyncCommittee altair).value.pubkeys.contains pubkey
 
 /-- From Altair: the sync committee subnets of a validator for the next slot.
 

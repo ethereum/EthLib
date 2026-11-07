@@ -101,7 +101,7 @@ def createLightClientBootstrap (config : Config) (state : BeaconState preset for
     state.slot
   return {
     header := ← blockToLightClientHeader config block
-    currentSyncCommittee := state.currentSyncCommittee altair
+    currentSyncCommittee := (state.currentSyncCommittee altair).value
     currentSyncCommitteeBranch := ← branchVector _ (← liftRoot (computeMerkleProof state gindex)) }
 
 /-- The update that a block gives, from the block, its parent and their post states.
@@ -142,7 +142,7 @@ def createLightClientUpdate (config : Config) {signatureFork finalizedFork : For
     if period attestedBlock.message.slot = period block.message.slot then do
       let gindex ← nextSyncCommitteeGindexAtSlot (preset := preset) (fork := fork) config
         attestedState.slot
-      pure (attestedState.nextSyncCommittee altair,
+      pure ((attestedState.nextSyncCommittee altair).value,
         ← branchVector _ (← liftRoot (computeMerkleProof attestedState gindex)))
     else pure (SyncCommittee.empty preset, Vector.replicate _ zeroBytes32)
   let (finalizedHeader, finalityBranch) ← match finalizedBlock with
