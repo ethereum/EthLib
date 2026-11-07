@@ -323,6 +323,12 @@
 #define DOC_consensus_state_transition_across \
   "The state after a signed block of a fork, from a state of that fork or an earlier one."
 
+#define DOC_consensus_state_transitions \
+  "The state after signed blocks in order, as SSZ bytes, with each state root checked."
+
+#define DOC_consensus_state_transitions_across \
+  "The state after signed blocks in order, as SSZ bytes, across the fork epochs on the way."
+
 #define DOC_consensus_initialize_genesis \
   "The candidate genesis state of a block of the proof-of-work chain, as SSZ bytes."
 

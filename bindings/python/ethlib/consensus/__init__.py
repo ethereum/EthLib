@@ -473,6 +473,36 @@ def state_transition_across(
     )
 
 
+def state_transitions(
+    name: str,
+    fork: str,
+    pre: bytes,
+    blocks: list[bytes],
+    verify: bool = True,
+    config: dict | None = None,
+) -> bytes:
+    """The SSZ bytes of a beacon state after signed blocks in order, or TransitionError."""
+    replacements = json.dumps(config).encode() if config else b""
+    return _native.consensus_state_transitions(name, fork, pre, blocks, replacements, verify)
+
+
+def state_transitions_across(
+    name: str,
+    fork: str,
+    pre: bytes,
+    block_forks: list[str],
+    blocks: list[bytes],
+    verify: bool = True,
+    config: dict | None = None,
+) -> bytes:
+    """The SSZ bytes of a state after blocks of the same or later forks, or TransitionError."""
+    replacements = json.dumps(config).encode() if config else b""
+    forks = [block_fork.encode() for block_fork in block_forks]
+    return _native.consensus_state_transitions_across(
+        name, fork, pre, forks, blocks, replacements, verify
+    )
+
+
 _FORK_CHOICE_STEPS = {
     "tick": 0,
     "block": 1,
@@ -1146,4 +1176,6 @@ __all__ = [
     "process_slots",
     "state_transition",
     "state_transition_across",
+    "state_transitions",
+    "state_transitions_across",
 ]

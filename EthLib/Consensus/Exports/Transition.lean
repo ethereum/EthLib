@@ -36,7 +36,11 @@ From Gloas, only the steps whose Gloas rule EthLib holds run.
 
 Another export upgrades a state to the next consensus fork, from Altair to Heze.
 
-The last runs a signed block from a state of an earlier fork, across the fork epochs between.
+Another runs a signed block from a state of an earlier fork, across the fork epochs between.
+
+Two more run a sequence of signed blocks in one call, in each of these two ways.
+
+The state is then decoded and encoded once, not once for each block.
 
 The configuration of a name holds, with the replacements that a JSON object gives.
 
@@ -343,5 +347,57 @@ def stateTransitionAcrossExport (name fork pre blockFork block replacements : By
   let after ← runTransition
     (stateTransitionAcross config checks (.constant true) ⟨fork, state⟩ signed)
   (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")
+
+/-- The state after signed blocks in order, as SSZ bytes, with each state root checked.
+
+The preset, the configuration and the fork are named in UTF-8, and every block is of that fork.
+
+The first block that fails stops the call with its error.
+
+The signature checks run unless the last argument is false.
+
+The execution layer accepts every payload, as in the vectors, which fix no answer for blocks. -/
+@[export eth_consensus_state_transitions]
+def stateTransitionsExport (name fork pre : ByteArray) (blocks : Array ByteArray)
+    (replacements : ByteArray) (verify : Bool) : Result ByteArray := do
+  let (preset, fork) ← transitionPresetAndFork name fork
+  let config ← configWith name replacements
+  let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
+  let mut state ← decodeInput (BeaconState preset fork) pre
+  for block in blocks do
+    let signed ← decodeInput (SignedBeaconBlock preset fork) block
+    state ← runTransition (stateTransition config checks (.constant true) state signed)
+  (SszType.serialize state).mapError fun e => (0, s!"state rejected: {reprStr e}")
+
+/-- The state after signed blocks in order, as SSZ bytes, across the fork epochs on the way.
+
+The state may be of the fork of the first block or of an earlier one.
+
+Before each block, the state advances to the slot of the block and upgrades at each fork epoch.
+
+Each block names its fork, which must be the fork that the state then has.
+
+The preset, the configuration and every fork are named in UTF-8, each fork up to Heze.
+
+The first block that fails stops the call with its error, as does a count of forks that differs.
+
+The signature checks run unless the last argument is false.
+
+The execution layer accepts every payload, as in the vectors, which fix no answer for blocks. -/
+@[export eth_consensus_state_transitions_across]
+def stateTransitionsAcrossExport (name fork pre : ByteArray) (blockForks blocks : Array ByteArray)
+    (replacements : ByteArray) (verify : Bool) : Result ByteArray := do
+  let (preset, fork) ← transitionPresetAndFork name fork
+  let config ← configWith name replacements
+  let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
+  if blockForks.size != blocks.size then
+    throw (0, s!"{blockForks.size} block forks for {blocks.size} blocks")
+  let mut forked : ForkedBeaconState preset := ⟨fork, ← decodeInput (BeaconState preset fork) pre⟩
+  for (blockFork, block) in blockForks.zip blocks do
+    let (_, blockFork) ← transitionPresetAndFork name blockFork
+    let signed ← decodeInput (SignedBeaconBlock preset blockFork) block
+    forked := ⟨blockFork,
+      ← runTransition (stateTransitionAcross config checks (.constant true) forked signed)⟩
+  (SszType.serialize forked.state).mapError fun e => (0, s!"state rejected: {reprStr e}")
 
 end EthLib.Consensus.Exports

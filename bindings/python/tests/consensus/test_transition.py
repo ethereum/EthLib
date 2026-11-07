@@ -117,10 +117,13 @@ def run_case(preset: str, fork: str, group: str, case: Path) -> None:
             )
         if group == "transition/core":
             return across(state)
-        for index in range(meta["blocks_count"]):
-            block = snappy.decompress((case / f"blocks_{index}.ssz_snappy").read_bytes())
-            state = consensus.state_transition(preset, FORKS[fork], state, block, verify, config)
-        return state
+        return consensus.state_transitions(preset, FORKS[fork], state, blocks(), verify, config)
+
+    def blocks() -> list[bytes]:
+        return [
+            snappy.decompress((case / f"blocks_{index}.ssz_snappy").read_bytes())
+            for index in range(meta["blocks_count"])
+        ]
 
     def across(state: bytes) -> bytes:
         # The state starts at the fork before the post fork.
@@ -128,15 +131,13 @@ def run_case(preset: str, fork: str, group: str, case: Path) -> None:
         # With no such index, every block belongs to the post fork.
         pre_fork = list(FORKS)[list(FORKS).index(fork) - 1]
         epochs = replacements(_fork_epochs(fork, meta["fork_epoch"]), preset)
-        state_fork = pre_fork
-        for index in range(meta["blocks_count"]):
-            block = snappy.decompress((case / f"blocks_{index}.ssz_snappy").read_bytes())
-            block_fork = pre_fork if index <= meta.get("fork_block", -1) else fork
-            state = consensus.state_transition_across(
-                preset, FORKS[state_fork], state, FORKS[block_fork], block, verify, epochs
-            )
-            state_fork = block_fork
-        return state
+        block_forks = [
+            FORKS[pre_fork if index <= meta.get("fork_block", -1) else fork]
+            for index in range(meta["blocks_count"])
+        ]
+        return consensus.state_transitions_across(
+            preset, FORKS[pre_fork], state, block_forks, blocks(), verify, epochs
+        )
 
     if post.exists():
         assert advance(state) == snappy.decompress(post.read_bytes())
@@ -222,3 +223,18 @@ def test_slots_not_after():
     ) as info:
         consensus.process_slots("minimal", "phase0", pre, 0)
     assert info.value.code == 53
+
+
+def test_no_blocks():
+    # With no block, the state is decoded and encoded again, so it comes back unchanged.
+    case = next((FILES / "minimal" / "phase0").rglob("pre.ssz_snappy"))
+    pre = snappy.decompress(case.read_bytes())
+    assert consensus.state_transitions("minimal", "phase0", pre, []) == pre
+    assert consensus.state_transitions_across("minimal", "phase0", pre, [], []) == pre
+
+
+def test_block_forks_count():
+    # Each block names its fork, so a count of forks that differs is a rejection.
+    with raises(consensus.TransitionError, "1 block forks for 0 blocks") as info:
+        consensus.state_transitions_across("minimal", "phase0", b"", ["phase0"], [])
+    assert info.value.code == 0

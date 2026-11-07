@@ -372,6 +372,15 @@ def bindings : List Binding := [
     "(name: str, fork: str, pre: bytes, block_fork: str, block: bytes, config: bytes, " ++
       "verify: bool) -> bytes",
     [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
+  ⟨"consensus_state_transitions", `EthLib.Consensus.Exports.stateTransitionsExport,
+    "(name: str, fork: str, pre: bytes, blocks: list[bytes], config: bytes, verify: bool) " ++
+      "-> bytes",
+    [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
+  ⟨"consensus_state_transitions_across",
+    `EthLib.Consensus.Exports.stateTransitionsAcrossExport,
+    "(name: str, fork: str, pre: bytes, block_forks: list[bytes], blocks: list[bytes], " ++
+      "config: bytes, verify: bool) -> bytes",
+    [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
   ⟨"consensus_initialize_genesis", `EthLib.Consensus.Exports.initializeGenesisExport,
     "(name: str, fork: str, eth1_block_hash: bytes, deposits: bytes, config: bytes, " ++
       "eth1_timestamp: int, verify: bool) -> bytes",
