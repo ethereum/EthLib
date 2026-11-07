@@ -754,6 +754,21 @@ Two transactions, or two withdrawals, with the same bytes are equal, so `transac
 `receiptsRoot_binding` does so for receipts whose types are 0 or types that the fork has, as the receipt decoder requires.
 No theorem bounds the probability of finding a collision.
 
+An answer of `eth_getProof` (EIP-1186) is checked against a state root by `AccountProof.verify` (`Execution/State/AccountProof.lean`).
+It checks the account proof, then each slot proof against the storage root of the answer.
+`verifyAccount_sound` and `verifySlot_sound` (`Execution/Proofs/State/AccountProof.lean`) carry `verifyProof_sound` over to the fields of the answer.
+Take a secured trie with distinct keys and its root.
+When a check passes, the trie's value under the key decodes to the fields of the answer.
+When the check reports absence, the trie holds no value under the key.
+A slot reported absent also has the word 0 in the answer.
+Otherwise a search returns a collision with the trie's own proof, or two keys with one hash.
+`verifyAccount_sound_state` and `verifySlot_sound_storage` apply them to the tries of a state, whose keys are distinct.
+`verifyAccount_getProof` and `verifySlot_getProof` prove that the trie's own proofs pass, with the fields that the trie holds.
+A proof can show that the address has no account, or that a slot is not set.
+The storage value of a slot that is not set is 0, so the answer must give that word.
+EIP-1186 does not say which fields the answer holds for an address without an account.
+So the check judges no field of an absent account, and reports the absence.
+
 ### Weak subjectivity
 
 A node that starts from a recent checkpoint trusts it only for a limited time, the weak subjectivity period.
@@ -978,13 +993,13 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 237 operations and 35 size constants.
-The Python extension calls 237 of the operations and 26 of the constants.
+Lean exports 238 operations and 35 size constants.
+The Python extension calls 238 of the operations and 26 of the constants.
 Exported constants it does not call: `eth_sphincs_const_chains`, `eth_sphincs_const_n`, `eth_sphincs_const_public_param_len`, `eth_sphincs_const_randomizer_len`, `eth_xmss_const_chains`, `eth_xmss_const_digest_len`, `eth_xmss_const_layer_height`, `eth_xmss_const_public_param_len`, `eth_xmss_const_randomizer_len`.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-8035 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (1478), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (223), `engine.c` (88), `enr.c` (146), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (962), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (96), `vrf.c` (119), `wrappers.h` (454), `xmss.c` (134).
+8061 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (1478), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (223), `engine.c` (88), `enr.c` (146), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (963), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (455), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

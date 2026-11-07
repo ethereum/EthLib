@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.State.Account
+public import EthLib.Execution.State.AccountProof
 public import EthLib.Execution.State.Root
 public import EthLib.Execution.State.Tracker
 public import EthLib.Execution.State.Errors

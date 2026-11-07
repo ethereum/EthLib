@@ -143,6 +143,9 @@
 #define DOC_trie_hex_prefix \
   "The hex-prefix encoding of a path, with one nibble in each input byte."
 
+#define DOC_trie_verify_account_proof \
+  "Check an answer of `eth_getProof` against a state root, with Keccak-256."
+
 #define DOC_vrf_verify \
   "The output of an opening at an index under a root, or no bytes when verification rejects."
 

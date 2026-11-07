@@ -1054,6 +1054,23 @@
    "docstring":
    "The hex-prefix encoding of a path, with one nibble in each input byte.\n\nA byte of 16 or more is not a nibble, and fails with code 0."},
   {"summary":
+   "Check an answer of `eth_getProof` against a state root, with Keccak-256.",
+   "signature": "(root: bytes, answer: bytes) -> bytes",
+   "operation": "EthLib.Execution.Trie.Exports.verifyAccountProofExport",
+   "method": "trie_verify_account_proof",
+   "errors":
+   [{"type": "EthLib.Execution.State.AccountProofError",
+     "codes":
+     [{"constructor": "account", "code": 501},
+      {"constructor": "accountEncoding", "code": 502},
+      {"constructor": "accountMismatch", "code": 503},
+      {"constructor": "slot", "code": 504},
+      {"constructor": "slotEncoding", "code": 505},
+      {"constructor": "slotMismatch", "code": 506}]}],
+   "error_class": "TrieError",
+   "docstring":
+   "Check an answer of `eth_getProof` against a state root, with Keccak-256.\n\nThe answer is the RLP list of the address, the nonce, the balance, the code hash and storage root.\n\nThe list goes on with the nodes of the account proof, then the slots.\n\nEach slot is the list of the slot on 32 bytes, the word, and the nodes of its proof.\n\nNo bytes means that the address has no account, and that no field or slot was judged.\n\nOtherwise the byte 1 comes first, then one byte for each slot: 1 if it is set, 0 if it is not.\n\nA root of another length than 32 bytes, or an answer that does not decode, has code 0."},
+  {"summary":
    "The output of an opening at an index under a root, or no bytes when verification rejects.",
    "signature": "(root: bytes, index: int, opening: bytes) -> bytes | None",
    "operation": "EthLib.Cryptography.Vrf.Exports.verify",

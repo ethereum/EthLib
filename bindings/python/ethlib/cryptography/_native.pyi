@@ -191,6 +191,10 @@ def trie_hex_prefix(nibbles: bytes, is_leaf: bool) -> bytes:
     """The hex-prefix encoding of a path, with one nibble in each input byte."""
     ...
 
+def trie_verify_account_proof(root: bytes, answer: bytes) -> bytes:
+    """Check an answer of `eth_getProof` against a state root, with Keccak-256."""
+    ...
+
 def vrf_verify(root: bytes, index: int, opening: bytes) -> bytes | None:
     """The output of an opening at an index under a root, or no bytes when verification rejects."""
     ...
