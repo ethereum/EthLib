@@ -330,10 +330,10 @@ theorem initializeLightClientStore_headers {config : Config} {trustedBlockRoot :
     | (cases computed; done)
     | (cases computed; exact ⟨rfl, rfl⟩)
 
-/-- Applying an update never moves the finalized slot or the optimistic slot back.
+/-- Applying an update never moves either slot back.
 
-A finalized slot at or below the optimistic slot stays at or below it. -/
-theorem applyLightClientUpdate_slots {store after : LightClientStore preset fork}
+It keeps a finalized slot at or below the optimistic slot when it starts there. -/
+private theorem applyLightClientUpdate_slots {store after : LightClientStore preset fork}
     {update : LightClientUpdate preset fork}
     (computed : applyLightClientUpdate store update = .ok after) :
     store.finalizedHeader.beacon.slot ≤ after.finalizedHeader.beacon.slot ∧
@@ -353,10 +353,10 @@ theorem applyLightClientUpdate_slots {store after : LightClientStore preset fork
       simp only [gt_iff_lt, UInt64.lt_iff_toNat_lt, UInt64.le_iff_toNat_le] at *
       omega
 
-/-- Processing an update never moves the finalized slot or the optimistic slot back.
+/-- Processing an update never moves either slot back.
 
-A finalized slot at or below the optimistic slot stays at or below it. -/
-theorem processLightClientUpdate_slots {config : Config} {checks : SignatureChecks}
+It keeps a finalized slot at or below the optimistic slot when it starts there. -/
+private theorem processLightClientUpdate_slots {config : Config} {checks : SignatureChecks}
     {store after : LightClientStore preset fork} {update : LightClientUpdate preset fork}
     {currentSlot : Slot} {genesisValidatorsRoot : Root}
     (computed : processLightClientUpdate config checks store update currentSlot
@@ -378,11 +378,11 @@ theorem processLightClientUpdate_slots {config : Config} {checks : SignatureChec
       simp only [gt_iff_lt, UInt64.lt_iff_toNat_lt, UInt64.le_iff_toNat_le] at *
       omega
 
-/-- A forced update never moves the finalized slot or the optimistic slot back.
+/-- A forced update never moves either slot back.
 
-A finalized slot at or below the optimistic slot stays at or below it. -/
-theorem processLightClientStoreForceUpdate_slots {store after : LightClientStore preset fork}
-    {currentSlot : Slot}
+It keeps a finalized slot at or below the optimistic slot when it starts there. -/
+private theorem processLightClientStoreForceUpdate_slots
+    {store after : LightClientStore preset fork} {currentSlot : Slot}
     (computed : processLightClientStoreForceUpdate store currentSlot = .ok after) :
     store.finalizedHeader.beacon.slot ≤ after.finalizedHeader.beacon.slot ∧
       store.optimisticHeader.beacon.slot ≤ after.optimisticHeader.beacon.slot ∧
@@ -400,6 +400,78 @@ theorem processLightClientStoreForceUpdate_slots {store after : LightClientStore
     all_goals
       simp only [gt_iff_lt, UInt64.le_iff_toNat_le] at *
       omega
+
+/-- Applying an update never moves the finalized slot back. -/
+theorem applyLightClientUpdate_finalizedSlot_le {store after : LightClientStore preset fork}
+    {update : LightClientUpdate preset fork}
+    (computed : applyLightClientUpdate store update = .ok after) :
+    store.finalizedHeader.beacon.slot ≤ after.finalizedHeader.beacon.slot :=
+  (applyLightClientUpdate_slots computed).1
+
+/-- Applying an update never moves the optimistic slot back. -/
+theorem applyLightClientUpdate_optimisticSlot_le {store after : LightClientStore preset fork}
+    {update : LightClientUpdate preset fork}
+    (computed : applyLightClientUpdate store update = .ok after) :
+    store.optimisticHeader.beacon.slot ≤ after.optimisticHeader.beacon.slot :=
+  (applyLightClientUpdate_slots computed).2.1
+
+/-- Applying an update keeps a finalized slot at or below the optimistic slot. -/
+theorem applyLightClientUpdate_slot_order {store after : LightClientStore preset fork}
+    {update : LightClientUpdate preset fork}
+    (computed : applyLightClientUpdate store update = .ok after)
+    (ordered : store.finalizedHeader.beacon.slot ≤ store.optimisticHeader.beacon.slot) :
+    after.finalizedHeader.beacon.slot ≤ after.optimisticHeader.beacon.slot :=
+  (applyLightClientUpdate_slots computed).2.2 ordered
+
+/-- Processing an update never moves the finalized slot back. -/
+theorem processLightClientUpdate_finalizedSlot_le {config : Config} {checks : SignatureChecks}
+    {store after : LightClientStore preset fork} {update : LightClientUpdate preset fork}
+    {currentSlot : Slot} {genesisValidatorsRoot : Root}
+    (computed : processLightClientUpdate config checks store update currentSlot
+      genesisValidatorsRoot = .ok after) :
+    store.finalizedHeader.beacon.slot ≤ after.finalizedHeader.beacon.slot :=
+  (processLightClientUpdate_slots computed).1
+
+/-- Processing an update never moves the optimistic slot back. -/
+theorem processLightClientUpdate_optimisticSlot_le {config : Config} {checks : SignatureChecks}
+    {store after : LightClientStore preset fork} {update : LightClientUpdate preset fork}
+    {currentSlot : Slot} {genesisValidatorsRoot : Root}
+    (computed : processLightClientUpdate config checks store update currentSlot
+      genesisValidatorsRoot = .ok after) :
+    store.optimisticHeader.beacon.slot ≤ after.optimisticHeader.beacon.slot :=
+  (processLightClientUpdate_slots computed).2.1
+
+/-- Processing an update keeps a finalized slot at or below the optimistic slot. -/
+theorem processLightClientUpdate_slot_order {config : Config} {checks : SignatureChecks}
+    {store after : LightClientStore preset fork} {update : LightClientUpdate preset fork}
+    {currentSlot : Slot} {genesisValidatorsRoot : Root}
+    (computed : processLightClientUpdate config checks store update currentSlot
+      genesisValidatorsRoot = .ok after)
+    (ordered : store.finalizedHeader.beacon.slot ≤ store.optimisticHeader.beacon.slot) :
+    after.finalizedHeader.beacon.slot ≤ after.optimisticHeader.beacon.slot :=
+  (processLightClientUpdate_slots computed).2.2 ordered
+
+/-- A forced update never moves the finalized slot back. -/
+theorem processLightClientStoreForceUpdate_finalizedSlot_le
+    {store after : LightClientStore preset fork} {currentSlot : Slot}
+    (computed : processLightClientStoreForceUpdate store currentSlot = .ok after) :
+    store.finalizedHeader.beacon.slot ≤ after.finalizedHeader.beacon.slot :=
+  (processLightClientStoreForceUpdate_slots computed).1
+
+/-- A forced update never moves the optimistic slot back. -/
+theorem processLightClientStoreForceUpdate_optimisticSlot_le
+    {store after : LightClientStore preset fork} {currentSlot : Slot}
+    (computed : processLightClientStoreForceUpdate store currentSlot = .ok after) :
+    store.optimisticHeader.beacon.slot ≤ after.optimisticHeader.beacon.slot :=
+  (processLightClientStoreForceUpdate_slots computed).2.1
+
+/-- A forced update keeps a finalized slot at or below the optimistic slot. -/
+theorem processLightClientStoreForceUpdate_slot_order
+    {store after : LightClientStore preset fork} {currentSlot : Slot}
+    (computed : processLightClientStoreForceUpdate store currentSlot = .ok after)
+    (ordered : store.finalizedHeader.beacon.slot ≤ store.optimisticHeader.beacon.slot) :
+    after.finalizedHeader.beacon.slot ≤ after.optimisticHeader.beacon.slot :=
+  (processLightClientStoreForceUpdate_slots computed).2.2 ordered
 
 end Slots
 
