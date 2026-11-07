@@ -14,7 +14,7 @@ Properties of the discv5 packet encoding.
 - The mask of a prefix is the prefix of the mask.
 - The authdata of each flag decodes back from its bytes.
 - A packet that the encoder writes, within the size limits, decodes back.
-- Bytes that decode, as authdata or as a packet, are the encoding of what they decode to.
+- Bytes decode to authdata or a packet exactly when they encode it and pass the decoder's checks.
 - The additional data of a message is the masking IV and the unmasked bytes up to the message.
 - A message that the encryption writes decrypts back.
 -/
@@ -134,7 +134,7 @@ theorem Authdata.decode_encode (a : Authdata) (h : a.fits = true) :
     simp [List.take_left', List.drop_left', vectorOf_toList, hs, hk, hsl, hkl]
     rw [← List.drop_drop, List.drop_left' hsl, List.drop_left' hkl]
 
-/-- A vector that a list of bytes reads as has those bytes. -/
+/-- A vector read from a list of bytes holds exactly those bytes. -/
 theorem toList_of_vectorOf {n : Nat} {bytes : List UInt8} {v : Vector UInt8 n}
     (h : Authdata.vectorOf n bytes = some v) : v.toList = bytes := by
   unfold Authdata.vectorOf at h
@@ -144,7 +144,7 @@ theorem toList_of_vectorOf {n : Nat} {bytes : List UInt8} {v : Vector UInt8 n}
   · cases h
 
 /-- Authdata that its bytes decode to has the flag it was read under, fits, and encodes back. -/
-theorem Authdata.encode_of_decode {flag : UInt8} {bytes : List UInt8} {a : Authdata}
+private theorem Authdata.encode_of_decode {flag : UInt8} {bytes : List UInt8} {a : Authdata}
     (h : Authdata.decode flag bytes = .ok a) :
     a.flag = flag ∧ a.fits = true ∧ a.encode = bytes := by
   unfold Authdata.decode at h
@@ -199,7 +199,7 @@ theorem Authdata.encode_of_decode {flag : UInt8} {bytes : List UInt8} {a : Authd
     · cases h
   · cases h
 
-/-- Bytes decode to authdata under a flag exactly when they are its encoding under its flag.
+/-- Bytes decode to authdata under a flag exactly when it has that flag and encodes to them.
 
 The authdata must also fit its size fields. -/
 theorem Authdata.decode_eq_ok_iff (flag : UInt8) (bytes : List UInt8) (a : Authdata) :
@@ -351,8 +351,8 @@ theorem Packet.size_messageAd_add {destId : NodeId} {p : Packet} {bytes ad : Byt
 /-- Bytes that decode to a packet are its encoding, and they pass the checks of the decoder.
 
 The checks are the size limits, and a WHOAREYOU packet with no message. -/
-theorem Packet.encode_and_checks_of_decode {destId : NodeId} {bytes : ByteArray} {p : Packet}
-    (h : Packet.decode destId bytes = .ok p) :
+private theorem Packet.encode_and_checks_of_decode {destId : NodeId} {bytes : ByteArray}
+    {p : Packet} (h : Packet.decode destId bytes = .ok p) :
     p.encode destId = .ok bytes ∧ MIN_PACKET_SIZE ≤ bytes.size ∧ bytes.size ≤ MAX_PACKET_SIZE ∧
       (p.header.authdata.flag = 1 → p.message.size = 0) := by
   unfold Packet.decode at h
