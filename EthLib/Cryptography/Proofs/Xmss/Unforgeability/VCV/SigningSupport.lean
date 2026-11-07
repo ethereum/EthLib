@@ -396,4 +396,53 @@ theorem actual_signDerived_support_cases
     (fun afterOTS beforeRoot pi => actual_world_root_joint pp seed .bottom idx.toNat
       afterOTS beforeRoot beforeRoot le_rfl pi)
 
+/-- Reconstruct the bottom root without changing the interpreted reply or entire raw cache.
+
+The initial full raw cache may be warm, and both normal layer errors are retained.
+
+The equality is under the raw random oracle, not between the original query traces.
+
+It does not equate physical hash costs.
+
+Source: the leanXMSS draft at leanVM commit `4af2cdddd7cd41b9df2cc7e123e314a91b0b4462`.
+
+Section "Trees" defines the fold, and section "The scheme", paragraph "Signing", orders the layers.
+-/
+theorem actual_signDerived_run_eq_inline_fold
+    (pp : Xmss.PublicParam) (seed : Xmss.Seed) (idx : Xmss.LeafIndex) (msg : Xmss.Message)
+    (initial : HashSig.HashSpec.QueryCache) :
+    (simulateQ HashSig.HashSpec.romImpl (Xmss.signDerived H seed pp idx msg)).run initial =
+    (simulateQ HashSig.HashSpec.romImpl (do
+      let bottom ← match ← Xmss.signLayer H pp seed .bottom idx.toNat (Xmss.packBytes msg) with
+        | .ok signature => pure signature
+        | .error err => return .error err
+      let selected ← Xmss.leaves H pp seed .bottom idx.toNat
+      let root ← Xmss.fold H pp .bottom idx.toNat selected bottom.path
+      let top ← match ← Xmss.signLayer H pp seed .top (Xmss.bottomTree idx)
+          (Xmss.packBytes root) with
+        | .ok signature => pure signature
+        | .error err => return .error err
+      return .ok { leafIndex := idx, bottom, top })).run initial := by
+  simp only [Xmss.signDerived, simulateQ_bind, StateT.run_bind, pure_bind]
+  -- Compare continuations only at endpoints of this actual bottom-layer run.
+  apply OracleComp.bind_congr_of_forall_mem_support
+  rintro ⟨reply, beforeRoot⟩ supported
+  cases reply with
+  | error err => rfl
+  | ok bottom =>
+    simp only [simulateQ_bind, StateT.run_bind]
+    -- The returned path settles the same raw cache used by the root computation.
+    obtain ⟨afterOTS, _, settled⟩ := layer_ok_path_state_support HashSig.HashSpec.romImpl H
+      pp seed .bottom idx.toNat (Xmss.packBytes msg) initial beforeRoot bottom supported
+    have joint := actual_world_root_joint pp seed .bottom idx.toNat afterOTS
+      beforeRoot beforeRoot le_rfl bottom.path settled
+    change (simulateQ HashSig.HashSpec.romImpl
+      (Xmss.node H pp seed .bottom Xmss.Constants.LAYER_HEIGHT (Xmss.bottomTree idx))).run
+        beforeRoot = _ at joint
+    -- Reconstruct the root before running the unchanged top-layer continuation.
+    rw [joint]
+    simp only [simulateQ_bind, StateT.run_bind, bind_assoc]
+    rfl
+
+
 end EthLib.Cryptography.Xmss.Unforgeability.VCV
