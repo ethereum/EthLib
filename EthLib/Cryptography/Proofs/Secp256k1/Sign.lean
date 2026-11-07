@@ -138,6 +138,24 @@ theorem isLowS_sign {sk : Fn} {hash : Vector UInt8 32} {r s : Fn} {odd : Bool}
   · rw [val_neg hs0, isLowS_neg, high]
     rfl
 
+/-- The signing loop fails when it has no attempts left. -/
+theorem signWith_zero (d e : Fn) (state : NonceState) :
+    signWith d e 0 state = .error .noNonce := rfl
+
+/-- Signing rejects the zero private key. -/
+theorem sign_zero (hash : Vector UInt8 32) : sign 0 hash = .error .zeroPrivateKey := by
+  simp [sign]
+
+/-- A signature from signing comes from a nonzero key and has nonzero `r` and `s`. -/
+theorem sign_ne_zero {sk : Fn} {hash : Vector UInt8 32} {r s : Fn} {odd : Bool}
+    (h : sign sk hash = .ok (r, s, odd)) : sk ≠ 0 ∧ r ≠ 0 ∧ s ≠ 0 := by
+  obtain ⟨hsk, s0, odd0, hw, hs⟩ := sign_spec h
+  obtain ⟨-, -, -, -, -, -, -, hr, -, hs0, -⟩ := signWith_spec hw
+  refine ⟨hsk, hr, ?_⟩
+  rcases hs with ⟨-, rfl, -⟩ | ⟨-, rfl, -⟩
+  · exact hs0
+  · exact neg_ne_zero.mpr hs0
+
 end Ecdsa
 
 end EthLib.Cryptography.Secp256k1
