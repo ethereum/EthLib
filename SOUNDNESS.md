@@ -708,6 +708,11 @@ A size is pushed modulo 2^256, as the instruction pushes it.
 It holds for every return address that is a JUMPDEST of the code, and every stack under it that leaves room for the block.
 `Logic.callSubroutine` proves that a push of the address of the block and a JUMP reach the return address with the results.
 It needs both addresses to be JUMPDESTs of the code, and room on the stack below 1024 words.
+`Twice.double` proves a subroutine that doubles a word, for 18 gas.
+`Twice.runFrame_spec` proves a contract that calls it at two places and returns 4 times the word of its call data.
+`SumTo.sum` proves a recursive subroutine that sums the numbers from 1 to `k`, by induction on `k`.
+It needs room for `2 k + 2` words on the stack, and `32 + 61 k` gas.
+`SumTo.runFrame_spec` proves a contract that returns that sum for the word of its call data, when the word is at most 510.
 `Logic.stop` is the rule for STOP, which stops the frame with no error and an empty output.
 `Logic.stop_of_size_le` is the rule for a frame at or past the end of its code, which stops the same way.
 `Logic.sstore_of_account` restates the rule for SSTORE when the current account exists.
