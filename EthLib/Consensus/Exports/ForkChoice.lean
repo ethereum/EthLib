@@ -217,9 +217,12 @@ def runForkChoiceStep {preset : Preset} {fork : Fork} (config : Config) (checks 
     return (·, .empty) <$> store.onAttesterSlashing config checks slashing
   | (4, data) => do
     let flags ← match data.toList with
-      | [flags] => if flags < 4 then pure flags else throw (0, "flag 4 needs a root")
+      | [flags] =>
+        if flags < 4 then pure flags
+        else throw (0, "a read without a root takes flags below 4")
       | flags :: _ =>
-        if 4 ≤ flags ∧ flags < 8 then pure flags else throw (0, "flags are below 8")
+        if 4 ≤ flags ∧ flags < 8 then pure flags
+        else throw (0, "a read with a root takes flags from 4 to 7")
       | [] => throw (0, "a read takes its flags")
     let root ← if 4 ≤ flags then decodeInput Root (data.extract 1 data.size)
       else pure (Vector.replicate 32 0)
