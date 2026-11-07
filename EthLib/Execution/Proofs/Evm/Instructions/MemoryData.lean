@@ -21,6 +21,16 @@ Then each puts the word it reads at the offset in place of the offset.
 
 MLOAD reads after the growth of memory.
 
+MSTORE and MSTORE8 pay their price and the growth of memory.
+
+Then they write a word or a byte of the value at the offset.
+
+MCOPY pays its price, a price for each word copied and the growth of memory to hold both ranges.
+
+Then it writes the bytes of the source range at the destination, read in full before the write.
+
+Each of these three drops its operands and writes after the growth of memory.
+
 RETURNDATACOPY that pays fails exactly when its range ends past the return data.
 
 None of these instructions changes the message, the state or the substate of the frame.
@@ -385,6 +395,83 @@ theorem mloadStep_cons {evm : Evm fork Meter} {start : U256} {rest : List U256}
   rcases hc : GasMeter.charge evm.gas
       (OPCODE_MLOAD_BASE + (extendMemory evm.memory.size [(start, 32#256)]).cost) with _ | _ <;>
     simp [hc, bind, Except.bind, pure, Except.pure, Except.map, room]
+
+/-- MSTORE on an offset and a value: pay and grow memory, then write the value there.
+
+The write is made after memory has grown, and the value is its 32 bytes. -/
+theorem mstoreStep_cons {evm : Evm fork Meter} {start value : U256} {rest : List U256}
+    (h : evm.stack.val = start :: value :: rest) :
+    mstoreStep evm =
+      let growth := extendMemory evm.memory.size [(start, 32)]
+      let memory := memoryExtend evm.memory growth.expandBy
+      (GasMeter.charge evm.gas (OPCODE_MSTORE_BASE + growth.cost)).map fun gas =>
+        { evm with
+          stack := ⟨rest, by
+            have := evm.stack.property
+            rw [h, List.length_cons, List.length_cons] at this
+            omega⟩,
+          gas, memory := memoryWrite memory start.toNat (wordBytes value), pc := evm.pc + 1 } := by
+  have hstack : evm.stack = ⟨start :: value :: rest, h ▸ evm.stack.property⟩ := Subtype.ext h
+  simp only [mstoreStep, popWord, chargeGasAndMemory, chargeGas, advance, hstack, Stack.pop]
+  rcases hc : GasMeter.charge evm.gas
+      (OPCODE_MSTORE_BASE + (extendMemory evm.memory.size [(start, 32#256)]).cost) with _ | _ <;>
+    simp [hc, bind, Except.bind, pure, Except.pure, Except.map]
+
+/-- MSTORE8 on an offset and a value: pay and grow memory, then write the lowest byte.
+
+The write is made after memory has grown. -/
+theorem mstore8Step_cons {evm : Evm fork Meter} {start value : U256} {rest : List U256}
+    (h : evm.stack.val = start :: value :: rest) :
+    mstore8Step evm =
+      let growth := extendMemory evm.memory.size [(start, 1)]
+      let memory := memoryExtend evm.memory growth.expandBy
+      (GasMeter.charge evm.gas (OPCODE_MSTORE8_BASE + growth.cost)).map fun gas =>
+        { evm with
+          stack := ⟨rest, by
+            have := evm.stack.property
+            rw [h, List.length_cons, List.length_cons] at this
+            omega⟩,
+          gas,
+          memory := memoryWrite memory start.toNat ⟨#[UInt8.ofNat value.toNat]⟩,
+          pc := evm.pc + 1 } := by
+  have hstack : evm.stack = ⟨start :: value :: rest, h ▸ evm.stack.property⟩ := Subtype.ext h
+  simp only [mstore8Step, popWord, chargeGasAndMemory, chargeGas, advance, hstack, Stack.pop]
+  rcases hc : GasMeter.charge evm.gas
+      (OPCODE_MSTORE8_BASE + (extendMemory evm.memory.size [(start, 1#256)]).cost) with _ | _ <;>
+    simp [hc, bind, Except.bind, pure, Except.pure, Except.map]
+
+/-- MCOPY on a destination, a source and a length: pay and grow memory to hold both ranges.
+
+Then write the bytes of the source range at the destination.
+
+The source range is read in full from the grown memory before the write.
+
+So overlapping ranges copy the old bytes. -/
+theorem mcopyStep_cons {evm : Evm fork Meter} {destination source length : U256}
+    {rest : List U256} (h : evm.stack.val = destination :: source :: length :: rest) :
+    mcopyStep evm =
+      let growth := extendMemory evm.memory.size [(source, length), (destination, length)]
+      let memory := memoryExtend evm.memory growth.expandBy
+      (GasMeter.charge evm.gas
+          (OPCODE_MCOPY_BASE + OPCODE_COPY_PER_WORD * wordCount length.toNat + growth.cost)).map
+        fun gas =>
+          { evm with
+            stack := ⟨rest, by
+              have := evm.stack.property
+              rw [h, List.length_cons, List.length_cons, List.length_cons] at this
+              omega⟩,
+            gas,
+            memory := memoryWrite memory destination.toNat
+              (memoryReadBytes memory source.toNat length.toNat),
+            pc := evm.pc + 1 } := by
+  have hstack : evm.stack =
+      ⟨destination :: source :: length :: rest, h ▸ evm.stack.property⟩ := Subtype.ext h
+  simp only [mcopyStep, popWord, chargeGasAndMemory, chargeGas, advance, hstack, Stack.pop]
+  rcases hc : GasMeter.charge evm.gas
+      (OPCODE_MCOPY_BASE + OPCODE_COPY_PER_WORD * wordCount length.toNat +
+        (extendMemory evm.memory.size [(source, length), (destination, length)]).cost)
+      with _ | _ <;>
+    simp [hc, bind, Except.bind, pure, Except.pure, Except.map]
 
 /-- Each instruction that moves bytes keeps the size of memory a multiple of 32. -/
 theorem size_memoryDataStep_mod {op : Op}
