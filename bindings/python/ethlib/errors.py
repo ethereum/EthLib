@@ -221,8 +221,13 @@ class ChainError(EthLibError, ValueError):
     """A chain configuration was malformed, with code 0."""
 
 
+class BindingError(EthLibError, ValueError):
+    """An error of an export of typed values, with code 0 when a value does not fit its argument."""
+
+
 __all__ = [
     "EthLibError",
+    "BindingError",
     "KzgError",
     "BlsError",
     "XmssError",

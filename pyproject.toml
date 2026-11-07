@@ -20,6 +20,7 @@ test = [
   "py_ecc==8.0.0",
   # The suites read TOML, and tomllib is in the standard library from Python 3.11.
   "tomli==2.5.0; python_version < '3.11'",
+  "hypothesis==6.168.5",
 ]
 
 [dependency-groups]

@@ -37,6 +37,7 @@ RESULT_MARKERS = {
     "list[bytes]": ("PyList_New", "bytes_list("),
     "tuple[bytes, bytes]": ("PyTuple_Pack",),
     "tuple[list[bytes], list[bytes]]": ("PyTuple_Pack", "cells_and_proofs("),
+    "object": ("call_pyvalue_export",),
 }
 
 

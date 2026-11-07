@@ -102,6 +102,7 @@ PyObject* WEAK_SUBJECTIVITY_ERROR;
 PyObject* VALIDATOR_DUTY_ERROR;
 PyObject* PROPOSER_ERROR;
 PyObject* SLASHING_PROTECTION_ERROR;
+PyObject* BINDING_ERROR;
 
 /* ---- Lean externs: size accessors ------------------------------------ */
 
@@ -356,6 +357,11 @@ initialize_EthLib_EthLib_Base_Exports_ChainConfig(
 
 extern lean_object*
 initialize_EthLib_EthLib_Engine_Exports(
+  uint8_t builtin
+);
+
+extern lean_object*
+initialize_EthLib_EthLib_Base_Exports_Echo(
   uint8_t builtin
 );
 
@@ -1005,6 +1011,7 @@ static PyMethodDef methods[] = {
    DOC_engine_prepare_execution_payload},
   {"engine_prepare_execution_payload_gloas", py_engine_prepare_execution_payload_gloas,
    METH_VARARGS, DOC_engine_prepare_execution_payload_gloas},
+  {"pyvalue_echo", py_pyvalue_echo, METH_VARARGS, DOC_pyvalue_echo},
   {NULL, NULL, 0, NULL},
 };
 
@@ -1070,6 +1077,7 @@ PyInit__native(void) {
     VALIDATOR_DUTY_ERROR = PyObject_GetAttrString(errors, "ValidatorDutyError");
     PROPOSER_ERROR = PyObject_GetAttrString(errors, "ProposerError");
     SLASHING_PROTECTION_ERROR = PyObject_GetAttrString(errors, "SlashingProtectionError");
+    BINDING_ERROR = PyObject_GetAttrString(errors, "BindingError");
     Py_DECREF(errors);
     if (PyErr_Occurred()) return NULL;
 
@@ -1098,6 +1106,10 @@ PyInit__native(void) {
     if (lean_io_result_is_ok(res)) {
       lean_dec_ref(res);
       res = initialize_EthLib_EthLib_Engine_Exports(1);
+    }
+    if (lean_io_result_is_ok(res)) {
+      lean_dec_ref(res);
+      res = initialize_EthLib_EthLib_Base_Exports_Echo(1);
     }
     if (lean_io_result_is_ok(res)) {
       lean_dec_ref(res);

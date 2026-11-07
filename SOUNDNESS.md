@@ -1626,12 +1626,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 287 operations and 41 size constants.
-The Python extension calls 287 of the operations and 41 of the constants.
+Lean exports 290 operations and 41 size constants.
+The Python extension calls 290 of the operations and 41 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-9732 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (2650), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1211), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (525), `xmss.c` (134).
+10196 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (2650), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1223), `pow.c` (105), `precompile.c` (95), `pyvalue.c` (420), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (557), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
@@ -1642,6 +1642,23 @@ The C layer raises them as an exception of `ethlib.errors`, one class for each p
 C reads the code from the pair that the export returns.
 A wrong field offset in C would give a wrong code, and no theorem covers that read.
 Some wrong argument sizes are caught in C first, and raise `ValueError` with no code.
+
+One generic converter in `pyvalue.c` passes typed values between Python and Lean.
+It knows the constructors of one Lean type of Python values, and the type of no export.
+Such an export needs only a short C wrapper that passes its Lean function and its arity to the generic caller, and no byte format of its own.
+The C code repeats the order of the constructors of the Lean type, and no theorem checks it.
+A change to that order needs the same change in C.
+
+On the Lean side, every typed export requires a theorem for the type of its result.
+That theorem says that reading back the value of a result gives that result, so two results never become one value of the Lean type.
+The converter refuses a Lean `dict` with a repeated key, which would drop a value.
+It counts the parts and the bytes of each call from Python, and refuses more than a million parts or 512 MiB.
+However much a call shares between its lists, the converter then builds at most a million parts and 512 MiB.
+A property test sends random nested values through Lean and back, with integers of thousands of bits.
+A separate test passes a value at the deepest level allowed.
+Another property test sends values that the converter must refuse, and checks that each raises `TypeError` or `ValueError`, never a crash.
+The converter refuses an `int` wider than 65536 bits, because Lean reads the digits of a large `int` in time quadratic in their number.
+Each export that moves to typed values removes its own C, and the line count above shows it.
 
 ### B5. Compiler substitutions in this repository
 

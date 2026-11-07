@@ -184,6 +184,7 @@ extern PyObject* WEAK_SUBJECTIVITY_ERROR;
 extern PyObject* VALIDATOR_DUTY_ERROR;
 extern PyObject* PROPOSER_ERROR;
 extern PyObject* SLASHING_PROTECTION_ERROR;
+extern PyObject* BINDING_ERROR;
 
 /* ---- Argument parsing helpers ---------------------------------------- */
 
@@ -521,5 +522,36 @@ PyObject* py_engine_new_payload_on_chain                 (PyObject* self, PyObje
 PyObject* py_engine_forkchoice_updated                   (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload            (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload_gloas      (PyObject* self, PyObject* args);
+
+/* ---- Typed values (`pyvalue.c`) --------------------------------------- */
+
+/* The Lean `PyValue` of a Python object, or NULL with an exception set. */
+lean_object*
+pyvalue_of_py(
+  PyObject* obj
+);
+
+/* The `PyValue` of a successful result as a Python object.
+ *
+ * A failure inside it becomes an instance of `error_class`.
+ * On an error it returns NULL with an exception set. */
+PyObject*
+except_into_pyvalue(
+  lean_object* result,
+  PyObject* error_class
+);
+
+/* Call an export between `PyValue`s on the tuple of the arguments of a method.
+ *
+ * A call with another number of arguments than `arity` raises `TypeError`. */
+PyObject*
+call_pyvalue_export(
+  lean_object* (*export)(lean_object*),
+  PyObject* args,
+  Py_ssize_t arity,
+  PyObject* error_class
+);
+
+PyObject* py_pyvalue_echo                                 (PyObject* self, PyObject* args);
 
 #endif /* ETHCS_WRAPPERS_H */

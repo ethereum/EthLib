@@ -7965,4 +7965,13 @@
       {"constructor": "duty", "code": 16}]}],
    "error_class": "ProposerError",
    "docstring":
-   "From Gloas: the forkchoice update of a proposer, as JSON text.\n\nThe store comes from an anchor state, an anchor block and steps of the fork choice export.\n\nThe signature checks run unless `verify` is false."}]}
+   "From Gloas: the forkchoice update of a proposer, as JSON text.\n\nThe store comes from an anchor state, an anchor block and steps of the fork choice export.\n\nThe signature checks run unless `verify` is false."},
+  {"summary":
+   "The value that Python passes, back to Python, with each failure tuple read as a failure.",
+   "signature": "(value: object) -> object",
+   "operation": "EthLib.Exports.pyValueEcho",
+   "method": "pyvalue_echo",
+   "errors": [],
+   "error_class": "BindingError",
+   "docstring":
+   "The value that Python passes, back to Python, with each failure tuple read as a failure.\n\nIt tests the converter of the C layer in both directions."}]}
