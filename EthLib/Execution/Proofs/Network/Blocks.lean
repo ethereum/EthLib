@@ -13,7 +13,11 @@ Headers that pass the check of a request are at most as many as asked.
 
 Each one is `skip + 1` blocks after the one before it, or before it when the request is reversed.
 
-An answer passes exactly when it is short enough, starts at the start, and each header follows.
+An answer passes the check exactly when three conditions hold.
+
+It is not longer than asked, and its first header, if any, is the start block.
+
+Each header follows the one before it.
 -/
 
 @[expose] public section
