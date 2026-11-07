@@ -172,11 +172,9 @@ on every message shorter than `2^61` bytes (`EthLib/Cryptography/Proofs/Hash/Sha
 **The pairing.**
 The pairing check reads only the group elements of valid points
 (`pairingCheck_congr`, `PairingCongr.lean`).
-The pairing is bilinear on the multiples of the generators: `e(a g_1, b g_2) = e(g_1, g_2)^(a b)`
-for all `a` and `b` in `Fr` (`pairingBilinear`, `PairingAte.lean`).
+The pairing is bilinear on the multiples of the generators: `e(a g_1, b g_2) = e(g_1, g_2)^(a b)` for all `a` and `b` in `Fr` (`pairingBilinear`, `PairingAte.lean`).
 The pairing of the generators has order `r` (`orderOf_pairing_generators`, `Nondegenerate.lean`).
-So the pairing law holds: on representatives of `a_i * g_1` and `b_i * g_2`,
-the check passes exactly when `sum_i a_i * b_i = 0` (`pairingLaws`, `PairingAte.lean`).
+So the pairing law holds: on representatives of `a_i * g_1` and `b_i * g_2`, the check passes exactly when `sum_i a_i * b_i = 0` (`pairingLaws`, `PairingAte.lean`).
 Theorems about the result of a pairing check take the law as a hypothesis, which `pairingLaws` supplies.
 
 **Signatures.**
