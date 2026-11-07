@@ -16,6 +16,8 @@ The exclusive or of byte strings is commutative, and applying one string twice u
 A byte of a join or a slice is a byte of a part, or zero past its end.
 
 Two strings of one size are equal when they agree on every byte.
+
+A loop over the bytes of a string runs as a loop over the list of those bytes, in order.
 -/
 
 @[expose] public section
@@ -117,5 +119,47 @@ theorem eq_of_byteAt {a b : ByteArray} (size : a.size = b.size)
   unfold byteAt at h
   rw [dite_eq_left (show i < a.size from ha), dite_eq_left (show i < b.size from hb)] at h
   exact h
+
+/-! ## A loop over the bytes -/
+
+/-- A loop over a buffer with `i` bytes left runs as a loop over the last `i` bytes of its list.
+
+With `i + 1` bytes left, it reads byte `size - 1 - i`. -/
+theorem forIn_loop_eq_forIn_drop {β : Type} {m : Type → Type} [Monad m] [LawfulMonad m]
+    (as : ByteArray) (f : UInt8 → β → m (ForInStep β)) :
+    ∀ (i : Nat) (h : i ≤ as.size) (b : β),
+      ByteArray.forIn.loop as f i h b = forIn (as.data.toList.drop (as.size - i)) b f := by
+  have hl : as.data.toList.length = as.size := Array.length_toList
+  intro i
+  induction i with
+  | zero =>
+    intro h b
+    rw [ByteArray.forIn.loop.eq_1, Nat.sub_zero, ← hl, List.drop_length]
+    rfl
+  | succ i ih =>
+    intro h b
+    have hlt : as.size - (i + 1) < as.data.toList.length := by omega
+    rw [ByteArray.forIn.loop.eq_2, List.drop_eq_getElem_cons hlt, List.forIn_cons]
+    -- With `i + 1` bytes left, the loop reads the first of them.
+    have hget : as[as.size - 1 - i] = as.data.toList[as.size - (i + 1)] := by
+      simp only [Array.getElem_toList, show as.size - 1 - i = as.size - (i + 1) by omega]
+      rfl
+    rw [hget]
+    congr 1
+    funext r
+    cases r with
+    | done b => rfl
+    | yield b =>
+      dsimp only
+      rw [ih]
+      congr 2
+      omega
+
+/-- A loop over the bytes of a buffer runs as a loop over the list of its bytes, in order. -/
+theorem forIn_eq_forIn_toList {β : Type} {m : Type → Type} [Monad m] [LawfulMonad m]
+    (as : ByteArray) (b : β) (f : UInt8 → β → m (ForInStep β)) :
+    forIn as b f = forIn as.data.toList b f := by
+  show ByteArray.forIn.loop as f as.size (Nat.le_refl _) b = _
+  rw [forIn_loop_eq_forIn_drop, Nat.sub_self, List.drop_zero]
 
 end EthLib.Base

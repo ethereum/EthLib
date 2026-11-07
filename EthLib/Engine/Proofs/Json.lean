@@ -4,6 +4,9 @@ public import EthLib.Engine.Json
 public import EthLib.Base.Hex
 public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
+public import EthLib.Base.Proofs.Bytes
+-- The digits of `Nat.toDigits` must unfold for `decide` to read them.
+import all Init.Data.Repr
 
 /-!
 # Proofs: the JSON decoders
@@ -39,6 +42,8 @@ A withdrawal decodes exactly when its object holds exactly its four fields, each
 A list decodes exactly when the value is an array whose items each decode, in order.
 
 A byte string of a fixed size, such as an address, decodes exactly to the vector of its bytes.
+
+A number below the bound, written in lowercase hex without leading zeros, decodes to itself.
 
 The 64-bit decoder returns a number exactly when the decoder with the bound `2^64` returns it.
 
@@ -212,28 +217,26 @@ private theorem forIn_range'_push {s k : Nat}
 private theorem hexDigitChar_ascii (n : Fin 16) : (hexDigitChar n).val ≤ 0x7F := by
   revert n; decide +revert
 
-/-- The digits after the marker `0x` of a hex encoding are the ASCII codes of its characters. -/
-theorem hexDigits_hexString (what : String) (data : List UInt8) :
-    hexDigits what (.str (hexString data)) =
-      .ok ((data.flatMap byteHexDigits).map fun c => c.val.toUInt8).toByteArray := by
+/-- The digits after the marker `0x` of an ASCII text are the codes of its characters. -/
+private theorem hexDigits_ascii (what : String) (l : List Char) (h : ∀ c ∈ l, c.val ≤ 0x7F) :
+    hexDigits what (.str ("0x" ++ String.ofList l)) =
+      .ok (l.map fun c => c.val.toUInt8).toByteArray := by
   unfold hexDigits
-  have hascii : ∀ c ∈ '0' :: 'x' :: data.flatMap byteHexDigits, c.val ≤ 0x7F := by
+  have hascii : ∀ c ∈ '0' :: 'x' :: l, c.val ≤ 0x7F := by
     intro c hc
-    simp only [List.mem_cons, List.mem_flatMap, byteHexDigits, List.mem_cons,
-      List.not_mem_nil, or_false] at hc
-    rcases hc with rfl | rfl | ⟨b, -, rfl | rfl⟩
+    simp only [List.mem_cons] at hc
+    rcases hc with rfl | rfl | hc
     · decide
     · decide
-    · exact hexDigitChar_ascii _
-    · exact hexDigitChar_ascii _
-  have hs : (hexString data).toUTF8 =
-      ('0'.val.toUInt8 :: 'x'.val.toUInt8 ::
-        (data.flatMap byteHexDigits).map fun c => c.val.toUInt8).toByteArray := by
-    rw [String.toUTF8_eq_toByteArray, ← String.ofList_toList (s := hexString data),
-      toList_hexString, String.toByteArray_ofList, ascii_utf8Encode _ hascii]
+    · exact h c hc
+  have hs : ("0x" ++ String.ofList l).toUTF8 =
+      ('0'.val.toUInt8 :: 'x'.val.toUInt8 :: l.map fun c => c.val.toUInt8).toByteArray := by
+    have : ("0x" ++ String.ofList l) = String.ofList ('0' :: 'x' :: l) := by
+      apply String.ext; simp
+    rw [this, String.toUTF8_eq_toByteArray, String.toByteArray_ofList, ascii_utf8Encode _ hascii]
     rfl
   simp only [hs]
-  generalize (data.flatMap byteHexDigits).map (fun c => c.val.toUInt8) = ds
+  generalize l.map (fun c => c.val.toUInt8) = ds
   have h0 : '0'.val.toUInt8 = 48 := by decide
   have hx : 'x'.val.toUInt8 = 120 := by decide
   rw [h0, hx]
@@ -243,6 +246,18 @@ theorem hexDigits_hexString (what : String) (data : List UInt8) :
   congr 1
   apply ByteArray.ext
   simp [ByteArray.data_extract]
+
+/-- The digits after the marker `0x` of a hex encoding are the ASCII codes of its characters. -/
+theorem hexDigits_hexString (what : String) (data : List UInt8) :
+    hexDigits what (.str (hexString data)) =
+      .ok ((data.flatMap byteHexDigits).map fun c => c.val.toUInt8).toByteArray := by
+  have htext : hexString data = "0x" ++ String.ofList (data.flatMap byteHexDigits) := by
+    apply String.ext
+    simp [toList_hexString]
+  rw [htext]
+  refine hexDigits_ascii what _ fun c hc => ?_
+  simp only [List.mem_flatMap, byteHexDigits, List.mem_cons, List.not_mem_nil, or_false] at hc
+  rcases hc with ⟨b, -, rfl | rfl⟩ <;> exact hexDigitChar_ascii _
 
 /-- A byte is sixteen times its high digit plus its low digit. -/
 private theorem byte_split (b : UInt8) :
@@ -428,5 +443,135 @@ theorem fixed_eq_ok_iff {what : String} {n : Nat} {j : Lean.Json} {upper : Bool}
 theorem address_eq_ok_iff {what : String} {j : Lean.Json} {a : Address} :
     address what j = .ok a ↔ bytesOf what true j = .ok ⟨a.toArray⟩ :=
   fixed_eq_ok_iff
+
+/-! ## A number written in hex -/
+
+/-- The value of the code of a hex digit, or zero for any other code. -/
+private def digitValue (c : UInt8) : Nat := ((hexValue false c).getD 0).toNat
+
+/-- The digit that Lean core writes for a value below sixteen is the lowercase hex digit. -/
+private theorem digitChar_eq_hexDigitChar : ∀ n (h : n < 16),
+    Nat.digitChar n = hexDigitChar ⟨n, h⟩ := by
+  decide
+
+/-- Each digit that `Nat.toDigits 16` writes is a lowercase hex digit, read back as its value. -/
+private theorem hexValue_digitChar (n : Nat) (hn : n < 16) :
+    hexValue false (Nat.digitChar n).val.toUInt8 = some n.toUInt8 ∧
+      (Nat.digitChar n).val ≤ 0x7F := by
+  rw [digitChar_eq_hexDigitChar n hn]
+  exact ⟨hexValue_hexDigitChar false ⟨n, hn⟩, hexDigitChar_ascii _⟩
+
+/-- No digit of a positive value below sixteen is the digit `0`. -/
+private theorem digitChar_ne_zero : ∀ n, n < 16 → 0 < n → ¬ Nat.digitChar n = '0' := by
+  decide
+
+/-- The hex digits of a number are ASCII digits whose values, read from the first, give the number.
+
+A positive number does not start with the digit `0`. -/
+private theorem toDigits_hex (n : Nat) :
+    (∀ c ∈ Nat.toDigits 16 n, ∃ d, d < 16 ∧ c = Nat.digitChar d) ∧
+      ((Nat.toDigits 16 n).map fun c => c.val.toUInt8).foldl
+        (fun acc c => 16 * acc + digitValue c) 0 = n ∧
+      (0 < n → (Nat.toDigits 16 n).head? ≠ some '0') := by
+  induction n using Nat.strongRecOn with
+  | _ n ih =>
+    rw [Nat.toDigits_eq_ite (by decide : 1 < 16)]
+    split
+    · rename_i hn
+      refine ⟨?_, ?_, ?_⟩
+      · intro c hc
+        exact ⟨n, hn, by simpa using hc⟩
+      · simp only [List.map_cons, List.map_nil, List.foldl_cons, List.foldl_nil, digitValue]
+        rw [(hexValue_digitChar n hn).1]
+        simp [Nat.toUInt8_eq, UInt8.toNat_ofNat', Nat.mod_eq_of_lt (by omega : n < 256)]
+      · intro hpos
+        simp only [List.head?_cons, ne_eq, Option.some.injEq]
+        exact digitChar_ne_zero n hn hpos
+    · rename_i hn
+      have hq : n / 16 < n := by omega
+      obtain ⟨hall, hval, hhead⟩ := ih (n / 16) hq
+      refine ⟨?_, ?_, ?_⟩
+      · intro c hc
+        rcases List.mem_append.mp hc with hc | hc
+        · exact hall c hc
+        · exact ⟨n % 16, by omega, by simpa using hc⟩
+      · rw [List.map_append, List.foldl_append, hval]
+        simp only [List.map_cons, List.map_nil, List.foldl_cons, List.foldl_nil, digitValue]
+        rw [(hexValue_digitChar (n % 16) (by omega)).1]
+        simp [Nat.toUInt8_eq, UInt8.toNat_ofNat', Nat.mod_eq_of_lt (by omega : n % 16 < 256)]
+        omega
+      · intro _
+        have hne := Nat.toDigits_ne_nil (b := 16) (n := n / 16)
+        obtain ⟨x, xs, hx⟩ := List.exists_cons_of_ne_nil hne
+        have := hhead (by omega)
+        rw [hx] at this ⊢
+        simpa using this
+
+/-- A digit whose code is that of `0` is the digit `0`. -/
+private theorem digitChar_code_zero : ∀ n, n < 16 →
+    (Nat.digitChar n).val.toUInt8 = 48 → Nat.digitChar n = '0' := by
+  decide
+
+/-- A loop whose step multiplies by sixteen and adds the value of a digit computes the fold. -/
+private theorem forIn_digits {ds : List UInt8}
+    {f : UInt8 → Nat → Except EngineError (ForInStep Nat)}
+    (h : ∀ c ∈ ds, ∀ s, f c s = .ok (.yield (16 * s + digitValue c))) (acc : Nat) :
+    forIn ds acc f = .ok (ds.foldl (fun a c => 16 * a + digitValue c) acc) := by
+  induction ds generalizing acc with
+  | nil => rfl
+  | cons c ds ih =>
+    rw [List.forIn_cons, h c (by simp) acc]
+    exact ih (fun c' hc' s => h c' (by simp [hc']) s) _
+
+/-- The decoder of numbers reads back a number below its bound, written in lowercase hex.
+
+The text is `0x` and the digits of the number, without leading zeros, and `0x0` for zero.
+
+It covers that text only, and does not state which other texts decode. -/
+theorem quantity_toDigits (what : String) {bits v : Nat} (hv : v < 2 ^ bits) :
+    quantity what bits (.str ("0x" ++ String.ofList (Nat.toDigits 16 v))) = .ok v := by
+  obtain ⟨hall, hval, hhead⟩ := toDigits_hex v
+  have hascii : ∀ c ∈ Nat.toDigits 16 v, c.val ≤ 0x7F := by
+    intro c hc
+    obtain ⟨d, hd, rfl⟩ := hall c hc
+    exact (hexValue_digitChar d hd).2
+  unfold quantity
+  rw [hexDigits_ascii _ _ hascii]
+  simp only [bind, Except.bind]
+  have hne := Nat.toDigits_ne_nil (b := 16) (n := v)
+  have hsize : (List.map (fun c => c.val.toUInt8) (Nat.toDigits 16 v)).toByteArray.size =
+      (Nat.toDigits 16 v).length := by simp
+  -- There is at least one digit.
+  rw [ite_eq_right (by rw [hsize]; exact fun h => hne (List.length_eq_zero_iff.mp h))]
+  -- The first digit is `0` only for the number 0, which has no other digit.
+  rw [ite_eq_right]
+  · -- Every digit is read, and the digits give the number.
+    rw [forIn_eq_forIn_toList]
+    have hdata : (List.map (fun c => c.val.toUInt8) (Nat.toDigits 16 v)).toByteArray.data.toList =
+        List.map (fun c => c.val.toUInt8) (Nat.toDigits 16 v) := by simp
+    rw [hdata, forIn_digits, hval]
+    · simp [hv, pure, Except.pure]
+    · intro c hc s
+      obtain ⟨c', hc', rfl⟩ := List.mem_map.mp hc
+      obtain ⟨d, hd, rfl⟩ := hall c' hc'
+      simp only [digitValue, (hexValue_digitChar d hd).1, Option.getD_some]
+      rfl
+  · rintro ⟨hgt, hzero⟩
+    obtain ⟨x, xs, hx⟩ := List.exists_cons_of_ne_nil hne
+    rw [hx] at hzero hgt
+    have hx48 : x.val.toUInt8 = 48 := by simpa using hzero
+    obtain ⟨d, hd, rfl⟩ := hall x (by simp [hx])
+    have hpos : 0 < v := by
+      rcases Nat.eq_zero_or_pos v with rfl | hp
+      · simp [Nat.toDigits_zero] at hx
+        obtain ⟨rfl, rfl⟩ := hx
+        simp at hgt
+      · exact hp
+    exact hhead hpos (by rw [hx]; simp [digitChar_code_zero d hd hx48])
+
+/-- The decoder of 64-bit numbers reads back any 64-bit number, written in lowercase hex. -/
+theorem uint64_toDigits (what : String) (x : UInt64) :
+    uint64 what (.str ("0x" ++ String.ofList (Nat.toDigits 16 x.toNat))) = .ok x :=
+  uint64_eq_ok_iff.mpr (quantity_toDigits what x.toNat_lt)
 
 end EthLib.Engine.Json
