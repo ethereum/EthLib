@@ -187,6 +187,22 @@ theorem vector_mapM_ok_getElem {n : Nat} {xs : Vector α n} {ys : Vector β n}
   have := mapM_ok_getElem onList i (by simpa using hi)
   simpa using this
 
+/-- A map over a vector returns a vector exactly when each output is the image of its input. -/
+theorem vector_mapM_eq_ok_iff {n : Nat} {xs : Vector α n} {ys : Vector β n} :
+    xs.mapM f = .ok ys ↔ ∀ (i : Nat) (hi : i < n), f xs[i] = .ok ys[i] := by
+  refine ⟨fun h i hi => vector_mapM_ok_getElem h i hi, fun each => ?_⟩
+  -- The map over the entries as a list returns the entries of the outputs.
+  have onList : xs.toArray.toList.mapM f = .ok ys.toArray.toList :=
+    mapM_eq_ok_iff.mpr ⟨by simp, fun i hi => by simpa using each i (by simpa using hi)⟩
+  have onArray : Vector.toArray <$> xs.mapM f = .ok ys.toArray := by
+    rw [Vector.toArray_mapM, Array.mapM_eq_mapM_toList, onList]
+    rfl
+  cases mapped : xs.mapM f with
+  | error e => rw [mapped] at onArray; cases onArray
+  | ok zs =>
+    rw [mapped] at onArray
+    exact congrArg Except.ok (Vector.toArray_inj.mp (Except.ok.inj onArray))
+
 /-- Two functions that agree on every entry of a vector map it to one result. -/
 theorem vector_mapM_congr {n : Nat} {xs : Vector α n} {g : α → Except ε β}
     (agree : ∀ (i : Nat) (hi : i < n), f xs[i] = g xs[i]) : xs.mapM f = xs.mapM g := by
