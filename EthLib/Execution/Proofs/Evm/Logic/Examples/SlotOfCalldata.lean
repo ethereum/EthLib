@@ -13,8 +13,7 @@ The bytecode compares the top four bytes of the first word of its call data with
 
 On a match, it copies the words of call data at the offsets 4 and 36 to memory.
 
-It hashes those 64 bytes with Keccak-256, and returns the word of storage of the current account at
-that hash.
+It hashes those 64 bytes with Keccak-256, and returns the word of storage at that hash.
 
 Otherwise it reverts, with no output.
 
@@ -27,7 +26,7 @@ Otherwise it reverts, with no output.
 - At 20, `60 04 35 60 00 52` writes the word of call data at offset 4 at offset 0 of memory.
 - At 26, `60 24 35 60 20 52` writes the word of call data at offset 36 at offset 32 of memory.
 - At 32, `60 40 60 00 20` hashes the 64 bytes of memory from offset 0.
-- At 37, `54` reads the slot of storage at that hash.
+- At 37, `54` reads the slot of storage of the current account at that hash.
 - At 38, `60 00 52 60 20 60 00 f3` writes the word at offset 0 of memory and returns it.
 
 A word of call data reads as CALLDATALOAD reads it: the 32 bytes from its offset.
@@ -415,8 +414,7 @@ theorem lookup (hfork : .berlin ≤ fork) {cold : Bool}
 
 /-! ## The specification -/
 
-/-- A call whose prefix is the tag returns the word of storage at the key that its call data
-names.
+/-- A call whose prefix is the tag returns the word of storage at the key its call data names.
 
 It pays 122 gas and SLOAD, which costs 2100 for a cold slot and 100 for a warm one.
 
