@@ -63,7 +63,7 @@ It holds the withdrawals exactly from version 2.
 
 It holds the two blob gas fields exactly in version 3.
 
-A payload of version 4 decodes exactly when its object holds exactly the fields of that version.
+A payload of version 4 decodes only when its object holds exactly the fields of that version.
 
 Its access list and its slot must then decode.
 
@@ -432,7 +432,7 @@ theorem withdrawal_eq_ok_iff {j : Lean.Json} {w : Execution.Blocks.Withdrawal} :
     simp only [bind_ok_iff, field_eq_ok_iff]
     exact ⟨i, hl1, _, hf1, v, hl2, _, hf2, a, hl3, _, hf3, m, hl4, _, hf4, rfl⟩
 
-/-- A payload of version 4 decodes exactly when its object holds exactly the fields of version 4.
+/-- A payload of version 4 decodes exactly when it has the fields of version 4 and each decodes.
 
 Fields whose value is null count as absent.
 
