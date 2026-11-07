@@ -6,8 +6,9 @@ public import EthLib.Execution.Network.Protocol
 /-!
 # `Execution.Network.Receipts`
 
-The receipt exchange of the eth capability, from "Receipt Encoding and Validity" and "Protocol
-Messages" of [`caps/eth.md`][eth].
+The receipt exchange of the eth capability, from two sections of [`caps/eth.md`][eth].
+
+They are "Receipt Encoding and Validity" and "Protocol Messages".
 
 [eth]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#receipt-encoding-and-validity
 
@@ -16,22 +17,27 @@ Messages" of [`caps/eth.md`][eth].
 
 On eth/68, a receipt has its consensus form, with its Bloom filter.
 
-From eth/69 on, it is `[tx-type, post-state-or-status, cumulative-gas, logs]`, without the
-filter, as [EIP-7642](https://eips.ethereum.org/EIPS/eip-7642#receipts-message-changes) says.
+From eth/69 on, it is `[tx-type, post-state-or-status, cumulative-gas, logs]`, without the filter.
 
-From eth/70 on, a peer may send part of the receipts of a block, as
-[EIP-7975](https://eips.ethereum.org/EIPS/eip-7975#specification) says.
+[EIP-7642][eip-7642] says so.
+
+From eth/70 on, a peer may send part of the receipts of a block, as [EIP-7975][eip-7975] says.
 
 - GetReceipts gains `firstBlockReceiptIndex`, the first receipt to send of the first block.
 - Receipts gains `lastBlockIncomplete`, set when the list of the last block is cut short.
 
-The fields of a receipt depend on the fork of its block, so the messages carry each receipt as
-its RLP item.
+The fields of a receipt depend on the fork of its block.
+
+So the messages carry each receipt as its RLP item.
 
 A node checks the receipts of a whole block against the receipts root of its header.
 
-To do so, it computes the Bloom filter of each receipt again, and encodes it in its consensus
-form.
+To do so, it computes the Bloom filter of each receipt again.
+
+It then encodes each receipt in its consensus form.
+
+[eip-7642]: https://eips.ethereum.org/EIPS/eip-7642#receipts-message-changes
+[eip-7975]: https://eips.ethereum.org/EIPS/eip-7975#specification
 -/
 
 @[expose] public section
@@ -78,8 +84,9 @@ def ofItem (item : Item) : Except RlpError (WireReceipt fork) := do
 
 instance : Codec (WireReceipt fork) := ⟨toItem, ofItem⟩
 
-/-- The consensus form of a receipt: its type, and the receipt with the Bloom filter of its
-logs. -/
+/-- The consensus form of a receipt.
+
+It is its type, and the receipt with the Bloom filter of its logs. -/
 def toConsensus (r : WireReceipt fork) : UInt8 × Receipt fork :=
   (r.txType, makeReceipt r.outcome r.cumulativeGasUsed r.logs)
 
@@ -146,8 +153,7 @@ def PartialReceiptsError.code : PartialReceiptsError → UInt32
   | .totalTooLarge .. => 503
 
 /--
-The checks that [EIP-7975](https://eips.ethereum.org/EIPS/eip-7975#specification) asks of the
-receipts of a block that arrive in parts.
+The checks that EIP-7975 asks of the receipts of a block that arrive in parts.
 
 `gasLimits` holds the gas limit of each transaction of the block, in order.
 
@@ -162,8 +168,15 @@ A list still in parts has fewer, so EthLib reads the rule as "at most" until the
 - Each receipt is at most the gas limit of its transaction divided by 8.
 - All the receipts together are at most the gas limit of the block divided by 8.
 
-The EIP says only "allowed by the block gas limit" for the total, so EthLib applies the bound of
-one transaction to the whole block, as its Rationale derives that bound from the gas.
+The EIP says only "allowed by the block gas limit" for the total.
+
+So EthLib applies the bound of one transaction to the whole block.
+
+The Rationale of the EIP derives that bound from the gas.
+
+The source is the specification of [EIP-7975][eip-7975].
+
+[eip-7975]: https://eips.ethereum.org/EIPS/eip-7975#specification
 -/
 def checkPartialReceipts (gasLimits : List Nat) (blockGasLimit : Nat) (sizes : List Nat) :
     Except PartialReceiptsError Unit := do

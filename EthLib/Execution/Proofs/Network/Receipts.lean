@@ -8,8 +8,9 @@ public import EthLib.Execution.Proofs.Blocks.Receipt
 
 A receipt reads back from its RLP item.
 
-Leaving out the Bloom filter and computing it again gives a receipt back exactly when its filter
-is the filter of its logs.
+Leaving out the Bloom filter and computing it again can give a receipt back.
+
+It does so exactly when its filter is the filter of its logs.
 
 From eth/69 on, the reader of a receipt gives its consensus form.
 
@@ -53,8 +54,9 @@ theorem ofConsensus_toConsensus (r : WireReceipt fork) : ofConsensus r.toConsens
   cases r
   rfl
 
-/-- A receipt in consensus form comes back through eth/69 exactly when its Bloom filter is the
-filter of its logs. -/
+/-- A receipt in consensus form can come back through eth/69.
+
+It does so exactly when its Bloom filter is the filter of its logs. -/
 theorem toConsensus_ofConsensus (t : UInt8) (r : Receipt fork) :
     (ofConsensus (t, r)).toConsensus = (t, r) ↔ r.bloom = logsBloom r.logs := by
   cases r
@@ -69,8 +71,9 @@ theorem consensusOfItem_toItem {version : EthVersion} (hv : version ≠ .eth68)
   simp [consensusOfItem, hv, LawfulCodec.ofItem_toItem, Functor.map, Except.map,
     Except.mapError]
 
-/-- A partial list that passes the checks of EIP-7975 has no more receipts than transactions, each
-receipt within its bound, and a total within the bound of the block. -/
+/-- A partial list that passes the checks of EIP-7975 has no more receipts than transactions.
+
+Each receipt is within its bound, and the total is within the bound of the block. -/
 theorem of_checkPartialReceipts {gasLimits : List Nat} {blockGasLimit : Nat} {sizes : List Nat}
     (h : checkPartialReceipts gasLimits blockGasLimit sizes = .ok ()) :
     sizes.length ≤ gasLimits.length ∧

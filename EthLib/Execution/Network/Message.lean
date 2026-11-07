@@ -12,8 +12,9 @@ public import EthLib.Execution.Network.Transactions
 
 The messages of the eth capability, read by their message ID and the negotiated version.
 
-A message on the wire is its message ID, then the RLP list of its data, as in
-"Message Encoding" of [`rlpx.md`][rlpx].
+A message on the wire is its message ID, then the RLP list of its data.
+
+"Message Encoding" of [`rlpx.md`][rlpx] defines this form.
 
 [rlpx]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/rlpx.md#message-encoding
 
@@ -129,8 +130,9 @@ def id : Message → Nat
 def envelope (requestId : UInt64) (payload : Item) : Item :=
   .list [Codec.toItem requestId, payload]
 
-/-- The envelope of eth/70, `[request-id, part, payload]`, or `[request-id, payload]` without a
-part. -/
+/-- The envelope of eth/70, `[request-id, part, payload]`.
+
+Without a part, it is `[request-id, payload]`. -/
 def withPart {α : Type} [Codec α] (requestId : UInt64) (part : Option α) (payload : Item) :
     Item :=
   match part with
@@ -164,8 +166,10 @@ def readEnvelope {α : Type} [Codec α] (item : Item) : Except RlpError (UInt64 
   | [i, p] => return (← i.field 0, ← p.field 1)
   | items => throw (.wrongFieldCount 2 items.length)
 
-/-- The request ID, the part and the payload of `[request-id, part, payload]` from eth/70 on, or
-of `[request-id, payload]` before. -/
+/-- The request ID, the part and the payload of an envelope.
+
+The envelope is `[request-id, part, payload]` from eth/70 on, and `[request-id, payload]` before.
+-/
 def readWithPart {α β : Type} [Codec α] [Codec β] (version : EthVersion) (item : Item) :
     Except RlpError (UInt64 × Option α × β) := do
   if version < .eth70 then
@@ -183,8 +187,9 @@ def requestId? : Message → Option UInt64
   | getBlockAccessLists i _ | blockAccessLists i _ | getCells i _ _ | cells i _ _ _ => some i
   | _ => none
 
-/-- Whether `response` answers `request`: it is the response type of the request type, and it
-repeats the request ID. -/
+/-- Whether `response` answers `request`.
+
+It is the response type of the request type, and it repeats the request ID. -/
 def answers (request response : Message) : Bool :=
   match request, response with
   | getBlockHeaders i _, blockHeaders j _ => i == j
@@ -270,8 +275,9 @@ def checkPooledResponse (request response : Message) : Except PoolError Unit :=
 
 /-- Whether `response` is Cells that answers the GetCells `request`.
 
-It must repeat the request ID and pass the checks of the cells, with `blobs` the number of blobs
-of each transaction of the response. -/
+It must repeat the request ID and pass the checks of the cells.
+
+There `blobs` is the number of blobs of each transaction of the response. -/
 def checkCellsResponse (blobs : List Nat) (request response : Message) :
     Except CellsError Unit :=
   match request, response with
@@ -283,8 +289,11 @@ def checkCellsResponse (blobs : List Nat) (request response : Message) :
 
 `expected` holds the access list hash of the header of each requested block.
 
-`eth.md` gives each element of the response one requested block, so the response has exactly
-one entry per request, unlike snap/2, which lets the peer cut the tail. -/
+`eth.md` gives each element of the response one requested block.
+
+So the response has exactly one entry per request.
+
+This differs from snap/2, which lets the peer cut the tail. -/
 def accessListsResponse (expected : List Hash32) (request response : Message) : Bool :=
   match request, response with
   | getBlockAccessLists i _, blockAccessLists j lists =>

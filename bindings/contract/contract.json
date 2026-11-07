@@ -5934,7 +5934,7 @@
       {"constructor": "range", "code": 103}]}],
    "error_class": "EthWireError",
    "docstring":
-   "Whether a node accepts the Status of a peer, on the negotiated version `version`.\n\nThe node has the schedule `s`, and its head has a block number and a timestamp.\n\n- The announced version must be the negotiated one.\n- The fork identifier must pass the rules of EIP-2124.\n- From eth/69 on, the announced range must be valid.\n\nThe network ID and the genesis hash are left to the node, since no rule of the specification\nreads them."},
+   "Whether a node accepts the Status of a peer, on the negotiated version `version`.\n\nThe node has the schedule `s`, and its head has a block number and a timestamp.\n\n- The announced version must be the negotiated one.\n- The fork identifier must pass the rules of EIP-2124.\n- From eth/69 on, the announced range must be valid.\n\nThe network ID and the genesis hash are left to the node.\n\nNo rule of the specification reads them."},
   {"summary":
    "Whether `response` is BlockHeaders that answers the GetBlockHeaders `request`.",
    "signature": "(version: int, request: bytes, response: bytes) -> bool",
@@ -5983,7 +5983,7 @@
    "errors": [],
    "error_class": "EthWireError",
    "docstring":
-   "The hash of a transaction as it crosses the wire.\n\nA legacy transaction hashes its RLP list, and a typed one its bytes `tx-type || tx-data`.\n\nA blob transaction in PooledTransactions can come in its network form, the type 3 followed by\n`rlp([tx_payload_body, ...])`, as\n[EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#networking) says.\n\nIts hash is the hash of `0x03 || rlp(tx_payload_body)`, the transaction without its blobs.\n\nThe payload of a canonical blob transaction starts with the chain ID, a scalar, and the network\nform with the body, a list, so the first item tells the two apart."},
+   "The hash of a transaction as it crosses the wire.\n\nA legacy transaction hashes its RLP list, and a typed one its bytes `tx-type || tx-data`.\n\nA blob transaction in PooledTransactions can come in its network form, as [EIP-4844][eip-4844] says.\n\nThat form is the type 3 followed by `rlp([tx_payload_body, ...])`.\n\nIts hash is the hash of `0x03 || rlp(tx_payload_body)`, the transaction without its blobs.\n\nThe payload of a canonical blob transaction starts with the chain ID, a scalar.\n\nThe network form starts with the body, a list.\n\nSo the first item tells the two apart.\n\n[eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#networking"},
   {"summary":
    "Whether the receipts of a block, as a version sends them, match the receipts root of its header.",
    "signature":
@@ -5995,7 +5995,7 @@
    "docstring":
    "Whether the receipts of a block, as a version sends them, match the receipts root of its header.\n\nThe root is computed over the consensus forms, as \"Receipt Encoding and Validity\" says.\n\nReceipts that do not read, or that have no root, do not match."},
   {"summary":
-   "Whether the BlockAccessLists data `response` answers the GetBlockAccessLists data `request` of eth/71 on, given the access list hash of each requested block.",
+   "Whether `response` answers a GetBlockAccessLists `request`, given each block's access list hash.",
    "signature":
    "(version: int, request: bytes, response: bytes, expected: list[bytes]) -> bool",
    "operation": "EthLib.Execution.Network.Exports.accessListsAnswerExport",
@@ -6008,9 +6008,9 @@
       {"constructor": "unequalLengths", "code": 3}]}],
    "error_class": "EthWireError",
    "docstring":
-   "Whether the BlockAccessLists data `response` answers the GetBlockAccessLists data `request`\nof eth/71 on, given the access list hash of each requested block."},
+   "Whether `response` answers a GetBlockAccessLists `request`, given each block's access list hash.\n\nThe response is BlockAccessLists data, and both messages exist from eth/71 on."},
   {"summary":
-   "The checks that [EIP-7975](https://eips.ethereum.org/EIPS/eip-7975#specification) asks of the receipts of a block that arrive in parts.",
+   "The checks that EIP-7975 asks of the receipts of a block that arrive in parts.",
    "signature":
    "(gas_limits: bytes, block_gas_limit: int, receipts: bytes) -> bool",
    "operation": "EthLib.Execution.Network.checkPartialReceipts",
@@ -6023,7 +6023,7 @@
       {"constructor": "totalTooLarge", "code": 503}]}],
    "error_class": "EthWireError",
    "docstring":
-   "The checks that [EIP-7975](https://eips.ethereum.org/EIPS/eip-7975#specification) asks of the\nreceipts of a block that arrive in parts.\n\n`gasLimits` holds the gas limit of each transaction of the block, in order.\n\n`sizes` holds the size in bytes of each receipt delivered so far, from the first one.\n\n- No more receipts than transactions; the list is complete when there are as many.\n\nThe EIP asks that the count of receipts \"matches\" the count of transactions.\n\nA list still in parts has fewer, so EthLib reads the rule as \"at most\" until the list is complete.\n\n- Each receipt is at most the gas limit of its transaction divided by 8.\n- All the receipts together are at most the gas limit of the block divided by 8.\n\nThe EIP says only \"allowed by the block gas limit\" for the total, so EthLib applies the bound of\none transaction to the whole block, as its Rationale derives that bound from the gas."},
+   "The checks that EIP-7975 asks of the receipts of a block that arrive in parts.\n\n`gasLimits` holds the gas limit of each transaction of the block, in order.\n\n`sizes` holds the size in bytes of each receipt delivered so far, from the first one.\n\n- No more receipts than transactions; the list is complete when there are as many.\n\nThe EIP asks that the count of receipts \"matches\" the count of transactions.\n\nA list still in parts has fewer, so EthLib reads the rule as \"at most\" until the list is complete.\n\n- Each receipt is at most the gas limit of its transaction divided by 8.\n- All the receipts together are at most the gas limit of the block divided by 8.\n\nThe EIP says only \"allowed by the block gas limit\" for the total.\n\nSo EthLib applies the bound of one transaction to the whole block.\n\nThe Rationale of the EIP derives that bound from the gas.\n\nThe source is the specification of [EIP-7975][eip-7975].\n\n[eip-7975]: https://eips.ethereum.org/EIPS/eip-7975#specification"},
   {"summary":
    "The canonical data of the message with the ID `id` and the data `data`, on a version.",
    "signature": "(version: int, id: int, data: bytes) -> bytes",
@@ -6051,7 +6051,7 @@
    "docstring":
    "Whether the ByteCodes data `response` answers the GetByteCodes data `request`.\n\nIt must repeat the request ID, and the codes must hash to requested hashes, in order."},
   {"summary":
-   "Whether the BlockAccessLists data `response` answers the GetBlockAccessLists data `request`, given the access list hash of each requested block.",
+   "Whether `response` answers a GetBlockAccessLists `request`, given each block's access list hash.",
    "signature":
    "(request: bytes, response: bytes, expected: list[bytes]) -> bool",
    "operation": "EthLib.Execution.Network.Snap.Exports.accessListsAnswerExport",
@@ -6063,7 +6063,7 @@
       {"constructor": "rlp", "code": 2}]}],
    "error_class": "SnapError",
    "docstring":
-   "Whether the BlockAccessLists data `response` answers the GetBlockAccessLists data\n`request`, given the access list hash of each requested block."},
+   "Whether `response` answers a GetBlockAccessLists `request`, given each block's access list hash.\n\nThe request is GetBlockAccessLists data, and the response BlockAccessLists data."},
   {"summary": "The full RLP form of an account in slim form.",
    "signature": "(slim: bytes) -> bytes",
    "operation": "EthLib.Execution.Network.Snap.Exports.fullAccountExport",

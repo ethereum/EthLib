@@ -70,8 +70,7 @@ def BASE_FEE_MAX_CHANGE_DENOMINATOR : Nat := 8
 
 /-- The base fee per gas of a block, from the gas limit, gas used and base fee of its parent.
 
-Source: the base fee check in `validate_block` of EIP-1559, at
-<https://eips.ethereum.org/EIPS/eip-1559#specification>.
+Source: the base fee check in `validate_block` of [EIP-1559][eip-1559].
 
 The `max` with 1 raises the fee by at least 1 above the target.
 
@@ -87,7 +86,10 @@ So it accepts no gas limit when the parent's is below 4997.
 
 A target of 0 then never reaches the division.
 
-Here a target of 0 and `x / 0 = 0` make a parent above it give `base_fee + 1`. -/
+Here a target of 0 and `x / 0 = 0` make a parent above it give `base_fee + 1`.
+
+[eip-1559]: https://eips.ethereum.org/EIPS/eip-1559#specification
+-/
 def calculateBaseFeePerGas (parentGasLimit parentGasUsed parentBaseFeePerGas : Nat) : Nat :=
   let parentGasTarget := parentGasLimit / ELASTICITY_MULTIPLIER
   if parentGasUsed = parentGasTarget then

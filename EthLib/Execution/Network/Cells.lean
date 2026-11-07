@@ -6,23 +6,27 @@ public import EthLib.Serialization.Rlp.Codec
 /-!
 # `Execution.Network.Cells`
 
-The cell exchange of eth/72, from "Blob Transaction and Cell Exchange", "GetCells (0x14)" and
-"Cells (0x15)" of [`caps/eth.md`][eth].
+The cell exchange of eth/72, from three sections of [`caps/eth.md`][eth].
+
+They are "Blob Transaction and Cell Exchange", "GetCells (0x14)" and "Cells (0x15)".
 
 [eth]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#getcells-0x14
 
-[EIP-8070](https://eips.ethereum.org/EIPS/eip-8070#specification), status Last Call, adds them.
+[EIP-8070][eip-8070], status Last Call, adds them.
 
 A cell index refers to the cell at that index in every blob of a transaction.
 
 A bitmap of 16 bytes marks the cell indices that a request asks for, or that a response holds.
 
-The checks here compare two bitmaps bit by bit and count their bits, so they need no order of the
-bits.
+The checks here compare two bitmaps bit by bit and count their bits.
+
+So they need no order of the bits.
 
 The `eth.md` text differs from EIP-8070 here: it adds a request ID to GetCells and to Cells.
 
 EthLib follows `eth.md`, the protocol text.
+
+[eip-8070]: https://eips.ethereum.org/EIPS/eip-8070#specification
 -/
 
 @[expose] public section
@@ -94,8 +98,9 @@ def CellsError.code : CellsError → UInt32
   | .blobCount .. => 407
 
 /--
-Whether a response of cells answers a request of the hashes `requested` with the bitmap
-`requestMask`.
+Whether a response of cells answers a request of the hashes `requested`.
+
+The request has the bitmap `requestMask`.
 
 `blobs` gives the number of blobs of each transaction of the response.
 

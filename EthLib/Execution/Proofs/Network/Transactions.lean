@@ -8,8 +8,9 @@ public import EthLib.Serialization.Proofs.Rlp.Codec
 
 An announcement reads back from its RLP item on the versions that use its form.
 
-The transactions of an answer that passes the check have hashes that are requested hashes, in
-the order of the request.
+Take an answer that passes the check.
+
+Its transactions have hashes that are requested hashes, in the order of the request.
 
 An answer passes exactly when its transactions hash to a sublist of the requested hashes, in order.
 -/
@@ -45,8 +46,9 @@ theorem ofItem_eth68_of_eth72 {version : EthVersion} (hv : version < .eth72) (t 
 
 end Announcement
 
-/-- In an answer that passes the check, the hashes of the transactions are requested hashes, in
-the order of the request. -/
+/-- Take an answer that passes the check.
+
+The hashes of its transactions are requested hashes, in the order of the request. -/
 theorem sublist_of_checkPooled {requested : List Hash32} {txs : List Item}
     (h : checkPooled requested txs = .ok ()) :
     ∃ hashes, txs.mapM wireHash = .ok hashes ∧ hashes.Sublist requested := by

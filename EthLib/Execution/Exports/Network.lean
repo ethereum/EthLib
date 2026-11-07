@@ -15,8 +15,11 @@ A message crosses it as its ID within the capability, and the RLP encoding of it
 
 A schedule crosses it as the fork identifier exports read it.
 
-Message errors have codes from 1, Status errors from 101, header errors from 201, transaction
-errors from 301, and a bad argument code 0.
+Message errors have codes from 1, and Status errors from 101.
+
+Header errors have codes from 201, and transaction errors from 301.
+
+A bad argument has code 0.
 -/
 
 public section
@@ -96,8 +99,7 @@ def checkHeadersExport (version : UInt64) (request response : ByteArray) : Resul
   (Message.checkHeaderResponse req resp).map (fun _ => true)
     |>.mapError fun e => (e.code, headersMessage e)
 
-/-- Whether the PooledTransactions data `response` answers the GetPooledTransactions data
-`request`.
+/-- Whether the PooledTransactions data `response` answers GetPooledTransactions data `request`.
 
 It returns true on acceptance, and raises the code of the refusal otherwise. -/
 @[export eth_check_pooled]
@@ -135,8 +137,9 @@ def receiptsMatchExport (version : UInt64) (fork root receipts : ByteArray) : Re
   | .ok (.list items) => return receiptsMatch v fork root items
   | _ => throw (0, "receipts are not one RLP list")
 
-/-- Whether the BlockAccessLists data `response` answers the GetBlockAccessLists data `request`
-of eth/71 on, given the access list hash of each requested block. -/
+/-- Whether `response` answers a GetBlockAccessLists `request`, given each block's access list hash.
+
+The response is BlockAccessLists data, and both messages exist from eth/71 on. -/
 @[export eth_access_lists_answer]
 def accessListsAnswerExport (version : UInt64) (request response : ByteArray)
     (expected : Array ByteArray) : Result Bool := do

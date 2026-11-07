@@ -864,11 +864,11 @@ def eth_receipts_match(version: int, fork: str, receipts_root: bytes, receipts: 
     ...
 
 def eth_access_lists_answer(version: int, request: bytes, response: bytes, expected: list[bytes]) -> bool:
-    """Whether the BlockAccessLists data `response` answers the GetBlockAccessLists data `request` of eth/71 on, given the access list hash of each requested block."""
+    """Whether `response` answers a GetBlockAccessLists `request`, given each block's access list hash."""
     ...
 
 def eth_check_partial_receipts(gas_limits: bytes, block_gas_limit: int, receipts: bytes) -> bool:
-    """The checks that [EIP-7975](https://eips.ethereum.org/EIPS/eip-7975#specification) asks of the receipts of a block that arrive in parts."""
+    """The checks that EIP-7975 asks of the receipts of a block that arrive in parts."""
     ...
 
 def snap_message_decode(version: int, id: int, data: bytes) -> bytes:
@@ -880,7 +880,7 @@ def snap_codes_answer(version: int, request: bytes, response: bytes) -> bool:
     ...
 
 def snap_access_lists_answer(request: bytes, response: bytes, expected: list[bytes]) -> bool:
-    """Whether the BlockAccessLists data `response` answers the GetBlockAccessLists data `request`, given the access list hash of each requested block."""
+    """Whether `response` answers a GetBlockAccessLists `request`, given each block's access list hash."""
     ...
 
 def snap_full_account(slim: bytes) -> bytes:

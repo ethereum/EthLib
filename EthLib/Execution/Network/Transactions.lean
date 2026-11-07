@@ -15,21 +15,24 @@ The transaction exchange of the eth capability, from "Protocol Messages" of [`ca
 
 - Transactions (0x02) sends whole transactions.
 - NewPooledTransactionHashes (0x08) announces transactions by type, size and hash.
-- GetPooledTransactions (0x09) asks for transactions by hash, and PooledTransactions (0x0a)
-  answers.
+- GetPooledTransactions (0x09) asks for transactions by hash.
+- PooledTransactions (0x0a) answers it.
 
-A transaction crosses the wire as an RLP list when it is legacy, and as the byte string
-`tx-type || tx-data` when it is typed, as
-[EIP-2976](https://eips.ethereum.org/EIPS/eip-2976#specification) says.
+A legacy transaction crosses the wire as an RLP list.
+
+A typed one crosses it as the byte string `tx-type || tx-data`, as [EIP-2976][eip-2976] says.
 
 The messages carry each transaction as its RLP item.
 
-From eth/68 on, an announcement has three lists of equal length, as
-[EIP-5793](https://eips.ethereum.org/EIPS/eip-5793#specification) says.
+From eth/68 on, an announcement has three lists of equal length, as [EIP-5793][eip-5793] says.
 
-From eth/72 on, it also has a 16-byte bitmap of the cells that the peer holds, empty when no blob
-transaction is announced, as [EIP-8070](https://eips.ethereum.org/EIPS/eip-8070#specification)
-says.
+From eth/72 on, it also has a 16-byte bitmap of the cells that the peer holds.
+
+The bitmap is empty when no blob transaction is announced, as [EIP-8070][eip-8070] says.
+
+[eip-2976]: https://eips.ethereum.org/EIPS/eip-2976#specification
+[eip-5793]: https://eips.ethereum.org/EIPS/eip-5793#specification
+[eip-8070]: https://eips.ethereum.org/EIPS/eip-8070#specification
 -/
 
 @[expose] public section
@@ -106,14 +109,19 @@ The hash of a transaction as it crosses the wire.
 
 A legacy transaction hashes its RLP list, and a typed one its bytes `tx-type || tx-data`.
 
-A blob transaction in PooledTransactions can come in its network form, the type 3 followed by
-`rlp([tx_payload_body, ...])`, as
-[EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#networking) says.
+A blob transaction in PooledTransactions can come in its network form, as [EIP-4844][eip-4844] says.
+
+That form is the type 3 followed by `rlp([tx_payload_body, ...])`.
 
 Its hash is the hash of `0x03 || rlp(tx_payload_body)`, the transaction without its blobs.
 
-The payload of a canonical blob transaction starts with the chain ID, a scalar, and the network
-form with the body, a list, so the first item tells the two apart.
+The payload of a canonical blob transaction starts with the chain ID, a scalar.
+
+The network form starts with the body, a list.
+
+So the first item tells the two apart.
+
+[eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#networking
 -/
 def wireHash (tx : Item) : Except RlpError Hash32 := do
   match tx with
@@ -135,8 +143,9 @@ def wireHash (tx : Item) : Except RlpError Hash32 := do
 inductive PoolError where
   /-- A transaction has no hash, since its item does not encode. -/
   | rlp (error : RlpError)
-  /-- The hashes of the transactions are not the requested hashes, in their order, with some
-  left out. -/
+  /-- The hashes of the transactions are not a sublist of the requested hashes.
+
+  A sublist keeps the order of the request, and may leave some hashes out. -/
   | notRequested
   /-- The response is not PooledTransactions with the request ID of the request. -/
   | notAnswer
@@ -155,8 +164,9 @@ def PoolError.code : PoolError → UInt32
 /--
 Whether the transactions `txs` answer a request of the hashes `requested`.
 
-The transactions must be in the order of the request, but the peer may leave some out, as
-"PooledTransactions (0x0a)" says.
+The transactions must be in the order of the request.
+
+The peer may leave some out, as "PooledTransactions (0x0a)" says.
 
 So their hashes form a sublist of the requested hashes.
 -/

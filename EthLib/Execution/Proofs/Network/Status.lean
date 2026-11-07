@@ -8,8 +8,9 @@ public import EthLib.Networking.Proofs.Devp2p.ForkId
 
 Each message reads back from its RLP item on the versions that use its form.
 
-The decoder of eth/68 rejects the Status of eth/69, and the decoder of each later version rejects
-the Status of eth/68.
+The decoder of eth/68 rejects the Status of eth/69.
+
+The decoder of each later version rejects the Status of eth/68.
 
 A node accepts a Status that carries its own version, its own fork identifier and a valid range.
 
@@ -77,8 +78,9 @@ theorem StatusError.code_injective (e₁ e₂ : StatusError) (h : e₁.code = e�
     first | rfl | (simp only [StatusError.code] at h; exact absurd h (by decide))
 
 /--
-A node accepts a Status from eth/69 on that carries the negotiated version, the node's own fork
-identifier and a valid range.
+A node accepts a Status from eth/69 on that carries three things.
+
+They are the negotiated version, the node's own fork identifier and a valid range.
 
 The forks of the node must fit rule 1a, and its head must be a real block.
 -/

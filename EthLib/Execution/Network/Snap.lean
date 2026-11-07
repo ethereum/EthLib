@@ -13,9 +13,9 @@ The source is [`caps/snap.md`][snap] of the devp2p specifications.
 [snap]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md
 
 - snap/1 has the IDs 0x00 to 0x07, as `snap.md` gave them at [`a1d196b`][snap1].
-- snap/2, [EIP-8189](https://eips.ethereum.org/EIPS/eip-8189), status Last Call, removes
-  GetTrieNodes (0x06) and TrieNodes (0x07), keeps their IDs reserved, and adds
-  GetBlockAccessLists (0x08) and BlockAccessLists (0x09).
+- snap/2, [EIP-8189][eip-8189], status Last Call, removes GetTrieNodes (0x06) and TrieNodes (0x07).
+  It keeps their IDs reserved.
+  It adds GetBlockAccessLists (0x08) and BlockAccessLists (0x09).
 
 [snap1]: https://github.com/ethereum/devp2p/blob/a1d196b39a9ed2d16e623e1d7a2ba9f3d77ae08f/caps/snap.md
 
@@ -23,15 +23,22 @@ Peers negotiate the version, so the messages depend on the version, not on the f
 
 A request ID is a 64-bit integer, as in the eth capability.
 
-An account crosses the wire in its slim form: an empty storage root and an empty code hash stand
-for the root of the empty trie and the hash of empty code.
+An account crosses the wire in its slim form.
+
+There an empty storage root stands for the root of the empty trie.
+
+An empty code hash stands for the hash of empty code.
 
 "Data format" calls them an "empty list", but an empty field in RLP is the empty string `0x80`.
 
-EthLib reads them as that string, as go-ethereum writes them:
-[`state_account.go` at `0d06140`](https://github.com/ethereum/go-ethereum/blob/0d061403cf53263b95f9beec48f07046e78e1bed/core/types/state_account.go#L64).
+EthLib reads them as that string, as go-ethereum writes them.
+
+That writer is [`state_account.go` at `0d06140`][geth].
 
 The Merkle proofs of a range are carried as lists of trie nodes.
+
+[eip-8189]: https://eips.ethereum.org/EIPS/eip-8189
+[geth]: https://github.com/ethereum/go-ethereum/blob/0d061403cf53263b95f9beec48f07046e78e1bed/core/types/state_account.go#L64
 -/
 
 @[expose] public section
@@ -98,8 +105,9 @@ def slimAccount (account : State.Account) (storageRoot : Hash32) : Item :=
 
 /-- The account and its storage root in slim form.
 
-An empty storage root is the root of the empty trie, and an empty code hash the hash of empty
-code. -/
+An empty storage root is the root of the empty trie.
+
+An empty code hash is the hash of empty code. -/
 def ofSlimAccount (item : Item) : Except RlpError (State.Account × Hash32) := do
   match ← item.fields 4 with
   | [n, b, r, c] =>
@@ -157,11 +165,13 @@ inductive SnapMessage where
 
   Each access list is its RLP item, or the empty string when the peer does not have it.
 
-  `snap.md` types an entry `B`, but hashes it as `keccak256(rlp.encode(bal))`, and an access list
-  is an RLP list.
+  `snap.md` types an entry `B`, but hashes it as `keccak256(rlp.encode(bal))`.
 
-  So EthLib embeds each list as its item, as
-  [EIP-8189](https://eips.ethereum.org/EIPS/eip-8189#specification) describes the message. -/
+  An access list is an RLP list.
+
+  So EthLib embeds each list as its item, as [EIP-8189][eip-8189] describes the message.
+
+  [eip-8189]: https://eips.ethereum.org/EIPS/eip-8189#specification -/
   | blockAccessLists (requestId : UInt64) (lists : List Item)
   deriving DecidableEq
 
@@ -259,8 +269,9 @@ def requestId : SnapMessage → UInt64
   | getByteCodes i .. | byteCodes i .. | getTrieNodes i .. | trieNodes i ..
   | getBlockAccessLists i .. | blockAccessLists i .. => i
 
-/-- Whether `response` answers `request`: it is the response type of the request type, and it
-repeats the request ID. -/
+/-- Whether `response` answers `request`.
+
+It is the response type of the request type, and it repeats the request ID. -/
 def answers (request response : SnapMessage) : Bool :=
   match request, response with
   | getAccountRange i .., accountRange j .. => i == j
@@ -277,8 +288,9 @@ end SnapMessage
 /--
 Whether the codes of a ByteCodes answer a request of the code hashes `requested`.
 
-The codes come in the order of the request, and the peer skips the codes it does not have, as
-"GetByteCodes (0x04)" says.
+The codes come in the order of the request.
+
+The peer skips the codes it does not have, as "GetByteCodes (0x04)" says.
 
 So the hashes of the codes form a sublist of the requested hashes.
 -/
@@ -290,8 +302,9 @@ Whether the access lists of a BlockAccessLists answer a request, by position.
 
 `expected` holds the access list hash of the header of each requested block.
 
-The peer may cut the list short from the tail, and puts the empty string for a list it does not
-have, as "BlockAccessLists (0x09)" says.
+The peer may cut the list short from the tail, as "BlockAccessLists (0x09)" says.
+
+It puts the empty string for a list it does not have, as that section also says.
 
 Every other entry must hash to the access list hash of its block.
 -/

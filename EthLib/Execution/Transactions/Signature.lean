@@ -167,8 +167,9 @@ def signingInput (fork : Fork) : Transaction → Except TransactionError (Hash32
 
 It lies in `[1, n - 1]`, and from Homestead it is at most `n / 2`.
 
-[EIP-2](https://eips.ethereum.org/EIPS/eip-2#specification) adds that bound, so each signature has
-one form. -/
+[EIP-2][eip-2] adds that bound, so each signature has one form.
+
+[eip-2]: https://eips.ethereum.org/EIPS/eip-2#specification -/
 def validS (fork : Fork) (s : Nat) : Bool :=
   if fork ≥ .homestead then 0 < s && Ecdsa.isLowS s
   else 0 < s && s < Fn.modulus

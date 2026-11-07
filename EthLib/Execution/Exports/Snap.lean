@@ -58,8 +58,9 @@ def codesAnswerExport (version : UInt64) (request response : ByteArray) : Result
     return SnapMessage.answers req resp && codesAnswer hashes codes
   | _, _ => return false
 
-/-- Whether the BlockAccessLists data `response` answers the GetBlockAccessLists data
-`request`, given the access list hash of each requested block. -/
+/-- Whether `response` answers a GetBlockAccessLists `request`, given each block's access list hash.
+
+The request is GetBlockAccessLists data, and the response BlockAccessLists data. -/
 @[export eth_snap_access_lists_answer]
 def accessListsAnswerExport (request response : ByteArray) (expected : Array ByteArray) :
     Result Bool := do
