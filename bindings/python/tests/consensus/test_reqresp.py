@@ -68,6 +68,7 @@ GLOAS = FULU + [
     _id("execution_payload_envelopes_by_range", 1),
     _id("execution_payload_envelopes_by_root", 1),
 ]
+HEZE = GLOAS + [_id("inclusion_lists_by_indices", 1)]
 
 
 @pytest.mark.parametrize(
@@ -81,19 +82,15 @@ GLOAS = FULU + [
         ("fusaka", FULU),
         ("bpo2", FULU),
         ("glamsterdam", GLOAS),
+        ("hegota", HEZE),
     ],
 )
 def test_protocol_ids(fork: str, expected: list) -> None:
     assert consensus.reqresp_protocol_ids(fork) == expected
 
 
-def test_protocol_ids_not_yet_specified() -> None:
-    with raises(ConsensusError, "fork hegota not yet specified"):
-        consensus.reqresp_protocol_ids("hegota")
-
-
 def test_parse_protocol_ids() -> None:
-    for text in GLOAS:
+    for text in HEZE:
         name, version = consensus.reqresp_parse_protocol_id(text)
         assert _id(name, version) == text
 
@@ -215,6 +212,7 @@ def _range(*values: int) -> bytes:
         ("altair", "LightClientUpdatesByRangeRequest", _range(400, 8)),
         ("dencun", "BlobSidecarsByRangeRequest", _range(10, 64)),
         ("fusaka", "BeaconBlocksByHeadRequest", bytes(range(32)) + _range(64)),
+        ("glamsterdam", "ExecutionPayloadEnvelopesByRangeRequest", _range(400, 8)),
     ],
 )
 def test_two_field_requests(fork: str, name: str, data: bytes) -> None:
@@ -234,6 +232,10 @@ def test_two_field_requests(fork: str, name: str, data: bytes) -> None:
         ("DataColumnSidecarsByRangeRequest", "pectra"),
         ("DataColumnSidecarsByRootRequest", "pectra"),
         ("BeaconBlocksByHeadRequest", "pectra"),
+        ("ExecutionPayloadEnvelopesByRangeRequest", "fusaka"),
+        ("ExecutionPayloadEnvelopesByRootRequest", "fusaka"),
+        ("InclusionListsByIndicesRequest", "glamsterdam"),
+        ("SignedInclusionLists", "glamsterdam"),
     ],
 )
 def test_request_before_its_fork(name: str, fork: str) -> None:
@@ -287,6 +289,43 @@ def _identifiers(count: int) -> bytes:
     # Identifiers with no column: their offsets, then each a root and the offset of its columns.
     offsets = b"".join((4 * count + 36 * i).to_bytes(4, "little") for i in range(count))
     return offsets + (bytes(32) + (36).to_bytes(4, "little")) * count
+
+
+def test_envelope_root_request_limit() -> None:
+    # The request names at most 128 block roots.
+    data = bytes(32 * 128)
+    name = "ExecutionPayloadEnvelopesByRootRequest"
+    _, again = consensus.reqresp_message("mainnet", "glamsterdam", name, data)
+    assert again == data
+    with raises(SszError, "input rejected: EthLib.Serialization.Ssz.Err.overLimit 128 129"):
+        consensus.reqresp_message("mainnet", "glamsterdam", name, data + bytes(32))
+
+
+def test_inclusion_lists_by_indices_request() -> None:
+    # A slot, a dependent root, and one bit for each of the 16 seats of the committee.
+    slot, dependent, bits = _range(96), bytes([5]) * 32, bytes([0b101, 0x80])
+    data = slot + dependent + bits
+    root, again = consensus.reqresp_message(
+        "mainnet", "hegota", "InclusionListsByIndicesRequest", data
+    )
+    assert again == data
+    assert root == _merkleize([_chunk(slot), dependent, _chunk(bits)])
+    # The request has a fixed size of 42 bytes.
+    with raises(SszError, "input rejected: EthLib.Serialization.Ssz.Err.scope 42 43"):
+        consensus.reqresp_message(
+            "mainnet", "hegota", "InclusionListsByIndicesRequest", data + bytes(1)
+        )
+
+
+def test_signed_inclusion_lists_empty() -> None:
+    # An empty response list: the root mixes in a length of zero.
+    root, again = consensus.reqresp_message("mainnet", "hegota", "SignedInclusionLists", b"")
+    assert again == b""
+    zero = bytes(32)
+    tree = zero
+    for _ in range(4):
+        tree = hashlib.sha256(tree + tree).digest()
+    assert root == hashlib.sha256(tree + zero).digest()
 
 
 def test_error_message_limit() -> None:

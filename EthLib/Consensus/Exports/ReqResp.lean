@@ -28,9 +28,8 @@ open Serialization.Ssz.Exports (runSsz)
 /-- The protocol IDs of a fork, as a JSON list of strings. -/
 @[export eth_consensus_reqresp_protocol_ids]
 def reqRespProtocolIdsExport (fork : ByteArray) : Result ByteArray := do
-  let fork ← forkUpTo .glamsterdam fork
-  let some ids := protocolIds fork | throw (0, s!"fork {fork.name} not yet specified")
-  return jsonBytes (toJson (ids.map ProtocolId.toString))
+  let fork ← forkUpTo .hegota fork
+  return jsonBytes (toJson ((protocolIds fork).map ProtocolId.toString))
 
 /-- The protocol name and the version that an ID names, as a JSON pair. -/
 @[export eth_consensus_reqresp_parse_protocol_id]
@@ -62,6 +61,13 @@ def reqRespMessageOf (preset : Preset) (config : Config) (fork : Fork) :
     if .fusaka ≤ fork then some ⟨DataColumnSidecarsByRootRequest preset config⟩ else none
   | "BeaconBlocksByHeadRequest" =>
     if .fusaka ≤ fork then some ⟨BeaconBlocksByHeadRequest⟩ else none
+  | "ExecutionPayloadEnvelopesByRangeRequest" =>
+    if .glamsterdam ≤ fork then some ⟨ExecutionPayloadEnvelopesByRangeRequest⟩ else none
+  | "ExecutionPayloadEnvelopesByRootRequest" =>
+    if .glamsterdam ≤ fork then some ⟨ExecutionPayloadEnvelopesByRootRequest config⟩ else none
+  | "InclusionListsByIndicesRequest" =>
+    if .hegota ≤ fork then some ⟨InclusionListsByIndicesRequest preset⟩ else none
+  | "SignedInclusionLists" => if .hegota ≤ fork then some ⟨SignedInclusionLists config⟩ else none
   | _ => none
 
 /-- The root of the message that the bytes encode, then the bytes of that message. -/
@@ -70,7 +76,7 @@ def reqRespMessageExport (name fork type data : ByteArray) : Result ByteArray :=
   let name ← nameOf name
   let preset ← presetOf name
   let config ← configOf name
-  let fork ← forkUpTo .bpo5 fork
+  let fork ← forkUpTo .hegota fork
   let type ← nameOf type
   let some message := reqRespMessageOf preset config fork type
     | throw (0, s!"no message {type} at {fork.name}")

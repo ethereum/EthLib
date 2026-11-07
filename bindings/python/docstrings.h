@@ -489,7 +489,7 @@
   "The shuffled position of one index, which must be below the count."
 
 #define DOC_consensus_reqresp_protocol_ids \
-  "The protocol IDs of a fork, up to Gloas."
+  "The protocol IDs of a fork: each protocol with each version that the fork defines."
 
 #define DOC_consensus_reqresp_parse_protocol_id \
   "The protocol and the version that an ID names, if it names one."
