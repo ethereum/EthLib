@@ -291,8 +291,11 @@ def test_import_of_a_file_that_does_not_read():
 
 # ---- The interchange tests -----------------------------------------------------------------------
 
-# The interchange tests of eth-clients/slashing-protection-interchange-tests at commit
-# bb7900688eecd287d8723154faac6addb5e63336, the release v5.3.0, from its source archive.
+# The interchange tests of EIP-3076, read from the source archive.
+#
+# Repository: eth-clients/slashing-protection-interchange-tests
+# Commit: bb7900688eecd287d8723154faac6addb5e63336
+# Release: v5.3.0
 ARCHIVE = "slashing-protection-interchange-tests@bb790068/source"
 ARCHIVE_ROOT = "slashing-protection-interchange-tests-bb7900688eecd287d8723154faac6addb5e63336"
 GENERATED = f"{ARCHIVE_ROOT}/tests/generated"

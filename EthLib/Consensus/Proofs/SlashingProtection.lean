@@ -9,7 +9,9 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.JsonLaws
 /-!
 # Proofs: slashing protection
 
-A signer that checks each message against its record, and then records it, signs no slashable pair.
+A signer checks each message against its record, and then records it.
+
+Such a signer signs a slashable pair only when two messages share a signing root.
 
 The statement holds for any function that gives the signing root of a message.
 
@@ -224,9 +226,7 @@ theorem signingRoot_eq_of_isSlashableWith_eq_false {signingRootOf : AttestationD
   · simp [same, distinct] at double
   · simp [below, above] at around
 
-/-- Votes that a signer signs from a record are never slashable with each other.
-
-Two signed votes that Casper FFG forbids together have the same signing root.
+/-- Two signed votes that Casper FFG forbids together have the same signing root.
 
 So such a pair is a collision of the signing root, since the two votes are different. -/
 theorem signingRoot_eq_of_signAttestations {signingRootOf : AttestationData → Root}
@@ -305,9 +305,9 @@ theorem signingRoot_eq_of_signBlocks {signingRootOf : BeaconBlockHeader → Root
       exact (against header1 inRest1 sameSlot).symm
     · exact ih later inRest1 inRest2
 
-/-- The two headers of a valid proposer slashing were never both signed by such a signer.
+/-- If such a signer signed both headers of a valid proposer slashing, they differ and share a root.
 
-Unless, that is, the two different headers have one signing root, which is a collision. -/
+So the pair is a collision of the signing root. -/
 theorem signingRoot_eq_of_processProposerSlashing {signingRootOf : BeaconBlockHeader → Root}
     {pubkey : BLSPubkey} {start finish : Interchange} {headers : List BeaconBlockHeader}
     (signed : signBlocks signingRootOf pubkey start headers = .ok finish) {config : Config}

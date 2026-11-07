@@ -45,14 +45,16 @@ So is a recorded vote without a signing root and a new vote with its target.
 
 The file reads integers as decimal digits in strings, and keys and roots as `0x` hex.
 
-The EIP leaves out several checks, and so does this module:
+The conditions of the EIP leave out several checks, and so does this module:
 
 - It does not compare the genesis validators root of a file with that of the chain.
 - It does not reject a file whose own records are slashable with each other.
 - It keeps no low watermark, so it cannot see a gap between two imported files.
 - It does not ask for the records of a key to be sorted, or for a key to appear once.
 
-[EIP-3076]: https://eips.ethereum.org/EIPS/eip-3076
+The security considerations of the EIP advise a low watermark against such a gap.
+
+[EIP-3076]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3076.md
 -/
 
 @[expose] public section
