@@ -625,6 +625,11 @@ It covers frames that send no message, so it says nothing past a call or a creat
 `Spec fork P Q` is total correctness for such frames: every frame of `P` reaches a stopped frame of `Q`.
 A run that ends out of gas ends in an exceptional halt, so a postcondition of a normal halt needs a precondition with enough gas.
 `Return42.runFrame_spec` proves the specification of one contract, `0x602a60005260206000f3`, which returns the word 42 for 18 gas with the one-counter meter of the forks before Glamsterdam.
+`Logic/Rules.lean` gives rules for the opcodes that read call data, compare, jump, hash memory, read storage and return or revert.
+From Berlin, the rule for SLOAD takes as a hypothesis whether the slot is cold, and charges 2100 or 100 by EIP-2929.
+`SlotOfCalldata.runFrame_match` proves a contract that compares the top four bytes of its call data with a constant, at the forks from Berlin with the one-counter meter.
+On a match, it returns the word of storage at the Keccak-256 hash of two words of its call data, for 122 gas and SLOAD.
+`SlotOfCalldata.runFrame_mismatch` proves that it reverts with no output otherwise, for 37 gas.
 
 ### SHA-256 precompile
 
