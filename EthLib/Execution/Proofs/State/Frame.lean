@@ -121,6 +121,20 @@ theorem getCode_touchAccount (tx : TransactionState) (address : Address) (hash :
   unfold touchAccount
   split <;> rfl
 
+/-- A touch of an account keeps the block of the state. -/
+theorem parent_touchAccount (tx : TransactionState) (address : Address) :
+    (tx.touchAccount address).parent = tx.parent := by
+  unfold touchAccount
+  split <;> rfl
+
+/-- After a touch, the address has an account. -/
+theorem isSome_getAccountOptional_touchAccount (tx : TransactionState) (address : Address) :
+    ((tx.touchAccount address).getAccountOptional address).isSome := by
+  unfold touchAccount
+  split
+  · assumption
+  · simp [setAccount, getAccountOptional]
+
 /-- A touch of an account keeps the account at every other address. -/
 theorem getAccount_touchAccount {tx : TransactionState} {address other : Address}
     (hne : other ≠ address) : (tx.touchAccount address).getAccount other = tx.getAccount other := by

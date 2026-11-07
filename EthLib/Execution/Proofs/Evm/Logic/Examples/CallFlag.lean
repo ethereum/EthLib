@@ -212,7 +212,7 @@ theorem spec (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
   apply HoareUnder.of_hoare
   rintro evm
     ⟨caller, msg, child, hcallee, hle, hst, hss, hmg, hmc, hmt, hmtg, hmca, hmcode, hmd, hmv, hmdep,
-      hat⟩
+      -, hat⟩
   have hleft : 15 ≤ gas - 24 -
       (messageCallGas fork 0 (65535 : U256).toNat (gas - 24) 0 (if cold then 2600 else 100)).cost +
         child.gas := by

@@ -66,7 +66,9 @@ The caller has paid the access to the address, the growth of memory, and the gas
 
 It has recorded the access, and the reads of the address and of its own account.
 
-Its memory has grown for both ranges, and the message runs the code of the address. -/
+Its memory has grown for both ranges, and the message runs the code of the address.
+
+The message is static when the frame is. -/
 theorem callStep_call (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     {evm : Evm fork Nat} {g a i isz o osz : U256} {rest : List U256} {calleeCode : ByteArray}
     (hst : evm.stack.val = g :: a :: 0 :: i :: isz :: o :: osz :: rest)
@@ -97,7 +99,8 @@ theorem callStep_call (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       msg.code = calleeCode ∧
       msg.data = memoryReadBytes (memoryExtend evm.memory
         (extendMemory evm.memory.size [(i, isz), (o, osz)]).expandBy) i.toNat isz.toNat ∧
-      msg.value = 0 ∧ msg.depth = evm.message.depth + 1 := by
+      msg.value = 0 ∧ msg.depth = evm.message.depth + 1 ∧
+      msg.isStatic = evm.message.isStatic := by
   have hng : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hglam
   rcases evm with ⟨pc, ⟨l, hl⟩, memory, code, valid, gas, running, message, output, returnData,
     state, substate, error⟩
@@ -132,7 +135,7 @@ theorem callStep_call (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     GasMeter.gasLeft, GasMeter.drain, GasMeter.reservoir, hcb', Nat.not_lt.mpr hdepth, hgas,
     Nat.not_lt.mpr hmin]
   exact ⟨_, _, ⟨rfl, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl,
-    rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- The step of CALL with value sends a message with that value, with its input as data.
 
@@ -352,6 +355,8 @@ The callee runs the code of `to`, which the state holds, and is no delegation.
 
 Memory grows for both ranges, and the message carries the bytes of the input range as its data.
 
+The message is static when the frame is.
+
 The rule holds for every frame that ends the message and meets the assumption.
 
 The caller pushes 1 when the callee ends with no error, and 0 otherwise.
@@ -393,7 +398,7 @@ theorem callWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
         msg.data = memoryReadBytes (memoryExtend memory
           (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).expandBy)
           inputStart.toNat inputSize.toNat ∧
-        msg.value = 0 ∧ msg.depth = message.depth + 1 ∧
+        msg.value = 0 ∧ msg.depth = message.depth + 1 ∧ msg.isStatic = message.isStatic ∧
         At code message (pc + 1) ((if child.error.isNone then 1 else 0) :: rest)
           (memoryWrite (memoryExtend memory
             (extendMemory memory.size
@@ -411,7 +416,7 @@ theorem callWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
   have hcost := callBaseCost_of_berlin hfork hglam cold
   subst hm hg hs hss hcold hmem
   obtain ⟨caller, msg, hstep, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, m1, m2, m3, mt, mca, m4,
-      md, m5, m6⟩ :=
+      md, m5, m6, m7⟩ :=
     callStep_call hfork hglam hst hcode hdel hdepth (by rw [hcost]; omega)
   refine ⟨hrun, caller, msg, resumeCall fork caller 0 outputStart outputSize, ?_, ?_⟩
   · rw [step_of_messageInstruction (by rw [hc, hpc]; exact hlt)
@@ -428,7 +433,7 @@ theorem callWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     obtain ⟨after, hres, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11⟩ :=
       resumeCall_eq (child := child) (o := outputStart) (osz := outputSize) hlen
     refine .inl ⟨after, hres, caller, msg, child, hcallee, hchild, c10, c11, ?_, m2, m3, mt, mca,
-      m4, md, m5, m6, ?_⟩
+      m4, md, m5, m6, m7, ?_⟩
     · rw [m1, hcost]
     · refine ⟨by rw [a1, c1, hc], by rw [a2, c2, hj], by rw [a3, c3], by rw [a4, c4, hpc],
         by rw [a5, c5], by rw [a6, c6], ?_, by rw [a8, c8, hrun], by rw [a9, c9, herr],
@@ -444,6 +449,8 @@ The rule holds for every frame that ends the message and meets the assumption.
 The caller pushes 1 when the callee ends with no error, and 0 otherwise.
 
 It gets back the gas that the callee leaves, and its state and substate come from the callee.
+
+The message is static when the frame is.
 
 The rule says nothing more of them, since the callee is arbitrary. -/
 theorem call (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
@@ -468,7 +475,7 @@ theorem call (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
         msg.caller = message.currentTarget ∧ msg.currentTarget = toAddressMasked to ∧
         msg.target = some (toAddressMasked to) ∧ msg.codeAddress = some (toAddressMasked to) ∧
         msg.code = calleeCode ∧ msg.data = .empty ∧ msg.value = 0 ∧
-        msg.depth = message.depth + 1 ∧
+        msg.depth = message.depth + 1 ∧ msg.isStatic = message.isStatic ∧
         At code message (pc + 1) ((if child.error.isNone then 1 else 0) :: rest) memory
           (gas - (messageCallGas fork 0 asked.toNat gas 0 (if cold then 2600 else 100)).cost +
             child.gas)
@@ -482,8 +489,9 @@ theorem call (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
   refine h.consequence (fun _ hp => hp) ?_
   rintro evm ⟨caller, msg, child, hc, hle, hst, hss, hmg, rest'⟩
   refine ⟨caller, msg, child, hc, hle, hst, hss, by simpa using hmg, ?_⟩
-  obtain ⟨m1, m2, m3, m4, m5, md, m6, m7, hat⟩ := rest'
-  refine ⟨m1, m2, m3, m4, m5, by simpa [memoryExtend_zero, memoryReadBytes] using md, m6, m7, ?_⟩
+  obtain ⟨m1, m2, m3, m4, m5, md, m6, m7, m8, hat⟩ := rest'
+  refine ⟨m1, m2, m3, m4, m5, by simpa [memoryExtend_zero, memoryReadBytes] using md, m6, m7, m8,
+    ?_⟩
   simpa [memoryExtend_zero, memoryWrite] using hat
 
 /-- CALL with a value `v`, which is not 0, to the address `to`, with ranges of input and output.

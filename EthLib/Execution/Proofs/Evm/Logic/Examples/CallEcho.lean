@@ -293,7 +293,7 @@ theorem runFrame_process (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
         msg.codeAddress = some (toAddressMasked (target message.data)) ∧ msg.code = ECHO ∧
         msg.data = memoryReadBytes (memoryExtend (wordBytes (word message.data)) 64)
           (0 : U256).toNat (32 : U256).toNat ∧
-        msg.value = 0 ∧ msg.depth = message.depth + 1 ∧
+        msg.value = 0 ∧ msg.depth = message.depth + 1 ∧ msg.isStatic = message.isStatic ∧
         At CODE message (22 + 1) ((if child.error.isNone then 1 else 0) :: [])
           (memoryWrite (memoryExtend (wordBytes (word message.data)) 64) (32 : U256).toNat
             (child.output.extract 0 (min (64 : U256).toNat child.output.size)))
@@ -305,7 +305,7 @@ theorem runFrame_process (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
       (fun evm => evm.running = false ∧ evm.error = none ∧
         evm.output = memoryExtend (wordBytes (word message.data)) 32) := by
     rintro evm ⟨caller, msg, child, hcallee, -, -, -, hmg, -, -, hmtg, hmca, hmcode, hmd, hmv, -,
-      hat⟩
+      -, hat⟩
     have hpre : precompileAddress fork msg = none := by
       simp [precompileAddress, hmca, hprecompile]
     have hsub : 21 ≤ msg.gas ∧ 6 ≤ gas - 39 - ((messageCallGas fork 0 (65535 : U256).toNat

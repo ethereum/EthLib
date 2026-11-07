@@ -115,6 +115,15 @@ theorem setStorage_eq_error_iff (tx : TransactionState) (address : Address) (key
     simp only [Option.isNone_iff_eq_none] at hsome
     simp [reduceCtorEq, hsome]
 
+/-- A storage write keeps the block of the state. -/
+theorem parent_setStorage {tx tx' : TransactionState} {address : Address} {key : Bytes32}
+    {value : U256} (h : tx.setStorage address key value = .ok tx') : tx'.parent = tx.parent := by
+  unfold setStorage at h
+  split at h
+  · cases h
+  · cases h
+    rfl
+
 /-- Reading the word just written gives it. -/
 theorem getStorage_setStorage_self {tx tx' : TransactionState} {address : Address}
     {key : Bytes32} {value : U256} (h : tx.setStorage address key value = .ok tx') :
