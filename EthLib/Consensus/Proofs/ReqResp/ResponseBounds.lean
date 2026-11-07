@@ -12,7 +12,8 @@ The fork of a chunk is a parameter, which the caller reads from the context byte
 
 - Take a successful chunk that decodes at the bounds of its protocol.
   Its payload is within the bounds of its SSZ type.
-- A value that a server serializes, within the payload cap, makes a compressed chunk that decodes.
+- A value that a server serializes, within the payload cap, makes a chunk that decodes.
+  The chunk is the one of the encoder that may compress its payload.
 - That chunk decodes at those bounds, and its payload reads back as the value.
 -/
 
@@ -74,7 +75,9 @@ theorem withinBounds_of_decodeResponseChunk {shape : Desc} {contextBytes : Nat} 
   obtain ⟨rest, hp⟩ := decodePayload_of_decodeResponseChunk hd hs
   exact withinBounds_of_decodePayload hp
 
-/-- A response value that a server serializes, within the cap, makes a compressed chunk.
+/-- A response value that a server serializes, within the cap, makes a chunk.
+
+The chunk is the one of the encoder that may compress its payload.
 
 The chunk decodes at the bounds of its protocol, and its payload reads back as the value. -/
 theorem decodeResponseChunk_response {α : Type} [SszType α] [LawfulSszType α] {a : α}
