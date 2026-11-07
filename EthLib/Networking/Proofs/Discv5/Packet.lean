@@ -14,6 +14,7 @@ Properties of the discv5 packet encoding.
 - The mask of a prefix is the prefix of the mask.
 - The authdata of each flag decodes back from its bytes.
 - A packet that the encoder writes, within the size limits, decodes back.
+- Bytes decode to authdata or a packet exactly when they encode it and pass the decoder's checks.
 - The additional data of a message is the masking IV and the unmasked bytes up to the message.
 - A message that the encryption writes decrypts back.
 -/
@@ -132,6 +133,80 @@ theorem Authdata.decode_encode (a : Authdata) (h : a.fits = true) :
       List.cons_append, List.nil_append]
     simp [List.take_left', List.drop_left', vectorOf_toList, hs, hk, hsl, hkl]
     rw [← List.drop_drop, List.drop_left' hsl, List.drop_left' hkl]
+
+/-- A vector read from a list of bytes holds exactly those bytes. -/
+theorem toList_of_vectorOf {n : Nat} {bytes : List UInt8} {v : Vector UInt8 n}
+    (h : Authdata.vectorOf n bytes = some v) : v.toList = bytes := by
+  unfold Authdata.vectorOf at h
+  split at h
+  · cases h
+    simp [Vector.toList]
+  · cases h
+
+/-- Authdata that its bytes decode to has the flag it was read under, fits, and encodes back. -/
+private theorem Authdata.encode_of_decode {flag : UInt8} {bytes : List UInt8} {a : Authdata}
+    (h : Authdata.decode flag bytes = .ok a) :
+    a.flag = flag ∧ a.fits = true ∧ a.encode = bytes := by
+  unfold Authdata.decode at h
+  split at h
+  · rename_i h0
+    split at h
+    · rename_i srcId hv
+      cases h
+      exact ⟨h0.symm, rfl, toList_of_vectorOf hv⟩
+    · cases h
+  split at h
+  · rename_i h1
+    split at h
+    · rename_i idNonce hv
+      split at h
+      · rename_i hl
+        cases h
+        -- The last 8 bytes are below 2^64, so they read back as the sequence number.
+        have hd : (bytes.drop 16).length = 8 := by simp [hl]
+        have hlt : Base.bytesToNat (bytes.drop 16) < 2 ^ 64 := by
+          have := Base.bytesToNat_lt (bytes.drop 16)
+          rw [hd] at this
+          simpa using this
+        refine ⟨h1.symm, rfl, ?_⟩
+        simp only [Authdata.encode, toList_of_vectorOf hv, UInt64.toNat_ofNat',
+          Nat.mod_eq_of_lt hlt]
+        rw [← hd, Base.natToBytes_bytesToNat, List.take_append_drop]
+      · cases h
+    · cases h
+  split at h
+  · rename_i h2
+    split at h
+    · rename_i srcId sigSize keySize rest hv hrest
+      split at h
+      · rename_i hfit
+        cases h
+        have hs : (rest.take sigSize.toNat).length = sigSize.toNat := by
+          simp only [List.length_take]; omega
+        have hk : ((rest.drop sigSize.toNat).take keySize.toNat).length = keySize.toNat := by
+          simp only [List.length_take, List.length_drop]; omega
+        refine ⟨h2.symm, ?_, ?_⟩
+        · simp only [Authdata.fits, ByteArray.size, List.size_toArray, hs, hk, Bool.and_eq_true,
+            decide_eq_true_eq]
+          exact ⟨sigSize.toNat_lt, keySize.toNat_lt⟩
+        · simp only [Authdata.encode, ByteArray.size, List.size_toArray, hs, hk,
+            UInt8.ofNat_toNat, toList_of_vectorOf hv]
+          -- The bytes after the source ID are the two sizes, then the three fields in turn.
+          conv => rhs; rw [← List.take_append_drop 32 bytes, hrest]
+          simp only [List.append_assoc, List.cons_append, List.nil_append]
+          rw [← List.drop_drop, List.take_append_drop, List.take_append_drop]
+      · cases h
+    · cases h
+  · cases h
+
+/-- Bytes decode to authdata under a flag exactly when it has that flag and encodes to them.
+
+The authdata must also fit its size fields. -/
+theorem Authdata.decode_eq_ok_iff (flag : UInt8) (bytes : List UInt8) (a : Authdata) :
+    Authdata.decode flag bytes = .ok a ↔ a.flag = flag ∧ a.fits = true ∧ a.encode = bytes := by
+  refine ⟨Authdata.encode_of_decode, ?_⟩
+  rintro ⟨rfl, hfits, rfl⟩
+  exact Authdata.decode_encode a hfits
 
 /-! ## Packets -/
 
@@ -272,6 +347,98 @@ theorem Packet.size_messageAd_add {destId : NodeId} {p : Packet} {bytes ad : Byt
     subst he ha
     simp only [ByteArray.size, List.size_toArray, List.length_append, length_mask,
       Array.length_toList]
+
+/-- Bytes that decode to a packet are its encoding, and they pass the checks of the decoder.
+
+The checks are the size limits, and a WHOAREYOU packet with no message. -/
+private theorem Packet.encode_and_checks_of_decode {destId : NodeId} {bytes : ByteArray}
+    {p : Packet} (h : Packet.decode destId bytes = .ok p) :
+    p.encode destId = .ok bytes ∧ MIN_PACKET_SIZE ≤ bytes.size ∧ bytes.size ≤ MAX_PACKET_SIZE ∧
+      (p.header.authdata.flag = 1 → p.message.size = 0) := by
+  unfold Packet.decode at h
+  simp only [bind, Except.bind, pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at h
+  split at h
+  · cases h
+  rename_i hsize
+  split at h
+  case h_2 => cases h
+  rename_i iv hiv
+  split at h
+  case isFalse => cases h
+  rename_i hprotocol
+  split at h
+  case h_2 => cases h
+  rename_i flag hflag
+  split at h
+  case h_2 => cases h
+  rename_i nonce hnonce
+  split at h
+  case isTrue => cases h
+  rename_i hlength
+  split at h
+  case h_1 => cases h
+  rename_i a ha
+  split at h
+  case isTrue => cases h
+  rename_i hwho
+  cases h
+  -- Name the bytes after the IV, their unmasked form and the size of the authdata.
+  generalize hR : bytes.data.toList.drop 16 = R at *
+  generalize hP : mask destId iv R = P at *
+  generalize hL : Base.bytesToNat ((P.drop 21).take 2) = L at *
+  unfold STATIC_HEADER_SIZE at *
+  have hPl : P.length = R.length := by rw [← hP, length_mask]
+  obtain ⟨hflagEq, hfits, hae⟩ := Authdata.encode_of_decode ha
+  -- The size field has two bytes, so the authdata has fewer than 2^16 bytes.
+  have hsizeBytes : ((P.drop 21).take 2).length = 2 := by simp; omega
+  have hLlt : L < 2 ^ 16 := by
+    have := Base.bytesToNat_lt ((P.drop 21).take 2)
+    rw [hsizeBytes] at this
+    omega
+  have hael : a.encode.length = L := by rw [hae]; simp; omega
+  have hsizeField : Base.natToBytes 2 a.encode.length = (P.drop 21).take 2 := by
+    have := Base.natToBytes_bytesToNat ((P.drop 21).take 2)
+    rwa [hsizeBytes, hL, ← hael] at this
+  -- The unmasked header is the first `23 + L` bytes of the unmasked data.
+  have h8 : 8 < P.length := by omega
+  have hPflag : P[8] = flag := (List.getElem?_eq_some_iff.mp hflag).2
+  have hheader : PROTOCOL_ID ++ VERSION ++ [a.flag] ++ nonce.toList ++
+      Base.natToBytes 2 a.encode.length ++ a.encode = P.take (23 + L) := by
+    rw [show 23 + L = 8 + (1 + (12 + (2 + L))) by omega, List.take_add, List.take_add,
+      List.take_add, List.take_add, ← hprotocol, hflagEq, toList_of_vectorOf hnonce, hsizeField,
+      hae, List.drop_eq_getElem_cons h8, hPflag]
+    simp only [List.drop_drop, List.take_succ_cons, List.take_zero, List.append_assoc,
+      List.cons_append, List.nil_append, List.drop_succ_cons]
+  have hencode : Header.encode ⟨nonce, a⟩ = .ok (P.take (23 + L)) := by
+    rw [← hheader]
+    simp [Header.encode, hael, hLlt, hfits]
+  -- Masking the header again gives the bytes of the packet before the message.
+  have hmasked : mask destId iv (P.take (23 + L)) = R.take (23 + L) := by
+    rw [mask_take, ← hP, mask_mask]
+  refine ⟨?_, by omega, by omega, fun hone => ?_⟩
+  · simp only [Packet.encode, hencode, hmasked, bind, Except.bind, pure, Except.pure,
+      Except.ok.injEq]
+    rw [toList_of_vectorOf hiv, List.append_assoc, List.take_append_drop, ← hR,
+      List.take_append_drop]
+  -- A WHOAREYOU packet passed the check that its message is empty.
+  · have hempty : R.drop (23 + L) = [] :=
+      Classical.byContradiction fun hne => hwho ⟨by rw [← hflagEq]; exact hone, hne⟩
+    simp [ByteArray.size, hempty]
+
+/-- Bytes that decode to a packet are the encoding of that packet. -/
+theorem Packet.encode_of_decode {destId : NodeId} {bytes : ByteArray} {p : Packet}
+    (h : Packet.decode destId bytes = .ok p) : p.encode destId = .ok bytes :=
+  (Packet.encode_and_checks_of_decode h).1
+
+/-- Bytes decode to a packet exactly when they are its encoding and pass the checks.
+
+The checks are the size limits, and a WHOAREYOU packet with no message. -/
+theorem Packet.decode_eq_ok_iff (destId : NodeId) (bytes : ByteArray) (p : Packet) :
+    Packet.decode destId bytes = .ok p ↔
+      p.encode destId = .ok bytes ∧ MIN_PACKET_SIZE ≤ bytes.size ∧
+        bytes.size ≤ MAX_PACKET_SIZE ∧ (p.header.authdata.flag = 1 → p.message.size = 0) :=
+  ⟨Packet.encode_and_checks_of_decode,
+    fun ⟨he, hmin, hmax, hw⟩ => Packet.decode_encode he hmin hmax hw⟩
 
 /-! ## Messages -/
 
