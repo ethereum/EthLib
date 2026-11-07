@@ -38,11 +38,14 @@ theorem responseBounds_eq {shape : Desc}
     responseBounds preset config chunkFork id = some (payloadBounds shape) := by
   simp [responseBounds, h]
 
-/-- The payload of a successful chunk is a payload that decodes at the bounds of the chunk. -/
-theorem decodePayload_of_decodeResponseChunk {contextBytes : Nat} {lo hi : UInt64}
+/-- The payload of a chunk is a payload that decodes at the bounds of its code.
+
+A success reads the bounds of the chunk, and an error those of an error message. -/
+private theorem decodePayload_of_decodeResponseChunk_code {contextBytes : Nat} {lo hi : UInt64}
     {bs : ByteArray} {chunk : ResponseChunk}
-    (h : decodeResponseChunk contextBytes lo hi bs = .ok chunk) (hs : chunk.code = .success) :
-    ∃ rest : ByteArray, decodePayload lo hi rest = .ok chunk.payload := by
+    (h : decodeResponseChunk contextBytes lo hi bs = .ok chunk) :
+    ∃ rest : ByteArray, decodePayload (if chunk.code = .success then lo else 0)
+      (if chunk.code = .success then hi else MAX_ERROR_MESSAGE_SIZE) rest = .ok chunk.payload := by
   unfold decodeResponseChunk at h
   split at h
   · cases h
@@ -55,13 +58,27 @@ theorem decodePayload_of_decodeResponseChunk {contextBytes : Nat} {lo hi : UInt6
         | ok payload =>
           simp only [hp, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at h
           subst h
-          exact ⟨_, hp⟩
+          refine ⟨⟨(rest.drop contextBytes).toArray⟩, ?_⟩
+          rw [ite_eq_left_of_eq_true _ _ (eq_self _), ite_eq_left_of_eq_true _ _ (eq_self _)]
+          exact hp
     · cases hp : decodePayload 0 MAX_ERROR_MESSAGE_SIZE ⟨rest.toArray⟩ with
       | error e => simp [hp, bind, Except.bind] at h
       | ok payload =>
         simp only [hp, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at h
         subst h
-        simp_all
+        refine ⟨⟨rest.toArray⟩, ?_⟩
+        split
+        · simp_all
+        · exact hp
+
+/-- The payload of a successful chunk is a payload that decodes at the bounds of the chunk. -/
+theorem decodePayload_of_decodeResponseChunk {contextBytes : Nat} {lo hi : UInt64}
+    {bs : ByteArray} {chunk : ResponseChunk}
+    (h : decodeResponseChunk contextBytes lo hi bs = .ok chunk) (hs : chunk.code = .success) :
+    ∃ rest : ByteArray, decodePayload lo hi rest = .ok chunk.payload := by
+  obtain ⟨rest, hp⟩ := decodePayload_of_decodeResponseChunk_code h
+  rw [ite_eq_left_of_eq_true _ _ (eq_true hs), ite_eq_left_of_eq_true _ _ (eq_true hs)] at hp
+  exact ⟨rest, hp⟩
 
 /-- A successful chunk that decodes at the bounds of its protocol is within its type's bounds. -/
 theorem withinBounds_of_decodeResponseChunk {shape : Desc} {contextBytes : Nat} {lo hi : UInt64}
@@ -120,31 +137,6 @@ theorem payloadBounds_errorMessage :
     payloadBounds (SszType.desc ErrorMessage) = (0, MAX_ERROR_MESSAGE_SIZE) := by
   decide
 
-/-- The payload of an error chunk is a payload that decodes at the bounds of an error message. -/
-private theorem decodePayload_of_decodeResponseChunk_error {contextBytes : Nat}
-    {lo hi : UInt64} {bs : ByteArray} {chunk : ResponseChunk}
-    (h : decodeResponseChunk contextBytes lo hi bs = .ok chunk) (hs : chunk.code ≠ .success) :
-    ∃ rest : ByteArray, decodePayload 0 MAX_ERROR_MESSAGE_SIZE rest = .ok chunk.payload := by
-  unfold decodeResponseChunk at h
-  split at h
-  · cases h
-  · rename_i b rest _
-    split at h
-    · split at h
-      · cases h
-      · cases hp : decodePayload lo hi ⟨(rest.drop contextBytes).toArray⟩ with
-        | error e => simp [hp, bind, Except.bind] at h
-        | ok payload =>
-          simp only [hp, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at h
-          subst h
-          exact absurd rfl hs
-    · cases hp : decodePayload 0 MAX_ERROR_MESSAGE_SIZE ⟨rest.toArray⟩ with
-      | error e => simp [hp, bind, Except.bind] at h
-      | ok payload =>
-        simp only [hp, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at h
-        subst h
-        exact ⟨_, hp⟩
-
 /-- An error chunk that decodes carries an error message: its payload reads back as one.
 
 The message holds the bytes of the payload, whatever they are. -/
@@ -153,7 +145,8 @@ theorem deserialize_errorMessage_of_decodeResponseChunk {contextBytes : Nat} {lo
     (h : decodeResponseChunk contextBytes lo hi bs = .ok chunk) (hs : chunk.code ≠ .success) :
     ∃ message : ErrorMessage, SszType.deserialize ErrorMessage chunk.payload = .ok message ∧
       message.data = chunk.payload.data := by
-  obtain ⟨rest, hp⟩ := decodePayload_of_decodeResponseChunk_error h hs
+  obtain ⟨rest, hp⟩ := decodePayload_of_decodeResponseChunk_code h
+  rw [ite_eq_right_of_eq_false _ _ (eq_false hs), ite_eq_right_of_eq_false _ _ (eq_false hs)] at hp
   have hsize : chunk.payload.size ≤ 256 := by
     have bound := (decodePayload_eq_ok_iff.mp hp).1
     have cap : (min MAX_ERROR_MESSAGE_SIZE MAX_PAYLOAD_SIZE).toNat = 256 := by decide
