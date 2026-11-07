@@ -21,7 +21,9 @@ A valid payload makes the block and its known ancestors leave the optimistic set
 
 An invalid one makes the first invalid block and its known descendants leave it.
 
-The rule of the latest valid hash names that first block, and the store removes those blocks.
+The rule of the latest valid hash names that first block.
+
+The store of the fork choice removes those blocks, and the optimistic store keeps them.
 
 A node whose head is optimistic is an optimistic node, and its validators sign none of these:
 
@@ -61,7 +63,9 @@ structure OptimisticStore (preset : Preset) (fork : Fork) where
 
 /-- From Bellatrix: whether a block carries a payload, the empty payload aside.
 
-A block before Bellatrix carries none. -/
+A block before Bellatrix carries none.
+
+From Gloas a block carries a bid and not a payload, so the answer is false. -/
 def isExecutionBlock (block : BeaconBlock preset fork) : Bool :=
   if range : .bellatrix ≤ fork ∧ fork < .glamsterdam then
     block.body.executionPayload range != .empty preset fork
@@ -77,7 +81,7 @@ The count is `SAFE_SLOTS_TO_IMPORT_OPTIMISTICALLY` unless the user sets another.
 
 It fails when the parent is not known, and when the slot plus the count overflows 64 bits.
 
-It is computed only when the parent carries no payload. -/
+The sum is computed only when the parent carries no payload. -/
 def OptimisticStore.isOptimisticCandidateBlock (store : OptimisticStore preset fork)
     (currentSlot : Slot) (block : BeaconBlock preset fork)
     (safeSlots : Slot := SAFE_SLOTS_TO_IMPORT_OPTIMISTICALLY) : Except ForkChoiceError Bool := do
@@ -122,7 +126,7 @@ decreasing_by
 
 The walk also stops at a block whose parent root is zero, the genesis block.
 
-The block itself is never one that the execution layer found invalid, as the guide assumes.
+The guide assumes that the execution layer never found the block itself invalid.
 
 It fails when an optimistic block on the way has a parent that is not known.
 
@@ -143,15 +147,6 @@ decreasing_by
   simp only [_found, _parentFound, Option.map_some, Option.getD_some]
   exact UInt64.lt_iff_toNat_lt.mp _lower
 
-/-- The roots that a check of each one leaves, in their order. -/
-def keepRoots (leaves : Root → Except ForkChoiceError Bool) :
-    List Root → Except ForkChoiceError (List Root)
-  | [] => pure []
-  | root :: rest => do
-    let gone ← leaves root
-    let kept ← keepRoots leaves rest
-    return if gone then kept else root :: kept
-
 /-- The optimistic roots after the payload of a known block is found valid.
 
 The block and its known ancestors leave the set, and every other root stays.
@@ -171,8 +166,8 @@ It and its known descendants leave the set, and every other root stays.
 
 It fails when an optimistic root is not a known block, or as the chain of one fails. -/
 def onInvalidatedPayload (first : Root) : Except ForkChoiceError (OptimisticStore preset fork) := do
-  let kept ← keepRoots (fun optimistic => do return (← store.chain optimistic).contains first)
-    store.optimisticRoots
+  let kept ← store.optimisticRoots.filterMapM fun optimistic => do
+    return if (← store.chain optimistic).contains first then none else some optimistic
   return { store with optimisticRoots := kept }
 
 end OptimisticStore

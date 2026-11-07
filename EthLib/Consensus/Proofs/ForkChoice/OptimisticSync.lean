@@ -2,13 +2,14 @@ module
 
 public import EthLib.Base.Except
 public import EthLib.Consensus.ForkChoice.OptimisticSync
+public import EthLib.Consensus.Proofs.ForkChoice.Optimistic
 
 /-!
 # Proofs: optimistic sync
 
-The optimistic check of a block holds exactly when its parent carries a payload.
+A block passes the optimistic check exactly when its parent carries a payload or it is old enough.
 
-It also holds when the slot of the block is far enough before the clock.
+It is old enough when its slot is far enough before the clock.
 
 The latest verified ancestor of a block is reached through optimistic blocks only.
 
@@ -138,41 +139,6 @@ theorem latestVerifiedAncestor_spec {root ancestor : Root}
       simp only [notLower, ↓reduceDIte] at found
       simp [throw, throwThe, MonadExceptOf.throw] at found
 
-/-- The roots that a check keeps are exactly those of the list that it does not mark. -/
-theorem mem_keepRoots {leaves : Root → Except ForkChoiceError Bool} :
-    ∀ {roots kept : List Root}, keepRoots leaves roots = .ok kept →
-      ∀ root, root ∈ kept ↔ root ∈ roots ∧ leaves root = .ok false
-  | [], kept, computed, root => by
-    simp only [keepRoots, pure, Except.pure, Except.ok.injEq] at computed
-    simp [← computed]
-  | first :: rest, kept, computed, root => by
-    simp only [keepRoots, bind_ok_iff] at computed
-    obtain ⟨gone, marked, keptRest, restOk, result⟩ := computed
-    simp only [pure, Except.pure, Except.ok.injEq] at result
-    subst result
-    have later := mem_keepRoots restOk root
-    cases gone with
-    | true =>
-      simp only [↓reduceIte, later, List.mem_cons]
-      constructor
-      · rintro ⟨member, unmarked⟩
-        exact ⟨.inr member, unmarked⟩
-      · rintro ⟨first | member, unmarked⟩
-        · subst first
-          rw [marked] at unmarked
-          cases unmarked
-        · exact ⟨member, unmarked⟩
-    | false =>
-      simp only [Bool.false_eq_true, ↓reduceIte, List.mem_cons, later]
-      constructor
-      · rintro (same | ⟨member, unmarked⟩)
-        · subst same
-          exact ⟨.inl rfl, marked⟩
-        · exact ⟨.inr member, unmarked⟩
-      · rintro ⟨same | member, unmarked⟩
-        · exact .inl same
-        · exact .inr ⟨member, unmarked⟩
-
 /-- A valid payload removes exactly the block and its known ancestors from the optimistic set.
 
 The head and the blocks stay as they were. -/
@@ -201,11 +167,21 @@ theorem onInvalidatedPayload_spec {first : Root} {after : OptimisticStore preset
   simp only [onInvalidatedPayload, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at updated
   obtain ⟨kept, keptOk, rfl⟩ := updated
   refine ⟨fun optimistic => ?_, rfl, rfl⟩
-  rw [mem_keepRoots keptOk]
-  refine and_congr_right fun _ => ?_
-  cases chained : store.chain optimistic with
-  | error => simp [bind, Except.bind]
-  | ok chain => simp [bind, Except.bind]
+  rw [mem_filterMapM_ok keptOk]
+  constructor
+  · rintro ⟨root, member, checked⟩
+    cases chained : store.chain root with
+    | error => simp [chained, bind, Except.bind] at checked
+    | ok chain =>
+      by_cases holds : first ∈ chain
+      · simp [chained, holds, bind, Except.bind] at checked
+      · simp only [chained, holds, bind, Except.bind, List.contains_iff_mem, ↓reduceIte,
+          Except.ok.injEq, Option.some.injEq] at checked
+        subst checked
+        exact ⟨member, chain, chained, holds⟩
+  · rintro ⟨member, chain, chained, holds⟩
+    refine ⟨optimistic, member, ?_⟩
+    simp [chained, holds, bind, Except.bind]
 
 end OptimisticStore
 
