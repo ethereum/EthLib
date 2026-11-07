@@ -13,7 +13,7 @@ Each member of the next sync committee is active in the epoch after the epoch of
 
 The committee has the size of the preset by its type, and may hold a validator more than once.
 
-The draw returns a committee exactly when its validators all exist and their keys aggregate.
+The draw returns a committee exactly when it draws indices, finds each validator and aggregates.
 
 That committee holds their keys, in the order of the draw, and the aggregate of those keys.
 -/
