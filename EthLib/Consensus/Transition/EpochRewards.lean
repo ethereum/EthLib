@@ -155,8 +155,8 @@ def earliestInclusions (size : Nat)
     signers.foldl (init := best) fun best index =>
       match best.getD index.toNat none with
       | some kept => if attestation.inclusionDelay < kept.inclusionDelay then
-          best.set! index.toNat (some attestation) else best
-      | none => best.set! index.toNat (some attestation)
+          best.setIfInBounds index.toNat (some attestation) else best
+      | none => best.setIfInBounds index.toNat (some attestation)
 
 /-- The inclusion rewards of one attester, under the attestation that first included its vote.
 
