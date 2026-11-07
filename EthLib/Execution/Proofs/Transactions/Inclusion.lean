@@ -81,7 +81,9 @@ private theorem failIf_ok {c : Bool} {e : InclusionError} {u : Unit} (h : failIf
 
 It passes the rules that need no state, and its signature names the sender.
 
-Its gas fits in the gas left of the block, and its blob gas in the blob gas left.
+Its gas, capped at 2^24 from Glamsterdam, fits in the gas left of the block.
+
+Its blob gas fits in the blob gas left.
 
 From Glamsterdam, the gas left of the block is execution gas.
 
@@ -144,7 +146,11 @@ It signs no chain or the chain of the network, and its signature names the sende
 
 It passes the gas, nonce and fee rules, and its blobs and authorizations pass the rules.
 
-Its gas fits in the gas left of the block, and its blob gas in the blob gas left.
+Its gas, capped at 2^24 from Glamsterdam, fits in the gas left of the block.
+
+Its blob gas fits in the blob gas left.
+
+From Glamsterdam, the gas left of the block is execution gas.
 
 From Glamsterdam, its gas limit also fits in the state gas left.
 
