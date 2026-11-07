@@ -4048,7 +4048,7 @@
       {"constructor": "invalidInclusionListSignature", "code": 51}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "Validate the messages of a topic in turn, against the store of an anchor and later blocks.\n\nAt Gloas seven topics are specified here: blocks, votes, aggregates and the four new topics.\n\nAt Heze no topic is specified yet."},
+   "Validate the messages of a topic in turn, against the store of an anchor and later blocks.\n\nAt Gloas every topic but the partial column sidecars is specified here.\n\nAt Heze no topic is specified yet."},
   {"summary":
    "The headers of a sync, step by step, from a bootstrap for a trusted block root.",
    "signature":

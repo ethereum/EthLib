@@ -1,0 +1,8 @@
+topic: bls_to_execution_change
+blocks:
+- {block: 
+    block_0x9f87a12d020fe5f111a8e388f428594715e83c39314fecf4b523dd7da27848b5}
+messages:
+- {current_time_ms: 0, message: 
+    bls_to_execution_change_0x40a9df9312e02c1da95a7ddc2c0b83fe804c0074fb6112e98663ad2d847a4938,
+  expected: valid}

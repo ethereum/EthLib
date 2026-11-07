@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: networking
+handler: gossip_voluntary_exit
+suite: pyspec_tests
+case: gossip_voluntary_exit__valid

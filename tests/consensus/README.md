@@ -77,7 +77,8 @@ A sidecar rejected for one of them fails that check, and every other sidecar pas
 From Gloas a sidecar has no branch, and its commitments are in the bid of the block whose root it names.
 So from Gloas the file finds that block among the blocks of the case, and runs the two other checks against it.
 A sidecar whose block the case does not give must be rejected before gossip validation reads the block.
-From Gloas the rest of gossip validation waits for the Gloas store; the Fulu cases run in full from `gossip/`.
+The Fulu and Gloas cases run in full from `gossip/`, which keeps them with their state.
+At Heze the rest of gossip validation waits for the Heze rules.
 The same file rebuilds every sidecar of a block from one sidecar, and from the bodies of `merkle_proof/` for Fulu.
 From Gloas it rebuilds each valid sidecar from its block, and from itself.
 It also builds the matrix of two blobs of the KZG vectors under `tests/cryptography/kzg/`, and recovers it from half of its columns.
@@ -199,6 +200,8 @@ A bid case also sends the proposer preferences and the envelopes that its bids r
 It keeps 24 Gloas cases of blocks, attestations and aggregates, for the checks that Gloas adds.
 Those checks read the bid of a block, its parent payload, and the payload that a vote sees.
 The anchor block of a case may come with the envelope of its payload too.
+At Gloas it keeps one valid case of each of the six topics that Gloas leaves unchanged.
+It keeps every minimal Gloas case of the column sidecar topic too.
 `bindings/python/tests/consensus/test_gossip_validation.py` validates each message in Lean and compares the outcome and the reason with the case.
 
 The directory `genesis/` holds every genesis case of `minimal.tar.gz` in the same way.

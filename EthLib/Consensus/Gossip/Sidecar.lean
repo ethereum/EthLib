@@ -28,6 +28,10 @@ Its branch must climb from its commitments to the body root of its header.
 
 Its KZG proofs must match its commitments.
 
+From Gloas a column sidecar names its block by its root, and has no header.
+
+Its commitments are those of the bid of that block, which must be known and valid.
+
 A proof that the KZG checks cannot read is an error, since the rule raises there.
 
 At Fulu a partial column sidecar carries some cells of a column, its header, or both.
@@ -166,6 +170,51 @@ def Seen.recordDataColumnSidecar (seen : Seen) (before : fork < .glamsterdam)
     (sidecar : DataColumnSidecar preset fork) : Seen :=
   { seen with
     dataColumnSidecarTuples := dataColumnSidecarKey before sidecar :: seen.dataColumnSidecarTuples }
+
+/-- From Gloas: the checks of a column sidecar on a subnet, at a time in milliseconds.
+
+The first valid sidecar of a block for a column passes, and a later one is ignored.
+
+The sidecar must be on the subnet of its column, and not early.
+
+Its block must be known, and is ignored otherwise; it must have a state, and is rejected otherwise.
+
+The sidecar must have the slot of its block.
+
+It must have one cell and one proof per commitment of the bid of the block, at least one.
+
+Its cells must match those commitments, by their proofs. -/
+def validateGloasDataColumnSidecar (config : Config) (setup : TrustedSetup) (seen : Seen)
+    (store : Store preset fork) (gloas : .glamsterdam ≤ fork)
+    (sidecar : DataColumnSidecar preset fork) (currentTimeMs subnetId : UInt64) :
+    Except ForkChoiceError ValidationResult :=
+  let root := sidecar.beaconBlockRoot gloas
+  (ignoreUnless (!seen.dataColumnSidecarRoots.contains (root, sidecar.index))
+    "already seen sidecar for this block root and index").andThenM fun _ => do
+  let subnet ← (computeSubnetForDataColumnSidecar config sidecar.index).mapError
+    SubnetError.toForkChoice
+  (rejectUnless (subnet == subnetId) "sidecar is for wrong subnet").andThenM fun _ => do
+  let future ← store.isFutureSlot config (sidecar.slot gloas) currentTimeMs
+  (ignoreUnless (!future) "sidecar is from a future slot").andThenM fun _ =>
+  match store.blocks[root]? with
+  | none => return .ignore "block for sidecar's beacon block root has not been seen"
+  | some block =>
+  match store.blockStates[root]? with
+  | none => return .reject "block for sidecar's beacon block root failed validation"
+  | some _ =>
+  (rejectUnless (sidecar.slot gloas == block.slot)
+    "sidecar's slot does not match block's slot").andThenM fun _ =>
+  (rejectUnless (verifyDataColumnSidecar preset config sidecar block.bidCommitments)
+    "invalid sidecar").andThenM fun _ => do
+  let valid ← (verifyDataColumnSidecarKzgProofs setup sidecar block.bidCommitments).mapError .kzg
+  return rejectUnless valid "invalid sidecar kzg proofs"
+
+/-- From Gloas: the keys after a valid column sidecar, its block root and its column. -/
+def Seen.recordGloasDataColumnSidecar (seen : Seen) (gloas : .glamsterdam ≤ fork)
+    (sidecar : DataColumnSidecar preset fork) : Seen :=
+  { seen with
+    dataColumnSidecarRoots :=
+      (sidecar.beaconBlockRoot gloas, sidecar.index) :: seen.dataColumnSidecarRoots }
 
 /-- At Fulu: the partial headers that passed their checks, each with the root of its block.
 

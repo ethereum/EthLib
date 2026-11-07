@@ -60,8 +60,10 @@ structure Seen where
   aggregateBits : List ((Root × CommitteeIndex) × List Bool) := []
   /-- At Deneb and Electra: the slot, the proposer and the index of each valid blob sidecar. -/
   blobSidecarTuples : List (Slot × ValidatorIndex × BlobIndex) := []
-  /-- From Fulu: the slot, the proposer and the column index of each valid column sidecar. -/
+  /-- At Fulu: the slot, the proposer and the column index of each valid column sidecar. -/
   dataColumnSidecarTuples : List (Slot × ValidatorIndex × DataAvailability.ColumnIndex) := []
+  /-- From Gloas: the block root and the column index of each valid column sidecar. -/
+  dataColumnSidecarRoots : List (Root × DataAvailability.ColumnIndex) := []
   /-- From Gloas: the valid preferences of proposers, by proposal slot and dependent root. -/
   proposerPreferences : List ((Slot × Root) × ProposerPreferences) := []
   /-- From Gloas: the block root and the builder of each valid envelope. -/
