@@ -163,7 +163,9 @@ theorem repeat_apply_eq_repeat_succ {α : Type} (f : α → α) (k : Nat) (a : �
   | zero => rfl
   | succ k ih => exact congrArg f ih
 
-/-- Block `j` of the output, counted from 0, is block `j` of the data XORed with the cipher.
+/-- Block `j` of the output, counted from 0, is block `j` of the data XORed with a cipher output.
+
+It holds for each of the `n` blocks that the loop runs.
 
 The cipher takes the counter `T` incremented `j` times, as in SP 800-38A §6.5.
 
@@ -200,7 +202,7 @@ theorem xorKeystream_block (ciph : Block → Block) (m : Nat) {n j : Nat} (hj : 
         List.drop_eq_nil_of_le (as := data) (by omega)]
       simp
 
-/-- Block `j` of a CTR output, counted from 0, is block `j` of the data XORed with the cipher.
+/-- Block `j` of a CTR output, counted from 0, is block `j` of the data XORed with a cipher output.
 
 The cipher takes the initial counter incremented `j` times, for every block `j` of the data. -/
 theorem ctr_block (ciph : Block → Block) (m : Nat) (T : Block) (data : ByteArray) {j : Nat}
