@@ -229,7 +229,7 @@ theorem at_startFrame {code : ByteArray} {message : Message fork} (hcode : messa
     At code message 0 [] .empty message.gas state substate
       (startFrame message state substate (GasMeter.start message.gas message.reservoir)) := by
   subst hcode
-  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- The assumption that a call with code `code` runs as a specification of that code says.
 

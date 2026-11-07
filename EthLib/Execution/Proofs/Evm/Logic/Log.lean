@@ -83,7 +83,7 @@ theorem log {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List U2
                 (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
                 start.toNat size.toNat } }) := by
   apply At.rule hlt hbyte (ofByte_of_decode decoded (Fork.frontier_le _)) (instruction_log n)
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss⟩
   subst hm hg hs hss hmem
   have hl := evm.stack.property
   rw [hst] at hl
@@ -98,6 +98,7 @@ theorem log {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List U2
   simp only [chargeGasAndMemory, chargeGas, GasMeter.charge, logCost] at hgas ⊢
   simp only [Nat.not_lt.mpr hgas, ite_false, bind, Except.bind, pure, Except.pure, hstatic,
     Bool.false_eq_true]
-  exact ⟨_, rfl, hcode, hj, rfl, by simp [advance, hpc], rfl, rfl, rfl, hrun, herr, rfl, rfl⟩
+  exact ⟨_, rfl, hcode, hj, rfl, by simp [advance, hpc], rfl, rfl, rfl, hrun, herr, hout, rfl,
+    rfl⟩
 
 end EthLib.Execution.Evm.Logic
