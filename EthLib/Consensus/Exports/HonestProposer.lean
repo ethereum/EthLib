@@ -87,6 +87,18 @@ def computeOnChainAggregateExport (name fork : ByteArray) (aggregates : Array By
   let attestation ← runProposer (computeOnChainAggregate electra aggregates)
   (SszType.serialize attestation).mapError fun e => (0, s!"attestation rejected: {reprStr e}")
 
+/-- From Altair: the sync aggregate of a block from the contributions of subcommittees.
+
+It comes as SSZ bytes, and so does each contribution. -/
+@[export eth_consensus_process_sync_committee_contributions]
+def processSyncCommitteeContributionsExport (name fork : ByteArray)
+    (contributions : Array ByteArray) : Result ByteArray := do
+  let (preset, fork) ← transitionPresetAndFork name fork
+  let ⟨_⟩ ← holds (.altair ≤ fork) s!"no sync aggregate at {fork.name}"
+  let contributions ← contributions.toList.mapM (decodeInput (SyncCommitteeContribution preset))
+  let aggregate ← runProposer (processSyncCommitteeContributions contributions)
+  (SszType.serialize aggregate).mapError fun e => (0, s!"sync aggregate rejected: {reprStr e}")
+
 /-- From Electra: the requests of an execution block, as SSZ bytes.
 
 They come from the list that the execution layer gives, one typed list per entry. -/
