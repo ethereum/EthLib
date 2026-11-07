@@ -97,6 +97,19 @@ theorem serialize_ok_or_overflow (a : α) :
   · exact .inl ⟨⟨bytes⟩, serialize_ok_iff.mpr wrote⟩
   · exact .inr ⟨size, large, by simp [serialize, failed, bind, Except.bind]⟩
 
+/-- Bytes that decode to the empty value are empty, when the empty bytes decode to it. -/
+theorem size_eq_zero_iff_of_deserialize_empty {empty : α}
+    (emptyRead : deserialize α ByteArray.empty = .ok empty) {a : α} {data : ByteArray}
+    (wrote : serialize a = .ok data) : data.size = 0 ↔ a = empty := by
+  constructor
+  · intro size
+    have : data = ByteArray.empty := ByteArray.ext (Array.eq_empty_of_size_eq_zero size)
+    subst this
+    exact Except.ok.inj ((deserialize_serialize wrote).symm.trans emptyRead)
+  · rintro rfl
+    rw [Except.ok.inj (wrote.symm.trans (serialize_deserialize emptyRead))]
+    rfl
+
 end SszType
 
 end EthLib.Serialization.Ssz

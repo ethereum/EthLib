@@ -185,4 +185,32 @@ instance : LawfulSszType ProgressiveBitlist where
     cases value <;> simp only [ofValue] at made <;> try cases made
     rfl
 
+/-- An empty encoding has no slices. -/
+theorem listSlices_empty (element : Desc) (limit : Option Nat) :
+    listSlices element limit #[] = .ok [] := by
+  simp [listSlices, bytesPerOffset, pure, Except.pure]
+
+/-- The empty bytes decode to the empty progressive list. -/
+theorem deserialize_progressiveList_empty {α : Type} [SszType α] :
+    SszType.deserialize (ProgressiveList α) ByteArray.empty = .ok ⟨#[]⟩ := by
+  unfold SszType.deserialize
+  show (do SszType.ofValue (← Ssz.deserialize _ #[])) = _
+  simp only [SszType.desc]
+  rw [Ssz.deserialize]
+  simp [listSlices_empty, deserializeEach_nil, bind, Except.bind, pure, Except.pure,
+      SszType.ofValue, SszType.ofElements, SszType.ofElementsOnto, Functor.map, Except.map]
+
+/-- The empty progressive list has empty SSZ bytes. -/
+theorem serialize_progressiveList_empty {α : Type} [SszType α] [LawfulSszType α] :
+    SszType.serialize (⟨#[]⟩ : ProgressiveList α) = .ok .empty :=
+  SszType.serialize_deserialize deserialize_progressiveList_empty
+
+/-- A progressive list with SSZ bytes is empty exactly when its bytes are. -/
+theorem progressiveList_size_eq_zero_iff {α : Type} [SszType α] [LawfulSszType α]
+    {list : ProgressiveList α} {data : ByteArray} (wrote : SszType.serialize list = .ok data) :
+    list.data.size = 0 ↔ data.size = 0 := by
+  rw [SszType.size_eq_zero_iff_of_deserialize_empty deserialize_progressiveList_empty wrote]
+  cases list
+  simp [Array.size_eq_zero_iff]
+
 end EthLib.Serialization.Ssz
