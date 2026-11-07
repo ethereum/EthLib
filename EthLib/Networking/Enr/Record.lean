@@ -26,7 +26,7 @@ A value is any RLP item.
 
 The text form is `enr:`, then the URL-safe base64 of the RLP bytes, without padding.
 
-[eip-778]: https://github.com/ethereum/EIPs/blob/7622abc1c6569b7e7ade9ed957dde4ed2271cc40/EIPS/eip-778.md
+[eip-778]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-778.md
 -/
 
 @[expose] public section
