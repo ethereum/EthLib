@@ -37,7 +37,9 @@ Before Glamsterdam, a block counts the gas that the sender pays.
 
 So the gas used in the header is the sum of the gas of the transactions.
 
-Adding ether below `2^256` creates it, and an amount of at least `2^256` overflows the balance.
+Crediting an amount below `2^256` creates that ether at the address.
+
+Crediting at least `2^256` fails as an overflow of the balance.
 
 Settling the gas reports the gas used that the settlement counts.
 
@@ -307,7 +309,7 @@ theorem creditEther_of_lt {fork : Fork} {state : TransactionState} {address : Ad
       state.createEther fork address (BitVec.ofNat 256 amount) := by
   simp only [creditEther, h, ↓reduceIte]
 
-/-- An amount of at least `2^256` overflows the balance, and the state is not changed. -/
+/-- Crediting an amount of at least `2^256` fails as an overflow of the balance. -/
 theorem creditEther_of_le {fork : Fork} {state : TransactionState} {address : Address}
     {amount : Nat} (h : 2 ^ 256 ≤ amount) :
     creditEther fork state address amount = .error (.balanceOverflow address) := by
