@@ -12,7 +12,9 @@ The equality holds for every pair of keys, the zero key included, with the same 
 
 Two nonzero keys always derive a secret.
 
-The primitive returns `z` exactly when the key `Q` is a point other than `O` and `d` is nonzero.
+The primitive returns `z` exactly when the key `Q` is a point of the curve other than `O`.
+
+The key `d` must also be nonzero.
 
 Then `z` is the `x` of `d Q`, as 32 big-endian bytes.
 -/
@@ -90,7 +92,6 @@ theorem exists_ecdh_eq_ok {a b : Fn} (ha : a ≠ 0) (hb : b ≠ 0) :
   cases hm : mul a (mul b generator) with
   | infinity => exact absurd hm (mul_ne_infinity ha (isOnCurve_mul _ hG) hP)
   | affine x y => exact ⟨_, rfl⟩
-
 
 /-- ECDH is the Diffie-Hellman primitive of SEC 1 v2 §3.3.1, read in the group of the curve.
 
