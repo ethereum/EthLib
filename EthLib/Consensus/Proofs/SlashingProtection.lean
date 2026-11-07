@@ -48,7 +48,7 @@ theorem checkBlockSlot_eq_ok_iff {blocks : List SignedBlockRecord} {slot : Slot}
     {signingRoot : Root} :
     checkBlockSlot blocks slot signingRoot = .ok () ↔
       ∀ minimum, minBlockSlot blocks = some minimum →
-        minimum < slot ∨ isRepeatSigning (blocks.map (·.signingRoot)) signingRoot = true := by
+        minimum < slot ∨ isRepeatBlock blocks slot signingRoot = true := by
   unfold checkBlockSlot
   split <;> simp_all [ensure_ok_iff]
 
@@ -62,11 +62,11 @@ theorem checkSourceEpoch_eq_ok_iff {attestations : List SignedAttestationRecord}
 
 /-- The fifth condition holds exactly when the target epoch is after the least one, or a repeat. -/
 theorem checkTargetEpoch_eq_ok_iff {attestations : List SignedAttestationRecord}
-    {targetEpoch : Epoch} {signingRoot : Root} :
-    checkTargetEpoch attestations targetEpoch signingRoot = .ok () ↔
+    {sourceEpoch targetEpoch : Epoch} {signingRoot : Root} :
+    checkTargetEpoch attestations sourceEpoch targetEpoch signingRoot = .ok () ↔
       ∀ minimum, minTargetEpoch attestations = some minimum →
         minimum < targetEpoch ∨
-          isRepeatSigning (attestations.map (·.signingRoot)) signingRoot = true := by
+          isRepeatAttestation attestations sourceEpoch targetEpoch signingRoot = true := by
   unfold checkTargetEpoch
   split <;> simp_all [ensure_ok_iff]
 
@@ -74,13 +74,13 @@ theorem checkTargetEpoch_eq_ok_iff {attestations : List SignedAttestationRecord}
 
 No recorded block of its slot has another signing root, or none.
 
-Its slot is after the least recorded slot, or some record carries its signing root. -/
+Its slot is after the least recorded slot, or some record has its slot and signing root. -/
 theorem checkBlockSigning_eq_ok_iff {blocks : List SignedBlockRecord} {slot : Slot}
     {signingRoot : Root} :
     checkBlockSigning blocks slot signingRoot = .ok () ↔
       (∀ block ∈ blocks, block.conflictsWith slot signingRoot = false) ∧
       ∀ minimum, minBlockSlot blocks = some minimum →
-        minimum < slot ∨ isRepeatSigning (blocks.map (·.signingRoot)) signingRoot = true := by
+        minimum < slot ∨ isRepeatBlock blocks slot signingRoot = true := by
   rw [checkBlockSigning, bind_unit_ok_iff, ensure_ok_iff, checkBlockSlot_eq_ok_iff]
 
 /-- A vote may be signed exactly when it meets the last three conditions.
@@ -89,7 +89,7 @@ No recorded vote is slashable with it, as a record sees it.
 
 Its source epoch is at least the least recorded one.
 
-Its target epoch is after the least recorded one, or some record carries its signing root. -/
+Its target epoch is after the least one, or some record has its epochs and signing root. -/
 theorem checkAttestationSigning_eq_ok_iff {attestations : List SignedAttestationRecord}
     {sourceEpoch targetEpoch : Epoch} {signingRoot : Root} :
     checkAttestationSigning attestations sourceEpoch targetEpoch signingRoot = .ok () ↔
@@ -98,7 +98,7 @@ theorem checkAttestationSigning_eq_ok_iff {attestations : List SignedAttestation
       (∀ minimum, minSourceEpoch attestations = some minimum → minimum ≤ sourceEpoch) ∧
       ∀ minimum, minTargetEpoch attestations = some minimum →
         minimum < targetEpoch ∨
-          isRepeatSigning (attestations.map (·.signingRoot)) signingRoot = true := by
+          isRepeatAttestation attestations sourceEpoch targetEpoch signingRoot = true := by
   rw [checkAttestationSigning, bind_unit_ok_iff, ensure_ok_iff, bind_unit_ok_iff,
     checkSourceEpoch_eq_ok_iff, checkTargetEpoch_eq_ok_iff]
 

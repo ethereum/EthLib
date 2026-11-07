@@ -231,11 +231,13 @@ def test_vote_signed(record: list, source: int, target: int, root: str):
         ([entry(attestations=[vote(2, 5, ROOT_A)])], 1, 6, ROOT_B, 5),
         ([entry(attestations=[vote(1, 9, ROOT_A)])], 2, 8, ROOT_B, 5),
         # Condition 4: a source below the least recorded source.
-        ([entry(attestations=[vote(4, 9, ROOT_A)])], 3, 10, ROOT_B, 6),
+        ([entry(attestations=[vote(4, 9, ROOT_A)])], 3, 8, ROOT_B, 6),
         # Condition 5: a target at most the least recorded target.
-        ([entry(attestations=[vote(4, 9, ROOT_A), vote(4, 12, ROOT_A)])], 5, 8, ROOT_B, 7),
+        ([entry(attestations=[vote(4, 9, ROOT_A), vote(4, 12, ROOT_A)])], 4, 8, ROOT_B, 7),
+        # A record with the root but other epochs does not make a repeat.
+        ([entry(attestations=[vote(4, 9, ROOT_A)])], 4, 8, ROOT_A, 7),
     ],
-    ids=["double", "no root", "surrounds", "surrounded", "source", "target"],
+    ids=["double", "no root", "surrounds", "surrounded", "source", "target", "root only"],
 )
 def test_vote_refused(record: list, source: int, target: int, root: str, code: int):
     with raises(ERROR, f"slashing protection failed with code {code}") as info:

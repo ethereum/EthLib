@@ -290,11 +290,24 @@ def minSourceEpoch (attestations : List SignedAttestationRecord) : Option Epoch 
 def minTargetEpoch (attestations : List SignedAttestationRecord) : Option Epoch :=
   (attestations.map (·.targetEpoch)).min?
 
-/-- Whether a message is a repeat: some record carries its signing root.
+/-- Whether a block is a repeat: some record has its slot and carries its signing root.
 
-A record without a signing root is the repeat of no message. -/
-def isRepeatSigning (signingRoots : List (Option Root)) (signingRoot : Root) : Bool :=
-  signingRoots.contains (some signingRoot)
+A record without a signing root is the repeat of no block.
+
+A record with the root but another slot is not a repeat, since the root commits to the slot. -/
+def isRepeatBlock (blocks : List SignedBlockRecord) (slot : Slot) (signingRoot : Root) : Bool :=
+  blocks.any fun block => block.slot == slot && block.signingRoot == some signingRoot
+
+/-- Whether a vote is a repeat: some record has its two epochs and carries its signing root.
+
+A record without a signing root is the repeat of no vote.
+
+A record with the root but other epochs is not a repeat, since the root commits to them. -/
+def isRepeatAttestation (attestations : List SignedAttestationRecord)
+    (sourceEpoch targetEpoch : Epoch) (signingRoot : Root) : Bool :=
+  attestations.any fun attestation =>
+    attestation.sourceEpoch == sourceEpoch && attestation.targetEpoch == targetEpoch &&
+      attestation.signingRoot == some signingRoot
 
 /-- Whether a recorded block conflicts with a new block of a slot and a signing root.
 
@@ -323,7 +336,7 @@ def checkBlockSlot (blocks : List SignedBlockRecord) (slot : Slot) (signingRoot 
     Except SlashingProtectionError Unit :=
   match minBlockSlot blocks with
   | some minimum =>
-    ensure (minimum < slot ∨ isRepeatSigning (blocks.map (·.signingRoot)) signingRoot)
+    ensure (minimum < slot ∨ isRepeatBlock blocks slot signingRoot)
       (.blockSlotTooLow slot minimum)
   | none => .ok ()
 
@@ -347,12 +360,12 @@ def checkSourceEpoch (attestations : List SignedAttestationRecord) (sourceEpoch 
   | none => .ok ()
 
 /-- The fifth condition: a vote has a target epoch after the least recorded one, or is a repeat. -/
-def checkTargetEpoch (attestations : List SignedAttestationRecord) (targetEpoch : Epoch)
-    (signingRoot : Root) : Except SlashingProtectionError Unit :=
+def checkTargetEpoch (attestations : List SignedAttestationRecord)
+    (sourceEpoch targetEpoch : Epoch) (signingRoot : Root) : Except SlashingProtectionError Unit :=
   match minTargetEpoch attestations with
   | some minimum =>
     ensure (minimum < targetEpoch ∨
-        isRepeatSigning (attestations.map (·.signingRoot)) signingRoot)
+        isRepeatAttestation attestations sourceEpoch targetEpoch signingRoot)
       (.targetEpochTooLow targetEpoch minimum)
   | none => .ok ()
 
@@ -370,7 +383,7 @@ def checkAttestationSigning (attestations : List SignedAttestationRecord)
       attestation.isSlashableWith sourceEpoch targetEpoch signingRoot = false)
     (.slashableAttestation sourceEpoch targetEpoch)
   checkSourceEpoch attestations sourceEpoch
-  checkTargetEpoch attestations targetEpoch signingRoot
+  checkTargetEpoch attestations sourceEpoch targetEpoch signingRoot
 
 namespace Interchange
 
