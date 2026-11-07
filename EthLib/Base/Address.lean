@@ -7,8 +7,7 @@ public import EthLib.Base.U256
 
 The 20-byte address of an account.
 
-Source: the Yellow Paper, Shanghai version, in
-[`Paper.tex` at `efc5f9a`](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex).
+Source: the Yellow Paper, Shanghai version, in [`Paper.tex` at `efc5f9a`][paper].
 
 Section 4.1 makes an address a member of `B_20`.
 
@@ -19,6 +18,8 @@ A word becomes an address by dropping its first 12 bytes.
 An address becomes a word by filling those 12 bytes with zeros.
 
 Lean core orders addresses byte by byte, from the first byte, with a lawful linear order.
+
+[paper]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 -/
 
 @[expose] public section

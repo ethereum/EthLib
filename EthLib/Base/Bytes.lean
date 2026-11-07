@@ -5,12 +5,13 @@ module
 
 Byte strings of a fixed length, with the length in the type.
 
-Source: section 3 of the Yellow Paper, Shanghai version, in
-[`Paper.tex` at `efc5f9a`](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex).
+Source: section 3 of the Yellow Paper, Shanghai version, in [`Paper.tex` at `efc5f9a`][paper].
 
 It writes `B_n` for the byte strings of length `n`.
 
 A read of one byte of an untyped string gives zero past its end.
+
+[paper]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 -/
 
 @[expose] public section

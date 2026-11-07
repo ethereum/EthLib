@@ -83,12 +83,14 @@ namespace ChainConfig
 
 Each fork activates no earlier than the forks before it.
 
-[EIP-6122](https://eips.ethereum.org/EIPS/eip-6122#additional-rules) puts forks by timestamp after
-forks by block.
+[EIP-6122][eip-6122] puts forks by timestamp after forks by block.
 
 So Petersburg never activates before Constantinople, a case that EIP-1716 sets apart.
 
-Each blob schedule also activates no earlier than the schedules before it. -/
+Each blob schedule also activates no earlier than the schedules before it.
+
+[eip-6122]: https://eips.ethereum.org/EIPS/eip-6122#additional-rules
+-/
 def Ordered (config : ChainConfig) : Prop :=
   config.activations.Pairwise (fun x y => x.1 < y.1 ∧ x.2 ≤ y.2) ∧
     config.blobSchedules.Pairwise fun x y => x.1 ≤ y.1
@@ -134,20 +136,25 @@ Its chain ID is 1, as [EIP-155](https://eips.ethereum.org/EIPS/eip-155#list-of-c
 
 Frontier holds from the genesis block on.
 
-[EIP-6953](https://eips.ethereum.org/EIPS/eip-6953#proof-of-work-network-upgrades) gives the blocks
-from Homestead to Gray Glacier.
+[EIP-6953][eip-6953-pow] gives the blocks from Homestead to Gray Glacier.
 
-[EIP-3675](https://eips.ethereum.org/EIPS/eip-3675#transition-block-validity) starts Paris at the
-first block whose parent reaches the terminal total difficulty.
+[EIP-3675][eip-3675] starts Paris at the first block whose parent reaches a set total difficulty.
 
-On mainnet that block is 15,537,394, the first block after the history of
-[EIP-7643](https://eips.ethereum.org/EIPS/eip-7643#pre-pos-root).
+That value is the terminal total difficulty.
 
-[EIP-6953](https://eips.ethereum.org/EIPS/eip-6953#post-merge-upgrades) gives the time of Shapella.
+On mainnet that block is 15,537,394, the first block after the history of [EIP-7643][eip-7643].
+
+[EIP-6953][eip-6953-pos] gives the time of Shapella.
 
 The meta EIP of each later fork gives its time: EIP-7569, EIP-7600, EIP-7607, EIP-8134, EIP-8135.
 
-Mainnet sets no blob schedule of its own: each fork keeps the schedule of its EIPs. -/
+Mainnet sets no blob schedule of its own: each fork keeps the schedule of its EIPs.
+
+[eip-6953-pow]: https://eips.ethereum.org/EIPS/eip-6953#proof-of-work-network-upgrades
+[eip-3675]: https://eips.ethereum.org/EIPS/eip-3675#transition-block-validity
+[eip-7643]: https://eips.ethereum.org/EIPS/eip-7643#pre-pos-root
+[eip-6953-pos]: https://eips.ethereum.org/EIPS/eip-6953#post-merge-upgrades
+-/
 def mainnet : ChainConfig where
   chainId := 1
   activations := [

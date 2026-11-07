@@ -210,8 +210,9 @@ theorem weight_none (hlatest : ∀ v, G.latest v = (N.latest v).map Prod.fst) (c
   · rintro ⟨hv, _, ⟨m, hm, rfl⟩, ha⟩
     exact ⟨hv, m, hm, ha⟩
 
-/-- No vote supports an empty node when every block builds on a full parent and no vote names
-an empty node. -/
+/-- Let every block build on a full parent, and let no vote name an empty node.
+
+Then no vote supports an empty node. -/
 theorem weight_empty (hfull : ∀ r, r ≠ T.genesis → full r = true)
     (hvote : ∀ v r, N.latest v ≠ some (r, some false)) (b : β) :
     weight V w N (b, some false) = 0 := by
@@ -234,8 +235,9 @@ The views hold the same pending nodes as blocks, and the full node of each block
 
 Every block builds on a full parent, no vote names an empty node, and votes name the same blocks.
 
-Then from the pending node of a block, the rule over nodes reaches the full node of the head that
-the rule over blocks reaches. -/
+Take a block, and the head that the rule over blocks reaches from it.
+
+From the pending node of that block, the rule over nodes reaches the full node of that head. -/
 theorem ghost_payloadTree {root : β → ρ} (hroot : Set.InjOn root {r | r ≠ T.genesis})
     (hfull : ∀ r, r ≠ T.genesis → full r = true)
     (hpending : ∀ r, (r, none) ∈ N.blocks ↔ r ∈ G.blocks)
@@ -336,8 +338,8 @@ def View.fullView (G : View ν β T) (hfull : ∀ r, r ≠ T.genesis → full r 
 
 /-- The rule over the view with every payload picks the head of the rule over blocks, in full.
 
-Every block builds on a full parent, no vote names an empty node, and votes name the same
-blocks. -/
+Every block builds on a full parent, no vote names an empty node, and votes name the same blocks.
+-/
 theorem ghost_fullView {root : β → ρ} (hroot : Set.InjOn root {r | r ≠ T.genesis})
     (hfull : ∀ r, r ≠ T.genesis → full r = true) {latest : ν → Option (β × Status)}
     (hvote : ∀ v r, latest v ≠ some (r, some false))

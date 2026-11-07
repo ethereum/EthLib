@@ -131,8 +131,9 @@ theorem markIndices_congr {size : Nat} {first second : List ValidatorIndex}
     exact ⟨fun ⟨x, m, e⟩ => ⟨x, (same x).mp m, e⟩, fun ⟨x, m, e⟩ => ⟨x, (same x).mpr m, e⟩⟩
   rw [this]
 
-/-- A total balance exists exactly when every index names a validator and the sum of the marked
-effective balances is below 2^64.
+/-- A total balance exists exactly when two conditions hold.
+
+Every index names a validator, and the sum of the marked effective balances is below 2^64.
 
 It is then that sum, or one increment if the sum is smaller. -/
 theorem getTotalBalance_ok_iff {state : BeaconState preset fork}
