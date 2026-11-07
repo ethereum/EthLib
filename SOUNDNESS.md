@@ -841,16 +841,38 @@ A run of the loop then ends by the measure, not by the gas.
 `Triple.loop_gas` proves a loop whose invariant carries the gas, with a price for each run that may depend on the runs left.
 The loop then needs the sum of those prices and the price of its exit.
 `Logic.holds_empty` proves that memory holds no bytes from an offset within it.
-`Logic.Stored` is a running frame that knows ranges of memory, the facts of some slots of its account, and the refund counter.
-A fact of a slot gives its key, its word before the transaction, its word now, and whether it is warm.
-Every other slot of every account, and every account, reads as in a base state.
+`Logic.Stored` is a running frame that knows ranges of memory, the facts of some slots, and the refund counter.
+A fact of a slot gives its account, its key, its word before the transaction, its word now, and whether it is warm.
+`Logic.Agrees` says that a state and its accessed keys agree with a base outside a list of slots.
+There each word reads as in the base state, and each slot is warm exactly when the base keys hold it.
+The words before the transaction, the accounts, the codes and the block are those of the base state.
+A `Stored` frame agrees with its base outside the slots of its facts.
+`Logic.Agrees.trans` proves that agreement composes, outside both lists of slots.
 `Logic.Stored.of_known` proves that a rule that keeps the state and the substate keeps every fact.
-`Logic.sload_stored` proves that from Berlin, SLOAD of the key of a fact pushes its word now and makes the slot warm.
-`Logic.sstore_stored` proves that from Berlin to before Glamsterdam, SSTORE to the key of a fact writes it and makes it warm.
+`Logic.Stored.of_at` proves the same for a rule that also keeps memory.
+`Logic.sload_stored` proves that from Berlin, SLOAD of the key of a fact of the frame's account pushes its word now.
+It makes the slot warm.
+`Logic.sstore_stored` proves that from Berlin to before Glamsterdam, SSTORE to the key of such a fact writes it and makes it warm.
 It needs a frame that may change the state, more than 2300 gas, and the account of the frame in the base state.
 It pays the price of EIP-2200 with the prices of EIP-2929 from the facts of the slot, and adds the refund of the write.
+`Logic.StoppedStored.of_known` proves that a rule that halts and keeps the state and the substate keeps every fact.
 `Logic.stop_stored` proves that STOP keeps every fact.
 These frames say nothing of the logs, the accessed addresses and the other fields of the substate.
+`Logic.Effect` (`Logic/Effect.lean`) is the effect of a message on storage, from the frame that sends it.
+Outside the slots it touches, the state after agrees with the state before, and a failed message touches no slot.
+A message that succeeds gives the facts of some slots and adds a refund.
+`Logic.effects_rollbackOnError` proves that a callee whose stopped frame agrees with its start outside some slots has such an effect after the rollback.
+`Logic.call_stored` proves that from Berlin to before Glamsterdam, CALL with no value keeps the facts of a `Stored` frame.
+It keeps each fact of a slot that the effect of the callee does not touch.
+It needs an input range that a fact of memory holds, an empty output range, and the gas of a cold call.
+It also needs an assumption that gives the effect of each frame that ends the message.
+On success the frame gains the facts and the refund of the effect.
+On failure it keeps its facts, and the assumption may rule a failure out.
+Its new base agrees with the old one outside the touched slots and the slots of the facts.
+`Logic.meets_runsAll` proves that the runner of the interpreter meets the specifications of a family of codes that call each other, at every bound.
+Each specification is a triple under the assumption that the whole family runs as specified, so a callee may call its caller back.
+The proof is an induction on the bound on the gas of messages.
+`HoareUnder.of_exists` proves a triple from a precondition that gives a witness, with a triple for each witness.
 `StepBy` (`Logic/Message.lean`) adds the steps that send a message, which a runner of messages ends with a frame.
 `runFrame_eq_of_reaches` proves that `runFrame` runs a frame as it runs each frame that it reaches.
 It holds for every relation whose steps `runFrame` runs alike at both ends, as `Step` and `StepBy` do.
