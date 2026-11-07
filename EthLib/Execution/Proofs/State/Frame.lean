@@ -15,7 +15,11 @@ A move of ether from an account that holds code to itself changes no account and
 
 A rollback to a snapshot of the same block gives back the snapshot's accounts and storage.
 
-The statements cover the account, the storage and the transient storage only.
+Every write within a transaction keeps the block of the state.
+
+So a snapshot taken before a run of writes has the block of the state after them.
+
+The other statements cover the account, the storage and the transient storage only.
 
 They say nothing about the original words of storage, the created accounts or the records of reads.
 
@@ -60,9 +64,8 @@ theorem SameOutside.trans {first second : List Address} {tx tx' tx'' : Transacti
 
 /-- The relation still holds for a list that contains the first one. -/
 theorem SameOutside.mono {first second : List Address} {tx tx' : TransactionState}
-    (h : SameOutside first tx tx') (sub : ∀ address, address ∈ first → address ∈ second) :
-    SameOutside second tx tx' :=
-  fun address hmem => h address fun hfirst => hmem (sub address hfirst)
+    (h : SameOutside first tx tx') (sub : first ⊆ second) : SameOutside second tx tx' :=
+  fun address hmem => h address fun hfirst => hmem (sub hfirst)
 
 /-! ## Each write -/
 
@@ -165,17 +168,11 @@ theorem sameOutside_setTransientStorage (tx : TransactionState) (address : Addre
 /-- A successful write of storage touches the address it names only. -/
 theorem sameOutside_setStorage {tx tx' : TransactionState} {address : Address} {key : Bytes32}
     {value : U256} (h : tx.setStorage address key value = .ok tx') :
-    SameOutside [address] tx tx' := by
-  intro other hmem
-  have hne : other ≠ address := by simpa using hmem
-  refine ⟨?_, fun otherKey =>
-    getStorage_setStorage_of_ne h (Or.inl hne) , fun _ => ?_⟩
-  all_goals
-    unfold setStorage at h
-    split at h
-    · cases h
-    · cases h
-      rfl
+    SameOutside [address] tx tx' :=
+  fun other hmem =>
+    ⟨getAccountOptional_setStorage h,
+      fun _ => getStorage_setStorage_of_ne h (Or.inl (by simpa using hmem)),
+      getTransientStorage_setStorage h other⟩
 
 /-- A successful change of an account touches that address only. -/
 theorem sameOutside_modifyState {fork : Fork} {tx tx' : TransactionState} {address : Address}
@@ -227,6 +224,13 @@ theorem sameOutside_clearAccountPreservingBalance {fork : Fork} {tx tx' : Transa
     SameOutside [address] tx tx' :=
   ((sameOutside_destroyStorage tx address).trans (sameOutside_modifyState h)).mono (by simp)
 
+/-- Clearing an account leaves every other account unchanged. -/
+theorem getAccount_clearAccountPreservingBalance_of_ne {fork : Fork} {tx tx' : TransactionState}
+    {address other : Address} (h : tx.clearAccountPreservingBalance fork address = .ok tx')
+    (hne : other ≠ address) : tx'.getAccount other = tx.getAccount other := by
+  unfold getAccount
+  rw [(sameOutside_clearAccountPreservingBalance h other (by simpa using hne)).1]
+
 /-- A successful move of ether touches the sender and the recipient only. -/
 theorem sameOutside_moveEther {fork : Fork} {tx tx' : TransactionState}
     {sender recipient : Address} {amount : U256}
@@ -238,6 +242,14 @@ theorem sameOutside_moveEther {fork : Fork} {tx tx' : TransactionState}
   | ok mid =>
     rw [h1] at h
     exact ((sameOutside_modifyState h1).trans (sameOutside_modifyState h)).mono (by simp)
+
+/-- Moving ether keeps the storage of every address other than the two parties. -/
+theorem getStorage_moveEther_of_ne {fork : Fork} {tx tx' : TransactionState}
+    {sender recipient other : Address} {amount : U256}
+    (h : tx.moveEther fork sender recipient amount = .ok tx') (hs : other ≠ sender)
+    (hr : other ≠ recipient) (key : Bytes32) :
+    tx'.getStorage other key = tx.getStorage other key :=
+  (sameOutside_moveEther h other (by simp [hs, hr])).2.1 key
 
 /-- The account at an address that holds code is not empty, so no change of it deletes it. -/
 theorem accountExistsAndIsEmpty_setAccount_of_code {tx : TransactionState} {address : Address}
@@ -342,6 +354,115 @@ theorem sameOutside_destroyTouchedEmptyAccounts (fork : Fork) (tx : TransactionS
             (by simpa using hsub head (by simp))
         · exact SameOutside.refl _ acc
       exact (step.trans (ih _ fun a ha => hsub a (by simp [ha]))).mono (by simp)
+
+/-! ## The block of the state
+
+Every write within a transaction keeps the block that it starts from.
+
+So a rollback after a run of writes meets the hypothesis of the rollback lemma.
+
+The storage write and the touch of an account have theirs next to their other lemmas.
+-/
+
+/-- A record of an account read keeps the block of the state. -/
+theorem parent_recordAccountRead (tx : TransactionState) (address : Address) :
+    (tx.recordAccountRead address).parent = tx.parent := rfl
+
+/-- A record of a storage read keeps the block of the state. -/
+theorem parent_recordStorageRead (tx : TransactionState) (address : Address) (key : Bytes32) :
+    (tx.recordStorageRead address key).parent = tx.parent := rfl
+
+/-- Taking the records of reads of another state keeps the block of the state. -/
+theorem parent_withReadsOf (tx other : TransactionState) :
+    (tx.withReadsOf other).parent = tx.parent := rfl
+
+/-- Setting an account keeps the block of the state. -/
+theorem parent_setAccount (tx : TransactionState) (address : Address) (account : Option Account) :
+    (tx.setAccount address account).parent = tx.parent := rfl
+
+/-- Wiping the storage of an address keeps the block of the state. -/
+theorem parent_destroyStorage (tx : TransactionState) (address : Address) :
+    (tx.destroyStorage address).parent = tx.parent := rfl
+
+/-- Deleting an account keeps the block of the state. -/
+theorem parent_destroyAccount (tx : TransactionState) (address : Address) :
+    (tx.destroyAccount address).parent = tx.parent := rfl
+
+/-- A record of the creation of an account keeps the block of the state. -/
+theorem parent_markAccountCreated (tx : TransactionState) (address : Address) :
+    (tx.markAccountCreated address).parent = tx.parent := rfl
+
+/-- A write of transient storage keeps the block of the state. -/
+theorem parent_setTransientStorage (tx : TransactionState) (address : Address) (key : Bytes32)
+    (value : U256) : (tx.setTransientStorage address key value).parent = tx.parent := rfl
+
+/-- A successful change of an account keeps the block of the state. -/
+theorem parent_modifyState {fork : Fork} {tx tx' : TransactionState} {address : Address}
+    {f : Account → Except StateError Account} (h : tx.modifyState fork address f = .ok tx') :
+    tx'.parent = tx.parent := by
+  obtain ⟨account, -, rfl⟩ := modifyState_eq_ok_iff.mp h
+  split <;> rfl
+
+/-- A successful move of ether keeps the block of the state. -/
+theorem parent_moveEther {fork : Fork} {tx tx' : TransactionState}
+    {sender recipient : Address} {amount : U256}
+    (h : tx.moveEther fork sender recipient amount = .ok tx') : tx'.parent = tx.parent := by
+  unfold moveEther at h
+  cases h1 : tx.modifyState fork sender (Account.debit sender amount) with
+  | error e => simp [h1, bind, Except.bind] at h
+  | ok mid =>
+    rw [h1] at h
+    exact (parent_modifyState h).trans (parent_modifyState h1)
+
+/-- A successful creation of ether keeps the block of the state. -/
+theorem parent_createEther {fork : Fork} {tx tx' : TransactionState} {address : Address}
+    {amount : U256} (h : tx.createEther fork address amount = .ok tx') :
+    tx'.parent = tx.parent :=
+  parent_modifyState h
+
+/-- A successful write of a balance keeps the block of the state. -/
+theorem parent_setAccountBalance {fork : Fork} {tx tx' : TransactionState}
+    {address : Address} {amount : U256} (h : tx.setAccountBalance fork address amount = .ok tx') :
+    tx'.parent = tx.parent :=
+  parent_modifyState h
+
+/-- A successful increment of a nonce keeps the block of the state. -/
+theorem parent_incrementNonce {fork : Fork} {tx tx' : TransactionState} {address : Address}
+    (h : tx.incrementNonce fork address = .ok tx') : tx'.parent = tx.parent :=
+  parent_modifyState h
+
+/-- A successful write of the code of an address keeps the block of the state. -/
+theorem parent_setCode {fork : Fork} {tx tx' : TransactionState} {address : Address}
+    {code : ByteArray} (h : tx.setCode fork address code = .ok tx') :
+    tx'.parent = tx.parent := by
+  dsimp only [setCode] at h
+  split at h
+  · exact parent_modifyState h
+  · exact (parent_modifyState h).trans rfl
+
+/-- A successful clear of an account keeps the block of the state. -/
+theorem parent_clearAccountPreservingBalance {fork : Fork} {tx tx' : TransactionState}
+    {address : Address} (h : tx.clearAccountPreservingBalance fork address = .ok tx') :
+    tx'.parent = tx.parent :=
+  parent_modifyState (tx := tx.destroyStorage address) h
+
+/-- The deletion of the touched empty accounts keeps the block of the state. -/
+theorem parent_destroyTouchedEmptyAccounts (fork : Fork) (tx : TransactionState)
+    (touched : List Address) :
+    (tx.destroyTouchedEmptyAccounts fork touched).parent = tx.parent := by
+  unfold destroyTouchedEmptyAccounts
+  split
+  · rfl
+  · induction touched generalizing tx with
+    | nil => rfl
+    | cons head rest ih =>
+      simp only [List.foldl_cons]
+      rw [ih]
+      split <;> rfl
+
+/-- A rollback keeps the block of the state it rolls back. -/
+theorem parent_restoreTxState (tx snapshot : TransactionState) :
+    (tx.restoreTxState snapshot).parent = tx.parent := rfl
 
 /-! ## A rollback -/
 
