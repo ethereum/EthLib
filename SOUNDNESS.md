@@ -811,12 +811,12 @@ Otherwise the search `findBranchCollision` over the two climbs returns two diffe
 `validateLightClientUpdate_nextSyncCommittee` states the same for the root of the next committee.
 `lightClientGindices_eq` shows that each index is the generalized index of the path of its field in the type of the beacon state, at every fork from Altair, for the mainnet and minimal presets.
 From Altair to the forks before Gloas, `lightClientGindices_eq_of_lt` shows the same three indices for every preset.
-On a state of such a fork, `BeaconState.nodeRoot_finalizedCheckpoint_root_of_lt` reads the finality node as the root of `state.finalizedCheckpoint.root`.
-`BeaconState.nodeRoot_nextSyncCommittee_of_lt` and `BeaconState.nodeRoot_currentSyncCommittee_of_lt` read the committee nodes as the roots of those fields.
+From Gloas the state is a progressive container, and `lightClientGindices_eq_of_glamsterdam_le` shows them for every preset too.
+On a state of any fork from Altair, `BeaconState.nodeRoot_finalizedCheckpoint_root` reads the finality node as the root of `state.finalizedCheckpoint.root`.
+`BeaconState.nodeRoot_nextSyncCommittee` and `BeaconState.nodeRoot_currentSyncCommittee` read the committee nodes as the roots of those fields.
 These theorems take the lawful SSZ type of the state as an argument, and they name the root of the field, which always exists.
 Instance search does not yet find that lawful type at the mainnet or minimal preset, so a caller supplies it.
-From Gloas the state is a progressive container, and the node results there remain open.
-The statements that join the node results to the update validators remain open too.
+The statements that join the node results to the update validators remain open.
 
 The signature theorems assume `SignatureChecks.AggregateSound`, listed in A4.
 Under it, `validateLightClientUpdate_signed` shows that every member whose bit is set signed the signing root.
