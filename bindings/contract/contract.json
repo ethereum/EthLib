@@ -2985,6 +2985,42 @@
    "docstring":
    "From Altair: the sync committee subnets of a validator for the next slot, as a JSON list.\n\nThe preset, the configuration and the fork are named in UTF-8."},
   {"summary":
+   "From Gloas: the slot of an epoch whose payload timeliness committee holds a validator, as JSON.",
+   "signature":
+   "(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) -> bytes",
+   "operation": "EthLib.Consensus.Exports.getPtcAssignmentExport",
+   "method": "consensus_get_ptc_assignment",
+   "errors":
+   [{"type": "EthLib.Consensus.ValidatorDutyError",
+     "codes":
+     [{"constructor": "accessor", "code": 1},
+      {"constructor": "ssz", "code": 2},
+      {"constructor": "bls", "code": 3},
+      {"constructor": "arith", "code": 4},
+      {"constructor": "epochTooFar", "code": 5},
+      {"constructor": "periodOutOfRange", "code": 6}]}],
+   "error_class": "ValidatorDutyError",
+   "docstring":
+   "From Gloas: the slot of an epoch whose payload timeliness committee holds a validator, as JSON.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nIt is `null` without an assignment, or the slot."},
+  {"summary":
+   "From Gloas: the slots after the slot of a state that a validator proposes, as a JSON list.",
+   "signature":
+   "(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bytes",
+   "operation": "EthLib.Consensus.Exports.getUpcomingProposalSlotsExport",
+   "method": "consensus_get_upcoming_proposal_slots",
+   "errors":
+   [{"type": "EthLib.Consensus.ValidatorDutyError",
+     "codes":
+     [{"constructor": "accessor", "code": 1},
+      {"constructor": "ssz", "code": 2},
+      {"constructor": "bls", "code": 3},
+      {"constructor": "arith", "code": 4},
+      {"constructor": "epochTooFar", "code": 5},
+      {"constructor": "periodOutOfRange", "code": 6}]}],
+   "error_class": "ValidatorDutyError",
+   "docstring":
+   "From Gloas: the slots after the slot of a state that a validator proposes, as a JSON list.\n\nThe preset, the configuration and the fork are named in UTF-8."},
+  {"summary":
    "The signature of the object of a duty, by a secret key of 32 big-endian bytes.",
    "signature":
    "(name: str, fork: str, state: bytes, config: bytes, duty: str, object: bytes, secret_key: bytes) -> bytes",
@@ -3001,7 +3037,7 @@
       {"constructor": "periodOutOfRange", "code": 6}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
-   "The signature of the object of a duty, by a secret key of 32 big-endian bytes.\n\nThe preset, the configuration, the fork and the duty are named in UTF-8.\n\nThe object comes as SSZ bytes, by duty:\n\n- `randao` and `block`: a block.\n- `attestation`: attestation data.\n- `slot`: a slot.\n- `aggregate_and_proof`: an aggregate and proof.\n- `sync_committee_message`: a block root.\n- `sync_committee_selection_proof`: sync aggregator selection data.\n- `contribution_and_proof`: a contribution and proof.\n\nThe three duties of the sync committee need Altair; before it they have code 0."},
+   "The signature of the object of a duty, by a secret key of 32 big-endian bytes.\n\nThe preset, the configuration, the fork and the duty are named in UTF-8.\n\nThe object comes as SSZ bytes, by duty:\n\n- `randao` and `block`: a block.\n- `attestation`: attestation data.\n- `slot`: a slot.\n- `aggregate_and_proof`: an aggregate and proof.\n- `sync_committee_message`: a block root.\n- `sync_committee_selection_proof`: sync aggregator selection data.\n- `contribution_and_proof`: a contribution and proof.\n- `payload_attestation_message`: a payload attestation message, whose data is signed.\n\nThe three duties of the sync committee need Altair; before it they have code 0.\n\nThe payload attestation message needs Gloas; before it, it has code 0."},
   {"summary":
    "Before Heze: the Eth1 vote of a proposer on a state, as the SSZ bytes of the Eth1 data.",
    "signature":

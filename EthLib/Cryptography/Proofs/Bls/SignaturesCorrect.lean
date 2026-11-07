@@ -293,6 +293,20 @@ theorem fastAggregateVerify_aggregate (laws : PairingLaws) (sks : List SecretKey
     exact fastAggregateVerify_of_represents laws hne hsum hQ hb
       ((sum_map_mul sks (·.val) b) ▸ hSrep)
 
+/-- An honest signature passes the fast aggregate verification under its one public key. -/
+theorem fastAggregateVerify_sign (laws : PairingLaws) (sk : SecretKey) (msg : ByteArray)
+    {sig : BLSSignature} (signed : sign sk msg = .ok sig) :
+    fastAggregateVerify #[pkBytes sk] msg (sigBytes sig) = true := by
+  obtain ⟨Q, hQ, hv, hs⟩ := HashToCurve.hashToG2_total_inSubgroup msg DST
+  obtain ⟨b, hb⟩ := (G2.inSubgroup_iff_exists_represents hv).mp hs
+  unfold sign at signed
+  rw [coreSign_eq hQ sk, Except.ok.injEq] at signed
+  subst signed
+  have verifies := fastAggregateVerify_of_represents laws (sks := [sk]) (List.cons_ne_nil _ _)
+    (by simpa using sk.property) hQ hb (by simpa using hb.mul sk.val)
+  rw [← pointToSignature_bytes] at verifies
+  exact verifies
+
 /-! ## Aggregation on several messages -/
 
 /-- The hash of a message under the message tag. -/

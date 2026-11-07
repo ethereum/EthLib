@@ -14,6 +14,8 @@ One export finds the committee assignment of a validator, and one whether it pro
 
 Two find its sync committee assignment and its sync committee subnets, from Altair.
 
+Two find the slot of its payload timeliness committee and the slots it will propose, from Gloas.
+
 One export signs the object of a duty, named as the duty, with a secret key of 32 big-endian bytes.
 
 The configuration of a name holds, with the replacements that a JSON object gives.
@@ -36,6 +38,11 @@ def runDuty {α : Type} (result : Except ValidatorDutyError α) : Result α :=
 def altairOf (fork : Fork) : Result (PLift (.altair ≤ fork)) :=
   if altair : .altair ≤ fork then return ⟨altair⟩
   else throw (0, s!"no sync committee at {fork.name}")
+
+/-- The proof that a fork is at least Gloas, or code 0. -/
+def gloasOf (fork : Fork) : Result (PLift (.glamsterdam ≤ fork)) :=
+  if gloas : .glamsterdam ≤ fork then return ⟨gloas⟩
+  else throw (0, s!"no payload timeliness committee at {fork.name}")
 
 /-- The committee assignment of a validator in an epoch, as JSON.
 
@@ -103,8 +110,11 @@ The object comes as SSZ bytes, by duty:
 - `sync_committee_message`: a block root.
 - `sync_committee_selection_proof`: sync aggregator selection data.
 - `contribution_and_proof`: a contribution and proof.
+- `payload_attestation_message`: a payload attestation message, whose data is signed.
 
-The three duties of the sync committee need Altair; before it they have code 0. -/
+The three duties of the sync committee need Altair; before it they have code 0.
+
+The payload attestation message needs Gloas; before it, it has code 0. -/
 @[export eth_consensus_get_validator_signature]
 def getValidatorSignatureExport (name fork state replacements duty object secretKey : ByteArray) :
     Result ByteArray := do
@@ -138,7 +148,40 @@ def getValidatorSignatureExport (name fork state replacements duty object secret
       let ⟨_⟩ ← altairOf fork
       runDuty (getContributionAndProofSignature config state
         (← decodeInput (ContributionAndProof preset) object) key)
+    | "payload_attestation_message" => do
+      let ⟨_⟩ ← gloasOf fork
+      runDuty (getPayloadAttestationMessageSignature config state
+        (← decodeInput PayloadAttestationMessage object) key)
     | other => throw (0, s!"unknown duty {other}")
   return packBytes signature
+
+/-- From Gloas: the slot of an epoch whose payload timeliness committee holds a validator, as JSON.
+
+The preset, the configuration and the fork are named in UTF-8.
+
+It is `null` without an assignment, or the slot. -/
+@[export eth_consensus_get_ptc_assignment]
+def getPtcAssignmentExport (name fork state replacements : ByteArray) (epoch : UInt64)
+    (validatorIndex : UInt64) : Result ByteArray := do
+  let (preset, fork) ← transitionPresetAndFork name fork
+  let config ← configWith name replacements
+  let ⟨gloas⟩ ← gloasOf fork
+  let state ← decodeInput (BeaconState preset fork) state
+  match ← runDuty (getPtcAssignment config state gloas epoch validatorIndex) with
+  | none => return jsonBytes Json.null
+  | some slot => return jsonBytes (toJson slot.toNat)
+
+/-- From Gloas: the slots after the slot of a state that a validator proposes, as a JSON list.
+
+The preset, the configuration and the fork are named in UTF-8. -/
+@[export eth_consensus_get_upcoming_proposal_slots]
+def getUpcomingProposalSlotsExport (name fork state replacements : ByteArray)
+    (validatorIndex : UInt64) : Result ByteArray := do
+  let (preset, fork) ← transitionPresetAndFork name fork
+  let _ ← configWith name replacements
+  let ⟨gloas⟩ ← gloasOf fork
+  let state ← decodeInput (BeaconState preset fork) state
+  let slots ← runDuty (getUpcomingProposalSlots state gloas validatorIndex)
+  return jsonBytes (toJson (slots.map UInt64.toNat))
 
 end EthLib.Consensus.Exports

@@ -4,6 +4,7 @@ public import EthLib.Consensus.Containers.Attestation
 public import EthLib.Consensus.Containers.SyncCommittee
 public import EthLib.Consensus.Gossip.SyncCommittee
 public import EthLib.Consensus.Mutators
+public import EthLib.Consensus.PayloadTimeliness
 public import EthLib.Cryptography.Bls.Signatures
 
 /-!
@@ -16,6 +17,8 @@ They are what it computes to propose, attest, aggregate and serve on a sync comm
 A validator finds its committee for an epoch, and whether it proposes a block.
 
 From Altair, it finds whether it serves on a sync committee, and on which subnets.
+
+From Gloas, it finds the slot of its payload timeliness committee, and the slots it will propose.
 
 Each message it sends carries its BLS signature of the message's signing root.
 
@@ -33,8 +36,11 @@ Each duty signs one object at one epoch:
 - A sync committee message signs a block root, at the current epoch.
 - A sync selection proof signs selection data, at the epoch of its slot.
 - A contribution and proof is signed at the epoch of its slot.
+- From Gloas, the data of a payload attestation message is signed at the epoch of its slot.
 
 The guides of the later forks, up to Heze, change none of these duties and only add others.
+
+Gloas adds the payload timeliness duties, and Heze adds the inclusion list committee.
 
 The steps that read the network or the execution layer are not specified here.
 
@@ -59,8 +65,8 @@ inductive ValidatorDutyError where
   | bls (error : BlsError)
   /-- A 64-bit operation has no result. -/
   | arith (error : ArithError)
-  /-- An assignment is asked for an epoch after the next one. -/
-  | epochTooFar (epoch nextEpoch : Epoch)
+  /-- An assignment is asked for an epoch after the last one whose committees are known. -/
+  | epochTooFar (epoch lastEpoch : Epoch)
   /-- A sync committee assignment is asked for a period other than the current or the next. -/
   | periodOutOfRange (period currentPeriod : UInt64)
 
@@ -115,6 +121,48 @@ def getCommitteeAssignment (state : BeaconState preset fork) (epoch : Epoch)
 def isProposer (state : BeaconState preset fork) (validatorIndex : ValidatorIndex) :
     Except ValidatorDutyError Bool := do
   return (← (getBeaconProposerIndex state).mapError .accessor) == validatorIndex
+
+/-- From Gloas: the first of some slots whose payload timeliness committee holds a validator. -/
+def findPtcSlot (config : Config) (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
+    (validatorIndex : ValidatorIndex) : List Slot → Except ValidatorDutyError (Option Slot)
+  | [] => return none
+  | slot :: rest => do
+    let committee ← (getPtc config state gloas slot).mapError .accessor
+    if validatorIndex ∈ committee.toList then return some slot
+    findPtcSlot config state gloas validatorIndex rest
+
+/-- From Gloas: the slot of an epoch whose payload timeliness committee holds a validator.
+
+The epoch must be at most the lookahead of seeds after the current one.
+
+A validator in no committee of the epoch has no slot.
+
+It fails for an epoch after that one, and when the committee of a slot has no value.
+
+It also fails when the last epoch, the first slot or that slot plus an epoch overflows 64 bits. -/
+def getPtcAssignment (config : Config) (state : BeaconState preset fork)
+    (gloas : .glamsterdam ≤ fork) (epoch : Epoch) (validatorIndex : ValidatorIndex) :
+    Except ValidatorDutyError (Option Slot) := do
+  let maxEpoch ← (addChecked (getCurrentEpoch state) preset.MIN_SEED_LOOKAHEAD).mapError .arith
+  unless epoch ≤ maxEpoch do throw (.epochTooFar epoch maxEpoch)
+  findPtcSlot config state gloas validatorIndex (← (epochSlots preset epoch).mapError .arith)
+
+/-- From Gloas: the slots after the slot of a state that a validator proposes, in order.
+
+The state keeps the proposers from the start of its epoch, for the lookahead of seeds.
+
+It fails when the first slot of the epoch, or a slot of the lookahead, overflows 64 bits. -/
+def getUpcomingProposalSlots (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
+    (validatorIndex : ValidatorIndex) : Except ValidatorDutyError (List Slot) := do
+  let startSlot ← (computeStartSlotAtEpoch preset (getCurrentEpoch state)).mapError .arith
+  let lookahead := state.proposerLookahead (Nat.le_trans (by decide) gloas)
+  -- Each offset of the lookahead gives a slot, which must be a 64-bit slot.
+  let slots ← (List.finRange lookahead.size).mapM fun offset =>
+    if startSlot.toNat + offset.val < 2 ^ 64 then
+      .ok (startSlot + offset.val.toUInt64, lookahead[offset])
+    else .error (.arith .overflow)
+  return (slots.filter fun (slot, proposer) => state.slot < slot ∧ proposer = validatorIndex).map
+    (·.1)
 
 /-- From Altair: whether a validator serves on the sync committee of the period of an epoch.
 
@@ -229,5 +277,14 @@ def getContributionAndProofSignature (config : Config) (state : BeaconState pres
     Except ValidatorDutyError BLSSignature :=
   signAtEpoch config state DOMAIN_CONTRIBUTION_AND_PROOF
     (computeEpochAtSlot preset contributionAndProof.contribution.slot) contributionAndProof key
+
+/-- From Gloas: the signature of the data of a payload attestation message, at its slot's epoch.
+
+The message names its validator, but the signature covers only the data. -/
+def getPayloadAttestationMessageSignature (config : Config) (state : BeaconState preset fork)
+    (message : PayloadAttestationMessage) (key : Signatures.SecretKey) :
+    Except ValidatorDutyError BLSSignature :=
+  signAtEpoch config state DOMAIN_PTC_ATTESTER (computeEpochAtSlot preset message.data.slot)
+    message.data key
 
 end EthLib.Consensus

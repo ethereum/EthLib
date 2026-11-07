@@ -336,6 +336,8 @@ PyObject* py_consensus_get_committee_assignment (PyObject* self, PyObject* args)
 PyObject* py_consensus_is_proposer (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_assigned_to_sync_committee (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_subnets_for_sync_committee (PyObject* self, PyObject* args);
+PyObject* py_consensus_get_ptc_assignment (PyObject* self, PyObject* args);
+PyObject* py_consensus_get_upcoming_proposal_slots (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_validator_signature (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_eth1_vote (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_eth1_pending_deposit_count (PyObject* self, PyObject* args);
