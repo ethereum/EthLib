@@ -226,6 +226,65 @@ theorem verify_rebuilt {q : Point} {hash : Vector UInt8 32} {r s : Nat} (hv : ve
   · rename_i x y hR
     exact ⟨x, y, hR, by simpa using hv⟩
 
+/-- A scalar read from a natural number is that number in `ZMod n`. -/
+private theorem toZMod_ofNat (e : Nat) : Fn.toZMod (Fin.ofNat _ e) = (e : ZMod Fn.modulus) := by
+  apply ZMod.val_injective
+  simp [Fn.toZMod, ZMod.val_natCast]
+  rfl
+
+/-- The scalars `e / s` and `r / s` that the verifier computes, in `ZMod n`. -/
+private theorem toZMod_scalars (e r s : Nat) (hr : r < Fn.modulus) (hs : s < Fn.modulus) :
+    Fn.toZMod (Fin.ofNat _ e * Fn.inv ⟨s, hs⟩) = (e : ZMod Fn.modulus) / s ∧
+      Fn.toZMod ((⟨r, hr⟩ : Fn) * Fn.inv ⟨s, hs⟩) = (r : ZMod Fn.modulus) / s := by
+  have hs' : (⟨s, hs⟩ : Fn) = Fin.ofNat _ s := Fin.ext (Nat.mod_eq_of_lt hs).symm
+  have hr' : (⟨r, hr⟩ : Fn) = Fin.ofNat _ r := Fin.ext (Nat.mod_eq_of_lt hr).symm
+  rw [map_mul, map_mul, Fn.toZMod_inv, hs', hr', toZMod_ofNat, toZMod_ofNat,
+    toZMod_ofNat, div_eq_mul_inv, div_eq_mul_inv]
+  exact ⟨rfl, rfl⟩
+
+/-- Verification against a key is the verifying operation of SEC 1 v2 §4.1.4, in the group.
+
+Let `e` be the hash read as a natural number.
+
+A signature `(r, s)` is valid under the key `Q` exactly when these hold:
+
+- `r` and `s` lie in `[1, n - 1]`;
+- `Q` lies on the curve and is not `O`;
+- `R = (e / s) G + (r / s) Q` is a point `(x, y)` other than `O`, with `x mod n = r`.
+
+The scalars `e / s` and `r / s` are taken modulo `n`.
+
+It is about verification against a given key; recovery, which ECRECOVER runs, is not covered. -/
+theorem verify_eq_true_iff {q : Point} {hash : Vector UInt8 32} {r s : Nat} :
+    verify q hash r s = true ↔
+      (0 < r ∧ r < Fn.modulus) ∧ (0 < s ∧ s < Fn.modulus) ∧ q ≠ .infinity ∧
+        q.isOnCurve = true ∧
+        ∃ x y : Fp, (affine x y).isOnCurve = true ∧
+          toPoint (affine x y) = ((hashToInt hash : ZMod Fn.modulus) / s) • toPoint generator
+            + ((r : ZMod Fn.modulus) / s) • toPoint q ∧
+          x.val % Fn.modulus = r := by
+  have hG := isOnCurve_generator
+  constructor
+  · intro hv
+    obtain ⟨hr, hs, hqi, hqc, x, y, hR, hx⟩ := verify_rebuilt hv
+    obtain ⟨h1, h2⟩ := toZMod_scalars (hashToInt hash) r s hr.2 hs.2
+    have hc : (affine x y).isOnCurve = true :=
+      hR ▸ isOnCurve_add (isOnCurve_mul _ hG) (isOnCurve_mul _ hqc)
+    refine ⟨hr, hs, hqi, hqc, x, y, hc, ?_, hx⟩
+    rw [← hR, toPoint_rebuilt _ _ hqc, h1, h2]
+  · rintro ⟨hr, hs, hqi, hqc, x, y, hc, hR, hx⟩
+    obtain ⟨h1, h2⟩ := toZMod_scalars (hashToInt hash) r s hr.2 hs.2
+    rw [verify, dite_eq_left hr, dite_eq_left hs, ite_eq_left ⟨hqi, hqc⟩]
+    dsimp only
+    rw [mulAdd_eq _ _ isOnCurve_generator hqc]
+    -- The point that the verifier rebuilds is `(x, y)`, since both have one image in the group.
+    have heq : mul (Fin.ofNat _ (hashToInt hash) * Fn.inv ⟨s, hs.2⟩) generator
+        + mul ((⟨r, hr.2⟩ : Fn) * Fn.inv ⟨s, hs.2⟩) q = affine x y := by
+      apply (toPoint_inj (isOnCurve_add (isOnCurve_mul _ hG) (isOnCurve_mul _ hqc)) hc).mp
+      rw [toPoint_rebuilt _ _ hqc, h1, h2, hR]
+    rw [heq]
+    simp [hx]
+
 /-- An `x` below `p` with `x mod n = r` is `r`, when `p <= r + n`. -/
 theorem val_eq_of_mod_eq {x : Fp} {r : Nat} (hx : x.val % Fn.modulus = r)
     (hp : Fp.modulus ≤ r + Fn.modulus) : x.val = r := by
