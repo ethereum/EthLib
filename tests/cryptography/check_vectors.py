@@ -22,8 +22,8 @@ assert _spec and _spec.loader
 fetch_archives = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(fetch_archives)
 
-# The general test archive of consensus-specs v1.7.0-alpha.12, the last release before
-# consensus-specs#5398.
+# The general test archive of consensus-specs v1.7.0-alpha.12.
+# It is the last release before consensus-specs#5398.
 # The cases come from this archive.
 # The pins in tests/sources.toml hold the same bytes.
 UPSTREAM = "consensus-specs/v1.7.0-alpha.12/general"

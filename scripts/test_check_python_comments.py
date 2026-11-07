@@ -44,6 +44,23 @@ class WrappedSentences(unittest.TestCase):
         self.assertEqual(wraps("# One (`a.`)\n# Two.\n"), [])
         self.assertEqual(wraps("# One (a)\n# two.\n"), [2])
 
+    def test_run_on_after_a_colon(self):
+        self.assertEqual(wraps("# The bytes it shares:\n# h, then m.\n"), [2])
+        # A capital, a list item, a URL or code after the colon starts something new.
+        text = (
+            "# A label:\n"
+            "# A new sentence.\n"
+            "# The items:\n"
+            "# - one\n"
+            "#\n"
+            "# The source:\n"
+            "# https://example.org/a\n"
+            "# Usage:\n"
+            "#\n"
+            "#     uv run a.py\n"
+        )
+        self.assertEqual(wraps(text), [])
+
     def test_list_items(self):
         self.assertEqual(wraps("# A list:\n# - one\n# - two\n# 1. three\n"), [])
         # The continuation of an item is a wrapped sentence too.
