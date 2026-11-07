@@ -1,13 +1,15 @@
 module
 
+public import EthLib.Serialization.Proofs.Ssz.Typed.Basic
 public import EthLib.Serialization.Proofs.Ssz.Typed.Class
 public import EthLib.Serialization.Proofs.Ssz.Codec.Binding
 public import EthLib.Serialization.Proofs.Ssz.Codec.RootDomain
+public import EthLib.Serialization.Proofs.Ssz.Codec.Summary
 
 /-!
 # Proofs: the root of a typed SSZ value
 
-Every lawful typed value has a 32-byte root.
+Every lawful typed value has a 32-byte root, and a 32-byte value is its own root.
 
 Two values with one root are equal, or the two root computations contain a SHA-256 collision.
 -/
@@ -37,6 +39,10 @@ theorem hashTreeRoot_total (a : α) : ∃ root, hashTreeRoot a = .ok root := by
   obtain ⟨root, rooted, width⟩ :=
     Ssz.hashTreeRoot_total (desc α) (toValue a) LawfulSszType.wellFormed (LawfulSszType.fits a)
   exact ⟨⟨root, width⟩, hashTreeRoot_ok_iff.mpr rooted⟩
+
+/-- A 32-byte value is its own root. -/
+theorem hashTreeRoot_bytes32 (root : Vector UInt8 32) : hashTreeRoot root = .ok root :=
+  hashTreeRoot_ok_iff.mpr (hashTreeRoot_chunk (by simp [bytesPerChunk]))
 
 /--
 Two values with one root are equal, or a search finds a SHA-256 collision.

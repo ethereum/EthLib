@@ -1459,13 +1459,14 @@ Its node at the index of the finality branch is the root that the update proves.
 That root is the root of the finalized beacon header, or zero at the genesis slot.
 Otherwise the search `findBranchCollision` over the two climbs returns two different messages with one SHA-256 hash.
 `validateLightClientUpdate_nextSyncCommittee` states the same for the root of the next committee.
-`lightClientGindices_eq` shows that each index is the generalized index of the path of its field in the type of the beacon state, at every fork from Altair, for the mainnet and minimal presets.
-From Altair to the forks before Gloas, `lightClientGindices_eq_of_lt` shows the same three indices for every preset.
-From Gloas the state is a progressive container, and `lightClientGindices_eq_of_glamsterdam_le` shows them for every preset too.
-On a state of any fork from Altair, `BeaconState.nodeRoot_finalizedCheckpoint_root` reads the finality node as the root of `state.finalizedCheckpoint.root`.
-`BeaconState.nodeRoot_nextSyncCommittee` and `BeaconState.nodeRoot_currentSyncCommittee` read the committee nodes as the roots of those fields.
-These theorems take the lawful SSZ type of the state as an argument, and they name the root of the field, which always exists.
-Instance search does not yet find that lawful type at the mainnet or minimal preset, so a caller supplies it.
+`lightClientGindices_eq` shows that each index is the generalized index of the path of its field in the type of the beacon state, at every fork from Altair and at every preset.
+It joins two theorems that name the ordinals of the fields.
+From Altair to the forks before Gloas, `lightClientGindices_eq_of_lt` shows the same three indices.
+From Gloas the state is a progressive container, and `lightClientGindices_eq_of_glamsterdam_le` shows them too.
+On a state of any fork from Altair, `BeaconState.nodeRoot_finalizedCheckpoint_root` reads the finality node as `state.finalizedCheckpoint.root` itself, since a 32-byte value is its own root.
+`BeaconState.nodeRoot_nextSyncCommittee` and `BeaconState.nodeRoot_currentSyncCommittee` read the committee nodes as the roots of those fields, which always exist.
+These theorems take the lawful SSZ type of the state as an argument, and the committee theorems also take a nonempty committee.
+Instance search finds that lawful type at the mainnet and minimal presets.
 `validateLightClientUpdate_finalizedCheckpoint` joins the finality result to these nodes.
 Take an accepted update, and a beacon state whose root is the attested state root.
 The proved root is then the root in the finalized checkpoint of that state.

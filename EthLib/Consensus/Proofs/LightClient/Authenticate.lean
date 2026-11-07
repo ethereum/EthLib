@@ -356,9 +356,9 @@ theorem validateLightClientUpdate_finalizedCheckpoint {config : Config}
     validateLightClientUpdate_finalized accepted finality state rooted
   rw [layout, Except.ok.injEq] at indexed
   subst indexed
-  obtain ⟨node, nodeRooted⟩ := SszType.hashTreeRoot_total state.finalizedCheckpoint.root
-  exact ⟨leaf, node, named, nodeRooted,
-    bound node (BeaconState.nodeRoot_finalizedCheckpoint_root altair state nodeRooted)⟩
+  exact ⟨leaf, state.finalizedCheckpoint.root, named,
+    SszType.hashTreeRoot_bytes32 state.finalizedCheckpoint.root,
+    bound _ (BeaconState.nodeRoot_finalizedCheckpoint_root altair state)⟩
 
 /-- The committee of an accepted update is the next sync committee of the attested beacon state.
 
