@@ -25,7 +25,7 @@ The boost applies after a parent older than the previous slot, and after a paren
 
 The head has no child among the viable nodes, so the walk stops only at a leaf.
 
-Before Gloas, when the justified block is known, the head descends from the justified block.
+Before Gloas, the head descends from the justified block.
 
 A viable node with children has a viable child, so from Gloas the head is never a pending node.
 
@@ -564,12 +564,33 @@ theorem getAncestor_getHeadFrom (before : fork < .glamsterdam) {nodes : List For
             getAncestor_of_le found (UInt64.le_refl _)]
         · cases walk
 
-/-- Before Gloas, the head descends from the justified checkpoint block.
+/-- A node whose viable subtree can be computed is a known block.
 
-The justified block must be known to the store. -/
+An unknown node has no voting source, and no child can rank below it. -/
+theorem filterNodeTree_known {node : ForkChoiceNode} {nodes : List ForkChoiceNode}
+    (walk : store.filterNodeTree config node = .ok nodes) :
+    ∃ block, store.blocks[node.root]? = some block := by
+  cases found : store.blocks[node.root]? with
+  | some block => exact ⟨block, rfl⟩
+  | none =>
+  exfalso
+  rw [filterNodeTree, bind_ok_iff] at walk
+  obtain ⟨children, -, walk⟩ := walk
+  cases children with
+  | nil =>
+    simp only [List.isEmpty_nil, ↓reduceIte, bind_ok_iff] at walk
+    obtain ⟨_, viable, -⟩ := walk
+    simp only [isViableLeaf, getVotingSource, Store.block, found, bind_ok_iff] at viable
+    simp [throw, throwThe, MonadExceptOf.throw] at viable
+  | cons child rest =>
+    simp only [List.isEmpty_cons, Bool.false_eq_true, ↓reduceIte, bind_ok_iff] at walk
+    obtain ⟨_, viable, -⟩ := walk
+    rw [List.flatMapM_cons, bind_ok_iff] at viable
+    obtain ⟨_, below, -⟩ := viable
+    simp [nodeRank, found, throw, throwThe, MonadExceptOf.throw] at below
+
+/-- Before Gloas, the head descends from the justified checkpoint block. -/
 theorem isAncestor_getHead (before : fork < .glamsterdam) {head : ForkChoiceNode}
-    {justifiedBlock : BeaconBlock preset fork}
-    (justifiedFound : store.blocks[store.justifiedCheckpoint.root]? = some justifiedBlock)
     (found : store.getHead config = .ok head) :
     store.isAncestor head ⟨store.justifiedCheckpoint.root, .pending⟩ = .ok true := by
   have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
@@ -577,6 +598,8 @@ theorem isAncestor_getHead (before : fork < .glamsterdam) {head : ForkChoiceNode
   cases tree : store.getFilteredNodeTree config with
   | error e => simp [tree, bind, Except.bind] at found
   | ok nodes =>
+    -- The walk from the justified node succeeded, so its block is known.
+    obtain ⟨justifiedBlock, justifiedFound⟩ := filterNodeTree_known tree
     simp only [tree, bind, Except.bind, later, false_and, ↓reduceIte] at found
     have walked := getAncestor_getHeadFrom before found rfl justifiedFound
     simp [isAncestor, block_ok_iff.mpr justifiedFound, walked, later, bind, Except.bind, pure,
