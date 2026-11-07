@@ -74,8 +74,9 @@ instance : Neg (Fp6 F) := ⟨neg⟩
   --                          = ξ·c2 + c0·v + c1·v²
   ⟨a.c2.mulByOnePlusI, a.c0, a.c1⟩
 
-/-- Multiplicative inverse via the norm formula. Caller must ensure
-`a ≠ 0`. -/
+/-- Multiplicative inverse via the norm formula.
+
+The caller must pass a nonzero `a`. -/
 def inverse (a : Fp6 F) : Fp6 F :=
   let xi := @Fp2.mulByOnePlusI F _
   let t0 := a.c0 * a.c0 - xi (a.c1 * a.c2)

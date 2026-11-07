@@ -60,8 +60,9 @@ It is scoped, as Mathlib scopes the ring instance of `Fin`, to avoid coercion lo
 
 namespace EthLib.Cryptography.Bls.Fr
 
--- Kernel evaluation of `powModAux` (256 recursion steps) exceeds the
--- default `maxRecDepth` of the `decide` calls below.
+-- Kernel evaluation of `powModAux` (256 recursion steps) exceeds the default `maxRecDepth`.
+--
+-- The `decide` calls below need the higher depth.
 set_option maxRecDepth 4000
 
 private theorem seven_pow_div_ne_one (q : Nat)
@@ -74,9 +75,11 @@ theorem seven_pow_card_sub_one : ((7 : ℕ) : ZMod modulus) ^ (modulus - 1) = 1 
   rw [PowMod.natCast_pow_eq_one_iff modulus 256 7 (modulus - 1) (by decide)]
   decide
 
-/-- Second half of the Lucas certificate: `7 ^ ((r - 1) / q) ≠ 1` in
-`ZMod r` for every prime factor `q` of `r - 1`. Together with
-`seven_pow_card_sub_one` this pins the order of `7` to exactly `r - 1`. -/
+/-- Second half of the Lucas certificate.
+
+For every prime factor `q` of `r - 1`, `7 ^ ((r - 1) / q) ≠ 1` in `ZMod r`.
+
+Together with `seven_pow_card_sub_one` this pins the order of `7` to exactly `r - 1`. -/
 theorem seven_pow_div_prime_ne_one : ∀ q : Nat, q.Prime → q ∣ modulus - 1 →
     ((7 : ℕ) : ZMod modulus) ^ ((modulus - 1) / q) ≠ 1 := by
   intro q hq hdvd
@@ -167,9 +170,11 @@ example : Field (ZMod modulus) := inferInstance
 
 /-! ## Roots of unity -/
 
-/-- `7` has multiplicative order exactly `r - 1` in `ZMod r`: it is a
-generator of the multiplicative group. Reuses the two halves of the
-Lucas certificate. -/
+/-- `7` has multiplicative order exactly `r - 1` in `ZMod r`.
+
+So it is a generator of the multiplicative group.
+
+Reuses the two halves of the Lucas certificate. -/
 theorem orderOf_seven : orderOf ((7 : ℕ) : ZMod modulus) = modulus - 1 :=
   orderOf_eq_of_pow_and_pow_div_prime (by decide)
     seven_pow_card_sub_one seven_pow_div_prime_ne_one
@@ -179,9 +184,9 @@ theorem isPrimitiveRoot_seven :
     IsPrimitiveRoot ((7 : ℕ) : ZMod modulus) (modulus - 1) :=
   orderOf_seven ▸ IsPrimitiveRoot.orderOf _
 
-/-- `7 ^ ((r-1)/n)` is a primitive `n`-th root of unity for every
-`n ∣ r - 1`. This is the root the KZG spec's `computeRootsOfUnity`
-builds its evaluation domains from. -/
+/-- `7 ^ ((r-1)/n)` is a primitive `n`-th root of unity for every `n ∣ r - 1`.
+
+This is the root the KZG spec's `computeRootsOfUnity` builds its evaluation domains from. -/
 theorem isPrimitiveRoot_seven_pow {n : Nat} (hn : n ∣ modulus - 1) :
     IsPrimitiveRoot (((7 : ℕ) : ZMod modulus) ^ ((modulus - 1) / n)) n :=
   isPrimitiveRoot_seven.pow (by decide) (Nat.div_mul_cancel hn).symm
@@ -231,8 +236,8 @@ theorem ofNat_eq_natCast (n : Nat) : Fr.ofNat n = (n : Fr) := rfl
 /-- The spec's `Fr.powNat` is Mathlib's monoid power. -/
 theorem powNat_eq_pow (a : Fr) (n : Nat) : a.powNat n = a ^ n := rfl
 
-/-- The spec's `HPow Fr Fr Fr` (used as `a ^ b`) is Mathlib's monoid
-power at the exponent's value. -/
+/-- The spec's `HPow Fr Fr Fr` (used as `a ^ b`) is Mathlib's monoid power at the exponent's value.
+-/
 theorem hpow_eq_pow (a b : Fr) : a ^ b = a ^ b.val :=
   powNat_eq_pow a b.val
 
@@ -273,10 +278,11 @@ theorem natCast_ne_zero {n : Nat} (h0 : 0 < n) (hn : n < modulus) : (n : Fr) ≠
   rw [← ofNat_eq_natCast, val_ofNat_of_lt hn, val_zero] at hv
   omega
 
-/-- `Fr`-facing form of `isPrimitiveRoot_seven_pow`, phrased with the
-spec's own operations (`Fr.ofNat` and the `Fr`-exponent power): the root
-`computeRootsOfUnity n` starts from is a primitive `n`-th root of
-unity. -/
+/-- `Fr`-facing form of `isPrimitiveRoot_seven_pow`.
+
+It is phrased with the spec's own operations: `Fr.ofNat` and the `Fr`-exponent power.
+
+The root `computeRootsOfUnity n` starts from is a primitive `n`-th root of unity. -/
 theorem isPrimitiveRoot_ofNat_seven_pow {n : Nat} (hn : n ∣ modulus - 1) :
     IsPrimitiveRoot (Fr.ofNat 7 ^ Fr.ofNat ((modulus - 1) / n)) n := by
   have hlt : (modulus - 1) / n < modulus :=

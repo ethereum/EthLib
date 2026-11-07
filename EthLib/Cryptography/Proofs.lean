@@ -37,10 +37,13 @@ public import EthLib.Cryptography.Proofs.ScaledCurve
 /-!
 # `EthLib.Cryptography.Proofs`
 
-Machine-checked properties of the executable specification. This tree
-mirrors the layout of the definitions it proves things about: proofs for
-`EthLib.Cryptography.Foo.Bar` live in `EthLib.Cryptography.Proofs.Foo.Bar`.
+Machine-checked properties of the executable specification.
 
-The proofs are compiled by the `Proofs` Lake library, which the runtime
-code does not depend on: nothing here is linked into the Python extension.
+This tree mirrors the layout of the definitions it proves things about.
+
+Proofs for `EthLib.Cryptography.Foo.Bar` live in `EthLib.Cryptography.Proofs.Foo.Bar`.
+
+The proofs are compiled by the `Proofs` Lake library, which the runtime code does not depend on.
+
+Nothing here is linked into the Python extension.
 -/

@@ -89,8 +89,9 @@ private theorem bytesToNat_toBytesBE (x : Fp) :
   exact Base.bytesToNat_natToBytes_of_lt (lt_of_lt_of_le (val_lt x) (by decide))
 
 set_option exponentiation.threshold 400 in
-/-- The most significant byte of a canonical field element has its top
-three bits clear (`< 0x20`), since `p < 2^381 = 32·2^376`. -/
+/-- The most significant byte of a canonical field element has its top three bits clear (`< 0x20`).
+
+This holds since `p < 2^381 = 32·2^376`. -/
 theorem toBytesBE_head_lt (x : Fp) : ((Fp.toBytesBE x).get! 0).toNat < 0x20 := by
   have hv : x.val < 256 ^ 48 := lt_of_lt_of_le (val_lt x) (by decide)
   -- Split the 48 bytes into the head byte and the 47 after it.
@@ -183,9 +184,9 @@ set_option maxRecDepth 4000
 
 /-! ## Affine coordinates satisfy the curve equation -/
 
-/-- Pure `ZMod` curve identity whose term structure matches `toAffine`
-and uncompress's `rhs`, so it transfers to the spec goal by `exact`
-(defeq: `Fin`-mul ≡ `ZMod`-mul). -/
+/-- Pure `ZMod` curve identity whose term structure matches `toAffine` and uncompress's `rhs`.
+
+So it transfers to the spec goal by `exact` (defeq: `Fin`-mul ≡ `ZMod`-mul). -/
 private theorem curve_eq_aux (x y z w : ZMod Fp.modulus) (hw : z * w = 1)
     (heq : y ^ 2 = x ^ 3 + 4 * z ^ 6) :
     (y * (w * w * w)) * (y * (w * w * w))
@@ -213,8 +214,7 @@ theorem affine_sqrt_witness {p : G1} (h : Valid p) (hz : ¬ p.z.isZero = true) :
 
 /-! ## Sign-bit recovery -/
 
-/-- Sign bit flips under negation of a nonzero element (`p` is odd, so
-`y ≠ p − y`). -/
+/-- Sign bit flips under negation of a nonzero element (`p` is odd, so `y ≠ p − y`). -/
 theorem signBit_neg {y : Fp} (hy : y ≠ 0) :
     Fp.signBit (-y) = !Fp.signBit y := by
   have hy0 : 0 < y.val := Nat.pos_of_ne_zero (fun hh => hy (Fp.ext (hh.trans Fp.val_zero.symm)))
@@ -233,8 +233,9 @@ theorem signBit_neg {y : Fp} (hy : y ≠ 0) :
 
 /-! ## The two square roots -/
 
-/-- `yPos = ±ya`: any square root of `ya²` is `ya` or `-ya`
-(`ZMod Fp.modulus` is a domain, as `p` is prime). -/
+/-- `yPos = ±ya`: any square root of `ya²` is `ya` or `-ya`.
+
+This holds since `ZMod Fp.modulus` is a domain, as `p` is prime. -/
 theorem sqrt_pm {ya yPos : ZMod Fp.modulus}
     (h : yPos * yPos = ya * ya) : yPos = ya ∨ yPos = -ya := by
   have hfac : (yPos - ya) * (yPos + ya) = 0 := by linear_combination h
@@ -242,8 +243,7 @@ theorem sqrt_pm {ya yPos : ZMod Fp.modulus}
   · exact Or.inl (sub_eq_zero.mp h1)
   · exact Or.inr (eq_neg_of_add_eq_zero_left h2)
 
-/-- Uncompress's sign selection recovers the original `y` from `±y`
-and the stored sign bit. -/
+/-- Uncompress's sign selection recovers the original `y` from `±y` and the stored sign bit. -/
 private theorem sign_recovery {ya yPos : Fp} (hsq : yPos * yPos = ya * ya) :
     (if Fp.signBit yPos = Fp.signBit ya then yPos else -yPos) = ya := by
   have hz : Fp.toZMod yPos * Fp.toZMod yPos = Fp.toZMod ya * Fp.toZMod ya := by
@@ -298,8 +298,8 @@ private theorem yval_aux (y z w : ZMod Fp.modulus) (hw : z * w = 1) :
     y * (w * w * w) * z ^ 3 = y := by
   linear_combination y * ((z * w) ^ 2 + z * w + 1) * hw
 
-/-- The compressed-then-decompressed point (affine, `z = 1`) denotes the
-same group element as `p`. -/
+/-- The compressed-then-decompressed point (affine, `z = 1`) denotes the same group element as `p`.
+-/
 theorem toPoint_affine_normalize {p : G1} (hz : ¬ p.z.isZero = true) :
     toPoint ⟨(p.toAffine).1, (p.toAffine).2, Fp.one⟩ = toPoint p := by
   have hzne : Fp.toZMod p.z ≠ 0 := fun hh => hz (isZero_iff.mpr hh)
@@ -343,8 +343,9 @@ private theorem uncompress_infinityBytes :
   -- `dsimp only` is slow here when `Fp` is in Montgomery form.
   simp (config := { decide := true }) only [hhead, htail]
 
-/-- Sign selection in `uncompress` (a `Prop`-equality condition)
-recovers `y` from `±y` and the stored sign bit. -/
+/-- Sign selection in `uncompress` (a `Prop`-equality condition) recovers `y` from `±y`.
+
+It reads the stored sign bit. -/
 private theorem sign_recovery' {ya yPos : Fp} {P : Prop} [Decidable P]
     (hsq : yPos * yPos = ya * ya)
     (hP : P ↔ (Fp.signBit ya = true)) :
@@ -357,8 +358,9 @@ private theorem sign_recovery' {ya yPos : Fp} {P : Prop} [Decidable P]
   exact sign_recovery hsq
 
 set_option linter.auxLemma false in
-/-- Uncompress recovers `⟨xa, ya, 1⟩` from compressed bytes `cb`
-satisfying the flag- and coordinate-level facts. -/
+/-- Uncompress recovers `⟨xa, ya, 1⟩` from compressed bytes `cb`.
+
+The bytes must satisfy the flag- and coordinate-level facts. -/
 private theorem uncompress_of_facts {xa ya yPos : Fp} {cb : ByteArray}
     (hsize : cb.size = 48)
     (hc : (cb.get! 0 &&& 0x80) ≠ 0)
@@ -444,15 +446,23 @@ private theorem b0_neg_m (B0 : UInt8) (hb0 : B0 < 0x20) :
   -- Check all 256 byte values in the kernel, where values from 0x20 up hold vacuously.
   rcases B0 with ⟨⟨i⟩⟩; revert i hb0; decide
 
-/-- **Compression round-trip.** For any valid point `p`, `compress`
-followed by `uncompress` succeeds and returns a point `q` denoting the
-same group element (`toPoint q = toPoint p`). The Jacobian
-representative is generally *not* preserved — `compress` records only
-the affine `x` plus the sign of `y`, so decompression rebuilds the
-canonical `z = 1` representative — but the underlying curve point is.
-This is the encoding half of the BLS G1 serialization spec; it relies
-on `p` being prime (both square roots are `±y`, recovered via the
-stored sign bit) and on `p ≡ 3 (mod 4)` (so `Fp.sqrt` is exact). -/
+/-- **Compression round-trip.**
+
+For any valid point `p`, `compress` followed by `uncompress` succeeds.
+
+It returns a point `q` denoting the same group element (`toPoint q = toPoint p`).
+
+The Jacobian representative is generally *not* preserved, but the underlying curve point is.
+
+`compress` records only the affine `x` plus the sign of `y`.
+
+So decompression rebuilds the canonical `z = 1` representative.
+
+This is the encoding half of the BLS G1 serialization spec.
+
+It relies on `p` being prime: both square roots are `±y`, recovered via the stored sign bit.
+
+It also relies on `p ≡ 3 (mod 4)`, so `Fp.sqrt` is exact. -/
 theorem uncompress_compress {p : G1} (h : Valid p) :
     ∃ q, uncompress (compress p) = .ok q ∧ toPoint q = toPoint p := by
   by_cases hinf : p.isInfinity = true

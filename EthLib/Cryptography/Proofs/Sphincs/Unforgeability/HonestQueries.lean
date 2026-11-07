@@ -19,10 +19,10 @@ The random-oracle proof uses this to move the algorithms between oracle worlds.
 
 Below the scheme seed, the honest algorithms make three kinds of call.
 
-- A derivation from the seed, at a derivation address: the chain starts, the FORS secrets, the
-  public parameter and the randomizer.
-- An encoding of a one-time key, at the key's encoding address, with a payload of at least
-  16 bytes.
+- A derivation from the seed, at a derivation address.
+  It derives the chain starts, the FORS secrets, the public parameter and the randomizer.
+- An encoding of a one-time key, at the key's encoding address.
+  Its payload has at least 16 bytes.
 - A hash at an address of another type, with a payload of at least 16 bytes.
 
 So a query that no call of the last two kinds makes is made only through the derivations.
@@ -854,8 +854,8 @@ theorem signDerived_H_isQueryBoundP_seedLength (s : Seed) (pp : PublicParam) (ms
   signDerived_isQueryBoundP_zero H _ H_thInput_isQueryBoundP_seedLength
     (seedPrf_H_isQueryBoundP_seedLength s) pp msg
 
-/-- In the game, the public key of the derivations of any scheme seed makes no seed-length
-query. -/
+/-- In the game, the public key of derivations of any scheme seed makes no seed-length query.
+-/
 theorem publicKeyOf_H_isQueryBoundP_seedLength (s : Seed) :
     IsQueryBoundP (publicKeyOf H (seedPrf H s)) IsSeedLengthQuery 0 :=
   publicKeyOf_isQueryBoundP_zero H _ H_thInput_isQueryBoundP_seedLength

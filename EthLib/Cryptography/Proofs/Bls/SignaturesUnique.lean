@@ -14,8 +14,10 @@ Whoever knows a scalar `c` builds a key from a victim's key, and signs for both 
 
 So every key of a fast aggregate verification needs a verified proof of possession.
 
-The sources are [draft-04](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04),
-§3.3, and [ePrint 2018/483](https://eprint.iacr.org/2018/483), §1.
+The sources are [draft-04][draft-04], §3.3, and [ePrint 2018/483][2018-483], §1.
+
+[draft-04]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04
+[2018-483]: https://eprint.iacr.org/2018/483
 -/
 
 @[expose] public section

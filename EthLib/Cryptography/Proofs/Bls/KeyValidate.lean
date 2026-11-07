@@ -13,8 +13,9 @@ Key validation accepts exactly the encodings of the nonzero points of order `r` 
 
 The subgroup checks accept exactly the valid points that represent a multiple of the generator.
 
-The source is [draft-04](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04),
-§2.5 and §2.7.
+The source is [draft-04][draft-04], §2.5 and §2.7.
+
+[draft-04]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04
 -/
 
 @[expose] public section
@@ -140,8 +141,9 @@ theorem uncompress_compress_mul_inSubgroup (b : Fr) :
 
 end G2
 
-/-- The signature subgroup check accepts exactly the valid points that represent a multiple of
-`g2`. -/
+/-- The signature subgroup check accepts exactly one set of valid points.
+
+They are the valid points that represent a multiple of `g2`. -/
 theorem Signatures.signatureSubgroupCheck_iff {sig : G2} (h : G2.Valid sig) :
     Signatures.signatureSubgroupCheck sig = true ↔ ∃ b, G2.Represents sig b :=
   G2.inSubgroup_iff_exists_represents h

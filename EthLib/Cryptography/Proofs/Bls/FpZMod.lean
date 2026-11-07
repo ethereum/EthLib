@@ -41,11 +41,13 @@ The square root is not treated here, but with the decompression proofs that need
 
 namespace EthLib.Cryptography.Bls.Fp
 
--- Kernel evaluation of `powModAux` (384 recursion steps) and the
--- `decide`-checked factorization identities exceed the default depth.
+-- Kernel evaluation of `powModAux` (384 recursion steps) exceeds the default depth.
+--
+-- So do the `decide`-checked factorization identities.
 set_option maxRecDepth 8000
--- The `2 ^ 384` fuel bounds below are only ever evaluated by the
--- kernel inside `decide`; keep the elaborator from warning about them.
+-- Only the kernel evaluates the `2 ^ 384` fuel bounds below, inside `decide`.
+--
+-- Keep the elaborator from warning about them.
 set_option exponentiation.threshold 512
 
 /-! ## The Lucas certificate chain (Pratt tree) for `p` -/
@@ -444,10 +446,11 @@ private theorem pow_div_prime_ne_one_modulus :
   · obtain rfl := heq 15778400344354997994418419698270088123916926905054652752758194827714659 prime_15778400344354997994418419698270088123916926905054652752758194827714659 hdvd
     exact PowMod.natCast_pow_div_ne_one modulus 384 2 15778400344354997994418419698270088123916926905054652752758194827714659 (by decide) (by decide)
 
-/-- The BLS12-381 base field modulus is prime, by a Lucas certificate
-chain (Pratt tree): every prime factor of `p - 1` beyond `norm_num`
-range carries its own certificate above. Witness: `2` is a
-primitive root mod `p`. -/
+/-- The BLS12-381 base field modulus is prime, by a Lucas certificate chain (Pratt tree).
+
+Every prime factor of `p - 1` beyond `norm_num` range carries its own certificate above.
+
+Witness: `2` is a primitive root mod `p`. -/
 theorem modulus_prime : Nat.Prime modulus :=
   lucas_primality modulus ((2 : Nat) : ZMod modulus)
     pow_card_sub_one_modulus pow_div_prime_ne_one_modulus

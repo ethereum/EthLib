@@ -26,10 +26,10 @@ The count holds for every hash that makes at most one oracle call, and the game'
 
 Verification also reads nothing but the answers to its own calls.
 
-- When a fixed function answers every call, verification computes EthLib's verification with
-  that function as its hash.
-- Two functions that agree on the inputs verification hashes under the first give the same
-  verdict.
+- Let a fixed function answer every call.
+  Verification then computes EthLib's verification, with that function as its hash.
+- Take two functions that agree on the inputs that verification hashes under the first.
+  They give the same verdict.
 -/
 
 @[expose] public section

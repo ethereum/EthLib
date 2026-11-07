@@ -197,8 +197,9 @@ theorem fromBytesBE_toBytesBE (a : Fr) : fromBytesBE a.toBytesBE = .ok a := by
   simp only [ne_eq, not_true_eq_false, ↓reduceIte]
   rw [show a.toBytesBE = Montgomery.toBytesBE a from rfl, Montgomery.ofBytesBE_toBytesBE]
 
-/-- A successful `fromBytesBE` implies: the input was 32 bytes, the value
-is the big-endian decoding, and the value is canonical. -/
+/-- A successful `fromBytesBE` implies three facts.
+
+The input was 32 bytes, the value is the big-endian decoding, and the value is canonical. -/
 theorem fromBytesBE_ok {b : ByteArray} {f : Fr}
     (h : fromBytesBE b = .ok f) :
     b.size = 32 ∧ f.val = Base.bytesToNat b.data.toList ∧

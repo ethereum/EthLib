@@ -38,9 +38,11 @@ def i2osp (n : Nat) (len : Nat) : ByteArray :=
 def strxor (a b : ByteArray) : ByteArray :=
   ⟨Array.zipWith (· ^^^ ·) a.data b.data⟩
 
-/-- Expand `msg` into `lenInBytes` pseudo-random bytes via XMD with
-SHA-256. Follows RFC 9380 §5.3.1 and §5.3.3: oversized DSTs are first
-shortened with SHA-256, and oversized output requests are rejected. -/
+/-- Expand `msg` into `lenInBytes` pseudo-random bytes via XMD with SHA-256.
+
+Follows RFC 9380 §5.3.1 and §5.3.3.
+
+Oversized DSTs are first shortened with SHA-256, and oversized output requests are rejected. -/
 def expandMessageXmd
     (msg : ByteArray) (dst : ByteArray) (lenInBytes : Nat)
     : Except BlsError ByteArray := do
@@ -72,8 +74,7 @@ def expandMessageXmd
 
 /-! ## `hash_to_field` for Fp2 (RFC 9380 §5.2)
 
-Returns `count` Fp2 elements, each derived from `2 * L = 128` bytes of
-expand-message output. -/
+Returns `count` Fp2 elements, each derived from `2 * L = 128` bytes of expand-message output. -/
 
 def fpFromBytesL (b : ByteArray) : F :=
   -- OS2IP into a Nat, then reduce mod p.

@@ -425,8 +425,9 @@ private theorem c0_ne_zero_sub_zmod {a0 a1 s' c0 inv2 : ZMod Fp.modulus}
     exact ha1 (mul_self_eq_zero.mp ha1_sq)
   exact mul_ne_zero h2ne hc0_ne
 
--- `sqrt.match_1` is the matcher of the library's `Fp2.sqrt`, named on purpose so the
--- statement matches that definition's unfolding.
+-- `sqrt.match_1` is the matcher of the library's `Fp2.sqrt`.
+--
+-- It is named on purpose, so the statement matches that definition's unfolding.
 set_option linter.auxLemma false in
 private theorem c0Opt_eq_ok {F : Type} {sqrtFn : F → Except BlsError F} {x y c0 : F}
     (h : sqrt.match_1 (fun _ => Except BlsError F) (sqrtFn x) (fun _ => sqrtFn x)

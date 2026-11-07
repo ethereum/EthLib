@@ -6,13 +6,19 @@ public import Mathlib.Tactic.NormNum
 /-!
 # Proofs: `Id.run do` loops as folds
 
-Conversion lemmas turning `for x in [:n]` loops of the executable
-spec's `Id.run do` blocks into `List.foldl` over `List.range' 0 n`,
-where ordinary induction applies. The `_ite` variants accommodate
-bodies whose branches both yield (the `ite`'s type ascription inside a
-`forIn` body differs from a bare one, so the plain lemma cannot match
-them). `id_pure`/`id_bind` are `rfl`-lemmas for `dsimp`-normalizing
-the monadic plumbing away.
+Conversion lemmas turn `for x in [:n]` loops into folds.
+
+The loops are those of the executable spec's `Id.run do` blocks.
+
+The fold is `List.foldl` over `List.range' 0 n`, where ordinary induction applies.
+
+The `_ite` variants accommodate bodies whose branches both yield.
+
+The `ite`'s type ascription inside a `forIn` body differs from a bare one.
+
+So the plain lemma cannot match them.
+
+`id_pure`/`id_bind` are `rfl`-lemmas for `dsimp`-normalizing the monadic plumbing away.
 -/
 
 @[expose] public section
@@ -85,8 +91,7 @@ theorem forIn_range_yield_ite₂ {β : Type} (n : Nat) (init : β)
     · rfl
   rw [hbody, forIn_range_yield]
 
-/-- An index-fold over `range' 0 arr.size` reading `arr[i]!` is a fold
-over `arr.toList`. -/
+/-- An index-fold over `range' 0 arr.size` reading `arr[i]!` is a fold over `arr.toList`. -/
 theorem foldl_range'_getElem! {α β : Type} [Inhabited α] (arr : Array α)
     (f : β → α → β) (init : β) :
     (List.range' 0 arr.size).foldl (fun acc i => f acc arr[i]!) init
