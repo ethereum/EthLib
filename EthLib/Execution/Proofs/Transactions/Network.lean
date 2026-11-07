@@ -103,7 +103,7 @@ theorem decodeNetwork_encodeNetwork {fork : Fork} {w : NetworkBlobTransaction} {
 
 /-- Bytes that decode to a network form are the encoding of that form.
 
-So two different byte strings never decode to the same network form. -/
+So at one fork, two different byte strings never decode to the same network form. -/
 theorem encodeNetwork_of_decodeNetwork {fork : Fork} {bytes : ByteArray}
     {w : NetworkBlobTransaction} (h : decodeNetwork fork bytes = .ok w) :
     encodeNetwork fork w = .ok bytes := by
