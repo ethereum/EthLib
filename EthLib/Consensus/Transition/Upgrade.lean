@@ -113,6 +113,37 @@ def carryFields (config : Config) (post : Fork) {fork : Fork} (pre : BeaconState
     (upgrade : fork < post) (before : post < .glamsterdam) : BeaconState preset post :=
   have early : fork < .glamsterdam := Nat.lt_trans upgrade before
   have beforeHeze : fork < .hegota := Nat.lt_trans early (by decide)
+  -- The new values are built here, once, so that a read of a field does not build them again.
+  let previousEpochParticipation : EpochParticipation preset post :=
+    if altair : .altair ≤ fork then carryList upgrade (pre.previousEpochParticipation altair)
+    else zeroPerValidator upgrade pre.validators
+  let currentEpochParticipation : EpochParticipation preset post :=
+    if altair : .altair ≤ fork then carryList upgrade (pre.currentEpochParticipation altair)
+    else zeroPerValidator upgrade pre.validators
+  let inactivityScores : InactivityScores preset post :=
+    if altair : .altair ≤ fork then carryList upgrade (pre.inactivityScores altair)
+    else zeroPerValidator upgrade pre.validators
+  let currentSyncCommittee :=
+    if altair : .altair ≤ fork then pre.currentSyncCommittee altair
+    else .of (SyncCommittee.empty preset)
+  let nextSyncCommittee :=
+    if altair : .altair ≤ fork then pre.nextSyncCommittee altair
+    else .of (SyncCommittee.empty preset)
+  let latestExecutionPayloadHeader :=
+    if bellatrix : .bellatrix ≤ fork then
+      (pre.latestExecutionPayloadHeader ⟨bellatrix, early⟩).upgrade post
+    else ExecutionPayloadHeader.empty preset post
+  let pendingDeposits : PendingDeposits preset post :=
+    if electra : .pectra ≤ fork then carryList upgrade (pre.pendingDeposits electra)
+    else ⟨#[], fun _ => Nat.zero_le _⟩
+  let pendingPartialWithdrawals : PendingPartialWithdrawals preset post :=
+    if electra : .pectra ≤ fork then carryList upgrade (pre.pendingPartialWithdrawals electra)
+    else ⟨#[], fun _ => Nat.zero_le _⟩
+  let pendingConsolidations : PendingConsolidations preset post :=
+    if electra : .pectra ≤ fork then carryList upgrade (pre.pendingConsolidations electra)
+    else ⟨#[], fun _ => Nat.zero_le _⟩
+  let proposerLookahead :=
+    if fulu : .fusaka ≤ fork then pre.proposerLookahead fulu else Vector.replicate _ 0
   { genesisTime := pre.genesisTime
     genesisValidatorsRoot := pre.genesisValidatorsRoot
     slot := pre.slot
@@ -135,29 +166,16 @@ def carryFields (config : Config) (post : Fork) {fork : Fork} (pre : BeaconState
       pre.previousEpochAttestations (Nat.lt_trans upgrade phase0)
     currentEpochAttestations := fun phase0 =>
       pre.currentEpochAttestations (Nat.lt_trans upgrade phase0)
-    previousEpochParticipation := fun _ =>
-      if altair : .altair ≤ fork then carryList upgrade (pre.previousEpochParticipation altair)
-      else zeroPerValidator upgrade pre.validators
-    currentEpochParticipation := fun _ =>
-      if altair : .altair ≤ fork then carryList upgrade (pre.currentEpochParticipation altair)
-      else zeroPerValidator upgrade pre.validators
+    previousEpochParticipation := fun _ => previousEpochParticipation
+    currentEpochParticipation := fun _ => currentEpochParticipation
     justificationBits := pre.justificationBits
     previousJustifiedCheckpoint := pre.previousJustifiedCheckpoint
     currentJustifiedCheckpoint := pre.currentJustifiedCheckpoint
     finalizedCheckpoint := pre.finalizedCheckpoint
-    inactivityScores := fun _ =>
-      if altair : .altair ≤ fork then carryList upgrade (pre.inactivityScores altair)
-      else zeroPerValidator upgrade pre.validators
-    currentSyncCommittee := fun _ =>
-      if altair : .altair ≤ fork then pre.currentSyncCommittee altair
-      else .of (SyncCommittee.empty preset)
-    nextSyncCommittee := fun _ =>
-      if altair : .altair ≤ fork then pre.nextSyncCommittee altair
-      else .of (SyncCommittee.empty preset)
-    latestExecutionPayloadHeader := fun _ =>
-      if bellatrix : .bellatrix ≤ fork then
-        (pre.latestExecutionPayloadHeader ⟨bellatrix, early⟩).upgrade post
-      else ExecutionPayloadHeader.empty preset post
+    inactivityScores := fun _ => inactivityScores
+    currentSyncCommittee := fun _ => currentSyncCommittee
+    nextSyncCommittee := fun _ => nextSyncCommittee
+    latestExecutionPayloadHeader := fun _ => latestExecutionPayloadHeader
     latestBlockHash := fun gloas => absurd gloas (Nat.not_le_of_lt before)
     nextWithdrawalIndex := fun _ =>
       if capella : .shapella ≤ fork then pre.nextWithdrawalIndex capella else 0
@@ -179,17 +197,10 @@ def carryFields (config : Config) (post : Fork) {fork : Fork} (pre : BeaconState
       if electra : .pectra ≤ fork then pre.consolidationBalanceToConsume electra else 0
     earliestConsolidationEpoch := fun _ =>
       if electra : .pectra ≤ fork then pre.earliestConsolidationEpoch electra else 0
-    pendingDeposits := fun _ =>
-      if electra : .pectra ≤ fork then carryList upgrade (pre.pendingDeposits electra)
-      else ⟨#[], fun _ => Nat.zero_le _⟩
-    pendingPartialWithdrawals := fun _ =>
-      if electra : .pectra ≤ fork then carryList upgrade (pre.pendingPartialWithdrawals electra)
-      else ⟨#[], fun _ => Nat.zero_le _⟩
-    pendingConsolidations := fun _ =>
-      if electra : .pectra ≤ fork then carryList upgrade (pre.pendingConsolidations electra)
-      else ⟨#[], fun _ => Nat.zero_le _⟩
-    proposerLookahead := fun _ =>
-      if fulu : .fusaka ≤ fork then pre.proposerLookahead fulu else Vector.replicate _ 0
+    pendingDeposits := fun _ => pendingDeposits
+    pendingPartialWithdrawals := fun _ => pendingPartialWithdrawals
+    pendingConsolidations := fun _ => pendingConsolidations
+    proposerLookahead := fun _ => proposerLookahead
     builders := fun gloas => absurd gloas (Nat.not_le_of_lt before)
     nextWithdrawalBuilderIndex := fun gloas => absurd gloas (Nat.not_le_of_lt before)
     executionPayloadAvailability := fun gloas => absurd gloas (Nat.not_le_of_lt before)
