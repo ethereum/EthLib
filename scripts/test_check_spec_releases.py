@@ -5,6 +5,7 @@ import re
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 
@@ -105,12 +106,7 @@ repository = "ethereum/consensus-specs"
 
 class NextFork(unittest.TestCase):
     def setUp(self):
-        self.saved = check._get, check.holds
-        check._get = lambda path: {"default_branch": "forks/bogota"}
         self.asked = []
-
-    def tearDown(self):
-        check._get, check.holds = self.saved
 
     def run_with(self, holding: set[str], found: dict) -> list[str]:
         """The report when exactly the refs `holding` hold the tests of the next fork."""
@@ -119,8 +115,11 @@ class NextFork(unittest.TestCase):
             self.asked.append(ref)
             return ref in holding
 
-        check.holds = holds
-        return check.next_fork(found)
+        with (
+            mock.patch.object(check, "_get", lambda path: {"default_branch": "forks/bogota"}),
+            mock.patch.object(check, "holds", holds),
+        ):
+            return check.next_fork(found)
 
     def test_nothing_is_due_while_no_ref_holds_the_tests(self):
         found = {
