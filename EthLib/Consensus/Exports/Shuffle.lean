@@ -27,6 +27,7 @@ def shuffleErrorText : ShuffleError → String
   | .indexOutOfRange index count => s!"index {index} is not below the index count {count}"
   | .noCommittee => "the committee count is zero"
   | .overflow => "a committee bound is 2^64 or more"
+  | .countTooLarge count => s!"the index count {count} is above 2^40"
 
 /-- The seed of 32 bytes. -/
 def seedOf (seed : ByteArray) : Result Bytes32 :=

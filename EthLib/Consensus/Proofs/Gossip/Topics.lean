@@ -173,12 +173,12 @@ theorem computeSubnetForDataColumnSidecar_lt {config : Config} {columnIndex : UI
     subst computed
     exact UInt64.mod_lt _ (UInt64.pos_iff_ne_zero.mpr zero)
 
-/-- The shuffle of the preset places every index below the count at a position below it. -/
+/-- The shuffle of the preset places every index below a count of at most `2^40` below it. -/
 theorem computeShuffledIndex_bounded (preset : Preset) :
-    ∀ i n (seed : Bytes32), i < n → ∃ p,
+    ∀ i n (seed : Bytes32), i < n → n.toNat ≤ 2 ^ 40 → ∃ p,
       computeShuffledIndex preset i n seed = .ok p ∧ p < n := by
-  intro i n seed lt
-  refine ⟨_, computeShuffledIndex_eq lt, ?_⟩
+  intro i n seed lt fits
+  refine ⟨_, computeShuffledIndex_eq lt fits, ?_⟩
   have bound := Shuffle.shuffledIndex_lt (rounds := preset.SHUFFLE_ROUND_COUNT.toNat)
     (seed := seed) (UInt64.lt_iff_toNat_lt.mp lt)
   rw [UInt64.lt_iff_toNat_lt, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (Nat.lt_trans bound n.toNat_lt)]
@@ -187,7 +187,7 @@ theorem computeShuffledIndex_bounded (preset : Preset) :
 /--
 A node gets the subnets per node, each below the number of attestation subnets.
 
-The counts must be positive, and the prefix must have fewer than 64 bits.
+The counts must be positive, and the prefix must have at most 40 bits.
 
 The epoch must leave room for one subscription period.
 
@@ -198,7 +198,7 @@ theorem computeSubscribedSubnets_ok {preset : Preset} {config : Config}
     (count : config.ATTESTATION_SUBNET_COUNT ≠ 0)
     (epochs : config.EPOCHS_PER_SUBNET_SUBSCRIPTION ≠ 0)
     (bits : Serialization.Ssz.depthFor config.ATTESTATION_SUBNET_COUNT.toNat +
-      config.ATTESTATION_SUBNET_EXTRA_BITS.toNat < 64)
+      config.ATTESTATION_SUBNET_EXTRA_BITS.toNat ≤ 40)
     (period : epoch.toNat + config.EPOCHS_PER_SUBNET_SUBSCRIPTION.toNat ≤ 2 ^ 64)
     (perNode : config.SUBNETS_PER_NODE.toNat ≤ 2 ^ 63) :
     ∃ subnets, computeSubscribedSubnets preset config nodeId epoch = .ok subnets ∧
@@ -206,7 +206,10 @@ theorem computeSubscribedSubnets_ok {preset : Preset} {config : Config}
       ∀ subnet ∈ subnets, subnet < config.ATTESTATION_SUBNET_COUNT := by
   obtain ⟨subnets, chosen⟩ := Networking.Proofs.Gossip.Subnet.computeSubscribedSubnets_exists
     (config := config.toSubnetParameters) (nodeId := nodeId) (epoch := epoch)
-    count epochs bits period (computeShuffledIndex_bounded preset) perNode
+    count epochs (by omega) period
+    (fun i n seed lt fits => computeShuffledIndex_bounded preset i n seed lt
+      (Nat.le_trans fits (Nat.pow_le_pow_right (by decide) bits)))
+    perNode
   exact ⟨subnets, chosen, Networking.Proofs.Gossip.Subnet.computeSubscribedSubnets_ok chosen⟩
 
 end EthLib.Consensus.Proofs.Gossip.Topics
