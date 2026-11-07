@@ -10,6 +10,7 @@ The parser of topic strings inverts the printer.
 - Every topic string of a name without `/` parses back to its fork digest and its name.
 - Every string that parses is the topic string of what it parses to.
 - The same two facts hold for the subnet ID in the name of a subnet topic.
+- Each parser accepts exactly what its printer writes; a topic name must also contain no `/`.
 -/
 
 @[expose] public section
@@ -84,6 +85,14 @@ theorem byteHexDigits_of_hexByte? {hi lo : Char} {byte : UInt8}
   simp only [Base.byteHexDigits, this]
   congr 4 <;> omega
 
+/-- Two characters read as a byte exactly when they are the two hex digits of that byte. -/
+theorem hexByte?_eq_some_iff (hi lo : Char) (byte : UInt8) :
+    hexByte? hi lo = some byte ↔ Base.byteHexDigits byte = [hi, lo] := by
+  refine ⟨byteHexDigits_of_hexByte?, fun h => ?_⟩
+  simp only [Base.byteHexDigits, List.cons.injEq, and_true] at h
+  obtain ⟨rfl, rfl⟩ := h
+  exact hexByte?_hexDigitChar byte
+
 /-- A fork digest is its four bytes. -/
 theorem vector_four (v : Vector UInt8 4) : v = #v[v[0], v[1], v[2], v[3]] := by
   apply Vector.ext
@@ -114,6 +123,11 @@ theorem forkDigestChars_of_parseForkDigest {cs : List Char} {digest : Vector UIn
     simp [forkDigestChars, byteHexDigits_of_hexByte? hw, byteHexDigits_of_hexByte? hx,
       byteHexDigits_of_hexByte? hy, byteHexDigits_of_hexByte? hz]
   · cases h
+
+/-- Characters read as a fork digest exactly when they are the hex digits of that digest. -/
+theorem parseForkDigest_eq_some_iff (cs : List Char) (digest : Vector UInt8 4) :
+    parseForkDigest cs = some digest ↔ forkDigestChars digest = cs :=
+  ⟨forkDigestChars_of_parseForkDigest, fun h => h ▸ parseForkDigest_forkDigestChars digest⟩
 
 /-! ## Topic strings -/
 
@@ -160,6 +174,37 @@ theorem topicString_of_parseTopic {topic name : String} {digest : Vector UInt8 4
       next => cases h
     next => cases h
   next => cases h
+
+/-- The name that a topic string parses to contains no `/`. -/
+theorem slash_not_mem_of_parseTopic {topic name : String} {digest : Vector UInt8 4}
+    (h : parseTopic topic = .ok (digest, name)) : '/' ∉ name.toList := by
+  unfold parseTopic at h
+  split at h
+  next rest hrest =>
+    split at h
+    next d hd =>
+      split at h
+      next body hbody =>
+        split at h
+        next chars hchars =>
+          split at h
+          · cases h
+          · rename_i hslash
+            cases h
+            simpa using hslash
+        next => cases h
+      next => cases h
+    next => cases h
+  next => cases h
+
+/-- A string parses to a fork digest and a name exactly when it is their topic string.
+
+The name must also contain no `/`. -/
+theorem parseTopic_eq_ok_iff (topic : String) (digest : Vector UInt8 4) (name : String) :
+    parseTopic topic = .ok (digest, name) ↔
+      topicString digest name = topic ∧ '/' ∉ name.toList :=
+  ⟨fun h => ⟨topicString_of_parseTopic h, slash_not_mem_of_parseTopic h⟩,
+    fun ⟨h, hs⟩ => h ▸ parseTopic_topicString digest hs⟩
 
 /-! ## Subnet topics -/
 
@@ -219,5 +264,16 @@ theorem slash_not_mem_subnetTopicName {base : String} (h : '/' ∉ base.toList)
   · simp at hm
   · have := Nat.isDigit_of_mem_toDigits (b := 10) (by decide) (by decide) hm
     exact absurd this (by decide)
+
+/-- Characters read as a subnet ID exactly when they are the decimal digits of that ID. -/
+theorem parseSubnetId_eq_some_iff (digits : List Char) (subnetId : SubnetID) :
+    parseSubnetId digits = some subnetId ↔ Nat.toDigits 10 subnetId.toNat = digits :=
+  ⟨toDigits_of_parseSubnetId, fun h => h ▸ parseSubnetId_toDigits subnetId⟩
+
+/-- A name parses to a subnet ID exactly when it is the name of that subnet's topic. -/
+theorem parseSubnetTopicName_eq_some_iff (base name : String) (subnetId : SubnetID) :
+    parseSubnetTopicName base name = some subnetId ↔ subnetTopicName base subnetId = name :=
+  ⟨subnetTopicName_of_parseSubnetTopicName,
+    fun h => h ▸ parseSubnetTopicName_subnetTopicName base subnetId⟩
 
 end EthLib.Networking.Proofs.Gossip.Topic
