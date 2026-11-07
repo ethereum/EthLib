@@ -30,7 +30,7 @@ section Generic
 variable {F : Type} [BaseField F]
 
 /-- Fuel-based equivalent of `HashToCurve.mulNegX` for closed kernel evaluation. -/
-def negXAux (P : G2 F) : G2 F := G2.neg (G2.mulNatAux 65 P HashToCurve.blsAbsX)
+def negXAux (P : G2 F) : G2 F := G2.neg (G2.mulNatAux 65 P blsX)
 
 /-- Fuel-based equivalent of `HashToCurve.clearCofactor` for closed kernel evaluation. -/
 def clearAux (P : G2 F) : G2 F :=

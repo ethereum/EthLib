@@ -361,21 +361,21 @@ theorem toPoint_psi_mulNat {P : G2} (hP : G2.Valid P) (n : Nat) :
 theorem psi_generator_projectiveEq :
     G2.projectiveEq (psi (G2.generator : G2)) (mulNegX G2.generator) = true := by
   unfold mulNegX
-  rw [← G2.mulNatAux_eq 65 G2.generator blsAbsX (by decide)]
+  rw [← G2.mulNatAux_eq 65 G2.generator blsX (by decide)]
   decide_g2_at_model [map_psi]
 
-/-- The `psi` eigenvalue on `G2.generator` equals the signed BLS parameter `x = -blsAbsX`. -/
+/-- The `psi` eigenvalue on `G2.generator` equals the signed BLS parameter `x = -|x|`. -/
 theorem hom_generator :
-    hom (G2.toPoint G2.generator) = -(blsAbsX • G2.toPoint G2.generator) := by
+    hom (G2.toPoint G2.generator) = -(blsX • G2.toPoint G2.generator) := by
   rw [← toPoint_psi G2.valid_generator]
   have he := (G2.projectiveEq_eq_true_iff_toPoint_eq
     (psi_valid G2.valid_generator) (mulNegX_valid G2.valid_generator)).mp psi_generator_projectiveEq
   rw [he, mulNegX, G2.toPoint_neg (G2.valid_mulNat G2.valid_generator _),
     G2.toPoint_mulNat G2.valid_generator]
 
-/-- Every multiple `[n] * g_2` satisfies `hom ([n] * g_2) = -[blsAbsX] * ([n] * g_2)`. -/
+/-- Every multiple `[n] * g_2` satisfies `hom ([n] * g_2) = -[|x|] * ([n] * g_2)`. -/
 theorem hom_generator_nsmul (n : Nat) :
-    hom (n • G2.toPoint G2.generator) = -(blsAbsX • (n • G2.toPoint G2.generator)) := by
+    hom (n • G2.toPoint G2.generator) = -(blsX • (n • G2.toPoint G2.generator)) := by
   rw [map_nsmul, hom_generator, neg_nsmul, ← mul_nsmul, ← mul_nsmul, Nat.mul_comm]
 
 end TwistFrobenius

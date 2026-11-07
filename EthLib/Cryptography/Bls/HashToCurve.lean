@@ -245,14 +245,8 @@ def psi2 (P : G2 F) : G2 F :=
     let (x, y) := P.toAffine
     ⟨c1Psi2 * x, -y, Fp2.one⟩
 
-/-- `|x|`, the absolute value of the BLS parameter.
-
-The parameter itself is `-|x|`, so scalar multiplication negates the result where needed.
--/
-def blsAbsX : Nat := 0xd201000000010000
-
 /-- Multiply by the negative BLS parameter (`x = -|x|`). -/
-def mulNegX (P : G2 F) : G2 F := G2.neg (G2.mulNat P blsAbsX)
+def mulNegX (P : G2 F) : G2 F := G2.neg (G2.mulNat P blsX)
 
 /-- Cofactor clearing for G2 per RFC 9380 G.3. -/
 def clearCofactor (P : G2 F) : G2 F :=
