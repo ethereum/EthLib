@@ -164,6 +164,49 @@ theorem extcodesizeStep_of_accountCode [GasMeter Meter] {evm : Evm fork Meter} {
   rcases hc : GasMeter.charge _ _ with _ | _ <;>
     simp [Except.map, Stack.push, room, accountCode, recorded]
 
+/-- EXTCODECOPY on an address word, a start, an offset and a size, whose code is found.
+
+It accesses the address, pays the access, 3 gas a word and the growth of memory.
+
+It records the read of the account.
+
+It then writes the bytes of the code from the offset, with zeros past its end.
+
+The write is made after memory has grown.
+
+The lookup of the code can fail with a state error, which this theorem excludes. -/
+theorem extcodecopyStep_of_accountCode [GasMeter Meter] {evm : Evm fork Meter}
+    {word start offset size : U256} {rest : List U256} {code : ByteArray}
+    (h : evm.stack.val = word :: start :: offset :: size :: rest)
+    (found : accountCode evm (toAddressMasked word) = .ok code) :
+    extcodecopyStep evm =
+      let accessed := accessAddress { evm with stack := ⟨rest, by
+        have := evm.stack.property; rw [h] at this; simp at this; omega⟩ } (toAddressMasked word)
+      let growth := extendMemory evm.memory.size [(start, size)]
+      (GasMeter.charge accessed.2.gas (externalBaseCost fork accessed.1 +
+          GasCosts.OPCODE_COPY_PER_WORD * wordCount size.toNat + growth.cost)).map fun gas =>
+        { accessed.2 with
+          gas
+          state := accessed.2.state.recordAccountRead (toAddressMasked word)
+          memory := memoryWrite (memoryExtend evm.memory growth.expandBy) start.toNat
+            ⟨(bufferRead code offset.toNat size.toNat).toArray⟩
+          pc := evm.pc + 1 } := by
+  have hstack : evm.stack =
+      ⟨word :: start :: offset :: size :: rest, h ▸ evm.stack.property⟩ := Subtype.ext h
+  obtain ⟨accessed, hacc⟩ := accessAddress_snd
+    { evm with stack := ⟨rest, by have := evm.stack.property; rw [h] at this; simp at this; omega⟩ }
+    (toAddressMasked word)
+  simp only [extcodecopyStep, popWord, chargeGasAndMemory, chargeGas, recordAccountRead, advance,
+    hstack, Stack.pop]
+  simp only [bind, Except.bind, pure, Except.pure, hacc]
+  -- Recording the read leaves the account and its code as they are.
+  have recorded : Except.mapError EvmError.state
+      ((evm.state.recordAccountRead (toAddressMasked word)).getCode
+        ((evm.state.recordAccountRead (toAddressMasked word)).getAccount
+          (toAddressMasked word)).codeHash) = Except.ok code := found
+  rcases hc : GasMeter.charge _ _ with _ | _ <;>
+    simp [Except.map, accountCode, recorded]
+
 /-- EXTCODEHASH reads 0 for an address with no account. -/
 theorem codeHashWord_of_none {state : State.TransactionState} {a : Address}
     (h : state.getAccountOptional a = none) : codeHashWord (state.getAccount a) = 0 := by

@@ -707,6 +707,27 @@ That state keeps every other slot, the original words and the accounts.
 `Logic.gas_rule` is the rule for GAS, which pushes the gas left after its own price of 2.
 `Logic.extcodesize` is the rule for EXTCODESIZE from Berlin to before Glamsterdam.
 It charges the prices of EIP-2929, and needs the state to hold the code of the account.
+`Logic.mstore8` is the rule for MSTORE8, which writes the lowest byte of a word.
+`Logic.mcopy` is the rule for MCOPY from Dencun, which grows memory for both ranges before it reads the source.
+`Logic.copyWith` is the rule for a copy of a buffer of the frame to memory, with zeros past its end.
+`Logic.calldatacopy` is its case for CALLDATACOPY.
+`Logic.codecopy` is its case for CODECOPY.
+`Logic.returndatacopy` is the rule for RETURNDATACOPY from Byzantium, for a range that ends within the return data.
+`Logic.extcodecopy` is the rule for EXTCODECOPY from Berlin to before Glamsterdam.
+It charges the prices of EIP-2929 and 3 gas a word, and needs the state to hold the code of the account.
+`Logic.Holds` says that memory covers a range and that the range reads as given bytes.
+`Logic.holds_memoryWrite` proves that a write within memory holds the written bytes.
+`Logic.Holds.memoryWrite_of_disjoint` proves that such a write keeps every range it does not touch.
+`Logic.Holds.memoryExtend` proves that growth keeps every range.
+`Logic.Holds.append` proves that two adjacent ranges hold their bytes in order.
+`Logic.Holds.left` proves that a range that holds two blocks holds the first from its start.
+`Logic.Holds.right` proves that it holds the second after the first.
+`Logic.Holds.loadWord` proves that a range that holds the bytes of a word reads as that word.
+`Logic.extendMemory_of_le` proves that a range within memory grows nothing and costs nothing.
+`Logic.extendMemory_of_lt` proves that a range of some bytes past memory grows it to the rounded end of the range.
+It needs a size of memory that is a multiple of 32.
+That growth costs the price of the new size minus the price of the old size.
+`Logic.size_memoryExtend_extendMemory` proves that memory then has the greater of its old size and that rounded end.
 `memoryReadBytes_memoryWrite_eq_append` proves that a read that ends where a write ends gives the bytes before the write, then the value.
 `Logic.staticcallWith` is the rule for STATICCALL from Berlin to before Glamsterdam.
 Its message carries no value and is static.
@@ -742,6 +763,8 @@ The new address holds no code and a nonce of 0.
 `NoValue.spec_nonzero` proves a contract that halts at `0xfe` when its message sends value.
 `memoryReadBytes_memoryWrite_of_disjoint` proves that a write within memory leaves a read of a disjoint range unchanged.
 `memoryReadBytes_memoryWrite_memoryWrite` proves that a read across two adjacent writes gives both values in order.
+`memoryWrite_comm_of_disjoint` proves that two writes within memory to disjoint ranges commute.
+`memoryReadBytes_memoryWrite_memoryWrite_rev` proves the same read when the higher write comes first.
 From Berlin, the rule for SLOAD takes as a hypothesis whether the slot is cold, and charges 2100 or 100 by EIP-2929.
 `Logic.sstore` is the rule for SSTORE from Berlin to before Glamsterdam, in a frame that may change the state and holds more than 2300 gas.
 It charges `sstoreCost` and adds `sstoreRefund` to the refund counter, from the original, current and new words and whether the slot is cold.
