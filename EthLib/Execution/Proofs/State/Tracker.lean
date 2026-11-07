@@ -164,6 +164,17 @@ theorem getStorage_setStorage_of_ne {tx tx' : TransactionState} {address other :
       · simp [getStorage, StorageMap.slot, recordAccountRead, Std.ExtTreeMap.getElem?_insert,
           Ne.symm haddress] <;> rfl
 
+/-- A storage write leaves every word of the transient storage. -/
+theorem getTransientStorage_setStorage {tx tx' : TransactionState} {address : Address}
+    {key : Bytes32} {value : U256} (h : tx.setStorage address key value = .ok tx')
+    (other : Address) (otherKey : Bytes32) :
+    tx'.getTransientStorage other otherKey = tx.getTransientStorage other otherKey := by
+  unfold setStorage at h
+  split at h
+  · cases h
+  · cases h
+    rfl
+
 /-- A storage write leaves the words before the transaction. -/
 theorem getStorageOriginal_setStorage {tx tx' : TransactionState} {address : Address}
     {key : Bytes32} {value : U256} (h : tx.setStorage address key value = .ok tx') :
@@ -518,13 +529,6 @@ theorem getAccount_clearAccountPreservingBalance {fork : Fork} {tx tx' : Transac
   obtain ⟨account, hf, hread, -⟩ := modifyState_eq_ok h
   cases hf
   exact hread
-
-/-- Clearing an account leaves every other account unchanged. -/
-theorem getAccount_clearAccountPreservingBalance_of_ne {fork : Fork} {tx tx' : TransactionState}
-    {address other : Address} (h : tx.clearAccountPreservingBalance fork address = .ok tx')
-    (hne : other ≠ address) : tx'.getAccount other = tx.getAccount other := by
-  obtain ⟨-, -, -, hother⟩ := modifyState_eq_ok h
-  exact hother other hne
 
 /-- Clearing an account wipes its storage. -/
 theorem getStorage_clearAccountPreservingBalance {fork : Fork} {tx tx' : TransactionState}
@@ -997,19 +1001,6 @@ theorem getStorageOriginal_moveEther {fork : Fork} {tx tx' : TransactionState}
   · simp [hmid, bind, Except.bind] at h
   · simp only [hmid, bind, Except.bind] at h
     rw [getStorageOriginal_modifyState h, getStorageOriginal_modifyState hmid]
-
-/-- Moving ether keeps the storage of every address other than the two parties. -/
-theorem getStorage_moveEther_of_ne {fork : Fork} {tx tx' : TransactionState}
-    {sender recipient other : Address} {amount : U256}
-    (h : tx.moveEther fork sender recipient amount = .ok tx') (hs : other ≠ sender)
-    (hr : other ≠ recipient) (key : Bytes32) :
-    tx'.getStorage other key = tx.getStorage other key := by
-  unfold moveEther at h
-  rcases modifyState_debit fork tx sender amount with ⟨-, hmid⟩ | ⟨-, mid, hmid, -⟩
-  · simp [hmid, bind, Except.bind] at h
-  · simp only [hmid, bind, Except.bind] at h
-    rw [getStorage_modifyState h, getStorage_modifyState hmid]
-    simp [hs, hr]
 
 /-! ## The exact record of reads -/
 

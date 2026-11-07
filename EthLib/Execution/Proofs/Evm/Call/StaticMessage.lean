@@ -29,26 +29,6 @@ open EthLib.Execution.State (EMPTY_CODE_HASH)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
-omit [GasMeter Meter] in
-/-- A change of an account keeps the block of the state. -/
-theorem parent_modifyState {fork : Fork} {tx tx' : State.TransactionState} {address : Address}
-    {f : State.Account → Except State.StateError State.Account}
-    (h : tx.modifyState fork address f = .ok tx') : tx'.parent = tx.parent := by
-  obtain ⟨account, -, rfl⟩ := State.TransactionState.modifyState_eq_ok_iff.mp h
-  split <;> rfl
-
-omit [GasMeter Meter] in
-/-- A move of ether keeps the block of the state. -/
-theorem parent_moveEther {fork : Fork} {tx tx' : State.TransactionState}
-    {sender recipient : Address} {amount : U256}
-    (h : tx.moveEther fork sender recipient amount = .ok tx') : tx'.parent = tx.parent := by
-  unfold State.TransactionState.moveEther at h
-  cases h1 : tx.modifyState fork sender (State.Account.debit sender amount) with
-  | error e => simp [h1, bind, Except.bind] at h
-  | ok mid =>
-    rw [h1] at h
-    exact (parent_modifyState h).trans (parent_modifyState h1)
-
 /-- A precompile is a static step. -/
 theorem staticStep_runPrecompile {address : Nat} {evm after : Evm fork Meter}
     (h : runPrecompile fork address evm = some after) : StaticStep evm after := by
@@ -115,7 +95,8 @@ theorem processMessage_static [LawfulGasMeter Meter] (hfork : .paris ≤ fork) :
            obtain ⟨hcaller, hcode⟩ := hmsg.2.2.2 ht.1 ht.2
            rw [hcaller] at hm'
            have so := State.TransactionState.sameOutside_moveEther_self hcode hm'
-           exact ⟨so, parent_moveEther hm', StaticMessage.of_sameOutside so hmsg⟩)
+           exact ⟨so, State.TransactionState.parent_moveEther hm',
+             StaticMessage.of_sameOutside so hmsg⟩)
         | (cases hm
            exact ⟨State.TransactionState.SameOutside.refl _ _, rfl, hmsg⟩)
     all_goals
