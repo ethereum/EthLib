@@ -353,6 +353,9 @@ The secp256k1 theorems are correctness statements.
 `verify_sign` (`Proofs/Secp256k1/Ecdsa.lean`) proves that a signature from the signing operation of SEC 1 verifies.
 `verify_recover` and `recover_of_verify` (`Proofs/Secp256k1/Recovery.lean`) prove that a recovered key verifies the signature, and that every key that verifies one is recovered, when `r + n >= p`.
 `verify_lowS_unique` (`Proofs/Secp256k1/Malleability.lean`) proves that two low-s signatures with one `r` that verify are equal, under the same bound.
+`verify_iff_of_verify` assumes the same bound and a valid signature `(r, s)`.
+Under them, `(r, s')` verifies under the same key and hash exactly when `s'` is `s` or `n - s`.
+`verify_and_isLowS_iff` adds that `s` is low, and then that signature is the only valid low-s one with that `r`.
 
 No theorem states unforgeability, which rests on the discrete logarithm problem.
 
