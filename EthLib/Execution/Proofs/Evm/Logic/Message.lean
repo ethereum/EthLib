@@ -309,6 +309,13 @@ theorem assumption {callee' : Evm fork Meter → Message fork → Evm fork Meter
     ⟨fun caller message lt child ran => stronger _ _ _ (meets.ok caller message lt child ran),
       meets.aborts⟩
 
+/-- A precondition that gives a witness, with a triple from the condition of each witness. -/
+theorem of_exists {α : Type} {P Q : Evm fork Meter → Prop} {R : α → Evm fork Meter → Prop}
+    (h : ∀ evm, P evm → ∃ x, R x evm) (each : ∀ x, HoareUnder fork callee (R x) Q) :
+    HoareUnder fork callee P Q := fun bound runChild meets evm hp within =>
+  let ⟨x, hx⟩ := h evm hp
+  each x bound runChild meets evm hx within
+
 variable [LawfulGasMeter Meter]
 
 /-- Sequence: reach the middle condition, then the postcondition from it. -/
