@@ -943,6 +943,12 @@ So `bls12MapFpToG1_isOk_iff` and `bls12MapFp2ToG2_isOk_iff` (`Map.lean`) prove t
 
 No theorem relates the module to the execution-specs code it follows.
 
+### Transaction gas
+
+`processTransaction_gasUsed` (`Execution/Proofs/Transactions/Process.lean`) gives the gas used of a transaction that runs, from Pectra to BPO5.
+It is the gas limit minus the gas that the message leaves and the capped refund, or the call data floor when that is larger.
+Before Pectra and from Glamsterdam, no theorem states the gas used of a run.
+
 ### Merkle Patricia Trie
 
 The trie commits to a map from byte keys to byte values under one 32-byte root.
