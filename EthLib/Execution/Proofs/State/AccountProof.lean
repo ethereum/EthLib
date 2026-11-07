@@ -36,6 +36,8 @@ Completeness needs distinct paths, which in a secured trie means keys with disti
 Each of the two checks passes exactly when the proof gives no value, or a value matching the answer.
 
 A slot without a value also needs the word `0` in the answer.
+
+The slot checks of a whole answer pass exactly when each slot passes at its own index.
 -/
 
 @[expose] public section
@@ -176,6 +178,64 @@ theorem verifySlot_eq_slotMismatch {storageRoot : Hash32} {index : Nat} {s : Sto
     verifySlot hash storageRoot index s = .error (.slotMismatch index) := by
   simp [verifySlot, hv, hd, hne, Except.mapError, bind, Except.bind, throw, throwThe,
     MonadExceptOf.throw]
+
+/-- The slot checks pass exactly when each slot passes its check at its own index.
+
+The slots are numbered from `index`, and there is one outcome for each slot, in order. -/
+theorem verifySlots_eq_ok_iff {storageRoot : Hash32} :
+    ∀ {index : Nat} {slots : List StorageProof} {outcomes : List SlotOutcome},
+      verifySlots hash storageRoot index slots = .ok outcomes ↔
+        ∃ hlen : outcomes.length = slots.length, ∀ (i : Nat) (hi : i < slots.length),
+          verifySlot hash storageRoot (index + i) slots[i] = .ok (outcomes[i]'(hlen ▸ hi))
+  | index, [], outcomes => by
+    cases outcomes <;> simp [verifySlots, pure, Except.pure]
+  | index, s :: rest, outcomes => by
+    simp only [verifySlots, bind, Except.bind]
+    cases hs : verifySlot hash storageRoot index s with
+    | error e =>
+      simp only [reduceCtorEq, false_iff, not_exists]
+      intro _ h
+      have := h 0 (by simp)
+      simp [hs] at this
+    | ok o =>
+      cases hr : verifySlots hash storageRoot (index + 1) rest with
+      | error e =>
+        simp only [reduceCtorEq, false_iff, not_exists]
+        intro hlen h
+        cases outcomes with
+        | nil => simp at hlen
+        | cons o' os =>
+          -- The checks of the rest pass too, so the recursive call cannot fail.
+          have hrest := (verifySlots_eq_ok_iff (index := index + 1) (slots := rest)
+            (outcomes := os)).mpr ⟨by simpa using hlen, fun i hi => by
+              have := h (i + 1) (by simp [hi])
+              simpa [Nat.add_assoc, Nat.add_comm 1 i] using this⟩
+          rw [hr] at hrest
+          cases hrest
+      | ok os =>
+        simp only [pure, Except.pure, Except.ok.injEq]
+        constructor
+        · rintro rfl
+          obtain ⟨hlen, h⟩ := (verifySlots_eq_ok_iff (index := index + 1)).mp hr
+          refine ⟨by simp [hlen], fun i hi => ?_⟩
+          cases i with
+          | zero => simpa using hs
+          | succ i =>
+            have := h i (by simpa using hi)
+            simpa [Nat.add_assoc, Nat.add_comm 1 i] using this
+        · rintro ⟨hlen, h⟩
+          cases outcomes with
+          | nil => simp at hlen
+          | cons o' os' =>
+            have h0 := h 0 (by simp)
+            simp only [Nat.add_zero, List.getElem_cons_zero, hs, Except.ok.injEq] at h0
+            have hrest := (verifySlots_eq_ok_iff (index := index + 1) (slots := rest)
+              (outcomes := os')).mpr ⟨by simpa using hlen, fun i hi => by
+                have := h (i + 1) (by simp [hi])
+                simpa [Nat.add_assoc, Nat.add_comm 1 i] using this⟩
+            rw [hr] at hrest
+            cases hrest
+            rw [h0]
 
 /-- A whole answer shows the account exactly when the account check passes with it present.
 
