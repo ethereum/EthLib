@@ -42,6 +42,7 @@ def _file(fork: str, kind: str) -> str:
 
 
 def block_root(fork: str) -> str:
+    """The root of the block of the case, as hex text that starts with 0x."""
     return _file(fork, "block").removeprefix("block_")
 
 
@@ -57,7 +58,8 @@ def payload_hashes(fork: str) -> tuple[bytes, bytes]:
     message = _offset(signed, 0)
     payload = message + _offset(signed, message)
     # The parent hash opens the payload.
-    # The block hash follows 12 fields: 4 hashes, an address, a bloom, 4 numbers, an offset, a fee.
+    # The block hash follows 12 fields.
+    # They are 4 of 32 bytes, an address, a bloom, 4 numbers, an offset and a fee.
     block_hash = payload + 32 + 20 + 32 + 32 + 256 + 32 + 4 * 8 + 4 + 32
     return signed[payload : payload + 32], signed[block_hash : block_hash + 32]
 
@@ -83,8 +85,13 @@ def proposer_state(fork: str, slot: int = 2) -> bytes:
 
 
 def prepare(
-    fork: str, status: int, state: bytes | None = None, taken: list | None = None, root=None
-):
+    fork: str,
+    status: int,
+    state: bytes | None = None,
+    taken: list | None = None,
+    root: bytes | None = None,
+) -> dict:
+    """The update of a proposer on the store of the case, with the defaults of the case."""
     return engine.prepare_execution_payload_gloas(
         "minimal",
         NAMES[fork],
@@ -106,7 +113,7 @@ def _hex(data: bytes) -> str:
 
 
 def check_update(fork: str, update: dict, head: bytes) -> None:
-    """Compare an update with the values that the guide gives for the case."""
+    """Compare an update with the values worked out from the guide, and the length of the mix."""
     genesis_time = int.from_bytes(_read(fork, "anchor_state")[:8], "little")
     assert update["forkchoiceState"] == {
         "headBlockHash": _hex(head),
@@ -127,37 +134,38 @@ def check_update(fork: str, update: dict, head: bytes) -> None:
 
 
 @pytest.mark.parametrize("fork", ["gloas", "heze"])
-def test_full_parent(fork: str):
-    # The payload of the block of the previous slot is verified, and no member voted against it.
+def test_full_parent(fork: str) -> None:
+    # The payload of the block of the previous slot is verified.
+    # No member of the payload timeliness committee voted against it.
     _, block_hash = payload_hashes(fork)
     check_update(fork, prepare(fork, FULL), block_hash)
 
 
 @pytest.mark.parametrize("fork", ["gloas", "heze"])
-def test_empty_parent(fork: str):
+def test_empty_parent(fork: str) -> None:
     parent_hash, _ = payload_hashes(fork)
     check_update(fork, prepare(fork, EMPTY), parent_hash)
 
 
-def test_inclusion_lists_from_heze():
+def test_inclusion_lists_from_heze() -> None:
     # The node received no inclusion list.
     assert prepare("heze", FULL)["inclusionListTransactions"] == []
     assert "inclusionListTransactions" not in prepare("gloas", FULL)
 
 
-def test_pending_head():
+def test_pending_head() -> None:
     with raises(PROPOSER_ERROR, "proposer step failed with code 15") as info:
         prepare("gloas", PENDING)
     assert info.value.code == 15
 
 
-def test_unknown_head():
+def test_unknown_head() -> None:
     with raises(PROPOSER_ERROR, "proposer step failed with code 15") as info:
         prepare("gloas", FULL, root=bytes(32))
     assert info.value.code == 15
 
 
-def test_full_head_without_its_payload():
+def test_full_head_without_its_payload() -> None:
     # Two slots later, a full head is followed whatever the committee says, but the store lacks it.
     with raises(PROPOSER_ERROR, "proposer step failed with code 15") as info:
         prepare(
@@ -166,7 +174,7 @@ def test_full_head_without_its_payload():
     assert info.value.code == 15
 
 
-def test_inclusion_lists_at_slot_0():
+def test_inclusion_lists_at_slot_0() -> None:
     # The proposer builds on the anchor, at slot 0, which has no slot before it.
     checks = YAML(typ="safe").load((FILES / "heze" / CASE / "steps.yaml").read_text())[1]["checks"]
     anchor_root = bytes.fromhex(checks["head"]["root"][2:])
@@ -176,7 +184,7 @@ def test_inclusion_lists_at_slot_0():
 
 
 @pytest.mark.parametrize("fork", ["bellatrix", "fusaka"])
-def test_fork_without_this_preparation(fork: str):
+def test_fork_without_this_preparation(fork: str) -> None:
     with raises(PROPOSER_ERROR, f"no payload preparation on a store at {fork}") as info:
         engine.prepare_execution_payload_gloas(
             "minimal", fork, b"", b"", [], bytes(32), EMPTY, b"", SAFE, FINALIZED, FEE_RECIPIENT, 0
@@ -184,7 +192,7 @@ def test_fork_without_this_preparation(fork: str):
     assert info.value.code == 0
 
 
-def test_unknown_payload_status():
+def test_unknown_payload_status() -> None:
     with raises(PROPOSER_ERROR, "a payload status is 0, 1 or 2") as info:
         prepare("gloas", 3)
     assert info.value.code == 0
@@ -200,7 +208,9 @@ def test_unknown_payload_status():
     ],
     ids=["head", "safe", "finalized", "fee recipient"],
 )
-def test_input_of_the_wrong_length(root, safe, finalized, fee, message: str):
+def test_input_of_the_wrong_length(
+    root: bytes, safe: bytes, finalized: bytes, fee: bytes, message: str
+) -> None:
     with raises(PROPOSER_ERROR, f"input rejected: EthLib.Serialization.Ssz.{message}") as info:
         engine.prepare_execution_payload_gloas(
             "minimal",
@@ -219,7 +229,7 @@ def test_input_of_the_wrong_length(root, safe, finalized, fee, message: str):
     assert info.value.code == 0
 
 
-def test_state_that_does_not_decode():
+def test_state_that_does_not_decode() -> None:
     with raises(
         PROPOSER_ERROR, "input rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 14405 0"
     ) as info:

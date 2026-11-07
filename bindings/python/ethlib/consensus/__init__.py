@@ -569,7 +569,7 @@ def fork_choice(
 
 
 def _fork_choice_records(steps: list) -> bytes:
-    """The steps of a fork choice case as the export reads them."""
+    """The steps of a fork choice case as the records that the native exports read."""
     # A step is (kind, data), and its data is one of these:
     # - the tick in seconds
     # - the SSZ bytes of a block, an attestation, an attester slashing or a PoW block
