@@ -34,6 +34,60 @@ open EthLib.Execution.State (TransactionState)
 
 variable {fork : Fork}
 
+/-- The runner of the messages of the code of a message, at the gas of that message. -/
+abbrev processRunner (fork : Fork) (bound : Nat) : MessageRunner fork Nat bound :=
+  fun caller child _ =>
+    match child.target with
+    | some _ => processMessage fork child caller.state caller.substate.child
+    | none => processCreateMessage fork child caller.state caller.substate.child
+
+/-- A message with no value and no precompile ends as the run of its code from its frame ends.
+
+The frame that ends the message is the stopped frame of that run, rolled back on a failure.
+
+A run that fails makes the message fail with the same error. -/
+theorem processMessage_map_val {message : Message fork} {state : TransactionState}
+    {substate : Substate} {result : Except EvmError (Evm fork Nat)}
+    (noValue : ¬(message.shouldTransferValue = true ∧ message.value ≠ 0))
+    (noPrecompile : precompileAddress fork message = none)
+    (ran : runFrame (step fork) (step_decreases fork) message.gas (processRunner fork message.gas)
+      (startFrame message (startState fork message state) substate
+        (GasMeter.start message.gas message.reservoir)) (Nat.le_refl _) = result) :
+    (processMessage fork message state substate).map Subtype.val =
+      result.map (rollbackOnError state) := by
+  have ran' : ∀ within, runFrame (step fork) (step_decreases fork) message.gas
+      (processRunner fork message.gas)
+      (startFrame message (startState fork message state)
+        (if message.shouldTransferValue = true ∧ message.value ≠ 0 then
+          { substate with
+            logs := pushTransferLog fork substate.logs message.caller message.currentTarget
+              message.value } else substate)
+        (GasMeter.start message.gas message.reservoir)) within = result := by
+    intro within
+    simp only [noValue, ite_false]
+    exact ran
+  rw [processMessage]
+  simp only [Except.map, noPrecompile, noValue, ite_false, bind, pure, Except.bind, Except.pure]
+  split <;> rename_i heq
+  · split at heq <;> rename_i heq'
+    · split at heq' <;> rename_i h3
+      · cases heq'
+        cases heq
+        have hr := (ran' _).symm.trans h3
+        subst hr
+        rfl
+      · cases heq'
+    · cases heq
+  · split at heq <;> rename_i heq'
+    · cases heq
+    · split at heq' <;> rename_i h3
+      · cases heq'
+      · cases heq'
+        cases heq
+        have hr := (ran' _).symm.trans h3
+        subst hr
+        rfl
+
 /-- A message with no value and no precompile runs its code to a stopped frame of a specification.
 
 The specification holds from the frame that the message starts, and sends no message.
@@ -49,41 +103,8 @@ theorem processMessage_of_spec {message : Message fork} {state : TransactionStat
       (processMessage fork message state substate).map Subtype.val =
         .ok (rollbackOnError state stopped) := by
   obtain ⟨stopped, ran, hq⟩ := h.runFrame (bound := message.gas)
-    (runChild := fun caller child _ =>
-      match child.target with
-      | some _ => processMessage fork child caller.state caller.substate.child
-      | none => processCreateMessage fork child caller.state caller.substate.child)
-    start (Nat.le_refl _)
-  refine ⟨stopped, hq, ?_⟩
-  have ran' : ∀ within, runFrame (step fork) (step_decreases fork) message.gas
-      (fun caller child _ =>
-        match child.target with
-        | some _ => processMessage fork child caller.state caller.substate.child
-        | none => processCreateMessage fork child caller.state caller.substate.child)
-      (startFrame message
-        (if fork < .paris then state.touchAccount message.currentTarget else state)
-        (if message.shouldTransferValue = true ∧ message.value ≠ 0 then
-          { substate with
-            logs := pushTransferLog fork substate.logs message.caller message.currentTarget
-              message.value } else substate)
-        (GasMeter.start message.gas message.reservoir)) within = .ok stopped := by
-    intro within
-    simp only [noValue, ite_false]
-    exact ran
-  rw [processMessage]
-  simp only [Except.map, noPrecompile, noValue, ite_false, bind, pure, Except.bind, Except.pure]
-  split <;> rename_i heq
-  · split at heq <;> rename_i heq'
-    · split at heq' <;> rename_i h3 <;> first | (cases heq'; done) | cases h3.symm.trans (ran' _)
-    · cases heq
-  · split at heq <;> rename_i heq'
-    · cases heq
-    · split at heq' <;> rename_i h3
-      · cases heq'
-      · cases h3.symm.trans (ran' _)
-        cases heq'
-        cases heq
-        rfl
+    (runChild := processRunner fork message.gas) start (Nat.le_refl _)
+  exact ⟨stopped, hq, processMessage_map_val noValue noPrecompile ran⟩
 
 /-- A frame that stopped with no error needs no rollback. -/
 theorem rollbackOnError_of_error_eq_none {snapshot : TransactionState} {evm : Evm fork Nat}
@@ -102,15 +123,17 @@ theorem at_startFrame {code : ByteArray} {message : Message fork} (hcode : messa
 
 The message runs that code, has a target, sends no value, and runs no precompile.
 
-When `G` holds of the message, the frame that ends it is a stopped frame of `Q`.
+`G` holds of the message, and of the state and the substate that it starts from.
+
+Then the frame that ends it is a stopped frame of `Q`.
 
 That frame is the one that the callee stopped in, after the rollback of a failure. -/
-def RunsAs (code : ByteArray) (G : Message fork → Prop)
+def RunsAs (code : ByteArray) (G : Message fork → TransactionState → Substate → Prop)
     (Q : Message fork → TransactionState → Substate → Evm fork Nat → Prop)
     (caller : Evm fork Nat) (message : Message fork) (child : Evm fork Nat) : Prop :=
   message.code = code → message.target.isSome →
     ¬(message.shouldTransferValue = true ∧ message.value ≠ 0) →
-    precompileAddress fork message = none → G message →
+    precompileAddress fork message = none → G message caller.state caller.substate.child →
     ∃ stopped, Q message caller.state caller.substate.child stopped ∧
       child = rollbackOnError caller.state stopped
 
@@ -118,26 +141,48 @@ def RunsAs (code : ByteArray) (G : Message fork → Prop)
 
 The specification holds of every message with that code and `G`, from the frame it starts.
 
-The callee sends no message itself, since the specification is one with no message. -/
-theorem meets_of_spec {code : ByteArray} {G : Message fork → Prop}
+The callee may send messages: its specification is a triple under an assumption `A`.
+
+The runner of the interpreter must meet `A` for every bound on the gas of messages.
+
+A run of the callee that aborts makes the runner fail, and the assumption asks nothing of it. -/
+theorem meets_of_specUnder {code : ByteArray}
+    {G : Message fork → TransactionState → Substate → Prop}
     {Q : Message fork → TransactionState → Substate → Evm fork Nat → Prop}
-    (hspec : ∀ message state substate, message.code = code → G message →
-      Spec fork (At code message 0 [] .empty message.gas (startState fork message state) substate)
+    {A : Evm fork Nat → Message fork → Evm fork Nat → Prop}
+    (hspec : ∀ message state substate, message.code = code → G message state substate →
+      SpecUnder fork A
+        (At code message 0 [] .empty message.gas (startState fork message state) substate)
         (Q message state substate))
-    (bound : Nat) :
-    Meets (bound := bound) (RunsAs code G Q) fun (caller : Evm fork Nat) message _ =>
-      match message.target with
-      | some _ => processMessage fork message caller.state caller.substate.child
-      | none => processCreateMessage fork message caller.state caller.substate.child := by
+    (meets : ∀ bound, Meets A (processRunner fork bound)) (bound : Nat) :
+    Meets (RunsAs code G Q) (processRunner fork bound) := by
   refine ⟨fun caller message _ child ran hcode htarget noValue noPrecompile hg => ?_,
     (meets_process fork bound).aborts⟩
   obtain ⟨target, ht⟩ := Option.isSome_iff_exists.mp htarget
-  simp only [ht] at ran
-  obtain ⟨stopped, hq, hrun⟩ := processMessage_of_spec (state := caller.state)
-    (substate := caller.substate.child) (hspec message caller.state caller.substate.child hcode hg)
-    noValue noPrecompile (at_startFrame hcode _ _)
-  refine ⟨stopped, hq, ?_⟩
-  rw [ran] at hrun
-  exact Except.ok.inj hrun
+  simp only [processRunner, ht] at ran
+  rcases (hspec message caller.state caller.substate.child hcode hg).runFrame
+      (meets message.gas) (at_startFrame hcode _ _) (Nat.le_refl _) with
+    ⟨stopped, hrun, hq⟩ | ⟨e, hrun, -⟩
+  · have h := processMessage_map_val (state := caller.state) noValue noPrecompile hrun
+    rw [ran] at h
+    exact ⟨stopped, hq, Except.ok.inj h⟩
+  · have h := processMessage_map_val (state := caller.state) noValue noPrecompile hrun
+    rw [ran] at h
+    cases h
+
+/-- The runner of the interpreter meets the assumption of a specification with no message.
+
+The callee then sends no message itself. -/
+theorem meets_of_spec {code : ByteArray} {G : Message fork → TransactionState → Substate → Prop}
+    {Q : Message fork → TransactionState → Substate → Evm fork Nat → Prop}
+    (hspec : ∀ message state substate, message.code = code → G message state substate →
+      Spec fork (At code message 0 [] .empty message.gas (startState fork message state) substate)
+        (Q message state substate))
+    (bound : Nat) :
+    Meets (RunsAs code G Q) (processRunner fork bound) :=
+  meets_of_specUnder (A := fun _ _ _ => True)
+    (fun message state substate hcode hg =>
+      SpecUnder.of_spec (hspec message state substate hcode hg))
+    (meets_process fork) bound
 
 end EthLib.Execution.Evm.Logic
