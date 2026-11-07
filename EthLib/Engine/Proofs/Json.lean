@@ -217,28 +217,26 @@ private theorem forIn_range'_push {s k : Nat}
 private theorem hexDigitChar_ascii (n : Fin 16) : (hexDigitChar n).val ≤ 0x7F := by
   revert n; decide +revert
 
-/-- The digits after the marker `0x` of a hex encoding are the ASCII codes of its characters. -/
-theorem hexDigits_hexString (what : String) (data : List UInt8) :
-    hexDigits what (.str (hexString data)) =
-      .ok ((data.flatMap byteHexDigits).map fun c => c.val.toUInt8).toByteArray := by
+/-- The digits after the marker `0x` of an ASCII text are the codes of its characters. -/
+private theorem hexDigits_ascii (what : String) (l : List Char) (h : ∀ c ∈ l, c.val ≤ 0x7F) :
+    hexDigits what (.str ("0x" ++ String.ofList l)) =
+      .ok (l.map fun c => c.val.toUInt8).toByteArray := by
   unfold hexDigits
-  have hascii : ∀ c ∈ '0' :: 'x' :: data.flatMap byteHexDigits, c.val ≤ 0x7F := by
+  have hascii : ∀ c ∈ '0' :: 'x' :: l, c.val ≤ 0x7F := by
     intro c hc
-    simp only [List.mem_cons, List.mem_flatMap, byteHexDigits, List.mem_cons,
-      List.not_mem_nil, or_false] at hc
-    rcases hc with rfl | rfl | ⟨b, -, rfl | rfl⟩
+    simp only [List.mem_cons] at hc
+    rcases hc with rfl | rfl | hc
     · decide
     · decide
-    · exact hexDigitChar_ascii _
-    · exact hexDigitChar_ascii _
-  have hs : (hexString data).toUTF8 =
-      ('0'.val.toUInt8 :: 'x'.val.toUInt8 ::
-        (data.flatMap byteHexDigits).map fun c => c.val.toUInt8).toByteArray := by
-    rw [String.toUTF8_eq_toByteArray, ← String.ofList_toList (s := hexString data),
-      toList_hexString, String.toByteArray_ofList, ascii_utf8Encode _ hascii]
+    · exact h c hc
+  have hs : ("0x" ++ String.ofList l).toUTF8 =
+      ('0'.val.toUInt8 :: 'x'.val.toUInt8 :: l.map fun c => c.val.toUInt8).toByteArray := by
+    have : ("0x" ++ String.ofList l) = String.ofList ('0' :: 'x' :: l) := by
+      apply String.ext; simp
+    rw [this, String.toUTF8_eq_toByteArray, String.toByteArray_ofList, ascii_utf8Encode _ hascii]
     rfl
   simp only [hs]
-  generalize (data.flatMap byteHexDigits).map (fun c => c.val.toUInt8) = ds
+  generalize l.map (fun c => c.val.toUInt8) = ds
   have h0 : '0'.val.toUInt8 = 48 := by decide
   have hx : 'x'.val.toUInt8 = 120 := by decide
   rw [h0, hx]
@@ -248,6 +246,18 @@ theorem hexDigits_hexString (what : String) (data : List UInt8) :
   congr 1
   apply ByteArray.ext
   simp [ByteArray.data_extract]
+
+/-- The digits after the marker `0x` of a hex encoding are the ASCII codes of its characters. -/
+theorem hexDigits_hexString (what : String) (data : List UInt8) :
+    hexDigits what (.str (hexString data)) =
+      .ok ((data.flatMap byteHexDigits).map fun c => c.val.toUInt8).toByteArray := by
+  have htext : hexString data = "0x" ++ String.ofList (data.flatMap byteHexDigits) := by
+    apply String.ext
+    simp [toList_hexString]
+  rw [htext]
+  refine hexDigits_ascii what _ fun c hc => ?_
+  simp only [List.mem_flatMap, byteHexDigits, List.mem_cons, List.not_mem_nil, or_false] at hc
+  rcases hc with ⟨b, -, rfl | rfl⟩ <;> exact hexDigitChar_ascii _
 
 /-- A byte is sixteen times its high digit plus its low digit. -/
 private theorem byte_split (b : UInt8) :
@@ -436,44 +446,20 @@ theorem address_eq_ok_iff {what : String} {j : Lean.Json} {a : Address} :
 
 /-! ## A number written in hex -/
 
-/-- The digits after the marker `0x` of an ASCII text are the codes of its characters. -/
-private theorem hexDigits_ascii (what : String) (l : List Char) (h : ∀ c ∈ l, c.val ≤ 0x7F) :
-    hexDigits what (.str ("0x" ++ String.ofList l)) =
-      .ok (l.map fun c => c.val.toUInt8).toByteArray := by
-  unfold hexDigits
-  have hascii : ∀ c ∈ '0' :: 'x' :: l, c.val ≤ 0x7F := by
-    intro c hc
-    simp only [List.mem_cons] at hc
-    rcases hc with rfl | rfl | hc
-    · decide
-    · decide
-    · exact h c hc
-  have hs : ("0x" ++ String.ofList l).toUTF8 =
-      ('0'.val.toUInt8 :: 'x'.val.toUInt8 :: l.map fun c => c.val.toUInt8).toByteArray := by
-    have : ("0x" ++ String.ofList l) = String.ofList ('0' :: 'x' :: l) := by
-      apply String.ext; simp
-    rw [this, String.toUTF8_eq_toByteArray, String.toByteArray_ofList, ascii_utf8Encode _ hascii]
-    rfl
-  simp only [hs]
-  generalize l.map (fun c => c.val.toUInt8) = ds
-  have h0 : '0'.val.toUInt8 = 48 := by decide
-  have hx : 'x'.val.toUInt8 = 120 := by decide
-  rw [h0, hx]
-  have h1 : (48 :: 120 :: ds).toByteArray[0]? = some 48 := by simp
-  have h2 : (48 :: 120 :: ds).toByteArray[1]? = some 120 := by simp
-  simp only [h1, h2, and_self, ↓reduceIte]
-  congr 1
-  apply ByteArray.ext
-  simp [ByteArray.data_extract]
-
 /-- The value of the code of a hex digit, or zero for any other code. -/
 private def digitValue (c : UInt8) : Nat := ((hexValue false c).getD 0).toNat
 
+/-- The digit that Lean core writes for a value below sixteen is the lowercase hex digit. -/
+private theorem digitChar_eq_hexDigitChar : ∀ n (h : n < 16),
+    Nat.digitChar n = hexDigitChar ⟨n, h⟩ := by
+  decide
+
 /-- Each digit that `Nat.toDigits 16` writes is a lowercase hex digit, read back as its value. -/
-private theorem hexValue_digitChar : ∀ n, n < 16 →
+private theorem hexValue_digitChar (n : Nat) (hn : n < 16) :
     hexValue false (Nat.digitChar n).val.toUInt8 = some n.toUInt8 ∧
       (Nat.digitChar n).val ≤ 0x7F := by
-  decide
+  rw [digitChar_eq_hexDigitChar n hn]
+  exact ⟨hexValue_hexDigitChar false ⟨n, hn⟩, hexDigitChar_ascii _⟩
 
 /-- No digit of a positive value below sixteen is the digit `0`. -/
 private theorem digitChar_ne_zero : ∀ n, n < 16 → 0 < n → ¬ Nat.digitChar n = '0' := by

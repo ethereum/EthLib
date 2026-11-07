@@ -122,12 +122,9 @@ theorem eq_of_byteAt {a b : ByteArray} (size : a.size = b.size)
 
 /-! ## A loop over the bytes -/
 
-/-- The step of a loop over a buffer at a count of bytes left runs over the last bytes of its list.
+/-- A loop over a buffer with `i` bytes left runs as a loop over the last `i` bytes of its list.
 
-Lean core states no lemma for this loop.
-
-With `i + 1` bytes left, it reads byte `size - 1 - i`.
--/
+With `i + 1` bytes left, it reads byte `size - 1 - i`. -/
 theorem forIn_loop_eq_forIn_drop {β : Type} {m : Type → Type} [Monad m] [LawfulMonad m]
     (as : ByteArray) (f : UInt8 → β → m (ForInStep β)) :
     ∀ (i : Nat) (h : i ≤ as.size) (b : β),
