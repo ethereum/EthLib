@@ -1,0 +1,8 @@
+topic: proposer_slashing
+blocks:
+- {block: 
+    block_0x1535ea30d1ead103e010ba8abbdab2a927d11133eaa74d6182fae304db94656a}
+messages:
+- {message: 
+    proposer_slashing_0x42e381612feed5a2cb2f587ef522abca553c14a1262a019b8db870b05e5712f6,
+  expected: valid}

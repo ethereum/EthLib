@@ -47,7 +47,6 @@ NOT_YET = {
     "random": "the state transition after Phase 0 (consensus track C26 to C40)",
     "sanity": "the state transition after Phase 0 (consensus track C26 to C40)",
     "transition": "the Electra and Fulu blocks (consensus track C35 to C40)",
-    "networking": "gossip validation of blocks, votes and sidecars (consensus track C63, C64)",
 }
 
 # The plan at Gloas and Heze, by the steps of the track for Glamsterdam
@@ -65,10 +64,6 @@ _HEZE = {
     "ssz_static": "the partial data column containers at Heze (G80, G81)",
 }
 NOT_YET_AT = {
-    **{
-        fork: {"networking/gossip_beacon_block": "the Electra and Fulu blocks (C35 to C40)"}
-        for fork in ("electra", "fulu")
-    },
     "gloas": _GLOAS,
     "heze": _HEZE,
 }
