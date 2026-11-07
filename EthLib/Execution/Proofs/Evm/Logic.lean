@@ -41,6 +41,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Examples.Echo
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.Pair
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.Twice
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.SumTo
+public import EthLib.Execution.Proofs.Evm.Logic.Examples.Indices
 
 /-!
 # `EthLib.Execution.Proofs.Evm.Logic`

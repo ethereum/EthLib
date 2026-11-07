@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Proofs.Evm.Logic.Rules
+public import EthLib.Execution.Proofs.Evm.Logic.Known
 
 /-!
 # Proofs: subroutines inside a code
@@ -93,6 +93,56 @@ theorem callSubroutine {n : Fin 33} {entry ret : U256} {args results rest : List
   have h2 := jump (fork := fork) (code := code) (message := message) (pc := pc + (1 + n))
     (memory := memory) (gas := gas - 3) (state := state) (substate := substate)
     (destination := entry) (rest := args ++ ret :: rest) hjlt hjump (by omega) ventry
+  have h3 := h ret rest (gas - 3 - 8) vret hroom (by omega)
+  have hg : gas - 3 - 8 - cost = gas - (11 + cost) := by omega
+  rw [hg] at h3
+  exact (h1.seq h2).seq h3
+
+/-! ## Subroutines over frames that know ranges of memory -/
+
+/-- A specification of a subroutine over frames that know only the size of memory and some facts.
+
+It holds for the same return addresses, stacks and gas as a subroutine over exact memory.
+
+The frame goes from memory of size `size` that holds `facts` to size `size'` that holds `facts'`. -/
+def KnownSubroutine (code : ByteArray) (message : Message fork) (entry : Nat)
+    (args results : List U256) (room cost size size' : Nat) (facts facts' : List (Nat × ByteArray))
+    (state state' : State.TransactionState) (substate substate' : Substate) : Prop :=
+  ∀ (ret : U256) (rest : List U256) (gas : Nat),
+    isValidJumpDest (validJumpDestinations code) ret.toNat = true →
+    args.length + 1 + rest.length + room ≤ STACK_LIMIT → cost ≤ gas →
+    Hoare fork (Known code message entry (args ++ ret :: rest) size facts gas state substate)
+      (Known code message ret.toNat (results ++ rest) size' facts' (gas - cost) state' substate')
+
+/-- A call of a subroutine over frames that know ranges of memory: PUSHn of its address, then JUMP.
+
+It has the hypotheses of a call of a subroutine over exact memory.
+
+The push and the jump keep the size of memory and every fact. -/
+theorem callKnownSubroutine {n : Fin 33} {entry ret : U256} {args results rest : List U256}
+    {room cost size size' : Nat} {facts facts' : List (Nat × ByteArray)}
+    (h : KnownSubroutine code message entry.toNat args results room cost size size' facts facts'
+      state state' substate substate')
+    (hn : n.val ≠ 0) (hlt : pc < code.size) (hbyte : code[pc] = 0x5f + UInt8.ofNat n.val)
+    (decoded : Op.decode (0x5f + UInt8.ofNat n.val) = some (.push n))
+    (hword : pushData code pc n = entry) (hjlt : pc + (1 + n) < code.size)
+    (hjump : code[pc + (1 + n)] = 0x56)
+    (ventry : isValidJumpDest (validJumpDestinations code) entry.toNat = true)
+    (vret : isValidJumpDest (validJumpDestinations code) ret.toNat = true)
+    (hroom : args.length + 1 + rest.length + room ≤ STACK_LIMIT)
+    (hpush : args.length + 1 + rest.length < STACK_LIMIT) (hgas : 11 + cost ≤ gas) :
+    Hoare fork (Known code message pc (args ++ ret :: rest) size facts gas state substate)
+      (Known code message ret.toNat (results ++ rest) size' facts' (gas - (11 + cost)) state'
+        substate') := by
+  have h1 := Known.of_at (size := size) (facts := facts) fun memory =>
+    push (fork := fork) (code := code) (message := message) (pc := pc)
+      (stack := args ++ ret :: rest) (memory := memory) (gas := gas) (state := state)
+      (substate := substate) hn hlt hbyte decoded hword (by omega)
+      (by simp only [List.length_append, List.length_cons]; omega)
+  have h2 := Known.of_at (size := size) (facts := facts) fun memory =>
+    jump (fork := fork) (code := code) (message := message) (pc := pc + (1 + n))
+      (memory := memory) (gas := gas - 3) (state := state) (substate := substate)
+      (destination := entry) (rest := args ++ ret :: rest) hjlt hjump (by omega) ventry
   have h3 := h ret rest (gas - 3 - 8) vret hroom (by omega)
   have hg : gas - 3 - 8 - cost = gas - (11 + cost) := by omega
   rw [hg] at h3
