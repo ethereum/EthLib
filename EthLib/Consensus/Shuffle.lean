@@ -135,7 +135,9 @@ An empty range has no position to read, so it gives an empty committee, even pas
 
 The default value is never read when each shuffled position is below the length.
 
-The committees of an epoch share one shuffle, so it is computed once and passed here. -/
+It takes the shuffled positions as an argument, so the committees of an epoch can share one shuffle.
+
+It gives the committee of the rule when those positions are the shuffle of the list. -/
 def shuffledCommittee (indices : Array ValidatorIndex) (shuffled : Array UInt64)
     (index count : UInt64) : Except ShuffleError (Array ValidatorIndex) := do
   if count = 0 then throw .noCommittee

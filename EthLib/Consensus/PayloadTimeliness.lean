@@ -15,6 +15,8 @@ Each draw is the draw of a proposer at the fork of the state.
 
 From Electra, that draw reads two random bytes.
 
+One hash gives the random bytes of 32 draws before Electra, and of 16 draws from Electra.
+
 Gloas selects the proposers and the payload timeliness committee this way.
 
 From Altair, the sync committee is a selection of this kind too.
@@ -50,22 +52,29 @@ variable {preset : Preset} {fork : Base.Fork}
 
 Draw `i` reads the candidate at position `order (i mod n)`, among `n` candidates.
 
+It carries the hash of the block of draw `i`, and hashes again only when a new block starts.
+
 The draw counter is a 64-bit integer, so the search fails when it would reach `2^64`.
 
 The default candidate is never read when each position of the order is in range. -/
 def balanceWeightedSearch (preset : Preset) (fork : Base.Fork) (indices : Array ValidatorIndex)
     (balances : Array Gwei) (order : Nat → Nat) (seed : Bytes32) (size : Nat)
-    (selected : Array ValidatorIndex) (bound : selected.size ≤ size) (i : Nat) :
+    (selected : Array ValidatorIndex) (bound : selected.size ≤ size) (i : Nat)
+    (random : { random // random = drawHash fork seed i }) :
     Except AccessorError (Vector ValidatorIndex size) :=
   if full : selected.size = size then .ok ⟨selected, full⟩
   else do
     let position := order (i % indices.size)
-    let accepted ← proposerDraw preset fork seed i (balances.getD position 0)
+    let accepted ← drawAccepts preset fork random.1 i (balances.getD position 0)
     let next : { next : Array ValidatorIndex // next.size ≤ size } :=
       if accepted then ⟨selected.push (indices.getD position 0), by simp; omega⟩
       else ⟨selected, bound⟩
+    let random : { random // random = drawHash fork seed (i + 1) } :=
+      if start : (i + 1) % drawsPerHash fork = 0 then ⟨drawHash fork seed (i + 1), rfl⟩
+      else ⟨random.1, random.2.trans (drawHash_succ start).symm⟩
     if i + 1 < 2 ^ 64 then
       balanceWeightedSearch preset fork indices balances order seed size next.1 next.2 (i + 1)
+        random
     else throw (.arith .overflow)
 termination_by 2 ^ 64 - i
 
@@ -87,18 +96,43 @@ def computeBalanceWeightedSelection (state : BeaconState preset fork)
     if shuffleIndices then Shuffle.shuffledIndex preset.SHUFFLE_ROUND_COUNT.toNat seed indices.size
     else id
   balanceWeightedSearch preset fork indices balances order seed size.toNat #[] (Nat.zero_le _) 0
+    ⟨drawHash fork seed 0, rfl⟩
+
+/-- The active validators of an epoch, and their shuffle for the attestation committees. -/
+def attesterShuffle (state : BeaconState preset fork) (epoch : Epoch) :
+    Except AccessorError (Array ValidatorIndex × Array UInt64) := do
+  let seed ← getSeed state epoch DOMAIN_BEACON_ATTESTER
+  let active := (getActiveValidatorIndices state epoch).toArray
+  return (active, computeShuffledPermutation preset (UInt64.ofNat active.size) seed)
+
+/-- The members of the attestation committees of a slot, committee after committee.
+
+They are cut from the given active validators and shuffle. -/
+def slotCommitteeMembersOf (state : BeaconState preset fork) (slot : Slot)
+    (active : Array ValidatorIndex) (shuffled : Array UInt64) :
+    Except AccessorError (Array ValidatorIndex) :=
+  (List.range (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat).foldlM
+    (fun members index => do
+      return members ++ (← beaconCommitteeOf state slot index.toUInt64 active shuffled)) #[]
 
 /-- The members of the attestation committees of a slot, committee after committee.
 
 The committees share one shuffle of the active validators, computed once for the slot. -/
 def slotCommitteeMembers (state : BeaconState preset fork) (slot : Slot) :
     Except AccessorError (Array ValidatorIndex) := do
-  let epoch := computeEpochAtSlot preset slot
-  let seed ← getSeed state epoch DOMAIN_BEACON_ATTESTER
-  let active := (getActiveValidatorIndices state epoch).toArray
-  let shuffled := computeShuffledPermutation preset (UInt64.ofNat active.size) seed
-  (List.range (getCommitteeCountPerSlot state epoch).toNat).foldlM (fun members index => do
-    return members ++ (← beaconCommitteeOf state slot index.toUInt64 active shuffled)) #[]
+  let (active, shuffled) ← attesterShuffle state (computeEpochAtSlot preset slot)
+  slotCommitteeMembersOf state slot active shuffled
+
+/-- The payload timeliness committee of a slot, from the seed of its epoch for this duty.
+
+The attestation committees of the slot are cut from the given active validators and shuffle. -/
+def computePtcOf (state : BeaconState preset fork) (slot : Slot) (epochSeed : Bytes32)
+    (active : Array ValidatorIndex) (shuffled : Array UInt64) :
+    Except AccessorError (PayloadTimelinessCommittee preset) := do
+  let seed :=
+    Cryptography.Hash.Sha256.hash32 ⟨epochSeed.toArray ++ (uintToBytes 8 slot.toNat).toArray⟩
+  computeBalanceWeightedSelection state (← slotCommitteeMembersOf state slot active shuffled) seed
+    preset.PTC_SIZE false
 
 /-- The payload timeliness committee of a slot, which may hold a validator more than once.
 
@@ -107,11 +141,10 @@ It is drawn from the members of the attestation committees of the slot, in their
 Its seed is the hash of the seed of the epoch for this duty and the slot as 8 bytes. -/
 def computePtc (state : BeaconState preset fork) (slot : Slot) :
     Except AccessorError (PayloadTimelinessCommittee preset) := do
-  let epochSeed ← getSeed state (computeEpochAtSlot preset slot) DOMAIN_PTC_ATTESTER
-  let seed :=
-    Cryptography.Hash.Sha256.hash32 ⟨epochSeed.toArray ++ (uintToBytes 8 slot.toNat).toArray⟩
-  computeBalanceWeightedSelection state (← slotCommitteeMembers state slot) seed preset.PTC_SIZE
-    false
+  let epoch := computeEpochAtSlot preset slot
+  let epochSeed ← getSeed state epoch DOMAIN_PTC_ATTESTER
+  let (active, shuffled) ← attesterShuffle state epoch
+  computePtcOf state slot epochSeed active shuffled
 
 /-- The position in the window of the committee of a slot.
 
@@ -233,9 +266,15 @@ def processPtcWindow (state : BeaconState preset fork) (gloas : .glamsterdam ≤
   let perEpoch := preset.SLOTS_PER_EPOCH.toNat
   let nextEpoch ← liftArith do
     addChecked (← addChecked (getCurrentEpoch state) preset.MIN_SEED_LOOKAHEAD) 1
+  -- The new committees read the same two seeds and the same shuffle, so these are computed once.
+  let inputs : Except AccessorError _ := do
+    return (← getSeed state nextEpoch DOMAIN_PTC_ATTESTER, ← attesterShuffle state nextEpoch)
   let moved ← (Vector.range _).mapM fun position =>
     if kept : position + perEpoch < _ then pure window[position + perEpoch]
-    else do computePtc state (← ptcWindowSlot preset nextEpoch (position + perEpoch - window.size))
+    else do
+      let slot ← ptcWindowSlot preset nextEpoch (position + perEpoch - window.size)
+      let (epochSeed, active, shuffled) ← inputs
+      computePtcOf state slot epochSeed active shuffled
   return { state with ptcWindow := fun _ => moved }
 
 end EthLib.Consensus
