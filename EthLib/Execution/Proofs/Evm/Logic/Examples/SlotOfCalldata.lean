@@ -67,6 +67,7 @@ def CODE_NAT : Nat :=
 No proof unfolds it: proofs rewrite it by its equation, and evaluate its bytes on the number. -/
 @[irreducible] def CODE : ByteArray := NatCode.ofNat CODE_NAT 46
 
+/-- The equation of the code, which proofs rewrite by. -/
 theorem CODE_eq : CODE = NatCode.ofNat CODE_NAT 46 := by
   unfold CODE
   rfl

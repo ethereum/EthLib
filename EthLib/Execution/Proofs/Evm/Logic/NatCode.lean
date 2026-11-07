@@ -52,14 +52,17 @@ def ofNat (n size : Nat) : ByteArray := ⟨Array.ofFn (n := size) fun i => natBy
 
 /-! ## The bytes -/
 
+/-- The code stored in a number has the size it is given. -/
 theorem size_ofNat (n size : Nat) : (ofNat n size).size = size := by
   simp [ofNat, ByteArray.size]
 
+/-- A byte inside the code is the byte of the number at that index. -/
 theorem getElem_ofNat (n size i : Nat) (h : i < (ofNat n size).size) :
     (ofNat n size)[i] = natByte n size i :=
   show (Array.ofFn (n := size) fun i => natByte n size i.val)[i]'(by
     simpa [ofNat, ByteArray.size] using h) = _ from Array.getElem_ofFn ..
 
+/-- The byte at any index, 0 past the end, is the byte of the number at that index. -/
 theorem byteAt_ofNat (n size i : Nat) : byteAt (ofNat n size) i = natByte n size i := by
   unfold byteAt
   split
@@ -98,6 +101,7 @@ def nextPc (n size pc : Nat) : Nat :=
   pc + 1 + if 0x60 ≤ (natByte n size pc).toNat ∧ (natByte n size pc).toNat ≤ 0x7f then
     (natByte n size pc).toNat - 0x5f else 0
 
+/-- The opcode after the one at `pc` sits where the number puts it. -/
 theorem nextOpcode_ofNat (n size pc : Nat) : nextOpcode (ofNat n size) pc = nextPc n size pc := by
   rw [nextOpcode_eq, byteAt_ofNat, nextPc]
 
