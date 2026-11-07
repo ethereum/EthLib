@@ -539,6 +539,37 @@ def fork_choice(
     config: dict | None = None,
 ) -> list:
     """The outcome of each step of a fork choice case, from an anchor state and block."""
+    records = _fork_choice_records(steps)
+    replacements = json.dumps(config).encode() if config else b""
+    out = _native.consensus_fork_choice(
+        name, fork, anchor_state, anchor_block, records, replacements, verify
+    )
+    outcomes, offset = [], 0
+    for kind, data in steps:
+        if kind == "block" and isinstance(data, tuple):
+            # The blobs or the columns that the node holds take no part in the outcome.
+            offset += 1
+        status, offset = out[offset], offset + 1
+        if status == 1:
+            code = int.from_bytes(out[offset : offset + 4], "little")
+            length = int.from_bytes(out[offset + 4 : offset + 8], "little")
+            message = out[offset + 8 : offset + 8 + length].decode()
+            outcomes.append(ForkChoiceError(code, message))
+            offset += 8 + length
+        elif kind == "fast_confirmation":
+            size = 216 + 1 + 32 * out[offset + 216]
+            outcomes.append(_fast_confirmation_record(out[offset : offset + size]))
+            offset += size
+        elif kind != "checks":
+            outcomes.append(None)
+        else:
+            read, offset = _store_record(out, offset, data)
+            outcomes.append(read)
+    return outcomes
+
+
+def _fork_choice_records(steps: list) -> bytes:
+    """The steps of a fork choice case as the export reads them."""
     # A step is (kind, data), and its data is one of these:
     # - the tick in seconds
     # - the SSZ bytes of a block, an attestation, an attester slashing or a PoW block
@@ -583,32 +614,7 @@ def fork_choice(
             )
             records += bytes([7]) + len(held).to_bytes(4, "little") + held
         records += bytes([_FORK_CHOICE_STEPS[kind]]) + len(data).to_bytes(4, "little") + data
-    replacements = json.dumps(config).encode() if config else b""
-    out = _native.consensus_fork_choice(
-        name, fork, anchor_state, anchor_block, records, replacements, verify
-    )
-    outcomes, offset = [], 0
-    for kind, data in steps:
-        if kind == "block" and isinstance(data, tuple):
-            # The blobs or the columns that the node holds take no part in the outcome.
-            offset += 1
-        status, offset = out[offset], offset + 1
-        if status == 1:
-            code = int.from_bytes(out[offset : offset + 4], "little")
-            length = int.from_bytes(out[offset + 4 : offset + 8], "little")
-            message = out[offset + 8 : offset + 8 + length].decode()
-            outcomes.append(ForkChoiceError(code, message))
-            offset += 8 + length
-        elif kind == "fast_confirmation":
-            size = 216 + 1 + 32 * out[offset + 216]
-            outcomes.append(_fast_confirmation_record(out[offset : offset + size]))
-            offset += size
-        elif kind != "checks":
-            outcomes.append(None)
-        else:
-            read, offset = _store_record(out, offset, data)
-            outcomes.append(read)
-    return outcomes
+    return records
 
 
 def gossip_validation(

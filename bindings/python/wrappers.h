@@ -520,5 +520,6 @@ PyObject* py_engine_new_payload                          (PyObject* self, PyObje
 PyObject* py_engine_new_payload_on_chain                 (PyObject* self, PyObject* args);
 PyObject* py_engine_forkchoice_updated                   (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload            (PyObject* self, PyObject* args);
+PyObject* py_engine_prepare_execution_payload_gloas      (PyObject* self, PyObject* args);
 
 #endif /* ETHCS_WRAPPERS_H */

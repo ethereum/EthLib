@@ -287,22 +287,12 @@ def readPayloadVerdict (data : ByteArray) : Result (Option (Option Hash32)) :=
   | 1 :: _ => return some (some (← decodeInput Hash32 (data.extract 1 data.size)))
   | _ => throw (0, "a verdict is 0, or 1 with an optional hash of 32 bytes")
 
-/-- The outcome of each step of a fork choice case, from an anchor state and an anchor block.
+/-- The store after each step of a fork choice case, and the outcome of each step.
 
-The preset, the configuration and the fork are named in UTF-8.
-
-The signature checks run unless the last argument is false.
-
-From Gloas the node on which a proposer builds is not yet specified here, so that read fails. -/
-@[export eth_consensus_fork_choice]
-def forkChoiceExport (name fork anchorState anchorBlock steps replacements : ByteArray)
-    (verify : Bool) : Result ByteArray := do
-  let preset ← presetOf (← nameOf name)
-  let fork ← forkOf fork
-  let config ← configWith name replacements
-  let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
-  let anchorState ← decodeInput (BeaconState preset fork) anchorState
-  let anchorBlock ← decodeInput (BeaconBlock preset fork) anchorBlock
+The store starts from an anchor state and an anchor block. -/
+def replayForkChoice {preset : Preset} {fork : Fork} (config : Config) (checks : SignatureChecks)
+    (anchorState : BeaconState preset fork) (anchorBlock : BeaconBlock preset fork)
+    (steps : ByteArray) : Result (Store preset fork × ByteArray) := do
   let mut store ← runForkChoice (getForkchoiceStore config anchorState anchorBlock)
   let mut fcr := getFastConfirmationStore store
   let mut out := ByteArray.empty
@@ -376,6 +366,24 @@ def forkChoiceExport (name fork anchorState anchorBlock steps replacements : Byt
       out := out.push 0 ++ record
     | .error e =>
       out := out ++ rejection e
-  return out
+  return (store, out)
+
+/-- The outcome of each step of a fork choice case, from an anchor state and an anchor block.
+
+The preset, the configuration and the fork are named in UTF-8.
+
+The signature checks run unless the last argument is false.
+
+From Gloas the node on which a proposer builds is not yet specified here, so that read fails. -/
+@[export eth_consensus_fork_choice]
+def forkChoiceExport (name fork anchorState anchorBlock steps replacements : ByteArray)
+    (verify : Bool) : Result ByteArray := do
+  let preset ← presetOf (← nameOf name)
+  let fork ← forkOf fork
+  let config ← configWith name replacements
+  let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
+  let anchorState ← decodeInput (BeaconState preset fork) anchorState
+  let anchorBlock ← decodeInput (BeaconBlock preset fork) anchorBlock
+  return (← replayForkChoice config checks anchorState anchorBlock steps).2
 
 end EthLib.Consensus.Exports

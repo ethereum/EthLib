@@ -860,4 +860,7 @@
 #define DOC_engine_prepare_execution_payload \
   "From Bellatrix to Fulu: the forkchoice update of a proposer, as JSON text."
 
+#define DOC_engine_prepare_execution_payload_gloas \
+  "From Gloas: the forkchoice update of a proposer, as JSON text."
+
 #endif /* ETHLIB_DOCSTRINGS_H */
