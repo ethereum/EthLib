@@ -3213,10 +3213,16 @@
       {"constructor": "invalidColumns", "code": 33},
       {"constructor": "unknownPayloadVotes", "code": 34},
       {"constructor": "pendingNode", "code": 35},
-      {"constructor": "notPreviousSlot", "code": 36}]}],
+      {"constructor": "notPreviousSlot", "code": 36},
+      {"constructor": "invalidAttestationIndex", "code": 37},
+      {"constructor": "sameSlotPayloadVote", "code": 38},
+      {"constructor": "payloadNotVerified", "code": 39},
+      {"constructor": "notInPtc", "code": 40},
+      {"constructor": "ptcVoteNotCurrent", "code": 41},
+      {"constructor": "invalidPayloadAttestation", "code": 42}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "The outcome of each step of a fork choice case, from an anchor state and an anchor block.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nThe signature checks run unless the last argument is false.\n\nFrom Gloas the store starts and gives its head.\n\nFrom Gloas a block, a vote or the node on which a proposer builds is not yet specified here.\n\nSo such a step fails from Gloas."},
+   "The outcome of each step of a fork choice case, from an anchor state and an anchor block.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nThe signature checks run unless the last argument is false.\n\nFrom Gloas the store starts, gives its head, and takes attestations and attester slashings.\n\nFrom Gloas a block or the node on which a proposer builds is not yet specified here.\n\nSo such a step fails from Gloas."},
   {"summary":
    "Validate the messages of a topic in turn, against the store of an anchor and later blocks.",
    "signature":
@@ -3261,7 +3267,13 @@
       {"constructor": "invalidColumns", "code": 33},
       {"constructor": "unknownPayloadVotes", "code": 34},
       {"constructor": "pendingNode", "code": 35},
-      {"constructor": "notPreviousSlot", "code": 36}]}],
+      {"constructor": "notPreviousSlot", "code": 36},
+      {"constructor": "invalidAttestationIndex", "code": 37},
+      {"constructor": "sameSlotPayloadVote", "code": 38},
+      {"constructor": "payloadNotVerified", "code": 39},
+      {"constructor": "notInPtc", "code": 40},
+      {"constructor": "ptcVoteNotCurrent", "code": 41},
+      {"constructor": "invalidPayloadAttestation", "code": 42}]}],
    "error_class": "ForkChoiceError",
    "docstring":
    "Validate the messages of a topic in turn, against the store of an anchor and later blocks.\n\nFrom Gloas no topic is specified here yet."},

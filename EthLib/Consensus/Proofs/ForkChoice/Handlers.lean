@@ -25,6 +25,14 @@ At Bellatrix the first payload passes exactly when it follows a terminal block o
 A known block leaves the store as it was.
 
 An attestation leaves each voter not marked as an equivocator a vote at its target epoch or later.
+
+From Gloas the vote of an attestation on the payload passes exactly in the three allowed cases.
+
+From Gloas a block also records whether it came before the votes of the payload committee.
+
+A vote of the payload committee sets the votes of its validator at each of its positions.
+
+Such a vote for another slot than its block's, or carried by a block at slot 0, changes nothing.
 -/
 
 @[expose] public section
@@ -34,6 +42,40 @@ namespace EthLib.Consensus
 open Base Uint64 Serialization.Ssz
 
 variable {preset : Preset} {fork : Fork}
+
+/-- Setting the votes at some positions leaves every other position as it was. -/
+theorem setPtcVotes_get_of_not_mem {n : Nat} {votes : Vector (Option Bool) n}
+    {positions : List (Fin n)} {value : Bool} {position : Fin n} (notMem : position ∉ positions) :
+    (setPtcVotes votes positions value)[position] = votes[position] := by
+  unfold setPtcVotes
+  induction positions generalizing votes with
+  | nil => rfl
+  | cons p rest ih =>
+    rw [List.foldl_cons, ih (fun h => notMem (List.mem_cons_of_mem _ h))]
+    have other : p.val ≠ position.val := fun same => notMem (by simp [Fin.ext same])
+    simp [Fin.getElem_fin, other]
+
+/-- Setting the votes at some positions puts the value at each of them. -/
+theorem setPtcVotes_get_of_mem {n : Nat} {votes : Vector (Option Bool) n}
+    {positions : List (Fin n)} {value : Bool} {position : Fin n} (mem : position ∈ positions) :
+    (setPtcVotes votes positions value)[position] = some value := by
+  induction positions generalizing votes with
+  | nil => cases mem
+  | cons first rest ih =>
+    by_cases later : position ∈ rest
+    · exact ih later
+    · obtain rfl : position = first := by simpa [later] using mem
+      -- No later position writes this one again.
+      have step : setPtcVotes votes (position :: rest) value =
+          setPtcVotes (votes.set position.val (some value) position.isLt) rest value := rfl
+      rw [step, setPtcVotes_get_of_not_mem later]
+      simp [Fin.getElem_fin]
+
+/-- The positions of a validator in a committee are the positions that hold it. -/
+theorem mem_ptcPositions {committee : PayloadTimelinessCommittee preset}
+    {validator : ValidatorIndex} {position : Fin preset.PTC_SIZE.toNat} :
+    position ∈ ptcPositions committee validator ↔ committee[position] = validator := by
+  simp [ptcPositions]
 
 namespace Store
 
@@ -314,10 +356,33 @@ theorem recordBlockTimeliness_frame {root : Root} {after : Store preset fork}
     (recorded : store.recordBlockTimeliness config root = .ok after) :
     store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates := by
   unfold recordBlockTimeliness at recorded
-  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at recorded
+  simp only [bind_ok_iff, pure, Except.pure] at recorded
   obtain ⟨_, _, _, _, _, _, _, _, recorded⟩ := recorded
-  subst recorded
-  exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl⟩
+  split at recorded
+  · simp only [bind_ok_iff, Except.ok.injEq] at recorded
+    obtain ⟨_, _, rfl⟩ := recorded
+    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl⟩
+  · cases recorded
+    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl⟩
+
+/-- From Gloas a recorded block also gets whether it came before the payload committee's deadline.
+
+That holds when the clock is in the block's slot, before the deadline of those votes. -/
+theorem recordBlockTimeliness_ptc {root : Root} {after : Store preset fork}
+    (gloas : .glamsterdam ≤ fork)
+    (recorded : store.recordBlockTimeliness config root = .ok after) :
+    ∃ block current time deadline, store.blocks[root]? = some block ∧
+      store.getCurrentSlot config = .ok current ∧ store.getTimeIntoSlotMs config = .ok time ∧
+      getPayloadAttestationDueMs config = .ok deadline ∧
+      (after.ptcTimeliness gloas)[root]? =
+        some (decide (current = block.slot ∧ time < deadline)) := by
+  unfold recordBlockTimeliness at recorded
+  simp only [bind_ok_iff, pure, Except.pure] at recorded
+  obtain ⟨block, found, time, timeOk, _, _, current, currentOk, recorded⟩ := recorded
+  simp only [gloas, ↓reduceDIte, bind_ok_iff, Except.ok.injEq, mapError_ok_iff] at recorded
+  obtain ⟨deadline, deadlineOk, rfl⟩ := recorded
+  exact ⟨block, current, time, deadline, block_ok_iff.mp found, currentOk, timeOk, deadlineOk,
+    by simp⟩
 
 /-- Updating the boost changes only the boosted root. -/
 theorem updateProposerBoostRoot_frame {head root : Root} {after : Store preset fork}
@@ -763,6 +828,117 @@ theorem onAttestation_voted {checks : SignatureChecks} {attestation : Attestatio
     · cases g : getIndexedAttestation targetState attestation <;> simp_all [Except.mapError]
     · exact foldl_recordVote _ _ voted honest
   · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at attested
+
+/-- From Gloas the vote of an attestation on the payload passes exactly in three cases.
+
+Its index is 0 or 1, it is 0 in the slot of the block, and 1 only with a verified payload. -/
+theorem validatePayloadVote_ok_iff {gloas : .glamsterdam ≤ fork}
+    {attestation : Attestation preset fork} {voted : BeaconBlock preset fork} :
+    store.validatePayloadVote gloas attestation voted = .ok () ↔
+      (attestation.data.index = 0 ∨ attestation.data.index = 1) ∧
+      (voted.slot = attestation.data.slot → attestation.data.index = 0) ∧
+      (attestation.data.index = 1 →
+        store.isPayloadVerified gloas attestation.data.beaconBlockRoot = true) := by
+  unfold validatePayloadVote
+  dsimp only
+  have failed : ∀ {e : ForkChoiceError}, (throw e : Except ForkChoiceError Unit) ≠ .ok () :=
+    fun h => by simp [throw, throwThe, MonadExceptOf.throw] at h
+  split
+  next bad =>
+    refine ⟨fun h => absurd h failed, fun ⟨range, _⟩ => ?_⟩
+    rcases range with zero | one
+    · exact absurd zero bad.1
+    · exact absurd one bad.2
+  next bad =>
+  split
+  next same => exact ⟨fun h => absurd h failed, fun ⟨_, zero, _⟩ => absurd (zero same.1) same.2⟩
+  next same =>
+  split
+  next unverified =>
+    refine ⟨fun h => absurd h failed, fun ⟨_, _, verified⟩ => ?_⟩
+    have notVerified := unverified.2
+    rw [verified unverified.1] at notVerified
+    exact absurd notVerified (by decide)
+  next unverified =>
+  refine ⟨fun _ => ⟨?_, fun slot => ?_, fun one => ?_⟩, fun _ => rfl⟩
+  · exact Classical.byContradiction fun range =>
+      bad ⟨fun h => range (.inl h), fun h => range (.inr h)⟩
+  · exact Classical.byContradiction fun ne => same ⟨slot, ne⟩
+  · cases verified : store.isPayloadVerified gloas attestation.data.beaconBlockRoot
+    · exact absurd ⟨one, by simp [verified]⟩ unverified
+    · rfl
+
+/-- A vote of the payload committee for another slot than its block's changes nothing. -/
+theorem onPayloadAttestationMessage_of_other_slot {checks : SignatureChecks}
+    {gloas : .glamsterdam ≤ fork} {message : PayloadAttestationMessage} {isFromBlock : Bool}
+    {state : BeaconState preset fork}
+    (found : store.blockStates[message.data.beaconBlockRoot]? = some state)
+    (other : message.data.slot ≠ state.slot) :
+    store.onPayloadAttestationMessage config checks gloas message isFromBlock = .ok store := by
+  simp [onPayloadAttestationMessage, blockState, found, other, bind, Except.bind, pure,
+    Except.pure]
+
+/-- A vote of the payload committee from a block does not read the signature checks. -/
+theorem onPayloadAttestationMessage_from_block {checks checks' : SignatureChecks}
+    {gloas : .glamsterdam ≤ fork} {message : PayloadAttestationMessage} :
+    store.onPayloadAttestationMessage config checks gloas message true =
+      store.onPayloadAttestationMessage config checks' gloas message true := by
+  simp [onPayloadAttestationMessage]
+
+/-- An accepted vote of the payload committee for the slot of its block sets its votes.
+
+The validator holds at least one position in the committee of that slot.
+
+At each of its positions, the store then holds both values of the vote for that block. -/
+theorem onPayloadAttestationMessage_votes {checks : SignatureChecks}
+    {gloas : .glamsterdam ≤ fork} {message : PayloadAttestationMessage} {isFromBlock : Bool}
+    {state : BeaconState preset fork} {after : Store preset fork}
+    (found : store.blockStates[message.data.beaconBlockRoot]? = some state)
+    (same : message.data.slot = state.slot)
+    (accepted : store.onPayloadAttestationMessage config checks gloas message isFromBlock =
+      .ok after) :
+    ∃ ptc timeliness availability, getPtc config state gloas message.data.slot = .ok ptc ∧
+      ptcPositions ptc message.validatorIndex ≠ [] ∧
+      (after.payloadTimelinessVote gloas)[message.data.beaconBlockRoot]? = some timeliness ∧
+      (after.payloadDataAvailabilityVote gloas)[message.data.beaconBlockRoot]? =
+        some availability ∧
+      ∀ position ∈ ptcPositions ptc message.validatorIndex,
+        timeliness[position] = some message.data.payloadPresent ∧
+        availability[position] = some message.data.blobDataAvailable := by
+  unfold onPayloadAttestationMessage at accepted
+  rw [bind_ok_iff] at accepted
+  obtain ⟨_, stateOk, accepted⟩ := accepted
+  rw [blockState_ok_iff, found, Option.some.injEq] at stateOk
+  subst stateOk
+  simp only [same, ne_eq, not_true_eq_false, ↓reduceIte, bind_ok_iff, mapError_ok_iff] at accepted
+  obtain ⟨ptc, ptcOk, first, firstOk, accepted⟩ := accepted
+  have nonempty : ptcPositions ptc message.validatorIndex ≠ [] := by
+    intro empty
+    simp [empty, throw, throwThe, MonadExceptOf.throw] at firstOk
+  -- Both kinds of vote end with the same record of the votes.
+  replace accepted :
+      store.recordPtcVotes gloas message.data (ptcPositions ptc message.validatorIndex) =
+        .ok after := by
+    cases isFromBlock
+    · simp only [Bool.false_eq_true, ↓reduceIte, bind_ok_iff] at accepted
+      obtain ⟨_, -, accepted⟩ := accepted
+      exact accepted
+    · simpa using accepted
+  unfold recordPtcVotes at accepted
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at accepted
+  obtain ⟨timeliness, -, availability, -, rfl⟩ := accepted
+  refine ⟨ptc, setPtcVotes timeliness (ptcPositions ptc message.validatorIndex)
+    message.data.payloadPresent, setPtcVotes availability
+    (ptcPositions ptc message.validatorIndex) message.data.blobDataAvailable,
+    same ▸ ptcOk, nonempty, by simp, by simp, fun position mem =>
+    ⟨setPtcVotes_get_of_mem mem, setPtcVotes_get_of_mem mem⟩⟩
+
+/-- The votes of the payload committee in a block change nothing at slot 0. -/
+theorem notifyPtcMessages_of_zero {checks : SignatureChecks} {gloas : .glamsterdam ≤ fork}
+    {state : BeaconState preset fork} {attestations : List (PayloadAttestation preset)}
+    (zero : state.slot = 0) :
+    store.notifyPtcMessages config checks gloas state attestations = .ok store := by
+  simp [notifyPtcMessages, zero, pure, Except.pure]
 
 end Store
 

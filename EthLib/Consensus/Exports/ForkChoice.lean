@@ -227,9 +227,9 @@ The preset, the configuration and the fork are named in UTF-8.
 
 The signature checks run unless the last argument is false.
 
-From Gloas the store starts and gives its head.
+From Gloas the store starts, gives its head, and takes attestations and attester slashings.
 
-From Gloas a block, a vote or the node on which a proposer builds is not yet specified here.
+From Gloas a block or the node on which a proposer builds is not yet specified here.
 
 So such a step fails from Gloas. -/
 @[export eth_consensus_fork_choice]
