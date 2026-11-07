@@ -15,6 +15,7 @@ What is proved about RIPEMD-160:
 - Padding fills whole blocks, with the least zeros that do, and keeps the message and the `0x80` byte in place.
 - Every digest is 20 bytes.
 - One block's compression, read as 32-bit vectors, is the compression of a model of the pseudo-code.
+- The hash of every message is the hash of the model, with no bound on the length of the message.
 
 The model follows the authors' pseudo-code over 32-bit vectors.
 
@@ -24,7 +25,11 @@ It reads each message word with its least significant byte first, as MD4 does (R
 
 It shares only the constants `K` and `K'`, the word orders and the rotation amounts with the code.
 
-No theorem states the whole hash, with its padding and its chain of blocks, against the model.
+The model pads the message as MD4 does (RFC 1320 §3.1 and §3.2).
+
+It runs the blocks from its own initial value.
+
+Its digest puts the least significant byte of each word first.
 
 The Python tests of the bindings check the hash against the published test vectors.
 -/
@@ -104,6 +109,48 @@ def inputWords (block : ByteArray) (start : Nat) (whole : start + 64 ≤ block.s
   Vector.ofFn fun i =>
     block[start + 4 * i.val + 3].toBitVec ++ block[start + 4 * i.val + 2].toBitVec ++
       block[start + 4 * i.val + 1].toBitVec ++ block[start + 4 * i.val].toBitVec
+
+/-- The initial value `h0` to `h4` of the pseudo-code. -/
+def initial : Vector Word 5 := #v[0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0]
+
+/-- The least number of zero bytes after the `0x80` byte that leaves the length 56 modulo 64.
+
+RFC 1320 §3.1 appends a set bit, then zero bits up to a length of 448 modulo 512.
+
+The message is whole bytes, so the set bit and the seven zero bits after it are the byte `0x80`. -/
+def zeroCount (size : Nat) : Nat := (119 - size % 64) % 64
+
+/-- The padded message of RFC 1320 §3.1 and §3.2.
+
+It is the message, `0x80`, zeros, and the low 64 bits of the bit length.
+
+The length bytes put the least significant byte first, as RFC 1320 §2 and §3.2 do. -/
+def padded (message : ByteArray) : ByteArray :=
+  ⟨message.data ++ #[0x80] ++ Array.replicate (zeroCount message.size) 0 ++
+    Array.ofFn fun i : Fin 8 => UInt8.ofNat (message.size * 8 % 2 ^ 64 / 2 ^ (8 * i.val) % 256)⟩
+
+/-- The chaining variable after the first `count` blocks of a message, from a chaining variable.
+
+This is the outer loop `for i := 0 to t-1` of the pseudo-code. -/
+def blocks (message : ByteArray) (h : Vector Word 5) :
+    (count : Nat) → 64 * count ≤ message.size → Vector Word 5
+  | 0, _ => h
+  | count + 1, within =>
+    compression (inputWords message (64 * count) (by omega)) (blocks message h count (by omega))
+
+/-- The hash result as twenty bytes: `h0` to `h4`, each word least significant byte first.
+
+The paper takes the last chaining variable as the hash result.
+
+The byte order is the one of MD4 (RFC 1320 §3.5), which the test values of the paper pin. -/
+def digest (h : Vector Word 5) : ByteArray :=
+  ⟨Array.ofFn fun i : Fin 20 =>
+    UInt8.ofNat ((h[i.val / 4]'(by omega)).toNat / 2 ^ (8 * (i.val % 4)) % 256)⟩
+
+/-- RIPEMD-160 of a message: pad it, run every block from the initial value, and read the digest. -/
+def hash (message : ByteArray) : ByteArray :=
+  let input := padded message
+  digest (blocks input initial (input.size / 64) (Nat.mul_div_le input.size 64))
 
 end Spec
 
@@ -538,5 +585,86 @@ theorem pad_length_suffix (message : ByteArray) :
 /-- Every digest is 20 bytes long, whatever the message. -/
 @[simp] theorem hash_size (message : ByteArray) : (hash message).size = 20 := by
   simp only [hash, digest, ByteArray.size, Array.size_ofFn]
+
+/-- Byte `i` of the length is digit `i` in base 256 of the low 64 bits of the bit length. -/
+theorem lengthBytes_digit (size : Nat) (i : Fin 8) :
+    ((lengthBytes size)[i.val]'(by simp)).toNat = size * 8 % 2 ^ 64 / 2 ^ (8 * i.val) % 256 := by
+  have offset : (8 * UInt64.ofNat i.val).toNat = 8 * i.val := by
+    simp [UInt64.toNat_mul, UInt64.toNat_ofNat]
+    omega
+  simp only [lengthBytes, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn,
+    UInt64.toNat_toUInt8, UInt64.toNat_shiftRight, offset]
+  -- The conversion and the multiplication both reduce modulo `2^64`.
+  have bits : (UInt64.ofNat size * 8).toNat = size * 8 % 2 ^ 64 := by
+    rw [UInt64.toNat_mul, UInt64.toNat_ofNat', UInt64.toNat_ofNat, ← Nat.mul_mod]
+  rw [bits, Nat.mod_eq_of_lt (show 8 * i.val < 64 by omega), Nat.shiftRight_eq_div_pow]
+
+/-- The padding is the one of RFC 1320 §3.1 and §3.2, for every message. -/
+theorem pad_eq_spec (message : ByteArray) : pad message = Spec.padded message := by
+  have zeros : paddingZeros message.size = Spec.zeroCount message.size := by
+    unfold paddingZeros Spec.zeroCount
+    omega
+  have length : (lengthBytes message.size).data =
+      Array.ofFn fun i : Fin 8 =>
+        UInt8.ofNat (message.size * 8 % 2 ^ 64 / 2 ^ (8 * i.val) % 256) := by
+    apply Array.ext
+    · exact (lengthBytes_size message.size).trans Array.size_ofFn.symm
+    · intro p left right
+      apply UInt8.toNat_inj.mp
+      simpa [ByteArray.getElem_eq_getElem_data] using
+        lengthBytes_digit message.size ⟨p, by simpa using left⟩
+  -- The message, the `0x80` byte, the zeros and the length agree region by region.
+  apply ByteArray.ext
+  simp [pad, Spec.padded, zeros, length, ByteArray.data_append, ByteArray.push]
+
+/-- The initial value of the code is the one of the model. -/
+theorem IV_toBitVec : IV.map UInt32.toBitVec = Spec.initial := by
+  decide +kernel
+
+/-- The compression of the first `count` blocks, in order, is the chain of blocks of the model. -/
+theorem foldl_compress_toBitVec (bytes : ByteArray) (h : Vector UInt32 5) (count : Nat)
+    (whole : 64 * count ≤ bytes.size) :
+    (Fin.foldl count (fun state i => compress state bytes (64 * i.val) (by omega)) h).map
+        UInt32.toBitVec =
+      Spec.blocks bytes (h.map UInt32.toBitVec) count whole := by
+  induction count with
+  | zero => simp [Spec.blocks]
+  | succ count ih =>
+    -- The last block runs on the chaining variable of the blocks before it.
+    rw [Fin.foldl_succ_last, compress_toBitVec, Spec.blocks, ← ih (by omega)]
+    rfl
+
+/-- The digest is the model's digest. -/
+theorem digest_eq_spec (state : Vector UInt32 5) :
+    digest state = Spec.digest (state.map UInt32.toBitVec) := by
+  apply ByteArray.ext
+  apply Array.ext
+  · simp [digest, Spec.digest]
+  · intro i _ _
+    apply UInt8.toNat_inj.mp
+    -- Each byte is one base-256 digit of its word.
+    simp [digest, Spec.digest, UInt32.toNat_shiftRight, Nat.shiftRight_eq_div_pow,
+      UInt32.toNat_mul, UInt32.toNat_ofNat]
+    rw [Nat.mod_eq_of_lt (show 8 * (i % 4) < 32 by omega)]
+
+/--
+RIPEMD-160 is the hash of the authors' pseudo-code with the padding of MD4, for every message.
+
+The code and the model both take the low 64 bits of the bit length, as RFC 1320 §3.2 does.
+
+So the statement bounds no message length.
+-/
+theorem hash_eq_spec (message : ByteArray) : hash message = Spec.hash message := by
+  -- The padded bytes are the model's, and the chain of blocks then runs over them.
+  have padded : ∀ bytes, bytes = Spec.padded message →
+      ∀ within : ∀ i : Fin (bytes.size / 64), 64 * i.val + 64 ≤ bytes.size,
+        digest (Fin.foldl (bytes.size / 64)
+          (fun state i => compress state bytes (64 * i.val) (within i)) IV) =
+          Spec.hash message := by
+    intro bytes same within
+    subst same
+    rw [digest_eq_spec, foldl_compress_toBitVec _ _ _ (Nat.mul_div_le _ 64), IV_toBitVec,
+      Spec.hash]
+  exact padded (pad message) (pad_eq_spec message) _
 
 end EthLib.Cryptography.Hash.Ripemd160
