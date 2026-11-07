@@ -78,6 +78,7 @@ CONTAINERS = {
     "Withdrawal": ("capella", None),
     "ExecutionPayload": ("bellatrix", None),
     "ExecutionPayloadHeader": ("bellatrix", "gloas"),
+    "PowBlock": ("bellatrix", None),
     "Builder": ("gloas", None),
     "BuilderPendingPayment": ("gloas", None),
     "BuilderPendingWithdrawal": ("gloas", None),

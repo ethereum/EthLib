@@ -29,7 +29,7 @@ The release repeats the same cases for Gloas and Heze, with only the fork name c
 
 The directory `ssz_static/` holds static SSZ cases of the containers that EthLib defines.
 A case gives the bytes of a container, compressed with Snappy, and the root of its value.
-They are copied byte for byte under their path in `minimal.tar.gz` and `mainnet.tar.gz`, from Phase 0 to Fulu.
+They are copied byte for byte under their path in `minimal.tar.gz` and `mainnet.tar.gz`, from Phase 0 to Heze.
 From each archive the directory keeps the first case of each suite.
 It keeps the files `serialized.ssz_snappy` and `roots.yaml` of each case, and leaves out `value.yaml`.
 `bindings/python/tests/consensus/test_ssz_static.py` decodes each case in Lean, then checks the root and the bytes encoded again.

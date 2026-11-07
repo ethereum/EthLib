@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Containers.PowBlock
 public import EthLib.Consensus.DataAvailability.Column
 public import EthLib.Consensus.ForkChoice.Head
 public import EthLib.Consensus.InclusionListCommittee
@@ -59,21 +60,6 @@ namespace EthLib.Consensus
 open Base Uint64 Serialization.Ssz Cryptography.Kzg
 
 variable {preset : Preset} {fork : Fork}
-
-/-- A block of the proof-of-work chain, with the total difficulty of its chain. -/
-structure PowBlock where
-  /-- The hash of the block. -/
-  blockHash : Hash32
-  /-- The hash of its parent. -/
-  parentHash : Hash32
-  /-- The total difficulty of the chain up to the block. -/
-  totalDifficulty : U256
-  deriving DecidableEq, Repr
-
-instance : SszType PowBlock :=
-  .container ["block_hash", "parent_hash", "total_difficulty"]
-    (fun b => (b.blockHash, b.parentHash, b.totalDifficulty))
-    (fun (blockHash, parentHash, totalDifficulty) => ⟨blockHash, parentHash, totalDifficulty⟩)
 
 /-- What a node asks outside the beacon chain to judge a block. -/
 structure BlockSources (preset : Preset) (fork : Fork) where

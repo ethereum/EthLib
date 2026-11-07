@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Containers.Execution
+public import EthLib.Consensus.Containers.PowBlock
 public import EthLib.Serialization.Proofs.Ssz.Typed.Basic
 public import EthLib.Serialization.Proofs.Ssz.Typed.Collections
 public import EthLib.Serialization.Proofs.Ssz.Typed.ForkKind
@@ -26,6 +27,8 @@ So its bytes and its root are those of that plain list of fields.
 Before Gloas, the header of a payload has the root of the payload.
 
 Each list gives way to its own root, which leaves the root unchanged.
+
+A withdrawal and a block of proof of work are lawful containers too.
 -/
 
 @[expose] public section
@@ -35,6 +38,9 @@ namespace EthLib.Consensus
 open Base Serialization.Ssz SszType
 
 instance : LawfulSszType Withdrawal :=
+  .container (by decide) (fun _ => rfl) (fun _ => rfl)
+
+instance : LawfulSszType PowBlock :=
   .container (by decide) (fun _ => rfl) (fun _ => rfl)
 
 namespace ExecutionPayload

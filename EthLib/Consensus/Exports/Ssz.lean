@@ -8,6 +8,7 @@ public import EthLib.Consensus.Containers.Execution
 public import EthLib.Consensus.Containers.InclusionList
 public import EthLib.Consensus.Containers.Operations
 public import EthLib.Consensus.Containers.PayloadAttestation
+public import EthLib.Consensus.Containers.PowBlock
 public import EthLib.Consensus.Containers.ProposerPreferences
 public import EthLib.Consensus.Containers.Requests
 public import EthLib.Consensus.Containers.Signing
@@ -142,6 +143,7 @@ def containerOf (preset : Preset) (fork : Fork) : String → Option Container
   | "PartialDataColumnGroupID" =>
     if .fusaka ≤ fork ∧ fork < .glamsterdam then some ⟨PartialDataColumnGroupID⟩ else none
   | "Withdrawal" => if .shapella ≤ fork then some ⟨Withdrawal⟩ else none
+  | "PowBlock" => if .bellatrix ≤ fork then some ⟨PowBlock⟩ else none
   | "ExecutionPayload" =>
     if .bellatrix ≤ fork then some ⟨ExecutionPayload preset fork⟩ else none
   | "ExecutionPayloadHeader" =>
@@ -188,7 +190,7 @@ def specifiedFromGlamsterdam : List String := [
   "ContributionAndProof", "SignedContributionAndProof", "SyncAggregatorSelectionData",
   "HistoricalSummary", "BLSToExecutionChange", "SignedBLSToExecutionChange", "PendingDeposit",
   "PendingPartialWithdrawal", "PendingConsolidation", "DepositRequest", "WithdrawalRequest",
-  "ConsolidationRequest", "Withdrawal", "Builder", "BuilderPendingPayment",
+  "ConsolidationRequest", "Withdrawal", "PowBlock", "Builder", "BuilderPendingPayment",
   "BuilderPendingWithdrawal", "BuilderDepositRequest", "BuilderExitRequest",
   "PayloadAttestationData", "PayloadAttestationMessage", "ProposerPreferences",
   "SignedProposerPreferences", "InclusionList", "SignedInclusionList",
