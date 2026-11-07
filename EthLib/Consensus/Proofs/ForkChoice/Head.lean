@@ -121,31 +121,6 @@ theorem chooseHeaviest_eq_none {weighted : List WeightedNode} :
     chooseHeaviest weighted = none ↔ weighted = [] := by
   cases weighted <;> simp [chooseHeaviest]
 
-/-- An element of a monadic flat map comes from the list of one element, and each such counts. -/
-theorem mem_of_flatMapM_ok {α β ε : Type} {f : α → Except ε (List β)} :
-    ∀ {xs : List α} {ys : List β}, xs.flatMapM f = .ok ys →
-      ∀ y, y ∈ ys ↔ ∃ x ∈ xs, ∃ zs, f x = .ok zs ∧ y ∈ zs
-  | [], ys, h, y => by
-    simp only [List.flatMapM_nil, pure, Except.pure, Except.ok.injEq] at h
-    simp [← h]
-  | x :: xs, ys, h, y => by
-    rw [List.flatMapM_cons, bind_ok_iff] at h
-    obtain ⟨zs, first, h⟩ := h
-    rw [bind_ok_iff] at h
-    obtain ⟨rest, restOk, h⟩ := h
-    simp only [pure, Except.pure, Except.ok.injEq] at h
-    subst h
-    rw [List.mem_append, mem_of_flatMapM_ok restOk]
-    constructor
-    · rintro (mem | ⟨x', mem', zs', ok', mem''⟩)
-      · exact ⟨x, List.mem_cons_self, zs, first, mem⟩
-      · exact ⟨x', List.mem_cons_of_mem _ mem', zs', ok', mem''⟩
-    · rintro ⟨x', mem', zs', ok', mem''⟩
-      rcases List.mem_cons.mp mem' with rfl | mem'
-      · rw [first, Except.ok.injEq] at ok'
-        exact .inl (ok' ▸ mem'')
-      · exact .inr ⟨x', mem', zs', ok', mem''⟩
-
 namespace Store
 
 variable {config : Config} {store : Store preset fork}
