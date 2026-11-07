@@ -15,7 +15,9 @@ A node accepts a Status that carries its own version, its own fork identifier an
 
 It accepts a Status exactly when the version matches and the fork identifier passes.
 
-From eth/69 the range must also be valid, and the network ID and genesis hash play no part.
+From eth/69 the range must also be valid.
+
+At every version, the network ID and the genesis hash play no part.
 -/
 
 @[expose] public section
@@ -94,7 +96,7 @@ The Status carries the version of the node, and its fork identifier passes the c
 
 From eth/69, the announced range does not start after it ends.
 
-The network ID and the genesis hash play no part, so a Status with any of them passes. -/
+The conditions do not read the network ID or the genesis hash. -/
 theorem checkStatus_eq_ok_iff {version : EthVersion} {s : Schedule} {number timestamp : Nat}
     {status : Status} :
     checkStatus version s number timestamp status = .ok () ↔
