@@ -32,6 +32,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Examples.CallRevert
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.KeyBranch
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.Assert
 public import EthLib.Execution.Proofs.Evm.Logic.Examples.NoValue
+public import EthLib.Execution.Proofs.Evm.Logic.Examples.Deploy
 
 /-!
 # `EthLib.Execution.Proofs.Evm.Logic`
