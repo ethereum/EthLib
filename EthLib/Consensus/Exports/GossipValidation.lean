@@ -5,6 +5,7 @@ public import EthLib.Cryptography.Exports.Kzg
 public import EthLib.Consensus.Gossip.Attestation
 public import EthLib.Consensus.Gossip.Block
 public import EthLib.Consensus.Gossip.Operations
+public import EthLib.Consensus.Gossip.Payload
 public import EthLib.Consensus.Gossip.ProposerPreferences
 public import EthLib.Consensus.Gossip.Sidecar
 public import EthLib.Consensus.Gossip.SyncCommittee
@@ -25,6 +26,10 @@ The node knows such a block but holds no state after it.
 The state after any other block is the state transition of the state of its parent.
 
 The second byte gives the status of the payload of the block, or 255 for none.
+
+From Gloas a block may come with the signed envelope of its payload, which the store then keeps.
+
+It follows the block as a 4-byte length and that many bytes, and a length of 0 means no envelope.
 
 An optional 40-byte checkpoint, an epoch and a root, replaces the finalized checkpoint.
 
@@ -100,10 +105,12 @@ structure GossipBlockInput where
   status : UInt8
   /-- The SSZ bytes of the signed block. -/
   data : ByteArray
+  /-- The SSZ bytes of the signed envelope of its payload, or none when empty. -/
+  envelope : ByteArray
 
 /-- The blocks that the bytes hold from an offset.
 
-Each block reads at least 6 bytes, so one round more than the bytes suffices. -/
+Each block reads at least 10 bytes, so one round more than the bytes suffices. -/
 def readGossipBlocks : (rounds : Nat) → ByteArray → Nat → Result (List GossipBlockInput)
   | 0, _, _ => throw (0, "blocks do not end")
   | rounds + 1, bytes, offset =>
@@ -112,16 +119,33 @@ def readGossipBlocks : (rounds : Nat) → ByteArray → Nat → Result (List Gos
     else do
       let length := (← decodeInput UInt32 (bytes.extract (offset + 2) (offset + 6))).toNat
       let stop := offset + 6 + length
-      if bytes.size < stop then throw (0, "the bytes of a block are cut short")
-      let rest ← readGossipBlocks rounds bytes stop
+      if bytes.size < stop + 4 then throw (0, "the bytes of a block are cut short")
+      let envelopeLength := (← decodeInput UInt32 (bytes.extract stop (stop + 4))).toNat
+      let next := stop + 4 + envelopeLength
+      if bytes.size < next then throw (0, "the bytes of an envelope are cut short")
+      let rest ← readGossipBlocks rounds bytes next
       return ⟨bytes[offset]'(by omega), bytes[offset + 1]'(by omega),
-        bytes.extract (offset + 6) stop⟩ :: rest
+        bytes.extract (offset + 6) stop, bytes.extract (stop + 4) next⟩ :: rest
+
+/-- The store with the envelope of the payload of a block, from Gloas, when there is one.
+
+The envelope was verified when it arrived, so the store keeps it by the root of the block. -/
+def importGossipEnvelope {preset : Preset} {fork : Fork} (store : Store preset fork)
+    (root : Root) (bytes : ByteArray) : Result (Store preset fork) := do
+  if bytes.isEmpty then return store
+  if gloas : .glamsterdam ≤ fork then
+    let signed ← decodeInput (SignedExecutionPayloadEnvelope preset fork) bytes
+    let payloads := (store.payloads gloas).insert root signed.message
+    return { store with payloads := fun _ => payloads }
+  else throw (0, "a block has the envelope of a payload only from Gloas")
 
 /-- The store and the statuses after a block that follows the anchor.
 
 A failed or a pending block joins the known blocks only.
 
-Another block also gets its state, by the state transition of the state of its parent. -/
+Another block also gets its state, by the state transition of the state of its parent.
+
+From Gloas the store also keeps the envelope of its payload, when there is one. -/
 def importGossipBlock {preset : Preset} {fork : Fork} (config : Config)
     (checks : SignatureChecks) (store : Store preset fork) (statuses : PayloadStatuses)
     (input : GossipBlockInput) : Result (Store preset fork × PayloadStatuses) := do
@@ -129,6 +153,7 @@ def importGossipBlock {preset : Preset} {fork : Fork} (config : Config)
   let root ← runSsz "block rejected" (SszType.hashTreeRoot signed.message)
   let statuses := if input.status = 255 then statuses else statuses.insert root input.status
   let store := { store with blocks := store.blocks.insert root signed.message }
+  let store ← importGossipEnvelope store root input.envelope
   if input.kind ≠ 0 then return (store, statuses)
   let parentState ← runForkChoice (store.blockState signed.message.parentRoot)
   let state ← runForkChoice
@@ -141,7 +166,9 @@ The sync committee has topics from Altair, and changes of BLS credentials from C
 
 Blob sidecars travel at Deneb and Electra, and column sidecars at Fulu.
 
-At Gloas only the preferences of proposers are specified here, and at Heze no topic yet. -/
+At Gloas three topics are specified here: proposer preferences, envelopes and payload votes.
+
+At Heze no topic is specified yet. -/
 def gossipValidationSpecified (fork : Fork) : String → Bool
   | "attester_slashing" | "proposer_slashing" | "voluntary_exit" | "beacon_block"
   | "beacon_attestation" | "beacon_aggregate_and_proof" => fork < .glamsterdam
@@ -150,7 +177,8 @@ def gossipValidationSpecified (fork : Fork) : String → Bool
   | "bls_to_execution_change" => .shapella ≤ fork && fork < .glamsterdam
   | "blob_sidecar" => .dencun ≤ fork && fork < .fusaka
   | "data_column_sidecar" | "partial_data_column_sidecar" => .fusaka ≤ fork && fork < .glamsterdam
-  | "proposer_preferences" => .glamsterdam ≤ fork && fork < .hegota
+  | "proposer_preferences" | "execution_payload" | "payload_attestation_message" =>
+    .glamsterdam ≤ fork && fork < .hegota
   | _ => false
 
 /-- The outcome of one message of a topic, and the keys seen after it.
@@ -245,6 +273,20 @@ def validateGossipInput {preset : Preset} {fork : Fork} (config : Config)
         signed input.currentTimeMs)
       return record outcome (·.recordProposerPreferences signed)
     else throw (0, "the preferences of proposers travel only from Gloas")
+  | "execution_payload" =>
+    let signed ← decodeInput (SignedExecutionPayloadEnvelope preset fork) input.data
+    if gloas : .glamsterdam ≤ fork then
+      let outcome ← runForkChoice
+        (validateExecutionPayloadEnvelope config checks seen store gloas signed)
+      return record outcome (·.recordExecutionPayloadEnvelope signed)
+    else throw (0, "the envelopes of payloads travel only from Gloas")
+  | "payload_attestation_message" =>
+    let message ← decodeInput PayloadAttestationMessage input.data
+    if gloas : .glamsterdam ≤ fork then
+      let outcome ← runForkChoice (validatePayloadAttestationMessage config checks seen store
+        gloas message input.currentTimeMs)
+      return record outcome (·.recordPayloadAttestationMessage message)
+    else throw (0, "the votes on payloads travel only from Gloas")
   | _ => throw (0, s!"gossip validation of the topic {topic} is not yet specified")
 
 /-- At Fulu: the outcomes of the partial sidecars of a case, after the headers it records first.
@@ -280,7 +322,9 @@ def validatePartialInputs {preset : Preset} {fork : Fork} (config : Config)
 
 /-- Validate the messages of a topic in turn, against the store of an anchor and later blocks.
 
-At Gloas only the preferences of proposers are specified here, and at Heze no topic yet. -/
+At Gloas three topics are specified here: proposer preferences, envelopes and payload votes.
+
+At Heze no topic is specified yet. -/
 @[export eth_consensus_gossip_validation]
 def gossipValidationExport
     (name fork anchorState anchorBlock blocks finalized topic messages replacements : ByteArray)

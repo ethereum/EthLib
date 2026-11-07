@@ -1,0 +1,11 @@
+topic: execution_payload
+blocks:
+- {block: 
+    block_0x9f87a12d020fe5f111a8e388f428594715e83c39314fecf4b523dd7da27848b5}
+- {block: 
+    block_0xdca934c46061b174930cccbebed949a5561c2669583171927fba4d12335cd896, 
+    failed: true}
+messages:
+- {message: 
+    execution_payload_envelope_0x1921bee4d9707f70cd59ecd3462e6789f728ae85f45a591367c3325f9e748877,
+  expected: reject, reason: envelope's block failed validation}

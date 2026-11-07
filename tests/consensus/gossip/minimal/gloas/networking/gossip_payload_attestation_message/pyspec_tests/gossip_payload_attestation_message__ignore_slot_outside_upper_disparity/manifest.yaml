@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: networking
+handler: gossip_payload_attestation_message
+suite: pyspec_tests
+case: gossip_payload_attestation_message__ignore_slot_outside_upper_disparity

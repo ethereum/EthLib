@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: networking
+handler: gossip_payload_attestation_message
+suite: pyspec_tests
+case: gossip_payload_attestation_message__reject_validator_index_out_of_range

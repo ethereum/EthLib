@@ -1,0 +1,11 @@
+topic: payload_attestation_message
+blocks:
+- {block: 
+    block_0x9f87a12d020fe5f111a8e388f428594715e83c39314fecf4b523dd7da27848b5}
+- {block: 
+    block_0x2bdd11129831a9f7045c6cba57db119b16c42192f8a0abd3f248bea2f21d15b2}
+messages:
+- {current_time_ms: 12100, message: 
+    payload_attestation_message_0x9ad38eca8dc0317523c603df501a810527f7b2529863e4ec58de7de65db4fedd,
+  expected: ignore, reason: payload attestation's block is not at the assigned 
+    slot}

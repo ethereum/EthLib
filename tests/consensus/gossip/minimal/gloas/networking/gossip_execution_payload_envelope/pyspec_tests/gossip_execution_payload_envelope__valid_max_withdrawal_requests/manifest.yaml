@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: networking
+handler: gossip_execution_payload_envelope
+suite: pyspec_tests
+case: gossip_execution_payload_envelope__valid_max_withdrawal_requests

@@ -191,6 +191,9 @@ It keeps every Fulu case of the partial column topic too.
 A partial message carries some cells of one column and a bitmap of the blobs that they belong to.
 On the first push it also carries the header of its block.
 A case gives a group ID with each message, and may list headers that the node has already validated.
+At Gloas it keeps four cases of the topic of proposer preferences.
+It also keeps every Gloas case of the topics of payload envelopes and of payload votes.
+From Gloas a block of a case may come with the envelope of its payload, which the store keeps.
 `bindings/python/tests/consensus/test_gossip_validation.py` validates each message in Lean and compares the outcome and the reason with the case.
 
 The directory `genesis/` holds every genesis case of `minimal.tar.gz` in the same way.

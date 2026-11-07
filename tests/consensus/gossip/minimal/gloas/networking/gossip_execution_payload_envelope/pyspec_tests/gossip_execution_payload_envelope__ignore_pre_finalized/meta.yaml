@@ -1,0 +1,14 @@
+topic: execution_payload
+blocks:
+- {block: 
+    block_0x9f87a12d020fe5f111a8e388f428594715e83c39314fecf4b523dd7da27848b5}
+- {block: 
+    block_0x2bdd11129831a9f7045c6cba57db119b16c42192f8a0abd3f248bea2f21d15b2}
+finalized_checkpoint:
+  epoch: 2
+  root: '0x29874e204fad82a30293db7910390d39dc70d4e7c5a7302cfbc10a1b8f17dcf4'
+messages:
+- {message: 
+    execution_payload_envelope_0x131ab93ae0a85b4dae8dd199874c24c136c7c8645f3a7b21bb0135cff179e47a,
+  expected: ignore, reason: envelope is from a slot before the latest finalized 
+    slot}
