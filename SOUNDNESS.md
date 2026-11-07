@@ -1101,7 +1101,7 @@ With these distinct keys, `indexedRoot_binding_key` shows that two lists with on
 Otherwise `findCollision` returns a collision in the proofs of that key.
 `indexedRoot_binding` concludes that the two lists are equal, or `findIndexedCollision` returns a collision in the proofs of one index.
 Two transactions, or two withdrawals, with the same bytes are equal, so `transactionsRoot_binding` and `withdrawalsRoot_binding` conclude the same for the lists themselves.
-`receiptsRoot_binding` does so for receipts whose types are 0 or types that the fork has, as the receipt decoder requires.
+`receiptsRoot_binding` does so for receipts whose types are below `0xc0`, which holds for type 0 and for every type that a fork adds.
 No theorem bounds the probability of finding a collision.
 
 An answer of `eth_getProof` (EIP-1186) is checked against a state root by `AccountProof.verify` (`Execution/State/AccountProof.lean`).

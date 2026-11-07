@@ -126,6 +126,63 @@ theorem decodeReceipt_encodeReceipt {type : UInt8} {r : Receipt fork} {bytes : B
         extract_typedBytes, Codec.decode_encode hPayload, Functor.map, Except.map,
         Except.mapError]
 
+/-- The bytes of a receipt are the bytes of its RLP form, or that form after its type. -/
+private theorem encodeReceipt_cases {type : UInt8} {r : Receipt fork} {bytes : ByteArray}
+    (h : encodeReceipt type r = .ok bytes) :
+    (type = 0 ∧ Codec.encode r = .ok bytes) ∨
+      (type ≠ 0 ∧ ∃ payload, Codec.encode r = .ok payload ∧ bytes = typedBytes type payload) := by
+  unfold encodeReceipt at h
+  split at h
+  · rename_i hZero
+    exact .inl ⟨hZero, h⟩
+  · rename_i hNe
+    cases hPayload : Codec.encode r with
+    | error e => simp [hPayload, Functor.map, Except.map] at h
+    | ok payload =>
+      simp only [hPayload, Functor.map, Except.map, Except.ok.injEq] at h
+      exact .inr ⟨hNe, payload, rfl, h.symm⟩
+
+/-- The first byte of a legacy receipt is at least `0xc0`. -/
+private theorem le_getElem_zero_of_encode {r : Receipt fork} {bytes : ByteArray}
+    (h : Codec.encode r = .ok bytes) : ∃ h0 : 0 < bytes.size, (0xc0 : UInt8) ≤ bytes[0] := by
+  obtain ⟨first, rest, hList, hFirst⟩ := encode_list_head _ _ h
+  obtain ⟨h0, hEq⟩ := getElem_zero_of_toList hList
+  exact ⟨h0, hEq ▸ hFirst⟩
+
+/-- Two receipts with one encoding have one type and are equal.
+
+Each type must be below `0xc0`, so that a typed receipt cannot start like a legacy one.
+
+The fork need not have the types. -/
+theorem encodeReceipt_injective {type₁ type₂ : UInt8} {r₁ r₂ : Receipt fork} {bytes : ByteArray}
+    (small₁ : type₁ < 0xc0) (small₂ : type₂ < 0xc0)
+    (h₁ : encodeReceipt type₁ r₁ = .ok bytes) (h₂ : encodeReceipt type₂ r₂ = .ok bytes) :
+    type₁ = type₂ ∧ r₁ = r₂ := by
+  rcases encodeReceipt_cases h₁ with ⟨rfl, e₁⟩ | ⟨ne₁, p₁, e₁, rfl⟩ <;>
+    rcases encodeReceipt_cases h₂ with ⟨rfl, e₂⟩ | ⟨ne₂, p₂, e₂, hb⟩
+  · exact ⟨rfl, Codec.encode_injective e₁ e₂⟩
+  · -- A legacy receipt starts at least at `0xc0`, a typed one with its small type.
+    subst hb
+    obtain ⟨h0, hge⟩ := le_getElem_zero_of_encode e₁
+    rw [typedBytes_getElem_zero] at hge
+    exact absurd hge (UInt8.not_le.mpr small₂)
+  · obtain ⟨h0, hge⟩ := le_getElem_zero_of_encode e₂
+    rw [typedBytes_getElem_zero] at hge
+    exact absurd hge (UInt8.not_le.mpr small₁)
+  · -- The type is the first byte and the payload is the rest.
+    have htype : type₁ = type₂ := by
+      have key : ∀ (a b : ByteArray) (ha : 0 < a.size) (hb : 0 < b.size), a = b → a[0] = b[0] := by
+        rintro a b _ _ rfl
+        rfl
+      rw [← typedBytes_getElem_zero type₁ p₁, ← typedBytes_getElem_zero type₂ p₂]
+      exact key _ _ _ _ hb
+    subst htype
+    have hp : p₁ = p₂ := by
+      have := congrArg (fun b : ByteArray => b.extract 1 b.size) hb
+      simpa only [extract_typedBytes] using this
+    subst hp
+    exact ⟨rfl, Codec.encode_injective e₁ e₂⟩
+
 /-- Bytes that decode to a type and a receipt are the encoding of that receipt with that type.
 
 So two different byte strings never decode to the same type and receipt. -/
