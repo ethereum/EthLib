@@ -7,7 +7,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Known
 
 This example proves code whose memory depends on its input, with frames that know ranges of memory.
 
-The bytecode `0x3660006000373660006000f3` copies the call data to memory and returns it.
+The bytecode `0x366000600037366000f3` copies the call data to memory and returns it.
 
 - At 0, `36` pushes the size of the call data.
 - At 1, `60 00 60 00` pushes the offset 0 in the call data and the start 0 in memory.

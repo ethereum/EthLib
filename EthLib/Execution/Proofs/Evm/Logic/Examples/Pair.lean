@@ -17,7 +17,9 @@ The second write keeps the fact of the first, since their ranges are apart.
 
 The two facts then join into the fact of the 64 bytes.
 
-The code costs 30 gas: eight pushes of 3, and the growth of memory to two words for 6.
+The code costs 30 gas.
+
+Six pushes and two stores cost 3 each, and the growth of memory to two words costs 6.
 
 It halts normally, returns the two words, and keeps its state and substate.
 -/

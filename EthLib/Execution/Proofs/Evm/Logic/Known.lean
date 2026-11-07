@@ -14,8 +14,8 @@ Each fact is a start and the bytes that memory holds from there.
 - A rule that keeps memory, for every memory, keeps the size and every fact.
 - A write keeps each fact whose range it does not touch, and adds the fact of what it writes.
 - Memory grows by the growth for the ranges of the write, which depends only on its size.
-- MLOAD of a range that a fact covers with the bytes of a word pushes that word.
-- RETURN and REVERT of a range that a fact covers give the bytes of the fact.
+- MLOAD of the range of a fact with the bytes of a word pushes that word.
+- RETURN and REVERT of the range of a fact give the bytes of the fact.
 - Two facts of adjacent ranges join into one, and a frame may forget facts.
 
 The rules here give this form to MSTORE, MSTORE8 and MCOPY.
@@ -169,7 +169,7 @@ theorem mstore8_known {start value : U256} {rest : List U256} (hlt : pc < code.s
   exact ⟨after, hreach, known_of_write (by decide) rfl (List.mem_singleton_self _) hsize hmod
     hall hat'⟩
 
-/-- MLOAD of a range that a fact covers with the bytes of a word pushes that word.
+/-- MLOAD of the range of a fact with the bytes of a word pushes that word.
 
 It pays 3, and memory does not grow. -/
 theorem mload_known {start word : U256} {rest : List U256} (hlt : pc < code.size)
@@ -190,7 +190,7 @@ theorem mload_known {start word : U256} {rest : List U256} (hlt : pc < code.size
   exact ⟨after, hreach, by rw [hm]; exact hat', by rw [hm]; exact hsize, hmod,
     by rw [hm]; exact hall⟩
 
-/-- RETURN of a range that a fact covers stops the frame with the bytes of the fact.
+/-- RETURN of the range of a fact stops the frame with the bytes of the fact.
 
 The size of the range is the size of those bytes, and memory does not grow. -/
 theorem return_known {start length : U256} {out : ByteArray} {rest : List U256}
@@ -209,7 +209,7 @@ theorem return_known {start length : U256} {out : ByteArray} {rest : List U256}
   rw [memoryExtend_zero, ← hlen, hold.2, Nat.sub_zero] at hq
   exact ⟨after, hreach, halted, hq⟩
 
-/-- From Byzantium, REVERT of a range that a fact covers reverts with the bytes of the fact.
+/-- From Byzantium, REVERT of the range of a fact reverts with the bytes of the fact.
 
 The size of the range is the size of those bytes, and memory does not grow. -/
 theorem revert_known (hfork : .byzantium ≤ fork) {start length : U256} {out : ByteArray}
@@ -233,7 +233,7 @@ theorem size_bufferRead (data : ByteArray) (offset length : Nat) :
     (⟨(bufferRead data offset length).toArray⟩ : ByteArray).size = length := by
   simp [ByteArray.size, bufferRead_length]
 
-/-- From Dencun, MCOPY of a range that a fact covers writes the fact at the destination.
+/-- From Dencun, MCOPY of the range of a fact writes the fact at the destination.
 
 It keeps the facts apart from the destination.
 
