@@ -188,6 +188,28 @@ theorem blobScheduleAt_append_of_reached {a : Activation} {s : BlobSchedule}
     blobScheduleAt ⟨id, fs, l ++ [(a, s)]⟩ n t = some s := by
   simp [blobScheduleAt, hr]
 
+/-- The forks are ordered exactly when no fork by block is later than a fork by timestamp. -/
+theorem activationsOrdered_eq_true_iff {activations : List (Fork × Activation)} :
+    activationsOrdered activations = true ↔
+      ∀ f t g n, (f, Activation.time t) ∈ activations → (g, Activation.block n) ∈ activations →
+        ¬ f < g := by
+  simp only [activationsOrdered, List.all_eq_true, Bool.or_eq_true, Bool.not_eq_true',
+    decide_eq_false_iff_not, Prod.forall]
+  constructor
+  · intro h f t g n hf hg
+    rcases h g _ hg with h1 | h1
+    · simp at h1
+    · rcases h1 f _ hf with h2 | h2 <;> simp_all
+  · intro h g b hg
+    cases b with
+    | block n =>
+      right
+      intro f a hf
+      cases a with
+      | block _ => left; simp
+      | time t => right; exact h f t g n hf hg
+    | time _ => left; simp
+
 /-! ## Mainnet -/
 
 /-- Mainnet lists its forks in the order of the timeline, with activations in order. -/
