@@ -23,7 +23,7 @@ In the state of the attested block, the two nodes are its finalized root and its
 
 A new store trusts a block.
 
-The committee of its bootstrap is the current committee of the state of that block.
+Its committee, which the bootstrap proves, is the current committee of the state of that block.
 
 The signature needs an assumption, since EthLib proves no unforgeability of BLS here.
 
@@ -164,11 +164,14 @@ theorem currentSyncCommitteeGindexAtSlot_named {config : Config} {slot : Slot} {
 
 The header of the bootstrap has the trusted block root.
 
+The store keeps the committee of the bootstrap.
+
 Its committee branch verifies the root of its committee against the state root of the header. -/
 theorem initializeLightClientStore_proves {config : Config} {trustedBlockRoot : Root}
     {bootstrap : LightClientBootstrap preset fork} {store : LightClientStore preset fork}
     (computed : initializeLightClientStore config trustedBlockRoot bootstrap = .ok store) :
     SszType.hashTreeRoot bootstrap.header.beacon = .ok trustedBlockRoot ∧
+      store.currentSyncCommittee = bootstrap.currentSyncCommittee ∧
       ∃ gindex leaf, currentSyncCommitteeGindexAtSlot (preset := preset) (fork := fork) config
           bootstrap.header.beacon.slot = .ok gindex ∧
         SszType.hashTreeRoot bootstrap.currentSyncCommittee = .ok leaf ∧
@@ -183,10 +186,11 @@ theorem initializeLightClientStore_proves {config : Config} {trustedBlockRoot : 
   obtain ⟨leaf, leafRooted, rest⟩ := Base.bind_ok_iff.mp rest
   obtain ⟨gindex, indexed, rest⟩ := Base.bind_ok_iff.mp rest
   obtain ⟨verdict, checked, rest⟩ := Base.bind_ok_iff.mp rest
-  obtain ⟨_, accepted, _⟩ := Base.bind_ok_iff.mp rest
+  obtain ⟨_, accepted, built⟩ := Base.bind_ok_iff.mp rest
   obtain rfl := LightClientError.require_ok.mp trusted
   obtain rfl := LightClientError.require_ok.mp accepted
-  exact ⟨LightClientError.liftRoot_ok.mp headerRooted, gindex, leaf, indexed,
+  cases built
+  exact ⟨LightClientError.liftRoot_ok.mp headerRooted, rfl, gindex, leaf, indexed,
     LightClientError.liftRoot_ok.mp leafRooted, LightClientError.liftRoot_ok.mp checked⟩
 
 /-- What an accepted update proves, before any assumption on the signature.
@@ -405,7 +409,9 @@ Take a beacon state of a fork from Altair whose root is the state root of the bo
 
 At the slot of that header, the client must read the committee at the index of that fork.
 
-The root of the committee of the bootstrap is the root of the current committee of the state.
+The root of the committee of the store is the root of the current committee of the state.
+
+The branch of the bootstrap proves it.
 
 Otherwise the search names a SHA-256 collision. -/
 theorem initializeLightClientStore_currentSyncCommittee {config : Config}
@@ -418,7 +424,7 @@ theorem initializeLightClientStore_currentSyncCommittee {config : Config}
     (rooted : SszType.hashTreeRoot state = .ok bootstrap.header.beacon.stateRoot)
     (layout : currentSyncCommitteeGindexAtSlot (preset := preset) (fork := fork) config
       bootstrap.header.beacon.slot = .ok (currentSyncCommitteeGindex stateFork)) :
-    ∃ leaf node, SszType.hashTreeRoot bootstrap.currentSyncCommittee = .ok leaf ∧
+    ∃ leaf node, SszType.hashTreeRoot store.currentSyncCommittee = .ok leaf ∧
       SszType.hashTreeRoot (state.currentSyncCommittee altair) = .ok node ∧
       (leaf = node ∨ ∃ honest a b,
         computeMerkleProof state (currentSyncCommitteeGindex stateFork) = .ok honest ∧
@@ -431,7 +437,9 @@ theorem initializeLightClientStore_currentSyncCommittee {config : Config}
         a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
         Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
           Cryptography.Hash.Sha256.hash (ByteArray.mk b)) := by
-  obtain ⟨_, gindex, leaf, indexed, leafRooted, valid⟩ := initializeLightClientStore_proves computed
+  obtain ⟨_, kept, gindex, leaf, indexed, leafRooted, valid⟩ :=
+    initializeLightClientStore_proves computed
+  rw [kept]
   rw [layout, Except.ok.injEq] at indexed
   subst indexed
   obtain ⟨node, nodeRooted⟩ := SszType.hashTreeRoot_total (state.currentSyncCommittee altair)

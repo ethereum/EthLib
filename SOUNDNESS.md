@@ -888,7 +888,8 @@ Otherwise `findBranchCollision` returns a SHA-256 collision.
 Both assume that the index of the slot is the index of the state's own fork.
 The client then reads the state with the layout of that fork.
 `initializeLightClientStore_currentSyncCommittee` states the same for a new store.
-The committee root of its bootstrap is the root of the current committee of the trusted state, or the search returns a collision.
+The store keeps the committee that its bootstrap proves.
+Its root is the root of the current committee of the trusted state, or the search returns a collision.
 
 The signature theorems assume `SignatureChecks.AggregateSound`, listed in A4.
 Under it, `validateLightClientUpdate_signed` shows that every member whose bit is set signed the signing root.
