@@ -40,7 +40,7 @@ GLOAS_HANDLERS = (
     "payload_timeliness",
     "should_apply_proposer_boost",
 )
-SPECIFIED = ("altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas")
+SPECIFIED = ("altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas", "heze")
 
 # The forks of the fast confirmation cases, which wait at Gloas for its own rule.
 FAST_CONFIRMATION_FORKS = ("altair", "bellatrix", "capella", "deneb", "electra", "fulu")
@@ -250,7 +250,7 @@ def _archive_cases() -> list:
     for preset, name in ARCHIVES.items():
         paths = [f"tests/{preset}/{fork}/fork_choice" for fork in SPECIFIED]
         # The optimistic sync cases run from Bellatrix to Fulu.
-        sync = [fork for fork in SPECIFIED if fork not in ("altair", "gloas")]
+        sync = [fork for fork in SPECIFIED if fork not in ("altair", "gloas", "heze")]
         paths += [f"tests/{preset}/{fork}/sync" for fork in sync]
         # The fast confirmation cases are minimal only.
         if preset == "minimal":

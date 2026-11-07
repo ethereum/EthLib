@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: fork_choice
+handler: should_apply_proposer_boost
+suite: pyspec_tests
+case: should_apply_proposer_boost_no_equivocation

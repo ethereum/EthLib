@@ -61,14 +61,6 @@ def isValidProposerPreferencesSignature (config : Config) (checks : SignatureChe
 
 /-! ## The lookahead -/
 
-/-- The state of a dependent block at the first slot of a lookahead.
-
-A state at or after that slot is kept as it is. -/
-def lookaheadState (config : Config) (checks : SignatureChecks) (state : BeaconState preset fork)
-    (start : Slot) : Except ForkChoiceError (BeaconState preset fork) :=
-  if state.slot < start then (processSlots config checks state start).mapError .transition
-  else pure state
-
 /-- From Fulu: the proposer of a slot in the lookahead of a state, which starts at a given slot.
 
 A slot before the start is an error, and so is a slot after the end of the lookahead. -/

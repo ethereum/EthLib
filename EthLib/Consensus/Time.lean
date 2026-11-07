@@ -130,4 +130,8 @@ def getPayloadDueMs (config : Config) : Except ArithError UInt64 :=
 def getPayloadAttestationDueMs (config : Config) : Except ArithError UInt64 :=
   getSlotComponentDurationMs config config.PAYLOAD_ATTESTATION_DUE_BPS
 
+/-- From Heze: the time into a slot by which an inclusion list must arrive to be timely. -/
+def getInclusionListDueMs (config : Config) : Except ArithError UInt64 :=
+  getSlotComponentDurationMs config config.INCLUSION_LIST_DUE_BPS
+
 end EthLib.Consensus

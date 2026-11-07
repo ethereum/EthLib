@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.DataAvailability.Column
 public import EthLib.Consensus.ForkChoice.Head
+public import EthLib.Consensus.InclusionListCommittee
 public import EthLib.Consensus.Transition.EpochJustification
 public import EthLib.Consensus.Transition.StateTransition
 
@@ -86,6 +87,10 @@ structure BlockSources (preset : Preset) (fork : Fork) where
   columns : Root → Option (Array (DataColumnSidecar preset fork))
   /-- The trusted setup of KZG, with which the node checks the blobs and the columns. -/
   setup : TrustedSetup
+  /-- From Heze: whether the execution layer finds that a payload satisfies some transactions.
+
+  The transactions are those of the timely inclusion lists of the slot before the payload's. -/
+  inclusionListSatisfied : ExecutionPayload preset fork → List InclusionListTransaction → Bool
 
 /-- Whether a proof-of-work block is terminal, by the definition of EIP-3675.
 
@@ -201,6 +206,14 @@ def ptcPositions (committee : PayloadTimelinessCommittee preset)
 def setPtcVotes {n : Nat} (votes : Vector (Option Bool) n) (positions : List (Fin n))
     (value : Bool) : Vector (Option Bool) n :=
   positions.foldl (fun votes position => votes.set position.val (some value) position.isLt) votes
+
+/-- The state of a dependent block at the first slot of a lookahead.
+
+A state at or after that slot is kept as it is. -/
+def lookaheadState (config : Config) (checks : SignatureChecks) (state : BeaconState preset fork)
+    (start : Slot) : Except ForkChoiceError (BeaconState preset fork) :=
+  if state.slot < start then (processSlots config checks state start).mapError .transition
+  else pure state
 
 namespace Store
 
@@ -645,6 +658,30 @@ def validatePayloadData (config : Config) (sources : BlockSources preset fork) (
   unless ← columnsAvailable config sources root (fun _ => bid.blobKzgCommitments) do
     throw (.invalidColumns root)
 
+/-- From Heze: the store with the answer on whether the payload of a block satisfied its lists.
+
+The lists are the timely ones of the slot before the block, for the dependent root on its chain.
+
+The execution layer gives the answer from their transactions.
+
+A block at slot 0 has no slot before it, and that is an error. -/
+def recordPayloadInclusionListSatisfaction (sources : BlockSources preset fork)
+    (heze : .hegota ≤ fork) (root : Root) (payload : ExecutionPayload preset fork) :
+    Except ForkChoiceError (Store preset fork) := do
+  let slot ← (subChecked (← store.block root).slot 1).mapError .arith
+  let dependentRoot ← store.getShufflingDependentRoot root (computeEpochAtSlot preset slot)
+  let transactions := (store.inclusionLists heze).transactions slot dependentRoot true
+  let satisfaction := (store.payloadInclusionListSatisfaction heze).insert root
+    (sources.inclusionListSatisfied payload transactions)
+  return { store with payloadInclusionListSatisfaction := fun _ => satisfaction }
+
+/-- The store before it keeps an envelope: from Heze, with the answer on its inclusion lists. -/
+def recordEnvelope (sources : BlockSources preset fork) (root : Root)
+    (payload : ExecutionPayload preset fork) : Except ForkChoiceError (Store preset fork) :=
+  if heze : .hegota ≤ fork then
+    store.recordPayloadInclusionListSatisfaction sources heze root payload
+  else pure store
+
 /-- The store after a signed envelope, from Gloas: the payload of its block is then verified.
 
 The store must hold the state after the block that the envelope names.
@@ -652,6 +689,8 @@ The store must hold the state after the block that the envelope names.
 The node must get the data of the payload, against the bid that the state after the block holds.
 
 The envelope must pass its checks against that state.
+
+From Heze the store then records whether the payload satisfied the inclusion lists of its slot.
 
 The store then keeps the envelope, by the root of its block. -/
 def onExecutionPayloadEnvelope (checks : SignatureChecks) (sources : BlockSources preset fork)
@@ -662,7 +701,71 @@ def onExecutionPayloadEnvelope (checks : SignatureChecks) (sources : BlockSource
   validatePayloadData config sources root (state.latestExecutionPayloadBid gloas)
   (verifyExecutionPayloadEnvelope config checks sources.engine state gloas signed).mapError
     .transition
-  return { store with payloads := fun _ => (store.payloads gloas).insert root signed.message }
+  let recorded ← store.recordEnvelope sources root signed.message.payload
+  let payloads := (recorded.payloads gloas).insert root signed.message
+  return { recorded with payloads := fun _ => payloads }
+
+/-- From Heze: the checks of an inclusion list, which give whether it is timely.
+
+The list must be for the current slot or a slot of the window before it.
+
+Its transactions must have bytes, each one, and at most the limit in all.
+
+Its dependent block must be known with its state, at or before the dependent slot of its epoch.
+
+That block must be the head, or have a known child after that slot.
+
+Its sender must sit on the committee of its slot in the state of that block.
+
+That state is advanced to the first slot of the lookahead, when it is earlier.
+
+The sender must have signed the list with its key in that state.
+
+The list is timely when it arrives in its slot, before the inclusion list deadline. -/
+def checkInclusionList (checks : SignatureChecks) (signed : SignedInclusionList) :
+    Except ForkChoiceError Bool := do
+  let list := signed.message
+  let currentSlot ← store.getCurrentSlot config
+  ensure (list.slot ≤ currentSlot) (.futureInclusionList list.slot)
+  let lastSlot ← (addChecked list.slot config.MIN_SLOTS_FOR_INCLUSION_LISTS_REQUESTS).mapError
+    .arith
+  ensure (currentSlot ≤ lastSlot) (.inclusionListTooOld list.slot)
+  let transactions := list.transactions.data.toList
+  let size := (transactions.map (·.data.size)).sum
+  ensure (0 < size ∧ size ≤ config.MAX_TRANSACTIONS_BYTES_PER_INCLUSION_LIST.toNat)
+    (.invalidInclusionListSize size)
+  ensure (transactions.all (0 < ·.data.size)) .emptyInclusionListTransaction
+  let block ← store.block list.dependentRoot
+  let dependentState ← store.blockState list.dependentRoot
+  let epoch := computeEpochAtSlot preset list.slot
+  let dependentSlot ← (computeShufflingDependentSlot preset epoch).mapError .arith
+  ensure (block.slot ≤ dependentSlot) (.dependentBlockTooLate list.dependentRoot)
+  let possible ← store.isValidDependentRoot config list.dependentRoot dependentSlot
+  ensure possible (.notPossibleDependentBlock list.dependentRoot)
+  let start ← (computeShufflingLookaheadStartSlot preset epoch).mapError .arith
+  let state ← lookaheadState config checks dependentState start
+  let committee ← (getInclusionListCommittee state list.slot).mapError .accessor
+  ensure (list.validatorIndex ∈ committee.toList)
+    (.notInInclusionListCommittee list.validatorIndex)
+  let valid ← (isValidInclusionListSignature config state signed).mapError .accessor
+  ensure valid .invalidInclusionListSignature
+  -- The time into the slot is read only for a list of the current slot.
+  if list.slot = currentSlot then
+    let due ← (getInclusionListDueMs config).mapError .arith
+    let timeIntoSlot ← store.getTimeIntoSlotMs config
+    return decide (timeIntoSlot < due)
+  else return false
+
+/-- From Heze: the store after an inclusion list that passes every check.
+
+The store keeps the list with its timeliness.
+
+A list that fails a check is an error, and the store does not change. -/
+def onInclusionList (checks : SignatureChecks) (heze : .hegota ≤ fork)
+    (signed : SignedInclusionList) : Except ForkChoiceError (Store preset fork) := do
+  let timely ← store.checkInclusionList config checks signed
+  let lists := (store.inclusionLists heze).process signed timely
+  return { store with inclusionLists := fun _ => lists }
 
 end Store
 

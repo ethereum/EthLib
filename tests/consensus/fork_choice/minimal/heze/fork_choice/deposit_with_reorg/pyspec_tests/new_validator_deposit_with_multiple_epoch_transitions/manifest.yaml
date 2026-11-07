@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: fork_choice
+handler: deposit_with_reorg
+suite: pyspec_tests
+case: new_validator_deposit_with_multiple_epoch_transitions

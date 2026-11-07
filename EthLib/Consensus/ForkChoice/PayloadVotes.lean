@@ -99,11 +99,25 @@ def shouldBuildOnFull (gloas : .glamsterdam ≤ fork) (head : ForkChoiceNode) (s
   if ← store.payloadDataAvailability gloas head.root false then return false
   return true
 
+/-- From Heze: whether the payload of a block is verified and satisfied its inclusion lists.
+
+The store must hold the answer for the block, else it is an error.
+
+A payload that is not verified does not count as satisfying them. -/
+def isPayloadInclusionListSatisfied (heze : .hegota ≤ fork) (root : Root) :
+    Except ForkChoiceError Bool := do
+  let some satisfied := (store.payloadInclusionListSatisfaction heze)[root]?
+    | throw (.unknownInclusionListSatisfaction root)
+  if !store.isPayloadVerified (Nat.le_trans (by decide) heze) root then return false
+  return satisfied
+
 /-- Whether to extend the payload of a block from the previous slot.
 
 The block must be from the previous slot.
 
 A payload that the store has not verified is not extended.
+
+From Heze, neither is a payload that did not satisfy its inclusion lists.
 
 It extends a payload that the committee finds on time and with its data available.
 
@@ -114,6 +128,8 @@ def shouldExtendPayload (gloas : .glamsterdam ≤ fork) (root : Root) :
   if (← (addChecked block.slot 1).mapError .arith) ≠ (← store.getCurrentSlot config) then
     throw (.notPreviousSlot root)
   if !store.isPayloadVerified gloas root then return false
+  if heze : .hegota ≤ fork then
+    if !(← store.isPayloadInclusionListSatisfied heze root) then return false
   let proposerRoot := store.proposerBoostRoot
   let payloadIsTimely ← store.payloadTimeliness gloas root true
   let payloadDataIsAvailable ← store.payloadDataAvailability gloas root true

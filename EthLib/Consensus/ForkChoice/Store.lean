@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Accessors
 public import EthLib.Consensus.Containers.State
+public import EthLib.Consensus.InclusionList
 public import EthLib.Consensus.Time
 public import EthLib.Consensus.Transition.Basic
 public import Std.Data.TreeMap
@@ -197,6 +198,24 @@ inductive ForkChoiceError where
   | ptcVoteNotCurrent (slot : Slot)
   /-- The signature of a vote of the payload committee does not verify. -/
   | invalidPayloadAttestation
+  /-- From Heze: the store has no answer on the inclusion lists of the payload of a block. -/
+  | unknownInclusionListSatisfaction (root : Root)
+  /-- From Heze: an inclusion list is for a slot after the current one. -/
+  | futureInclusionList (slot : Slot)
+  /-- From Heze: an inclusion list is for a slot before the window that the node keeps. -/
+  | inclusionListTooOld (slot : Slot)
+  /-- From Heze: the transactions of an inclusion list have no bytes, or more than the limit. -/
+  | invalidInclusionListSize (size : Nat)
+  /-- From Heze: a transaction of an inclusion list has no bytes. -/
+  | emptyInclusionListTransaction
+  /-- From Heze: the dependent block of an inclusion list comes after the dependent slot. -/
+  | dependentBlockTooLate (root : Root)
+  /-- From Heze: the dependent block of an inclusion list cannot fix the committee of its slot. -/
+  | notPossibleDependentBlock (root : Root)
+  /-- From Heze: the sender of an inclusion list has no seat in the committee of its slot. -/
+  | notInInclusionListCommittee (index : ValidatorIndex)
+  /-- From Heze: the signature of an inclusion list does not verify. -/
+  | invalidInclusionListSignature
   deriving Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -247,6 +266,15 @@ def ForkChoiceError.code : ForkChoiceError → UInt32
   | .notInPtc _ => 40
   | .ptcVoteNotCurrent _ => 41
   | .invalidPayloadAttestation => 42
+  | .unknownInclusionListSatisfaction _ => 43
+  | .futureInclusionList _ => 44
+  | .inclusionListTooOld _ => 45
+  | .invalidInclusionListSize _ => 46
+  | .emptyInclusionListTransaction => 47
+  | .dependentBlockTooLate _ => 48
+  | .notPossibleDependentBlock _ => 49
+  | .notInInclusionListCommittee _ => 50
+  | .invalidInclusionListSignature => 51
 
 variable (preset : Preset) (fork : Fork)
 
@@ -290,6 +318,12 @@ structure Store where
   /-- The vote of each member of the payload committee on whether the blob data is available. -/
   payloadDataAvailabilityVote :
     Since .glamsterdam fork (Std.TreeMap Root (Vector (Option Bool) preset.PTC_SIZE.toNat))
+  /-- From Heze: the inclusion lists that the node has received. -/
+  inclusionLists : Since .hegota fork InclusionListStore
+  /-- From Heze: whether the payload of each block satisfied the inclusion lists of its slot.
+
+  A verified payload of Heze has its answer recorded. -/
+  payloadInclusionListSatisfaction : Since .hegota fork (Std.TreeMap Root Bool)
 
 variable {preset fork}
 
@@ -297,7 +331,9 @@ variable {preset fork}
 
 The anchor is justified and finalized at the epoch of its state.
 
-From Gloas the anchor is timely for both deadlines, and has no payload and no committee vote yet. -/
+From Gloas the anchor is timely for both deadlines, and has no payload and no committee vote yet.
+
+From Heze the store holds no inclusion list and no answer on inclusion lists yet. -/
 def getForkchoiceStore (config : Config) (anchorState : BeaconState preset fork)
     (anchorBlock : BeaconBlock preset fork) : Except ForkChoiceError (Store preset fork) := do
   let stateRoot ← (SszType.hashTreeRoot anchorState).mapError .ssz
@@ -326,7 +362,9 @@ def getForkchoiceStore (config : Config) (anchorState : BeaconState preset fork)
     payloadTimelinessVote := fun _ =>
       Std.TreeMap.empty.insert anchorRoot (Vector.replicate _ none)
     payloadDataAvailabilityVote := fun _ =>
-      Std.TreeMap.empty.insert anchorRoot (Vector.replicate _ none) }
+      Std.TreeMap.empty.insert anchorRoot (Vector.replicate _ none)
+    inclusionLists := fun _ => .empty
+    payloadInclusionListSatisfaction := fun _ => ∅ }
 
 namespace Store
 

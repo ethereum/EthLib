@@ -137,6 +137,28 @@ theorem shouldExtendPayload_of_not_verified {gloas : .glamsterdam ≤ fork} {roo
   simp [shouldExtendPayload, Store.block, found, nextOk, current, unverified, Except.mapError,
     bind, Except.bind, pure, Except.pure]
 
+/-- From Heze: a payload of the previous slot that failed its inclusion lists is not extended. -/
+theorem shouldExtendPayload_of_not_satisfied {gloas : .glamsterdam ≤ fork}
+    (heze : .hegota ≤ fork) {root : Root} {block : BeaconBlock preset fork} {next : Slot}
+    (found : store.blocks[root]? = some block) (nextOk : addChecked block.slot 1 = .ok next)
+    (current : store.getCurrentSlot config = .ok next)
+    (unsatisfied : store.isPayloadInclusionListSatisfied heze root = .ok false) :
+    store.shouldExtendPayload config gloas root = .ok false := by
+  by_cases verified : store.isPayloadVerified gloas root = true
+  · simp [shouldExtendPayload, Store.block, found, nextOk, current, verified, heze, unsatisfied,
+      Except.mapError, bind, Except.bind, pure, Except.pure]
+  · exact shouldExtendPayload_of_not_verified found nextOk current (by simpa using verified)
+
+/-- From Heze: a payload that is extended satisfied its inclusion lists, and is verified. -/
+theorem isPayloadInclusionListSatisfied_of_shouldExtendPayload {gloas : .glamsterdam ≤ fork}
+    (heze : .hegota ≤ fork) {root : Root}
+    (extends_ : store.shouldExtendPayload config gloas root = .ok true) :
+    store.isPayloadInclusionListSatisfied heze root = .ok true := by
+  unfold shouldExtendPayload at extends_
+  simp only [heze, dite_true, bind, Except.bind, Except.mapError, pure, Except.pure] at extends_
+  repeat' split at extends_
+  all_goals simp_all
+
 /-- Outside a decision on the previous slot's payload, the tiebreaker is the status number. -/
 theorem getPayloadStatusTiebreaker_of_not_decision {gloas : .glamsterdam ≤ fork}
     {node : ForkChoiceNode}
