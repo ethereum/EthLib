@@ -287,15 +287,15 @@ theorem withdrawalsRoot_binding {withdrawals₁ withdrawals₂ : List Withdrawal
 
 /-- Binding of the receipts root: two lists of receipts with one root are equal.
 
-Each type must be 0, or a type that the fork has, as the decoder of a receipt requires.
+Each type must be below `0xc0`, so that a typed receipt cannot start like a legacy one.
+
+Type 0 and every type that a fork adds meet this bound.
 
 Otherwise the search over their bytes finds a Keccak-256 collision in the proofs of one index. -/
 theorem receiptsRoot_binding {fork : Fork} {receipts₁ receipts₂ : List (UInt8 × Receipt fork)}
     {root' : Hash32}
-    (htypes₁ : ∀ entry ∈ receipts₁,
-      entry.1 = 0 ∨ ∃ since, typeFork entry.1 = some since ∧ since ≤ fork)
-    (htypes₂ : ∀ entry ∈ receipts₂,
-      entry.1 = 0 ∨ ∃ since, typeFork entry.1 = some since ∧ since ≤ fork)
+    (htypes₁ : ∀ entry ∈ receipts₁, entry.1 < 0xc0)
+    (htypes₂ : ∀ entry ∈ receipts₂, entry.1 < 0xc0)
     (hroot₁ : receiptsRoot receipts₁ = .ok root') (hroot₂ : receiptsRoot receipts₂ = .ok root') :
     receipts₁ = receipts₂ ∨
       ∃ values₁ values₂ pair,
@@ -305,11 +305,11 @@ theorem receiptsRoot_binding {fork : Fork} {receipts₁ receipts₂ : List (UInt
   obtain ⟨values₁, hvalues₁, hindexed₁⟩ := indexedRoot_of_mapM hroot₁
   obtain ⟨values₂, hvalues₂, hindexed₂⟩ := indexedRoot_of_mapM hroot₂
   rcases indexedRoot_binding hindexed₁ hindexed₂ with rfl | ⟨pair, hfound, hvalid⟩
-  · -- The decoder reads the type and the receipt back from the bytes of each.
-    refine .inl (mapM_ok_injective (fun ⟨tx, rx⟩ hx ⟨ty, ry⟩ hy bytes hxb hyb => ?_)
-      hvalues₁ hvalues₂)
-    exact Except.ok.inj ((decodeReceipt_encodeReceipt hxb (htypes₁ _ hx)).symm.trans
-      (decodeReceipt_encodeReceipt hyb (htypes₂ _ hy)))
+  · -- Two receipts with the same bytes have the same type and are equal.
+    refine .inl (mapM_ok_injective (fun ⟨tx, rx⟩ hx ⟨ty, ry⟩ hy bytes hxb hyb => ?_) hvalues₁
+      hvalues₂)
+    obtain ⟨rfl, rfl⟩ := encodeReceipt_injective (htypes₁ _ hx) (htypes₂ _ hy) hxb hyb
+    rfl
   · exact .inr ⟨values₁, values₂, pair, hvalues₁, hvalues₂, hfound, hvalid⟩
 
 end EthLib.Execution.Blocks
