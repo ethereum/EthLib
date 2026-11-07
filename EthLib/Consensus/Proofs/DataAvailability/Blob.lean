@@ -404,6 +404,93 @@ theorem getBlobSidecars_ok (named : preset = .mainnet ∨ preset = .minimal)
   simp only [chosen, proven, built, bind, Except.bind, pure, Except.pure]
   exact ⟨_, rfl⟩
 
+/-- The commitments of a body sit at node 27 of its tree, and their generic branch climbs there.
+
+This holds from Deneb to the forks before Gloas, for every preset. -/
+theorem blobKzgCommitments_branch (deneb : .dencun ≤ fork ∧ fork < .glamsterdam)
+    (body : BeaconBlockBody preset fork) :
+    ∃ (leaf root : Bytes32) (nodes : List Bytes32), SszType.getGeneralizedIndex
+        (BeaconBlockBody preset fork)
+        [.position ((BeaconBlockBody.names fork).idxOf "blob_kzg_commitments")] = .ok 27 ∧
+      SszType.hashTreeRoot (body.blobKzgCommitments deneb) = .ok leaf ∧
+      SszType.hashTreeRoot body = .ok root ∧
+      isValidMerkleBranch leaf nodes (Nat.log2 27) (27 % 2 ^ Nat.log2 27) root = true := by
+  obtain ⟨position, fields, desc, count, field⟩ := body_desc (preset := preset) deneb
+  obtain ⟨values, valued, commitments⟩ := body_values deneb body
+  obtain ⟨leaf, rooted⟩ := SszType.hashTreeRoot_total (body.blobKzgCommitments deneb)
+  -- The list of commitments is the node that its field names in the tree of the body.
+  have selects : PathSelects (SszType.desc (BeaconBlockBody preset fork))
+      (SszType.toValue body) [.position 11] leaf.toArray := by
+    have sound := LawfulSszType.wellFormed (α := BeaconBlockBody preset fork)
+    have fits := LawfulSszType.fits body
+    rw [desc] at sound fits ⊢
+    rw [valued] at fits ⊢
+    exact PathSelects.containerField sound fits field commitments
+      (PathSelects.root (SszType.hashTreeRoot_ok_iff.mp rooted))
+  obtain ⟨gindex, located, read⟩ := selects.reads
+  have named : SszType.getGeneralizedIndex (BeaconBlockBody preset fork)
+      [.position ((BeaconBlockBody.names fork).idxOf "blob_kzg_commitments")] = .ok 27 := by
+    unfold SszType.getGeneralizedIndex
+    rw [desc, position]
+    exact getGeneralizedIndex_step (resolveStep_field_eleven count field)
+      (getGeneralizedIndex_nil _) (gindexConcat_root_right (by decide))
+  have same : gindex = 27 := by
+    unfold SszType.getGeneralizedIndex at named
+    rw [position] at named
+    rw [named] at located
+    exact (Except.ok.inj located).symm
+  subst same
+  obtain ⟨root, nodes, bodyRoot, -, valid⟩ :=
+    SszType.buildProof_isValidMerkleBranch body (by decide) read
+  exact ⟨leaf, root, nodes, named, rooted, bodyRoot, valid⟩
+
+/-- A sidecar whose inclusion check passes carries the commitment of its index in the block.
+
+Take any body whose root is the body root of the header of the sidecar.
+
+If the body has a commitment at the index of the sidecar, it has the root of the sidecar's one.
+
+Otherwise the two climbs hash two different messages to one SHA-256 output.
+
+This holds for both presets, whose proof depth is that of the body type. -/
+theorem verifyBlobSidecarInclusionProof_body (named : preset = .mainnet ∨ preset = .minimal)
+    (deneb : .dencun ≤ fork ∧ fork < .glamsterdam) {sidecar : BlobSidecar preset}
+    (valid : verifyBlobSidecarInclusionProof preset fork sidecar = true)
+    {body : BeaconBlockBody preset fork}
+    (rooted : SszType.hashTreeRoot body = .ok sidecar.signedBlockHeader.message.bodyRoot)
+    {commitment : KZGCommitment}
+    (chosen : (body.blobKzgCommitments deneb).data[sidecar.index.toNat]? = some commitment) :
+    ∃ (leaf other : Bytes32) (index : Nat) (nodes : List Bytes32),
+      SszType.hashTreeRoot sidecar.kzgCommitment = .ok leaf ∧
+      SszType.hashTreeRoot commitment = .ok other ∧
+      (leaf = other ∨ ∃ a ∈ branchMessages index 0 leaf.toArray
+          (sidecar.kzgCommitmentInclusionProof.toList.map Vector.toArray),
+        ∃ b ∈ branchMessages index 0 other.toArray (nodes.map Vector.toArray),
+          a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
+          Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
+            Cryptography.Hash.Sha256.hash (ByteArray.mk b)) := by
+  have inside : sidecar.index.toNat < preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat :=
+    Nat.lt_of_lt_of_le (List.getElem?_eq_some_iff.mp (by simpa using chosen)).1
+      ((body.blobKzgCommitments deneb).bound deneb.2)
+  obtain ⟨gindex, other, root, nodes, located, otherRooted, bodyRoot, -, honest⟩ :=
+    inclusion_branch deneb chosen
+  obtain ⟨depthIndex, located', depth⟩ := blobKzgCommitmentGindex_depth named deneb inside
+  rw [located] at located'
+  cases located'
+  rw [rooted] at bodyRoot
+  cases bodyRoot
+  obtain ⟨leaf, leafRooted⟩ := SszType.hashTreeRoot_total sidecar.kzgCommitment
+  have positive : 1 ≤ gindex := getGeneralizedIndex_positive _ _ _ located
+  have below : getSubtreeIndex gindex = .ok (gindex % 2 ^ Nat.log2 gindex) := by
+    simp [getSubtreeIndex, gindexDepth, gindexBelow, Nat.not_lt.mpr positive, bind,
+      Except.bind, pure, Except.pure]
+  -- The sidecar's branch and the body's branch climb at one depth and index to one root.
+  unfold verifyBlobSidecarInclusionProof at valid
+  simp only [located, leafRooted, below] at valid
+  rw [depth] at honest valid
+  exact ⟨leaf, other, _, nodes, leafRooted, otherRooted,
+    isValidMerkleBranch_binding valid honest⟩
+
 end Inclusion
 
 end EthLib.Consensus

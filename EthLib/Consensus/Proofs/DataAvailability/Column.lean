@@ -248,6 +248,54 @@ theorem kzgCommitmentsInclusionProofDepth_eq {preset : Preset} {fork : Fork}
   rcases named with rfl | rfl <;> cases fork <;> first
     | exact absurd fulu (by decide) | exact absurd beforeGloas (by decide) | decide +kernel
 
+/-- A column sidecar whose inclusion check passes carries the commitments of its block.
+
+Take any body whose root is the body root of the header of the sidecar.
+
+Its list of commitments has the root of the sidecar's list.
+
+Otherwise the two climbs hash two different messages to one SHA-256 output.
+
+This holds at Fulu and the BPO forks, for both presets. -/
+theorem verifyDataColumnSidecarInclusionProof_body {preset : Preset} {fork : Fork}
+    [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
+    [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat] [NeZero preset.PTC_SIZE.toNat]
+    [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat]
+    (named : preset = .mainnet ∨ preset = .minimal) (fulu : .fusaka ≤ fork)
+    (beforeGloas : fork < .glamsterdam) {sidecar : DataColumnSidecar preset fork}
+    (valid : verifyDataColumnSidecarInclusionProof preset beforeGloas sidecar = true)
+    {body : BeaconBlockBody preset fork}
+    (rooted : SszType.hashTreeRoot body =
+      .ok (sidecar.signedBlockHeader beforeGloas).message.bodyRoot) :
+    ∃ (leaf other : Bytes32) (index : Nat) (nodes : List Bytes32),
+      SszType.hashTreeRoot (sidecar.kzgCommitments beforeGloas) = .ok leaf ∧
+      SszType.hashTreeRoot (body.blobKzgCommitments ⟨Nat.le_trans (by decide) fulu,
+        beforeGloas⟩) = .ok other ∧
+      (leaf = other ∨ ∃ a ∈ branchMessages index 0 leaf.toArray
+          ((sidecar.kzgCommitmentsInclusionProof beforeGloas).toList.map Vector.toArray),
+        ∃ b ∈ branchMessages index 0 other.toArray (nodes.map Vector.toArray),
+          a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
+          Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
+            Cryptography.Hash.Sha256.hash (ByteArray.mk b)) := by
+  obtain ⟨other, root, nodes, located, otherRooted, bodyRoot, honest⟩ :=
+    blobKzgCommitments_branch ⟨Nat.le_trans (by decide) fulu, beforeGloas⟩ body
+  obtain ⟨gindex, located', depth⟩ := kzgCommitmentsInclusionProofDepth_eq named fulu beforeGloas
+  unfold blobKzgCommitmentsGindex at located'
+  rw [located] at located'
+  cases located'
+  rw [rooted] at bodyRoot
+  cases bodyRoot
+  obtain ⟨leaf, leafRooted⟩ := SszType.hashTreeRoot_total (sidecar.kzgCommitments beforeGloas)
+  have below : getSubtreeIndex 27 = .ok (27 % 2 ^ Nat.log2 27) := by
+    simp [getSubtreeIndex, gindexDepth, gindexBelow, bind, Except.bind, pure, Except.pure]
+  -- The sidecar's branch and the body's branch climb at one depth and index to one root.
+  unfold verifyDataColumnSidecarInclusionProof verifyKzgCommitmentsInclusionProof
+    blobKzgCommitmentsGindex at valid
+  simp only [located, leafRooted, below] at valid
+  rw [depth] at honest valid
+  exact ⟨leaf, other, _, nodes, leafRooted, otherRooted,
+    isValidMerkleBranch_binding valid honest⟩
+
 section Matrix
 
 open Cryptography.Kzg Cryptography.Kzg.Constants

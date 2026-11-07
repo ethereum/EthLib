@@ -46,6 +46,7 @@ public import EthLib.Consensus.Proofs.Gossip.Operations
 public import EthLib.Consensus.Proofs.Gossip.Payload
 public import EthLib.Consensus.Proofs.Gossip.ProposerPreferences
 public import EthLib.Consensus.Proofs.Gossip.Sidecar
+public import EthLib.Consensus.Proofs.Gossip.SidecarInclusion
 public import EthLib.Consensus.Proofs.Gossip.SyncCommittee
 public import EthLib.Consensus.Proofs.Gossip.Topics
 public import EthLib.Consensus.Proofs.InclusionList
