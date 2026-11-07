@@ -467,6 +467,30 @@ def consensus_get_validator_signature(name: str, fork: str, state: bytes, config
     """The signature of the object of a duty, by a secret key of 32 big-endian bytes."""
     ...
 
+def consensus_get_eth1_vote(name: str, fork: str, state: bytes, config: bytes, chain: list[bytes]) -> bytes:
+    """Before Heze: the Eth1 vote of a proposer on a state, as the SSZ bytes of the Eth1 data."""
+    ...
+
+def consensus_get_eth1_pending_deposit_count(name: str, fork: str, state: bytes) -> int:
+    """In Electra: the number of deposits of the deposit contract that a proposer includes."""
+    ...
+
+def consensus_compute_new_state_root(name: str, fork: str, state: bytes, block: bytes, config: bytes, verify: bool) -> bytes:
+    """The root of the state after a block, to set as its state root, as 32 bytes."""
+    ...
+
+def consensus_compute_on_chain_aggregate(name: str, fork: str, aggregates: list[bytes]) -> bytes:
+    """From Electra: the attestation on chain from network aggregates, as SSZ bytes."""
+    ...
+
+def consensus_get_execution_requests(name: str, fork: str, requests: list[bytes]) -> bytes:
+    """From Electra: the requests of an execution block, as SSZ bytes."""
+    ...
+
+def consensus_get_validators_custody_requirement(name: str, fork: str, state: bytes, config: bytes, validator_indices: list[bytes]) -> int:
+    """From Fulu: the number of custody groups of a node, from the indices of its validators."""
+    ...
+
 def consensus_upgrade_state(name: str, fork: str, pre: bytes, config: bytes, verify: bool) -> bytes:
     """The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes."""
     ...

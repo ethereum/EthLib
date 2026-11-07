@@ -350,6 +350,24 @@
 #define DOC_consensus_get_validator_signature \
   "The signature of the object of a duty, by a secret key of 32 big-endian bytes."
 
+#define DOC_consensus_get_eth1_vote \
+  "Before Heze: the Eth1 vote of a proposer on a state, as the SSZ bytes of the Eth1 data."
+
+#define DOC_consensus_get_eth1_pending_deposit_count \
+  "In Electra: the number of deposits of the deposit contract that a proposer includes."
+
+#define DOC_consensus_compute_new_state_root \
+  "The root of the state after a block, to set as its state root, as 32 bytes."
+
+#define DOC_consensus_compute_on_chain_aggregate \
+  "From Electra: the attestation on chain from network aggregates, as SSZ bytes."
+
+#define DOC_consensus_get_execution_requests \
+  "From Electra: the requests of an execution block, as SSZ bytes."
+
+#define DOC_consensus_get_validators_custody_requirement \
+  "From Fulu: the number of custody groups of a node, from the indices of its validators."
+
 #define DOC_consensus_upgrade_state \
   "The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes."
 

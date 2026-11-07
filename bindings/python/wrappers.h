@@ -173,6 +173,7 @@ extern PyObject* FORK_CHOICE_ERROR;
 extern PyObject* CHAIN_ERROR;
 extern PyObject* WEAK_SUBJECTIVITY_ERROR;
 extern PyObject* VALIDATOR_DUTY_ERROR;
+extern PyObject* PROPOSER_ERROR;
 
 /* ---- Argument parsing helpers ---------------------------------------- */
 
@@ -197,6 +198,15 @@ pack_bytes_sequence(
   Py_ssize_t stride,
   Py_ssize_t* out_len,
   const char* name
+);
+
+/* Read a sequence of `bytes` of any lengths into a Lean `Array ByteArray`.
+ * Returns 0, or 1 with a Python exception set. */
+int
+parse_bytes_sequence(
+  PyObject* seq,
+  const char* name,
+  lean_object** out
 );
 
 /* ---- Wrapper functions ----------------------------------------------- */
@@ -327,6 +337,12 @@ PyObject* py_consensus_is_proposer (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_assigned_to_sync_committee (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_subnets_for_sync_committee (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_validator_signature (PyObject* self, PyObject* args);
+PyObject* py_consensus_get_eth1_vote (PyObject* self, PyObject* args);
+PyObject* py_consensus_get_eth1_pending_deposit_count (PyObject* self, PyObject* args);
+PyObject* py_consensus_compute_new_state_root (PyObject* self, PyObject* args);
+PyObject* py_consensus_compute_on_chain_aggregate (PyObject* self, PyObject* args);
+PyObject* py_consensus_get_execution_requests (PyObject* self, PyObject* args);
+PyObject* py_consensus_get_validators_custody_requirement (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_ssz                                  (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_possession_signing_root              (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_is_valid_possession_proof            (PyObject* self, PyObject* args);
