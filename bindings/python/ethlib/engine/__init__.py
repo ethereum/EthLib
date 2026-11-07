@@ -18,9 +18,9 @@ def new_payload(config: dict, method: str, params: list) -> dict:
 
 def new_payload_on_chain(
     config: dict, state: bytes, recent: list, method: str, params: list
-) -> tuple[dict, bytes | None, list | None]:
+) -> tuple[dict, bytes | None, bytes | None]:
     """The payload status of an `engine_newPayload` call, on a chain that holds the parent."""
-    # A valid payload also gives its header and the accounts of the state after it.
+    # A valid payload also gives the RLP encodings of its header and of the accounts after it.
     request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
     items = [
         [name.encode(), rlp.decode(header), [rlp.decode(o) for o in ommers]]
@@ -31,9 +31,9 @@ def new_payload_on_chain(
             json.dumps(config).encode(), state, rlp.encode(items), json.dumps(request).encode()
         )
     )
-    if header == []:
+    if header == b"":
         return json.loads(status), None, None
-    return json.loads(status), rlp.encode(header), accounts
+    return json.loads(status), header, accounts
 
 
 def forkchoice_updated(tree: list, method: str, params: list, finalized: str | None = None) -> dict:

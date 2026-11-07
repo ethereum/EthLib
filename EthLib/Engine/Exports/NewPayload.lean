@@ -80,11 +80,13 @@ def newPayloadExport (config request : ByteArray) : Result ByteArray := do
 
 The chain has the inputs of the state transition export: configuration, state, recent blocks.
 
-It returns an RLP list of three items, the status as JSON first.
+It returns an RLP list of three byte strings, the status as JSON first.
 
-For a valid payload, the RLP form of its header and the accounts of the state after it follow.
+For a valid payload, the RLP encodings of its header and of the accounts after it follow.
 
-For any other payload, two empty lists follow. -/
+The caller can then pass the accounts to the next call without decoding them.
+
+For any other payload, two empty byte strings follow. -/
 @[export eth_engine_new_payload_on_chain]
 def newPayloadOnChainExport (config state recent request : ByteArray) : Result ByteArray := do
   let config ← configOfJson (← parseJson "config" config)
@@ -102,13 +104,16 @@ def newPayloadOnChainExport (config state recent request : ByteArray) : Result B
   | .error e => throw (e.code, s!"engine error: {reprStr e}")
   | .ok (status, reason, next) =>
     let json := Serialization.Rlp.Item.bytes (statusJson status reason).compress.toUTF8
-    let (header, accounts) := match next with
-      | some (block, post) =>
-        (Serialization.Rlp.Codec.toItem block.header,
-          Serialization.Rlp.Item.list (post.accounts.toList.map fun (address, account) =>
+    let encoded : Except _ (ByteArray × ByteArray) := match next with
+      | some (block, post) => do
+        let header ← Serialization.Rlp.encode (Serialization.Rlp.Codec.toItem block.header)
+        let accounts ← Serialization.Rlp.encode (.list (post.accounts.toList.map
+          fun (address, account) =>
             Execution.Transactions.Exports.stateEntryItem post address account))
-      | none => (.list [], .list [])
-    (Serialization.Rlp.encode (.list [json, header, accounts])).mapError
+        return (header, accounts)
+      | none => pure (.empty, .empty)
+    let (header, accounts) ← encoded.mapError fun e => (0, s!"result: {reprStr e}")
+    (Serialization.Rlp.encode (.list [json, .bytes header, .bytes accounts])).mapError
       fun e => (0, s!"result: {reprStr e}")
 
 end EthLib.Engine.Exports
