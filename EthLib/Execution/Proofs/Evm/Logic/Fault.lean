@@ -137,7 +137,8 @@ macro_rules
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
          case gas => evm_gas
-         case nz => decide
-         case bad => evm_bad_dest [$ls,*]))
+         case nz => first | assumption | decide
+         case bad => evm_bad_dest [$ls,*])
+      | fail "no rule of an exceptional halt applies to the opcode at the program counter")
 
 end EthLib.Execution.Evm.Logic
