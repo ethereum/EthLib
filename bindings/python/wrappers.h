@@ -327,6 +327,8 @@ PyObject* py_consensus_rewards_deltas (PyObject* self, PyObject* args);
 PyObject* py_consensus_process_slots (PyObject* self, PyObject* args);
 PyObject* py_consensus_state_transition (PyObject* self, PyObject* args);
 PyObject* py_consensus_state_transition_across (PyObject* self, PyObject* args);
+PyObject* py_consensus_state_transitions (PyObject* self, PyObject* args);
+PyObject* py_consensus_state_transitions_across (PyObject* self, PyObject* args);
 PyObject* py_consensus_fork_choice (PyObject* self, PyObject* args);
 PyObject* py_consensus_gossip_validation (PyObject* self, PyObject* args);
 PyObject* py_consensus_initialize_genesis (PyObject* self, PyObject* args);
