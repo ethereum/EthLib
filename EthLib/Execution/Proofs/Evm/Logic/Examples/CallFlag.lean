@@ -172,13 +172,14 @@ def Returned (callee : Evm fork Nat → Message fork → Evm fork Nat → Prop) 
     caller.state =
       (state.recordAccountRead (toAddressMasked (target message.data))).recordAccountRead
         message.currentTarget ∧
-    msg.gas = callGas 65535 (gas - 24) (accessCost cold) ∧
+    msg.gas = (messageCallGas fork 0 (65535 : U256).toNat (gas - 24) 0 (accessCost cold)).subCall ∧
     msg.currentTarget = toAddressMasked (target message.data) ∧
     msg.target = some (toAddressMasked (target message.data)) ∧
     msg.codeAddress = some (toAddressMasked (target message.data)) ∧ msg.code = calleeCode ∧
     msg.value = 0 ∧ msg.data = .empty ∧ msg.depth = message.depth + 1 ∧
     Halted false (wordBytes (flag child))
-      (gas - 24 - (callGas 65535 (gas - 24) (accessCost cold) + accessCost cold) + child.gas - 15)
+      (gas - 24 - (messageCallGas fork 0 (65535 : U256).toNat (gas - 24) 0 (accessCost cold)).cost +
+        child.gas - 15)
       (incorporateChild fork caller child).state (incorporateChild fork caller child).substate evm
 
 /-- The specification of the code, under any assumption on the frame that ends its message.
@@ -212,15 +213,12 @@ theorem spec (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
   rintro evm
     ⟨caller, msg, child, hcallee, hle, hst, hss, hmg, hmc, hmt, hmtg, hmca, hmcode, hmd, hmv, hmdep,
       hat⟩
-  have hleft : 15 ≤ gas - 24 - (callGas 65535 (gas - 24) (if cold then 2600 else 100) +
-      if cold then 2600 else 100) + child.gas := by
-    have hmax : callGas 65535 (gas - 24) (if cold then 2600 else 100) ≤
-        gas - 24 - (if cold then 2600 else 100) -
-          (gas - 24 - (if cold then 2600 else 100)) / 64 := by
-      unfold callGas maxMessageCallGas
-      exact Nat.min_le_right _ _
-    cases cold <;>
-      simp only [accessCost, ite_true, Bool.false_eq_true, ite_false] at hgas hmax ⊢ <;> omega
+  have hleft : 15 ≤ gas - 24 -
+      (messageCallGas fork 0 (65535 : U256).toNat (gas - 24) 0 (if cold then 2600 else 100)).cost +
+        child.gas := by
+    have htw : fork ≥ .tangerineWhistle := Nat.le_trans (by decide) hfork
+    cases cold <;> simp only [accessCost, ite_true, Bool.false_eq_true, ite_false] at hgas ⊢ <;>
+      rw [messageCallGas_of_le htw (by omega)] <;> simp only [maxMessageCallGas] <;> omega
   obtain ⟨stopped, hreach, halted, hq⟩ := finish (fork := fork) (message := message)
     (word := flag child) hleft evm hat
   exact ⟨stopped, hreach, halted, caller, msg, child, hcallee, hle, hst, hmg, hmt, hmtg, hmca,
