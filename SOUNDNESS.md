@@ -422,6 +422,7 @@ They also check the CTR examples F.5.1, F.5.2, F.5.5 and F.5.6 of SP 800-38A.
 Both hold for every forward cipher.
 `residue_mul` (`Proofs/Aes/GaloisField.lean`) proves that the block product of SP 800-38D §6.3, Algorithm 1, is the product of the two blocks read as polynomials over GF(2) modulo `1 + u + u^2 + u^7 + u^128`.
 `residue_xorBlock` proves that XOR is their sum, and `residue_injective` that two different blocks have two different residues.
+`residue_ghash` proves that GHASH of `X_1 ... X_m` is `X_1 H^m + ... + X_m H` on residues, the form that §6.4 states.
 No theorem proves that the modulus is irreducible, so none proves that these residues form a field.
 `encrypt_shortTag` and `decrypt_shortTag` prove that both functions reject the 64-bit and 32-bit tags, which SP 800-38D Appendix C restricts.
 The Python tests check seven test cases of the NIST CAVP file `gcmtestvectors.zip`, one of them a forged tag that decryption rejects.
