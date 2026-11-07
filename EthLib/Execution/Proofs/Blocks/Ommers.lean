@@ -111,6 +111,8 @@ private theorem exists_unit {P : Unit → Prop} : (∃ u, P u) ↔ P () :=
 
 The block commits to them by its ommers hash, and each ommer header passes its own checks.
 
+The number of each ommer is at least 1 and below the number of the block.
+
 There are at most two ommers, and no two have one hash.
 
 No ommer is the block, a block of the recent chain, or an ommer that the recent chain holds.
