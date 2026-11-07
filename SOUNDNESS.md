@@ -632,6 +632,8 @@ On a match, it returns the word of storage at the Keccak-256 hash of two words o
 `SlotOfCalldata.runFrame_mismatch` proves that it reverts with no output otherwise, for 37 gas.
 `Hoare.loop` (`Logic/Loop.lean`) proves a loop from an invariant for each value of a natural measure.
 A run of the loop then ends by the measure, not by the gas.
+`SumLoop.runFrame_spec` proves a contract that loops `n` times, for the word `n` of its call data, with the one-counter meter.
+With at least `45 + 55 n` gas, it returns `n (n + 1) / 2` modulo `2^256`.
 
 ### SHA-256 precompile
 
