@@ -16,7 +16,7 @@ Both functions reject the 64-bit and 32-bit tags.
 
 Under the length checks, the counters of the text differ from each other and from `J_0`.
 
-Both hold for every forward cipher, so for AES under every key.
+Each holds for every forward cipher, so for AES under every key.
 -/
 
 @[expose] public section
@@ -144,7 +144,7 @@ theorem encrypt_eq_ok_of_decrypt_eq_ok (ciph : Block → Block) (t : Nat)
     · simp only [hT, ite_false] at h
       cases h
 
-/-- Decryption returns `p` exactly when `p` encrypts to the ciphertext and the tag, §7. -/
+/-- Decryption returns `p` exactly when `p` encrypts to the ciphertext and tag, SP 800-38D §7. -/
 theorem decrypt_eq_ok_iff (ciph : Block → Block) (t : Nat) (iv c aad T p : ByteArray) :
     decrypt ciph t iv c aad T = .ok p ↔ encrypt ciph t iv p aad = .ok (c, T) :=
   ⟨encrypt_eq_ok_of_decrypt_eq_ok ciph t iv c aad T p, decrypt_encrypt ciph t iv p aad c T⟩
