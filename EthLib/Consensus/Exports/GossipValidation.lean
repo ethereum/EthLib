@@ -350,7 +350,8 @@ def validatePartialInputs {preset : Preset} {fork : Fork} (config : Config)
       | some 0 =>
         let sidecar ← decodeInput (PartialDataColumnSidecar preset fork) rest
         let (outcome, next) ← runForkChoice (validatePartialDataColumnSidecar config checks setup
-          headers store fulu sidecar input.currentTimeMs ⟨root⟩ input.subnetId)
+          headers store fulu sidecar input.currentTimeMs
+          ⟨root, fun gloas => absurd gloas (not_glamsterdam_le fulu.2)⟩ input.subnetId)
         headers := next
         out := out ++ outcomeRecord outcome
       | _ => throw (0, "the kind of a partial message is 0 or 1")

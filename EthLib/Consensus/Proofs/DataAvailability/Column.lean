@@ -144,16 +144,46 @@ instance {preset : Preset} {fork : Fork}
     LawfulSszType (PartialDataColumnHeader preset fork) :=
   .container ⟨rfl, by simp, by decide⟩ (fun _ => rfl) (fun _ => rfl)
 
+/-- The field names of a partial sidecar are distinct at every fork. -/
+theorem PartialDataColumnSidecar.names_nodup {fork : Fork} :
+    (PartialDataColumnSidecar.names fork).Nodup := by
+  have all : (["cells_present_bitmap", "partial_column", "kzg_proofs", "header"] :
+      List String).Nodup := by decide
+  exact all.sublist ((List.Sublist.refl _).append (untilNames_sublist _))
+
 instance {preset : Preset} {fork : Fork}
     [NeZero preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat] :
     LawfulSszType (PartialDataColumnSidecar preset fork) :=
+  .container
+    ⟨by
+      by_cases before : fork < Fork.glamsterdam
+      · simp [PartialDataColumnSidecar.names, untilNames, SszFields.descs, before]
+      · simp [PartialDataColumnSidecar.names, untilNames, SszFields.descs, before],
+     by simp [PartialDataColumnSidecar.names],
+     firstDuplicate_of_nodup _ PartialDataColumnSidecar.names_nodup⟩
+    (fun _ => rfl) (fun _ => rfl)
+
+instance {preset : Preset} {fork : Fork} :
+    LawfulSszType (PartialDataColumnPartsMetadata preset fork) :=
   .container ⟨rfl, by simp, by decide⟩ (fun _ => rfl) (fun _ => rfl)
 
-instance {preset : Preset} : LawfulSszType (PartialDataColumnPartsMetadata preset) :=
-  .container ⟨rfl, by simp, by decide⟩ (fun _ => rfl) (fun _ => rfl)
+/-- The field names of a group are distinct at every fork. -/
+theorem PartialDataColumnGroupID.names_nodup {fork : Fork} :
+    (PartialDataColumnGroupID.names fork).Nodup := by
+  have all : (["beacon_block_root", "slot"] : List String).Nodup := by decide
+  exact all.sublist ((List.Sublist.refl _).append (sinceNames_sublist _))
 
-instance : LawfulSszType PartialDataColumnGroupID :=
-  .container (by decide) (fun _ => rfl) (fun _ => rfl)
+instance {fork : Fork} : LawfulSszType (PartialDataColumnGroupID fork) :=
+  .container
+    ⟨by
+      by_cases before : fork < Fork.glamsterdam
+      · simp [PartialDataColumnGroupID.names, sinceNames, SszFields.descs,
+          not_glamsterdam_le before]
+      · simp [PartialDataColumnGroupID.names, sinceNames, SszFields.descs,
+          not_lt_glamsterdam before],
+     by simp [PartialDataColumnGroupID.names],
+     firstDuplicate_of_nodup _ PartialDataColumnGroupID.names_nodup⟩
+    (fun _ => rfl) (fun _ => rfl)
 
 /-- A bitmap with every bit set names every blob, in order. -/
 theorem PartialDataColumnSidecar.blobIndices_of_all {preset : Preset} {fork : Fork}

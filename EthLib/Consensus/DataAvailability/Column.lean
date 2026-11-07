@@ -30,6 +30,8 @@ A partial sidecar carries the header of its block only on the first push, as a l
 
 The header holds the commitments of the block, its signed header and the branch between them.
 
+Gloas drops that header, and the group of a partial message also names the slot of its block.
+
 [EIP-7594] specifies the matrix, the sidecars and their checks.
 
 [EIP-7594]: https://eips.ethereum.org/EIPS/eip-7594#specification
@@ -315,8 +317,13 @@ def getDataColumnSidecarsFromColumnSidecar {preset : Preset} {fork : Fork}
   getDataColumnSidecars preset sidecar.signedBlockHeader sidecar.kzgCommitments
     sidecar.kzgCommitmentsInclusionProof sidecar.beaconBlockRoot sidecar.slot cellsAndKzgProofs
 
-/-- One bit per blob of a block, for the cells of one column. -/
-abbrev CellsBitList (preset : Preset) := Bitlist preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat
+/-- One bit per blob of a block, for the cells of one column.
+
+From Gloas the bitlist is progressive, as [EIP-7688] specifies.
+
+[EIP-7688]: https://eips.ethereum.org/EIPS/eip-7688#specification -/
+abbrev CellsBitList (preset : Preset) (fork : Fork) :=
+  ForkBitlist .glamsterdam fork preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat
 
 /-- At Fulu: what all the columns of a block share, to check their cells. -/
 structure PartialDataColumnHeader (preset : Preset) (fork : Fork) where
@@ -333,53 +340,82 @@ instance {preset : Preset} {fork : Fork} : SszType (PartialDataColumnHeader pres
     (fun h => (h.kzgCommitments, h.signedBlockHeader, h.kzgCommitmentsInclusionProof))
     (fun (kzgCommitments, signedBlockHeader, branch) => ⟨kzgCommitments, signedBlockHeader, branch⟩)
 
-/-- At Fulu: some cells of one column, those that the bitmap marks, with their proofs.
+/-- From Fulu: some cells of one column, those that the bitmap marks, with their proofs.
 
 The topic of the message names the column.
 
-A header comes along only on an eager push, as a list of at most one. -/
+At Fulu a header comes along only on an eager push, as a list of at most one.
+
+Gloas removes the header, since the bid of the block holds the commitments.
+
+Gloas also makes the cells and the proofs progressive lists. -/
 structure PartialDataColumnSidecar (preset : Preset) (fork : Fork) where
   /-- Bit `i` is set when the cell of blob `i` is present. -/
-  cellsPresentBitmap : CellsBitList preset
+  cellsPresentBitmap : CellsBitList preset fork
   /-- The cells that are present, in the order of their blobs. -/
-  partialColumn : SszList Cell preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat
+  partialColumn : ForkList .glamsterdam fork Cell preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat
   /-- The proof of each cell that is present. -/
-  kzgProofs : SszList KZGProof preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat
-  /-- The header of the block, or nothing. -/
-  header : SszList (PartialDataColumnHeader preset fork) 1
+  kzgProofs : ForkList .glamsterdam fork KZGProof preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat
+  /-- Before Gloas: the header of the block, or nothing. -/
+  header : Until .glamsterdam fork (SszList (PartialDataColumnHeader preset fork) 1)
+
+namespace PartialDataColumnSidecar
+
+/-- The names of the fields of a partial sidecar at a fork, in their order. -/
+def names (fork : Fork) : List String :=
+  ["cells_present_bitmap", "partial_column", "kzg_proofs"] ++
+    untilNames .glamsterdam fork ["header"]
 
 instance {preset : Preset} {fork : Fork} : SszType (PartialDataColumnSidecar preset fork) :=
-  .container ["cells_present_bitmap", "partial_column", "kzg_proofs", "header"]
+  .container (names fork)
     (fun s => (s.cellsPresentBitmap, s.partialColumn, s.kzgProofs, s.header))
     (fun (bitmap, cells, proofs, header) => ⟨bitmap, cells, proofs, header⟩)
 
-/-- At Fulu: the cells that a peer has, and those that it asks for.
+/-- The headers that a partial sidecar carries: at most one before Gloas, and none from Gloas. -/
+def headers {preset : Preset} {fork : Fork} (sidecar : PartialDataColumnSidecar preset fork) :
+    Array (PartialDataColumnHeader preset fork) :=
+  if before : fork < .glamsterdam then (sidecar.header before).data else #[]
+
+end PartialDataColumnSidecar
+
+/-- From Fulu: the cells that a peer has, and those that it asks for.
 
 A peer that has a cell has its proof too. -/
-structure PartialDataColumnPartsMetadata (preset : Preset) where
+structure PartialDataColumnPartsMetadata (preset : Preset) (fork : Fork) where
   /-- Bit `i` is set when the peer has the cell of blob `i` and will provide it. -/
-  available : CellsBitList preset
+  available : CellsBitList preset fork
   /-- Bit `i` is set when the peer wants the cell of blob `i`. -/
-  requests : CellsBitList preset
+  requests : CellsBitList preset fork
   deriving DecidableEq
 
-instance {preset : Preset} : SszType (PartialDataColumnPartsMetadata preset) :=
+instance {preset : Preset} {fork : Fork} : SszType (PartialDataColumnPartsMetadata preset fork) :=
   .container ["available", "requests"] (fun m => (m.available, m.requests))
     (fun (available, requests) => ⟨available, requests⟩)
 
-/-- At Fulu: the group of the partial messages of one block, named by the root of the block. -/
-structure PartialDataColumnGroupID where
+/-- From Fulu: the group of the partial messages of one block, named by the root of the block.
+
+Gloas adds the slot of the block. -/
+structure PartialDataColumnGroupID (fork : Fork) where
   /-- The root of the block. -/
   beaconBlockRoot : Root
-  deriving DecidableEq
+  /-- From Gloas: the slot of the block. -/
+  slot : Since .glamsterdam fork Slot
 
-instance : SszType PartialDataColumnGroupID :=
-  .container ["beacon_block_root"] (fun g => g.beaconBlockRoot) (fun root => ⟨root⟩)
+namespace PartialDataColumnGroupID
+
+/-- The names of the fields of a group at a fork, in their order. -/
+def names (fork : Fork) : List String :=
+  ["beacon_block_root"] ++ sinceNames .glamsterdam fork ["slot"]
+
+instance {fork : Fork} : SszType (PartialDataColumnGroupID fork) :=
+  .container (names fork) (fun g => (g.beaconBlockRoot, g.slot))
+    (fun (beaconBlockRoot, slot) => ⟨beaconBlockRoot, slot⟩)
 
 /-- The gossip group ID of a group: the version byte 0, then the SSZ bytes of the group. -/
-def PartialDataColumnGroupID.toGroupId (group : PartialDataColumnGroupID) :
-    Except Err ByteArray := do
+def toGroupId {fork : Fork} (group : PartialDataColumnGroupID fork) : Except Err ByteArray := do
   return ByteArray.mk #[0] ++ (← SszType.serialize group)
+
+end PartialDataColumnGroupID
 
 /-- Whether the branch of a header climbs from its commitments to its body root. -/
 def verifyPartialDataColumnHeaderInclusionProof (preset : Preset) {fork : Fork}
