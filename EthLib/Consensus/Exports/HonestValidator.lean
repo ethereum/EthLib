@@ -102,7 +102,9 @@ The object comes as SSZ bytes, by duty:
 - `aggregate_and_proof`: an aggregate and proof.
 - `sync_committee_message`: a block root.
 - `sync_committee_selection_proof`: sync aggregator selection data.
-- `contribution_and_proof`: a contribution and proof. -/
+- `contribution_and_proof`: a contribution and proof.
+
+The three duties of the sync committee need Altair; before it they have code 0. -/
 @[export eth_consensus_get_validator_signature]
 def getValidatorSignatureExport (name fork state replacements duty object secretKey : ByteArray) :
     Result ByteArray := do
@@ -124,13 +126,16 @@ def getValidatorSignatureExport (name fork state replacements duty object secret
       runDuty (getAggregateAndProofSignature config state
         (← decodeInput (AggregateAndProof preset fork) object) key)
     | "sync_committee_message" => do
+      let ⟨_⟩ ← altairOf fork
       let message ← runDuty (getSyncCommitteeMessage config state
         (← decodeInput Root object) 0 key)
       pure message.signature
     | "sync_committee_selection_proof" => do
+      let ⟨_⟩ ← altairOf fork
       let data ← decodeInput SyncAggregatorSelectionData object
       runDuty (getSyncCommitteeSelectionProof config state data.slot data.subcommitteeIndex key)
     | "contribution_and_proof" => do
+      let ⟨_⟩ ← altairOf fork
       runDuty (getContributionAndProofSignature config state
         (← decodeInput (ContributionAndProof preset) object) key)
     | other => throw (0, s!"unknown duty {other}")

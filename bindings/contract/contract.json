@@ -2885,7 +2885,7 @@
       {"constructor": "periodOutOfRange", "code": 6}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
-   "The signature of the object of a duty, by a secret key of 32 big-endian bytes.\n\nThe preset, the configuration, the fork and the duty are named in UTF-8.\n\nThe object comes as SSZ bytes, by duty:\n\n- `randao` and `block`: a block.\n- `attestation`: attestation data.\n- `slot`: a slot.\n- `aggregate_and_proof`: an aggregate and proof.\n- `sync_committee_message`: a block root.\n- `sync_committee_selection_proof`: sync aggregator selection data.\n- `contribution_and_proof`: a contribution and proof."},
+   "The signature of the object of a duty, by a secret key of 32 big-endian bytes.\n\nThe preset, the configuration, the fork and the duty are named in UTF-8.\n\nThe object comes as SSZ bytes, by duty:\n\n- `randao` and `block`: a block.\n- `attestation`: attestation data.\n- `slot`: a slot.\n- `aggregate_and_proof`: an aggregate and proof.\n- `sync_committee_message`: a block root.\n- `sync_committee_selection_proof`: sync aggregator selection data.\n- `contribution_and_proof`: a contribution and proof.\n\nThe three duties of the sync committee need Altair; before it they have code 0."},
   {"summary":
    "The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes.",
    "signature":

@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Containers.Attestation
 public import EthLib.Consensus.Containers.SyncCommittee
+public import EthLib.Consensus.Gossip.SyncCommittee
 public import EthLib.Consensus.Mutators
 public import EthLib.Cryptography.Bls.Signatures
 
@@ -20,21 +21,18 @@ Each message it sends carries its BLS signature of the message's signing root.
 
 The root joins the root of the message with a domain of a kind of message, a fork and a chain.
 
-So a signature for one kind of message cannot pass as another.
+Each kind of message has its own domain type, so two kinds are signed under different domains.
 
-```text
-duty                     signed object               domain type                epoch
-RANDAO reveal            epoch of the block          RANDAO                     of the block
-block                    block                       BEACON_PROPOSER            of the block
-attestation              attestation data            BEACON_ATTESTER            target epoch
-selection proof          slot                        SELECTION_PROOF            of the slot
-aggregate and proof      aggregate and proof         AGGREGATE_AND_PROOF        of its slot
-sync committee message   block root                  SYNC_COMMITTEE             current
-sync selection proof     selection data              SYNC_COMMITTEE_SELECTION   of the slot
-contribution and proof   contribution and proof      CONTRIBUTION_AND_PROOF     of its slot
-```
+Each duty signs one object at one epoch:
 
-Each domain type is the constant of that name with the prefix `DOMAIN_`.
+- The RANDAO reveal signs the epoch of the block, at that epoch.
+- A block is signed at the epoch of its slot.
+- Attestation data is signed at its target epoch.
+- A selection proof signs a slot, at the epoch of the slot.
+- An aggregate and proof is signed at the epoch of the aggregate's slot.
+- A sync committee message signs a block root, at the current epoch.
+- A sync selection proof signs selection data, at the epoch of its slot.
+- A contribution and proof is signed at the epoch of its slot.
 
 The guides of the later forks, up to Heze, change none of these duties and only add others.
 
@@ -142,18 +140,9 @@ Each seat of the validator in the committee gives the subnet of its subcommittee
 The subnets come once each, in increasing order. -/
 def computeSubnetsForSyncCommittee (state : BeaconState preset fork) (altair : .altair ≤ fork)
     (validatorIndex : ValidatorIndex) : Except ValidatorDutyError (List UInt64) := do
-  let nextSlot ← (addChecked state.slot 1).mapError .arith
-  let nextSlotEpoch := computeEpochAtSlot preset nextSlot
-  let syncCommittee :=
-    if computeSyncCommitteePeriod preset (getCurrentEpoch state) =
-        computeSyncCommitteePeriod preset nextSlotEpoch then
-      state.currentSyncCommittee altair
-    else state.nextSyncCommittee altair
+  let syncCommittee ← (syncCommitteeAtNextSlot state altair).mapError .arith
   let targetPubkey := (← (getValidator state validatorIndex).mapError .accessor).pubkey
-  let seats := syncCommittee.pubkeys.toList.zipIdx.filterMap fun (pubkey, seat) =>
-    if pubkey = targetPubkey then some seat else none
-  return ((seats.map (· / syncSubcommitteeSize preset)).eraseDups.mergeSort (· ≤ ·)).map
-    Nat.toUInt64
+  return (syncSubnetsOfPubkey syncCommittee targetPubkey).mergeSort (· ≤ ·)
 
 /-! ## Signatures -/
 

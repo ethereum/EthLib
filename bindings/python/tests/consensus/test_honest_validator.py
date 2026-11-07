@@ -202,10 +202,8 @@ def test_unknown_duty():
 
 # The expected committees come from the shuffle export, which tests/consensus/shuffling pins.
 def _expected_committee(count: int, epoch: int, slot: int) -> list:
-    """The one committee of a slot, when an epoch of `count` validators has one per slot.
-
-    The seed hashes the attester domain type, the epoch and a RANDAO mix, which is zero here.
-    """
+    """The one committee of a slot, when an epoch of `count` validators has one per slot."""
+    # The seed hashes the attester domain type, the epoch and a RANDAO mix, which is zero here.
     seed = _sha256(DOMAIN_BEACON_ATTESTER + struct.pack("<Q", epoch) + bytes(32))
     start = count * (slot % SLOTS_PER_EPOCH) // SLOTS_PER_EPOCH
     end = count * (slot % SLOTS_PER_EPOCH + 1) // SLOTS_PER_EPOCH
@@ -270,6 +268,15 @@ def test_sync_committee_subnets():
         2,
         3,
     ]
+
+
+@pytest.mark.parametrize(
+    "duty", ["sync_committee_message", "sync_committee_selection_proof", "contribution_and_proof"]
+)
+def test_no_sync_committee_duty_before_altair(duty: str):
+    with raises(consensus.ValidatorDutyError, "no sync committee at phase0") as info:
+        _sign(phase0_state(1), duty, bytes(32))
+    assert info.value.code == 0
 
 
 def test_no_sync_committee_before_altair():

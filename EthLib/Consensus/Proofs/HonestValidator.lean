@@ -39,27 +39,6 @@ theorem ValidatorDutyError.code_injective (e₁ e₂ : ValidatorDutyError)
 
 /-! ## Signatures -/
 
-/-- A signature at an epoch passes the check of a signature at that epoch, under its public key.
-
-The statement holds under the laws of the pairing, as BLS correctness does. -/
-theorem isValidSignatureAtEpoch_of_signAtEpoch (laws : PairingLaws) {α : Type} [SszType α]
-    {config : Config} {state : BeaconState preset fork} {domainType : DomainType}
-    {epoch : Epoch} {object : α} {key : Signatures.SecretKey} {signature : BLSSignature}
-    (signed : signAtEpoch config state domainType epoch object key = .ok signature) :
-    isValidSignatureAtEpoch config .bls state domainType epoch object (Signatures.skToPk key)
-      signature = .ok true := by
-  unfold signAtEpoch at signed
-  -- Split the binds with lemmas, so the kernel never evaluates the signature.
-  obtain ⟨domain, domained, signed⟩ := bind_ok_iff.mp signed
-  obtain ⟨root, rooted, signs⟩ := bind_ok_iff.mp signed
-  rw [mapError_ok_iff] at domained rooted signs
-  obtain ⟨signature', signs', verifies⟩ := Signatures.verify_sign laws key (packBytes root)
-  rw [signs', Except.ok.injEq] at signs
-  subst signs
-  unfold isValidSignatureAtEpoch
-  simp only [domained, rooted, bind, Except.bind, Except.mapError, pure, Except.pure]
-  exact congrArg Except.ok verifies
-
 /-- A signature at an epoch is a signature of the signing root of the object at that epoch.
 
 Under the laws of the pairing, it verifies under the public key of the secret key. -/
@@ -72,6 +51,7 @@ theorem signAtEpoch_verifies (laws : PairingLaws) {α : Type} [SszType α] {conf
       Signatures.verify (packBytes (Signatures.skToPk key)) (packBytes root)
         (packBytes signature) = true := by
   unfold signAtEpoch at signed
+  -- Split the binds with lemmas, so the kernel never evaluates the signature.
   obtain ⟨domain, domained, signed⟩ := bind_ok_iff.mp signed
   obtain ⟨root, rooted, signs⟩ := bind_ok_iff.mp signed
   rw [mapError_ok_iff] at domained rooted signs
@@ -79,6 +59,20 @@ theorem signAtEpoch_verifies (laws : PairingLaws) {α : Type} [SszType α] {conf
   rw [signs', Except.ok.injEq] at signs
   subst signs
   exact ⟨domain, root, domained, rooted, verifies⟩
+
+/-- A signature at an epoch passes the check of a signature at that epoch, under its public key.
+
+The statement holds under the laws of the pairing, as BLS correctness does. -/
+theorem isValidSignatureAtEpoch_of_signAtEpoch (laws : PairingLaws) {α : Type} [SszType α]
+    {config : Config} {state : BeaconState preset fork} {domainType : DomainType}
+    {epoch : Epoch} {object : α} {key : Signatures.SecretKey} {signature : BLSSignature}
+    (signed : signAtEpoch config state domainType epoch object key = .ok signature) :
+    isValidSignatureAtEpoch config .bls state domainType epoch object (Signatures.skToPk key)
+      signature = .ok true := by
+  obtain ⟨domain, root, domained, rooted, verifies⟩ := signAtEpoch_verifies laws signed
+  unfold isValidSignatureAtEpoch
+  simp only [domained, rooted, bind, Except.bind, Except.mapError, pure, Except.pure]
+  exact congrArg Except.ok verifies
 
 /-- A block signed by its proposer passes the check of the block's signature.
 
@@ -165,7 +159,7 @@ theorem isValidSignatureAtEpoch_getAggregateAndProofSignature (laws : PairingLaw
 
 /-- A sync committee message passes the check of a signature at the epoch of its slot.
 
-The state must be at a slot of the current epoch, as the message takes its slot from it.
+The message takes its slot from the state, so that epoch is the current epoch that it signs in.
 
 The statement holds under the laws of the pairing, as BLS correctness does. -/
 theorem isValidSignatureAtSlot_getSyncCommitteeMessage (laws : PairingLaws) {config : Config}
@@ -356,11 +350,14 @@ The seed of the epoch must have a value, and an epoch must have at least one slo
 
 The slots of the epoch must fit in 64 bits.
 
-The number of active validators times the number of committees of the epoch must fit too. -/
+There must be at most `2^40` active validators.
+
+Their number times the number of committees of the epoch must fit in 64 bits. -/
 theorem getCommitteeAssignment_ne_none {state : BeaconState preset fork} {epoch : Epoch}
     {seed : Bytes32} (seedOk : getSeed state epoch DOMAIN_BEACON_ATTESTER = .ok seed)
     (positive : preset.SLOTS_PER_EPOCH ≠ 0)
     (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64)
+    (small : (getActiveValidatorIndices state epoch).length ≤ 2 ^ 40)
     (fits : (getActiveValidatorIndices state epoch).length *
       ((getCommitteeCountPerSlot state epoch).toNat * preset.SLOTS_PER_EPOCH.toNat) < 2 ^ 64)
     {validatorIndex : ValidatorIndex}
@@ -372,7 +369,7 @@ theorem getCommitteeAssignment_ne_none {state : BeaconState preset fork} {epoch 
   split at h
   · obtain ⟨positions, positioned, found⟩ := bind_ok_iff.mp h
     obtain ⟨slot, index, committee, slotEpoch, indexLt, computed, mem⟩ :=
-      exists_mem_getBeaconCommittee seedOk positive slotsFit fits active
+      exists_mem_getBeaconCommittee seedOk positive slotsFit small fits active
     exact not_mem_of_findCommittee_none found (slot, index)
       (mem_committeePositions_of_epoch positive positioned slotEpoch indexLt) committee computed mem
   · simp [throw, throwThe, MonadExceptOf.throw] at h
