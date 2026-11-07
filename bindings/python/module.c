@@ -1001,6 +1001,8 @@ static PyMethodDef methods[] = {
    DOC_engine_new_payload_on_chain},
   {"engine_forkchoice_updated", py_engine_forkchoice_updated, METH_VARARGS,
    DOC_engine_forkchoice_updated},
+  {"engine_prepare_execution_payload", py_engine_prepare_execution_payload, METH_VARARGS,
+   DOC_engine_prepare_execution_payload},
   {NULL, NULL, 0, NULL},
 };
 

@@ -29,7 +29,7 @@ A message and a creation fail only with an error that aborts the run.
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Fork)
+open EthLib.Base (Fork bind_eq_error)
 open EthLib.Execution.State (TransactionState)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
@@ -144,11 +144,6 @@ theorem touchedOnError_of_outside {caller child : Evm fork Meter}
     revert h1 h2 outside
     cases fork <;> decide
   · rfl
-
-/-- Two steps in sequence fail when the first fails, or when the second fails on its value. -/
-private theorem bind_eq_error {ε α β : Type} {x : Except ε α} {g : α → Except ε β} {e : ε}
-    (h : x >>= g = .error e) : x = .error e ∨ ∃ a, x = .ok a ∧ g a = .error e := by
-  cases x <;> simp_all [bind, Except.bind]
 
 /-- An error of the state aborts the run. -/
 private theorem aborts_of_mapError_state {α : Type} {x : Except State.StateError α}

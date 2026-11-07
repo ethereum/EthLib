@@ -5,7 +5,7 @@ import json
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
 from ethlib.cryptography import _native
-from ethlib.errors import EngineError
+from ethlib.errors import EngineError, ProposerError
 from ethlib.serialization import rlp
 
 
@@ -46,4 +46,36 @@ def forkchoice_updated(tree: list, method: str, params: list, finalized: str | N
     return json.loads(response)
 
 
-__all__ = ["new_payload", "new_payload_on_chain", "forkchoice_updated", "EngineError"]
+def prepare_execution_payload(
+    name: str,
+    fork: str,
+    state: bytes,
+    safe_block_hash: bytes,
+    finalized_block_hash: bytes,
+    suggested_fee_recipient: bytes,
+    pow_chain: list | None = None,
+    config: dict | None = None,
+) -> dict | None:
+    """The forkchoice update and payload attributes of a proposer, or None when it asks nothing."""
+    replacements = json.dumps(config).encode() if config else b""
+    update = _native.engine_prepare_execution_payload(
+        name,
+        fork,
+        state,
+        replacements,
+        safe_block_hash,
+        finalized_block_hash,
+        suggested_fee_recipient,
+        pow_chain or [],
+    )
+    return json.loads(update)
+
+
+__all__ = [
+    "new_payload",
+    "new_payload_on_chain",
+    "forkchoice_updated",
+    "prepare_execution_payload",
+    "EngineError",
+    "ProposerError",
+]

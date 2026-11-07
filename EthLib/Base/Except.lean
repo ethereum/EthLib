@@ -3,7 +3,7 @@ module
 /-!
 # `Base.Except`
 
-An assertion in `Except`, and when an assertion, a map or a sequence of two steps succeeds.
+An assertion in `Except`, and when an assertion, a map or a sequence of two steps succeeds or fails.
 
 It sits outside the property modules, so a specification module may import it.
 
@@ -23,6 +23,17 @@ theorem ensure_ok_iff {ε : Type} {condition : Prop} [Decidable condition] {erro
     {u : Unit} : ensure condition error = .ok u ↔ condition := by
   unfold ensure
   split <;> simp_all
+
+/-- A failed assertion fails with its own error. -/
+theorem eq_of_ensure_eq_error {ε : Type} {condition : Prop} [Decidable condition]
+    {error other : ε} (failed : ensure condition error = .error other) : other = error := by
+  unfold ensure at failed
+  split at failed <;> simp_all
+
+/-- Two steps in sequence fail when the first fails, or when the second fails on its value. -/
+theorem bind_eq_error {ε α β : Type} {x : Except ε α} {g : α → Except ε β} {e : ε}
+    (h : x >>= g = .error e) : x = .error e ∨ ∃ a, x = .ok a ∧ g a = .error e := by
+  cases x <;> simp_all [bind, Except.bind]
 
 /-- Two steps in sequence succeed exactly when the first succeeds with some value.
 

@@ -73,6 +73,8 @@ inductive ProposerError where
   | subcommitteeOutOfRange (index : UInt64)
   /-- Two contributions name the same subcommittee. -/
   | repeatedSubcommittee (index : UInt64)
+  /-- From Bellatrix: a block of proof of work names a parent that the chain does not hold. -/
+  | unknownPowBlock (hash : Hash32)
 
 /-- The code of an error at the C boundary, one for each constructor. -/
 def ProposerError.code : ProposerError → UInt32
@@ -89,6 +91,7 @@ def ProposerError.code : ProposerError → UInt32
   | .requestTypeOrder .. => 11
   | .subcommitteeOutOfRange _ => 12
   | .repeatedSubcommittee _ => 13
+  | .unknownPowBlock _ => 14
 
 /-! ## The Eth1 vote -/
 

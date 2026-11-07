@@ -6,6 +6,7 @@ public import EthLib.Engine.ForkchoiceUpdated
 public import EthLib.Engine.Json
 public import EthLib.Engine.NewPayload
 public import EthLib.Engine.Payload
+public import EthLib.Engine.PreparePayload
 
 /-!
 # `EthLib.Engine`
