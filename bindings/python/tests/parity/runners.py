@@ -48,7 +48,6 @@ NOT_YET = {
     "sanity": "the state transition after Phase 0 (consensus track C26 to C40)",
     "transition": "the Electra and Fulu blocks (consensus track C35 to C40)",
     "networking": "gossip validation of blocks, votes and sidecars (consensus track C63, C64)",
-    "ssz_static": "the remaining beacon containers (consensus track C2, C6 to C12)",
 }
 
 # The plan at Gloas and Heze, by the steps of the track for Glamsterdam
@@ -58,12 +57,12 @@ _GLOAS = {
     "fast_confirmation": "the Gloas fast confirmation (G73)",
     "networking": "the Gloas data columns and unchanged topics (G77)",
     "networking/gossip_partial_data_column_sidecar": "Gloas partial data columns (G78)",
-    "ssz_static": "the remaining Gloas containers (G36 to G41, G65)",
+    "ssz_static": "the Gloas partial data column containers (G65)",
 }
 _HEZE = {
     "fast_confirmation": "the Gloas fast confirmation (G73) on the Heze fork choice (G86)",
     "networking": "the Heze gossip and req/resp rules (G87)",
-    "ssz_static": "the Heze containers (G80, G81)",
+    "ssz_static": "the partial data column containers at Heze (G80, G81)",
 }
 NOT_YET_AT = {
     **{
