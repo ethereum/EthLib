@@ -73,17 +73,27 @@ theorem pop {x : U256} {rest : List U256} (hlt : pc < code.size) (hbyte : code[p
   exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, hmem, by simp [hg, OPCODE_POP, BASE], hrun,
     herr, hs, hss⟩
 
-/-- SWAP(n + 1) exchanges the top word with the word `x` at depth `n + 1`, for 3 gas. -/
-theorem swap (n : Fin 16) {top x : U256} {rest : List U256} (hlt : pc < code.size)
-    (hbyte : code[pc] = (0x90 + n.val).toUInt8) (hx : rest[n.val]? = some x) (hgas : 3 ≤ gas) :
+/-- SWAP(n + 1), for the `n` that the byte at the program counter decodes to.
+
+It exchanges the top word with the word `x` at depth `n + 1`, for 3 gas. -/
+theorem swap_of_decode {byte : UInt8} {n : Fin 16} {top x : U256} {rest : List U256}
+    (hlt : pc < code.size) (hbyte : code[pc] = byte) (decoded : Op.decode byte = some (.swap n))
+    (hx : rest[n.val]? = some x) (hgas : 3 ≤ gas) :
     Hoare fork (At code message pc (top :: rest) memory gas state substate)
       (At code message (pc + 1) (x :: rest.set n.val top) memory (gas - 3) state substate) := by
-  apply At.rule hlt hbyte (ofByte_of_decode (decode_swap n) (Fork.frontier_le _))
+  apply At.rule hlt hbyte (ofByte_of_decode decoded (Fork.frontier_le _))
     (instruction_of_stackOnlyStep rfl)
   rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
   rw [swapN_of_getElem? hst hx, charge_nat (by rw [hg]; exact hgas)]
   exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, hmem,
     by simp [hg, OPCODE_SWAP, VERY_LOW], hrun, herr, hs, hss⟩
+
+/-- SWAP(n + 1) exchanges the top word with the word `x` at depth `n + 1`, for 3 gas. -/
+theorem swap (n : Fin 16) {top x : U256} {rest : List U256} (hlt : pc < code.size)
+    (hbyte : code[pc] = (0x90 + n.val).toUInt8) (hx : rest[n.val]? = some x) (hgas : 3 ≤ gas) :
+    Hoare fork (At code message pc (top :: rest) memory gas state substate)
+      (At code message (pc + 1) (x :: rest.set n.val top) memory (gas - 3) state substate) :=
+  swap_of_decode hlt hbyte (decode_swap n) hx hgas
 
 /-- EXP puts `base` to the power `exponent` in place of both.
 
