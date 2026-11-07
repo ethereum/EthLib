@@ -12,6 +12,10 @@ Leaving out the Bloom filter and computing it again gives a receipt back exactly
 is the filter of its logs.
 
 From eth/69 on, the reader of a receipt gives its consensus form.
+
+From eth/70, a partial list of receipts passes the EIP-7975 checks exactly when three bounds hold.
+
+Before eth/70, a peer sends every receipt of a block, and these checks do not apply.
 -/
 
 @[expose] public section
@@ -94,6 +98,37 @@ theorem of_checkPartialReceipts {gasLimits : List Nat} {blockGasLimit : Nat} {si
     · by_cases ht : blockGasLimit / 8 < sizes.sum
       · simp [ht, throw, throwThe, MonadExceptOf.throw] at h
       · omega
+
+/-- From eth/70, a partial list passes the checks of EIP-7975 exactly when three bounds hold.
+
+There are no more receipts than transactions.
+
+Each receipt is within the bound of its transaction, its gas limit over 8.
+
+All the receipts together are within the bound of the block.
+
+The conditions read only the sizes of the receipts.
+
+They do not check the receipts against the receipts root, nor that the list is complete. -/
+theorem checkPartialReceipts_eq_ok_iff {gasLimits : List Nat} {blockGasLimit : Nat}
+    {sizes : List Nat} :
+    checkPartialReceipts gasLimits blockGasLimit sizes = .ok () ↔
+      sizes.length ≤ gasLimits.length ∧
+        (∀ (i : Nat) (hs : i < sizes.length) (hg : i < gasLimits.length),
+          sizes[i] ≤ gasLimits[i] / 8) ∧
+        sizes.sum ≤ blockGasLimit / 8 := by
+  refine ⟨of_checkPartialReceipts, fun ⟨hl, hall, ht⟩ => ?_⟩
+  unfold checkPartialReceipts
+  -- No indexed receipt is above the bound of its transaction.
+  have hf : ((List.range sizes.length).zip (sizes.zip gasLimits)).find?
+      (fun (_, size, gas) => gas / 8 < size) = none := by
+    apply List.find?_eq_none.mpr
+    intro x hx
+    obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem hx
+    simp only [List.length_zip, List.length_range, Nat.lt_min] at hi
+    simp only [List.getElem_zip, List.getElem_range, decide_eq_true_eq, Nat.not_lt]
+    exact hall i hi.1 hi.2.2
+  simp [Nat.not_lt.mpr hl, hf, Nat.not_lt.mpr ht, pure, Except.pure]
 
 /-- Two errors with one code come from one constructor. -/
 theorem PartialReceiptsError.code_injective (e₁ e₂ : PartialReceiptsError)

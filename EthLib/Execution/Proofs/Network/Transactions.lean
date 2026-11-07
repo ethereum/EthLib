@@ -10,6 +10,8 @@ An announcement reads back from its RLP item on the versions that use its form.
 
 The transactions of an answer that passes the check have hashes that are requested hashes, in
 the order of the request.
+
+An answer passes exactly when its transactions hash, to a sublist of the requested hashes.
 -/
 
 @[expose] public section
@@ -57,6 +59,20 @@ theorem sublist_of_checkPooled {requested : List Hash32} {txs : List Item}
     by_cases hs : hashes.isSublist requested
     · exact List.isSublist_iff_sublist.mp hs
     · simp [hs, throw, throwThe, MonadExceptOf.throw] at h
+
+/-- An answer passes the check of a request exactly when its transactions hash to requested hashes.
+
+Every transaction must hash, and the hashes form a sublist of the requested hashes, in order.
+
+The conditions do not ask for every requested hash, since a peer may leave some out.
+
+They read only the hash of each transaction, not whether it is valid. -/
+theorem checkPooled_eq_ok_iff {requested : List Hash32} {txs : List Item} :
+    checkPooled requested txs = .ok () ↔
+      ∃ hashes, txs.mapM wireHash = .ok hashes ∧ hashes.Sublist requested := by
+  refine ⟨sublist_of_checkPooled, fun ⟨hashes, hm, hs⟩ => ?_⟩
+  simp [checkPooled, hm, List.isSublist_iff_sublist.mpr hs, Except.mapError, bind, Except.bind,
+    pure, Except.pure]
 
 /-- The empty answer passes the check of every request. -/
 theorem checkPooled_nil (requested : List Hash32) : checkPooled requested [] = .ok () := by
