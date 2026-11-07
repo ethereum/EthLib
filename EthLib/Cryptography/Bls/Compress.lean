@@ -85,8 +85,8 @@ end Sqrt
 -- The exposed decoders need this body for downstream reduction.
 def tailAllZero (bytes : ByteArray) (start : Nat) : Bool := Id.run do
   let mut ok := true
-  for i in [start : bytes.size] do
-    if bytes.get! i ≠ 0 then ok := false
+  for h : i in [start : bytes.size] do
+    if bytes[i]'h.upper ≠ 0 then ok := false
   return ok
 
 /-! ## G1 -/
@@ -102,7 +102,7 @@ namespace G1
 
 /-- Canonical compressed-infinity encoding: `0xc0` then 47 zero bytes. -/
 def infinityBytes : ByteArray :=
-  ByteArray.mk <| (Array.replicate 48 (0 : UInt8)).set! 0 0xc0
+  ByteArray.mk <| #[(0xc0 : UInt8)] ++ Array.replicate 47 0
 
 /-- Compressed 48-byte serialization. -/
 def compress (p : G1) : ByteArray := Id.run do
@@ -192,7 +192,7 @@ namespace G2
 
 /-- Canonical compressed-infinity encoding: `0xc0` then 95 zero bytes. -/
 def infinityBytes : ByteArray :=
-  ByteArray.mk <| (Array.replicate 96 (0 : UInt8)).set! 0 0xc0
+  ByteArray.mk <| #[(0xc0 : UInt8)] ++ Array.replicate 95 0
 
 /-- Encode `Fp2` as 96 big-endian bytes (`c1 ‖ c0`). -/
 def fp2ToBytes (x : Fp2) : ByteArray :=

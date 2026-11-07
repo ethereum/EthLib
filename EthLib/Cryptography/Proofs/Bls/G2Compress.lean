@@ -201,34 +201,6 @@ private theorem foldl_allZero (b : ByteArray) (s n : Nat) (init : Bool)
     · exact hs
     · exact hrest i hlt (by omega)
 
-open EthLib.Cryptography.IdLoops in
-/-- The imperative `tailAllZero` scan succeeds only if bytes `1` through `b.size - 1` are zero. -/
-private theorem tailAllZero_ok (b : ByteArray)
-    (h : (Id.run do
-      let mut ok := true
-      for i in [1 : b.size] do
-        if b.get! i ≠ 0 then ok := false
-      return ok) = true) :
-    ∀ i, 1 ≤ i → i < b.size → b.get! i = 0 := by
-  -- Rewrite the Id.run range loop into List.foldl over List.range'.
-  dsimp only [Id.run, id_pure, id_bind] at h
-  rw [Std.Legacy.Range.forIn_eq_forIn_range'] at h
-  -- Pull ForInStep.yield outside the conditional so forIn_list_yield applies.
-  have hbody : (fun (i : Nat) (ok : Bool) =>
-      (if b.get! i ≠ 0 then ForInStep.yield false
-        else ForInStep.yield ok : Id (ForInStep Bool)))
-      = fun i ok => ForInStep.yield (if b.get! i ≠ 0 then false else ok) := by
-    funext i ok; split <;> rfl
-  change (forIn (m := Id) (List.range' 1 ([1 : b.size].size) 1) true
-      (fun i ok => if b.get! i ≠ 0 then ForInStep.yield false else ForInStep.yield ok)) = true at h
-  rw [hbody, forIn_list_yield] at h
-  -- The range [1 : b.size] covers b.size - 1 indices starting at 1.
-  have hsz : [1 : b.size].size = b.size - 1 := by
-    simp [Std.Legacy.Range.size]
-  rw [hsz] at h
-  intro i hi1 hi2
-  exact (foldl_allZero b 1 (b.size - 1) true h).2 i hi1 (by omega)
-
 /-- Decoding rejects any input that is not 96 bytes long (Section C.2). -/
 theorem uncompress_size_ne {bytes : ByteArray} (h : bytes.size ≠ 96) :
     G2.uncompress bytes = .error .invalidG2Point := by
@@ -274,7 +246,7 @@ theorem uncompress_infinity_nonzero_tail {bytes : ByteArray} (hsz : bytes.size =
   have htail : tailAllZero bytes 1 = false := by
     rw [Bool.eq_false_iff]
     intro hok
-    exact hne (tailAllZero_ok bytes hok i hi1 (by omega))
+    exact hne (G1.tailAllZero_ok bytes hok i hi1 (by omega))
   rw [uncompress, ite_eq_right (show ¬ bytes.size ≠ 96 from fun h => h hsz)]
   extract_lets head isC isI yS
   have hC : ¬ (!decide isC) = true := by simp [isC, head, hc]
@@ -817,7 +789,7 @@ theorem compress_uncompress {b : ByteArray} {q : G2}
     uncompress_ok_cases h
   -- Infinity: the header is 0xc0 and bytes 1..95 are zero.
   · rw [compress_inf isInfinity_zero]
-    have htail0 : ∀ i, 1 ≤ i → i < b.size → b.get! i = 0 := tailAllZero_ok b htail
+    have htail0 : ∀ i, 1 ≤ i → i < b.size → b.get! i = 0 := G1.tailAllZero_ok b htail
     refine ba_ext (by rw [hsz96]; decide) (fun i hi => ?_)
     have hi96 : i < 96 := by simpa [show infinityBytes.size = 96 by decide] using hi
     by_cases hi0 : i = 0
