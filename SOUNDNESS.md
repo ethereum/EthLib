@@ -680,6 +680,9 @@ The caller discards that state; no theorem here states it.
 `Logic.callvalue`, `Logic.address`, `Logic.origin`, `Logic.caller`, `Logic.calldatasize`, `Logic.codesize`, `Logic.pc_rule` and `Logic.msize` are its cases.
 A size is pushed modulo 2^256, as the instruction pushes it.
 `Logic.jumpi_of_eq_zero` is the rule for JUMPI on a condition proved equal to 0.
+`Logic.stop` is the rule for STOP.
+`Logic.stop_of_size_le` is the rule for a frame at or past the end of its code, which stops the same way.
+Their postcondition `Stopped` names no output, since the frame of a code does not name it.
 `NoValue.spec_nonzero` proves a contract that halts at `0xfe` when its message sends value.
 `memoryReadBytes_memoryWrite_of_disjoint` proves that a write within memory leaves a read of a disjoint range unchanged.
 `memoryReadBytes_memoryWrite_memoryWrite` proves that a read across two adjacent writes gives both values in order.

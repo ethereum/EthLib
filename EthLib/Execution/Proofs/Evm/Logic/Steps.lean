@@ -42,6 +42,8 @@ It proves that the fork has an opcode when every fork has it.
 
 It also does so when a hypothesis names a fork that has the opcode.
 
+A second tactic closes a run at STOP, or at the end of the code.
+
 A last rule replaces the stack, the memory and the gas of a frame by equal ones.
 
 It ends a run whose last frame names its fields in another form.
@@ -234,5 +236,19 @@ macro_rules
          case gas => evm_gas
          case room => evm_room)
       | fail "no rule of a step applies to the opcode at the program counter") <;> evm_tidy))
+
+/-- Closes a specification at STOP, or at a program counter at or past the end of the code.
+
+The rewrite rules `ls` turn the facts about the code into facts about numbers. -/
+syntax "evm_stop" " [" simpLemma,* "]" : tactic
+
+macro_rules
+  | `(tactic| evm_stop [$ls,*]) => `(tactic| first
+      | (refine' stop ?lt ?op
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*])
+      | (refine' stop_of_size_le ?le
+         case le => simp only [$ls,*, NatCode.size_ofNat]; decide)
+      | fail "the opcode at the program counter is not STOP, and the code does not end there")
 
 end EthLib.Execution.Evm.Logic
