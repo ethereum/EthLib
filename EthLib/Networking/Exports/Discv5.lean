@@ -6,6 +6,8 @@ public import EthLib.Base.Hex
 public import EthLib.Networking.Discv5.Identity
 public import EthLib.Networking.Discv5.Message
 public import EthLib.Networking.Discv5.Packet
+public import EthLib.Networking.Discv5.Handshake
+public import EthLib.Networking.Discv5.Session
 
 /-!
 # `Exports.Discv5`
@@ -19,6 +21,10 @@ A node ID is 32 bytes.
 A packet error or a message error comes back with its code.
 
 Any other rejected input comes back with code 0, including a failure of AES-GCM.
+
+A failure of the handshake or of a session packet comes back with the code of its packet error.
+
+Any other such failure comes back with code 0, and its message names the reason.
 -/
 
 public section
@@ -210,5 +216,100 @@ def reencodeMessageExport (plaintext : ByteArray) : Result ByteArray := do
   match m.encode with
   | .ok bytes => pure bytes
   | .error _ => throw (0, "message has no RLP encoding")
+
+/-! ## Session packets -/
+
+/-- A vector of `n` bytes, or an error that names the field. -/
+def vectorOf (n : Nat) (field : String) (bytes : ByteArray) : Result (Vector UInt8 n) :=
+  if h : bytes.size = n then pure ⟨bytes.data, h⟩
+  else throw (0, s!"{field} has {bytes.size} bytes, not {n}")
+
+/-- A session error, with the code of its packet error or 0, and the reason. -/
+def runSession {α : Type} (act : Except SessionError α) : Result α :=
+  act.mapError fun
+    | .packet e => (e.code, s!"invalid packet: {repr e}")
+    | .encryption _ => (0, "encryption failed")
+    | .decryption _ => (0, "message does not authenticate")
+    | .wrongFlag flag expected => (0, s!"packet has flag {flag}, not {expected}")
+    | .noSession _ => (0, "no session key for the source node ID")
+
+/-- A handshake error, with the code of its packet error or 0, and the reason. -/
+def runHandshake {α : Type} (act : Except HandshakeError α) : Result α :=
+  act.mapError fun
+    | .packet e => (e.code, s!"invalid packet: {repr e}")
+    | .keyAgreement _ => (0, "no shared secret")
+    | .keyDerivation _ => (0, "key derivation failed")
+    | .signing _ => (0, "signing failed")
+    | .ephemeralKeySize size => (0, s!"ephemeral key has {size} bytes, not 33")
+    | .ephemeralKey _ => (0, "ephemeral key is not a point of secp256k1")
+    | .idSignature => (0, "ID signature does not verify")
+    | .encryption _ => (0, "encryption failed")
+    | .decryption _ => (0, "message does not authenticate")
+    | .notHandshake flag => (0, s!"packet has flag {flag}, not 2")
+
+/-- Node B's WHOAREYOU packet for node A, and its challenge data, as a JSON object.
+
+The `enr-seq` is 8 big-endian bytes. -/
+@[export eth_discv5_make_whoareyou]
+def makeWhoareyouExport (destId maskingIv nonce idNonce enrSeq : ByteArray) :
+    Result ByteArray := do
+  let seq ← vectorOf 8 "enr-seq" enrSeq
+  let (packet, challengeData) ← runSession (makeWhoareyou (← nodeIdOf destId)
+    (← vectorOf 16 "masking IV" maskingIv) (← nonceOf nonce) (← vectorOf 16 "ID nonce" idNonce)
+    (Base.bytesToNat seq.toList).toUInt64)
+  let json := Json.mkObj [("packet", hex packet.data.toList),
+    ("challenge_data", hex challengeData.data.toList)]
+  return json.compress.toUTF8
+
+/-- Node A's reading of a WHOAREYOU packet, as a JSON object. -/
+@[export eth_discv5_read_whoareyou]
+def readWhoareyouExport (destId packet : ByteArray) : Result ByteArray := do
+  let c ← runSession (readWhoareyou (← nodeIdOf destId) packet)
+  let json := Json.mkObj [("nonce", hex c.nonce.toList), ("id_nonce", hex c.idNonce.toList),
+    ("enr_seq", toJson c.enrSeq.toNat), ("challenge_data", hex c.challengeData.data.toList)]
+  return json.compress.toUTF8
+
+/-- An ordinary message packet from node `srcId` to node `destId`, under a session key. -/
+@[export eth_discv5_seal_message]
+def sealMessageExport (key srcId destId maskingIv nonce plaintext : ByteArray) :
+    Result ByteArray := do
+  runSession (sealMessage (← aesKeyOf key) (← nodeIdOf srcId) (← nodeIdOf destId)
+    (← vectorOf 16 "masking IV" maskingIv) (← nonceOf nonce) plaintext)
+
+/-- The plaintext of an ordinary message packet from the node `srcId`, under its session key.
+
+It fails when the packet names another source node ID. -/
+@[export eth_discv5_open_message]
+def openMessageExport (key srcId destId packet : ByteArray) : Result ByteArray := do
+  let k ← aesKeyOf key
+  let src ← nodeIdOf srcId
+  let (_, plaintext) ← runSession (openMessage (fun id => if id = src then some k else none)
+    (← nodeIdOf destId) packet)
+  return plaintext
+
+/-- Node A's handshake message packet for node B, and its session keys, as a JSON object. -/
+@[export eth_discv5_seal_handshake]
+def sealHandshakeExport (ephemeralKey staticKey challengeData srcId destId destPubkey maskingIv
+    nonce record plaintext : ByteArray) : Result ByteArray := do
+  let (packet, keys) ← runHandshake (sealHandshake (← privateKeyOf ephemeralKey)
+    (← privateKeyOf staticKey) challengeData (← nodeIdOf srcId) (← nodeIdOf destId)
+    (← publicKeyOf destPubkey) (← vectorOf 16 "masking IV" maskingIv) (← nonceOf nonce) record
+    plaintext)
+  let json := Json.mkObj [("packet", hex packet.data.toList),
+    ("initiator_key", hex keys.initiatorKey.data.toList),
+    ("recipient_key", hex keys.recipientKey.data.toList)]
+  return json.compress.toUTF8
+
+/-- Node B's reading of a handshake message packet, as a JSON object. -/
+@[export eth_discv5_open_handshake]
+def openHandshakeExport (staticKey challengeData destId srcPubkey packet : ByteArray) :
+    Result ByteArray := do
+  let r ← runHandshake (openHandshake (← privateKeyOf staticKey) challengeData
+    (← nodeIdOf destId) (← publicKeyOf srcPubkey) packet)
+  let json := Json.mkObj [("src_id", hex r.srcId.toList), ("record", hex r.record.data.toList),
+    ("plaintext", hex r.message.data.toList),
+    ("initiator_key", hex r.keys.initiatorKey.data.toList),
+    ("recipient_key", hex r.keys.recipientKey.data.toList)]
+  return json.compress.toUTF8
 
 end EthLib.Networking.Discv5.Exports

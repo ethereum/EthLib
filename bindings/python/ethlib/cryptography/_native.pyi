@@ -343,6 +343,30 @@ def discv5_reencode_message(plaintext: bytes) -> bytes:
     """The plaintext of the decoded message, written again by the encoder."""
     ...
 
+def discv5_make_whoareyou(dest_id: bytes, masking_iv: bytes, nonce: bytes, id_nonce: bytes, enr_seq: bytes) -> bytes:
+    """Node B's WHOAREYOU packet for node A, and its challenge data, as a JSON object."""
+    ...
+
+def discv5_read_whoareyou(dest_id: bytes, packet: bytes) -> bytes:
+    """Node A's reading of a WHOAREYOU packet, as a JSON object."""
+    ...
+
+def discv5_seal_message(key: bytes, src_id: bytes, dest_id: bytes, masking_iv: bytes, nonce: bytes, plaintext: bytes) -> bytes:
+    """An ordinary message packet from node `srcId` to node `destId`, under a session key."""
+    ...
+
+def discv5_open_message(key: bytes, src_id: bytes, dest_id: bytes, packet: bytes) -> bytes:
+    """The plaintext of an ordinary message packet from the node `srcId`, under its session key."""
+    ...
+
+def discv5_seal_handshake(ephemeral_key: bytes, static_key: bytes, challenge_data: bytes, src_id: bytes, dest_id: bytes, dest_pubkey: bytes, masking_iv: bytes, nonce: bytes, record: bytes, plaintext: bytes) -> bytes:
+    """Node A's handshake message packet for node B, and its session keys, as a JSON object."""
+    ...
+
+def discv5_open_handshake(static_key: bytes, challenge_data: bytes, dest_id: bytes, src_pubkey: bytes, packet: bytes) -> bytes:
+    """Node B's reading of a handshake message packet, as a JSON object."""
+    ...
+
 def consensus_preset(name: str) -> bytes:
     """The preset of a name, as a JSON object."""
     ...
