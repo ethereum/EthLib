@@ -211,9 +211,9 @@ def passedNext (number timestamp next : Nat) : Bool :=
 namespace Schedule
 
 /--
-Whether a node at a head accepts the fork identifier of a peer.
+Whether a node at a head accepts the fork identifier of a peer, by the rules of EIP-2124.
 
-The validation rules of [EIP-2124][eip-2124] decide.
+They are the validation rules of [EIP-2124][eip-2124].
 
 - 1: the two hashes match, so the nodes are at one fork.
   The node refuses only if it has passed the next fork that the peer announces (1a).

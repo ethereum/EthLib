@@ -836,7 +836,7 @@ def mainnet_fork_id(number: int, timestamp: int) -> bytes:
     ...
 
 def fork_id_validate(schedule: bytes, number: int, timestamp: int, remote: bytes) -> bool:
-    """Whether a node at a head accepts the fork identifier of a peer."""
+    """Whether a node at a head accepts the fork identifier of a peer, by the rules of EIP-2124."""
     ...
 
 def eth_message_decode(version: int, id: int, data: bytes) -> bytes:
