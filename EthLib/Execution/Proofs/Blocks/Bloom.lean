@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.BigEndian
 public import EthLib.Execution.Blocks.Bloom
 
 /-!
@@ -16,6 +17,10 @@ A bit of the filter of an entry is set exactly when it is one of the bits of the
 A bit of the filter of some logs is set exactly when it is a bit of an entry of one of the logs.
 
 The entries of a log are its address and its topics.
+
+The 256 bytes of a filter read back, most significant byte first, as the number of the filter.
+
+So two filters with the same bytes are the same filter.
 -/
 
 @[expose] public section
@@ -115,5 +120,22 @@ theorem mayContain_address {logs : List Log} {log : Log} (hLog : log ∈ logs) :
 theorem mayContain_topic {logs : List Log} {log : Log} (hLog : log ∈ logs) {topic : Hash32}
     (hTopic : topic ∈ log.topics) : mayContain (ofLogs logs) ⟨topic.toArray⟩ = true :=
   mayContain_ofLogs hLog (List.mem_cons_of_mem _ (List.mem_map_of_mem hTopic))
+
+-- The bound compares `2 ^ 2048` with `256 ^ 256`, which needs a higher threshold.
+set_option exponentiation.threshold 2048 in
+/-- The bytes of a filter, read most significant first, give back the number of the filter. -/
+theorem bytesToNat_toBytes (bloom : BitVec 2048) :
+    bytesToNat (toBytes bloom).toList = bloom.toNat := by
+  simp only [toBytes, Vector.toList_mk]
+  apply bytesToNat_natToBytes_of_lt
+  -- 256 bytes hold 2048 bits.
+  have hpow : (256 : Nat) ^ 256 = 2 ^ 2048 := (Nat.pow_mul 2 8 256).symm
+  rw [hpow]
+  exact bloom.isLt
+
+/-- Two filters with the same 256 bytes are the same filter. -/
+theorem toBytes_injective : Function.Injective toBytes := fun a b h => by
+  apply BitVec.eq_of_toNat_eq
+  rw [← bytesToNat_toBytes a, ← bytesToNat_toBytes b, h]
 
 end EthLib.Execution.Blocks.Bloom
