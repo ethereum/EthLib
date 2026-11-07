@@ -12,6 +12,7 @@ The stream that compresses decodes back to its data, against `framing_format.txt
 
 - A chunk of at most 65536 bytes, in the shorter of its two forms, decodes to its data (§4.2, §4.3).
 - The chunks of a stream decode to the data they were cut from.
+- Two streams, one after the other, decode to their two pieces of data in turn.
 - The stream is never longer than the stream of uncompressed chunks.
 -/
 
@@ -60,6 +61,11 @@ theorem decodeFrames_encodeFrames (d : ByteArray) : decodeFrames (encodeFrames d
   rw [decodeChunks_encodeChunks (chunk := dataChunk) (fun _ h => dataChunk_spec h) _ hn
     (by omega)]
   rfl
+
+/-- Two streams of the encoder, one after the other, decode to their two pieces of data in turn. -/
+theorem decodeFrames_encodeFrames_append (d e : ByteArray) :
+    decodeFrames (encodeFrames d ++ encodeFrames e) = .ok (d ++ e) :=
+  decodeFrames_append (decodeFrames_encodeFrames d) (decodeFrames_encodeFrames e)
 
 /-! ## The size -/
 
