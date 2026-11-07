@@ -204,7 +204,8 @@ def cancelProposerPayments (state : BeaconState preset fork) (gloas : .glamsterd
     (proposer : ValidatorIndex) : BeaconState preset fork :=
   let cancel (payment : BuilderPendingPayment) :=
     if payment.proposerIndex = proposer then .empty else payment
-  { state with builderPendingPayments := fun _ => (state.builderPendingPayments gloas).map cancel }
+  let payments := (state.builderPendingPayments gloas).map cancel
+  { state with builderPendingPayments := fun _ => payments }
 
 /-- The state after a validator is slashed.
 

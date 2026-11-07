@@ -60,7 +60,8 @@ variable {preset : Preset} {fork : Base.Fork}
 def BeaconState.putBuilder (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
     (index : Nat) (inside : index < (state.builders gloas).data.size) (builder : Builder) :
     BeaconState preset fork :=
-  { state with builders := fun _ => ⟨(state.builders gloas).data.set index builder inside⟩ }
+  let builders : Builders := ⟨(state.builders gloas).data.set index builder inside⟩
+  { state with builders := fun _ => builders }
 
 /-- From Gloas: the state with a builder of the registry replaced.
 
@@ -149,9 +150,10 @@ def settleBuilderPayment (state : BeaconState preset fork) (gloas : .glamsterdam
     let withdrawals := (state.builderPendingWithdrawals gloas).data
     let withdrawals :=
       if 0 < payment.withdrawal.amount then withdrawals.push payment.withdrawal else withdrawals
+    let payments := payments.set paymentIndex.toNat .empty
     .ok { state with
       builderPendingWithdrawals := fun _ => ⟨withdrawals⟩
-      builderPendingPayments := fun _ => payments.set paymentIndex.toNat .empty }
+      builderPendingPayments := fun _ => payments }
   else .error (.paymentIndexOutOfRange paymentIndex)
 
 end EthLib.Consensus

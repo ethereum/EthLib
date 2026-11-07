@@ -394,11 +394,12 @@ def updateNextWithdrawalValidatorIndex (state : BeaconState preset fork)
 def updatePendingPartialWithdrawals (state : BeaconState preset fork) (electra : .pectra ≤ fork)
     (count : Nat) : BeaconState preset fork :=
   let queue := state.pendingPartialWithdrawals electra
-  { state with pendingPartialWithdrawals := fun _ =>
-      ⟨queue.data.extract count queue.data.size, fun before => by
-        have := queue.bound before
-        simp only [Array.size_extract]
-        omega⟩ }
+  let rest : PendingPartialWithdrawals preset fork :=
+    ⟨queue.data.extract count queue.data.size, fun before => by
+      have := queue.bound before
+      simp only [Array.size_extract]
+      omega⟩
+  { state with pendingPartialWithdrawals := fun _ => rest }
 
 /-- From Gloas: the state that records the withdrawals that the next payload must carry. -/
 def updatePayloadExpectedWithdrawals (state : BeaconState preset fork)
@@ -411,7 +412,8 @@ def updatePayloadExpectedWithdrawals (state : BeaconState preset fork)
 def updateBuilderPendingWithdrawals (state : BeaconState preset fork)
     (gloas : .glamsterdam ≤ fork) (count : Nat) : BeaconState preset fork :=
   let queue := (state.builderPendingWithdrawals gloas).data
-  { state with builderPendingWithdrawals := fun _ => ⟨queue.extract count queue.size⟩ }
+  let rest : BuilderPendingWithdrawals := ⟨queue.extract count queue.size⟩
+  { state with builderPendingWithdrawals := fun _ => rest }
 
 /-- From Gloas: the state whose next sweep of builders starts after the builders visited.
 
