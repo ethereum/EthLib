@@ -442,7 +442,7 @@ def bindings : List Binding := [
   ⟨"consensus_compute_shuffled_permutation",
     `EthLib.Consensus.Exports.computeShuffledPermutationExport,
     "(name: str, count: int, seed: bytes) -> bytes",
-    [], some "ConsensusError"⟩,
+    [`EthLib.Consensus.ShuffleError], some "ConsensusError"⟩,
   ⟨"consensus_compute_shuffled_index", `EthLib.Consensus.computeShuffledIndex,
     "(name: str, index: int, count: int, seed: bytes) -> int",
     [`EthLib.Consensus.ShuffleError], some "ConsensusError"⟩,

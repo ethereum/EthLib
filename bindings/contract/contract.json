@@ -3807,13 +3807,21 @@
    "error_class": "SszError",
    "docstring":
    "All the column sidecars of a block, from the bytes of one of them and the rows of its blobs."},
-  {"summary": "The shuffled position of every index below the count.",
+  {"summary":
+   "The shuffled position of every index below the count, which must be at most `2^40`.",
    "signature": "(name: str, count: int, seed: bytes) -> bytes",
    "operation": "EthLib.Consensus.Exports.computeShuffledPermutationExport",
    "method": "consensus_compute_shuffled_permutation",
-   "errors": [],
+   "errors":
+   [{"type": "EthLib.Consensus.ShuffleError",
+     "codes":
+     [{"constructor": "indexOutOfRange", "code": 201},
+      {"constructor": "noCommittee", "code": 202},
+      {"constructor": "overflow", "code": 203},
+      {"constructor": "countTooLarge", "code": 204}]}],
    "error_class": "ConsensusError",
-   "docstring": "The shuffled position of every index below the count."},
+   "docstring":
+   "The shuffled position of every index below the count, which must be at most `2^40`."},
   {"summary":
    "The shuffled position of one index, which must be below the count.",
    "signature": "(name: str, index: int, count: int, seed: bytes) -> int",
@@ -3822,10 +3830,10 @@
    "errors":
    [{"type": "EthLib.Consensus.ShuffleError",
      "codes":
-     [{"constructor": "indexOutOfRange", "code": 1},
-      {"constructor": "noCommittee", "code": 2},
-      {"constructor": "overflow", "code": 3},
-      {"constructor": "countTooLarge", "code": 4}]}],
+     [{"constructor": "indexOutOfRange", "code": 201},
+      {"constructor": "noCommittee", "code": 202},
+      {"constructor": "overflow", "code": 203},
+      {"constructor": "countTooLarge", "code": 204}]}],
    "error_class": "ConsensusError",
    "docstring":
    "The shuffled position of one index, which must be below the count.\n\nThe count must be at most `2^40`.\n\nA shuffle of more indices reaches a position whose bucket number does not fit in 4 bytes.\n\nBoth checks come before any round.\n\nIt runs the rounds on that index alone, so its cost does not grow with the count."},

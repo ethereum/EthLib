@@ -17,6 +17,12 @@ Not yet released.
   In Python, `engine.forkchoice_updated` takes it as the keyword `finalized`, `None` by default, so a call without it gets the same answer as before.
 - `engine_forkchoiceUpdated` with payload attributes now answers a syncing head, an invalid head and a head below the known finalized block, since no payload build begins there ([#1018](https://github.com/ethereum/EthLib/pull/1018)).
   A request that would select a new head with payload attributes is still refused with code 0, because the build is not specified.
+- The shuffle errors of `ConsensusError` now have the codes 201 to 204, in place of 1 to 4 ([#1087](https://github.com/ethereum/EthLib/pull/1087)).
+  The custody errors already had the codes 1 to 3 in the same class, so a code did not name one error.
+  A caller that tests `code == 1` for an index at or past the count now tests `code == 201`.
+  The new code 204 is a count above 2^40.
+- `compute_shuffled_index` and `compute_shuffled_permutation` now fail for a count above 2^40, as the consensus specification does ([#1072](https://github.com/ethereum/EthLib/pull/1072) and [#1087](https://github.com/ethereum/EthLib/pull/1087)).
+  Before, the index wrapped a bucket number that does not fit in 4 bytes and returned a value.
 
 ## 0.3.0
 

@@ -508,7 +508,7 @@ def consensus_get_data_column_sidecars_from_column_sidecar(name: str, fork: str,
     ...
 
 def consensus_compute_shuffled_permutation(name: str, count: int, seed: bytes) -> bytes:
-    """The shuffled position of every index below the count."""
+    """The shuffled position of every index below the count, which must be at most `2^40`."""
     ...
 
 def consensus_compute_shuffled_index(name: str, index: int, count: int, seed: bytes) -> int:

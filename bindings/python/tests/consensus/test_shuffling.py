@@ -54,14 +54,21 @@ def test_shuffled_index(preset):
 def test_index_out_of_range():
     with raises(consensus.ConsensusError, "index 5 is not below the index count 5") as info:
         consensus.compute_shuffled_index(5, 5, bytes(32))
-    assert info.value.code == 1
+    assert info.value.code == 201
 
 
 def test_count_above_bound():
     # The bucket number of a position is 4 bytes, so a count above 2^40 fails.
     with raises(consensus.ConsensusError, "the index count 1099511627777 is above 2^40") as info:
         consensus.compute_shuffled_index(0, 2**40 + 1, bytes(32))
-    assert info.value.code == 4
+    assert info.value.code == 204
+
+
+def test_permutation_count_above_bound():
+    # The full permutation fails for the same counts, before it allocates anything.
+    with raises(consensus.ConsensusError, "the index count 1099511627777 is above 2^40") as info:
+        consensus.compute_shuffled_permutation(2**40 + 1, bytes(32))
+    assert info.value.code == 204
 
 
 def test_index_checked_first():
