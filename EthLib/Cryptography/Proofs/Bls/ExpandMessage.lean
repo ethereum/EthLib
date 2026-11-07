@@ -16,6 +16,8 @@ Sources:
 - [RFC 9380 §5.2](https://www.rfc-editor.org/rfc/rfc9380#section-5.2), `hash_to_field`.
 - [RFC 9380 §5.3.1](https://www.rfc-editor.org/rfc/rfc9380#section-5.3.1), `expand_message_xmd`.
 - [RFC 9380 §5.3.3](https://www.rfc-editor.org/rfc/rfc9380#section-5.3.3), DSTs over 255 bytes.
+- [RFC 8017 §4](https://www.rfc-editor.org/rfc/rfc8017#section-4), I2OSP and OS2IP.
+- [FIPS 180-4 §6.2](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf), SHA-256.
 
 The file restates `expand_message_xmd` and `hash_to_field` as a model over lists of bytes.
 
@@ -228,7 +230,7 @@ private theorem shortDst_toList (dst : ByteArray) (hdst : dst.size + 17 < 2 ^ 61
 /--
 The message expansion is `expand_message_xmd` of RFC 9380 §5.3.1 with SHA-256.
 
-It holds for every message shorter than 2^61 - 323 bytes and every DST shorter than 2^61 - 17.
+It holds for every message shorter than 2^61 - 323 bytes and every DST shorter than 2^61 - 17 bytes.
 
 A DST longer than 255 bytes is shortened as §5.3.3 requires.
 
@@ -338,7 +340,7 @@ private theorem toZMod_fpFromBytesL (uniform : ByteArray) (off : Nat) :
 /--
 The hash to `Fp2` is `hash_to_field` of RFC 9380 §5.2 with `expand_message_xmd`.
 
-It holds for every message shorter than 2^61 - 323 bytes and every DST shorter than 2^61 - 17.
+It holds for every message shorter than 2^61 - 323 bytes and every DST shorter than 2^61 - 17 bytes.
 
 Each element is mapped to the pair of its coordinates in `ZMod p`.
 -/
