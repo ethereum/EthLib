@@ -39,11 +39,9 @@ def seedOf (seed : ByteArray) : Result Bytes32 :=
 def computeShuffledPermutationExport (name : ByteArray) (count : UInt64) (seed : ByteArray) :
     Result ByteArray := do
   let preset ← presetOf (← nameOf name)
-  -- A shuffle of more indices reaches a position whose bucket number does not fit in 4 bytes.
-  unless count.toNat ≤ 2 ^ 40 do
-    let error := ShuffleError.countTooLarge count
-    throw (error.code, shuffleErrorText error)
-  return jsonBytes (toJson (computeShuffledPermutation preset count (← seedOf seed)).toList)
+  let shuffled ← (computeShuffledPermutation preset count (← seedOf seed)).mapError
+    fun e => (e.code, shuffleErrorText e)
+  return jsonBytes (toJson shuffled.toList)
 
 /-- The shuffled position of one index. -/
 @[export eth_consensus_compute_shuffled_index]

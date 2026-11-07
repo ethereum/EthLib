@@ -108,24 +108,48 @@ theorem foldl_round_eq_map {seed : Bytes32} {count : Nat} (rounds : List Nat)
     rw [ih (round_bounded bounded), round_eq_map bounded, Array.map_map]
     rfl
 
+/-- The batch holds, at each index below the count, every round applied to that index. -/
+theorem shuffledPositions_getElem {rounds : Nat} {seed : Bytes32} {count index : Nat}
+    (lt : index < count) :
+    (shuffledPositions rounds seed count)[index]? =
+      some (UInt64.ofNat (shuffledIndex rounds seed count index)) := by
+  unfold shuffledPositions
+  rw [foldl_round_eq_map _ (fun i mem => Array.mem_range.mp mem)]
+  simp [lt, shuffledIndex]
+
+/-- The batch has one entry for each index below the count. -/
+theorem shuffledPositions_size (rounds : Nat) (seed : Bytes32) (count : Nat) :
+    (shuffledPositions rounds seed count).size = count := by
+  unfold shuffledPositions
+  rw [foldl_round_eq_map _ (fun i mem => Array.mem_range.mp mem)]
+  simp
+
 end Shuffle
 
-/-- The shuffled list holds, at each index below the count, every round applied to that index. -/
-theorem computeShuffledPermutation_getElem {preset : Preset} {count : UInt64} {seed : Bytes32}
-    {index : Nat} (lt : index < count.toNat) :
-    (computeShuffledPermutation preset count seed)[index]? =
-      some (UInt64.ofNat
-        (Shuffle.shuffledIndex preset.SHUFFLE_ROUND_COUNT.toNat seed count.toNat index)) := by
-  unfold computeShuffledPermutation
-  rw [Shuffle.foldl_round_eq_map _ (fun i mem => Array.mem_range.mp mem)]
-  simp [lt, Shuffle.shuffledIndex]
+/-- A count of at most `2^40` has the batch of every round on each index below it. -/
+theorem computeShuffledPermutation_eq {preset : Preset} {count : UInt64} {seed : Bytes32}
+    (fits : count.toNat ≤ 2 ^ 40) :
+    computeShuffledPermutation preset count seed =
+      .ok (Shuffle.shuffledPositions preset.SHUFFLE_ROUND_COUNT.toNat seed count.toNat) := by
+  simp [computeShuffledPermutation, fits]
 
-/-- The shuffled list has one entry for each index below the count. -/
-theorem computeShuffledPermutation_size (preset : Preset) (count : UInt64) (seed : Bytes32) :
-    (computeShuffledPermutation preset count seed).size = count.toNat := by
-  unfold computeShuffledPermutation
-  rw [Shuffle.foldl_round_eq_map _ (fun i mem => Array.mem_range.mp mem)]
-  simp
+/-- A count above `2^40` has no permutation. -/
+theorem computeShuffledPermutation_countTooLarge {preset : Preset} {count : UInt64}
+    {seed : Bytes32} (large : 2 ^ 40 < count.toNat) :
+    computeShuffledPermutation preset count seed = .error (.countTooLarge count) := by
+  simp [computeShuffledPermutation, Nat.not_le.mpr large]
+
+/-- A permutation that has a value comes from a count of at most `2^40`. -/
+theorem computeShuffledPermutation_ok {preset : Preset} {count : UInt64} {seed : Bytes32}
+    {shuffled : Array UInt64}
+    (computed : computeShuffledPermutation preset count seed = .ok shuffled) :
+    count.toNat ≤ 2 ^ 40 ∧
+      shuffled = Shuffle.shuffledPositions preset.SHUFFLE_ROUND_COUNT.toNat seed count.toNat := by
+  by_cases fits : count.toNat ≤ 2 ^ 40
+  · rw [computeShuffledPermutation_eq fits, Except.ok.injEq] at computed
+    exact ⟨fits, computed.symm⟩
+  · rw [computeShuffledPermutation_countTooLarge (Nat.lt_of_not_le fits)] at computed
+    cases computed
 
 /-- The shuffled position of an index below the count is every round applied to it. -/
 theorem computeShuffledIndex_eq {preset : Preset} {index count : UInt64} {seed : Bytes32}

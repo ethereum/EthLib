@@ -101,15 +101,25 @@ Each round hashes twice, for the pivot and for the bucket, whatever the count. -
 def shuffledIndex (rounds : Nat) (seed : Bytes32) (count index : Nat) : Nat :=
   (List.range rounds).foldl (fun index roundNumber => indexRound seed count roundNumber index) index
 
+/-- Every round on each index below the count, in order, one round at a time for all of them. -/
+def shuffledPositions (rounds : Nat) (seed : Bytes32) (count : Nat) : Array UInt64 :=
+  ((List.range rounds).foldl (fun indices roundNumber => round seed count roundNumber indices)
+    (Array.range count)).map UInt64.ofNat
+
 end Shuffle
 
-/-- The shuffled position of each index below the count, after every round of the preset. -/
+/-- The shuffled position of each index below the count, after every round of the preset.
+
+The count must be at most `2^40`.
+
+A shuffle of more indices reaches a position whose bucket number does not fit in 4 bytes.
+
+The check comes before any round. -/
 def computeShuffledPermutation (preset : Preset) (count : UInt64) (seed : Bytes32) :
-    Array UInt64 :=
-  let rounds := (List.range preset.SHUFFLE_ROUND_COUNT.toNat).foldl
-    (fun indices roundNumber => Shuffle.round seed count.toNat roundNumber indices)
-    (Array.range count.toNat)
-  rounds.map UInt64.ofNat
+    Except ShuffleError (Array UInt64) :=
+  if count.toNat ≤ 2 ^ 40 then
+    .ok (Shuffle.shuffledPositions preset.SHUFFLE_ROUND_COUNT.toNat seed count.toNat)
+  else .error (.countTooLarge count)
 
 /-- The shuffled position of one index, which must be below the count.
 
@@ -155,10 +165,14 @@ def shuffledCommittee (indices : Array ValidatorIndex) (shuffled : Array UInt64)
   return ((List.range (stop - start)).map fun i =>
     indices.getD (shuffled.getD (start + i) 0).toNat 0).toArray
 
-/-- Committee `index` of `count`, cut from the shuffled list of indices. -/
+/-- Committee `index` of `count`, cut from the shuffled list of indices.
+
+It fails as the shuffle does, before it cuts the committee.
+
+So above `2^40` indices it fails even for an empty committee, where the rule shuffles nothing. -/
 def computeCommittee (preset : Preset) (indices : Array ValidatorIndex) (seed : Bytes32)
-    (index count : UInt64) : Except ShuffleError (Array ValidatorIndex) :=
-  shuffledCommittee indices (computeShuffledPermutation preset (UInt64.ofNat indices.size) seed)
-    index count
+    (index count : UInt64) : Except ShuffleError (Array ValidatorIndex) := do
+  shuffledCommittee indices
+    (← computeShuffledPermutation preset (UInt64.ofNat indices.size) seed) index count
 
 end EthLib.Consensus
