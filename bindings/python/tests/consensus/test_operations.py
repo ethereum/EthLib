@@ -87,8 +87,9 @@ def run_case(preset: str, fork: str, handler: str, case: Path) -> None:
     meta = (YAML(typ="safe").load(meta_file.read_text()) if meta_file.exists() else None) or {}
     # Setting 2 marks placeholder signatures, which the case must not check.
     setting = meta.get("bls_setting", 0)
-    # The export takes the latest block header of the state as the parent block of a Gloas
-    # attestation; the slot of that header starts at byte 64 of the state.
+    # For a Gloas attestation, the export takes the parent block from the state.
+    # That parent block is the latest block header of the state.
+    # The slot of that header starts at byte 64 of the state.
     if "parent_slot" in meta:
         assert meta["parent_slot"] == int.from_bytes(pre[64:72], "little")
     config_file = case / "config.yaml"

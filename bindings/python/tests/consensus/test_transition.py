@@ -123,8 +123,9 @@ def run_case(preset: str, fork: str, group: str, case: Path) -> None:
         return state
 
     def across(state: bytes) -> bytes:
-        # The state starts at the fork before the post fork, and the blocks up to the index
-        # `fork_block` belong to it; with no such index, every block belongs to the post fork.
+        # The state starts at the fork before the post fork.
+        # The blocks up to the index `fork_block` belong to that fork.
+        # With no such index, every block belongs to the post fork.
         pre_fork = list(FORKS)[list(FORKS).index(fork) - 1]
         epochs = replacements(_fork_epochs(fork, meta["fork_epoch"]), preset)
         state_fork = pre_fork
@@ -213,8 +214,8 @@ def test_slots_not_after():
     # The target slot must be after the slot of the state, so zero slots is a rejection.
     case = next((FILES / "minimal" / "phase0").rglob("pre.ssz_snappy"))
     pre = snappy.decompress(case.read_bytes())
-    # A phase0 state starts with genesis_time (8 bytes) and genesis_validators_root (32 bytes),
-    # then its slot as a little-endian uint64.
+    # A phase0 state starts with genesis_time (8 bytes) and genesis_validators_root (32 bytes).
+    # Its slot follows, as a little-endian uint64.
     slot = int.from_bytes(pre[40:48], "little")
     with raises(
         consensus.TransitionError, f"EthLib.Consensus.TransitionError.slotNotAfter {slot} {slot}"

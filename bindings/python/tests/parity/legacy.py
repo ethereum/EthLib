@@ -73,8 +73,9 @@ OMMER_DAO_EXTRA_DATA = 243
 UNKNOWN_PARENT = {"UnknownParent", "UnknownParent2", "BlockException.UNKNOWN_PARENT"}
 
 # The exceptions that a header check cannot see.
-# They concern the body, the execution, the ommer rules, or the DAO Fork rule of a chain
-# configuration, so a block with one of them has a valid header.
+# They concern the body, the execution or the ommer rules.
+# Or they concern the DAO Fork rule of a chain configuration.
+# So a block with one of them has a valid header.
 NOT_IN_HEADER = {
     "InvalidStateRoot",
     "InvalidReceiptsStateRoot",
@@ -192,8 +193,8 @@ def _header_error(
     if any(f"BlockError.{HEADER_ERRORS[code]}" in message for code in codes):
         return
     # The ommer check takes the parent of an ommer to be the recent block one number below it.
-    # An ommer with a wrong number then fails against a block that is not its parent, at the
-    # first check that this block breaks.
+    # An ommer with a wrong number then fails against a block that is not its parent.
+    # It fails at the first check that this block breaks.
     assert codes & {207}, message
     headers = {_number(b[0]): b[0] for b in map(rlp.decode, recent(chain, parent))}
     assert any(
@@ -479,8 +480,8 @@ def run_dao(root: Path, case: Case) -> None:
         if expected is None:
             chain[block.hash] = block
     assert checked > 0
-    # No transaction pays a DAO account or the recovery contract, so only the fork moves their
-    # ether.
+    # No transaction pays a DAO account or the recovery contract.
+    # So only the fork moves their ether.
     paid = {
         tx[3]
         for entry in test["blocks"]
@@ -518,8 +519,8 @@ def chain_config(network: str) -> dict:
 
 
 # The error of the state transition that each exception of the tests names, as a pattern.
-# The header and ommer names follow the code sets of the header and ommer runners above,
-# since the fillers name the first check of their client, and EthLib checks in another order.
+# The header and ommer names follow the code sets of the header and ommer runners above.
+# Why: the fillers name the first check of their client, and EthLib checks in another order.
 EXCEPTIONS: dict[str, str] = {
     # The checks of a header against its parent.
     "InvalidDifficulty": r"wrongDifficulty",
@@ -608,8 +609,10 @@ def run_blockchain(root: Path, case: Case) -> None:
     network = test["network"]
     config = chain_config(network)
     genesis = rlp.decode(bytes.fromhex(test["genesisRLP"].removeprefix("0x")))[0]
-    # Each valid block by its hash: the state after it, the recent blocks that end with it,
-    # and the total difficulty of its chain.
+    # Each valid block by its hash, with three values:
+    # - the state after it
+    # - the recent blocks that end with it
+    # - the total difficulty of its chain
     chains = {
         keccak256(rlp.encode(genesis)): (
             _pre_state(test["pre"]),

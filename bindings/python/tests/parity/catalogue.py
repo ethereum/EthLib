@@ -25,8 +25,8 @@ LEGACY_STATE_DIRECTORIES = (
 )
 
 # The blockchain tests of ethereum/legacytests.
-# The directory Constantinople holds the networks up to Constantinople Fix,
-# and Cancun the later ones.
+# The directory Constantinople holds the networks up to Constantinople Fix.
+# The directory Cancun holds the later ones.
 LEGACY_DIRECTORIES = (
     "Constantinople/BlockchainTests/ValidBlocks",
     "Constantinople/BlockchainTests/InvalidBlocks",

@@ -276,8 +276,8 @@ def test_block_of_another_root():
     consensus.verify_data_column_sidecar(preset, "glamsterdam", data, block)
     consensus.verify_data_column_sidecar_kzg_proofs(preset, "glamsterdam", data, block)
     # A new state root changes the root of the block, and nothing else that the checks read.
-    # The message starts at the offset in the first 4 bytes, with the slot, the proposer index
-    # and the parent root before the state root.
+    # The message starts at the offset in the first 4 bytes.
+    # The slot, the proposer index and the parent root come before the state root.
     other = bytearray(block)
     other[int.from_bytes(block[:4], "little") + 48] ^= 1
     expected = "the block is not the block of the sidecar"

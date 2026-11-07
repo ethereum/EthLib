@@ -17,8 +17,8 @@ _YAML = YAML(typ="safe")
 BEACON = 112
 
 # The forks whose blocks the state transition of EthLib processes.
-# A case whose forks are all among them runs every block, across the fork boundaries, and its
-# served data is checked against what the full node functions give from the post states.
+# A case whose forks are all among them runs every block, across the fork boundaries.
+# Its served data is checked against what the full node functions give from the post states.
 TRANSITION = ("altair", "bellatrix", "capella", "deneb", "electra", "fulu")
 
 
@@ -311,8 +311,9 @@ class FullNode:
                 )
                 for block in candidates
             )
-        # The latest updates come from the latest block of the head's chain with enough
-        # signatures, after the finalized block, and from its parent as the attested block.
+        # The latest updates come from the latest block of the head's chain with enough signatures.
+        # That block comes after the finalized block.
+        # Its parent serves as the attested block.
         low = max(self.tail, old_slot)
         signed = [block for block in head[:-1] if self.participants(block) >= self.min_participants]
         latest = signed[0] if signed and signed[0].slot > low else None
@@ -385,8 +386,9 @@ def _period(preset: str) -> int:
 def run_data_collection_case(case: Path, preset: str) -> None:
     """Check the light client data that a case serves after each new head."""
     # Each header must be the one that EthLib derives from its block, and each proof must verify.
-    # Where the state transition runs the blocks, the full node functions must also give the
-    # served data from the post states, and the chosen best update must rank above the others.
+    # Where the state transition runs the blocks, two more checks hold.
+    # The full node functions must give the served data from the post states.
+    # The chosen best update must rank above the others.
     chain = Chain(case, preset)
     node = FullNode(chain) if _transition_runs(case.parts[-5], case.name) else None
     for step in _YAML.load((case / "steps.yaml").read_text()):

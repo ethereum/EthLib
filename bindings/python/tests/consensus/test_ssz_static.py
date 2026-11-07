@@ -87,8 +87,9 @@ def test_truncated_bytes_are_rejected():
 
 
 def test_mainnet_state_reads_on_the_main_thread():
-    # The Phase 0 mainnet state with every list empty, built field by field: the size of each
-    # fixed field, or None for a list, which is a 4-byte offset to the end of the fixed part.
+    # The Phase 0 mainnet state with every list empty, built field by field.
+    # Each entry is the size of a fixed field, or None for a list.
+    # A list is a 4-byte offset to the end of the fixed part.
     # Its 65,536 RANDAO mixes must read without a stack that grows with them.
     sizes = [
         8,

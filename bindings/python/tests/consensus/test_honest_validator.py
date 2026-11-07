@@ -242,8 +242,9 @@ def test_assignment_after_the_next_epoch():
     assert info.value.code == 5
 
 
-# The last epoch that the guide accepts. In the epoch after it, the first slot plus the length of
-# an epoch is 2^64, and the guide's 64-bit sum overflows.
+# The last epoch that the guide accepts.
+# In the epoch after it, the first slot plus the length of an epoch is 2^64.
+# There the guide's 64-bit sum overflows.
 LAST_EPOCH = 2**64 // SLOTS_PER_EPOCH - 2
 
 
@@ -330,9 +331,12 @@ def _fixed_end(state: bytes) -> int:
 
 # The window of payload committees is the last field of a Gloas state, of a fixed size.
 WINDOW_SIZE = (MIN_SEED_LOOKAHEAD + 2) * SLOTS_PER_EPOCH * PTC_SIZE * 8
-# Between the lookahead of proposers and the window sit the offset of the builders, the next
-# builder index, the availability bits of 8192 slots, the 64 pending payments of 52 bytes, and
-# the offsets of the pending withdrawals, the latest bid and the expected withdrawals.
+# Between the lookahead of proposers and the window sit these fields:
+# - the offset of the builders
+# - the next builder index
+# - the availability bits of 8192 slots
+# - the 64 pending payments of 52 bytes
+# - the offsets of the pending withdrawals, the latest bid and the expected withdrawals
 BETWEEN = 4 + 8 + 8192 // 8 + 2 * SLOTS_PER_EPOCH * 52 + 3 * 4
 LOOKAHEAD_SIZE = (MIN_SEED_LOOKAHEAD + 1) * SLOTS_PER_EPOCH * 8
 

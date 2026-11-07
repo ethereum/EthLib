@@ -2,8 +2,8 @@
 
 # python scaling.py [hash,rlp,trie,snappy,ssz]
 #
-# Each line gives the times at four or five sizes and the growth exponent between the last two:
-# near 1 for a linear operation, near 2 for a quadratic one.
+# Each line gives the times at four or five sizes, and the growth exponent between the last two.
+# The exponent is near 1 for a linear operation, and near 2 for a quadratic one.
 
 import hashlib
 import math

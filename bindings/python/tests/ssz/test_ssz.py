@@ -37,8 +37,8 @@ CASES = [
     ),
     # Opaque bytes of a fixed length are written as they are.
     ({"byte_vector": 2}, {"bytes": "0x0102"}, "0102"),
-    # A variable field of opaque bytes takes an offset, like any variable field: the body
-    # starts at byte 5, after the one byte of a and the four of the offset.
+    # A variable field of opaque bytes takes an offset, like any variable field.
+    # The body starts at byte 5, after the one byte of a and the four of the offset.
     (
         {"container": [["a", {"uint": 1}], ["b", {"byte_list": 4}]]},
         {"seq": [{"uint": 7}, {"bytes": "0xaabb"}]},

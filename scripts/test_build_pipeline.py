@@ -213,8 +213,8 @@ class BuildPipelineTests(unittest.TestCase):
         self.assertIn(".lake/build/ethlib-module-times.json", names)
         self.assertIn(".lake/build/ir/a directory/ordinary.json", names)
 
-        # Restoring the saved payload must retain Lake's content-hash cache hits
-        # for every default target.
+        # Restoring the saved payload must retain Lake's content-hash cache hits.
+        # It must do so for every default target.
         shutil.rmtree(self.build)
         self.run_command(["tar", "-xf", str(archive)])
         output = self.run_command(["lake", "--no-build", "build", "--wfail"])

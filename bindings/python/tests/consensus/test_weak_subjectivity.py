@@ -54,8 +54,9 @@ def _validator(effective_balance: int) -> bytes:
     )
 
 
-# The mainnet sizes of the fields of an Altair state: the attestations become participation
-# flags, and the inactivity scores and the two sync committees follow the checkpoints.
+# The mainnet sizes of the fields of an Altair state.
+# The attestations become participation flags.
+# The inactivity scores and the two sync committees follow the checkpoints.
 _SYNC_COMMITTEE_SIZE = 512 * 48 + 48
 _ALTAIR_FIELDS = [
     *_PHASE0_FIELDS[:15],

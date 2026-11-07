@@ -21,8 +21,8 @@ FORKS = ends("istanbul")
 
 ADDRESS = 0x09
 
-# The 208 bytes that every nonempty EIP-152 vector shares, after its rounds field:
-# h, then m ("abc" and 125 zero bytes), then t0 = 3 and t1 = 0.
+# The 208 bytes that every nonempty EIP-152 vector shares, after its rounds field.
+# They are h, then m ("abc" and 125 zero bytes), then t0 = 3 and t1 = 0.
 SHARED = (
     "48c9bdf267e6096a3ba7ca8485ae67bb2bf894fe72f36e3cf1361d5f3af54fa5"
     "d182e6ad7f520e511f6c3e2b8c68059b6bbd41fbabd9831f79217e1319cde05b"

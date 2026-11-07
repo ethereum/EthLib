@@ -314,8 +314,8 @@ def test_execution_requests_rejected(entries: list, message: str):
 
 # ---- The on-chain aggregate ---------------------------------------------------------------------
 
-# The mainnet attestation of Electra: its aggregation bits, its data, its signature and one bit
-# for each of the 64 committees of a slot.
+# The mainnet attestation of Electra: its aggregation bits, its data and its signature.
+# Then one bit for each of the 64 committees of a slot.
 DATA = struct.pack("<QQ", 9, 0) + bytes([7]) * 32 + struct.pack("<Q", 0) + bytes(32)
 DATA += struct.pack("<Q", 1) + bytes([8]) * 32
 

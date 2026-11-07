@@ -2,8 +2,8 @@
 
 # python gen_cons_inputs.py <consensus-specs checkout> <data directory> [validators]
 #
-# Each SSZ case holds its type and value in the tagged JSON that the EthLib binding reads,
-# and the bytes that pyspec serializes it to.
+# Each SSZ case holds its type and value in the tagged JSON that the EthLib binding reads.
+# It also holds the bytes that pyspec serializes it to.
 
 import hashlib
 import json

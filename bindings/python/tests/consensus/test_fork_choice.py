@@ -59,8 +59,9 @@ FAST_CONFIRMATION = (
     "variables",
 )
 
-# The checks that read the store of the fast confirmation rule. A checks step with them follows a
-# run of that rule, which the case leaves implicit at the start of each slot.
+# The checks that read the store of the fast confirmation rule.
+# A checks step with them follows a run of that rule.
+# The case leaves that run implicit at the start of each slot.
 FAST_CONFIRMATION_CHECKS = (
     "previous_epoch_observed_justified_checkpoint",
     "current_epoch_observed_justified_checkpoint",
