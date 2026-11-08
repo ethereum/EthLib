@@ -3226,9 +3226,10 @@
    "error_class": "WeakSubjectivityError",
    "docstring":
    "Whether a checkpoint is within the weak subjectivity period of its state, at a time.\n\nThe preset, the configuration and the fork are named by `str`.\n\nThe checkpoint comes as its SSZ bytes, and the state as the state at the checkpoint.\n\nThe two times are those of a store, in milliseconds since the Unix epoch."},
-  {"summary": "The committee assignment of a validator in an epoch, as JSON.",
+  {"summary":
+   "The committee assignment of a validator in an epoch, if it has one.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) -> bytes",
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, epoch: int, validator_index: int) -> tuple[list[int], int, int] | None",
    "operation": "EthLib.Consensus.Exports.getCommitteeAssignmentExport",
    "method": "consensus_get_committee_assignment",
    "errors":
@@ -3249,10 +3250,10 @@
       {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
-   "The committee assignment of a validator in an epoch, as JSON.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nIt is `null` without an assignment, or the committee, its index and its slot."},
+   "The committee assignment of a validator in an epoch, if it has one.\n\nThe preset, the configuration and the fork are named by `str`.\n\nIt is `None` without an assignment, or the tuple of the committee, its index and its slot."},
   {"summary": "Whether a validator proposes the block of the slot of a state.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bool",
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, validator_index: int) -> bool",
    "operation": "EthLib.Consensus.Exports.isProposerExport",
    "method": "consensus_is_proposer",
    "errors":
@@ -3273,11 +3274,11 @@
       {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
-   "Whether a validator proposes the block of the slot of a state.\n\nThe preset, the configuration and the fork are named in UTF-8."},
+   "Whether a validator proposes the block of the slot of a state.\n\nThe preset, the configuration and the fork are named by `str`."},
   {"summary":
    "From Altair: whether a validator serves on the sync committee of the period of an epoch.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) -> bool",
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, epoch: int, validator_index: int) -> bool",
    "operation": "EthLib.Consensus.Exports.isAssignedToSyncCommitteeExport",
    "method": "consensus_is_assigned_to_sync_committee",
    "errors":
@@ -3298,11 +3299,11 @@
       {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
-   "From Altair: whether a validator serves on the sync committee of the period of an epoch.\n\nThe preset, the configuration and the fork are named in UTF-8."},
+   "From Altair: whether a validator serves on the sync committee of the period of an epoch.\n\nThe preset, the configuration and the fork are named by `str`."},
   {"summary":
-   "From Altair: the sync committee subnets of a validator for the next slot, as a JSON list.",
+   "From Altair: the sync committee subnets of a validator for the next slot, as a list.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bytes",
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, validator_index: int) -> list[int]",
    "operation": "EthLib.Consensus.Exports.computeSubnetsForSyncCommitteeExport",
    "method": "consensus_compute_subnets_for_sync_committee",
    "errors":
@@ -3323,11 +3324,11 @@
       {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
-   "From Altair: the sync committee subnets of a validator for the next slot, as a JSON list.\n\nThe preset, the configuration and the fork are named in UTF-8."},
+   "From Altair: the sync committee subnets of a validator for the next slot, as a list.\n\nThe preset, the configuration and the fork are named by `str`."},
   {"summary":
-   "From Gloas: the slot of an epoch whose payload timeliness committee holds a validator, as JSON.",
+   "From Gloas: the slot of an epoch whose payload timeliness committee holds a validator.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) -> bytes",
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, epoch: int, validator_index: int) -> int | None",
    "operation": "EthLib.Consensus.Exports.getPtcAssignmentExport",
    "method": "consensus_get_ptc_assignment",
    "errors":
@@ -3348,11 +3349,11 @@
       {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
-   "From Gloas: the slot of an epoch whose payload timeliness committee holds a validator, as JSON.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nIt is `null` without an assignment, or the slot."},
+   "From Gloas: the slot of an epoch whose payload timeliness committee holds a validator.\n\nThe preset, the configuration and the fork are named by `str`.\n\nIt is `None` without an assignment, or the slot."},
   {"summary":
-   "From Gloas: the slots after the slot of a state that a validator proposes, as a JSON list.",
+   "From Gloas: the slots after the slot of a state that a validator proposes, as a list.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bytes",
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, validator_index: int) -> list[int]",
    "operation": "EthLib.Consensus.Exports.getUpcomingProposalSlotsExport",
    "method": "consensus_get_upcoming_proposal_slots",
    "errors":
@@ -3373,11 +3374,11 @@
       {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
-   "From Gloas: the slots after the slot of a state that a validator proposes, as a JSON list.\n\nThe preset, the configuration and the fork are named in UTF-8."},
+   "From Gloas: the slots after the slot of a state that a validator proposes, as a list.\n\nThe preset, the configuration and the fork are named by `str`."},
   {"summary":
    "The signature of the object of a duty, by a secret key of 32 big-endian bytes.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: bytes, duty: str, object: bytes, secret_key: bytes) -> bytes",
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, duty: str, object: bytes, secret_key: bytes) -> bytes",
    "operation": "EthLib.Consensus.Exports.getValidatorSignatureExport",
    "method": "consensus_get_validator_signature",
    "errors":
@@ -3398,7 +3399,7 @@
       {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
-   "The signature of the object of a duty, by a secret key of 32 big-endian bytes.\n\nThe preset, the configuration, the fork and the duty are named in UTF-8.\n\nThe object comes as SSZ bytes, by duty:\n\n- `randao` and `block`: a block.\n- `attestation`: attestation data.\n- `slot`: a slot.\n- `aggregate_and_proof`: an aggregate and proof.\n- `sync_committee_message`: a block root.\n- `sync_committee_selection_proof`: sync aggregator selection data.\n- `contribution_and_proof`: a contribution and proof.\n- `payload_attestation_message`: a payload attestation message, whose data is signed.\n- `proposer_preferences`: the preferences of a proposer.\n\nThe three duties of the sync committee need Altair; before it they have code 0.\n\nThe payload attestation message needs Gloas; before it, it has code 0.\n\nThe preferences of a proposer take a state of any fork.\n\nTheir domain reads only the root of the genesis validators of the state.\n\nSo a state of the epoch before Gloas can sign them for the first epoch of Gloas."},
+   "The signature of the object of a duty, by a secret key of 32 big-endian bytes.\n\nThe preset, the configuration, the fork and the duty are named by `str`.\n\nThe object comes as SSZ bytes, by duty:\n\n- `randao` and `block`: a block.\n- `attestation`: attestation data.\n- `slot`: a slot.\n- `aggregate_and_proof`: an aggregate and proof.\n- `sync_committee_message`: a block root.\n- `sync_committee_selection_proof`: sync aggregator selection data.\n- `contribution_and_proof`: a contribution and proof.\n- `payload_attestation_message`: a payload attestation message, whose data is signed.\n- `proposer_preferences`: the preferences of a proposer.\n\nThe three duties of the sync committee need Altair; before it they have code 0.\n\nThe payload attestation message needs Gloas; before it, it has code 0.\n\nThe preferences of a proposer take a state of any fork.\n\nTheir domain reads only the root of the genesis validators of the state.\n\nSo a state of the epoch before Gloas can sign them for the first epoch of Gloas."},
   {"summary":
    "The attestation data of an attester, from the head block and the state at its slot, as SSZ.",
    "signature":
@@ -3450,7 +3451,7 @@
   {"summary":
    "Before Electra: the attestation of a validator on attestation data, as SSZ bytes.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: bytes, data: bytes, validator_index: int, secret_key: bytes) -> bytes",
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, data: bytes, validator_index: int, secret_key: bytes) -> bytes",
    "operation": "EthLib.Consensus.Exports.constructAttestationExport",
    "method": "consensus_construct_attestation",
    "errors":
@@ -3471,11 +3472,11 @@
       {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
-   "Before Electra: the attestation of a validator on attestation data, as SSZ bytes.\n\nThe preset, the configuration and the fork are named in UTF-8."},
+   "Before Electra: the attestation of a validator on attestation data, as SSZ bytes.\n\nThe preset, the configuration and the fork are named by `str`."},
   {"summary":
    "From Electra: the single attestation of a validator in a committee, as SSZ bytes.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: bytes, data: bytes, committee_index: int, validator_index: int, secret_key: bytes) -> bytes",
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, data: bytes, committee_index: int, validator_index: int, secret_key: bytes) -> bytes",
    "operation": "EthLib.Consensus.Exports.constructSingleAttestationExport",
    "method": "consensus_construct_single_attestation",
    "errors":
@@ -3496,7 +3497,7 @@
       {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
-   "From Electra: the single attestation of a validator in a committee, as SSZ bytes.\n\nThe preset, the configuration and the fork are named in UTF-8."},
+   "From Electra: the single attestation of a validator in a committee, as SSZ bytes.\n\nThe preset, the configuration and the fork are named by `str`."},
   {"summary":
    "Before Electra: the aggregate of the attestations that vote for attestation data, as SSZ bytes.",
    "signature":
@@ -3810,7 +3811,7 @@
   {"summary":
    "From Bellatrix: the root of the latest block of a chain that is not optimistic.",
    "signature":
-   "(name: str, fork: str, blocks: list[bytes], optimistic_roots: bytes, root: bytes) -> bytes",
+   "(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], root: bytes) -> bytes",
    "operation": "EthLib.Consensus.Exports.latestVerifiedAncestorExport",
    "method": "consensus_latest_verified_ancestor",
    "errors":
@@ -3869,11 +3870,11 @@
       {"constructor": "invalidInclusionListSignature", "code": 51}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "From Bellatrix: the root of the latest block of a chain that is not optimistic."},
+   "From Bellatrix: the root of the latest block of a chain that is not optimistic.\n\nThe arguments are the names of the preset and the fork, the blocks and the optimistic roots.\n\nThen comes the root of a block."},
   {"summary":
-   "From Bellatrix: the optimistic roots after the payload of a block is found valid.",
+   "From Bellatrix: the optimistic roots after the payload of a block is found valid, as a list.",
    "signature":
-   "(name: str, fork: str, blocks: list[bytes], optimistic_roots: bytes, root: bytes) -> bytes",
+   "(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], root: bytes) -> list[bytes]",
    "operation": "EthLib.Consensus.Exports.onValidPayloadExport",
    "method": "consensus_on_valid_payload",
    "errors":
@@ -3932,11 +3933,11 @@
       {"constructor": "invalidInclusionListSignature", "code": 51}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "From Bellatrix: the optimistic roots after the payload of a block is found valid."},
+   "From Bellatrix: the optimistic roots after the payload of a block is found valid, as a list.\n\nThe arguments are the names of the preset and the fork, the blocks and the optimistic roots.\n\nThen comes the root of a block."},
   {"summary":
-   "From Bellatrix: the optimistic roots after a block is found to be the first invalid one.",
+   "From Bellatrix: the optimistic roots after a block is found the first invalid one, as a list.",
    "signature":
-   "(name: str, fork: str, blocks: list[bytes], optimistic_roots: bytes, first: bytes) -> bytes",
+   "(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], first: bytes) -> list[bytes]",
    "operation": "EthLib.Consensus.Exports.onInvalidatedPayloadExport",
    "method": "consensus_on_invalidated_payload",
    "errors":
@@ -3995,7 +3996,7 @@
       {"constructor": "invalidInclusionListSignature", "code": 51}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "From Bellatrix: the optimistic roots after a block is found to be the first invalid one."},
+   "From Bellatrix: the optimistic roots after a block is found the first invalid one, as a list.\n\nThe arguments are the names of the preset and the fork, the blocks and the optimistic roots.\n\nThen comes the root of the first invalid block."},
   {"summary":
    "Whether an optimistic validator may not sign under a domain type of 4 bytes.",
    "signature": "(domain_type: bytes) -> bool",
@@ -4008,7 +4009,7 @@
   {"summary":
    "Before Heze: the Eth1 vote of a proposer on a state, as the SSZ bytes of the Eth1 data.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: bytes, chain: list[bytes]) -> bytes",
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, chain: list[tuple[int, bytes]]) -> bytes",
    "operation": "EthLib.Consensus.Exports.getEth1VoteExport",
    "method": "consensus_get_eth1_vote",
    "errors":
@@ -4063,7 +4064,7 @@
   {"summary":
    "The root of the state after a block, to set as its state root, as 32 bytes.",
    "signature":
-   "(name: str, fork: str, state: bytes, block: bytes, config: bytes, verify: bool) -> bytes",
+   "(name: str, fork: str, state: bytes, block: bytes, config: dict[str, Any] | None, verify: bool) -> bytes",
    "operation": "EthLib.Consensus.Exports.computeNewStateRootExport",
    "method": "consensus_compute_new_state_root",
    "errors":

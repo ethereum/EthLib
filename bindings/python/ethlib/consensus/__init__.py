@@ -1,7 +1,6 @@
 """The consensus layer: presets, configurations, containers, the shuffle, custody and networking."""
 
 import json
-import struct
 from collections.abc import Sequence
 from typing import Any, Literal, TypeAlias
 
@@ -648,69 +647,67 @@ def is_within_weak_subjectivity_period(
     )
 
 
-def _replacements(config: dict | None) -> bytes:
-    return json.dumps(config).encode() if config else b""
-
-
 def get_committee_assignment(
-    name: str, fork: str, state: bytes, epoch: int, validator_index: int, config: dict | None = None
-) -> tuple[list, int, int] | None:
+    name: str,
+    fork: str,
+    state: bytes,
+    epoch: int,
+    validator_index: int,
+    config: dict[str, Any] | None = None,
+) -> tuple[list[int], int, int] | None:
     """The committee, its index and its slot for a validator in an epoch, or None."""
-    out = json.loads(
-        _native.consensus_get_committee_assignment(
-            name, fork, state, _replacements(config), epoch, validator_index
-        )
+    return _native.consensus_get_committee_assignment(
+        name, fork, state, config, epoch, validator_index
     )
-    return None if out is None else (out["committee"], out["index"], out["slot"])
 
 
 def is_proposer(
-    name: str, fork: str, state: bytes, validator_index: int, config: dict | None = None
+    name: str, fork: str, state: bytes, validator_index: int, config: dict[str, Any] | None = None
 ) -> bool:
     """Whether a validator proposes the block of the slot of a state."""
-    return _native.consensus_is_proposer(name, fork, state, _replacements(config), validator_index)
+    return _native.consensus_is_proposer(name, fork, state, config, validator_index)
 
 
 def is_assigned_to_sync_committee(
-    name: str, fork: str, state: bytes, epoch: int, validator_index: int, config: dict | None = None
+    name: str,
+    fork: str,
+    state: bytes,
+    epoch: int,
+    validator_index: int,
+    config: dict[str, Any] | None = None,
 ) -> bool:
     """Whether a validator serves on the sync committee of the period of an epoch."""
     return _native.consensus_is_assigned_to_sync_committee(
-        name, fork, state, _replacements(config), epoch, validator_index
+        name, fork, state, config, epoch, validator_index
     )
 
 
 def compute_subnets_for_sync_committee(
-    name: str, fork: str, state: bytes, validator_index: int, config: dict | None = None
-) -> list:
+    name: str, fork: str, state: bytes, validator_index: int, config: dict[str, Any] | None = None
+) -> list[int]:
     """The sync committee subnets of a validator for the next slot, in increasing order."""
-    return json.loads(
-        _native.consensus_compute_subnets_for_sync_committee(
-            name, fork, state, _replacements(config), validator_index
-        )
+    return _native.consensus_compute_subnets_for_sync_committee(
+        name, fork, state, config, validator_index
     )
 
 
 def get_ptc_assignment(
-    name: str, fork: str, state: bytes, epoch: int, validator_index: int, config: dict | None = None
+    name: str,
+    fork: str,
+    state: bytes,
+    epoch: int,
+    validator_index: int,
+    config: dict[str, Any] | None = None,
 ) -> int | None:
     """The slot of an epoch whose payload timeliness committee holds a validator, or None."""
-    return json.loads(
-        _native.consensus_get_ptc_assignment(
-            name, fork, state, _replacements(config), epoch, validator_index
-        )
-    )
+    return _native.consensus_get_ptc_assignment(name, fork, state, config, epoch, validator_index)
 
 
 def get_upcoming_proposal_slots(
-    name: str, fork: str, state: bytes, validator_index: int, config: dict | None = None
-) -> list:
+    name: str, fork: str, state: bytes, validator_index: int, config: dict[str, Any] | None = None
+) -> list[int]:
     """The slots after the slot of a state that a validator proposes, in increasing order."""
-    return json.loads(
-        _native.consensus_get_upcoming_proposal_slots(
-            name, fork, state, _replacements(config), validator_index
-        )
-    )
+    return _native.consensus_get_upcoming_proposal_slots(name, fork, state, config, validator_index)
 
 
 def get_validator_signature(
@@ -720,11 +717,11 @@ def get_validator_signature(
     duty: str,
     obj: bytes,
     secret_key: bytes,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
 ) -> bytes:
     """The 96-byte signature of the SSZ bytes of the object of a duty, by a secret key."""
     return _native.consensus_get_validator_signature(
-        name, fork, state, _replacements(config), duty, obj, secret_key
+        name, fork, state, config, duty, obj, secret_key
     )
 
 
@@ -755,11 +752,11 @@ def construct_attestation(
     data: bytes,
     validator_index: int,
     secret_key: bytes,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
 ) -> bytes:
     """Before Electra, the attestation of a validator on attestation data, as SSZ bytes."""
     return _native.consensus_construct_attestation(
-        name, fork, state, _replacements(config), data, validator_index, secret_key
+        name, fork, state, config, data, validator_index, secret_key
     )
 
 
@@ -771,11 +768,11 @@ def construct_single_attestation(
     committee_index: int,
     validator_index: int,
     secret_key: bytes,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
 ) -> bytes:
     """From Electra, the single attestation of a validator in a committee, as SSZ bytes."""
     return _native.consensus_construct_single_attestation(
-        name, fork, state, _replacements(config), data, committee_index, validator_index, secret_key
+        name, fork, state, config, data, committee_index, validator_index, secret_key
     )
 
 
@@ -864,36 +861,30 @@ def is_optimistic_candidate_block(
     )
 
 
-def _roots(data: bytes) -> list:
-    return [data[i : i + 32] for i in range(0, len(data), 32)]
-
-
 def latest_verified_ancestor(
-    name: str, fork: str, blocks: list, optimistic_roots: list, root: bytes
+    name: str, fork: str, blocks: Sequence[bytes], optimistic_roots: Sequence[bytes], root: bytes
 ) -> bytes:
     """From Bellatrix, the root of the latest block of a chain that is not optimistic."""
     return _native.consensus_latest_verified_ancestor(
-        name, fork, blocks, b"".join(optimistic_roots), root
+        name, fork, list(blocks), list(optimistic_roots), root
     )
 
 
 def on_valid_payload(
-    name: str, fork: str, blocks: list, optimistic_roots: list, root: bytes
-) -> list:
+    name: str, fork: str, blocks: Sequence[bytes], optimistic_roots: Sequence[bytes], root: bytes
+) -> list[bytes]:
     """From Bellatrix, the optimistic roots after the payload of a block is found valid."""
-    return _roots(
-        _native.consensus_on_valid_payload(name, fork, blocks, b"".join(optimistic_roots), root)
+    return _native.consensus_on_valid_payload(
+        name, fork, list(blocks), list(optimistic_roots), root
     )
 
 
 def on_invalidated_payload(
-    name: str, fork: str, blocks: list, optimistic_roots: list, first: bytes
-) -> list:
+    name: str, fork: str, blocks: Sequence[bytes], optimistic_roots: Sequence[bytes], first: bytes
+) -> list[bytes]:
     """From Bellatrix, the optimistic roots after a block is found to be the first invalid one."""
-    return _roots(
-        _native.consensus_on_invalidated_payload(
-            name, fork, blocks, b"".join(optimistic_roots), first
-        )
+    return _native.consensus_on_invalidated_payload(
+        name, fork, list(blocks), list(optimistic_roots), first
     )
 
 
@@ -903,11 +894,14 @@ def is_optimistic_restricted_domain(domain_type: bytes) -> bool:
 
 
 def get_eth1_vote(
-    name: str, fork: str, state: bytes, chain: list, config: dict | None = None
+    name: str,
+    fork: str,
+    state: bytes,
+    chain: Sequence[tuple[int, bytes]],
+    config: dict[str, Any] | None = None,
 ) -> bytes:
     """The Eth1 data that a proposer votes for, from Eth1 blocks as (timestamp, Eth1 data)."""
-    blocks = [struct.pack("<Q", timestamp) + data for timestamp, data in chain]
-    return _native.consensus_get_eth1_vote(name, fork, state, _replacements(config), blocks)
+    return _native.consensus_get_eth1_vote(name, fork, state, config, list(chain))
 
 
 def get_eth1_pending_deposit_count(name: str, fork: str, state: bytes) -> int:
@@ -921,12 +915,10 @@ def compute_new_state_root(
     state: bytes,
     block: bytes,
     verify: bool = True,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
 ) -> bytes:
     """The 32-byte root of the state after a block, to set as the state root of that block."""
-    return _native.consensus_compute_new_state_root(
-        name, fork, state, block, _replacements(config), verify
-    )
+    return _native.consensus_compute_new_state_root(name, fork, state, block, config, verify)
 
 
 def compute_on_chain_aggregate(name: str, fork: str, aggregates: list) -> bytes:

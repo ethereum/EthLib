@@ -351,7 +351,7 @@
   "Whether a checkpoint is within the weak subjectivity period of its state, at a time."
 
 #define DOC_consensus_get_committee_assignment \
-  "The committee assignment of a validator in an epoch, as JSON."
+  "The committee assignment of a validator in an epoch, if it has one."
 
 #define DOC_consensus_is_proposer \
   "Whether a validator proposes the block of the slot of a state."
@@ -360,13 +360,13 @@
   "From Altair: whether a validator serves on the sync committee of the period of an epoch."
 
 #define DOC_consensus_compute_subnets_for_sync_committee \
-  "From Altair: the sync committee subnets of a validator for the next slot, as a JSON list."
+  "From Altair: the sync committee subnets of a validator for the next slot, as a list."
 
 #define DOC_consensus_get_ptc_assignment \
-  "From Gloas: the slot of an epoch whose payload timeliness committee holds a validator, as JSON."
+  "From Gloas: the slot of an epoch whose payload timeliness committee holds a validator."
 
 #define DOC_consensus_get_upcoming_proposal_slots \
-  "From Gloas: the slots after the slot of a state that a validator proposes, as a JSON list."
+  "From Gloas: the slots after the slot of a state that a validator proposes, as a list."
 
 #define DOC_consensus_get_validator_signature \
   "The signature of the object of a duty, by a secret key of 32 big-endian bytes."
@@ -420,10 +420,10 @@
   "From Bellatrix: the root of the latest block of a chain that is not optimistic."
 
 #define DOC_consensus_on_valid_payload \
-  "From Bellatrix: the optimistic roots after the payload of a block is found valid."
+  "From Bellatrix: the optimistic roots after the payload of a block is found valid, as a list."
 
 #define DOC_consensus_on_invalidated_payload \
-  "From Bellatrix: the optimistic roots after a block is found to be the first invalid one."
+  "From Bellatrix: the optimistic roots after a block is found the first invalid one, as a list."
 
 #define DOC_consensus_is_optimistic_restricted_domain \
   "Whether an optimistic validator may not sign under a domain type of 4 bytes."

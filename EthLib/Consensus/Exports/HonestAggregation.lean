@@ -33,7 +33,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz Cryptography.Bls
-open EthLib.Exports (Result)
+open EthLib.Exports (Result PyValue pyExport)
 
 /-- A secret key from its bytes, or code 0. -/
 def secretKeyOf (bytes : ByteArray) : Result Signatures.SecretKey :=
@@ -79,14 +79,13 @@ def getAggregateSignatureExport (name fork : ByteArray) (attestations : Array By
   let attestations ← attestations.toList.mapM (decodeInput (Attestation preset fork))
   return packBytes (← runDuty ((getAggregateSignature attestations).mapError .bls))
 
-/-- Before Electra: the attestation of a validator on attestation data, as SSZ bytes.
-
-The preset, the configuration and the fork are named in UTF-8. -/
-@[export eth_consensus_construct_attestation]
-def constructAttestationExport (name fork state replacements data : ByteArray)
-    (validatorIndex : UInt64) (secretKey : ByteArray) : Result ByteArray := do
-  let (preset, fork) ← transitionPresetAndFork name fork
-  let config ← configWith name replacements
+/-- Before Electra: the attestation of a validator on attestation data, as SSZ bytes. -/
+def constructAttestationOf
+    (args : String × String × ByteArray × Option PyValue × ByteArray × UInt64 × ByteArray) :
+    Result ByteArray := do
+  let (name, fork, state, replacements, data, validatorIndex, secretKey) := args
+  let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
+  let config ← configWithValue name replacements
   let ⟨before⟩ ← holds (fork < .pectra) s!"no attestation of one validator at {fork.name}"
   let state ← decodeInput (BeaconState preset fork) state
   let data ← decodeInput AttestationData data
@@ -94,20 +93,34 @@ def constructAttestationExport (name fork state replacements data : ByteArray)
     (constructAttestation config state before data validatorIndex (← secretKeyOf secretKey))
   (SszType.serialize attestation).mapError fun e => (0, s!"attestation rejected: {reprStr e}")
 
-/-- From Electra: the single attestation of a validator in a committee, as SSZ bytes.
+/-- Before Electra: the attestation of a validator on attestation data, as SSZ bytes.
 
-The preset, the configuration and the fork are named in UTF-8. -/
-@[export eth_consensus_construct_single_attestation]
-def constructSingleAttestationExport (name fork state replacements data : ByteArray)
-    (committeeIndex validatorIndex : UInt64) (secretKey : ByteArray) : Result ByteArray := do
-  let (preset, fork) ← transitionPresetAndFork name fork
-  let config ← configWith name replacements
+The preset, the configuration and the fork are named by `str`. -/
+@[export eth_consensus_construct_attestation]
+def constructAttestationExport (args : PyValue) : Result PyValue :=
+  pyExport constructAttestationOf args
+
+/-- From Electra: the single attestation of a validator in a committee, as SSZ bytes. -/
+def constructSingleAttestationOf
+    (args : String × String × ByteArray × Option PyValue × ByteArray × UInt64 × UInt64 ×
+      ByteArray) :
+    Result ByteArray := do
+  let (name, fork, state, replacements, data, committeeIndex, validatorIndex, secretKey) := args
+  let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
+  let config ← configWithValue name replacements
   let ⟨_⟩ ← holds (.pectra ≤ fork) s!"no single attestation at {fork.name}"
   let state ← decodeInput (BeaconState preset fork) state
   let data ← decodeInput AttestationData data
   let single ← runDuty (constructSingleAttestation config state data committeeIndex
     validatorIndex (← secretKeyOf secretKey))
   (SszType.serialize single).mapError fun e => (0, s!"attestation rejected: {reprStr e}")
+
+/-- From Electra: the single attestation of a validator in a committee, as SSZ bytes.
+
+The preset, the configuration and the fork are named by `str`. -/
+@[export eth_consensus_construct_single_attestation]
+def constructSingleAttestationExport (args : PyValue) : Result PyValue :=
+  pyExport constructSingleAttestationOf args
 
 /-- Before Electra: the aggregate of the attestations that vote for attestation data, as SSZ bytes.
 

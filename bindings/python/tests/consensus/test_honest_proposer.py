@@ -205,6 +205,33 @@ def test_eth1_vote_overflow():
         consensus.get_eth1_vote("mainnet", "phase0", state, [(2**64 - 1, eth1_data(1, 1))])
 
 
+def test_eth1_timestamp_out_of_range():
+    state = state_at("phase0", ONE_COMMITTEE, genesis_time=GENESIS_TIME, slot=SLOT)
+    with raises(ProposerError, f"expected an int below {2**64}, got {2**64}") as info:
+        consensus.get_eth1_vote("mainnet", "phase0", state, [(2**64, eth1_data(1, 1))])
+    assert info.value.code == 0
+
+
+def test_eth1_data_of_another_length():
+    state = state_at("phase0", ONE_COMMITTEE, genesis_time=GENESIS_TIME, slot=SLOT)
+    with raises(ProposerError, "input rejected: EthLib.Serialization.Ssz.Err.scope 72 71") as info:
+        consensus.get_eth1_vote("mainnet", "phase0", state, [(0, eth1_data(1, 1)[:71])])
+    assert info.value.code == 0
+
+
+def test_eth1_data_must_be_bytes():
+    state = state_at("phase0", ONE_COMMITTEE, genesis_time=GENESIS_TIME, slot=SLOT)
+    with raises(TypeError, "cannot pass a value of type bytearray to Lean"):
+        consensus.get_eth1_vote("mainnet", "phase0", state, [(0, bytearray(eth1_data(1, 1)))])  # ty: ignore[invalid-argument-type]
+
+
+@pytest.mark.parametrize("verify", [1, None])
+def test_verify_must_be_a_bool(verify):
+    with raises(ProposerError, "expected a bool") as info:
+        consensus.compute_new_state_root("minimal", "phase0", b"", b"", verify)
+    assert info.value.code == 0
+
+
 def test_no_eth1_vote_at_heze():
     with raises(ProposerError, "no Eth1 vote at hegota"):
         consensus.get_eth1_vote("mainnet", "hegota", b"", [])
