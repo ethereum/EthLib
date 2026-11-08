@@ -171,6 +171,9 @@ Then `msm` returns a valid point equal to `sum_i scalars_i * points_i` in the cu
 **The commitment.**
 A setup is well formed for a secret `τ` when its points represent `τ^i` and the Lagrange basis at `τ`.
 For such a setup, `blobToKzgCommitment_represents`, in `Proofs/Kzg/Commitment.lean`, proves that a blob's commitment represents its polynomial at `τ`.
+`blobToKzgCommitment_binding` proves that two blobs whose decoded values differ share a commitment only when `τ` is a root of the difference of their interpolants.
+That difference is a nonzero polynomial of degree below 4096.
+The proof needs no pairing law, and it does not bound the cost of finding such blobs without `τ`.
 That a secret makes the embedded setup well formed is an assumption, recorded in SOUNDNESS.md D3.
 
 **The proofs.**

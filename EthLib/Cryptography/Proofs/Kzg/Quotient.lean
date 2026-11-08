@@ -33,17 +33,6 @@ theorem interpolant_sub_eq_mul (poly : Polynomial) (z : Fr) :
   refine (mul_divByMonic_eq_iff_isRoot.mpr ?_).symm
   simp [IsRoot]
 
-/-- The interpolant has degree below 4096. -/
-theorem natDegree_interpolant_lt (poly : Polynomial) :
-    (interpolant poly).natDegree < FIELD_ELEMENTS_PER_BLOB := by
-  have h := Lagrange.degree_interpolate_lt (s := Finset.univ) (r := fun i => poly[i.val]!)
-    evalDomain_injective.injOn
-  rw [Finset.card_univ, Fintype.card_fin] at h
-  by_cases h0 : interpolant poly = 0
-  · rw [h0, natDegree_zero]
-    decide
-  · exact (natDegree_lt_iff_degree_lt h0).mpr h
-
 /-- The quotient has degree at most 4094. -/
 theorem natDegree_quotientPoly_le (poly : Polynomial) (z : Fr) :
     (quotientPoly poly z).natDegree ≤ FIELD_ELEMENTS_PER_BLOB - 2 := by
