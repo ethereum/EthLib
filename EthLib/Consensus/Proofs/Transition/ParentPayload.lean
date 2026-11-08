@@ -11,7 +11,7 @@ An empty parent leaves the state as it is when the block carries no request.
 
 It rejects a block that carries a request.
 
-A parent payload step that succeeds keeps four lists of requests within their limits.
+A parent payload step succeeds only when four lists of requests fit their limits.
 
 A full parent records its block hash, and marks its slot as having a payload.
 
