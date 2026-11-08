@@ -70,7 +70,8 @@ def bucketBits (seed : Bytes32) (round bucket : Nat) : ByteArray :=
 
 /-- The bit of a position in the bits of its bucket, least significant first in each byte. -/
 def bitAt (bits : ByteArray) (position : Nat) : Bool :=
-  (bits.data.getD (position % 256 / 8) 0).toNat / 2 ^ (position % 8) % 2 == 1
+  -- The byte is read in place: the array of the bytes would be a copy of all of them.
+  (bits[position % 256 / 8]?.getD 0) >>> (position % 8).toUInt8 &&& 1 == 1
 
 /-- One round of swap-or-not on one index.
 
