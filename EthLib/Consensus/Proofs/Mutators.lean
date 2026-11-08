@@ -362,7 +362,7 @@ theorem getValidator_of_validators_eq {state after : BeaconState preset fork}
     getValidator after index = getValidator state index := by
   simp [getValidator, same]
 
-/-- A validator that the lookup returns is the one at its index of the registry. -/
+/-- The lookup returns a validator exactly when it is the one at its index of the registry. -/
 theorem getValidator_eq_ok_iff {state : BeaconState preset fork} {index : ValidatorIndex}
     {validator : Validator} :
     getValidator state index = .ok validator ↔
