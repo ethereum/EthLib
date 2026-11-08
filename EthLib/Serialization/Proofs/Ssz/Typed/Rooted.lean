@@ -151,7 +151,7 @@ theorem hashTreeRoot_vector_leafRoots {length : Nat} (composite : (desc α).isBa
   have rooted := mapM_hashTreeRoot_toValue elements.toList
   rw [hashTreeRoot_unfold]
   simp [merkleLayout, sequenceLayout, composite, MerkleLayout.nesting, leafChunks,
-    slotRoot, List.mapM_map, Function.comp_def, rooted, finishLayout, merkleizeBoundedUnchecked,
+    slotRoot, List.mapM_map, Function.comp_def, rooted, finishLayout, merkleizeBoundedUnchecked_eq,
     bind, Except.bind, pure, Except.pure]
   congr 1
   apply Array.ext
@@ -292,7 +292,7 @@ theorem hashTreeRoot_vector_packed {length : Nat} (basic : (desc α).isBasic = t
         exact (serialize_elementBytes basic a).2)]
     simp [chunksForBytes]
   simp [merkleLayout, sequenceLayout, basic, MerkleLayout.packing, leafChunks,
-    serializeEach_elementBytes basic, finishLayout, merkleizeBoundedUnchecked,
+    serializeEach_elementBytes basic, finishLayout, merkleizeBoundedUnchecked_eq,
     bind, Except.bind, pure, Except.pure, packed, fit]
 
 end Packed

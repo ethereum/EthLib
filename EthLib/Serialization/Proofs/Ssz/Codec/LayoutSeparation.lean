@@ -127,7 +127,7 @@ theorem hashTreeRoot_progressiveContainer_layouts_separate
           = Cryptography.Hash.Sha256.hash
               (ByteArray.mk (rightContents ++ activeFieldsWord rightActive)) := by
       apply ByteArray.ext
-      simpa [combine] using joined
+      simpa [combine_eq] using joined
     refine .inr ⟨_, _, ?_, by simp [leftWidth, Nat.two_mul], by simp [rightWidth, Nat.two_mul],
       same, hashed⟩
     simp [findMixinCollision, leftMessage, rightMessage, same, hashed]

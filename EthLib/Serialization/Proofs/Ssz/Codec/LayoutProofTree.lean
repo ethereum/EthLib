@@ -20,14 +20,14 @@ theorem hashTreeRoot_bounded_layout {shape : Desc} {value : Value} {layout : Mer
       | some word => combine (subtreeAt chunks (depthFor capacity) 0) word) := by
   -- The type's positive nesting depth leaves one budget unit for its own layout.
   have positive := shape.nesting_pos
-  unfold hashTreeRoot
+  rw [hashTreeRoot_eq_nesting]
   cases nesting : shape.nesting with
   | zero => omega
   | succ budget =>
     -- The enclosing type consumes one recursion level, matching the budget used for its materialized leaves.
     simp only [nesting, Nat.add_sub_cancel] at materialized
-    simp [hashTreeRootAt, laid, materialized, bounded, merkleizeBoundedUnchecked, Nat.not_lt.mpr fits,
-      mixIn, Bind.bind, Except.bind, Pure.pure, Except.pure]
+    simp [hashTreeRootAt_succ, laid, materialized, bounded, merkleizeBoundedUnchecked_eq,
+      Nat.not_lt.mpr fits, mixIn_eq, Bind.bind, Except.bind, Pure.pure, Except.pure]
     rfl
 
 /-- Every top-level node in an unmixed bounded layout is its corresponding binary subtree. -/

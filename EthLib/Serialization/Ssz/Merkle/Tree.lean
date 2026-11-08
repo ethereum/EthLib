@@ -4,7 +4,15 @@ public import EthLib.Cryptography.Hash.Sha256
 public import EthLib.Serialization.Ssz.Codec.Serialize
 public import EthLib.Serialization.Ssz.Merkle.Merkleize
 
-/-! The two tree shapes SSZ merkleizes into, and the words a shape hashes itself against. -/
+/-!
+The two tree shapes SSZ merkleizes into, and the words a shape hashes itself against.
+
+The hash is an argument, and it may answer inside a monad.
+
+The specification is the identity monad with SHA-256.
+
+So a random-oracle model can run this merkleization with a hash that queries an oracle.
+-/
 
 @[expose] public section
 
@@ -14,9 +22,14 @@ namespace EthLib.Serialization.Ssz
 def zeroChunk : Bytes :=
   Array.replicate bytesPerChunk 0
 
-/-- Folding two nodes into their parent. -/
+/-- Folding two nodes into their parent, with a hash that may answer in a monad. -/
+def combineM {m : Type → Type} [Monad m] (hash : ByteArray → m ByteArray) (left right : Bytes) :
+    m Bytes := do
+  return (← hash (ByteArray.mk (left ++ right))).data
+
+/-- Folding two nodes into their parent, with SHA-256. -/
 def combine (left right : Bytes) : Bytes :=
-  (Cryptography.Hash.Sha256.hash (ByteArray.mk (left ++ right))).data
+  (combineM (m := Id) Cryptography.Hash.Sha256.hash left right).run
 
 /-- Cache depth for common capacities, with larger trees computed on demand. -/
 abbrev maxZeroDepth : Nat :=
@@ -51,6 +64,38 @@ def zeroSubtree (depth : Nat) : Bytes :=
   | some root => root
   | none => zeroRoot combine zeroChunk depth
 
+/--
+The hash that merkleization calls, and the roots of the all-zero subtrees that it reads.
+
+Both answer in a monad.
+
+The root of an all-zero subtree is itself a hash of zero nodes, so a model of the hash computes it.
+
+The specification reads these roots from a table instead.
+
+Nothing here ties the zero roots to the hash: a hasher built from its hash alone computes them.
+-/
+structure Hasher (m : Type → Type) where
+  /-- The hash of the bytes of two nodes. -/
+  hash : ByteArray → m ByteArray
+  /-- The root of the all-zero perfect tree of a depth. -/
+  zeroSubtree : Nat → m Bytes
+
+/-- SHA-256, with the roots of the all-zero subtrees read from the table. -/
+def sha256Hasher : Hasher Id :=
+  ⟨Cryptography.Hash.Sha256.hash, zeroSubtree⟩
+
+/-- The root of the all-zero perfect tree of a depth, hashed from the root one level below. -/
+def zeroSubtreeM {m : Type → Type} [Monad m] (hash : ByteArray → m ByteArray) : Nat → m Bytes
+  | 0 => pure zeroChunk
+  | depth + 1 => do
+    let below ← zeroSubtreeM hash depth
+    combineM hash below below
+
+/-- A hasher that computes the roots of the all-zero subtrees with its own hash, one per level. -/
+def Hasher.ofHash {m : Type → Type} [Monad m] (hash : ByteArray → m ByteArray) : Hasher m :=
+  ⟨hash, zeroSubtreeM hash⟩
+
 /-- Bytes right-padded to a node boundary and split into nodes. -/
 def packBytes (data : Bytes) : Array Bytes :=
   Array.ofFn (n := (data.size + bytesPerChunk - 1) / bytesPerChunk) fun position =>
@@ -61,16 +106,24 @@ def packBytes (data : Bytes) : Array Bytes :=
 /--
 Root of the perfect tree of a given depth, over nodes starting at a position.
 
-Positions past the data are zero, and a subtree wholly past it is read from the table.
+Positions past the data are zero, and a subtree wholly past it is an all-zero subtree.
 
 Every node is trusted to be 32 bytes wide.
 -/
-def subtreeAt (chunks : Array Bytes) (depth start : Nat) : Bytes :=
-  if start ≥ chunks.size then zeroSubtree depth
+def subtreeAtM {m : Type → Type} [Monad m] (hasher : Hasher m) (chunks : Array Bytes)
+    (depth start : Nat) : m Bytes :=
+  if start ≥ chunks.size then hasher.zeroSubtree depth
   else
     match depth with
-    | 0 => padded zeroChunk chunks start
-    | d + 1 => combine (subtreeAt chunks d start) (subtreeAt chunks d (start + 2 ^ d))
+    | 0 => pure (padded zeroChunk chunks start)
+    | d + 1 => do
+      let left ← subtreeAtM hasher chunks d start
+      let right ← subtreeAtM hasher chunks d (start + 2 ^ d)
+      combineM hasher.hash left right
+
+/-- Root of the perfect tree over nodes from a position, with SHA-256 and the zero table. -/
+def subtreeAt (chunks : Array Bytes) (depth start : Nat) : Bytes :=
+  (subtreeAtM sha256Hasher chunks depth start).run
 
 /-- Refuse a hash operand that is not one complete 32-byte SSZ node. -/
 def checkChunk (node : Bytes) : Except Err Unit :=
@@ -98,13 +151,18 @@ With no capacity given, the tree is just wide enough for the nodes it holds.
 
 A node of another width is hashed or returned as it is, so the caller checks widths first.
 -/
-def merkleizeBoundedUnchecked (chunks : Array Bytes) (limit : Option Nat) : Except Err Bytes := do
+def merkleizeBoundedUncheckedM {m : Type → Type} [Monad m] (hasher : Hasher m)
+    (chunks : Array Bytes) (limit : Option Nat) : ExceptT Err m Bytes := do
   match limit with
   | some capacity =>
     -- A capacity under the data would silently drop nodes.
     if capacity < chunks.size then throw (.merkleizeLimit chunks.size capacity)
-    return subtreeAt chunks (depthFor capacity) 0
-  | none => return subtreeAt chunks (depthFor chunks.size) 0
+    ExceptT.lift (subtreeAtM hasher chunks (depthFor capacity) 0)
+  | none => ExceptT.lift (subtreeAtM hasher chunks (depthFor chunks.size) 0)
+
+/-- Root of the bounded tree over a node sequence, with SHA-256 and the zero table. -/
+def merkleizeBoundedUnchecked (chunks : Array Bytes) (limit : Option Nat) : Except Err Bytes :=
+  (merkleizeBoundedUncheckedM sha256Hasher chunks limit).run
 
 /--
 Root of the progressive tree over a node sequence, per EIP-7916.
@@ -125,13 +183,15 @@ Its branch still has to be rebuilt to authenticate the new root.
 
 Every node is trusted to be 32 bytes wide.
 -/
-def merkleizeProgressiveUnchecked (chunks : List Bytes) (level : Nat := 0) : Bytes :=
+def merkleizeProgressiveUncheckedM {m : Type → Type} [Monad m] (hasher : Hasher m)
+    (chunks : List Bytes) (level : Nat := 0) : m Bytes :=
   -- An exhausted input closes the spine with a plain zero node, not a zero subtree.
-  if chunks.isEmpty then zeroChunk
-  else
+  if chunks.isEmpty then pure zeroChunk
+  else do
     let width := 4 ^ level
-    let here := subtreeAt (chunks.take width).toArray (depthFor width) 0
-    combine here (merkleizeProgressiveUnchecked (chunks.drop width) (level + 1))
+    let here ← subtreeAtM hasher (chunks.take width).toArray (depthFor width) 0
+    let rest ← merkleizeProgressiveUncheckedM hasher (chunks.drop width) (level + 1)
+    combineM hasher.hash here rest
 termination_by chunks.length
 decreasing_by
   have : 0 < 4 ^ level := Nat.pos_of_neZero (4 ^ level)
@@ -141,6 +201,10 @@ decreasing_by
     | nil => simp_all
     | cons _ _ => simp
   omega
+
+/-- Root of the progressive tree over a node sequence, with SHA-256 and the zero table. -/
+def merkleizeProgressiveUnchecked (chunks : List Bytes) (level : Nat := 0) : Bytes :=
+  (merkleizeProgressiveUncheckedM sha256Hasher chunks level).run
 
 /--
 Root of the progressive tree, starting from a level of a given width.
@@ -154,8 +218,12 @@ def merkleizeProgressiveFrom (chunks : Array Bytes) (width : Nat) : Bytes :=
   merkleizeProgressiveUnchecked chunks.toList (Nat.log2 width / 2)
 
 /-- Hashing a subtree root against the word its shape mixes in, as the right child. -/
+def mixInM {m : Type → Type} [Monad m] (hasher : Hasher m) (root word : Bytes) : m Bytes :=
+  combineM hasher.hash root word
+
+/-- Hashing a subtree root against the word its shape mixes in, with SHA-256. -/
 def mixIn (root word : Bytes) : Bytes :=
-  combine root word
+  (mixInM sha256Hasher root word).run
 
 /--
 The low 256 bits of a count, written as one little-endian node.

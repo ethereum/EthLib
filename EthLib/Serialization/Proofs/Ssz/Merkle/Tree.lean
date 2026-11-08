@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Serialization.Ssz.Merkle.Tree
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Hasher
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Merkleize
 
 /-! Laws of the concrete SHA-256 trees: node widths, zero subtrees, and windowed roots. -/
@@ -64,6 +65,22 @@ theorem zeroSubtree_eq (depth : Nat) :
       Array.getElem?_eq_none (by simp only [zeroRoots, zeroRootsUpTo_size]; omega)
     simp [zeroSubtree, absent]
 
+/-- The zero roots that SHA-256 computes level by level are the roots in the table. -/
+theorem zeroSubtreeM_sha256 (depth : Nat) :
+    (zeroSubtreeM (m := Id) Cryptography.Hash.Sha256.hash depth).run = zeroSubtree depth := by
+  induction depth with
+  | zero => rfl
+  | succ depth ih =>
+    rw [zeroSubtree_eq, zeroRoot, ← zeroSubtree_eq, ← ih]
+    rfl
+
+/-- The hasher built from SHA-256 alone is the hasher of the specification. -/
+theorem ofHash_sha256 : Hasher.ofHash (m := Id) Cryptography.Hash.Sha256.hash = sha256Hasher := by
+  unfold Hasher.ofHash sha256Hasher
+  congr 1
+  funext depth
+  exact zeroSubtreeM_sha256 depth
+
 /-- Packing uses the smallest number of whole nodes that can hold the bytes. -/
 @[simp] theorem packBytes_size (data : Bytes) :
     (packBytes data).size = (data.size + bytesPerChunk - 1) / bytesPerChunk := by
@@ -119,7 +136,7 @@ theorem subtreeAt_eq_subtreeRoot (chunks : Array Bytes) :
   induction depth with
   | zero =>
     intro start
-    unfold subtreeAt
+    rw [subtreeAt_eq]
     -- Either the leaf lies past the data, or it is read from it.
     split
     · -- Past the data, the lookup answers with the zero node the leaf would have read.
@@ -128,7 +145,7 @@ theorem subtreeAt_eq_subtreeRoot (chunks : Array Bytes) :
     · simp [subtreeRoot_zero, padded]
   | succ depth ih =>
     intro start
-    unfold subtreeAt
+    rw [subtreeAt_eq]
     -- Either the whole subtree lies past the data, or part of it does not.
     split
     · -- A subtree wholly past the data is the empty tree of its depth, by the lemma above.
@@ -151,11 +168,12 @@ theorem subtreeAt_split (chunks : Array Bytes) {depth : Nat}
     subtreeAt chunks (depth + 1) start
       = combine (subtreeAt chunks depth start) (subtreeAt chunks depth (start + 2 ^ depth)) := by
   -- Either part of the subtree reaches the data, or none of it does.
-  rw [subtreeAt]
+  rw [subtreeAt_eq]
   split
   · -- Wholly past the data, so both halves read the zero subtree one level down.
     rename_i past
-    rw [subtreeAt.eq_def chunks depth start, ite_eq_left past, subtreeAt.eq_def chunks depth (start + 2 ^ depth),
+    rw [subtreeAt_eq chunks depth start, ite_eq_left past,
+      subtreeAt_eq chunks depth (start + 2 ^ depth),
       ite_eq_left (Nat.le_add_right_of_le past), zeroSubtree_eq, zeroSubtree_eq]
     rfl
   · rfl
@@ -169,7 +187,7 @@ theorem subtreeAt_zero_eq (chunks : Array Bytes) {depth : Nat} :
 /-- A subtree of height zero is the node at its position, or the zero node past the data. -/
 theorem subtreeAt_leaf (chunks : Array Bytes) (start : Nat) :
     subtreeAt chunks 0 start = chunks[start]?.getD zeroChunk := by
-  unfold subtreeAt
+  rw [subtreeAt_eq]
   split
   · -- Past the data, the cached zero tree of height zero is the zero node.
     rw [zeroSubtree_eq, Array.getElem?_eq_none (by omega)]
@@ -180,7 +198,7 @@ theorem subtreeAt_leaf (chunks : Array Bytes) (start : Nat) :
 theorem subtreeAt_past (chunks : Array Bytes) (depth start : Nat) (past : chunks.size ≤ start) :
     subtreeAt chunks depth start = zeroSubtree depth := by
   -- The walk checks for this case first and answers from the zero tree.
-  unfold subtreeAt
+  rw [subtreeAt_eq]
   rw [ite_eq_left past]
 
 /-- A subtree reads only the leaves under it. -/
@@ -216,8 +234,8 @@ theorem merkleizeBoundedUnchecked_window (chunks : Array Bytes) {depth : Nat}
     rw [Array.size_extract]
     generalize 2 ^ depth = width
     omega
-  simp only [merkleizeBoundedUnchecked, ite_eq_right (Nat.not_lt.mpr span), depthFor_pow, pure, Except.pure,
-    Except.ok.injEq]
+  simp only [merkleizeBoundedUnchecked_eq, ite_eq_right (Nat.not_lt.mpr span), depthFor_pow, pure,
+    Except.pure, Except.ok.injEq]
   -- Both sides are the specification's tree, over leaf supplies that have yet to be compared.
   rw [subtreeAt_zero_eq _, subtreeAt_eq_subtreeRoot chunks depth start]
   refine subtreeRoot_congr combine depth ?_
@@ -240,7 +258,8 @@ theorem merkleizeBoundedUnchecked_append_zeros (chunks : Array Bytes)
     merkleizeBoundedUnchecked (chunks ++ Array.replicate count zeroChunk) (some capacity)
       = merkleizeBoundedUnchecked chunks (some capacity) := by
   -- The padded buffer is longer, but still inside the capacity, so neither side refuses.
-  simp only [merkleizeBoundedUnchecked, Array.size_append, Array.size_replicate, ite_eq_right (by omega : ¬ capacity < chunks.size + count),
+  simp only [merkleizeBoundedUnchecked_eq, Array.size_append, Array.size_replicate,
+    ite_eq_right (by omega : ¬ capacity < chunks.size + count),
     ite_eq_right (by omega : ¬ capacity < chunks.size)]
   -- Both roots are then the specification's, over leaf supplies already known equal.
   rw [subtreeAt_zero_eq _, subtreeAt_zero_eq _, padded_append_zeros]
@@ -250,7 +269,8 @@ theorem merkleizeBoundedUnchecked_empty {capacity : Nat} :
     merkleizeBoundedUnchecked #[] (some capacity)
       = .ok (zeroRoot combine zeroChunk (depthFor capacity)) := by
   -- An empty buffer is under any capacity, so the merkleizer answers rather than refusing.
-  simp only [merkleizeBoundedUnchecked, Array.size_empty, ite_eq_right (by omega : ¬ capacity < 0)]
+  simp only [merkleizeBoundedUnchecked_eq, Array.size_empty,
+    ite_eq_right (by omega : ¬ capacity < 0)]
   -- Every leaf then reads as zero, which is the constant supply the table entry stands for.
   rw [subtreeAt_zero_eq _, ← subtreeRoot_const_zero combine zeroChunk]
   rfl
@@ -259,11 +279,12 @@ theorem merkleizeBoundedUnchecked_empty {capacity : Nat} :
 theorem merkleizeProgressiveUnchecked_eq (chunks : List Bytes) (level : Nat) :
     merkleizeProgressiveUnchecked chunks level = progressiveRoot combine zeroChunk chunks level := by
   -- Both definitions consume one level's leaves before continuing down the spine.
-  induction chunks, level using merkleizeProgressiveUnchecked.induct with
+  induction chunks, level using progressiveRoot.induct combine zeroChunk with
   | case1 chunks level empty =>
-    simp [merkleizeProgressiveUnchecked, progressiveRoot, empty]
+    simp [merkleizeProgressiveUnchecked_unfold, progressiveRoot, empty]
   | case2 chunks level nonempty width ih =>
-    rw [merkleizeProgressiveUnchecked, progressiveRoot, ite_eq_right nonempty, ite_eq_right nonempty]
+    rw [merkleizeProgressiveUnchecked_unfold, progressiveRoot, ite_eq_right nonempty,
+      ite_eq_right nonempty]
     -- The bounded subtree equivalence is valid at every depth.
     dsimp only
     rw [subtreeAt_zero_eq, ih]

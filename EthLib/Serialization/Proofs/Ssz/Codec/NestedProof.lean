@@ -41,7 +41,8 @@ theorem boundedNode_nested_leaf (layout : MerkleLayout) (budget : Nat)
   rw [one, hashTreeRootAt_eq_hashTreeRoot child inner budget enough]
   -- The enclosing leaf preserves both the child’s successful root and any child-rooting error.
   cases hashTreeRoot child inner <;>
-    simp [merkleizeBoundedUnchecked, subtreeAt, depthFor, padded, Bind.bind, Except.bind, Pure.pure, Except.pure]
+    simp [merkleizeBoundedUnchecked_eq, subtreeAt_eq, depthFor, padded, Bind.bind, Except.bind,
+      Pure.pure, Except.pure]
 
 /-- Removing an outer path prefix preserves each left or right child turn. -/
 theorem gindexRebase_children (index depth : Nat) :

@@ -44,4 +44,15 @@ theorem exceptT_id_monadLift {ε α : Type} (x : Except ε α) :
 theorem exceptT_id_lift {ε α : Type} (a : Id α) : ExceptT.lift (ε := ε) a = Except.ok a :=
   rfl
 
+/-- A map in the identity monad with errors is the map with errors. -/
+theorem exceptT_id_mapM {ε α β : Type} (f : α → Except ε β) :
+    (xs : List α) → xs.mapM (m := ExceptT ε Id) f = xs.mapM (m := Except ε) f
+  | [] => rfl
+  | x :: rest => by
+    simp only [List.mapM_cons]
+    rw [exceptT_id_bind, exceptT_id_mapM f rest]
+    cases f x with
+    | error => rfl
+    | ok y => cases rest.mapM (m := Except ε) f <;> rfl
+
 end EthLib.Base

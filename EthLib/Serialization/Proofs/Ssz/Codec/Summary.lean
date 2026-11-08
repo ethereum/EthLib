@@ -31,10 +31,10 @@ private theorem packBytes_chunk {data : Bytes} (width : data.size = bytesPerChun
 theorem hashTreeRoot_chunk {data : Bytes} (width : data.size = bytesPerChunk) :
     hashTreeRoot (.byteVector bytesPerChunk) (.bytes data) = .ok data := by
   have flat : depthFor 1 = 0 := depthFor_pow 0
-  simp only [hashTreeRoot, Desc.nesting, hashTreeRootAt, merkleLayout, width, bne_self_eq_false,
-    Bool.false_eq_true, ite_false, Bind.bind, Except.bind, pure, Except.pure,
-    MerkleLayout.packing, packBytes_chunk width, layoutChunksAt, Leaves.count]
-  simp only [merkleizeBoundedUnchecked, flat, subtreeAt, padded, Array.size_singleton,
+  simp only [hashTreeRoot_eq_nesting, Desc.nesting, hashTreeRootAt_succ, merkleLayout, width,
+    bne_self_eq_false, Bool.false_eq_true, ite_false, Bind.bind, Except.bind, pure, Except.pure,
+    MerkleLayout.packing, packBytes_chunk width, layoutChunksAt_eq, Leaves.count]
+  simp only [merkleizeBoundedUnchecked_eq, flat, subtreeAt_eq, padded, Array.size_singleton,
     Bind.bind, Except.bind, pure, Except.pure]
   rfl
 
@@ -58,7 +58,7 @@ private theorem chunks_nested {budget : Nat} {slots : List (Option (Desc × Valu
     (enough : ∀ shape value, some (shape, value) ∈ slots → shape.nesting ≤ budget) :
     layoutChunksAt budget ⟨.nested slots, limit, mixin⟩
       = (do let chunks ← slots.mapM slotRoot; return chunks.toArray) := by
-  simp only [layoutChunksAt, Leaves.count, Option.getD_none, Nat.sub_zero, List.drop_zero,
+  simp only [layoutChunksAt_eq, Leaves.count, Option.getD_none, Nat.sub_zero, List.drop_zero,
     List.take_length]
   congr 1
   apply mapM_of_map
@@ -78,7 +78,7 @@ private theorem hashTreeRoot_step {shape : Desc} :
 private theorem hashTreeRoot_refused {shape : Desc} {value : Value} {fault : Err}
     (failed : merkleLayout shape value = .error fault) :
     hashTreeRoot shape value = .error fault := by
-  simp [hashTreeRoot_step, hashTreeRootAt, failed, Bind.bind, Except.bind]
+  simp [hashTreeRoot_step, hashTreeRootAt_succ, failed, Bind.bind, Except.bind]
 
 /-- Two nested layouts with the same tree shape and the same leaf roots give the same root. -/
 private theorem hashTreeRoot_slots {left right : Desc} {first second : Value}
@@ -96,7 +96,7 @@ private theorem hashTreeRoot_slots {left right : Desc} {first second : Value}
       have := merkleLayout_child_nesting _ _ _ laid slots rfl child inner member
       omega
   rw [hashTreeRoot_step, hashTreeRoot_step]
-  simp only [hashTreeRootAt, leftLaid, rightLaid, below leftLaid, below rightLaid,
+  simp only [hashTreeRootAt_succ, leftLaid, rightLaid, below leftLaid, below rightLaid,
     mapM_of_map same, Bind.bind, Except.bind]
 
 /-- Placing fields with the same roots gives leaf positions with the same roots. -/

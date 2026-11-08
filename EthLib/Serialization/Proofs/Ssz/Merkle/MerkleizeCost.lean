@@ -2,6 +2,7 @@ module
 
 public import EthLib.Serialization.Ssz.Merkle.Tree
 public import EthLib.Serialization.Ssz.Type.Paths
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Hasher
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Merkleize
 
 /-! What a bounded root costs in hashes, and why a large capacity barely adds to it. -/
@@ -170,7 +171,7 @@ theorem subtreeAtCounted_fst (chunks : Array Bytes) :
     ∀ depth start, (subtreeAtCounted chunks depth start).1 = subtreeAt chunks depth start := by
   intro depth start
   -- Both recursions branch on the same tests, so unfolding the implementation closes every case.
-  fun_induction subtreeAtCounted chunks depth start <;> rw [subtreeAt.eq_def] <;> grind
+  fun_induction subtreeAtCounted chunks depth start <;> rw [subtreeAt_eq] <;> grind
 
 /-- The folds counted along that recursion are exactly the modelled cost. -/
 theorem subtreeAtCounted_snd (chunks : Array Bytes) :

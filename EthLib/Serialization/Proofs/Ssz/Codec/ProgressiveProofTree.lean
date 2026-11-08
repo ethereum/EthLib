@@ -66,7 +66,7 @@ theorem progressive_suffix_split (chunks : Array Bytes) (start level : Nat)
       combine (subtreeAt chunks (2 * level) start)
         (merkleizeProgressiveUnchecked (chunks.toList.drop (start + 4 ^ level)) (level + 1)) := by
   -- A nonempty suffix opens one level, and the next level starts after its capacity.
-  rw [merkleizeProgressiveUnchecked, ite_eq_right (by simp; omega)]
+  rw [merkleizeProgressiveUnchecked_unfold, ite_eq_right (by simp; omega)]
   simp only [List.drop_drop]
   -- The current bounded segment is the prefix of the same suffix used by progressive merkleization.
   have interval := congrArg List.toArray (extract_interval_list chunks start (4 ^ level))
@@ -78,7 +78,7 @@ theorem progressive_suffix_split (chunks : Array Bytes) (start level : Nat)
     simp only [Array.size_extract]
     generalize 2 ^ (2 * level) = width
     omega
-  simp only [merkleizeBoundedUnchecked, ite_eq_right (Nat.not_lt.mpr span), depthFor_pow,
+  simp only [merkleizeBoundedUnchecked_eq, ite_eq_right (Nat.not_lt.mpr span), depthFor_pow,
     Pure.pure, Except.pure, Except.ok.injEq] at window
   simpa only [four_pow_eq, depthFor_pow] using congrArg
     (fun left => combine left

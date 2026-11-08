@@ -38,7 +38,7 @@ theorem subtreeAt_size (chunks : Array Bytes)
     (subtreeAt chunks depth start).size = bytesPerChunk := by
   -- At depth zero the root is a leaf.
   -- Every deeper root is a SHA-256 digest.
-  rw [subtreeAt.eq_def]
+  rw [subtreeAt_eq]
   split
   · exact zeroSubtree_size depth
   · cases depth with
@@ -50,14 +50,15 @@ theorem merkleizeBoundedUnchecked_size {chunks : Array Bytes} {limit : Option Na
     (complete : ∀ chunk ∈ chunks, chunk.size = bytesPerChunk)
     (made : merkleizeBoundedUnchecked chunks limit = .ok root) : root.size = bytesPerChunk := by
   -- A successful capacity check leaves a bounded subtree whose leaves already have valid widths.
-  cases limit <;> simp only [merkleizeBoundedUnchecked] at made <;> (try split at made) <;> cases made
+  cases limit <;> simp only [merkleizeBoundedUnchecked_eq] at made <;> (try split at made) <;>
+    cases made
   all_goals exact subtreeAt_size chunks complete _ _
 
 /-- A progressive root is either a zero node or a digest, regardless of its leaf widths. -/
 @[simp] theorem merkleizeProgressiveUnchecked_size (chunks : List Bytes) (level : Nat) :
     (merkleizeProgressiveUnchecked chunks level).size = bytesPerChunk := by
   -- An empty spine returns a complete zero node, and a nonempty spine returns a digest.
-  rw [merkleizeProgressiveUnchecked]
+  rw [merkleizeProgressiveUnchecked_unfold]
   split <;> simp
 
 /-- A count is written into one full node, including its high zero bytes. -/

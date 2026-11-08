@@ -21,7 +21,8 @@ theorem rooted_bounded_chunks {shape : Desc} {value : Value} {layout : MerkleLay
   cases laid.symm.trans actualLayout
   rw [bounded] at tree
   refine ⟨chunks, materialized, Nat.not_lt.mp fun over => ?_⟩
-  simp [merkleizeBoundedUnchecked, over, Functor.map, Except.map, throw, throwThe, MonadExceptOf.throw] at tree
+  simp [merkleizeBoundedUnchecked_eq, over, Functor.map, Except.map, throw, throwThe,
+    MonadExceptOf.throw] at tree
 
 /-- Composite sequence elements occupy one whole chunk apiece. -/
 theorem Desc.itemLength_composite {element : Desc} (composite : element.isBasic = false) :

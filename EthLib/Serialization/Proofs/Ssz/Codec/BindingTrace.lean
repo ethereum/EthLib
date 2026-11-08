@@ -69,11 +69,11 @@ decreasing_by
     (progressive trees level).root = merkleizeProgressiveUnchecked (trees.map root) level := by
   -- Both computations consume the same prefix before continuing down the right spine.
   induction trees, level using progressive.induct with
-  | case1 trees level empty => simp [progressive, merkleizeProgressiveUnchecked, empty, root]
+  | case1 trees level empty => simp [progressive, merkleizeProgressiveUnchecked_unfold, empty, root]
   | case2 trees level nonempty ih =>
     -- The current level separates into a bounded prefix and the remaining progressive suffix.
     -- The suffix has the same root by recursion, and taking prefixes commutes with reading child roots.
-    rw [progressive, ite_eq_right nonempty, merkleizeProgressiveUnchecked]
+    rw [progressive, ite_eq_right nonempty, merkleizeProgressiveUnchecked_unfold]
     simp only [List.isEmpty_map, nonempty, Bool.false_eq_true, ite_false, root,
       bounded_root, ih, List.map_toArray, List.map_take, List.map_drop]
 
