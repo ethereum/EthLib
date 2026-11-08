@@ -1,14 +1,14 @@
 module
 
-public import EthLib.Consensus.Proofs.Participation
-public import EthLib.Consensus.Proofs.Transition.EpochRewards
 public import EthLib.Consensus.Proofs.Transition.Operations
 public import EthLib.Consensus.Proofs.Transition.SyncAggregate
 
 /-!
 # Proofs: the rewards paid inside a block
 
-From Altair, a block pays rewards in two places: its attestations and its sync aggregate.
+From Altair, a block pays its proposer for slashings, attestations and the sync aggregate.
+
+This module covers the attestations and the sync aggregate.
 
 An attestation pays the proposer of the slot one reward.
 
@@ -16,13 +16,13 @@ That reward sums the weighted base reward of each flag newly set, over the attes
 
 The sum is divided by `(64 - 8) * 64 / 8 = 448`, rounding down.
 
-The sync aggregate pays each member that signed the participant reward, and the proposer a share.
+Each sync committee member that signed earns the participant reward, and the proposer a share.
 
 Each member that did not sign pays the participant reward, stopping at zero.
 
 The participant reward is the total base reward of a slot, weighted and split among the members.
 
-The proposer share is the participant reward times 8, over 56, rounding down.
+The proposer share is the participant reward times 8, over 64 - 8 = 56, rounding down.
 
 These rules hold at every fork from Altair.
 
@@ -175,7 +175,9 @@ The members are the first validators that hold the keys of the committee, in com
 
 Each member that signed earns the participant reward, and the proposer earns its share.
 
-That share is the reward times the proposer weight, over the rest of the weight denominator.
+That share is the reward times the proposer weight, over the denominator less that weight.
+
+It rounds down.
 
 Each member that did not sign pays the participant reward, stopping at zero.
 
@@ -253,7 +255,7 @@ def newFlagsNumerator (earned : List UInt64) (flags : ParticipationFlags) (base 
     if flag.val.toUInt64 ∈ earned ∧ hasFlag flags flag.val.toUInt64 = false then
       base.toNat * PARTICIPATION_FLAG_WEIGHTS[flag].toNat else 0).sum
 
-/-- The flags of one attester, set in turn, each at most once in the list.
+/-- Setting the flags of one attester in turn, with no flag twice in the list.
 
 A flag outside the list keeps whether it is set.
 
@@ -429,17 +431,8 @@ theorem foldlM_addAttesterFlags {total : Gwei} {earned : List UInt64} :
 theorem getAttestingIndices_nodup {attestation : Attestation preset fork}
     {attesters : List ValidatorIndex}
     (computed : getAttestingIndices state attestation = .ok attesters) :
-    (attesters.map UInt64.toNat).Nodup := by
-  have sorted : attesters.Pairwise (· < ·) := by
-    unfold getAttestingIndices at computed
-    split at computed
-    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-      obtain ⟨_, _, rfl⟩ := computed
-      exact sortedSet_sorted _
-    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-      obtain ⟨_, _, _, _, rfl⟩ := computed
-      exact sortedSet_sorted _
-  exact List.pairwise_map.mpr (sorted.imp fun less same =>
+    (attesters.map UInt64.toNat).Nodup :=
+  List.pairwise_map.mpr ((getAttestingIndices_sorted computed).imp fun less same =>
     UInt64.ne_of_lt less (UInt64.toNat_inj.mp same))
 
 /-- Writing the flags of an epoch keeps the proposer of the slot, which reads no flag. -/
