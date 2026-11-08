@@ -12,6 +12,7 @@ The WHOAREYOU challenge and the ordinary message packet read back.
 - A WHOAREYOU packet has 63 bytes, the smallest packet.
 - Node A reads the challenge of node B back, with the challenge data that node B keeps.
 - Node B reads an ordinary message packet of node A back, under its key.
+- An ordinary message packet that opens under the sender's key was sealed under that key.
 - Two errors with one code come from one constructor.
 
 The theorems say nothing about the freshness of a nonce, an ID nonce or an `enr-seq`.
@@ -84,6 +85,42 @@ theorem openMessage_sealMessage {key : Aes.Key .aes128} {nodeIdA nodeIdB : NodeI
   obtain ⟨message, hdec, hopen⟩ :=
     openPacket_sealPacket (decryptionError := SessionError.decryption) h (by simp [Authdata.flag])
   simp only [openMessage, hdec, hkey, hopen, Except.mapError, bind, Except.bind, pure, Except.pure]
+
+/-- An ordinary message packet that opens under the sender's key was sealed under that key. -/
+theorem sealMessage_of_openMessage {keyOf : NodeId → Option (Aes.Key .aes128)}
+    {key : Aes.Key .aes128} {nodeIdA nodeIdB : NodeId} {bytes plaintext : ByteArray}
+    (ho : openMessage keyOf nodeIdB bytes = .ok (nodeIdA, plaintext))
+    (hk : keyOf nodeIdA = some key) :
+    ∃ maskingIv nonce,
+      sealMessage key nodeIdA nodeIdB maskingIv nonce plaintext = .ok bytes := by
+  unfold openMessage at ho
+  cases hd : Packet.decode nodeIdB bytes with
+  | error err => simp [hd, Except.mapError, bind, Except.bind] at ho
+  | ok packet =>
+    simp only [hd, Except.mapError, bind, Except.bind] at ho
+    cases ha : packet.header.authdata with
+    | whoareyou idNonce enrSeq => simp [ha, throw] at ho
+    | handshake srcId idSignature ephemeralPubkey record => simp [ha, throw] at ho
+    | message srcId =>
+      simp only [ha] at ho
+      cases hkey : keyOf srcId with
+      | none => simp [hkey, throw] at ho
+      | some senderKey =>
+        simp only [hkey] at ho
+        cases hp : openPacket SessionError.packet SessionError.decryption senderKey packet with
+        | error err => simp [hp] at ho
+        | ok plain =>
+          simp only [hp, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at ho
+          obtain ⟨rfl, rfl⟩ := ho
+          rw [hk] at hkey
+          cases hkey
+          refine ⟨packet.maskingIv, packet.header.nonce, ?_⟩
+          have hseal := sealPacket_of_openPacket
+            (packetError' := SessionError.packet) (encryptionError := SessionError.encryption) hd hp
+          obtain ⟨iv, ⟨nonce, authdata⟩, message⟩ := packet
+          simp only at ha
+          subst ha
+          exact hseal
 
 /-! ## Error codes -/
 
