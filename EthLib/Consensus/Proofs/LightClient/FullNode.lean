@@ -37,20 +37,6 @@ theorem mapM_toChunk_map_toArray :
     simp [List.mapM_cons, toChunk, mapM_toChunk_map_toArray rest, bind, Except.bind, pure,
       Except.pure]
 
-/-- A branch of the exact depth of an index passes the check of a normalized branch there. -/
-theorem isValidNormalizedMerkleBranch_of_isValidMerkleBranch {leaf root : Bytes32}
-    {branch : List Bytes32} {gindex : Nat} (named : 2 ≤ gindex)
-    (valid : isValidMerkleBranch leaf branch (Nat.log2 gindex) (gindex % 2 ^ Nat.log2 gindex)
-      root = true) :
-    isValidNormalizedMerkleBranch leaf branch gindex root = .ok true := by
-  -- The branch has exactly the depth of the index, so no node is in front.
-  have counted := (isValidMerkleBranch_eq_true_iff.mp valid).1
-  rw [isValidNormalizedMerkleBranch_iff named, counted, Nat.sub_self, List.drop_zero]
-  refine ⟨by simp, ?_⟩
-  rw [← two_pow_log2_add_mod (by omega : 1 ≤ gindex)]
-  exact (isValidMerkleBranch_iff_verifyMerkleProof (log2_pos named)
-    (Nat.mod_lt _ (Nat.two_pow_pos _))).mp valid
-
 /-- A branch that a full node builds for a node of a value proves that node.
 
 The node is read at a generalized index of at least two, and the root is the root of the value.

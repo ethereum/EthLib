@@ -238,6 +238,20 @@ theorem isValidNormalizedMerkleBranch_iff {leaf root : Vector UInt8 32}
   rw [isValidMerkleBranch_iff_verifyMerkleProof (log2_pos named) reduced,
     two_pow_log2_add_mod (by omega)]
 
+/-- A branch of the exact depth of an index passes the check of a normalized branch there. -/
+theorem isValidNormalizedMerkleBranch_of_isValidMerkleBranch {leaf root : Vector UInt8 32}
+    {branch : List (Vector UInt8 32)} {gindex : Nat} (named : 2 ≤ gindex)
+    (valid : isValidMerkleBranch leaf branch (Nat.log2 gindex) (gindex % 2 ^ Nat.log2 gindex)
+      root = true) :
+    isValidNormalizedMerkleBranch leaf branch gindex root = .ok true := by
+  -- The branch has exactly the depth of the index, so no node is in front.
+  have counted := (isValidMerkleBranch_eq_true_iff.mp valid).1
+  rw [isValidNormalizedMerkleBranch_iff named, counted, Nat.sub_self, List.drop_zero]
+  refine ⟨by simp, ?_⟩
+  rw [← two_pow_log2_add_mod (by omega : 1 ≤ gindex)]
+  exact (isValidMerkleBranch_iff_verifyMerkleProof (log2_pos named)
+    (Nat.mod_lt _ (Nat.two_pow_pos _))).mp valid
+
 /-- Two normalized branches that verify at one index and one root open one leaf.
 
 Otherwise the search over the two climbs names two different 64-byte messages with one hash. -/

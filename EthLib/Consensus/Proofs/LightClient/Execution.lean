@@ -7,39 +7,13 @@ public import EthLib.Consensus.Proofs.LightClient.Authenticate
 
 From Capella a light client header carries the execution data of its block.
 
-A branch proves that data against the body root of the beacon header.
+A valid header binds that data to any body whose root is its body root, or names a collision.
 
-From Capella to Fulu the data is an execution payload header, and the branch reaches node 25.
+Before Gloas the data is the payload root at node 25, and from Gloas a block hash.
 
-That node of a body is the root of its execution payload.
+From Deneb the binding reaches the blob gas fields of [EIP-4844].
 
-From Gloas the data is a block hash, and the index depends on the fork of the slot.
-
-For a slot from Gloas, node 2856 of the body is the parent block hash of its bid.
-
-For an earlier slot, node 812 of a body from Deneb, or 412 of a Capella body, is its payload's hash.
-
-Take a valid header and a body whose root is the body root of the header.
-
-The header then carries the root or the hash of that body.
-
-Otherwise the two climbs to the body root give a SHA-256 collision, which the theorems name.
-
-The headers that the client checks are valid: the header of a bootstrap and the attested header.
-
-So is the finalized header of an update that proves finality, after the genesis slot.
-
-From Deneb the execution header carries the blob gas of its block.
-
-So a valid header at a slot from Deneb binds the blob gas used and the excess blob gas to the block.
-
-A valid header at an earlier slot has zero for both.
-
-Each theorem holds at every preset.
-
-The blob gas fields of the execution header come from [EIP-4844].
-
-Each binding is a consequence of the SSZ trees of the types, not a further rule of the protocol.
+The theorems take the lawful type of the body, as at the mainnet and minimal presets.
 
 [EIP-4844]: https://eips.ethereum.org/EIPS/eip-4844#specification
 -/
@@ -309,7 +283,7 @@ theorem getLcExecutionRoot_execution {config : Config} (capella : .shapella ≤ 
 
 Take a body of the fork of the header whose root is the body root of the beacon header.
 
-At a slot from the fork of the header, its execution header is the header of the body's payload.
+At a slot from Capella, and from Deneb for a header from Deneb, it has the body's payload header.
 
 Otherwise one of two searches names a SHA-256 collision.
 
@@ -418,7 +392,7 @@ Take a body of the fork of the header whose root is the body root, at a slot fro
 
 The blob gas used and the excess blob gas of the header are those of the payload of the body.
 
-Otherwise one of the two searches of `isValidLightClientHeader_execution_eq` names a collision.
+Otherwise a search over the branches or the header roots names a SHA-256 collision.
 
 The schedule must start Capella no later than Deneb. -/
 theorem isValidLightClientHeader_blobGas {config : Config}
@@ -574,7 +548,7 @@ theorem isValidLightClientHeader_parentBlockHash {config : Config} (gloas : .gla
 
 /-- From Gloas, a valid header of a block from Capella to Fulu carries the hash of its payload.
 
-Take a body of the fork of the slot, from Capella to Fulu, whose root is the body root.
+Take a body from Capella to Fulu, from Deneb exactly when the slot is, whose root is the body root.
 
 The block hash of the header is the block hash of the payload of the body.
 
