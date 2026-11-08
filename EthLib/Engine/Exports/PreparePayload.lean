@@ -92,27 +92,44 @@ def updateJson {fork : Fork} (update : ForkchoiceState) (attributes : PayloadAtt
       ("suggestedFeeRecipient", dataJson attributes.suggestedFeeRecipient.toList)] ++
       withdrawals ++ parentRoot ++ slotNumber ++ targetGasLimit))] ++ others)
 
-/-- From Bellatrix to Fulu: the forkchoice update of a proposer, as JSON text.
+/-- The arguments of the payload preparation of a proposer, from Bellatrix to Fulu.
 
-It is `null` when the proposer asks for nothing, before the merge. -/
-@[export eth_engine_prepare_execution_payload]
-def prepareExecutionPayloadExport (name fork state replacements safe finalized : ByteArray)
-    (feeRecipient : ByteArray) (powChain : Array ByteArray) : Result ByteArray := do
-  let (preset, fork) ← transitionPresetAndFork name fork
-  let config ← configWith name replacements
+They are the preset, the fork, the state in SSZ and replacements of values of the configuration.
+
+Then come the safe and finalized block hashes, the fee recipient and the PoW blocks in SSZ. -/
+abbrev PrepareArgs := String × String × ByteArray × Option PyValue × ByteArray × ByteArray ×
+  ByteArray × List ByteArray
+
+/-- From Bellatrix to Fulu: the forkchoice update of a proposer, as the value of its JSON.
+
+It is `None` when the proposer asks for nothing, before the merge. -/
+def prepareExecutionPayloadOf (args : PrepareArgs) : Result PyValue := do
+  let (name, fork, state, replacements, safe, finalized, feeRecipient, powChain) := args
+  let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
+  let config ← configWithValue name replacements
   let ⟨bellatrix⟩ ← holds (.bellatrix ≤ fork ∧ fork < .glamsterdam)
     s!"no payload preparation at {fork.name}"
   let state ← decodeInput (BeaconState preset fork) state
   let safe ← decodeInput Root safe
   let finalized ← decodeInput Root finalized
   let feeRecipient ← decodeInput ExecutionAddress feeRecipient
-  let powChain ← powChain.toList.mapM (decodeInput PowBlock)
+  let powChain ← powChain.mapM (decodeInput PowBlock)
   let prepared ← runProposer
     (prepareExecutionPayload config state bellatrix safe finalized feeRecipient powChain)
-  let json := match prepared with
-    | some (update, attributes) => updateJson update attributes
-    | none => Json.null
-  return json.compress.toUTF8
+  return match prepared with
+    | some (update, attributes) => .ofJson (updateJson update attributes)
+    | none => .none
+
+/-- From Bellatrix to Fulu: the forkchoice update of a proposer, as the value of its JSON.
+
+The arguments are the preset, the fork, the state in SSZ, and replacements of the configuration.
+
+Then come the safe and finalized block hashes, the fee recipient and the PoW blocks in SSZ.
+
+It is `None` when the proposer asks for nothing, before the merge. -/
+@[export eth_engine_prepare_execution_payload]
+def prepareExecutionPayloadExport (args : PyValue) : Result PyValue :=
+  pyExport prepareExecutionPayloadOf args
 
 /-- The status of a payload from its code: 0 empty, 1 full and 2 pending. -/
 def payloadStatusOfCode : UInt64 → Result Consensus.PayloadStatus

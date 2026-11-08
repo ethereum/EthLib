@@ -199,8 +199,50 @@ def test_wrong_root() -> None:
 
 def test_field_pattern() -> None:
     """A nonce with a leading zero does not match the type `uint64` of execution-apis."""
-    with raises(ValueError, "not a value of uint64: '0x00'"):
+    with raises(TrieError, "nonce: leading zero") as error:
         trie.verify_account_proof(STATE_ROOT, dict(_WITH_STORAGE, nonce="0x00"))
+    assert error.value.code == 0
+
+
+_SLOT = {"key": "0x0", "value": "0x0", "proof": []}
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        # A missing field, and a field of value null, which counts as absent.
+        ({"address": None}, "answer: no field address"),
+        ({"storageProof": "0x"}, "storageProof: not an array"),
+        # The nonce is a uint64, so 2^64 is out of range.
+        ({"nonce": "0x10000000000000000"}, "nonce: above 2^64"),
+        # A hash and a proof node take lowercase hex digits only, two for each byte.
+        ({"codeHash": "0x" + "AA" * 32}, "codeHash: not a hex digit"),
+        ({"accountProof": ["0x123"]}, "accountProof: odd number of hex digits"),
+        # A storage key has at most 64 lowercase digits behind its 0x marker.
+        ({"storageProof": [dict(_SLOT, key="0x" + "1" * 65)]}, "key: more than 64 hex digits"),
+        ({"storageProof": [dict(_SLOT, key="0xA")]}, "key: not a hex digit"),
+        ({"storageProof": [dict(_SLOT, key="00")]}, "key: no 0x marker"),
+    ],
+)
+def test_field_out_of_its_pattern(change: dict, message: str) -> None:
+    """Lean reads each field of the answer in the pattern of its base type, before any check."""
+    with raises(TrieError, message) as error:
+        trie.verify_account_proof(STATE_ROOT, {**_WITH_STORAGE, **change})
+    assert error.value.code == 0
+
+
+def test_answer_is_an_object() -> None:
+    with raises(TrieError, "answer: not an object") as error:
+        trie.verify_account_proof(STATE_ROOT, [])  # ty: ignore[invalid-argument-type]
+    assert error.value.code == 0
+
+
+def test_uppercase_address() -> None:
+    """An address may use uppercase hex digits, so the answer reads and holds as before."""
+    answer = dict(_WITH_STORAGE, address=_WITH_STORAGE["address"].upper().replace("0X", "0x"))
+    assert trie.verify_account_proof(STATE_ROOT, answer) == trie.verify_account_proof(
+        STATE_ROOT, _WITH_STORAGE
+    )
 
 
 def test_short_root() -> None:

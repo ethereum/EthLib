@@ -175,8 +175,8 @@ def bindings : List Binding := [
   ⟨"trie_hex_prefix", `EthLib.Execution.Trie.Exports.hexPrefixExport,
     "(nibbles: list[int], is_leaf: bool) -> bytes",
     [], some "TrieError"⟩,
-  ⟨"trie_verify_account_proof", `EthLib.Execution.Trie.Exports.verifyAccountProofExport,
-    "(root: bytes, answer: bytes) -> bytes",
+  ⟨"trie_verify_account_proof", `EthLib.Engine.Exports.verifyAccountProofExport,
+    "(root: bytes, answer: dict) -> list[bool] | None",
     [`EthLib.Execution.State.AccountProofError], some "TrieError"⟩,
   ⟨"vrf_verify", `EthLib.Cryptography.Vrf.Exports.verify,
     "(root: bytes, index: int, opening: bytes) -> bytes | None",
@@ -982,7 +982,7 @@ def bindings : List Binding := [
     "(dao_block: int, fork: str, header: bytes) -> bool",
     [`EthLib.Serialization.Rlp.RlpError], some "BlockError"⟩,
   ⟨"state_transition", `EthLib.Execution.Blocks.Exports.stateTransitionExport,
-    "(config: bytes, state: bytes, recent: bytes, fork: str, block: bytes, check_seal: bool) " ++
+    "(config: dict, state: bytes, recent: bytes, fork: str, block: bytes, check_seal: bool) " ++
       "-> bytes",
     [`EthLib.Execution.Blocks.BlockError], some "BlockError"⟩,
   ⟨"genesis_block", `EthLib.Execution.Blocks.Exports.genesisExport,
@@ -1020,18 +1020,19 @@ def bindings : List Binding := [
     "(config: dict[str, Any], number: int, timestamp: int) -> str | None",
     [], some "ChainError"⟩,
   ⟨"engine_new_payload", `EthLib.Engine.Exports.newPayloadExport,
-    "(config: bytes, request: bytes) -> bytes",
+    "(config: dict, request: dict) -> dict",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
   ⟨"engine_new_payload_on_chain", `EthLib.Engine.Exports.newPayloadOnChainExport,
-    "(config: bytes, state: bytes, recent: bytes, request: bytes) -> bytes",
+    "(config: dict, state: bytes, recent: bytes, request: dict) -> " ++
+      "tuple[dict, bytes, bytes] | tuple[dict, None, None]",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
   ⟨"engine_forkchoice_updated", `EthLib.Engine.Exports.forkchoiceUpdatedExport,
-    "(tree: bytes, finalized: bytes, request: bytes) -> bytes",
+    "(tree: list, finalized: str | None, request: dict) -> dict",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
   ⟨"engine_prepare_execution_payload", `EthLib.Engine.Exports.prepareExecutionPayloadExport,
-    "(name: str, fork: str, state: bytes, config: bytes, safe_block_hash: bytes, " ++
+    "(name: str, fork: str, state: bytes, config: dict | None, safe_block_hash: bytes, " ++
       "finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes]) " ++
-      "-> bytes",
+      "-> dict | None",
     [`EthLib.Consensus.ProposerError], some "ProposerError"⟩,
   ⟨"engine_prepare_execution_payload_gloas",
     `EthLib.Engine.Exports.prepareExecutionPayloadGloasExport,

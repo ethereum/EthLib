@@ -191,8 +191,8 @@ def trie_hex_prefix(nibbles: list[int], is_leaf: bool) -> bytes:
     """The hex-prefix encoding of a path of nibbles, for a leaf or an extension."""
     ...
 
-def trie_verify_account_proof(root: bytes, answer: bytes) -> bytes:
-    """Check an answer of `eth_getProof` against a state root, with Keccak-256."""
+def trie_verify_account_proof(root: bytes, answer: dict) -> list[bool] | None:
+    """Check an answer of `eth_getProof` against a 32-byte state root, with Keccak-256."""
     ...
 
 def vrf_verify(root: bytes, index: int, opening: bytes) -> bytes | None:
@@ -1123,7 +1123,7 @@ def block_dao_extra_data_valid(dao_block: int, fork: str, header: bytes) -> bool
     """Whether a header has the extra data that the DAO Fork asks of its first ten blocks."""
     ...
 
-def state_transition(config: bytes, state: bytes, recent: bytes, fork: str, block: bytes, check_seal: bool) -> bytes:
+def state_transition(config: dict, state: bytes, recent: bytes, fork: str, block: bytes, check_seal: bool) -> bytes:
     """Run the state transition of a block on a chain, and give the state after it."""
     ...
 
@@ -1167,20 +1167,20 @@ def active_fork(config: dict[str, Any], number: int, timestamp: int) -> str | No
     """The name of the active fork of a configured chain at a block, or `None` when none is active."""
     ...
 
-def engine_new_payload(config: bytes, request: bytes) -> bytes:
+def engine_new_payload(config: dict, request: dict) -> dict:
     """The payload status of an `engine_newPayload` request, without the parent's state."""
     ...
 
-def engine_new_payload_on_chain(config: bytes, state: bytes, recent: bytes, request: bytes) -> bytes:
+def engine_new_payload_on_chain(config: dict, state: bytes, recent: bytes, request: dict) -> tuple[dict, bytes, bytes] | tuple[dict, None, None]:
     """The payload status of an `engine_newPayload` request, on a chain that holds the parent."""
     ...
 
-def engine_forkchoice_updated(tree: bytes, finalized: bytes, request: bytes) -> bytes:
+def engine_forkchoice_updated(tree: list, finalized: str | None, request: dict) -> dict:
     """The response to an `engine_forkchoiceUpdated` request, against a tree of payloads."""
     ...
 
-def engine_prepare_execution_payload(name: str, fork: str, state: bytes, config: bytes, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes]) -> bytes:
-    """From Bellatrix to Fulu: the forkchoice update of a proposer, as JSON text."""
+def engine_prepare_execution_payload(name: str, fork: str, state: bytes, config: dict | None, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes]) -> dict | None:
+    """From Bellatrix to Fulu: the forkchoice update of a proposer, as the value of its JSON."""
     ...
 
 def engine_prepare_execution_payload_gloas(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, head_root: bytes, head_status: int, state: bytes, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, target_gas_limit: int, verify: bool, config: dict | None) -> dict:

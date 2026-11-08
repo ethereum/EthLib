@@ -11,7 +11,7 @@ The C-ABI export of the state transition of a block, callable from the Python C 
 
 The chain crosses the boundary as three inputs.
 
-- Its configuration is JSON, in the form of the chain configuration exports.
+- Its configuration is the typed value of its JSON, in the form of the chain configuration exports.
 - Its state takes the form of the state root export.
 - Its recent blocks, oldest first, are an RLP list, each the fork name, the header and the ommers.
 
@@ -62,20 +62,19 @@ def blockErrorMessage : BlockError → String
 
 /-- Run the state transition of a block on a chain, and give the state after it.
 
-With `checkSeal` 0, the proof of work is left out, as for test chains that run without one.
+Without the seal check, the proof of work is left out, as for test chains that run without one.
 
-It returns a list of two items: the state root, and the accounts of the state. -/
-@[export eth_state_transition]
-def stateTransitionExport (config state recent fork block : ByteArray) (checkSeal : UInt8) :
+It returns the RLP list of two items: the state root, and the accounts of the state. -/
+def stateTransitionOf (args : PyValue × ByteArray × ByteArray × String × ByteArray × Bool) :
     Result ByteArray := do
-  let config ← ChainConfig.Exports.configOfJson
-    (← ChainConfig.Exports.parseJson "config" config)
+  let (config, state, recent, fork, block, checkSeal) := args
+  let config ← ChainConfig.Exports.configOfJson config.toJson
   -- The chain is an input that the export reads itself, so its errors have code 0.
   let pre ← (State.Exports.ofInput state).mapError fun e => (0, e.message)
   let recentItems : List Item ← (Codec.decode recent).mapError
     fun e => (0, s!"recent blocks rejected: {reprStr e}")
   let recent ← (recentItems.mapM (recentOfItem config)).mapError fun (_, m) => (0, m)
-  let fork ← forkUpTo .glamsterdam fork
+  let fork ← forkUpTo .glamsterdam fork.toUTF8
   let raw : Block fork Item ← (Block.decode (forkAtBlock config) block).mapError
     fun e => ((BlockError.encoding e).code, s!"block rejected: {reprStr e}")
   let transactions ← raw.transactions.zipIdx.mapM fun (item, index) =>
@@ -83,13 +82,24 @@ def stateTransitionExport (config state recent fork block : ByteArray) (checkSea
       ((BlockError.undecodableTransaction index e).code,
         s!"transaction {index} does not decode: {message e}")
   let chain : BlockChain := ⟨config, pre, recent⟩
-  let post ← (stateTransition chain { raw with transactions } (checkSeal ≠ 0)).mapError
+  let post ← (stateTransition chain { raw with transactions } checkSeal).mapError
     fun e => (e.code, blockErrorMessage e)
   let root ← State.Exports.rootOf post
   let accounts := post.accounts.toList.map fun (address, account) =>
     stateEntryItem post address account
   (encode (Item.list [Codec.toItem root, .list accounts])).mapError
     fun e => (0, s!"result: {reprStr e}")
+
+/-- Run the state transition of a block on a chain, and give the state after it.
+
+The arguments are the configuration of the chain, its state and its recent blocks.
+
+Then come the fork and the block, and whether to check the seal of the proof of work.
+
+It returns the RLP list of two items: the state root, and the accounts of the state. -/
+@[export eth_state_transition]
+def stateTransitionExport (args : PyValue) : Result PyValue :=
+  pyExport stateTransitionOf args
 
 /-- The fields of a genesis header that a chain chooses, in the order of the header.
 

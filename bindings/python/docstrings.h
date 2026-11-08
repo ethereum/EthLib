@@ -144,7 +144,7 @@
   "The hex-prefix encoding of a path of nibbles, for a leaf or an extension."
 
 #define DOC_trie_verify_account_proof \
-  "Check an answer of `eth_getProof` against a state root, with Keccak-256."
+  "Check an answer of `eth_getProof` against a 32-byte state root, with Keccak-256."
 
 #define DOC_vrf_verify \
   "The output of an opening at an index under a root, or no bytes when verification rejects."
@@ -885,7 +885,7 @@
   "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads."
 
 #define DOC_engine_prepare_execution_payload \
-  "From Bellatrix to Fulu: the forkchoice update of a proposer, as JSON text."
+  "From Bellatrix to Fulu: the forkchoice update of a proposer, as the value of its JSON."
 
 #define DOC_engine_prepare_execution_payload_gloas \
   "From Gloas: the forkchoice update of a proposer, as the value of its JSON."

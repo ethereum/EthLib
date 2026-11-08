@@ -1054,9 +1054,9 @@
    "docstring":
    "The hex-prefix encoding of a path of nibbles, for a leaf or an extension.\n\nThe arguments are the list of the nibbles and whether the path ends at a leaf.\n\nA value of 16 or more is not a nibble, and fails with code 0."},
   {"summary":
-   "Check an answer of `eth_getProof` against a state root, with Keccak-256.",
-   "signature": "(root: bytes, answer: bytes) -> bytes",
-   "operation": "EthLib.Execution.Trie.Exports.verifyAccountProofExport",
+   "Check an answer of `eth_getProof` against a 32-byte state root, with Keccak-256.",
+   "signature": "(root: bytes, answer: dict) -> list[bool] | None",
+   "operation": "EthLib.Engine.Exports.verifyAccountProofExport",
    "method": "trie_verify_account_proof",
    "errors":
    [{"type": "EthLib.Execution.State.AccountProofError",
@@ -1069,7 +1069,7 @@
       {"constructor": "slotMismatch", "code": 506}]}],
    "error_class": "TrieError",
    "docstring":
-   "Check an answer of `eth_getProof` against a state root, with Keccak-256.\n\nThe answer is the RLP list of the address, the nonce, the balance, the code hash and storage root.\n\nThe list goes on with the nodes of the account proof, then the slots.\n\nEach slot is the list of the slot on 32 bytes, the word, and the nodes of its proof.\n\nNo bytes means that the address has no account: the nonce, the balance and each slot word are `0`.\n\nOtherwise the byte 1 comes first, then one byte for each slot: 1 if it is set, 0 if it is not.\n\nA root of another length than 32 bytes, or an answer that does not decode, has code 0."},
+   "Check an answer of `eth_getProof` against a 32-byte state root, with Keccak-256.\n\nThe arguments are the state root and the `result` object of the response.\n\n`None` means that the proof shows no account at the address, with the nonce, balance and slots 0.\n\nOtherwise each slot is true when it is set and holds its value, and false when it is not set.\n\nA field that is missing or out of its pattern, or a root that is not 32 bytes, has code 0.\n\nAn answer that does not hold has the code of its fault."},
   {"summary":
    "The output of an opening at an index under a root, or no bytes when verification rejects.",
    "signature": "(root: bytes, index: int, opening: bytes) -> bytes | None",
@@ -7947,7 +7947,7 @@
   {"summary":
    "Run the state transition of a block on a chain, and give the state after it.",
    "signature":
-   "(config: bytes, state: bytes, recent: bytes, fork: str, block: bytes, check_seal: bool) -> bytes",
+   "(config: dict, state: bytes, recent: bytes, fork: str, block: bytes, check_seal: bool) -> bytes",
    "operation": "EthLib.Execution.Blocks.Exports.stateTransitionExport",
    "method": "state_transition",
    "errors":
@@ -7995,7 +7995,7 @@
       {"constructor": "wrongBlockAccessListHash", "code": 256}]}],
    "error_class": "BlockError",
    "docstring":
-   "Run the state transition of a block on a chain, and give the state after it.\n\nWith `checkSeal` 0, the proof of work is left out, as for test chains that run without one.\n\nIt returns a list of two items: the state root, and the accounts of the state."},
+   "Run the state transition of a block on a chain, and give the state after it.\n\nThe arguments are the configuration of the chain, its state and its recent blocks.\n\nThen come the fork and the block, and whether to check the seal of the proof of work.\n\nIt returns the RLP list of two items: the state root, and the accounts of the state."},
   {"summary": "The genesis block at a fork, in RLP form.",
    "signature":
    "(fork: str, params: tuple[bytes, int, int, int, bytes, bytes, bytes, int, int, int], state: bytes) -> bytes",
@@ -8189,7 +8189,7 @@
    "The name of the active fork of a configured chain at a block, or `None` when none is active.\n\nThe arguments are the configuration as a `dict`, the block number and the timestamp."},
   {"summary":
    "The payload status of an `engine_newPayload` request, without the parent's state.",
-   "signature": "(config: bytes, request: bytes) -> bytes",
+   "signature": "(config: dict, request: dict) -> dict",
    "operation": "EthLib.Engine.Exports.newPayloadExport",
    "method": "engine_new_payload",
    "errors":
@@ -8200,11 +8200,11 @@
       {"constructor": "invalidForkchoiceState", "code": 38002}]}],
    "error_class": "EngineError",
    "docstring":
-   "The payload status of an `engine_newPayload` request, without the parent's state."},
+   "The payload status of an `engine_newPayload` request, without the parent's state.\n\nThe arguments are the chain configuration and the request."},
   {"summary":
    "The payload status of an `engine_newPayload` request, on a chain that holds the parent.",
    "signature":
-   "(config: bytes, state: bytes, recent: bytes, request: bytes) -> bytes",
+   "(config: dict, state: bytes, recent: bytes, request: dict) -> tuple[dict, bytes, bytes] | tuple[dict, None, None]",
    "operation": "EthLib.Engine.Exports.newPayloadOnChainExport",
    "method": "engine_new_payload_on_chain",
    "errors":
@@ -8215,10 +8215,10 @@
       {"constructor": "invalidForkchoiceState", "code": 38002}]}],
    "error_class": "EngineError",
    "docstring":
-   "The payload status of an `engine_newPayload` request, on a chain that holds the parent.\n\nThe chain has the inputs of the state transition export: configuration, state, recent blocks.\n\nIt returns an RLP list of three byte strings, the status as JSON first.\n\nFor a valid payload, the RLP encodings of its header and of the accounts after it follow.\n\nThe caller can then pass the accounts to the next call without decoding them.\n\nFor any other payload, two empty byte strings follow."},
+   "The payload status of an `engine_newPayload` request, on a chain that holds the parent.\n\nThe arguments are the chain configuration, the state, the recent blocks and the request.\n\nA valid payload also gives the RLP forms of its header and of the accounts after it.\n\nOtherwise both are `None`."},
   {"summary":
    "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.",
-   "signature": "(tree: bytes, finalized: bytes, request: bytes) -> bytes",
+   "signature": "(tree: list, finalized: str | None, request: dict) -> dict",
    "operation": "EthLib.Engine.Exports.forkchoiceUpdatedExport",
    "method": "engine_forkchoice_updated",
    "errors":
@@ -8229,11 +8229,11 @@
       {"constructor": "invalidForkchoiceState", "code": 38002}]}],
    "error_class": "EngineError",
    "docstring":
-   "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.\n\nThe execution layer may know a finalized block, from an earlier update."},
+   "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.\n\nThe arguments are the tree, the finalized block that the execution layer knows, and the request."},
   {"summary":
-   "From Bellatrix to Fulu: the forkchoice update of a proposer, as JSON text.",
+   "From Bellatrix to Fulu: the forkchoice update of a proposer, as the value of its JSON.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: bytes, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes]) -> bytes",
+   "(name: str, fork: str, state: bytes, config: dict | None, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes]) -> dict | None",
    "operation": "EthLib.Engine.Exports.prepareExecutionPayloadExport",
    "method": "engine_prepare_execution_payload",
    "errors":
@@ -8257,7 +8257,7 @@
       {"constructor": "duty", "code": 16}]}],
    "error_class": "ProposerError",
    "docstring":
-   "From Bellatrix to Fulu: the forkchoice update of a proposer, as JSON text.\n\nIt is `null` when the proposer asks for nothing, before the merge."},
+   "From Bellatrix to Fulu: the forkchoice update of a proposer, as the value of its JSON.\n\nThe arguments are the preset, the fork, the state in SSZ, and replacements of the configuration.\n\nThen come the safe and finalized block hashes, the fee recipient and the PoW blocks in SSZ.\n\nIt is `None` when the proposer asks for nothing, before the merge."},
   {"summary":
    "From Gloas: the forkchoice update of a proposer, as the value of its JSON.",
    "signature":
