@@ -221,8 +221,8 @@ Its game runs EthLib's `keyGenWith`, `signWith` and `verifyWith`, with the hash 
 `keyGen`, `sign` and `verify` are the same definitions with Keccak-256 as `H`.
 
 The proof is a port of leanVM's model of the scheme, and `Proofs/Sphincs/Security/README.md` lists what changed here.
-The ported model signs the layers of the hypertree from the bottom up, as EthLib and leanVM's Rust signer do.
-The published model signed them from the top down, and its author confirmed in [leanVM#720](https://github.com/leanEthereum/leanVM/issues/720) that this order is a bug.
+The model comes from the commit that merged [leanVM#662](https://github.com/leanEthereum/leanVM/pull/662), which moves the scheme to the hash layout of FIPS 205.
+The model signs the layers of the hypertree from the bottom up, as EthLib does.
 The bridge in `Proofs/Sphincs/Unforgeability/Bridge/` connects the model to EthLib's algorithms.
 An EthLib forgery is a model forgery of a translated adversary (`forgeAdvantage_le`).
 Under every fixed answer of the oracle, a signing request costs the model at most what it costs EthLib (`hashCalls_sign_le`).
@@ -1634,12 +1634,17 @@ The Python bindings expose the block cipher, CTR and GCM, as `encrypt_block`, `d
 
 A security theorem rests on a model, such as a random oracle for a hash.
 Each such theorem of EthLib rests on one idealisation, listed below.
-The two theorems of Casper FFG share one bullet, as do the signature theorems of the light client, and the binding of a proof of possession and the codeword searches share that of leanXMSS:
+The two theorems of Casper FFG share one bullet, as do the signature theorems of the light client.
+The binding of a proof of possession shares the bullet of leanXMSS, and the codeword searches of each scheme share the bullet of that scheme:
 
 - leanXMSS: the hash `H`, Keccak-256, is a random oracle on byte strings.
   The theorem says nothing about an attack that uses the structure of Keccak.
   The binding of an EIP-8450 proof of possession rests on the same oracle.
-  So do the failure bounds of the codeword searches of leanXMSS and leanSPHINCS.
+  So do the failure bounds of the codeword searches of leanXMSS.
+- leanSPHINCS: the hash `H`, Keccak-256, is a random oracle on byte strings, as for leanXMSS.
+  The unforgeability theorem says nothing about an attack that uses the structure of Keccak.
+  It counts classical queries only, so it says nothing about a quantum adversary.
+  The failure bounds of the codeword searches of leanSPHINCS rest on the same oracle.
 - Merkle search bounds: each new `(level, position, left, right)` input receives an independent uniform answer from a finite nonempty range.
   Repeated inputs receive the same answer, and the initial cache is empty.
   The fixed-target bound excludes one honest input from the oracle domain and fixes the target before the run.
@@ -1720,12 +1725,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 299 operations and 42 size constants.
-The Python extension calls 299 of the operations and 42 of the constants.
+Lean exports 299 operations and 41 size constants.
+The Python extension calls 299 of the operations and 41 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-8732 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (351), `bls.c` (378), `chain.c` (45), `consensus.c` (1652), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (45), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1249), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (119), `wrappers.h` (566), `xmss.c` (134).
+8724 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (351), `bls.c` (378), `chain.c` (45), `consensus.c` (1652), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (45), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1241), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (119), `wrappers.h` (566), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

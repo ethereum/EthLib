@@ -41,7 +41,8 @@ The other directories hold the game hops and the bounds.
 `ScanSigner/`, `GraphView/` and `LazyRun/` analyse the signer's hash calls, their cost, and a run whose hidden values are sampled only when read.
 `Reduction/` moves the oracle and the seeds out of the game.
 `Reduction/SeedElimination.lean` bounds the advantage by any bound on the win probability of a game without seeds, plus `3 q / 2^256`.
-The extra term covers a hash call that names a hidden seed.
+The extra term covers a hash call that names a hidden key value: the secret seed, or the PRF key `SK.prf` in a randomizer derivation.
+The proof gives `2 q / 2^256`, and the statement keeps the slack of `3 q / 2^256` that its consumers use.
 `CoverBound/` and `CoverPotential/` bound the chance that a forgery covers every FORS tree.
 `SmallBudget/` and `LargeBudget/` bound the win for small and for large hash budgets.
 `Certificates/` holds the numeric certificates of the configuration, which the kernel checks in exact rational arithmetic.
@@ -58,7 +59,10 @@ So a budget of `q` hash calls against EthLib is a budget of `q` against the mode
 
 ## Source
 
-The proof is adapted from [leanEthereum/leanVM](https://github.com/leanEthereum/leanVM) at commit [`1753fde3ee06e534db39487c88a13e29d4ed05bf`](https://github.com/leanEthereum/leanVM/tree/1753fde3ee06e534db39487c88a13e29d4ed05bf/formal/lean_sphincs), directory `formal/lean_sphincs/`.
+The proof is adapted from [leanEthereum/leanVM](https://github.com/leanEthereum/leanVM) at commit [`5e3ade21d339a45e1b3b0dba97ad9300ab50e49b`](https://github.com/leanEthereum/leanVM/tree/5e3ade21d339a45e1b3b0dba97ad9300ab50e49b/formal/lean_sphincs), directory `formal/lean_sphincs/`.
+That commit merged [leanVM#662](https://github.com/leanEthereum/leanVM/pull/662), "leanSphincs closer to FIPS205", into `main`.
+The pull request moves the scheme to the hash layout of FIPS 205.
+EthLib first ported the proof from commit `1753fde3ee06e534db39487c88a13e29d4ed05bf`, and then applied the changes between the two commits.
 
 ## License
 
@@ -77,12 +81,14 @@ The changes that follow from this are:
   The lemmas about uniform samples, events and sums of point masses use the new names of VCVio.
 - VCVio's query cache is now a structure, not a function, so a cache is built and read through its constructor and its lookup.
 - The modules use Lean's module system, as all of EthLib does.
-  VCVio's tracing, logging and cost-writer handlers are not exposed to importers.
-  So the statements that leanVM proves by unfolding these handlers are proved by simplification here.
-  These are two statements about the hash trace of a computation, and seven about hash calls and costs in `GraphView/HashCalls.lean`, `GraphView/CountedGame.lean` and `Reduction/PreparedSample.lean`.
+  VCVio's tracing, logging and cost-writer handlers are built on PolyFun's trace handlers, which are not exposed to importers.
+  So the statements that leanVM proves by unfolding these handlers are proved here with their simp lemmas.
+  These are two statements about the hash trace of a computation, and seven about hash calls and costs in `GraphView/HashCalls.lean`, `GraphView/CountedGame.lean` and `Scheme/VerificationCost.lean`.
 - On Lean v4.35.0 the simplifier does not read the length of a byte encoding of a fixed-width digest through the width's arithmetic.
   `Scheme/Bytes.lean` gains lemmas for the lengths of the byte widths that the model uses.
-  Some files set the option that lets definitional unfolding cross reducibility boundaries, each with a comment that says why.
+  So five files set the option that lets definitional unfolding cross reducibility boundaries, where leanVM does not, and each says why in a comment.
+  Seventeen other files keep that option from leanVM.
+  Two of them, `LazyRun/GraphRows.lean` and `Seed/Coupling.lean`, say why in a comment, and the other fifteen do not.
 - `Scheme/Uniform.lean` gains a lemma: the first coordinate of a uniform pair is uniform.
 - The Mathlib that EthLib uses has no uniform probability mass function of a finite type.
   So `Base/Prelude.lean` and `LazyRun/Resample.lean` state their lemmas about uniform products, pairs and tables for uniform samples, as equalities in distribution.
@@ -101,16 +107,9 @@ The changes that follow from this are:
 - leanXMSS uses the same random oracle, and neither scheme imports the other.
   So the oracle, its inputs and answers and the truncation of an answer come from `Proofs/HashSig/Oracle.lean`.
   `Scheme.lean` exports them under their old names, so the proof keeps them.
-- The signer signs the layers from the bottom up, where leanVM's model signs them from the top down.
-  leanVM's Rust signer signs from the bottom up.
-  The model's author confirmed in [leanVM#720](https://github.com/leanEthereum/leanVM/issues/720) that the top-down order is a bug.
-  The change is in the sequencing of the layers, which now runs from the last index down.
-  A signature is unchanged, and so is the verifier.
-  The analyses of the signer's hash calls keep their statements.
-  Only their inductions change, from the first index and its successors to the last index and its predecessors.
-  The reason is the bridge to EthLib, which signs from the bottom up.
-  With one order, both signers reach the same layers, so the bridge can compare their hash calls request by request.
 - No file raises the heartbeat limit.
+  leanVM raises it in eight files, among them `Scheme/Correctness.lean`, `Scheme/Recovery.lean` and `Certificates/H26.lean`.
+  Here their proofs fit the default limit.
 - Arguments that the simplifier does not use, deprecated lemma names and unused section variables are removed, so the files build without warnings.
 
 The other changes are names and documentation:

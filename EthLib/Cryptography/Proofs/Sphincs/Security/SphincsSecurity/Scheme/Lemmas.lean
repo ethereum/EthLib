@@ -65,9 +65,8 @@ variable {m : Type → Type} [Monad m] [HasQuery HashSpec m]
 
 The signer derives the starts of all 64 chains at once, and each entry has this value. -/
 def otsStart (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
-    (leaf : LeafIndex) (chainIdx : ChainIndex) (seed : MasterSeed) : m Digest := do
-  let output ← deriveOutput parameter (.ots lay tree leaf (chainPair chainIdx)) seed
-  return hashHalf chainIdx.val output
+    (leaf : LeafIndex) (chainIdx : ChainIndex) (seed : MasterSeed) : m Digest :=
+  deriveKey parameter (.ots lay tree leaf chainIdx) seed
 
 /-- The end of signing once a randomizer lands: the digest, the FORS opening and the layers. -/
 def finishSign (sk : SecretKey) (message : Message) (randomness : Randomness) :
@@ -75,7 +74,10 @@ def finishSign (sk : SecretKey) (message : Message) (randomness : Randomness) :
   let digest ← messageDigest sk.parameter sk.root message randomness
   let index := digestIndex digest
   let opening ← forsOpen sk.parameter index (digestLeaves digest) sk.seed
-  let some layers ← sequenceLayers (fun lay => signLayer sk index lay) | return none
+  let roots ← forsRecover sk.parameter index (digestLeaves digest) opening
+  let forsKey ← forsPublicKey sk.parameter index roots
+  let some layers ← sequenceThread (fun lay below => layerStep sk index lay below) forsKey
+    | return none
   return some ⟨randomness, opening, layers⟩
 
 end Seeded
@@ -139,11 +141,6 @@ theorem totalHeight_le_hashOutput : totalHeight ≤ hashOutputBits := by
   unfold hashOutputBits
   omega
 
-/-- The index fits in the message digest. -/
-theorem totalHeight_le_digest : totalHeight ≤ messageDigestBits := by
-  unfold messageDigestBits
-  omega
-
 theorem two_pow_totalHeight_le : 2 ^ totalHeight ≤ 2 ^ 28 :=
   Nat.pow_le_pow_right (by decide) totalHeight_le_28
 
@@ -166,11 +163,20 @@ theorem lowerHeight_pos : 0 < lowerHeight := lt_of_lt_of_le (by decide) Params.l
 theorem maxLayerHeight_pos : 0 < maxLayerHeight :=
   lt_of_lt_of_le lowerHeight_pos lowerHeight_le_max
 
-/-- The message digest fits in the concatenated digest calls. -/
+/-- The bottom layer is no taller than the hypertree. -/
+theorem bottomHeight_le : bottomHeight ≤ totalHeight := by
+  unfold bottomHeight layerHeight
+  split
+  · exact maxLayerHeight_le
+  · exact lowerHeight_le_max.trans maxLayerHeight_le
+
+/-- The message digest fits in the concatenated digest calls.
+
+The `m` bytes of FIPS 205 round each field of the digest up to whole bytes. -/
 theorem messageDigestBits_le : messageDigestBits ≤ hashOutputBits * digestCalls := by
-  unfold digestCalls hashOutputBits
-  have h := Nat.div_add_mod (messageDigestBits + 256 - 1) 256
-  have h2 := Nat.mod_lt (messageDigestBits + 256 - 1) (by decide : 0 < 256)
+  have := bottomHeight_le
+  unfold digestCalls digestBytes mdBytes treeIndexBytes leafIndexBytes hashOutputBits
+    messageDigestBits
   omega
 
 theorem forsHeight_pos : 0 < forsHeight := lt_of_lt_of_le (by decide) Params.forsHeight_ge
@@ -199,8 +205,8 @@ theorem leaf_lt_two_pow_32 (leaf : LeafIndex) : leaf.val < 2 ^ 32 :=
   lt_of_lt_of_le leaf.isLt ((Nat.pow_le_pow_right (by decide) maxLayerHeight_le).trans
     (two_pow_totalHeight_le.trans (by decide)))
 
-/-- The layer number of the address fits in one byte. -/
-theorem layerByte_lt (lay : Layer) : layerByte lay < 2 ^ 8 := by
+/-- The layer number of the address fits in its 32-bit word. -/
+theorem layerByte_lt (lay : Layer) : layerByte lay < 2 ^ 32 := by
   have := numLayers_le
   unfold layerByte
   omega
@@ -212,9 +218,9 @@ theorem layerByte_injective {lay lay' : Layer} (h : layerByte lay = layerByte la
   unfold layerByte at h
   exact Fin.ext (by omega)
 
-/-- Two layers with the same layer byte are equal. -/
+/-- Two layers with the same layer word are equal. -/
 theorem layerByte_ofNat_injective {lay lay' : Layer}
-    (h : BitVec.ofNat 8 (layerByte lay) = BitVec.ofNat 8 (layerByte lay')) : lay = lay' :=
+    (h : BitVec.ofNat 32 (layerByte lay) = BitVec.ofNat 32 (layerByte lay')) : lay = lay' :=
   layerByte_injective (ofNat_inj_of_lt' (layerByte_lt lay) (layerByte_lt lay') h)
 
 end SphincsSecurity

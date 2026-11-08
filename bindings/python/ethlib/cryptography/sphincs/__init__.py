@@ -9,7 +9,6 @@ from ethlib.cryptography._native import (
     SPHINCS_MESSAGE_LEN as MESSAGE_LEN,
     SPHINCS_N as N,
     SPHINCS_PUB_KEY_SIZE as PUB_KEY_SIZE,
-    SPHINCS_PUBLIC_PARAM_LEN as PUBLIC_PARAM_LEN,
     SPHINCS_RANDOMIZER_LEN as RANDOMIZER_LEN,
     SPHINCS_SEED_LEN as SEED_LEN,
     SPHINCS_SIG_SIZE as SIG_SIZE,
@@ -26,7 +25,7 @@ from ethlib.errors import SphincsError
 
 def key_gen(seed: bytes) -> bytes:
     """
-    The public key grown from a 32-byte seed.
+    The 32-byte public key `PK.seed | PK.root` of a 32-byte seed `SK.seed`.
 
     It builds the whole top tree, 2^10 one-time keys.
     """
@@ -35,9 +34,11 @@ def key_gen(seed: bytes) -> bytes:
 
 def sign(seed: bytes, message: bytes) -> bytes:
     """
-    Sign a 32-byte message with the key grown from a seed.
+    Sign a 32-byte message with the key of a seed `SK.seed`.
 
     The message digest picks the FORS instance, so signing needs no index and keeps no state.
+
+    It rebuilds the public key, whose root the message digest hashes.
 
     Never sign more than 2^30 messages with one key.
 
@@ -53,7 +54,6 @@ def verify(public_key: bytes, message: bytes, signature: bytes) -> bool:
 
 __all__ = [
     "N",
-    "PUBLIC_PARAM_LEN",
     "RANDOMIZER_LEN",
     "CHAINS",
     "COUNTER_LEN",

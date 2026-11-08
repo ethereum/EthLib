@@ -10,18 +10,15 @@ public import EthLib.Cryptography.HashSig
 The hash every other definition is built from.
 
 ```text
-    Th(P, A, M) = H_0(P | A | M)
+    Th(PK.seed, ADRS, M)       = Trunc_n(H(PK.seed | ADRS | M))
+    PRF(PK.seed, SK.seed, ADRS) = Th(PK.seed, ADRS, SK.seed)
 ```
 
-- `H` is Keccak-256: the 256-bit hash of FIPS 202, with Keccak's original padding.
-- `H_0` and `H_1` are the first and last 16 bytes of its output.
-- `P` and `A` are 16 bytes each, so the payload `M` always starts at byte 32.
+- `H` is Keccak-256: the 256-bit hash of FIPS 202, with Keccak's original padding byte `0x01`.
+- `Trunc_n` keeps the first `n = 16` bytes of its output.
+- `PK.seed` has 16 bytes and `ADRS` 32, so the payload `M` always starts at byte 48.
 
-One seed derivation keeps both halves: they are two secrets for the price of one hash.
-
-Every secret is a derivation `H(P' | A | S | suffix)` from the scheme seed `S`.
-
-All of them go through one function, so a proof can replace the seed's role in one place.
+`Th` is FIPS 205's `F`, `H` and `T_l` alike, as the SHAKE instances of FIPS 205 §11.1 lay them out.
 
 Every definition that hashes takes the hash `H` as an argument, in a monad `m`.
 
@@ -30,10 +27,12 @@ Every definition that hashes takes the hash `H` as an argument, in a monad `m`.
 
 So the definitions that run are the definitions that the security proof is about.
 
-An output read as a number is read little-endian, so its first 16 bytes are its low 128 bits.
+Source: [FIPS 205][fips205] §11.1 for the layout of the input.
 
-Source: `tweakableHashInput`, `truncateHash` and `hashHalf` in FORS/Scheme.lean.
-<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean>
+[leanSPHINCS.tex][note] §1 truncates Keccak-256 to 16 bytes.
+
+[note]: https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/leanSPHINCS.tex
+[fips205]: https://doi.org/10.6028/NIST.FIPS.205
 -/
 
 @[expose] public section
@@ -46,7 +45,7 @@ open EthLib.Cryptography.Sphincs.Constants
 
 export EthLib.Cryptography.HashSig (pureHash)
 
-/-- `H`: the scheme's 32-byte hash. -/
+/-- `H`: the scheme's 32-byte hash, Keccak-256. -/
 def hash (input : ByteArray) : HashOutput :=
   Hash.Keccak.keccak256 input
 
@@ -56,45 +55,38 @@ An abbreviation, so a theorem about `pureHash f` applies to it with `f = hash`. 
 abbrev hashId : ByteArray → Id (Vector UInt8 32) :=
   pureHash hash
 
+/-- `Trunc_r`: the first `r` bytes of a byte string. -/
+def trunc {k : Nat} (r : Nat) (x : Vector UInt8 k) (h : r ≤ k := by decide) : Vector UInt8 r :=
+  Vector.ofFn fun i => x[i.val]'(by have := i.isLt; omega)
+
 /-! ## Tweakable hash calls -/
 
 variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 
-/-- `H_0` or `H_1` of a hash value: its first or its last 16 bytes. -/
-def halfOf (half : Fin 2) (full : HashOutput) : Digest :=
-  -- Half 0 is bytes 0 to 15, half 1 is bytes 16 to 31.
-  Vector.ofFn fun i => full[16 * half.val + i.val]'(by
-    have := half.isLt
-    have := i.isLt
-    simp only [N, HASH_LEN] at *
-    omega)
-
-/-- The bytes one tweakable hash call hashes: `P | A | M`. -/
-def thInput (pp : PublicParam) (address : Address) (payload : ByteArray) : ByteArray :=
+/-- The bytes one tweakable hash call hashes: `PK.seed | ADRS | M`. -/
+def thInput (pkSeed : PkSeed) (adrs : Adrs) (payload : ByteArray) : ByteArray :=
   -- Fixed-length prefixes, so the input splits back into its three parts one way.
-  packBytes pp ++ packBytes address ++ payload
+  packBytes pkSeed ++ packBytes adrs ++ payload
 
-/-- `H(P | A | M)`: the whole 32-byte output of one call.
+/-- `Th(PK.seed, ADRS, M)`: hash a payload under one address of one key, cut to `n` bytes.
 
-Seed derivations and the message digest keep all of it. -/
-def thFull (pp : PublicParam) (address : Address) (payload : ByteArray) : m HashOutput :=
-  H (thInput pp address payload)
+It is FIPS 205's `F`, `H` and `T_l`. -/
+def th (pkSeed : PkSeed) (adrs : Adrs) (payload : ByteArray) : m Digest := do
+  return trunc N (← H (thInput pkSeed adrs payload))
 
-/-- `Th(P, A, M)`: hash a payload under one address of one key, cut to 16 bytes. -/
-def th (pp : PublicParam) (address : Address) (payload : ByteArray) : m Digest := do
-  return halfOf 0 (← thFull H pp address payload)
+/-! ## Secret values -/
 
-/-! ## Derivations from the seed -/
+/-- A source of secret values: `PRF(PK.seed, SK.seed, ADRS)` as a function of the address.
 
-/-- A source of secret values: the derivation at a parameter, an address and a suffix.
+The signer derives every chain start and every FORS secret through one such source.
 
-The signer derives every secret through one such source, so a proof can replace it whole. -/
-abbrev SeedPrf (m : Type → Type) := PublicParam → Address → ByteArray → m HashOutput
+So a proof can replace the derivations from `SK.seed` as a whole. -/
+abbrev Prf (m : Type → Type) := Adrs → m Digest
 
-/-- `H(P' | A | S | suffix)`: the derivations from the scheme seed `S`.
+/-- `PRF(PK.seed, SK.seed, ADRS) = Th(PK.seed, ADRS, SK.seed)`, FIPS 205's `PRF`.
 
-The seed comes right after the address, so the suffix follows it. -/
-def seedPrf (s : Seed) : SeedPrf m := fun pp address suffix =>
-  thFull H pp address (packBytes s ++ suffix)
+`SK.seed` has 32 bytes, so the input has 80 bytes. -/
+def prf (pkSeed : PkSeed) (skSeed : Seed) : Prf m := fun adrs =>
+  th H pkSeed adrs (packBytes skSeed)
 
 end EthLib.Cryptography.Sphincs

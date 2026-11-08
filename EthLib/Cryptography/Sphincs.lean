@@ -18,7 +18,9 @@ public import EthLib.Cryptography.Sphincs.Sign
 /-!
 # leanSPHINCS
 
-leanSPHINCS: FORS under a hypertree of WOTS+C keys, three layers of heights 10, 8 and 8.
+leanSPHINCS: FORS under a hypertree of WOTS+C keys, three layers of heights 8, 8 and 10.
 
 A stateless hash-based signature for post-quantum Ethereum, for `2^30` signatures per key.
+
+It is SLH-DSA of FIPS 205 on Keccak-256, with WOTS+C as its one-time signature.
 -/

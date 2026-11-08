@@ -31,6 +31,17 @@ def _emit(case: str, seed: bytes, message: bytes) -> None:
 @fixtures.slow
 def test_known_answer() -> None:
     _emit(f"{HANDLER}_known_answer", fixtures.SEED_KNOWN_ANSWER, fixtures.MESSAGE_KNOWN_ANSWER)
+    # The signature just written must be the independent known answer, byte for byte.
+    assert fixtures.read_output(HANDLER, f"{HANDLER}_known_answer") == (
+        fixtures.SIGNATURE_KNOWN_ANSWER
+    )
+
+
+def test_committed_known_answer() -> None:
+    # The committed case holds the independent known answer, so a fast run checks it too.
+    assert fixtures.read_output(HANDLER, f"{HANDLER}_known_answer") == (
+        fixtures.SIGNATURE_KNOWN_ANSWER
+    )
 
 
 @fixtures.slow

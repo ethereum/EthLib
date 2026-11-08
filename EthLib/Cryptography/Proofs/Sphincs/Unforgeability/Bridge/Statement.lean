@@ -20,7 +20,7 @@ The budget `q` counts every hash call of the experiment, repeated inputs include
 
 That is key generation, signing, the adversary's queries and the final verification.
 
-The signer re-derives the scheme seed and the public parameter on each request.
+On each request the signer derives `PK.seed` and `SK.prf` again, and rebuilds the top tree.
 
 Those calls count too.
 
@@ -78,7 +78,7 @@ def signingOracle (sk : SecretKey) :
   QueryImpl.withLogging fun message =>
     liftM (Except.toOption <$> signWith H sk message)
 
-/-- A uniform seed `S_0`: the bytes of a uniform 256-bit vector, which are uniform bytes. -/
+/-- A uniform `SK.seed`: the bytes of a uniform 256-bit vector, which are uniform bytes. -/
 noncomputable def sampleSeed : ProbComp Seed :=
   ofSeed <$> SphincsSecurity.sampleMasterSeed
 
