@@ -1045,11 +1045,13 @@ theorem getAttestationComponentDeltas_size {attestations : Array (PendingAttesta
   obtain ⟨_, _, _, _, _, rewardsOk, _, penaltiesOk, rfl⟩ := step
   exact ⟨(addDelta_size rewardsOk).trans sizes.1, (addDelta_size penaltiesOk).trans sizes.2⟩
 
-/-- The sums of four lists of deltas, read at one index below the size of the first list.
+/-- The sums of four lists of deltas, read at any index.
 
-Each entry is the sum of the four entries at its index, without overflow.
+Below the size of the first list, an entry is the sum of the four at its index, without overflow.
 
-An entry past the end of a list counts as zero. -/
+An entry past the end of one of the other lists counts as zero.
+
+Past the size of the first list, the entry is zero. -/
 theorem sumDeltas_getD {first second third fourth result : Array Gwei}
     (computed : sumDeltas first second third fourth = .ok result) (j : Nat) :
     (result.getD j 0).toNat = if j < first.size then (first.getD j 0).toNat +
