@@ -10,7 +10,9 @@ public import EthLib.Serialization.Proofs.Rlp.Codec
 
 An honest initiator and an honest recipient derive the same secrets.
 
-Each reading step accepts only public keys on the curve other than `O`.
+Each reading step accepts only public keys that lie on the curve and are not `O`.
+
+The key agreement checks this again, but a reader rejects a key off the curve before it runs.
 
 A reader of `auth` or `ack` ignores the list items after the fields it knows, as EIP-8 asks.
 
@@ -45,7 +47,7 @@ theorem decodePublicKey_encodePublicKey {p : Point} (hp : p.isOnCurve = true)
       simp
     rw [he, h]
 
-/-- 64 bytes decode to a key exactly when it is on the curve, not `O`, and has those bytes. -/
+/-- 64 bytes decode to a point exactly when it lies on the curve, is not `O` and encodes to them. -/
 theorem decodePublicKey_eq_ok_iff {bytes : Vector UInt8 64} {p : Point} :
     decodePublicKey bytes = .ok p ↔
       p.isOnCurve = true ∧ p ≠ .infinity ∧ encodePublicKey p = bytes := by
@@ -74,7 +76,7 @@ theorem decodePublicKey_eq_ok_iff {bytes : Vector UInt8 64} {p : Point} :
     exact decodePublicKey_encodePublicKey hon hinf
 
 /-- A recovered signer key lies on the curve and is not `O`. -/
-theorem isOnCurve_of_recoverSigner {hash : Vector UInt8 32} {sig : Vector UInt8 65} {p : Point}
+theorem recoverSigner_valid {hash : Vector UInt8 32} {sig : Vector UInt8 65} {p : Point}
     (h : recoverSigner hash sig = .ok p) :
     p.isOnCurve = true ∧ p ≠ .infinity := by
   unfold recoverSigner at h
@@ -136,12 +138,12 @@ theorem openPacket_sealPacket {key r : Fn} {iv : Aes.Block} {body padding packet
       rw [hopen, Ecies.decrypt_encrypt hc]
       rfl
 
-/-- An opened packet starts, after its size, with an uncompressed key `R` on the curve, not `O`. -/
-theorem ephemeral_of_openPacket {key : Fn} {packet body : ByteArray}
+/-- After its two size bytes, an opened packet starts with the uncompressed bytes of a key `R`.
+
+`R` lies on the curve and is not `O`. -/
+theorem ephemeral_of_openPacket_eq_ok {key : Fn} {packet body : ByteArray}
     (h : openPacket key packet = .ok body) :
-    key ≠ 0 ∧ ∃ R : Point,
-      Point.decode ⟨((packet.data.toList.drop 2).take Ecies.EPHEMERAL_KEY_SIZE).toArray⟩ = .ok R ∧
-      R.isOnCurve = true ∧ R ≠ .infinity ∧
+    ∃ R : Point, R.isOnCurve = true ∧ R ≠ .infinity ∧
       ⟨((packet.data.toList.drop 2).take Ecies.EPHEMERAL_KEY_SIZE).toArray⟩ =
         R.encodeUncompressed := by
   unfold openPacket at h
@@ -307,8 +309,8 @@ theorem finish_respond {initiator recipient : Keys} {sealingI sealingR : Sealing
     Except.pure, hnonce]
   rfl
 
-/-- Reading `auth` returns two initiator keys on the curve other than `O`. -/
-theorem isOnCurve_of_readAuth {staticKey : Fn} {packet : ByteArray}
+/-- Reading `auth` returns the initiator's static and ephemeral keys, both on the curve, not `O`. -/
+theorem readAuth_valid {staticKey : Fn} {packet : ByteArray}
     {auth : AuthMessage} {remoteStatic remoteEphemeral : Point}
     (h : readAuth staticKey packet = .ok (auth, remoteStatic, remoteEphemeral)) :
     remoteStatic.isOnCurve = true ∧ remoteStatic ≠ .infinity ∧
@@ -333,11 +335,11 @@ theorem isOnCurve_of_readAuth {staticKey : Fn} {packet : ByteArray}
     Except.ok.injEq, Prod.mk.injEq] at h
   obtain ⟨rfl, rfl, rfl⟩ := h
   obtain ⟨hsOn, hsInf, -⟩ := decodePublicKey_eq_ok_iff.mp hk
-  obtain ⟨heOn, heInf⟩ := isOnCurve_of_recoverSigner hr
+  obtain ⟨heOn, heInf⟩ := recoverSigner_valid hr
   exact ⟨hsOn, hsInf, heOn, heInf⟩
 
-/-- Reading `ack` returns a recipient ephemeral key on the curve other than `O`. -/
-theorem isOnCurve_of_readAck {staticKey : Fn} {packet : ByteArray}
+/-- Reading `ack` returns the recipient's ephemeral key, which lies on the curve and is not `O`. -/
+theorem readAck_valid {staticKey : Fn} {packet : ByteArray}
     {ack : AckMessage} {remoteEphemeral : Point}
     (h : readAck staticKey packet = .ok (ack, remoteEphemeral)) :
     remoteEphemeral.isOnCurve = true ∧ remoteEphemeral ≠ .infinity := by
@@ -357,7 +359,7 @@ theorem isOnCurve_of_readAck {staticKey : Fn} {packet : ByteArray}
   obtain ⟨heOn, heInf, -⟩ := decodePublicKey_eq_ok_iff.mp hk
   exact ⟨heOn, heInf⟩
 
-/-- Answering `auth` reads an `auth` with both initiator keys on the curve other than `O`. -/
+/-- A recipient that answers `auth` has read both initiator keys on the curve, not `O`. -/
 theorem exists_readAuth_of_respond {keys : Keys} {sealing : Sealing} {auth ack : ByteArray}
     {secrets : Secrets} (h : respond keys sealing auth = .ok (ack, secrets)) :
     ∃ msg remoteStatic remoteEphemeral,
@@ -369,10 +371,10 @@ theorem exists_readAuth_of_respond {keys : Keys} {sealing : Sealing} {auth ack :
   | error e => simp [hr, bind, Except.bind] at h
   | ok triple =>
     rcases triple with ⟨msg, remoteStatic, remoteEphemeral⟩
-    obtain ⟨hsOn, hsInf, heOn, heInf⟩ := isOnCurve_of_readAuth hr
+    obtain ⟨hsOn, hsInf, heOn, heInf⟩ := readAuth_valid hr
     exact ⟨msg, remoteStatic, remoteEphemeral, rfl, hsOn, hsInf, heOn, heInf⟩
 
-/-- Finishing the handshake reads an `ack` with an ephemeral key on the curve other than `O`. -/
+/-- An initiator that finishes has read an `ack` whose ephemeral key is on the curve, not `O`. -/
 theorem exists_readAck_of_finish {keys : Keys} {auth ack : ByteArray} {secrets : Secrets}
     (h : finish keys auth ack = .ok secrets) :
     ∃ msg remoteEphemeral,
@@ -383,7 +385,7 @@ theorem exists_readAck_of_finish {keys : Keys} {auth ack : ByteArray} {secrets :
   | error e => simp [hr, bind, Except.bind] at h
   | ok pair =>
     rcases pair with ⟨msg, remoteEphemeral⟩
-    obtain ⟨heOn, heInf⟩ := isOnCurve_of_readAck hr
+    obtain ⟨heOn, heInf⟩ := readAck_valid hr
     exact ⟨msg, remoteEphemeral, rfl, heOn, heInf⟩
 
 /-! ## Error codes -/
