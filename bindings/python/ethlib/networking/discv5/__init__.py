@@ -1,6 +1,5 @@
 """Node distances, handshake cryptography and packets of discv5."""
 
-import json
 from typing import NamedTuple
 
 # Every domain links into one extension module.
@@ -36,10 +35,11 @@ def derive_keys(
     challenge_data: bytes,
 ) -> SessionKeys:
     """The session keys from the ephemeral key of node A and the public key of node B."""
-    raw = _native.discv5_derive_keys(
-        ephemeral_key, dest_pubkey, node_id_a, node_id_b, challenge_data
+    return SessionKeys(
+        *_native.discv5_derive_keys(
+            ephemeral_key, dest_pubkey, node_id_a, node_id_b, challenge_data
+        )
     )
-    return SessionKeys(raw[:16], raw[16:])
 
 
 def id_sign(
@@ -62,14 +62,9 @@ def id_verify(
     )
 
 
-def _hex_fields(raw: bytes) -> dict:
-    fields = json.loads(raw)
-    return {k: bytes.fromhex(v[2:]) if isinstance(v, str) else v for k, v in fields.items()}
-
-
 def decode_packet(dest_id: bytes, packet: bytes) -> dict:
     """The fields of a packet that node dest_id reads, with message_ad its additional data."""
-    return _hex_fields(_native.discv5_decode_packet(dest_id, packet))
+    return _native.discv5_decode_packet(dest_id, packet)
 
 
 def reencode_packet(dest_id: bytes, packet: bytes) -> bytes:
@@ -87,18 +82,9 @@ def decrypt_message(key: bytes, nonce: bytes, message: bytes, ad: bytes) -> byte
     return _native.discv5_decrypt_message(key, nonce, message, ad)
 
 
-def _bytes_of(value):
-    if isinstance(value, str):
-        return bytes.fromhex(value[2:])
-    if isinstance(value, list):
-        return [_bytes_of(v) for v in value]
-    return value
-
-
 def decode_message(plaintext: bytes) -> dict:
     """The type and the fields of a message plaintext."""
-    fields = json.loads(_native.discv5_decode_message(plaintext))
-    return {k: _bytes_of(v) for k, v in fields.items()}
+    return _native.discv5_decode_message(plaintext)
 
 
 def reencode_message(plaintext: bytes) -> bytes:
@@ -110,17 +96,12 @@ def make_whoareyou(
     dest_id: bytes, masking_iv: bytes, nonce: bytes, id_nonce: bytes, enr_seq: int
 ) -> tuple[bytes, bytes]:
     """Node B's WHOAREYOU packet for node dest_id, and its challenge data."""
-    fields = _hex_fields(
-        _native.discv5_make_whoareyou(
-            dest_id, masking_iv, nonce, id_nonce, enr_seq.to_bytes(8, "big")
-        )
-    )
-    return fields["packet"], fields["challenge_data"]
+    return _native.discv5_make_whoareyou(dest_id, masking_iv, nonce, id_nonce, enr_seq)
 
 
 def read_whoareyou(dest_id: bytes, packet: bytes) -> dict:
     """The nonce, the ID nonce, the enr-seq and the challenge data of a WHOAREYOU packet."""
-    return _hex_fields(_native.discv5_read_whoareyou(dest_id, packet))
+    return _native.discv5_read_whoareyou(dest_id, packet)
 
 
 def seal_message(
@@ -153,30 +134,26 @@ def seal_handshake(
     plaintext: bytes,
 ) -> tuple[bytes, SessionKeys]:
     """Node A's handshake message packet for node B, and the session keys of node A."""
-    fields = _hex_fields(
-        _native.discv5_seal_handshake(
-            ephemeral_key,
-            static_key,
-            challenge_data,
-            src_id,
-            dest_id,
-            dest_pubkey,
-            masking_iv,
-            nonce,
-            record,
-            plaintext,
-        )
+    packet, initiator_key, recipient_key = _native.discv5_seal_handshake(
+        ephemeral_key,
+        static_key,
+        challenge_data,
+        src_id,
+        dest_id,
+        dest_pubkey,
+        masking_iv,
+        nonce,
+        record,
+        plaintext,
     )
-    return fields["packet"], SessionKeys(fields["initiator_key"], fields["recipient_key"])
+    return packet, SessionKeys(initiator_key, recipient_key)
 
 
 def open_handshake(
     static_key: bytes, challenge_data: bytes, dest_id: bytes, src_pubkey: bytes, packet: bytes
 ) -> dict:
     """The source ID, the record, the plaintext and the session keys of a handshake packet."""
-    fields = _hex_fields(
-        _native.discv5_open_handshake(static_key, challenge_data, dest_id, src_pubkey, packet)
-    )
+    fields = _native.discv5_open_handshake(static_key, challenge_data, dest_id, src_pubkey, packet)
     keys = SessionKeys(fields.pop("initiator_key"), fields.pop("recipient_key"))
     return {**fields, "keys": keys}
 

@@ -12,6 +12,12 @@ A setup of the secret `τ` holds `[τ^i]_1`, `[τ^i]_2` and `[L_i(τ)]_1`, with 
 
 A blob's commitment sums its values times the Lagrange points, which gives `[p(τ)]_1`.
 
+Two blobs whose decoded values differ share a commitment only when `τ` is a root of `p - p'`.
+
+Here `p` and `p'` are their interpolants, and `p - p'` is not zero and has degree below 4096.
+
+These theorems give no bound on the cost of finding two such blobs when `τ` is secret.
+
 A polynomial of degree below 4096, committed with the monomial points, also gives `[p(τ)]_1`.
 
 The setup built from the powers `[τ^i]_1` and `[τ^i]_2` is a well-formed setup of `τ`.
@@ -77,6 +83,17 @@ theorem eval_interpolant (poly : Polynomial) (τ : Fr) :
   refine Finset.sum_congr rfl fun i _ => ?_
   rw [eval_mul, eval_C]
 
+/-- The interpolant has degree below 4096. -/
+theorem natDegree_interpolant_lt (poly : Polynomial) :
+    (interpolant poly).natDegree < FIELD_ELEMENTS_PER_BLOB := by
+  have h := Lagrange.degree_interpolate_lt (s := Finset.univ) (r := fun i => poly[i.val]!)
+    evalDomain_injective.injOn
+  rw [Finset.card_univ, Fintype.card_fin] at h
+  by_cases h0 : interpolant poly = 0
+  · rw [h0, natDegree_zero]
+    decide
+  · exact (natDegree_lt_iff_degree_lt h0).mpr h
+
 /-- On a decoded blob, the commitment compresses the sum of the values times the points. -/
 theorem blobToKzgCommitment_eq_ok (s : TrustedSetup) {blob : Blob} {poly : Polynomial}
     (hblob : blobToPolynomial blob = .ok poly) :
@@ -118,6 +135,83 @@ theorem blobToKzgCommitment_represents {s : TrustedSetup} {τ : Fr} (hs : s.Well
       G1.Represents (G1.msm s.g1LagrangeBrp.toArray poly) ((interpolant poly).eval τ) :=
   ⟨blobToKzgCommitment_eq_ok s hblob,
     represents_lagrange_msm hs (size_blobToPolynomial blob poly hblob)⟩
+
+/-! ## Commitments that collide at the setup secret -/
+
+/-- Two valid points with the same 48-byte compressed form are the same point of the curve. -/
+theorem toPoint_eq_of_compressG1_eq {P Q : G1} (hP : G1.Valid P) (hQ : G1.Valid Q)
+    (heq : compressG1 P = compressG1 Q) :
+    G1.toPoint P = G1.toPoint Q := by
+  have hcomp : G1.compress P = G1.compress Q :=
+    ByteArray.ext (congrArg Vector.toArray heq)
+  obtain ⟨p, hp, hptP⟩ := G1.uncompress_compress hP
+  obtain ⟨q, hq, hptQ⟩ := G1.uncompress_compress hQ
+  rw [hcomp, hq] at hp
+  cases hp
+  exact hptP.symm.trans hptQ
+
+/-- Two points with the same 48-byte compressed form represent the same scalar. -/
+theorem represents_eq_of_compressG1_eq {P Q : G1} {a b : Fr}
+    (hP : G1.Represents P a) (hQ : G1.Represents Q b) (heq : compressG1 P = compressG1 Q) :
+    a = b :=
+  hP.unique ⟨hP.1, (toPoint_eq_of_compressG1_eq hP.1 hQ.1 heq).trans hQ.2⟩
+
+/-- Two arrays of 4096 values with the same interpolant are equal. -/
+theorem eq_of_interpolant_eq {poly poly' : Polynomial}
+    (hsize : poly.size = FIELD_ELEMENTS_PER_BLOB)
+    (hsize' : poly'.size = FIELD_ELEMENTS_PER_BLOB)
+    (h : interpolant poly = interpolant poly') : poly = poly' := by
+  refine Array.ext (hsize.trans hsize'.symm) fun i hi hi' => ?_
+  have hev := Lagrange.values_eq_on_of_interpolate_eq _ _ evalDomain_injective.injOn h
+    ⟨i, hsize ▸ hi⟩ (Finset.mem_univ _)
+  rwa [getElem!_pos poly i hi, getElem!_pos poly' i hi'] at hev
+
+/-- On a well-formed setup of `τ`, blobs with equal commitments have interpolants equal at `τ`.
+
+Each interpolant is the polynomial of degree below 4096 that takes the blob's decoded values. -/
+theorem eval_interpolant_eq_of_blobToKzgCommitment_eq {s : TrustedSetup} {τ : Fr}
+    (hs : s.WellFormed τ) {blob blob' : Blob} {poly poly' : Polynomial} {c : KZGCommitment}
+    (hblob : blobToPolynomial blob = .ok poly) (hblob' : blobToPolynomial blob' = .ok poly')
+    (hc : blobToKzgCommitment s blob = .ok c) (hc' : blobToKzgCommitment s blob' = .ok c) :
+    (interpolant poly).eval τ = (interpolant poly').eval τ := by
+  obtain ⟨hC, hr⟩ := blobToKzgCommitment_represents hs hblob
+  obtain ⟨hC', hr'⟩ := blobToKzgCommitment_represents hs hblob'
+  have heq : compressG1 (G1.msm s.g1LagrangeBrp.toArray poly) =
+      compressG1 (G1.msm s.g1LagrangeBrp.toArray poly') :=
+    Except.ok.inj (hC.symm.trans (hc.trans (hc'.symm.trans hC')))
+  exact represents_eq_of_compressG1_eq hr hr' heq
+
+/-- Two blobs whose decoded values differ and whose commitments agree make `τ` a root of `p - p'`.
+
+Here `s` is a well-formed setup of `τ`, and `p` and `p'` are the two interpolants.
+
+The theorem also proves that `p - p'` is not zero and has degree below 4096. -/
+theorem blobToKzgCommitment_binding {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ)
+    {blob blob' : Blob} {poly poly' : Polynomial} {c : KZGCommitment}
+    (hblob : blobToPolynomial blob = .ok poly) (hblob' : blobToPolynomial blob' = .ok poly')
+    (hne : poly ≠ poly')
+    (hc : blobToKzgCommitment s blob = .ok c) (hc' : blobToKzgCommitment s blob' = .ok c) :
+    interpolant poly - interpolant poly' ≠ 0 ∧
+      (interpolant poly - interpolant poly').natDegree < FIELD_ELEMENTS_PER_BLOB ∧
+      (interpolant poly - interpolant poly').eval τ = 0 := by
+  have hint : interpolant poly ≠ interpolant poly' :=
+    mt (eq_of_interpolant_eq (size_blobToPolynomial blob poly hblob)
+      (size_blobToPolynomial blob' poly' hblob')) hne
+  -- The ring lemmas below are stated on variables, as in the degree bound of the quotient.
+  --
+  -- On the interpolants themselves, the kernel replay could compute polynomial subtraction.
+  have hsub (f g : _root_.Polynomial Fr) : (f - g).eval τ = f.eval τ - g.eval τ :=
+    eval_sub f g τ
+  have hne0 (f g : _root_.Polynomial Fr) (h : f ≠ g) : f - g ≠ 0 :=
+    sub_ne_zero.mpr h
+  have hdeg (f g : _root_.Polynomial Fr) (hf : f.natDegree < FIELD_ELEMENTS_PER_BLOB)
+      (hg : g.natDegree < FIELD_ELEMENTS_PER_BLOB) :
+      (f - g).natDegree < FIELD_ELEMENTS_PER_BLOB :=
+    lt_of_le_of_lt (natDegree_sub_le f g) (max_lt hf hg)
+  refine ⟨hne0 _ _ hint,
+    hdeg _ _ (natDegree_interpolant_lt poly) (natDegree_interpolant_lt poly'), ?_⟩
+  rw [hsub, sub_eq_zero]
+  exact eval_interpolant_eq_of_blobToKzgCommitment_eq hs hblob hblob' hc hc'
 
 /-! ## Commitments from monomial points and the setup of a secret -/
 

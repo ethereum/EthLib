@@ -31,14 +31,11 @@ An empty code hash stands for the hash of empty code.
 
 "Data format" calls them an "empty list", but an empty field in RLP is the empty string `0x80`.
 
-EthLib reads them as that string, as go-ethereum writes them.
-
-That writer is [`state_account.go` at `0d06140`][geth].
+EthLib reads them as that string.
 
 The Merkle proofs of a range are carried as lists of trie nodes.
 
 [eip-8189]: https://eips.ethereum.org/EIPS/eip-8189
-[geth]: https://github.com/ethereum/go-ethereum/blob/0d061403cf53263b95f9beec48f07046e78e1bed/core/types/state_account.go#L64
 -/
 
 @[expose] public section

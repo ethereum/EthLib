@@ -18,10 +18,6 @@ A payload whose block decodes holds no transaction of no bytes.
 
 The beacon chain calls a version of the method at each fork from Bellatrix to Fulu.
 
-A field from a fork decodes exactly when it is present from that fork on and absent before.
-
-A field decodes from an option exactly when reading the field back gives that option.
-
 A payload takes a fork exactly when its optional fields are present from their forks on.
 
 The withdrawals are from Shapella, and the two blob gas fields from Dencun.
@@ -29,6 +25,8 @@ The withdrawals are from Shapella, and the two blob gas fields from Dencun.
 So a decoded payload of version 1 takes the forks before Shapella.
 
 Version 2 takes Shapella, and version 3 the forks from Dencun.
+
+The structure built from a payload of the beacon chain has the same shape, and takes its fork.
 -/
 
 public section
@@ -189,41 +187,6 @@ theorem payloadBlock_of_glamsterdam (h : .glamsterdam ≤ fork) {config : ChainC
   cases anyPayloadOf p <;> cases config.activeFork p.blockNumber.toNat p.timestamp.toNat <;>
     simp [zero, acceptsFork]
 
-/-! ## A field from a fork -/
-
-/-- A field from fork `f` decodes exactly when its presence agrees with `f ≤ fork`. -/
-theorem exists_since_iff {α : Type} {f : Fork} {what : String} {o : Option α} :
-    (∃ x : Since f fork α, Json.since what o = .ok x) ↔ (o.isSome ↔ f ≤ fork) := by
-  -- Each of the four cases either succeeds or fails with an invalid parameter.
-  cases o <;> unfold Json.since <;> by_cases h : f ≤ fork <;>
-    simp [h, Json.invalid, throw, throwThe, MonadExceptOf.throw, pure, Except.pure] <;>
-    exact ⟨_, rfl⟩
-
-/-- Reading back a decoded field from a fork gives the option it was decoded from. -/
-theorem sinceValue_of_since {α : Type} {f : Fork} {what : String} {o : Option α}
-    {x : Since f fork α} (h : Json.since what o = .ok x) : sinceValue x = o := by
-  -- The two cases that fail cannot give the field, and the other two give back the option.
-  cases o <;> unfold Json.since at h <;> by_cases hf : f ≤ fork <;>
-    simp [hf, Json.invalid, throw, throwThe, MonadExceptOf.throw, pure, Except.pure] at h
-  · simp [sinceValue, hf]
-  · cases h
-    simp [sinceValue, hf]
-
-/-- Decoding the value of a field from a fork gives back the field. -/
-theorem since_sinceValue {α : Type} {f : Fork} {what : String} (x : Since f fork α) :
-    Json.since what (sinceValue x) = .ok x := by
-  unfold sinceValue Json.since
-  by_cases hf : f ≤ fork
-  · simp only [hf, dite_true, ite_true]
-    rfl
-  · simp only [hf, dite_false]
-    exact congrArg Except.ok (funext fun h => absurd h hf)
-
-/-- A field from a fork decodes from an option exactly when reading it back gives that option. -/
-theorem since_eq_ok_iff {α : Type} {f : Fork} {what : String} {o : Option α}
-    {x : Since f fork α} : Json.since what o = .ok x ↔ sinceValue x = o :=
-  ⟨sinceValue_of_since, fun h => h ▸ since_sinceValue x⟩
-
 /-! ## A payload at a fork -/
 
 /-- A payload takes a fork exactly when its optional fields are present from their forks on.
@@ -243,11 +206,12 @@ theorem exists_atFork_iff {p : Json.AnyPayload} :
   · rintro ⟨q, h⟩
     simp only [Json.AnyPayload.atFork, bind_ok_iff] at h
     obtain ⟨w, hw, b, hb, e, he, -⟩ := h
-    exact ⟨exists_since_iff.mp ⟨w, hw⟩, exists_since_iff.mp ⟨b, hb⟩, exists_since_iff.mp ⟨e, he⟩⟩
+    exact ⟨Json.exists_since_iff.mp ⟨w, hw⟩, Json.exists_since_iff.mp ⟨b, hb⟩,
+      Json.exists_since_iff.mp ⟨e, he⟩⟩
   · rintro ⟨h1, h2, h3⟩
-    obtain ⟨w, hw⟩ := exists_since_iff (what := "withdrawals") |>.mpr h1
-    obtain ⟨b, hb⟩ := exists_since_iff (what := "blobGasUsed") |>.mpr h2
-    obtain ⟨e, he⟩ := exists_since_iff (what := "excessBlobGas") |>.mpr h3
+    obtain ⟨w, hw⟩ := Json.exists_since_iff (what := "withdrawals") |>.mpr h1
+    obtain ⟨b, hb⟩ := Json.exists_since_iff (what := "blobGasUsed") |>.mpr h2
+    obtain ⟨e, he⟩ := Json.exists_since_iff (what := "excessBlobGas") |>.mpr h3
     simp only [Json.AnyPayload.atFork, hw, hb, he, bind, Except.bind, pure, Except.pure]
     exact ⟨_, rfl⟩
 
@@ -259,7 +223,7 @@ theorem sinceValue_of_atFork {p : Json.AnyPayload} {q : ExecutionPayload fork}
   simp only [Json.AnyPayload.atFork, bind_ok_iff] at h
   obtain ⟨w, hw, b, hb, e, he, h⟩ := h
   cases h
-  exact ⟨sinceValue_of_since hw, sinceValue_of_since hb, sinceValue_of_since he⟩
+  exact ⟨Json.sinceValue_of_since hw, Json.sinceValue_of_since hb, Json.sinceValue_of_since he⟩
 
 /-- A decoded payload takes a fork exactly when its version is the version of that fork.
 
@@ -281,5 +245,72 @@ theorem exists_atFork_iff_of_anyPayload {j : Lean.Json} {p : Json.AnyPayload}
   rw [exists_atFork_iff]
   -- Each version fixes which fields are present, and the order of the forks does the rest.
   rcases hv with hv | hv | hv <;> simp only [hw, hb, he, hv] <;> cases fork <;> decide
+
+/-! ## The structure of a payload of the beacon chain -/
+
+/-- The structure of a payload of the beacon chain has the version and fields of its fork. -/
+private theorem facts_of_anyPayloadOf {p : Consensus.ExecutionPayload preset fork}
+    {any : Json.AnyPayload} (h : anyPayloadOf p = some any) :
+    any.version = (if .dencun ≤ fork then 3 else if .shapella ≤ fork then 2 else 1) ∧
+      (any.withdrawals.isSome ↔ .shapella ≤ fork) ∧ (any.blobGasUsed.isSome ↔ .dencun ≤ fork) ∧
+        (any.excessBlobGas.isSome ↔ .dencun ≤ fork) := by
+  unfold anyPayloadOf at h
+  split at h
+  · cases h
+    refine ⟨rfl, ?_, ?_, ?_⟩
+    · by_cases hf : .shapella ≤ fork <;> simp [sinceValue, hf]
+    · by_cases hf : .dencun ≤ fork <;> simp [sinceValue, hf]
+    · by_cases hf : .dencun ≤ fork <;> simp [sinceValue, hf]
+  · cases h
+
+/-- The structure of a payload of the beacon chain has version 1, 2 or 3. -/
+theorem version_of_anyPayloadOf {p : Consensus.ExecutionPayload preset fork}
+    {any : Json.AnyPayload} (h : anyPayloadOf p = some any) :
+    any.version = 1 ∨ any.version = 2 ∨ any.version = 3 := by
+  rw [(facts_of_anyPayloadOf h).1]
+  split <;> try split
+  all_goals simp
+
+/-- The structure of a payload of the beacon chain holds withdrawals exactly from version 2. -/
+theorem withdrawals_isSome_iff_of_anyPayloadOf {p : Consensus.ExecutionPayload preset fork}
+    {any : Json.AnyPayload} (h : anyPayloadOf p = some any) :
+    any.withdrawals.isSome ↔ 2 ≤ any.version := by
+  obtain ⟨hv, hw, -⟩ := facts_of_anyPayloadOf h
+  rw [hw, hv]
+  cases fork <;> decide
+
+/-- The structure of a payload of the beacon chain holds the blob gas used exactly in version 3. -/
+theorem blobGasUsed_isSome_iff_of_anyPayloadOf {p : Consensus.ExecutionPayload preset fork}
+    {any : Json.AnyPayload} (h : anyPayloadOf p = some any) :
+    any.blobGasUsed.isSome ↔ 3 ≤ any.version := by
+  obtain ⟨hv, -, hb, -⟩ := facts_of_anyPayloadOf h
+  rw [hb, hv]
+  cases fork <;> decide
+
+/-- The structure of a payload of the beacon chain has the excess blob gas exactly in version 3. -/
+theorem excessBlobGas_isSome_iff_of_anyPayloadOf {p : Consensus.ExecutionPayload preset fork}
+    {any : Json.AnyPayload} (h : anyPayloadOf p = some any) :
+    any.excessBlobGas.isSome ↔ 3 ≤ any.version := by
+  obtain ⟨hv, -, -, he⟩ := facts_of_anyPayloadOf h
+  rw [he, hv]
+  cases fork <;> decide
+
+/-- The structure of a payload of the beacon chain has the shape of a decoded payload.
+
+Its version is 1, 2 or 3, and its optional fields match that version. -/
+theorem shape_of_anyPayloadOf {p : Consensus.ExecutionPayload preset fork}
+    {any : Json.AnyPayload} (h : anyPayloadOf p = some any) :
+    (any.version = 1 ∨ any.version = 2 ∨ any.version = 3) ∧
+      (any.withdrawals.isSome ↔ 2 ≤ any.version) ∧ (any.blobGasUsed.isSome ↔ 3 ≤ any.version) ∧
+        (any.excessBlobGas.isSome ↔ 3 ≤ any.version) :=
+  ⟨version_of_anyPayloadOf h, withdrawals_isSome_iff_of_anyPayloadOf h,
+    blobGasUsed_isSome_iff_of_anyPayloadOf h, excessBlobGas_isSome_iff_of_anyPayloadOf h⟩
+
+/-- The structure of a payload of the beacon chain takes the fork of that payload. -/
+theorem exists_atFork_of_anyPayloadOf {p : Consensus.ExecutionPayload preset fork}
+    {any : Json.AnyPayload} (h : anyPayloadOf p = some any) :
+    ∃ q : ExecutionPayload fork, any.atFork fork = .ok q := by
+  obtain ⟨-, hw, hb, he⟩ := facts_of_anyPayloadOf h
+  exact exists_atFork_iff.mpr ⟨hw, hb, he⟩
 
 end EthLib.Engine

@@ -130,16 +130,51 @@ decreasing_by omega
 
 @[inline] def mul (p : G2 F) (s : Fr) : G2 F := mulNat p s.val
 
-/-- `[r] p`, computed as `[t^2] ([t^2] p - p) + p`, since `r = t^4 - t^2 + 1`.
+/-- Whether two Jacobian triples denote the same point.
 
-Here `t` is the BLS parameter, and `|t|` has 64 bits, six of them set.
+Two finite triples agree when `X1 Z2^2 = X2 Z1^2` and `Y1 Z2^3 = Y2 Z1^3`.
 
-So the four products by `|t|` take at most 256 doublings and 24 additions.
+Two triples at infinity agree, and a finite triple never agrees with one at infinity. -/
+def projectiveEq (p q : G2 F) : Bool :=
+  if p.z.isZero then q.z.isZero
+  else if q.z.isZero then false
+  else
+    (p.x * (q.z * q.z)).beq (q.x * (p.z * p.z)) &&
+    (p.y * ((q.z * q.z) * q.z)).beq (q.y * ((p.z * p.z) * p.z))
 
-One product by `r` would take up to 255 doublings and 134 additions. -/
-def mulModulus (p : G2 F) : G2 F :=
-  let a := mulNat (mulNat p blsX) blsX
-  add (mulNat (mulNat (add a (neg p)) blsX) blsX) p
+/-! ## The endomorphism `psi`
+
+The map `psi` untwists a point to `E(Fp12)`, applies the Frobenius map `x ↦ x^p`, and twists back.
+
+It is an endomorphism of the twist.
+
+On the points of order `r` it acts as `[t]`, for the BLS parameter `t`.
+
+The source is RFC 9380, Appendix G.3.
+<https://www.rfc-editor.org/rfc/rfc9380#appendix-G.3>
+-/
+
+/-- Frobenius for `GF(p^2)` with basis `(1, I)`: `c0 + c1·I ↦ c0 − c1·I`. -/
+def frobeniusFp2 (x : Fp2 F) : Fp2 F := ⟨x.c0, -x.c1⟩
+
+/-- `c1_psi = 1 / (1 + I)^((p − 1) / 3)`. -/
+def c1Psi : Fp2 F :=
+  let oneI : Fp2 F := ⟨BaseField.one, BaseField.one⟩
+  (Fp2.powNat oneI ((Fp.modulus - 1) / 3)).inverse
+
+/-- `c2_psi = 1 / (1 + I)^((p − 1) / 2)`. -/
+def c2Psi : Fp2 F :=
+  let oneI : Fp2 F := ⟨BaseField.one, BaseField.one⟩
+  (Fp2.powNat oneI ((Fp.modulus - 1) / 2)).inverse
+
+/-- `psi(x, y) = (c1_psi · frobenius(x), c2_psi · frobenius(y))`, RFC 9380, Appendix G.3. -/
+def psi (P : G2 F) : G2 F :=
+  if P.z.isZero then P else
+    -- Normalise to affine form, then map the coordinates, with `Z = 1`.
+    let (x, y) := P.toAffine
+    let qx := c1Psi * frobeniusFp2 x
+    let qy := c2Psi * frobeniusFp2 y
+    ⟨qx, qy, Fp2.one⟩
 
 end G2
 

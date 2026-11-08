@@ -10,7 +10,7 @@ public import EthLib.Base.Proofs.MapM
 
 - ECADD and ECMUL fail exactly when the gas is below the price or a point is invalid.
 - ECPAIRING succeeds exactly when the gas covers the price and every pair decodes.
-- Every decoded point is on the curve.
+- Every decoded point is on its curve: a point of `G_1` on the curve, a point of `G_2` on the twist.
 - Every output of ECADD and ECMUL has 64 bytes, and every output of ECPAIRING is the word 0 or 1.
 - ECPAIRING charges its gas before it checks that the call data is a whole number of 192-byte pairs.
 
@@ -88,6 +88,22 @@ theorem bytesToG1_isOnCurve {raw : List UInt8} {p : Point} (h : bytesToG1 raw = 
         · cases h
     · cases h
   · cases h
+
+/-- A decoded point of the twist is on the twist. -/
+theorem bytesToG2_isOnCurve {raw : List UInt8} {q : Point2} (h : bytesToG2 raw = .ok q) :
+    q.isOnCurve = true := by
+  simp only [bytesToG2, pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at h
+  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  split at h
+  · cases h
+    rfl
+  · split at h
+    · cases h
+      assumption
+    · cases h
 
 /-- ECADD succeeds exactly when the gas covers the price and both points decode. -/
 theorem ecadd_eq_ok_iff (fork : Fork) (data : ByteArray) (gas : Nat) (out : ByteArray) :

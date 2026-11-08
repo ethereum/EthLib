@@ -33,10 +33,6 @@ In both, the first item after the fixed fields is a list.
 EIP-868 later put the sequence number at that place.
 
 EthLib reads that item as the sequence number, so it rejects both packets.
-
-go-ethereum does the same, in [`v4wire.go` at `0d06140`][v4wire].
-
-[v4wire]: https://github.com/ethereum/go-ethereum/blob/0d061403cf53263b95f9beec48f07046e78e1bed/p2p/discover/v4wire/v4wire.go#L54
 -/
 
 @[expose] public section
@@ -265,7 +261,7 @@ def readBody (hash : Vector UInt8 32) (sig : Vector UInt8 65) (type : UInt8)
     (data : List UInt8) : Except Discv4Error Received := do
   let sender ← (Rlpx.recoverSigner (keccak (type :: data)) sig).mapError
     fun _ => .invalidSignature
-  let (item, _) ← (decodeItem data).mapError .rlp
+  let (item, _) ← (decodeItem ⟨data.toArray⟩ 0 data.length).mapError .rlp
   let p ← Packet.ofItems type (← item.toItems.mapError .rlp)
   return ⟨p, sender, hash⟩
 

@@ -46,21 +46,23 @@ def Faulted (error : EvmError) (state : State.TransactionState) (substate : Subs
 
 variable {code : ByteArray} {message : Message fork} {pc : Nat} {stack : List U256}
   {memory : ByteArray} {gas : Nat} {state : State.TransactionState} {substate : Substate}
+  {returnData : ByteArray}
 
 /-- A frame whose step fails with an error that does not abort halts with that error. -/
 theorem At.fault {e : EvmError} (halts : e.aborts = false)
-    (h : ∀ evm, At code message pc stack memory gas state substate evm →
+    (h : ∀ evm, At code message pc stack memory gas state substate returnData evm →
       step fork evm = .error e) :
-    Spec fork (At code message pc stack memory gas state substate) (Faulted e state substate) := by
+    Spec fork (At code message pc stack memory gas state substate returnData)
+      (Faulted e state substate) := by
   apply Triple.of_step
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩
-  exact ⟨_, Step.halt hrun (h evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hs, hss⟩) halts,
-    rfl, rfl, rfl, rfl, rfl, hs, hss⟩
+  intro evm hat
+  obtain ⟨-, -, -, -, -, -, -, hrun, -, -, hs, hss, -⟩ := id hat
+  exact ⟨_, Step.halt hrun (h evm hat) halts, rfl, rfl, rfl, rfl, rfl, hs, hss⟩
 
 /-- A byte that is no opcode at the fork halts the frame with that byte as an invalid opcode. -/
 theorem invalid {byte : UInt8} (hlt : pc < code.size) (hbyte : code[pc] = byte)
     (none : Op.ofByte fork byte = none) :
-    Spec fork (At code message pc stack memory gas state substate)
+    Spec fork (At code message pc stack memory gas state substate returnData)
       (Faulted (.invalidOpcode byte) state substate) := by
   refine At.fault rfl fun evm ⟨hcode, _, _, hpc, _⟩ => ?_
   subst hcode hpc
@@ -68,7 +70,7 @@ theorem invalid {byte : UInt8} (hlt : pc < code.size) (hbyte : code[pc] = byte)
 
 /-- The byte `0xfe` is no opcode at any fork, so it halts the frame as an invalid opcode. -/
 theorem invalid_fe (hlt : pc < code.size) (hbyte : code[pc] = 0xfe) :
-    Spec fork (At code message pc stack memory gas state substate)
+    Spec fork (At code message pc stack memory gas state substate returnData)
       (Faulted (.invalidOpcode 0xfe) state substate) :=
   invalid hlt hbyte rfl
 
@@ -76,7 +78,7 @@ theorem invalid_fe (hlt : pc < code.size) (hbyte : code[pc] = 0xfe) :
 theorem jump_invalid {destination : U256} {rest : List U256} (hlt : pc < code.size)
     (hbyte : code[pc] = 0x56) (hgas : 8 ≤ gas)
     (invalid : isValidJumpDest (validJumpDestinations code) destination.toNat = false) :
-    Spec fork (At code message pc (destination :: rest) memory gas state substate)
+    Spec fork (At code message pc (destination :: rest) memory gas state substate returnData)
       (Faulted .invalidJumpDest state substate) := by
   refine At.fault rfl fun evm ⟨hcode, hj, _, hpc, hst, _, hg, _⟩ => ?_
   subst hcode hpc
@@ -92,7 +94,8 @@ theorem jump_invalid {destination : U256} {rest : List U256} (hlt : pc < code.si
 theorem jumpi_invalid {destination condition : U256} {rest : List U256} (hlt : pc < code.size)
     (hbyte : code[pc] = 0x57) (hgas : 10 ≤ gas) (nonzero : condition ≠ 0)
     (invalid : isValidJumpDest (validJumpDestinations code) destination.toNat = false) :
-    Spec fork (At code message pc (destination :: condition :: rest) memory gas state substate)
+    Spec fork (At code message pc (destination :: condition :: rest) memory gas state substate
+        returnData)
       (Faulted .invalidJumpDest state substate) := by
   refine At.fault rfl fun evm ⟨hcode, hj, _, hpc, hst, _, hg, _⟩ => ?_
   subst hcode hpc

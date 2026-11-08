@@ -9,6 +9,8 @@ public import EthLib.Serialization.Ssz.Codec.Root
 A Lean type becomes an SSZ type by naming its declaration and converting its values.
 
 Serialization, deserialization and the root then come from the codec of untyped values.
+
+A type may compute them directly instead, and its laws then tie them to the untyped codec.
 -/
 
 @[expose] public section
@@ -29,18 +31,38 @@ class SszType (α : Type) where
   A type that keeps the tree of its values reads the root there instead of hashing again.
   -/
   root : α → Except Err Bytes := fun a => Ssz.hashTreeRoot desc (toValue a)
+  /--
+  The bytes of a value, which are the bytes of its untyped value.
+
+  A type may write its bytes directly instead of building the untyped value.
+  -/
+  encode : α → Except Err ByteArray := fun a => do return ⟨← Ssz.serialize desc (toValue a)⟩
+  /--
+  The value that bytes encode, which is the typed value of their untyped decoding.
+
+  A type may read its bytes directly instead of building the untyped value.
+  -/
+  decode : ByteArray → Except Err α := fun data => do ofValue (← Ssz.deserialize desc data.data)
+
+/--
+Little-endian bytes of a byte array read back as an unsigned integer.
+
+The read takes `width` bytes from `start`.
+
+A byte past the end of the data reads as zero.
+-/
+def readUintBytes (data : ByteArray) (start width : Nat) : Nat :=
+  Base.bytesToUint (Vector.ofFn fun i : Fin width => data[start + i.val]?.getD 0)
 
 namespace SszType
 
 variable {α : Type} [SszType α]
 
 /-- The bytes of a value. -/
-def serialize (a : α) : Except Err ByteArray := do
-  return ⟨← Ssz.serialize (desc α) (toValue a)⟩
+def serialize (a : α) : Except Err ByteArray := encode a
 
 /-- The value of a type that the bytes encode, or why they encode none. -/
-def deserialize (α : Type) [SszType α] (data : ByteArray) : Except Err α := do
-  ofValue (← Ssz.deserialize (desc α) data.data)
+def deserialize (α : Type) [SszType α] (data : ByteArray) : Except Err α := decode data
 
 /--
 The 32-byte Merkle root of a value.

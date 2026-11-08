@@ -32,21 +32,54 @@ class LawfulSszType (α : Type) [SszType α] : Prop where
   ofValue_toValue : ∀ a : α, ofValue (toValue a) = .ok a
   /-- An untyped value that reads back is the one its typed value stands for. -/
   toValue_of_ofValue : ∀ {value : Value} {a : α}, ofValue value = .ok a → toValue a = value
+  /-- The type never refuses an untyped value that its SSZ type admits. -/
+  ofValue_ne_error : ∀ {value : Value} {fault : Err}, Fits (desc α) value →
+    ofValue (α := α) value ≠ .error fault
   /-- The root that the type gives a value is the root of its untyped value. -/
   root_eq : ∀ a : α, root a = Ssz.hashTreeRoot (desc α) (toValue a) := by intro; rfl
+  /-- The bytes that the type gives a value are the bytes of its untyped value. -/
+  encode_eq : ∀ a : α, encode a = (do return ⟨← Ssz.serialize (desc α) (toValue a)⟩) := by
+    intro; rfl
+  /-- The value that the type reads from bytes is the typed value of their untyped decoding. -/
+  decode_eq : ∀ data : ByteArray,
+      decode data = (do ofValue (α := α) (← Ssz.deserialize (desc α) data.data)) := by
+    intro; rfl
+
+/-- A byte of a byte array is the byte at the same place of its data. -/
+private theorem getElem?_data (data : ByteArray) (i : Nat) : data[i]? = data.data[i]? := by
+  by_cases h : i < data.size
+  · simp [h, ByteArray.size_data]
+    rfl
+  · simp [h, ByteArray.size_data]
+
+/-- An integer read from a byte array is the one read from its bytes. -/
+theorem readUintBytes_eq (data : ByteArray) (start width : Nat) :
+    readUintBytes data start width = readUint data.data start width := by
+  unfold readUintBytes readUint
+  simp only [getElem?_data]
 
 namespace SszType
 
 variable {α : Type} [SszType α]
 
+variable [LawfulSszType α]
+
+/-- Serializing a value is the untyped serialization of its untyped value. -/
+theorem serialize_eq (a : α) :
+    serialize a = (do return ⟨← Ssz.serialize (desc α) (toValue a)⟩) :=
+  LawfulSszType.encode_eq a
+
+/-- Deserializing bytes is the untyped deserialization, then the typed value of its result. -/
+theorem deserialize_eq (data : ByteArray) :
+    deserialize α data = (do ofValue (α := α) (← Ssz.deserialize (desc α) data.data)) :=
+  LawfulSszType.decode_eq data
+
 /-- The typed bytes are the untyped bytes of the value. -/
 theorem serialize_ok_iff {a : α} {data : ByteArray} :
     serialize a = .ok data ↔ Ssz.serialize (desc α) (toValue a) = .ok data.data := by
-  unfold serialize
+  rw [serialize_eq]
   cases Ssz.serialize (desc α) (toValue a) <;>
     simp [bind, Except.bind, pure, Except.pure, ByteArray.ext_iff, eq_comm]
-
-variable [LawfulSszType α]
 
 /-- The typed root is the root of the untyped value, cut to one 32-byte node. -/
 theorem hashTreeRoot_eq (a : α) :
@@ -58,12 +91,12 @@ theorem deserialize_serialize {a : α} {data : ByteArray} (wrote : serialize a =
     deserialize α data = .ok a := by
   -- The untyped codec reads back the untyped value, which converts back to the typed one.
   have read := roundTrip_of_encoding LawfulSszType.wellFormed (serialize_ok_iff.mp wrote)
-  simp [deserialize, read, bind, Except.bind, LawfulSszType.ofValue_toValue]
+  simp [deserialize_eq, read, bind, Except.bind, LawfulSszType.ofValue_toValue]
 
 /-- Bytes that deserialize are the bytes of the value they give, so the decoder is canonical. -/
 theorem serialize_deserialize {a : α} {data : ByteArray} (read : deserialize α data = .ok a) :
     serialize a = .ok data := by
-  unfold deserialize at read
+  rw [deserialize_eq] at read
   cases decoded : Ssz.deserialize (desc α) data.data with
   | error fault => simp [decoded, bind, Except.bind] at read
   | ok value =>
@@ -95,7 +128,7 @@ theorem serialize_ok_or_overflow (a : α) :
   rcases serialize_fits_or_overflow (LawfulSszType.fits a) with
     ⟨bytes, wrote⟩ | ⟨size, large, failed⟩
   · exact .inl ⟨⟨bytes⟩, serialize_ok_iff.mpr wrote⟩
-  · exact .inr ⟨size, large, by simp [serialize, failed, bind, Except.bind]⟩
+  · exact .inr ⟨size, large, by simp [serialize_eq, failed, bind, Except.bind]⟩
 
 /-- Bytes that decode to the empty value are empty, when the empty bytes decode to it. -/
 theorem size_eq_zero_iff_of_deserialize_empty {empty : α}

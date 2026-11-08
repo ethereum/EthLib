@@ -32,7 +32,7 @@ pytestmark = pytest.mark.archive(catalogue.LEGACY)
 
 
 @pytest.mark.parametrize(
-    "case", harness.runnable(CASES), ids=lambda case: f"{case.group}:{case.id}"
+    "case", harness.in_shard(CASES), ids=lambda case: f"{case.group}:{case.id}"
 )
 def test_case(case, request, record_property) -> None:
     harness.run(cast(Path, ROOT), case, DISAGREEMENTS, request, record_property)

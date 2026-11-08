@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.Bls.G2Subgroup
 public import EthLib.Cryptography.Proofs.Bls.CofactorSpan
 public import EthLib.Cryptography.Proofs.Bls.CofactorIndependence
 public import EthLib.Cryptography.Proofs.Bls.CofactorPointQ2713
@@ -39,9 +40,7 @@ private theorem mem_landing_of_clear_zero {P : G2} (hP : G2.Valid P)
 private theorem generator_mem_landing : G2.toPoint G2.generator ∈ landingKernel := by
   change Fr.modulus • cofactorHom (G2.toPoint G2.generator) = 0
   rw [← toPoint_clearCofactor G2.valid_generator]
-  exact (G2.inSubgroup_iff_modulus_smul_eq_zero
-    (clearCofactor_valid G2.valid_generator)).mp
-      (clearCofactor_inSubgroup_of_inSubgroup G2.valid_generator G2.inSubgroup_generator)
+  exact clearCofactor_modulus_smul G2.valid_generator G2.modulus_smul_generator
 
 private theorem landingKernel_eq_top : landingKernel = ⊤ := by
   have h13 : 13 ^ 2 ∣ Nat.card landingKernel :=

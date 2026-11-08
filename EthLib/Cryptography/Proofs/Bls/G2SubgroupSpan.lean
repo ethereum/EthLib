@@ -1,6 +1,11 @@
 module
 
-public import EthLib.Cryptography.Proofs.Bls.CofactorSubgroupLanding
+public import EthLib.Cryptography.Proofs.Bls.CofactorSpan
+public import EthLib.Cryptography.Proofs.Bls.CofactorIndependence
+public import EthLib.Cryptography.Proofs.Bls.CofactorPointQ2713
+public import EthLib.Cryptography.Proofs.Bls.CofactorPointQ11953
+public import EthLib.Cryptography.Proofs.Bls.CofactorPointQ262069
+public import EthLib.Cryptography.Proofs.Bls.CofactorPointLarge
 
 /-!
 # Proofs: Twist curve cardinality and `G2.generator` span completeness
@@ -11,7 +16,7 @@ The torsion witnesses and the size bound give `|E'(Fp2)| = h_2 * r` exactly.
 
 The generator spans it.
 
-So every point that passes the subgroup check is `[a] * g_2` for some `a`.
+So every point of order dividing `r` is `[a] * g_2` for some `a`.
 -/
 
 @[expose] public section
@@ -96,20 +101,5 @@ theorem exists_nsmul_generator_of_modulus_smul_eq_zero {Q : curve.toAffine.Point
   rw [mem_zmultiples_iff_mem_range_addOrderOf, addOrderOf_toPoint_generator] at hm
   obtain ⟨n, hn, he⟩ := Finset.mem_image.mp hm
   exact ⟨n, Finset.mem_range.mp hn, he.symm⟩
-
-/-- A valid point in the subgroup equals `[n] * g_2` for some `n < r`. -/
-theorem exists_mulNat_generator_of_inSubgroup {P : G2} (hP : Valid P)
-    (hsub : inSubgroup P = true) :
-    ∃ n : Nat, n < Fr.modulus ∧ toPoint P = toPoint (mulNat generator n) := by
-  obtain ⟨n, hn, he⟩ := exists_nsmul_generator_of_modulus_smul_eq_zero
-    ((inSubgroup_iff_modulus_smul_eq_zero hP).mp hsub)
-  exact ⟨n, hn, he.trans (toPoint_mulNat valid_generator n).symm⟩
-
-/-- A valid point in the subgroup equals `[a] * g_2` for some `a` in `Fr`. -/
-theorem exists_mul_generator_of_inSubgroup {P : G2} (hP : Valid P)
-    (hsub : inSubgroup P = true) :
-    ∃ a : Fr, toPoint P = toPoint (mul generator a) := by
-  obtain ⟨n, hn, he⟩ := exists_mulNat_generator_of_inSubgroup hP hsub
-  exact ⟨Fr.ofNat n, by rw [he, mul, Fr.val_ofNat_of_lt hn]⟩
 
 end EthLib.Cryptography.Bls.G2

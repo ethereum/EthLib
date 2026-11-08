@@ -2,10 +2,36 @@ module
 
 public import EthLib.Consensus.HonestBuilder
 public import EthLib.Base.Proofs.MapM
+public import EthLib.Consensus.Proofs.Containers.Block
+public import EthLib.Consensus.Proofs.Transition.PayloadInputs
 public import EthLib.Cryptography.Proofs.Bls.SignaturesCorrect
 
 /-!
-# Proofs: the signatures of an honest builder
+# Proofs: the bid, the envelope and the signatures of an honest builder
+
+A bid is built exactly when its fields are those of its payload, its state and its inputs.
+
+A self-built bid is from the reserved builder index, with no value and the signature at infinity.
+
+It passes the checks of the builder of a bid, on every state.
+
+An envelope is built exactly when it reveals its payload and requests, and names its block.
+
+It must also name the parent of the block and the builder of the bid of the block.
+
+From Gloas, take a block that passes its steps, with a bid that a builder built from a payload.
+
+The block must also commit to the root of the state after it.
+
+The vectors whose length the preset sets must have a positive length, for the root of the block.
+
+The envelope of that payload then passes the checks of the block root and the parent root.
+
+It also passes the checks of the builder, the mix, the gas limit and the block hash.
+
+It passes the check of the root of the requests, and builds on the latest block hash.
+
+The slot of the bid is the slot of that state.
 
 A bid is signed under the domain of the epoch of its slot, and checked under the current one.
 
@@ -22,9 +48,158 @@ For a self-build, the signer of an envelope is the proposer of the latest block.
 
 namespace EthLib.Consensus
 
-open Base Cryptography.Bls
+open Base Cryptography.Bls Serialization.Ssz
 
 variable {preset : Preset} {fork : Base.Fork} {state : BeaconState preset fork}
+
+/-! ## The bid and the envelope -/
+
+section Build
+
+variable {payload : ExecutionPayload preset fork} {requests : ExecutionRequests preset fork}
+  {blobKzgCommitments : BlobKZGCommitments preset fork} {feeRecipient : ExecutionAddress}
+  {inclusionListBits : Since .hegota fork (InclusionListBits preset)}
+
+/-- A bid is built exactly when its fields are those of its payload, its state and its inputs.
+
+Its parent root is the root of the latest block header of the state.
+
+Its root of the requests is the root of the requests of the payload.
+
+Its parent hash, block hash, RANDAO mix and gas limit are those of the payload.
+
+It asks for no payment on the execution layer, and its other fields are the inputs. -/
+theorem getExecutionPayloadBid_eq_ok_iff {slot : Slot} {builderIndex : BuilderIndex}
+    {value : Gwei} {bid : ExecutionPayloadBid preset fork} :
+    getExecutionPayloadBid state payload requests blobKzgCommitments slot feeRecipient
+        builderIndex value inclusionListBits = .ok bid ↔
+      SszType.hashTreeRoot state.latestBlockHeader = .ok bid.parentBlockRoot ∧
+      SszType.hashTreeRoot requests = .ok bid.executionRequestsRoot ∧
+      bid.parentBlockHash = payload.parentHash ∧ bid.blockHash = payload.blockHash ∧
+      bid.prevRandao = payload.prevRandao ∧ bid.gasLimit = payload.gasLimit ∧
+      bid.feeRecipient = feeRecipient ∧ bid.builderIndex = builderIndex ∧ bid.slot = slot ∧
+      bid.value = value ∧ bid.executionPayment = 0 ∧
+      bid.blobKzgCommitments = blobKzgCommitments ∧ bid.inclusionListBits = inclusionListBits := by
+  unfold getExecutionPayloadBid
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq]
+  constructor
+  · rintro ⟨_, rooted, _, requested, rfl⟩
+    exact ⟨rooted, requested, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  · cases bid
+    rintro ⟨rooted, requested, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    exact ⟨_, rooted, _, requested, rfl⟩
+
+/-- A self-built bid is the bid of the reserved builder index, for the slot of the state.
+
+It has no value, and the signature at infinity. -/
+theorem getSelfBuiltExecutionPayloadBid_eq_ok_iff
+    {signed : SignedExecutionPayloadBid preset fork} :
+    getSelfBuiltExecutionPayloadBid state payload requests blobKzgCommitments feeRecipient
+        inclusionListBits = .ok signed ↔
+      getExecutionPayloadBid state payload requests blobKzgCommitments state.slot feeRecipient
+          BUILDER_INDEX_SELF_BUILD 0 inclusionListBits = .ok signed.message ∧
+        signed.signature = Signatures.infinitySignature := by
+  unfold getSelfBuiltExecutionPayloadBid
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq]
+  constructor
+  · rintro ⟨_, built, rfl⟩
+    exact ⟨built, rfl⟩
+  · cases signed
+    rintro ⟨built, rfl⟩
+    exact ⟨_, built, rfl⟩
+
+/-- A self-built bid passes the checks of the builder of a bid, on every state. -/
+theorem checkBidBuilder_of_getSelfBuiltExecutionPayloadBid {config : Config}
+    {checks : SignatureChecks} {other : BeaconState preset fork} (gloas : .glamsterdam ≤ fork)
+    {signed : SignedExecutionPayloadBid preset fork}
+    (built : getSelfBuiltExecutionPayloadBid state payload requests blobKzgCommitments
+      feeRecipient inclusionListBits = .ok signed) :
+    checkBidBuilder config checks other gloas signed = .ok () := by
+  obtain ⟨made, signature⟩ := getSelfBuiltExecutionPayloadBid_eq_ok_iff.mp built
+  obtain ⟨-, -, -, -, -, -, -, builder, -, value, -⟩ := getExecutionPayloadBid_eq_ok_iff.mp made
+  simp [checkBidBuilder, builder, value, signature, ensure]
+
+/-- An envelope is built exactly when it reveals the payload and the requests.
+
+It names the builder of the bid of the block, the root of the block and the parent of the block. -/
+theorem getExecutionPayloadEnvelope_eq_ok_iff {block : BeaconBlock preset fork}
+    {gloas : .glamsterdam ≤ fork} {envelope : ExecutionPayloadEnvelope preset fork} :
+    getExecutionPayloadEnvelope block gloas payload requests = .ok envelope ↔
+      SszType.hashTreeRoot block = .ok envelope.beaconBlockRoot ∧ envelope.payload = payload ∧
+      envelope.executionRequests = requests ∧
+      envelope.builderIndex = (block.body.signedExecutionPayloadBid gloas).message.builderIndex ∧
+      envelope.parentBeaconBlockRoot = block.parentRoot := by
+  unfold getExecutionPayloadEnvelope
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq]
+  constructor
+  · rintro ⟨_, rooted, rfl⟩
+    exact ⟨rooted, rfl, rfl, rfl, rfl⟩
+  · cases envelope
+    rintro ⟨rooted, rfl, rfl, rfl, rfl⟩
+    exact ⟨_, rooted, rfl⟩
+
+variable [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
+  [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat] [NeZero preset.PTC_SIZE.toNat]
+  [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat]
+
+/-- The envelope of a payload passes most checks against the state after the block of its bid.
+
+The block carries a bid that a builder built from the payload and its requests.
+
+The block passes its steps, and commits to the root of the state after it.
+
+The envelope then names that block, by the root that the check computes, and its parent.
+
+It agrees with the bid that the state keeps on the builder, the mix, the gas limit and the hash.
+
+It also agrees with that bid on the root of the requests.
+
+The slot of the bid is the slot of the state, so a payload for that slot passes the slot check.
+
+The payload also builds on the latest block hash of the state.
+
+The lengths of the vectors that the preset sets must be positive, for the root of the block. -/
+theorem getExecutionPayloadEnvelope_checks {config : Config} {checks : SignatureChecks}
+    {engine : ExecutionEngine preset fork} {pre post : BeaconState preset fork}
+    (gloas : .glamsterdam ≤ fork) {block : BeaconBlock preset fork} {slot : Slot}
+    {builderIndex : BuilderIndex} {value : Gwei}
+    {envelope : ExecutionPayloadEnvelope preset fork}
+    (built : getExecutionPayloadBid state payload requests blobKzgCommitments slot feeRecipient
+      builderIndex value inclusionListBits =
+        .ok (block.body.signedExecutionPayloadBid gloas).message)
+    (processed : processBlock config checks engine pre block = .ok post)
+    (committed : SszType.hashTreeRoot post = .ok block.stateRoot)
+    (enveloped : getExecutionPayloadEnvelope block gloas payload requests = .ok envelope) :
+    let bid := post.latestExecutionPayloadBid gloas
+    (∃ stateRoot, SszType.hashTreeRoot post = .ok stateRoot ∧
+      SszType.hashTreeRoot { post.latestBlockHeader with stateRoot } =
+        .ok envelope.beaconBlockRoot) ∧
+    envelope.parentBeaconBlockRoot = post.latestBlockHeader.parentRoot ∧
+    envelope.builderIndex = bid.builderIndex ∧ envelope.payload.prevRandao = bid.prevRandao ∧
+    envelope.payload.gasLimit = bid.gasLimit ∧ envelope.payload.blockHash = bid.blockHash ∧
+    SszType.hashTreeRoot envelope.executionRequests = .ok bid.executionRequestsRoot ∧
+    slot = post.slot ∧
+    envelope.payload.parentHash = post.latestBlockHash gloas := by
+  obtain ⟨blockRoot, rfl, rfl, builder, parentRoot⟩ :=
+    getExecutionPayloadEnvelope_eq_ok_iff.mp enveloped
+  obtain ⟨-, requestsRoot, parentHash, blockHash, randao, gasLimit, -, -, bidSlot, -⟩ :=
+    getExecutionPayloadBid_eq_ok_iff.mp built
+  have kept := latestExecutionPayloadBid_processBlock gloas processed
+  obtain ⟨bodyRoot, bodyRooted, header⟩ := latestBlockHeader_processBlock gloas processed
+  obtain ⟨_, _, withdrawn, _, _, _, _, _, bidOk, slotKept, -, -, -⟩ :=
+    processBlock_steps gloas processed
+  obtain ⟨-, -, checkedSlot, -⟩ :=
+    checkExecutionPayloadBid_ok_iff.mp (processExecutionPayloadBid_ok bidOk).1
+  simp only [kept, header]
+  refine ⟨⟨block.stateRoot, committed, ?_⟩, parentRoot, builder, randao.symm, gasLimit.symm,
+    blockHash.symm, requestsRoot, ?_, ?_⟩
+  · rw [← blockRoot]
+    exact BeaconBlock.hashTreeRoot_header bodyRooted
+  · rw [← bidSlot, checkedSlot, slotKept]
+    exact ((payloadInputs_processExecutionPayloadBid bidOk).slot).symm
+  · rw [latestBlockHash_processBlock gloas processed, kept, parentHash]
+
+end Build
 
 /-- The domain of the current epoch is the default domain of a state. -/
 theorem getDomain_currentEpoch (config : Config) (domainType : DomainType) :

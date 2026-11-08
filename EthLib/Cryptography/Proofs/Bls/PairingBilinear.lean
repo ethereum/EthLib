@@ -21,7 +21,9 @@ By the equation, that product is `e(g1, g2)` to the power `sum_i a_i b_i`.
 
 The pairing of the generators has order `r`, so the power is 1 exactly when `r` divides the sum.
 
-No theorem proves the equation yet, so it stays a hypothesis.
+This file takes the equation as a hypothesis.
+
+The proof of the equation, through Miller's function, imports this file and lives in another one.
 -/
 
 @[expose] public section

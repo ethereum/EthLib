@@ -11,7 +11,11 @@ C-ABI exports of the post-quantum key registry.
 
 No fork includes the registry yet, so the exports name no fork.
 
-The first decodes the bytes of a container, then returns its root and its bytes encoded again.
+The first decodes the bytes of a container.
+
+It returns the pair of the root and the bytes encoded again.
+
+It takes and returns typed Python values.
 
 The others compute the root that a proof of possession signs, and check a proof.
 
@@ -23,7 +27,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz PqKeys
-open EthLib.Exports (Result)
+open EthLib.Exports (Result PyValue pyExport)
 open Serialization.Ssz.Exports (runSsz)
 
 /-- The container of the registry with a name, as the source names it. -/
@@ -39,18 +43,21 @@ def pqKeysContainerOf : String → Option Container
   | "PQKeyRegistrations" => some ⟨PQKeyRegistrations⟩
   | _ => none
 
-/-- The root of the value that the bytes encode, then the bytes of that value.
-
-The container is named in UTF-8. -/
-@[export eth_pq_keys_ssz]
-def pqKeysSszExport (type data : ByteArray) : Result ByteArray := do
-  let type ← nameOf type
+/-- The root of the value that the bytes encode, and the bytes of that value. -/
+def pqKeysSszOf (args : String × ByteArray) : Result (Root × ByteArray) := do
+  let (type, data) := args
   let some container := pqKeysContainerOf type
     | throw (0, s!"no container {type} in the post-quantum key registry")
   let value ← runSsz "input rejected" (SszType.deserialize container.type data)
   let root ← runSsz "root rejected" (SszType.hashTreeRoot value)
   let bytes ← runSsz "value rejected" (SszType.serialize value)
-  return ⟨root.toArray⟩ ++ bytes
+  return (root, bytes)
+
+/-- The root of the value that the bytes encode, and the bytes of that value, as a pair.
+
+The arguments are the name of the container and the bytes. -/
+@[export eth_pq_keys_ssz]
+def pqKeysSszExport (args : PyValue) : Result PyValue := pyExport pqKeysSszOf args
 
 /-- The bytes of a fixed-size input, or code 0 when the length differs. -/
 def exactBytes (n : Nat) (what : String) (bytes : ByteArray) : Result (Vector UInt8 n) :=

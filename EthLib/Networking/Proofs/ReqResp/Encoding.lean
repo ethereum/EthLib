@@ -156,6 +156,9 @@ theorem decodePayload_ok {typeMin typeBound : UInt64} {bs d : ByteArray}
                   UInt64.le_iff_toNat_le.mpr hle.1, UInt64.le_iff_toNat_le.mpr hle.2,
                   UInt64.not_lt.mp hmin, by simp [hm], by simpa using hc, by simp⟩
 
+/-- The payload cap is 10 MiB. -/
+theorem toNat_MAX_PAYLOAD_SIZE : MAX_PAYLOAD_SIZE.toNat = 10485760 := rfl
+
 /-- The decoder accepts exactly the encoding of a length within the bounds, then compressed bytes.
 
 The length is at most the smaller of the largest encoding and the cap, and at least the smallest.
@@ -168,7 +171,7 @@ theorem decodePayload_eq_ok_iff {typeMin typeBound : UInt64} {bs d : ByteArray} 
       ∃ rest, bs.data.toList = encode (UInt64.ofNat d.size) ++ rest ∧
         rest.length ≤ 32 + d.size + d.size / 6 ∧
         Snappy.decodeFrames ⟨rest.toArray⟩ = .ok d := by
-  have hmax : MAX_PAYLOAD_SIZE.toNat = 10485760 := rfl
+  have hmax := toNat_MAX_PAYLOAD_SIZE
   constructor
   · intro h
     obtain ⟨declared, b, hv, hs, hty, hcap, hmin, hb, hlen, hf⟩ := decodePayload_ok h

@@ -61,6 +61,10 @@ directories = [
 commit = "ed1974ea83433eba7b2d95c5dcd9ac33cb847913"
 directories = ["bindings/python/tests/precompile/blake2"]
 
+# The Snappy block and frame formats, which the independent decoders of the tests follow.
+[repositories."google/snappy"]
+commit = "7406111ac4ae539ea0db8b7ea2dc76730cd957f4"
+
 [repositories."ethereum/devp2p"]
 commit = "88f1c80800d622cc3a542a2125bbe33cc18c9f9c"
 

@@ -16,6 +16,8 @@ Properties of the Snappy framing format, against `framing_format.txt` of `google
 - After the identifier, one bad chunk rejects the whole stream.
 - A wrong checksum, more than 65536 bytes or a reserved unskippable type makes a chunk bad.
 - Padding and reserved skippable chunks add nothing.
+- Two streams that decode, one after the other, decode to their two outputs in turn.
+  A stream identifier after the first adds nothing (§4.1).
 -/
 
 @[expose] public section
@@ -175,6 +177,117 @@ theorem decodeFrames_encodeFramesLiteral (d : ByteArray) :
   rw [decodeChunks_encodeChunks (chunk := uncompressedChunk) (fun _ h => uncompressedChunk_spec h) _
     hn (by omega)]
   rfl
+
+/-! ## Concatenated streams -/
+
+/-- A loop that decodes with some fuel decodes the same with more. -/
+theorem decodeChunks_of_le {l out : List UInt8} {f g : Nat} (h : decodeChunks l f = .ok out)
+    (hfg : f ≤ g) : decodeChunks l g = .ok out := by
+  induction f generalizing l out g with
+  | zero =>
+    match l with
+    | [] => simpa [decodeChunks] using h
+    | [_] | [_, _] | [_, _, _] | _ :: _ :: _ :: _ :: _ => simp [decodeChunks] at h
+  | succ f ih =>
+    obtain ⟨g, rfl⟩ : ∃ g', g = g' + 1 := ⟨g - 1, by omega⟩
+    match l with
+    | [] => simpa [decodeChunks] using h
+    | [_] | [_, _] | [_, _, _] => simp [decodeChunks] at h
+    | type :: l0 :: l1 :: l2 :: rest =>
+      by_cases hl : rest.length < bytesToUint #v[l0, l1, l2]
+      · simp [decodeChunks, hl] at h
+      · cases hc : decodeChunk type (rest.take (bytesToUint #v[l0, l1, l2])) with
+        | error e => simp [decodeChunks, hl, hc] at h
+        | ok o =>
+          cases hd : decodeChunks (rest.drop (bytesToUint #v[l0, l1, l2])) f with
+          | error e => simp [decodeChunks, hl, hc, hd, Except.map] at h
+          | ok v =>
+            simp only [decodeChunks, hl, hc, hd, ite_false] at h ⊢
+            rw [ih hd (by omega)]
+            exact h
+
+/-- Two runs of chunks that decode, one after the other, decode to their two outputs in turn. -/
+theorem decodeChunks_append {a b oa ob : List UInt8} {f g : Nat}
+    (ha : decodeChunks a f = .ok oa) (hb : decodeChunks b g = .ok ob) :
+    decodeChunks (a ++ b) (f + g) = .ok (oa ++ ob) := by
+  induction f generalizing a oa with
+  | zero =>
+    match a with
+    | [] =>
+      simp only [decodeChunks, Except.ok.injEq] at ha
+      subst ha
+      simpa using decodeChunks_of_le hb (by omega)
+    | [_] | [_, _] | [_, _, _] | _ :: _ :: _ :: _ :: _ => simp [decodeChunks] at ha
+  | succ f ih =>
+    match a with
+    | [] =>
+      simp only [decodeChunks, Except.ok.injEq] at ha
+      subst ha
+      simpa using decodeChunks_of_le hb (by omega)
+    | [_] | [_, _] | [_, _, _] => simp [decodeChunks] at ha
+    | type :: l0 :: l1 :: l2 :: rest =>
+      by_cases hl : rest.length < bytesToUint #v[l0, l1, l2]
+      · simp [decodeChunks, hl] at ha
+      · cases hc : decodeChunk type (rest.take (bytesToUint #v[l0, l1, l2])) with
+        | error e => simp [decodeChunks, hl, hc] at ha
+        | ok o =>
+          cases hd : decodeChunks (rest.drop (bytesToUint #v[l0, l1, l2])) f with
+          | error e => simp [decodeChunks, hl, hc, hd, Except.map] at ha
+          | ok v =>
+            simp only [decodeChunks, hl, hc, hd, ite_false, Except.map, Except.ok.injEq] at ha
+            subst ha
+            have hl' : ¬ (rest ++ b).length < bytesToUint #v[l0, l1, l2] := by
+              simp only [List.length_append]
+              omega
+            have htake : (rest ++ b).take (bytesToUint #v[l0, l1, l2]) =
+                rest.take (bytesToUint #v[l0, l1, l2]) := List.take_append_of_le_length (by omega)
+            have hdrop : (rest ++ b).drop (bytesToUint #v[l0, l1, l2]) =
+                rest.drop (bytesToUint #v[l0, l1, l2]) ++ b :=
+              List.drop_append_of_le_length (by omega)
+            rw [show f + 1 + g = (f + g) + 1 by omega]
+            simp only [List.cons_append, decodeChunks, hl', ite_false, htake, hc, hdrop, ih hd,
+              Except.map, List.append_assoc]
+
+/-- Two framed streams that decode, one after the other, decode to their two outputs in turn.
+
+The stream identifier at the start of the second is a chunk that adds nothing (§4.1). -/
+theorem decodeFramesList_append {a b oa ob : List UInt8} (ha : decodeFramesList a = .ok oa)
+    (hb : decodeFramesList b = .ok ob) : decodeFramesList (a ++ b) = .ok (oa ++ ob) := by
+  match a, b with
+  | [], _ => simp [decodeFramesList] at ha
+  | _, [] => simp [decodeFramesList] at hb
+  | ta :: ra, tb :: rb =>
+    simp only [decodeFramesList] at ha hb
+    by_cases hta : ta = streamIdentifierType
+    · by_cases htb : tb = streamIdentifierType
+      · subst hta htb
+        simp only [beq_self_eq_true, ite_true] at ha hb
+        simp only [List.cons_append, decodeFramesList, beq_self_eq_true, ite_true]
+        rw [show (streamIdentifierType :: (ra ++ streamIdentifierType :: rb)).length =
+          (streamIdentifierType :: ra).length + (streamIdentifierType :: rb).length by
+            simp only [List.length_cons, List.length_append]; omega]
+        exact decodeChunks_append ha hb
+      · simp [htb] at hb
+    · simp [hta] at ha
+
+/-- Two framed streams that decode, one after the other, decode to their two outputs in turn. -/
+theorem decodeFrames_append {a b oa ob : ByteArray} (ha : decodeFrames a = .ok oa)
+    (hb : decodeFrames b = .ok ob) : decodeFrames (a ++ b) = .ok (oa ++ ob) := by
+  simp only [decodeFrames] at ha hb ⊢
+  cases hla : decodeFramesList a.data.toList with
+  | error e => simp [hla, Except.map] at ha
+  | ok la =>
+    cases hlb : decodeFramesList b.data.toList with
+    | error e => simp [hlb, Except.map] at hb
+    | ok lb =>
+      simp only [hla, hlb, Except.map, Except.ok.injEq] at ha hb
+      subst ha hb
+      have hab : (a ++ b).data.toList = a.data.toList ++ b.data.toList := by
+        simp [ByteArray.data_append]
+      rw [hab, decodeFramesList_append hla hlb]
+      simp only [Except.map, Except.ok.injEq]
+      apply ByteArray.ext
+      simp [ByteArray.data_append]
 
 /-! ## Rejected streams -/
 

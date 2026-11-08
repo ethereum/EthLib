@@ -205,6 +205,33 @@ def test_eth1_vote_overflow():
         consensus.get_eth1_vote("mainnet", "phase0", state, [(2**64 - 1, eth1_data(1, 1))])
 
 
+def test_eth1_timestamp_out_of_range():
+    state = state_at("phase0", ONE_COMMITTEE, genesis_time=GENESIS_TIME, slot=SLOT)
+    with raises(ProposerError, f"expected an int below {2**64}, got {2**64}") as info:
+        consensus.get_eth1_vote("mainnet", "phase0", state, [(2**64, eth1_data(1, 1))])
+    assert info.value.code == 0
+
+
+def test_eth1_data_of_another_length():
+    state = state_at("phase0", ONE_COMMITTEE, genesis_time=GENESIS_TIME, slot=SLOT)
+    with raises(ProposerError, "input rejected: EthLib.Serialization.Ssz.Err.scope 72 71") as info:
+        consensus.get_eth1_vote("mainnet", "phase0", state, [(0, eth1_data(1, 1)[:71])])
+    assert info.value.code == 0
+
+
+def test_eth1_data_must_be_bytes():
+    state = state_at("phase0", ONE_COMMITTEE, genesis_time=GENESIS_TIME, slot=SLOT)
+    with raises(TypeError, "cannot pass a value of type bytearray to Lean"):
+        consensus.get_eth1_vote("mainnet", "phase0", state, [(0, bytearray(eth1_data(1, 1)))])  # ty: ignore[invalid-argument-type]
+
+
+@pytest.mark.parametrize("verify", [1, None])
+def test_verify_must_be_a_bool(verify):
+    with raises(ProposerError, "expected a bool") as info:
+        consensus.compute_new_state_root("minimal", "phase0", b"", b"", verify)
+    assert info.value.code == 0
+
+
 def test_no_eth1_vote_at_heze():
     with raises(ProposerError, "no Eth1 vote at hegota"):
         consensus.get_eth1_vote("mainnet", "hegota", b"", [])
@@ -255,6 +282,24 @@ def test_validators_custody_requirement(balances: list, indices: list):
     expected = min(max(total // (32 * GWEI), 8), 128)
     got = consensus.get_validators_custody_requirement("mainnet", "fusaka", state, indices)
     assert got == expected
+
+
+def test_custody_with_a_replacement():
+    # A higher floor of groups per node raises the requirement of a small validator set.
+    state = state_at("fusaka", [32 * GWEI] * 4)
+    config = {"VALIDATOR_CUSTODY_REQUIREMENT": 16}
+    got = consensus.get_validators_custody_requirement("mainnet", "fusaka", state, [0], config)
+    assert got == 16
+    assert consensus.get_validators_custody_requirement("mainnet", "fusaka", state, [0]) == 8
+
+
+def test_custody_index_out_of_range():
+    state = state_at("fusaka", [32 * GWEI])
+    with raises(ProposerError, f"expected an int below {2**64}, got {2**64}") as caught:
+        consensus.get_validators_custody_requirement("mainnet", "fusaka", state, [2**64])
+    assert caught.value.code == 0
+    with raises(ValueError, "cannot pass a negative int to Lean"):
+        consensus.get_validators_custody_requirement("mainnet", "fusaka", state, [-1])
 
 
 def test_custody_of_an_unknown_validator():

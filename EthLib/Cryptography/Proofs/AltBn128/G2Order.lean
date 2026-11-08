@@ -12,6 +12,8 @@ It lies on the twist and is not the point at infinity.
 The kernel computes `q P2 = O` by double and add, so `P2` has the prime order `q`.
 
 EIP-197 says that `G_2` is the only group of order `q` on the twist, so `P2` generates it.
+
+`G2Torsion.lean` in this directory proves that claim.
 -/
 
 @[expose] public section

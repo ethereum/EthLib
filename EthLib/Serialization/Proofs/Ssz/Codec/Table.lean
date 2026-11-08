@@ -494,6 +494,32 @@ theorem assemble_inline (parts : List Bytes) (bytes : Bytes)
   rw [headOf_inline, bodiesOf_inline]
   simp
 
+/-- The fixed part of parts all written in place is as wide as the parts laid end to end. -/
+theorem headWidth_inlineSlots (parts : List Bytes) :
+    headWidth (inlineSlots parts) = (concatParts parts).size := by
+  rw [← headOf_size _ 0, headOf_inline]
+
+/-- Parts all written in place leave no bodies. -/
+theorem bodyWidth_inlineSlots (parts : List Bytes) : bodyWidth (inlineSlots parts) = 0 := by
+  rw [← bodiesOf_size, bodiesOf_inline]
+  rfl
+
+/-- Parts all written in place are laid end to end, unless four bytes cannot name their size. -/
+theorem assemble_inline_eq (parts : List Bytes) :
+    assemble (parts.map fun _ => true) parts =
+      if (concatParts parts).size ≥ 2 ^ (8 * bytesPerOffset) then
+        .error (.offsetOverflow (concatParts parts).size)
+      else .ok (concatParts parts) := by
+  have head := headWidth_inlineSlots parts
+  have body := bodyWidth_inlineSlots parts
+  simp only [inlineSlots] at head body
+  rw [assemble_eq]
+  simp only [head, body, Nat.add_zero]
+  split
+  · rfl
+  · show Except.ok (headOf _ (inlineSlots parts) ++ bodiesOf (inlineSlots parts)) = _
+    rw [headOf_inline, bodiesOf_inline, Array.append_empty]
+
 /-- A run of equal-width elements is as wide as their count says. -/
 theorem concatParts_size (width : Nat) : ∀ (parts : List Bytes),
     (∀ part ∈ parts, part.size = width) →

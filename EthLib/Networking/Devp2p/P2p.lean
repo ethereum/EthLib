@@ -165,13 +165,15 @@ A compressed message is rejected before decompression when its declared size exc
 -/
 def decodeMessage (snappy : Bool) (frameData : ByteArray) : Except P2pError Message := do
   -- The ID is one RLP item at the start, and the message is the bytes after it.
-  let (idItem, rest) ← ((decodeItem frameData.data.toList).map fun r => (r.1, r.2.1)).mapError .rlp
+  let (idItem, next) ← ((decodeItem frameData 0 frameData.size).map fun r => (r.1, r.2.1)).mapError
+    .rlp
   let id ← idItem.toScalar.mapError .rlp
+  let rest := frameData.extract next frameData.size
   let data ← if snappy && id != 0x00 then do
-      let (size, _) ← (Snappy.readPreamble rest).mapError .snappy
+      let (size, _) ← (Snappy.readPreamble rest.data.toList).mapError .snappy
       if MAX_MESSAGE_SIZE < size then throw (.tooLarge size)
-      (Snappy.decompress ⟨rest.toArray⟩).mapError .snappy
-    else pure ⟨rest.toArray⟩
+      (Snappy.decompress rest).mapError .snappy
+    else pure rest
   Message.ofItem id (← (decode data).mapError .rlp)
 
 /-- Whether both peers use Snappy: both Hello messages carry version 5 or more, by EIP-706. -/

@@ -52,16 +52,14 @@ def runs(fork: str) -> bool:
 
 
 def run_case(preset: str, fork: str, case: Path) -> None:
-    """Check each deltas file of a case against the deltas that EthLib computes."""
+    """Check each deltas file of a case against the deltas that EthLib computes in one call."""
     pre = snappy.decompress((case / "pre.ssz_snappy").read_bytes())
-    checked = 0
-    for component in COMPONENTS:
-        expected = case / f"{component}.ssz_snappy"
-        if expected.exists():
-            got = consensus.rewards_deltas(preset, FORKS[fork], component, pre)
-            assert got == snappy.decompress(expected.read_bytes()), component
-            checked += 1
-    assert checked == (5 if fork == "phase0" else 4)
+    components = [c for c in COMPONENTS if (case / f"{c}.ssz_snappy").exists()]
+    assert len(components) == (5 if fork == "phase0" else 4)
+    got = consensus.rewards_deltas_batch(preset, FORKS[fork], components, pre)
+    for component, deltas in zip(components, got, strict=True):
+        expected = snappy.decompress((case / f"{component}.ssz_snappy").read_bytes())
+        assert deltas == expected, component
 
 
 def _cases() -> list:
@@ -141,3 +139,24 @@ def test_unknown_component():
     with raises(consensus.TransitionError, "no deltas no_such_deltas at phase0") as info:
         consensus.rewards_deltas("minimal", FORKS["phase0"], "no_such_deltas", _pre("phase0"))
     assert info.value.code == 0
+
+
+def test_batch_matches_single():
+    pre = _pre("phase0")
+    got = consensus.rewards_deltas_batch("minimal", FORKS["phase0"], list(COMPONENTS), pre)
+    assert got == [
+        consensus.rewards_deltas("minimal", FORKS["phase0"], component, pre)
+        for component in COMPONENTS
+    ]
+
+
+def test_batch_first_error():
+    # The first kind that fails gives the error, here the second one.
+    components = ["source_deltas", "no_such_deltas", "inclusion_delay_deltas"]
+    with raises(consensus.TransitionError, "no deltas no_such_deltas at altair") as info:
+        consensus.rewards_deltas_batch("minimal", FORKS["altair"], components, _pre("altair"))
+    assert info.value.code == 0
+
+
+def test_batch_empty():
+    assert consensus.rewards_deltas_batch("minimal", FORKS["phase0"], [], _pre("phase0")) == []

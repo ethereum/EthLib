@@ -1,7 +1,12 @@
-"""The ssz_snappy req/resp encoding against hand-built messages."""
+"""The ssz_snappy req/resp encoding against hand-built messages and a reference decoder."""
+
+import random
+
+import pytest
 
 from ethlib.networking import reqresp
 from raising import raises
+from snappy_reference import CASES as SPEC_CASES, SpecCase, decode_block, spec_object
 
 # Each message is built from the framing format of google/snappy and the protobuf varint.
 # The framing format is framing_format.txt, so no value comes from the code under test.
@@ -245,3 +250,162 @@ def test_empty_error_message_ignores_type_minimum():
     # An error chunk carries an error message, not the payload type, so it may be empty.
     chunk = bytes([1]) + _varint(0) + STREAM_IDENTIFIER
     assert reqresp.decode_response_chunk(4, 8, 100, chunk) == (1, b"", b"")
+
+
+# A frame decoder written here checks the encoders that compress.
+# It reads blocks with the independent block decoder of the Snappy tests.
+# It reads only data chunks, the only chunks that the encoders write.
+# A compressor may write other bytes for the same data, so the tests compare the decoded data.
+#
+# Frames: https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/framing_format.txt
+
+
+def _read_varint(data: bytes, at: int) -> tuple[int, int]:
+    # The value of the varint at `at`, and the position after it.
+    value, shift = 0, 0
+    while True:
+        byte = data[at]
+        value |= (byte & 0x7F) << shift
+        at += 1
+        if byte < 0x80:
+            return value, at
+        shift += 7
+
+
+def _decode_frames(stream: bytes) -> tuple[bytes, list[tuple[int, int]]]:
+    # The data of a framed stream, and the type and data size of each of its data chunks.
+    assert stream.startswith(STREAM_IDENTIFIER)
+    data = bytearray()
+    chunks: list[tuple[int, int]] = []
+    at = len(STREAM_IDENTIFIER)
+    while at < len(stream):
+        chunk_type = stream[at]
+        length = int.from_bytes(stream[at + 1 : at + 4], "little")
+        body = stream[at + 4 : at + 4 + length]
+        assert len(body) == length
+        at += 4 + length
+        # Type 0 is a compressed chunk, and type 1 an uncompressed one.
+        assert chunk_type in (0x00, 0x01)
+        piece = decode_block(body[4:]) if chunk_type == 0x00 else body[4:]
+        assert len(piece) <= 65536
+        assert body[:4] == _masked_crc(piece).to_bytes(4, "little")
+        data += piece
+        chunks.append((chunk_type, len(piece)))
+    return bytes(data), chunks
+
+
+def _decode_payload(payload: bytes) -> tuple[bytes, list[tuple[int, int]]]:
+    # The data of a payload, checked against its length prefix, and the chunks of its stream.
+    length, at = _read_varint(payload, 0)
+    assert payload[:at] == _varint(length)
+    data, chunks = _decode_frames(payload[at:])
+    assert len(data) == length
+    return data, chunks
+
+
+def _noise(n: int) -> bytes:
+    # Bytes that do not compress, from a seeded generator.
+    return random.Random(2026).randbytes(n)
+
+
+def test_reference_decoder():
+    # The decoder reads the hand-built messages of the tests above.
+    uncompressed = _varint(4) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD)
+    assert _decode_payload(uncompressed) == (PAYLOAD, [(1, 4)])
+    compressed = _varint(4) + STREAM_IDENTIFIER + _compressed_literal(PAYLOAD)
+    assert _decode_payload(compressed) == (PAYLOAD, [(0, 4)])
+    # 32 zero bytes: a literal of one zero byte, then a copy of 31 bytes from 1 back.
+    assert decode_block(bytes.fromhex("2000007a0100")) == bytes(32)
+
+
+# Each input of the payload encoder, and the type and data size of each chunk that it writes.
+# Each chunk holds at most 65536 bytes of data.
+PAYLOADS = [
+    pytest.param(b"", [], id="empty"),
+    pytest.param(PAYLOAD, [(1, 4)], id="4 bytes"),
+    pytest.param(bytes(100), [(0, 100)], id="100 zero bytes"),
+    pytest.param(_noise(1000), [(1, 1000)], id="incompressible"),
+    pytest.param(bytes(65537), [(0, 65536), (1, 1)], id="cut after 65536 bytes"),
+    pytest.param(
+        _noise(65536) + bytes(70_000), [(1, 65536), (0, 65536), (0, 4464)], id="three chunks"
+    ),
+]
+
+
+@pytest.mark.parametrize(("data", "chunks"), PAYLOADS)
+def test_encode_payload(data: bytes, chunks: list[tuple[int, int]]):
+    payload = reqresp.encode_payload(data)
+    assert _decode_payload(payload) == (data, chunks)
+    assert reqresp.decode_payload(len(data), len(data), payload) == data
+
+
+# The SSZ objects of the 50 ssz_snappy files of consensus-spec-tests that the Snappy tests read.
+# `tests/consensus/snappy/README.md` gives their origin.
+@pytest.mark.parametrize("case", SPEC_CASES, ids=[case["file"] for case in SPEC_CASES])
+def test_encode_payload_of_spec_objects(case: SpecCase):
+    data = spec_object(case)
+    decoded, _ = _decode_payload(reqresp.encode_payload(data))
+    assert decoded == data
+
+
+def test_encode_payload_wrong_type():
+    with raises(TypeError, "data must be bytes"):
+        reqresp.encode_payload(bytearray(b"x"))  # ty: ignore[invalid-argument-type]
+
+
+RESPONSE_CHUNKS = [
+    pytest.param(reqresp.ResponseChunk(0, bytes.fromhex("6a95a1a9"), bytes(100)), id="success"),
+    pytest.param(reqresp.ResponseChunk(0, b"", PAYLOAD), id="success without context"),
+    pytest.param(reqresp.ResponseChunk(1, b"", b"bad request"), id="invalid request"),
+    pytest.param(reqresp.ResponseChunk(200, b"", b"x"), id="request specific"),
+]
+
+
+@pytest.mark.parametrize("chunk", RESPONSE_CHUNKS)
+def test_encode_response_chunk(chunk: reqresp.ResponseChunk):
+    encoded = reqresp.encode_response_chunk(chunk)
+    # The code and the context bytes are written as they are, before the payload.
+    head = bytes([chunk.code]) + chunk.context
+    assert encoded.startswith(head)
+    assert _decode_payload(encoded[len(head) :])[0] == chunk.payload
+    size = len(chunk.payload)
+    assert reqresp.decode_response_chunk(len(chunk.context), size, size, encoded) == chunk
+
+
+def test_encode_response_chunk_keeps_any_context():
+    # The encoder does not check the context bytes against the code.
+    chunk = reqresp.ResponseChunk(2, bytes.fromhex("6a95a1a9"), b"oops")
+    encoded = reqresp.encode_response_chunk(chunk)
+    assert encoded[:5] == bytes.fromhex("026a95a1a9")
+    assert _decode_payload(encoded[5:])[0] == b"oops"
+
+
+@pytest.mark.parametrize("code", [256, -1, 2**64], ids=["256", "negative", "2^64"])
+def test_encode_response_chunk_code_out_of_range(code: int):
+    with raises(OverflowError, "code must be in [0, 256)"):
+        reqresp.encode_response_chunk(reqresp.ResponseChunk(code, b"", b""))
+
+
+WRONG_TYPES = [
+    pytest.param(
+        reqresp.ResponseChunk(b"\x00", b"", b""),  # ty: ignore[invalid-argument-type]
+        "code must be int",
+        id="code",
+    ),
+    pytest.param(
+        reqresp.ResponseChunk(0, "", b""),  # ty: ignore[invalid-argument-type]
+        "context and payload must be bytes",
+        id="context",
+    ),
+    pytest.param(
+        reqresp.ResponseChunk(0, b"", ""),  # ty: ignore[invalid-argument-type]
+        "context and payload must be bytes",
+        id="payload",
+    ),
+]
+
+
+@pytest.mark.parametrize(("chunk", "message"), WRONG_TYPES)
+def test_encode_response_chunk_wrong_type(chunk: reqresp.ResponseChunk, message: str):
+    with raises(TypeError, message):
+        reqresp.encode_response_chunk(chunk)

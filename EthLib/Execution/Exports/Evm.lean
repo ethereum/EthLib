@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.Bytes
-public import EthLib.Base.Exports
+public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Execution.Evm.Call.ContractAddress
 public import EthLib.Execution.Evm.Gas.Memory
 public import EthLib.Execution.Evm.Op
@@ -15,30 +15,32 @@ public import EthLib.Execution.Evm.Instructions.Comparison
 
 C-ABI exports of the word of a stack instruction, the price of memory and created addresses.
 
-A word crosses the boundary as 32 big-endian bytes.
+The word of an instruction, the price of memory and the CREATE address take typed Python values.
 
-A size or a price crosses it as its shortest big-endian bytes, so no value is truncated.
+A word, a size or a price crosses as an `int`, so no value is truncated, and a word is below 2^256.
 
-An opcode outside the table of words fails with code 0.
+An argument that is not of its type fails with code 0.
+
+An opcode outside the table of words fails with code 0, and so do more than three operands.
 
 So does an immediate byte that encodes no depth of DUPN, SWAPN or EXCHANGE.
 
-An argument of the wrong length fails with a code from 101, above every code of an RLP error.
+The immediate depths take the opcode and the immediate byte as integers, and return bytes.
+
+The CREATE2 address takes bytes, and a salt is 32 big-endian bytes.
+
+A sender or a salt of the wrong length fails with a code above every code of an RLP error.
 -/
 
 @[expose] public section
 
 namespace EthLib.Execution.Evm.Exports
 
-open EthLib.Base (Address U256 bytesToNat natToBytes readBytes)
-open EthLib.Exports (Result)
+open EthLib.Base (Address U256 bytesToNat readBytes)
+open EthLib.Exports (Result PyValue pyExport)
 
 /-- Why an export rejects an argument: the argument has the wrong length. -/
 inductive ArgumentError where
-  /-- An operand of an instruction is not a word of 32 bytes. -/
-  | operandLength
-  /-- A list of memory ranges is not a whole number of pairs of words, of 64 bytes each. -/
-  | rangesLength
   /-- A sender is not an address of 20 bytes. -/
   | senderLength
   /-- A salt of CREATE2 is not a word of 32 bytes. -/
@@ -47,19 +49,17 @@ inductive ArgumentError where
 
 /-- The stable code of an error, one per constructor, for the C exports.
 
-The codes start at 101, above every code of an RLP error, so that the two never meet.
+The codes are above every code of an RLP error, so that the two never meet.
 
-A new constructor takes a new code, so that each code keeps its meaning. -/
+A new constructor takes a new code, so that each code keeps its meaning.
+
+Codes 101 and 102 stay unused, so that no code takes a second meaning. -/
 def ArgumentError.code : ArgumentError → UInt32
-  | .operandLength => 101
-  | .rangesLength => 102
   | .senderLength => 103
   | .saltLength => 104
 
 /-- The message of an error, as the bindings raise it. -/
 def ArgumentError.message : ArgumentError → String
-  | .operandLength => "each operand must be 32 bytes"
-  | .rangesLength => "the ranges must be a whole number of 64-byte pairs"
   | .senderLength => "the sender must be 20 bytes"
   | .saltLength => "the salt must be 32 bytes"
 
@@ -74,14 +74,6 @@ def wordOf (bytes : ByteArray) : U256 :=
 /-- The word of exactly 32 big-endian bytes, or the given error for any other length. -/
 def readWord (error : ArgumentError) (bytes : ByteArray) : Result U256 :=
   if bytes.size = 32 then .ok (wordOf bytes) else .error error.toResult
-
-/-- The 32 big-endian bytes of a word. -/
-def bytesOfWord (w : U256) : ByteArray :=
-  ⟨(U256.toBeBytes w).toArray⟩
-
-/-- The shortest big-endian bytes of a number, with one byte for 0. -/
-def bytesOfNat (n : Nat) : ByteArray :=
-  ⟨(natToBytes (n.log2 / 8 + 1) n).toArray⟩
 
 /-- The word that the instruction of an opcode pushes, for operands from the top of the stack.
 
@@ -118,22 +110,28 @@ def wordOp (op : Op) (a b c : U256) : Option U256 :=
   | .clz => some (countLeadingZeros a)
   | _ => none
 
-/-- The word that the instruction of an opcode pushes.
+/-- The word that the instruction of an opcode pushes, for at most three operands.
 
-Each opcode is read at a fork that has it.
-
-Each operand is a word of 32 bytes.
+Each opcode is read at a fork that has it, and a missing operand is 0.
 
 An opcode outside the table fails with code 0, since no Lean error type covers it. -/
-@[export eth_evm_word_op]
-def wordOpExport (opcode : UInt8) (a b c : ByteArray) : Result ByteArray := do
-  -- The lengths come first, so a bad operand fails even with an opcode outside the table.
-  let a ← readWord .operandLength a
-  let b ← readWord .operandLength b
-  let c ← readWord .operandLength c
-  match (Op.decode opcode).bind fun op => wordOp op a b c with
-  | some w => .ok (bytesOfWord w)
+def wordOpOf (args : UInt8 × List U256) : Result U256 := do
+  let (opcode, operands) := args
+  -- The count comes first, so too many operands fail even with an opcode outside the table.
+  if operands.length > 3 then throw (0, "an instruction takes at most 3 operands")
+  let operand (i : Nat) := operands.getD i 0
+  match (Op.decode opcode).bind fun op => wordOp op (operand 0) (operand 1) (operand 2) with
+  | some w => .ok w
   | none => .error (0, s!"opcode {opcode} does not push a word of its operands alone")
+
+/-- The word that the instruction of an opcode pushes, for at most three operands.
+
+The arguments are the opcode and the list of the operands, each an `int` below 2^256.
+
+A missing operand is 0, and an opcode outside the table fails with code 0. -/
+@[export eth_evm_word_op]
+def wordOpExport (args : PyValue) : Result PyValue :=
+  pyExport wordOpOf args
 
 /-- The depths, counted from 1 at the top, that the immediate byte of an opcode encodes.
 
@@ -154,48 +152,44 @@ def immediateDepthsExport (opcode immediate : UInt8) : Result ByteArray :=
 
 /-- The price of a memory of a given size in bytes. -/
 @[export eth_evm_memory_gas_cost]
-def memoryGasCostExport (size : ByteArray) : ByteArray :=
-  bytesOfNat (memoryGasCost (bytesToNat size.toList))
+def memoryGasCostExport (args : PyValue) : Result PyValue :=
+  pyExport (fun size => pure (memoryGasCost size)) args
 
-/-- The ranges of a memory access: each 64 bytes are a start word, then a size word. -/
-def rangesOf (ranges : ByteArray) : List (U256 × U256) :=
-  (List.range (ranges.size / 64)).map fun i =>
-    let start := ranges.extract (64 * i) (64 * i + 32)
-    let size := ranges.extract (64 * i + 32) (64 * i + 64)
-    (wordOf start, wordOf size)
+/-- The price of growing a memory for a list of ranges, and the bytes that it grows by.
 
-/-- The ranges of a memory access, or the error for a length that is not a multiple of 64. -/
-def readRanges (ranges : ByteArray) : Result (List (U256 × U256)) :=
-  if ranges.size % 64 = 0 then .ok (rangesOf ranges)
-  else .error ArgumentError.rangesLength.toResult
+The arguments are the size of the memory and the ranges, each a start word and a size word. -/
+def extendMemoryOf (args : Nat × List (U256 × U256)) : Result (Nat × Nat) := do
+  let (size, ranges) := args
+  let extension := extendMemory size ranges
+  return (extension.cost, extension.expandBy)
 
-/-- The price of growing a memory for a list of ranges.
+/-- The price of growing a memory for a list of ranges, and the bytes that it grows by.
 
-Each range is a start word, then a size word, so the ranges are a multiple of 64 bytes. -/
-@[export eth_evm_extend_memory_cost]
-def extendMemoryCostExport (size ranges : ByteArray) : Result ByteArray := do
-  return bytesOfNat (extendMemory (bytesToNat size.toList) (← readRanges ranges)).cost
-
-/-- The number of bytes that a memory grows by for a list of ranges.
-
-Each range is a start word, then a size word, so the ranges are a multiple of 64 bytes. -/
-@[export eth_evm_extend_memory_expand_by]
-def extendMemoryExpandByExport (size ranges : ByteArray) : Result ByteArray := do
-  return bytesOfNat (extendMemory (bytesToNat size.toList) (← readRanges ranges)).expandBy
+The arguments are the size of the memory and the ranges, each a start word and a size word. -/
+@[export eth_evm_extend_memory]
+def extendMemoryExport (args : PyValue) : Result PyValue :=
+  pyExport extendMemoryOf args
 
 /-- The address of exactly 20 bytes, or the error for any other length. -/
 def readAddress (bytes : ByteArray) : Result Address :=
   if h : bytes.size = 20 then .ok (readBytes bytes 0 20 (by omega))
   else .error ArgumentError.senderLength.toResult
 
-/-- The address of the contract that a sender makes with CREATE at a big-endian nonce.
+/-- The address of the contract that a sender makes with CREATE at a nonce.
 
 The sender is an address of 20 bytes. -/
-@[export eth_evm_create_address]
-def createAddressExport (sender nonce : ByteArray) : Result ByteArray := do
+def createAddressOf (args : ByteArray × Nat) : Result ByteArray := do
+  let (sender, nonce) := args
   let sender ← readAddress sender
-  (createAddress sender (bytesToNat nonce.toList)).map (fun a => ⟨a.toArray⟩)
+  (createAddress sender nonce).map (fun a => ⟨a.toArray⟩)
     |>.mapError fun e => (e.code, s!"create preimage rejected: {reprStr e}")
+
+/-- The address of the contract that a sender makes with CREATE at a nonce.
+
+The arguments are the sender, an address of 20 bytes, and the nonce, an `int`. -/
+@[export eth_evm_create_address]
+def createAddressExport (args : PyValue) : Result PyValue :=
+  pyExport createAddressOf args
 
 /-- The address of the contract that a sender makes with CREATE2, from a salt and init code.
 

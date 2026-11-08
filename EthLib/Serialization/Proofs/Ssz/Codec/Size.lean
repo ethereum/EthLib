@@ -3,6 +3,7 @@ module
 public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.Admits
 public import EthLib.Serialization.Proofs.Ssz.Codec.Table
+public import EthLib.Serialization.Ssz.Type.Bounds
 
 /-! Mathematical encoding sizes and the offset bounds needed for successful serialization. -/
 
@@ -12,8 +13,7 @@ namespace EthLib.Serialization.Ssz
 
 /-- A field contributes its bytes, plus a four-byte offset when its size can vary. -/
 def fieldSize (shape : Desc) (size : Nat) : Nat :=
-  -- Fixed fields live entirely in the header, while variable fields also need a four-byte body pointer.
-  size + if shape.isFixed then 0 else bytesPerOffset
+  size + offsetWidth shape
 
 /--
 A structural witness of encoded byte size, with every assembled sequence or container inside the offset range.
@@ -102,7 +102,8 @@ private theorem sequence_width (element : Desc) (parts : List Bytes) :
       (parts.map fun part => fieldSize element part.size).sum := by
   -- Each element adds its payload, plus an offset when its width varies.
   induction parts <;> cases fixed : element.isFixed <;> simp_all [headWidth_nil, headWidth_cons,
-      bodyWidth_nil, bodyWidth_cons_inline, bodyWidth_cons_variable, fieldSize] <;> omega
+      bodyWidth_nil, bodyWidth_cons_inline, bodyWidth_cons_variable, fieldSize, offsetWidth] <;>
+    omega
 
 /-- Measuring struct slots is the sum of each paired field's bytes and possible offset. -/
 private theorem fields_width (fields : List Desc) (parts : List Bytes) :
@@ -117,7 +118,7 @@ private theorem fields_width (fields : List Desc) (parts : List Bytes) :
     | cons part parts =>
       have tail := ih parts
       cases fixed : field.isFixed <;> simp [headWidth_cons, bodyWidth_cons_inline,
-          bodyWidth_cons_variable, fieldSize, fixed] at tail ⊢ <;> omega
+          bodyWidth_cons_variable, fieldSize, offsetWidth, fixed] at tail ⊢ <;> omega
 
 /-- Successful child encodings retain their mathematical size contributions when collected. -/
 private theorem collect_each (element : Desc) (sizes : Value → Nat) :

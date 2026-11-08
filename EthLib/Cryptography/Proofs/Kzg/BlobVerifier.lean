@@ -108,33 +108,6 @@ private theorem list_foldl_push {σ α β : Type} {step : σ → α → σ} (p :
     rw [List.foldl_cons, list_foldl_push p g hp L, hp, List.map_cons, List.toArray_cons]
     ext i h₁ h₂ <;> simp [Array.getElem_append]
 
-/-- If a fold over a list succeeds, every member satisfies any condition needed by one step. -/
-private theorem list_foldlM_forall {ε σ α : Type} {f : σ → α → Except ε σ} {P : α → Prop}
-    (hf : ∀ acc x r, f acc x = .ok r → P x) :
-    ∀ (L : List α) init out, L.foldlM f init = .ok out → ∀ x ∈ L, P x
-  | [], _, _, _, _, hx => absurd hx List.not_mem_nil
-  | x :: xs, init, out, h, q, hq => by
-    simp only [List.foldlM_cons, bind, Except.bind] at h
-    cases hx : f init x with
-    | error e => rw [hx] at h; cases h
-    | ok mid =>
-      rw [hx] at h
-      rcases List.mem_cons.mp hq with rfl | hmem
-      · exact hf init q mid hx
-      · exact list_foldlM_forall hf xs mid out h q hmem
-
-/-- A monadic fold whose every step succeeds with a pure step returns the pure fold. -/
-private theorem list_foldlM_eq_foldl {ε σ α : Type} {f : σ → α → Except ε σ} {step : σ → α → σ}
-    {L : List α} (hstep : ∀ acc x, x ∈ L → f acc x = .ok (step acc x)) :
-    ∀ init, L.foldlM f init = .ok (L.foldl step init) := by
-  induction L with
-  | nil => intro init; rfl
-  | cons x xs ih =>
-    intro init
-    rw [List.foldlM_cons, hstep init x List.mem_cons_self, List.foldl_cons]
-    simp only [bind, Except.bind]
-    exact ih (fun acc q hq => hstep acc q (List.mem_cons_of_mem x hq)) _
-
 /-- One step of the loop of the batch check of blobs, on inputs that decode. -/
 private theorem blobLoopStep_of_ok (acc : BlobBatchAcc) (blob : Blob) (cb pb : Bytes48) (i : Nat)
     {c p : G1} {poly : Polynomial} (hcb : validateKzgG1Point cb = .ok c)
@@ -265,7 +238,7 @@ private theorem blobLoop_eq_ok {blobs : Array Blob} {commitmentsBytes proofsByte
   let pureEntry : (Blob × Bytes48 × Bytes48) × Nat →
       Blob × Bytes48 × Bytes48 × G1 × G1 × Polynomial :=
     fun e => (e.1.1, e.1.2.1, e.1.2.2, csG1[e.2]!, psG1[e.2]!, ps[e.2]!)
-  rw [list_foldlM_eq_foldl (L := L)
+  rw [Base.foldlM_eq_ok_foldl (L := L)
     (step := fun acc e => blobPureStep acc (pureEntry e)) fun acc e he => by
       obtain ⟨k, hk, rfl⟩ := List.getElem_of_mem he
       rw [hgetL k hk]
@@ -355,7 +328,7 @@ theorem verifyBlobKzgProofBatch_eq_ok {s : TrustedSetup} {blobs : Array Blob}
     exact Array.mem_toList_iff.mpr (Array.getElem_mem hkz)
   have hfoldL := hfold
   rw [← Array.foldlM_toList] at hfoldL
-  have hall := list_foldlM_forall
+  have hall := Base.foldlM_forall_of_ok
     (fun s₀ (e : (Blob × Bytes48 × Bytes48) × Nat) r hr =>
       blobLoopStep_valid s₀ r e.1.1 e.1.2.1 e.1.2.2 e.2 hr) _ _ _ hfoldL
   obtain ⟨ps, hps⟩ := array_mapM_exists_ok (f := blobToPolynomial) (xs := blobs) fun bl hbl => by
@@ -650,16 +623,21 @@ theorem verifyBlobKzgProofBatch_computeBlobKzgProof (laws : Bls.PairingLaws) {s 
 
 /-! ## Non-vacuity witness -/
 
-/-- The all-zero blob, built as 4096 canonical encodings of zero. -/
-private def zeroBlob : Blob :=
-  (Vector.ofFn (n := FIELD_ELEMENTS_PER_BLOB) fun _ => blsFieldToBytes Fr.zero).flatten
+/-- The one-hot blob: the canonical encoding of one, then 4095 encodings of zero.
 
-/-- The all-zero blob decodes to 4096 zeros, without kernel evaluation of the array. -/
-private theorem blobToPolynomial_zeroBlob :
-    blobToPolynomial zeroBlob =
-      .ok (Array.ofFn fun _ : Fin FIELD_ELEMENTS_PER_BLOB => Fr.zero) := by
-  unfold blobToPolynomial zeroBlob
-  refine bytesToBlsFields_eq_ok (k := FIELD_ELEMENTS_PER_BLOB) (fun _ => Fr.zero) fun i => ?_
+Its polynomial is not zero. -/
+private def oneHotBlob : Blob :=
+  (Vector.ofFn (n := FIELD_ELEMENTS_PER_BLOB) fun i =>
+    blsFieldToBytes (if i.val = 0 then Fr.one else Fr.zero)).flatten
+
+/-- The one-hot blob decodes to one, then 4095 zeros, without kernel evaluation of the array. -/
+private theorem blobToPolynomial_oneHotBlob :
+    blobToPolynomial oneHotBlob =
+      .ok (Array.ofFn fun i : Fin FIELD_ELEMENTS_PER_BLOB =>
+        if i.val = 0 then Fr.one else Fr.zero) := by
+  unfold blobToPolynomial oneHotBlob
+  refine bytesToBlsFields_eq_ok (k := FIELD_ELEMENTS_PER_BLOB)
+    (fun i => if i.val = 0 then Fr.one else Fr.zero) fun i => ?_
   rw [fieldElementBytes_flatten]
   simp only [Fin.getElem_fin, Vector.getElem_ofFn, bytesToBlsField_blsFieldToBytes]
 
@@ -675,20 +653,34 @@ theorem exists_honest_blob_batch (laws : Bls.PairingLaws) (τ : Fr) :
         computeBlobKzgProof s y.blobs[i]! y.commitments[i]! = .ok y.proofs[i]!) ∧
       verifyBlobKzgProofBatch s y.blobs y.commitments y.proofs = .ok true := by
   obtain ⟨C, P, hC, hP⟩ :=
-    exists_blobToKzgCommitment_computeBlobKzgProof (wellFormed_ofPowers τ) blobToPolynomial_zeroBlob
-  have hhonest : ∀ i < (#[zeroBlob]).size,
-      blobToKzgCommitment (TrustedSetup.ofPowers (setupPowers τ)) (#[zeroBlob])[i]! =
+    exists_blobToKzgCommitment_computeBlobKzgProof (wellFormed_ofPowers τ)
+      blobToPolynomial_oneHotBlob
+  have hhonest : ∀ i < (#[oneHotBlob]).size,
+      blobToKzgCommitment (TrustedSetup.ofPowers (setupPowers τ)) (#[oneHotBlob])[i]! =
         .ok (#[C])[i]! ∧
-      computeBlobKzgProof (TrustedSetup.ofPowers (setupPowers τ)) (#[zeroBlob])[i]! (#[C])[i]! =
+      computeBlobKzgProof (TrustedSetup.ofPowers (setupPowers τ)) (#[oneHotBlob])[i]! (#[C])[i]! =
         .ok (#[P])[i]! := by
     intro i hi
     obtain rfl : i = 0 := Nat.lt_one_iff.mp hi
-    rw [getElem!_pos #[zeroBlob] 0 (Nat.zero_lt_one), getElem!_pos #[C] 0 (Nat.zero_lt_one),
+    rw [getElem!_pos #[oneHotBlob] 0 (Nat.zero_lt_one), getElem!_pos #[C] 0 (Nat.zero_lt_one),
       getElem!_pos #[P] 0 (Nat.zero_lt_one)]
     exact ⟨hC, hP⟩
-  exact ⟨TrustedSetup.ofPowers (setupPowers τ), ⟨#[zeroBlob], #[C], #[P]⟩,
+  exact ⟨TrustedSetup.ofPowers (setupPowers τ), ⟨#[oneHotBlob], #[C], #[P]⟩,
     wellFormed_ofPowers τ, Nat.zero_lt_one, hhonest,
     verifyBlobKzgProofBatch_computeBlobKzgProof laws (wellFormed_ofPowers τ) rfl rfl hhonest⟩
+
+/-- The all-zero blob, built as 4096 canonical encodings of zero. -/
+private def zeroBlob : Blob :=
+  (Vector.ofFn (n := FIELD_ELEMENTS_PER_BLOB) fun _ => blsFieldToBytes Fr.zero).flatten
+
+/-- The all-zero blob decodes to 4096 zeros, without kernel evaluation of the array. -/
+private theorem blobToPolynomial_zeroBlob :
+    blobToPolynomial zeroBlob =
+      .ok (Array.ofFn fun _ : Fin FIELD_ELEMENTS_PER_BLOB => Fr.zero) := by
+  unfold blobToPolynomial zeroBlob
+  refine bytesToBlsFields_eq_ok (k := FIELD_ELEMENTS_PER_BLOB) (fun _ => Fr.zero) fun i => ?_
+  rw [fieldElementBytes_flatten]
+  simp only [Fin.getElem_fin, Vector.getElem_ofFn, bytesToBlsField_blsFieldToBytes]
 
 /-- Both entries of an array of two equal elements are that element. -/
 private theorem getElem!_pair {α : Type} [Inhabited α] (a : α) {i : Nat} (hi : i < 2) :

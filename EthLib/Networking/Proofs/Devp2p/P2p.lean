@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.List
 public import EthLib.Networking.Devp2p.P2p
 public import EthLib.Networking.Proofs.Rlpx.Handshake
 public import EthLib.Networking.Proofs.Snappy.Compress
@@ -9,9 +10,19 @@ public import EthLib.Networking.Proofs.Snappy.Compress
 
 Each message reads back from its frame data, compressed or not.
 
+A reader of Hello ignores the list items after the five fields it knows, as EIP-8 asks.
+
+With Snappy, a reader rejects a message other than Hello whose preamble declares more than 16 MiB.
+
+A message other than Hello that such a reader accepts decompresses to at most 16 MiB.
+
 Two peers use Snappy exactly when both announce version 5 or more.
 
 The message IDs of the shared capabilities do not overlap, and none is below `0x10`.
+
+Of the versions of one name that both peers list, only the highest is negotiated.
+
+Both peers negotiate the same capabilities and message IDs, whichever of them asks.
 
 Two errors with one code come from one constructor.
 -/
@@ -54,6 +65,12 @@ theorem Hello.ofItem_toItem (h : Hello) : Codec.ofItem (Codec.toItem h) = .ok h 
     List.length_nil, List.take, Nat.zero_add, Nat.reduceAdd, Nat.le_refl, ↓reduceIte, hcaps, hcid,
     LawfulCodec.ofItem_toItem, pure, Except.pure]
 
+/-- Hello reads the same from five or more items, whatever items follow them, as EIP-8 asks. -/
+theorem Hello.ofItem_append {fields : List Item} (extra : List Item) (h : 5 ≤ fields.length) :
+    (Codec.ofItem (.list (fields ++ extra)) : Except RlpError Hello) =
+      Codec.ofItem (.list fields) := by
+  simp only [Codec.ofItem, Rlpx.leadingFields_append extra h]
+
 /-- Each message reads back from its ID and its RLP list. -/
 theorem Message.ofItem_toItem (m : Message) : Message.ofItem m.id m.toItem = .ok m := by
   cases m with
@@ -64,6 +81,22 @@ theorem Message.ofItem_toItem (m : Message) : Message.ofItem m.id m.toItem = .ok
       toScalar_scalar, Except.mapError, Functor.map, Except.map]
   | ping => rfl
   | pong => rfl
+
+/-- The frame data starts with the message ID, and the reader stops right after it. -/
+private theorem decodeItem_id_append {id : Nat} {idE : ByteArray}
+    (hid : encode (Item.scalar id) = .ok idE) (rest : ByteArray) :
+    ((decodeItem (idE ++ rest) 0 (idE ++ rest).size).map fun r => (r.1, r.2.1)) =
+      .ok (Item.scalar id, idE.size) := by
+  obtain ⟨_, hd⟩ := decodeItem_encode _ _ hid (input := idE ++ rest) (pos := 0)
+    (rest := rest.data.toList) (Nat.le_refl _)
+    (by rw [ByteArray.extract_zero_size, ByteArray.toList_data_append])
+  rw [hd]
+  simp [Except.map]
+
+/-- The bytes after the message ID are the rest of the frame data. -/
+private theorem extract_id_append (idE rest : ByteArray) :
+    (idE ++ rest).extract idE.size (idE ++ rest).size = rest :=
+  ByteArray.extract_append_eq_right rfl ByteArray.size_append
 
 /--
 Each message reads back from its frame data, compressed or not.
@@ -85,41 +118,68 @@ theorem decodeMessage_encodeMessage {snappy : Bool} {m : Message} {data frame : 
   · -- A compressed body: the reader checks the declared size, then decompresses.
     have hmax : data.size ≤ Snappy.maxUncompressedLength := by
       simp only [MAX_MESSAGE_SIZE, Snappy.maxUncompressedLength] at hsize ⊢; omega
-    obtain ⟨hRest, hd⟩ := decodeItem_encode _ _ hid (Snappy.compress data).data.toList
-    obtain ⟨rest, hpre⟩ := Proofs.Snappy.Compress.readPreamble_compress hmax
-    have hd' : ((decodeItem (idE ++ Snappy.compress data).data.toList).map
-        fun r => (r.1, r.2.1)) =
-          .ok (Item.scalar m.id, (Snappy.compress data).data.toList) := by
-      generalize hL : (idE ++ Snappy.compress data).data.toList = L
-      obtain rfl : L = idE.data.toList ++ (Snappy.compress data).data.toList := by
-        rw [← hL, ByteArray.data_append, Array.toList_append]
-      rw [hd]
-      rfl
+    have hpre := Proofs.Snappy.Compress.readPreamble_compress hmax
+    have hd' := decodeItem_id_append hid (Snappy.compress data)
     have hframe : (if (snappy && m.id != 0x00) = true then Snappy.compress data else data) =
         Snappy.compress data := by simp [hc]
     rw [hframe]
     unfold decodeMessage
-    simp only [hd', Except.mapError, bind, Except.bind, toScalar_scalar, hc, ↓reduceIte]
+    simp only [hd', extract_id_append, Except.mapError, bind, Except.bind, toScalar_scalar, hc,
+      ↓reduceIte]
     have hlen : ¬ MAX_MESSAGE_SIZE < data.size := Nat.not_lt.mpr hsize
     rw [hpre]
-    simp only [hlen, ↓reduceIte, Array.toArray_toList]
+    simp only [hlen, ↓reduceIte]
     rw [Proofs.Snappy.Compress.decompress_compress hmax]
     simp only [hdec, Message.ofItem_toItem]
   · -- An uncompressed body is the RLP list itself.
-    obtain ⟨hRest, hd⟩ := decodeItem_encode _ _ hid data.data.toList
-    have hd' : ((decodeItem (idE ++ data).data.toList).map fun r => (r.1, r.2.1)) =
-        .ok (Item.scalar m.id, data.data.toList) := by
-      generalize hL : (idE ++ data).data.toList = L
-      obtain rfl : L = idE.data.toList ++ data.data.toList := by
-        rw [← hL, ByteArray.data_append, Array.toList_append]
-      rw [hd]
-      rfl
+    have hd' := decodeItem_id_append hid data
     have hframe : (if (snappy && m.id != 0x00) = true then Snappy.compress data else data) =
         data := by simp [hc]
     rw [hframe]
     unfold decodeMessage
-    simp only [hd', Except.mapError, bind, Except.bind, toScalar_scalar, hc, Bool.false_eq_true,
-      ↓reduceIte, pure, Except.pure, Array.toArray_toList, hdec, Message.ofItem_toItem]
+    simp only [hd', extract_id_append, Except.mapError, bind, Except.bind, toScalar_scalar, hc,
+      Bool.false_eq_true, ↓reduceIte, pure, Except.pure, hdec, Message.ofItem_toItem]
+
+/--
+With Snappy, a message other than Hello whose preamble declares more than 16 MiB is rejected.
+
+The rejection does not depend on the bytes after the preamble.
+-/
+theorem decodeMessage_tooLarge {id size : Nat} {idE rest : ByteArray} {tail : List UInt8}
+    (hid : encode (Item.scalar id) = .ok idE) (hne : id ≠ 0x00)
+    (hpre : Snappy.readPreamble rest.data.toList = .ok (size, tail))
+    (hsize : MAX_MESSAGE_SIZE < size) :
+    decodeMessage true (idE ++ rest) = .error (.tooLarge size) := by
+  have hc : (true && id != 0x00) = true := by simpa using hne
+  unfold decodeMessage
+  simp only [decodeItem_id_append hid, extract_id_append, Except.mapError, bind, Except.bind,
+    toScalar_scalar, hc, ↓reduceIte, hpre, hsize]
+  rfl
+
+/--
+With Snappy, a message other than Hello that a reader accepts decompresses to at most 16 MiB.
+-/
+theorem size_le_of_decodeMessage {id : Nat} {idE rest : ByteArray} {m : Message}
+    (hid : encode (Item.scalar id) = .ok idE) (hne : id ≠ 0x00)
+    (h : decodeMessage true (idE ++ rest) = .ok m) :
+    ∃ data, Snappy.decompress rest = .ok data ∧ data.size ≤ MAX_MESSAGE_SIZE := by
+  have hc : (true && id != 0x00) = true := by simpa using hne
+  unfold decodeMessage at h
+  simp only [decodeItem_id_append hid, extract_id_append, Except.mapError, bind, Except.bind,
+    toScalar_scalar, hc, ↓reduceIte] at h
+  cases hpre : Snappy.readPreamble rest.data.toList with
+  | error e => simp [hpre] at h
+  | ok p =>
+  by_cases hsize : MAX_MESSAGE_SIZE < p.1
+  · simp [hpre, hsize] at h
+  cases hd : Snappy.decompress rest with
+  | error e => simp [hpre, hsize, hd] at h
+  | ok data =>
+  -- The preamble that the reader checked is the length that the block decompresses to.
+  obtain ⟨_, hdecl⟩ := Proofs.Snappy.Block.decompress_size_eq_declared hd
+  rw [Proofs.Snappy.Block.toList_eq_data_toList, hpre] at hdecl
+  have hp : p.1 = data.size := congrArg Prod.fst (Except.ok.inj hdecl)
+  exact ⟨data, rfl, hp ▸ Nat.not_lt.mp hsize⟩
 
 /-! ## Snappy -/
 
@@ -173,11 +233,67 @@ theorem pairwise_negotiate (length : Capability → Nat) (ours theirs : List Cap
     (negotiate length ours theirs).Pairwise fun p q => p.2 + length p.1 ≤ q.2 :=
   pairwise_messageOffsets length _ _
 
+/--
+A capability is negotiated exactly when both peers list it and share no higher version of its name.
+-/
+theorem mem_sharedCapabilities_iff {ours theirs : List Capability} {c : Capability} :
+    c ∈ sharedCapabilities ours theirs ↔
+      c ∈ ours ∧ c ∈ theirs ∧
+        ∀ d ∈ ours, d ∈ theirs → d.name = c.name → d.version ≤ c.version := by
+  simp only [sharedCapabilities, List.mem_mergeSort, List.mem_filter, List.mem_eraseDups,
+    List.all_eq_true, decide_eq_true_eq, Bool.or_eq_true]
+  exact ⟨fun ⟨⟨ho, ht⟩, h⟩ => ⟨ho, ht, fun d hd hd' hn => (h d ⟨hd, hd'⟩).resolve_left (· hn)⟩,
+    fun ⟨ho, ht, h⟩ => ⟨⟨ho, ht⟩, fun d ⟨hd, hd'⟩ =>
+      (em (d.name = c.name)).elim (fun hn => .inr (h d hd hd' hn)) .inl⟩⟩
+
 /-- Every negotiated capability is in both lists, with the same name and version. -/
 theorem mem_sharedCapabilities {ours theirs : List Capability} {c : Capability}
-    (h : c ∈ sharedCapabilities ours theirs) : c ∈ ours ∧ c ∈ theirs := by
-  simp only [sharedCapabilities, List.mem_mergeSort, List.mem_filter, List.mem_eraseDups] at h
-  simpa using h.1
+    (h : c ∈ sharedCapabilities ours theirs) : c ∈ ours ∧ c ∈ theirs :=
+  ⟨(mem_sharedCapabilities_iff.mp h).1, (mem_sharedCapabilities_iff.mp h).2.1⟩
+
+/-- The names of the negotiated capabilities strictly increase, byte by byte. -/
+theorem pairwise_sharedCapabilities (ours theirs : List Capability) :
+    (sharedCapabilities ours theirs).Pairwise
+      fun a b => a.name.data.toList < b.name.data.toList := by
+  have sorted : (sharedCapabilities ours theirs).Pairwise (Capability.nameLe · ·) :=
+    List.pairwise_mergeSort
+      (fun a b c hab hbc => by
+        simp only [Capability.nameLe, decide_eq_true_eq] at *
+        exact List.le_trans hab hbc)
+      (fun a b => by
+        simpa [Capability.nameLe] using List.le_total a.name.data.toList b.name.data.toList) _
+  have nodup : (sharedCapabilities ours theirs).Nodup :=
+    ((Base.nodup_eraseDups _).filter _).perm (List.mergeSort_perm _ _).symm
+  refine (sorted.and nodup).imp_of_mem fun {a b} ha hb ⟨hle, hne⟩ => ?_
+  simp only [Capability.nameLe, decide_eq_true_eq] at hle
+  refine (List.le_iff_lt_or_eq.mp hle).resolve_right fun heq => hne ?_
+  -- Two negotiated capabilities of one name both have the highest version, so they are one.
+  have hname : a.name = b.name := ByteArray.ext (Array.ext' heq)
+  have ha := mem_sharedCapabilities_iff.mp ha
+  have hb := mem_sharedCapabilities_iff.mp hb
+  have hversion := Nat.le_antisymm (hb.2.2 a ha.1 ha.2.1 hname) (ha.2.2 b hb.1 hb.2.1 hname.symm)
+  cases a
+  cases b
+  simp only at hname hversion
+  rw [hname, hversion]
+
+/-- Both peers negotiate the same capabilities in the same order, whichever of them asks. -/
+theorem sharedCapabilities_comm (ours theirs : List Capability) :
+    sharedCapabilities ours theirs = sharedCapabilities theirs ours := by
+  have lt := pairwise_sharedCapabilities ours theirs
+  have lt' := pairwise_sharedCapabilities theirs ours
+  have ne : ∀ {a b : Capability}, a.name.data.toList < b.name.data.toList → a ≠ b :=
+    fun hab e => List.lt_irrefl _ (e ▸ hab)
+  refine List.Perm.eq_of_pairwise (fun _ _ _ _ hab hba => absurd hba (List.lt_asymm hab)) lt lt' ?_
+  refine (List.perm_ext_iff_of_nodup (lt.imp ne) (lt'.imp ne)).mpr fun c => ?_
+  simp only [mem_sharedCapabilities_iff]
+  exact ⟨fun ⟨h₁, h₂, h₃⟩ => ⟨h₂, h₁, fun d hd hd' => h₃ d hd' hd⟩,
+    fun ⟨h₁, h₂, h₃⟩ => ⟨h₂, h₁, fun d hd hd' => h₃ d hd' hd⟩⟩
+
+/-- Both peers give each shared capability the same message IDs, whichever of them asks. -/
+theorem negotiate_comm (length : Capability → Nat) (ours theirs : List Capability) :
+    negotiate length ours theirs = negotiate length theirs ours := by
+  rw [negotiate, negotiate, sharedCapabilities_comm]
 
 /-! ## Error codes -/
 

@@ -177,6 +177,32 @@ def mulModulus (p : G1 F) : G1 F :=
   let a := mulNat (mulNat p blsX) blsX
   add (mulNat (mulNat (add a (neg p)) blsX) blsX) p
 
+/-- A cube root of unity in the base field, other than `1`.
+
+Of the two such roots, it is the one for which the map below acts as `[-t^2]` on `G1`. -/
+def beta : F :=
+  BaseField.ofNat
+    0x5f19672fdf76ce51ba69c6076a0f77eaddb3a93be6f89688de17d813620a00022e01fffffffefffe
+
+/-- The endomorphism `(x, y) ↦ (β x, y)` of the curve.
+
+It keeps a point on `y^2 = x^3 + 4`, since `β^3 = 1`.
+
+In Jacobian coordinates it scales `X` alone, since `x = X / Z^2`. -/
+@[inline] def sigma (p : G1 F) : G1 F := ⟨beta * p.x, p.y, p.z⟩
+
+/-- Whether two Jacobian triples denote the same point.
+
+Two finite triples agree when `X1 Z2^2 = X2 Z1^2` and `Y1 Z2^3 = Y2 Z1^3`.
+
+Two triples at infinity agree, and a finite triple never agrees with one at infinity. -/
+def projectiveEq (p q : G1 F) : Bool :=
+  if BaseField.isZero p.z then BaseField.isZero q.z
+  else if BaseField.isZero q.z then false
+  else
+    BaseField.beq (p.x * (q.z * q.z)) (q.x * (p.z * p.z)) &&
+    BaseField.beq (p.y * ((q.z * q.z) * q.z)) (q.y * ((p.z * p.z) * p.z))
+
 /-! ## Multi-scalar multiplication
 
 Pippenger's algorithm splits each scalar into 8-bit windows.
@@ -190,29 +216,32 @@ Each window's sum needs only the points and the scalars, so each one runs as its
 /-- Window `k` of the value of a scalar: its bits `[8k, 8k + 8)`. -/
 def windowVal (s : Nat) (k : Nat) : Nat := (s >>> (k * 8)) &&& (1 <<< 8 - 1)
 
-/-- The largest bit length among the values of the first `n` scalars.
+/-- A window of a scalar is a digit below `2^8`. -/
+theorem windowVal_lt (s k : Nat) : windowVal s k < 256 :=
+  Nat.lt_of_le_of_lt Nat.and_le_right (by decide)
+
+/-- The first `nW` windows of the value of a scalar, as digits below `2^8`. -/
+def msmDigits (nW s : Nat) : Vector (Fin 256) nW :=
+  Vector.ofFn fun k => ⟨windowVal s k.val, windowVal_lt s k.val⟩
+
+/-- The largest bit length among the values of the scalars.
 
 Windows above it are all zero, so they are skipped. -/
-def msmMaxBits (vals : Array Nat) (n : Nat) : Nat :=
-  (List.range' 0 n).foldl (fun m j =>
-    if vals[j]! ≠ 0 then
-      if vals[j]!.log2 + 1 > m then vals[j]!.log2 + 1 else m
+def msmMaxBits {n : Nat} (vals : Vector Nat n) : Nat :=
+  (List.finRange n).foldl (fun m j =>
+    if vals[j.val] ≠ 0 then
+      if vals[j.val].log2 + 1 > m then vals[j.val].log2 + 1 else m
     else m) 0
-
-section Buckets
-
--- The buckets are arrays, and reading one needs a default point.
-variable [Inhabited F]
 
 /-- The buckets of window `k`: bucket `v` sums the points whose digit `k` is `v`.
 
 Bucket 0 stays empty, since those points contribute nothing. -/
-def msmBuckets (points : Array (G1 F)) (vals : Array Nat) (n k : Nat) : Array (G1 F) :=
-  (List.range' 0 n).foldl (fun bs j =>
-    if windowVal vals[j]! k ≠ 0 then
-      bs.set! (windowVal vals[j]! k)
-        (add bs[windowVal vals[j]! k]! points[j]!)
-    else bs) (Array.replicate (1 <<< 8) zero)
+def msmBuckets {n nW : Nat} (points : Vector (G1 F) n) (digits : Vector (Vector (Fin 256) nW) n)
+    (k : Fin nW) : Vector (G1 F) 256 :=
+  (List.finRange n).foldl (fun bs j =>
+    let d : Fin 256 := digits[j.val][k.val]
+    if d.val ≠ 0 then bs.set d.val (add bs[d.val] points[j.val]) else bs)
+    (Vector.replicate 256 zero)
 
 /-- `sum_v v * B_v`, by the running-sum trick, walking `v` from 255 down to 1.
 
@@ -221,10 +250,10 @@ The state is `(partialSum, running)`.
 The running sum holds `sum_{u >= v} B_u`.
 
 Adding it at each step counts bucket `u` exactly `u` times. -/
-def msmRunning (bs : Array (G1 F)) : MProd (G1 F) (G1 F) :=
-  (List.range' 0 (1 <<< 8 - 1)).foldl (fun rp vv =>
-    ⟨add rp.1 (add rp.2 bs[1 <<< 8 - 1 - vv]!),
-     add rp.2 bs[1 <<< 8 - 1 - vv]!⟩) ⟨zero, zero⟩
+def msmRunning (bs : Vector (G1 F) 256) : MProd (G1 F) (G1 F) :=
+  (List.finRange 255).foldl (fun rp vv =>
+    let b := bs[255 - vv.val]
+    ⟨add rp.1 (add rp.2 b), add rp.2 b⟩) ⟨zero, zero⟩
 
 /-- One step of the window fold: shift `acc` up by 8 bits, then add the window sum `S`.
 
@@ -237,29 +266,34 @@ def msmCombine (nW : Nat) (acc : G1 F) (kk : Nat) (S : G1 F) : G1 F :=
 
 /-- Multi-scalar multiplication `sum_j [scalars[j]] points[j]`, by Pippenger's algorithm.
 
+It reads the first `n` points and scalars, for `n` the smaller of the two sizes.
+
 The window sums are independent, so each runs as its own task.
 
 The fold then combines them in order, from the top window down. -/
 def msm (points : Array (G1 F)) (scalars : Array Fr) : G1 F :=
-  let n := if points.size ≤ scalars.size then points.size else scalars.size
+  let n := min points.size scalars.size
+  let pts : Vector (G1 F) n :=
+    Vector.ofFn fun j => points[j.val]'(Nat.lt_of_lt_of_le j.isLt (Nat.min_le_left _ _))
   -- Leaving Montgomery form costs a product, so each scalar is converted once, before the windows.
-  let vals := scalars.map Fr.val
+  let vals : Vector Nat n :=
+    Vector.ofFn fun j => (scalars[j.val]'(Nat.lt_of_lt_of_le j.isLt (Nat.min_le_right _ _))).val
   if n = 0 then zero
-  else if msmMaxBits vals n = 0 then zero
+  else if msmMaxBits vals = 0 then zero
   else
-    let nW := (msmMaxBits vals n + 8 - 1) / 8
-    let windows := List.range' 0 nW
+    let nW := (msmMaxBits vals + 8 - 1) / 8
+    -- Each scalar is split into its windows once, for all the windows.
+    let digits := vals.map (msmDigits nW)
+    let windows := List.finRange nW
     -- The windows are spawned from a task of their own.
     -- Lean's pool starts a new worker only when no worker is idle.
     -- From outside the pool, a burst of windows can all land on one idle worker.
     -- From a busy worker, each window finds no idle worker, and the pool grows.
     (Task.spawn fun _ =>
-      -- Spawn every window first, then wait for them in fold order.
+      -- Spawn every window first, then wait for them in fold order, from window `nW - 1` down.
       let sums := windows.map fun kk => Task.spawn fun _ =>
-        (msmRunning (msmBuckets points vals n (nW - 1 - kk))).1
-      (windows.zip sums).foldl (fun acc w => msmCombine nW acc w.1 w.2.get) zero).get
-
-end Buckets
+        (msmRunning (msmBuckets pts digits kk.rev)).1
+      (windows.zip sums).foldl (fun acc w => msmCombine nW acc w.1.val w.2.get) zero).get
 
 end G1
 

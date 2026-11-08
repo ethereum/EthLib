@@ -50,10 +50,11 @@ theorem serialize_forkList_ofSszList (before : fork < switch) (l : SszList α li
         SszType.serialize l ∧
       SszType.hashTreeRoot (ForkList.ofSszList (switch := switch) (fork := fork) l) =
         SszType.hashTreeRoot l := by
-  constructor <;>
-    simp only [SszType.serialize, SszType.hashTreeRoot, SszType.root, desc_forkList before,
-      toValue_forkList_ofSszList]
-  all_goals simp [not_switch_of_lt before, ForkList.ofSszList]
+  constructor
+  · simp only [SszType.serialize, SszType.encode]
+    simp [not_switch_of_lt before, ForkList.ofSszList]
+  · simp only [SszType.hashTreeRoot, SszType.root]
+    simp [not_switch_of_lt before, ForkList.ofSszList]
 
 /-- A list with the same elements has the same bytes after the switch as before it.
 
@@ -62,7 +63,7 @@ theorem serialize_forkList_across {earlier later : Fork} (after : switch ≤ lat
     (before : earlier < switch) {a : ForkList switch later α limit}
     {b : ForkList switch earlier α limit} (same : a.data = b.data) :
     SszType.serialize a = SszType.serialize b := by
-  simp only [SszType.serialize, desc, toValue, after, not_switch_of_lt before, ite_true,
+  simp only [SszType.serialize, SszType.encode, after, not_switch_of_lt before, ite_true,
     ite_false, same]
   simp [Serialization.Ssz.serialize, boundCheck, b.bound before]
   rfl
@@ -71,9 +72,8 @@ theorem serialize_forkList_across {earlier later : Fork} (after : switch ≤ lat
 theorem deserialize_forkList_empty :
     SszType.deserialize (ForkList switch fork α limit) ByteArray.empty =
       .ok ⟨#[], fun _ => Nat.zero_le _⟩ := by
-  unfold SszType.deserialize
+  unfold SszType.deserialize SszType.decode
   show (do SszType.ofValue (← Ssz.deserialize _ #[])) = _
-  simp only [SszType.desc]
   split <;>
   · rw [Ssz.deserialize]
     simp [listSlices_empty, deserializeEach_nil, bind, Except.bind, pure, Except.pure,
@@ -108,6 +108,29 @@ instance : LawfulSszType (ForkList switch fork α limit) where
         subst made
         simp [toValue, ← map_toValue_of_ofElements read]
       · cases made
+  ofValue_ne_error {value fault} fits made := by
+    simp only [desc] at fits
+    split at fits
+    · rename_i after
+      cases fits with
+      | progressiveList within each =>
+        obtain ⟨items, read, size⟩ := ofElements_ok each
+        have ok : fork < switch → items.size ≤ limit := fun h => absurd h (Nat.not_lt.mpr after)
+        simp only [ofValue, read, bind, Except.bind, dite_eq_left_of_eq_true (eq_true ok)] at made
+        cases made
+    · cases fits with
+      | list within each =>
+        obtain ⟨items, read, size⟩ := ofElements_ok each
+        simp [ofValue, read, bind, Except.bind, pure, Except.pure, size, within] at made
+  encode_eq l := by
+    by_cases fixed : (desc α).isFixed
+    · simp only [encode, fixed, ite_true, encodeFixedElements_eq fixed, desc, toValue]
+      split
+      · simp [Ssz.serialize, boundCheck, bind, Except.bind, pure, Except.pure]
+      · rename_i before
+        simp [Ssz.serialize, l.bound (lt_of_not_switch before)]
+    · simp only [encode, fixed, Bool.false_eq_true, ite_false]
+      rfl
 
 /-- The empty list has empty SSZ bytes. -/
 theorem serialize_forkList_empty :
@@ -144,10 +167,11 @@ theorem serialize_forkList_uint8 (before : fork < switch) (l : SszList UInt8 lim
         SszType.serialize l ∧
       SszType.hashTreeRoot (ForkList.ofSszList (switch := switch) (fork := fork) l) =
         SszType.hashTreeRoot l := by
-  constructor <;>
-    simp only [SszType.serialize, SszType.hashTreeRoot, SszType.root, desc_forkList_uint8 before,
-      toValue_forkList_uint8 before]
-  all_goals simp [not_switch_of_lt before, ForkList.ofSszList]
+  constructor
+  · simp only [SszType.serialize, SszType.encode]
+    simp [not_switch_of_lt before, ForkList.ofSszList]
+  · simp only [SszType.hashTreeRoot, SszType.root]
+    simp [not_switch_of_lt before, ForkList.ofSszList]
 
 instance : LawfulSszType (ForkList switch fork UInt8 limit) where
   wellFormed := by
@@ -193,6 +217,20 @@ instance : LawfulSszType (ForkList switch fork UInt8 limit) where
         subst made
         simp [toValue, from_]
       · cases made
+  ofValue_ne_error {value fault} fits made := by
+    simp only [desc] at fits
+    split at fits
+    · rename_i after
+      cases fits with
+      | progressiveList within each =>
+        obtain ⟨items, read, size⟩ := ofElements_ok (α := UInt8) each
+        have ok : fork < switch → items.size ≤ limit := fun h => absurd h (Nat.not_lt.mpr after)
+        simp only [ofValue, after, ↓reduceIte, read, bind, Except.bind,
+          dite_eq_left_of_eq_true (eq_true ok)] at made
+        cases made
+    · rename_i before
+      cases fits with
+      | byteList within => simp [ofValue, before, within] at made
 
 end Bytes
 
@@ -215,10 +253,11 @@ theorem serialize_forkBitlist_ofBitlist (before : fork < switch) (b : Bitlist li
         SszType.serialize b ∧
       SszType.hashTreeRoot (ForkBitlist.ofBitlist (switch := switch) (fork := fork) b) =
         SszType.hashTreeRoot b := by
-  constructor <;>
-    simp only [SszType.serialize, SszType.hashTreeRoot, SszType.root, desc_forkBitlist before,
-      toValue_forkBitlist_ofBitlist]
-  all_goals simp [not_switch_of_lt before, ForkBitlist.ofBitlist]
+  constructor
+  · simp only [SszType.serialize, SszType.encode]
+    simp [not_switch_of_lt before, ForkBitlist.ofBitlist]
+  · simp only [SszType.hashTreeRoot, SszType.root]
+    simp [not_switch_of_lt before, ForkBitlist.ofBitlist]
 
 instance : LawfulSszType (ForkBitlist switch fork limit) where
   wellFormed := by
@@ -240,6 +279,18 @@ instance : LawfulSszType (ForkBitlist switch fork limit) where
       subst made
       rfl
     · cases made
+  ofValue_ne_error {value fault} fits made := by
+    simp only [desc] at fits
+    split at fits
+    · rename_i after
+      cases fits with
+      | progressiveBitList within =>
+        rename_i data
+        have ok : fork < switch → data.size ≤ limit := fun h => absurd h (Nat.not_lt.mpr after)
+        simp only [ofValue, dite_eq_left_of_eq_true (eq_true ok)] at made
+        cases made
+    · cases fits with
+      | bitList within => simp [ofValue, within] at made
 
 end Bitlist
 

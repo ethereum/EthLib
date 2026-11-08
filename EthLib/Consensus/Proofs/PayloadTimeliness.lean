@@ -167,7 +167,7 @@ theorem slotCommitteeMembers_eq (state : BeaconState preset fork) (slot : Slot) 
       rw [count, List.range_succ_eq_map, List.foldlM_cons]
       simp [getBeaconCommittee, seedOk, shuffleOk, bind, Except.bind, Except.mapError]
     | ok shuffled =>
-      simp only [List.size_toArray, shuffleOk, Except.mapError, bind, Except.bind, pure,
+      simp only [seedOk, List.size_toArray, shuffleOk, Except.mapError, bind, Except.bind, pure,
         Except.pure]
       congr 1
       funext members index
@@ -262,39 +262,27 @@ The new committees share the two seeds and the shuffle of their epoch, with the 
 The two sides fail with the same error too. -/
 theorem processPtcWindow_eq (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
     processPtcWindow state gloas = (do
-      let window := (state.ptcWindow gloas).elements
-      let perEpoch := preset.SLOTS_PER_EPOCH.toNat
       let nextEpoch ← liftArith do
         addChecked (← addChecked (getCurrentEpoch state) preset.MIN_SEED_LOOKAHEAD) 1
-      let moved ← (Vector.range _).mapM fun position =>
-        if kept : position + perEpoch < _ then pure window[position + perEpoch]
-        else do
-          computePtc state (← ptcWindowSlot preset nextEpoch (position + perEpoch - window.size))
-      return { state with ptcWindow := fun _ => .ofVector moved }) := by
+      let fresh ← (Vector.range preset.SLOTS_PER_EPOCH.toNat).mapM fun offset => do
+        computePtc state (← ptcWindowSlot preset nextEpoch offset)
+      return { state with
+        ptcWindow := fun _ => (state.ptcWindow gloas).shift fresh
+          (Nat.le_mul_of_pos_left _ (Nat.succ_pos _)) }) := by
   unfold processPtcWindow
   simp only [bind, Except.bind]
   split
   · rfl
   rename_i nextEpoch _
-  rw [vector_mapM_congr (g := fun position =>
-      if kept : position + preset.SLOTS_PER_EPOCH.toNat < _ then
-        pure (state.ptcWindow gloas).elements[position + preset.SLOTS_PER_EPOCH.toNat]
-      else do
-        computePtc state (← ptcWindowSlot preset nextEpoch
-          (position + preset.SLOTS_PER_EPOCH.toNat - (state.ptcWindow gloas).elements.size)))]
+  rw [vector_mapM_congr (g := fun offset => do
+      computePtc state (← ptcWindowSlot preset nextEpoch offset))]
   · rfl
-  intro position inRange
-  simp only [Vector.getElem_range]
-  split
-  · rfl
-  rename_i last
-  simp only [bind, Except.bind]
+  intro offset inRange
+  simp only [Vector.getElem_range, bind, Except.bind]
   split
   · rfl
   rename_i slot computed
   -- The slot is in the new epoch, so its committee reads the seeds and shuffle of that epoch.
-  have size : (state.ptcWindow gloas).elements.size =
-      (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat := rfl
   have epoch := computeEpochAtSlot_ptcWindowSlot (by omega) computed
   cases seedOk : getSeed state nextEpoch DOMAIN_PTC_ATTESTER <;>
     cases shuffleOk : attesterShuffle state nextEpoch <;>
@@ -325,19 +313,27 @@ theorem processPtcWindow_spec {state after : BeaconState preset fork}
   rw [processPtcWindow_eq] at computed
   simp only [bind_ok_iff, liftArith, mapError_ok_iff, addChecked_ok_iff,
     pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨nextEpoch, ⟨lookahead, ⟨_, first⟩, _, second⟩, moved, movedOk, rfl⟩ := computed
+  obtain ⟨nextEpoch, ⟨lookahead, ⟨_, first⟩, _, second⟩, fresh, freshOk, rfl⟩ := computed
   have one : (1 : UInt64).toNat = 1 := rfl
   refine ⟨fun position kept => ?_, nextEpoch, by omega, fun position inRange last => ?_⟩
-  · have entry := vector_mapM_ok_getElem movedOk position (by omega)
-    simp only [Vector.getElem_range, kept, ↓reduceDIte, Except.ok.injEq] at entry
-    exact entry.symm
-  · have entry := vector_mapM_ok_getElem movedOk position inRange
-    simp only [Vector.getElem_range] at entry
-    split at entry
-    · omega
-    simp only [bind_ok_iff] at entry
+  · show (RootedVector.shift _ fresh _).elements[position] = _
+    rw [RootedVector.elements_shift, RootedVector.getElem_shiftElements _ _ _ _ (by omega),
+      dite_eq_left kept]
+    rfl
+  · have offsetLt : position + preset.SLOTS_PER_EPOCH.toNat -
+        (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat <
+        preset.SLOTS_PER_EPOCH.toNat := by
+      have := Nat.le_mul_of_pos_left preset.SLOTS_PER_EPOCH.toNat
+        (Nat.succ_pos (preset.MIN_SEED_LOOKAHEAD.toNat + 1))
+      omega
+    have entry := vector_mapM_ok_getElem freshOk _ offsetLt
+    simp only [Vector.getElem_range, bind_ok_iff] at entry
     obtain ⟨slot, slotOk, ptc⟩ := entry
-    exact ⟨slot, slotOk, ptc⟩
+    refine ⟨slot, slotOk, ?_⟩
+    show _ = Except.ok (RootedVector.shift _ fresh _).elements[position]
+    rw [RootedVector.elements_shift, RootedVector.getElem_shiftElements _ _ _ _ inRange,
+      dite_eq_right (by omega)]
+    exact ptc
 
 /-- The position in the window of a slot of the current epoch or of the lookahead.
 

@@ -60,8 +60,8 @@ ARCHIVES = {
 _YAML = YAML(typ="safe")
 
 # The topics of the messages that a case of another topic sends, by the prefix of their file.
-# A bid case sends the preferences, the envelopes and from Heze the inclusion lists that its
-# bids rely on.
+# A bid case sends the preferences and the envelopes.
+# From Heze it also sends the inclusion lists that its bids rely on.
 _MESSAGE_TOPICS = {
     "proposer_preferences": "proposer_preferences",
     "execution_payload_envelope": "execution_payload",
@@ -301,3 +301,76 @@ def test_seen_keys_follow_valid_messages():
         ("valid", None),
         ("ignore", "already seen voluntary exit for this validator"),
     ]
+
+
+def test_message_of_another_shape():
+    with raises(
+        consensus.ForkChoiceError,
+        "a message is (time, subnet, bytes) or (time, subnet, bytes, topic)",
+    ) as info:
+        consensus.gossip_validation("minimal", "shapella", b"", b"", "voluntary_exit", [(1, 0)])  # ty: ignore[invalid-argument-type]
+    assert info.value.code == 0
+
+
+def test_block_of_another_shape():
+    with raises(
+        consensus.ForkChoiceError,
+        "a block is (kind, status, bytes) or (kind, status, bytes, envelope)",
+    ) as info:
+        consensus.gossip_validation(
+            "minimal",
+            "shapella",
+            b"",
+            b"",
+            "voluntary_exit",
+            [],
+            blocks=[(0, None)],  # ty: ignore[invalid-argument-type]
+        )
+    assert info.value.code == 0
+
+
+def test_time_out_of_range():
+    message = f"expected an int below {2**64}, got {2**64}"
+    with raises(consensus.ForkChoiceError, message) as info:
+        consensus.gossip_validation(
+            "minimal", "shapella", b"", b"", "voluntary_exit", [(2**64, 0, b"")]
+        )
+    assert info.value.code == 0
+
+
+def test_finalized_root_length():
+    with raises(consensus.ForkChoiceError, "expected 32 bytes, got 31") as info:
+        consensus.gossip_validation(
+            "minimal", "shapella", b"", b"", "voluntary_exit", [], finalized=(0, bytes(31))
+        )
+    assert info.value.code == 0
+
+
+@pytest.mark.parametrize("verify", [1, None])
+def test_verify_must_be_a_bool(verify):
+    with raises(consensus.ForkChoiceError, "expected a bool") as info:
+        consensus.gossip_validation("minimal", "shapella", b"", b"", "voluntary_exit", [], verify)
+    assert info.value.code == 0
+
+
+def _envelope_error(envelope: bytes | None) -> tuple[int, str]:
+    # The anchor block is empty, so the run stops at its decoding, after the blocks are read.
+    case = _valid_case("gossip_voluntary_exit")
+    try:
+        consensus.gossip_validation(
+            "minimal",
+            "shapella",
+            _read(case, "state"),
+            b"",
+            "voluntary_exit",
+            [],
+            blocks=[(0, None, b"", envelope)],
+        )
+    except consensus.ForkChoiceError as error:
+        return error.code, str(error)
+    raise AssertionError("the run did not stop")
+
+
+def test_none_is_no_envelope():
+    # None reads as empty bytes, so both stop at the same point with the same error.
+    assert _envelope_error(None) == _envelope_error(b"")

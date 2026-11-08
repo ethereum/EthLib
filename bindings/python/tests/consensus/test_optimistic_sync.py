@@ -185,9 +185,14 @@ def test_block_that_does_not_decode(call):
 
 
 def test_roots_of_another_length():
-    with raises(ERROR, "a root is 32 bytes, not 31") as info:
+    with raises(ERROR, "expected 32 bytes, got 31") as info:
         consensus.latest_verified_ancestor("mainnet", FORK, BLOCKS, [], bytes(31))
     assert info.value.code == 0
-    with raises(ERROR, "a list of roots is 32 bytes each, not 33") as info:
+    with raises(ERROR, "expected 32 bytes, got 33") as info:
         consensus.on_valid_payload("mainnet", FORK, BLOCKS, [bytes(33)], RA)
     assert info.value.code == 0
+
+
+def test_roots_must_be_bytes():
+    with raises(TypeError, "cannot pass a value of type bytearray to Lean"):
+        consensus.on_valid_payload("mainnet", FORK, BLOCKS, [bytearray(RA)], RA)  # ty: ignore[invalid-argument-type]

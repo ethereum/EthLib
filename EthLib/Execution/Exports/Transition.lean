@@ -11,9 +11,9 @@ The C-ABI export of the state transition of a block, callable from the Python C 
 
 The chain crosses the boundary as three inputs.
 
-- Its configuration is JSON, in the form of the chain configuration exports.
+- Its configuration is the typed value of its JSON, in the form of the chain configuration exports.
 - Its state takes the form of the state root export.
-- Its recent blocks, oldest first, are an RLP list, each the fork name, the header and the ommers.
+- Its recent blocks, oldest first, are a list, each the fork name, the RLP header and RLP ommers.
 
 The block crosses it as the name of its fork and its RLP form.
 
@@ -27,31 +27,29 @@ The transition holds up to Glamsterdam, and fails from Hegotá as not yet specif
 
 The genesis export takes the name of a fork, the fields that the chain chooses and the state.
 
-The fields cross as an RLP list, and the block comes back in RLP form.
+The fields cross as a tuple of typed Python values, and the block comes back in RLP form.
 -/
 
 public section
 
 namespace EthLib.Execution.Blocks.Exports
 
-open EthLib.Exports (Result forkUpTo)
+open EthLib.Exports (Result PyValue forkUpTo pyExport)
 open EthLib.Base
 open EthLib.Serialization.Rlp
 open EthLib.Execution.Transactions.Exports (abortMessage inclusionMessage message oneLine
   stateEntryItem)
 
-/-- A recent block from its item: the fork name, the header and the list of its ommers.
+/-- A recent block from its fork name, its header and its ommers, each header in RLP form.
 
 Each ommer is at the fork of its own number on the chain `config`. -/
-def recentOfItem (config : ChainConfig) (item : Item) : Result RecentBlock := do
-  match ← runRlp "recent block rejected" (item.fields 3) with
-  | [name, header, ommers] =>
-    let name : ByteArray ← runRlp "recent fork rejected" (Codec.ofItem name)
-    let fork ← forkUpTo .glamsterdam name
-    let ommers : List Item ← runRlp "recent ommers rejected" (Codec.ofItem ommers)
-    return ⟨fork, ← runRlp "recent header rejected" (Codec.ofItem header),
-      ← runRlp "recent ommers rejected" (ommers.mapM (Header.ofItemAtNumber (forkAtBlock config)))⟩
-  | _ => throw (0, "a recent block is not a list of three items")
+def recentOf (config : ChainConfig) (block : String × ByteArray × List ByteArray) :
+    Result RecentBlock := do
+  let (name, header, ommers) := block
+  let fork ← forkUpTo .glamsterdam name.toUTF8
+  return ⟨fork, ← runRlp "recent header rejected" (Codec.decode header),
+    ← runRlp "recent ommers rejected" (ommers.mapM fun ommer => do
+      Header.ofItemAtNumber (forkAtBlock config) (← decode ommer))⟩
 
 /-- A message for a block error, phrased for a Python traceback. -/
 def blockErrorMessage : BlockError → String
@@ -62,20 +60,18 @@ def blockErrorMessage : BlockError → String
 
 /-- Run the state transition of a block on a chain, and give the state after it.
 
-With `checkSeal` 0, the proof of work is left out, as for test chains that run without one.
+Without the seal check, the proof of work is left out, as for test chains that run without one.
 
-It returns a list of two items: the state root, and the accounts of the state. -/
-@[export eth_state_transition]
-def stateTransitionExport (config state recent fork block : ByteArray) (checkSeal : UInt8) :
-    Result ByteArray := do
-  let config ← ChainConfig.Exports.configOfJson
-    (← ChainConfig.Exports.parseJson "config" config)
+It returns the RLP list of two items: the state root, and the accounts of the state. -/
+def stateTransitionOf
+    (args : PyValue × ByteArray × List (String × ByteArray × List ByteArray) × String × ByteArray ×
+      Bool) : Result ByteArray := do
+  let (config, state, recent, fork, block, checkSeal) := args
+  let config ← ChainConfig.Exports.configOfJson config.toJson
   -- The chain is an input that the export reads itself, so its errors have code 0.
   let pre ← (State.Exports.ofInput state).mapError fun e => (0, e.message)
-  let recentItems : List Item ← (Codec.decode recent).mapError
-    fun e => (0, s!"recent blocks rejected: {reprStr e}")
-  let recent ← (recentItems.mapM (recentOfItem config)).mapError fun (_, m) => (0, m)
-  let fork ← forkUpTo .glamsterdam fork
+  let recent ← (recent.mapM (recentOf config)).mapError fun (_, m) => (0, m)
+  let fork ← forkUpTo .glamsterdam fork.toUTF8
   let raw : Block fork Item ← (Block.decode (forkAtBlock config) block).mapError
     fun e => ((BlockError.encoding e).code, s!"block rejected: {reprStr e}")
   let transactions ← raw.transactions.zipIdx.mapM fun (item, index) =>
@@ -83,7 +79,7 @@ def stateTransitionExport (config state recent fork block : ByteArray) (checkSea
       ((BlockError.undecodableTransaction index e).code,
         s!"transaction {index} does not decode: {message e}")
   let chain : BlockChain := ⟨config, pre, recent⟩
-  let post ← (stateTransition chain { raw with transactions } (checkSeal ≠ 0)).mapError
+  let post ← (stateTransition chain { raw with transactions } checkSeal).mapError
     fun e => (e.code, blockErrorMessage e)
   let root ← State.Exports.rootOf post
   let accounts := post.accounts.toList.map fun (address, account) =>
@@ -91,42 +87,49 @@ def stateTransitionExport (config state recent fork block : ByteArray) (checkSea
   (encode (Item.list [Codec.toItem root, .list accounts])).mapError
     fun e => (0, s!"result: {reprStr e}")
 
-/-- The fields of a genesis header that a chain chooses, from an RLP list.
+/-- Run the state transition of a block on a chain, and give the state after it.
 
-They follow the order of the header.
+The arguments are the configuration of the chain, its state and its recent blocks.
 
-The beneficiary, difficulty, gas limit, time, extra data, mix hash and nonce come first.
+Then come the fork and the block, and whether to check the seal of the proof of work.
 
-The base fee, the excess blob gas and the slot number follow. -/
-def genesisParamsOfItem (item : Item) : Except RlpError GenesisParams := do
-  let n := 10
-  let items ← item.fields n
-  let (coinbase, items) ← Item.readField (α := Address) n items
-  let (difficulty, items) ← Item.readField (α := Nat) n items
-  let (gasLimit, items) ← Item.readField (α := Nat) n items
-  let (timestamp, items) ← Item.readField (α := U256) n items
-  let (extraData, items) ← Item.readField (α := ByteArray) n items
-  let (prevRandao, items) ← Item.readField (α := Bytes32) n items
-  let (nonce, items) ← Item.readField (α := Bytes8) n items
-  let (baseFeePerGas, items) ← Item.readField (α := Nat) n items
-  let (excessBlobGas, items) ← Item.readField (α := UInt64) n items
-  let (slotNumber, _) ← Item.readField (α := UInt64) n items
-  return { coinbase, difficulty, gasLimit, timestamp, extraData, prevRandao, nonce, baseFeePerGas,
-           excessBlobGas, slotNumber }
+It returns the RLP list of two items: the state root, and the accounts of the state. -/
+@[export eth_state_transition]
+def stateTransitionExport (args : PyValue) : Result PyValue :=
+  pyExport stateTransitionOf args
 
-/-- The genesis block at a fork, in RLP form.
+/-- The fields of a genesis header that a chain chooses, in the order of the header.
 
-The chain chooses the fields `params` and starts with the state `state`. -/
-@[export eth_genesis_block]
-def genesisExport (fork params state : ByteArray) : Result ByteArray := do
-  let fork ← forkUpTo .glamsterdam fork
-  -- The inputs are read by the export itself, so their errors have code 0.
-  let params ← (Codec.decode params >>= genesisParamsOfItem).mapError
-    fun e => (0, s!"genesis fields rejected: {reprStr e}")
+They are the beneficiary, difficulty, gas limit, time, extra data, mix hash and nonce.
+
+Then come the base fee, the excess blob gas and the slot number. -/
+abbrev GenesisFields :=
+  Address × Nat × Nat × U256 × ByteArray × Bytes32 × Bytes8 × Nat × UInt64 × UInt64
+
+/-- The genesis block at a fork, in RLP form, with the fields that the chain chooses. -/
+def genesisOf (args : String × GenesisFields × ByteArray) : Result ByteArray := do
+  let (fork, fields, state) := args
+  let (coinbase, difficulty, gasLimit, timestamp, extraData, prevRandao, nonce, baseFeePerGas,
+    excessBlobGas, slotNumber) := fields
+  let params : GenesisParams := {
+    coinbase := coinbase, difficulty := difficulty, gasLimit := gasLimit, timestamp := timestamp,
+    extraData := extraData, prevRandao := prevRandao, nonce := nonce,
+    baseFeePerGas := baseFeePerGas, excessBlobGas := excessBlobGas, slotNumber := slotNumber }
+  let fork ← forkUpTo .glamsterdam fork.toUTF8
+  -- The state is read by the export itself, so its errors have code 0.
   let alloc ← (State.Exports.ofInput state).mapError fun e => (0, e.message)
   let block ← (genesis fork params alloc).mapError fun e => (e.code, blockErrorMessage e)
   -- The body is empty, so its transactions take the form of RLP items.
   ({ block with transactions := ([] : List Item) }.encode).mapError
     fun e => (0, s!"result: {reprStr e}")
+
+/-- The genesis block at a fork, in RLP form.
+
+The arguments are the fork, the fields of the header that the chain chooses, and the state.
+
+The fields are in the order of the header, from the beneficiary to the slot number. -/
+@[export eth_genesis_block]
+def genesisExport (args : PyValue) : Result PyValue :=
+  pyExport genesisOf args
 
 end EthLib.Execution.Blocks.Exports

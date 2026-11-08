@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Exports
+public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Execution.Exports.Blocks
 public import EthLib.Execution.Exports.State
 public import EthLib.Cryptography.Exports.Kzg
@@ -16,6 +16,10 @@ public import EthLib.Execution.Transactions.Validity
 C-ABI exports for transactions, callable from the Python C extension.
 
 A fork crosses the boundary as the name of its case, and a transaction as its bytes.
+
+The checks, the settlement and the run take and return typed Python values.
+
+A number among them crosses as an `int`, and an argument that Lean cannot read fails with code 0.
 
 Each operation decodes the transaction at the fork first.
 
@@ -42,7 +46,7 @@ public section
 
 namespace EthLib.Execution.Transactions.Exports
 
-open EthLib.Exports (Result forkUpTo)
+open EthLib.Exports (Result PyValue forkUpTo pyExport)
 
 open EthLib.Base
 open EthLib.Serialization.Rlp
@@ -106,20 +110,23 @@ def intrinsicGasExport (fork bytes : ByteArray) : Result UInt64 := do
   let sender ← if fork ≥ .glamsterdam then runTx (recoverSender fork tx) else pure default
   gasToUInt64 (intrinsicGas fork sender tx)
 
+/-- Check a transaction alone on the chain `chainId`, for its sender and its intrinsic gas.
+
+The intrinsic gas must be below 2^64. -/
+def checkOf (args : String × UInt64 × ByteArray) : Result (Address × UInt64) := do
+  let (fork, chainId, bytes) := args
+  let (fork, tx) ← decodeAt .glamsterdam fork.toUTF8 bytes
+  let (sender, gas) ← runTx (checkTransaction fork chainId tx)
+  return (sender, ← gasToUInt64 gas)
+
 /-- Check a transaction alone on the chain `chainId`.
 
-It returns 28 bytes: the 20-byte sender, then the intrinsic gas as 8 big-endian bytes. -/
-@[export eth_tx_check]
-def checkExport (fork : ByteArray) (chainId : UInt64) (bytes : ByteArray) : Result ByteArray := do
-  let (fork, tx) ← decodeAt .glamsterdam fork bytes
-  let (sender, gas) ← runTx (checkTransaction fork chainId tx)
-  let gas ← gasToUInt64 gas
-  return ⟨sender.toArray ++ (List.range 8).reverse.toArray.map
-    fun i => (gas >>> UInt64.ofNat (8 * i)).toUInt8⟩
+The arguments are the name of the fork, the chain ID and the transaction.
 
-/-- The number that big-endian bytes encode. -/
-def numberOf (bytes : ByteArray) : Nat :=
-  bytesToNat bytes.toList
+It returns the 20-byte sender and the intrinsic gas, which must be below 2^64. -/
+@[export eth_tx_check]
+def checkExport (args : PyValue) : Result PyValue :=
+  pyExport checkOf args
 
 /-- Settle the gas of a transaction that passes the gas, nonce and fee rules.
 
@@ -129,16 +136,13 @@ The base fee must be below 2^256, and 0 before London, which has none.
 
 The price per gas must cover the base fee, and the gas left must be at most the gas limit.
 
-It returns four numbers of 64 big-endian bytes each.
-
-They are the gas used, the refund of the sender, the priority fee and the burned fee. -/
-@[export eth_tx_settle]
-def settleExport (fork tx baseFee gasLeft refundCounter : ByteArray) : Result ByteArray := do
-  let (fork, tx) ← decodeAt .bpo5 fork tx
+It returns the gas used, the refund of the sender, the priority fee and the burned fee. -/
+def settleOf (args : String × ByteArray × Nat × Nat × Nat) : Result (Nat × Nat × Nat × Nat) := do
+  let (fork, tx, baseFee, gasLeft, refundCounter) := args
+  let (fork, tx) ← decodeAt .bpo5 fork.toUTF8 tx
   -- Before Glamsterdam the sender changes nothing, so any address stands in for it.
   let sender : Address := default
   let _ ← runTx (validateTransaction fork sender tx)
-  let baseFee := numberOf baseFee
   -- No error type covers these inputs of the binding, so their code is 0.
   if fork < .london ∧ baseFee ≠ 0 then
     throw (0, "a fork before london has no base fee")
@@ -146,35 +150,51 @@ def settleExport (fork tx baseFee gasLeft refundCounter : ByteArray) : Result By
     throw (0, "base fee is 2^256 or more")
   if tx.maxFeePerGas < baseFee then
     throw (0, "the price per gas is below the base fee")
-  if tx.gas.toNat < numberOf gasLeft then
+  if tx.gas.toNat < gasLeft then
     throw (0, "the gas left is above the gas limit")
-  let s := settlement fork baseFee sender tx (numberOf gasLeft) (numberOf refundCounter)
-  return ⟨([s.gasUsed, s.senderRefund, s.priorityFee, s.burned].flatMap (natToBytes 64)).toArray⟩
+  let s := settlement fork baseFee sender tx gasLeft refundCounter
+  return (s.gasUsed, s.senderRefund, s.priorityFee, s.burned)
+
+/-- Settle the gas of a transaction that passes the gas, nonce and fee rules.
+
+The arguments are the name of the fork and the transaction.
+
+Then come the base fee per gas, the gas left and the refund counter.
+
+The base fee must be below 2^256, and 0 before London, which has none.
+
+The price per gas must cover the base fee, and the gas left must be at most the gas limit.
+
+It returns the gas used, the refund of the sender, the priority fee and the burned fee. -/
+@[export eth_tx_settle]
+def settleExport (args : PyValue) : Result PyValue :=
+  pyExport settleOf args
 
 /-- A message for a rejection by the block, phrased for a Python traceback. -/
 def inclusionMessage : InclusionError → String
   | .transaction e => message e
   | error => (oneLine error).replace "EthLib.Execution.Transactions.InclusionError." ""
 
-/-- Check that a transaction may enter its block, against the state that `state` encodes.
+/-- The arguments of the check of a transaction against its block.
+
+They are the name of the fork, the chain ID, the transaction and the state.
+
+Then come the gas limit, the gas used and the blob gas used before the transaction.
+
+Last come the base fee per gas and the excess blob gas of the block. -/
+abbrev InBlockArgs := String × UInt64 × ByteArray × ByteArray × Nat × Nat × Nat × Nat × Nat
+
+/-- Check that a transaction may enter its block, against a state.
 
 The state takes the form of the state root export.
 
-The block has a gas limit, a base fee and an excess blob gas, given as big-endian numbers.
-
-Before the transaction, the block has used `gasUsed` gas and `blobGasUsed` blob gas.
-
 The base fee must be 0 before London, and the excess blob gas below 2^64.
 
-It returns 60 bytes: the sender, the price per gas as 32 bytes, and the blob gas as 8 bytes. -/
-@[export eth_tx_check_in_block]
-def checkInBlockExport (fork : ByteArray) (chainId : UInt64)
-    (tx state gasLimit gasUsed blobGasUsed baseFee excessBlobGas : ByteArray) :
-    Result ByteArray := do
-  let (fork, tx) ← decodeAt .bpo5 fork tx
+It returns the sender, the price per gas and the blob gas of the transaction. -/
+def checkInBlockOf (args : InBlockArgs) : Result (Address × Nat × UInt64) := do
+  let (fork, chainId, tx, state, gasLimit, gasUsed, blobGasUsed, baseFee, excess) := args
+  let (fork, tx) ← decodeAt .bpo5 fork.toUTF8 tx
   let pre ← (State.Exports.ofInput state).mapError fun e => (e.code, e.message)
-  let baseFee := numberOf baseFee
-  let excess := numberOf excessBlobGas
   -- No error type covers these inputs of the binding, so their code is 0.
   if fork < .london ∧ baseFee ≠ 0 then
     throw (0, "a fork before london has no base fee")
@@ -182,17 +202,28 @@ def checkInBlockExport (fork : ByteArray) (chainId : UInt64)
     throw (0, "excess blob gas is 2^64 or more")
   -- The checks read no other field of the block, so the others hold 0.
   let env : Evm.BlockEnvironment fork := {
-    chainId, coinbase := 0, number := 0, gasLimit := numberOf gasLimit,
+    chainId, coinbase := 0, number := 0, gasLimit,
     timestamp := 0, difficulty := 0, blockHashes := [], baseFeePerGas := fun _ => baseFee,
     prevRandao := fun _ => 0, excessBlobGas := fun _ => UInt64.ofNat excess,
     parentBeaconBlockRoot := fun _ => 0, slotNumber := fun _ => 0 }
   -- Before Glamsterdam a block counts no state gas.
-  let used : BlockGas := ⟨numberOf gasUsed, 0, numberOf blobGasUsed⟩
+  let used : BlockGas := ⟨gasUsed, 0, blobGasUsed⟩
   let inc ← (checkInclusion chainId env used (.ofBlock ⟨pre, ∅, ∅, ∅, ∅⟩) tx).mapError
     fun e => (e.code, inclusionMessage e)
-  let blobGas ← gasToUInt64 inc.blobGasUsed
-  return ⟨inc.sender.toArray ++ (natToBytes 32 inc.gasPrice).toArray ++
-    (List.range 8).reverse.toArray.map fun i => (blobGas >>> UInt64.ofNat (8 * i)).toUInt8⟩
+  return (inc.sender, inc.gasPrice, ← gasToUInt64 inc.blobGasUsed)
+
+/-- Check that a transaction may enter its block, against a state.
+
+The arguments are the name of the fork, the chain ID, the transaction and the state.
+
+Then come the gas limit, the gas used, the blob gas used, the base fee and the excess blob gas.
+
+The base fee must be 0 before London, and the excess blob gas below 2^64.
+
+It returns the sender, the price per gas and the blob gas of the transaction. -/
+@[export eth_tx_check_in_block]
+def checkInBlockExport (args : PyValue) : Result PyValue :=
+  pyExport checkInBlockOf args
 
 /-! ## The run of a transaction -/
 
@@ -226,19 +257,31 @@ def ofEnvironmentItem (fork : Fork) (chainId : UInt64) (item : Item) :
       slotNumber := fun _ => slotNumber }
   | items => .error (.wrongFieldCount 10 items.length)
 
+/-- An account of a state: its address, nonce, balance, code, and storage slots with values. -/
+abbrev StateEntry := Address × Nat × U256 × ByteArray × List (Bytes32 × U256)
+
+/-- An account of a state, with its code and its storage. -/
+def stateEntry (state : State.State) (address : Address) (account : State.Account) :
+    StateEntry :=
+  let code := (state.code[account.codeHash]?).getD .empty
+  (address, account.nonce, account.balance, code, ((state.storage[address]?).getD ∅).toList)
+
 /-- An account of a state as an item: its address, nonce, balance, code and storage. -/
 def stateEntryItem (state : State.State) (address : Address) (account : State.Account) : Item :=
-  let code := (state.code[account.codeHash]?).getD .empty
-  let storage := ((state.storage[address]?).getD ∅).toList.map fun (key, value) =>
-    Item.list [Codec.toItem key, Codec.toItem value]
-  .list [Codec.toItem address, Codec.toItem account.nonce, Codec.toItem account.balance,
-    Codec.toItem code, .list storage]
+  let (address, nonce, balance, code, storage) := stateEntry state address account
+  .list [Codec.toItem address, Codec.toItem nonce, Codec.toItem balance, Codec.toItem code,
+    .list (storage.map fun (key, value) => Item.list [Codec.toItem key, Codec.toItem value])]
 
 /-- A message for an error that aborts a run, phrased for a Python traceback. -/
 def abortMessage (error : Evm.EvmError) : String :=
   s!"the run aborted: {(oneLine error).replace "EthLib.Execution.Evm.EvmError." ""}"
 
-/-- Run one transaction on the state that `state` encodes, in a block with no transaction before.
+/-- What a run leaves, and the accounts of the state after it.
+
+They are the state root, the hash of the encoding of the logs, the gas used and the success. -/
+abbrev RunResult := ByteArray × Hash32 × Nat × Bool × List StateEntry
+
+/-- Run one transaction on a state, in a block with no transaction before.
 
 The state takes the form of the state root export, and the block is a list of ten items.
 
@@ -246,17 +289,10 @@ A transaction that may not enter the block fails with the code of its inclusion 
 
 An error that aborts the run has the code of its state error, or 0.
 
-It returns a list of five items, about the transaction and the state after it.
-
-They are the state root, the hash of the encoding of the logs, and the gas used.
-
-Then come whether the message succeeded, and the accounts of the state.
-
 The state after it has no beneficiary reward, since a block pays that. -/
-@[export eth_tx_run]
-def runExport (fork : ByteArray) (chainId : UInt64) (tx state env : ByteArray) :
-    Result ByteArray := do
-  let (fork, tx) ← decodeAt .glamsterdam fork tx
+def runOf (args : String × UInt64 × ByteArray × ByteArray × ByteArray) : Result RunResult := do
+  let (fork, chainId, tx, state, env) := args
+  let (fork, tx) ← decodeAt .glamsterdam fork.toUTF8 tx
   let pre ← (State.Exports.ofInput state).mapError fun e => (e.code, e.message)
   let env ← (decode env >>= ofEnvironmentItem fork chainId).mapError
     fun e => (0, s!"block environment rejected: {rlpMessage e}")
@@ -272,11 +308,27 @@ def runExport (fork : ByteArray) (chainId : UInt64) (tx state env : ByteArray) :
   let logs ← (encode (Codec.toItem out.logs.toList)).mapError
     fun e => (0, s!"logs: {rlpMessage e}")
   let accounts := post.accounts.toList.map fun (address, account) =>
-    stateEntryItem post address account
-  let logsHash := Cryptography.Hash.Keccak.keccak256 logs
-  let result := Item.list [Codec.toItem root, Codec.toItem logsHash, Codec.toItem out.gasUsed,
-    Codec.toItem out.error.isNone, .list accounts]
-  (encode result).mapError fun e => (0, s!"result: {rlpMessage e}")
+    stateEntry post address account
+  return (root, Cryptography.Hash.Keccak.keccak256 logs, out.gasUsed, out.error.isNone, accounts)
+
+/-- Run one transaction on a state, in a block with no transaction before.
+
+The arguments are the name of the fork, the chain ID, the transaction, the state and the block.
+
+The state takes the form of the state root export, and the block is a list of ten items.
+
+A transaction that may not enter the block fails with the code of its inclusion error.
+
+An error that aborts the run has the code of its state error, or 0.
+
+It returns the state root, the hash of the encoding of the logs, the gas used and the success.
+
+Last come the accounts of the state after it, each with its code and its storage.
+
+The state after it has no beneficiary reward, since a block pays that. -/
+@[export eth_tx_run]
+def runExport (args : PyValue) : Result PyValue :=
+  pyExport runOf args
 
 /-! ## The network form of blob transactions -/
 

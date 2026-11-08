@@ -41,13 +41,13 @@ from .catalogue import BOGOTA_NETWORKS, Case
 # A key may also be a format of execution-spec-tests.
 NOT_YET = {
     "epoch_processing": "beacon state transition (consensus track C13 to C40)",
-    "finality": "the state transition after Phase 0 (consensus track C26 to C40)",
+    "finality": "a fork or handler that the runner of finality does not cover yet",
     "fork": "beacon state transition (consensus track C13 to C40)",
     "genesis": "the genesis after Phase 0 (consensus track C26 to C40)",
     "operations": "beacon state transition (consensus track C13 to C40)",
-    "random": "the state transition after Phase 0 (consensus track C26 to C40)",
-    "sanity": "the state transition after Phase 0 (consensus track C26 to C40)",
-    "transition": "the Electra and Fulu blocks (consensus track C35 to C40)",
+    "random": "a fork or handler that the runner of random does not cover yet",
+    "sanity": "a fork or handler that the runner of sanity does not cover yet",
+    "transition": "a fork or handler that the runner of transition does not cover yet",
 }
 
 # The plan at Gloas and Heze, by the steps of the track for Glamsterdam and Hegotá.
@@ -158,14 +158,14 @@ def _environment(env: dict) -> bytes:
     )
 
 
-def _accounts(accounts: list) -> dict:
+def _accounts(accounts: list[tuple[bytes, int, int, bytes, list[tuple[bytes, int]]]]) -> dict:
     """The accounts of a run, by address, in the form of the post state of a fixture."""
     return {
         "0x" + address.hex(): {
-            "nonce": int.from_bytes(nonce, "big"),
-            "balance": int.from_bytes(balance, "big"),
+            "nonce": nonce,
+            "balance": balance,
             "code": "0x" + code.hex(),
-            "storage": {int.from_bytes(k, "big"): int.from_bytes(v, "big") for k, v in storage},
+            "storage": {int.from_bytes(k, "big"): v for k, v in storage},
         }
         for address, nonce, balance, code, storage in accounts
     }
@@ -472,6 +472,7 @@ def _header_of_json(fields: dict) -> bytes:
 def _engine_payload(fixture: dict, payload: dict, state: bytes, recent: list) -> tuple:
     """Run one payload on the chain; return its kind, and the next state and recent blocks."""
     from ethlib import engine
+    from ethlib.cryptography.keccak import keccak256
     from ethlib.serialization import rlp
 
     config, _ = chain_of(fixture)
@@ -489,16 +490,22 @@ def _engine_payload(fixture: dict, payload: dict, state: bytes, recent: list) ->
         assert status["status"] == "VALID", status
         assert status["latestValidHash"] == payload["params"][0]["blockHash"]
         # A valid payload gives its header and the accounts after it.
-        header, accounts = cast(bytes, header), cast(list, accounts)
+        header, accounts = cast(bytes, header), cast(bytes, accounts)
         fork = active_fork(chain_of(fixture)[1], rlp.decode(header))
-        return "valid", rlp.encode(accounts), (recent + [(fork, header, [])])[-256:]
+        return "valid", accounts, (recent + [(fork, header, [])])[-256:]
     names = expected.split("|")
     code, _, message = status["validationError"].partition(": ")
     if int(code) == 405:
         assert status["status"] == "INVALID", status
         assert any(names_block_error(e, message) for e in names), (status, names)
+        # A payload invalid in execution names its most recent valid ancestor.
+        # That is the head of the chain, which is its parent.
+        # The zero hash for an ancestor before Paris never applies: engine chains start at Paris.
+        assert status["latestValidHash"] == "0x" + keccak256(recent[-1][1]).hex(), status
         return "execution", state, recent
     assert ENGINE_EXCEPTIONS[int(code)] & set(names), (status, names)
+    # A payload that a check before execution rejects has a null latest valid hash.
+    assert status["latestValidHash"] is None, status
     return "invalid", state, recent
 
 

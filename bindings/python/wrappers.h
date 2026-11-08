@@ -46,6 +46,7 @@ extern size_t SECP256R1_SIGNATURE_LEN;
 
 
 extern size_t ENR_MAX_RECORD_SIZE;
+extern size_t RLPX_SECRETS_SIZE;
 extern size_t REQRESP_MAX_PAYLOAD_SIZE;
 extern size_t REQRESP_MAX_ERROR_MESSAGE_SIZE;
 
@@ -175,6 +176,7 @@ extern PyObject* WEAK_SUBJECTIVITY_ERROR;
 extern PyObject* VALIDATOR_DUTY_ERROR;
 extern PyObject* PROPOSER_ERROR;
 extern PyObject* SLASHING_PROTECTION_ERROR;
+extern PyObject* BINDING_ERROR;
 
 /* ---- Argument parsing helpers ---------------------------------------- */
 
@@ -191,6 +193,14 @@ parse_bytes_of_size(
   PyObject* obj,
   Py_ssize_t expected,
   const char* name
+);
+
+/* The items of a sequence, in a tuple or a list that no other thread can change.
+ * Returns a new reference, or NULL with a TypeError that carries `message`. */
+PyObject*
+sequence_snapshot(
+  PyObject* seq,
+  const char* message
 );
 
 uint8_t*
@@ -266,7 +276,9 @@ PyObject* py_vrf_verify                                   (PyObject* self, PyObj
 PyObject* py_vrf_secret                                   (PyObject* self, PyObject* args);
 PyObject* py_vrf_evaluate                                 (PyObject* self, PyObject* args);
 PyObject* py_crc32                                       (PyObject* self, PyObject* args);
+PyObject* py_crc32_number                                (PyObject* self, PyObject* args);
 PyObject* py_crc32c                                      (PyObject* self, PyObject* args);
+PyObject* py_crc32c_number                               (PyObject* self, PyObject* args);
 PyObject* py_aes_encrypt_block                            (PyObject* self, PyObject* args);
 PyObject* py_aes_decrypt_block                            (PyObject* self, PyObject* args);
 PyObject* py_aes_ctr                                      (PyObject* self, PyObject* args);
@@ -324,6 +336,7 @@ PyObject* py_consensus_process_operation (PyObject* self, PyObject* args);
 PyObject* py_consensus_upgrade_state (PyObject* self, PyObject* args);
 PyObject* py_consensus_process_epoch (PyObject* self, PyObject* args);
 PyObject* py_consensus_rewards_deltas (PyObject* self, PyObject* args);
+PyObject* py_consensus_rewards_deltas_batch (PyObject* self, PyObject* args);
 PyObject* py_consensus_process_slots (PyObject* self, PyObject* args);
 PyObject* py_consensus_state_transition (PyObject* self, PyObject* args);
 PyObject* py_consensus_state_transition_across (PyObject* self, PyObject* args);
@@ -367,6 +380,9 @@ PyObject* py_consensus_get_eth1_pending_deposit_count (PyObject* self, PyObject*
 PyObject* py_consensus_compute_new_state_root (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_on_chain_aggregate (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_execution_requests (PyObject* self, PyObject* args);
+PyObject* py_consensus_get_execution_payload_bid          (PyObject* self, PyObject* args);
+PyObject* py_consensus_get_self_built_execution_payload_bid (PyObject* self, PyObject* args);
+PyObject* py_consensus_get_execution_payload_envelope     (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_validators_custody_requirement (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_ssz                                  (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_possession_signing_root              (PyObject* self, PyObject* args);
@@ -406,9 +422,12 @@ PyObject* py_consensus_compute_subscribed_subnets         (PyObject* self, PyObj
 PyObject* py_reqresp_max_compressed_len                   (PyObject* self, PyObject* args);
 PyObject* py_reqresp_decode_payload                       (PyObject* self, PyObject* args);
 PyObject* py_reqresp_decode_response_chunk                (PyObject* self, PyObject* args);
+PyObject* py_reqresp_encode_payload                       (PyObject* self, PyObject* args);
+PyObject* py_reqresp_encode_response_chunk                (PyObject* self, PyObject* args);
 PyObject* py_block_header_hash                            (PyObject* self, PyObject* args);
 PyObject* py_block_reencode                               (PyObject* self, PyObject* args);
 PyObject* py_pow_block_difficulty                         (PyObject* self, PyObject* args);
+PyObject* py_pow_chain_forks                              (PyObject* self, PyObject* args);
 PyObject* py_pow_seal_hash                                (PyObject* self, PyObject* args);
 PyObject* py_pow_check                                    (PyObject* self, PyObject* args);
 PyObject* py_pow_validate_ommers                          (PyObject* self, PyObject* args);
@@ -427,8 +446,7 @@ PyObject* py_fees_blob_data_fee                           (PyObject* self, PyObj
 PyObject* py_evm_word_op                                  (PyObject* self, PyObject* args);
 PyObject* py_evm_immediate_depths                         (PyObject* self, PyObject* args);
 PyObject* py_evm_memory_gas_cost                          (PyObject* self, PyObject* args);
-PyObject* py_evm_extend_memory_cost                       (PyObject* self, PyObject* args);
-PyObject* py_evm_extend_memory_expand_by                  (PyObject* self, PyObject* args);
+PyObject* py_evm_extend_memory                            (PyObject* self, PyObject* args);
 PyObject* py_evm_create_address                           (PyObject* self, PyObject* args);
 PyObject* py_evm_create2_address                          (PyObject* self, PyObject* args);
 PyObject* py_rlp_encode                                   (PyObject* self, PyObject* args);
@@ -456,6 +474,8 @@ PyObject* py_discv4_decode                                (PyObject* self, PyObj
 PyObject* py_discv4_encode                                (PyObject* self, PyObject* args);
 PyObject* py_discv4_record_signed_by                      (PyObject* self, PyObject* args);
 PyObject* py_fork_id                                      (PyObject* self, PyObject* args);
+PyObject* py_fork_id_schedule                             (PyObject* self, PyObject* args);
+PyObject* py_fork_id_encode                               (PyObject* self, PyObject* args);
 PyObject* py_mainnet_fork_id                              (PyObject* self, PyObject* args);
 PyObject* py_fork_id_validate                             (PyObject* self, PyObject* args);
 PyObject* py_eth_message_decode                           (PyObject* self, PyObject* args);
@@ -509,5 +529,38 @@ PyObject* py_active_fork                                  (PyObject* self, PyObj
 PyObject* py_engine_new_payload                          (PyObject* self, PyObject* args);
 PyObject* py_engine_new_payload_on_chain                 (PyObject* self, PyObject* args);
 PyObject* py_engine_forkchoice_updated                   (PyObject* self, PyObject* args);
+PyObject* py_engine_prepare_execution_payload            (PyObject* self, PyObject* args);
+PyObject* py_engine_prepare_execution_payload_gloas      (PyObject* self, PyObject* args);
+
+/* ---- Typed values (`pyvalue.c`) --------------------------------------- */
+
+/* The Lean `PyValue` of a Python object, or NULL with an exception set. */
+lean_object*
+pyvalue_of_py(
+  PyObject* obj
+);
+
+/* The `PyValue` of a successful result as a Python object.
+ *
+ * A failure inside it becomes an instance of `error_class`.
+ * On an error it returns NULL with an exception set. */
+PyObject*
+except_into_pyvalue(
+  lean_object* result,
+  PyObject* error_class
+);
+
+/* Call an export between `PyValue`s on the tuple of the arguments of a method.
+ *
+ * A call with another number of arguments than `arity` raises `TypeError`. */
+PyObject*
+call_pyvalue_export(
+  lean_object* (*export)(lean_object*),
+  PyObject* args,
+  Py_ssize_t arity,
+  PyObject* error_class
+);
+
+PyObject* py_pyvalue_echo                                 (PyObject* self, PyObject* args);
 
 #endif /* ETHCS_WRAPPERS_H */

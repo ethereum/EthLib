@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Exports
+public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Networking.Devp2p.ForkId
 
 /-!
@@ -8,7 +8,7 @@ public import EthLib.Networking.Devp2p.ForkId
 
 C-ABI exports for the fork identifier, callable from the Python C extension.
 
-A fork identifier crosses the boundary as its RLP list `[FORK_HASH, FORK_NEXT]`.
+A remote fork identifier, and the output of the encoder, is its RLP list `[FORK_HASH, FORK_NEXT]`.
 
 A schedule crosses it as the RLP list `[genesis-hash, genesis-time, merge-fork, forks]`.
 
@@ -18,6 +18,10 @@ A schedule crosses it as the RLP list `[genesis-hash, genesis-time, merge-fork, 
 
 A block number and a timestamp cross the boundary as 64-bit integers.
 
+The fork identifier of a node comes back as typed Python values: its hash and its next fork.
+
+Two exports write a schedule and a fork identifier in RLP, from typed Python values.
+
 An input that the export rejects before the fork identifier rules has code 0.
 -/
 
@@ -26,7 +30,7 @@ public section
 namespace EthLib.Networking.Devp2p.Exports
 
 open EthLib.Base
-open EthLib.Exports (Result forkOfName)
+open EthLib.Exports (Result PyValue forkOfName pyExport)
 open EthLib.Serialization.Rlp
 
 /-- A message for a refusal, phrased for someone reading a Python traceback. -/
@@ -62,17 +66,62 @@ def readSchedule (bytes : ByteArray) : Result Schedule := do
   let activations ← forks.mapM readActivation
   return ⟨hash, time, { chainId := 0, activations }, mergeForkBlock⟩
 
-/-- The fork identifier, as RLP, of a node with the schedule `schedule` at a head. -/
-@[export eth_fork_id]
-def forkIdExport (schedule : ByteArray) (number timestamp : UInt64) : Result ByteArray := do
-  let s ← readSchedule schedule
-  (Codec.encode (s.forkId number.toNat timestamp.toNat)).mapError fun _ => (0, "too large")
+/-- The hash and the next fork of a fork identifier. -/
+def forkIdFields (id : ForkId) : Vector UInt8 4 × UInt64 :=
+  (id.hash, id.next)
 
-/-- The fork identifier, as RLP, of a mainnet node at a head. -/
+/-- The fork identifier of a node with a schedule in RLP at a head: its hash and its next fork. -/
+def forkIdOf (args : ByteArray × UInt64 × UInt64) : Result (Vector UInt8 4 × UInt64) := do
+  let (schedule, number, timestamp) := args
+  let s ← readSchedule schedule
+  return forkIdFields (s.forkId number.toNat timestamp.toNat)
+
+/-- The fork identifier of a node with a schedule at a head: its hash and its next fork.
+
+The arguments are the schedule in RLP, the block number and the timestamp of the head. -/
+@[export eth_fork_id]
+def forkIdExport (args : PyValue) : Result PyValue :=
+  pyExport forkIdOf args
+
+/-- The fork identifier of a mainnet node at a head: its hash and its next fork.
+
+The arguments are the block number and the timestamp of the head. -/
 @[export eth_mainnet_fork_id]
-def mainnetForkIdExport (number timestamp : UInt64) : Result ByteArray :=
-  (Codec.encode (Schedule.mainnet.forkId number.toNat timestamp.toNat)).mapError
-    fun _ => (0, "too large")
+def mainnetForkIdExport (args : PyValue) : Result PyValue :=
+  pyExport (fun ((number, timestamp) : UInt64 × UInt64) =>
+    pure (forkIdFields (Schedule.mainnet.forkId number.toNat timestamp.toNat))) args
+
+/-- The RLP schedule `[genesis-hash, genesis-time, merge-fork, forks]` of a chain.
+
+Each fork is its name, its kind, 0 for a block and 1 for a time, and its block or time.
+
+The kind is written as given, and the reader of a schedule rejects any other. -/
+def scheduleOf (args : ByteArray × Nat × Option Nat × List (String × Nat × Nat)) :
+    Result ByteArray := do
+  let (hash, time, merge, forks) := args
+  let item : Item := .list [.bytes hash, Codec.toItem time, .list (merge.toList.map Codec.toItem),
+    .list (forks.map fun (name, kind, value) =>
+      .list [.bytes name.toUTF8, Codec.toItem kind, Codec.toItem value])]
+  (Serialization.Rlp.encode item).mapError fun _ => (0, "schedule has no RLP encoding")
+
+/-- The RLP schedule `[genesis-hash, genesis-time, merge-fork, forks]` of a chain.
+
+The arguments are the genesis hash, the genesis time, the merge fork block or `None`, and the forks.
+
+Each fork is its name, its kind, 0 for a block and 1 for a time, and its block or time. -/
+@[export eth_fork_id_schedule]
+def scheduleExport (args : PyValue) : Result PyValue :=
+  pyExport scheduleOf args
+
+/-- The RLP fork identifier `[FORK_HASH, FORK_NEXT]`. -/
+def encodeOf (args : Vector UInt8 4 × UInt64) : Result ByteArray := do
+  let (hash, next) := args
+  (Codec.encode (⟨hash, next⟩ : ForkId)).mapError fun _ => (0, "too large")
+
+/-- The RLP fork identifier `[FORK_HASH, FORK_NEXT]`, from its 4-byte hash and its next fork. -/
+@[export eth_fork_id_encode]
+def encodeExport (args : PyValue) : Result PyValue :=
+  pyExport encodeOf args
 
 /-- Whether a node with the schedule `schedule` at a head accepts the RLP identifier `remote`.
 

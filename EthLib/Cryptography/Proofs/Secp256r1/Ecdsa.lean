@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Nat
 public import EthLib.Cryptography.Proofs.Secp256r1.Order
 
 /-!
@@ -217,17 +218,6 @@ theorem verify_rebuilt {q : Point} {e r s : Nat} (hv : verify q e r s = true) :
   · rename_i x y hR
     exact ⟨x, y, hR, by simpa using hv⟩
 
-/-- An `x` below `p` with `x mod n = r` is `r`, when `p <= r + n`. -/
-private theorem val_eq_of_mod_eq {x : Fp} {r : Nat} (hx : x.val % Fn.modulus = r)
-    (hp : Fp.modulus ≤ r + Fn.modulus) : x.val = r := by
-  have hdiv := Nat.mod_add_div x.val Fn.modulus
-  have hlt := x.isLt
-  by_cases h0 : x.val / Fn.modulus = 0
-  · rw [h0, Nat.mul_zero, Nat.add_zero] at hdiv
-    omega
-  · have := Nat.le_mul_of_pos_right Fn.modulus (Nat.pos_of_ne_zero h0)
-    omega
-
 /-- Two signatures with the same `r`, key and message verify only if their `s` agree up to sign.
 
 The bound `p <= r + n` makes both rebuilt points have `x = r`, so they are equal or opposite. -/
@@ -237,7 +227,8 @@ theorem verify_s_eq_or_neg {q : Point} {e r s s' : Nat}
   obtain ⟨hr, hs, -, hqc, x, y, hR, hx⟩ := verify_rebuilt hv
   obtain ⟨hr', hs', -, -, x', y', hR', hx'⟩ := verify_rebuilt hv'
   -- Both rebuilt points have `x = r`.
-  obtain rfl : x' = x := Fin.ext ((val_eq_of_mod_eq hx' hp).trans (val_eq_of_mod_eq hx hp).symm)
+  obtain rfl : x' = x := Fin.ext ((Base.eq_of_mod_eq_of_lt hx' x'.isLt hp).trans
+    (Base.eq_of_mod_eq_of_lt hx x.isLt hp).symm)
   have hG := isOnCurve_generator
   have hc : (affine x' y).isOnCurve = true :=
     hR ▸ isOnCurve_add (isOnCurve_mul _ hG) (isOnCurve_mul _ hqc)
@@ -282,7 +273,7 @@ theorem verify_s_eq_or_neg {q : Point} {e r s s' : Nat}
 /-- Let `(r, s)` be a valid signature under a key and a message, with `p <= r + n`.
 
 Then `(r, s')` is valid under the same key and message exactly when `s'` is `s` or `n - s`. -/
-theorem verify_iff_of_verify {q : Point} {e r s s' : Nat} (hv : verify q e r s = true)
+theorem verify_iff_s_eq_or_neg {q : Point} {e r s s' : Nat} (hv : verify q e r s = true)
     (hp : Fp.modulus ≤ r + Fn.modulus) :
     verify q e r s' = true ↔ s' = s ∨ s' = Fn.modulus - s := by
   refine ⟨fun hv' => verify_s_eq_or_neg hv hv' hp, ?_⟩

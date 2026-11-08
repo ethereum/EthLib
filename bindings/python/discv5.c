@@ -19,11 +19,7 @@ eth_discv5_ecdh(
 
 extern lean_object*
 eth_discv5_derive_keys(
-  lean_object* ephemeral_key,
-  lean_object* dest_pubkey,
-  lean_object* node_id_a,
-  lean_object* node_id_b,
-  lean_object* challenge_data
+  lean_object* args
 );
 
 extern lean_object*
@@ -45,8 +41,7 @@ eth_discv5_id_verify(
 
 extern lean_object*
 eth_discv5_decode_packet(
-  lean_object* dest_id,
-  lean_object* packet
+  lean_object* args
 );
 
 extern lean_object*
@@ -73,7 +68,7 @@ eth_discv5_decrypt_message(
 
 extern lean_object*
 eth_discv5_decode_message(
-  lean_object* plaintext
+  lean_object* args
 );
 
 extern lean_object*
@@ -83,17 +78,12 @@ eth_discv5_reencode_message(
 
 extern lean_object*
 eth_discv5_make_whoareyou(
-  lean_object* dest_id,
-  lean_object* masking_iv,
-  lean_object* nonce,
-  lean_object* id_nonce,
-  lean_object* enr_seq
+  lean_object* args
 );
 
 extern lean_object*
 eth_discv5_read_whoareyou(
-  lean_object* dest_id,
-  lean_object* packet
+  lean_object* args
 );
 
 extern lean_object*
@@ -116,25 +106,12 @@ eth_discv5_open_message(
 
 extern lean_object*
 eth_discv5_seal_handshake(
-  lean_object* ephemeral_key,
-  lean_object* static_key,
-  lean_object* challenge_data,
-  lean_object* src_id,
-  lean_object* dest_id,
-  lean_object* dest_pubkey,
-  lean_object* masking_iv,
-  lean_object* nonce,
-  lean_object* record,
-  lean_object* plaintext
+  lean_object* args
 );
 
 extern lean_object*
 eth_discv5_open_handshake(
-  lean_object* static_key,
-  lean_object* challenge_data,
-  lean_object* dest_id,
-  lean_object* src_pubkey,
-  lean_object* packet
+  lean_object* args
 );
 
 /* ---- Wrappers --------------------------------------------------------- */
@@ -189,10 +166,7 @@ py_discv5_derive_keys(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object* a[5];
-  if (!parse_bytes_args(args, 5, a)) return NULL;
-  return except_into_pybytes(
-    eth_discv5_derive_keys(a[0], a[1], a[2], a[3], a[4]), DISCV5_ERROR);
+  return call_pyvalue_export(eth_discv5_derive_keys, args, 5, DISCV5_ERROR);
 }
 
 PyObject*
@@ -221,9 +195,7 @@ py_discv5_decode_packet(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object* a[2];
-  if (!parse_bytes_args(args, 2, a)) return NULL;
-  return except_into_pybytes(eth_discv5_decode_packet(a[0], a[1]), DISCV5_ERROR);
+  return call_pyvalue_export(eth_discv5_decode_packet, args, 2, DISCV5_ERROR);
 }
 
 PyObject*
@@ -263,9 +235,7 @@ py_discv5_decode_message(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object* a[1];
-  if (!parse_bytes_args(args, 1, a)) return NULL;
-  return except_into_pybytes(eth_discv5_decode_message(a[0]), DISCV5_ERROR);
+  return call_pyvalue_export(eth_discv5_decode_message, args, 1, DISCV5_ERROR);
 }
 
 PyObject*
@@ -283,10 +253,7 @@ py_discv5_make_whoareyou(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object* a[5];
-  if (!parse_bytes_args(args, 5, a)) return NULL;
-  return except_into_pybytes(
-    eth_discv5_make_whoareyou(a[0], a[1], a[2], a[3], a[4]), DISCV5_ERROR);
+  return call_pyvalue_export(eth_discv5_make_whoareyou, args, 5, DISCV5_ERROR);
 }
 
 PyObject*
@@ -294,10 +261,7 @@ py_discv5_read_whoareyou(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object* a[2];
-  if (!parse_bytes_args(args, 2, a)) return NULL;
-  return except_into_pybytes(
-    eth_discv5_read_whoareyou(a[0], a[1]), DISCV5_ERROR);
+  return call_pyvalue_export(eth_discv5_read_whoareyou, args, 2, DISCV5_ERROR);
 }
 
 PyObject*
@@ -327,10 +291,7 @@ py_discv5_seal_handshake(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object* a[10];
-  if (!parse_bytes_args(args, 10, a)) return NULL;
-  return except_into_pybytes(
-    eth_discv5_seal_handshake(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9]), DISCV5_ERROR);
+  return call_pyvalue_export(eth_discv5_seal_handshake, args, 10, DISCV5_ERROR);
 }
 
 PyObject*
@@ -338,8 +299,5 @@ py_discv5_open_handshake(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object* a[5];
-  if (!parse_bytes_args(args, 5, a)) return NULL;
-  return except_into_pybytes(
-    eth_discv5_open_handshake(a[0], a[1], a[2], a[3], a[4]), DISCV5_ERROR);
+  return call_pyvalue_export(eth_discv5_open_handshake, args, 5, DISCV5_ERROR);
 }

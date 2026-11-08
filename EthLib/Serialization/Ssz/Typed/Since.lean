@@ -53,6 +53,28 @@ abbrev presentFieldsProd (p : Prop) [Decidable p] (α β : Type) [SszType α] [S
   roots pair :=
     if present : p then return (← root (pair.1 present)) :: (← SszFields.roots pair.2)
     else SszFields.roots pair.2
+  encodes pair :=
+    if present : p then return (← encode (pair.1 present)) :: (← SszFields.encodes pair.2)
+    else SszFields.encodes pair.2
+  decodeSlots slots :=
+    if present : p then
+      match slots with
+      | .inline bytes :: slots => do
+        let field ← decode bytes
+        let rest ← SszFields.decodeSlots slots
+        return fun bodies => return (fun _ => field, ← rest bodies)
+      | .body _ :: slots => do
+        let rest ← SszFields.decodeSlots slots
+        return fun
+          | bytes :: bodies => do
+            let field ← decode bytes
+            return (fun _ => field, ← rest bodies)
+          | [] => .error (.count (SszFields.descs β).length.succ 0)
+      | [] => .ok fun _ => .error (.count (SszFields.descs β).length.succ 0)
+    else do
+      -- An absent field reads nothing, so the slots all belong to the fields that follow.
+      let rest ← SszFields.decodeSlots slots
+      return fun bodies => return (fun later => absurd later present, ← rest bodies)
 
 /-- A field present when `p` holds, as the last field of a container. -/
 abbrev presentFields (p : Prop) [Decidable p] (α : Type) [SszType α] : SszFields (p → α) where
@@ -68,6 +90,19 @@ abbrev presentFields (p : Prop) [Decidable p] (α : Type) [SszType α] : SszFiel
       | [] => .ok fun later => absurd later present
       | values => .error (.count 0 values.length)
   roots field := if present : p then return [← root (field present)] else return []
+  encodes field := if present : p then return [← encode (field present)] else return []
+  decodeSlots slots :=
+    if present : p then
+      match slots with
+      | .inline bytes :: _ => do
+        let field ← decode bytes
+        return fun _ => .ok fun _ => field
+      | _ => .ok fun
+        | [bytes] => (fun field _ => field) <$> decode bytes
+        | bodies => .error (.count 1 bodies.length)
+    else .ok fun
+      | [] => .ok fun later => absurd later present
+      | bodies => .error (.count 0 bodies.length)
 
 /-- A field that appears at a fork, in front of the fields that follow it. -/
 instance {first fork : Fork} {α β : Type} [SszType α] [SszFields β] :

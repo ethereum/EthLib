@@ -10,6 +10,12 @@ public import EthLib.Serialization.Proofs.Rlp.Codec
 
 An honest initiator and an honest recipient derive the same secrets.
 
+Each reading step accepts only public keys that lie on the curve and are not `O`.
+
+The key agreement checks this again, but a reader rejects a key off the curve before it runs.
+
+A reader of `auth` or `ack` ignores the list items after the fields it knows, as EIP-8 asks.
+
 Each side's egress MAC state is the other side's ingress MAC state.
 
 Two errors with one code come from one constructor.
@@ -40,6 +46,51 @@ theorem decodePublicKey_encodePublicKey {p : Point} (hp : p.isOnCurve = true)
         ⟨(0x04 :: x.toBytes ++ y.toBytes).toArray⟩ := by
       simp
     rw [he, h]
+
+/-- 64 bytes decode to a point exactly when it lies on the curve, is not `O` and encodes to them. -/
+theorem decodePublicKey_eq_ok_iff {bytes : Vector UInt8 64} {p : Point} :
+    decodePublicKey bytes = .ok p ↔
+      p.isOnCurve = true ∧ p ≠ .infinity ∧ encodePublicKey p = bytes := by
+  constructor
+  · intro h
+    unfold decodePublicKey at h
+    cases hd : Point.decode ⟨#[0x04] ++ bytes.toArray⟩ with
+    | error e => simp [hd, Except.mapError] at h
+    | ok q =>
+      simp only [hd, Except.mapError, Except.ok.injEq] at h
+      subst h
+      obtain ⟨hon, hinf, hform⟩ := (Point.decode_eq_ok_iff _ _).mp hd
+      refine ⟨hon, hinf, ?_⟩
+      cases q with
+      | infinity => exact absurd rfl hinf
+      | affine x y =>
+        rcases hform with hcomp | hunc
+        · have hsize := congrArg ByteArray.size hcomp
+          rw [size_encodeCompressed] at hsize
+          simp [ByteArray.size] at hsize
+        · have hlist := congrArg (fun b : ByteArray => b.data.toList) hunc
+          simp only [encodeUncompressed, Array.toList_append] at hlist
+          have htail : bytes.toList = x.toBytes ++ y.toBytes := List.cons.inj hlist |>.2
+          exact Vector.toList_inj.mp (by simpa [encodePublicKey] using htail.symm)
+  · rintro ⟨hon, hinf, rfl⟩
+    exact decodePublicKey_encodePublicKey hon hinf
+
+/-- A recovered signer key lies on the curve and is not `O`. -/
+theorem recoverSigner_valid {hash : Vector UInt8 32} {sig : Vector UInt8 65} {p : Point}
+    (h : recoverSigner hash sig = .ok p) :
+    p.isOnCurve = true ∧ p ≠ .infinity := by
+  unfold recoverSigner at h
+  dsimp only at h
+  split at h
+  · rename_i hv
+    cases hr : Ecdsa.recover hash (Base.bytesToNat (sig.toList.take 32))
+        (Base.bytesToNat ((sig.toList.drop 32).take 32)) ⟨sig[64].toNat, hv⟩ with
+    | error e => simp [hr, Except.mapError] at h
+    | ok q =>
+      simp only [hr, Except.mapError, Except.ok.injEq] at h
+      subst h
+      exact Ecdsa.recover_valid hr
+  · cases h
 
 /-- Recovery from the bytes of a signature from signing returns the signer's key. -/
 theorem recoverSigner_signatureBytes {sk : Fn} {hash : Vector UInt8 32} {sig : Fn × Fn × Bool}
@@ -87,15 +138,40 @@ theorem openPacket_sealPacket {key r : Fn} {iv : Aes.Block} {body padding packet
       rw [hopen, Ecies.decrypt_encrypt hc]
       rfl
 
+/-- After its two size bytes, an opened packet starts with the uncompressed bytes of a key `R`.
+
+`R` lies on the curve and is not `O`. -/
+theorem ephemeral_of_openPacket_eq_ok {key : Fn} {packet body : ByteArray}
+    (h : openPacket key packet = .ok body) :
+    ∃ R : Point, R.isOnCurve = true ∧ R ≠ .infinity ∧
+      ⟨((packet.data.toList.drop 2).take Ecies.EPHEMERAL_KEY_SIZE).toArray⟩ =
+        R.encodeUncompressed := by
+  unfold openPacket at h
+  cases hl : packet.data.toList with
+  | nil => rw [hl] at h; cases h
+  | cons hi tail =>
+    cases tail with
+    | nil => rw [hl] at h; cases h
+    | cons lo rest =>
+      rw [hl] at h
+      dsimp only at h
+      split at h
+      · cases hd : Ecies.decrypt key ⟨#[hi, lo]⟩ ⟨rest.toArray⟩ with
+        | error e => simp [hd, Except.mapError] at h
+        | ok plain =>
+          simpa using Ecies.ephemeral_of_decrypt_eq_ok hd
+      · cases h
+
 /-! ## Messages -/
 
 /-- A message decodes from the start of a body, whatever padding follows it. -/
 theorem decodeBody_encode {α : Type} [Codec α] {m : α}
     (hm : Codec.ofItem (Codec.toItem m) = .ok m) {body : ByteArray} (h : Codec.encode m = .ok body)
     (padding : ByteArray) : decodeBody (body ++ padding) = .ok m := by
-  obtain ⟨hRest, hd⟩ := decodeItem_encode _ _ h padding.data.toList
+  obtain ⟨hNext, hd⟩ := decodeItem_encode _ _ h (input := body ++ padding) (pos := 0)
+    (rest := padding.data.toList) (Nat.le_refl _)
+    (by rw [ByteArray.extract_zero_size, ByteArray.toList_data_append])
   unfold decodeBody
-  rw [ByteArray.data_append, Array.toList_append]
   simp only [bind, Except.bind, hd, hm, Except.mapError]
 
 /-- `auth` reads back from its RLP item. -/
@@ -109,6 +185,29 @@ theorem AckMessage.ofItem_toItem (m : AckMessage) :
     Codec.ofItem (Codec.toItem m) = .ok m := by
   simp [Codec.toItem, Codec.ofItem, leadingFields, Item.toItems, Item.toBytes, ByteArray.size,
     toScalar_scalar, bind, Except.bind, pure, Except.pure]
+
+/-! ## Further list items -/
+
+/-- A list of at least `count` items gives the same leading fields, whatever items follow. -/
+theorem leadingFields_append {count : Nat} {fields : List Item} (extra : List Item)
+    (h : count ≤ fields.length) :
+    leadingFields count (.list (fields ++ extra)) = leadingFields count (.list fields) := by
+  simp [leadingFields, Item.toItems, bind, Except.bind, h, Nat.le_add_right_of_le h,
+    List.take_append_of_le_length h]
+
+/-- `auth` reads the same from four or more items, whatever items follow them, as EIP-8 asks. -/
+theorem AuthMessage.ofItem_append {fields : List Item} (extra : List Item)
+    (h : 4 ≤ fields.length) :
+    (Codec.ofItem (.list (fields ++ extra)) : Except RlpError AuthMessage) =
+      Codec.ofItem (.list fields) := by
+  simp only [Codec.ofItem, leadingFields_append extra h]
+
+/-- `ack` reads the same from three or more items, whatever items follow them, as EIP-8 asks. -/
+theorem AckMessage.ofItem_append {fields : List Item} (extra : List Item)
+    (h : 3 ≤ fields.length) :
+    (Codec.ofItem (.list (fields ++ extra)) : Except RlpError AckMessage) =
+      Codec.ofItem (.list fields) := by
+  simp only [Codec.ofItem, leadingFields_append extra h]
 
 /-! ## The two sides -/
 
@@ -209,6 +308,85 @@ theorem finish_respond {initiator recipient : Keys} {sealingI sealingR : Sealing
   simp only [ecdh_comm initiator.ephemeralKey recipient.ephemeralKey, he, Except.mapError, pure,
     Except.pure, hnonce]
   rfl
+
+/-- Reading `auth` returns the initiator's static and ephemeral keys, both on the curve, not `O`. -/
+theorem readAuth_valid {staticKey : Fn} {packet : ByteArray}
+    {auth : AuthMessage} {remoteStatic remoteEphemeral : Point}
+    (h : readAuth staticKey packet = .ok (auth, remoteStatic, remoteEphemeral)) :
+    remoteStatic.isOnCurve = true ∧ remoteStatic ≠ .infinity ∧
+      remoteEphemeral.isOnCurve = true ∧ remoteEphemeral ≠ .infinity := by
+  unfold readAuth at h
+  cases ho : openPacket staticKey packet with
+  | error e => simp [ho, bind, Except.bind] at h
+  | ok body =>
+  cases hb : (decodeBody body : Except HandshakeError AuthMessage) with
+  | error e => simp [ho, hb, bind, Except.bind] at h
+  | ok msg =>
+  cases hk : decodePublicKey msg.initiatorPubkey with
+  | error e => simp [ho, hb, hk, bind, Except.bind] at h
+  | ok staticPt =>
+  cases hs : ecdh staticKey staticPt with
+  | error e => simp [ho, hb, hk, hs, Except.mapError, bind, Except.bind] at h
+  | ok shared =>
+  cases hr : recoverSigner (xorBytes shared msg.initiatorNonce) msg.signature with
+  | error e => simp [ho, hb, hk, hs, hr, Except.mapError, bind, Except.bind] at h
+  | ok ephPt =>
+  simp only [ho, hb, hk, hs, hr, Except.mapError, bind, Except.bind, pure, Except.pure,
+    Except.ok.injEq, Prod.mk.injEq] at h
+  obtain ⟨rfl, rfl, rfl⟩ := h
+  obtain ⟨hsOn, hsInf, -⟩ := decodePublicKey_eq_ok_iff.mp hk
+  obtain ⟨heOn, heInf⟩ := recoverSigner_valid hr
+  exact ⟨hsOn, hsInf, heOn, heInf⟩
+
+/-- Reading `ack` returns the recipient's ephemeral key, which lies on the curve and is not `O`. -/
+theorem readAck_valid {staticKey : Fn} {packet : ByteArray}
+    {ack : AckMessage} {remoteEphemeral : Point}
+    (h : readAck staticKey packet = .ok (ack, remoteEphemeral)) :
+    remoteEphemeral.isOnCurve = true ∧ remoteEphemeral ≠ .infinity := by
+  unfold readAck at h
+  cases ho : openPacket staticKey packet with
+  | error e => simp [ho, bind, Except.bind] at h
+  | ok body =>
+  cases hb : (decodeBody body : Except HandshakeError AckMessage) with
+  | error e => simp [ho, hb, bind, Except.bind] at h
+  | ok msg =>
+  cases hk : decodePublicKey msg.ephemeralPubkey with
+  | error e => simp [ho, hb, hk, bind, Except.bind] at h
+  | ok ephPt =>
+  simp only [ho, hb, hk, bind, Except.bind, pure, Except.pure, Except.ok.injEq,
+    Prod.mk.injEq] at h
+  obtain ⟨rfl, rfl⟩ := h
+  obtain ⟨heOn, heInf, -⟩ := decodePublicKey_eq_ok_iff.mp hk
+  exact ⟨heOn, heInf⟩
+
+/-- A recipient that answers `auth` has read both initiator keys on the curve, not `O`. -/
+theorem exists_readAuth_of_respond {keys : Keys} {sealing : Sealing} {auth ack : ByteArray}
+    {secrets : Secrets} (h : respond keys sealing auth = .ok (ack, secrets)) :
+    ∃ msg remoteStatic remoteEphemeral,
+      readAuth keys.staticKey auth = .ok (msg, remoteStatic, remoteEphemeral) ∧
+      remoteStatic.isOnCurve = true ∧ remoteStatic ≠ .infinity ∧
+      remoteEphemeral.isOnCurve = true ∧ remoteEphemeral ≠ .infinity := by
+  unfold respond at h
+  cases hr : readAuth keys.staticKey auth with
+  | error e => simp [hr, bind, Except.bind] at h
+  | ok triple =>
+    rcases triple with ⟨msg, remoteStatic, remoteEphemeral⟩
+    obtain ⟨hsOn, hsInf, heOn, heInf⟩ := readAuth_valid hr
+    exact ⟨msg, remoteStatic, remoteEphemeral, rfl, hsOn, hsInf, heOn, heInf⟩
+
+/-- An initiator that finishes has read an `ack` whose ephemeral key is on the curve, not `O`. -/
+theorem exists_readAck_of_finish {keys : Keys} {auth ack : ByteArray} {secrets : Secrets}
+    (h : finish keys auth ack = .ok secrets) :
+    ∃ msg remoteEphemeral,
+      readAck keys.staticKey ack = .ok (msg, remoteEphemeral) ∧
+      remoteEphemeral.isOnCurve = true ∧ remoteEphemeral ≠ .infinity := by
+  unfold finish at h
+  cases hr : readAck keys.staticKey ack with
+  | error e => simp [hr, bind, Except.bind] at h
+  | ok pair =>
+    rcases pair with ⟨msg, remoteEphemeral⟩
+    obtain ⟨heOn, heInf⟩ := readAck_valid hr
+    exact ⟨msg, remoteEphemeral, rfl, heOn, heInf⟩
 
 /-! ## Error codes -/
 

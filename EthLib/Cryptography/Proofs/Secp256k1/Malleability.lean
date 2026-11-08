@@ -13,7 +13,7 @@ Both are valid together, so the valid signatures with that `r`, key and hash are
 
 So the low-s rule of EIP-2 leaves one valid signature for each `r`.
 
-Below that bound, `R` may have `x = r + n`, and two signatures may rebuild unrelated points.
+Below that bound, `R` may also have `x = r + n`, and up to four values of `s` may verify.
 -/
 
 @[expose] public section
@@ -33,7 +33,8 @@ theorem verify_s_eq_or_neg {q : Point} {hash : Vector UInt8 32} {r s s' : Nat}
   obtain ⟨hr, hs, -, hqc, x, y, hR, hx⟩ := verify_rebuilt hv
   obtain ⟨hr', hs', -, -, x', y', hR', hx'⟩ := verify_rebuilt hv'
   -- Both rebuilt points have `x = r`.
-  obtain rfl : x' = x := Fin.ext ((val_eq_of_mod_eq hx' hp).trans (val_eq_of_mod_eq hx hp).symm)
+  obtain rfl : x' = x := Fin.ext ((Base.eq_of_mod_eq_of_lt hx' x'.isLt hp).trans
+    (Base.eq_of_mod_eq_of_lt hx x.isLt hp).symm)
   have hG := isOnCurve_generator
   have hc : (affine x' y).isOnCurve = true :=
     hR ▸ isOnCurve_add (isOnCurve_mul _ hG) (isOnCurve_mul _ hqc)
@@ -88,7 +89,7 @@ theorem verify_lowS_unique {q : Point} {hash : Vector UInt8 32} {r s s' : Nat}
 /-- Let `(r, s)` be a valid signature under a key and a hash, with `p <= r + n`.
 
 Then `(r, s')` is valid under the same key and hash exactly when `s'` is `s` or `n - s`. -/
-theorem verify_iff_of_verify {q : Point} {hash : Vector UInt8 32} {r s s' : Nat}
+theorem verify_iff_s_eq_or_neg {q : Point} {hash : Vector UInt8 32} {r s s' : Nat}
     (hv : verify q hash r s = true) (hp : Fp.modulus ≤ r + Fn.modulus) :
     verify q hash r s' = true ↔ s' = s ∨ s' = Fn.modulus - s := by
   refine ⟨fun hv' => verify_s_eq_or_neg hv hv' hp, ?_⟩

@@ -193,7 +193,7 @@ def test_attributes_invalid_head() -> None:
 
 
 def test_attributes_inconsistent_state() -> None:
-    """An inconsistent forkchoice state fails before its payload attributes are read."""
+    """An inconsistent forkchoice state fails before its payload attributes start a build."""
     state = {"headBlockHash": _hash(2), "safeBlockHash": _hash(3), "finalizedBlockHash": ZERO}
     with raises(
         engine.EngineError, "engine error: EthLib.Engine.EngineError.invalidForkchoiceState"
@@ -222,3 +222,28 @@ def test_duplicate_block_hash() -> None:
     with raises(engine.EngineError, "tree: two payloads with one block hash") as error:
         engine.forkchoice_updated(tree, "engine_forkchoiceUpdatedV3", [state, None])
     assert error.value.code == 0
+
+
+@pytest.mark.parametrize("attributes", [1, "0x1", [], True], ids=repr)
+@pytest.mark.parametrize("head", [3, 9], ids=["new-head", "unknown-head"])
+@pytest.mark.parametrize("version", [1, 2, 3])
+def test_attributes_not_an_object(attributes: object, head: int, version: int) -> None:
+    """Payload attributes that are neither an object nor null are an invalid parameter."""
+    # Block 3 is a new valid head, and block 9 an unknown one that would answer syncing.
+    state = {"headBlockHash": _hash(head), "safeBlockHash": ZERO, "finalizedBlockHash": ZERO}
+    with raises(
+        engine.EngineError,
+        'engine error: EthLib.Engine.EngineError.invalidParams "payloadAttributes: not an object"',
+    ) as error:
+        engine.forkchoice_updated(TREE, f"engine_forkchoiceUpdatedV{version}", [state, attributes])
+    assert error.value.code == 32602
+
+
+def test_bad_state_and_attributes() -> None:
+    """A bad forkchoice state and bad payload attributes together report the state."""
+    with raises(
+        engine.EngineError,
+        'engine error: EthLib.Engine.EngineError.invalidParams "forkchoiceState: not an object"',
+    ) as error:
+        engine.forkchoice_updated(TREE, "engine_forkchoiceUpdatedV3", [1, 1])
+    assert error.value.code == 32602

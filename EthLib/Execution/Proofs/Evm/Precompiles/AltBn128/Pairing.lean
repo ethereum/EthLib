@@ -2,7 +2,7 @@ module
 
 public import EthLib.Execution.Proofs.Evm.Precompiles.AltBn128.Basic
 public import EthLib.Cryptography.Proofs.AltBn128.Order
-public import EthLib.Cryptography.Proofs.AltBn128.Twist
+public import EthLib.Cryptography.Proofs.AltBn128.G2Torsion
 
 /-!
 # Proofs: the pairs of ECPAIRING
@@ -13,7 +13,7 @@ For `G_1`, it says that the encoding and the curve equation are enough.
 
 The curve over `Fp` has `q` points, so `q P = O` for each of them.
 
-So the check `q P = O` that the code also makes on the first point never fails.
+So the code checks the order of the second point only.
 
 For `G_2`, EIP-197 also asks that the order of the point be `q`.
 
@@ -25,13 +25,15 @@ So the check accepts each point whose order divides `q`, including `O`.
 
 EIP-197 encodes `O` as zeros.
 
-EIP-197 says that these points form `G_2`, and no theorem here proves it.
+These points are the multiples of `P2`, so they form `G_2`, as EIP-197 says.
 
 So a pair decodes exactly when its first point decodes, its second point decodes, and `q Q = O`.
 
+So each pair that decodes holds a multiple of `P1` and a multiple of `P2`.
+
 Source: [EIP-197][eip197], section Specification.
 
-[eip197]: https://eips.ethereum.org/EIPS/eip-197#specification
+[eip197]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-197.md#specification
 -/
 
 @[expose] public section
@@ -39,28 +41,9 @@ Source: [EIP-197][eip197], section Specification.
 namespace EthLib.Execution.Evm.Precompiles.AltBn128
 
 open EthLib.Cryptography.AltBn128
-open EthLib.Base (bind_ok_iff)
 open EthLib.Execution.Evm (bufferRead)
 
-/-- A decoded point of the twist is on the twist. -/
-theorem bytesToG2_isOnCurve {raw : List UInt8} {q : Point2} (h : bytesToG2 raw = .ok q) :
-    q.isOnCurve = true := by
-  simp only [bytesToG2, pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at h
-  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-  split at h
-  · cases h
-    rfl
-  · split at h
-    · cases h
-      assumption
-    · cases h
-
-/-- A pair decodes exactly when both points decode and `q` kills the point of the twist.
-
-The check `q P = O` on the point of `G_1` passes for every point that decodes. -/
+/-- A pair decodes exactly when both points decode and `q` kills the point of the twist. -/
 theorem decodePair_eq_ok_iff (data : ByteArray) (index : Nat) (p : Point) (q : Point2) :
     decodePair data index = .ok (p, q) ↔
       bytesToG1 (bufferRead data (192 * index) 64) = .ok p ∧
@@ -73,21 +56,29 @@ theorem decodePair_eq_ok_iff (data : ByteArray) (index : Nat) (p : Point) (q : P
     cases hq : bytesToG2 (bufferRead data (192 * index + 64) 128) with
     | error e => simp [bind, Except.bind]
     | ok q' =>
-      -- Every point of the curve over `Fp` passes its check, since the curve has `q` points.
-      have hp' := Point.mulBits_order (bytesToG1_isOnCurve hp)
       have hq' := Point2.mulBits_order_eq_infinity_iff (bytesToG2_isOnCurve hq)
       by_cases hsub : Point2.mulBits 256 Fr.modulus q' = .infinity
-      · simp only [bind, Except.bind, pure, Except.pure, hp', hsub, ne_eq, not_true_eq_false,
+      · simp only [bind, Except.bind, pure, Except.pure, hsub, ne_eq, not_true_eq_false,
           ↓reduceIte, Except.ok.injEq, Prod.mk.injEq]
         constructor
         · rintro ⟨rfl, rfl⟩
           exact ⟨rfl, rfl, hq'.mp hsub⟩
         · rintro ⟨rfl, rfl, -⟩
           exact ⟨rfl, rfl⟩
-      · simp only [bind, Except.bind, throw, throwThe, MonadExceptOf.throw, hp', hsub, ne_eq,
-          not_true_eq_false, not_false_eq_true, ↓reduceIte, reduceCtorEq, Except.ok.injEq,
-          false_iff, not_and]
+      · simp only [bind, Except.bind, throw, throwThe, MonadExceptOf.throw, hsub, ne_eq,
+          not_false_eq_true, ↓reduceIte, reduceCtorEq, Except.ok.injEq, false_iff, not_and]
         rintro - rfl
         exact fun h => hsub (hq'.mpr h)
+
+/-- Each pair that decodes holds `a P1` and `b P2`, for some `a < q` and `b < q`. -/
+theorem exists_mulBits_generator_of_decodePair {data : ByteArray} {index : Nat} {p : Point}
+    {Q : Point2} (h : decodePair data index = .ok (p, Q)) :
+    (∃ a < Fr.modulus, p = Point.mulBits 256 a Point.generator) ∧
+      ∃ b < Fr.modulus, Q = Point2.mulBits 256 b Point2.generator := by
+  obtain ⟨hp, hq, hord⟩ := (decodePair_eq_ok_iff data index p Q).mp h
+  have hon := bytesToG2_isOnCurve hq
+  exact ⟨Point.exists_eq_mulBits_generator (bytesToG1_isOnCurve hp),
+    (Point2.mulBits_order_eq_infinity_iff_exists hon).mp
+      ((Point2.mulBits_order_eq_infinity_iff hon).mpr hord)⟩
 
 end EthLib.Execution.Evm.Precompiles.AltBn128

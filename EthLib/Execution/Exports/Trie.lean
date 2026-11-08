@@ -1,8 +1,7 @@
 module
 
-public import EthLib.Base.Exports
+public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Cryptography.Hash.Keccak
-public import EthLib.Execution.State.AccountProof
 public import EthLib.Execution.Trie.HexPrefix
 public import EthLib.Execution.Trie.Proof
 public import EthLib.Serialization.Rlp.Codec
@@ -12,11 +11,13 @@ public import EthLib.Serialization.Rlp.Codec
 
 The C exports of the trie root, of proof verification and of the hex-prefix encoding.
 
-A fourth export checks an answer of `eth_getProof` against a state root.
-
 Both hash with Keccak-256.
 
+The Engine exports check an answer of `eth_getProof`, whose fields are JSON.
+
 The pairs of a trie and the nodes of a proof cross the boundary as RLP lists.
+
+The hex-prefix encoding takes typed Python values: a list of nibbles and a bool.
 
 A trie or proof error comes back with its code and a message.
 
@@ -27,7 +28,7 @@ public section
 
 namespace EthLib.Execution.Trie.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result PyValue pyExport)
 
 open EthLib.Base
 open EthLib.Serialization.Rlp
@@ -80,68 +81,23 @@ def verifyProofExport (root : ByteArray) (secured : UInt8) (key proof : ByteArra
   else
     throw (0, s!"bad root size: {root.size}, expected 32")
 
-/-- The hex-prefix encoding of a path, with one nibble in each input byte.
+/-- The hex-prefix encoding of a path of nibbles, for a leaf or an extension.
 
-A byte of 16 or more is not a nibble, and fails with code 0. -/
+A value of 16 or more is not a nibble, and fails with code 0. -/
+def hexPrefixOf (args : List Nat × Bool) : Result ByteArray := do
+  let (nibbles, isLeaf) := args
+  let path ← nibbles.mapM fun n =>
+    if h : n < 16 then pure (⟨n, h⟩ : Nibble)
+    else throw (0, s!"{n} is not a nibble")
+  return nibbleListToCompact path isLeaf
+
+/-- The hex-prefix encoding of a path of nibbles, for a leaf or an extension.
+
+The arguments are the list of the nibbles and whether the path ends at a leaf.
+
+A value of 16 or more is not a nibble, and fails with code 0. -/
 @[export eth_trie_hex_prefix]
-def hexPrefixExport (nibbles : ByteArray) (isLeaf : UInt8) : Result ByteArray := do
-  let path ← nibbles.toList.mapM fun b =>
-    if h : b.toNat < 16 then pure (⟨b.toNat, h⟩ : Nibble)
-    else throw (0, s!"{b} is not a nibble")
-  return nibbleListToCompact path (isLeaf != 0)
-
-/-- The nodes of a proof, from a list of byte strings. -/
-def nodesOfItem (item : Item) : Except RlpError (List ByteArray) := do
-  (← item.toItems).mapM Item.toBytes
-
-/-- One slot of an answer, from a list of the slot on 32 bytes, the word and the nodes. -/
-def storageProofOfItem (item : Item) : Except RlpError State.StorageProof := do
-  match ← item.fields 3 with
-  | [key, value, proof] =>
-    return ⟨← Codec.ofItem key, ← Codec.ofItem value, ← nodesOfItem proof⟩
-  | items => .error (.wrongFieldCount 3 items.length)
-
-/-- An answer of `eth_getProof`, from a list of its seven fields in the order of the structure. -/
-def accountProofOfItem (item : Item) : Except RlpError State.AccountProof := do
-  match ← item.fields 7 with
-  | [address, nonce, balance, codeHash, storageHash, accountProof, storageProof] =>
-    return {
-      address := ← Codec.ofItem address
-      nonce := ← Codec.ofItem nonce
-      balance := ← Codec.ofItem balance
-      codeHash := ← Codec.ofItem codeHash
-      storageHash := ← Codec.ofItem storageHash
-      accountProof := ← nodesOfItem accountProof
-      storageProof := ← (← storageProof.toItems).mapM storageProofOfItem }
-  | items => .error (.wrongFieldCount 7 items.length)
-
-/-- Check an answer of `eth_getProof` against a state root, with Keccak-256.
-
-The answer is the RLP list of the address, the nonce, the balance, the code hash and storage root.
-
-The list goes on with the nodes of the account proof, then the slots.
-
-Each slot is the list of the slot on 32 bytes, the word, and the nodes of its proof.
-
-No bytes means that the address has no account, and that no field or slot was judged.
-
-Otherwise the byte 1 comes first, then one byte for each slot: 1 if it is set, 0 if it is not.
-
-A root of another length than 32 bytes, or an answer that does not decode, has code 0. -/
-@[export eth_trie_verify_account_proof]
-def verifyAccountProofExport (root answer : ByteArray) : Result ByteArray := do
-  if h : root.size = 32 then
-    let .ok item := decode answer | throw (0, "answer is not one RLP item")
-    let .ok p := accountProofOfItem item
-      | throw (0, "answer is not an RLP list of the fields of an account proof")
-    match p.verify Cryptography.Hash.Keccak.keccak256 ⟨root.data, h⟩ with
-    | .ok .absent => return .empty
-    | .ok (.present slots) =>
-      return ⟨(#[1] : Array UInt8) ++ (slots.map fun
-        | .set => (1 : UInt8)
-        | .absent => 0).toArray⟩
-    | .error e => throw (e.code, s!"answer does not hold: {repr e}")
-  else
-    throw (0, s!"bad root size: {root.size}, expected 32")
+def hexPrefixExport (args : PyValue) : Result PyValue :=
+  pyExport hexPrefixOf args
 
 end EthLib.Execution.Trie.Exports

@@ -1,9 +1,7 @@
 module
 
-public import EthLib.Base.Exports
+public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Networking.Exports.Enr
-public import Lean.Data.Json
-public import EthLib.Base.Hex
 public import EthLib.Networking.Discv5.Identity
 public import EthLib.Networking.Discv5.Message
 public import EthLib.Networking.Discv5.Packet
@@ -26,17 +24,22 @@ Any other rejected input comes back with code 0, including a failure of AES-GCM.
 A failure of the handshake or of a session packet comes back with its own code.
 
 When the failure is in the packet itself, the code is that of the packet error instead.
+
+The exports that read a packet, a message or a handshake return typed Python values.
+
+A byte string is `bytes` and a number is an `int`.
+
+An argument that Lean cannot read fails with code 0.
 -/
 
 public section
 
 namespace EthLib.Networking.Discv5.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result PyValue toPy pyExport)
 
 open EthLib.Cryptography.Secp256k1
 open EthLib.Networking.Enr.Exports (privateKeyOf)
-open Lean (Json ToJson toJson)
 
 /-- A node ID of 32 bytes. -/
 def nodeIdOf (bytes : ByteArray) : Result NodeId :=
@@ -61,17 +64,26 @@ def ecdhExport (sk pk : ByteArray) : Result ByteArray := do
   | .ok secret => pure secret
   | .error _ => throw (0, "no shared secret")
 
-/-- The session keys, as the 16 bytes of the initiator key, then the 16 of the recipient key.
+/-- The session keys: the 16-byte initiator key and the 16-byte recipient key.
 
 The secret is the ECDH of the ephemeral private key and the public key of node B. -/
-@[export eth_discv5_derive_keys]
-def deriveKeysExport (ephemeralKey destPubkey nodeIdA nodeIdB challengeData : ByteArray) :
-    Result ByteArray := do
+def deriveKeysOf (args : ByteArray × ByteArray × ByteArray × ByteArray × ByteArray) :
+    Result (ByteArray × ByteArray) := do
+  let (ephemeralKey, destPubkey, nodeIdA, nodeIdB, challengeData) := args
   let some secret := (ecdh (← privateKeyOf ephemeralKey) (← publicKeyOf destPubkey)).toOption
     | throw (0, "no shared secret")
   match deriveKeys secret challengeData (← nodeIdOf nodeIdA) (← nodeIdOf nodeIdB) with
-  | .ok keys => pure (keys.initiatorKey ++ keys.recipientKey)
+  | .ok keys => pure (keys.initiatorKey, keys.recipientKey)
   | .error _ => throw (0, "key derivation failed")
+
+/-- The session keys: the 16-byte initiator key and the 16-byte recipient key.
+
+The arguments are the ephemeral key of node A and the public key of node B.
+
+Then come the two node IDs and the challenge data. -/
+@[export eth_discv5_derive_keys]
+def deriveKeysExport (args : PyValue) : Result PyValue :=
+  pyExport deriveKeysOf args
 
 /-- The 64-byte ID signature of node A. -/
 @[export eth_discv5_id_sign]
@@ -91,39 +103,44 @@ def idVerifyExport (pubkey challengeData ephemeralPubkey nodeIdB signature : Byt
 
 /-! ## Packets -/
 
-/-- Bytes as a `0x`-prefixed lowercase hex string. -/
-def hex (bytes : List UInt8) : Json :=
-  Json.str (Base.hexString bytes)
-
 /-- Run a packet operation, with its error as a code and a message. -/
 def runPacket {α : Type} (act : Except PacketError α) : Result α :=
   act.mapError fun e => (e.code, s!"invalid packet: {repr e}")
 
-/-- The fields of an authdata, as JSON. -/
-def authdataJson : Authdata → List (String × Json)
-  | .message srcId => [("src_id", hex srcId.toList)]
-  | .whoareyou idNonce enrSeq =>
-    [("id_nonce", hex idNonce.toList), ("enr_seq", toJson enrSeq.toNat)]
+/-- The fields of an authdata, as Python values. -/
+def authdataFields : Authdata → List (String × PyValue)
+  | .message srcId => [("src_id", toPy srcId)]
+  | .whoareyou idNonce enrSeq => [("id_nonce", toPy idNonce), ("enr_seq", toPy enrSeq)]
   | .handshake srcId idSignature ephemeralPubkey record =>
-    [("src_id", hex srcId.toList), ("id_signature", hex idSignature.data.toList),
-      ("ephemeral_pubkey", hex ephemeralPubkey.data.toList), ("record", hex record.data.toList)]
+    [("src_id", toPy srcId), ("id_signature", toPy idSignature),
+      ("ephemeral_pubkey", toPy ephemeralPubkey), ("record", toPy record)]
 
-/-- The packet that a destination node reads, as a JSON object of hex strings.
+/-- The packet that a destination node reads, as a `dict`.
+
+It holds the flag, the masking IV, the nonce, the authdata fields and the message.
+
+It also holds the additional data of the message. -/
+def decodePacketOf (args : ByteArray × ByteArray) : Result PyValue := do
+  let (destId, bytes) := args
+  let p ← runPacket (Packet.decode (← nodeIdOf destId) bytes)
+  let ad ← runPacket p.messageAd
+  return .dict <| (#[
+    ("flag", toPy p.header.authdata.flag),
+    ("masking_iv", toPy p.maskingIv),
+    ("nonce", toPy p.header.nonce),
+    ("message", toPy p.message),
+    ("message_ad", toPy ad)] ++ (authdataFields p.header.authdata).toArray)
+
+/-- The packet that a destination node reads, as a `dict`.
+
+The arguments are the node ID of the destination and the packet.
 
 It holds the flag, the masking IV, the nonce, the authdata fields and the message.
 
 It also holds the additional data of the message. -/
 @[export eth_discv5_decode_packet]
-def decodePacketExport (destId bytes : ByteArray) : Result ByteArray := do
-  let p ← runPacket (Packet.decode (← nodeIdOf destId) bytes)
-  let ad ← runPacket p.messageAd
-  let json := Json.mkObj <| [
-    ("flag", toJson p.header.authdata.flag.toNat),
-    ("masking_iv", hex p.maskingIv.toList),
-    ("nonce", hex p.header.nonce.toList),
-    ("message", hex p.message.data.toList),
-    ("message_ad", hex ad.data.toList)] ++ authdataJson p.header.authdata
-  return json.compress.toUTF8
+def decodePacketExport (args : PyValue) : Result PyValue :=
+  pyExport decodePacketOf args
 
 /-- The bytes of the packet that the decoder reads, written again by the encoder. -/
 @[export eth_discv5_reencode_packet]
@@ -166,44 +183,47 @@ def runMessage {α : Type} (act : Except MessageError α) : Result α :=
     | .fields t => s!"invalid message: wrong field count for type {t}"
     | .invalid => "invalid message: a size or a distance is out of range")
 
-/-- The RLP bytes of an item, for a record inside a message. -/
-def itemHex (item : Serialization.Rlp.Item) : Json :=
+/-- The RLP bytes of an item, for a record inside a message, or `None` when it has none. -/
+def itemBytes (item : Serialization.Rlp.Item) : PyValue :=
   match Serialization.Rlp.encode item with
-  | .ok bytes => hex bytes.data.toList
-  | .error _ => Json.null
+  | .ok bytes => .bytes bytes
+  | .error _ => .none
 
-/-- The fields of a message, as JSON: byte strings in hex, integers as numbers. -/
-def messageJson : Message → List (String × Json)
-  | .ping id seq => [("request_id", hex id.data.toList), ("enr_seq", toJson seq.toNat)]
+/-- The fields of a message, as Python values: byte strings as `bytes`, integers as `int`. -/
+def messageFields : Message → List (String × PyValue)
+  | .ping id seq => [("request_id", toPy id), ("enr_seq", toPy seq)]
   | .pong id seq ip port =>
-    [("request_id", hex id.data.toList), ("enr_seq", toJson seq.toNat),
-      ("recipient_ip", hex ip.data.toList), ("recipient_port", toJson port.toNat)]
-  | .findnode id ds => [("request_id", hex id.data.toList), ("distances", toJson ds)]
+    [("request_id", toPy id), ("enr_seq", toPy seq),
+      ("recipient_ip", toPy ip), ("recipient_port", toPy port)]
+  | .findnode id ds => [("request_id", toPy id), ("distances", toPy ds)]
   | .nodes id total rs =>
-    [("request_id", hex id.data.toList), ("total", toJson total.toNat),
-      ("records", Json.arr (rs.map itemHex).toArray)]
+    [("request_id", toPy id), ("total", toPy total),
+      ("records", .list (rs.map itemBytes).toArray)]
   | .talkreq id p r =>
-    [("request_id", hex id.data.toList), ("protocol", hex p.data.toList),
-      ("request", hex r.data.toList)]
-  | .talkresp id r => [("request_id", hex id.data.toList), ("response", hex r.data.toList)]
+    [("request_id", toPy id), ("protocol", toPy p),
+      ("request", toPy r)]
+  | .talkresp id r => [("request_id", toPy id), ("response", toPy r)]
   | .regtopic id t rec ticket ds =>
-    [("request_id", hex id.data.toList), ("topic", hex t.toList), ("record", itemHex rec),
-      ("ticket", hex ticket.data.toList), ("distances", toJson ds)]
+    [("request_id", toPy id), ("topic", toPy t), ("record", itemBytes rec),
+      ("ticket", toPy ticket), ("distances", toPy ds)]
   | .regconfirmation id total ticket wait =>
-    [("request_id", hex id.data.toList), ("total", toJson total.toNat),
-      ("ticket", hex ticket.data.toList), ("wait_time", toJson wait.toNat)]
+    [("request_id", toPy id), ("total", toPy total),
+      ("ticket", toPy ticket), ("wait_time", toPy wait)]
   | .topicquery id t ds =>
-    [("request_id", hex id.data.toList), ("topic", hex t.toList), ("distances", toJson ds)]
+    [("request_id", toPy id), ("topic", toPy t), ("distances", toPy ds)]
   | .topicnodes id total rs =>
-    [("request_id", hex id.data.toList), ("total", toJson total.toNat),
-      ("records", Json.arr (rs.map itemHex).toArray)]
+    [("request_id", toPy id), ("total", toPy total),
+      ("records", .list (rs.map itemBytes).toArray)]
 
-/-- The message of a plaintext, as a JSON object with its type and its fields. -/
-@[export eth_discv5_decode_message]
-def decodeMessageExport (plaintext : ByteArray) : Result ByteArray := do
+/-- The message of a plaintext, as a `dict` of its type and its fields. -/
+def decodeMessageOf (plaintext : ByteArray) : Result PyValue := do
   let m ← runMessage (Message.decode plaintext)
-  let json := Json.mkObj (("type", toJson m.type.toNat) :: messageJson m)
-  return json.compress.toUTF8
+  return .dict (("type", toPy m.type) :: messageFields m).toArray
+
+/-- The message of a plaintext, as a `dict` of its type and its fields. -/
+@[export eth_discv5_decode_message]
+def decodeMessageExport (args : PyValue) : Result PyValue :=
+  pyExport decodeMessageOf args
 
 /-- The plaintext of the decoded message, written again by the encoder. -/
 @[export eth_discv5_reencode_message]
@@ -243,27 +263,33 @@ def runHandshake {α : Type} (act : Except HandshakeError α) : Result α :=
     | .decryption _ => (e.code, "message does not authenticate")
     | .notHandshake flag => (e.code, s!"packet has flag {flag}, not 2")
 
-/-- Node B's WHOAREYOU packet for node A, and its challenge data, as a JSON object.
+/-- Node B's WHOAREYOU packet for node A, and its challenge data. -/
+def makeWhoareyouOf (args : ByteArray × ByteArray × ByteArray × ByteArray × UInt64) :
+    Result (ByteArray × ByteArray) := do
+  let (destId, maskingIv, nonce, idNonce, enrSeq) := args
+  runSession (makeWhoareyou (← nodeIdOf destId) (← vectorOf 16 "masking IV" maskingIv)
+    (← nonceOf nonce) (← vectorOf 16 "ID nonce" idNonce) enrSeq)
 
-The `enr-seq` is 8 big-endian bytes. -/
+/-- Node B's WHOAREYOU packet for node A, and its challenge data.
+
+The arguments are the node ID of node A, the masking IV, the nonce, the ID nonce and the seq. -/
 @[export eth_discv5_make_whoareyou]
-def makeWhoareyouExport (destId maskingIv nonce idNonce enrSeq : ByteArray) :
-    Result ByteArray := do
-  let seq ← vectorOf 8 "enr-seq" enrSeq
-  let (packet, challengeData) ← runSession (makeWhoareyou (← nodeIdOf destId)
-    (← vectorOf 16 "masking IV" maskingIv) (← nonceOf nonce) (← vectorOf 16 "ID nonce" idNonce)
-    (Base.bytesToNat seq.toList).toUInt64)
-  let json := Json.mkObj [("packet", hex packet.data.toList),
-    ("challenge_data", hex challengeData.data.toList)]
-  return json.compress.toUTF8
+def makeWhoareyouExport (args : PyValue) : Result PyValue :=
+  pyExport makeWhoareyouOf args
 
-/-- Node A's reading of a WHOAREYOU packet, as a JSON object. -/
-@[export eth_discv5_read_whoareyou]
-def readWhoareyouExport (destId packet : ByteArray) : Result ByteArray := do
+/-- Node A's reading of a WHOAREYOU packet, as a `dict`. -/
+def readWhoareyouOf (args : ByteArray × ByteArray) : Result PyValue := do
+  let (destId, packet) := args
   let c ← runSession (readWhoareyou (← nodeIdOf destId) packet)
-  let json := Json.mkObj [("nonce", hex c.nonce.toList), ("id_nonce", hex c.idNonce.toList),
-    ("enr_seq", toJson c.enrSeq.toNat), ("challenge_data", hex c.challengeData.data.toList)]
-  return json.compress.toUTF8
+  return .dict #[("nonce", toPy c.nonce), ("id_nonce", toPy c.idNonce),
+    ("enr_seq", toPy c.enrSeq), ("challenge_data", toPy c.challengeData)]
+
+/-- Node A's reading of a WHOAREYOU packet, as a `dict`.
+
+The arguments are the node ID of node A and the packet. -/
+@[export eth_discv5_read_whoareyou]
+def readWhoareyouExport (args : PyValue) : Result PyValue :=
+  pyExport readWhoareyouOf args
 
 /-- An ordinary message packet from one node to another, under a session key. -/
 @[export eth_discv5_seal_message]
@@ -283,29 +309,50 @@ def openMessageExport (key srcId destId packet : ByteArray) : Result ByteArray :
     (← nodeIdOf destId) packet)
   return plaintext
 
-/-- Node A's handshake message packet for node B, and its session keys, as a JSON object. -/
-@[export eth_discv5_seal_handshake]
-def sealHandshakeExport (ephemeralKey staticKey challengeData srcId destId destPubkey maskingIv
-    nonce record plaintext : ByteArray) : Result ByteArray := do
+/-- The arguments of a handshake that node A seals.
+
+They are the ephemeral key and the static key of node A, the challenge data and the two node IDs.
+
+Then come the public key of node B, the masking IV, the nonce, the record and the plaintext. -/
+abbrev SealHandshakeArgs := ByteArray × ByteArray × ByteArray × ByteArray × ByteArray ×
+  ByteArray × ByteArray × ByteArray × ByteArray × ByteArray
+
+/-- Node A's handshake message packet for node B, and its two session keys. -/
+def sealHandshakeOf (args : SealHandshakeArgs) : Result (ByteArray × ByteArray × ByteArray) := do
+  let (ephemeralKey, staticKey, challengeData, srcId, destId, destPubkey, maskingIv, nonce, record,
+    plaintext) := args
   let (packet, keys) ← runHandshake (sealHandshake (← privateKeyOf ephemeralKey)
     (← privateKeyOf staticKey) challengeData (← nodeIdOf srcId) (← nodeIdOf destId)
     (← publicKeyOf destPubkey) (← vectorOf 16 "masking IV" maskingIv) (← nonceOf nonce) record
     plaintext)
-  let json := Json.mkObj [("packet", hex packet.data.toList),
-    ("initiator_key", hex keys.initiatorKey.data.toList),
-    ("recipient_key", hex keys.recipientKey.data.toList)]
-  return json.compress.toUTF8
+  return (packet, keys.initiatorKey, keys.recipientKey)
 
-/-- Node B's reading of a handshake message packet, as a JSON object. -/
-@[export eth_discv5_open_handshake]
-def openHandshakeExport (staticKey challengeData destId srcPubkey packet : ByteArray) :
-    Result ByteArray := do
+/-- Node A's handshake message packet for node B, and its two session keys.
+
+The arguments are the ephemeral key and the static key of node A, the challenge data and the IDs.
+
+Then come the public key of node B, the masking IV, the nonce, the record and the plaintext. -/
+@[export eth_discv5_seal_handshake]
+def sealHandshakeExport (args : PyValue) : Result PyValue :=
+  pyExport sealHandshakeOf args
+
+/-- Node B's reading of a handshake message packet, as a `dict`. -/
+def openHandshakeOf (args : ByteArray × ByteArray × ByteArray × ByteArray × ByteArray) :
+    Result PyValue := do
+  let (staticKey, challengeData, destId, srcPubkey, packet) := args
   let r ← runHandshake (openHandshake (← privateKeyOf staticKey) challengeData
     (← nodeIdOf destId) (← publicKeyOf srcPubkey) packet)
-  let json := Json.mkObj [("src_id", hex r.srcId.toList), ("record", hex r.record.data.toList),
-    ("plaintext", hex r.message.data.toList),
-    ("initiator_key", hex r.keys.initiatorKey.data.toList),
-    ("recipient_key", hex r.keys.recipientKey.data.toList)]
-  return json.compress.toUTF8
+  return .dict #[("src_id", toPy r.srcId), ("record", toPy r.record),
+    ("plaintext", toPy r.message), ("initiator_key", toPy r.keys.initiatorKey),
+    ("recipient_key", toPy r.keys.recipientKey)]
+
+/-- Node B's reading of a handshake message packet, as a `dict`.
+
+The arguments are the static key of node B, the challenge data and the node ID of node B.
+
+Then come the public key of node A and the packet. -/
+@[export eth_discv5_open_handshake]
+def openHandshakeExport (args : PyValue) : Result PyValue :=
+  pyExport openHandshakeOf args
 
 end EthLib.Networking.Discv5.Exports

@@ -12,9 +12,12 @@ The WHOAREYOU challenge and the ordinary message packet read back.
 - A WHOAREYOU packet has 63 bytes, the smallest packet.
 - Node A reads the challenge of node B back, with the challenge data that node B keeps.
 - Node B reads an ordinary message packet of node A back, under its key.
+- An ordinary message packet that opens under a key is the sealing of its plaintext under that key.
 - Two errors with one code come from one constructor.
 
 The theorems say nothing about the freshness of a nonce, an ID nonce or an `enr-seq`.
+
+They give no bound on forging an AES-GCM tag.
 -/
 
 @[expose] public section
@@ -24,29 +27,6 @@ namespace EthLib.Networking.Proofs.Discv5.Session
 open EthLib.Networking.Discv5
 open EthLib.Networking.Proofs.Discv5.Packet
 open EthLib.Cryptography
-
-/-! ## Sizes -/
-
-/-- The unmasked header is the 23 bytes of the static header, then the authdata. -/
-theorem length_of_header_encode {h : Header} {bytes : List UInt8} (he : h.encode = .ok bytes) :
-    bytes.length = 23 + h.authdata.encode.length := by
-  unfold Header.encode at he
-  dsimp only at he
-  split at he
-  · cases he
-    simp [PROTOCOL_ID, VERSION, Base.natToBytes_length]
-    omega
-  · cases he
-
-/-- A packet is the masking IV, the unmasked header and the message, in size. -/
-theorem size_of_encode {destId : NodeId} {p : Packet} {bytes : ByteArray} {header : List UInt8}
-    (he : p.encode destId = .ok bytes) (hh : p.header.encode = .ok header) :
-    bytes.size = 16 + header.length + p.message.size := by
-  obtain ⟨header', hh', rfl, -⟩ := Packet.encode_eq_ok he
-  obtain ⟨iv, h, msg⟩ := p
-  obtain rfl : header' = header := Except.ok.inj (hh'.symm.trans hh)
-  simp only [ByteArray.size, List.size_toArray, List.length_append, Vector.length_toList,
-    length_mask, Array.length_toList]
 
 /-! ## The WHOAREYOU challenge -/
 
@@ -70,17 +50,22 @@ theorem readWhoareyou_makeWhoareyou {nodeIdA : NodeId} {maskingIv : Vector UInt8
       simp only [ha, hb, Except.mapError, bind, Except.bind, pure, Except.pure, Except.ok.injEq,
         Prod.mk.injEq] at h
       obtain ⟨rfl, rfl⟩ := h
-      -- The header has 23 + 24 bytes, and the message is empty.
+      -- The additional data is 16 + 23 + 24 bytes, and the message is empty.
       cases hh : p.header.encode with
       | error err => simp [Packet.encode, hh, bind, Except.bind] at hb
       | ok header =>
-        have hlen := length_of_header_encode hh
-        have hsize := size_of_encode hb hh
+        have hlen := Header.length_encode hh
+        have hsize := Packet.size_messageAd_add hb ha
         subst hp
         simp only [Authdata.encode, List.length_append, Vector.length_toList,
           Base.natToBytes_length] at hlen
+        have hadSize := ha
+        simp only [Packet.messageAd, hh, bind, Except.bind, pure, Except.pure,
+          Except.ok.injEq] at hadSize
         have h63 : packetBytes.size = 63 := by
-          rw [hsize, hlen]
+          rw [← hsize, ← hadSize]
+          simp only [ByteArray.size, List.size_toArray, List.length_append, Vector.length_toList,
+            hlen]
           rfl
         refine ⟨h63, ?_⟩
         have hdec := Packet.decode_encode hb (fun _ => rfl)
@@ -99,29 +84,50 @@ theorem openMessage_sealMessage {key : Aes.Key .aes128} {nodeIdA nodeIdB : NodeI
     (hkey : keyOf nodeIdA = some key) :
     openMessage keyOf nodeIdB bytes = .ok (nodeIdA, plaintext) := by
   unfold sealMessage at h
-  generalize hheader : (⟨nonce, .message nodeIdA⟩ : Header) = header at h
-  cases ha : Packet.messageAd ⟨maskingIv, header, .empty⟩ with
-  | error err => simp [ha, Except.mapError, bind, Except.bind] at h
-  | ok ad =>
-    cases hm : encryptMessage key nonce plaintext ad with
-    | error err => simp [ha, hm, Except.mapError, bind, Except.bind] at h
-    | ok message =>
-      simp only [ha, hm, Except.mapError, bind, Except.bind] at h
-      cases hb : Packet.encode nodeIdB ⟨maskingIv, header, message⟩ with
-      | error err => simp [hb] at h
-      | ok packetBytes =>
-        simp only [hb, Except.ok.injEq] at h
-        subst h
-        have hdec := Packet.decode_encode hb (by
-          intro hflag
-          rw [← hheader] at hflag
-          simp [Authdata.flag] at hflag)
-        -- The additional data depends only on the masking IV and the header.
-        have had : Packet.messageAd ⟨maskingIv, header, message⟩ = .ok ad := by
-          simpa [Packet.messageAd] using ha
-        subst hheader
-        simp only [openMessage, hdec, hkey, had, decryptMessage_encryptMessage hm,
-          Except.mapError, bind, Except.bind, pure, Except.pure]
+  obtain ⟨message, hdec, hopen⟩ :=
+    openPacket_sealPacket (decryptionError := SessionError.decryption) h (by simp [Authdata.flag])
+  simp only [openMessage, hdec, hkey, hopen, Except.mapError, bind, Except.bind, pure, Except.pure]
+
+/-- An ordinary message packet that opens under a key is the sealing of its plaintext.
+
+The sealing uses the key that node B holds for the sender.
+
+It also uses the masking IV and the header nonce of the decoded packet. -/
+theorem sealMessage_of_openMessage {keyOf : NodeId → Option (Aes.Key .aes128)}
+    {key : Aes.Key .aes128} {nodeIdA nodeIdB : NodeId} {bytes plaintext : ByteArray}
+    (ho : openMessage keyOf nodeIdB bytes = .ok (nodeIdA, plaintext))
+    (hk : keyOf nodeIdA = some key) :
+    ∃ packet, Packet.decode nodeIdB bytes = .ok packet ∧
+      sealMessage key nodeIdA nodeIdB packet.maskingIv packet.header.nonce plaintext
+        = .ok bytes := by
+  unfold openMessage at ho
+  cases hd : Packet.decode nodeIdB bytes with
+  | error err => simp [hd, Except.mapError, bind, Except.bind] at ho
+  | ok packet =>
+    simp only [hd, Except.mapError, bind, Except.bind] at ho
+    cases ha : packet.header.authdata with
+    | whoareyou idNonce enrSeq => simp [ha, throw] at ho
+    | handshake srcId idSignature ephemeralPubkey record => simp [ha, throw] at ho
+    | message srcId =>
+      simp only [ha] at ho
+      cases hkey : keyOf srcId with
+      | none => simp [hkey, throw] at ho
+      | some senderKey =>
+        simp only [hkey] at ho
+        cases hp : openPacket SessionError.packet SessionError.decryption senderKey packet with
+        | error err => simp [hp] at ho
+        | ok plain =>
+          simp only [hp, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at ho
+          obtain ⟨rfl, rfl⟩ := ho
+          rw [hk] at hkey
+          cases hkey
+          refine ⟨packet, rfl, ?_⟩
+          have hseal := sealPacket_of_openPacket
+            (packetError' := SessionError.packet) (encryptionError := SessionError.encryption) hd hp
+          obtain ⟨iv, ⟨nonce, authdata⟩, message⟩ := packet
+          simp only at ha
+          subst ha
+          exact hseal
 
 /-! ## Error codes -/
 

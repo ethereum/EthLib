@@ -375,6 +375,8 @@ From Fusaka, each oversized length fails the call whatever the gas (`modexp_leng
 `modexp_lengthTooLarge_exponent`, `modexp_lengthTooLarge_modulus`).
 With every length in bounds, a call fails exactly when the gas is below the price, at every fork
 (`modexp_outOfGas`, `modexp_ok`).
+A call succeeds exactly when, from Fusaka, every length is in bounds and the gas covers the price (`modexp_eq_ok_iff`).
+It fails exactly on the first oversized length, from Fusaka, or else on too little gas (`modexp_eq_error_iff`).
 
 The price of each fork has its theorem (`gasCost_of_lt_berlin`, `gasCost_of_berlin_le`).
 From Fusaka, the price is at least 500, does not fall when a length grows, and is at most
@@ -444,11 +446,11 @@ Every decoded point is on its curve (`bytesToG1_isOnCurve`, `bytesToG2_isOnCurve
 Let `q` be the order of `G_1` and `O` the point at infinity.
 A pair of ECPAIRING decodes exactly when both points decode and `q Q = O` for its point `Q` of
 the twist (`decodePair_eq_ok_iff`).
-The same check on its point of `G_1` always passes, because the curve over `Fp` has `q` points.
-So the curve equation is enough for `G_1`, as EIP-197 says.
+The curve over `Fp` has `q` points, so the curve equation is enough for `G_1`, as EIP-197 says.
+So the decoder checks the order of the point of the twist only.
 
 The decoder of a point of `G_1` accepts 64 bytes exactly when they encode a point on the curve
-(`bytesToG1_eq_ok_iff`, from `bytesToG1_g1ToBytes` and `g1ToBytes_of_bytesToG1`).
+(`bytesToG1_eq_ok_iff`, from `bytesToG1_g1ToBytes` and `g1ToBytes_bytesToG1`).
 `Group.lean` shows that ECADD returns the sum of its points in the group of the curve, and ECMUL
 the product of its point by its scalar (`ecadd_toPoint`, `ecmul_toPoint`).
 Each output decodes to that sum or that product (`bytesToG1_ecadd`, `bytesToG1_ecmul`).
@@ -497,6 +499,7 @@ The proofs are in `EthLib/Execution/Proofs/Evm/Precompiles/Blake2f.lean` and
 A call fails exactly on a wrong length, too little gas or a wrong flag byte, in that order
 (`blake2f_eq_error_iff`).
 Otherwise it returns F on the decoded fields (`blake2f_of_gas`, `output_ok`).
+A call succeeds exactly on a 213-byte input with enough gas and a flag byte of `0` or `1` (`blake2f_eq_ok_iff`).
 Every field is decoded with its own byte order, and the output words keep the order of the input
 (`readRounds_toNat`, `readWord_toNat`, `writeState_word`).
 Each word of the initialization vector is the square root of its prime, and each row of the

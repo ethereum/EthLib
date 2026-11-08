@@ -1,0 +1,13 @@
+# Hand conversions that the check allows in the package, around the native calls.
+#
+# An entry is a file, a function and a rule.
+#
+# It covers every conversion of that rule in that function.
+# A nested function or a method is named after what encloses it, as `outer.inner`.
+# Code in a class body outside its methods is named after the class.
+# Code outside every function and class is named `<module>`.
+# Remove an entry in the pull request that makes its export take and return typed values.
+# An entry that matches no conversion fails the check.
+# A new entry is an exception that a maintainer approves, and the diff shows it.
+# A pull request that moves a conversion to another function renames its entry.
+

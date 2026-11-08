@@ -225,9 +225,8 @@ def test_committee_assignment(epoch: int):
         assert assignment is not None
         committee, index, slot = assignment
         assert validator in committee
-        assert index == 0
         assert slot // SLOTS_PER_EPOCH == epoch
-        assert committee == _expected_committee(count, epoch, slot)
+        assert assignment == (_expected_committee(count, epoch, slot), 0, slot)
         seen.add(validator)
     assert seen == set(range(count))
 
@@ -503,3 +502,35 @@ def test_proposer_preferences_signature_in_the_epoch_before_gloas():
         config,
     )
     assert got == expected
+
+
+@pytest.mark.parametrize(
+    "index, error, message",
+    [
+        (True, consensus.ValidatorDutyError, "expected an int"),
+        (2**64, consensus.ValidatorDutyError, f"expected an int below {2**64}, got {2**64}"),
+        (-1, ValueError, "cannot pass a negative int to Lean"),
+    ],
+)
+def test_validator_index_is_read_as_an_int(index, error, message):
+    with raises(error, message):
+        consensus.is_proposer("mainnet", "phase0", phase0_state(64), index)
+
+
+def test_duty_must_be_text():
+    with raises(consensus.ValidatorDutyError, "expected a str") as info:
+        consensus.get_validator_signature(
+            "mainnet",
+            "phase0",
+            phase0_state(64),
+            b"randao",  # ty: ignore[invalid-argument-type]
+            b"",
+            bytes(32),
+        )
+    assert info.value.code == 0
+
+
+def test_configuration_must_be_a_dict():
+    with raises(consensus.ValidatorDutyError, "configuration: expected a dict") as info:
+        consensus.is_proposer("mainnet", "phase0", phase0_state(64), 0, [])  # ty: ignore[invalid-argument-type]
+    assert info.value.code == 0

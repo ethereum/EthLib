@@ -25,13 +25,15 @@ A tie between two children goes to the greater root, read as a big-endian number
 
 That order is the order of roots as strings of bytes.
 
-The head descends from the justified block.
-
-It is a viable leaf, unless no leaf is viable, and then it is the justified block.
+The head is a viable leaf, unless no leaf is viable, and then it is the justified block.
 
 So when some leaf is viable, the chain of the head holds the finalized block.
 
 That is not required when the finalized epoch is genesis.
+
+When a viable block holds more than half of the stake in votes, the head descends from it.
+
+That holds before Gloas and without a boost, when each known block sits after its known parent.
 -/
 
 @[expose] public section
@@ -148,6 +150,36 @@ theorem isAncestor_of_parent {root : Root} {block parent : BeaconBlock preset fo
     rw [getAncestor_of_gt before found (fun le => absurd (UInt64.lt_of_lt_of_le below le)
       (UInt64.lt_irrefl _)) parentFound lower]
     exact descends
+
+/-- The ancestor walk to a slot succeeds from every known block.
+
+Each known parent must sit below its child.
+
+Each known block whose parent is unknown must sit at or below the slot. -/
+theorem getAncestor_ok_of_orphans_le (lower : store.ParentsBelow) {slot : Slot}
+    (orphansLe : ∀ (root : Root) (block : BeaconBlock preset fork),
+      store.blocks[root]? = some block → store.blocks[block.parentRoot]? = none →
+      block.slot ≤ slot)
+    {node : ForkChoiceNode} {block : BeaconBlock preset fork}
+    (found : store.blocks[node.root]? = some block) :
+    ∃ ancestor, store.getAncestor node slot = .ok ancestor := by
+  suffices ∀ (n : ℕ) (node : ForkChoiceNode) (block : BeaconBlock preset fork),
+      block.slot.toNat = n → store.blocks[node.root]? = some block →
+      ∃ ancestor, store.getAncestor node slot = .ok ancestor from
+    this _ node block rfl found
+  intro n
+  induction n using Nat.strong_induction_on with
+  | _ n ih =>
+    intro node block size found
+    by_cases le : block.slot ≤ slot
+    · exact ⟨node, getAncestor_of_le found le⟩
+    · cases parentFound : store.blocks[block.parentRoot]? with
+      | none => exact absurd (orphansLe _ block found parentFound) le
+      | some parent =>
+        have parentLower := lower _ block parent found parentFound
+        rw [getAncestor_step found le parentFound parentLower]
+        exact ih parent.slot.toNat (size ▸ UInt64.lt_iff_toNat_lt.mp parentLower) _ parent rfl
+          parentFound
 
 /-- The ancestor walk climbs the tree of the store.
 
@@ -910,20 +942,6 @@ theorem getHeadFrom_descends {nodes : List ForkChoiceNode} {ancestor : ForkChoic
     have step := isAncestor_of_parent before childFound parentFound lower (startNode ▸ descends)
     exact ih source lowerRank childPending (childNode ▸ step) walk
 
-/-- Before Gloas, the head descends from the justified block, which counts as its own descendant.
--/
-theorem getHead_descends {head : ForkChoiceNode} (before : fork < .glamsterdam)
-    (found : store.getHead config = .ok head) :
-    store.isAncestor head ⟨store.justifiedCheckpoint.root, .pending⟩ = .ok true := by
-  have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
-  simp only [getHead, later, false_and, ↓reduceIte, bind, Except.bind] at found
-  cases tree : store.getFilteredNodeTree config with
-  | error e => simp [tree] at found
-  | ok nodes =>
-    simp only [tree] at found
-    obtain ⟨_, known⟩ := filterNodeTree_known tree
-    exact getHeadFrom_descends before rfl (isAncestor_self known) found
-
 /-- The head is a viable leaf, or no leaf is viable and the head is a node of the justified block.
 
 That node is pending before Gloas, and empty from Gloas. -/
@@ -982,6 +1000,126 @@ theorem getHead_eq_ghost {nodes : List ForkChoiceNode} {head : ForkChoiceNode}
   have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
   simp only [getHead, later, false_and, ↓reduceIte, tree, bind, Except.bind] at found
   exact getHeadFrom_eq_ghost before noBoost justifiedState tree rfl (.refl _) found
+
+/-- Before Gloas, the walk from a viable node reaches the slot of each viable ancestor. -/
+private theorem getAncestor_ok_of_viable_ancestor {nodes : List ForkChoiceNode}
+    (before : fork < .glamsterdam) (tree : store.getFilteredNodeTree config = .ok nodes) :
+    ∀ {n : ℕ} {start : Root}, (∃ m ∈ nodes, m.root = start) →
+      ∀ {root : Root} {rootBlock : BeaconBlock preset fork},
+        (blockTree lower).parent^[n] (some start) = some root →
+        store.blocks[root]? = some rootBlock →
+        (blockTree lower).Ancestor (some store.justifiedCheckpoint.root) (some root) →
+        ∃ ancestor, store.getAncestor ⟨start, .pending⟩ rootBlock.slot = .ok ancestor
+  | 0, start, ⟨m, mMem, mRoot⟩, root, rootBlock, step, rootFound, _ => by
+    cases step
+    obtain ⟨-, ⟨startBlock, startFound⟩, -⟩ := filterNodeTree_mem tree m mMem
+    rw [mRoot, rootFound, Option.some.injEq] at startFound
+    subst startFound
+    exact ⟨_, getAncestor_of_le rootFound (UInt64.le_refl _)⟩
+  | n + 1, start, ⟨m, mMem, mRoot⟩, root, rootBlock, step, rootFound, belowJustified => by
+    obtain ⟨-, ⟨startBlock, startFound⟩, -⟩ := filterNodeTree_mem tree m mMem
+    rw [mRoot] at startFound
+    by_cases le : startBlock.slot ≤ rootBlock.slot
+    · exact ⟨_, getAncestor_of_le startFound le⟩
+    · rw [Function.iterate_succ_apply, blockTree_parent_of startFound] at step
+      have parentAbove : (blockTree lower).Ancestor (some root) (some startBlock.parentRoot) :=
+        ⟨n, step⟩
+      have startInNodes :
+          (blockTree lower).Ancestor (some startBlock.parentRoot) (some m.root) := by
+        rw [mRoot]
+        exact ⟨1, blockTree_parent_of startFound⟩
+      obtain ⟨p, pMem, pRoot⟩ := (filterNodeTree_ancestor (lower := lower) before tree m mMem).2
+        (some startBlock.parentRoot) (belowJustified.trans parentAbove) startInNodes
+      replace pRoot : p.root = startBlock.parentRoot := Option.some.inj pRoot.symm
+      obtain ⟨-, ⟨parentBlock, parentFound⟩, -⟩ := filterNodeTree_mem tree p pMem
+      rw [pRoot] at parentFound
+      rw [getAncestor_of_gt before startFound le parentFound
+        (lower start startBlock parentBlock startFound parentFound)]
+      exact getAncestor_ok_of_viable_ancestor before tree ⟨p, pMem, pRoot⟩ step rootFound
+        belowJustified
+
+variable (lower) in
+/-- When a viable block has more than half of the stake in votes, the head is in its subtree.
+
+That holds before Gloas and without a boost, when each known block sits after its known parent.
+
+A validator counts when it is active and not slashed in the justified state.
+
+Its stake is its effective balance, and the votes of the block are counted at its node. -/
+theorem ancestor_getHead_of_majority {nodes : List ForkChoiceNode} {node head : ForkChoiceNode}
+    {score : Gwei} (before : fork < .glamsterdam)
+    (noBoost : store.proposerBoostRoot = Vector.replicate 32 0)
+    (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
+    (tree : store.getFilteredNodeTree config = .ok nodes) (viable : node ∈ nodes)
+    (votes : store.getAttestationScore node state = .ok score)
+    (majority : Models.stake (balanceAt state) (voters state) < 2 * score.toNat)
+    (found : store.getHead config = .ok head) :
+    (blockTree lower).Ancestor (some node.root) (some head.root) := by
+  obtain ⟨-, ⟨block, nodeFound⟩, -⟩ := filterNodeTree_mem tree node viable
+  have nodePending : node.payloadStatus = .pending := by
+    rcases (filterNodeTree_parent before rfl tree node viable).2 with rfl | ⟨pending, -⟩
+    · rfl
+    · exact pending
+  have belowJustified :
+      (blockTree lower).Ancestor (some store.justifiedCheckpoint.root) (some node.root) :=
+    (filterNodeTree_ancestor (lower := lower) before tree node viable).1
+  have inView : some node.root ∈ (view lower nodes).blocks := by
+    simp only [view, View.mem_ofBlocks, List.mem_toFinset, List.mem_map]
+    exact ⟨_, ⟨node, viable, rfl⟩, .refl _⟩
+  rw [getAttestationScore_eq_weight (lower := lower) before nodeFound nodePending nodes votes]
+    at majority
+  have model := ancestor_ghost_of_majority (voters state) (balanceAt state) (view lower nodes)
+    rootValue inView belowJustified majority
+  rwa [getHead_eq_ghost lower before noBoost justifiedState tree found] at model
+
+/-- When a viable block has more than half of the stake in votes, the head descends from its node.
+
+The ancestor check of the store returns true from the head back to that node.
+
+That holds before Gloas and without a boost, when each known block sits after its known parent.
+
+A validator counts when it is active and not slashed in the justified state.
+
+Its stake is its effective balance, and the votes of the block are counted at its node. -/
+theorem isAncestor_getHead_of_majority {nodes : List ForkChoiceNode} {node head : ForkChoiceNode}
+    {score : Gwei} (lower : store.ParentsBelow) (before : fork < .glamsterdam)
+    (noBoost : store.proposerBoostRoot = Vector.replicate 32 0)
+    (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
+    (tree : store.getFilteredNodeTree config = .ok nodes) (viable : node ∈ nodes)
+    (votes : store.getAttestationScore node state = .ok score)
+    (majority : Models.stake (balanceAt state) (voters state) < 2 * score.toNat)
+    (found : store.getHead config = .ok head) :
+    store.isAncestor head node = .ok true := by
+  have above := ancestor_getHead_of_majority lower before noBoost justifiedState tree viable votes
+    majority found
+  obtain ⟨-, ⟨nodeBlock, nodeFound⟩, -⟩ := filterNodeTree_mem tree node viable
+  have nodePending : node.payloadStatus = .pending := by
+    rcases (filterNodeTree_parent before rfl tree node viable).2 with rfl | ⟨pending, -⟩
+    · rfl
+    · exact pending
+  have belowJustified :
+      (blockTree lower).Ancestor (some store.justifiedCheckpoint.root) (some node.root) :=
+    (filterNodeTree_ancestor (lower := lower) before tree node viable).1
+  have headPending := getHead_pending before found
+  have headIn : head ∈ nodes := by
+    have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+    simp only [getHead, later, false_and, ↓reduceIte, tree, bind, Except.bind] at found
+    rcases getHeadFrom_mem found with rfl | mem
+    · exact (filterNodeTree_mem tree node viable).1
+    · exact mem
+  obtain ⟨n, step⟩ := above
+  obtain ⟨ancestor, walk⟩ := getAncestor_ok_of_viable_ancestor (lower := lower) before tree
+    ⟨head, headIn, rfl⟩ step nodeFound belowJustified
+  have computed : store.isAncestor ⟨head.root, .pending⟩ node = .ok (ancestor == node) := by
+    have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+    simp [isAncestor, block_ok_iff.mpr nodeFound, later, walk, bind, Except.bind, pure,
+      Except.pure]
+  have same :=
+    (isAncestor_iff (lower := lower) before nodeFound nodePending computed).mpr ⟨n, step⟩
+  obtain ⟨root, status⟩ := head
+  simp only at headPending
+  subst headPending
+  exact same ▸ computed
 
 end Store
 

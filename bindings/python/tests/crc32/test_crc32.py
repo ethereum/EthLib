@@ -6,6 +6,7 @@ import zlib
 import pytest
 
 from ethlib.cryptography import crc32
+from ethlib.errors import BindingError
 from raising import raises
 
 # The genesis hash of mainnet.
@@ -57,5 +58,5 @@ def test_zlib() -> None:
 
 
 def test_rejects_non_bytes() -> None:
-    with raises(TypeError, "data must be bytes"):
+    with raises(BindingError, "expected bytes"):
         crc32.digest("abc")  # ty: ignore[invalid-argument-type]

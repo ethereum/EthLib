@@ -42,13 +42,6 @@ open EthLib.Execution.State (TransactionState)
 
 variable {fork : Fork}
 
-/-- The runner of the messages of the code of a message, at the gas of that message. -/
-abbrev processRunner (fork : Fork) (bound : Nat) : MessageRunner fork Nat bound :=
-  fun caller child _ =>
-    match child.target with
-    | some _ => processMessage fork child caller.state caller.substate.child
-    | none => processCreateMessage fork child caller.state caller.substate.child
-
 /-- A message with no value and no precompile ends as the run of its code from its frame ends.
 
 The frame that ends the message is the stopped frame of that run, rolled back on a failure.
@@ -223,13 +216,15 @@ theorem processMessage_empty_value {message : Message fork} {state movedState : 
   rw [he, rollbackOnError_of_error_eq_none herr]
   exact ⟨herr, hst⟩
 
-/-- The frame that a message starts is a running frame of its code, at 0, with nothing on it. -/
+/-- The frame that a message starts is a running frame of its code, at 0, with nothing on it.
+
+It has no return data. -/
 theorem at_startFrame {code : ByteArray} {message : Message fork} (hcode : message.code = code)
     (state : TransactionState) (substate : Substate) :
-    At code message 0 [] .empty message.gas state substate
+    At code message 0 [] .empty message.gas state substate .empty
       (startFrame message state substate (GasMeter.start message.gas message.reservoir)) := by
   subst hcode
-  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- The assumption that a call with code `code` runs as a specification of that code says.
 
@@ -264,7 +259,8 @@ theorem meets_of_specUnder {code : ByteArray}
     {A : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     (hspec : ∀ message state substate, message.code = code → G message state substate →
       SpecUnder fork A
-        (At code message 0 [] .empty message.gas (startState fork message state) substate)
+        (At code message 0 [] .empty message.gas (startState fork message state) substate
+          .empty)
         (Q message state substate))
     (meets : ∀ bound, Meets A (processRunner fork bound)) (bound : Nat) :
     Meets (RunsAs code G Q) (processRunner fork bound) := by
@@ -288,7 +284,8 @@ The callee then sends no message itself. -/
 theorem meets_of_spec {code : ByteArray} {G : Message fork → TransactionState → Substate → Prop}
     {Q : Message fork → TransactionState → Substate → Evm fork Nat → Prop}
     (hspec : ∀ message state substate, message.code = code → G message state substate →
-      Spec fork (At code message 0 [] .empty message.gas (startState fork message state) substate)
+      Spec fork
+        (At code message 0 [] .empty message.gas (startState fork message state) substate .empty)
         (Q message state substate))
     (bound : Nat) :
     Meets (RunsAs code G Q) (processRunner fork bound) :=

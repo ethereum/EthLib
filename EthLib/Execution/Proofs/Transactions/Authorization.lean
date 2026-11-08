@@ -22,6 +22,12 @@ An authority that refuses an authorization, such as for a wrong nonce, is only m
 
 An authorization with no valid signature changes nothing.
 
+A parity of `y` above 1, `r` outside `[1, n - 1]` or `s` outside `[1, n / 2]` names no authority.
+
+Here `n` is the order of the secp256k1 group.
+
+Such an authorization changes nothing.
+
 The hash that an authority signs ignores the signature of the authorization.
 
 Up to BPO5, a valid authorization gives back 12500 exactly when its authority has an account.
@@ -34,6 +40,7 @@ From Glamsterdam, an authority pays for its first write and its new indicator at
 namespace EthLib.Execution.Transactions
 
 open EthLib.Base
+open EthLib.Cryptography.Secp256k1
 open EthLib.Execution.Evm (GasMeter delegatedAddress delegatedAddress_delegationIndicator)
 open EthLib.Execution.State (EMPTY_CODE_HASH TransactionState)
 open EthLib.Execution.State.TransactionState
@@ -154,6 +161,50 @@ theorem refund_applyAuthorization_of_accepts (hfork : fork < .glamsterdam)
     simp only [hfork, true_and]
     rfl
 
+/-! ## The ranges of the parity of `y`, `r` and `s` -/
+
+/-- A parity of `y` above 1 names no authority. -/
+theorem recoverAuthority_yParity_gt (h : 1 < auth.yParity.toNat) :
+    recoverAuthority auth = none := by
+  have hy : ¬ (auth.yParity.toNat < 2 ∧ 0 < auth.r.toNat ∧ auth.r.toNat < Fn.modulus ∧
+      0 < auth.s.toNat ∧ Ecdsa.isLowS auth.s.toNat = true) := by omega
+  simp only [recoverAuthority, hy, ↓reduceIte]
+
+/-- A first integer of 0 names no authority. -/
+theorem recoverAuthority_r_zero (h : auth.r.toNat = 0) :
+    recoverAuthority auth = none := by
+  have hr : ¬ (auth.yParity.toNat < 2 ∧ 0 < auth.r.toNat ∧ auth.r.toNat < Fn.modulus ∧
+      0 < auth.s.toNat ∧ Ecdsa.isLowS auth.s.toNat = true) := by omega
+  simp only [recoverAuthority, hr, ↓reduceIte]
+
+/-- A first integer of `n` or more names no authority. -/
+theorem recoverAuthority_r_ge (h : Fn.modulus ≤ auth.r.toNat) :
+    recoverAuthority auth = none := by
+  have hr : ¬ (auth.yParity.toNat < 2 ∧ 0 < auth.r.toNat ∧ auth.r.toNat < Fn.modulus ∧
+      0 < auth.s.toNat ∧ Ecdsa.isLowS auth.s.toNat = true) := by omega
+  simp only [recoverAuthority, hr, ↓reduceIte]
+
+/-- A first integer outside `[1, n - 1]` names no authority. -/
+theorem recoverAuthority_r_out (h : auth.r.toNat = 0 ∨ Fn.modulus ≤ auth.r.toNat) :
+    recoverAuthority auth = none :=
+  h.elim recoverAuthority_r_zero recoverAuthority_r_ge
+
+/-- A second integer of 0 names no authority. -/
+theorem recoverAuthority_s_zero (h : auth.s.toNat = 0) :
+    recoverAuthority auth = none := by
+  have hs : ¬ (auth.yParity.toNat < 2 ∧ 0 < auth.r.toNat ∧ auth.r.toNat < Fn.modulus ∧
+      0 < auth.s.toNat ∧ Ecdsa.isLowS auth.s.toNat = true) := by omega
+  simp only [recoverAuthority, hs, ↓reduceIte]
+
+/-- A second integer above `n / 2` names no authority. -/
+theorem recoverAuthority_high_s (h : Fn.modulus / 2 < auth.s.toNat) :
+    recoverAuthority auth = none := by
+  have hs : ¬ (auth.yParity.toNat < 2 ∧ 0 < auth.r.toNat ∧ auth.r.toNat < Fn.modulus ∧
+      0 < auth.s.toNat ∧ Ecdsa.isLowS auth.s.toNat = true) := by
+    simp only [Ecdsa.isLowS, decide_eq_true_eq]
+    omega
+  simp only [recoverAuthority, hs, ↓reduceIte]
+
 /-! ## A skipped authorization -/
 
 /-- An authorization out of scope changes nothing. -/
@@ -172,6 +223,28 @@ theorem applyAuthorization_of_recoverAuthority_none (h : recoverAuthority auth =
     applyAuthorization fork chainId done auth = .ok done := by
   unfold applyAuthorization
   split <;> simp only [h]
+
+/-- A parity of `y`, an `r` or an `s` out of range changes nothing. -/
+theorem applyAuthorization_of_out_of_range
+    (h : 1 < auth.yParity.toNat ∨ auth.r.toNat = 0 ∨ Fn.modulus ≤ auth.r.toNat ∨
+      auth.s.toNat = 0 ∨ Fn.modulus / 2 < auth.s.toNat) :
+    applyAuthorization fork chainId done auth = .ok done := by
+  apply applyAuthorization_of_recoverAuthority_none
+  rcases h with hy | hr | hr | hs0 | hshigh
+  · exact recoverAuthority_yParity_gt hy
+  · exact recoverAuthority_r_out (.inl hr)
+  · exact recoverAuthority_r_out (.inr hr)
+  · exact recoverAuthority_s_zero hs0
+  · exact recoverAuthority_high_s hshigh
+
+/-- A parity of `y`, an `r` or an `s` out of range leaves the state and its records as they were. -/
+theorem eq_of_applyAuthorization_of_out_of_range
+    (h : 1 < auth.yParity.toNat ∨ auth.r.toNat = 0 ∨ Fn.modulus ≤ auth.r.toNat ∨
+      auth.s.toNat = 0 ∨ Fn.modulus / 2 < auth.s.toNat)
+    (happly : applyAuthorization fork chainId done auth = .ok done') :
+    done' = done := by
+  rw [applyAuthorization_of_out_of_range h, Except.ok.injEq] at happly
+  exact happly.symm
 
 /-- An authorization that its authority refuses only marks the authority as accessed and read. -/
 theorem applyAuthorization_of_refused (hscope : authorizationInScope chainId auth = true)

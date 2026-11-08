@@ -12,6 +12,7 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - The map has one output for each input.
 - Two lists that map to one list are equal, when the function is injective on their items.
 - A run of checks passes exactly when each check passes.
+- A loop that never stops early passes exactly when each step passes.
 - The function succeeds on every input.
 - Each output is the image of an input.
 - The map succeeds, and returns no error, when the function succeeds on every input.
@@ -22,6 +23,9 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - Two functions that agree on every entry of a vector map it to one result.
 - A failed map fails on some input, and succeeds on every input before it.
 - A property that each step keeps holds after a successful fold.
+- A successful fold reads only inputs that its steps accept.
+- A fold of steps that each succeed with a pure step is the pure fold.
+- A fold whose steps all succeed returns no error.
 
 A mapped error leaves a success unchanged.
 -/
@@ -84,17 +88,41 @@ theorem forM_ok_iff {xs : List α} {check : α → Except ε Unit} :
     simp only [List.forM, bind_unit_ok_iff, List.forall_mem_cons]
     exact and_congr_right fun _ => ih
 
+/-- A loop with no state passes exactly when each step passes.
+
+No step may stop the loop early. -/
+theorem forIn_unit_ok_iff {xs : List α} {body : α → PUnit → Except ε (ForInStep PUnit)}
+    (hnd : ∀ x, body x PUnit.unit ≠ .ok (.done PUnit.unit)) :
+    forIn xs PUnit.unit body = .ok PUnit.unit ↔
+      ∀ x ∈ xs, body x PUnit.unit = .ok (.yield PUnit.unit) := by
+  induction xs with
+  | nil => simp [pure, Except.pure]
+  | cons x xs ih =>
+    rw [List.forIn_cons, List.forall_mem_cons]
+    cases h : body x PUnit.unit with
+    | error e => simp [bind, Except.bind]
+    | ok s =>
+      cases s with
+      | done u => exact absurd h (hnd x)
+      | yield u => simpa [bind, Except.bind] using ih
+
+/-- Each input of a successful map has its output among the outputs. -/
+theorem exists_mem_of_mapM_ok {xs : List α} {ys : List β}
+    (made : xs.mapM f = .ok ys) {x : α} (member : x ∈ xs) : ∃ y ∈ ys, f x = .ok y := by
+  induction xs generalizing ys with
+  | nil => simp at member
+  | cons head tail ih =>
+    obtain ⟨y, rest, first, others, rfl⟩ := mapM_cons_ok.mp made
+    rcases List.mem_cons.mp member with rfl | member
+    · exact ⟨y, List.mem_cons_self, first⟩
+    · obtain ⟨y', member', step⟩ := ih others member
+      exact ⟨y', List.mem_cons_of_mem _ member', step⟩
+
 /-- A successful map succeeds on every input. -/
 theorem mapM_ok_of_mem {xs : List α} {ys : List β} (h : xs.mapM f = .ok ys) :
-    ∀ x ∈ xs, ∃ y, f x = .ok y := by
-  induction xs generalizing ys with
-  | nil => simp
-  | cons x xs ih =>
-    obtain ⟨y, rest, head, tail, rfl⟩ := mapM_cons_ok.mp h
-    intro x' member
-    rcases List.mem_cons.mp member with rfl | member
-    · exact ⟨y, head⟩
-    · exact ih tail x' member
+    ∀ x ∈ xs, ∃ y, f x = .ok y := fun _ member =>
+  let ⟨y, _, step⟩ := exists_mem_of_mapM_ok h member
+  ⟨y, step⟩
 
 /-- Each output of a successful map is the image of an input. -/
 theorem mapM_ok_mem {xs : List α} {ys : List β} (h : xs.mapM f = .ok ys) :
@@ -313,16 +341,114 @@ theorem foldlM_ok_invariant {g : β → α → Except ε β} (P : β → Prop)
     obtain ⟨middle, first, rest⟩ := computed
     exact foldlM_ok_invariant P step (step b x middle holds first) rest
 
-/-- Each input of a successful map has its output among the outputs. -/
-theorem exists_mem_of_mapM_ok {xs : List α} {ys : List β}
-    (made : xs.mapM f = .ok ys) {x : α} (member : x ∈ xs) : ∃ y ∈ ys, f x = .ok y := by
-  induction xs generalizing ys with
-  | nil => simp at member
-  | cons head tail ih =>
-    obtain ⟨y, rest, first, others, rfl⟩ := mapM_cons_ok.mp made
+/-- Every input of a successful fold meets a condition that each successful step checks. -/
+theorem foldlM_forall_of_ok {σ : Type} {g : σ → α → Except ε σ} {P : α → Prop}
+    (step : ∀ acc x r, g acc x = .ok r → P x) :
+    ∀ (xs : List α) init out, xs.foldlM g init = .ok out → ∀ x ∈ xs, P x
+  | [], _, _, _, _, member => absurd member List.not_mem_nil
+  | x :: xs, init, out, computed, y, member => by
+    rw [List.foldlM_cons, bind_ok_iff] at computed
+    obtain ⟨middle, first, rest⟩ := computed
     rcases List.mem_cons.mp member with rfl | member
-    · exact ⟨y, List.mem_cons_self, first⟩
-    · obtain ⟨y', member', step⟩ := ih others member
-      exact ⟨y', List.mem_cons_of_mem _ member', step⟩
+    · exact step init y middle first
+    · exact foldlM_forall_of_ok step xs middle out rest y member
+
+/-- A fold whose every step succeeds with a pure step returns the pure fold. -/
+theorem foldlM_eq_ok_foldl {σ : Type} {g : σ → α → Except ε σ} {step : σ → α → σ}
+    {L : List α} (pureStep : ∀ acc x, x ∈ L → g acc x = .ok (step acc x)) :
+    ∀ init, L.foldlM g init = .ok (L.foldl step init) := by
+  induction L with
+  | nil => intro init; rfl
+  | cons x xs ih =>
+    intro init
+    rw [List.foldlM_cons, pureStep init x List.mem_cons_self, List.foldl_cons]
+    simp only [bind, Except.bind]
+    exact ih (fun acc y member => pureStep acc y (List.mem_cons_of_mem x member)) _
+
+/-- A fold whose steps all succeed returns no error. -/
+theorem foldlM_ne_error {σ : Type} {g : σ → α → Except ε σ} {e : ε} :
+    ∀ (xs : List α) (init : σ), (∀ acc, ∀ x ∈ xs, ∃ r, g acc x = .ok r) →
+      xs.foldlM g init ≠ .error e
+  | [], _, _ => fun h => nomatch h
+  | x :: xs, init, h => by
+    obtain ⟨r, first⟩ := h init x List.mem_cons_self
+    simp only [List.foldlM_cons, bind, Except.bind, first]
+    exact foldlM_ne_error xs r fun acc y member => h acc y (List.mem_cons_of_mem x member)
+
+/-- Each element of a list gives a result when the monadic flat map over the list succeeds. -/
+theorem flatMapM_ok_of_mem {α β ε : Type} {f : α → Except ε (List β)} :
+    ∀ {xs : List α} {ys : List β}, xs.flatMapM f = .ok ys → ∀ x ∈ xs, ∃ zs, f x = .ok zs
+  | [], _, _, _, mem => by cases mem
+  | x :: xs, ys, h, y, mem => by
+    rw [List.flatMapM_cons, bind_ok_iff] at h
+    obtain ⟨zs, first, h⟩ := h
+    rw [bind_ok_iff] at h
+    obtain ⟨rest, restOk, -⟩ := h
+    rcases List.mem_cons.mp mem with rfl | mem
+    · exact ⟨zs, first⟩
+    · exact flatMapM_ok_of_mem restOk y mem
+
+/-- An element of a monadic flat map comes from the list of one element, and each such counts. -/
+theorem mem_of_flatMapM_ok {α β ε : Type} {f : α → Except ε (List β)} :
+    ∀ {xs : List α} {ys : List β}, xs.flatMapM f = .ok ys →
+      ∀ y, y ∈ ys ↔ ∃ x ∈ xs, ∃ zs, f x = .ok zs ∧ y ∈ zs
+  | [], ys, h, y => by
+    simp only [List.flatMapM_nil, pure, Except.pure, Except.ok.injEq] at h
+    simp [← h]
+  | x :: xs, ys, h, y => by
+    rw [List.flatMapM_cons, bind_ok_iff] at h
+    obtain ⟨zs, first, h⟩ := h
+    rw [bind_ok_iff] at h
+    obtain ⟨rest, restOk, h⟩ := h
+    simp only [pure, Except.pure, Except.ok.injEq] at h
+    subst h
+    rw [List.mem_append, mem_of_flatMapM_ok restOk]
+    constructor
+    · rintro (mem | ⟨x', mem', zs', ok', mem''⟩)
+      · exact ⟨x, List.mem_cons_self, zs, first, mem⟩
+      · exact ⟨x', List.mem_cons_of_mem _ mem', zs', ok', mem''⟩
+    · rintro ⟨x', mem', zs', ok', mem''⟩
+      rcases List.mem_cons.mp mem' with rfl | mem'
+      · rw [first, Except.ok.injEq] at ok'
+        exact .inl (ok' ▸ mem'')
+      · exact .inr ⟨x', mem', zs', ok', mem''⟩
+
+/-- A monadic filter map in `Except` succeeds when each call succeeds. -/
+theorem filterMapM_ok_of_forall {α β ε : Type} {f : α → Except ε (Option β)} :
+    ∀ {l : List α}, (∀ x ∈ l, ∃ y, f x = .ok y) → ∃ out, l.filterMapM f = .ok out
+  | [], _ => ⟨[], rfl⟩
+  | x :: l, each => by
+    obtain ⟨y, first⟩ := each x List.mem_cons_self
+    obtain ⟨rest, restOk⟩ :=
+      filterMapM_ok_of_forall fun x' mem => each x' (List.mem_cons_of_mem _ mem)
+    cases y with
+    | none => exact ⟨rest, by simp [List.filterMapM_cons, first, restOk, bind, Except.bind]⟩
+    | some z =>
+      exact ⟨z :: rest, by simp [List.filterMapM_cons, first, restOk, bind, Except.bind, pure,
+        Except.pure]⟩
+
+/-- A monadic filter map in `Except` that succeeds is the filter map of the values of its calls. -/
+theorem eq_filterMap_of_filterMapM_ok {α β ε : Type} {f : α → Except ε (Option β)}
+    {g : α → Option β} :
+    ∀ {l : List α} {out : List β}, (∀ x ∈ l, ∀ y, f x = .ok y → g x = y) →
+      l.filterMapM f = .ok out → out = l.filterMap g
+  | [], out, _, mapped => by
+    simp only [List.filterMapM_nil, pure, Except.pure, Except.ok.injEq] at mapped
+    simp [← mapped]
+  | x :: l, out, values, mapped => by
+    rw [List.filterMapM_cons, bind_ok_iff] at mapped
+    obtain ⟨image, first, mapped⟩ := mapped
+    have rest : ∀ x' ∈ l, ∀ y, f x' = .ok y → g x' = y :=
+      fun x' member => values x' (List.mem_cons_of_mem x member)
+    rw [List.filterMap_cons, values x List.mem_cons_self image first]
+    cases image with
+    | none => exact eq_filterMap_of_filterMapM_ok rest mapped
+    | some z =>
+      simp only at mapped
+      rw [bind_ok_iff] at mapped
+      obtain ⟨tail, tailOk, mapped⟩ := mapped
+      simp only [pure, Except.pure, Except.ok.injEq] at mapped
+      subst mapped
+      simp only [eq_filterMap_of_filterMapM_ok rest tailOk]
 
 end EthLib.Base

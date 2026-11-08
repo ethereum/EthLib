@@ -174,12 +174,14 @@ def c_calls(root: Path, symbols: set[str]) -> set[str]:
 
     A declaration is an `extern` statement, `extern <type> name(<params>);`.
 
-    The C sources define none of these functions, so any other `name(` is a call.
+    The C sources define none of these functions, so any other use of a name is a call.
+
+    That use is `name(`, or the name passed to the generic caller of typed exports.
     """
     called = set()
     for path in sorted((root / "bindings" / "python").glob("*.c")):
         text = re.sub(r"\bextern\b[^;{]*;", " ", strip_c(path.read_text()))
-        called |= set(re.findall(r"\b(eth_\w+)\s*\(", text)) & symbols
+        called |= set(re.findall(r"\b(eth_\w+)\b", text)) & symbols
     return called
 
 

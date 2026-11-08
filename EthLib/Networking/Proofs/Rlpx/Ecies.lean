@@ -13,6 +13,8 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Encoding
 The recipient decrypts every ciphertext to its message, for every nonzero ephemeral key.
 
 A ciphertext with any other tag is rejected.
+
+A ciphertext that decrypts starts with an uncompressed key that lies on the curve and is not `O`.
 -/
 
 @[expose] public section
@@ -210,6 +212,37 @@ theorem size_encrypt {key ephemeral : Fn} {iv : Aes.Block} {sharedMac m c : Byte
     cipher, Aes.size_ctr]
   simp only [OVERHEAD]
   omega
+
+/-- A ciphertext that decrypts starts with the uncompressed bytes of a key `R`.
+
+`R` lies on the curve and is not `O`. -/
+theorem ephemeral_of_decrypt_eq_ok {key : Fn} {sharedMac ciphertext m : ByteArray}
+    (h : decrypt key sharedMac ciphertext = .ok m) :
+    ∃ R : Point, R.isOnCurve = true ∧ R ≠ .infinity ∧
+      ⟨(ciphertext.data.toList.take EPHEMERAL_KEY_SIZE).toArray⟩ = R.encodeUncompressed := by
+  unfold decrypt at h
+  dsimp only at h
+  split at h
+  · cases h
+  · rename_i hlong
+    cases hd : Point.decode ⟨(ciphertext.data.toList.take EPHEMERAL_KEY_SIZE).toArray⟩ with
+    | error e => simp [hd, Except.mapError, bind, Except.bind] at h
+    | ok R =>
+      cases hs : ecdh key R with
+      | error e => simp [hd, hs, Except.mapError, bind, Except.bind] at h
+      | ok secret =>
+        obtain ⟨hon, hinf, hform⟩ := (Point.decode_eq_ok_iff _ _).mp hd
+        refine ⟨R, hon, hinf, ?_⟩
+        rcases hform with hcomp | hunc
+        · cases R with
+          | infinity => exact absurd rfl hinf
+          | affine x y =>
+            have hsize := congrArg ByteArray.size hcomp
+            rw [size_encodeCompressed] at hsize
+            simp only [ByteArray.size, List.size_toArray, List.length_take] at hsize
+            simp only [OVERHEAD, EPHEMERAL_KEY_SIZE, IV_SIZE, TAG_SIZE] at hlong hsize
+            omega
+        · exact hunc
 
 /-! ## Error codes -/
 

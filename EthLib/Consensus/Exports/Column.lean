@@ -15,11 +15,11 @@ From Gloas a sidecar names its block by root, and the checks read the commitment
 
 So the checks of a sidecar take the bytes of its signed block too, which are empty before Gloas.
 
-Blobs, entries and rows of cells arrive one after another in one byte string.
+The exports of the matrix, of the lists of sidecars and of the shape check take typed values.
 
-A row of cells holds the 128 cells of an extended blob, then their 128 proofs.
+A blob, a matrix entry and a sidecar each cross as bytes, in a list.
 
-A list of sidecars comes back in the SSZ encoding of a list.
+A row holds the 128 cells of an extended blob and their 128 proofs, as a pair of lists.
 
 An input that the export reads itself, such as a wrong length, has code 0.
 -/
@@ -28,17 +28,10 @@ public section
 
 namespace EthLib.Consensus.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result PyValue pyExport)
 open Base Cryptography.Kzg Cryptography.Kzg.Constants Serialization.Ssz
 open Cryptography.Kzg.Exports (runKzgWithSetup)
 open Serialization.Ssz.Exports (runSsz)
-
-/-- The pieces of `n` bytes that make up the bytes, in order, or none if they do not divide. -/
-def pieces (n : Nat) (bytes : ByteArray) : Option (Array (Vector UInt8 n)) :=
-  if n = 0 ∨ bytes.size % n ≠ 0 then none
-  else (Array.range (bytes.size / n)).mapM fun i =>
-    let piece := bytes.extract (i * n) ((i + 1) * n)
-    if h : piece.size = n then some ⟨piece.data, h⟩ else none
 
 /-- The preset and a fork from Fulu on, which the names name. -/
 def columnPresetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do
@@ -82,14 +75,24 @@ def bidCommitmentsOf {preset : Preset} {fork : Fork} (sidecar : DataColumnSideca
 
 Before Gloas the count of its commitments stays within the blob limit of its epoch.
 
-The configuration of the name holds, with the replacements that the JSON object gives. -/
-@[export eth_consensus_verify_data_column_sidecar]
-def verifyDataColumnSidecarExport (name fork data block replacements : ByteArray) :
-    Result Bool := do
-  let (preset, fork) ← columnPresetAndFork name fork
-  let config ← configWith name replacements
+The configuration of the name holds, with the replacements that a `dict` gives. -/
+def verifyDataColumnSidecarOf
+    (args : String × String × ByteArray × ByteArray × Option PyValue) : Result Bool := do
+  let (name, fork, data, block, replacements) := args
+  let (preset, fork) ← columnPresetAndFork name.toUTF8 fork.toUTF8
+  let config ← configWithValue name replacements
   let sidecar ← readSidecar preset fork data
   return verifyDataColumnSidecar preset config sidecar (← bidCommitmentsOf sidecar block)
+
+/-- Whether a sidecar, given as bytes, has a valid shape.
+
+The arguments are the name of the preset and the configuration, the fork and the sidecar.
+
+Then come the signed block, empty before Gloas, and replacements of values of the configuration.
+-/
+@[export eth_consensus_verify_data_column_sidecar]
+def verifyDataColumnSidecarExport (args : PyValue) : Result PyValue :=
+  pyExport verifyDataColumnSidecarOf args
 
 /-- Whether the branch of a sidecar, given as bytes, climbs to the body root of its header. -/
 @[export eth_consensus_verify_data_column_sidecar_inclusion_proof]
@@ -135,67 +138,86 @@ def verifyPartialDataColumnSidecarKzgProofsExport (name fork data commitments : 
   runKzgWithSetup fun setup =>
     verifyPartialDataColumnSidecarKzgProofs setup sidecar commitments columnIndex
 
-/-- The bytes of the entries of a matrix, one after another. -/
-def matrixBytes (entries : List MatrixEntry) : Result ByteArray :=
-  entries.foldlM (fun bytes entry => return bytes ++ (← runSsz "entry rejected"
-    (SszType.serialize entry))) ByteArray.empty
+/-- The SSZ bytes of each value of a list. -/
+def encodeEach {α : Type} [SszType α] (what : String) (values : List α) :
+    Result (List ByteArray) :=
+  values.mapM fun value => runSsz s!"{what} rejected" (SszType.serialize value)
 
-/-- The matrix of the blobs, given one after another, as its entries one after another. -/
+/-- The matrix of the blobs, as the SSZ bytes of each of its entries. -/
+def computeMatrixOf (blobs : List Blob) : Result (List ByteArray) := do
+  encodeEach "entry" (← runKzgWithSetup fun setup => computeMatrix setup blobs)
+
+/-- The matrix of the blobs, as the SSZ bytes of each of its entries, in a list.
+
+The argument is the list of the blobs. -/
 @[export eth_consensus_compute_matrix]
-def computeMatrixExport (blobs : ByteArray) : Result ByteArray := do
-  let some blobs := pieces BYTES_PER_BLOB blobs | throw (0, "blobs have a wrong length")
-  matrixBytes (← runKzgWithSetup fun setup => computeMatrix setup blobs.toList)
+def computeMatrixExport (args : PyValue) : Result PyValue := pyExport computeMatrixOf args
 
 /-- The bytes of one matrix entry: a cell, a proof, a column and a row. -/
 def MATRIX_ENTRY_BYTES : Nat := BYTES_PER_CELL + BYTES_PER_PROOF + 8 + 8
 
-/-- The full matrix of `count` rows, from some entries given one after another. -/
+/-- The full matrix of a count of rows, from the SSZ bytes of some of its entries.
+
+Every entry of the right length decodes, so an entry fails only on its length, with code 0. -/
+def recoverMatrixOf (args : List (Vector UInt8 MATRIX_ENTRY_BYTES) × UInt64) :
+    Result (List ByteArray) := do
+  let (entries, count) := args
+  let entries ← entries.mapM fun entry =>
+    (SszType.deserialize MatrixEntry ⟨entry.toArray⟩).mapError
+      fun e => (0, s!"entry rejected: {reprStr e}")
+  encodeEach "entry" (← runKzgWithSetup fun setup => recoverMatrix setup entries count)
+
+/-- The full matrix of a count of rows, from the SSZ bytes of some of its entries, in a list.
+
+The arguments are the list of the entries, of 2112 bytes each, and the count of rows. -/
 @[export eth_consensus_recover_matrix]
-def recoverMatrixExport (entries : ByteArray) (count : UInt64) : Result ByteArray := do
-  let some pieces := pieces MATRIX_ENTRY_BYTES entries
-    | throw (0, "entries have a wrong length")
-  let entries ← pieces.toList.mapM fun piece =>
-    runSsz "entry rejected" (SszType.deserialize MatrixEntry ⟨piece.toArray⟩)
-  matrixBytes (← runKzgWithSetup fun setup => recoverMatrix setup entries count)
+def recoverMatrixExport (args : PyValue) : Result PyValue := pyExport recoverMatrixOf args
 
-/-- The rows of cells and proofs, given one after another. -/
-def readRows (rows : ByteArray) : Result (List (Array Cell × Array KZGProof)) := do
-  let width := CELLS_PER_EXT_BLOB * (BYTES_PER_CELL + BYTES_PER_PROOF)
-  let some rows := pieces width rows | throw (0, "rows have a wrong length")
-  return rows.toList.map fun row =>
-    let bytes : ByteArray := ⟨row.toArray⟩
-    let cellBytes := CELLS_PER_EXT_BLOB * BYTES_PER_CELL
-    ((pieces BYTES_PER_CELL (bytes.extract 0 cellBytes)).getD #[],
-      (pieces BYTES_PER_PROOF (bytes.extract cellBytes width)).getD #[])
+/-- The rows of cells and proofs, each with the cells and the proofs of an extended blob.
 
-/-- The bytes of a list of sidecars, in the SSZ encoding of a list. -/
-def sidecarsBytes {preset : Preset} {fork : Fork}
-    (sidecars : List (DataColumnSidecar preset fork)) :
-    Result ByteArray := do
-  if bound : sidecars.toArray.size ≤ preset.NUMBER_OF_COLUMNS.toNat then
-    runSsz "sidecars rejected"
-      (SszType.serialize (⟨sidecars.toArray, bound⟩ :
-        SszList (DataColumnSidecar preset fork) preset.NUMBER_OF_COLUMNS.toNat))
-  else throw (0, "too many sidecars")
+A row with another count of cells or of proofs has code 0. -/
+def checkRows (rows : List (Array Cell × Array KZGProof)) :
+    Result (List (Array Cell × Array KZGProof)) := do
+  for (cells, proofs) in rows do
+    unless cells.size = CELLS_PER_EXT_BLOB ∧ proofs.size = CELLS_PER_EXT_BLOB do
+      throw (0, s!"a row holds {cells.size} cells and {proofs.size} proofs, \
+        not {CELLS_PER_EXT_BLOB} of each")
+  return rows
 
 /-- The column sidecars of a signed block, from its bytes and the rows of its blobs. -/
-@[export eth_consensus_get_data_column_sidecars_from_block]
-def getDataColumnSidecarsFromBlockExport (name fork block rows : ByteArray) :
-    Result ByteArray := do
-  let (preset, fork) ← columnPresetAndFork name fork
+def getDataColumnSidecarsFromBlockOf
+    (args : String × String × ByteArray × List (Array Cell × Array KZGProof)) :
+    Result (List ByteArray) := do
+  let (name, fork, block, rows) := args
+  let (preset, fork) ← columnPresetAndFork name.toUTF8 fork.toUTF8
   let signed ← runSsz "input rejected"
     (SszType.deserialize (SignedBeaconBlock preset fork) block)
   if deneb : .dencun ≤ fork then
-    sidecarsBytes (← runSsz "sidecars rejected"
-      (getDataColumnSidecarsFromBlock deneb signed (← readRows rows)))
+    encodeEach "sidecar" (← runSsz "sidecars rejected"
+      (getDataColumnSidecarsFromBlock deneb signed (← checkRows rows)))
   else throw (0, s!"no blobs at {fork.name}")
 
+/-- The column sidecars of a signed block, as the SSZ bytes of each, in a list.
+
+The arguments are the name of the preset, the fork, the signed block and the rows of its blobs. -/
+@[export eth_consensus_get_data_column_sidecars_from_block]
+def getDataColumnSidecarsFromBlockExport (args : PyValue) : Result PyValue :=
+  pyExport getDataColumnSidecarsFromBlockOf args
+
 /-- All the column sidecars of a block, from the bytes of one of them and the rows of its blobs. -/
+def getDataColumnSidecarsFromColumnSidecarOf
+    (args : String × String × ByteArray × List (Array Cell × Array KZGProof)) :
+    Result (List ByteArray) := do
+  let (name, fork, sidecar, rows) := args
+  let (preset, fork) ← columnPresetAndFork name.toUTF8 fork.toUTF8
+  encodeEach "sidecar" (← runSsz "sidecars rejected"
+    (getDataColumnSidecarsFromColumnSidecar (← readSidecar preset fork sidecar) (← checkRows rows)))
+
+/-- All the column sidecars of a block, as the SSZ bytes of each, in a list.
+
+The arguments are the name of the preset, the fork, the bytes of one sidecar and the rows. -/
 @[export eth_consensus_get_data_column_sidecars_from_column_sidecar]
-def getDataColumnSidecarsFromColumnSidecarExport (name fork sidecar rows : ByteArray) :
-    Result ByteArray := do
-  let (preset, fork) ← columnPresetAndFork name fork
-  sidecarsBytes (← runSsz "sidecars rejected"
-    (getDataColumnSidecarsFromColumnSidecar (← readSidecar preset fork sidecar) (← readRows rows)))
+def getDataColumnSidecarsFromColumnSidecarExport (args : PyValue) : Result PyValue :=
+  pyExport getDataColumnSidecarsFromColumnSidecarOf args
 
 end EthLib.Consensus.Exports

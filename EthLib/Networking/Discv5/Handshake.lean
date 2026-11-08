@@ -167,10 +167,8 @@ def sealHandshake (ephemeralKey staticKey : Fn) (challengeData : ByteArray)
   let init ← initiateHandshake ephemeralKey staticKey challengeData nodeIdA nodeIdB destPubkey
   let header : Header :=
     ⟨nonce, .handshake nodeIdA init.idSignature init.ephemeralPubkey record⟩
-  let ad ← (Packet.messageAd ⟨maskingIv, header, .empty⟩).mapError .packet
-  let message ← (encryptMessage (sessionKey init.keys.initiatorKey) nonce plaintext ad).mapError
-    .encryption
-  let bytes ← (Packet.encode nodeIdB ⟨maskingIv, header, message⟩).mapError .packet
+  let bytes ← sealPacket .packet .encryption (sessionKey init.keys.initiatorKey) nodeIdB maskingIv
+    header plaintext
   return (bytes, init.keys)
 
 /-- Node B's reading of a handshake message packet from node A.
@@ -191,9 +189,7 @@ def openHandshake (staticKey : Fn) (challengeData : ByteArray) (nodeIdB : NodeId
     | throw (.notHandshake packet.header.authdata.flag)
   let keys ← acceptHandshake staticKey challengeData srcId nodeIdB srcPubkey ephemeralPubkey
     idSignature
-  let ad ← packet.messageAd.mapError .packet
-  let plaintext ← (decryptMessage (sessionKey keys.initiatorKey) packet.header.nonce
-    packet.message ad).mapError .decryption
+  let plaintext ← openPacket .packet .decryption (sessionKey keys.initiatorKey) packet
   return ⟨srcId, record, plaintext, keys⟩
 
 end EthLib.Networking.Discv5

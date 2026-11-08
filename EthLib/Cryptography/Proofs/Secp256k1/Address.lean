@@ -1,13 +1,14 @@
 module
 
 public import EthLib.Cryptography.Secp256k1.Address
+public import EthLib.Cryptography.Proofs.Secp256k1.Ecdh
 public import EthLib.Cryptography.Proofs.Secp256k1.Recovery
 
 /-!
 # Proofs: Ethereum addresses
 
 - The 64 hashed bytes are the uncompressed SEC 1 encoding without its `04` prefix.
-- Every private key in `[1, n - 1]` has an address.
+- Every private key in `[1, n - 1]` has an address, and only the key `0` has none.
 -/
 
 @[expose] public section
@@ -31,5 +32,15 @@ theorem addressOfPrivateKey_ne_none {d : Fn} (hd : d ≠ 0) : addressOfPrivateKe
   · rename_i heq
     exact absurd heq h
   · simp
+
+/-- A private key has no address exactly when it is zero. -/
+theorem addressOfPrivateKey_eq_none_iff {d : Fn} : addressOfPrivateKey d = none ↔ d = 0 := by
+  constructor
+  · intro h
+    by_contra hd
+    exact addressOfPrivateKey_ne_none hd h
+  · rintro rfl
+    unfold addressOfPrivateKey
+    rw [mul_zero_left isOnCurve_generator]
 
 end EthLib.Cryptography.Secp256k1

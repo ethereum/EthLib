@@ -47,7 +47,7 @@ theorem lt_iff_number_lt {a b : EthVersion} : a < b ↔ a.number < b.number := b
   cases a <;> cases b <;> decide
 
 /-- Every version has at least one message ID. -/
-theorem messageCount_pos (v : EthVersion) : 0 < v.messageCount := by
+theorem messageCount_ne_zero (v : EthVersion) : v.messageCount ≠ 0 := by
   cases v <;> decide
 
 end EthVersion
@@ -74,6 +74,6 @@ theorem ethLength_ne_zero_iff {c : Networking.Devp2p.Capability} :
     · exact absurd rfl h
   · rintro ⟨v, rfl⟩
     rw [ethLength_capability]
-    exact Nat.pos_iff_ne_zero.mp (EthVersion.messageCount_pos v)
+    exact EthVersion.messageCount_ne_zero v
 
 end EthLib.Execution.Network

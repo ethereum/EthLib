@@ -6,6 +6,8 @@ module
 Facts about lists that Lean core does not prove and that several layers use.
 
 Removing the duplicates of a list leaves each element once.
+
+A bound on each term of a sum bounds the sum by the count times that bound.
 -/
 
 @[expose] public section
@@ -32,5 +34,25 @@ theorem nodup_eraseDups {α : Type} [BEq α] [LawfulBEq α] (l : List α) : l.er
       · rw [List.mem_eraseDups, List.mem_filter] at mem
         simp at mem
       · exact Nat.le_trans (List.length_filter_le _ _) (by simpa using short)
+
+/-- Each term at least `low` makes the sum at least the count times `low`. -/
+theorem le_sum_map {α : Type} {f : α → Nat} {low : Nat} :
+    ∀ {xs : List α}, (∀ x ∈ xs, low ≤ f x) → xs.length * low ≤ (xs.map f).sum
+  | [], _ => by simp
+  | x :: xs, h => by
+    have hx := h x List.mem_cons_self
+    have := le_sum_map (xs := xs) fun y hy => h y (List.mem_cons_of_mem x hy)
+    simp only [List.length_cons, List.map_cons, List.sum_cons, Nat.succ_mul]
+    omega
+
+/-- Each term at most `high` makes the sum at most the count times `high`. -/
+theorem sum_map_le {α : Type} {f : α → Nat} {high : Nat} :
+    ∀ {xs : List α}, (∀ x ∈ xs, f x ≤ high) → (xs.map f).sum ≤ xs.length * high
+  | [], _ => by simp
+  | x :: xs, h => by
+    have hx := h x List.mem_cons_self
+    have := sum_map_le (xs := xs) fun y hy => h y (List.mem_cons_of_mem x hy)
+    simp only [List.length_cons, List.map_cons, List.sum_cons, Nat.succ_mul]
+    omega
 
 end EthLib.Base

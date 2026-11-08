@@ -67,6 +67,7 @@ def branch (x : U256) (pc size : Nat) : List (U256 × U256) → Nat
 
 variable {code : ByteArray} {message : Message fork} {memory : ByteArray}
   {state : State.TransactionState} {substate : Substate}
+  {returnData : ByteArray}
 
 /-- A table of keys sends the word `x` to the destination of the first entry with key `x`.
 
@@ -77,9 +78,9 @@ theorem branchTable {n m : Fin 33} (hn : n.val ≠ 0) (hm : m.val ≠ 0) {x : U2
     {rest : List U256} (hstack : rest.length + 2 < STACK_LIMIT) :
     ∀ {pc gas : Nat} {entries : List (U256 × U256)}, Table code n m pc entries →
       22 * tested x entries ≤ gas →
-      Hoare fork (At code message pc (x :: rest) memory gas state substate)
+      Hoare fork (At code message pc (x :: rest) memory gas state substate returnData)
         (At code message (branch x pc (entrySize n m) entries) (x :: rest) memory
-          (gas - 22 * tested x entries) state substate)
+          (gas - 22 * tested x entries) state substate returnData)
   | pc, gas, [], _, _ => Triple.of_imp fun _ h => h
   | pc, gas, (key, dest) :: entries, ⟨⟨l0, b0⟩, ⟨l1, b1⟩, hkey, ⟨l2, b2⟩, ⟨l3, b3⟩, hdest,
       ⟨l4, b4⟩, valid, table⟩, hgas => by
@@ -87,26 +88,31 @@ theorem branchTable {n m : Fin 33} (hn : n.val ≠ 0) (hm : m.val ≠ 0) {x : U2
       simp only [tested] at hgas
       split at hgas <;> omega
     have h1 := dup1 (fork := fork) (code := code) (message := message) (memory := memory)
-      (state := state) (substate := substate) (pc := pc) (x := x) (rest := rest) (gas := gas)
+      (state := state) (substate := substate) (returnData := returnData)
+      (pc := pc) (x := x) (rest := rest) (gas := gas)
       l0 b0 (by omega) (by simp only [List.length_cons]; omega)
     have h2 := push (fork := fork) (code := code) (message := message) (memory := memory)
-      (state := state) (substate := substate) (pc := pc + 1) (stack := x :: x :: rest)
+      (state := state) (substate := substate) (returnData := returnData)
+      (pc := pc + 1) (stack := x :: x :: rest)
       (gas := gas - 3) (n := n) (word := key) hn l1 b1 (decode_push n hn) hkey (by omega)
       (by simp only [List.length_cons]; omega)
     have h3 := binary (fork := fork) (code := code) (message := message) (memory := memory)
-      (state := state) (substate := substate) (pc := pc + 1 + (1 + n)) (x := key) (y := x)
+      (state := state) (substate := substate) (returnData := returnData)
+      (pc := pc + 1 + (1 + n)) (x := key) (y := x)
       (rest := x :: rest) (gas := gas - 3 - 3) l2 b2
       (ofByte_of_decode (op := .eq) rfl (Fork.frontier_le _)) instruction_eq
       (by simp only [OPCODE_EQ, VERY_LOW]; omega)
     have h4 := push (fork := fork) (code := code) (message := message) (memory := memory)
-      (state := state) (substate := substate) (pc := pc + 1 + (1 + n) + 1)
+      (state := state) (substate := substate) (returnData := returnData)
+      (pc := pc + 1 + (1 + n) + 1)
       (stack := equal key x :: x :: rest) (gas := gas - 3 - 3 - OPCODE_EQ) (n := m) (word := dest)
       hm l3 b3 (decode_push m hm) hdest (by simp only [OPCODE_EQ, VERY_LOW]; omega)
       (by simp only [List.length_cons]; omega)
     have h14 := ((h1.seq h2).seq h3).seq h4
     by_cases hk : key = x
     · have h5 := jumpi_taken (fork := fork) (code := code) (message := message) (memory := memory)
-        (state := state) (substate := substate) (pc := pc + 1 + (1 + n) + 1 + (1 + m))
+        (state := state) (substate := substate) (returnData := returnData)
+        (pc := pc + 1 + (1 + n) + 1 + (1 + m))
         (destination := dest) (condition := equal key x) (rest := x :: rest)
         (gas := gas - 3 - 3 - OPCODE_EQ - 3) l4 b4 (by simp only [OPCODE_EQ, VERY_LOW]; omega)
         (by simp [equal, hk]) valid
@@ -116,7 +122,8 @@ theorem branchTable {n m : Fin 33} (hn : n.val ≠ 0) (hm : m.val ≠ 0) {x : U2
     · have heq : equal key x = 0 := by simp [equal, hk]
       rw [heq] at h14
       have h5 := jumpi_zero (fork := fork) (code := code) (message := message) (memory := memory)
-        (state := state) (substate := substate) (pc := pc + 1 + (1 + n) + 1 + (1 + m))
+        (state := state) (substate := substate) (returnData := returnData)
+        (pc := pc + 1 + (1 + n) + 1 + (1 + m))
         (destination := dest) (rest := x :: rest) (gas := gas - 3 - 3 - OPCODE_EQ - 3) l4 b4
         (by simp only [OPCODE_EQ, VERY_LOW]; omega)
       have hpc : pc + 1 + (1 + n) + 1 + (1 + m) + 1 = pc + entrySize n m := by

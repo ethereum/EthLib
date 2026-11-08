@@ -9,13 +9,6 @@ from ethlib.errors import BlockError
 from ethlib.serialization import rlp
 
 
-def _number(n: int) -> bytes:
-    """The shortest big-endian bytes of a non-negative integer."""
-    if n < 0:
-        raise OverflowError("a block quantity cannot be negative")
-    return n.to_bytes(max(1, (n.bit_length() + 7) // 8), "big")
-
-
 def block_difficulty(
     fork: str,
     number: int,
@@ -25,31 +18,26 @@ def block_difficulty(
     parent_ommers: int,
 ) -> int:
     """The difficulty of a block at a fork, from its parent and its parent's ommer count."""
-    numbers = (number, timestamp, parent_timestamp, parent_difficulty, parent_ommers)
-    result = _native.pow_block_difficulty(fork.encode(), *map(_number, numbers))
-    return int.from_bytes(result, "big")
+    return _native.pow_block_difficulty(
+        fork, number, timestamp, parent_timestamp, parent_difficulty, parent_ommers
+    )
 
 
 def seal_hash(fork: str, header: bytes) -> bytes:
     """The Keccak-256 hash of a header without its mix digest and nonce."""
-    return _native.pow_seal_hash(fork.encode(), header)
+    return _native.pow_seal_hash(fork, header)
 
 
 def check_proof_of_work(fork: str, header: bytes) -> bool:
     """Check the proof of work of a header in RLP form, at a fork before Paris."""
-    return _native.pow_check(fork.encode(), header)
+    return _native.pow_check(fork, header)
 
 
 def chain_forks(forks: str | Sequence[tuple[str, int]]) -> bytes:
     """The RLP form of the forks of a chain with their first blocks; a name alone starts at 0."""
     if isinstance(forks, str):
         forks = [(forks, 0)]
-    return rlp.encode(
-        [
-            [name.encode(), first.to_bytes((first.bit_length() + 7) // 8, "big")]
-            for name, first in forks
-        ]
-    )
+    return _native.pow_chain_forks(list(forks))
 
 
 def validate_ommers(

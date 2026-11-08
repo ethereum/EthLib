@@ -17,8 +17,6 @@ Properties of the gossip message ID.
 - Each hash input determines its domain and its bytes, and under Altair its topic.
   The topic must be shorter than 2^64 bytes.
   So two messages that differ in one share an ID only if SHA-256, cut to 20 bytes, collides.
-
-The kernel checks everything here, so no `native_decide` or `bv_decide` axiom appears.
 -/
 
 @[expose] public section

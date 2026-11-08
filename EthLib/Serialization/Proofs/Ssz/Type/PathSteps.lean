@@ -85,6 +85,14 @@ theorem resolveStep_progressiveBitList {limit : Option Nat} (ordinal : Nat) :
   simp [Desc.resolveStep, Desc.chunkPosition, Desc.elementType, Desc.positionCount,
     Bind.bind, Except.bind, Pure.pure, Except.pure]
 
+/-- A container field selects its leaf in the tree of the fields. -/
+theorem resolveStep_container (names : List String) (fields : List Desc) (ordinal : Nat)
+    (child : Desc) (selected : fields[ordinal]? = some child) :
+    (Desc.container names fields).resolveStep (.position ordinal) =
+      .ok (nextPow2 fields.length + ordinal, some child) := by
+  simp [Desc.resolveStep, Desc.chunkPosition, Desc.elementType, Desc.chunkCount, selected,
+    Bind.bind, Except.bind, Pure.pure, Except.pure]
+
 /-- A progressive field selects its active layout position, including preceding gaps. -/
 theorem resolveStep_progressiveContainer (active : List Bool) (names : List String)
     (fields : List Desc) (ordinal position : Nat) (child : Desc)

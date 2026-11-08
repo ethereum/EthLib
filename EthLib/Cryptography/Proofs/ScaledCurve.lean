@@ -18,7 +18,7 @@ A sextic untwist is such a map, and so is the Frobenius map of a curve over the 
 
 The line of Miller's algorithm through two images has the image of the slope times `u`.
 
-A point with `x = 0` on `y^2 = x^3 + c` has order 1 or 3.
+A point with `x = 0` on `y^2 = x^3 + c` has order 3.
 -/
 
 @[expose] public section
@@ -218,6 +218,42 @@ theorem three_nsmul_some_zero {y : F} (h : (curve 0 c).Nonsingular 0 y) :
     simp only [curve]
     constructor <;> ring
   rw [show (3 : ℕ) = 2 + 1 from rfl, add_nsmul, two_nsmul, h2, one_nsmul, neg_add_cancel]
+
+omit [DecidableEq F] in
+/-- Points with the same coordinates are equal, whatever the proofs that they are on the curve. -/
+theorem some_congr {W : Affine F} {x y x' y' : F} (hx : x = x') (hy : y = y')
+    (h : W.Nonsingular x y) (h' : W.Nonsingular x' y') :
+    (Point.some x y h : W.Point) = .some x' y' h' := by
+  subst hx hy
+  rfl
+
+/-- Let `β` be a cube root of unity other than `1`.
+
+Then `(x, y)`, `(β x, y)` and `(β^2 x, y)` lie on the line `Y = y`, so they sum to `O`.
+
+When `x = 0` the three points are one point, of order 3. -/
+theorem some_add_some_add_some {β x y : F} (hβ : 1 + β + β ^ 2 = 0) (hβ1 : β ≠ 1)
+    (h₁ : (curve 0 c).Nonsingular x y) (h₂ : (curve 0 c).Nonsingular (β * x) y)
+    (h₃ : (curve 0 c).Nonsingular (β ^ 2 * x) y) :
+    Point.some x y h₁ + Point.some (β * x) y h₂ + Point.some (β ^ 2 * x) y h₃ = 0 := by
+  by_cases hx : x = 0
+  · subst hx
+    have he (t : F) (ht : t = 0) (h : (curve 0 c).Nonsingular t y) :
+        (Point.some t y h : (curve 0 c).Point) = .some 0 y h₁ := by
+      subst ht
+      rfl
+    rw [he _ (mul_zero β) h₂, he _ (mul_zero _) h₃, ← two_nsmul, ← succ_nsmul]
+    exact three_nsmul_some_zero h₁
+  · have hne : x ≠ β * x := by
+      intro h
+      have : (1 - β) * x = 0 := by linear_combination h
+      rcases mul_eq_zero.mp this with h' | h'
+      · exact hβ1 (by linear_combination -h')
+      · exact hx h'
+    obtain ⟨h₄, he⟩ := add_of_x_ne h₁ h₂ hne (l := 0) (x3 := β ^ 2 * x) (y3 := -y)
+      (by simp) (by linear_combination x * hβ) (by ring)
+    rw [he]
+    exact add_of_y_eq_neg h₄ h₃ (neg_neg y).symm
 
 end Inflection
 

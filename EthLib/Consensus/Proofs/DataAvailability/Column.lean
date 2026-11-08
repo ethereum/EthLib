@@ -301,15 +301,48 @@ theorem ascending_check_false {indices : List Nat} (sorted : indices.Pairwise (�
 private theorem toNat_toUInt64_of_lt {n : Nat} (small : n < 2 ^ 64) : n.toUInt64.toNat = n := by
   rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small]
 
-/-- The entries of a row that a filter of columns keeps: one for each kept column, in order. -/
-theorem filter_matrixRow (keep : DataAvailability.ColumnIndex → Bool) (row : RowIndex)
-    (cells : Array Cell) (proofs : Array KZGProof) :
-    (matrixRow row cells proofs).filter (fun e => keep e.columnIndex) =
-      ((List.range CELLS_PER_EXT_BLOB).filter fun c => keep c.toUInt64).map fun c =>
-        ⟨cells[c]!, proofs[c]!, c.toUInt64, row⟩ := by
+/-- The entries of a row of 128 cells and 128 proofs: one for each column, in order. -/
+theorem matrixRow_eq_finRange (row : RowIndex) {cells : Array Cell} {proofs : Array KZGProof}
+    (cellsSize : cells.size = CELLS_PER_EXT_BLOB) (proofsSize : proofs.size = CELLS_PER_EXT_BLOB) :
+    matrixRow row cells proofs =
+      (List.finRange CELLS_PER_EXT_BLOB).map fun c =>
+        ⟨cells[c.val]'(by simp [cellsSize]), proofs[c.val]'(by simp [proofsSize]),
+          c.val.toUInt64, row⟩ := by
   unfold matrixRow
-  rw [List.filter_map]
+  apply List.ext_getElem (by simp [cellsSize, proofsSize])
+  intro i _ _
+  simp
+
+/-- The entries of a row that a filter of columns keeps: one for each kept column, in order.
+
+The row has 128 cells and 128 proofs. -/
+theorem filter_matrixRow (keep : DataAvailability.ColumnIndex → Bool) (row : RowIndex)
+    {cells : Array Cell} {proofs : Array KZGProof}
+    (cellsSize : cells.size = CELLS_PER_EXT_BLOB) (proofsSize : proofs.size = CELLS_PER_EXT_BLOB) :
+    (matrixRow row cells proofs).filter (fun e => keep e.columnIndex) =
+      ((List.finRange CELLS_PER_EXT_BLOB).filter fun c => keep c.val.toUInt64).map fun c =>
+        ⟨cells[c.val]'(by simp [cellsSize]), proofs[c.val]'(by simp [proofsSize]),
+          c.val.toUInt64, row⟩ := by
+  rw [matrixRow_eq_finRange row cellsSize proofsSize, List.filter_map]
   rfl
+
+/-- The kept entries of a row that FK20 computes, read by column index. -/
+private theorem filter_matrixRow_fk20 (keep : DataAvailability.ColumnIndex → Bool)
+    (row : RowIndex) (setup : TrustedSetup) {p : PolynomialCoeff}
+    (hp : p.size = FIELD_ELEMENTS_PER_BLOB) :
+    (matrixRow row (fk20CellsAndProofs setup p).1 (fk20CellsAndProofs setup p).2).filter
+        (fun e => keep e.columnIndex) =
+      ((List.range CELLS_PER_EXT_BLOB).filter fun c => keep c.toUInt64).map fun c =>
+        ⟨(fk20CellsAndProofs setup p).1[c]!, (fk20CellsAndProofs setup p).2[c]!, c.toUInt64,
+          row⟩ := by
+  obtain ⟨cellsSize, proofsSize⟩ :=
+    size_fk20CellsAndProofs setup (polynomialCoeff := p) (by rw [hp]; decide)
+  have range : List.range CELLS_PER_EXT_BLOB = (List.finRange CELLS_PER_EXT_BLOB).map Fin.val :=
+    List.ext_getElem (by simp) (by simp)
+  rw [filter_matrixRow keep row cellsSize proofsSize, range, List.filter_map, List.map_map]
+  apply List.map_congr_left
+  intro c _
+  simp [getElem!_pos, cellsSize, proofsSize]
 
 /-- Recovering the matrix of some blobs from the columns that a filter keeps gives the matrix.
 
@@ -369,13 +402,13 @@ theorem recoverMatrix_computeMatrix {setup : TrustedSetup} {blobs : List Blob}
     apply List.map_congr_left
     intro k hk
     have hk' := List.mem_range.mp hk
-    obtain ⟨p, _, hpk⟩ := hrow k hk'
-    simp only [Function.comp, getElem!_pos rows k (hlen ▸ hk'), hpk, filter_matrixRow]
+    obtain ⟨p, hp, hpk⟩ := hrow k hk'
+    simp only [Function.comp, getElem!_pos rows k (hlen ▸ hk'), hpk, filter_matrixRow_fk20 _ _ _ hp]
     by_cases same : k = j
     · subst same
       simp only [↓reduceIte]
       rw [getElem!_pos rows k (hlen ▸ hk'), hpk,
-        filter_matrixRow, List.filter_eq_self.mpr]
+        filter_matrixRow_fk20 _ _ _ hp, List.filter_eq_self.mpr]
       intro e he
       obtain ⟨c, _, rfl⟩ := List.mem_map.mp he
       simp
@@ -405,7 +438,8 @@ theorem recoverMatrix_computeMatrix {setup : TrustedSetup} {blobs : List Blob}
   intro j hj
   have hj' := List.mem_range.mp hj
   obtain ⟨p, hp, hpj⟩ := hrow j hj'
-  simp only [hselect j hj', getElem!_pos rows j (hlen ▸ hj'), hpj, filter_matrixRow, List.map_map]
+  simp only [hselect j hj', getElem!_pos rows j (hlen ▸ hj'), hpj, filter_matrixRow_fk20 _ _ _ hp,
+    List.map_map]
   have hidx : List.map ((fun x => UInt64.toNat x.columnIndex) ∘ fun c =>
       (⟨(fk20CellsAndProofs setup p).1[c]!, (fk20CellsAndProofs setup p).2[c]!, c.toUInt64,
         j.toUInt64⟩ : MatrixEntry))

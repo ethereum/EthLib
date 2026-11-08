@@ -135,6 +135,13 @@ def test_make_whoareyou_packet():
     assert challenge_data == WHOAREYOU_CHALLENGE_DATA
 
 
+def test_make_whoareyou_seq_fits_64_bits():
+    # The enr-seq is a uint64, so Lean rejects 2^64 with code 0.
+    with raises(discv5.Discv5Error, f"expected an int below {2**64}, got {2**64}") as info:
+        discv5.make_whoareyou(DEST_ID, MASKING_IV, WHOAREYOU_NONCE, ID_NONCE, 2**64)
+    assert info.value.code == 0
+
+
 def test_read_whoareyou_packet():
     c = discv5.read_whoareyou(DEST_ID, WHOAREYOU_PACKET)
     assert c["nonce"] == WHOAREYOU_NONCE

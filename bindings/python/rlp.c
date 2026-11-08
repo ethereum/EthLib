@@ -17,8 +17,7 @@ eth_rlp_decode(
 
 extern lean_object*
 eth_rlp_decode_as(
-  lean_object* kind,
-  lean_object* data
+  lean_object* args
 );
 
 /* ---- Items ------------------------------------------------------------ */
@@ -44,14 +43,21 @@ item_of_py(
     PyErr_SetString(PyExc_TypeError, "an RLP item must be bytes or a list of items");
     return NULL;
   }
-  if (Py_EnterRecursiveCall(" while converting an RLP item")) return NULL;
+  /* A copy of the items, so another thread cannot change the list while it is read. */
+  PyObject* items = PyList_AsTuple(obj);
+  if (!items) return NULL;
+  if (Py_EnterRecursiveCall(" while converting an RLP item")) {
+    Py_DECREF(items);
+    return NULL;
+  }
   /* Build the list from its last element, so each cell takes the list after it. */
   lean_object* list = lean_box(0);
-  for (Py_ssize_t i = PyList_GET_SIZE(obj); i > 0; i--) {
-    lean_object* child = item_of_py(PyList_GET_ITEM(obj, i - 1));
+  for (Py_ssize_t i = PyTuple_GET_SIZE(items); i > 0; i--) {
+    lean_object* child = item_of_py(PyTuple_GET_ITEM(items, i - 1));
     if (!child) {
       lean_dec(list);
       Py_LeaveRecursiveCall();
+      Py_DECREF(items);
       return NULL;
     }
     lean_object* cell = lean_alloc_ctor(1, 2, 0);
@@ -60,6 +66,7 @@ item_of_py(
     list = cell;
   }
   Py_LeaveRecursiveCall();
+  Py_DECREF(items);
   lean_object* item = lean_alloc_ctor(1, 1, 0);
   lean_ctor_set(item, 0, list);
   return item;
@@ -145,18 +152,5 @@ py_rlp_decode_as(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject* kind_obj;
-  PyObject* data_obj;
-  if (!PyArg_ParseTuple(args, "OO", &kind_obj, &data_obj)) return NULL;
-  if (!PyUnicode_Check(kind_obj)) {
-    PyErr_SetString(PyExc_TypeError, "kind must be str");
-    return NULL;
-  }
-  Py_ssize_t len;
-  const char* utf8 = PyUnicode_AsUTF8AndSize(kind_obj, &len);
-  if (!utf8) return NULL;
-  lean_object* data = bytes_of_py(data_obj, "data");
-  if (!data) return NULL;
-  lean_object* kind = mk_bytearray((const uint8_t*) utf8, len);
-  return except_into_pyitem(eth_rlp_decode_as(kind, data));
+  return call_pyvalue_export(eth_rlp_decode_as, args, 2, RLP_ERROR);
 }

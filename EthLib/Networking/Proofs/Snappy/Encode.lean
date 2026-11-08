@@ -166,26 +166,40 @@ theorem reads_copyElement {declared : Nat} {L : List UInt8} {p offset len : Nat}
 
 /-! ## The encoder -/
 
-/-- The copies that the encoder appends for one offset copy the next `len` bytes of a list.
+/-- The copies that the encoder appends for one offset do not depend on the output before them. -/
+theorem toList_emitCopies (offset : Nat) (out : ByteArray) (len : Nat) :
+    (emitCopies offset out len).data.toList =
+      out.data.toList ++ (emitCopies offset ByteArray.empty len).data.toList := by
+  induction len using Nat.strongRecOn generalizing out with
+  | _ len ih =>
+      unfold emitCopies
+      by_cases h0 : len = 0
+      · simp [h0]
+      · simp only [h0, ↓reduceIte]
+        rw [ih _ (by simp only [maxCopyLength]; grind) (out ++ ⟨(copyElement offset _).toArray⟩),
+          ih _ (by simp only [maxCopyLength]; grind)
+            (ByteArray.empty ++ ⟨(copyElement offset _).toArray⟩)]
+        simp
 
-At each step the output is a prefix of the list.
+/-- The copies that the encoder writes for one offset copy the next `len` bytes of a list.
 
-Each byte the copies write repeats the byte `offset` places before it.
+They take the first `p` bytes of the list to its first `p + len` bytes.
+
+Each byte the copies write must repeat the byte `offset` places before it.
 -/
 theorem emitCopies_reads {declared : Nat} {L : List UInt8} {offset : Nat} (hoff : 0 < offset)
-    (hbound : offset < copyTwoOffsetBound) (len : Nat) :
-    ∀ (p : Nat) (out : ByteArray), offset ≤ p → p + len ≤ L.length → p + len ≤ declared →
-      (∀ (j : Nat) (_ : p ≤ j) (_ : j < p + len) (h1 : j < L.length) (h2 : j - offset < L.length),
-        L[j] = L[j - offset]) →
-      ∃ e, (emitCopies offset out len).data.toList = out.data.toList ++ e ∧
-        Reads declared e (L.take p) (L.take (p + len)) := by
-  induction len using Nat.strongRecOn with
+    (hbound : offset < copyTwoOffsetBound) (len : Nat) {p : Nat} (hle : offset ≤ p)
+    (hL : p + len ≤ L.length) (hfit : p + len ≤ declared)
+    (hmatch : ∀ (j : Nat) (_ : p ≤ j) (_ : j < p + len) (h1 : j < L.length)
+      (h2 : j - offset < L.length), L[j] = L[j - offset]) :
+    Reads declared (emitCopies offset ByteArray.empty len).data.toList (L.take p)
+      (L.take (p + len)) := by
+  induction len using Nat.strongRecOn generalizing p with
   | _ len ih =>
-      intro p out hle hL hfit hmatch
       rw [emitCopies]
       by_cases h0 : len = 0
       · subst h0
-        exact ⟨[], by simp, Reads.nil declared _⟩
+        simpa using Reads.nil declared _
       · simp only [h0, ↓reduceIte]
         -- The length of the next element: 1 to 64 bytes, and at most what remains.
         generalize hn : (if maxCopyLength + 4 ≤ len then maxCopyLength
@@ -196,44 +210,54 @@ theorem emitCopies_reads {declared : Nat} {L : List UInt8} {offset : Nat} (hoff 
         have h₁ := reads_copyElement (declared := declared) (L := L) (p := p) hoff hle hn1 hn2
           hbound (by omega) (by omega)
           (fun j hj hjn h1 h2 => hmatch j hj (by omega) h1 h2)
-        obtain ⟨e, he, hr⟩ := ih (len - n) (by omega) (p + n)
-          (out ++ ⟨(copyElement offset n).toArray⟩)
-          (by omega) (by omega) (by omega)
+        have hr := ih (len - n) (by omega) (p := p + n) (by omega) (by omega) (by omega)
           (fun j hj hjn h1 h2 => hmatch j (by omega) (by omega) h1 h2)
-        refine ⟨copyElement offset n ++ e, ?_, ?_⟩
-        · rw [he]; simp
-        · rw [show p + len = p + n + (len - n) by omega]
-          exact h₁.trans hr
+        rw [toList_emitCopies]
+        simp only [ByteArray.empty_append, List.toList_toArray] at hr ⊢
+        rw [show p + len = p + n + (len - n) by omega]
+        exact h₁.trans hr
 
-/-- The literal that the encoder appends for the bytes of `src` from `lo` up to `hi`.
+/-- The encoder appends one literal for the bytes of `src` from `lo` up to `hi`, if there are any.
 
-It takes the first `lo` bytes of `src` to its first `hi` bytes.
+The range must end within `src`.
 -/
-theorem emitLiteral_reads {declared : Nat} {src : ByteArray} {lo hi : Nat} (out : ByteArray)
-    (hlh : lo ≤ hi) (hhi : hi ≤ src.size) (hlen : hi - lo ≤ 2 ^ 32) (hfit : hi ≤ declared) :
-    ∃ e, (emitLiteral out src lo hi).data.toList = out.data.toList ++ e ∧
-      Reads declared e (src.data.toList.take lo) (src.data.toList.take hi) := by
+theorem toList_emitLiteral (out : ByteArray) {src : ByteArray} {lo hi : Nat}
+    (hhi : hi ≤ src.size) :
+    (emitLiteral out src lo hi).data.toList = out.data.toList ++
+      if lo < hi then literal ((src.data.toList.drop lo).take (hi - lo)) else [] := by
   unfold emitLiteral
+  by_cases hlt : lo < hi
+  · have hsz : src.data.toList.length = src.size := Array.length_toList
+    have hdl : ((src.data.toList.drop lo).take (hi - lo)).length = hi - lo := by simp; omega
+    -- The slice appends the data after the header, and leaves nothing behind it.
+    simp only [hlt, ↓reduceIte, ByteArray.copySlice, literal, hdl]
+    have hm : min (hi - lo) (src.data.size - lo) = hi - lo := by
+      rw [ByteArray.size_data]; omega
+    have h0 : ∀ a b c : Nat, b - (a + b + c - a) = 0 := by intros; omega
+    simp [Array.toList_extract, List.extract, Nat.add_sub_cancel' (by omega : lo ≤ hi),
+      ← ByteArray.size_data, hm, h0, List.take_of_length_le]
+    omega
+  · simp [hlt]
+
+/-- The literal for a range of `src` takes the bytes before the range to the bytes up to its end.
+
+The range goes from `lo` up to `hi`, and an empty range gives no bytes.
+-/
+theorem emitLiteral_reads {declared : Nat} {src : ByteArray} {lo hi : Nat}
+    (hlh : lo ≤ hi) (hhi : hi ≤ src.size) (hlen : hi - lo ≤ 2 ^ 32) (hfit : hi ≤ declared) :
+    Reads declared (if lo < hi then literal ((src.data.toList.drop lo).take (hi - lo)) else [])
+      (src.data.toList.take lo) (src.data.toList.take hi) := by
   by_cases hlt : lo < hi
   · have hsz : src.data.toList.length = src.size := Array.length_toList
     have hlo : (src.data.toList.take lo).length = lo := by simp; omega
     have hdl : ((src.data.toList.drop lo).take (hi - lo)).length = hi - lo := by simp; omega
-    refine ⟨literal ((src.data.toList.drop lo).take (hi - lo)), ?_, ?_⟩
-    -- The slice appends the data after the header, and leaves nothing behind it.
-    · simp only [hlt, ↓reduceIte, ByteArray.copySlice, literal, hdl]
-      have hm : min (hi - lo) (src.data.size - lo) = hi - lo := by
-        rw [ByteArray.size_data]; omega
-      have h0 : ∀ a b c : Nat, b - (a + b + c - a) = 0 := by intros; omega
-      simp [Array.toList_extract, List.extract, Nat.add_sub_cancel' hlh, ← ByteArray.size_data,
-        hm, h0, List.take_of_length_le]
-      omega
-    · rw [show hi = lo + (hi - lo) by omega, List.take_add, Nat.add_sub_cancel_left]
-      refine reads_literal (fun h => ?_) (by omega) (by omega)
-      rw [h] at hdl
-      simp at hdl
-      omega
+    simp only [hlt, ↓reduceIte]
+    rw [show hi = lo + (hi - lo) by omega, List.take_add, Nat.add_sub_cancel_left]
+    refine reads_literal (fun h => ?_) (by omega) (by omega)
+    rw [h] at hdl
+    simp at hdl
+    omega
   · obtain rfl : lo = hi := by omega
-    simp only [Nat.lt_irrefl, ↓reduceIte]
-    exact ⟨[], by simp, Reads.nil declared _⟩
+    simpa using Reads.nil declared _
 
 end EthLib.Networking.Proofs.Snappy.Encode

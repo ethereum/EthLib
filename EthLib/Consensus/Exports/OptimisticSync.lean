@@ -8,9 +8,15 @@ public import EthLib.Consensus.ForkChoice.OptimisticSync
 
 C-ABI exports of the optimistic sync of Bellatrix.
 
-The preset and the fork are named in UTF-8, at a fork from Bellatrix to Fulu.
+The preset and the fork are named, at a fork from Bellatrix to Fulu.
 
-A block comes as SSZ bytes, and a root or a list of roots as 32 bytes each.
+They are named by `str` in the exports that take typed values, and in UTF-8 in the others.
+
+A block comes as SSZ bytes, and a root as 32 bytes.
+
+The exports of the ancestor and of the payload verdicts take and return typed values.
+
+They take the optimistic roots as a list.
 
 An optimistic store is built from its blocks, each under the root of its SSZ bytes.
 
@@ -24,7 +30,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz
-open EthLib.Exports (Result)
+open EthLib.Exports (Result PyValue pyExport)
 
 /-- The result of a step of optimistic sync, with the code of its error. -/
 def runOptimistic {α : Type} (result : Except ForkChoiceError α) : Result α :=
@@ -37,32 +43,17 @@ def optimisticPresetAndFork (name fork : ByteArray) : Result (Preset × Fork) :=
     throw (0, s!"no optimistic sync at {fork.name}")
   return (preset, fork)
 
-/-- A root from 32 bytes, or code 0. -/
-def optimisticRootOf (bytes : ByteArray) : Result Root :=
-  if sized : bytes.size = 32 then return ⟨bytes.data, sized⟩
-  else throw (0, s!"a root is 32 bytes, not {bytes.size}")
-
-/-- A list of roots from their bytes, 32 bytes each, or code 0. -/
-def optimisticRootsOf (bytes : ByteArray) : Result (List Root) := do
-  unless bytes.size % 32 = 0 do throw (0, s!"a list of roots is 32 bytes each, not {bytes.size}")
-  (List.range (bytes.size / 32)).mapM fun index =>
-    optimisticRootOf (bytes.extract (32 * index) (32 * index + 32))
-
-/-- The bytes of a list of roots, 32 bytes each, in order. -/
-def optimisticRootsBytes (roots : List Root) : ByteArray :=
-  roots.foldl (fun bytes root => bytes ++ Base.packBytes root) ByteArray.empty
-
 /-- An optimistic store from its optimistic roots and the SSZ bytes of its blocks.
 
 The head is the zero root, which no rule of these exports reads. -/
 def optimisticStoreOf (preset : Preset) (fork : Fork) (blocks : Array ByteArray)
-    (optimisticRoots : ByteArray) : Result (OptimisticStore preset fork) := do
+    (optimisticRoots : List Root) : Result (OptimisticStore preset fork) := do
   let decoded ← blocks.toList.mapM fun bytes => do
     let block ← decodeInput (BeaconBlock preset fork) bytes
     let root ← (SszType.hashTreeRoot block).mapError fun e => (0, s!"block rejected: {reprStr e}")
     return (root, block)
   return {
-    optimisticRoots := ← optimisticRootsOf optimisticRoots
+    optimisticRoots := optimisticRoots
     headBlockRoot := Vector.replicate 32 0
     blocks := Std.TreeMap.ofList decoded }
 
@@ -79,35 +70,61 @@ The clock is at a slot, and the user sets the number of slots to wait. -/
 def isOptimisticCandidateBlockExport (name fork : ByteArray) (blocks : Array ByteArray)
     (currentSlot safeSlots : UInt64) (block : ByteArray) : Result Bool := do
   let (preset, fork) ← optimisticPresetAndFork name fork
-  let store ← optimisticStoreOf preset fork blocks ByteArray.empty
+  let store ← optimisticStoreOf preset fork blocks []
   let block ← decodeInput (BeaconBlock preset fork) block
   runOptimistic (store.isOptimisticCandidateBlock currentSlot block safeSlots)
 
 /-- From Bellatrix: the root of the latest block of a chain that is not optimistic. -/
-@[export eth_consensus_latest_verified_ancestor]
-def latestVerifiedAncestorExport (name fork : ByteArray) (blocks : Array ByteArray)
-    (optimisticRoots root : ByteArray) : Result ByteArray := do
-  let (preset, fork) ← optimisticPresetAndFork name fork
+def latestVerifiedAncestorOf (args : String × String × Array ByteArray × List Root × Root) :
+    Result Root := do
+  let (name, fork, blocks, optimisticRoots, root) := args
+  let (preset, fork) ← optimisticPresetAndFork name.toUTF8 fork.toUTF8
   let store ← optimisticStoreOf preset fork blocks optimisticRoots
-  return Base.packBytes (← runOptimistic (store.latestVerifiedAncestor (← optimisticRootOf root)))
+  runOptimistic (store.latestVerifiedAncestor root)
+
+/-- From Bellatrix: the root of the latest block of a chain that is not optimistic.
+
+The arguments are the names of the preset and the fork, the blocks and the optimistic roots.
+
+Then comes the root of a block.
+-/
+@[export eth_consensus_latest_verified_ancestor]
+def latestVerifiedAncestorExport (args : PyValue) : Result PyValue :=
+  pyExport latestVerifiedAncestorOf args
 
 /-- From Bellatrix: the optimistic roots after the payload of a block is found valid. -/
-@[export eth_consensus_on_valid_payload]
-def onValidPayloadExport (name fork : ByteArray) (blocks : Array ByteArray)
-    (optimisticRoots root : ByteArray) : Result ByteArray := do
-  let (preset, fork) ← optimisticPresetAndFork name fork
+def onValidPayloadOf (args : String × String × Array ByteArray × List Root × Root) :
+    Result (List Root) := do
+  let (name, fork, blocks, optimisticRoots, root) := args
+  let (preset, fork) ← optimisticPresetAndFork name.toUTF8 fork.toUTF8
   let store ← optimisticStoreOf preset fork blocks optimisticRoots
-  let after ← runOptimistic (store.onValidPayload (← optimisticRootOf root))
-  return optimisticRootsBytes after.optimisticRoots
+  return (← runOptimistic (store.onValidPayload root)).optimisticRoots
+
+/-- From Bellatrix: the optimistic roots after the payload of a block is found valid, as a list.
+
+The arguments are the names of the preset and the fork, the blocks and the optimistic roots.
+
+Then comes the root of a block.
+-/
+@[export eth_consensus_on_valid_payload]
+def onValidPayloadExport (args : PyValue) : Result PyValue := pyExport onValidPayloadOf args
 
 /-- From Bellatrix: the optimistic roots after a block is found to be the first invalid one. -/
-@[export eth_consensus_on_invalidated_payload]
-def onInvalidatedPayloadExport (name fork : ByteArray) (blocks : Array ByteArray)
-    (optimisticRoots first : ByteArray) : Result ByteArray := do
-  let (preset, fork) ← optimisticPresetAndFork name fork
+def onInvalidatedPayloadOf (args : String × String × Array ByteArray × List Root × Root) :
+    Result (List Root) := do
+  let (name, fork, blocks, optimisticRoots, first) := args
+  let (preset, fork) ← optimisticPresetAndFork name.toUTF8 fork.toUTF8
   let store ← optimisticStoreOf preset fork blocks optimisticRoots
-  let after ← runOptimistic (store.onInvalidatedPayload (← optimisticRootOf first))
-  return optimisticRootsBytes after.optimisticRoots
+  return (← runOptimistic (store.onInvalidatedPayload first)).optimisticRoots
+
+/-- From Bellatrix: the optimistic roots after a block is found the first invalid one, as a list.
+
+The arguments are the names of the preset and the fork, the blocks and the optimistic roots.
+
+Then comes the root of the first invalid block. -/
+@[export eth_consensus_on_invalidated_payload]
+def onInvalidatedPayloadExport (args : PyValue) : Result PyValue :=
+  pyExport onInvalidatedPayloadOf args
 
 /-- Whether an optimistic validator may not sign under a domain type of 4 bytes. -/
 @[export eth_consensus_is_optimistic_restricted_domain]

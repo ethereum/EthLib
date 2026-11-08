@@ -200,3 +200,10 @@ def test_list_nat() -> None:
 def test_unknown_kind_rejected() -> None:
     with raises(ValueError, "unknown RLP type"):
         rlp.decode_as("float", bytes.fromhex("80"))
+
+
+def test_kind_is_a_str() -> None:
+    # The kind is read in Lean, so a kind given as bytes fails there with code 0.
+    with raises(rlp.RlpError, "expected a str") as info:
+        rlp.decode_as(b"nat", bytes.fromhex("80"))  # ty: ignore[invalid-argument-type]
+    assert info.value.code == 0

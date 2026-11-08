@@ -131,7 +131,7 @@ theorem readSigningRoot_signingRootFields (path : String) (base : List (String �
     readSigningRoot path (Json.mkObj (base ++ signingRootFields root)) = .ok root := by
   cases root with
   | none =>
-    obtain ⟨fault, absent⟩ := Serialization.Ssz.getObjVal?_mkObj_of_not_mem
+    have absent := Serialization.Ssz.getObjVal?_mkObj_of_not_mem
       (pairs := base ++ signingRootFields none) (name := "signing_root") (by
         simp only [signingRootFields, List.append_nil, List.mem_map, not_exists, not_and]
         exact fun pair mem eq => named pair mem eq)

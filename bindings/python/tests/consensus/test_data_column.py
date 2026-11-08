@@ -1,7 +1,6 @@
 """The data column sidecars and the matrix, from Fulu, against the vectors of consensus-specs."""
 
 import hashlib
-import json
 from pathlib import Path
 
 import pytest
@@ -52,23 +51,21 @@ def _yaml(path: Path):
 
 
 def _conform(base, value):
-    # Give a YAML value the JSON form of the Lean value it replaces.
+    # Give a YAML value the form of the configuration value it replaces.
     if isinstance(value, list):
         sample = base[0] if base else {}
         return [_conform(sample, item) for item in value]
     if isinstance(value, dict):
-        return {key: _conform(base.get(key, ""), item) for key, item in value.items()}
-    if isinstance(value, int) and isinstance(base, str):
+        return {key: _conform(base.get(key), item) for key, item in value.items()}
+    if isinstance(value, int) and isinstance(base, str) and base.startswith("0x"):
         # YAML reads an unquoted 0x value as an integer; Lean keeps it as bytes.
-        if base.startswith("0x"):
-            return "0x" + value.to_bytes((len(base) - 2) // 2, "big").hex()
-        return str(value)
+        return "0x" + value.to_bytes((len(base) - 2) // 2, "big").hex()
     return value
 
 
 def replacements(case_config: dict, name: str) -> dict:
     """The values of a case's configuration that the named configuration holds, in Lean's form."""
-    base = json.loads(_native.consensus_config(name))
+    base = _native.consensus_config(name)
     return {key: _conform(base[key], value) for key, value in case_config.items() if key in base}
 
 
@@ -337,6 +334,30 @@ def test_sidecars_need_one_row_per_commitment():
     rows = [([bytes(CELL)] * 128, [bytes(PROOF)] * 128)] * 200
     with raises(SszError, "sidecars rejected: EthLib.Serialization.Ssz.Err.count 1 200"):
         consensus.get_data_column_sidecars_from_block("minimal", "fusaka", block, rows)
+
+
+@pytest.mark.parametrize("cells, proofs", [(127, 128), (128, 129)])
+def test_rows_need_every_cell_and_proof(cells: int, proofs: int):
+    case = sorted(PROOFS.glob("minimal/fulu/merkle_proof/*/BeaconBlockBody/*"))[0]
+    body = snappy.decompress((case / "object.ssz_snappy").read_bytes())
+    block = (100).to_bytes(4, "little") + bytes(96) + bytes(80) + (84).to_bytes(4, "little") + body
+    rows = [([bytes(CELL)] * cells, [bytes(PROOF)] * proofs)]
+    message = f"a row holds {cells} cells and {proofs} proofs, not 128 of each"
+    with raises(SszError, message) as caught:
+        consensus.get_data_column_sidecars_from_block("minimal", "fusaka", block, rows)
+    assert caught.value.code == 0
+
+
+def test_matrix_entry_of_wrong_length():
+    with raises(KzgError, "expected 2112 bytes, got 1") as caught:
+        consensus.recover_matrix([b"\x00"], 1)
+    assert caught.value.code == 0
+
+
+def test_matrix_blob_of_wrong_length():
+    with raises(KzgError, "expected 131072 bytes, got 1") as caught:
+        consensus.compute_matrix([b"\x00"])
+    assert caught.value.code == 0
 
 
 def _kzg_case(i: int) -> tuple:

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Exports.ForkChoiceValues
 public import EthLib.Consensus.Exports.Transition
 public import EthLib.Consensus.ForkChoice.FastConfirmation
 public import EthLib.Consensus.ForkChoice.Handlers
@@ -14,89 +15,13 @@ A C-ABI export that runs a case of the fork choice vectors on one store.
 
 The store starts from an anchor state and an anchor block, given in SSZ.
 
-The steps arrive one after another in one byte string.
+The steps and the outcome of each step are typed Python values.
 
-Each step is one byte for its kind, a 4-byte length, then that many bytes.
+A read of the store or a fast confirmation gives a `dict`, and another step gives `None`.
 
-Kind 0 moves the clock to a time in seconds, given in 8 bytes.
+A step that the store rejects gives its error as its outcome, and the run goes on.
 
-Kind 1 adds a signed block with its votes, kind 2 an attestation and kind 3 an attester slashing.
-
-Kind 4 reads the store, with one byte of flags.
-
-Flag 1 asks where the proposer of the slot builds.
-
-Flag 2 asks for the viable leaves of the filtered tree, each with its weight.
-
-Flag 4 asks for the votes of the payload committee on a block, whose root follows the flags.
-
-Kind 5 makes a block of proof of work known, in SSZ, for the merge check of later blocks.
-
-Kind 6 gives the blobs and the proofs that the node holds for the next block.
-
-It is a 4-byte count of blobs, then the blobs, then the proofs of 48 bytes each.
-
-Without it the node holds no blob and no proof for a block.
-
-Kind 7 gives the columns that the node samples for the next block or envelope.
-
-It is a 4-byte count, then each column as a 4-byte length and its SSZ bytes.
-
-A count of zero means that the node cannot get the columns.
-
-Without it the node samples no column for a block or an envelope.
-
-Kind 8 gives the verdict of the execution layer on the payload of the next block.
-
-A byte of 0 accepts the payload, and a byte of 1 finds it invalid.
-
-An invalid verdict may add the 32 bytes of the latest valid hash of the chain.
-
-The block then fails, and the blocks that the verdict finds invalid leave the store.
-
-Without a verdict the execution layer accepts the payload.
-
-Kind 9 runs the fast confirmation of the slot, on a store of its own that starts with the case.
-
-It gives three checkpoints, each an epoch and a root.
-
-They are the justified checkpoints that the node saw in the previous and the current epoch.
-
-The third is the greatest unrealized checkpoint of the previous epoch.
-
-Then come the heads of the previous and the current slot, and the confirmed root.
-
-Before Bellatrix a byte of 0 ends it.
-
-From Bellatrix a byte of 1 and the hash of the safe execution block end it.
-
-From Gloas kind 10 adds a signed envelope, and the execution layer accepts its payload.
-
-From Gloas kind 11 adds a vote of a member of the payload committee, from the wire.
-
-After each step comes one byte: 0 when the store takes the step, 1 when it rejects it.
-
-A rejection carries its error code, a length and a message.
-
-It leaves the store as it was, except for the blocks that an invalid verdict removes.
-
-A read gives the head as a slot and a root, then the time and the genesis time in milliseconds.
-
-Then come the justified and the finalized checkpoints, each an epoch and a root.
-
-Then come the boosted root and, when asked, the root on which the proposer builds.
-
-Then comes the status of the payload of the head: 0 empty, 1 full, 2 pending.
-
-When asked, a 4-byte count of viable leaves follows, each a root, a weight and a payload status.
-
-When asked, a 4-byte count of committee positions follows, then the votes on time.
-
-The votes on the data follow, each vote a byte: 0 false, 1 true, 2 none.
-
-Numbers are little-endian, and a code is 4 bytes.
-
-An input that the export reads itself, such as a wrong length, has code 0.
+An input that the export reads itself, such as bytes that do not decode, has code 0.
 -/
 
 public section
@@ -104,7 +29,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz
-open EthLib.Exports (Result)
+open EthLib.Exports (Result PyValue pyExport)
 
 /-- A result of the fork choice, with the code of its error. -/
 def runForkChoice {α : Type} (result : Except ForkChoiceError α) : Result α :=
@@ -113,28 +38,6 @@ def runForkChoice {α : Type} (result : Except ForkChoiceError α) : Result α :
 /-- The little-endian bytes of a number, in a given width. -/
 def littleEndian (width value : Nat) : ByteArray :=
   Base.packBytes (uintToBytes width value)
-
-/-- A step of a fork choice case: its kind and its bytes. -/
-abbrev ForkChoiceStep := UInt8 × ByteArray
-
-/-- The steps that the bytes hold from an offset.
-
-Each step reads at least 5 bytes, so one round more than the bytes suffices. -/
-def readForkChoiceSteps : (rounds : Nat) → ByteArray → Nat → Result (List ForkChoiceStep)
-  | 0, _, _ => throw (0, "steps do not end")
-  | rounds + 1, bytes, offset =>
-    if offset = bytes.size then return []
-    else if short : bytes.size < offset + 5 then throw (0, "a step is cut short")
-    else do
-      let length := (← decodeInput UInt32 (bytes.extract (offset + 1) (offset + 5))).toNat
-      let stop := offset + 5 + length
-      if bytes.size < stop then throw (0, "the bytes of a step are cut short")
-      let rest ← readForkChoiceSteps rounds bytes stop
-      return (bytes[offset]'(by omega), bytes.extract (offset + 5) stop) :: rest
-
-/-- The epoch and the root of a checkpoint, in 40 bytes. -/
-def checkpointRecord (checkpoint : Checkpoint) : ByteArray :=
-  littleEndian 8 checkpoint.epoch.toNat ++ Base.packBytes checkpoint.root
 
 /-- The leaves of the filtered tree, which the vectors check with their weights.
 
@@ -146,200 +49,150 @@ def viableLeaves {preset : Preset} {fork : Fork} (config : Config) (store : Stor
   nodes.filterM fun node => do
     return (← store.getNodeChildren node).all (· ∉ nodes)
 
-/-- The bytes of the votes of the payload committee: 0 false, 1 true, 2 none. -/
-def ptcVoteRecord {n : Nat} (votes : Vector (Option Bool) n) : ByteArray :=
-  ⟨votes.toArray.map fun vote => match vote with
-    | some false => 0
-    | some true => 1
-    | none => 2⟩
-
-/-- What a read of the store gives, with what its flags ask. -/
-def storeRecord {preset : Preset} {fork : Fork} (config : Config) (store : Store preset fork)
-    (flags : UInt8) (root : Root) : Except ForkChoiceError ByteArray := do
+/-- What a read of the store gives, with what it asks. -/
+def storeRead {preset : Preset} {fork : Fork} (config : Config) (store : Store preset fork)
+    (read : ReadRequest) : Except ForkChoiceError StoreRead := do
   let head ← store.getHead config
   let headBlock ← store.block head.root
-  let mut record := littleEndian 8 headBlock.slot.toNat ++ Base.packBytes head.root ++
-    littleEndian 8 store.timeMs.toNat ++ littleEndian 8 store.genesisTimeMs.toNat ++
-    checkpointRecord store.justifiedCheckpoint ++ checkpointRecord store.finalizedCheckpoint ++
-    Base.packBytes store.proposerBoostRoot
-  if flags &&& 1 ≠ 0 then
-    let slot ← store.getCurrentSlot config
-    record := record ++ Base.packBytes (← store.getProposerHead config head slot).root
-  record := record.push head.payloadStatus.code
-  if flags &&& 2 ≠ 0 then
-    let leaves ← viableLeaves config store
-    record := record ++ littleEndian 4 leaves.length
-    for leaf in leaves do
-      let weight ← store.getWeight config leaf
-      record := (record ++ Base.packBytes leaf.root ++ littleEndian 8 weight.toNat).push
-        leaf.payloadStatus.code
-  if flags &&& 4 ≠ 0 then
-    if gloas : .glamsterdam ≤ fork then
-      let timeliness ← Store.ptcVotes (store.payloadTimelinessVote gloas) root
-      let availability ← Store.ptcVotes (store.payloadDataAvailabilityVote gloas) root
-      record := record ++ littleEndian 4 preset.PTC_SIZE.toNat ++ ptcVoteRecord timeliness ++
-        ptcVoteRecord availability
-    else throw (.forkNotYetSpecified fork)
-  return record
-
-/-- The bytes of a rejected step: a byte of 1, the error code, then the length and the message. -/
-def rejection (e : ForkChoiceError) : ByteArray :=
-  let message := (reprStr e).toUTF8
-  (ByteArray.empty.push 1) ++ littleEndian 4 e.code.toNat ++ littleEndian 4 message.size ++ message
+  let proposerHead ← if read.proposerHead then
+      let slot ← store.getCurrentSlot config
+      pure (some (← store.getProposerHead config head slot).root)
+    else pure none
+  let viable ← if read.viable then
+      let leaves ← viableLeaves config store
+      some <$> leaves.mapM fun leaf => do
+        return ⟨leaf.root, ← store.getWeight config leaf, leaf.payloadStatus.code⟩
+    else pure none
+  let votes ← match read.root with
+    | none => pure (none, none)
+    | some root =>
+      if gloas : .glamsterdam ≤ fork then
+        let timeliness ← Store.ptcVotes (store.payloadTimelinessVote gloas) root
+        let availability ← Store.ptcVotes (store.payloadDataAvailabilityVote gloas) root
+        pure (some timeliness.toList, some availability.toList)
+      else throw (.forkNotYetSpecified fork)
+  return {
+    head := ⟨headBlock.slot, head.root, head.payloadStatus.code⟩
+    timeMs := store.timeMs
+    genesisTimeMs := store.genesisTimeMs
+    justifiedCheckpoint := .of store.justifiedCheckpoint
+    finalizedCheckpoint := .of store.finalizedCheckpoint
+    proposerBoostRoot := store.proposerBoostRoot
+    proposerHead
+    viableForHeadRootsAndWeights := viable
+    payloadTimelinessVote := votes.1
+    payloadDataAvailabilityVote := votes.2 }
 
 /-- What the fast confirmation of a slot gives, from Bellatrix with the safe execution block. -/
-def fastConfirmationRecord {preset : Preset} {fork : Fork} (store : Store preset fork)
-    (fcr : FastConfirmationStore) : Except ForkChoiceError ByteArray := do
-  let record := checkpointRecord fcr.previousEpochObservedJustifiedCheckpoint ++
-    checkpointRecord fcr.currentEpochObservedJustifiedCheckpoint ++
-    checkpointRecord fcr.previousEpochGreatestUnrealizedCheckpoint ++
-    Base.packBytes fcr.previousSlotHead ++ Base.packBytes fcr.currentSlotHead ++
-    Base.packBytes fcr.confirmedRoot
-  if bellatrix : .bellatrix ≤ fork then
-    return record.push 1 ++ Base.packBytes (← store.getSafeExecutionBlockHash fcr bellatrix)
-  return record.push 0
+def fastConfirmationRead {preset : Preset} {fork : Fork} (store : Store preset fork)
+    (fcr : FastConfirmationStore) : Except ForkChoiceError FastConfirmationRead := do
+  let safe ← if bellatrix : .bellatrix ≤ fork then
+      some <$> store.getSafeExecutionBlockHash fcr bellatrix
+    else pure none
+  return {
+    previousEpochObservedJustifiedCheckpoint := .of fcr.previousEpochObservedJustifiedCheckpoint
+    currentEpochObservedJustifiedCheckpoint := .of fcr.currentEpochObservedJustifiedCheckpoint
+    previousEpochGreatestUnrealizedCheckpoint := .of fcr.previousEpochGreatestUnrealizedCheckpoint
+    previousSlotHead := fcr.previousSlotHead
+    currentSlotHead := fcr.currentSlotHead
+    confirmedRoot := fcr.confirmedRoot
+    safeExecutionBlockHash := safe }
 
-/-- The store after a step and the bytes that the step reports, or the error that rejects it. -/
+/-- The outcome of a step: what it reads, or the code and the message of the error that rejects it.
+
+The message carries no prefix, unlike an error of the whole call. -/
+abbrev StepOutcome := Except (UInt32 × String) (Option StepRead)
+
+/-- The outcome of a step that the store rejects. -/
+def rejected (e : ForkChoiceError) : StepOutcome := .error (e.code, reprStr e)
+
+/-- The store after a step and what the step reads, or the error that rejects it.
+
+Three kinds of step run before this: a PoW block, a payload verdict and the fast confirmation. -/
 def runForkChoiceStep {preset : Preset} {fork : Fork} (config : Config) (checks : SignatureChecks)
     (sources : BlockSources preset fork) (store : Store preset fork) :
-    ForkChoiceStep → Result (Except ForkChoiceError (Store preset fork × ByteArray))
-  | (0, data) => do
-    let seconds ← decodeInput UInt64 data
-    return (·, .empty) <$> store.onTick config (secondsToMilliseconds seconds)
-  | (1, data) => do
-    let signed ← decodeInput (SignedBeaconBlock preset fork) data
-    return (·, .empty) <$> store.onBlockWithVotes config checks sources signed
-  | (2, data) => do
+    ForkChoiceStep → Result (Except ForkChoiceError (Store preset fork × Option StepRead))
+  | .tick seconds => return (·, none) <$> store.onTick config (secondsToMilliseconds seconds)
+  | .block input => do
+    let signed ← decodeInput (SignedBeaconBlock preset fork) input.block
+    return (·, none) <$> store.onBlockWithVotes config checks sources signed
+  | .attestation data => do
     let attestation ← decodeInput (Attestation preset fork) data
-    return (·, .empty) <$> store.onAttestation config checks attestation false
-  | (3, data) => do
+    return (·, none) <$> store.onAttestation config checks attestation false
+  | .attesterSlashing data => do
     let slashing ← decodeInput (AttesterSlashing preset fork) data
-    return (·, .empty) <$> store.onAttesterSlashing config checks slashing
-  | (4, data) => do
-    let flags ← match data.toList with
-      | [flags] => if flags < 4 then pure flags else throw (0, "flag 4 needs a root")
-      | flags :: _ =>
-        if 4 ≤ flags ∧ flags < 8 then pure flags else throw (0, "flags are below 8")
-      | [] => throw (0, "a read takes its flags")
-    let root ← if 4 ≤ flags then decodeInput Root (data.extract 1 data.size)
-      else pure (Vector.replicate 32 0)
-    return (store, ·) <$> storeRecord config store flags root
-  | (10, data) => do
+    return (·, none) <$> store.onAttesterSlashing config checks slashing
+  | .checks read => return (fun r => (store, some (.store r))) <$> storeRead config store read
+  | .executionPayload data => do
     let signed ← decodeInput (SignedExecutionPayloadEnvelope preset fork) data
     if gloas : .glamsterdam ≤ fork then
-      return (·, .empty) <$> store.onExecutionPayloadEnvelope config checks sources gloas signed
+      return (·, none) <$> store.onExecutionPayloadEnvelope config checks sources gloas signed
     else throw (0, "an envelope needs Gloas or later")
-  | (11, data) => do
+  | .payloadAttestationMessage data => do
     let message ← decodeInput PayloadAttestationMessage data
     if gloas : .glamsterdam ≤ fork then
-      return (·, .empty) <$> store.onPayloadAttestationMessage config checks gloas message false
+      return (·, none) <$> store.onPayloadAttestationMessage config checks gloas message false
     else throw (0, "a vote of the payload committee needs Gloas or later")
-  | (kind, _) => throw (0, s!"no step of kind {kind}")
+  | .powBlock _ | .payload _ | .fastConfirmation _ =>
+    throw (0, "this step does not run on the store alone")
 
-/-- The blobs and the proofs of a step: a count of blobs, the blobs, then the proofs. -/
-def readBlobData (data : ByteArray) : Result (Array Cryptography.Kzg.Blob ×
-    Array Cryptography.Kzg.KZGProof) := do
-  if data.size < 4 then throw (0, "the count of blobs is cut short")
-  let count := (← decodeInput UInt32 (data.extract 0 4)).toNat
-  let blobBytes := count * Cryptography.Kzg.Constants.BYTES_PER_BLOB
-  if data.size < 4 + blobBytes then throw (0, "the blobs are cut short")
-  let proofBytes := data.size - (4 + blobBytes)
-  if proofBytes % 48 ≠ 0 then throw (0, "the proofs are not 48 bytes each")
-  let blobs ← (Array.range count).mapM fun i =>
-    decodeInput Cryptography.Kzg.Blob
-      (data.extract (4 + i * Cryptography.Kzg.Constants.BYTES_PER_BLOB)
-        (4 + (i + 1) * Cryptography.Kzg.Constants.BYTES_PER_BLOB))
-  let proofs ← (Array.range (proofBytes / 48)).mapM fun i =>
-    decodeInput Cryptography.Kzg.KZGProof
-      (data.extract (4 + blobBytes + i * 48) (4 + blobBytes + (i + 1) * 48))
+/-- The blobs and the proofs that the node holds for a block. -/
+def heldBlobs (blobs proofs : List ByteArray) :
+    Result (Array Cryptography.Kzg.Blob × Array Cryptography.Kzg.KZGProof) := do
+  let blobs ← blobs.toArray.mapM (decodeInput Cryptography.Kzg.Blob)
+  let proofs ← proofs.toArray.mapM (decodeInput Cryptography.Kzg.KZGProof)
   return (blobs, proofs)
 
-/-- The columns of a step: a count, then each column as a length and its SSZ bytes.
+/-- The verdicts of the execution layer that find a payload invalid, by their Engine API names. -/
+def invalidStatuses : List String := ["INVALID", "INVALID_BLOCK_HASH"]
 
-A count of zero means that the node cannot get the columns. -/
-def readColumnData {preset : Preset} {fork : Fork} (data : ByteArray) :
-    Result (Option (Array (DataColumnSidecar preset fork))) := do
-  if data.size < 4 then throw (0, "the count of columns is cut short")
-  let count := (← decodeInput UInt32 (data.extract 0 4)).toNat
-  let mut offset := 4
-  let mut columns := #[]
-  for _ in [0:count] do
-    if data.size < offset + 4 then throw (0, "the length of a column is cut short")
-    let length := (← decodeInput UInt32 (data.extract offset (offset + 4))).toNat
-    let stop := offset + 4 + length
-    if data.size < stop then throw (0, "a column is cut short")
-    columns := columns.push (← decodeInput (DataColumnSidecar preset fork)
-      (data.extract (offset + 4) stop))
-    offset := stop
-  if offset ≠ data.size then throw (0, "bytes follow the last column")
-  return if count = 0 then none else some columns
+/-- The store after each step of a fork choice case, and the outcome of each step.
 
-/-- The verdict of a step on a payload: none when the execution layer accepts it.
-
-Otherwise it is the latest valid hash, when the execution layer knows one. -/
-def readPayloadVerdict (data : ByteArray) : Result (Option (Option Hash32)) :=
-  match data.toList with
-  | [0] => return none
-  | [1] => return some none
-  | 1 :: _ => return some (some (← decodeInput Hash32 (data.extract 1 data.size)))
-  | _ => throw (0, "a verdict is 0, or 1 with an optional hash of 32 bytes")
-
-/-- The outcome of each step of a fork choice case, from an anchor state and an anchor block.
-
-The preset, the configuration and the fork are named in UTF-8.
-
-The signature checks run unless the last argument is false.
-
-From Gloas the node on which a proposer builds is not yet specified here, so that read fails. -/
-@[export eth_consensus_fork_choice]
-def forkChoiceExport (name fork anchorState anchorBlock steps replacements : ByteArray)
-    (verify : Bool) : Result ByteArray := do
-  let preset ← presetOf (← nameOf name)
-  let fork ← forkOf fork
-  let config ← configWith name replacements
-  let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
-  let anchorState ← decodeInput (BeaconState preset fork) anchorState
-  let anchorBlock ← decodeInput (BeaconBlock preset fork) anchorBlock
+The store starts from an anchor state and an anchor block. -/
+def replayForkChoice {preset : Preset} {fork : Fork} (config : Config) (checks : SignatureChecks)
+    (anchorState : BeaconState preset fork) (anchorBlock : BeaconBlock preset fork)
+    (steps : List ForkChoiceStep) : Result (Store preset fork × List StepOutcome) := do
   let mut store ← runForkChoice (getForkchoiceStore config anchorState anchorBlock)
   let mut fcr := getFastConfirmationStore store
-  let mut out := ByteArray.empty
+  let mut outcomes : Array StepOutcome := #[]
   let mut powBlocks : List PowBlock := []
-  let mut blobData : Array Cryptography.Kzg.Blob × Array Cryptography.Kzg.KZGProof := (#[], #[])
-  let mut columnData : Option (Array (DataColumnSidecar preset fork)) := some #[]
   let mut verdict : Option (Option Hash32) := none
   let setup ← Cryptography.Kzg.Exports.embeddedSetup.mapError fun e => (0, e.message)
-  for step in ← readForkChoiceSteps (steps.size + 1) steps 0 do
-    if step.1 = 5 then
-      powBlocks := (← decodeInput PowBlock step.2) :: powBlocks
-      out := out.push 0
+  for step in steps do
+    match step with
+    | .powBlock data =>
+      powBlocks := (← decodeInput PowBlock data) :: powBlocks
+      outcomes := outcomes.push (.ok none)
       continue
-    if step.1 = 6 then
-      blobData ← readBlobData step.2
-      out := out.push 0
+    | .payload ⟨status, latestValidHash⟩ =>
+      verdict := if status ∈ invalidStatuses then some latestValidHash else none
+      outcomes := outcomes.push (.ok none)
       continue
-    if step.1 = 7 then
-      columnData ← readColumnData step.2
-      out := out.push 0
-      continue
-    if step.1 = 8 then
-      verdict ← readPayloadVerdict step.2
-      out := out.push 0
-      continue
-    if step.1 = 9 then
-      if step.2.size ≠ 0 then throw (0, "a fast confirmation takes no bytes")
+    | .fastConfirmation () =>
       match do
           let next ← store.onFastConfirmation config fcr
-          return (next, ← fastConfirmationRecord store next) with
-      | .ok (next, record) =>
+          return (next, ← fastConfirmationRead store next) with
+      | .ok (next, read) =>
         fcr := next
-        out := out.push 0 ++ record
-      | .error e =>
-        out := out ++ rejection e
+        outcomes := outcomes.push (.ok (some (.fastConfirmation read)))
+      | .error e => outcomes := outcomes.push (rejected e)
       continue
+    | _ => pure ()
+    -- The blobs, the columns and the verdict of a block serve only that block.
+    let (held, sampled) ← match step with
+      | .block (.withBlobs _ blobs proofs) => do
+        let held ← heldBlobs blobs proofs
+        pure (held, some #[])
+      | .block (.withColumns _ []) => pure ((#[], #[]), none)
+      | .block (.withColumns _ columns) => do
+        let columns ← columns.toArray.mapM (decodeInput (DataColumnSidecar preset fork))
+        pure ((#[], #[]), some columns)
+      | _ => pure ((#[], #[]), some #[])
     let known := powBlocks
-    let held := blobData
-    let sampled := columnData
-    let invalid := if step.1 = 1 then verdict else none
+    let invalid := match step with
+      | .block _ => verdict
+      | _ => none
+    if let .block _ := step then verdict := none
     let sources : BlockSources preset fork := {
       engine := .constant invalid.isNone
       powBlock := fun hash => known.find? (·.blockHash = hash)
@@ -348,31 +201,50 @@ def forkChoiceExport (name fork anchorState anchorBlock steps replacements : Byt
       setup
       -- The execution layer of the vectors finds that every payload satisfies its lists.
       inclusionListSatisfied := fun _ _ => true }
-    -- The blobs, the columns and the verdict of a step serve only the block that follows it.
-    if step.1 = 1 then
-      blobData := (#[], #[])
-      columnData := some #[]
-      verdict := none
-    -- From Gloas the columns serve the envelope that follows them.
-    if step.1 = 10 then columnData := some #[]
     let mut outcome ← runForkChoiceStep config checks sources store step
     -- An invalid verdict removes blocks, whether the block itself fails or not.
     if let some latestValidHash := invalid then
-      let signed ← decodeInput (SignedBeaconBlock preset fork) step.2
-      let after := match outcome with
-        | .ok (next, _) => next
-        | .error _ => store
-      match after.onInvalidPayload signed.message latestValidHash with
-      | .ok removed =>
-        store := removed
-        outcome := outcome.map fun (_, record) => (removed, record)
-      | .error e => outcome := .error e
+      if let .block input := step then
+        let signed ← decodeInput (SignedBeaconBlock preset fork) input.block
+        let after := match outcome with
+          | .ok (next, _) => next
+          | .error _ => store
+        match after.onInvalidPayload signed.message latestValidHash with
+        | .ok removed =>
+          store := removed
+          outcome := outcome.map fun (_, read) => (removed, read)
+        | .error e => outcome := .error e
     match outcome with
-    | .ok (next, record) =>
+    | .ok (next, read) =>
       store := next
-      out := out.push 0 ++ record
-    | .error e =>
-      out := out ++ rejection e
-  return out
+      outcomes := outcomes.push (.ok read)
+    | .error e => outcomes := outcomes.push (rejected e)
+  return (store, outcomes.toList)
+
+/-- The outcome of each step of a fork choice case, from an anchor state and an anchor block.
+
+A step that the store rejects gives the error as its outcome, and the run goes on.
+
+From Gloas the node on which a proposer builds is not yet specified here, so that read fails. -/
+def forkChoice (args : String × String × ByteArray × ByteArray × List ForkChoiceStep × Bool ×
+    Option PyValue) : Result (List StepOutcome) := do
+  let (name, fork, anchorState, anchorBlock, steps, verify, replacements) := args
+  let preset ← presetOf name
+  let fork ← forkOf fork.toUTF8
+  let config ← configWithValue name replacements
+  let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
+  let anchorState ← decodeInput (BeaconState preset fork) anchorState
+  let anchorBlock ← decodeInput (BeaconBlock preset fork) anchorBlock
+  return (← replayForkChoice config checks anchorState anchorBlock steps).2
+
+/-- The outcome of each step of a fork choice case, from an anchor state and an anchor block.
+
+The arguments are the preset, the fork, the anchor state and the anchor block in SSZ, and the steps.
+
+Then come whether the signature checks run, and replacements of values of the configuration.
+
+From Gloas the node on which a proposer builds is not yet specified here, so that read fails. -/
+@[export eth_consensus_fork_choice]
+def forkChoiceExport (args : PyValue) : Result PyValue := pyExport forkChoice args
 
 end EthLib.Consensus.Exports

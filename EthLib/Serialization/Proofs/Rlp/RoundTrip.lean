@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Serialization.Proofs.Rlp.Bytes
 public import EthLib.Serialization.Proofs.Rlp.Loops
 public import EthLib.Serialization.Rlp.Decode
 public import EthLib.Serialization.Proofs.Rlp.Item
@@ -21,6 +22,8 @@ The proof follows the shape of an encoding.
 4. Items read back one after another, by induction on the tree.
 
 Each step holds with any bytes after the encoding, since a list holds more items after each one.
+
+Each step also holds wherever the encoding sits in the array that the decoder reads.
 -/
 
 @[expose] public section
@@ -28,8 +31,9 @@ Each step holds with any bytes after the encoding, since a list holds more items
 namespace EthLib.Serialization.Rlp
 
 /-- The short prefix `offset + length` reads back as its kind and its length. -/
-theorem readPrefix_short (kind : PayloadKind) (length : Nat) (h : length < 56) (rest : List UInt8) :
-    readPrefix (UInt8.ofNat (kind.offset + length)) rest = .ok (kind, 0, length) := by
+theorem readPrefix_short (kind : PayloadKind) (length : Nat) (h : length < 56) (input : ByteArray)
+    (pos stop : Nat) :
+    readPrefix input (UInt8.ofNat (kind.offset + length)) pos stop = .ok (kind, 0, length) := by
   cases kind
   · have hMod : (128 + length) % 256 = 128 + length := Nat.mod_eq_of_lt (by omega)
     simp only [readPrefix, PayloadKind.offset, UInt8.lt_iff_toNat_lt, UInt8.toNat_ofNat', hMod]
@@ -58,24 +62,27 @@ theorem bigEndian_length_bounds (length : Nat) (h1 : 56 ≤ length) (h2 : length
 
 /-- The long prefix reads back as its kind and its length.
 
-That prefix is `offset + 55 + k`, then `BE(length)` on `k` bytes. -/
+That prefix is `offset + 55 + k`, then `BE(length)` on `k` bytes at the start of the bytes read. -/
 theorem readPrefix_long (kind : PayloadKind) (length : Nat) (h1 : 56 ≤ length) (h2 : length < 2 ^ 64)
-    (rest : List UInt8) :
-    readPrefix (UInt8.ofNat (kind.offset + 55 + (bigEndian length).size))
-        ((bigEndian length).data.toList ++ rest)
+    {input : ByteArray} {pos stop : Nat} {rest : List UInt8} (hPos : pos ≤ stop)
+    (hStop : stop ≤ input.size)
+    (h : (input.extract pos stop).data.toList = (bigEndian length).data.toList ++ rest) :
+    readPrefix input (UInt8.ofNat (kind.offset + 55 + (bigEndian length).size)) pos stop
       = .ok (kind, (bigEndian length).size, length) := by
   obtain ⟨hLen, hk1, hk8⟩ := bigEndian_length_bounds length h1 h2
-  -- The `k` bytes of the length read back as `BE(length)`.
-  have hLong : readPrefix.readLongLength ((bigEndian length).data.toList ++ rest) kind
-      (bigEndian length).size = .ok (kind, (bigEndian length).size, length) := by
-    have hTake : ((bigEndian length).data.toList ++ rest).take (bigEndian length).size
-        = (bigEndian length).data.toList :=
-      List.take_left' hLen
-    have hHead : ((bigEndian length).data.toList).head? ≠ some 0 := by
-      intro h0
-      exact bigEndian_head_ne_zero length 0 h0 rfl
-    simp only [readPrefix.readLongLength, hTake, bigEndian_value, List.length_append]
-    simp [hHead, show ¬ length < 56 by omega]
+  obtain ⟨hMid, hBytes, -⟩ := extract_toList_eq_append hPos hStop h
+  rw [hLen] at hMid hBytes
+  -- The `k` bytes of the length read back as `BE(length)`, whose first byte is not zero.
+  have hHead : input.get! pos ≠ 0 := by
+    rw [extract_toList_cons input pos _ (by omega) (by omega)] at hBytes
+    intro h0
+    exact bigEndian_head_ne_zero length (input.get! pos) (by rw [← hBytes]; rfl) h0
+  have hLong : readPrefix.readLongLength input pos stop kind (bigEndian length).size
+      = .ok (kind, (bigEndian length).size, length) := by
+    simp only [readPrefix.readLongLength,
+      readBigEndian_zero input pos (bigEndian length).size (by omega), hBytes, bigEndian_value]
+    simp [hHead, show ¬ stop - pos < (bigEndian length).size by omega,
+      show ¬ length < 56 by omega]
   cases kind
   · have hMod : (128 + 55 + (bigEndian length).size) % 256 = 183 + (bigEndian length).size :=
       Nat.mod_eq_of_lt (by omega)
@@ -93,7 +100,9 @@ theorem readPrefix_long (kind : PayloadKind) (length : Nat) (h1 : 56 ≤ length)
 theorem lengthPrefix_readPrefix (kind : PayloadKind) (length : Nat) (pre : ByteArray)
     (h : lengthPrefix kind length = .ok pre) :
     ∃ first lengthBytes, pre.data.toList = first :: lengthBytes ∧ 0x80 ≤ first ∧
-      ∀ rest, readPrefix first (lengthBytes ++ rest) = .ok (kind, lengthBytes.length, length) := by
+      ∀ (input : ByteArray) (pos stop : Nat) (rest : List UInt8), pos ≤ stop → stop ≤ input.size →
+        (input.extract pos stop).data.toList = lengthBytes ++ rest →
+        readPrefix input first pos stop = .ok (kind, lengthBytes.length, length) := by
   unfold lengthPrefix at h
   by_cases hShort : length < 56
   · -- Short form: the one byte `offset + length`.
@@ -101,8 +110,8 @@ theorem lengthPrefix_readPrefix (kind : PayloadKind) (length : Nat) (pre : ByteA
     cases h
     refine ⟨UInt8.ofNat (kind.offset + length), [], by simp, ?_, ?_⟩
     · cases kind <;> simp [PayloadKind.offset, UInt8.le_iff_toNat_le, UInt8.toNat_ofNat'] <;> omega
-    · intro rest
-      simpa using readPrefix_short kind length hShort rest
+    · intro input pos stop rest _ _ _
+      simpa using readPrefix_short kind length hShort input pos stop
   · rw [ite_eq_right hShort] at h
     by_cases hLong : length < 2 ^ 64
     · -- Long form: the byte `offset + 55 + k`, then `BE(length)` on `k` bytes.
@@ -112,69 +121,116 @@ theorem lengthPrefix_readPrefix (kind : PayloadKind) (length : Nat) (pre : ByteA
       refine ⟨UInt8.ofNat (kind.offset + 55 + (bigEndian length).size),
         (bigEndian length).data.toList, by simp, ?_, ?_⟩
       · cases kind <;> simp [PayloadKind.offset, UInt8.le_iff_toNat_le, UInt8.toNat_ofNat'] <;> omega
-      · intro rest
+      · intro input pos stop rest hPos hStop hInput
         rw [hLen]
-        exact readPrefix_long kind length (by omega) hLong rest
+        exact readPrefix_long kind length (by omega) hLong hPos hStop hInput
     · rw [ite_eq_right hLong] at h
       cases h
 
-/-- The item read from `input`, and the bytes after it, without the bound on their length. -/
-def readItem (input : List UInt8) : Except RlpError (Item × List UInt8) :=
-  (decodeItem input).map fun (item, rest) => (item, rest.val)
+/-- The item read from the bytes of `input` from `pos` to `stop`, and the position after it. -/
+def readItem (input : ByteArray) (pos stop : Nat) : Except RlpError (Item × Nat) :=
+  (decodeItem input pos stop).map fun (item, next) => (item, next.val)
+
+/-- When the parser succeeds, the decoder of one item succeeds with the same item and position. -/
+theorem decodeItem_of_readItem {input : ByteArray} {pos stop next : Nat} {item : Item}
+    (h : readItem input pos stop = .ok (item, next)) :
+    ∃ hNext, decodeItem input pos stop = .ok (item, ⟨next, hNext⟩) := by
+  unfold readItem at h
+  cases hDecode : decodeItem input pos stop with
+  | error err => simp [hDecode, Except.map] at h
+  | ok result =>
+    obtain ⟨item', ⟨next', hNext'⟩⟩ := result
+    simp [hDecode, Except.map] at h
+    obtain ⟨rfl, rfl⟩ := h
+    exact ⟨hNext', rfl⟩
+
+/-- What the decoder learns from a prefix, then a payload, then more bytes.
+
+The first byte is at least `0x80`, and the length bytes read back as the kind and the length. -/
+theorem readItem_prefix {input : ByteArray} {pos stop : Nat} {first : UInt8}
+    {lengthBytes payload rest : List UInt8} {kind : PayloadKind} (hStop : stop ≤ input.size)
+    (hFirst : 0x80 ≤ first)
+    (hRead : ∀ (input : ByteArray) (pos stop : Nat) (rest : List UInt8), pos ≤ stop →
+      stop ≤ input.size → (input.extract pos stop).data.toList = lengthBytes ++ rest →
+      readPrefix input first pos stop = .ok (kind, lengthBytes.length, payload.length))
+    (hInput : (input.extract pos stop).data.toList = first :: (lengthBytes ++ payload ++ rest)) :
+    pos < stop ∧ input.get! pos = first ∧ ¬ first < 0x80 ∧
+      readPrefix input first (pos + 1) stop = .ok (kind, lengthBytes.length, payload.length) ∧
+      pos + 1 + lengthBytes.length + payload.length ≤ stop ∧
+      (input.extract (pos + 1 + lengthBytes.length)
+        (pos + 1 + lengthBytes.length + payload.length)).data.toList = payload := by
+  obtain ⟨hPos, hGet, hTail⟩ := extract_toList_eq_cons hStop hInput
+  rw [List.append_assoc] at hTail
+  obtain ⟨hMid, -, hBody⟩ := extract_toList_eq_append (by omega) hStop hTail
+  obtain ⟨hEnd, hPayload, -⟩ := extract_toList_eq_append hMid hStop hBody
+  have hHigh : ¬ first < 0x80 := by
+    simp only [UInt8.lt_iff_toNat_lt, UInt8.le_iff_toNat_le] at hFirst ⊢
+    omega
+  exact ⟨hPos, hGet, hHigh, hRead input (pos + 1) stop _ (by omega) hStop hTail, hEnd, hPayload⟩
 
 /-- A list reads back from its prefix and the encodings of its items, with any bytes after them. -/
-theorem readItem_list (payload rest : List UInt8) (items : List Item) (pre : ByteArray)
-    (h : lengthPrefix .list payload.length = .ok pre) (hItems : decodeItems payload = .ok items) :
-    readItem (pre.data.toList ++ payload ++ rest) = .ok (.list items, rest) := by
-  obtain ⟨first, lengthBytes, hPre, hFirst, hRead⟩ := lengthPrefix_readPrefix .list payload.length pre h
-  rw [hPre]
-  have hHigh : ¬ first < 0x80 := by
-    simp only [UInt8.lt_iff_toNat_lt, UInt8.le_iff_toNat_le] at hFirst ⊢
-    omega
+theorem readItem_list {input : ByteArray} {pos stop : Nat} {payload rest : List UInt8}
+    {items : List Item} {pre : ByteArray} (hStop : stop ≤ input.size)
+    (h : lengthPrefix .list payload.length = .ok pre)
+    (hInput : (input.extract pos stop).data.toList = pre.data.toList ++ payload ++ rest)
+    (hItems : ∀ start, start + payload.length ≤ input.size →
+      (input.extract start (start + payload.length)).data.toList = payload →
+      decodeItems input start (start + payload.length) = .ok items) :
+    readItem input pos stop = .ok (.list items, pos + pre.size + payload.length) := by
+  obtain ⟨first, lengthBytes, hPre, hFirst, hRead⟩ :=
+    lengthPrefix_readPrefix .list payload.length pre h
+  rw [hPre, List.cons_append, List.cons_append] at hInput
+  obtain ⟨hPos, hGet, hHigh, hRP, hFit, hPayload⟩ := readItem_prefix hStop hFirst hRead hInput
+  have hSize : pre.size = lengthBytes.length + 1 := by
+    simp [← ByteArray.size_data, ← Array.length_toList, hPre]
   unfold readItem
-  rw [List.cons_append, List.cons_append, List.append_assoc, decodeItem.eq_def]
-  simp only [hHigh, ite_false]
-  rw [hRead (payload ++ rest)]
-  simp [bind, Except.bind, hItems, Except.map]
+  rw [decodeItem.eq_def]
+  simp only [hPos, hGet, hHigh, hRP, dite_true, ite_false, bind, Except.bind, hFit,
+    hItems _ (by omega) hPayload, Except.map, Except.ok.injEq, Prod.mk.injEq, true_and]
+  omega
 
 /-- A byte string reads back from its prefix and its bytes, with any bytes after them. -/
-theorem readItem_bytes (data : ByteArray) (rest : List UInt8) (pre : ByteArray)
-    (h : lengthPrefix .bytes data.size = .ok pre) (hNotSingle : isSingleLowByte data = false) :
-    readItem (pre.data.toList ++ data.data.toList ++ rest) = .ok (.bytes data, rest) := by
+theorem readItem_bytes {input : ByteArray} {pos stop : Nat} (data : ByteArray) {rest : List UInt8}
+    {pre : ByteArray} (hStop : stop ≤ input.size) (h : lengthPrefix .bytes data.size = .ok pre)
+    (hNotSingle : isSingleLowByte data = false)
+    (hInput : (input.extract pos stop).data.toList = pre.data.toList ++ data.data.toList ++ rest) :
+    readItem input pos stop = .ok (.bytes data, pos + pre.size + data.size) := by
+  have hLen : data.data.toList.length = data.size := Array.length_toList
   obtain ⟨first, lengthBytes, hPre, hFirst, hRead⟩ := lengthPrefix_readPrefix .bytes data.size pre h
-  rw [hPre]
-  have hHigh : ¬ first < 0x80 := by
-    simp only [UInt8.lt_iff_toNat_lt, UInt8.le_iff_toNat_le] at hFirst ⊢
-    omega
-  have hSize : data.data.toList.length = data.size := Array.length_toList
+  rw [hPre, List.cons_append, List.cons_append] at hInput
+  rw [← hLen] at hRead
+  obtain ⟨hPos, hGet, hHigh, hRP, hFit, hPayload⟩ := readItem_prefix hStop hFirst hRead hInput
+  rw [hLen] at hRP hFit hPayload
+  have hSize : pre.size = lengthBytes.length + 1 := by
+    simp [← ByteArray.size_data, ← Array.length_toList, hPre]
+  -- The bytes read are the bytes of the byte string.
+  have hData : input.extract (pos + 1 + lengthBytes.length)
+      (pos + 1 + lengthBytes.length + data.size) = data :=
+    byteArray_eq_of_toList _ _ hPayload
+  -- One byte below `0x80` would be its own encoding, which the byte string is not.
+  have hOne : ¬ (data.size = 1 ∧ input.get! (pos + 1 + lengthBytes.length) < 0x80) := by
+    rintro ⟨hOne, hLow⟩
+    rw [hOne, extract_toList_cons input _ _ (by omega) (by omega),
+      extract_toList_of_le input _ _ (by omega)] at hPayload
+    obtain ⟨⟨l⟩⟩ := data
+    simp only [ByteArray.size] at hOne
+    simp only [isSingleLowByte, ByteArray.size, hOne, dite_true, decide_eq_false_iff_not]
+      at hNotSingle
+    apply hNotSingle
+    have hl : l = [input.get! (pos + 1 + lengthBytes.length)] := hPayload.symm
+    subst hl
+    exact hLow
   unfold readItem
-  rw [List.cons_append, List.cons_append, List.append_assoc, decodeItem.eq_def]
-  simp only [hHigh, ite_false]
-  rw [hRead (data.data.toList ++ rest), ← hSize]
-  simp only [bind, Except.bind, List.drop_left, List.take_left, List.length_append]
-  rw [ite_eq_left (Nat.le_add_right _ _)]
-  split
-  · -- One byte: it is at least `0x80`, or the byte string would be its own encoding.
-    rename_i byte hOne
-    have hByte : ¬ byte < 128 := by
-      intro hLow
-      have hData : data = ⟨#[byte]⟩ := by
-        cases data with
-        | mk arr => cases arr with
-          | mk l => simp at hOne; simp [hOne]
-      subst hData
-      simp only [isSingleLowByte, dite_eq_right_iff, decide_eq_false_iff_not] at hNotSingle
-      exact (hNotSingle rfl) hLow
-    have hData : data = ⟨#[byte]⟩ := by
-      cases data with
-      | mk arr => cases arr with
-        | mk l => simp at hOne; simp [hOne]
-    simp [hByte, Except.map, hData]
-  · simp [Except.map]
+  rw [decodeItem.eq_def]
+  simp only [hPos, hGet, hHigh, hRP, dite_true, ite_false, bind, Except.bind, hFit, hOne, hData,
+    Except.map, Except.ok.injEq, Prod.mk.injEq, true_and]
+  omega
 
 /-- A single byte below `0x80` reads back as itself. -/
-theorem readItem_single (data : ByteArray) (rest : List UInt8) (h : isSingleLowByte data = true) :
-    readItem (data.data.toList ++ rest) = .ok (.bytes data, rest) := by
+theorem readItem_single {input : ByteArray} {pos stop : Nat} (data : ByteArray) {rest : List UInt8}
+    (hStop : stop ≤ input.size) (h : isSingleLowByte data = true)
+    (hInput : (input.extract pos stop).data.toList = data.data.toList ++ rest) :
+    readItem input pos stop = .ok (.bytes data, pos + data.size) := by
   obtain ⟨⟨l⟩⟩ := data
   simp only [isSingleLowByte] at h
   split at h
@@ -183,9 +239,10 @@ theorem readItem_single (data : ByteArray) (rest : List UInt8) (h : isSingleLowB
     match l, hSize, h with
     | [byte], _, hLow =>
       have hLow' : byte < 0x80 := of_decide_eq_true hLow
+      obtain ⟨hPos, hGet, -⟩ := extract_toList_eq_cons hStop hInput
       unfold readItem
       rw [decodeItem.eq_def]
-      simp [hLow', Except.map]
+      simp [hPos, hGet, hLow', Except.map, ByteArray.size]
   · cases h
 
 /-- What a successful encoding of a list is made of. -/
@@ -212,7 +269,8 @@ theorem encode_list_head (items : List Item) (e : ByteArray) (h : encode (.list 
     lengthPrefix_readPrefix .list payload.size pre hPre
   refine ⟨first, lengthBytes ++ payload.data.toList, by simp [hList], ?_⟩
   -- Below `0xc0`, the prefix reads as the prefix of a byte string, not of a list.
-  have hList := hRead []
+  have hList := hRead ⟨lengthBytes.toArray⟩ 0 lengthBytes.length [] (Nat.zero_le _)
+    (by simp [ByteArray.size]) (by simp)
   refine Decidable.byContradiction fun hLow => ?_
   unfold readPrefix readPrefix.readLongLength at hList
   simp only [UInt8.not_le] at hLow
@@ -247,62 +305,60 @@ theorem joinEncodings_cons_ok (item : Item) (rest : List Item) (e : ByteArray)
       simp [hHead, hTail, bind, Except.bind, pure, Except.pure] at h
       exact ⟨head, tail, by simp, by simp, h.symm⟩
 
-/-- When the parser succeeds, the decoder of one item succeeds with the same item and rest. -/
-theorem decodeItem_of_readItem (input rest : List UInt8) (item : Item)
-    (h : readItem input = .ok (item, rest)) :
-    ∃ hRest, decodeItem input = .ok (item, ⟨rest, hRest⟩) := by
-  unfold readItem at h
-  cases hDecode : decodeItem input with
-  | error err => simp [hDecode, Except.map] at h
-  | ok result =>
-    obtain ⟨item', ⟨rest', hRest'⟩⟩ := result
-    simp [hDecode, Except.map] at h
-    obtain ⟨rfl, rfl⟩ := h
-    exact ⟨hRest', rfl⟩
-
 mutual
 
-/-- An encoding, then more bytes, reads back as the item and the bytes after it. -/
-theorem readItem_encode : (x : Item) → (e : ByteArray) → encode x = .ok e → (rest : List UInt8) →
-    readItem (e.data.toList ++ rest) = .ok (x, rest)
-  | .bytes data, e, h, rest => by
+/-- An encoding, then more bytes, reads back as the item and the position after the encoding. -/
+theorem readItem_encode : (x : Item) → (e : ByteArray) → encode x = .ok e →
+    ∀ {input : ByteArray} {pos stop : Nat} {rest : List UInt8}, stop ≤ input.size →
+      (input.extract pos stop).data.toList = e.data.toList ++ rest →
+      readItem input pos stop = .ok (x, pos + e.size)
+  | .bytes data, e, h, input, pos, stop, rest, hStop, hInput => by
     rw [encode] at h
-    rcases encodeBytes_ok data e h with ⟨hSingle, hE⟩ | ⟨hSingle, pre, hPre, rfl⟩
-    · rw [hE]
-      exact readItem_single data rest hSingle
-    · have := readItem_bytes data rest pre hPre hSingle
-      simpa [List.append_assoc] using this
-  | .list items, e, h, rest => by
+    rcases encodeBytes_ok data e h with ⟨hSingle, rfl⟩ | ⟨hSingle, pre, hPre, rfl⟩
+    · exact readItem_single e hStop hSingle hInput
+    · rw [ByteArray.toList_data_append] at hInput
+      rw [readItem_bytes data hStop hPre hSingle hInput, ByteArray.size_append, Nat.add_assoc]
+  | .list items, e, h, input, pos, stop, rest, hStop, hInput => by
     obtain ⟨payload, pre, hJoin, hPre, rfl⟩ := encode_list_ok items e h
     have hSize : payload.size = payload.data.toList.length := Array.length_toList.symm
     rw [hSize] at hPre
-    have := readItem_list payload.data.toList rest items pre hPre (decodeItems_joinEncodings items payload hJoin)
-    simpa [List.append_assoc] using this
+    rw [ByteArray.toList_data_append] at hInput
+    have hItems : ∀ start, start + payload.data.toList.length ≤ input.size →
+        (input.extract start (start + payload.data.toList.length)).data.toList =
+          payload.data.toList →
+        decodeItems input start (start + payload.data.toList.length) = .ok items := by
+      intro start hEnd hBytes
+      rw [← hSize] at hEnd hBytes ⊢
+      exact decodeItems_joinEncodings items payload hJoin hEnd hBytes
+    rw [readItem_list hStop hPre hInput hItems, ByteArray.size_append, ← hSize, Nat.add_assoc]
 termination_by structural x => x
 
 /-- Decoding the encodings of items, one after another, gives back the items. -/
 theorem decodeItems_joinEncodings : (xs : List Item) → (e : ByteArray) → joinEncodings xs = .ok e →
-    decodeItems e.data.toList = .ok xs
-  | [], e, h => by
+    ∀ {input : ByteArray} {pos : Nat}, pos + e.size ≤ input.size →
+      (input.extract pos (pos + e.size)).data.toList = e.data.toList →
+      decodeItems input pos (pos + e.size) = .ok xs
+  | [], e, h, input, pos, _, _ => by
     simp [joinEncodings] at h
     subst h
     rw [decodeItems_eq]
-    simp
-  | x :: xs, e, h => by
+    simp [ByteArray.size_empty]
+  | x :: xs, e, h, input, pos, hEnd, hBytes => by
     obtain ⟨head, tail, hHead, hTail, rfl⟩ := joinEncodings_cons_ok x xs e h
+    rw [ByteArray.toList_data_append] at hBytes
+    rw [ByteArray.size_append] at hEnd hBytes ⊢
     -- The first item reads back from the front, and the rest is the encodings of the others.
-    have hRead := readItem_encode x head hHead tail.data.toList
-    obtain ⟨hRest, hDecode⟩ := decodeItem_of_readItem _ _ _ (by simpa using hRead)
-    have hTailItems := decodeItems_joinEncodings xs tail hTail
-    -- The first item takes at least one byte, so the input is not empty.
-    have hNe : (head.data.toList ++ tail.data.toList).isEmpty = false := by
-      have hHeadNe : head.data.toList ≠ [] := by
-        intro h0
-        simp [h0] at hRest
-      simp [hHeadNe]
-    have hAppend : (head ++ tail).data.toList = head.data.toList ++ tail.data.toList := by simp
-    rw [hAppend, decodeItems_eq]
-    simp [hNe, hDecode, bind, Except.bind, hTailItems]
+    obtain ⟨hNext, hDecode⟩ := decodeItem_of_readItem (readItem_encode x head hHead hEnd hBytes)
+    have hHeadLen : head.data.toList.length = head.size := Array.length_toList
+    obtain ⟨-, -, hRest⟩ := extract_toList_eq_append (by omega) hEnd hBytes
+    rw [hHeadLen] at hRest
+    have hTailItems := decodeItems_joinEncodings xs tail hTail (input := input)
+      (pos := pos + head.size)
+      (by omega) (by rw [show pos + head.size + tail.size = pos + (head.size + tail.size) by omega]
+                     exact hRest)
+    rw [decodeItems_eq, ite_eq_left (by omega)]
+    rw [show pos + head.size + tail.size = pos + (head.size + tail.size) by omega] at hTailItems
+    simp [hDecode, bind, Except.bind, hTailItems]
 termination_by structural xs => xs
 
 end
@@ -310,9 +366,9 @@ end
 /-- Decoding undoes encoding: the encoding of an item decodes to that item. -/
 theorem decode_encode (x : Item) (b : ByteArray) (h : encode x = .ok b) : decode b = .ok x := by
   -- The item reads back from the whole encoding, with no byte left.
-  have hRead := readItem_encode x b h []
-  rw [List.append_nil] at hRead
-  obtain ⟨hRest, hDecode⟩ := decodeItem_of_readItem _ _ _ hRead
+  have hRead := readItem_encode x b h (input := b) (pos := 0) (rest := []) (Nat.le_refl _)
+    (by simp)
+  obtain ⟨hNext, hDecode⟩ := decodeItem_of_readItem hRead
   simp [decode, hDecode, bind, Except.bind]
 
 /-- Two items with the same encoding are the same item. -/
@@ -323,14 +379,16 @@ theorem encode_injective (x y : Item) (b : ByteArray) (hx : encode x = .ok b) (h
   cases this
   rfl
 
-/-- The parser reads an encoding from the front of any input, and leaves exactly the bytes after it.
+/-- The parser reads an encoding from the front of the bytes it reads, and stops right after it.
 
 The theorem is the left-inverse property of Coglio's parser, with any bytes after the encoding.
 
 Coglio names it `rlp-parse-tree-of-rlp-encode-tree`. -/
-theorem decodeItem_encode (x : Item) (e : ByteArray) (h : encode x = .ok e) (rest : List UInt8) :
-    ∃ hRest, decodeItem (e.data.toList ++ rest) = .ok (x, ⟨rest, hRest⟩) :=
-  decodeItem_of_readItem _ _ _ (readItem_encode x e h rest)
+theorem decodeItem_encode (x : Item) (e : ByteArray) (h : encode x = .ok e) {input : ByteArray}
+    {pos stop : Nat} {rest : List UInt8} (hStop : stop ≤ input.size)
+    (hInput : (input.extract pos stop).data.toList = e.data.toList ++ rest) :
+    ∃ hNext, decodeItem input pos stop = .ok (x, ⟨pos + e.size, hNext⟩) :=
+  decodeItem_of_readItem (readItem_encode x e h hStop hInput)
 
 /-- No encoding is a proper prefix of another: `RLP` is prefix-free.
 
@@ -345,11 +403,15 @@ That paper is "Ethereum's Recursive Length Prefix in ACL2".
 theorem encode_prefix_free (x y : Item) (ex ey : ByteArray) (hx : encode x = .ok ex) (hy : encode y = .ok ey)
     (more : List UInt8) (hPrefix : ey.data.toList = ex.data.toList ++ more) : more = [] := by
   -- Read `ey` from the front in two ways: as `y` with nothing after, and as `x` with `more` after.
-  have hY := readItem_encode y ey hy []
-  have hX := readItem_encode x ex hx more
-  rw [List.append_nil, hPrefix, hX] at hY
-  cases hY
-  rfl
+  have hY := readItem_encode y ey hy (input := ey) (pos := 0) (rest := []) (Nat.le_refl _)
+    (by simp)
+  have hX := readItem_encode x ex hx (input := ey) (pos := 0) (rest := more) (Nat.le_refl _)
+    (by simpa using hPrefix)
+  rw [hX] at hY
+  simp only [Except.ok.injEq, Prod.mk.injEq, Nat.zero_add] at hY
+  have hLen := congrArg List.length hPrefix
+  simp only [List.length_append, Array.length_toList, ByteArray.size_data] at hLen
+  exact List.eq_nil_of_length_eq_zero (by omega)
 
 /-- An encoding followed by more bytes is not a whole encoding.
 
@@ -358,18 +420,12 @@ theorem decode_trailing (x : Item) (e : ByteArray) (h : encode x = .ok e) (more 
     (hMore : more.size ≠ 0) :
     decode (e ++ more) = .error (.trailingBytes more.size) := by
   -- The item is read from the front, and the bytes of `more` are left.
-  have hAppend : (e ++ more).data.toList = e.data.toList ++ more.data.toList := by simp
-  obtain ⟨hRest, hDecode⟩ : ∃ hRest, decodeItem (e ++ more).data.toList = .ok (x, ⟨more.data.toList, hRest⟩) := by
-    rw [hAppend]
-    exact decodeItem_encode x e h more.data.toList
-  have hLen : more.data.toList.length = more.size := Array.length_toList
-  have hNe : more.data.toList.isEmpty = false := by
-    cases hm : more.data.toList with
-    | nil =>
-      rw [hm] at hLen
-      exact absurd hLen.symm hMore
-    | cons _ _ => rfl
-  simp only [decode, hDecode, bind, Except.bind, hNe, hLen]
-  rfl
+  obtain ⟨hNext, hDecode⟩ := decodeItem_encode x e h (input := e ++ more) (pos := 0)
+    (rest := more.data.toList) (Nat.le_refl _)
+    (by rw [ByteArray.extract_zero_size, ByteArray.toList_data_append])
+  simp only [decode, hDecode, bind, Except.bind, ByteArray.size_append, Nat.zero_add]
+  rw [ite_eq_right (by omega)]
+  congr 2
+  omega
 
 end EthLib.Serialization.Rlp

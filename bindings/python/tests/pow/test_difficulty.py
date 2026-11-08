@@ -75,5 +75,5 @@ def test_unknown_fork() -> None:
 
 
 def test_negative_quantity() -> None:
-    with raises(OverflowError, "a block quantity cannot be negative"):
+    with raises(ValueError, "cannot pass a negative int to Lean"):
         block_difficulty("homestead", -1, 2, 1, 131072, 0)

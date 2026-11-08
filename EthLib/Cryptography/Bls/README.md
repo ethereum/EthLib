@@ -172,6 +172,10 @@ on every message shorter than `2^61` bytes (`EthLib/Cryptography/Proofs/Hash/Sha
 **The pairing.**
 The pairing check reads only the group elements of valid points
 (`pairingCheck_congr`, `PairingCongr.lean`).
+The pairing is bilinear on the multiples of the generators: `e(a g_1, b g_2) = e(g_1, g_2)^(a b)` for all `a` and `b` in `Fr` (`pairingBilinear`, `PairingAte.lean`).
+The pairing of the generators has order `r` (`orderOf_pairing_generators`, `Nondegenerate.lean`).
+So the pairing law holds: on representatives of `a_i * g_1` and `b_i * g_2`, the check passes exactly when `sum_i a_i * b_i = 0` (`pairingLaws`, `PairingAte.lean`).
+Theorems about the result of a pairing check take the law as a hypothesis, which `pairingLaws` supplies.
 
 **Signatures.**
 Signing never fails (`sign_ok`, `popProve_ok`, `Signatures.lean`).
@@ -192,19 +196,10 @@ which kills every torsion point of the cofactor (`clearCofactorG1_inSubgroup`).
 
 ## What is not proved
 
-- No theorem proves that the pairing check computes a bilinear, non-degenerate pairing.
-  Theorems assume the pairing law below instead.
-- Without the pairing law, no theorem says which signatures verification rejects,
-  beyond malformed input.
 - Unforgeability is proved only in the random oracle model, with the hash to G2 as the oracle.
   It covers signing and verification, not aggregation or proofs of possession.
   Its adversary works on group elements, and the step to a forger on bytes is not proved.
   It rests on a co-Diffie-Hellman problem that no theorem proves hard.
-- `PairingLaws`, the law of the pairing check, is not proved:
-  on representatives of `a_i * g_1` and `b_i * g_2`,
-  the check passes exactly when `sum_i a_i * b_i = 0`.
-  Theorems about the result of a pairing check take it as a hypothesis,
-  among them the theorem on the KZG ceremony checks.
 
 ## What the kernel can evaluate
 

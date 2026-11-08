@@ -136,6 +136,19 @@ Next to the vectors, record their pinned origin, such as the commit they come fr
 
 Never regenerate an expected value from the code under test and call it a check.
 
+### No examples
+
+EthLib proves general statements about the specification, and it keeps no examples.
+An example is a proof about one particular program, contract, state or value, written to show how a rule or a tool works.
+Do not add files of such proofs, and do not add them to other modules.
+
+Example logic belongs outside the repository, with the project that needs it.
+EthLib keeps the general rules and lemmas that such a proof uses.
+If an example needs a general lemma that EthLib lacks, add the lemma, stated for all inputs.
+
+A new rule or tactic is justified by its general statement.
+Show its example in the description of the pull request, not in the tree.
+
 ## Writing
 
 Developers all over the world read EthLib, many of them in their second language.
@@ -256,6 +269,19 @@ The C exports and the Python package are the public surface for clients.
   Never hard-code a length in C or Python.
 - The generated C frees each argument itself.
   A wrapper must not free what it passes to an export.
+- The extension runs without the GIL on a free-threaded build of CPython.
+  So a wrapper never reads the items of a list in place, since another thread may change the list.
+  It reads them through `sequence_snapshot`, which copies a list into a tuple, or it passes the list to the generic converter, which copies it too.
+- A Python function passes its arguments to the export and returns its result.
+  It never encodes or decodes bytes by hand: no slices, no integers or text to or from bytes, no JSON text.
+  Lean then defines every value that crosses the boundary, and its proofs can cover that value.
+
+`scripts/check_python_boundary.py` finds the usual forms of such conversions in `bindings/python/ethlib`.
+With `--base`, it fails on any conversion on a line added since the merge base, committed or not.
+Without it, it fails on any conversion in the package.
+Both forms skip the conversions that `scripts/check_python_boundary_allowlist.txt` lists.
+That list names the conversions that remain from before the rule.
+A new entry is an exception that a maintainer approves, so the list only shrinks otherwise.
 
 ## Checks
 
@@ -399,6 +425,7 @@ uv run --no-sync ty check
 git ls-files -z '*.py' | xargs -0 uv run --no-sync codespell
 uv run --no-sync python scripts/check_raises.py
 uv run --no-sync python scripts/check_docstrings.py
+uv run --no-project --python 3.12 python scripts/check_python_boundary.py --base origin/master
 uv run --no-project --python 3.12 python scripts/check_python_comments.py --base origin/master
 ```
 

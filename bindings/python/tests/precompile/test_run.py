@@ -5,7 +5,7 @@ import struct
 
 import pytest
 
-from ethlib.precompiles import ADDRESSES, price, run
+from ethlib.precompiles import ADDRESSES, PrecompileError, price, run
 from raising import raises
 
 from .forks import FORKS, since
@@ -68,7 +68,8 @@ def test_rejects_bad_arguments() -> None:
         run(b"fusaka", 0x04, b"", 100)  # ty: ignore[invalid-argument-type]
     with raises(OverflowError, "int too big to convert"):
         run("fusaka", 0x04, b"", 2**64)
-    with raises(OverflowError, "int too big to convert"):
+    # The price reads any address, so one at 2^64 or above has no precompile.
+    with raises(PrecompileError, f"no precompile at address {2**64} at fork fusaka"):
         price("fusaka", 2**64, b"")
 
 

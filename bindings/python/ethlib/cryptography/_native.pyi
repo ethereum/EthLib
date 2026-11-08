@@ -128,15 +128,15 @@ def xmss_signature_index(signature: bytes) -> int:
     ...
 
 def sphincs_key_gen(seed: bytes) -> bytes:
-    """The public key `PK.seed | PK.root` of `SK.seed`."""
+    """The public key grown from a seed."""
     ...
 
 def sphincs_sign(seed: bytes, message: bytes) -> bytes:
-    """`Sign(SK, M)`: sign a message."""
+    """`Sign(sk, m)`: sign a message."""
     ...
 
 def sphincs_verify(public_key: bytes, message: bytes, signature: bytes) -> bool:
-    """`Ver(PK, M, sigma)`: whether a signature signs a message under a public key."""
+    """`Ver(pk, m, sigma)`: whether a signature signs a message under a public key."""
     ...
 
 def sha256(data: bytes) -> bytes:
@@ -151,27 +151,27 @@ def keccak512(data: bytes) -> bytes:
     """Keccak-512 of a byte string: `Keccak[1024](M, 512)` of FIPS 202 §5.2."""
     ...
 
-def ethash_cache_size(number: bytes) -> bytes:
+def ethash_cache_size(block_number: int) -> int:
     """The bytes in the cache of the epoch of a block: `c_size` of the Yellow Paper, J.2."""
     ...
 
-def ethash_dataset_size(number: bytes) -> bytes:
+def ethash_dataset_size(block_number: int) -> int:
     """The bytes in the dataset of the epoch of a block: `d_size` of the Yellow Paper, J.2."""
     ...
 
-def ethash_seed(number: bytes) -> bytes:
+def ethash_seed(block_number: int) -> bytes:
     """The seed of the epoch of a block: `C_seedhash` of the Yellow Paper, J.3.1."""
     ...
 
-def ethash_cache(number: bytes) -> bytes:
+def ethash_cache(block_number: int) -> bytes:
     """The cache of the epoch of a block: `c` of the Yellow Paper, J.3.2."""
     ...
 
-def ethash_dataset_item(cache: bytes, index: bytes) -> bytes:
+def ethash_dataset_item(cache: bytes, index: int) -> bytes:
     """The dataset item at an index, from the cache: `E_datasetitem` of the Yellow Paper, J.3.3."""
     ...
 
-def ethash_hashimoto_light(dataset_size: bytes, cache: bytes, header_hash: bytes, nonce: bytes) -> bytes:
+def ethash_hashimoto_light(dataset_size: int, cache: bytes, header_hash: bytes, nonce: bytes) -> tuple[bytes, bytes]:
     """The 32-byte mix digest and the 32-byte result of the proof-of-work function, from a cache."""
     ...
 
@@ -187,12 +187,12 @@ def trie_verify_proof(root: bytes, secured: int, key: bytes, proof: bytes) -> by
     """The value of `key` in the trie of `root`, as the nodes of `proof` show."""
     ...
 
-def trie_hex_prefix(nibbles: bytes, is_leaf: bool) -> bytes:
-    """The hex-prefix encoding of a path, with one nibble in each input byte."""
+def trie_hex_prefix(nibbles: list[int], is_leaf: bool) -> bytes:
+    """The hex-prefix encoding of a path of nibbles, for a leaf or an extension."""
     ...
 
-def trie_verify_account_proof(root: bytes, answer: bytes) -> bytes:
-    """Check an answer of `eth_getProof` against a state root, with Keccak-256."""
+def trie_verify_account_proof(root: bytes, answer: dict) -> list[bool] | None:
+    """Check an answer of `eth_getProof` against a 32-byte state root, with Keccak-256."""
     ...
 
 def vrf_verify(root: bytes, index: int, opening: bytes) -> bytes | None:
@@ -211,8 +211,16 @@ def crc32(data: bytes) -> bytes:
     """The four digest bytes of CRC-32: the highest power of each byte at its least significant bit."""
     ...
 
+def crc32_number(data: bytes) -> int:
+    """CRC-32 as a number: the digest bytes read least significant byte first."""
+    ...
+
 def crc32c(data: bytes) -> bytes:
     """The four digest bytes of RFC 3720 §12.1: the CRC, which is R(x) complemented."""
+    ...
+
+def crc32c_number(data: bytes) -> int:
+    """CRC-32C as a number: the digest bytes read least significant byte first."""
     ...
 
 def aes_encrypt_block(key: bytes, block: bytes) -> bytes:
@@ -299,12 +307,12 @@ def enr_make_record_v4(secret_key: bytes, seq: int, pairs: bytes) -> bytes:
     """The bytes of a new "v4" record of a private key, a sequence number and other pairs."""
     ...
 
-def enr_consensus_entries(fork: str, count: int, record: bytes) -> bytes:
+def enr_consensus_entries(fork: str, count: int, record: bytes) -> tuple[tuple[bytes, bytes, int], bytes | None, bytes | None, int | None, bytes | None]:
     """The consensus entries of a record at the named fork, with `count` attestation subnets."""
     ...
 
-def enr_eth_fork_id(record: bytes) -> bytes:
-    """The fork identifier of the "eth" entry of a record, as RLP, or no bytes without the entry."""
+def enr_eth_fork_id(record: bytes) -> tuple[bytes, int] | None:
+    """The fork identifier of the "eth" entry of a record, as its hash and its next fork."""
     ...
 
 def discv5_log_distance(a: bytes, b: bytes) -> int:
@@ -315,7 +323,7 @@ def discv5_ecdh(secret_key: bytes, public_key: bytes) -> bytes:
     """The shared secret of a private key and a public key: `d Q`, compressed to 33 bytes."""
     ...
 
-def discv5_derive_keys(ephemeral_key: bytes, dest_pubkey: bytes, node_id_a: bytes, node_id_b: bytes, challenge_data: bytes) -> bytes:
+def discv5_derive_keys(ephemeral_key: bytes, dest_pubkey: bytes, node_id_a: bytes, node_id_b: bytes, challenge_data: bytes) -> tuple[bytes, bytes]:
     """The session keys from the shared secret and the challenge that the recipient sent."""
     ...
 
@@ -327,8 +335,8 @@ def discv5_id_verify(public_key: bytes, challenge_data: bytes, ephemeral_pubkey:
     """Whether an ID signature of 64 bytes `r || s` verifies under the public key of node A."""
     ...
 
-def discv5_decode_packet(dest_id: bytes, packet: bytes) -> bytes:
-    """The packet that a destination node reads, as a JSON object of hex strings."""
+def discv5_decode_packet(dest_id: bytes, packet: bytes) -> dict:
+    """The packet that a destination node reads, as a `dict`."""
     ...
 
 def discv5_reencode_packet(dest_id: bytes, packet: bytes) -> bytes:
@@ -343,20 +351,20 @@ def discv5_decrypt_message(key: bytes, nonce: bytes, message: bytes, ad: bytes) 
     """The plaintext of an encrypted message, or an error if it does not authenticate."""
     ...
 
-def discv5_decode_message(plaintext: bytes) -> bytes:
-    """The message of a plaintext, as a JSON object with its type and its fields."""
+def discv5_decode_message(plaintext: bytes) -> dict:
+    """The message of a plaintext, as a `dict` of its type and its fields."""
     ...
 
 def discv5_reencode_message(plaintext: bytes) -> bytes:
     """The plaintext of the decoded message, written again by the encoder."""
     ...
 
-def discv5_make_whoareyou(dest_id: bytes, masking_iv: bytes, nonce: bytes, id_nonce: bytes, enr_seq: bytes) -> bytes:
-    """Node B's WHOAREYOU packet for node A, and its challenge data, as a JSON object."""
+def discv5_make_whoareyou(dest_id: bytes, masking_iv: bytes, nonce: bytes, id_nonce: bytes, enr_seq: int) -> tuple[bytes, bytes]:
+    """Node B's WHOAREYOU packet for node A, and its challenge data."""
     ...
 
-def discv5_read_whoareyou(dest_id: bytes, packet: bytes) -> bytes:
-    """Node A's reading of a WHOAREYOU packet, as a JSON object."""
+def discv5_read_whoareyou(dest_id: bytes, packet: bytes) -> dict:
+    """Node A's reading of a WHOAREYOU packet, as a `dict`."""
     ...
 
 def discv5_seal_message(key: bytes, src_id: bytes, dest_id: bytes, masking_iv: bytes, nonce: bytes, plaintext: bytes) -> bytes:
@@ -367,119 +375,123 @@ def discv5_open_message(key: bytes, src_id: bytes, dest_id: bytes, packet: bytes
     """The plaintext of an ordinary message packet from a given node, under its session key."""
     ...
 
-def discv5_seal_handshake(ephemeral_key: bytes, static_key: bytes, challenge_data: bytes, src_id: bytes, dest_id: bytes, dest_pubkey: bytes, masking_iv: bytes, nonce: bytes, record: bytes, plaintext: bytes) -> bytes:
-    """Node A's handshake message packet for node B, and its session keys, as a JSON object."""
+def discv5_seal_handshake(ephemeral_key: bytes, static_key: bytes, challenge_data: bytes, src_id: bytes, dest_id: bytes, dest_pubkey: bytes, masking_iv: bytes, nonce: bytes, record: bytes, plaintext: bytes) -> tuple[bytes, bytes, bytes]:
+    """Node A's handshake message packet for node B, and its two session keys."""
     ...
 
-def discv5_open_handshake(static_key: bytes, challenge_data: bytes, dest_id: bytes, src_pubkey: bytes, packet: bytes) -> bytes:
-    """Node B's reading of a handshake message packet, as a JSON object."""
+def discv5_open_handshake(static_key: bytes, challenge_data: bytes, dest_id: bytes, src_pubkey: bytes, packet: bytes) -> dict:
+    """Node B's reading of a handshake message packet, as a `dict`."""
     ...
 
-def consensus_preset(name: str) -> bytes:
-    """The preset of a name, as a JSON object."""
+def consensus_preset(name: str) -> dict[str, int]:
+    """The preset of a name, as a `dict`."""
     ...
 
-def consensus_config(name: str) -> bytes:
-    """The configuration of a name, as a JSON object."""
+def consensus_config(name: str) -> dict[str, Any]:
+    """The configuration of a name, as a `dict`."""
     ...
 
-def consensus_parameters(name: str, fork: str) -> bytes:
-    """The parameters of a preset at a fork, as a JSON object."""
+def consensus_parameters(name: str, fork: str) -> dict[str, int]:
+    """The parameters of a preset at a fork, as a `dict`."""
     ...
 
-def consensus_get_custody_groups(name: str, node_id: bytes, custody_group_count: int) -> bytes:
-    """The custody groups of a node ID of 32 bytes, most significant first."""
+def consensus_get_custody_groups(name: str, node_id: int, custody_group_count: int) -> list[int]:
+    """The custody groups of a node ID, in increasing order, as a list."""
     ...
 
-def consensus_compute_columns_for_custody_group(name: str, custody_group: int) -> bytes:
-    """The columns of a custody group."""
+def consensus_compute_columns_for_custody_group(name: str, custody_group: int) -> list[int]:
+    """The columns of a custody group, as a list."""
     ...
 
-def consensus_ssz_static(name: str, fork: str, type: str, data: bytes) -> bytes:
-    """The root of the value that the bytes encode, then the bytes of that value."""
+def consensus_ssz_static(name: str, fork: str, type: str, data: bytes) -> tuple[bytes, bytes]:
+    """The root of the value that the bytes encode, and the bytes of that value, as a pair."""
     ...
 
-def consensus_merkle_proof(name: str, fork: str, type: str, data: bytes, gindex: int) -> bytes:
-    """The node at a generalized index of the value that the bytes encode, then its branch."""
+def consensus_merkle_proof(name: str, fork: str, type: str, data: bytes, gindex: int) -> tuple[bytes, list[bytes]]:
+    """The node at a generalized index of the value that the bytes encode, and its branch, as a pair."""
     ...
 
 def consensus_verify_blob_sidecar_inclusion_proof(name: str, fork: str, data: bytes) -> bool:
     """Whether the branch of a blob sidecar, given as bytes, climbs to the body root of its header."""
     ...
 
-def consensus_process_operation(name: str, fork: str, handler: str, pre: bytes, operation: bytes, config: bytes, verify: bool, execution_valid: bool) -> bytes:
+def consensus_process_operation(name: str, fork: str, handler: str, pre: bytes, operation: bytes, config: dict[str, Any] | None, verify: bool, execution_valid: bool) -> bytes:
     """The state after a block operation of a handler of the vectors, as SSZ bytes."""
     ...
 
-def consensus_process_epoch(name: str, fork: str, handler: str, pre: bytes, config: bytes) -> bytes:
+def consensus_process_epoch(name: str, fork: str, handler: str, pre: bytes, config: dict[str, Any] | None) -> bytes:
     """The state after one step of the epoch transition of a handler of the vectors, as SSZ bytes."""
     ...
 
-def consensus_rewards_deltas(name: str, fork: str, component: str, pre: bytes, config: bytes) -> bytes:
+def consensus_rewards_deltas(name: str, fork: str, component: str, pre: bytes, config: dict[str, Any] | None) -> bytes:
     """The rewards and the penalties of each validator for one kind of vote, as SSZ bytes."""
     ...
 
-def consensus_process_slots(name: str, fork: str, pre: bytes, config: bytes, slots: int) -> bytes:
+def consensus_rewards_deltas_batch(name: str, fork: str, components: list[str], pre: bytes, config: dict[str, Any] | None) -> list[bytes]:
+    """The deltas of several kinds of vote for one state, as SSZ bytes, in the order of the kinds."""
+    ...
+
+def consensus_process_slots(name: str, fork: str, pre: bytes, config: dict[str, Any] | None, slots: int) -> bytes:
     """The state some slots later, as SSZ bytes."""
     ...
 
-def consensus_state_transition(name: str, fork: str, pre: bytes, block: bytes, config: bytes, verify: bool) -> bytes:
+def consensus_state_transition(name: str, fork: str, pre: bytes, block: bytes, config: dict[str, Any] | None, verify: bool) -> bytes:
     """The state after a signed block, as SSZ bytes, with the signature and the state root checked."""
     ...
 
-def consensus_state_transition_across(name: str, fork: str, pre: bytes, block_fork: str, block: bytes, config: bytes, verify: bool) -> bytes:
+def consensus_state_transition_across(name: str, fork: str, pre: bytes, block_fork: str, block: bytes, config: dict[str, Any] | None, verify: bool) -> bytes:
     """The state after a signed block of a fork, from a state of that fork or an earlier one."""
     ...
 
-def consensus_state_transitions(name: str, fork: str, pre: bytes, blocks: list[bytes], config: bytes, verify: bool) -> bytes:
+def consensus_state_transitions(name: str, fork: str, pre: bytes, blocks: list[bytes], config: dict[str, Any] | None, verify: bool) -> bytes:
     """The state after signed blocks in order, as SSZ bytes, with each state root checked."""
     ...
 
-def consensus_state_transitions_across(name: str, fork: str, pre: bytes, block_forks: list[bytes], blocks: list[bytes], config: bytes, verify: bool) -> bytes:
+def consensus_state_transitions_across(name: str, fork: str, pre: bytes, block_forks: list[str], blocks: list[bytes], config: dict[str, Any] | None, verify: bool) -> bytes:
     """The state after signed blocks in order, as SSZ bytes, across the fork epochs on the way."""
     ...
 
-def consensus_initialize_genesis(name: str, fork: str, eth1_block_hash: bytes, deposits: bytes, config: bytes, eth1_timestamp: int, verify: bool) -> bytes:
+def consensus_initialize_genesis(name: str, fork: str, eth1_block_hash: bytes, deposits: list[bytes], config: dict[str, Any] | None, eth1_timestamp: int, verify: bool) -> bytes:
     """The candidate genesis state of a block of the proof-of-work chain, as SSZ bytes."""
     ...
 
-def consensus_is_valid_genesis_state(name: str, fork: str, state: bytes, config: bytes) -> bool:
+def consensus_is_valid_genesis_state(name: str, fork: str, state: bytes, config: dict[str, Any] | None) -> bool:
     """Whether a candidate genesis state launches the chain."""
     ...
 
-def consensus_compute_weak_subjectivity_period(name: str, fork: str, state: bytes, config: bytes) -> int:
+def consensus_compute_weak_subjectivity_period(name: str, fork: str, state: bytes, config: dict[str, Any] | None) -> int:
     """The weak subjectivity period of a state, in epochs."""
     ...
 
-def consensus_is_within_weak_subjectivity_period(name: str, fork: str, state: bytes, checkpoint: bytes, config: bytes, genesis_time_ms: int, time_ms: int) -> bool:
+def consensus_is_within_weak_subjectivity_period(name: str, fork: str, state: bytes, checkpoint: bytes, config: dict[str, Any] | None, genesis_time_ms: int, time_ms: int) -> bool:
     """Whether a checkpoint is within the weak subjectivity period of its state, at a time."""
     ...
 
-def consensus_get_committee_assignment(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) -> bytes:
-    """The committee assignment of a validator in an epoch, as JSON."""
+def consensus_get_committee_assignment(name: str, fork: str, state: bytes, config: dict[str, Any] | None, epoch: int, validator_index: int) -> tuple[list[int], int, int] | None:
+    """The committee assignment of a validator in an epoch, if it has one."""
     ...
 
-def consensus_is_proposer(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bool:
+def consensus_is_proposer(name: str, fork: str, state: bytes, config: dict[str, Any] | None, validator_index: int) -> bool:
     """Whether a validator proposes the block of the slot of a state."""
     ...
 
-def consensus_is_assigned_to_sync_committee(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) -> bool:
+def consensus_is_assigned_to_sync_committee(name: str, fork: str, state: bytes, config: dict[str, Any] | None, epoch: int, validator_index: int) -> bool:
     """From Altair: whether a validator serves on the sync committee of the period of an epoch."""
     ...
 
-def consensus_compute_subnets_for_sync_committee(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bytes:
-    """From Altair: the sync committee subnets of a validator for the next slot, as a JSON list."""
+def consensus_compute_subnets_for_sync_committee(name: str, fork: str, state: bytes, config: dict[str, Any] | None, validator_index: int) -> list[int]:
+    """From Altair: the sync committee subnets of a validator for the next slot, as a list."""
     ...
 
-def consensus_get_ptc_assignment(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) -> bytes:
-    """From Gloas: the slot of an epoch whose payload timeliness committee holds a validator, as JSON."""
+def consensus_get_ptc_assignment(name: str, fork: str, state: bytes, config: dict[str, Any] | None, epoch: int, validator_index: int) -> int | None:
+    """From Gloas: the slot of an epoch whose payload timeliness committee holds a validator."""
     ...
 
-def consensus_get_upcoming_proposal_slots(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bytes:
-    """From Gloas: the slots after the slot of a state that a validator proposes, as a JSON list."""
+def consensus_get_upcoming_proposal_slots(name: str, fork: str, state: bytes, config: dict[str, Any] | None, validator_index: int) -> list[int]:
+    """From Gloas: the slots after the slot of a state that a validator proposes, as a list."""
     ...
 
-def consensus_get_validator_signature(name: str, fork: str, state: bytes, config: bytes, duty: str, object: bytes, secret_key: bytes) -> bytes:
+def consensus_get_validator_signature(name: str, fork: str, state: bytes, config: dict[str, Any] | None, duty: str, object: bytes, secret_key: bytes) -> bytes:
     """The signature of the object of a duty, by a secret key of 32 big-endian bytes."""
     ...
 
@@ -491,11 +503,11 @@ def consensus_get_aggregate_signature(name: str, fork: str, attestations: list[b
     """The aggregate of the signatures of attestations, as 96 bytes."""
     ...
 
-def consensus_construct_attestation(name: str, fork: str, state: bytes, config: bytes, data: bytes, validator_index: int, secret_key: bytes) -> bytes:
+def consensus_construct_attestation(name: str, fork: str, state: bytes, config: dict[str, Any] | None, data: bytes, validator_index: int, secret_key: bytes) -> bytes:
     """Before Electra: the attestation of a validator on attestation data, as SSZ bytes."""
     ...
 
-def consensus_construct_single_attestation(name: str, fork: str, state: bytes, config: bytes, data: bytes, committee_index: int, validator_index: int, secret_key: bytes) -> bytes:
+def consensus_construct_single_attestation(name: str, fork: str, state: bytes, config: dict[str, Any] | None, data: bytes, committee_index: int, validator_index: int, secret_key: bytes) -> bytes:
     """From Electra: the single attestation of a validator in a committee, as SSZ bytes."""
     ...
 
@@ -543,23 +555,23 @@ def consensus_is_optimistic_candidate_block(name: str, fork: str, blocks: list[b
     """From Bellatrix: whether a block may be imported optimistically, given the known blocks."""
     ...
 
-def consensus_latest_verified_ancestor(name: str, fork: str, blocks: list[bytes], optimistic_roots: bytes, root: bytes) -> bytes:
+def consensus_latest_verified_ancestor(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], root: bytes) -> bytes:
     """From Bellatrix: the root of the latest block of a chain that is not optimistic."""
     ...
 
-def consensus_on_valid_payload(name: str, fork: str, blocks: list[bytes], optimistic_roots: bytes, root: bytes) -> bytes:
-    """From Bellatrix: the optimistic roots after the payload of a block is found valid."""
+def consensus_on_valid_payload(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], root: bytes) -> list[bytes]:
+    """From Bellatrix: the optimistic roots after the payload of a block is found valid, as a list."""
     ...
 
-def consensus_on_invalidated_payload(name: str, fork: str, blocks: list[bytes], optimistic_roots: bytes, first: bytes) -> bytes:
-    """From Bellatrix: the optimistic roots after a block is found to be the first invalid one."""
+def consensus_on_invalidated_payload(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], first: bytes) -> list[bytes]:
+    """From Bellatrix: the optimistic roots after a block is found the first invalid one, as a list."""
     ...
 
 def consensus_is_optimistic_restricted_domain(domain_type: bytes) -> bool:
     """Whether an optimistic validator may not sign under a domain type of 4 bytes."""
     ...
 
-def consensus_get_eth1_vote(name: str, fork: str, state: bytes, config: bytes, chain: list[bytes]) -> bytes:
+def consensus_get_eth1_vote(name: str, fork: str, state: bytes, config: dict[str, Any] | None, chain: list[tuple[int, bytes]]) -> bytes:
     """Before Heze: the Eth1 vote of a proposer on a state, as the SSZ bytes of the Eth1 data."""
     ...
 
@@ -567,7 +579,7 @@ def consensus_get_eth1_pending_deposit_count(name: str, fork: str, state: bytes)
     """In Electra: the number of deposits of the deposit contract that a proposer includes."""
     ...
 
-def consensus_compute_new_state_root(name: str, fork: str, state: bytes, block: bytes, config: bytes, verify: bool) -> bytes:
+def consensus_compute_new_state_root(name: str, fork: str, state: bytes, block: bytes, config: dict[str, Any] | None, verify: bool) -> bytes:
     """The root of the state after a block, to set as its state root, as 32 bytes."""
     ...
 
@@ -583,35 +595,47 @@ def consensus_get_execution_requests(name: str, fork: str, requests: list[bytes]
     """From Electra: the requests of an execution block, as SSZ bytes."""
     ...
 
-def consensus_get_validators_custody_requirement(name: str, fork: str, state: bytes, config: bytes, validator_indices: list[bytes]) -> int:
+def consensus_get_execution_payload_bid(name: str, fork: str, state: bytes, payload: bytes, requests: bytes, commitments: bytes, fee_recipient: bytes, inclusion_list_bits: bytes, slot: int, builder_index: int, value: int) -> bytes:
+    """From Gloas: the bid of a builder for a payload that it built on a state, as SSZ bytes."""
+    ...
+
+def consensus_get_self_built_execution_payload_bid(name: str, fork: str, state: bytes, payload: bytes, requests: bytes, commitments: bytes, fee_recipient: bytes, inclusion_list_bits: bytes) -> bytes:
+    """From Gloas: the signed bid of a proposer that builds its own payload, as SSZ bytes."""
+    ...
+
+def consensus_get_execution_payload_envelope(name: str, fork: str, block: bytes, payload: bytes, requests: bytes) -> bytes:
+    """From Gloas: the envelope that reveals a payload after the block of its bid, as SSZ bytes."""
+    ...
+
+def consensus_get_validators_custody_requirement(name: str, fork: str, state: bytes, config: dict[str, Any] | None, validator_indices: list[int]) -> int:
     """From Fulu: the number of custody groups of a node, from the indices of its validators."""
     ...
 
-def consensus_upgrade_state(name: str, fork: str, pre: bytes, config: bytes, verify: bool) -> bytes:
+def consensus_upgrade_state(name: str, fork: str, pre: bytes, config: dict[str, Any] | None, verify: bool) -> bytes:
     """The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes."""
     ...
 
-def consensus_fork_choice(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: bytes, config: bytes, verify: bool) -> bytes:
+def consensus_fork_choice(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None) -> list:
     """The outcome of each step of a fork choice case, from an anchor state and an anchor block."""
     ...
 
-def consensus_gossip_validation(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: bytes, finalized: bytes, topic: bytes, messages: bytes, config: bytes, verify: bool) -> bytes:
+def consensus_gossip_validation(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]], finalized: tuple[int, bytes] | None, topic: str, messages: list[tuple[int, int, bytes] | tuple[int, int, bytes, str]], config: dict[str, Any] | None, verify: bool) -> list[tuple[str, str | None]]:
     """Validate the messages of a topic in turn, against the store of an anchor and later blocks."""
     ...
 
-def consensus_light_client_sync(name: str, fork: str, bootstrap_fork: str, config: bytes, trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, steps: bytes) -> bytes:
+def consensus_light_client_sync(name: str, fork: str, bootstrap_fork: str, config: dict[str, Any] | None, trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, steps: list[tuple[str, str, int, bytes] | tuple[str, int] | tuple[str, str]]) -> list[tuple[tuple[int, bytes, bytes], tuple[int, bytes, bytes]]]:
     """The headers of a sync, step by step, from a bootstrap for a trusted block root."""
     ...
 
-def consensus_block_to_light_client_header(name: str, fork: str, config: bytes, block: bytes) -> bytes:
-    """The root of a block, given as bytes, then the bytes of its light client header."""
+def consensus_block_to_light_client_header(name: str, fork: str, config: dict[str, Any] | None, block: bytes) -> tuple[bytes, bytes]:
+    """The root of a block, given as bytes, and the bytes of its light client header, as a pair."""
     ...
 
-def consensus_light_client_update_proofs(name: str, fork: str, type: str, config: bytes, data: bytes) -> bool:
+def consensus_light_client_update_proofs(name: str, fork: str, type: str, config: dict[str, Any] | None, data: bytes) -> bool:
     """Whether the proofs of an update or a finality update, given as bytes, verify."""
     ...
 
-def consensus_is_better_update(name: str, fork: str, old_fork: str, config: bytes, new_update: bytes, old_update: bytes) -> bool:
+def consensus_is_better_update(name: str, fork: str, old_fork: str, config: dict[str, Any] | None, new_update: bytes, old_update: bytes) -> bool:
     """Whether a new update, given as bytes, ranks above an old one for a forced update."""
     ...
 
@@ -619,20 +643,20 @@ def consensus_genesis_block(name: str, fork: str, state: bytes) -> bytes:
     """The genesis block of a state, given as bytes, with a signature of zero bytes."""
     ...
 
-def consensus_create_light_client_bootstrap(name: str, fork: str, config: bytes, state: bytes, block: bytes) -> bytes:
+def consensus_create_light_client_bootstrap(name: str, fork: str, config: dict[str, Any] | None, state: bytes, block: bytes) -> bytes:
     """The bootstrap that a full node serves for a block, from the block and its post state."""
     ...
 
-def consensus_create_light_client_update(name: str, fork: str, attested_fork: str, finalized_fork: str, type: str, config: bytes, state: bytes, block: bytes, attested_state: bytes, attested_block: bytes, finalized_block: bytes) -> bytes:
+def consensus_create_light_client_update(name: str, fork: str, attested_fork: str, finalized_fork: str, type: str, config: dict[str, Any] | None, state: bytes, block: bytes, attested_state: bytes, attested_block: bytes, finalized_block: bytes | None) -> bytes:
     """The update that a full node serves for a block, from the blocks and their post states."""
     ...
 
-def consensus_compute_fork_digest(name: str, config: bytes, genesis_validators_root: bytes, epoch: int) -> bytes:
+def consensus_compute_fork_digest(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, epoch: int) -> bytes:
     """The fork digest at an epoch, on the chain with the given root of the genesis validators."""
     ...
 
-def pq_keys_ssz(type: str, data: bytes) -> bytes:
-    """The root of the value that the bytes encode, then the bytes of that value."""
+def pq_keys_ssz(type: str, data: bytes) -> tuple[bytes, bytes]:
+    """The root of the value that the bytes encode, and the bytes of that value, as a pair."""
     ...
 
 def pq_keys_possession_signing_root(name: str, genesis_validators_root: bytes, pubkey: bytes, xmss_public_key: bytes) -> bytes:
@@ -643,7 +667,7 @@ def pq_keys_is_valid_possession_proof(name: str, genesis_validators_root: bytes,
     """Whether a proof of possession of a leanXMSS key for a BLS key is valid, with Keccak-256."""
     ...
 
-def consensus_verify_data_column_sidecar(name: str, fork: str, data: bytes, block: bytes, config: bytes) -> bool:
+def consensus_verify_data_column_sidecar(name: str, fork: str, data: bytes, block: bytes, config: dict[str, Any] | None) -> bool:
     """Whether a sidecar, given as bytes, has a valid shape."""
     ...
 
@@ -663,56 +687,56 @@ def consensus_verify_partial_data_column_sidecar_kzg_proofs(name: str, fork: str
     """At Fulu: whether the cells of a partial sidecar match their commitments by their proofs."""
     ...
 
-def consensus_compute_matrix(blobs: bytes) -> bytes:
-    """The matrix of the blobs, given one after another, as its entries one after another."""
+def consensus_compute_matrix(blobs: list[bytes]) -> list[bytes]:
+    """The matrix of the blobs, as the SSZ bytes of each of its entries, in a list."""
     ...
 
-def consensus_recover_matrix(entries: bytes, blob_count: int) -> bytes:
-    """The full matrix of `count` rows, from some entries given one after another."""
+def consensus_recover_matrix(entries: list[bytes], blob_count: int) -> list[bytes]:
+    """The full matrix of a count of rows, from the SSZ bytes of some of its entries, in a list."""
     ...
 
-def consensus_get_data_column_sidecars_from_block(name: str, fork: str, block: bytes, rows: bytes) -> bytes:
-    """The column sidecars of a signed block, from its bytes and the rows of its blobs."""
+def consensus_get_data_column_sidecars_from_block(name: str, fork: str, block: bytes, rows: list[tuple[list[bytes], list[bytes]]]) -> list[bytes]:
+    """The column sidecars of a signed block, as the SSZ bytes of each, in a list."""
     ...
 
-def consensus_get_data_column_sidecars_from_column_sidecar(name: str, fork: str, sidecar: bytes, rows: bytes) -> bytes:
-    """All the column sidecars of a block, from the bytes of one of them and the rows of its blobs."""
+def consensus_get_data_column_sidecars_from_column_sidecar(name: str, fork: str, sidecar: bytes, rows: list[tuple[list[bytes], list[bytes]]]) -> list[bytes]:
+    """All the column sidecars of a block, as the SSZ bytes of each, in a list."""
     ...
 
-def consensus_compute_shuffled_permutation(name: str, count: int, seed: bytes) -> bytes:
-    """The shuffled position of every index below the count, which must be at most `2^40`."""
+def consensus_compute_shuffled_permutation(name: str, count: int, seed: bytes) -> list[int]:
+    """The shuffled position of every index below a count of at most `2^40`, as a list."""
     ...
 
 def consensus_compute_shuffled_index(name: str, index: int, count: int, seed: bytes) -> int:
     """The shuffled position of one index, which must be below the count."""
     ...
 
-def consensus_reqresp_protocol_ids(fork: str) -> bytes:
+def consensus_reqresp_protocol_ids(fork: str) -> list[str]:
     """The protocol IDs of a fork: each protocol with each version that the fork defines."""
     ...
 
-def consensus_reqresp_parse_protocol_id(text: str) -> bytes:
+def consensus_reqresp_parse_protocol_id(text: str) -> tuple[str, int]:
     """The protocol and the version that an ID names, if it names one."""
     ...
 
-def consensus_reqresp_message(name: str, fork: str, type: str, data: bytes) -> bytes:
-    """The root of the message that the bytes encode, then the bytes of that message."""
+def consensus_reqresp_message(name: str, fork: str, type: str, data: bytes) -> tuple[bytes, bytes]:
+    """The root of the message that the bytes encode, and the bytes of that message, as a pair."""
     ...
 
 def consensus_compute_min_epochs_for_block_requests(name: str) -> int:
     """The fewest epochs back from the current one over which a node must serve blocks."""
     ...
 
-def consensus_gossip_topics(name: str, fork: str) -> bytes:
+def consensus_gossip_topics(name: str, fork: str) -> list[str]:
     """The gossip topics of a fork, in the order of the fork that adds each one."""
     ...
 
-def consensus_reqresp_request_bounds(name: str, fork: str, protocol: str) -> bytes:
-    """The smallest and the largest length of a request payload, as a JSON pair."""
+def consensus_reqresp_request_bounds(name: str, fork: str, protocol: str) -> tuple[int, int]:
+    """The smallest and the largest length of a request payload, as a pair."""
     ...
 
-def consensus_reqresp_response_bounds(name: str, chunk_fork: str, protocol: str) -> bytes:
-    """The smallest and the largest length of the payload of a successful response chunk."""
+def consensus_reqresp_response_bounds(name: str, chunk_fork: str, protocol: str) -> tuple[int, int]:
+    """The smallest and the largest length of the payload of a successful response chunk, as a pair."""
     ...
 
 def consensus_gossip_topic_bound(name: str, fork: str, topic: str) -> int:
@@ -731,7 +755,7 @@ def consensus_compute_subnet_for_data_column_sidecar(name: str, column_index: in
     """From Fulu: the subnet of a data column sidecar, its column modulo the number of subnets."""
     ...
 
-def consensus_compute_subscribed_subnets(name: str, node_id: bytes, epoch: int) -> bytes:
+def consensus_compute_subscribed_subnets(name: str, node_id: int, epoch: int) -> list[int]:
     """The attestation subnets that a node subscribes to in an epoch."""
     ...
 
@@ -743,8 +767,16 @@ def reqresp_decode_payload(type_min: int, type_bound: int, data: bytes) -> bytes
     """The SSZ bytes of a payload, given the smallest and the largest encoding of its SSZ type."""
     ...
 
-def reqresp_decode_response_chunk(context_bytes: int, type_min: int, type_bound: int, data: bytes) -> bytes:
+def reqresp_decode_response_chunk(context_bytes: int, type_min: int, type_bound: int, data: bytes) -> tuple[int, bytes, bytes]:
     """One response chunk, given the number of context bytes that the method sends."""
+    ...
+
+def reqresp_encode_payload(ssz_bytes: bytes) -> bytes:
+    """A payload that decodes to `data`: its length as a varint, then a stream that compresses."""
+    ...
+
+def reqresp_encode_response_chunk(code: int, context: bytes, payload: bytes) -> bytes:
+    """The response chunk of a code byte, context bytes and a payload, compressed when shorter."""
     ...
 
 def block_header_hash(fork: str, header: bytes) -> bytes:
@@ -755,15 +787,19 @@ def block_reencode(fork: str, block: bytes) -> bytes:
     """The RLP form of a block, decoded at the fork and encoded again."""
     ...
 
-def pow_block_difficulty(fork: bytes, number: bytes, timestamp: bytes, parent_timestamp: bytes, parent_difficulty: bytes, parent_ommers: bytes) -> bytes:
+def pow_block_difficulty(fork: str, number: int, timestamp: int, parent_timestamp: int, parent_difficulty: int, parent_ommers: int) -> int:
     """The difficulty of a block at a fork: `D(H)` of the Yellow Paper, 4.3.4, before Paris."""
     ...
 
-def pow_seal_hash(fork: bytes, header: bytes) -> bytes:
+def pow_chain_forks(forks: list[tuple[str, int]]) -> bytes:
+    """The RLP form of the forks of a chain, each with its first block."""
+    ...
+
+def pow_seal_hash(fork: str, header: bytes) -> bytes:
     """The seal hash of a header: the Keccak-256 hash of the header without mix digest and nonce."""
     ...
 
-def pow_check(fork: bytes, header: bytes) -> bool:
+def pow_check(fork: str, header: bytes) -> bool:
     """Check the proof of work of a header, as section 4.3.4 of the Yellow Paper asks."""
     ...
 
@@ -799,48 +835,44 @@ def block_validate_size(fork: str, block: bytes) -> bool:
     """Check the RLP size of a block, decoded at the fork: from Fusaka, at most 8 MiB."""
     ...
 
-def fees_base_fee_per_gas(parent_gas_limit: bytes, parent_gas_used: bytes, parent_base_fee_per_gas: bytes) -> bytes:
+def fees_base_fee_per_gas(parent_gas_limit: int, parent_gas_used: int, parent_base_fee_per_gas: int) -> int:
     """The base fee per gas of a block, from its parent's gas limit, gas used and base fee."""
     ...
 
-def fees_fake_exponential(factor: bytes, numerator: bytes, denominator: bytes) -> bytes:
+def fees_fake_exponential(factor: int, numerator: int, denominator: int) -> int:
     """`factor * e^(numerator / denominator)`, the integer approximation of EIP-4844."""
     ...
 
-def fees_base_fee_per_blob_gas(fork: bytes, excess_blob_gas: bytes) -> bytes:
+def fees_base_fee_per_blob_gas(fork: str, excess_blob_gas: int) -> int:
     """The base fee per blob gas at an excess, under the blob schedule of a fork."""
     ...
 
-def fees_blob_data_fee(fork: bytes, excess_blob_gas: bytes, transaction: bytes) -> bytes:
+def fees_blob_data_fee(fork: str, excess_blob_gas: int, transaction: bytes) -> int:
     """The fee of the blobs of a transaction, decoded at a fork, at an excess blob gas."""
     ...
 
-def fees_excess_blob_gas(fork: bytes, parent_excess_blob_gas: bytes, parent_blob_gas_used: bytes, parent_base_fee_per_gas: bytes) -> bytes:
+def fees_excess_blob_gas(fork: str, parent_excess_blob_gas: int, parent_blob_gas_used: int, parent_base_fee_per_gas: int) -> int:
     """The excess blob gas of a block at a fork, from its parent's excess, blob gas and base fee."""
     ...
 
-def evm_word_op(opcode: int, a: bytes, b: bytes, c: bytes) -> bytes:
-    """The word that the instruction of an opcode pushes."""
+def evm_word_op(opcode: int, operands: list[int]) -> int:
+    """The word that the instruction of an opcode pushes, for at most three operands."""
     ...
 
 def evm_immediate_depths(opcode: int, immediate: int) -> bytes:
     """The depths, counted from 1 at the top, that the immediate byte of an opcode encodes."""
     ...
 
-def evm_memory_gas_cost(size: bytes) -> bytes:
+def evm_memory_gas_cost(size: int) -> int:
     """The price of a memory of a given size in bytes."""
     ...
 
-def evm_extend_memory_cost(current_size: bytes, ranges: bytes) -> bytes:
-    """The price of growing a memory for a list of ranges."""
+def evm_extend_memory(current_size: int, ranges: list[tuple[int, int]]) -> tuple[int, int]:
+    """The price of growing a memory for a list of ranges, and the bytes that it grows by."""
     ...
 
-def evm_extend_memory_expand_by(current_size: bytes, ranges: bytes) -> bytes:
-    """The number of bytes that a memory grows by for a list of ranges."""
-    ...
-
-def evm_create_address(sender: bytes, nonce: bytes) -> bytes:
-    """The address of the contract that a sender makes with CREATE at a big-endian nonce."""
+def evm_create_address(sender: bytes, nonce: int) -> bytes:
+    """The address of the contract that a sender makes with CREATE at a nonce."""
     ...
 
 def evm_create2_address(sender: bytes, salt: bytes, init_code: bytes) -> bytes:
@@ -856,19 +888,19 @@ def rlp_decode(data: bytes) -> Any:
     ...
 
 def rlp_decode_as(kind: str, data: bytes) -> Any:
-    """The value of the named type that the bytes encode, given as the item of the value."""
+    """The value of the named type that the bytes encode, as a Python value."""
     ...
 
-def ssz_serialize(type: bytes, value: bytes) -> bytes:
-    """The SSZ bytes of a value of a type, both given as JSON."""
+def ssz_serialize(type: str | dict[str, Any], value: dict[str, Any]) -> bytes:
+    """The SSZ bytes of a value of a type, both given in their tagged form."""
     ...
 
-def ssz_deserialize(type: bytes, data: bytes) -> bytes:
-    """The value, as JSON, that SSZ bytes hold for a type given as JSON."""
+def ssz_deserialize(type: str | dict[str, Any], data: bytes) -> dict[str, Any]:
+    """The value that SSZ bytes hold for a type given in its tagged form, as a tagged `dict`."""
     ...
 
-def ssz_hash_tree_root(type: bytes, value: bytes) -> bytes:
-    """The 32-byte hash tree root of a value of a type, both given as JSON."""
+def ssz_hash_tree_root(type: str | dict[str, Any], value: dict[str, Any]) -> bytes:
+    """The 32-byte hash tree root of a value of a type, both given in their tagged form."""
     ...
 
 def rlpx_ecies_encrypt(recipient: bytes, ephemeral: bytes, iv: bytes, shared_mac: bytes, message: bytes) -> bytes:
@@ -899,12 +931,20 @@ def discv4_record_signed_by(sender: bytes, record: bytes) -> bool:
     """Whether the RLP record `record` of an ENRResponse is signed by the public key `sender`."""
     ...
 
-def fork_id(schedule: bytes, number: int, timestamp: int) -> bytes:
-    """The fork identifier, as RLP, of a node with the schedule `schedule` at a head."""
+def fork_id(schedule: bytes, number: int, timestamp: int) -> tuple[bytes, int]:
+    """The fork identifier of a node with a schedule at a head: its hash and its next fork."""
     ...
 
-def mainnet_fork_id(number: int, timestamp: int) -> bytes:
-    """The fork identifier, as RLP, of a mainnet node at a head."""
+def fork_id_schedule(genesis_hash: bytes, genesis_time: int, merge_fork_block: int | None, forks: list[tuple[str, int, int]]) -> bytes:
+    """The RLP schedule `[genesis-hash, genesis-time, merge-fork, forks]` of a chain."""
+    ...
+
+def fork_id_encode(fork_hash: bytes, fork_next: int) -> bytes:
+    """The RLP fork identifier `[FORK_HASH, FORK_NEXT]`, from its 4-byte hash and its next fork."""
+    ...
+
+def mainnet_fork_id(number: int, timestamp: int) -> tuple[bytes, int]:
+    """The fork identifier of a mainnet node at a head: its hash and its next fork."""
     ...
 
 def fork_id_validate(schedule: bytes, number: int, timestamp: int, remote: bytes) -> bool:
@@ -991,7 +1031,7 @@ def varint_decode(data: bytes) -> int:
     """The 64-bit value a varint denotes, or why it is not a valid varint."""
     ...
 
-def gossip_message_id(fork: bytes, topic: bytes, data: bytes) -> bytes:
+def gossip_message_id(fork: str, topic: bytes, data: bytes) -> bytes:
     """The message ID of a message on a topic of a fork: the first 20 bytes of a SHA-256 digest."""
     ...
 
@@ -1027,20 +1067,20 @@ def tx_intrinsic_gas(fork: str, tx: bytes) -> int:
     """The intrinsic gas of a transaction, without the call data floor."""
     ...
 
-def tx_check(fork: str, chain_id: int, tx: bytes) -> bytes:
+def tx_check(fork: str, chain_id: int, tx: bytes) -> tuple[bytes, int]:
     """Check a transaction alone on the chain `chainId`."""
     ...
 
-def tx_check_in_block(fork: str, chain_id: int, tx: bytes, state: bytes, gas_limit: bytes, gas_used: bytes, blob_gas_used: bytes, base_fee: bytes, excess_blob_gas: bytes) -> bytes:
+def tx_check_in_block(fork: str, chain_id: int, tx: bytes, state: bytes, gas_limit: int, gas_used: int, blob_gas_used: int, base_fee: int, excess_blob_gas: int) -> tuple[bytes, int, int]:
     """Check that a transaction may enter its block at `fork`, on the chain `chainId`."""
     ...
 
-def tx_settle(fork: str, tx: bytes, base_fee: bytes, gas_left: bytes, refund_counter: bytes) -> bytes:
+def tx_settle(fork: str, tx: bytes, base_fee: int, gas_left: int, refund_counter: int) -> tuple[int, int, int, int]:
     """Settle the gas of a transaction that passes the gas, nonce and fee rules."""
     ...
 
-def tx_run(fork: str, chain_id: int, tx: bytes, state: bytes, env: bytes) -> bytes:
-    """Run one transaction on the state that `state` encodes, in a block with no transaction before."""
+def tx_run(fork: str, chain_id: int, tx: bytes, state: bytes, env: bytes) -> tuple[bytes, bytes, int, bool, list[tuple[bytes, int, int, bytes, list[tuple[bytes, int]]]]]:
+    """Run one transaction on a state, in a block with no transaction before."""
     ...
 
 def tx_network_check(fork: str, network: bytes) -> bytes:
@@ -1051,8 +1091,8 @@ def rlpx_make_auth(static_key: bytes, ephemeral_key: bytes, nonce: bytes, recipi
     """The packet `auth` from the initiator to the recipient's public key."""
     ...
 
-def rlpx_respond(static_key: bytes, ephemeral_key: bytes, nonce: bytes, r: bytes, iv: bytes, padding: bytes, auth: bytes, probe: bytes) -> bytes:
-    """The recipient's answer to `auth`: the packet `ack`, then the 128 bytes of its secrets."""
+def rlpx_respond(static_key: bytes, ephemeral_key: bytes, nonce: bytes, r: bytes, iv: bytes, padding: bytes, auth: bytes, probe: bytes) -> tuple[bytes, bytes]:
+    """The recipient's answer to `auth`: the packet `ack`, and the 128 bytes of its secrets."""
     ...
 
 def rlpx_recipient_secrets(static_key: bytes, ephemeral_key: bytes, nonce: bytes, auth: bytes, ack: bytes, probe: bytes) -> bytes:
@@ -1071,11 +1111,11 @@ def rlpx_read_frames(aes_secret: bytes, mac_secret: bytes, mac_init: bytes, inpu
     """The frame data of the frames in `input`, as an RLP list, from the start of a direction."""
     ...
 
-def block_validate_header(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: bytes) -> bool:
+def block_validate_header(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: list[tuple[int, int, int, int]]) -> None:
     """Check a header at a fork against its parent at the parent's fork, at every fork."""
     ...
 
-def block_check_header(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: bytes) -> bool:
+def block_check_header(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: list[tuple[int, int, int, int]]) -> None:
     """Check a header against its parent at two named forks, every check but the proof of work."""
     ...
 
@@ -1083,11 +1123,11 @@ def block_dao_extra_data_valid(dao_block: int, fork: str, header: bytes) -> bool
     """Whether a header has the extra data that the DAO Fork asks of its first ten blocks."""
     ...
 
-def state_transition(config: bytes, state: bytes, recent: bytes, fork: str, block: bytes, check_seal: bool) -> bytes:
+def state_transition(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], fork: str, block: bytes, check_seal: bool) -> bytes:
     """Run the state transition of a block on a chain, and give the state after it."""
     ...
 
-def genesis_block(fork: str, params: bytes, state: bytes) -> bytes:
+def genesis_block(fork: str, params: tuple[bytes, int, int, int, bytes, bytes, bytes, int, int, int], state: bytes) -> bytes:
     """The genesis block at a fork, in RLP form."""
     ...
 
@@ -1095,7 +1135,7 @@ def precompile_run(fork: str, address: int, data: bytes, gas: int) -> bytes:
     """Run the precompile at the address on the call data, with the gas given, at the fork named."""
     ...
 
-def precompile_price(fork: str, address: int, data: bytes) -> bytes:
+def precompile_price(fork: str, address: int, data: bytes) -> int:
     """The price of the precompile at the address on the call data, at the fork named."""
     ...
 
@@ -1115,28 +1155,40 @@ def state_rewards_root(forks: bytes, state: bytes, block: bytes) -> bytes:
     """The state root after the mining rewards of a block, from the state that `input` encodes."""
     ...
 
-def mainnet_active_fork(number: int, timestamp: int) -> bytes:
-    """The name of the active fork of mainnet at a block, or no bytes when no fork is active."""
+def mainnet_active_fork(number: int, timestamp: int) -> str | None:
+    """The name of the active fork of mainnet at a block, or `None` when none is active."""
     ...
 
-def hoodi_active_fork(number: int, timestamp: int) -> bytes:
-    """The name of the active fork of Hoodi at a block, or no bytes when no fork is active."""
+def hoodi_active_fork(number: int, timestamp: int) -> str | None:
+    """The name of the active fork of Hoodi at a block, or `None` when none is active."""
     ...
 
-def active_fork(config: bytes, number: int, timestamp: int) -> bytes:
-    """The name of the active fork of a configured chain at a block, or no bytes when none is active."""
+def active_fork(config: dict[str, Any], number: int, timestamp: int) -> str | None:
+    """The name of the active fork of a configured chain at a block, or `None` when none is active."""
     ...
 
-def engine_new_payload(config: bytes, request: bytes) -> bytes:
+def engine_new_payload(config: dict, request: dict) -> dict:
     """The payload status of an `engine_newPayload` request, without the parent's state."""
     ...
 
-def engine_new_payload_on_chain(config: bytes, state: bytes, recent: bytes, request: bytes) -> bytes:
+def engine_new_payload_on_chain(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], request: dict) -> tuple[dict, bytes, bytes] | tuple[dict, None, None]:
     """The payload status of an `engine_newPayload` request, on a chain that holds the parent."""
     ...
 
-def engine_forkchoice_updated(tree: bytes, finalized: bytes, request: bytes) -> bytes:
+def engine_forkchoice_updated(tree: list, finalized: str | None, request: dict) -> dict:
     """The response to an `engine_forkchoiceUpdated` request, against a tree of payloads."""
+    ...
+
+def engine_prepare_execution_payload(name: str, fork: str, state: bytes, config: dict | None, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes]) -> dict | None:
+    """From Bellatrix to Fulu: the forkchoice update of a proposer, as the value of its JSON."""
+    ...
+
+def engine_prepare_execution_payload_gloas(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, head_root: bytes, head_status: int, state: bytes, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, target_gas_limit: int, verify: bool, config: dict | None) -> dict:
+    """From Gloas: the forkchoice update of a proposer, as the value of its JSON."""
+    ...
+
+def pyvalue_echo(value: object) -> object:
+    """The value that Python passes, back to Python, with each failure tuple read as a failure."""
     ...
 
 def __getattr__(name: str) -> int: ...

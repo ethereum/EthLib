@@ -68,14 +68,8 @@ def test_mainnet() -> None:
 
 
 def test_fields_that_do_not_decode() -> None:
-    # A nonce of 9 bytes is not a header nonce, so the export rejects the fields with code 0.
-    with raises(
-        BlockError,
-        (
-            "genesis fields rejected: EthLib.Serialization.Rlp.RlpError.inField 6 "
-            "(EthLib.Serialization.Rlp.RlpError.wrongLength 8 9)"
-        ),
-    ) as error:
+    # A nonce of 9 bytes is not a header nonce, so the fields do not read, with code 0.
+    with raises(BlockError, "expected 8 bytes, got 9") as error:
         blocks.genesis_block(
             "frontier",
             rlp.encode([]),

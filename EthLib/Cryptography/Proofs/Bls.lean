@@ -18,6 +18,8 @@ public import EthLib.Cryptography.Proofs.Bls.G1Msm
 public import EthLib.Cryptography.Proofs.Bls.G1Order
 public import EthLib.Cryptography.Proofs.Bls.G1TorsionCheck
 public import EthLib.Cryptography.Proofs.Bls.G1Cardinality
+public import EthLib.Cryptography.Proofs.Bls.G1Endomorphism
+public import EthLib.Cryptography.Proofs.Bls.G2Endomorphism
 public import EthLib.Cryptography.Proofs.Bls.G1SubgroupSpan
 public import EthLib.Cryptography.Proofs.Bls.G2Group
 public import EthLib.Cryptography.Proofs.Bls.G2Validity
@@ -26,6 +28,7 @@ public import EthLib.Cryptography.Proofs.Bls.G2Order
 public import EthLib.Cryptography.Proofs.Bls.G2Subgroup
 public import EthLib.Cryptography.Proofs.Bls.G2Compress
 public import EthLib.Cryptography.Proofs.Bls.HashToCurve
+public import EthLib.Cryptography.Proofs.Bls.ExpandMessage
 public import EthLib.Cryptography.Proofs.Bls.Isogeny
 public import EthLib.Cryptography.Proofs.Bls.HashToCurveValidity
 public import EthLib.Cryptography.Proofs.Bls.TwistFrobenius
@@ -44,13 +47,16 @@ public import EthLib.Cryptography.Proofs.Bls.CofactorIndependence
 public import EthLib.Cryptography.Proofs.Bls.CofactorPrimes
 public import EthLib.Cryptography.Proofs.Bls.CofactorSpan
 public import EthLib.Cryptography.Proofs.Bls.CofactorSubgroupLanding
+public import EthLib.Cryptography.Proofs.Bls.CofactorEffective
 public import EthLib.Cryptography.Proofs.Bls.G2SubgroupSpan
 public import EthLib.Cryptography.Proofs.Bls.PairingCongr
 public import EthLib.Cryptography.Proofs.Bls.FinalExponentiation
 public import EthLib.Cryptography.Proofs.Bls.MillerLoop
 public import EthLib.Cryptography.Proofs.Bls.MillerChain
+public import EthLib.Cryptography.Proofs.Bls.AteFrobenius
 public import EthLib.Cryptography.Proofs.Bls.Nondegenerate
 public import EthLib.Cryptography.Proofs.Bls.PairingBilinear
+public import EthLib.Cryptography.Proofs.Bls.PairingAte
 public import EthLib.Cryptography.Proofs.Bls.TargetGroup
 public import EthLib.Cryptography.Proofs.Bls.PairingLaws
 public import EthLib.Cryptography.Proofs.Bls.Represents

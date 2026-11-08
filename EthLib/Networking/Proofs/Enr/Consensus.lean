@@ -13,6 +13,7 @@ Properties of the consensus entries of a node record.
 
 - The `eth2` value is a lawful SSZ container, so it round-trips and has 16 bytes.
 - A key that exists at a fork exists at every later fork.
+- A node accepts a record exactly when each of its entries reads, and the `eth2` entry is present.
 - A node before Altair reads no sync committee subnets.
 - A node from Fulu on reads a custody group count and a next fork digest, or rejects the record.
 - Each entry error has its own code, and no record error has that code.
@@ -60,25 +61,44 @@ theorem readRequiredAt_isSome {α : Type} {fork : Fork} {key : ConsensusKey}
     simp only [pure, Except.pure, Except.ok.injEq] at ha
     simp [← ha]
 
+/--
+A node accepts a record exactly when each entry reads at the fork, and the entries are those values.
+
+The `eth2` entry must be present.
+-/
+theorem readEntries_eq_ok_iff {count : UInt64} {fork : Fork} {r : Enr}
+    {e : ConsensusEntries count} :
+    readEntries count fork r = .ok e ↔
+      readSsz EnrForkId r .eth2 = .ok (some e.eth2) ∧
+        readSsz (Attnets count) r .attnets = .ok e.attnets ∧
+        readAt fork .syncnets (readSsz Syncnets r .syncnets) = .ok e.syncnets ∧
+        readRequiredAt fork .cgc (readCgc r) = .ok e.cgc ∧
+        readRequiredAt fork .nfd (readSsz (Vector UInt8 4) r .nfd) = .ok e.nfd := by
+  constructor
+  · intro h
+    simp only [readEntries] at h
+    obtain ⟨eth2?, he, h⟩ := bind_ok_iff.mp h
+    cases eth2? with
+    | none => simp [throw, throwThe, MonadExceptOf.throw] at h
+    | some eth2 =>
+      obtain ⟨attnets, ha, h⟩ := bind_ok_iff.mp h
+      obtain ⟨syncnets, hs, h⟩ := bind_ok_iff.mp h
+      obtain ⟨cgc, hc, h⟩ := bind_ok_iff.mp h
+      obtain ⟨nfd, hn, h⟩ := bind_ok_iff.mp h
+      simp only [pure, Except.pure, Except.ok.injEq] at h
+      subst h
+      exact ⟨he, ha, hs, hc, hn⟩
+  · rintro ⟨he, ha, hs, hc, hn⟩
+    simp only [readEntries, he, ha, hs, hc, hn, bind, Except.bind, pure, Except.pure]
+
 /-- The entries that a node reads, from the values of each step. -/
 theorem readEntries_ok {count : UInt64} {fork : Fork} {r : Enr}
     {e : ConsensusEntries count}
     (h : readEntries count fork r = .ok e) :
     readAt fork .syncnets (readSsz Syncnets r .syncnets) = .ok e.syncnets ∧
       readRequiredAt fork .cgc (readCgc r) = .ok e.cgc ∧
-      readRequiredAt fork .nfd (readSsz (Vector UInt8 4) r .nfd) = .ok e.nfd := by
-  simp only [readEntries] at h
-  obtain ⟨eth2?, _, h⟩ := bind_ok_iff.mp h
-  cases eth2? with
-  | none => simp [throw, throwThe, MonadExceptOf.throw] at h
-  | some eth2 =>
-    obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
-    obtain ⟨syncnets, hs, h⟩ := bind_ok_iff.mp h
-    obtain ⟨cgc, hc, h⟩ := bind_ok_iff.mp h
-    obtain ⟨nfd, hn, h⟩ := bind_ok_iff.mp h
-    simp only [pure, Except.pure, Except.ok.injEq] at h
-    subst h
-    exact ⟨hs, hc, hn⟩
+      readRequiredAt fork .nfd (readSsz (Vector UInt8 4) r .nfd) = .ok e.nfd :=
+  (readEntries_eq_ok_iff.mp h).2.2
 
 /-- Before Altair, a node reads no sync committee subnets. -/
 theorem readEntries_syncnets {count : UInt64} {fork : Fork} {r : Enr}

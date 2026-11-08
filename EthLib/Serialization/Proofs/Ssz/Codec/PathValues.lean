@@ -50,8 +50,7 @@ theorem PathSelects.containerField {names : List String} {fields : List Desc} {v
       (List.getElem?_eq_some_iff.mp selectedType).1 rfl _ _ suffix
     · simpa only [List.getElem?_map, Option.map_eq_some_iff] using
         ⟨(child, inner), List.getElem?_zip_eq_some.mpr ⟨selectedType, selectedValue⟩, rfl⟩
-    · simp [Desc.resolveStep, Desc.chunkPosition, Desc.elementType, Desc.chunkCount,
-        selectedType, Bind.bind, Except.bind, Pure.pure, Except.pure]
+    · exact resolveStep_container names fields ordinal child selectedType
 
 /-- A vector of composite values preserves the selected element's entire remaining path. -/
 theorem PathSelects.vectorElement {element : Desc} {count : Nat} {values : List Value}

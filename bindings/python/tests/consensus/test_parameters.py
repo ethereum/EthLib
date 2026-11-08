@@ -7,6 +7,7 @@ import pytest
 from ruamel.yaml import YAML
 
 from ethlib import consensus
+from ethlib.errors import SszError
 from raising import raises
 
 # The files are the mainnet and minimal presets from Phase 0 to Heze, and the two configurations.
@@ -79,17 +80,15 @@ def _load(relative: str) -> dict:
 
 
 def _canonical(value):
-    """A value as text that compares equal across YAML and the exports."""
+    """A YAML value in the form that the exports give: an int, lowercase hex, or text."""
     if isinstance(value, list):
         return [_canonical(item) for item in value]
     if isinstance(value, dict):
         return {key: _canonical(item) for key, item in value.items()}
-    if isinstance(value, int):
-        return str(value)
     if value.startswith("0x"):
         return value.lower()
     if value.isdigit():
-        return str(int(value))
+        return int(value)
     return value
 
 
@@ -115,7 +114,7 @@ def test_preset(name: str) -> None:
     expected = {}
     for values in _preset_files(name).values():
         expected.update(values)
-    assert _canonical(consensus.preset(name)) == _canonical(expected)
+    assert consensus.preset(name) == _canonical(expected)
 
 
 @pytest.mark.parametrize("name", PRESETS)
@@ -143,7 +142,7 @@ def test_parameters(name: str, fork: str) -> None:
             replacement = f"{key}_{earlier.upper()}"
             if replacement in files[earlier]:
                 expected[key] = files[earlier][replacement]
-    assert _canonical(consensus.parameters(name, fork)) == _canonical(expected)
+    assert consensus.parameters(name, fork) == _canonical(expected)
 
 
 @pytest.mark.parametrize("name", PRESETS)
@@ -151,7 +150,17 @@ def test_config(name: str) -> None:
     source = _load(f"configs/{name}.yaml")
     assert NOT_IN_CONFIG <= set(source)
     expected = {key: value for key, value in source.items() if key not in NOT_IN_CONFIG}
-    assert _canonical(consensus.config(name)) == _canonical(expected)
+    assert consensus.config(name) == _canonical(expected)
+
+
+def test_values_are_typed() -> None:
+    """An integer comes back as an int, even past 64 bits, and a byte string as hex."""
+    config = consensus.config("mainnet")
+    assert config["TERMINAL_TOTAL_DIFFICULTY"] == 58750000000000000000000
+    assert config["SLOT_DURATION_MS"] == 12000
+    assert config["GENESIS_FORK_VERSION"] == "0x00000000"
+    assert config["PRESET_BASE"] == "mainnet"
+    assert consensus.preset("minimal")["SLOTS_PER_EPOCH"] == 8
 
 
 def test_unknown_names_are_rejected() -> None:
@@ -161,3 +170,30 @@ def test_unknown_names_are_rejected() -> None:
         consensus.config("holesky")
     with raises(ValueError, "frontier is not a fork of the beacon chain"):
         consensus.parameters("mainnet", "frontier")
+
+
+def test_name_must_be_text() -> None:
+    """A name given as bytes is not read, and fails with code 0."""
+    with raises(consensus.ConsensusError, "expected a str") as error:
+        consensus.preset(b"mainnet")  # ty: ignore[invalid-argument-type]
+    assert error.value.code == 0
+
+
+@pytest.mark.parametrize("epoch", [0, "0"])
+def test_replacement_as_int_or_digits(epoch: int | str) -> None:
+    """A 64-bit replacement reads the same from an int and from its digits."""
+    root = bytes(32)
+    expected = consensus.compute_fork_digest("mainnet", root, 0, {"ALTAIR_FORK_EPOCH": 0})
+    assert (
+        consensus.compute_fork_digest("mainnet", root, 0, {"ALTAIR_FORK_EPOCH": epoch}) == expected
+    )
+    assert expected != consensus.compute_fork_digest("mainnet", root, 0)
+
+
+def test_replacement_out_of_range() -> None:
+    """A 64-bit replacement of 2^64 does not fit, and fails with code 0."""
+    field = "EthLib.Consensus.Config.ALTAIR_FORK_EPOCH"
+    message = f"configuration: {field}: {2**64} does not fit in 64 bits"
+    with raises(SszError, message) as error:
+        consensus.compute_fork_digest("mainnet", bytes(32), 0, {"ALTAIR_FORK_EPOCH": 2**64})
+    assert error.value.code == 0

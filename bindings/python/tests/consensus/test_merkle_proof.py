@@ -91,3 +91,24 @@ def test_blob_sidecar_inclusion_proof(preset, fork, case):
 def test_no_blob_sidecar_at_fulu():
     with raises(SszError, "no container BlobSidecar at fusaka"):
         consensus.verify_blob_sidecar_inclusion_proof("minimal", "fusaka", b"")
+
+
+def test_gindex_out_of_range():
+    """A generalized index of 2^64 is not a 64-bit number, so it fails with code 0."""
+    with raises(SszError, f"expected an int below {2**64}, got {2**64}") as caught:
+        consensus.merkle_proof("mainnet", "phase0", "Checkpoint", bytes(40), 2**64)
+    assert caught.value.code == 0
+
+
+def test_negative_gindex():
+    """A negative generalized index never reaches Lean."""
+    with raises(ValueError, "cannot pass a negative int to Lean"):
+        consensus.merkle_proof("mainnet", "phase0", "Checkpoint", bytes(40), -1)
+
+
+def test_proof_is_a_node_and_a_list():
+    """The proof of the epoch of a checkpoint is its node and the list of its one sibling."""
+    root = bytes(range(32))
+    data = (5).to_bytes(8, "little") + root
+    epoch = (5).to_bytes(8, "little") + bytes(24)
+    assert consensus.merkle_proof("mainnet", "phase0", "Checkpoint", data, 2) == (epoch, [root])

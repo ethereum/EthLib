@@ -27,12 +27,15 @@ def test_case(case: dict) -> None:
 
 
 def test_counts() -> None:
-    """The file holds 78 valid payloads, 46 JSON-RPC errors and 43 invalid payloads."""
+    """The file holds 90 valid payloads, 75 JSON-RPC errors and 82 invalid payloads."""
     kinds = Counter(
         check(c["network"], c["method"], c["params"], c["validationError"], c["errorCode"])
         for c in CASES
     )
-    assert kinds == {"valid": 78, "error": 46, "invalid": 43}
+    # A check before execution rejects 80 of the invalid payloads.
+    # The 2 others are Amsterdam block access lists with accounts out of order, or one twice.
+    # That is found when the block runs, so without the parent's state the payload is syncing.
+    assert kinds == {"valid": 90, "error": 75, "invalid": 80, "execution": 2}
 
 
 def test_wrong_version() -> None:
@@ -64,13 +67,6 @@ def test_extra_data_above_32_bytes() -> None:
     assert error.value.code == 32602
 
 
-def _amsterdam() -> dict:
-    """The chain of the network Prague, with every later fork up to Amsterdam at time 0."""
-    chain = config("Prague")
-    later = ["fusaka", "bpo1", "bpo2", "glamsterdam"]
-    return dict(chain, activations=chain["activations"] + [[f, "time", 0] for f in later])
-
-
 def _prague_v4() -> list:
     """The parameters of a valid payload of the network Prague, for engine_newPayloadV4."""
     case = next(c for c in CASES if c["network"] == "Prague" and c["validationError"] is None)
@@ -84,7 +80,7 @@ def test_v5_without_block_access_list() -> None:
         "engine error: EthLib.Engine.EngineError.invalidParams "
         '"payload: not the fields of version 4"',
     ) as error:
-        engine.new_payload(_amsterdam(), "engine_newPayloadV5", _prague_v4())
+        engine.new_payload(config("Amsterdam"), "engine_newPayloadV5", _prague_v4())
     assert error.value.code == 32602
 
 
@@ -104,7 +100,7 @@ def test_v4_at_amsterdam() -> None:
     with raises(
         engine.EngineError, "engine error: EthLib.Engine.EngineError.unsupportedFork"
     ) as error:
-        engine.new_payload(_amsterdam(), "engine_newPayloadV4", _prague_v4())
+        engine.new_payload(config("Amsterdam"), "engine_newPayloadV4", _prague_v4())
     assert error.value.code == 38005
 
 
@@ -114,7 +110,7 @@ def test_v5_block_access_list_not_rlp(access_list: str) -> None:
     # 0x01 is a byte string, 0xc000 an empty list with a trailing byte, and 0x no item at all.
     params = _prague_v4()
     payload = dict(params[0], blockAccessList=access_list, slotNumber="0x0")
-    status = engine.new_payload(_amsterdam(), "engine_newPayloadV5", [payload, *params[1:]])
+    status = engine.new_payload(config("Amsterdam"), "engine_newPayloadV5", [payload, *params[1:]])
     assert status["status"] == "INVALID"
     assert status["latestValidHash"] is None
     assert status["validationError"] == "406: the block access list is not the RLP form of one"
@@ -129,5 +125,5 @@ def test_v5_without_slot_number() -> None:
         "engine error: EthLib.Engine.EngineError.invalidParams "
         '"payload: not the fields of version 4"',
     ) as error:
-        engine.new_payload(_amsterdam(), "engine_newPayloadV5", [payload, *params[1:]])
+        engine.new_payload(config("Amsterdam"), "engine_newPayloadV5", [payload, *params[1:]])
     assert error.value.code == 32602

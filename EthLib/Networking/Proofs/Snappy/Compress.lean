@@ -71,26 +71,65 @@ theorem matchLength_get (src : ByteArray) (c j : Nat) (hc : c < j) :
 
 /-! ## The scan -/
 
+/-- Bytes in front of the output stay in front when a literal is appended. -/
+theorem emitLiteral_append (pre out src : ByteArray) (lo hi : Nat) :
+    emitLiteral (pre ++ out) src lo hi = pre ++ emitLiteral out src lo hi := by
+  unfold emitLiteral
+  split
+  · have key : ∀ b : ByteArray, src.copySlice lo (pre ++ b) (pre ++ b).size (hi - lo) false =
+        pre ++ src.copySlice lo b b.size (hi - lo) false := by
+      intro b
+      have hx (a : ByteArray) (k : Nat) : a.extract (a.size + k) a.size = ByteArray.empty :=
+        ByteArray.extract_eq_empty_iff.mpr (by omega)
+      simp only [ByteArray.copySlice_eq_append, ByteArray.extract_zero_size, ByteArray.size_data,
+        hx, ByteArray.append_empty, ByteArray.append_assoc]
+    simp only [ByteArray.append_assoc, key]
+  · rfl
+
+/-- Bytes in front of the output stay in front when copies are appended. -/
+theorem emitCopies_append (offset : Nat) (pre out : ByteArray) (len : Nat) :
+    emitCopies offset (pre ++ out) len = pre ++ emitCopies offset out len := by
+  apply ByteArray.ext
+  apply Array.toList_inj.mp
+  rw [toList_emitCopies, ByteArray.data_append, Array.toList_append, ByteArray.data_append,
+    Array.toList_append, toList_emitCopies offset out, List.append_assoc]
+
+/-- The scan writes the same elements after any bytes it starts from. -/
+theorem compressLoop_append (src : ByteArray) (table : Array Nat) (i lit : Nat)
+    (pre out : ByteArray) :
+    compressLoop src table i lit (pre ++ out) = pre ++ compressLoop src table i lit out := by
+  fun_induction compressLoop src table i lit out with
+  | case1 tb i lit out hi s c tb' hc len hl ih =>
+      rw [compressLoop, dite_eq_left hi, dite_eq_left hc, dite_eq_left hl, emitLiteral_append,
+        emitCopies_append, ih]
+  | case2 tb i lit out hi s c tb' hc len hl ih =>
+      rw [compressLoop, dite_eq_left hi, dite_eq_left hc, dite_eq_right hl, ih]
+  | case3 tb i lit out hi s c tb' hc ih =>
+      rw [compressLoop, dite_eq_left hi, dite_eq_right hc, ih]
+  | case4 tb i lit out hi =>
+      rw [compressLoop, dite_eq_right hi, emitLiteral_append]
+
 /-- The scan writes bytes that take an empty output to the whole input.
 
 The invariant: the bytes written so far take the empty output to the input before `lit`.
+
+A literal holds at most 2^32 bytes, so the input must have at most 2^32 bytes.
 -/
-theorem compressLoop_reads (src : ByteArray) (hsz : src.size ≤ maxUncompressedLength)
+theorem compressLoop_reads (src : ByteArray) (hmax : src.size ≤ 2 ^ 32)
     (table : Array Nat) (i lit : Nat) (out : ByteArray) (hli : lit ≤ i) (his : i ≤ src.size)
     (hout : Reads src.size out.data.toList [] (src.data.toList.take lit)) :
     Reads src.size (compressLoop src table i lit out).data.toList [] src.data.toList := by
   have hlen : src.data.toList.length = src.size := Array.length_toList
   have hmin : minCopyLength = 4 := rfl
-  have hmax : src.size ≤ 2 ^ 32 := by simp only [maxUncompressedLength] at hsz; omega
   fun_induction compressLoop src table i lit out with
   | case1 tb i lit out hi s c tb' hc len hl ih =>
       have hle := matchLength_le src c i hc.1 (by omega)
       have hmatch := matchLength_get src c i hc.1
       have hwin : i - c < copyTwoOffsetBound := hc.2
-      obtain ⟨e₁, he₁, hr₁⟩ := emitLiteral_reads (declared := src.size) out hli
-        (by omega) (by omega) (by omega)
-      obtain ⟨e₂, he₂, hr₂⟩ := emitCopies_reads (declared := src.size) (L := src.data.toList)
-        (offset := i - c) (by omega) hwin (matchLength src c i hc.1) i (emitLiteral out src lit i)
+      have hr₁ := emitLiteral_reads (declared := src.size) (src := src) (lo := lit) (hi := i)
+        hli (by omega) (by omega) (by omega)
+      have hr₂ := emitCopies_reads (declared := src.size) (L := src.data.toList)
+        (offset := i - c) (by omega) hwin (matchLength src c i hc.1) (p := i)
         (by omega) (by omega) (by omega) (fun j hj hjn h1 h2 => by
           have hA := hmatch (j - i) (by omega) (by omega) (by omega)
           have e₁ : c + (j - i) = j - (i - c) := by omega
@@ -98,25 +137,33 @@ theorem compressLoop_reads (src : ByteArray) (hsz : src.size ≤ maxUncompressed
           simp only [e₁, e₂] at hA
           simpa [ByteArray.getElem_eq_getElem_data] using hA.symm)
       refine ih (Nat.le_refl _) (by omega) ?_
-      rw [he₂, he₁]
-      exact ((hout.trans hr₁).trans hr₂)
+      rw [toList_emitCopies, toList_emitLiteral _ (by omega : i ≤ src.size)]
+      exact (hout.trans hr₁).trans hr₂
   | case2 tb i lit out hi s c tb' hc len hl ih => exact ih (by omega) (by omega) hout
   | case3 tb i lit out hi s c tb' hc ih => exact ih (by omega) (by omega) hout
   | case4 tb i lit out hi =>
-      obtain ⟨e, he, hr⟩ := emitLiteral_reads (declared := src.size) out (hi := src.size)
+      have hr := emitLiteral_reads (declared := src.size) (hi := src.size)
         (lo := lit) (src := src) (by omega) (Nat.le_refl _) (by omega) (Nat.le_refl _)
-      rw [he]
+      rw [toList_emitLiteral out (Nat.le_refl _)]
       have := hout.trans hr
-      rwa [List.take_of_length_le (by omega)] at this
+      rwa [List.take_of_length_le (l := src.data.toList) (by omega)] at this
 
 /-! ## The round trip -/
+
+/-- A block is the preamble, then the elements that the scan writes from an empty output. -/
+theorem compress_eq (src : ByteArray) :
+    compress src =
+      ⟨(EthLib.Networking.Encoding.Varint.encodeAux src.size preambleMaxLength).toArray⟩ ++
+        compressLoop src (Array.replicate (2 ^ tableBits) 0) 0 0 ByteArray.empty := by
+  rw [compress, ← compressLoop_append, ByteArray.append_empty]
 
 /-- The block of an input of at most 2^32 - 1 bytes decompresses back to the input. -/
 theorem decompress_compress {src : ByteArray} (h : src.size ≤ maxUncompressedLength) :
     decompress (compress src) = .ok src := by
-  have hreads := compressLoop_reads src h (Array.replicate (2 ^ tableBits) 0) 0 0 ByteArray.empty
-    (Nat.le_refl _) (Nat.zero_le _) (by simpa using Reads.nil src.size [])
-  rw [decompress, toList_eq_data_toList, compress, ByteArray.data_append, Array.toList_append,
+  have hmax : src.size ≤ 2 ^ 32 := by simp only [maxUncompressedLength] at h; omega
+  have hreads := compressLoop_reads src hmax (Array.replicate (2 ^ tableBits) 0) 0 0
+    ByteArray.empty (Nat.le_refl _) (Nat.zero_le _) (by simpa using Reads.nil src.size [])
+  rw [decompress, toList_eq_data_toList, compress_eq, ByteArray.data_append, Array.toList_append,
     List.toList_toArray, decompressToArray, readPreamble_encode _ (by simpa using h)]
   generalize compressLoop src (Array.replicate (2 ^ tableBits) 0) 0 0 ByteArray.empty = body
     at hreads ⊢
@@ -134,10 +181,14 @@ theorem decompressList_compress {src : ByteArray} (h : src.size ≤ maxUncompres
   rw [decompress, toList_eq_data_toList] at hd
   simp [decompressList, hd, Except.map]
 
-/-- The block of an input of at most 2^32 - 1 bytes declares the size of the input. -/
+/-- The block of an input of at most 2^32 - 1 bytes declares the size of the input.
+
+The elements that the scan writes follow the preamble.
+-/
 theorem readPreamble_compress {src : ByteArray} (h : src.size ≤ maxUncompressedLength) :
-    ∃ rest, readPreamble (compress src).data.toList = .ok (src.size, rest) := by
-  obtain ⟨rest, hpre⟩ := decompressList_length_eq_declared (decompressList_compress h)
-  exact ⟨rest, by simpa using hpre⟩
+    readPreamble (compress src).data.toList = .ok (src.size,
+      (compressLoop src (Array.replicate (2 ^ tableBits) 0) 0 0 ByteArray.empty).data.toList) := by
+  rw [compress_eq, ByteArray.data_append, Array.toList_append, List.toList_toArray,
+    readPreamble_encode _ (by simpa using h)]
 
 end EthLib.Networking.Proofs.Snappy.Compress

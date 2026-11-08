@@ -1,7 +1,6 @@
 module
 
 public import EthLib.Cryptography.Proofs.Bls.TwistFrobenius
-public import EthLib.Cryptography.Proofs.Bls.G2Subgroup
 
 /-!
 # Proofs: the algebra of the cofactor clearing of `G2`
@@ -11,7 +10,7 @@ The source is RFC 9380, Appendix G.3.
 - The endomorphism `psi` applied twice is `psi2`.
 - `psi2` applied three times negates a point.
 - The cofactor clearing is a group homomorphism on the twist, since `psi` is one.
-- The cofactor clearing keeps a point of order `r` in the subgroup of order `r`.
+- The cofactor clearing maps a point of order dividing `r` to one of order dividing `r`.
 -/
 
 @[expose] public section
@@ -20,10 +19,12 @@ namespace EthLib.Cryptography.Bls.HashToCurve
 
 open EthLib.Cryptography.Bls
 
-private theorem c1Psi_norm : (c1Psi : Fp2) * c1Psi.conjugate = c1Psi2 := by
+/-- The norm of the first constant of `psi` is the constant of `psi2`. -/
+theorem c1Psi_norm : (c1Psi : Fp2) * c1Psi.conjugate = c1Psi2 := by
   decide_eq_at_model [map_c1Psi, map_c1Psi2]
 
-private theorem c2Psi_norm : (c2Psi : Fp2) * c2Psi.conjugate = -1 := by
+/-- The norm of the second constant of `psi` is `-1`. -/
+theorem c2Psi_norm : (c2Psi : Fp2) * c2Psi.conjugate = -1 := by
   decide_eq_at_model [map_c2Psi]
 
 private theorem toAffine_one (x y : Fp2) :
@@ -248,32 +249,25 @@ theorem clearCofactor_group_expression {P : G2} (hP : G2.Valid P) :
 
 /-! ## Subgroup preservation on `r`-torsion and the `cofactorHom` endomorphism -/
 
-/-- `psi` preserves `G2.inSubgroup` on valid twist points. -/
-theorem psi_inSubgroup {P : G2} (hP : G2.Valid P) (hs : G2.inSubgroup P = true) :
-    G2.inSubgroup (psi P) = true := by
-  apply (G2.inSubgroup_iff_modulus_smul_eq_zero (psi_valid hP)).mpr
-  rw [TwistFrobenius.toPoint_psi hP, ← map_nsmul,
-    (G2.inSubgroup_iff_modulus_smul_eq_zero hP).mp hs, map_zero]
+/-- `psi` maps a point of order dividing `r` to one of order dividing `r`. -/
+theorem psi_modulus_smul {P : G2} (hP : G2.Valid P) (hs : Fr.modulus • G2.toPoint P = 0) :
+    Fr.modulus • G2.toPoint (psi P) = 0 := by
+  rw [TwistFrobenius.toPoint_psi hP, ← map_nsmul, hs, map_zero]
 
-/-- `psi2` preserves `G2.inSubgroup` on valid twist points. -/
-theorem psi2_inSubgroup {P : G2} (hP : G2.Valid P) (hs : G2.inSubgroup P = true) :
-    G2.inSubgroup (psi2 P) = true := by
+/-- `psi2` maps a point of order dividing `r` to one of order dividing `r`. -/
+theorem psi2_modulus_smul {P : G2} (hP : G2.Valid P) (hs : Fr.modulus • G2.toPoint P = 0) :
+    Fr.modulus • G2.toPoint (psi2 P) = 0 := by
   rw [← psi_psi_eq_psi2]
-  exact psi_inSubgroup (psi_valid hP) (psi_inSubgroup hP hs)
+  exact psi_modulus_smul (psi_valid hP) (psi_modulus_smul hP hs)
 
-/-- `clearCofactor` preserves `G2.inSubgroup` whenever the input is already in the `r`-subgroup. -/
-theorem clearCofactor_inSubgroup_of_inSubgroup {P : G2} (hP : G2.Valid P)
-    (hs : G2.inSubgroup P = true) : G2.inSubgroup (clearCofactor P) = true := by
-  apply (G2.inSubgroup_iff_modulus_smul_eq_zero (clearCofactor_valid hP)).mpr
+/-- The cofactor clearing maps a point of order dividing `r` to one of order dividing `r`. -/
+theorem clearCofactor_modulus_smul {P : G2} (hP : G2.Valid P)
+    (h0 : Fr.modulus • G2.toPoint P = 0) : Fr.modulus • G2.toPoint (clearCofactor P) = 0 := by
   rw [clearCofactor_group_expression hP]
-  have h0 := (G2.inSubgroup_iff_modulus_smul_eq_zero hP).mp hs
-  have h1 := (G2.inSubgroup_iff_modulus_smul_eq_zero (psi_valid hP)).mp
-    (psi_inSubgroup hP hs)
-  have hd : G2.inSubgroup (G2.double P) = true := by
-    apply (G2.inSubgroup_iff_modulus_smul_eq_zero (G2.valid_double hP)).mpr
+  have h1 := psi_modulus_smul hP h0
+  have hd : Fr.modulus • G2.toPoint (G2.double P) = 0 := by
     rw [G2.toPoint_double hP, nsmul_add, h0, zero_add]
-  have h2 := (G2.inSubgroup_iff_modulus_smul_eq_zero (psi2_valid (G2.valid_double hP))).mp
-    (psi2_inSubgroup (G2.valid_double hP) hd)
+  have h2 := psi2_modulus_smul (G2.valid_double hP) hd
   simp only [nsmul_sub, nsmul_add, h0, h1, h2]
   rw [smul_comm Fr.modulus (blsX * blsX + blsX),
     smul_comm Fr.modulus blsX, h0, h1]

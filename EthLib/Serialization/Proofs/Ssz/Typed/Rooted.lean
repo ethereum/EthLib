@@ -329,6 +329,12 @@ instance {length : Nat} [NeZero length] : LawfulSszType (RootedVector α length)
       simp only [read, Functor.map, Except.map, Except.ok.injEq] at made
       subst made
       exact LawfulSszType.toValue_of_ofValue (α := Vector α length) read
+  ofValue_ne_error {value fault} fits made := by
+    change ofVector <$> (ofValue value : Except Err (Vector α length)) = .error fault at made
+    cases read : (ofValue value : Except Err (Vector α length)) with
+    | error fault => exact LawfulSszType.ofValue_ne_error (α := (Vector α length)) fits read
+    | ok w => simp [read, Functor.map, Except.map] at made
   root_eq := RootedVector.root_eq
+  encode_eq v := LawfulSszType.encode_eq (α := Vector α length) v.elements
 
 end EthLib.Serialization.Ssz

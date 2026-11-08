@@ -1,7 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
-public import EthLib.Base.Exports
+public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Cryptography.Ethash
 
 /-!
@@ -9,9 +8,11 @@ public import EthLib.Cryptography.Ethash
 
 The C exports of the sizes, the seed, the cache and the dataset items of Ethash.
 
-A number crosses the boundary as its big-endian bytes.
+Their arguments and results are typed Python values, and a number crosses as an `int`.
 
-A cache crosses it as its items in order, 64 bytes each.
+A cache crosses the boundary as its items in order, 64 bytes each.
+
+An argument of the wrong type fails with code 0.
 
 A dataset item needs a cache of at least one item, and the export rejects any other with code 0.
 
@@ -22,16 +23,7 @@ public section
 
 namespace EthLib.Cryptography.Ethash.Exports
 
-open EthLib.Base (bytesToNat natToBytes)
-open EthLib.Exports (Result)
-
-/-- The number that big-endian bytes encode. -/
-def numberOf (bytes : ByteArray) : Nat :=
-  bytesToNat bytes.toList
-
-/-- The shortest big-endian bytes of a number, one byte for 0. -/
-def bytesOfNumber (n : Nat) : ByteArray :=
-  ⟨(natToBytes (n.log2 / 8 + 1) n).toArray⟩
+open EthLib.Exports (Result PyValue pyExport)
 
 /-- The bytes of a cache: its items in order, 64 bytes each. -/
 def bytesOfCache (c : Array Item) : ByteArray :=
@@ -47,42 +39,60 @@ def cacheOfBytes (bytes : ByteArray) : Result (Array Item) := do
 
 /-- The bytes in the cache of the epoch of a block. -/
 @[export eth_ethash_cache_size]
-def cacheSizeExport (number : ByteArray) : ByteArray :=
-  bytesOfNumber (cacheSize (numberOf number))
+def cacheSizeExport (args : PyValue) : Result PyValue :=
+  pyExport (fun number => pure (cacheSize number)) args
 
 /-- The bytes in the dataset of the epoch of a block. -/
 @[export eth_ethash_dataset_size]
-def datasetSizeExport (number : ByteArray) : ByteArray :=
-  bytesOfNumber (datasetSize (numberOf number))
+def datasetSizeExport (args : PyValue) : Result PyValue :=
+  pyExport (fun number => pure (datasetSize number)) args
 
 /-- The 32-byte seed of the epoch of a block. -/
 @[export eth_ethash_seed]
-def seedExport (number : ByteArray) : ByteArray :=
-  seed (numberOf number)
+def seedExport (args : PyValue) : Result PyValue :=
+  pyExport (fun number => pure (seed number)) args
 
 /-- The cache of the epoch of a block, its items in order, 64 bytes each. -/
 @[export eth_ethash_cache]
-def cacheExport (number : ByteArray) : ByteArray :=
-  bytesOfCache (cache (numberOf number))
+def cacheExport (args : PyValue) : Result PyValue :=
+  pyExport (fun number => pure (bytesOfCache (cache number))) args
 
 /-- The 64-byte dataset item at an index, from a cache given as its bytes. -/
-@[export eth_ethash_dataset_item]
-def datasetItemExport (cacheBytes index : ByteArray) : Result ByteArray := do
+def datasetItemOf (args : ByteArray × Nat) : Result ByteArray := do
+  let (cacheBytes, index) := args
   let c ← cacheOfBytes cacheBytes
-  pure (bytesOfWords (datasetItem c (numberOf index)))
+  pure (bytesOfWords (datasetItem c index))
+
+/-- The 64-byte dataset item at an index, from a cache given as its bytes.
+
+The arguments are the cache and the index, and a cache of the wrong size fails with code 0. -/
+@[export eth_ethash_dataset_item]
+def datasetItemExport (args : PyValue) : Result PyValue :=
+  pyExport datasetItemOf args
 
 /-- The 32-byte mix digest and the 32-byte result of the proof-of-work function, from a cache.
 
+The arguments are the size of the dataset, the cache, the header hash and the nonce.
+
 The header hash must be 32 bytes and the nonce 8 bytes. -/
-@[export eth_ethash_hashimoto_light]
-def hashimotoLightExport (datasetSize cacheBytes headerHash nonce : ByteArray) :
-    Result ByteArray := do
+def hashimotoLightOf (args : Nat × ByteArray × ByteArray × ByteArray) :
+    Result (ByteArray × ByteArray) := do
+  let (datasetSize, cacheBytes, headerHash, nonce) := args
   let c ← cacheOfBytes cacheBytes
   if headerHash.size ≠ 32 then
     throw (0, s!"Ethash: a header hash is 32 bytes, got {headerHash.size}")
   if nonce.size ≠ 8 then
     throw (0, s!"Ethash: a nonce is 8 bytes, got {nonce.size}")
-  let out := hashimotoLight (numberOf datasetSize) c headerHash nonce
-  pure (out.mixDigest ++ out.result)
+  let out := hashimotoLight datasetSize c headerHash nonce
+  pure (out.mixDigest, out.result)
+
+/-- The 32-byte mix digest and the 32-byte result of the proof-of-work function, from a cache.
+
+The arguments are the size of the dataset, the cache, the header hash and the nonce.
+
+The result is the pair of the mix digest and the result, and a wrong size fails with code 0. -/
+@[export eth_ethash_hashimoto_light]
+def hashimotoLightExport (args : PyValue) : Result PyValue :=
+  pyExport hashimotoLightOf args
 
 end EthLib.Cryptography.Ethash.Exports

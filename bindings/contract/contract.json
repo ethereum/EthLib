@@ -860,7 +860,7 @@
    "error_class": "XmssError",
    "docstring":
    "The leaf index a 2404-byte signature carries.\n\nIt reads only the first 4 bytes.\n\nIt does not verify the signature, so the index is only what the signer claims.\n\nA caller can use it to require a given leaf before verifying.\n\nFor example, a proof of possession requires leaf 0."},
-  {"summary": "The public key `PK.seed | PK.root` of `SK.seed`.",
+  {"summary": "The public key grown from a seed.",
    "signature": "(seed: bytes) -> bytes",
    "operation": "EthLib.Cryptography.Sphincs.Exports.keyGenExport",
    "method": "sphincs_key_gen",
@@ -874,8 +874,8 @@
       {"constructor": "badMessageSize", "code": 5}]}],
    "error_class": "SphincsError",
    "docstring":
-   "The public key `PK.seed | PK.root` of `SK.seed`.\n\nIt builds the whole top tree, `2^10` one-time keys."},
-  {"summary": "`Sign(SK, M)`: sign a message.",
+   "The public key grown from a seed.\n\nIt builds the whole top tree, `2^10` one-time keys."},
+  {"summary": "`Sign(sk, m)`: sign a message.",
    "signature": "(seed: bytes, message: bytes) -> bytes",
    "operation": "EthLib.Cryptography.Sphincs.sign",
    "method": "sphincs_sign",
@@ -889,9 +889,9 @@
       {"constructor": "badMessageSize", "code": 5}]}],
    "error_class": "SphincsError",
    "docstring":
-   "`Sign(SK, M)`: sign a message.\n\n1. The randomizer and the message give the digest: the index and one leaf per FORS tree.\n2. FORS instance `idx` opens those leaves.\n3. Each layer's key signs what the layer below gives, with its path.\n\n# Warning\n\nNever sign more than `2^30` messages with one secret key.\n\n# Errors\n\n- A one-time signature finds no codeword."},
+   "`Sign(sk, m)`: sign a message.\n\n1. The randomizer and the message give the digest: the index and one leaf per FORS tree.\n2. FORS instance `idx` opens those leaves.\n3. Each layer's key signs what the layer below gives, with its path.\n\n# Warning\n\nNever sign more than `2^30` messages with one secret key.\n\n# Errors\n\n- A one-time signature finds no codeword."},
   {"summary":
-   "`Ver(PK, M, sigma)`: whether a signature signs a message under a public key.",
+   "`Ver(pk, m, sigma)`: whether a signature signs a message under a public key.",
    "signature": "(public_key: bytes, message: bytes, signature: bytes) -> bool",
    "operation": "EthLib.Cryptography.Sphincs.verify",
    "method": "sphincs_verify",
@@ -905,7 +905,7 @@
       {"constructor": "badMessageSize", "code": 5}]}],
    "error_class": "SphincsError",
    "docstring":
-   "`Ver(PK, M, sigma)`: whether a signature signs a message under a public key.\n\nA yes or a no, never a reason.\n\nWhich step rejected a well-formed signature carries no meaning for the caller."},
+   "`Ver(pk, m, sigma)`: whether a signature signs a message under a public key.\n\nA yes or a no, never a reason.\n\nWhich step rejected a well-formed signature carries no meaning for the caller."},
   {"summary":
    "SHA-256 of a byte string shorter than 2^61 bytes, the bound of FIPS 180-4 §1.",
    "signature": "(data: bytes) -> bytes",
@@ -935,43 +935,43 @@
    "Keccak-512 of a byte string: `Keccak[1024](M, 512)` of FIPS 202 §5.2.\n\nIt absorbs at a rate of 72 bytes, with the same permutation as Keccak-256.\n\nOne block of output holds the 64 digest bytes, so no further permutation is needed."},
   {"summary":
    "The bytes in the cache of the epoch of a block: `c_size` of the Yellow Paper, J.2.",
-   "signature": "(number: bytes) -> bytes",
+   "signature": "(block_number: int) -> int",
    "operation": "EthLib.Cryptography.Ethash.cacheSize",
    "method": "ethash_cache_size",
    "errors": [],
-   "error_class": null,
+   "error_class": "EthashError",
    "docstring":
    "The bytes in the cache of the epoch of a block: `c_size` of the Yellow Paper, J.2.\n\nThe search starts one hash below the linear size."},
   {"summary":
    "The bytes in the dataset of the epoch of a block: `d_size` of the Yellow Paper, J.2.",
-   "signature": "(number: bytes) -> bytes",
+   "signature": "(block_number: int) -> int",
    "operation": "EthLib.Cryptography.Ethash.datasetSize",
    "method": "ethash_dataset_size",
    "errors": [],
-   "error_class": null,
+   "error_class": "EthashError",
    "docstring":
    "The bytes in the dataset of the epoch of a block: `d_size` of the Yellow Paper, J.2.\n\nThe search starts one mix below the linear size."},
   {"summary":
    "The seed of the epoch of a block: `C_seedhash` of the Yellow Paper, J.3.1.",
-   "signature": "(number: bytes) -> bytes",
+   "signature": "(block_number: int) -> bytes",
    "operation": "EthLib.Cryptography.Ethash.seed",
    "method": "ethash_seed",
    "errors": [],
-   "error_class": null,
+   "error_class": "EthashError",
    "docstring":
    "The seed of the epoch of a block: `C_seedhash` of the Yellow Paper, J.3.1.\n\nIt is 32 zero bytes at epoch 0, and the Keccak-256 digest of the previous seed after."},
   {"summary":
    "The cache of the epoch of a block: `c` of the Yellow Paper, J.3.2.",
-   "signature": "(number: bytes) -> bytes",
+   "signature": "(block_number: int) -> bytes",
    "operation": "EthLib.Cryptography.Ethash.cache",
    "method": "ethash_cache",
    "errors": [],
-   "error_class": null,
+   "error_class": "EthashError",
    "docstring":
    "The cache of the epoch of a block: `c` of the Yellow Paper, J.3.2.\n\nIt has one item per 64 bytes of the cache size, after three rounds over the initial cache."},
   {"summary":
    "The dataset item at an index, from the cache: `E_datasetitem` of the Yellow Paper, J.3.3.",
-   "signature": "(cache: bytes, index: bytes) -> bytes",
+   "signature": "(cache: bytes, index: int) -> bytes",
    "operation": "EthLib.Cryptography.Ethash.datasetItem",
    "method": "ethash_dataset_item",
    "errors": [],
@@ -981,13 +981,13 @@
   {"summary":
    "The 32-byte mix digest and the 32-byte result of the proof-of-work function, from a cache.",
    "signature":
-   "(dataset_size: bytes, cache: bytes, header_hash: bytes, nonce: bytes) -> bytes",
+   "(dataset_size: int, cache: bytes, header_hash: bytes, nonce: bytes) -> tuple[bytes, bytes]",
    "operation": "EthLib.Cryptography.Ethash.Exports.hashimotoLightExport",
    "method": "ethash_hashimoto_light",
    "errors": [],
    "error_class": "EthashError",
    "docstring":
-   "The 32-byte mix digest and the 32-byte result of the proof-of-work function, from a cache.\n\nThe header hash must be 32 bytes and the nonce 8 bytes."},
+   "The 32-byte mix digest and the 32-byte result of the proof-of-work function, from a cache.\n\nThe arguments are the size of the dataset, the cache, the header hash and the nonce.\n\nThe result is the pair of the mix digest and the result, and a wrong size fails with code 0."},
   {"summary":
    "Keccak-f[1600], FIPS 202 §3.4: Keccak-p[1600, 24], rounds 0 to 23 in order.",
    "signature": "(state: bytes) -> bytes",
@@ -1045,18 +1045,18 @@
    "docstring":
    "The value of `key` in the trie of `root`, as the nodes of `proof` show.\n\nThe proof is an RLP list of byte strings, the encodings of the nodes.\n\nNo bytes means that `key` is not set, since no value is empty.\n\nA root of another length than 32 bytes, or a proof that does not verify, is an error."},
   {"summary":
-   "The hex-prefix encoding of a path, with one nibble in each input byte.",
-   "signature": "(nibbles: bytes, is_leaf: bool) -> bytes",
+   "The hex-prefix encoding of a path of nibbles, for a leaf or an extension.",
+   "signature": "(nibbles: list[int], is_leaf: bool) -> bytes",
    "operation": "EthLib.Execution.Trie.Exports.hexPrefixExport",
    "method": "trie_hex_prefix",
    "errors": [],
    "error_class": "TrieError",
    "docstring":
-   "The hex-prefix encoding of a path, with one nibble in each input byte.\n\nA byte of 16 or more is not a nibble, and fails with code 0."},
+   "The hex-prefix encoding of a path of nibbles, for a leaf or an extension.\n\nThe arguments are the list of the nibbles and whether the path ends at a leaf.\n\nA value of 16 or more is not a nibble, and fails with code 0."},
   {"summary":
-   "Check an answer of `eth_getProof` against a state root, with Keccak-256.",
-   "signature": "(root: bytes, answer: bytes) -> bytes",
-   "operation": "EthLib.Execution.Trie.Exports.verifyAccountProofExport",
+   "Check an answer of `eth_getProof` against a 32-byte state root, with Keccak-256.",
+   "signature": "(root: bytes, answer: dict) -> list[bool] | None",
+   "operation": "EthLib.Engine.Exports.verifyAccountProofExport",
    "method": "trie_verify_account_proof",
    "errors":
    [{"type": "EthLib.Execution.State.AccountProofError",
@@ -1069,7 +1069,7 @@
       {"constructor": "slotMismatch", "code": 506}]}],
    "error_class": "TrieError",
    "docstring":
-   "Check an answer of `eth_getProof` against a state root, with Keccak-256.\n\nThe answer is the RLP list of the address, the nonce, the balance, the code hash and storage root.\n\nThe list goes on with the nodes of the account proof, then the slots.\n\nEach slot is the list of the slot on 32 bytes, the word, and the nodes of its proof.\n\nNo bytes means that the address has no account, and that no field or slot was judged.\n\nOtherwise the byte 1 comes first, then one byte for each slot: 1 if it is set, 0 if it is not.\n\nA root of another length than 32 bytes, or an answer that does not decode, has code 0."},
+   "Check an answer of `eth_getProof` against a 32-byte state root, with Keccak-256.\n\nThe arguments are the state root and the `result` object of the response.\n\n`None` means that the proof shows no account at the address, with the nonce, balance and slots 0.\n\nOtherwise each slot is true when it is set and holds its value, and false when it is not set.\n\nA field that is missing or out of its pattern, or a root that is not 32 bytes, has code 0.\n\nAn answer that does not hold has the code of its fault."},
   {"summary":
    "The output of an opening at an index under a root, or no bytes when verification rejects.",
    "signature": "(root: bytes, index: int, opening: bytes) -> bytes | None",
@@ -1099,18 +1099,36 @@
    "operation": "EthLib.Cryptography.Hash.Crc32.digest",
    "method": "crc32",
    "errors": [],
-   "error_class": null,
+   "error_class": "BindingError",
    "docstring":
    "The four digest bytes of CRC-32: the highest power of each byte at its least significant bit."},
+  {"summary":
+   "CRC-32 as a number: the digest bytes read least significant byte first.",
+   "signature": "(data: bytes) -> int",
+   "operation": "EthLib.Cryptography.Hash.Crc32.crc32",
+   "method": "crc32_number",
+   "errors": [],
+   "error_class": "BindingError",
+   "docstring":
+   "CRC-32 as a number: the digest bytes read least significant byte first.\n\nIt is the value of the sample code of RFC 1952 §8, and CRC-32/ISO-HDLC of the CRC catalogue."},
   {"summary":
    "The four digest bytes of RFC 3720 §12.1: the CRC, which is R(x) complemented.",
    "signature": "(data: bytes) -> bytes",
    "operation": "EthLib.Cryptography.Hash.Crc32c.digest",
    "method": "crc32c",
    "errors": [],
-   "error_class": null,
+   "error_class": "BindingError",
    "docstring":
    "The four digest bytes of RFC 3720 §12.1: the CRC, which is R(x) complemented.\n\n- Byte 0 holds x^31 down to x^24, byte 1 holds x^23 down to x^16, and so on.\n- In each byte, the highest power goes to bit 7, the least significant bit (§2.3.3)."},
+  {"summary":
+   "CRC-32C as a number: the digest bytes read least significant byte first.",
+   "signature": "(data: bytes) -> int",
+   "operation": "EthLib.Cryptography.Hash.Crc32c.crc32c",
+   "method": "crc32c_number",
+   "errors": [],
+   "error_class": "BindingError",
+   "docstring":
+   "CRC-32C as a number: the digest bytes read least significant byte first.\n\nIt is CRC-32/ISCSI of the CRC catalogue."},
   {"summary": "The forward cipher `CIPH_K` of FIPS 197 §5 on one block.",
    "signature": "(key: bytes, block: bytes) -> bytes",
    "operation": "EthLib.Cryptography.Aes.Exports.encryptBlock",
@@ -1538,7 +1556,8 @@
    "The bytes of a new \"v4\" record of a private key, a sequence number and other pairs.\n\nThe other pairs come as the RLP list `[k1, v1, k2, v2, ...]`, in key order."},
   {"summary":
    "The consensus entries of a record at the named fork, with `count` attestation subnets.",
-   "signature": "(fork: str, count: int, record: bytes) -> bytes",
+   "signature":
+   "(fork: str, count: int, record: bytes) -> tuple[tuple[bytes, bytes, int], bytes | None, bytes | None, int | None, bytes | None]",
    "operation": "EthLib.Networking.Enr.Exports.consensusEntriesExport",
    "method": "enr_consensus_entries",
    "errors":
@@ -1568,10 +1587,10 @@
       {"constructor": "cgc", "code": 104}]}],
    "error_class": "EnrError",
    "docstring":
-   "The consensus entries of a record at the named fork, with `count` attestation subnets.\n\nThey come back as the 16 SSZ bytes of `eth2`, then `attnets`, `syncnets`, `cgc` and `nfd`.\n\nEach of the four is the byte 0 when absent, or the byte 1 and its SSZ bytes."},
+   "The consensus entries of a record at the named fork, with `count` attestation subnets.\n\nThe arguments are the name of the fork, the number of attestation subnets and the record.\n\nThey come back as `eth2`, as its three fields, then `attnets`, `syncnets`, `cgc` and `nfd`.\n\nEach of the last four is `None` when absent, and the bitvectors are their SSZ bytes."},
   {"summary":
-   "The fork identifier of the \"eth\" entry of a record, as RLP, or no bytes without the entry.",
-   "signature": "(record: bytes) -> bytes",
+   "The fork identifier of the \"eth\" entry of a record, as its hash and its next fork.",
+   "signature": "(record: bytes) -> tuple[bytes, int] | None",
    "operation": "EthLib.Networking.Enr.Exports.ethForkIdExport",
    "method": "enr_eth_fork_id",
    "errors":
@@ -1595,7 +1614,7 @@
       {"constructor": "signing", "code": 16}]}],
    "error_class": "EnrError",
    "docstring":
-   "The fork identifier of the \"eth\" entry of a record, as RLP, or no bytes without the entry.\n\nAn entry that is not a list starting with a fork identifier has code 0."},
+   "The fork identifier of the \"eth\" entry of a record, as its hash and its next fork.\n\nIt is `None` without the entry, and an entry that does not start with one has code 0."},
   {"summary":
    "The logarithmic distance: the number of bits of the distance, and 0 for equal IDs.",
    "signature": "(a: bytes, b: bytes) -> int",
@@ -1617,7 +1636,7 @@
   {"summary":
    "The session keys from the shared secret and the challenge that the recipient sent.",
    "signature":
-   "(ephemeral_key: bytes, dest_pubkey: bytes, node_id_a: bytes, node_id_b: bytes, challenge_data: bytes) -> bytes",
+   "(ephemeral_key: bytes, dest_pubkey: bytes, node_id_a: bytes, node_id_b: bytes, challenge_data: bytes) -> tuple[bytes, bytes]",
    "operation": "EthLib.Networking.Discv5.deriveKeys",
    "method": "discv5_derive_keys",
    "errors": [],
@@ -1644,9 +1663,8 @@
    "error_class": "Discv5Error",
    "docstring":
    "Whether an ID signature of 64 bytes `r || s` verifies under the public key of node A."},
-  {"summary":
-   "The packet that a destination node reads, as a JSON object of hex strings.",
-   "signature": "(dest_id: bytes, packet: bytes) -> bytes",
+  {"summary": "The packet that a destination node reads, as a `dict`.",
+   "signature": "(dest_id: bytes, packet: bytes) -> dict",
    "operation": "EthLib.Networking.Discv5.Exports.decodePacketExport",
    "method": "discv5_decode_packet",
    "errors":
@@ -1661,7 +1679,7 @@
       {"constructor": "fieldTooLong", "code": 7}]}],
    "error_class": "Discv5Error",
    "docstring":
-   "The packet that a destination node reads, as a JSON object of hex strings.\n\nIt holds the flag, the masking IV, the nonce, the authdata fields and the message.\n\nIt also holds the additional data of the message."},
+   "The packet that a destination node reads, as a `dict`.\n\nThe arguments are the node ID of the destination and the packet.\n\nIt holds the flag, the masking IV, the nonce, the authdata fields and the message.\n\nIt also holds the additional data of the message."},
   {"summary":
    "The bytes of the packet that the decoder reads, written again by the encoder.",
    "signature": "(dest_id: bytes, packet: bytes) -> bytes",
@@ -1701,8 +1719,8 @@
    "docstring":
    "The plaintext of an encrypted message, or an error if it does not authenticate."},
   {"summary":
-   "The message of a plaintext, as a JSON object with its type and its fields.",
-   "signature": "(plaintext: bytes) -> bytes",
+   "The message of a plaintext, as a `dict` of its type and its fields.",
+   "signature": "(plaintext: bytes) -> dict",
    "operation": "EthLib.Networking.Discv5.Exports.decodeMessageExport",
    "method": "discv5_decode_message",
    "errors":
@@ -1715,7 +1733,7 @@
       {"constructor": "invalid", "code": 105}]}],
    "error_class": "Discv5Error",
    "docstring":
-   "The message of a plaintext, as a JSON object with its type and its fields."},
+   "The message of a plaintext, as a `dict` of its type and its fields."},
   {"summary":
    "The plaintext of the decoded message, written again by the encoder.",
    "signature": "(plaintext: bytes) -> bytes",
@@ -1732,10 +1750,9 @@
    "error_class": "Discv5Error",
    "docstring":
    "The plaintext of the decoded message, written again by the encoder."},
-  {"summary":
-   "Node B's WHOAREYOU packet for node A, and its challenge data, as a JSON object.",
+  {"summary": "Node B's WHOAREYOU packet for node A, and its challenge data.",
    "signature":
-   "(dest_id: bytes, masking_iv: bytes, nonce: bytes, id_nonce: bytes, enr_seq: bytes) -> bytes",
+   "(dest_id: bytes, masking_iv: bytes, nonce: bytes, id_nonce: bytes, enr_seq: int) -> tuple[bytes, bytes]",
    "operation": "EthLib.Networking.Discv5.Exports.makeWhoareyouExport",
    "method": "discv5_make_whoareyou",
    "errors":
@@ -1757,9 +1774,9 @@
       {"constructor": "noSession", "code": 205}]}],
    "error_class": "Discv5Error",
    "docstring":
-   "Node B's WHOAREYOU packet for node A, and its challenge data, as a JSON object.\n\nThe `enr-seq` is 8 big-endian bytes."},
-  {"summary": "Node A's reading of a WHOAREYOU packet, as a JSON object.",
-   "signature": "(dest_id: bytes, packet: bytes) -> bytes",
+   "Node B's WHOAREYOU packet for node A, and its challenge data.\n\nThe arguments are the node ID of node A, the masking IV, the nonce, the ID nonce and the seq."},
+  {"summary": "Node A's reading of a WHOAREYOU packet, as a `dict`.",
+   "signature": "(dest_id: bytes, packet: bytes) -> dict",
    "operation": "EthLib.Networking.Discv5.Exports.readWhoareyouExport",
    "method": "discv5_read_whoareyou",
    "errors":
@@ -1780,7 +1797,8 @@
       {"constructor": "wrongFlag", "code": 204},
       {"constructor": "noSession", "code": 205}]}],
    "error_class": "Discv5Error",
-   "docstring": "Node A's reading of a WHOAREYOU packet, as a JSON object."},
+   "docstring":
+   "Node A's reading of a WHOAREYOU packet, as a `dict`.\n\nThe arguments are the node ID of node A and the packet."},
   {"summary":
    "An ordinary message packet from one node to another, under a session key.",
    "signature":
@@ -1834,9 +1852,9 @@
    "docstring":
    "The plaintext of an ordinary message packet from a given node, under its session key.\n\nIt fails when the packet names another source node ID."},
   {"summary":
-   "Node A's handshake message packet for node B, and its session keys, as a JSON object.",
+   "Node A's handshake message packet for node B, and its two session keys.",
    "signature":
-   "(ephemeral_key: bytes, static_key: bytes, challenge_data: bytes, src_id: bytes, dest_id: bytes, dest_pubkey: bytes, masking_iv: bytes, nonce: bytes, record: bytes, plaintext: bytes) -> bytes",
+   "(ephemeral_key: bytes, static_key: bytes, challenge_data: bytes, src_id: bytes, dest_id: bytes, dest_pubkey: bytes, masking_iv: bytes, nonce: bytes, record: bytes, plaintext: bytes) -> tuple[bytes, bytes, bytes]",
    "operation": "EthLib.Networking.Discv5.Exports.sealHandshakeExport",
    "method": "discv5_seal_handshake",
    "errors":
@@ -1863,11 +1881,10 @@
       {"constructor": "notHandshake", "code": 310}]}],
    "error_class": "Discv5Error",
    "docstring":
-   "Node A's handshake message packet for node B, and its session keys, as a JSON object."},
-  {"summary":
-   "Node B's reading of a handshake message packet, as a JSON object.",
+   "Node A's handshake message packet for node B, and its two session keys.\n\nThe arguments are the ephemeral key and the static key of node A, the challenge data and the IDs.\n\nThen come the public key of node B, the masking IV, the nonce, the record and the plaintext."},
+  {"summary": "Node B's reading of a handshake message packet, as a `dict`.",
    "signature":
-   "(static_key: bytes, challenge_data: bytes, dest_id: bytes, src_pubkey: bytes, packet: bytes) -> bytes",
+   "(static_key: bytes, challenge_data: bytes, dest_id: bytes, src_pubkey: bytes, packet: bytes) -> dict",
    "operation": "EthLib.Networking.Discv5.Exports.openHandshakeExport",
    "method": "discv5_open_handshake",
    "errors":
@@ -1894,32 +1911,35 @@
       {"constructor": "notHandshake", "code": 310}]}],
    "error_class": "Discv5Error",
    "docstring":
-   "Node B's reading of a handshake message packet, as a JSON object."},
-  {"summary": "The preset of a name, as a JSON object.",
-   "signature": "(name: str) -> bytes",
+   "Node B's reading of a handshake message packet, as a `dict`.\n\nThe arguments are the static key of node B, the challenge data and the node ID of node B.\n\nThen come the public key of node A and the packet."},
+  {"summary": "The preset of a name, as a `dict`.",
+   "signature": "(name: str) -> dict[str, int]",
    "operation": "EthLib.Consensus.Exports.presetExport",
    "method": "consensus_preset",
    "errors": [],
    "error_class": "ConsensusError",
-   "docstring": "The preset of a name, as a JSON object."},
-  {"summary": "The configuration of a name, as a JSON object.",
-   "signature": "(name: str) -> bytes",
+   "docstring":
+   "The preset of a name, as a `dict`.\n\nThe argument is the name of the preset."},
+  {"summary": "The configuration of a name, as a `dict`.",
+   "signature": "(name: str) -> dict[str, Any]",
    "operation": "EthLib.Consensus.Exports.configExport",
    "method": "consensus_config",
    "errors": [],
    "error_class": "ConsensusError",
-   "docstring": "The configuration of a name, as a JSON object."},
-  {"summary": "The parameters of a preset at a fork, as a JSON object.",
-   "signature": "(name: str, fork: str) -> bytes",
+   "docstring":
+   "The configuration of a name, as a `dict`.\n\nThe argument is the name of the configuration."},
+  {"summary": "The parameters of a preset at a fork, as a `dict`.",
+   "signature": "(name: str, fork: str) -> dict[str, int]",
    "operation": "EthLib.Consensus.Exports.parametersExport",
    "method": "consensus_parameters",
    "errors": [],
    "error_class": "ConsensusError",
-   "docstring": "The parameters of a preset at a fork, as a JSON object."},
+   "docstring":
+   "The parameters of a preset at a fork, as a `dict`.\n\nThe arguments are the name of the preset and the name of the fork."},
   {"summary":
-   "The custody groups of a node ID of 32 bytes, most significant first.",
+   "The custody groups of a node ID, in increasing order, as a list.",
    "signature":
-   "(name: str, node_id: bytes, custody_group_count: int) -> bytes",
+   "(name: str, node_id: int, custody_group_count: int) -> list[int]",
    "operation": "EthLib.Consensus.Exports.getCustodyGroupsExport",
    "method": "consensus_get_custody_groups",
    "errors":
@@ -1930,9 +1950,9 @@
       {"constructor": "outOfFuel", "code": 3}]}],
    "error_class": "ConsensusError",
    "docstring":
-   "The custody groups of a node ID of 32 bytes, most significant first."},
-  {"summary": "The columns of a custody group.",
-   "signature": "(name: str, custody_group: int) -> bytes",
+   "The custody groups of a node ID, in increasing order, as a list.\n\nThe arguments are the name of the configuration, the node ID and the custody group count."},
+  {"summary": "The columns of a custody group, as a list.",
+   "signature": "(name: str, custody_group: int) -> list[int]",
    "operation": "EthLib.Consensus.Exports.computeColumnsForCustodyGroupExport",
    "method": "consensus_compute_columns_for_custody_group",
    "errors":
@@ -1942,10 +1962,12 @@
       {"constructor": "groupOutOfRange", "code": 2},
       {"constructor": "outOfFuel", "code": 3}]}],
    "error_class": "ConsensusError",
-   "docstring": "The columns of a custody group."},
+   "docstring":
+   "The columns of a custody group, as a list.\n\nThe arguments are the name of the preset and the configuration, and the custody group."},
   {"summary":
-   "The root of the value that the bytes encode, then the bytes of that value.",
-   "signature": "(name: str, fork: str, type: str, data: bytes) -> bytes",
+   "The root of the value that the bytes encode, and the bytes of that value, as a pair.",
+   "signature":
+   "(name: str, fork: str, type: str, data: bytes) -> tuple[bytes, bytes]",
    "operation": "EthLib.Consensus.Exports.sszStaticExport",
    "method": "consensus_ssz_static",
    "errors":
@@ -2028,11 +2050,11 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
    "docstring":
-   "The root of the value that the bytes encode, then the bytes of that value.\n\nThe preset, the fork and the container are named in UTF-8."},
+   "The root of the value that the bytes encode, and the bytes of that value, as a pair.\n\nThe arguments are the name of the preset, the fork, the container and the bytes."},
   {"summary":
-   "The node at a generalized index of the value that the bytes encode, then its branch.",
+   "The node at a generalized index of the value that the bytes encode, and its branch, as a pair.",
    "signature":
-   "(name: str, fork: str, type: str, data: bytes, gindex: int) -> bytes",
+   "(name: str, fork: str, type: str, data: bytes, gindex: int) -> tuple[bytes, list[bytes]]",
    "operation": "EthLib.Consensus.Exports.merkleProofExport",
    "method": "consensus_merkle_proof",
    "errors":
@@ -2115,7 +2137,7 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
    "docstring":
-   "The node at a generalized index of the value that the bytes encode, then its branch.\n\nThe branch lists the sibling of each node on the path, from the node up to the root."},
+   "The node at a generalized index of the value that the bytes encode, and its branch, as a pair.\n\nThe arguments are the name of the preset, the fork, the container, the bytes and the index.\n\nThe branch lists the sibling of each node on the path, from the node up to the root."},
   {"summary":
    "Whether the branch of a blob sidecar, given as bytes, climbs to the body root of its header.",
    "signature": "(name: str, fork: str, data: bytes) -> bool",
@@ -2206,7 +2228,7 @@
   {"summary":
    "The state after a block operation of a handler of the vectors, as SSZ bytes.",
    "signature":
-   "(name: str, fork: str, handler: str, pre: bytes, operation: bytes, config: bytes, verify: bool, execution_valid: bool) -> bytes",
+   "(name: str, fork: str, handler: str, pre: bytes, operation: bytes, config: dict[str, Any] | None, verify: bool, execution_valid: bool) -> bytes",
    "operation": "EthLib.Consensus.Exports.processOperationExport",
    "method": "consensus_process_operation",
    "errors":
@@ -2298,11 +2320,11 @@
       {"constructor": "wrongPayloadSlot", "code": 89}]}],
    "error_class": "TransitionError",
    "docstring":
-   "The state after a block operation of a handler of the vectors, as SSZ bytes.\n\nThe preset, the configuration and the fork are named in UTF-8, and the handler too.\n\nThe signature checks run unless the verify flag is false.\n\nThe last argument is the answer of the execution layer to a payload."},
+   "The state after a block operation of a handler of the vectors, as SSZ bytes.\n\nThe preset, the configuration and the fork are named by `str`, and the handler too.\n\nThe signature checks run unless the verify flag is false.\n\nThe last argument is the answer of the execution layer to a payload."},
   {"summary":
    "The state after one step of the epoch transition of a handler of the vectors, as SSZ bytes.",
    "signature":
-   "(name: str, fork: str, handler: str, pre: bytes, config: bytes) -> bytes",
+   "(name: str, fork: str, handler: str, pre: bytes, config: dict[str, Any] | None) -> bytes",
    "operation": "EthLib.Consensus.Exports.processEpochExport",
    "method": "consensus_process_epoch",
    "errors":
@@ -2394,11 +2416,11 @@
       {"constructor": "wrongPayloadSlot", "code": 89}]}],
    "error_class": "TransitionError",
    "docstring":
-   "The state after one step of the epoch transition of a handler of the vectors, as SSZ bytes.\n\nThe preset, the configuration and the fork are named in UTF-8, and the handler too.\n\nThe signature of a pending deposit to a new key is always checked."},
+   "The state after one step of the epoch transition of a handler of the vectors, as SSZ bytes.\n\nThe preset, the configuration and the fork are named by `str`, and the handler too.\n\nThe signature of a pending deposit to a new key is always checked."},
   {"summary":
    "The rewards and the penalties of each validator for one kind of vote, as SSZ bytes.",
    "signature":
-   "(name: str, fork: str, component: str, pre: bytes, config: bytes) -> bytes",
+   "(name: str, fork: str, component: str, pre: bytes, config: dict[str, Any] | None) -> bytes",
    "operation": "EthLib.Consensus.Exports.rewardsDeltasExport",
    "method": "consensus_rewards_deltas",
    "errors":
@@ -2490,10 +2512,106 @@
       {"constructor": "wrongPayloadSlot", "code": 89}]}],
    "error_class": "TransitionError",
    "docstring":
-   "The rewards and the penalties of each validator for one kind of vote, as SSZ bytes.\n\nThe preset, the configuration, the fork and the kind of vote are named in UTF-8.\n\nThe kinds are the file names of the vectors without their extension, such as source deltas.\n\nA list longer than the registry limit has code 0."},
+   "The rewards and the penalties of each validator for one kind of vote, as SSZ bytes.\n\nThe preset, the configuration, the fork and the kind of vote are named by `str`.\n\nThe kinds are the file names of the vectors without their extension, such as source deltas.\n\nA list longer than the registry limit has code 0."},
+  {"summary":
+   "The deltas of several kinds of vote for one state, as SSZ bytes, in the order of the kinds.",
+   "signature":
+   "(name: str, fork: str, components: list[str], pre: bytes, config: dict[str, Any] | None) -> list[bytes]",
+   "operation": "EthLib.Consensus.Exports.rewardsDeltasBatchExport",
+   "method": "consensus_rewards_deltas_batch",
+   "errors":
+   [{"type": "EthLib.Consensus.TransitionError",
+     "codes":
+     [{"constructor": "accessor", "code": 1},
+      {"constructor": "ssz", "code": 2},
+      {"constructor": "slotMismatch", "code": 3},
+      {"constructor": "notNewer", "code": 4},
+      {"constructor": "wrongProposer", "code": 5},
+      {"constructor": "wrongParent", "code": 6},
+      {"constructor": "proposerSlashed", "code": 7},
+      {"constructor": "invalidRandaoReveal", "code": 8},
+      {"constructor": "tooManyEth1Votes", "code": 9},
+      {"constructor": "headerSlotsDiffer", "code": 10},
+      {"constructor": "headerProposersDiffer", "code": 11},
+      {"constructor": "sameHeaders", "code": 12},
+      {"constructor": "notSlashable", "code": 13},
+      {"constructor": "invalidHeaderSignature", "code": 14},
+      {"constructor": "notSlashableData", "code": 15},
+      {"constructor": "invalidIndexedAttestation", "code": 16},
+      {"constructor": "noneSlashed", "code": 17},
+      {"constructor": "payloadAttestationNotForParent", "code": 18},
+      {"constructor": "payloadAttestationWrongSlot", "code": 19},
+      {"constructor": "invalidPayloadAttestation", "code": 20},
+      {"constructor": "selfBuildBidPaid", "code": 21},
+      {"constructor": "builderNotActive", "code": 22},
+      {"constructor": "notPayloadBuilder", "code": 23},
+      {"constructor": "bidNotCovered", "code": 24},
+      {"constructor": "invalidBidSignature", "code": 25},
+      {"constructor": "tooManyBlobCommitments", "code": 26},
+      {"constructor": "bidWrongSlot", "code": 27},
+      {"constructor": "bidAtGenesis", "code": 28},
+      {"constructor": "bidWrongParentHash", "code": 29},
+      {"constructor": "bidRepeatsParentHash", "code": 30},
+      {"constructor": "bidWrongParentRoot", "code": 31},
+      {"constructor": "bidWrongRandao", "code": 32},
+      {"constructor": "depositIndicesDiffer", "code": 33},
+      {"constructor": "attestationTargetNotRecent", "code": 34},
+      {"constructor": "attestationTargetNotSlotEpoch", "code": 35},
+      {"constructor": "attestationTooEarly", "code": 36},
+      {"constructor": "attestationTooLate", "code": 37},
+      {"constructor": "committeeIndexOutOfRange", "code": 38},
+      {"constructor": "aggregationBitsLength", "code": 39},
+      {"constructor": "wrongAttestationSource", "code": 40},
+      {"constructor": "tooManyPendingAttestations", "code": 41},
+      {"constructor": "invalidAttestation", "code": 42},
+      {"constructor": "wrongDepositCount", "code": 43},
+      {"constructor": "invalidDepositProof", "code": 44},
+      {"constructor": "registryFull", "code": 45},
+      {"constructor": "exitingValidatorNotActive", "code": 46},
+      {"constructor": "exitAlreadyInitiated", "code": 47},
+      {"constructor": "exitNotYetValid", "code": 48},
+      {"constructor": "exitTooSoon", "code": 49},
+      {"constructor": "invalidExitSignature", "code": 50},
+      {"constructor": "zeroInclusionDelay", "code": 51},
+      {"constructor": "priorWithdrawalsAtLimit", "code": 61},
+      {"constructor": "wrongWithdrawals", "code": 62},
+      {"constructor": "notBlsCredentials", "code": 63},
+      {"constructor": "wrongBlsKey", "code": 64},
+      {"constructor": "invalidBlsChangeSignature", "code": 65},
+      {"constructor": "historicalRootsFull", "code": 52},
+      {"constructor": "slotNotAfter", "code": 53},
+      {"constructor": "invalidBlockSignature", "code": 54},
+      {"constructor": "wrongStateRoot", "code": 55},
+      {"constructor": "wrongPayloadParentHash", "code": 66},
+      {"constructor": "wrongPayloadRandao", "code": 67},
+      {"constructor": "wrongPayloadTimestamp", "code": 68},
+      {"constructor": "invalidExecutionPayload", "code": 69},
+      {"constructor": "historicalSummariesFull", "code": 70},
+      {"constructor": "invalidSyncAggregate", "code": 71},
+      {"constructor": "invalidSyncCommitteeKey", "code": 72},
+      {"constructor": "unknownSyncCommitteeMember", "code": 73},
+      {"constructor": "blockForkMismatch", "code": 74},
+      {"constructor": "attestationIndexNotZero", "code": 75},
+      {"constructor": "noCommitteeAttester", "code": 76},
+      {"constructor": "exitPendingWithdrawal", "code": 77},
+      {"constructor": "parentRequestsNotEmpty", "code": 78},
+      {"constructor": "wrongParentRequestsRoot", "code": 79},
+      {"constructor": "tooManyOperations", "code": 80},
+      {"constructor": "attestationIndexAboveOne", "code": 81},
+      {"constructor": "invalidEnvelopeSignature", "code": 82},
+      {"constructor": "envelopeWrongBlockRoot", "code": 83},
+      {"constructor": "envelopeWrongParentRoot", "code": 84},
+      {"constructor": "envelopeWrongBuilder", "code": 85},
+      {"constructor": "wrongPayloadGasLimit", "code": 86},
+      {"constructor": "wrongPayloadBlockHash", "code": 87},
+      {"constructor": "wrongPayloadRequestsRoot", "code": 88},
+      {"constructor": "wrongPayloadSlot", "code": 89}]}],
+   "error_class": "TransitionError",
+   "docstring":
+   "The deltas of several kinds of vote for one state, as SSZ bytes, in the order of the kinds.\n\nThe state is decoded once for all the kinds.\n\nEach kind gives the same bytes as the export for one kind.\n\nThe first kind that fails gives the error."},
   {"summary": "The state some slots later, as SSZ bytes.",
    "signature":
-   "(name: str, fork: str, pre: bytes, config: bytes, slots: int) -> bytes",
+   "(name: str, fork: str, pre: bytes, config: dict[str, Any] | None, slots: int) -> bytes",
    "operation": "EthLib.Consensus.Exports.processSlotsExport",
    "method": "consensus_process_slots",
    "errors":
@@ -2585,11 +2703,11 @@
       {"constructor": "wrongPayloadSlot", "code": 89}]}],
    "error_class": "TransitionError",
    "docstring":
-   "The state some slots later, as SSZ bytes.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nFrom Electra the pending deposits check the signatures of new keys with BLS, as the vectors expect.\n\nA target slot that reaches `2^64` is an error."},
+   "The state some slots later, as SSZ bytes.\n\nThe preset, the configuration and the fork are named by `str`.\n\nFrom Electra the pending deposits check the signatures of new keys with BLS, as the vectors expect.\n\nA target slot that reaches `2^64` is an error."},
   {"summary":
    "The state after a signed block, as SSZ bytes, with the signature and the state root checked.",
    "signature":
-   "(name: str, fork: str, pre: bytes, block: bytes, config: bytes, verify: bool) -> bytes",
+   "(name: str, fork: str, pre: bytes, block: bytes, config: dict[str, Any] | None, verify: bool) -> bytes",
    "operation": "EthLib.Consensus.Exports.stateTransitionExport",
    "method": "consensus_state_transition",
    "errors":
@@ -2681,11 +2799,11 @@
       {"constructor": "wrongPayloadSlot", "code": 89}]}],
    "error_class": "TransitionError",
    "docstring":
-   "The state after a signed block, as SSZ bytes, with the signature and the state root checked.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nThe signature checks run unless the last argument is false.\n\nThe execution layer accepts every payload, as in the vectors, which fix no answer for blocks."},
+   "The state after a signed block, as SSZ bytes, with the signature and the state root checked.\n\nThe preset, the configuration and the fork are named by `str`.\n\nThe signature checks run unless the last argument is false.\n\nThe execution layer accepts every payload, as in the vectors, which fix no answer for blocks."},
   {"summary":
    "The state after a signed block of a fork, from a state of that fork or an earlier one.",
    "signature":
-   "(name: str, fork: str, pre: bytes, block_fork: str, block: bytes, config: bytes, verify: bool) -> bytes",
+   "(name: str, fork: str, pre: bytes, block_fork: str, block: bytes, config: dict[str, Any] | None, verify: bool) -> bytes",
    "operation": "EthLib.Consensus.Exports.stateTransitionAcrossExport",
    "method": "consensus_state_transition_across",
    "errors":
@@ -2777,11 +2895,11 @@
       {"constructor": "wrongPayloadSlot", "code": 89}]}],
    "error_class": "TransitionError",
    "docstring":
-   "The state after a signed block of a fork, from a state of that fork or an earlier one.\n\nThe state advances to the slot of the block and upgrades at each fork epoch on the way.\n\nThe fork epochs are those of the configuration, with its replacements.\n\nThe block must be of the fork that the state then has.\n\nThe preset, the configuration and both forks are named in UTF-8, each fork up to Heze.\n\nThe signature checks run unless the last argument is false.\n\nThe execution layer accepts every payload, as in the vectors, which fix no answer for blocks."},
+   "The state after a signed block of a fork, from a state of that fork or an earlier one.\n\nThe state advances to the slot of the block and upgrades at each fork epoch on the way.\n\nThe fork epochs are those of the configuration, with its replacements.\n\nThe block must be of the fork that the state then has.\n\nThe preset, the configuration and both forks are named by `str`, each fork up to Heze.\n\nThe signature checks run unless the last argument is false.\n\nThe execution layer accepts every payload, as in the vectors, which fix no answer for blocks."},
   {"summary":
    "The state after signed blocks in order, as SSZ bytes, with each state root checked.",
    "signature":
-   "(name: str, fork: str, pre: bytes, blocks: list[bytes], config: bytes, verify: bool) -> bytes",
+   "(name: str, fork: str, pre: bytes, blocks: list[bytes], config: dict[str, Any] | None, verify: bool) -> bytes",
    "operation": "EthLib.Consensus.Exports.stateTransitionsExport",
    "method": "consensus_state_transitions",
    "errors":
@@ -2873,11 +2991,11 @@
       {"constructor": "wrongPayloadSlot", "code": 89}]}],
    "error_class": "TransitionError",
    "docstring":
-   "The state after signed blocks in order, as SSZ bytes, with each state root checked.\n\nThe preset, the configuration and the fork are named in UTF-8, and every block is of that fork.\n\nThe first block that fails stops the call with its error.\n\nThe signature checks run unless the last argument is false.\n\nThe execution layer accepts every payload, as in the vectors, which fix no answer for blocks."},
+   "The state after signed blocks in order, as SSZ bytes, with each state root checked.\n\nThe preset, the configuration and the fork are named by `str`, and every block is of that fork.\n\nThe first block that fails stops the call with its error.\n\nThe signature checks run unless the last argument is false.\n\nThe execution layer accepts every payload, as in the vectors, which fix no answer for blocks."},
   {"summary":
    "The state after signed blocks in order, as SSZ bytes, across the fork epochs on the way.",
    "signature":
-   "(name: str, fork: str, pre: bytes, block_forks: list[bytes], blocks: list[bytes], config: bytes, verify: bool) -> bytes",
+   "(name: str, fork: str, pre: bytes, block_forks: list[str], blocks: list[bytes], config: dict[str, Any] | None, verify: bool) -> bytes",
    "operation": "EthLib.Consensus.Exports.stateTransitionsAcrossExport",
    "method": "consensus_state_transitions_across",
    "errors":
@@ -2969,11 +3087,11 @@
       {"constructor": "wrongPayloadSlot", "code": 89}]}],
    "error_class": "TransitionError",
    "docstring":
-   "The state after signed blocks in order, as SSZ bytes, across the fork epochs on the way.\n\nThe state may be of the fork of the first block or of an earlier one.\n\nBefore each block, the state advances to the slot of the block and upgrades at each fork epoch.\n\nEach block names its fork, which must be the fork that the state then has.\n\nThe preset, the configuration and every fork are named in UTF-8, each fork up to Heze.\n\nThe first block that fails stops the call with its error, as does a count of forks that differs.\n\nThe signature checks run unless the last argument is false.\n\nThe execution layer accepts every payload, as in the vectors, which fix no answer for blocks."},
+   "The state after signed blocks in order, as SSZ bytes, across the fork epochs on the way.\n\nThe state may be of the fork of the first block or of an earlier one.\n\nBefore each block, the state advances to the slot of the block and upgrades at each fork epoch.\n\nEach block names its fork, which must be the fork that the state then has.\n\nThe preset, the configuration and every fork are named by `str`, each fork up to Heze.\n\nThe first block that fails stops the call with its error, as does a count of forks that differs.\n\nThe signature checks run unless the last argument is false.\n\nThe execution layer accepts every payload, as in the vectors, which fix no answer for blocks."},
   {"summary":
    "The candidate genesis state of a block of the proof-of-work chain, as SSZ bytes.",
    "signature":
-   "(name: str, fork: str, eth1_block_hash: bytes, deposits: bytes, config: bytes, eth1_timestamp: int, verify: bool) -> bytes",
+   "(name: str, fork: str, eth1_block_hash: bytes, deposits: list[bytes], config: dict[str, Any] | None, eth1_timestamp: int, verify: bool) -> bytes",
    "operation": "EthLib.Consensus.Exports.initializeGenesisExport",
    "method": "consensus_initialize_genesis",
    "errors":
@@ -3065,17 +3183,19 @@
       {"constructor": "wrongPayloadSlot", "code": 89}]}],
    "error_class": "TransitionError",
    "docstring":
-   "The candidate genesis state of a block of the proof-of-work chain, as SSZ bytes.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nThe deposits come as the SSZ bytes of a list of deposits.\n\nThe signature checks of the deposits run unless the last argument is false."},
+   "The candidate genesis state of a block of the proof-of-work chain, as SSZ bytes.\n\nThe preset, the configuration and the fork are named by `str`.\n\nEach deposit comes as its SSZ bytes, in a list.\n\nThe signature checks of the deposits run unless the last argument is false."},
   {"summary": "Whether a candidate genesis state launches the chain.",
-   "signature": "(name: str, fork: str, state: bytes, config: bytes) -> bool",
+   "signature":
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None) -> bool",
    "operation": "EthLib.Consensus.Exports.isValidGenesisStateExport",
    "method": "consensus_is_valid_genesis_state",
    "errors": [],
    "error_class": "TransitionError",
    "docstring":
-   "Whether a candidate genesis state launches the chain.\n\nThe preset, the configuration and the fork are named in UTF-8."},
+   "Whether a candidate genesis state launches the chain.\n\nThe preset, the configuration and the fork are named by `str`."},
   {"summary": "The weak subjectivity period of a state, in epochs.",
-   "signature": "(name: str, fork: str, state: bytes, config: bytes) -> int",
+   "signature":
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None) -> int",
    "operation": "EthLib.Consensus.Exports.computeWeakSubjectivityPeriodExport",
    "method": "consensus_compute_weak_subjectivity_period",
    "errors":
@@ -3088,11 +3208,11 @@
       {"constructor": "epochMismatch", "code": 5}]}],
    "error_class": "WeakSubjectivityError",
    "docstring":
-   "The weak subjectivity period of a state, in epochs.\n\nThe preset, the configuration and the fork are named in UTF-8."},
+   "The weak subjectivity period of a state, in epochs.\n\nThe preset, the configuration and the fork are named by `str`."},
   {"summary":
    "Whether a checkpoint is within the weak subjectivity period of its state, at a time.",
    "signature":
-   "(name: str, fork: str, state: bytes, checkpoint: bytes, config: bytes, genesis_time_ms: int, time_ms: int) -> bool",
+   "(name: str, fork: str, state: bytes, checkpoint: bytes, config: dict[str, Any] | None, genesis_time_ms: int, time_ms: int) -> bool",
    "operation": "EthLib.Consensus.Exports.isWithinWeakSubjectivityPeriodExport",
    "method": "consensus_is_within_weak_subjectivity_period",
    "errors":
@@ -3105,10 +3225,11 @@
       {"constructor": "epochMismatch", "code": 5}]}],
    "error_class": "WeakSubjectivityError",
    "docstring":
-   "Whether a checkpoint is within the weak subjectivity period of its state, at a time.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nThe checkpoint comes as its SSZ bytes, and the state as the state at the checkpoint.\n\nThe two times are those of a store, in milliseconds since the Unix epoch."},
-  {"summary": "The committee assignment of a validator in an epoch, as JSON.",
+   "Whether a checkpoint is within the weak subjectivity period of its state, at a time.\n\nThe preset, the configuration and the fork are named by `str`.\n\nThe checkpoint comes as its SSZ bytes, and the state as the state at the checkpoint.\n\nThe two times are those of a store, in milliseconds since the Unix epoch."},
+  {"summary":
+   "The committee assignment of a validator in an epoch, if it has one.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) -> bytes",
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, epoch: int, validator_index: int) -> tuple[list[int], int, int] | None",
    "operation": "EthLib.Consensus.Exports.getCommitteeAssignmentExport",
    "method": "consensus_get_committee_assignment",
    "errors":
@@ -3129,10 +3250,10 @@
       {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
-   "The committee assignment of a validator in an epoch, as JSON.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nIt is `null` without an assignment, or the committee, its index and its slot."},
+   "The committee assignment of a validator in an epoch, if it has one.\n\nThe preset, the configuration and the fork are named by `str`.\n\nIt is `None` without an assignment, or the tuple of the committee, its index and its slot."},
   {"summary": "Whether a validator proposes the block of the slot of a state.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bool",
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, validator_index: int) -> bool",
    "operation": "EthLib.Consensus.Exports.isProposerExport",
    "method": "consensus_is_proposer",
    "errors":
@@ -3153,11 +3274,11 @@
       {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
-   "Whether a validator proposes the block of the slot of a state.\n\nThe preset, the configuration and the fork are named in UTF-8."},
+   "Whether a validator proposes the block of the slot of a state.\n\nThe preset, the configuration and the fork are named by `str`."},
   {"summary":
    "From Altair: whether a validator serves on the sync committee of the period of an epoch.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) -> bool",
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, epoch: int, validator_index: int) -> bool",
    "operation": "EthLib.Consensus.Exports.isAssignedToSyncCommitteeExport",
    "method": "consensus_is_assigned_to_sync_committee",
    "errors":
@@ -3178,11 +3299,11 @@
       {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
-   "From Altair: whether a validator serves on the sync committee of the period of an epoch.\n\nThe preset, the configuration and the fork are named in UTF-8."},
+   "From Altair: whether a validator serves on the sync committee of the period of an epoch.\n\nThe preset, the configuration and the fork are named by `str`."},
   {"summary":
-   "From Altair: the sync committee subnets of a validator for the next slot, as a JSON list.",
+   "From Altair: the sync committee subnets of a validator for the next slot, as a list.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bytes",
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, validator_index: int) -> list[int]",
    "operation": "EthLib.Consensus.Exports.computeSubnetsForSyncCommitteeExport",
    "method": "consensus_compute_subnets_for_sync_committee",
    "errors":
@@ -3203,11 +3324,11 @@
       {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
-   "From Altair: the sync committee subnets of a validator for the next slot, as a JSON list.\n\nThe preset, the configuration and the fork are named in UTF-8."},
+   "From Altair: the sync committee subnets of a validator for the next slot, as a list.\n\nThe preset, the configuration and the fork are named by `str`."},
   {"summary":
-   "From Gloas: the slot of an epoch whose payload timeliness committee holds a validator, as JSON.",
+   "From Gloas: the slot of an epoch whose payload timeliness committee holds a validator.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) -> bytes",
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, epoch: int, validator_index: int) -> int | None",
    "operation": "EthLib.Consensus.Exports.getPtcAssignmentExport",
    "method": "consensus_get_ptc_assignment",
    "errors":
@@ -3228,11 +3349,11 @@
       {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
-   "From Gloas: the slot of an epoch whose payload timeliness committee holds a validator, as JSON.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nIt is `null` without an assignment, or the slot."},
+   "From Gloas: the slot of an epoch whose payload timeliness committee holds a validator.\n\nThe preset, the configuration and the fork are named by `str`.\n\nIt is `None` without an assignment, or the slot."},
   {"summary":
-   "From Gloas: the slots after the slot of a state that a validator proposes, as a JSON list.",
+   "From Gloas: the slots after the slot of a state that a validator proposes, as a list.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bytes",
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, validator_index: int) -> list[int]",
    "operation": "EthLib.Consensus.Exports.getUpcomingProposalSlotsExport",
    "method": "consensus_get_upcoming_proposal_slots",
    "errors":
@@ -3253,11 +3374,11 @@
       {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
-   "From Gloas: the slots after the slot of a state that a validator proposes, as a JSON list.\n\nThe preset, the configuration and the fork are named in UTF-8."},
+   "From Gloas: the slots after the slot of a state that a validator proposes, as a list.\n\nThe preset, the configuration and the fork are named by `str`."},
   {"summary":
    "The signature of the object of a duty, by a secret key of 32 big-endian bytes.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: bytes, duty: str, object: bytes, secret_key: bytes) -> bytes",
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, duty: str, object: bytes, secret_key: bytes) -> bytes",
    "operation": "EthLib.Consensus.Exports.getValidatorSignatureExport",
    "method": "consensus_get_validator_signature",
    "errors":
@@ -3278,7 +3399,7 @@
       {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
-   "The signature of the object of a duty, by a secret key of 32 big-endian bytes.\n\nThe preset, the configuration, the fork and the duty are named in UTF-8.\n\nThe object comes as SSZ bytes, by duty:\n\n- `randao` and `block`: a block.\n- `attestation`: attestation data.\n- `slot`: a slot.\n- `aggregate_and_proof`: an aggregate and proof.\n- `sync_committee_message`: a block root.\n- `sync_committee_selection_proof`: sync aggregator selection data.\n- `contribution_and_proof`: a contribution and proof.\n- `payload_attestation_message`: a payload attestation message, whose data is signed.\n- `proposer_preferences`: the preferences of a proposer.\n\nThe three duties of the sync committee need Altair; before it they have code 0.\n\nThe payload attestation message needs Gloas; before it, it has code 0.\n\nThe preferences of a proposer take a state of any fork.\n\nTheir domain reads only the root of the genesis validators of the state.\n\nSo a state of the epoch before Gloas can sign them for the first epoch of Gloas."},
+   "The signature of the object of a duty, by a secret key of 32 big-endian bytes.\n\nThe preset, the configuration, the fork and the duty are named by `str`.\n\nThe object comes as SSZ bytes, by duty:\n\n- `randao` and `block`: a block.\n- `attestation`: attestation data.\n- `slot`: a slot.\n- `aggregate_and_proof`: an aggregate and proof.\n- `sync_committee_message`: a block root.\n- `sync_committee_selection_proof`: sync aggregator selection data.\n- `contribution_and_proof`: a contribution and proof.\n- `payload_attestation_message`: a payload attestation message, whose data is signed.\n- `proposer_preferences`: the preferences of a proposer.\n\nThe three duties of the sync committee need Altair; before it they have code 0.\n\nThe payload attestation message needs Gloas; before it, it has code 0.\n\nThe preferences of a proposer take a state of any fork.\n\nTheir domain reads only the root of the genesis validators of the state.\n\nSo a state of the epoch before Gloas can sign them for the first epoch of Gloas."},
   {"summary":
    "The attestation data of an attester, from the head block and the state at its slot, as SSZ.",
    "signature":
@@ -3330,7 +3451,7 @@
   {"summary":
    "Before Electra: the attestation of a validator on attestation data, as SSZ bytes.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: bytes, data: bytes, validator_index: int, secret_key: bytes) -> bytes",
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, data: bytes, validator_index: int, secret_key: bytes) -> bytes",
    "operation": "EthLib.Consensus.Exports.constructAttestationExport",
    "method": "consensus_construct_attestation",
    "errors":
@@ -3351,11 +3472,11 @@
       {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
-   "Before Electra: the attestation of a validator on attestation data, as SSZ bytes.\n\nThe preset, the configuration and the fork are named in UTF-8."},
+   "Before Electra: the attestation of a validator on attestation data, as SSZ bytes.\n\nThe preset, the configuration and the fork are named by `str`."},
   {"summary":
    "From Electra: the single attestation of a validator in a committee, as SSZ bytes.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: bytes, data: bytes, committee_index: int, validator_index: int, secret_key: bytes) -> bytes",
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, data: bytes, committee_index: int, validator_index: int, secret_key: bytes) -> bytes",
    "operation": "EthLib.Consensus.Exports.constructSingleAttestationExport",
    "method": "consensus_construct_single_attestation",
    "errors":
@@ -3376,7 +3497,7 @@
       {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
-   "From Electra: the single attestation of a validator in a committee, as SSZ bytes.\n\nThe preset, the configuration and the fork are named in UTF-8."},
+   "From Electra: the single attestation of a validator in a committee, as SSZ bytes.\n\nThe preset, the configuration and the fork are named by `str`."},
   {"summary":
    "Before Electra: the aggregate of the attestations that vote for attestation data, as SSZ bytes.",
    "signature":
@@ -3690,7 +3811,7 @@
   {"summary":
    "From Bellatrix: the root of the latest block of a chain that is not optimistic.",
    "signature":
-   "(name: str, fork: str, blocks: list[bytes], optimistic_roots: bytes, root: bytes) -> bytes",
+   "(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], root: bytes) -> bytes",
    "operation": "EthLib.Consensus.Exports.latestVerifiedAncestorExport",
    "method": "consensus_latest_verified_ancestor",
    "errors":
@@ -3749,11 +3870,11 @@
       {"constructor": "invalidInclusionListSignature", "code": 51}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "From Bellatrix: the root of the latest block of a chain that is not optimistic."},
+   "From Bellatrix: the root of the latest block of a chain that is not optimistic.\n\nThe arguments are the names of the preset and the fork, the blocks and the optimistic roots.\n\nThen comes the root of a block."},
   {"summary":
-   "From Bellatrix: the optimistic roots after the payload of a block is found valid.",
+   "From Bellatrix: the optimistic roots after the payload of a block is found valid, as a list.",
    "signature":
-   "(name: str, fork: str, blocks: list[bytes], optimistic_roots: bytes, root: bytes) -> bytes",
+   "(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], root: bytes) -> list[bytes]",
    "operation": "EthLib.Consensus.Exports.onValidPayloadExport",
    "method": "consensus_on_valid_payload",
    "errors":
@@ -3812,11 +3933,11 @@
       {"constructor": "invalidInclusionListSignature", "code": 51}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "From Bellatrix: the optimistic roots after the payload of a block is found valid."},
+   "From Bellatrix: the optimistic roots after the payload of a block is found valid, as a list.\n\nThe arguments are the names of the preset and the fork, the blocks and the optimistic roots.\n\nThen comes the root of a block."},
   {"summary":
-   "From Bellatrix: the optimistic roots after a block is found to be the first invalid one.",
+   "From Bellatrix: the optimistic roots after a block is found the first invalid one, as a list.",
    "signature":
-   "(name: str, fork: str, blocks: list[bytes], optimistic_roots: bytes, first: bytes) -> bytes",
+   "(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], first: bytes) -> list[bytes]",
    "operation": "EthLib.Consensus.Exports.onInvalidatedPayloadExport",
    "method": "consensus_on_invalidated_payload",
    "errors":
@@ -3875,7 +3996,7 @@
       {"constructor": "invalidInclusionListSignature", "code": 51}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "From Bellatrix: the optimistic roots after a block is found to be the first invalid one."},
+   "From Bellatrix: the optimistic roots after a block is found the first invalid one, as a list.\n\nThe arguments are the names of the preset and the fork, the blocks and the optimistic roots.\n\nThen comes the root of the first invalid block."},
   {"summary":
    "Whether an optimistic validator may not sign under a domain type of 4 bytes.",
    "signature": "(domain_type: bytes) -> bool",
@@ -3888,7 +4009,7 @@
   {"summary":
    "Before Heze: the Eth1 vote of a proposer on a state, as the SSZ bytes of the Eth1 data.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: bytes, chain: list[bytes]) -> bytes",
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, chain: list[tuple[int, bytes]]) -> bytes",
    "operation": "EthLib.Consensus.Exports.getEth1VoteExport",
    "method": "consensus_get_eth1_vote",
    "errors":
@@ -3906,7 +4027,10 @@
       {"constructor": "emptyRequest", "code": 10},
       {"constructor": "requestTypeOrder", "code": 11},
       {"constructor": "subcommitteeOutOfRange", "code": 12},
-      {"constructor": "repeatedSubcommittee", "code": 13}]}],
+      {"constructor": "repeatedSubcommittee", "code": 13},
+      {"constructor": "unknownPowBlock", "code": 14},
+      {"constructor": "forkChoice", "code": 15},
+      {"constructor": "duty", "code": 16}]}],
    "error_class": "ProposerError",
    "docstring":
    "Before Heze: the Eth1 vote of a proposer on a state, as the SSZ bytes of the Eth1 data.\n\nEach block of the Eth1 chain is its timestamp and its Eth1 data, by increasing height."},
@@ -3930,14 +4054,17 @@
       {"constructor": "emptyRequest", "code": 10},
       {"constructor": "requestTypeOrder", "code": 11},
       {"constructor": "subcommitteeOutOfRange", "code": 12},
-      {"constructor": "repeatedSubcommittee", "code": 13}]}],
+      {"constructor": "repeatedSubcommittee", "code": 13},
+      {"constructor": "unknownPowBlock", "code": 14},
+      {"constructor": "forkChoice", "code": 15},
+      {"constructor": "duty", "code": 16}]}],
    "error_class": "ProposerError",
    "docstring":
    "In Electra: the number of deposits of the deposit contract that a proposer includes."},
   {"summary":
    "The root of the state after a block, to set as its state root, as 32 bytes.",
    "signature":
-   "(name: str, fork: str, state: bytes, block: bytes, config: bytes, verify: bool) -> bytes",
+   "(name: str, fork: str, state: bytes, block: bytes, config: dict[str, Any] | None, verify: bool) -> bytes",
    "operation": "EthLib.Consensus.Exports.computeNewStateRootExport",
    "method": "consensus_compute_new_state_root",
    "errors":
@@ -3955,7 +4082,10 @@
       {"constructor": "emptyRequest", "code": 10},
       {"constructor": "requestTypeOrder", "code": 11},
       {"constructor": "subcommitteeOutOfRange", "code": 12},
-      {"constructor": "repeatedSubcommittee", "code": 13}]}],
+      {"constructor": "repeatedSubcommittee", "code": 13},
+      {"constructor": "unknownPowBlock", "code": 14},
+      {"constructor": "forkChoice", "code": 15},
+      {"constructor": "duty", "code": 16}]}],
    "error_class": "ProposerError",
    "docstring":
    "The root of the state after a block, to set as its state root, as 32 bytes.\n\nThe signature checks of the operations run unless the last argument is false.\n\nThe execution layer accepts every payload, as in the vectors."},
@@ -3979,7 +4109,10 @@
       {"constructor": "emptyRequest", "code": 10},
       {"constructor": "requestTypeOrder", "code": 11},
       {"constructor": "subcommitteeOutOfRange", "code": 12},
-      {"constructor": "repeatedSubcommittee", "code": 13}]}],
+      {"constructor": "repeatedSubcommittee", "code": 13},
+      {"constructor": "unknownPowBlock", "code": 14},
+      {"constructor": "forkChoice", "code": 15},
+      {"constructor": "duty", "code": 16}]}],
    "error_class": "ProposerError",
    "docstring":
    "From Electra: the attestation on chain from network aggregates, as SSZ bytes."},
@@ -4004,7 +4137,10 @@
       {"constructor": "emptyRequest", "code": 10},
       {"constructor": "requestTypeOrder", "code": 11},
       {"constructor": "subcommitteeOutOfRange", "code": 12},
-      {"constructor": "repeatedSubcommittee", "code": 13}]}],
+      {"constructor": "repeatedSubcommittee", "code": 13},
+      {"constructor": "unknownPowBlock", "code": 14},
+      {"constructor": "forkChoice", "code": 15},
+      {"constructor": "duty", "code": 16}]}],
    "error_class": "ProposerError",
    "docstring":
    "From Altair: the sync aggregate of a block from the contributions of subcommittees.\n\nIt comes as SSZ bytes, and so does each contribution."},
@@ -4027,14 +4163,279 @@
       {"constructor": "emptyRequest", "code": 10},
       {"constructor": "requestTypeOrder", "code": 11},
       {"constructor": "subcommitteeOutOfRange", "code": 12},
-      {"constructor": "repeatedSubcommittee", "code": 13}]}],
+      {"constructor": "repeatedSubcommittee", "code": 13},
+      {"constructor": "unknownPowBlock", "code": 14},
+      {"constructor": "forkChoice", "code": 15},
+      {"constructor": "duty", "code": 16}]}],
    "error_class": "ProposerError",
    "docstring":
    "From Electra: the requests of an execution block, as SSZ bytes.\n\nThey come from the list that the execution layer gives, one typed list per entry."},
   {"summary":
+   "From Gloas: the bid of a builder for a payload that it built on a state, as SSZ bytes.",
+   "signature":
+   "(name: str, fork: str, state: bytes, payload: bytes, requests: bytes, commitments: bytes, fee_recipient: bytes, inclusion_list_bits: bytes, slot: int, builder_index: int, value: int) -> bytes",
+   "operation": "EthLib.Consensus.Exports.getExecutionPayloadBidExport",
+   "method": "consensus_get_execution_payload_bid",
+   "errors":
+   [{"type": "EthLib.Serialization.Ssz.Err",
+     "codes":
+     [{"constructor": "typeMismatch", "code": 1},
+      {"constructor": "overLimit", "code": 2},
+      {"constructor": "scope", "code": 3},
+      {"constructor": "scopeTooSmall", "code": 4},
+      {"constructor": "scopeUndivided", "code": 5},
+      {"constructor": "scopeWidthless", "code": 6},
+      {"constructor": "firstOffset", "code": 7},
+      {"constructor": "offsetUnordered", "code": 8},
+      {"constructor": "offsetPastScope", "code": 9},
+      {"constructor": "offsetUnaligned", "code": 10},
+      {"constructor": "offsetBelowTable", "code": 11},
+      {"constructor": "truncated", "code": 12},
+      {"constructor": "notABit", "code": 13},
+      {"constructor": "count", "code": 14},
+      {"constructor": "paddingBits", "code": 15},
+      {"constructor": "emptyEncoding", "code": 16},
+      {"constructor": "noDelimiter", "code": 17},
+      {"constructor": "trailingZeros", "code": 18},
+      {"constructor": "noSelector", "code": 19},
+      {"constructor": "unknownSelector", "code": 20},
+      {"constructor": "badDeclaration", "code": 21},
+      {"constructor": "notAPosition", "code": 22},
+      {"constructor": "notEntitled", "code": 23},
+      {"constructor": "undeclared", "code": 24},
+      {"constructor": "capacityNegative", "code": 25},
+      {"constructor": "layoutNotBits", "code": 26},
+      {"constructor": "notAGindex", "code": 27},
+      {"constructor": "rootHasNoBranch", "code": 28},
+      {"constructor": "emptyRequest", "code": 29},
+      {"constructor": "repeatedIndex", "code": 30},
+      {"constructor": "nestedIndex", "code": 31},
+      {"constructor": "branchLength", "code": 32},
+      {"constructor": "leafCount", "code": 33},
+      {"constructor": "proofLength", "code": 34},
+      {"constructor": "proofIncomplete", "code": 35},
+      {"constructor": "pathIntoMixin", "code": 36},
+      {"constructor": "pathIntoPacked", "code": 37},
+      {"constructor": "pathIntoGap", "code": 38},
+      {"constructor": "pathPastSpine", "code": 39},
+      {"constructor": "noParts", "code": 40},
+      {"constructor": "noPartsMixin", "code": 41},
+      {"constructor": "noMixin", "code": 42},
+      {"constructor": "noChunkCount", "code": 43},
+      {"constructor": "notSteppable", "code": 44},
+      {"constructor": "noSuchField", "code": 45},
+      {"constructor": "noSuchOption", "code": 46},
+      {"constructor": "noSuchPosition", "code": 47},
+      {"constructor": "merkleizeLimit", "code": 48},
+      {"constructor": "zeroTreeWidth", "code": 49},
+      {"constructor": "vectorEmpty", "code": 50},
+      {"constructor": "layoutWidth", "code": 51},
+      {"constructor": "layoutTrailingGap", "code": 52},
+      {"constructor": "layoutTooWide", "code": 53},
+      {"constructor": "layoutFieldCount", "code": 54},
+      {"constructor": "unionEmpty", "code": 55},
+      {"constructor": "unionSelectorRange", "code": 56},
+      {"constructor": "unionIncompatible", "code": 57},
+      {"constructor": "unionSelectorRepeated", "code": 58},
+      {"constructor": "uintWidth", "code": 59},
+      {"constructor": "offsetOverflow", "code": 60},
+      {"constructor": "containerEmpty", "code": 61},
+      {"constructor": "hexPrefix", "code": 62},
+      {"constructor": "hexDigits", "code": 63},
+      {"constructor": "hexLength", "code": 64},
+      {"constructor": "bitfieldPadding", "code": 65},
+      {"constructor": "bitfieldDelimiter", "code": 66},
+      {"constructor": "bitfieldTrailingZeros", "code": 67},
+      {"constructor": "uintRange", "code": 68},
+      {"constructor": "documentOverLimit", "code": 69},
+      {"constructor": "elementKind", "code": 70},
+      {"constructor": "noDefault", "code": 71},
+      {"constructor": "undeclaredField", "code": 72},
+      {"constructor": "missingField", "code": 73},
+      {"constructor": "structNotAnObject", "code": 74},
+      {"constructor": "undeclaredSelector", "code": 75}]}],
+   "error_class": "SszError",
+   "docstring":
+   "From Gloas: the bid of a builder for a payload that it built on a state, as SSZ bytes."},
+  {"summary":
+   "From Gloas: the signed bid of a proposer that builds its own payload, as SSZ bytes.",
+   "signature":
+   "(name: str, fork: str, state: bytes, payload: bytes, requests: bytes, commitments: bytes, fee_recipient: bytes, inclusion_list_bits: bytes) -> bytes",
+   "operation":
+   "EthLib.Consensus.Exports.getSelfBuiltExecutionPayloadBidExport",
+   "method": "consensus_get_self_built_execution_payload_bid",
+   "errors":
+   [{"type": "EthLib.Serialization.Ssz.Err",
+     "codes":
+     [{"constructor": "typeMismatch", "code": 1},
+      {"constructor": "overLimit", "code": 2},
+      {"constructor": "scope", "code": 3},
+      {"constructor": "scopeTooSmall", "code": 4},
+      {"constructor": "scopeUndivided", "code": 5},
+      {"constructor": "scopeWidthless", "code": 6},
+      {"constructor": "firstOffset", "code": 7},
+      {"constructor": "offsetUnordered", "code": 8},
+      {"constructor": "offsetPastScope", "code": 9},
+      {"constructor": "offsetUnaligned", "code": 10},
+      {"constructor": "offsetBelowTable", "code": 11},
+      {"constructor": "truncated", "code": 12},
+      {"constructor": "notABit", "code": 13},
+      {"constructor": "count", "code": 14},
+      {"constructor": "paddingBits", "code": 15},
+      {"constructor": "emptyEncoding", "code": 16},
+      {"constructor": "noDelimiter", "code": 17},
+      {"constructor": "trailingZeros", "code": 18},
+      {"constructor": "noSelector", "code": 19},
+      {"constructor": "unknownSelector", "code": 20},
+      {"constructor": "badDeclaration", "code": 21},
+      {"constructor": "notAPosition", "code": 22},
+      {"constructor": "notEntitled", "code": 23},
+      {"constructor": "undeclared", "code": 24},
+      {"constructor": "capacityNegative", "code": 25},
+      {"constructor": "layoutNotBits", "code": 26},
+      {"constructor": "notAGindex", "code": 27},
+      {"constructor": "rootHasNoBranch", "code": 28},
+      {"constructor": "emptyRequest", "code": 29},
+      {"constructor": "repeatedIndex", "code": 30},
+      {"constructor": "nestedIndex", "code": 31},
+      {"constructor": "branchLength", "code": 32},
+      {"constructor": "leafCount", "code": 33},
+      {"constructor": "proofLength", "code": 34},
+      {"constructor": "proofIncomplete", "code": 35},
+      {"constructor": "pathIntoMixin", "code": 36},
+      {"constructor": "pathIntoPacked", "code": 37},
+      {"constructor": "pathIntoGap", "code": 38},
+      {"constructor": "pathPastSpine", "code": 39},
+      {"constructor": "noParts", "code": 40},
+      {"constructor": "noPartsMixin", "code": 41},
+      {"constructor": "noMixin", "code": 42},
+      {"constructor": "noChunkCount", "code": 43},
+      {"constructor": "notSteppable", "code": 44},
+      {"constructor": "noSuchField", "code": 45},
+      {"constructor": "noSuchOption", "code": 46},
+      {"constructor": "noSuchPosition", "code": 47},
+      {"constructor": "merkleizeLimit", "code": 48},
+      {"constructor": "zeroTreeWidth", "code": 49},
+      {"constructor": "vectorEmpty", "code": 50},
+      {"constructor": "layoutWidth", "code": 51},
+      {"constructor": "layoutTrailingGap", "code": 52},
+      {"constructor": "layoutTooWide", "code": 53},
+      {"constructor": "layoutFieldCount", "code": 54},
+      {"constructor": "unionEmpty", "code": 55},
+      {"constructor": "unionSelectorRange", "code": 56},
+      {"constructor": "unionIncompatible", "code": 57},
+      {"constructor": "unionSelectorRepeated", "code": 58},
+      {"constructor": "uintWidth", "code": 59},
+      {"constructor": "offsetOverflow", "code": 60},
+      {"constructor": "containerEmpty", "code": 61},
+      {"constructor": "hexPrefix", "code": 62},
+      {"constructor": "hexDigits", "code": 63},
+      {"constructor": "hexLength", "code": 64},
+      {"constructor": "bitfieldPadding", "code": 65},
+      {"constructor": "bitfieldDelimiter", "code": 66},
+      {"constructor": "bitfieldTrailingZeros", "code": 67},
+      {"constructor": "uintRange", "code": 68},
+      {"constructor": "documentOverLimit", "code": 69},
+      {"constructor": "elementKind", "code": 70},
+      {"constructor": "noDefault", "code": 71},
+      {"constructor": "undeclaredField", "code": 72},
+      {"constructor": "missingField", "code": 73},
+      {"constructor": "structNotAnObject", "code": 74},
+      {"constructor": "undeclaredSelector", "code": 75}]}],
+   "error_class": "SszError",
+   "docstring":
+   "From Gloas: the signed bid of a proposer that builds its own payload, as SSZ bytes."},
+  {"summary":
+   "From Gloas: the envelope that reveals a payload after the block of its bid, as SSZ bytes.",
+   "signature":
+   "(name: str, fork: str, block: bytes, payload: bytes, requests: bytes) -> bytes",
+   "operation": "EthLib.Consensus.Exports.getExecutionPayloadEnvelopeExport",
+   "method": "consensus_get_execution_payload_envelope",
+   "errors":
+   [{"type": "EthLib.Serialization.Ssz.Err",
+     "codes":
+     [{"constructor": "typeMismatch", "code": 1},
+      {"constructor": "overLimit", "code": 2},
+      {"constructor": "scope", "code": 3},
+      {"constructor": "scopeTooSmall", "code": 4},
+      {"constructor": "scopeUndivided", "code": 5},
+      {"constructor": "scopeWidthless", "code": 6},
+      {"constructor": "firstOffset", "code": 7},
+      {"constructor": "offsetUnordered", "code": 8},
+      {"constructor": "offsetPastScope", "code": 9},
+      {"constructor": "offsetUnaligned", "code": 10},
+      {"constructor": "offsetBelowTable", "code": 11},
+      {"constructor": "truncated", "code": 12},
+      {"constructor": "notABit", "code": 13},
+      {"constructor": "count", "code": 14},
+      {"constructor": "paddingBits", "code": 15},
+      {"constructor": "emptyEncoding", "code": 16},
+      {"constructor": "noDelimiter", "code": 17},
+      {"constructor": "trailingZeros", "code": 18},
+      {"constructor": "noSelector", "code": 19},
+      {"constructor": "unknownSelector", "code": 20},
+      {"constructor": "badDeclaration", "code": 21},
+      {"constructor": "notAPosition", "code": 22},
+      {"constructor": "notEntitled", "code": 23},
+      {"constructor": "undeclared", "code": 24},
+      {"constructor": "capacityNegative", "code": 25},
+      {"constructor": "layoutNotBits", "code": 26},
+      {"constructor": "notAGindex", "code": 27},
+      {"constructor": "rootHasNoBranch", "code": 28},
+      {"constructor": "emptyRequest", "code": 29},
+      {"constructor": "repeatedIndex", "code": 30},
+      {"constructor": "nestedIndex", "code": 31},
+      {"constructor": "branchLength", "code": 32},
+      {"constructor": "leafCount", "code": 33},
+      {"constructor": "proofLength", "code": 34},
+      {"constructor": "proofIncomplete", "code": 35},
+      {"constructor": "pathIntoMixin", "code": 36},
+      {"constructor": "pathIntoPacked", "code": 37},
+      {"constructor": "pathIntoGap", "code": 38},
+      {"constructor": "pathPastSpine", "code": 39},
+      {"constructor": "noParts", "code": 40},
+      {"constructor": "noPartsMixin", "code": 41},
+      {"constructor": "noMixin", "code": 42},
+      {"constructor": "noChunkCount", "code": 43},
+      {"constructor": "notSteppable", "code": 44},
+      {"constructor": "noSuchField", "code": 45},
+      {"constructor": "noSuchOption", "code": 46},
+      {"constructor": "noSuchPosition", "code": 47},
+      {"constructor": "merkleizeLimit", "code": 48},
+      {"constructor": "zeroTreeWidth", "code": 49},
+      {"constructor": "vectorEmpty", "code": 50},
+      {"constructor": "layoutWidth", "code": 51},
+      {"constructor": "layoutTrailingGap", "code": 52},
+      {"constructor": "layoutTooWide", "code": 53},
+      {"constructor": "layoutFieldCount", "code": 54},
+      {"constructor": "unionEmpty", "code": 55},
+      {"constructor": "unionSelectorRange", "code": 56},
+      {"constructor": "unionIncompatible", "code": 57},
+      {"constructor": "unionSelectorRepeated", "code": 58},
+      {"constructor": "uintWidth", "code": 59},
+      {"constructor": "offsetOverflow", "code": 60},
+      {"constructor": "containerEmpty", "code": 61},
+      {"constructor": "hexPrefix", "code": 62},
+      {"constructor": "hexDigits", "code": 63},
+      {"constructor": "hexLength", "code": 64},
+      {"constructor": "bitfieldPadding", "code": 65},
+      {"constructor": "bitfieldDelimiter", "code": 66},
+      {"constructor": "bitfieldTrailingZeros", "code": 67},
+      {"constructor": "uintRange", "code": 68},
+      {"constructor": "documentOverLimit", "code": 69},
+      {"constructor": "elementKind", "code": 70},
+      {"constructor": "noDefault", "code": 71},
+      {"constructor": "undeclaredField", "code": 72},
+      {"constructor": "missingField", "code": 73},
+      {"constructor": "structNotAnObject", "code": 74},
+      {"constructor": "undeclaredSelector", "code": 75}]}],
+   "error_class": "SszError",
+   "docstring":
+   "From Gloas: the envelope that reveals a payload after the block of its bid, as SSZ bytes."},
+  {"summary":
    "From Fulu: the number of custody groups of a node, from the indices of its validators.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: bytes, validator_indices: list[bytes]) -> int",
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, validator_indices: list[int]) -> int",
    "operation":
    "EthLib.Consensus.Exports.getValidatorsCustodyRequirementExport",
    "method": "consensus_get_validators_custody_requirement",
@@ -4053,14 +4454,17 @@
       {"constructor": "emptyRequest", "code": 10},
       {"constructor": "requestTypeOrder", "code": 11},
       {"constructor": "subcommitteeOutOfRange", "code": 12},
-      {"constructor": "repeatedSubcommittee", "code": 13}]}],
+      {"constructor": "repeatedSubcommittee", "code": 13},
+      {"constructor": "unknownPowBlock", "code": 14},
+      {"constructor": "forkChoice", "code": 15},
+      {"constructor": "duty", "code": 16}]}],
    "error_class": "ProposerError",
    "docstring":
-   "From Fulu: the number of custody groups of a node, from the indices of its validators.\n\nEach index is 8 bytes, little-endian."},
+   "From Fulu: the number of custody groups of a node, from the indices of its validators.\n\nThe arguments are the name of the preset and the configuration, the fork and the state.\n\nThen come replacements of values of the configuration, and the list of the indices."},
   {"summary":
    "The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes.",
    "signature":
-   "(name: str, fork: str, pre: bytes, config: bytes, verify: bool) -> bytes",
+   "(name: str, fork: str, pre: bytes, config: dict[str, Any] | None, verify: bool) -> bytes",
    "operation": "EthLib.Consensus.Exports.upgradeStateExport",
    "method": "consensus_upgrade_state",
    "errors":
@@ -4152,11 +4556,11 @@
       {"constructor": "wrongPayloadSlot", "code": 89}]}],
    "error_class": "TransitionError",
    "docstring":
-   "The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes.\n\nThe preset, the configuration and the target fork are named in UTF-8.\n\nThe upgrades are those from Altair to Heze, each from the consensus fork before it.\n\nThe signature checks of the deposits at the upgrade to Gloas run unless the last argument is false."},
+   "The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes.\n\nThe preset, the configuration and the target fork are named by `str`.\n\nThe upgrades are those from Altair to Heze, each from the consensus fork before it.\n\nThe signature checks of the deposits at the upgrade to Gloas run unless the last argument is false."},
   {"summary":
    "The outcome of each step of a fork choice case, from an anchor state and an anchor block.",
    "signature":
-   "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: bytes, config: bytes, verify: bool) -> bytes",
+   "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None) -> list",
    "operation": "EthLib.Consensus.Exports.forkChoiceExport",
    "method": "consensus_fork_choice",
    "errors":
@@ -4215,11 +4619,11 @@
       {"constructor": "invalidInclusionListSignature", "code": 51}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "The outcome of each step of a fork choice case, from an anchor state and an anchor block.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nThe signature checks run unless the last argument is false.\n\nFrom Gloas the node on which a proposer builds is not yet specified here, so that read fails."},
+   "The outcome of each step of a fork choice case, from an anchor state and an anchor block.\n\nThe arguments are the preset, the fork, the anchor state and the anchor block in SSZ, and the steps.\n\nThen come whether the signature checks run, and replacements of values of the configuration.\n\nFrom Gloas the node on which a proposer builds is not yet specified here, so that read fails."},
   {"summary":
    "Validate the messages of a topic in turn, against the store of an anchor and later blocks.",
    "signature":
-   "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: bytes, finalized: bytes, topic: bytes, messages: bytes, config: bytes, verify: bool) -> bytes",
+   "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]], finalized: tuple[int, bytes] | None, topic: str, messages: list[tuple[int, int, bytes] | tuple[int, int, bytes, str]], config: dict[str, Any] | None, verify: bool) -> list[tuple[str, str | None]]",
    "operation": "EthLib.Consensus.Exports.gossipValidationExport",
    "method": "consensus_gossip_validation",
    "errors":
@@ -4278,11 +4682,11 @@
       {"constructor": "invalidInclusionListSignature", "code": 51}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "Validate the messages of a topic in turn, against the store of an anchor and later blocks.\n\nEvery topic is specified here up to Heze."},
+   "Validate the messages of a topic in turn, against the store of an anchor and later blocks.\n\nThe arguments are the names of the preset and the fork, the anchor state and the anchor block.\n\nThen come the later blocks, the finalized checkpoint or none, the topic and the messages.\n\nThen come replacements of values of the configuration, and whether the signature checks run.\n\nEvery topic is specified here up to Heze."},
   {"summary":
    "The headers of a sync, step by step, from a bootstrap for a trusted block root.",
    "signature":
-   "(name: str, fork: str, bootstrap_fork: str, config: bytes, trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, steps: bytes) -> bytes",
+   "(name: str, fork: str, bootstrap_fork: str, config: dict[str, Any] | None, trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, steps: list[tuple[str, str, int, bytes] | tuple[str, int] | tuple[str, str]]) -> list[tuple[tuple[int, bytes, bytes], tuple[int, bytes, bytes]]]",
    "operation": "EthLib.Consensus.Exports.lightClientSyncExport",
    "method": "consensus_light_client_sync",
    "errors":
@@ -4311,10 +4715,11 @@
       {"constructor": "finalizedNotOfState", "code": 21}]}],
    "error_class": "LightClientError",
    "docstring":
-   "The headers of a sync, step by step, from a bootstrap for a trusted block root.\n\nThe store starts at the given fork, and the bootstrap may be of an earlier fork.\n\nThe configuration of the name holds, with the replacements that the JSON object gives.\n\nEach update is checked with the BLS signature scheme."},
+   "The headers of a sync, step by step, from a bootstrap for a trusted block root.\n\nThe arguments are the names of the preset, the fork of the store and the fork of the bootstrap.\n\nThen come replacements of values of the configuration and the trusted block root.\n\nThen come the root of the genesis validators, the bootstrap in SSZ and the steps.\n\nA step is an update of a fork at a slot, an update forced at a slot, or an upgrade to a fork.\n\nEach step gives the finalized header, then the optimistic header, each a slot and two roots.\n\nEach update is checked with the BLS signature scheme."},
   {"summary":
-   "The root of a block, given as bytes, then the bytes of its light client header.",
-   "signature": "(name: str, fork: str, config: bytes, block: bytes) -> bytes",
+   "The root of a block, given as bytes, and the bytes of its light client header, as a pair.",
+   "signature":
+   "(name: str, fork: str, config: dict[str, Any] | None, block: bytes) -> tuple[bytes, bytes]",
    "operation": "EthLib.Consensus.Exports.blockToLightClientHeaderExport",
    "method": "consensus_block_to_light_client_header",
    "errors":
@@ -4343,11 +4748,11 @@
       {"constructor": "finalizedNotOfState", "code": 21}]}],
    "error_class": "LightClientError",
    "docstring":
-   "The root of a block, given as bytes, then the bytes of its light client header."},
+   "The root of a block, given as bytes, and the bytes of its light client header, as a pair."},
   {"summary":
    "Whether the proofs of an update or a finality update, given as bytes, verify.",
    "signature":
-   "(name: str, fork: str, type: str, config: bytes, data: bytes) -> bool",
+   "(name: str, fork: str, type: str, config: dict[str, Any] | None, data: bytes) -> bool",
    "operation": "EthLib.Consensus.Exports.lightClientUpdateProofsExport",
    "method": "consensus_light_client_update_proofs",
    "errors":
@@ -4380,7 +4785,7 @@
   {"summary":
    "Whether a new update, given as bytes, ranks above an old one for a forced update.",
    "signature":
-   "(name: str, fork: str, old_fork: str, config: bytes, new_update: bytes, old_update: bytes) -> bool",
+   "(name: str, fork: str, old_fork: str, config: dict[str, Any] | None, new_update: bytes, old_update: bytes) -> bool",
    "operation": "EthLib.Consensus.Exports.isBetterUpdateExport",
    "method": "consensus_is_better_update",
    "errors":
@@ -4445,7 +4850,7 @@
   {"summary":
    "The bootstrap that a full node serves for a block, from the block and its post state.",
    "signature":
-   "(name: str, fork: str, config: bytes, state: bytes, block: bytes) -> bytes",
+   "(name: str, fork: str, config: dict[str, Any] | None, state: bytes, block: bytes) -> bytes",
    "operation": "EthLib.Consensus.Exports.createLightClientBootstrapExport",
    "method": "consensus_create_light_client_bootstrap",
    "errors":
@@ -4478,7 +4883,7 @@
   {"summary":
    "The update that a full node serves for a block, from the blocks and their post states.",
    "signature":
-   "(name: str, fork: str, attested_fork: str, finalized_fork: str, type: str, config: bytes, state: bytes, block: bytes, attested_state: bytes, attested_block: bytes, finalized_block: bytes) -> bytes",
+   "(name: str, fork: str, attested_fork: str, finalized_fork: str, type: str, config: dict[str, Any] | None, state: bytes, block: bytes, attested_state: bytes, attested_block: bytes, finalized_block: bytes | None) -> bytes",
    "operation": "EthLib.Consensus.Exports.createLightClientUpdateExport",
    "method": "consensus_create_light_client_update",
    "errors":
@@ -4507,11 +4912,11 @@
       {"constructor": "finalizedNotOfState", "code": 21}]}],
    "error_class": "LightClientError",
    "docstring":
-   "The update that a full node serves for a block, from the blocks and their post states.\n\nThe type names the update, the finality update or the optimistic update that it gives.\n\nThe first fork is that of the block, the second that of its parent, which the update takes.\n\nThe third is the fork of the finalized block, at or before the second.\n\nEmpty bytes for the finalized block stand for a finalized block that the node does not know."},
+   "The update that a full node serves for a block, from the blocks and their post states.\n\nThe type names the update, the finality update or the optimistic update that it gives.\n\nThe first fork is that of the block, the second that of its parent, which the update takes.\n\nThe third is the fork of the finalized block, at or before the second.\n\n`None` for the finalized block stands for a finalized block that the node does not know."},
   {"summary":
    "The fork digest at an epoch, on the chain with the given root of the genesis validators.",
    "signature":
-   "(name: str, config: bytes, genesis_validators_root: bytes, epoch: int) -> bytes",
+   "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, epoch: int) -> bytes",
    "operation": "EthLib.Consensus.Exports.computeForkDigestExport",
    "method": "consensus_compute_fork_digest",
    "errors":
@@ -4594,10 +4999,10 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
    "docstring":
-   "The fork digest at an epoch, on the chain with the given root of the genesis validators.\n\nThe configuration of the name holds, with the replacements that the JSON object gives."},
+   "The fork digest at an epoch, on the chain with the given root of the genesis validators.\n\nThe configuration of the name holds, with the replacements that a `dict` gives."},
   {"summary":
-   "The root of the value that the bytes encode, then the bytes of that value.",
-   "signature": "(type: str, data: bytes) -> bytes",
+   "The root of the value that the bytes encode, and the bytes of that value, as a pair.",
+   "signature": "(type: str, data: bytes) -> tuple[bytes, bytes]",
    "operation": "EthLib.Consensus.Exports.pqKeysSszExport",
    "method": "pq_keys_ssz",
    "errors":
@@ -4680,7 +5085,7 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
    "docstring":
-   "The root of the value that the bytes encode, then the bytes of that value.\n\nThe container is named in UTF-8."},
+   "The root of the value that the bytes encode, and the bytes of that value, as a pair.\n\nThe arguments are the name of the container and the bytes."},
   {"summary":
    "The root that a proof of possession signs, on the chain with the given genesis validators.",
    "signature":
@@ -4703,7 +5108,7 @@
    "Whether a proof of possession of a leanXMSS key for a BLS key is valid, with Keccak-256."},
   {"summary": "Whether a sidecar, given as bytes, has a valid shape.",
    "signature":
-   "(name: str, fork: str, data: bytes, block: bytes, config: bytes) -> bool",
+   "(name: str, fork: str, data: bytes, block: bytes, config: dict[str, Any] | None) -> bool",
    "operation": "EthLib.Consensus.Exports.verifyDataColumnSidecarExport",
    "method": "consensus_verify_data_column_sidecar",
    "errors":
@@ -4786,7 +5191,7 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
    "docstring":
-   "Whether a sidecar, given as bytes, has a valid shape.\n\nBefore Gloas the count of its commitments stays within the blob limit of its epoch.\n\nThe configuration of the name holds, with the replacements that the JSON object gives."},
+   "Whether a sidecar, given as bytes, has a valid shape.\n\nThe arguments are the name of the preset and the configuration, the fork and the sidecar.\n\nThen come the signed block, empty before Gloas, and replacements of values of the configuration."},
   {"summary":
    "Whether the branch of a sidecar, given as bytes, climbs to the body root of its header.",
    "signature": "(name: str, fork: str, data: bytes) -> bool",
@@ -5033,8 +5438,8 @@
    "docstring":
    "At Fulu: whether the cells of a partial sidecar match their commitments by their proofs.\n\nThe commitments of all the blobs of the block arrive in their SSZ encoding.\n\nA sidecar or a list of commitments that does not decode has code 0."},
   {"summary":
-   "The matrix of the blobs, given one after another, as its entries one after another.",
-   "signature": "(blobs: bytes) -> bytes",
+   "The matrix of the blobs, as the SSZ bytes of each of its entries, in a list.",
+   "signature": "(blobs: list[bytes]) -> list[bytes]",
    "operation": "EthLib.Consensus.Exports.computeMatrixExport",
    "method": "consensus_compute_matrix",
    "errors":
@@ -5065,10 +5470,10 @@
       {"constructor": "invalidTrustedSetup", "code": 23}]}],
    "error_class": "KzgError",
    "docstring":
-   "The matrix of the blobs, given one after another, as its entries one after another."},
+   "The matrix of the blobs, as the SSZ bytes of each of its entries, in a list.\n\nThe argument is the list of the blobs."},
   {"summary":
-   "The full matrix of `count` rows, from some entries given one after another.",
-   "signature": "(entries: bytes, blob_count: int) -> bytes",
+   "The full matrix of a count of rows, from the SSZ bytes of some of its entries, in a list.",
+   "signature": "(entries: list[bytes], blob_count: int) -> list[bytes]",
    "operation": "EthLib.Consensus.Exports.recoverMatrixExport",
    "method": "consensus_recover_matrix",
    "errors":
@@ -5099,10 +5504,11 @@
       {"constructor": "invalidTrustedSetup", "code": 23}]}],
    "error_class": "KzgError",
    "docstring":
-   "The full matrix of `count` rows, from some entries given one after another."},
+   "The full matrix of a count of rows, from the SSZ bytes of some of its entries, in a list.\n\nThe arguments are the list of the entries, of 2112 bytes each, and the count of rows."},
   {"summary":
-   "The column sidecars of a signed block, from its bytes and the rows of its blobs.",
-   "signature": "(name: str, fork: str, block: bytes, rows: bytes) -> bytes",
+   "The column sidecars of a signed block, as the SSZ bytes of each, in a list.",
+   "signature":
+   "(name: str, fork: str, block: bytes, rows: list[tuple[list[bytes], list[bytes]]]) -> list[bytes]",
    "operation": "EthLib.Consensus.Exports.getDataColumnSidecarsFromBlockExport",
    "method": "consensus_get_data_column_sidecars_from_block",
    "errors":
@@ -5185,10 +5591,11 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
    "docstring":
-   "The column sidecars of a signed block, from its bytes and the rows of its blobs."},
+   "The column sidecars of a signed block, as the SSZ bytes of each, in a list.\n\nThe arguments are the name of the preset, the fork, the signed block and the rows of its blobs."},
   {"summary":
-   "All the column sidecars of a block, from the bytes of one of them and the rows of its blobs.",
-   "signature": "(name: str, fork: str, sidecar: bytes, rows: bytes) -> bytes",
+   "All the column sidecars of a block, as the SSZ bytes of each, in a list.",
+   "signature":
+   "(name: str, fork: str, sidecar: bytes, rows: list[tuple[list[bytes], list[bytes]]]) -> list[bytes]",
    "operation":
    "EthLib.Consensus.Exports.getDataColumnSidecarsFromColumnSidecarExport",
    "method": "consensus_get_data_column_sidecars_from_column_sidecar",
@@ -5272,10 +5679,10 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
    "docstring":
-   "All the column sidecars of a block, from the bytes of one of them and the rows of its blobs."},
+   "All the column sidecars of a block, as the SSZ bytes of each, in a list.\n\nThe arguments are the name of the preset, the fork, the bytes of one sidecar and the rows."},
   {"summary":
-   "The shuffled position of every index below the count, which must be at most `2^40`.",
-   "signature": "(name: str, count: int, seed: bytes) -> bytes",
+   "The shuffled position of every index below a count of at most `2^40`, as a list.",
+   "signature": "(name: str, count: int, seed: bytes) -> list[int]",
    "operation": "EthLib.Consensus.Exports.computeShuffledPermutationExport",
    "method": "consensus_compute_shuffled_permutation",
    "errors":
@@ -5287,7 +5694,7 @@
       {"constructor": "countTooLarge", "code": 204}]}],
    "error_class": "ConsensusError",
    "docstring":
-   "The shuffled position of every index below the count, which must be at most `2^40`."},
+   "The shuffled position of every index below a count of at most `2^40`, as a list.\n\nThe arguments are the name of the preset, the count and the seed of 32 bytes."},
   {"summary":
    "The shuffled position of one index, which must be below the count.",
    "signature": "(name: str, index: int, count: int, seed: bytes) -> int",
@@ -5305,7 +5712,7 @@
    "The shuffled position of one index, which must be below the count.\n\nThe count must be at most `2^40`.\n\nA shuffle of more indices reaches a position whose bucket number does not fit in 4 bytes.\n\nBoth checks come before any round.\n\nIt runs the rounds on that index alone, so its cost does not grow with the count."},
   {"summary":
    "The protocol IDs of a fork: each protocol with each version that the fork defines.",
-   "signature": "(fork: str) -> bytes",
+   "signature": "(fork: str) -> list[str]",
    "operation": "EthLib.Consensus.protocolIds",
    "method": "consensus_reqresp_protocol_ids",
    "errors": [],
@@ -5313,7 +5720,7 @@
    "docstring":
    "The protocol IDs of a fork: each protocol with each version that the fork defines."},
   {"summary": "The protocol and the version that an ID names, if it names one.",
-   "signature": "(text: str) -> bytes",
+   "signature": "(text: str) -> tuple[str, int]",
    "operation": "EthLib.Consensus.ProtocolId.parse?",
    "method": "consensus_reqresp_parse_protocol_id",
    "errors": [],
@@ -5321,8 +5728,9 @@
    "docstring":
    "The protocol and the version that an ID names, if it names one.\n\nThe version is written in decimal with no leading zero, and is positive."},
   {"summary":
-   "The root of the message that the bytes encode, then the bytes of that message.",
-   "signature": "(name: str, fork: str, type: str, data: bytes) -> bytes",
+   "The root of the message that the bytes encode, and the bytes of that message, as a pair.",
+   "signature":
+   "(name: str, fork: str, type: str, data: bytes) -> tuple[bytes, bytes]",
    "operation": "EthLib.Consensus.Exports.reqRespMessageExport",
    "method": "consensus_reqresp_message",
    "errors":
@@ -5405,7 +5813,7 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
    "docstring":
-   "The root of the message that the bytes encode, then the bytes of that message."},
+   "The root of the message that the bytes encode, and the bytes of that message, as a pair.\n\nThe arguments are the name of the preset and the configuration, the fork, the message and its bytes."},
   {"summary":
    "The fewest epochs back from the current one over which a node must serve blocks.",
    "signature": "(name: str) -> int",
@@ -5417,7 +5825,7 @@
    "The fewest epochs back from the current one over which a node must serve blocks.\n\nIt covers the time a validator needs to withdraw, plus half the churn quotient."},
   {"summary":
    "The gossip topics of a fork, in the order of the fork that adds each one.",
-   "signature": "(name: str, fork: str) -> bytes",
+   "signature": "(name: str, fork: str) -> list[str]",
    "operation": "EthLib.Consensus.Config.gossipTopics",
    "method": "consensus_gossip_topics",
    "errors": [],
@@ -5425,8 +5833,8 @@
    "docstring":
    "The gossip topics of a fork, in the order of the fork that adds each one.\n\nA fork before Altair has the topics of Phase 0.\n\nHeze has none yet, since its topics are not yet specified here."},
   {"summary":
-   "The smallest and the largest length of a request payload, as a JSON pair.",
-   "signature": "(name: str, fork: str, protocol: str) -> bytes",
+   "The smallest and the largest length of a request payload, as a pair.",
+   "signature": "(name: str, fork: str, protocol: str) -> tuple[int, int]",
    "operation": "EthLib.Consensus.Exports.reqRespRequestBoundsExport",
    "method": "consensus_reqresp_request_bounds",
    "errors":
@@ -5438,10 +5846,11 @@
       {"constructor": "topicsNotSpecified", "code": 304}]}],
    "error_class": "ConsensusError",
    "docstring":
-   "The smallest and the largest length of a request payload, as a JSON pair."},
+   "The smallest and the largest length of a request payload, as a pair.\n\nThe arguments are the name of the preset and the configuration, the fork and the protocol ID."},
   {"summary":
-   "The smallest and the largest length of the payload of a successful response chunk.",
-   "signature": "(name: str, chunk_fork: str, protocol: str) -> bytes",
+   "The smallest and the largest length of the payload of a successful response chunk, as a pair.",
+   "signature":
+   "(name: str, chunk_fork: str, protocol: str) -> tuple[int, int]",
    "operation": "EthLib.Consensus.Exports.reqRespResponseBoundsExport",
    "method": "consensus_reqresp_response_bounds",
    "errors":
@@ -5453,7 +5862,7 @@
       {"constructor": "topicsNotSpecified", "code": 304}]}],
    "error_class": "ConsensusError",
    "docstring":
-   "The smallest and the largest length of the payload of a successful response chunk.\n\nThe fork is the one that the context bytes of the chunk name, and it must define the protocol."},
+   "The smallest and the largest length of the payload of a successful response chunk, as a pair.\n\nThe arguments are the name of the preset and the configuration, the fork of the chunk and the ID.\n\nThat fork is the one that the context bytes of the chunk name, and it must define the protocol."},
   {"summary": "The largest length of the payload of a gossip topic at a fork.",
    "signature": "(name: str, fork: str, topic: str) -> int",
    "operation": "EthLib.Consensus.Exports.gossipTopicBoundExport",
@@ -5521,7 +5930,7 @@
    "docstring":
    "From Fulu: the subnet of a data column sidecar, its column modulo the number of subnets."},
   {"summary": "The attestation subnets that a node subscribes to in an epoch.",
-   "signature": "(name: str, node_id: bytes, epoch: int) -> bytes",
+   "signature": "(name: str, node_id: int, epoch: int) -> list[int]",
    "operation": "EthLib.Consensus.computeSubscribedSubnets",
    "method": "consensus_compute_subscribed_subnets",
    "errors":
@@ -5579,7 +5988,7 @@
   {"summary":
    "One response chunk, given the number of context bytes that the method sends.",
    "signature":
-   "(context_bytes: int, type_min: int, type_bound: int, data: bytes) -> bytes",
+   "(context_bytes: int, type_min: int, type_bound: int, data: bytes) -> tuple[int, bytes, bytes]",
    "operation": "EthLib.Networking.ReqResp.decodeResponseChunk",
    "method": "reqresp_decode_response_chunk",
    "errors":
@@ -5597,6 +6006,24 @@
    "error_class": "ReqRespError",
    "docstring":
    "One response chunk, given the number of context bytes that the method sends.\n\nA success carries that many context bytes, and its payload has the bounds of the message type.\n\nAn error carries no context bytes, and its payload is an error message of at most 256 bytes."},
+  {"summary":
+   "A payload that decodes to `data`: its length as a varint, then a stream that compresses.",
+   "signature": "(ssz_bytes: bytes) -> bytes",
+   "operation": "EthLib.Networking.ReqResp.encodePayload",
+   "method": "reqresp_encode_payload",
+   "errors": [],
+   "error_class": null,
+   "docstring":
+   "A payload that decodes to `data`: its length as a varint, then a stream that compresses.\n\nA chunk of the stream is compressed when that makes it shorter."},
+  {"summary":
+   "The response chunk of a code byte, context bytes and a payload, compressed when shorter.",
+   "signature": "(code: int, context: bytes, payload: bytes) -> bytes",
+   "operation": "EthLib.Networking.ReqResp.Exports.encodeResponseChunkExport",
+   "method": "reqresp_encode_response_chunk",
+   "errors": [],
+   "error_class": null,
+   "docstring":
+   "The response chunk of a code byte, context bytes and a payload, compressed when shorter.\n\nIt does not check that the context bytes or the payload fit the code."},
   {"summary":
    "The hash of a header in RLP form, after the decoder at the fork accepts it.",
    "signature": "(fork: str, header: bytes) -> bytes",
@@ -5649,16 +6076,41 @@
   {"summary":
    "The difficulty of a block at a fork: `D(H)` of the Yellow Paper, 4.3.4, before Paris.",
    "signature":
-   "(fork: bytes, number: bytes, timestamp: bytes, parent_timestamp: bytes, parent_difficulty: bytes, parent_ommers: bytes) -> bytes",
+   "(fork: str, number: int, timestamp: int, parent_timestamp: int, parent_difficulty: int, parent_ommers: int) -> int",
    "operation": "EthLib.Execution.Blocks.blockDifficulty",
    "method": "pow_block_difficulty",
    "errors": [],
    "error_class": "BlockError",
    "docstring":
-   "The difficulty of a block at a fork: `D(H)` of the Yellow Paper, 4.3.4, before Paris.\n\n```text\n    D(H) = max(D_min, P_d + ⌊P_d / 2048⌋ · factor + ε)\n```\n\n`P_d` is the parent's difficulty, and `ε` is the bomb.\n\nThe factor is the one of the time since the parent.\n\nFrom Paris on, [EIP-3675](https://eips.ethereum.org/EIPS/eip-3675#block-structure) sets it to 0.\n\nThe genesis block has no parent, and its difficulty is part of the chain's configuration."},
+   "The difficulty of a block at a fork: `D(H)` of the Yellow Paper, 4.3.4, before Paris.\n\n```text\n    D(H) = max(D_min, P_d + ⌊P_d / 2048⌋ · factor + ε)\n```\n\n`P_d` is the parent's difficulty, and `ε` is the bomb.\n\nThe factor is the one of the time since the parent.\n\nFrom Paris on, [EIP-3675] sets it to 0.\n\nThe genesis block has no parent, and its difficulty is part of the chain's configuration.\n\n[EIP-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#block-structure"},
+  {"summary":
+   "The RLP form of the forks of a chain, each with its first block.",
+   "signature": "(forks: list[tuple[str, int]]) -> bytes",
+   "operation": "EthLib.Execution.Blocks.Exports.chainForksExport",
+   "method": "pow_chain_forks",
+   "errors":
+   [{"type": "EthLib.Serialization.Rlp.RlpError",
+     "codes":
+     [{"constructor": "payloadTooLong", "code": 1},
+      {"constructor": "inputTooShort", "code": 2},
+      {"constructor": "singleByteWithPrefix", "code": 3},
+      {"constructor": "longFormForShortLength", "code": 4},
+      {"constructor": "leadingZeroInLength", "code": 5},
+      {"constructor": "trailingBytes", "code": 6},
+      {"constructor": "leadingZeroInScalar", "code": 7},
+      {"constructor": "listAsScalar", "code": 8},
+      {"constructor": "listAsBytes", "code": 9},
+      {"constructor": "bytesAsList", "code": 10},
+      {"constructor": "wrongLength", "code": 11},
+      {"constructor": "scalarTooLarge", "code": 12},
+      {"constructor": "wrongFieldCount", "code": 13},
+      {"constructor": "inField", "code": 14}]}],
+   "error_class": "BlockError",
+   "docstring":
+   "The RLP form of the forks of a chain, each with its first block.\n\nThe argument is the list of the forks, each its name and its first block."},
   {"summary":
    "The seal hash of a header: the Keccak-256 hash of the header without mix digest and nonce.",
-   "signature": "(fork: bytes, header: bytes) -> bytes",
+   "signature": "(fork: str, header: bytes) -> bytes",
    "operation": "EthLib.Execution.Blocks.Exports.sealHashExport",
    "method": "pow_seal_hash",
    "errors":
@@ -5680,10 +6132,10 @@
       {"constructor": "inField", "code": 14}]}],
    "error_class": "BlockError",
    "docstring":
-   "The seal hash of a header: the Keccak-256 hash of the header without mix digest and nonce."},
+   "The seal hash of a header: the Keccak-256 hash of the header without mix digest and nonce.\n\nThe arguments are the name of the fork and the header in RLP form."},
   {"summary":
    "Check the proof of work of a header, as section 4.3.4 of the Yellow Paper asks.",
-   "signature": "(fork: bytes, header: bytes) -> bool",
+   "signature": "(fork: str, header: bytes) -> bool",
    "operation": "EthLib.Execution.Blocks.checkProofOfWork",
    "method": "pow_check",
    "errors":
@@ -5989,66 +6441,59 @@
   {"summary":
    "The base fee per gas of a block, from its parent's gas limit, gas used and base fee.",
    "signature":
-   "(parent_gas_limit: bytes, parent_gas_used: bytes, parent_base_fee_per_gas: bytes) -> bytes",
+   "(parent_gas_limit: int, parent_gas_used: int, parent_base_fee_per_gas: int) -> int",
    "operation": "EthLib.Execution.Fees.Exports.baseFeePerGasExport",
    "method": "fees_base_fee_per_gas",
    "errors": [],
-   "error_class": null,
+   "error_class": "FeesError",
    "docstring":
    "The base fee per gas of a block, from its parent's gas limit, gas used and base fee."},
   {"summary":
    "`factor * e^(numerator / denominator)`, the integer approximation of EIP-4844.",
-   "signature":
-   "(factor: bytes, numerator: bytes, denominator: bytes) -> bytes",
+   "signature": "(factor: int, numerator: int, denominator: int) -> int",
    "operation": "EthLib.Execution.Fees.Exports.fakeExponentialExport",
    "method": "fees_fake_exponential",
    "errors": [],
-   "error_class": null,
+   "error_class": "FeesError",
    "docstring":
    "`factor * e^(numerator / denominator)`, the integer approximation of EIP-4844.\n\nA denominator of 0 gives 0, where the EIP divides by 0 and fails."},
   {"summary":
    "The base fee per blob gas at an excess, under the blob schedule of a fork.",
-   "signature": "(fork: bytes, excess_blob_gas: bytes) -> bytes",
+   "signature": "(fork: str, excess_blob_gas: int) -> int",
    "operation": "EthLib.Execution.Fees.Exports.baseFeePerBlobGasExport",
    "method": "fees_base_fee_per_blob_gas",
    "errors": [],
    "error_class": "FeesError",
    "docstring":
-   "The base fee per blob gas at an excess, under the blob schedule of a fork."},
+   "The base fee per blob gas at an excess, under the blob schedule of a fork.\n\nThe arguments are the name of the fork and the excess blob gas."},
   {"summary":
    "The fee of the blobs of a transaction, decoded at a fork, at an excess blob gas.",
-   "signature":
-   "(fork: bytes, excess_blob_gas: bytes, transaction: bytes) -> bytes",
+   "signature": "(fork: str, excess_blob_gas: int, transaction: bytes) -> int",
    "operation": "EthLib.Execution.Fees.Exports.blobDataFeeExport",
    "method": "fees_blob_data_fee",
    "errors": [],
    "error_class": "FeesError",
    "docstring":
-   "The fee of the blobs of a transaction, decoded at a fork, at an excess blob gas."},
+   "The fee of the blobs of a transaction, decoded at a fork, at an excess blob gas.\n\nThe arguments are the name of the fork, the excess blob gas and the transaction."},
   {"summary":
    "The excess blob gas of a block at a fork, from its parent's excess, blob gas and base fee.",
    "signature":
-   "(fork: bytes, parent_excess_blob_gas: bytes, parent_blob_gas_used: bytes, parent_base_fee_per_gas: bytes) -> bytes",
+   "(fork: str, parent_excess_blob_gas: int, parent_blob_gas_used: int, parent_base_fee_per_gas: int) -> int",
    "operation": "EthLib.Execution.Fees.Exports.excessBlobGasExport",
    "method": "fees_excess_blob_gas",
    "errors": [],
    "error_class": "FeesError",
    "docstring":
-   "The excess blob gas of a block at a fork, from its parent's excess, blob gas and base fee."},
-  {"summary": "The word that the instruction of an opcode pushes.",
-   "signature": "(opcode: int, a: bytes, b: bytes, c: bytes) -> bytes",
+   "The excess blob gas of a block at a fork, from its parent's excess, blob gas and base fee.\n\nThe arguments are the name of the fork, then the three numbers of the parent."},
+  {"summary":
+   "The word that the instruction of an opcode pushes, for at most three operands.",
+   "signature": "(opcode: int, operands: list[int]) -> int",
    "operation": "EthLib.Execution.Evm.Exports.wordOpExport",
    "method": "evm_word_op",
-   "errors":
-   [{"type": "EthLib.Execution.Evm.Exports.ArgumentError",
-     "codes":
-     [{"constructor": "operandLength", "code": 101},
-      {"constructor": "rangesLength", "code": 102},
-      {"constructor": "senderLength", "code": 103},
-      {"constructor": "saltLength", "code": 104}]}],
+   "errors": [],
    "error_class": "EvmError",
    "docstring":
-   "The word that the instruction of an opcode pushes.\n\nEach opcode is read at a fork that has it.\n\nEach operand is a word of 32 bytes.\n\nAn opcode outside the table fails with code 0, since no Lean error type covers it."},
+   "The word that the instruction of an opcode pushes, for at most three operands.\n\nThe arguments are the opcode and the list of the operands, each an `int` below 2^256.\n\nA missing operand is 0, and an opcode outside the table fails with code 0."},
   {"summary":
    "The depths, counted from 1 at the top, that the immediate byte of an opcode encodes.",
    "signature": "(opcode: int, immediate: int) -> bytes",
@@ -6059,44 +6504,25 @@
    "docstring":
    "The depths, counted from 1 at the top, that the immediate byte of an opcode encodes.\n\nDUPN and SWAPN give one depth, and EXCHANGE gives two, as EIP-8024 decodes them.\n\nAnother opcode, or a byte that encodes no depth, fails with code 0.\n\nNo Lean error type covers these failures."},
   {"summary": "The price of a memory of a given size in bytes.",
-   "signature": "(size: bytes) -> bytes",
+   "signature": "(size: int) -> int",
    "operation": "EthLib.Execution.Evm.Exports.memoryGasCostExport",
    "method": "evm_memory_gas_cost",
    "errors": [],
-   "error_class": null,
+   "error_class": "EvmError",
    "docstring": "The price of a memory of a given size in bytes."},
-  {"summary": "The price of growing a memory for a list of ranges.",
-   "signature": "(current_size: bytes, ranges: bytes) -> bytes",
-   "operation": "EthLib.Execution.Evm.Exports.extendMemoryCostExport",
-   "method": "evm_extend_memory_cost",
-   "errors":
-   [{"type": "EthLib.Execution.Evm.Exports.ArgumentError",
-     "codes":
-     [{"constructor": "operandLength", "code": 101},
-      {"constructor": "rangesLength", "code": 102},
-      {"constructor": "senderLength", "code": 103},
-      {"constructor": "saltLength", "code": 104}]}],
+  {"summary":
+   "The price of growing a memory for a list of ranges, and the bytes that it grows by.",
+   "signature":
+   "(current_size: int, ranges: list[tuple[int, int]]) -> tuple[int, int]",
+   "operation": "EthLib.Execution.Evm.Exports.extendMemoryExport",
+   "method": "evm_extend_memory",
+   "errors": [],
    "error_class": "EvmError",
    "docstring":
-   "The price of growing a memory for a list of ranges.\n\nEach range is a start word, then a size word, so the ranges are a multiple of 64 bytes."},
+   "The price of growing a memory for a list of ranges, and the bytes that it grows by.\n\nThe arguments are the size of the memory and the ranges, each a start word and a size word."},
   {"summary":
-   "The number of bytes that a memory grows by for a list of ranges.",
-   "signature": "(current_size: bytes, ranges: bytes) -> bytes",
-   "operation": "EthLib.Execution.Evm.Exports.extendMemoryExpandByExport",
-   "method": "evm_extend_memory_expand_by",
-   "errors":
-   [{"type": "EthLib.Execution.Evm.Exports.ArgumentError",
-     "codes":
-     [{"constructor": "operandLength", "code": 101},
-      {"constructor": "rangesLength", "code": 102},
-      {"constructor": "senderLength", "code": 103},
-      {"constructor": "saltLength", "code": 104}]}],
-   "error_class": "EvmError",
-   "docstring":
-   "The number of bytes that a memory grows by for a list of ranges.\n\nEach range is a start word, then a size word, so the ranges are a multiple of 64 bytes."},
-  {"summary":
-   "The address of the contract that a sender makes with CREATE at a big-endian nonce.",
-   "signature": "(sender: bytes, nonce: bytes) -> bytes",
+   "The address of the contract that a sender makes with CREATE at a nonce.",
+   "signature": "(sender: bytes, nonce: int) -> bytes",
    "operation": "EthLib.Execution.Evm.Exports.createAddressExport",
    "method": "evm_create_address",
    "errors":
@@ -6118,13 +6544,11 @@
       {"constructor": "inField", "code": 14}]},
     {"type": "EthLib.Execution.Evm.Exports.ArgumentError",
      "codes":
-     [{"constructor": "operandLength", "code": 101},
-      {"constructor": "rangesLength", "code": 102},
-      {"constructor": "senderLength", "code": 103},
+     [{"constructor": "senderLength", "code": 103},
       {"constructor": "saltLength", "code": 104}]}],
    "error_class": "EvmError",
    "docstring":
-   "The address of the contract that a sender makes with CREATE at a big-endian nonce.\n\nThe sender is an address of 20 bytes."},
+   "The address of the contract that a sender makes with CREATE at a nonce.\n\nThe arguments are the sender, an address of 20 bytes, and the nonce, an `int`."},
   {"summary":
    "The address of the contract that a sender makes with CREATE2, from a salt and init code.",
    "signature": "(sender: bytes, salt: bytes, init_code: bytes) -> bytes",
@@ -6133,9 +6557,7 @@
    "errors":
    [{"type": "EthLib.Execution.Evm.Exports.ArgumentError",
      "codes":
-     [{"constructor": "operandLength", "code": 101},
-      {"constructor": "rangesLength", "code": 102},
-      {"constructor": "senderLength", "code": 103},
+     [{"constructor": "senderLength", "code": 103},
       {"constructor": "saltLength", "code": 104}]}],
    "error_class": "EvmError",
    "docstring":
@@ -6189,7 +6611,7 @@
    "docstring":
    "The item that `input` encodes.\n\nIt fails unless `input` is exactly the encoding of one item."},
   {"summary":
-   "The value of the named type that the bytes encode, given as the item of the value.",
+   "The value of the named type that the bytes encode, as a Python value.",
    "signature": "(kind: str, data: bytes) -> Any",
    "operation": "EthLib.Serialization.Rlp.Exports.decodeAsExport",
    "method": "rlp_decode_as",
@@ -6212,9 +6634,10 @@
       {"constructor": "inField", "code": 14}]}],
    "error_class": "RlpError",
    "docstring":
-   "The value of the named type that the bytes encode, given as the item of the value.\n\nAn unbounded integer goes through the scalar decoder itself."},
-  {"summary": "The SSZ bytes of a value of a type, both given as JSON.",
-   "signature": "(type: bytes, value: bytes) -> bytes",
+   "The value of the named type that the bytes encode, as a Python value.\n\nThe arguments are the name of the type and the bytes.\n\nThe names are `nat`, `u256`, `uint64`, `bool`, `address`, `recipient` and `list_nat`.\n\nA recipient is an address, or `None` for a contract creation."},
+  {"summary":
+   "The SSZ bytes of a value of a type, both given in their tagged form.",
+   "signature": "(type: str | dict[str, Any], value: dict[str, Any]) -> bytes",
    "operation": "EthLib.Serialization.Ssz.Exports.serializeExport",
    "method": "ssz_serialize",
    "errors":
@@ -6296,10 +6719,11 @@
       {"constructor": "structNotAnObject", "code": 74},
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
-   "docstring": "The SSZ bytes of a value of a type, both given as JSON."},
+   "docstring":
+   "The SSZ bytes of a value of a type, both given in their tagged form."},
   {"summary":
-   "The value, as JSON, that SSZ bytes hold for a type given as JSON.",
-   "signature": "(type: bytes, data: bytes) -> bytes",
+   "The value that SSZ bytes hold for a type given in its tagged form, as a tagged `dict`.",
+   "signature": "(type: str | dict[str, Any], data: bytes) -> dict[str, Any]",
    "operation": "EthLib.Serialization.Ssz.Exports.deserializeExport",
    "method": "ssz_deserialize",
    "errors":
@@ -6382,10 +6806,10 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
    "docstring":
-   "The value, as JSON, that SSZ bytes hold for a type given as JSON."},
+   "The value that SSZ bytes hold for a type given in its tagged form, as a tagged `dict`."},
   {"summary":
-   "The 32-byte hash tree root of a value of a type, both given as JSON.",
-   "signature": "(type: bytes, value: bytes) -> bytes",
+   "The 32-byte hash tree root of a value of a type, both given in their tagged form.",
+   "signature": "(type: str | dict[str, Any], value: dict[str, Any]) -> bytes",
    "operation": "EthLib.Serialization.Ssz.Exports.hashTreeRootExport",
    "method": "ssz_hash_tree_root",
    "errors":
@@ -6468,7 +6892,7 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
    "docstring":
-   "The 32-byte hash tree root of a value of a type, both given as JSON."},
+   "The 32-byte hash tree root of a value of a type, both given in their tagged form."},
   {"summary":
    "The ciphertext `R || iv || c || d` of `m` to the public key `recipient`.",
    "signature":
@@ -6578,21 +7002,43 @@
    "docstring":
    "Whether the RLP record `record` of an ENRResponse is signed by the public key `sender`."},
   {"summary":
-   "The fork identifier, as RLP, of a node with the schedule `schedule` at a head.",
-   "signature": "(schedule: bytes, number: int, timestamp: int) -> bytes",
+   "The fork identifier of a node with a schedule at a head: its hash and its next fork.",
+   "signature":
+   "(schedule: bytes, number: int, timestamp: int) -> tuple[bytes, int]",
    "operation": "EthLib.Networking.Devp2p.Exports.forkIdExport",
    "method": "fork_id",
    "errors": [],
    "error_class": "ForkIdError",
    "docstring":
-   "The fork identifier, as RLP, of a node with the schedule `schedule` at a head."},
-  {"summary": "The fork identifier, as RLP, of a mainnet node at a head.",
-   "signature": "(number: int, timestamp: int) -> bytes",
+   "The fork identifier of a node with a schedule at a head: its hash and its next fork.\n\nThe arguments are the schedule in RLP, the block number and the timestamp of the head."},
+  {"summary":
+   "The RLP schedule `[genesis-hash, genesis-time, merge-fork, forks]` of a chain.",
+   "signature":
+   "(genesis_hash: bytes, genesis_time: int, merge_fork_block: int | None, forks: list[tuple[str, int, int]]) -> bytes",
+   "operation": "EthLib.Networking.Devp2p.Exports.scheduleExport",
+   "method": "fork_id_schedule",
+   "errors": [],
+   "error_class": "ForkIdError",
+   "docstring":
+   "The RLP schedule `[genesis-hash, genesis-time, merge-fork, forks]` of a chain.\n\nThe arguments are the genesis hash, the genesis time, the merge fork block or `None`, and the forks.\n\nEach fork is its name, its kind, 0 for a block and 1 for a time, and its block or time."},
+  {"summary":
+   "The RLP fork identifier `[FORK_HASH, FORK_NEXT]`, from its 4-byte hash and its next fork.",
+   "signature": "(fork_hash: bytes, fork_next: int) -> bytes",
+   "operation": "EthLib.Networking.Devp2p.Exports.encodeExport",
+   "method": "fork_id_encode",
+   "errors": [],
+   "error_class": "ForkIdError",
+   "docstring":
+   "The RLP fork identifier `[FORK_HASH, FORK_NEXT]`, from its 4-byte hash and its next fork."},
+  {"summary":
+   "The fork identifier of a mainnet node at a head: its hash and its next fork.",
+   "signature": "(number: int, timestamp: int) -> tuple[bytes, int]",
    "operation": "EthLib.Networking.Devp2p.Exports.mainnetForkIdExport",
    "method": "mainnet_fork_id",
    "errors": [],
    "error_class": "ForkIdError",
-   "docstring": "The fork identifier, as RLP, of a mainnet node at a head."},
+   "docstring":
+   "The fork identifier of a mainnet node at a head: its hash and its next fork.\n\nThe arguments are the block number and the timestamp of the head."},
   {"summary":
    "Whether a node at a head accepts the fork identifier of a peer, by the rules of EIP-2124.",
    "signature":
@@ -6804,7 +7250,7 @@
    "errors": [],
    "error_class": null,
    "docstring":
-   "A Snappy block of the input: the length as a varint, then literals and copies.\n\nThe input must have at most 2^32 - 1 bytes, the largest length that a preamble can declare (§1).\n\nA longer input gives a preamble out of range, so decompression rejects the block."},
+   "A Snappy block of the input: the length as a varint, then literals and copies.\n\nThe input must have at most 2^32 - 1 bytes, the largest length that a preamble can declare (§1).\n\nA longer input gives a preamble out of range, so decompression rejects the block.\n\nThe scan writes its elements straight after the preamble, so the body is not copied a second time."},
   {"summary":
    "The bytes a framed stream decodes to, or why it is not a valid stream.",
    "signature": "(stream: bytes) -> bytes",
@@ -6886,7 +7332,7 @@
    "The 64-bit value a varint denotes, or why it is not a valid varint.\n\nThe rules are checked in this order:\n\n1. The ten-byte cap, while reading, so the work stays bounded.\n2. Minimal encoding.\n3. The 64-bit range.\n\n# Why minimality is enforced\n\nThe specification only says SHOULD.\n\nRejecting padding means each length has exactly one encoding.\n\nSo a message cannot be re-sent with a different prefix that differs only in padding."},
   {"summary":
    "The message ID of a message on a topic of a fork: the first 20 bytes of a SHA-256 digest.",
-   "signature": "(fork: bytes, topic: bytes, data: bytes) -> bytes",
+   "signature": "(fork: str, topic: bytes, data: bytes) -> bytes",
    "operation": "EthLib.Networking.Gossip.messageId",
    "method": "gossip_message_id",
    "errors": [],
@@ -7098,7 +7544,7 @@
    "docstring":
    "The intrinsic gas of a transaction, without the call data floor.\n\nFrom Glamsterdam it reads the sender, so the signature must name one.\n\nBefore Glamsterdam the sender changes nothing, so any address stands in for it."},
   {"summary": "Check a transaction alone on the chain `chainId`.",
-   "signature": "(fork: str, chain_id: int, tx: bytes) -> bytes",
+   "signature": "(fork: str, chain_id: int, tx: bytes) -> tuple[bytes, int]",
    "operation": "EthLib.Execution.Transactions.Exports.checkExport",
    "method": "tx_check",
    "errors":
@@ -7122,11 +7568,11 @@
       {"constructor": "intrinsicGasAboveLimit", "code": 16}]}],
    "error_class": "TransactionError",
    "docstring":
-   "Check a transaction alone on the chain `chainId`.\n\nIt returns 28 bytes: the 20-byte sender, then the intrinsic gas as 8 big-endian bytes."},
+   "Check a transaction alone on the chain `chainId`.\n\nThe arguments are the name of the fork, the chain ID and the transaction.\n\nIt returns the 20-byte sender and the intrinsic gas, which must be below 2^64."},
   {"summary":
    "Check that a transaction may enter its block at `fork`, on the chain `chainId`.",
    "signature":
-   "(fork: str, chain_id: int, tx: bytes, state: bytes, gas_limit: bytes, gas_used: bytes, blob_gas_used: bytes, base_fee: bytes, excess_blob_gas: bytes) -> bytes",
+   "(fork: str, chain_id: int, tx: bytes, state: bytes, gas_limit: int, gas_used: int, blob_gas_used: int, base_fee: int, excess_blob_gas: int) -> tuple[bytes, int, int]",
    "operation": "EthLib.Execution.Transactions.checkInclusion",
    "method": "tx_check_in_block",
    "errors":
@@ -7148,7 +7594,7 @@
   {"summary":
    "Settle the gas of a transaction that passes the gas, nonce and fee rules.",
    "signature":
-   "(fork: str, tx: bytes, base_fee: bytes, gas_left: bytes, refund_counter: bytes) -> bytes",
+   "(fork: str, tx: bytes, base_fee: int, gas_left: int, refund_counter: int) -> tuple[int, int, int, int]",
    "operation": "EthLib.Execution.Transactions.Exports.settleExport",
    "method": "tx_settle",
    "errors":
@@ -7172,11 +7618,11 @@
       {"constructor": "intrinsicGasAboveLimit", "code": 16}]}],
    "error_class": "TransactionError",
    "docstring":
-   "Settle the gas of a transaction that passes the gas, nonce and fee rules.\n\nIt reads the base fee per gas of the block, the gas left and the refund counter.\n\nThe base fee must be below 2^256, and 0 before London, which has none.\n\nThe price per gas must cover the base fee, and the gas left must be at most the gas limit.\n\nIt returns four numbers of 64 big-endian bytes each.\n\nThey are the gas used, the refund of the sender, the priority fee and the burned fee."},
+   "Settle the gas of a transaction that passes the gas, nonce and fee rules.\n\nThe arguments are the name of the fork and the transaction.\n\nThen come the base fee per gas, the gas left and the refund counter.\n\nThe base fee must be below 2^256, and 0 before London, which has none.\n\nThe price per gas must cover the base fee, and the gas left must be at most the gas limit.\n\nIt returns the gas used, the refund of the sender, the priority fee and the burned fee."},
   {"summary":
-   "Run one transaction on the state that `state` encodes, in a block with no transaction before.",
+   "Run one transaction on a state, in a block with no transaction before.",
    "signature":
-   "(fork: str, chain_id: int, tx: bytes, state: bytes, env: bytes) -> bytes",
+   "(fork: str, chain_id: int, tx: bytes, state: bytes, env: bytes) -> tuple[bytes, bytes, int, bool, list[tuple[bytes, int, int, bytes, list[tuple[bytes, int]]]]]",
    "operation": "EthLib.Execution.Transactions.Exports.runExport",
    "method": "tx_run",
    "errors":
@@ -7200,7 +7646,7 @@
       {"constructor": "balanceOverflow", "code": 104}]}],
    "error_class": "TransactionError",
    "docstring":
-   "Run one transaction on the state that `state` encodes, in a block with no transaction before.\n\nThe state takes the form of the state root export, and the block is a list of ten items.\n\nA transaction that may not enter the block fails with the code of its inclusion error.\n\nAn error that aborts the run has the code of its state error, or 0.\n\nIt returns a list of five items, about the transaction and the state after it.\n\nThey are the state root, the hash of the encoding of the logs, and the gas used.\n\nThen come whether the message succeeded, and the accounts of the state.\n\nThe state after it has no beneficiary reward, since a block pays that."},
+   "Run one transaction on a state, in a block with no transaction before.\n\nThe arguments are the name of the fork, the chain ID, the transaction, the state and the block.\n\nThe state takes the form of the state root export, and the block is a list of ten items.\n\nA transaction that may not enter the block fails with the code of its inclusion error.\n\nAn error that aborts the run has the code of its state error, or 0.\n\nIt returns the state root, the hash of the encoding of the logs, the gas used and the success.\n\nLast come the accounts of the state after it, each with its code and its storage.\n\nThe state after it has no beneficiary reward, since a block pays that."},
   {"summary": "Check the network form of a blob transaction at the named fork.",
    "signature": "(fork: str, network: bytes) -> bytes",
    "operation": "EthLib.Execution.Transactions.Exports.networkCheckExport",
@@ -7243,9 +7689,9 @@
    "docstring":
    "The packet `auth` from the initiator to the recipient's public key."},
   {"summary":
-   "The recipient's answer to `auth`: the packet `ack`, then the 128 bytes of its secrets.",
+   "The recipient's answer to `auth`: the packet `ack`, and the 128 bytes of its secrets.",
    "signature":
-   "(static_key: bytes, ephemeral_key: bytes, nonce: bytes, r: bytes, iv: bytes, padding: bytes, auth: bytes, probe: bytes) -> bytes",
+   "(static_key: bytes, ephemeral_key: bytes, nonce: bytes, r: bytes, iv: bytes, padding: bytes, auth: bytes, probe: bytes) -> tuple[bytes, bytes]",
    "operation": "EthLib.Networking.Rlpx.Exports.respondExport",
    "method": "rlpx_respond",
    "errors":
@@ -7266,7 +7712,7 @@
       {"constructor": "tagMismatch", "code": 5}]}],
    "error_class": "RlpxError",
    "docstring":
-   "The recipient's answer to `auth`: the packet `ack`, then the 128 bytes of its secrets."},
+   "The recipient's answer to `auth`: the packet `ack`, and the 128 bytes of its secrets.\n\nThe arguments are the static key, the ephemeral key, the nonce, `r`, the IV and the padding.\n\nLast come the packet `auth` and the probe that the MAC digests read after."},
   {"summary":
    "The recipient's secrets for an `auth` it received and an `ack` it sent.",
    "signature":
@@ -7352,7 +7798,7 @@
   {"summary":
    "Check a header at a fork against its parent at the parent's fork, at every fork.",
    "signature":
-   "(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: bytes) -> bool",
+   "(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: list[tuple[int, int, int, int]]) -> None",
    "operation": "EthLib.Execution.Blocks.Exports.validateHeaderExport",
    "method": "block_validate_header",
    "errors":
@@ -7416,11 +7862,11 @@
       {"constructor": "wrongBlockAccessListHash", "code": 256}]}],
    "error_class": "BlockError",
    "docstring":
-   "Check a header at a fork against its parent at the parent's fork, at every fork.\n\nThe header's blob schedule is the last given one that it has reached, else that of its fork."},
+   "Check a header at a fork against its parent at the parent's fork, at every fork.\n\nThe arguments are the forks of the parent and of the header, the parent and the header in RLP.\n\nLast come the blob schedules that the chain sets, each four integers.\n\nThe header's blob schedule is the last given one that it has reached, else that of its fork."},
   {"summary":
    "Check a header against its parent at two named forks, every check but the proof of work.",
    "signature":
-   "(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: bytes) -> bool",
+   "(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: list[tuple[int, int, int, int]]) -> None",
    "operation": "EthLib.Execution.Blocks.Exports.checkHeaderExport",
    "method": "block_check_header",
    "errors":
@@ -7484,7 +7930,7 @@
       {"constructor": "wrongBlockAccessListHash", "code": 256}]}],
    "error_class": "BlockError",
    "docstring":
-   "Check a header against its parent at two named forks, every check but the proof of work.\n\nTest chains that run without proof of work check their headers this way.\n\nThe header's blob schedule is the last given one that it has reached, else that of its fork."},
+   "Check a header against its parent at two named forks, every check but the proof of work.\n\nTest chains that run without proof of work check their headers this way.\n\nThe arguments are those of the full check of a header.\n\nThe header's blob schedule is the last given one that it has reached, else that of its fork."},
   {"summary":
    "Whether a header has the extra data that the DAO Fork asks of its first ten blocks.",
    "signature": "(dao_block: int, fork: str, header: bytes) -> bool",
@@ -7513,7 +7959,7 @@
   {"summary":
    "Run the state transition of a block on a chain, and give the state after it.",
    "signature":
-   "(config: bytes, state: bytes, recent: bytes, fork: str, block: bytes, check_seal: bool) -> bytes",
+   "(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], fork: str, block: bytes, check_seal: bool) -> bytes",
    "operation": "EthLib.Execution.Blocks.Exports.stateTransitionExport",
    "method": "state_transition",
    "errors":
@@ -7561,9 +8007,10 @@
       {"constructor": "wrongBlockAccessListHash", "code": 256}]}],
    "error_class": "BlockError",
    "docstring":
-   "Run the state transition of a block on a chain, and give the state after it.\n\nWith `checkSeal` 0, the proof of work is left out, as for test chains that run without one.\n\nIt returns a list of two items: the state root, and the accounts of the state."},
+   "Run the state transition of a block on a chain, and give the state after it.\n\nThe arguments are the configuration of the chain, its state and its recent blocks.\n\nThen come the fork and the block, and whether to check the seal of the proof of work.\n\nIt returns the RLP list of two items: the state root, and the accounts of the state."},
   {"summary": "The genesis block at a fork, in RLP form.",
-   "signature": "(fork: str, params: bytes, state: bytes) -> bytes",
+   "signature":
+   "(fork: str, params: tuple[bytes, int, int, int, bytes, bytes, bytes, int, int, int], state: bytes) -> bytes",
    "operation": "EthLib.Execution.Blocks.Exports.genesisExport",
    "method": "genesis_block",
    "errors":
@@ -7611,7 +8058,7 @@
       {"constructor": "wrongBlockAccessListHash", "code": 256}]}],
    "error_class": "BlockError",
    "docstring":
-   "The genesis block at a fork, in RLP form.\n\nThe chain chooses the fields `params` and starts with the state `state`."},
+   "The genesis block at a fork, in RLP form.\n\nThe arguments are the fork, the fields of the header that the chain chooses, and the state.\n\nThe fields are in the order of the header, from the beneficiary to the slot number."},
   {"summary":
    "Run the precompile at the address on the call data, with the gas given, at the fork named.",
    "signature": "(fork: str, address: int, data: bytes, gas: int) -> bytes",
@@ -7635,13 +8082,13 @@
    "Run the precompile at the address on the call data, with the gas given, at the fork named.\n\nThe code of a failed call names the precompile, and the message is its error, as Lean prints it.\n\nAn unknown fork, or an address with no precompile at the fork, has code 0.\n\nNo error of a precompile has that code."},
   {"summary":
    "The price of the precompile at the address on the call data, at the fork named.",
-   "signature": "(fork: str, address: int, data: bytes) -> bytes",
+   "signature": "(fork: str, address: int, data: bytes) -> int",
    "operation": "EthLib.Execution.Evm.Precompiles.Exports.priceExport",
    "method": "precompile_price",
    "errors": [],
    "error_class": "PrecompileError",
    "docstring":
-   "The price of the precompile at the address on the call data, at the fork named.\n\nThe price is a big-endian integer, since a long call data can price it above `2^64`.\n\nAn unknown fork, or an address with no precompile at the fork, has code 0."},
+   "The price of the precompile at the address on the call data, at the fork named.\n\nThe arguments are the name of the fork, the address and the call data.\n\nAn unknown fork, or an address with no precompile at the fork, has code 0."},
   {"summary":
    "The 32-byte state root, with Keccak-256, of the state that `input` encodes.",
    "signature": "(state: bytes) -> bytes",
@@ -7725,35 +8172,36 @@
    "docstring":
    "The state root after the mining rewards of a block, from the state that `input` encodes.\n\nThe forks of the chain are an RLP list of `[name, first block]`, the first one from block 0.\n\nThe block and each of its ommers decode at the fork of their own number.\n\nFrom Paris on, a block pays no reward."},
   {"summary":
-   "The name of the active fork of mainnet at a block, or no bytes when no fork is active.",
-   "signature": "(number: int, timestamp: int) -> bytes",
+   "The name of the active fork of mainnet at a block, or `None` when none is active.",
+   "signature": "(number: int, timestamp: int) -> str | None",
    "operation": "EthLib.Base.ChainConfig.Exports.mainnetActiveForkExport",
    "method": "mainnet_active_fork",
    "errors": [],
-   "error_class": null,
+   "error_class": "ChainError",
    "docstring":
-   "The name of the active fork of mainnet at a block, or no bytes when no fork is active."},
+   "The name of the active fork of mainnet at a block, or `None` when none is active.\n\nThe arguments are the block number and the timestamp."},
   {"summary":
-   "The name of the active fork of Hoodi at a block, or no bytes when no fork is active.",
-   "signature": "(number: int, timestamp: int) -> bytes",
+   "The name of the active fork of Hoodi at a block, or `None` when none is active.",
+   "signature": "(number: int, timestamp: int) -> str | None",
    "operation": "EthLib.Base.ChainConfig.Exports.hoodiActiveForkExport",
    "method": "hoodi_active_fork",
    "errors": [],
-   "error_class": null,
+   "error_class": "ChainError",
    "docstring":
-   "The name of the active fork of Hoodi at a block, or no bytes when no fork is active."},
+   "The name of the active fork of Hoodi at a block, or `None` when none is active.\n\nThe arguments are the block number and the timestamp."},
   {"summary":
-   "The name of the active fork of a configured chain at a block, or no bytes when none is active.",
-   "signature": "(config: bytes, number: int, timestamp: int) -> bytes",
+   "The name of the active fork of a configured chain at a block, or `None` when none is active.",
+   "signature":
+   "(config: dict[str, Any], number: int, timestamp: int) -> str | None",
    "operation": "EthLib.Base.ChainConfig.Exports.activeForkExport",
    "method": "active_fork",
    "errors": [],
    "error_class": "ChainError",
    "docstring":
-   "The name of the active fork of a configured chain at a block, or no bytes when none is active.\n\nThe configuration is JSON text in UTF-8, as the other exports that run on a chain read it."},
+   "The name of the active fork of a configured chain at a block, or `None` when none is active.\n\nThe arguments are the configuration as a `dict`, the block number and the timestamp."},
   {"summary":
    "The payload status of an `engine_newPayload` request, without the parent's state.",
-   "signature": "(config: bytes, request: bytes) -> bytes",
+   "signature": "(config: dict, request: dict) -> dict",
    "operation": "EthLib.Engine.Exports.newPayloadExport",
    "method": "engine_new_payload",
    "errors":
@@ -7764,11 +8212,11 @@
       {"constructor": "invalidForkchoiceState", "code": 38002}]}],
    "error_class": "EngineError",
    "docstring":
-   "The payload status of an `engine_newPayload` request, without the parent's state."},
+   "The payload status of an `engine_newPayload` request, without the parent's state.\n\nThe arguments are the chain configuration and the request."},
   {"summary":
    "The payload status of an `engine_newPayload` request, on a chain that holds the parent.",
    "signature":
-   "(config: bytes, state: bytes, recent: bytes, request: bytes) -> bytes",
+   "(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], request: dict) -> tuple[dict, bytes, bytes] | tuple[dict, None, None]",
    "operation": "EthLib.Engine.Exports.newPayloadOnChainExport",
    "method": "engine_new_payload_on_chain",
    "errors":
@@ -7779,10 +8227,10 @@
       {"constructor": "invalidForkchoiceState", "code": 38002}]}],
    "error_class": "EngineError",
    "docstring":
-   "The payload status of an `engine_newPayload` request, on a chain that holds the parent.\n\nThe chain has the inputs of the state transition export: configuration, state, recent blocks.\n\nIt returns an RLP list of three items, the status as JSON first.\n\nFor a valid payload, the RLP form of its header and the accounts of the state after it follow.\n\nFor any other payload, two empty lists follow."},
+   "The payload status of an `engine_newPayload` request, on a chain that holds the parent.\n\nThe arguments are the chain configuration, the state, the recent blocks and the request.\n\nA valid payload also gives the RLP forms of its header and of the accounts after it.\n\nOtherwise both are `None`."},
   {"summary":
    "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.",
-   "signature": "(tree: bytes, finalized: bytes, request: bytes) -> bytes",
+   "signature": "(tree: list, finalized: str | None, request: dict) -> dict",
    "operation": "EthLib.Engine.Exports.forkchoiceUpdatedExport",
    "method": "engine_forkchoice_updated",
    "errors":
@@ -7793,4 +8241,69 @@
       {"constructor": "invalidForkchoiceState", "code": 38002}]}],
    "error_class": "EngineError",
    "docstring":
-   "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.\n\nThe execution layer may know a finalized block, from an earlier update."}]}
+   "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.\n\nThe arguments are the tree, the finalized block that the execution layer knows, and the request."},
+  {"summary":
+   "From Bellatrix to Fulu: the forkchoice update of a proposer, as the value of its JSON.",
+   "signature":
+   "(name: str, fork: str, state: bytes, config: dict | None, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes]) -> dict | None",
+   "operation": "EthLib.Engine.Exports.prepareExecutionPayloadExport",
+   "method": "engine_prepare_execution_payload",
+   "errors":
+   [{"type": "EthLib.Consensus.ProposerError",
+     "codes":
+     [{"constructor": "arith", "code": 1},
+      {"constructor": "accessor", "code": 2},
+      {"constructor": "ssz", "code": 3},
+      {"constructor": "bls", "code": 4},
+      {"constructor": "transition", "code": 5},
+      {"constructor": "noAggregates", "code": 6},
+      {"constructor": "noCommittee", "code": 7},
+      {"constructor": "tooManyBits", "code": 8},
+      {"constructor": "unknownRequestType", "code": 9},
+      {"constructor": "emptyRequest", "code": 10},
+      {"constructor": "requestTypeOrder", "code": 11},
+      {"constructor": "subcommitteeOutOfRange", "code": 12},
+      {"constructor": "repeatedSubcommittee", "code": 13},
+      {"constructor": "unknownPowBlock", "code": 14},
+      {"constructor": "forkChoice", "code": 15},
+      {"constructor": "duty", "code": 16}]}],
+   "error_class": "ProposerError",
+   "docstring":
+   "From Bellatrix to Fulu: the forkchoice update of a proposer, as the value of its JSON.\n\nThe arguments are the preset, the fork, the state in SSZ, and replacements of the configuration.\n\nThen come the safe and finalized block hashes, the fee recipient and the PoW blocks in SSZ.\n\nIt is `None` when the proposer asks for nothing, before the merge."},
+  {"summary":
+   "From Gloas: the forkchoice update of a proposer, as the value of its JSON.",
+   "signature":
+   "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, head_root: bytes, head_status: int, state: bytes, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, target_gas_limit: int, verify: bool, config: dict | None) -> dict",
+   "operation": "EthLib.Engine.Exports.prepareExecutionPayloadGloasExport",
+   "method": "engine_prepare_execution_payload_gloas",
+   "errors":
+   [{"type": "EthLib.Consensus.ProposerError",
+     "codes":
+     [{"constructor": "arith", "code": 1},
+      {"constructor": "accessor", "code": 2},
+      {"constructor": "ssz", "code": 3},
+      {"constructor": "bls", "code": 4},
+      {"constructor": "transition", "code": 5},
+      {"constructor": "noAggregates", "code": 6},
+      {"constructor": "noCommittee", "code": 7},
+      {"constructor": "tooManyBits", "code": 8},
+      {"constructor": "unknownRequestType", "code": 9},
+      {"constructor": "emptyRequest", "code": 10},
+      {"constructor": "requestTypeOrder", "code": 11},
+      {"constructor": "subcommitteeOutOfRange", "code": 12},
+      {"constructor": "repeatedSubcommittee", "code": 13},
+      {"constructor": "unknownPowBlock", "code": 14},
+      {"constructor": "forkChoice", "code": 15},
+      {"constructor": "duty", "code": 16}]}],
+   "error_class": "ProposerError",
+   "docstring":
+   "From Gloas: the forkchoice update of a proposer, as the value of its JSON.\n\nThe arguments are the preset, the fork, the anchor state and the anchor block, and the steps.\n\nThen come the head root and status, the state, the safe and finalized hashes and the fee recipient.\n\nThen come the target gas limit, whether the signature checks run, and configuration replacements."},
+  {"summary":
+   "The value that Python passes, back to Python, with each failure tuple read as a failure.",
+   "signature": "(value: object) -> object",
+   "operation": "EthLib.Exports.pyValueEcho",
+   "method": "pyvalue_echo",
+   "errors": [],
+   "error_class": "BindingError",
+   "docstring":
+   "The value that Python passes, back to Python, with each failure tuple read as a failure.\n\nIt tests the converter of the C layer in both directions."}]}

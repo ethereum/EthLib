@@ -18,11 +18,13 @@ The deterministic signer, with the nonce of RFC 6979 and the low-s rule of EIP-2
 
 The node ID exists exactly when the public key can be read, and it is the hash of that key.
 
+It depends only on the `id` and `secp256k1` pairs.
+
 A record that the signer signs verifies, keeps its pairs, and reads back from its bytes.
 
 A record that the builder makes reads back from its bytes, verifies, and has its key pairs.
 
-These are correctness statements: no theorem here states that a signature cannot be forged.
+These are correctness statements; a separate module states forgery and malleability.
 -/
 
 @[expose] public section
@@ -139,22 +141,31 @@ theorem verifyV4_of_sign {r : Enr} {sk rr ss : Fn} {odd : Bool} {content : ByteA
 
 /-! ## Node ID -/
 
-/-- The public key of a record is a point that the decoder returns for some bytes. -/
+/-- The public key of a record is the point that the decoder returns for its `secp256k1` value.
+
+That value is 33 bytes. -/
 theorem decode_of_publicKeyV4 {r : Enr} {q : Point} (h : r.publicKeyV4 = .ok q) :
-    ∃ key, Point.decode key = .ok q := by
+    ∃ key, r.get KEY_SECP256K1 = some (.bytes key) ∧ key.size = 33 ∧ Point.decode key = .ok q := by
   unfold Enr.publicKeyV4 at h
-  split at h <;> (try split at h) <;> (try split at h) <;> (try split at h) <;> (try cases h)
-  rename_i key _ _
-  cases hdec : Point.decode key with
-  | error e => simp [Except.mapError, hdec] at h
-  | ok p =>
-    simp only [Except.mapError, hdec, Except.ok.injEq] at h
-    exact ⟨key, h ▸ hdec⟩
+  split at h
+  · cases h
+  · split at h
+    · split at h
+      · rename_i key hk
+        split at h
+        · rename_i hsz
+          refine ⟨key, hk, hsz, ?_⟩
+          cases hd : Point.decode key with
+          | error e => simp [hd, Except.mapError] at h
+          | ok p => simp [hd, Except.mapError] at h; rw [h]
+        · cases h
+      · cases h
+    · cases h
 
 /-- The public key of a record lies on the curve. -/
 theorem publicKeyV4_isOnCurve {r : Enr} {q : Point} (h : r.publicKeyV4 = .ok q) :
     q.isOnCurve = true := by
-  obtain ⟨key, hdec⟩ := decode_of_publicKeyV4 h
+  obtain ⟨key, -, -, hdec⟩ := decode_of_publicKeyV4 h
   exact ((Point.decode_eq_ok_iff key q).mp hdec).1
 
 /-- The public key of a record is never the point at infinity.
@@ -162,7 +173,7 @@ theorem publicKeyV4_isOnCurve {r : Enr} {q : Point} (h : r.publicKeyV4 = .ok q) 
 The decoder never returns that point. -/
 theorem publicKeyV4_ne_infinity {r : Enr} {q : Point} (h : r.publicKeyV4 = .ok q) :
     q ≠ .infinity := by
-  obtain ⟨key, hdec⟩ := decode_of_publicKeyV4 h
+  obtain ⟨key, -, -, hdec⟩ := decode_of_publicKeyV4 h
   exact ((Point.decode_eq_ok_iff key q).mp hdec).2.1
 
 /-- Let the public key of a record be the point `(x, y)`.
@@ -198,6 +209,29 @@ theorem nodeId_eq_ok_iff {r : Enr} {id : Vector UInt8 32} :
         exact ⟨x, y, rfl, (Except.ok.inj h).symm⟩
   · rintro ⟨x, y, hq, rfl⟩
     exact nodeId_of_publicKeyV4 hq
+
+/-- Let the `secp256k1` value of a "v4" record compress the curve point `(x, y)`.
+
+Its node ID is the Keccak-256 hash of the 64 bytes of `x` then `y`. -/
+theorem nodeId_of_get {r : Enr} {x y : Fp} (hq : (Point.affine x y).isOnCurve = true)
+    (hid : r.get KEY_ID = some (.bytes SCHEME_V4))
+    (hkey : r.get KEY_SECP256K1 = some (.bytes (Point.affine x y).encodeCompressed)) :
+    nodeId r = .ok (Hash.Keccak.keccak256 (publicKeyBytes x y)) :=
+  nodeId_of_publicKeyV4 (publicKeyV4_of_get hq nofun hid hkey)
+
+/-- The public key of a record depends only on its `id` and `secp256k1` values. -/
+theorem publicKeyV4_congr {r r' : Enr} (hid : r.get KEY_ID = r'.get KEY_ID)
+    (hkey : r.get KEY_SECP256K1 = r'.get KEY_SECP256K1) : r.publicKeyV4 = r'.publicKeyV4 := by
+  unfold Enr.publicKeyV4
+  rw [hid, hkey]
+
+/-- The node ID of a record depends only on its `id` and `secp256k1` values.
+
+So the sequence number, the signature and the pairs under other keys do not change it. -/
+theorem nodeId_congr {r r' : Enr} (hid : r.get KEY_ID = r'.get KEY_ID)
+    (hkey : r.get KEY_SECP256K1 = r'.get KEY_SECP256K1) : nodeId r = nodeId r' := by
+  unfold nodeId
+  rw [publicKeyV4_congr hid hkey]
 
 /-- A record that verifies has a node ID. -/
 theorem nodeId_ok_of_verifyV4 {r : Enr} (h : verifyV4 r = true) : ∃ id, nodeId r = .ok id := by

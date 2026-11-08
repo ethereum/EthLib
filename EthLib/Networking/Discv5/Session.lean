@@ -105,11 +105,8 @@ def readWhoareyou (nodeIdA : NodeId) (bytes : ByteArray) : Except SessionError C
 
 It fails when the packet would exceed 1280 bytes. -/
 def sealMessage (key : Aes.Key .aes128) (nodeIdA nodeIdB : NodeId) (maskingIv : Vector UInt8 16)
-    (nonce : Vector UInt8 12) (plaintext : ByteArray) : Except SessionError ByteArray := do
-  let header : Header := ⟨nonce, .message nodeIdA⟩
-  let ad ← (Packet.messageAd ⟨maskingIv, header, .empty⟩).mapError .packet
-  let message ← (encryptMessage key nonce plaintext ad).mapError .encryption
-  (Packet.encode nodeIdB ⟨maskingIv, header, message⟩).mapError .packet
+    (nonce : Vector UInt8 12) (plaintext : ByteArray) : Except SessionError ByteArray :=
+  sealPacket .packet .encryption key nodeIdB maskingIv ⟨nonce, .message nodeIdA⟩ plaintext
 
 /-- Node B's reading of an ordinary message packet: the source node ID and the plaintext.
 
@@ -120,8 +117,6 @@ def openMessage (keyOf : NodeId → Option (Aes.Key .aes128)) (nodeIdB : NodeId)
   let .message srcId := packet.header.authdata
     | throw (.wrongFlag packet.header.authdata.flag 0)
   let some key := keyOf srcId | throw (.noSession srcId)
-  let ad ← packet.messageAd.mapError .packet
-  let plaintext ← (decryptMessage key packet.header.nonce packet.message ad).mapError .decryption
-  return (srcId, plaintext)
+  return (srcId, ← openPacket .packet .decryption key packet)
 
 end EthLib.Networking.Discv5

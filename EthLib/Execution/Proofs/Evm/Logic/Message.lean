@@ -206,15 +206,24 @@ structure Meets (callee : Evm fork Meter → Message fork → Evm fork Meter →
   /-- The runner fails only with an error that aborts the run. -/
   aborts : ∀ caller message lt e, runChild caller message lt = .error e → e.aborts = true
 
+/-- The runner of the messages of the code of a message: a call or a creation, under any bound.
+
+It runs each message from the state and the substate of its caller. -/
+abbrev processRunner (fork : Fork) {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter]
+    (bound : Nat) :
+    MessageRunner fork Meter bound :=
+  fun caller child _ =>
+    match child.target with
+    | some _ => processMessage fork child caller.state caller.substate.child
+    | none => processCreateMessage fork child caller.state caller.substate.child
+
 /-- The runner of the messages of a frame of a message meets the assumption that always holds.
 
 It runs a call or a creation, as the code of a message runs them, for every bound on their gas. -/
 theorem meets_process [LawfulGasMeter Meter] (fork : Fork) (bound : Nat) :
-    Meets (bound := bound) (fun _ _ _ => True) fun (caller : Evm fork Meter) message _ =>
-      match message.target with
-      | some _ => processMessage fork message caller.state caller.substate.child
-      | none => processCreateMessage fork message caller.state caller.substate.child := by
+    Meets (bound := bound) (fun _ _ _ => True) (processRunner fork (Meter := Meter) bound) := by
   refine ⟨fun _ _ _ _ _ => trivial, fun caller message _ e h => ?_⟩
+  unfold processRunner at h
   split at h
   · exact (aborts_of_process_eq_error message.gas message rfl).1 _ _ _ _ _ h
   · exact (aborts_of_process_eq_error message.gas message rfl).2 _ _ _ _ _ h
@@ -308,6 +317,13 @@ theorem assumption {callee' : Evm fork Meter → Message fork → Evm fork Meter
   h bound runChild
     ⟨fun caller message lt child ran => stronger _ _ _ (meets.ok caller message lt child ran),
       meets.aborts⟩
+
+/-- A precondition that gives a witness, with a triple from the condition of each witness. -/
+theorem of_exists {α : Type} {P Q : Evm fork Meter → Prop} {R : α → Evm fork Meter → Prop}
+    (h : ∀ evm, P evm → ∃ x, R x evm) (each : ∀ x, HoareUnder fork callee (R x) Q) :
+    HoareUnder fork callee P Q := fun bound runChild meets evm hp within =>
+  let ⟨x, hx⟩ := h evm hp
+  each x bound runChild meets evm hx within
 
 variable [LawfulGasMeter Meter]
 

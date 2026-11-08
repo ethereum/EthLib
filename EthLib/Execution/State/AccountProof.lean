@@ -34,12 +34,35 @@ The word of a slot that is not set is the storage value `0`, so the answer must 
 
 EIP-1186 does not say which fields the answer holds for an address without an account.
 
-So the check judges no field of an absent account, and checks no slot of it.
+It refers the balance to `eth_getBalance`, and the nonce to `eth_getTransactionCount`.
 
-It reports the absence instead, and leaves the meaning of those fields to the caller.
+The tests of execution-apis give such an address a [balance][balance] and a [nonce][nonce] of `0`.
+
+They give the [word][word] `0` for a slot of it, so the answer must give `0` for each slot.
+
+An address without an account has no storage, so the proofs of those slots are not read.
+
+No source fixes which code hash or storage root the answer gives for an absent account.
+
+This specification decides to accept two readings of each, and to reject any other value.
+
+One reading is the zero hash, which [EIP-1052][eip-1052] gives as the code hash of no account.
+
+The other reading is the value of an account with no code and no storage.
+
+The tests give such an address the [empty code][code], whose hash is the hash of the empty string.
+
+EIP-1186 also gives that code hash for an account without code.
+
+The storage root of an account without storage is the root of the empty trie.
 
 [eip-1186]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-1186.md
 [schema]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/state.yaml
+[balance]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/tests/eth_getBalance/get-balance-unknown-account.io
+[nonce]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/tests/eth_getTransactionCount/get-nonce-unknown-account.io
+[word]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/tests/eth_getStorageAt/get-storage-unknown-account.io
+[code]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/tests/eth_getCode/get-code-unknown-account.io
+[eip-1052]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-1052.md#specification
 -/
 
 @[expose] public section
@@ -83,7 +106,9 @@ inductive AccountProofError where
   | account (error : ProofError)
   /-- The value under the address is not the RLP form of an account. -/
   | accountEncoding
-  /-- The fields of the answer are not those that the account proof shows. -/
+  /-- The fields of the answer are not those that the account proof shows.
+
+  For an absent account, a number is not `0`, or a hash is neither zero nor the empty value. -/
   | accountMismatch
   /-- The proof of the slot at an index, from 0, does not verify against the storage root. -/
   | slot (index : Nat) (error : ProofError)
@@ -118,7 +143,7 @@ inductive SlotOutcome where
 inductive AccountOutcome where
   /-- The account exists with the fields of the answer, and each slot is as the outcome says. -/
   | present (slots : List SlotOutcome)
-  /-- The address has no account; the check judges no field and no slot. -/
+  /-- The address has no account, the answer gives it no value, and each slot gives the word `0`. -/
   | absent
   deriving DecidableEq, Repr
 
@@ -127,13 +152,32 @@ namespace AccountProof
 /-- The account that an answer gives, without its storage. -/
 def account (p : AccountProof) : Account := ⟨p.nonce, p.balance, p.codeHash⟩
 
+/-- The root of the empty trie: the hash of `0x80`, the encoding of the empty string. -/
+def emptyTrieRoot (hash : ByteArray → Hash32) : Hash32 := hash ⟨#[0x80]⟩
+
+/-- Whether the fields of an answer fit an address with no account.
+
+The nonce and the balance are `0`.
+
+The code hash is zero or the Keccak-256 hash of the empty string.
+
+The storage root is zero or the root of the empty trie.
+
+The two hashes are judged apart, so a zero code hash may come with the root of the empty trie. -/
+def absentFields (hash : ByteArray → Hash32) (p : AccountProof) : Bool :=
+  p.nonce == 0 && p.balance == 0 &&
+    (p.codeHash == Vector.replicate 32 0 || p.codeHash == EMPTY_CODE_HASH) &&
+    (p.storageHash == Vector.replicate 32 0 || p.storageHash == emptyTrieRoot hash)
+
 /-- Check the account of an answer against the state root.
 
 It is `true` when the proof shows the account.
 
 The fields and the storage root of the account must then be those of the answer.
 
-It is `false` when the proof shows that the address has no account. -/
+It is `false` when the proof shows that the address has no account.
+
+The fields of the answer must then fit an address with no account. -/
 def verifyAccount (hash : ByteArray → Hash32) (stateRoot : Hash32) (p : AccountProof) :
     Except AccountProofError Bool := do
   let value ← (verifyProof hash stateRoot true ⟨p.address.toArray⟩ p.accountProof).mapError
@@ -143,7 +187,9 @@ def verifyAccount (hash : ByteArray → Hash32) (stateRoot : Hash32) (p : Accoun
     let (account, storageRoot) ← (decodeAccount bytes).mapError fun _ => .accountEncoding
     unless account = p.account ∧ storageRoot = p.storageHash do throw .accountMismatch
     return true
-  | none => return false
+  | none =>
+    unless p.absentFields hash do throw .accountMismatch
+    return false
 
 /-- Check the slot at an index against the storage root.
 
@@ -171,14 +217,26 @@ def verifySlots (hash : ByteArray → Hash32) (storageRoot : Hash32) :
     let outcome ← verifySlot hash storageRoot index s
     return outcome :: (← verifySlots hash storageRoot (index + 1) rest)
 
+/-- Check that each slot of an absent account gives the word `0`, in order.
+
+The account has no storage, so the proofs of its slots are not read. -/
+def verifyAbsentSlots : Nat → List StorageProof → Except AccountProofError Unit
+  | _, [] => pure ()
+  | index, s :: rest => do
+    unless s.value = 0 do throw (.slotMismatch index)
+    verifyAbsentSlots (index + 1) rest
+
 /-- Check a whole answer of `eth_getProof` against a state root: the account, then each slot.
 
-The slots are checked only when the account exists. -/
+The slots of an existing account are checked against its storage root.
+
+Those of an absent account must each give the word `0`. -/
 def verify (hash : ByteArray → Hash32) (stateRoot : Hash32) (p : AccountProof) :
     Except AccountProofError AccountOutcome := do
   if ← p.verifyAccount hash stateRoot then
     return .present (← verifySlots hash p.storageHash 0 p.storageProof)
   else
+    verifyAbsentSlots 0 p.storageProof
     return .absent
 
 end AccountProof

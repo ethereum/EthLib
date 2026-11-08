@@ -1,6 +1,5 @@
 module
 
-public import EthLib.Base.Exports
 public import EthLib.Consensus.Exports.Parameters
 public import EthLib.Consensus.Shuffle
 
@@ -9,7 +8,7 @@ public import EthLib.Consensus.Shuffle
 
 C-ABI exports of the swap-or-not shuffle, under the rounds of a named preset.
 
-The shuffled list comes back as a JSON list of integers.
+The exports take typed Python values, and the shuffled list comes back as a list of integers.
 
 A seed that is not 32 bytes, or an unknown name, has code 0.
 -/
@@ -18,7 +17,7 @@ public section
 
 namespace EthLib.Consensus.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result PyValue pyExport)
 
 open Lean Base
 
@@ -29,26 +28,32 @@ def shuffleErrorText : ShuffleError → String
   | .overflow => "a committee bound is 2^64 or more"
   | .countTooLarge count => s!"the index count {count} is above 2^40"
 
-/-- The seed of 32 bytes. -/
-def seedOf (seed : ByteArray) : Result Bytes32 :=
-  if h : seed.size = 32 then return ⟨seed.data, by simpa using h⟩
-  else throw (0, "a seed is 32 bytes")
-
 /-- The shuffled position of every index below the count, which must be at most `2^40`. -/
-@[export eth_consensus_compute_shuffled_permutation]
-def computeShuffledPermutationExport (name : ByteArray) (count : UInt64) (seed : ByteArray) :
-    Result ByteArray := do
-  let preset ← presetOf (← nameOf name)
-  let shuffled ← (computeShuffledPermutation preset count (← seedOf seed)).mapError
+def computeShuffledPermutationOf (args : String × UInt64 × Bytes32) : Result (List UInt64) := do
+  let (name, count, seed) := args
+  let preset ← presetOf name
+  let shuffled ← (computeShuffledPermutation preset count seed).mapError
     fun e => (e.code, shuffleErrorText e)
-  return jsonBytes (toJson shuffled.toList)
+  return shuffled.toList
+
+/-- The shuffled position of every index below a count of at most `2^40`, as a list.
+
+The arguments are the name of the preset, the count and the seed of 32 bytes. -/
+@[export eth_consensus_compute_shuffled_permutation]
+def computeShuffledPermutationExport (args : PyValue) : Result PyValue :=
+  pyExport computeShuffledPermutationOf args
 
 /-- The shuffled position of one index. -/
+def computeShuffledIndexOf (args : String × UInt64 × UInt64 × Bytes32) : Result UInt64 := do
+  let (name, index, count, seed) := args
+  let preset ← presetOf name
+  (computeShuffledIndex preset index count seed).mapError fun e => (e.code, shuffleErrorText e)
+
+/-- The shuffled position of one index.
+
+The arguments are the name of the preset, the index, the count and the seed of 32 bytes. -/
 @[export eth_consensus_compute_shuffled_index]
-def computeShuffledIndexExport (name : ByteArray) (index count : UInt64) (seed : ByteArray) :
-    Result UInt64 := do
-  let preset ← presetOf (← nameOf name)
-  (computeShuffledIndex preset index count (← seedOf seed)).mapError
-    fun e => (e.code, shuffleErrorText e)
+def computeShuffledIndexExport (args : PyValue) : Result PyValue :=
+  pyExport computeShuffledIndexOf args
 
 end EthLib.Consensus.Exports

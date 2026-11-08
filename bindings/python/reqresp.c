@@ -19,10 +19,19 @@ eth_reqresp_decode_payload(
 
 extern lean_object*
 eth_reqresp_decode_response_chunk(
-  uint64_t context_bytes,
-  uint64_t type_min,
-  uint64_t type_bound,
+  lean_object* args
+);
+
+extern lean_object*
+eth_reqresp_encode_payload(
   lean_object* data
+);
+
+extern lean_object*
+eth_reqresp_encode_response_chunk(
+  uint8_t code,
+  lean_object* context,
+  lean_object* payload
 );
 
 /* ---- Wrappers --------------------------------------------------------- */
@@ -72,14 +81,50 @@ py_reqresp_decode_response_chunk(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *context_obj, *min_obj, *bound_obj, *data_obj;
-  if (!PyArg_ParseTuple(args, "OOOO", &context_obj, &min_obj, &bound_obj, &data_obj)) return NULL;
-  uint64_t context_bytes, type_min, type_bound;
-  if (parse_uint64(context_obj, "context_bytes", &context_bytes)) return NULL;
-  if (parse_uint64(min_obj, "type_min", &type_min)) return NULL;
-  if (parse_uint64(bound_obj, "type_bound", &type_bound)) return NULL;
+  return call_pyvalue_export(eth_reqresp_decode_response_chunk, args, 4, REQRESP_ERROR);
+}
+
+PyObject*
+py_reqresp_encode_payload(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject* data_obj;
+  if (!PyArg_ParseTuple(args, "O", &data_obj)) return NULL;
   lean_object* data = parse_data(data_obj);
   if (!data) return NULL;
+  return except_into_pybytes(eth_reqresp_encode_payload(data), REQRESP_ERROR);
+}
+
+PyObject*
+py_reqresp_encode_response_chunk(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *code_obj, *context_obj, *payload_obj;
+  if (!PyArg_ParseTuple(args, "OOO", &code_obj, &context_obj, &payload_obj)) return NULL;
+  if (!PyLong_Check(code_obj)) {
+    PyErr_SetString(PyExc_TypeError, "code must be int");
+    return NULL;
+  }
+  int overflow;
+  long code = PyLong_AsLongAndOverflow(code_obj, &overflow);
+  if (code == -1 && PyErr_Occurred()) return NULL;
+  if (overflow || code < 0 || code > 255) {
+    PyErr_SetString(PyExc_OverflowError, "code must be in [0, 256)");
+    return NULL;
+  }
+  if (!PyBytes_Check(context_obj) || !PyBytes_Check(payload_obj)) {
+    PyErr_SetString(PyExc_TypeError, "context and payload must be bytes");
+    return NULL;
+  }
+  lean_object* context = parse_data(context_obj);
+  if (!context) return NULL;
+  lean_object* payload = parse_data(payload_obj);
+  if (!payload) {
+    lean_dec(context);
+    return NULL;
+  }
   return except_into_pybytes(
-    eth_reqresp_decode_response_chunk(context_bytes, type_min, type_bound, data), REQRESP_ERROR);
+    eth_reqresp_encode_response_chunk((uint8_t) code, context, payload), REQRESP_ERROR);
 }

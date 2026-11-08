@@ -101,17 +101,89 @@ def test_slot_proof_fails() -> None:
         trie.verify_account_proof(STATE_ROOT, dict(_WITH_STORAGE, storageProof=[slot]))
 
 
+# The empty trie has the root keccak256(0x80), and its one node is 0x80, the encoding of b"".
+_EMPTY_ROOT = keccak256(rlp.encode(b""))
+
+# The answer for an address without an account, against the empty state.
+# Its hashes are those of an account with no code and no storage.
+_ABSENT = {
+    "address": _WITH_STORAGE["address"],
+    "nonce": "0x0",
+    "balance": "0x0",
+    "codeHash": "0x" + keccak256(b"").hex(),
+    "storageHash": "0x" + _EMPTY_ROOT.hex(),
+    "accountProof": ["0x80"],
+    "storageProof": [],
+}
+
+
 def test_absent_account() -> None:
-    """The proof of an empty state shows every address absent, and no field is judged."""
-    # The empty trie has the root keccak256(0x80), and its one node is the empty string 0x80.
-    empty_root = keccak256(rlp.encode(b""))
-    answer = dict(
-        _WITH_STORAGE,
-        accountProof=["0x80"],
-        balance="0x1",
-        storageProof=[],
-    )
-    assert trie.verify_account_proof(empty_root, answer) is None
+    """An empty state shows the address absent, with the hashes of no code and no storage."""
+    assert trie.verify_account_proof(_EMPTY_ROOT, _ABSENT) is None
+
+
+@pytest.mark.parametrize(
+    "zero_fields",
+    [("codeHash", "storageHash"), ("codeHash",), ("storageHash",)],
+    ids="+".join,
+)
+def test_absent_account_zero_hashes(zero_fields: tuple[str, ...]) -> None:
+    """An absent account may give the zero hash for either hash, or both, judged apart."""
+    answer = dict(_ABSENT, **dict.fromkeys(zero_fields, "0x" + "00" * 32))
+    assert trie.verify_account_proof(_EMPTY_ROOT, answer) is None
+
+
+@pytest.mark.parametrize("proof", [[], ["0x80"], ["0x01"]], ids=repr)
+def test_absent_account_slot(proof: list[str]) -> None:
+    """A slot of an absent account that gives the word 0 holds, whatever its proof."""
+    slot = {"key": "0x1", "value": "0x0", "proof": proof}
+    answer = dict(_ABSENT, storageProof=[slot])
+    assert trie.verify_account_proof(_EMPTY_ROOT, answer) is None
+
+
+def test_absent_account_slot_nonzero() -> None:
+    """A slot of an absent account with a word other than 0 does not hold, with its index."""
+    slots = [
+        {"key": "0x1", "value": "0x0", "proof": []},
+        {"key": "0x2", "value": "0x5", "proof": []},
+    ]
+    with raises(
+        TrieError, "answer does not hold: EthLib.Execution.State.AccountProofError.slotMismatch 1"
+    ) as error:
+        trie.verify_account_proof(_EMPTY_ROOT, dict(_ABSENT, storageProof=slots))
+    assert error.value.code == 506
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("nonce", "0x1"),
+        ("balance", "0x1"),
+        ("codeHash", "0x" + "11" * 32),
+        ("storageHash", _WITH_STORAGE["storageHash"]),
+        # The empty value of one hash is not a reading of the other.
+        ("codeHash", "0x" + _EMPTY_ROOT.hex()),
+        ("storageHash", "0x" + keccak256(b"").hex()),
+    ],
+)
+def test_absent_account_field(field: str, value: str) -> None:
+    """An absent account with a field that fits no reading of an absent account does not hold."""
+    with raises(
+        TrieError, "answer does not hold: EthLib.Execution.State.AccountProofError.accountMismatch"
+    ) as error:
+        trie.verify_account_proof(_EMPTY_ROOT, dict(_ABSENT, **{field: value}))
+    assert error.value.code == 503
+
+
+def test_absent_account_fields_before_slots() -> None:
+    """The fields of an absent account are checked before its slots."""
+    slot = {"key": "0x1", "value": "0x5", "proof": []}
+    answer = dict(_ABSENT, balance="0x1", storageProof=[slot])
+    with raises(
+        TrieError, "answer does not hold: EthLib.Execution.State.AccountProofError.accountMismatch"
+    ) as error:
+        trie.verify_account_proof(_EMPTY_ROOT, answer)
+    assert error.value.code == 503
 
 
 def test_wrong_root() -> None:
@@ -127,8 +199,50 @@ def test_wrong_root() -> None:
 
 def test_field_pattern() -> None:
     """A nonce with a leading zero does not match the type `uint64` of execution-apis."""
-    with raises(ValueError, "not a value of uint64: '0x00'"):
+    with raises(TrieError, "nonce: leading zero") as error:
         trie.verify_account_proof(STATE_ROOT, dict(_WITH_STORAGE, nonce="0x00"))
+    assert error.value.code == 0
+
+
+_SLOT = {"key": "0x0", "value": "0x0", "proof": []}
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        # A missing field, and a field of value null, which counts as absent.
+        ({"address": None}, "answer: no field address"),
+        ({"storageProof": "0x"}, "storageProof: not an array"),
+        # The nonce is a uint64, so 2^64 is out of range.
+        ({"nonce": "0x10000000000000000"}, "nonce: above 2^64"),
+        # A hash and a proof node take lowercase hex digits only, two for each byte.
+        ({"codeHash": "0x" + "AA" * 32}, "codeHash: not a hex digit"),
+        ({"accountProof": ["0x123"]}, "accountProof: odd number of hex digits"),
+        # A storage key has at most 64 lowercase digits behind its 0x marker.
+        ({"storageProof": [dict(_SLOT, key="0x" + "1" * 65)]}, "key: more than 64 hex digits"),
+        ({"storageProof": [dict(_SLOT, key="0xA")]}, "key: not a hex digit"),
+        ({"storageProof": [dict(_SLOT, key="00")]}, "key: no 0x marker"),
+    ],
+)
+def test_field_out_of_its_pattern(change: dict, message: str) -> None:
+    """Lean reads each field of the answer in the pattern of its base type, before any check."""
+    with raises(TrieError, message) as error:
+        trie.verify_account_proof(STATE_ROOT, {**_WITH_STORAGE, **change})
+    assert error.value.code == 0
+
+
+def test_answer_is_an_object() -> None:
+    with raises(TrieError, "answer: not an object") as error:
+        trie.verify_account_proof(STATE_ROOT, [])  # ty: ignore[invalid-argument-type]
+    assert error.value.code == 0
+
+
+def test_uppercase_address() -> None:
+    """An address may use uppercase hex digits, so the answer reads and holds as before."""
+    answer = dict(_WITH_STORAGE, address=_WITH_STORAGE["address"].upper().replace("0X", "0x"))
+    assert trie.verify_account_proof(STATE_ROOT, answer) == trie.verify_account_proof(
+        STATE_ROOT, _WITH_STORAGE
+    )
 
 
 def test_short_root() -> None:

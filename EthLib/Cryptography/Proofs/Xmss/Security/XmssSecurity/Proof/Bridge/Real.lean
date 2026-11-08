@@ -52,7 +52,7 @@ theorem queryCount_queryH (x : ByteArray) :
 /-- `n` computations in order make the sum of their calls. -/
 theorem QueryCount.ofFnInOrder {α : Type} {k n : Nat} {c : Fin k → OracleComp HashSpec α}
     (h : ∀ i, QueryCount (c i) n) : QueryCount (Xmss.ofFnInOrder k c) (k * n) := by
-  rw [Xmss.Unforgeability.ofFnInOrder_eq_map_sequenceFin]
+  rw [HashSig.ofFnInOrder_eq_map_sequenceFin]
   exact (QueryCount.sequenceFin h).map _
 
 theorem queryCount_th (pp : Xmss.PublicParam) (A : Xmss.Address) (payload : ByteArray) :
@@ -127,7 +127,7 @@ theorem resolves_queryH {cache : QueryCache HashSpec} {x : ByteArray} {y : HashO
 theorem Resolves.ofFnInOrder {α : Type} {cache : QueryCache HashSpec} {n : Nat}
     {c : Fin n → OracleComp HashSpec α} {v : Fin n → α} (h : ∀ i, Resolves cache (c i) (v i)) :
     Resolves cache (Xmss.ofFnInOrder n c) (Vector.ofFn v) := by
-  rw [Xmss.Unforgeability.ofFnInOrder_eq_map_sequenceFin]
+  rw [HashSig.ofFnInOrder_eq_map_sequenceFin]
   exact (Resolves.sequenceFin h).map _
 
 /-- The hash that starts chains `2j` and `2j + 1` of a bottom key is the bottom derivation's. -/
@@ -212,7 +212,7 @@ theorem leaf_bottom (P : PublicParameter) (secret : LeafIndex → ChainIndex →
       (secret index (chainOf i))) fun i => by
     rw [show (ofChains (secret index))[i] = ofDigest (secret index (chainOf i)) from
       Vector.getElem_ofFn _, Xmss.Unforgeability.chain_bottom]]
-  rw [Xmss.Unforgeability.ofFnInOrder_eq_sequenceFin, bind_map_left]
+  rw [HashSig.ofFnInOrder_eq_sequenceFin, bind_map_left]
   unfold Concrete.leafAt Concrete.oneTimePublicKey
   rw [map_bind]
   refine bind_congr fun (ends : ChainIndex → Digest) => ?_
@@ -232,7 +232,7 @@ theorem leaf_top (P : PublicParameter) (topSecret : TopIndex → ChainIndex → 
       (topSecret key (chainOf i))) fun i => by
     rw [show (ofChains (topSecret key))[i] = ofDigest (topSecret key (chainOf i)) from
       Vector.getElem_ofFn _, Xmss.Unforgeability.chain_top]]
-  rw [Xmss.Unforgeability.ofFnInOrder_eq_sequenceFin, bind_map_left]
+  rw [HashSig.ofFnInOrder_eq_sequenceFin, bind_map_left]
   unfold Concrete.topLeafAt Concrete.topOneTimePublicKey
   rw [map_bind]
   refine bind_congr fun (ends : ChainIndex → Digest) => ?_

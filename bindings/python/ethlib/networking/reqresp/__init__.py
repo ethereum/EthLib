@@ -10,8 +10,9 @@ from ethlib.errors import ReqRespError
 # A payload is a varint of the SSZ length, then a Snappy framed stream of the SSZ bytes.
 # A response chunk is a response code, then context bytes, then a payload.
 #
-# Each function takes the whole message.
-# A message that the decoder rejects raises `ReqRespError`, a `ValueError` with a code.
+# Each decoder takes the whole message.
+# A message that a decoder rejects raises `ReqRespError`, a `ValueError` with a code.
+# The encoders cannot fail.
 MAX_PAYLOAD_SIZE = _native.REQRESP_MAX_PAYLOAD_SIZE
 MAX_ERROR_MESSAGE_SIZE = _native.REQRESP_MAX_ERROR_MESSAGE_SIZE
 
@@ -42,10 +43,19 @@ def decode_response_chunk(
 
     An error chunk carries no context bytes, and its payload is the error message.
     """
-    raw = _native.reqresp_decode_response_chunk(context_bytes, type_min, type_bound, data)
-    code = raw[0]
-    n = context_bytes if code == 0 else 0
-    return ResponseChunk(code, raw[1 : 1 + n], raw[1 + n :])
+    return ResponseChunk(
+        *_native.reqresp_decode_response_chunk(context_bytes, type_min, type_bound, data)
+    )
+
+
+def encode_payload(ssz_bytes: bytes) -> bytes:
+    """The length of SSZ bytes as a varint, then their Snappy stream, compressed where shorter."""
+    return _native.reqresp_encode_payload(ssz_bytes)
+
+
+def encode_response_chunk(chunk: ResponseChunk) -> bytes:
+    """The bytes of a response chunk, with no check of its context or payload against its code."""
+    return _native.reqresp_encode_response_chunk(chunk.code, chunk.context, chunk.payload)
 
 
 __all__ = [
@@ -56,4 +66,6 @@ __all__ = [
     "max_compressed_len",
     "decode_payload",
     "decode_response_chunk",
+    "encode_payload",
+    "encode_response_chunk",
 ]

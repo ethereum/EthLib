@@ -16,7 +16,11 @@ Properties of the discv5 packet encoding.
 - A packet that the encoder writes decodes back.
 - Bytes decode to authdata or a packet exactly when they encode it and pass the decoder's checks.
 - The additional data of a message is the masking IV and the unmasked bytes up to the message.
-- A message that the encryption writes decrypts back.
+- A destination reads that additional data from the packet bytes and their masking IV.
+- A message that the encryption writes decrypts back, also after encoding and decoding.
+- A message that decrypts is the encryption of its plaintext.
+- A sealed message packet decodes back and opens to its plaintext.
+- A decoded packet that opens under a key seals to its packet bytes under that key.
 -/
 
 @[expose] public section
@@ -476,6 +480,118 @@ theorem Packet.decode_eq_ok_iff (destId : NodeId) (bytes : ByteArray) (p : Packe
       (Packet.encode_and_checks_of_decode h).2.2.2⟩,
     fun ⟨he, hw⟩ => Packet.decode_encode he hw⟩
 
+/-- The header bytes that the encoder writes, with the size of the authdata below 2^16. -/
+private theorem Header.encode_eq_ok {h : Header} {hb : List UInt8} (he : h.encode = .ok hb) :
+    hb = PROTOCOL_ID ++ VERSION ++ [h.authdata.flag] ++ h.nonce.toList ++
+        Base.natToBytes 2 h.authdata.encode.length ++ h.authdata.encode ∧
+      h.authdata.encode.length < 2 ^ 16 ∧ h.authdata.fits = true := by
+  unfold Header.encode at he
+  dsimp only at he
+  split at he
+  · rename_i hfit
+    simp only [Bool.and_eq_true, decide_eq_true_eq] at hfit
+    cases he
+    exact ⟨rfl, hfit.1, hfit.2⟩
+  · cases he
+
+/-- Header bytes have the static header and the authdata, and the size field names the authdata.
+
+The size field is read from the bytes that follow the header too. -/
+private theorem Header.encode_size_field {h : Header} {hb : List UInt8} (X : List UInt8)
+    (he : h.encode = .ok hb) :
+    hb.length = STATIC_HEADER_SIZE + h.authdata.encode.length ∧
+      Base.bytesToNat (((hb ++ X).drop 21).take 2) = h.authdata.encode.length := by
+  obtain ⟨rfl, hL, -⟩ := Header.encode_eq_ok he
+  generalize h.authdata.encode = ae at hL ⊢
+  have hnb : (Base.natToBytes 2 ae.length).length = 2 := Base.natToBytes_length 2 _
+  have hs : (PROTOCOL_ID ++ VERSION ++ [h.authdata.flag] ++ h.nonce.toList).length = 21 := by
+    simp [PROTOCOL_ID, VERSION]
+  generalize PROTOCOL_ID ++ VERSION ++ [h.authdata.flag] ++ h.nonce.toList = s at hs ⊢
+  refine ⟨by simp only [List.length_append, hnb, hs]; unfold STATIC_HEADER_SIZE; omega, ?_⟩
+  rw [show s ++ Base.natToBytes 2 ae.length ++ ae ++ X =
+    s ++ (Base.natToBytes 2 ae.length ++ (ae ++ X)) by simp, List.drop_left' hs,
+    List.take_left' hnb]
+  exact Base.bytesToNat_natToBytes_of_lt (by simpa using hL)
+
+/-- Two headers whose bytes start the same list are equal, and so are their bytes. -/
+private theorem Header.eq_of_encode_append {h h' : Header} {hb hb' X Y : List UInt8}
+    (he : h.encode = .ok hb) (he' : h'.encode = .ok hb') (hX : hb ++ X = hb' ++ Y) :
+    hb = hb' ∧ X = Y ∧ h = h' := by
+  obtain ⟨l1, b1⟩ := Header.encode_size_field X he
+  obtain ⟨l2, b2⟩ := Header.encode_size_field Y he'
+  rw [hX] at b1
+  have hae : h.authdata.encode.length = h'.authdata.encode.length := b1.symm.trans b2
+  obtain ⟨hbb, hXY⟩ := List.append_inj hX (by omega)
+  subst hbb hXY
+  refine ⟨rfl, rfl, ?_⟩
+  obtain ⟨e1, -, hf⟩ := Header.encode_eq_ok he
+  obtain ⟨e2, -, hf'⟩ := Header.encode_eq_ok he'
+  have h12 := e1.symm.trans e2
+  obtain ⟨h12, hA⟩ := List.append_inj' h12 hae
+  obtain ⟨h12, -⟩ := List.append_inj' h12 (by simp [Base.natToBytes_length])
+  obtain ⟨h12, hN⟩ := List.append_inj' h12 (by simp)
+  have hflag : h.authdata.flag = h'.authdata.flag := by
+    have := (List.append_inj' h12 (by simp)).2
+    simpa using this
+  obtain ⟨n, a⟩ := h
+  obtain ⟨n', a'⟩ := h'
+  dsimp only at *
+  have hn : n = n' := Vector.toList_inj.mp hN
+  subst hn
+  have hd := Authdata.decode_encode a hf
+  have hd' := Authdata.decode_encode a' hf'
+  rw [← hflag, ← hA] at hd'
+  rw [hd'] at hd
+  cases hd
+  rfl
+
+/-- The packet that a destination decodes from the bytes of an encoded packet is that packet. -/
+theorem Packet.eq_of_decode {destId : NodeId} {p q : Packet} {bytes : ByteArray}
+    (he : p.encode destId = .ok bytes) (hd : Packet.decode destId bytes = .ok q) : q = p := by
+  obtain ⟨hb, hh, e1, -⟩ := Packet.encode_eq_ok he
+  obtain ⟨hb', hh', e2, -⟩ := Packet.encode_eq_ok (Packet.encode_of_decode hd)
+  have h3 := congrArg (fun b => b.data.toList) (e1.symm.trans e2)
+  simp only [List.append_assoc] at h3
+  obtain ⟨hiv, hrest⟩ := List.append_inj h3 (by simp)
+  have hiv := Vector.toList_inj.mp hiv
+  obtain ⟨iv, h, m⟩ := p
+  obtain ⟨iv', h', m'⟩ := q
+  dsimp only at *
+  subst hiv
+  have u1 := mask_masked_append destId iv hb m.data.toList
+  have u2 := mask_masked_append destId iv hb' m'.data.toList
+  rw [hrest] at u1
+  obtain ⟨rfl, -, rfl⟩ := Header.eq_of_encode_append hh hh' (u1.symm.trans u2)
+  have hm : m = m' := ByteArray.ext (Array.toList_inj.mp (List.append_cancel_left hrest))
+  subst hm
+  rfl
+
+/-- A destination reads the additional data of a decoded packet from its bytes and masking IV.
+
+It is the first 16 bytes, then the unmasked bytes up to the end of the authdata.
+
+The decoder reads the masking IV from those first 16 bytes.
+
+The static header gives the size of the authdata. -/
+theorem Packet.messageAd_of_decode {destId : NodeId} {bytes : ByteArray} {p : Packet}
+    (hd : Packet.decode destId bytes = .ok p) :
+    let plain := mask destId p.maskingIv (bytes.data.toList.drop 16)
+    p.messageAd = .ok ⟨(bytes.data.toList.take 16 ++
+      plain.take (STATIC_HEADER_SIZE + Base.bytesToNat ((plain.drop 21).take 2))).toArray⟩ := by
+  obtain ⟨hb, hh, e1, -⟩ := Packet.encode_eq_ok (Packet.encode_of_decode hd)
+  obtain ⟨X, hX⟩ : ∃ X, mask destId p.maskingIv (mask destId p.maskingIv hb ++
+      p.message.data.toList) = hb ++ X := ⟨_, mask_masked_append ..⟩
+  obtain ⟨hlen, hL⟩ := Header.encode_size_field X hh
+  have hdata : bytes.data.toList = p.maskingIv.toList ++
+      (mask destId p.maskingIv hb ++ p.message.data.toList) := by
+    rw [e1]; simp
+  intro plain
+  have hplain : plain = hb ++ X := by
+    simp only [plain, hdata, List.drop_left' (by simp : p.maskingIv.toList.length = 16)]
+    exact hX
+  rw [hplain, hL, ← hlen, List.take_left' rfl, hdata, List.take_left' (by simp)]
+  simp [Packet.messageAd, hh, bind, Except.bind, pure, Except.pure]
+
 /-! ## Messages -/
 
 /-- The 16 bytes of the GCM tag are a tag length of SP 800-38D. -/
@@ -508,6 +624,98 @@ theorem decryptMessage_encryptMessage {key : Aes.Key .aes128} {nonce : Vector UI
     rw [ByteArray.extract_append_eq_left rfl,
       ByteArray.extract_append_eq_right rfl (by rw [ByteArray.size_append])]
     exact Aes.Gcm.decrypt_encrypt _ _ _ _ _ _ _ he
+
+/-- A message that decrypts is the encryption of its plaintext.
+
+The encryption uses the same key, nonce and additional data. -/
+theorem encryptMessage_of_decryptMessage {key : Aes.Key .aes128} {nonce : Vector UInt8 12}
+    {message ad plaintext : ByteArray}
+    (h : decryptMessage key nonce message ad = .ok plaintext) :
+    encryptMessage key nonce plaintext ad = .ok message := by
+  unfold decryptMessage at h
+  have he := Aes.Gcm.encrypt_eq_ok_of_decrypt_eq_ok _ _ _ _ _ _ _ h
+  have hjoin : message.extract 0 (message.size - TAG_SIZE) ++
+      message.extract (message.size - TAG_SIZE) message.size = message := by
+    rw [← ByteArray.extract_eq_extract_append_extract (message.size - TAG_SIZE) (Nat.zero_le _)
+      (Nat.sub_le _ _), ByteArray.extract_zero_size]
+  simp only [encryptMessage, he, bind, Except.bind, pure, Except.pure, hjoin]
+
+/-- A message that a sender encrypts and encodes decrypts back at the destination.
+
+The destination decodes the packet, then decrypts with its nonce and additional data. -/
+theorem decryptMessage_of_decode {destId : NodeId} {key : Aes.Key .aes128} {p q : Packet}
+    {plaintext ad ad' bytes : ByteArray} (ha : p.messageAd = .ok ad)
+    (hm : encryptMessage key p.header.nonce plaintext ad = .ok p.message)
+    (he : p.encode destId = .ok bytes) (hd : Packet.decode destId bytes = .ok q)
+    (ha' : q.messageAd = .ok ad') :
+    decryptMessage key q.header.nonce q.message ad' = .ok plaintext := by
+  obtain rfl := Packet.eq_of_decode he hd
+  rw [ha] at ha'
+  cases ha'
+  exact decryptMessage_encryptMessage hm
+
+/-- The unmasked header is the 23 bytes of the static header, then the authdata. -/
+theorem Header.length_encode {h : Header} {bytes : List UInt8} (he : h.encode = .ok bytes) :
+    bytes.length = 23 + h.authdata.encode.length :=
+  (Header.encode_size_field [] he).1
+
+/-- A sealed message packet decodes back, and opens to its plaintext under the same key.
+
+The packet must not be a WHOAREYOU packet, whose message the decoder requires to be empty. -/
+theorem openPacket_sealPacket {ε : Type} {packetError : PacketError → ε}
+    {encryptionError decryptionError : Aes.Gcm.Error → ε} {key : Aes.Key .aes128}
+    {destId : NodeId} {maskingIv : Vector UInt8 16} {header : Header} {plaintext bytes : ByteArray}
+    (h : sealPacket packetError encryptionError key destId maskingIv header plaintext = .ok bytes)
+    (hflag : header.authdata.flag ≠ 1) :
+    ∃ message, Packet.decode destId bytes = .ok ⟨maskingIv, header, message⟩ ∧
+      openPacket packetError decryptionError key ⟨maskingIv, header, message⟩ = .ok plaintext := by
+  unfold sealPacket at h
+  cases ha : Packet.messageAd ⟨maskingIv, header, .empty⟩ with
+  | error err => simp [ha, Except.mapError, bind, Except.bind] at h
+  | ok ad =>
+    cases hm : encryptMessage key header.nonce plaintext ad with
+    | error err => simp [ha, hm, Except.mapError, bind, Except.bind] at h
+    | ok message =>
+      simp only [ha, hm, Except.mapError, bind, Except.bind] at h
+      cases hb : Packet.encode destId ⟨maskingIv, header, message⟩ with
+      | error err => simp [hb] at h
+      | ok packetBytes =>
+        simp only [hb, Except.ok.injEq] at h
+        subst h
+        refine ⟨message, Packet.decode_encode hb fun one => absurd one hflag, ?_⟩
+        -- The additional data depends only on the masking IV and the header.
+        have had : Packet.messageAd ⟨maskingIv, header, message⟩ = .ok ad := by
+          simpa [Packet.messageAd] using ha
+        simp only [openPacket, had, decryptMessage_encryptMessage hm, Except.mapError, bind,
+          Except.bind]
+
+/-- A decoded packet that opens under a key seals to its packet bytes under that key.
+
+The sealing reuses the masking IV and the header of the packet. -/
+theorem sealPacket_of_openPacket {ε ε' : Type} {packetError : PacketError → ε}
+    {decryptionError : Aes.Gcm.Error → ε} {packetError' : PacketError → ε'}
+    {encryptionError : Aes.Gcm.Error → ε'} {key : Aes.Key .aes128} {destId : NodeId}
+    {packet : Packet} {bytes plaintext : ByteArray}
+    (hd : Packet.decode destId bytes = .ok packet)
+    (ho : openPacket packetError decryptionError key packet = .ok plaintext) :
+    sealPacket packetError' encryptionError key destId packet.maskingIv packet.header
+      plaintext = .ok bytes := by
+  unfold openPacket at ho
+  cases ha : packet.messageAd with
+  | error err => simp [ha, Except.mapError, bind, Except.bind] at ho
+  | ok ad =>
+    simp only [ha, Except.mapError, bind, Except.bind] at ho
+    cases hm : decryptMessage key packet.header.nonce packet.message ad with
+    | error err => simp [hm] at ho
+    | ok plain =>
+      simp only [hm, Except.ok.injEq] at ho
+      subst ho
+      have had : Packet.messageAd ⟨packet.maskingIv, packet.header, .empty⟩ = .ok ad := by
+        simpa [Packet.messageAd] using ha
+      have henc := Packet.encode_of_decode hd
+      obtain ⟨iv, header, message⟩ := packet
+      simp only [sealPacket, had, encryptMessage_of_decryptMessage hm, henc, Except.mapError,
+        bind, Except.bind]
 
 /-! ## Error codes -/
 

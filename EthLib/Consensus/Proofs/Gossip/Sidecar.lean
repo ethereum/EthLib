@@ -685,7 +685,7 @@ theorem validateGloasDataColumnSidecar_shape
 
 end GloasColumn
 
-/-! ## Partial column sidecars, at Fulu -/
+/-! ## Partial column sidecars, from Fulu -/
 
 section Partial
 
@@ -1281,10 +1281,17 @@ theorem validateGloasPartialDataColumnSidecar_eq_ignore :
       | some state =>
         simp only [reduceCtorEq, false_and, iff_false]
         simp only [bind, Except.bind, pure, Except.pure, Except.mapError, rejectUnless_andThenM]
-        split <;> try simp
-        split <;> try simp
-        cases verifyPartialDataColumnSidecarKzgProofs setup sidecar (block.bidCommitments gloas)
-          columnIndex <;> simp [rejectUnless] <;> split <;> simp
+        -- The slot check and the bitmap check reject, so they never ignore.
+        split
+        · split
+          · cases verifyPartialDataColumnSidecarKzgProofs setup sidecar
+                (block.bidCommitments gloas) columnIndex with
+            | error e => simp
+            | ok verdict =>
+              -- The KZG check accepts or rejects, and never ignores.
+              cases verdict <;> simp [rejectUnless]
+          · simp
+        · simp
   · simp only [ValidationResult.andThenM_of_ne_accept counts, pure, Except.pure, Except.ok.injEq]
     cases h : partialCountsOutcome sidecar <;> simp_all [partialCountsOutcome_ne_ignore]
 

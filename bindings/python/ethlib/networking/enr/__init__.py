@@ -8,7 +8,6 @@ from ethlib import consensus
 # That module lives in the `cryptography` package.
 from ethlib.cryptography import _native
 from ethlib.errors import EnrError
-from ethlib.serialization import rlp
 
 # A record is its RLP bytes, at most this many bytes long.
 # Its text form is "enr:", then the unpadded URL-safe base64 of those bytes.
@@ -84,30 +83,13 @@ class ConsensusEntries(NamedTuple):
 def consensus_entries(fork: str, record: bytes, config: str = "mainnet") -> ConsensusEntries:
     """The consensus entries of a record at a fork, with the subnet count of a configuration."""
     count = consensus.config(config)["ATTESTATION_SUBNET_COUNT"]
-    raw = _native.enr_consensus_entries(fork, count, record)
-    eth2 = EnrForkId(raw[0:4], raw[4:8], int.from_bytes(raw[8:16], "little"))
-    pos = 16
-    fields = []
-    # attnets: one bit per subnet, syncnets: 1 byte, cgc: a little-endian uint64, nfd: 4 bytes.
-    for size in ((count + 7) // 8, 1, 8, 4):
-        if raw[pos] == 0:
-            fields.append(None)
-            pos += 1
-        else:
-            fields.append(raw[pos + 1 : pos + 1 + size])
-            pos += 1 + size
-    attnets, syncnets, cgc, nfd = fields
-    cgc_value = None if cgc is None else int.from_bytes(cgc, "little")
-    return ConsensusEntries(eth2, attnets, syncnets, cgc_value, nfd)
+    eth2, attnets, syncnets, cgc, nfd = _native.enr_consensus_entries(fork, count, record)
+    return ConsensusEntries(EnrForkId(*eth2), attnets, syncnets, cgc, nfd)
 
 
 def eth_fork_id(record: bytes) -> tuple[bytes, int] | None:
     """The fork hash and next fork of the "eth" entry of a record, or None without the entry."""
-    raw = _native.enr_eth_fork_id(record)
-    if not raw:
-        return None
-    fork_hash, fork_next = rlp.decode(raw)
-    return fork_hash, int.from_bytes(fork_next, "big")
+    return _native.enr_eth_fork_id(record)
 
 
 __all__ = [

@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Bls.Compress
 public import EthLib.Cryptography.Proofs.Bls.Compress
 public import EthLib.Cryptography.Proofs.Bls.G1Cardinality
+public import EthLib.Cryptography.Proofs.Bls.G1Endomorphism
 public import Mathlib.GroupTheory.Index
 public import Mathlib.Data.ZMod.QuotientGroup
 
@@ -79,15 +80,6 @@ theorem isInfinity_eq_true_iff_toPoint_eq_zero {P : G1} (hP : Valid P) :
     rw [toPoint, Point.toAffine_of_Z_ne_zero hP hz] at h
     cases h
 
-theorem inSubgroup_iff_modulus_smul_eq_zero {P : G1} (hP : Valid P) :
-    inSubgroup P = true ↔ Fr.modulus • toPoint P = 0 := by
-  rw [inSubgroup]
-  by_cases hi : P.isInfinity = true
-  · rw [ite_eq_left hi, (isInfinity_eq_true_iff_toPoint_eq_zero hP).mp hi]
-    simp
-  · rw [ite_eq_right hi, isInfinity_eq_true_iff_toPoint_eq_zero (valid_mulModulus hP),
-      toPoint_mulModulus hP]
-
 /-- Rules out a rank-2 `r`-torsion subgroup inside `E(Fp)` once `#E(Fp) <= 2 * p + 1` meets Lagrange's theorem. -/
 theorem modulus_sq_gt_card_bound : 2 * Fp.modulus + 1 < Fr.modulus ^ 2 := by
   decide +kernel
@@ -109,6 +101,27 @@ theorem exists_nsmul_generator_of_modulus_smul_eq_zero {Q : curve.toAffine.Point
   have hc := card_point_le
   have hn := modulus_sq_gt_card_bound
   omega
+
+/-- On points of order dividing `r`, `σ` acts as `[-t^2]`, as it does on the generator. -/
+theorem sigmaHom_of_modulus_smul_eq_zero {Q : curve.toAffine.Point} (hQ : Fr.modulus • Q = 0) :
+    sigmaHom Q = -((blsX * blsX) • Q) := by
+  obtain ⟨n, -, rfl⟩ := exists_nsmul_generator_of_modulus_smul_eq_zero hQ
+  rw [_root_.map_nsmul, sigmaHom_generator, neg_nsmul, smul_comm]
+
+/-- The subgroup check accepts a valid point exactly when `[r] P = 0`.
+
+For a finite point the check is `σ(P) = [-t^2] P`, which is Scott's criterion. -/
+theorem inSubgroup_iff_modulus_smul_eq_zero {P : G1} (hP : Valid P) :
+    inSubgroup P = true ↔ Fr.modulus • toPoint P = 0 := by
+  rw [inSubgroup]
+  by_cases hi : P.isInfinity = true
+  · rw [ite_eq_left hi, (isInfinity_eq_true_iff_toPoint_eq_zero hP).mp hi]
+    simp
+  · have hv := valid_mulNat (valid_mulNat hP blsX) blsX
+    rw [ite_eq_right hi, projectiveEq_eq_true_iff_toPoint_eq (valid_sigma hP) (valid_neg hv),
+      toPoint_sigma hP, toPoint_neg hv, toPoint_mulNat (valid_mulNat hP blsX),
+      toPoint_mulNat hP, smul_smul]
+    exact ⟨modulus_smul_eq_zero_of_sigmaHom, sigmaHom_of_modulus_smul_eq_zero⟩
 
 theorem exists_mulNat_generator_of_inSubgroup {P : G1} (hP : Valid P)
     (hsub : inSubgroup P = true) :

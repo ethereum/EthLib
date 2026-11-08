@@ -19,6 +19,7 @@ namespace EthLib.Cryptography.Sphincs.Unforgeability.Bridge
 open EthLib.Cryptography.Sphincs
 open EthLib.Cryptography.Sphincs.Constants
 open SphincsSecurity.Concrete (tweakableHash sequenceFin)
+open EthLib.Cryptography.HashSig (ofFnInOrder_eq_sequenceFin ofFnInOrder_eq_sequenceFin_cast)
 
 variable {m : Type → Type} [Monad m] [LawfulMonad m] [HasQuery HashSig.HashSpec m]
 
@@ -28,15 +29,6 @@ abbrev secretsOf (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.PublicPar
   prf (queryH (m := m)) (ofParam P) (ofSeed S)
 
 /-! ## One-time keys -/
-
-omit [HasQuery HashSig.HashSpec m] in
-/-- A vector computed in order is the model's function computed in order, over equal lengths. -/
-theorem ofFnInOrder_eq_sequenceFin_cast {α β : Type} {n n' : Nat} (h : n = n')
-    (c : Fin n' → m α) (g : α → β) :
-    ofFnInOrder n (fun i => g <$> c (Fin.cast h i))
-      = (fun f => Vector.ofFn fun i => g (f (Fin.cast h i))) <$> sequenceFin c := by
-  subst h
-  exact ofFnInOrder_eq_sequenceFin n c g
 
 /-- The starts of a key's chains are the model's secrets, one derivation per chain. -/
 theorem chainStarts_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.PublicParameter)

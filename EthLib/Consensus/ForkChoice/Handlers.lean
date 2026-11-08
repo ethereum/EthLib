@@ -78,11 +78,12 @@ structure BlockSources (preset : Preset) (fork : Fork) where
   The transactions are those of the timely inclusion lists of the slot before the payload's. -/
   inclusionListSatisfied : ExecutionPayload preset fork → List InclusionListTransaction → Bool
 
-/-- Whether a proof-of-work block is terminal, by the definition of EIP-3675.
+/-- Whether a proof-of-work block is terminal, by the definition of [EIP-3675].
 
 Its total difficulty reaches the terminal total difficulty, and that of its parent does not.
 
-The source is [EIP-3675](https://eips.ethereum.org/EIPS/eip-3675#definitions). -/
+[EIP-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#definitions
+-/
 def isValidTerminalPowBlock (config : Config) (block parent : PowBlock) : Bool :=
   decide (config.TERMINAL_TOTAL_DIFFICULTY ≤ block.totalDifficulty) &&
     decide (parent.totalDifficulty < config.TERMINAL_TOTAL_DIFFICULTY)

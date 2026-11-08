@@ -1,7 +1,9 @@
 module
 
 public import EthLib.Engine.Exports.ForkchoiceUpdated
+public import EthLib.Engine.Exports.GetProof
 public import EthLib.Engine.Exports.NewPayload
+public import EthLib.Engine.Exports.PreparePayload
 
 /-!
 # `EthLib.Engine.Exports`

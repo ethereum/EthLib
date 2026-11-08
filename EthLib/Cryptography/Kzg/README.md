@@ -171,6 +171,9 @@ Then `msm` returns a valid point equal to `sum_i scalars_i * points_i` in the cu
 **The commitment.**
 A setup is well formed for a secret `τ` when its points represent `τ^i` and the Lagrange basis at `τ`.
 For such a setup, `blobToKzgCommitment_represents`, in `Proofs/Kzg/Commitment.lean`, proves that a blob's commitment represents its polynomial at `τ`.
+`blobToKzgCommitment_binding` proves that two blobs whose decoded values differ share a commitment only when `τ` is a root of the difference of their interpolants.
+That difference is a nonzero polynomial of degree below 4096.
+The proof needs no pairing law, and it does not bound the cost of finding such blobs without `τ`.
 That a secret makes the embedded setup well formed is an assumption, recorded in SOUNDNESS.md D3.
 
 **The proofs.**
@@ -190,6 +193,7 @@ They force each point of a contribution to represent the expected power of the s
 A point represents a scalar when its group element is that multiple of the generator.
 The coordinates of the point do not matter, so the theorem applies to decoded points.
 It assumes the pairing law, the subgroup checks, and that two points are not at infinity.
+The BLS12-381 proofs prove the pairing law (`pairingLaws`, `Proofs/Bls/PairingAte.lean`).
 
 ## What is not proved
 
@@ -216,8 +220,6 @@ It assumes the pairing law, the subgroup checks, and that two points are not at 
   Each KZG vector of the Python suite runs an operation that first decodes the setup.
   The Python suite also checks that each point decodes and lies in the subgroup,
   in `bindings/python/tests/kzg/test_trusted_setup.py`.
-- The pairing law that the ceremony theorem assumes is not proved.
-  It is bilinearity together with non-degeneracy.
 
 ## What the kernel cannot evaluate
 

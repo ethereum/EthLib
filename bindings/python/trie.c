@@ -21,14 +21,12 @@ eth_trie_verify_proof(
 
 extern lean_object*
 eth_trie_hex_prefix(
-  lean_object* nibbles,
-  uint8_t is_leaf
+  lean_object* args
 );
 
 extern lean_object*
 eth_trie_verify_account_proof(
-  lean_object* root,
-  lean_object* answer
+  lean_object* args
 );
 
 /* ---- Local helpers ---------------------------------------------------- */
@@ -92,13 +90,7 @@ py_trie_hex_prefix(
   PyObject* self,
   PyObject* args
 ) {
-  /* The path, one nibble in each byte, and whether it ends at a leaf. */
-  PyObject* nibbles_obj;
-  int is_leaf;
-  if (!PyArg_ParseTuple(args, "Op", &nibbles_obj, &is_leaf)) return NULL;
-  lean_object* nibbles = bytes_arg(nibbles_obj, "nibbles");
-  if (!nibbles) return NULL;
-  return except_into_pybytes(eth_trie_hex_prefix(nibbles, (uint8_t) is_leaf), TRIE_ERROR);
+  return call_pyvalue_export(eth_trie_hex_prefix, args, 2, TRIE_ERROR);
 }
 
 PyObject*
@@ -106,15 +98,5 @@ py_trie_verify_account_proof(
   PyObject* self,
   PyObject* args
 ) {
-  /* The state root, and the RLP list of the fields of an answer of `eth_getProof`. */
-  PyObject *root_obj, *answer_obj;
-  if (!PyArg_ParseTuple(args, "OO", &root_obj, &answer_obj)) return NULL;
-  if (!PyBytes_Check(root_obj) || !PyBytes_Check(answer_obj)) {
-    PyErr_SetString(PyExc_TypeError, "root and answer must be bytes");
-    return NULL;
-  }
-  lean_object* res = eth_trie_verify_account_proof(
-    bytes_arg(root_obj, "root"), bytes_arg(answer_obj, "answer"));
-  /* No bytes for an absent account, else 1 and one byte for each slot. */
-  return except_into_pybytes(res, TRIE_ERROR);
+  return call_pyvalue_export(eth_trie_verify_account_proof, args, 2, TRIE_ERROR);
 }

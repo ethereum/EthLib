@@ -497,6 +497,33 @@ theorem balancesMatch_addValidatorToRegistry {pubkey : BLSPubkey}
       simp only [Array.size_push, RootedForkList.data_push, holds]
     · cases computed
 
+/-- A new validator joins the end of the registry.
+
+That needs an index that fits 64 bits. -/
+theorem addValidatorToRegistry_validators_eq_push {pubkey : BLSPubkey}
+    {withdrawalCredentials : Bytes32} {amount : Gwei}
+    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after)
+    (small : state.validators.data.size < 2 ^ 64) :
+    after.validators.data = state.validators.data.push
+      (getValidatorFromDeposit preset fork pubkey withdrawalCredentials amount) := by
+  unfold addValidatorToRegistry at computed
+  split at computed
+  · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
+      Except.ok.injEq] at computed
+    obtain ⟨_, validatorsOk, _, _, _, _, _, _, _, _, rfl⟩ := computed
+    -- The index of a new validator is the size of the registry, since that size fits 64 bits.
+    have atEnd : (getIndexForNewValidator state).toNat = state.validators.data.size := by
+      rw [getIndexForNewValidator, Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small]
+    simp only [setOrAppendRooted, atEnd, ↓reduceIte] at validatorsOk
+    split at validatorsOk
+    · cases validatorsOk
+      rfl
+    · cases validatorsOk
+  · split at computed
+    · cases computed
+      rfl
+    · cases computed
+
 /-- A new validator joins the end of the registry, and its balance joins the end of the balances.
 
 That needs one balance for each validator, and an index that fits 64 bits. -/
@@ -507,29 +534,23 @@ theorem addValidatorToRegistry_push {pubkey : BLSPubkey}
     after.validators.data = state.validators.data.push
         (getValidatorFromDeposit preset fork pubkey withdrawalCredentials amount) ∧
       after.balances.data = state.balances.data.push amount := by
+  refine ⟨addValidatorToRegistry_validators_eq_push computed small, ?_⟩
   unfold addValidatorToRegistry at computed
   split at computed
   · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
       Except.ok.injEq] at computed
-    obtain ⟨_, validatorsOk, _, balancesOk, _, _, _, _, _, _, rfl⟩ := computed
-    -- The index of a new validator is the size of the registry, since that size fits 64 bits.
-    have atEnd : (getIndexForNewValidator state).toNat = state.validators.data.size := by
-      rw [getIndexForNewValidator, Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small]
-    -- With one balance for each validator, it is also the size of the balances.
+    obtain ⟨_, _, _, balancesOk, _, _, _, _, _, _, rfl⟩ := computed
+    -- The index is the size of the registry, which fits 64 bits, and so the size of the balances.
     have atBalances : (getIndexForNewValidator state).toNat = state.balances.data.size := by
-      rw [atEnd, holds]
-    simp only [setOrAppendRooted, atEnd, ↓reduceIte] at validatorsOk
+      rw [getIndexForNewValidator, Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small, holds]
     simp only [setOrAppendList, atBalances, ↓reduceIte, appendWithinLimit] at balancesOk
-    split at validatorsOk
-    · split at balancesOk
-      · cases validatorsOk
-        cases balancesOk
-        exact ⟨rfl, rfl⟩
-      · cases balancesOk
-    · cases validatorsOk
+    split at balancesOk
+    · cases balancesOk
+      rfl
+    · cases balancesOk
   · split at computed
     · cases computed
-      exact ⟨rfl, rfl⟩
+      rfl
     · cases computed
 
 /-- A new validator raises the sum of the balances by at most its amount. -/
@@ -794,10 +815,10 @@ theorem applyPendingDeposit_new_valid {deposit : PendingDeposit}
 
 /-- A deposit adds at most one entry to the registry, and keeps each validator there.
 
-That needs one balance for each validator, and an index that fits 64 bits. -/
-private theorem applyPendingDeposit_grows {deposit : PendingDeposit}
+That needs an index that fits 64 bits. -/
+theorem applyPendingDeposit_validators_size_le_and_mem {deposit : PendingDeposit}
     (computed : applyPendingDeposit config checks state deposit = .ok after)
-    (holds : BalancesMatch state) (small : state.validators.data.size < 2 ^ 64) :
+    (small : state.validators.data.size < 2 ^ 64) :
     after.validators.data.size ≤ state.validators.data.size + 1 ∧
       ∀ validator ∈ state.validators.data, validator ∈ after.validators.data := by
   unfold applyPendingDeposit at computed
@@ -808,7 +829,7 @@ private theorem applyPendingDeposit_grows {deposit : PendingDeposit}
     simp only [bind_ok_iff] at computed
     obtain ⟨_, _, computed⟩ := computed
     split at computed
-    · rw [(addValidatorToRegistry_push computed holds small).1]
+    · rw [addValidatorToRegistry_validators_eq_push computed small]
       exact ⟨by simp, fun _ member => Array.mem_push.mpr (.inl member)⟩
     · simp only [pure, Except.pure, Except.ok.injEq] at computed
       subst computed
@@ -872,7 +893,7 @@ theorem foldlM_applyPendingDeposit_partition :
     split at computed
     · cases computed
     rename_i next applied
-    have grown := applyPendingDeposit_grows applied holds (by omega)
+    have grown := applyPendingDeposit_validators_size_le_and_mem applied (by omega)
     obtain ⟨added, dropped, perm, all, sum⟩ :=
       foldlM_applyPendingDeposit_partition computed ((applyPendingDeposit_kept applied).1 holds)
         (by omega)

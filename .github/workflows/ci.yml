@@ -69,15 +69,17 @@ jobs:
             cp .lake/build/ethlib-module-times.json "$BUILD_TIMING_LOG_DIR/module-times-base.json"
           fi
 
-      # Installs elan and fetches the mathlib cache.
+      # Installs elan and the Lean toolchain; only this step gets the token.
       # The builds run as named steps below, so the log shows which part failed.
-      - uses: leanprover/lean-action@fe408643ea7367d8c0404a8be3975bb145f5fb64 # v1.7.0
-        with:
-          auto-config: false
-          use-mathlib-cache: true
+      - name: install Lean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash scripts/install_elan.sh
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
-          # EthLib's build has its own cache; Mathlib uses its published cache.
-          use-github-cache: false
+      - name: fetch the Mathlib cache
+        run: lake exe cache get
 
       # The Mathlib cache does not hold these packages, so without this step every run builds them.
       # Lake compares content hashes, so it rebuilds any restored module whose inputs differ.
@@ -210,7 +212,7 @@ jobs:
   # The vector suites run the library through the bindings, so they do not wait for the proofs.
   # They run on each Python version from 3.10 to 3.14, so a feature that an older version lacks
   # fails here and not first in the wheel test of a release.
-  # The free-threaded 3.14t build runs only in that wheel test.
+  # They also run on the free-threaded 3.14t build, where the extension runs without the GIL.
   suites:
     name: suites (Python ${{ matrix.python }})
     runs-on: ubuntu-24.04
@@ -218,7 +220,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]
     env:
       BUILD_TIMING_SOURCE_SHA: ${{ github.sha }}
       BUILD_TIMING_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
@@ -249,11 +251,15 @@ jobs:
           restore-keys: |
             ethlib-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
 
-      - uses: leanprover/lean-action@fe408643ea7367d8c0404a8be3975bb145f5fb64 # v1.7.0
-        with:
-          auto-config: false
-          use-mathlib-cache: true
-          use-github-cache: false
+      - name: install Lean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash scripts/install_elan.sh
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: fetch the Mathlib cache
+        run: lake exe cache get
 
       - name: library
         run: bash scripts/build_timing_report.sh run library_build "$BUILD_TIMING_RESULTS" -- lake build --wfail EthLib
@@ -378,6 +384,9 @@ jobs:
       - name: release watcher, unit tests
         run: uv run --no-sync python -m unittest scripts/test_check_spec_releases.py
 
+      - name: parity shard merge, unit tests
+        run: uv run --no-sync python -m unittest scripts/test_merge_parity.py
+
       # A module docstring is one line, and no docstring wraps a sentence onto a second line.
       - name: docstrings
         run: uv run --no-sync python scripts/check_docstrings.py
@@ -451,6 +460,19 @@ jobs:
         run: uv run --no-project --python 3.12 python scripts/check_lean_layout.py --all --rule wrap --github
 
       - run: uv run --no-project --python 3.12 python -m unittest scripts/test_check_lean_layout.py
+
+      # A pull request adds no hand conversion to the Python package.
+      # The allowlist names every conversion that remains.
+      - name: Python package, no hand conversion on the changed lines
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: uv run --no-project --python 3.12 python scripts/check_python_boundary.py --base "origin/${BASE_REF}"
+
+      - name: Python package, no hand conversion outside the allowlist
+        run: uv run --no-project --python 3.12 python scripts/check_python_boundary.py
+
+      - run: uv run --no-project --python 3.12 python -m unittest scripts/test_check_python_boundary.py
 
       # No sentence of a Python comment runs onto a second line, in any file.
       - name: Python comments, one sentence per line

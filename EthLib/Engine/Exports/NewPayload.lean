@@ -11,7 +11,11 @@ public import EthLib.Execution.Exports.Transition
 
 The C export of `engine_newPayload`, for an execution layer without the parent's state.
 
-The chain configuration and the request cross the boundary as JSON text in UTF-8.
+The chain configuration and the request cross the boundary as typed Python values.
+
+Each is the value of its JSON, as `json.loads` gives it.
+
+Python refuses a value that cannot cross, such as a `float`, before Lean runs.
 
 The configuration is an object with the chain ID and the activations.
 
@@ -19,13 +23,13 @@ Each activation is a list of a fork name, `block` or `time`, and a number.
 
 The request is a JSON-RPC request object, with its method and its parameters.
 
-The result is the JSON text of the payload status.
+The result is the value of the JSON of the payload status.
 
 Its validation error starts with the code of the reason, then a colon.
 
 A JSON-RPC error has the code of its Engine API error: 32602 or 38005.
 
-An unknown method, or input that is not JSON, has code 0.
+An unknown method, or an argument that Lean cannot read, has code 0.
 -/
 
 public section
@@ -33,9 +37,9 @@ public section
 namespace EthLib.Engine.Exports
 
 open Lean (Json)
-open EthLib.Exports (Result)
+open EthLib.Exports (Result PyValue pyExport)
 open EthLib.Base
-open EthLib.Base.ChainConfig.Exports (configOfJson parseJson)
+open EthLib.Base.ChainConfig.Exports (configOfJson)
 
 /-- A message for the reason of an invalid payload, on one line. -/
 def reasonMessage : PayloadError → String
@@ -63,52 +67,77 @@ def newPayloadVersion (method : String) : Option Nat :=
   ["engine_newPayloadV1", "engine_newPayloadV2", "engine_newPayloadV3",
     "engine_newPayloadV4", "engine_newPayloadV5"].idxOf? method |>.map (· + 1)
 
-/-- The payload status of an `engine_newPayload` request, without the parent's state. -/
-@[export eth_engine_new_payload]
-def newPayloadExport (config request : ByteArray) : Result ByteArray := do
-  let config ← configOfJson (← parseJson "config" config)
-  let request ← parseJson "request" request
+/-- The payload status of an `engine_newPayload` request, without the parent's state.
+
+The arguments are the chain configuration and the request. -/
+def newPayloadOf (args : PyValue × PyValue) : Result PyValue := do
+  let (config, request) := args
+  let config ← configOfJson config.toJson
+  let request := request.toJson
   let some method := (request.getObjValAs? String "method").toOption
     | throw (0, "request: no method")
   let some version := newPayloadVersion method | throw (0, s!"no method {method}")
   let params := request.getObjValD "params"
   match newPayloadWithoutState config version params with
-  | .ok (status, reason) => return (statusJson status reason).compress.toUTF8
+  | .ok (status, reason) => return .ofJson (statusJson status reason)
   | .error e => throw (e.code, s!"engine error: {reprStr e}")
+
+/-- The payload status of an `engine_newPayload` request, without the parent's state.
+
+The arguments are the chain configuration and the request. -/
+@[export eth_engine_new_payload]
+def newPayloadExport (args : PyValue) : Result PyValue :=
+  pyExport newPayloadOf args
 
 /-- The payload status of an `engine_newPayload` request, on a chain that holds the parent.
 
-The chain has the inputs of the state transition export: configuration, state, recent blocks.
+The arguments are the chain configuration, the state, the recent blocks and the request.
 
-It returns an RLP list of three items, the status as JSON first.
+The state takes the form of the state root export.
 
-For a valid payload, the RLP form of its header and the accounts of the state after it follow.
+The recent blocks are a list, each the fork name, the header and its ommers.
 
-For any other payload, two empty lists follow. -/
-@[export eth_engine_new_payload_on_chain]
-def newPayloadOnChainExport (config state recent request : ByteArray) : Result ByteArray := do
-  let config ← configOfJson (← parseJson "config" config)
+The header and each ommer are in RLP form.
+
+A valid payload also gives the RLP forms of its header and of the accounts after it. -/
+def newPayloadOnChainOf
+    (args : PyValue × ByteArray × List (String × ByteArray × List ByteArray) × PyValue) :
+    Result (PyValue × Option ByteArray × Option ByteArray) := do
+  let (config, state, recent, request) := args
+  let config ← configOfJson config.toJson
   -- The chain is an input that the export reads itself, so its errors have code 0.
   let pre ← (Execution.State.Exports.ofInput state).mapError fun e => (0, e.message)
-  let recentItems : List Serialization.Rlp.Item ← (Serialization.Rlp.Codec.decode recent).mapError
-    fun e => (0, s!"recent blocks rejected: {reprStr e}")
-  let recent ← (recentItems.mapM (Execution.Blocks.Exports.recentOfItem config)).mapError
+  let recent ← (recent.mapM (Execution.Blocks.Exports.recentOf config)).mapError
     fun (_, m) => (0, m)
-  let request ← parseJson "request" request
+  let request := request.toJson
   let some method := (request.getObjValAs? String "method").toOption
     | throw (0, "request: no method")
   let some version := newPayloadVersion method | throw (0, s!"no method {method}")
   match newPayloadOnChain ⟨config, pre, recent⟩ version (request.getObjValD "params") with
   | .error e => throw (e.code, s!"engine error: {reprStr e}")
   | .ok (status, reason, next) =>
-    let json := Serialization.Rlp.Item.bytes (statusJson status reason).compress.toUTF8
-    let (header, accounts) := match next with
-      | some (block, post) =>
-        (Serialization.Rlp.Codec.toItem block.header,
-          Serialization.Rlp.Item.list (post.accounts.toList.map fun (address, account) =>
+    let status := PyValue.ofJson (statusJson status reason)
+    match next with
+    | none => return (status, none, none)
+    | some (block, post) =>
+      let encoded : Except _ (ByteArray × ByteArray) := do
+        let header ← Serialization.Rlp.encode (Serialization.Rlp.Codec.toItem block.header)
+        let accounts ← Serialization.Rlp.encode (.list (post.accounts.toList.map
+          fun (address, account) =>
             Execution.Transactions.Exports.stateEntryItem post address account))
-      | none => (.list [], .list [])
-    (Serialization.Rlp.encode (.list [json, header, accounts])).mapError
-      fun e => (0, s!"result: {reprStr e}")
+        return (header, accounts)
+      let (header, accounts) ← encoded.mapError fun e => (0, s!"result: {reprStr e}")
+      return (status, some header, some accounts)
+
+/-- The payload status of an `engine_newPayload` request, on a chain that holds the parent.
+
+The arguments are the chain configuration, the state, the recent blocks and the request.
+
+A valid payload also gives the RLP forms of its header and of the accounts after it.
+
+Otherwise both are `None`. -/
+@[export eth_engine_new_payload_on_chain]
+def newPayloadOnChainExport (args : PyValue) : Result PyValue :=
+  pyExport newPayloadOnChainOf args
 
 end EthLib.Engine.Exports

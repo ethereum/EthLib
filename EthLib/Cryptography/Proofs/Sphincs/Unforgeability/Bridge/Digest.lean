@@ -29,6 +29,7 @@ namespace EthLib.Cryptography.Sphincs.Unforgeability.Bridge
 open EthLib.Cryptography.Sphincs
 open EthLib.Cryptography.Sphincs.Constants
 open SphincsSecurity.Concrete (sequenceFin)
+open EthLib.Cryptography.HashSig (ofFnInOrder_eq_sequenceFin ofFnInOrder_eq_sequenceFin_cast)
 
 /-- The model's digest calls as EthLib's digest: the first 34 of their bytes, call 0 first. -/
 def ofOutputs (outs : SphincsSecurity.DigestCall → HashSig.HashOutput) : MessageDigest :=

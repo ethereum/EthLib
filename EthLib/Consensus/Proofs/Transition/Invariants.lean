@@ -174,16 +174,15 @@ theorem frame_slashValidator {slashedIndex : ValidatorIndex}
     {whistleblowerIndex : Option ValidatorIndex}
     (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
     Frame state after := by
-  simp only [slashValidator, bind_ok_iff, liftArith, mapError_ok_iff] at computed
-  obtain ⟨exited, exitedOk, validator, found, delay, _, marked, markedOk, _, _, _, _, _, _,
-    lowered, loweredOk,
-    proposer, _, _, _, raised, raisedOk, last, lastOk, done⟩ := computed
+  obtain ⟨_, validator, _, _, _, _, _, _, _, _, _, last, exitedOk, found, -, markedOk, -, -, -,
+    loweredOk, -, -, raisedOk, lastOk, done⟩ := slashValidator_ok computed
   refine (frame_initiateValidatorExit exitedOk).trans <|
     ((frame_setValidator markedOk
       fun ordered => ?_).trans
       (frame_slashings _ _)).trans <|
     (frame_decreaseBalance loweredOk).trans <| (frame_increaseBalance raisedOk).trans <|
-    (frame_increaseBalance lastOk).trans (frame_slashValidatorLast done)
+    (frame_increaseBalance lastOk).trans (frame_slashValidatorLast
+      (last := last) (after := after) (index := slashedIndex) (by subst done; rfl))
   refine UInt64.le_trans (ordered validator (mem_of_getValidator found)) ?_
   rw [UInt64.max_def]
   split
@@ -700,8 +699,9 @@ theorem frame_processBlockExecution {body : BeaconBlockBody preset fork}
 
 /-! ## The sync aggregate -/
 
-theorem frame_applySyncReward {reward proposerReward : Gwei} {member : ValidatorIndex × Bool}
-    (computed : applySyncReward reward proposerReward state member = .ok after) :
+theorem frame_applySyncReward {reward proposerReward : Gwei}
+    {proposer : Except AccessorError ValidatorIndex} {member : ValidatorIndex × Bool}
+    (computed : applySyncReward reward proposerReward proposer state member = .ok after) :
     Frame state after := by
   unfold applySyncReward at computed
   split at computed

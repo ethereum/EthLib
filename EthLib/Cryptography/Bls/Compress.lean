@@ -20,7 +20,7 @@ The first byte of the `x` coordinate carries three flags in its top bits.
 
 Key validation decompresses the point, and checks that it is on the curve.
 
-It then checks `[r] P = O`, and rejects the point at infinity.
+It then checks that `[r] P = O`, and rejects the point at infinity.
 
 KZG accepts the point at infinity, so it tests for that encoding before key validation.
 -/
@@ -155,9 +155,18 @@ theorem size_compress (p : G1) : (compress p).size = 48 := by
     · exact (size_set! ..).trans ((size_set! ..).trans (Fp.size_toBytesBE _))
     · exact (size_set! ..).trans (Fp.size_toBytesBE _)
 
-/-- Subgroup-membership check via `[r]·P = O`, with `[r]·P` computed by `mulModulus`. -/
+/-- Subgroup-membership check by the endomorphism `σ(x, y) = (β x, y)`.
+
+A point passes when `σ(P) = [-t^2] P`, where `t` is the BLS parameter.
+
+The test is the one of Scott for `G1`, <https://eprint.iacr.org/2021/1130>.
+
+For a point on the curve, the proofs show that it holds exactly when `[r] P = O`.
+
+`[t^2]` is two products by the 64-bit `|t|`, so the test takes about 128 doublings. -/
 def inSubgroup (p : G1) : Bool :=
-  if p.isInfinity then true else (mulModulus p).isInfinity
+  if p.isInfinity then true
+  else projectiveEq (sigma p) (neg (mulNat (mulNat p blsX) blsX))
 
 /-- Validate a compressed public key and return its point.
 
@@ -263,9 +272,18 @@ def uncompress (bytes : ByteArray) : Except BlsError G2 :=
           .ok ⟨x, y, Fp2.one⟩
       | _, _ => .error .invalidG2Point
 
-/-- Subgroup-membership check via `[r]·P = O`, with `[r]·P` computed by `mulModulus`. -/
+/-- Subgroup-membership check by the endomorphism `psi` of the twist.
+
+A point passes when `psi(P) = [t] P`, where `t` is the BLS parameter.
+
+The test is the one of Scott for `G2`, <https://eprint.iacr.org/2021/1130>.
+
+For a point on the twist, the proofs show that it holds exactly when `[r] P = O`.
+
+`t` is negative, so `[t] P` is `-[|t|] P`, one product by the 64-bit `|t|`. -/
 def inSubgroup (p : G2) : Bool :=
-  if p.isInfinity then true else (mulModulus p).isInfinity
+  if p.isInfinity then true
+  else projectiveEq (psi p) (neg (mulNat p blsX))
 
 end G2
 

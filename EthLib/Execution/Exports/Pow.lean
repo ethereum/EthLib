@@ -1,22 +1,25 @@
 module
 
-public import EthLib.Base.Exports
+public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Execution.Blocks.Difficulty
 public import EthLib.Execution.Blocks.ProofOfWork
 public import EthLib.Execution.Blocks.Ommers
 public import EthLib.Execution.Exports.Blocks
-public import EthLib.Execution.Exports.Evm
 
 /-!
 # `Exports.Pow`
 
 C-ABI exports of proof of work before Paris, for the Python C extension.
 
-Each number crosses the boundary as its big-endian bytes, so no value is truncated.
+The difficulty, the forks of a chain, the seal hash and the proof-of-work check take typed values.
 
-A fork crosses it as its name, and an unknown name fails with code 0.
+A number crosses as an `int`, and a fork as its name, a `str`.
 
-A header crosses it as its RLP bytes, and a header that the decoder rejects fails with its RLP code.
+The ommer check takes its forks and its blocks in RLP form.
+
+An unknown name fails with code 0.
+
+A header crosses as its RLP bytes, and a header that the decoder rejects fails with its RLP code.
 
 The proof-of-work check takes a fork before Paris, and fails with code 0 at a later one.
 
@@ -27,20 +30,39 @@ public section
 
 namespace EthLib.Execution.Blocks.Exports
 
-open EthLib.Base (bytesToNat)
-open EthLib.Exports (Result forkUpTo)
-open EthLib.Execution.Evm.Exports (bytesOfNat)
+open EthLib.Exports (Result PyValue forkUpTo pyExport)
 
 /-- The difficulty of a block at a named fork, from its number, its timestamp and its parent.
 
 The parent's ommers count only as none or some. -/
+def blockDifficultyOf (args : String × Nat × Nat × Nat × Nat × Nat) : Result Nat := do
+  let (fork, number, timestamp, parentTimestamp, parentDifficulty, parentOmmers) := args
+  let fork ← forkUpTo .glamsterdam fork.toUTF8
+  pure (blockDifficulty fork number timestamp parentTimestamp parentDifficulty (parentOmmers ≠ 0))
+
+/-- The difficulty of a block at a named fork, from its number, its timestamp and its parent.
+
+The arguments are the name of the fork, then the number and the timestamp of the block.
+
+Then come the timestamp, the difficulty and the number of ommers of the parent. -/
 @[export eth_pow_block_difficulty]
-def blockDifficultyExport (fork number timestamp parentTimestamp parentDifficulty
-    parentOmmers : ByteArray) : Result ByteArray := do
-  let fork ← forkUpTo .glamsterdam fork
-  let n (bytes : ByteArray) := bytesToNat bytes.toList
-  pure (bytesOfNat (blockDifficulty fork (n number) (n timestamp) (n parentTimestamp)
-    (n parentDifficulty) (n parentOmmers ≠ 0)))
+def blockDifficultyExport (args : PyValue) : Result PyValue :=
+  pyExport blockDifficultyOf args
+
+/-- The RLP form of the forks of a chain, each with its first block: a list of `[name, block]`.
+
+The ommer check and the rewards root read the forks of a chain in this form. -/
+def chainForksOf (forks : List (String × Nat)) : Result ByteArray :=
+  (Serialization.Rlp.encode (.list (forks.map fun (name, first) =>
+    .list [.bytes name.toUTF8, Serialization.Rlp.Codec.toItem first]))).mapError
+    fun e => (e.code, s!"forks have no encoding: {reprStr e}")
+
+/-- The RLP form of the forks of a chain, each with its first block.
+
+The argument is the list of the forks, each its name and its first block. -/
+@[export eth_pow_chain_forks]
+def chainForksExport (args : PyValue) : Result PyValue :=
+  pyExport chainForksOf args
 
 /-- The header at a named fork that RLP bytes hold. -/
 def headerOf (fork header : ByteArray) : Result (Σ fork : Base.Fork, Header fork) := do
@@ -49,20 +71,32 @@ def headerOf (fork header : ByteArray) : Result (Σ fork : Base.Fork, Header for
     fun e => (e.code, s!"header rejected: {reprStr e}")
   pure ⟨fork, header⟩
 
-/-- The seal hash of a header: the Keccak-256 hash of the header without mix digest and nonce. -/
-@[export eth_pow_seal_hash]
-def sealHashExport (fork header : ByteArray) : Result ByteArray := do
-  let ⟨_, header⟩ ← headerOf fork header
+/-- The seal hash of a header at a named fork: its Keccak-256 hash without mix digest and nonce. -/
+def sealHashOf (args : String × ByteArray) : Result ByteArray := do
+  let ⟨_, header⟩ ← headerOf args.1.toUTF8 args.2
   let hash ← header.sealHash.mapError fun e => (e.code, s!"header has no encoding: {reprStr e}")
   pure ⟨hash.toArray⟩
 
+/-- The seal hash of a header: the Keccak-256 hash of the header without mix digest and nonce.
+
+The arguments are the name of the fork and the header in RLP form. -/
+@[export eth_pow_seal_hash]
+def sealHashExport (args : PyValue) : Result PyValue :=
+  pyExport sealHashOf args
+
 /-- Check the proof of work of a header in RLP form, at a named fork before Paris. -/
-@[export eth_pow_check]
-def checkExport (fork header : ByteArray) : Result UInt8 := do
-  let ⟨fork, header⟩ ← headerOf fork header
+def checkOf (args : String × ByteArray) : Result Bool := do
+  let ⟨fork, header⟩ ← headerOf args.1.toUTF8 args.2
   if .paris ≤ fork then throw (0, "a header from Paris on has no proof of work")
-  (checkProofOfWork header).map (fun () => 1) |>.mapError
+  (checkProofOfWork header).map (fun () => true) |>.mapError
     fun e => (e.code, s!"proof of work invalid: {reprStr e}")
+
+/-- Check the proof of work of a header in RLP form, at a named fork before Paris.
+
+The arguments are the name of the fork and the header in RLP form. -/
+@[export eth_pow_check]
+def checkExport (args : PyValue) : Result PyValue :=
+  pyExport checkOf args
 
 /-- Check the ommers of a block in RLP form, against recent blocks, each at the fork of its number.
 

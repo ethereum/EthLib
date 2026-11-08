@@ -46,6 +46,7 @@ size_t SPHINCS_FORS_HEIGHT;
 
 
 size_t ENR_MAX_RECORD_SIZE;
+size_t RLPX_SECRETS_SIZE;
 size_t REQRESP_MAX_PAYLOAD_SIZE;
 size_t REQRESP_MAX_ERROR_MESSAGE_SIZE;
 size_t SECP256K1_HASH_LEN;
@@ -101,6 +102,7 @@ PyObject* WEAK_SUBJECTIVITY_ERROR;
 PyObject* VALIDATOR_DUTY_ERROR;
 PyObject* PROPOSER_ERROR;
 PyObject* SLASHING_PROTECTION_ERROR;
+PyObject* BINDING_ERROR;
 
 /* ---- Lean externs: size accessors ------------------------------------ */
 
@@ -295,6 +297,11 @@ eth_enr_const_max_record_size(
 );
 
 extern uint64_t
+eth_rlpx_const_secrets_size(
+  lean_object* unit
+);
+
+extern uint64_t
 eth_reqresp_const_max_payload_size(
   lean_object* unit
 );
@@ -350,6 +357,11 @@ initialize_EthLib_EthLib_Base_Exports_ChainConfig(
 
 extern lean_object*
 initialize_EthLib_EthLib_Engine_Exports(
+  uint8_t builtin
+);
+
+extern lean_object*
+initialize_EthLib_EthLib_Base_Exports_Echo(
   uint8_t builtin
 );
 
@@ -550,6 +562,26 @@ parse_bytes_of_size(
   return (const uint8_t*) PyBytes_AS_STRING(obj);
 }
 
+/* The items of a sequence, in a tuple or a list that no other thread can change.
+ *
+ * A list is copied into a tuple, which takes the lock of the list on a free-threaded build.
+ * The copy reads the storage of the list, so a subclass that overrides iteration is read the same.
+ * So another thread that changes the list cannot free an item while the caller reads it.
+ * Any other iterable becomes a new list that only the caller holds.
+ * It returns NULL with a TypeError that carries `message` when `seq` is not iterable. */
+PyObject*
+sequence_snapshot(
+  PyObject* seq,
+  const char* message
+) {
+  if (PyTuple_Check(seq)) {
+    Py_INCREF(seq);
+    return seq;
+  }
+  if (PyList_Check(seq)) return PyList_AsTuple(seq);
+  return PySequence_Fast(seq, message);
+}
+
 /* Pack `seq[i]` (each must be `bytes` of `stride`) into a contiguous buffer.
  * Returns malloc'd buffer (caller frees) of size `*out_len * stride`,
  * or NULL on error (sets a Python exception). */
@@ -560,7 +592,7 @@ pack_bytes_sequence(
   Py_ssize_t* out_len,
   const char* name
 ) {
-  PyObject* fast = PySequence_Fast(seq, "expected a sequence");
+  PyObject* fast = sequence_snapshot(seq, "expected a sequence");
   if (!fast) return NULL;
   Py_ssize_t n = PySequence_Fast_GET_SIZE(fast);
   uint8_t* buf = (uint8_t*) PyMem_Malloc(n * stride);
@@ -635,7 +667,9 @@ static PyMethodDef methods[] = {
   {"vrf_secret", py_vrf_secret, METH_VARARGS, DOC_vrf_secret},
   {"vrf_evaluate", py_vrf_evaluate, METH_VARARGS, DOC_vrf_evaluate},
   {"crc32", py_crc32, METH_VARARGS, DOC_crc32},
+  {"crc32_number", py_crc32_number, METH_VARARGS, DOC_crc32_number},
   {"crc32c", py_crc32c, METH_VARARGS, DOC_crc32c},
+  {"crc32c_number", py_crc32c_number, METH_VARARGS, DOC_crc32c_number},
   {"aes_encrypt_block", py_aes_encrypt_block, METH_VARARGS, DOC_aes_encrypt_block},
   {"aes_decrypt_block", py_aes_decrypt_block, METH_VARARGS, DOC_aes_decrypt_block},
   {"aes_ctr", py_aes_ctr, METH_VARARGS, DOC_aes_ctr},
@@ -708,6 +742,8 @@ static PyMethodDef methods[] = {
    DOC_consensus_process_epoch},
   {"consensus_rewards_deltas", py_consensus_rewards_deltas, METH_VARARGS,
    DOC_consensus_rewards_deltas},
+  {"consensus_rewards_deltas_batch", py_consensus_rewards_deltas_batch, METH_VARARGS,
+   DOC_consensus_rewards_deltas_batch},
   {"consensus_upgrade_state", py_consensus_upgrade_state, METH_VARARGS,
    DOC_consensus_upgrade_state},
   {"consensus_process_slots", py_consensus_process_slots, METH_VARARGS,
@@ -801,6 +837,13 @@ static PyMethodDef methods[] = {
    METH_VARARGS, DOC_consensus_compute_on_chain_aggregate},
   {"consensus_get_execution_requests", py_consensus_get_execution_requests, METH_VARARGS,
    DOC_consensus_get_execution_requests},
+  {"consensus_get_execution_payload_bid", py_consensus_get_execution_payload_bid, METH_VARARGS,
+   DOC_consensus_get_execution_payload_bid},
+  {"consensus_get_self_built_execution_payload_bid",
+   py_consensus_get_self_built_execution_payload_bid, METH_VARARGS,
+   DOC_consensus_get_self_built_execution_payload_bid},
+  {"consensus_get_execution_payload_envelope", py_consensus_get_execution_payload_envelope,
+   METH_VARARGS, DOC_consensus_get_execution_payload_envelope},
   {"consensus_get_validators_custody_requirement",
    py_consensus_get_validators_custody_requirement, METH_VARARGS,
    DOC_consensus_get_validators_custody_requirement},
@@ -866,9 +909,13 @@ static PyMethodDef methods[] = {
   {"reqresp_max_compressed_len", py_reqresp_max_compressed_len, METH_VARARGS, DOC_reqresp_max_compressed_len},
   {"reqresp_decode_payload", py_reqresp_decode_payload, METH_VARARGS, DOC_reqresp_decode_payload},
   {"reqresp_decode_response_chunk", py_reqresp_decode_response_chunk, METH_VARARGS, DOC_reqresp_decode_response_chunk},
+  {"reqresp_encode_payload", py_reqresp_encode_payload, METH_VARARGS, DOC_reqresp_encode_payload},
+  {"reqresp_encode_response_chunk", py_reqresp_encode_response_chunk, METH_VARARGS,
+   DOC_reqresp_encode_response_chunk},
   {"block_header_hash", py_block_header_hash, METH_VARARGS, DOC_block_header_hash},
   {"block_reencode", py_block_reencode, METH_VARARGS, DOC_block_reencode},
   {"pow_block_difficulty", py_pow_block_difficulty, METH_VARARGS, DOC_pow_block_difficulty},
+  {"pow_chain_forks", py_pow_chain_forks, METH_VARARGS, DOC_pow_chain_forks},
   {"pow_seal_hash", py_pow_seal_hash, METH_VARARGS, DOC_pow_seal_hash},
   {"pow_check", py_pow_check, METH_VARARGS, DOC_pow_check},
   {"pow_validate_ommers", py_pow_validate_ommers, METH_VARARGS, DOC_pow_validate_ommers},
@@ -887,8 +934,7 @@ static PyMethodDef methods[] = {
   {"evm_word_op", py_evm_word_op, METH_VARARGS, DOC_evm_word_op},
   {"evm_immediate_depths", py_evm_immediate_depths, METH_VARARGS, DOC_evm_immediate_depths},
   {"evm_memory_gas_cost", py_evm_memory_gas_cost, METH_VARARGS, DOC_evm_memory_gas_cost},
-  {"evm_extend_memory_cost", py_evm_extend_memory_cost, METH_VARARGS, DOC_evm_extend_memory_cost},
-  {"evm_extend_memory_expand_by", py_evm_extend_memory_expand_by, METH_VARARGS, DOC_evm_extend_memory_expand_by},
+  {"evm_extend_memory", py_evm_extend_memory, METH_VARARGS, DOC_evm_extend_memory},
   {"evm_create_address", py_evm_create_address, METH_VARARGS, DOC_evm_create_address},
   {"evm_create2_address", py_evm_create2_address, METH_VARARGS, DOC_evm_create2_address},
   {"rlp_encode", py_rlp_encode, METH_VARARGS, DOC_rlp_encode},
@@ -905,6 +951,8 @@ static PyMethodDef methods[] = {
   {"discv4_encode", py_discv4_encode, METH_VARARGS, DOC_discv4_encode},
   {"discv4_record_signed_by", py_discv4_record_signed_by, METH_VARARGS, DOC_discv4_record_signed_by},
   {"fork_id", py_fork_id, METH_VARARGS, DOC_fork_id},
+  {"fork_id_schedule", py_fork_id_schedule, METH_VARARGS, DOC_fork_id_schedule},
+  {"fork_id_encode", py_fork_id_encode, METH_VARARGS, DOC_fork_id_encode},
   {"mainnet_fork_id", py_mainnet_fork_id, METH_VARARGS, DOC_mainnet_fork_id},
   {"fork_id_validate", py_fork_id_validate, METH_VARARGS, DOC_fork_id_validate},
   {"eth_message_decode", py_eth_message_decode, METH_VARARGS, DOC_eth_message_decode},
@@ -967,6 +1015,11 @@ static PyMethodDef methods[] = {
    DOC_engine_new_payload_on_chain},
   {"engine_forkchoice_updated", py_engine_forkchoice_updated, METH_VARARGS,
    DOC_engine_forkchoice_updated},
+  {"engine_prepare_execution_payload", py_engine_prepare_execution_payload, METH_VARARGS,
+   DOC_engine_prepare_execution_payload},
+  {"engine_prepare_execution_payload_gloas", py_engine_prepare_execution_payload_gloas,
+   METH_VARARGS, DOC_engine_prepare_execution_payload_gloas},
+  {"pyvalue_echo", py_pyvalue_echo, METH_VARARGS, DOC_pyvalue_echo},
   {NULL, NULL, 0, NULL},
 };
 
@@ -1032,6 +1085,7 @@ PyInit__native(void) {
     VALIDATOR_DUTY_ERROR = PyObject_GetAttrString(errors, "ValidatorDutyError");
     PROPOSER_ERROR = PyObject_GetAttrString(errors, "ProposerError");
     SLASHING_PROTECTION_ERROR = PyObject_GetAttrString(errors, "SlashingProtectionError");
+    BINDING_ERROR = PyObject_GetAttrString(errors, "BindingError");
     Py_DECREF(errors);
     if (PyErr_Occurred()) return NULL;
 
@@ -1060,6 +1114,10 @@ PyInit__native(void) {
     if (lean_io_result_is_ok(res)) {
       lean_dec_ref(res);
       res = initialize_EthLib_EthLib_Engine_Exports(1);
+    }
+    if (lean_io_result_is_ok(res)) {
+      lean_dec_ref(res);
+      res = initialize_EthLib_EthLib_Base_Exports_Echo(1);
     }
     if (lean_io_result_is_ok(res)) {
       lean_dec_ref(res);
@@ -1116,6 +1174,7 @@ PyInit__native(void) {
     SECP256R1_HASH_LEN       = (size_t) eth_secp256r1_const_hash_len(lean_box(0));
     SECP256R1_SIGNATURE_LEN  = (size_t) eth_secp256r1_const_signature_len(lean_box(0));
     ENR_MAX_RECORD_SIZE     = (size_t) eth_enr_const_max_record_size(lean_box(0));
+    RLPX_SECRETS_SIZE       = (size_t) eth_rlpx_const_secrets_size(lean_box(0));
     REQRESP_MAX_PAYLOAD_SIZE = (size_t) eth_reqresp_const_max_payload_size(lean_box(0));
     REQRESP_MAX_ERROR_MESSAGE_SIZE = (size_t) eth_reqresp_const_max_error_message_size(lean_box(0));
 
@@ -1125,6 +1184,16 @@ PyInit__native(void) {
 
   PyObject* m = PyModule_Create(&moduledef);
   if (!m) return NULL;
+#ifdef Py_GIL_DISABLED
+  /* The module runs without the GIL on a free-threaded build.
+   *
+   * Each call builds its own Lean objects, and no two threads share one.
+   * The objects that the Lean modules build when they load are persistent, so no count of theirs
+   * changes after the load.
+   * The exception classes and the sizes are written once, before the module is returned.
+   * The wrappers read lists through a snapshot, so a list that another thread changes is safe. */
+  PyUnstable_Module_SetGIL(m, Py_MOD_GIL_NOT_USED);
+#endif
 
   /* Expose the spec presets as module-level constants. */
   PyModule_AddIntConstant(m, "BYTES_PER_PUBKEY", BYTES_PER_PUBKEY);
@@ -1165,6 +1234,7 @@ PyInit__native(void) {
   PyModule_AddIntConstant(m, "SECP256R1_HASH_LEN", SECP256R1_HASH_LEN);
   PyModule_AddIntConstant(m, "SECP256R1_SIGNATURE_LEN", SECP256R1_SIGNATURE_LEN);
   PyModule_AddIntConstant(m, "ENR_MAX_RECORD_SIZE", ENR_MAX_RECORD_SIZE);
+  PyModule_AddIntConstant(m, "RLPX_SECRETS_SIZE", RLPX_SECRETS_SIZE);
   PyModule_AddIntConstant(m, "REQRESP_MAX_PAYLOAD_SIZE", REQRESP_MAX_PAYLOAD_SIZE);
   PyModule_AddIntConstant(m, "REQRESP_MAX_ERROR_MESSAGE_SIZE", REQRESP_MAX_ERROR_MESSAGE_SIZE);
   return m;

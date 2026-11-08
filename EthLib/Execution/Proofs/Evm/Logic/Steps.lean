@@ -28,7 +28,7 @@ It steps over JUMPDEST, CALLDATALOAD and JUMP.
 
 It steps over JUMPI on a condition that is a number, or that a hypothesis proves zero or nonzero.
 
-It steps over each opcode that pushes a word fixed by the frame, such as CALLVALUE.
+It steps over each opcode that pushes a word fixed by the frame, such as CALLVALUE, and over GAS.
 
 It proves a jump destination valid by the walk along the opcodes.
 
@@ -61,17 +61,17 @@ variable {fork : Fork}
 /-- A frame reaches itself, named with an equal stack, an equal memory and an equal gas. -/
 theorem reshape {code : ByteArray} {message : Message fork} {pc : Nat} {s s' : List U256}
     {m m' : ByteArray} {g g' : Nat} {st : State.TransactionState} {ss : Substate}
-    (hs : s = s') (hm : m = m') (hg : g = g') :
-    Hoare fork (At code message pc s m g st ss) (At code message pc s' m' g' st ss) := by
+    {rd : ByteArray} (hs : s = s') (hm : m = m') (hg : g = g') :
+    Hoare fork (At code message pc s m g st ss rd) (At code message pc s' m' g' st ss rd) := by
   subst hs hm hg
   exact Triple.of_imp fun _ h => h
 
 /-- A specification also holds from a frame with an equal stack, memory and gas. -/
 theorem Spec.reshape {code : ByteArray} {message : Message fork} {pc : Nat} {s s' : List U256}
     {m m' : ByteArray} {g g' : Nat} {st : State.TransactionState} {ss : Substate}
-    {Q : Evm fork Nat → Prop} (hs : s = s') (hm : m = m') (hg : g = g')
-    (h : Spec fork (At code message pc s' m' g' st ss) Q) :
-    Spec fork (At code message pc s m g st ss) Q :=
+    {rd : ByteArray} {Q : Evm fork Nat → Prop} (hs : s = s') (hm : m = m') (hg : g = g')
+    (h : Spec fork (At code message pc s' m' g' st ss rd) Q) :
+    Spec fork (At code message pc s m g st ss rd) Q :=
   Spec.seq (Logic.reshape hs hm hg) h
 
 open Lean.Parser.Tactic
@@ -233,6 +233,11 @@ macro_rules
          case dec => refine ofByte_of_decode rfl ?_; evm_fork
          case run => rfl
          case word => intro _ hc hm hp hmem; (try simp only [hc, hm, hp, hmem]); rfl
+         case gas => evm_gas
+         case room => evm_room)
+      | (refine' Triple.seq (gas_rule ?lt ?op ?gas ?room) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
          case gas => evm_gas
          case room => evm_room)
       | fail "no rule of a step applies to the opcode at the program counter") <;> evm_tidy))

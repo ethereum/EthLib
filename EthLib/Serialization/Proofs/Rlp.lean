@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Serialization.Proofs.Rlp.Item
+public import EthLib.Serialization.Proofs.Rlp.Bytes
 public import EthLib.Serialization.Proofs.Rlp.Loops
 public import EthLib.Serialization.Proofs.Rlp.Encode
 public import EthLib.Serialization.Proofs.Rlp.Bound
@@ -16,6 +17,7 @@ public import EthLib.Serialization.Proofs.Rlp.Codec
 Machine-checked properties of RLP.
 
 - `Proofs/Rlp/Item` proves that `bigEndian` is `BE` of the Yellow Paper.
+- `Proofs/Rlp/Bytes` sees the bytes that the decoder reads between two positions as a list.
 - `Proofs/Rlp/Loops` restates the loops of the encoder and the decoder as plain recursions.
 - `Proofs/Rlp/Encode` proves that `encode` refuses a payload of `2^64` bytes or more.
 - `Proofs/Rlp/Bound` proves that `encode` fails exactly on a payload of `2^64` bytes or more.

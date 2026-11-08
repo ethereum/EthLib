@@ -16,6 +16,11 @@
 # A wrong type raises `TypeError`, and a wrong length `ValueError`.
 # An integer out of its range raises `OverflowError`.
 # None of them carries a code.
+#
+# An export of typed values reads its arguments in Lean instead.
+# An argument that Lean cannot read raises the error class of the method, with code 0.
+# A negative or too large `int`, too many parts or bytes, or deep nesting raises `ValueError`.
+# A value of a type that cannot cross, such as a `float` or a `bytearray`, raises `TypeError`.
 class EthLibError(Exception):
     """An error of the specification, with its code and its message."""
 
@@ -62,7 +67,7 @@ class KeccakError(EthLibError, ValueError):
 
 
 class EthashError(EthLibError, ValueError):
-    """An Ethash export rejected its cache."""
+    """An Ethash export rejected an argument, such as its cache."""
 
 
 class ReqRespError(EthLibError, ValueError):
@@ -186,11 +191,11 @@ class VrfError(EthLibError, ValueError):
 
 
 class EvmError(EthLibError, ValueError):
-    """An EVM export rejected an opcode, an immediate byte, a length or a CREATE preimage."""
+    """An EVM export rejected an argument, an opcode, an immediate byte or a CREATE preimage."""
 
 
 class FeesError(EthLibError, ValueError):
-    """A fee export got an unknown fork, or one before Dencun, with code 0."""
+    """A fee export got an unknown, blobless or unspecified fork, a bad transaction or argument."""
 
 
 class TrieError(EthLibError, ValueError):
@@ -221,8 +226,13 @@ class ChainError(EthLibError, ValueError):
     """A chain configuration was malformed, with code 0."""
 
 
+class BindingError(EthLibError, ValueError):
+    """An error of an export of typed values, with code 0 when a value does not fit its argument."""
+
+
 __all__ = [
     "EthLibError",
+    "BindingError",
     "KzgError",
     "BlsError",
     "XmssError",

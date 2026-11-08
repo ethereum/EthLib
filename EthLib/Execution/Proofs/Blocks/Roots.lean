@@ -2,7 +2,8 @@ module
 
 public import EthLib.Execution.Blocks.Roots
 public import EthLib.Execution.Proofs.Blocks.Receipt
-public import EthLib.Execution.Proofs.Blocks.Withdrawal
+public import EthLib.Execution.Proofs.Blocks.TypedRoots
+public import EthLib.Execution.Proofs.Blocks.WithdrawalCodec
 public import EthLib.Execution.Proofs.Trie.Binding
 public import EthLib.Execution.Proofs.Trie.Root
 public import EthLib.Serialization.Proofs.Rlp.Codec
@@ -104,7 +105,7 @@ theorem indexedRoot_eq_ok_iff {values : List ByteArray} {root' : Hash32} :
 /-- Binding of a list's root: two lists with one root give every key one value.
 
 Otherwise the search finds a Keccak-256 collision in the proofs of that key. -/
-theorem indexedRoot_binding_key {values₁ values₂ : List ByteArray}
+private theorem indexedRoot_binding_key {values₁ values₂ : List ByteArray}
     {entries₁ entries₂ : List (ByteArray × ByteArray)} {root' : Hash32}
     (hentries₁ : indexedEntries values₁ = .ok entries₁)
     (hentries₂ : indexedEntries values₂ = .ok entries₂)
@@ -238,17 +239,6 @@ theorem indexedRoot_binding {values₁ values₂ : List ByteArray} {root' : Hash
 
 /-! ## The roots of typed lists -/
 
-/-- A typed list with a root has bytes for each item, and the list of those bytes has that root. -/
-theorem indexedRoot_of_mapM {γ : Type} {encodeItem : γ → Except RlpError ByteArray}
-    {items : List γ} {root' : Hash32}
-    (h : (do indexedRoot (← (items.mapM encodeItem).mapError TrieError.rlp)) = .ok root') :
-    ∃ values, items.mapM encodeItem = .ok values ∧ indexedRoot values = .ok root' := by
-  cases hvalues : items.mapM encodeItem with
-  | error e => simp [hvalues, Except.mapError, bind, Except.bind] at h
-  | ok values =>
-    simp only [hvalues, Except.mapError, bind, Except.bind] at h
-    exact ⟨values, rfl, h⟩
-
 /-- Binding of the transactions root: two lists of transactions with one root are equal.
 
 Otherwise the search over their bytes finds a Keccak-256 collision in the proofs of one index. -/
@@ -259,8 +249,8 @@ theorem transactionsRoot_binding {transactions₁ transactions₂ : List Transac
       ∃ values₁ values₂ pair, transactions₁.mapM encodeTransaction = .ok values₁ ∧
         transactions₂.mapM encodeTransaction = .ok values₂ ∧
         findIndexedCollision values₁ values₂ = some pair ∧ IsCollision keccak256 pair := by
-  obtain ⟨values₁, hvalues₁, hindexed₁⟩ := indexedRoot_of_mapM hroot₁
-  obtain ⟨values₂, hvalues₂, hindexed₂⟩ := indexedRoot_of_mapM hroot₂
+  obtain ⟨values₁, hvalues₁, hindexed₁⟩ := transactionsRoot_eq_ok_iff.mp hroot₁
+  obtain ⟨values₂, hvalues₂, hindexed₂⟩ := transactionsRoot_eq_ok_iff.mp hroot₂
   rcases indexedRoot_binding hindexed₁ hindexed₂ with rfl | ⟨pair, hfound, hvalid⟩
   · -- Two transactions with the same bytes are equal.
     exact .inl (mapM_ok_injective (fun _ _ _ _ _ hx hy => encodeTransaction_injective hx hy)
@@ -277,8 +267,8 @@ theorem withdrawalsRoot_binding {withdrawals₁ withdrawals₂ : List Withdrawal
       ∃ values₁ values₂ pair, withdrawals₁.mapM Codec.encode = .ok values₁ ∧
         withdrawals₂.mapM Codec.encode = .ok values₂ ∧
         findIndexedCollision values₁ values₂ = some pair ∧ IsCollision keccak256 pair := by
-  obtain ⟨values₁, hvalues₁, hindexed₁⟩ := indexedRoot_of_mapM hroot₁
-  obtain ⟨values₂, hvalues₂, hindexed₂⟩ := indexedRoot_of_mapM hroot₂
+  obtain ⟨values₁, hvalues₁, hindexed₁⟩ := withdrawalsRoot_eq_ok_iff.mp hroot₁
+  obtain ⟨values₂, hvalues₂, hindexed₂⟩ := withdrawalsRoot_eq_ok_iff.mp hroot₂
   rcases indexedRoot_binding hindexed₁ hindexed₂ with rfl | ⟨pair, hfound, hvalid⟩
   · -- Two withdrawals with the same bytes are equal.
     exact .inl (mapM_ok_injective (fun _ _ _ _ _ hx hy => Codec.encode_injective hx hy)
@@ -287,29 +277,29 @@ theorem withdrawalsRoot_binding {withdrawals₁ withdrawals₂ : List Withdrawal
 
 /-- Binding of the receipts root: two lists of receipts with one root are equal.
 
-Each type must be 0, or a type that the fork has, as the decoder of a receipt requires.
+Each type must be below `0xc0`, so that a typed receipt cannot start like a legacy one.
+
+Type 0 and every type that a fork adds meet this bound.
 
 Otherwise the search over their bytes finds a Keccak-256 collision in the proofs of one index. -/
 theorem receiptsRoot_binding {fork : Fork} {receipts₁ receipts₂ : List (UInt8 × Receipt fork)}
     {root' : Hash32}
-    (htypes₁ : ∀ entry ∈ receipts₁,
-      entry.1 = 0 ∨ ∃ since, typeFork entry.1 = some since ∧ since ≤ fork)
-    (htypes₂ : ∀ entry ∈ receipts₂,
-      entry.1 = 0 ∨ ∃ since, typeFork entry.1 = some since ∧ since ≤ fork)
+    (htypes₁ : ∀ entry ∈ receipts₁, entry.1 < 0xc0)
+    (htypes₂ : ∀ entry ∈ receipts₂, entry.1 < 0xc0)
     (hroot₁ : receiptsRoot receipts₁ = .ok root') (hroot₂ : receiptsRoot receipts₂ = .ok root') :
     receipts₁ = receipts₂ ∨
       ∃ values₁ values₂ pair,
         receipts₁.mapM (fun (type, r) => encodeReceipt (fork := fork) type r) = .ok values₁ ∧
         receipts₂.mapM (fun (type, r) => encodeReceipt (fork := fork) type r) = .ok values₂ ∧
         findIndexedCollision values₁ values₂ = some pair ∧ IsCollision keccak256 pair := by
-  obtain ⟨values₁, hvalues₁, hindexed₁⟩ := indexedRoot_of_mapM hroot₁
-  obtain ⟨values₂, hvalues₂, hindexed₂⟩ := indexedRoot_of_mapM hroot₂
+  obtain ⟨values₁, hvalues₁, hindexed₁⟩ := receiptsRoot_eq_ok_iff.mp hroot₁
+  obtain ⟨values₂, hvalues₂, hindexed₂⟩ := receiptsRoot_eq_ok_iff.mp hroot₂
   rcases indexedRoot_binding hindexed₁ hindexed₂ with rfl | ⟨pair, hfound, hvalid⟩
-  · -- The decoder reads the type and the receipt back from the bytes of each.
-    refine .inl (mapM_ok_injective (fun ⟨tx, rx⟩ hx ⟨ty, ry⟩ hy bytes hxb hyb => ?_)
-      hvalues₁ hvalues₂)
-    exact Except.ok.inj ((decodeReceipt_encodeReceipt hxb (htypes₁ _ hx)).symm.trans
-      (decodeReceipt_encodeReceipt hyb (htypes₂ _ hy)))
+  · -- Two receipts with the same bytes have the same type and are equal.
+    refine .inl (mapM_ok_injective (fun ⟨tx, rx⟩ hx ⟨ty, ry⟩ hy bytes hxb hyb => ?_) hvalues₁
+      hvalues₂)
+    obtain ⟨rfl, rfl⟩ := encodeReceipt_injective (htypes₁ _ hx) (htypes₂ _ hy) hxb hyb
+    rfl
   · exact .inr ⟨values₁, values₂, pair, hvalues₁, hvalues₂, hfound, hvalid⟩
 
 end EthLib.Execution.Blocks
