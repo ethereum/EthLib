@@ -46,40 +46,6 @@ open Base Uint64 Serialization.Ssz
 
 variable {preset : Preset} {fork : Base.Fork} {state after : BeaconState preset fork}
 
-/-! ## One balance at a time -/
-
-/-- Raising a balance adds the amount at its own index, without overflow, and keeps the others. -/
-theorem balance_increaseBalance {index : ValidatorIndex} {delta : Gwei}
-    (computed : increaseBalance state index delta = .ok after) {j : Nat} {balance : Gwei}
-    (found : state.balances.data[j]? = some balance) :
-    ∃ raised, after.balances.data[j]? = some raised ∧
-      raised.toNat = balance.toNat + if index.toNat = j then delta.toNat else 0 := by
-  obtain ⟨inside, fits, rfl⟩ := increaseBalance_eq_ok_iff.mp computed
-  by_cases same : index.toNat = j
-  · subst same
-    rw [Array.getElem?_eq_getElem inside, Option.some.injEq] at found
-    subst found
-    exact ⟨state.balances.data[index.toNat] + delta, by simp [BeaconState.putBalance],
-      by simp [toNat_add_of_lt fits]⟩
-  · exact ⟨balance, by simp [BeaconState.putBalance, same, found], by simp [same]⟩
-
-/-- Lowering a balance subtracts the amount at its own index, stopping at zero.
-
-It keeps the other balances. -/
-theorem balance_decreaseBalance {index : ValidatorIndex} {delta : Gwei}
-    (computed : decreaseBalance state index delta = .ok after) {j : Nat} {balance : Gwei}
-    (found : state.balances.data[j]? = some balance) :
-    ∃ lowered, after.balances.data[j]? = some lowered ∧
-      lowered.toNat = if index.toNat = j then balance.toNat - delta.toNat else balance.toNat := by
-  obtain ⟨inside, rfl⟩ := decreaseBalance_eq_ok_iff.mp computed
-  by_cases same : index.toNat = j
-  · subst same
-    rw [Array.getElem?_eq_getElem inside, Option.some.injEq] at found
-    subst found
-    exact ⟨saturatingSub state.balances.data[index.toNat] delta, by simp [BeaconState.putBalance],
-      by simp [toNat_saturatingSub]⟩
-  · exact ⟨balance, by simp [BeaconState.putBalance, same, found], by simp [same]⟩
-
 /-! ## The sync aggregate -/
 
 /-- The steps of the sync rewards, in committee order, read at one balance.
