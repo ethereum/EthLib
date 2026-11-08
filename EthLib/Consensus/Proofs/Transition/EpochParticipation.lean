@@ -225,7 +225,7 @@ private theorem updateInactivityScore_getElem? {config : Config}
     simp [Ne.symm other]
   · simp [throw, throwThe, MonadExceptOf.throw] at computed
 
-/-- A validator is marked exactly when it is active, unslashed and set the flag in the given epoch. -/
+/-- A validator is marked exactly when it is active, unslashed and set the flag in an epoch. -/
 private theorem getD_markIndices_iff {flagIndex : UInt64} {epoch : Epoch}
     {altair : .altair ≤ fork} {participating : List ValidatorIndex}
     (computed : getUnslashedParticipatingIndices state altair flagIndex epoch = .ok participating)
