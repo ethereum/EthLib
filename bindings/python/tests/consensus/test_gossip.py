@@ -134,3 +134,23 @@ def test_subscribed_subnets_epoch_overflow() -> None:
     ) as caught:
         consensus.compute_subscribed_subnets(255, 2**64 - 1)
     assert caught.value.code == 103
+
+
+def test_subscribed_subnets_node_id_out_of_range() -> None:
+    """A node ID of 2^256 is not a 256-bit number, so it fails with code 0."""
+    with raises(ConsensusError, f"expected an int below {2**256}, got {2**256}") as caught:
+        consensus.compute_subscribed_subnets(2**256, 0)
+    assert caught.value.code == 0
+
+
+def test_subscribed_subnets_epoch_out_of_range() -> None:
+    """An epoch of 2^64 is not a 64-bit number, so it fails with code 0."""
+    with raises(ConsensusError, f"expected an int below {2**64}, got {2**64}") as caught:
+        consensus.compute_subscribed_subnets(1, 2**64)
+    assert caught.value.code == 0
+
+
+def test_subscribed_subnets_negative_node_id() -> None:
+    """A negative node ID never reaches Lean."""
+    with raises(ValueError, "cannot pass a negative int to Lean"):
+        consensus.compute_subscribed_subnets(-1, 0)

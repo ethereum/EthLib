@@ -93,6 +93,7 @@ def test_parse_protocol_ids() -> None:
     for text in HEZE:
         name, version = consensus.reqresp_parse_protocol_id(text)
         assert _id(name, version) == text
+    assert consensus.reqresp_parse_protocol_id(_id("status", 1)) == ("status", 1)
 
 
 @pytest.mark.parametrize(

@@ -23,11 +23,13 @@ public import EthLib.Serialization.Exports.Ssz
 /-!
 # `Exports.Ssz`
 
-A C-ABI export that reads the bytes of a beacon container, for the static SSZ test vectors.
+C-ABI exports that read the bytes of a beacon container, for the static SSZ test vectors.
 
 The container is named as the source names it, at a preset and a fork.
 
-The export decodes the bytes, then returns the root of the value and its bytes encoded again.
+The export decodes the bytes, then returns the pair of the root and the bytes encoded again.
+
+The static SSZ and Merkle proof exports take and return typed Python values.
 
 A name with no container at the fork comes back as code 0, since no error type covers it.
 
@@ -39,7 +41,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz
-open EthLib.Exports (Result)
+open EthLib.Exports (Result PyValue pyExport)
 open Serialization.Ssz.Exports (runSsz)
 
 /-- A container type of the beacon chain, with its SSZ codec. -/
@@ -212,14 +214,11 @@ def presetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do
   if .glamsterdam ≤ fork then throw (0, s!"fork {fork.name} not yet specified")
   return (preset, fork)
 
-/-- The root of the value that the bytes encode, then the bytes of that value.
-
-The preset, the fork and the container are named in UTF-8. -/
-@[export eth_consensus_ssz_static]
-def sszStaticExport (name fork type data : ByteArray) : Result ByteArray := do
-  let preset ← presetOf (← nameOf name)
-  let fork ← forkOf fork
-  let type ← nameOf type
+/-- The root of the value that the bytes encode, and the bytes of that value. -/
+def sszStaticOf (args : String × String × String × ByteArray) : Result (Root × ByteArray) := do
+  let (name, fork, type, data) := args
+  let preset ← presetOf name
+  let fork ← forkOf fork.toUTF8
   let some container := containerOf preset fork type
     | throw (0, s!"no container {type} at {fork.name}")
   if !specifiedAt fork type then
@@ -227,16 +226,22 @@ def sszStaticExport (name fork type data : ByteArray) : Result ByteArray := do
   let value ← runSsz "input rejected" (SszType.deserialize container.type data)
   let root ← runSsz "root rejected" (SszType.hashTreeRoot value)
   let bytes ← runSsz "value rejected" (SszType.serialize value)
-  return ⟨root.toArray⟩ ++ bytes
+  return (root, bytes)
 
-/-- The node at a generalized index of the value that the bytes encode, then its branch.
+/-- The root of the value that the bytes encode, and the bytes of that value, as a pair.
+
+The arguments are the name of the preset, the fork, the container and the bytes. -/
+@[export eth_consensus_ssz_static]
+def sszStaticExport (args : PyValue) : Result PyValue := pyExport sszStaticOf args
+
+/-- The node at a generalized index of the value that the bytes encode, and its branch.
 
 The branch lists the sibling of each node on the path, from the node up to the root. -/
-@[export eth_consensus_merkle_proof]
-def merkleProofExport (name fork type data : ByteArray) (gindex : UInt64) : Result ByteArray := do
-  let preset ← presetOf (← nameOf name)
-  let fork ← forkOf fork
-  let type ← nameOf type
+def merkleProofOf (args : String × String × String × ByteArray × UInt64) :
+    Result (ByteArray × List ByteArray) := do
+  let (name, fork, type, data, gindex) := args
+  let preset ← presetOf name
+  let fork ← forkOf fork.toUTF8
   let some container := containerOf preset fork type
     | throw (0, s!"no container {type} at {fork.name}")
   if !specifiedAt fork type then
@@ -245,7 +250,15 @@ def merkleProofExport (name fork type data : ByteArray) (gindex : UInt64) : Resu
   let shape := SszType.desc container.type
   let node ← runSsz "node rejected" (nodeRoot shape (SszType.toValue value) gindex.toNat)
   let branch ← runSsz "branch rejected" (buildProof shape (SszType.toValue value) gindex.toNat)
-  return branch.foldl (fun bytes sibling => bytes ++ ⟨sibling⟩) ⟨node⟩
+  return (⟨node⟩, branch.map fun sibling => ⟨sibling⟩)
+
+/-- The node at a generalized index of the value that the bytes encode, and its branch, as a pair.
+
+The arguments are the name of the preset, the fork, the container, the bytes and the index.
+
+The branch lists the sibling of each node on the path, from the node up to the root. -/
+@[export eth_consensus_merkle_proof]
+def merkleProofExport (args : PyValue) : Result PyValue := pyExport merkleProofOf args
 
 /-- Whether the branch of a blob sidecar, given as bytes, climbs to the body root of its header. -/
 @[export eth_consensus_verify_blob_sidecar_inclusion_proof]

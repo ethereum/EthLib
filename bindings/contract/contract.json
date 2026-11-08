@@ -1964,8 +1964,9 @@
    "error_class": "ConsensusError",
    "docstring": "The columns of a custody group."},
   {"summary":
-   "The root of the value that the bytes encode, then the bytes of that value.",
-   "signature": "(name: str, fork: str, type: str, data: bytes) -> bytes",
+   "The root of the value that the bytes encode, and the bytes of that value, as a pair.",
+   "signature":
+   "(name: str, fork: str, type: str, data: bytes) -> tuple[bytes, bytes]",
    "operation": "EthLib.Consensus.Exports.sszStaticExport",
    "method": "consensus_ssz_static",
    "errors":
@@ -2048,11 +2049,11 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
    "docstring":
-   "The root of the value that the bytes encode, then the bytes of that value.\n\nThe preset, the fork and the container are named in UTF-8."},
+   "The root of the value that the bytes encode, and the bytes of that value, as a pair.\n\nThe arguments are the name of the preset, the fork, the container and the bytes."},
   {"summary":
-   "The node at a generalized index of the value that the bytes encode, then its branch.",
+   "The node at a generalized index of the value that the bytes encode, and its branch, as a pair.",
    "signature":
-   "(name: str, fork: str, type: str, data: bytes, gindex: int) -> bytes",
+   "(name: str, fork: str, type: str, data: bytes, gindex: int) -> tuple[bytes, list[bytes]]",
    "operation": "EthLib.Consensus.Exports.merkleProofExport",
    "method": "consensus_merkle_proof",
    "errors":
@@ -2135,7 +2136,7 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
    "docstring":
-   "The node at a generalized index of the value that the bytes encode, then its branch.\n\nThe branch lists the sibling of each node on the path, from the node up to the root."},
+   "The node at a generalized index of the value that the bytes encode, and its branch, as a pair.\n\nThe arguments are the name of the preset, the fork, the container, the bytes and the index.\n\nThe branch lists the sibling of each node on the path, from the node up to the root."},
   {"summary":
    "Whether the branch of a blob sidecar, given as bytes, climbs to the body root of its header.",
    "signature": "(name: str, fork: str, data: bytes) -> bool",
@@ -4995,8 +4996,8 @@
    "docstring":
    "The fork digest at an epoch, on the chain with the given root of the genesis validators.\n\nThe configuration of the name holds, with the replacements that the JSON object gives."},
   {"summary":
-   "The root of the value that the bytes encode, then the bytes of that value.",
-   "signature": "(type: str, data: bytes) -> bytes",
+   "The root of the value that the bytes encode, and the bytes of that value, as a pair.",
+   "signature": "(type: str, data: bytes) -> tuple[bytes, bytes]",
    "operation": "EthLib.Consensus.Exports.pqKeysSszExport",
    "method": "pq_keys_ssz",
    "errors":
@@ -5079,7 +5080,7 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
    "docstring":
-   "The root of the value that the bytes encode, then the bytes of that value.\n\nThe container is named in UTF-8."},
+   "The root of the value that the bytes encode, and the bytes of that value, as a pair.\n\nThe arguments are the name of the container and the bytes."},
   {"summary":
    "The root that a proof of possession signs, on the chain with the given genesis validators.",
    "signature":
@@ -5704,7 +5705,7 @@
    "The shuffled position of one index, which must be below the count.\n\nThe count must be at most `2^40`.\n\nA shuffle of more indices reaches a position whose bucket number does not fit in 4 bytes.\n\nBoth checks come before any round.\n\nIt runs the rounds on that index alone, so its cost does not grow with the count."},
   {"summary":
    "The protocol IDs of a fork: each protocol with each version that the fork defines.",
-   "signature": "(fork: str) -> bytes",
+   "signature": "(fork: str) -> list[str]",
    "operation": "EthLib.Consensus.protocolIds",
    "method": "consensus_reqresp_protocol_ids",
    "errors": [],
@@ -5712,7 +5713,7 @@
    "docstring":
    "The protocol IDs of a fork: each protocol with each version that the fork defines."},
   {"summary": "The protocol and the version that an ID names, if it names one.",
-   "signature": "(text: str) -> bytes",
+   "signature": "(text: str) -> tuple[str, int]",
    "operation": "EthLib.Consensus.ProtocolId.parse?",
    "method": "consensus_reqresp_parse_protocol_id",
    "errors": [],
@@ -5720,8 +5721,9 @@
    "docstring":
    "The protocol and the version that an ID names, if it names one.\n\nThe version is written in decimal with no leading zero, and is positive."},
   {"summary":
-   "The root of the message that the bytes encode, then the bytes of that message.",
-   "signature": "(name: str, fork: str, type: str, data: bytes) -> bytes",
+   "The root of the message that the bytes encode, and the bytes of that message, as a pair.",
+   "signature":
+   "(name: str, fork: str, type: str, data: bytes) -> tuple[bytes, bytes]",
    "operation": "EthLib.Consensus.Exports.reqRespMessageExport",
    "method": "consensus_reqresp_message",
    "errors":
@@ -5804,7 +5806,7 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
    "docstring":
-   "The root of the message that the bytes encode, then the bytes of that message."},
+   "The root of the message that the bytes encode, and the bytes of that message, as a pair.\n\nThe arguments are the name of the preset and the configuration, the fork, the message and its bytes."},
   {"summary":
    "The fewest epochs back from the current one over which a node must serve blocks.",
    "signature": "(name: str) -> int",
@@ -5816,7 +5818,7 @@
    "The fewest epochs back from the current one over which a node must serve blocks.\n\nIt covers the time a validator needs to withdraw, plus half the churn quotient."},
   {"summary":
    "The gossip topics of a fork, in the order of the fork that adds each one.",
-   "signature": "(name: str, fork: str) -> bytes",
+   "signature": "(name: str, fork: str) -> list[str]",
    "operation": "EthLib.Consensus.Config.gossipTopics",
    "method": "consensus_gossip_topics",
    "errors": [],
@@ -5824,8 +5826,8 @@
    "docstring":
    "The gossip topics of a fork, in the order of the fork that adds each one.\n\nA fork before Altair has the topics of Phase 0.\n\nHeze has none yet, since its topics are not yet specified here."},
   {"summary":
-   "The smallest and the largest length of a request payload, as a JSON pair.",
-   "signature": "(name: str, fork: str, protocol: str) -> bytes",
+   "The smallest and the largest length of a request payload, as a pair.",
+   "signature": "(name: str, fork: str, protocol: str) -> tuple[int, int]",
    "operation": "EthLib.Consensus.Exports.reqRespRequestBoundsExport",
    "method": "consensus_reqresp_request_bounds",
    "errors":
@@ -5837,10 +5839,11 @@
       {"constructor": "topicsNotSpecified", "code": 304}]}],
    "error_class": "ConsensusError",
    "docstring":
-   "The smallest and the largest length of a request payload, as a JSON pair."},
+   "The smallest and the largest length of a request payload, as a pair.\n\nThe arguments are the name of the preset and the configuration, the fork and the protocol ID."},
   {"summary":
-   "The smallest and the largest length of the payload of a successful response chunk.",
-   "signature": "(name: str, chunk_fork: str, protocol: str) -> bytes",
+   "The smallest and the largest length of the payload of a successful response chunk, as a pair.",
+   "signature":
+   "(name: str, chunk_fork: str, protocol: str) -> tuple[int, int]",
    "operation": "EthLib.Consensus.Exports.reqRespResponseBoundsExport",
    "method": "consensus_reqresp_response_bounds",
    "errors":
@@ -5852,7 +5855,7 @@
       {"constructor": "topicsNotSpecified", "code": 304}]}],
    "error_class": "ConsensusError",
    "docstring":
-   "The smallest and the largest length of the payload of a successful response chunk.\n\nThe fork is the one that the context bytes of the chunk name, and it must define the protocol."},
+   "The smallest and the largest length of the payload of a successful response chunk, as a pair.\n\nThe arguments are the name of the preset and the configuration, the fork of the chunk and the ID.\n\nThat fork is the one that the context bytes of the chunk name, and it must define the protocol."},
   {"summary": "The largest length of the payload of a gossip topic at a fork.",
    "signature": "(name: str, fork: str, topic: str) -> int",
    "operation": "EthLib.Consensus.Exports.gossipTopicBoundExport",
@@ -5920,7 +5923,7 @@
    "docstring":
    "From Fulu: the subnet of a data column sidecar, its column modulo the number of subnets."},
   {"summary": "The attestation subnets that a node subscribes to in an epoch.",
-   "signature": "(name: str, node_id: bytes, epoch: int) -> bytes",
+   "signature": "(name: str, node_id: int, epoch: int) -> list[int]",
    "operation": "EthLib.Consensus.computeSubscribedSubnets",
    "method": "consensus_compute_subscribed_subnets",
    "errors":

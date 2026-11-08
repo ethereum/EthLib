@@ -60,16 +60,12 @@ eth_consensus_compute_columns_for_custody_group(
 
 extern lean_object*
 eth_consensus_ssz_static(
-  lean_object* name,
-  lean_object* fork,
-  lean_object* type,
-  lean_object* data
+  lean_object* args
 );
 
 extern lean_object*
 eth_pq_keys_ssz(
-  lean_object* type,
-  lean_object* data
+  lean_object* args
 );
 
 extern lean_object*
@@ -106,20 +102,17 @@ eth_consensus_compute_shuffled_index(
 
 extern lean_object*
 eth_consensus_reqresp_protocol_ids(
-  lean_object* fork
+  lean_object* args
 );
 
 extern lean_object*
 eth_consensus_reqresp_parse_protocol_id(
-  lean_object* text
+  lean_object* args
 );
 
 extern lean_object*
 eth_consensus_reqresp_message(
-  lean_object* name,
-  lean_object* fork,
-  lean_object* type,
-  lean_object* data
+  lean_object* args
 );
 
 extern lean_object*
@@ -129,22 +122,17 @@ eth_consensus_compute_min_epochs_for_block_requests(
 
 extern lean_object*
 eth_consensus_gossip_topics(
-  lean_object* name,
-  lean_object* fork
+  lean_object* args
 );
 
 extern lean_object*
 eth_consensus_reqresp_request_bounds(
-  lean_object* name,
-  lean_object* fork,
-  lean_object* protocol
+  lean_object* args
 );
 
 extern lean_object*
 eth_consensus_reqresp_response_bounds(
-  lean_object* name,
-  lean_object* chunk_fork,
-  lean_object* protocol
+  lean_object* args
 );
 
 extern lean_object*
@@ -177,18 +165,12 @@ eth_consensus_compute_subnet_for_data_column_sidecar(
 
 extern lean_object*
 eth_consensus_compute_subscribed_subnets(
-  lean_object* name,
-  lean_object* node_id,
-  uint64_t epoch
+  lean_object* args
 );
 
 extern lean_object*
 eth_consensus_merkle_proof(
-  lean_object* name,
-  lean_object* fork,
-  lean_object* type,
-  lean_object* data,
-  uint64_t gindex
+  lean_object* args
 );
 
 extern lean_object*
@@ -614,30 +596,7 @@ py_consensus_ssz_static(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *fork_obj, *type_obj, *data_obj;
-  if (!PyArg_ParseTuple(args, "OOOO", &name_obj, &fork_obj, &type_obj, &data_obj)) return NULL;
-  /* Check every argument before any Lean object exists, so a failure leaks nothing. */
-  if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj) || !PyUnicode_Check(type_obj)) {
-    PyErr_SetString(PyExc_TypeError, "name, fork and type must be str");
-    return NULL;
-  }
-  if (!PyBytes_Check(data_obj)) {
-    PyErr_SetString(PyExc_TypeError, "data must be bytes");
-    return NULL;
-  }
-  Py_ssize_t name_len, fork_len, type_len;
-  const char* name_utf8 = PyUnicode_AsUTF8AndSize(name_obj, &name_len);
-  if (!name_utf8) return NULL;
-  const char* fork_utf8 = PyUnicode_AsUTF8AndSize(fork_obj, &fork_len);
-  if (!fork_utf8) return NULL;
-  const char* type_utf8 = PyUnicode_AsUTF8AndSize(type_obj, &type_len);
-  if (!type_utf8) return NULL;
-  lean_object* name = mk_bytearray((const uint8_t*) name_utf8, name_len);
-  lean_object* fork = mk_bytearray((const uint8_t*) fork_utf8, fork_len);
-  lean_object* type = mk_bytearray((const uint8_t*) type_utf8, type_len);
-  lean_object* data = mk_bytearray(
-    (const uint8_t*) PyBytes_AS_STRING(data_obj), PyBytes_GET_SIZE(data_obj));
-  return except_into_pybytes(eth_consensus_ssz_static(name, fork, type, data), SSZ_ERROR);
+  return call_pyvalue_export(eth_consensus_ssz_static, args, 4, SSZ_ERROR);
 }
 
 PyObject*
@@ -645,13 +604,7 @@ py_pq_keys_ssz(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *type_obj;
-  const uint8_t* data;
-  Py_ssize_t data_len;
-  if (!PyArg_ParseTuple(args, "Oy#", &type_obj, &data, &data_len)) return NULL;
-  lean_object* type = str_arg(type_obj, "type");
-  if (!type) return NULL;
-  return except_into_pybytes(eth_pq_keys_ssz(type, mk_bytearray(data, data_len)), SSZ_ERROR);
+  return call_pyvalue_export(eth_pq_keys_ssz, args, 2, SSZ_ERROR);
 }
 
 PyObject*
@@ -735,16 +688,7 @@ py_consensus_gossip_topics(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *fork_obj;
-  if (!PyArg_ParseTuple(args, "OO", &name_obj, &fork_obj)) return NULL;
-  lean_object* name = str_arg(name_obj, "name");
-  if (!name) return NULL;
-  lean_object* fork = str_arg(fork_obj, "fork");
-  if (!fork) {
-    lean_dec(name);
-    return NULL;
-  }
-  return except_into_pybytes(eth_consensus_gossip_topics(name, fork), CONSENSUS_ERROR);
+  return call_pyvalue_export(eth_consensus_gossip_topics, args, 2, CONSENSUS_ERROR);
 }
 
 PyObject*
@@ -806,17 +750,7 @@ py_consensus_compute_subscribed_subnets(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *epoch_obj;
-  const uint8_t* node_id;
-  Py_ssize_t node_id_len;
-  if (!PyArg_ParseTuple(args, "Oy#O", &name_obj, &node_id, &node_id_len, &epoch_obj)) return NULL;
-  uint64_t epoch;
-  if (parse_uint64(epoch_obj, "epoch", &epoch)) return NULL;
-  lean_object* name = str_arg(name_obj, "name");
-  if (!name) return NULL;
-  return except_into_pybytes(
-    eth_consensus_compute_subscribed_subnets(name, mk_bytearray(node_id, node_id_len), epoch),
-    CONSENSUS_ERROR);
+  return call_pyvalue_export(eth_consensus_compute_subscribed_subnets, args, 3, CONSENSUS_ERROR);
 }
 
 PyObject*
@@ -824,11 +758,7 @@ py_consensus_reqresp_protocol_ids(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject* fork_obj;
-  if (!PyArg_ParseTuple(args, "O", &fork_obj)) return NULL;
-  lean_object* fork = str_arg(fork_obj, "fork");
-  if (!fork) return NULL;
-  return except_into_pybytes(eth_consensus_reqresp_protocol_ids(fork), CONSENSUS_ERROR);
+  return call_pyvalue_export(eth_consensus_reqresp_protocol_ids, args, 1, CONSENSUS_ERROR);
 }
 
 PyObject*
@@ -836,11 +766,7 @@ py_consensus_reqresp_parse_protocol_id(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject* text_obj;
-  if (!PyArg_ParseTuple(args, "O", &text_obj)) return NULL;
-  lean_object* text = str_arg(text_obj, "text");
-  if (!text) return NULL;
-  return except_into_pybytes(eth_consensus_reqresp_parse_protocol_id(text), CONSENSUS_ERROR);
+  return call_pyvalue_export(eth_consensus_reqresp_parse_protocol_id, args, 1, CONSENSUS_ERROR);
 }
 
 PyObject*
@@ -848,30 +774,7 @@ py_consensus_reqresp_message(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *fork_obj, *type_obj, *data_obj;
-  if (!PyArg_ParseTuple(args, "OOOO", &name_obj, &fork_obj, &type_obj, &data_obj)) return NULL;
-  /* Check every argument before any Lean object exists, so a failure leaks nothing. */
-  if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj) || !PyUnicode_Check(type_obj)) {
-    PyErr_SetString(PyExc_TypeError, "name, fork and type must be str");
-    return NULL;
-  }
-  if (!PyBytes_Check(data_obj)) {
-    PyErr_SetString(PyExc_TypeError, "data must be bytes");
-    return NULL;
-  }
-  Py_ssize_t name_len, fork_len, type_len;
-  const char* name_utf8 = PyUnicode_AsUTF8AndSize(name_obj, &name_len);
-  if (!name_utf8) return NULL;
-  const char* fork_utf8 = PyUnicode_AsUTF8AndSize(fork_obj, &fork_len);
-  if (!fork_utf8) return NULL;
-  const char* type_utf8 = PyUnicode_AsUTF8AndSize(type_obj, &type_len);
-  if (!type_utf8) return NULL;
-  lean_object* name = mk_bytearray((const uint8_t*) name_utf8, name_len);
-  lean_object* fork = mk_bytearray((const uint8_t*) fork_utf8, fork_len);
-  lean_object* type = mk_bytearray((const uint8_t*) type_utf8, type_len);
-  lean_object* data = mk_bytearray(
-    (const uint8_t*) PyBytes_AS_STRING(data_obj), PyBytes_GET_SIZE(data_obj));
-  return except_into_pybytes(eth_consensus_reqresp_message(name, fork, type, data), SSZ_ERROR);
+  return call_pyvalue_export(eth_consensus_reqresp_message, args, 4, SSZ_ERROR);
 }
 
 PyObject*
@@ -892,35 +795,7 @@ py_consensus_merkle_proof(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *fork_obj, *type_obj, *data_obj, *gindex_obj;
-  if (!PyArg_ParseTuple(args, "OOOOO", &name_obj, &fork_obj, &type_obj, &data_obj, &gindex_obj))
-    return NULL;
-  /* Check every argument before any Lean object exists, so a failure leaks nothing. */
-  if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj) || !PyUnicode_Check(type_obj)) {
-    PyErr_SetString(PyExc_TypeError, "name, fork and type must be str");
-    return NULL;
-  }
-  if (!PyBytes_Check(data_obj)) {
-    PyErr_SetString(PyExc_TypeError, "data must be bytes");
-    return NULL;
-  }
-  /* A generalized index outside [0, 2^64) raises OverflowError. */
-  unsigned long long gindex = PyLong_AsUnsignedLongLong(gindex_obj);
-  if (PyErr_Occurred()) return NULL;
-  Py_ssize_t name_len, fork_len, type_len;
-  const char* name_utf8 = PyUnicode_AsUTF8AndSize(name_obj, &name_len);
-  if (!name_utf8) return NULL;
-  const char* fork_utf8 = PyUnicode_AsUTF8AndSize(fork_obj, &fork_len);
-  if (!fork_utf8) return NULL;
-  const char* type_utf8 = PyUnicode_AsUTF8AndSize(type_obj, &type_len);
-  if (!type_utf8) return NULL;
-  lean_object* name = mk_bytearray((const uint8_t*) name_utf8, name_len);
-  lean_object* fork = mk_bytearray((const uint8_t*) fork_utf8, fork_len);
-  lean_object* type = mk_bytearray((const uint8_t*) type_utf8, type_len);
-  lean_object* data = mk_bytearray(
-    (const uint8_t*) PyBytes_AS_STRING(data_obj), PyBytes_GET_SIZE(data_obj));
-  return except_into_pybytes(
-    eth_consensus_merkle_proof(name, fork, type, data, (uint64_t) gindex), SSZ_ERROR);
+  return call_pyvalue_export(eth_consensus_merkle_proof, args, 5, SSZ_ERROR);
 }
 
 PyObject*
@@ -2537,10 +2412,7 @@ py_consensus_reqresp_request_bounds(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object* a[3];
-  if (!three_str_args(args, "name", "fork", "protocol", a)) return NULL;
-  return except_into_pybytes(
-    eth_consensus_reqresp_request_bounds(a[0], a[1], a[2]), CONSENSUS_ERROR);
+  return call_pyvalue_export(eth_consensus_reqresp_request_bounds, args, 3, CONSENSUS_ERROR);
 }
 
 PyObject*
@@ -2548,10 +2420,7 @@ py_consensus_reqresp_response_bounds(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object* a[3];
-  if (!three_str_args(args, "name", "chunk_fork", "protocol", a)) return NULL;
-  return except_into_pybytes(
-    eth_consensus_reqresp_response_bounds(a[0], a[1], a[2]), CONSENSUS_ERROR);
+  return call_pyvalue_export(eth_consensus_reqresp_response_bounds, args, 3, CONSENSUS_ERROR);
 }
 
 PyObject*

@@ -303,10 +303,10 @@
   "The columns of a custody group."
 
 #define DOC_consensus_ssz_static \
-  "The root of the value that the bytes encode, then the bytes of that value."
+  "The root of the value that the bytes encode, and the bytes of that value, as a pair."
 
 #define DOC_consensus_merkle_proof \
-  "The node at a generalized index of the value that the bytes encode, then its branch."
+  "The node at a generalized index of the value that the bytes encode, and its branch, as a pair."
 
 #define DOC_consensus_verify_blob_sidecar_inclusion_proof \
   "Whether the branch of a blob sidecar, given as bytes, climbs to the body root of its header."
@@ -492,7 +492,7 @@
   "The fork digest at an epoch, on the chain with the given root of the genesis validators."
 
 #define DOC_pq_keys_ssz \
-  "The root of the value that the bytes encode, then the bytes of that value."
+  "The root of the value that the bytes encode, and the bytes of that value, as a pair."
 
 #define DOC_pq_keys_possession_signing_root \
   "The root that a proof of possession signs, on the chain with the given genesis validators."
@@ -540,7 +540,7 @@
   "The protocol and the version that an ID names, if it names one."
 
 #define DOC_consensus_reqresp_message \
-  "The root of the message that the bytes encode, then the bytes of that message."
+  "The root of the message that the bytes encode, and the bytes of that message, as a pair."
 
 #define DOC_consensus_compute_min_epochs_for_block_requests \
   "The fewest epochs back from the current one over which a node must serve blocks."
@@ -549,10 +549,10 @@
   "The gossip topics of a fork, in the order of the fork that adds each one."
 
 #define DOC_consensus_reqresp_request_bounds \
-  "The smallest and the largest length of a request payload, as a JSON pair."
+  "The smallest and the largest length of a request payload, as a pair."
 
 #define DOC_consensus_reqresp_response_bounds \
-  "The smallest and the largest length of the payload of a successful response chunk."
+  "The smallest and the largest length of the payload of a successful response chunk, as a pair."
 
 #define DOC_consensus_gossip_topic_bound \
   "The largest length of the payload of a gossip topic at a fork."

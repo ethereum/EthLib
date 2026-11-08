@@ -11,9 +11,11 @@ public import EthLib.Consensus.Gossip.Topics
 
 C-ABI exports of the gossip topics of a fork and of the subnet of a message.
 
-A list comes back as JSON, and a subnet as an integer, or as the code and the message of its error.
+The topics and the subscribed subnets take and return typed Python values.
 
-A malformed node ID, an unknown name or a fork with no topic set has code 0.
+A subnet comes back as an integer, or as the code and the message of its error.
+
+A node ID of 2^256 or more, an unknown name or a fork with no topic set has code 0.
 
 The bound of a topic that the fork does not list has the code of its error.
 
@@ -24,7 +26,7 @@ public section
 
 namespace EthLib.Consensus.Exports
 
-open EthLib.Exports (Result forkOfName forkUpTo)
+open EthLib.Exports (Result PyValue pyExport forkOfName forkUpTo)
 
 open Lean Base Networking.Gossip
 
@@ -32,14 +34,20 @@ open Lean Base Networking.Gossip
 def subnetResult {α : Type} (result : Except (SubnetError ShuffleError) α) : Result α :=
   result.mapError fun e => (e.code, s!"subnet rejected: {reprStr e}")
 
-/-- The names of the gossip topics of a fork, as a JSON list of strings. -/
-@[export eth_consensus_gossip_topics]
-def gossipTopicsExport (name fork : ByteArray) : Result ByteArray := do
-  let config ← configOf (← nameOf name)
-  let fork ← forkOfName fork
+/-- The names of the gossip topics of a fork. -/
+def gossipTopicsOf (args : String × String) : Result (List String) := do
+  let (name, fork) := args
+  let config ← configOf name
+  let fork ← forkOfName fork.toUTF8
   let some topics := config.gossipTopics fork
     | throw (0, s!"the gossip topics of {fork.name} are not yet specified")
-  return jsonBytes (toJson (topics.map GossipTopic.name))
+  return topics.map GossipTopic.name
+
+/-- The names of the gossip topics of a fork, as a list.
+
+The arguments are the name of the configuration and the name of the fork. -/
+@[export eth_consensus_gossip_topics]
+def gossipTopicsExport (args : PyValue) : Result PyValue := pyExport gossipTopicsOf args
 
 /-- The subnet of an attestation, from the committees per slot, its slot and its committee. -/
 @[export eth_consensus_compute_subnet_for_attestation]
@@ -62,16 +70,17 @@ def computeSubnetForDataColumnSidecarExport (name : ByteArray) (columnIndex : UI
     Result UInt64 := do
   subnetResult (computeSubnetForDataColumnSidecar (← configOf (← nameOf name)) columnIndex)
 
-/-- The attestation subnets of a node ID of 32 bytes in an epoch, as a JSON list. -/
+/-- The attestation subnets of a node ID in an epoch. -/
+def computeSubscribedSubnetsOf (args : String × NodeID × UInt64) : Result (List UInt64) := do
+  let (name, id, epoch) := args
+  subnetResult (computeSubscribedSubnets (← presetOf name) (← configOf name) id epoch)
+
+/-- The attestation subnets of a node ID in an epoch, as a list.
+
+The arguments are the name of the preset and the configuration, the node ID and the epoch. -/
 @[export eth_consensus_compute_subscribed_subnets]
-def computeSubscribedSubnetsExport (name nodeId : ByteArray) (epoch : UInt64) :
-    Result ByteArray := do
-  let name ← nameOf name
-  unless nodeId.size = 32 do throw (0, "a node ID is 32 bytes")
-  let id : NodeID := BitVec.ofNat 256 (bytesToNat nodeId.toList)
-  let subnets ← subnetResult
-    (computeSubscribedSubnets (← presetOf name) (← configOf name) id epoch)
-  return jsonBytes (toJson subnets)
+def computeSubscribedSubnetsExport (args : PyValue) : Result PyValue :=
+  pyExport computeSubscribedSubnetsOf args
 
 /-- The largest length of the payload of a gossip topic at a fork. -/
 @[export eth_consensus_gossip_topic_bound]

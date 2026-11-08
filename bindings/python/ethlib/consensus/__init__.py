@@ -67,14 +67,12 @@ def compute_columns_for_custody_group(custody_group: int, name: str = "mainnet")
 
 def ssz_static(name: str, fork: str, type_name: str, data: bytes) -> tuple[bytes, bytes]:
     """The root of the beacon container that SSZ bytes encode, and its bytes encoded again."""
-    out = _native.consensus_ssz_static(name, fork, type_name, data)
-    return out[:32], out[32:]
+    return _native.consensus_ssz_static(name, fork, type_name, data)
 
 
 def pq_keys_ssz(type_name: str, data: bytes) -> tuple[bytes, bytes]:
     """The root of the EIP-8450 container that SSZ bytes encode, and its bytes encoded again."""
-    out = _native.pq_keys_ssz(type_name, data)
-    return out[:32], out[32:]
+    return _native.pq_keys_ssz(type_name, data)
 
 
 def pq_keys_possession_signing_root(
@@ -109,21 +107,19 @@ def compute_shuffled_index(index: int, count: int, seed: bytes, name: str = "mai
     return _native.consensus_compute_shuffled_index(name, index, count, seed)
 
 
-def reqresp_protocol_ids(fork: str) -> list:
+def reqresp_protocol_ids(fork: str) -> list[str]:
     """The request and response protocol IDs of a fork."""
-    return json.loads(_native.consensus_reqresp_protocol_ids(fork))
+    return _native.consensus_reqresp_protocol_ids(fork)
 
 
 def reqresp_parse_protocol_id(text: str) -> tuple[str, int]:
     """The protocol name and the version that a protocol ID names."""
-    name, version = json.loads(_native.consensus_reqresp_parse_protocol_id(text))
-    return name, version
+    return _native.consensus_reqresp_parse_protocol_id(text)
 
 
 def reqresp_message(name: str, fork: str, type_name: str, data: bytes) -> tuple[bytes, bytes]:
-    """The root of a request or response message that SSZ bytes encode, and its bytes again."""
-    out = _native.consensus_reqresp_message(name, fork, type_name, data)
-    return out[:32], out[32:]
+    """The root of a req/resp message that SSZ bytes encode, and its bytes encoded again."""
+    return _native.consensus_reqresp_message(name, fork, type_name, data)
 
 
 def compute_min_epochs_for_block_requests(name: str = "mainnet") -> int:
@@ -131,23 +127,21 @@ def compute_min_epochs_for_block_requests(name: str = "mainnet") -> int:
     return _native.consensus_compute_min_epochs_for_block_requests(name)
 
 
-def gossip_topics(fork: str, name: str = "mainnet") -> list:
+def gossip_topics(fork: str, name: str = "mainnet") -> list[str]:
     """The names of the gossip topics of a fork."""
-    return json.loads(_native.consensus_gossip_topics(name, fork))
+    return _native.consensus_gossip_topics(name, fork)
 
 
 def reqresp_request_bounds(fork: str, protocol: str, name: str = "mainnet") -> tuple[int, int]:
     """The smallest and the largest length of the request payload of a protocol ID at a fork."""
-    low, high = json.loads(_native.consensus_reqresp_request_bounds(name, fork, protocol))
-    return low, high
+    return _native.consensus_reqresp_request_bounds(name, fork, protocol)
 
 
 def reqresp_response_bounds(
     chunk_fork: str, protocol: str, name: str = "mainnet"
 ) -> tuple[int, int]:
     """The smallest and the largest length of a successful response chunk at its fork."""
-    low, high = json.loads(_native.consensus_reqresp_response_bounds(name, chunk_fork, protocol))
-    return low, high
+    return _native.consensus_reqresp_response_bounds(name, chunk_fork, protocol)
 
 
 def gossip_topic_bound(fork: str, topic: str, name: str = "mainnet") -> int:
@@ -174,18 +168,16 @@ def compute_subnet_for_data_column_sidecar(column_index: int, name: str = "mainn
     return _native.consensus_compute_subnet_for_data_column_sidecar(name, column_index)
 
 
-def compute_subscribed_subnets(node_id: int, epoch: int, name: str = "mainnet") -> list:
+def compute_subscribed_subnets(node_id: int, epoch: int, name: str = "mainnet") -> list[int]:
     """The attestation subnets of a node in an epoch."""
-    if not 0 <= node_id < 2**256:
-        raise OverflowError("node_id is out of range")
-    subnets = _native.consensus_compute_subscribed_subnets(name, node_id.to_bytes(32, "big"), epoch)
-    return _value(json.loads(subnets))
+    return _native.consensus_compute_subscribed_subnets(name, node_id, epoch)
 
 
-def merkle_proof(name: str, fork: str, type_name: str, data: bytes, gindex: int) -> tuple:
+def merkle_proof(
+    name: str, fork: str, type_name: str, data: bytes, gindex: int
+) -> tuple[bytes, list[bytes]]:
     """The node at a generalized index of a beacon container, and its branch up to the root."""
-    out = _native.consensus_merkle_proof(name, fork, type_name, data, gindex)
-    return out[:32], [out[i : i + 32] for i in range(32, len(out), 32)]
+    return _native.consensus_merkle_proof(name, fork, type_name, data, gindex)
 
 
 def verify_blob_sidecar_inclusion_proof(name: str, fork: str, data: bytes) -> bool:
