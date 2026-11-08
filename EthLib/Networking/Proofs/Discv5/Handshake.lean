@@ -142,33 +142,18 @@ theorem openHandshake_sealHandshake {e a b : Fn} {challengeData : ByteArray}
   | error err => simp [hi, bind, Except.bind] at h
   | ok init =>
     simp only [hi, bind, Except.bind] at h
-    generalize hheader : (⟨nonce, .handshake nodeIdA init.idSignature init.ephemeralPubkey
-      record⟩ : Header) = header at h
-    cases ha : Packet.messageAd ⟨maskingIv, header, .empty⟩ with
-    | error err => simp [ha, Except.mapError] at h
-    | ok ad =>
-      simp only [ha, Except.mapError] at h
-      cases hm : encryptMessage (sessionKey init.keys.initiatorKey) nonce plaintext ad with
-      | error err => simp [hm] at h
-      | ok message =>
-        simp only [hm] at h
-        cases hb : Packet.encode nodeIdB ⟨maskingIv, header, message⟩ with
-        | error err => simp [hb] at h
-        | ok packetBytes =>
-          simp only [hb, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
-          obtain ⟨rfl, rfl⟩ := h
-          -- The packet decodes back, since its flag is 2 and not that of WHOAREYOU.
-          have hdec := Packet.decode_encode hb (by
-            intro hflag
-            rw [← hheader] at hflag
-            simp [Authdata.flag] at hflag)
-          -- The additional data depends only on the masking IV and the header.
-          have had : Packet.messageAd ⟨maskingIv, header, message⟩ = .ok ad := by
-            simpa [Packet.messageAd] using ha
-          subst hheader
-          simp only [openHandshake, hdec, acceptHandshake_initiateHandshake hi, had,
-            decryptMessage_encryptMessage hm, Except.mapError, bind, Except.bind, pure,
-            Except.pure]
+    cases hs : sealPacket HandshakeError.packet HandshakeError.encryption
+      (sessionKey init.keys.initiatorKey) nodeIdB maskingIv
+      ⟨nonce, .handshake nodeIdA init.idSignature init.ephemeralPubkey record⟩ plaintext with
+    | error err => simp [hs] at h
+    | ok packetBytes =>
+      simp only [hs, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      -- The packet decodes back, since its flag is 2 and not that of WHOAREYOU.
+      obtain ⟨message, hdec, hopen⟩ := openPacket_sealPacket
+        (decryptionError := HandshakeError.decryption) hs (by simp [Authdata.flag])
+      simp only [openHandshake, hdec, acceptHandshake_initiateHandshake hi, hopen,
+        Except.mapError, bind, Except.bind, pure, Except.pure]
 
 /-! ## Error codes -/
 

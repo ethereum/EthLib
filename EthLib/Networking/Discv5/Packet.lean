@@ -233,4 +233,32 @@ def decryptMessage (key : Aes.Key .aes128) (nonce : Vector UInt8 12) (message ad
   Aes.Gcm.decrypt (Aes.ciph .aes128 key) TAG_SIZE ⟨nonce.toArray⟩ (message.extract 0 n) ad
     (message.extract n message.size)
 
+/-! ## Sealing and opening a message packet -/
+
+/-- A message packet to `destId`: the masking IV, the masked header, then the encrypted message.
+
+The message is encrypted under `key`, with the nonce of the header.
+
+Its additional data is the masking IV, then the unmasked header.
+
+The two functions give the error of the caller, for the packet and for the encryption.
+
+It fails when a field is too long for its size field, or the packet would exceed 1280 bytes.
+
+It fails with the cipher error when the encryption rejects the plaintext. -/
+def sealPacket {ε : Type} (packetError : PacketError → ε) (encryptionError : Aes.Gcm.Error → ε)
+    (key : Aes.Key .aes128) (destId : NodeId) (maskingIv : Vector UInt8 16) (header : Header)
+    (plaintext : ByteArray) : Except ε ByteArray := do
+  let ad ← (Packet.messageAd ⟨maskingIv, header, .empty⟩).mapError packetError
+  let message ← (encryptMessage key header.nonce plaintext ad).mapError encryptionError
+  (Packet.encode destId ⟨maskingIv, header, message⟩).mapError packetError
+
+/-- The plaintext of a decoded message packet, decrypted under `key`.
+
+The two functions give the error of the caller, for the packet and for the decryption. -/
+def openPacket {ε : Type} (packetError : PacketError → ε) (decryptionError : Aes.Gcm.Error → ε)
+    (key : Aes.Key .aes128) (packet : Packet) : Except ε ByteArray := do
+  let ad ← packet.messageAd.mapError packetError
+  (decryptMessage key packet.header.nonce packet.message ad).mapError decryptionError
+
 end EthLib.Networking.Discv5
