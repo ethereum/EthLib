@@ -54,17 +54,16 @@ check_sha256() {
 }
 
 # Download via GitHub's REST asset endpoint, which redirects straight to blob storage without hitting the web release redirector.
+# The token, when set, reaches curl on standard input, so it never appears on a command line.
 download_asset() {
   local out="$1"
-  local repo="$2"
-  local asset_id="$3"
-  local -a auth_args=()
+  local url="https://api.github.com/repos/$2/releases/assets/$3"
+  local -a curl_args=(-sSfL --retry 5 --retry-delay 2 --retry-all-errors -H "Accept: application/octet-stream")
   if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-    auth_args=(-H "Authorization: Bearer $GITHUB_TOKEN")
+    printf 'Authorization: Bearer %s\n' "$GITHUB_TOKEN" | curl "${curl_args[@]}" -H @- -o "$out" "$url"
+  else
+    curl "${curl_args[@]}" -o "$out" "$url"
   fi
-  curl -sSfL --retry 5 --retry-delay 2 --retry-all-errors \
-    -H "Accept: application/octet-stream" "${auth_args[@]}" \
-    -o "$out" "https://api.github.com/repos/$repo/releases/assets/$asset_id"
 }
 
 work_dir="$(mktemp -d)"
@@ -79,11 +78,24 @@ tar -xzf "$elan_archive" -C "$work_dir"
 
 elan_home="${ELAN_HOME:-$HOME/.elan}"
 toolchain_dir="$elan_home/toolchains/leanprover--lean4---v$lean_version"
-if [[ ! -d "$toolchain_dir" ]]; then
+# A toolchain counts as installed only when its `lean` binary is there.
+if [[ ! -x "$toolchain_dir/bin/lean" ]]; then
+  if ! command -v zstd > /dev/null; then
+    echo "zstd is required to unpack the Lean toolchain" >&2
+    exit 1
+  fi
   lean_archive="$work_dir/lean-$lean_version-$lean_target.tar.zst"
   download_asset "$lean_archive" "leanprover/lean4" "$lean_asset_id"
   check_sha256 "$lean_digest" "$lean_archive"
+
+  # Unpack next to the final directory, so that the last step is a rename on one filesystem.
+  # A partial directory from an interrupted run moves into the unpack directory, which the trap removes.
   mkdir -p "$elan_home/toolchains"
-  zstd -dc "$lean_archive" | tar -xf - -C "$work_dir"
-  mv "$work_dir/lean-$lean_version-$lean_target" "$toolchain_dir"
+  unpack_dir="$(mktemp -d "$elan_home/toolchains/.unpack.XXXXXX")"
+  trap 'rm -rf "$work_dir" "$unpack_dir"' EXIT
+  zstd -dc "$lean_archive" | tar -xf - -C "$unpack_dir"
+  if [[ -e "$toolchain_dir" ]]; then
+    mv "$toolchain_dir" "$unpack_dir/partial"
+  fi
+  mv "$unpack_dir/lean-$lean_version-$lean_target" "$toolchain_dir"
 fi
