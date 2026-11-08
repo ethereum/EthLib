@@ -136,9 +136,13 @@ def preCounter (H : Block) (iv : ByteArray) : Block :=
     -- The padding `0^s` completes the last block, and `0^64 || [len(IV)]_64` is one more block.
     ghash H (blocksOf iv ++ [blockOfNat (8 * iv.size)])
 
-/-- The padded input of GHASH in GCM, SP 800-38D §7.1, step 5.
+/-- The padded input of GHASH in GCM, SP 800-38D §7.1, step 5, and §7.2, step 6.
 
-It is the padded additional data, the padded ciphertext, and one block of both bit lengths. -/
+It is the padded additional data, the padded ciphertext, and one block of both bit lengths.
+
+The block holds `[len(A)]_64 || [len(C)]_64` when both bit lengths are below `2^64`.
+
+The length checks of §5.2.1.1 keep both lengths below those bounds. -/
 def ghashInput (aad c : ByteArray) : List Block :=
   blocksOf aad ++ blocksOf c ++ [blockOfNat (8 * aad.size * 2 ^ 64 + 8 * c.size)]
 

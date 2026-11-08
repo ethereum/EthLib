@@ -525,7 +525,8 @@ No theorem states unforgeability.
 
 ### AES
 
-The AES cipher and counter-mode theorems are correctness statements, and none bounds tag forgery or the cipher.
+The AES theorems are correctness statements, except the bounds on GHASH over a uniform hash subkey.
+No theorem bounds tag forgery or states a security property of the cipher.
 `invCipher_cipher` and `ciphInv_ciph` (`Proofs/Aes/Block.lean`) prove that the inverse cipher of FIPS 197 undoes the cipher, for every key schedule and so for every key.
 `sbox_eq` proves that each entry of the S-box table equals the inverse in GF(2^8) followed by the affine map of FIPS 197 §5.1.1.
 `ciph_eq_spec` proves that AES-128 and AES-256 equal a model of FIPS 197, for every key and every block.
@@ -556,13 +557,16 @@ The three hold for every forward cipher.
 `residue_ghash` proves that GHASH of `X_1 ... X_m` is `X_1 H^m + ... + X_m H` on residues, the form that §6.4 states.
 `irreducible_modulus` (`Proofs/Aes/Field.lean`) proves that the modulus is irreducible over GF(2), so the residues form a field, and `card_adjoinRoot_modulus` that this field has `2^128` elements.
 The kernel checks a certificate of the test: 128 squarings by Algorithm 1 fix `u`, and a block inverts `u^(2^64) - u`.
+
 `prEvent_xorBlock_ghash_eq_le` (`Proofs/Aes/Universal.lean`) takes two different lists of `m` blocks and a target block `c`.
 It proves that a uniform hash subkey gives XOR `c` on their GHASH values with probability at most `m / 2^128`.
 `prEvent_xorBlock_ghash_singleton_eq` proves that on distinct one-block inputs this probability is `1 / 2^128`.
 `ghash_zeroBlock_cons` proves that a zero block in front does not change GHASH, so `[X]` and `[0, X]` agree for every key.
-`prEvent_xorBlock_ghash_ghashInput_eq_le` proves the bound on GCM's padded input, for two different pairs below `2^64` bits each.
-Its numerator `m` is the longer of their two padded lists.
+`prEvent_xorBlock_ghash_ghashInput_eq_le` proves the bound on GCM's padded input, for two different pairs of additional data and ciphertext with each string below `2^64` bits.
+This is Lemma 2 of McGrew and Viega, [ePrint 2004/193](https://eprint.iacr.org/2004/193), Appendix A, without output truncation.
+Its numerator `m` is the length of the longer of their two padded lists, the length block included.
 The bound counts uniform hash subkeys; it does not bound tag forgery and says nothing about the cipher.
+
 `gctr_inc_block` proves that GCM encrypts block `k` of the text under `J_0` incremented `k + 1` times.
 `counter_ne_preCounter` and `counter_injOn` assume the length checks of §5.2.1.1.
 Under them, the counters of the text differ from each other and from `J_0`, the counter of the tag.

@@ -14,15 +14,13 @@ SP 800-38D §6.4 reads GHASH of blocks `X_1 ... X_m` as `X_1 H^m + ... + X_m H`.
 
 Take two different lists of `m` blocks, and a target block `c`.
 
-The blocks `H` where the XOR of their two GHASH values is `c` are the roots of one polynomial.
+Consider the keys `H` where the XOR of their two GHASH values is `c`.
+
+Their residues are the roots of one polynomial.
 
 That polynomial is not zero, and its degree is at most `m`.
 
-A field has at most `m` roots of it, so a uniform key hits one with probability at most `m / 2^128`.
-
-This is Lemma 1 of McGrew and Viega, INDOCRYPT 2004:
-
-<https://eprint.iacr.org/2004/193>
+In a field it has at most `m` roots, so a uniform key hits one with probability at most `m / 2^128`.
 
 A list of zero blocks in front does not change GHASH, so `[X]` and `[0, X]` agree for every key.
 
@@ -30,11 +28,15 @@ GCM avoids that.
 
 It hashes the padded data, the padded ciphertext, and one block of both bit lengths (§7.1).
 
-Under the 64-bit length bounds, that block records both lengths.
+When both bit lengths are below `2^64`, that block records both lengths.
 
 So two different pairs still give two different lists after the shorter one grows by zero blocks.
 
-The same bound then applies, with `m` the longer of the two lists.
+The same bound then applies, with `m` the length of the longer list.
+
+This is Lemma 2 in Appendix A of McGrew and Viega, IACR ePrint 2004/193 (full version):
+
+<https://eprint.iacr.org/2004/193>
 
 The bound is a uniform count over the hash subkey.
 
@@ -60,7 +62,7 @@ theorem card_block : Fintype.card Block = 2 ^ 128 := by
 
 /-- A zero block in front does not change GHASH, for any hash subkey `H`.
 
-The first step of Algorithm 2 multiplies `(0 + 0) • H`, which is the zero block. -/
+The first step of Algorithm 2 computes `(0 + 0) • H`, which is the zero block. -/
 theorem ghash_zeroBlock_cons (H : Block) (xs : List Block) :
     ghash H (zeroBlock :: xs) = ghash H xs := by
   have h0 : mul (xorBlock zeroBlock zeroBlock) H = zeroBlock :=
@@ -78,6 +80,8 @@ section
 open Polynomial
 
 /-- The difference of two GHASH polynomials, plus the target block `c`.
+
+Let `m` be the length of the first list.
 
 Block `i` of each list, counted from 0, takes the power `m - i`.
 
@@ -184,27 +188,18 @@ On the residues, the ring instance and the field instance give two semirings.
 
 Matching them unfolds the modulus `u^128 + ...`. -/
 
-/-- An injective map into a field hits the roots of a nonzero polynomial at most its degree times.
--/
-theorem card_filter_eval_eq_zero_le {α F : Type*} [Fintype α] [Field F] {f : α → F}
+/-- An injective map into a field meets the roots of a nonzero polynomial at most degree times. -/
+private theorem card_filter_eval_eq_zero_le {α F : Type*} [Fintype α] [Field F] {f : α → F}
     (hf : Function.Injective f) {P : F[X]} (hP : P ≠ 0) {d : Nat} (hd : P.natDegree ≤ d)
     [DecidablePred fun x : α => P.eval (f x) = 0] :
     (Finset.univ.filter fun x : α => P.eval (f x) = 0).card ≤ d := by
   classical
-  let s := Finset.univ.filter fun x : α => P.eval (f x) = 0
-  have hsub : s.image f ⊆ P.roots.toFinset := by
-    intro r hr
-    simp only [s, Finset.mem_image, Finset.mem_filter, Finset.mem_univ, true_and] at hr
-    obtain ⟨x, hx, rfl⟩ := hr
-    exact Multiset.mem_toFinset.mpr ((mem_roots hP).mpr hx)
-  calc s.card
-      = (s.image f).card := (Finset.card_image_of_injective s hf).symm
-    _ ≤ P.roots.toFinset.card := Finset.card_le_card hsub
-    _ ≤ P.roots.card := Multiset.toFinset_card_le _
-    _ ≤ P.natDegree := card_roots' P
-    _ ≤ d := hd
+  rw [← Finset.card_image_of_injective _ hf]
+  refine le_trans (card_le_degree_of_subset_roots fun r hr => ?_) hd
+  obtain ⟨x, hx, rfl⟩ := Finset.mem_image.mp (Finset.mem_val.mp hr)
+  exact (mem_roots hP).mpr (Finset.mem_filter.mp hx).2
 
-/-- The keys that give the XOR collision are at most `m`.
+/-- At most `m` keys give XOR `c`, where `m` is the length of the lists.
 
 Each is a root of the polynomial, and degree at most `m` allows at most `m` roots. -/
 theorem card_ghash_xor_le {A B : List Block} (hne : A ≠ B) (hlen : A.length = B.length)
@@ -224,12 +219,11 @@ end
 
 /-- **GHASH is `m / 2^128`-almost XOR universal on equal-length block lists.**
 
-This is Lemma 1 of McGrew and Viega, INDOCRYPT 2004, and the bound of SP 800-38D §6.4.
+It is the root count in the proof of Lemma 2 of McGrew and Viega, ePrint 2004/193, Appendix A.
 
 Take two different lists `A` and `B` of `m` blocks, and a target block `c`.
 
-A uniform key `H` gives `xorBlock (ghash H A) (ghash H B) = c` with probability at most `m / 2^128`.
--/
+A uniform key `H` gives XOR `c` on their GHASH values with probability at most `m / 2^128`. -/
 theorem prEvent_xorBlock_ghash_eq_le {A B : List Block} (hne : A ≠ B)
     (hlen : A.length = B.length) (c : Block) :
     Pr{let H ← $ᵗ Block}[xorBlock (ghash H A) (ghash H B) = c] ≤
@@ -271,7 +265,7 @@ theorem mul_bijective_of_ne_zeroBlock {d : Block} (hd : d ≠ zeroBlock) :
     simpa only [residue_mul] using congrArg residue h
   exact mul_left_cancel₀ (fun h0 => hd (residue_injective (h0.trans residue_zeroBlock.symm))) hres
 
-/-- On distinct one-block inputs, the XOR collision probability is exactly `1 / 2^128`.
+/-- On distinct one-block inputs, a uniform key gives XOR `c` with probability exactly `1 / 2^128`.
 
 `H ↦ (x + x') • H` is a bijection of the blocks, so it hits `c` once. -/
 theorem prEvent_xorBlock_ghash_singleton_eq {x x' : Block} (hne : x ≠ x') (c : Block) :
@@ -289,11 +283,13 @@ theorem prEvent_xorBlock_ghash_singleton_eq {x x' : Block} (hne : x ≠ x') (c :
 
 GCM hashes the padded data, the padded ciphertext, and one block of both bit lengths (§7.1).
 
-A list of zero blocks in front does not change GHASH, so padding alone cannot separate two inputs.
+A list of zero blocks in front does not change GHASH.
+
+So GHASH alone does not separate lists of different lengths.
 
 The length block can.
 
-Under the 64-bit bounds, that block records both lengths.
+When both bit lengths are below `2^64`, that block records both lengths.
 
 So two different pairs stay different after the shorter list grows by zero blocks. -/
 
@@ -310,7 +306,7 @@ theorem length_blocksOf (data : ByteArray) : (blocksOf data).length = (data.size
 
 /-- Two byte strings of one length with the same blocks are equal.
 
-Each byte sits at row `k % 16` of block `k / 16`, and that block is completed with zeros. -/
+Each byte sits at position `k % 16` of block `k / 16`, and that block is completed with zeros. -/
 theorem blocksOf_inj {a b : ByteArray} (hs : a.size = b.size) (h : blocksOf a = blocksOf b) :
     a = b := by
   apply ByteArray.ext
@@ -326,7 +322,7 @@ theorem blocksOf_inj {a b : ByteArray} (hs : a.size = b.size) (h : blocksOf a = 
   simp only [Vector.getElem_ofFn, Nat.div_add_mod, Array.getD, hkA, hkB, ↓reduceDIte] at hbyte
   exact hbyte
 
-/-- Under the 64-bit bounds, the length block records both lengths. -/
+/-- When all four bit lengths are below `2^64`, the length block records both lengths. -/
 theorem blockOfNat_bitLengths_inj {aad c aad' c' : ByteArray}
     (haad : 8 * aad.size < 2 ^ 64) (hc : 8 * c.size < 2 ^ 64)
     (haad' : 8 * aad'.size < 2 ^ 64) (hc' : 8 * c'.size < 2 ^ 64)
@@ -360,7 +356,9 @@ theorem bitLengths_lt_of_checkLengths {t : Nat} {iv text aad : ByteArray}
     all_goals contradiction
   omega
 
-/-- Two pairs with one padded input to GHASH are the same pair, under the 64-bit bounds. -/
+/-- Two pairs with the same padded input to GHASH are the same pair.
+
+It holds when all four bit lengths are below `2^64`. -/
 theorem ghashInput_inj {aad c aad' c' : ByteArray}
     (haad : 8 * aad.size < 2 ^ 64) (hc : 8 * c.size < 2 ^ 64)
     (haad' : 8 * aad'.size < 2 ^ 64) (hc' : 8 * c'.size < 2 ^ 64)
@@ -408,13 +406,15 @@ theorem ghashInput_pad_ne {aad c aad' c' : ByteArray}
 
 /-- **The bound for the padded input of GCM.**
 
-Take two different pairs of additional data and ciphertext, each of bit length below `2^64`.
+This is Lemma 2 of McGrew and Viega, ePrint 2004/193, Appendix A, with output truncation omitted.
 
-Let `m` be the longer of their two padded lists.
+Take two different pairs of additional data and ciphertext, with each string below `2^64` bits.
+
+Let `m` be the length of the longer of their two padded lists, the length block included.
 
 A uniform key `H` gives XOR `d` on their GHASH values with probability at most `m / 2^128`.
 
-The length checks of §5.2.1.1 give the bit-length bounds, by `bitLengths_lt_of_checkLengths`.
+The length checks of §5.2.1.1 give these bit-length bounds.
 
 The bound counts keys.
 
