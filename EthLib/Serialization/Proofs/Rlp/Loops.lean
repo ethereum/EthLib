@@ -57,39 +57,43 @@ theorem joinEncodings_cons (item : Item) (rest : List Item) :
     cases joinEncodingsFrom rest .empty <;> rfl
 
 /-- The loop from some items read is the loop from none, after them. -/
-theorem decodeItemsFrom_eq (payload : List UInt8) (done : List Item) :
-    decodeItemsFrom payload done = (decodeItemsFrom payload []).map (done.reverse ++ ·) := by
+theorem decodeItemsFrom_eq (input : ByteArray) (pos stop : Nat) (done : List Item) :
+    decodeItemsFrom input pos stop done =
+      (decodeItemsFrom input pos stop []).map (done.reverse ++ ·) := by
   rw [decodeItemsFrom, decodeItemsFrom]
   split
-  · simp [Except.map]
-  · cases hd : decodeItem payload with
+  · cases hd : decodeItem input pos stop with
     | error e => rfl
     | ok r =>
-      obtain ⟨item, ⟨rest, hrest⟩⟩ := r
-      show decodeItemsFrom rest (item :: done) = (decodeItemsFrom rest [item]).map _
-      rw [decodeItemsFrom_eq rest (item :: done), decodeItemsFrom_eq rest [item]]
-      cases decodeItemsFrom rest [] <;> simp [Except.map]
-termination_by payload.length
+      obtain ⟨item, ⟨next, hNext⟩⟩ := r
+      show decodeItemsFrom input next stop (item :: done) =
+        (decodeItemsFrom input next stop [item]).map _
+      rw [decodeItemsFrom_eq input next stop (item :: done),
+        decodeItemsFrom_eq input next stop [item]]
+      cases decodeItemsFrom input next stop [] <;> simp [Except.map]
+  · simp [Except.map]
+termination_by stop - pos
+decreasing_by all_goals omega
 
-/-- The items of a payload: none for an empty payload, else the first item, then the rest. -/
-theorem decodeItems_eq (payload : List UInt8) :
-    decodeItems payload =
-      (if payload.isEmpty then
-        .ok []
-      else do
-        let (item, ⟨rest, _⟩) ← decodeItem payload
-        let items ← decodeItems rest
-        .ok (item :: items)) := by
+/-- The items from `pos` to `stop`: none if no byte is left, else the first item, then the rest. -/
+theorem decodeItems_eq (input : ByteArray) (pos stop : Nat) :
+    decodeItems input pos stop =
+      (if pos < stop then do
+        let (item, ⟨next, _⟩) ← decodeItem input pos stop
+        let items ← decodeItems input next stop
+        .ok (item :: items)
+      else
+        .ok []) := by
   rw [decodeItems, decodeItemsFrom]
   split
-  · rfl
-  · cases decodeItem payload with
+  · cases decodeItem input pos stop with
     | error e => rfl
     | ok r =>
-      obtain ⟨item, ⟨rest, _⟩⟩ := r
-      show decodeItemsFrom rest [item] =
-        (do let items ← decodeItems rest; Except.ok (item :: items))
+      obtain ⟨item, ⟨next, _⟩⟩ := r
+      show decodeItemsFrom input next stop [item] =
+        (do let items ← decodeItems input next stop; Except.ok (item :: items))
       rw [decodeItemsFrom_eq, decodeItems]
-      cases decodeItemsFrom rest [] <;> rfl
+      cases decodeItemsFrom input next stop [] <;> rfl
+  · rfl
 
 end EthLib.Serialization.Rlp

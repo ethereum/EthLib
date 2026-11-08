@@ -95,9 +95,10 @@ theorem openPacket_sealPacket {key r : Fn} {iv : Aes.Block} {body padding packet
 theorem decodeBody_encode {α : Type} [Codec α] {m : α}
     (hm : Codec.ofItem (Codec.toItem m) = .ok m) {body : ByteArray} (h : Codec.encode m = .ok body)
     (padding : ByteArray) : decodeBody (body ++ padding) = .ok m := by
-  obtain ⟨hRest, hd⟩ := decodeItem_encode _ _ h padding.data.toList
+  obtain ⟨hNext, hd⟩ := decodeItem_encode _ _ h (input := body ++ padding) (pos := 0)
+    (rest := padding.data.toList) (Nat.le_refl _)
+    (by rw [ByteArray.extract_zero_size, ByteArray.toList_data_append])
   unfold decodeBody
-  rw [ByteArray.data_append, Array.toList_append]
   simp only [bind, Except.bind, hd, hm, Except.mapError]
 
 /-- `auth` reads back from its RLP item. -/

@@ -1,6 +1,5 @@
 module
 
-public import EthLib.Base.Length
 public import EthLib.Serialization.Rlp.Encode
 
 /-!
@@ -33,10 +32,16 @@ The decoder rejects all three, and any input that ends early or has bytes left a
 
 namespace EthLib.Serialization.Rlp
 
--- Each length the decoder reads is checked in as many steps as that length.
-attribute [local instance high] Base.Length.decideLeLength Base.Length.decideLengthLt
+/-- The number that the `k` bytes of `input` from `pos` write in base 256, after the value `acc`.
 
-/-- What the first bytes of an encoding announce, from its first byte `first` and the rest.
+Each byte multiplies the value so far by 256, then adds itself. -/
+def readBigEndian (input : ByteArray) (pos : Nat) : (k acc : Nat) → Nat
+  | 0, acc => acc
+  | k + 1, acc => readBigEndian input (pos + 1) k (256 * acc + (input.get! pos).toNat)
+
+/-- What the first bytes of an encoding announce, from its first byte `first`.
+
+The bytes of `input` from `pos` to `stop` follow the first byte.
 
 The result is the kind of payload, the number `k` of bytes that write the length, and the length.
 
@@ -46,7 +51,8 @@ The result is the kind of payload, the number `k` of bytes that write the length
 - From `0xf8` to `0xff`, a list payload whose length is on the next `k = first - 0xf7` bytes.
 
 A byte below `0x80` is its own encoding and announces nothing, so it is not passed here. -/
-def readPrefix (first : UInt8) (rest : List UInt8) : Except RlpError (PayloadKind × Nat × Nat) :=
+def readPrefix (input : ByteArray) (first : UInt8) (pos stop : Nat) :
+    Except RlpError (PayloadKind × Nat × Nat) :=
   -- The short forms write the length in the first byte.
   if first < 0xb8 then
     .ok (.bytes, 0, first.toNat - 0x80)
@@ -60,77 +66,78 @@ where
   /-- The long form: the length is `BE(length)` on the next `k` bytes, and is at least 56. -/
   readLongLength (kind : PayloadKind) (k : Nat) : Except RlpError (PayloadKind × Nat × Nat) :=
     -- The `k` bytes of the length must all be there.
-    if rest.length < k then
-      .error (.inputTooShort k rest.length)
+    if stop - pos < k then
+      .error (.inputTooShort k (stop - pos))
+    -- `BE` has no leading zero byte, and `k` is at least 1 here.
+    else if k ≠ 0 ∧ input.get! pos = 0 then
+      .error .leadingZeroInLength
     else
-      let lengthBytes := rest.take k
-      -- `BE` has no leading zero byte, and `k` is at least 1 here.
-      if lengthBytes.head? = some 0 then
-        .error .leadingZeroInLength
+      let length := readBigEndian input pos k 0
+      -- A length below 56 fits in the first byte, so its long form is never written.
+      if length < 56 then
+        .error (.longFormForShortLength length)
       else
-        let length := ofBigEndian lengthBytes
-        -- A length below 56 fits in the first byte, so its long form is never written.
-        if length < 56 then
-          .error (.longFormForShortLength length)
-        else
-          .ok (kind, k, length)
+        .ok (kind, k, length)
 
 mutual
 
-/-- One item read from the front of `input`, and the bytes after it.
+/-- One item read from the bytes of `input` from `pos` to `stop`, and the position after it.
 
-The bytes after it are fewer than the input, which bounds the recursion of a list. -/
-def decodeItem (input : List UInt8) :
-    Except RlpError (Item × { rest : List UInt8 // rest.length < input.length }) :=
-  match input with
+That position is past `pos`, which bounds the recursion of a list.
+
+The decoder reads the bytes in place, and copies only the bytes of each byte string.
+
+The end position is at most the size of `input`; past it, a byte would read as zero. -/
+def decodeItem (input : ByteArray) (pos stop : Nat) :
+    Except RlpError (Item × { next : Nat // pos < next ∧ next ≤ stop }) :=
   -- There is no first byte.
-  | [] => .error (.inputTooShort 1 0)
-  | first :: tail =>
+  if hPos : pos < stop then
+    let first := input.get! pos
     -- A byte below `0x80` is its own encoding.
     if first < 0x80 then
-      .ok (.bytes ⟨#[first]⟩, ⟨tail, by simp⟩)
+      .ok (.bytes ⟨#[first]⟩, ⟨pos + 1, by omega, by omega⟩)
     else do
-      let (kind, k, length) ← readPrefix first tail
+      let (kind, k, length) ← readPrefix input first (pos + 1) stop
       -- The payload starts after the `k` bytes of its length.
-      let body := tail.drop k
+      let start := pos + 1 + k
       -- The payload must fit in what is left of the input.
-      if length ≤ body.length then
-        let payload := body.take length
-        let rest : { rest : List UInt8 // rest.length < (first :: tail).length } :=
-          ⟨body.drop length, by simp [body]; omega⟩
+      if hFit : start + length ≤ stop then
+        let next : { next : Nat // pos < next ∧ next ≤ stop } := ⟨start + length, by omega, hFit⟩
         match kind with
         | .bytes =>
-          match payload with
           -- One byte below `0x80` is its own encoding, never `0x81` then the byte.
-          | [byte] =>
-            if byte < 0x80 then .error (.singleByteWithPrefix byte)
-            else .ok (.bytes ⟨#[byte]⟩, rest)
-          | _ => .ok (.bytes ⟨payload.toArray⟩, rest)
+          if length = 1 ∧ input.get! start < 0x80 then
+            .error (.singleByteWithPrefix (input.get! start))
+          else
+            .ok (.bytes (input.extract start (start + length)), next)
         | .list =>
           -- The payload of a list is its items, one after another, with nothing left over.
-          let items ← decodeItems payload
-          .ok (.list items, rest)
+          let items ← decodeItems input start (start + length)
+          .ok (.list items, next)
       else
-        .error (.inputTooShort length body.length)
-termination_by 3 * input.length
-decreasing_by simp; omega
+        .error (.inputTooShort length (stop - start))
+  else
+    .error (.inputTooShort 1 0)
+termination_by 3 * (stop - pos)
+decreasing_by omega
 
-/-- The items whose encodings, one after another, are exactly `payload`. -/
-def decodeItems (payload : List UInt8) : Except RlpError (List Item) :=
-  decodeItemsFrom payload []
-termination_by 3 * payload.length + 2
+/-- The items whose encodings, one after another, are exactly the bytes from `pos` to `stop`. -/
+def decodeItems (input : ByteArray) (pos stop : Nat) : Except RlpError (List Item) :=
+  decodeItemsFrom input pos stop []
+termination_by 3 * (stop - pos) + 2
 
-/-- The items read so far, in reverse order, then the items of `payload`.
+/-- The items read so far, in reverse order, then the items from `pos` to `stop`.
 
 The loop runs in constant stack for any number of items. -/
-def decodeItemsFrom (payload : List UInt8) (done : List Item) : Except RlpError (List Item) :=
-  if payload.isEmpty then
-    .ok done.reverse
-  else do
+def decodeItemsFrom (input : ByteArray) (pos stop : Nat) (done : List Item) :
+    Except RlpError (List Item) :=
+  if pos < stop then do
     -- The first item, then the items of what is left.
-    let (item, ⟨rest, _⟩) ← decodeItem payload
-    decodeItemsFrom rest (item :: done)
-termination_by 3 * payload.length + 1
+    let (item, ⟨next, _⟩) ← decodeItem input pos stop
+    decodeItemsFrom input next stop (item :: done)
+  else
+    .ok done.reverse
+termination_by 3 * (stop - pos) + 1
 
 end
 
@@ -138,11 +145,11 @@ end
 
 It fails unless `input` is exactly the encoding of one item. -/
 def decode (input : ByteArray) : Except RlpError Item := do
-  let (item, ⟨rest, _⟩) ← decodeItem input.data.toList
+  let (item, ⟨next, _⟩) ← decodeItem input 0 input.size
   -- The encoding of the item must be the whole input.
-  if rest.isEmpty then
+  if next = input.size then
     .ok item
   else
-    .error (.trailingBytes rest.length)
+    .error (.trailingBytes (input.size - next))
 
 end EthLib.Serialization.Rlp

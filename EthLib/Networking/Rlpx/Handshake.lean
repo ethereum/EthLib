@@ -139,7 +139,7 @@ The message at the start of a decrypted body.
 EIP-8 asks the reader to ignore the bytes after the RLP list, which are padding.
 -/
 def decodeBody {α : Type} [Codec α] (body : ByteArray) : Except HandshakeError α :=
-  (do Codec.ofItem (← decodeItem body.data.toList).1).mapError .rlp
+  (do Codec.ofItem (← decodeItem body 0 body.size).1).mapError .rlp
 
 /-! ## Packets -/
 
