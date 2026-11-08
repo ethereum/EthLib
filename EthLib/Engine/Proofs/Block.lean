@@ -35,27 +35,28 @@ variable {fork : Fork}
 
 /-! ## Pieces -/
 
-/-- A field computed only at the forks that have it is the field of the step. -/
-theorem sinceM_eq_ok {ε α : Type} {f : Fork} {g : f ≤ fork → Except ε α} {x : Since f fork α}
-    (h : ∀ hf, g hf = .ok (x hf)) : sinceM g = .ok x := by
-  unfold sinceM
-  split
-  · rename_i hf
-    rw [h hf]
-    exact congrArg Except.ok (Since.eq_const hf x).symm
-  · exact congrArg Except.ok (Since.eq_of_not_le (by assumption) _ _)
+/-- A field computed only at the forks that have it is exactly the step's value at each of them.
 
-/-- A field that a step computed is the step's value at each fork that has the field. -/
-theorem sinceM_apply {ε α : Type} {f : Fork} {g : f ≤ fork → Except ε α} {x : Since f fork α}
-    (h : sinceM g = .ok x) (hf : f ≤ fork) : g hf = .ok (x hf) := by
-  unfold sinceM at h
-  rw [dite_eq_left hf] at h
-  cases hg : g hf with
-  | error e => simp [hg, Functor.map, Except.map] at h
-  | ok a =>
-    simp only [hg, Functor.map, Except.map] at h
-    cases h
-    rfl
+Before its fork the field has one value, so the computation then always succeeds. -/
+theorem sinceM_eq_ok_iff {ε α : Type} {f : Fork} {g : f ≤ fork → Except ε α}
+    {x : Since f fork α} : sinceM g = .ok x ↔ ∀ hf, g hf = .ok (x hf) := by
+  unfold sinceM
+  by_cases hf : f ≤ fork
+  · rw [dite_eq_left hf]
+    constructor
+    · intro h hf'
+      cases hg : g hf with
+      | error e => simp [hg, Functor.map, Except.map] at h
+      | ok a =>
+        simp only [hg, Functor.map, Except.map] at h
+        cases h
+        rfl
+    · intro h
+      rw [h hf]
+      exact congrArg Except.ok (Since.eq_const hf x).symm
+  · rw [dite_eq_right hf]
+    exact ⟨fun _ hf' => absurd hf' hf,
+      fun _ => congrArg Except.ok (Since.eq_of_not_le hf _ _)⟩
 
 /-- Decoded transactions encode back to their bytes, and the fork has their kinds. -/
 theorem encode_of_decodeTransactions {index : Nat} {bytes : List ByteArray}
@@ -212,10 +213,10 @@ theorem toBlock_ofBlock (hParis : .paris ≤ fork)
     cases hBytes.symm.trans hBytes'
     have hWr : sinceM (fork := fork) (fun hf => (withdrawalsRoot (b.withdrawals hf)).mapError
         fun _ => PayloadError.noEncoding) = .ok b.header.withdrawalsRoot :=
-      sinceM_eq_ok fun hf => by simp [hWithdrawalsRoot hf, Except.mapError]
+      sinceM_eq_ok_iff.mpr fun hf => by simp [hWithdrawalsRoot hf, Except.mapError]
     simp only [Except.mapError] at hWr
     have hAl : sinceM (fork := fork) (fun hf => blockAccessListHashOf (accessList hf)) =
-        .ok b.header.blockAccessListHash := sinceM_eq_ok hAccessList
+        .ok b.header.blockAccessListHash := sinceM_eq_ok_iff.mpr hAccessList
     have hSl : slot = b.header.slotNumber := funext hSlot
     subst hSl
     simp only [toBlock, toBlockUnchecked, toHeader, checkBlockHash, hDec, hRoot, bind,
@@ -293,23 +294,31 @@ theorem blockAccessListHashOf_eq_error_iff (bytes : ByteArray) (e : PayloadError
     · rintro ⟨-, rfl⟩
       rfl
 
-/-- From Glamsterdam, the block of a payload holds the hash of the access list and the slot.
+/-- From Glamsterdam, the access list of a payload with a block is the RLP form of one.
 
-The access list is then the RLP form of a block access list. -/
-theorem toBlock_glamsterdam {p : ExecutionPayload fork} {beacon : Since .dencun fork Hash32}
+Its hash is the hash in the header of the block. -/
+theorem toBlock_accessList {p : ExecutionPayload fork} {beacon : Since .dencun fork Hash32}
     {requests : Since .pectra fork (List ByteArray)}
     {accessList : Since .glamsterdam fork ByteArray} {slot : Since .glamsterdam fork UInt64}
     {b : Block fork Transaction} (h : p.toBlock beacon requests accessList slot = .ok b)
     (hf : .glamsterdam ≤ fork) :
     (∃ bal : BlockAccessList, Serialization.Rlp.Codec.decode (accessList hf) = .ok bal) ∧
-      b.header.blockAccessListHash hf = keccak256 (accessList hf) ∧
-      b.header.slotNumber hf = slot hf := by
+      b.header.blockAccessListHash hf = keccak256 (accessList hf) := by
   simp only [toBlock, toBlockUnchecked, toHeader, checkBlockHash, bind_ok_iff, pure_eq_ok,
     mapError_ok_iff] at h
   obtain ⟨_, ⟨txs, -, root, -, accessHash, hAccess, _, ⟨wr, -, rfl⟩, rfl⟩, -, -, rfl⟩ := h
-  obtain ⟨hdecode, hhash⟩ :=
-    (blockAccessListHashOf_eq_ok_iff _ _).mp (sinceM_apply hAccess hf)
-  exact ⟨hdecode, hhash, rfl⟩
+  exact (blockAccessListHashOf_eq_ok_iff _ _).mp (sinceM_eq_ok_iff.mp hAccess hf)
+
+/-- From Glamsterdam, the block of a payload holds the slot that it is given. -/
+theorem toBlock_slotNumber {p : ExecutionPayload fork} {beacon : Since .dencun fork Hash32}
+    {requests : Since .pectra fork (List ByteArray)}
+    {accessList : Since .glamsterdam fork ByteArray} {slot : Since .glamsterdam fork UInt64}
+    {b : Block fork Transaction} (h : p.toBlock beacon requests accessList slot = .ok b)
+    (hf : .glamsterdam ≤ fork) : b.header.slotNumber hf = slot hf := by
+  simp only [toBlock, toBlockUnchecked, toHeader, checkBlockHash, bind_ok_iff, pure_eq_ok,
+    mapError_ok_iff] at h
+  obtain ⟨_, ⟨txs, -, root, -, accessHash, -, _, ⟨wr, -, rfl⟩, rfl⟩, -, -, rfl⟩ := h
+  rfl
 
 /-- From Glamsterdam, a payload whose access list is not the RLP form of one gives no block. -/
 theorem toBlock_ne_ok_of_not_decode {p : ExecutionPayload fork}
@@ -319,7 +328,7 @@ theorem toBlock_ne_ok_of_not_decode {p : ExecutionPayload fork}
     (hbad : ∀ bal : BlockAccessList, Serialization.Rlp.Codec.decode (accessList hf) ≠ .ok bal)
     (b : Block fork Transaction) : p.toBlock beacon requests accessList slot ≠ .ok b := by
   intro h
-  obtain ⟨⟨bal, hbal⟩, -⟩ := toBlock_glamsterdam h hf
+  obtain ⟨⟨bal, hbal⟩, -⟩ := toBlock_accessList h hf
   exact hbad bal hbal
 
 end ExecutionPayload

@@ -11,6 +11,8 @@ The update is syncing exactly when the execution layer does not hold the head.
 
 A valid head below the known finalized block is valid, and the head does not change.
 
+A valid update that keeps the head is exactly that case.
+
 Any other valid update selects a valid head that the execution layer holds.
 
 Its safe and finalized blocks are then zero, or the head or one of its known ancestors.
@@ -41,7 +43,9 @@ The parameters decode exactly when they are a JSON array of two values.
 
 The first value must also decode as a forkchoice state.
 
-The result is that state, and whether the payload attributes are not `null`.
+The second value must be `null` or an object.
+
+The result is that state, and whether the payload attributes are an object.
 -/
 
 public section
@@ -199,6 +203,42 @@ theorem forkchoiceUpdated_of_belowFinalized {p : KnownPayload}
     forkchoiceUpdated tree finalized state = .ok (⟨.valid, some state.headBlockHash⟩, none) := by
   simp [forkchoiceUpdated, hp, hValid, hBelow, pure, Except.pure]
 
+/-- An update is valid with no new head exactly for a valid head below the known finalized block.
+
+This is the answer of step 2, with the head as the latest valid block. -/
+theorem forkchoiceUpdated_valid_none_iff {result : PayloadStatus × Option Hash32} :
+    (forkchoiceUpdated tree finalized state = .ok result ∧ result.1.status = .valid ∧
+        result.2 = none) ↔
+      (∃ p, tree.lookup state.headBlockHash = some p ∧ p.valid = true) ∧
+        belowFinalized tree finalized state.headBlockHash = true ∧
+        result = (⟨.valid, some state.headBlockHash⟩, none) := by
+  unfold forkchoiceUpdated
+  cases hp : tree.lookup state.headBlockHash with
+  | none =>
+    simp [pure, Except.pure]
+    rintro rfl
+    simp
+  | some p =>
+    by_cases hv : p.valid = true
+    · by_cases hb : belowFinalized tree finalized state.headBlockHash = true
+      · simp only [hv, hb, Bool.not_true, Bool.false_eq_true, ↓reduceIte, pure, Except.pure,
+          Except.ok.injEq]
+        simp only [Option.some.injEq, exists_eq_left', hv, true_and]
+        constructor
+        · rintro ⟨rfl, -, -⟩
+          rfl
+        · rintro rfl
+          simp
+      · by_cases hc : onChain tree state.headBlockHash state.safeBlockHash = true ∧
+            onChain tree state.headBlockHash state.finalizedBlockHash = true
+        · simp [hv, hb, hc, pure, Except.pure]
+          rintro rfl
+          simp
+        · simp [hv, hb, hc]
+    · simp [hv, pure, Except.pure]
+      rintro rfl
+      simp
+
 /-- An invalid head that the tree holds is invalid, with the latest valid block of its chain. -/
 theorem forkchoiceUpdated_of_invalid {p : KnownPayload}
     (hp : tree.lookup state.headBlockHash = some p) (hInvalid : p.valid = false) :
@@ -310,14 +350,12 @@ theorem forkchoiceUpdatedParams_eq_ok_iff {params : Lean.Json} {r : ForkchoiceSt
     | [stateJson, attributes] =>
       simp only [bind_ok_iff]
       -- The attributes decide the flag: `null`, an object, or any other value, which fails.
-      cases attributes <;>
-        simp [Json.invalid, throw, throwThe, MonadExceptOf.throw, pure, Except.pure, eq_comm,
-          and_assoc]
-    | [] => simp [Json.invalid, throw, throwThe, MonadExceptOf.throw]
-    | [_] => simp [Json.invalid, throw, throwThe, MonadExceptOf.throw]
-    | _ :: _ :: _ :: _ => simp [Json.invalid, throw, throwThe, MonadExceptOf.throw]
+      cases attributes <;> simp [pure, Except.pure, eq_comm, and_assoc]
+    | [] => simp
+    | [_] => simp
+    | _ :: _ :: _ :: _ => simp
   -- Any other JSON value is not an array.
-  | _ => simp [Json.invalid, throw, throwThe, MonadExceptOf.throw]
+  | _ => simp
 
 /-- Payload attributes that are neither `null` nor an object are an invalid parameter.
 
@@ -328,7 +366,6 @@ theorem forkchoiceUpdatedParams_not_object {stateJson attributes : Lean.Json}
     forkchoiceUpdatedParams (.arr #[stateJson, attributes]) =
       .error (.invalidParams "payloadAttributes: not an object") := by
   unfold forkchoiceUpdatedParams
-  cases attributes <;> simp_all [Json.invalid, throw, throwThe, MonadExceptOf.throw, bind,
-    Except.bind]
+  cases attributes <;> simp_all [bind, Except.bind]
 
 end EthLib.Engine
