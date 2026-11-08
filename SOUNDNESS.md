@@ -1069,7 +1069,8 @@ A step that sends a message keeps it once the frame that ends the message has th
 `parent_processMessage` proves that a successful call keeps the block of the state it is sent from, at every fork.
 `parent_processCreateMessage` proves the same for a successful creation.
 `keepsParent_processRunner` (`Logic/Message.lean`) proves that the runner of the code of a message meets `KeepsParent`, for every bound.
-`getStorage_processMessage_of_error` proves that a call that ends with an error leaves every storage word as it was in the state it is sent from, at every fork.
+`processMessage_sameOutside_of_error` proves that a call that ends with an error reads as the state it is sent from at every address, at every fork.
+That covers the account, the storage and the transient storage, and `getStorage_processMessage_of_error` states it for one storage word.
 
 ### SHA-256 precompile
 

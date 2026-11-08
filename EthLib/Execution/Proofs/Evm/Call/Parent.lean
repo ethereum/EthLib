@@ -471,17 +471,26 @@ theorem parent_rollbackOnError (snapshot : TransactionState) (evm : Evm fork Met
   unfold rollbackOnError
   split <;> rfl
 
+/-- A call ends with the rollback of the frame that ends it, to the state it is sent from. -/
+theorem exists_rollbackOnError_processMessage [LawfulGasMeter Meter] {message : Message fork}
+    {state : TransactionState} {substate : Substate} {meter : Meter}
+    {held : GasMeter.gasHeld meter ≤ message.gas} {ended}
+    (h : processMessage fork message state substate meter held = .ok ended) :
+    ∃ last : Evm fork Meter, ended.val = rollbackOnError state last := by
+  rw [processMessage] at h
+  obtain ⟨ended0, -, rolled⟩ := Base.map_ok_iff.mp h
+  have hval := congrArg Subtype.val rolled
+  simp only at hval
+  exact ⟨ended0.val, hval.symm⟩
+
 /-- Every successful call and creation keeps the block of the state, at every fork.
 
-A call ends with the rollback of a frame that has the block of the state it is sent from.
-
-It is the induction on the gas of the message that the theorems below state for one message. -/
+The proof is by strong induction on the gas of the message, for calls and creations together. -/
 theorem processMessage_parent [LawfulGasMeter Meter] (n : Nat) :
     (∀ (message : Message fork) (state : TransactionState) (substate : Substate) (meter : Meter)
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
       ∀ ended, processMessage fork message state substate meter held = .ok ended →
-        ∃ last : Evm fork Meter, ended.val = rollbackOnError state last ∧
-          last.state.parent = state.parent) ∧
+        ended.val.state.parent = state.parent) ∧
     (∀ (message : Message fork) (state : TransactionState) (substate : Substate) (meter : Meter)
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
       ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
@@ -491,8 +500,7 @@ theorem processMessage_parent [LawfulGasMeter Meter] (n : Nat) :
     have call : ∀ (message : Message fork) (state : TransactionState) (substate : Substate)
         (meter : Meter) (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
         ∀ ended, processMessage fork message state substate meter held = .ok ended →
-          ∃ last : Evm fork Meter, ended.val = rollbackOnError state last ∧
-            last.state.parent = state.parent := by
+          ended.val.state.parent = state.parent := by
       intro message state substate meter held hn ended h
       rw [processMessage] at h
       obtain ⟨ended0, hdo, rolled⟩ := Base.map_ok_iff.mp h
@@ -516,12 +524,8 @@ theorem processMessage_parent [LawfulGasMeter Meter] (n : Nat) :
               rintro caller' message' lt ⟨c, used⟩ hrun'
               dsimp only at hrun'
               split at hrun'
-              · obtain ⟨last, hl, hp⟩ :=
-                  (ih message'.gas (by omega)).1 message' caller'.state _ _ _ rfl ⟨c, used⟩ hrun'
-                have hl' : c = rollbackOnError caller'.state last := hl
-                show c.state.parent = _
-                rw [hl', parent_rollbackOnError]
-                exact hp
+              · exact (ih message'.gas (by omega)).1 message' caller'.state _ _ _ rfl ⟨c, used⟩
+                  hrun'
               · exact (ih message'.gas (by omega)).2 message' caller'.state _ _ _ rfl ⟨c, used⟩
                   hrun'
           · simp only [hpa] at hdo
@@ -536,7 +540,8 @@ theorem processMessage_parent [LawfulGasMeter Meter] (n : Nat) :
                 exact hp1
       have hval := congrArg Subtype.val rolled
       simp only at hval
-      exact ⟨ended0.val, hval.symm, core⟩
+      rw [← hval, parent_rollbackOnError]
+      exact core
     refine ⟨call, ?_⟩
     intro message state substate meter held hn ended h
     rw [processCreateMessage] at h
@@ -546,22 +551,18 @@ theorem processMessage_parent [LawfulGasMeter Meter] (n : Nat) :
     split at h
     · cases h
     · cases h
-      obtain ⟨last, hl, hp'⟩ := call message prepared substate meter held hn _ hrun
-      have hl' : evm = rollbackOnError prepared last := hl
-      refine (parent_depositCode ‹depositCode _ _ _ = .ok _›).trans ?_
-      rw [hl', parent_rollbackOnError]
-      exact hp'.trans (parent_prepareCreation hp)
+      have hp' : evm.state.parent = prepared.parent :=
+        call message prepared substate meter held hn _ hrun
+      exact (parent_depositCode ‹depositCode _ _ _ = .ok _›).trans
+        (hp'.trans (parent_prepareCreation hp))
 
 /-- A successful call keeps the block of the state it is sent from, at every fork. -/
 theorem parent_processMessage [LawfulGasMeter Meter] {message : Message fork}
     {state : TransactionState} {substate : Substate} {meter : Meter}
     {held : GasMeter.gasHeld meter ≤ message.gas} {ended}
     (h : processMessage fork message state substate meter held = .ok ended) :
-    ended.val.state.parent = state.parent := by
-  obtain ⟨last, hl, hp⟩ :=
-    (processMessage_parent message.gas).1 message state substate meter held rfl ended h
-  rw [hl, parent_rollbackOnError]
-  exact hp
+    ended.val.state.parent = state.parent :=
+  (processMessage_parent message.gas).1 message state substate meter held rfl ended h
 
 /-- A successful creation keeps the block of the state it is sent from, at every fork. -/
 theorem parent_processCreateMessage [LawfulGasMeter Meter] {message : Message fork}
@@ -571,6 +572,26 @@ theorem parent_processCreateMessage [LawfulGasMeter Meter] {message : Message fo
     ended.val.state.parent = state.parent :=
   (processMessage_parent message.gas).2 message state substate meter held rfl ended h
 
+/-- A call that ends with an error reads as the state it is sent from, at every address.
+
+That holds for the account, every word of storage and every word of transient storage.
+
+It holds at every fork, whatever the code of the message. -/
+theorem processMessage_sameOutside_of_error [LawfulGasMeter Meter] {message : Message fork}
+    {state : TransactionState} {substate : Substate} {meter : Meter}
+    {held : GasMeter.gasHeld meter ≤ message.gas} {ended}
+    (h : processMessage fork message state substate meter held = .ok ended)
+    (herr : ended.val.error.isSome = true) :
+    TransactionState.SameOutside [] state ended.val.state := by
+  have hp := parent_processMessage h
+  obtain ⟨last, hl⟩ := exists_rollbackOnError_processMessage h
+  rw [hl] at herr hp ⊢
+  unfold rollbackOnError at herr hp ⊢
+  split at herr
+  · simp only [‹last.error.isSome = true›, ↓reduceIte] at hp ⊢
+    exact TransactionState.sameOutside_restoreTxState hp
+  · exact absurd herr ‹_›
+
 /-- A call that ends with an error leaves every storage word as it was in the state it is sent from.
 
 That holds at every fork, at every address, whatever the code of the message. -/
@@ -579,14 +600,7 @@ theorem getStorage_processMessage_of_error [LawfulGasMeter Meter] {message : Mes
     {held : GasMeter.gasHeld meter ≤ message.gas} {ended}
     (h : processMessage fork message state substate meter held = .ok ended)
     (herr : ended.val.error.isSome = true) (address : Address) (key : Bytes32) :
-    ended.val.state.getStorage address key = state.getStorage address key := by
-  obtain ⟨last, hl, hp⟩ :=
-    (processMessage_parent message.gas).1 message state substate meter held rfl ended h
-  rw [hl] at herr ⊢
-  unfold rollbackOnError at herr ⊢
-  split at herr
-  · simp only [‹last.error.isSome = true›, ↓reduceIte]
-    exact TransactionState.getStorage_restoreTxState hp address key
-  · exact absurd herr ‹_›
+    ended.val.state.getStorage address key = state.getStorage address key :=
+  (processMessage_sameOutside_of_error h herr address List.not_mem_nil).2.1 key
 
 end EthLib.Execution.Evm
