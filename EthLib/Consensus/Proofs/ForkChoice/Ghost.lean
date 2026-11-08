@@ -25,9 +25,7 @@ A tie between two children goes to the greater root, read as a big-endian number
 
 That order is the order of roots as strings of bytes.
 
-The head descends from the justified block.
-
-It is a viable leaf, unless no leaf is viable, and then it is the justified block.
+The head is a viable leaf, unless no leaf is viable, and then it is the justified block.
 
 So when some leaf is viable, the chain of the head holds the finalized block.
 
@@ -943,20 +941,6 @@ theorem getHeadFrom_descends {nodes : List ForkChoiceNode} {ancestor : ForkChoic
       exact startFound
     have step := isAncestor_of_parent before childFound parentFound lower (startNode ▸ descends)
     exact ih source lowerRank childPending (childNode ▸ step) walk
-
-/-- Before Gloas, the head descends from the justified block, which counts as its own descendant.
--/
-theorem getHead_descends {head : ForkChoiceNode} (before : fork < .glamsterdam)
-    (found : store.getHead config = .ok head) :
-    store.isAncestor head ⟨store.justifiedCheckpoint.root, .pending⟩ = .ok true := by
-  have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
-  simp only [getHead, later, false_and, ↓reduceIte, bind, Except.bind] at found
-  cases tree : store.getFilteredNodeTree config with
-  | error e => simp [tree] at found
-  | ok nodes =>
-    simp only [tree] at found
-    obtain ⟨_, known⟩ := filterNodeTree_known tree
-    exact getHeadFrom_descends before rfl (isAncestor_self known) found
 
 /-- The head is a viable leaf, or no leaf is viable and the head is a node of the justified block.
 
