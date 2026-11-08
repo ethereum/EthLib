@@ -8,6 +8,10 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
+# Jobs that need more ask for it themselves.
+permissions:
+  contents: read
+
 jobs:
   build_wheels:
     name: wheels — ${{ matrix.os }} / ${{ matrix.arch }}
@@ -38,6 +42,8 @@ jobs:
       # cibuildwheel container via CIBW_BEFORE_ALL_LINUX below.
       - name: Install elan (macOS host)
         if: runner.os == 'macOS'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           bash scripts/install_elan.sh
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
@@ -60,7 +66,9 @@ jobs:
           # Inside the manylinux container: install elan once, then
           # `setup.py`'s LakeThenBuild handler will call `lake build`
           # for each wheel.
-          CIBW_BEFORE_ALL_LINUX: bash {project}/scripts/install_elan.sh
+          # The image has no zstd program, which unpacks the Lean archive.
+          # The token stays outside the container: the release assets download without it.
+          CIBW_BEFORE_ALL_LINUX: dnf install -y zstd && bash {project}/scripts/install_elan.sh
 
           # cibuildwheel expands $VAR at runtime in the container.
           CIBW_ENVIRONMENT_LINUX: PATH=$HOME/.elan/bin:$PATH
