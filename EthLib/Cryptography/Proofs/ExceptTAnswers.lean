@@ -51,4 +51,14 @@ theorem evalWithAnswerFn_exceptT_adapt (g : ε → ε') (x : ExceptT ε (OracleC
     evalWithAnswerFn f (ExceptT.adapt g x).run = (evalWithAnswerFn f x.run).mapError g := by
   rw [ExceptT.run_adapt, evalWithAnswerFn_map]
 
+/-- A list map with errors, run against a full answer table, maps the runs. -/
+theorem evalWithAnswerFn_exceptT_mapM (g : α → ExceptT ε (OracleComp spec) β) :
+    (xs : List α) → evalWithAnswerFn f (xs.mapM g).run =
+      xs.mapM (fun x => evalWithAnswerFn f (g x).run)
+  | [] => rfl
+  | x :: rest => by
+    simp only [List.mapM_cons, evalWithAnswerFn_exceptT_bind,
+      evalWithAnswerFn_exceptT_mapM g rest, evalWithAnswerFn_exceptT_pure]
+    rfl
+
 end EthLib.Cryptography

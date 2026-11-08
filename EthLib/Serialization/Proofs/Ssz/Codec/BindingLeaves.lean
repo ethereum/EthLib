@@ -24,19 +24,20 @@ theorem layoutTreesAt_size {budget : Nat} {layout : MerkleLayout}
       layoutTreesAt_nested_size budget layout slots leaves trees success
 
 /-- Recursive binding is needed only for present children at the two supplied layouts. -/
-def LayoutChildrenBind (budget : Nat) (left right : MerkleLayout) : Prop :=
+def LayoutChildrenBind (budget : Nat) (left right : MerkleLayout)
+    (hash : ByteArray → ByteArray := Cryptography.Hash.Sha256.hash) : Prop :=
   -- Only children present in the two actual layouts participate in the recursive binding obligation.
   ∀ slotsLeft slotsRight child first second traceLeft traceRight,
     left.leaves = .nested slotsLeft → right.leaves = .nested slotsRight →
     some (child, first) ∈ slotsLeft → some (child, second) ∈ slotsRight →
     valueTreeAt budget child first = .ok traceLeft →
     valueTreeAt budget child second = .ok traceRight →
-    traceLeft.root = traceRight.root →
-    CommitmentTree.NoCollision traceLeft traceRight → first = second
+    traceLeft.root hash = traceRight.root hash →
+    CommitmentTree.NoCollision traceLeft traceRight hash → first = second
 
 /-- Equal collision-free layout roots preserve every aligned packed or nested leaf. -/
-theorem layout_leaves_eq_of_noCollision {budget : Nat} {left right : MerkleLayout}
-    {a b : Array CommitmentTree}
+theorem layout_leaves_eq_of_noCollision {hash : ByteArray → ByteArray} {budget : Nat}
+    {left right : MerkleLayout} {a b : Array CommitmentTree}
     (shaped : left.leaves.shapes = right.leaves.shapes)
     (limits : left.limit = right.limit)
     (tracedA : layoutTreesAt budget left = .ok a)
@@ -46,17 +47,19 @@ theorem layout_leaves_eq_of_noCollision {budget : Nat} {left right : MerkleLayou
     (completeA : (CommitmentTree.content a left.limit).Complete)
     (completeB : (CommitmentTree.content b right.limit).Complete)
     (clean : CommitmentTree.NoCollision
-      (CommitmentTree.content a left.limit) (CommitmentTree.content b right.limit))
-    (same : (CommitmentTree.content a left.limit).root =
-      (CommitmentTree.content b right.limit).root)
-    (children : LayoutChildrenBind budget left right) : left.leaves = right.leaves := by
+      (CommitmentTree.content a left.limit) (CommitmentTree.content b right.limit) hash)
+    (same : (CommitmentTree.content a left.limit).root hash =
+      (CommitmentTree.content b right.limit).root hash)
+    (children : LayoutChildrenBind budget left right hash)
+    (width : ∀ x, (hash x).size = 32 := by exact EthLib.Cryptography.Hash.Sha256.hash_size) :
+    left.leaves = right.leaves := by
   -- Matching leaf shapes imply the same number of positions in both materialized trees.
   have counts : a.size = b.size := by
     rw [layoutTreesAt_size tracedA, layoutTreesAt_size tracedB]
     exact Leaves.count_of_shapes shaped
   -- Equal collision-free contents roots authenticate every aligned child root.
   have roots := CommitmentTree.content_roots a b left.limit counts roomA completeA
-    (limits.symm ▸ completeB) (limits.symm ▸ clean) (limits.symm ▸ same)
+    (limits.symm ▸ completeB) (limits.symm ▸ clean) (limits.symm ▸ same) width
   cases l : left.leaves with
   | packed chunks =>
     cases r : right.leaves with
@@ -102,8 +105,8 @@ theorem layout_leaves_eq_of_noCollision {budget : Nat} {left right : MerkleLayou
       have secondTrace := layoutTreesAt_nested_getElem budget right others r b tracedB
         i hj child secondValue second
       -- Every child hash input also occurs in the enclosing contents tree.
-      have includedA := CommitmentTree.content_included a left.limit roomA i boundA
-      have includedB := CommitmentTree.content_included b right.limit roomB i boundB
+      have includedA := CommitmentTree.content_included a left.limit roomA i boundA hash
+      have includedB := CommitmentTree.content_included b right.limit roomB i boundB hash
       -- The enclosing collision-free assumption therefore restricts to these two child computations.
       have childClean := clean.restrict includedA includedB
       -- The recursive binding obligation recovers equal child values from their authenticated roots.
