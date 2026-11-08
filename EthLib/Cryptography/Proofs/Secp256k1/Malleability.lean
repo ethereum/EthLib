@@ -89,7 +89,7 @@ theorem verify_lowS_unique {q : Point} {hash : Vector UInt8 32} {r s s' : Nat}
 /-- Let `(r, s)` be a valid signature under a key and a hash, with `p <= r + n`.
 
 Then `(r, s')` is valid under the same key and hash exactly when `s'` is `s` or `n - s`. -/
-theorem verify_iff_of_verify {q : Point} {hash : Vector UInt8 32} {r s s' : Nat}
+theorem verify_iff_s_eq_or_neg {q : Point} {hash : Vector UInt8 32} {r s s' : Nat}
     (hv : verify q hash r s = true) (hp : Fp.modulus ≤ r + Fn.modulus) :
     verify q hash r s' = true ↔ s' = s ∨ s' = Fn.modulus - s := by
   refine ⟨fun hv' => verify_s_eq_or_neg hv hv' hp, ?_⟩

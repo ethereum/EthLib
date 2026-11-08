@@ -1190,11 +1190,9 @@ It runs a call or a creation, as the code of a message runs them, for every boun
 theorem meets_process_noCode {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter] (fork : Fork)
     (bound : Nat) :
     Meets (bound := bound) (NoCodeSucceeds (fork := fork) (Meter := Meter))
-      fun (caller : Evm fork Meter) message _ =>
-        match message.target with
-        | some _ => processMessage fork message caller.state caller.substate.child
-        | none => processCreateMessage fork message caller.state caller.substate.child := by
+      (processRunner fork (Meter := Meter) bound) := by
   refine ⟨fun caller message _ child h hcode htarget hpre => ?_, (meets_process fork bound).aborts⟩
+  unfold processRunner at h
   split at h
   · exact error_processMessage_of_empty hcode hpre h
   · rename_i hnone

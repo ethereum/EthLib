@@ -42,13 +42,6 @@ open EthLib.Execution.State (TransactionState)
 
 variable {fork : Fork}
 
-/-- The runner of the messages of the code of a message, at the gas of that message. -/
-abbrev processRunner (fork : Fork) (bound : Nat) : MessageRunner fork Nat bound :=
-  fun caller child _ =>
-    match child.target with
-    | some _ => processMessage fork child caller.state caller.substate.child
-    | none => processCreateMessage fork child caller.state caller.substate.child
-
 /-- A message with no value and no precompile ends as the run of its code from its frame ends.
 
 The frame that ends the message is the stopped frame of that run, rolled back on a failure.

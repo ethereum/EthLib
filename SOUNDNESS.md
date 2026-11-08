@@ -410,7 +410,7 @@ By it, recovery returns `Q` exactly when `r` and `s` lie in `[1, n - 1]` and `R 
 The parity of `y` must be the recovery id.
 `Q` must be a point of the curve other than `O`, equal to `(s / r) R - (e / r) G`.
 `verify_lowS_unique` (`Proofs/Secp256k1/Malleability.lean`) proves that two low-s signatures with one `r` that verify are equal, under the same bound.
-`verify_iff_of_verify` assumes the same bound and a valid signature `(r, s)`.
+`verify_iff_s_eq_or_neg` assumes the same bound and a valid signature `(r, s)`.
 Under them, `(r, s')` verifies under the same key and hash exactly when `s'` is `s` or `n - s`.
 `verify_and_isLowS_iff` adds that `s` is low, and then that signature is the only valid low-s one with that `r`.
 
@@ -491,7 +491,7 @@ The kernel checks it by an inverse of `X^p - X` modulo the cubic.
 By it, a signature is valid exactly when the conditions below all hold.
 Both `r` and `s` lie in `[1, n - 1]`, and the key is a point of the curve other than `O`.
 The point `(e / s) G + (r / s) Q` must also be other than `O`, with `x mod n = r`.
-`verify_iff_of_verify` describes the signatures that verify next to a valid one.
+`verify_iff_s_eq_or_neg` describes the signatures that verify next to a valid one.
 Take a valid signature `(r, s)` under a key and a message, with `r + n >= p`.
 The signatures `(r, s')` that verify under the same key and message are then exactly those with `s' = s` or `s' = n - s`.
 For P-256, `p - n` is about `2^126`, so the bound excludes only the values of `r` below it.

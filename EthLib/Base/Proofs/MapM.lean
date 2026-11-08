@@ -25,6 +25,7 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - A property that each step keeps holds after a successful fold.
 - A successful fold reads only inputs that its steps accept.
 - A fold of steps that each succeed with a pure step is the pure fold.
+- A fold whose steps all succeed returns no error.
 
 A mapped error leaves a success unchanged.
 -/
@@ -363,6 +364,16 @@ theorem foldlM_eq_ok_foldl {σ : Type} {g : σ → α → Except ε σ} {step : 
     rw [List.foldlM_cons, pureStep init x List.mem_cons_self, List.foldl_cons]
     simp only [bind, Except.bind]
     exact ih (fun acc y member => pureStep acc y (List.mem_cons_of_mem x member)) _
+
+/-- A fold whose steps all succeed returns no error. -/
+theorem foldlM_ne_error {σ : Type} {g : σ → α → Except ε σ} {e : ε} :
+    ∀ (xs : List α) (init : σ), (∀ acc, ∀ x ∈ xs, ∃ r, g acc x = .ok r) →
+      xs.foldlM g init ≠ .error e
+  | [], _, _ => fun h => nomatch h
+  | x :: xs, init, h => by
+    obtain ⟨r, first⟩ := h init x List.mem_cons_self
+    simp only [List.foldlM_cons, bind, Except.bind, first]
+    exact foldlM_ne_error xs r fun acc y member => h acc y (List.mem_cons_of_mem x member)
 
 /-- Each element of a list gives a result when the monadic flat map over the list succeeds. -/
 theorem flatMapM_ok_of_mem {α β ε : Type} {f : α → Except ε (List β)} :
