@@ -27,6 +27,8 @@ The RANDAO step changes only the mixes, and the bid step only the latest bid.
 So from Gloas a block leaves its own bid as the latest bid, and its header as the latest header.
 
 The latest block hash after the block is then the parent hash of that bid.
+
+From Gloas a block that succeeds also runs an operations step that succeeds.
 -/
 
 @[expose] public section
@@ -587,6 +589,21 @@ theorem processBlock_steps (gloas : .glamsterdam ≤ fork) {block : BeaconBlock 
     rest.slot.trans randao.slot, rest.latestBlockHeader.trans randao.latestBlockHeader,
     rest.latestBlockHash.trans randao.latestBlockHash,
     rest.latestExecutionPayloadBid.trans randao.latestExecutionPayloadBid⟩
+
+/-- From Gloas, a block step that succeeds runs an operations step that succeeds.
+
+The operations read the slot of the parent from the latest block header before the block. -/
+theorem processBlock_operations (gloas : .glamsterdam ≤ fork) {block : BeaconBlock preset fork}
+    (computed : processBlock config checks engine state block = .ok after) :
+    ∃ voted operated, processOperations config checks voted block.body
+      state.latestBlockHeader.slot = .ok operated := by
+  have altair : .altair ≤ fork := Nat.le_trans (by decide) gloas
+  have bellatrix : .bellatrix ≤ fork := Nat.le_trans (by decide) gloas
+  simp only [processBlock, altair, ↓reduceDIte, processBlockAltair, gloas, bellatrix,
+    processBlockExecution, bind_ok_iff] at computed
+  -- Four steps and the vote on the deposit contract come first, and Heze drops the vote.
+  obtain ⟨-, -, -, -, -, -, -, -, voted, -, operated, operatedOk, -⟩ := computed
+  exact ⟨voted, operated, operatedOk⟩
 
 /-- From Gloas, a block leaves its own bid as the latest bid. -/
 theorem latestExecutionPayloadBid_processBlock (gloas : .glamsterdam ≤ fork)

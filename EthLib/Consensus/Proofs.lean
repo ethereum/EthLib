@@ -40,6 +40,7 @@ public import EthLib.Consensus.Proofs.ForkSchedule
 public import EthLib.Consensus.Proofs.Gossip.Attestation
 public import EthLib.Consensus.Proofs.Gossip.Bid
 public import EthLib.Consensus.Proofs.Gossip.Block
+public import EthLib.Consensus.Proofs.Gossip.BlockHandler
 public import EthLib.Consensus.Proofs.Gossip.InclusionList
 public import EthLib.Consensus.Proofs.Gossip.Bounds
 public import EthLib.Consensus.Proofs.Gossip.Operations

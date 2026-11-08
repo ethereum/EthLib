@@ -11,6 +11,8 @@ An empty parent leaves the state as it is when the block carries no request.
 
 It rejects a block that carries a request.
 
+A parent payload step succeeds only when four lists of requests fit their limits.
+
 A full parent records its block hash, and marks its slot as having a payload.
 
 The payment of its builder empties at most one pending payment.
@@ -42,6 +44,34 @@ theorem processParentExecutionPayload_of_empty_requests {body : BeaconBlockBody 
     processParentExecutionPayload config checks state gloas body =
       .error .parentRequestsNotEmpty := by
   simp [processParentExecutionPayload, empty, requests, ensure, bind, Except.bind]
+
+/-- A parent payload step succeeds only when four lists of requests fit their limits.
+
+An empty parent takes no request, and a full parent checks the four counts. -/
+theorem processParentExecutionPayload_counts {body : BeaconBlockBody preset fork}
+    (computed : processParentExecutionPayload config checks state gloas body = .ok after) :
+    (body.parentExecutionRequests gloas).withdrawals.data.size ≤
+        preset.MAX_WITHDRAWAL_REQUESTS_PER_PAYLOAD.toNat ∧
+      (body.parentExecutionRequests gloas).consolidations.data.size ≤
+        preset.MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD.toNat ∧
+      ((body.parentExecutionRequests gloas).builderDeposits gloas).data.size ≤
+        preset.MAX_BUILDER_DEPOSIT_REQUESTS_PER_PAYLOAD.toNat ∧
+      ((body.parentExecutionRequests gloas).builderExits gloas).data.size ≤
+        preset.MAX_BUILDER_EXIT_REQUESTS_PER_PAYLOAD.toNat := by
+  unfold processParentExecutionPayload at computed
+  dsimp only at computed
+  -- A bid that does not build on the parent bid finds the parent empty.
+  split at computed
+  · obtain ⟨_, empty, -⟩ := bind_ok_iff.mp computed
+    rw [ensure_ok_iff] at empty
+    simp only [ExecutionRequests.isEmpty, Bool.and_eq_true, Array.isEmpty_iff] at empty
+    obtain ⟨⟨⟨⟨-, withdrawals⟩, consolidations⟩, builderDeposits⟩, exits⟩ := empty
+    simp [withdrawals, consolidations, builderDeposits, exits]
+  -- A full parent checks the root of its requests, then their four counts.
+  · simp only [bind_ok_iff, ensure_ok_iff, applyParentExecutionPayload, checkCount] at computed
+    obtain ⟨_, -, _, -, _, withdrawals, _, consolidations, _, builderDeposits, _, exits, -⟩ :=
+      computed
+    exact ⟨withdrawals, consolidations, builderDeposits, exits⟩
 
 /-- A full parent makes the hash of its bid the latest block hash. -/
 theorem applyParentExecutionPayload_latestBlockHash {requests : ExecutionRequests preset fork}
