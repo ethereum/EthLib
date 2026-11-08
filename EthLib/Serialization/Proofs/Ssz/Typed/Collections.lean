@@ -134,6 +134,28 @@ theorem encodeElementsOnto_eq {α : Type} [SszType α] [LawfulSszType α] (items
     simp [concatParts]
 termination_by items.size - i
 
+/--
+The bytes of fixed-size elements, written one after another, are those of the untyped encoder.
+-/
+theorem encodeFixedElements_eq {α : Type} [SszType α] [LawfulSszType α]
+    (fixed : (desc α).isFixed) (items : Array α) :
+    encodeFixedElements items =
+      (do return ⟨← serializeSequence (desc α) (items.toList.map toValue)⟩) := by
+  simp only [encodeFixedElements, serializeSequence, fixed, assemble_inline_eq]
+  rw [encodeElementsOnto_eq, List.drop_zero]
+  cases serializeEach (desc α) (items.toList.map toValue) with
+  | error fault => rfl
+  | ok parts =>
+    have empty : ∀ c, ByteArray.emptyWithCapacity c ++ ⟨concatParts parts⟩ =
+        ⟨concatParts parts⟩ := fun c => by
+      ext1
+      simp [show (ByteArray.emptyWithCapacity c).data = #[] from rfl]
+    have size : (⟨concatParts parts⟩ : ByteArray).size = (concatParts parts).size := rfl
+    by_cases big : (concatParts parts).size ≥ 2 ^ (8 * bytesPerOffset)
+    · simp [Except.map, empty, bind, Except.bind, size, big, throw, throwThe,
+        MonadExceptOf.throw]
+    · simp [Except.map, empty, bind, Except.bind, size, big, pure, Except.pure]
+
 instance {α : Type} [SszType α] [LawfulSszType α] {length : Nat} [NeZero length] :
     LawfulSszType (Vector α length) where
   wellFormed := by
@@ -161,24 +183,9 @@ instance {α : Type} [SszType α] [LawfulSszType α] {length : Nat} [NeZero leng
       simp [ofValue, read, count, size, bind, Except.bind, pure, Except.pure] at made
   encode_eq v := by
     by_cases fixed : (desc α).isFixed
-    · -- Fixed elements: their bytes one after another, as the untyped encoder lays them out.
-      simp only [encode, fixed, ite_true, encodeFixedElements, desc, toValue, Ssz.serialize,
-        List.length_map, Vector.length_toList, beq_self_eq_true, serializeSequence,
-        assemble_inline_eq]
-      rw [encodeElementsOnto_eq, List.drop_zero]
-      rw [show v.toList = v.toArray.toList from rfl]
-      cases serializeEach (desc α) (v.toArray.toList.map toValue) with
-      | error fault => rfl
-      | ok parts =>
-        have empty : ∀ c, ByteArray.emptyWithCapacity c ++ ⟨concatParts parts⟩ =
-            ⟨concatParts parts⟩ := fun c => by
-          ext1
-          simp [show (ByteArray.emptyWithCapacity c).data = #[] from rfl]
-        have size : (⟨concatParts parts⟩ : ByteArray).size = (concatParts parts).size := rfl
-        by_cases big : (concatParts parts).size ≥ 2 ^ (8 * bytesPerOffset)
-        · simp [Except.map, empty, bind, Except.bind, size, big, throw, throwThe,
-            MonadExceptOf.throw]
-        · simp [Except.map, empty, bind, Except.bind, size, big, pure, Except.pure]
+    · simp only [encode, fixed, ite_true, encodeFixedElements_eq fixed, desc, toValue,
+        Ssz.serialize, List.length_map, Vector.length_toList, beq_self_eq_true]
+      rfl
     · simp only [encode, fixed, Bool.false_eq_true, ite_false]
       rfl
 
@@ -205,6 +212,12 @@ instance {α : Type} [SszType α] [LawfulSszType α] {limit : Nat} :
     | list within each =>
       obtain ⟨items, read, size⟩ := ofElements_ok each
       simp [ofValue, read, within, size, bind, Except.bind, pure, Except.pure] at made
+  encode_eq l := by
+    by_cases fixed : (desc α).isFixed
+    · simp only [encode, fixed, ite_true, encodeFixedElements_eq fixed, desc, toValue,
+        Ssz.serialize, List.length_map, Array.length_toList, l.bound, ite_true]
+    · simp only [encode, fixed, Bool.false_eq_true, ite_false]
+      rfl
 
 instance {limit : Nat} : LawfulSszType (SszList UInt8 limit) where
   wellFormed := rfl
@@ -290,6 +303,12 @@ instance {α : Type} [SszType α] [LawfulSszType α] : LawfulSszType (Progressiv
     | progressiveList within each =>
       obtain ⟨items, read, size⟩ := ofElements_ok each
       simp [ofValue, read, Functor.map, Except.map] at made
+  encode_eq l := by
+    by_cases fixed : (desc α).isFixed
+    · simp only [encode, fixed, ite_true, encodeFixedElements_eq fixed, desc, toValue,
+        Ssz.serialize, boundCheck, bind, Except.bind, pure, Except.pure]
+    · simp only [encode, fixed, Bool.false_eq_true, ite_false]
+      rfl
 
 instance : LawfulSszType ProgressiveBitlist where
   wellFormed := rfl

@@ -366,5 +366,6 @@ instance {switch fork : Fork} {α : Type} [SszType α] {limit : Nat} :
       .ok (mixIn (topOfLevels full (raiseLevels depth l.levels.get (full - depth)))
         (lengthWord l.data.size))
     else .ok (mixIn (spineRoot 0 l.spine.get) (lengthWord l.data.size))
+  encode l := encode l.toForkList
 
 end EthLib.Serialization.Ssz

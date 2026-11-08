@@ -48,5 +48,6 @@ instance : LawfulSszType (Rooted α) where
     | error fault => exact LawfulSszType.ofValue_ne_error (α := α) fits read
     | ok w => simp [read, Functor.map, Except.map] at made
   root_eq := Rooted.root_eq
+  encode_eq r := LawfulSszType.encode_eq r.value
 
 end EthLib.Serialization.Ssz

@@ -61,5 +61,6 @@ instance {α : Type} [SszType α] : SszType (Rooted α) where
   toValue r := toValue r.value
   ofValue value := Rooted.of <$> ofValue value
   root r := r.cached.get
+  encode r := encode r.value
 
 end EthLib.Serialization.Ssz

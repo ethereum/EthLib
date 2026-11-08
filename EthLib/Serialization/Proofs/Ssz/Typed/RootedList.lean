@@ -206,5 +206,6 @@ instance : LawfulSszType (RootedForkList switch fork α limit) where
       exact LawfulSszType.ofValue_ne_error (α := ForkList switch fork α limit) fits read
     | ok w => simp [read, Functor.map, Except.map] at made
   root_eq := RootedForkList.root_eq
+  encode_eq l := LawfulSszType.encode_eq (α := ForkList switch fork α limit) l.toForkList
 
 end EthLib.Serialization.Ssz
