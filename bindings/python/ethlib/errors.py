@@ -16,6 +16,11 @@
 # A wrong type raises `TypeError`, and a wrong length `ValueError`.
 # An integer out of its range raises `OverflowError`.
 # None of them carries a code.
+#
+# An export of typed values reads its arguments in Lean instead.
+# An argument that Lean cannot read raises the error class of the method, with code 0.
+# A negative or too large `int`, too many parts or bytes, or deep nesting raises `ValueError`.
+# A value of a type that cannot cross, such as a `float` or a `bytearray`, raises `TypeError`.
 class EthLibError(Exception):
     """An error of the specification, with its code and its message."""
 
@@ -62,7 +67,7 @@ class KeccakError(EthLibError, ValueError):
 
 
 class EthashError(EthLibError, ValueError):
-    """An Ethash export rejected its cache."""
+    """An Ethash export rejected an argument, such as its cache."""
 
 
 class ReqRespError(EthLibError, ValueError):

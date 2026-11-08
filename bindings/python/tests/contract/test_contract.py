@@ -37,9 +37,6 @@ RESULT_MARKERS = {
     "list[bytes]": ("PyList_New", "bytes_list("),
     "tuple[bytes, bytes]": ("PyTuple_Pack",),
     "tuple[list[bytes], list[bytes]]": ("PyTuple_Pack", "cells_and_proofs("),
-    "object": ("call_pyvalue_export",),
-    "list": ("call_pyvalue_export",),
-    "dict": ("call_pyvalue_export",),
 }
 
 
@@ -72,7 +69,11 @@ def test_method_matches_contract(entry: dict) -> None:
     # The C wrapper builds the result type that the signature declares.
     returns = entry["signature"].split(") -> ")[1]
     body = WRAPPERS["py_" + entry["method"]]
-    assert any(marker in body for marker in RESULT_MARKERS[returns]), returns
+    # The generic converter of typed values builds a result of any type.
+    # Only that converter builds a result of a type that the markers do not name.
+    uses_converter = "call_pyvalue_export" in body
+    assert uses_converter or returns in RESULT_MARKERS, returns
+    assert uses_converter or any(marker in body for marker in RESULT_MARKERS[returns]), returns
     for other, markers in SIMPLE_RESULTS.items():
         if other not in returns:
             assert not any(marker in body for marker in markers), other

@@ -25,6 +25,13 @@ Not yet released.
   Before, the index wrapped a bucket number that does not fit in 4 bytes and returned a value.
 - The C export `eth_engine_forkchoice_updated` now rejects a tree of known payloads that names one block hash twice, with code 0 ([#1102](https://github.com/ethereum/EthLib/pull/1102)).
   Before, it answered from the first entry of that hash and ignored the second.
+- The Ethash exports, the CRC-32 and CRC-32C exports and the precompile price now take and return typed values ([#1516](https://github.com/ethereum/EthLib/pull/1516)).
+  A number crosses as a Python `int`, and the proof-of-work function returns its mix digest and its result as a pair.
+  The C exports take the tuple of their arguments as one value, as `eth_consensus_fork_choice` does.
+  In Python, an argument that Lean cannot read raises the error class of the method with code 0, where some raised `TypeError` before.
+  Examples are a `str` given for bytes and a `bool` given for an `int`.
+  A negative number raises `ValueError`, where it raised `OverflowError`.
+  An address of 2^64 or more has no precompile, so its price raises `PrecompileError`, where it raised `OverflowError`.
 - A chain configuration that the exports read as JSON is now rejected, with code 0, when a fork by block number comes after a fork by timestamp ([#1110](https://github.com/ethereum/EthLib/pull/1110)).
   EIP-6122 requires the forks by timestamp to be scheduled at or after the forks by block.
 

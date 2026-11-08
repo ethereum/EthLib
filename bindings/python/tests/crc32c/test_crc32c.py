@@ -5,6 +5,7 @@ import random
 import pytest
 
 from ethlib.cryptography import crc32c
+from ethlib.errors import BindingError
 from raising import raises
 
 # The SCSI Read (10) Command PDU of RFC 3720 Appendix B.4, four bytes per row as it prints them.
@@ -66,7 +67,7 @@ def test_reference() -> None:
 
 
 def test_rejects_non_bytes() -> None:
-    with raises(TypeError, "data must be bytes"):
+    with raises(BindingError, "expected bytes"):
         crc32c.digest("abc")  # ty: ignore[invalid-argument-type]
-    with raises(TypeError, "data must be bytes"):
+    with raises(BindingError, "expected bytes"):
         crc32c.crc32c("abc")  # ty: ignore[invalid-argument-type]

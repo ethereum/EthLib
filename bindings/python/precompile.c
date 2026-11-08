@@ -1,8 +1,8 @@
 /* Python wrappers of the exports that run any precompile, and give its price, at a fork.
  *
- * Each wrapper checks its Python arguments.
+ * The run checks its Python arguments, calls the Lean export and turns the result into bytes.
  *
- * It then calls the Lean export and turns the result into Python bytes. */
+ * The price takes and returns typed values, which the generic converter passes. */
 #include "wrappers.h"
 
 /* ---- Lean externs ----------------------------------------------------- */
@@ -17,9 +17,7 @@ eth_precompile_run(
 
 extern lean_object*
 eth_precompile_price(
-  lean_object* fork,
-  uint64_t address,
-  lean_object* data
+  lean_object* args
 );
 
 /* ---- Helpers ---------------------------------------------------------- */
@@ -83,13 +81,5 @@ py_precompile_price(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *fork_obj, *address_obj, *data_obj;
-  if (!PyArg_ParseTuple(args, "OOO", &fork_obj, &address_obj, &data_obj)) return NULL;
-  lean_object *fork, *data;
-  uint64_t address;
-  if (!parse_fork_address_data(fork_obj, address_obj, data_obj, &fork, &address, &data)) return NULL;
-
-  /* The export takes ownership of its arguments. */
-  lean_object* res = eth_precompile_price(fork, address, data);
-  return except_into_pybytes(res, PRECOMPILE_ERROR);
+  return call_pyvalue_export(eth_precompile_price, args, 3, PRECOMPILE_ERROR);
 }

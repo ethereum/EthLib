@@ -82,12 +82,6 @@ bindings/python/ethlib/consensus/__init__.py state_transitions json
 bindings/python/ethlib/consensus/__init__.py state_transitions_across json
 bindings/python/ethlib/consensus/__init__.py upgrade_state json
 bindings/python/ethlib/consensus/__init__.py verify_data_column_sidecar json
-bindings/python/ethlib/cryptography/crc32/__init__.py crc32 from_bytes
-bindings/python/ethlib/cryptography/crc32c/__init__.py crc32c from_bytes
-bindings/python/ethlib/cryptography/ethash/__init__.py _number to_bytes
-bindings/python/ethlib/cryptography/ethash/__init__.py cache_size from_bytes
-bindings/python/ethlib/cryptography/ethash/__init__.py dataset_size from_bytes
-bindings/python/ethlib/cryptography/ethash/__init__.py hashimoto_light slice
 bindings/python/ethlib/engine/__init__.py forkchoice_updated json
 bindings/python/ethlib/engine/__init__.py new_payload json
 bindings/python/ethlib/engine/__init__.py new_payload_on_chain json
@@ -136,7 +130,6 @@ bindings/python/ethlib/networking/forkid/__init__.py _read from_bytes
 bindings/python/ethlib/networking/forkid/__init__.py _scalar to_bytes
 bindings/python/ethlib/networking/reqresp/__init__.py decode_response_chunk slice
 bindings/python/ethlib/networking/rlpx/__init__.py respond slice
-bindings/python/ethlib/precompiles/__init__.py price from_bytes
 bindings/python/ethlib/serialization/rlp/__init__.py _scalar from_bytes
 bindings/python/ethlib/serialization/ssz/__init__.py _dump json
 bindings/python/ethlib/serialization/ssz/__init__.py deserialize json

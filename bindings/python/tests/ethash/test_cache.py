@@ -114,5 +114,12 @@ def test_dataset_item_rejects_a_bad_cache(cache: bytes) -> None:
 
 
 def test_negative_block_number() -> None:
-    with raises(OverflowError, "an Ethash number cannot be negative"):
+    with raises(ValueError, "cannot pass a negative int to Lean"):
         ethash.cache_size(-1)
+
+
+def test_block_number_is_an_int() -> None:
+    # A bool crosses as itself, not as 0 or 1, so Lean rejects it with code 0.
+    with raises(EthashError, "expected an int") as error:
+        ethash.cache_size(True)
+    assert error.value.code == 0

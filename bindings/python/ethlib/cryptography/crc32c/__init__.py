@@ -1,6 +1,6 @@
 """CRC-32C, the Castagnoli CRC of RFC 3720 §12.1."""
 
-from ethlib.cryptography._native import crc32c as native_crc32c
+from ethlib.cryptography import _native
 
 
 def digest(data: bytes) -> bytes:
@@ -10,10 +10,8 @@ def digest(data: bytes) -> bytes:
     Every byte string has a digest.
 
     It detects errors and authenticates nothing: anyone can recompute it.
-
-    A non-`bytes` argument raises `TypeError`.
     """
-    return native_crc32c(data)
+    return _native.crc32c(data)
 
 
 def crc32c(data: bytes) -> int:
@@ -21,10 +19,8 @@ def crc32c(data: bytes) -> int:
     CRC-32C as a number: the digest bytes read least significant byte first.
 
     It is CRC-32/ISCSI of the CRC catalogue.
-
-    A non-`bytes` argument raises `TypeError`.
     """
-    return int.from_bytes(native_crc32c(data), "little")
+    return _native.crc32c_number(data)
 
 
 __all__ = [
