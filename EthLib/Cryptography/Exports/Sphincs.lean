@@ -42,10 +42,6 @@ Each takes a `Unit` to keep the C-ABI signature predictable. -/
 def constN (_ : Unit) : UInt64 :=
   UInt64.ofNat N
 
-@[export eth_sphincs_const_public_param_len]
-def constPublicParamLen (_ : Unit) : UInt64 :=
-  UInt64.ofNat PUBLIC_PARAM_LEN
-
 @[export eth_sphincs_const_message_len]
 def constMessageLen (_ : Unit) : UInt64 :=
   UInt64.ofNat MESSAGE_LEN
@@ -98,7 +94,7 @@ private def readExact (n : Nat) (bytes : ByteArray) (bad : Nat → SphincsError)
   -- Too short or too long is refused: no padding, no truncation.
   if h : bytes.size = n then .ok ⟨bytes.data, h⟩ else .error (bad bytes.size)
 
-/-- The public key grown from a seed.
+/-- The public key `PK.seed | PK.root` of `SK.seed`.
 
 It builds the whole top tree, `2^10` one-time keys. -/
 @[export eth_sphincs_key_gen]
@@ -109,7 +105,7 @@ def keyGenExport (seed : ByteArray) : Result ByteArray :=
     let (_, pk) := keyGen seed
     return encodePublicKey pk
 
-/-- Sign a message with the key grown from a seed.
+/-- Sign a message with the key of `SK.seed`.
 
 The message digest picks the FORS instance, so no index crosses the boundary. -/
 @[export eth_sphincs_sign]
@@ -117,7 +113,7 @@ def signExport (seed : ByteArray) (msg : ByteArray) : Result ByteArray :=
   runSphincs do
     let seed ← readExact SEED_LEN seed .badSeedSize
     let msg ← readExact MESSAGE_LEN msg .badMessageSize
-    -- Signing needs no public key, so the top tree's root is never computed here.
+    -- Signing rebuilds the public key from the seed, since `H_msg` hashes `PK.root`.
     let sig ← sign ⟨seed⟩ msg
     return encodeSignature sig
 

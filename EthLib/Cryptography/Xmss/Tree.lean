@@ -56,14 +56,14 @@ def nodeHash (pp : PublicParam) (layer : Layer) (level j : Nat) (left right : Di
   th H pp (addrNode layer (Fin.ofNat _ level) (UInt32.ofNat j)) (packBytes left ++ packBytes right)
 
 /-- `X_{0,j}`: the leaf of one-time key `j`. -/
-def leaves (pp : PublicParam) (seed : Seed) (layer : Layer) (j : Nat) : m Digest :=
-  otsPublicLeaf H pp seed layer (UInt32.ofNat j)
+def leaves (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (j : Nat) : m Digest :=
+  otsPublicLeaf H pp prf layer (UInt32.ofNat j)
 
 /-- `X_{level,j}`: node `j` on `level` of a layer.
 
 Computing it evaluates the `2^level` leaves below it. -/
-def node (pp : PublicParam) (seed : Seed) (layer : Layer) (level j : Nat) : m Digest :=
-  Merkle.node (nodeHash H pp layer) (leaves H pp seed layer) level j
+def node (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (level j : Nat) : m Digest :=
+  Merkle.node (nodeHash H pp layer) (leaves H pp prf layer) level j
 
 /-! ## The path -/
 
@@ -73,9 +73,9 @@ def node (pp : PublicParam) (seed : Seed) (layer : Layer) (level j : Nat) : m Di
     pi_lambda = X_{lambda, floor(e / 2^lambda) xor 1}
 ```
 -/
-def path (pp : PublicParam) (seed : Seed) (layer : Layer) (e : Nat) :
+def path (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : Nat) :
     m (Vector Digest LAYER_HEIGHT) :=
-  Merkle.path (nodeHash H pp layer) (leaves H pp seed layer) LAYER_HEIGHT e
+  Merkle.path (nodeHash H pp layer) (leaves H pp prf layer) LAYER_HEIGHT e
 
 /-- `Tree.fold(l, e, X, pi)`: the root a path leads to from the leaf of key `e`. -/
 def fold (pp : PublicParam) (layer : Layer) (e : Nat) (leaf : Digest)

@@ -1,75 +1,78 @@
 # leanSPHINCS signatures
 
 leanSPHINCS is a stateless hash-based signature scheme, proposed for post-quantum transaction signatures on Ethereum.
+It is SLH-DSA of [FIPS 205](https://doi.org/10.6028/NIST.FIPS.205) on Keccak-256, with WOTS+C as its one-time signature and a hypertree whose layers have different heights.
 
 This module specifies one configuration: Keccak-256, FORS, and a layered key for `2^30` signatures.
 
-- The few-time signature is FORS: 24 trees of 1024 leaves, with no root hash.
+- The few-time signature is FORS: 24 trees of 1024 leaves, whose roots `T_k` hashes into the FORS public key.
 - The one-time signature is WOTS+C: 64 chains of 4 positions, codewords of digit sum 128.
-- The hypertree has three layers of heights 10, 8 and 8, top first.
+- The hypertree has three layers of heights 8, 8 and 10, from the bottom.
 
 A message's digest picks a bottom leaf `idx`, and so one FORS instance, and one leaf in each FORS tree.
+The FORS openings sign the digest.
+The bottom one-time key signs the FORS public key, the middle key signs the bottom tree's root, and the top key signs the middle tree's root.
+The top tree's root is `PK.root`.
 
-The FORS openings sign the message.
-
-The bottom one-time key signs the FORS key, the middle key signs the bottom tree's root, and the top key signs the middle tree's root.
-
-The top tree's root is the public key.
-
-A public key is 32 bytes and a signature 7740 bytes.
-
-Verification costs a constant 492 Keccak-f[1600] permutations.
+A public key is `PK.seed | PK.root`, 32 bytes, and a signature is 7740 bytes.
+Verification costs a constant 515 Keccak-f[1600] permutations.
 
 ## Source
 
-The specification is the note [`leanSPHINCS.tex`](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/leanSPHINCS.tex) and its Lean model [`formal/sphincs/FORS/Scheme.lean`](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean), both at commit `1538d0a97845c3b771088f09561ddf7607b560a1` of `TomWambsgans/sphincs.art`.
+The hash layout is that of [FIPS 205](https://doi.org/10.6028/NIST.FIPS.205).
+It takes the 32-byte address of §4.2, the hash inputs of §11.1, the digest split of Algorithm 19 and the signature of §9.
+The parameters are those of the layered key of `2^30` in §1 of the note [`leanSPHINCS.tex`](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/leanSPHINCS.tex), at commit `1538d0a97845c3b771088f09561ddf7607b560a1` of `TomWambsgans/sphincs.art`.
+That section also fixes WOTS+C, the hash truncated to 16 bytes, and the signature size of 7740 bytes.
 
-The configuration is the layered key of `2^30` in §1 of the note.
+Where leanSPHINCS departs from FIPS 205, the file says so.
+For example:
 
-In the model it is `Params.layered 26 3 8 24 10`, with the signature limit 1,182,000,000, about `2^30.14`.
+- The one-time signature is WOTS+C, with a counter in place of the checksum (`Ots.lean`).
+- The layers of the hypertree have different heights (`Constants.lean`).
+- One more address type, for the WOTS+C encoding (`Address.lean`).
+- The hash is Keccak-256 truncated to 16 bytes, and `H_msg` is MGF1 of [RFC 8017](https://www.rfc-editor.org/rfc/rfc8017) on it (`TweakableHash.lean`, `Digest.lean`).
+- `PK.seed` and `SK.prf` derive from `SK.seed` (`KeyGen.lean`).
+- Each layer's counter comes before its chain values in a signature (`Serialization.lean`).
 
-The note fixes the parameters and the costs.
+The known answer of an independent implementation is a test vector here, as [Test vectors](#test-vectors) describes, and not a source of rules.
 
-The model fixes every byte: addresses, hash inputs, the digest layout and the signature layout.
+Each file cites the parts of FIPS 205 and of the note that it follows:
 
-Each file cites the definitions it follows:
-
-- `Constants.lean`: §1 of the note, and `Params.layered`.
-- `Address.lean`: `fieldBytes`, `hashDomainFields` and `keygenDomainFields`.
-- `TweakableHash.lean`: `tweakableHashInput`, `truncateHash` and `hashHalf`.
-- `Encoding.lean`: `TargetSum.digestEncoding`, and WOTS+C from [ePrint 2022/778](https://eprint.iacr.org/2022/778).
-- `Ots.lean`: `otsSecrets`, `chainWalk`, `encode`, `otsSign` and `otsLeaf`.
-- `Tree.lean`: `Seeded.treeNode`, `Seeded.treePath` and `treeFold`, built on the shared [Merkle trees](../Merkle/).
-- `Fors.lean`: `forsNode`, `forsKey`, `treeOpen`, `treeRecover` and `forsRecover`, and FORS from [FIPS 205](https://doi.org/10.6028/NIST.FIPS.205) §8, on the same Merkle trees.
-- `Digest.lean`: `deriveRandomizer`, `messageDigest`, `digestIndex` and `digestLeaves`.
-- `KeyGen.lean`: `keygenFromSeed`.
-- `Sign.lean`: `Seeded.sign`.
-- `Verify.lean`: `Concrete.verify`.
-- `Serialization.lean`: `serializeSignature` in [`FORS/Scheme/Layout.lean`](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme/Layout.lean).
+- `Constants.lean`: §1 of the note.
+- `Types.lean`: `toInt` and `toByte` of FIPS 205 (Algorithms 2 and 3), and the keys of a layer (§7).
+- `Address.lean`: the address of FIPS 205 §4.2, with one more type.
+- `TweakableHash.lean`: `F`, `H`, `T_l` and `PRF` as FIPS 205's SHAKE instances lay them out (§11.1).
+- `Encoding.lean`: WOTS+C from [ePrint 2022/778](https://eprint.iacr.org/2022/778), digits read as FIPS 205's `base_2b`.
+- `Ots.lean`: WOTS+C, hashed as WOTS+ of FIPS 205 §5.
+- `Tree.lean`: the trees of FIPS 205 §6, built on the shared [Merkle trees](../Merkle/).
+- `Fors.lean`: FORS of FIPS 205 §8, on the same Merkle trees.
+- `Digest.lean`: `PRF_msg` of FIPS 205 Algorithm 22, `H_msg` as MGF1 of RFC 8017, and the digest split of Algorithm 19.
+- `KeyGen.lean`: key generation, FIPS 205 Algorithm 18.
+- `Sign.lean`: signing, FIPS 205 Algorithm 19.
+- `Verify.lean`: verification, FIPS 205 Algorithm 20.
+- `Serialization.lean`: the public key and signature of FIPS 205 §9.1 and §9.2.
 
 Keccak-256 is [FIPS 202](https://csrc.nist.gov/pubs/fips/202/final) with Keccak's original padding (`EthLib/Cryptography/Hash/Keccak.lean`).
-
-The model's hash outputs are bit vectors.
-
-This module reads a 32-byte output as a little-endian number, so its first 16 bytes are the model's low 128 bits.
+Every integer on the wire is big-endian, as in FIPS 205: the address words, the counters of `H_msg` and of the encoding, and the digest fields.
 
 ## Choices this module makes
 
-The secret key is the 32-byte seed `S_0`.
-Every secret derives from the scheme seed `S = H("leanSPHINCS" | S_0)`, the hash of the scheme's 11-byte ASCII name, then the seed.
-The model's `keygenFromSeed` derives from the seed directly.
-The name separates these derivations from those of every other scheme, and leanXMSS hashes its own name the same way.
-Key generation costs one permutation more than in the model, and everything below the scheme seed is the model's.
-Every derivation from the scheme seed has the form `H(P' | A | S | suffix)`, and all of them go through one function, `seedPrf`.
-A security proof can then replace the derivations as a whole, without reading the seed.
-
-Every index lands in the key, so the signer keeps the first randomizer `R_0`.
-
-The walk `R_0 + i * delta` of the model is never needed, and it is not computed.
-
-A FORS node of level 1 derives its pair of secrets once in the model, and once per leaf here.
-
+The secret key is `SK.seed`, and the exports of key generation and signing take it alone.
+So the signer rebuilds `PK.root`, which `H_msg` hashes, with the definition that key generation uses.
+It builds the top tree once for `PK.root` and once for the top key's path.
+It builds each lower tree once for its root and once for the path.
+It builds each FORS tree once for the FORS public key and once for the opening.
+A signer that keeps the levels of each tree builds it once.
 The values are the same, so the signatures are the same.
+
+The trees are built depth first by the shared Merkle definitions.
+A signer that builds them level by level computes the same nodes, and so the same outputs.
+
+Every chain start and every FORS secret is `PRF(PK.seed, SK.seed, ADRS)`, and the definitions that need one take the PRF as an argument.
+A security proof can then replace these derivations as a whole, without reading `SK.seed`.
+
+The key expansion hashes for `PK.seed` first and for `SK.prf` second, as the note's Lean model does.
+The order changes no value.
 
 ## Operations
 
@@ -79,12 +82,12 @@ The values are the same, so the signatures are the same.
 | `sign` | `Sign.lean` | `eth_sphincs_sign` | `sphincs.sign` |
 | `verify` | `Verify.lean` | `eth_sphincs_verify` | `sphincs.verify` |
 
-The secret key is the 32-byte seed, and everything else derives from it.
+The secret key is the 32-byte `SK.seed`, and everything else derives from it.
 So the exports of `keyGen` and `sign` take the seed and rebuild what they need on each call.
-`keyGen` builds the top tree, which means `2^10` one-time keys and about 231,000 hashes.
-`sign` builds the FORS key and openings, both lower trees and the top tree's path, and searches three counters.
-That costs about half a million Keccak-f[1600] permutations.
-`verify` makes 492 Keccak-f[1600] permutations.
+`keyGen` builds the top tree, which means `2^10` one-time keys and 271,361 Keccak-f[1600] permutations.
+`sign` builds the top tree, the FORS instance and both lower trees, and searches three counters.
+Since it builds each tree twice, it makes about twice the permutations of a signer that builds each tree once.
+`verify` makes 515 Keccak-f[1600] permutations.
 
 Never sign more than `2^30` messages with one key.
 The digest picks a FORS instance at random, so instances are reused, and each signature from an instance weakens it.
@@ -94,16 +97,13 @@ Nothing in EthLib counts signatures, so the caller must.
 
 `tests/cryptography/sphincs/` has cases for `key_gen`, `sign` and `verify`.
 
-The `verify_valid_scheme_seed` case pins one public key and one signature, computed outside EthLib by an independent implementation.
-The key grows from the scheme seed `S[i] = 37 i + 11 mod 256`, and the signature signs `m[i] = 7 i + 3`.
-So the case fixes every hash that verification makes.
-Verification reads the public parameter from the key, so no case checks that it is the one the scheme seed gives.
-A test checks the value Keccak-256 gives for the name followed by the seed, the hash that key generation starts with.
-Two more cases reject that signature with a zeroed FORS secret and with a zeroed top sibling.
-
-The `key_gen_known_answer` and `sign_known_answer` cases take the same bytes `S[i]` as a key's seed `S_0`.
-Their scheme seed is the hash of the name with `S[i]`, so their key and signature differ from the case above.
-They come from the code under test.
+The `key_gen_known_answer` and `sign_known_answer` cases are the known answer of an independent implementation, pinned in `tests/sources.toml`.
+The key is that of `SK.seed[i] = 37 i + 11 mod 256`, and the signature signs `M[i] = 7 i + 3`.
+The Python suite checks both cases against those bytes on every run, and again when it regenerates them.
+So the two cases fix every hash that key generation, signing and verification make.
+A test also checks `PK.seed`, the first 16 bytes of the key, through the Keccak-256 binding rather than through key generation.
+Two cases reject the known-answer signature with a zeroed FORS secret and with a zeroed top sibling.
+The other cases come from the code under test.
 
 ## What is proved
 
@@ -118,23 +118,27 @@ Definitions that derive a secret take the derivation function as an argument too
 - Correctness.
   A key from `keyGen` verifies every signature that `sign` makes with it (`verify_keyGen_sign`, `Correctness.lean`).
 - What verification checks.
-  `verify` accepts exactly when the three layers, from the recovered FORS key up, lead to the key's root (`verify_iff`, `Verify.lean`).
+  `verify` accepts exactly when the three layers, from the recovered FORS public key up, lead to the key's root (`verify_iff`, `Verify.lean`).
 - Signing.
   The counter search returns the least counter whose encoding is a codeword (`findFirst_spec`).
   leanXMSS shares that search and the hash chains, in [`Wots.lean`](../Wots.lean).
   Signing fails only when a one-time key finds no codeword (`sign_error`, `Sign.lean`).
 - FORS (`Fors.lean`).
-  An honest opening recovers its tree's two level-9 nodes, in order (`treeRecover_treeOpen`).
-  Honest openings recover the instance's FORS key (`forsRecover_forsSign`).
+  An honest opening recovers its tree's root (`treeRecover_treeOpen`).
+  Honest openings recover the instance's FORS public key, the hash `T_k` of the 24 roots (`forsRecover_forsSign`).
 - The hypertree (`Tree.lean`, `Correctness.lean`).
   An honest path leads from a key's leaf to its tree's root (`fold_path_root`).
   A tree hashes only at its own levels, so every node address names the true level (`path_eq_of_agree`, `fold_eq_of_agree`).
-  A FORS tree hashes only at levels 1 to 9, where its node address is exact (`forsNode_eq_of_agree`, `treeOpen_path_eq_of_agree`).
+  A FORS node at height `z` depends only on the node hash at heights 1 to `z`, so its root on heights 1 to 10 (`forsNode_eq_of_agree`, `forsRoot_eq_of_agree`).
+  An opened path holds nodes below height 10, so it depends only on heights 1 to 9 (`treeOpen_path_eq_of_agree`).
   Each higher key signs the root of the tree its index names on the layer below (`OtsKey.ofIndex_child`).
 - The digest (`Digest.lean`).
-  The digest is two Keccak-256 calls, and the index and the 24 leaves are exactly its low 266 bits (`digest_fields`).
-  The two calls have distinct addresses (`addrMsg_inj`).
+  The digest is the first 34 bytes of two Keccak-256 calls, split as FIPS 205's Algorithm 19 splits it.
+  Read as a big-endian number, its top 240 bits are the 24 leaves of 10 bits, and its low 26 bits are the index (`digest_fields`).
+  The 6 bits between them are not read, and two digests with the same index and leaves agree on all 266 bits that are read (`digest_fields_inj`).
 - The code (`Encoding.lean`, `CodeSize.lean`).
+  The digits of a digest are FIPS 205's `base_2b` with `b = 2`, most significant first (`digits_getElem_val_toInt`).
+  They are a bijection from digests onto strings of 64 digits (`digits_bijective`).
   A codeword's digits sum to `T = 128` (`sum_of_codeword`).
   No two digests share a codeword (`eq_of_codeword`).
   Two distinct codewords are incomparable: each has a digit below the other's (`codeword_incomparable`).
@@ -147,27 +151,28 @@ Definitions that derive a secret take the derivation function as an argument too
   The theorem assumes that the oracle's cache holds none of the counters' inputs when the search starts, as an empty cache does.
 - A whole signature in the random oracle model (`SignatureFailure.lean`).
   Signing fails with probability at most `3 exp(-2^18)`, one `exp(-2^18)` for each layer's search (`prEvent_signWith_error_le`).
-  A trial input of a key is an input at the key's encoding address whose payload has the layer's trial size.
-  On the bottom layer that size is 772 bytes: a 768-byte FORS key and a 4-byte counter.
-  Above it the size is 20 bytes: a 16-byte root and the counter.
+  A trial input of a key is an input at the key's encoding address whose payload has the trial size.
+  On every layer that size is 20 bytes: a 16-byte message and a 4-byte counter, so a trial input has 68 bytes.
   Before a key's search, the signer hashes no trial input of that key's layer.
   Its other calls are derivations, encodings on lower layers and hashes at addresses of other types.
-  The 43-byte input that grows the scheme seed is too short to be a trial input.
+  The inputs without an address have other lengths: 44 bytes for the key expansion, 93 for `PRF_msg` and 84 for `H_msg`.
   The theorem assumes that the cache holds no trial input of any key when signing starts, as an empty cache does (`prEvent_signWith_error_le_empty`).
 - Domain separation (`Address.lean`, `TweakableHash.lean`).
-  An address determines all six of its fields (`encodeAddress_inj`).
-  The eleven address types have eleven codes (`AddressType.code_injective`).
-  Each address of a key or a FORS instance determines its own arguments (`keyAddress_inj`, `addrNode_inj`, `addrForsNode_inj` and the others).
-  A hash input determines its public parameter, address and payload (`thInput_inj`).
+  An address determines all six of its fields: the layer, the tree, the type and the three words that follow (`encodeAdrs_inj`).
+  The eight address types have eight codes, 0 to 7 (`AdrsType.code_injective`).
+  Each address of a key or a FORS instance determines its own arguments (`keyAdrs_inj`, `adrsNode_inj`, `adrsFors_forsTreeIndex_inj` and the others).
+  A FORS node's tree index counts across the 24 trees, so it names its tree and node only for a node index below `2^(10 - z)` at height `z` (`adrsFors_forsTreeIndex_inj`).
+  A hash input determines its `PK.seed`, address and payload (`thInput_inj`).
 - Verification's hash calls (`Unforgeability/VerifyQueries.lean`).
-  Verification makes at most 466 calls, with any hash that makes at most one oracle call (`verifyWith_isTotalQueryBound`, `verifyCalls_eq`).
+  Verification makes at most 491 calls, with any hash that makes at most one oracle call (`verifyWith_isTotalQueryBound`, `verifyCalls_eq`).
+  A signature that verifies is checked with exactly 491 calls (`length_verifyQueries_of_verify`).
   When a fixed function answers the oracle, verification computes EthLib's verification with that function as its hash (`evalWithAnswerFn_verifyWith`).
   Two answer functions that agree on the inputs verification hashes give the same verdict (`verifyWith_congr`).
 - The hash calls of key generation and signing (`Unforgeability/HonestQueries.lean`).
   Key generation, signing and verification commute with every map of monads that keeps `pure` and `bind` (`keyGenWith_map_monad`, `signWith_map_monad`).
-  Outside the derivations from the seed, every call hashes at an address of another type, with a payload of at least 16 bytes (`signDerived_isQueryBoundP_zero`, `publicKeyOf_isQueryBoundP_zero`, `verifyWith_isQueryBoundP_zero`).
+  Outside the derivations from the seed and the two calls of `H_msg`, every call hashes at an address of another type, with a payload of at least 16 bytes (`signDerived_isQueryBoundP_zero`, `publicKeyOf_isQueryBoundP_zero`, `verifyWith_isQueryBoundP_zero`).
   The lemmas for one layer take each key's encodings as a separate hypothesis, since a key's search queries its own (`EncodingAvoids`).
-  So in the game, the honest algorithms query a 43-byte input only to grow the scheme seed (`keyGenWith_H_isQueryBoundP_seedLength`, `signWith_H_isQueryBoundP_seedLength`, `size_seedInput`).
+  So in the game, key generation and each signing request make at most two 44-byte queries, those of the key expansion of `SK.seed` (`keyGenWith_H_isQueryBoundP_seedLength`, `signWith_H_isQueryBoundP_seedLength`, `size_expandInput`).
 - Unforgeability in the random oracle model (`Unforgeability.lean`).
   Take an adversary that makes at most `2^30` signing requests and whose experiment makes at most `q >= 1` hash calls.
   The count `q` includes the calls of key generation, of every signing request and of the final verification.
@@ -176,15 +181,17 @@ Definitions that derive a secret take the derivation function as an argument too
 - The security proof (`Security/`).
   It is a ported model of the scheme with its theorem for this configuration (`h26_layered`): 127 bits, up to 1,182,000,000 signatures.
   Its README gives the provenance and every change to the ported text.
-  The ported model signs its layers from the bottom up, as EthLib and leanVM's Rust signer do.
-  The model as published signed from the top down, and its author confirmed in [leanVM#720](https://github.com/leanEthereum/leanVM/issues/720) that this order is a bug.
+  The model signs its layers from the bottom up, as EthLib does.
 - The bridge to the model (`Unforgeability/Bridge/`).
   EthLib's bytes, addresses, keys and signatures translate to the model's and back.
   Key generation and verification make the model's calls, call for call (`keyGenWith_queryH`, `verifyWith_queryH`).
-  The signer gives the model's signature under every fixed answer of the oracle, and both fail together (`signWith_answers`).
+  Under every fixed answer of the oracle, the signer gives the model's signature under the model's key from the same seed, and both fail together (`signWith_answers`).
   So an EthLib forgery is a model forgery of a translated adversary (`forgeAdvantage_le`).
   Under every fixed answer of the oracle, a signing request costs the model at most what it costs EthLib (`hashCalls_sign_le`).
-  Both signers stop at the same failing layer, and EthLib derives more secrets than the model.
+  Both signers stop at the same failing layer, and their counter searches and paths make the same number of calls.
+  Before the layers, EthLib makes 337636 calls: it expands the key, rebuilds the top tree, derives the randomizer, hashes the message and opens FORS.
+  The model makes 73709 calls there.
+  Below the top layer, the model recovers the layer's root from the signature with 74 calls, and EthLib computes each layer's message with at least 66047.
   So a budget of `q` hash calls against EthLib is a budget of `q` against the model (`hasHashQueryBound_translate_self`).
 - Serialization (`Serialization.lean`).
   Decoding succeeds exactly on strings of the declared length, and encoding and decoding are inverse bijections there.

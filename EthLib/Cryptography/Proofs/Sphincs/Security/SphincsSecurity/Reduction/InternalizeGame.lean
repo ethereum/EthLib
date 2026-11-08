@@ -5,11 +5,11 @@ public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Reduct
 /-!
 # Internalizing the long inputs of the deterministic game
 
-The deterministic signer makes only short hash queries, and its randomizer input has 96 bytes.
+The deterministic signer makes only short hash queries, and its randomizer input has 93 bytes.
 
 So internalizing the long inputs of the adversary never lowers a budgeted win probability.
 
-From a uniform scheme seed, the internalized game is equal in distribution to fixed-function games.
+From a uniform seed, the internalized game is equal in distribution to fixed-function games.
 -/
 
 @[expose] public section
@@ -22,28 +22,20 @@ variable [Params]
 
 open Completeness SeedCoupling Short Internalize
 
--- The byte-length lemmas must see the parameter and message widths as `8 * n` to match.
-set_option backward.isDefEq.respectTransparency false
 set_option maxRecDepth 10000
 attribute [local instance] Classical.propDecidable
 
 omit [Params] in
-theorem randomizerHashInput_length (parameter : PublicParameter) (seed : MasterSeed)
+theorem randomizerHashInput_short (prf : HashOutput) (parameter : PublicParameter)
     (message : Message) :
-    (randomizerHashInput parameter seed message).length = 96 := by
-  simp [randomizerHashInput, fieldBytes_length, bytesLE_length]
-
-omit [Params] in
-theorem randomizerHashInput_short (parameter : PublicParameter) (seed : MasterSeed)
-    (message : Message) :
-    IsShort (randomizerHashInput parameter seed message) := by
+    IsShort (randomizerHashInput prf parameter message) := by
   simp only [IsShort, bound, randomizerHashInput_length]
   omega
 
 omit [Params] in
-theorem Only.deriveRandomizer (parameter : PublicParameter) (seed : MasterSeed)
+theorem Only.deriveRandomizer (prf : HashOutput) (parameter : PublicParameter)
     (message : Message) :
-    Only (SphincsSecurity.deriveRandomizer parameter seed message :
+    Only (SphincsSecurity.deriveRandomizer prf parameter message :
       OracleComp HashSpec (Randomness × Randomness)) := by
   unfold SphincsSecurity.deriveRandomizer
   exact Only.bind (Only.query (randomizerHashInput_short _ _ _)) (fun _ => Only.pure' _)
@@ -67,7 +59,7 @@ theorem Only.seededLoop (sk : SphincsSecurity.Seeded.SecretKey) (message : Messa
 /-- The deterministic signer derives a start and a step, scans the randomizers, then assembles. -/
 theorem seededSign_eq (sk : SphincsSecurity.Seeded.SecretKey) (message : Message) :
     (SphincsSecurity.Seeded.sign sk message : OracleComp HashSpec (Option Signature)) = (do
-      let walk ← SphincsSecurity.deriveRandomizer sk.parameter sk.seed message
+      let walk ← SphincsSecurity.deriveRandomizer sk.prf sk.parameter message
       let some (randomness, _) ←
           SphincsSecurity.Seeded.signDigestLoop sk message walk.2 digestAttemptLimit walk.1
         | return none
@@ -278,7 +270,7 @@ theorem leftProgD_internal (sk : SphincsSecurity.Seeded.SecretKey) {β : Type}
       (fun result => (result.1.1, result.2)) <$> rightProgD sk M ∅ := by
   simp only [leftProgD, rightProgD, StateT.run'_eq, simulateQ_map, WriterT.run_map]
 
-/-- The deterministic game after the scheme seed `S`, starting with key generation from `S`. -/
+/-- The deterministic game after `SK.seed`: key generation from it, the run and the verification. -/
 noncomputable def gameAfterSeedDet (adversary : Adversary) (seed : MasterSeed) :
     OracleComp OracleWorld Bool := do
   let (pk, sk) ← liftM (SphincsSecurity.Seeded.keygenFromSeed seed)
@@ -290,27 +282,10 @@ noncomputable def gameAfterSeedDet (adversary : Adversary) (seed : MasterSeed) :
     OracleComp HashSpec Bool)
   return decide (SigningTranscript.Valid log ∧ ¬SigningTranscript.Contains log forgery) && verified
 
-/-- The key's seed `S0` and its hash, the scheme seed `S = H(leanSPHINCS || S0)`. -/
-noncomputable def sampleSchemeSeed : OracleComp OracleWorld MasterSeed := do
-  let seed ← liftM sampleMasterSeed
-  liftM (schemeSeed seed : OracleComp HashSpec MasterSeed)
-
-attribute [local irreducible] sampleMasterSeed in
-omit [Params] in
-theorem OnlyW.sampleSchemeSeed : OnlyW sampleSchemeSeed :=
-  OnlyW.bind (OnlyW.liftProb _) fun seed => OnlyW.liftHash (Short.Only.schemeSeed seed)
-
 theorem gameCore_eq_sampling (adversary : Adversary) :
-    gameCore adversary = sampleSchemeSeed >>= gameAfterSeedDet adversary := by
-  simp only [gameCore, sampleSchemeSeed, SphincsSecurity.Seeded.keygen, liftM_bind, bind_assoc]
+    gameCore adversary =
+      (liftM sampleMasterSeed : OracleComp OracleWorld MasterSeed) >>= gameAfterSeedDet adversary :=
   rfl
-
-/-- The game from a uniform scheme seed `S` in place of `H(leanSPHINCS || S0)`. -/
-noncomputable def gameCoreMaster (adversary : Adversary) : OracleComp OracleWorld Bool :=
-  (liftM sampleMasterSeed : OracleComp OracleWorld MasterSeed) >>= gameAfterSeedDet adversary
-
-noncomputable def experimentMaster (adversary : Adversary) : ProbComp (Bool × Nat) :=
-  (simulateQ countedOracle (gameCoreMaster adversary)).run.run' ∅
 
 theorem gameAfterSeedDet_eq (adversary : Adversary) (seed : MasterSeed) :
     gameAfterSeedDet adversary seed = (liftM (SphincsSecurity.Seeded.keygenFromSeed seed) :
@@ -377,12 +352,14 @@ theorem evalDist_experiment_internalize (adversary : Adversary) :
     experiment (internalize adversary) =ᵈ
       (fun result => result.1) <$> leftRun (gameCore adversary) ∅ := by
   rw [experiment_eq_rightRun, gameCore_eq_sampling, gameCore_eq_sampling,
-    show leftRun (sampleSchemeSeed >>= gameAfterSeedDet adversary) ∅ =
-      leftRun (sampleSchemeSeed >>= gameAfterSeedDet adversary) (merge ∅ ∅) by rw [merge_empty],
+    show leftRun ((liftM sampleMasterSeed : OracleComp OracleWorld MasterSeed) >>=
+        gameAfterSeedDet adversary) ∅ =
+      leftRun ((liftM sampleMasterSeed : OracleComp OracleWorld MasterSeed) >>=
+        gameAfterSeedDet adversary) (merge ∅ ∅) by rw [merge_empty],
     leftRun_bind, rightRun_bind, map_bind, map_bind]
   symm
   refine evalDist_bind_rel _ _ id (fun result => (result.1, merge result.2 ∅))
-    (by rw [leftRun_short _ OnlyW.sampleSchemeSeed, Functor.map_map]; rfl) _ _
+    (by rw [leftRun_short _ (OnlyW.liftProb _), Functor.map_map]; rfl) _ _
     (fun first => (fun second => (second.1.1, first.1.2 + second.1.2)) <$>
       leftRun (gameAfterSeedDet adversary first.1.1) first.2)
     (fun first => ?_) (fun first => ?_)
@@ -454,18 +431,18 @@ noncomputable local instance detLabelsSampleable : SampleableType CanonicalGraph
   graphLabelsSampleable
 
 open SeedModel Graph Assembly Eager in
-/-- From a uniform seed, the internalized game is equal in distribution to fixed-function games.
+/-- The internalized game is equal in distribution to fixed-function games.
 
 The material, the seed, the graph labels and the table are drawn first. -/
-theorem evalDist_experimentMaster_fixed (adversary : Adversary) :
-    experimentMaster (internalize adversary) =ᵈ (do
+theorem evalDist_experiment_fixed (adversary : Adversary) :
+    experiment (internalize adversary) =ᵈ (do
       let material ← sampleMaterial
       let seed ← sampleMasterSeed
       let answers ← $ᵗ CanonicalGraphLabels
       let table ← $ᵗ Eager.Table
       simulateQ (fixedRom (extend (preparedCache material seed answers) table))
         (countHashQueries (gameAfterSeedDet (internalize adversary) seed))) := by
-  rw [experimentMaster, gameCoreMaster]
+  rw [experiment, gameCore_eq_sampling]
   refine (evalDist_seeded_prepared_counted _).trans ?_
   refine EvalDistEq.bind_right _ fun material => EvalDistEq.bind_right _ fun seed => ?_
   rw [← simulateQ_countHashQueries]

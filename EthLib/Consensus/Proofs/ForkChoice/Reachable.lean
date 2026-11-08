@@ -31,7 +31,7 @@ So a block at that root would hash to the parent root of the anchor.
 
 The head of such a store is then the LMD-GHOST head of its filtered tree.
 
-That holds before Gloas and without a boost.
+That holds before Gloas, with the proposer boost as one more vote for the boosted block.
 -/
 
 @[expose] public section
@@ -474,6 +474,28 @@ theorem Reachable.getHead_eq_ghost {state : BeaconState preset fork}
     ghost (voters state) (balanceAt state) (view (reachable.parentsBelow anchorSlot unknown) nodes)
       rootValue (some store.justifiedCheckpoint.root) = some head.root :=
   Store.getHead_eq_ghost _ before noBoost justifiedState tree found
+
+/-- Before Gloas, the head of a reachable store is the head of LMD-GHOST with the boost.
+
+That needs the anchor block at or before the slot of the anchor state.
+
+It also needs the parent root of the anchor to name no known block.
+
+The model starts at the justified block, over the view of the viable nodes.
+
+The boost is one more vote, for the boosted block, and its stake is the score of the boost. -/
+theorem Reachable.getHead_eq_ghost_withBoost {state : BeaconState preset fork}
+    {nodes : List ForkChoiceNode} {head : ForkChoiceNode}
+    (reachable : Reachable config anchorState anchorBlock store)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (unknown : store.blocks[anchorBlock.parentRoot]? = none) (before : fork < .glamsterdam)
+    (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
+    (tree : store.getFilteredNodeTree config = .ok nodes)
+    (found : store.getHead config = .ok head) :
+    ghost (voters state).insertNone (boostStake (balanceAt state) (store.boostScore config))
+      ((view (reachable.parentsBelow anchorSlot unknown) nodes).withBoost store.boostedRoot)
+      rootValue (some store.justifiedCheckpoint.root) = some head.root :=
+  Store.getHead_eq_ghost_withBoost _ before justifiedState tree found
 
 end Store
 

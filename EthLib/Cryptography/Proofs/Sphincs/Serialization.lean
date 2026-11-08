@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Sphincs.Serialization
-public import EthLib.Base.Proofs.LittleEndian
+public import EthLib.Cryptography.Proofs.Sphincs.Address
 public import EthLib.Cryptography.Proofs.HashSig
 
 /-!
@@ -12,6 +12,8 @@ The encodings are bijections between objects and byte strings of the declared le
 - Decoding an encoding returns the object.
 - Every string of the declared length is an encoding.
 - Every string of another length is rejected.
+
+The public key is `PK.seed | PK.root`, and each layer's counter is a big-endian 32-bit word.
 -/
 
 @[expose] public section
@@ -69,7 +71,10 @@ open Constants
     simp only [Vector.getElem_ofFn, Vector.getElem_append, hj, ↓reduceDIte]
   -- The 144 bytes after them are the path.
   · have hpath : (Vector.ofFn fun j : Fin (FORS_HEIGHT * N) =>
-        (secret ++ path.flatten)[N + j.val]'(by have := j.isLt; simp only [N, FORS_HEIGHT] at *; omega))
+        (secret ++ path.flatten)[N + j.val]'(by
+          have := j.isLt
+          simp only [N, FORS_HEIGHT] at *
+          omega))
         = path.flatten := by
       apply Vector.ext
       intro j hj
@@ -98,7 +103,7 @@ open Constants
 /-- A public key encodes to 32 bytes. -/
 @[simp] theorem size_encodePublicKey (pk : PublicKey) :
     (encodePublicKey pk).size = PUB_KEY_SIZE := by
-  simp [encodePublicKey, PUB_KEY_SIZE]
+  simp [encodePublicKey, PUB_KEY_SIZE, Nat.two_mul]
 
 /-- The FORS openings encode to 4224 bytes. -/
 @[simp] theorem size_encodeFors (openings : Vector TreeOpening FORS_TREES) :
@@ -137,15 +142,15 @@ theorem decodeLayerSignature_middle {layer : Layer} {b a c : ByteArray}
     (h : offset + layerSigSize layer.height ≤ b.size) :
     decodeLayerSignature layer b offset h = sig := by
   -- Regroup so each field is the middle of its own concatenation.
-  have hr : b = a ++ packBytes (uintToBytes COUNTER_LEN sig.counter.toNat)
+  have hr : b = a ++ packBytes (toByte COUNTER_LEN sig.counter.toNat)
       ++ (packDigests sig.chainValues ++ packDigests sig.path ++ c) := by
     rw [hb, encodeLayerSignature]
     simp only [ByteArray.append_assoc]
-  have hc : b = (a ++ packBytes (uintToBytes COUNTER_LEN sig.counter.toNat))
+  have hc : b = (a ++ packBytes (toByte COUNTER_LEN sig.counter.toNat))
       ++ packBytes sig.chainValues.flatten ++ (packDigests sig.path ++ c) := by
     rw [hb, encodeLayerSignature]
     simp only [ByteArray.append_assoc, packDigests]
-  have hp : b = (a ++ packBytes (uintToBytes COUNTER_LEN sig.counter.toNat)
+  have hp : b = (a ++ packBytes (toByte COUNTER_LEN sig.counter.toNat)
       ++ packDigests sig.chainValues) ++ packBytes sig.path.flatten ++ c := by
     rw [hb, encodeLayerSignature]
     simp only [ByteArray.append_assoc, packDigests]
@@ -155,12 +160,10 @@ theorem decodeLayerSignature_middle {layer : Layer} {b a c : ByteArray}
     (by simp [ho]) (by simp only [layerSigSize] at h; omega)
   have p := HashSig.readBytes_middle hp (offset := offset + COUNTER_LEN + V * N)
     (by simp [ho]) (by simp only [layerSigSize] at h; omega)
-  -- A 32-bit word survives its four bytes.
-  have word : UInt32.ofNat (bytesToUint (uintToBytes COUNTER_LEN sig.counter.toNat))
-      = sig.counter := by
-    rw [Base.bytesToUint_uintToBytes, Nat.mod_eq_of_lt (by
-      have := sig.counter.toNat_lt_size
-      simpa [COUNTER_LEN, UInt32.size] using this), UInt32.ofNat_toNat]
+  -- A 32-bit word survives its four big-endian bytes.
+  have word : UInt32.ofNat (toInt (toByte COUNTER_LEN sig.counter.toNat)) = sig.counter := by
+    rw [toInt_toByte, Nat.mod_eq_of_lt (Nat.lt_of_lt_of_eq sig.counter.toNat_lt_size (by decide)),
+      UInt32.ofNat_toNat]
   obtain ⟨counter, chainValues, path⟩ := sig
   simp only [decodeLayerSignature, r, c', p, word, splitDigests, splitChunks_flatten]
 
@@ -170,15 +173,16 @@ theorem decodeLayerSignature_middle {layer : Layer} {b a c : ByteArray}
 @[simp] theorem decodePublicKey_encodePublicKey (pk : PublicKey) :
     decodePublicKey (encodePublicKey pk) = .ok pk := by
   rw [decodePublicKey, dite_eq_left (size_encodePublicKey pk)]
-  -- The root is the first field, the public parameter the one after it.
-  have root := HashSig.readBytes_middle (b := encodePublicKey pk) (a := ByteArray.empty)
-    (c := packBytes pk.publicParam) (v := pk.root) (offset := 0)
+  -- `PK.seed` is the first field, `PK.root` the one after it.
+  have seed := HashSig.readBytes_middle (b := encodePublicKey pk) (a := ByteArray.empty)
+    (c := packBytes pk.root) (v := pk.pkSeed) (offset := 0)
     (by simp [encodePublicKey, ByteArray.empty_append]) (by simp)
-    (by simp [PUB_KEY_SIZE])
-  have param := HashSig.readBytes_middle (b := encodePublicKey pk) (a := packBytes pk.root)
-    (c := ByteArray.empty) (v := pk.publicParam) (offset := N)
-    (by simp [encodePublicKey, ByteArray.append_empty]) (by simp) (by simp [PUB_KEY_SIZE])
-  simp only [root, param]
+    (by simp [PUB_KEY_SIZE, Nat.two_mul])
+  have root := HashSig.readBytes_middle (b := encodePublicKey pk) (a := packBytes pk.pkSeed)
+    (c := ByteArray.empty) (v := pk.root) (offset := N)
+    (by simp [encodePublicKey, ByteArray.append_empty]) (by simp)
+    (by simp [PUB_KEY_SIZE, Nat.two_mul])
+  simp only [seed, root]
 
 /-- Decoding an encoded signature returns it. -/
 @[simp] theorem decodeSignature_encodeSignature (sig : Signature) :
@@ -238,18 +242,17 @@ theorem encodeFors_decodeFors (b : ByteArray) (offset : Nat) (h) :
   rw [this, Vector.map_id, flatten_splitChunks, HashSig.packBytes_readBytes]
 
 /-- A layer's signature re-encodes to the bytes it was read from. -/
-theorem encodeLayerSignature_decodeLayerSignature (layer : Layer) (b : ByteArray) (offset : Nat) (h) :
+theorem encodeLayerSignature_decodeLayerSignature (layer : Layer) (b : ByteArray) (offset : Nat)
+    (h) :
     encodeLayerSignature (decodeLayerSignature layer b offset h)
       = ⟨b.data.extract offset (offset + layerSigSize layer.height)⟩ := by
-  -- Four bytes read as a word, and written back, are the same four bytes.
-  have hword : bytesToUint (readBytes b offset COUNTER_LEN
-      (by simp only [layerSigSize] at h; omega)) < 2 ^ 32 := by
-    have := Base.bytesToUint_lt (readBytes b offset COUNTER_LEN
-      (by simp only [layerSigSize] at h; omega))
-    simpa [COUNTER_LEN] using this
+  -- Four bytes read as a big-endian word, and written back, are the same four bytes.
+  have hword : toInt (readBytes b offset COUNTER_LEN
+      (by simp only [layerSigSize] at h; omega)) < UInt32.size :=
+    Nat.lt_of_lt_of_eq (toInt_lt _) (by decide)
   simp only [encodeLayerSignature, decodeLayerSignature, packDigests, splitDigests,
     flatten_splitChunks, HashSig.packBytes_readBytes, UInt32.toNat_ofNat_of_lt' hword,
-    Base.uintToBytes_bytesToUint]
+    toByte_toInt]
   rw [slice_append _ (by omega) (by omega), slice_append _ (by omega) (by omega)]
   simp only [layerSigSize, Nat.add_assoc]
 
@@ -263,7 +266,7 @@ theorem encodePublicKey_decodePublicKey {bytes : ByteArray} (sized : bytes.size 
   congr 1
   apply ByteArray.ext
   simp only [ByteArray.size] at sized
-  simp [sized, PUB_KEY_SIZE, N, PUBLIC_PARAM_LEN]
+  simp [sized, PUB_KEY_SIZE, N]
 
 /-- Every 7740-byte string is the encoding of a signature. -/
 theorem encodeSignature_decodeSignature {bytes : ByteArray} (sized : bytes.size = SIG_SIZE) :

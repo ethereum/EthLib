@@ -33,15 +33,15 @@ variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 
 - No randomizer trial gives a codeword.
   In the random oracle model, from an empty cache, that has probability below `exp(-4000)`. -/
-def signLayer (pp : PublicParam) (s : Seed) (layer : Layer) (e : Nat) (msg : ByteArray) :
-    m (Except XmssError LayerSignature) := do
+def signLayer (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : Nat)
+    (msg : ByteArray) : m (Except XmssError LayerSignature) := do
   -- No codeword is an error.
-  let some (randomizer, chainValues) ← otsSign H pp s layer (UInt32.ofNat e) msg
+  let some (randomizer, chainValues) ← otsSign H pp prf layer (UInt32.ofNat e) msg
     | return .error (.noAdmissibleEncoding layer e)
   -- A one-time signature is packed with the key's path.
-  return .ok { randomizer, chainValues, path := ← path H pp s layer e }
+  return .ok { randomizer, chainValues, path := ← path H pp prf layer e }
 
-/-- Sign a message at a leaf index, from the scheme seed `S` and the parameter `P`.
+/-- Sign a message at a leaf index, from the derivations of a seed and the parameter `P`.
 
 1. The bottom key `idx` signs the message.
 2. The root `X^0_{16,b}` of bottom tree `b = floor(idx / 2^16)`, which builds that whole tree.
@@ -50,14 +50,14 @@ def signLayer (pp : PublicParam) (s : Seed) (layer : Layer) (e : Nat) (msg : Byt
 # Errors
 
 - Either layer's one-time signature finds no codeword. -/
-def signDerived (s : Seed) (pp : PublicParam) (idx : LeafIndex) (msg : Message) :
+def signDerived (prf : SeedPrf m) (pp : PublicParam) (idx : LeafIndex) (msg : Message) :
     m (Except XmssError Signature) := do
   -- A layer's error ends signing, before any later hash call.
-  let bottom ← match ← signLayer H pp s .bottom idx.toNat (packBytes msg) with
+  let bottom ← match ← signLayer H pp prf .bottom idx.toNat (packBytes msg) with
     | .ok sig => pure sig
     | .error err => return .error err
-  let bottomRoot ← node H pp s .bottom LAYER_HEIGHT (bottomTree idx)
-  let top ← match ← signLayer H pp s .top (bottomTree idx) (packBytes bottomRoot) with
+  let bottomRoot ← node H pp prf .bottom LAYER_HEIGHT (bottomTree idx)
+  let top ← match ← signLayer H pp prf .top (bottomTree idx) (packBytes bottomRoot) with
     | .ok sig => pure sig
     | .error err => return .error err
   return .ok { leafIndex := idx, bottom, top }
@@ -65,7 +65,7 @@ def signDerived (s : Seed) (pp : PublicParam) (idx : LeafIndex) (msg : Message) 
 /-- `Sig(sk, idx, m)` over a hash `H`: sign a message at a leaf index.
 
 1. The scheme seed `S` and the public parameter `P`, from the secret key's seed.
-2. The signature from `S` and `P`.
+2. The signature from the derivations of `S` and from `P`.
 
 # Warning
 
@@ -81,8 +81,8 @@ So it signs one message, however many leaf indices of that tree are used.
 def signWith (sk : SecretKey) (idx : LeafIndex) (msg : Message) :
     m (Except XmssError Signature) := do
   let s ← schemeSeed H sk.seed
-  let pp ← publicParamOf H s
-  signDerived H s pp idx msg
+  let pp ← publicParamOf (seedPrf H s)
+  signDerived H (seedPrf H s) pp idx msg
 
 /-- `Sig(sk, idx, m)`, with Keccak-256. -/
 def sign (sk : SecretKey) (idx : LeafIndex) (msg : Message) : Except XmssError Signature :=

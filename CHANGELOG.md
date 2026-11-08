@@ -212,6 +212,12 @@ Not yet released.
 - The converter of typed values now passes up to 2^22 values in one call, where it passed 1,000,000, so that the longest `ssz_generic` vectors of consensus-spec-tests cross ([#1563](https://github.com/ethereum/EthLib/pull/1563)).
 - A chain configuration that the exports read as JSON is now rejected, with code 0, when a fork by block number comes after a fork by timestamp ([#1110](https://github.com/ethereum/EthLib/pull/1110)).
   EIP-6122 requires the forks by timestamp to be scheduled at or after the forks by block.
+- leanSPHINCS now hashes with the layout of FIPS 205 ([#1555](https://github.com/ethereum/EthLib/pull/1555)).
+  For the same seed and message, `key_gen` and `sign` now return a different key and signature.
+  `verify` checks the new layout, so keys and signatures made with 0.3.0 must be made again.
+  The sizes are unchanged: a 32-byte seed, a 32-byte public key and a 7740-byte signature.
+  The public key is now `PK.seed` then the root, 16 bytes each, in place of the root then the public parameter.
+  The Python constant `sphincs.PUBLIC_PARAM_LEN` and the C export `eth_sphincs_const_public_param_len` are removed.
 
 ## 0.3.0
 

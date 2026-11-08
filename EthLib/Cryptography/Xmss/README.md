@@ -58,6 +58,13 @@ So the code makes its calls as the note defines them, one by one and in a fixed 
 - a node computes its left subtree, then its right subtree, then its own hash;
 - `sign` builds the root `X^0_{16,b}` of bottom tree `b` from the whole tree, as the note defines it.
 
+Every secret derives from the scheme seed `S = H("leanXMSS" | S_0)`, and so does the public parameter, which the public key publishes.
+These derivations are the public parameter, the chain starts and the randomizer bases.
+Each of these values is a half of a hash `H(P | A | S | suffix)`, with `P = 0^128` for the public parameter itself.
+The suffix is empty, except for a randomizer base, whose suffix is the message.
+The definitions take the derivations as one function argument of type `SeedPrf`, as they take `H`.
+`keyGen` and `sign` pass `seedPrf`, the derivations from `S`, so a security proof can replace the derivations as a whole without reading the seed.
+
 ## Operations
 
 | Lean | File | C export | Python |

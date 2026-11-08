@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Sphincs.Ots
+public import EthLib.Cryptography.Proofs.Sphincs.Address
 public import EthLib.Cryptography.Proofs.Sphincs.CodeSize
 public import EthLib.Cryptography.Proofs.Sphincs.TweakableHash
 public import EthLib.Cryptography.Proofs.HashSig
@@ -15,9 +16,13 @@ To sign, a one-time key encodes the message under counters `0, 1, ...`, up to `2
 
 It keeps the first counter whose 16-byte digest is a codeword, and signing fails if none is.
 
+Counter `c` hashes `PK.seed | ADRS_enc(K) | M | BE_32(c)` and keeps the first 16 bytes.
+
 Here the hash is a random oracle, and its cache holds none of the trial inputs yet.
 
-The counters give distinct inputs, so the trials see fresh, independent, uniform digests.
+The counters below `2^32` have distinct big-endian words, so the trials hash distinct inputs.
+
+So the trials see fresh, independent, uniform digests.
 
 Exactly `|C|` of the `2^128` digests are codewords.
 
@@ -45,9 +50,9 @@ open OracleSpec OracleComp ENNReal
 
 /-- Exactly `|C|` digests are codewords: a digest is its 64 digits. -/
 theorem card_codeword : Nat.card {d : Digest // (codeword? d).isSome} = CODE_SIZE := by
-  have hdig : Function.Bijective (Internal.digits) := Wots.digits4_bijective
   rw [← card_onTarget]
-  exact Nat.card_congr ((Equiv.ofBijective _ hdig).subtypeEquiv fun d => codeword?_isSome_iff)
+  exact Nat.card_congr
+    ((Equiv.ofBijective _ digits_bijective).subtypeEquiv fun d => codeword?_isSome_iff)
 
 /-- The other `2^128 - |C|` digests are not codewords. -/
 theorem card_not_codeword : Nat.card {d : Digest // codeword? d = none} = 2 ^ 128 - CODE_SIZE := by
@@ -57,23 +62,20 @@ theorem card_not_codeword : Nat.card {d : Digest // codeword? d = none} = 2 ^ 12
   rw [← h, Nat.add_sub_cancel_left]
   exact Nat.card_congr (Equiv.subtypeEquivRight fun d => by simp)
 
-/-- The first 16 bytes of an oracle answer are the bytes of its low 128 bits. -/
-theorem halfOf_zero_ofOutput (x : HashSig.HashOutput) :
-    halfOf 0 (HashSig.ofOutput x) = HashSig.ofBV 16 (HashSig.truncateHash x) := by
+/-- `Trunc_16` of an oracle answer is the bytes of its low 128 bits. -/
+theorem trunc_ofOutput (x : HashSig.HashOutput) :
+    trunc N (HashSig.ofOutput x) = HashSig.ofBV 16 (HashSig.truncateHash x) := by
   apply Vector.ext
   intro i hi
-  simp only [N] at hi
-  simp only [halfOf, Vector.getElem_ofFn]
-  simp only [Fin.isValue, Fin.val_zero, Nat.mul_zero, Nat.zero_add]
+  rw [getElem_trunc]
   exact HashSig.getElem_ofOutput_of_lt x i hi
 
 /-- One fresh counter misses the code with probability `1 - |C| / 2^128`. -/
 theorem prEvent_not_codeword :
-    Pr{let u ← $ᵗ HashSig.HashOutput}[
-        codeword? (halfOf 0 (HashSig.ofOutput u)) = none]
+    Pr{let u ← $ᵗ HashSig.HashOutput}[codeword? (trunc N (HashSig.ofOutput u)) = none]
       = ((2 ^ 128 - CODE_SIZE : ℕ) : ℝ≥0∞) / 2 ^ 128 := by
   rw [← card_not_codeword]
-  simp only [halfOf_zero_ofOutput]
+  simp only [trunc_ofOutput]
   exact HashSig.prEvent_ofBV_truncateHash (fun d => codeword? d = none)
 
 /-- A trial below `2^32` is its own counter. -/
@@ -89,26 +91,28 @@ The hash is a lazily sampled random oracle, and the search starts from any cache
 
 The cache must hold none of the `2^32` inputs that the counters hash.
 
-The message and the key are arbitrary. -/
-theorem prEvent_findCounter_none (pp : PublicParam) (key : OtsKey) (msg : ByteArray)
+The `PK.seed`, the message and the key are arbitrary. -/
+theorem prEvent_findCounter_none (pkSeed : PkSeed) (key : OtsKey) (msg : Digest)
     (cache : HashSig.HashSpec.QueryCache)
     (hfresh : ∀ j < MAX_COUNTER_TRIALS,
-      cache (thInput pp (addrEncoding key)
-        (msg ++ packBytes (uintToBytes COUNTER_LEN j))).data.toList = none) :
+      cache (thInput pkSeed (adrsEnc key)
+        (packBytes msg ++ packBytes (toByte COUNTER_LEN j))).data.toList = none) :
     Pr{let z ← (simulateQ HashSig.HashSpec.romImpl (Internal.findCounter
-        HashSig.queryH pp key msg 0 MAX_COUNTER_TRIALS)).run' cache}[z = none]
+        HashSig.queryH pkSeed key msg 0 MAX_COUNTER_TRIALS)).run' cache}[z = none]
       = (((2 ^ 128 - CODE_SIZE : ℕ) : ℝ≥0∞) / 2 ^ 128) ^ MAX_COUNTER_TRIALS := by
   rw [← prEvent_not_codeword]
   refine Wots.prEvent_findFirst_romImpl_none UInt32.ofNat
-    (fun c => (thInput pp (addrEncoding key)
-      (msg ++ packBytes (uintToBytes COUNTER_LEN c.toNat))).data.toList)
-    (fun u => codeword? (halfOf 0 (HashSig.ofOutput u))) _ (fun c => ?_) _ 0 cache
+    (fun c => (thInput pkSeed (adrsEnc key)
+      (packBytes msg ++ packBytes (toByte COUNTER_LEN c.toNat))).data.toList)
+    (fun u => codeword? (trunc N (HashSig.ofOutput u))) _ (fun c => ?_) _ 0 cache
     (fun j j' _ hj _ hj' h => ?_) (fun j _ hj => ?_)
-  · simp only [encode, th, thFull, HashSig.queryH, HashSig.oracleHash,
-      map_eq_bind_pure_comp]
+  · simp only [encode, th, HashSig.queryH, HashSig.oracleHash, map_eq_bind_pure_comp]
     rfl
-  · have hin := (thInput_inj (ByteArray.ext (Array.toList_inj.mp h))).2.2
-    have hc := Base.uintToBytes_inj (by simp [COUNTER_LEN]; omega) (by simp [COUNTER_LEN]; omega)
+  · -- The trials share the prefix and the message, so their counter words agree.
+    have hin := (thInput_inj (ByteArray.ext (Array.toList_inj.mp h))).2.2
+    have hword : UInt32.size = 256 ^ COUNTER_LEN := by decide
+    have hc := toByte_inj (Nat.lt_of_lt_of_eq (UInt32.ofNat j).toNat_lt_size hword)
+      (Nat.lt_of_lt_of_eq (UInt32.ofNat j').toNat_lt_size hword)
       (Base.packBytes_injective (HashSig.byteArray_append_inj hin rfl).2)
     rw [toNat_ofNat_trial (by omega), toNat_ofNat_trial (by omega)] at hc
     exact hc
@@ -118,24 +122,24 @@ theorem prEvent_findCounter_none (pp : PublicParam) (key : OtsKey) (msg : ByteAr
 /-- **All `2^32` counters miss the code with probability below `exp(-2^18)`.**
 
 The hypotheses are those of the exact probability above. -/
-theorem prEvent_findCounter_none_le (pp : PublicParam) (key : OtsKey) (msg : ByteArray)
+theorem prEvent_findCounter_none_le (pkSeed : PkSeed) (key : OtsKey) (msg : Digest)
     (cache : HashSig.HashSpec.QueryCache)
     (hfresh : ∀ j < MAX_COUNTER_TRIALS,
-      cache (thInput pp (addrEncoding key)
-        (msg ++ packBytes (uintToBytes COUNTER_LEN j))).data.toList = none) :
+      cache (thInput pkSeed (adrsEnc key)
+        (packBytes msg ++ packBytes (toByte COUNTER_LEN j))).data.toList = none) :
     Pr{let z ← (simulateQ HashSig.HashSpec.romImpl (Internal.findCounter
-        HashSig.queryH pp key msg 0 MAX_COUNTER_TRIALS)).run' cache}[z = none]
+        HashSig.queryH pkSeed key msg 0 MAX_COUNTER_TRIALS)).run' cache}[z = none]
       ≤ ENNReal.ofReal (Real.exp (-(2 ^ 18))) := by
-  rw [prEvent_findCounter_none pp key msg cache hfresh,
+  rw [prEvent_findCounter_none pkSeed key msg cache hfresh,
     HashSig.ofReal_one_sub_div _ _ (by simp [CODE_SIZE]),
     ← ENNReal.ofReal_pow (by norm_num [CODE_SIZE])]
   exact ENNReal.ofReal_le_ofReal all_counters_fail_probability
 
 /-- From an empty cache, all `2^32` counters miss the code with probability below `exp(-2^18)`. -/
-theorem prEvent_findCounter_none_le_empty (pp : PublicParam) (key : OtsKey) (msg : ByteArray) :
+theorem prEvent_findCounter_none_le_empty (pkSeed : PkSeed) (key : OtsKey) (msg : Digest) :
     Pr{let z ← (simulateQ HashSig.HashSpec.romImpl (Internal.findCounter
-        HashSig.queryH pp key msg 0 MAX_COUNTER_TRIALS)).run' ∅}[z = none]
+        HashSig.queryH pkSeed key msg 0 MAX_COUNTER_TRIALS)).run' ∅}[z = none]
       ≤ ENNReal.ofReal (Real.exp (-(2 ^ 18))) :=
-  prEvent_findCounter_none_le pp key msg ∅ fun _ _ => rfl
+  prEvent_findCounter_none_le pkSeed key msg ∅ fun _ _ => rfl
 
 end EthLib.Cryptography.Sphincs

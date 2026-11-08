@@ -9,18 +9,20 @@ public import EthLib.Cryptography.Proofs.Wots
 /-!
 # Proofs: the hash calls of leanSPHINCS verification
 
-Verification makes at most 466 hash calls, whatever the key, the message and the signature.
+Verification makes at most 491 hash calls, whatever the key, the message and the signature.
 
 - The digest: 2 calls.
-- FORS: a leaf and 9 nodes in each of the 24 trees, 240 calls.
+- FORS: a leaf and 10 nodes in each of the 24 trees, then `T_k` over the roots, 265 calls.
 - Each of the 3 layers: an encoding, 64 chain steps and a leaf, 66 calls.
-- The paths: one call per level, `8 + 8 + 10 = 26` calls.
+- The paths: one call per height, `8 + 8 + 10 = 26` calls.
 
-That is `2 + 240 + 3 * 66 + 26 = 466`.
+That is `2 + 265 + 3 * 66 + 26 = 491`.
 
 A layer walks `3 * 64 - 128 = 64` chain steps, because the digits of a codeword sum to 128.
 
-Verification stops at the first layer that fails, so it can make fewer calls.
+Verification stops at the first layer whose encoding is not a codeword, so it can make fewer calls.
+
+A signature that verifies passes every layer, so it takes exactly 491 calls.
 
 The count holds for every hash that makes at most one oracle call, and the game's `H` is one.
 
@@ -118,68 +120,76 @@ theorem map_monad_map {β γ : Type} (g : β → γ) (x : m β) : φ (g <$> x) =
 
 omit [LawfulMonad m] [LawfulMonad n] in
 /-- A tweakable hash call commutes with the map. -/
-theorem th_map_monad (pp : PublicParam) (A : Address) (payload : ByteArray) :
-    φ (th H pp A payload) = th (fun x => φ (H x)) pp A payload := by
-  rw [th, th, thFull, thFull]
-  erw [map_bind]
+theorem th_map_monad (pkSeed : PkSeed) (adrs : Adrs) (payload : ByteArray) :
+    φ (th H pkSeed adrs payload) = th (fun x => φ (H x)) pkSeed adrs payload := by
+  rw [th, th, map_bind]
   exact congrArg _ (funext fun _ => map_pure _)
 
 omit [LawfulMonad m] [LawfulMonad n] in
 /-- A FORS node hash commutes with the map. -/
-theorem forsNodeHash_map_monad (pp : PublicParam) (idx : Nat) (kappa : Fin FORS_TREES)
-    (level j : Nat) (left right : Digest) :
-    φ (forsNodeHash H pp idx kappa level j left right)
-      = forsNodeHash (fun x => φ (H x)) pp idx kappa level j left right :=
+theorem forsNodeHash_map_monad (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TREES)
+    (z j : Nat) (left right : Digest) :
+    φ (forsNodeHash H pkSeed idx kappa z j left right)
+      = forsNodeHash (fun x => φ (H x)) pkSeed idx kappa z j left right :=
+  th_map_monad φ map_pure map_bind H _ _ _
+
+omit [LawfulMonad m] [LawfulMonad n] in
+/-- The FORS public key from the roots commutes with the map. -/
+theorem forsPkFromRoots_map_monad (pkSeed : PkSeed) (idx : Nat)
+    (roots : Vector Digest FORS_TREES) :
+    φ (forsPkFromRoots H pkSeed idx roots) = forsPkFromRoots (fun x => φ (H x)) pkSeed idx roots :=
   th_map_monad φ map_pure map_bind H _ _ _
 
 omit [LawfulMonad m] [LawfulMonad n] in
 /-- A hypertree node hash commutes with the map. -/
-theorem nodeHash_map_monad (pp : PublicParam) (layer : Layer) (tree level j : Nat)
+theorem nodeHash_map_monad (pkSeed : PkSeed) (layer : Layer) (tree z j : Nat)
     (left right : Digest) :
-    φ (nodeHash H pp layer tree level j left right)
-      = nodeHash (fun x => φ (H x)) pp layer tree level j left right :=
+    φ (nodeHash H pkSeed layer tree z j left right)
+      = nodeHash (fun x => φ (H x)) pkSeed layer tree z j left right :=
   th_map_monad φ map_pure map_bind H _ _ _
 
 omit [LawfulMonad m] [LawfulMonad n] in
 /-- A chain step commutes with the map. -/
-theorem chainStep_map_monad (pp : PublicParam) (key : OtsKey) (i : Fin V)
+theorem chainStep_map_monad (pkSeed : PkSeed) (key : OtsKey) (i : Fin V)
     (mu : Fin (CHAIN_LENGTH - 1)) (value : Digest) :
-    φ (chainStep H pp key i mu value) = chainStep (fun x => φ (H x)) pp key i mu value :=
+    φ (chainStep H pkSeed key i mu value) = chainStep (fun x => φ (H x)) pkSeed key i mu value :=
   th_map_monad φ map_pure map_bind H _ _ _
 
 omit [LawfulMonad m] [LawfulMonad n] in
 /-- The message digest commutes with the map. -/
-theorem messageDigest_map_monad (pp : PublicParam) (msg : Message) (rho : Randomizer) :
-    φ (messageDigest H pp msg rho) = messageDigest (fun x => φ (H x)) pp msg rho := by
-  rw [messageDigest, messageDigest, map_bind, HashSig.ofFnInOrder_map_monad φ map_pure map_bind]
+theorem hMsg_map_monad (rho : Randomizer) (pkSeed : PkSeed) (pkRoot : Digest) (msg : Message) :
+    φ (hMsg H rho pkSeed pkRoot msg) = hMsg (fun x => φ (H x)) rho pkSeed pkRoot msg := by
+  rw [hMsg, hMsg, map_bind, HashSig.ofFnInOrder_map_monad φ map_pure map_bind]
   exact congrArg _ (funext fun _ => map_pure _)
 
 omit [LawfulMonad m] [LawfulMonad n] in
-/-- Recovering one FORS tree commutes with the map. -/
-theorem treeRecover_map_monad (pp : PublicParam) (idx : Nat) (kappa : Fin FORS_TREES)
-    (l : Fin (2 ^ FORS_HEIGHT)) (opening : TreeOpening) :
-    φ (treeRecover H pp idx kappa l opening)
-      = treeRecover (fun x => φ (H x)) pp idx kappa l opening := by
+/-- Recovering one FORS tree's root commutes with the map. -/
+theorem treeRecover_map_monad (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TREES)
+    (s : Fin (2 ^ FORS_HEIGHT)) (opening : TreeOpening) :
+    φ (treeRecover H pkSeed idx kappa s opening)
+      = treeRecover (fun x => φ (H x)) pkSeed idx kappa s opening := by
   rw [treeRecover, treeRecover, map_bind, forsLeafHash, forsLeafHash,
     th_map_monad φ map_pure map_bind]
   refine congrArg _ (funext fun leaf => ?_)
-  rw [map_bind, Merkle.climb_map_monad (φ := φ) (map_pure := map_pure) (map_bind := map_bind)]
-  simp only [forsNodeHash_map_monad φ map_pure map_bind, map_pure]
+  rw [Merkle.climb_map_monad (φ := φ) (map_pure := map_pure) (map_bind := map_bind)]
+  simp only [forsNodeHash_map_monad φ map_pure map_bind]
 
 omit [LawfulMonad m] [LawfulMonad n] in
-/-- Recovering a FORS key commutes with the map. -/
-theorem forsRecover_map_monad (pp : PublicParam) (idx : Nat)
+/-- Recovering a FORS public key commutes with the map. -/
+theorem forsRecover_map_monad (pkSeed : PkSeed) (idx : Nat)
     (leaves : Vector (Fin (2 ^ FORS_HEIGHT)) FORS_TREES)
     (openings : Vector TreeOpening FORS_TREES) :
-    φ (forsRecover H pp idx leaves openings)
-      = forsRecover (fun x => φ (H x)) pp idx leaves openings := by
-  rw [forsRecover, forsRecover, HashSig.ofFnInOrder_map_monad φ map_pure map_bind]
-  simp only [treeRecover_map_monad φ map_pure map_bind]
+    φ (forsRecover H pkSeed idx leaves openings)
+      = forsRecover (fun x => φ (H x)) pkSeed idx leaves openings := by
+  rw [forsRecover, forsRecover, map_bind, HashSig.ofFnInOrder_map_monad φ map_pure map_bind]
+  simp only [treeRecover_map_monad φ map_pure map_bind,
+    forsPkFromRoots_map_monad φ map_pure map_bind]
 
 /-- Recovering a one-time leaf commutes with the map. -/
-theorem otsLeaf_map_monad (pp : PublicParam) (key : OtsKey) (msg : ByteArray) (counter : UInt32)
+theorem otsLeaf_map_monad (pkSeed : PkSeed) (key : OtsKey) (msg : Digest) (counter : UInt32)
     (y : Vector Digest V) :
-    φ (otsLeaf H pp key msg counter y) = otsLeaf (fun x => φ (H x)) pp key msg counter y := by
+    φ (otsLeaf H pkSeed key msg counter y)
+      = otsLeaf (fun x => φ (H x)) pkSeed key msg counter y := by
   rw [otsLeaf, otsLeaf, map_bind, encode, encode, map_monad_map φ map_pure map_bind,
     th_map_monad φ map_pure map_bind]
   refine congrArg _ (funext fun x => ?_)
@@ -191,9 +201,10 @@ theorem otsLeaf_map_monad (pp : PublicParam) (key : OtsKey) (msg : ByteArray) (c
       otsLeafHash, th_map_monad φ map_pure map_bind]
 
 /-- A layer's root commutes with the map. -/
-theorem layerRoot_map_monad (pp : PublicParam) (layer : Layer) (idx : Nat) (msg : ByteArray)
+theorem layerRoot_map_monad (pkSeed : PkSeed) (layer : Layer) (idx : Nat) (msg : Digest)
     (sig : LayerSignature layer) :
-    φ (layerRoot H pp layer idx msg sig) = layerRoot (fun x => φ (H x)) pp layer idx msg sig := by
+    φ (layerRoot H pkSeed layer idx msg sig)
+      = layerRoot (fun x => φ (H x)) pkSeed layer idx msg sig := by
   rw [layerRoot, layerRoot, map_bind, otsLeaf_map_monad φ map_pure map_bind]
   refine congrArg _ (funext fun leaf => ?_)
   cases leaf with
@@ -205,7 +216,7 @@ theorem layerRoot_map_monad (pp : PublicParam) (layer : Layer) (idx : Nat) (msg 
 /-- Verification commutes with the map. -/
 theorem verifyWith_map_monad (pk : PublicKey) (msg : Message) (sig : Signature) :
     φ (verifyWith H pk msg sig) = verifyWith (fun x => φ (H x)) pk msg sig := by
-  rw [verifyWith, verifyWith, map_bind, messageDigest_map_monad φ map_pure map_bind]
+  rw [verifyWith, verifyWith, map_bind, hMsg_map_monad φ map_pure map_bind]
   refine congrArg _ (funext fun d => ?_)
   rw [map_bind, forsRecover_map_monad φ map_pure map_bind]
   refine congrArg _ (funext fun key => ?_)
@@ -290,45 +301,45 @@ variable (H : ByteArray → OracleComp spec (Vector UInt8 32))
 include hH
 
 /-- A tweakable hash call makes one call. -/
-theorem th_isTotalQueryBound (pp : PublicParam) (A : Address) (payload : ByteArray) :
-    IsTotalQueryBound (th H pp A payload) 1 :=
+theorem th_isTotalQueryBound (pkSeed : PkSeed) (adrs : Adrs) (payload : ByteArray) :
+    IsTotalQueryBound (th H pkSeed adrs payload) 1 :=
   isTotalQueryBound_bind (n₂ := 0) (hH _) fun _ => isQueryBound_pure _ _ _ _
 
-/-- The message digest makes one call per half. -/
-theorem messageDigest_isTotalQueryBound (pp : PublicParam) (msg : Message) (rho : Randomizer) :
-    IsTotalQueryBound (messageDigest H pp msg rho) DIGEST_CALLS := by
-  rw [messageDigest]
+/-- The message digest makes one call per block of output. -/
+theorem hMsg_isTotalQueryBound (rho : Randomizer) (pkSeed : PkSeed) (pkRoot : Digest)
+    (msg : Message) : IsTotalQueryBound (hMsg H rho pkSeed pkRoot msg) DIGEST_CALLS := by
+  rw [hMsg]
   refine (isTotalQueryBound_bind (n₂ := 0) ?_ fun _ => isQueryBound_pure _ _ _ _).mono le_rfl
   have := ofFnInOrder_isTotalQueryBound DIGEST_CALLS
-    (fun call => thFull H pp (addrMsg call) (packBytes msg ++ packBytes rho)) (fun _ => 1)
-    fun _ => hH _
+    (fun i => H (packBytes rho ++ packBytes pkSeed ++ packBytes pkRoot ++ packBytes msg
+      ++ packBytes (toByte 4 i.val))) (fun _ => 1) fun _ => hH _
   rwa [Finset.sum_const, Finset.card_univ, Fintype.card_fin, smul_eq_mul, mul_one] at this
 
-/-- Recovering one FORS tree makes a call for the leaf and one per level up to level 9. -/
-theorem treeRecover_isTotalQueryBound (pp : PublicParam) (idx : Nat) (kappa : Fin FORS_TREES)
-    (l : Fin (2 ^ FORS_HEIGHT)) (opening : TreeOpening) :
-    IsTotalQueryBound (treeRecover H pp idx kappa l opening) FORS_HEIGHT := by
+/-- Recovering one FORS tree's root makes a call for the leaf and one per height. -/
+theorem treeRecover_isTotalQueryBound (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TREES)
+    (s : Fin (2 ^ FORS_HEIGHT)) (opening : TreeOpening) :
+    IsTotalQueryBound (treeRecover H pkSeed idx kappa s opening) (1 + FORS_HEIGHT) := by
   rw [treeRecover]
-  refine (isTotalQueryBound_bind (th_isTotalQueryBound H hH _ _ _) fun _ =>
-    isTotalQueryBound_bind (n₂ := 0)
-      (climb_isTotalQueryBound _ (fun _ _ _ _ => th_isTotalQueryBound H hH _ _ _) _ _ _ _)
-      fun _ => isQueryBound_pure _ _ _ _).mono ?_
-  simp only [List.length_take, FORS_HEIGHT]
-  omega
+  refine isTotalQueryBound_bind (th_isTotalQueryBound H hH _ _ _) fun leaf => ?_
+  have := climb_isTotalQueryBound (forsNodeHash H pkSeed idx kappa)
+    (fun _ _ _ _ => th_isTotalQueryBound H hH _ _ _) opening.path.toList 0 s.val leaf
+  rwa [Vector.length_toList] at this
 
-/-- Recovering the FORS key makes `24 * 10 = 240` calls. -/
-theorem forsRecover_isTotalQueryBound (pp : PublicParam) (idx : Nat)
+/-- Recovering the FORS public key makes `24 * 11 + 1 = 265` calls: the trees, then `T_k`. -/
+theorem forsRecover_isTotalQueryBound (pkSeed : PkSeed) (idx : Nat)
     (leaves : Vector (Fin (2 ^ FORS_HEIGHT)) FORS_TREES)
     (openings : Vector TreeOpening FORS_TREES) :
-    IsTotalQueryBound (forsRecover H pp idx leaves openings) (FORS_TREES * FORS_HEIGHT) := by
+    IsTotalQueryBound (forsRecover H pkSeed idx leaves openings)
+      (FORS_TREES * (1 + FORS_HEIGHT) + 1) := by
   rw [forsRecover]
-  simpa using ofFnInOrder_isTotalQueryBound FORS_TREES _ (fun _ => FORS_HEIGHT)
+  refine isTotalQueryBound_bind ?_ fun _ => th_isTotalQueryBound H hH _ _ _
+  simpa using ofFnInOrder_isTotalQueryBound FORS_TREES _ (fun _ => 1 + FORS_HEIGHT)
     fun _ => treeRecover_isTotalQueryBound H hH _ _ _ _ _
 
 /-- Recovering a one-time leaf makes an encoding call, 64 chain steps and a leaf call. -/
-theorem otsLeaf_isTotalQueryBound (pp : PublicParam) (key : OtsKey) (msg : ByteArray)
+theorem otsLeaf_isTotalQueryBound (pkSeed : PkSeed) (key : OtsKey) (msg : Digest)
     (counter : UInt32) (y : Vector Digest V) :
-    IsTotalQueryBound (otsLeaf H pp key msg counter y) (1 + (CHAIN_HASHES + 1)) := by
+    IsTotalQueryBound (otsLeaf H pkSeed key msg counter y) (1 + (CHAIN_HASHES + 1)) := by
   rw [otsLeaf]
   refine isTotalQueryBound_bind_of_mem_support
     ((isQueryBound_map_iff _ _ _ _ _).2 (th_isTotalQueryBound H hH _ _ _)) fun x hx => ?_
@@ -343,10 +354,10 @@ theorem otsLeaf_isTotalQueryBound (pp : PublicParam) (key : OtsKey) (msg : ByteA
         fun _ => isQueryBound_pure _ _ _ _).mono ?_
     rw [sum_steps_of_codeword hd]
 
-/-- A layer's root makes the calls of its one-time leaf, then one per level of its path. -/
-theorem layerRoot_isTotalQueryBound (pp : PublicParam) (layer : Layer) (idx : Nat)
-    (msg : ByteArray) (sig : LayerSignature layer) :
-    IsTotalQueryBound (layerRoot H pp layer idx msg sig)
+/-- A layer's root makes the calls of its one-time leaf, then one per height of its path. -/
+theorem layerRoot_isTotalQueryBound (pkSeed : PkSeed) (layer : Layer) (idx : Nat)
+    (msg : Digest) (sig : LayerSignature layer) :
+    IsTotalQueryBound (layerRoot H pkSeed layer idx msg sig)
       (1 + (CHAIN_HASHES + 1) + layer.height) := by
   rw [layerRoot]
   refine isTotalQueryBound_bind (otsLeaf_isTotalQueryBound H hH _ _ _ _ _) fun leaf => ?_
@@ -356,24 +367,24 @@ theorem layerRoot_isTotalQueryBound (pp : PublicParam) (layer : Layer) (idx : Na
     rw [← Nat.add_zero layer.height]
     refine isTotalQueryBound_bind ?_ fun _ => isQueryBound_pure _ _ _ _
     rw [fold]
-    have := climb_isTotalQueryBound (nodeHash H pp layer (OtsKey.ofIndex layer idx).tree)
+    have := climb_isTotalQueryBound (nodeHash H pkSeed layer (OtsKey.ofIndex layer idx).tree)
       (fun _ _ _ _ => th_isTotalQueryBound H hH _ _ _) sig.path.toList 0
       (OtsKey.ofIndex layer idx).leaf leaf
     rwa [Vector.length_toList] at this
 
 /-- The most hash calls verification makes: the digest, FORS, three layers and their paths. -/
 def verifyCalls : Nat :=
-  DIGEST_CALLS + FORS_TREES * FORS_HEIGHT + LAYERS * (CHAIN_HASHES + 2) + HEIGHT
+  DIGEST_CALLS + (FORS_TREES * (1 + FORS_HEIGHT) + 1) + LAYERS * (CHAIN_HASHES + 2) + HEIGHT
 
 /-- Verification makes at most that many hash calls, on every path. -/
 theorem verifyWith_isTotalQueryBound (pk : PublicKey) (msg : Message) (sig : Signature) :
     IsTotalQueryBound (verifyWith H pk msg sig) verifyCalls := by
   rw [verifyWith]
-  refine (isTotalQueryBound_bind (n₂ := FORS_TREES * FORS_HEIGHT +
+  refine (isTotalQueryBound_bind (n₂ := (FORS_TREES * (1 + FORS_HEIGHT) + 1) +
       ((1 + (CHAIN_HASHES + 1) + Layer.bottom.height) +
         ((1 + (CHAIN_HASHES + 1) + Layer.middle.height) +
           (1 + (CHAIN_HASHES + 1) + Layer.top.height + 0))))
-    (messageDigest_isTotalQueryBound H hH _ _ _) fun _ =>
+    (hMsg_isTotalQueryBound H hH _ _ _ _) fun _ =>
     isTotalQueryBound_bind (forsRecover_isTotalQueryBound H hH _ _ _ _) fun _ =>
     isTotalQueryBound_bind (layerRoot_isTotalQueryBound H hH _ _ _ _ _) fun r₀ => ?_).mono ?_
   · cases r₀ with
@@ -391,8 +402,182 @@ theorem verifyWith_isTotalQueryBound (pk : PublicKey) (msg : Message) (sig : Sig
 
 end Count
 
-/-- Verification makes at most 466 calls. -/
-theorem verifyCalls_eq : verifyCalls = 466 := by
+/-! ## The exact count when verification accepts
+
+With a fixed function for the answers, a layer that accepts makes every call of its bound.
+
+So verification makes exactly as many calls as its bound when it accepts. -/
+
+section Exact
+
+variable {ι : Type} {spec : OracleSpec ι} (F : QueryImpl spec Id)
+
+/-- A bind queries what its first part queries, then what the rest queries after that answer. -/
+theorem queriesWith_bind {α β : Type} (oa : OracleComp spec α) (k : α → OracleComp spec β) :
+    queriesWith F (oa >>= k)
+      = queriesWith F oa ++ queriesWith F (k (evalWithAnswerFn F oa)) := by
+  induction oa using OracleComp.inductionOn with
+  | pure a => simp
+  | query_bind t k' ih =>
+    rw [bind_assoc]
+    change t :: queriesWith F (k' (F t) >>= k) = (t :: queriesWith F (k' (F t))) ++ _
+    rw [ih, evalWithAnswerFn_bind, List.cons_append]
+    rfl
+
+/-- A map queries what the computation queries. -/
+theorem queriesWith_map {α β : Type} (g : α → β) (oa : OracleComp spec α) :
+    queriesWith F (g <$> oa) = queriesWith F oa := by
+  rw [map_eq_bind_pure_comp, queriesWith_bind]
+  simp
+
+/-- Computing a vector in order queries the inputs of its entries, entry 0 first. -/
+theorem length_queriesWith_ofFnInOrder {α : Type} :
+    ∀ (k : Nat) (f : Fin k → OracleComp spec α),
+      (queriesWith F (HashSig.ofFnInOrder k f)).length = ∑ i, (queriesWith F (f i)).length
+  | 0, _ => rfl
+  | k + 1, f => by
+    rw [HashSig.ofFnInOrder, Fin.sum_univ_succ, queriesWith_bind, List.length_append,
+      queriesWith_bind, List.length_append, length_queriesWith_ofFnInOrder k]
+    simp
+
+/-- A walk of `steps` steps queries `steps` inputs, when each step queries one. -/
+theorem length_queriesWith_chain {α : Type} {k : Nat} (step : Fin k → α → OracleComp spec α)
+    (hstep : ∀ i v, (queriesWith F (step i v)).length = 1) (start : Nat) :
+    ∀ (steps : Nat) (h : start + steps ≤ k) (value : α),
+      (queriesWith F (Wots.chain step start steps h value)).length = steps
+  | 0, _, _ => rfl
+  | s + 1, h, value => by
+    rw [Wots.chain_succ, queriesWith_bind, List.length_append,
+      length_queriesWith_chain step hstep start s _ value, hstep]
+
+/-- A climb queries one input per sibling, when each node hash queries one. -/
+theorem length_queriesWith_climb {α : Type} (hash : Nat → Nat → α → α → OracleComp spec α)
+    (hhash : ∀ z j left right, (queriesWith F (hash z j left right)).length = 1) :
+    ∀ (siblings : List α) (z j : Nat) (current : α),
+      (queriesWith F (Merkle.climb hash z j current siblings)).length = siblings.length
+  | [], _, _, _ => rfl
+  | _ :: rest, z, j, current => by
+    rw [Merkle.climb, queriesWith_bind, List.length_append, hhash,
+      length_queriesWith_climb hash hhash rest, List.length_cons]
+    omega
+
+variable (H : ByteArray → OracleComp spec (Vector UInt8 32))
+  (hH : ∀ x, (queriesWith F (H x)).length = 1)
+
+include hH
+
+/-- A tweakable hash call queries one input. -/
+theorem length_queriesWith_th (pkSeed : PkSeed) (adrs : Adrs) (payload : ByteArray) :
+    (queriesWith F (th H pkSeed adrs payload)).length = 1 := by
+  rw [th, queriesWith_bind, List.length_append, hH]
+  rfl
+
+/-- The message digest queries one input per block of output. -/
+theorem length_queriesWith_hMsg (rho : Randomizer) (pkSeed : PkSeed) (pkRoot : Digest)
+    (msg : Message) : (queriesWith F (hMsg H rho pkSeed pkRoot msg)).length = DIGEST_CALLS := by
+  rw [hMsg, queriesWith_bind, List.length_append, length_queriesWith_ofFnInOrder]
+  simp [hH]
+
+/-- Recovering one FORS tree's root queries the leaf, then one input per height. -/
+theorem length_queriesWith_treeRecover (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TREES)
+    (s : Fin (2 ^ FORS_HEIGHT)) (opening : TreeOpening) :
+    (queriesWith F (treeRecover H pkSeed idx kappa s opening)).length = 1 + FORS_HEIGHT := by
+  rw [treeRecover, queriesWith_bind, List.length_append, forsLeafHash,
+    length_queriesWith_th F H hH, length_queriesWith_climb F (forsNodeHash H pkSeed idx kappa)
+      (fun _ _ _ _ => length_queriesWith_th F H hH _ _ _), Vector.length_toList]
+
+/-- Recovering the FORS public key queries `24 * 11 + 1 = 265` inputs. -/
+theorem length_queriesWith_forsRecover (pkSeed : PkSeed) (idx : Nat)
+    (leaves : Vector (Fin (2 ^ FORS_HEIGHT)) FORS_TREES)
+    (openings : Vector TreeOpening FORS_TREES) :
+    (queriesWith F (forsRecover H pkSeed idx leaves openings)).length
+      = FORS_TREES * (1 + FORS_HEIGHT) + 1 := by
+  rw [forsRecover, queriesWith_bind, List.length_append, length_queriesWith_ofFnInOrder,
+    forsPkFromRoots, length_queriesWith_th F H hH]
+  simp [length_queriesWith_treeRecover F H hH]
+
+/-- Recovering a one-time leaf queries an encoding, 64 chain steps and a leaf.
+
+The encoding must be a codeword, so that the recovery returns a leaf. -/
+theorem length_queriesWith_otsLeaf (pkSeed : PkSeed) (key : OtsKey) (msg : Digest)
+    (counter : UInt32) (y : Vector Digest V)
+    (h : (evalWithAnswerFn F (otsLeaf H pkSeed key msg counter y)).isSome) :
+    (queriesWith F (otsLeaf H pkSeed key msg counter y)).length = 1 + (CHAIN_HASHES + 1) := by
+  rw [otsLeaf, evalWithAnswerFn_bind] at h
+  rw [otsLeaf, queriesWith_bind, List.length_append]
+  rcases hx : evalWithAnswerFn F (encode H pkSeed key msg counter) with _ | x
+  · rw [hx] at h
+    exact absurd h (by simp)
+  · -- The encoding is a codeword, so all chains are walked to their ends.
+    rw [encode, evalWithAnswerFn_map] at hx
+    rw [encode, queriesWith_map, length_queriesWith_th F H hH]
+    dsimp only
+    rw [queriesWith_bind, List.length_append, length_queriesWith_ofFnInOrder, queriesWith_bind,
+      List.length_append, otsLeafHash, length_queriesWith_th F H hH]
+    have hc : ∀ i : Fin V, (queriesWith F (chain H pkSeed key i x[i] (CHAIN_LENGTH - 1 - x[i])
+        (by have := x[i].isLt; omega) y[i])).length = CHAIN_LENGTH - 1 - x[i] := fun i =>
+      length_queriesWith_chain F _ (fun _ _ => length_queriesWith_th F H hH _ _ _) _ _ _ _
+    rw [Finset.sum_congr rfl fun i _ => hc i, sum_steps_of_codeword hx, queriesWith_pure,
+      List.length_nil]
+
+/-- A layer's root queries its one-time leaf's inputs, then one per height of its path.
+
+The layer must accept, so that it returns a root. -/
+theorem length_queriesWith_layerRoot (pkSeed : PkSeed) (layer : Layer) (idx : Nat)
+    (msg : Digest) (sig : LayerSignature layer)
+    (h : (evalWithAnswerFn F (layerRoot H pkSeed layer idx msg sig)).isSome) :
+    (queriesWith F (layerRoot H pkSeed layer idx msg sig)).length
+      = 1 + (CHAIN_HASHES + 1) + layer.height := by
+  rw [layerRoot, evalWithAnswerFn_bind] at h
+  rw [layerRoot, queriesWith_bind, List.length_append]
+  rcases hleaf : evalWithAnswerFn F (otsLeaf H pkSeed (OtsKey.ofIndex layer idx) msg sig.counter
+    sig.chainValues) with _ | leaf
+  · rw [hleaf] at h
+    exact absurd h (by simp)
+  · rw [length_queriesWith_otsLeaf F H hH _ _ _ _ _ (by rw [hleaf]; rfl)]
+    dsimp only
+    rw [queriesWith_bind, List.length_append, fold,
+      length_queriesWith_climb F (nodeHash H pkSeed layer (OtsKey.ofIndex layer idx).tree)
+        (fun _ _ _ _ => length_queriesWith_th F H hH _ _ _), Vector.length_toList]
+    rfl
+
+/-- **A signature that verifies takes exactly as many calls as the bound.**
+
+Every layer accepted, so each made all its calls. -/
+theorem length_queriesWith_verifyWith (pk : PublicKey) (msg : Message) (sig : Signature)
+    (h : evalWithAnswerFn F (verifyWith H pk msg sig) = true) :
+    (queriesWith F (verifyWith H pk msg sig)).length = verifyCalls := by
+  rw [verifyWith] at h ⊢
+  simp only [evalWithAnswerFn_bind, queriesWith_bind, List.length_append,
+    length_queriesWith_hMsg F H hH, length_queriesWith_forsRecover F H hH] at h ⊢
+  generalize evalWithAnswerFn F (hMsg H sig.randomizer pk.pkSeed pk.root msg) = d at h ⊢
+  generalize evalWithAnswerFn F (forsRecover H pk.pkSeed (digestIndex d) (digestLeaves d)
+    sig.fors) = forsPk at h ⊢
+  -- Each layer accepted, since a rejection returns false at once.
+  rcases h0 : evalWithAnswerFn F (layerRoot H pk.pkSeed .bottom (digestIndex d) forsPk
+    sig.bottom) with _ | r₀ <;> rw [h0] at h
+  · exact absurd h (by simp)
+  rw [length_queriesWith_layerRoot F H hH _ _ _ _ _ (by rw [h0]; rfl)]
+  dsimp only at h ⊢
+  simp only [evalWithAnswerFn_bind, queriesWith_bind, List.length_append] at h ⊢
+  rcases h1 : evalWithAnswerFn F (layerRoot H pk.pkSeed .middle (digestIndex d) r₀
+    sig.middle) with _ | r₁ <;> rw [h1] at h
+  · exact absurd h (by simp)
+  rw [length_queriesWith_layerRoot F H hH _ _ _ _ _ (by rw [h1]; rfl)]
+  dsimp only at h ⊢
+  simp only [evalWithAnswerFn_bind, queriesWith_bind, List.length_append] at h ⊢
+  rcases h2 : evalWithAnswerFn F (layerRoot H pk.pkSeed .top (digestIndex d) r₁
+    sig.top) with _ | r₂ <;> rw [h2] at h
+  · exact absurd h (by simp)
+  rw [length_queriesWith_layerRoot F H hH _ _ _ _ _ (by rw [h2]; rfl)]
+  dsimp only
+  rw [queriesWith_pure, List.length_nil]
+  decide
+
+end Exact
+
+/-- Verification makes at most `2 + 265 + 3 * 66 + 26 = 491` calls. -/
+theorem verifyCalls_eq : verifyCalls = 491 := by
   decide
 
 /-! ## Verification in the game -/
@@ -401,9 +586,9 @@ theorem verifyCalls_eq : verifyCalls = 466 := by
 theorem H_isTotalQueryBound (x : ByteArray) : IsTotalQueryBound (H x) 1 :=
   (isQueryBound_map_iff _ _ _ _ _).2 ((isQueryBound_query_iff _ _ _ _).2 Nat.one_pos)
 
-/-- In the game, verification makes at most 466 hash calls, on every path. -/
+/-- In the game, verification makes at most 491 hash calls, on every path. -/
 theorem verifyWith_H_isTotalQueryBound (pk : PublicKey) (msg : Message) (sig : Signature) :
-    IsTotalQueryBound (verifyWith H pk msg sig) 466 :=
+    IsTotalQueryBound (verifyWith H pk msg sig) 491 :=
   verifyCalls_eq ▸ verifyWith_isTotalQueryBound H H_isTotalQueryBound pk msg sig
 
 /-- The inputs verification hashes in the game, when `F` answers every query. -/
@@ -411,10 +596,23 @@ def verifyQueries (F : QueryImpl HashSig.OracleWorld Id) (pk : PublicKey) (msg :
     (sig : Signature) : List HashSig.OracleWorld.Domain :=
   queriesWith F (verifyWith H pk msg sig)
 
-/-- Verification hashes at most 466 inputs. -/
+/-- Verification hashes at most 491 inputs. -/
 theorem length_verifyQueries_le (F : QueryImpl HashSig.OracleWorld Id) (pk : PublicKey)
-    (msg : Message) (sig : Signature) : (verifyQueries F pk msg sig).length ≤ 466 :=
+    (msg : Message) (sig : Signature) : (verifyQueries F pk msg sig).length ≤ 491 :=
   length_queriesWith_le F (verifyWith_H_isTotalQueryBound pk msg sig)
+
+/-- In the game, one hash call queries one input. -/
+theorem length_queriesWith_H (F : QueryImpl HashSig.OracleWorld Id) (x : ByteArray) :
+    (queriesWith F (H x)).length = 1 :=
+  rfl
+
+/-- **In the game, a signature that verifies is checked with exactly 491 hash calls.**
+
+The bound of 491 is then reached: no layer stopped verification early. -/
+theorem length_verifyQueries_of_verify (F : QueryImpl HashSig.OracleWorld Id) (pk : PublicKey)
+    (msg : Message) (sig : Signature) (h : evalWithAnswerFn F (verifyWith H pk msg sig) = true) :
+    (verifyQueries F pk msg sig).length = 491 :=
+  (length_queriesWith_verifyWith F H (length_queriesWith_H F) pk msg sig h).trans verifyCalls_eq
 
 /-- When `F` answers every query, the game's verification is EthLib's verification.
 

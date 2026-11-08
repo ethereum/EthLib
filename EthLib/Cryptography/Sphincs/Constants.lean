@@ -3,17 +3,18 @@ module
 /-!
 # leanSPHINCS parameters
 
-The leanSPHINCS parameter set: lifetime `2^30`, Keccak-256, FORS, layered.
+The leanSPHINCS parameter set: lifetime `2^30`, Keccak-256, FORS, three layers.
 
 - Few-time signature: FORS, 24 trees of height 10.
 - One-time signature: WOTS+C, 64 chains of 4 positions, target sum 128.
-- Hypertree: three layers of heights 10, 8 and 8, top first.
+- Hypertree: three layers of heights 8, 8 and 10, from the bottom.
 
-Source: the layered key of `2^30` in leanSPHINCS.tex §1.
-<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/leanSPHINCS.tex>
+Source: the layered key of `2^30` in [leanSPHINCS.tex][note] §1, with FORS of 24 trees of height 10.
 
-It is `Params.layered 26 3 8 24 10` in FORS/Scheme.lean.
-<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean>
+The layout is that of [FIPS 205][fips205], except where a file says otherwise.
+
+[note]: https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/leanSPHINCS.tex
+[fips205]: https://doi.org/10.6028/NIST.FIPS.205
 -/
 
 @[expose] public section
@@ -22,120 +23,122 @@ namespace EthLib.Cryptography.Sphincs.Constants
 
 /-! ## Hash and object sizes -/
 
-/-- The hash value and Merkle node length in bytes, `n`.
+/-- `n`: the length in bytes of a hash value, of `PK.seed` and of a Merkle node.
 
-128 bits, the digest size of the SLH-DSA parameter sets at NIST level 1. -/
+128 bits, the security parameter of the SLH-DSA parameter sets at NIST level 1. -/
 def N : Nat := 16
 
-/-- The public parameter length in bytes.
+/-- The length in bytes of an address `ADRS`: eight 32-bit words, as in FIPS 205 §4.2. -/
+def ADRS_LEN : Nat := 32
 
-It is hashed into every call, which separates one key's hashes from another's. -/
-def PUBLIC_PARAM_LEN : Nat := 16
-
-/-- The address length in bytes.
-
-An address separates the call sites of one key. -/
-def ADDRESS_LEN : Nat := 16
+/-- The bytes before the payload of an addressed hash: `PK.seed | ADRS`. -/
+def PREFIX_LEN : Nat := N + ADRS_LEN
 
 /-- The message length in bytes.
 
 leanSPHINCS signs a 256-bit message hash, so the caller hashes the real message first. -/
 def MESSAGE_LEN : Nat := 32
 
-/-- The randomizer length in bytes.
+/-- The length in bytes of the randomizer `R`, which is `n`.
 
 It is hashed with the message into the digest that picks the FORS instance and its leaves. -/
-def RANDOMIZER_LEN : Nat := 16
+def RANDOMIZER_LEN : Nat := N
 
-/-- The secret key length in bytes.
-
-The secret key is one uniform seed.
-
-Every other secret derives from its hash with the scheme's name. -/
+/-- The length in bytes of `SK.seed`, the whole secret key. -/
 def SEED_LEN : Nat := 32
 
-/-- The scheme's name, `"leanSPHINCS"` in ASCII, hashed before the seed.
+/-- The scheme's name, `"leanSPHINCS"` in ASCII.
 
-No other scheme derives its secrets from the same bytes, leanXMSS included. -/
+It is hashed before `SK.seed` in the key expansion, and it is the context of `PRF_msg`. -/
 def SEED_TAG : List UInt8 := "leanSPHINCS".toList.map fun c => UInt8.ofNat c.toNat
 
-/-- The length in bytes of a WOTS+C counter, a little-endian 32-bit word. -/
+/-- The length in bytes of a WOTS+C counter, a big-endian 32-bit word. -/
 def COUNTER_LEN : Nat := 4
 
-/-- The length in bytes of one output of Keccak-256. -/
+/-- The length in bytes of one output of Keccak-256, and of `SK.prf`. -/
 def HASH_LEN : Nat := 32
+
+/-- The length in bytes of the framed message `M' = 0x00 | len(ctx) | ctx | M` of `PRF_msg`. -/
+def FRAMED_LEN : Nat := 2 + SEED_TAG.length + MESSAGE_LEN
 
 /-! ## WOTS+C -/
 
-/-- The positions of one hash chain, `0` to `3`, so `w = 4`.
+/-- `w`: the bits of a chain position, FIPS 205's `lg_w`. -/
+def W : Nat := 2
 
-A digit of 2 bits names one of them. -/
+/-- The positions of one hash chain, `2^w = 4`, from `0` to `3`.
+
+A digit of `w = 2` bits names one of them. -/
 def CHAIN_LENGTH : Nat := 4
 
-/-- The chains of one one-time key, `v`.
+/-- `v`: the chains of one one-time key, `8n / w`.
 
 A 16-byte digest has 128 bits, so it carries exactly 64 digits of 2 bits. -/
 def V : Nat := 64
 
-/-- The sum of a codeword's digits, `T`.
+/-- `T`: the sum of the digits of a codeword.
 
 It replaces the Winternitz checksum.
 
 `128` is above the mean digit sum `96`, so the verifier walks fewer steps.
 
-The signer pays with about 14,700 counter trials per one-time signature. -/
+The signer pays with about 14,670 counter trials per one-time signature. -/
 def TARGET_SUM : Nat := 128
 
-/-- Chain steps one verification walks for one one-time signature, `3v - T`.
+/-- Chain steps one verification walks for one one-time signature, `(2^w - 1) v - T`.
 
 The digit sum is fixed, so the count is fixed. -/
 def CHAIN_HASHES : Nat := 64
 
-/-- The counters a one-time signature may try, `C_max`.
+/-- `C_max`: the counters a one-time signature may try.
 
 A counter is a 32-bit word, so `2^32` is every counter there is. -/
 def MAX_COUNTER_TRIALS : Nat := 2 ^ 32
 
 /-! ## The hypertree -/
 
-/-- The height of the top layer's one tree. -/
+/-- `h_2`: the height of the top layer's one tree. -/
 def TOP_HEIGHT : Nat := 10
 
-/-- The height of each tree on the two layers below the top. -/
+/-- `h_0 = h_1`: the height of each tree on the two layers below the top. -/
 def LOWER_HEIGHT : Nat := 8
 
-/-- The layers of the hypertree, `d`. -/
+/-- `d`: the layers of the hypertree. -/
 def LAYERS : Nat := 3
 
-/-- The bits of an index, `h`: the three layers' heights added.
+/-- `h = h_0 + h_1 + h_2`: the bits of an index.
 
 An index names a bottom leaf, and the FORS instance under it. -/
 def HEIGHT : Nat := TOP_HEIGHT + 2 * LOWER_HEIGHT
 
 /-! ## FORS -/
 
-/-- The trees of one FORS instance, `k`.
-
-The note takes 24 trees of height 10 for every lifetime from `2^28` up. -/
+/-- `k`: the trees of one FORS instance. -/
 def FORS_TREES : Nat := 24
 
-/-- The height of each FORS tree, `a`: each tree has `2^10 = 1024` leaves. -/
+/-- `a`: the height of each FORS tree, so each tree has `2^10 = 1024` leaves. -/
 def FORS_HEIGHT : Nat := 10
 
-/-! ## The message digest -/
+/-! ## The message digest
 
-/-- The bits of the message digest that are read: the index, then one leaf per FORS tree.
+FIPS 205 Algorithm 19 splits the digest into three fields of whole bytes. -/
 
-```text
-    h + k a = 26 + 24 * 10 = 266
-```
--/
-def DIGEST_BITS : Nat := HEIGHT + FORS_TREES * FORS_HEIGHT
+/-- The bytes of `md`, the FORS leaves: `ceil(k a / 8) = 30`. -/
+def MD_BYTES : Nat := (FORS_TREES * FORS_HEIGHT + 7) / 8
 
-/-- The Keccak-256 calls that give the digest, `ceil((h + k a) / 256)`.
+/-- The bytes of the tree index: `ceil((h - h_0) / 8) = 3`. -/
+def TREE_INDEX_BYTES : Nat := (HEIGHT - LOWER_HEIGHT + 7) / 8
 
-266 bits need two calls of 256 bits. -/
-def DIGEST_CALLS : Nat := (DIGEST_BITS + 8 * HASH_LEN - 1) / (8 * HASH_LEN)
+/-- The bytes of the bottom leaf index: `ceil(h_0 / 8) = 1`. -/
+def LEAF_INDEX_BYTES : Nat := (LOWER_HEIGHT + 7) / 8
+
+/-- `m`: the bytes of `H_msg`, the three fields together. -/
+def DIGEST_BYTES : Nat := MD_BYTES + TREE_INDEX_BYTES + LEAF_INDEX_BYTES
+
+/-- The Keccak-256 calls of `H_msg`, `ceil(m / 32)`.
+
+34 bytes need two calls of 32 bytes. -/
+def DIGEST_CALLS : Nat := (DIGEST_BYTES + HASH_LEN - 1) / HASH_LEN
 
 /-! ## The signature limit -/
 
@@ -150,8 +153,8 @@ def SIGNATURE_LIMIT : Nat := 2 ^ 30
 
 /-! ## Serialized sizes -/
 
-/-- Bytes in a serialized public key: the root, then the public parameter. -/
-def PUB_KEY_SIZE : Nat := N + PUBLIC_PARAM_LEN
+/-- Bytes in a serialized public key: `PK.seed`, then `PK.root`. -/
+def PUB_KEY_SIZE : Nat := 2 * N
 
 /-- Bytes in one FORS tree's opening: the secret, then `a` path nodes.
 
@@ -170,10 +173,39 @@ def SIG_SIZE : Nat :=
   RANDOMIZER_LEN + FORS_TREES * TREE_OPENING_SIZE
     + 2 * layerSigSize LOWER_HEIGHT + layerSigSize TOP_HEIGHT
 
+/-! ## The cost of verification -/
+
+/-- The bytes Keccak-256 absorbs per permutation of Keccak-f[1600], its rate. -/
+def KECCAK_RATE : Nat := 136
+
+/-- The permutations Keccak-256 makes on an input of `len` bytes: `floor(len / 136) + 1`. -/
+def permutations (len : Nat) : Nat := len / KECCAK_RATE + 1
+
+/-- The permutations of one verification, counted call by call.
+
+- `H_msg`: two calls of 84 bytes.
+- FORS: per tree, a leaf of 64 bytes and `a` nodes of 80 bytes.
+- `T_k` over the 24 roots: 432 bytes.
+- Encodings: one of 68 bytes per layer.
+- Chains: `(2^w - 1) v - T = 64` steps of 64 bytes per layer.
+- `T_v` over 64 chain ends: 1072 bytes per layer.
+- Paths: `h` nodes of 80 bytes.
+-/
+def VERIFY_PERMUTATIONS : Nat :=
+  DIGEST_CALLS * permutations (3 * N + MESSAGE_LEN + COUNTER_LEN)
+    + FORS_TREES * (permutations (PREFIX_LEN + N) + FORS_HEIGHT * permutations (PREFIX_LEN + 2 * N))
+    + permutations (PREFIX_LEN + FORS_TREES * N)
+    + LAYERS * permutations (PREFIX_LEN + N + COUNTER_LEN)
+    + LAYERS * (CHAIN_HASHES + permutations (PREFIX_LEN + V * N))
+    + HEIGHT * permutations (PREFIX_LEN + 2 * N)
+
 /-! ## Identities the parameter set must satisfy -/
 
+/-- A chain has `2^w` positions. -/
+theorem chain_length_eq : CHAIN_LENGTH = 2 ^ W := by decide
+
 /-- A digest is exactly 64 digits of 2 bits. -/
-theorem digits_fill_digest : 2 * V = 8 * N := by decide
+theorem digits_fill_digest : W * V = 8 * N := by decide
 
 /-- The target sum is reachable: it does not exceed the maximum digit sum. -/
 theorem target_sum_le_max : TARGET_SUM ≤ V * (CHAIN_LENGTH - 1) := by decide
@@ -181,39 +213,41 @@ theorem target_sum_le_max : TARGET_SUM ≤ V * (CHAIN_LENGTH - 1) := by decide
 /-- The verifier's step count is what the target sum leaves unwalked. -/
 theorem chain_hashes_eq : V * (CHAIN_LENGTH - 1) - TARGET_SUM = CHAIN_HASHES := by decide
 
-/-- The chain starts come in pairs, one hash for two chains. -/
-theorem chains_even : 2 * (V / 2) = V := by decide
-
-/-- An index has 26 bits: `10 + 8 + 8`. -/
+/-- An index has 26 bits: `8 + 8 + 10`. -/
 theorem height_eq : HEIGHT = 26 := by decide
 
 /-- The lifetime is within the model's proved limit of 1,182,000,000 signatures. -/
 theorem signature_limit_le : SIGNATURE_LIMIT ≤ 1182000000 := by decide
 
-/-- Two digest calls give the 266 bits the signature reads, and one would not. -/
-theorem digest_calls_eq :
-    DIGEST_CALLS = 2 ∧ 8 * HASH_LEN < DIGEST_BITS ∧ DIGEST_BITS ≤ DIGEST_CALLS * (8 * HASH_LEN) := by
+/-- The digest has `m = 34` bytes: 30 for the FORS leaves, 3 for the tree, 1 for the leaf. -/
+theorem digest_bytes_eq :
+    MD_BYTES = 30 ∧ TREE_INDEX_BYTES = 3 ∧ LEAF_INDEX_BYTES = 1 ∧ DIGEST_BYTES = 34 := by
   decide
 
-/-- A digest call number fits the 24-bit address field `hi`. -/
-theorem digest_calls_le : DIGEST_CALLS ≤ 2 ^ 24 := by decide
+/-- Two Keccak-256 calls give the 34 bytes of the digest, and one would not. -/
+theorem digest_calls_eq :
+    DIGEST_CALLS = 2 ∧ HASH_LEN < DIGEST_BYTES ∧ DIGEST_BYTES ≤ DIGEST_CALLS * HASH_LEN := by
+  decide
 
-/-- The FORS leaf secrets come in pairs, one hash for two leaves. -/
-theorem fors_leaves_even : 2 * (2 ^ FORS_HEIGHT / 2) = 2 ^ FORS_HEIGHT := by decide
+/-- The FORS leaves fill `md` exactly: 24 leaves of 10 bits are 30 bytes. -/
+theorem fors_leaves_fill_md : FORS_TREES * FORS_HEIGHT = 8 * MD_BYTES := by decide
 
-/-- An index fits the 32-bit address field `lo`. -/
-theorem index_fits_lo : 2 ^ HEIGHT ≤ 2 ^ 32 := by decide
+/-- The tree index and the bottom leaf fit their bytes. -/
+theorem index_fields_fit :
+    HEIGHT - LOWER_HEIGHT ≤ 8 * TREE_INDEX_BYTES ∧ LOWER_HEIGHT ≤ 8 * LEAF_INDEX_BYTES := by
+  decide
 
-/-- A FORS tree and a position in it fit the 24-bit address field `hi`.
+/-- A FORS tree index `kappa 2^a + s` fits the 32-bit word of the address. -/
+theorem fors_tree_index_fits : FORS_TREES * 2 ^ FORS_HEIGHT ≤ 2 ^ 32 := by decide
 
-The position of a node is `level + 16 j`, below `16 * 2^10`, and the tree adds `64` times it. -/
-theorem fors_position_fits_hi : FORS_TREES + 64 * (16 * 2 ^ FORS_HEIGHT) ≤ 2 ^ 24 := by decide
+/-- A tree number of any layer fits the 64 bits that the tree address holds. -/
+theorem tree_fits : 2 ^ (HEIGHT - LOWER_HEIGHT) ≤ 2 ^ 64 := by decide
 
-/-- A FORS tree number fits the 6 bits of `hi` below the position. -/
-theorem fors_trees_lt : FORS_TREES ≤ 64 := by decide
+/-- A leaf of any layer fits the 32-bit key pair word of the address. -/
+theorem leaf_fits : 2 ^ TOP_HEIGHT ≤ 2 ^ 32 := by decide
 
-/-- A FORS level fits the 4 bits of a position below the node index. -/
-theorem fors_height_lt : FORS_HEIGHT ≤ 16 := by decide
+/-- The framed message is 45 bytes. -/
+theorem framed_len_eq : FRAMED_LEN = 45 := by decide
 
 /-- The advertised public key size. -/
 theorem pub_key_size_eq : PUB_KEY_SIZE = 32 := by decide
@@ -227,17 +261,25 @@ theorem lower_layer_sig_size_eq : layerSigSize LOWER_HEIGHT = 1156 := by decide
 /-- The advertised size of the top layer's signature. -/
 theorem top_layer_sig_size_eq : layerSigSize TOP_HEIGHT = 1188 := by decide
 
-/-- The advertised signature size, `7740` bytes, as in leanSPHINCS.tex §1.
-<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/leanSPHINCS.tex>
+/-- The signature size, `7740` bytes, as in the table of the note's §1.
 
-It is `16 + 16 k (a + 1) + 1028 d + 16 h`, `signature_size` of FORS/Scheme/Layout.lean:
-<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme/Layout.lean> -/
+It is `n + k (1 + a) n + d (4 + v n) + h n`. -/
 theorem sig_size_eq : SIG_SIZE = 7740 ∧
-    SIG_SIZE = 16 + 16 * FORS_TREES * (FORS_HEIGHT + 1) + 1028 * LAYERS + 16 * HEIGHT := by
+    SIG_SIZE = N + FORS_TREES * (1 + FORS_HEIGHT) * N + LAYERS * (COUNTER_LEN + V * N)
+      + HEIGHT * N := by
+  decide
+
+/-- The verification cost, `515` permutations.
+
+It is `2 + k (1 + a) + 4 + d + d ((2^w - 1) v - T + 8) + h`. -/
+theorem verify_permutations_eq : VERIFY_PERMUTATIONS = 515 ∧
+    VERIFY_PERMUTATIONS = 2 + FORS_TREES * (1 + FORS_HEIGHT) + 4 + LAYERS
+      + LAYERS * (CHAIN_HASHES + 8) + HEIGHT := by
   decide
 
 /-- The scheme's name is these 11 bytes. -/
-theorem seed_tag_eq : SEED_TAG = [0x6c, 0x65, 0x61, 0x6e, 0x53, 0x50, 0x48, 0x49, 0x4e, 0x43, 0x53] := by
+theorem seed_tag_eq :
+    SEED_TAG = [0x6c, 0x65, 0x61, 0x6e, 0x53, 0x50, 0x48, 0x49, 0x4e, 0x43, 0x53] := by
   decide
 
 end EthLib.Cryptography.Sphincs.Constants
