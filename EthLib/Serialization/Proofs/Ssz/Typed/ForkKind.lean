@@ -122,6 +122,15 @@ instance : LawfulSszType (ForkList switch fork α limit) where
       | list within each =>
         obtain ⟨items, read, size⟩ := ofElements_ok each
         simp [ofValue, read, bind, Except.bind, pure, Except.pure, size, within] at made
+  encode_eq l := by
+    by_cases fixed : (desc α).isFixed
+    · simp only [encode, fixed, ite_true, encodeFixedElements_eq fixed, desc, toValue]
+      split
+      · simp [Ssz.serialize, boundCheck, bind, Except.bind, pure, Except.pure]
+      · rename_i before
+        simp [Ssz.serialize, l.bound (lt_of_not_switch before)]
+    · simp only [encode, fixed, Bool.false_eq_true, ite_false]
+      rfl
 
 /-- The empty list has empty SSZ bytes. -/
 theorem serialize_forkList_empty :

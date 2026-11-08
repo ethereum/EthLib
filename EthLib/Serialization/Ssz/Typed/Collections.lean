@@ -120,6 +120,10 @@ instance {α : Type} [SszType α] {limit : Nat} : SszType (SszList α limit) whe
       if within : items.size ≤ limit then return ⟨items, within⟩
       else throw (.overLimit limit items.size)
     | _ => .error .typeMismatch
+  -- Fixed-size elements need no offset table, so their bytes follow one another.
+  encode l :=
+    if (desc α).isFixed then encodeFixedElements l.data
+    else do return ⟨← Ssz.serialize (.list (desc α) limit) (.seq (l.data.toList.map toValue))⟩
 
 /--
 `ByteList[limit]`, the alias of `List[byte, limit]`.
@@ -159,6 +163,11 @@ instance {α : Type} [SszType α] : SszType (ProgressiveList α) where
   ofValue
     | .seq elements => ProgressiveList.mk <$> ofElements elements
     | _ => .error .typeMismatch
+  -- Fixed-size elements need no offset table, so their bytes follow one another.
+  encode l :=
+    if (desc α).isFixed then encodeFixedElements l.data
+    else do
+      return ⟨← Ssz.serialize (.progressiveList (desc α) none) (.seq (l.data.toList.map toValue))⟩
 
 instance : SszType ProgressiveBitlist where
   desc := .progressiveBitList none

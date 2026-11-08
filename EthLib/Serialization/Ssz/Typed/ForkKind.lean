@@ -72,6 +72,12 @@ instance {switch fork : Fork} {α : Type} [SszType α] {limit : Nat} :
       if within : fork < switch → items.size ≤ limit then return ⟨items, within⟩
       else throw (.overLimit limit items.size)
     | _ => .error .typeMismatch
+  -- Fixed-size elements need no offset table, so their bytes follow one another.
+  encode l :=
+    if (desc α).isFixed then encodeFixedElements l.data
+    else do
+      let shape := if switch ≤ fork then .progressiveList (desc α) none else .list (desc α) limit
+      return ⟨← Ssz.serialize shape (.seq (l.data.toList.map toValue))⟩
 
 /-- Bytes: a byte list before the switch, and a progressive list of bytes from it on.
 
