@@ -268,7 +268,7 @@ theorem patricializeStep_perm (hash : ByteArray → Hash32)
   | _ :: _ :: _, [], hperm, _ => exact absurd hperm.length_eq (by simp)
   | _ :: _ :: _, [_], hperm, _ => exact absurd hperm.length_eq (by simp)
   | (key₁, value₁) :: second :: rest, (key₂, value₂) :: second' :: rest', hperm, hdistinct =>
-    simp only [patricializeStep]
+    simp only [patricializeStep_cons_cons]
     -- Both runs equal the run from the first key, over the keys of the first order.
     have hfirst₂ : (key₂, value₂) ∈ (key₁, value₁) :: second :: rest := hperm.mem_iff.mpr List.mem_cons_self
     have hrun : List.foldl (fun length (x : List Nibble × ByteArray) =>
@@ -303,10 +303,10 @@ theorem patricializeAux_perm (hash : ByteArray → Hash32) :
     (fuel : Nat) → (obj obj' : List (List Nibble × ByteArray)) → (level : Nat) → obj.Perm obj' →
       Distinct obj level → patricializeAux hash fuel obj level = patricializeAux hash fuel obj' level
   | 0, _, _, _, hperm, hdistinct => by
-    simp only [patricializeAux]
+    simp only [patricializeAux_zero]
     exact patricializeStep_perm hash (fun _ _ _ _ _ => rfl) hperm hdistinct
   | fuel + 1, _, _, _, hperm, hdistinct => by
-    simp only [patricializeAux]
+    simp only [patricializeAux_add_one]
     exact patricializeStep_perm hash
       (fun obj obj' level hperm' hdistinct' => patricializeAux_perm hash fuel obj obj' level hperm' hdistinct')
       hperm hdistinct
@@ -315,7 +315,8 @@ theorem patricializeAux_perm (hash : ByteArray → Hash32) :
 theorem patricialize_perm (hash : ByteArray → Hash32) {obj obj' : List (List Nibble × ByteArray)} {level : Nat}
     (hperm : obj.Perm obj') (hdistinct : Distinct obj level) :
     patricialize hash obj level = patricialize hash obj' level := by
-  rw [patricialize, patricialize, longestPath_perm hperm, patricializeAux_perm hash _ _ _ _ hperm hdistinct]
+  rw [patricialize_eq, patricialize_eq, longestPath_perm hperm,
+    patricializeAux_perm hash _ _ _ _ hperm hdistinct]
 
 /-! ## The root ignores the order -/
 
@@ -332,7 +333,7 @@ theorem root_of_prepareData {hash : ByteArray → Hash32} {trie : Trie} {obj : L
       let rootNode ← (patricialize hash obj 0).mapError .rlp
       let encoded ← (encode (unencoded rootNode)).mapError .rlp
       return hash encoded) := by
-  simp only [root, h]
+  simp only [root_eq, h]
   rfl
 
 /-- The root does not depend on the order of the entries, when the keys have distinct paths. -/
@@ -366,7 +367,8 @@ theorem root_plain_eq (hash : ByteArray → Hash32) {data data' : List (ByteArra
     root hash ⟨false, data⟩ = root hash ⟨false, data'⟩ := by
   apply root_perm hash ((List.perm_ext_iff_of_nodup (nodup_of_map _ hkeys) (nodup_of_map _ hkeys')).mpr hentries)
   -- Distinct keys have distinct nibbles.
-  simpa [keyPath, List.map_map, Function.comp_def] using nodup_map_of_injective (fun _ _ h => bytesToNibbleList_injective h) hkeys
+  simpa [keyPath_eq, List.map_map, Function.comp_def] using
+    nodup_map_of_injective (fun _ _ h => bytesToNibbleList_injective h) hkeys
 
 /-- A secured trie: two lists whose keys have distinct hashes and that hold the same entries have the same root. -/
 theorem root_secured_eq (hash : ByteArray → Hash32) {data data' : List (ByteArray × ByteArray)}
@@ -376,6 +378,7 @@ theorem root_secured_eq (hash : ByteArray → Hash32) {data data' : List (ByteAr
   apply root_perm hash ((List.perm_ext_iff_of_nodup (nodup_of_map _ hhashes) (nodup_of_map _ hhashes')).mpr hentries)
   -- Distinct hashes have distinct bytes, and distinct bytes have distinct nibbles.
   have hbytes := nodup_map_of_injective hashBytes_injective hhashes
-  simpa [keyPath, List.map_map, Function.comp_def] using nodup_map_of_injective (fun _ _ h => bytesToNibbleList_injective h) hbytes
+  simpa [keyPath_eq, List.map_map, Function.comp_def] using
+    nodup_map_of_injective (fun _ _ h => bytesToNibbleList_injective h) hbytes
 
 end EthLib.Execution.Trie

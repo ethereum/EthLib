@@ -32,11 +32,13 @@ The scheme's name comes first, so no other scheme derives from the same bytes. -
 def schemeSeed (seed : Seed) : m Seed :=
   H (ByteArray.mk SEED_TAG.toArray ++ packBytes seed)
 
-/-- `P = Th(0^128, A_param, S)`: the public parameter.
+/-- `P`: the public parameter, the first half of the derivation at `0^128` and `A_param`.
 
-The all-zero parameter stands in for the one being derived. -/
-def publicParamOf (s : Seed) : m PublicParam :=
-  th H (Vector.replicate PUBLIC_PARAM_LEN 0) addrParam (packBytes s)
+The all-zero parameter stands in for the one being derived, and the suffix is empty.
+
+With the derivations from the scheme seed `S`, it is `Th(0^128, A_param, S)`. -/
+def publicParamOf (prf : SeedPrf m) : m PublicParam := do
+  return halfOf 0 (← prf (Vector.replicate PUBLIC_PARAM_LEN 0) addrParam .empty)
 
 /-! ## Keys -/
 
@@ -47,23 +49,23 @@ structure SecretKey where
 
 /-! ## Key generation -/
 
-/-- The public key of the scheme seed `S`: the parameter `P`, then the root of the top tree.
+/-- The public key of the derivations from a seed: the top tree's root and the parameter `P`.
 
 Computing the root builds all `2^16` one-time keys of the top tree. -/
-def publicKeyOf (s : Seed) : m PublicKey := do
-  let pp ← publicParamOf H s
-  let root ← node H pp s .top LAYER_HEIGHT 0
+def publicKeyOf (prf : SeedPrf m) : m PublicKey := do
+  let pp ← publicParamOf prf
+  let root ← node H pp prf .top LAYER_HEIGHT 0
   return { root, publicParam := pp }
 
 /-- `Gen` over a hash `H`: the key pair grown from a seed.
 
 1. The scheme seed `S`, from the seed.
-2. The public key of `S`.
+2. The public key of the derivations from `S`.
 
 The seed must be 32 uniform bytes, kept secret. -/
 def keyGenWith (seed : Seed) : m (SecretKey × PublicKey) := do
   let s ← schemeSeed H seed
-  return (⟨seed⟩, ← publicKeyOf H s)
+  return (⟨seed⟩, ← publicKeyOf H (seedPrf H s))
 
 /-- `Gen`, with Keccak-256. -/
 def keyGen (seed : Seed) : SecretKey × PublicKey :=

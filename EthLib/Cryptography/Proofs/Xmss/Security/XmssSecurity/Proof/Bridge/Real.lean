@@ -3,6 +3,8 @@ module
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Resolution
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 public import EthLib.Cryptography.Proofs.Xmss.Tree
+public import EthLib.Cryptography.Proofs.Xmss.KeyGen
+public import EthLib.Cryptography.Proofs.Xmss.Ots
 
 /-!
 # EthLib's key generation under the programmed cache
@@ -33,9 +35,13 @@ def keygenQueries : Nat := 2 + 2 ^ 16 * (29 + 174 + 1) + 2 ^ 16 - 1
 
 theorem keygenQueries_eq : keygenQueries = 13434881 := by decide
 
+/-- The derivations from the scheme's seed `S`, each a query to the oracle. -/
+abbrev realPrf (seed : MasterSeed) : Xmss.SeedPrf (OracleComp HashSpec) :=
+  Xmss.seedPrf queryH (ofSeed seed)
+
 /-- EthLib's key generation from the scheme's seed `S`, after the seed hash. -/
 def realKeygen (seed : MasterSeed) : OracleComp HashSpec Xmss.PublicKey :=
-  Xmss.publicKeyOf queryH (ofSeed seed)
+  Xmss.publicKeyOf queryH (realPrf seed)
 
 /-! ## Counts -/
 
@@ -71,8 +77,9 @@ theorem queryCount_chain (pp : Xmss.PublicParam) (layer : Xmss.Layer) (e : UInt3
 
 theorem queryCount_chainStarts (pp : Xmss.PublicParam) (s : Xmss.Seed) (layer : Xmss.Layer)
     (e : UInt32) :
-    QueryCount (Xmss.chainStarts queryH pp s layer e : OracleComp HashSpec _) 29 := by
-  unfold Xmss.chainStarts
+    QueryCount (Xmss.chainStarts pp (Xmss.seedPrf queryH s) layer e : OracleComp HashSpec _)
+      29 := by
+  rw [Xmss.chainStarts_seedPrf]
   exact (QueryCount.ofFnInOrder fun _ => queryCount_queryH _).bind fun _ => .pure _
 
 /-- The hash calls of a node at `level`, its subtree's one-time keys included. -/
@@ -80,7 +87,8 @@ def nodeQueries (level : Nat) : Nat := 2 ^ level * (29 + 174 + 1) + 2 ^ level - 
 
 theorem queryCount_otsPublicLeaf (pp : Xmss.PublicParam) (s : Xmss.Seed) (layer : Xmss.Layer)
     (e : UInt32) :
-    QueryCount (Xmss.otsPublicLeaf queryH pp s layer e : OracleComp HashSpec Xmss.Digest)
+    QueryCount (Xmss.otsPublicLeaf queryH pp (Xmss.seedPrf queryH s) layer e :
+      OracleComp HashSpec Xmss.Digest)
       (nodeQueries 0) := by
   unfold Xmss.otsPublicLeaf
   rw [show nodeQueries 0 = 29 + (V * 3 + 1) by decide]
@@ -90,7 +98,8 @@ theorem queryCount_otsPublicLeaf (pp : Xmss.PublicParam) (s : Xmss.Seed) (layer 
 
 theorem queryCount_node (pp : Xmss.PublicParam) (s : Xmss.Seed) (layer : Xmss.Layer) :
     ∀ (level : Nat) (j : Nat),
-      QueryCount (Xmss.node queryH pp s layer level j : OracleComp HashSpec Xmss.Digest)
+      QueryCount (Xmss.node queryH pp (Xmss.seedPrf queryH s) layer level j :
+        OracleComp HashSpec Xmss.Digest)
         (nodeQueries level)
   | 0, j => by
     rw [Xmss.node_zero]
@@ -107,7 +116,8 @@ theorem queryCount_node (pp : Xmss.PublicParam) (s : Xmss.Seed) (layer : Xmss.La
 
 theorem queryCount_realKeygen (seed : MasterSeed) :
     QueryCount (realKeygen seed) (keygenQueries - 1) := by
-  unfold realKeygen Xmss.publicKeyOf Xmss.publicParamOf
+  unfold realKeygen Xmss.publicKeyOf
+  rw [Xmss.publicParamOf_seedPrf]
   rw [show keygenQueries - 1 = 1 + (nodeQueries 16 + 0) by decide]
   exact (queryCount_th _ _ _).bind fun _ =>
     (queryCount_node _ _ _ 16 0).bind fun _ => .pure _
@@ -173,10 +183,10 @@ theorem halves_eq (f : ChainPair → HashOutput) (pairs : Fin (V / 2) → HashOu
 
 /-- A bottom key's chain starts are the derivations' answers. -/
 theorem chainStarts_bottom (seed : MasterSeed) (d : Derivations) (index : LeafIndex) :
-    Resolves (progCache seed d) (Xmss.chainStarts queryH (ofParam d.parameter) (ofSeed seed)
+    Resolves (progCache seed d) (Xmss.chainStarts (ofParam d.parameter) (realPrf seed)
         .bottom (ofLeafIndex index) : OracleComp HashSpec (Vector Xmss.Digest V))
       (ofChains (d.secret index)) := by
-  unfold Xmss.chainStarts
+  rw [Xmss.chainStarts_seedPrf]
   refine (Resolves.ofFnInOrder
     (v := fun j : Fin (V / 2) => ofOutput (d.bottom (index, ⟨j.val, j.isLt⟩)))
     fun j => resolves_queryH ?_).bind ?_
@@ -187,10 +197,10 @@ theorem chainStarts_bottom (seed : MasterSeed) (d : Derivations) (index : LeafIn
 
 /-- A top key's chain starts are the derivations' answers. -/
 theorem chainStarts_top (seed : MasterSeed) (d : Derivations) (key : TopIndex) :
-    Resolves (progCache seed d) (Xmss.chainStarts queryH (ofParam d.parameter) (ofSeed seed)
+    Resolves (progCache seed d) (Xmss.chainStarts (ofParam d.parameter) (realPrf seed)
         .top (ofTopIndex key) : OracleComp HashSpec (Vector Xmss.Digest V))
       (ofChains (d.topSecret key)) := by
-  unfold Xmss.chainStarts
+  rw [Xmss.chainStarts_seedPrf]
   refine (Resolves.ofFnInOrder (v := fun j : Fin (V / 2) => ofOutput (d.top (key, ⟨j.val, j.isLt⟩)))
     fun j => resolves_queryH ?_).bind ?_
   · rw [topPrfInput]
@@ -259,11 +269,11 @@ theorem erases_node (seed : MasterSeed) (d : Derivations) (layer : Xmss.Layer) (
     (hheight : LAYER_HEIGHT ≤ bits) (hbits : 2 ^ bits ≤ Concrete.layerLeaves layer)
     (leaves : Nat → OracleComp HashSpec Digest)
     (hleaves : ∀ j < 2 ^ bits, Erases (progCache seed d)
-      (Xmss.node queryH (ofParam d.parameter) (ofSeed seed) layer 0 j :
+      (Xmss.node queryH (ofParam d.parameter) (realPrf seed) layer 0 j :
         OracleComp HashSpec Xmss.Digest) (ofDigest <$> leaves j)) :
     ∀ (level : Nat), level ≤ LAYER_HEIGHT → ∀ (j : Nat), j < 2 ^ (bits - level) →
-      Erases (progCache seed d) (Xmss.node queryH (ofParam d.parameter) (ofSeed seed) layer
-          level j : OracleComp HashSpec Xmss.Digest)
+      Erases (progCache seed d) (Xmss.node queryH (ofParam d.parameter) (realPrf seed)
+          layer level j : OracleComp HashSpec Xmss.Digest)
         (ofDigest <$> EthLib.Cryptography.Merkle.node (Concrete.nodeAt d.parameter layer) leaves
           level j)
   | 0, _, j, hj => by
@@ -292,7 +302,7 @@ theorem erases_node (seed : MasterSeed) (d : Derivations) (layer : Xmss.Layer) (
 /-- A bottom node from `S` is the model's with its derivations erased. -/
 theorem erases_node_bottom (seed : MasterSeed) (d : Derivations) (level : Nat)
     (hlevel : level ≤ LAYER_HEIGHT) (j : Nat) (hj : j < 2 ^ (32 - level)) :
-    Erases (progCache seed d) (Xmss.node queryH (ofParam d.parameter) (ofSeed seed) .bottom
+    Erases (progCache seed d) (Xmss.node queryH (ofParam d.parameter) (realPrf seed) .bottom
         level j : OracleComp HashSpec Xmss.Digest)
       (ofDigest <$> Concrete.treeNode d.parameter d.secret level (Concrete.merkleNodeOfNat j)) := by
   have hjN : j < lifetime := hj.trans_le (Nat.pow_le_pow_right (by decide) (Nat.sub_le _ _))
@@ -305,7 +315,7 @@ theorem erases_node_bottom (seed : MasterSeed) (d : Derivations) (level : Nat)
 /-- A top node from `S` is the model's with its derivations erased. -/
 theorem erases_node_top (seed : MasterSeed) (d : Derivations) (level : Nat)
     (hlevel : level ≤ LAYER_HEIGHT) (j : Nat) (hj : j < 2 ^ (16 - level)) :
-    Erases (progCache seed d) (Xmss.node queryH (ofParam d.parameter) (ofSeed seed) .top
+    Erases (progCache seed d) (Xmss.node queryH (ofParam d.parameter) (realPrf seed) .top
         level j : OracleComp HashSpec Xmss.Digest)
       (ofDigest <$> Concrete.topTreeNode d.parameter d.topSecret level
         (Concrete.topNodeOfNat j)) := by
@@ -327,7 +337,7 @@ variable {seed : MasterSeed} {d : Derivations}
 theorem realBottomNode (h : Prepared seed d result cache) (level : Nat)
     (hlevel : level ≤ LAYER_HEIGHT)
     (j : Nat) (hj : j < 2 ^ (32 - level)) :
-    Resolves cache (Xmss.node queryH (ofParam d.parameter) (ofSeed seed) .bottom level j :
+    Resolves cache (Xmss.node queryH (ofParam d.parameter) (realPrf seed) .bottom level j :
         OracleComp HashSpec Xmss.Digest)
       (ofDigest ((modelSecretKey d result).treeValue ⟨level, by
         have : level ≤ 16 := hlevel; simp only [treeHeight]; omega⟩
@@ -338,7 +348,7 @@ theorem realBottomNode (h : Prepared seed d result cache) (level : Nat)
 theorem realTopNode (h : Prepared seed d result cache) (level : Nat)
     (hlevel : level ≤ LAYER_HEIGHT)
     (j : Nat) (hj : j < 2 ^ (16 - level)) :
-    Resolves cache (Xmss.node queryH (ofParam d.parameter) (ofSeed seed) .top level j :
+    Resolves cache (Xmss.node queryH (ofParam d.parameter) (realPrf seed) .top level j :
         OracleComp HashSpec Xmss.Digest)
       (ofDigest ((modelSecretKey d result).topTreeValue ⟨level, by
         have : level ≤ 16 := hlevel; simp only [treeHeight]; omega⟩
@@ -348,9 +358,10 @@ theorem realTopNode (h : Prepared seed d result cache) (level : Nat)
 
 /-- The parameter `P = Th(0^128, A_param, S)` resolves to the programmed one. -/
 theorem realParam (h : Prepared seed d result cache) :
-    Resolves cache (Xmss.publicParamOf queryH (ofSeed seed) : OracleComp HashSpec _)
-      (ofParam d.parameter) := by
-  unfold Xmss.publicParamOf Xmss.th
+    Resolves cache (Xmss.publicParamOf (realPrf seed) :
+      OracleComp HashSpec _) (ofParam d.parameter) := by
+  rw [Xmss.publicParamOf_seedPrf]
+  unfold Xmss.th
   have hparam : cache (paramInput seed) = some d.param := h.prog_le (progCache_param seed d)
   -- The all-zero parameter is the bytes of the zero bit vector.
   have hzero : Vector.replicate PUBLIC_PARAM_LEN (0 : UInt8)

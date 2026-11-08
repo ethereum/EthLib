@@ -720,9 +720,9 @@ theorem tree_root_value (hboundary : BoundaryCorrect f parameter seed labels)
 
 Every FORS position is active, so its label is its honest value.
 
-The scheme does not hash the root of a FORS tree.
+A leaf is the hash of its secret, and a node is the honest node.
 
-The FORS key holds the two nodes at level `a - 1` of every tree.
+The FORS public key, `T_k` of the roots of the trees, is the label of the FORS roots position.
 -/
 
 section ForsTrees
@@ -781,38 +781,34 @@ theorem fnode_value (level : Nat) (hlevel : level ≤ forsHeight) (nd : FLeaf)
         fnode_input f parameter seed labels index κ level hlevel nd hglobal,
         Completeness.forsNodeValue_succ f parameter index κ seed level nd.val (by omega)]
       rw [ih (by omega) _ (by change 2 * nd.val < _; omega), ih (by omega) _ hchildren]
-      congr 4
-      exact Fin.ext (Nat.mod_eq_of_lt nd.isLt).symm
+      -- Name the reduced node index: `congr` would try to decide it by unfolding the inputs.
+      rw [show (⟨nd.val % 2 ^ forsHeight, Nat.mod_lt _ (Nat.two_pow_pos _)⟩ : FLeaf) = nd from
+        Fin.ext (Nat.mod_eq_of_lt nd.isLt)]
 
-/-- The position index `a - 2` of the two nodes at tree level `a - 1`. -/
-def topNodeLevel : FLevel := ⟨forsHeight - 2, by have := Params.forsHeight_ge; omega⟩
-
-/-- The FORS key read from the labels: the two nodes at level `a - 1` of every tree. -/
-def keyLabels : ForsKey :=
-  fun κ' => (truncateHash (labels (.fnode index κ' topNodeLevel ⟨0, Nat.two_pow_pos _⟩)),
-    truncateHash (labels (.fnode index κ' topNodeLevel ⟨1, Nat.one_lt_two_pow (by
-      have := Params.forsHeight_ge; omega)⟩)))
+/-- The FORS public key read from the labels: the label of the position that hashes the roots. -/
+def keyLabels : Digest := truncateHash (labels (.froots index))
 
 include hconsistent in
 theorem fors_key_value :
     keyLabels labels index =
-      evalWithAnswerFn f (Seeded.forsKey parameter index seed : OracleComp HashSpec ForsKey) := by
+      evalWithAnswerFn f (Seeded.forsKey parameter index seed : OracleComp HashSpec Digest) := by
   have ha := Params.forsHeight_ge
-  have hlevel : forsHeight - 2 + 1 = forsHeight - 1 := by omega
-  have h : ∀ (κ' : FTree) (nd : FLeaf) (_ : nd.val < 2),
-      truncateHash (labels (.fnode index κ' topNodeLevel nd)) =
-        Completeness.forsNodeValue f parameter index κ' seed (forsHeight - 1) nd.val := by
-    intro κ' nd hnd
-    have h1 : truncateHash (labels (.fnode index κ' topNodeLevel nd)) =
-        Completeness.forsNodeValue f parameter index κ' seed (forsHeight - 2 + 1) nd.val :=
-      fnode_value f parameter seed labels hconsistent index κ' (forsHeight - 2 + 1) (by omega) nd
-        (by rw [show forsHeight - (forsHeight - 2 + 1) = 1 by omega]; simpa using hnd)
-    rw [hlevel] at h1
-    exact h1
-  rw [Completeness.forsKey_eq]
+  rw [Completeness.forsKey_eq, Completeness.eval_forsPublicKey, keyLabels,
+    hconsistent (.froots index) trivial]
+  apply congrArg (fun input : HashInput => truncateHash (f input))
+  unfold canonicalGraphInput canonicalGraphSlots
+  simp only [Position.children, Position.domain, List.map_ofFn, rootsPayload]
+  congr 1
+  apply congrArg (fun values : List Digest => values.flatMap (bytesLE 16))
+  apply congrArg List.ofFn
   funext κ'
-  simp only [keyLabels, Completeness.topsValue]
-  rw [h κ' _ (by norm_num), h κ' _ (by norm_num)]
+  simp only [Function.comp_apply, Completeness.rootValue]
+  have h : truncateHash (labels (.fnode index κ' Position.rootLevel ⟨0, Nat.two_pow_pos _⟩)) =
+      Completeness.forsNodeValue f parameter index κ' seed (forsHeight - 1 + 1) 0 :=
+    fnode_value f parameter seed labels hconsistent index κ' (forsHeight - 1 + 1) (by omega)
+      ⟨0, Nat.two_pow_pos _⟩ (Nat.two_pow_pos _)
+  rw [show forsHeight - 1 + 1 = forsHeight by omega] at h
+  exact h
 
 /-! #### Paths -/
 

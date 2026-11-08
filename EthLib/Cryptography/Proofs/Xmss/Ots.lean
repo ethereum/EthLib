@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Wots
 public import EthLib.Cryptography.Xmss.Ots
-public import EthLib.Cryptography.Proofs.Xmss.Types
+public import EthLib.Cryptography.Proofs.Xmss.TweakableHash
 
 /-!
 # Proofs: WOTS+C one-time signatures
@@ -14,6 +14,10 @@ Each theorem holds for every hash function `f`, run in the identity monad.
 Keccak-256 is one such function, so the theorems cover the specification as it runs.
 
 A variable `f` also keeps every proof from unfolding the hash on a concrete input.
+
+The theorems also hold for every source of derived values.
+
+With the derivations from `S`, chain starts and randomizer bases are the note's hashes of `S`.
 -/
 
 @[expose] public section
@@ -25,6 +29,29 @@ open EthLib.Cryptography.Xmss.Constants
 variable {f : ByteArray → Vector UInt8 32} {pp : PublicParam} {layer : Layer} {e : UInt32}
   {i : Fin V}
   {start s₁ s₂ : Nat} {value : Digest}
+
+/-! ## Derivations from the seed -/
+
+section SeedPrf
+
+variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32)) (s : Seed)
+
+/-- With the seed's derivations, the chain starts hash `P | A_prf(l, e, j) | S`. -/
+theorem chainStarts_seedPrf (pp : PublicParam) (layer : Layer) (e : UInt32) :
+    chainStarts pp (seedPrf H s) layer e = (do
+      let pairs ← ofFnInOrder (V / 2) fun j => H (thInput pp (addrPrf layer e j) (packBytes s))
+      return Vector.ofFn fun i =>
+        halfOf ⟨i.val % 2, Nat.mod_lt _ (by decide)⟩
+          (pairs[i.val / 2]'(by have := i.isLt; simp only [V] at *; omega))) := by
+  simp only [chainStarts, seedPrf_empty]
+
+/-- With the seed's derivations, the randomizer base is `Th(P, A_rnd(l, e), S | M)`. -/
+theorem randomizerBase_seedPrf (pp : PublicParam) (layer : Layer) (e : UInt32)
+    (msg : ByteArray) :
+    randomizerBase pp (seedPrf H s) layer e msg = th H pp (addrRnd layer e) (packBytes s ++ msg) :=
+  rfl
+
+end SeedPrf
 
 /-! ## Chains -/
 
@@ -41,16 +68,16 @@ variable {f : ByteArray → Vector UInt8 32} {pp : PublicParam} {layer : Layer} 
 `simp` rewrites with `rfl` lemmas, and checking those makes Lean unfold the grinding loop.
 
 That loop runs up to `2^32` trials. -/
-theorem otsSign_run {seed : Seed} {msg : ByteArray} :
-    (otsSign (pureHash f) pp seed layer e msg).run =
+theorem otsSign_run {prf : SeedPrf Id} {msg : ByteArray} :
+    (otsSign (pureHash f) pp prf layer e msg).run =
       ((Internal.findCodeword (pureHash f) pp layer e msg
-          (randomizerBase (pureHash f) pp seed layer e msg).run 0 MAX_RANDOMIZER_TRIALS).run).map
+          (randomizerBase pp prf layer e msg).run 0 MAX_RANDOMIZER_TRIALS).run).map
         fun found => (found.1, Vector.ofFn fun i => (chain (pureHash f) pp layer e i 0
           (found.2[i]).val (by have := (found.2[i]).isLt; omega)
-          (chainStarts (pureHash f) pp seed layer e).run[i]).run) := by
+          (chainStarts pp prf layer e).run[i]).run) := by
   rw [otsSign, Id.run_bind, Id.run_bind]
   cases (Internal.findCodeword (pureHash f) pp layer e msg
-      (randomizerBase (pureHash f) pp seed layer e msg).run 0 MAX_RANDOMIZER_TRIALS).run with
+      (randomizerBase pp prf layer e msg).run 0 MAX_RANDOMIZER_TRIALS).run with
   | none => rfl
   | some found =>
     obtain ⟨rho, x⟩ := found
@@ -58,15 +85,16 @@ theorem otsSign_run {seed : Seed} {msg : ByteArray} :
     rw [Option.map_some, ← HashSig.ofFnInOrder_run]
     rfl
 
-/-- A one-time signature from the seed recovers the leaf the seed gives the key.
+/-- A one-time signature from the derivations recovers the leaf they give the key.
 
 The verifier walks each revealed value from position `x_i` to 3.
 
 The signer walked it from 0 to `x_i`, so together they walk the whole chain. -/
-theorem otsLeaf_otsSign {seed : Seed} {msg : ByteArray} {rho : Randomizer} {y : Vector Digest V}
-    (h : (otsSign (pureHash f) pp seed layer e msg).run = some (rho, y)) :
+theorem otsLeaf_otsSign {prf : SeedPrf Id} {msg : ByteArray} {rho : Randomizer}
+    {y : Vector Digest V}
+    (h : (otsSign (pureHash f) pp prf layer e msg).run = some (rho, y)) :
     (otsLeaf (pureHash f) pp layer e msg rho y).run
-      = some (otsPublicLeaf (pureHash f) pp seed layer e).run := by
+      = some (otsPublicLeaf (pureHash f) pp prf layer e).run := by
   -- Name the grinding result: a randomizer and its codeword.
   rw [otsSign_run, Option.map_eq_some_iff] at h
   obtain ⟨⟨rho', x⟩, hfind, hxy⟩ := h
@@ -84,7 +112,7 @@ theorem otsLeaf_otsSign {seed : Seed} {msg : ByteArray} {rho : Randomizer} {y : 
   have hx := (x[j]'hj).isLt
   have hsplit := Wots.chain_add (m := Id) (step := chainStep (pureHash f) pp layer e ⟨j, hj⟩)
     (start := 0) (s₁ := (x[j]'hj : Nat)) (s₂ := CHAIN_LENGTH - 1 - (x[j]'hj : Nat))
-    (value := (chainStarts (pureHash f) pp seed layer e).run[j]'hj) (Nat.zero_add _).symm
+    (value := (chainStarts pp prf layer e).run[j]'hj) (Nat.zero_add _).symm
     (by simp only [CHAIN_LENGTH] at *; omega) (by simp only [CHAIN_LENGTH] at *; omega)
   -- Steps revealed plus steps walked is the whole chain.
   exact hsplit.trans (Wots.chain_steps_congr (by simp only [CHAIN_LENGTH] at *; omega) _ _)
@@ -94,12 +122,12 @@ theorem otsLeaf_otsSign {seed : Seed} {msg : ByteArray} {rho : Randomizer} {y : 
 /-- A key's leaf, from its chain starts, its chain ends and its leaf hash.
 
 A known answer checks each piece on its own. -/
-theorem otsPublicLeaf_eq {seed : Seed} {starts ends : Vector Digest V} {leaf : Digest}
-    (hstarts : (chainStarts (pureHash f) pp seed layer e).run = starts)
+theorem otsPublicLeaf_eq {prf : SeedPrf Id} {starts ends : Vector Digest V} {leaf : Digest}
+    (hstarts : (chainStarts pp prf layer e).run = starts)
     (hends : ∀ i : Fin V,
       (chain (pureHash f) pp layer e i 0 (CHAIN_LENGTH - 1) (by decide) starts[i]).run = ends[i])
     (hleaf : (otsLeafHash (pureHash f) pp layer e ends).run = leaf) :
-    (otsPublicLeaf (pureHash f) pp seed layer e).run = leaf := by
+    (otsPublicLeaf (pureHash f) pp prf layer e).run = leaf := by
   -- The walked chains are the stated ends, chain by chain.
   have hv : (Vector.ofFn fun i =>
       (chain (pureHash f) pp layer e i 0 (CHAIN_LENGTH - 1) (by decide) starts[i]).run) = ends :=

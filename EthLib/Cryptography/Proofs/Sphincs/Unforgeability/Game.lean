@@ -9,7 +9,7 @@ public import VCVio.CryptoFoundations.SignatureAlg.RomQueryCount
 
 Strong unforgeability under chosen-message attacks, for one key, in the random-oracle model.
 
-1. `S_0` is 32 uniform bytes, and `(sk, pk) = Gen(S_0)`.
+1. `SK.seed` is 32 uniform bytes, and `(sk, pk) = Gen(SK.seed)`.
 2. The adversary gets `pk`, queries `H`, and requests `Sign(sk, m)` for messages of its choice.
 3. It returns a pair `(m*, sigma*)`.
 4. It wins when `Ver(pk, m*, sigma*) = 1` and no request for `m*` returned `sigma*`.
@@ -45,13 +45,11 @@ The signer does not count its signatures, so the limit of `2^30` is the caller's
 
 The game has one key pair.
 
-The message digest hashes the public parameter, not the root of the public key.
+The message digest hashes `R`, `PK.seed`, `PK.root` and `M`, as FIPS 205 §9.2, Algorithm 19, does.
 
-FIPS 205 §9.2, Algorithm 19, hashes the root instead.
+Every addressed hash starts with the 16-byte `PK.seed`, as in FIPS 205.
 
-So every hash binds to a key only through its 16-byte public parameter.
-
-Security for many keys is not claimed: a second key can reuse a first key's parameter.
+Security for many keys is not claimed.
 
 The adversary returns a signature as a structure, not as bytes.
 
@@ -74,14 +72,14 @@ open OracleSpec OracleComp ENNReal MeasureTheory
 abbrev H : ByteArray → OracleComp HashSig.OracleWorld (Vector UInt8 32) :=
   HashSig.queryH
 
-/-- A uniform 32-byte seed `S_0`. -/
+/-- A uniform 32-byte `SK.seed`. -/
 noncomputable def sampleSeed : ProbComp Seed :=
   letI := SampleableType.ofFintype Seed
   $ᵗ Seed
 
 /-- leanSPHINCS as a signature scheme over the random oracle.
 
-- Key generation samples `S_0`, then runs `keyGenWith`.
+- Key generation samples `SK.seed`, then runs `keyGenWith`.
 - Signing runs `signWith`, and answers nothing when it fails.
 - Verification runs `verifyWith`, and rejects nothing. -/
 noncomputable def scheme :

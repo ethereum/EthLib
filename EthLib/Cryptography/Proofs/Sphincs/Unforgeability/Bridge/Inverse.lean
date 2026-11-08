@@ -21,7 +21,7 @@ open EthLib.Cryptography.Sphincs.Constants
 
 /-- EthLib's bytes as a model digest: their little-endian number, on 128 bits. -/
 def toDigest {k : Nat} (d : Vector UInt8 k) : SphincsSecurity.Digest :=
-  BitVec.ofNat _ (bytesToUint d)
+  BitVec.ofNat _ (Base.bytesToUint d)
 
 /-- A digest read as a number and written back is itself. -/
 theorem ofDigest_toDigest (d : Digest) : ofDigest (toDigest d) = d :=

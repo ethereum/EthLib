@@ -9,9 +9,13 @@ public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Scheme
 
 The security proof writes leanSPHINCS over bit vectors, and EthLib over byte vectors.
 
-A bit vector becomes its little-endian bytes, and the model's byte encoding lists those bytes.
+A digest, a seed or a message becomes the little-endian bytes of its bit vector.
 
-So EthLib builds a hash input from the converted values, and the model from the values themselves.
+The model's byte encoding lists those bytes, so EthLib hashes the bytes the model hashes.
+
+The address words and the counters are big-endian in both.
+
+EthLib writes them with `toByte`, and the model with its big-endian bytes of a bit vector.
 
 The model is generic over its parameters.
 
@@ -47,8 +51,8 @@ theorem bytesLE_eq (n : Nat) (x : BitVec (8 * n)) :
 /-- A digest's 16 bytes. -/
 abbrev ofDigest {w : Nat} (x : BitVec w) : Digest := ofBV N x
 
-/-- A public parameter's 16 bytes. -/
-abbrev ofParam {w : Nat} (x : BitVec w) : PublicParam := ofBV PUBLIC_PARAM_LEN x
+/-- The 16 bytes of `PK.seed`, which the model calls the public parameter. -/
+abbrev ofParam {w : Nat} (x : BitVec w) : PkSeed := ofBV N x
 
 /-- A randomizer's 16 bytes. -/
 abbrev ofRandomizer {w : Nat} (x : BitVec w) : Randomizer := ofBV RANDOMIZER_LEN x
@@ -79,36 +83,82 @@ abbrev ofMessage {w : Nat} (x : BitVec w) : Message := ofBV MESSAGE_LEN x
     (ofMessage x).toList = SphincsSecurity.bytesLE 32 x :=
   toList_ofBV 32 x
 
-/-! ## The two halves of a hash value -/
+/-- The 32 bytes of a hash value, such as `SK.prf`. -/
+@[simp] theorem toList_ofOutput (x : HashSig.HashOutput) :
+    (ofOutput x).toList = SphincsSecurity.bytesLE 32 x :=
+  toList_ofBV 32 x
 
-/-- The first 16 bytes of a hash value are the bytes of its low 128 bits. -/
-theorem halfOf_zero_ofOutput (x : HashSig.HashOutput) :
-    halfOf 0 (ofOutput x) = ofDigest (HashSig.truncateHash x) := by
+/-- The 32 bytes of a hash value, packed as EthLib's hash output such as `SK.prf`. -/
+@[simp] theorem toList_data_packBytes_ofOutput (x : HashSig.HashOutput) :
+    (packBytes (n := HASH_LEN) (ofOutput x)).data.toList = SphincsSecurity.bytesLE 32 x :=
+  toList_ofBV 32 x
+
+/-- EthLib's tag is the model's: the 11 ASCII bytes of `leanSPHINCS`. -/
+theorem seedTag_eq : SEED_TAG = SphincsSecurity.seedTag :=
+  rfl
+
+/-- The tag has 11 bytes, the length byte of the framed message. -/
+theorem ofNat_length_seedTag : UInt8.ofNat SphincsSecurity.seedTag.length = 0x0b :=
+  rfl
+
+/-! ## The first 16 bytes of a hash value -/
+
+/-- `Trunc_16` of a hash value is the bytes of its low 128 bits. -/
+theorem trunc_ofOutput_truncateHash (x : HashSig.HashOutput) :
+    trunc N (ofOutput x) = ofDigest (HashSig.truncateHash x) := by
   apply Vector.ext
   intro i hi
   simp only [N] at hi
-  simp only [halfOf, Vector.getElem_ofFn, Fin.isValue, Fin.val_zero, Nat.mul_zero, Nat.zero_add]
+  simp only [trunc, Vector.getElem_ofFn]
   exact HashSig.getElem_ofOutput_of_lt x i hi
 
-/-- The last 16 bytes of a hash value are the bytes of its high 128 bits. -/
-theorem halfOf_one_ofOutput (x : HashSig.HashOutput) :
-    halfOf 1 (ofOutput x) = ofDigest (SphincsSecurity.upperHash x) := by
-  apply Vector.ext
-  intro i hi
-  simp only [N] at hi
-  simp only [halfOf, Vector.getElem_ofFn, getElem_ofBV, SphincsSecurity.upperHash,
-    HashSig.digestBits]
-  rw [HashSig.extractLsb'_byte_low x 128 128 i (by omega)]
-  exact (getElem_ofBV 32 x (16 * 1 + i) (by omega)).trans (by congr 2; omega)
+/-! ## Big-endian words -/
 
-/-- Half `i mod 2` of a hash value: the first for even `i`, the last for odd `i`. -/
-theorem halfOf_mod_two_ofOutput (x : HashSig.HashOutput) (i : Nat) :
-    halfOf ⟨i % 2, Nat.mod_lt _ (by decide)⟩ (ofOutput x)
-      = ofDigest (SphincsSecurity.hashHalf i x) := by
-  rcases Nat.mod_two_eq_zero_or_one i with h | h
-  · simp only [h, SphincsSecurity.hashHalf, ↓reduceIte]
-    exact halfOf_zero_ofOutput x
-  · simp only [h, SphincsSecurity.hashHalf, Nat.one_ne_zero, ↓reduceIte]
-    exact halfOf_one_ofOutput x
+/-- Byte `i` of the big-endian bytes of `n`, as a number, from the integer. -/
+private theorem toNat_byte_ofNat (w a n : Nat) :
+    (UInt8.ofBitVec ((BitVec.ofNat w n).extractLsb' a 8)).toNat = n % 2 ^ w / 2 ^ a % 2 ^ 8 := by
+  simp only [UInt8.toNat_ofBitVec, BitVec.extractLsb'_toNat, BitVec.toNat_ofNat,
+    Nat.shiftRight_eq_div_pow]
+
+/-- EthLib's `len` big-endian bytes of `n` are the model's, of `n` as a `8 len`-bit vector. -/
+theorem natToBytes_eq_bytesBE (len n : Nat) :
+    Base.natToBytes len n = SphincsSecurity.bytesBE len (BitVec.ofNat (8 * len) n) := by
+  induction len generalizing n with
+  | zero => rfl
+  | succ len ih =>
+    rw [Base.natToBytes_succ, ih, SphincsSecurity.bytesBE, SphincsSecurity.bytesBE,
+      List.ofFn_succ', List.concat_eq_append]
+    congr 1
+    · -- A higher byte of `n` is the byte one place lower of `n / 256`.
+      refine congrArg List.ofFn (funext fun i => UInt8.toNat.inj ?_)
+      rw [toNat_byte_ofNat, toNat_byte_ofNat]
+      apply Nat.eq_of_testBit_eq
+      intro j
+      have hi := i.isLt
+      simp only [Fin.val_castSucc, Nat.testBit_mod_two_pow, Nat.testBit_div_two_pow,
+        show (256 : Nat) = 2 ^ 8 from rfl]
+      rw [show j + 8 * (len + 1 - 1 - i.val) = j + 8 * (len - 1 - i.val) + 8 by omega]
+      by_cases hj : j < 8
+      · simp only [hj, decide_true, Bool.true_and,
+          show j + 8 * (len - 1 - i.val) + 8 < 8 * (len + 1) by omega,
+          show j + 8 * (len - 1 - i.val) < 8 * len by omega]
+      · simp [hj]
+    · -- The last byte is `n mod 256`.
+      congr 1
+      apply UInt8.toNat.inj
+      rw [toNat_byte_ofNat, Fin.val_last, show len + 1 - 1 - len = 0 by omega, Nat.mul_zero,
+        pow_zero, Nat.div_one, Nat.mod_mod_of_dvd _ (pow_dvd_pow 2 (by omega))]
+      simp
+
+/-- `toByte k n`, as a list, is the model's big-endian bytes of `n` on `8 k` bits. -/
+@[simp] theorem toList_toByte_bytesBE (k n : Nat) :
+    (toByte k n).toList = SphincsSecurity.bytesBE k (BitVec.ofNat (8 * k) n) := by
+  rw [← natToBytes_eq_bytesBE]
+  rfl
+
+/-- The model's big-endian integer of a byte string is EthLib's. -/
+theorem beInt_eq_bytesToNat (bytes : List UInt8) :
+    SphincsSecurity.beInt bytes = Base.bytesToNat bytes := by
+  simp only [SphincsSecurity.beInt, Base.bytesToNat, Nat.mul_comm 256]
 
 end EthLib.Cryptography.Sphincs.Unforgeability.Bridge

@@ -135,6 +135,14 @@ theorem evalDist_seedFree_completion (adversary : Adversary) (q : Nat)
   unfold seedFreeExperiment
   refine (evalDist_material_graph_continuation _).trans ?_
   refine EvalDistEq.bind_right _ fun parameterOutput => ?_
+  -- The seed-free run does not read the PRF key, so the draw of that key can be dropped.
+  rw [show (fun prf : HashOutput => sampleSplitPair >>= fun pair =>
+      ($ᵗ Eager.Table) >>= seedFreeRun adversary q steps ((parameterOutput, prf), pair.1)
+        pair.2) =
+      fun _ => sampleSplitPair >>= fun pair =>
+        ($ᵗ Eager.Table) >>= seedFreeRun adversary q steps ((parameterOutput, 0), pair.1) pair.2
+      from rfl]
+  refine (OracleComp.EvalDistEq.bind_const _ _).trans ?_
   simp only [sampleSplitPair, bind_assoc, bind_map_left]
   refine (evalDist_mix_bind (truncateHash parameterOutput) _).trans ?_
   refine EvalDistEq.bind_right _ fun fixed => ?_

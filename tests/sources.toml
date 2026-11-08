@@ -127,6 +127,10 @@ directories = ["tests/serialization/ssz"]
 commit = "bb7900688eecd287d8723154faac6addb5e63336"
 release = "v5.3.0"
 
+# The leanSPHINCS tests read the known answer of an independent implementation at this commit.
+[repositories."leanEthereum/leanVM"]
+commit = "5e3ade21d339a45e1b3b0dba97ad9300ab50e49b"
+
 # The release archives, each from a repository above or from the source it names.
 [archives."consensus-specs/v1.7.0-alpha.12/general"]
 repository = "ethereum/consensus-specs"
