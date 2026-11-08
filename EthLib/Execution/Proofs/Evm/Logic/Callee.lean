@@ -46,15 +46,17 @@ variable {fork : Fork}
 
 The frame that ends the message is the stopped frame of that run, rolled back on a failure.
 
+The frame starts with any lawful meter `meter` that holds at most the gas of the message.
+
 A run that fails makes the message fail with the same error. -/
-theorem processMessage_map_val {message : Message fork} {state : TransactionState}
-    {substate : Substate} {result : Except EvmError (Evm fork Nat)}
+theorem processMessage_map_val {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter]
+    {message : Message fork} {state : TransactionState} {substate : Substate} {meter : Meter}
+    {held : GasMeter.gasHeld meter ≤ message.gas} {result : Except EvmError (Evm fork Meter)}
     (noValue : ¬(message.shouldTransferValue = true ∧ message.value ≠ 0))
     (noPrecompile : precompileAddress fork message = none)
     (ran : runFrame (step fork) (step_decreases fork) message.gas (processRunner fork message.gas)
-      (startFrame message (startState fork message state) substate
-        (GasMeter.start message.gas message.reservoir)) (Nat.le_refl _) = result) :
-    (processMessage fork message state substate).map Subtype.val =
+      (startFrame message (startState fork message state) substate meter) held = result) :
+    (processMessage fork message state substate meter held).map Subtype.val =
       result.map (rollbackOnError state) := by
   have ran' : ∀ within, runFrame (step fork) (step_decreases fork) message.gas
       (processRunner fork message.gas)
@@ -63,7 +65,7 @@ theorem processMessage_map_val {message : Message fork} {state : TransactionStat
           { substate with
             logs := pushTransferLog fork substate.logs message.caller message.currentTarget
               message.value } else substate)
-        (GasMeter.start message.gas message.reservoir)) within = result := by
+        meter) within = result := by
     intro within
     simp only [noValue, ite_false]
     exact ran
@@ -91,9 +93,13 @@ theorem processMessage_map_val {message : Message fork} {state : TransactionStat
 
 /-- A message with value and no precompile ends as the run of its code from its frame ends.
 
-The value moves from the caller to the target first, and the frame starts from that state. -/
-theorem processMessage_map_val_value {message : Message fork} {state movedState : TransactionState}
-    {substate : Substate} {result : Except EvmError (Evm fork Nat)}
+The value moves from the caller to the target first, and the frame starts from that state.
+
+The frame starts with any lawful meter `meter` that holds at most the gas of the message. -/
+theorem processMessage_map_val_value {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter]
+    {message : Message fork} {state movedState : TransactionState} {substate : Substate}
+    {meter : Meter} {held : GasMeter.gasHeld meter ≤ message.gas}
+    {result : Except EvmError (Evm fork Meter)}
     (transfers : message.shouldTransferValue = true ∧ message.value ≠ 0)
     (moved : (startState fork message state).moveEther fork message.caller message.currentTarget
       message.value = .ok movedState)
@@ -103,8 +109,8 @@ theorem processMessage_map_val_value {message : Message fork} {state movedState 
         { substate with
           logs := pushTransferLog fork substate.logs message.caller message.currentTarget
             message.value }
-        (GasMeter.start message.gas message.reservoir)) (Nat.le_refl _) = result) :
-    (processMessage fork message state substate).map Subtype.val =
+        meter) held = result) :
+    (processMessage fork message state substate meter held).map Subtype.val =
       result.map (rollbackOnError state) := by
   have ran' : ∀ within, runFrame (step fork) (step_decreases fork) message.gas
       (processRunner fork message.gas)
@@ -113,7 +119,7 @@ theorem processMessage_map_val_value {message : Message fork} {state movedState 
           { substate with
             logs := pushTransferLog fork substate.logs message.caller message.currentTarget
               message.value } else substate)
-        (GasMeter.start message.gas message.reservoir)) within = result := by
+        meter) within = result := by
     intro within
     simp only [transfers, ne_eq, not_false_eq_true, and_self, ite_true]
     exact ran

@@ -163,6 +163,33 @@ theorem processMessageCall_of_halt {e : EvmError} {read : State.TransactionState
       .ok (.ofHalt (state.withReadsOf read) message.reservoir e) := by
   simp only [processMessageCall, h, halts, Bool.false_eq_true, ↓reduceIte]
 
+omit [LawfulGasMeter Meter] in
+/-- The first frame of a call that moves no ether and applies no authorization.
+
+The recipient `target` holds the code `c`, which from Pectra is no delegation indicator.
+
+Its meter is the fresh meter of the message, committed.
+
+The frame runs `c` with the gas that this meter holds.
+
+Its state records the read of the recipient, its substate is the one given, and it has no refund. -/
+theorem prepareFirstFrame_of_value_eq_zero {target : Address} {c : ByteArray}
+    (htarget : message.target = some target) (hvalue : message.value = 0)
+    (hcode : state.getCode (state.getAccount target).codeHash = .ok c)
+    (hdelegate : fork ≥ .pectra → delegatedAddress c = none) :
+    prepareFirstFrame (Meter := Meter) chainId message state substate [] paid =
+      .ok (.ofMeter { message with code := c } (state.recordAccountRead target) substate 0
+        (GasMeter.commit (GasMeter.start message.gas message.reservoir : Meter))) := by
+  have hcode' : (state.recordAccountRead target).getCode
+      ((state.recordAccountRead target).getAccount target).codeHash = .ok c := hcode
+  have hnone : (if fork ≥ .pectra then delegatedAddress c else none) = none := by
+    split
+    · exact hdelegate ‹_›
+    · rfl
+  simp only [prepareFirstFrame, htarget, applyAuthorizations, List.foldlM, hvalue, bind,
+    Except.bind, pure, Except.pure, Except.mapError, ne_eq, not_true_eq_false, false_and,
+    and_false, ↓reduceIte, hcode', hnone]
+
 /-- A halt before the first frame leaves no execution gas, the whole reservoir and no state gas. -/
 theorem ofHalt_gas (state : State.TransactionState) (reservoir : Nat) (e : EvmError) :
     (CallOutput.ofHalt state reservoir e).gasLeft = 0 ∧

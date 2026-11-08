@@ -218,17 +218,19 @@ theorem sloadStep_cons {evm : Evm fork Meter} {word : U256} {rest : List U256}
   rcases hc : GasMeter.charge _ _ with _ | _ <;> simp [Except.map, Stack.push, room] <;> rfl
 
 
-/-- SSTORE never completes in a static frame: it fails, or it halts with an error. -/
-theorem sstoreStep_halts_of_isStatic {evm after : Evm fork Meter}
-    (static : evm.message.isStatic = true) (h : sstoreStep evm = .ok after) :
-    after.running = false ∧ after.error.isSome := by
+/-- SSTORE never completes in a static frame, or when the current address has no account.
+
+It fails, or it halts with an error. -/
+theorem sstoreStep_halts {evm after : Evm fork Meter}
+    (bad : evm.message.isStatic = true ∨
+      evm.state.getAccountOptional evm.message.currentTarget = none)
+    (h : sstoreStep evm = .ok after) : after.running = false ∧ after.error.isSome := by
   unfold sstoreStep at h
   split at h
   · simp [bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
   obtain ⟨⟨k, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨n, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
-  have m2 : e2.message = evm.message :=
-    (popWord_sameContext h2).message.trans (popWord_sameContext h1).message
+  have c2 := (popWord_sameContext h1).trans (popWord_sameContext h2)
   simp only [] at h
   split at h
   · simp [throw, throwThe, MonadExceptOf.throw] at h
@@ -240,14 +242,37 @@ theorem sstoreStep_halts_of_isStatic {evm after : Evm fork Meter}
       simp only [hpair] at h
       obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
       obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
+      have c5 := (chargeGas_sameContext h4).trans (chargeStateGas_sameContext h5)
       have m5 : e5.message = evm.message := by
-        obtain ⟨_, -, h5⟩ := Base.bind_ok_iff.mp h5
-        cases h5
-        rw [(chargeGas_sameContext h4).message]
+        rw [c5.message]
         cases hacc
-        exact m2
-      simp [m5, static, throw, throwThe, MonadExceptOf.throw] at h
+        exact c2.message
+      have s5 : e5.state = evm.state.recordStorageRead evm.message.currentTarget
+          (U256.toBeBytes k) := by
+        rw [c5.state]
+        cases hacc
+        simp only [refillStateGas, recordStorageRead]
+        rw [c2.state, c2.message]
+      split at h
+      · simp [throw, throwThe, MonadExceptOf.throw] at h
+      · rename_i dynamic
+        obtain ⟨st, hst, h⟩ := Base.bind_ok_iff.mp h
+        rw [m5] at dynamic
+        rcases bad with static | none
+        · exact absurd static dynamic
+        · rw [s5, c2.message] at hst
+          have absent : ((evm.state.recordStorageRead evm.message.currentTarget
+              (U256.toBeBytes k)).getAccountOptional evm.message.currentTarget).isNone := by
+            simpa [State.TransactionState.recordStorageRead,
+              State.TransactionState.getAccountOptional] using none
+          simp [State.TransactionState.setStorage, absent, Except.mapError] at hst
     · exact ⟨rfl, rfl⟩
+
+/-- SSTORE never completes in a static frame: it fails, or it halts with an error. -/
+theorem sstoreStep_halts_of_isStatic {evm after : Evm fork Meter}
+    (static : evm.message.isStatic = true) (h : sstoreStep evm = .ok after) :
+    after.running = false ∧ after.error.isSome :=
+  sstoreStep_halts (.inl static) h
 
 /-- From Glamsterdam, SSTORE in a static frame fails before it reads the stack. -/
 theorem sstoreStep_of_isStatic (h : fork ≥ .glamsterdam) {evm : Evm fork Meter}

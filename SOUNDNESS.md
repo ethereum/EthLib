@@ -844,6 +844,7 @@ That state keeps every other slot, the original words and the accounts.
 `Logic.gas_rule` is the rule for GAS, which pushes the gas left after its own price of 2.
 `Logic.extcodesize` is the rule for EXTCODESIZE from Berlin to before Glamsterdam.
 It charges the prices of EIP-2929, and needs the state to hold the code of the account.
+`Logic.extcodesize_of_berlin_le` is the rule for EXTCODESIZE from Berlin, Glamsterdam included, at the price of the fork.
 `Logic.mstore8` is the rule for MSTORE8, which writes the lowest byte of a word.
 `Logic.mcopy` is the rule for MCOPY from Dencun, which grows memory for both ranges before it reads the source.
 `Logic.copyWith` is the rule for a copy of a buffer of the frame to memory, with zeros past its end.
@@ -853,6 +854,7 @@ It charges the prices of EIP-2929, and needs the state to hold the code of the a
 `Logic.returndatasize` is the rule for RETURNDATASIZE from Byzantium, which pushes the size of the return data and keeps it.
 `Logic.extcodecopy` is the rule for EXTCODECOPY from Berlin to before Glamsterdam.
 It charges the prices of EIP-2929 and 3 gas a word, and needs the state to hold the code of the account.
+`Logic.extcodecopy_of_berlin_le` is the rule for EXTCODECOPY from Berlin, Glamsterdam included, at the price of the fork.
 `Logic.Holds` says that memory covers a range and that the range reads as given bytes.
 `Logic.holds_memoryWrite` proves that a write within memory holds the written bytes.
 `Logic.Holds.memoryWrite_of_disjoint` proves that such a write keeps every range it does not touch.
@@ -907,6 +909,8 @@ It needs the output to hold at most 24576 bytes (EIP-170), and from London not t
 `Logic.processCreateMessage_eq_ok` proves that a creation with no value and no precompile ends as its init code ends, then deposits.
 `Logic.meets_of_spec_create` proves that the runner of the interpreter meets `CreatesAs` for a specification of the init code.
 `Logic.running_eq_false_of_sstore_of_isStatic` proves that in a static frame, a step at SSTORE stops the frame.
+`sstoreStep_halts` proves that SSTORE never completes in a static frame, or when the current address has no account.
+In that second case the write fails and aborts the run.
 `Logic.running_eq_false_of_log_of_isStatic` proves the same for LOG0 to LOG4.
 `memoryReadBytes_memoryWrite_of_disjoint` proves that a write within memory leaves a read of a disjoint range unchanged.
 `memoryReadBytes_memoryWrite_memoryWrite` proves that a read across two adjacent writes gives both values in order.
@@ -1029,6 +1033,8 @@ The frame that ends the message is a stopped frame of the specification, rolled 
 `meets_of_specUnder` proves the same for a callee that sends messages, from a triple under an assumption `A` on its own messages.
 It asks that the runner meet `A` at every bound.
 `meets_of_spec` is its case with the assumption that always holds.
+`processMessage_map_val` proves that a message that moves no value and has no precompile ends as the run of its code ends, for every lawful meter.
+`processMessage_map_val_value` proves the same for a message that moves value, from the state after the transfer.
 No theorem yet proves that this runner meets an assumption for a callee that sends value or is a precompile.
 No theorem reasons about a callee that calls back into its caller and depends on the state that the caller wrote.
 `SpecUnder fork callee P Q` holds under every runner that meets `callee`, and for every bound that holds the gas of the frame.
@@ -1191,6 +1197,8 @@ Four theorems in `Execution/Proofs/Transactions/Process.lean` give the gas used 
 Its gas left is the execution gas left plus the reservoir left, and it gives the two block gas counts of EIP-7778 and EIP-8037.
 At Glamsterdam, a negative state gas used counts as 0 in both block gas counts, a case that EIP-8037 leaves open.
 From Hegotá a run fails as not yet specified, so there is no gas used to state.
+
+`prepareFirstFrame_of_value_eq_zero` gives the first frame of a call that moves no ether and applies no authorization.
 
 ### Merkle Patricia Trie
 
