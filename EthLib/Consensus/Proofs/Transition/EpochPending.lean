@@ -144,7 +144,9 @@ The registry and the balances are those of the pass.
 
 The queue holds the deposits that the pass did not reach, then those it postponed.
 
-If the pass reached the churn, the churn that it did not use carries over, and else none does. -/
+If the pass records that it reached the churn, the churn it did not use carries over.
+
+Otherwise none carries over to the next epoch. -/
 theorem processPendingDeposits_pass {electra : .pectra ≤ fork}
     (computed : processPendingDeposits config checks state electra = .ok after) :
     ∃ nextEpoch churn available finalizedSlot pass,
