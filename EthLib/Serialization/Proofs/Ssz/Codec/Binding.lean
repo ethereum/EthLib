@@ -9,6 +9,8 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.BindingShape
 /-!
 Two values of one type with one root are equal, or a search finds a SHA-256 collision.
 
+The same holds for any hash with 32-byte digests, with the zero subtrees computed by that hash.
+
 The search reads only the hash inputs of the two root computations.
 -/
 
@@ -30,13 +32,16 @@ private theorem layout_ext {left right : MerkleLayout}
 Without a collision between the two computations, an SSZ root determines its whole value.
 Counts are checked before comparing variable-shaped subtrees, and nested values use the same argument.
 -/
-theorem valueTreeAt_eq_of_noCollision (budget : Nat) {shape : Desc} {left right : Value}
+theorem valueTreeAt_eq_of_noCollision {hash : ByteArray → ByteArray} (budget : Nat)
+    {shape : Desc} {left right : Value}
     {first second : CommitmentTree} (enough : shape.nesting ≤ budget)
     (sound : shape.wellFormed = .ok ()) (leftFits : Fits shape left) (rightFits : Fits shape right)
     (leftSized : CommitmentSized shape left) (rightSized : CommitmentSized shape right)
     (leftTrace : valueTreeAt budget shape left = .ok first)
     (rightTrace : valueTreeAt budget shape right = .ok second)
-    (clean : NoCollision first second) (same : first.root = second.root) : left = right := by
+    (clean : NoCollision first second hash) (same : first.root hash = second.root hash)
+    (width : ∀ x, (hash x).size = 32 := by exact EthLib.Cryptography.Hash.Sha256.hash_size) :
+    left = right := by
   -- The recursion budget decreases whenever a leaf contains another SSZ value.
   induction budget generalizing shape left right first second with
   | zero => simp [valueTreeAt] at leftTrace
@@ -49,12 +54,13 @@ theorem valueTreeAt_eq_of_noCollision (budget : Nat) {shape : Desc} {left right 
     obtain ⟨rightLayout, rightTrees, otherLaid, rightMaterialized, rightRoom, rfl⟩ := valueTreeAt_view rightTrace
     -- Authenticate the count or selector before deciding how the underlying trees align.
     have mixed := withMixin_comparison (merkleLayout_mixin_presence laid otherLaid)
-      leftComplete rightComplete clean same
+      leftComplete rightComplete clean same width
     -- The common type and exact mixing word determine the capacity and every child type.
     have skeleton := merkleLayout_shapes sound leftFits rightFits leftSized rightSized
       laid otherLaid mixed.1
     -- Any collision inside the contents would also belong to the enclosing computations.
-    have contentClean := clean.restrict (withMixin_included _ _) (withMixin_included _ _)
+    have contentClean :=
+      clean.restrict (withMixin_included _ _ hash) (withMixin_included _ _ hash)
     -- Equal contents roots now preserve packed nodes or corresponding nested values.
     have leaves := layout_leaves_eq_of_noCollision skeleton.2 skeleton.1
       leftMaterialized rightMaterialized leftRoom rightRoom
@@ -72,12 +78,55 @@ theorem valueTreeAt_eq_of_noCollision (budget : Nat) {shape : Desc} {left right 
         have smaller := merkleLayout_child_nesting shape left leftLayout laid leftSlots
           leftNested child a leftMember
         exact ih (by omega) aValid.2 aValid.1 bValid.1 aSized bSized
-          aTrace bTrace collisionFree roots)
+          aTrace bTrace collisionFree roots) width
     -- Equal leaves, capacity, and mixing words recover the full unhashed layouts.
     have layouts := layout_ext leaves skeleton.1 mixed.1
     -- The layout rules preserve the original values once lengths and child contents are known.
     apply merkleLayout_injective sound leftFits rightFits leftSized rightSized laid
     exact otherLaid.trans (congrArg Except.ok layouts.symm)
+
+/--
+Two values of one well-formed type with one root are equal, or a search finds a collision.
+
+The root is the one that a hash with 32-byte digests computes.
+
+The search compares the hash inputs of the two root computations.
+
+It returns two different 64-byte inputs with one digest, one hashed in each computation.
+
+Every nested variable-size count must fit its 256-bit mixing word.
+-/
+theorem hashTreeRootM_binding (hash : ByteArray → ByteArray) (width : ∀ x, (hash x).size = 32)
+    {shape : Desc} {left right : Value} {root : Bytes}
+    (sound : shape.wellFormed = .ok ()) (leftFits : Fits shape left) (rightFits : Fits shape right)
+    (leftSized : CommitmentSized shape left) (rightSized : CommitmentSized shape right)
+    (first : (hashTreeRootM (Hasher.ofHash (m := Id) hash) shape left).run = .ok root)
+    (second : (hashTreeRootM (Hasher.ofHash (m := Id) hash) shape right).run = .ok root) :
+    left = right ∨ ∃ leftTree rightTree,
+      valueTree shape left = .ok leftTree ∧ valueTree shape right = .ok rightTree ∧
+      ∃ a b, findMessageCollision (leftTree.messages hash) (rightTree.messages hash) hash
+          = some (a, b) ∧
+        a ∈ leftTree.messages hash ∧ b ∈ rightTree.messages hash ∧ MessageCollision a b hash := by
+  -- Expand both roots into finite computations with the same results.
+  obtain ⟨leftTree, leftTrace, leftRoot, leftComplete⟩ :=
+    valueTree_of_hashTreeRootM hash _ _ _ first
+  obtain ⟨rightTree, rightTrace, rightRoot, rightComplete⟩ :=
+    valueTree_of_hashTreeRootM hash _ _ _ second
+  cases found : findMessageCollision (leftTree.messages hash) (rightTree.messages hash) hash with
+  | none =>
+    -- No collision between the computations: structural recovery gives equal values.
+    refine .inl (valueTreeAt_eq_of_noCollision shape.nesting (Nat.le_refl _) sound
+      leftFits rightFits leftSized rightSized leftTrace rightTrace ?_
+      (leftRoot.trans rightRoot.symm) width)
+    -- Every message of a complete computation has 64 bytes, so the search would see a collision.
+    rintro ⟨a, aMember, b, bMember, different, hashed⟩
+    exact findMessageCollision_eq_none_iff.mp found a aMember b bMember
+      ⟨messages_size_of_width hash width leftTree leftComplete a aMember,
+        messages_size_of_width hash width rightTree rightComplete b bMember, different, hashed⟩
+  | some pair =>
+    -- The search names the collision, with one message from each computation.
+    exact .inr ⟨leftTree, rightTree, leftTrace, rightTrace, pair.1, pair.2, found,
+      findMessageCollision_valid found⟩
 
 /--
 Two values of one well-formed type with one root are equal, or a search finds a collision.
@@ -97,23 +146,9 @@ theorem hashTreeRoot_binding {shape : Desc} {left right : Value} {root : Bytes}
       valueTree shape left = .ok leftTree ∧ valueTree shape right = .ok rightTree ∧
       ∃ a b, findMessageCollision leftTree.messages rightTree.messages = some (a, b) ∧
         a ∈ leftTree.messages ∧ b ∈ rightTree.messages ∧ MessageCollision a b := by
-  -- Expand both executable roots into finite computations with the same results.
-  obtain ⟨leftTree, leftTrace, leftRoot, leftComplete⟩ := valueTree_of_hashTreeRoot _ _ _ first
-  obtain ⟨rightTree, rightTrace, rightRoot, rightComplete⟩ := valueTree_of_hashTreeRoot _ _ _ second
-  cases found : findMessageCollision leftTree.messages rightTree.messages with
-  | none =>
-    -- No collision between the computations: structural recovery gives equal values.
-    refine .inl (valueTreeAt_eq_of_noCollision shape.nesting (Nat.le_refl _) sound
-      leftFits rightFits leftSized rightSized leftTrace rightTrace ?_
-      (leftRoot.trans rightRoot.symm))
-    -- Every message of a complete computation has 64 bytes, so the search would see a collision.
-    rintro ⟨a, aMember, b, bMember, different, hashed⟩
-    exact findMessageCollision_eq_none_iff.mp found a aMember b bMember
-      ⟨messages_size leftTree leftComplete a aMember,
-        messages_size rightTree rightComplete b bMember, different, hashed⟩
-  | some pair =>
-    -- The search names the collision, with one message from each computation.
-    exact .inr ⟨leftTree, rightTree, leftTrace, rightTrace, pair.1, pair.2, found,
-      findMessageCollision_valid found⟩
+  -- The specification's hasher is the one built from SHA-256 alone.
+  rw [hashTreeRoot, ← ofHash_sha256] at first second
+  exact hashTreeRootM_binding _ Cryptography.Hash.Sha256.hash_size sound leftFits rightFits
+    leftSized rightSized first second
 
 end EthLib.Serialization.Ssz

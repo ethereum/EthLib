@@ -81,6 +81,79 @@ theorem ofHash_sha256 : Hasher.ofHash (m := Id) Cryptography.Hash.Sha256.hash = 
   funext depth
   exact zeroSubtreeM_sha256 depth
 
+/-- The zero roots that any hash computes level by level fold the zero node with that hash. -/
+theorem zeroSubtreeM_eq_zeroRoot (hash : ByteArray → ByteArray) (depth : Nat) :
+    (zeroSubtreeM (m := Id) hash depth).run
+      = zeroRoot (fun a b => (combineM (m := Id) hash a b).run) zeroChunk depth := by
+  induction depth with
+  | zero => rfl
+  | succ depth ih =>
+    rw [zeroRoot, ← ih]
+    rfl
+
+/-- Any hash in the identity monad walks a subtree as the specification states it. -/
+theorem subtreeAtM_ofHash_eq_subtreeRoot (hash : ByteArray → ByteArray) (chunks : Array Bytes) :
+    ∀ depth start, (subtreeAtM (Hasher.ofHash (m := Id) hash) chunks depth start).run
+      = subtreeRoot (fun a b => (combineM (m := Id) hash a b).run) depth
+          (fun i => padded zeroChunk chunks (start + i)) := by
+  intro depth
+  -- The walk descends a level at a time, so the starting position stays quantified over.
+  induction depth with
+  | zero =>
+    intro start
+    rw [subtreeAtM.eq_def]
+    -- Either the leaf lies past the data, or it is read from it.
+    split
+    · show (zeroSubtreeM (m := Id) hash 0).run = _
+      simp [subtreeRoot_zero, padded, Array.getElem?_eq_none (show chunks.size ≤ start by omega)]
+      rfl
+    · simp [subtreeRoot_zero, padded]
+  | succ depth ih =>
+    intro start
+    rw [subtreeAtM.eq_def]
+    split
+    · -- A subtree wholly past the data is the empty tree of its depth.
+      rename_i past
+      show (zeroSubtreeM (m := Id) hash (depth + 1)).run = _
+      rw [zeroSubtreeM_eq_zeroRoot]
+      exact (subtreeRoot_padded_past_data _ zeroChunk (depth + 1) chunks (by omega)).symm
+    · -- Otherwise both sides fold the same two halves, and the shift lines up.
+      show (combineM (m := Id) hash
+        (subtreeAtM (Hasher.ofHash (m := Id) hash) chunks depth start).run
+        (subtreeAtM (Hasher.ofHash (m := Id) hash) chunks depth (start + 2 ^ depth)).run).run = _
+      rw [subtreeRoot_halves, ih start, ih (start + 2 ^ depth)]
+      simp only [Nat.add_assoc, Nat.add_comm (2 ^ depth)]
+
+/-- The bounded tree of any hash over a whole node array, read as the specification states it. -/
+theorem subtreeAtM_ofHash_zero_eq (hash : ByteArray → ByteArray) (chunks : Array Bytes)
+    {depth : Nat} :
+    (subtreeAtM (Hasher.ofHash (m := Id) hash) chunks depth 0).run
+      = subtreeRoot (fun a b => (combineM (m := Id) hash a b).run) depth
+          (padded zeroChunk chunks) := by
+  simp only [subtreeAtM_ofHash_eq_subtreeRoot hash chunks depth 0, Nat.zero_add]
+
+/-- The progressive tree of any hash agrees with the hash-independent definition. -/
+theorem merkleizeProgressiveUncheckedM_ofHash_eq (hash : ByteArray → ByteArray)
+    (chunks : List Bytes) (level : Nat) :
+    (merkleizeProgressiveUncheckedM (Hasher.ofHash (m := Id) hash) chunks level).run
+      = progressiveRoot (fun a b => (combineM (m := Id) hash a b).run) zeroChunk chunks level := by
+  -- Both definitions consume one level's leaves before continuing down the spine.
+  induction chunks, level using
+    progressiveRoot.induct (fun a b => (combineM (m := Id) hash a b).run) zeroChunk with
+  | case1 chunks level empty =>
+    rw [merkleizeProgressiveUncheckedM.eq_def, progressiveRoot, ite_eq_left empty,
+      ite_eq_left empty]
+    rfl
+  | case2 chunks level nonempty width ih =>
+    rw [merkleizeProgressiveUncheckedM.eq_def, progressiveRoot, ite_eq_right nonempty,
+      ite_eq_right nonempty]
+    show (combineM (m := Id) hash
+      (subtreeAtM (Hasher.ofHash (m := Id) hash) (chunks.take (4 ^ level)).toArray
+        (depthFor (4 ^ level)) 0).run
+      (merkleizeProgressiveUncheckedM (Hasher.ofHash (m := Id) hash)
+        (chunks.drop (4 ^ level)) (level + 1)).run).run = _
+    rw [subtreeAtM_ofHash_zero_eq, ih]
+
 /-- Packing uses the smallest number of whole nodes that can hold the bytes. -/
 @[simp] theorem packBytes_size (data : Bytes) :
     (packBytes data).size = (data.size + bytesPerChunk - 1) / bytesPerChunk := by
@@ -131,32 +204,10 @@ theorem subtreeAt_eq_subtreeRoot (chunks : Array Bytes) :
     ∀ depth, ∀ start,
       subtreeAt chunks depth start
         = subtreeRoot combine depth (fun i => padded zeroChunk chunks (start + i)) := by
-  intro depth
-  -- The walk descends a level at a time, so the starting position stays quantified over.
-  induction depth with
-  | zero =>
-    intro start
-    rw [subtreeAt_eq]
-    -- Either the leaf lies past the data, or it is read from it.
-    split
-    · -- Past the data, the lookup answers with the zero node the leaf would have read.
-      rw [zeroSubtree_eq]
-      simp [subtreeRoot_zero, zeroRoot, padded, Array.getElem?_eq_none (show chunks.size ≤ start by omega)]
-    · simp [subtreeRoot_zero, padded]
-  | succ depth ih =>
-    intro start
-    rw [subtreeAt_eq]
-    -- Either the whole subtree lies past the data, or part of it does not.
-    split
-    · -- A subtree wholly past the data is the empty tree of its depth, by the lemma above.
-      rw [zeroSubtree_eq]
-      exact (subtreeRoot_padded_past_data combine zeroChunk (depth + 1) chunks (by omega)).symm
-    · -- Otherwise both sides fold the same two halves, and the shift lines up.
-      show combine (subtreeAt chunks depth start) (subtreeAt chunks depth (start + 2 ^ depth)) = _
-      -- Each half is the same claim one level down, which the hypothesis gives twice.
-      rw [subtreeRoot_halves, ih start, ih (start + 2 ^ depth)]
-      -- The right half starts a half-width along, which is the shift the fold applies.
-      simp only [Nat.add_assoc, Nat.add_comm (2 ^ depth)]
+  -- The specification's hasher is the one built from SHA-256 alone.
+  unfold subtreeAt
+  rw [← ofHash_sha256]
+  exact subtreeAtM_ofHash_eq_subtreeRoot _ chunks
 
 /--
 A subtree is its two halves combined, whatever sits under it.
@@ -278,16 +329,10 @@ theorem merkleizeBoundedUnchecked_empty {capacity : Nat} :
 /-- The executable progressive tree agrees with the hash-independent definition. -/
 theorem merkleizeProgressiveUnchecked_eq (chunks : List Bytes) (level : Nat) :
     merkleizeProgressiveUnchecked chunks level = progressiveRoot combine zeroChunk chunks level := by
-  -- Both definitions consume one level's leaves before continuing down the spine.
-  induction chunks, level using progressiveRoot.induct combine zeroChunk with
-  | case1 chunks level empty =>
-    simp [merkleizeProgressiveUnchecked_unfold, progressiveRoot, empty]
-  | case2 chunks level nonempty width ih =>
-    rw [merkleizeProgressiveUnchecked_unfold, progressiveRoot, ite_eq_right nonempty,
-      ite_eq_right nonempty]
-    -- The bounded subtree equivalence is valid at every depth.
-    dsimp only
-    rw [subtreeAt_zero_eq, ih]
+  -- The specification's hasher is the one built from SHA-256 alone.
+  unfold merkleizeProgressiveUnchecked
+  rw [← ofHash_sha256]
+  exact merkleizeProgressiveUncheckedM_ofHash_eq _ chunks level
 
 /-- A node converts to a 32-byte vector exactly when that vector holds its bytes. -/
 theorem toChunk_ok_iff {node : Bytes} {chunk : Vector UInt8 bytesPerChunk} :

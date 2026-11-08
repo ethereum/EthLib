@@ -64,6 +64,54 @@ theorem layoutChunksAt_eq (budget : Nat) (layout : MerkleLayout) (start : Nat)
     rw [exceptT_id_mapM]
     rfl
 
+/-- With any hasher in the identity monad, a spent budget gives no root. -/
+theorem hashTreeRootAtM_id_zero (hasher : Hasher Id) (shape : Desc) (value : Value) :
+    (hashTreeRootAtM hasher 0 shape value).run = .error .proofIncomplete := by
+  simp only [hashTreeRootAtM]
+  rfl
+
+/-- With any hasher in the identity monad, one more unit of budget roots the layout. -/
+theorem hashTreeRootAtM_id_succ (hasher : Hasher Id) (budget : Nat) (shape : Desc)
+    (value : Value) :
+    (hashTreeRootAtM hasher (budget + 1) shape value).run = (do
+      let layout ← merkleLayout shape value
+      let chunks ← (layoutChunksAtM hasher budget layout).run
+      let root ← match layout.limit with
+        | none => .ok (merkleizeProgressiveUncheckedM hasher chunks.toList).run
+        | some capacity => (merkleizeBoundedUncheckedM hasher chunks (some capacity)).run
+      return match layout.mixin with
+        | none => root
+        | some word => (mixInM hasher root word).run : Except Err Bytes) := by
+  simp only [hashTreeRootAtM, ExceptT.run, exceptT_id_bind, exceptT_id_monadLift,
+    exceptT_id_lift, exceptT_id_pure, except_bind_eq]
+  cases merkleLayout shape value with
+  | error => rfl
+  | ok layout =>
+    simp only [Except.bind]
+    cases layout.limit <;> cases layout.mixin <;> rfl
+
+/-- With any hasher in the identity monad, the leaves in a range, each nested value rooted. -/
+theorem layoutChunksAtM_id_eq (hasher : Hasher Id) (budget : Nat) (layout : MerkleLayout)
+    (start : Nat) (stop : Option Nat) :
+    (layoutChunksAtM hasher budget layout start stop).run = (do
+      let last := stop.getD layout.leaves.count
+      match layout.leaves with
+      | .packed chunks => return chunks.extract start last
+      | .nested values =>
+        let slots := (values.drop start).take (last - start)
+        let chunks ← slots.mapM fun slot =>
+          match slot with
+          | none => pure zeroChunk
+          | some (shape, value) => (hashTreeRootAtM hasher budget shape value).run
+        return chunks.toArray : Except Err (Array Bytes)) := by
+  simp only [layoutChunksAtM, ExceptT.run]
+  cases layout.leaves with
+  | packed chunks => rfl
+  | nested values =>
+    simp only [exceptT_id_bind, except_bind_eq]
+    rw [exceptT_id_mapM]
+    rfl
+
 /-- The root of a value spends the nesting of its type as its budget. -/
 theorem hashTreeRoot_eq_nesting (shape : Desc) (value : Value) :
     hashTreeRoot shape value = hashTreeRootAt shape.nesting shape value :=
