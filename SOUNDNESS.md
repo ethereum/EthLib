@@ -522,7 +522,8 @@ The three hold for every forward cipher.
 `residue_mul` (`Proofs/Aes/GaloisField.lean`) proves that the block product of SP 800-38D §6.3, Algorithm 1, is the product of the two blocks read as polynomials over GF(2) modulo `1 + u + u^2 + u^7 + u^128`.
 `residue_xorBlock` proves that XOR is their sum, and `residue_injective` that two different blocks have two different residues.
 `residue_ghash` proves that GHASH of `X_1 ... X_m` is `X_1 H^m + ... + X_m H` on residues, the form that §6.4 states.
-No theorem proves that the modulus is irreducible, so none proves that these residues form a field.
+`irreducible_modulus` (`Proofs/Aes/Field.lean`) proves that the modulus is irreducible over GF(2), so the residues form a field, and `card_adjoinRoot_modulus` that this field has `2^128` elements.
+The kernel checks a certificate of the test: 128 squarings by Algorithm 1 fix `u`, and a block inverts `u^(2^64) - u`.
 `gctr_inc_block` proves that GCM encrypts block `k` of the text under `J_0` incremented `k + 1` times.
 `counter_ne_preCounter` and `counter_injOn` assume the length checks of §5.2.1.1.
 Under them, the counters of the text differ from each other and from `J_0`, the counter of the tag.
