@@ -41,7 +41,7 @@ def cubeRootNat : Nat :=
   0x1a0111ea397fe699ec02408663d4de85aa0d857d89759ad4897d29650fb85f9b409427eb4f49fffd8bfd00000000aaac
 
 /-- The cube root of unity `β' = β^2`. -/
-def cubeRoot : F := G1Rotation.beta ^ 2
+def cubeRoot : F := betaZ ^ 2
 
 /-- The scalar `λ = z^2 - 1`. -/
 def eigenvalue : Nat := blsX ^ 2 - 1
@@ -49,16 +49,14 @@ def eigenvalue : Nat := blsX ^ 2 - 1
 theorem cubeRoot_val : cubeRoot.val = cubeRootNat := by decide +kernel
 
 theorem cubeRoot_cube : cubeRoot ^ 3 = 1 := by
-  rw [cubeRoot, ← pow_mul, show 2 * 3 = 3 * 2 from rfl, pow_mul, G1Rotation.beta_cube, one_pow]
+  rw [cubeRoot, ← pow_mul, show 2 * 3 = 3 * 2 from rfl, pow_mul, betaZ_cube, one_pow]
 
-theorem beta_ne_zero : (G1Rotation.beta : F) ≠ 0 := by decide
-
-theorem four_mul_beta_pow_six : (RingHom.id F) 4 * G1Rotation.beta ^ 6 = 4 := by
-  rw [RingHom.id_apply, show 6 = 3 * 2 from rfl, pow_mul, G1Rotation.beta_cube, one_pow, mul_one]
+theorem four_mul_beta_pow_six : (RingHom.id F) 4 * betaZ ^ 6 = 4 := by
+  rw [RingHom.id_apply, show 6 = 3 * 2 from rfl, pow_mul, betaZ_cube, one_pow, mul_one]
 
 /-- The map `(x, y) ↦ (β' x, y)` of the curve, as a group homomorphism. -/
 noncomputable def endoHom : curve.toAffine.Point →+ curve.toAffine.Point :=
-  ShortWeierstrass.scaledHom (RingHom.id F) beta_ne_zero four_mul_beta_pow_six
+  ShortWeierstrass.scaledHom (RingHom.id F) betaZ_ne_zero four_mul_beta_pow_six
 
 /-- The map `(x, y) ↦ (β' x, y)`, in Jacobian coordinates. -/
 def endo (q : G1) : G1 := ⟨Fp.toZMod.symm cubeRoot * q.x, q.y, q.z⟩
@@ -82,51 +80,13 @@ private theorem rep_endo (q : G1) : rep (endo q) = ![cubeRoot * rep q 0, rep q 1
 private theorem val_cubeRoot : (Fp.toZMod.symm cubeRoot).val = cubeRootNat := by
   rw [Fp.val_eq, RingEquiv.apply_symm_apply, cubeRoot_val]
 
-private theorem nonsingular_endo {P : Fin 3 → F} (h : curve.Nonsingular P) :
-    curve.Nonsingular ![cubeRoot * P 0, P 1, P 2] := by
-  have hb := cubeRoot_cube
-  have hb0 : cubeRoot ≠ 0 := by decide +kernel
-  rw [nonsingular_iff, equation_iff] at h ⊢
-  simp only [Matrix.cons_val_zero, Matrix.cons_val_one, Matrix.cons_val_two, Matrix.head_cons,
-    Matrix.tail_cons, show curve.a₁ = 0 from rfl, show curve.a₂ = 0 from rfl,
-    show curve.a₃ = 0 from rfl, show curve.a₄ = 0 from rfl, show curve.a₆ = 4 from rfl,
-    zero_mul, mul_zero, add_zero] at h ⊢
-  obtain ⟨he, hd⟩ := h
-  refine ⟨by linear_combination he - P 0 ^ 3 * hb, ?_⟩
-  rcases hd with hd | hd
-  · left
-    rw [show 0 - 3 * (cubeRoot * P 0) ^ 2 = cubeRoot ^ 2 * (0 - 3 * P 0 ^ 2) by ring]
-    exact mul_ne_zero (pow_ne_zero 2 hb0) hd
-  · right
-    exact hd
-
 theorem valid_endo {q : G1} (h : Valid q) : Valid (endo q) := by
   rw [Valid, rep_endo]
-  exact nonsingular_endo h
-
-/-- An affine point `(x', y')` with `x' = β' x` and `y' = y` is the image of `(x, y)`. -/
-private theorem some_eq_endoHom {x y x' y' : F} {h : curve.toAffine.Nonsingular x y}
-    {h' : curve.toAffine.Nonsingular x' y'} (hx : x' = x * G1Rotation.beta ^ 2)
-    (hy : y' = y * G1Rotation.beta ^ 3) :
-    Affine.Point.some x' y' h' = endoHom (.some x y h) := by
-  subst hx hy
-  rfl
+  exact nonsingular_scale cubeRoot_cube h
 
 private theorem toAffine_endo {P : Fin 3 → F} (h : curve.Nonsingular P) :
-    Point.toAffine curve ![cubeRoot * P 0, P 1, P 2] = endoHom (Point.toAffine curve P) := by
-  by_cases hz : P 2 = 0
-  · rw [Point.toAffine_of_Z_eq_zero (show (![cubeRoot * P 0, P 1, P 2] : Fin 3 → F) 2 = 0 from hz),
-      Point.toAffine_of_Z_eq_zero hz, _root_.map_zero]
-  · have hz' : (![cubeRoot * P 0, P 1, P 2] : Fin 3 → F) 2 ≠ 0 := hz
-    rw [Point.toAffine_of_Z_ne_zero h hz, Point.toAffine_of_Z_ne_zero (nonsingular_endo h) hz']
-    refine some_eq_endoHom ?_ ?_
-    · simp only [Matrix.cons_val_zero, Matrix.cons_val_two, Matrix.tail_cons, Matrix.head_cons,
-        cubeRoot]
-      ring
-    · have hb := G1Rotation.beta_cube
-      simp only [Matrix.cons_val_zero, Matrix.cons_val_one, Matrix.cons_val_two, Matrix.tail_cons,
-        Matrix.head_cons]
-      linear_combination -(P 1 / P 2 ^ 3) * hb
+    Point.toAffine curve ![cubeRoot * P 0, P 1, P 2] = endoHom (Point.toAffine curve P) :=
+  toAffine_scale betaZ_ne_zero four_mul_beta_pow_six betaZ_cube h
 
 /-- In Jacobian coordinates, the map computes the homomorphism. -/
 theorem toPoint_endo {q : G1} (h : Valid q) : toPoint (endo q) = endoHom (toPoint q) := by

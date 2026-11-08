@@ -29,20 +29,14 @@ local notation "F" => ZMod Fp.modulus
 
 /-! ## Two homomorphisms into `E(Fp12)` -/
 
-/-- A cube root of unity in `Fp`, other than `1`. -/
-def beta : F :=
-  0x5f19672fdf76ce51ba69c6076a0f77eaddb3a93be6f89688de17d813620a00022e01fffffffefffe
-
-theorem beta_cube : beta ^ 3 = 1 := by decide
-
-theorem beta_ne_zero : fpToFp12 beta ≠ 0 :=
+theorem beta_ne_zero : fpToFp12 betaZ ≠ 0 :=
   (map_ne_zero fpToFp12).mpr (by decide)
 
 theorem map_four {u : Fp12} (hu : u ^ 6 = 1) : fpToFp12 (4 : F) * u ^ 6 = 4 := by
   rw [hu, mul_one, map_ofNat]
 
-theorem beta_sq_pow_six : (fpToFp12 beta ^ 2) ^ 6 = 1 := by
-  rw [← pow_mul, show 2 * 6 = 3 * 4 from rfl, pow_mul, ← map_pow, beta_cube, map_one, one_pow]
+theorem beta_sq_pow_six : (fpToFp12 betaZ ^ 2) ^ 6 = 1 := by
+  rw [← pow_mul, show 2 * 6 = 3 * 4 from rfl, pow_mul, ← map_pow, betaZ_cube, map_one, one_pow]
 
 /-- The inclusion of `E(Fp)` in `E(Fp12)`. -/
 noncomputable def embed : curve.toAffine.Point →+ ambientCurve.Point :=
@@ -57,9 +51,9 @@ theorem embed_injective : Function.Injective embed :=
 
 /-- The rotation of an affine point is the inclusion of the point `(β * x, y)`. -/
 theorem rotate_toPoint {x y x' : Fp} (hv : Valid ⟨x, y, Fp.one⟩) (hv' : Valid ⟨x', y, Fp.one⟩)
-    (hx : Fp.toZMod x' = beta * Fp.toZMod x) :
+    (hx : Fp.toZMod x' = betaZ * Fp.toZMod x) :
     rotate (toPoint ⟨x, y, Fp.one⟩) = embed (toPoint ⟨x', y, Fp.one⟩) := by
-  have hb : fpToFp12 beta ^ 3 = 1 := by rw [← map_pow, beta_cube, map_one]
+  have hb : fpToFp12 betaZ ^ 3 = 1 := by rw [← map_pow, betaZ_cube, map_one]
   have hr (a : Fp) : rep ⟨a, y, Fp.one⟩ = ![Fp.toZMod a, Fp.toZMod y, 1] := by
     rw [rep, Fp.one_def, Fp.toZMod_one]
   rw [Valid, hr] at hv hv'
@@ -71,8 +65,8 @@ theorem rotate_toPoint {x y x' : Fp} (hv : Valid ⟨x, y, Fp.one⟩) (hv' : Vali
   show Affine.Point.some _ _ _ = Affine.Point.some _ _ _
   rw [Affine.Point.some.injEq, hx, _root_.map_mul, one_pow, one_pow, mul_one, mul_one]
   constructor
-  · linear_combination fpToFp12 (Fp.toZMod x) * fpToFp12 beta * hb
-  · linear_combination fpToFp12 (Fp.toZMod y) * (fpToFp12 beta ^ 3 + 1) * hb
+  · linear_combination fpToFp12 (Fp.toZMod x) * fpToFp12 betaZ * hb
+  · linear_combination fpToFp12 (Fp.toZMod y) * (fpToFp12 betaZ ^ 3 + 1) * hb
 
 /-- An equation of `Fp` elements, decided by comparing their values. -/
 theorem eq_of_decide {a b : F} (h : @decide (a = b) (instDecidableEqFin _ a b) = true) : a = b :=
@@ -179,7 +173,7 @@ theorem toPoint_ne_zero {x y : Fp} (hv : Valid ⟨x, y, Fp.one⟩) : toPoint ⟨
 The hypothesis says that no `i` below `q` both is a root of `1 + i + i^2` and has `Q = [i] P`. -/
 theorem not_nsmul_of_rotation {q : Nat} (hq : q.Prime) {x y bx bbx : Fp}
     (hp : Valid ⟨x, y, Fp.one⟩) (hq' : Valid ⟨bx, y, Fp.one⟩) (hr : Valid ⟨bbx, y, Fp.one⟩)
-    (hbx : Fp.toZMod bx = beta * Fp.toZMod x) (hbbx : Fp.toZMod bbx = beta * Fp.toZMod bx)
+    (hbx : Fp.toZMod bx = betaZ * Fp.toZMod x) (hbbx : Fp.toZMod bbx = betaZ * Fp.toZMod bx)
     (hP : q • toPoint ⟨x, y, Fp.one⟩ = 0)
     (hsum : toPoint ⟨x, y, Fp.one⟩ + toPoint ⟨bx, y, Fp.one⟩ + toPoint ⟨bbx, y, Fp.one⟩ = 0)
     (hroots : ∀ i < q, q ∣ 1 + i + i * i →

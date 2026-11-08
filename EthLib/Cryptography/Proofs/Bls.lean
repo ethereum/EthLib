@@ -18,6 +18,7 @@ public import EthLib.Cryptography.Proofs.Bls.G1Msm
 public import EthLib.Cryptography.Proofs.Bls.G1Order
 public import EthLib.Cryptography.Proofs.Bls.G1TorsionCheck
 public import EthLib.Cryptography.Proofs.Bls.G1Cardinality
+public import EthLib.Cryptography.Proofs.Bls.G1Endomorphism
 public import EthLib.Cryptography.Proofs.Bls.G1SubgroupSpan
 public import EthLib.Cryptography.Proofs.Bls.G2Group
 public import EthLib.Cryptography.Proofs.Bls.G2Validity

@@ -155,9 +155,18 @@ theorem size_compress (p : G1) : (compress p).size = 48 := by
     · exact (size_set! ..).trans ((size_set! ..).trans (Fp.size_toBytesBE _))
     · exact (size_set! ..).trans (Fp.size_toBytesBE _)
 
-/-- Subgroup-membership check via `[r]·P = O`, with `[r]·P` computed by `mulModulus`. -/
+/-- Subgroup-membership check by the endomorphism `σ(x, y) = (β x, y)`.
+
+A point passes when `σ(P) = [-t^2] P`, where `t` is the BLS parameter.
+
+The test is the one of Scott for `G1`, <https://eprint.iacr.org/2021/1130>.
+
+For a point on the curve, the proofs show that it holds exactly when `[r] P = O`.
+
+`[t^2]` is two products by the 64-bit `|t|`, so the test takes about 128 doublings. -/
 def inSubgroup (p : G1) : Bool :=
-  if p.isInfinity then true else (mulModulus p).isInfinity
+  if p.isInfinity then true
+  else projectiveEq (sigma p) (neg (mulNat (mulNat p blsX) blsX))
 
 /-- Validate a compressed public key and return its point.
 
