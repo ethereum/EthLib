@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.Bls.Signatures
 public import EthLib.Cryptography.Proofs.Bls.G1SubgroupSpan
-public import EthLib.Cryptography.Proofs.Bls.G2SubgroupSpan
+public import EthLib.Cryptography.Proofs.Bls.G2Subgroup
 public import EthLib.Cryptography.Proofs.Bls.G2Compress
 public import EthLib.Cryptography.Proofs.Bls.PairingLaws
 

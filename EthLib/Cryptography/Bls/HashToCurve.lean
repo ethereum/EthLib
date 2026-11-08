@@ -214,32 +214,14 @@ def isoMapG2 (xp yp : Fp2 F) : G2 F :=
 
 Uses the psi endomorphism for the fast Budroni-Pintore method. -/
 
-/-- Frobenius for `GF(p^2)` with basis `(1, I)`: `c0 + c1·I ↦ c0 − c1·I`. -/
-def frobeniusFp2 (x : Fp2 F) : Fp2 F := ⟨x.c0, -x.c1⟩
-
-/-- `c1_psi = 1 / (1 + I)^((p − 1) / 3)`. -/
-def c1Psi : Fp2 F :=
-  let oneI : Fp2 F := ⟨BaseField.one, BaseField.one⟩
-  (Fp2.powNat oneI ((Fp.modulus - 1) / 3)).inverse
-
-/-- `c2_psi = 1 / (1 + I)^((p − 1) / 2)`. -/
-def c2Psi : Fp2 F :=
-  let oneI : Fp2 F := ⟨BaseField.one, BaseField.one⟩
-  (Fp2.powNat oneI ((Fp.modulus - 1) / 2)).inverse
+-- The endomorphism `psi` is a map of the twist, so it is defined with the curve.
+export EthLib.Cryptography.Bls.G2 (frobeniusFp2 c1Psi c2Psi psi)
 
 /-- `c1_psi2 = 1 / 2^((p − 1) / 3)`, lifted into Fp2. -/
 def c1Psi2 : Fp2 F :=
   let two : F := BaseField.ofNat 2
   let v : F := BaseField.inverse (BaseField.powNat two ((Fp.modulus - 1) / 3))
   ⟨v, BaseField.zero⟩
-
-def psi (P : G2 F) : G2 F :=
-  if P.z.isZero then P else
-    -- Affine form for clarity; G2.add handles re-projection.
-    let (x, y) := P.toAffine
-    let qx := c1Psi * frobeniusFp2 x
-    let qy := c2Psi * frobeniusFp2 y
-    ⟨qx, qy, Fp2.one⟩
 
 def psi2 (P : G2 F) : G2 F :=
   if P.z.isZero then P else
