@@ -58,27 +58,30 @@ private theorem bufferRead_toArray (bytes : List UInt8) :
 
 /-- The output of a call of ECADD that succeeds, read as a point, is the sum of its two points. -/
 theorem bytesToG1_ecadd {fork : EthLib.Base.Fork} {data : ByteArray} {gas : Nat} {out : ByteArray}
-    (h : ecadd fork data gas = .ok out) :
-    ∃ p0 p1, bytesToG1 (bufferRead data 0 64) = .ok p0 ∧
-      bytesToG1 (bufferRead data 64 64) = .ok p1 ∧
-      bytesToG1 (bufferRead out 0 64) = .ok (p0 + p1) := by
-  obtain ⟨-, p0, p1, h0, h1, rfl⟩ := (ecadd_eq_ok_iff fork data gas out).mp h
-  refine ⟨p0, p1, h0, h1, ?_⟩
-  have hread := bufferRead_toArray (g1ToBytes (p0 + p1))
+    {p0 p1 : Point} (h : ecadd fork data gas = .ok out)
+    (h0 : bytesToG1 (bufferRead data 0 64) = .ok p0)
+    (h1 : bytesToG1 (bufferRead data 64 64) = .ok p1) :
+    bytesToG1 (bufferRead out 0 64) = .ok (p0 + p1) := by
+  obtain ⟨-, p0', p1', h0', h1', rfl⟩ := (ecadd_eq_ok_iff fork data gas out).mp h
+  -- The decoder is a function, so the points of the call are the named ones.
+  obtain rfl : p0' = p0 := Except.ok.inj (h0'.symm.trans h0)
+  obtain rfl : p1' = p1 := Except.ok.inj (h1'.symm.trans h1)
+  have hread := bufferRead_toArray (g1ToBytes (p0' + p1'))
   rw [length_g1ToBytes] at hread
   rw [hread]
   exact bytesToG1_g1ToBytes (Point.isOnCurve_add (bytesToG1_isOnCurve h0) (bytesToG1_isOnCurve h1))
 
 /-- The output of a call of ECMUL that succeeds, read as a point, is its point times its scalar. -/
 theorem bytesToG1_ecmul {fork : EthLib.Base.Fork} {data : ByteArray} {gas : Nat} {out : ByteArray}
-    (h : ecmul fork data gas = .ok out) :
-    ∃ p0, bytesToG1 (bufferRead data 0 64) = .ok p0 ∧
-      bytesToG1 (bufferRead out 0 64) =
-        .ok (Point.mulBits 256 (Base.bytesToNat (bufferRead data 64 32)) p0) := by
-  obtain ⟨-, p0, h0, rfl⟩ := (ecmul_eq_ok_iff fork data gas out).mp h
-  refine ⟨p0, h0, ?_⟩
+    {p0 : Point} (h : ecmul fork data gas = .ok out)
+    (h0 : bytesToG1 (bufferRead data 0 64) = .ok p0) :
+    bytesToG1 (bufferRead out 0 64) =
+      .ok (Point.mulBits 256 (Base.bytesToNat (bufferRead data 64 32)) p0) := by
+  obtain ⟨-, p0', h0', rfl⟩ := (ecmul_eq_ok_iff fork data gas out).mp h
+  -- The decoder is a function, so the point of the call is the named one.
+  obtain rfl : p0' = p0 := Except.ok.inj (h0'.symm.trans h0)
   have hread := bufferRead_toArray
-    (g1ToBytes (Point.mulBits 256 (Base.bytesToNat (bufferRead data 64 32)) p0))
+    (g1ToBytes (Point.mulBits 256 (Base.bytesToNat (bufferRead data 64 32)) p0'))
   rw [length_g1ToBytes] at hread
   rw [hread]
   exact bytesToG1_g1ToBytes (Point.isOnCurve_mulBits _ _ (bytesToG1_isOnCurve h0))
