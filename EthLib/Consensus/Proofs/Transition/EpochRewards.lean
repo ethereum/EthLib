@@ -901,7 +901,9 @@ In all they are at most the weight of the flag in the base reward per increment.
 
 It counts once for each increment that set the flag in the previous epoch.
 
-It is scaled by the share that set it.
+It is scaled by those increments over the active ones, a ratio that can exceed one.
+
+Both sides are multiplied by 64 for each active increment, so with none the bound says nothing.
 
 That needs a registry within its limit. -/
 theorem getFlagIndexDeltas_rewards_le {altair : .altair ≤ fork}
@@ -1035,7 +1037,9 @@ Each bound is the weight of its flag in the base reward per increment.
 
 It counts once for each increment that set the flag in the previous epoch.
 
-It is scaled by the share that set it.
+It is scaled by those increments over the active ones, a ratio that can exceed one.
+
+Both sides are multiplied by 64 for each active increment, so with none the bound says nothing.
 
 That needs a registry within its limit. -/
 theorem processRewardsAndPenalties_balanceSum_le {config : Config}
