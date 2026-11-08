@@ -450,7 +450,7 @@ The curve over `Fp` has `q` points, so the curve equation is enough for `G_1`, a
 So the decoder checks the order of the point of the twist only.
 
 The decoder of a point of `G_1` accepts 64 bytes exactly when they encode a point on the curve
-(`bytesToG1_eq_ok_iff`, from `bytesToG1_g1ToBytes` and `g1ToBytes_of_bytesToG1`).
+(`bytesToG1_eq_ok_iff`, from `bytesToG1_g1ToBytes` and `g1ToBytes_bytesToG1`).
 `Group.lean` shows that ECADD returns the sum of its points in the group of the curve, and ECMUL
 the product of its point by its scalar (`ecadd_toPoint`, `ecmul_toPoint`).
 Each output decodes to that sum or that product (`bytesToG1_ecadd`, `bytesToG1_ecmul`).
