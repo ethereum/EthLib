@@ -173,16 +173,16 @@ def verifyProof (hash : ByteArray → Hash32) (root : Hash32) (secured : Bool) (
 It lists the encoding of each node on the path that its parent holds by hash.
 
 The budget counts the nodes on the path, and one more than the length of `path` is enough. -/
-def proofBelow (hash : ByteArray → Hash32) :
-    Nat → List (List Nibble × ByteArray) → Nat → List Nibble → Except RlpError (List ByteArray)
-  | 0, _, _, _ => .ok []
+def proofBelowM {m : Type → Type} [Monad m] (hash : ByteArray → m Hash32) :
+    Nat → List (List Nibble × ByteArray) → Nat → List Nibble → ExceptT RlpError m (List ByteArray)
+  | 0, _, _, _ => pure []
   | fuel + 1, obj, level, path => do
     -- The proof of the child that the path enters, the keys `sub` at `deeper`.
     let child (sub : List (List Nibble × ByteArray)) (deeper : Nat) (restOfPath : List Nibble) := do
-      let encoded ← encode (unencoded (← patricialize hash sub deeper))
-      let below ← proofBelow hash fuel sub deeper restOfPath
+      let encoded ← encode (unencoded (← patricializeM hash sub deeper))
+      let below ← proofBelowM hash fuel sub deeper restOfPath
       return (if encoded.size < 32 then [] else [encoded]) ++ below
-    match ← patricialize hash obj level with
+    match ← patricializeM hash obj level with
     | some (.extension keySegment _) =>
       if keySegment = path.take keySegment.length then
         child obj (level + keySegment.length) (path.drop keySegment.length)
@@ -191,16 +191,29 @@ def proofBelow (hash : ByteArray → Hash32) :
     | some (.branch _ _) =>
       match path with
       | [] => return []
-      | nibble :: restOfPath => child (obj.filter fun (key, _) => key[level]? = some nibble) (level + 1) restOfPath
+      | nibble :: restOfPath =>
+        child (obj.filter fun (key, _) => key[level]? = some nibble) (level + 1) restOfPath
     -- No node or a leaf: the path ends here.
     | _ => return []
 
+/-- The proof below a node, with a plain hash. -/
+def proofBelow (hash : ByteArray → Hash32) (fuel : Nat) (obj : List (List Nibble × ByteArray))
+    (level : Nat) (path : List Nibble) : Except RlpError (List ByteArray) :=
+  (proofBelowM (m := Id) hash fuel obj level path).run
+
 /-- The proof of one key of a trie: the encoding of the root node, then the proof below it. -/
-def getProof (hash : ByteArray → Hash32) (trie : Trie) (key : ByteArray) : Except TrieError (List ByteArray) := do
-  let obj ← prepareData hash trie.data trie.secured
-  let path := keyPath hash trie.secured key
-  let encoded ← (encode (unencoded (← (patricialize hash obj 0).mapError .rlp))).mapError .rlp
-  let below ← (proofBelow hash (path.length + 1) obj 0 path).mapError .rlp
+def getProofM {m : Type → Type} [Monad m] (hash : ByteArray → m Hash32) (trie : Trie)
+    (key : ByteArray) : ExceptT TrieError m (List ByteArray) := do
+  let obj ← prepareDataM hash trie.data trie.secured
+  let path ← ExceptT.lift (keyPathM hash trie.secured key)
+  let rootNode ← (patricializeM hash obj 0).adapt .rlp
+  let encoded ← ((encode (unencoded rootNode)).mapError .rlp : Except TrieError ByteArray)
+  let below ← (proofBelowM hash (path.length + 1) obj 0 path).adapt .rlp
   return encoded :: below
+
+/-- The proof of one key of a trie, with a plain hash. -/
+def getProof (hash : ByteArray → Hash32) (trie : Trie) (key : ByteArray) :
+    Except TrieError (List ByteArray) :=
+  (getProofM (m := Id) hash trie key).run
 
 end EthLib.Execution.Trie
