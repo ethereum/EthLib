@@ -118,6 +118,23 @@ Not yet released.
   A negative number raises `ValueError`.
   A seed, a blob, a matrix entry, or a cell or proof of a row, of the wrong length, raises the error class of the method with code 0 and the message `expected N bytes, got M`.
   A `bytearray` or a `memoryview` given for bytes raises `TypeError`, where some were read as bytes.
+- The consensus transition exports now take typed values ([#1556](https://github.com/ethereum/EthLib/pull/1556)).
+  These are the block operations, the epoch steps, the slots and the state transitions of one block or of several blocks.
+  They are also the upgrades, the rewards and penalties, the genesis exports and the weak subjectivity exports.
+  Their C exports take the tuple of their arguments as one value, in the order they had.
+  A configuration replacement crosses as a `dict`, where it crossed as JSON text, and any other value raises the error class of the method with code 0.
+  In a replacement, a negative `int` or a `float` raises `ValueError` or `TypeError` from the converter, and `bytes` crosses as `0x` hex.
+  The names of the kinds of deltas and of the forks of the blocks cross as `str`.
+  The deposits of the genesis cross as a list of bytes, one deposit each, where they crossed joined in one byte string.
+  A hash of the Eth1 block of another length than 32 bytes raises `TransitionError` with code 0 and the message `expected 32 bytes, got N`, where the message began with `input rejected`.
+  Every argument is read before the names, so an argument that Lean cannot read is reported before an unknown preset.
+  In Python, a slot count or an Eth1 timestamp of 2^64 or more, or a negative one, raises an error, where it was read modulo 2^64 without one.
+  The times of weak subjectivity of 2^64 or more raise the error class of the method with code 0, where they raised `OverflowError`.
+  A negative number raises `ValueError`.
+  An argument that crosses to Lean but that Lean cannot read raises the error class of the method with code 0, where it raised `TypeError`.
+  Examples are `bytes` given for a name and `str` given for a state.
+  A `bool` given for a slot count, and `1` or `None` given for `verify`, now raise the same error, where they were read as 0 or 1 or by truthiness.
+  The limits of the converter, 2^29 bytes and 1,000,000 values in one call, now apply to the states and the blocks.
 - A chain configuration that the exports read as JSON is now rejected, with code 0, when a fork by block number comes after a fork by timestamp ([#1110](https://github.com/ethereum/EthLib/pull/1110)).
   EIP-6122 requires the forks by timestamp to be scheduled at or after the forks by block.
 

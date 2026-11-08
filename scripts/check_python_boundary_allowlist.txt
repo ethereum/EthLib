@@ -19,7 +19,6 @@ bindings/python/ethlib/consensus/__init__.py block_to_light_client_header json
 bindings/python/ethlib/consensus/__init__.py block_to_light_client_header slice
 bindings/python/ethlib/consensus/__init__.py compute_fork_digest json
 bindings/python/ethlib/consensus/__init__.py compute_subnets_for_sync_committee json
-bindings/python/ethlib/consensus/__init__.py compute_weak_subjectivity_period json
 bindings/python/ethlib/consensus/__init__.py create_light_client_bootstrap json
 bindings/python/ethlib/consensus/__init__.py create_light_client_update json
 bindings/python/ethlib/consensus/__init__.py get_committee_assignment json
@@ -30,11 +29,7 @@ bindings/python/ethlib/consensus/__init__.py gossip_validation from_bytes
 bindings/python/ethlib/consensus/__init__.py gossip_validation json
 bindings/python/ethlib/consensus/__init__.py gossip_validation slice
 bindings/python/ethlib/consensus/__init__.py gossip_validation to_bytes
-bindings/python/ethlib/consensus/__init__.py initialize_genesis join
-bindings/python/ethlib/consensus/__init__.py initialize_genesis json
 bindings/python/ethlib/consensus/__init__.py is_better_update json
-bindings/python/ethlib/consensus/__init__.py is_valid_genesis_state json
-bindings/python/ethlib/consensus/__init__.py is_within_weak_subjectivity_period json
 bindings/python/ethlib/consensus/__init__.py latest_verified_ancestor join
 bindings/python/ethlib/consensus/__init__.py light_client_sync join
 bindings/python/ethlib/consensus/__init__.py light_client_sync json
@@ -44,15 +39,5 @@ bindings/python/ethlib/consensus/__init__.py light_client_sync.header slice
 bindings/python/ethlib/consensus/__init__.py light_client_update_proofs json
 bindings/python/ethlib/consensus/__init__.py on_invalidated_payload join
 bindings/python/ethlib/consensus/__init__.py on_valid_payload join
-bindings/python/ethlib/consensus/__init__.py process_epoch json
-bindings/python/ethlib/consensus/__init__.py process_operation json
-bindings/python/ethlib/consensus/__init__.py process_slots json
-bindings/python/ethlib/consensus/__init__.py rewards_deltas json
-bindings/python/ethlib/consensus/__init__.py rewards_deltas_batch json
-bindings/python/ethlib/consensus/__init__.py state_transition json
-bindings/python/ethlib/consensus/__init__.py state_transition_across json
-bindings/python/ethlib/consensus/__init__.py state_transitions json
-bindings/python/ethlib/consensus/__init__.py state_transitions_across json
-bindings/python/ethlib/consensus/__init__.py upgrade_state json
 bindings/python/ethlib/serialization/ssz/__init__.py _dump json
 bindings/python/ethlib/serialization/ssz/__init__.py deserialize json

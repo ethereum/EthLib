@@ -135,14 +135,17 @@ The replacements come as a `dict` with the names of the configuration file.
 
 Each value replaces its key in the JSON form of the configuration, bytes as `0x` and hex.
 
-None or an empty `dict` keeps the configuration of the name. -/
+None or an empty `dict` keeps the configuration of the name.
+
+Any other value than a `dict` has code 0. -/
 def configWithValue (name : String) (replacements : Option PyValue) : Result Config := do
   let config ← configOf name
   match replacements with
   | none | some (.dict #[]) => return config
-  | some replaced =>
-    (fromJson? ((toJson config).mergeObj replaced.toJson)).mapError fun e =>
+  | some (.dict entries) =>
+    (fromJson? ((toJson config).mergeObj (PyValue.dict entries).toJson)).mapError fun e =>
       (0, s!"configuration: {e}")
+  | some _ => throw (0, "configuration: expected a dict")
 
 /-- The fork of a name, for the forks from Phase 0 to Hegotá, whose beacon chain is Heze.
 

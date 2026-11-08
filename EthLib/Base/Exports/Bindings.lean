@@ -361,52 +361,54 @@ def bindings : List Binding := [
     "(name: str, fork: str, data: bytes) -> bool",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
   ⟨"consensus_process_operation", `EthLib.Consensus.Exports.processOperationExport,
-    "(name: str, fork: str, handler: str, pre: bytes, operation: bytes, config: bytes, " ++
-      "verify: bool, execution_valid: bool) -> bytes",
+    "(name: str, fork: str, handler: str, pre: bytes, operation: bytes, " ++
+      "config: dict[str, Any] | None, verify: bool, execution_valid: bool) -> bytes",
     [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
   ⟨"consensus_process_epoch", `EthLib.Consensus.Exports.processEpochExport,
-    "(name: str, fork: str, handler: str, pre: bytes, config: bytes) -> bytes",
+    "(name: str, fork: str, handler: str, pre: bytes, config: dict[str, Any] | None) -> bytes",
     [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
   ⟨"consensus_rewards_deltas", `EthLib.Consensus.Exports.rewardsDeltasExport,
-    "(name: str, fork: str, component: str, pre: bytes, config: bytes) -> bytes",
+    "(name: str, fork: str, component: str, pre: bytes, config: dict[str, Any] | None) -> bytes",
     [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
   ⟨"consensus_rewards_deltas_batch", `EthLib.Consensus.Exports.rewardsDeltasBatchExport,
-    "(name: str, fork: str, components: list[bytes], pre: bytes, config: bytes) -> list[bytes]",
+    "(name: str, fork: str, components: list[str], pre: bytes, " ++
+      "config: dict[str, Any] | None) -> list[bytes]",
     [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
   ⟨"consensus_process_slots", `EthLib.Consensus.Exports.processSlotsExport,
-    "(name: str, fork: str, pre: bytes, config: bytes, slots: int) -> bytes",
+    "(name: str, fork: str, pre: bytes, config: dict[str, Any] | None, slots: int) -> bytes",
     [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
   ⟨"consensus_state_transition", `EthLib.Consensus.Exports.stateTransitionExport,
-    "(name: str, fork: str, pre: bytes, block: bytes, config: bytes, verify: bool) -> bytes",
+    "(name: str, fork: str, pre: bytes, block: bytes, config: dict[str, Any] | None, " ++
+      "verify: bool) -> bytes",
     [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
   ⟨"consensus_state_transition_across",
     `EthLib.Consensus.Exports.stateTransitionAcrossExport,
-    "(name: str, fork: str, pre: bytes, block_fork: str, block: bytes, config: bytes, " ++
-      "verify: bool) -> bytes",
+    "(name: str, fork: str, pre: bytes, block_fork: str, block: bytes, " ++
+      "config: dict[str, Any] | None, verify: bool) -> bytes",
     [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
   ⟨"consensus_state_transitions", `EthLib.Consensus.Exports.stateTransitionsExport,
-    "(name: str, fork: str, pre: bytes, blocks: list[bytes], config: bytes, verify: bool) " ++
-      "-> bytes",
+    "(name: str, fork: str, pre: bytes, blocks: list[bytes], config: dict[str, Any] | None, " ++
+      "verify: bool) -> bytes",
     [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
   ⟨"consensus_state_transitions_across",
     `EthLib.Consensus.Exports.stateTransitionsAcrossExport,
-    "(name: str, fork: str, pre: bytes, block_forks: list[bytes], blocks: list[bytes], " ++
-      "config: bytes, verify: bool) -> bytes",
+    "(name: str, fork: str, pre: bytes, block_forks: list[str], blocks: list[bytes], " ++
+      "config: dict[str, Any] | None, verify: bool) -> bytes",
     [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
   ⟨"consensus_initialize_genesis", `EthLib.Consensus.Exports.initializeGenesisExport,
-    "(name: str, fork: str, eth1_block_hash: bytes, deposits: bytes, config: bytes, " ++
-      "eth1_timestamp: int, verify: bool) -> bytes",
+    "(name: str, fork: str, eth1_block_hash: bytes, deposits: list[bytes], " ++
+      "config: dict[str, Any] | None, eth1_timestamp: int, verify: bool) -> bytes",
     [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
   ⟨"consensus_is_valid_genesis_state", `EthLib.Consensus.Exports.isValidGenesisStateExport,
-    "(name: str, fork: str, state: bytes, config: bytes) -> bool",
+    "(name: str, fork: str, state: bytes, config: dict[str, Any] | None) -> bool",
     [], some "TransitionError"⟩,
   ⟨"consensus_compute_weak_subjectivity_period",
     `EthLib.Consensus.Exports.computeWeakSubjectivityPeriodExport,
-    "(name: str, fork: str, state: bytes, config: bytes) -> int",
+    "(name: str, fork: str, state: bytes, config: dict[str, Any] | None) -> int",
     [`EthLib.Consensus.WeakSubjectivityError], some "WeakSubjectivityError"⟩,
   ⟨"consensus_is_within_weak_subjectivity_period",
     `EthLib.Consensus.Exports.isWithinWeakSubjectivityPeriodExport,
-    "(name: str, fork: str, state: bytes, checkpoint: bytes, config: bytes, " ++
+    "(name: str, fork: str, state: bytes, checkpoint: bytes, config: dict[str, Any] | None, " ++
       "genesis_time_ms: int, time_ms: int) -> bool",
     [`EthLib.Consensus.WeakSubjectivityError], some "WeakSubjectivityError"⟩,
   ⟨"consensus_get_committee_assignment",
@@ -555,7 +557,7 @@ def bindings : List Binding := [
       "-> int",
     [`EthLib.Consensus.ProposerError], some "ProposerError"⟩,
   ⟨"consensus_upgrade_state", `EthLib.Consensus.Exports.upgradeStateExport,
-    "(name: str, fork: str, pre: bytes, config: bytes, verify: bool) -> bytes",
+    "(name: str, fork: str, pre: bytes, config: dict[str, Any] | None, verify: bool) -> bytes",
     [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
   ⟨"consensus_fork_choice", `EthLib.Consensus.Exports.forkChoiceExport,
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++

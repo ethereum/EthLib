@@ -384,55 +384,53 @@ def process_operation(
     pre: bytes,
     operation: bytes,
     verify: bool = True,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
     execution_valid: bool = True,
 ) -> bytes:
     """The SSZ bytes of a beacon state after one block operation, or TransitionError."""
-    replacements = json.dumps(config).encode() if config else b""
     return _native.consensus_process_operation(
-        name, fork, handler, pre, operation, replacements, verify, execution_valid
+        name, fork, handler, pre, operation, config, verify, execution_valid
     )
 
 
 def process_epoch(
-    name: str, fork: str, handler: str, pre: bytes, config: dict | None = None
+    name: str, fork: str, handler: str, pre: bytes, config: dict[str, Any] | None = None
 ) -> bytes:
     """The SSZ bytes of a beacon state after one epoch transition step, or TransitionError."""
-    replacements = json.dumps(config).encode() if config else b""
-    return _native.consensus_process_epoch(name, fork, handler, pre, replacements)
+    return _native.consensus_process_epoch(name, fork, handler, pre, config)
 
 
 def rewards_deltas(
-    name: str, fork: str, component: str, pre: bytes, config: dict | None = None
+    name: str, fork: str, component: str, pre: bytes, config: dict[str, Any] | None = None
 ) -> bytes:
     """The SSZ bytes of the reward and penalty deltas of one kind of vote, or TransitionError."""
-    replacements = json.dumps(config).encode() if config else b""
-    return _native.consensus_rewards_deltas(name, fork, component, pre, replacements)
+    return _native.consensus_rewards_deltas(name, fork, component, pre, config)
 
 
 def rewards_deltas_batch(
-    name: str, fork: str, components: list[str], pre: bytes, config: dict | None = None
+    name: str, fork: str, components: list[str], pre: bytes, config: dict[str, Any] | None = None
 ) -> list[bytes]:
     """The SSZ bytes of the deltas of each named kind of vote, from one decode of the state."""
-    replacements = json.dumps(config).encode() if config else b""
-    kinds = [component.encode() for component in components]
-    return _native.consensus_rewards_deltas_batch(name, fork, kinds, pre, replacements)
+    return _native.consensus_rewards_deltas_batch(name, fork, components, pre, config)
 
 
 def process_slots(
-    name: str, fork: str, pre: bytes, slots: int, config: dict | None = None
+    name: str, fork: str, pre: bytes, slots: int, config: dict[str, Any] | None = None
 ) -> bytes:
     """The SSZ bytes of a beacon state some slots later, or TransitionError."""
-    replacements = json.dumps(config).encode() if config else b""
-    return _native.consensus_process_slots(name, fork, pre, replacements, slots)
+    return _native.consensus_process_slots(name, fork, pre, config, slots)
 
 
 def state_transition(
-    name: str, fork: str, pre: bytes, block: bytes, verify: bool = True, config: dict | None = None
+    name: str,
+    fork: str,
+    pre: bytes,
+    block: bytes,
+    verify: bool = True,
+    config: dict[str, Any] | None = None,
 ) -> bytes:
     """The SSZ bytes of a beacon state after a signed block, or TransitionError."""
-    replacements = json.dumps(config).encode() if config else b""
-    return _native.consensus_state_transition(name, fork, pre, block, replacements, verify)
+    return _native.consensus_state_transition(name, fork, pre, block, config, verify)
 
 
 def state_transition_across(
@@ -442,12 +440,11 @@ def state_transition_across(
     block_fork: str,
     block: bytes,
     verify: bool = True,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
 ) -> bytes:
     """The SSZ bytes of a state after a block of the same or a later fork, or TransitionError."""
-    replacements = json.dumps(config).encode() if config else b""
     return _native.consensus_state_transition_across(
-        name, fork, pre, block_fork, block, replacements, verify
+        name, fork, pre, block_fork, block, config, verify
     )
 
 
@@ -455,13 +452,12 @@ def state_transitions(
     name: str,
     fork: str,
     pre: bytes,
-    blocks: list[bytes],
+    blocks: Sequence[bytes],
     verify: bool = True,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
 ) -> bytes:
     """The SSZ bytes of a beacon state after signed blocks in order, or TransitionError."""
-    replacements = json.dumps(config).encode() if config else b""
-    return _native.consensus_state_transitions(name, fork, pre, blocks, replacements, verify)
+    return _native.consensus_state_transitions(name, fork, pre, list(blocks), config, verify)
 
 
 def state_transitions_across(
@@ -469,15 +465,13 @@ def state_transitions_across(
     fork: str,
     pre: bytes,
     block_forks: list[str],
-    blocks: list[bytes],
+    blocks: Sequence[bytes],
     verify: bool = True,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
 ) -> bytes:
     """The SSZ bytes of a state after blocks of the same or later forks, or TransitionError."""
-    replacements = json.dumps(config).encode() if config else b""
-    forks = [block_fork.encode() for block_fork in block_forks]
     return _native.consensus_state_transitions_across(
-        name, fork, pre, forks, blocks, replacements, verify
+        name, fork, pre, block_forks, list(blocks), config, verify
     )
 
 
@@ -615,29 +609,28 @@ def initialize_genesis(
     fork: str,
     eth1_block_hash: bytes,
     eth1_timestamp: int,
-    deposits: list[bytes],
+    deposits: Sequence[bytes],
     verify: bool = True,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
 ) -> bytes:
     """The SSZ bytes of the candidate genesis state of a block and its deposits."""
-    replacements = json.dumps(config).encode() if config else b""
     return _native.consensus_initialize_genesis(
-        name, fork, eth1_block_hash, b"".join(deposits), replacements, eth1_timestamp, verify
+        name, fork, eth1_block_hash, list(deposits), config, eth1_timestamp, verify
     )
 
 
-def is_valid_genesis_state(name: str, fork: str, state: bytes, config: dict | None = None) -> bool:
+def is_valid_genesis_state(
+    name: str, fork: str, state: bytes, config: dict[str, Any] | None = None
+) -> bool:
     """Whether a candidate genesis state launches the chain."""
-    replacements = json.dumps(config).encode() if config else b""
-    return _native.consensus_is_valid_genesis_state(name, fork, state, replacements)
+    return _native.consensus_is_valid_genesis_state(name, fork, state, config)
 
 
 def compute_weak_subjectivity_period(
-    name: str, fork: str, state: bytes, config: dict | None = None
+    name: str, fork: str, state: bytes, config: dict[str, Any] | None = None
 ) -> int:
     """The weak subjectivity period of a state, in epochs, or WeakSubjectivityError."""
-    replacements = json.dumps(config).encode() if config else b""
-    return _native.consensus_compute_weak_subjectivity_period(name, fork, state, replacements)
+    return _native.consensus_compute_weak_subjectivity_period(name, fork, state, config)
 
 
 def is_within_weak_subjectivity_period(
@@ -647,12 +640,11 @@ def is_within_weak_subjectivity_period(
     ws_checkpoint: bytes,
     genesis_time_ms: int,
     time_ms: int,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
 ) -> bool:
     """Whether a checkpoint and its state are within the period at the two times of a store."""
-    replacements = json.dumps(config).encode() if config else b""
     return _native.consensus_is_within_weak_subjectivity_period(
-        name, fork, ws_state, ws_checkpoint, replacements, genesis_time_ms, time_ms
+        name, fork, ws_state, ws_checkpoint, config, genesis_time_ms, time_ms
     )
 
 
@@ -1035,11 +1027,10 @@ def get_validators_custody_requirement(
 
 
 def upgrade_state(
-    name: str, fork: str, pre: bytes, verify: bool = True, config: dict | None = None
+    name: str, fork: str, pre: bytes, verify: bool = True, config: dict[str, Any] | None = None
 ) -> bytes:
     """The SSZ bytes of a state upgraded to a fork from the fork before, or TransitionError."""
-    replacements = json.dumps(config).encode() if config else b""
-    return _native.consensus_upgrade_state(name, fork, pre, replacements, verify)
+    return _native.consensus_upgrade_state(name, fork, pre, config, verify)
 
 
 __all__ = [

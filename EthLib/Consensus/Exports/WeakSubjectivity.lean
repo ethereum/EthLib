@@ -18,7 +18,9 @@ Heze keeps the rule of Gloas.
 
 The check reads only the time of the store, so the export takes the two times of a store.
 
-The configuration of a name holds, with the replacements that a JSON object gives.
+The configuration of a name holds, with the replacements that a `dict` gives.
+
+The exports take the tuple of their arguments as typed Python values.
 
 An input that does not decode, or an unknown name, has code 0.
 -/
@@ -28,22 +30,28 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz
-open EthLib.Exports (Result)
+open EthLib.Exports (Result PyValue pyExport)
 
 /-- The result of weak subjectivity, with the code and the text of its error. -/
 def runWeakSubjectivity {α : Type} (result : Except WeakSubjectivityError α) : Result α :=
   result.mapError fun e => (e.code, reprStr e)
 
-/-- The weak subjectivity period of a state, in epochs.
-
-The preset, the configuration and the fork are named in UTF-8. -/
-@[export eth_consensus_compute_weak_subjectivity_period]
-def computeWeakSubjectivityPeriodExport (name fork state replacements : ByteArray) :
+/-- The weak subjectivity period of a state, in epochs. -/
+def computeWeakSubjectivityPeriodOf
+    (args : String × String × ByteArray × Option PyValue) :
     Result UInt64 := do
-  let (preset, fork) ← transitionPresetAndFork name fork
-  let config ← configWith name replacements
+  let (name, fork, state, replacements) := args
+  let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
+  let config ← configWithValue name replacements
   let state ← decodeInput (BeaconState preset fork) state
   runWeakSubjectivity (computeWeakSubjectivityPeriod config state)
+
+/-- The weak subjectivity period of a state, in epochs.
+
+The preset, the configuration and the fork are named by `str`. -/
+@[export eth_consensus_compute_weak_subjectivity_period]
+def computeWeakSubjectivityPeriodExport (args : PyValue) : Result PyValue :=
+  pyExport computeWeakSubjectivityPeriodOf args
 
 /-- A store with a time and a time of genesis, and nothing else.
 
@@ -60,21 +68,27 @@ def storeAtTime (preset : Preset) (fork : Fork) (genesisTimeMs timeMs : UInt64) 
     payloadDataAvailabilityVote := fun _ => {}, inclusionLists := fun _ => .empty,
     payloadInclusionListSatisfaction := fun _ => {} }
 
+/-- Whether a checkpoint is within the weak subjectivity period of its state, at a time. -/
+def isWithinWeakSubjectivityPeriodOf
+    (args : String × String × ByteArray × ByteArray × Option PyValue × UInt64 × UInt64) :
+    Result Bool := do
+  let (name, fork, state, checkpoint, replacements, genesisTimeMs, timeMs) := args
+  let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
+  let config ← configWithValue name replacements
+  let state ← decodeInput (BeaconState preset fork) state
+  let checkpoint ← decodeInput Checkpoint checkpoint
+  runWeakSubjectivity (isWithinWeakSubjectivityPeriod config
+    (storeAtTime preset fork genesisTimeMs timeMs) state checkpoint)
+
 /-- Whether a checkpoint is within the weak subjectivity period of its state, at a time.
 
-The preset, the configuration and the fork are named in UTF-8.
+The preset, the configuration and the fork are named by `str`.
 
 The checkpoint comes as its SSZ bytes, and the state as the state at the checkpoint.
 
 The two times are those of a store, in milliseconds since the Unix epoch. -/
 @[export eth_consensus_is_within_weak_subjectivity_period]
-def isWithinWeakSubjectivityPeriodExport (name fork state checkpoint replacements : ByteArray)
-    (genesisTimeMs timeMs : UInt64) : Result Bool := do
-  let (preset, fork) ← transitionPresetAndFork name fork
-  let config ← configWith name replacements
-  let state ← decodeInput (BeaconState preset fork) state
-  let checkpoint ← decodeInput Checkpoint checkpoint
-  runWeakSubjectivity (isWithinWeakSubjectivityPeriod config
-    (storeAtTime preset fork genesisTimeMs timeMs) state checkpoint)
+def isWithinWeakSubjectivityPeriodExport (args : PyValue) : Result PyValue :=
+  pyExport isWithinWeakSubjectivityPeriodOf args
 
 end EthLib.Consensus.Exports

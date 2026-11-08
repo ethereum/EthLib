@@ -286,3 +286,10 @@ def test_state_at_another_epoch():
     ) as info:
         _is_within(state, _checkpoint(EPOCH - 1, ROOT), EPOCH)
     assert info.value.code == 5
+
+
+def test_time_out_of_range():
+    message = f"expected an int below {2**64}, got {2**64}"
+    with raises(consensus.WeakSubjectivityError, message) as info:
+        consensus.is_within_weak_subjectivity_period("minimal", "phase0", b"", b"", 2**64, 0)
+    assert info.value.code == 0

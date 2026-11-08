@@ -16,6 +16,12 @@ from .test_data_column import replacements
 
 FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "transition"
 
+
+def _phase0_pre() -> bytes:
+    case = next((FILES / "minimal" / "phase0").rglob("pre.ssz_snappy"))
+    return snappy.decompress(case.read_bytes())
+
+
 # The forks at which EthLib runs each group, as runner and handler.
 GROUPS = {
     "sanity/slots": (
@@ -237,4 +243,51 @@ def test_block_forks_count():
     # Each block names its fork, so a count of forks that differs is a rejection.
     with raises(consensus.TransitionError, "1 block forks for 0 blocks") as info:
         consensus.state_transitions_across("minimal", "phase0", b"", ["phase0"], [])
+    assert info.value.code == 0
+
+
+def test_configuration_replacement_is_read():
+    # A replacement crosses as a dict, and a value that does not fit is a rejection.
+    field = "EthLib.Consensus.Config.ALTAIR_FORK_EPOCH"
+    message = f"configuration: {field}: {2**64} does not fit in 64 bits"
+    with raises(consensus.TransitionError, message) as info:
+        consensus.process_slots("minimal", "phase0", _phase0_pre(), 1, {"ALTAIR_FORK_EPOCH": 2**64})
+    assert info.value.code == 0
+
+
+def test_slots_out_of_range():
+    message = f"expected an int below {2**64}, got {2**64}"
+    with raises(consensus.TransitionError, message) as info:
+        consensus.process_slots("minimal", "phase0", _phase0_pre(), 2**64)
+    assert info.value.code == 0
+
+
+def test_negative_slots():
+    with raises(ValueError, "cannot pass a negative int to Lean"):
+        consensus.process_slots("minimal", "phase0", _phase0_pre(), -1)
+
+
+@pytest.mark.parametrize("value, message", [(True, "expected an int"), ("1", "expected an int")])
+def test_slots_of_another_type(value, message):
+    with raises(consensus.TransitionError, message) as info:
+        consensus.process_slots("minimal", "phase0", _phase0_pre(), value)
+    assert info.value.code == 0
+
+
+@pytest.mark.parametrize("verify", [1, None])
+def test_verify_must_be_a_bool(verify):
+    with raises(consensus.TransitionError, "expected a bool") as info:
+        consensus.state_transition("minimal", "phase0", _phase0_pre(), b"", verify)
+    assert info.value.code == 0
+
+
+def test_configuration_must_be_a_dict():
+    with raises(consensus.TransitionError, "configuration: expected a dict") as info:
+        consensus.process_slots("minimal", "phase0", _phase0_pre(), 1, [1])  # ty: ignore[invalid-argument-type]
+    assert info.value.code == 0
+
+
+def test_genesis_hash_length():
+    with raises(consensus.TransitionError, "expected 32 bytes, got 31") as info:
+        consensus.initialize_genesis("minimal", "phase0", bytes(31), 0, [])
     assert info.value.code == 0
