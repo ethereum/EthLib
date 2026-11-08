@@ -177,6 +177,32 @@ def mulModulus (p : G1 F) : G1 F :=
   let a := mulNat (mulNat p blsX) blsX
   add (mulNat (mulNat (add a (neg p)) blsX) blsX) p
 
+/-- A cube root of unity in the base field, other than `1`.
+
+Of the two such roots, it is the one for which the map below acts as `[-t^2]` on `G1`. -/
+def beta : F :=
+  BaseField.ofNat
+    0x5f19672fdf76ce51ba69c6076a0f77eaddb3a93be6f89688de17d813620a00022e01fffffffefffe
+
+/-- The endomorphism `(x, y) ↦ (β x, y)` of the curve.
+
+It keeps a point on `y^2 = x^3 + 4`, since `β^3 = 1`.
+
+In Jacobian coordinates it scales `X` alone, since `x = X / Z^2`. -/
+@[inline] def sigma (p : G1 F) : G1 F := ⟨beta * p.x, p.y, p.z⟩
+
+/-- Whether two Jacobian triples denote the same point.
+
+Two finite triples agree when `X1 Z2^2 = X2 Z1^2` and `Y1 Z2^3 = Y2 Z1^3`.
+
+Two triples at infinity agree, and a finite triple never agrees with one at infinity. -/
+def projectiveEq (p q : G1 F) : Bool :=
+  if BaseField.isZero p.z then BaseField.isZero q.z
+  else if BaseField.isZero q.z then false
+  else
+    BaseField.beq (p.x * (q.z * q.z)) (q.x * (p.z * p.z)) &&
+    BaseField.beq (p.y * ((q.z * q.z) * q.z)) (q.y * ((p.z * p.z) * p.z))
+
 /-! ## Multi-scalar multiplication
 
 Pippenger's algorithm splits each scalar into 8-bit windows.
