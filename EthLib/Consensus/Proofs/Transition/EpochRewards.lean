@@ -380,7 +380,7 @@ private theorem getEligibleValidatorIndices_eq {eligible : List ValidatorIndex}
     (computed : getEligibleValidatorIndices state = .ok eligible) :
     eligible = state.validators.data.toList.zipIdx.filterMap fun (validator, index) =>
       if (match isEligibleValidator (getPreviousEpoch state) validator with
-        | .ok eligible => eligible
+        | .ok passes => passes
         | .error _ => false) then some index.toUInt64 else none := by
   unfold getEligibleValidatorIndices at computed
   refine eq_filterMap_of_filterMapM_ok (fun ⟨validator, position⟩ _ image step => ?_) computed
@@ -399,7 +399,7 @@ theorem getEligibleValidatorIndices_sorted {eligible : List ValidatorIndex}
   rw [getEligibleValidatorIndices_eq computed]
   exact validatorPositions_sorted within fun validator =>
     match isEligibleValidator (getPreviousEpoch state) validator with
-    | .ok eligible => eligible
+    | .ok passes => passes
     | .error _ => false
 
 /-- Each validator active in the previous epoch is eligible for the rewards of that epoch. -/
