@@ -1725,7 +1725,7 @@ The Python extension calls 299 of the operations and 42 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-8799 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (351), `bls.c` (378), `chain.c` (63), `consensus.c` (1652), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (45), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1249), `pow.c` (110), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (119), `wrappers.h` (566), `xmss.c` (134).
+8732 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (351), `bls.c` (378), `chain.c` (45), `consensus.c` (1652), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (45), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1249), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (119), `wrappers.h` (566), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
@@ -1751,7 +1751,8 @@ However much a call shares between its lists, the converter then builds at most 
 A property test sends random nested values through Lean and back, with integers of thousands of bits.
 A separate test passes a value at the deepest level allowed.
 Another property test sends values that the converter must refuse, and checks that each raises `TypeError` or `ValueError`, never a crash.
-The converter refuses an `int` wider than 65536 bits, because Lean reads the digits of a large `int` in time quadratic in their number.
+The converter refuses an `int` wider than 65536 bits, so that each call holds the GIL for a short time.
+Lean reads and writes the digits of a large `int` by halves, in time about `d log d` for `d` digits.
 Each export that moves to typed values removes its own C, and the line count above shows it.
 
 ### B5. Compiler substitutions in this repository

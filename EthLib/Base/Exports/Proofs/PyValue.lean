@@ -218,28 +218,97 @@ theorem pyExport_items {α β : Type} [ToPyItems α] [FromPyItems α] [LawfulPyI
   simp [pyExport, LawfulPyItems.ofItems_items, Except.mapError]
   rfl
 
+/-- The digit that a value below 16 writes reads back as that value. -/
+theorem hexDigit_digitChar (m : Nat) (h : m < 16) : hexDigit (Nat.digitChar m) = m := by
+  have : m = 0 ∨ m = 1 ∨ m = 2 ∨ m = 3 ∨ m = 4 ∨ m = 5 ∨ m = 6 ∨ m = 7 ∨ m = 8 ∨ m = 9 ∨
+      m = 10 ∨ m = 11 ∨ m = 12 ∨ m = 13 ∨ m = 14 ∨ m = 15 := by omega
+  rcases this with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl |
+    rfl | rfl | rfl <;> simp [hexDigit, Nat.digitChar, Char.isDigit]
+
+/-- Reading digits after a value shifts that value by one place per digit. -/
+theorem foldl_hexDigit (a : Nat) (cs : List Char) :
+    cs.foldl (fun n c => 16 * n + hexDigit c) a =
+      a * 16 ^ cs.length + cs.foldl (fun n c => 16 * n + hexDigit c) 0 := by
+  induction cs generalizing a with
+  | nil => simp
+  | cons c cs ih =>
+    simp only [List.foldl_cons, List.length_cons]
+    rw [ih, ih (16 * 0 + hexDigit c), Nat.pow_succ]
+    simp only [Nat.mul_zero, Nat.zero_add, Nat.add_mul]
+    rw [Nat.mul_comm 16 a, Nat.mul_assoc, Nat.mul_comm 16]
+    omega
+
+/-- Reading the digits by halves gives the number that reading them one by one gives. -/
+theorem natOfHexDigits_eq_foldl (cs : List Char) :
+    natOfHexDigits cs = cs.foldl (fun n c => 16 * n + hexDigit c) 0 := by
+  induction cs using natOfHexDigits.induct with
+  | case1 cs h =>
+    rw [natOfHexDigits]
+    simp only [h, ↓reduceIte]
+  | case2 cs h ih1 ih2 =>
+    rw [natOfHexDigits]
+    simp only [h, ↓reduceIte]
+    rw [ih1, ih2, Nat.shiftLeft_eq]
+    conv => rhs; rw [← List.take_append_drop (cs.length - cs.length / 2) cs, List.foldl_append,
+      foldl_hexDigit (List.foldl _ 0 _), List.length_drop]
+    have hk : cs.length - (cs.length - cs.length / 2) = cs.length / 2 := by omega
+    rw [hk, Nat.pow_mul]
+
+/-- The padded digits of a number are `m` digits, and they write its remainder by `16 ^ m`. -/
+theorem hexDigitsPadded_spec (m n : Nat) :
+    (hexDigitsPadded m n).length = m ∧
+      (hexDigitsPadded m n).foldl (fun n c => 16 * n + hexDigit c) 0 = n % 16 ^ m := by
+  induction m, n using hexDigitsPadded.induct with
+  | case1 m n h =>
+    rw [hexDigitsPadded]
+    simp only [h, ↓reduceIte]
+    rcases (by omega : m = 0 ∨ m = 1) with rfl | rfl
+    · simp [Nat.mod_one]
+    · simp [hexDigit_digitChar _ (Nat.mod_lt n (by omega))]
+  | case2 m n h ih1 ih2 =>
+    rw [hexDigitsPadded]
+    simp only [h, ↓reduceIte]
+    rw [List.length_append, List.foldl_append, ih1.1, ih2.1,
+      foldl_hexDigit (List.foldl _ 0 _), ih1.2, ih2.1, ih2.2]
+    refine ⟨by omega, ?_⟩
+    have hm : 16 ^ m = 16 ^ (m / 2) * 16 ^ (m - m / 2) := by
+      rw [← Nat.pow_add]; congr 1; omega
+    have h16 : (2 : Nat) ^ (4 * (m / 2)) = 16 ^ (m / 2) := by rw [Nat.pow_mul]
+    rw [Nat.and_two_pow_sub_one_eq_mod, Nat.shiftRight_eq_div_pow, h16, hm, Nat.mod_mul,
+      Nat.mod_mod]
+    ac_rfl
+
+/-- Each padded digit of a number is a digit of base 16. -/
+theorem hexDigitsPadded_digits (m n : Nat) :
+    ∀ c ∈ hexDigitsPadded m n, ∃ d, d < 16 ∧ c = Nat.digitChar d := by
+  induction m, n using hexDigitsPadded.induct with
+  | case1 m n h =>
+    rw [hexDigitsPadded]
+    simp only [h, ↓reduceIte]
+    intro c hc
+    exact ⟨n % 16, Nat.mod_lt n (by omega), (List.eq_of_mem_replicate hc)⟩
+  | case2 m n h ih1 ih2 =>
+    rw [hexDigitsPadded]
+    simp only [h, ↓reduceIte]
+    intro c hc
+    rcases List.mem_append.mp hc with hc | hc
+    · exact ih1 c hc
+    · exact ih2 c hc
+
+/-- The digits of a number are digits of base 16, in lower case, so the C layer can read them. -/
+theorem natToHex_digits (n : Nat) :
+    ∀ c ∈ (natToHex n).toList, ∃ d, d < 16 ∧ c = Nat.digitChar d := by
+  unfold natToHex
+  rw [String.toList_ofList]
+  exact hexDigitsPadded_digits _ n
+
 /-- Reading the digits of a number in base 16 gives the number. -/
 theorem natOfHex_natToHex (n : Nat) : natOfHex (natToHex n) = n := by
-  have hd : ∀ m : Fin 16, hexDigit (Nat.digitChar m) = m := by
-    rintro ⟨m, hm⟩
-    have : m = 0 ∨ m = 1 ∨ m = 2 ∨ m = 3 ∨ m = 4 ∨ m = 5 ∨ m = 6 ∨ m = 7 ∨ m = 8 ∨ m = 9 ∨
-        m = 10 ∨ m = 11 ∨ m = 12 ∨ m = 13 ∨ m = 14 ∨ m = 15 := by omega
-    rcases this with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl |
-      rfl | rfl | rfl <;> simp [hexDigit, Nat.digitChar, Char.isDigit]
-  have key : ∀ n : Nat, (Nat.toDigits 16 n).foldl (fun n c => 16 * n + hexDigit c) 0 = n := by
-    intro n
-    induction n using Nat.strongRecOn with
-    | _ n ih =>
-      by_cases h : n < 16
-      · rw [Nat.toDigits_of_lt_base h]
-        simpa using hd ⟨n, h⟩
-      · rw [Nat.toDigits_eq_ite (by omega)]
-        simp only [h, ↓reduceIte, List.foldl_append]
-        have h2 := hd ⟨n % 16, Nat.mod_lt _ (by omega)⟩
-        simp only [ih (n / 16) (by omega), List.foldl_cons, List.foldl_nil] at h2 ⊢
-        omega
   unfold natOfHex natToHex
-  rw [String.foldl_eq_foldl_toList, String.toList_ofList]
-  exact key n
+  rw [String.toList_ofList, natOfHexDigits_eq_foldl, (hexDigitsPadded_spec _ n).2]
+  apply Nat.mod_eq_of_lt
+  calc n < 2 ^ (n.log2 + 1) := Nat.lt_log2_self
+    _ ≤ 2 ^ (4 * (n.log2 / 4 + 1)) := Nat.pow_le_pow_right (by omega) (by omega)
+    _ = 16 ^ (n.log2 / 4 + 1) := by rw [Nat.pow_mul]
 
 end EthLib.Exports
