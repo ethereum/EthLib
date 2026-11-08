@@ -35,6 +35,28 @@ theorem SszType.decodeUint_eq {α : Type} (width : Nat) (make : Nat → α) (dat
   · simp [Ssz.deserialize, ByteArray.size_data, size]
     rfl
 
+/-- The bytes pushed for an integer are its little-endian bytes, after the bytes so far. -/
+theorem SszType.data_pushUintBytes (width n : Nat) (out : ByteArray) :
+    (pushUintBytes width n out).data = out.data ++ uintBytes width n := by
+  induction width generalizing n out with
+  | zero => simp [pushUintBytes, uintBytes_zero]
+  | succ width ih =>
+    rw [pushUintBytes, ih, uintBytes_succ, ← Array.append_assoc, ByteArray.data_push,
+      ← UInt8.ofNat_mod_size (x := n)]
+    rfl
+
+/-- An integer that fits its width, written straight to bytes, gives the untyped encoder's bytes. -/
+theorem SszType.encodeUint_eq (width n : Nat) (below : n < 2 ^ (8 * width)) :
+    encodeUint width n = (do return ⟨← Ssz.serialize (.uint width) (.uint n)⟩) := by
+  have bytes : pushUintBytes width n (ByteArray.emptyWithCapacity width) = ⟨uintBytes width n⟩ := by
+    cases h : pushUintBytes width n (ByteArray.emptyWithCapacity width) with
+    | mk data =>
+      have := data_pushUintBytes width n (ByteArray.emptyWithCapacity width)
+      rw [h] at this
+      simp only at this
+      rw [this, show (ByteArray.emptyWithCapacity width).data = #[] from rfl, Array.empty_append]
+  simp [encodeUint, bytes, Ssz.serialize, below, bind, Except.bind, pure, Except.pure]
+
 /--
 An integer type is lawful when its numbers are exactly those below the bound of its width.
 
@@ -98,31 +120,37 @@ instance : LawfulSszType Bool where
 instance : LawfulSszType UInt8 :=
   .ofUint UInt8.toNat UInt8.ofNat rfl rfl (fun _ => rfl) rfl UInt8.toNat_lt
     (fun _ => UInt8.ofNat_toNat) (fun _ below => UInt8.toNat_ofNat_of_lt' below)
+    (encoded := fun a => encodeUint_eq 1 a.toNat (by simpa using a.toNat_lt))
     (decoded := decodeUint_eq 1 UInt8.ofNat)
 
 instance : LawfulSszType UInt16 :=
   .ofUint UInt16.toNat UInt16.ofNat rfl rfl (fun _ => rfl) rfl UInt16.toNat_lt
     (fun _ => UInt16.ofNat_toNat) (fun _ below => UInt16.toNat_ofNat_of_lt' below)
+    (encoded := fun a => encodeUint_eq 2 a.toNat (by simpa using a.toNat_lt))
     (decoded := decodeUint_eq 2 UInt16.ofNat)
 
 instance : LawfulSszType UInt32 :=
   .ofUint UInt32.toNat UInt32.ofNat rfl rfl (fun _ => rfl) rfl UInt32.toNat_lt
     (fun _ => UInt32.ofNat_toNat) (fun _ below => UInt32.toNat_ofNat_of_lt' below)
+    (encoded := fun a => encodeUint_eq 4 a.toNat (by simpa using a.toNat_lt))
     (decoded := decodeUint_eq 4 UInt32.ofNat)
 
 instance : LawfulSszType UInt64 :=
   .ofUint UInt64.toNat UInt64.ofNat rfl rfl (fun _ => rfl) rfl UInt64.toNat_lt
     (fun _ => UInt64.ofNat_toNat) (fun _ below => UInt64.toNat_ofNat_of_lt' below)
+    (encoded := fun a => encodeUint_eq 8 a.toNat (by simpa using a.toNat_lt))
     (decoded := decodeUint_eq 8 UInt64.ofNat)
 
 instance : LawfulSszType (BitVec 128) :=
   .ofUint BitVec.toNat (BitVec.ofNat 128) rfl rfl (fun _ => rfl) rfl BitVec.isLt
     (fun _ => by simp) (fun _ below => Nat.mod_eq_of_lt below)
+    (encoded := fun a => encodeUint_eq 16 a.toNat a.isLt)
     (decoded := decodeUint_eq 16 (BitVec.ofNat 128))
 
 instance : LawfulSszType Base.U256 :=
   .ofUint BitVec.toNat (BitVec.ofNat 256) rfl rfl (fun _ => rfl) rfl BitVec.isLt
     (fun _ => by simp) (fun _ below => Nat.mod_eq_of_lt below)
+    (encoded := fun a => encodeUint_eq 32 a.toNat a.isLt)
     (decoded := decodeUint_eq 32 (BitVec.ofNat 256))
 
 instance {n : Nat} [NeZero n] : LawfulSszType (Vector UInt8 n) where
@@ -141,5 +169,11 @@ instance {n : Nat} [NeZero n] : LawfulSszType (Vector UInt8 n) where
   ofValue_ne_error {value fault} fits made := by
     cases fits with
     | byteVector exact => simp [ofValue, exact] at made
+  encode_eq v := by
+    by_cases wide : n ≥ 2 ^ (8 * bytesPerOffset)
+    · simp [encode, desc, toValue, Ssz.serialize, wide, v.size_toArray, bind, Except.bind, throw,
+        throwThe, MonadExceptOf.throw]
+    · simp [encode, desc, toValue, Ssz.serialize, wide, v.size_toArray, bind, Except.bind, pure,
+        Except.pure]
 
 end EthLib.Serialization.Ssz

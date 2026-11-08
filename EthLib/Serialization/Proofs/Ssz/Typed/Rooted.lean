@@ -335,5 +335,6 @@ instance {length : Nat} [NeZero length] : LawfulSszType (RootedVector α length)
     | error fault => exact LawfulSszType.ofValue_ne_error (α := (Vector α length)) fits read
     | ok w => simp [read, Functor.map, Except.map] at made
   root_eq := RootedVector.root_eq
+  encode_eq v := LawfulSszType.encode_eq (α := Vector α length) v.elements
 
 end EthLib.Serialization.Ssz
