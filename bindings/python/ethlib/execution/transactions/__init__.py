@@ -6,7 +6,6 @@ from typing import NamedTuple
 # That module lives in the `cryptography` package.
 from ethlib.cryptography import _native
 from ethlib.errors import TransactionError
-from ethlib.serialization import rlp
 
 
 def tx_type(fork: str, tx: bytes) -> int:
@@ -43,8 +42,7 @@ class Checked(NamedTuple):
 
 def check(fork: str, chain_id: int, tx: bytes) -> Checked:
     """Check a transaction alone, on the chain `chain_id`."""
-    raw = _native.tx_check(fork, chain_id, tx)
-    return Checked(raw[:20], int.from_bytes(raw[20:28], "big"))
+    return Checked(*_native.tx_check(fork, chain_id, tx))
 
 
 class Settlement(NamedTuple):
@@ -54,10 +52,6 @@ class Settlement(NamedTuple):
     sender_refund: int
     priority_fee: int
     burned: int
-
-
-def _number(value: int) -> bytes:
-    return value.to_bytes(max(1, (value.bit_length() + 7) // 8), "big")
 
 
 class Included(NamedTuple):
@@ -81,14 +75,19 @@ def check_in_block(
     excess_blob_gas: int,
 ) -> Included:
     """Check that a transaction may enter its block, against a state in the form of `state_root`."""
-    raw = _native.tx_check_in_block(
-        fork,
-        chain_id,
-        tx,
-        state,
-        *map(_number, (gas_limit, gas_used, blob_gas_used, base_fee, excess_blob_gas)),
+    return Included(
+        *_native.tx_check_in_block(
+            fork,
+            chain_id,
+            tx,
+            state,
+            gas_limit,
+            gas_used,
+            blob_gas_used,
+            base_fee,
+            excess_blob_gas,
+        )
     )
-    return Included(raw[:20], int.from_bytes(raw[20:52], "big"), int.from_bytes(raw[52:60], "big"))
 
 
 class Run(NamedTuple):
@@ -98,21 +97,18 @@ class Run(NamedTuple):
     logs_hash: bytes
     gas_used: int
     succeeded: bool
-    accounts: list
+    # Each account is its address, nonce, balance and code, then its storage slots with values.
+    accounts: list[tuple[bytes, int, int, bytes, list[tuple[bytes, int]]]]
 
 
 def run(fork: str, chain_id: int, tx: bytes, state: bytes, env: bytes) -> Run:
     """Run one transaction on a state in the form of `state_root`, in a block that `env` encodes."""
-    root, logs, gas_used, succeeded, accounts = rlp.decode(
-        _native.tx_run(fork, chain_id, tx, state, env)
-    )
-    return Run(root, logs, int.from_bytes(gas_used, "big"), succeeded == b"\x01", accounts)
+    return Run(*_native.tx_run(fork, chain_id, tx, state, env))
 
 
 def settle(fork: str, tx: bytes, base_fee: int, gas_left: int, refund_counter: int) -> Settlement:
     """Settle the gas of a transaction, from its gas left and its refund counter."""
-    raw = _native.tx_settle(fork, tx, _number(base_fee), _number(gas_left), _number(refund_counter))
-    return Settlement(*(int.from_bytes(raw[i : i + 64], "big") for i in range(0, 256, 64)))
+    return Settlement(*_native.tx_settle(fork, tx, base_fee, gas_left, refund_counter))
 
 
 __all__ = [

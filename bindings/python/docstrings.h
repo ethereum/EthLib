@@ -801,7 +801,7 @@
   "Settle the gas of a transaction that passes the gas, nonce and fee rules."
 
 #define DOC_tx_run \
-  "Run one transaction on the state that `state` encodes, in a block with no transaction before."
+  "Run one transaction on a state, in a block with no transaction before."
 
 #define DOC_tx_network_check \
   "Check the network form of a blob transaction at the named fork."

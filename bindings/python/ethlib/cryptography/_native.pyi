@@ -1055,20 +1055,20 @@ def tx_intrinsic_gas(fork: str, tx: bytes) -> int:
     """The intrinsic gas of a transaction, without the call data floor."""
     ...
 
-def tx_check(fork: str, chain_id: int, tx: bytes) -> bytes:
+def tx_check(fork: str, chain_id: int, tx: bytes) -> tuple[bytes, int]:
     """Check a transaction alone on the chain `chainId`."""
     ...
 
-def tx_check_in_block(fork: str, chain_id: int, tx: bytes, state: bytes, gas_limit: bytes, gas_used: bytes, blob_gas_used: bytes, base_fee: bytes, excess_blob_gas: bytes) -> bytes:
+def tx_check_in_block(fork: str, chain_id: int, tx: bytes, state: bytes, gas_limit: int, gas_used: int, blob_gas_used: int, base_fee: int, excess_blob_gas: int) -> tuple[bytes, int, int]:
     """Check that a transaction may enter its block at `fork`, on the chain `chainId`."""
     ...
 
-def tx_settle(fork: str, tx: bytes, base_fee: bytes, gas_left: bytes, refund_counter: bytes) -> bytes:
+def tx_settle(fork: str, tx: bytes, base_fee: int, gas_left: int, refund_counter: int) -> tuple[int, int, int, int]:
     """Settle the gas of a transaction that passes the gas, nonce and fee rules."""
     ...
 
-def tx_run(fork: str, chain_id: int, tx: bytes, state: bytes, env: bytes) -> bytes:
-    """Run one transaction on the state that `state` encodes, in a block with no transaction before."""
+def tx_run(fork: str, chain_id: int, tx: bytes, state: bytes, env: bytes) -> tuple[bytes, bytes, int, bool, list[tuple[bytes, int, int, bytes, list[tuple[bytes, int]]]]]:
+    """Run one transaction on a state, in a block with no transaction before."""
     ...
 
 def tx_network_check(fork: str, network: bytes) -> bytes:
