@@ -13,7 +13,7 @@ Both are valid together, so the valid signatures with that `r`, key and hash are
 
 So the low-s rule of EIP-2 leaves one valid signature for each `r`.
 
-Below that bound, `R` may have `x = r + n`, and two signatures may rebuild unrelated points.
+Below that bound, `R` may also have `x = r + n`, and up to four values of `s` may verify.
 -/
 
 @[expose] public section

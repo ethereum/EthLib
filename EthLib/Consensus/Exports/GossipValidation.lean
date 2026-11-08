@@ -198,7 +198,7 @@ def importGossipBlock {preset : Preset} {fork : Fork} (config : Config)
 
 The sync committee has topics from Altair, and changes of BLS credentials from Capella.
 
-Blob sidecars travel at Deneb and Electra, and column sidecars at Fulu.
+Blob sidecars travel at Deneb and Electra, and column sidecars from Fulu on.
 
 Gloas adds four topics, and Heze adds inclusion lists. -/
 def gossipValidationSpecified (fork : Fork) : String → Bool

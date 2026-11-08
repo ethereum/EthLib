@@ -192,13 +192,9 @@ EIP-6122 says that a node need not tell the two apart.
 
 Rule 1a must, since it compares a peer's next fork with the local head.
 
-EthLib takes the bound of go-ethereum, the implementation that EIP-2124 names.
-
-The bound is in [`forkid.go` at `0d06140`][forkid].
+EthLib fixes the bound as a choice of its own: the time 2015-07-30 15:26:13 UTC.
 
 Every block number of a real chain is far below it, and every fork timestamp far above it.
-
-[forkid]: https://github.com/ethereum/go-ethereum/blob/0d061403cf53263b95f9beec48f07046e78e1bed/core/forkid/forkid.go#L47
 -/
 def TIMESTAMP_THRESHOLD : Nat := 1438269973
 

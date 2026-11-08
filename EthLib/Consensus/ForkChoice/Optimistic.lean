@@ -103,6 +103,14 @@ The first invalid block is the child of the block whose payload the hash names, 
 
 Without a hash, or when no known block of the chain has that payload, it is the block itself.
 
+So a hash that names a descendant of the block, or no block at all, counts as absent.
+
+The zero hash names the empty payload, so the first block of the chain with a payload is invalid.
+
+On a store anchored above the merge block, no known block has the empty payload.
+
+EthLib then takes the block itself as the first invalid block, a choice of its own.
+
 When the hash names the payload of the block itself, no block is invalid.
 
 That block and every known block that descends from it leave the store.

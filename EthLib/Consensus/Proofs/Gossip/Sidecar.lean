@@ -685,7 +685,7 @@ theorem validateGloasDataColumnSidecar_shape
 
 end GloasColumn
 
-/-! ## Partial column sidecars, at Fulu -/
+/-! ## Partial column sidecars, from Fulu -/
 
 section Partial
 
