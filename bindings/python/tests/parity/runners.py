@@ -158,14 +158,14 @@ def _environment(env: dict) -> bytes:
     )
 
 
-def _accounts(accounts: list) -> dict:
+def _accounts(accounts: list[tuple[bytes, int, int, bytes, list[tuple[bytes, int]]]]) -> dict:
     """The accounts of a run, by address, in the form of the post state of a fixture."""
     return {
         "0x" + address.hex(): {
-            "nonce": int.from_bytes(nonce, "big"),
-            "balance": int.from_bytes(balance, "big"),
+            "nonce": nonce,
+            "balance": balance,
             "code": "0x" + code.hex(),
-            "storage": {int.from_bytes(k, "big"): int.from_bytes(v, "big") for k, v in storage},
+            "storage": {int.from_bytes(k, "big"): v for k, v in storage},
         }
         for address, nonce, balance, code, storage in accounts
     }

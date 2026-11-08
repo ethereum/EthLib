@@ -42,6 +42,14 @@ Not yet released.
   Examples are an operand, a range word or an opcode out of range, more than three operands, a `bool` given for an `int` and `bytes` given for a fork name.
   Before, these raised `OverflowError`, `ValueError`, `TypeError` or `AttributeError`.
   A negative number raises `ValueError`, where it raised `OverflowError`.
+- The transaction check, the check against a block, the settlement and the run now take and return typed values ([#1529](https://github.com/ethereum/EthLib/pull/1529)).
+  The C exports `eth_tx_check`, `eth_tx_check_in_block`, `eth_tx_settle` and `eth_tx_run` take the tuple of their arguments as one value.
+  They return tuples where they returned fixed-width bytes or an RLP list.
+  In Python, `Run.accounts` holds each nonce, balance and storage value as an `int`, where they were the bytes of RLP scalars.
+  Each account and each storage slot is a tuple, where it was a list.
+  An argument that Lean cannot read raises `TransactionError` with code 0, where some raised `TypeError` or `OverflowError`.
+  Examples are a chain ID of 2^64 or more, a `bool` given for an `int` and `bytes` given for a fork name.
+  A negative number raises `ValueError`, where it raised `OverflowError`.
 - A chain configuration that the exports read as JSON is now rejected, with code 0, when a fork by block number comes after a fork by timestamp ([#1110](https://github.com/ethereum/EthLib/pull/1110)).
   EIP-6122 requires the forks by timestamp to be scheduled at or after the forks by block.
 

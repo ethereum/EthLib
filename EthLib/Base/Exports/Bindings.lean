@@ -913,17 +913,20 @@ def bindings : List Binding := [
     "(fork: str, tx: bytes) -> int",
     [`EthLib.Execution.Transactions.TransactionError], some "TransactionError"⟩,
   ⟨"tx_check", `EthLib.Execution.Transactions.Exports.checkExport,
-    "(fork: str, chain_id: int, tx: bytes) -> bytes",
+    "(fork: str, chain_id: int, tx: bytes) -> tuple[bytes, int]",
     [`EthLib.Execution.Transactions.TransactionError], some "TransactionError"⟩,
   ⟨"tx_check_in_block", `EthLib.Execution.Transactions.checkInclusion,
-    "(fork: str, chain_id: int, tx: bytes, state: bytes, gas_limit: bytes, gas_used: bytes, " ++
-      "blob_gas_used: bytes, base_fee: bytes, excess_blob_gas: bytes) -> bytes",
+    "(fork: str, chain_id: int, tx: bytes, state: bytes, gas_limit: int, gas_used: int, " ++
+      "blob_gas_used: int, base_fee: int, excess_blob_gas: int) -> tuple[bytes, int, int]",
     [`EthLib.Execution.Transactions.InclusionError], some "TransactionError"⟩,
   ⟨"tx_settle", `EthLib.Execution.Transactions.Exports.settleExport,
-    "(fork: str, tx: bytes, base_fee: bytes, gas_left: bytes, refund_counter: bytes) -> bytes",
+    "(fork: str, tx: bytes, base_fee: int, gas_left: int, refund_counter: int) -> " ++
+      "tuple[int, int, int, int]",
     [`EthLib.Execution.Transactions.TransactionError], some "TransactionError"⟩,
   ⟨"tx_run", `EthLib.Execution.Transactions.Exports.runExport,
-    "(fork: str, chain_id: int, tx: bytes, state: bytes, env: bytes) -> bytes",
+    "(fork: str, chain_id: int, tx: bytes, state: bytes, env: bytes) -> " ++
+      "tuple[bytes, bytes, int, bool, list[tuple[bytes, int, int, bytes, " ++
+      "list[tuple[bytes, int]]]]]",
     [`EthLib.Execution.Transactions.InclusionError, `EthLib.Execution.State.StateError],
     some "TransactionError"⟩,
   ⟨"tx_network_check", `EthLib.Execution.Transactions.Exports.networkCheckExport,

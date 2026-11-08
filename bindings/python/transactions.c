@@ -1,4 +1,7 @@
-/* Transaction wrappers around the `eth_tx_*` Lean exports. */
+/* Transaction wrappers around the `eth_tx_*` Lean exports.
+ *
+ * The checks, the settlement and the run take and return typed values, which the converter
+ * passes. */
 #include "wrappers.h"
 
 /* ---- Lean externs ----------------------------------------------------- */
@@ -37,40 +40,22 @@ eth_tx_intrinsic_gas(
 
 extern lean_object*
 eth_tx_check(
-  lean_object* fork,
-  uint64_t chain_id,
-  lean_object* tx
+  lean_object* args
 );
 
 extern lean_object*
 eth_tx_check_in_block(
-  lean_object* fork,
-  uint64_t chain_id,
-  lean_object* tx,
-  lean_object* state,
-  lean_object* gas_limit,
-  lean_object* gas_used,
-  lean_object* blob_gas_used,
-  lean_object* base_fee,
-  lean_object* excess_blob_gas
+  lean_object* args
 );
 
 extern lean_object*
 eth_tx_run(
-  lean_object* fork,
-  uint64_t chain_id,
-  lean_object* tx,
-  lean_object* state,
-  lean_object* env
+  lean_object* args
 );
 
 extern lean_object*
 eth_tx_settle(
-  lean_object* fork,
-  lean_object* tx,
-  lean_object* base_fee,
-  lean_object* gas_left,
-  lean_object* refund_counter
+  lean_object* args
 );
 
 /* ---- Wrappers --------------------------------------------------------- */
@@ -158,14 +143,7 @@ py_tx_check(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *fork_obj, *chain_obj, *tx_obj;
-  if (!PyArg_ParseTuple(args, "OOO", &fork_obj, &chain_obj, &tx_obj)) return NULL;
-  /* The chain is a non-negative integer below 2^64. */
-  uint64_t chain_id = (uint64_t) PyLong_AsUnsignedLongLong(chain_obj);
-  if (PyErr_Occurred()) return NULL;
-  lean_object *fork, *tx;
-  if (!parse_fork_and_tx(fork_obj, tx_obj, &fork, &tx)) return NULL;
-  return except_into_pybytes(eth_tx_check(fork, chain_id, tx), TRANSACTION_ERROR);
+  return call_pyvalue_export(eth_tx_check, args, 3, TRANSACTION_ERROR);
 }
 
 PyObject*
@@ -173,26 +151,7 @@ py_tx_check_in_block(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *fork_obj, *chain_obj, *tx_obj;
-  const char* data[6];
-  Py_ssize_t len[6];
-  if (!PyArg_ParseTuple(args, "OOOy#y#y#y#y#y#", &fork_obj, &chain_obj, &tx_obj,
-                        &data[0], &len[0], &data[1], &len[1], &data[2], &len[2],
-                        &data[3], &len[3], &data[4], &len[4], &data[5], &len[5])) {
-    return NULL;
-  }
-  /* The chain is a non-negative integer below 2^64. */
-  uint64_t chain_id = (uint64_t) PyLong_AsUnsignedLongLong(chain_obj);
-  if (PyErr_Occurred()) return NULL;
-  lean_object *fork, *tx;
-  if (!parse_fork_and_tx(fork_obj, tx_obj, &fork, &tx)) return NULL;
-  lean_object* arg[6];
-  for (int i = 0; i < 6; i++) {
-    arg[i] = mk_bytearray((const uint8_t*) data[i], (size_t) len[i]);
-  }
-  return except_into_pybytes(
-    eth_tx_check_in_block(fork, chain_id, tx, arg[0], arg[1], arg[2], arg[3], arg[4], arg[5]),
-    TRANSACTION_ERROR);
+  return call_pyvalue_export(eth_tx_check_in_block, args, 9, TRANSACTION_ERROR);
 }
 
 PyObject*
@@ -200,22 +159,7 @@ py_tx_run(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *fork_obj, *chain_obj, *tx_obj;
-  const char *state, *env;
-  Py_ssize_t state_len, env_len;
-  if (!PyArg_ParseTuple(args, "OOOy#y#", &fork_obj, &chain_obj, &tx_obj, &state, &state_len,
-                        &env, &env_len)) {
-    return NULL;
-  }
-  /* The chain is a non-negative integer below 2^64. */
-  uint64_t chain_id = (uint64_t) PyLong_AsUnsignedLongLong(chain_obj);
-  if (PyErr_Occurred()) return NULL;
-  lean_object *fork, *tx;
-  if (!parse_fork_and_tx(fork_obj, tx_obj, &fork, &tx)) return NULL;
-  lean_object* state_arg = mk_bytearray((const uint8_t*) state, (size_t) state_len);
-  lean_object* env_arg = mk_bytearray((const uint8_t*) env, (size_t) env_len);
-  return except_into_pybytes(eth_tx_run(fork, chain_id, tx, state_arg, env_arg),
-                             TRANSACTION_ERROR);
+  return call_pyvalue_export(eth_tx_run, args, 5, TRANSACTION_ERROR);
 }
 
 PyObject*
@@ -223,21 +167,7 @@ py_tx_settle(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *fork_obj, *tx_obj;
-  const char *base_fee, *gas_left, *refund_counter;
-  Py_ssize_t base_fee_len, gas_left_len, refund_counter_len;
-  if (!PyArg_ParseTuple(args, "OOy#y#y#", &fork_obj, &tx_obj, &base_fee, &base_fee_len,
-                        &gas_left, &gas_left_len, &refund_counter, &refund_counter_len)) {
-    return NULL;
-  }
-  lean_object *fork, *tx;
-  if (!parse_fork_and_tx(fork_obj, tx_obj, &fork, &tx)) return NULL;
-  return except_into_pybytes(
-    eth_tx_settle(fork, tx,
-                  mk_bytearray((const uint8_t*) base_fee, (size_t) base_fee_len),
-                  mk_bytearray((const uint8_t*) gas_left, (size_t) gas_left_len),
-                  mk_bytearray((const uint8_t*) refund_counter, (size_t) refund_counter_len)),
-    TRANSACTION_ERROR);
+  return call_pyvalue_export(eth_tx_settle, args, 5, TRANSACTION_ERROR);
 }
 
 PyObject*
