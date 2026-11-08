@@ -608,6 +608,12 @@ That proof needs no pairing law.
 It is not computational binding: no theorem bounds the cost of finding two such blobs without the secret.
 Under the pairing law and for a well-formed setup, honest KZG proofs and blob proofs verify (`verifyKzgProof_computeKzgProof`, `verifyBlobKzgProof_computeBlobKzgProof`, `Proofs/Kzg/Verify.lean`).
 `verifyKzgProofImpl_iff` states when the check accepts: `c - y = w (τ - z)`, for decoded points representing `c` and `w`.
+Under the pairing law and on a well-formed setup (assumption D3), `verifyBlobKzgProof_binding` in the same file splits an accepted blob opening into three cases.
+Let the validated commitment and proof represent `f(τ)` and `g(τ)` for polynomials `f` and `g` of degree below 4096.
+Let `p` be the interpolant of the blob's decoded values, and let `z` be the evaluation challenge.
+Then `f = p`, or `f ≠ p` and `z` is a root of `f - p`, of degree below 4096.
+Otherwise `h = f - p(z) - g (X - z)` is nonzero of degree at most 4096, and the secret `τ` is a root of `h`.
+It is not computational binding: no theorem bounds the cost of finding such polynomials without the secret.
 `verifyKzgProofBatch_ok_iff_root` (`Proofs/Kzg/BatchBinding.lean`) states when the batch check of openings accepts, as an equivalence.
 Let opening `i` have commitment `c_i`, value `y_i`, point `z_i` and proof `w_i`.
 Under `PairingLaws` and a well-formed setup, its verdict is true exactly when its challenge `r` is a root of `P(X) = sum_i X^i (c_i - y_i - w_i (τ - z_i))`.
