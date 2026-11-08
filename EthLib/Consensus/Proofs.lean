@@ -99,8 +99,8 @@ public import EthLib.Consensus.Proofs.Transition.Slot
 public import EthLib.Consensus.Proofs.Transition.StateTransition
 public import EthLib.Consensus.Proofs.Transition.SyncAggregate
 public import EthLib.Consensus.Proofs.Transition.Upgrade
-public import EthLib.Consensus.Proofs.Transition.Withdrawals
 public import EthLib.Consensus.Proofs.Transition.WithdrawalAmounts
+public import EthLib.Consensus.Proofs.Transition.Withdrawals
 public import EthLib.Consensus.Proofs.WeakSubjectivity
 
 /-!

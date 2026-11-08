@@ -830,7 +830,7 @@ theorem updateNextWithdrawalBuilderIndex_balances {state after : BeaconState pre
     obtain ⟨_, _, rfl⟩ := computed
     exact ⟨rfl, rfl⟩
 
-/-- At every fork, only the withdrawals themselves change the balances and the builders. -/
+/-- From Capella, only the withdrawals themselves change the balances and the builders. -/
 theorem applyExpectedWithdrawals_balances {state after : BeaconState preset fork}
     {capella : .shapella ≤ fork} {expected : ExpectedWithdrawals}
     (computed : applyExpectedWithdrawals state capella expected = .ok after) :
@@ -848,7 +848,7 @@ theorem applyExpectedWithdrawals_balances {state after : BeaconState preset fork
       exact ⟨rfl, rfl⟩
     · cases indexedOk
       exact ⟨rfl, rfl⟩
-  -- The queues, the recorded withdrawals and the sweep of builders hold no balance.
+  -- Updating the queues, the recorded withdrawals and the builder sweep keeps the balances.
   have two : swept.balances = indexed.balances ∧ swept.builders = indexed.builders := by
     split at sweptOk
     · rw [(updateNextWithdrawalBuilderIndex_balances sweptOk).1,
@@ -864,6 +864,143 @@ theorem applyExpectedWithdrawals_balances {state after : BeaconState preset fork
   · cases last
   · cases last
     exact ⟨two.1.trans one.1, two.2.trans one.2⟩
+
+section
+
+variable {state : BeaconState preset fork}
+
+/-! ## What the builders withdraw -/
+
+/-- From Gloas, each queued builder withdrawal that a payload pays is one entry of the queue.
+
+It pays the amount of that entry to its fee recipient, under the index that names its builder. -/
+theorem getBuilderWithdrawals_loop_pays {prior : Array Withdrawal} {limit : UInt64}
+    {whole : List BuilderPendingWithdrawal} :
+    ∀ (queue : List BuilderPendingWithdrawal) (withdrawals : Array Withdrawal)
+      (next : WithdrawalIndex) (processed : Nat)
+      {result : Array Withdrawal × WithdrawalIndex × Nat},
+    (∀ pending ∈ queue, pending ∈ whole) →
+    (∀ withdrawal ∈ withdrawals.toList, ∃ pending ∈ whole,
+      withdrawal.validatorIndex = convertBuilderIndexToValidatorIndex pending.builderIndex ∧
+      withdrawal.address = pending.feeRecipient ∧ withdrawal.amount = pending.amount) →
+    getBuilderWithdrawals.loop prior limit queue withdrawals next processed = .ok result →
+    ∀ withdrawal ∈ result.1.toList, ∃ pending ∈ whole,
+      withdrawal.validatorIndex = convertBuilderIndexToValidatorIndex pending.builderIndex ∧
+      withdrawal.address = pending.feeRecipient ∧ withdrawal.amount = pending.amount
+  | [], _, _, _, _, _, pays, computed => by
+    simp only [getBuilderWithdrawals.loop, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact pays
+  | pending :: rest, _, _, _, _, within, pays, computed => by
+    simp only [getBuilderWithdrawals.loop] at computed
+    split at computed
+    · simp only [pure, Except.pure, Except.ok.injEq] at computed
+      subst computed
+      exact pays
+    · simp only [bind_ok_iff, liftAccessor_ok] at computed
+      obtain ⟨⟨appended, following⟩, appendedOk, loopOk⟩ := computed
+      refine getBuilderWithdrawals_loop_pays rest _ _ _
+        (fun other member => within other (List.mem_cons_of_mem _ member))
+        (fun withdrawal member => ?_) loopOk
+      simp only [appendWithdrawal, bind_ok_iff, pure, Except.pure, Except.ok.injEq,
+        Prod.mk.injEq] at appendedOk
+      obtain ⟨_, _, rfl, rfl⟩ := appendedOk
+      simp only [Array.toList_push, List.mem_append, List.mem_singleton] at member
+      rcases member with member | rfl
+      · exact pays withdrawal member
+      · exact ⟨pending, within pending List.mem_cons_self, rfl, rfl, rfl⟩
+
+/-- From Gloas, each queued builder withdrawal of a payload is one entry of the queue.
+
+It pays the amount of that entry to its fee recipient, under the index that names its builder. -/
+theorem getBuilderWithdrawals_pays {gloas : .glamsterdam ≤ fork} {start : WithdrawalIndex}
+    {prior builders : Array Withdrawal} {next : WithdrawalIndex} {processed : Nat}
+    (computed : getBuilderWithdrawals state gloas start prior = .ok (builders, next, processed)) :
+    ∀ withdrawal ∈ builders.toList,
+      ∃ pending ∈ (state.builderPendingWithdrawals gloas).data.toList,
+        withdrawal.validatorIndex = convertBuilderIndexToValidatorIndex pending.builderIndex ∧
+        withdrawal.address = pending.feeRecipient ∧ withdrawal.amount = pending.amount := by
+  unfold getBuilderWithdrawals at computed
+  simp only [bind_ok_iff, ensure_ok_iff] at computed
+  obtain ⟨_, _, _, _, loopOk⟩ := computed
+  exact getBuilderWithdrawals_loop_pays _ _ _ _ (fun _ member => member)
+    (fun _ absent => absurd absent (by simp)) loopOk
+
+/-- What the sweep of builders pays one builder, after the withdrawals of the payload before it.
+
+The builder is withdrawable, and it withdraws all of its balance left, which is not zero. -/
+private def BuilderSweepPays (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
+    (epoch : Epoch) (before : Array Withdrawal) (withdrawal : Withdrawal) : Prop :=
+  ∃ index builder left, withdrawal.validatorIndex = convertBuilderIndexToValidatorIndex index ∧
+    getBuilder state gloas index = .ok builder ∧
+    getBuilderBalanceAfterWithdrawals state gloas index before = .ok left ∧
+    builder.withdrawableEpoch ≤ epoch ∧ 0 < left ∧ withdrawal.amount = left
+
+/-- From Gloas, each withdrawal of the sweep of builders pays by the rule above. -/
+private theorem getBuildersSweepWithdrawals_loop_pays {gloas : .glamsterdam ≤ fork}
+    {prior : Array Withdrawal} {epoch : Epoch} {count : Nat} {limit : UInt64} :
+    ∀ (visits : Nat) (withdrawals : Array Withdrawal) (next : WithdrawalIndex)
+      (index : BuilderIndex) (processed : Nat)
+      {result : Array Withdrawal × WithdrawalIndex × Nat},
+    (∀ k (inside : k < withdrawals.size),
+      BuilderSweepPays state gloas epoch (prior ++ withdrawals.extract 0 k) withdrawals[k]) →
+    getBuildersSweepWithdrawals.loop state gloas prior epoch count limit visits withdrawals next
+      index processed = .ok result →
+    ∀ k (inside : k < result.1.size),
+      BuilderSweepPays state gloas epoch (prior ++ result.1.extract 0 k) result.1[k]
+  | 0, _, _, _, _, _, pays, computed => by
+    simp only [getBuildersSweepWithdrawals.loop, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact pays
+  | visits + 1, withdrawals, next, index, _, _, pays, computed => by
+    simp only [getBuildersSweepWithdrawals.loop] at computed
+    split at computed
+    · simp only [pure, Except.pure, Except.ok.injEq] at computed
+      subst computed
+      exact pays
+    simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨builder, builderOk, left, leftOk, computed⟩ := computed
+    split at computed
+    · rename_i paid
+      simp only [bind_ok_iff, liftAccessor_ok] at computed
+      obtain ⟨⟨appended, following⟩, appendedOk, _, _, loopOk⟩ := computed
+      refine getBuildersSweepWithdrawals_loop_pays visits _ _ _ _ (fun k inside => ?_) loopOk
+      simp only [appendWithdrawal, bind_ok_iff, pure, Except.pure, Except.ok.injEq,
+        Prod.mk.injEq] at appendedOk
+      obtain ⟨_, _, rfl, rfl⟩ := appendedOk
+      simp only [Array.size_push] at inside
+      by_cases old : k < withdrawals.size
+      · rw [Array.getElem_push_lt old, Array.extract_push_of_le (by omega)]
+        exact pays k old
+      · obtain rfl : k = withdrawals.size := by omega
+        rw [Array.getElem_push_eq, Array.extract_push_of_le (Nat.le_refl _),
+          Array.extract_eq_self_of_le (Nat.le_refl _)]
+        exact ⟨index, builder, left, rfl, builderOk, leftOk, paid.1, paid.2, rfl⟩
+    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, exists_eq_left'] at computed
+      obtain ⟨_, _, loopOk⟩ := computed
+      exact getBuildersSweepWithdrawals_loop_pays visits _ _ _ _ pays loopOk
+
+/-- From Gloas, what each withdrawal of the sweep of builders pays.
+
+The builder is withdrawable, and it withdraws all of its balance left, which is not zero.
+
+The balance left is read after the withdrawals before it. -/
+theorem getBuildersSweepWithdrawals_pays {gloas : .glamsterdam ≤ fork} {start : WithdrawalIndex}
+    {prior swept : Array Withdrawal} {next : WithdrawalIndex} {processed : Nat}
+    (computed : getBuildersSweepWithdrawals state gloas start prior =
+      .ok (swept, next, processed)) :
+    ∀ k (inside : k < swept.size), ∃ index builder left,
+      swept[k].validatorIndex = convertBuilderIndexToValidatorIndex index ∧
+      getBuilder state gloas index = .ok builder ∧
+      getBuilderBalanceAfterWithdrawals state gloas index (prior ++ swept.extract 0 k) = .ok left ∧
+      builder.withdrawableEpoch ≤ getCurrentEpoch state ∧ 0 < left ∧ swept[k].amount = left := by
+  unfold getBuildersSweepWithdrawals at computed
+  simp only [bind_ok_iff, ensure_ok_iff] at computed
+  obtain ⟨_, _, _, _, loopOk⟩ := computed
+  exact getBuildersSweepWithdrawals_loop_pays _ _ _ _ _
+    (fun _ inside => absurd inside (by simp)) loopOk
+
+end
 
 /-- Withdrawals that each name a builder. -/
 private def AllBuilders (withdrawals : Array Withdrawal) : Prop :=
@@ -887,80 +1024,6 @@ theorem withdrawnFrom_append (first second : Array Withdrawal) (index : Validato
       withdrawnFrom first index + withdrawnFrom second index := by
   simp [withdrawnFrom, List.filter_append]
 
-/-- A withdrawal of a builder appended to withdrawals of builders keeps them all of builders. -/
-private theorem appendWithdrawal_allBuilders {withdrawals after : Array Withdrawal}
-    {next next' : WithdrawalIndex} {index : BuilderIndex} {address : ExecutionAddress}
-    {amount : Gwei} (builders : AllBuilders withdrawals)
-    (computed : appendWithdrawal withdrawals next (convertBuilderIndexToValidatorIndex index)
-      address amount = .ok (after, next')) :
-    AllBuilders after := by
-  simp only [appendWithdrawal, bind_ok_iff, pure, Except.pure, Except.ok.injEq,
-    Prod.mk.injEq] at computed
-  obtain ⟨_, _, rfl, rfl⟩ := computed
-  intro withdrawal member
-  simp only [Array.toList_push, List.mem_append, List.mem_singleton] at member
-  rcases member with member | rfl
-  · exact builders withdrawal member
-  · exact isBuilderIndex_convertBuilderIndexToValidatorIndex index
-
-/-- The queued builder withdrawals that a payload pays each name a builder. -/
-private theorem getBuilderWithdrawals_loop_allBuilders {prior : Array Withdrawal} {limit : UInt64} :
-    ∀ (queue : List BuilderPendingWithdrawal) (withdrawals : Array Withdrawal)
-      (next : WithdrawalIndex) (processed : Nat)
-      {result : Array Withdrawal × WithdrawalIndex × Nat},
-    AllBuilders withdrawals →
-    getBuilderWithdrawals.loop prior limit queue withdrawals next processed = .ok result →
-    AllBuilders result.1
-  | [], _, _, _, _, builders, computed => by
-    simp only [getBuilderWithdrawals.loop, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact builders
-  | _ :: rest, _, _, _, _, builders, computed => by
-    simp only [getBuilderWithdrawals.loop] at computed
-    split at computed
-    · simp only [pure, Except.pure, Except.ok.injEq] at computed
-      subst computed
-      exact builders
-    · simp only [bind_ok_iff, liftAccessor_ok] at computed
-      obtain ⟨⟨appended, following⟩, appendedOk, rest'⟩ := computed
-      exact getBuilderWithdrawals_loop_allBuilders rest _ _ _
-        (appendWithdrawal_allBuilders builders appendedOk) rest'
-
-/-- The withdrawals of the sweep of builders each name a builder. -/
-private theorem getBuildersSweepWithdrawals_loop_allBuilders {gloas : .glamsterdam ≤ fork}
-    {prior : Array Withdrawal} {epoch : Epoch} {count : Nat} {limit : UInt64} :
-    ∀ (visits : Nat) (withdrawals : Array Withdrawal) (next : WithdrawalIndex)
-      (index : BuilderIndex) (processed : Nat)
-      {result : Array Withdrawal × WithdrawalIndex × Nat},
-    AllBuilders withdrawals →
-    getBuildersSweepWithdrawals.loop state gloas prior epoch count limit visits withdrawals next
-      index processed = .ok result →
-    AllBuilders result.1
-  | 0, _, _, _, _, _, builders, computed => by
-    simp only [getBuildersSweepWithdrawals.loop, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact builders
-  | visits + 1, _, _, _, _, _, builders, computed => by
-    simp only [getBuildersSweepWithdrawals.loop] at computed
-    split at computed
-    · simp only [pure, Except.pure, Except.ok.injEq] at computed
-      subst computed
-      exact builders
-    · simp only [bind_ok_iff] at computed
-      obtain ⟨_, _, _, _, computed⟩ := computed
-      split at computed
-      · simp only [bind_ok_iff, liftAccessor_ok] at computed
-        obtain ⟨⟨appended, following⟩, appendedOk, _, _, rest⟩ := computed
-        exact getBuildersSweepWithdrawals_loop_allBuilders visits _ _ _ _
-          (appendWithdrawal_allBuilders builders appendedOk) rest
-      · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, exists_eq_left'] at computed
-        obtain ⟨_, _, rest⟩ := computed
-        exact getBuildersSweepWithdrawals_loop_allBuilders visits _ _ _ _ builders rest
-
-/-- No withdrawals at all are withdrawals of builders. -/
-private theorem allBuilders_empty : AllBuilders #[] :=
-  fun _ absent => absurd absent List.not_mem_nil
-
 /-- The expected withdrawals take from a validator at most its balance.
 
 This holds before Gloas, and from Gloas for an index that names no builder. -/
@@ -980,11 +1043,10 @@ theorem getExpectedWithdrawals_withdrawnFrom {state : BeaconState preset fork}
       ⟨buildersSweep, index3, _⟩, buildersSweepOk, ⟨sweep, index4, _⟩, sweepOk, rfl⟩ := computed
     -- The queued builder withdrawals take nothing from the validator.
     simp only [gloas, ↓reduceDIte] at buildersOk buildersSweepOk
-    have one : AllBuilders builders := by
-      unfold getBuilderWithdrawals at buildersOk
-      simp only [bind_ok_iff, ensure_ok_iff] at buildersOk
-      obtain ⟨_, _, _, _, loopOk⟩ := buildersOk
-      exact getBuilderWithdrawals_loop_allBuilders _ _ _ _ allBuilders_empty loopOk
+    have one : AllBuilders builders := fun withdrawal member => by
+      obtain ⟨_, -, named, -⟩ := getBuilderWithdrawals_pays buildersOk withdrawal member
+      rw [named]
+      exact isBuilderIndex_convertBuilderIndexToValidatorIndex _
     have two : withdrawnFrom (builders ++ partials) index ≤ balance.toNat := by
       split at partialsOk
       · unfold getPendingPartialWithdrawals at partialsOk
@@ -996,11 +1058,11 @@ theorem getExpectedWithdrawals_withdrawnFrom {state : BeaconState preset fork}
         obtain ⟨rfl, -, -⟩ := partialsOk
         simp [withdrawnFrom_of_allBuilders one notBuilder]
     -- The sweep of builders takes nothing from the validator either.
-    have three : AllBuilders buildersSweep := by
-      unfold getBuildersSweepWithdrawals at buildersSweepOk
-      simp only [bind_ok_iff, ensure_ok_iff] at buildersSweepOk
-      obtain ⟨_, _, _, _, loopOk⟩ := buildersSweepOk
-      exact getBuildersSweepWithdrawals_loop_allBuilders _ _ _ _ _ allBuilders_empty loopOk
+    have three : AllBuilders buildersSweep := fun withdrawal member => by
+      obtain ⟨k, inside, rfl⟩ := Array.getElem_of_mem (Array.mem_toList_iff.mp member)
+      obtain ⟨_, _, _, named, -⟩ := getBuildersSweepWithdrawals_pays buildersSweepOk k inside
+      rw [named]
+      exact isBuilderIndex_convertBuilderIndexToValidatorIndex _
     unfold getValidatorsSweepWithdrawals at sweepOk
     simp only [bind_ok_iff, ensure_ok_iff] at sweepOk
     obtain ⟨_, _, loopOk⟩ := sweepOk
