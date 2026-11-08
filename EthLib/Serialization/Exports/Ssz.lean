@@ -1,7 +1,7 @@
 module
 
 public import Lean.Data.Json
-public import EthLib.Base.Exports
+public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Serialization.Ssz.Codec.Json
 public import EthLib.Serialization.Ssz.Codec.Root
 public import EthLib.Serialization.Ssz.Type.Valid
@@ -11,11 +11,15 @@ public import EthLib.Serialization.Ssz.Type.Valid
 
 C-ABI exports for SSZ, callable from the Python C extension.
 
-A type and a value cross the boundary as JSON, one tagged object for each constructor.
+A type and a value cross the boundary as Python values in their tagged form.
+
+Each constructor is a tagged `dict`, and the type `bool` is the `str` that names it.
+
+An integer is an `int`, and bytes are `bytes` or a `str` of `0x` and hex.
 
 A rejected input comes back as the code of its error and a message that names the fault.
 
-JSON that does not parse, or that names no type or value, has code 0.
+A value that names no type or value, or an argument of another form, has code 0.
 -/
 
 public section
@@ -23,9 +27,11 @@ public section
 namespace EthLib.Serialization.Ssz.Exports
 
 open Lean
-open EthLib.Exports (Result)
+open EthLib.Exports (Result PyValue pyExport)
 
-/-- The deepest nesting of types or values that the exports read. -/
+/-- The deepest nesting of types or values that the exports read.
+
+From Python the converter bounds the nesting first, at 64 levels below an argument. -/
 def MAX_NESTING : Nat := 256
 
 /-- The one key and its value of an object with exactly one entry. -/
@@ -45,7 +51,7 @@ def pair (document : Json) : Except String (Json × Json) := do
   | #[first, second] => return (first, second)
   | _ => throw "expected an array of two elements"
 
-/-- The type that a JSON document names, reading at most `fuel` levels of nesting. -/
+/-- The type that a tagged document names, reading at most `fuel` levels of nesting. -/
 def descOf : Nat → Json → Except String Desc
   | 0, _ => throw "the type is nested too deeply"
   | fuel + 1, document => do
@@ -87,7 +93,7 @@ def descOf : Nat → Json → Except String Desc
       return .compatibleUnion selectors options
     | _ => throw s!"unknown SSZ type {key}"
 
-/-- The value that a JSON document writes, reading at most `fuel` levels of nesting. -/
+/-- The value that a tagged document writes, reading at most `fuel` levels of nesting. -/
 def valueOfJson : Nat → Json → Except String Value
   | 0, _ => throw "the value is nested too deeply"
   | fuel + 1, document => do
@@ -126,43 +132,54 @@ def jsonOfValues : List Value → Array Json → Array Json
 
 end
 
-/-- Read a JSON document from UTF-8 bytes, then decode it. -/
-def readJson {α : Type} (what : String) (text : ByteArray) (decode : Json → Except String α) :
-    Result α := do
-  let some text := String.fromUTF8? text | throw (0, s!"{what} is not UTF-8")
-  (Json.parse text >>= decode).mapError fun e => (0, s!"{what}: {e}")
+/-- Decode a Python value in the form of JSON. -/
+def readValue {α : Type} (what : String) (value : PyValue) (decode : Json → Except String α) :
+    Result α :=
+  (decode value.toJson).mapError fun e => (0, s!"{what}: {e}")
 
 /-- Run a fallible step of the codec, with the code of its error and a message. -/
 def runSsz {α : Type} (what : String) (act : Except Err α) : Result α :=
   act.mapError fun e => (e.code, s!"{what}: {reprStr e}")
 
-/-- The type that a JSON document names, if SSZ allows it.
+/-- The type that a Python value in its tagged form names, if SSZ allows it.
 
 A type from outside is checked once here, since the codec does not check it at every step. -/
-def readType (type : ByteArray) : Result Desc := do
-  let shape ← readJson "type" type (descOf MAX_NESTING)
+def readType (type : PyValue) : Result Desc := do
+  let shape ← readValue "type" type (descOf MAX_NESTING)
   runSsz "type rejected" shape.wellFormed
   return shape
 
-/-- The SSZ bytes of a value of a type, both given as JSON. -/
-@[export eth_ssz_serialize]
-def serializeExport (type value : ByteArray) : Result ByteArray := do
+/-- The SSZ bytes of a value of a type. -/
+def serializeOf (args : PyValue × PyValue) : Result ByteArray := do
+  let (type, value) := args
   let shape ← readType type
-  let value ← readJson "value" value (valueOfJson MAX_NESTING)
+  let value ← readValue "value" value (valueOfJson MAX_NESTING)
   return ⟨← runSsz "value rejected" (serialize shape value)⟩
 
-/-- The value, as JSON, that SSZ bytes hold for a type given as JSON. -/
-@[export eth_ssz_deserialize]
-def deserializeExport (type data : ByteArray) : Result ByteArray := do
+/-- The SSZ bytes of a value of a type, both given in their tagged form. -/
+@[export eth_ssz_serialize]
+def serializeExport (args : PyValue) : Result PyValue := pyExport serializeOf args
+
+/-- The value that SSZ bytes hold for a type, in its tagged form. -/
+def deserializeOf (args : PyValue × ByteArray) : Result PyValue := do
+  let (type, data) := args
   let shape ← readType type
   let value ← runSsz "input rejected" (deserialize shape data.data)
-  return (jsonOfValue value).compress.toUTF8
+  return PyValue.ofJson (jsonOfValue value)
 
-/-- The 32-byte hash tree root of a value of a type, both given as JSON. -/
-@[export eth_ssz_hash_tree_root]
-def hashTreeRootExport (type value : ByteArray) : Result ByteArray := do
+/-- The value that SSZ bytes hold for a type given in its tagged form, as a tagged `dict`. -/
+@[export eth_ssz_deserialize]
+def deserializeExport (args : PyValue) : Result PyValue := pyExport deserializeOf args
+
+/-- The 32-byte hash tree root of a value of a type. -/
+def hashTreeRootOf (args : PyValue × PyValue) : Result ByteArray := do
+  let (type, value) := args
   let shape ← readType type
-  let value ← readJson "value" value (valueOfJson MAX_NESTING)
+  let value ← readValue "value" value (valueOfJson MAX_NESTING)
   return ⟨← runSsz "value rejected" (hashTreeRoot shape value)⟩
+
+/-- The 32-byte hash tree root of a value of a type, both given in their tagged form. -/
+@[export eth_ssz_hash_tree_root]
+def hashTreeRootExport (args : PyValue) : Result PyValue := pyExport hashTreeRootOf args
 
 end EthLib.Serialization.Ssz.Exports

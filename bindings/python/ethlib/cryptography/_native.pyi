@@ -891,16 +891,16 @@ def rlp_decode_as(kind: str, data: bytes) -> Any:
     """The value of the named type that the bytes encode, as a Python value."""
     ...
 
-def ssz_serialize(type: bytes, value: bytes) -> bytes:
-    """The SSZ bytes of a value of a type, both given as JSON."""
+def ssz_serialize(type: str | dict[str, Any], value: dict[str, Any]) -> bytes:
+    """The SSZ bytes of a value of a type, both given in their tagged form."""
     ...
 
-def ssz_deserialize(type: bytes, data: bytes) -> bytes:
-    """The value, as JSON, that SSZ bytes hold for a type given as JSON."""
+def ssz_deserialize(type: str | dict[str, Any], data: bytes) -> dict[str, Any]:
+    """The value that SSZ bytes hold for a type given in its tagged form, as a tagged `dict`."""
     ...
 
-def ssz_hash_tree_root(type: bytes, value: bytes) -> bytes:
-    """The 32-byte hash tree root of a value of a type, both given as JSON."""
+def ssz_hash_tree_root(type: str | dict[str, Any], value: dict[str, Any]) -> bytes:
+    """The 32-byte hash tree root of a value of a type, both given in their tagged form."""
     ...
 
 def rlpx_ecies_encrypt(recipient: bytes, ephemeral: bytes, iv: bytes, shared_mac: bytes, message: bytes) -> bytes:

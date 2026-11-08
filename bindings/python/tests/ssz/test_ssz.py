@@ -84,7 +84,7 @@ def test_illegal_type_rejected(ssz_type, fault: str) -> None:
 
 
 def test_unknown_type_rejected() -> None:
-    # A type that the JSON names no SSZ type for has code 0, which no SSZ error has.
+    # A type that names no SSZ type has code 0, which no SSZ error has.
     with raises(SszError, "type: unknown SSZ type float") as caught:
         ssz.serialize({"float": 4}, {"uint": 1})
     assert caught.value.code == 0
@@ -165,3 +165,49 @@ def test_hash_tree_root_rejects_type() -> None:
     # The root checks the type before it reads the value.
     with raises(SszError, "type rejected: EthLib.Serialization.Ssz.Err.uintWidth 3"):
         ssz.hash_tree_root({"uint": 3}, {"uint": 0})
+
+
+def test_bytes_cross_as_hex() -> None:
+    # A bytes value crosses as 0x and hex, the form that a str in the value gives.
+    assert ssz.serialize({"byte_list": 4}, {"bytes": b"ab"}) == b"ab"
+    assert ssz.serialize({"byte_list": 4}, {"bytes": "0x6162"}) == b"ab"
+
+
+def test_deserialize_returns_a_dict() -> None:
+    assert ssz.deserialize({"uint": 2}, b"\x02\x01") == {"uint": 258}
+
+
+def test_type_of_another_form() -> None:
+    with raises(SszError, "type: expected an object with one key") as info:
+        ssz.serialize(5, {"uint": 1})  # ty: ignore[invalid-argument-type]
+    assert info.value.code == 0
+
+
+def test_data_of_another_form() -> None:
+    with raises(SszError, "expected bytes") as info:
+        ssz.deserialize("bool", "01")  # ty: ignore[invalid-argument-type]
+    assert info.value.code == 0
+
+
+def test_nesting_bound_of_the_converter() -> None:
+    # The converter reads at most 64 levels below an argument.
+    # A vector type takes two levels for each of its own, and a value one more than its type.
+    def vector(depth: int) -> str | dict:
+        return "bool" if depth == 0 else {"vector": [vector(depth - 1), 1]}
+
+    def value(depth: int) -> dict:
+        return {"bool": True} if depth == 0 else {"seq": [value(depth - 1)]}
+
+    def container(depth: int) -> str | dict:
+        return "bool" if depth == 0 else {"container": [["a", container(depth - 1)]]}
+
+    message = "cannot pass a value nested deeper than 64 to Lean"
+    assert ssz.serialize(vector(31), value(31)) == b"\x01"
+    with raises(ValueError, message):
+        ssz.serialize(vector(31), value(32))
+    assert ssz.deserialize(vector(32), b"\x01") == value(32)
+    with raises(ValueError, message):
+        ssz.deserialize(vector(33), b"\x01")
+    assert ssz.deserialize(container(21), b"\x01") == value(21)
+    with raises(ValueError, message):
+        ssz.deserialize(container(22), b"\x01")

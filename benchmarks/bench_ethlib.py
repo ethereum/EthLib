@@ -2,7 +2,6 @@
 
 # python bench_ethlib.py <data directory> <results file>
 
-import json
 import sys
 
 from benchlib import Runner, load
@@ -174,12 +173,12 @@ framed = x(ci["snappy_framed"])
 R.run("snappy_decode_frames_100k", lambda: snappy.decode_frames(framed))
 for name, case in ci["ssz"].items():
     b = x(case["bytes"])
-    # The native calls, with the JSON documents prepared outside the timing.
-    tj, vj = ssz._dump(case["type"]), ssz._dump(case["value"])
+    # The native calls, with the tagged type and value as the converter takes them.
+    tj, vj = case["type"], case["value"]
     if case["serialize"]:
         R.run("ssz_serialize_" + name, lambda tj=tj, vj=vj: N.ssz_serialize(tj, vj))
     R.run(
         "ssz_deserialize_" + name,
         lambda tj=tj, b=b: N.ssz_deserialize(tj, b),
-        norm=lambda r, t=case["type"]: ssz.serialize(t, json.loads(r)),
+        norm=lambda r, t=case["type"]: ssz.serialize(t, r),
     )
