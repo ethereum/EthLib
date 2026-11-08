@@ -141,7 +141,7 @@
   "The value of `key` in the trie of `root`, as the nodes of `proof` show."
 
 #define DOC_trie_hex_prefix \
-  "The hex-prefix encoding of a path, with one nibble in each input byte."
+  "The hex-prefix encoding of a path of nibbles, for a leaf or an extension."
 
 #define DOC_trie_verify_account_proof \
   "Check an answer of `eth_getProof` against a state root, with Keccak-256."
@@ -593,6 +593,9 @@
 #define DOC_pow_block_difficulty \
   "The difficulty of a block at a fork: `D(H)` of the Yellow Paper, 4.3.4, before Paris."
 
+#define DOC_pow_chain_forks \
+  "The RLP form of the forks of a chain, each with its first block."
+
 #define DOC_pow_seal_hash \
   "The seal hash of a header: the Keccak-256 hash of the header without mix digest and nonce."
 
@@ -663,7 +666,7 @@
   "The item that `input` encodes."
 
 #define DOC_rlp_decode_as \
-  "The value of the named type that the bytes encode, given as the item of the value."
+  "The value of the named type that the bytes encode, as a Python value."
 
 #define DOC_ssz_serialize \
   "The SSZ bytes of a value of a type, both given as JSON."

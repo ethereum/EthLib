@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Exports
+public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Execution.Blocks
 public import EthLib.Execution.Transactions.Envelope
 public import EthLib.Serialization.Exports.Rlp
@@ -24,7 +24,9 @@ An unknown fork name, or forks out of order, has code 0, since no error type cov
 
 So does a transaction of a block that does not decode, and a trie with an empty value.
 
-So does a blob schedule that is not four integers, or whose bounds fail.
+So does a blob schedule whose bounds fail, or an argument that Lean cannot read.
+
+The header checks take and return typed Python values, and a blob schedule is four integers.
 
 A deposit log in another layout has a code from 301.
 
@@ -45,7 +47,7 @@ public section
 
 namespace EthLib.Execution.Blocks.Exports
 
-open EthLib.Exports (Result forkUpTo)
+open EthLib.Exports (Result PyValue forkUpTo pyExport)
 
 open EthLib.Base
 open EthLib.Serialization.Rlp
@@ -129,27 +131,33 @@ def validateSizeExport (fork block : ByteArray) : Result UInt8 := do
   (validateBlockSize b).map (fun () => 1) |>.mapError
     fun e => (e.code, s!"block invalid: {reprStr e}")
 
-/-- The blob schedules that a chain sets itself, from their RLP form.
+/-- The blob schedules that a chain sets itself.
 
-Each is a list of four integers: activation time, target, maximum and update fraction. -/
-def blobSchedulesOf (bytes : ByteArray) : Result (List (Activation × BlobSchedule)) := do
-  let entries : List (List Nat) ← runRlp "blob schedules rejected" (Codec.decode bytes)
-  entries.mapM fun
-    | [time, target, max, fraction] =>
-      if h : target ≤ max ∧ 0 < max ∧ 0 < fraction then
-        pure (.time time, ⟨target, max, fraction, h.1, h.2.1, h.2.2⟩)
-      -- No error type covers a blob schedule of the binding, so its code is 0.
-      else throw (0, "a blob schedule needs target ≤ max, 0 < max and 0 < update fraction")
-    | _ => throw (0, "a blob schedule is not a list of four integers")
+Each is four integers: activation time, target, maximum and update fraction. -/
+def blobSchedulesOf (entries : List (Nat × Nat × Nat × Nat)) :
+    Result (List (Activation × BlobSchedule)) :=
+  entries.mapM fun (time, target, max, fraction) =>
+    if h : target ≤ max ∧ 0 < max ∧ 0 < fraction then
+      pure (.time time, ⟨target, max, fraction, h.1, h.2.1, h.2.2⟩)
+    -- No error type covers a blob schedule of the binding, so its code is 0.
+    else throw (0, "a blob schedule needs target ≤ max, 0 < max and 0 < update fraction")
+
+/-- The arguments of a header check.
+
+They are the forks of the parent and of the header, then the parent and the header in RLP.
+
+Last come the blob schedules of the chain. -/
+abbrev HeaderCheckArgs := String × String × ByteArray × ByteArray × List (Nat × Nat × Nat × Nat)
 
 /-- The parent and the header of a header check, decoded at their forks, and a blob schedule.
 
 The schedule is the header's, on a chain that sets the given blob schedules. -/
-def headerCheckInputs (parentFork fork parent header schedules : ByteArray) :
+def headerCheckInputs (args : HeaderCheckArgs) :
     Result ((parentFork fork : Fork) × Header parentFork × Header fork ×
       Since .dencun fork BlobSchedule) := do
-  let parentFork ← forkUpTo .glamsterdam parentFork
-  let fork ← forkUpTo .glamsterdam fork
+  let (parentFork, fork, parent, header, schedules) := args
+  let parentFork ← forkUpTo .glamsterdam parentFork.toUTF8
+  let fork ← forkUpTo .glamsterdam fork.toUTF8
   let parent : Header parentFork ← runRlp "parent rejected" (Codec.decode parent)
   let header : Header fork ← runRlp "header rejected" (Codec.decode header)
   -- The chain's forks and chain ID play no part in the blob schedule of the header.
@@ -161,13 +169,31 @@ def headerCheckInputs (parentFork fork parent header schedules : ByteArray) :
 /-- Check a header at a fork against its parent at the parent's fork, at every fork.
 
 The header's blob schedule is the last given one that it has reached, else that of its fork. -/
-@[export eth_block_validate_header]
-def validateHeaderExport (parentFork fork parent header schedules : ByteArray) :
-    Result UInt8 := do
-  let ⟨parentFork, fork, parent, header, schedule⟩ ←
-    headerCheckInputs parentFork fork parent header schedules
+def validateHeaderOf (args : HeaderCheckArgs) : Result Unit := do
+  let ⟨parentFork, fork, parent, header, schedule⟩ ← headerCheckInputs args
   if hFork : parentFork ≤ fork then
-    (validateHeader hFork parent header schedule).map (fun () => 1) |>.mapError
+    (validateHeader hFork parent header schedule).mapError
+      fun e => (e.code, s!"header invalid: {reprStr e}")
+  else throw (0, "the parent's fork is after the fork")
+
+/-- Check a header at a fork against its parent at the parent's fork, at every fork.
+
+The arguments are the forks of the parent and of the header, the parent and the header in RLP.
+
+Last come the blob schedules that the chain sets, each four integers.
+
+The header's blob schedule is the last given one that it has reached, else that of its fork. -/
+@[export eth_block_validate_header]
+def validateHeaderExport (args : PyValue) : Result PyValue :=
+  pyExport validateHeaderOf args
+
+/-- Check a header against its parent at two named forks, every check but the proof of work.
+
+The header's blob schedule is the last given one that it has reached, else that of its fork. -/
+def checkHeaderOf (args : HeaderCheckArgs) : Result Unit := do
+  let ⟨parentFork, fork, parent, header, schedule⟩ ← headerCheckInputs args
+  if hFork : parentFork ≤ fork then
+    (checkHeader hFork parent header schedule).mapError
       fun e => (e.code, s!"header invalid: {reprStr e}")
   else throw (0, "the parent's fork is after the fork")
 
@@ -175,15 +201,12 @@ def validateHeaderExport (parentFork fork parent header schedules : ByteArray) :
 
 Test chains that run without proof of work check their headers this way.
 
+The arguments are those of the full check of a header.
+
 The header's blob schedule is the last given one that it has reached, else that of its fork. -/
 @[export eth_block_check_header]
-def checkHeaderExport (parentFork fork parent header schedules : ByteArray) : Result UInt8 := do
-  let ⟨parentFork, fork, parent, header, schedule⟩ ←
-    headerCheckInputs parentFork fork parent header schedules
-  if hFork : parentFork ≤ fork then
-    (checkHeader hFork parent header schedule).map (fun () => 1) |>.mapError
-      fun e => (e.code, s!"header invalid: {reprStr e}")
-  else throw (0, "the parent's fork is after the fork")
+def checkHeaderExport (args : PyValue) : Result PyValue :=
+  pyExport checkHeaderOf args
 
 /-- Whether a header has the extra data that the DAO Fork asks of its first ten blocks.
 

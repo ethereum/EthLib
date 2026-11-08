@@ -303,9 +303,11 @@ instance {α β : Type} [FromPy α] [FromPyItems β] : FromPyItems (α × β) :=
 instance {α β : Type} [ToPy α] [ToPyItems β] : ToPy (α × β) := ⟨fun p =>
   .tuple (ToPyItems.items p).toArray⟩
 
-/-- A pair, or a nest of pairs to the right, is one flat tuple. -/
+/-- A pair, or a nest of pairs to the right, is one flat tuple.
+
+Python callers often pass a list instead, which reads the same. -/
 instance {α β : Type} [FromPy α] [FromPyItems β] : FromPy (α × β) := ⟨fun
-  | .tuple items => FromPyItems.ofItems items.toList
+  | .tuple items | .list items => FromPyItems.ofItems items.toList
   | _ => .error "expected a tuple"⟩
 
 /-- A result that may be an error inside a larger result: the error crosses as a failure. -/

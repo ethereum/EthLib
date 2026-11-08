@@ -1045,14 +1045,14 @@
    "docstring":
    "The value of `key` in the trie of `root`, as the nodes of `proof` show.\n\nThe proof is an RLP list of byte strings, the encodings of the nodes.\n\nNo bytes means that `key` is not set, since no value is empty.\n\nA root of another length than 32 bytes, or a proof that does not verify, is an error."},
   {"summary":
-   "The hex-prefix encoding of a path, with one nibble in each input byte.",
-   "signature": "(nibbles: bytes, is_leaf: bool) -> bytes",
+   "The hex-prefix encoding of a path of nibbles, for a leaf or an extension.",
+   "signature": "(nibbles: list[int], is_leaf: bool) -> bytes",
    "operation": "EthLib.Execution.Trie.Exports.hexPrefixExport",
    "method": "trie_hex_prefix",
    "errors": [],
    "error_class": "TrieError",
    "docstring":
-   "The hex-prefix encoding of a path, with one nibble in each input byte.\n\nA byte of 16 or more is not a nibble, and fails with code 0."},
+   "The hex-prefix encoding of a path of nibbles, for a leaf or an extension.\n\nThe arguments are the list of the nibbles and whether the path ends at a leaf.\n\nA value of 16 or more is not a nibble, and fails with code 0."},
   {"summary":
    "Check an answer of `eth_getProof` against a state root, with Keccak-256.",
    "signature": "(root: bytes, answer: bytes) -> bytes",
@@ -6072,6 +6072,31 @@
    "docstring":
    "The difficulty of a block at a fork: `D(H)` of the Yellow Paper, 4.3.4, before Paris.\n\n```text\n    D(H) = max(D_min, P_d + ⌊P_d / 2048⌋ · factor + ε)\n```\n\n`P_d` is the parent's difficulty, and `ε` is the bomb.\n\nThe factor is the one of the time since the parent.\n\nFrom Paris on, [EIP-3675] sets it to 0.\n\nThe genesis block has no parent, and its difficulty is part of the chain's configuration.\n\n[EIP-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#block-structure"},
   {"summary":
+   "The RLP form of the forks of a chain, each with its first block.",
+   "signature": "(forks: list[tuple[str, int]]) -> bytes",
+   "operation": "EthLib.Execution.Blocks.Exports.chainForksExport",
+   "method": "pow_chain_forks",
+   "errors":
+   [{"type": "EthLib.Serialization.Rlp.RlpError",
+     "codes":
+     [{"constructor": "payloadTooLong", "code": 1},
+      {"constructor": "inputTooShort", "code": 2},
+      {"constructor": "singleByteWithPrefix", "code": 3},
+      {"constructor": "longFormForShortLength", "code": 4},
+      {"constructor": "leadingZeroInLength", "code": 5},
+      {"constructor": "trailingBytes", "code": 6},
+      {"constructor": "leadingZeroInScalar", "code": 7},
+      {"constructor": "listAsScalar", "code": 8},
+      {"constructor": "listAsBytes", "code": 9},
+      {"constructor": "bytesAsList", "code": 10},
+      {"constructor": "wrongLength", "code": 11},
+      {"constructor": "scalarTooLarge", "code": 12},
+      {"constructor": "wrongFieldCount", "code": 13},
+      {"constructor": "inField", "code": 14}]}],
+   "error_class": "BlockError",
+   "docstring":
+   "The RLP form of the forks of a chain, each with its first block.\n\nThe argument is the list of the forks, each its name and its first block."},
+  {"summary":
    "The seal hash of a header: the Keccak-256 hash of the header without mix digest and nonce.",
    "signature": "(fork: bytes, header: bytes) -> bytes",
    "operation": "EthLib.Execution.Blocks.Exports.sealHashExport",
@@ -6574,7 +6599,7 @@
    "docstring":
    "The item that `input` encodes.\n\nIt fails unless `input` is exactly the encoding of one item."},
   {"summary":
-   "The value of the named type that the bytes encode, given as the item of the value.",
+   "The value of the named type that the bytes encode, as a Python value.",
    "signature": "(kind: str, data: bytes) -> Any",
    "operation": "EthLib.Serialization.Rlp.Exports.decodeAsExport",
    "method": "rlp_decode_as",
@@ -6597,7 +6622,7 @@
       {"constructor": "inField", "code": 14}]}],
    "error_class": "RlpError",
    "docstring":
-   "The value of the named type that the bytes encode, given as the item of the value.\n\nAn unbounded integer goes through the scalar decoder itself."},
+   "The value of the named type that the bytes encode, as a Python value.\n\nThe arguments are the name of the type and the bytes.\n\nThe names are `nat`, `u256`, `uint64`, `bool`, `address`, `recipient` and `list_nat`.\n\nA recipient is an address, or `None` for a contract creation."},
   {"summary": "The SSZ bytes of a value of a type, both given as JSON.",
    "signature": "(type: bytes, value: bytes) -> bytes",
    "operation": "EthLib.Serialization.Ssz.Exports.serializeExport",
@@ -7737,7 +7762,7 @@
   {"summary":
    "Check a header at a fork against its parent at the parent's fork, at every fork.",
    "signature":
-   "(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: bytes) -> bool",
+   "(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: list[tuple[int, int, int, int]]) -> None",
    "operation": "EthLib.Execution.Blocks.Exports.validateHeaderExport",
    "method": "block_validate_header",
    "errors":
@@ -7801,11 +7826,11 @@
       {"constructor": "wrongBlockAccessListHash", "code": 256}]}],
    "error_class": "BlockError",
    "docstring":
-   "Check a header at a fork against its parent at the parent's fork, at every fork.\n\nThe header's blob schedule is the last given one that it has reached, else that of its fork."},
+   "Check a header at a fork against its parent at the parent's fork, at every fork.\n\nThe arguments are the forks of the parent and of the header, the parent and the header in RLP.\n\nLast come the blob schedules that the chain sets, each four integers.\n\nThe header's blob schedule is the last given one that it has reached, else that of its fork."},
   {"summary":
    "Check a header against its parent at two named forks, every check but the proof of work.",
    "signature":
-   "(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: bytes) -> bool",
+   "(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: list[tuple[int, int, int, int]]) -> None",
    "operation": "EthLib.Execution.Blocks.Exports.checkHeaderExport",
    "method": "block_check_header",
    "errors":
@@ -7869,7 +7894,7 @@
       {"constructor": "wrongBlockAccessListHash", "code": 256}]}],
    "error_class": "BlockError",
    "docstring":
-   "Check a header against its parent at two named forks, every check but the proof of work.\n\nTest chains that run without proof of work check their headers this way.\n\nThe header's blob schedule is the last given one that it has reached, else that of its fork."},
+   "Check a header against its parent at two named forks, every check but the proof of work.\n\nTest chains that run without proof of work check their headers this way.\n\nThe arguments are those of the full check of a header.\n\nThe header's blob schedule is the last given one that it has reached, else that of its fork."},
   {"summary":
    "Whether a header has the extra data that the DAO Fork asks of its first ten blocks.",
    "signature": "(dao_block: int, fork: str, header: bytes) -> bool",
@@ -7948,7 +7973,8 @@
    "docstring":
    "Run the state transition of a block on a chain, and give the state after it.\n\nWith `checkSeal` 0, the proof of work is left out, as for test chains that run without one.\n\nIt returns a list of two items: the state root, and the accounts of the state."},
   {"summary": "The genesis block at a fork, in RLP form.",
-   "signature": "(fork: str, params: bytes, state: bytes) -> bytes",
+   "signature":
+   "(fork: str, params: tuple[bytes, int, int, int, bytes, bytes, bytes, int, int, int], state: bytes) -> bytes",
    "operation": "EthLib.Execution.Blocks.Exports.genesisExport",
    "method": "genesis_block",
    "errors":
@@ -7996,7 +8022,7 @@
       {"constructor": "wrongBlockAccessListHash", "code": 256}]}],
    "error_class": "BlockError",
    "docstring":
-   "The genesis block at a fork, in RLP form.\n\nThe chain chooses the fields `params` and starts with the state `state`."},
+   "The genesis block at a fork, in RLP form.\n\nThe arguments are the fork, the fields of the header that the chain chooses, and the state.\n\nThe fields are in the order of the header, from the beneficiary to the slot number."},
   {"summary":
    "Run the precompile at the address on the call data, with the gas given, at the fork named.",
    "signature": "(fork: str, address: int, data: bytes, gas: int) -> bytes",

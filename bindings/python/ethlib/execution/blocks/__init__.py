@@ -75,13 +75,6 @@ def validate_size(fork: str, block: bytes) -> None:
 BlobSchedule = tuple[int, int, int, int]
 
 
-def _blob_schedules(schedules: Sequence[BlobSchedule]) -> bytes:
-    # Each integer crosses as its minimal big-endian bytes, in one RLP list per schedule.
-    return rlp.encode(
-        [[v.to_bytes((v.bit_length() + 7) // 8, "big") for v in schedule] for schedule in schedules]
-    )
-
-
 def validate_header(
     parent_fork: str,
     fork: str,
@@ -90,9 +83,7 @@ def validate_header(
     blob_schedules: Sequence[BlobSchedule] = (),
 ) -> None:
     """Check a header against its parent at any fork, and raise BlockError if it fails."""
-    _native.block_validate_header(
-        parent_fork, fork, parent, header, _blob_schedules(blob_schedules)
-    )
+    _native.block_validate_header(parent_fork, fork, parent, header, list(blob_schedules))
 
 
 def check_header(
@@ -103,7 +94,7 @@ def check_header(
     blob_schedules: Sequence[BlobSchedule] = (),
 ) -> None:
     """Check a header against its parent, every check but the proof of work."""
-    _native.block_check_header(parent_fork, fork, parent, header, _blob_schedules(blob_schedules))
+    _native.block_check_header(parent_fork, fork, parent, header, list(blob_schedules))
 
 
 def dao_extra_data_valid(dao_block: int, fork: str, header: bytes) -> bool:
@@ -157,23 +148,19 @@ def genesis_block(
     slot_number: int = 0,
 ) -> bytes:
     """The genesis block at a fork of a chain with the header fields it chooses and its state."""
-
-    def scalar(n: int) -> bytes:
-        return n.to_bytes((n.bit_length() + 7) // 8, "big")
-
-    params = [
+    params = (
         coinbase,
-        scalar(difficulty),
-        scalar(gas_limit),
-        scalar(timestamp),
+        difficulty,
+        gas_limit,
+        timestamp,
         extra_data,
         mix_hash,
         nonce,
-        scalar(base_fee),
-        scalar(excess_blob_gas),
-        scalar(slot_number),
-    ]
-    return _native.genesis_block(fork, rlp.encode(params), state)
+        base_fee,
+        excess_blob_gas,
+        slot_number,
+    )
+    return _native.genesis_block(fork, params, state)
 
 
 __all__ = [

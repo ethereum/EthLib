@@ -86,14 +86,10 @@ bindings/python/ethlib/engine/__init__.py forkchoice_updated json
 bindings/python/ethlib/engine/__init__.py new_payload json
 bindings/python/ethlib/engine/__init__.py new_payload_on_chain json
 bindings/python/ethlib/engine/__init__.py prepare_execution_payload json
-bindings/python/ethlib/execution/blocks/__init__.py _blob_schedules to_bytes
-bindings/python/ethlib/execution/blocks/__init__.py genesis_block.scalar to_bytes
 bindings/python/ethlib/execution/blocks/__init__.py state_transition json
-bindings/python/ethlib/execution/pow/__init__.py chain_forks to_bytes
 bindings/python/ethlib/execution/trie/__init__.py _data fromhex
 bindings/python/ethlib/execution/trie/__init__.py _digits slice
 bindings/python/ethlib/execution/trie/__init__.py _scalar to_bytes
-bindings/python/ethlib/execution/trie/__init__.py hex_prefix bytes
 bindings/python/ethlib/execution/trie/__init__.py verify_account_proof slice
 bindings/python/ethlib/execution/trie/__init__.py verify_account_proof to_bytes
 bindings/python/ethlib/networking/discv5/__init__.py _bytes_of fromhex
@@ -111,6 +107,5 @@ bindings/python/ethlib/networking/forkid/__init__.py _read from_bytes
 bindings/python/ethlib/networking/forkid/__init__.py _scalar to_bytes
 bindings/python/ethlib/networking/reqresp/__init__.py decode_response_chunk slice
 bindings/python/ethlib/networking/rlpx/__init__.py respond slice
-bindings/python/ethlib/serialization/rlp/__init__.py _scalar from_bytes
 bindings/python/ethlib/serialization/ssz/__init__.py _dump json
 bindings/python/ethlib/serialization/ssz/__init__.py deserialize json

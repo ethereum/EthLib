@@ -37,12 +37,7 @@ def chain_forks(forks: str | Sequence[tuple[str, int]]) -> bytes:
     """The RLP form of the forks of a chain with their first blocks; a name alone starts at 0."""
     if isinstance(forks, str):
         forks = [(forks, 0)]
-    return rlp.encode(
-        [
-            [name.encode(), first.to_bytes((first.bit_length() + 7) // 8, "big")]
-            for name, first in forks
-        ]
-    )
+    return _native.pow_chain_forks(list(forks))
 
 
 def validate_ommers(

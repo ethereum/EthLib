@@ -1,6 +1,6 @@
 /* Python wrappers of the proof-of-work exports.
  *
- * The difficulty takes and returns typed values, which the generic converter passes.
+ * The difficulty and the forks of a chain take typed values, which the converter passes.
  * The other exports take a fork as its name in UTF-8, and a header or a block in RLP. */
 #include "wrappers.h"
 
@@ -9,6 +9,7 @@
 /* Each export consumes its object arguments, so the caller never releases them. */
 
 extern lean_object* eth_pow_block_difficulty(lean_object*);
+extern lean_object* eth_pow_chain_forks(lean_object*);
 extern lean_object* eth_pow_seal_hash(lean_object*, lean_object*);
 extern lean_object* eth_pow_check(lean_object*, lean_object*);
 extern lean_object* eth_pow_validate_ommers(lean_object*, lean_object*, lean_object*, uint8_t);
@@ -54,6 +55,14 @@ py_pow_block_difficulty(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_pow_block_difficulty, args, 6, BLOCK_ERROR);
+}
+
+PyObject*
+py_pow_chain_forks(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_pow_chain_forks, args, 1, BLOCK_ERROR);
 }
 
 PyObject*

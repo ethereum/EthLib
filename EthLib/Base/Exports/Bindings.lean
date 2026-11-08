@@ -173,7 +173,7 @@ def bindings : List Binding := [
     "(root: bytes, secured: int, key: bytes, proof: bytes) -> bytes | None",
     [`EthLib.Execution.Trie.TrieError, `EthLib.Execution.Trie.ProofError], some "TrieError"⟩,
   ⟨"trie_hex_prefix", `EthLib.Execution.Trie.Exports.hexPrefixExport,
-    "(nibbles: bytes, is_leaf: bool) -> bytes",
+    "(nibbles: list[int], is_leaf: bool) -> bytes",
     [], some "TrieError"⟩,
   ⟨"trie_verify_account_proof", `EthLib.Execution.Trie.Exports.verifyAccountProofExport,
     "(root: bytes, answer: bytes) -> bytes",
@@ -705,6 +705,9 @@ def bindings : List Binding := [
     "(fork: str, number: int, timestamp: int, parent_timestamp: int, " ++
       "parent_difficulty: int, parent_ommers: int) -> int",
     [], some "BlockError"⟩,
+  ⟨"pow_chain_forks", `EthLib.Execution.Blocks.Exports.chainForksExport,
+    "(forks: list[tuple[str, int]]) -> bytes",
+    [`EthLib.Serialization.Rlp.RlpError], some "BlockError"⟩,
   ⟨"pow_seal_hash", `EthLib.Execution.Blocks.Exports.sealHashExport,
     "(fork: bytes, header: bytes) -> bytes",
     [`EthLib.Serialization.Rlp.RlpError], some "BlockError"⟩,
@@ -959,12 +962,12 @@ def bindings : List Binding := [
     "(aes_secret: bytes, mac_secret: bytes, mac_init: bytes, input: bytes) -> bytes",
     [`EthLib.Networking.Rlpx.FrameError], some "RlpxError"⟩,
   ⟨"block_validate_header", `EthLib.Execution.Blocks.Exports.validateHeaderExport,
-    "(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: bytes) " ++
-      "-> bool",
+    "(parent_fork: str, fork: str, parent: bytes, header: bytes, " ++
+      "blob_schedules: list[tuple[int, int, int, int]]) -> None",
     [`EthLib.Serialization.Rlp.RlpError, `EthLib.Execution.Blocks.BlockError], some "BlockError"⟩,
   ⟨"block_check_header", `EthLib.Execution.Blocks.Exports.checkHeaderExport,
-    "(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: bytes) " ++
-      "-> bool",
+    "(parent_fork: str, fork: str, parent: bytes, header: bytes, " ++
+      "blob_schedules: list[tuple[int, int, int, int]]) -> None",
     [`EthLib.Serialization.Rlp.RlpError, `EthLib.Execution.Blocks.BlockError], some "BlockError"⟩,
   ⟨"block_dao_extra_data_valid", `EthLib.Execution.Blocks.Exports.daoExtraDataValidExport,
     "(dao_block: int, fork: str, header: bytes) -> bool",
@@ -974,7 +977,8 @@ def bindings : List Binding := [
       "-> bytes",
     [`EthLib.Execution.Blocks.BlockError], some "BlockError"⟩,
   ⟨"genesis_block", `EthLib.Execution.Blocks.Exports.genesisExport,
-    "(fork: str, params: bytes, state: bytes) -> bytes",
+    "(fork: str, params: tuple[bytes, int, int, int, bytes, bytes, bytes, int, int, int], " ++
+      "state: bytes) -> bytes",
     [`EthLib.Execution.Blocks.BlockError], some "BlockError"⟩,
   ⟨"precompile_run", `EthLib.Execution.Evm.Precompiles.Exports.runExport,
     "(fork: str, address: int, data: bytes, gas: int) -> bytes",

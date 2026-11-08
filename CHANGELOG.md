@@ -35,7 +35,7 @@ Not yet released.
 - The EVM word and memory exports, the CREATE address, the fee exports and the block difficulty now take and return typed values ([#1524](https://github.com/ethereum/EthLib/pull/1524)).
   `eth_evm_word_op` takes the opcode and a list of at most three operands, each an `int` below 2^256.
   `eth_evm_extend_memory` replaces `eth_evm_extend_memory_cost` and `eth_evm_extend_memory_expand_by`, and returns the price and the growth as a pair.
-  Each range is a tuple of two words, and a range given as a list is rejected.
+  Each range is a pair of two words.
   The base fee and the fake exponential now return a result that can fail, as every typed export does.
   The error codes 101 and 102 of `EvmError` are gone, since no export reads the lengths of operands or ranges now.
   In Python, an argument that Lean cannot read raises the error class of the method with code 0.
@@ -50,6 +50,17 @@ Not yet released.
   An argument that Lean cannot read raises `TransactionError` with code 0, where some raised `TypeError` or `OverflowError`.
   Examples are a chain ID of 2^64 or more, a `bool` given for an `int` and `bytes` given for a fork name.
   A negative number raises `ValueError`, where it raised `OverflowError`.
+- The header checks, the genesis block, the typed RLP decoder and the hex-prefix encoding now take typed values ([#1542](https://github.com/ethereum/EthLib/pull/1542)).
+  The C exports `eth_block_validate_header`, `eth_block_check_header`, `eth_genesis_block`, `eth_rlp_decode_as` and `eth_trie_hex_prefix` take the tuple of their arguments as one value.
+  The header checks take the blob schedules as pairs of four integers, and return `None`.
+  `eth_genesis_block` takes the fields of the header as one tuple, and `eth_trie_hex_prefix` takes a list of nibbles.
+  `eth_rlp_decode_as` returns the value itself, such as an `int`, a `bool` or `None` for a contract creation.
+  A new export, `eth_pow_chain_forks`, writes the RLP form of the forks of a chain, which `chain_forks` returns.
+  In Python, an argument that Lean cannot read raises the error class of the method with code 0, where some raised `TypeError`.
+  Examples are `bytes` given for a fork name or for the kind of `rlp.decode_as`, and an `int` given for the `is_leaf` flag.
+  A nibble of 16 or more raises `TrieError` with code 0, where one of 256 or more raised `OverflowError`.
+  A negative number raises `ValueError`, where some raised `OverflowError`.
+- Every typed export reads a pair, such as a memory range or a blob schedule, from a Python list as from a tuple ([#1542](https://github.com/ethereum/EthLib/pull/1542)).
 - A chain configuration that the exports read as JSON is now rejected, with code 0, when a fork by block number comes after a fork by timestamp ([#1110](https://github.com/ethereum/EthLib/pull/1110)).
   EIP-6122 requires the forks by timestamp to be scheduled at or after the forks by block.
 

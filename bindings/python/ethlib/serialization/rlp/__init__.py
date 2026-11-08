@@ -22,13 +22,7 @@ def decode(data: bytes) -> Any:
     return _native.rlp_decode(data)
 
 
-def _scalar(item: Item) -> int:
-    # A scalar is its bytes in base 256, most significant first.
-    assert isinstance(item, bytes)
-    return int.from_bytes(item, "big")
-
-
-def decode_as(kind: str, data: bytes):
+def decode_as(kind: str, data: bytes) -> Any:
     """
     The value of one type that the bytes encode.
 
@@ -41,14 +35,4 @@ def decode_as(kind: str, data: bytes):
     - "recipient": 20 bytes, or None for a contract creation;
     - "list_nat": a list of int.
     """
-    item = _native.rlp_decode_as(kind, data)
-    if kind in ("nat", "u256", "uint64"):
-        return _scalar(item)
-    if kind == "bool":
-        return _scalar(item) == 1
-    if kind == "recipient":
-        return item or None
-    if kind == "list_nat":
-        assert isinstance(item, list)
-        return [_scalar(x) for x in item]
-    return item
+    return _native.rlp_decode_as(kind, data)

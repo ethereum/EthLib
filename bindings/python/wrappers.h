@@ -427,6 +427,7 @@ PyObject* py_reqresp_encode_response_chunk                (PyObject* self, PyObj
 PyObject* py_block_header_hash                            (PyObject* self, PyObject* args);
 PyObject* py_block_reencode                               (PyObject* self, PyObject* args);
 PyObject* py_pow_block_difficulty                         (PyObject* self, PyObject* args);
+PyObject* py_pow_chain_forks                              (PyObject* self, PyObject* args);
 PyObject* py_pow_seal_hash                                (PyObject* self, PyObject* args);
 PyObject* py_pow_check                                    (PyObject* self, PyObject* args);
 PyObject* py_pow_validate_ommers                          (PyObject* self, PyObject* args);

@@ -41,7 +41,14 @@ def test_not_a_nibble() -> None:
     assert info.value.code == 0
 
 
-def test_not_a_byte() -> None:
-    # A value outside a byte never reaches the encoder.
-    with raises(OverflowError, "a nibble must be in [0, 256)"):
+def test_beyond_a_byte() -> None:
+    # Any value of 16 or more is not a nibble, a byte or not.
+    with raises(TrieError, "256 is not a nibble") as info:
         trie.hex_prefix([256], False)
+    assert info.value.code == 0
+
+
+def test_negative() -> None:
+    # A negative value never reaches Lean.
+    with raises(ValueError, "cannot pass a negative int to Lean"):
+        trie.hex_prefix([-1], False)

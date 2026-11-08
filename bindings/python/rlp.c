@@ -17,8 +17,7 @@ eth_rlp_decode(
 
 extern lean_object*
 eth_rlp_decode_as(
-  lean_object* kind,
-  lean_object* data
+  lean_object* args
 );
 
 /* ---- Items ------------------------------------------------------------ */
@@ -145,18 +144,5 @@ py_rlp_decode_as(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject* kind_obj;
-  PyObject* data_obj;
-  if (!PyArg_ParseTuple(args, "OO", &kind_obj, &data_obj)) return NULL;
-  if (!PyUnicode_Check(kind_obj)) {
-    PyErr_SetString(PyExc_TypeError, "kind must be str");
-    return NULL;
-  }
-  Py_ssize_t len;
-  const char* utf8 = PyUnicode_AsUTF8AndSize(kind_obj, &len);
-  if (!utf8) return NULL;
-  lean_object* data = bytes_of_py(data_obj, "data");
-  if (!data) return NULL;
-  lean_object* kind = mk_bytearray((const uint8_t*) utf8, len);
-  return except_into_pyitem(eth_rlp_decode_as(kind, data));
+  return call_pyvalue_export(eth_rlp_decode_as, args, 2, RLP_ERROR);
 }

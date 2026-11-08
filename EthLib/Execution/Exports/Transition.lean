@@ -27,14 +27,14 @@ The transition holds up to Glamsterdam, and fails from Hegotá as not yet specif
 
 The genesis export takes the name of a fork, the fields that the chain chooses and the state.
 
-The fields cross as an RLP list, and the block comes back in RLP form.
+The fields cross as a tuple of typed Python values, and the block comes back in RLP form.
 -/
 
 public section
 
 namespace EthLib.Execution.Blocks.Exports
 
-open EthLib.Exports (Result forkUpTo)
+open EthLib.Exports (Result PyValue forkUpTo pyExport)
 open EthLib.Base
 open EthLib.Serialization.Rlp
 open EthLib.Execution.Transactions.Exports (abortMessage inclusionMessage message oneLine
@@ -91,42 +91,38 @@ def stateTransitionExport (config state recent fork block : ByteArray) (checkSea
   (encode (Item.list [Codec.toItem root, .list accounts])).mapError
     fun e => (0, s!"result: {reprStr e}")
 
-/-- The fields of a genesis header that a chain chooses, from an RLP list.
+/-- The fields of a genesis header that a chain chooses, in the order of the header.
 
-They follow the order of the header.
+They are the beneficiary, difficulty, gas limit, time, extra data, mix hash and nonce.
 
-The beneficiary, difficulty, gas limit, time, extra data, mix hash and nonce come first.
+Then come the base fee, the excess blob gas and the slot number. -/
+abbrev GenesisFields :=
+  Address × Nat × Nat × U256 × ByteArray × Bytes32 × Bytes8 × Nat × UInt64 × UInt64
 
-The base fee, the excess blob gas and the slot number follow. -/
-def genesisParamsOfItem (item : Item) : Except RlpError GenesisParams := do
-  let n := 10
-  let items ← item.fields n
-  let (coinbase, items) ← Item.readField (α := Address) n items
-  let (difficulty, items) ← Item.readField (α := Nat) n items
-  let (gasLimit, items) ← Item.readField (α := Nat) n items
-  let (timestamp, items) ← Item.readField (α := U256) n items
-  let (extraData, items) ← Item.readField (α := ByteArray) n items
-  let (prevRandao, items) ← Item.readField (α := Bytes32) n items
-  let (nonce, items) ← Item.readField (α := Bytes8) n items
-  let (baseFeePerGas, items) ← Item.readField (α := Nat) n items
-  let (excessBlobGas, items) ← Item.readField (α := UInt64) n items
-  let (slotNumber, _) ← Item.readField (α := UInt64) n items
-  return { coinbase, difficulty, gasLimit, timestamp, extraData, prevRandao, nonce, baseFeePerGas,
-           excessBlobGas, slotNumber }
-
-/-- The genesis block at a fork, in RLP form.
-
-The chain chooses the fields `params` and starts with the state `state`. -/
-@[export eth_genesis_block]
-def genesisExport (fork params state : ByteArray) : Result ByteArray := do
-  let fork ← forkUpTo .glamsterdam fork
-  -- The inputs are read by the export itself, so their errors have code 0.
-  let params ← (Codec.decode params >>= genesisParamsOfItem).mapError
-    fun e => (0, s!"genesis fields rejected: {reprStr e}")
+/-- The genesis block at a fork, in RLP form, with the fields that the chain chooses. -/
+def genesisOf (args : String × GenesisFields × ByteArray) : Result ByteArray := do
+  let (fork, fields, state) := args
+  let (coinbase, difficulty, gasLimit, timestamp, extraData, prevRandao, nonce, baseFeePerGas,
+    excessBlobGas, slotNumber) := fields
+  let params : GenesisParams := {
+    coinbase := coinbase, difficulty := difficulty, gasLimit := gasLimit, timestamp := timestamp,
+    extraData := extraData, prevRandao := prevRandao, nonce := nonce,
+    baseFeePerGas := baseFeePerGas, excessBlobGas := excessBlobGas, slotNumber := slotNumber }
+  let fork ← forkUpTo .glamsterdam fork.toUTF8
+  -- The state is read by the export itself, so its errors have code 0.
   let alloc ← (State.Exports.ofInput state).mapError fun e => (0, e.message)
   let block ← (genesis fork params alloc).mapError fun e => (e.code, blockErrorMessage e)
   -- The body is empty, so its transactions take the form of RLP items.
   ({ block with transactions := ([] : List Item) }.encode).mapError
     fun e => (0, s!"result: {reprStr e}")
+
+/-- The genesis block at a fork, in RLP form.
+
+The arguments are the fork, the fields of the header that the chain chooses, and the state.
+
+The fields are in the order of the header, from the beneficiary to the slot number. -/
+@[export eth_genesis_block]
+def genesisExport (args : PyValue) : Result PyValue :=
+  pyExport genesisOf args
 
 end EthLib.Execution.Blocks.Exports
