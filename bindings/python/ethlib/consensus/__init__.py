@@ -1,6 +1,5 @@
 """The consensus layer: presets, configurations, containers, the shuffle, custody and networking."""
 
-import json
 from collections.abc import Sequence
 from typing import Any, Literal, TypeAlias
 
@@ -517,63 +516,29 @@ def gossip_validation(
     topic: str,
     messages: Sequence[tuple[int, int, bytes] | tuple[int, int, bytes, str]],
     verify: bool = True,
-    config: dict | None = None,
-    blocks: Sequence[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes]]
+    config: dict[str, Any] | None = None,
+    blocks: Sequence[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]]
     | None = None,
     finalized: tuple[int, bytes] | None = None,
 ) -> list[tuple[str, str | None]]:
     """The outcome of each gossip message of a topic, in turn, with the reason of a failure."""
     # A block after the anchor is (1 if failed, 2 if pending, else 0; payload status; SSZ bytes).
     # Kind 3 gives a block that the store holds already, such as the anchor, for its envelope.
-    # From Gloas the SSZ bytes of the signed envelope of its payload may follow.
-    block_records = b""
-    for kind, status, data, *envelope in blocks or []:
-        payload = envelope[0] if envelope else b""
-        block_records += (
-            bytes([kind, 255 if status is None else status])
-            + len(data).to_bytes(4, "little")
-            + data
-            + len(payload).to_bytes(4, "little")
-            + payload
-        )
-    checkpoint = b"" if finalized is None else finalized[0].to_bytes(8, "little") + finalized[1]
+    # From Gloas the SSZ bytes of the signed envelope of its payload may follow, or None for none.
     # A message is (arrival time in milliseconds, subnet ID, SSZ bytes).
     # A topic may follow, for a message of another topic than the case.
-    records = b""
-    for time, subnet, data, *rest in messages:
-        own_topic = rest[0].encode() if rest else b""
-        records += (
-            time.to_bytes(8, "little")
-            + subnet.to_bytes(8, "little")
-            + bytes([len(own_topic)])
-            + own_topic
-            + len(data).to_bytes(4, "little")
-            + data
-        )
-    replacements = json.dumps(config).encode() if config else b""
-    out = _native.consensus_gossip_validation(
+    return _native.consensus_gossip_validation(
         name,
         fork,
         anchor_state,
         anchor_block,
-        block_records,
-        checkpoint,
-        topic.encode(),
-        records,
-        replacements,
+        list(blocks or []),
+        finalized,
+        topic,
+        list(messages),
+        config,
         verify,
     )
-    outcomes, offset = [], 0
-    while offset < len(out):
-        status, offset = out[offset], offset + 1
-        if status == 0:
-            outcomes.append(("valid", None))
-            continue
-        length = int.from_bytes(out[offset : offset + 4], "little")
-        reason = out[offset + 4 : offset + 4 + length].decode()
-        outcomes.append(("ignore" if status == 1 else "reject", reason))
-        offset += 4 + length
-    return outcomes
 
 
 def initialize_genesis(

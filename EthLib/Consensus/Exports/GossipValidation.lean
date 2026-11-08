@@ -19,47 +19,41 @@ A C-ABI export that validates gossip messages of one topic, in turn, against one
 
 The store starts from an anchor state and a signed anchor block, given in SSZ.
 
-More signed blocks may follow the anchor, each as two bytes, a 4-byte length and that many bytes.
+The export takes the tuple of its arguments as typed Python values.
 
-The first byte marks a block that failed its transition with 1, or a pending block with 2.
+More signed blocks may follow the anchor, each a tuple of its kind, its payload status and bytes.
+
+The kind marks a block that failed its transition with 1, or a pending block with 2.
 
 The node knows such a block but holds no state after it.
 
-A first byte of 3 gives a block that the store holds already, such as the anchor, for its envelope.
+A kind of 3 gives a block that the store holds already, such as the anchor, for its envelope.
 
 The state after any other block is the state transition of the state of its parent.
 
-The second byte gives the status of the payload of the block, or 255 for none.
+The status of the payload is an integer, or none.
 
-From Gloas a block may come with the signed envelope of its payload, which the store then keeps.
+From Gloas a block may come with the signed envelope of its payload, as a fourth item.
 
-It follows the block as a 4-byte length and that many bytes, and a length of 0 means no envelope.
+The store then keeps the envelope, and none or empty bytes mean no envelope.
 
-An optional 40-byte checkpoint, an epoch and a root, replaces the finalized checkpoint.
+An optional checkpoint, an epoch and a root, replaces the finalized checkpoint.
 
 It replaces it in the store and in the state after each block, wherever the rules read it.
 
-A JSON object may replace values of the configuration, and an empty one keeps it.
+A `dict` may replace values of the configuration, and an empty one keeps it.
 
-The messages arrive one after another in one byte string.
+Each message is a tuple of the time of its arrival in milliseconds, a subnet ID and its SSZ bytes.
 
-Each message is the time of its arrival in milliseconds and a subnet ID, 8 bytes each.
+A topic may follow, for a message of another topic than the case.
 
-Then comes the topic of the message, as one byte of length and that many bytes of UTF-8.
-
-An empty topic is the topic of the case, and another topic must be specified at the fork too.
-
-Then come a 4-byte length and that many bytes of SSZ.
+That topic must be specified at the fork too, and an empty topic is the topic of the case.
 
 A topic that takes no subnet ignores its subnet ID.
 
 The messages share the keys of the messages seen, which each valid message extends.
 
-After each message comes one byte: 0 when it is valid, 1 when it is ignored, 2 when it is rejected.
-
-An ignore or a reject carries a 4-byte length and its reason in UTF-8.
-
-Numbers are little-endian.
+Each message gives `valid`, `ignore` or `reject`, and an ignore or a reject gives its reason.
 
 From Heze a valid inclusion list also joins the inclusion lists of the store, as timely.
 
@@ -73,7 +67,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz Networking.Gossip
-open EthLib.Exports (Result)
+open EthLib.Exports (Result PyValue FromPy fromPy pyExport)
 open Serialization.Ssz.Exports (runSsz)
 open Cryptography.Kzg.Exports (embeddedSetup)
 
@@ -88,62 +82,41 @@ structure GossipInput where
   /-- The SSZ bytes of the message. -/
   data : ByteArray
 
-/-- The messages that the bytes hold from an offset.
+/-- A message is a tuple of its time, its subnet and its bytes, then its topic if it has one. -/
+instance : FromPy GossipInput := ⟨fun v => do
+  match (← v.sequence).toList with
+  | [time, subnet, data] => return ⟨← fromPy time, ← fromPy subnet, "", ← fromPy data⟩
+  | [time, subnet, data, topic] =>
+    return ⟨← fromPy time, ← fromPy subnet, ← fromPy topic, ← fromPy data⟩
+  | _ => throw "a message is (time, subnet, bytes) or (time, subnet, bytes, topic)"⟩
 
-Each message reads at least 21 bytes, so one round more than the bytes suffices. -/
-def readGossipInputs : (rounds : Nat) → ByteArray → Nat → Result (List GossipInput)
-  | 0, _, _ => throw (0, "messages do not end")
-  | rounds + 1, bytes, offset =>
-    if offset = bytes.size then return []
-    else if short : bytes.size < offset + 21 then throw (0, "a message is cut short")
-    else do
-      let currentTimeMs ← decodeInput UInt64 (bytes.extract offset (offset + 8))
-      let subnetId ← decodeInput UInt64 (bytes.extract (offset + 8) (offset + 16))
-      let named := offset + 17 + (bytes[offset + 16]'(by omega)).toNat
-      if bytes.size < named + 4 then throw (0, "the topic of a message is cut short")
-      let some topic := String.fromUTF8? (bytes.extract (offset + 17) named)
-        | throw (0, "the topic of a message is not UTF-8")
-      let length := (← decodeInput UInt32 (bytes.extract named (named + 4))).toNat
-      let stop := named + 4 + length
-      if bytes.size < stop then throw (0, "the bytes of a message are cut short")
-      let rest ← readGossipInputs rounds bytes stop
-      return ⟨currentTimeMs, subnetId, topic, bytes.extract (named + 4) stop⟩ :: rest
-
-/-- The byte of an outcome, then the length and the text of its reason. -/
-def outcomeRecord : ValidationResult → ByteArray
-  | .accept => ByteArray.empty.push 0
-  | .ignore reason => ByteArray.empty.push 1 ++ littleEndian 4 reason.utf8ByteSize ++ reason.toUTF8
-  | .reject reason => ByteArray.empty.push 2 ++ littleEndian 4 reason.utf8ByteSize ++ reason.toUTF8
+/-- The name of an outcome, and its reason if it has one. -/
+def outcomeRecord : ValidationResult → String × Option String
+  | .accept => ("valid", none)
+  | .ignore reason => ("ignore", some reason)
+  | .reject reason => ("reject", some reason)
 
 /-- A block that follows the anchor of a case, with what the node knows of it. -/
 structure GossipBlockInput where
   /-- 1 for a failed block, 2 for a pending block, 3 for a block already held, 0 otherwise. -/
   kind : UInt8
-  /-- The status of the payload of the block, or 255 for none. -/
-  status : UInt8
+  /-- The status of the payload of the block, if the node has one. -/
+  status : Option UInt8
   /-- The SSZ bytes of the signed block. -/
   data : ByteArray
   /-- The SSZ bytes of the signed envelope of its payload, or none when empty. -/
   envelope : ByteArray
 
-/-- The blocks that the bytes hold from an offset.
+/-- A block is a tuple of its kind, the status of its payload or none, and its bytes.
 
-Each block reads at least 10 bytes, so one round more than the bytes suffices. -/
-def readGossipBlocks : (rounds : Nat) → ByteArray → Nat → Result (List GossipBlockInput)
-  | 0, _, _ => throw (0, "blocks do not end")
-  | rounds + 1, bytes, offset =>
-    if offset = bytes.size then return []
-    else if short : bytes.size < offset + 6 then throw (0, "a block is cut short")
-    else do
-      let length := (← decodeInput UInt32 (bytes.extract (offset + 2) (offset + 6))).toNat
-      let stop := offset + 6 + length
-      if bytes.size < stop + 4 then throw (0, "the bytes of a block are cut short")
-      let envelopeLength := (← decodeInput UInt32 (bytes.extract stop (stop + 4))).toNat
-      let next := stop + 4 + envelopeLength
-      if bytes.size < next then throw (0, "the bytes of an envelope are cut short")
-      let rest ← readGossipBlocks rounds bytes next
-      return ⟨bytes[offset]'(by omega), bytes[offset + 1]'(by omega),
-        bytes.extract (offset + 6) stop, bytes.extract (stop + 4) next⟩ :: rest
+The bytes of the envelope of its payload may follow, and none or empty bytes mean no envelope. -/
+instance : FromPy GossipBlockInput := ⟨fun v => do
+  match (← v.sequence).toList with
+  | [kind, status, data] => return ⟨← fromPy kind, ← fromPy status, ← fromPy data, .empty⟩
+  | [kind, status, data, envelope] =>
+    return ⟨← fromPy kind, ← fromPy status, ← fromPy data,
+      (← fromPy (α := Option ByteArray) envelope).getD .empty⟩
+  | _ => throw "a block is (kind, status, bytes) or (kind, status, bytes, envelope)"⟩
 
 /-- The store with the envelope of the payload of a block, from Gloas, when there is one.
 
@@ -177,7 +150,9 @@ def importGossipBlock {preset : Preset} {fork : Fork} (config : Config)
     (input : GossipBlockInput) : Result (Store preset fork × PayloadStatuses) := do
   let signed ← decodeInput (SignedBeaconBlock preset fork) input.data
   let root ← runSsz "block rejected" (SszType.hashTreeRoot signed.message)
-  let statuses := if input.status = 255 then statuses else statuses.insert root input.status
+  let statuses := match input.status with
+    | none => statuses
+    | some status => statuses.insert root status
   let store := { store with blocks := store.blocks.insert root signed.message }
   let store ← importGossipEnvelope store root input.envelope
   if input.kind ≠ 0 then return (store, statuses)
@@ -351,12 +326,12 @@ Kind 0 is a partial sidecar, whose column is the subnet field of the message.
 At Fulu a sidecar is checked against the recorded headers, and from Gloas against its block. -/
 def validatePartialInputs {preset : Preset} {fork : Fork} (config : Config)
     (checks : SignatureChecks) (store : Store preset fork) (inputs : List GossipInput) :
-    Result ByteArray := do
+    Result (List (String × Option String)) := do
   if fulu : .fusaka ≤ fork then
     let setup ← runForkChoice (embeddedSetup.mapError .kzg)
     let groupEnd := if .glamsterdam ≤ fork then 41 else 33
     let mut headers : PartialHeaders preset fork := []
-    let mut out := ByteArray.empty
+    let mut out := #[]
     for input in inputs do
       if input.data.size < groupEnd then throw (0, "a partial message is cut short")
       let group ← decodeInput (PartialDataColumnGroupID fork) (input.data.extract 1 groupEnd)
@@ -370,15 +345,15 @@ def validatePartialInputs {preset : Preset} {fork : Fork} (config : Config)
         if gloas : .glamsterdam ≤ fork then
           let outcome ← runForkChoice (validateGloasPartialDataColumnSidecar setup store gloas
             sidecar group input.subnetId)
-          out := out ++ outcomeRecord outcome
+          out := out.push (outcomeRecord outcome)
         else
           let (outcome, next) ← runForkChoice (validatePartialDataColumnSidecar config checks
             setup headers store ⟨fulu, Nat.lt_of_not_le gloas⟩ sidecar input.currentTimeMs group
             input.subnetId)
           headers := next
-          out := out ++ outcomeRecord outcome
+          out := out.push (outcomeRecord outcome)
       | _ => throw (0, "the kind of a partial message is 0 or 1")
-    return out
+    return out.toList
   else throw (0, "partial column sidecars travel only from Fulu")
 
 /-- From Heze: the store after a message, which keeps a valid inclusion list as timely.
@@ -401,35 +376,32 @@ def recordGossipInclusionList {preset : Preset} {fork : Fork} (store : Store pre
 /-- Validate the messages of a topic in turn, against the store of an anchor and later blocks.
 
 Every topic is specified here up to Heze. -/
-@[export eth_consensus_gossip_validation]
-def gossipValidationExport
-    (name fork anchorState anchorBlock blocks finalized topic messages replacements : ByteArray)
-    (verify : Bool) :
-    Result ByteArray := do
-  let preset ← presetOf (← nameOf name)
-  let fork ← forkOf fork
-  let config ← configWith name replacements
+def gossipValidationOf (args : String × String × ByteArray × ByteArray × List GossipBlockInput ×
+    Option (UInt64 × Root) × String × List GossipInput × Option PyValue × Bool) :
+    Result (List (String × Option String)) := do
+  let (name, fork, anchorState, anchorBlock, blocks, finalized, topic, inputs, replacements,
+    verify) := args
+  let preset ← presetOf name
+  let fork ← forkOf fork.toUTF8
+  let config ← configWithValue name replacements
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
-  let some topic := String.fromUTF8? topic | throw (0, "the topic is not UTF-8")
   unless gossipValidationSpecified fork topic do
     throw (0, s!"gossip validation of the topic {topic} at {fork.name} is not yet specified")
   let anchorState ← decodeInput (BeaconState preset fork) anchorState
   let anchorBlock ← decodeInput (SignedBeaconBlock preset fork) anchorBlock
   let mut store ← runForkChoice (getForkchoiceStore config anchorState anchorBlock.message)
   let mut statuses : PayloadStatuses := {}
-  for input in ← readGossipBlocks (blocks.size + 1) blocks 0 do
+  for input in blocks do
     (store, statuses) ← importGossipBlock config checks store statuses input
-  if finalized.size = 40 then
-    let checkpoint ← decodeInput Checkpoint finalized
+  if let some (epoch, root) := finalized then
+    let checkpoint : Checkpoint := { epoch, root }
     let blockStates := store.blockStates.map fun _ state =>
       { state with finalizedCheckpoint := checkpoint }
     store := { store with finalizedCheckpoint := checkpoint, blockStates }
-  else if finalized.size ≠ 0 then throw (0, "the finalized checkpoint is not 40 bytes")
-  let inputs ← readGossipInputs (messages.size + 1) messages 0
   if topic = "partial_data_column_sidecar" then
     return ← validatePartialInputs config checks store inputs
   let mut seen : Seen := {}
-  let mut out := ByteArray.empty
+  let mut out := #[]
   for input in inputs do
     let messageTopic := if input.topic.isEmpty then topic else input.topic
     unless gossipValidationSpecified fork messageTopic do
@@ -438,8 +410,20 @@ def gossipValidationExport
     let (outcome, next) ←
       validateGossipInput config checks store statuses messageTopic seen input
     seen := next
-    out := out ++ outcomeRecord outcome
+    out := out.push (outcomeRecord outcome)
     store ← recordGossipInclusionList store messageTopic outcome input
-  return out
+  return out.toList
+
+/-- Validate the messages of a topic in turn, against the store of an anchor and later blocks.
+
+The arguments are the names of the preset and the fork, the anchor state and the anchor block.
+
+Then come the later blocks, the finalized checkpoint or none, the topic and the messages.
+
+Then come replacements of values of the configuration, and whether the signature checks run.
+
+Every topic is specified here up to Heze. -/
+@[export eth_consensus_gossip_validation]
+def gossipValidationExport (args : PyValue) : Result PyValue := pyExport gossipValidationOf args
 
 end EthLib.Consensus.Exports
