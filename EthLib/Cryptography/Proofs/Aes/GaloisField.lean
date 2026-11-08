@@ -24,7 +24,7 @@ The reduction modulus is `1 + u + u^2 + u^7 + u^128`, the polynomial of `R || 1`
 
 The section calls this ring the field of `2^128` elements.
 
-No theorem here proves that the modulus is irreducible, so none proves that the ring is a field.
+`Proofs/Aes/Field.lean` proves that the modulus is irreducible, so the ring is that field.
 -/
 
 @[expose] public section
