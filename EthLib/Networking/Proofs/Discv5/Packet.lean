@@ -18,7 +18,9 @@ Properties of the discv5 packet encoding.
 - The additional data of a message is the masking IV and the unmasked bytes up to the message.
 - A destination reads that additional data from the packet bytes and their masking IV.
 - A message that the encryption writes decrypts back, also after encoding and decoding.
+- A message that decrypts is the encryption of its plaintext.
 - A sealed message packet decodes back and opens to its plaintext.
+- A decoded packet that opens under a key seals to its packet bytes under that key.
 -/
 
 @[expose] public section
@@ -623,6 +625,21 @@ theorem decryptMessage_encryptMessage {key : Aes.Key .aes128} {nonce : Vector UI
       ByteArray.extract_append_eq_right rfl (by rw [ByteArray.size_append])]
     exact Aes.Gcm.decrypt_encrypt _ _ _ _ _ _ _ he
 
+/-- A message that decrypts is the encryption of its plaintext.
+
+The encryption uses the same key, nonce and additional data. -/
+theorem encryptMessage_of_decryptMessage {key : Aes.Key .aes128} {nonce : Vector UInt8 12}
+    {message ad plaintext : ByteArray}
+    (h : decryptMessage key nonce message ad = .ok plaintext) :
+    encryptMessage key nonce plaintext ad = .ok message := by
+  unfold decryptMessage at h
+  have he := Aes.Gcm.encrypt_eq_ok_of_decrypt_eq_ok _ _ _ _ _ _ _ h
+  have hjoin : message.extract 0 (message.size - TAG_SIZE) ++
+      message.extract (message.size - TAG_SIZE) message.size = message := by
+    rw [← ByteArray.extract_eq_extract_append_extract (message.size - TAG_SIZE) (Nat.zero_le _)
+      (Nat.sub_le _ _), ByteArray.extract_zero_size]
+  simp only [encryptMessage, he, bind, Except.bind, pure, Except.pure, hjoin]
+
 /-- A message that a sender encrypts and encodes decrypts back at the destination.
 
 The destination decodes the packet, then decrypts with its nonce and additional data. -/
@@ -671,6 +688,34 @@ theorem openPacket_sealPacket {ε : Type} {packetError : PacketError → ε}
           simpa [Packet.messageAd] using ha
         simp only [openPacket, had, decryptMessage_encryptMessage hm, Except.mapError, bind,
           Except.bind]
+
+/-- A decoded packet that opens under a key seals to its packet bytes under that key.
+
+The sealing reuses the masking IV and the header of the packet. -/
+theorem sealPacket_of_openPacket {ε ε' : Type} {packetError : PacketError → ε}
+    {decryptionError : Aes.Gcm.Error → ε} {packetError' : PacketError → ε'}
+    {encryptionError : Aes.Gcm.Error → ε'} {key : Aes.Key .aes128} {destId : NodeId}
+    {packet : Packet} {bytes plaintext : ByteArray}
+    (hd : Packet.decode destId bytes = .ok packet)
+    (ho : openPacket packetError decryptionError key packet = .ok plaintext) :
+    sealPacket packetError' encryptionError key destId packet.maskingIv packet.header
+      plaintext = .ok bytes := by
+  unfold openPacket at ho
+  cases ha : packet.messageAd with
+  | error err => simp [ha, Except.mapError, bind, Except.bind] at ho
+  | ok ad =>
+    simp only [ha, Except.mapError, bind, Except.bind] at ho
+    cases hm : decryptMessage key packet.header.nonce packet.message ad with
+    | error err => simp [hm] at ho
+    | ok plain =>
+      simp only [hm, Except.ok.injEq] at ho
+      subst ho
+      have had : Packet.messageAd ⟨packet.maskingIv, packet.header, .empty⟩ = .ok ad := by
+        simpa [Packet.messageAd] using ha
+      have henc := Packet.encode_of_decode hd
+      obtain ⟨iv, header, message⟩ := packet
+      simp only [sealPacket, had, encryptMessage_of_decryptMessage hm, henc, Except.mapError,
+        bind, Except.bind]
 
 /-! ## Error codes -/
 
