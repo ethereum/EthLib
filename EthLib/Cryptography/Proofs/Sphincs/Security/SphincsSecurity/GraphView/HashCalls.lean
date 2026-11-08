@@ -14,9 +14,11 @@ This module counts the hash calls of the honest seeded computations on a fixed a
 
 It covers chains, one-time keys, tree and FORS nodes, encodings, message digests and signing.
 
-One seed derivation gives the starts of two chains, so a one-time key costs `32 + 64 · 3 = 224`.
+Every chain start and every FORS secret is one `PRF` call.
 
-A FORS pair of leaves costs one derivation and two hashes.
+So a one-time key costs `64 + 64 · 3 = 256` hash calls.
+
+A FORS leaf costs its secret and its hash.
 -/
 
 open OracleComp OracleSpec
@@ -61,10 +63,16 @@ omit [Params] in
     hashCalls f (deriveKey parameter domain seed : OracleComp HashSpec Digest) = 1 := by
   simp only [deriveKey, hashCalls_bind, hashCalls_oracleHash, hashCalls_pure, Nat.add_zero]
 
-@[simp] theorem hashCalls_deriveOutput (f : QueryImpl HashSpec Id)
-    (parameter : PublicParameter) (domain : KeygenDomain) (seed : MasterSeed) :
-    hashCalls f (deriveOutput parameter domain seed : OracleComp HashSpec HashOutput) = 1 := by
-  simp only [deriveOutput, hashCalls_oracleHash]
+-- The body returns a `Digest`, not a `PublicParameter`, so `rw` cannot match the bind lemma.
+omit [Params] in
+@[simp] theorem hashCalls_derivePublicSeed (f : QueryImpl HashSpec Id) (seed : MasterSeed) :
+    hashCalls f (derivePublicSeed seed : OracleComp HashSpec PublicParameter) = 1 :=
+  (hashCalls_bind f (oracleHash (keySeedInput seed 0)) _).trans (by rw [hashCalls_oracleHash]; rfl)
+
+omit [Params] in
+@[simp] theorem hashCalls_derivePrf (f : QueryImpl HashSpec Id) (seed : MasterSeed) :
+    hashCalls f (derivePrf seed : OracleComp HashSpec HashOutput) = 1 := by
+  simp only [derivePrf, hashCalls_oracleHash]
 
 omit [Params] in
 theorem hashCalls_sequenceFin {α : Type} {n : Nat} (f : QueryImpl HashSpec Id)
@@ -87,20 +95,19 @@ theorem hashCalls_chainWalk (f : QueryImpl HashSpec Id) (parameter : PublicParam
       rw [chainWalk, hashCalls_bind, dite_eq_left (by omega), hashCalls_tweakableHash,
         ih _ _ (by omega)]
 
-/-- The 64 chain starts of a one-time key cost 32 seed derivations. -/
+/-- The 64 chain starts of a one-time key cost 64 seed derivations. -/
 theorem hashCalls_otsSecrets (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
     (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (seed : MasterSeed) :
     hashCalls f (Seeded.otsSecrets parameter lay tree leaf seed :
-      OracleComp HashSpec (ChainIndex → Digest)) = 32 := by
-  simp only [Seeded.otsSecrets, hashCalls_bind, hashCalls_sequenceFin, hashCalls_deriveOutput,
-    hashCalls_pure]
+      OracleComp HashSpec (ChainIndex → Digest)) = 64 := by
+  simp only [Seeded.otsSecrets, hashCalls_sequenceFin, hashCalls_deriveKey]
   decide
 
-/-- A one-time key costs `32 + 64 · 3 = 224` calls. -/
+/-- A one-time key costs `64 + 64 · 3 = 256` calls. -/
 theorem hashCalls_oneTimePublicKey (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
     (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (seed : MasterSeed) :
     hashCalls f (Seeded.oneTimePublicKey parameter lay tree leaf seed :
-      OracleComp HashSpec (ChainIndex → Digest)) = 224 := by
+      OracleComp HashSpec (ChainIndex → Digest)) = 256 := by
   simp only [Seeded.oneTimePublicKey, hashCalls_sequenceFin, hashCalls_bind, hashCalls_otsSecrets]
   have walk (chain : ChainIndex) (value : Digest) :
       hashCalls f (chainWalk parameter lay tree leaf chain 0 (chainLength - 1) value :
@@ -113,7 +120,7 @@ theorem hashCalls_treeNode (f : QueryImpl HashSpec Id) (parameter : PublicParame
     (lay : Layer) (tree : TreeIndex) (seed : MasterSeed) (level nodeIdx : Nat) :
     hashCalls f (Seeded.treeNode parameter lay tree seed level nodeIdx :
       OracleComp HashSpec Digest) =
-      226 * 2 ^ level - 1 := by
+      258 * 2 ^ level - 1 := by
   induction level generalizing nodeIdx with
   | zero => simp [Seeded.treeNode, hashCalls_bind, hashCalls_oneTimePublicKey, leafHash]
   | succ level ih =>
@@ -122,48 +129,41 @@ theorem hashCalls_treeNode (f : QueryImpl HashSpec Id) (parameter : PublicParame
       rw [pow_succ]
       omega
 
-/-- A FORS node at level `level + 1` costs `5 · 2^level - 1` hash calls.
+/-- A FORS node at level `level ≤ a` costs `3 · 2^level - 1` hash calls.
 
-Each pair of leaves costs one derivation and two hashes. -/
+Each of its `2^level` leaves costs a secret and a hash, and each node above them costs one hash. -/
 theorem hashCalls_forsNode (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
     (index : Index) (κ : FTree) (seed : MasterSeed) (level node : Nat)
-    (hlevel : level < forsHeight) :
-    hashCalls f (Seeded.forsNode parameter index κ seed (level + 1) node :
-      OracleComp HashSpec Digest) =
-      5 * 2 ^ level - 1 := by
+    (hlevel : level ≤ forsHeight) :
+    hashCalls f (Seeded.forsNode parameter index κ seed level node : OracleComp HashSpec Digest) =
+      3 * 2 ^ level - 1 := by
   induction level generalizing node with
   | zero =>
-      rw [Seeded.forsNode, hashCalls_bind, hashCalls_deriveOutput, hashCalls_bind, forsLeafHash,
-        hashCalls_tweakableHash, hashCalls_bind, forsLeafHash, hashCalls_tweakableHash,
+      rw [Seeded.forsNode, hashCalls_bind, Seeded.forsSecret, hashCalls_deriveKey, forsLeafHash,
         hashCalls_tweakableHash]
       rfl
   | succ level ih =>
-      rw [Seeded.forsNode, hashCalls_bind, hashCalls_bind, dite_eq_left hlevel,
+      rw [Seeded.forsNode, hashCalls_bind, hashCalls_bind, dite_eq_left (by omega),
         hashCalls_tweakableHash, ih _ (by omega), ih _ (by omega)]
       have hp : 0 < 2 ^ level := Nat.two_pow_pos level
       rw [pow_succ]
       omega
 
-/-- The FORS key of `k` trees of height `a` costs `k · 2 · (5 · 2^(a - 2) - 1)` hash calls.
+/-- The FORS public key of `k` trees of height `a` costs `k · (3 · 2^a - 1) + 1` hash calls.
 
-The cost covers the two nodes at level `a - 1` of each tree.
-
-The roots of the trees and the key itself cost no hash call. -/
+Each tree costs `3 · 2^a - 1` calls up to its root, and `T_k` of the roots costs one more. -/
 theorem hashCalls_forsKey (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
     (index : Index) (seed : MasterSeed) :
-    hashCalls f (Seeded.forsKey parameter index seed : OracleComp HashSpec ForsKey) =
-      forsTrees * (2 * (5 * 2 ^ (forsHeight - 2) - 1)) := by
-  have ha := Params.forsHeight_ge
-  have htop (κ : FTree) (node : Nat) :
-      hashCalls f (Seeded.forsNode parameter index κ seed (forsHeight - 1) node :
+    hashCalls f (Seeded.forsKey parameter index seed : OracleComp HashSpec Digest) =
+      forsTrees * (3 * 2 ^ forsHeight - 1) + 1 := by
+  have hroot (κ : FTree) :
+      hashCalls f (Seeded.forsNode parameter index κ seed forsHeight 0 :
         OracleComp HashSpec Digest) =
-        5 * 2 ^ (forsHeight - 2) - 1 := by
-    have h := hashCalls_forsNode f parameter index κ seed (forsHeight - 2) node (by omega)
-    rwa [show forsHeight - 2 + 1 = forsHeight - 1 by omega] at h
-  rw [Seeded.forsKey, hashCalls_sequenceFin]
-  simp only [hashCalls_bind, hashCalls_pure, htop, Finset.sum_const, Finset.card_univ,
-    Fintype.card_fin, smul_eq_mul]
-  ring
+        3 * 2 ^ forsHeight - 1 :=
+    hashCalls_forsNode f parameter index κ seed forsHeight 0 le_rfl
+  rw [Seeded.forsKey, hashCalls_bind, hashCalls_sequenceFin, forsPublicKey,
+    hashCalls_tweakableHash]
+  simp only [hroot, Finset.sum_const, Finset.card_univ, Fintype.card_fin, smul_eq_mul]
 
 theorem hashCalls_encode (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
     (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (message : HashInput)
@@ -172,37 +172,12 @@ theorem hashCalls_encode (f : QueryImpl HashSpec Id) (parameter : PublicParamete
       OracleComp HashSpec (Option Encoding)) = 1 := by
   simp only [encode, hashCalls_bind, hashCalls_tweakableHash, hashCalls_pure, Nat.add_zero]
 
-/-- The cost of running the computations from the last index down, up to the first failure. -/
+/-- The cost of running the computations from the last index down, through the first failure. -/
 def seqCost : {n : Nat} → (Fin n → Bool) → (Fin n → Nat) → Nat
   | 0, _, _ => 0
   | _ + 1, ok, cost =>
       cost (Fin.last _) + if ok (Fin.last _) then
         seqCost (fun i => ok i.castSucc) (fun i => cost i.castSucc) else 0
-
-omit [Params] in
-theorem hashCalls_sequenceDep (f : QueryImpl HashSpec Id) : ∀ {n : Nat} {α : Fin n → Type}
-    (computation : (i : Fin n) → OracleComp HashSpec (Option (α i))),
-    hashCalls f (sequenceDep computation) =
-      seqCost (fun i => (evalWithAnswerFn f (computation i)).isSome)
-        (fun i => hashCalls f (computation i))
-  | 0, _, _ => rfl
-  | n + 1, α, computation => by
-      simp only [sequenceDep, hashCalls_bind, seqCost]
-      cases hhead : evalWithAnswerFn f (computation (Fin.last n)) with
-      | none => simp only [hashCalls_pure, Option.isSome_none, Bool.false_eq_true, ↓reduceIte]
-      | some head =>
-          simp only [hashCalls_bind, Option.isSome_some, ↓reduceIte,
-            hashCalls_sequenceDep f (α := fun i => α i.castSucc) fun i => computation i.castSucc]
-          cases evalWithAnswerFn f
-              (sequenceDep (α := fun i => α i.castSucc) fun i => computation i.castSucc) <;>
-            simp only [hashCalls_pure, Nat.add_zero]
-
-theorem hashCalls_sequenceLayers {α : Layer → Type} (f : QueryImpl HashSpec Id)
-    (computation : (lay : Layer) → OracleComp HashSpec (Option (α lay))) :
-    hashCalls f (sequenceLayers computation) =
-      seqCost (fun lay => (evalWithAnswerFn f (computation lay)).isSome)
-        (fun lay => hashCalls f (computation lay)) :=
-  hashCalls_sequenceDep f computation
 
 theorem hashCalls_messageDigestCall (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
     (root : Digest) (message : Message) (randomness : Randomness) (call : DigestCall) :
@@ -289,9 +264,9 @@ end
 section
 
 /-!
-The exact hash cost of key generation: the parameter, the top kept subtree and its spine.
+The exact hash cost of key generation: `PK.seed`, `SK.prf`, the top kept subtree and its spine.
 
-Key generation costs `226 · 2^k + 2 · (h - k)` hash calls.
+Key generation costs `258 · 2^k + 1 + 2 · (h - k)` hash calls.
 
 Here `h` is the height of the top layer and `k` is the height of its kept subtree.
 -/
@@ -305,16 +280,12 @@ open Concrete Completeness SeedModel
 
 attribute [local irreducible] Seeded.treeNode Seeded.spineNode Seeded.treeRoot
   programCache
--- Key generation passes its parameter as a truncated hash output.
-
--- The simplifier must see its type as the parameter type to use the count of the tree root.
-set_option backward.isDefEq.respectTransparency false
 
 theorem hashCalls_spineNode (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
     (lay : Layer) (tree : TreeIndex) (seed : MasterSeed) (steps : Nat)
     (hsteps : steps ≤ layerHeight lay - keptHeight lay) :
     hashCalls f (Seeded.spineNode parameter lay tree seed steps : OracleComp HashSpec Digest) =
-      (226 * 2 ^ keptHeight lay - 1) + 2 * steps := by
+      (258 * 2 ^ keptHeight lay - 1) + 2 * steps := by
   induction steps with
   | zero => simp only [Seeded.spineNode, hashCalls_treeNode, Nat.mul_zero, Nat.add_zero]
   | succ steps ih =>
@@ -329,18 +300,18 @@ theorem hashCalls_spineNode (f : QueryImpl HashSpec Id) (parameter : PublicParam
 theorem hashCalls_treeRoot (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
     (lay : Layer) (tree : TreeIndex) (seed : MasterSeed) :
     hashCalls f (Seeded.treeRoot parameter lay tree seed : OracleComp HashSpec Digest) =
-      (226 * 2 ^ keptHeight lay - 1) + 2 * (layerHeight lay - keptHeight lay) := by
+      (258 * 2 ^ keptHeight lay - 1) + 2 * (layerHeight lay - keptHeight lay) := by
   rw [Seeded.treeRoot, hashCalls_spineNode f _ _ _ seed _ (le_refl _)]
 
-/-- The hash calls of key generation: the parameter, the top kept subtree and its spine. -/
+/-- The hash calls of key generation: `PK.seed`, `SK.prf`, the top kept subtree and its spine. -/
 def keygenHashCost : Nat :=
-  226 * 2 ^ keptHeight topLayer + 2 * (layerHeight topLayer - keptHeight topLayer)
+  258 * 2 ^ keptHeight topLayer + 1 + 2 * (layerHeight topLayer - keptHeight topLayer)
 
 theorem hashCalls_keygenFromSeed (f : QueryImpl HashSpec Id) (seed : MasterSeed) :
     hashCalls f (Seeded.keygenFromSeed seed) = keygenHashCost := by
   unfold keygenHashCost
-  simp only [Seeded.keygenFromSeed, hashCalls_bind, hashCalls_deriveKey, hashCalls_treeRoot,
-    hashCalls_pure, Nat.add_zero]
+  simp only [Seeded.keygenFromSeed, hashCalls_bind, hashCalls_derivePublicSeed,
+    hashCalls_derivePrf, hashCalls_treeRoot, hashCalls_pure, Nat.add_zero]
   have := Nat.two_pow_pos (keptHeight topLayer)
   omega
 

@@ -2,13 +2,14 @@ module
 
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Scheme.Pruning
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Scheme.DigestView
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Scheme.Landing
 
 /-!
 # Correctness of the scheme
 
 Every signature that the signer returns verifies, under every fixed hash function.
 
-This holds for every height and shape of the key, the kept subtree of a pruned key included.
+This holds for every height and shape of the key, each of which builds the whole top layer.
 -/
 
 @[expose] public section
@@ -42,7 +43,8 @@ theorem signLayer_spec (secretKey : Seeded.SecretKey) (index : Index) (lay : Lay
       ∧ part.path = evalWithAnswerFn f (Seeded.treePath secretKey.parameter lay
           (treeIndexAt index lay) secretKey.seed (leafIndexAt index lay)
           : OracleComp HashSpec (Fin (layerHeight lay) → Digest)) := by
-  simp only [layerMessageValue, Seeded.signLayer, evalWithAnswerFn_bind] at h ⊢
+  simp only [layerMessageValue, Seeded.signLayer, Seeded.signLayerWith,
+    evalWithAnswerFn_bind] at h ⊢
   cases hots : evalWithAnswerFn f (otsSign secretKey.parameter lay (treeIndexAt index lay)
       (leafIndexAt index lay) secretKey.seed
       (evalWithAnswerFn f (Seeded.layerMessage secretKey index lay : OracleComp HashSpec HashInput))
@@ -73,10 +75,10 @@ theorem layerMessageValue_above (secretKey : Seeded.SecretKey) (index : Index) (
   simp only [layerMessageValue, Seeded.layerMessage, Seeded.keyMessage, dite_eq_left hbelow,
     evalWithAnswerFn_bind, evalWithAnswerFn_pure, childTree_path_above index lay hbelow]
 
-/-- The message of the bottom layer is the FORS key. -/
+/-- The message of the bottom layer is the FORS public key. -/
 theorem layerMessageValue_bottom (secretKey : Seeded.SecretKey) (index : Index) :
-    layerMessageValue f secretKey index bottomLayer = rootsPayload (evalWithAnswerFn f
-      (Seeded.forsKey secretKey.parameter index secretKey.seed : OracleComp HashSpec ForsKey)) := by
+    layerMessageValue f secretKey index bottomLayer = rootPayload (evalWithAnswerFn f
+      (Seeded.forsKey secretKey.parameter index secretKey.seed : OracleComp HashSpec Digest)) := by
   have h : ¬(bottomLayer.val + 1 < numLayers) := by
     change ¬(numLayers - 1 + 1 < numLayers); have := numLayers_pos; omega
   simp only [layerMessageValue, Seeded.layerMessage, Seeded.keyMessage, dite_eq_right h,
@@ -88,60 +90,12 @@ def digestValue (secretKey : Seeded.SecretKey) (message : Message) (randomness :
   evalWithAnswerFn f (messageDigest secretKey.parameter secretKey.root message randomness
     : OracleComp HashSpec MessageDigest)
 
-theorem digestValue_index (secretKey : Seeded.SecretKey) (message : Message)
-    (randomness : Randomness) :
-    digestIndex (digestValue f secretKey message randomness) =
-      blockIndex (evalWithAnswerFn f (messageDigestCall secretKey.parameter secretKey.root
-        message randomness firstCall : OracleComp HashSpec HashOutput)) := by
-  simp only [digestValue, messageDigest, evalWithAnswerFn_bind, evalWithAnswerFn_pure,
-    eval_sequenceFin, Concrete.digestIndex_truncate]
-
 theorem signDigestLoop_spec (secretKey : Seeded.SecretKey) (message : Message) (step : Randomness) :
     ∀ (attempts : Nat) (start : Randomness) {randomness : Randomness} {index : Index},
       evalWithAnswerFn f (Seeded.signDigestLoop secretKey message step attempts start
         : OracleComp HashSpec (Option (Randomness × Index))) = some (randomness, index) →
-      Landed secretKey.parameter (digestIndex (digestValue f secretKey message randomness)) := by
-  intro attempts
-  induction attempts with
-  | zero => intro start randomness index h; simp [Seeded.signDigestLoop] at h
-  | succ attempts ih =>
-      intro start randomness index h
-      simp only [Seeded.signDigestLoop, Seeded.signAttempt, evalWithAnswerFn_bind] at h
-      split at h
-      next hl =>
-        simp only [evalWithAnswerFn_pure, Option.some.injEq, Prod.mk.injEq] at h
-        rw [digestValue_index, ← h.1]
-        by_contra hh
-        simp only [ite_eq_right hh, evalWithAnswerFn_pure] at hl
-        contradiction
-      next => exact ih (start + step) h
-
-omit [Params] in
-theorem sequenceDep_spec : ∀ {n : Nat} {α : Fin n → Type}
-    (computation : (i : Fin n) → OracleComp HashSpec (Option (α i))) {results : (i : Fin n) → α i},
-    evalWithAnswerFn f (sequenceDep computation) = some results →
-      ∀ i, evalWithAnswerFn f (computation i) = some (results i)
-  | 0, _, _, _, _ => fun i => Fin.elim0 i
-  | n + 1, α, computation, results, h => by
-      simp only [sequenceDep, evalWithAnswerFn_bind] at h
-      cases hhead : evalWithAnswerFn f (computation (Fin.last n)) with
-      | none => rw [hhead] at h; simp at h
-      | some head =>
-          rw [hhead] at h
-          simp only [evalWithAnswerFn_bind] at h
-          cases htail : evalWithAnswerFn f
-              (sequenceDep (α := fun i => α i.castSucc) fun i => computation i.castSucc) with
-          | none => rw [htail] at h; simp at h
-          | some tail =>
-              rw [htail] at h
-              simp only [evalWithAnswerFn_pure, Option.some.injEq] at h
-              subst h
-              intro i
-              refine Fin.lastCases ?_ (fun j => ?_) i
-              · simpa using hhead
-              · simpa using sequenceDep_spec (α := fun i => α i.castSucc)
-                  (fun i => computation i.castSucc)
-                  htail j
+      Landed secretKey.parameter (digestIndex (digestValue f secretKey message randomness)) :=
+  fun _ _ _ _ _ => landed_full _ _
 
 /-- All the values if every one is present, and `none` otherwise. -/
 def allSome {n : Nat} {α : Fin n → Type} (values : (i : Fin n) → Option (α i)) :
@@ -164,31 +118,71 @@ theorem allSome_map {n : Nat} {α β : Fin n → Type} (values : (i : Fin n) →
     rfl
 
 omit [Params] in
-theorem eval_sequenceDep : ∀ {n : Nat} {α : Fin n → Type}
-    (computation : (i : Fin n) → OracleComp HashSpec (Option (α i))),
-    evalWithAnswerFn f (sequenceDep computation) =
-      allSome fun i => evalWithAnswerFn f (computation i)
-  | 0, _, _ => by
-      simp only [sequenceDep, evalWithAnswerFn_pure, allSome]
+/-- If all the values are present, each of them is the matching entry of the result. -/
+theorem allSome_spec {n : Nat} {α : Fin n → Type} {values : (i : Fin n) → Option (α i)}
+    {results : (i : Fin n) → α i} (h : allSome values = some results) :
+    ∀ i, values i = some (results i) := by
+  unfold allSome at h
+  split at h
+  next hall =>
+      simp only [Option.some.injEq] at h
+      subst h
+      intro i
+      simp
+  next => exact absurd h (by simp)
+
+omit [Params] in
+/-- Under fixed answers, the threaded sequence gives the values of its computations.
+
+Each computation starts from the state at its index.
+
+Every computation but the one at index 0 hands on the state of the index below it. -/
+theorem eval_sequenceThread {σ : Type} (state : Nat → σ) : ∀ {n : Nat} {α : Fin n → Type}
+    (computation : (i : Fin n) → σ → OracleComp HashSpec (Option (α i × σ))),
+    (∀ (i : Fin n) (value : α i) (next : σ), i.val ≠ 0 →
+      evalWithAnswerFn f (computation i (state i.val)) = some (value, next) →
+        next = state (i.val - 1)) →
+    evalWithAnswerFn f (sequenceThread computation (state (n - 1))) =
+      allSome fun i => (evalWithAnswerFn f (computation i (state i.val))).map Prod.fst
+  | 0, _, _, _ => by
+      simp only [sequenceThread, evalWithAnswerFn_pure, allSome]
       rw [dite_eq_left (fun i => Fin.elim0 i)]
       congr 1
       funext i
       exact Fin.elim0 i
-  | n + 1, α, computation => by
-      simp only [sequenceDep, evalWithAnswerFn_bind]
-      have ih := eval_sequenceDep (α := fun i => α i.castSucc) fun i => computation i.castSucc
-      cases hhead : evalWithAnswerFn f (computation (Fin.last n)) with
+  | n + 1, α, computation, hnext => by
+      have ih := eval_sequenceThread state (α := fun i => α i.castSucc)
+        (fun i => computation i.castSucc) (fun i => hnext i.castSucc)
+      rw [Nat.add_sub_cancel]
+      simp only [sequenceThread, evalWithAnswerFn_bind]
+      cases hhead : evalWithAnswerFn f (computation (Fin.last n) (state n)) with
       | none =>
           simp only [evalWithAnswerFn_pure, allSome]
           rw [dite_eq_right (fun h => by simpa [hhead] using h (Fin.last n))]
-      | some head =>
-          simp only [evalWithAnswerFn_bind, ih, allSome]
-          by_cases hall : ∀ i : Fin n, (evalWithAnswerFn f (computation i.castSucc)).isSome
+      | some pair =>
+          obtain ⟨last, next⟩ := pair
+          have hstate : evalWithAnswerFn f (sequenceThread (α := fun i => α i.castSucc)
+              (fun i => computation i.castSucc) next) =
+              allSome fun i : Fin n => (evalWithAnswerFn f (computation i.castSucc
+                (state i.val))).map Prod.fst := by
+            rcases Nat.eq_zero_or_pos n with hn | hn
+            · subst hn
+              simp only [sequenceThread, evalWithAnswerFn_pure, allSome]
+              rw [dite_eq_left (fun i => Fin.elim0 i)]
+              congr 1
+              funext i
+              exact Fin.elim0 i
+            · rw [hnext (Fin.last n) last next (by simp; omega) hhead]
+              exact ih
+          simp only [evalWithAnswerFn_bind, hstate, allSome]
+          by_cases hall : ∀ i : Fin n,
+              ((evalWithAnswerFn f (computation i.castSucc (state i.val))).map Prod.fst).isSome
           · rw [dite_eq_left hall]
             simp only [evalWithAnswerFn_pure]
-            have hall' : ∀ i : Fin (n + 1), (evalWithAnswerFn f (computation i)).isSome := by
+            have hall' : ∀ i : Fin (n + 1),
+                ((evalWithAnswerFn f (computation i (state i.val))).map Prod.fst).isSome := by
               intro i
-              refine Fin.lastCases ?_ (fun j => hall j) i
+              refine Fin.lastCases ?_ (fun j => by simpa using hall j) i
               simp [hhead]
             rw [dite_eq_left hall']
             congr 1
@@ -198,14 +192,142 @@ theorem eval_sequenceDep : ∀ {n : Nat} {α : Fin n → Type}
             · simp
           · rw [dite_eq_right hall]
             simp only [evalWithAnswerFn_pure]
-            rw [dite_eq_right (fun h => hall fun i => h i.castSucc)]
+            rw [dite_eq_right (fun h => hall fun i => by simpa using h i.castSucc)]
 
-theorem sequenceLayers_spec {α : Layer → Type}
-    (computation : (lay : Layer) → OracleComp HashSpec (Option (α lay)))
-    {layers : (lay : Layer) → α lay}
-    (h : evalWithAnswerFn f (sequenceLayers computation) = some layers) :
-    ∀ lay, evalWithAnswerFn f (computation lay) = some (layers lay) :=
-  sequenceDep_spec f computation h
+/-- For a landed index, a layer signature on its own recovers the honest leaf.
+
+Its path then folds to the root of the tree of the layer. -/
+theorem eval_layerRecover (secretKey : Seeded.SecretKey) (index : Index) (lay : Layer)
+    (hland : Landed secretKey.parameter index) {part : LayerSignature lay}
+    (h : evalWithAnswerFn f (Seeded.signLayer secretKey index lay
+        : OracleComp HashSpec (Option (LayerSignature lay))) = some part) :
+    evalWithAnswerFn f (layerRecover secretKey.parameter index lay
+        (layerMessageValue f secretKey index lay) part : OracleComp HashSpec (Option Digest))
+      = some (evalWithAnswerFn f (treeRoot secretKey.parameter lay (treeIndexAt index lay)
+          secretKey.seed : OracleComp HashSpec Digest)) := by
+  obtain ⟨hots, hpath⟩ := signLayer_spec f secretKey index lay h
+  have hleaf : evalWithAnswerFn f (otsLeaf secretKey.parameter lay (treeIndexAt index lay)
+      (leafIndexAt index lay) (layerMessageValue f secretKey index lay) part.counter
+      part.chainValues : OracleComp HashSpec (Option Digest)) =
+      some (node f secretKey.parameter lay (treeIndexAt index lay) secretKey.seed 0
+        (leafIndexAt index lay).val) := by
+    rw [eval_otsLeaf_of_otsSign f secretKey.parameter lay (treeIndexAt index lay)
+      (leafIndexAt index lay) secretKey.seed _ hots, node_zero]
+  have hfold : evalWithAnswerFn f (treeFold secretKey.parameter lay (treeIndexAt index lay)
+      (leafIndexAt index lay) (partPath part) (layerHeight lay)
+      (node f secretKey.parameter lay (treeIndexAt index lay) secretKey.seed 0
+        (leafIndexAt index lay).val) : OracleComp HashSpec Digest) =
+      evalWithAnswerFn f (treeRoot secretKey.parameter lay (treeIndexAt index lay)
+        secretKey.seed : OracleComp HashSpec Digest) := by
+    apply eval_treeFold_pruned_path f _ _ _ _ _
+      (kept_leafIndexAt secretKey.parameter index hland lay)
+    intro level hlevel
+    rw [partPath, dite_eq_left hlevel, hpath]
+  simp only [layerRecover, evalWithAnswerFn_bind, hleaf, hfold, evalWithAnswerFn_pure]
+
+/-- The layer above a layer below the top. -/
+def aboveLayer (lay : Layer) (_h : lay.val ≠ 0) : Layer :=
+  ⟨lay.val - 1, by have := lay.isLt; omega⟩
+
+/-- What the key of a layer signs, as a digest: the root of the tree below it.
+
+At the bottom layer, it is the FORS public key. -/
+def belowValue (secretKey : Seeded.SecretKey) (index : Index) (lay : Layer) : Digest :=
+  if hbelow : lay.val + 1 < numLayers then
+    evalWithAnswerFn f (Seeded.treeRoot secretKey.parameter ⟨lay.val + 1, hbelow⟩
+      (treeIndexAt index ⟨lay.val + 1, hbelow⟩) secretKey.seed : OracleComp HashSpec Digest)
+  else evalWithAnswerFn f (Seeded.forsKey secretKey.parameter index secretKey.seed
+    : OracleComp HashSpec Digest)
+
+theorem rootPayload_belowValue (secretKey : Seeded.SecretKey) (index : Index) (lay : Layer) :
+    rootPayload (belowValue f secretKey index lay) = layerMessageValue f secretKey index lay := by
+  unfold belowValue
+  by_cases hbelow : lay.val + 1 < numLayers
+  · rw [dite_eq_left hbelow, layerMessageValue_above f secretKey index lay hbelow]
+  · rw [dite_eq_right hbelow]
+    have hlay : lay = bottomLayer := Fin.ext (by change lay.val = numLayers - 1; omega)
+    subst hlay
+    rw [layerMessageValue_bottom]
+
+/-- Above a layer below the top, the key signs the root of that layer. -/
+theorem belowValue_aboveLayer (secretKey : Seeded.SecretKey) (index : Index) (lay : Layer)
+    (h : lay.val ≠ 0) :
+    belowValue f secretKey index (aboveLayer lay h) = evalWithAnswerFn f (Seeded.treeRoot
+      secretKey.parameter lay (treeIndexAt index lay) secretKey.seed
+        : OracleComp HashSpec Digest) := by
+  have hbelow : (aboveLayer lay h).val + 1 < numLayers := by
+    simp only [aboveLayer]; have := lay.isLt; omega
+  have hlay : (⟨(aboveLayer lay h).val + 1, hbelow⟩ : Layer) = lay :=
+    Fin.ext (by simp only [aboveLayer]; omega)
+  unfold belowValue
+  rw [dite_eq_left hbelow, hlay]
+
+/-- One step of the signer, from the honest value below its layer.
+
+It gives the signature of the layer and the honest value below the layer above.
+
+At the top layer, which has no layer above, it gives the same value back. -/
+theorem eval_layerStep (secretKey : Seeded.SecretKey) (index : Index)
+    (hland : Landed secretKey.parameter index) (lay : Layer) :
+    evalWithAnswerFn f (Seeded.layerStep secretKey index lay (belowValue f secretKey index lay)
+        : OracleComp HashSpec (Option (LayerSignature lay × Digest))) =
+      (evalWithAnswerFn f (Seeded.signLayer secretKey index lay
+          : OracleComp HashSpec (Option (LayerSignature lay)))).map fun part =>
+        (part, if h : lay.val = 0 then belowValue f secretKey index lay
+          else belowValue f secretKey index (aboveLayer lay h)) := by
+  have hsign : evalWithAnswerFn f (Seeded.signLayer secretKey index lay
+      : OracleComp HashSpec (Option (LayerSignature lay))) =
+      evalWithAnswerFn f (Seeded.signLayerWith secretKey index lay
+        (rootPayload (belowValue f secretKey index lay))
+        : OracleComp HashSpec (Option (LayerSignature lay))) := by
+    rw [rootPayload_belowValue]
+    simp only [Seeded.signLayer, evalWithAnswerFn_bind, layerMessageValue]
+  rw [Seeded.layerStep, evalWithAnswerFn_bind]
+  cases hpart : evalWithAnswerFn f (Seeded.signLayerWith secretKey index lay
+      (rootPayload (belowValue f secretKey index lay))
+      : OracleComp HashSpec (Option (LayerSignature lay))) with
+  | none => simp [hsign, hpart]
+  | some part =>
+      have hspec : evalWithAnswerFn f (Seeded.signLayer secretKey index lay
+          : OracleComp HashSpec (Option (LayerSignature lay))) = some part := hsign.trans hpart
+      rw [hsign, hpart]
+      dsimp only
+      by_cases htop : lay.val = 0
+      · simp [htop]
+      · rw [ite_eq_right htop, dite_eq_right htop, rootPayload_belowValue]
+        simp only [evalWithAnswerFn_bind, eval_layerRecover f secretKey index lay hland hspec,
+          evalWithAnswerFn_pure, Option.map_some, belowValue_aboveLayer]
+
+/-- The layers of the signer, threaded up from the FORS public key, are the layer signatures. -/
+theorem eval_signLayers (secretKey : Seeded.SecretKey) (index : Index)
+    (hland : Landed secretKey.parameter index) :
+    evalWithAnswerFn f (sequenceThread (fun lay below => Seeded.layerStep secretKey index lay below)
+        (evalWithAnswerFn f (Seeded.forsKey secretKey.parameter index secretKey.seed
+          : OracleComp HashSpec Digest))
+        : OracleComp HashSpec (Option ((lay : Layer) → LayerSignature lay))) =
+      allSome fun lay => evalWithAnswerFn f (Seeded.signLayer secretKey index lay
+        : OracleComp HashSpec (Option (LayerSignature lay))) := by
+  let state : Nat → Digest := fun v =>
+    if h : v < numLayers then belowValue f secretKey index ⟨v, h⟩ else 0
+  have hstate : ∀ lay : Layer, state lay.val = belowValue f secretKey index lay := fun lay => by
+    simp only [state, dite_eq_left lay.isLt]
+  have hbottom : evalWithAnswerFn f (Seeded.forsKey secretKey.parameter index secretKey.seed
+      : OracleComp HashSpec Digest) = state (numLayers - 1) := by
+    rw [show numLayers - 1 = bottomLayer.val from rfl, hstate, belowValue,
+      dite_eq_right (by change ¬(numLayers - 1 + 1 < numLayers); omega)]
+  rw [hbottom,
+    eval_sequenceThread f state (fun lay below => Seeded.layerStep secretKey index lay below)]
+  · congr 1
+    funext lay
+    rw [hstate lay, eval_layerStep f secretKey index hland lay, Option.map_map]
+    cases evalWithAnswerFn f (Seeded.signLayer secretKey index lay
+      : OracleComp HashSpec (Option (LayerSignature lay))) <;> rfl
+  · intro lay part next hlay h
+    rw [hstate lay, eval_layerStep f secretKey index hland lay] at h
+    simp only [Option.map_eq_some_iff, Prod.mk.injEq] at h
+    obtain ⟨_, _, _, hnext⟩ := h
+    rw [← hnext, dite_eq_right hlay, ← hstate]
+    rfl
 
 attribute [local irreducible] Seeded.signDigestLoop Seeded.signLayer Seeded.forsOpen
   Seeded.treePath Seeded.treeNode sequenceFin Seeded.forsKey Seeded.treeRoot
@@ -226,12 +348,13 @@ theorem sign_spec (secretKey : Seeded.SecretKey) (message : Message) {signature 
   split at h
   next randomness index hloop =>
       have hland := signDigestLoop_spec f secretKey message _ digestAttemptLimit _ hloop
-      rw [evalWithAnswerFn_bind, evalWithAnswerFn_bind, evalWithAnswerFn_bind] at h
+      simp only [evalWithAnswerFn_bind, eval_forsPublicKey_forsRecover] at h
+      rw [eval_signLayers f secretKey _ (landed_full _ _)] at h
       split at h
       next layers hlayers =>
           simp only [evalWithAnswerFn_pure, Option.some.injEq] at h
           subst h
-          exact ⟨hland, rfl, fun lay => sequenceLayers_spec f _ hlayers lay⟩
+          exact ⟨hland, rfl, allSome_spec hlayers⟩
       next => exact absurd h (by simp)
   next => exact absurd h (by simp)
 
@@ -310,10 +433,11 @@ theorem verify_of_parts (secretKey : Seeded.SecretKey) (message : Message) {sign
   obtain ⟨hland, hfors, hlayers⟩ := hparts
   set digest := digestValue f secretKey message signature.randomness
   set index := digestIndex digest with hindex
-  have hkey : rootsPayload (evalWithAnswerFn f (forsRecover secretKey.parameter index
-      (digestLeaves digest) signature.fors : OracleComp HashSpec ForsKey)) =
+  have hkey : rootPayload (evalWithAnswerFn f (forsPublicKey secretKey.parameter index
+      (evalWithAnswerFn f (forsRecover secretKey.parameter index (digestLeaves digest)
+        signature.fors : OracleComp HashSpec ForsKey)) : OracleComp HashSpec Digest)) =
       layerMessageValue f secretKey index bottomLayer := by
-    rw [hfors, eval_forsRecover, layerMessageValue_bottom]
+    rw [hfors, eval_forsPublicKey_forsRecover, layerMessageValue_bottom]
   have hwalk : evalWithAnswerFn f (verifyLayers secretKey.parameter index signature numLayers
       (layerMessageValue f secretKey index bottomLayer) : OracleComp HashSpec (Option Digest)) =
       some (evalWithAnswerFn f (treeRoot secretKey.parameter topLayer rootTree secretKey.seed
@@ -338,7 +462,7 @@ theorem verify_of_sign (secretKey : Seeded.SecretKey) (message : Message) {signa
       : OracleComp HashSpec Bool) = true := by
   exact verify_of_parts f secretKey message hroot (sign_spec f secretKey message h)
 
-/-- Correctness: under the key generated from a scheme seed, every returned signature verifies.
+/-- Correctness: under the key generated from a seed, every returned signature verifies.
 
 This holds under every fixed hash function. -/
 theorem correct (seed : MasterSeed) (publicKey : PublicKey) (secretKey : Seeded.SecretKey)
@@ -351,13 +475,15 @@ theorem correct (seed : MasterSeed) (publicKey : PublicKey) (secretKey : Seeded.
   simp only [Seeded.keygenFromSeed, evalWithAnswerFn_bind, evalWithAnswerFn_pure,
     Prod.mk.injEq] at hkey
   generalize hparameter : evalWithAnswerFn f
-    (deriveKey 0 .parameter seed : OracleComp HashSpec Digest) = parameter at hkey
+    (derivePublicSeed seed : OracleComp HashSpec PublicParameter) = parameter at hkey
+  generalize hprf : evalWithAnswerFn f
+    (derivePrf seed : OracleComp HashSpec HashOutput) = prf at hkey
   generalize hrootval : evalWithAnswerFn f
     (treeRoot parameter topLayer rootTree seed : OracleComp HashSpec Digest) = root at hkey
   obtain ⟨hpk, hsk⟩ := hkey
   subst publicKey
   subst secretKey
-  exact verify_of_sign f ⟨seed, parameter, root⟩ message hrootval.symm hsign
+  exact verify_of_sign f ⟨seed, prf, parameter, root⟩ message hrootval.symm hsign
 
 /-- If the end of signing succeeds on a landed randomizer, its signature has the signer's form.
 
@@ -375,13 +501,14 @@ theorem finishSign_spec (secretKey : Seeded.SecretKey) (message : Message)
       ∧ ∀ lay : Layer, evalWithAnswerFn f (Seeded.signLayer secretKey
           (digestIndex (digestValue f secretKey message signature.randomness)) lay
           : OracleComp HashSpec (Option (LayerSignature lay))) = some (signature.layers lay) := by
-  rw [Seeded.finishSign, evalWithAnswerFn_bind, evalWithAnswerFn_bind,
-    evalWithAnswerFn_bind] at h
+  rw [Seeded.finishSign] at h
+  simp only [evalWithAnswerFn_bind, eval_forsPublicKey_forsRecover] at h
+  rw [eval_signLayers f secretKey _ (landed_full _ _)] at h
   split at h
   next layers hlayers =>
     simp only [evalWithAnswerFn_pure, Option.some.injEq] at h
     subst h
-    exact ⟨hland, rfl, fun lay => sequenceLayers_spec f _ hlayers lay⟩
+    exact ⟨hland, rfl, allSome_spec hlayers⟩
   next => exact absurd h (by simp)
 
 end SphincsSecurity.Completeness

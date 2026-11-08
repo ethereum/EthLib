@@ -7,34 +7,34 @@ public import EthLib.Cryptography.Sphincs.Digest
 
 Signature verification.
 
-1. Hash `m` and `R` into the digest `D`, and read `idx` and the 24 leaves from it.
-2. Recover the FORS key `K = Fts.recover(idx, leaves, fors)`.
-3. Bottom layer: `X_0 = Tree.fold(Ots.leaf(K, c_0, y_0), pi_0)`.
-4. Middle layer: `X_1 = Tree.fold(Ots.leaf(X_0, c_1, y_1), pi_1)`.
-5. Top layer: `X_2 = Tree.fold(Ots.leaf(X_1, c_2, y_2), pi_2)`.
-6. Accept when no `Ots.leaf` fails and `X_2` is the public key's root.
-
-Each one-time key and its tree are the ones on the way from `idx` up.
+1. Hash `R` and `M` into the digest `H_msg(R, PK.seed, PK.root, M)`.
+   Read `idx` and the 24 leaves `s` from it.
+2. Recover the FORS public key `M_0 = Fors.recover(idx, s, openings)`.
+3. For `l = 0, 1, 2`: `X_l = Wots.leaf(K_l(idx), M_l, c_l, sigma_l)`.
+   Then `M_{l+1} = Tree.fold(K_l(idx), X_l, P_l)`.
+4. Accept when no `Wots.leaf` fails and `M_3` is `PK.root`.
 
 # Cost
 
-A constant 492 permutations of Keccak-f[1600], whatever the message.
+A constant 515 permutations of Keccak-f[1600], whatever the message.
 
 A `k`-byte input costs `floor(k / 136) + 1` permutations:
 
-- Digest: 2, one for each 80-byte call.
-- FORS: `24 * 10 = 240`, a leaf and 9 nodes per tree, one each.
-- Encodings: 6 for the 804-byte input of the FORS key, then 1 per layer above.
+- Digest: 2, one for each 84-byte call of `H_msg`.
+- FORS: `24 * (1 + 10) = 264`, a leaf of 64 bytes and 10 nodes of 80 bytes per tree.
+- FORS public key: 4, for the 432-byte input of `T_k`.
+- Encodings: 1 per layer, for the 68-byte input.
 - Chains: `3v - T = 64` per layer, one each.
-- Leaves: 8 per layer, for the 1056-byte input of 64 chain ends.
-- Paths: `8 + 8 + 10 = 26`, one per level.
+- Leaves: 8 per layer, for the 1072-byte input of `T_v`.
+- Paths: `8 + 8 + 10 = 26`, one per height.
 
-That is `2 + 240 + 8 + 192 + 24 + 26 = 492`.
+That is `2 + 264 + 4 + 3 + 192 + 24 + 26 = 515`.
 
 Nothing here needs to be constant time: every value it reads is public.
 
-Source: `Concrete.verify` in FORS/Scheme.lean.
-<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean>
+Source: `slh_verify_internal` of [FIPS 205][fips205] (Algorithm 20).
+
+[fips205]: https://doi.org/10.6028/NIST.FIPS.205
 -/
 
 @[expose] public section
@@ -45,12 +45,12 @@ open EthLib.Cryptography.Sphincs.Constants
 
 /-! ## Keys and signatures -/
 
-/-- What a verifier knows about a signer. -/
+/-- What a verifier knows about a signer: `PK = (PK.seed, PK.root)`. -/
 structure PublicKey where
-  /-- The root of the top tree. -/
+  /-- `PK.seed`, which every addressed hash of this key starts with. -/
+  pkSeed : PkSeed
+  /-- `PK.root`, the root of the top tree. -/
   root : Digest
-  /-- The public parameter every hash of this key is made under. -/
-  publicParam : PublicParam
   deriving DecidableEq
 
 /-- One layer's signature: a one-time signature and the path of its key. -/
@@ -69,7 +69,7 @@ structure Signature where
   randomizer : Randomizer
   /-- One opening per FORS tree, at the leaf the digest picks. -/
   fors : Vector TreeOpening FORS_TREES
-  /-- The bottom key's signature of the FORS key. -/
+  /-- The bottom key's signature of the FORS public key. -/
   bottom : LayerSignature .bottom
   /-- The middle key's signature of the bottom tree's root. -/
   middle : LayerSignature .middle
@@ -86,39 +86,37 @@ variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 The signing key is the layer's key on the way from `idx` up.
 
 Returns nothing when the counter does not encode the message as a codeword. -/
-def layerRoot (pp : PublicParam) (layer : Layer) (idx : Nat) (msg : ByteArray)
+def layerRoot (pkSeed : PkSeed) (layer : Layer) (idx : Nat) (msg : Digest)
     (sig : LayerSignature layer) : m (Option Digest) := do
   let key := OtsKey.ofIndex layer idx
   -- Recover the key's leaf from the one-time signature.
-  let some leaf ← otsLeaf H pp key msg sig.counter sig.chainValues | return none
+  let some leaf ← otsLeaf H pkSeed key msg sig.counter sig.chainValues | return none
   -- Climb the key's path to its tree's root.
-  return some (← fold H pp layer key.tree key.leaf leaf sig.path)
+  return some (← fold H pkSeed layer key.tree key.leaf leaf sig.path)
 
-/-- `Ver(pk, m, sigma)` over a hash `H`: whether a signature signs a message under a public key.
+/-- `Ver(PK, M, sigma)` over a hash `H`: whether a signature signs a message under a public key.
 
 1. The digest names the index and the leaf of each FORS tree.
-2. The openings lead to a FORS key.
+2. The openings lead to a FORS public key.
 3. Each layer, from the bottom up, signs what the layer below leads to.
 
 A layer that fails ends verification, before any later hash call. -/
 def verifyWith (pk : PublicKey) (msg : Message) (sig : Signature) : m Bool := do
-  let pp := pk.publicParam
   -- Step 1: the digest names the index and the leaf of each FORS tree.
-  let d ← messageDigest H pp msg sig.randomizer
+  let d ← hMsg H sig.randomizer pk.pkSeed pk.root msg
   let idx := digestIndex d
-  -- Step 2: the openings lead to a FORS key.
-  let key ← forsRecover H pp idx (digestLeaves d) sig.fors
-  -- Step 3: the bottom key signs the FORS key, and its path leads to a bottom root.
-  let some bottomRoot ← layerRoot H pp .bottom idx (forsKeyBytes key) sig.bottom | return false
+  -- Step 2: the openings lead to a FORS public key.
+  let forsPk ← forsRecover H pk.pkSeed idx (digestLeaves d) sig.fors
+  -- Step 3: the bottom key signs the FORS public key, and its path leads to a bottom root.
+  let some bottomRoot ← layerRoot H pk.pkSeed .bottom idx forsPk sig.bottom | return false
   -- Step 4: the middle key signs that root, and its path leads to a middle root.
-  let some middleRoot ← layerRoot H pp .middle idx (packBytes bottomRoot) sig.middle
-    | return false
+  let some middleRoot ← layerRoot H pk.pkSeed .middle idx bottomRoot sig.middle | return false
   -- Step 5: the top key signs that root, and its path leads to the top root.
-  let some root ← layerRoot H pp .top idx (packBytes middleRoot) sig.top | return false
+  let some root ← layerRoot H pk.pkSeed .top idx middleRoot sig.top | return false
   -- Step 6: no layer failed, and the top root is the key's.
   return decide (root = pk.root)
 
-/-- `Ver(pk, m, sigma)`: whether a signature signs a message under a public key.
+/-- `Ver(PK, M, sigma)`: whether a signature signs a message under a public key.
 
 A yes or a no, never a reason.
 

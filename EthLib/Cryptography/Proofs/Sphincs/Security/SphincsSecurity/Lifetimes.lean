@@ -24,7 +24,7 @@ open Security ForsPotential
 
 Its signature limit is 1,182,000,000. -/
 theorem h26_layered_bits : SecurityBits (.layered 26 3 8 24 10 1182000000) 127 :=
-  @det_bitsFH (.layered 26 3 8 24 10 1182000000) (by decide) 26 26 24 10 231424 1182000000
+  @det_bitsFH (.layered 26 3 8 24 10 1182000000) (by decide) 26 26 24 10 264193 1182000000
     (by decide) (by decide) (by decide) (by decide) (by decide)
         (by decide) 512487451133699472151040029945233408
     H0.rho_h26_b26 H0.tab_h26_b26 H0.small_h26_b26 H0.near_h26_b26 H0.tab_h26_b26_ok

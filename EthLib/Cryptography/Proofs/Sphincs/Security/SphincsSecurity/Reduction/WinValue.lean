@@ -505,7 +505,7 @@ theorem fixedCostP_sequenceDep_det : ∀ {n : Nat} {α : Fin n → Type}
 theorem layerCostSearch_det (parameter : PublicParameter) (data : PublicData) (index : Index)
     (lay : Layer) :
     ∃ x, simulateQ (fixedCostP g c) (layerCostSearch parameter data index lay) = pure x := by
-  simp only [layerCostSearch, simulateQ_bind, fixedCostP_tick, fixedCostP_liftHash, pure_bind]
+  simp only [layerCostSearch, simulateQ_bind, fixedCostP_liftHash, pure_bind]
   split
   · simp only [simulateQ_bind, fixedCostP_tick, pure_bind, simulateQ_pure]
     exact ⟨_, rfl⟩

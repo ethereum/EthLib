@@ -27,9 +27,9 @@ variable [Params]
 def serializeTree (opening : TreeOpening) : List UInt8 :=
   bytesLE 16 opening.secret ++ (List.ofFn opening.path).flatMap (bytesLE 16)
 
-/-- The bytes of one layer: the counter, the 64 chain values, then the path. -/
+/-- The bytes of one layer: the big-endian counter, the 64 chain values, then the path. -/
 def serializeLayer {lay : Layer} (part : LayerSignature lay) : List UInt8 :=
-  bytesLE 4 part.counter ++ (List.ofFn part.chainValues).flatMap (bytesLE 16) ++
+  bytesBE 4 part.counter ++ (List.ofFn part.chainValues).flatMap (bytesLE 16) ++
     (List.ofFn part.path).flatMap (bytesLE 16)
 
 /-- The bytes of a signature: the randomizer, the FORS openings, then the layers from the bottom. -/
@@ -38,20 +38,15 @@ def serializeSignature (signature : Signature) : List UInt8 :=
   (List.ofFn fun κ : FTree => serializeTree (signature.fors κ)).flatten ++
   (List.ofFn fun k : Fin numLayers => serializeLayer (signature.layers (layerUp k.val))).flatten
 
-omit [Params] in
-theorem digest_vector_length {n : Nat} (values : Fin n → Digest) :
-    ((List.ofFn values).flatMap (bytesLE 16)).length = n * 16 := by
-  simp [List.length_flatMap, bytesLE_length_16, Function.comp_def]
-
 theorem serializeTree_length (opening : TreeOpening) :
     (serializeTree opening).length = 16 * (forsHeight + 1) := by
-  simp only [serializeTree, List.length_append, bytesLE_length, digest_vector_length]
+  simp only [serializeTree, List.length_append, bytesLE_length, ofFn_flatMap_bytesLE_length]
   ring
 
 theorem serializeLayer_length {lay : Layer} (part : LayerSignature lay) :
     (serializeLayer part).length = 1028 + 16 * layerHeight lay := by
-  simp only [serializeLayer, List.length_append, bytesLE_length, digest_vector_length]
-  change 4 + 64 * 16 + layerHeight lay * 16 = _
+  simp only [serializeLayer, List.length_append, bytesBE_length, ofFn_flatMap_bytesLE_length]
+  change 4 + 16 * 64 + 16 * layerHeight lay = _
   omega
 
 /-- The heights of the layers add up to the height `h` of the key. -/

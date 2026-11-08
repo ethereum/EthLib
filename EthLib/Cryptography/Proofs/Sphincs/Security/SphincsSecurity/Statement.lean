@@ -10,11 +10,15 @@ This file states strong unforgeability under chosen-message attack (SUF-CMA).
 
 The hash is a random oracle.
 
-The game samples a uniform 32-byte seed `S0` and generates the key from it.
+The game samples a uniform 32-byte seed `SK.seed`, the secret key, and generates the key from it.
 
-Key generation first hashes `S0` into the scheme seed `S = H(leanSPHINCS || S0)`.
+Key generation derives `PK.seed` and `SK.prf` as the hashes of `leanSPHINCS || SK.seed || d`.
 
-The signer is deterministic: it derives each randomizer from `S` and the message.
+Here `d` is 0 for `PK.seed` and 1 for `SK.prf`.
+
+It derives every other secret with one `PRF` call.
+
+The signer is deterministic: it derives each randomizer from `SK.prf`, `PK.seed` and the message.
 
 So a repeated request returns the same signature.
 
@@ -88,7 +92,7 @@ noncomputable def signingOracle (sk : Seeded.SecretKey) :
   QueryImpl.withLogging fun request =>
     liftM (Seeded.sign sk request : OracleComp HashSpec (Option Signature))
 
-/-- The game: sample a seed `S0`, generate the key, run the adversary and verify its forgery.
+/-- The game: sample a seed `SK.seed`, generate the key, run the adversary and verify its forgery.
 
 The adversary wins when its forgery verifies and it made at most `N` signing requests.
 

@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.FixedRun
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.Reference
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.Hidden
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.ScanSigner.FairShare
 
 /-!
 # Classifying an accepted signature
@@ -15,7 +16,7 @@ Then the layer has a tree hit, or its key has a WOTS+C exception, or the key's m
 
 A canonical message makes the fold of the layer below the honest root of its tree.
 
-At the bottom, the canonical message is the FORS key.
+At the bottom, the canonical message is the canonical FORS public key.
 
 Every exception other than a tree hit is at a key on the path of a landed index.
 -/
@@ -47,14 +48,17 @@ def WotsException (f : QueryImpl HashSpec Id) (pk : PublicKey) (seed : MasterSee
 
 /-- A canonical WOTS and tree opening at every layer of a landed index.
 
-Its FORS openings recover the canonical FORS key. -/
+Its FORS openings recover roots whose `T_k` hash is the canonical FORS public key. -/
 def RecoveredOpening (f : QueryImpl HashSpec Id) (pk : PublicKey) (seed : MasterSeed)
     (message : Message) (signature : Signature) (referenceCounter : Layer → Counter) : Prop :=
   let leaf := index f pk message signature
   Landed pk.parameter leaf ∧
     (∀ lay, CanonicalLayer f pk seed leaf signature lay (referenceCounter lay)
       (chosenWord f pk.parameter seed leaf lay)) ∧
-    verificationFors f pk message signature = canonicalFors f pk.parameter seed leaf
+    evalWithAnswerFn f (forsPublicKey pk.parameter leaf (verificationFors f pk message signature)
+        : OracleComp HashSpec Digest) =
+      evalWithAnswerFn f (forsPublicKey pk.parameter leaf (canonicalFors f pk.parameter seed leaf)
+        : OracleComp HashSpec Digest)
 
 /-- At a crossing above the top kept subtree, the forged path enters at the boundary node. -/
 theorem crossing_boundary (parameter : PublicParameter) (leaf reference : LeafIndex)
@@ -174,6 +178,12 @@ def TreeHit (f : QueryImpl HashSpec Id) (pk : PublicKey) (seed : MasterSeed)
         (signaturePath signature lay) value level ∧
       (keyLeaf leaf lay).val / 2 ^ level = boundaryIndex pk.parameter level))
 
+/-- The verifier gives the key of every layer a 16-byte message, the bytes of one digest. -/
+theorem verificationMessage_length (f : QueryImpl HashSpec Id) (pk : PublicKey) (message : Message)
+    (signature : Signature) (k : Nat) :
+    (verificationMessage f pk message signature k).length = 16 := by
+  cases k <;> exact bytesLE_length 16 _
+
 /-- The canonical opening of one layer with its chosen counter. -/
 def ChosenLayer (f : QueryImpl HashSpec Id) (pk : PublicKey) (seed : MasterSeed)
     (message : Message) (signature : Signature) (lay : Layer) : Prop :=
@@ -262,8 +272,10 @@ theorem layer_step (f : QueryImpl HashSpec Id) (pk : PublicKey) (seed : MasterSe
         (keyLeaf leaf lay)
         (canonicalMessage f pk.parameter seed leaf lay)
         (Completeness.otsSecret f pk.parameter lay (keyTree leaf lay) (keyLeaf leaf lay) seed)
-        (verificationMessage f pk message signature j) (signature.layers lay).counter
-        (signature.layers lay).chainValues candidate (trace f pk message signature)
+        (verificationMessage f pk message signature j)
+        (verificationMessage_length f pk message signature j)
+        (signature.layers lay).counter (signature.layers lay).chainValues candidate
+        (trace f pk message signature)
         hencode hrunLeaf hcanonical with
       ⟨counter, hselected, hmsg, hcounter, hvalues⟩ | hencoding | hleafMatch | hchain
     · refine Or.inl ⟨⟨counter, ?_, hcounter, funext hvalues, ?_⟩, hmsg⟩
@@ -283,7 +295,7 @@ Take the layer `j` steps above the bottom, on the path of a landed index.
 
 Assume that its fold is the honest root of its tree.
 
-Then the layers up to `j` are canonical and the FORS key is recovered.
+Then the layers up to `j` are canonical and the recovered roots give the canonical FORS public key.
 
 Otherwise some layer up to `j` has a tree hit or a WOTS exception. -/
 theorem walk_classification (f : QueryImpl HashSpec Id) (pk : PublicKey) (seed : MasterSeed)
@@ -297,8 +309,11 @@ theorem walk_classification (f : QueryImpl HashSpec Id) (pk : PublicKey) (seed :
         evalWithAnswerFn f (Seeded.treeRoot pk.parameter (layerUp j)
           (keyTree (index f pk message signature) (layerUp j)) seed : OracleComp HashSpec Digest) →
       ((∀ j', j' ≤ j → ChosenLayer f pk seed message signature (layerUp j')) ∧
-          verificationFors f pk message signature = canonicalFors f pk.parameter seed
-            (index f pk message signature)) ∨
+          evalWithAnswerFn f (forsPublicKey pk.parameter (index f pk message signature)
+              (verificationFors f pk message signature) : OracleComp HashSpec Digest) =
+            evalWithAnswerFn f (forsPublicKey pk.parameter (index f pk message signature)
+              (canonicalFors f pk.parameter seed (index f pk message signature))
+                : OracleComp HashSpec Digest)) ∨
         (∃ j', j' ≤ j ∧ TreeHit f pk seed message signature j') ∨
         (∃ j', j' ≤ j ∧ WotsException f pk seed message signature (layerUp j')) := by
   intro j
@@ -310,7 +325,10 @@ theorem walk_classification (f : QueryImpl HashSpec Id) (pk : PublicKey) (seed :
       · left
         refine ⟨fun j' hj' => by rw [Nat.le_zero.mp hj']; exact hchosen, ?_⟩
         rw [canonicalMessage_bottom] at hmsg
-        exact rootsPayload_injective hmsg
+        have h : rootPayload (evalWithAnswerFn f
+            (forsPublicKey pk.parameter (index f pk message signature)
+              (verificationFors f pk message signature) : OracleComp HashSpec Digest)) = _ := hmsg
+        exact bytesLE_injective h
       · exact Or.inr (Or.inl ⟨0, le_rfl, htree⟩)
       · exact Or.inr (Or.inr ⟨0, le_rfl, hwots⟩)
   | succ j ih =>
@@ -336,9 +354,9 @@ theorem walk_classification (f : QueryImpl HashSpec Id) (pk : PublicKey) (seed :
       · exact Or.inr (Or.inl ⟨j + 1, le_rfl, htree⟩)
       · exact Or.inr (Or.inr ⟨j + 1, le_rfl, hwots⟩)
 
-/-- Under the honest root, an accepted signature recovers the canonical FORS key or has a tree hit.
+/-- Under the honest root, an accepted signature recovers the canonical FORS public key.
 
-Otherwise its index is landed and a key on its path has a WOTS exception. -/
+Otherwise it has a tree hit, or its index is landed and a key on its path has a WOTS exception. -/
 theorem accepted_recovered_classification (f : QueryImpl HashSpec Id) (pk : PublicKey)
     (seed : MasterSeed) (message : Message) (signature : Signature) (hb : 0 < keptHeight topLayer)
     (hroot : pk.root = evalWithAnswerFn f
@@ -442,7 +460,9 @@ theorem accepted_full_classification (f : QueryImpl HashSpec Id) (pk : PublicKey
     ⟨counter, hcounter, hland, hlayers, hfors⟩ | htree | ⟨hland, hwots⟩
   · rcases Fors.recover_classification f pk.parameter (index f pk message signature) seed
         (digestLeaves (verificationDigest f pk message signature)) signature.fors
-        hfors with hforsOpening | hforsException
+        (hfors.trans
+          (Completeness.forsKey_eq f pk.parameter (index f pk message signature) seed).symm) with
+      hforsOpening | hforsException
     · exact Or.inl ⟨counter, hcounter, hland, hlayers, hforsOpening⟩
     · refine Or.inr (Or.inr ⟨hland, Or.inr ⟨hforsException, ?_⟩⟩)
       obtain ⟨input, canonicalInput, hinput, hne, hout⟩ :=
@@ -474,6 +494,20 @@ noncomputable def graphTable (f : QueryImpl HashSpec Id) (parameter : PublicPara
     (PrunedGraph.active parameter) (PrunedGraph.boundary parameter (surrogates f parameter seed))
         labels
 
+omit [Params] in
+/-- An ordered node payload holds two digests, so it has 32 bytes. -/
+theorem orderedPayload_length (bit : Bool) (current sibling : Digest) :
+    (orderedPayload bit current sibling).length = 32 := by
+  unfold orderedPayload
+  split <;> exact nodePayload_length _ _
+
+/-- A Merkle node input has a 32-byte payload, so it is no message-digest input. -/
+theorem merkleInput_not_msg (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
+    (domain : Nat → Nat → HashDomain) (index : Nat) (path : Nat → Digest) (value : Digest)
+    (level : Nat) :
+    ¬ForsSigner.IsMsgInput (merkleInput f parameter domain index path value level) :=
+  ForsSigner.not_msg_tweakable _ _ _ (by rw [orderedPayload_length]; omega)
+
 section Hits
 
 variable (f : QueryImpl HashSpec Id) (parameter : PublicParameter) (seed : MasterSeed)
@@ -504,9 +538,11 @@ theorem leafOutput_hit (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
     (h : Wots.LeafOutputMatch f parameter lay tree leaf
       (Completeness.otsSecret f parameter lay tree leaf seed) trace) :
     ∃ input ∈ trace, truncateHash (f input) ∈
-      targets parameter (graphTable f parameter seed labels) input := by
+      targets parameter (graphTable f parameter seed labels) input ∧
+        ¬ForsSigner.IsMsgInput input := by
   obtain ⟨endpoints, hne, hmem, hout⟩ := h
-  refine ⟨_, hmem, active_hit f parameter seed labels (.leaf lay tree leaf) hactive _ ?_ ?_⟩
+  refine ⟨_, hmem, active_hit f parameter seed labels (.leaf lay tree leaf) hactive _ ?_ ?_,
+    ForsSigner.not_msg_tweakable _ _ _ (by rw [leafPayload_length]; omega)⟩
   · rw [leaf_input f parameter seed labels hconsistent lay tree leaf hactive]
     intro heq
     exact hne (tweakableInput_injective heq).2.2
@@ -521,10 +557,12 @@ theorem chainOutput_hit (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
     (h : Wots.ChainOutputMatch f parameter lay tree leaf
       (Completeness.otsSecret f parameter lay tree leaf seed) trace) :
     ∃ input ∈ trace, truncateHash (f input) ∈
-      targets parameter (graphTable f parameter seed labels) input := by
+      targets parameter (graphTable f parameter seed labels) input ∧
+        ¬ForsSigner.IsMsgInput input := by
   obtain ⟨index, step, payload, hmem, hne, hout⟩ := h
   refine ⟨_, hmem, active_hit f parameter seed labels
-      (.chain lay tree leaf index step) hactive _ ?_ ?_⟩
+      (.chain lay tree leaf index step) hactive _ ?_ ?_,
+    ForsSigner.not_msg_tweakable _ _ _ (by rw [bytesLE_length_digest]; omega)⟩
   · rw [chain_input f parameter seed labels hconsistent lay tree leaf hactive index step]
     intro heq
     exact hne (bytesLE_injective (tweakableInput_injective heq).2.2)
@@ -545,32 +583,80 @@ theorem active_hit' (position : Position) (hactive : PrunedGraph.active paramete
   exact active_hit f parameter seed labels position hactive payload hne hout
 
 include hconsistent in
+/-- The canonical `T_k` input of a FORS instance holds its canonical roots. -/
+theorem froots_input (index : Index) :
+    canonicalGraphInput parameter (otsSecrets f parameter seed) (ftsSecrets f parameter seed)
+      (.froots index) labels =
+    tweakableHashInput parameter (.forsRoots index)
+      (rootsPayload fun κ => Completeness.rootValue f parameter index seed κ) := by
+  have ha := Params.forsHeight_ge
+  unfold canonicalGraphInput canonicalGraphSlots
+  simp only [Position.children, Position.domain, List.map_ofFn, rootsPayload]
+  congr 1
+  apply congrArg (fun values : List Digest => values.flatMap (bytesLE 16))
+  apply congrArg List.ofFn
+  funext κ'
+  simp only [Function.comp_apply, Completeness.rootValue]
+  have h : truncateHash (labels (.fnode index κ' Position.rootLevel ⟨0, Nat.two_pow_pos _⟩)) =
+      Completeness.forsNodeValue f parameter index κ' seed (forsHeight - 1 + 1) 0 :=
+    fnode_value f parameter seed labels hconsistent index κ' (forsHeight - 1 + 1) (by omega)
+      ⟨0, Nat.two_pow_pos _⟩ (Nat.two_pow_pos _)
+  rw [show forsHeight - 1 + 1 = forsHeight by omega] at h
+  exact h
+
+include hconsistent in
+/-- A roots match hits a first-order target at its `T_k` input.
+
+The target is the canonical FORS public key of the instance. -/
+theorem rootsMatch_hit (index : Index) (roots : ForsKey)
+    (h : Fors.RootsMatch f parameter index seed roots) :
+    truncateHash (f (tweakableHashInput parameter (.forsRoots index) (rootsPayload roots))) ∈
+      targets parameter (graphTable f parameter seed labels)
+        (tweakableHashInput parameter (.forsRoots index) (rootsPayload roots)) := by
+  obtain ⟨hne, heq⟩ := h
+  refine active_hit f parameter seed labels (.froots index) trivial (rootsPayload roots) ?_ ?_
+  · rw [froots_input f parameter seed labels hconsistent index]
+    intro hinput
+    exact hne (rootsPayload_injective (tweakableInput_injective hinput).2.2)
+  · have hkey : truncateHash (labels (.froots index)) = evalWithAnswerFn f
+        (forsPublicKey parameter index (fun κ => Completeness.rootValue f parameter index seed κ)
+          : OracleComp HashSpec Digest) :=
+      (fors_key_value f parameter seed labels hconsistent index).trans
+        (Completeness.forsKey_eq f parameter index seed)
+    have hroots := heq.trans hkey.symm
+    rw [Completeness.eval_forsPublicKey] at hroots
+    exact hroots
+
+include hconsistent in
 theorem forsException_hit (index : Index) (leaves : FTree → FLeaf) (opening : FTree → TreeOpening)
     (h : Fors.Exception f parameter index seed leaves opening) :
-    ∃ input ∈ queriedInputs f (forsRecover parameter index leaves opening : OracleComp HashSpec
-        ForsKey),
-      truncateHash (f input) ∈ targets parameter (graphTable f parameter seed labels) input := by
+    ∃ input ∈ queriedInputs f
+        (forsRecover parameter index leaves opening >>= forsPublicKey parameter index
+          : OracleComp HashSpec Digest),
+      truncateHash (f input) ∈ targets parameter (graphTable f parameter seed labels) input ∧
+        ¬ForsSigner.IsMsgInput input := by
   have hcanon : ∀ κ (leaf : FLeaf), Fors.leafValue f parameter index κ leaf
       (Completeness.forsSecretValue f parameter index κ seed leaf) =
         Completeness.forsLeafValue f parameter index κ seed leaf := fun κ leaf => by
     rw [Fors.leafValue_canonical, Completeness.forsNodeValue_zero]
-  rcases h with ⟨κ, hne, heq⟩ | ⟨κ, level, hlevel, -, hneq, hout⟩
-  · refine ⟨_, Fors.leafInput_mem f parameter index leaves opening κ,
-      active_hit f parameter seed labels (.fleaf index κ (leaves κ)) trivial _ ?_ ?_⟩
+  rcases h with ⟨κ, hne, heq⟩ | ⟨κ, level, hlevel, -, hneq, hout⟩ | hroots
+  · refine ⟨_, queriedInputs_mono_bind_left f _ _
+        (Fors.leafInput_mem f parameter index leaves opening κ),
+      active_hit f parameter seed labels (.fleaf index κ (leaves κ)) trivial _ ?_ ?_,
+      ForsSigner.not_msg_tweakable _ _ _ (by rw [bytesLE_length_digest]; omega)⟩
     · rw [fleaf_input f parameter seed labels index κ (leaves κ)]
       intro hinput
       exact hne (bytesLE_injective (tweakableInput_injective hinput).2.2)
     · rw [fleaf_value f parameter seed labels hconsistent, ← hcanon, ← heq]
       simp only [Fors.leafValue, forsLeafHash, Completeness.eval_tweakableHash]
       rfl
-  · have hfolded := hlevel
-    have hlevel : level < forsHeight := by omega
-    have hl1 : level + 1 ≤ forsHeight := hlevel
+  · have hl1 : level + 1 ≤ forsHeight := hlevel
     rw [hcanon] at hneq hout
-    refine ⟨_, Fors.nodeInput_mem f parameter index leaves opening κ level hfolded,
+    refine ⟨_, queriedInputs_mono_bind_left f _ _
+        (Fors.nodeInput_mem f parameter index leaves opening κ level hlevel),
       active_hit' f parameter seed labels (forsPosition index κ (level + 1) hl1
         ⟨(leaves κ).val / 2 ^ (level + 1), (Nat.div_le_self _ _).trans_lt (leaves κ).isLt⟩)
-        trivial _ ?_ ?_ ?_⟩
+        trivial _ ?_ ?_ ?_, merkleInput_not_msg _ _ _ _ _ _ _⟩
     · have hdom : Fors.forsDomain index κ (level + 1) ((leaves κ).val / 2 ^ (level + 1)) =
           HashDomain.forsNode index κ ⟨level, by omega⟩
             ⟨(leaves κ).val / 2 ^ (level + 1), (Nat.div_le_self _ _).trans_lt (leaves κ).isLt⟩ := by
@@ -582,13 +668,17 @@ theorem forsException_hit (index : Index) (leaves : FTree → FLeaf) (opening : 
       exact hneq
     · rw [fors_path_value f parameter seed labels hconsistent index κ _ (level + 1) hl1]
       exact hout
+  · exact ⟨_, Fors.rootsInput_mem f parameter index leaves opening,
+      rootsMatch_hit f parameter seed labels hconsistent index _ hroots,
+      ForsSigner.not_msg_tweakable _ _ _ (by rw [rootsPayload_length]; omega)⟩
 
 include hconsistent in
 theorem treeHit_hit (hboundary : BoundaryCorrect f parameter seed labels) (pk : PublicKey)
     (hparameter : pk.parameter = parameter) (message : Message) (signature : Signature) (j : Nat)
     (h : SignatureWitness.TreeHit f pk seed message signature j) :
     ∃ input ∈ SignatureWitness.trace f pk message signature,
-      truncateHash (f input) ∈ targets parameter (graphTable f parameter seed labels) input := by
+      truncateHash (f input) ∈ targets parameter (graphTable f parameter seed labels) input ∧
+        ¬ForsSigner.IsMsgInput input := by
   subst hparameter
   obtain ⟨-, value, -, hrun, hcase⟩ := h
   generalize hlay : layerUp j = lay at hrun hcase
@@ -608,7 +698,7 @@ theorem treeHit_hit (hboundary : BoundaryCorrect f parameter seed labels) (pk : 
     exact merkleInput_mem f pk.parameter _ leaf.val path value (layerHeight lay) level hlevel
   rcases hcase with ⟨reference, hreference, level, hlevel, hparent, hne, hout⟩ |
     ⟨hlaytop, level, hlevel, ⟨hlower, hpositive, hsurrogate⟩, haddress⟩
-  · refine ⟨_, hmem level hlevel, ?_⟩
+  · refine ⟨_, hmem level hlevel, ?_, merkleInput_not_msg _ _ _ _ _ _ _⟩
     have hpos := active_hit f pk.parameter seed labels
       (treePosition lay tree (level + 1) (hlevel.trans_le (layerHeight_le lay))
         ⟨reference.val / 2 ^ (level + 1), (Nat.div_le_self _ _).trans_lt reference.isLt⟩)
@@ -638,7 +728,7 @@ theorem treeHit_hit (hboundary : BoundaryCorrect f parameter seed labels) (pk : 
     have htop : tree = rootTree := by
       rw [← htree]; exact Completeness.treeIndexAt_top _
     subst htop
-    refine ⟨_, hmem (level - 1) (by omega), ?_⟩
+    refine ⟨_, hmem (level - 1) (by omega), ?_, merkleInput_not_msg _ _ _ _ _ _ _⟩
     have hlevel' : level < maxLayerHeight := hlevel.trans_le (layerHeight_le _)
     have hentry := PrunedGraph.referenceTable_surrogate pk.parameter
         (otsSecrets f pk.parameter seed)
@@ -689,7 +779,7 @@ attribute [local irreducible] encodingAt
 
 /-- The message of every key, read from the graph labels.
 
-It is the root label of the tree below, or the label of the FORS key at the bottom.
+It is the root label of the tree below, or the label of the FORS public key at the bottom.
 
 For a retained key, it is the key's canonical message. -/
 def labelMessage (labels : CanonicalGraphLabels) (key : OtsKey) : HashInput :=
@@ -743,9 +833,11 @@ theorem encodingMatch_hit (f : QueryImpl HashSpec Id) (parameter : PublicParamet
     (h : ReferenceChoice.EncodingMatch f parameter key.1 key.2.1 key.2.2
       (labelMessage labels key) trace) :
     ∃ input ∈ trace, truncateHash (f input) ∈
-      targets parameter (fullTable f parameter seed labels) input := by
-  obtain ⟨message, counter, hexempt, hmem, hout⟩ := h
-  refine ⟨_, hmem, ?_⟩
+      targets parameter (fullTable f parameter seed labels) input ∧
+        ¬ForsSigner.IsMsgInput input := by
+  obtain ⟨message, counter, hlength, hexempt, hmem, hout⟩ := h
+  refine ⟨_, hmem, ?_, ForsSigner.not_msg_tweakable _ _ _ (by
+    rw [List.length_append, hlength, bytesBE_length_counter]; omega)⟩
   have hentry : fullTable f parameter seed labels
       (hashDomainFields (.encoding key.1 key.2.1 key.2.2)) =
       some ⟨ReferenceChoice.exemptInput f parameter key.1 key.2.1 key.2.2
@@ -755,7 +847,7 @@ theorem encodingMatch_hit (f : QueryImpl HashSpec Id) (parameter : PublicParamet
   have hexempt' : ¬ReferenceChoice.exemptInput f parameter key.1 key.2.1 key.2.2
       (labelMessage labels key) =
         some (tweakableHashInput parameter (.encoding key.1 key.2.1 key.2.2)
-          (message ++ bytesLE 4 counter)) := hexempt
+          (message ++ bytesBE 4 counter)) := hexempt
   unfold Wots.encodingInput
   rw [targets_at_entry _ _ _ _ _ hentry]
   simp only []

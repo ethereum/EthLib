@@ -8,7 +8,9 @@ public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Scheme
 /-!
 # Landing digests
 
-The message digest is the first `h + k a` bits of the concatenated digest calls.
+The message digest reads each of its bits from its own bit of the digest calls.
+
+This is how Algorithm 19 of FIPS 205 reads the digest.
 
 So uniform digest calls give a uniform digest.
 
@@ -42,7 +44,7 @@ theorem evalDist_digestBlock_uniform :
 /-- The input of a digest call. -/
 abbrev digestInput (parameter : PublicParameter) (root : Digest) (message : Message)
     (randomness : Randomness) (call : DigestCall) : HashInput :=
-  tweakableHashInput parameter (.message call) (messageDigestPayload root message randomness)
+  messageDigestInput parameter root message randomness call
 
 end SphincsSecurity.Security
 
