@@ -169,7 +169,7 @@ theorem activationEpochAt_setValidator {index : ValidatorIndex} {validator : Val
     simp [activationEpochAt, getValidator_setValidator_self set, Except.map]
   · simp [activationEpochAt, getValidator_setValidator_of_ne set equal, equal]
 
-/-- An index in the activation queue names a validator that is not activated yet. -/
+/-- In a registry within its limit, a queued index has the far-future activation epoch. -/
 theorem activationEpochAt_of_mem_activationQueue (within : state.RegistryWithinLimit)
     {index : ValidatorIndex} (member : index ∈ activationQueue state) :
     activationEpochAt state index = .ok FAR_FUTURE_EPOCH := by
@@ -189,31 +189,36 @@ theorem activationEpochAt_of_mem_activationQueue (within : state.RegistryWithinL
   simp only [atI]
   exact congrArg Except.ok eligible.2
 
-/-- Before Electra, starting an exit keeps the slot and all activation epochs. -/
+/-- Starting an exit keeps the slot and all activation epochs, at every fork. -/
 theorem initiateValidatorExit_activationEpochs {config : Config} {index : ValidatorIndex}
-    (before : fork < .pectra)
     (computed : initiateValidatorExit config state index = .ok after) :
     after.slot = state.slot ∧
       ∀ other, activationEpochAt after other = activationEpochAt state other := by
   obtain ⟨validator, found, ⟨_, rfl⟩ | ⟨_, queued, _, _, queue, _, set⟩⟩ :=
     initiateValidatorExit_ok computed
   · exact ⟨rfl, fun _ => rfl⟩
-  have notElectra : ¬Fork.pectra ≤ fork := Nat.not_le_of_lt before
-  -- Before Electra the exit queue changes no state field.
-  simp only [exitQueue, notElectra, ↓reduceDIte, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq, Prod.mk.injEq] at queue
-  obtain ⟨_, _, rfl, _⟩ := queue
-  refine ⟨setValidator_slot set, fun other => ?_⟩
+  -- The exit queue changes neither the registry nor the slot, before Electra or from it.
+  have same : queued.validators = state.validators ∧ queued.slot = state.slot := by
+    unfold exitQueue at queue
+    split at queue
+    · simp only [computeExitEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
+        Except.ok.injEq, Prod.mk.injEq] at queue
+      obtain ⟨_, _, _, _, _, _, rfl, _⟩ := queue
+      exact ⟨rfl, rfl⟩
+    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at queue
+      obtain ⟨_, _, rfl, _⟩ := queue
+      exact ⟨rfl, rfl⟩
+  refine ⟨(setValidator_slot set).trans same.2, fun other => ?_⟩
   rw [activationEpochAt_setValidator set]
   split
   · rename_i equal
     subst other
-    simp [activationEpochAt, found, Except.map]
-  · rfl
+    simp [activationEpochAt, Except.map, getValidator] at found ⊢
+    simp [found]
+  · simp [activationEpochAt, getValidator, same.1]
 
-/-- The first registry pass keeps the slot and all activation epochs. -/
+/-- The registry step of one validator keeps the slot and all activation epochs, at every fork. -/
 theorem updateRegistryEntry_activationEpochs {config : Config} {index : Nat}
-    (before : fork < .pectra)
     (computed : updateRegistryEntry config state index = .ok after) :
     after.slot = state.slot ∧
       ∀ other, activationEpochAt after other = activationEpochAt state other := by
@@ -238,13 +243,13 @@ theorem updateRegistryEntry_activationEpochs {config : Config} {index : Nat}
     · rfl
   split at rest
   · rw [liftAccessor_ok] at rest
-    obtain ⟨slot, epochs⟩ := initiateValidatorExit_activationEpochs before rest
+    obtain ⟨slot, epochs⟩ := initiateValidatorExit_activationEpochs rest
     exact ⟨slot.trans (setValidator_slot set), fun other => (epochs other).trans (first other)⟩
   · simp only [pure, Except.pure, Except.ok.injEq] at rest
     subst after
     exact ⟨setValidator_slot set, first⟩
 
-/-- Activating one validator writes the computed epoch and leaves every other activation epoch. -/
+/-- Activating one validator writes the computed epoch, and keeps the slot and the other epochs. -/
 theorem activateValidator_activationEpochs {index : ValidatorIndex}
     (computed : activateValidator state index = .ok after) :
     ∃ epoch, computeActivationExitEpoch preset (getCurrentEpoch state) = .ok epoch ∧
@@ -294,11 +299,13 @@ theorem foldlM_activateValidator_activationEpochs {indices : List ValidatorIndex
 
 /-- Before Electra, the registry writes activation epochs only in a bounded queue prefix.
 
-The queue of the first pass sorts by eligibility epoch, then by validator index.
+The queue, read after the first pass, sorts by eligibility epoch, then by validator index.
 
-Phase 0 uses validator churn, and Deneb caps it as [EIP-7514] specifies.
+Before Deneb the limit is the validator churn limit; from Deneb it is capped, as [EIP-7514] says.
 
-Each selected validator had the activation epoch FAR_FUTURE_EPOCH before the step.
+Each selected validator had the far-future activation epoch, 2^64 - 1, before the step.
+
+The limit is read after the first pass, as the step reads it.
 
 With an empty prefix, the step does not compute an activation epoch at all.
 
@@ -330,7 +337,7 @@ theorem processRegistryUpdates_activationEpochs {config : Config}
     (fun next : BeaconState preset fork => next.slot = state.slot ∧
       ∀ index, activationEpochAt next index = activationEpochAt state index)
     (fun _ _ _ holds step => by
-      obtain ⟨slot, epochs⟩ := updateRegistryEntry_activationEpochs before step
+      obtain ⟨slot, epochs⟩ := updateRegistryEntry_activationEpochs step
       exact ⟨slot.trans holds.1, fun index => (epochs index).trans (holds.2 index)⟩)
     ⟨rfl, fun _ => rfl⟩ first
   obtain ⟨_, unchanged, written⟩ := foldlM_activateValidator_activationEpochs last
@@ -354,6 +361,8 @@ theorem processRegistryUpdates_activationEpochs {config : Config}
 
 /-- Before Electra, the limit of activations bounds each list of distinct changed indices.
 
+That limit is read after the first pass.
+
 A changed index is one whose activation epoch differs after the step. -/
 theorem processRegistryUpdates_changedActivationCount {config : Config}
     (before : fork < .pectra)
@@ -373,7 +382,9 @@ theorem processRegistryUpdates_changedActivationCount {config : Config}
   refine Nat.le_trans (distinct.length_le_of_subset fun index member => ?_) bounded
   exact Classical.byContradiction fun outside => differ index member (unchanged index outside)
 
-/-- Before Electra, unless the computed epoch is FAR_FUTURE_EPOCH, exactly the prefix changes. -/
+/-- Before Electra, unless the computed epoch is the far future, exactly the prefix changes.
+
+That exception guards against an epoch that reaches 2^64 - 1, not a protocol condition. -/
 theorem processRegistryUpdates_changedActivationEpochs_exact {config : Config}
     (before : fork < .pectra)
     (computed : processRegistryUpdates config state = .ok after) :
