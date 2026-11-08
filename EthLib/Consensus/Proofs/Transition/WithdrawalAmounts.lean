@@ -7,11 +7,11 @@ public import EthLib.Consensus.Proofs.Transition.Withdrawals
 
 The step applies the expected withdrawals before Gloas, and from Gloas after a full parent.
 
-They lower the balance of each validator that names no builder by exactly their total for it.
+They lower a validator's balance by their total for it, before Gloas or for a non-builder index.
 
 That total never exceeds the balance, and a builder's balance stops at zero.
 
-Each withdrawal pays an exact amount, fixed by the part of the payload it belongs to.
+Each queued partial withdrawal and each withdrawal of the validator sweep pays an exact amount.
 
 The sweep of validators names each validator at most once and comes last.
 
@@ -389,7 +389,7 @@ private theorem mod_ne_of_lt {start t u count : Nat} (lt : t < u) (small : u < c
   have := Nat.le_of_dvd (by omega) divides
   omega
 
-/-- The loop of the sweep pays each validator it visits by the rule above, at most once.
+/-- The loop of the sweep pays each validator it visits as a full or partial sweep, at most once.
 
 The sweep starts at a validator of the registry, and wraps around it.
 
@@ -829,7 +829,9 @@ Each part reads the parts before it.
 
 Before its fork a part is empty and keeps the withdrawal index.
 
-The theorems above give what each part pays. -/
+Theorems above state what the partial withdrawals and the validator sweep pay.
+
+The withdrawal proofs state what the builder parts pay. -/
 theorem getExpectedWithdrawals_parts {capella : .shapella ≤ fork}
     {expected : ExpectedWithdrawals}
     (computed : getExpectedWithdrawals state capella = .ok expected) :

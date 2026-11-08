@@ -22,6 +22,8 @@ A validator can withdraw its whole balance exactly when its credentials, epoch a
 A full payload starts the next sweep after its last withdrawal, before the wrap at the registry.
 
 Otherwise the next sweep starts one sweep after the start of the last one.
+
+From Gloas, a builder withdrawal pays a queued entry, or all that a withdrawable builder has left.
 -/
 
 @[expose] public section
@@ -1001,6 +1003,8 @@ theorem getBuildersSweepWithdrawals_pays {gloas : .glamsterdam ≤ fork} {start 
     (fun _ inside => absurd inside (by simp)) loopOk
 
 end
+
+/-! ## The withdrawals that a balance allows -/
 
 /-- Withdrawals that each name a builder. -/
 private def AllBuilders (withdrawals : Array Withdrawal) : Prop :=
