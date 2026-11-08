@@ -7,6 +7,7 @@ public import EthLib.Cryptography.Proofs.Bls.G1Group
 public import EthLib.Cryptography.Proofs.Bls.G1Order
 public import EthLib.Cryptography.Proofs.Bls.PairingLaws
 public import EthLib.Cryptography.Proofs.Bls.KeyValidate
+import EthLib.Cryptography.Proofs.Bls.PairingAte
 
 /-!
 # Sufficiency of the ceremony pairing checks
@@ -16,7 +17,7 @@ The KZG ceremony sequencer runs three pairing checks on each contribution.
 The source is the sequencer document of `kzg-ceremony-specs`, section "Pairing checks":
 <https://github.com/ethereum/kzg-ceremony-specs/blob/master/docs/sequencer/sequencer.md#pairing-checks>
 
-Under the pairing law, the checks force each point to represent a power of the new trapdoor.
+The checks force each point to represent a power of the new trapdoor.
 
 A point represents a scalar when its group element is that multiple of the generator.
 
@@ -243,15 +244,15 @@ private theorem add_neg_mul_eq_zero_iff (a b c d : Fr) :
     a * b + -c * d = 0 ↔ a * b = c * d := by
   constructor <;> intro h <;> linear_combination h
 
-/-- Under the pairing law, a pairing equality of representatives is an equality of scalars.
+/-- A pairing equality of representatives is an equality of scalars.
 
 `e(a • g1, b • g2) = e(c • g1, d • g2)` holds exactly when `a * b = c * d`. -/
-theorem pairingEq_iff (laws : Bls.PairingLaws) {p₁ p₂ : G1} {q₁ q₂ : G2} {a b c d : Fr}
+theorem pairingEq_iff {p₁ p₂ : G1} {q₁ q₂ : G2} {a b c d : Fr}
     (hp₁ : G1.Represents p₁ a) (hq₁ : G2.Represents q₁ b)
     (hp₂ : G1.Represents p₂ c) (hq₂ : G2.Represents q₂ d) :
     pairingEq p₁ q₁ p₂ q₂ ↔ a * b = c * d := by
   unfold pairingEq
-  rw [laws.two_pairs hp₁ hq₁ hp₂.neg hq₂]
+  rw [Bls.pairingLaws.two_pairs hp₁ hq₁ hp₂.neg hq₂]
   exact add_neg_mul_eq_zero_iff a b c d
 
 /-- A representative of `0 • g1` is the point at infinity. -/
@@ -272,9 +273,8 @@ theorem g2_ne_zero_of_isInfinity_eq_false {q : G2} {b : Fr} (h : G2.Represents q
 
 /-- **Scalar consequence of the three pairing checks.**
 
-Under the pairing law, the exponent of point `i` is `(s * x)^i`, in both groups. -/
+The exponent of point `i` is `(s * x)^i`, in both groups. -/
 theorem exponentChecksSufficient
-    (laws : Bls.PairingLaws)
     (contribution : Contribution) (transcript : Transcript)
     (checks : Checks contribution transcript)
     (exponents : SubgroupExponents contribution transcript)
@@ -292,7 +292,7 @@ theorem exponentChecksSufficient
 
   -- The tau update: `e([s], [x]) = e([a_1], [1])`.
   have updateScalar : exponents.s * exponents.x = exponents.a 1 := by
-    have hmul := (pairingEq_iff laws exponents.previousTau_rep exponents.potPubkey_rep
+    have hmul := (pairingEq_iff exponents.previousTau_rep exponents.potPubkey_rep
       (exponents.g1_rep 1 checks.one_lt_g1) G2.represents_generator).mp checks.tauUpdate
     exact hmul.trans (mul_one (exponents.a 1))
 
@@ -300,7 +300,7 @@ theorem exponentChecksSufficient
   have g1Recurrence : ∀ i (hi : i + 1 < contribution.g1Powers.size),
       exponents.a (i + 1) = exponents.a i * exponents.b 1 := by
     intro i hi
-    have hmul := (pairingEq_iff laws (exponents.g1_rep (i + 1) hi) G2.represents_generator
+    have hmul := (pairingEq_iff (exponents.g1_rep (i + 1) hi) G2.represents_generator
       (exponents.g1_rep i (Nat.lt_trans (Nat.lt_succ_self i) hi))
       (exponents.g2_rep 1 checks.one_lt_g2)).mp (checks.g1Powers i hi)
     exact
@@ -313,7 +313,7 @@ theorem exponentChecksSufficient
   have crossGroup : ∀ i (hi : i < contribution.g2Powers.size),
       exponents.b i = exponents.a i := by
     intro i hi
-    have hmul := (pairingEq_iff laws G1.represents_generator (exponents.g2_rep i hi)
+    have hmul := (pairingEq_iff G1.represents_generator (exponents.g2_rep i hi)
       (exponents.g1_rep i (Nat.lt_of_lt_of_le hi checks.g2_le_g1))
       G2.represents_generator).mp (checks.g2Powers i hi)
     exact
@@ -410,13 +410,12 @@ theorem exponentChecksSufficient
 
 /-- **Sufficiency of the three pairing checks.**
 
-Assume the pairing law, and that the previous tau point and the public key are not at infinity.
+Assume that the previous tau point and the public key are not at infinity.
 
 If the three checks hold, point `i` represents `(s * x)^i` times the generator, in both groups.
 
 The assumptions on infinity are the previous transcript's validity and a check of the public key. -/
 theorem checksSufficient
-    (laws : Bls.PairingLaws)
     (contribution : Contribution) (transcript : Transcript)
     (checks : Checks contribution transcript)
     (exponents : SubgroupExponents contribution transcript)
@@ -428,7 +427,7 @@ theorem checksSufficient
     (∀ i (hi : i < contribution.g2Powers.size),
       G2.Represents (contribution.g2Powers[i]'hi)
         (Fr.powNat (exponents.s * exponents.x) i)) := by
-  have scalarPowers := exponentChecksSufficient laws contribution transcript checks
+  have scalarPowers := exponentChecksSufficient contribution transcript checks
     exponents previousTauNonzero pubkeyNonzero
   refine ⟨fun i hi => ?_, fun i hi => ?_⟩
   · rw [← scalarPowers.1 i hi]
@@ -438,7 +437,6 @@ theorem checksSufficient
 
 /-- The checks force the zeroth exponent in `G1` to be one. -/
 theorem g1ZeroExponentEqOne
-    (laws : Bls.PairingLaws)
     (contribution : Contribution) (transcript : Transcript)
     (checks : Checks contribution transcript)
     (exponents : SubgroupExponents contribution transcript)
@@ -447,13 +445,12 @@ theorem g1ZeroExponentEqOne
     exponents.a 0 = 1 := by
   have zero_lt_g1 : 0 < contribution.g1Powers.size :=
     Nat.lt_trans (Nat.zero_lt_succ 0) checks.one_lt_g1
-  have h := (exponentChecksSufficient laws contribution transcript checks exponents
+  have h := (exponentChecksSufficient contribution transcript checks exponents
     previousTauNonzero pubkeyNonzero).1 0 zero_lt_g1
   simpa [Fr.powNat_zero] using h
 
 /-- The zeroth point in `G1` represents the generator itself. -/
 theorem g1ZeroPointRepresentsOne
-    (laws : Bls.PairingLaws)
     (contribution : Contribution) (transcript : Transcript)
     (checks : Checks contribution transcript)
     (exponents : SubgroupExponents contribution transcript)
@@ -461,7 +458,7 @@ theorem g1ZeroPointRepresentsOne
     (pubkeyNonzero : G2.isInfinity contribution.potPubkey = false) :
     G1.Represents
       (contribution.g1Powers[0]'(Nat.lt_trans (Nat.zero_lt_succ 0) checks.one_lt_g1)) 1 := by
-  have h := (checksSufficient laws contribution transcript checks exponents
+  have h := (checksSufficient contribution transcript checks exponents
     previousTauNonzero pubkeyNonzero).1 0
       (Nat.lt_trans (Nat.zero_lt_succ 0) checks.one_lt_g1)
   simpa [Fr.powNat_zero] using h
@@ -502,13 +499,12 @@ theorem nonempty_subgroupExponents
 
 /-- **Sufficiency of the checks of the sequencer, with the subgroup checks.**
 
-Assume the pairing law and the three pairing checks.
+Assume the three pairing checks.
 
 Assume that every point is valid and in its subgroup, and that two points are not at infinity.
 
 Then some `τ` makes point `i` represent `τ^i` times the generator, in both groups. -/
 theorem checksSufficient_of_subgroupChecks
-    (laws : Bls.PairingLaws)
     (contribution : Contribution) (transcript : Transcript)
     (checks : Checks contribution transcript)
     (hτ : G1.Valid transcript.previousTau ∧ transcript.previousTau.inSubgroup = true)
@@ -525,7 +521,7 @@ theorem checksSufficient_of_subgroupChecks
       (∀ i (hi : i < contribution.g2Powers.size),
         G2.Represents (contribution.g2Powers[i]'hi) (Fr.powNat τ i)) := by
   obtain ⟨exponents⟩ := nonempty_subgroupExponents contribution transcript hτ hpk hg1 hg2
-  exact ⟨_, checksSufficient laws contribution transcript checks exponents
+  exact ⟨_, checksSufficient contribution transcript checks exponents
     previousTauNonzero pubkeyNonzero⟩
 
 end EthLib.Cryptography.Kzg.CeremonyChecks

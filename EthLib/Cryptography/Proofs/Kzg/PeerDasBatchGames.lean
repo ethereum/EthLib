@@ -21,7 +21,7 @@ The verifier queries the oracle on the inputs of the batch, and gets the challen
 
 It accepts when the batch check returns a verdict and `x` is a root of the error polynomial.
 
-Under the pairing law, this is the batch check of cells at the challenge of the hash.
+For a well-formed setup, this is the batch check of cells at the challenge of the hash.
 
 No theorem relates the two at another challenge.
 
@@ -61,7 +61,7 @@ The challenge `x` is a root of the error polynomial of the batch.
 
 Each point has the scalar of its bytes, and the setup is one of the secret `τ`.
 
-Under the pairing law, this is the batch check of cells at the challenge of the hash.
+For a well-formed setup, this is the batch check of cells at the challenge of the hash.
 
 No theorem relates the two at another challenge. -/
 def CellBatchInput.AcceptsAt (s : TrustedSetup) (τ : Fr) (y : CellBatchInput) (x : Fr) : Prop :=
@@ -70,10 +70,10 @@ def CellBatchInput.AcceptsAt (s : TrustedSetup) (τ : Fr) (y : CellBatchInput) (
 
 /-- **At the challenge of its hash, the check with a given challenge is the batch check.**
 
-Assume the pairing law and a well-formed setup of the secret `τ`.
+Assume a well-formed setup of the secret `τ`.
 
 The batch check accepts with its own challenge exactly when the batch check of cells accepts. -/
-theorem CellBatchInput.acceptsAt_challenge_iff (laws : Bls.PairingLaws) {s : TrustedSetup}
+theorem CellBatchInput.acceptsAt_challenge_iff {s : TrustedSetup}
     {τ : Fr} (hs : s.WellFormed τ) (y : CellBatchInput) :
     y.AcceptsAt s τ y.toCellBatch.challenge ↔
       verifyCellKzgProofBatch s y.commitments y.cellIndices y.cells y.proofs = .ok true := by
@@ -82,7 +82,7 @@ theorem CellBatchInput.acceptsAt_challenge_iff (laws : Bls.PairingLaws) {s : Tru
         (b = true ↔ (y.toCellBatch.errorPoly τ scalarOf scalarOf).eval y.toCellBatch.challenge =
           0) := fun {b} hb => by
     obtain ⟨hvc, hvp⟩ := validates_of_verifyCellKzgProofBatch hb
-    exact verifyCellKzgProofBatch_ok_iff_root laws hs y
+    exact verifyCellKzgProofBatch_ok_iff_root hs y
       (fun k hk _ hP => represents_scalarOf
         (hvc y.commitments[k]! (getElem!_pos y.commitments k hk ▸ Array.getElem_mem hk)) hP)
       (fun k hk _ hP => represents_scalarOf
@@ -221,7 +221,7 @@ noncomputable def batchCodeArsdhReduction
 
 /-- **When the adversary wins batch code-binding, a search wins or the challenge is a root.**
 
-Assume the pairing law and a well-formed setup of the secret `τ`.
+Assume a well-formed setup of the secret `τ`.
 
 If the opened cells are all valid, the adversary also wins code-binding with cells checked alone.
 
@@ -231,7 +231,7 @@ Otherwise the error polynomial of the batch is not zero, and the challenge is on
 
 The batch then has at most 128 cells, since their indices are distinct and below 128. -/
 theorem batchCodeBinding_cases {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
-    (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ)
+    {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ)
     {p : (Bytes48 × List CellOpening) × Fr} (hw : BatchCodeBindingWins s τ p) :
     IsBsdhSolutionSub M τ (codeBsdhSearch M s p.1) ∨
       IsArsdhSolution (FIELD_ELEMENTS_PER_BLOB - 1) τ (codeArsdhSearch s p.1) ∨
@@ -248,8 +248,8 @@ theorem batchCodeBinding_cases {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
       have hv := cellOpeningValid_of_errorPoly_eq_zero hb hz (k := k)
         (by simpa [openingsInput] using hk)
       simp only [openingsInput, getElem!_toArray_map _ _ hk] at hv
-      exact (CellOpening.verifies_iff laws hs).mpr hv
-    rcases codeBinding_searches M laws hs hwin with h | h
+      exact (CellOpening.verifies_iff hs).mpr hv
+    rcases codeBinding_searches M hs hwin with h | h
     · exact Or.inl h
     · exact Or.inr (Or.inl h)
   · refine Or.inr (Or.inr ⟨?_, hz, hr⟩)
@@ -268,7 +268,7 @@ theorem batchCodeBinding_cases {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
 
 /-- **Code-binding of PeerDAS with one batch check of all openings.**
 
-Assume the pairing law, and take a model of the target group.
+Take a model of the target group.
 
 Let the adversary make at most `q` queries to the random oracle.
 
@@ -280,7 +280,6 @@ Its advantage against batch code-binding is at most the sum of three terms.
 
 Here `r` is the order of `Fr`, and the term `q + 1` counts the query of the verifier. -/
 theorem batchCodeBindingAdvantage_le {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
-    (laws : Bls.PairingLaws)
     (adversary : SetupPowers → OracleComp (CellBatch →ₒ Fr) (Bytes48 × List CellOpening))
     {q : Nat} (hq : ∀ pw, OracleComp.IsTotalQueryBound (adversary pw) q) :
     batchCodeBindingAdvantage adversary ≤
@@ -296,7 +295,7 @@ theorem batchCodeBindingAdvantage_le {GT : Type} [CommMonoid GT] (M : TargetGrou
     (fun τ p => (openingsInput p.1).cellIndices.size ≤ CELLS_PER_EXT_BLOB ∧
       (openingsInput p.1).toCellBatch.errorPoly τ scalarOf scalarOf ≠ 0 ∧
       ((openingsInput p.1).toCellBatch.errorPoly τ scalarOf scalarOf).eval p.2 = 0)
-    fun τ _ hw => batchCodeBinding_cases M laws (wellFormed_ofPowers τ) hw).trans
+    fun τ _ hw => batchCodeBinding_cases M (wellFormed_ofPowers τ) hw).trans
       (add_le_add le_rfl (prEvent_bind_le_of_forall _ _ _ fun τ => ?_))
   -- For each secret, the root event is the one of the outer check with the oracle.
   have hq' : OracleComp.IsTotalQueryBound (openingsInput <$> adversary (setupPowers τ)) q := by

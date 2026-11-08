@@ -59,9 +59,9 @@ Without a model of cost, hardness cannot be a Lean hypothesis.
 
 The BSDH advantage is relative to a model of the target group.
 
-The real pairing gives such a model under the pairing law.
+The real pairing gives such a model.
 
-Under the pairing law, this verifier accepts the cells and proofs of a blob.
+This verifier accepts the cells and proofs of a blob.
 
 Another file proves it.
 
@@ -128,7 +128,7 @@ The secret `τ` is uniform in `Fr`, and the adversary receives its powers.
 
 It wins when it outputs `c ≠ τ` and the element of the target group for `1 / (τ - c)`.
 
-The target group is a model; the real pairing gives one under the pairing law. -/
+The target group is a model, and the real pairing gives one. -/
 noncomputable def bsdhAdvantage {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
     (adversary : SetupPowers → ProbComp (Fr × GT)) : ℝ≥0∞ :=
   Pr{let τ ← $ᵗ Fr; let sol ← adversary (setupPowers τ)}[IsBsdhSolutionSub M τ sol]
@@ -241,7 +241,7 @@ theorem eval_ne_zero_of_natDegree_le_zero {P : Fr[X]} (h0 : P ≠ 0) (hd : P.nat
 
 /-- **An accepted cell is valid.**
 
-Assume the pairing law and a well-formed setup of the secret `τ`.
+Assume a well-formed setup of the secret `τ`.
 
 Let the verifier accept one opening for a commitment.
 
@@ -256,7 +256,7 @@ These satisfy `c - I(τ) = w (τ^64 - h^64)`.
 No random oracle is needed: the error polynomial of one cell is a constant.
 
 A nonzero constant has no root, and the zero constant is the valid case. -/
-theorem CellOpening.Verifies.valid (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
+theorem CellOpening.Verifies.valid {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) {commitment : Bytes48} {o : CellOpening}
     (h : o.Verifies s commitment) :
     o.cellIndex < CELLS_PER_EXT_BLOB ∧ ∃ e C c P w, cellToCosetEvals o.cell = .ok e ∧
@@ -298,7 +298,7 @@ theorem CellOpening.Verifies.valid (laws : Bls.PairingLaws) {s : TrustedSetup} {
     cases hP'
     exact hw
   have hx : y.toCellBatch.cosetsEvals = evals := decodeCells_of_ok hev
-  rcases verifyCellKzgProofBatch_valid_or_root laws hs y (c := fun _ => c) (w := fun _ => w) hyC
+  rcases verifyCellKzgProofBatch_valid_or_root hs y (c := fun _ => c) (w := fun _ => w) hyC
     hyP h with hall | ⟨h0, hroot⟩
   · have hv := hall 0 (by simp [y])
     rw [hx] at hv
@@ -331,7 +331,7 @@ def decodePoint (b : Bytes48) : G1 :=
 /-- Two accepted openings for one commitment have scalars that one equation relates.
 
 Their commitment scalars are equal, since the commitment decodes to one point. -/
-theorem CellOpening.Verifies.valid₂ (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
+theorem CellOpening.Verifies.valid₂ {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) {commitment : Bytes48} {C : G1} {c : Fr}
     (hC : uncompressG1 commitment = .ok C) (hc : G1.Represents C c) {o : CellOpening}
     (h : o.Verifies s commitment) :
@@ -339,7 +339,7 @@ theorem CellOpening.Verifies.valid₂ (laws : Bls.PairingLaws) {s : TrustedSetup
       decodeCell o.cell = e ∧ G1.Represents (decodePoint o.proof) w ∧
       c - (cellInterpolant o.cellIndex e).eval τ =
         w * (τ ^ FIELD_ELEMENTS_PER_CELL - cellShift o.cellIndex ^ FIELD_ELEMENTS_PER_CELL) := by
-  obtain ⟨hci, e, C', c', P, w, he, hC', hc', hP, hw, hv⟩ := h.valid laws hs
+  obtain ⟨hci, e, C', c', P, w, he, hC', hc', hP, hw, hv⟩ := h.valid hs
   rw [hC] at hC'
   cases hC'
   rw [hc.unique hc'] at ⊢
@@ -386,13 +386,13 @@ noncomputable def positionBsdhReduction {GT : Type} [CommMonoid GT] (M : TargetG
 
 /-- When the adversary wins position-binding, the search returns a BSDH solution. -/
 theorem isBsdhSolutionSub_positionBsdhSearch {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
-    (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ)
+    {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ)
     {out : Bytes48 × CellOpening × CellOpening} (hw : PositionBindingWins s out) :
     IsBsdhSolutionSub M τ (positionBsdhSearch M s out) := by
   obtain ⟨hidx, hne, h, h'⟩ := hw
-  obtain ⟨hci, -, C, c, -, -, -, hC, hc, -⟩ := h.valid laws hs
-  obtain ⟨-, e, w, he, hde, hw, hv⟩ := h.valid₂ laws hs hC hc
-  obtain ⟨-, e', w', he', hde', hw', hv'⟩ := h'.valid₂ laws hs hC hc
+  obtain ⟨hci, -, C, c, -, -, -, hC, hc, -⟩ := h.valid hs
+  obtain ⟨-, e, w, he, hde, hw, hv⟩ := h.valid₂ hs hC hc
+  obtain ⟨-, e', w', he', hde', hw', hv'⟩ := h'.valid₂ hs hC hc
   rw [← hidx] at hv'
   have hee : e ≠ e' := fun heq => hne (cellToCosetEvals_inj he (heq ▸ he'))
   obtain ⟨sol, hsol, hsolv⟩ := findBsdh_valid M hs hci (size_bytesToBlsFields he)
@@ -402,19 +402,18 @@ theorem isBsdhSolutionSub_positionBsdhSearch {GT : Type} [CommMonoid GT] (M : Ta
 
 /-- **Position-binding of the PeerDAS commitment (Lemma 3 of ePrint 2025/1683).**
 
-Assume the pairing law, and take a model of the target group.
+Take a model of the target group.
 
 For every adversary, the advantage is at most that of the reduction against `(4095, 64)`-BSDH.
 -/
 theorem positionBindingAdvantage_le {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
-    (laws : Bls.PairingLaws)
     (adversary : SetupPowers → ProbComp (Bytes48 × CellOpening × CellOpening)) :
     positionBindingAdvantage adversary ≤ bsdhAdvantage M (positionBsdhReduction M adversary) :=
   prEvent_le_of_reduction ($ᵗ Fr) setupPowers adversary
     (fun pw => positionBsdhSearch M (TrustedSetup.ofPowers pw))
     (fun τ out => PositionBindingWins (TrustedSetup.ofPowers (setupPowers τ)) out)
     (fun τ sol => IsBsdhSolutionSub M τ sol)
-    fun τ _ hw => isBsdhSolutionSub_positionBsdhSearch M laws (wellFormed_ofPowers τ) hw
+    fun τ _ hw => isBsdhSolutionSub_positionBsdhSearch M (wellFormed_ofPowers τ) hw
 
 /-! ## Code-binding, Lemma 4 -/
 
@@ -543,7 +542,7 @@ theorem eq_codewordCell {cell : Cell} {e : CosetEvals} (he : cellToCosetEvals ce
 
 /-- **When the adversary wins code-binding, one of the two searches returns a solution.**
 
-Assume the pairing law and a well-formed setup of the secret `τ`.
+Assume a well-formed setup of the secret `τ`.
 
 Let `I` interpolate the first 64 openings.
 
@@ -553,21 +552,21 @@ Otherwise the deterministic argument applies to the first 64 openings and the ou
 
 Then the first search returns a BSDH solution, or the second returns an ARSDH solution. -/
 theorem codeBinding_searches {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
-    (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ)
+    {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ)
     {out : Bytes48 × List CellOpening} (hw : CodeBindingWins s out) :
     IsBsdhSolutionSub M τ (codeBsdhSearch M s out) ∨
       IsArsdhSolution (FIELD_ELEMENTS_PER_BLOB - 1) τ (codeArsdhSearch s out) := by
   obtain ⟨com, os⟩ := out
   obtain ⟨hnd, hver, hno⟩ := hw
   have hidx : ∀ o ∈ os, o.cellIndex < CELLS_PER_EXT_BLOB := fun o ho =>
-    ((hver o ho).valid laws hs).1
+    ((hver o ho).valid hs).1
   have hJ : ∀ j ∈ firstCells os, j < CELLS_PER_EXT_BLOB := fun j hj => by
     obtain ⟨o, ho, rfl⟩ := exists_of_mem_firstCells hj
     exact hidx o ho
   have hdeg := natDegree_cellsInterpolant_lt hJ (card_firstCells_le os) (openedValues os)
   have hev : ∀ o ∈ os, ∃ e, cellToCosetEvals o.cell = .ok e ∧ openedValues os o.cellIndex = e :=
     fun o ho => by
-      obtain ⟨-, e, -, -, -, -, he, -⟩ := (hver o ho).valid laws hs
+      obtain ⟨-, e, -, -, -, -, he, -⟩ := (hver o ho).valid hs
       refine ⟨e, he, ?_⟩
       simp only [openedValues, openingAt_cellIndex hnd ho, Option.map_some, Option.getD_some,
         decodeCell_of_ok he]
@@ -590,7 +589,7 @@ theorem codeBinding_searches {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
         (cellsInterpolant (firstCells os) (openedValues os)).eval (cellPoint o.cellIndex m) =
           (openedValues os o.cellIndex)[m]! := by
       simpa using List.find?_some hout
-    obtain ⟨hci, -, C, c, -, -, -, hC, hc, -⟩ := (hver o ho).valid laws hs
+    obtain ⟨hci, -, C, c, -, -, -, hC, hc, -⟩ := (hver o ho).valid hs
     -- Fewer than 64 openings are all among the first 64, where the interpolation agrees.
     have hJcard : (firstCells os).card = FIELD_ELEMENTS_PER_CELL := by
       by_contra hne
@@ -615,7 +614,7 @@ theorem codeBinding_searches {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
         rcases Finset.mem_insert.mp hj with rfl | hj
         · exact ⟨o, ho, rfl⟩
         · exact exists_of_mem_firstCells hj
-      obtain ⟨-, e', w', he', hde', hw', hv'⟩ := (hver o' ho').valid₂ laws hs hC hc
+      obtain ⟨-, e', w', he', hde', hw', hv'⟩ := (hver o' ho').valid₂ hs hC hc
       refine ⟨w', ?_, ?_⟩
       · simpa only [openedProof, openingAt_cellIndex hnd ho', Option.map_some, Option.getD_some]
           using hw'
@@ -637,7 +636,7 @@ theorem codeBinding_searches {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
 
 /-- **Code-binding of the PeerDAS commitment (Lemma 4 of ePrint 2025/1683).**
 
-Assume the pairing law, and take a model of the target group.
+Take a model of the target group.
 
 For every adversary, the advantage against code-binding is at most the sum of two advantages.
 
@@ -645,7 +644,7 @@ The first is that of the first reduction against `(4095, 64)`-BSDH.
 
 The second is that of the second reduction against `(4095, 64)`-ARSDH. -/
 theorem codeBindingAdvantage_le {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
-    (laws : Bls.PairingLaws) (adversary : SetupPowers → ProbComp (Bytes48 × List CellOpening)) :
+    (adversary : SetupPowers → ProbComp (Bytes48 × List CellOpening)) :
     codeBindingAdvantage adversary ≤
       bsdhAdvantage M (codeBsdhReduction M adversary) +
         arsdhAdvantage (codeArsdhReduction adversary) :=
@@ -655,6 +654,6 @@ theorem codeBindingAdvantage_le {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
     (fun τ out => CodeBindingWins (TrustedSetup.ofPowers (setupPowers τ)) out)
     (fun τ sol => IsBsdhSolutionSub M τ sol)
     (fun τ sol => IsArsdhSolution (FIELD_ELEMENTS_PER_BLOB - 1) τ sol)
-    fun τ _ hw => codeBinding_searches M laws (wellFormed_ofPowers τ) hw
+    fun τ _ hw => codeBinding_searches M (wellFormed_ofPowers τ) hw
 
 end EthLib.Cryptography.Kzg

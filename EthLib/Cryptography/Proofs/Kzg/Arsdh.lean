@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Kzg.CellBinding
 public import EthLib.Cryptography.Proofs.Bls.Represents
+import EthLib.Cryptography.Proofs.Bls.PairingAte
 
 /-!
 # Proofs: the winning conditions of the PeerDAS assumptions
@@ -116,15 +117,15 @@ private theorem pairing_form_fr (a b v : Fr) :
 
 Let `Q` represent `V_S(τ)` in `G2`.
 
-Under the pairing law, `a = b V_S(τ)` holds exactly when `e(g, g2) = e(φ, Q)`.
+`a = b V_S(τ)` holds exactly when `e(g, g2) = e(φ, Q)`.
 
 The check of the pairs `(g, -g2)` and `(φ, Q)` tests that equation. -/
-theorem isArsdhSolution_iff_pairingCheck (laws : Bls.PairingLaws) {d : Nat} {τ : Fr}
+theorem isArsdhSolution_iff_pairingCheck {d : Nat} {τ : Fr}
     {S : Finset Fr} {g φ : G1} {Q : G2} {a b : Fr} (hg : G1.Represents g a)
     (hφ : G1.Represents φ b) (hQ : G2.Represents Q (vanishingAt S τ)) :
     IsArsdhSolution d τ (S, g, φ) ↔ S.card = d + 1 ∧ a ≠ 0 ∧
       Bls.pairingCheck #[(g, G2.neg G2.generator), (φ, Q)] = true := by
-  rw [isArsdhSolution_iff hg hφ, laws.two_pairs hg G2.represents_generator.neg hφ hQ]
+  rw [isArsdhSolution_iff hg hφ, Bls.pairingLaws.two_pairs hg G2.represents_generator.neg hφ hQ]
   exact and_congr_right' (and_congr_right' (pairing_form_fr a b _))
 
 end EthLib.Cryptography.Kzg

@@ -86,14 +86,14 @@ theorem findSdh_valid_of_identity {τ c w w' z y y' : Fr} {P P' : G1}
 
 /-- **Evaluation binding, with a named solution.**
 
-Assume the pairing law and a well-formed setup of the secret `τ`.
+Assume a well-formed setup of the secret `τ`.
 
 Let a commitment and two proofs represent `c`, `w` and `w'`.
 
 Let the check accept the first proof for the value `y`, and the second for `y'`.
 
 Then `y = y'`, or the search returns a strong Diffie–Hellman solution for `τ`. -/
-theorem findSdh_valid (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
+theorem findSdh_valid {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) {C P P' : G1} {c w w' z y y' : Fr}
     (hC : G1.Represents C c) (hP : G1.Represents P w) (hP' : G1.Represents P' w')
     (h : verifyKzgProofImpl s C z y P = true) (h' : verifyKzgProofImpl s C z y' P' = true) :
@@ -101,8 +101,8 @@ theorem findSdh_valid (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
   by_cases hne : y = y'
   · exact Or.inl hne
   · exact Or.inr (findSdh_valid_of_identity hP hP' hne
-      ((verifyKzgProofImpl_iff laws hs hC hP z y).mp h)
-      ((verifyKzgProofImpl_iff laws hs hC hP' z y').mp h'))
+      ((verifyKzgProofImpl_iff hs hC hP z y).mp h)
+      ((verifyKzgProofImpl_iff hs hC hP' z y').mp h'))
 
 /-- A point that passes KZG validation represents some scalar. -/
 theorem represents_of_validateKzgG1Point {b : Bytes48} {P : G1}
@@ -178,12 +178,12 @@ theorem verifyKzgProof_eq_ok_true {s : TrustedSetup} {commitmentBytes proofBytes
 
 /-- **Evaluation binding from bytes.**
 
-Assume the pairing law and a well-formed setup of the secret `τ`.
+Assume a well-formed setup of the secret `τ`.
 
 Let the check accept one commitment at one point `z` with two values and two proofs.
 
 Then the values agree, or the search on the decoded openings returns a solution for `τ`. -/
-theorem findSdh_valid_bytes (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
+theorem findSdh_valid_bytes {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) {commitmentBytes proofBytes proofBytes' : Bytes48}
     {zBytes yBytes yBytes' : Bytes32}
     (h : verifyKzgProof s commitmentBytes zBytes yBytes proofBytes = .ok true)
@@ -199,6 +199,6 @@ theorem findSdh_valid_bytes (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr
   obtain ⟨c, hrC⟩ := represents_of_validateKzgG1Point hC
   obtain ⟨w, hrP⟩ := represents_of_validateKzgG1Point hP
   obtain ⟨w', hrP'⟩ := represents_of_validateKzgG1Point hP'
-  exact ⟨z, y, y', P, P', hz, hy, hy', hP, hP', findSdh_valid laws hs hrC hrP hrP' hv hv'⟩
+  exact ⟨z, y, y', P, P', hz, hy, hy', hP, hP', findSdh_valid hs hrC hrP hrP' hv hv'⟩
 
 end EthLib.Cryptography.Kzg
