@@ -20,6 +20,10 @@ So the queue splits into the deposits added to the balances, those dropped, and 
 
 A pass postpones exactly the deposits it reads whose validator exits and is not withdrawn.
 
+That needs the registry and the limit per epoch to fit together in 64 bits.
+
+The validators it tests are those at the start of the pass.
+
 The balances plus the amounts in the queue never rise.
 
 A pass that leaves deposits unread stops at its stop condition, the limit per epoch or the churn.
@@ -279,11 +283,11 @@ Those are the deposits whose validator, at the start of the pass, neither exits 
 
 The churn grows by nothing else.
 
-Also, `moved` holds exactly the deposits of `read` whose validator exits and is not withdrawn.
+Under it, `moved` holds exactly the deposits of `read` whose validator exits and is not withdrawn.
 
-`applied` holds the others.
+As for the churn, the validators are those at the start of the pass.
 
-As for the churn, the validators are those at the start of the pass. -/
+`applied` holds the others. -/
 structure PassPendingDepositsFacts (config : Config) (checks : SignatureChecks)
     (stop : PendingDeposit → Bool) (nextEpoch : Epoch) (available : Gwei)
     (state : BeaconState preset fork) (processed : Gwei) (count : Nat)
@@ -549,13 +553,15 @@ theorem processPendingDeposits_applied {electra : .pectra ≤ fork}
 
 /-- The pending deposits of an epoch read a prefix of the queue, at most the limit per epoch.
 
-They postpone those whose validator exits and is not withdrawn before the next epoch.
+They postpone those whose validator, in the state before, exits and is not withdrawn.
+
+Withdrawn means withdrawable before the next epoch.
 
 They apply the others in order, and move the postponed ones to the end of the queue in order.
 
 The state after is the state of those applied, with a new queue and a new churn left over.
 
-That needs room in 64 bits for the registry and the limit per epoch. -/
+That needs the registry and the limit per epoch to fit together in 64 bits. -/
 theorem processPendingDeposits_postponed {electra : .pectra ≤ fork}
     (computed : processPendingDeposits config checks state electra = .ok after)
     (room : state.validators.data.size + preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat < 2 ^ 64) :
