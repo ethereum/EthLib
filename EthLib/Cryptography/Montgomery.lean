@@ -1399,28 +1399,28 @@ theorem size_powTableAux (a : Montgomery M) :
   mul s t[d.toNat]
 
 /-- The top four bits of a word are a digit below 16. -/
-theorem toNat_shiftRight_twentyEight_lt (w : UInt32) : (w >>> 28).toNat < 16 := by
+theorem topDigit_lt (w : UInt32) : (w >>> 28).toNat < 16 := by
   rw [UInt32.toNat_shiftRight, Nat.shiftRight_eq_div_pow]
   have := w.toNat_lt
   simp only [UInt32.reduceToNat, Nat.reduceMod]
   omega
 
 /-- The low four bits of a word are a digit below 16. -/
-theorem toNat_and_fifteen_lt (w : UInt32) : (w &&& 15).toNat < 16 := by
+theorem lowDigit_lt (w : UInt32) : (w &&& 15).toNat < 16 := by
   rw [UInt32.toNat_and]
   exact Nat.lt_succ_of_le Nat.and_le_right
 
 /-- `acc ^ (2 ^ 32) * a ^ w`, four bits of `w` at a time, with the powers `t` of `a`. -/
 @[inline] def powWord (t : Vector (Montgomery M) 16) (acc : Montgomery M) (w : UInt32) :
     Montgomery M :=
-  let acc := window t acc (w >>> 28) (toNat_shiftRight_twentyEight_lt w)
-  let acc := window t acc (w >>> 24 &&& 15) (toNat_and_fifteen_lt _)
-  let acc := window t acc (w >>> 20 &&& 15) (toNat_and_fifteen_lt _)
-  let acc := window t acc (w >>> 16 &&& 15) (toNat_and_fifteen_lt _)
-  let acc := window t acc (w >>> 12 &&& 15) (toNat_and_fifteen_lt _)
-  let acc := window t acc (w >>> 8 &&& 15) (toNat_and_fifteen_lt _)
-  let acc := window t acc (w >>> 4 &&& 15) (toNat_and_fifteen_lt _)
-  window t acc (w &&& 15) (toNat_and_fifteen_lt _)
+  let acc := window t acc (w >>> 28) (topDigit_lt w)
+  let acc := window t acc (w >>> 24 &&& 15) (lowDigit_lt _)
+  let acc := window t acc (w >>> 20 &&& 15) (lowDigit_lt _)
+  let acc := window t acc (w >>> 16 &&& 15) (lowDigit_lt _)
+  let acc := window t acc (w >>> 12 &&& 15) (lowDigit_lt _)
+  let acc := window t acc (w >>> 8 &&& 15) (lowDigit_lt _)
+  let acc := window t acc (w >>> 4 &&& 15) (lowDigit_lt _)
+  window t acc (w &&& 15) (lowDigit_lt _)
 
 /-- `acc ^ (2 ^ (32 k)) * a ^ e`, for the integer `e` of the low `k` limbs of `l`.
 
