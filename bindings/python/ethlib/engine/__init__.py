@@ -1,5 +1,6 @@
 """The Engine API between the consensus and the execution layers."""
 
+from collections.abc import Sequence
 from typing import Any
 
 # Every domain links into one extension module.
@@ -7,7 +8,7 @@ from typing import Any
 from ethlib.consensus import ForkChoiceStep
 from ethlib.cryptography import _native
 from ethlib.errors import EngineError, ProposerError
-from ethlib.serialization import rlp
+from ethlib.execution.blocks import RecentBlock
 
 
 def new_payload(config: dict, method: str, params: list) -> dict:
@@ -17,16 +18,13 @@ def new_payload(config: dict, method: str, params: list) -> dict:
 
 
 def new_payload_on_chain(
-    config: dict, state: bytes, recent: list, method: str, params: list
+    config: dict, state: bytes, recent: Sequence[RecentBlock], method: str, params: list
 ) -> tuple[dict, bytes | None, bytes | None]:
     """The payload status of an `engine_newPayload` call, on a chain that holds the parent."""
     # A valid payload also gives the RLP encodings of its header and of the accounts after it.
     request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
-    items = [
-        [name.encode(), rlp.decode(header), [rlp.decode(o) for o in ommers]]
-        for name, header, ommers in recent
-    ]
-    return _native.engine_new_payload_on_chain(config, state, rlp.encode(items), request)
+    items = [(name, header, list(ommers)) for name, header, ommers in recent]
+    return _native.engine_new_payload_on_chain(config, state, items, request)
 
 
 def forkchoice_updated(tree: list, method: str, params: list, finalized: str | None = None) -> dict:

@@ -114,13 +114,9 @@ def state_transition(
     check_seal: bool = True,
 ) -> tuple[bytes, list]:
     """Run a block on a chain, and return the state root and the accounts after it."""
-    # Each header is already RLP, so it enters the list of the recent blocks as a raw item.
-    items = [
-        [name.encode(), rlp.decode(header), [rlp.decode(o) for o in ommers]]
-        for name, header, ommers in recent
-    ]
+    items = [(name, header, list(ommers)) for name, header, ommers in recent]
     root, accounts = rlp.decode(
-        _native.state_transition(config, state, rlp.encode(items), fork, block, check_seal)
+        _native.state_transition(config, state, items, fork, block, check_seal)
     )
     return root, accounts
 

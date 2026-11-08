@@ -10,14 +10,12 @@ from ethlib.errors import ChainError
 
 def mainnet_active_fork(number: int, timestamp: int) -> str | None:
     """The fork active on mainnet at a block with this number and timestamp, if any."""
-    name = _native.mainnet_active_fork(number, timestamp)
-    return name.decode() if name else None
+    return _native.mainnet_active_fork(number, timestamp)
 
 
 def hoodi_active_fork(number: int, timestamp: int) -> str | None:
     """The fork active on Hoodi at a block with this number and timestamp, if any."""
-    name = _native.hoodi_active_fork(number, timestamp)
-    return name.decode() if name else None
+    return _native.hoodi_active_fork(number, timestamp)
 
 
 def active_fork(config: dict[str, Any], number: int, timestamp: int) -> str | None:

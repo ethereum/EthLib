@@ -5,7 +5,7 @@ import ast
 import re
 import subprocess
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal, TypeGuard
@@ -19,32 +19,50 @@ ALLOWLIST: Final = Path("scripts/check_python_boundary_allowlist.txt")
 MODULE: Final = "<module>"
 
 type Rule = Literal[
-    "from_bytes", "to_bytes", "fromhex", "hex", "slice", "bytes", "join", "json", "struct"
+    "from_bytes",
+    "to_bytes",
+    "fromhex",
+    "hex",
+    "text",
+    "slice",
+    "bytes",
+    "memoryview",
+    "join",
+    "json",
+    "struct",
 ]
 
 # What each rule finds, as the message of a finding says it.
-RULES: Final[dict[Rule, str]] = {
+RULES: Final[Mapping[Rule, str]] = {
     "from_bytes": "reads an integer from bytes",
     "to_bytes": "writes an integer as bytes",
     "fromhex": "reads bytes from hexadecimal text",
     "hex": "writes bytes as hexadecimal text",
+    "text": "converts between text and bytes",
     "slice": "slices a value",
     "bytes": "builds bytes from parts",
+    "memoryview": "views the bytes of a value",
     "join": "joins bytes",
-    "json": "converts a value to or from JSON text",
+    "json": "imports json",
     "struct": "imports struct",
 }
 
 # The methods whose call converts between bytes and other values by hand, with their rules.
-METHODS: Final[dict[str, Rule]] = {
+METHODS: Final[Mapping[str, Rule]] = {
     "from_bytes": "from_bytes",
     "to_bytes": "to_bytes",
     "fromhex": "fromhex",
     "hex": "hex",
 }
 
-# The functions of `json` that turn values into text or back.
-JSON: Final = frozenset({"loads", "dumps"})
+# The modules whose import alone is a finding, since the package needs none of them.
+IMPORTS: Final[Mapping[str, Rule]] = {"codecs": "text", "json": "json", "struct": "struct"}
+
+# The methods of `str` and `bytes` that convert text to bytes and back.
+CODECS: Final = frozenset({"encode", "decode"})
+
+# The keywords of those methods, which name a codec and an error handler.
+CODEC_KEYWORDS: Final = frozenset({"encoding", "errors"})
 
 # The built-in functions that build bytes from their parts.
 BUILDERS: Final = frozenset({"bytes", "bytearray"})
@@ -73,12 +91,15 @@ def findings(path: str, text: str) -> list[Finding]:
         found.append(Finding(path, node.lineno, function, rule))
 
     def visit(node: ast.AST, function: str) -> None:
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
             function = node.name if function == MODULE else f"{function}.{node.name}"
-        if isinstance(node, ast.Import) and any(n.name == "struct" for n in node.names):
-            add(node, function, "struct")
-        elif isinstance(node, ast.ImportFrom) and node.module == "struct":
-            add(node, function, "struct")
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if (rule := IMPORTS.get(alias.name.partition(".")[0])) is not None:
+                    add(node, function, rule)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module is not None:
+            if (rule := IMPORTS.get(node.module.partition(".")[0])) is not None:
+                add(node, function, rule)
         elif isinstance(node, ast.Subscript) and _has_slice(node.slice):
             add(node, function, "slice")
         elif isinstance(node, ast.Call):
@@ -102,17 +123,30 @@ def _call_rule(node: ast.Call) -> Rule | None:
     """The rule that a call breaks, if any."""
     func = node.func
     if isinstance(func, ast.Name):
+        if func.id == "memoryview":
+            return "memoryview"
+        # `str(raw, "utf-8")` decodes bytes, while `str(value)` only formats a value.
+        if func.id == "str" and (len(node.args) > 1 or node.keywords):
+            return "text"
         # A call with no argument builds empty bytes, which converts nothing.
         return "bytes" if func.id in BUILDERS and (node.args or node.keywords) else None
     if not isinstance(func, ast.Attribute):
         return None
     if func.attr in METHODS:
         return METHODS[func.attr]
-    if func.attr in JSON and isinstance(func.value, ast.Name) and func.value.id == "json":
-        return "json"
+    if func.attr in CODECS and _is_codec_call(node):
+        return "text"
     if func.attr == "join" and isinstance(func.value, ast.Constant):
         return "join" if isinstance(func.value.value, bytes) else None
     return None
+
+
+def _is_codec_call(node: ast.Call) -> bool:
+    """Whether a call takes only a codec and an error handler, as `bytes.decode` does."""
+    # `rlp.encode(items)` takes a value, so it is a call into Lean, not a text conversion.
+    return all(
+        isinstance(arg, ast.Constant) and isinstance(arg.value, str) for arg in node.args
+    ) and all(keyword.arg in CODEC_KEYWORDS for keyword in node.keywords)
 
 
 def read_allowlist(root: Path) -> tuple[set[tuple[str, str, Rule]], list[str]]:
@@ -229,7 +263,7 @@ def message(item: Finding) -> str:
 
 
 def main(argv: Sequence[str]) -> int:
-    """Print each hand conversion that the check finds, and return the exit code."""
+    """Print each finding and each allowlist problem, and return the exit code."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", help="check only the lines changed since the merge base")
     args = parser.parse_args(argv[1:])

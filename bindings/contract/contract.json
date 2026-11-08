@@ -6110,7 +6110,7 @@
    "The RLP form of the forks of a chain, each with its first block.\n\nThe argument is the list of the forks, each its name and its first block."},
   {"summary":
    "The seal hash of a header: the Keccak-256 hash of the header without mix digest and nonce.",
-   "signature": "(fork: bytes, header: bytes) -> bytes",
+   "signature": "(fork: str, header: bytes) -> bytes",
    "operation": "EthLib.Execution.Blocks.Exports.sealHashExport",
    "method": "pow_seal_hash",
    "errors":
@@ -6132,10 +6132,10 @@
       {"constructor": "inField", "code": 14}]}],
    "error_class": "BlockError",
    "docstring":
-   "The seal hash of a header: the Keccak-256 hash of the header without mix digest and nonce."},
+   "The seal hash of a header: the Keccak-256 hash of the header without mix digest and nonce.\n\nThe arguments are the name of the fork and the header in RLP form."},
   {"summary":
    "Check the proof of work of a header, as section 4.3.4 of the Yellow Paper asks.",
-   "signature": "(fork: bytes, header: bytes) -> bool",
+   "signature": "(fork: str, header: bytes) -> bool",
    "operation": "EthLib.Execution.Blocks.checkProofOfWork",
    "method": "pow_check",
    "errors":
@@ -7332,7 +7332,7 @@
    "The 64-bit value a varint denotes, or why it is not a valid varint.\n\nThe rules are checked in this order:\n\n1. The ten-byte cap, while reading, so the work stays bounded.\n2. Minimal encoding.\n3. The 64-bit range.\n\n# Why minimality is enforced\n\nThe specification only says SHOULD.\n\nRejecting padding means each length has exactly one encoding.\n\nSo a message cannot be re-sent with a different prefix that differs only in padding."},
   {"summary":
    "The message ID of a message on a topic of a fork: the first 20 bytes of a SHA-256 digest.",
-   "signature": "(fork: bytes, topic: bytes, data: bytes) -> bytes",
+   "signature": "(fork: str, topic: bytes, data: bytes) -> bytes",
    "operation": "EthLib.Networking.Gossip.messageId",
    "method": "gossip_message_id",
    "errors": [],
@@ -7959,7 +7959,7 @@
   {"summary":
    "Run the state transition of a block on a chain, and give the state after it.",
    "signature":
-   "(config: dict, state: bytes, recent: bytes, fork: str, block: bytes, check_seal: bool) -> bytes",
+   "(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], fork: str, block: bytes, check_seal: bool) -> bytes",
    "operation": "EthLib.Execution.Blocks.Exports.stateTransitionExport",
    "method": "state_transition",
    "errors":
@@ -8172,23 +8172,23 @@
    "docstring":
    "The state root after the mining rewards of a block, from the state that `input` encodes.\n\nThe forks of the chain are an RLP list of `[name, first block]`, the first one from block 0.\n\nThe block and each of its ommers decode at the fork of their own number.\n\nFrom Paris on, a block pays no reward."},
   {"summary":
-   "The name of the active fork of mainnet at a block, or no bytes when no fork is active.",
-   "signature": "(number: int, timestamp: int) -> bytes",
+   "The name of the active fork of mainnet at a block, or `None` when none is active.",
+   "signature": "(number: int, timestamp: int) -> str | None",
    "operation": "EthLib.Base.ChainConfig.Exports.mainnetActiveForkExport",
    "method": "mainnet_active_fork",
    "errors": [],
-   "error_class": null,
+   "error_class": "ChainError",
    "docstring":
-   "The name of the active fork of mainnet at a block, or no bytes when no fork is active."},
+   "The name of the active fork of mainnet at a block, or `None` when none is active.\n\nThe arguments are the block number and the timestamp."},
   {"summary":
-   "The name of the active fork of Hoodi at a block, or no bytes when no fork is active.",
-   "signature": "(number: int, timestamp: int) -> bytes",
+   "The name of the active fork of Hoodi at a block, or `None` when none is active.",
+   "signature": "(number: int, timestamp: int) -> str | None",
    "operation": "EthLib.Base.ChainConfig.Exports.hoodiActiveForkExport",
    "method": "hoodi_active_fork",
    "errors": [],
-   "error_class": null,
+   "error_class": "ChainError",
    "docstring":
-   "The name of the active fork of Hoodi at a block, or no bytes when no fork is active."},
+   "The name of the active fork of Hoodi at a block, or `None` when none is active.\n\nThe arguments are the block number and the timestamp."},
   {"summary":
    "The name of the active fork of a configured chain at a block, or `None` when none is active.",
    "signature":
@@ -8216,7 +8216,7 @@
   {"summary":
    "The payload status of an `engine_newPayload` request, on a chain that holds the parent.",
    "signature":
-   "(config: dict, state: bytes, recent: bytes, request: dict) -> tuple[dict, bytes, bytes] | tuple[dict, None, None]",
+   "(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], request: dict) -> tuple[dict, bytes, bytes] | tuple[dict, None, None]",
    "operation": "EthLib.Engine.Exports.newPayloadOnChainExport",
    "method": "engine_new_payload_on_chain",
    "errors":

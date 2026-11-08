@@ -1,7 +1,7 @@
 /* Python wrappers of the proof-of-work exports.
  *
- * The difficulty and the forks of a chain take typed values, which the converter passes.
- * The other exports take a fork as its name in UTF-8, and a header or a block in RLP. */
+ * The ommer check takes its forks and its blocks in RLP form.
+ * The other exports take typed values, which the converter passes. */
 #include "wrappers.h"
 
 /* ---- Lean externs ----------------------------------------------------- */
@@ -10,42 +10,9 @@
 
 extern lean_object* eth_pow_block_difficulty(lean_object*);
 extern lean_object* eth_pow_chain_forks(lean_object*);
-extern lean_object* eth_pow_seal_hash(lean_object*, lean_object*);
-extern lean_object* eth_pow_check(lean_object*, lean_object*);
+extern lean_object* eth_pow_seal_hash(lean_object*);
+extern lean_object* eth_pow_check(lean_object*);
 extern lean_object* eth_pow_validate_ommers(lean_object*, lean_object*, lean_object*, uint8_t);
-
-/* The largest number of `bytes` arguments of a proof-of-work export: those of a header. */
-#define POW_MAX_ARGS 2
-
-/* ---- Helpers ---------------------------------------------------------- */
-
-/* Read exactly `n` `bytes` arguments as Lean byte arrays.
- *
- * It returns 0 with a TypeError set when the argument count or a type is wrong. */
-static int
-parse_bytes_args(
-  PyObject* args,
-  Py_ssize_t n,
-  lean_object** out
-) {
-  if (PyTuple_GET_SIZE(args) != n) {
-    PyErr_Format(PyExc_TypeError, "expected %zd arguments", n);
-    return 0;
-  }
-  for (Py_ssize_t i = 0; i < n; i++) {
-    if (!PyBytes_Check(PyTuple_GET_ITEM(args, i))) {
-      PyErr_SetString(PyExc_TypeError, "every argument must be bytes");
-      return 0;
-    }
-  }
-  /* Build the arrays only once every argument is checked, so none leaks on an error. */
-  for (Py_ssize_t i = 0; i < n; i++) {
-    PyObject* item = PyTuple_GET_ITEM(args, i);
-    out[i] = mk_bytearray((const uint8_t*) PyBytes_AS_STRING(item),
-                          (size_t) PyBytes_GET_SIZE(item));
-  }
-  return 1;
-}
 
 /* ---- Wrappers --------------------------------------------------------- */
 
@@ -70,9 +37,7 @@ py_pow_seal_hash(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object* a[POW_MAX_ARGS];
-  if (!parse_bytes_args(args, 2, a)) return NULL;
-  return except_into_pybytes(eth_pow_seal_hash(a[0], a[1]), BLOCK_ERROR);
+  return call_pyvalue_export(eth_pow_seal_hash, args, 2, BLOCK_ERROR);
 }
 
 PyObject*
@@ -80,9 +45,7 @@ py_pow_check(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object* a[POW_MAX_ARGS];
-  if (!parse_bytes_args(args, 2, a)) return NULL;
-  return except_into_pybool(eth_pow_check(a[0], a[1]), BLOCK_ERROR);
+  return call_pyvalue_export(eth_pow_check, args, 2, BLOCK_ERROR);
 }
 
 PyObject*

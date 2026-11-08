@@ -795,11 +795,11 @@ def pow_chain_forks(forks: list[tuple[str, int]]) -> bytes:
     """The RLP form of the forks of a chain, each with its first block."""
     ...
 
-def pow_seal_hash(fork: bytes, header: bytes) -> bytes:
+def pow_seal_hash(fork: str, header: bytes) -> bytes:
     """The seal hash of a header: the Keccak-256 hash of the header without mix digest and nonce."""
     ...
 
-def pow_check(fork: bytes, header: bytes) -> bool:
+def pow_check(fork: str, header: bytes) -> bool:
     """Check the proof of work of a header, as section 4.3.4 of the Yellow Paper asks."""
     ...
 
@@ -1031,7 +1031,7 @@ def varint_decode(data: bytes) -> int:
     """The 64-bit value a varint denotes, or why it is not a valid varint."""
     ...
 
-def gossip_message_id(fork: bytes, topic: bytes, data: bytes) -> bytes:
+def gossip_message_id(fork: str, topic: bytes, data: bytes) -> bytes:
     """The message ID of a message on a topic of a fork: the first 20 bytes of a SHA-256 digest."""
     ...
 
@@ -1123,7 +1123,7 @@ def block_dao_extra_data_valid(dao_block: int, fork: str, header: bytes) -> bool
     """Whether a header has the extra data that the DAO Fork asks of its first ten blocks."""
     ...
 
-def state_transition(config: dict, state: bytes, recent: bytes, fork: str, block: bytes, check_seal: bool) -> bytes:
+def state_transition(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], fork: str, block: bytes, check_seal: bool) -> bytes:
     """Run the state transition of a block on a chain, and give the state after it."""
     ...
 
@@ -1155,12 +1155,12 @@ def state_rewards_root(forks: bytes, state: bytes, block: bytes) -> bytes:
     """The state root after the mining rewards of a block, from the state that `input` encodes."""
     ...
 
-def mainnet_active_fork(number: int, timestamp: int) -> bytes:
-    """The name of the active fork of mainnet at a block, or no bytes when no fork is active."""
+def mainnet_active_fork(number: int, timestamp: int) -> str | None:
+    """The name of the active fork of mainnet at a block, or `None` when none is active."""
     ...
 
-def hoodi_active_fork(number: int, timestamp: int) -> bytes:
-    """The name of the active fork of Hoodi at a block, or no bytes when no fork is active."""
+def hoodi_active_fork(number: int, timestamp: int) -> str | None:
+    """The name of the active fork of Hoodi at a block, or `None` when none is active."""
     ...
 
 def active_fork(config: dict[str, Any], number: int, timestamp: int) -> str | None:
@@ -1171,7 +1171,7 @@ def engine_new_payload(config: dict, request: dict) -> dict:
     """The payload status of an `engine_newPayload` request, without the parent's state."""
     ...
 
-def engine_new_payload_on_chain(config: dict, state: bytes, recent: bytes, request: dict) -> tuple[dict, bytes, bytes] | tuple[dict, None, None]:
+def engine_new_payload_on_chain(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], request: dict) -> tuple[dict, bytes, bytes] | tuple[dict, None, None]:
     """The payload status of an `engine_newPayload` request, on a chain that holds the parent."""
     ...
 

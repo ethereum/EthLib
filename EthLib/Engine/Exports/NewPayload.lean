@@ -93,18 +93,21 @@ def newPayloadExport (args : PyValue) : Result PyValue :=
 
 The arguments are the chain configuration, the state, the recent blocks and the request.
 
-The state takes the form of the state root export, and the recent blocks are an RLP list.
+The state takes the form of the state root export.
+
+The recent blocks are a list, each the fork name, the header and its ommers.
+
+The header and each ommer are in RLP form.
 
 A valid payload also gives the RLP forms of its header and of the accounts after it. -/
-def newPayloadOnChainOf (args : PyValue × ByteArray × ByteArray × PyValue) :
+def newPayloadOnChainOf
+    (args : PyValue × ByteArray × List (String × ByteArray × List ByteArray) × PyValue) :
     Result (PyValue × Option ByteArray × Option ByteArray) := do
   let (config, state, recent, request) := args
   let config ← configOfJson config.toJson
   -- The chain is an input that the export reads itself, so its errors have code 0.
   let pre ← (Execution.State.Exports.ofInput state).mapError fun e => (0, e.message)
-  let recentItems : List Serialization.Rlp.Item ← (Serialization.Rlp.Codec.decode recent).mapError
-    fun e => (0, s!"recent blocks rejected: {reprStr e}")
-  let recent ← (recentItems.mapM (Execution.Blocks.Exports.recentOfItem config)).mapError
+  let recent ← (recent.mapM (Execution.Blocks.Exports.recentOf config)).mapError
     fun (_, m) => (0, m)
   let request := request.toJson
   let some method := (request.getObjValAs? String "method").toOption

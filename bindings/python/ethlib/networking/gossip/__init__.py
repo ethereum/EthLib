@@ -7,7 +7,7 @@ from ethlib.cryptography import _native
 
 def message_id(fork: str, topic: bytes, data: bytes) -> bytes:
     """The 20-byte message ID of a message on a topic of a fork."""
-    return _native.gossip_message_id(fork.encode(), topic, data)
+    return _native.gossip_message_id(fork, topic, data)
 
 
 def decode_payload(type_bound: int, data: bytes) -> bytes:

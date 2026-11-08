@@ -13,7 +13,7 @@ Mainnet and Hoodi have an export each, and any other chain passes its configurat
 
 A block number and a timestamp cross the boundary as 64-bit integers, as EIP-6122 reads them.
 
-A fork crosses it as its name in UTF-8, such as `bellatrix`.
+A fork crosses it as its name, a `str` such as `bellatrix`.
 
 A chain configuration crosses it as the typed value of its JSON, a `dict`.
 
@@ -28,22 +28,31 @@ public section
 
 namespace EthLib.Base.ChainConfig.Exports
 
-/-- The name of the active fork of mainnet at a block, or no bytes when no fork is active. -/
-@[export eth_mainnet_active_fork]
-def mainnetActiveForkExport (number timestamp : UInt64) : ByteArray :=
-  match mainnet.activeFork number.toNat timestamp.toNat with
-  | some fork => fork.name.toUTF8
-  | none => .empty
+open EthLib.Exports (Result PyValue pyExport forkOfName)
 
-/-- The name of the active fork of Hoodi at a block, or no bytes when no fork is active. -/
+/-- The name of the active fork of mainnet at a block, if a fork is active. -/
+def mainnetActiveForkOf (args : UInt64 × UInt64) : Result (Option String) :=
+  let (number, timestamp) := args
+  pure ((mainnet.activeFork number.toNat timestamp.toNat).map (·.name))
+
+/-- The name of the active fork of mainnet at a block, or `None` when none is active.
+
+The arguments are the block number and the timestamp. -/
+@[export eth_mainnet_active_fork]
+def mainnetActiveForkExport (args : PyValue) : Result PyValue := pyExport mainnetActiveForkOf args
+
+/-- The name of the active fork of Hoodi at a block, if a fork is active. -/
+def hoodiActiveForkOf (args : UInt64 × UInt64) : Result (Option String) :=
+  let (number, timestamp) := args
+  pure ((hoodi.activeFork number.toNat timestamp.toNat).map (·.name))
+
+/-- The name of the active fork of Hoodi at a block, or `None` when none is active.
+
+The arguments are the block number and the timestamp. -/
 @[export eth_hoodi_active_fork]
-def hoodiActiveForkExport (number timestamp : UInt64) : ByteArray :=
-  match hoodi.activeFork number.toNat timestamp.toNat with
-  | some fork => fork.name.toUTF8
-  | none => .empty
+def hoodiActiveForkExport (args : PyValue) : Result PyValue := pyExport hoodiActiveForkOf args
 
 open Lean (Json)
-open EthLib.Exports (Result PyValue pyExport forkOfName)
 
 /-- An activation from its kind, `block` or `time`, and its number. -/
 def activationOf (kind : String) (n : Json) : Result Activation := do

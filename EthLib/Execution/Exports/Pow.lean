@@ -11,9 +11,11 @@ public import EthLib.Execution.Exports.Blocks
 
 C-ABI exports of proof of work before Paris, for the Python C extension.
 
-The difficulty and the forks of a chain take typed Python values, and a number crosses as an `int`.
+The difficulty, the forks of a chain, the seal hash and the proof-of-work check take typed values.
 
-The difficulty takes a fork as its name, a `str`, and the other exports as its UTF-8 bytes.
+A number crosses as an `int`, and a fork as its name, a `str`.
+
+The ommer check takes its forks and its blocks in RLP form.
 
 An unknown name fails with code 0.
 
@@ -69,20 +71,32 @@ def headerOf (fork header : ByteArray) : Result (Σ fork : Base.Fork, Header for
     fun e => (e.code, s!"header rejected: {reprStr e}")
   pure ⟨fork, header⟩
 
-/-- The seal hash of a header: the Keccak-256 hash of the header without mix digest and nonce. -/
-@[export eth_pow_seal_hash]
-def sealHashExport (fork header : ByteArray) : Result ByteArray := do
-  let ⟨_, header⟩ ← headerOf fork header
+/-- The seal hash of a header at a named fork: its Keccak-256 hash without mix digest and nonce. -/
+def sealHashOf (args : String × ByteArray) : Result ByteArray := do
+  let ⟨_, header⟩ ← headerOf args.1.toUTF8 args.2
   let hash ← header.sealHash.mapError fun e => (e.code, s!"header has no encoding: {reprStr e}")
   pure ⟨hash.toArray⟩
 
+/-- The seal hash of a header: the Keccak-256 hash of the header without mix digest and nonce.
+
+The arguments are the name of the fork and the header in RLP form. -/
+@[export eth_pow_seal_hash]
+def sealHashExport (args : PyValue) : Result PyValue :=
+  pyExport sealHashOf args
+
 /-- Check the proof of work of a header in RLP form, at a named fork before Paris. -/
-@[export eth_pow_check]
-def checkExport (fork header : ByteArray) : Result UInt8 := do
-  let ⟨fork, header⟩ ← headerOf fork header
+def checkOf (args : String × ByteArray) : Result Bool := do
+  let ⟨fork, header⟩ ← headerOf args.1.toUTF8 args.2
   if .paris ≤ fork then throw (0, "a header from Paris on has no proof of work")
-  (checkProofOfWork header).map (fun () => 1) |>.mapError
+  (checkProofOfWork header).map (fun () => true) |>.mapError
     fun e => (e.code, s!"proof of work invalid: {reprStr e}")
+
+/-- Check the proof of work of a header in RLP form, at a named fork before Paris.
+
+The arguments are the name of the fork and the header in RLP form. -/
+@[export eth_pow_check]
+def checkExport (args : PyValue) : Result PyValue :=
+  pyExport checkOf args
 
 /-- Check the ommers of a block in RLP form, against recent blocks, each at the fork of its number.
 

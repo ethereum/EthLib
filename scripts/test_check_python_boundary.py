@@ -3,6 +3,7 @@
 import importlib.util
 import subprocess
 import tempfile
+import typing
 import unittest
 from pathlib import Path
 
@@ -18,11 +19,15 @@ spec.loader.exec_module(boundary)
 
 WRAPPER = "bindings/python/ethlib/a/__init__.py"
 
-# Every conversion that the check finds, one per line, each in a function of its own.
+# Every conversion that the check finds, one per line.
+# The imports are outside every function, and each other conversion is in a function of its own.
 CONVERSIONS = """\
 import json
 import struct
 from struct import pack
+from json import loads
+import json.decoder
+import codecs
 
 
 def read(out):
@@ -61,23 +66,34 @@ def concat(items):
     return b"".join(items)
 
 
-def parse(text):
-    return json.loads(text)
+def name(raw):
+    return raw.decode()
 
 
-def show(value):
-    return json.dumps(value)
+def label(text):
+    return text.encode("ascii", errors="strict")
+
+
+def view(data):
+    return memoryview(data)
+
+
+def text(raw):
+    return str(raw, "utf-8")
 """
 
 # Code that converts nothing by hand.
 CLEAN = """\
 from ethlib.cryptography import _native
+from ethlib.serialization import rlp
 
+from . import json
 
 def call(data: bytes, read: dict[str, int]) -> list[bytes]:
     empty = bytes()
     words = ", ".join(["a", "b"])
-    return [_native.f(data, read["head"], empty, words)]
+    item = rlp.encode([data])
+    return [_native.f(data, read["head"], empty, words, item, rlp.decode(item), str(data))]
 """
 
 NESTED = """\
@@ -89,6 +105,14 @@ def outer(out):
 """
 
 MODULE_LEVEL = "HEAD = b'abc'[:2]\n"
+
+METHOD = """\
+class Reader:
+    HEAD = b"abc"[:1]
+
+    def read(self, out):
+        return out[1:]
+"""
 
 
 def problem(line: int, function: str, rule: str, path: str = WRAPPER) -> str:
@@ -121,27 +145,42 @@ class CheckAll(unittest.TestCase):
         self.assertEqual(
             self.run_check({WRAPPER: CONVERSIONS}),
             [
+                problem(1, "<module>", "json"),
                 problem(2, "<module>", "struct"),
                 problem(3, "<module>", "struct"),
-                problem(7, "read", "from_bytes"),
-                problem(11, "write", "to_bytes"),
-                problem(15, "unhex", "fromhex"),
-                problem(19, "tohex", "hex"),
-                problem(23, "split", "slice"),
-                problem(27, "pick", "slice"),
-                problem(31, "build", "bytes"),
-                problem(35, "build_array", "bytes"),
-                problem(39, "concat", "join"),
-                problem(43, "parse", "json"),
-                problem(47, "show", "json"),
+                problem(4, "<module>", "json"),
+                problem(5, "<module>", "json"),
+                problem(6, "<module>", "text"),
+                problem(10, "read", "from_bytes"),
+                problem(14, "write", "to_bytes"),
+                problem(18, "unhex", "fromhex"),
+                problem(22, "tohex", "hex"),
+                problem(26, "split", "slice"),
+                problem(30, "pick", "slice"),
+                problem(34, "build", "bytes"),
+                problem(38, "build_array", "bytes"),
+                problem(42, "concat", "join"),
+                problem(46, "name", "text"),
+                problem(50, "label", "text"),
+                problem(54, "view", "memoryview"),
+                problem(58, "text", "text"),
             ],
         )
+
+    def test_every_rule_has_a_message(self) -> None:
+        self.assertEqual(set(boundary.RULES), set(typing.get_args(boundary.Rule.__value__)))
 
     def test_clean_code_passes(self) -> None:
         self.assertEqual(self.run_check({WRAPPER: CLEAN}), [])
 
     def test_a_nested_function_is_named_after_its_outer_function(self) -> None:
         self.assertEqual(self.run_check({WRAPPER: NESTED}), [problem(3, "outer.inner", "slice")])
+
+    def test_a_method_is_named_after_its_class(self) -> None:
+        self.assertEqual(
+            self.run_check({WRAPPER: METHOD}),
+            [problem(2, "Reader", "slice"), problem(5, "Reader.read", "slice")],
+        )
 
     def test_code_outside_functions_is_named_module(self) -> None:
         self.assertEqual(self.run_check({WRAPPER: MODULE_LEVEL}), [problem(1, "<module>", "slice")])
