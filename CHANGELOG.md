@@ -153,6 +153,22 @@ Not yet released.
   An example is `bytes` given for a name or a duty.
   A `bool` given for an index, and `1` or `None` given for `verify`, now raise the same error, where they were read as 0 or 1 or by truthiness.
   A `bytearray` or a `memoryview` given for an optimistic root or for the Eth1 data of a block raises `TypeError`, where it was read as bytes.
+- The light client exports that take a configuration now take and return typed values ([#1559](https://github.com/ethereum/EthLib/pull/1559)).
+  These are the sync, the light client header of a block, the checks of the proofs of an update, the ranking of two updates, the bootstrap, the update and the fork digest.
+  Their C exports take the tuple of their arguments as one value, in the order they had, and a configuration replacement as a `dict`, as the transition exports do.
+  The steps of a sync cross as tuples, `("update", fork, slot, data)`, `("force", slot)` and `("upgrade", fork)`, where they crossed packed in one byte string.
+  The sync returns, for each step, the pair of the finalized and the optimistic header, each a tuple of a slot and two roots, where it returned 144 bytes for each step.
+  The light client header of a block comes back as the pair of the root and the bytes, where the two came back joined.
+  An unknown finalized block of an update is `None`, where it was empty bytes; in Python, empty bytes still stand for it.
+  A root of another length than 32 bytes raises the error class of the method with code 0 and the message `expected 32 bytes, got N`, where it said `a root has 32 bytes`.
+  In Python, a step of an unknown kind raises `LightClientError` with code 0, where it raised `ValueError`.
+  A slot of a step of 2^64 or more raises `LightClientError` with code 0, and a negative one `ValueError`, where it raised `OverflowError`.
+  An epoch of the fork digest of 2^64 or more raises `SszError` with code 0, and a negative one `ValueError`, where both were read modulo 2^64.
+  A `bool` given for a slot or an epoch raises the error class of the method with code 0, where it was read as 0 or 1.
+  A `bytearray` or a `memoryview` given for the data of an update raises `TypeError`, where it was read as bytes.
+  Every argument is read before the names, so a root of the wrong length is reported before an unknown preset or a fork before Altair.
+  The limits of the converter, 2^29 bytes and 1,000,000 values in one call, now apply to the states, the blocks and the steps.
+  An argument that crosses to Lean but that Lean cannot read raises the error class of the method with code 0, where some raised `TypeError`.
 - A chain configuration that the exports read as JSON is now rejected, with code 0, when a fork by block number comes after a fork by timestamp ([#1110](https://github.com/ethereum/EthLib/pull/1110)).
   EIP-6122 requires the forks by timestamp to be scheduled at or after the forks by block.
 

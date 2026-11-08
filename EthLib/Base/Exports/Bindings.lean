@@ -576,18 +576,20 @@ def bindings : List Binding := [
       "finalized: bytes, topic: bytes, messages: bytes, config: bytes, verify: bool) -> bytes",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_light_client_sync", `EthLib.Consensus.Exports.lightClientSyncExport,
-    "(name: str, fork: str, bootstrap_fork: str, config: bytes, trusted: bytes, " ++
-      "genesis_validators_root: bytes, bootstrap: bytes, steps: bytes) -> bytes",
+    "(name: str, fork: str, bootstrap_fork: str, config: dict[str, Any] | None, " ++
+      "trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, " ++
+      "steps: list[tuple[str, str, int, bytes] | tuple[str, int] | tuple[str, str]]) " ++
+      "-> list[tuple[tuple[int, bytes, bytes], tuple[int, bytes, bytes]]]",
     [`EthLib.Consensus.LightClientError], some "LightClientError"⟩,
   ⟨"consensus_block_to_light_client_header",
     `EthLib.Consensus.Exports.blockToLightClientHeaderExport,
-    "(name: str, fork: str, config: bytes, block: bytes) -> bytes",
+    "(name: str, fork: str, config: dict[str, Any] | None, block: bytes) -> tuple[bytes, bytes]",
     [`EthLib.Consensus.LightClientError], some "LightClientError"⟩,
   ⟨"consensus_light_client_update_proofs", `EthLib.Consensus.Exports.lightClientUpdateProofsExport,
-    "(name: str, fork: str, type: str, config: bytes, data: bytes) -> bool",
+    "(name: str, fork: str, type: str, config: dict[str, Any] | None, data: bytes) -> bool",
     [`EthLib.Consensus.LightClientError], some "LightClientError"⟩,
   ⟨"consensus_is_better_update", `EthLib.Consensus.Exports.isBetterUpdateExport,
-    "(name: str, fork: str, old_fork: str, config: bytes, new_update: bytes, " ++
+    "(name: str, fork: str, old_fork: str, config: dict[str, Any] | None, new_update: bytes, " ++
       "old_update: bytes) -> bool",
     [`EthLib.Consensus.LightClientError], some "LightClientError"⟩,
   ⟨"consensus_genesis_block", `EthLib.Consensus.Exports.genesisBlockExport,
@@ -595,15 +597,16 @@ def bindings : List Binding := [
     [`EthLib.Consensus.LightClientError], some "LightClientError"⟩,
   ⟨"consensus_create_light_client_bootstrap",
     `EthLib.Consensus.Exports.createLightClientBootstrapExport,
-    "(name: str, fork: str, config: bytes, state: bytes, block: bytes) -> bytes",
+    "(name: str, fork: str, config: dict[str, Any] | None, state: bytes, block: bytes) -> bytes",
     [`EthLib.Consensus.LightClientError], some "LightClientError"⟩,
   ⟨"consensus_create_light_client_update", `EthLib.Consensus.Exports.createLightClientUpdateExport,
     "(name: str, fork: str, attested_fork: str, finalized_fork: str, type: str, " ++
-      "config: bytes, state: bytes, block: bytes, attested_state: bytes, " ++
-      "attested_block: bytes, finalized_block: bytes) -> bytes",
+      "config: dict[str, Any] | None, state: bytes, block: bytes, attested_state: bytes, " ++
+      "attested_block: bytes, finalized_block: bytes | None) -> bytes",
     [`EthLib.Consensus.LightClientError], some "LightClientError"⟩,
   ⟨"consensus_compute_fork_digest", `EthLib.Consensus.Exports.computeForkDigestExport,
-    "(name: str, config: bytes, genesis_validators_root: bytes, epoch: int) -> bytes",
+    "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, " ++
+      "epoch: int) -> bytes",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
   ⟨"pq_keys_ssz", `EthLib.Consensus.Exports.pqKeysSszExport,
     "(type: str, data: bytes) -> tuple[bytes, bytes]",

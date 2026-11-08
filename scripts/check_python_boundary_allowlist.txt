@@ -10,24 +10,10 @@
 # A new entry is an exception that a maintainer approves, and the diff shows it.
 # A pull request that moves a conversion to another function renames its entry.
 
-bindings/python/ethlib/consensus/__init__.py _sync_step bytes
-bindings/python/ethlib/consensus/__init__.py _sync_step to_bytes
-bindings/python/ethlib/consensus/__init__.py block_to_light_client_header json
-bindings/python/ethlib/consensus/__init__.py block_to_light_client_header slice
-bindings/python/ethlib/consensus/__init__.py compute_fork_digest json
-bindings/python/ethlib/consensus/__init__.py create_light_client_bootstrap json
-bindings/python/ethlib/consensus/__init__.py create_light_client_update json
 bindings/python/ethlib/consensus/__init__.py gossip_validation bytes
 bindings/python/ethlib/consensus/__init__.py gossip_validation from_bytes
 bindings/python/ethlib/consensus/__init__.py gossip_validation json
 bindings/python/ethlib/consensus/__init__.py gossip_validation slice
 bindings/python/ethlib/consensus/__init__.py gossip_validation to_bytes
-bindings/python/ethlib/consensus/__init__.py is_better_update json
-bindings/python/ethlib/consensus/__init__.py light_client_sync join
-bindings/python/ethlib/consensus/__init__.py light_client_sync json
-bindings/python/ethlib/consensus/__init__.py light_client_sync slice
-bindings/python/ethlib/consensus/__init__.py light_client_sync.header from_bytes
-bindings/python/ethlib/consensus/__init__.py light_client_sync.header slice
-bindings/python/ethlib/consensus/__init__.py light_client_update_proofs json
 bindings/python/ethlib/serialization/ssz/__init__.py _dump json
 bindings/python/ethlib/serialization/ssz/__init__.py deserialize json

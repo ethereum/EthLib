@@ -202,6 +202,17 @@ def verify_partial_data_column_sidecar_kzg_proofs(
     )
 
 
+# A step of a light client sync: an update of a fork at a slot, a forced update, or an upgrade.
+SyncStep: TypeAlias = (
+    tuple[Literal["update"], str, int, bytes]
+    | tuple[Literal["force"], int]
+    | tuple[Literal["upgrade"], str]
+)
+
+# A header after a step of a sync: its slot, its beacon root and its execution root.
+SyncHeader: TypeAlias = tuple[int, bytes, bytes]
+
+
 def light_client_sync(
     name: str,
     fork: str,
@@ -209,69 +220,35 @@ def light_client_sync(
     trusted_block_root: bytes,
     genesis_validators_root: bytes,
     bootstrap: bytes,
-    steps: list,
-    config: dict | None = None,
-) -> list:
+    steps: Sequence[SyncStep],
+    config: dict[str, Any] | None = None,
+) -> list[tuple[SyncHeader, SyncHeader]]:
     """The finalized and optimistic headers, as slot and two roots, after each step of a sync."""
-    # A step is ("update", fork, slot, update), ("force", slot) or ("upgrade", fork).
-    replacements = json.dumps(config).encode() if config else b""
-    records = b"".join(_sync_step(*step) for step in steps)
-    out = _native.consensus_light_client_sync(
+    return _native.consensus_light_client_sync(
         name,
         fork,
         bootstrap_fork,
-        replacements,
+        config,
         trusted_block_root,
         genesis_validators_root,
         bootstrap,
-        records,
-    )
-
-    def header(record: bytes) -> tuple:
-        return int.from_bytes(record[:8], "little"), record[8:40], record[40:72]
-
-    return [
-        (header(out[i : i + 72]), header(out[i + 72 : i + 144])) for i in range(0, len(out), 144)
-    ]
-
-
-def _sync_step(kind: str, *fields) -> bytes:
-    """The bytes of a step of a sync: kind, slot, fork name and data."""
-    match kind, fields:
-        case "update", (fork, slot, data):
-            code = 0
-        case "force", (slot,):
-            code, fork, data = 1, "", b""
-        case "upgrade", (fork,):
-            code, slot, data = 2, 0, b""
-        case _:
-            raise ValueError(f"no sync step {kind} {fields}")
-    name = fork.encode()
-    return (
-        bytes([code])
-        + slot.to_bytes(8, "little")
-        + bytes([len(name)])
-        + name
-        + len(data).to_bytes(4, "little")
-        + data
+        # A step read from JSON or YAML may be a list, which the converter reads as a tuple.
+        [tuple(step) for step in steps],
     )
 
 
 def block_to_light_client_header(
-    name: str, fork: str, block: bytes, config: dict | None = None
+    name: str, fork: str, block: bytes, config: dict[str, Any] | None = None
 ) -> tuple[bytes, bytes]:
     """The root of a signed block, and the SSZ bytes of its light client header."""
-    replacements = json.dumps(config).encode() if config else b""
-    out = _native.consensus_block_to_light_client_header(name, fork, replacements, block)
-    return out[:32], out[32:]
+    return _native.consensus_block_to_light_client_header(name, fork, config, block)
 
 
 def light_client_update_proofs(
-    name: str, fork: str, type_name: str, data: bytes, config: dict | None = None
+    name: str, fork: str, type_name: str, data: bytes, config: dict[str, Any] | None = None
 ) -> bool:
     """Check the attested header and the branches of a light client update."""
-    replacements = json.dumps(config).encode() if config else b""
-    return _native.consensus_light_client_update_proofs(name, fork, type_name, replacements, data)
+    return _native.consensus_light_client_update_proofs(name, fork, type_name, config, data)
 
 
 def is_better_update(
@@ -280,12 +257,11 @@ def is_better_update(
     new_update: bytes,
     old_update: bytes,
     old_fork: str | None = None,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
 ) -> bool:
     """Whether a new light client update ranks above an old one, both at the later fork."""
-    replacements = json.dumps(config).encode() if config else b""
     return _native.consensus_is_better_update(
-        name, fork, old_fork or fork, replacements, new_update, old_update
+        name, fork, old_fork or fork, config, new_update, old_update
     )
 
 
@@ -295,11 +271,10 @@ def genesis_block(name: str, fork: str, state: bytes) -> bytes:
 
 
 def create_light_client_bootstrap(
-    name: str, fork: str, state: bytes, block: bytes, config: dict | None = None
+    name: str, fork: str, state: bytes, block: bytes, config: dict[str, Any] | None = None
 ) -> bytes:
     """The SSZ bytes of the bootstrap that a full node serves for a block and its post state."""
-    replacements = json.dumps(config).encode() if config else b""
-    return _native.consensus_create_light_client_bootstrap(name, fork, replacements, state, block)
+    return _native.consensus_create_light_client_bootstrap(name, fork, config, state, block)
 
 
 def create_light_client_update(
@@ -311,12 +286,11 @@ def create_light_client_update(
     attested_state: bytes,
     attested_block: bytes,
     finalized_block: bytes | None,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
     attested_fork: str | None = None,
     finalized_fork: str | None = None,
 ) -> bytes:
     """The SSZ bytes of the update of a type that a full node serves for a block."""
-    replacements = json.dumps(config).encode() if config else b""
     attested_fork = attested_fork or fork
     return _native.consensus_create_light_client_update(
         name,
@@ -324,21 +298,20 @@ def create_light_client_update(
         attested_fork,
         finalized_fork or attested_fork,
         type_name,
-        replacements,
+        config,
         state,
         block,
         attested_state,
         attested_block,
-        finalized_block or b"",
+        finalized_block or None,
     )
 
 
 def compute_fork_digest(
-    name: str, genesis_validators_root: bytes, epoch: int, config: dict | None = None
+    name: str, genesis_validators_root: bytes, epoch: int, config: dict[str, Any] | None = None
 ) -> bytes:
     """The fork digest at an epoch, on the chain with the given root of the genesis validators."""
-    replacements = json.dumps(config).encode() if config else b""
-    return _native.consensus_compute_fork_digest(name, replacements, genesis_validators_root, epoch)
+    return _native.consensus_compute_fork_digest(name, config, genesis_validators_root, epoch)
 
 
 def compute_matrix(blobs: Sequence[bytes]) -> list[bytes]:
@@ -1079,6 +1052,8 @@ __all__ = [
     "fork_choice",
     "gossip_validation",
     "light_client_sync",
+    "SyncStep",
+    "SyncHeader",
     "block_to_light_client_header",
     "light_client_update_proofs",
     "is_better_update",

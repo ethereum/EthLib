@@ -407,34 +407,20 @@ extern lean_object* eth_consensus_compute_matrix(lean_object* args);
 extern lean_object* eth_consensus_recover_matrix(lean_object* args);
 extern lean_object* eth_consensus_get_data_column_sidecars_from_block(lean_object* args);
 extern lean_object* eth_consensus_get_data_column_sidecars_from_column_sidecar(lean_object* args);
-extern lean_object* eth_consensus_light_client_sync(
-  lean_object* name, lean_object* fork, lean_object* bootstrap_fork, lean_object* config,
-  lean_object* trusted, lean_object* genesis_validators_root, lean_object* bootstrap,
-  lean_object* steps);
+extern lean_object* eth_consensus_light_client_sync(lean_object* args);
 extern lean_object* eth_consensus_fork_choice(lean_object* args);
 extern lean_object* eth_consensus_gossip_validation(
   lean_object* name, lean_object* fork, lean_object* anchor_state, lean_object* anchor_block,
   lean_object* blocks, lean_object* finalized, lean_object* topic, lean_object* messages,
   lean_object* config, uint8_t verify);
-extern lean_object* eth_consensus_block_to_light_client_header(
-  lean_object* name, lean_object* fork, lean_object* config, lean_object* block);
-extern lean_object* eth_consensus_light_client_update_proofs(
-  lean_object* name, lean_object* fork, lean_object* type, lean_object* config,
-  lean_object* data);
-extern lean_object* eth_consensus_is_better_update(
-  lean_object* name, lean_object* fork, lean_object* old_fork, lean_object* config,
-  lean_object* new_update, lean_object* old_update);
+extern lean_object* eth_consensus_block_to_light_client_header(lean_object* args);
+extern lean_object* eth_consensus_light_client_update_proofs(lean_object* args);
+extern lean_object* eth_consensus_is_better_update(lean_object* args);
 extern lean_object* eth_consensus_genesis_block(
   lean_object* name, lean_object* fork, lean_object* state);
-extern lean_object* eth_consensus_create_light_client_bootstrap(
-  lean_object* name, lean_object* fork, lean_object* config, lean_object* state,
-  lean_object* block);
-extern lean_object* eth_consensus_create_light_client_update(
-  lean_object* name, lean_object* fork, lean_object* attested_fork, lean_object* finalized_fork,
-  lean_object* type, lean_object* config, lean_object* state, lean_object* block,
-  lean_object* attested_state, lean_object* attested_block, lean_object* finalized_block);
-extern lean_object* eth_consensus_compute_fork_digest(
-  lean_object* name, lean_object* config, lean_object* genesis_validators_root, uint64_t epoch);
+extern lean_object* eth_consensus_create_light_client_bootstrap(lean_object* args);
+extern lean_object* eth_consensus_create_light_client_update(lean_object* args);
+extern lean_object* eth_consensus_compute_fork_digest(lean_object* args);
 
 /* ---- Wrappers --------------------------------------------------------- */
 
@@ -897,11 +883,7 @@ py_consensus_light_client_sync(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object* a[8];
-  if (!strs_bytes_args(args, 3, 5, a)) return NULL;
-  return except_into_pybytes(
-    eth_consensus_light_client_sync(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]),
-    LIGHT_CLIENT_ERROR);
+  return call_pyvalue_export(eth_consensus_light_client_sync, args, 8, LIGHT_CLIENT_ERROR);
 }
 
 PyObject*
@@ -940,10 +922,8 @@ py_consensus_block_to_light_client_header(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object* a[4];
-  if (!strs_bytes_args(args, 2, 2, a)) return NULL;
-  return except_into_pybytes(
-    eth_consensus_block_to_light_client_header(a[0], a[1], a[2], a[3]), LIGHT_CLIENT_ERROR);
+  return call_pyvalue_export(
+    eth_consensus_block_to_light_client_header, args, 4, LIGHT_CLIENT_ERROR);
 }
 
 PyObject*
@@ -951,10 +931,7 @@ py_consensus_light_client_update_proofs(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object* a[5];
-  if (!strs_bytes_args(args, 3, 2, a)) return NULL;
-  return except_into_pybool(
-    eth_consensus_light_client_update_proofs(a[0], a[1], a[2], a[3], a[4]), LIGHT_CLIENT_ERROR);
+  return call_pyvalue_export(eth_consensus_light_client_update_proofs, args, 5, LIGHT_CLIENT_ERROR);
 }
 
 PyObject*
@@ -962,10 +939,7 @@ py_consensus_is_better_update(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object* a[6];
-  if (!strs_bytes_args(args, 3, 3, a)) return NULL;
-  return except_into_pybool(
-    eth_consensus_is_better_update(a[0], a[1], a[2], a[3], a[4], a[5]), LIGHT_CLIENT_ERROR);
+  return call_pyvalue_export(eth_consensus_is_better_update, args, 6, LIGHT_CLIENT_ERROR);
 }
 
 PyObject*
@@ -983,11 +957,8 @@ py_consensus_create_light_client_bootstrap(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object* a[5];
-  if (!strs_bytes_args(args, 2, 3, a)) return NULL;
-  return except_into_pybytes(
-    eth_consensus_create_light_client_bootstrap(a[0], a[1], a[2], a[3], a[4]),
-    LIGHT_CLIENT_ERROR);
+  return call_pyvalue_export(
+    eth_consensus_create_light_client_bootstrap, args, 5, LIGHT_CLIENT_ERROR);
 }
 
 PyObject*
@@ -995,12 +966,8 @@ py_consensus_create_light_client_update(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object* a[11];
-  if (!strs_bytes_args(args, 5, 6, a)) return NULL;
-  return except_into_pybytes(
-    eth_consensus_create_light_client_update(
-      a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10]),
-    LIGHT_CLIENT_ERROR);
+  return call_pyvalue_export(
+    eth_consensus_create_light_client_update, args, 11, LIGHT_CLIENT_ERROR);
 }
 
 PyObject*
@@ -1008,23 +975,7 @@ py_consensus_compute_fork_digest(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *config_obj, *root_obj;
-  unsigned long long epoch;
-  if (!PyArg_ParseTuple(args, "OOOK", &name_obj, &config_obj, &root_obj, &epoch)) return NULL;
-  if (!PyUnicode_Check(name_obj)) {
-    PyErr_SetString(PyExc_TypeError, "name must be str");
-    return NULL;
-  }
-  if (!PyBytes_Check(config_obj) || !PyBytes_Check(root_obj)) {
-    PyErr_SetString(PyExc_TypeError, "the data must be bytes");
-    return NULL;
-  }
-  lean_object* name = str_arg(name_obj, "name");
-  if (!name) return NULL;
-  return except_into_pybytes(
-    eth_consensus_compute_fork_digest(name, bytes_arg(config_obj), bytes_arg(root_obj),
-                                      (uint64_t) epoch),
-    SSZ_ERROR);
+  return call_pyvalue_export(eth_consensus_compute_fork_digest, args, 4, SSZ_ERROR);
 }
 
 PyObject*
