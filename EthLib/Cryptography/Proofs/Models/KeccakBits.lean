@@ -1,7 +1,7 @@
 module
 
 /-!
-# Keccak-256 on bits
+# Keccak on bits
 
 FIPS 202 sections 3.1 to 3.4 define the state and permutation.
 
@@ -9,11 +9,17 @@ Section 4, Algorithm 8, defines the sponge.
 
 Section 5.1, Algorithm 9, defines pad10*1.
 
-Section 5.2 defines KECCAK[c], and Keccak-256 is KECCAK[512] with a 256-bit output.
+Section 5.2 defines KECCAK[c].
+
+Keccak-256 is KECCAK[512] with a 256-bit output.
+
+Keccak-512 is KECCAK[1024] with a 512-bit output.
 
 Appendix B.1 orders bits within each byte from least significant to most significant.
 
-Keccak-256 pads the message bits with pad10*1 directly, without the SHA3-256 suffix of section 6.1.
+Keccak-256 and Keccak-512 pad the message bits with pad10*1 directly.
+
+Neither hash appends the SHA-3 domain suffix of section 6.1.
 
 The model imports nothing from the lane implementation, and it does not reuse its tables.
 
@@ -112,46 +118,89 @@ def byteBits (byte : UInt8) : List Bool :=
 /-- The bits of a byte string, in increasing byte and bit order. -/
 def messageBits (msg : ByteArray) : List Bool := msg.data.toList.flatMap byteBits
 
+/-- FIPS 202 Algorithm 9 at a rate of `rateBits` bits. -/
+def paddingAt (rateBits length : Nat) : List Bool :=
+  true :: List.replicate ((rateBits - ((length + 2) % rateBits)) % rateBits) false ++ [true]
+
+/-- The bits of a message followed by pad10*1 at a rate of `rateBits` bits. -/
+def paddedAt (rateBits : Nat) (msg : ByteArray) : List Bool :=
+  let bits := messageBits msg
+  bits ++ paddingAt rateBits bits.length
+
 /-- FIPS 202 Algorithm 9 at the 1088-bit rate. -/
-def padding (length : Nat) : List Bool :=
-  true :: List.replicate ((1088 - ((length + 2) % 1088)) % 1088) false ++ [true]
+def padding (length : Nat) : List Bool := paddingAt 1088 length
 
 /-- The bits of a message followed by pad10*1 at the 1088-bit rate. -/
-def padded (msg : ByteArray) : List Bool :=
-  let bits := messageBits msg
-  bits ++ padding bits.length
+def padded (msg : ByteArray) : List Bool := paddedAt 1088 msg
 
 /-- FIPS 202 section 3.1.2 linear state index. -/
 def index (x y : Fin 5) (z : Fin 64) : Nat := 64 * (x.val + 5 * y.val) + z.val
 
-/-- Each padded message has a whole number of rate-sized blocks. -/
-theorem padded_size_multiple (msg : ByteArray) : (padded msg).length % 1088 = 0 := by
-  simp only [padded, List.length_append, padding, List.length_cons,
+/-- Each padded message has a whole number of rate-sized blocks, at any positive bit rate. -/
+theorem paddedAt_size_multiple {rateBits : Nat} (hr : 0 < rateBits) (msg : ByteArray) :
+    (paddedAt rateBits msg).length % rateBits = 0 := by
+  simp only [paddedAt, List.length_append, paddingAt, List.length_cons,
     List.length_replicate, List.length_nil]
-  have h : ((messageBits msg).length + 2) % 1088 < 1088 := Nat.mod_lt _ (by decide)
-  omega
+  let n := (messageBits msg).length + 2
+  have hmod : n % rateBits < rateBits := Nat.mod_lt _ hr
+  have hdiv := Nat.div_add_mod n rateBits
+  by_cases h0 : n % rateBits = 0
+  · have hlen : (messageBits msg).length +
+        ((rateBits - n % rateBits) % rateBits + 1 + (0 + 1)) = rateBits * (n / rateBits) := by
+      rw [h0, Nat.sub_zero, Nat.mod_self]
+      omega
+    rw [hlen, Nat.mul_mod_right]
+  · have hsub : (rateBits - n % rateBits) % rateBits = rateBits - n % rateBits :=
+      Nat.mod_eq_of_lt (by omega)
+    have hlen : (messageBits msg).length +
+        ((rateBits - n % rateBits) % rateBits + 1 + (0 + 1)) = rateBits * (n / rateBits + 1) := by
+      rw [hsub, Nat.mul_add, Nat.mul_one]
+      omega
+    rw [hlen, Nat.mul_mod_right]
 
-/-- A rate-sized source block. -/
-abbrev Block := Vector Bool 1088
+/-- Each padded message has a whole number of rate-sized blocks. -/
+theorem padded_size_multiple (msg : ByteArray) : (padded msg).length % 1088 = 0 :=
+  paddedAt_size_multiple (by decide) msg
+
+/-- A source block of `rateBits` bits. -/
+abbrev BlockOf (rateBits : Nat) := Vector Bool rateBits
+
+/-- A rate-sized source block at the 1088-bit rate. -/
+abbrev Block := BlockOf 1088
+
+/-- Extract complete block `i` from a message padded at `rateBits` bits. -/
+def paddedBlockAt {rateBits : Nat} (hr : 0 < rateBits) (msg : ByteArray)
+    (i : Fin ((paddedAt rateBits msg).length / rateBits)) : BlockOf rateBits :=
+  Vector.ofFn fun j => (paddedAt rateBits msg)[rateBits * i.val + j.val]'(by
+    have hm := paddedAt_size_multiple hr msg
+    have hi := i.isLt
+    have hj := j.isLt
+    have hd := Nat.div_add_mod (paddedAt rateBits msg).length rateBits
+    have hmul : rateBits * (i.val + 1) ≤ rateBits * ((paddedAt rateBits msg).length / rateBits) :=
+      Nat.mul_le_mul_left rateBits hi
+    rw [Nat.mul_add, Nat.mul_one] at hmul
+    omega)
 
 /-- Extract a complete block from a padded message. -/
 def paddedBlock (msg : ByteArray) (i : Fin ((padded msg).length / 1088)) : Block :=
-  Vector.ofFn fun j => (padded msg)[1088 * i.val + j.val]'(by
-    have hm := padded_size_multiple msg
-    have hi := i.isLt
-    have hj := j.isLt
-    omega)
+  paddedBlockAt (by decide) msg i
+
+/-- XOR one `rateBits`-bit block into the state, leaving the capacity unchanged. -/
+def absorbAt {rateBits : Nat} (a : State) (block : BlockOf rateBits) : State := fun x y z =>
+  let i := index x y z
+  Bool.xor (a x y z) (if h : i < rateBits then block[i]'h else false)
 
 /-- XOR one rate-sized block into the state, leaving the capacity unchanged. -/
-def absorb (a : State) (block : Block) : State := fun x y z =>
-  let i := index x y z
-  Bool.xor (a x y z) (if h : i < 1088 then block[i]'h else false)
+def absorb (a : State) (block : Block) : State := absorbAt a block
+
+/-- Absorb every complete block of a message padded at `rateBits` bits. -/
+def absorbAllAt {rateBits : Nat} (hr : 0 < rateBits) (msg : ByteArray) : State :=
+  (List.finRange ((paddedAt rateBits msg).length / rateBits)).foldl
+    (fun a i => permutation (absorbAt a (paddedBlockAt hr msg i)))
+    (fun _ _ _ => false)
 
 /-- Absorb every complete rate-sized block of a padded message. -/
-def absorbAll (msg : ByteArray) : State :=
-  (List.finRange ((padded msg).length / 1088)).foldl
-    (fun a i => permutation (absorb a (paddedBlock msg i)))
-    (fun _ _ _ => false)
+def absorbAll (msg : ByteArray) : State := absorbAllAt (rateBits := 1088) (by decide) msg
 
 /-- The state bit at a linear index, modulo the state dimensions. -/
 def stateBit (a : State) (i : Nat) : Bool :=
@@ -162,9 +211,21 @@ def outputByte (a : State) (i : Nat) : UInt8 :=
   UInt8.ofNat ((List.range 8).foldl (fun n j =>
     if stateBit a (8 * i + j) then n + 2 ^ j else n) 0)
 
+/-- The first `outBytes` output bytes of a state, least significant bit first in each byte. -/
+def squeezeBytes (outBytes : Nat) (a : State) : Vector UInt8 outBytes :=
+  Vector.ofFn fun i => outputByte a i.val
+
+/-- The sponge of FIPS 202 section 4, Algorithm 8, when `outBytes` fits in one rate block. -/
+def sponge {rateBits outBytes : Nat} (hr : 0 < rateBits) (_hout : 8 * outBytes ≤ rateBits)
+    (msg : ByteArray) : Vector UInt8 outBytes :=
+  squeezeBytes outBytes (absorbAllAt hr msg)
+
 /-- Original Keccak-256, FIPS 202 sections 4 and 5.2. -/
 def keccak256 (msg : ByteArray) : Vector UInt8 32 :=
-  let a := absorbAll msg
-  Vector.ofFn fun i => outputByte a i.val
+  sponge (rateBits := 1088) (by decide) (by decide) msg
+
+/-- Original Keccak-512, FIPS 202 sections 4 and 5.2. -/
+def keccak512 (msg : ByteArray) : Vector UInt8 64 :=
+  sponge (rateBits := 576) (by decide) (by decide) msg
 
 end EthLib.Cryptography.Models.KeccakBits
