@@ -1302,12 +1302,17 @@ The Python bindings expose the block cipher, CTR and GCM, as `encrypt_block`, `d
 
 A security theorem rests on a model, such as a random oracle for a hash.
 Each such theorem of EthLib rests on one idealisation, listed below.
-The two theorems of Casper FFG share one bullet, as do the signature theorems of the light client, and the binding of a proof of possession and the codeword searches share that of leanXMSS:
+The two theorems of Casper FFG share one bullet, as do the signature theorems of the light client.
+The binding of a proof of possession shares the bullet of leanXMSS, and the codeword searches of each scheme share the bullet of that scheme:
 
 - leanXMSS: the hash `H`, Keccak-256, is a random oracle on byte strings.
   The theorem says nothing about an attack that uses the structure of Keccak.
   The binding of an EIP-8450 proof of possession rests on the same oracle.
-  So do the failure bounds of the codeword searches of leanXMSS and leanSPHINCS.
+  So do the failure bounds of the codeword searches of leanXMSS.
+- leanSPHINCS: the hash `H`, Keccak-256, is a random oracle on byte strings, as for leanXMSS.
+  The unforgeability theorem says nothing about an attack that uses the structure of Keccak.
+  It counts classical queries only, so it says nothing about a quantum adversary.
+  The failure bounds of the codeword searches of leanSPHINCS rest on the same oracle.
 - Merkle search bounds: each new `(level, position, left, right)` input receives an independent uniform answer from a finite nonempty range.
   Repeated inputs receive the same answer, and the initial cache is empty.
   The fixed-target bound excludes one honest input from the oracle domain and fixes the target before the run.
