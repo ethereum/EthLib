@@ -167,7 +167,7 @@ theorem slotCommitteeMembers_eq (state : BeaconState preset fork) (slot : Slot) 
       rw [count, List.range_succ_eq_map, List.foldlM_cons]
       simp [getBeaconCommittee, seedOk, shuffleOk, bind, Except.bind, Except.mapError]
     | ok shuffled =>
-      simp only [List.size_toArray, shuffleOk, Except.mapError, bind, Except.bind, pure,
+      simp only [seedOk, List.size_toArray, shuffleOk, Except.mapError, bind, Except.bind, pure,
         Except.pure]
       congr 1
       funext members index

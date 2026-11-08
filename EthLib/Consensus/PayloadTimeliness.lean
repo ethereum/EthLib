@@ -120,32 +120,38 @@ def attesterShuffle (state : BeaconState preset fork) (epoch : Epoch) :
 
 /-- The members of the attestation committees of a slot, committee after committee.
 
-They are cut from the given active validators and shuffle. -/
-def slotCommitteeMembersOf (state : BeaconState preset fork) (slot : Slot)
+They are cut from the given active validators and shuffle, with the given count of committees.
+
+The caller computes the count once, since computing it reads the whole registry. -/
+def slotCommitteeMembersOf (preset : Preset) (slot : Slot) (perSlot : UInt64)
     (active : Array ValidatorIndex) (shuffled : Array UInt64) :
     Except AccessorError (Array ValidatorIndex) :=
-  (List.range (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat).foldlM
+  (List.range perSlot.toNat).foldlM
     (fun members index => do
-      return members ++ (← beaconCommitteeOf state slot index.toUInt64 active shuffled)) #[]
+      return members ++ (← beaconCommitteeOf preset slot index.toUInt64 perSlot active shuffled))
+    #[]
 
 /-- The members of the attestation committees of a slot, committee after committee.
 
 The committees share one shuffle of the active validators, computed once for the slot. -/
 def slotCommitteeMembers (state : BeaconState preset fork) (slot : Slot) :
     Except AccessorError (Array ValidatorIndex) := do
-  let (active, shuffled) ← attesterShuffle state (computeEpochAtSlot preset slot)
-  slotCommitteeMembersOf state slot active shuffled
+  let epoch := computeEpochAtSlot preset slot
+  let (active, shuffled) ← attesterShuffle state epoch
+  slotCommitteeMembersOf preset slot (getCommitteeCountPerSlot state epoch) active shuffled
 
 /-- The payload timeliness committee of a slot, from the seed of its epoch for this duty.
 
-The attestation committees of the slot are cut from the given active validators and shuffle. -/
+The attestation committees of the slot are cut from the given active validators and shuffle.
+
+The count of those committees in the slot is given. -/
 def computePtcOf (state : BeaconState preset fork) (slot : Slot) (epochSeed : Bytes32)
-    (active : Array ValidatorIndex) (shuffled : Array UInt64) :
+    (perSlot : UInt64) (active : Array ValidatorIndex) (shuffled : Array UInt64) :
     Except AccessorError (PayloadTimelinessCommittee preset) := do
   let seed :=
     Cryptography.Hash.Sha256.hash32 ⟨epochSeed.toArray ++ (uintToBytes 8 slot.toNat).toArray⟩
-  computeBalanceWeightedSelection state (← slotCommitteeMembersOf state slot active shuffled) seed
-    preset.PTC_SIZE false
+  let members ← slotCommitteeMembersOf preset slot perSlot active shuffled
+  computeBalanceWeightedSelection state members seed preset.PTC_SIZE false
 
 /-- The payload timeliness committee of a slot, which may hold a validator more than once.
 
@@ -157,7 +163,7 @@ def computePtc (state : BeaconState preset fork) (slot : Slot) :
   let epoch := computeEpochAtSlot preset slot
   let epochSeed ← getSeed state epoch DOMAIN_PTC_ATTESTER
   let (active, shuffled) ← attesterShuffle state epoch
-  computePtcOf state slot epochSeed active shuffled
+  computePtcOf state slot epochSeed (getCommitteeCountPerSlot state epoch) active shuffled
 
 /-- The position in the window of the committee of a slot.
 
@@ -279,15 +285,16 @@ def processPtcWindow (state : BeaconState preset fork) (gloas : .glamsterdam ≤
   let perEpoch := preset.SLOTS_PER_EPOCH.toNat
   let nextEpoch ← liftArith do
     addChecked (← addChecked (getCurrentEpoch state) preset.MIN_SEED_LOOKAHEAD) 1
-  -- The new committees read the same two seeds and the same shuffle, so these are computed once.
+  -- The new committees read the same two seeds, shuffle and count, so these are computed once.
   let inputs : Except AccessorError _ := do
-    return (← getSeed state nextEpoch DOMAIN_PTC_ATTESTER, ← attesterShuffle state nextEpoch)
+    return (← getSeed state nextEpoch DOMAIN_PTC_ATTESTER, getCommitteeCountPerSlot state nextEpoch,
+      ← attesterShuffle state nextEpoch)
   let moved ← (Vector.range _).mapM fun position =>
     if kept : position + perEpoch < _ then pure window[position + perEpoch]
     else do
       let slot ← ptcWindowSlot preset nextEpoch (position + perEpoch - window.size)
-      let (epochSeed, active, shuffled) ← inputs
-      computePtcOf state slot epochSeed active shuffled
+      let (epochSeed, perSlot, active, shuffled) ← inputs
+      computePtcOf state slot epochSeed perSlot active shuffled
   -- The tree is built here, once, so that each read of the field does not build it again.
   let moved := RootedVector.ofVector moved
   return { state with ptcWindow := fun _ => moved }
