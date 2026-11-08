@@ -420,6 +420,8 @@ PyObject* py_consensus_compute_subscribed_subnets         (PyObject* self, PyObj
 PyObject* py_reqresp_max_compressed_len                   (PyObject* self, PyObject* args);
 PyObject* py_reqresp_decode_payload                       (PyObject* self, PyObject* args);
 PyObject* py_reqresp_decode_response_chunk                (PyObject* self, PyObject* args);
+PyObject* py_reqresp_encode_payload                       (PyObject* self, PyObject* args);
+PyObject* py_reqresp_encode_response_chunk                (PyObject* self, PyObject* args);
 PyObject* py_block_header_hash                            (PyObject* self, PyObject* args);
 PyObject* py_block_reencode                               (PyObject* self, PyObject* args);
 PyObject* py_pow_block_difficulty                         (PyObject* self, PyObject* args);

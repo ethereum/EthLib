@@ -25,6 +25,18 @@ eth_reqresp_decode_response_chunk(
   lean_object* data
 );
 
+extern lean_object*
+eth_reqresp_encode_payload(
+  lean_object* data
+);
+
+extern lean_object*
+eth_reqresp_encode_response_chunk(
+  uint8_t code,
+  lean_object* context,
+  lean_object* payload
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* The bytes of a `bytes` argument, or NULL with a TypeError set. */
@@ -82,4 +94,49 @@ py_reqresp_decode_response_chunk(
   if (!data) return NULL;
   return except_into_pybytes(
     eth_reqresp_decode_response_chunk(context_bytes, type_min, type_bound, data), REQRESP_ERROR);
+}
+
+PyObject*
+py_reqresp_encode_payload(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject* data_obj;
+  if (!PyArg_ParseTuple(args, "O", &data_obj)) return NULL;
+  lean_object* data = parse_data(data_obj);
+  if (!data) return NULL;
+  return except_into_pybytes(eth_reqresp_encode_payload(data), REQRESP_ERROR);
+}
+
+PyObject*
+py_reqresp_encode_response_chunk(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *code_obj, *context_obj, *payload_obj;
+  if (!PyArg_ParseTuple(args, "OOO", &code_obj, &context_obj, &payload_obj)) return NULL;
+  if (!PyLong_Check(code_obj)) {
+    PyErr_SetString(PyExc_TypeError, "code must be int");
+    return NULL;
+  }
+  int overflow;
+  long code = PyLong_AsLongAndOverflow(code_obj, &overflow);
+  if (code == -1 && PyErr_Occurred()) return NULL;
+  if (overflow || code < 0 || code > 255) {
+    PyErr_SetString(PyExc_OverflowError, "code must be in [0, 256)");
+    return NULL;
+  }
+  if (!PyBytes_Check(context_obj) || !PyBytes_Check(payload_obj)) {
+    PyErr_SetString(PyExc_TypeError, "context and payload must be bytes");
+    return NULL;
+  }
+  lean_object* context = parse_data(context_obj);
+  if (!context) return NULL;
+  lean_object* payload = parse_data(payload_obj);
+  if (!payload) {
+    lean_dec(context);
+    return NULL;
+  }
+  return except_into_pybytes(
+    eth_reqresp_encode_response_chunk((uint8_t) code, context, payload), REQRESP_ERROR);
 }
