@@ -996,9 +996,12 @@ def get_execution_payload_bid(
     value: int,
     inclusion_list_bits: bytes | None = None,
 ) -> bytes:
-    """From Gloas, the bid of a builder for a payload it built on a state, as SSZ bytes."""
-    # The inclusion list bits are SSZ bytes, required from Heze and absent before.
-    # Empty bytes tell the export that they are absent.
+    """
+    From Gloas, the bid of a builder for a payload it built on a state, as SSZ bytes.
+
+    The inclusion list bits are SSZ bytes, required from Heze and rejected before.
+    """
+    # Empty bytes tell the export that the bits are absent.
     return _native.consensus_get_execution_payload_bid(
         name,
         fork,
@@ -1024,9 +1027,12 @@ def get_self_built_execution_payload_bid(
     fee_recipient: bytes,
     inclusion_list_bits: bytes | None = None,
 ) -> bytes:
-    """From Gloas, the signed bid of a proposer that builds its own payload, as SSZ bytes."""
-    # The inclusion list bits are SSZ bytes, required from Heze and absent before.
-    # Empty bytes tell the export that they are absent.
+    """
+    From Gloas, the signed bid of a proposer that builds its own payload, as SSZ bytes.
+
+    The inclusion list bits are SSZ bytes, required from Heze and rejected before.
+    """
+    # Empty bytes tell the export that the bits are absent.
     return _native.consensus_get_self_built_execution_payload_bid(
         name,
         fork,

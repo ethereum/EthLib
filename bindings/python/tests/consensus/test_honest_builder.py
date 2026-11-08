@@ -177,7 +177,7 @@ def test_inclusion_list_bits_before_heze():
     assert info.value.code == 0
 
 
-@pytest.mark.parametrize("bits", [None, b""], ids=["omitted", "empty"])
+@pytest.mark.parametrize("bits", [None, b""], ids=["none", "empty"])
 def test_inclusion_list_bits_missing_from_heze(bits: bytes | None):
     with raises(SszError, "inclusion list bits are required at hegota") as info:
         self_built("heze", bits)
@@ -209,10 +209,15 @@ def test_inclusion_list_bits_in_the_bid():
     assert self_built("heze", bits).endswith(bits)
 
 
-def test_inclusion_list_bits_from_heze():
-    # The bits of the 16 members take 2 bytes.
-    with raises(SszError, "input rejected: EthLib.Serialization.Ssz.Err.scope 2 1") as info:
-        self_built("heze", bytes(1))
+# The bits of the 16 members take 2 bytes.
+@pytest.mark.parametrize("size", [1, 3], ids=["short", "long"])
+def test_inclusion_list_bits_of_the_wrong_length(size: int):
+    message = f"input rejected: EthLib.Serialization.Ssz.Err.scope 2 {size}"
+    with raises(SszError, message) as info:
+        self_built("heze", bytes(size))
+    assert info.value.code == 0
+    with raises(SszError, message) as info:
+        bid("heze", 7, 0, bits=bytes(size))
     assert info.value.code == 0
 
 
