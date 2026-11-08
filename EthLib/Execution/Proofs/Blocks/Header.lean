@@ -19,9 +19,13 @@ A list with another count never decodes as a header of that fork.
 
 The hash of a decoded header is the hash of the bytes that it decodes from.
 
-Two headers at one fork with one hash are equal, or a search returns their encodings as a collision.
+Two headers at one fork with one hash are equal.
 
-The theorems give no bound on finding a Keccak-256 collision.
+Otherwise a search returns their encodings, which form a Keccak-256 collision.
+
+Keccak-256 has collisions, so no theorem can rule one out.
+
+The theorems give no bound on the cost of finding one.
 -/
 
 @[expose] public section
@@ -126,13 +130,13 @@ theorem hash_eq_ok_iff {h : Header fork} {digest : Hash32} :
       cases hb
       rfl
 
-/-- The encodings of two headers when they differ and share one Keccak-256 hash. -/
+/-- The encodings of two headers, when the encodings differ and share one Keccak-256 hash. -/
 def findCollision (h₁ h₂ : Header fork) : Option (ByteArray × ByteArray) :=
   match Codec.encode h₁, Codec.encode h₂ with
   | .ok b₁, .ok b₂ => if b₁ ≠ b₂ ∧ keccak256 b₁ = keccak256 b₂ then some (b₁, b₂) else none
   | _, _ => none
 
-/-- Every pair that the search returns is a Keccak-256 collision of the two encodings. -/
+/-- Every pair that the search returns holds the two encodings, in order, and is a collision. -/
 theorem findCollision_valid {h₁ h₂ : Header fork} {pair : ByteArray × ByteArray}
     (hFound : findCollision h₁ h₂ = some pair) :
     Codec.encode h₁ = .ok pair.1 ∧ Codec.encode h₂ = .ok pair.2 ∧ IsCollision keccak256 pair := by
@@ -156,9 +160,9 @@ theorem findCollision_self (h : Header fork) : findCollision h h = none := by
     simp
   · rfl
 
-/-- Binding of the header hash: two headers at one fork with one hash are equal.
+/-- Two headers at one fork with one hash are equal, or the search returns their encodings.
 
-Otherwise the search returns their encodings, which form a Keccak-256 collision. -/
+Those encodings then form a Keccak-256 collision. -/
 theorem hash_binding {h₁ h₂ : Header fork} {digest : Hash32}
     (hh₁ : h₁.hash = .ok digest) (hh₂ : h₂.hash = .ok digest) :
     h₁ = h₂ ∨ ∃ pair, findCollision h₁ h₂ = some pair ∧
