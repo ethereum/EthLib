@@ -457,7 +457,10 @@ It states the check of EIP-197: the pairs `(a_i P1, b_i P2)` pass exactly when `
 `Ate.ateValue_add_left` proves that these lines at `P`, raised to `N`, are linear in a point `P` that `pi` fixes.
 `Ate.ateValue_add_right` proves that they are linear in `Q'` on the untwist of `G_2`.
 `Ate.pairing_eq_ateValue` proves that the pairing of a finite `P` on the curve and a `Q` on the twist whose untwist lies in `G_2` is that value.
-No theorem proves that every point `Q` with `q Q = O` on the twist is a multiple of `P2`, so the law covers the pairs of EIP-197 that are multiples of the generators.
+`Point2.nsmul_order_eq_zero_iff` (`Proofs/AltBn128/G2Torsion.lean`) proves that every point `Q` with `q Q = O` on the twist is a multiple of `P2`, as EIP-197 says.
+`Point2.mulBits_order_eq_infinity_iff_exists` restates it for the subgroup check of ECPAIRING, and `Point.exists_eq_mulBits_generator` (`Proofs/AltBn128/Order.lean`) does the same for `P1`.
+So every pair that ECPAIRING decodes is a pair of multiples of the generators, where the law above holds.
+No theorem yet states the law for the decoded pairs themselves.
 
 `ecadd_toPoint` and `ecmul_toPoint` (`Execution/Proofs/Evm/Precompiles/AltBn128/Group.lean`) carry this group law to the precompiles.
 A call of ECADD that succeeds returns the sum of its two points, and a call of ECMUL returns its point times its 32-byte scalar.

@@ -2,7 +2,7 @@ module
 
 public import EthLib.Execution.Proofs.Evm.Precompiles.AltBn128.Basic
 public import EthLib.Cryptography.Proofs.AltBn128.Order
-public import EthLib.Cryptography.Proofs.AltBn128.Twist
+public import EthLib.Cryptography.Proofs.AltBn128.G2Torsion
 
 /-!
 # Proofs: the pairs of ECPAIRING
@@ -25,9 +25,11 @@ So the check accepts each point whose order divides `q`, including `O`.
 
 EIP-197 encodes `O` as zeros.
 
-EIP-197 says that these points form `G_2`, and no theorem here proves it.
+These points are the multiples of `P2`, so they form `G_2`, as EIP-197 says.
 
 So a pair decodes exactly when its first point decodes, its second point decodes, and `q Q = O`.
+
+So each pair that decodes holds a multiple of `P1` and a multiple of `P2`.
 
 Source: [EIP-197][eip197], section Specification.
 
@@ -67,5 +69,16 @@ theorem decodePair_eq_ok_iff (data : ByteArray) (index : Nat) (p : Point) (q : P
           not_false_eq_true, ↓reduceIte, reduceCtorEq, Except.ok.injEq, false_iff, not_and]
         rintro - rfl
         exact fun h => hsub (hq'.mpr h)
+
+/-- Each pair that decodes holds `a P1` and `b P2`, for some `a < q` and `b < q`. -/
+theorem exists_mulBits_generator_of_decodePair {data : ByteArray} {index : Nat} {p : Point}
+    {q : Point2} (h : decodePair data index = .ok (p, q)) :
+    (∃ a < Fr.modulus, p = Point.mulBits 256 a Point.generator) ∧
+      ∃ b < Fr.modulus, q = Point2.mulBits 256 b Point2.generator := by
+  obtain ⟨hp, hq, hord⟩ := (decodePair_eq_ok_iff data index p q).mp h
+  have hon := bytesToG2_isOnCurve hq
+  exact ⟨Point.exists_eq_mulBits_generator (bytesToG1_isOnCurve hp),
+    (Point2.mulBits_order_eq_infinity_iff_exists hon).mp
+      ((Point2.mulBits_order_eq_infinity_iff hon).mpr hord)⟩
 
 end EthLib.Execution.Evm.Precompiles.AltBn128
