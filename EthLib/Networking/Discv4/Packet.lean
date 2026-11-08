@@ -33,10 +33,6 @@ In both, the first item after the fixed fields is a list.
 EIP-868 later put the sequence number at that place.
 
 EthLib reads that item as the sequence number, so it rejects both packets.
-
-go-ethereum does the same, in [`v4wire.go` at `0d06140`][v4wire].
-
-[v4wire]: https://github.com/ethereum/go-ethereum/blob/0d061403cf53263b95f9beec48f07046e78e1bed/p2p/discover/v4wire/v4wire.go#L54
 -/
 
 @[expose] public section

@@ -146,7 +146,7 @@ So the statements say something, even though every compressing hash has collisio
 
 `Proofs/Merkle/RandomOracle.lean` bounds classical searches against an ideal random oracle with `N` outputs and an empty initial cache.
 `prEvent_collision_le` bounds a collision among queried inputs by `q^2 / N` for at most `q` hash calls, and private uniform sampling is not counted.
-This bound exceeds the standard birthday bound `q(q - 1) / (2N)` by the factor `2q / (q - 1)`, a little over 2.
+This bound exceeds the standard birthday bound `q(q - 1) / (2N)` by the factor `2q / (q - 1)`: at most 4 for `q >= 2`, and close to 2 for large `q`.
 
 `prEvent_secondPreimage_le` bounds by `q / N` a hit on a target digest fixed before the run, among queried inputs other than one honest input.
 The theorem does not tie the target to the digest of the honest input.

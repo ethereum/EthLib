@@ -146,7 +146,9 @@ theorem gasHeld_le_of_measure_lt {a b : Evm fork Meter} (h : measure b < measure
 
 From a calling frame, it runs a message and gives the frame that ends it, with at most its gas.
 
-It fails only with an error that aborts the run. -/
+By convention, it fails only with an error that aborts the run.
+
+The type does not enforce this; the proofs assume it of the runners they reason about. -/
 abbrev MessageRunner (fork : Fork) (Meter : Type) [GasMeter Meter] (bound : Nat) : Type :=
   (caller : Evm fork Meter) → (message : Message fork) → message.gas < bound →
     Except EvmError { child : Evm fork Meter // GasMeter.gasHeld child.gas ≤ message.gas }

@@ -151,7 +151,7 @@ The meta EIP of each later fork gives its time: EIP-7569, EIP-7600, EIP-7607, EI
 Mainnet sets no blob schedule of its own: each fork keeps the schedule of its EIPs.
 
 [eip-6953-pow]: https://eips.ethereum.org/EIPS/eip-6953#proof-of-work-network-upgrades
-[eip-3675]: https://eips.ethereum.org/EIPS/eip-3675#transition-block-validity
+[eip-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#transition-block-validity
 [eip-7643]: https://eips.ethereum.org/EIPS/eip-7643#pre-pos-root
 [eip-6953-pos]: https://eips.ethereum.org/EIPS/eip-6953#post-merge-upgrades
 -/

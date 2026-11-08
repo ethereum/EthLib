@@ -62,7 +62,7 @@ inductive BlockId where
 
   `eth.md` writes the number as `P`, with no bound.
 
-  EthLib bounds it below 2^64, a choice it shares with go-ethereum.
+  EthLib bounds it below 2^64, a choice of its own.
 
   So a number never has the 32 bytes of a hash. -/
   | number (n : UInt64)

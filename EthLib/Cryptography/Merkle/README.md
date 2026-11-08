@@ -95,7 +95,7 @@ The bounds exclude position-ignoring hashes, including those of SSZ and the VRF 
 They make no security claim about a concrete hash or quantum queries.
 
 With an empty initial cache and `N` possible answers, `prEvent_collision_le` bounds the probability of a collision among queried inputs by `q^2 / N` for at most `q` classical hash calls.
-This bound exceeds the standard birthday bound `q(q - 1) / (2N)` by the factor `2q / (q - 1)`, a little over 2.
+This bound exceeds the standard birthday bound `q(q - 1) / (2N)` by the factor `2q / (q - 1)`: at most 4 for `q >= 2`, and close to 2 for large `q`.
 `prEvent_secondPreimage_le` bounds by `q / N` the probability that a queried input other than one fixed honest input has a target digest fixed before the run.
 As a second-preimage bound, it takes the target to be the honest digest and the other answers to stay uniform given that digest.
 That conditioning is a modelling step: the theorem does not tie the target to the honest input.
@@ -111,6 +111,7 @@ Q(l, n+1) = 1 + 2*(2^l - 1) + (2^(l+1) - 1) + Q(l+1, n)
 
 For a path of length `n` from level `l`, fixed with the leaves before the oracle is sampled, `prEvent_findSecondPreimage_queryNode_le` bounds the success probability by `Q(l, n)^2 / N`.
 The budget `Q(l, n)` equals `2^(l+n+2) - 2^(l+2) - 2n`, because the search recomputes the honest nodes on every level.
-The search queries at most `2^(l+n) - 1 + n` distinct inputs, so the budget counts about four times as many calls.
+The search queries at most `2^(l+n) - 1 + n` distinct inputs.
+The budget is between one and four times that count: under two for a path of length 1, and near four only for long paths.
 Its honest ancestors depend on oracle answers, so this search uses the birthday bound rather than the bound for one fixed target.
 A search whose paths depend on oracle answers goes through the covered-event theorems `prEvent_findCollision_le` and `prEvent_findSecondPreimage_le`.

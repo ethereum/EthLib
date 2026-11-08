@@ -34,7 +34,7 @@ Electra passes the requests of the payload too.
 
 [EIP-7691] raises the blob limit at Electra, and from Fulu [EIP-7892] sets it by epoch.
 
-[EIP-3675]: https://eips.ethereum.org/EIPS/eip-3675#block-structure
+[EIP-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#block-structure
 [EIP-4399]: https://eips.ethereum.org/EIPS/eip-4399#block-structure
 [EIP-4788]: https://eips.ethereum.org/EIPS/eip-4788#block-structure-and-validity
 [EIP-7685]: https://eips.ethereum.org/EIPS/eip-7685#consensus-layer

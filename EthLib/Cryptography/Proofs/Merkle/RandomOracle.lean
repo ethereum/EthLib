@@ -20,7 +20,9 @@ Repeated inputs are not collisions, but still count towards the query budget.
 
 The birthday bound here is the loose bound `q^2 / N`, for `N` possible answers.
 
-It exceeds the standard bound `q(q - 1) / (2N)` by the factor `2q / (q - 1)`, a little over 2.
+It exceeds the standard bound `q(q - 1) / (2N)` by the factor `2q / (q - 1)`.
+
+That factor is at most 4 for `q >= 2`, and close to 2 for large `q`.
 
 The proof charges each fresh answer at most `q / N`, and private uniform sampling is not counted.
 
@@ -360,7 +362,9 @@ Repeated honest calls still count, even though the oracle answers them from its 
 
 From level `l` over `n` siblings, the budget is `2^(l+n+2) - 2^(l+2) - 2n`.
 
-The search queries at most `2^(l+n) - 1 + n` distinct inputs, about a quarter of that.
+The search queries at most `2^(l+n) - 1 + n` distinct inputs.
+
+The budget is between one and four times that count, and near four only for long paths.
 -/
 def secondPreimageQueries : Nat → Nat → Nat
   | _, 0 => 0

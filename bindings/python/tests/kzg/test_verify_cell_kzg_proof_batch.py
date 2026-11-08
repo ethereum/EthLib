@@ -130,17 +130,11 @@ def test_valid_not_sorted() -> None:
 
 def test_valid_regression1() -> None:
     """
-    Regression from fusaka-devnet-5.
+    Regression from fusaka-devnet-5: cells of ten blobs, one committed at infinity, verify.
 
-    In c-kzg-4844, 8 or more blobs with one commitment at infinity gave a wrong result.
+    A batch verifier gave a wrong result on 8 or more blobs with a commitment at infinity.
 
-    Below 8 blobs, c-kzg-4844 uses a naive MSM, so the earlier reference tests missed the bug.
-
-    The bug was in blst, which fixed it in this commit:
-    https://github.com/supranational/blst/commit/f48500c1fdbefa7c0bf9800bccd65d28236799c1
-
-    The inputs come from Teku:
-    https://github.com/Consensys/teku/pull/9893
+    Below 8 blobs it took a naive MSM, so the earlier reference tests missed the bug.
     """
     commitments = [
         bytes.fromhex(h)
