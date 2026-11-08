@@ -175,7 +175,7 @@ def test_unknown_names_are_rejected() -> None:
 def test_name_must_be_text() -> None:
     """A name given as bytes is not read, and fails with code 0."""
     with raises(consensus.ConsensusError, "expected a str") as error:
-        consensus.preset(b"mainnet")
+        consensus.preset(b"mainnet")  # ty: ignore[invalid-argument-type]
     assert error.value.code == 0
 
 

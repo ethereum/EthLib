@@ -403,12 +403,12 @@ def consensus_compute_columns_for_custody_group(name: str, custody_group: int) -
     """The columns of a custody group."""
     ...
 
-def consensus_ssz_static(name: str, fork: str, type: str, data: bytes) -> bytes:
-    """The root of the value that the bytes encode, then the bytes of that value."""
+def consensus_ssz_static(name: str, fork: str, type: str, data: bytes) -> tuple[bytes, bytes]:
+    """The root of the value that the bytes encode, and the bytes of that value, as a pair."""
     ...
 
-def consensus_merkle_proof(name: str, fork: str, type: str, data: bytes, gindex: int) -> bytes:
-    """The node at a generalized index of the value that the bytes encode, then its branch."""
+def consensus_merkle_proof(name: str, fork: str, type: str, data: bytes, gindex: int) -> tuple[bytes, list[bytes]]:
+    """The node at a generalized index of the value that the bytes encode, and its branch, as a pair."""
     ...
 
 def consensus_verify_blob_sidecar_inclusion_proof(name: str, fork: str, data: bytes) -> bool:
@@ -655,8 +655,8 @@ def consensus_compute_fork_digest(name: str, config: bytes, genesis_validators_r
     """The fork digest at an epoch, on the chain with the given root of the genesis validators."""
     ...
 
-def pq_keys_ssz(type: str, data: bytes) -> bytes:
-    """The root of the value that the bytes encode, then the bytes of that value."""
+def pq_keys_ssz(type: str, data: bytes) -> tuple[bytes, bytes]:
+    """The root of the value that the bytes encode, and the bytes of that value, as a pair."""
     ...
 
 def pq_keys_possession_signing_root(name: str, genesis_validators_root: bytes, pubkey: bytes, xmss_public_key: bytes) -> bytes:
@@ -711,32 +711,32 @@ def consensus_compute_shuffled_index(name: str, index: int, count: int, seed: by
     """The shuffled position of one index, which must be below the count."""
     ...
 
-def consensus_reqresp_protocol_ids(fork: str) -> bytes:
+def consensus_reqresp_protocol_ids(fork: str) -> list[str]:
     """The protocol IDs of a fork: each protocol with each version that the fork defines."""
     ...
 
-def consensus_reqresp_parse_protocol_id(text: str) -> bytes:
+def consensus_reqresp_parse_protocol_id(text: str) -> tuple[str, int]:
     """The protocol and the version that an ID names, if it names one."""
     ...
 
-def consensus_reqresp_message(name: str, fork: str, type: str, data: bytes) -> bytes:
-    """The root of the message that the bytes encode, then the bytes of that message."""
+def consensus_reqresp_message(name: str, fork: str, type: str, data: bytes) -> tuple[bytes, bytes]:
+    """The root of the message that the bytes encode, and the bytes of that message, as a pair."""
     ...
 
 def consensus_compute_min_epochs_for_block_requests(name: str) -> int:
     """The fewest epochs back from the current one over which a node must serve blocks."""
     ...
 
-def consensus_gossip_topics(name: str, fork: str) -> bytes:
+def consensus_gossip_topics(name: str, fork: str) -> list[str]:
     """The gossip topics of a fork, in the order of the fork that adds each one."""
     ...
 
-def consensus_reqresp_request_bounds(name: str, fork: str, protocol: str) -> bytes:
-    """The smallest and the largest length of a request payload, as a JSON pair."""
+def consensus_reqresp_request_bounds(name: str, fork: str, protocol: str) -> tuple[int, int]:
+    """The smallest and the largest length of a request payload, as a pair."""
     ...
 
-def consensus_reqresp_response_bounds(name: str, chunk_fork: str, protocol: str) -> bytes:
-    """The smallest and the largest length of the payload of a successful response chunk."""
+def consensus_reqresp_response_bounds(name: str, chunk_fork: str, protocol: str) -> tuple[int, int]:
+    """The smallest and the largest length of the payload of a successful response chunk, as a pair."""
     ...
 
 def consensus_gossip_topic_bound(name: str, fork: str, topic: str) -> int:
@@ -755,7 +755,7 @@ def consensus_compute_subnet_for_data_column_sidecar(name: str, column_index: in
     """From Fulu: the subnet of a data column sidecar, its column modulo the number of subnets."""
     ...
 
-def consensus_compute_subscribed_subnets(name: str, node_id: bytes, epoch: int) -> bytes:
+def consensus_compute_subscribed_subnets(name: str, node_id: int, epoch: int) -> list[int]:
     """The attestation subnets that a node subscribes to in an epoch."""
     ...
 
