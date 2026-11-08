@@ -364,7 +364,9 @@ From level `l` over `n` siblings, the budget is `2^(l+n+2) - 2^(l+2) - 2n`.
 
 The search queries at most `2^(l+n) - 1 + n` distinct inputs.
 
-The budget is between one and four times that count, and near four only for long paths.
+On a path of length at least 1, the budget is one to four times that count.
+
+It nears four only for long paths.
 -/
 def secondPreimageQueries : Nat → Nat → Nat
   | _, 0 => 0
