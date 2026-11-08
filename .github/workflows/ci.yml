@@ -103,14 +103,19 @@ jobs:
 
       # Time Lean exports separately from the Python package build.
       - name: exports
+        id: exports
         run: bash scripts/build_timing_report.sh run exports_build "$BUILD_TIMING_RESULTS" -- lake build --wfail Exports
 
       # The C docstrings, the contract and the type stub must match the Lean docstrings and codes.
       - name: binding contract
         run: lake exe gen-bindings --check
 
-      # The build pipeline regressions below run in this Python environment.
+      # The build pipeline regressions below run in this Python environment,
+      # so it syncs even when the contract check above fails.
+      # The sync builds the exports again, so it runs only when they built above.
       - name: bindings
+        id: bindings
+        if: ${{ !cancelled() && steps.exports.outcome == 'success' }}
         run: bash scripts/build_timing_report.sh run bindings_build "$BUILD_TIMING_RESULTS" -- uv sync --frozen --extra test
 
       # The steps below run even after a failed step above, so every result is reported.
@@ -150,8 +155,9 @@ jobs:
         if: ${{ !cancelled() }}
         run: uv run --no-project --python 3.12 python -m unittest discover -s scripts -p 'test_build_timing.py'
 
+      # These tests import the test extra, which only the bindings step installs.
       - name: build pipeline regressions
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.bindings.outcome == 'success' }}
         run: uv run --no-sync python -m unittest discover -s scripts -p 'test_build_pipeline.py'
 
       # A failed run still publishes its logs and the status of each measured command.
