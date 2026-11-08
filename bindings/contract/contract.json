@@ -4623,7 +4623,7 @@
   {"summary":
    "Validate the messages of a topic in turn, against the store of an anchor and later blocks.",
    "signature":
-   "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: bytes, finalized: bytes, topic: bytes, messages: bytes, config: bytes, verify: bool) -> bytes",
+   "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]], finalized: tuple[int, bytes] | None, topic: str, messages: list[tuple[int, int, bytes] | tuple[int, int, bytes, str]], config: dict[str, Any] | None, verify: bool) -> list[tuple[str, str | None]]",
    "operation": "EthLib.Consensus.Exports.gossipValidationExport",
    "method": "consensus_gossip_validation",
    "errors":
@@ -4682,7 +4682,7 @@
       {"constructor": "invalidInclusionListSignature", "code": 51}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "Validate the messages of a topic in turn, against the store of an anchor and later blocks.\n\nEvery topic is specified here up to Heze."},
+   "Validate the messages of a topic in turn, against the store of an anchor and later blocks.\n\nThe arguments are the names of the preset and the fork, the anchor state and the anchor block.\n\nThen come the later blocks, the finalized checkpoint or none, the topic and the messages.\n\nThen come replacements of values of the configuration, and whether the signature checks run.\n\nEvery topic is specified here up to Heze."},
   {"summary":
    "The headers of a sync, step by step, from a bootstrap for a trusted block root.",
    "signature":

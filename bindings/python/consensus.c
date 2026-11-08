@@ -409,10 +409,7 @@ extern lean_object* eth_consensus_get_data_column_sidecars_from_block(lean_objec
 extern lean_object* eth_consensus_get_data_column_sidecars_from_column_sidecar(lean_object* args);
 extern lean_object* eth_consensus_light_client_sync(lean_object* args);
 extern lean_object* eth_consensus_fork_choice(lean_object* args);
-extern lean_object* eth_consensus_gossip_validation(
-  lean_object* name, lean_object* fork, lean_object* anchor_state, lean_object* anchor_block,
-  lean_object* blocks, lean_object* finalized, lean_object* topic, lean_object* messages,
-  lean_object* config, uint8_t verify);
+extern lean_object* eth_consensus_gossip_validation(lean_object* args);
 extern lean_object* eth_consensus_block_to_light_client_header(lean_object* args);
 extern lean_object* eth_consensus_light_client_update_proofs(lean_object* args);
 extern lean_object* eth_consensus_is_better_update(lean_object* args);
@@ -899,22 +896,7 @@ py_consensus_gossip_validation(
   PyObject* self,
   PyObject* args
 ) {
-  if (PyTuple_Size(args) != 10) {
-    PyErr_SetString(PyExc_TypeError, "expected 10 arguments");
-    return NULL;
-  }
-  int verify = PyObject_IsTrue(PyTuple_GET_ITEM(args, 9));
-  if (verify < 0) return NULL;
-  PyObject* inputs = PyTuple_GetSlice(args, 0, 9);
-  if (!inputs) return NULL;
-  lean_object* a[9];
-  int read = strs_bytes_args(inputs, 2, 7, a);
-  Py_DECREF(inputs);
-  if (!read) return NULL;
-  return except_into_pybytes(
-    eth_consensus_gossip_validation(
-      a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], (uint8_t) verify),
-    FORK_CHOICE_ERROR);
+  return call_pyvalue_export(eth_consensus_gossip_validation, args, 10, FORK_CHOICE_ERROR);
 }
 
 PyObject*

@@ -572,8 +572,12 @@ def bindings : List Binding := [
       "verify: bool, config: dict | None) -> list",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_gossip_validation", `EthLib.Consensus.Exports.gossipValidationExport,
-    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: bytes, " ++
-      "finalized: bytes, topic: bytes, messages: bytes, config: bytes, verify: bool) -> bytes",
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, " ++
+      "blocks: list[tuple[int, int | None, bytes] | " ++
+      "tuple[int, int | None, bytes, bytes | None]], " ++
+      "finalized: tuple[int, bytes] | None, topic: str, " ++
+      "messages: list[tuple[int, int, bytes] | tuple[int, int, bytes, str]], " ++
+      "config: dict[str, Any] | None, verify: bool) -> list[tuple[str, str | None]]",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_light_client_sync", `EthLib.Consensus.Exports.lightClientSyncExport,
     "(name: str, fork: str, bootstrap_fork: str, config: dict[str, Any] | None, " ++

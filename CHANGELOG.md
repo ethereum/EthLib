@@ -169,6 +169,24 @@ Not yet released.
   Every argument is read before the names, so a root of the wrong length is reported before an unknown preset or a fork before Altair.
   The limits of the converter, 2^29 bytes and 1,000,000 values in one call, now apply to the states, the blocks and the steps.
   An argument that crosses to Lean but that Lean cannot read raises the error class of the method with code 0, where some raised `TypeError`.
+- The gossip validation export now takes and returns typed values ([#1561](https://github.com/ethereum/EthLib/pull/1561)).
+  Its C export takes the tuple of its arguments as one value, in the order it had, and a configuration replacement as a `dict`, as the transition exports do.
+  The blocks after the anchor cross as tuples of a kind, a payload status or `None`, the SSZ bytes and an optional envelope, where they crossed packed in one byte string.
+  An envelope of `None` means no envelope, as empty bytes still do.
+  A payload status of 255 is now a status, where it meant none; only `None` means none.
+  The messages cross as tuples of a time, a subnet, the SSZ bytes and an optional topic, where they crossed packed in one byte string.
+  A topic of a message may now be longer than 255 bytes in UTF-8, where it raised `ValueError`.
+  The finalized checkpoint crosses as a pair of an epoch and a root, or `None`, where it crossed as 40 bytes, and the topic as a `str`.
+  Each outcome comes back as a pair of `valid`, `ignore` or `reject` and its reason or `None`, where it came back packed in one byte string.
+  In Python, a block or a message of another length than three or four items raises `ForkChoiceError` with code 0.
+  Before, a shorter one raised `ValueError`, and a longer one was read without its extra items.
+  A time, a subnet or an epoch of 2^64 or more raises `ForkChoiceError` with code 0, and a negative one `ValueError`, where it raised `OverflowError`.
+  A kind or a payload status of 256 or more raises `ForkChoiceError` with code 0, where it raised `ValueError`.
+  A `bool` given for one of these numbers, and `1` or `None` given for `verify`, raise the same error, where they were read as 0 or 1 or by truthiness.
+  A `bytearray` or a `memoryview` given for the bytes of a block, an envelope or a message raises `TypeError`, where it was read as bytes.
+  An argument that crosses to Lean but that Lean cannot read raises the error class of the method with code 0, where some raised `TypeError` or `AttributeError`.
+  A root of the finalized checkpoint of another length than 32 bytes raises `ForkChoiceError` with code 0 and the message `expected 32 bytes, got N`, where the message was `the finalized checkpoint is not 40 bytes`.
+  Every argument is read before the names, and the limits of the converter, 2^29 bytes and 1,000,000 values in one call, now apply.
 - A chain configuration that the exports read as JSON is now rejected, with code 0, when a fork by block number comes after a fork by timestamp ([#1110](https://github.com/ethereum/EthLib/pull/1110)).
   EIP-6122 requires the forks by timestamp to be scheduled at or after the forks by block.
 

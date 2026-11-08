@@ -619,7 +619,7 @@ def consensus_fork_choice(name: str, fork: str, anchor_state: bytes, anchor_bloc
     """The outcome of each step of a fork choice case, from an anchor state and an anchor block."""
     ...
 
-def consensus_gossip_validation(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: bytes, finalized: bytes, topic: bytes, messages: bytes, config: bytes, verify: bool) -> bytes:
+def consensus_gossip_validation(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]], finalized: tuple[int, bytes] | None, topic: str, messages: list[tuple[int, int, bytes] | tuple[int, int, bytes, str]], config: dict[str, Any] | None, verify: bool) -> list[tuple[str, str | None]]:
     """Validate the messages of a topic in turn, against the store of an anchor and later blocks."""
     ...
 
