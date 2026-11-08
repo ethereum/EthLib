@@ -125,15 +125,10 @@ theorem payloadInputs_slashValidator {slashedIndex : ValidatorIndex}
     {whistleblowerIndex : Option ValidatorIndex}
     (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
     PayloadInputs state after := by
-  simp only [slashValidator, bind_ok_iff, liftArith, mapError_ok_iff] at computed
-  obtain ⟨_, exitedOk, _, _, _, _, _, markedOk, _, _, _, _, _, _, _, loweredOk,
-    _, _, _, _, _, raisedOk, _, lastOk, done⟩ := computed
-  have last : ∀ {last : BeaconState preset fork},
-      (pure (if gloas : .glamsterdam ≤ fork then cancelProposerPayments last gloas slashedIndex
-        else last) : Except AccessorError (BeaconState preset fork)) = .ok after →
-      PayloadInputs last after := by
-    intro last done
-    simp only [pure, Except.pure, Except.ok.injEq] at done
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, last, exitedOk, -, -, markedOk, -, -, -, loweredOk, -, -,
+    raisedOk, lastOk, done⟩ := slashValidator_ok computed
+  -- The last step changes at most the builder payments, which are not an input of a payload.
+  have cancelled : PayloadInputs last after := by
     subst done
     split
     · exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
@@ -142,7 +137,7 @@ theorem payloadInputs_slashValidator {slashedIndex : ValidatorIndex}
     ((payloadInputs_setValidator markedOk).trans ?_).trans <|
     (payloadInputs_decreaseBalance loweredOk).trans <|
     (payloadInputs_increaseBalance raisedOk).trans <|
-    (payloadInputs_increaseBalance lastOk).trans (last done)
+    (payloadInputs_increaseBalance lastOk).trans cancelled
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-! ## The requests of a parent payload -/
