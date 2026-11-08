@@ -11,28 +11,18 @@
 # A pull request that moves a conversion to another function renames its entry.
 
 bindings/python/ethlib/consensus/__init__.py <module> struct
-bindings/python/ethlib/consensus/__init__.py _list_items from_bytes
-bindings/python/ethlib/consensus/__init__.py _list_items slice
 bindings/python/ethlib/consensus/__init__.py _replacements json
 bindings/python/ethlib/consensus/__init__.py _roots slice
 bindings/python/ethlib/consensus/__init__.py _sync_step bytes
 bindings/python/ethlib/consensus/__init__.py _sync_step to_bytes
 bindings/python/ethlib/consensus/__init__.py block_to_light_client_header json
 bindings/python/ethlib/consensus/__init__.py block_to_light_client_header slice
-bindings/python/ethlib/consensus/__init__.py compute_columns_for_custody_group json
 bindings/python/ethlib/consensus/__init__.py compute_fork_digest json
-bindings/python/ethlib/consensus/__init__.py compute_matrix join
-bindings/python/ethlib/consensus/__init__.py compute_matrix slice
-bindings/python/ethlib/consensus/__init__.py compute_shuffled_permutation json
 bindings/python/ethlib/consensus/__init__.py compute_subnets_for_sync_committee json
 bindings/python/ethlib/consensus/__init__.py compute_weak_subjectivity_period json
 bindings/python/ethlib/consensus/__init__.py create_light_client_bootstrap json
 bindings/python/ethlib/consensus/__init__.py create_light_client_update json
 bindings/python/ethlib/consensus/__init__.py get_committee_assignment json
-bindings/python/ethlib/consensus/__init__.py get_custody_groups json
-bindings/python/ethlib/consensus/__init__.py get_custody_groups to_bytes
-bindings/python/ethlib/consensus/__init__.py get_data_column_sidecars_from_block join
-bindings/python/ethlib/consensus/__init__.py get_data_column_sidecars_from_column_sidecar join
 bindings/python/ethlib/consensus/__init__.py get_ptc_assignment json
 bindings/python/ethlib/consensus/__init__.py get_upcoming_proposal_slots json
 bindings/python/ethlib/consensus/__init__.py gossip_validation bytes
@@ -57,8 +47,6 @@ bindings/python/ethlib/consensus/__init__.py on_valid_payload join
 bindings/python/ethlib/consensus/__init__.py process_epoch json
 bindings/python/ethlib/consensus/__init__.py process_operation json
 bindings/python/ethlib/consensus/__init__.py process_slots json
-bindings/python/ethlib/consensus/__init__.py recover_matrix join
-bindings/python/ethlib/consensus/__init__.py recover_matrix slice
 bindings/python/ethlib/consensus/__init__.py rewards_deltas json
 bindings/python/ethlib/consensus/__init__.py rewards_deltas_batch json
 bindings/python/ethlib/consensus/__init__.py state_transition json
@@ -66,6 +54,5 @@ bindings/python/ethlib/consensus/__init__.py state_transition_across json
 bindings/python/ethlib/consensus/__init__.py state_transitions json
 bindings/python/ethlib/consensus/__init__.py state_transitions_across json
 bindings/python/ethlib/consensus/__init__.py upgrade_state json
-bindings/python/ethlib/consensus/__init__.py verify_data_column_sidecar json
 bindings/python/ethlib/serialization/ssz/__init__.py _dump json
 bindings/python/ethlib/serialization/ssz/__init__.py deserialize json

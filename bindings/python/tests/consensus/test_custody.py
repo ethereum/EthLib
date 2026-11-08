@@ -7,7 +7,6 @@ import pytest
 from ruamel.yaml import YAML
 
 from ethlib import consensus
-from ethlib.cryptography import _native
 from raising import raises
 
 FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "networking"
@@ -65,54 +64,60 @@ def test_compute_columns_for_custody_group(preset, case):
 def test_too_many_groups():
     with raises(
         consensus.ConsensusError, "custody group count 129 exceeds the number of groups"
-    ) as info:
+    ) as caught:
         consensus.get_custody_groups(0, 129)
-    assert info.value.code == 1
+    assert caught.value.code == 1
 
 
 def test_group_out_of_range():
     with raises(
         consensus.ConsensusError, "custody group 128 is not below the number of groups"
-    ) as info:
+    ) as caught:
         consensus.compute_columns_for_custody_group(128)
-    assert info.value.code == 2
+    assert caught.value.code == 2
 
 
 def test_unknown_name():
-    with raises(consensus.ConsensusError, "no configuration is named nonexistent") as info:
+    with raises(consensus.ConsensusError, "no configuration is named nonexistent") as caught:
         consensus.compute_columns_for_custody_group(0, "nonexistent")
-    assert info.value.code == 0
+    assert caught.value.code == 0
 
 
-OUT_OF_RANGE = [-1, 2**64, 2**64 + 1]
-
-
-@pytest.mark.parametrize(
-    "value, message",
-    [
-        (-1, "can't convert negative int to unsigned"),
-        (2**64, "int too big to convert"),
-        (2**64 + 1, "int too big to convert"),
-    ],
-)
-def test_native_rejects_out_of_range(value, message):
-    # The extension raises instead of reducing the value modulo 2^64.
-    with raises(OverflowError, message):
-        _native.consensus_get_custody_groups("mainnet", bytes(32), value)
-    with raises(OverflowError, message):
-        _native.consensus_compute_columns_for_custody_group("mainnet", value)
-
-
-def test_native_rejects_non_integer():
-    with raises(TypeError, "an integer is required"):
-        _native.consensus_get_custody_groups("mainnet", bytes(32), "4")  # ty: ignore[invalid-argument-type]
-    with raises(TypeError, "an integer is required"):
-        _native.consensus_compute_columns_for_custody_group("mainnet", "0")  # ty: ignore[invalid-argument-type]
-
-
-@pytest.mark.parametrize("value", OUT_OF_RANGE)
-def test_wrapper_rejects_out_of_range(value):
-    with raises(OverflowError, "node_id or custody_group_count is out of range"):
+@pytest.mark.parametrize("value", [2**64, 2**64 + 1])
+def test_count_out_of_range(value):
+    # Lean reads a 64-bit number, and rejects a larger one instead of reducing it modulo 2^64.
+    message = f"expected an int below {2**64}, got {value}"
+    with raises(consensus.ConsensusError, message) as caught:
         consensus.get_custody_groups(0, value)
-    with raises(OverflowError, "custody_group is out of range"):
+    assert caught.value.code == 0
+    with raises(consensus.ConsensusError, message) as caught:
         consensus.compute_columns_for_custody_group(value)
+    assert caught.value.code == 0
+
+
+def test_node_id_out_of_range():
+    with raises(
+        consensus.ConsensusError, f"expected an int below {2**256}, got {2**256}"
+    ) as caught:
+        consensus.get_custody_groups(2**256, 4)
+    assert caught.value.code == 0
+
+
+def test_negative_numbers():
+    with raises(ValueError, "cannot pass a negative int to Lean"):
+        consensus.get_custody_groups(-1, 4)
+    with raises(ValueError, "cannot pass a negative int to Lean"):
+        consensus.compute_columns_for_custody_group(-1)
+
+
+@pytest.mark.parametrize("value", ["4", True, False])
+def test_non_integer(value):
+    with raises(consensus.ConsensusError, "expected an int") as caught:
+        consensus.get_custody_groups(0, value)
+    assert caught.value.code == 0
+    with raises(consensus.ConsensusError, "expected an int") as caught:
+        consensus.get_custody_groups(value, 4)
+    assert caught.value.code == 0
+    with raises(consensus.ConsensusError, "expected an int") as caught:
+        consensus.compute_columns_for_custody_group(value)
+    assert caught.value.code == 0

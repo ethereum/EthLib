@@ -83,6 +83,6 @@ def test_count_at_bound():
 
 
 def test_seed_length():
-    with raises(consensus.ConsensusError, "a seed is 32 bytes") as info:
+    with raises(consensus.ConsensusError, "expected 32 bytes, got 31") as info:
         consensus.compute_shuffled_permutation(5, bytes(31))
     assert info.value.code == 0

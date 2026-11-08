@@ -1937,9 +1937,9 @@
    "docstring":
    "The parameters of a preset at a fork, as a `dict`.\n\nThe arguments are the name of the preset and the name of the fork."},
   {"summary":
-   "The custody groups of a node ID of 32 bytes, most significant first.",
+   "The custody groups of a node ID, in increasing order, as a list.",
    "signature":
-   "(name: str, node_id: bytes, custody_group_count: int) -> bytes",
+   "(name: str, node_id: int, custody_group_count: int) -> list[int]",
    "operation": "EthLib.Consensus.Exports.getCustodyGroupsExport",
    "method": "consensus_get_custody_groups",
    "errors":
@@ -1950,9 +1950,9 @@
       {"constructor": "outOfFuel", "code": 3}]}],
    "error_class": "ConsensusError",
    "docstring":
-   "The custody groups of a node ID of 32 bytes, most significant first."},
-  {"summary": "The columns of a custody group.",
-   "signature": "(name: str, custody_group: int) -> bytes",
+   "The custody groups of a node ID, in increasing order, as a list.\n\nThe arguments are the name of the configuration, the node ID and the custody group count."},
+  {"summary": "The columns of a custody group, as a list.",
+   "signature": "(name: str, custody_group: int) -> list[int]",
    "operation": "EthLib.Consensus.Exports.computeColumnsForCustodyGroupExport",
    "method": "consensus_compute_columns_for_custody_group",
    "errors":
@@ -1962,7 +1962,8 @@
       {"constructor": "groupOutOfRange", "code": 2},
       {"constructor": "outOfFuel", "code": 3}]}],
    "error_class": "ConsensusError",
-   "docstring": "The columns of a custody group."},
+   "docstring":
+   "The columns of a custody group, as a list.\n\nThe arguments are the name of the preset and the configuration, and the custody group."},
   {"summary":
    "The root of the value that the bytes encode, and the bytes of that value, as a pair.",
    "signature":
@@ -4431,7 +4432,7 @@
   {"summary":
    "From Fulu: the number of custody groups of a node, from the indices of its validators.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: bytes, validator_indices: list[bytes]) -> int",
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, validator_indices: list[int]) -> int",
    "operation":
    "EthLib.Consensus.Exports.getValidatorsCustodyRequirementExport",
    "method": "consensus_get_validators_custody_requirement",
@@ -4456,7 +4457,7 @@
       {"constructor": "duty", "code": 16}]}],
    "error_class": "ProposerError",
    "docstring":
-   "From Fulu: the number of custody groups of a node, from the indices of its validators.\n\nEach index is 8 bytes, little-endian."},
+   "From Fulu: the number of custody groups of a node, from the indices of its validators.\n\nThe arguments are the name of the preset and the configuration, the fork and the state.\n\nThen come replacements of values of the configuration, and the list of the indices."},
   {"summary":
    "The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes.",
    "signature":
@@ -5103,7 +5104,7 @@
    "Whether a proof of possession of a leanXMSS key for a BLS key is valid, with Keccak-256."},
   {"summary": "Whether a sidecar, given as bytes, has a valid shape.",
    "signature":
-   "(name: str, fork: str, data: bytes, block: bytes, config: bytes) -> bool",
+   "(name: str, fork: str, data: bytes, block: bytes, config: dict[str, Any] | None) -> bool",
    "operation": "EthLib.Consensus.Exports.verifyDataColumnSidecarExport",
    "method": "consensus_verify_data_column_sidecar",
    "errors":
@@ -5186,7 +5187,7 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
    "docstring":
-   "Whether a sidecar, given as bytes, has a valid shape.\n\nBefore Gloas the count of its commitments stays within the blob limit of its epoch.\n\nThe configuration of the name holds, with the replacements that the JSON object gives."},
+   "Whether a sidecar, given as bytes, has a valid shape.\n\nThe arguments are the name of the preset and the configuration, the fork and the sidecar.\n\nThen come the signed block, empty before Gloas, and replacements of values of the configuration."},
   {"summary":
    "Whether the branch of a sidecar, given as bytes, climbs to the body root of its header.",
    "signature": "(name: str, fork: str, data: bytes) -> bool",
@@ -5433,8 +5434,8 @@
    "docstring":
    "At Fulu: whether the cells of a partial sidecar match their commitments by their proofs.\n\nThe commitments of all the blobs of the block arrive in their SSZ encoding.\n\nA sidecar or a list of commitments that does not decode has code 0."},
   {"summary":
-   "The matrix of the blobs, given one after another, as its entries one after another.",
-   "signature": "(blobs: bytes) -> bytes",
+   "The matrix of the blobs, as the SSZ bytes of each of its entries, in a list.",
+   "signature": "(blobs: list[bytes]) -> list[bytes]",
    "operation": "EthLib.Consensus.Exports.computeMatrixExport",
    "method": "consensus_compute_matrix",
    "errors":
@@ -5465,10 +5466,10 @@
       {"constructor": "invalidTrustedSetup", "code": 23}]}],
    "error_class": "KzgError",
    "docstring":
-   "The matrix of the blobs, given one after another, as its entries one after another."},
+   "The matrix of the blobs, as the SSZ bytes of each of its entries, in a list.\n\nThe argument is the list of the blobs."},
   {"summary":
-   "The full matrix of `count` rows, from some entries given one after another.",
-   "signature": "(entries: bytes, blob_count: int) -> bytes",
+   "The full matrix of a count of rows, from the SSZ bytes of some of its entries, in a list.",
+   "signature": "(entries: list[bytes], blob_count: int) -> list[bytes]",
    "operation": "EthLib.Consensus.Exports.recoverMatrixExport",
    "method": "consensus_recover_matrix",
    "errors":
@@ -5499,10 +5500,11 @@
       {"constructor": "invalidTrustedSetup", "code": 23}]}],
    "error_class": "KzgError",
    "docstring":
-   "The full matrix of `count` rows, from some entries given one after another."},
+   "The full matrix of a count of rows, from the SSZ bytes of some of its entries, in a list.\n\nThe arguments are the list of the entries, of 2112 bytes each, and the count of rows."},
   {"summary":
-   "The column sidecars of a signed block, from its bytes and the rows of its blobs.",
-   "signature": "(name: str, fork: str, block: bytes, rows: bytes) -> bytes",
+   "The column sidecars of a signed block, as the SSZ bytes of each, in a list.",
+   "signature":
+   "(name: str, fork: str, block: bytes, rows: list[tuple[list[bytes], list[bytes]]]) -> list[bytes]",
    "operation": "EthLib.Consensus.Exports.getDataColumnSidecarsFromBlockExport",
    "method": "consensus_get_data_column_sidecars_from_block",
    "errors":
@@ -5585,10 +5587,11 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
    "docstring":
-   "The column sidecars of a signed block, from its bytes and the rows of its blobs."},
+   "The column sidecars of a signed block, as the SSZ bytes of each, in a list.\n\nThe arguments are the name of the preset, the fork, the signed block and the rows of its blobs."},
   {"summary":
-   "All the column sidecars of a block, from the bytes of one of them and the rows of its blobs.",
-   "signature": "(name: str, fork: str, sidecar: bytes, rows: bytes) -> bytes",
+   "All the column sidecars of a block, as the SSZ bytes of each, in a list.",
+   "signature":
+   "(name: str, fork: str, sidecar: bytes, rows: list[tuple[list[bytes], list[bytes]]]) -> list[bytes]",
    "operation":
    "EthLib.Consensus.Exports.getDataColumnSidecarsFromColumnSidecarExport",
    "method": "consensus_get_data_column_sidecars_from_column_sidecar",
@@ -5672,10 +5675,10 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
    "docstring":
-   "All the column sidecars of a block, from the bytes of one of them and the rows of its blobs."},
+   "All the column sidecars of a block, as the SSZ bytes of each, in a list.\n\nThe arguments are the name of the preset, the fork, the bytes of one sidecar and the rows."},
   {"summary":
-   "The shuffled position of every index below the count, which must be at most `2^40`.",
-   "signature": "(name: str, count: int, seed: bytes) -> bytes",
+   "The shuffled position of every index below a count of at most `2^40`, as a list.",
+   "signature": "(name: str, count: int, seed: bytes) -> list[int]",
    "operation": "EthLib.Consensus.Exports.computeShuffledPermutationExport",
    "method": "consensus_compute_shuffled_permutation",
    "errors":
@@ -5687,7 +5690,7 @@
       {"constructor": "countTooLarge", "code": 204}]}],
    "error_class": "ConsensusError",
    "docstring":
-   "The shuffled position of every index below the count, which must be at most `2^40`."},
+   "The shuffled position of every index below a count of at most `2^40`, as a list.\n\nThe arguments are the name of the preset, the count and the seed of 32 bytes."},
   {"summary":
    "The shuffled position of one index, which must be below the count.",
    "signature": "(name: str, index: int, count: int, seed: bytes) -> int",
