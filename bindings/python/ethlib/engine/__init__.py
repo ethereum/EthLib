@@ -1,6 +1,5 @@
 """The Engine API between the consensus and the execution layers."""
 
-import json
 from typing import Any
 
 # Every domain links into one extension module.
@@ -14,8 +13,7 @@ from ethlib.serialization import rlp
 def new_payload(config: dict, method: str, params: list) -> dict:
     """The payload status of an `engine_newPayload` call, without the state of the parent."""
     request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
-    status = _native.engine_new_payload(json.dumps(config).encode(), json.dumps(request).encode())
-    return json.loads(status)
+    return _native.engine_new_payload(config, request)
 
 
 def new_payload_on_chain(
@@ -28,24 +26,14 @@ def new_payload_on_chain(
         [name.encode(), rlp.decode(header), [rlp.decode(o) for o in ommers]]
         for name, header, ommers in recent
     ]
-    status, header, accounts = rlp.decode(
-        _native.engine_new_payload_on_chain(
-            json.dumps(config).encode(), state, rlp.encode(items), json.dumps(request).encode()
-        )
-    )
-    if header == b"":
-        return json.loads(status), None, None
-    return json.loads(status), header, accounts
+    return _native.engine_new_payload_on_chain(config, state, rlp.encode(items), request)
 
 
 def forkchoice_updated(tree: list, method: str, params: list, finalized: str | None = None) -> dict:
     """The response to an `engine_forkchoiceUpdated` call, against a tree of known payloads."""
     # The execution layer may know a finalized block, the latest one an earlier update named.
     request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
-    response = _native.engine_forkchoice_updated(
-        json.dumps(tree).encode(), json.dumps(finalized).encode(), json.dumps(request).encode()
-    )
-    return json.loads(response)
+    return _native.engine_forkchoice_updated(tree, finalized, request)
 
 
 def prepare_execution_payload(
@@ -59,18 +47,16 @@ def prepare_execution_payload(
     config: dict | None = None,
 ) -> dict | None:
     """The forkchoice update and payload attributes of a proposer, or None when it asks nothing."""
-    replacements = json.dumps(config).encode() if config else b""
-    update = _native.engine_prepare_execution_payload(
+    return _native.engine_prepare_execution_payload(
         name,
         fork,
         state,
-        replacements,
+        config,
         safe_block_hash,
         finalized_block_hash,
         suggested_fee_recipient,
         pow_chain or [],
     )
-    return json.loads(update)
 
 
 def prepare_execution_payload_gloas(

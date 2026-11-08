@@ -15,9 +15,9 @@ A block number and a timestamp cross the boundary as 64-bit integers, as EIP-612
 
 A fork crosses it as its name in UTF-8, such as `bellatrix`.
 
-A chain configuration crosses it as JSON: its chain ID, its activations and its blob schedules.
+A chain configuration crosses it as the typed value of its JSON, a `dict`.
 
-The export of the active fork of a configured chain takes it as a `dict`, with the same keys.
+Its keys are its chain ID, its activations and its blob schedules.
 
 An activation is a fork name, `block` or `time`, and a number.
 
@@ -44,13 +44,6 @@ def hoodiActiveForkExport (number timestamp : UInt64) : ByteArray :=
 
 open Lean (Json)
 open EthLib.Exports (Result PyValue pyExport forkOfName)
-
-/-- The JSON value of some UTF-8 text. -/
-def parseJson (what : String) (text : ByteArray) : Result Json := do
-  let some text := String.fromUTF8? text | throw (0, s!"{what} is not UTF-8")
-  match Json.parse text with
-  | .ok j => pure j
-  | .error e => throw (0, s!"{what} is not JSON: {e}")
 
 /-- An activation from its kind, `block` or `time`, and its number. -/
 def activationOf (kind : String) (n : Json) : Result Activation := do

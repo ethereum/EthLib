@@ -76,12 +76,7 @@ eth_block_validate_size(
 
 extern lean_object*
 eth_state_transition(
-  lean_object* config,
-  lean_object* state,
-  lean_object* recent,
-  lean_object* fork,
-  lean_object* block,
-  uint8_t check_seal
+  lean_object* args
 );
 
 extern lean_object*
@@ -344,23 +339,7 @@ py_state_transition(
   PyObject* self,
   PyObject* args
 ) {
-  const char *config, *state, *recent, *block;
-  Py_ssize_t config_len, state_len, recent_len, block_len;
-  PyObject* fork_obj;
-  int check_seal;
-  if (!PyArg_ParseTuple(args, "y#y#y#Oy#p", &config, &config_len, &state, &state_len, &recent,
-                        &recent_len, &fork_obj, &block, &block_len, &check_seal)) {
-    return NULL;
-  }
-  lean_object* fork = parse_fork(fork_obj);
-  if (!fork) return NULL;
-  return except_into_pybytes(
-    eth_state_transition(
-      mk_bytearray((const uint8_t*) config, (size_t) config_len),
-      mk_bytearray((const uint8_t*) state, (size_t) state_len),
-      mk_bytearray((const uint8_t*) recent, (size_t) recent_len), fork,
-      mk_bytearray((const uint8_t*) block, (size_t) block_len), (uint8_t) check_seal),
-    BLOCK_ERROR);
+  return call_pyvalue_export(eth_state_transition, args, 6, BLOCK_ERROR);
 }
 
 PyObject*

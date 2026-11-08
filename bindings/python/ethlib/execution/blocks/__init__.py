@@ -1,6 +1,5 @@
 """Block headers, blocks and receipts of the execution layer, at each fork."""
 
-import json
 from collections.abc import Sequence
 
 # Every domain links into one extension module.
@@ -121,9 +120,7 @@ def state_transition(
         for name, header, ommers in recent
     ]
     root, accounts = rlp.decode(
-        _native.state_transition(
-            json.dumps(config).encode(), state, rlp.encode(items), fork, block, check_seal
-        )
+        _native.state_transition(config, state, rlp.encode(items), fork, block, check_seal)
     )
     return root, accounts
 

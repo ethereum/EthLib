@@ -78,15 +78,5 @@ bindings/python/ethlib/consensus/__init__.py state_transitions json
 bindings/python/ethlib/consensus/__init__.py state_transitions_across json
 bindings/python/ethlib/consensus/__init__.py upgrade_state json
 bindings/python/ethlib/consensus/__init__.py verify_data_column_sidecar json
-bindings/python/ethlib/engine/__init__.py forkchoice_updated json
-bindings/python/ethlib/engine/__init__.py new_payload json
-bindings/python/ethlib/engine/__init__.py new_payload_on_chain json
-bindings/python/ethlib/engine/__init__.py prepare_execution_payload json
-bindings/python/ethlib/execution/blocks/__init__.py state_transition json
-bindings/python/ethlib/execution/trie/__init__.py _data fromhex
-bindings/python/ethlib/execution/trie/__init__.py _digits slice
-bindings/python/ethlib/execution/trie/__init__.py _scalar to_bytes
-bindings/python/ethlib/execution/trie/__init__.py verify_account_proof slice
-bindings/python/ethlib/execution/trie/__init__.py verify_account_proof to_bytes
 bindings/python/ethlib/serialization/ssz/__init__.py _dump json
 bindings/python/ethlib/serialization/ssz/__init__.py deserialize json

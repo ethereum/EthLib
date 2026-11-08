@@ -7,8 +7,8 @@
 
 extern lean_object*
 eth_engine_prepare_execution_payload(
-  lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
-  lean_object* safe, lean_object* finalized, lean_object* fee_recipient, lean_object* pow_chain);
+  lean_object* args
+);
 
 extern lean_object*
 eth_engine_prepare_execution_payload_gloas(lean_object* args);
@@ -2569,35 +2569,7 @@ py_engine_prepare_execution_payload(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *fork_obj, *list_obj;
-  const uint8_t *state, *config, *safe, *finalized, *fee;
-  Py_ssize_t state_len, config_len, safe_len, finalized_len, fee_len;
-  if (!PyArg_ParseTuple(args, "OOy#y#y#y#y#O", &name_obj, &fork_obj, &state, &state_len, &config,
-                        &config_len, &safe, &safe_len, &finalized, &finalized_len, &fee, &fee_len,
-                        &list_obj))
-    return NULL;
-  if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj)) {
-    PyErr_SetString(PyExc_TypeError, "name and fork must be str");
-    return NULL;
-  }
-  lean_object* pow_chain;
-  if (parse_bytes_sequence(list_obj, "pow_chain", &pow_chain)) return NULL;
-  lean_object* name = str_arg(name_obj, "name");
-  if (!name) {
-    lean_dec(pow_chain);
-    return NULL;
-  }
-  lean_object* fork = str_arg(fork_obj, "fork");
-  if (!fork) {
-    lean_dec(name);
-    lean_dec(pow_chain);
-    return NULL;
-  }
-  return except_into_pybytes(
-    eth_engine_prepare_execution_payload(name, fork, mk_bytearray(state, state_len),
-      mk_bytearray(config, config_len), mk_bytearray(safe, safe_len),
-      mk_bytearray(finalized, finalized_len), mk_bytearray(fee, fee_len), pow_chain),
-    PROPOSER_ERROR);
+  return call_pyvalue_export(eth_engine_prepare_execution_payload, args, 8, PROPOSER_ERROR);
 }
 
 PyObject*
