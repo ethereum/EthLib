@@ -23,6 +23,8 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - Two functions that agree on every entry of a vector map it to one result.
 - A failed map fails on some input, and succeeds on every input before it.
 - A property that each step keeps holds after a successful fold.
+- A successful fold reads only inputs that its steps accept.
+- A fold of steps that each succeed with a pure step is the pure fold.
 
 A mapped error leaves a success unchanged.
 -/
@@ -103,17 +105,23 @@ theorem forIn_unit_ok_iff {xs : List α} {body : α → PUnit → Except ε (For
       | done u => exact absurd h (hnd x)
       | yield u => simpa [bind, Except.bind] using ih
 
+/-- Each input of a successful map has its output among the outputs. -/
+theorem exists_mem_of_mapM_ok {xs : List α} {ys : List β}
+    (made : xs.mapM f = .ok ys) {x : α} (member : x ∈ xs) : ∃ y ∈ ys, f x = .ok y := by
+  induction xs generalizing ys with
+  | nil => simp at member
+  | cons head tail ih =>
+    obtain ⟨y, rest, first, others, rfl⟩ := mapM_cons_ok.mp made
+    rcases List.mem_cons.mp member with rfl | member
+    · exact ⟨y, List.mem_cons_self, first⟩
+    · obtain ⟨y', member', step⟩ := ih others member
+      exact ⟨y', List.mem_cons_of_mem _ member', step⟩
+
 /-- A successful map succeeds on every input. -/
 theorem mapM_ok_of_mem {xs : List α} {ys : List β} (h : xs.mapM f = .ok ys) :
-    ∀ x ∈ xs, ∃ y, f x = .ok y := by
-  induction xs generalizing ys with
-  | nil => simp
-  | cons x xs ih =>
-    obtain ⟨y, rest, head, tail, rfl⟩ := mapM_cons_ok.mp h
-    intro x' member
-    rcases List.mem_cons.mp member with rfl | member
-    · exact ⟨y, head⟩
-    · exact ih tail x' member
+    ∀ x ∈ xs, ∃ y, f x = .ok y := fun _ member =>
+  let ⟨y, _, step⟩ := exists_mem_of_mapM_ok h member
+  ⟨y, step⟩
 
 /-- Each output of a successful map is the image of an input. -/
 theorem mapM_ok_mem {xs : List α} {ys : List β} (h : xs.mapM f = .ok ys) :
@@ -332,17 +340,29 @@ theorem foldlM_ok_invariant {g : β → α → Except ε β} (P : β → Prop)
     obtain ⟨middle, first, rest⟩ := computed
     exact foldlM_ok_invariant P step (step b x middle holds first) rest
 
-/-- Each input of a successful map has its output among the outputs. -/
-theorem exists_mem_of_mapM_ok {xs : List α} {ys : List β}
-    (made : xs.mapM f = .ok ys) {x : α} (member : x ∈ xs) : ∃ y ∈ ys, f x = .ok y := by
-  induction xs generalizing ys with
-  | nil => simp at member
-  | cons head tail ih =>
-    obtain ⟨y, rest, first, others, rfl⟩ := mapM_cons_ok.mp made
+/-- Every input of a successful fold meets a condition that each successful step checks. -/
+theorem foldlM_forall_of_ok {σ : Type} {g : σ → α → Except ε σ} {P : α → Prop}
+    (step : ∀ acc x r, g acc x = .ok r → P x) :
+    ∀ (xs : List α) init out, xs.foldlM g init = .ok out → ∀ x ∈ xs, P x
+  | [], _, _, _, _, member => absurd member List.not_mem_nil
+  | x :: xs, init, out, computed, y, member => by
+    rw [List.foldlM_cons, bind_ok_iff] at computed
+    obtain ⟨middle, first, rest⟩ := computed
     rcases List.mem_cons.mp member with rfl | member
-    · exact ⟨y, List.mem_cons_self, first⟩
-    · obtain ⟨y', member', step⟩ := ih others member
-      exact ⟨y', List.mem_cons_of_mem _ member', step⟩
+    · exact step init y middle first
+    · exact foldlM_forall_of_ok step xs middle out rest y member
+
+/-- A fold whose every step succeeds with a pure step returns the pure fold. -/
+theorem foldlM_eq_ok_foldl {σ : Type} {g : σ → α → Except ε σ} {step : σ → α → σ}
+    {L : List α} (pureStep : ∀ acc x, x ∈ L → g acc x = .ok (step acc x)) :
+    ∀ init, L.foldlM g init = .ok (L.foldl step init) := by
+  induction L with
+  | nil => intro init; rfl
+  | cons x xs ih =>
+    intro init
+    rw [List.foldlM_cons, pureStep init x List.mem_cons_self, List.foldl_cons]
+    simp only [bind, Except.bind]
+    exact ih (fun acc y member => pureStep acc y (List.mem_cons_of_mem x member)) _
 
 /-- Each element of a list gives a result when the monadic flat map over the list succeeds. -/
 theorem flatMapM_ok_of_mem {α β ε : Type} {f : α → Except ε (List β)} :

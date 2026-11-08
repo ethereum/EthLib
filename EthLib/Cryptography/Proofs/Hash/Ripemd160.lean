@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Hash.Ripemd160
+public import EthLib.Base.Proofs.BitVec
 public import Mathlib.Logic.Function.Defs
 
 /-!
@@ -248,16 +249,7 @@ theorem rol_rol (x n : UInt32) (h0 : 0 < n.toNat) (h32 : n.toNat < 32) :
   have hsub := (thirtyTwo_sub_cancel h0 h32).1
   apply UInt32.toBitVec_inj.mp
   rw [rol_toBitVec _ _ (by omega) (by omega), rol_toBitVec _ _ h0 h32, hsub]
-  refine BitVec.eq_of_getLsbD_eq fun i hi => ?_
-  simp only [BitVec.getLsbD_rotateLeft, Nat.mod_eq_of_lt (by omega : 32 - n.toNat < 32),
-    Nat.mod_eq_of_lt h32, hi, decide_true, Bool.true_and]
-  rw [show 32 - (32 - n.toNat) = n.toNat by omega]
-  by_cases hlt : i < 32 - n.toNat
-  · have hlt2 : n.toNat + i < 32 := by omega
-    have hge2 : ¬ (n.toNat + i < n.toNat) := by omega
-    simp [hlt, hlt2, hge2, show n.toNat + i - n.toNat = i by omega]
-  · have hlt3 : i - (32 - n.toNat) < n.toNat := by omega
-    simp [hlt, hlt3, show 32 - n.toNat + (i - (32 - n.toNat)) = i by omega]
+  exact Base.rotateLeft_rotateLeft_sub _ h32
 
 /-- Left rotation by a fixed `n` with `0 < n < 32` permutes the 32-bit words. -/
 theorem rol_left_bijective {n : UInt32} (h0 : 0 < n.toNat) (h32 : n.toNat < 32) :

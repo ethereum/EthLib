@@ -249,10 +249,6 @@ theorem Stored.of_at
       (Stored code message pc' stack' size facts gas' slots refund base accessed returnData') :=
   Stored.of_known fun state substate => Known.of_at fun memory => h memory state substate
 
-/-- Two words with the same bytes are the same word. -/
-theorem toBeBytes_inj {a b : U256} (h : U256.toBeBytes a = U256.toBeBytes b) : a = b := by
-  rw [← U256.fromBeBytes_toBeBytes a, h, U256.fromBeBytes_toBeBytes]
-
 /-- After the access of a slot of an address, a slot is accessed when it was, or is that one. -/
 theorem mem_getD_insert (keys : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32))
     (address other : Address) (key slot : Bytes32) :
@@ -281,7 +277,7 @@ theorem SlotFact.ne_of_slot_ne {fact fact' : SlotFact} (h : fact.slot ≠ fact'.
     fact.address ≠ fact'.address ∨ U256.toBeBytes fact.key ≠ U256.toBeBytes fact'.key := by
   by_cases ha : fact.address = fact'.address
   · refine .inr fun hk => h ?_
-    simp [SlotFact.slot, ha, toBeBytes_inj hk]
+    simp [SlotFact.slot, ha, U256.toBeBytes_inj hk]
   · exact .inl ha
 
 /-- After an access to the slot of `fact'`, the facts of the slots hold of the new state.

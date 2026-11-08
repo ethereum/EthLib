@@ -439,7 +439,7 @@ private theorem sum_map_add (l : List Nat) (f g : Nat → Nat) :
   induction l <;> simp_all
   omega
 
-private theorem sum_map_le {l : List Nat} {f g : Nat → Nat}
+private theorem sum_map_le_pointwise {l : List Nat} {f g : Nat → Nat}
     (pointwise : ∀ item ∈ l, f item ≤ g item) : (l.map f).sum ≤ (l.map g).sum := by
   induction l <;> simp_all
   omega
@@ -568,7 +568,7 @@ theorem sharedPaths_length_ge_run {first count depth : Nat}
     have climbed := shift_add_le first (first + count - 1) shift ordered
     rw [show first + count - 1 - first = count - 1 from by omega] at climbed
     omega
-  have summed := sum_map_le terms
+  have summed := sum_map_le_pointwise terms
   have split : ((List.range depth).map fun shift => 1 + (count - 1) >>> shift).sum
       = depth + shiftSum depth (count - 1) := by
     rw [sum_map_add (List.range depth) (fun _ => 1) (fun shift => (count - 1) >>> shift),

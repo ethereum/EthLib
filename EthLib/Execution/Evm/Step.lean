@@ -140,6 +140,17 @@ theorem keepReads_eq_ok {α : Type} {evm : Evm fork Meter} {halted : Evm fork Me
   · cases h
     exact .inl rfl
 
+/-- The rest of an instruction that keeps its reads fails only with an error that aborts the run.
+
+That error is the error of the rest. -/
+theorem keepReads_eq_error {α : Type} {evm : Evm fork Meter} {halted : Evm fork Meter → α}
+    {rest : Except EvmError α} {e : EvmError} :
+    keepReads evm halted rest = .error e ↔ rest = .error e ∧ e.aborts = true := by
+  unfold keepReads
+  split
+  · split <;> simp_all <;> rintro rfl <;> assumption
+  · simp
+
 /-- What one step of a frame gives. -/
 inductive StepResult (fork : Fork) (Meter : Type) where
   /-- The frame after the step. -/

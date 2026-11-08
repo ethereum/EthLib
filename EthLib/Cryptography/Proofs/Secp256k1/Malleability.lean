@@ -33,7 +33,8 @@ theorem verify_s_eq_or_neg {q : Point} {hash : Vector UInt8 32} {r s s' : Nat}
   obtain ⟨hr, hs, -, hqc, x, y, hR, hx⟩ := verify_rebuilt hv
   obtain ⟨hr', hs', -, -, x', y', hR', hx'⟩ := verify_rebuilt hv'
   -- Both rebuilt points have `x = r`.
-  obtain rfl : x' = x := Fin.ext ((val_eq_of_mod_eq hx' hp).trans (val_eq_of_mod_eq hx hp).symm)
+  obtain rfl : x' = x := Fin.ext ((Base.eq_of_mod_eq_of_lt hx' x'.isLt hp).trans
+    (Base.eq_of_mod_eq_of_lt hx x.isLt hp).symm)
   have hG := isOnCurve_generator
   have hc : (affine x' y).isOnCurve = true :=
     hR ▸ isOnCurve_add (isOnCurve_mul _ hG) (isOnCurve_mul _ hqc)
