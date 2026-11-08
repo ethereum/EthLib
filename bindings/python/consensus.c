@@ -217,52 +217,53 @@ eth_consensus_is_within_weak_subjectivity_period(
 
 extern lean_object*
 eth_consensus_get_committee_assignment(
-  lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
-  uint64_t epoch, uint64_t validator_index);
+  lean_object* args
+);
 
 extern lean_object*
 eth_consensus_is_proposer(
-  lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
-  uint64_t validator_index);
+  lean_object* args
+);
 
 extern lean_object*
 eth_consensus_is_assigned_to_sync_committee(
-  lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
-  uint64_t epoch, uint64_t validator_index);
+  lean_object* args
+);
 
 extern lean_object*
 eth_consensus_compute_subnets_for_sync_committee(
-  lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
-  uint64_t validator_index);
+  lean_object* args
+);
 
 extern lean_object*
 eth_consensus_get_ptc_assignment(
-  lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
-  uint64_t epoch, uint64_t validator_index);
+  lean_object* args
+);
 
 extern lean_object*
 eth_consensus_get_upcoming_proposal_slots(
-  lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
-  uint64_t validator_index);
+  lean_object* args
+);
 
 extern lean_object*
 eth_consensus_get_validator_signature(
-  lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
-  lean_object* duty, lean_object* object, lean_object* secret_key);
+  lean_object* args
+);
 
 extern lean_object*
 eth_consensus_get_eth1_vote(
-  lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
-  lean_object* chain);
+  lean_object* args
+);
 
 extern lean_object*
 eth_consensus_get_eth1_pending_deposit_count(
-  lean_object* name, lean_object* fork, lean_object* state);
+  lean_object* args
+);
 
 extern lean_object*
 eth_consensus_compute_new_state_root(
-  lean_object* name, lean_object* fork, lean_object* state, lean_object* block,
-  lean_object* config, uint8_t verify);
+  lean_object* args
+);
 
 extern lean_object*
 eth_consensus_compute_on_chain_aggregate(
@@ -279,13 +280,13 @@ eth_consensus_get_aggregate_signature(
 
 extern lean_object*
 eth_consensus_construct_attestation(
-  lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
-  lean_object* data, uint64_t validator_index, lean_object* secret_key);
+  lean_object* args
+);
 
 extern lean_object*
 eth_consensus_construct_single_attestation(
-  lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
-  lean_object* data, uint64_t committee_index, uint64_t validator_index, lean_object* secret_key);
+  lean_object* args
+);
 
 extern lean_object*
 eth_consensus_construct_aggregate(
@@ -340,18 +341,18 @@ eth_consensus_is_optimistic_candidate_block(
 
 extern lean_object*
 eth_consensus_latest_verified_ancestor(
-  lean_object* name, lean_object* fork, lean_object* blocks, lean_object* optimistic_roots,
-  lean_object* root);
+  lean_object* args
+);
 
 extern lean_object*
 eth_consensus_on_valid_payload(
-  lean_object* name, lean_object* fork, lean_object* blocks, lean_object* optimistic_roots,
-  lean_object* root);
+  lean_object* args
+);
 
 extern lean_object*
 eth_consensus_on_invalidated_payload(
-  lean_object* name, lean_object* fork, lean_object* blocks, lean_object* optimistic_roots,
-  lean_object* first);
+  lean_object* args
+);
 
 extern lean_object*
 eth_consensus_is_optimistic_restricted_domain(lean_object* domain_type);
@@ -1082,50 +1083,12 @@ py_consensus_is_valid_genesis_state(
   return call_pyvalue_export(eth_consensus_is_valid_genesis_state, args, 4, TRANSITION_ERROR);
 }
 
-/* The name, the fork, the state and the configuration of a duty export, or NULL with an
- * exception set. On success the caller owns the four Lean objects. */
-static int
-duty_args(
-  PyObject* name_obj, PyObject* fork_obj, const uint8_t* state, Py_ssize_t state_len,
-  const uint8_t* config, Py_ssize_t config_len, lean_object** out
-) {
-  if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj)) {
-    PyErr_SetString(PyExc_TypeError, "name and fork must be str");
-    return -1;
-  }
-  lean_object* name = str_arg(name_obj, "name");
-  if (!name) return -1;
-  lean_object* fork = str_arg(fork_obj, "fork");
-  if (!fork) {
-    lean_dec(name);
-    return -1;
-  }
-  out[0] = name;
-  out[1] = fork;
-  out[2] = mk_bytearray(state, state_len);
-  out[3] = mk_bytearray(config, config_len);
-  return 0;
-}
-
 PyObject*
 py_consensus_get_committee_assignment(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *fork_obj, *epoch_obj, *index_obj;
-  const uint8_t *state, *config;
-  Py_ssize_t state_len, config_len;
-  if (!PyArg_ParseTuple(args, "OOy#y#OO", &name_obj, &fork_obj, &state, &state_len, &config,
-                        &config_len, &epoch_obj, &index_obj))
-    return NULL;
-  uint64_t epoch, index;
-  if (parse_uint64(epoch_obj, "epoch", &epoch) < 0) return NULL;
-  if (parse_uint64(index_obj, "validator_index", &index) < 0) return NULL;
-  lean_object* a[4];
-  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) return NULL;
-  return except_into_pybytes(
-    eth_consensus_get_committee_assignment(a[0], a[1], a[2], a[3], epoch, index),
-    VALIDATOR_DUTY_ERROR);
+  return call_pyvalue_export(eth_consensus_get_committee_assignment, args, 6, VALIDATOR_DUTY_ERROR);
 }
 
 PyObject*
@@ -1133,18 +1096,7 @@ py_consensus_is_proposer(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *fork_obj, *index_obj;
-  const uint8_t *state, *config;
-  Py_ssize_t state_len, config_len;
-  if (!PyArg_ParseTuple(args, "OOy#y#O", &name_obj, &fork_obj, &state, &state_len, &config,
-                        &config_len, &index_obj))
-    return NULL;
-  uint64_t index;
-  if (parse_uint64(index_obj, "validator_index", &index) < 0) return NULL;
-  lean_object* a[4];
-  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) return NULL;
-  return except_into_pybool(eth_consensus_is_proposer(a[0], a[1], a[2], a[3], index),
-    VALIDATOR_DUTY_ERROR);
+  return call_pyvalue_export(eth_consensus_is_proposer, args, 5, VALIDATOR_DUTY_ERROR);
 }
 
 PyObject*
@@ -1152,20 +1104,8 @@ py_consensus_is_assigned_to_sync_committee(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *fork_obj, *epoch_obj, *index_obj;
-  const uint8_t *state, *config;
-  Py_ssize_t state_len, config_len;
-  if (!PyArg_ParseTuple(args, "OOy#y#OO", &name_obj, &fork_obj, &state, &state_len, &config,
-                        &config_len, &epoch_obj, &index_obj))
-    return NULL;
-  uint64_t epoch, index;
-  if (parse_uint64(epoch_obj, "epoch", &epoch) < 0) return NULL;
-  if (parse_uint64(index_obj, "validator_index", &index) < 0) return NULL;
-  lean_object* a[4];
-  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) return NULL;
-  return except_into_pybool(
-    eth_consensus_is_assigned_to_sync_committee(a[0], a[1], a[2], a[3], epoch, index),
-    VALIDATOR_DUTY_ERROR);
+  return call_pyvalue_export(
+    eth_consensus_is_assigned_to_sync_committee, args, 6, VALIDATOR_DUTY_ERROR);
 }
 
 PyObject*
@@ -1173,19 +1113,8 @@ py_consensus_compute_subnets_for_sync_committee(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *fork_obj, *index_obj;
-  const uint8_t *state, *config;
-  Py_ssize_t state_len, config_len;
-  if (!PyArg_ParseTuple(args, "OOy#y#O", &name_obj, &fork_obj, &state, &state_len, &config,
-                        &config_len, &index_obj))
-    return NULL;
-  uint64_t index;
-  if (parse_uint64(index_obj, "validator_index", &index) < 0) return NULL;
-  lean_object* a[4];
-  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) return NULL;
-  return except_into_pybytes(
-    eth_consensus_compute_subnets_for_sync_committee(a[0], a[1], a[2], a[3], index),
-    VALIDATOR_DUTY_ERROR);
+  return call_pyvalue_export(
+    eth_consensus_compute_subnets_for_sync_committee, args, 5, VALIDATOR_DUTY_ERROR);
 }
 
 PyObject*
@@ -1193,20 +1122,7 @@ py_consensus_get_ptc_assignment(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *fork_obj, *epoch_obj, *index_obj;
-  const uint8_t *state, *config;
-  Py_ssize_t state_len, config_len;
-  if (!PyArg_ParseTuple(args, "OOy#y#OO", &name_obj, &fork_obj, &state, &state_len, &config,
-                        &config_len, &epoch_obj, &index_obj))
-    return NULL;
-  uint64_t epoch, index;
-  if (parse_uint64(epoch_obj, "epoch", &epoch) < 0) return NULL;
-  if (parse_uint64(index_obj, "validator_index", &index) < 0) return NULL;
-  lean_object* a[4];
-  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) return NULL;
-  return except_into_pybytes(
-    eth_consensus_get_ptc_assignment(a[0], a[1], a[2], a[3], epoch, index),
-    VALIDATOR_DUTY_ERROR);
+  return call_pyvalue_export(eth_consensus_get_ptc_assignment, args, 6, VALIDATOR_DUTY_ERROR);
 }
 
 PyObject*
@@ -1214,19 +1130,8 @@ py_consensus_get_upcoming_proposal_slots(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *fork_obj, *index_obj;
-  const uint8_t *state, *config;
-  Py_ssize_t state_len, config_len;
-  if (!PyArg_ParseTuple(args, "OOy#y#O", &name_obj, &fork_obj, &state, &state_len, &config,
-                        &config_len, &index_obj))
-    return NULL;
-  uint64_t index;
-  if (parse_uint64(index_obj, "validator_index", &index) < 0) return NULL;
-  lean_object* a[4];
-  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) return NULL;
-  return except_into_pybytes(
-    eth_consensus_get_upcoming_proposal_slots(a[0], a[1], a[2], a[3], index),
-    VALIDATOR_DUTY_ERROR);
+  return call_pyvalue_export(
+    eth_consensus_get_upcoming_proposal_slots, args, 5, VALIDATOR_DUTY_ERROR);
 }
 
 PyObject*
@@ -1234,43 +1139,7 @@ py_consensus_get_validator_signature(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *fork_obj, *duty_obj;
-  const uint8_t *state, *config, *object, *key;
-  Py_ssize_t state_len, config_len, object_len, key_len;
-  if (!PyArg_ParseTuple(args, "OOy#y#Oy#y#", &name_obj, &fork_obj, &state, &state_len, &config,
-                        &config_len, &duty_obj, &object, &object_len, &key, &key_len))
-    return NULL;
-  if (!PyUnicode_Check(duty_obj)) {
-    PyErr_SetString(PyExc_TypeError, "duty must be str");
-    return NULL;
-  }
-  lean_object* a[4];
-  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) return NULL;
-  lean_object* duty = str_arg(duty_obj, "duty");
-  if (!duty) {
-    for (int i = 0; i < 4; i++) lean_dec(a[i]);
-    return NULL;
-  }
-  return except_into_pybytes(
-    eth_consensus_get_validator_signature(a[0], a[1], a[2], a[3], duty,
-      mk_bytearray(object, object_len), mk_bytearray(key, key_len)),
-    VALIDATOR_DUTY_ERROR);
-}
-
-/* A sequence of `bytes` of one length as a Lean `Array ByteArray`, or NULL with an exception set.
- */
-static lean_object*
-fixed_bytes_list_arg(
-  PyObject* seq,
-  Py_ssize_t stride,
-  const char* name
-) {
-  Py_ssize_t n;
-  uint8_t* buf = pack_bytes_sequence(seq, stride, &n, name);
-  if (!buf) return NULL;
-  lean_object* arr = mk_bytearray_array(buf, (size_t) n, (size_t) stride);
-  PyMem_Free(buf);
-  return arr;
+  return call_pyvalue_export(eth_consensus_get_validator_signature, args, 7, VALIDATOR_DUTY_ERROR);
 }
 
 /* The name, the fork and a list of a proposer export, or -1 with an exception set.
@@ -1304,22 +1173,7 @@ py_consensus_get_eth1_vote(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *fork_obj, *chain_obj;
-  const uint8_t *state, *config;
-  Py_ssize_t state_len, config_len;
-  if (!PyArg_ParseTuple(args, "OOy#y#O", &name_obj, &fork_obj, &state, &state_len, &config,
-                        &config_len, &chain_obj))
-    return NULL;
-  /* Each block is its 8-byte timestamp followed by its 72-byte Eth1 data. */
-  lean_object* chain = fixed_bytes_list_arg(chain_obj, 80, "chain");
-  if (!chain) return NULL;
-  lean_object* a[4];
-  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) {
-    lean_dec(chain);
-    return NULL;
-  }
-  return except_into_pybytes(eth_consensus_get_eth1_vote(a[0], a[1], a[2], a[3], chain),
-    PROPOSER_ERROR);
+  return call_pyvalue_export(eth_consensus_get_eth1_vote, args, 5, PROPOSER_ERROR);
 }
 
 PyObject*
@@ -1327,17 +1181,7 @@ py_consensus_get_eth1_pending_deposit_count(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *fork_obj;
-  const uint8_t* state;
-  Py_ssize_t state_len;
-  if (!PyArg_ParseTuple(args, "OOy#", &name_obj, &fork_obj, &state, &state_len)) return NULL;
-  lean_object* a[4];
-  if (duty_args(name_obj, fork_obj, state, state_len, (const uint8_t*) "", 0, a) < 0)
-    return NULL;
-  /* The count reads no configuration. */
-  lean_dec(a[3]);
-  return except_into_pyint(eth_consensus_get_eth1_pending_deposit_count(a[0], a[1], a[2]),
-    PROPOSER_ERROR);
+  return call_pyvalue_export(eth_consensus_get_eth1_pending_deposit_count, args, 3, PROPOSER_ERROR);
 }
 
 PyObject*
@@ -1345,19 +1189,7 @@ py_consensus_compute_new_state_root(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *fork_obj;
-  const uint8_t *state, *block, *config;
-  Py_ssize_t state_len, block_len, config_len;
-  int verify;
-  if (!PyArg_ParseTuple(args, "OOy#y#y#p", &name_obj, &fork_obj, &state, &state_len, &block,
-                        &block_len, &config, &config_len, &verify))
-    return NULL;
-  lean_object* a[4];
-  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) return NULL;
-  return except_into_pybytes(
-    eth_consensus_compute_new_state_root(a[0], a[1], a[2], mk_bytearray(block, block_len), a[3],
-      (uint8_t) verify),
-    PROPOSER_ERROR);
+  return call_pyvalue_export(eth_consensus_compute_new_state_root, args, 6, PROPOSER_ERROR);
 }
 
 PyObject*
@@ -1436,20 +1268,7 @@ py_consensus_construct_attestation(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *fork_obj, *index_obj;
-  const uint8_t *state, *config, *data, *key;
-  Py_ssize_t state_len, config_len, data_len, key_len;
-  if (!PyArg_ParseTuple(args, "OOy#y#y#Oy#", &name_obj, &fork_obj, &state, &state_len, &config,
-                        &config_len, &data, &data_len, &index_obj, &key, &key_len))
-    return NULL;
-  uint64_t index;
-  if (parse_uint64(index_obj, "validator_index", &index) < 0) return NULL;
-  lean_object* a[4];
-  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) return NULL;
-  return except_into_pybytes(
-    eth_consensus_construct_attestation(a[0], a[1], a[2], a[3], mk_bytearray(data, data_len),
-      index, mk_bytearray(key, key_len)),
-    VALIDATOR_DUTY_ERROR);
+  return call_pyvalue_export(eth_consensus_construct_attestation, args, 7, VALIDATOR_DUTY_ERROR);
 }
 
 PyObject*
@@ -1457,22 +1276,8 @@ py_consensus_construct_single_attestation(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *fork_obj, *committee_obj, *index_obj;
-  const uint8_t *state, *config, *data, *key;
-  Py_ssize_t state_len, config_len, data_len, key_len;
-  if (!PyArg_ParseTuple(args, "OOy#y#y#OOy#", &name_obj, &fork_obj, &state, &state_len, &config,
-                        &config_len, &data, &data_len, &committee_obj, &index_obj, &key,
-                        &key_len))
-    return NULL;
-  uint64_t committee, index;
-  if (parse_uint64(committee_obj, "committee_index", &committee) < 0) return NULL;
-  if (parse_uint64(index_obj, "validator_index", &index) < 0) return NULL;
-  lean_object* a[4];
-  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) return NULL;
-  return except_into_pybytes(
-    eth_consensus_construct_single_attestation(a[0], a[1], a[2], a[3],
-      mk_bytearray(data, data_len), committee, index, mk_bytearray(key, key_len)),
-    VALIDATOR_DUTY_ERROR);
+  return call_pyvalue_export(
+    eth_consensus_construct_single_attestation, args, 8, VALIDATOR_DUTY_ERROR);
 }
 
 PyObject*
@@ -1689,18 +1494,7 @@ py_consensus_latest_verified_ancestor(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *fork_obj, *list_obj;
-  const uint8_t *roots, *root;
-  Py_ssize_t roots_len, root_len;
-  if (!PyArg_ParseTuple(args, "OOOy#y#", &name_obj, &fork_obj, &list_obj, &roots, &roots_len,
-                        &root, &root_len))
-    return NULL;
-  lean_object* a[3];
-  if (named_list_args(name_obj, fork_obj, list_obj, "blocks", a) < 0) return NULL;
-  return except_into_pybytes(
-    eth_consensus_latest_verified_ancestor(a[0], a[1], a[2], mk_bytearray(roots, roots_len),
-      mk_bytearray(root, root_len)),
-    FORK_CHOICE_ERROR);
+  return call_pyvalue_export(eth_consensus_latest_verified_ancestor, args, 5, FORK_CHOICE_ERROR);
 }
 
 PyObject*
@@ -1708,18 +1502,7 @@ py_consensus_on_valid_payload(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *fork_obj, *list_obj;
-  const uint8_t *roots, *root;
-  Py_ssize_t roots_len, root_len;
-  if (!PyArg_ParseTuple(args, "OOOy#y#", &name_obj, &fork_obj, &list_obj, &roots, &roots_len,
-                        &root, &root_len))
-    return NULL;
-  lean_object* a[3];
-  if (named_list_args(name_obj, fork_obj, list_obj, "blocks", a) < 0) return NULL;
-  return except_into_pybytes(
-    eth_consensus_on_valid_payload(a[0], a[1], a[2], mk_bytearray(roots, roots_len),
-      mk_bytearray(root, root_len)),
-    FORK_CHOICE_ERROR);
+  return call_pyvalue_export(eth_consensus_on_valid_payload, args, 5, FORK_CHOICE_ERROR);
 }
 
 PyObject*
@@ -1727,18 +1510,7 @@ py_consensus_on_invalidated_payload(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *fork_obj, *list_obj;
-  const uint8_t *roots, *root;
-  Py_ssize_t roots_len, root_len;
-  if (!PyArg_ParseTuple(args, "OOOy#y#", &name_obj, &fork_obj, &list_obj, &roots, &roots_len,
-                        &root, &root_len))
-    return NULL;
-  lean_object* a[3];
-  if (named_list_args(name_obj, fork_obj, list_obj, "blocks", a) < 0) return NULL;
-  return except_into_pybytes(
-    eth_consensus_on_invalidated_payload(a[0], a[1], a[2], mk_bytearray(roots, roots_len),
-      mk_bytearray(root, root_len)),
-    FORK_CHOICE_ERROR);
+  return call_pyvalue_export(eth_consensus_on_invalidated_payload, args, 5, FORK_CHOICE_ERROR);
 }
 
 PyObject*

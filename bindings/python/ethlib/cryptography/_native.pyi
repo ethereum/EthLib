@@ -467,31 +467,31 @@ def consensus_is_within_weak_subjectivity_period(name: str, fork: str, state: by
     """Whether a checkpoint is within the weak subjectivity period of its state, at a time."""
     ...
 
-def consensus_get_committee_assignment(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) -> bytes:
-    """The committee assignment of a validator in an epoch, as JSON."""
+def consensus_get_committee_assignment(name: str, fork: str, state: bytes, config: dict[str, Any] | None, epoch: int, validator_index: int) -> tuple[list[int], int, int] | None:
+    """The committee assignment of a validator in an epoch, if it has one."""
     ...
 
-def consensus_is_proposer(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bool:
+def consensus_is_proposer(name: str, fork: str, state: bytes, config: dict[str, Any] | None, validator_index: int) -> bool:
     """Whether a validator proposes the block of the slot of a state."""
     ...
 
-def consensus_is_assigned_to_sync_committee(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) -> bool:
+def consensus_is_assigned_to_sync_committee(name: str, fork: str, state: bytes, config: dict[str, Any] | None, epoch: int, validator_index: int) -> bool:
     """From Altair: whether a validator serves on the sync committee of the period of an epoch."""
     ...
 
-def consensus_compute_subnets_for_sync_committee(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bytes:
-    """From Altair: the sync committee subnets of a validator for the next slot, as a JSON list."""
+def consensus_compute_subnets_for_sync_committee(name: str, fork: str, state: bytes, config: dict[str, Any] | None, validator_index: int) -> list[int]:
+    """From Altair: the sync committee subnets of a validator for the next slot, as a list."""
     ...
 
-def consensus_get_ptc_assignment(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) -> bytes:
-    """From Gloas: the slot of an epoch whose payload timeliness committee holds a validator, as JSON."""
+def consensus_get_ptc_assignment(name: str, fork: str, state: bytes, config: dict[str, Any] | None, epoch: int, validator_index: int) -> int | None:
+    """From Gloas: the slot of an epoch whose payload timeliness committee holds a validator."""
     ...
 
-def consensus_get_upcoming_proposal_slots(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bytes:
-    """From Gloas: the slots after the slot of a state that a validator proposes, as a JSON list."""
+def consensus_get_upcoming_proposal_slots(name: str, fork: str, state: bytes, config: dict[str, Any] | None, validator_index: int) -> list[int]:
+    """From Gloas: the slots after the slot of a state that a validator proposes, as a list."""
     ...
 
-def consensus_get_validator_signature(name: str, fork: str, state: bytes, config: bytes, duty: str, object: bytes, secret_key: bytes) -> bytes:
+def consensus_get_validator_signature(name: str, fork: str, state: bytes, config: dict[str, Any] | None, duty: str, object: bytes, secret_key: bytes) -> bytes:
     """The signature of the object of a duty, by a secret key of 32 big-endian bytes."""
     ...
 
@@ -503,11 +503,11 @@ def consensus_get_aggregate_signature(name: str, fork: str, attestations: list[b
     """The aggregate of the signatures of attestations, as 96 bytes."""
     ...
 
-def consensus_construct_attestation(name: str, fork: str, state: bytes, config: bytes, data: bytes, validator_index: int, secret_key: bytes) -> bytes:
+def consensus_construct_attestation(name: str, fork: str, state: bytes, config: dict[str, Any] | None, data: bytes, validator_index: int, secret_key: bytes) -> bytes:
     """Before Electra: the attestation of a validator on attestation data, as SSZ bytes."""
     ...
 
-def consensus_construct_single_attestation(name: str, fork: str, state: bytes, config: bytes, data: bytes, committee_index: int, validator_index: int, secret_key: bytes) -> bytes:
+def consensus_construct_single_attestation(name: str, fork: str, state: bytes, config: dict[str, Any] | None, data: bytes, committee_index: int, validator_index: int, secret_key: bytes) -> bytes:
     """From Electra: the single attestation of a validator in a committee, as SSZ bytes."""
     ...
 
@@ -555,23 +555,23 @@ def consensus_is_optimistic_candidate_block(name: str, fork: str, blocks: list[b
     """From Bellatrix: whether a block may be imported optimistically, given the known blocks."""
     ...
 
-def consensus_latest_verified_ancestor(name: str, fork: str, blocks: list[bytes], optimistic_roots: bytes, root: bytes) -> bytes:
+def consensus_latest_verified_ancestor(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], root: bytes) -> bytes:
     """From Bellatrix: the root of the latest block of a chain that is not optimistic."""
     ...
 
-def consensus_on_valid_payload(name: str, fork: str, blocks: list[bytes], optimistic_roots: bytes, root: bytes) -> bytes:
-    """From Bellatrix: the optimistic roots after the payload of a block is found valid."""
+def consensus_on_valid_payload(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], root: bytes) -> list[bytes]:
+    """From Bellatrix: the optimistic roots after the payload of a block is found valid, as a list."""
     ...
 
-def consensus_on_invalidated_payload(name: str, fork: str, blocks: list[bytes], optimistic_roots: bytes, first: bytes) -> bytes:
-    """From Bellatrix: the optimistic roots after a block is found to be the first invalid one."""
+def consensus_on_invalidated_payload(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], first: bytes) -> list[bytes]:
+    """From Bellatrix: the optimistic roots after a block is found the first invalid one, as a list."""
     ...
 
 def consensus_is_optimistic_restricted_domain(domain_type: bytes) -> bool:
     """Whether an optimistic validator may not sign under a domain type of 4 bytes."""
     ...
 
-def consensus_get_eth1_vote(name: str, fork: str, state: bytes, config: bytes, chain: list[bytes]) -> bytes:
+def consensus_get_eth1_vote(name: str, fork: str, state: bytes, config: dict[str, Any] | None, chain: list[tuple[int, bytes]]) -> bytes:
     """Before Heze: the Eth1 vote of a proposer on a state, as the SSZ bytes of the Eth1 data."""
     ...
 
@@ -579,7 +579,7 @@ def consensus_get_eth1_pending_deposit_count(name: str, fork: str, state: bytes)
     """In Electra: the number of deposits of the deposit contract that a proposer includes."""
     ...
 
-def consensus_compute_new_state_root(name: str, fork: str, state: bytes, block: bytes, config: bytes, verify: bool) -> bytes:
+def consensus_compute_new_state_root(name: str, fork: str, state: bytes, block: bytes, config: dict[str, Any] | None, verify: bool) -> bytes:
     """The root of the state after a block, to set as its state root, as 32 bytes."""
     ...
 

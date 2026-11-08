@@ -413,33 +413,36 @@ def bindings : List Binding := [
     [`EthLib.Consensus.WeakSubjectivityError], some "WeakSubjectivityError"⟩,
   ⟨"consensus_get_committee_assignment",
     `EthLib.Consensus.Exports.getCommitteeAssignmentExport,
-    "(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) " ++
-      "-> bytes",
+    "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, epoch: int, " ++
+      "validator_index: int) -> tuple[list[int], int, int] | None",
     [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
   ⟨"consensus_is_proposer", `EthLib.Consensus.Exports.isProposerExport,
-    "(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bool",
+    "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, " ++
+      "validator_index: int) -> bool",
     [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
   ⟨"consensus_is_assigned_to_sync_committee",
     `EthLib.Consensus.Exports.isAssignedToSyncCommitteeExport,
-    "(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) " ++
-      "-> bool",
+    "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, epoch: int, " ++
+      "validator_index: int) -> bool",
     [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
   ⟨"consensus_compute_subnets_for_sync_committee",
     `EthLib.Consensus.Exports.computeSubnetsForSyncCommitteeExport,
-    "(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bytes",
+    "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, " ++
+      "validator_index: int) -> list[int]",
     [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
   ⟨"consensus_get_ptc_assignment", `EthLib.Consensus.Exports.getPtcAssignmentExport,
-    "(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) " ++
-      "-> bytes",
+    "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, epoch: int, " ++
+      "validator_index: int) -> int | None",
     [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
   ⟨"consensus_get_upcoming_proposal_slots",
     `EthLib.Consensus.Exports.getUpcomingProposalSlotsExport,
-    "(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bytes",
+    "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, " ++
+      "validator_index: int) -> list[int]",
     [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
   ⟨"consensus_get_validator_signature",
     `EthLib.Consensus.Exports.getValidatorSignatureExport,
-    "(name: str, fork: str, state: bytes, config: bytes, duty: str, object: bytes, " ++
-      "secret_key: bytes) -> bytes",
+    "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, duty: str, " ++
+      "object: bytes, secret_key: bytes) -> bytes",
     [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
   ⟨"consensus_get_attestation_data", `EthLib.Consensus.Exports.getAttestationDataExport,
     "(name: str, fork: str, state: bytes, head_root: bytes, head_slot: int, " ++
@@ -450,13 +453,13 @@ def bindings : List Binding := [
     "(name: str, fork: str, attestations: list[bytes]) -> bytes",
     [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
   ⟨"consensus_construct_attestation", `EthLib.Consensus.Exports.constructAttestationExport,
-    "(name: str, fork: str, state: bytes, config: bytes, data: bytes, validator_index: int, " ++
-      "secret_key: bytes) -> bytes",
+    "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, data: bytes, " ++
+      "validator_index: int, secret_key: bytes) -> bytes",
     [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
   ⟨"consensus_construct_single_attestation",
     `EthLib.Consensus.Exports.constructSingleAttestationExport,
-    "(name: str, fork: str, state: bytes, config: bytes, data: bytes, committee_index: int, " ++
-      "validator_index: int, secret_key: bytes) -> bytes",
+    "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, data: bytes, " ++
+      "committee_index: int, validator_index: int, secret_key: bytes) -> bytes",
     [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
   ⟨"consensus_construct_aggregate", `EthLib.Consensus.Exports.constructAggregateExport,
     "(name: str, fork: str, state: bytes, data: bytes, attestations: list[bytes]) -> bytes",
@@ -504,26 +507,31 @@ def bindings : List Binding := [
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_latest_verified_ancestor",
     `EthLib.Consensus.Exports.latestVerifiedAncestorExport,
-    "(name: str, fork: str, blocks: list[bytes], optimistic_roots: bytes, root: bytes) -> bytes",
+    "(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], " ++
+      "root: bytes) -> bytes",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_on_valid_payload", `EthLib.Consensus.Exports.onValidPayloadExport,
-    "(name: str, fork: str, blocks: list[bytes], optimistic_roots: bytes, root: bytes) -> bytes",
+    "(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], " ++
+      "root: bytes) -> list[bytes]",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_on_invalidated_payload", `EthLib.Consensus.Exports.onInvalidatedPayloadExport,
-    "(name: str, fork: str, blocks: list[bytes], optimistic_roots: bytes, first: bytes) -> bytes",
+    "(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], " ++
+      "first: bytes) -> list[bytes]",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_is_optimistic_restricted_domain",
     `EthLib.Consensus.Exports.isOptimisticRestrictedDomainExport,
     "(domain_type: bytes) -> bool", [], some "ForkChoiceError"⟩,
   ⟨"consensus_get_eth1_vote", `EthLib.Consensus.Exports.getEth1VoteExport,
-    "(name: str, fork: str, state: bytes, config: bytes, chain: list[bytes]) -> bytes",
+    "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, " ++
+      "chain: list[tuple[int, bytes]]) -> bytes",
     [`EthLib.Consensus.ProposerError], some "ProposerError"⟩,
   ⟨"consensus_get_eth1_pending_deposit_count",
     `EthLib.Consensus.Exports.getEth1PendingDepositCountExport,
     "(name: str, fork: str, state: bytes) -> int",
     [`EthLib.Consensus.ProposerError], some "ProposerError"⟩,
   ⟨"consensus_compute_new_state_root", `EthLib.Consensus.Exports.computeNewStateRootExport,
-    "(name: str, fork: str, state: bytes, block: bytes, config: bytes, verify: bool) -> bytes",
+    "(name: str, fork: str, state: bytes, block: bytes, config: dict[str, Any] | None, " ++
+      "verify: bool) -> bytes",
     [`EthLib.Consensus.ProposerError], some "ProposerError"⟩,
   ⟨"consensus_compute_on_chain_aggregate",
     `EthLib.Consensus.Exports.computeOnChainAggregateExport,

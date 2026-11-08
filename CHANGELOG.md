@@ -135,6 +135,24 @@ Not yet released.
   Examples are `bytes` given for a name and `str` given for a state.
   A `bool` given for a slot count, and `1` or `None` given for `verify`, now raise the same error, where they were read as 0 or 1 or by truthiness.
   The limits of the converter, 2^29 bytes and 1,000,000 values in one call, now apply to the states and the blocks.
+- The honest validator exports that take a state, and the optimistic sync exports of the ancestor and the payload verdicts, now take and return typed values ([#1558](https://github.com/ethereum/EthLib/pull/1558)).
+  These are the committee, proposer, sync committee and PTC assignments, the sync committee subnets and the upcoming proposal slots.
+  They are also the signature of a duty, the construction of an attestation and of a single attestation, the Eth1 vote, the pending deposit count and the new state root.
+  The others are the latest verified ancestor and the two payload verdicts.
+  Their C exports take the tuple of their arguments as one value, in the order they had, and a configuration replacement as a `dict`, as the transition exports do.
+  The committee assignment comes back as a tuple of the committee, its index and its slot, or `None`, where it came back as JSON text.
+  The PTC assignment comes back as an `int` or `None`, and the sync committee subnets and the upcoming proposal slots as a list of `int`, where they came back as JSON text.
+  The Eth1 chain crosses as a list of pairs of a timestamp and the SSZ bytes of the Eth1 data, where each block crossed as 80 packed bytes.
+  Eth1 data of another length than 72 bytes raises `ProposerError` with code 0, after the fork and the state are read, where it raised `ValueError`.
+  The optimistic roots cross and come back as a list of 32-byte roots, where they crossed joined in one byte string.
+  A root of another length than 32 bytes raises the error class of the method with code 0 and the message `expected 32 bytes, got N`.
+  Before, the message was `a root is 32 bytes, not N` or `a list of roots is 32 bytes each, not N`, and it came after the checks of the name and the fork.
+  In Python, an epoch, an index or a timestamp of 2^64 or more raises the error class of the method with code 0, where it raised `OverflowError`, or `struct.error` for an Eth1 timestamp.
+  A negative number raises `ValueError`, where it raised `OverflowError` or `struct.error`.
+  An argument that crosses to Lean but that Lean cannot read raises the error class of the method with code 0, where some raised `TypeError`.
+  An example is `bytes` given for a name or a duty.
+  A `bool` given for an index, and `1` or `None` given for `verify`, now raise the same error, where they were read as 0 or 1 or by truthiness.
+  A `bytearray` or a `memoryview` given for an optimistic root or for the Eth1 data of a block raises `TypeError`, where it was read as bytes.
 - A chain configuration that the exports read as JSON is now rejected, with code 0, when a fork by block number comes after a fork by timestamp ([#1110](https://github.com/ethereum/EthLib/pull/1110)).
   EIP-6122 requires the forks by timestamp to be scheduled at or after the forks by block.
 
