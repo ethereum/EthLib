@@ -281,7 +281,6 @@ The last epoch of the window becomes the epoch after the lookahead, with its com
 -/
 def processPtcWindow (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
     Except AccessorError (BeaconState preset fork) := do
-  let window := (state.ptcWindow gloas).elements
   let perEpoch := preset.SLOTS_PER_EPOCH.toNat
   let nextEpoch ← liftArith do
     addChecked (← addChecked (getCurrentEpoch state) preset.MIN_SEED_LOOKAHEAD) 1
@@ -289,14 +288,16 @@ def processPtcWindow (state : BeaconState preset fork) (gloas : .glamsterdam ≤
   let inputs : Except AccessorError _ := do
     return (← getSeed state nextEpoch DOMAIN_PTC_ATTESTER, getCommitteeCountPerSlot state nextEpoch,
       ← attesterShuffle state nextEpoch)
-  let moved ← (Vector.range _).mapM fun position =>
-    if kept : position + perEpoch < _ then pure window[position + perEpoch]
-    else do
-      let slot ← ptcWindowSlot preset nextEpoch (position + perEpoch - window.size)
-      let (epochSeed, perSlot, active, shuffled) ← inputs
-      computePtcOf state slot epochSeed perSlot active shuffled
-  -- The tree is built here, once, so that each read of the field does not build it again.
-  let moved := RootedVector.ofVector moved
+  let fresh ← (Vector.range perEpoch).mapM fun offset => do
+    let slot ← ptcWindowSlot preset nextEpoch offset
+    let (epochSeed, perSlot, active, shuffled) ← inputs
+    computePtcOf state slot epochSeed perSlot active shuffled
+  -- The committees that stay keep their leaves in the tree of the window.
+  --
+  -- So only the new committees are hashed, with the levels above the leaves.
+  --
+  -- The window is bound here, once, so that each read of the field shares its tree.
+  let moved := (state.ptcWindow gloas).shift fresh (Nat.le_mul_of_pos_left _ (Nat.succ_pos _))
   return { state with ptcWindow := fun _ => moved }
 
 end EthLib.Consensus
