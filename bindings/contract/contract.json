@@ -935,43 +935,43 @@
    "Keccak-512 of a byte string: `Keccak[1024](M, 512)` of FIPS 202 §5.2.\n\nIt absorbs at a rate of 72 bytes, with the same permutation as Keccak-256.\n\nOne block of output holds the 64 digest bytes, so no further permutation is needed."},
   {"summary":
    "The bytes in the cache of the epoch of a block: `c_size` of the Yellow Paper, J.2.",
-   "signature": "(number: bytes) -> bytes",
+   "signature": "(block_number: int) -> int",
    "operation": "EthLib.Cryptography.Ethash.cacheSize",
    "method": "ethash_cache_size",
    "errors": [],
-   "error_class": null,
+   "error_class": "EthashError",
    "docstring":
    "The bytes in the cache of the epoch of a block: `c_size` of the Yellow Paper, J.2.\n\nThe search starts one hash below the linear size."},
   {"summary":
    "The bytes in the dataset of the epoch of a block: `d_size` of the Yellow Paper, J.2.",
-   "signature": "(number: bytes) -> bytes",
+   "signature": "(block_number: int) -> int",
    "operation": "EthLib.Cryptography.Ethash.datasetSize",
    "method": "ethash_dataset_size",
    "errors": [],
-   "error_class": null,
+   "error_class": "EthashError",
    "docstring":
    "The bytes in the dataset of the epoch of a block: `d_size` of the Yellow Paper, J.2.\n\nThe search starts one mix below the linear size."},
   {"summary":
    "The seed of the epoch of a block: `C_seedhash` of the Yellow Paper, J.3.1.",
-   "signature": "(number: bytes) -> bytes",
+   "signature": "(block_number: int) -> bytes",
    "operation": "EthLib.Cryptography.Ethash.seed",
    "method": "ethash_seed",
    "errors": [],
-   "error_class": null,
+   "error_class": "EthashError",
    "docstring":
    "The seed of the epoch of a block: `C_seedhash` of the Yellow Paper, J.3.1.\n\nIt is 32 zero bytes at epoch 0, and the Keccak-256 digest of the previous seed after."},
   {"summary":
    "The cache of the epoch of a block: `c` of the Yellow Paper, J.3.2.",
-   "signature": "(number: bytes) -> bytes",
+   "signature": "(block_number: int) -> bytes",
    "operation": "EthLib.Cryptography.Ethash.cache",
    "method": "ethash_cache",
    "errors": [],
-   "error_class": null,
+   "error_class": "EthashError",
    "docstring":
    "The cache of the epoch of a block: `c` of the Yellow Paper, J.3.2.\n\nIt has one item per 64 bytes of the cache size, after three rounds over the initial cache."},
   {"summary":
    "The dataset item at an index, from the cache: `E_datasetitem` of the Yellow Paper, J.3.3.",
-   "signature": "(cache: bytes, index: bytes) -> bytes",
+   "signature": "(cache: bytes, index: int) -> bytes",
    "operation": "EthLib.Cryptography.Ethash.datasetItem",
    "method": "ethash_dataset_item",
    "errors": [],
@@ -981,13 +981,13 @@
   {"summary":
    "The 32-byte mix digest and the 32-byte result of the proof-of-work function, from a cache.",
    "signature":
-   "(dataset_size: bytes, cache: bytes, header_hash: bytes, nonce: bytes) -> bytes",
+   "(dataset_size: int, cache: bytes, header_hash: bytes, nonce: bytes) -> tuple[bytes, bytes]",
    "operation": "EthLib.Cryptography.Ethash.Exports.hashimotoLightExport",
    "method": "ethash_hashimoto_light",
    "errors": [],
    "error_class": "EthashError",
    "docstring":
-   "The 32-byte mix digest and the 32-byte result of the proof-of-work function, from a cache.\n\nThe header hash must be 32 bytes and the nonce 8 bytes."},
+   "The 32-byte mix digest and the 32-byte result of the proof-of-work function, from a cache.\n\nThe arguments are the size of the dataset, the cache, the header hash and the nonce.\n\nThe result is the pair of the mix digest and the result, and a wrong size fails with code 0."},
   {"summary":
    "Keccak-f[1600], FIPS 202 §3.4: Keccak-p[1600, 24], rounds 0 to 23 in order.",
    "signature": "(state: bytes) -> bytes",
@@ -1069,7 +1069,7 @@
       {"constructor": "slotMismatch", "code": 506}]}],
    "error_class": "TrieError",
    "docstring":
-   "Check an answer of `eth_getProof` against a state root, with Keccak-256.\n\nThe answer is the RLP list of the address, the nonce, the balance, the code hash and storage root.\n\nThe list goes on with the nodes of the account proof, then the slots.\n\nEach slot is the list of the slot on 32 bytes, the word, and the nodes of its proof.\n\nNo bytes means that the address has no account, and that no field or slot was judged.\n\nOtherwise the byte 1 comes first, then one byte for each slot: 1 if it is set, 0 if it is not.\n\nA root of another length than 32 bytes, or an answer that does not decode, has code 0."},
+   "Check an answer of `eth_getProof` against a state root, with Keccak-256.\n\nThe answer is the RLP list of the address, the nonce, the balance, the code hash and storage root.\n\nThe list goes on with the nodes of the account proof, then the slots.\n\nEach slot is the list of the slot on 32 bytes, the word, and the nodes of its proof.\n\nNo bytes means that the address has no account: the nonce, the balance and each slot word are `0`.\n\nOtherwise the byte 1 comes first, then one byte for each slot: 1 if it is set, 0 if it is not.\n\nA root of another length than 32 bytes, or an answer that does not decode, has code 0."},
   {"summary":
    "The output of an opening at an index under a root, or no bytes when verification rejects.",
    "signature": "(root: bytes, index: int, opening: bytes) -> bytes | None",
@@ -1099,18 +1099,36 @@
    "operation": "EthLib.Cryptography.Hash.Crc32.digest",
    "method": "crc32",
    "errors": [],
-   "error_class": null,
+   "error_class": "BindingError",
    "docstring":
    "The four digest bytes of CRC-32: the highest power of each byte at its least significant bit."},
+  {"summary":
+   "CRC-32 as a number: the digest bytes read least significant byte first.",
+   "signature": "(data: bytes) -> int",
+   "operation": "EthLib.Cryptography.Hash.Crc32.crc32",
+   "method": "crc32_number",
+   "errors": [],
+   "error_class": "BindingError",
+   "docstring":
+   "CRC-32 as a number: the digest bytes read least significant byte first.\n\nIt is the value of the sample code of RFC 1952 §8, and CRC-32/ISO-HDLC of the CRC catalogue."},
   {"summary":
    "The four digest bytes of RFC 3720 §12.1: the CRC, which is R(x) complemented.",
    "signature": "(data: bytes) -> bytes",
    "operation": "EthLib.Cryptography.Hash.Crc32c.digest",
    "method": "crc32c",
    "errors": [],
-   "error_class": null,
+   "error_class": "BindingError",
    "docstring":
    "The four digest bytes of RFC 3720 §12.1: the CRC, which is R(x) complemented.\n\n- Byte 0 holds x^31 down to x^24, byte 1 holds x^23 down to x^16, and so on.\n- In each byte, the highest power goes to bit 7, the least significant bit (§2.3.3)."},
+  {"summary":
+   "CRC-32C as a number: the digest bytes read least significant byte first.",
+   "signature": "(data: bytes) -> int",
+   "operation": "EthLib.Cryptography.Hash.Crc32c.crc32c",
+   "method": "crc32c_number",
+   "errors": [],
+   "error_class": "BindingError",
+   "docstring":
+   "CRC-32C as a number: the digest bytes read least significant byte first.\n\nIt is CRC-32/ISCSI of the CRC catalogue."},
   {"summary": "The forward cipher `CIPH_K` of FIPS 197 §5 on one block.",
    "signature": "(key: bytes, block: bytes) -> bytes",
    "operation": "EthLib.Cryptography.Aes.Exports.encryptBlock",
@@ -7201,7 +7219,7 @@
    "errors": [],
    "error_class": null,
    "docstring":
-   "A Snappy block of the input: the length as a varint, then literals and copies.\n\nThe input must have at most 2^32 - 1 bytes, the largest length that a preamble can declare (§1).\n\nA longer input gives a preamble out of range, so decompression rejects the block."},
+   "A Snappy block of the input: the length as a varint, then literals and copies.\n\nThe input must have at most 2^32 - 1 bytes, the largest length that a preamble can declare (§1).\n\nA longer input gives a preamble out of range, so decompression rejects the block.\n\nThe scan writes its elements straight after the preamble, so the body is not copied a second time."},
   {"summary":
    "The bytes a framed stream decodes to, or why it is not a valid stream.",
    "signature": "(stream: bytes) -> bytes",
@@ -8032,13 +8050,13 @@
    "Run the precompile at the address on the call data, with the gas given, at the fork named.\n\nThe code of a failed call names the precompile, and the message is its error, as Lean prints it.\n\nAn unknown fork, or an address with no precompile at the fork, has code 0.\n\nNo error of a precompile has that code."},
   {"summary":
    "The price of the precompile at the address on the call data, at the fork named.",
-   "signature": "(fork: str, address: int, data: bytes) -> bytes",
+   "signature": "(fork: str, address: int, data: bytes) -> int",
    "operation": "EthLib.Execution.Evm.Precompiles.Exports.priceExport",
    "method": "precompile_price",
    "errors": [],
    "error_class": "PrecompileError",
    "docstring":
-   "The price of the precompile at the address on the call data, at the fork named.\n\nThe price is a big-endian integer, since a long call data can price it above `2^64`.\n\nAn unknown fork, or an address with no precompile at the fork, has code 0."},
+   "The price of the precompile at the address on the call data, at the fork named.\n\nThe arguments are the name of the fork, the address and the call data.\n\nAn unknown fork, or an address with no precompile at the fork, has code 0."},
   {"summary":
    "The 32-byte state root, with Keccak-256, of the state that `input` encodes.",
    "signature": "(state: bytes) -> bytes",

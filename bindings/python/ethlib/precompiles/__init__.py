@@ -34,7 +34,7 @@ def run(fork: str, address: int, data: bytes, gas: int) -> bytes:
 
 def price(fork: str, address: int, data: bytes) -> int:
     """The gas that the precompile at the address charges for the call data, at the fork."""
-    return int.from_bytes(_native.precompile_price(fork, address, data), "big")
+    return _native.precompile_price(fork, address, data)
 
 
 __all__ = ["ADDRESSES", "run", "price", "PrecompileError"]

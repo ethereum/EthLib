@@ -151,27 +151,27 @@ def keccak512(data: bytes) -> bytes:
     """Keccak-512 of a byte string: `Keccak[1024](M, 512)` of FIPS 202 §5.2."""
     ...
 
-def ethash_cache_size(number: bytes) -> bytes:
+def ethash_cache_size(block_number: int) -> int:
     """The bytes in the cache of the epoch of a block: `c_size` of the Yellow Paper, J.2."""
     ...
 
-def ethash_dataset_size(number: bytes) -> bytes:
+def ethash_dataset_size(block_number: int) -> int:
     """The bytes in the dataset of the epoch of a block: `d_size` of the Yellow Paper, J.2."""
     ...
 
-def ethash_seed(number: bytes) -> bytes:
+def ethash_seed(block_number: int) -> bytes:
     """The seed of the epoch of a block: `C_seedhash` of the Yellow Paper, J.3.1."""
     ...
 
-def ethash_cache(number: bytes) -> bytes:
+def ethash_cache(block_number: int) -> bytes:
     """The cache of the epoch of a block: `c` of the Yellow Paper, J.3.2."""
     ...
 
-def ethash_dataset_item(cache: bytes, index: bytes) -> bytes:
+def ethash_dataset_item(cache: bytes, index: int) -> bytes:
     """The dataset item at an index, from the cache: `E_datasetitem` of the Yellow Paper, J.3.3."""
     ...
 
-def ethash_hashimoto_light(dataset_size: bytes, cache: bytes, header_hash: bytes, nonce: bytes) -> bytes:
+def ethash_hashimoto_light(dataset_size: int, cache: bytes, header_hash: bytes, nonce: bytes) -> tuple[bytes, bytes]:
     """The 32-byte mix digest and the 32-byte result of the proof-of-work function, from a cache."""
     ...
 
@@ -211,8 +211,16 @@ def crc32(data: bytes) -> bytes:
     """The four digest bytes of CRC-32: the highest power of each byte at its least significant bit."""
     ...
 
+def crc32_number(data: bytes) -> int:
+    """CRC-32 as a number: the digest bytes read least significant byte first."""
+    ...
+
 def crc32c(data: bytes) -> bytes:
     """The four digest bytes of RFC 3720 §12.1: the CRC, which is R(x) complemented."""
+    ...
+
+def crc32c_number(data: bytes) -> int:
+    """CRC-32C as a number: the digest bytes read least significant byte first."""
     ...
 
 def aes_encrypt_block(key: bytes, block: bytes) -> bytes:
@@ -1119,7 +1127,7 @@ def precompile_run(fork: str, address: int, data: bytes, gas: int) -> bytes:
     """Run the precompile at the address on the call data, with the gas given, at the fork named."""
     ...
 
-def precompile_price(fork: str, address: int, data: bytes) -> bytes:
+def precompile_price(fork: str, address: int, data: bytes) -> int:
     """The price of the precompile at the address on the call data, at the fork named."""
     ...
 

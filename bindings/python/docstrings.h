@@ -158,8 +158,14 @@
 #define DOC_crc32 \
   "The four digest bytes of CRC-32: the highest power of each byte at its least significant bit."
 
+#define DOC_crc32_number \
+  "CRC-32 as a number: the digest bytes read least significant byte first."
+
 #define DOC_crc32c \
   "The four digest bytes of RFC 3720 §12.1: the CRC, which is R(x) complemented."
+
+#define DOC_crc32c_number \
+  "CRC-32C as a number: the digest bytes read least significant byte first."
 
 #define DOC_aes_encrypt_block \
   "The forward cipher `CIPH_K` of FIPS 197 §5 on one block."

@@ -1,7 +1,6 @@
 module
 
-public import EthLib.Execution.Exports.Evm
-public import EthLib.Base.Exports
+public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Execution.Evm.Precompiles.Table
 
 /-!
@@ -18,7 +17,7 @@ public section
 
 namespace EthLib.Execution.Evm.Precompiles.Exports
 
-open EthLib.Exports (Result forkUpTo)
+open EthLib.Exports (Result PyValue forkUpTo pyExport)
 
 open EthLib.Execution.Evm.Precompiles
 
@@ -39,14 +38,23 @@ def runExport (fork : ByteArray) (address : UInt64) (data : ByteArray) (gas : UI
 
 /-- The price of the precompile at the address on the call data, at the fork named.
 
-The price is a big-endian integer, since a long call data can price it above `2^64`.
+The arguments are the name of the fork, the address and the call data.
+
+An unknown fork, or an address with no precompile at the fork, has code 0. -/
+def priceOf (args : String × Nat × ByteArray) : Result Nat := do
+  let (fork, address, data) := args
+  let fork ← forkUpTo .glamsterdam fork.toUTF8
+  match price fork address data with
+  | some cost => return cost
+  | none => throw (0, s!"no precompile at address {address} at fork {fork.name}")
+
+/-- The price of the precompile at the address on the call data, at the fork named.
+
+The arguments are the name of the fork, the address and the call data.
 
 An unknown fork, or an address with no precompile at the fork, has code 0. -/
 @[export eth_precompile_price]
-def priceExport (fork : ByteArray) (address : UInt64) (data : ByteArray) : Result ByteArray := do
-  let fork ← forkUpTo .glamsterdam fork
-  match price fork address.toNat data with
-  | some cost => return Evm.Exports.bytesOfNat cost
-  | none => throw (0, s!"no precompile at address {address} at fork {fork.name}")
+def priceExport (args : PyValue) : Result PyValue :=
+  pyExport priceOf args
 
 end EthLib.Execution.Evm.Precompiles.Exports
