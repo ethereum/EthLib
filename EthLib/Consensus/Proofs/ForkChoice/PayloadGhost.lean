@@ -33,7 +33,7 @@ The empty or full node of that parent is then a viable payload decision of the p
 
 A tie between two children goes to the greater root, then to the greater status number.
 
-Take a viable node whose votes exceed half of the stake plus the score of the boost.
+Take a viable node whose votes exceed half of the sum of the stake and the score of the boost.
 
 Those votes leave out the boost.
 
@@ -1217,7 +1217,7 @@ private theorem getAncestor_ok_of_viable_ancestor_of_gloas {nodes : List ForkCho
         belowJustified
 
 variable (lower) in
-/-- Take a viable node whose votes exceed half of the stake plus the score of the boost.
+/-- Take a viable node whose votes exceed half of the sum of the stake and the score of the boost.
 
 Those votes leave out the boost.
 
@@ -1263,7 +1263,7 @@ theorem ancestor_getHead_of_majority_withBoost_of_gloas {nodes : List ForkChoice
   rwa [getHead_eq_ghost_withBoost_of_gloas lower gloas noDecision justifiedState tree
     (List.ne_nil_of_mem viable) found] at model
 
-/-- Take a viable node whose votes exceed half of the stake plus the score of the boost.
+/-- Take a viable node whose votes exceed half of the sum of the stake and the score of the boost.
 
 Those votes leave out the boost.
 

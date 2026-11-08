@@ -35,7 +35,7 @@ So when some leaf is viable, the chain of the head holds the finalized block.
 
 That is not required when the finalized epoch is genesis.
 
-Take a viable block whose votes exceed half of the stake plus the score of the boost.
+Take a viable block whose votes exceed half of the sum of the stake and the score of the boost.
 
 Those votes leave out the boost.
 
@@ -1201,7 +1201,7 @@ private theorem getAncestor_ok_of_viable_ancestor {nodes : List ForkChoiceNode}
         belowJustified
 
 variable (lower) in
-/-- Take a viable block whose votes exceed half of the stake plus the score of the boost.
+/-- Take a viable block whose votes exceed half of the sum of the stake and the score of the boost.
 
 Those votes leave out the boost.
 
@@ -1243,7 +1243,7 @@ theorem ancestor_getHead_of_majority_withBoost {nodes : List ForkChoiceNode}
     rootValue inView belowJustified majority
   rwa [getHead_eq_ghost_withBoost lower before justifiedState tree found] at model
 
-/-- Take a viable block whose votes exceed half of the stake plus the score of the boost.
+/-- Take a viable block whose votes exceed half of the sum of the stake and the score of the boost.
 
 Those votes leave out the boost.
 
