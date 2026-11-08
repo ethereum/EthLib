@@ -456,6 +456,14 @@ the product of its point by its scalar (`ecadd_toPoint`, `ecmul_toPoint`).
 Each output decodes to that sum or that product (`bytesToG1_ecadd`, `bytesToG1_ecmul`).
 So a later call can take it as its input.
 
+`PairingProduct.lean` states the verdict of ECPAIRING from `pairingLaws`.
+No theorem assumes a hypothesis on the pairing.
+Every decoded pair holds `a_i P1` and `b_i P2` for some `a_i` and `b_i` in `ZMod q`
+(`exists_represents_of_decodePairs`, `exists_represents_of_ecpairing`).
+On a successful call, ECPAIRING returns the word 1 when `sum_i a_i * b_i = 0`, and the word 0
+otherwise (`ecpairing_eq_one_iff`, `ecpairing_eq_zero_iff`).
+Both outputs are reached (`ecpairing_generators`, `ecpairing_generator_neg`, `ecpairing_empty`).
+
 ### Test vectors
 
 `bindings/python/tests/precompile/test_alt_bn128.py` checks the three precompiles against py_ecc.
