@@ -47,12 +47,6 @@ abbrev State := DebtState HashInput HashOutput Coordinate
 noncomputable instance viewInhabited : Inhabited View :=
     ⟨(⟨0, Nat.two_pow_pos _⟩, fun _ => ⟨0, Nat.two_pow_pos _⟩)⟩
 
-omit [Params] in
-theorem payload_pair_injective (root : Digest) {m m' : Message} {ρ ρ' : Randomness}
-    (h : messageDigestPayload root m ρ = messageDigestPayload root m' ρ') : m = m' ∧ ρ = ρ' := by
-  have hparts := List.append_inj h (by simp [bytesLE_length])
-  exact ⟨bytesLE_injective hparts.1, bytesLE_injective hparts.2⟩
-
 section Defs
 
 variable (parameter : PublicParameter) (data : PublicData)
@@ -66,11 +60,8 @@ theorem pblk_call_injective (p : Pair) : Function.Injective (pblk parameter data
 
 theorem pblk_injective {p q : Pair} {call call' : DigestCall}
     (h : pblk parameter data p call = pblk parameter data q call') : p = q ∧ call = call' := by
-  obtain ⟨hfields, -, hpayload⟩ := tweakableInput_injective h
-  obtain ⟨hm, hρ⟩ := payload_pair_injective data.root hpayload
-  refine ⟨Prod.ext hm hρ, ?_⟩
-  simpa using hashFields_injective (left := .message call)
-      (right := .message call') trivial trivial hfields
+  obtain ⟨-, -, hm, hρ, hcall⟩ := Security.messageDigestInput_injective h
+  exact ⟨Prod.ext hm hρ, hcall⟩
 
 theorem pblk_ne_of_ne {p q : Pair} (h : p ≠ q) (call call' : DigestCall) :
     pblk parameter data p call ≠ pblk parameter data q call' := fun heq =>

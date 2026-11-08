@@ -23,6 +23,50 @@ namespace EthLib.Execution.Trie
 open EthLib.Base
 open EthLib.Serialization.Rlp
 
+/-! ## The plain-hash instances -/
+
+/-- A budget of zero gives an empty proof. -/
+theorem proofBelow_zero (hash : ByteArray → Hash32) (obj : List (List Nibble × ByteArray))
+    (level : Nat) (path : List Nibble) : proofBelow hash 0 obj level path = .ok [] :=
+  rfl
+
+/-- One more unit of budget follows the child that the path enters, with a plain hash. -/
+theorem proofBelow_succ (hash : ByteArray → Hash32) (fuel : Nat)
+    (obj : List (List Nibble × ByteArray)) (level : Nat) (path : List Nibble) :
+    proofBelow hash (fuel + 1) obj level path = (do
+      let child (sub : List (List Nibble × ByteArray)) (deeper : Nat) (restOfPath : List Nibble) :=
+        do
+        let encoded ← encode (unencoded (← patricialize hash sub deeper))
+        let below ← proofBelow hash fuel sub deeper restOfPath
+        return (if encoded.size < 32 then [] else [encoded]) ++ below
+      match ← patricialize hash obj level with
+      | some (.extension keySegment _) =>
+        if keySegment = path.take keySegment.length then
+          child obj (level + keySegment.length) (path.drop keySegment.length)
+        else
+          return []
+      | some (.branch _ _) =>
+        match path with
+        | [] => return []
+        | nibble :: restOfPath =>
+          child (obj.filter fun (key, _) => key[level]? = some nibble) (level + 1) restOfPath
+      | _ => return [] : Except RlpError _) := by
+  simp only [proofBelow, proofBelowM, ExceptT.run, exceptT_id_bind, exceptT_id_pure,
+    exceptT_id_monadLift, except_bind_eq]
+  rfl
+
+/-- The proof of a key, with a plain hash. -/
+theorem getProof_eq (hash : ByteArray → Hash32) (trie : Trie) (key : ByteArray) :
+    getProof hash trie key = do
+      let obj ← prepareData hash trie.data trie.secured
+      let path := keyPath hash trie.secured key
+      let encoded ← (encode (unencoded (← (patricialize hash obj 0).mapError .rlp))).mapError .rlp
+      let below ← (proofBelow hash (path.length + 1) obj 0 path).mapError .rlp
+      return encoded :: below := by
+  simp only [getProof, getProofM, ExceptT.run, exceptT_id_bind, exceptT_id_adapt,
+    exceptT_id_monadLift, exceptT_id_lift, except_bind_eq]
+  rfl
+
 /-! ## Decoding inverts `unencoded` -/
 
 /-- A leaf decodes from its item. -/
@@ -71,7 +115,7 @@ theorem encodeInternalNode_of_encode {hash : ByteArray → Hash32} {node : Optio
     (h : encode (unencoded node) = .ok encoded) :
     encodeInternalNode hash node
       = .ok (if encoded.size < 32 then unencoded node else .bytes ⟨(hash encoded).toArray⟩) := by
-  simp only [encodeInternalNode, h, Bind.bind, Except.bind]
+  simp only [encodeInternalNode_eq, h, Bind.bind, Except.bind]
   split <;> rfl
 
 /-- The item of a node is a list, or the empty byte string for no node. -/
@@ -159,13 +203,13 @@ theorem built_of_patricialize (hash : ByteArray → Hash32) {obj : List (List Ni
   rw [hstep] at h
   match obj, h with
   | [], h =>
-    simp only [patricializeStep, Except.ok.injEq] at h
+    simp only [patricializeStep_nil, Except.ok.injEq] at h
     exact h ▸ .none rfl
   | [(key, value)], h =>
-    simp only [patricializeStep, Except.ok.injEq] at h
+    simp only [patricializeStep_singleton, Except.ok.injEq] at h
     exact h ▸ .leaf key value rfl
   | (key₁, value₁) :: second :: rest, h =>
-    simp only [patricializeStep] at h
+    simp only [patricializeStep_cons_cons] at h
     have hfits : ∀ sub deeper, 0 < deeper → longestPath sub ≤ longestPath ((key₁, value₁) :: second :: rest) →
         patricializeAux hash (longestPath ((key₁, value₁) :: second :: rest)) sub deeper = patricialize hash sub deeper :=
       fun sub deeper hdeeper hle => patricializeAux_eq_patricialize hash (by omega)
@@ -203,7 +247,7 @@ theorem built_of_patricialize (hash : ByteArray → Hash32) {obj : List (List Ni
           · rw [hlength, ← hfits _ _ (by omega) (Nat.le_refl _), hc]
     · -- A branch.
       simp only [Bind.bind, Except.bind] at h
-      generalize hchildren : mapMVector _ (List.finRange 16) = children at h
+      generalize hchildren : mapMVector (m := Except RlpError) _ (List.finRange 16) = children at h
       cases children with
       | error => cases h
       | ok subnodes =>
@@ -401,7 +445,7 @@ theorem encode_of_encodeInternalNode {hash : ByteArray → Hash32} {node : Optio
     ∃ encoded, encode (unencoded node) = .ok encoded ∧
       reference = if encoded.size < 32 then unencoded node else .bytes ⟨(hash encoded).toArray⟩ := by
   cases hencode : encode (unencoded node) with
-  | error => simp [encodeInternalNode, hencode, Bind.bind, Except.bind] at h
+  | error => simp [encodeInternalNode_eq, hencode, Bind.bind, Except.bind] at h
   | ok encoded =>
     rw [encodeInternalNode_of_encode hencode] at h
     exact ⟨encoded, rfl, (Except.ok.inj h).symm⟩
@@ -468,7 +512,7 @@ theorem walk_honest (hash : ByteArray → Hash32) :
   | 0, _, _, _, _, _, _, _, hfuel, _, _, _ => absurd hfuel (Nat.not_lt_zero _)
   | _, 0, _, _, _, _, _, _, _, hfuel', _, _ => absurd hfuel' (Nat.not_lt_zero _)
   | fuel + 1, fuel' + 1, obj, level, path, node, below, honest, hfuel, hfuel', hnode, hbelow => by
-    simp only [proofBelow, hnode, Bind.bind, Except.bind] at hbelow
+    simp only [proofBelow_succ, hnode, Bind.bind, Except.bind] at hbelow
     cases built_of_patricialize hash hnode with
     | none hobj =>
       -- No node: no proof node, and the key is not set.
@@ -567,33 +611,33 @@ theorem proofBelow_ok (hash : ByteArray → Hash32) :
       exact ⟨(if encoded.size < 32 then [] else [encoded]) ++ below,
         by simp [hpatricialize, hencode, hbelow, Bind.bind, Except.bind, pure, Except.pure]⟩
     cases built_of_patricialize hash h with
-    | none => exact ⟨[], by simp [proofBelow, h, Bind.bind, Except.bind, pure, Except.pure]⟩
-    | leaf => exact ⟨[], by simp [proofBelow, h, Bind.bind, Except.bind, pure, Except.pure]⟩
+    | none => exact ⟨[], by simp [proofBelow_succ, h, Bind.bind, Except.bind, pure, Except.pure]⟩
+    | leaf => exact ⟨[], by simp [proofBelow_succ, h, Bind.bind, Except.bind, pure, Except.pure]⟩
     | extension keySegment subnode child _ _ hpatricialize hsubnode =>
       by_cases hfollow : keySegment = path.take keySegment.length
       · obtain ⟨below, hbelow⟩ := hchild hpatricialize hsubnode (path.drop keySegment.length)
         refine ⟨below, ?_⟩
-        simp only [proofBelow, h, Bind.bind, Except.bind]
+        simp only [proofBelow_succ, h, Bind.bind, Except.bind]
         rw [ite_eq_left hfollow]
         exact hbelow
       · refine ⟨[], ?_⟩
-        simp only [proofBelow, h, Bind.bind, Except.bind]
+        simp only [proofBelow_succ, h, Bind.bind, Except.bind]
         rw [ite_eq_right hfollow]
         rfl
     | branch subnodes hchildren value _ =>
       cases path with
-      | nil => exact ⟨[], by simp [proofBelow, h, Bind.bind, Except.bind, pure, Except.pure]⟩
+      | nil => exact ⟨[], by simp [proofBelow_succ, h, Bind.bind, Except.bind, pure, Except.pure]⟩
       | cons nibble rest =>
         obtain ⟨child, hpatricialize, hsubnode⟩ := hchildren nibble
         obtain ⟨below, hbelow⟩ := hchild hpatricialize hsubnode rest
-        exact ⟨below, by simp only [proofBelow, h, Bind.bind, Except.bind]; exact hbelow⟩
+        exact ⟨below, by simp only [proofBelow_succ, h, Bind.bind, Except.bind]; exact hbelow⟩
 
 /-- A trie with a root has a proof for every key. -/
 theorem getProof_ok (hash : ByteArray → Hash32) {trie : Trie} {root' : Hash32}
     (hroot : root hash trie = .ok root') (key : ByteArray) :
     ∃ proof, getProof hash trie key = .ok proof := by
-  simp only [root, Bind.bind, Except.bind, Except.mapError] at hroot
-  simp only [getProof, Bind.bind, Except.bind, Except.mapError]
+  simp only [root_eq, Bind.bind, Except.bind, Except.mapError] at hroot
+  simp only [getProof_eq, Bind.bind, Except.bind, Except.mapError]
   -- The root's own steps succeed, and the proof below the root node can be built.
   cases hobj : prepareData hash trie.data trie.secured with
   | error => simp [hobj] at hroot
@@ -635,8 +679,8 @@ theorem honest_root {hash : ByteArray → Hash32} {trie : Trie} {key : ByteArray
     cases hroot
   have hprepare := prepareData_eq_keyPath hash trie.secured hfull
   generalize hobj : trie.data.map (fun entry => (keyPath hash trie.secured entry.1, entry.2)) = obj at hprepare ⊢
-  simp only [root, hprepare, Except.mapError, Bind.bind, Except.bind] at hroot
-  simp only [getProof, hprepare, Except.mapError, Bind.bind, Except.bind] at hproof
+  simp only [root_eq, hprepare, Except.mapError, Bind.bind, Except.bind] at hroot
+  simp only [getProof_eq, hprepare, Except.mapError, Bind.bind, Except.bind] at hproof
   cases hnode : patricialize hash obj 0 with
   | error => simp [hnode] at hroot
   | ok rootNode =>
@@ -685,7 +729,7 @@ theorem valueAt_plain (hash : ByteArray → Hash32) (data : List (ByteArray × B
   apply find?_congr
   intro entry _
   -- Two keys have the same nibbles exactly when they are the same bytes.
-  simp only [keyPath, Bool.false_eq_true, ↓reduceIte]
+  simp only [keyPath_eq, Bool.false_eq_true, ↓reduceIte]
   rw [Bool.eq_iff_iff, decide_eq_true_iff, sameBytes_iff]
   constructor
   · intro h

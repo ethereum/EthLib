@@ -52,6 +52,16 @@ def keptLeafEquiv (parameter : PublicParameter) :
     change subtreePosition parameter * 2 ^ subtreeHeight + i.val.val % 2 ^ subtreeHeight = _
     rw [← i.property, Nat.mul_comm, Nat.div_add_mod]
 
+/-- A full key keeps the whole top layer: its subtree is the first and only one. -/
+theorem subtreePosition_eq_zero (parameter : PublicParameter) : subtreePosition parameter = 0 := by
+  unfold subtreePosition
+  rw [Params.full, Nat.sub_self, pow_zero, Nat.mod_one]
+
+/-- With a full key, every index lands in the kept subtree. -/
+theorem landed_full (parameter : PublicParameter) (index : Index) : Landed parameter index := by
+  unfold Landed
+  rw [subtreePosition_eq_zero, Params.full, Nat.div_eq_of_lt index.isLt]
+
 theorem evalDist_blockIndex_uniform :
     (Concrete.blockIndex <$> ($ᵗ HashOutput : ProbComp HashOutput)) =ᵈ
       ($ᵗ Index : ProbComp Index) := by

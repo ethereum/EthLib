@@ -28,6 +28,17 @@ def _emit(case: str, seed: bytes) -> None:
 @fixtures.slow
 def test_known_answer() -> None:
     _emit(f"{HANDLER}_known_answer", fixtures.SEED_KNOWN_ANSWER)
+    # The key just written must be the independent known answer, byte for byte.
+    assert fixtures.read_output(HANDLER, f"{HANDLER}_known_answer") == (
+        fixtures.PUBLIC_KEY_KNOWN_ANSWER
+    )
+
+
+def test_committed_known_answer() -> None:
+    # The committed case holds the independent known answer, so a fast run checks it too.
+    assert fixtures.read_output(HANDLER, f"{HANDLER}_known_answer") == (
+        fixtures.PUBLIC_KEY_KNOWN_ANSWER
+    )
 
 
 @fixtures.slow
@@ -45,10 +56,8 @@ def test_long_seed() -> None:
     _emit(f"{HANDLER}_long_seed", fixtures.SEED_KNOWN_ANSWER + b"\x00")
 
 
-def test_scheme_seed() -> None:
-    # The hash of the name, then the seed, that key generation starts with.
-    # It checks the value through the Keccak-256 binding, not through key generation itself.
-    assert (
-        keccak.keccak256(b"leanSPHINCS" + fixtures.SEED_KNOWN_ANSWER)
-        == fixtures.SCHEME_SEED_KNOWN_ANSWER
-    )
+def test_pk_seed() -> None:
+    # PK.seed is the first 16 bytes of Keccak-256 of the name, the seed and the byte 0.
+    # It checks the key expansion through the Keccak-256 binding, not through key generation.
+    expansion = keccak.keccak256(b"leanSPHINCS" + fixtures.SEED_KNOWN_ANSWER + b"\x00")
+    assert expansion[: sphincs.N] == fixtures.PUBLIC_KEY_KNOWN_ANSWER[: sphincs.N]

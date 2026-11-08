@@ -9,11 +9,11 @@ A model signature becomes EthLib's field by field.
 
 The model numbers its layers from the top, so its layer 2 is EthLib's bottom layer.
 
-Both verifiers recover the FORS key, then walk the layers from the bottom up.
+Both verifiers recover the FORS public key, then walk the layers from the bottom up.
 
 They make the same calls in the same order, so EthLib's verifier with the query is the model's.
 
-Key generation makes the same calls too: the scheme seed, the public parameter, then the top root.
+Key generation makes the same calls too: `PK.seed`, `SK.prf`, then the top root.
 -/
 
 @[expose] public section
@@ -28,7 +28,7 @@ open SphincsSecurity.Concrete (sequenceFin)
 
 /-- A model public key as EthLib's. -/
 def ofPublicKey (pk : SphincsSecurity.PublicKey) : PublicKey :=
-  { root := ofDigest pk.root, publicParam := ofParam pk.parameter }
+  { pkSeed := ofParam pk.parameter, root := ofDigest pk.root }
 
 /-- A model layer signature as EthLib's, on the same layer. -/
 def ofLayerSignature (lay : SphincsSecurity.Layer) (s : SphincsSecurity.LayerSignature lay) :
@@ -90,55 +90,20 @@ theorem toList_path_ofLayerSignature (sig : SphincsSecurity.Signature)
 def treeAt (κ : Fin FORS_TREES) : SphincsSecurity.FTree :=
   ⟨κ.val, lt_of_lt_of_eq κ.isLt rfl⟩
 
-/-- Lists in pairs, flattened twice, are the pairs joined and flattened once. -/
-theorem flatten_flatten_pairs {α : Type} {n : Nat} (f g : Fin n → List α) :
-    (List.ofFn fun x => [f x, g x]).flatten.flatten = (List.ofFn fun x => f x ++ g x).flatten := by
-  induction n with
-  | zero => simp
-  | succ n ih => simp [List.ofFn_succ, ih]
-
-/-- The bytes of digests in pairs, in order, as one list. -/
-theorem toList_packDigests_pairs {n : Nat} (a b : Fin n → Digest) :
-    (packDigests ((Vector.ofFn fun κ => #v[a κ, b κ]).flatten.cast (Nat.mul_comm n 2))).data.toList
-      = (List.ofFn fun κ => (a κ).toList ++ (b κ).toList).flatten := by
-  simp only [packDigests, packBytes, Vector.flatten, Vector.cast_mk, Array.toList_flatten,
-    Vector.toArray_ofFn, Array.toList_map, Array.toList_ofFn, List.map_ofFn, Function.comp_def]
-  simp only [List.map_flatten, List.map_ofFn, Function.comp_def, List.map_cons, List.map_nil]
-  exact flatten_flatten_pairs (fun x => (a x).toList) (fun x => (b x).toList)
-
-/-- The bytes of a FORS key, as the message the bottom layer signs, are the model's. -/
-theorem toList_forsKeyBytes (k : SphincsSecurity.ForsKey) :
-    (forsKeyBytes (ofForsKey k)).data.toList = SphincsSecurity.Concrete.rootsPayload k := by
-  have hvec : (Vector.ofFn fun i : Fin (2 * FORS_TREES) =>
-      let pair := (ofForsKey k)[i.val / 2]'(by have := i.isLt; omega)
-      if i.val % 2 = 0 then pair.1 else pair.2)
-      = (Vector.ofFn fun κ : Fin FORS_TREES =>
-          #v[ofDigest (k (treeAt κ)).1, ofDigest (k (treeAt κ)).2]).flatten.cast
-          (Nat.mul_comm _ _) := by
-    apply Vector.ext
-    intro i hi
-    rcases Nat.mod_two_eq_zero_or_one i with h | h <;>
-      simp [ofForsKey, ofTops, treeAt, h, Vector.getElem_cast, Vector.getElem_flatten]
-  unfold forsKeyBytes
-  rw [hvec, toList_packDigests_pairs]
-  simp only [toList_ofDigest, SphincsSecurity.Concrete.rootsPayload, List.flatMap_def,
-    List.map_ofFn]
-  rfl
-
 section Query
 
 variable {m : Type → Type} [Monad m] [LawfulMonad m] [HasQuery HashSig.HashSpec m]
 
 /-- The root that a layer's signature leads to is the model's. -/
 theorem layerRoot_queryH (P : SphincsSecurity.PublicParameter) (index : SphincsSecurity.Index)
-    (sig : SphincsSecurity.Signature) (lay : SphincsSecurity.Layer) (msg : ByteArray) :
+    (sig : SphincsSecurity.Signature) (lay : SphincsSecurity.Layer) (msg : Digest) :
     layerRoot (queryH (m := m)) (ofParam P) (layerOf lay) index.val msg
         (ofLayerSignature lay (sig.layers lay))
       = Option.map ofDigest <$> (do
           let tree := SphincsSecurity.Concrete.treeIndexAt index lay
           let leaf := SphincsSecurity.Concrete.leafIndexAt index lay
           let some value ← SphincsSecurity.Concrete.otsLeaf (m := m) P lay tree leaf
-              msg.data.toList (sig.layers lay).counter (sig.layers lay).chainValues
+              msg.toList (sig.layers lay).counter (sig.layers lay).chainValues
             | pure none
           some <$> SphincsSecurity.Concrete.treeFold P lay tree leaf
             (SphincsSecurity.Concrete.signaturePath sig lay) (SphincsSecurity.layerHeight lay)
@@ -154,7 +119,6 @@ theorem layerRoot_queryH (P : SphincsSecurity.PublicParameter) (index : SphincsS
   rcases r with _ | value
   · simp
   · have h := hclimb value (SphincsSecurity.layerHeight lay) 0
-      ((Nat.zero_add _).trans_le (SphincsSecurity.Concrete.layerHeight_le lay))
     simp only [Nat.zero_add, SphincsSecurity.Concrete.treeFold, pure_bind, pow_zero,
       Nat.div_one] at h
     simp only [Option.map_some, fold, keyOf]
@@ -171,26 +135,29 @@ theorem verifyWith_queryH (pk : SphincsSecurity.PublicKey) (msg : SphincsSecurit
   rw [messageDigest_queryH (root := pk.root), bind_map_left, bind_assoc]
   refine bind_congr fun outs => ?_
   rw [pure_bind, digestIndex_ofOutputs, digestLeaves_ofOutputs, forsRecover_queryH,
-    bind_map_left]
-  refine bind_congr fun key => ?_
+    bind_map_left, bind_assoc]
+  refine bind_congr fun roots => ?_
   generalize SphincsSecurity.Concrete.digestIndex (SphincsSecurity.truncateMessageDigest outs)
     = index
+  refine bind_congr fun forsKey => ?_
+  -- The bottom layer signs the FORS public key.
   have hb : layerRoot (queryH (m := m)) (ofParam pk.parameter) .bottom index.val
-      (forsKeyBytes (ofForsKey key)) (ofLayerSignature bottomLayer (sig.layers bottomLayer)) = _ :=
+      (ofDigest forsKey) (ofLayerSignature bottomLayer (sig.layers bottomLayer)) = _ :=
     layerRoot_queryH pk.parameter index sig bottomLayer _
-  rw [hb, toList_forsKeyBytes]
+  rw [hb, toList_ofDigest]
   erw [SphincsSecurity.Concrete.verifyLayers.eq_2]
-  simp only [dite_eq_left (show 2 < SphincsSecurity.numLayers by decide), map_bind, bind_assoc]
+  simp only [dite_eq_left (show 2 < SphincsSecurity.numLayers by decide), map_bind, bind_assoc,
+    SphincsSecurity.Concrete.rootPayload]
   refine bind_congr fun r => ?_
   rcases r with _ | bottomRoot
   · simp
   simp only [Option.map_some, bind_map_left, bind_assoc]
   refine bind_congr fun bottomRoot => ?_
+  -- The middle layer signs the bottom tree's root.
   have hm : layerRoot (queryH (m := m)) (ofParam pk.parameter) .middle index.val
-      (packBytes (ofDigest bottomRoot)) (ofLayerSignature middleLayer (sig.layers middleLayer))
-      = _ :=
+      (ofDigest bottomRoot) (ofLayerSignature middleLayer (sig.layers middleLayer)) = _ :=
     layerRoot_queryH pk.parameter index sig middleLayer _
-  rw [ite_eq_right (by decide), hm, toList_data_packBytes_ofDigest]
+  rw [ite_eq_right (by decide), hm, toList_ofDigest]
   erw [SphincsSecurity.Concrete.verifyLayers.eq_2]
   simp only [dite_eq_left (show 1 < SphincsSecurity.numLayers by decide), map_bind, bind_assoc,
     SphincsSecurity.Concrete.rootPayload]
@@ -199,12 +166,12 @@ theorem verifyWith_queryH (pk : SphincsSecurity.PublicKey) (msg : SphincsSecurit
   · simp
   simp only [Option.map_some, bind_map_left, bind_assoc]
   refine bind_congr fun middleRoot => ?_
+  -- The top layer signs the middle tree's root.
   have ht : layerRoot (queryH (m := m)) (ofParam pk.parameter) .top index.val
-      (packBytes (ofDigest middleRoot))
-      (ofLayerSignature SphincsSecurity.topLayer (sig.layers SphincsSecurity.topLayer))
-      = _ :=
+      (ofDigest middleRoot)
+      (ofLayerSignature SphincsSecurity.topLayer (sig.layers SphincsSecurity.topLayer)) = _ :=
     layerRoot_queryH pk.parameter index sig SphincsSecurity.topLayer _
-  rw [ite_eq_right (by decide), ht, toList_data_packBytes_ofDigest]
+  rw [ite_eq_right (by decide), ht, toList_ofDigest]
   erw [SphincsSecurity.Concrete.verifyLayers.eq_2]
   simp only [dite_eq_left (show 0 < SphincsSecurity.numLayers by decide), map_bind, bind_assoc,
     SphincsSecurity.Concrete.rootPayload]
@@ -222,22 +189,25 @@ end Query
 
 /-! ## Key generation -/
 
-/-- EthLib's key generation is the model's, with the seed as the secret key. -/
+/-- EthLib's key generation is the model's, with the seed as the secret key.
+
+Both hash `PK.seed`, then `SK.prf`, then build the top tree. -/
 theorem keyGenWith_queryH (S0 : SphincsSecurity.MasterSeed) :
     keyGenWith (queryH (m := OracleComp HashSig.HashSpec)) (ofSeed S0)
       = (fun kp => ((⟨ofSeed S0⟩ : SecretKey), ofPublicKey kp.1)) <$>
           SphincsSecurity.Seeded.keygen S0 := by
   unfold keyGenWith publicKeyOf SphincsSecurity.Seeded.keygen
     SphincsSecurity.Seeded.keygenFromSeed
-  rw [schemeSeed_queryH, bind_map_left, map_bind]
-  refine bind_congr fun S => ?_
-  rw [publicParamOf_queryH, bind_map_left, bind_assoc, map_bind]
+  rw [expandKey_queryH, bind_assoc, map_bind]
   refine bind_congr fun P => ?_
+  rw [bind_assoc, map_bind]
+  refine bind_congr fun prf => ?_
   have hroot : treeRoot (queryH (m := OracleComp HashSig.HashSpec)) (ofParam P)
-      (seedPrf queryH (ofSeed S)) .top 0
+      (secretsOf S0 P) .top 0
       = ofDigest <$> SphincsSecurity.Seeded.treeRoot P SphincsSecurity.topLayer
-          SphincsSecurity.Concrete.rootTree S :=
-    treeRoot_queryH S P SphincsSecurity.topLayer SphincsSecurity.Concrete.rootTree
+          SphincsSecurity.Concrete.rootTree S0 :=
+    treeRoot_queryH S0 P SphincsSecurity.topLayer SphincsSecurity.Concrete.rootTree
+  simp only [pure_bind, ofExpanded]
   rw [hroot, bind_map_left, map_bind]
   simp only [bind_assoc, pure_bind, map_pure]
   rfl

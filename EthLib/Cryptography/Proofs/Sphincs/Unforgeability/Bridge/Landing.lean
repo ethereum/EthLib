@@ -5,13 +5,13 @@ public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Bytes
 /-!
 # Proofs: in EthLib's configuration every index lands
 
-The model's signer walks the randomizers `R0, R0 + delta` and onwards.
+The model's signer tests the randomizers `R0, R0 + delta` and onwards.
 
-It stops at the first whose index lands in the kept subtree.
+Each test checks that the low 26 bits of the first digest call land in the kept subtree.
 
-EthLib's key is layered, so the kept subtree is the whole key and every index lands.
+EthLib's key is layered, so the kept subtree is the whole key and every value lands.
 
-So the model's walk stops at its first randomizer, with one digest call, as EthLib's signer does.
+So the model's walk stops at `R0` after one test call, and signs with the randomizer EthLib uses.
 -/
 
 @[expose] public section
@@ -20,7 +20,7 @@ namespace EthLib.Cryptography.Sphincs.Unforgeability.Bridge
 
 open SphincsSecurity SphincsSecurity.Concrete
 
-/-- Every index lands, for every public parameter. -/
+/-- Every index lands, whatever `PK.seed` is. -/
 theorem landed (parameter : PublicParameter) (index : Index) : Landed parameter index := by
   have hi : index.val < 2 ^ 26 := index.isLt
   change index.val / 2 ^ 26 = parameter.toNat % 2 ^ (26 - 26)

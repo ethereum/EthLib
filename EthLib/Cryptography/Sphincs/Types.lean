@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Sphincs.Constants
-public import EthLib.Base.LittleEndian
+public import EthLib.Base.BigEndian
 public import EthLib.Cryptography.HashSig
 
 /-!
@@ -13,7 +13,7 @@ Fixed-size byte objects, with the length carried in the type, and the layers of 
 - Sizes stop being side conditions dragged through proofs.
 - The types are abbreviations, so equal-length objects stay interchangeable.
 
-Integers are read and written little-endian, with the shared conversions of Base.
+Integers are read and written big-endian, as FIPS 205's `toInt` and `toByte` do.
 -/
 
 @[expose] public section
@@ -24,25 +24,39 @@ open EthLib.Cryptography.Sphincs.Constants
 
 /-! ## Byte conversions and ordered vectors -/
 
-export EthLib.Base (uintToBytes bytesToUint packBytes readBytes)
+export EthLib.Base (packBytes readBytes)
 export EthLib.Cryptography.HashSig (unpackBytes? ofFnInOrder)
+
+/-- `toInt(X, k)` (FIPS 205 Algorithm 2): the integer whose big-endian bytes these are.
+
+For example, `[0x12, 0x34]` reads as `0x1234`. -/
+def toInt {k : Nat} (x : Vector UInt8 k) : Nat :=
+  EthLib.Base.bytesToNat x.toList
+
+/-- `toByte(x, k)` (FIPS 205 Algorithm 3): the `k` low bytes of `x`, most significant first.
+
+A larger `x` keeps only `x % 256^k`.
+
+For example, `toByte 2 0x1234` is `[0x12, 0x34]`. -/
+def toByte (k x : Nat) : Vector UInt8 k :=
+  ⟨(EthLib.Base.natToBytes k x).toArray, by simp [EthLib.Base.natToBytes_length]⟩
 
 /-! ## Objects -/
 
-/-- A hash value.
+/-- A hash value of `n` bytes.
 
 Chain values, Merkle nodes, FORS secrets and leaves are all digests. -/
 abbrev Digest := Vector UInt8 N
 
-/-- The public parameter `P`, hashed into every call.
+/-- `PK.seed`, hashed first into every addressed call.
 
 It makes one key's hash functions independent of another's. -/
-abbrev PublicParam := Vector UInt8 PUBLIC_PARAM_LEN
+abbrev PkSeed := Vector UInt8 N
 
-/-- The address hashed after the public parameter.
+/-- `ADRS`, the address hashed after `PK.seed`.
 
 It names the call site of one hash inside one key. -/
-abbrev Address := Vector UInt8 ADDRESS_LEN
+abbrev Adrs := Vector UInt8 ADRS_LEN
 
 /-- The randomizer `R` hashed with the message into the message digest.
 
@@ -52,7 +66,7 @@ abbrev Randomizer := Vector UInt8 RANDOMIZER_LEN
 /-- The message to sign: a 256-bit message hash, not a document. -/
 abbrev Message := Vector UInt8 MESSAGE_LEN
 
-/-- The 32-byte secret seed every secret derives from. -/
+/-- `SK.seed`, the 32-byte secret seed every secret derives from. -/
 abbrev Seed := Vector UInt8 SEED_LEN
 
 /-- One 32-byte output of Keccak-256, before it is cut to a digest. -/
@@ -63,16 +77,16 @@ abbrev Codeword := Vector (Fin CHAIN_LENGTH) V
 
 /-! ## The layers of the hypertree
 
-The layers are counted from the bottom, as the address byte counts them.
+The layers are counted from the bottom, as the layer word of an address counts them.
 
-- Layer 2, the top: one tree of height 10, whose root is the public key.
-- Layer 1, the middle: `2^10` trees of height 8.
 - Layer 0, the bottom: `2^18` trees of height 8, each leaf signing one FORS instance.
+- Layer 1, the middle: `2^10` trees of height 8.
+- Layer 2, the top: one tree of height 10, whose root is `PK.root`.
 -/
 
 /-- One of the three layers of the hypertree. -/
 inductive Layer where
-  /-- Layer 0: its one-time keys sign FORS keys. -/
+  /-- Layer 0: its one-time keys sign FORS public keys. -/
   | bottom
   /-- Layer 1: its one-time keys sign the roots of bottom trees. -/
   | middle
@@ -80,19 +94,19 @@ inductive Layer where
   | top
   deriving DecidableEq, Repr
 
-/-- The layer's number, counted from the bottom: the address byte of its hashes. -/
+/-- The layer's number `l`, counted from the bottom: the layer word of its addresses. -/
 def Layer.toNat : Layer → Nat
   | .bottom => 0
   | .middle => 1
   | .top => 2
 
-/-- The height of each tree of the layer. -/
+/-- `h_l`: the height of each tree of the layer. -/
 def Layer.height : Layer → Nat
   | .bottom => LOWER_HEIGHT
   | .middle => LOWER_HEIGHT
   | .top => TOP_HEIGHT
 
-/-- The index bits below the layer: the heights of the layers under it, added. -/
+/-- `beta_l`: the index bits below the layer, the heights of the layers under it added. -/
 def Layer.below : Layer → Nat
   | .bottom => 0
   | .middle => LOWER_HEIGHT
@@ -100,7 +114,9 @@ def Layer.below : Layer → Nat
 
 /-! ## Where a one-time key sits -/
 
-/-- A one-time key: its layer, its tree on that layer and its leaf in that tree. -/
+/-- A one-time key `K = (l, tau, e)`: its layer, its tree on that layer and its leaf in that tree.
+
+The leaf is FIPS 205's key pair address. -/
 structure OtsKey where
   /-- The layer of the key. -/
   layer : Layer
@@ -110,7 +126,7 @@ structure OtsKey where
   leaf : Nat
   deriving DecidableEq, Repr
 
-/-- The key of a layer on the way from index `idx` up to the root.
+/-- `K_l(idx)`: the key of a layer on the way from index `idx` up to the root (FIPS 205 §7).
 
 The bits below the layer are dropped, and what is left splits into a tree and a leaf.
 

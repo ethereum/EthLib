@@ -329,10 +329,10 @@ theorem covers_h26_b26_ok : ForsPotential.checkCoversH 26 26 24 10 15166603264 1
 
 The layered key (10 + 8 + 8) reuses the certificates of the full key.
 
-Only the cover chain is checked again, with the key generation cost `K = 231424`.
+Only the cover chain is checked again, with the key generation cost `K = 264193`.
 -/
 
-theorem cover_h26_L_0_ok : checkCoverW 26 26 24 10 231424 1182000000
+theorem cover_h26_L_0_ok : checkCoverW 26 26 24 10 264193 1182000000
     512487451133699472151040029945233409 cover_h26_b26_0 = true :=
   checkCoverW_of_pt [large_h26_b26_0_0_cB, large_h26_b26_0_1_cB, large_h26_b26_0_2_cB,
       large_h26_b26_0_3_cB, large_h26_b26_0_4_cB, large_h26_b26_0_5_cB, large_h26_b26_0_6_cB,
@@ -349,7 +349,7 @@ theorem cover_h26_L_0_ok : checkCoverW 26 26 24 10 231424 1182000000
 /-- The cover chain reaches every budget `q` with `q + K < 2^127`.
 
 Here `K` is the key generation cost of the layered key. -/
-theorem covers_h26_L_ok : ForsPotential.checkCoversH 26 26 24 10 231424 1182000000
+theorem covers_h26_L_ok : ForsPotential.checkCoversH 26 26 24 10 264193 1182000000
     512487451133699472151040029945233409 [cover_h26_b26_0] [] = true := by
   simp only [ForsPotential.checkCoversH, ForsPotential.checkCoversHeavy, Bool.and_eq_true]
   exact ⟨cover_h26_L_0_ok, by decide +kernel⟩

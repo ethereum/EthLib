@@ -357,6 +357,29 @@ theorem Linked.getHead_eq_ghost_of_onInvalidPayload {config : Config} {orphanPar
       (some after.justifiedCheckpoint.root) = some head.root :=
   Store.getHead_eq_ghost _ before noBoost justifiedState tree found
 
+/-- Before Gloas, an invalid payload leaves the head of LMD-GHOST with the boost.
+
+The store must be linked before the payload.
+
+The model starts at the justified block, over the view of the viable nodes that stay.
+
+The boost is one more vote, for the boosted block, and its stake is the score of the boost. -/
+theorem Linked.getHead_eq_ghost_withBoost_of_onInvalidPayload {config : Config}
+    {orphanParent : Root} {block : BeaconBlock preset fork} {latestValidHash : Option Hash32}
+    {after : Store preset fork} {state : BeaconState preset fork}
+    {nodes : List ForkChoiceNode} {head : ForkChoiceNode}
+    (linked : store.Linked orphanParent)
+    (invalidated : store.onInvalidPayload block latestValidHash = .ok after)
+    (before : fork < .glamsterdam)
+    (justifiedState : after.checkpointState after.justifiedCheckpoint = .ok state)
+    (tree : after.getFilteredNodeTree config = .ok nodes)
+    (found : after.getHead config = .ok head) :
+    Models.ForkChoice.ghost (voters state).insertNone
+      (Models.ForkChoice.boostStake (balanceAt state) (after.boostScore config))
+      ((view (linked.onInvalidPayload invalidated).parentsBelow nodes).withBoost after.boostedRoot)
+      rootValue (some after.justifiedCheckpoint.root) = some head.root :=
+  Store.getHead_eq_ghost_withBoost _ before justifiedState tree found
+
 /-- A known block sits in the chain of a root only when that root is known. -/
 theorem known_of_ancestor {first root : Root} {firstBlock : BeaconBlock preset fork}
     (lower : store.ParentsBelow) (firstFound : store.blocks[first]? = some firstBlock)

@@ -46,6 +46,7 @@ public import EthLib.Consensus.Proofs.Gossip.Operations
 public import EthLib.Consensus.Proofs.Gossip.Payload
 public import EthLib.Consensus.Proofs.Gossip.ProposerPreferences
 public import EthLib.Consensus.Proofs.Gossip.Sidecar
+public import EthLib.Consensus.Proofs.Gossip.SidecarInclusion
 public import EthLib.Consensus.Proofs.Gossip.SyncCommittee
 public import EthLib.Consensus.Proofs.Gossip.Topics
 public import EthLib.Consensus.Proofs.InclusionList
@@ -76,6 +77,7 @@ public import EthLib.Consensus.Proofs.ShufflePermutation
 public import EthLib.Consensus.Proofs.Signing
 public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.Transition.Block
+public import EthLib.Consensus.Proofs.Transition.BlockRewards
 public import EthLib.Consensus.Proofs.Transition.BuilderPayments
 public import EthLib.Consensus.Proofs.Transition.BuilderRequests
 public import EthLib.Consensus.Proofs.Transition.EpochJustification
@@ -92,6 +94,7 @@ public import EthLib.Consensus.Proofs.Transition.Operations
 public import EthLib.Consensus.Proofs.Transition.ParentPayload
 public import EthLib.Consensus.Proofs.Transition.Payload
 public import EthLib.Consensus.Proofs.Transition.Requests
+public import EthLib.Consensus.Proofs.Transition.RewardDeltas
 public import EthLib.Consensus.Proofs.Transition.Slot
 public import EthLib.Consensus.Proofs.Transition.StateTransition
 public import EthLib.Consensus.Proofs.Transition.SyncAggregate

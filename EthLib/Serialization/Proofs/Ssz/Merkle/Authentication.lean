@@ -45,6 +45,13 @@ def findBranchCollision (index level : Nat) (left right : Bytes)
   (Cryptography.Merkle.findCollision (m := Id) (fun _ _ => combine) level (index >>> level) left
       right leftProof rightProof).run.map fun c => (c.x.1 ++ c.x.2, c.y.1 ++ c.y.2)
 
+/-- One branch compared with itself gives no collision, so the search can fail. -/
+theorem findBranchCollision_self (index level : Nat) (node : Bytes) (proof : List Bytes) :
+    findBranchCollision index level node node proof proof = none := by
+  unfold findBranchCollision
+  rw [Cryptography.Merkle.findCollision_self]
+  rfl
+
 /-- Between branches of complete nodes, the search returns two different 64-byte messages.
 
 They have one SHA-256 digest. -/
