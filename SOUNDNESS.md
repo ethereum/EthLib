@@ -1060,6 +1060,18 @@ Its return data is then empty.
 Its frame ends in the state that the move of the value gives.
 No rule covers CREATE, DELEGATECALL or STATICCALL.
 
+The block of a transaction state is the state before the block, with the writes of the block so far.
+A rollback restores the storage of a snapshot only when both states have the same block.
+`parentResult_step` (`Execution/Proofs/Evm/Call/Parent.lean`) proves that every successful step keeps the block of the state, at every fork.
+A step that sends a message keeps it once the frame that ends the message has the block of its caller.
+`KeepsParent runChild` says that the runner ends each message that succeeds with the block of the frame that sends it.
+`parent_runFrame` proves that a successful run of a frame keeps the block, under a runner that meets `KeepsParent`.
+`parent_processMessage` proves that a successful call keeps the block of the state it is sent from, at every fork.
+`parent_processCreateMessage` proves the same for a successful creation.
+`keepsParent_processRunner` (`Logic/Message.lean`) proves that the runner of the code of a message meets `KeepsParent`, for every bound.
+`processMessage_sameOutside_of_error` proves that a call that ends with an error reads as the state it is sent from at every address, at every fork.
+That covers the account, the storage and the transient storage, and `getStorage_processMessage_of_error` states it for one storage word.
+
 ### SHA-256 precompile
 
 The precompile reuses the SHA-256 of the cryptography layer, so its theorems are about the gas and the failure.
