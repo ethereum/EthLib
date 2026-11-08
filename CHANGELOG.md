@@ -92,6 +92,8 @@ Not yet released.
   An argument of the right Python type that Lean rejects raises the error class of the method with code 0, where some raised `TypeError`.
   Examples are `str` given for the state, and `1` given for `check_seal`.
   A field of an `eth_getProof` answer that is missing or out of its pattern raises `TrieError` with code 0, where it raised `KeyError` or `ValueError`.
+- On a free-threaded build of CPython, such as 3.14t, importing the extension now leaves the GIL disabled ([#1372](https://github.com/ethereum/EthLib/issues/1372)).
+  Threads may call the exports at the same time, and a list that another thread changes during a call is read as a snapshot.
 - A chain configuration that the exports read as JSON is now rejected, with code 0, when a fork by block number comes after a fork by timestamp ([#1110](https://github.com/ethereum/EthLib/pull/1110)).
   EIP-6122 requires the forks by timestamp to be scheduled at or after the forks by block.
 

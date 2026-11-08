@@ -594,6 +594,26 @@ parse_bytes_of_size(
   return (const uint8_t*) PyBytes_AS_STRING(obj);
 }
 
+/* The items of a sequence, in a tuple or a list that no other thread can change.
+ *
+ * A list is copied into a tuple, which takes the lock of the list on a free-threaded build.
+ * The copy reads the storage of the list, so a subclass that overrides iteration is read the same.
+ * So another thread that changes the list cannot free an item while the caller reads it.
+ * Any other iterable becomes a new list that only the caller holds.
+ * It returns NULL with a TypeError that carries `message` when `seq` is not iterable. */
+PyObject*
+sequence_snapshot(
+  PyObject* seq,
+  const char* message
+) {
+  if (PyTuple_Check(seq)) {
+    Py_INCREF(seq);
+    return seq;
+  }
+  if (PyList_Check(seq)) return PyList_AsTuple(seq);
+  return PySequence_Fast(seq, message);
+}
+
 /* Pack `seq[i]` (each must be `bytes` of `stride`) into a contiguous buffer.
  * Returns malloc'd buffer (caller frees) of size `*out_len * stride`,
  * or NULL on error (sets a Python exception). */
@@ -604,7 +624,7 @@ pack_bytes_sequence(
   Py_ssize_t* out_len,
   const char* name
 ) {
-  PyObject* fast = PySequence_Fast(seq, "expected a sequence");
+  PyObject* fast = sequence_snapshot(seq, "expected a sequence");
   if (!fast) return NULL;
   Py_ssize_t n = PySequence_Fast_GET_SIZE(fast);
   uint8_t* buf = (uint8_t*) PyMem_Malloc(n * stride);
@@ -1197,6 +1217,16 @@ PyInit__native(void) {
 
   PyObject* m = PyModule_Create(&moduledef);
   if (!m) return NULL;
+#ifdef Py_GIL_DISABLED
+  /* The module runs without the GIL on a free-threaded build.
+   *
+   * Each call builds its own Lean objects, and no two threads share one.
+   * The objects that the Lean modules build when they load are persistent, so no count of theirs
+   * changes after the load.
+   * The exception classes and the sizes are written once, before the module is returned.
+   * The wrappers read lists through a snapshot, so a list that another thread changes is safe. */
+  PyUnstable_Module_SetGIL(m, Py_MOD_GIL_NOT_USED);
+#endif
 
   /* Expose the spec presets as module-level constants. */
   PyModule_AddIntConstant(m, "BYTES_PER_PUBKEY", BYTES_PER_PUBKEY);

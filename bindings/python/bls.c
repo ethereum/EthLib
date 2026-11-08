@@ -151,7 +151,7 @@ parse_bytes_sequence(
   const char* name,
   lean_object** out
 ) {
-  PyObject* fast = PySequence_Fast(seq, "expected a sequence");
+  PyObject* fast = sequence_snapshot(seq, "expected a sequence");
   if (!fast) return 1;
   Py_ssize_t n = PySequence_Fast_GET_SIZE(fast);
   lean_object* arr = lean_alloc_array(n, n);
