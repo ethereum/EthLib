@@ -112,7 +112,7 @@ jobs:
 
       # The build pipeline regressions below run in this Python environment,
       # so it syncs even when the contract check above fails.
-      # The sync builds the exports again, so it skips when they failed above.
+      # The sync builds the exports again, so it runs only when they built above.
       - name: bindings
         id: bindings
         if: ${{ !cancelled() && steps.exports.outcome == 'success' }}
