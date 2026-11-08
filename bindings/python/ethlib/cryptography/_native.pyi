@@ -383,16 +383,16 @@ def discv5_open_handshake(static_key: bytes, challenge_data: bytes, dest_id: byt
     """Node B's reading of a handshake message packet, as a `dict`."""
     ...
 
-def consensus_preset(name: str) -> bytes:
-    """The preset of a name, as a JSON object."""
+def consensus_preset(name: str) -> dict[str, int]:
+    """The preset of a name, as a `dict`."""
     ...
 
-def consensus_config(name: str) -> bytes:
-    """The configuration of a name, as a JSON object."""
+def consensus_config(name: str) -> dict[str, Any]:
+    """The configuration of a name, as a `dict`."""
     ...
 
-def consensus_parameters(name: str, fork: str) -> bytes:
-    """The parameters of a preset at a fork, as a JSON object."""
+def consensus_parameters(name: str, fork: str) -> dict[str, int]:
+    """The parameters of a preset at a fork, as a `dict`."""
     ...
 
 def consensus_get_custody_groups(name: str, node_id: bytes, custody_group_count: int) -> bytes:
@@ -1163,8 +1163,8 @@ def hoodi_active_fork(number: int, timestamp: int) -> bytes:
     """The name of the active fork of Hoodi at a block, or no bytes when no fork is active."""
     ...
 
-def active_fork(config: bytes, number: int, timestamp: int) -> bytes:
-    """The name of the active fork of a configured chain at a block, or no bytes when none is active."""
+def active_fork(config: dict[str, Any], number: int, timestamp: int) -> str | None:
+    """The name of the active fork of a configured chain at a block, or `None` when none is active."""
     ...
 
 def engine_new_payload(config: bytes, request: bytes) -> bytes:

@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.ChainConfig
-public import EthLib.Base.Exports
+public import EthLib.Base.Exports.Proofs.PyValue
 public import Lean.Data.Json
 
 /-!
@@ -16,6 +16,8 @@ A block number and a timestamp cross the boundary as 64-bit integers, as EIP-612
 A fork crosses it as its name in UTF-8, such as `bellatrix`.
 
 A chain configuration crosses it as JSON: its chain ID, its activations and its blob schedules.
+
+The export of the active fork of a configured chain takes it as a `dict`, with the same keys.
 
 An activation is a fork name, `block` or `time`, and a number.
 
@@ -41,7 +43,7 @@ def hoodiActiveForkExport (number timestamp : UInt64) : ByteArray :=
   | none => .empty
 
 open Lean (Json)
-open EthLib.Exports (Result forkOfName)
+open EthLib.Exports (Result PyValue pyExport forkOfName)
 
 /-- The JSON value of some UTF-8 text. -/
 def parseJson (what : String) (text : ByteArray) : Result Json := do
@@ -95,14 +97,18 @@ def configOfJson (j : Json) : Result ChainConfig := do
     | _ => throw (0, "config: blobSchedules is not an array")
   return { chainId := UInt64.ofNat chainId, activations, blobSchedules := schedules }
 
-/-- The name of the active fork of a configured chain at a block, or no bytes when none is active.
+/-- The name of the active fork of a configured chain at a block, if a fork is active.
 
-The configuration is JSON text in UTF-8, as the other exports that run on a chain read it. -/
+The configuration is a `dict` with the keys and values of the JSON that other exports read. -/
+def activeForkOf (args : PyValue × UInt64 × UInt64) : Result (Option String) := do
+  let (config, number, timestamp) := args
+  let config ← configOfJson config.toJson
+  return (config.activeFork number.toNat timestamp.toNat).map (·.name)
+
+/-- The name of the active fork of a configured chain at a block, or `None` when none is active.
+
+The arguments are the configuration as a `dict`, the block number and the timestamp. -/
 @[export eth_active_fork]
-def activeForkExport (config : ByteArray) (number timestamp : UInt64) : Result ByteArray := do
-  let config ← configOfJson (← parseJson "config" config)
-  return match config.activeFork number.toNat timestamp.toNat with
-    | some fork => fork.name.toUTF8
-    | none => .empty
+def activeForkExport (args : PyValue) : Result PyValue := pyExport activeForkOf args
 
 end EthLib.Base.ChainConfig.Exports

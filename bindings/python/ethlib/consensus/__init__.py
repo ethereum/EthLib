@@ -31,19 +31,20 @@ def _value(value: Any) -> Any:
     return value
 
 
-def preset(name: str) -> dict:
+def preset(name: str) -> dict[str, int]:
     """The values of a preset, with the values that it derives from them."""
-    return _value(json.loads(_native.consensus_preset(name)))
+    return _native.consensus_preset(name)
 
 
-def config(name: str) -> dict:
+def config(name: str) -> dict[str, Any]:
     """The values of a configuration."""
-    return _value(json.loads(_native.consensus_config(name)))
+    # A value is an int, a str such as 0x and hex, or a list of dicts for a schedule.
+    return _native.consensus_config(name)
 
 
-def parameters(name: str, fork: str) -> dict:
+def parameters(name: str, fork: str) -> dict[str, int]:
     """The values of a preset that a fork replaces, as they stand at the fork."""
-    return _value(json.loads(_native.consensus_parameters(name, fork)))
+    return _native.consensus_parameters(name, fork)
 
 
 def get_custody_groups(node_id: int, custody_group_count: int, name: str = "mainnet") -> list:

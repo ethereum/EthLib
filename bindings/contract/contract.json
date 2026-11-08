@@ -1912,27 +1912,30 @@
    "error_class": "Discv5Error",
    "docstring":
    "Node B's reading of a handshake message packet, as a `dict`.\n\nThe arguments are the static key of node B, the challenge data and the node ID of node B.\n\nThen come the public key of node A and the packet."},
-  {"summary": "The preset of a name, as a JSON object.",
-   "signature": "(name: str) -> bytes",
+  {"summary": "The preset of a name, as a `dict`.",
+   "signature": "(name: str) -> dict[str, int]",
    "operation": "EthLib.Consensus.Exports.presetExport",
    "method": "consensus_preset",
    "errors": [],
    "error_class": "ConsensusError",
-   "docstring": "The preset of a name, as a JSON object."},
-  {"summary": "The configuration of a name, as a JSON object.",
-   "signature": "(name: str) -> bytes",
+   "docstring":
+   "The preset of a name, as a `dict`.\n\nThe argument is the name of the preset."},
+  {"summary": "The configuration of a name, as a `dict`.",
+   "signature": "(name: str) -> dict[str, Any]",
    "operation": "EthLib.Consensus.Exports.configExport",
    "method": "consensus_config",
    "errors": [],
    "error_class": "ConsensusError",
-   "docstring": "The configuration of a name, as a JSON object."},
-  {"summary": "The parameters of a preset at a fork, as a JSON object.",
-   "signature": "(name: str, fork: str) -> bytes",
+   "docstring":
+   "The configuration of a name, as a `dict`.\n\nThe argument is the name of the configuration."},
+  {"summary": "The parameters of a preset at a fork, as a `dict`.",
+   "signature": "(name: str, fork: str) -> dict[str, int]",
    "operation": "EthLib.Consensus.Exports.parametersExport",
    "method": "consensus_parameters",
    "errors": [],
    "error_class": "ConsensusError",
-   "docstring": "The parameters of a preset at a fork, as a JSON object."},
+   "docstring":
+   "The parameters of a preset at a fork, as a `dict`.\n\nThe arguments are the name of the preset and the name of the fork."},
   {"summary":
    "The custody groups of a node ID of 32 bytes, most significant first.",
    "signature":
@@ -8175,14 +8178,15 @@
    "docstring":
    "The name of the active fork of Hoodi at a block, or no bytes when no fork is active."},
   {"summary":
-   "The name of the active fork of a configured chain at a block, or no bytes when none is active.",
-   "signature": "(config: bytes, number: int, timestamp: int) -> bytes",
+   "The name of the active fork of a configured chain at a block, or `None` when none is active.",
+   "signature":
+   "(config: dict[str, Any], number: int, timestamp: int) -> str | None",
    "operation": "EthLib.Base.ChainConfig.Exports.activeForkExport",
    "method": "active_fork",
    "errors": [],
    "error_class": "ChainError",
    "docstring":
-   "The name of the active fork of a configured chain at a block, or no bytes when none is active.\n\nThe configuration is JSON text in UTF-8, as the other exports that run on a chain read it."},
+   "The name of the active fork of a configured chain at a block, or `None` when none is active.\n\nThe arguments are the configuration as a `dict`, the block number and the timestamp."},
   {"summary":
    "The payload status of an `engine_newPayload` request, without the parent's state.",
    "signature": "(config: bytes, request: bytes) -> bytes",
