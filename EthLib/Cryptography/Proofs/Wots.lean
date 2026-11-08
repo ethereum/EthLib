@@ -104,6 +104,21 @@ theorem findFirst_spec {κ β : Type} {trial : Nat → κ} {test : κ → Id (Op
       · exact hx
       · exact hmin j' h₁ h₂
 
+/-- A map of monads that keeps `pure` and `bind` commutes with the search. -/
+theorem findFirst_map_monad {m m' : Type → Type} [Monad m] [Monad m']
+    (φ : ∀ {β : Type}, m β → m' β) (map_pure : ∀ {β : Type} (b : β), φ (pure b) = pure b)
+    (map_bind : ∀ {β γ : Type} (x : m β) (f : β → m γ), φ (x >>= f) = φ x >>= fun b => φ (f b))
+    {κ β : Type} (trial : Nat → κ) (test : κ → m (Option β)) :
+    ∀ (fuel c : Nat),
+      φ (findFirst trial test c fuel) = findFirst trial (fun k => φ (test k)) c fuel
+  | 0, _ => map_pure _
+  | fuel + 1, c => by
+    simp only [findFirst, map_bind]
+    refine bind_congr fun x => ?_
+    cases x with
+    | some x => exact map_pure _
+    | none => exact findFirst_map_monad φ map_pure map_bind trial test fuel (c + 1)
+
 /-! ## The search in the random-oracle model
 
 Each trial makes one hash query, and the hash is a lazily sampled random oracle.
