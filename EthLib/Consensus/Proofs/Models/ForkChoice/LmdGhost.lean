@@ -417,9 +417,13 @@ So the block and each of its ancestors gain `W_p` in weight.
 
 The source is Buterin's [mitigation of balancing attacks][mitigation], "Proposed solution", step 3.
 
+Step 3 sets that weight to `W / 4`, and its section "Analysis" names it `W_p`.
+
 Section 3 of [Three Attacks on Proof-of-Stake Ethereum][attacks] gives the ex ante reorg.
 
-A [post on balancing and reorging attacks][post] says that the boost stops most ex ante reorgs.
+A [post on balancing and reorging attacks][post] gives the limits of the boost.
+
+Its section "Why change?" says that the boost fixes most ex ante reorgs, but not all.
 
 Its section "Boosting does not mitigate all ex ante reorgs" adds the boost to the votes.
 
@@ -432,7 +436,7 @@ Its latest message is the boosted block, and its stake is the score of the boost
 Without a boosted block, it has no latest message.
 
 [mitigation]: https://notes.ethereum.org/@vbuterin/lmd_ghost_mitigation
-[attacks]: https://arxiv.org/abs/2110.10086
+[attacks]: https://arxiv.org/abs/2110.10086v1
 [post]: https://ethresear.ch/t/change-fork-choice-rule-to-mitigate-balancing-and-reorging-attacks/11127
 -/
 
@@ -464,7 +468,7 @@ theorem stake_boostStake (score : ℕ) :
 open scoped Classical in
 /-- With the boost, a block weighs its votes, plus the score.
 
-The score counts when the boosted block is in its subtree. -/
+The score counts exactly when the boosted block is in its subtree. -/
 theorem weight_withBoost (boosted : Option β) (score : ℕ) (b : β) :
     weight V.insertNone (boostStake w score) (G.withBoost boosted) b =
       weight V w G b + if ∃ m, boosted = some m ∧ T.Ancestor b m then score else 0 := by

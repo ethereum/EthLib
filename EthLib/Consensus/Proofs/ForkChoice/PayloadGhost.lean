@@ -27,9 +27,15 @@ When the store applies the boost, it counts as one more vote.
 
 That vote is for the pending node of the boosted block.
 
+A viable boosted block whose parent is from the previous slot is left out.
+
+The empty or full node of that parent is then a viable payload decision of the previous slot.
+
 A tie between two children goes to the greater root, then to the greater status number.
 
-Take a viable node with more than half of the stake and the boost in votes.
+Take a viable node whose votes exceed half of the stake plus the score of the boost.
+
+Those votes leave out the boost.
 
 The head then descends from it.
 
@@ -306,7 +312,7 @@ Then the weight of each node in the chain of the boosted block fails.
 
 A payload decision of the previous slot is the exception.
 
-So the head fails when the walk weighs such a node, and else the score does not count. -/
+So the head fails when the walk weighs such a node; otherwise no weight reads the score. -/
 def boostScoreOfGloas (gloas : .glamsterdam ≤ fork) : ℕ :=
   match store.shouldApplyProposerBoost config gloas, store.getProposerScore config with
   | .ok true, .ok score => score.toNat
@@ -624,6 +630,8 @@ variable (lower) in
 
 No viable node may be a payload decision of the previous slot.
 
+So a viable boosted block must not build on a block of the previous slot.
+
 Each known block must sit at a later slot than its known parent, and some node must be viable.
 
 The model starts at the pending node of the justified block, over the view of the viable nodes.
@@ -710,9 +718,7 @@ theorem latestNode_ne_empty (gloas : .glamsterdam ≤ fork)
   · simp [getSupportedNode_of_same_slot gloas found (UInt64.not_lt.mp later), Except.toOption,
       ForkChoiceNode.toModel, PayloadStatus.toStatus] at vote
 
-/-- From Gloas, take every payload present.
-
-The head of a model of nodes is then the full node of the head of a model of blocks.
+/-- From Gloas, the head of a model of nodes is the full node of the head of a model of blocks.
 
 The model of nodes has the blocks of the view of nodes.
 
@@ -823,7 +829,7 @@ theorem getHead_eq_ghost_full_of_gloas {nodes : List ForkChoiceNode} {head : For
 
 /-- From Gloas, when every payload is present, the head is a full node.
 
-Its block is the head over blocks with the boost.
+Its root is the head over blocks with the boost.
 
 That is the rule that the head follows before Gloas, over the view of the viable blocks.
 
@@ -1211,7 +1217,9 @@ private theorem getAncestor_ok_of_viable_ancestor_of_gloas {nodes : List ForkCho
         belowJustified
 
 variable (lower) in
-/-- Take a viable node with more than half of the stake and the boost in votes.
+/-- Take a viable node whose votes exceed half of the stake plus the score of the boost.
+
+Those votes leave out the boost.
 
 The head is then in its subtree.
 
@@ -1255,7 +1263,9 @@ theorem ancestor_getHead_of_majority_withBoost_of_gloas {nodes : List ForkChoice
   rwa [getHead_eq_ghost_withBoost_of_gloas lower gloas noDecision justifiedState tree
     (List.ne_nil_of_mem viable) found] at model
 
-/-- Take a viable node with more than half of the stake and the boost in votes.
+/-- Take a viable node whose votes exceed half of the stake plus the score of the boost.
+
+Those votes leave out the boost.
 
 The head then descends from it.
 

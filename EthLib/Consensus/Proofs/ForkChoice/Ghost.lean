@@ -35,7 +35,9 @@ So when some leaf is viable, the chain of the head holds the finalized block.
 
 That is not required when the finalized epoch is genesis.
 
-Take a viable block with more than half of the stake and the boost in votes.
+Take a viable block whose votes exceed half of the stake plus the score of the boost.
+
+Those votes leave out the boost.
 
 The head then descends from it.
 
@@ -766,7 +768,7 @@ It is also 0 when the proposer score fails.
 
 Then the weight of each node in the chain of the boosted block fails.
 
-So the head fails when the walk weighs such a node, and else the score does not count. -/
+So the head fails when the walk weighs such a node; otherwise no weight reads the score. -/
 def boostScore : ℕ :=
   if store.proposerBoostRoot = Vector.replicate 32 0 then 0
   else
@@ -1199,7 +1201,9 @@ private theorem getAncestor_ok_of_viable_ancestor {nodes : List ForkChoiceNode}
         belowJustified
 
 variable (lower) in
-/-- Take a viable block with more than half of the stake and the boost in votes.
+/-- Take a viable block whose votes exceed half of the stake plus the score of the boost.
+
+Those votes leave out the boost.
 
 The head is then in its subtree.
 
@@ -1239,7 +1243,9 @@ theorem ancestor_getHead_of_majority_withBoost {nodes : List ForkChoiceNode}
     rootValue inView belowJustified majority
   rwa [getHead_eq_ghost_withBoost lower before justifiedState tree found] at model
 
-/-- Take a viable block with more than half of the stake and the boost in votes.
+/-- Take a viable block whose votes exceed half of the stake plus the score of the boost.
+
+Those votes leave out the boost.
 
 The head then descends from its node.
 
