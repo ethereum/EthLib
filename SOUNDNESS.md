@@ -1121,9 +1121,12 @@ No theorem relates the module to the execution-specs code it follows.
 
 ### Transaction gas
 
-`processTransaction_gasUsed` (`Execution/Proofs/Transactions/Process.lean`) gives the gas used of a transaction that runs, from Pectra to BPO5.
-It is the gas limit minus the gas that the message leaves and the capped refund, or the call data floor when that is larger.
-Before Pectra and from Glamsterdam, no theorem states the gas used of a run.
+Four theorems in `Execution/Proofs/Transactions/Process.lean` give the gas used and the block gas of a transaction that runs, before Hegotá.
+`processTransaction_gasUsed_of_lt_london` covers the forks before London, where the refund is at most half of the gas before it.
+`processTransaction_gasUsed_of_lt_pectra` covers London to Dencun, where EIP-3529 caps the refund at a fifth.
+`processTransaction_gasUsed` covers Pectra to BPO5, where EIP-7623 raises the gas used to the call data floor when that floor is larger.
+`processTransaction_gasUsed_of_glamsterdam` covers Glamsterdam, where EIP-8037 splits the gas into execution gas and a reservoir.
+It counts both in the gas left, and gives the two block gas counts of EIP-7778 and EIP-8037.
 
 ### Merkle Patricia Trie
 
