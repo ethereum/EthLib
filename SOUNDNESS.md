@@ -421,6 +421,12 @@ It is the Diffie-Hellman primitive of SEC 1 v2 §3.3.1, with no key derivation f
 By it, ECDH returns a secret exactly when the public key is a point of the curve other than `O` and the private key is nonzero.
 The secret is then the `x` of their product, as 32 big-endian bytes.
 
+### ENR "v4" records
+
+`verifyV4_negS` (`Networking/Proofs/Enr/Security.lean`) proves that a record with a 64-byte signature verifies exactly when its copy with `n - s` does, and `negS_ne_of_verifyV4` that the two differ.
+`ecdsaForgery_of_forgery` (`Networking/Proofs/Enr/Security.lean`) proves that a forged EIP-778 "v4" record gives a forgery of ECDSA with Keccak-256 on a fresh message.
+The security of records then rests on the chosen-message security of that ECDSA, which EthLib assumes and does not prove.
+
 ### alt_bn128
 
 The alt_bn128 theorems check the constants and the group law of `G_1`, which the ECADD, ECMUL and ECPAIRING precompiles use.
