@@ -16,8 +16,6 @@ Two blobs whose decoded values differ share a commitment only when `τ` is a roo
 
 Here `p` and `p'` are their interpolants, and `p - p'` is not zero and has degree below 4096.
 
-For every `τ`, some pairs of blobs collide, for example those with `p - p' = X - τ`.
-
 These theorems give no bound on the cost of finding two such blobs when `τ` is secret.
 
 A polynomial of degree below 4096, committed with the monomial points, also gives `[p(τ)]_1`.
