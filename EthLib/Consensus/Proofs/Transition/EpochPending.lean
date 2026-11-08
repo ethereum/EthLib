@@ -18,6 +18,8 @@ A pass reads a prefix of the queue, applies some of it in order, and postpones t
 
 So the queue splits into the deposits added to the balances, those dropped, and the queue after.
 
+A pass postpones exactly the deposits it reads whose validator exits and is not withdrawn.
+
 The balances plus the amounts in the queue never rise.
 
 A pass that leaves deposits unread stops at its stop condition, the limit per epoch or the churn.
@@ -245,6 +247,12 @@ private theorem beq_false_false {status : Bool × Bool} :
   cases status with
   | mk exited withdrawn => cases exited <;> cases withdrawn <;> rfl
 
+/-- A pair of tests is a true test then a false test exactly when only the first holds. -/
+private theorem beq_true_false {status : Bool × Bool} :
+    (status == (true, false)) = (status.1 && !status.2) := by
+  cases status with
+  | mk exited withdrawn => cases exited <;> cases withdrawn <;> rfl
+
 /-- What a pass does with `read`, the deposits that it reads.
 
 They are a prefix of its deposits, at most what the limit per epoch still allows.
@@ -269,7 +277,13 @@ Then the churn that it uses grows by the amount of each deposit it reads that ta
 
 Those are the deposits whose validator, at the start of the pass, neither exits nor is withdrawn.
 
-The churn grows by nothing else. -/
+The churn grows by nothing else.
+
+Also, `moved` holds exactly the deposits of `read` whose validator exits and is not withdrawn.
+
+`applied` holds the others.
+
+As for the churn, the validators are those at the start of the pass. -/
 structure PassPendingDepositsFacts (config : Config) (checks : SignatureChecks)
     (stop : PendingDeposit → Bool) (nextEpoch : Epoch) (available : Gwei)
     (state : BeaconState preset fork) (processed : Gwei) (count : Nat)
@@ -294,10 +308,20 @@ structure PassPendingDepositsFacts (config : Config) (checks : SignatureChecks)
       2 ^ 64 →
     pass.processed.toNat = processed.toNat + pendingAmount (read.filter fun deposit =>
       depositTargetStatus state nextEpoch deposit.pubkey == (false, false))
+  appliedFilter : state.validators.data.size +
+      (preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat - count) < 2 ^ 64 →
+    applied = read.filter fun deposit =>
+      depositTargetStatus state nextEpoch deposit.pubkey != (true, false)
+  movedFilter : state.validators.data.size +
+      (preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat - count) < 2 ^ 64 →
+    moved = read.filter fun deposit =>
+      depositTargetStatus state nextEpoch deposit.pubkey == (true, false)
 
 /-- A pass reads a prefix of its deposits, applies some of them and postpones the others.
 
-When the registry and the rest of the limit per epoch fit in 64 bits, it also counts its churn. -/
+When the registry and the rest of the limit per epoch fit in 64 bits, it also counts its churn.
+
+In that case it postpones exactly those it reads whose validator exits and is not withdrawn. -/
 theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
     {available : Gwei} :
     ∀ {deposits : List PendingDeposit} {state : BeaconState preset fork} {processed : Gwei}
@@ -311,7 +335,8 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
     simp only [passPendingDeposits, pure, Except.pure, Except.ok.injEq] at computed
     subst computed
     exact ⟨[], [], [], rfl, by simp, by simp, List.nil_sublist _, List.nil_sublist _,
-      List.Perm.refl _, rfl, by simp, by simp, by simp, fun _ => by simp [pendingAmount]⟩
+      List.Perm.refl _, rfl, by simp, by simp, by simp, fun _ => by simp [pendingAmount],
+      fun _ => rfl, fun _ => rfl⟩
   | deposit :: rest, state, processed, count, postponed, pass, computed => by
     unfold passPendingDeposits at computed
     simp only [bind, Except.bind, pure, Except.pure] at computed
@@ -319,7 +344,8 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
     · rename_i stopped
       cases computed
       refine ⟨[], [], [], rfl, by simp, by simp, List.nil_sublist _, List.nil_sublist _,
-        List.Perm.refl _, rfl, by simp, ?_, by simp, fun _ => by simp [pendingAmount]⟩
+        List.Perm.refl _, rfl, by simp, ?_, by simp, fun _ => by simp [pendingAmount],
+        fun _ => rfl, fun _ => rfl⟩
       rintro _ _ ⟨⟩
       simp only [Bool.or_eq_true, decide_eq_true_eq] at stopped
       exact stopped.imp_right Or.inl
@@ -338,6 +364,10 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
       cases computed
       obtain ⟨read, applied, moved, facts⟩ := passPendingDeposits_applied (deposits := rest) ‹_›
       have within := facts.bounded
+      -- A deposit credited outside the churn does not wait.
+      have notMoved :
+          (depositTargetStatus state nextEpoch deposit.pubkey == (true, false)) = false := by
+        simp [beq_true_false, isWithdrawn]
       refine ⟨deposit :: read, deposit :: applied, moved,
         { split := congrArg (deposit :: ·) facts.split
           pushed := facts.pushed
@@ -352,19 +382,29 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
           reached := fun flagged => (facts.reached flagged).imp fun _ =>
             .imp fun _ ⟨front, unstopped, under⟩ =>
               ⟨front, unstopped, by simp only [List.length_cons]; omega⟩
-          used := fun room => ?_ }⟩
+          used := fun room => ?_
+          appliedFilter := fun room => ?_
+          movedFilter := fun room => ?_ }⟩
       · simp only [List.foldlM_cons, bind, Except.bind, step]
         exact facts.applies
-      · have small : state.validators.data.size < 2 ^ 64 := by omega
+      all_goals
+        have small : state.validators.data.size < 2 ^ 64 := by omega
         have grows := (applyPendingDeposit_validators_size_le_and_mem step small).1
-        have used := facts.used (by omega)
         -- The rest of the pass tests the state after the deposit, which keeps both tests per key.
-        rw [depositTargetStatus_applyPendingDeposit step small] at used
+        have kept := depositTargetStatus_applyPendingDeposit step small
+      · have used := facts.used (by omega)
+        rw [kept] at used
         -- A deposit credited outside the churn takes none of it.
         have outside :
             (depositTargetStatus state nextEpoch deposit.pubkey == (false, false)) = false := by
           simp [beq_false_false, isWithdrawn]
         simp only [List.filter_cons, outside, Bool.false_eq_true, ↓reduceIte, used]
+      · have filtered := facts.appliedFilter (by omega)
+        rw [kept] at filtered
+        simp only [List.filter_cons, bne, notMoved, Bool.not_false, ↓reduceIte, filtered]
+      · have filtered := facts.movedFilter (by omega)
+        rw [kept] at filtered
+        simp only [List.filter_cons, notMoved, Bool.false_eq_true, ↓reduceIte, filtered]
     rename_i notWithdrawn
     split at computed
     · rename_i isExited
@@ -373,6 +413,11 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
       cases computed
       obtain ⟨read, applied, moved, facts⟩ := passPendingDeposits_applied (deposits := rest) ‹_›
       have within := facts.bounded
+      -- Its validator exits and is not withdrawn, so the deposit waits.
+      have isMoved :
+          (depositTargetStatus state nextEpoch deposit.pubkey == (true, false)) = true := by
+        simp only [Bool.not_eq_true] at notWithdrawn
+        simp [beq_true_false, isExited, notWithdrawn]
       refine ⟨deposit :: read, applied, deposit :: moved,
         { split := congrArg (deposit :: ·) facts.split
           pushed := ?_
@@ -387,7 +432,9 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
           reached := fun flagged => (facts.reached flagged).imp fun _ =>
             .imp fun _ ⟨front, unstopped, under⟩ =>
               ⟨front, unstopped, by simp only [List.length_cons]; omega⟩
-          used := fun room => ?_ }⟩
+          used := fun room => ?_
+          appliedFilter := fun room => ?_
+          movedFilter := fun room => ?_ }⟩
       · -- The deposit waits after those that earlier steps postponed.
         rw [facts.pushed, Array.toList_push, List.append_assoc]
         rfl
@@ -397,6 +444,11 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
             (depositTargetStatus state nextEpoch deposit.pubkey == (false, false)) = false := by
           simp [beq_false_false, isExited]
         simp only [List.filter_cons, outside, Bool.false_eq_true, ↓reduceIte, used]
+      · have filtered := facts.appliedFilter (by omega)
+        simp only [List.filter_cons, bne, isMoved, Bool.not_true, Bool.false_eq_true, ↓reduceIte,
+          filtered]
+      · have filtered := facts.movedFilter (by omega)
+        simp only [List.filter_cons, isMoved, ↓reduceIte, filtered]
     rename_i notExited
     simp only [Bool.not_eq_true] at notWithdrawn notExited
     split at computed
@@ -417,7 +469,7 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
       refine ⟨[], [], [], rfl, by simp, by simp, List.nil_sublist _, List.nil_sublist _,
         List.Perm.refl _, rfl, by simp, ?_,
         fun _ => ⟨deposit, rest, rfl, reads, by simpa using below⟩,
-        fun _ => by simp [pendingAmount]⟩
+        fun _ => by simp [pendingAmount], fun _ => rfl, fun _ => rfl⟩
       rintro _ _ ⟨⟩
       exact Or.inr (Or.inr ⟨eq_of_beq inside, beyond, rfl⟩)
     split at computed
@@ -428,6 +480,10 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
     cases computed
     obtain ⟨read, applied, moved, facts⟩ := passPendingDeposits_applied (deposits := rest) ‹_›
     have within := facts.bounded
+    -- The deposit takes churn, so it does not wait.
+    have notMoved :
+        (depositTargetStatus state nextEpoch deposit.pubkey == (true, false)) = false := by
+      simp [beq_true_false, notExited]
     refine ⟨deposit :: read, deposit :: applied, moved,
       { split := congrArg (deposit :: ·) facts.split
         pushed := facts.pushed
@@ -442,17 +498,27 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
         reached := fun flagged => (facts.reached flagged).imp fun _ =>
           .imp fun _ ⟨front, unstopped, under⟩ =>
             ⟨front, unstopped, by simp only [List.length_cons]; omega⟩
-        used := fun room => ?_ }⟩
+        used := fun room => ?_
+        appliedFilter := fun room => ?_
+        movedFilter := fun room => ?_ }⟩
     · simp only [List.foldlM_cons, bind, Except.bind, step]
       exact facts.applies
-    · have small : state.validators.data.size < 2 ^ 64 := by omega
+    all_goals
+      have small : state.validators.data.size < 2 ^ 64 := by omega
       have grows := (applyPendingDeposit_validators_size_le_and_mem step small).1
-      have used := facts.used (by omega)
       -- The rest of the pass tests the state after the deposit, which keeps both tests at each key.
-      rw [depositTargetStatus_applyPendingDeposit step small] at used
+      have kept := depositTargetStatus_applyPendingDeposit step small
+    · have used := facts.used (by omega)
+      rw [kept] at used
       simp only [List.filter_cons, inside, ↓reduceIte, pendingAmount, List.map_cons,
         List.sum_cons] at used ⊢
       omega
+    · have filtered := facts.appliedFilter (by omega)
+      rw [kept] at filtered
+      simp only [List.filter_cons, bne, notMoved, Bool.not_false, ↓reduceIte, filtered]
+    · have filtered := facts.movedFilter (by omega)
+      rw [kept] at filtered
+      simp only [List.filter_cons, notMoved, Bool.false_eq_true, ↓reduceIte, filtered]
 
 /-- The pending deposits of an epoch read a prefix of the queue, at most the limit per epoch.
 
@@ -480,6 +546,50 @@ theorem processPendingDeposits_applied {electra : .pectra ≤ fork}
     exact ⟨read, _, applied, postponed, _, _, _, facts.split, by simpa using facts.pushed,
       by simpa using facts.bounded, facts.appliedSublist, facts.movedSublist, facts.perm,
       facts.applies, rfl⟩
+
+/-- The pending deposits of an epoch read a prefix of the queue, at most the limit per epoch.
+
+They postpone those whose validator exits and is not withdrawn before the next epoch.
+
+They apply the others in order, and move the postponed ones to the end of the queue in order.
+
+The state after is the state of those applied, with a new queue and a new churn left over.
+
+That needs room in 64 bits for the registry and the limit per epoch. -/
+theorem processPendingDeposits_postponed {electra : .pectra ≤ fork}
+    (computed : processPendingDeposits config checks state electra = .ok after)
+    (room : state.validators.data.size + preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat < 2 ^ 64) :
+    ∃ (read rest : List PendingDeposit) (next : BeaconState preset fork)
+        (pending : PendingDeposits preset fork) (carried : Gwei),
+      (state.pendingDeposits electra).data.toList = read ++ rest ∧
+        pending.data.toList = rest ++ read.filter (fun deposit =>
+          depositTargetStatus state (getCurrentEpoch state + 1) deposit.pubkey == (true, false)) ∧
+        read.length ≤ preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat ∧
+        (read.filter fun deposit =>
+            depositTargetStatus state (getCurrentEpoch state + 1) deposit.pubkey !=
+              (true, false)).foldlM (applyPendingDeposit config checks) state = .ok next ∧
+        after = { next with
+          pendingDeposits := fun _ => pending
+          depositBalanceToConsume := fun _ => carried } := by
+  unfold processPendingDeposits at computed
+  simp only [bind, Except.bind, pure, Except.pure] at computed
+  -- Each success ends in the same record, after a pass from count zero with nothing postponed.
+  repeat' (split at computed <;> try cases computed)
+  all_goals
+    -- The next epoch that the step computes is the wrapping sum, since the step succeeds.
+    have added := liftAccessor_ok.mp
+      ‹liftAccessor (liftArith (addChecked (getCurrentEpoch state) 1)) = .ok _›
+    rw [liftArith, mapError_ok_iff, addChecked_ok_iff] at added
+    obtain rfl := UInt64.toNat_inj.mp (added.2.trans (toNat_add_of_lt added.1).symm)
+    obtain ⟨read, applied, _, facts⟩ := passPendingDeposits_applied ‹_›
+    have within : state.validators.data.size +
+        (preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat - 0) < 2 ^ 64 := by
+      omega
+    have applies := facts.applies
+    rw [facts.appliedFilter within] at applies
+    refine ⟨read, _, _, _, _, facts.split, ?_, by simpa using facts.bounded, applies, rfl⟩
+    rw [← facts.movedFilter within]
+    simpa using facts.pushed
 
 /-- The queue before splits into the deposits added, the deposits dropped, and the queue after.
 
