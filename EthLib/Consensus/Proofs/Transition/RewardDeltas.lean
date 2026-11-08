@@ -36,6 +36,8 @@ The earliest inclusion of a signer is the first attestation with its least inclu
 The attestation deltas are the sums of these parts.
 
 Every quotient rounds down, and no sum or product overflows.
+
+No EIP specifies these Phase 0 and Altair rules, so this comment states them.
 -/
 
 @[expose] public section
