@@ -71,7 +71,7 @@ The EIPs that change it:
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [yp-berlin]: https://github.com/ethereum/yellowpaper/blob/beacfbd29ccc04dfd790f2282d4c4b1c0afc9b5a/Paper.tex
-[eip-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#block-structure
+[eip-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#specification
 [eip-4895]: https://eips.ethereum.org/EIPS/eip-4895#specification
 [eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#header-extension
 [eip-7685]: https://eips.ethereum.org/EIPS/eip-7685#block-header
