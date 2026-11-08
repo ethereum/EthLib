@@ -111,7 +111,7 @@ def validateMergeBlock (config : Config) (powBlock : Hash32 → Option PowBlock)
 
 Each column must have a valid shape, and the proofs of its cells must match the commitments.
 
-The source must return every column that the node samples, as `BlockSources.columns` states.
+The source must return every column that the node samples.
 
 The check takes that on trust: it reads no list of sampled columns, so it cannot find a missing one.
 

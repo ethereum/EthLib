@@ -635,7 +635,7 @@ private theorem unless_ok_iff {ε : Type} {test : Except ε Bool} {e : ε} :
 
 Each column must have a valid shape, and the proofs of its cells must match the commitments.
 
-The source must return every column that the node samples, as `BlockSources.columns` states.
+The source must return every column that the node samples.
 
 The check takes that on trust: it reads no list of sampled columns, so it cannot find a missing one.
 -/
@@ -671,7 +671,7 @@ theorem columnsAvailable_ok_iff {sources : BlockSources preset fork} {root : Roo
 
 Each column must have a valid shape, and the proofs of its cells must match its commitments.
 
-The source must return every column that the node samples, as `BlockSources.columns` states.
+The source must return every column that the node samples.
 
 The check takes that on trust: it reads no list of sampled columns, so it cannot find a missing one.
 -/
@@ -695,7 +695,7 @@ theorem validateDataAvailability_ok_of_fulu {sources : BlockSources preset fork}
 
 The commitments are those of the bid.
 
-The source must return every column that the node samples, as `BlockSources.columns` states.
+The source must return every column that the node samples.
 
 The check takes that on trust: it reads no list of sampled columns, so it cannot find a missing one.
 -/

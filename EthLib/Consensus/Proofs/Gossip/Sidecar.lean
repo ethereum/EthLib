@@ -20,7 +20,7 @@ A valid sidecar records its key, and the same sidecar is then ignored.
 
 A sidecar with another index keeps the outcome of the seen check.
 
-Whatever the store and the clock, a valid sidecar was unseen and has an index in range.
+Before Gloas, a valid sidecar was unseen and has an index in range, whatever the store and clock.
 
 Its branch reaches the body root of its header, and its KZG proofs match its commitments.
 
@@ -182,7 +182,7 @@ theorem andThenM_eq_ok_accept {ε : Type} {first : ValidationResult}
     first.andThenM next = .ok accept ↔ first = accept ∧ next () = .ok accept := by
   cases first <;> simp [andThenM, pure, Except.pure]
 
-/-- A header that passes its checks has passed the proofs of the data of its sidecar.
+/-- When the header checks accept, the proofs of the data of the sidecar accept too.
 
 This holds whatever the parent, the store and the clock. -/
 theorem validateSidecarHeader_accept {proofs : Unit → Except ForkChoiceError ValidationResult}
