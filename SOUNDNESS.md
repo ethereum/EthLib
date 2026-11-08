@@ -305,6 +305,7 @@ The theorems that take `PairingLaws` as a hypothesis, or build a model of the ta
 - `Cryptography/Proofs/Kzg/Arsdh.lean`
 - `Cryptography/Proofs/Kzg/BatchBinding.lean`
 - `Cryptography/Proofs/Kzg/Binding.lean`
+- `Cryptography/Proofs/Kzg/BlobBinding.lean`
 - `Cryptography/Proofs/Kzg/BlobVerifier.lean`
 - `Cryptography/Proofs/Kzg/CellBatchBinding.lean`
 - `Cryptography/Proofs/Kzg/CellBinding.lean`
@@ -608,11 +609,16 @@ That proof needs no pairing law.
 It is not computational binding: no theorem bounds the cost of finding two such blobs without the secret.
 Under the pairing law and for a well-formed setup, honest KZG proofs and blob proofs verify (`verifyKzgProof_computeKzgProof`, `verifyBlobKzgProof_computeBlobKzgProof`, `Proofs/Kzg/Verify.lean`).
 `verifyKzgProofImpl_iff` states when the check accepts: `c - y = w (τ - z)`, for decoded points representing `c` and `w`.
-Under the pairing law and on a well-formed setup (assumption D3), `verifyBlobKzgProof_binding` in the same file splits an accepted blob opening into three cases.
+Under the pairing law and on a well-formed setup (assumption D3), `verifyBlobKzgProof_binding` (`Proofs/Kzg/BlobBinding.lean`) splits an accepted blob opening into three cases.
 Let the validated commitment and proof represent `f(τ)` and `g(τ)` for polynomials `f` and `g` of degree below 4096.
 Let `p` be the interpolant of the blob's decoded values, and let `z` be the evaluation challenge.
-Then `f = p`, or `f ≠ p` and `z` is a root of `f - p`, of degree below 4096.
-Otherwise `h = f - p(z) - g (X - z)` is nonzero of degree at most 4096, and the secret `τ` is a root of `h`.
+Then `f = p`; or `f ≠ p`, `f - p` has degree below 4096, and `z` is a root of `f - p`.
+Or `h = f - p(z) - g (X - z)` is nonzero of degree at most 4096, and the secret `τ` is a root of `h`.
+The cases can overlap.
+They carry meaning only when an algebraic adversary outputs `f` and `g` over the setup's points, without `τ`.
+This reading is the algebraic group model, an assumption.
+For other choices, such as the constants that the points represent, the third case only restates the check.
+The second case is unlikely only if the challenge hash is modelled as a random oracle, and the third only if `τ` stays secret.
 It is not computational binding: no theorem bounds the cost of finding such polynomials without the secret.
 `verifyKzgProofBatch_ok_iff_root` (`Proofs/Kzg/BatchBinding.lean`) states when the batch check of openings accepts, as an equivalence.
 Let opening `i` have commitment `c_i`, value `y_i`, point `z_i` and proof `w_i`.

@@ -184,10 +184,12 @@ Under the pairing law and for a well-formed setup, honest single proofs and blob
 For single proofs, a theorem reduces binding to a hard problem.
 Two accepted openings to different values give a strong Diffie–Hellman solution,
 in `Proofs/Kzg/Binding.lean`.
-For one blob opening, `verifyBlobKzgProof_binding`, in `Proofs/Kzg/Verify.lean`, reads the commitment and the proof as polynomials `f` and `g` of degree below 4096 at `τ`.
+For one accepted blob opening, a theorem in `Proofs/Kzg/BlobBinding.lean` assumes the pairing law and a well-formed setup.
+It also assumes that the commitment and the proof represent `f(τ)` and `g(τ)`, for polynomials `f` and `g` of degree below 4096.
 Let `p` be the interpolant of the blob's decoded values, and let `z` be the evaluation challenge.
-Then `f = p`, or `f ≠ p` and `z` is a root of `f - p`, of degree below 4096.
-Otherwise `τ` is a root of `f - p(z) - g (X - z)`, which is nonzero of degree at most 4096.
+Then `f = p`; or `f ≠ p`, `f - p` has degree below 4096, and `z` is a root of `f - p`.
+Or `τ` is a root of `f - p(z) - g (X - z)`, which is nonzero of degree at most 4096.
+These cases mean something only when an algebraic adversary outputs `f` and `g` without knowing `τ`.
 The theorem does not bound the cost of finding such polynomials without `τ`.
 
 **The ceremony.**
