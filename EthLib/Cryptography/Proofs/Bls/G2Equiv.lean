@@ -20,13 +20,20 @@ namespace EthLib.Cryptography.Bls.G2
 
 open WeierstrassCurve.Jacobian
 
-/-- Cross-multiplied Jacobian equivalence test, defined separately so structural `BEq G2` stays untouched. -/
-def projectiveEq {F : Type} [BaseField F] (p q : G2 F) : Bool :=
-  if p.z.isZero then q.z.isZero
-  else if q.z.isZero then false
-  else
-    (p.x * (q.z * q.z)).beq (q.x * (p.z * p.z)) &&
-    (p.y * ((q.z * q.z) * q.z)).beq (q.y * ((p.z * p.z) * p.z))
+/-- On a valid triple, `Z = 0` exactly when the point is `O`.
+
+Singular triples with `Z ≠ 0` also map to `O`, so the hypothesis is needed. -/
+theorem isInfinity_eq_true_iff_toPoint_eq_zero {p : G2} (hp : Valid p) :
+    p.isInfinity = true ↔ toPoint p = 0 := by
+  constructor
+  · intro h
+    exact Point.toAffine_of_Z_eq_zero (Fp2.isZero_iff.mp h)
+  · intro h
+    -- A finite nonsingular representative maps to `Point.some`, never `0`.
+    by_contra hne
+    have hz : p.z ≠ 0 := fun hz0 => hne (Fp2.isZero_iff.mpr hz0)
+    rw [toPoint, Point.toAffine_of_Z_ne_zero hp hz] at h
+    cases h
 
 theorem toPoint_eq_iff_rep_equiv {p q : G2} (hp : Valid p) (hq : Valid q) :
     toPoint p = toPoint q ↔ rep p ≈ rep q := by
@@ -76,7 +83,7 @@ theorem projectiveEq_eq_true_iff_rep_equiv {p q : G2} (hp : Valid p) (hq : Valid
           change p.y * q.z ^ 3 = q.y * p.z ^ 3 at hy
           linear_combination hy
 
-/-- Bridge allowing group-law proofs in `curve.toAffine.Point` to discharge `projectiveEq` goals on `G2`. -/
+/-- On valid triples, projective equality is equality of the points they denote. -/
 theorem projectiveEq_eq_true_iff_toPoint_eq {p q : G2} (hp : Valid p) (hq : Valid q) :
     projectiveEq p q = true ↔ toPoint p = toPoint q :=
   (projectiveEq_eq_true_iff_rep_equiv hp hq).trans (toPoint_eq_iff_rep_equiv hp hq).symm

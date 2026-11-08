@@ -153,7 +153,7 @@ theorem hashToG2_eq_clearCofactor {msg dst : ByteArray} {P : G2}
         rw [h1] at h
         rw [← Prod.mk.eta (p := p0), ← Prod.mk.eta (p := p1)] at h
         simp (config := { zeta := false, iota := false }) only
-          [psi.match_1.eq_1, ok_bind, pure, Except.pure, Except.ok.injEq] at h
+          [psi2.match_1.eq_1, ok_bind, pure, Except.pure, Except.ok.injEq] at h
         refine ⟨_, ?_, h.symm⟩
         exact G2.valid_add (simpleSwu_isoMapG2_valid h0) (simpleSwu_isoMapG2_valid h1)
 
@@ -193,7 +193,7 @@ theorem hashToG2_total (msg dst : ByteArray) :
   have hok : ∃ P : G2, hashToG2 msg dst = .ok P := by
     rw [hashToG2, hus, ok_bind, h0, ok_bind, h1]
     rw [← Prod.mk.eta (p := p0), ← Prod.mk.eta (p := p1)]
-    simp (config := { zeta := false, iota := false }) only [psi.match_1.eq_1, ok_bind]
+    simp (config := { zeta := false, iota := false }) only [psi2.match_1.eq_1, ok_bind]
     exact ⟨_, rfl⟩
   rcases hok with ⟨P, hP⟩
   exact ⟨P, hP, hashToG2_valid hP⟩

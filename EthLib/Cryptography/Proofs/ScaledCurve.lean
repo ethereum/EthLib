@@ -219,6 +219,14 @@ theorem three_nsmul_some_zero {y : F} (h : (curve 0 c).Nonsingular 0 y) :
     constructor <;> ring
   rw [show (3 : ℕ) = 2 + 1 from rfl, add_nsmul, two_nsmul, h2, one_nsmul, neg_add_cancel]
 
+omit [DecidableEq F] in
+/-- Points with the same coordinates are equal, whatever the proofs that they are on the curve. -/
+theorem some_congr {W : Affine F} {x y x' y' : F} (hx : x = x') (hy : y = y')
+    (h : W.Nonsingular x y) (h' : W.Nonsingular x' y') :
+    (Point.some x y h : W.Point) = .some x' y' h' := by
+  subst hx hy
+  rfl
+
 /-- Let `β` be a cube root of unity other than `1`.
 
 Then `(x, y)`, `(β x, y)` and `(β^2 x, y)` lie on the line `Y = y`, so they sum to `O`.

@@ -130,16 +130,9 @@ theorem nonsingular_beta {x y : F} (h : curve.toAffine.Nonsingular x y) :
     (pow_ne_zero 2 betaZ_ne_zero) scale_six h
   rwa [scale_x, scale_y] at hs
 
-/-- Points with the same coordinates are equal, whatever the proofs that they are on the curve. -/
-private theorem some_congr {x y x' y' : F} (hx : x = x') (hy : y = y')
-    (h : curve.toAffine.Nonsingular x y) (h' : curve.toAffine.Nonsingular x' y') :
-    (Affine.Point.some x y h : curve.toAffine.Point) = .some x' y' h' := by
-  subst hx hy
-  rfl
-
 theorem sigmaHom_some {x y : F} (h : curve.toAffine.Nonsingular x y) :
     sigmaHom (.some x y h) = .some _ _ (nonsingular_beta h) :=
-  some_congr (scale_x x) (scale_y y) _ _
+  ShortWeierstrass.some_congr (scale_x x) (scale_y y) _ _
 
 /-- `P + σ(P) + σ(σ(P)) = 0`, since the three points lie on the line `Y = y`. -/
 theorem add_sigmaHom_add_sigmaHom (P : curve.toAffine.Point) :
@@ -151,7 +144,7 @@ theorem add_sigmaHom_add_sigmaHom (P : curve.toAffine.Point) :
     have h₃ := nonsingular_beta (nonsingular_beta h)
     have h₃' : curve.toAffine.Nonsingular (betaZ ^ 2 * x) y := by
       rwa [← mul_assoc, ← sq] at h₃
-    rw [some_congr (by ring) rfl h₃ h₃']
+    rw [ShortWeierstrass.some_congr (by ring) rfl h₃ h₃']
     exact ShortWeierstrass.some_add_some_add_some one_add_beta_add_sq betaZ_ne_one h _ _
 
 /-- Scott's criterion: if `σ(P) = [-t^2] P`, then `[r] P = 0`.
@@ -219,7 +212,7 @@ theorem toAffine_scale {u : F} (hu : u ≠ 0) (hc : (RingHom.id F) 4 * u ^ 6 = 4
   · have hz' : (![u ^ 2 * P 0, P 1, P 2] : Fin 3 → F) 2 ≠ 0 := hz
     rw [Point.toAffine_of_Z_ne_zero h hz, Point.toAffine_of_Z_ne_zero (nonsingular_scale ha h) hz']
     show _ = Affine.Point.some _ _ _
-    apply some_congr
+    apply ShortWeierstrass.some_congr
     · simp only [Matrix.cons_val_zero, Matrix.cons_val_two, Matrix.tail_cons, Matrix.head_cons,
         RingHom.id_apply]
       ring
