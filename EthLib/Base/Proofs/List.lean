@@ -14,6 +14,8 @@ Bounds on each term of a sum bound it by the sum of those bounds.
 A factor of every term comes out of the sum.
 
 The quotients of the terms sum to at most the quotient of the sum.
+
+Dropping the front where a test holds keeps each member that fails the test.
 -/
 
 @[expose] public section
@@ -102,5 +104,16 @@ theorem sum_map_div_le {α : Type} (f : α → Nat) (divisor : Nat) :
       have kept := Nat.mul_le_mul_right divisor rest
       rw [Nat.add_mul]
       omega
+
+/-- Dropping the front where a test holds keeps each member that fails the test. -/
+theorem mem_dropWhile_of_eq_false {α : Type} {test : α → Bool} {member : α}
+    (failed : test member = false) {list : List α} (found : member ∈ list) :
+    member ∈ list.dropWhile test := by
+  rw [← List.takeWhile_append_dropWhile (p := test) (l := list), List.mem_append] at found
+  rcases found with taken | kept
+  · have passed := List.all_eq_true.mp List.all_takeWhile member taken
+    rw [failed] at passed
+    cases passed
+  · exact kept
 
 end EthLib.Base

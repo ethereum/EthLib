@@ -1,7 +1,7 @@
 module
 
+public import EthLib.Base.Proofs.List
 public import EthLib.Consensus.Proofs.PayloadTimeliness
-public import EthLib.Consensus.Proofs.Transition.BlockRewards
 public import EthLib.Consensus.Proofs.Transition.Operations
 public import EthLib.Consensus.Transition.Requests
 
@@ -16,13 +16,13 @@ The pending consolidations of an epoch keep the registry.
 
 They move balance from one validator to another, so the sum of the balances stays.
 
-From Electra, they drop the front of the queue up to the first source that must wait.
+From Electra, they drop the front of the queue before the first source that must wait.
 
 A source must wait when it is unslashed and cannot withdraw in the next epoch.
 
 They lower no balance of a validator that is slashed or cannot withdraw in the next epoch.
 
-A source that is slashable in the next epoch keeps both its consolidation and its balance.
+A source that is slashable in the next epoch keeps its consolidation and at least its balance.
 -/
 
 @[expose] public section
@@ -93,18 +93,7 @@ theorem processPendingConsolidations_kept {electra : .pectra ≤ fork}
   cases computed
   exact passPendingConsolidations_kept passed
 
-/-- A validator that `getValidator` returns is the one at its index. -/
-private theorem getElem?_of_getValidator {index : ValidatorIndex} {validator : Validator}
-    (read : getValidator state index = .ok validator) :
-    state.validators.data[index.toNat]? = some validator := by
-  unfold getValidator at read
-  split at read
-  · rename_i found
-    cases read
-    exact found
-  · cases read
-
-/-- A pass reads the longest front of its list where each source is slashed or can withdraw.
+/-- A pass leaves its list from the first source that is unslashed and cannot withdraw.
 
 A source can withdraw when its withdrawable epoch is at most the epoch of the pass. -/
 theorem passPendingConsolidations_drop {nextEpoch : Epoch} :
@@ -123,7 +112,7 @@ theorem passPendingConsolidations_drop {nextEpoch : Epoch} :
     split at computed
     · cases computed
     rename_i source looked
-    have read := getElem?_of_getValidator (liftAccessor_ok.mp looked)
+    have read := getValidator_eq_ok_iff.mp (liftAccessor_ok.mp looked)
     split at computed
     · rename_i slashed
       split at computed
@@ -160,7 +149,7 @@ theorem passPendingConsolidations_drop {nextEpoch : Epoch} :
     rw [List.drop_succ_cons, List.dropWhile_cons_of_pos (by simp [read, unslashed, early])]
     exact dropped
 
-/-- A pass at an epoch lowers no balance of a validator that is slashed or cannot withdraw then. -/
+/-- A pass lowers no balance of a validator that is slashed or cannot withdraw at its epoch. -/
 theorem balance_passPendingConsolidations {nextEpoch : Epoch} {j : Nat} {validator : Validator}
     (waiting : validator.slashed = true ∨ nextEpoch < validator.withdrawableEpoch) :
     ∀ {consolidations : List PendingConsolidation} {state : BeaconState preset fork} {result}
@@ -178,7 +167,7 @@ theorem balance_passPendingConsolidations {nextEpoch : Epoch} {j : Nat} {validat
     split at computed
     · cases computed
     rename_i source looked
-    have read := getElem?_of_getValidator (liftAccessor_ok.mp looked)
+    have read := getValidator_eq_ok_iff.mp (liftAccessor_ok.mp looked)
     split at computed
     · split at computed
       · cases computed
@@ -245,17 +234,6 @@ theorem processPendingConsolidations_pass {electra : .pectra ≤ fork}
   refine ⟨_, passed, rfl, ?_⟩
   simp only [Array.toList_extract, List.extract_eq_take_drop]
   exact List.take_of_length_le (by simp)
-
-/-- Dropping the front where a test holds keeps each member that fails the test. -/
-private theorem mem_dropWhile_of_eq_false {α : Type} {test : α → Bool} {member : α}
-    (failed : test member = false) {list : List α} (found : member ∈ list) :
-    member ∈ list.dropWhile test := by
-  rw [← List.takeWhile_append_dropWhile (p := test) (l := list), List.mem_append] at found
-  rcases found with taken | kept
-  · have passed := List.all_eq_true.mp List.all_takeWhile member taken
-    rw [failed] at passed
-    cases passed
-  · exact kept
 
 /-- From Electra, take a step of the pending consolidations that succeeds.
 
