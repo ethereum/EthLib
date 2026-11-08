@@ -1767,8 +1767,7 @@ The repository has none of the three today.
 `setup.py` runs `lake build Exports`, and links the objects under `.lake/build/ir/EthLib/` with `libleanshared`, `libgmp` and `libuv`.
 `.github/workflows/publish.yml` builds the wheels with `cibuildwheel`, cleans the build before each wheel, and publishes them to PyPI.
 
-The workflow installs elan from a pinned release, and checks the SHA-256 digest of the archive first.
-Then elan installs the Lean toolchain that `lean-toolchain` names.
+The workflow installs elan and the Lean toolchain that `lean-toolchain` names from pinned releases, and checks the SHA-256 digest of each archive first.
 Each wheel runs the vector suites and the check of the pinned vectors before it is published.
 A build provenance attestation records which workflow run, at which commit, built each wheel and the sdist.
 

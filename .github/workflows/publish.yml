@@ -38,6 +38,8 @@ jobs:
       # cibuildwheel container via CIBW_BEFORE_ALL_LINUX below.
       - name: Install elan (macOS host)
         if: runner.os == 'macOS'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           bash scripts/install_elan.sh
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
@@ -57,13 +59,15 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_34
           CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_34
 
-          # Inside the manylinux container: install elan once, then
-          # `setup.py`'s LakeThenBuild handler will call `lake build`
-          # for each wheel.
-          CIBW_BEFORE_ALL_LINUX: bash {project}/scripts/install_elan.sh
+           # Inside the manylinux container: install elan once, then
+           # `setup.py`'s LakeThenBuild handler will call `lake build`
+           # for each wheel.
+           CIBW_BEFORE_ALL_LINUX: bash {project}/scripts/install_elan.sh
 
-          # cibuildwheel expands $VAR at runtime in the container.
-          CIBW_ENVIRONMENT_LINUX: PATH=$HOME/.elan/bin:$PATH
+           # cibuildwheel expands $VAR at runtime in the container.
+           CIBW_ENVIRONMENT_LINUX: PATH=$HOME/.elan/bin:$PATH
+           CIBW_ENVIRONMENT_PASS_LINUX: GITHUB_TOKEN
+           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
           # Force a fresh `lake build` per wheel to avoid stale objects
           # from a previous Python ABI's compile.
