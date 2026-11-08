@@ -237,15 +237,65 @@ theorem slashValidator_last {last after : BeaconState preset fork} {index : Vali
   subst done
   split <;> exact ⟨rfl, rfl⟩
 
+/-- The steps of a successful slashing, in order.
+
+The validator exits, and its record in the exited state is read.
+
+Its withdrawal is delayed and it is marked slashed.
+
+Its effective balance is added to the slashed balance of the epoch, in the slashings vector.
+
+Its balance pays the first penalty, and the proposer of the slot is read.
+
+The proposer and the whistleblower are paid.
+
+From Gloas the pending builder payments of its blocks are cancelled. -/
+theorem slashValidator_ok {config : Config} {state after : BeaconState preset fork}
+    {slashedIndex : ValidatorIndex} {whistleblowerIndex : Option ValidatorIndex}
+    (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
+    ∃ exited validator withdrawable marked slashed total slashings lowered proposer reward raised
+      last,
+      initiateValidatorExit config state slashedIndex = .ok exited ∧
+      getValidator exited slashedIndex = .ok validator ∧
+      addChecked (getCurrentEpoch state) preset.EPOCHS_PER_SLASHINGS_VECTOR = .ok withdrawable ∧
+      exited.setValidator slashedIndex
+        { validator with
+          slashed := true
+          withdrawableEpoch := max validator.withdrawableEpoch withdrawable } = .ok marked ∧
+      readCircular marked.slashings.elements (getCurrentEpoch state) = .ok slashed ∧
+      addChecked slashed validator.effectiveBalance = .ok total ∧
+      writeCircularRooted marked.slashings (getCurrentEpoch state) total = .ok slashings ∧
+      decreaseBalance { marked with slashings } slashedIndex
+        (validator.effectiveBalance / (parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT) =
+          .ok lowered ∧
+      getBeaconProposerIndex lowered = .ok proposer ∧
+      proposerShare preset fork
+        (validator.effectiveBalance / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT) =
+          .ok reward ∧
+      increaseBalance lowered proposer reward = .ok raised ∧
+      increaseBalance raised (whistleblowerIndex.getD proposer)
+        (validator.effectiveBalance / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT -
+          reward) = .ok last ∧
+      after = if gloas : .glamsterdam ≤ fork then cancelProposerPayments last gloas slashedIndex
+        else last := by
+  simp only [slashValidator, bind_ok_iff, liftArith, mapError_ok_iff] at computed
+  obtain ⟨exited, exitedOk, validator, found, withdrawable, delay, marked, markedOk, slashed,
+    slashedOk, total, totalOk, slashings, slashingsOk, lowered, loweredOk, proposer, proposerOk,
+    reward, rewardOk, raised, raisedOk, last, lastOk, done⟩ := computed
+  simp only [pure, Except.pure, Except.ok.injEq] at done
+  exact ⟨exited, validator, withdrawable, marked, slashed, total, slashings, lowered, proposer,
+    reward, raised, last, exitedOk, found, delay, markedOk, slashedOk, totalOk, slashingsOk,
+    loweredOk, proposerOk, rewardOk, raisedOk, lastOk, done.symm⟩
+
 /-- Slashing a validator keeps the sizes. -/
 theorem sameSizes_slashValidator {config : Config} {state after : BeaconState preset fork}
     {slashedIndex : ValidatorIndex} {whistleblowerIndex : Option ValidatorIndex}
     (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
     SameSizes state after := by
-  simp only [slashValidator, bind_ok_iff, liftArith, mapError_ok_iff] at computed
-  obtain ⟨exited, exitedOk, _, _, _, _, marked, markedOk, _, _, _, _, _, _, _, lowered, _, _, _,
-    _, _, raised, _, final, done⟩ := computed
-  have cancelled := slashValidator_last done
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, last, exitedOk, -, -, markedOk, -, -, -, lowered, -, -,
+    raised, final, done⟩ := slashValidator_ok computed
+  have cancelled := slashValidator_last (last := last) (after := after) (index := slashedIndex)
+    (by subst done; rfl)
   refine (sameSizes_initiateValidatorExit exitedOk).trans (SameSizes.trans ?_
     ((sameSizes_decreaseBalance lowered).trans ((sameSizes_increaseBalance raised).trans
       ((sameSizes_increaseBalance final).trans ⟨by rw [cancelled.1], by rw [cancelled.2]⟩))))
@@ -411,15 +461,14 @@ theorem slashValidator_slashedFlag {config : Config} {state after : BeaconState 
     (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
     slashedFlag after slashedIndex = .ok true ∧
       ∀ other, other ≠ slashedIndex → slashedFlag after other = slashedFlag state other := by
-  unfold slashValidator at computed
-  simp only [bind_ok_iff, liftArith, mapError_ok_iff] at computed
-  obtain ⟨exited, exitedOk, validator, found, withdrawable, _, slashedState, markedOk, _, _, _, _,
-    _, _, _, lowered, _, _, _, _, _, raised, _, final, done⟩ := computed
+  obtain ⟨exited, validator, withdrawable, slashedState, _, _, _, _, _, _, _, last, exitedOk, -, -,
+    markedOk, -, -, -, lowered, -, -, raised, final, done⟩ := slashValidator_ok computed
   -- The balance steps keep the registry in which the validator is marked slashed.
   let marked : Validator :=
     { validator with
       slashed := true, withdrawableEpoch := max validator.withdrawableEpoch withdrawable }
-  have same := (slashValidator_last done).1.trans ((increaseBalance_validators final).trans
+  have same := (slashValidator_last (last := last) (after := after) (index := slashedIndex)
+    (by subst done; rfl)).1.trans ((increaseBalance_validators final).trans
     ((increaseBalance_validators raised).trans (decreaseBalance_validators lowered)))
   replace same : after.validators = slashedState.validators := same
   refine ⟨?_, fun other distinct => ?_⟩
@@ -486,11 +535,9 @@ theorem slashValidator_payments {config : Config} {state after : BeaconState pre
     after.builderPendingPayments gloas =
       .ofVector ((state.builderPendingPayments gloas).elements.map fun payment =>
         if payment.proposerIndex = slashedIndex then .empty else payment) := by
-  unfold slashValidator at computed
-  simp only [bind_ok_iff, liftArith, mapError_ok_iff] at computed
-  obtain ⟨exited, exitedOk, _, _, _, _, marked, markedOk, _, _, _, _, _, _, _, lowered, _, _, _,
-    _, _, raised, _, final, done⟩ := computed
-  simp only [pure, Except.pure, Except.ok.injEq, gloas, ↓reduceDIte] at done
+  obtain ⟨exited, _, _, _, _, _, _, _, _, _, _, _, exitedOk, -, -, markedOk, -, -, -, lowered, -, -,
+    raised, final, done⟩ := slashValidator_ok computed
+  simp only [gloas, ↓reduceDIte] at done
   subst done
   simp only [cancelProposerPayments]
   rw [increaseBalance_payments final, increaseBalance_payments raised,
