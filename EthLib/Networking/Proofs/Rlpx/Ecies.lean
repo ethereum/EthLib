@@ -213,7 +213,7 @@ theorem size_encrypt {key ephemeral : Fn} {iv : Aes.Block} {sharedMac m c : Byte
   simp only [OVERHEAD]
   omega
 
-/-- A decrypted ciphertext starts with the uncompressed bytes of a key `R`.
+/-- A ciphertext that decrypts starts with the uncompressed bytes of a key `R`.
 
 `R` lies on the curve and is not `O`. -/
 theorem ephemeral_of_decrypt_eq_ok {key : Fn} {sharedMac ciphertext m : ByteArray}
