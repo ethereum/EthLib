@@ -18,7 +18,7 @@ So the queue splits into the deposits added to the balances, those dropped, and 
 
 The balances plus the amounts in the queue never rise.
 
-A pass stops only where its stop condition holds, at the limit per epoch, or beyond the churn.
+A pass that leaves deposits unread stops at its stop condition, the limit per epoch or the churn.
 
 The pass of an epoch reads only deposits with a slot at most the first slot of the finalized epoch.
 
@@ -184,9 +184,11 @@ It applies some of those in order, and postpones the others in order.
 
 It reads no deposit for which `stop` is true.
 
-It stops only at a deposit for which `stop` is true, at that limit, or beyond the churn.
+If deposits remain, it stopped at one for which `stop` is true, or at the limit per epoch.
 
-Beyond the churn, `churnReached` is true, and the validator neither exits nor is withdrawn. -/
+Otherwise that deposit takes churn, and it would take more than the churn available.
+
+No validator with its key exits or is withdrawn, and the pass records that it reached the churn. -/
 theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
     {available : Gwei} :
     ∀ {deposits : List PendingDeposit} {state : BeaconState preset fork} {processed : Gwei}
