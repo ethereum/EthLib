@@ -34,16 +34,21 @@ At Glamsterdam, the gas left holds both the execution gas left and the reservoir
 
 Before London, the refund is the refund counter, at most half of the gas used before it.
 
-From London, the refund is at most a fifth of the gas used before it, by EIP-3529.
+From London, the refund is at most a fifth of the gas used before it, by [EIP-3529][e3529].
 
-From Pectra, the gas used is never below the call data floor, by EIP-7623.
+From Pectra, the gas used is never below the call data floor, by [EIP-7623][e7623].
 
 Up to BPO5, the block counts the gas used of the transaction, with no state gas.
 
-At Glamsterdam, the block counts two amounts of gas, by EIP-7778 and EIP-8037:
+At Glamsterdam, the block counts two amounts of gas, by [EIP-7778][e7778] and [EIP-8037][e8037]:
 
-- the state gas used of the message, or 0 when it is negative;
+- the state gas used of the message, or 0 when it is negative, a case that the EIPs leave open;
 - the gas used before the refund minus that state gas, and at least the call data floor.
+
+[e3529]: https://eips.ethereum.org/EIPS/eip-3529#specification
+[e7623]: https://eips.ethereum.org/EIPS/eip-7623#specification
+[e7778]: https://eips.ethereum.org/EIPS/eip-7778#specification
+[e8037]: https://eips.ethereum.org/EIPS/eip-8037#integration-with-eip-7778
 -/
 
 @[expose] public section
@@ -199,15 +204,55 @@ private theorem processMessageCall_reservoir {chainId : Nat} {message : Message 
       unfold CallOutput.ofFrame
       split <;> rfl
 
+/-- A transaction that runs takes each step of the run, in order, with any gas meter.
+
+The gas past the intrinsic gas splits into the execution gas and the reservoir of the message.
+
+The gas left of the run is the execution gas left plus the reservoir left.
+
+The block counts the gas of the transaction.
+
+The gas is then settled on the state that the message leaves.
+
+Then the accounts to delete and the empty touched accounts are deleted. -/
+private theorem runTransaction_eq_ok {env : BlockEnvironment fork} {block : State.BlockState}
+    {included : Included} {out : TransactionOutput}
+    (h : runTransaction Meter env block included tx = .ok out) :
+    let gas := allocateGas fork tx included.intrinsicGas
+    ∃ target bought message output settled,
+      messageTarget included.sender
+          ((State.TransactionState.ofBlock block).getAccount included.sender).nonce tx =
+        .ok target ∧
+      buyGas env (State.TransactionState.ofBlock block) included.sender tx = .ok bought ∧
+      transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes⟩ bought
+          included.sender target gas.execution tx = .ok message ∧
+      processMessageCall (Meter := Meter) env.chainId.toNat
+          { message with reservoir := gas.reservoir } bought
+          (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
+          (paidWrites included.sender target tx) = .ok output ∧
+      out.blockGas =
+        transactionBlockGas fork included.sender tx (output.gasLeft + output.reservoir)
+          output.refund output.stateGasUsed ∧
+      settleGas env output.state included.sender tx (output.gasLeft + output.reservoir)
+          output.refund =
+        .ok (settled, out.gasUsed) ∧
+      deleteAccounts fork settled output = .ok out.state := by
+  unfold runTransaction at h
+  obtain ⟨target, hTarget, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨bought, hBought, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨message, hMessage, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨output, hOutput, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨settled, used⟩, hSettle, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨deleted, hDeleted, h⟩ := Base.bind_ok_iff.mp h
+  cases h
+  exact ⟨target, bought, message, output, settled, hTarget, Base.mapError_ok_iff.mp hBought,
+    hMessage, hOutput, rfl, Base.mapError_ok_iff.mp hSettle, Base.mapError_ok_iff.mp hDeleted⟩
+
 /-- Up to BPO5, a transaction that runs takes each step of the run, in order.
 
 The sender buys the gas, and the message gets the gas limit minus the intrinsic gas.
 
-The message hands back no reservoir.
-
-The block counts the gas of the transaction, and the gas is settled on the state of the message.
-
-Then the deletions at the end of the transaction run. -/
+The message hands back no reservoir, so the gas left is the gas that the message leaves. -/
 private theorem processTransaction_eq_ok_of_lt {env : BlockEnvironment fork}
     {block : State.BlockState} {included : Included} {out : TransactionOutput}
     (hlt : fork < .glamsterdam) (h : processTransaction env block included tx = .ok out) :
@@ -228,64 +273,13 @@ private theorem processTransaction_eq_ok_of_lt {env : BlockEnvironment fork}
         .ok (settled, out.gasUsed) ∧
       deleteAccounts fork settled output = .ok out.state := by
   rw [processTransaction_of_lt_glamsterdam hlt] at h
-  unfold runTransaction at h
-  simp only [allocateGas_of_lt hlt] at h
-  obtain ⟨target, hTarget, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨bought, hBought, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨message, hMessage, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨output, hOutput, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨settled, used⟩, hSettle, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨deleted, hDeleted, h⟩ := Base.bind_ok_iff.mp h
-  cases h
+  obtain ⟨target, bought, message, output, settled, hTarget, hBought, hMessage, hOutput, hBlock,
+      hSettle, hDeleted⟩ := runTransaction_eq_ok h
+  simp only [allocateGas_of_lt hlt] at hMessage hOutput
   have hRes := processMessageCall_reservoir hOutput
-  rw [hRes, Nat.add_zero] at hSettle
-  refine ⟨target, bought, message, output, settled, hTarget, Base.mapError_ok_iff.mp hBought,
-    hMessage, hOutput, ?_, Base.mapError_ok_iff.mp hSettle, Base.mapError_ok_iff.mp hDeleted⟩
-  simp only [hRes, Nat.add_zero]
-
-/-- At Glamsterdam, a transaction that runs takes each step of the run, in order.
-
-The gas past the intrinsic gas splits into the execution gas and the reservoir of the message.
-
-The gas left of the run is the execution gas left plus the reservoir left.
-
-The block counts the gas of the transaction, and the gas is settled on the state of the message.
-
-Then the deletions at the end of the transaction run. -/
-private theorem processTransaction_eq_ok_of_glamsterdam {env : BlockEnvironment fork}
-    {block : State.BlockState} {included : Included} {out : TransactionOutput}
-    (hGlam : .glamsterdam ≤ fork) (hlt : fork < .hegota)
-    (h : processTransaction env block included tx = .ok out) :
-    let gas := allocateGas fork tx included.intrinsicGas
-    ∃ target bought message output settled,
-      messageTarget included.sender
-          ((State.TransactionState.ofBlock block).getAccount included.sender).nonce tx =
-        .ok target ∧
-      buyGas env (State.TransactionState.ofBlock block) included.sender tx = .ok bought ∧
-      transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes⟩ bought
-          included.sender target gas.execution tx = .ok message ∧
-      processMessageCall (Meter := StateGasMeter) env.chainId.toNat
-          { message with reservoir := gas.reservoir } bought
-          (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
-          (paidWrites included.sender target tx) = .ok output ∧
-      out.blockGas =
-        transactionBlockGas fork included.sender tx (output.gasLeft + output.reservoir)
-          output.refund output.stateGasUsed ∧
-      settleGas env output.state included.sender tx (output.gasLeft + output.reservoir)
-          output.refund =
-        .ok (settled, out.gasUsed) ∧
-      deleteAccounts fork settled output = .ok out.state := by
-  rw [processTransaction_of_glamsterdam hGlam hlt] at h
-  unfold runTransaction at h
-  obtain ⟨target, hTarget, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨bought, hBought, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨message, hMessage, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨output, hOutput, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨settled, used⟩, hSettle, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨deleted, hDeleted, h⟩ := Base.bind_ok_iff.mp h
-  cases h
-  exact ⟨target, bought, message, output, settled, hTarget, Base.mapError_ok_iff.mp hBought,
-    hMessage, hOutput, rfl, Base.mapError_ok_iff.mp hSettle, Base.mapError_ok_iff.mp hDeleted⟩
+  rw [hRes, Nat.add_zero] at hBlock hSettle
+  exact ⟨target, bought, message, output, settled, hTarget, hBought, hMessage, hOutput, hBlock,
+    hSettle, hDeleted⟩
 
 /-- Before London, the gas used of a transaction that runs follows from its message.
 
@@ -342,7 +336,7 @@ The refund is the refund counter of the message, at most a fifth of the gas used
 The block counts that gas used, no state gas, and the blob gas of the transaction.
 
 [e3529]: https://eips.ethereum.org/EIPS/eip-3529#specification -/
-theorem processTransaction_gasUsed_of_lt_pectra {env : BlockEnvironment fork}
+theorem processTransaction_gasUsed_of_london_of_lt_pectra {env : BlockEnvironment fork}
     {block : State.BlockState} {included : Included} {out : TransactionOutput}
     (hLondon : .london ≤ fork) (hlt : fork < .pectra)
     (h : processTransaction env block included tx = .ok out) :
@@ -426,11 +420,15 @@ The gas used is the gas limit minus that gas left and the refund, or the call da
 
 The refund is the refund counter of the message, at most a fifth of the gas used before it.
 
-The block counts the state gas used of the message, or 0 when it is negative, by [EIP-8037][e8037b].
+The block counts the state gas used of the message, by [EIP-8037][e8037b].
 
-It counts as execution gas the gas before the refund minus that state gas, by [EIP-7778][e7778].
+A negative state gas used counts as 0, a case that the EIP leaves open.
+
+Its execution gas is the gas used before the refund minus that state gas, by [EIP-7778][e7778].
 
 That execution gas is never below the call data floor.
+
+The block also counts the blob gas of the transaction.
 
 [e7778]: https://eips.ethereum.org/EIPS/eip-7778#specification
 [e8037]: https://eips.ethereum.org/EIPS/eip-8037#transaction-level-gas-accounting-reservoir-model
@@ -462,7 +460,7 @@ theorem processTransaction_gasUsed_of_glamsterdam {env : BlockEnvironment fork}
           Fees.BlobBaseFee.calculateTotalBlobGas tx⟩ := by
   obtain ⟨target, bought, message, output, _, hTarget, hBought, hMessage, hOutput, hBlock,
       hSettle, -⟩ :=
-    processTransaction_eq_ok_of_glamsterdam hGlam hlt h
+    runTransaction_eq_ok (by rwa [processTransaction_of_glamsterdam hGlam hlt] at h)
   have hLondon : fork ≥ .london := Nat.le_trans (by decide) hGlam
   have hPectra : fork ≥ .pectra := Nat.le_trans (by decide) hGlam
   refine ⟨target, bought, message, output, hTarget, hBought, hMessage, hOutput, ?_, ?_⟩
