@@ -5,6 +5,7 @@ public import EthLib.Base.Hex
 public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.Bytes
+public import EthLib.Base.Proofs.Fork
 -- The digits of `Nat.toDigits` must unfold for `decide` to read them.
 import all Init.Data.Repr
 
@@ -68,6 +69,10 @@ A payload of version 4 decodes only when its object holds exactly the fields of 
 Its access list and its slot must then decode.
 
 The rest must decode as a payload of an earlier version.
+
+A field from a fork decodes exactly when it is present from that fork on and absent before.
+
+A field decodes from an option exactly when reading the field back gives that option.
 -/
 
 public section
@@ -75,6 +80,10 @@ public section
 namespace EthLib.Engine.Json
 
 open EthLib.Base
+
+/-- A failure with an invalid parameter is that error, never a value. -/
+@[simp] theorem invalid_eq {α : Type} (reason : String) :
+    (invalid reason : Decode α) = .error (.invalidParams reason) := rfl
 
 /-- The decoders read the value of each digit that the hex encoder writes. -/
 theorem hexValue_hexDigitChar (upper : Bool) (n : Fin 16) :
@@ -141,8 +150,8 @@ theorem bytesMax_eq_ok_iff {what : String} {n : Nat} {j : Lean.Json} {b : ByteAr
     rw [h]
     simp [bind, Except.bind, hn, pure, Except.pure]
 
-/-- The version and the optional fields of a decoded payload, in one walk of the decoder. -/
-private theorem anyPayload_walk {j : Lean.Json} {p : AnyPayload} (h : anyPayload j = .ok p) :
+/-- A decoded payload has version 1, 2 or 3, and its optional fields match that version. -/
+theorem shape_of_anyPayload {j : Lean.Json} {p : AnyPayload} (h : anyPayload j = .ok p) :
     (p.version = 1 ∨ p.version = 2 ∨ p.version = 3) ∧ (p.withdrawals.isSome ↔ 2 ≤ p.version) ∧
       (p.blobGasUsed.isSome ↔ 3 ≤ p.version) ∧ (p.excessBlobGas.isSome ↔ 3 ≤ p.version) := by
   unfold anyPayload at h
@@ -150,7 +159,7 @@ private theorem anyPayload_walk {j : Lean.Json} {p : AnyPayload} (h : anyPayload
   dsimp only at h
   -- Split each step of the decoder: a failing step contradicts the success, and a read value stays.
   repeat' (first
-    | (simp only [invalid, throw, throwThe, MonadExceptOf.throw] at h; cases h; done)
+    | (simp only [invalid_eq] at h; cases h; done)
     | (obtain ⟨_, step, h⟩ := bind_ok_iff.mp h
        first | cases step | obtain ⟨_, -, rfl⟩ := map_ok_iff.mp step | skip)
     | split at h)
@@ -160,29 +169,22 @@ private theorem anyPayload_walk {j : Lean.Json} {p : AnyPayload} (h : anyPayload
 /-- A decoded payload has version 1, 2 or 3. -/
 theorem version_of_anyPayload {j : Lean.Json} {p : AnyPayload} (h : anyPayload j = .ok p) :
     p.version = 1 ∨ p.version = 2 ∨ p.version = 3 :=
-  (anyPayload_walk h).1
+  (shape_of_anyPayload h).1
 
 /-- A decoded payload holds the withdrawals exactly from version 2. -/
 theorem withdrawals_isSome_iff_of_anyPayload {j : Lean.Json} {p : AnyPayload}
     (h : anyPayload j = .ok p) : p.withdrawals.isSome ↔ 2 ≤ p.version :=
-  (anyPayload_walk h).2.1
+  (shape_of_anyPayload h).2.1
 
 /-- A decoded payload holds the blob gas used exactly in version 3. -/
 theorem blobGasUsed_isSome_iff_of_anyPayload {j : Lean.Json} {p : AnyPayload}
     (h : anyPayload j = .ok p) : p.blobGasUsed.isSome ↔ 3 ≤ p.version :=
-  (anyPayload_walk h).2.2.1
+  (shape_of_anyPayload h).2.2.1
 
 /-- A decoded payload holds the excess blob gas exactly in version 3. -/
 theorem excessBlobGas_isSome_iff_of_anyPayload {j : Lean.Json} {p : AnyPayload}
     (h : anyPayload j = .ok p) : p.excessBlobGas.isSome ↔ 3 ≤ p.version :=
-  (anyPayload_walk h).2.2.2
-
-/-- A decoded payload has version 1, 2 or 3, and its optional fields match that version. -/
-theorem shape_of_anyPayload {j : Lean.Json} {p : AnyPayload} (h : anyPayload j = .ok p) :
-    (p.version = 1 ∨ p.version = 2 ∨ p.version = 3) ∧ (p.withdrawals.isSome ↔ 2 ≤ p.version) ∧
-      (p.blobGasUsed.isSome ↔ 3 ≤ p.version) ∧ (p.excessBlobGas.isSome ↔ 3 ≤ p.version) :=
-  ⟨version_of_anyPayload h, withdrawals_isSome_iff_of_anyPayload h,
-    blobGasUsed_isSome_iff_of_anyPayload h, excessBlobGas_isSome_iff_of_anyPayload h⟩
+  (shape_of_anyPayload h).2.2.2
 
 /-- ASCII characters encode to their own bytes. -/
 private theorem ascii_utf8Encode (l : List Char) (h : ∀ c ∈ l, c.val ≤ 0x7F) :
@@ -394,7 +396,7 @@ theorem field_eq_ok_iff {what name : String} {fs : List (String × Lean.Json)} {
     field what fs name = .ok v ↔ fs.lookup name = some v := by
   unfold field
   cases h : fs.lookup name <;>
-    simp [pure, Except.pure, invalid, throw, throwThe, MonadExceptOf.throw]
+    simp [pure, Except.pure]
 
 /-- A withdrawal decodes exactly when its object holds exactly its four fields.
 
@@ -481,7 +483,7 @@ theorem array_eq_ok_iff {α : Type} {what : String} {f : Lean.Json → Decode α
     simp only [array, Lean.Json.arr.injEq, exists_eq_left', mapM_eq_ok_iff]
     simp
   -- Any other JSON value is not an array, so the read fails at once.
-  | _ => simp [array, invalid, throw, throwThe, MonadExceptOf.throw]
+  | _ => simp [array]
 
 /-- A byte string of a fixed size decodes to a vector exactly when its bytes are the vector's.
 
@@ -791,7 +793,7 @@ theorem quantity_eq_ok_iff {what : String} {bits : Nat} {j : Lean.Json} {v : Nat
       rw [forIn_eq_forIn_toList] at hw
       obtain ⟨hall, hval⟩ := forIn_digits_ok (fun c s r hr => by
         cases hc : hexValue false c with
-        | none => simp [hc, invalid, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at hr
+        | none => simp [hc, bind, Except.bind] at hr
         | some d =>
           simp only [hc, pure, Except.pure, Except.ok.injEq] at hr
           exact ⟨rfl, by rw [← hr, digitValue, hc]; rfl⟩) hw
@@ -820,7 +822,7 @@ theorem quantity_eq_ok_iff {what : String} {bits : Nat} {j : Lean.Json} {v : Nat
     -- Any other JSON value is not a string, so the read fails at once.
     | _ =>
       obtain ⟨digits, hd, -⟩ := bind_ok_iff.mp h'
-      simp [hexDigits, invalid, throw, throwThe, MonadExceptOf.throw] at hd
+      simp [hexDigits] at hd
   · rintro ⟨hv, rfl⟩
     exact quantity_toDigits what hv
 
@@ -947,8 +949,8 @@ private theorem bytesOf_eq_ok_digits {what : String} {upper : Bool} {j : Lean.Js
             simp only [pure, Except.pure, Except.ok.injEq] at hr'
             obtain ⟨eh, el⟩ := highDigit_lowDigit (hexValue_lt hh).2 (hexValue_lt hl).2
             exact ⟨_, hr'.symm, c, d, hc, hd', by rw [hh, eh], by rw [hl, el]⟩
-          · simp [invalid, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at hr'
-        · simp [invalid, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at hr')
+          · simp [bind, Except.bind] at hr'
+        · simp [bind, Except.bind] at hr')
       hloop
     have hres' : res.data.toList = xs := by
       rw [hxs]; simp [ByteArray.emptyWithCapacity] <;> rfl
@@ -963,7 +965,7 @@ private theorem bytesOf_eq_ok_digits {what : String} {upper : Bool} {j : Lean.Js
       exact ⟨hcs, hds⟩
   | _ =>
     obtain ⟨digits, hd, -⟩ := bind_ok_iff.mp h
-    simp [hexDigits, invalid, throw, throwThe, MonadExceptOf.throw] at hd
+    simp [hexDigits] at hd
 
 /-- A code that the decoder reads as a lowercase hex digit of a value is the code of that digit. -/
 private theorem eq_of_hexValue_false {c : UInt8} {n : Fin 16}
@@ -1170,5 +1172,44 @@ theorem address_eq_ok_iff_map_toLower {what : String} {j : Lean.Json} {a : Addre
         ds.map Char.toLower = a.toList.flatMap byteHexDigits := by
   rw [address_eq_ok_iff, bytesOf_true_eq_ok_iff]
   exact Iff.rfl
+
+/-! ## A field from a fork -/
+
+section Since
+
+variable {fork : Fork}
+
+/-- A field from fork `f` decodes exactly when its presence agrees with `f ≤ fork`. -/
+theorem exists_since_iff {α : Type} {f : Fork} {what : String} {o : Option α} :
+    (∃ x : Since f fork α, since what o = .ok x) ↔ (o.isSome ↔ f ≤ fork) := by
+  -- Each of the four cases either succeeds or fails with an invalid parameter.
+  cases o <;> unfold since <;> by_cases h : f ≤ fork <;> simp [h, pure, Except.pure] <;>
+    exact ⟨_, rfl⟩
+
+/-- Reading back a decoded field from a fork gives the option it was decoded from. -/
+theorem sinceValue_of_since {α : Type} {f : Fork} {what : String} {o : Option α}
+    {x : Since f fork α} (h : since what o = .ok x) : sinceValue x = o := by
+  -- The two cases that fail cannot give the field, and the other two give back the option.
+  cases o <;> unfold since at h <;> by_cases hf : f ≤ fork <;> simp [hf, pure, Except.pure] at h
+  · simp [sinceValue, hf]
+  · cases h
+    simp [sinceValue, hf]
+
+/-- Decoding the value of a field from a fork gives back the field. -/
+theorem since_sinceValue {α : Type} {f : Fork} {what : String} (x : Since f fork α) :
+    since what (sinceValue x) = .ok x := by
+  unfold sinceValue since
+  by_cases hf : f ≤ fork
+  · simp only [hf, dite_true, ite_true]
+    exact congrArg Except.ok (Since.eq_const hf x).symm
+  · simp only [hf, dite_false]
+    exact congrArg Except.ok (Since.eq_of_not_le hf _ _)
+
+/-- A field from a fork decodes from an option exactly when reading it back gives that option. -/
+theorem since_eq_ok_iff {α : Type} {f : Fork} {what : String} {o : Option α}
+    {x : Since f fork α} : since what o = .ok x ↔ sinceValue x = o :=
+  ⟨sinceValue_of_since, fun h => h ▸ since_sinceValue x⟩
+
+end Since
 
 end EthLib.Engine.Json

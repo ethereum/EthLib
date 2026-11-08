@@ -245,3 +245,13 @@ def AnyPayload.atFork (p : AnyPayload) (fork : Fork) : Decode (ExecutionPayload 
     excessBlobGas := ← since "excessBlobGas" p.excessBlobGas }
 
 end EthLib.Engine.Json
+
+namespace EthLib.Engine
+
+open EthLib.Base
+
+/-- The value of a field from fork `f`, if the fork has the field. -/
+def sinceValue {fork : Fork} {α : Type} {f : Fork} (x : Since f fork α) : Option α :=
+  if h : f ≤ fork then some (x h) else none
+
+end EthLib.Engine

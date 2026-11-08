@@ -60,10 +60,6 @@ def newPayloadVersion (fork : Fork) : Nat :=
 def executionWithdrawal (w : Consensus.Withdrawal) : Execution.Blocks.Withdrawal :=
   ⟨w.index, w.validatorIndex, w.address, w.amount⟩
 
-/-- The value of a field from fork `f`, if the fork has the field. -/
-def sinceValue {α : Type} {f : Fork} (x : Since f fork α) : Option α :=
-  if h : f ≤ fork then some (x h) else none
-
 /-- The transactions of a payload of the beacon chain, as byte arrays in order. -/
 def beaconTransactions (p : Consensus.ExecutionPayload preset fork) : List ByteArray :=
   p.transactions.data.toList.map fun tx => ⟨tx.data⟩

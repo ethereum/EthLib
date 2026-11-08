@@ -2,6 +2,7 @@ module
 
 public import EthLib.Engine.NewPayload
 public import EthLib.Engine.Proofs.Block
+public import EthLib.Engine.Proofs.Json
 
 /-!
 # Proofs: the checks of `engine_newPayload`
@@ -15,6 +16,8 @@ Below version 5 the payload decodes exactly as a structure of a version that the
 From version 5 it decodes exactly as a payload of version 4, with its access list and its slot.
 
 Request lists that pass the checks have distinct types, in increasing order.
+
+Each such request has more than one byte, so its type is its first byte.
 
 Without a JSON-RPC error, the parameters are an array of the values of the version, none null.
 
@@ -89,8 +92,7 @@ theorem payloadParam_five_of_not_mem {j : Lean.Json} {fs : List (String × Lean.
     exact hmiss (List.mem_map.mpr ⟨field, hmem, by simpa using heq⟩)
   have hfields : Json.hasExactly fs Json.payloadFieldsV4 = false := by
     simp [Json.hasExactly, Json.payloadFieldsV4, Json.amsterdamFields, hany]
-  simp [payloadParam, Json.payloadV4, hfs, hfields, Json.invalid, bind, Except.bind, throw,
-    throwThe, MonadExceptOf.throw]
+  simp [payloadParam, Json.payloadV4, hfs, hfields, bind, Except.bind]
 
 /-- Below version 5, the payload decodes exactly as a structure of a version that the method takes.
 
@@ -112,7 +114,7 @@ theorem payloadParam_eq_ok_iff_of_lt {version : Nat} {j : Lean.Json}
     · simp only [hs, ↓reduceIte, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
       obtain ⟨rfl, rfl⟩ := h
       exact ⟨ha, hs, rfl⟩
-    · simp [hs, Json.invalid, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+    · simp [hs, bind, Except.bind] at h
   · rintro ⟨ha, hs, rfl⟩
     simp [ha, hs, bind, Except.bind, pure, Except.pure]
 
@@ -160,11 +162,30 @@ theorem pairwise_of_validRequests {requests : List ByteArray}
           exact ⟨a, c, hra, hc, UInt8.lt_trans hab hbc⟩
       · exact absurd h (by simp)
 
-/-- Request lists that pass the check have distinct types. -/
+/-- Each request of a list that passes the check has more than one byte: its type and its data. -/
+theorem size_of_validRequests :
+    ∀ {requests : List ByteArray}, validRequests requests = true → ∀ r ∈ requests, 1 < r.size
+  | [], _ => by simp
+  | [r], h => by simpa [validRequests] using h
+  | r :: s :: rest, h => by
+    simp only [validRequests] at h
+    split at h
+    · simp only [Bool.and_eq_true, decide_eq_true_eq] at h
+      obtain ⟨⟨⟨hr, -⟩, -⟩, hrest⟩ := h
+      intro t ht
+      rcases List.mem_cons.mp ht with rfl | ht
+      · exact hr
+      · exact size_of_validRequests hrest t ht
+    · exact absurd h (by simp)
+
+/-- Request lists that pass the check have distinct types, their first bytes.
+
+Each request has a first byte, so no type here is a default value. -/
 theorem nodup_types_of_validRequests {requests : List ByteArray}
-    (h : validRequests requests = true) : (requests.map fun r => r[0]?).Nodup :=
-  List.Pairwise.map _ (fun _ _ ⟨a, b, ha, hb, hlt⟩ => by
-    rw [ha, hb]; exact fun e => UInt8.ne_of_lt hlt (Option.some.inj e))
+    (h : validRequests requests = true) : (requests.map fun r => r[0]!).Nodup :=
+  List.Pairwise.map _ (fun r s ⟨a, b, ha, hb, hlt⟩ => by
+    rw [getElem!_def, getElem!_def, ha, hb]
+    exact UInt8.ne_of_lt hlt)
     (pairwise_of_validRequests h)
 
 /-! ## The parameters of the checks -/
