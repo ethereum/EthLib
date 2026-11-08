@@ -579,6 +579,9 @@ They take two hypotheses on the setup.
 Of the setup, they assume only that it decodes.
 
 For a well-formed setup, `blobToKzgCommitment_represents` (`Proofs/Kzg/Commitment.lean`) proves that a blob's commitment holds its polynomial at the secret.
+`blobToKzgCommitment_binding` in the same file treats two blobs whose decoded values differ.
+They get one commitment only when the secret is a root of the difference of their interpolants.
+That proof needs no pairing law.
 Under the pairing law and for a well-formed setup, honest KZG proofs and blob proofs verify (`verifyKzgProof_computeKzgProof`, `verifyBlobKzgProof_computeBlobKzgProof`, `Proofs/Kzg/Verify.lean`).
 `verifyKzgProofImpl_iff` states when the check accepts: `c - y = w (τ - z)`, for decoded points representing `c` and `w`.
 `verifyKzgProofBatch_ok_iff_root` (`Proofs/Kzg/BatchBinding.lean`) states when the batch check of openings accepts, as an equivalence.

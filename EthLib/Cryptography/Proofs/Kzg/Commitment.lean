@@ -12,6 +12,14 @@ A setup of the secret `τ` holds `[τ^i]_1`, `[τ^i]_2` and `[L_i(τ)]_1`, with 
 
 A blob's commitment sums its values times the Lagrange points, which gives `[p(τ)]_1`.
 
+Two blobs whose values differ get one commitment only when `τ` is a root of `p - p'`.
+
+Here `p` and `p'` are the interpolants of the two blobs, so `p - p'` is not zero.
+
+A polynomial of degree 1 to 4095 can vanish at `τ`, so no theorem can exclude that root.
+
+The theorems give no bound on the cost of finding two such blobs when `τ` is secret.
+
 A polynomial of degree below 4096, committed with the monomial points, also gives `[p(τ)]_1`.
 
 The setup built from the powers `[τ^i]_1` and `[τ^i]_2` is a well-formed setup of `τ`.
@@ -118,6 +126,80 @@ theorem blobToKzgCommitment_represents {s : TrustedSetup} {τ : Fr} (hs : s.Well
       G1.Represents (G1.msm s.g1LagrangeBrp.toArray poly) ((interpolant poly).eval τ) :=
   ⟨blobToKzgCommitment_eq_ok s hblob,
     represents_lagrange_msm hs (size_blobToPolynomial blob poly hblob)⟩
+
+/-! ## Commitments that collide at the setup secret -/
+
+/-- Two valid points with the same 48-byte compressed form have the same group element. -/
+private theorem toPoint_eq_of_compressG1_eq {P Q : G1} (hP : G1.Valid P) (hQ : G1.Valid Q)
+    (heq : compressG1 P = compressG1 Q) :
+    G1.toPoint P = G1.toPoint Q := by
+  have hcomp : G1.compress P = G1.compress Q :=
+    ByteArray.ext (congrArg Vector.toArray heq)
+  obtain ⟨p, hp, hptP⟩ := G1.uncompress_compress hP
+  obtain ⟨q, hq, hptQ⟩ := G1.uncompress_compress hQ
+  rw [hcomp, hq] at hp
+  cases hp
+  exact hptP.symm.trans hptQ
+
+/-- Two representatives with the same 48-byte compressed form represent the same scalar. -/
+private theorem represents_eq_of_compressG1_eq {P Q : G1} {a b : Fr}
+    (hP : G1.Represents P a) (hQ : G1.Represents Q b) (heq : compressG1 P = compressG1 Q) :
+    a = b :=
+  hP.unique ⟨hP.1, (toPoint_eq_of_compressG1_eq hP.1 hQ.1 heq).trans hQ.2⟩
+
+/-- Two 4096-element arrays have the same interpolant exactly when they are equal. -/
+private theorem interpolant_eq_iff {poly poly' : Polynomial}
+    (hsize : poly.size = FIELD_ELEMENTS_PER_BLOB)
+    (hsize' : poly'.size = FIELD_ELEMENTS_PER_BLOB) :
+    interpolant poly = interpolant poly' ↔ poly = poly' := by
+  constructor
+  · intro h
+    refine Array.ext (hsize.trans hsize'.symm) fun i hi hi' => ?_
+    have hiF : i < FIELD_ELEMENTS_PER_BLOB := hsize ▸ hi
+    have hev := congrArg (eval (evalDomain ⟨i, hiF⟩)) h
+    rw [interpolant, interpolant,
+      Lagrange.eval_interpolate_at_node _ evalDomain_injective.injOn (Finset.mem_univ _),
+      Lagrange.eval_interpolate_at_node _ evalDomain_injective.injOn (Finset.mem_univ _),
+      getElem!_pos poly i hi, getElem!_pos poly' i hi'] at hev
+    exact hev
+  · rintro rfl
+    rfl
+
+/-- On a well-formed setup of `τ`, two blobs with one commitment agree on their interpolants at `τ`.
+
+The interpolant of each blob is the polynomial of degree below 4096 with its 4096 decoded values. -/
+theorem eval_interpolant_eq_of_blobToKzgCommitment_eq {s : TrustedSetup} {τ : Fr}
+    (hs : s.WellFormed τ) {blob blob' : Blob} {poly poly' : Polynomial} {c : KZGCommitment}
+    (hblob : blobToPolynomial blob = .ok poly) (hblob' : blobToPolynomial blob' = .ok poly')
+    (hc : blobToKzgCommitment s blob = .ok c) (hc' : blobToKzgCommitment s blob' = .ok c) :
+    (interpolant poly).eval τ = (interpolant poly').eval τ := by
+  obtain ⟨hC, hr⟩ := blobToKzgCommitment_represents hs hblob
+  obtain ⟨hC', hr'⟩ := blobToKzgCommitment_represents hs hblob'
+  have heq : compressG1 (G1.msm s.g1LagrangeBrp.toArray poly) =
+      compressG1 (G1.msm s.g1LagrangeBrp.toArray poly') :=
+    Except.ok.inj (hC.symm.trans (hc.trans (hc'.symm.trans hC')))
+  exact represents_eq_of_compressG1_eq hr hr' heq
+
+/-- Two blobs whose values differ and whose commitments agree make `τ` a root of `p - p'`.
+
+Here `s` is a well-formed setup of `τ`, `p` and `p'` are the two interpolants, and `p - p' ≠ 0`. -/
+theorem blobToKzgCommitment_binding {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ)
+    {blob blob' : Blob} {poly poly' : Polynomial} {c : KZGCommitment}
+    (hblob : blobToPolynomial blob = .ok poly) (hblob' : blobToPolynomial blob' = .ok poly')
+    (hne : poly ≠ poly')
+    (hc : blobToKzgCommitment s blob = .ok c) (hc' : blobToKzgCommitment s blob' = .ok c) :
+    interpolant poly - interpolant poly' ≠ 0 ∧
+      (interpolant poly - interpolant poly').eval τ = 0 := by
+  have hint : interpolant poly ≠ interpolant poly' :=
+    mt (interpolant_eq_iff (size_blobToPolynomial blob poly hblob)
+      (size_blobToPolynomial blob' poly' hblob')).mp hne
+  have hsub (f g : _root_.Polynomial Fr) : (f - g).eval τ = f.eval τ - g.eval τ :=
+    eval_sub f g τ
+  have hne0 (f g : _root_.Polynomial Fr) (h : f ≠ g) : f - g ≠ 0 :=
+    sub_ne_zero.mpr h
+  refine ⟨hne0 _ _ hint, ?_⟩
+  rw [hsub, sub_eq_zero]
+  exact eval_interpolant_eq_of_blobToKzgCommitment_eq hs hblob hblob' hc hc'
 
 /-! ## Commitments from monomial points and the setup of a secret -/
 
