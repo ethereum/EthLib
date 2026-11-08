@@ -126,7 +126,9 @@ def bytesToG2 (raw : List UInt8) : Except AltBn128Error Point2 := do
 
 /-- The 128 bytes of a point of the twist, with the `i` part of each coordinate first.
 
-The point at infinity is 128 zero bytes. -/
+The point at infinity is 128 zero bytes.
+
+No precompile returns a point of the twist; this encoding is the inverse of the decoder above. -/
 def g2ToBytes : Point2 → List UInt8
   | .infinity => List.replicate 128 0
   | .affine x y =>

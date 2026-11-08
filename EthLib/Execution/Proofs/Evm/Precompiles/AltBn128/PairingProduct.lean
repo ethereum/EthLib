@@ -99,7 +99,7 @@ theorem ecpairingWord_injective : Function.Injective ecpairingWord := by
 
 Here `(P_i, Q_i)` are the decoded pairs, with `P_i = a_i P1` and `Q_i = b_i P2`.
 
-Such `a` and `b` exist for every successful call, with no hypothesis on the pairing. -/
+Every successful call has such `a` and `b`, so the theorem is never vacuous. -/
 theorem ecpairing_eq_one_iff {fork : Fork} {data : ByteArray} {gas : Nat} {out : ByteArray}
     (h : ecpairing fork data gas = .ok out) {pairs : List (Point × Point2)}
     (hdec : (List.range (data.size / 192)).mapM (decodePair data) = .ok pairs)

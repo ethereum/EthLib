@@ -474,7 +474,7 @@ This is the optimal ate pairing of Beuchat et al. (ePrint 2010/354, §2).
 `AltBn128.pairingBilinear` (`Proofs/AltBn128/PairingAte.lean`) proves that the pairing is bilinear on the multiples of the generators: `e(a P1, b P2) = e(P1, P2)^(a b)` for all `a` and `b` in `Fr`.
 `orderOf_pairing_generators` (`Proofs/AltBn128/Nondegenerate.lean`) proves that the pairing of `P1` and `P2` has order `q`, so it is not 1; the kernel evaluates that pairing.
 `pairingCheck_eq_true_iff` (`Proofs/AltBn128/PairingBilinear.lean`) proves that the check passes exactly when the product of the pairings of its pairs is 1.
-The pairing law is a hypothesis, `AltBn128.PairingLaws` (`Proofs/AltBn128/PairingLaws.lean`), in the shape of the BLS one.
+The pairing law is stated as a structure, `AltBn128.PairingLaws` (`Proofs/AltBn128/PairingLaws.lean`), in the shape of the BLS one.
 It states the check of EIP-197: the pairs `(a_i P1, b_i P2)` pass exactly when `sum_i a_i b_i = 0`.
 `PairingLaws.of_bilinear` (`Proofs/AltBn128/PairingBilinear.lean`) derives it from one smaller hypothesis, `PairingBilinear`: `e(a P1, b P2) = e(P1, P2)^(a b)` for all `a` and `b` in `Fr`.
 `AltBn128.pairingLaws` (`Proofs/AltBn128/PairingAte.lean`) proves `AltBn128.PairingLaws` from it, so every theorem that assumes it holds once it is supplied.
