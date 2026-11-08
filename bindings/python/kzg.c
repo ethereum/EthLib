@@ -112,7 +112,7 @@ pack_indices(
   PyObject* seq,
   Py_ssize_t* out_len
 ) {
-  PyObject* fast = PySequence_Fast(seq, "expected a sequence of ints");
+  PyObject* fast = sequence_snapshot(seq, "expected a sequence of ints");
   if (!fast) return NULL;
   Py_ssize_t n = PySequence_Fast_GET_SIZE(fast);
   uint64_t* buf = (uint64_t*) PyMem_Malloc(n * sizeof(uint64_t));
@@ -389,7 +389,7 @@ py_compute_verify_cell_kzg_proof_batch_challenge(
 
   /* Each `cosets_evals` entry is a list of FIELD_ELEMENTS_PER_CELL field
    * elements (32 bytes each); we pack each list into a CELL-sized buffer. */
-  PyObject* fast_evals = PySequence_Fast(evals_obj, "cosets_evals must be a sequence");
+  PyObject* fast_evals = sequence_snapshot(evals_obj, "cosets_evals must be a sequence");
   if (!fast_evals) {
     PyMem_Free(cell_idx); PyMem_Free(com_idx); PyMem_Free(coms); return NULL;
   }
@@ -402,7 +402,7 @@ py_compute_verify_cell_kzg_proof_batch_challenge(
   }
   for (Py_ssize_t i = 0; i < n_packed; i++) {
     PyObject* sub = PySequence_Fast_GET_ITEM(fast_evals, i);
-    PyObject* fast_sub = PySequence_Fast(sub, "each cosets_evals[i] must be a sequence");
+    PyObject* fast_sub = sequence_snapshot(sub, "each cosets_evals[i] must be a sequence");
     if (!fast_sub) goto fail_evals;
     if (PySequence_Fast_GET_SIZE(fast_sub) != (Py_ssize_t) FIELD_ELEMENTS_PER_CELL) {
       Py_DECREF(fast_sub);

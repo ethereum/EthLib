@@ -204,6 +204,14 @@ parse_bytes_of_size(
   const char* name
 );
 
+/* The items of a sequence, in a tuple or a list that no other thread can change.
+ * Returns a new reference, or NULL with a TypeError that carries `message`. */
+PyObject*
+sequence_snapshot(
+  PyObject* seq,
+  const char* message
+);
+
 uint8_t*
 pack_bytes_sequence(
   PyObject* seq,

@@ -210,7 +210,7 @@ jobs:
   # The vector suites run the library through the bindings, so they do not wait for the proofs.
   # They run on each Python version from 3.10 to 3.14, so a feature that an older version lacks
   # fails here and not first in the wheel test of a release.
-  # The free-threaded 3.14t build runs only in that wheel test.
+  # They also run on the free-threaded 3.14t build, where the extension runs without the GIL.
   suites:
     name: suites (Python ${{ matrix.python }})
     runs-on: ubuntu-24.04
@@ -218,7 +218,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]
     env:
       BUILD_TIMING_SOURCE_SHA: ${{ github.sha }}
       BUILD_TIMING_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
