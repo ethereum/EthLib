@@ -24,6 +24,10 @@ From Gloas the data comes with the payload, and the check of the block passes.
 
 From Gloas a block that builds on the payload of its parent finds that payload verified.
 
+A new block that the handler accepts is not from the future, and is after the finalized slot.
+
+The checkpoint block of its parent at the finalized epoch is the finalized block.
+
 At Bellatrix the first payload passes exactly when it follows a terminal block of proof of work.
 
 A known block leaves the store as it was.
@@ -569,6 +573,42 @@ theorem validateOnBlock_ok {checks : SignatureChecks} {sources : BlockSources pr
     subst same
     exact ⟨available, mapError_ok_iff.mp transition⟩
 
+/-- A block that passes the checks is not from the future, and is after the finalized slot.
+
+The checkpoint block of its parent at the finalized epoch is the finalized block. -/
+theorem validateOnBlock_checks {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : SignedBeaconBlock preset fork}
+    {blockRoot : Root} {state : BeaconState preset fork}
+    (valid : store.validateOnBlock config checks sources signed blockRoot = .ok state) :
+    (∃ current, store.getCurrentSlot config = .ok current ∧ signed.message.slot ≤ current) ∧
+      (∃ finalizedSlot,
+        computeStartSlotAtEpoch preset store.finalizedCheckpoint.epoch = .ok finalizedSlot ∧
+          finalizedSlot < signed.message.slot) ∧
+      store.getCheckpointBlock signed.message.parentRoot store.finalizedCheckpoint.epoch =
+        .ok store.finalizedCheckpoint.root := by
+  unfold validateOnBlock at valid
+  dsimp only at valid
+  simp only [bind_ok_iff] at valid
+  -- The state of the parent and the check of its payload come before the check of the clock.
+  obtain ⟨_, _, _, _, current, currentOk, valid⟩ := valid
+  split at valid
+  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at valid
+  rename_i notFuture
+  simp only [bind_ok_iff] at valid
+  obtain ⟨finalizedSlot, start, valid⟩ := valid
+  split at valid
+  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at valid
+  rename_i later
+  simp only [bind_ok_iff] at valid
+  obtain ⟨checkpointBlock, checkpoint, valid⟩ := valid
+  split at valid
+  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at valid
+  rename_i same
+  simp only [ne_eq, Decidable.not_not] at same
+  refine ⟨⟨current, currentOk, UInt64.not_lt.mp notFuture⟩,
+    ⟨finalizedSlot, mapError_ok_iff.mp start, UInt64.not_le.mp later⟩, ?_⟩
+  rw [checkpoint, same]
+
 /-- From Gloas the data comes with the payload, so the check of a block passes. -/
 theorem validateDataAvailability_of_gloas {sources : BlockSources preset fork}
     {block : BeaconBlock preset fork} {blockRoot : Root} (gloas : .glamsterdam ≤ fork) :
@@ -858,6 +898,28 @@ theorem onBlock_insert {checks : SignatureChecks} {sources : BlockSources preset
   obtain ⟨pre, found, -, -, transition⟩ := validateOnBlock_ok valid
   refine ⟨by rw [b3, updateCheckpoints_blocks, b2, b1, b0], pre, state, found, transition, ?_⟩
   rw [bs3, updateCheckpoints_blockStates, bs2, bs1, bs0]
+
+/-- A new block that the handler accepts is not from the future, and is after the finalized slot.
+
+The checkpoint block of its parent at the finalized epoch is the finalized block. -/
+theorem onBlock_checks {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : SignedBeaconBlock preset fork}
+    {blockRoot : Root} {after : Store preset fork}
+    (root : SszType.hashTreeRoot signed.message = .ok blockRoot)
+    (new : ¬ store.blocks.contains blockRoot)
+    (added : store.onBlock config checks sources signed = .ok after) :
+    (∃ current, store.getCurrentSlot config = .ok current ∧ signed.message.slot ≤ current) ∧
+      (∃ finalizedSlot,
+        computeStartSlotAtEpoch preset store.finalizedCheckpoint.epoch = .ok finalizedSlot ∧
+          finalizedSlot < signed.message.slot) ∧
+      store.getCheckpointBlock signed.message.parentRoot store.finalizedCheckpoint.epoch =
+        .ok store.finalizedCheckpoint.root := by
+  simp only [onBlock, root, new, bind, Except.bind, Except.mapError, ↓reduceIte,
+    Bool.false_eq_true] at added
+  unfold addBlock at added
+  simp only [bind_ok_iff] at added
+  obtain ⟨_, valid, -⟩ := added
+  exact validateOnBlock_checks valid
 
 /-- No block lowers the epoch of the justified or the finalized checkpoint. -/
 theorem onBlock_epochsLe {checks : SignatureChecks} {sources : BlockSources preset fork}
