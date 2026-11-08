@@ -1127,6 +1127,7 @@ Four theorems in `Execution/Proofs/Transactions/Process.lean` give the gas used 
 `processTransaction_gasUsed` covers Pectra to BPO5, where EIP-7623 raises the gas used to the call data floor when that floor is larger.
 `processTransaction_gasUsed_of_glamsterdam` covers Glamsterdam, where EIP-8037 splits the gas into execution gas and a reservoir.
 Its gas left is the execution gas left plus the reservoir left, and it gives the two block gas counts of EIP-7778 and EIP-8037.
+At Glamsterdam, a negative state gas used counts as 0 in both block gas counts, a case that EIP-8037 leaves open.
 From Hegotá a run fails as not yet specified, so there is no gas used to state.
 
 ### Merkle Patricia Trie

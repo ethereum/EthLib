@@ -38,7 +38,7 @@ From London, the refund is at most a fifth of the gas used before it, by [EIP-35
 
 From Pectra, the gas used is never below the call data floor, by [EIP-7623][e7623].
 
-Up to BPO5, the block counts the gas used of the transaction, with no state gas.
+Up to BPO5, the block counts the gas used of the transaction, its blob gas, and no state gas.
 
 At Glamsterdam, the block counts two amounts of gas, by [EIP-7778][e7778] and [EIP-8037][e8037]:
 
