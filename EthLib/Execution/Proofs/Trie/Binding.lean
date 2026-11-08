@@ -327,14 +327,14 @@ theorem keyPath_nodup (hash : ByteArray → Hash32) {trie : Trie}
   cases secured with
   | false =>
     -- A plain trie: distinct keys have distinct nibbles.
-    simpa [keyPath, List.map_map, Function.comp_def] using
+    simpa [keyPath_eq, List.map_map, Function.comp_def] using
       nodup_map_of_injective (fun _ _ h => bytesToNibbleList_injective h) hkeys
   | true =>
     -- A secured trie: distinct hashes have distinct bytes, and distinct bytes distinct nibbles.
     simp only [↓reduceIte] at hsearch
     have hhashes := nodup_map_of_findKeyCollision hash _ hkeys hsearch
     have hbytes := nodup_map_of_injective hashBytes_injective hhashes
-    simpa [keyPath, List.map_map, Function.comp_def] using
+    simpa [keyPath_eq, List.map_map, Function.comp_def] using
       nodup_map_of_injective (fun _ _ h => bytesToNibbleList_injective h) hbytes
 
 /-- Soundness: a proof that verifies against the trie's root is the proof that the trie builds.
@@ -489,7 +489,7 @@ theorem root_secured_perm (hash : ByteArray → Hash32) {data data' : List (Byte
     -- Distinct hashes have distinct bytes, and distinct bytes have distinct nibbles.
     have hhashes := nodup_map_of_findKeyCollision hash _ hkeys hfind
     have hbytes := nodup_map_of_injective hashBytes_injective hhashes
-    simpa [keyPath, List.map_map, Function.comp_def] using
+    simpa [keyPath_eq, List.map_map, Function.comp_def] using
       nodup_map_of_injective (fun _ _ h => bytesToNibbleList_injective h) hbytes
 
 end EthLib.Execution.Trie
