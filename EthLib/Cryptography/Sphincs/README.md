@@ -19,30 +19,38 @@ Verification costs a constant 515 Keccak-f[1600] permutations.
 
 ## Source
 
-The specification is the note [`doc/lean_sphincs/main.tex`](https://github.com/leanEthereum/leanVM/blob/5e3ade21d339a45e1b3b0dba97ad9300ab50e49b/doc/lean_sphincs/main.tex) of `leanEthereum/leanVM`, at commit `5e3ade21d339a45e1b3b0dba97ad9300ab50e49b`.
-That commit merged leanVM pull request [#662](https://github.com/leanEthereum/leanVM/pull/662), "leanSphincs closer to FIPS205", into `main`.
+The hash layout is that of [FIPS 205](https://doi.org/10.6028/NIST.FIPS.205).
+It takes the 32-byte address of §4.2, the hash inputs of §11.1, the digest split of Algorithm 19 and the signature of §9.
+The parameters are those of the layered key of `2^30` in §1 of the note [`leanSPHINCS.tex`](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/leanSPHINCS.tex), at commit `1538d0a97845c3b771088f09561ddf7607b560a1` of `TomWambsgans/sphincs.art`.
+That section also fixes WOTS+C, the hash truncated to 16 bytes, and the signature size of 7740 bytes.
 
-The note follows FIPS 205 except where its §1 lists a difference.
-It fixes every byte: the hash inputs, the address encoding of its Appendix A, the digest layout and the signature layout.
-leanVM's Rust implementation of the note, [`crates/signatures/src/lean_sphincs/`](https://github.com/leanEthereum/leanVM/tree/5e3ade21d339a45e1b3b0dba97ad9300ab50e49b/crates/signatures/src/lean_sphincs) at the same commit, implements the note.
-Its known answer is a test vector here, as [Test vectors](#test-vectors) describes, and not a source of rules.
-The note's Lean model, [`formal/lean_sphincs/`](https://github.com/leanEthereum/leanVM/tree/5e3ade21d339a45e1b3b0dba97ad9300ab50e49b/formal/lean_sphincs) at the same commit, proves the security bound of its §7 for 1,182,000,000 signatures, about `2^30.14`.
+Where leanSPHINCS departs from FIPS 205, the file says so.
+For example:
 
-Each file cites the parts of the note and of FIPS 205 that it follows:
+- The one-time signature is WOTS+C, with a counter in place of the checksum (`Ots.lean`).
+- The layers of the hypertree have different heights (`Constants.lean`).
+- One more address type, for the WOTS+C encoding (`Address.lean`).
+- The hash is Keccak-256 truncated to 16 bytes, and `H_msg` is MGF1 of [RFC 8017](https://www.rfc-editor.org/rfc/rfc8017) on it (`TweakableHash.lean`, `Digest.lean`).
+- `PK.seed` and `SK.prf` derive from `SK.seed` (`KeyGen.lean`).
+- Each layer's counter comes before its chain values in a signature (`Serialization.lean`).
 
-- `Constants.lean`: the parameter table of §2, and the sizes and costs of §6.4.
-- `Types.lean`: `toInt` and `toByte` of FIPS 205 (Algorithms 2 and 3), and the keys `K_l(idx)` of §4.
-- `Address.lean`: the address of Appendix A, which is FIPS 205's (§4.2) with one more type.
-- `TweakableHash.lean`: `Th` and `PRF` of §2, as FIPS 205's SHAKE instances lay them out (§11.1).
-- `Encoding.lean`: the encoding of §3, and WOTS+C from [ePrint 2022/778](https://eprint.iacr.org/2022/778).
-- `Ots.lean`: WOTS+C of §3, hashed as WOTS+ of FIPS 205 §5.
-- `Tree.lean`: the hypertree of §4, built on the shared [Merkle trees](../Merkle/).
-- `Fors.lean`: FORS of §5, which is FORS of FIPS 205 §8, on the same Merkle trees.
-- `Digest.lean`: `PRF_msg` and `H_msg` of §2, and the digest of §5, split as FIPS 205 Algorithm 19 does.
-- `KeyGen.lean`: the keys of §2 and key generation of §6.1.
-- `Sign.lean`: signing of §6.2.
-- `Verify.lean`: verification of §6.3, and its cost in §6.4.
-- `Serialization.lean`: the serialization of §6.4.
+The known answer of an independent implementation is a test vector here, as [Test vectors](#test-vectors) describes, and not a source of rules.
+
+Each file cites the parts of FIPS 205 and of the note that it follows:
+
+- `Constants.lean`: §1 of the note.
+- `Types.lean`: `toInt` and `toByte` of FIPS 205 (Algorithms 2 and 3), and the keys of a layer (§7).
+- `Address.lean`: the address of FIPS 205 §4.2, with one more type.
+- `TweakableHash.lean`: `F`, `H`, `T_l` and `PRF` as FIPS 205's SHAKE instances lay them out (§11.1).
+- `Encoding.lean`: WOTS+C from [ePrint 2022/778](https://eprint.iacr.org/2022/778), digits read as FIPS 205's `base_2b`.
+- `Ots.lean`: WOTS+C, hashed as WOTS+ of FIPS 205 §5.
+- `Tree.lean`: the trees of FIPS 205 §6, built on the shared [Merkle trees](../Merkle/).
+- `Fors.lean`: FORS of FIPS 205 §8, on the same Merkle trees.
+- `Digest.lean`: `PRF_msg` of FIPS 205 Algorithm 22, `H_msg` as MGF1 of RFC 8017, and the digest split of Algorithm 19.
+- `KeyGen.lean`: key generation, FIPS 205 Algorithm 18.
+- `Sign.lean`: signing, FIPS 205 Algorithm 19.
+- `Verify.lean`: verification, FIPS 205 Algorithm 20.
+- `Serialization.lean`: the public key and signature of FIPS 205 §9.1 and §9.2.
 
 Keccak-256 is [FIPS 202](https://csrc.nist.gov/pubs/fips/202/final) with Keccak's original padding (`EthLib/Cryptography/Hash/Keccak.lean`).
 Every integer on the wire is big-endian, as in FIPS 205: the address words, the counters of `H_msg` and of the encoding, and the digest fields.
@@ -54,11 +62,11 @@ So the signer rebuilds `PK.root`, which `H_msg` hashes, with the definition that
 It builds the top tree once for `PK.root` and once for the top key's path.
 It builds each lower tree once for its root and once for the path.
 It builds each FORS tree once for the FORS public key and once for the opening.
-leanVM's Rust signer keeps the levels of each tree and builds it once.
+A signer that keeps the levels of each tree builds it once.
 The values are the same, so the signatures are the same.
 
-The trees are built depth first by the shared Merkle definitions, where the Rust builds them level by level.
-The nodes, and so the outputs, are the same.
+The trees are built depth first by the shared Merkle definitions.
+A signer that builds them level by level computes the same nodes, and so the same outputs.
 
 Every chain start and every FORS secret is `PRF(PK.seed, SK.seed, ADRS)`, and the definitions that need one take the PRF as an argument.
 A security proof can then replace these derivations as a whole, without reading `SK.seed`.
@@ -76,9 +84,9 @@ The order changes no value.
 
 The secret key is the 32-byte `SK.seed`, and everything else derives from it.
 So the exports of `keyGen` and `sign` take the seed and rebuild what they need on each call.
-`keyGen` builds the top tree, which means `2^10` one-time keys and 271,361 Keccak-f[1600] permutations, as §6.4 of the note counts them.
+`keyGen` builds the top tree, which means `2^10` one-time keys and 271,361 Keccak-f[1600] permutations.
 `sign` builds the top tree, the FORS instance and both lower trees, and searches three counters.
-Since it builds each tree twice, it makes about twice the `5.25 * 10^5` permutations that §6.4 counts for one signature.
+Since it builds each tree twice, it makes about twice the permutations of a signer that builds each tree once.
 `verify` makes 515 Keccak-f[1600] permutations.
 
 Never sign more than `2^30` messages with one key.
@@ -89,7 +97,7 @@ Nothing in EthLib counts signatures, so the caller must.
 
 `tests/cryptography/sphincs/` has cases for `key_gen`, `sign` and `verify`.
 
-The `key_gen_known_answer` and `sign_known_answer` cases are the known answer of leanVM's Rust implementation, `crates/signatures/src/lean_sphincs/known_answer.hex` at the pinned commit.
+The `key_gen_known_answer` and `sign_known_answer` cases are the known answer of an independent implementation, pinned in `tests/sources.toml`.
 The key is that of `SK.seed[i] = 37 i + 11 mod 256`, and the signature signs `M[i] = 7 i + 3`.
 The Python suite checks both cases against those bytes on every run, and again when it regenerates them.
 So the two cases fix every hash that key generation, signing and verification make.
@@ -173,9 +181,7 @@ Definitions that derive a secret take the derivation function as an argument too
 - The security proof (`Security/`).
   It is a ported model of the scheme with its theorem for this configuration (`h26_layered`): 127 bits, up to 1,182,000,000 signatures.
   Its README gives the provenance and every change to the ported text.
-  The model signs its layers from the bottom up, as EthLib and leanVM's Rust signer do.
-  The version that EthLib ported first signed them from the top down, and its author confirmed in [leanVM#720](https://github.com/leanEthereum/leanVM/issues/720) that this order is a bug.
-  At the pinned commit the model signs from the bottom up itself.
+  The model signs its layers from the bottom up, as EthLib does.
 - The bridge to the model (`Unforgeability/Bridge/`).
   EthLib's bytes, addresses, keys and signatures translate to the model's and back.
   Key generation and verification make the model's calls, call for call (`keyGenWith_queryH`, `verifyWith_queryH`).

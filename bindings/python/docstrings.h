@@ -96,13 +96,13 @@
   "The leaf index a 2404-byte signature carries."
 
 #define DOC_sphincs_key_gen \
-  "The public key grown from a seed."
+  "The public key `PK.seed | PK.root` of `SK.seed`."
 
 #define DOC_sphincs_sign \
-  "`Sign(sk, m)`: sign a message."
+  "`Sign(SK, M)`: sign a message."
 
 #define DOC_sphincs_verify \
-  "`Ver(pk, m, sigma)`: whether a signature signs a message under a public key."
+  "`Ver(PK, M, sigma)`: whether a signature signs a message under a public key."
 
 #define DOC_sha256 \
   "SHA-256 of a byte string shorter than 2^61 bytes, the bound of FIPS 180-4 §1."

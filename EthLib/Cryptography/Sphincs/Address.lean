@@ -21,9 +21,9 @@ The address is FIPS 205's: eight big-endian 32-bit words.
 
 leanSPHINCS adds one address type, for the WOTS+C encoding.
 
-Source: FIPS 205 §4.2 and §4.3, and Appendix A of [main.tex][main].
+Source: [FIPS 205][fips205] §4.2 and §4.3.
 
-[main]: https://github.com/leanEthereum/leanVM/blob/5e3ade21d339a45e1b3b0dba97ad9300ab50e49b/doc/lean_sphincs/main.tex
+[fips205]: https://doi.org/10.6028/NIST.FIPS.205
 -/
 
 @[expose] public section

@@ -30,9 +30,10 @@ The index is `idx = tree * 2^8 + leaf`, a bottom leaf and so a FORS instance.
 
 Every index names a bottom leaf of the key, so every digest is valid.
 
-Source: [main.tex][main] §2 and §5, and FIPS 205 Algorithms 19 and 22.
+Source: [FIPS 205][fips205] Algorithms 19 and 22, and MGF1 of [RFC 8017][rfc8017] Appendix B.2.1.
 
-[main]: https://github.com/leanEthereum/leanVM/blob/5e3ade21d339a45e1b3b0dba97ad9300ab50e49b/doc/lean_sphincs/main.tex
+[fips205]: https://doi.org/10.6028/NIST.FIPS.205
+[rfc8017]: https://www.rfc-editor.org/rfc/rfc8017
 -/
 
 @[expose] public section

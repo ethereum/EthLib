@@ -22,9 +22,9 @@ So `SK.seed` alone regenerates every chain, every FORS secret and the public key
 
 FIPS 205 draws `SK.prf` and `PK.seed` independently of `SK.seed`.
 
-Source: [main.tex][main] §2 and §6.1, and FIPS 205's `slh_keygen_internal` (Algorithm 18).
+Source: `slh_keygen_internal` of [FIPS 205][fips205] (Algorithm 18).
 
-[main]: https://github.com/leanEthereum/leanVM/blob/5e3ade21d339a45e1b3b0dba97ad9300ab50e49b/doc/lean_sphincs/main.tex
+[fips205]: https://doi.org/10.6028/NIST.FIPS.205
 -/
 
 @[expose] public section
@@ -79,7 +79,7 @@ def publicKeyOf (pkSeed : PkSeed) (prf : Prf m) : m PublicKey := do
 
 The seed must be 32 uniform bytes, kept secret.
 
-`SK.prf` is not part of the public key, but `Gen` derives it, as main.tex §6.1 does. -/
+`SK.prf` is not part of the public key, but `Gen` derives it all the same. -/
 def keyGenWith (seed : Seed) : m (SecretKey × PublicKey) := do
   let key ← expandKey H seed
   return (⟨seed⟩, ← publicKeyOf H key.pkSeed (prf H key.pkSeed seed))

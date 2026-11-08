@@ -8,7 +8,7 @@ from ethlib.cryptography import sphincs
 from . import fixtures
 
 # The keys and signatures come from the committed `key_gen` and `sign` cases.
-# The `zeroed` cases start from leanVM's known answer, the same bytes as the known-answer cases.
+# The `zeroed` cases start from the independent known answer, as the known-answer cases do.
 # Each rejection changes one input, so it fails at one known step.
 
 HANDLER = "verify"

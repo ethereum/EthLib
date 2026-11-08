@@ -40,13 +40,10 @@ MESSAGE_ZERO = bytes(sphincs.MESSAGE_LEN)
 # ---- The known answer ------------------------------------------------------
 
 # The public key of SEED_KNOWN_ANSWER, and its signature of MESSAGE_KNOWN_ANSWER.
-# They are the two lines of the known answer of leanVM's Rust implementation, an independent one.
+# They are the two lines of the known answer of an independent implementation.
+# tests/sources.toml pins the commit it comes from.
 #
-# Repository: leanEthereum/leanVM
-# File: crates/signatures/src/lean_sphincs/known_answer.hex
 # Commit: 5e3ade21d339a45e1b3b0dba97ad9300ab50e49b
-#
-# That commit merged leanVM pull request 662 into main.
 # The public key is PK.seed, then PK.root.
 PUBLIC_KEY_KNOWN_ANSWER = bytes.fromhex(
     "e316da87de2d05b3ccd0a39c30bfda68303b3741edeb4da5f028855bcd31b9ee"

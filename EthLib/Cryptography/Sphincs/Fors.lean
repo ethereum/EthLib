@@ -30,9 +30,10 @@ The FORS public key `Fors.key(idx)` is one digest, which the bottom one-time key
 
 An opening reveals a leaf's secret and its 10 path nodes.
 
-Source: [main.tex][main] §5, which is FORS of FIPS 205 §8.
+Source: FORS of [FIPS 205][fips205] §8, with 24 trees of height 10 as in [leanSPHINCS.tex][note] §1.
 
-[main]: https://github.com/leanEthereum/leanVM/blob/5e3ade21d339a45e1b3b0dba97ad9300ab50e49b/doc/lean_sphincs/main.tex
+[note]: https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/leanSPHINCS.tex
+[fips205]: https://doi.org/10.6028/NIST.FIPS.205
 -/
 
 @[expose] public section

@@ -22,9 +22,9 @@ A FORS instance stays secure over a few signatures, and its security falls with 
 
 So one key must sign at most `2^30` messages.
 
-Source: [main.tex][main] §6.2, and FIPS 205's `slh_sign_internal` (Algorithm 19).
+Source: `slh_sign_internal` of [FIPS 205][fips205] (Algorithm 19).
 
-[main]: https://github.com/leanEthereum/leanVM/blob/5e3ade21d339a45e1b3b0dba97ad9300ab50e49b/doc/lean_sphincs/main.tex
+[fips205]: https://doi.org/10.6028/NIST.FIPS.205
 -/
 
 @[expose] public section

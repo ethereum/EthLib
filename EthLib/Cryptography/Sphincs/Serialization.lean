@@ -14,13 +14,11 @@ So an encoding is the fields concatenated, with no offsets and no length prefixe
 
 Decoding checks the total length, then reads each field at its fixed offset.
 
-Source: [main.tex][main] §6.4.
-
-The public key and the order of a signature are FIPS 205's, of §9.1 and §9.2.
+Source: [FIPS 205][fips205] §9.1 and §9.2, for the public key and the order of a signature.
 
 leanSPHINCS puts each layer's counter before its chain values.
 
-[main]: https://github.com/leanEthereum/leanVM/blob/5e3ade21d339a45e1b3b0dba97ad9300ab50e49b/doc/lean_sphincs/main.tex
+[fips205]: https://doi.org/10.6028/NIST.FIPS.205
 -/
 
 @[expose] public section

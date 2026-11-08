@@ -23,11 +23,14 @@ So the chain values revealed for one codeword never sign another.
 
 This replaces the Winternitz checksum.
 
-Source: the encoding of [main.tex][main] §3, which reads `D` as FIPS 205's `base_2b` does.
+Source: WOTS+C with target sum 128 of [leanSPHINCS.tex][note] §1.
+
+It reads `D` as the `base_2b` of [FIPS 205][fips205] does.
 
 WOTS+C is [ePrint 2022/778][wotsc].
 
-[main]: https://github.com/leanEthereum/leanVM/blob/5e3ade21d339a45e1b3b0dba97ad9300ab50e49b/doc/lean_sphincs/main.tex
+[note]: https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/leanSPHINCS.tex
+[fips205]: https://doi.org/10.6028/NIST.FIPS.205
 [wotsc]: https://eprint.iacr.org/2022/778
 -/
 

@@ -26,7 +26,7 @@ The key signs a 16-byte message `M` with the least counter `c` that makes this a
     D = Th(PK.seed, ADRS_enc(K), M | BE_32(c))
 ```
 
-Source: [main.tex][main] §3, and WOTS+ of FIPS 205 §5.
+Source: WOTS+C of [leanSPHINCS.tex][note] §1, and WOTS+ of [FIPS 205][fips205] §5.
 
 WOTS+C is [ePrint 2022/778][wotsc].
 
@@ -34,7 +34,8 @@ Every definition takes the hash `H` and makes its calls in a fixed order.
 
 Chains go by index, and each chain is walked step by step from its start.
 
-[main]: https://github.com/leanEthereum/leanVM/blob/5e3ade21d339a45e1b3b0dba97ad9300ab50e49b/doc/lean_sphincs/main.tex
+[note]: https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/leanSPHINCS.tex
+[fips205]: https://doi.org/10.6028/NIST.FIPS.205
 [wotsc]: https://eprint.iacr.org/2022/778
 -/
 

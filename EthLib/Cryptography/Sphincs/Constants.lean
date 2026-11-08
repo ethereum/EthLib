@@ -9,11 +9,11 @@ The leanSPHINCS parameter set: lifetime `2^30`, Keccak-256, FORS, three layers.
 - One-time signature: WOTS+C, 64 chains of 4 positions, target sum 128.
 - Hypertree: three layers of heights 8, 8 and 10, from the bottom.
 
-Source: the parameter table of [main.tex][main] §2, and its sizes and costs in §6.4.
+Source: the layered key of `2^30` in [leanSPHINCS.tex][note] §1, with FORS of 24 trees of height 10.
 
-The note follows [FIPS 205][fips205] except where its §1 says otherwise.
+The layout is that of [FIPS 205][fips205], except where a file says otherwise.
 
-[main]: https://github.com/leanEthereum/leanVM/blob/5e3ade21d339a45e1b3b0dba97ad9300ab50e49b/doc/lean_sphincs/main.tex
+[note]: https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/leanSPHINCS.tex
 [fips205]: https://doi.org/10.6028/NIST.FIPS.205
 -/
 
@@ -181,7 +181,7 @@ def KECCAK_RATE : Nat := 136
 /-- The permutations Keccak-256 makes on an input of `len` bytes: `floor(len / 136) + 1`. -/
 def permutations (len : Nat) : Nat := len / KECCAK_RATE + 1
 
-/-- The permutations of one verification, by the count of main.tex §6.4.
+/-- The permutations of one verification, counted call by call.
 
 - `H_msg`: two calls of 84 bytes.
 - FORS: per tree, a leaf of 64 bytes and `a` nodes of 80 bytes.
@@ -261,7 +261,7 @@ theorem lower_layer_sig_size_eq : layerSigSize LOWER_HEIGHT = 1156 := by decide
 /-- The advertised size of the top layer's signature. -/
 theorem top_layer_sig_size_eq : layerSigSize TOP_HEIGHT = 1188 := by decide
 
-/-- The advertised signature size, `7740` bytes, as in main.tex §6.4.
+/-- The signature size, `7740` bytes, as in the table of the note's §1.
 
 It is `n + k (1 + a) n + d (4 + v n) + h n`. -/
 theorem sig_size_eq : SIG_SIZE = 7740 ∧
@@ -269,7 +269,7 @@ theorem sig_size_eq : SIG_SIZE = 7740 ∧
       + HEIGHT * N := by
   decide
 
-/-- The advertised verification cost, `515` permutations, as in main.tex §6.4.
+/-- The verification cost, `515` permutations.
 
 It is `2 + k (1 + a) + 4 + d + d ((2^w - 1) v - T + 8) + h`. -/
 theorem verify_permutations_eq : VERIFY_PERMUTATIONS = 515 ∧

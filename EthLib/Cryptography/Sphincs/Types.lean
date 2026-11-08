@@ -126,7 +126,7 @@ structure OtsKey where
   leaf : Nat
   deriving DecidableEq, Repr
 
-/-- `K_l(idx)`: the key of a layer on the way from index `idx` up to the root (main.tex §4).
+/-- `K_l(idx)`: the key of a layer on the way from index `idx` up to the root (FIPS 205 §7).
 
 The bits below the layer are dropped, and what is left splits into a tree and a leaf.
 

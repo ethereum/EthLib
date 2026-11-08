@@ -32,9 +32,9 @@ That is `2 + 264 + 4 + 3 + 192 + 24 + 26 = 515`.
 
 Nothing here needs to be constant time: every value it reads is public.
 
-Source: [main.tex][main] §6.3 and §6.4, and FIPS 205's `slh_verify_internal` (Algorithm 20).
+Source: `slh_verify_internal` of [FIPS 205][fips205] (Algorithm 20).
 
-[main]: https://github.com/leanEthereum/leanVM/blob/5e3ade21d339a45e1b3b0dba97ad9300ab50e49b/doc/lean_sphincs/main.tex
+[fips205]: https://doi.org/10.6028/NIST.FIPS.205
 -/
 
 @[expose] public section

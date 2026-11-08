@@ -32,9 +32,12 @@ Every definition takes the hash `H`.
 
 A node computes its left subtree, then its right subtree, then its own hash.
 
-Source: [main.tex][main] §4, and FIPS 205's `xmss_node` and `xmss_pkFromSig` (§6).
+Source: `xmss_node` and `xmss_pkFromSig` of [FIPS 205][fips205] §6.
 
-[main]: https://github.com/leanEthereum/leanVM/blob/5e3ade21d339a45e1b3b0dba97ad9300ab50e49b/doc/lean_sphincs/main.tex
+The layer heights are those of [leanSPHINCS.tex][note] §1.
+
+[note]: https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/leanSPHINCS.tex
+[fips205]: https://doi.org/10.6028/NIST.FIPS.205
 -/
 
 @[expose] public section
