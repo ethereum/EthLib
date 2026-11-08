@@ -7,15 +7,12 @@
 
 extern lean_object*
 eth_fork_id(
-  lean_object* schedule,
-  uint64_t number,
-  uint64_t timestamp
+  lean_object* args
 );
 
 extern lean_object*
 eth_mainnet_fork_id(
-  uint64_t number,
-  uint64_t timestamp
+  lean_object* args
 );
 
 extern lean_object*
@@ -24,6 +21,16 @@ eth_fork_id_validate(
   uint64_t number,
   uint64_t timestamp,
   lean_object* remote
+);
+
+extern lean_object*
+eth_fork_id_schedule(
+  lean_object* args
+);
+
+extern lean_object*
+eth_fork_id_encode(
+  lean_object* args
 );
 
 /* ---- Wrappers --------------------------------------------------------- */
@@ -48,14 +55,7 @@ py_fork_id(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *schedule_obj, *number_obj, *timestamp_obj;
-  if (!PyArg_ParseTuple(args, "OOO", &schedule_obj, &number_obj, &timestamp_obj)) return NULL;
-  uint64_t number, timestamp;
-  if (parse_uint64(number_obj, "number", &number)) return NULL;
-  if (parse_uint64(timestamp_obj, "timestamp", &timestamp)) return NULL;
-  lean_object* schedule;
-  if (parse_bytes(schedule_obj, "schedule", &schedule)) return NULL;
-  return except_into_pybytes(eth_fork_id(schedule, number, timestamp), FORK_ID_ERROR);
+  return call_pyvalue_export(eth_fork_id, args, 3, FORK_ID_ERROR);
 }
 
 PyObject*
@@ -63,12 +63,7 @@ py_mainnet_fork_id(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *number_obj, *timestamp_obj;
-  if (!PyArg_ParseTuple(args, "OO", &number_obj, &timestamp_obj)) return NULL;
-  uint64_t number, timestamp;
-  if (parse_uint64(number_obj, "number", &number)) return NULL;
-  if (parse_uint64(timestamp_obj, "timestamp", &timestamp)) return NULL;
-  return except_into_pybytes(eth_mainnet_fork_id(number, timestamp), FORK_ID_ERROR);
+  return call_pyvalue_export(eth_mainnet_fork_id, args, 2, FORK_ID_ERROR);
 }
 
 PyObject*
@@ -87,4 +82,20 @@ py_fork_id_validate(
   if (parse_bytes(remote_obj, "remote", &remote)) { lean_dec(schedule); return NULL; }
   return except_into_pybool(
     eth_fork_id_validate(schedule, number, timestamp, remote), FORK_ID_ERROR);
+}
+
+PyObject*
+py_fork_id_schedule(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_fork_id_schedule, args, 4, FORK_ID_ERROR);
+}
+
+PyObject*
+py_fork_id_encode(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_fork_id_encode, args, 2, FORK_ID_ERROR);
 }

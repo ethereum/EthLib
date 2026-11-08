@@ -43,10 +43,9 @@ def decode_response_chunk(
 
     An error chunk carries no context bytes, and its payload is the error message.
     """
-    raw = _native.reqresp_decode_response_chunk(context_bytes, type_min, type_bound, data)
-    code = raw[0]
-    n = context_bytes if code == 0 else 0
-    return ResponseChunk(code, raw[1 : 1 + n], raw[1 + n :])
+    return ResponseChunk(
+        *_native.reqresp_decode_response_chunk(context_bytes, type_min, type_bound, data)
+    )
 
 
 def encode_payload(ssz_bytes: bytes) -> bytes:

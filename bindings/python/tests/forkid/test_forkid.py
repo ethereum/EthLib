@@ -378,3 +378,33 @@ def test_mainnet_times() -> None:
         assert forkid.mainnet_fork_id(20_000_000, timestamp - 1)[1] == timestamp
     # Each fork by time changes the hash.
     assert len(hashes) == len(MAINNET_TIMES)
+
+
+def test_encode_reads_the_fork_id_types() -> None:
+    # FORK_HASH is 4 bytes and FORK_NEXT a uint64, and Lean reads both with code 0 on a mismatch.
+    with raises(ForkIdError, "expected 4 bytes, got 5") as info:
+        forkid.encode(bytes(5), 0)
+    assert info.value.code == 0
+    with raises(ForkIdError, f"expected an int below {2**64}, got {2**64}") as info:
+        forkid.encode(bytes(4), 2**64)
+    assert info.value.code == 0
+
+
+def test_schedule_bytes() -> None:
+    # The genesis hash, the time 0 as an empty scalar, no merge fork, and one fork at block 1.
+    assert forkid.schedule(b"", 0, [("a", BLOCK, 1)]) == bytes.fromhex("c88080c0c4c3618001")
+    # A merge fork block is a list of its one scalar.
+    assert forkid.schedule(b"", 0, [], 5) == bytes.fromhex("c58080c105c0")
+
+
+def test_typed_arguments() -> None:
+    # A head of 2^64 does not read as a uint64, and a fork name must be a str.
+    with raises(ForkIdError, f"expected an int below {2**64}, got {2**64}") as info:
+        forkid.mainnet_fork_id(2**64, 0)
+    assert info.value.code == 0
+    with raises(ForkIdError, "expected a str") as info:
+        forkid.schedule(b"", 0, [(b"a", BLOCK, 1)])  # ty: ignore[invalid-argument-type]
+    assert info.value.code == 0
+    # A negative number never reaches Lean.
+    with raises(ValueError, "cannot pass a negative int to Lean"):
+        forkid.mainnet_fork_id(-1, 0)

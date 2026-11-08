@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Exports
+public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Networking.ReqResp.Encoding
 
 /-!
@@ -14,14 +14,14 @@ The encoders compress each chunk of a payload when that makes it shorter, and ca
 
 A rejected message comes back as the code and the message of its error.
 
-A response chunk comes back as one byte string: its code, its context bytes, then its payload.
+A response chunk comes back as a tuple of its code, its context bytes and its payload.
 -/
 
 public section
 
 namespace EthLib.Networking.ReqResp.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result PyValue pyExport)
 
 
 /-- A message for a rejection, phrased for someone reading a Python traceback. -/
@@ -60,12 +60,19 @@ def maxCompressedLenExport (n : UInt64) : Result UInt64 :=
 def decodePayloadExport (typeMin typeBound : UInt64) (bs : ByteArray) : Result ByteArray :=
   runReqResp (decodePayload typeMin typeBound bs)
 
-/-- The code, the context bytes and the payload of one response chunk, as one byte string. -/
-@[export eth_reqresp_decode_response_chunk]
-def decodeResponseChunkExport (contextBytes typeMin typeBound : UInt64) (bs : ByteArray) :
-    Result ByteArray := do
+/-- The code, the context bytes and the payload of one response chunk. -/
+def decodeResponseChunkOf (args : UInt64 × UInt64 × UInt64 × ByteArray) :
+    Result (UInt8 × ByteArray × ByteArray) := do
+  let (contextBytes, typeMin, typeBound, bs) := args
   let chunk ← runReqResp (decodeResponseChunk contextBytes.toNat typeMin typeBound bs)
-  return ⟨#[chunk.code.toByte]⟩ ++ chunk.context ++ chunk.payload
+  return (chunk.code.toByte, chunk.context, chunk.payload)
+
+/-- The code, the context bytes and the payload of one response chunk.
+
+The arguments are the number of context bytes, the bounds of the payload and the chunk. -/
+@[export eth_reqresp_decode_response_chunk]
+def decodeResponseChunkExport (args : PyValue) : Result PyValue :=
+  pyExport decodeResponseChunkOf args
 
 /-- The payload that holds the SSZ bytes, each chunk of its stream compressed when shorter. -/
 @[export eth_reqresp_encode_payload]

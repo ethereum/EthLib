@@ -47,6 +47,7 @@ size_t SPHINCS_FORS_HEIGHT;
 
 
 size_t ENR_MAX_RECORD_SIZE;
+size_t RLPX_SECRETS_SIZE;
 size_t REQRESP_MAX_PAYLOAD_SIZE;
 size_t REQRESP_MAX_ERROR_MESSAGE_SIZE;
 size_t SECP256K1_HASH_LEN;
@@ -298,6 +299,11 @@ eth_secp256r1_const_signature_len(
 
 extern uint64_t
 eth_enr_const_max_record_size(
+  lean_object* unit
+);
+
+extern uint64_t
+eth_rlpx_const_secrets_size(
   lean_object* unit
 );
 
@@ -957,6 +963,8 @@ static PyMethodDef methods[] = {
   {"discv4_encode", py_discv4_encode, METH_VARARGS, DOC_discv4_encode},
   {"discv4_record_signed_by", py_discv4_record_signed_by, METH_VARARGS, DOC_discv4_record_signed_by},
   {"fork_id", py_fork_id, METH_VARARGS, DOC_fork_id},
+  {"fork_id_schedule", py_fork_id_schedule, METH_VARARGS, DOC_fork_id_schedule},
+  {"fork_id_encode", py_fork_id_encode, METH_VARARGS, DOC_fork_id_encode},
   {"mainnet_fork_id", py_mainnet_fork_id, METH_VARARGS, DOC_mainnet_fork_id},
   {"fork_id_validate", py_fork_id_validate, METH_VARARGS, DOC_fork_id_validate},
   {"eth_message_decode", py_eth_message_decode, METH_VARARGS, DOC_eth_message_decode},
@@ -1179,6 +1187,7 @@ PyInit__native(void) {
     SECP256R1_HASH_LEN       = (size_t) eth_secp256r1_const_hash_len(lean_box(0));
     SECP256R1_SIGNATURE_LEN  = (size_t) eth_secp256r1_const_signature_len(lean_box(0));
     ENR_MAX_RECORD_SIZE     = (size_t) eth_enr_const_max_record_size(lean_box(0));
+    RLPX_SECRETS_SIZE       = (size_t) eth_rlpx_const_secrets_size(lean_box(0));
     REQRESP_MAX_PAYLOAD_SIZE = (size_t) eth_reqresp_const_max_payload_size(lean_box(0));
     REQRESP_MAX_ERROR_MESSAGE_SIZE = (size_t) eth_reqresp_const_max_error_message_size(lean_box(0));
 
@@ -1229,6 +1238,7 @@ PyInit__native(void) {
   PyModule_AddIntConstant(m, "SECP256R1_HASH_LEN", SECP256R1_HASH_LEN);
   PyModule_AddIntConstant(m, "SECP256R1_SIGNATURE_LEN", SECP256R1_SIGNATURE_LEN);
   PyModule_AddIntConstant(m, "ENR_MAX_RECORD_SIZE", ENR_MAX_RECORD_SIZE);
+  PyModule_AddIntConstant(m, "RLPX_SECRETS_SIZE", RLPX_SECRETS_SIZE);
   PyModule_AddIntConstant(m, "REQRESP_MAX_PAYLOAD_SIZE", REQRESP_MAX_PAYLOAD_SIZE);
   PyModule_AddIntConstant(m, "REQRESP_MAX_ERROR_MESSAGE_SIZE", REQRESP_MAX_ERROR_MESSAGE_SIZE);
   return m;

@@ -234,7 +234,7 @@
   "The consensus entries of a record at the named fork, with `count` attestation subnets."
 
 #define DOC_enr_eth_fork_id \
-  "The fork identifier of the \"eth\" entry of a record, as RLP, or no bytes without the entry."
+  "The fork identifier of the \"eth\" entry of a record, as its hash and its next fork."
 
 #define DOC_discv5_log_distance \
   "The logarithmic distance: the number of bits of the distance, and 0 for equal IDs."
@@ -252,7 +252,7 @@
   "Whether an ID signature of 64 bytes `r || s` verifies under the public key of node A."
 
 #define DOC_discv5_decode_packet \
-  "The packet that a destination node reads, as a JSON object of hex strings."
+  "The packet that a destination node reads, as a `dict`."
 
 #define DOC_discv5_reencode_packet \
   "The bytes of the packet that the decoder reads, written again by the encoder."
@@ -264,16 +264,16 @@
   "The plaintext of an encrypted message, or an error if it does not authenticate."
 
 #define DOC_discv5_decode_message \
-  "The message of a plaintext, as a JSON object with its type and its fields."
+  "The message of a plaintext, as a `dict` of its type and its fields."
 
 #define DOC_discv5_reencode_message \
   "The plaintext of the decoded message, written again by the encoder."
 
 #define DOC_discv5_make_whoareyou \
-  "Node B's WHOAREYOU packet for node A, and its challenge data, as a JSON object."
+  "Node B's WHOAREYOU packet for node A, and its challenge data."
 
 #define DOC_discv5_read_whoareyou \
-  "Node A's reading of a WHOAREYOU packet, as a JSON object."
+  "Node A's reading of a WHOAREYOU packet, as a `dict`."
 
 #define DOC_discv5_seal_message \
   "An ordinary message packet from one node to another, under a session key."
@@ -282,10 +282,10 @@
   "The plaintext of an ordinary message packet from a given node, under its session key."
 
 #define DOC_discv5_seal_handshake \
-  "Node A's handshake message packet for node B, and its session keys, as a JSON object."
+  "Node A's handshake message packet for node B, and its two session keys."
 
 #define DOC_discv5_open_handshake \
-  "Node B's reading of a handshake message packet, as a JSON object."
+  "Node B's reading of a handshake message packet, as a `dict`."
 
 #define DOC_consensus_preset \
   "The preset of a name, as a JSON object."
@@ -699,10 +699,16 @@
   "Whether the RLP record `record` of an ENRResponse is signed by the public key `sender`."
 
 #define DOC_fork_id \
-  "The fork identifier, as RLP, of a node with the schedule `schedule` at a head."
+  "The fork identifier of a node with a schedule at a head: its hash and its next fork."
+
+#define DOC_fork_id_schedule \
+  "The RLP schedule `[genesis-hash, genesis-time, merge-fork, forks]` of a chain."
+
+#define DOC_fork_id_encode \
+  "The RLP fork identifier `[FORK_HASH, FORK_NEXT]`, from its 4-byte hash and its next fork."
 
 #define DOC_mainnet_fork_id \
-  "The fork identifier, as RLP, of a mainnet node at a head."
+  "The fork identifier of a mainnet node at a head: its hash and its next fork."
 
 #define DOC_fork_id_validate \
   "Whether a node at a head accepts the fork identifier of a peer, by the rules of EIP-2124."
@@ -813,7 +819,7 @@
   "The packet `auth` from the initiator to the recipient's public key."
 
 #define DOC_rlpx_respond \
-  "The recipient's answer to `auth`: the packet `ack`, then the 128 bytes of its secrets."
+  "The recipient's answer to `auth`: the packet `ack`, and the 128 bytes of its secrets."
 
 #define DOC_rlpx_recipient_secrets \
   "The recipient's secrets for an `auth` it received and an `ack` it sent."

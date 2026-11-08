@@ -19,10 +19,7 @@ eth_reqresp_decode_payload(
 
 extern lean_object*
 eth_reqresp_decode_response_chunk(
-  uint64_t context_bytes,
-  uint64_t type_min,
-  uint64_t type_bound,
-  lean_object* data
+  lean_object* args
 );
 
 extern lean_object*
@@ -84,16 +81,7 @@ py_reqresp_decode_response_chunk(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *context_obj, *min_obj, *bound_obj, *data_obj;
-  if (!PyArg_ParseTuple(args, "OOOO", &context_obj, &min_obj, &bound_obj, &data_obj)) return NULL;
-  uint64_t context_bytes, type_min, type_bound;
-  if (parse_uint64(context_obj, "context_bytes", &context_bytes)) return NULL;
-  if (parse_uint64(min_obj, "type_min", &type_min)) return NULL;
-  if (parse_uint64(bound_obj, "type_bound", &type_bound)) return NULL;
-  lean_object* data = parse_data(data_obj);
-  if (!data) return NULL;
-  return except_into_pybytes(
-    eth_reqresp_decode_response_chunk(context_bytes, type_min, type_bound, data), REQRESP_ERROR);
+  return call_pyvalue_export(eth_reqresp_decode_response_chunk, args, 4, REQRESP_ERROR);
 }
 
 PyObject*

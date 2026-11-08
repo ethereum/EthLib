@@ -6,7 +6,7 @@ from ethlib.cryptography import _native
 from ethlib.errors import RlpxError
 
 # The secrets of a session: aes-secret, mac-secret, and the egress and ingress MAC digests.
-SECRETS_SIZE = 128
+SECRETS_SIZE = _native.RLPX_SECRETS_SIZE
 
 
 def ecies_encrypt(
@@ -45,8 +45,7 @@ def respond(
     probe: bytes,
 ) -> tuple[bytes, bytes]:
     """The recipient's packet ack and its secrets, with the MAC digests after `probe`."""
-    out = _native.rlpx_respond(static_key, ephemeral_key, nonce, r, iv, padding, auth, probe)
-    return out[:-SECRETS_SIZE], out[-SECRETS_SIZE:]
+    return _native.rlpx_respond(static_key, ephemeral_key, nonce, r, iv, padding, auth, probe)
 
 
 def recipient_secrets(

@@ -46,6 +46,7 @@ extern size_t SECP256R1_SIGNATURE_LEN;
 
 
 extern size_t ENR_MAX_RECORD_SIZE;
+extern size_t RLPX_SECRETS_SIZE;
 extern size_t REQRESP_MAX_PAYLOAD_SIZE;
 extern size_t REQRESP_MAX_ERROR_MESSAGE_SIZE;
 
@@ -474,6 +475,8 @@ PyObject* py_discv4_decode                                (PyObject* self, PyObj
 PyObject* py_discv4_encode                                (PyObject* self, PyObject* args);
 PyObject* py_discv4_record_signed_by                      (PyObject* self, PyObject* args);
 PyObject* py_fork_id                                      (PyObject* self, PyObject* args);
+PyObject* py_fork_id_schedule                             (PyObject* self, PyObject* args);
+PyObject* py_fork_id_encode                               (PyObject* self, PyObject* args);
 PyObject* py_mainnet_fork_id                              (PyObject* self, PyObject* args);
 PyObject* py_fork_id_validate                             (PyObject* self, PyObject* args);
 PyObject* py_eth_message_decode                           (PyObject* self, PyObject* args);

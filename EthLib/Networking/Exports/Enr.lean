@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Exports
+public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Networking.Enr.Consensus
 public import EthLib.Networking.Enr.Eth
 public import EthLib.Networking.Enr.V4
@@ -31,7 +31,7 @@ public section
 
 namespace EthLib.Networking.Enr.Exports
 
-open EthLib.Exports (Result forkUpTo)
+open EthLib.Exports (Result PyValue forkUpTo pyExport)
 
 open EthLib.Serialization.Ssz (SszType)
 
@@ -132,35 +132,56 @@ def sszBytes {α : Type} [SszType α] (a : α) : Result ByteArray :=
   -- No error type of the specification covers this case, so its code is 0.
   | .error _ => throw (0, "entry has no SSZ encoding")
 
-/-- An optional entry: the byte 0 when absent, else the byte 1 and its SSZ bytes. -/
-def optionBytes {α : Type} [SszType α] : Option α → Result ByteArray
-  | none => pure ⟨#[0]⟩
-  | some a => return ⟨#[1]⟩ ++ (← sszBytes a)
+/-- The SSZ bytes of an optional entry, or `None` when it is absent. -/
+def optionBytes {α : Type} [SszType α] : Option α → Result (Option ByteArray)
+  | none => pure none
+  | some a => some <$> sszBytes a
+
+/-- The consensus entries of a record, as typed Python values.
+
+They are `eth2` as its fork digest, next fork version and next fork epoch.
+
+Then come `attnets`, `syncnets`, `cgc` and `nfd`, each `None` when absent.
+
+The bitvectors are their SSZ bytes, and `cgc` is an integer. -/
+abbrev EntriesValue := (Vector UInt8 4 × Vector UInt8 4 × UInt64) × Option ByteArray ×
+  Option ByteArray × Option UInt64 × Option (Vector UInt8 4)
+
+/-- The consensus entries of a record at the named fork, with `count` attestation subnets. -/
+def consensusEntriesOf (args : String × UInt64 × ByteArray) : Result EntriesValue := do
+  let (fork, count, record) := args
+  let fork ← forkUpTo .bpo2 fork.toUTF8
+  let r ← runEnr (decode record)
+  let e ← (readEntries count fork r).mapError fun err => (err.code, entryMessage err)
+  return ((e.eth2.forkDigest, e.eth2.nextForkVersion, e.eth2.nextForkEpoch),
+    ← optionBytes e.attnets, ← optionBytes e.syncnets, e.cgc, e.nfd)
 
 /-- The consensus entries of a record at the named fork, with `count` attestation subnets.
 
-They come back as the 16 SSZ bytes of `eth2`, then `attnets`, `syncnets`, `cgc` and `nfd`.
+The arguments are the name of the fork, the number of attestation subnets and the record.
 
-Each of the four is the byte 0 when absent, or the byte 1 and its SSZ bytes. -/
+They come back as `eth2`, as its three fields, then `attnets`, `syncnets`, `cgc` and `nfd`.
+
+Each of the last four is `None` when absent, and the bitvectors are their SSZ bytes. -/
 @[export eth_enr_consensus_entries]
-def consensusEntriesExport (fork : ByteArray) (count : UInt64) (record : ByteArray) :
-    Result ByteArray := do
-  let fork ← forkUpTo .bpo2 fork
-  let r ← runEnr (decode record)
-  let e ← (readEntries count fork r).mapError fun err => (err.code, entryMessage err)
-  return (← sszBytes e.eth2) ++ (← optionBytes e.attnets) ++ (← optionBytes e.syncnets) ++
-    (← optionBytes e.cgc) ++ (← optionBytes e.nfd)
+def consensusEntriesExport (args : PyValue) : Result PyValue :=
+  pyExport consensusEntriesOf args
 
-/-- The fork identifier of the "eth" entry of a record, as RLP, or no bytes without the entry.
+/-- The fork identifier of the "eth" entry of a record, as its hash and its next fork.
 
-An entry that is not a list starting with a fork identifier has code 0. -/
-@[export eth_enr_eth_fork_id]
-def ethForkIdExport (record : ByteArray) : Result ByteArray := do
+It is `None` without the entry, and an entry that does not start with one has code 0. -/
+def ethForkIdOf (record : ByteArray) : Result (Option (Vector UInt8 4 × UInt64)) := do
   let r ← runEnr (decode record)
   match readEth r with
   | .error _ => throw (0, "eth entry is not a list that starts with [forkHash, forkNext]")
-  | .ok none => pure .empty
-  | .ok (some id) =>
-    (Serialization.Rlp.Codec.encode id).mapError fun _ => (0, "too large")
+  | .ok none => pure none
+  | .ok (some id) => pure (some (id.hash, id.next))
+
+/-- The fork identifier of the "eth" entry of a record, as its hash and its next fork.
+
+It is `None` without the entry, and an entry that does not start with one has code 0. -/
+@[export eth_enr_eth_fork_id]
+def ethForkIdExport (args : PyValue) : Result PyValue :=
+  pyExport ethForkIdOf args
 
 end EthLib.Networking.Enr.Exports

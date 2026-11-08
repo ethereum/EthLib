@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Exports
+public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Networking.Rlpx.Frame
 
 /-!
@@ -25,7 +25,7 @@ public section
 
 namespace EthLib.Networking.Rlpx.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result PyValue pyExport)
 
 open EthLib.Cryptography.Secp256k1
 
@@ -105,6 +105,13 @@ def readKeys (staticKey ephemeralKey nonce : ByteArray) : Result Keys := do
 def readSealing (r iv padding : ByteArray) : Result Sealing := do
   return ⟨← readPrivateKey r, ← readIv iv, padding⟩
 
+/-- The bytes of the secrets: the AES secret, the MAC secret and two MAC digests, 32 bytes each. -/
+def SECRETS_SIZE : Nat := 4 * 32
+
+/-- The number of bytes of the secrets that the handshake exports return. -/
+@[export eth_rlpx_const_secrets_size]
+def constSecretsSize (_ : Unit) : UInt64 := UInt64.ofNat SECRETS_SIZE
+
 /-- The 128 bytes of the secrets, with the digests of the MAC states after the probe. -/
 def secretsBytes (secrets : Secrets) (probe : ByteArray) : ByteArray :=
   let digest (h : Cryptography.Hash.Keccak.Hasher) := (h.absorb probe).digest.toArray
@@ -119,13 +126,22 @@ def makeAuthExport (staticKey ephemeralKey nonce recipient r iv padding : ByteAr
   let q ← readPublicKey recipient
   runHandshake (makeAuth keys q (← readSealing r iv padding))
 
-/-- The recipient's answer to `auth`: the packet `ack`, then the 128 bytes of its secrets. -/
-@[export eth_rlpx_respond]
-def respondExport (staticKey ephemeralKey nonce r iv padding auth probe : ByteArray) :
-    Result ByteArray := do
+/-- The recipient's answer to `auth`: the packet `ack`, and the 128 bytes of its secrets. -/
+def respondOf (args : ByteArray × ByteArray × ByteArray × ByteArray × ByteArray × ByteArray ×
+    ByteArray × ByteArray) : Result (ByteArray × ByteArray) := do
+  let (staticKey, ephemeralKey, nonce, r, iv, padding, auth, probe) := args
   let keys ← readKeys staticKey ephemeralKey nonce
   let (ack, secrets) ← runHandshake (respond keys (← readSealing r iv padding) auth)
-  return ack ++ secretsBytes secrets probe
+  return (ack, secretsBytes secrets probe)
+
+/-- The recipient's answer to `auth`: the packet `ack`, and the 128 bytes of its secrets.
+
+The arguments are the static key, the ephemeral key, the nonce, `r`, the IV and the padding.
+
+Last come the packet `auth` and the probe that the MAC digests read after. -/
+@[export eth_rlpx_respond]
+def respondExport (args : PyValue) : Result PyValue :=
+  pyExport respondOf args
 
 /-- The recipient's secrets for an `auth` it received and an `ack` it sent. -/
 @[export eth_rlpx_recipient_secrets]
