@@ -217,7 +217,9 @@ theorem initiateValidatorExit_activationEpochs {config : Config} {index : Valida
     simp [found]
   · simp [activationEpochAt, getValidator, same.1]
 
-/-- The registry step of one validator keeps the slot and all activation epochs, at every fork. -/
+/-- The registry step of one validator used before Electra keeps the slot and activation epochs.
+
+This holds for any fork value. -/
 theorem updateRegistryEntry_activationEpochs {config : Config} {index : Nat}
     (computed : updateRegistryEntry config state index = .ok after) :
     after.slot = state.slot ∧
@@ -299,13 +301,13 @@ theorem foldlM_activateValidator_activationEpochs {indices : List ValidatorIndex
 
 /-- Before Electra, the registry writes activation epochs only in a bounded queue prefix.
 
-The queue, read after the first pass, sorts by eligibility epoch, then by validator index.
+The queue and the limit are read after the first pass, as the step reads them.
+
+The queue sorts by eligibility epoch, then by validator index.
 
 Before Deneb the limit is the validator churn limit; from Deneb it is capped, as [EIP-7514] says.
 
 Each selected validator had the far-future activation epoch, 2^64 - 1, before the step.
-
-The limit is read after the first pass, as the step reads it.
 
 With an empty prefix, the step does not compute an activation epoch at all.
 

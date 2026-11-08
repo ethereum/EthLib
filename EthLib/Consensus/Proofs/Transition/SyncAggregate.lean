@@ -6,7 +6,7 @@ public import EthLib.Consensus.Transition.SyncAggregate
 /-!
 # Proofs: the sync aggregate of a block
 
-A successful sync aggregate step means that the Ethereum signature wrapper accepted the key list.
+A successful sync aggregate step means that the wrapper of the configured check accepted the keys.
 
 That wrapper accepts an empty key list with the signature of the point at infinity.
 
@@ -51,13 +51,13 @@ theorem bls_fastAggregateVerify_empty (message signature : ByteArray) :
 
 The key list is the stored aggregate key, that key less the absent keys, or the signing keys.
 
-Only the middle case decodes keys.
+Only the middle case decodes keys while it computes the list.
 
 The computed root is the signing root of the block root at the slot before the state's.
 
 Its domain is the sync committee domain at the epoch of that slot.
 
-The Ethereum signature wrapper accepted the computed key list and that root.
+The wrapper of the configured check accepted the computed key list and that root.
 
 This does not show that the signature is valid, or that each member key decodes. -/
 theorem processSyncAggregate_signed {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
