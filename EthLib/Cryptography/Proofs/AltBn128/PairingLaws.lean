@@ -4,13 +4,13 @@ public import EthLib.Cryptography.Proofs.AltBn128.Order
 public import EthLib.Cryptography.Proofs.AltBn128.G2Order
 
 /-!
-# Proofs: the pairing law of alt_bn128 as one hypothesis
+# Proofs: the pairing law of alt_bn128 as one structure
 
 [EIP-197](https://eips.ethereum.org/EIPS/eip-197) §"Specification" defines the check of ECPAIRING.
 
 It returns one exactly when `sum_i log_P1(a_i) log_P2(b_i) = 0`.
 
-EthLib does not prove that its pairing check computes this, so it states the law as one hypothesis.
+This module states the law as one structure, and `PairingAte.lean` proves it.
 
 The law reads points as multiples of the generators `P1` and `P2`.
 
@@ -75,6 +75,21 @@ theorem represents_generator : generator.Represents 1 := by
   have h := isOnCurve_generator
   rw [Represents, ZMod.val_one, ← toPoint_inj h (isOnCurve_mulBits _ _ h),
     toPoint_mulBits _ _ h (by decide), one_smul]
+
+/-- When `P` is `a P1`, its negative is `(-a) P1`. -/
+theorem Represents.neg {P : Point} {a : ZMod Fr.modulus} (h : P.Represents a) :
+    P.neg.Represents (-a) := by
+  have hg := isOnCurve_generator
+  have hP : P.isOnCurve = true := h ▸ isOnCurve_mulBits _ _ hg
+  have hlt (c : ZMod Fr.modulus) : c.val < 2 ^ 256 := lt_trans (ZMod.val_lt c) (by decide)
+  rw [Represents, ← toPoint_inj (isOnCurve_neg hP) (isOnCurve_mulBits _ _ hg), toPoint_neg hP,
+    h, toPoint_mulBits _ _ hg (hlt a), toPoint_mulBits _ _ hg (hlt (-a))]
+  -- The two multiples add to `((-a).val + a.val) P1`, and `q` divides that scalar.
+  refine (eq_neg_of_add_eq_zero_left ?_).symm
+  rw [← add_nsmul, ← addOrderOf_dvd_iff_nsmul_eq_zero, addOrderOf_generator,
+    ← ZMod.natCast_eq_zero_iff]
+  push_cast
+  simp
 
 end Point
 

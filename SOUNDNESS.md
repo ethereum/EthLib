@@ -191,11 +191,33 @@ Two values of one type with one root are equal, or `findMessageCollision` return
 It has three hypotheses on each value.
 The type is well formed, the value fits the type, and the value is `CommitmentSized`: every variable-size count in it is below `2^256`.
 A larger count would be truncated in the 256-bit word mixed into the root, and the proof needs the exact count.
+`hashTreeRootM_binding` states the same, with the same hypotheses, for any hash with 32-byte digests.
+It computes the roots of the all-zero subtrees with that hash too.
 
 Layout separation is `hashTreeRoot_progressiveContainer_layouts_separate` (`Proofs/Ssz/Codec/LayoutSeparation.lean`).
 Two legal progressive containers with one root have one layout, or `findMixinCollision` returns the inputs of the two last hashes.
 
-No theorem bounds the probability of finding any of these collisions.
+No theorem bounds the probability of finding a collision in a branch, a multiproof or a layout.
+
+`Proofs/Ssz/RandomOracle.lean` bounds whole-value binding, with the node hash a random oracle.
+The merkleization takes its hash in any monad, so the experiment runs the root of the specification with a hasher that queries the oracle.
+That hasher also computes the roots of the all-zero subtrees with the oracle, one query per level.
+The type is fixed before the run, and an adversary outputs two values of it.
+The experiment computes both roots, then hashes every node of both expanded computations again with the oracle.
+The adversary wins when the two values differ, fit the well-formed type, are `CommitmentSized`, and have one root.
+`collision_of_extract` shows that every win leaves two different cached inputs with one answer.
+Its proof finds them with `findMessageCollision`, run with a table that agrees with the cache.
+`prEvent_wins_le` then bounds a win by `Q^2 / N` through `prEvent_collision_le`, and `prEvent_wins_le_two_pow` states it with `N = 2^256`.
+`Q` counts every oracle call of the experiment, repeats included.
+The extraction makes many: the expanded computations hash every node of the padded tree of each value, one query each.
+So `Q` grows with the capacity of the type, not with the length of the values.
+A list with a capacity of `2^38` nodes costs about `2^38` queries for each value, so about `2^39` for the two.
+For an Electra beacon state the padded trees hold about `2^40.6` nodes for each value, so `Q` is at least about `2^41.6`, and with `Q = 2^42` the bound is `2^-172`.
+A rehash that shares the all-zero subtrees would bring `Q` down to the size of the values, and is left for later.
+`prEvent_secondValue_le_two_pow` fixes the first value as an honest one: its root is computed in the experiment, with the same oracle.
+That is still the birthday bound, not a sharper fixed-target bound.
+The bound needs no hypothesis that the cache covers the witnesses, since the experiment queries them itself.
+One oracle answers inner nodes and mixed-in words alike, so a collision between any two inputs counts.
 
 ### leanSPHINCS
 
@@ -283,6 +305,7 @@ The theorems that take `PairingLaws` as a hypothesis, or build a model of the ta
 - `Cryptography/Proofs/Kzg/Arsdh.lean`
 - `Cryptography/Proofs/Kzg/BatchBinding.lean`
 - `Cryptography/Proofs/Kzg/Binding.lean`
+- `Cryptography/Proofs/Kzg/BlobBinding.lean`
 - `Cryptography/Proofs/Kzg/BlobVerifier.lean`
 - `Cryptography/Proofs/Kzg/CellBatchBinding.lean`
 - `Cryptography/Proofs/Kzg/CellBinding.lean`
@@ -451,7 +474,7 @@ This is the optimal ate pairing of Beuchat et al. (ePrint 2010/354, §2).
 `AltBn128.pairingBilinear` (`Proofs/AltBn128/PairingAte.lean`) proves that the pairing is bilinear on the multiples of the generators: `e(a P1, b P2) = e(P1, P2)^(a b)` for all `a` and `b` in `Fr`.
 `orderOf_pairing_generators` (`Proofs/AltBn128/Nondegenerate.lean`) proves that the pairing of `P1` and `P2` has order `q`, so it is not 1; the kernel evaluates that pairing.
 `pairingCheck_eq_true_iff` (`Proofs/AltBn128/PairingBilinear.lean`) proves that the check passes exactly when the product of the pairings of its pairs is 1.
-The pairing law is a hypothesis, `AltBn128.PairingLaws` (`Proofs/AltBn128/PairingLaws.lean`), in the shape of the BLS one.
+The pairing law is stated as a structure, `AltBn128.PairingLaws` (`Proofs/AltBn128/PairingLaws.lean`), in the shape of the BLS one.
 It states the check of EIP-197: the pairs `(a_i P1, b_i P2)` pass exactly when `sum_i a_i b_i = 0`.
 `PairingLaws.of_bilinear` (`Proofs/AltBn128/PairingBilinear.lean`) derives it from one smaller hypothesis, `PairingBilinear`: `e(a P1, b P2) = e(P1, P2)^(a b)` for all `a` and `b` in `Fr`.
 `AltBn128.pairingLaws` (`Proofs/AltBn128/PairingAte.lean`) proves `AltBn128.PairingLaws` from it, so every theorem that assumes it holds once it is supplied.
@@ -466,7 +489,10 @@ It states the check of EIP-197: the pairs `(a_i P1, b_i P2)` pass exactly when `
 `Point2.nsmul_order_eq_zero_iff` (`Proofs/AltBn128/G2Torsion.lean`) proves that every point `Q` with `q Q = O` on the twist is a multiple of `P2`, as EIP-197 says.
 `Point2.mulBits_order_eq_infinity_iff_exists` restates it for the subgroup check of ECPAIRING, and `Point.exists_eq_mulBits_generator` (`Proofs/AltBn128/Order.lean`) does the same for `P1`.
 `exists_mulBits_generator_of_decodePair` (`Execution/Proofs/Evm/Precompiles/AltBn128/Pairing.lean`) combines them: every pair that ECPAIRING decodes is a pair of multiples of the generators, where the law above holds.
-No theorem yet states the law for the decoded pairs themselves.
+`exists_represents_of_decodePairs` and `exists_represents_of_ecpairing` (`Execution/Proofs/Evm/Precompiles/AltBn128/PairingProduct.lean`) lift this to lists of scalars `a_i` and `b_i` in `ZMod q`, for every successful decoding and every successful call.
+`ecpairing_eq_one_iff` and `ecpairing_eq_zero_iff` apply `AltBn128.pairingLaws`, with no hypothesis on the pairing.
+On a successful call, they prove that ECPAIRING returns the word 1 exactly when `sum_i a_i * b_i = 0`, and the word 0 otherwise.
+`ecpairing_encodePairs` computes the output on the encodings of represented pairs, and `ecpairing_generators`, `ecpairing_generator_neg` and `ecpairing_empty` reach both outputs.
 
 `ecadd_toPoint` and `ecmul_toPoint` (`Execution/Proofs/Evm/Precompiles/AltBn128/Group.lean`) carry this group law to the precompiles.
 A call of ECADD that succeeds returns the sum of its two points, and a call of ECMUL returns its point times its 32-byte scalar.
@@ -499,7 +525,8 @@ No theorem states unforgeability.
 
 ### AES
 
-The AES theorems are correctness statements, and none states a security property.
+The AES theorems are correctness statements, except the bounds on GHASH over a uniform hash subkey.
+No theorem bounds tag forgery or states a security property of the cipher.
 `invCipher_cipher` and `ciphInv_ciph` (`Proofs/Aes/Block.lean`) prove that the inverse cipher of FIPS 197 undoes the cipher, for every key schedule and so for every key.
 `sbox_eq` proves that each entry of the S-box table equals the inverse in GF(2^8) followed by the affine map of FIPS 197 §5.1.1.
 `ciph_eq_spec` proves that AES-128 and AES-256 equal a model of FIPS 197, for every key and every block.
@@ -530,6 +557,16 @@ The three hold for every forward cipher.
 `residue_ghash` proves that GHASH of `X_1 ... X_m` is `X_1 H^m + ... + X_m H` on residues, the form that §6.4 states.
 `irreducible_modulus` (`Proofs/Aes/Field.lean`) proves that the modulus is irreducible over GF(2), so the residues form a field, and `card_adjoinRoot_modulus` that this field has `2^128` elements.
 The kernel checks a certificate of the test: 128 squarings by Algorithm 1 fix `u`, and a block inverts `u^(2^64) - u`.
+
+`prEvent_xorBlock_ghash_eq_le` (`Proofs/Aes/Universal.lean`) takes two different lists of `m` blocks and a target block `c`.
+It proves that a uniform hash subkey gives XOR `c` on their GHASH values with probability at most `m / 2^128`.
+`prEvent_xorBlock_ghash_singleton_eq` proves that on distinct one-block inputs this probability is `1 / 2^128`.
+`ghash_zeroBlock_cons` proves that a zero block in front does not change GHASH, so `[X]` and `[0, X]` agree for every key.
+`prEvent_xorBlock_ghash_ghashInput_eq_le` proves the bound on GCM's padded input, for two different pairs of additional data and ciphertext with each string below `2^64` bits.
+This is Lemma 2 of McGrew and Viega, [ePrint 2004/193](https://eprint.iacr.org/2004/193), Appendix A, without output truncation.
+Its numerator `m` is the length of the longer of their two padded lists, the length block included.
+The bound counts uniform hash subkeys; it does not bound tag forgery and says nothing about the cipher.
+
 `gctr_inc_block` proves that GCM encrypts block `k` of the text under `J_0` incremented `k + 1` times.
 `counter_ne_preCounter` and `counter_injOn` assume the length checks of §5.2.1.1.
 Under them, the counters of the text differ from each other and from `J_0`, the counter of the tag.
@@ -586,6 +623,19 @@ That proof needs no pairing law.
 It is not computational binding: no theorem bounds the cost of finding two such blobs without the secret.
 Under the pairing law and for a well-formed setup, honest KZG proofs and blob proofs verify (`verifyKzgProof_computeKzgProof`, `verifyBlobKzgProof_computeBlobKzgProof`, `Proofs/Kzg/Verify.lean`).
 `verifyKzgProofImpl_iff` states when the check accepts: `c - y = w (τ - z)`, for decoded points representing `c` and `w`.
+Under the pairing law and on a well-formed setup (assumption D3), `verifyBlobKzgProof_binding` (`Proofs/Kzg/BlobBinding.lean`) splits an accepted blob opening into three cases.
+Let the validated commitment and proof represent `f(τ)` and `g(τ)` for polynomials `f` and `g` of degree below 4096.
+Let `p` be the interpolant of the blob's decoded values, and let `z` be the evaluation challenge.
+Then `f = p`; or `f ≠ p`, `f - p` has degree below 4096, and `z` is a root of `f - p`.
+Or `h = f - p(z) - g (X - z)` is nonzero of degree at most 4096, and the secret `τ` is a root of `h`.
+The cases can overlap.
+They carry meaning only when an algebraic adversary outputs `f` and `g` over the setup's points, without `τ`.
+This reading is the algebraic group model, an assumption.
+For other choices, such as the constants that the points represent, the third case only restates the check.
+The second case is unlikely if the challenge hash is modelled as a random oracle.
+The third is unlikely if the discrete logarithm problem with the setup's powers of `τ` is hard.
+Both are assumptions, and no theorem here proves either bound.
+It is not computational binding: no theorem bounds the cost of finding such polynomials without the secret.
 `verifyKzgProofBatch_ok_iff_root` (`Proofs/Kzg/BatchBinding.lean`) states when the batch check of openings accepts, as an equivalence.
 Let opening `i` have commitment `c_i`, value `y_i`, point `z_i` and proof `w_i`.
 Under `PairingLaws` and a well-formed setup, its verdict is true exactly when its challenge `r` is a root of `P(X) = sum_i X^i (c_i - y_i - w_i (τ - z_i))`.
@@ -1694,6 +1744,12 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
   Reading it as a second-preimage bound conditions on the honest digest, a modelling step that no theorem proves.
   Only classical queries are counted.
   No SHA-256, Keccak or quantum security claim follows from this model.
+- SSZ root bound: the SHA-256 node hash is a random oracle on byte strings, shared by every node of the tree.
+  The roots of the all-zero subtrees, constants of the specification, are oracle answers in the model.
+  The type is fixed before the run.
+  Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
+  Only classical queries are counted, and the adversary's private sampling is not.
+  The bound says nothing about an attack that uses the structure of SHA-256.
 - Trie root bound: Keccak-256 is a random oracle on byte strings, shared by the keys and the nodes of the trie.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.

@@ -417,12 +417,6 @@ theorem collision_of_extract {cache : HashOracle.QueryCache} {first second : Tri
 
 /-! ## The bound -/
 
-/-- There are `2^256` digests. -/
-theorem card_hash32 : Nat.card Hash32 = 2 ^ 256 := by
-  rw [Nat.card_congr (arrayVectorEquivFin UInt8 32), Nat.card_fun,
-    Nat.card_eq_fintype_card (α := UInt8), ← FinEnum.card_eq_fintypeCard, FinEnum.card_UInt8]
-  simp
-
 /-- Two tries of one kind, each with distinct keys and one root, that give a key different values.
 
 The probability is at most `Q^2 / N`, where `N` is the number of digests.
@@ -455,7 +449,7 @@ theorem prEvent_wins_le_two_pow
     Pr{let z ← (simulateQ HashOracle.romImpl (experiment adversary)).run ∅}[Wins z.1] ≤
       Q * ((Q : ℝ≥0∞) / 2 ^ 256) := by
   have bound := prEvent_wins_le adversary hQ
-  rw [card_hash32, Nat.cast_pow, Nat.cast_ofNat] at bound
+  rw [Cryptography.Merkle.RandomOracle.card_bytes32, Nat.cast_pow, Nat.cast_ofNat] at bound
   exact bound
 
 end EthLib.Execution.Trie.RandomOracle

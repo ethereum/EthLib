@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.List
 public import EthLib.Consensus.Proofs.PayloadTimeliness
 public import EthLib.Consensus.Proofs.Transition.Operations
 public import EthLib.Consensus.Transition.Requests
@@ -9,11 +10,19 @@ public import EthLib.Consensus.Transition.Requests
 
 A withdrawal request and a consolidation request keep one balance for each validator.
 
+So the operations of a block, with the requests from Electra, keep one balance for each validator.
+
 The pending consolidations of an epoch keep the registry.
 
 They move balance from one validator to another, so the sum of the balances stays.
 
-So the operations of a block, with the requests from Electra, keep one balance for each validator.
+From Electra, they drop the front of the queue before the first source that must wait.
+
+A source must wait when it is unslashed and cannot withdraw in the next epoch.
+
+They lower no balance of a validator that is slashed or cannot withdraw in the next epoch.
+
+A source that is slashable in the next epoch keeps its consolidation and at least its balance.
 -/
 
 @[expose] public section
@@ -83,6 +92,198 @@ theorem processPendingConsolidations_kept {electra : .pectra ≤ fork}
   rename_i passed
   cases computed
   exact passPendingConsolidations_kept passed
+
+/-- A pass leaves its list from the first source that is unslashed and cannot withdraw.
+
+A source can withdraw when its withdrawable epoch is at most the epoch of the pass. -/
+theorem passPendingConsolidations_drop {nextEpoch : Epoch} :
+    ∀ {consolidations : List PendingConsolidation} {state : BeaconState preset fork} {result},
+      passPendingConsolidations nextEpoch state consolidations = .ok result →
+      consolidations.drop result.2 = consolidations.dropWhile fun consolidation =>
+        state.validators.data[consolidation.sourceIndex.toNat]?.any fun source =>
+          source.slashed || source.withdrawableEpoch ≤ nextEpoch
+  | [], _, _, computed => by
+    simp only [passPendingConsolidations, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    rfl
+  | consolidation :: rest, state, result, computed => by
+    unfold passPendingConsolidations at computed
+    simp only [bind, Except.bind, pure, Except.pure] at computed
+    split at computed
+    · cases computed
+    rename_i source looked
+    have read := getValidator_eq_ok_iff.mp (liftAccessor_ok.mp looked)
+    split at computed
+    · rename_i slashed
+      split at computed
+      · cases computed
+      rename_i recur
+      cases computed
+      rw [List.drop_succ_cons, List.dropWhile_cons_of_pos (by simp [read, slashed])]
+      exact passPendingConsolidations_drop recur
+    rename_i unslashed
+    split at computed
+    · rename_i waiting
+      cases computed
+      have late : ¬source.withdrawableEpoch ≤ nextEpoch := UInt64.not_le.mpr waiting
+      rw [List.drop_zero, List.dropWhile_cons_of_neg (by simp [read, unslashed, late])]
+    rename_i ready
+    split at computed
+    · cases computed
+    split at computed
+    · cases computed
+    rename_i lowered loweredOk
+    split at computed
+    · cases computed
+    rename_i raised raisedOk
+    split at computed
+    · cases computed
+    rename_i recur
+    cases computed
+    have same : raised.validators = state.validators :=
+      (increaseBalance_validators (liftAccessor_ok.mp raisedOk)).trans
+        (decreaseBalance_validators (liftAccessor_ok.mp loweredOk))
+    have dropped := passPendingConsolidations_drop recur
+    rw [same] at dropped
+    have early : source.withdrawableEpoch ≤ nextEpoch := UInt64.not_lt.mp ready
+    rw [List.drop_succ_cons, List.dropWhile_cons_of_pos (by simp [read, unslashed, early])]
+    exact dropped
+
+/-- A pass lowers no balance of a validator that is slashed or cannot withdraw at its epoch. -/
+theorem balance_passPendingConsolidations {nextEpoch : Epoch} {j : Nat} {validator : Validator}
+    (waiting : validator.slashed = true ∨ nextEpoch < validator.withdrawableEpoch) :
+    ∀ {consolidations : List PendingConsolidation} {state : BeaconState preset fork} {result}
+      {balance : Gwei},
+      passPendingConsolidations nextEpoch state consolidations = .ok result →
+      state.validators.data[j]? = some validator → state.balances.data[j]? = some balance →
+      ∃ now, result.1.balances.data[j]? = some now ∧ balance.toNat ≤ now.toNat
+  | [], _, _, _, computed, _, held => by
+    simp only [passPendingConsolidations, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact ⟨_, held, Nat.le_refl _⟩
+  | consolidation :: rest, state, result, balance, computed, found, held => by
+    unfold passPendingConsolidations at computed
+    simp only [bind, Except.bind, pure, Except.pure] at computed
+    split at computed
+    · cases computed
+    rename_i source looked
+    have read := getValidator_eq_ok_iff.mp (liftAccessor_ok.mp looked)
+    split at computed
+    · split at computed
+      · cases computed
+      rename_i recur
+      cases computed
+      exact (balance_passPendingConsolidations waiting recur found held :)
+    rename_i unslashed
+    split at computed
+    · cases computed
+      exact ⟨_, held, Nat.le_refl _⟩
+    rename_i ready
+    split at computed
+    · cases computed
+    split at computed
+    · cases computed
+    rename_i lowered loweredOk
+    split at computed
+    · cases computed
+    rename_i raised raisedOk
+    split at computed
+    · cases computed
+    rename_i recur
+    cases computed
+    have other : consolidation.sourceIndex.toNat ≠ j := by
+      intro same
+      rw [same, found, Option.some.injEq] at read
+      subst read
+      exact waiting.elim unslashed ready
+    obtain ⟨kept, keptAt, keptEq⟩ := balance_decreaseBalance (liftAccessor_ok.mp loweredOk) held
+    rw [ite_eq_right_of_eq_false _ _ (eq_false other)] at keptEq
+    obtain ⟨grown, grownAt, grownEq⟩ := balance_increaseBalance (liftAccessor_ok.mp raisedOk) keptAt
+    have same : raised.validators = state.validators :=
+      (increaseBalance_validators (liftAccessor_ok.mp raisedOk)).trans
+        (decreaseBalance_validators (liftAccessor_ok.mp loweredOk))
+    obtain ⟨now, nowAt, rose⟩ :=
+      balance_passPendingConsolidations waiting recur (by rw [same]; exact found) grownAt
+    have up : kept.toNat ≤ grown.toNat := by
+      rw [grownEq]
+      exact Nat.le_add_right _ _
+    exact ⟨now, nowAt, by omega⟩
+
+/-- A step of the pending consolidations that succeeds runs one pass at the next epoch.
+
+It keeps the balances of the pass, and the queue loses what the pass read. -/
+theorem processPendingConsolidations_pass {electra : .pectra ≤ fork}
+    (computed : processPendingConsolidations state electra = .ok after) :
+    ∃ result, passPendingConsolidations (getCurrentEpoch state + 1) state
+        (state.pendingConsolidations electra).data.toList = .ok result ∧
+      after.balances = result.1.balances ∧
+      (after.pendingConsolidations electra).data.toList =
+        (state.pendingConsolidations electra).data.toList.drop result.2 := by
+  simp only [processPendingConsolidations, bind, Except.bind, pure, Except.pure] at computed
+  split at computed
+  · cases computed
+  rename_i nextEpoch next
+  split at computed
+  · cases computed
+  rename_i passed
+  cases computed
+  -- The next epoch that the step computes is the wrapping sum, since the step succeeds.
+  have added := liftAccessor_ok.mp next
+  rw [liftArith, mapError_ok_iff, addChecked_ok_iff] at added
+  obtain rfl := UInt64.toNat_inj.mp (added.2.trans (toNat_add_of_lt added.1).symm)
+  refine ⟨_, passed, rfl, ?_⟩
+  simp only [Array.toList_extract, List.extract_eq_take_drop]
+  exact List.take_of_length_le (by simp)
+
+/-- From Electra, take a step of the pending consolidations that succeeds.
+
+The queue loses its longest front where each source is slashed or can withdraw in the next epoch. -/
+theorem processPendingConsolidations_queue {electra : .pectra ≤ fork}
+    (computed : processPendingConsolidations state electra = .ok after) :
+    (after.pendingConsolidations electra).data.toList =
+      (state.pendingConsolidations electra).data.toList.dropWhile fun consolidation =>
+        state.validators.data[consolidation.sourceIndex.toNat]?.any fun source =>
+          source.slashed || source.withdrawableEpoch ≤ getCurrentEpoch state + 1 := by
+  obtain ⟨_, passed, -, queue⟩ := processPendingConsolidations_pass computed
+  rw [queue]
+  exact passPendingConsolidations_drop passed
+
+/-- From Electra, take a step of the pending consolidations that succeeds.
+
+It lowers no balance of a validator that is slashed or cannot withdraw in the next epoch. -/
+theorem balance_processPendingConsolidations {electra : .pectra ≤ fork}
+    (computed : processPendingConsolidations state electra = .ok after) {j : Nat}
+    {validator : Validator} (found : state.validators.data[j]? = some validator)
+    (waiting : validator.slashed = true ∨ getCurrentEpoch state + 1 < validator.withdrawableEpoch)
+    {balance : Gwei} (held : state.balances.data[j]? = some balance) :
+    ∃ now, after.balances.data[j]? = some now ∧ balance.toNat ≤ now.toNat := by
+  obtain ⟨_, passed, balances, -⟩ := processPendingConsolidations_pass computed
+  rw [balances]
+  exact balance_passPendingConsolidations waiting passed found held
+
+/-- From Electra, take a step of the pending consolidations that succeeds.
+
+A consolidation whose source is slashable in the next epoch is still in the queue.
+
+Its source keeps at least its balance. -/
+theorem processPendingConsolidations_of_slashable {electra : .pectra ≤ fork}
+    (computed : processPendingConsolidations state electra = .ok after)
+    {consolidation : PendingConsolidation}
+    (pending : consolidation ∈ (state.pendingConsolidations electra).data.toList)
+    {source : Validator}
+    (found : state.validators.data[consolidation.sourceIndex.toNat]? = some source)
+    (slashable : isSlashableValidator source (getCurrentEpoch state + 1) = true) {balance : Gwei}
+    (held : state.balances.data[consolidation.sourceIndex.toNat]? = some balance) :
+    consolidation ∈ (after.pendingConsolidations electra).data.toList ∧
+      ∃ now, after.balances.data[consolidation.sourceIndex.toNat]? = some now ∧
+        balance.toNat ≤ now.toNat := by
+  simp only [isSlashableValidator, Bool.and_eq_true, Bool.not_eq_true',
+    decide_eq_true_eq] at slashable
+  obtain ⟨⟨unslashed, -⟩, early⟩ := slashable
+  refine ⟨?_, balance_processPendingConsolidations computed found (.inr early) held⟩
+  rw [processPendingConsolidations_queue computed]
+  have late : ¬source.withdrawableEpoch ≤ getCurrentEpoch state + 1 := UInt64.not_le.mpr early
+  exact mem_dropWhile_of_eq_false (by simp [found, unslashed, late]) pending
 
 /-- A request for a partial withdrawal keeps the sizes of the registry and the balances. -/
 theorem sameSizes_requestPartialWithdrawal {electra : .pectra ≤ fork} {index : ValidatorIndex}

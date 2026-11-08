@@ -11,6 +11,8 @@ The check of an opening of `c` at `z` to `y`, with proof `w`, holds when `c - y 
 This needs the pairing law, as a hypothesis, and the secret `τ` of a well-formed setup.
 
 An honest proof commits to the quotient `q = (p - p(z)) / (X - z)`, so the identity holds.
+
+An accepted check of a blob also decodes its blob and points, and accepts at the challenge.
 -/
 
 @[expose] public section
@@ -233,6 +235,46 @@ theorem verifyBlobKzgProof_of_blobOpeningValid (laws : Bls.PairingLaws) {s : Tru
   rw [evaluatePolynomialInEvaluationForm_eq_interpolate poly _
     (size_blobToPolynomial blob poly hblob)]
   exact congrArg Except.ok ((verifyKzgProofImpl_iff laws hs hrC hrP _ _).mpr hid)
+
+/-- An accepted check of a blob decodes the blob, the commitment and the proof.
+
+The check of the decoded points then accepts at the challenge.
+
+The value it checks there is the interpolant's value at the challenge. -/
+theorem verifyBlobKzgProof_eq_ok_true {s : TrustedSetup} {blob : Blob}
+    {commitment proof : Bytes48}
+    (h : verifyBlobKzgProof s blob commitment proof = .ok true) :
+    ∃ poly C P, blobToPolynomial blob = .ok poly ∧
+      validateKzgG1Point commitment = .ok C ∧ validateKzgG1Point proof = .ok P ∧
+      verifyKzgProofImpl s C (computeChallenge blob commitment)
+        ((interpolant poly).eval (computeChallenge blob commitment)) P = true := by
+  unfold verifyBlobKzgProof at h
+  cases hC : validateKzgG1Point commitment with
+  | error e =>
+    rw [hC] at h
+    simp only [bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
+    exact nomatch h
+  | ok C =>
+    cases hblob : blobToPolynomial blob with
+    | error e =>
+      rw [hC, hblob] at h
+      simp only [bind, Except.bind, pure, Except.pure] at h
+      exact nomatch h
+    | ok poly =>
+      cases hP : validateKzgG1Point proof with
+      | error e =>
+        rw [hC, hblob, hP] at h
+        simp only [bind, Except.bind, pure, Except.pure, throw, throwThe,
+          MonadExceptOf.throw] at h
+        rw [evaluatePolynomialInEvaluationForm_eq_interpolate poly _
+          (size_blobToPolynomial blob poly hblob)] at h
+        exact nomatch h
+      | ok P =>
+        rw [hC, hblob, hP] at h
+        simp only [bind, Except.bind, pure, Except.pure] at h
+        rw [evaluatePolynomialInEvaluationForm_eq_interpolate poly _
+          (size_blobToPolynomial blob poly hblob)] at h
+        exact ⟨poly, C, P, rfl, rfl, rfl, Except.ok.inj h⟩
 
 /-- **Honest blob proofs verify.**
 

@@ -511,4 +511,10 @@ theorem prEvent_findSecondPreimage_queryNode_le [SampleableType R] [DecidableEq 
   rw [hw] at hp
   exact collision_of_partial_findSecondPreimage z.2 leaves q level j b w hp
 
+/-- There are `2^256` digests of 32 bytes. -/
+theorem card_bytes32 : Nat.card (Vector UInt8 32) = 2 ^ 256 := by
+  rw [Nat.card_congr (arrayVectorEquivFin UInt8 32), Nat.card_fun,
+    Nat.card_eq_fintype_card (α := UInt8), ← FinEnum.card_eq_fintypeCard, FinEnum.card_UInt8]
+  simp
+
 end EthLib.Cryptography.Merkle.RandomOracle
