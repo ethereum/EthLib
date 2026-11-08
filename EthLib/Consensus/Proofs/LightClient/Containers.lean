@@ -314,7 +314,7 @@ theorem BeaconBlockBody.idxOf_signedBid (gloas : .glamsterdam ≤ fork) :
       if .hegota ≤ fork then 8 else 10 := by
   cases fork <;> first | exact absurd gloas (by decide) | decide
 
-/-- From Gloas, the bid of a body below the root of the body is node 357 of its tree.
+/-- From Gloas, the signed bid of a body is node 357 of its tree.
 
 This holds at every preset. -/
 theorem BeaconBlockBody.resolveStep_signedBid (gloas : .glamsterdam ≤ fork) :

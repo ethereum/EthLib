@@ -13,7 +13,7 @@ Before Gloas the data is the payload root at node 25, and from Gloas a block has
 
 From Deneb the binding reaches the blob gas fields of [EIP-4844].
 
-The theorems take the lawful type of the body, as at the mainnet and minimal presets.
+The theorems take the lawful type of the body, at every preset whose sizes are nonzero.
 
 [EIP-4844]: https://eips.ethereum.org/EIPS/eip-4844#specification
 -/
@@ -255,7 +255,7 @@ omit [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
   [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat] in
 /-- From Capella to Fulu, the execution root of a header is the root of its execution header.
 
-This holds at a slot from the fork of the header: from Capella, and from Deneb at Deneb on. -/
+This holds at a slot from Capella, and from Deneb when the header is from Deneb. -/
 theorem getLcExecutionRoot_execution {config : Config} (capella : .shapella ≤ fork)
     (beforeGloas : fork < .glamsterdam) {header : LightClientHeader preset fork}
     (started : config.CAPELLA_FORK_EPOCH ≤ computeEpochAtSlot preset header.beacon.slot)
