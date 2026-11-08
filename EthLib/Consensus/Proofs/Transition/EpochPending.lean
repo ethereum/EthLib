@@ -12,6 +12,8 @@ The queue never grows.
 
 A pass never credits more inside the churn than the churn available.
 
+The churn that a pass uses is the sum of the amounts of the deposits it reads that take churn.
+
 A pass reads a prefix of the queue, applies some of it in order, and postpones the others.
 
 So the queue splits into the deposits added to the balances, those dropped, and the queue after.
@@ -131,6 +133,148 @@ theorem passPendingDeposits_processed_le {stop : PendingDeposit → Bool} {nextE
     cases computed
     exact passPendingDeposits_processed_le (deposits := rest) ‹_›
       (UInt64.not_lt.mp fits)
+
+/-- A deposit keeps, at each epoch and key, whether its validator exits and whether it is withdrawn.
+
+A new validator does neither, as at a key that no validator has.
+
+That needs one balance for each validator, and an index that fits 64 bits. -/
+theorem depositTargetStatus_applyPendingDeposit {deposit : PendingDeposit}
+    (computed : applyPendingDeposit config checks state deposit = .ok after)
+    (holds : BalancesMatch state) (small : state.validators.data.size < 2 ^ 64) :
+    depositTargetStatus after = depositTargetStatus state := by
+  funext nextEpoch pubkey
+  unfold applyPendingDeposit at computed
+  split at computed
+  · split at computed
+    · cases computed
+      rfl
+    simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    split at computed
+    · have pushed := (addValidatorToRegistry_push computed holds small).1
+      -- The new validator exits and is withdrawable only at the far future, which no epoch passes.
+      have far : ¬FAR_FUTURE_EPOCH < nextEpoch := by
+        rw [UInt64.lt_iff_toNat_lt]
+        have := nextEpoch.toNat_lt
+        have : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+        omega
+      simp only [depositTargetStatus, pushed, Array.find?_push]
+      cases state.validators.data.find? (·.pubkey == pubkey) with
+      | some _ => rfl
+      | none =>
+        simp only [Option.none_or]
+        by_cases key : deposit.pubkey = pubkey
+        · simp [getValidatorFromDeposit, key, far]
+        · simp [getValidatorFromDeposit, key]
+    · simp only [pure, Except.pure, Except.ok.injEq] at computed
+      subst computed
+      rfl
+  · rw [liftAccessor_ok] at computed
+    simp only [depositTargetStatus, increaseBalance_validators computed]
+
+/-- The churn that a pass uses grows by the amount of each deposit it reads that takes churn.
+
+Those are the deposits where no validator with its key exits or is withdrawn.
+
+It grows by nothing else.
+
+That needs one balance for each validator.
+
+It also needs room in 64 bits for the registry and the rest of the limit per epoch. -/
+theorem passPendingDeposits_processed {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
+    {available : Gwei} :
+    ∀ {deposits : List PendingDeposit} {state : BeaconState preset fork} {processed : Gwei}
+      {count : Nat} {postponed : Array PendingDeposit} {pass},
+      passPendingDeposits config checks stop nextEpoch available state processed count postponed
+        deposits = .ok pass →
+      BalancesMatch state →
+      state.validators.data.size + (preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat - count) <
+        2 ^ 64 →
+      ∃ read, deposits = read ++ pass.1.rest ∧
+        pass.1.processed.toNat = processed.toNat + pendingAmount (read.filter fun deposit =>
+          depositTargetStatus state nextEpoch deposit.pubkey == (false, false))
+  | [], _, _, _, _, _, computed, _, _ => by
+    simp only [passPendingDeposits, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact ⟨[], rfl, by simp [pendingAmount]⟩
+  | deposit :: rest, state, processed, count, postponed, pass, computed, holds, room => by
+    unfold passPendingDeposits at computed
+    simp only [bind, Except.bind, pure, Except.pure] at computed
+    split at computed
+    · cases computed
+      exact ⟨[], rfl, by simp [pendingAmount]⟩
+    rename_i continues
+    simp only [Bool.or_eq_true, decide_eq_true_eq, not_or, Bool.not_eq_true,
+      Nat.not_le] at continues
+    obtain ⟨-, below⟩ := continues
+    have small : state.validators.data.size < 2 ^ 64 := by omega
+    split at computed
+    · rename_i isWithdrawn
+      split at computed
+      · cases computed
+      rename_i step
+      split at computed
+      · cases computed
+      cases computed
+      have grows := (applyPendingDeposit_grows step holds small).1
+      obtain ⟨read, queue, used⟩ := passPendingDeposits_processed (deposits := rest) ‹_›
+        ((applyPendingDeposit_kept step).1 holds) (by omega)
+      -- A deposit credited outside the churn takes none of it.
+      have outside :
+          (depositTargetStatus state nextEpoch deposit.pubkey == (false, false)) = false := by
+        revert isWithdrawn
+        cases depositTargetStatus state nextEpoch deposit.pubkey with
+        | mk exited withdrawn => cases exited <;> cases withdrawn <;> simp
+      -- The rest of the pass reads the test after the deposit, which keeps it.
+      rw [depositTargetStatus_applyPendingDeposit step holds small] at used
+      refine ⟨deposit :: read, congrArg (deposit :: ·) queue, ?_⟩
+      simp only [List.filter_cons, outside, Bool.false_eq_true, ↓reduceIte, used]
+    rename_i notWithdrawn
+    split at computed
+    · rename_i isExited
+      split at computed
+      · cases computed
+      cases computed
+      obtain ⟨read, queue, used⟩ := passPendingDeposits_processed (deposits := rest) ‹_› holds
+        (by omega)
+      -- A deposit postponed takes no churn.
+      have outside :
+          (depositTargetStatus state nextEpoch deposit.pubkey == (false, false)) = false := by
+        revert isExited
+        cases depositTargetStatus state nextEpoch deposit.pubkey with
+        | mk exited withdrawn => cases exited <;> cases withdrawn <;> simp
+      refine ⟨deposit :: read, congrArg (deposit :: ·) queue, ?_⟩
+      simp only [List.filter_cons, outside, Bool.false_eq_true, ↓reduceIte, used]
+    rename_i notExited
+    split at computed
+    · cases computed
+    rename_i total checked
+    split at computed
+    · cases computed
+      exact ⟨[], rfl, by simp [pendingAmount]⟩
+    split at computed
+    · cases computed
+    rename_i step
+    split at computed
+    · cases computed
+    cases computed
+    have grows := (applyPendingDeposit_grows step holds small).1
+    obtain ⟨read, queue, used⟩ := passPendingDeposits_processed (deposits := rest) ‹_›
+      ((applyPendingDeposit_kept step).1 holds) (by omega)
+    -- The deposit takes churn, since neither test of its validator held.
+    have inside :
+        (depositTargetStatus state nextEpoch deposit.pubkey == (false, false)) = true := by
+      revert notExited notWithdrawn
+      cases depositTargetStatus state nextEpoch deposit.pubkey with
+      | mk exited withdrawn => cases exited <;> cases withdrawn <;> simp
+    have sum := (addChecked_ok_iff.mp (mapError_ok_iff.mp (liftAccessor_ok.mp checked))).2
+    -- The rest of the pass reads the test after the deposit, which keeps it.
+    rw [depositTargetStatus_applyPendingDeposit step holds small] at used
+    refine ⟨deposit :: read, congrArg (deposit :: ·) queue, ?_⟩
+    simp only [List.filter_cons, inside, ↓reduceIte, pendingAmount, List.map_cons,
+      List.sum_cons] at used ⊢
+    omega
 
 /-- The pending deposits of an epoch end with a pass over the queue from its front.
 
