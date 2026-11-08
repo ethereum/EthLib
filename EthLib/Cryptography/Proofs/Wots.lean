@@ -196,6 +196,119 @@ theorem prEvent_findFirst_romImpl_none (trial : ℕ → κ) (key : κ → ι) (f
       _ = q * q ^ n := by rw [ENNReal.tsum_mul_right, ← prEvent_eq_tsum_ite]
       _ = q ^ (n + 1) := (pow_succ' _ _).symm
 
+section Cached
+
+variable (trial : ℕ → κ) (key : κ → ι)
+  (f : R → Option β) (test : κ → OracleComp (unifSpec + (ι →ₒ R)) (Option β))
+  (htest : ∀ k, test k = f <$> liftM ((ι →ₒ R).query (key k)))
+
+include htest
+
+/-- A trial of the search is one query, then the next trials when its test fails. -/
+theorem run_findFirst_succ_romImpl (c n : ℕ) (cache : (ι →ₒ R).QueryCache) :
+    (simulateQ (ι →ₒ R).romImpl (findFirst trial test c (n + 1))).run cache =
+      ((ι →ₒ R).randomOracle (key (trial c))).run cache >>= fun w => match f w.1 with
+        | some x => pure (some (trial c, x), w.2)
+        | none => (simulateQ (ι →ₒ R).romImpl (findFirst trial test (c + 1) n)).run w.2 := by
+  rw [findFirst, htest]
+  simp only [simulateQ_bind, roSim.simulateQ_liftM_spec_query, StateT.run_bind, bind_map_left]
+  refine bind_congr fun w => ?_
+  cases f w.1 <;> rfl
+
+/-- **A cached trial that passes its test stops the search.**
+
+Some trial in the window is cached, with an answer that passes the test.
+
+Then the search finds a trial. -/
+theorem isSome_of_mem_support_findFirst_romImpl :
+    ∀ (n c : ℕ) (cache : (ι →ₒ R).QueryCache),
+      (∃ j, c ≤ j ∧ j < c + n ∧ ∃ y, cache (key (trial j)) = some y ∧ (f y).isSome) →
+      ∀ z ∈ support ((simulateQ (ι →ₒ R).romImpl (findFirst trial test c n)).run cache),
+        z.1.isSome := by
+  intro n
+  induction n with
+  | zero => intro c cache ⟨j, h₁, h₂, _⟩; omega
+  | succ n ih =>
+    intro c cache ⟨j, h₁, h₂, y, hy, hfy⟩ z hz
+    rw [run_findFirst_succ_romImpl trial key f test htest, mem_support_bind_iff] at hz
+    obtain ⟨w, hw, hz⟩ := hz
+    rw [randomOracle.run_eq] at hw
+    cases hc : cache (key (trial c)) with
+    | some y₀ =>
+      rw [hc, support_pure, Set.mem_singleton_iff] at hw
+      subst hw
+      cases hf : f y₀ with
+      | some x =>
+        rw [hf, support_pure, Set.mem_singleton_iff] at hz
+        simp [hz]
+      | none =>
+        rw [hf] at hz
+        refine ih (c + 1) cache ⟨j, ?_, by omega, y, hy, hfy⟩ z hz
+        rcases Nat.eq_or_lt_of_le h₁ with rfl | h
+        · rw [hc, Option.some_inj] at hy
+          subst hy
+          simp [hf] at hfy
+        · omega
+    | none =>
+      rw [hc, mem_support_bind_iff] at hw
+      obtain ⟨u, -, hw⟩ := hw
+      rw [support_pure, Set.mem_singleton_iff] at hw
+      subst hw
+      cases hf : f u with
+      | some x =>
+        rw [hf, support_pure, Set.mem_singleton_iff] at hz
+        simp [hz]
+      | none =>
+        rw [hf] at hz
+        have hjc : j ≠ c := by
+          rintro rfl
+          simp [hc] at hy
+        exact ih (c + 1) _ ⟨j, by omega, by omega, y, QueryCache.le_cacheQuery _ hc hy, hfy⟩ z hz
+
+/-- **The trial a search finds is cached, with an answer that passes its test.** -/
+theorem exists_cached_of_mem_support_findFirst_romImpl :
+    ∀ (n c : ℕ) (cache : (ι →ₒ R).QueryCache),
+      ∀ z ∈ support ((simulateQ (ι →ₒ R).romImpl (findFirst trial test c n)).run cache),
+        ∀ k b, z.1 = some (k, b) →
+          ∃ j, c ≤ j ∧ j < c + n ∧ k = trial j ∧ ∃ y, z.2 (key k) = some y ∧ f y = some b := by
+  intro n
+  induction n with
+  | zero =>
+    intro c cache z hz k b hk
+    simp only [findFirst, simulateQ_pure, StateT.run_pure, support_pure,
+      Set.mem_singleton_iff] at hz
+    simp [hz] at hk
+  | succ n ih =>
+    intro c cache z hz k b hk
+    rw [run_findFirst_succ_romImpl trial key f test htest, mem_support_bind_iff] at hz
+    obtain ⟨w, hw, hz⟩ := hz
+    have hcached : w.2 (key (trial c)) = some w.1 := by
+      rw [randomOracle.run_eq] at hw
+      cases hc : cache (key (trial c)) with
+      | some y₀ =>
+        rw [hc, support_pure, Set.mem_singleton_iff] at hw
+        subst hw
+        exact hc
+      | none =>
+        rw [hc, mem_support_bind_iff] at hw
+        obtain ⟨u, -, hw⟩ := hw
+        rw [support_pure, Set.mem_singleton_iff] at hw
+        subst hw
+        exact QueryCache.cacheQuery_self _ _ _
+    cases hf : f w.1 with
+    | some x =>
+      rw [hf, support_pure, Set.mem_singleton_iff] at hz
+      subst hz
+      simp only [Option.some_inj, Prod.mk.injEq] at hk
+      obtain ⟨rfl, rfl⟩ := hk
+      exact ⟨c, le_rfl, by omega, rfl, w.1, hcached, hf⟩
+    | none =>
+      rw [hf] at hz
+      obtain ⟨j, h₁, h₂, rest⟩ := ih (c + 1) w.2 z hz k b hk
+      exact ⟨j, by omega, by omega, rest⟩
+
+end Cached
+
 end RandomOracle
 
 end EthLib.Cryptography.Wots

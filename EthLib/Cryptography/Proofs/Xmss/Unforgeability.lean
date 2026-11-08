@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Game
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Reasons
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.SeedHops
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.IdealFailure
 
 /-!
 # Proofs: leanXMSS as EthLib computes it is unforgeable
@@ -55,6 +56,18 @@ Take an adversary that makes at most `qH` hash queries and `r` signing requests 
 The hops cost at most `2 Q / 2^256`, where `Q` bounds the hash calls of the game on every run.
 
 `Q = 205 * 2^16 + 1 + qH + r (2^33 + 615 * 2^16) + 384`, so it charges each request's worst case.
+
+After the hops, some request fails with probability at most `r (Q / 2^95 + 2 exp(-4000))`.
+
+A new search meets a cached trial with chance `<= Q / 2^96`, and fresh trials all fail rarely.
+
+A repeated search succeeds once its first run did, since a trial with a codeword stays cached.
+
+So the variant game's bound is `q / 2^127 + 2 Q / 2^256 + r (Q / 2^95 + 2 exp(-4000))`.
+
+The last term is at least `r^2 / 2^62`, so it says nothing from about `2^31` requests.
+
+That loss comes from the proof, which charges each new search the whole cache.
 -/
 
 @[expose] public section
@@ -83,3 +96,11 @@ info: 'EthLib.Cryptography.Xmss.Unforgeability.signingFailure_le_prfGame' depend
 -/
 #guard_msgs (whitespace := lax) in
 #print axioms EthLib.Cryptography.Xmss.Unforgeability.signingFailure_le_prfGame
+
+/--
+info: 'EthLib.Cryptography.Xmss.Unforgeability.reasonForgeAdvantage_le_bounded' depends on axioms:
+
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms EthLib.Cryptography.Xmss.Unforgeability.reasonForgeAdvantage_le_bounded
