@@ -74,6 +74,20 @@ theorem findProofCollision_append (hash : ByteArray → Hash32) (p q : List Byte
   | [] => rfl
   | a :: used => by simp [findProofCollision, findProofCollision_append hash p q used]
 
+/-- The pair that the proof search returns holds a node of each proof. -/
+theorem mem_of_findProofCollision (hash : ByteArray → Hash32) :
+    (p q : List ByteArray) → {pair : ByteArray × ByteArray} →
+      findProofCollision hash p q = some pair → pair.1 ∈ p ∧ pair.2 ∈ q
+  | [], _, _, h => by simp [findProofCollision] at h
+  | _ :: _, [], _, h => by simp [findProofCollision] at h
+  | a :: p, b :: q, pair, h => by
+    simp only [findProofCollision] at h
+    split at h
+    · cases h
+      exact ⟨List.mem_cons_self, List.mem_cons_self⟩
+    · obtain ⟨hp, hq⟩ := mem_of_findProofCollision hash p q h
+      exact ⟨List.mem_cons_of_mem a hp, List.mem_cons_of_mem b hq⟩
+
 /-! ## Two proofs of one key -/
 
 /-- Two proofs with no collision follow one reference to one item.
@@ -303,6 +317,20 @@ theorem nodup_map_of_findKeyCollision (hash : ByteArray → Hash32) :
       -- A key with the hash of the first key is the first key, which the rest does not hold.
       exact hkeys.1 (Decidable.byContradiction (fun hne => hother hne heq) ▸ hmem)
 
+/-- The pair that the key search returns holds two keys of the list. -/
+theorem mem_of_findKeyCollision (hash : ByteArray → Hash32) :
+    (keys : List ByteArray) → {pair : ByteArray × ByteArray} →
+      findKeyCollision hash keys = some pair → pair.1 ∈ keys ∧ pair.2 ∈ keys
+  | [], _, h => by cases h
+  | key :: rest, pair, h => by
+    unfold findKeyCollision at h
+    split at h
+    · rename_i other hfind
+      cases h
+      exact ⟨List.mem_cons_self, List.mem_cons_of_mem key (List.mem_of_find?_eq_some hfind)⟩
+    · obtain ⟨hfirst, hsecond⟩ := mem_of_findKeyCollision hash rest h
+      exact ⟨List.mem_cons_of_mem key hfirst, List.mem_cons_of_mem key hsecond⟩
+
 /-- Two different keys of a trie with one path.
 
 Only a secured trie can have them, as two keys with one hash. -/
@@ -327,14 +355,14 @@ theorem keyPath_nodup (hash : ByteArray → Hash32) {trie : Trie}
   cases secured with
   | false =>
     -- A plain trie: distinct keys have distinct nibbles.
-    simpa [keyPath, List.map_map, Function.comp_def] using
+    simpa [keyPath_eq, List.map_map, Function.comp_def] using
       nodup_map_of_injective (fun _ _ h => bytesToNibbleList_injective h) hkeys
   | true =>
     -- A secured trie: distinct hashes have distinct bytes, and distinct bytes distinct nibbles.
     simp only [↓reduceIte] at hsearch
     have hhashes := nodup_map_of_findKeyCollision hash _ hkeys hsearch
     have hbytes := nodup_map_of_injective hashBytes_injective hhashes
-    simpa [keyPath, List.map_map, Function.comp_def] using
+    simpa [keyPath_eq, List.map_map, Function.comp_def] using
       nodup_map_of_injective (fun _ _ h => bytesToNibbleList_injective h) hbytes
 
 /-- Soundness: a proof that verifies against the trie's root is the proof that the trie builds.
@@ -489,7 +517,7 @@ theorem root_secured_perm (hash : ByteArray → Hash32) {data data' : List (Byte
     -- Distinct hashes have distinct bytes, and distinct bytes have distinct nibbles.
     have hhashes := nodup_map_of_findKeyCollision hash _ hkeys hfind
     have hbytes := nodup_map_of_injective hashBytes_injective hhashes
-    simpa [keyPath, List.map_map, Function.comp_def] using
+    simpa [keyPath_eq, List.map_map, Function.comp_def] using
       nodup_map_of_injective (fun _ _ h => bytesToNibbleList_injective h) hbytes
 
 end EthLib.Execution.Trie

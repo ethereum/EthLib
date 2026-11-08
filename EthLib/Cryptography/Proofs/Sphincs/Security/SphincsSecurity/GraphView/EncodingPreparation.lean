@@ -108,7 +108,7 @@ theorem search_targets_empty_or_miss (f : QueryImpl HashSpec Id) (parameter : Pu
       cases hencode
   · have hexempt' : exemptInput f parameter lay tree leaf message =
         some (tweakableHashInput parameter (.encoding lay tree leaf)
-          (message ++ bytesLE 4 counter)) := hexempt
+          (message ++ bytesBE 4 counter)) := hexempt
     rw [ite_eq_left hexempt']
     exact Finset.notMem_empty _
 

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.ExceptT
 public import EthLib.Execution.Trie.Root
 
 /-!
@@ -19,6 +20,133 @@ namespace EthLib.Execution.Trie
 
 open EthLib.Base
 open EthLib.Serialization.Rlp
+
+/-! ## The plain-hash instances
+
+The definitions take a hash that may answer in a monad.
+
+With a plain hash they run in the identity monad, and each step reads as a plain computation.
+-/
+
+/-- Holding a node, with a plain hash. -/
+theorem encodeInternalNode_eq (hash : ByteArray → Hash32) (node : Option InternalNode) :
+    encodeInternalNode hash node = do
+      let encoded ← encode (unencoded node)
+      if encoded.size < 32 then
+        return unencoded node
+      else
+        return .bytes ⟨(hash encoded).toArray⟩ := by
+  unfold encodeInternalNode encodeInternalNodeM
+  cases encode (unencoded node) <;> rfl
+
+/-- The vector map in the identity monad with errors is the vector map with errors. -/
+theorem mapMVector_run {α β ε : Type} (f : α → Except ε β) :
+    (xs : List α) → (mapMVector (m := ExceptT ε Id) f xs) = mapMVector f xs
+  | [] => rfl
+  | x :: rest => by
+    have ih := mapMVector_run f rest
+    simp only [mapMVector] at *
+    rw [exceptT_id_bind, ih]
+    congr 1
+    funext y
+    generalize mapMVector f rest = r
+    cases r <;> rfl
+
+/-- No key gives no node. -/
+theorem patricializeStep_nil (hash : ByteArray → Hash32)
+    (recurse : List (List Nibble × ByteArray) → Nat → Except RlpError (Option InternalNode))
+    (level : Nat) : patricializeStep hash recurse [] level = .ok none := rfl
+
+/-- One key gives a leaf with the rest of its path. -/
+theorem patricializeStep_singleton (hash : ByteArray → Hash32)
+    (recurse : List (List Nibble × ByteArray) → Nat → Except RlpError (Option InternalNode))
+    (key : List Nibble) (value : ByteArray) (level : Nat) :
+    patricializeStep hash recurse [(key, value)] level
+      = .ok (some (.leaf (key.drop level) value)) :=
+  rfl
+
+/-- Two keys or more give an extension over their shared run, or else a branch. -/
+theorem patricializeStep_cons_cons (hash : ByteArray → Hash32)
+    (recurse : List (List Nibble × ByteArray) → Nat → Except RlpError (Option InternalNode))
+    (first second : List Nibble × ByteArray) (rest : List (List Nibble × ByteArray)) (level : Nat) :
+    patricializeStep hash recurse (first :: second :: rest) level = (do
+      let obj := first :: second :: rest
+      let substring := first.1.drop level
+      let prefixLength :=
+        obj.foldl
+          (fun length (key, _) => min length (commonPrefixLength substring (key.drop level)))
+          substring.length
+      if 0 < prefixLength then
+        let subnode ← encodeInternalNode hash (← recurse obj (level + prefixLength))
+        return some (.extension (substring.take prefixLength) subnode)
+      else
+        let value :=
+          obj.foldl (fun value (key, keyValue) => if key.length = level then keyValue else value)
+            .empty
+        let subnodes ← mapMVector (fun nibble => do
+            encodeInternalNode hash
+              (← recurse (obj.filter fun (key, _) => key[level]? = some nibble) (level + 1)))
+          (List.finRange 16)
+        return some (.branch (subnodes.cast (by simp)) value) : Except RlpError _) := by
+  obtain ⟨key, value⟩ := first
+  simp only [patricializeStep, patricializeStepM, ExceptT.run, exceptT_id_bind, exceptT_id_pure,
+    mapMVector_run, except_bind_eq]
+  split <;> rfl
+
+/-- A budget of zero makes every nested call give no node. -/
+theorem patricializeAux_zero (hash : ByteArray → Hash32) (obj : List (List Nibble × ByteArray))
+    (level : Nat) :
+    patricializeAux hash 0 obj level = patricializeStep hash (fun _ _ => .ok none) obj level :=
+  rfl
+
+/-- One more unit of budget makes each nested call with the budget left. -/
+theorem patricializeAux_add_one (hash : ByteArray → Hash32) (fuel : Nat)
+    (obj : List (List Nibble × ByteArray)) (level : Nat) :
+    patricializeAux hash (fuel + 1) obj level
+      = patricializeStep hash (patricializeAux hash fuel) obj level :=
+  rfl
+
+/-- The node composition starts with a budget of one more than the longest path. -/
+theorem patricialize_eq (hash : ByteArray → Hash32) (obj : List (List Nibble × ByteArray))
+    (level : Nat) :
+    patricialize hash obj level = patricializeAux hash (longestPath obj + 1) obj level :=
+  rfl
+
+/-- The path of a key, with a plain hash. -/
+theorem keyPath_eq (hash : ByteArray → Hash32) (secured : Bool) (key : ByteArray) :
+    keyPath hash secured key
+      = bytesToNibbleList (if secured then ⟨(hash key).toArray⟩ else key) := by
+  cases secured <;> rfl
+
+/-- Preparing the data, with a plain hash. -/
+theorem prepareData_eq (hash : ByteArray → Hash32) (data : List (ByteArray × ByteArray))
+    (secured : Bool) :
+    prepareData hash data secured = data.mapM fun (preimage, value) =>
+      if value.size = 0 then .error .emptyValue
+      else .ok (keyPath hash secured preimage, value) := by
+  induction data with
+  | nil => rfl
+  | cons entry rest ih =>
+    obtain ⟨preimage, value⟩ := entry
+    simp only [prepareData, prepareDataM, List.mapM_cons, ExceptT.run] at ih ⊢
+    rw [← ih]
+    by_cases hvalue : value.size = 0
+    · simp only [hvalue, ↓reduceIte]
+      rfl
+    · simp only [hvalue, ↓reduceIte, exceptT_id_bind, exceptT_id_lift, exceptT_id_pure,
+        except_bind_eq]
+      rfl
+
+/-- The root, with a plain hash. -/
+theorem root_eq (hash : ByteArray → Hash32) (trie : Trie) :
+    root hash trie = do
+      let obj ← prepareData hash trie.data trie.secured
+      let rootNode ← (patricialize hash obj 0).mapError .rlp
+      let encoded ← (encode (unencoded rootNode)).mapError .rlp
+      return hash encoded := by
+  simp only [root, rootM, ExceptT.run, exceptT_id_bind, exceptT_id_adapt, exceptT_id_monadLift,
+    exceptT_id_lift, except_bind_eq]
+  rfl
 
 /-! ## The longest path -/
 
@@ -84,7 +212,7 @@ theorem patricializeStep_congr (hash : ByteArray → Hash32)
   | [], _, _ => rfl
   | [_], _, _ => rfl
   | (arbitraryKey, arbitraryValue) :: second :: rest, hextension, hbranch =>
-    simp only [patricializeStep]
+    simp only [patricializeStep_cons_cons]
     -- The run is at most the rest of the first path, so an extension lands at most at its end.
     have hrun := foldl_min_le ((arbitraryKey, arbitraryValue) :: second :: rest)
       (fun entry => commonPrefixLength (arbitraryKey.drop level) (entry.1.drop level)) (arbitraryKey.drop level).length
@@ -138,7 +266,8 @@ theorem patricializeAux_succ (hash : ByteArray → Hash32) :
         intro entry hmem
         have := (longestPath_le_iff obj _).mp (Nat.le_refl _) entry hmem
         simp [List.getElem?_eq_none (show entry.1.length ≤ level by omega)]
-      rw [hempty, patricializeAux_nil]
+      rw [hempty]
+      exact patricializeAux_nil hash 0 (level + 1)
   | fuel + 1, obj, level, .inr hlongest => by
     -- Each nested call fits the smaller budget, so the induction hypothesis applies to it.
     apply patricializeStep_congr
@@ -164,7 +293,7 @@ theorem patricializeAux_eq_patricialize (hash : ByteArray → Hash32) {obj : Lis
   have hfits : Fits obj level fuel := .inr hfuel
   have hdefault : Fits obj level (longestPath obj + 1) := .inr (by omega)
   -- Both budgets give the node of their sum.
-  rw [patricialize, ← patricializeAux_add hash hfits (longestPath obj + 1),
+  rw [patricialize_eq, ← patricializeAux_add hash hfits (longestPath obj + 1),
     ← patricializeAux_add hash hdefault fuel, Nat.add_comm]
 
 /-! ## The root -/
@@ -179,7 +308,7 @@ theorem prepareData_emptyValue (hash : ByteArray → Hash32) (secured : Bool) :
       prepareData hash data secured = .error .emptyValue
   | (key, value) :: rest, ⟨entry, hmem, hempty⟩ => by
     by_cases hvalue : value.size = 0
-    · simp only [prepareData, List.mapM_cons, hvalue, ↓reduceIte]
+    · simp only [prepareData_eq, List.mapM_cons, hvalue, ↓reduceIte]
       rfl
     · -- The first value is not empty, so the empty one is further on.
       have hrest : ∃ entry ∈ rest, entry.2.size = 0 := by
@@ -187,14 +316,14 @@ theorem prepareData_emptyValue (hash : ByteArray → Hash32) (secured : Bool) :
         · exact absurd hempty hvalue
         · exact ⟨entry, h, hempty⟩
       have hrestError := prepareData_emptyValue hash secured rest hrest
-      simp only [prepareData] at hrestError
-      simp only [prepareData, List.mapM_cons, hvalue, ↓reduceIte, hrestError]
+      simp only [prepareData_eq] at hrestError
+      simp only [prepareData_eq, List.mapM_cons, hvalue, ↓reduceIte, hrestError]
       rfl
 
 /-- A map with an empty value has no root. -/
 theorem root_emptyValue (hash : ByteArray → Hash32) (trie : Trie) (h : ∃ entry ∈ trie.data, entry.2.size = 0) :
     root hash trie = .error .emptyValue := by
-  simp only [root, prepareData_emptyValue hash trie.secured trie.data h]
+  simp only [root_eq, prepareData_emptyValue hash trie.secured trie.data h]
   rfl
 
 /-- With no empty value, each key becomes its path, after hashing in a secured trie, and keeps its value and its place. -/
@@ -205,8 +334,8 @@ theorem prepareData_ok (hash : ByteArray → Hash32) (secured : Bool) :
   | [], _ => rfl
   | (key, value) :: rest, h => by
     have hrest := prepareData_ok hash secured rest fun entry hmem => h entry (List.mem_cons_of_mem _ hmem)
-    simp only [prepareData] at hrest
-    simp only [prepareData, List.mapM_cons, h (key, value) List.mem_cons_self, ↓reduceIte, hrest]
+    simp only [prepareData_eq] at hrest
+    simp only [prepareData_eq, List.mapM_cons, h (key, value) List.mem_cons_self, ↓reduceIte, hrest]
     rfl
 
 /-! ## Getting and setting a key -/

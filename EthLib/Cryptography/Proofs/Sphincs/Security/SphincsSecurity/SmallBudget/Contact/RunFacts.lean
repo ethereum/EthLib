@@ -284,7 +284,6 @@ theorem avoids_finishRest_fleaf (p : PublicParameter) (parameter : PublicParamet
   refine avoids_bind _ (avoids_tick _ _) fun _ => ?_
   refine avoids_bind _ (avoids_sequenceDep _ fun lay => ?_) fun found => ?_
   · unfold layerCostSearch layerSearch
-    refine avoids_bind _ (avoids_tick _ _) fun _ => ?_
     refine avoids_bind _ (avoids_liftHash _ _ (noQ_search _ _ _ _ _ (fun payload => ?_) _ _))
         fun found => ?_
     · rintro ⟨f, hf⟩

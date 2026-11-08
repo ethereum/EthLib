@@ -8,6 +8,7 @@ from ethlib.cryptography import sphincs
 from . import fixtures
 
 # The keys and signatures come from the committed `key_gen` and `sign` cases.
+# The `zeroed` cases start from the independent known answer, as the known-answer cases do.
 # Each rejection changes one input, so it fails at one known step.
 
 HANDLER = "verify"
@@ -92,36 +93,25 @@ def test_valid(case: str, key: str, message: bytes) -> None:
     )
 
 
-def test_valid_scheme_seed() -> None:
-    # The independent key and signature: every hash of the verifier is fixed by them.
-    _emit(
-        f"{HANDLER}_valid_scheme_seed",
-        fixtures.PUBLIC_KEY_SCHEME_SEED,
-        fixtures.MESSAGE_KNOWN_ANSWER,
-        fixtures.SIGNATURE_SCHEME_SEED,
-        expected=True,
-    )
-
-
-def test_zeroed_scheme_seed_top_last_sibling() -> None:
+def test_zeroed_top_last_sibling() -> None:
     # The sibling just below the key's root, the last N bytes, becomes all zero.
-    signature = fixtures.SIGNATURE_SCHEME_SEED[: -sphincs.N] + bytes(sphincs.N)
+    signature = fixtures.SIGNATURE_KNOWN_ANSWER[: -sphincs.N] + bytes(sphincs.N)
     _emit(
-        f"{HANDLER}_zeroed_scheme_seed_top_last_sibling",
-        fixtures.PUBLIC_KEY_SCHEME_SEED,
+        f"{HANDLER}_zeroed_top_last_sibling",
+        fixtures.PUBLIC_KEY_KNOWN_ANSWER,
         fixtures.MESSAGE_KNOWN_ANSWER,
         signature,
         expected=False,
     )
 
 
-def test_zeroed_scheme_seed_fors_secret() -> None:
+def test_zeroed_fors_secret() -> None:
     # The secret of FORS tree 0 becomes all zero, so the bottom layer signed another FORS key.
-    signature = fixtures.SIGNATURE_SCHEME_SEED
+    signature = fixtures.SIGNATURE_KNOWN_ANSWER
     signature = signature[:FORS] + bytes(sphincs.N) + signature[FORS + sphincs.N :]
     _emit(
-        f"{HANDLER}_zeroed_scheme_seed_fors_secret",
-        fixtures.PUBLIC_KEY_SCHEME_SEED,
+        f"{HANDLER}_zeroed_fors_secret",
+        fixtures.PUBLIC_KEY_KNOWN_ANSWER,
         fixtures.MESSAGE_KNOWN_ANSWER,
         signature,
         expected=False,
@@ -197,10 +187,11 @@ def test_tampered_top_last_sibling() -> None:
     )
 
 
-def test_wrong_root() -> None:
-    # The public key is the root, then the public parameter.
+def test_wrong_pk_seed() -> None:
+    # The public key is PK.seed, then PK.root.
+    # PK.seed is hashed into every call, so the digest and every node change.
     _emit(
-        f"{HANDLER}_wrong_root",
+        f"{HANDLER}_wrong_pk_seed",
         fixtures.flip(_key(), 0),
         fixtures.MESSAGE_KNOWN_ANSWER,
         _signature(),
@@ -208,9 +199,10 @@ def test_wrong_root() -> None:
     )
 
 
-def test_wrong_public_param() -> None:
+def test_wrong_root() -> None:
+    # PK.root is hashed into the digest, and it is the root the top layer must reach.
     _emit(
-        f"{HANDLER}_wrong_public_param",
+        f"{HANDLER}_wrong_root",
         fixtures.flip(_key(), sphincs.N),
         fixtures.MESSAGE_KNOWN_ANSWER,
         _signature(),

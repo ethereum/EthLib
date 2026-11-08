@@ -14,8 +14,11 @@ So an encoding is the fields concatenated, with no offsets and no length prefixe
 
 Decoding checks the total length, then reads each field at its fixed offset.
 
-Source: `serializeSignature` in FORS/Scheme/Layout.lean.
-<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme/Layout.lean>
+Source: [FIPS 205][fips205] §9.1 and §9.2, for the public key and the order of a signature.
+
+leanSPHINCS puts each layer's counter before its chain values.
+
+[fips205]: https://doi.org/10.6028/NIST.FIPS.205
 -/
 
 @[expose] public section
@@ -26,14 +29,14 @@ open Constants
 
 /-! ## Encoding -/
 
-/-- Encode a public key as 32 bytes.
+/-- Encode a public key as 32 bytes, `PK.seed | PK.root`.
 
 ```text
-    [ root: 16 | public parameter: 16 ]
+    [ PK.seed: 16 | PK.root: 16 ]
 ```
 -/
 def encodePublicKey (pk : PublicKey) : ByteArray :=
-  packBytes pk.root ++ packBytes pk.publicParam
+  packBytes pk.pkSeed ++ packBytes pk.root
 
 /-- The 176 bytes of one FORS tree's opening.
 
@@ -41,7 +44,7 @@ def encodePublicKey (pk : PublicKey) : ByteArray :=
     [ secret: 16 | 10 path nodes: 160 ]
 ```
 
-The path nodes run from level 0 up to level 9.
+The path nodes run from height 0 up to height 9.
 -/
 def treeOpeningBytes (opening : TreeOpening) : Vector UInt8 TREE_OPENING_SIZE :=
   opening.secret ++ opening.path.flatten
@@ -57,12 +60,12 @@ def encodeFors (openings : Vector TreeOpening FORS_TREES) : ByteArray :=
     [ counter: 4 | 64 chain values: 1024 | h siblings: 16 h ]
 ```
 
-- The counter is a little-endian 32-bit word.
+- The counter is `BE_32(c)`, a big-endian 32-bit word.
 - Chain values are in chain order.
 - Siblings run from the leaf up to the root.
 -/
 def encodeLayerSignature {layer : Layer} (sig : LayerSignature layer) : ByteArray :=
-  packBytes (uintToBytes COUNTER_LEN sig.counter.toNat) ++ packDigests sig.chainValues
+  packBytes (toByte COUNTER_LEN sig.counter.toNat) ++ packDigests sig.chainValues
     ++ packDigests sig.path
 
 /-- Encode a signature as 7740 bytes.
@@ -86,9 +89,8 @@ Length is the only check: every 32-byte string is a public key.
 def decodePublicKey (bytes : ByteArray) : Except SphincsError PublicKey :=
   if h : bytes.size = PUB_KEY_SIZE then
     -- The two fields sit at offsets 0 and 16.
-    .ok { root := readBytes bytes 0 N (by simp only [h, PUB_KEY_SIZE]; omega)
-          publicParam := readBytes bytes N PUBLIC_PARAM_LEN
-            (by simp only [h, PUB_KEY_SIZE]; omega) }
+    .ok { pkSeed := readBytes bytes 0 N (by simp only [h, PUB_KEY_SIZE]; omega)
+          root := readBytes bytes N N (by simp only [h, PUB_KEY_SIZE]; omega) }
   else
     .error (.badPublicKeySize bytes.size)
 
@@ -112,7 +114,7 @@ def decodeFors (bytes : ByteArray) (offset : Nat)
 def decodeLayerSignature (layer : Layer) (bytes : ByteArray) (offset : Nat)
     (h : offset + layerSigSize layer.height ≤ bytes.size) : LayerSignature layer where
   -- The counter, then the chain values at 4, then the siblings at 1028.
-  counter := UInt32.ofNat (bytesToUint (readBytes bytes offset COUNTER_LEN
+  counter := UInt32.ofNat (toInt (readBytes bytes offset COUNTER_LEN
     (by simp only [layerSigSize] at h; omega)))
   chainValues := splitDigests (readBytes bytes (offset + COUNTER_LEN) (V * N)
     (by simp only [layerSigSize] at h; omega))

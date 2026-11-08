@@ -94,62 +94,28 @@ theorem output_ne_input (address : Address) : address.outputCoordinate ≠
     address.inputCoordinate := by
   cases address <;> simp [Address.outputCoordinate, Address.inputCoordinate]
 
-/-! ### Message-digest fields carry no target -/
+/-! ### Message-digest inputs are not rows
 
-theorem msg_fields (parameter : PublicParameter) (input : HashInput)
-    (h : ForsSigner.IsMsgInput input)
-    (fields : TweakFields) (hf : parseFields parameter input = some fields) :
-    ∃ call : DigestCall, fields = hashDomainFields (.message call) := by
-  obtain ⟨parameter', call, payload, rfl⟩ := h
-  obtain ⟨payload', heq⟩ := (parseFields_some_iff _ _ _).1 hf
-  exact ⟨call, (fieldInput_injective heq).1.symm⟩
+A message-digest input has no address: it is the 84-byte input of the message hash.
 
-theorem rowAt_message (call : DigestCall) : rowAt (hashDomainFields (.message call)) = none := by
-  cases h : rowAt (hashDomainFields (.message call)) with
-  | none => rfl
-  | some address =>
-      have hd := hashFields_injective (Position.domain_inRange _) (by trivial)
-          ((rowAt_some_iff _ _).1 h)
-      cases address <;> simp [Address.position, Position.domain] at hd
+Its bytes still parse as an address when its randomizer equals the parsing `PK.seed`.
 
-theorem positionAt_message (call : DigestCall) :
-    positionAt (hashDomainFields (.message call)) = none := by
-  cases h : positionAt (hashDomainFields (.message call)) with
-  | none => rfl
-  | some position =>
-      have hd := hashFields_injective (Position.domain_inRange position) (by trivial)
-        ((positionAt_some_iff _ position).mp h)
-      cases position <;> simp [Position.domain] at hd
+That parse has a 36-byte payload, and no row input has a payload of that length.
 
-theorem encodingAt_message (call : DigestCall) :
-    encodingAt (hashDomainFields (.message call)) = none := by
-  unfold encodingAt
-  rw [dite_eq_right]
-  rintro ⟨leaf, h⟩
-  have hd := hashFields_injective (by trivial) (by trivial) h
-  cases hd
-
-theorem compTable_message (parameterOutput : HashOutput) (fixed : HiddenGraph.Table)
-    (highs : CoordinateHighs) (remaining : RemainingOutputs) (table : HiddenGraph.Table)
-    (results : OtsKey → Option (Counter × Encoding)) (call : DigestCall) :
-    compTable parameterOutput fixed highs remaining table results
-        (hashDomainFields (.message call)) =
-      none := by
-  unfold compTable
-  rw [positionAt_message]
-  simp only [encTable, encodingAt_message, Option.map_none]
+So the targeting below gives every message-digest input no target. -/
 
 theorem parse_msg_none (parameter : PublicParameter) (active : Address → Prop) (input : HashInput)
     (h : ForsSigner.IsMsgInput input) : HiddenGraph.parse parameter active input = none := by
-  obtain ⟨parameter', call, payload, rfl⟩ := h
+  obtain ⟨parameter', root, message, randomness, call, rfl⟩ := h
   cases hparse : HiddenGraph.parse parameter active
-      (tweakableHashInput parameter' (.message call) payload) with
+      (messageDigestInput parameter' root message randomness call) with
   | none => rfl
   | some query =>
       obtain ⟨heq, -⟩ := (parse_some_iff parameter active _ query).mp hparse
-      have hfields := (tweakableInput_injective heq).1
-      have hd := hashFields_injective (by trivial) (Position.domain_inRange _) hfields
-      cases hq : query.1 <;> simp [hq, Address.position, Position.domain] at hd
+      have hrow : messageDigestInput parameter' root message randomness call =
+          tweakableHashInput parameter query.1.position.domain (bytesLE 16 query.2) := heq
+      exact absurd hrow (messageDigestInput_ne_tweakableHashInput _ _ _ _ _ _ _
+        (by rw [bytesLE_length]; omega))
 
 /-! ### Non-row targets do not depend on the hidden table -/
 
@@ -237,10 +203,13 @@ noncomputable def kindAt (results : OtsKey → Option (Counter × Encoding)) (fi
       fun entry => .fixed entry.value)
     fun address => .hidden address.outputCoordinate
 
-/-- The target kind of an input, read from its tweak fields. -/
+/-- The target kind of an input, read from its tweak fields.
+
+A message-digest input has no target. -/
 noncomputable def sampleKind (results : OtsKey → Option (Counter × Encoding)) (input : HashInput) :
     HiddenDebt.TargetKind Coordinate :=
-  (parseFields (truncateHash parameterOutput) input).elim .none
+  if ForsSigner.IsMsgInput input then .none
+  else (parseFields (truncateHash parameterOutput) input).elim .none
     (kindAt parameterOutput fixed highs remaining results)
 
 /-- The targeting of one sample and preparation. -/
@@ -255,12 +224,13 @@ theorem sampleTargeting_kind_eq (results : OtsKey → Option (Counter × Encodin
       sampleKind parameterOutput fixed highs remaining results := rfl
 
 theorem sampleTargeting_kind (results : OtsKey → Option (Counter × Encoding)) (input : HashInput)
-    (fields : TweakFields) (hf : parseFields (truncateHash parameterOutput) input = some fields) :
+    (fields : TweakFields) (hmsg : ¬ForsSigner.IsMsgInput input)
+    (hf : parseFields (truncateHash parameterOutput) input = some fields) :
     (sampleTargeting parameterOutput fixed highs remaining results).kind input =
       kindAt parameterOutput fixed highs remaining results fields := by
   rw [sampleTargeting_kind_eq]
   unfold sampleKind
-  rw [hf]
+  rw [ite_eq_right hmsg, hf]
   exact Option.elim_some _ _ _
 
 theorem kindAt_row (results : OtsKey → Option (Counter × Encoding)) (fields : TweakFields)
@@ -284,31 +254,26 @@ theorem kindAt_nonrow (results : OtsKey → Option (Counter × Encoding)) (field
 theorem sampleTargeting_msg (results : OtsKey → Option (Counter × Encoding)) (input : HashInput)
     (h : ForsSigner.IsMsgInput input) :
     (sampleTargeting parameterOutput fixed highs remaining results).kind input = .none := by
-  cases hf : parseFields (truncateHash parameterOutput) input with
-  | none =>
-      rw [sampleTargeting_kind_eq]
-      unfold sampleKind
-      rw [hf]
-      exact Option.elim_none _ _
-  | some fields =>
-      rw [sampleTargeting_kind parameterOutput fixed highs remaining results input fields hf]
-      obtain ⟨call, rfl⟩ := msg_fields _ input h fields hf
-      rw [kindAt_nonrow parameterOutput fixed highs remaining results _ (rowAt_message call),
-        compTable_message]
-      exact Option.elim_none _ _
+  rw [sampleTargeting_kind_eq]
+  unfold sampleKind
+  exact ite_eq_left h
 
 theorem sampleTargeting_compatible (results : OtsKey → Option (Counter × Encoding)) :
     HiddenDebt.Compatible (sampleTargeting parameterOutput fixed highs remaining results)
       (sampleModel parameterOutput highs) where
   row := by
     intro bytes query hparse
+    by_cases hmsg : ForsSigner.IsMsgInput bytes
+    · rw [sampleTargeting_msg parameterOutput fixed highs remaining results bytes hmsg]
+      intro h
+      cases h
     rw [sampleModel_parse] at hparse
     rw [sampleModel_incoming]
     obtain ⟨rfl, -⟩ := (parse_some_iff _ _ bytes query).1 hparse
     have hf : parseFields (truncateHash parameterOutput)
         (HiddenGraph.input (truncateHash parameterOutput) query) =
         some (hashDomainFields query.1.position.domain) := parseFields_tweakable _ _ _
-    rw [sampleTargeting_kind parameterOutput fixed highs remaining results _ _ hf,
+    rw [sampleTargeting_kind parameterOutput fixed highs remaining results _ _ hmsg hf,
       kindAt_row parameterOutput fixed highs remaining results _ query.1 (rowAt_address query.1)]
     intro heq
     exact output_ne_input query.1 (HiddenDebt.TargetKind.hidden.inj heq)
@@ -323,12 +288,15 @@ theorem boundary_row (parameter : PublicParameter) (surrogates : Fin maxLayerHei
     PrunedGraph.boundary parameter surrogates address.position = none := by
   cases address <;> rfl
 
-/-- Every target of the sample is the fixed target of its kind.
+/-- Take an input that is not a message-digest input.
+
+Every target of the sample at it is the fixed target of its kind.
 
 Otherwise it is the table value of its hidden coordinate. -/
 theorem target_kind (table : HiddenGraph.Table)
     (htable : tableExtending (knownOf (truncateHash parameterOutput) fixed) table = table)
     (results : OtsKey → Option (Counter × Encoding)) (input : HashInput) (value : Digest)
+    (hmsg : ¬ForsSigner.IsMsgInput input)
     (hmem : value ∈ targets (truncateHash parameterOutput)
       (compTable parameterOutput fixed highs remaining table results) input) :
     (sampleTargeting parameterOutput fixed highs remaining results).kind input = .fixed value ∨
@@ -354,7 +322,8 @@ theorem target_kind (table : HiddenGraph.Table)
             · exact absurd hmem (Finset.notMem_empty _)
             · exact Finset.mem_singleton.1 hmem
           subst hvalue
-          rw [sampleTargeting_kind parameterOutput fixed highs remaining results input fields hf]
+          rw [sampleTargeting_kind parameterOutput fixed highs remaining results input fields hmsg
+            hf]
           cases hr : rowAt fields with
           | none =>
               left
@@ -544,8 +513,8 @@ theorem sampleTargeting_hit (parameterOutput : HashOutput) (fixed : HiddenGraph.
     (s : HiddenDebt.DebtState HashInput HashOutput HiddenGraph.Coordinate)
     (hprep : HiddenDebt.Prepared prepared.2 s) (hagree : HiddenDebt.Agrees s.known table)
     (hbad : HiddenDebt.CorrectGuess table s ∨
-      CacheMatch.Bad (targets (truncateHash parameterOutput)
-        (compTable parameterOutput fixed highs remaining table prepared.1)) s.cache) :
+      CacheMatch.Bad (digestFreeTargets parameterOutput fixed highs remaining table prepared.1)
+        s.cache) :
     HiddenDebt.Hit (sampleTargeting parameterOutput fixed highs remaining prepared.1) prepared.2
         table s := by
   rcases hbad with ⟨guess, hguess, hcorrect⟩ | ⟨input, answer, hcache, hmem⟩
@@ -553,7 +522,10 @@ theorem sampleTargeting_hit (parameterOutput : HashOutput) (fixed : HiddenGraph.
     change (guess.1, table guess.1) ∈ s.guesses
     rw [hcorrect]
     exact hguess
-  · cases hinit : prepared.2 input with
+  · unfold digestFreeTargets at hmem
+    split_ifs at hmem with hmsg
+    · exact absurd hmem (Finset.notMem_empty _)
+    cases hinit : prepared.2 input with
     | some old =>
         exfalso
         have hsame := hprep input old hinit
@@ -563,7 +535,7 @@ theorem sampleTargeting_hit (parameterOutput : HashOutput) (fixed : HiddenGraph.
             answer hinit hmem
     | none =>
         rcases target_kind parameterOutput fixed highs remaining table htable prepared.1 input _
-            hmem with
+            hmsg hmem with
           hfixed | ⟨coordinate, hhidden, hvalue⟩
         · exact Or.inl (Or.inl ⟨input, answer, _, hcache, hinit, hfixed, rfl⟩)
         · exact hit_of_debt hagree coordinate
@@ -576,7 +548,9 @@ It compares by truncation, and its kinds are compatible with the sample's row mo
 
 Message-digest inputs are untargeted digest queries.
 
-A correct guess or a cached target hit is a hit, under the conditions of the hit inclusion. -/
+A correct guess is a hit, under the conditions of the hit inclusion.
+
+So is a cached target hit away from the message-digest inputs. -/
 theorem exists_targeting (hb : 0 < keptHeight topLayer) (parameterOutput : HashOutput)
     (fixed : HiddenGraph.Table)
     (highs : CoordinateHighs) (remaining : RemainingOutputs)
@@ -591,8 +565,8 @@ theorem exists_targeting (hb : 0 < keptHeight topLayer) (parameterOutput : HashO
         ∀ (s : HiddenDebt.DebtState HashInput HashOutput HiddenGraph.Coordinate),
           HiddenDebt.Prepared prepared.2 s → HiddenDebt.Agrees s.known table →
           (HiddenDebt.CorrectGuess table s ∨
-            CacheMatch.Bad (targets (truncateHash parameterOutput)
-              (compTable parameterOutput fixed highs remaining table prepared.1)) s.cache) →
+            CacheMatch.Bad (digestFreeTargets parameterOutput fixed highs remaining table
+              prepared.1) s.cache) →
           HiddenDebt.Hit tg prepared.2 table s :=
   ⟨sampleTargeting parameterOutput fixed highs remaining prepared.1, rfl,
     sampleTargeting_compatible parameterOutput fixed highs remaining prepared.1,

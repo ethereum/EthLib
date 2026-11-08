@@ -248,6 +248,118 @@ theorem kzgCommitmentsInclusionProofDepth_eq {preset : Preset} {fork : Fork}
   rcases named with rfl | rfl <;> cases fork <;> first
     | exact absurd fulu (by decide) | exact absurd beforeGloas (by decide) | decide +kernel
 
+section Inclusion
+
+variable {preset : Preset} {fork : Fork}
+  [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
+  [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat] [NeZero preset.PTC_SIZE.toNat]
+  [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat]
+
+/-- A built branch of the list of commitments of a body climbs from its root to that of the body.
+
+The list is node 27 of the tree of the body, so the branch has the depth of that node.
+
+This holds from Deneb to the forks before Gloas, for every preset. -/
+theorem blobKzgCommitmentsInclusionProof_valid (deneb : .dencun ≤ fork ∧ fork < .glamsterdam)
+    {body : BeaconBlockBody preset fork}
+    {branch : Vector Bytes32 preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat}
+    (built : blobKzgCommitmentsInclusionProof body = .ok branch) :
+    ∃ leaf root, SszType.hashTreeRoot (body.blobKzgCommitments deneb) = .ok leaf ∧
+      SszType.hashTreeRoot body = .ok root ∧
+      Nat.log2 27 = preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat ∧
+      isValidMerkleBranch leaf branch.toList preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat
+        (27 % 2 ^ Nat.log2 27) root = true := by
+  obtain ⟨leaf, root, nodes, rooted, bodyRoot, proved, valid⟩ :=
+    blobKzgCommitments_branch deneb body
+  -- The built branch is the branch that the generic construction gives.
+  unfold blobKzgCommitmentsInclusionProof blobKzgCommitmentsGindex at built
+  simp only [blobKzgCommitmentsField_gindex deneb, proved, mapM_toChunk, bind,
+    Except.bind] at built
+  split at built
+  · rename_i exact
+    cases built
+    have depth : Nat.log2 27 = preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat := by
+      have := (Bool.and_eq_true_iff.mp valid).1
+      simp only [beq_iff_eq] at this
+      simp only [List.size_toArray] at exact
+      omega
+    refine ⟨leaf, root, rooted, bodyRoot, depth, ?_⟩
+    have listed : (⟨nodes.toArray, exact⟩ : Vector Bytes32 _).toList = nodes := by simp
+    rw [listed, ← depth]
+    exact valid
+  · cases built
+
+/-- For both presets, the branch of the list of commitments of a body is built.
+
+This holds at Fulu and the BPO forks. -/
+theorem blobKzgCommitmentsInclusionProof_ok (named : preset = .mainnet ∨ preset = .minimal)
+    (fulu : .fusaka ≤ fork) (beforeGloas : fork < .glamsterdam)
+    (body : BeaconBlockBody preset fork) :
+    ∃ branch, blobKzgCommitmentsInclusionProof body = .ok branch := by
+  have deneb : .dencun ≤ fork ∧ fork < .glamsterdam := ⟨Nat.le_trans (by decide) fulu, beforeGloas⟩
+  obtain ⟨_, _, nodes, -, -, proved, valid⟩ := blobKzgCommitments_branch deneb body
+  obtain ⟨gindex, located, depth⟩ := kzgCommitmentsInclusionProofDepth_eq named fulu beforeGloas
+  unfold blobKzgCommitmentsGindex at located
+  rw [blobKzgCommitmentsField_gindex deneb] at located
+  cases located
+  have length : nodes.length = preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat := by
+    have := (Bool.and_eq_true_iff.mp valid).1
+    simp only [beq_iff_eq] at this
+    omega
+  unfold blobKzgCommitmentsInclusionProof blobKzgCommitmentsGindex
+  simp only [blobKzgCommitmentsField_gindex deneb, proved, mapM_toChunk, bind, Except.bind]
+  split
+  · exact ⟨_, rfl⟩
+  · rename_i short
+    exact absurd (by simpa using length) short
+
+/-- A column sidecar whose inclusion check passes carries the root of the commitments of a body.
+
+Take a body whose root is the body root of the header of the sidecar.
+
+Take the branch that the full node builds for the list of commitments of that body.
+
+That list has the root of the sidecar's list.
+
+Otherwise the search over the two climbs names two different 64-byte messages with one hash.
+
+This holds at Fulu and the BPO forks; the full node builds the branch at both presets. -/
+theorem verifyDataColumnSidecarInclusionProof_body (fulu : .fusaka ≤ fork)
+    (beforeGloas : fork < .glamsterdam) {sidecar : DataColumnSidecar preset fork}
+    (valid : verifyDataColumnSidecarInclusionProof preset beforeGloas sidecar = true)
+    {body : BeaconBlockBody preset fork}
+    (rooted : SszType.hashTreeRoot body =
+      .ok (sidecar.signedBlockHeader beforeGloas).message.bodyRoot)
+    {branch : Vector Bytes32 preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat}
+    (built : blobKzgCommitmentsInclusionProof body = .ok branch) :
+    ∃ (leaf other : Bytes32),
+      SszType.hashTreeRoot (sidecar.kzgCommitments beforeGloas) = .ok leaf ∧
+      SszType.hashTreeRoot (body.blobKzgCommitments ⟨Nat.le_trans (by decide) fulu,
+        beforeGloas⟩) = .ok other ∧
+      (leaf = other ∨ ∃ a b, findBranchCollision 27 0 leaf.toArray other.toArray
+          ((sidecar.kzgCommitmentsInclusionProof beforeGloas).toList.map Vector.toArray)
+          (branch.toList.map Vector.toArray) = some (a, b) ∧
+        a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
+        Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
+          Cryptography.Hash.Sha256.hash (ByteArray.mk b)) := by
+  have deneb : .dencun ≤ fork ∧ fork < .glamsterdam := ⟨Nat.le_trans (by decide) fulu, beforeGloas⟩
+  obtain ⟨other, root, otherRooted, bodyRoot, depth, honest⟩ :=
+    blobKzgCommitmentsInclusionProof_valid deneb built
+  rw [rooted] at bodyRoot
+  cases bodyRoot
+  obtain ⟨leaf, leafRooted⟩ := SszType.hashTreeRoot_total (sidecar.kzgCommitments beforeGloas)
+  have below : getSubtreeIndex 27 = .ok (27 % 2 ^ Nat.log2 27) := by
+    simp [getSubtreeIndex, gindexDepth, gindexBelow, bind, Except.bind, pure, Except.pure]
+  -- The sidecar's branch and the built branch climb at one depth and index to one root.
+  unfold verifyDataColumnSidecarInclusionProof verifyKzgCommitmentsInclusionProof
+    blobKzgCommitmentsGindex at valid
+  simp only [blobKzgCommitmentsField_gindex deneb, leafRooted, below] at valid
+  rw [depth] at valid honest
+  exact ⟨leaf, other, leafRooted, otherRooted,
+    isValidMerkleBranch_findBranchCollision (by decide) depth valid honest⟩
+
+end Inclusion
+
 section Matrix
 
 open Cryptography.Kzg Cryptography.Kzg.Constants
