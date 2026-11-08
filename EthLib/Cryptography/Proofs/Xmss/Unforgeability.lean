@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Game
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Reasons
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.SeedHops
 
 /-!
 # Proofs: leanXMSS as EthLib computes it is unforgeable
@@ -46,6 +47,14 @@ They still count toward the budget `q`, so the bound holds as stated.
 A variant game has a signer that replies with its error, which tells which layer failed.
 
 There the bound gains the probability that some signing request fails.
+
+Two hidden-seed hops move that probability to a game whose derivations come from a lazy table.
+
+Take an adversary that makes at most `qH` hash queries and `r` signing requests on every run.
+
+The hops cost at most `2 Q / 2^256`, where `Q` bounds the hash calls of the game on every run.
+
+`Q = 205 * 2^16 + 1 + qH + r (2^33 + 615 * 2^16) + 384`, so it charges each request's worst case.
 -/
 
 @[expose] public section
@@ -66,3 +75,11 @@ info: 'EthLib.Cryptography.Xmss.Unforgeability.reasonForgeAdvantage_le_add' depe
 -/
 #guard_msgs (whitespace := lax) in
 #print axioms EthLib.Cryptography.Xmss.Unforgeability.reasonForgeAdvantage_le_add
+
+/--
+info: 'EthLib.Cryptography.Xmss.Unforgeability.signingFailure_le_prfGame' depends on axioms:
+
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms EthLib.Cryptography.Xmss.Unforgeability.signingFailure_le_prfGame

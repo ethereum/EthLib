@@ -22,6 +22,8 @@ A validator can withdraw its whole balance exactly when its credentials, epoch a
 A full payload starts the next sweep after its last withdrawal, before the wrap at the registry.
 
 Otherwise the next sweep starts one sweep after the start of the last one.
+
+From Gloas, a builder withdrawal pays a queued entry, or all that a withdrawable builder has left.
 -/
 
 @[expose] public section
@@ -760,8 +762,13 @@ theorem withdrawnFrom_cons (withdrawal : Withdrawal) (rest : List Withdrawal)
   unfold withdrawnFrom
   by_cases h : withdrawal.validatorIndex = index <;> simp [h]
 
-/-- Before Gloas, withdrawals within a balance lower it by exactly their total. -/
-theorem applyWithdrawals_balance {index : ValidatorIndex} (before : fork < .glamsterdam) :
+/-- Withdrawals within a validator's balance lower it by exactly their total.
+
+This holds before Gloas, and from Gloas for an index that names no builder.
+
+From Gloas the withdrawals of builders change no balance of a validator. -/
+theorem applyWithdrawals_balance {index : ValidatorIndex}
+    (named : fork < .glamsterdam ∨ isBuilderIndex index = false) :
     ∀ (withdrawals : List Withdrawal) (state after : BeaconState preset fork) (balance : Gwei),
     withdrawals.foldlM applyWithdrawal state = .ok after →
     state.balances.data[index.toNat]? = some balance →
@@ -775,90 +782,321 @@ theorem applyWithdrawals_balance {index : ValidatorIndex} (before : fork < .glam
   | withdrawal :: rest, state, after, balance, computed, found, bounded => by
     rw [List.foldlM_cons, bind_ok_iff] at computed
     obtain ⟨middle, step, computed⟩ := computed
-    have noGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
-    unfold applyWithdrawal at step
-    simp only [noGloas, false_and, ↓reduceDIte] at step
-    simp only [decreaseBalance, bind_ok_iff] at step
-    obtain ⟨old, oldOk, set⟩ := step
-    obtain ⟨inside, rfl⟩ := setBalance_ok set
     rw [withdrawnFrom_cons] at bounded ⊢
-    by_cases same : withdrawal.validatorIndex = index
-    · simp only [same, ↓reduceIte] at bounded ⊢
-      subst same
-      simp only [getBalance, found, Except.ok.injEq] at oldOk
-      subst oldOk
-      have inRange := (Array.getElem?_eq_some_iff.mp found).1
-      rw [applyWithdrawals_balance before rest _ after (saturatingSub balance withdrawal.amount)
-        computed (by simp [BeaconState.putBalance, inRange])
-        (by rw [toNat_saturatingSub]; omega), toNat_saturatingSub]
-      congr 1
-      omega
-    · simp only [same, ↓reduceIte, Nat.zero_add] at bounded ⊢
-      have apart : withdrawal.validatorIndex.toNat ≠ index.toNat :=
-        fun h => same (UInt64.toNat_inj.mp h)
-      exact applyWithdrawals_balance before rest _ after balance computed
-        (by simp [BeaconState.putBalance, apart, found]) bounded
+    unfold applyWithdrawal at step
+    split at step
+    · -- A withdrawal of a builder changes only the registry of builders.
+      rename_i builder
+      have other : withdrawal.validatorIndex ≠ index := fun same => by
+        rcases named with before | notBuilder
+        · exact Nat.not_le_of_lt before builder.1
+        · rw [same, notBuilder] at builder
+          exact Bool.false_ne_true builder.2
+      simp only [bind_ok_iff] at step
+      obtain ⟨_, _, set⟩ := step
+      obtain ⟨_, rfl⟩ := setBuilder_ok set
+      simp only [other, ↓reduceIte, Nat.zero_add] at bounded ⊢
+      exact applyWithdrawals_balance named rest _ after balance computed found bounded
+    · simp only [decreaseBalance, bind_ok_iff] at step
+      obtain ⟨old, oldOk, set⟩ := step
+      obtain ⟨inside, rfl⟩ := setBalance_ok set
+      by_cases same : withdrawal.validatorIndex = index
+      · simp only [same, ↓reduceIte] at bounded ⊢
+        subst same
+        simp only [getBalance, found, Except.ok.injEq] at oldOk
+        subst oldOk
+        have inRange := (Array.getElem?_eq_some_iff.mp found).1
+        rw [applyWithdrawals_balance named rest _ after
+          (saturatingSub balance withdrawal.amount) computed
+          (by simp [BeaconState.putBalance, inRange]) (by rw [toNat_saturatingSub]; omega),
+          toNat_saturatingSub]
+        congr 1
+        omega
+      · simp only [same, ↓reduceIte, Nat.zero_add] at bounded ⊢
+        have apart : withdrawal.validatorIndex.toNat ≠ index.toNat :=
+          fun h => same (UInt64.toNat_inj.mp h)
+        exact applyWithdrawals_balance named rest _ after balance computed
+          (by simp [BeaconState.putBalance, apart, found]) bounded
 
-/-- Before Gloas, only the withdrawals themselves change the balances. -/
+/-- Moving the start of the next sweep of builders keeps the balances and the builders. -/
+theorem updateNextWithdrawalBuilderIndex_balances {state after : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {count : Nat}
+    (computed : updateNextWithdrawalBuilderIndex state gloas count = .ok after) :
+    after.balances = state.balances ∧ after.builders = state.builders := by
+  unfold updateNextWithdrawalBuilderIndex at computed
+  dsimp only at computed
+  split at computed
+  · cases computed
+    exact ⟨rfl, rfl⟩
+  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, rfl⟩ := computed
+    exact ⟨rfl, rfl⟩
+
+/-- From Capella, only the withdrawals themselves change the balances and the builders. -/
 theorem applyExpectedWithdrawals_balances {state after : BeaconState preset fork}
-    {capella : .shapella ≤ fork} {expected : ExpectedWithdrawals} (before : fork < .glamsterdam)
+    {capella : .shapella ≤ fork} {expected : ExpectedWithdrawals}
     (computed : applyExpectedWithdrawals state capella expected = .ok after) :
     ∃ applied, applyWithdrawals state expected.withdrawals = .ok applied ∧
-      after.balances = applied.balances := by
-  have noGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+      after.balances = applied.balances ∧ after.builders = applied.builders := by
   unfold applyExpectedWithdrawals at computed
-  simp only [noGloas, ↓reduceDIte, bind_ok_iff] at computed
+  simp only [bind_ok_iff] at computed
   obtain ⟨applied, appliedOk, indexed, indexedOk, swept, sweptOk, last⟩ := computed
   refine ⟨applied, appliedOk, ?_⟩
-  have one : indexed.balances = applied.balances := by
+  have one : indexed.balances = applied.balances ∧ indexed.builders = applied.builders := by
     unfold updateNextWithdrawalIndex at indexedOk
     split at indexedOk
     · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at indexedOk
       obtain ⟨_, _, rfl⟩ := indexedOk
-      rfl
+      exact ⟨rfl, rfl⟩
     · cases indexedOk
-      rfl
-  have two : swept.balances = indexed.balances := by
-    simp only [pure, Except.pure, Except.ok.injEq] at sweptOk
-    subst sweptOk
-    split <;> rfl
+      exact ⟨rfl, rfl⟩
+  -- Updating the queues, the recorded withdrawals and the builder sweep keeps the balances.
+  have two : swept.balances = indexed.balances ∧ swept.builders = indexed.builders := by
+    split at sweptOk
+    · rw [(updateNextWithdrawalBuilderIndex_balances sweptOk).1,
+        (updateNextWithdrawalBuilderIndex_balances sweptOk).2]
+      constructor <;> split <;> (try split) <;> rfl
+    · simp only [pure, Except.pure, Except.ok.injEq] at sweptOk
+      subst sweptOk
+      constructor <;> split <;> (try split) <;> rfl
   unfold updateNextWithdrawalValidatorIndex at last
   simp only [bind_ok_iff] at last
   obtain ⟨_, _, last⟩ := last
   split at last
   · cases last
   · cases last
-    rw [← one, ← two]
+    exact ⟨two.1.trans one.1, two.2.trans one.2⟩
 
-/-- Before Gloas, the expected withdrawals take from a validator at most its balance. -/
+section
+
+variable {state : BeaconState preset fork}
+
+/-! ## What the builders withdraw -/
+
+/-- From Gloas, each queued builder withdrawal that a payload pays is one entry of the queue.
+
+It pays the amount of that entry to its fee recipient, under the index that names its builder. -/
+theorem getBuilderWithdrawals_loop_pays {prior : Array Withdrawal} {limit : UInt64}
+    {whole : List BuilderPendingWithdrawal} :
+    ∀ (queue : List BuilderPendingWithdrawal) (withdrawals : Array Withdrawal)
+      (next : WithdrawalIndex) (processed : Nat)
+      {result : Array Withdrawal × WithdrawalIndex × Nat},
+    (∀ pending ∈ queue, pending ∈ whole) →
+    (∀ withdrawal ∈ withdrawals.toList, ∃ pending ∈ whole,
+      withdrawal.validatorIndex = convertBuilderIndexToValidatorIndex pending.builderIndex ∧
+      withdrawal.address = pending.feeRecipient ∧ withdrawal.amount = pending.amount) →
+    getBuilderWithdrawals.loop prior limit queue withdrawals next processed = .ok result →
+    ∀ withdrawal ∈ result.1.toList, ∃ pending ∈ whole,
+      withdrawal.validatorIndex = convertBuilderIndexToValidatorIndex pending.builderIndex ∧
+      withdrawal.address = pending.feeRecipient ∧ withdrawal.amount = pending.amount
+  | [], _, _, _, _, _, pays, computed => by
+    simp only [getBuilderWithdrawals.loop, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact pays
+  | pending :: rest, _, _, _, _, within, pays, computed => by
+    simp only [getBuilderWithdrawals.loop] at computed
+    split at computed
+    · simp only [pure, Except.pure, Except.ok.injEq] at computed
+      subst computed
+      exact pays
+    · simp only [bind_ok_iff, liftAccessor_ok] at computed
+      obtain ⟨⟨appended, following⟩, appendedOk, loopOk⟩ := computed
+      refine getBuilderWithdrawals_loop_pays rest _ _ _
+        (fun other member => within other (List.mem_cons_of_mem _ member))
+        (fun withdrawal member => ?_) loopOk
+      simp only [appendWithdrawal, bind_ok_iff, pure, Except.pure, Except.ok.injEq,
+        Prod.mk.injEq] at appendedOk
+      obtain ⟨_, _, rfl, rfl⟩ := appendedOk
+      simp only [Array.toList_push, List.mem_append, List.mem_singleton] at member
+      rcases member with member | rfl
+      · exact pays withdrawal member
+      · exact ⟨pending, within pending List.mem_cons_self, rfl, rfl, rfl⟩
+
+/-- From Gloas, each queued builder withdrawal of a payload is one entry of the queue.
+
+It pays the amount of that entry to its fee recipient, under the index that names its builder. -/
+theorem getBuilderWithdrawals_pays {gloas : .glamsterdam ≤ fork} {start : WithdrawalIndex}
+    {prior builders : Array Withdrawal} {next : WithdrawalIndex} {processed : Nat}
+    (computed : getBuilderWithdrawals state gloas start prior = .ok (builders, next, processed)) :
+    ∀ withdrawal ∈ builders.toList,
+      ∃ pending ∈ (state.builderPendingWithdrawals gloas).data.toList,
+        withdrawal.validatorIndex = convertBuilderIndexToValidatorIndex pending.builderIndex ∧
+        withdrawal.address = pending.feeRecipient ∧ withdrawal.amount = pending.amount := by
+  unfold getBuilderWithdrawals at computed
+  simp only [bind_ok_iff, ensure_ok_iff] at computed
+  obtain ⟨_, _, _, _, loopOk⟩ := computed
+  exact getBuilderWithdrawals_loop_pays _ _ _ _ (fun _ member => member)
+    (fun _ absent => absurd absent (by simp)) loopOk
+
+/-- What the sweep of builders pays one builder, after the withdrawals of the payload before it.
+
+The builder is withdrawable, and it withdraws all of its balance left, which is not zero. -/
+private def BuilderSweepPays (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
+    (epoch : Epoch) (before : Array Withdrawal) (withdrawal : Withdrawal) : Prop :=
+  ∃ index builder left, withdrawal.validatorIndex = convertBuilderIndexToValidatorIndex index ∧
+    getBuilder state gloas index = .ok builder ∧
+    getBuilderBalanceAfterWithdrawals state gloas index before = .ok left ∧
+    builder.withdrawableEpoch ≤ epoch ∧ 0 < left ∧ withdrawal.amount = left
+
+/-- From Gloas, each withdrawal of the sweep of builders pays by the rule above. -/
+private theorem getBuildersSweepWithdrawals_loop_pays {gloas : .glamsterdam ≤ fork}
+    {prior : Array Withdrawal} {epoch : Epoch} {count : Nat} {limit : UInt64} :
+    ∀ (visits : Nat) (withdrawals : Array Withdrawal) (next : WithdrawalIndex)
+      (index : BuilderIndex) (processed : Nat)
+      {result : Array Withdrawal × WithdrawalIndex × Nat},
+    (∀ k (inside : k < withdrawals.size),
+      BuilderSweepPays state gloas epoch (prior ++ withdrawals.extract 0 k) withdrawals[k]) →
+    getBuildersSweepWithdrawals.loop state gloas prior epoch count limit visits withdrawals next
+      index processed = .ok result →
+    ∀ k (inside : k < result.1.size),
+      BuilderSweepPays state gloas epoch (prior ++ result.1.extract 0 k) result.1[k]
+  | 0, _, _, _, _, _, pays, computed => by
+    simp only [getBuildersSweepWithdrawals.loop, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact pays
+  | visits + 1, withdrawals, next, index, _, _, pays, computed => by
+    simp only [getBuildersSweepWithdrawals.loop] at computed
+    split at computed
+    · simp only [pure, Except.pure, Except.ok.injEq] at computed
+      subst computed
+      exact pays
+    simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨builder, builderOk, left, leftOk, computed⟩ := computed
+    split at computed
+    · rename_i paid
+      simp only [bind_ok_iff, liftAccessor_ok] at computed
+      obtain ⟨⟨appended, following⟩, appendedOk, _, _, loopOk⟩ := computed
+      refine getBuildersSweepWithdrawals_loop_pays visits _ _ _ _ (fun k inside => ?_) loopOk
+      simp only [appendWithdrawal, bind_ok_iff, pure, Except.pure, Except.ok.injEq,
+        Prod.mk.injEq] at appendedOk
+      obtain ⟨_, _, rfl, rfl⟩ := appendedOk
+      simp only [Array.size_push] at inside
+      by_cases old : k < withdrawals.size
+      · rw [Array.getElem_push_lt old, Array.extract_push_of_le (by omega)]
+        exact pays k old
+      · obtain rfl : k = withdrawals.size := by omega
+        rw [Array.getElem_push_eq, Array.extract_push_of_le (Nat.le_refl _),
+          Array.extract_eq_self_of_le (Nat.le_refl _)]
+        exact ⟨index, builder, left, rfl, builderOk, leftOk, paid.1, paid.2, rfl⟩
+    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, exists_eq_left'] at computed
+      obtain ⟨_, _, loopOk⟩ := computed
+      exact getBuildersSweepWithdrawals_loop_pays visits _ _ _ _ pays loopOk
+
+/-- From Gloas, what each withdrawal of the sweep of builders pays.
+
+The builder is withdrawable, and it withdraws all of its balance left, which is not zero.
+
+The balance left is read after the withdrawals before it. -/
+theorem getBuildersSweepWithdrawals_pays {gloas : .glamsterdam ≤ fork} {start : WithdrawalIndex}
+    {prior swept : Array Withdrawal} {next : WithdrawalIndex} {processed : Nat}
+    (computed : getBuildersSweepWithdrawals state gloas start prior =
+      .ok (swept, next, processed)) :
+    ∀ k (inside : k < swept.size), ∃ index builder left,
+      swept[k].validatorIndex = convertBuilderIndexToValidatorIndex index ∧
+      getBuilder state gloas index = .ok builder ∧
+      getBuilderBalanceAfterWithdrawals state gloas index (prior ++ swept.extract 0 k) = .ok left ∧
+      builder.withdrawableEpoch ≤ getCurrentEpoch state ∧ 0 < left ∧ swept[k].amount = left := by
+  unfold getBuildersSweepWithdrawals at computed
+  simp only [bind_ok_iff, ensure_ok_iff] at computed
+  obtain ⟨_, _, _, _, loopOk⟩ := computed
+  exact getBuildersSweepWithdrawals_loop_pays _ _ _ _ _
+    (fun _ inside => absurd inside (by simp)) loopOk
+
+end
+
+/-! ## The withdrawals that a balance allows -/
+
+/-- Withdrawals that each name a builder. -/
+private def AllBuilders (withdrawals : Array Withdrawal) : Prop :=
+  ∀ withdrawal ∈ withdrawals.toList, isBuilderIndex withdrawal.validatorIndex = true
+
+/-- Withdrawals of builders take nothing from an index that names no builder. -/
+private theorem withdrawnFrom_of_allBuilders {withdrawals : Array Withdrawal}
+    {index : ValidatorIndex}
+    (builders : AllBuilders withdrawals) (notBuilder : isBuilderIndex index = false) :
+    withdrawnFrom withdrawals index = 0 := by
+  unfold withdrawnFrom
+  rw [List.filter_eq_nil_iff.mpr fun withdrawal member same => by
+    have := builders withdrawal member
+    rw [of_decide_eq_true same, notBuilder] at this
+    cases this]
+  rfl
+
+/-- The total of a validator over two lists of withdrawals is the sum of the two totals. -/
+theorem withdrawnFrom_append (first second : Array Withdrawal) (index : ValidatorIndex) :
+    withdrawnFrom (first ++ second) index =
+      withdrawnFrom first index + withdrawnFrom second index := by
+  simp [withdrawnFrom, List.filter_append]
+
+/-- The expected withdrawals take from a validator at most its balance.
+
+This holds before Gloas, and from Gloas for an index that names no builder. -/
 theorem getExpectedWithdrawals_withdrawnFrom {state : BeaconState preset fork}
-    {capella : .shapella ≤ fork} {expected : ExpectedWithdrawals} (before : fork < .glamsterdam)
-    (computed : getExpectedWithdrawals state capella = .ok expected) {index : ValidatorIndex}
+    {capella : .shapella ≤ fork} {expected : ExpectedWithdrawals} {index : ValidatorIndex}
+    (named : fork < .glamsterdam ∨ isBuilderIndex index = false)
+    (computed : getExpectedWithdrawals state capella = .ok expected)
     {balance : Gwei} (found : state.balances.data[index.toNat]? = some balance) :
     withdrawnFrom expected.withdrawals index ≤ balance.toNat := by
-  unfold getExpectedWithdrawals at computed
-  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨⟨builders, index1, _⟩, buildersOk, ⟨partials, index2, _⟩, partialsOk,
-    ⟨buildersSweep, index3, _⟩, buildersSweepOk, ⟨sweep, index4, _⟩, sweepOk, rfl⟩ := computed
-  have noGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
-  simp only [noGloas, ↓reduceDIte, Except.ok.injEq, Prod.mk.injEq] at buildersOk buildersSweepOk
-  obtain ⟨rfl, rfl, _⟩ := buildersOk
-  obtain ⟨rfl, rfl, _⟩ := buildersSweepOk
-  have two : withdrawnFrom (#[] ++ partials) index ≤ balance.toNat := by
-    split at partialsOk
-    · unfold getPendingPartialWithdrawals at partialsOk
-      simp only [bind_ok_iff, ensure_ok_iff] at partialsOk
-      obtain ⟨_, _, _, _, loopOk⟩ := partialsOk
-      exact getPendingPartialWithdrawals_loop_withdrawnFrom found _ _ _ _
-        (by simp [withdrawnFrom]) loopOk
-    · simp only [Except.ok.injEq, Prod.mk.injEq] at partialsOk
-      obtain ⟨rfl, rfl, rfl⟩ := partialsOk
-      simp [withdrawnFrom]
-  unfold getValidatorsSweepWithdrawals at sweepOk
-  simp only [bind_ok_iff, ensure_ok_iff] at sweepOk
-  obtain ⟨_, _, loopOk⟩ := sweepOk
-  exact getValidatorsSweepWithdrawals_loop_withdrawnFrom found _ _ _ _ _ (by simpa using two)
-    loopOk
+  by_cases gloas : .glamsterdam ≤ fork
+  · -- From Gloas the withdrawals of builders take nothing from the validator.
+    have notBuilder : isBuilderIndex index = false :=
+      named.resolve_left (Nat.not_lt_of_le gloas)
+    unfold getExpectedWithdrawals at computed
+    simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨⟨builders, index1, _⟩, buildersOk, ⟨partials, index2, _⟩, partialsOk,
+      ⟨buildersSweep, index3, _⟩, buildersSweepOk, ⟨sweep, index4, _⟩, sweepOk, rfl⟩ := computed
+    -- The queued builder withdrawals take nothing from the validator.
+    simp only [gloas, ↓reduceDIte] at buildersOk buildersSweepOk
+    have one : AllBuilders builders := fun withdrawal member => by
+      obtain ⟨_, -, named, -⟩ := getBuilderWithdrawals_pays buildersOk withdrawal member
+      rw [named]
+      exact isBuilderIndex_convertBuilderIndexToValidatorIndex _
+    have two : withdrawnFrom (builders ++ partials) index ≤ balance.toNat := by
+      split at partialsOk
+      · unfold getPendingPartialWithdrawals at partialsOk
+        simp only [bind_ok_iff, ensure_ok_iff] at partialsOk
+        obtain ⟨_, _, _, _, loopOk⟩ := partialsOk
+        exact getPendingPartialWithdrawals_loop_withdrawnFrom found _ _ _ _
+          (by simp [withdrawnFrom_of_allBuilders one notBuilder]) loopOk
+      · simp only [Except.ok.injEq, Prod.mk.injEq] at partialsOk
+        obtain ⟨rfl, -, -⟩ := partialsOk
+        simp [withdrawnFrom_of_allBuilders one notBuilder]
+    -- The sweep of builders takes nothing from the validator either.
+    have three : AllBuilders buildersSweep := fun withdrawal member => by
+      obtain ⟨k, inside, rfl⟩ := Array.getElem_of_mem (Array.mem_toList_iff.mp member)
+      obtain ⟨_, _, _, named, -⟩ := getBuildersSweepWithdrawals_pays buildersSweepOk k inside
+      rw [named]
+      exact isBuilderIndex_convertBuilderIndexToValidatorIndex _
+    unfold getValidatorsSweepWithdrawals at sweepOk
+    simp only [bind_ok_iff, ensure_ok_iff] at sweepOk
+    obtain ⟨_, _, loopOk⟩ := sweepOk
+    exact getValidatorsSweepWithdrawals_loop_withdrawnFrom found _ _ _ _ _
+      (by simpa [withdrawnFrom_append, withdrawnFrom_of_allBuilders three notBuilder] using two)
+      loopOk
+  · have before : fork < .glamsterdam := Nat.lt_of_not_le gloas
+    unfold getExpectedWithdrawals at computed
+    simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨⟨builders, index1, _⟩, buildersOk, ⟨partials, index2, _⟩, partialsOk,
+      ⟨buildersSweep, index3, _⟩, buildersSweepOk, ⟨sweep, index4, _⟩, sweepOk, rfl⟩ := computed
+    have noGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+    simp only [noGloas, ↓reduceDIte, Except.ok.injEq, Prod.mk.injEq] at buildersOk buildersSweepOk
+    obtain ⟨rfl, rfl, _⟩ := buildersOk
+    obtain ⟨rfl, rfl, _⟩ := buildersSweepOk
+    have two : withdrawnFrom (#[] ++ partials) index ≤ balance.toNat := by
+      split at partialsOk
+      · unfold getPendingPartialWithdrawals at partialsOk
+        simp only [bind_ok_iff, ensure_ok_iff] at partialsOk
+        obtain ⟨_, _, _, _, loopOk⟩ := partialsOk
+        exact getPendingPartialWithdrawals_loop_withdrawnFrom found _ _ _ _
+          (by simp [withdrawnFrom]) loopOk
+      · simp only [Except.ok.injEq, Prod.mk.injEq] at partialsOk
+        obtain ⟨rfl, rfl, rfl⟩ := partialsOk
+        simp [withdrawnFrom]
+    unfold getValidatorsSweepWithdrawals at sweepOk
+    simp only [bind_ok_iff, ensure_ok_iff] at sweepOk
+    obtain ⟨_, _, loopOk⟩ := sweepOk
+    exact getValidatorsSweepWithdrawals_loop_withdrawnFrom found _ _ _ _ _ (by simpa using two)
+      loopOk
 
 /-- Before Gloas, the payload of a withdrawal step never takes more than a balance. -/
 theorem processWithdrawals_withdrawnFrom {state after : BeaconState preset fork}
@@ -869,7 +1107,7 @@ theorem processWithdrawals_withdrawnFrom {state after : BeaconState preset fork}
     withdrawnFrom ((payload before).withdrawals capella).data index ≤ balance.toNat := by
   obtain ⟨expected, expectedOk, carried, -⟩ := processWithdrawals_expected before computed
   rw [carried]
-  exact getExpectedWithdrawals_withdrawnFrom before expectedOk found
+  exact getExpectedWithdrawals_withdrawnFrom (.inl before) expectedOk found
 
 /-- Before Gloas, the withdrawal step lowers each balance by exactly what the payload takes from it.
 
@@ -882,11 +1120,11 @@ theorem processWithdrawals_balance {state after : BeaconState preset fork}
     (after.balances.data[index.toNat]?).map UInt64.toNat =
       some (balance.toNat - withdrawnFrom ((payload before).withdrawals capella).data index) := by
   obtain ⟨expected, expectedOk, carried, appliedOk⟩ := processWithdrawals_expected before computed
-  have bounded := getExpectedWithdrawals_withdrawnFrom before expectedOk found
-  obtain ⟨applied, appliedOk, same⟩ := applyExpectedWithdrawals_balances before appliedOk
+  have bounded := getExpectedWithdrawals_withdrawnFrom (.inl before) expectedOk found
+  obtain ⟨applied, appliedOk, same, -⟩ := applyExpectedWithdrawals_balances appliedOk
   unfold applyWithdrawals at appliedOk
   rw [← Array.foldlM_toList] at appliedOk
-  have lowered := applyWithdrawals_balance before _ _ _ _ appliedOk found
+  have lowered := applyWithdrawals_balance (.inl before) _ _ _ _ appliedOk found
     (by simpa using bounded)
   rw [carried, same]
   simpa using lowered

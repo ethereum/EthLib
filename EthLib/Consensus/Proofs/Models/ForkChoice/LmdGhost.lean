@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.Models.Stake
+public import Mathlib.Algebra.BigOperators.Option
 public import Mathlib.Data.Finset.Max
 public import Mathlib.Order.Prod.Lex.Basic
 
@@ -407,5 +408,73 @@ theorem ancestor_ghost_of_majority {a b : β} (hb : b ∈ G.blocks) (hab : T.Anc
     -- A block above `b` has a child in the view, so the rule does not stop there.
     obtain ⟨c, hc, hcb⟩ := hab.exists_child hba
     exact absurd ⟨c, mem_children.mpr ⟨G.mem_of_ancestor hb hcb, hc⟩⟩ h
+
+/-! ## Proposer boost
+
+The boost gives a timely block of the current slot the weight of an attestation of `W_p`.
+
+So the block and each of its ancestors gain `W_p` in weight.
+
+The source is Buterin's [mitigation of balancing attacks][mitigation], "Proposed solution", step 3.
+
+Step 3 sets that weight to `W / 4`, and its section "Analysis" names it `W_p`.
+
+Section 3 of [Three Attacks on Proof-of-Stake Ethereum][attacks] gives the ex ante reorg.
+
+A [post on balancing and reorging attacks][post] gives the limits of the boost.
+
+Its section "Why change?" says that the boost fixes most ex ante reorgs, but not all.
+
+Its section "Boosting does not mitigate all ex ante reorgs" adds the boost to the votes.
+
+There the boost counts in the chain of the boosted block.
+
+The model follows that rule: the boost is one more voter, `none`.
+
+Its latest message is the boosted block, and its stake is the score of the boost.
+
+Without a boosted block, it has no latest message.
+
+[mitigation]: https://notes.ethereum.org/@vbuterin/lmd_ghost_mitigation
+[attacks]: https://arxiv.org/abs/2110.10086v1
+[post]: https://ethresear.ch/t/change-fork-choice-rule-to-mitigate-balancing-and-reorging-attacks/11127
+-/
+
+variable {V w G}
+
+/-- The stakes with the boost: the stake of each validator, and the score of the boost. -/
+def boostStake (w : ν → ℕ) (score : ℕ) : Option ν → ℕ
+  | none => score
+  | some v => w v
+
+/-- The view with the boost: the same blocks, and the boosted block as the message of `none`. -/
+def View.withBoost (G : View ν β T) (boosted : Option β) : View (Option ν) β T where
+  blocks := G.blocks
+  parent_mem := G.parent_mem
+  latest
+    | none => boosted
+    | some v => G.latest v
+
+@[simp] theorem View.withBoost_blocks (boosted : Option β) :
+    (G.withBoost boosted).blocks = G.blocks :=
+  rfl
+
+/-- The voters and the boost together weigh the stake of the voters plus the score of the boost. -/
+theorem stake_boostStake (score : ℕ) :
+    stake (boostStake w score) V.insertNone = stake w V + score := by
+  rw [stake, Finset.sum_insertNone, stake, Nat.add_comm]
+  rfl
+
+open scoped Classical in
+/-- With the boost, a block weighs its votes, plus the score.
+
+The score counts exactly when the boosted block is in its subtree. -/
+theorem weight_withBoost (boosted : Option β) (score : ℕ) (b : β) :
+    weight V.insertNone (boostStake w score) (G.withBoost boosted) b =
+      weight V w G b + if ∃ m, boosted = some m ∧ T.Ancestor b m then score else 0 := by
+  classical
+  simp only [weight, stake, supporters, Finset.sum_filter, Finset.sum_insertNone]
+  rw [Nat.add_comm]
+  rfl
 
 end EthLib.Consensus.Models.ForkChoice

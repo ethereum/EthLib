@@ -201,12 +201,11 @@ theorem shortMessage_keyMessage (data : PublicData) (lay : Layer) (tree : TreeIn
   unfold PublicData.keyMessage
   split
   · exact Short.shortMessage_root _
-  · exact Short.shortMessage_roots _
+  · exact Short.shortMessage_root _
 
 theorem OnlyC.layerCostSearch (parameter : PublicParameter) (data : PublicData) (index : Index)
     (lay : Layer) : OnlyC (GraphView.layerCostSearch parameter data index lay) := by
   unfold GraphView.layerCostSearch GraphView.layerSearch
-  refine OnlyC.bind (OnlyC.tick _) (fun _ => ?_)
   refine OnlyC.bind (OnlyC.liftHash (Only.search _ _ _ _ _ (shortMessage_keyMessage _ _ _ _) _ _))
     (fun found => ?_)
   rcases found with _ | pair

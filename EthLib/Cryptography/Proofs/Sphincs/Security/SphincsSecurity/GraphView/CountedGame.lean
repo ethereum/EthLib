@@ -143,14 +143,13 @@ theorem fixed_forsCostSource (f : QueryImpl HashSpec Id) (table : HiddenGraph.Ta
 
 /-- The counter search of one layer at the cost level.
 
-It charges the key message first, and on success the chain values and the path. -/
+On success it charges the chain values, the path and the recovery of the root of the layer. -/
 noncomputable def layerCostSearch (parameter : PublicParameter) (data : PublicData) (index : Index)
     (lay : Layer) : OracleComp CostSpec (Option (Counter × Encoding)) := do
-  HiddenCost.tick (keyMessageCost lay)
   let found ← liftM (layerSearch parameter data index lay)
   match found with
   | some pair => do
-      HiddenCost.tick (160 + treePathCost lay)
+      HiddenCost.tick (192 + treePathCost lay + recoverCost lay)
       return some pair
   | none => return none
 
@@ -158,7 +157,7 @@ noncomputable def finishCostSource (parameter : PublicParameter) (data : PublicD
     (message : Message) (randomness : Randomness) : OracleComp CostSpec (Option Signature) := do
   let digest ← liftM (messageDigest parameter data.root message randomness :
     OracleComp HashSpec MessageDigest)
-  HiddenCost.tick (forsTrees * treeOpenCost)
+  HiddenCost.tick (forsTrees * treeOpenCost + forsRecoverCost)
   let index := digestIndex digest
   let some found ←
       sequenceDep (α := fun _ => Counter × Encoding) (layerCostSearch parameter data index)
@@ -176,18 +175,16 @@ theorem fixed_layerCostSearch (f : QueryImpl HashSpec Id) (parameter : PublicPar
           (data.keyMessage lay (treeIndexAt index lay) (leafIndexAt index lay))
           encodingAttemptLimit 0,
         Multiplicative.ofAdd (layerHashCost f parameter data index lay))) := by
-  simp only [layerCostSearch, simulateQ_bind, fixedCostSource_tick, fixedCostSource_lift_hash,
-    fixedWorldCost_lift_hash]
+  simp only [layerCostSearch, simulateQ_bind, fixedCostSource_lift_hash, fixedWorldCost_lift_hash]
   apply WriterT.ext
-  simp only [WriterT.run_bind, WriterT.run_mk, AddWriterT.run_addTell,
-    pure_bind, layerSearch, ReferenceChoice.eval_search, layerHashCost]
+  simp only [WriterT.run_bind, WriterT.run_mk, pure_bind, layerSearch,
+    ReferenceChoice.eval_search, layerHashCost]
   cases hs : firstEncoding f parameter lay (treeIndexAt index lay) (leafIndexAt index lay)
       (data.keyMessage lay (treeIndexAt index lay) (leafIndexAt index lay))
       encodingAttemptLimit 0 with
   | none =>
       simp only [simulateQ_pure, WriterT.run_pure, Option.isSome_none, Bool.false_eq_true,
         ↓reduceIte, Nat.add_zero, map_pure, mul_one]
-      simp only [← ofAdd_add]
   | some pair =>
       simp only [simulateQ_bind, fixedCostSource_tick, simulateQ_pure, WriterT.run_bind,
         WriterT.run_pure, AddWriterT.run_addTell, pure_bind, Option.isSome_some, ↓reduceIte,
@@ -310,17 +307,17 @@ theorem fixed_finishCostSource (f : QueryImpl HashSpec Id) (parameter : PublicPa
 theorem finishCostSource_correct (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
     (seed : MasterSeed) (data : PublicData) (table : HiddenGraph.Table)
     (hdata : DataCorrect f parameter seed data) (htable : CoordinatesCorrect f parameter seed table)
-    (message : Message) (randomness : Randomness)
+    (prf : HashOutput) (message : Message) (randomness : Randomness)
     (hland : Landed parameter (digestIndex (evalWithAnswerFn f
       (messageDigest parameter data.root message randomness :
         OracleComp HashSpec MessageDigest)))) :
     simulateQ (fixedCostSource f table) (finishCostSource parameter data message randomness) =
       simulateQ (fixedWorldCost f)
-        (liftM (Seeded.finishSign ⟨seed, parameter, data.root⟩ message randomness) :
+        (liftM (Seeded.finishSign ⟨seed, prf, parameter, data.root⟩ message randomness) :
           OracleComp OracleWorld (Option Signature)) := by
   rw [fixed_finishCostSource, fixedWorldCost_lift_hash,
-    eval_finishSign_assembled f parameter seed data table hdata htable message randomness hland,
-    hashCalls_finishSign_exact f parameter seed data hdata message randomness hland]
+    eval_finishSign_assembled f parameter seed data table hdata htable prf message randomness hland,
+    hashCalls_finishSign_exact f parameter seed prf data hdata message randomness hland]
 
 /-- The scan of randomizers from a start by a fixed step, with no fresh randomness. -/
 noncomputable def signCostSourceLoop (parameter : PublicParameter) (data : PublicData)
@@ -407,15 +404,17 @@ noncomputable def costGame (parameter : PublicParameter) (data : PublicData)
 
 theorem fixedWorldCost_keygen_graph (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
     (seed : MasterSeed) (data : PublicData) (hdata : DataCorrect f parameter seed data)
+    (prf : HashOutput)
     (hparameter :
-      evalWithAnswerFn f (deriveKey 0 .parameter seed : OracleComp HashSpec Digest) = parameter) :
+      evalWithAnswerFn f (derivePublicSeed seed : OracleComp HashSpec PublicParameter) = parameter)
+    (hprf : evalWithAnswerFn f (derivePrf seed : OracleComp HashSpec HashOutput) = prf) :
     simulateQ (fixedWorldCost f) (liftM (Seeded.keygenFromSeed seed) :
       OracleComp OracleWorld (PublicKey × Seeded.SecretKey)) =
-      WriterT.mk (pure ((⟨data.root, parameter⟩, ⟨seed, parameter, data.root⟩),
+      WriterT.mk (pure ((⟨data.root, parameter⟩, ⟨seed, prf, parameter, data.root⟩),
         Multiplicative.ofAdd keygenHashCost)) := by
   rw [fixedWorldCost_lift_hash, hashCalls_keygenFromSeed]
   simp only [Seeded.keygenFromSeed, evalWithAnswerFn_bind, evalWithAnswerFn_pure,
-    hparameter, ← hdata.root]
+    hparameter, hprf, ← hdata.root]
 
 end SphincsSecurity.Security.GraphView
 

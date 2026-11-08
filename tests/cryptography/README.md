@@ -91,7 +91,8 @@ So the generators rewrite the `key_gen` and `sign` cases only on request:
 ETHLIB_SLOW_VECTORS=1 uv run --no-sync pytest bindings/python/tests/sphincs
 ```
 
-`verify_valid_scheme_seed` holds a public key and a signature that an independent implementation computed.
+`key_gen_known_answer` holds the public key and `sign_known_answer` the signature of a known answer that an independent implementation computed.
+`tests/sources.toml` pins its commit.
 The other cases come from the code under test.
 
 ## VRF tree

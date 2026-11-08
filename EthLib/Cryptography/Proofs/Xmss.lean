@@ -9,6 +9,9 @@ public import EthLib.Cryptography.Proofs.Xmss.CodewordSearch
 public import EthLib.Cryptography.Proofs.Xmss.SignatureFailure
 public import EthLib.Cryptography.Proofs.Xmss.Ots
 public import EthLib.Cryptography.Proofs.Xmss.Tree
+public import EthLib.Cryptography.Proofs.Xmss.KeyGen
+public import EthLib.Cryptography.Proofs.Xmss.MapMonad
+public import EthLib.Cryptography.Proofs.Xmss.QueryBound
 public import EthLib.Cryptography.Proofs.Xmss.Verify
 public import EthLib.Cryptography.Proofs.Xmss.Serialization
 public import EthLib.Cryptography.Proofs.Xmss.Sign

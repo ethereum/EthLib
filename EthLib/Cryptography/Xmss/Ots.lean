@@ -37,14 +37,14 @@ variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 
 /-! ## Chains -/
 
-/-- The 29 hashes of the seed that start the 58 chains of one key.
+/-- The 29 derivations from the seed that start the 58 chains of one key.
 
-Chains `2j` and `2j + 1` start at the two halves of hash `j`. -/
-def chainStarts (pp : PublicParam) (seed : Seed) (layer : Layer) (e : UInt32) :
+Chains `2j` and `2j + 1` start at the two halves of derivation `j`, whose suffix is empty. -/
+def chainStarts (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32) :
     m (Vector Digest V) := do
-  -- One hash per pair of chains, so 29 hashes for 58 chains.
-  let pairs ← ofFnInOrder (V / 2) fun j => H (thInput pp (addrPrf layer e j) (packBytes seed))
-  -- Chain `i` takes half `i mod 2` of hash `floor(i / 2)`.
+  -- One derivation per pair of chains, so 29 derivations for 58 chains.
+  let pairs ← ofFnInOrder (V / 2) fun j => prf pp (addrPrf layer e j) .empty
+  -- Chain `i` takes half `i mod 2` of derivation `floor(i / 2)`.
   return Vector.ofFn fun i =>
     halfOf ⟨i.val % 2, Nat.mod_lt _ (by decide)⟩
       (pairs[i.val / 2]'(by have := i.isLt; simp only [V] at *; omega))
@@ -70,9 +70,10 @@ def otsLeafHash (pp : PublicParam) (layer : Layer) (e : UInt32) (ends : Vector D
     m Digest :=
   th H pp (addrLeaf layer e) (packDigests ends)
 
-/-- `X_{0,e}`: the leaf of key `e`, computed from the seed. -/
-def otsPublicLeaf (pp : PublicParam) (seed : Seed) (layer : Layer) (e : UInt32) : m Digest := do
-  let starts ← chainStarts H pp seed layer e
+/-- `X_{0,e}`: the leaf of key `e`, computed from the derivations of the seed. -/
+def otsPublicLeaf (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32) :
+    m Digest := do
+  let starts ← chainStarts pp prf layer e
   -- Every chain walked from position 0 to position 3, chain 0 first.
   let ends ← ofFnInOrder V fun i => chain H pp layer e i 0 (CHAIN_LENGTH - 1) (by decide) starts[i]
   otsLeafHash H pp layer e ends
@@ -86,12 +87,14 @@ def messageDigest (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : ByteArr
     (rho : Randomizer) : m Digest :=
   th H pp (addrMsg layer e) (msg ++ packBytes rho)
 
-/-- `R_0 = Th(P, A_rnd(l, e), S | M)`: the base every randomizer trial adds to.
+/-- `R_0`: the base every randomizer trial adds to, derived at `A_rnd(l, e)` with suffix `M`.
 
-The seed is in the input, so the randomizers stay secret until signed. -/
-def randomizerBase (pp : PublicParam) (seed : Seed) (layer : Layer) (e : UInt32)
-    (msg : ByteArray) : m Randomizer :=
-  th H pp (addrRnd layer e) (packBytes seed ++ msg)
+With the derivations from the scheme seed `S`, it is `Th(P, A_rnd(l, e), S | M)`.
+
+Since `S` is in the input, the randomizers stay secret until signed. -/
+def randomizerBase (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32)
+    (msg : ByteArray) : m Randomizer := do
+  return halfOf 0 (← prf pp (addrRnd layer e) msg)
 
 /-- `rho_c = LE_128(LE^-1(R_0) + c mod 2^128)`: the randomizer of trial `c`.
 
@@ -123,14 +126,14 @@ Reveals chain `i` at position `x_i`.
 Returns nothing when no trial gives a codeword.
 
 Deterministic, so signing one message again gives the same signature. -/
-def otsSign (pp : PublicParam) (seed : Seed) (layer : Layer) (e : UInt32)
+def otsSign (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32)
     (msg : ByteArray) : m (Option (Randomizer × Vector Digest V)) := do
   -- Step 1: grind the randomizer until the digest is a codeword.
-  let base ← randomizerBase H pp seed layer e msg
+  let base ← randomizerBase pp prf layer e msg
   let some (rho, x) ← Internal.findCodeword H pp layer e msg base 0 MAX_RANDOMIZER_TRIALS
     | return none
   -- Step 2: reveal each chain at the position its digit names, chain 0 first.
-  let starts ← chainStarts H pp seed layer e
+  let starts ← chainStarts pp prf layer e
   let y ← ofFnInOrder V fun i => chain H pp layer e i 0 x[i] (by simp) starts[i]
   return some (rho, y)
 

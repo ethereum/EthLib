@@ -165,7 +165,7 @@ private theorem foldlM_getD_zero {step : Array Gwei × Array Gwei → ValidatorI
     (fun deltas index next before done => (keeps deltas index next done).trans before) zero computed
 
 /-- An array of zeros is zero at every index. -/
-private theorem replicate_getD_zero (size j : Nat) :
+theorem replicate_getD_zero (size j : Nat) :
     (Array.replicate size (0 : Gwei)).getD j 0 = 0 := by
   simp only [Array.getD_eq_getD_getElem?, Array.getElem?_replicate]
   split <;> rfl
@@ -376,7 +376,7 @@ private theorem foldlM_addFlagDelta_reward_of_not_mem
     exact addFlagDelta_reward first (.inr fun same => absent.1 (UInt64.toNat_inj.mp same))
 
 /-- The eligible indices are the positions of the validators that pass the eligibility check. -/
-private theorem getEligibleValidatorIndices_eq {eligible : List ValidatorIndex}
+theorem getEligibleValidatorIndices_eq {eligible : List ValidatorIndex}
     (computed : getEligibleValidatorIndices state = .ok eligible) :
     eligible = state.validators.data.toList.zipIdx.filterMap fun (validator, index) =>
       if (match isEligibleValidator (getPreviousEpoch state) validator with

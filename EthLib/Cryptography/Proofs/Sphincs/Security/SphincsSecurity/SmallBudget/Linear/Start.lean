@@ -159,7 +159,7 @@ theorem pot_start (K : Ctx) (known : Knowledge Coordinate) (_hρ : 0 ≤ K.ρ) (
     rintro ⟨x, u, -, h, -⟩
     exact hfr x u h
   have hMk : ∀ l i, ¬K.Marker (DebtState.start K.initial known) l i :=
-      fun l i ⟨_, _, u, h, _⟩ => hfr _ u h
+      fun l i ⟨_, _, u, _, h, _⟩ => hfr _ u h
   have hcw : ∀ f, K.cw (DebtState.start K.initial known) f = 0 := fun f =>
     K.cw_of_not_fe fun ⟨u, h⟩ => hfr _ u h
   have hBL : ∀ l, ¬K.BadLeaf (DebtState.start K.initial known) l := by

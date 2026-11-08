@@ -7,7 +7,9 @@ public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Scheme
 
 A hash input names a seed when it is a key-generation input of that seed.
 
-The public parameter and the domain of that input can be any values.
+A seed derivation names its seed for any public seed and any domain.
+
+The inputs that give `PK.seed` and `SK.prf` also name their seed.
 
 Each input names at most one seed.
 
@@ -27,16 +29,22 @@ variable [Params]
 attribute [local instance] Classical.propDecidable
 set_option maxRecDepth 10000
 
-/-- The input is the key-generation input of the seed, for some public parameter and domain. -/
+/-- The input names the seed: it derives a key from the seed, or it is `leanSPHINCS || seed || d`.
+
+The domain byte `d` is 0 for `PK.seed` and 1 for `SK.prf`. -/
 def SeedHit (input : HashInput) (seed : MasterSeed) : Prop :=
-  ∃ parameter domain, keygenHashInput parameter domain seed = input
+  (∃ parameter domain, keygenHashInput parameter domain seed = input) ∨
+    ∃ domain, keySeedInput seed domain = input
 
 /-- An input names at most one seed. -/
 theorem seedHit_unique {input : HashInput} {seed seed' : MasterSeed}
     (h : SeedHit input seed) (h' : SeedHit input seed') : seed = seed' := by
-  obtain ⟨parameter, domain, heq⟩ := h
-  obtain ⟨parameter', domain', heq'⟩ := h'
-  exact (keygenInput_injective (heq.trans heq'.symm)).2.2
+  rcases h with ⟨parameter, domain, rfl⟩ | ⟨domain, rfl⟩ <;>
+    rcases h' with ⟨parameter', domain', heq⟩ | ⟨domain', heq⟩
+  · exact (keygenInput_injective heq.symm).2.2
+  · exact absurd heq (keySeedInput_ne_keygenHashInput _ _ _ _ _)
+  · exact absurd heq.symm (keySeedInput_ne_keygenHashInput _ _ _ _ _)
+  · exact (bytesLE_injective (List.append_cancel_left (List.append_inj' heq rfl).1)).symm
 
 /-- The seed that an input names, or `none` if the input names no seed. -/
 noncomputable def parseSeed (input : HashInput) : Option MasterSeed :=

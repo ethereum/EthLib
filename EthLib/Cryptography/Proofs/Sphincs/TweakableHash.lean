@@ -6,13 +6,13 @@ public import EthLib.Cryptography.Proofs.HashSig
 /-!
 # Proofs: the leanSPHINCS tweakable hash
 
-A hash input determines its public parameter, its address and its payload.
+A hash input determines its `PK.seed`, its address and its payload.
 
 So two calls hash the same bytes only when they are the same call.
 
 With the address proofs, distinct call sites of one key never hash the same input.
 
-A derivation from the seed with an empty suffix hashes the parameter, the address and the seed.
+`Trunc_n` keeps the first `n` bytes of the hash, in order.
 -/
 
 @[expose] public section
@@ -21,26 +21,36 @@ namespace EthLib.Cryptography.Sphincs
 
 open EthLib.Cryptography.Sphincs.Constants
 
-/-- `P | A | M` determines `P`, `A` and `M`. -/
-theorem thInput_inj {pp pp' : PublicParam} {a a' : Address} {m m' : ByteArray}
-    (h : thInput pp a m = thInput pp' a' m') : pp = pp' ∧ a = a' ∧ m = m' := by
-  -- The first 32 bytes are the two fixed-size prefixes, the rest is the payload.
+/-- `PK.seed | ADRS | M` determines `PK.seed`, `ADRS` and `M`. -/
+theorem thInput_inj {pkSeed pkSeed' : PkSeed} {a a' : Adrs} {m m' : ByteArray}
+    (h : thInput pkSeed a m = thInput pkSeed' a' m') : pkSeed = pkSeed' ∧ a = a' ∧ m = m' := by
+  -- The first 48 bytes are the two fixed-size prefixes, the rest is the payload.
   obtain ⟨hpre, hm⟩ := HashSig.byteArray_append_inj h (by simp)
-  obtain ⟨hpp, ha⟩ := HashSig.byteArray_append_inj hpre (by simp)
-  exact ⟨Base.packBytes_injective hpp, Base.packBytes_injective ha, hm⟩
+  obtain ⟨hseed, ha⟩ := HashSig.byteArray_append_inj hpre (by simp)
+  exact ⟨Base.packBytes_injective hseed, Base.packBytes_injective ha, hm⟩
 
-/-- A derivation with an empty suffix hashes `P' | A | S`.
+/-- A hash input has the 48 bytes of `PK.seed | ADRS`, then the payload. -/
+@[simp] theorem size_thInput (pkSeed : PkSeed) (a : Adrs) (m : ByteArray) :
+    (thInput pkSeed a m).size = PREFIX_LEN + m.size := by
+  simp only [thInput, ByteArray.size_append, Base.size_packBytes, PREFIX_LEN]
 
-The public parameter, the chain starts and the FORS secrets are such derivations. -/
-theorem seedPrf_empty {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32)) (s : Seed)
-    (pp : PublicParam) (address : Address) :
-    seedPrf H s pp address .empty = thFull H pp address (packBytes s) := by
-  simp only [seedPrf, ByteArray.append_empty]
+/-- A `PRF` input is `PK.seed | ADRS | SK.seed`, 80 bytes. -/
+theorem size_thInput_seed (pkSeed : PkSeed) (a : Adrs) (skSeed : Seed) :
+    (thInput pkSeed a (packBytes skSeed)).size = 80 := by
+  rw [size_thInput, Base.size_packBytes]
+  rfl
 
-/-- The two halves of a hash output, side by side, are the output. -/
-theorem halfOf_append (full : HashOutput) : halfOf 0 full ++ halfOf 1 full = full := by
-  ext i hi
-  simp only [halfOf, Vector.getElem_append, Vector.getElem_ofFn]
-  split <;> congr 1 <;> simp only [N] at * <;> omega
+/-- Byte `i` of `Trunc_r(x)` is byte `i` of `x`. -/
+@[simp] theorem getElem_trunc {k r : Nat} (x : Vector UInt8 k) (h : r ≤ k) (i : Nat) (hi : i < r) :
+    (trunc r x h)[i] = x[i] := by
+  simp [trunc]
+
+/-- `Trunc_r(x)` is the first `r` bytes of `x`. -/
+theorem toList_trunc {k r : Nat} (x : Vector UInt8 k) (h : r ≤ k) :
+    (trunc r x h).toList = x.toList.take r := by
+  apply List.ext_getElem
+  · simp [Nat.min_eq_left h]
+  · intro i hi _
+    simp
 
 end EthLib.Cryptography.Sphincs

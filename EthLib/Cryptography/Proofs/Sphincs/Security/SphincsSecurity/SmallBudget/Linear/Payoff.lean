@@ -229,9 +229,12 @@ theorem hit_of_bad
       (compTable parameterOutput fixed highs remaining T prepared.1)) s.cache) :
     Hit (ctxA parameterOutput fixed highs remaining prepared known ρ).tg prepared.2 T s := by
   obtain ⟨input, answer, hcache, hmem⟩ := hbad
-  unfold targetsA at hmem
-  split_ifs at hmem with hsec
-  · exact absurd hmem (Finset.notMem_empty _)
+  have hmsg : ¬ForsSigner.IsMsgInput input := fun hd => by simp [targetsA, hd] at hmem
+  have hsec : ¬SecondOrderInput (truncateHash parameterOutput) prepared.1 input := fun h => by
+    simp [targetsA, h] at hmem
+  replace hmem : truncateHash answer ∈ TargetAssignment.targets (truncateHash parameterOutput)
+      (compTable parameterOutput fixed highs remaining T prepared.1) input := by
+    simpa [targetsA, hsec, hmsg] using hmem
   have hag := (ForsPotential.agrees_iff_extending _ T).2 hT
   cases hinit : prepared.2 input with
   | some old =>
@@ -245,7 +248,8 @@ theorem hit_of_bad
       have hkind : (ctxA parameterOutput fixed highs remaining prepared known ρ).tg.kind input =
           (sampleTargeting parameterOutput fixed highs remaining prepared.1).kind input :=
               ite_eq_right hsec
-      rcases target_kind parameterOutput fixed highs remaining T hfix prepared.1 input _ hmem with
+      rcases target_kind parameterOutput fixed highs remaining T hfix prepared.1 input _ hmsg
+          hmem with
         hfixed | ⟨coordinate, hhidden, hvalue⟩
       · exact Or.inl (Or.inl ⟨input, answer, _, hcache, hinit, hkind.trans hfixed, rfl⟩)
       · exact hit_of_debt hag coordinate
@@ -284,10 +288,10 @@ theorem wotsBad_of_event (h : WotsEvent (truncateHash parameterOutput) prepared.
         (hfront chain)⟩
   have hmarker : ∀ chain, MarkerAt (truncateHash parameterOutput) prepared.1 s.cache leaf chain →
       K.Marker s leaf chain := by
-    rintro chain ⟨message, counter, answer, candidate, hc, hdec, hnb⟩
+    rintro chain ⟨message, counter, answer, candidate, hlen, hc, hdec, hnb⟩
     have hm : truncateHash answer ∈ K.markSet leaf chain :=
       mem_decodingDigests.2 ⟨candidate, mem_unitNeighbors.2 hnb, hdec⟩
-    refine ⟨message, counter, answer, ⟨hc, initial_none_of_not prepared fun a' h' => ?_⟩, hm⟩
+    refine ⟨message, counter, answer, hlen, ⟨hc, initial_none_of_not prepared fun a' h' => ?_⟩, hm⟩
     have hsame := hinv.prepared _ a' h'
     have hc' : s.cache (Wots.encodingInput K.p leaf.1 leaf.2.1 leaf.2.2 message counter) =
         some answer := hc

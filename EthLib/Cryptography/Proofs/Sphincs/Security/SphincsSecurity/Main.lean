@@ -11,9 +11,9 @@ It states the theorem from the definitions of the game alone, so a reader can ch
 
 The game is the SUF-CMA game, and the hash is a random oracle with 32-byte answers.
 
-The game samples a uniform 32-byte seed `S0`.
+The secret key is a uniform 32-byte seed `SK.seed`.
 
-Key generation hashes it into the scheme seed `S = H(leanSPHINCS || S0)`.
+Key generation derives `PK.seed`, `SK.prf` and every secret from it.
 
 The adversary gets the public key, the random oracle and a signing oracle.
 
@@ -26,6 +26,8 @@ It also needs at most `N = 1,182,000,000` signing requests to win.
 Every hash call of a run counts, repeated calls included.
 
 The calls of key generation, signing and verification count too.
+
+They include the two hash calls that derive `PK.seed` and `SK.prf`.
 
 Let `q ≥ 1`.
 

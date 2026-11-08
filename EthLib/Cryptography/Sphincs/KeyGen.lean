@@ -7,20 +7,24 @@ public import EthLib.Cryptography.Sphincs.Verify
 
 Key generation.
 
-The secret key is a 32-byte seed `S_0`, nothing more.
+The secret key is `SK.seed`, 32 bytes, and nothing more.
 
-Every secret derives from the scheme's seed `S = H("leanSPHINCS" | S_0)`.
+Two hashes of it under the scheme's 11-byte ASCII name give `PK.seed` and `SK.prf`:
 
-So the seed alone regenerates every chain, every FORS secret and the public key.
+```text
+    PK.seed = Trunc_n(H("leanSPHINCS" | SK.seed | BE_8(0)))
+    SK.prf  = H("leanSPHINCS" | SK.seed | BE_8(1))
+```
 
-The scheme's name separates these derivations from those of every other scheme, leanXMSS included.
+`SK.prf` keeps all 32 bytes, so predicting a randomizer is as hard as guessing `SK.seed`.
 
-Source: `keygenFromSeed` in FORS/Scheme.lean.
-<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean>
+So `SK.seed` alone regenerates every chain, every FORS secret and the public key.
 
-That model derives from `S_0` directly.
+FIPS 205 draws `SK.prf` and `PK.seed` independently of `SK.seed`.
 
-This module hashes the scheme's name first, as leanXMSS does.
+Source: `slh_keygen_internal` of [FIPS 205][fips205] (Algorithm 18).
+
+[fips205]: https://doi.org/10.6028/NIST.FIPS.205
 -/
 
 @[expose] public section
@@ -29,50 +33,58 @@ namespace EthLib.Cryptography.Sphincs
 
 open EthLib.Cryptography.Sphincs.Constants
 
-variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
-
-/-! ## Derivations from the seed -/
-
-/-- `S = H("leanSPHINCS" | S_0)`: the seed every secret derives from.
-
-The scheme's name comes first, so no other scheme derives from the same bytes. -/
-def schemeSeed (seed : Seed) : m Seed :=
-  H (ByteArray.mk SEED_TAG.toArray ++ packBytes seed)
-
-/-- `P = H_0(0^128 | A_param | S)`: the public parameter, a derivation from the seed.
-
-The all-zero parameter stands in for the one being derived, and the suffix is empty. -/
-def publicParamOf (prf : SeedPrf m) : m PublicParam := do
-  return halfOf 0 (← prf (Vector.replicate PUBLIC_PARAM_LEN 0) addrParam .empty)
-
 /-! ## Keys -/
 
-/-- A secret key: the seed `S_0`. -/
+/-- A secret key: `SK.seed`. -/
 structure SecretKey where
-  /-- The 32 uniform bytes the scheme's seed derives from. -/
+  /-- `SK.seed`, the 32 uniform bytes every secret derives from. -/
   seed : Seed
+
+/-- What `SK.seed` expands to: `PK.seed` and `SK.prf`. -/
+structure ExpandedKey where
+  /-- `PK.seed`, the first 16 bytes of the hash under domain 0. -/
+  pkSeed : PkSeed
+  /-- `SK.prf`, the whole hash under domain 1, the key of `PRF_msg`. -/
+  skPrf : HashOutput
+
+/-! ## Key expansion -/
+
+/-- The 44 bytes the key expansion hashes: `"leanSPHINCS" | SK.seed | BE_8(domain)`.
+
+The input has no `PK.seed` and no address, and no addressed call has 44 bytes. -/
+def expandInput (seed : Seed) (domain : UInt8) : ByteArray :=
+  ByteArray.mk SEED_TAG.toArray ++ packBytes seed ++ ByteArray.mk #[domain]
+
+variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
+
+/-- The key expansion of `SK.seed`: `PK.seed` from domain 0, then `SK.prf` from domain 1. -/
+def expandKey (seed : Seed) : m ExpandedKey := do
+  let pkSeed := trunc N (← H (expandInput seed 0))
+  let skPrf ← H (expandInput seed 1)
+  return { pkSeed, skPrf }
 
 /-! ## Key generation -/
 
-/-- The public key of the derivations from a seed: the parameter `P`, then the top tree's root.
+/-- The public key of `PK.seed` and a source of secrets: `PK.seed`, then the top tree's root.
 
 Computing the root builds the whole top tree: `2^10` one-time keys. -/
-def publicKeyOf (prf : SeedPrf m) : m PublicKey := do
-  let pp ← publicParamOf prf
-  let root ← treeRoot H pp prf .top 0
-  return { root, publicParam := pp }
+def publicKeyOf (pkSeed : PkSeed) (prf : Prf m) : m PublicKey := do
+  let root ← treeRoot H pkSeed prf .top 0
+  return { pkSeed, root }
 
-/-- `Gen` over a hash `H`: the key pair grown from a seed.
+/-- `Gen` over a hash `H`: the key pair of `SK.seed`, FIPS 205's `slh_keygen_internal`.
 
-1. The scheme seed `S`, from the seed.
-2. The public key of the derivations from `S`.
+1. `PK.seed` and `SK.prf`, from `SK.seed`.
+2. `PK.root`, the root of the top tree, whose secrets are `PRF(PK.seed, SK.seed, ADRS)`.
 
-The seed must be 32 uniform bytes, kept secret. -/
+The seed must be 32 uniform bytes, kept secret.
+
+`SK.prf` is not part of the public key, but `Gen` derives it all the same. -/
 def keyGenWith (seed : Seed) : m (SecretKey × PublicKey) := do
-  let s ← schemeSeed H seed
-  return (⟨seed⟩, ← publicKeyOf H (seedPrf H s))
+  let key ← expandKey H seed
+  return (⟨seed⟩, ← publicKeyOf H key.pkSeed (prf H key.pkSeed seed))
 
-/-- `Gen`: the key pair grown from a seed.
+/-- `Gen`: the key pair of `SK.seed`.
 
 The seed must be 32 uniform bytes, kept secret. -/
 def keyGen (seed : Seed) : SecretKey × PublicKey :=

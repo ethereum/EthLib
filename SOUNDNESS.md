@@ -221,8 +221,8 @@ Its game runs EthLib's `keyGenWith`, `signWith` and `verifyWith`, with the hash 
 `keyGen`, `sign` and `verify` are the same definitions with Keccak-256 as `H`.
 
 The proof is a port of leanVM's model of the scheme, and `Proofs/Sphincs/Security/README.md` lists what changed here.
-The ported model signs the layers of the hypertree from the bottom up, as EthLib and leanVM's Rust signer do.
-The published model signed them from the top down, and its author confirmed in [leanVM#720](https://github.com/leanEthereum/leanVM/issues/720) that this order is a bug.
+The model comes from the commit that merged [leanVM#662](https://github.com/leanEthereum/leanVM/pull/662), which moves the scheme to the hash layout of FIPS 205.
+The model signs the layers of the hypertree from the bottom up, as EthLib does.
 The bridge in `Proofs/Sphincs/Unforgeability/Bridge/` connects the model to EthLib's algorithms.
 An EthLib forgery is a model forgery of a translated adversary (`forgeAdvantage_le`).
 Under every fixed answer of the oracle, a signing request costs the model at most what it costs EthLib (`hashCalls_sign_le`).
@@ -1121,9 +1121,14 @@ No theorem relates the module to the execution-specs code it follows.
 
 ### Transaction gas
 
-`processTransaction_gasUsed` (`Execution/Proofs/Transactions/Process.lean`) gives the gas used of a transaction that runs, from Pectra to BPO5.
-It is the gas limit minus the gas that the message leaves and the capped refund, or the call data floor when that is larger.
-Before Pectra and from Glamsterdam, no theorem states the gas used of a run.
+Four theorems in `Execution/Proofs/Transactions/Process.lean` give the gas used and the block gas of a transaction that runs, before Hegotá.
+`processTransaction_gasUsed_of_lt_london` covers the forks before London, where the refund is at most half of the gas used before it.
+`processTransaction_gasUsed_of_london_of_lt_pectra` covers London to Dencun, where EIP-3529 caps the refund at a fifth of the gas used before it.
+`processTransaction_gasUsed` covers Pectra to BPO5, where EIP-7623 raises the gas used to the call data floor when that floor is larger.
+`processTransaction_gasUsed_of_glamsterdam` covers Glamsterdam, where EIP-8037 splits the gas into execution gas and a reservoir.
+Its gas left is the execution gas left plus the reservoir left, and it gives the two block gas counts of EIP-7778 and EIP-8037.
+At Glamsterdam, a negative state gas used counts as 0 in both block gas counts, a case that EIP-8037 leaves open.
+From Hegotá a run fails as not yet specified, so there is no gas used to state.
 
 ### Merkle Patricia Trie
 
@@ -1163,7 +1168,23 @@ The path searches return nothing there, since the trie is not secured.
 `indexedRoot_binding` concludes that the two lists are equal, or `findIndexedCollision` returns a collision in the proofs of one index.
 Two transactions, or two withdrawals, with the same bytes are equal, so `transactionsRoot_binding` and `withdrawalsRoot_binding` conclude the same for the lists themselves.
 `receiptsRoot_binding` does so for receipts whose types are below `0xc0`, which holds for type 0 and for every type that a fork adds.
-No theorem bounds the probability of finding a collision.
+No theorem bounds the probability of the indexed-root search itself.
+The bound below covers two tries that give one key two values.
+
+`Execution/Proofs/Trie/RandomOracle.lean` turns this binding into a probability bound, with the hash a random oracle.
+The trie definitions take their hash in any monad, so the experiment runs the root of the specification with a hash that queries the oracle.
+An adversary outputs two tries and a key.
+The experiment computes both roots and both proofs of the key, then queries the key, every key of both tries and every node of both proofs.
+The adversary wins when the tries are both secured or both plain, each has distinct keys, and they have one root, yet give the key different values.
+`collision_of_extract` shows that every win leaves two different cached inputs with one answer.
+The searches `findCollision`, `findPathCollision` and `findLookupCollision` name them, run with a table that agrees with the cache.
+`prEvent_wins_le` then bounds a win by `Q^2 / N` through `prEvent_collision_le`, where `Q` bounds the queries of the whole experiment.
+`prEvent_wins_le_two_pow` states it with `N = 2^256`.
+The bound needs no hypothesis that the cache covers the witnesses, since the experiment queries them itself.
+One oracle answers keys and nodes alike, so a collision between a key and a node counts too.
+The first trie may be fixed before the run, so the same bound covers a second trie with the root of a given one.
+That bound is still `Q^2 / N`, not a sharper fixed-target bound.
+`Q` counts every hash call of the experiment, repeats included, and the extraction makes many: each proof level rebuilds its subtree.
 
 An answer of `eth_getProof` (EIP-1186) is checked against a state root by `AccountProof.verify` (`Execution/State/AccountProof.lean`).
 It checks the account proof, then each slot proof against the storage root of the answer.
@@ -1493,6 +1514,28 @@ The client then reads the state with the layout of that fork.
 The store keeps the committee that its bootstrap proves.
 Its root is the root of the current committee of the trusted state, or the search returns a collision.
 It makes the same assumption on the index, at the slot of the bootstrap header.
+`stateForkAtSlot_gindices` discharges that assumption from the fork schedule.
+Take a slot whose scheduled fork is from Altair, and a store of that fork or later.
+The schedule must start Electra no later than Fulu, and Gloas no later than Heze.
+The client then reads the three nodes at the indices of the fork of the slot, so at the deeper indices of Electra from Electra.
+
+From Capella a header also carries the execution data of its block, which `Consensus/Proofs/LightClient/Execution.lean` binds to the block.
+From Capella to Fulu, `isValidLightClientHeader_executionPayload` takes a valid header at a slot from Capella.
+It also takes a body of a fork from Capella to Fulu whose root is the body root of the header.
+The execution root of the header is then the root of the execution payload of that body, or `findBranchCollision` returns a SHA-256 collision.
+`BeaconBlockBody.nodeRoot_executionPayload` reads node 25 of such a body as the root of its payload.
+Like the state theorems, these take the lawful type of the body.
+`ExecutionPayload.hashTreeRoot_header` shows that before Gloas the header of a payload has the root of the payload.
+So `isValidLightClientHeader_execution_eq` takes the binding to the fields, for a body of the fork of the header, at a slot from Capella, and from Deneb for a header from Deneb.
+The execution header of the light client header is then the header of the payload of the body, field by field.
+Otherwise a search over the two branch climbs, or one over the hash inputs of the two header roots, names a SHA-256 collision.
+From Deneb, `isValidLightClientHeader_blobGas` applies this to the blob gas used and the excess blob gas, at a slot from Deneb.
+The schedule must start Capella no later than Deneb.
+`isValidLightClientHeader_blobGas_zero` shows that a valid header of an earlier slot has zero for both.
+From Gloas, `isValidLightClientHeader_parentBlockHash` binds the block hash of a header at a slot from Gloas to the parent block hash of the bid of a Gloas body.
+`isValidLightClientHeader_executionBlockHash` binds it, for an earlier slot from Capella, to the block hash of the payload of a body from Capella to Fulu that is from Deneb exactly when the slot is.
+The headers that the client checks are valid: `initializeLightClientStore_header_valid`, `validateLightClientUpdate_attestedHeader_valid`, and `validateLightClientUpdate_finalizedHeader_valid` after the genesis slot.
+The index theorems `executionPayloadGindex_eq`, `payloadHeaderBlockHashGindex_eq`, `executionBlockHashGindex_eq` and `executionBlockHashGindexGloas_eq` hold at every preset.
 
 The signature theorems assume `SignatureChecks.AggregateSound`, listed in A4.
 Under it, `validateLightClientUpdate_signed` shows that every member whose bit is set signed the signing root.
@@ -1634,18 +1677,27 @@ The Python bindings expose the block cipher, CTR and GCM, as `encrypt_block`, `d
 
 A security theorem rests on a model, such as a random oracle for a hash.
 Each such theorem of EthLib rests on one idealisation, listed below.
-The two theorems of Casper FFG share one bullet, as do the signature theorems of the light client, and the binding of a proof of possession and the codeword searches share that of leanXMSS:
+The two theorems of Casper FFG share one bullet, as do the signature theorems of the light client.
+The binding of a proof of possession shares the bullet of leanXMSS, and the codeword searches of each scheme share the bullet of that scheme:
 
 - leanXMSS: the hash `H`, Keccak-256, is a random oracle on byte strings.
   The theorem says nothing about an attack that uses the structure of Keccak.
   The binding of an EIP-8450 proof of possession rests on the same oracle.
-  So do the failure bounds of the codeword searches of leanXMSS and leanSPHINCS.
+  So do the failure bounds of the codeword searches of leanXMSS.
+- leanSPHINCS: the hash `H`, Keccak-256, is a random oracle on byte strings, as for leanXMSS.
+  The unforgeability theorem says nothing about an attack that uses the structure of Keccak.
+  It counts classical queries only, so it says nothing about a quantum adversary.
+  The failure bounds of the codeword searches of leanSPHINCS rest on the same oracle.
 - Merkle search bounds: each new `(level, position, left, right)` input receives an independent uniform answer from a finite nonempty range.
   Repeated inputs receive the same answer, and the initial cache is empty.
   The fixed-target bound excludes one honest input from the oracle domain and fixes the target before the run.
   Reading it as a second-preimage bound conditions on the honest digest, a modelling step that no theorem proves.
   Only classical queries are counted.
   No SHA-256, Keccak or quantum security claim follows from this model.
+- Trie root bound: Keccak-256 is a random oracle on byte strings, shared by the keys and the nodes of the trie.
+  Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
+  Only classical queries are counted, and the adversary's private sampling is not.
+  The bound says nothing about an attack that uses the structure of Keccak.
 - VRF unpredictability: Keccak-256 is a random oracle on byte strings, as for leanXMSS.
   The bound says nothing about an attack that uses the structure of Keccak.
   It counts classical queries only, so it says nothing about a quantum adversary.
@@ -1720,12 +1772,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 299 operations and 42 size constants.
-The Python extension calls 299 of the operations and 42 of the constants.
+Lean exports 299 operations and 41 size constants.
+The Python extension calls 299 of the operations and 41 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-8732 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (351), `bls.c` (378), `chain.c` (45), `consensus.c` (1652), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (45), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1249), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (119), `wrappers.h` (566), `xmss.c` (134).
+8724 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (351), `bls.c` (378), `chain.c` (45), `consensus.c` (1652), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (45), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1241), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (119), `wrappers.h` (566), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
