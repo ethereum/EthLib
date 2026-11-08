@@ -61,6 +61,16 @@ Not yet released.
   A nibble of 16 or more raises `TrieError` with code 0, where one of 256 or more raised `OverflowError`.
   A negative number raises `ValueError`, where some raised `OverflowError`.
 - Every typed export reads a pair, such as a memory range or a blob schedule, from a Python list as from a tuple ([#1542](https://github.com/ethereum/EthLib/pull/1542)).
+- The networking exports that returned JSON text, packed records or joined bytes now return typed values ([#1547](https://github.com/ethereum/EthLib/pull/1547)).
+  These are the discv5 key derivation, packet, message, WHOAREYOU and handshake exports, the fork identifier, the consensus entries and `eth` entry of a record, the RLPx answer and the req/resp response chunk.
+  Their C exports take the tuple of their arguments as one value, and return a typed value where they returned bytes.
+  Two new exports, `eth_fork_id_schedule` and `eth_fork_id_encode`, write the RLP schedule and fork identifier that `forkid.schedule` and `forkid.encode` return.
+  `forkid.encode` now requires a 4-byte hash and a next fork below 2^64, as the fork identifier types them.
+  The discv5 `dict` results keep their keys and values, in the order of the packet rather than sorted.
+  In Python, an argument of the right Python type that Lean rejects raises the error class of the method with code 0, where some raised `TypeError`, `OverflowError` or `AttributeError`.
+  Examples are a block number of 2^64, `bytes` given for a fork name, and `str` given for bytes.
+  A negative number raises `ValueError`, where it raised `OverflowError`, and a value that cannot cross, such as a `bytearray`, still raises `TypeError`.
+  `rlpx.SECRETS_SIZE` is now read from Lean.
 - A chain configuration that the exports read as JSON is now rejected, with code 0, when a fork by block number comes after a fork by timestamp ([#1110](https://github.com/ethereum/EthLib/pull/1110)).
   EIP-6122 requires the forks by timestamp to be scheduled at or after the forks by block.
 

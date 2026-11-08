@@ -1556,7 +1556,8 @@
    "The bytes of a new \"v4\" record of a private key, a sequence number and other pairs.\n\nThe other pairs come as the RLP list `[k1, v1, k2, v2, ...]`, in key order."},
   {"summary":
    "The consensus entries of a record at the named fork, with `count` attestation subnets.",
-   "signature": "(fork: str, count: int, record: bytes) -> bytes",
+   "signature":
+   "(fork: str, count: int, record: bytes) -> tuple[tuple[bytes, bytes, int], bytes | None, bytes | None, int | None, bytes | None]",
    "operation": "EthLib.Networking.Enr.Exports.consensusEntriesExport",
    "method": "enr_consensus_entries",
    "errors":
@@ -1586,10 +1587,10 @@
       {"constructor": "cgc", "code": 104}]}],
    "error_class": "EnrError",
    "docstring":
-   "The consensus entries of a record at the named fork, with `count` attestation subnets.\n\nThey come back as the 16 SSZ bytes of `eth2`, then `attnets`, `syncnets`, `cgc` and `nfd`.\n\nEach of the four is the byte 0 when absent, or the byte 1 and its SSZ bytes."},
+   "The consensus entries of a record at the named fork, with `count` attestation subnets.\n\nThe arguments are the name of the fork, the number of attestation subnets and the record.\n\nThey come back as `eth2`, as its three fields, then `attnets`, `syncnets`, `cgc` and `nfd`.\n\nEach of the last four is `None` when absent, and the bitvectors are their SSZ bytes."},
   {"summary":
-   "The fork identifier of the \"eth\" entry of a record, as RLP, or no bytes without the entry.",
-   "signature": "(record: bytes) -> bytes",
+   "The fork identifier of the \"eth\" entry of a record, as its hash and its next fork.",
+   "signature": "(record: bytes) -> tuple[bytes, int] | None",
    "operation": "EthLib.Networking.Enr.Exports.ethForkIdExport",
    "method": "enr_eth_fork_id",
    "errors":
@@ -1613,7 +1614,7 @@
       {"constructor": "signing", "code": 16}]}],
    "error_class": "EnrError",
    "docstring":
-   "The fork identifier of the \"eth\" entry of a record, as RLP, or no bytes without the entry.\n\nAn entry that is not a list starting with a fork identifier has code 0."},
+   "The fork identifier of the \"eth\" entry of a record, as its hash and its next fork.\n\nIt is `None` without the entry, and an entry that does not start with one has code 0."},
   {"summary":
    "The logarithmic distance: the number of bits of the distance, and 0 for equal IDs.",
    "signature": "(a: bytes, b: bytes) -> int",
@@ -1635,7 +1636,7 @@
   {"summary":
    "The session keys from the shared secret and the challenge that the recipient sent.",
    "signature":
-   "(ephemeral_key: bytes, dest_pubkey: bytes, node_id_a: bytes, node_id_b: bytes, challenge_data: bytes) -> bytes",
+   "(ephemeral_key: bytes, dest_pubkey: bytes, node_id_a: bytes, node_id_b: bytes, challenge_data: bytes) -> tuple[bytes, bytes]",
    "operation": "EthLib.Networking.Discv5.deriveKeys",
    "method": "discv5_derive_keys",
    "errors": [],
@@ -1662,9 +1663,8 @@
    "error_class": "Discv5Error",
    "docstring":
    "Whether an ID signature of 64 bytes `r || s` verifies under the public key of node A."},
-  {"summary":
-   "The packet that a destination node reads, as a JSON object of hex strings.",
-   "signature": "(dest_id: bytes, packet: bytes) -> bytes",
+  {"summary": "The packet that a destination node reads, as a `dict`.",
+   "signature": "(dest_id: bytes, packet: bytes) -> dict",
    "operation": "EthLib.Networking.Discv5.Exports.decodePacketExport",
    "method": "discv5_decode_packet",
    "errors":
@@ -1679,7 +1679,7 @@
       {"constructor": "fieldTooLong", "code": 7}]}],
    "error_class": "Discv5Error",
    "docstring":
-   "The packet that a destination node reads, as a JSON object of hex strings.\n\nIt holds the flag, the masking IV, the nonce, the authdata fields and the message.\n\nIt also holds the additional data of the message."},
+   "The packet that a destination node reads, as a `dict`.\n\nThe arguments are the node ID of the destination and the packet.\n\nIt holds the flag, the masking IV, the nonce, the authdata fields and the message.\n\nIt also holds the additional data of the message."},
   {"summary":
    "The bytes of the packet that the decoder reads, written again by the encoder.",
    "signature": "(dest_id: bytes, packet: bytes) -> bytes",
@@ -1719,8 +1719,8 @@
    "docstring":
    "The plaintext of an encrypted message, or an error if it does not authenticate."},
   {"summary":
-   "The message of a plaintext, as a JSON object with its type and its fields.",
-   "signature": "(plaintext: bytes) -> bytes",
+   "The message of a plaintext, as a `dict` of its type and its fields.",
+   "signature": "(plaintext: bytes) -> dict",
    "operation": "EthLib.Networking.Discv5.Exports.decodeMessageExport",
    "method": "discv5_decode_message",
    "errors":
@@ -1733,7 +1733,7 @@
       {"constructor": "invalid", "code": 105}]}],
    "error_class": "Discv5Error",
    "docstring":
-   "The message of a plaintext, as a JSON object with its type and its fields."},
+   "The message of a plaintext, as a `dict` of its type and its fields."},
   {"summary":
    "The plaintext of the decoded message, written again by the encoder.",
    "signature": "(plaintext: bytes) -> bytes",
@@ -1750,10 +1750,9 @@
    "error_class": "Discv5Error",
    "docstring":
    "The plaintext of the decoded message, written again by the encoder."},
-  {"summary":
-   "Node B's WHOAREYOU packet for node A, and its challenge data, as a JSON object.",
+  {"summary": "Node B's WHOAREYOU packet for node A, and its challenge data.",
    "signature":
-   "(dest_id: bytes, masking_iv: bytes, nonce: bytes, id_nonce: bytes, enr_seq: bytes) -> bytes",
+   "(dest_id: bytes, masking_iv: bytes, nonce: bytes, id_nonce: bytes, enr_seq: int) -> tuple[bytes, bytes]",
    "operation": "EthLib.Networking.Discv5.Exports.makeWhoareyouExport",
    "method": "discv5_make_whoareyou",
    "errors":
@@ -1775,9 +1774,9 @@
       {"constructor": "noSession", "code": 205}]}],
    "error_class": "Discv5Error",
    "docstring":
-   "Node B's WHOAREYOU packet for node A, and its challenge data, as a JSON object.\n\nThe `enr-seq` is 8 big-endian bytes."},
-  {"summary": "Node A's reading of a WHOAREYOU packet, as a JSON object.",
-   "signature": "(dest_id: bytes, packet: bytes) -> bytes",
+   "Node B's WHOAREYOU packet for node A, and its challenge data.\n\nThe arguments are the node ID of node A, the masking IV, the nonce, the ID nonce and the seq."},
+  {"summary": "Node A's reading of a WHOAREYOU packet, as a `dict`.",
+   "signature": "(dest_id: bytes, packet: bytes) -> dict",
    "operation": "EthLib.Networking.Discv5.Exports.readWhoareyouExport",
    "method": "discv5_read_whoareyou",
    "errors":
@@ -1798,7 +1797,8 @@
       {"constructor": "wrongFlag", "code": 204},
       {"constructor": "noSession", "code": 205}]}],
    "error_class": "Discv5Error",
-   "docstring": "Node A's reading of a WHOAREYOU packet, as a JSON object."},
+   "docstring":
+   "Node A's reading of a WHOAREYOU packet, as a `dict`.\n\nThe arguments are the node ID of node A and the packet."},
   {"summary":
    "An ordinary message packet from one node to another, under a session key.",
    "signature":
@@ -1852,9 +1852,9 @@
    "docstring":
    "The plaintext of an ordinary message packet from a given node, under its session key.\n\nIt fails when the packet names another source node ID."},
   {"summary":
-   "Node A's handshake message packet for node B, and its session keys, as a JSON object.",
+   "Node A's handshake message packet for node B, and its two session keys.",
    "signature":
-   "(ephemeral_key: bytes, static_key: bytes, challenge_data: bytes, src_id: bytes, dest_id: bytes, dest_pubkey: bytes, masking_iv: bytes, nonce: bytes, record: bytes, plaintext: bytes) -> bytes",
+   "(ephemeral_key: bytes, static_key: bytes, challenge_data: bytes, src_id: bytes, dest_id: bytes, dest_pubkey: bytes, masking_iv: bytes, nonce: bytes, record: bytes, plaintext: bytes) -> tuple[bytes, bytes, bytes]",
    "operation": "EthLib.Networking.Discv5.Exports.sealHandshakeExport",
    "method": "discv5_seal_handshake",
    "errors":
@@ -1881,11 +1881,10 @@
       {"constructor": "notHandshake", "code": 310}]}],
    "error_class": "Discv5Error",
    "docstring":
-   "Node A's handshake message packet for node B, and its session keys, as a JSON object."},
-  {"summary":
-   "Node B's reading of a handshake message packet, as a JSON object.",
+   "Node A's handshake message packet for node B, and its two session keys.\n\nThe arguments are the ephemeral key and the static key of node A, the challenge data and the IDs.\n\nThen come the public key of node B, the masking IV, the nonce, the record and the plaintext."},
+  {"summary": "Node B's reading of a handshake message packet, as a `dict`.",
    "signature":
-   "(static_key: bytes, challenge_data: bytes, dest_id: bytes, src_pubkey: bytes, packet: bytes) -> bytes",
+   "(static_key: bytes, challenge_data: bytes, dest_id: bytes, src_pubkey: bytes, packet: bytes) -> dict",
    "operation": "EthLib.Networking.Discv5.Exports.openHandshakeExport",
    "method": "discv5_open_handshake",
    "errors":
@@ -1912,7 +1911,7 @@
       {"constructor": "notHandshake", "code": 310}]}],
    "error_class": "Discv5Error",
    "docstring":
-   "Node B's reading of a handshake message packet, as a JSON object."},
+   "Node B's reading of a handshake message packet, as a `dict`.\n\nThe arguments are the static key of node B, the challenge data and the node ID of node B.\n\nThen come the public key of node A and the packet."},
   {"summary": "The preset of a name, as a JSON object.",
    "signature": "(name: str) -> bytes",
    "operation": "EthLib.Consensus.Exports.presetExport",
@@ -5976,7 +5975,7 @@
   {"summary":
    "One response chunk, given the number of context bytes that the method sends.",
    "signature":
-   "(context_bytes: int, type_min: int, type_bound: int, data: bytes) -> bytes",
+   "(context_bytes: int, type_min: int, type_bound: int, data: bytes) -> tuple[int, bytes, bytes]",
    "operation": "EthLib.Networking.ReqResp.decodeResponseChunk",
    "method": "reqresp_decode_response_chunk",
    "errors":
@@ -6988,21 +6987,43 @@
    "docstring":
    "Whether the RLP record `record` of an ENRResponse is signed by the public key `sender`."},
   {"summary":
-   "The fork identifier, as RLP, of a node with the schedule `schedule` at a head.",
-   "signature": "(schedule: bytes, number: int, timestamp: int) -> bytes",
+   "The fork identifier of a node with a schedule at a head: its hash and its next fork.",
+   "signature":
+   "(schedule: bytes, number: int, timestamp: int) -> tuple[bytes, int]",
    "operation": "EthLib.Networking.Devp2p.Exports.forkIdExport",
    "method": "fork_id",
    "errors": [],
    "error_class": "ForkIdError",
    "docstring":
-   "The fork identifier, as RLP, of a node with the schedule `schedule` at a head."},
-  {"summary": "The fork identifier, as RLP, of a mainnet node at a head.",
-   "signature": "(number: int, timestamp: int) -> bytes",
+   "The fork identifier of a node with a schedule at a head: its hash and its next fork.\n\nThe arguments are the schedule in RLP, the block number and the timestamp of the head."},
+  {"summary":
+   "The RLP schedule `[genesis-hash, genesis-time, merge-fork, forks]` of a chain.",
+   "signature":
+   "(genesis_hash: bytes, genesis_time: int, merge_fork_block: int | None, forks: list[tuple[str, int, int]]) -> bytes",
+   "operation": "EthLib.Networking.Devp2p.Exports.scheduleExport",
+   "method": "fork_id_schedule",
+   "errors": [],
+   "error_class": "ForkIdError",
+   "docstring":
+   "The RLP schedule `[genesis-hash, genesis-time, merge-fork, forks]` of a chain.\n\nThe arguments are the genesis hash, the genesis time, the merge fork block or `None`, and the forks.\n\nEach fork is its name, its kind, 0 for a block and 1 for a time, and its block or time."},
+  {"summary":
+   "The RLP fork identifier `[FORK_HASH, FORK_NEXT]`, from its 4-byte hash and its next fork.",
+   "signature": "(fork_hash: bytes, fork_next: int) -> bytes",
+   "operation": "EthLib.Networking.Devp2p.Exports.encodeExport",
+   "method": "fork_id_encode",
+   "errors": [],
+   "error_class": "ForkIdError",
+   "docstring":
+   "The RLP fork identifier `[FORK_HASH, FORK_NEXT]`, from its 4-byte hash and its next fork."},
+  {"summary":
+   "The fork identifier of a mainnet node at a head: its hash and its next fork.",
+   "signature": "(number: int, timestamp: int) -> tuple[bytes, int]",
    "operation": "EthLib.Networking.Devp2p.Exports.mainnetForkIdExport",
    "method": "mainnet_fork_id",
    "errors": [],
    "error_class": "ForkIdError",
-   "docstring": "The fork identifier, as RLP, of a mainnet node at a head."},
+   "docstring":
+   "The fork identifier of a mainnet node at a head: its hash and its next fork.\n\nThe arguments are the block number and the timestamp of the head."},
   {"summary":
    "Whether a node at a head accepts the fork identifier of a peer, by the rules of EIP-2124.",
    "signature":
@@ -7653,9 +7674,9 @@
    "docstring":
    "The packet `auth` from the initiator to the recipient's public key."},
   {"summary":
-   "The recipient's answer to `auth`: the packet `ack`, then the 128 bytes of its secrets.",
+   "The recipient's answer to `auth`: the packet `ack`, and the 128 bytes of its secrets.",
    "signature":
-   "(static_key: bytes, ephemeral_key: bytes, nonce: bytes, r: bytes, iv: bytes, padding: bytes, auth: bytes, probe: bytes) -> bytes",
+   "(static_key: bytes, ephemeral_key: bytes, nonce: bytes, r: bytes, iv: bytes, padding: bytes, auth: bytes, probe: bytes) -> tuple[bytes, bytes]",
    "operation": "EthLib.Networking.Rlpx.Exports.respondExport",
    "method": "rlpx_respond",
    "errors":
@@ -7676,7 +7697,7 @@
       {"constructor": "tagMismatch", "code": 5}]}],
    "error_class": "RlpxError",
    "docstring":
-   "The recipient's answer to `auth`: the packet `ack`, then the 128 bytes of its secrets."},
+   "The recipient's answer to `auth`: the packet `ack`, and the 128 bytes of its secrets.\n\nThe arguments are the static key, the ephemeral key, the nonce, `r`, the IV and the padding.\n\nLast come the packet `auth` and the probe that the MAC digests read after."},
   {"summary":
    "The recipient's secrets for an `auth` it received and an `ack` it sent.",
    "signature":

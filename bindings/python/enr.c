@@ -40,14 +40,12 @@ eth_enr_make_record_v4(
 
 extern lean_object*
 eth_enr_consensus_entries(
-  lean_object* fork,
-  uint64_t count,
-  lean_object* record
+  lean_object* args
 );
 
 extern lean_object*
 eth_enr_eth_fork_id(
-  lean_object* record
+  lean_object* args
 );
 
 /* ---- Wrappers --------------------------------------------------------- */
@@ -167,25 +165,7 @@ py_enr_consensus_entries(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *fork_obj, *count_obj, *record_obj;
-  if (!PyArg_ParseTuple(args, "OOO", &fork_obj, &count_obj, &record_obj)) return NULL;
-  uint64_t count;
-  if (parse_uint64(count_obj, "count", &count)) return NULL;
-  if (!PyUnicode_Check(fork_obj)) {
-    PyErr_SetString(PyExc_TypeError, "fork must be str");
-    return NULL;
-  }
-  if (!PyBytes_Check(record_obj)) {
-    PyErr_SetString(PyExc_TypeError, "record must be bytes");
-    return NULL;
-  }
-  Py_ssize_t len;
-  const char* utf8 = PyUnicode_AsUTF8AndSize(fork_obj, &len);
-  if (!utf8) return NULL;
-  lean_object* fork = mk_bytearray((const uint8_t*) utf8, len);
-  lean_object* record = mk_bytearray(
-    (const uint8_t*) PyBytes_AS_STRING(record_obj), PyBytes_GET_SIZE(record_obj));
-  return except_into_pybytes(eth_enr_consensus_entries(fork, count, record), ENR_ERROR);
+  return call_pyvalue_export(eth_enr_consensus_entries, args, 3, ENR_ERROR);
 }
 
 PyObject*
@@ -193,13 +173,5 @@ py_enr_eth_fork_id(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject* record_obj;
-  if (!PyArg_ParseTuple(args, "O", &record_obj)) return NULL;
-  if (!PyBytes_Check(record_obj)) {
-    PyErr_SetString(PyExc_TypeError, "record must be bytes");
-    return NULL;
-  }
-  lean_object* record = mk_bytearray(
-    (const uint8_t*) PyBytes_AS_STRING(record_obj), PyBytes_GET_SIZE(record_obj));
-  return except_into_pybytes(eth_enr_eth_fork_id(record), ENR_ERROR);
+  return call_pyvalue_export(eth_enr_eth_fork_id, args, 1, ENR_ERROR);
 }

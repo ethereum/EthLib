@@ -34,14 +34,7 @@ eth_rlpx_make_auth(
 
 extern lean_object*
 eth_rlpx_respond(
-  lean_object* static_key,
-  lean_object* ephemeral_key,
-  lean_object* nonce,
-  lean_object* r,
-  lean_object* iv,
-  lean_object* padding,
-  lean_object* auth,
-  lean_object* probe
+  lean_object* args
 );
 
 extern lean_object*
@@ -146,10 +139,7 @@ py_rlpx_respond(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object* a[8];
-  if (!parse_bytes_args(args, 8, a)) return NULL;
-  lean_object* res = eth_rlpx_respond(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]);
-  return except_into_pybytes(res, RLPX_ERROR);
+  return call_pyvalue_export(eth_rlpx_respond, args, 8, RLPX_ERROR);
 }
 
 PyObject*

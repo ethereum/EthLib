@@ -307,12 +307,12 @@ def enr_make_record_v4(secret_key: bytes, seq: int, pairs: bytes) -> bytes:
     """The bytes of a new "v4" record of a private key, a sequence number and other pairs."""
     ...
 
-def enr_consensus_entries(fork: str, count: int, record: bytes) -> bytes:
+def enr_consensus_entries(fork: str, count: int, record: bytes) -> tuple[tuple[bytes, bytes, int], bytes | None, bytes | None, int | None, bytes | None]:
     """The consensus entries of a record at the named fork, with `count` attestation subnets."""
     ...
 
-def enr_eth_fork_id(record: bytes) -> bytes:
-    """The fork identifier of the "eth" entry of a record, as RLP, or no bytes without the entry."""
+def enr_eth_fork_id(record: bytes) -> tuple[bytes, int] | None:
+    """The fork identifier of the "eth" entry of a record, as its hash and its next fork."""
     ...
 
 def discv5_log_distance(a: bytes, b: bytes) -> int:
@@ -323,7 +323,7 @@ def discv5_ecdh(secret_key: bytes, public_key: bytes) -> bytes:
     """The shared secret of a private key and a public key: `d Q`, compressed to 33 bytes."""
     ...
 
-def discv5_derive_keys(ephemeral_key: bytes, dest_pubkey: bytes, node_id_a: bytes, node_id_b: bytes, challenge_data: bytes) -> bytes:
+def discv5_derive_keys(ephemeral_key: bytes, dest_pubkey: bytes, node_id_a: bytes, node_id_b: bytes, challenge_data: bytes) -> tuple[bytes, bytes]:
     """The session keys from the shared secret and the challenge that the recipient sent."""
     ...
 
@@ -335,8 +335,8 @@ def discv5_id_verify(public_key: bytes, challenge_data: bytes, ephemeral_pubkey:
     """Whether an ID signature of 64 bytes `r || s` verifies under the public key of node A."""
     ...
 
-def discv5_decode_packet(dest_id: bytes, packet: bytes) -> bytes:
-    """The packet that a destination node reads, as a JSON object of hex strings."""
+def discv5_decode_packet(dest_id: bytes, packet: bytes) -> dict:
+    """The packet that a destination node reads, as a `dict`."""
     ...
 
 def discv5_reencode_packet(dest_id: bytes, packet: bytes) -> bytes:
@@ -351,20 +351,20 @@ def discv5_decrypt_message(key: bytes, nonce: bytes, message: bytes, ad: bytes) 
     """The plaintext of an encrypted message, or an error if it does not authenticate."""
     ...
 
-def discv5_decode_message(plaintext: bytes) -> bytes:
-    """The message of a plaintext, as a JSON object with its type and its fields."""
+def discv5_decode_message(plaintext: bytes) -> dict:
+    """The message of a plaintext, as a `dict` of its type and its fields."""
     ...
 
 def discv5_reencode_message(plaintext: bytes) -> bytes:
     """The plaintext of the decoded message, written again by the encoder."""
     ...
 
-def discv5_make_whoareyou(dest_id: bytes, masking_iv: bytes, nonce: bytes, id_nonce: bytes, enr_seq: bytes) -> bytes:
-    """Node B's WHOAREYOU packet for node A, and its challenge data, as a JSON object."""
+def discv5_make_whoareyou(dest_id: bytes, masking_iv: bytes, nonce: bytes, id_nonce: bytes, enr_seq: int) -> tuple[bytes, bytes]:
+    """Node B's WHOAREYOU packet for node A, and its challenge data."""
     ...
 
-def discv5_read_whoareyou(dest_id: bytes, packet: bytes) -> bytes:
-    """Node A's reading of a WHOAREYOU packet, as a JSON object."""
+def discv5_read_whoareyou(dest_id: bytes, packet: bytes) -> dict:
+    """Node A's reading of a WHOAREYOU packet, as a `dict`."""
     ...
 
 def discv5_seal_message(key: bytes, src_id: bytes, dest_id: bytes, masking_iv: bytes, nonce: bytes, plaintext: bytes) -> bytes:
@@ -375,12 +375,12 @@ def discv5_open_message(key: bytes, src_id: bytes, dest_id: bytes, packet: bytes
     """The plaintext of an ordinary message packet from a given node, under its session key."""
     ...
 
-def discv5_seal_handshake(ephemeral_key: bytes, static_key: bytes, challenge_data: bytes, src_id: bytes, dest_id: bytes, dest_pubkey: bytes, masking_iv: bytes, nonce: bytes, record: bytes, plaintext: bytes) -> bytes:
-    """Node A's handshake message packet for node B, and its session keys, as a JSON object."""
+def discv5_seal_handshake(ephemeral_key: bytes, static_key: bytes, challenge_data: bytes, src_id: bytes, dest_id: bytes, dest_pubkey: bytes, masking_iv: bytes, nonce: bytes, record: bytes, plaintext: bytes) -> tuple[bytes, bytes, bytes]:
+    """Node A's handshake message packet for node B, and its two session keys."""
     ...
 
-def discv5_open_handshake(static_key: bytes, challenge_data: bytes, dest_id: bytes, src_pubkey: bytes, packet: bytes) -> bytes:
-    """Node B's reading of a handshake message packet, as a JSON object."""
+def discv5_open_handshake(static_key: bytes, challenge_data: bytes, dest_id: bytes, src_pubkey: bytes, packet: bytes) -> dict:
+    """Node B's reading of a handshake message packet, as a `dict`."""
     ...
 
 def consensus_preset(name: str) -> bytes:
@@ -767,7 +767,7 @@ def reqresp_decode_payload(type_min: int, type_bound: int, data: bytes) -> bytes
     """The SSZ bytes of a payload, given the smallest and the largest encoding of its SSZ type."""
     ...
 
-def reqresp_decode_response_chunk(context_bytes: int, type_min: int, type_bound: int, data: bytes) -> bytes:
+def reqresp_decode_response_chunk(context_bytes: int, type_min: int, type_bound: int, data: bytes) -> tuple[int, bytes, bytes]:
     """One response chunk, given the number of context bytes that the method sends."""
     ...
 
@@ -931,12 +931,20 @@ def discv4_record_signed_by(sender: bytes, record: bytes) -> bool:
     """Whether the RLP record `record` of an ENRResponse is signed by the public key `sender`."""
     ...
 
-def fork_id(schedule: bytes, number: int, timestamp: int) -> bytes:
-    """The fork identifier, as RLP, of a node with the schedule `schedule` at a head."""
+def fork_id(schedule: bytes, number: int, timestamp: int) -> tuple[bytes, int]:
+    """The fork identifier of a node with a schedule at a head: its hash and its next fork."""
     ...
 
-def mainnet_fork_id(number: int, timestamp: int) -> bytes:
-    """The fork identifier, as RLP, of a mainnet node at a head."""
+def fork_id_schedule(genesis_hash: bytes, genesis_time: int, merge_fork_block: int | None, forks: list[tuple[str, int, int]]) -> bytes:
+    """The RLP schedule `[genesis-hash, genesis-time, merge-fork, forks]` of a chain."""
+    ...
+
+def fork_id_encode(fork_hash: bytes, fork_next: int) -> bytes:
+    """The RLP fork identifier `[FORK_HASH, FORK_NEXT]`, from its 4-byte hash and its next fork."""
+    ...
+
+def mainnet_fork_id(number: int, timestamp: int) -> tuple[bytes, int]:
+    """The fork identifier of a mainnet node at a head: its hash and its next fork."""
     ...
 
 def fork_id_validate(schedule: bytes, number: int, timestamp: int, remote: bytes) -> bool:
@@ -1083,8 +1091,8 @@ def rlpx_make_auth(static_key: bytes, ephemeral_key: bytes, nonce: bytes, recipi
     """The packet `auth` from the initiator to the recipient's public key."""
     ...
 
-def rlpx_respond(static_key: bytes, ephemeral_key: bytes, nonce: bytes, r: bytes, iv: bytes, padding: bytes, auth: bytes, probe: bytes) -> bytes:
-    """The recipient's answer to `auth`: the packet `ack`, then the 128 bytes of its secrets."""
+def rlpx_respond(static_key: bytes, ephemeral_key: bytes, nonce: bytes, r: bytes, iv: bytes, padding: bytes, auth: bytes, probe: bytes) -> tuple[bytes, bytes]:
+    """The recipient's answer to `auth`: the packet `ack`, and the 128 bytes of its secrets."""
     ...
 
 def rlpx_recipient_secrets(static_key: bytes, ephemeral_key: bytes, nonce: bytes, auth: bytes, ack: bytes, probe: bytes) -> bytes:
