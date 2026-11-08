@@ -88,6 +88,16 @@ instance : LawfulPy UInt64 where
 instance : PlainPy UInt64 where
   isPlain_toPy := fun _ => rfl
 
+instance {w : Nat} : LawfulPy (BitVec w) where
+  fromPy_toPy := by
+    intro a
+    show (do return BitVec.ofNatLT _ (← fromPyBelow (2 ^ w) (.int a.toNat)).2) = _
+    rw [fromPyBelow_int a.isLt]
+    exact congrArg Except.ok (BitVec.ofNatLT_toNat ..)
+
+instance {w : Nat} : PlainPy (BitVec w) where
+  isPlain_toPy := fun _ => rfl
+
 instance : LawfulPy ByteArray where
   fromPy_toPy := fun _ => rfl
 

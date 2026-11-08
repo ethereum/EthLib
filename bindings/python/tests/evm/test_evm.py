@@ -321,14 +321,16 @@ def test_opcode_outside_the_table() -> None:
 
 
 def test_integers_out_of_range() -> None:
-    # An opcode is one byte and an operand one word, so a larger integer is out of range.
-    with raises(OverflowError, "the opcode must be below 256"):
+    # An opcode is one byte and an operand one word, so Lean rejects a larger integer with code 0.
+    with raises(EvmError, "expected an int below 256, got 256") as info:
         word_op(0x100, 0, 0)
-    with raises(OverflowError, "a word must be in [0, 2^256)"):
+    assert info.value.code == 0
+    with raises(EvmError, f"expected an int below {2**256}, got {2**256}") as info:
         word_op(0x01, 2**256, 0)
+    assert info.value.code == 0
     with raises(OverflowError, "the opcode and the immediate must be below 256"):
         immediate_depths(0xE6, 0x100)
-    with raises(OverflowError, "a size cannot be negative"):
+    with raises(ValueError, "cannot pass a negative int to Lean"):
         memory_gas_cost(-1)
 
 
@@ -357,44 +359,26 @@ def test_extend_memory(current: int, ranges: list, result: tuple) -> None:
     assert extend_memory(current, ranges) == result
 
 
-# The codes of an operand and of ranges of the wrong length, from the binding contract.
-OPERAND_LENGTH = 101
-RANGES_LENGTH = 102
+def test_ranges_out_of_their_type() -> None:
+    # Each range is a tuple of two words, and the size of the memory is not negative.
+    with raises(EvmError, f"expected an int below {2**256}, got {2**256}") as info:
+        extend_memory(0, [(2**256, 1)])
+    assert info.value.code == 0
+    with raises(EvmError, "expected a tuple") as info:
+        extend_memory(0, [[0, 32]])  # ty: ignore[invalid-argument-type]
+    assert info.value.code == 0
+    with raises(ValueError, "cannot pass a negative int to Lean"):
+        extend_memory(-1, [])
 
 
-@pytest.mark.parametrize("position", [0, 1, 2])
-@pytest.mark.parametrize("length", [0, 1, 31, 33])
-def test_operand_must_be_32_bytes(position: int, length: int) -> None:
-    # The extension takes whole words, so an operand of another length is rejected.
-    from ethlib.cryptography import _native
-
-    operands = [bytes(32)] * 3
-    operands[position] = bytes(length)
-    with raises(EvmError, "each operand must be 32 bytes") as info:
-        _native.evm_word_op(0x01, *operands)
-    assert info.value.code == OPERAND_LENGTH
-
-
-def test_operand_length_checked_before_opcode() -> None:
-    # JUMP is outside the table of words, but the short operand is the error reported.
-    from ethlib.cryptography import _native
-
-    with raises(EvmError, "each operand must be 32 bytes") as info:
-        _native.evm_word_op(0x56, bytes(31), bytes(32), bytes(32))
-    assert info.value.code == OPERAND_LENGTH
-
-
-@pytest.mark.parametrize("length", [1, 32, 63, 65, 127])
-def test_ranges_must_be_whole_pairs(length: int) -> None:
-    # The extension takes whole ranges of two words, so a partial range is rejected.
-    from ethlib.cryptography import _native
-
-    for export in (_native.evm_extend_memory_cost, _native.evm_extend_memory_expand_by):
-        with raises(EvmError, "the ranges must be a whole number of 64-byte pairs") as info:
-            export(b"\x00", bytes(length))
-        assert info.value.code == RANGES_LENGTH
+def test_at_most_three_operands() -> None:
+    # The count is checked before the opcode, so JUMP with four operands fails on the count.
+    for opcode in (0x01, 0x56):
+        with raises(EvmError, "an instruction takes at most 3 operands") as info:
+            word_op(opcode, 1, 2, 3, 4)
+        assert info.value.code == 0
 
 
 def test_no_ranges() -> None:
-    # An empty list of ranges is a whole number of pairs, so memory does not grow.
+    # No range means no growth.
     assert extend_memory(0, []) == (0, 0)

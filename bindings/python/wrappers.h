@@ -445,8 +445,7 @@ PyObject* py_fees_blob_data_fee                           (PyObject* self, PyObj
 PyObject* py_evm_word_op                                  (PyObject* self, PyObject* args);
 PyObject* py_evm_immediate_depths                         (PyObject* self, PyObject* args);
 PyObject* py_evm_memory_gas_cost                          (PyObject* self, PyObject* args);
-PyObject* py_evm_extend_memory_cost                       (PyObject* self, PyObject* args);
-PyObject* py_evm_extend_memory_expand_by                  (PyObject* self, PyObject* args);
+PyObject* py_evm_extend_memory                            (PyObject* self, PyObject* args);
 PyObject* py_evm_create_address                           (PyObject* self, PyObject* args);
 PyObject* py_evm_create2_address                          (PyObject* self, PyObject* args);
 PyObject* py_rlp_encode                                   (PyObject* self, PyObject* args);

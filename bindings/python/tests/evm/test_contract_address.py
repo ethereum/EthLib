@@ -78,6 +78,11 @@ def test_create_address_is_20_bytes() -> None:
     assert all(len(a) == 20 for a in addresses)
 
 
+def test_nonce_is_not_negative() -> None:
+    with raises(ValueError, "cannot pass a negative int to Lean"):
+        create_address(bytes(20), -1)
+
+
 @pytest.mark.parametrize("sender", [b"", bytes(19), bytes(21)])
 def test_sender_must_be_20_bytes(sender: bytes) -> None:
     """A sender that is not 20 bytes is rejected with the code of a sender."""

@@ -89,17 +89,6 @@ bindings/python/ethlib/engine/__init__.py prepare_execution_payload json
 bindings/python/ethlib/execution/blocks/__init__.py _blob_schedules to_bytes
 bindings/python/ethlib/execution/blocks/__init__.py genesis_block.scalar to_bytes
 bindings/python/ethlib/execution/blocks/__init__.py state_transition json
-bindings/python/ethlib/execution/evm/__init__.py _number to_bytes
-bindings/python/ethlib/execution/evm/__init__.py _word to_bytes
-bindings/python/ethlib/execution/evm/__init__.py extend_memory from_bytes
-bindings/python/ethlib/execution/evm/__init__.py extend_memory join
-bindings/python/ethlib/execution/evm/__init__.py memory_gas_cost from_bytes
-bindings/python/ethlib/execution/evm/__init__.py word_op bytes
-bindings/python/ethlib/execution/evm/__init__.py word_op from_bytes
-bindings/python/ethlib/execution/fees/__init__.py _int from_bytes
-bindings/python/ethlib/execution/fees/__init__.py _number to_bytes
-bindings/python/ethlib/execution/pow/__init__.py _number to_bytes
-bindings/python/ethlib/execution/pow/__init__.py block_difficulty from_bytes
 bindings/python/ethlib/execution/pow/__init__.py chain_forks to_bytes
 bindings/python/ethlib/execution/transactions/__init__.py _number to_bytes
 bindings/python/ethlib/execution/transactions/__init__.py check from_bytes

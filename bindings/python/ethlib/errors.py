@@ -191,11 +191,11 @@ class VrfError(EthLibError, ValueError):
 
 
 class EvmError(EthLibError, ValueError):
-    """An EVM export rejected an opcode, an immediate byte, a length or a CREATE preimage."""
+    """An EVM export rejected an argument, an opcode, an immediate byte or a CREATE preimage."""
 
 
 class FeesError(EthLibError, ValueError):
-    """A fee export got an unknown fork, or one before Dencun, with code 0."""
+    """A fee export got an unknown, blobless or unspecified fork, a bad transaction or argument."""
 
 
 class TrieError(EthLibError, ValueError):

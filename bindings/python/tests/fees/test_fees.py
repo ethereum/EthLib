@@ -126,7 +126,7 @@ def test_fork_without_blobs(fork: str, message: str) -> None:
 
 
 def test_negative_quantity() -> None:
-    with raises(OverflowError, "a fee quantity cannot be negative"):
+    with raises(ValueError, "cannot pass a negative int to Lean"):
         calculate_base_fee_per_gas(30_000_000, -1, 7)
 
 

@@ -9,13 +9,6 @@ from ethlib.errors import BlockError
 from ethlib.serialization import rlp
 
 
-def _number(n: int) -> bytes:
-    """The shortest big-endian bytes of a non-negative integer."""
-    if n < 0:
-        raise OverflowError("a block quantity cannot be negative")
-    return n.to_bytes(max(1, (n.bit_length() + 7) // 8), "big")
-
-
 def block_difficulty(
     fork: str,
     number: int,
@@ -25,9 +18,9 @@ def block_difficulty(
     parent_ommers: int,
 ) -> int:
     """The difficulty of a block at a fork, from its parent and its parent's ommer count."""
-    numbers = (number, timestamp, parent_timestamp, parent_difficulty, parent_ommers)
-    result = _native.pow_block_difficulty(fork.encode(), *map(_number, numbers))
-    return int.from_bytes(result, "big")
+    return _native.pow_block_difficulty(
+        fork, number, timestamp, parent_timestamp, parent_difficulty, parent_ommers
+    )
 
 
 def seal_hash(fork: str, header: bytes) -> bytes:

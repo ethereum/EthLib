@@ -5,11 +5,11 @@ public import EthLib.Execution.Exports.Evm
 /-!
 # Proofs: `Execution.Exports.Evm`
 
-Each export that reads a word, an address or a list of memory ranges checks the length first.
+Each export that reads an address or a salt as bytes checks the length first.
 
-An argument of the wrong length gives the error of that argument.
+An argument of the wrong length gives the error of that argument, and too many operands fail.
 
-Arguments of the right lengths give the result that the operation computes from them.
+Arguments of the right lengths or counts give the result that the operation computes from them.
 
 The codes of these errors never meet the codes of an RLP error, so one Python class carries both.
 
@@ -20,7 +20,7 @@ The library of the exports holds this module, since a proof module fails to load
 
 namespace EthLib.Execution.Evm.Exports
 
-open EthLib.Base (bytesToNat readBytes)
+open EthLib.Base (U256 readBytes)
 open EthLib.Serialization.Rlp (RlpError)
 
 /-! ## Error codes -/
@@ -38,75 +38,53 @@ theorem ArgumentError.code_ne_rlp (e : ArgumentError) (r : RlpError) : e.code �
 
 /-! ## Operands of an instruction -/
 
-/-- An operand of any length but 32 bytes gives the error of an operand. -/
-theorem wordOpExport_eq_error_of_size_ne {opcode : UInt8} {a b c : ByteArray}
-    (h : a.size ≠ 32 ∨ b.size ≠ 32 ∨ c.size ≠ 32) :
-    wordOpExport opcode a b c = .error ArgumentError.operandLength.toResult := by
-  by_cases ha : a.size = 32 <;> by_cases hb : b.size = 32 <;> by_cases hc : c.size = 32 <;>
-    simp_all [wordOpExport, readWord, bind, Except.bind]
+/-- More than three operands give an error with code 0, whatever the opcode. -/
+theorem wordOpOf_eq_error_of_length {opcode : UInt8} {operands : List U256}
+    (h : 3 < operands.length) :
+    wordOpOf (opcode, operands) = .error (0, "an instruction takes at most 3 operands") := by
+  simp [wordOpOf, h, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
-/-- Operands of 32 bytes give the word that the instruction pushes for them. -/
-theorem wordOpExport_eq_of_size_eq {opcode : UInt8} {a b c : ByteArray} (ha : a.size = 32)
-    (hb : b.size = 32) (hc : c.size = 32) :
-    wordOpExport opcode a b c =
-      match (Op.decode opcode).bind fun op => wordOp op (wordOf a) (wordOf b) (wordOf c) with
-      | some w => .ok (bytesOfWord w)
+/-- At most three operands give the word that the instruction pushes, with 0 for a missing one. -/
+theorem wordOpOf_eq_of_length_le {opcode : UInt8} {operands : List U256}
+    (h : operands.length ≤ 3) :
+    wordOpOf (opcode, operands) =
+      match (Op.decode opcode).bind fun op =>
+          wordOp op (operands.getD 0 0) (operands.getD 1 0) (operands.getD 2 0) with
+      | some w => .ok w
       | none => .error (0, s!"opcode {opcode} does not push a word of its operands alone") := by
-  -- The two sides match on one value with two copies of one matcher.
-  simp only [wordOpExport, readWord, ha, hb, hc, ite_true, bind, Except.bind]
-  split <;> rename_i h <;> rw [h]
+  simp only [wordOpOf, show ¬operands.length > 3 by omega, ite_false]
+  rfl
 
 /-! ## Ranges of a memory access -/
 
-/-- Ranges whose length is not a multiple of 64 bytes give the error of the ranges. -/
-theorem extendMemoryCostExport_eq_error_of_size {size ranges : ByteArray}
-    (h : ranges.size % 64 ≠ 0) :
-    extendMemoryCostExport size ranges = .error ArgumentError.rangesLength.toResult := by
-  simp [extendMemoryCostExport, readRanges, h, bind, Except.bind]
-
-/-- Ranges of a multiple of 64 bytes give the price of growing the memory for them. -/
-theorem extendMemoryCostExport_eq_of_size {size ranges : ByteArray}
-    (h : ranges.size % 64 = 0) :
-    extendMemoryCostExport size ranges =
-      .ok (bytesOfNat (extendMemory (bytesToNat size.toList) (rangesOf ranges)).cost) := by
-  simp [extendMemoryCostExport, readRanges, h, bind, Except.bind, pure, Except.pure]
-
-/-- Ranges whose length is not a multiple of 64 bytes give the error of the ranges. -/
-theorem extendMemoryExpandByExport_eq_error_of_size {size ranges : ByteArray}
-    (h : ranges.size % 64 ≠ 0) :
-    extendMemoryExpandByExport size ranges = .error ArgumentError.rangesLength.toResult := by
-  simp [extendMemoryExpandByExport, readRanges, h, bind, Except.bind]
-
-/-- Ranges of a multiple of 64 bytes give the number of bytes that the memory grows by. -/
-theorem extendMemoryExpandByExport_eq_of_size {size ranges : ByteArray}
-    (h : ranges.size % 64 = 0) :
-    extendMemoryExpandByExport size ranges =
-      .ok (bytesOfNat (extendMemory (bytesToNat size.toList) (rangesOf ranges)).expandBy) := by
-  simp [extendMemoryExpandByExport, readRanges, h, bind, Except.bind, pure, Except.pure]
+/-- The price of growing a memory for some ranges, and the bytes it grows by, come from one step. -/
+theorem extendMemoryOf_eq {size : Nat} {ranges : List (U256 × U256)} :
+    extendMemoryOf (size, ranges) =
+      .ok ((extendMemory size ranges).cost, (extendMemory size ranges).expandBy) := rfl
 
 /-! ## Created addresses -/
 
 /-- A sender of any length but 20 bytes gives the error of a sender, for CREATE. -/
-theorem createAddressExport_eq_error_of_size_ne {sender nonce : ByteArray}
+theorem createAddressOf_eq_error_of_size_ne {sender : ByteArray} {nonce : Nat}
     (h : sender.size ≠ 20) :
-    createAddressExport sender nonce = .error ArgumentError.senderLength.toResult := by
-  simp [createAddressExport, readAddress, h, bind, Except.bind]
+    createAddressOf (sender, nonce) = .error ArgumentError.senderLength.toResult := by
+  simp [createAddressOf, readAddress, h, bind, Except.bind]
 
 /-- A sender of 20 bytes gives the CREATE address of that sender, or the error of its preimage. -/
-theorem createAddressExport_eq_of_size_eq {sender nonce : ByteArray} (h : sender.size = 20) :
-    createAddressExport sender nonce =
-      ((createAddress (readBytes sender 0 20 (by omega)) (bytesToNat nonce.toList)).map
+theorem createAddressOf_eq_of_size_eq {sender : ByteArray} {nonce : Nat} (h : sender.size = 20) :
+    createAddressOf (sender, nonce) =
+      ((createAddress (readBytes sender 0 20 (by omega)) nonce).map
         (fun a => ⟨a.toArray⟩)).mapError
         fun e => (e.code, s!"create preimage rejected: {reprStr e}") := by
-  simp [createAddressExport, readAddress, h, bind, Except.bind]
+  simp [createAddressOf, readAddress, h, bind, Except.bind]
 
 /-- With a sender of 20 bytes, CREATE never fails with the code of a sender of a wrong length. -/
-theorem createAddressExport_code_ne_of_size_eq {sender nonce : ByteArray} {code : UInt32}
+theorem createAddressOf_code_ne_of_size_eq {sender : ByteArray} {nonce : Nat} {code : UInt32}
     {message : String} (h : sender.size = 20)
-    (he : createAddressExport sender nonce = .error (code, message)) :
+    (he : createAddressOf (sender, nonce) = .error (code, message)) :
     code ≠ ArgumentError.senderLength.code := by
-  rw [createAddressExport_eq_of_size_eq h] at he
-  cases hc : createAddress (readBytes sender 0 20 (by omega)) (bytesToNat nonce.toList) with
+  rw [createAddressOf_eq_of_size_eq h] at he
+  cases hc : createAddress (readBytes sender 0 20 (by omega)) nonce with
   | error r =>
     simp only [hc, Except.map, Except.mapError, Except.error.injEq, Prod.mk.injEq] at he
     rw [← he.1]
