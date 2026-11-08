@@ -154,7 +154,7 @@ theorem depositTargetStatus_applyPendingDeposit {deposit : PendingDeposit}
     simp only [bind_ok_iff] at computed
     obtain ⟨_, _, computed⟩ := computed
     split at computed
-    · have pushed := addValidatorToRegistry_validators computed small
+    · have pushed := addValidatorToRegistry_validators_eq_push computed small
       -- The new validator has no exit before the far future, and no epoch passes the far future.
       have far : ¬FAR_FUTURE_EPOCH < nextEpoch := by
         rw [UInt64.lt_iff_toNat_lt]
@@ -257,20 +257,23 @@ If deposits remain, it stopped at one for which `stop` is true, or at the limit 
 
 Otherwise that deposit takes churn, and it would take more than the churn available.
 
-No validator with its key exits or is withdrawn, and the pass records that it reached the churn.
+After the deposits it applied, no validator with its key exits or is withdrawn.
+
+The pass records that it reached the churn.
 
 In every other case it records that it did not reach the churn.
 
-The churn that it uses grows by the amount of each deposit it reads that takes churn.
+Suppose the registry and the rest of the limit per epoch fit together in 64 bits.
+
+Then the churn that it uses grows by the amount of each deposit it reads that takes churn.
 
 Those are the deposits whose validator, at the start of the pass, neither exits nor is withdrawn.
 
-It grows by nothing else.
-
-That needs room in 64 bits for the registry and the rest of the limit per epoch. -/
-structure PassRead (config : Config) (checks : SignatureChecks) (stop : PendingDeposit → Bool)
-    (nextEpoch : Epoch) (available : Gwei) (state : BeaconState preset fork) (processed : Gwei)
-    (count : Nat) (postponed : Array PendingDeposit) (deposits : List PendingDeposit)
+The churn grows by nothing else. -/
+structure PassPendingDepositsFacts (config : Config) (checks : SignatureChecks)
+    (stop : PendingDeposit → Bool) (nextEpoch : Epoch) (available : Gwei)
+    (state : BeaconState preset fork) (processed : Gwei) (count : Nat)
+    (postponed : Array PendingDeposit) (deposits : List PendingDeposit)
     (pass : PendingDepositsPass preset fork) (read applied moved : List PendingDeposit) : Prop where
   split : deposits = read ++ pass.rest
   pushed : pass.postponed.toList = postponed.toList ++ moved
@@ -294,7 +297,7 @@ structure PassRead (config : Config) (checks : SignatureChecks) (stop : PendingD
 
 /-- A pass reads a prefix of its deposits, applies some of them and postpones the others.
 
-With room in 64 bits, it uses the churn of those that take it. -/
+When the registry and the rest of the limit per epoch fit in 64 bits, it also counts its churn. -/
 theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
     {available : Gwei} :
     ∀ {deposits : List PendingDeposit} {state : BeaconState preset fork} {processed : Gwei}
@@ -302,8 +305,8 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
       passPendingDeposits config checks stop nextEpoch available state processed count postponed
         deposits = .ok pass →
       ∃ read applied moved : List PendingDeposit,
-        PassRead config checks stop nextEpoch available state processed count postponed deposits
-          pass.1 read applied moved
+        PassPendingDepositsFacts config checks stop nextEpoch available state processed count
+          postponed deposits pass.1 read applied moved
   | [], _, _, _, _, _, computed => by
     simp only [passPendingDeposits, pure, Except.pure, Except.ok.injEq] at computed
     subst computed

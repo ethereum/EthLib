@@ -500,7 +500,7 @@ theorem balancesMatch_addValidatorToRegistry {pubkey : BLSPubkey}
 /-- A new validator joins the end of the registry.
 
 That needs an index that fits 64 bits. -/
-theorem addValidatorToRegistry_validators {pubkey : BLSPubkey}
+theorem addValidatorToRegistry_validators_eq_push {pubkey : BLSPubkey}
     {withdrawalCredentials : Bytes32} {amount : Gwei}
     (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after)
     (small : state.validators.data.size < 2 ^ 64) :
@@ -534,13 +534,13 @@ theorem addValidatorToRegistry_push {pubkey : BLSPubkey}
     after.validators.data = state.validators.data.push
         (getValidatorFromDeposit preset fork pubkey withdrawalCredentials amount) ∧
       after.balances.data = state.balances.data.push amount := by
-  refine ⟨addValidatorToRegistry_validators computed small, ?_⟩
+  refine ⟨addValidatorToRegistry_validators_eq_push computed small, ?_⟩
   unfold addValidatorToRegistry at computed
   split at computed
   · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
       Except.ok.injEq] at computed
     obtain ⟨_, _, _, balancesOk, _, _, _, _, _, _, rfl⟩ := computed
-    -- The index of a new validator is the size of the registry, which is the size of the balances.
+    -- The index is the size of the registry, which fits 64 bits, and so the size of the balances.
     have atBalances : (getIndexForNewValidator state).toNat = state.balances.data.size := by
       rw [getIndexForNewValidator, Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small, holds]
     simp only [setOrAppendList, atBalances, ↓reduceIte, appendWithinLimit] at balancesOk
@@ -829,7 +829,7 @@ theorem applyPendingDeposit_validators_size_le_and_mem {deposit : PendingDeposit
     simp only [bind_ok_iff] at computed
     obtain ⟨_, _, computed⟩ := computed
     split at computed
-    · rw [addValidatorToRegistry_validators computed small]
+    · rw [addValidatorToRegistry_validators_eq_push computed small]
       exact ⟨by simp, fun _ member => Array.mem_push.mpr (.inl member)⟩
     · simp only [pure, Except.pure, Except.ok.injEq] at computed
       subst computed
