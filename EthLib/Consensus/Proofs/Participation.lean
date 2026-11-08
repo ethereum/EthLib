@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
+public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.Participation
 
 /-!
@@ -22,6 +23,8 @@ From Gloas a vote for the block of its own slot matches its payload exactly when
 A vote for an earlier block matches when its index is the availability bit of the parent slot.
 
 A head flag from Gloas needs a matching payload vote.
+
+From Altair, a base reward is the base reward per increment, once for each whole increment.
 -/
 
 @[expose] public section
@@ -152,5 +155,26 @@ theorem payloadMatches_of_head {state : BeaconState preset fork} (gloas : .glams
       · exact payloadOk
   · rw [ite_eq_right_of_eq_false _ _ (eq_false matching)] at computed
     cases computed
+
+/-- From Altair, the base reward of a validator is the base reward per increment.
+
+It counts once for each whole increment of the effective balance of the validator. -/
+theorem getBaseReward_eq_mul_of_altair {state : BeaconState preset fork}
+    (altair : .altair ≤ fork) {total perIncrement base : Gwei} {index : ValidatorIndex}
+    (per : getBaseRewardPerIncrement preset total = .ok perIncrement)
+    (computed : getBaseReward state total index = .ok base) :
+    ∃ validator, state.validators.data[index.toNat]? = some validator ∧
+      base.toNat = validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+        perIncrement.toNat := by
+  simp only [getBaseReward, altair, ↓reduceIte, bind_ok_iff, per, Except.ok.injEq,
+    exists_eq_left', liftArith, mapError_ok_iff, mulChecked_ok_iff] at computed
+  obtain ⟨validator, found, -, product⟩ := computed
+  refine ⟨validator, ?_, by rw [product, UInt64.toNat_div]⟩
+  unfold getValidator at found
+  split at found
+  · rename_i read
+    cases found
+    exact read
+  · cases found
 
 end EthLib.Consensus
