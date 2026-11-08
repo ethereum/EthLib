@@ -277,13 +277,14 @@ def getCommitteeCountPerSlot (state : BeaconState preset fork) (epoch : Epoch) :
 
 /-- The committee of a slot with a given index, cut from active validators in a shuffled order.
 
-It is the committee of the rule when the validators and shuffle are those of the epoch of the slot.
+The count of committees in each slot is an argument, so that a caller computes it once.
+
+It is the committee of the rule when its inputs are those of the epoch of the slot.
 
 The committees of an epoch are numbered across its slots, in the order of the slots. -/
-def beaconCommitteeOf (state : BeaconState preset fork) (slot : Slot) (index : CommitteeIndex)
+def beaconCommitteeOf (preset : Preset) (slot : Slot) (index : CommitteeIndex) (perSlot : UInt64)
     (active : Array ValidatorIndex) (shuffled : Array UInt64) :
     Except AccessorError (Array ValidatorIndex) := do
-  let perSlot := getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)
   let position ← liftArith do
     addChecked (← mulChecked (slot % preset.SLOTS_PER_EPOCH) perSlot) index
   let count ← liftArith (mulChecked perSlot preset.SLOTS_PER_EPOCH)
@@ -301,7 +302,7 @@ def getBeaconCommittee (state : BeaconState preset fork) (slot : Slot) (index : 
   let active := (getActiveValidatorIndices state epoch).toArray
   let shuffled ← (computeShuffledPermutation preset (UInt64.ofNat active.size) seed).mapError
     .shuffle
-  beaconCommitteeOf state slot index active shuffled
+  beaconCommitteeOf preset slot index (getCommitteeCountPerSlot state epoch) active shuffled
 
 /-- The number of draws that read one hash: 16 from Electra, 32 before. -/
 def drawsPerHash (fork : Base.Fork) : Nat :=
