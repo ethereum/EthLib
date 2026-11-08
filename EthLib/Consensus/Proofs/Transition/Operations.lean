@@ -795,7 +795,7 @@ theorem applyPendingDeposit_new_valid {deposit : PendingDeposit}
 /-- A deposit adds at most one entry to the registry, and keeps each validator there.
 
 That needs one balance for each validator, and an index that fits 64 bits. -/
-private theorem applyPendingDeposit_grows {deposit : PendingDeposit}
+theorem applyPendingDeposit_grows {deposit : PendingDeposit}
     (computed : applyPendingDeposit config checks state deposit = .ok after)
     (holds : BalancesMatch state) (small : state.validators.data.size < 2 ^ 64) :
     after.validators.data.size ≤ state.validators.data.size + 1 ∧
