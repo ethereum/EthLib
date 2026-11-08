@@ -6,9 +6,15 @@ public import EthLib.Consensus.Transition.SyncAggregate
 /-!
 # Proofs: the sync aggregate of a block
 
-A block passes its sync aggregate only with a valid signature of the members that signed.
+A successful sync aggregate step means that the wrapper of the configured check accepted the keys.
 
-With no member signing, only the signature of the point at infinity passes.
+That wrapper accepts an empty key list with the signature of the point at infinity.
+
+In every other case the configured check decides.
+
+Suppose that the configured checks reject empty key lists.
+
+Then with no key, only the signature of the point at infinity passes.
 
 The step keeps the sizes of the registry and the balances.
 
@@ -43,13 +49,17 @@ theorem bls_fastAggregateVerify_empty (message signature : ByteArray) :
 
 /-- What a successful sync aggregate step checked.
 
-The keys of the members that signed decode.
+The key list is the stored aggregate key, that key less the absent keys, or the signing keys.
 
-The signed root is the signing root of the block root at the slot before the state's.
+Only the middle case decodes keys while it computes the list.
+
+The computed root is the signing root of the block root at the slot before the state's.
 
 Its domain is the sync committee domain at the epoch of that slot.
 
-The signature check passed on those keys and that root. -/
+The wrapper of the configured check accepted the computed key list and that root.
+
+This does not show that the signature is valid, or that each member key decodes. -/
 theorem processSyncAggregate_signed {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
     (computed : processSyncAggregate config checks state altair aggregate = .ok after) :
     ∃ pubkeys domain root signingRoot,
