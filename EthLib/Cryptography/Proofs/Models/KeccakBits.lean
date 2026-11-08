@@ -120,7 +120,7 @@ def byteBits (byte : UInt8) : List Bool :=
 /-- The bits of a byte string, in increasing byte and bit order. -/
 def messageBits (msg : ByteArray) : List Bool := msg.data.toList.flatMap byteBits
 
-/-- FIPS 202 Algorithm 9 at a rate of `rateBits` bits. -/
+/-- FIPS 202 Algorithm 9 at a positive rate of `rateBits` bits. -/
 def padding (rateBits length : Nat) : List Bool :=
   true :: List.replicate ((rateBits - ((length + 2) % rateBits)) % rateBits) false ++ [true]
 
@@ -170,7 +170,9 @@ def paddedBlock {rateBits : Nat} (hr : 0 < rateBits) (msg : ByteArray)
     rw [Nat.mul_add, Nat.mul_one] at hmul
     omega)
 
-/-- XOR one `rateBits`-bit block into the state, leaving the capacity unchanged. -/
+/-- XOR one `rateBits`-bit block into the state, leaving the capacity unchanged.
+
+Bits at index 1600 and above are dropped, so the sponge requires a rate below 1600. -/
 def absorb {rateBits : Nat} (a : State) (block : Block rateBits) : State := fun x y z =>
   let i := index x y z
   Bool.xor (a x y z) (if h : i < rateBits then block[i]'h else false)
