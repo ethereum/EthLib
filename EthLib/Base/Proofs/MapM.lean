@@ -18,6 +18,7 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - The map succeeds, and returns no error, when the function succeeds on every input.
 - A function that returns a known value on every input maps to the list of those values.
 - A part of each output that its input fixes comes out in the order of the inputs.
+- When each output is at most a bound of its input, the outputs sum to at most the bounds.
 - Output `i` is the image of input `i`, for a list, an array or a vector.
 - A map returns a list exactly when it has one output per input, each the image of its input.
 - Two functions that agree on every entry of a vector map it to one result.
@@ -168,6 +169,23 @@ theorem map_of_mapM_ok {γ : Type} {p : β → γ} {q : α → γ} (hpart : ∀ 
   | cons x xs ih =>
     obtain ⟨y, rest, head, tail, rfl⟩ := mapM_cons_ok.mp h
     simp [hpart x y head, ih tail]
+
+/-- Take a successful map where each output is at most a bound of its input.
+
+Then the outputs sum to at most the bounds. -/
+theorem sum_map_le_sum_map_of_mapM_ok {value : β → Nat} {bound : α → Nat}
+    (bounded : ∀ x y, f x = .ok y → value y ≤ bound x) {xs : List α} {ys : List β}
+    (h : xs.mapM f = .ok ys) : (ys.map value).sum ≤ (xs.map bound).sum := by
+  induction xs generalizing ys with
+  | nil =>
+    simp only [List.mapM_nil, pure, Except.pure, Except.ok.injEq] at h
+    simp [← h]
+  | cons x xs ih =>
+    obtain ⟨y, rest, head, tail, rfl⟩ := mapM_cons_ok.mp h
+    have first := bounded x y head
+    have others := ih tail
+    simp only [List.map_cons, List.sum_cons]
+    omega
 
 /-- Output `i` of a successful map is the image of input `i`. -/
 theorem mapM_ok_getElem {xs : List α} {ys : List β} (h : xs.mapM f = .ok ys)

@@ -14,6 +14,8 @@ That needs the registry to stay within the limit of the preset, which its type s
 
 From Gloas the registry is a progressive list, so these theorems take the bound as a hypothesis.
 
+A marked sum of effective balances is their sum over the marked positions.
+
 A total balance reads its indices as a set: their order and their repeats do not matter.
 
 A total balance is at least one effective balance increment.
@@ -138,6 +140,39 @@ theorem markIndices_congr {size : Nat} {first second : List ValidatorIndex}
     rw [Bool.eq_iff_iff, List.any_eq_true, List.any_eq_true]
     exact ⟨fun ⟨x, m, e⟩ => ⟨x, (same x).mp m, e⟩, fun ⟨x, m, e⟩ => ⟨x, (same x).mpr m, e⟩⟩
   rw [this]
+
+/-- A fold that adds the effective balance of each marked validator sums them by position. -/
+private theorem foldl_zip_marks :
+    ∀ (validators : List Validator) (marks : List Bool) (sum : Nat),
+      (validators.zip marks).foldl (fun sum pair =>
+          if pair.2 then sum + pair.1.effectiveBalance.toNat else sum) sum =
+        sum + ((List.range validators.length).map fun j =>
+          if marks.getD j false then
+            ((validators[j]?).map (·.effectiveBalance.toNat)).getD 0
+          else 0).sum
+  | [], _, sum => by simp
+  | _ :: _, [], sum => by
+    simp only [List.zip_nil_right, List.foldl_nil, List.getD_nil, Bool.false_eq_true,
+      ↓reduceIte, List.map_const', List.sum_replicate_nat, Nat.mul_zero, Nat.add_zero]
+  | validator :: validators, mark :: marks, sum => by
+    rw [List.zip_cons_cons, List.foldl_cons, foldl_zip_marks validators marks,
+      List.length_cons, List.range_succ_eq_map]
+    simp only [List.map_cons, List.map_map, List.sum_cons, Function.comp_def,
+      List.getD_cons_zero, List.getD_cons_succ, List.getElem?_cons_zero,
+      List.getElem?_cons_succ, Option.map_some, Option.getD_some]
+    cases mark <;> simp only [Bool.false_eq_true, ↓reduceIte] <;> omega
+
+/-- The marked sum of the effective balances is their sum over the marked positions. -/
+theorem sumMarked_eq_sum (validators : Array Validator) (marks : Array Bool) :
+    sumMarked validators marks = ((List.range validators.size).map fun j =>
+      if (marks[j]?).getD false then ((validators[j]?).map (·.effectiveBalance.toNat)).getD 0
+      else 0).sum := by
+  unfold sumMarked
+  rw [← Array.foldl_toList, Array.toList_zip]
+  change List.foldl (fun (sum : Nat) (pair : Validator × Bool) =>
+      if pair.2 then sum + pair.1.effectiveBalance.toNat else sum) 0 _ = _
+  rw [foldl_zip_marks, Nat.zero_add, Array.length_toList]
+  simp only [List.getD_eq_getElem?_getD, Array.getElem?_toList]
 
 /-- A total balance exists exactly when two conditions hold.
 

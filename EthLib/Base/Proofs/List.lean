@@ -8,6 +8,12 @@ Facts about lists that Lean core does not prove and that several layers use.
 Removing the duplicates of a list leaves each element once.
 
 A bound on each term of a sum bounds the sum by the count times that bound.
+
+Bounds on each term of a sum bound it by the sum of those bounds.
+
+A factor of every term comes out of the sum.
+
+The quotients of the terms sum to at most the quotient of the sum.
 -/
 
 @[expose] public section
@@ -54,5 +60,47 @@ theorem sum_map_le {α : Type} {f : α → Nat} {high : Nat} :
     have := sum_map_le (xs := xs) fun y hy => h y (List.mem_cons_of_mem x hy)
     simp only [List.length_cons, List.map_cons, List.sum_cons, Nat.succ_mul]
     omega
+
+/-- Bounds on each term of a sum bound it by the sum of those bounds. -/
+theorem sum_map_le_sum_map {α : Type} {f g : α → Nat} :
+    ∀ {xs : List α}, (∀ x ∈ xs, f x ≤ g x) → (xs.map f).sum ≤ (xs.map g).sum
+  | [], _ => by simp
+  | x :: xs, h => by
+    have hx := h x List.mem_cons_self
+    have := sum_map_le_sum_map (xs := xs) fun y hy => h y (List.mem_cons_of_mem x hy)
+    simp only [List.map_cons, List.sum_cons]
+    omega
+
+/-- A factor on the left of every term comes out of the sum. -/
+theorem sum_map_mul_left {α : Type} (factor : Nat) (f : α → Nat) :
+    ∀ xs : List α, (xs.map fun x => factor * f x).sum = factor * (xs.map f).sum
+  | [] => by simp
+  | x :: xs => by
+    simp only [List.map_cons, List.sum_cons, Nat.mul_add, sum_map_mul_left factor f xs]
+
+/-- A factor on the right of every term comes out of the sum. -/
+theorem sum_map_mul_right {α : Type} (f : α → Nat) (factor : Nat) :
+    ∀ xs : List α, (xs.map fun x => f x * factor).sum = (xs.map f).sum * factor
+  | [] => by simp
+  | x :: xs => by
+    simp only [List.map_cons, List.sum_cons, Nat.add_mul, sum_map_mul_right f factor xs]
+
+/-- The quotients of the terms sum to at most the quotient of the sum. -/
+theorem sum_map_div_le {α : Type} (f : α → Nat) (divisor : Nat) :
+    ∀ xs : List α, (xs.map fun x => f x / divisor).sum ≤ (xs.map f).sum / divisor
+  | [] => by simp
+  | x :: xs => by
+    have rest := sum_map_div_le f divisor xs
+    simp only [List.map_cons, List.sum_cons]
+    rcases Nat.eq_zero_or_pos divisor with zero | positive
+    · subst zero
+      simp only [Nat.div_zero] at rest ⊢
+      omega
+    · refine (Nat.le_div_iff_mul_le positive).mpr ?_
+      have first := Nat.div_mul_le_self (f x) divisor
+      have second := Nat.div_mul_le_self (xs.map f).sum divisor
+      have kept := Nat.mul_le_mul_right divisor rest
+      rw [Nat.add_mul]
+      omega
 
 end EthLib.Base
