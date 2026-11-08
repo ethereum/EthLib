@@ -763,6 +763,14 @@ def reqresp_decode_response_chunk(context_bytes: int, type_min: int, type_bound:
     """One response chunk, given the number of context bytes that the method sends."""
     ...
 
+def reqresp_encode_payload(ssz_bytes: bytes) -> bytes:
+    """A payload that decodes to `data`: its length as a varint, then a stream that compresses."""
+    ...
+
+def reqresp_encode_response_chunk(code: int, context: bytes, payload: bytes) -> bytes:
+    """The response chunk of a code byte, context bytes and a payload, compressed when shorter."""
+    ...
+
 def block_header_hash(fork: str, header: bytes) -> bytes:
     """The hash of a header in RLP form, after the decoder at the fork accepts it."""
     ...

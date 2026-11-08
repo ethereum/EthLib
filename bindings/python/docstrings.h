@@ -572,6 +572,12 @@
 #define DOC_reqresp_decode_response_chunk \
   "One response chunk, given the number of context bytes that the method sends."
 
+#define DOC_reqresp_encode_payload \
+  "A payload that decodes to `data`: its length as a varint, then a stream that compresses."
+
+#define DOC_reqresp_encode_response_chunk \
+  "The response chunk of a code byte, context bytes and a payload, compressed when shorter."
+
 #define DOC_block_header_hash \
   "The hash of a header in RLP form, after the decoder at the fork accepts it."
 
