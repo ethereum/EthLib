@@ -71,6 +71,17 @@ Not yet released.
   Examples are a block number of 2^64, `bytes` given for a fork name, and `str` given for bytes.
   A negative number raises `ValueError`, where it raised `OverflowError`, and a value that cannot cross, such as a `bytearray`, still raises `TypeError`.
   `rlpx.SECRETS_SIZE` is now read from Lean.
+- The consensus presets, configurations and parameters, and the active fork of a configured chain, now take and return typed values ([#1548](https://github.com/ethereum/EthLib/pull/1548)).
+  The C exports `eth_consensus_preset`, `eth_consensus_config`, `eth_consensus_parameters` and `eth_active_fork` take the tuple of their arguments as one value.
+  The first three return a `dict`, where they returned JSON text.
+  An integer in that `dict` is an `int`, where it was a string of decimal digits.
+  `eth_active_fork` takes the chain configuration as a `dict` with the keys of its JSON form, and returns the name of the fork or `None`.
+  In Python, an argument that crosses to Lean but that Lean cannot read raises the error class of the method with code 0, where some raised `TypeError`.
+  An example is `bytes` given for a name.
+  A timestamp or a block number of 2^64 or more given to `chain.active_fork` raises `ChainError` with code 0, where it raised `OverflowError`.
+  A `bool` given there raises `ChainError` with code 0, where it read as 0 or 1.
+  A negative number raises `ValueError`, where it raised `OverflowError`.
+- A replacement of a 64-bit value of a consensus configuration may now be an `int`, where it had to be a string ([#1548](https://github.com/ethereum/EthLib/pull/1548)).
 - A chain configuration that the exports read as JSON is now rejected, with code 0, when a fork by block number comes after a fork by timestamp ([#1110](https://github.com/ethereum/EthLib/pull/1110)).
   EIP-6122 requires the forks by timestamp to be scheduled at or after the forks by block.
 

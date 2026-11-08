@@ -55,3 +55,31 @@ def test_unknown_activation_kind() -> None:
     with raises(ChainError, "no activation kind slot") as error:
         active_fork(config, 0, 0)
     assert error.value.code == 0
+
+
+def test_activations_as_tuples() -> None:
+    """An activation given as a tuple reads as one given as a list."""
+    config = {"chainId": 1, "activations": [("frontier", "block", 0), ("homestead", "block", 5)]}
+    assert active_fork(config, 5, 0) == "homestead"
+
+
+@pytest.mark.parametrize("number, timestamp", [(2**64, 0), (0, 2**64)])
+def test_number_out_of_range(number: int, timestamp: int) -> None:
+    """A block number or a timestamp of 2^64 is not a 64-bit number, so it fails with code 0."""
+    message = f"expected an int below {2**64}, got {2**64}"
+    with raises(ChainError, message) as error:
+        active_fork(TIMED, number, timestamp)
+    assert error.value.code == 0
+
+
+def test_negative_number() -> None:
+    """A negative block number never reaches Lean."""
+    with raises(ValueError, "cannot pass a negative int to Lean"):
+        active_fork(TIMED, -1, 0)
+
+
+def test_bool_is_not_a_number() -> None:
+    """A bool is not read as a block number, and fails with code 0."""
+    with raises(ChainError, "expected an int") as error:
+        active_fork(TIMED, True, 0)
+    assert error.value.code == 0

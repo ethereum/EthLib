@@ -1,7 +1,6 @@
 """The data column sidecars and the matrix, from Fulu, against the vectors of consensus-specs."""
 
 import hashlib
-import json
 from pathlib import Path
 
 import pytest
@@ -52,23 +51,21 @@ def _yaml(path: Path):
 
 
 def _conform(base, value):
-    # Give a YAML value the JSON form of the Lean value it replaces.
+    # Give a YAML value the form of the configuration value it replaces.
     if isinstance(value, list):
         sample = base[0] if base else {}
         return [_conform(sample, item) for item in value]
     if isinstance(value, dict):
-        return {key: _conform(base.get(key, ""), item) for key, item in value.items()}
-    if isinstance(value, int) and isinstance(base, str):
+        return {key: _conform(base.get(key), item) for key, item in value.items()}
+    if isinstance(value, int) and isinstance(base, str) and base.startswith("0x"):
         # YAML reads an unquoted 0x value as an integer; Lean keeps it as bytes.
-        if base.startswith("0x"):
-            return "0x" + value.to_bytes((len(base) - 2) // 2, "big").hex()
-        return str(value)
+        return "0x" + value.to_bytes((len(base) - 2) // 2, "big").hex()
     return value
 
 
 def replacements(case_config: dict, name: str) -> dict:
     """The values of a case's configuration that the named configuration holds, in Lean's form."""
-    base = json.loads(_native.consensus_config(name))
+    base = _native.consensus_config(name)
     return {key: _conform(base[key], value) for key, value in case_config.items() if key in base}
 
 

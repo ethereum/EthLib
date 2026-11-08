@@ -288,13 +288,13 @@
   "Node B's reading of a handshake message packet, as a `dict`."
 
 #define DOC_consensus_preset \
-  "The preset of a name, as a JSON object."
+  "The preset of a name, as a `dict`."
 
 #define DOC_consensus_config \
-  "The configuration of a name, as a JSON object."
+  "The configuration of a name, as a `dict`."
 
 #define DOC_consensus_parameters \
-  "The parameters of a preset at a fork, as a JSON object."
+  "The parameters of a preset at a fork, as a `dict`."
 
 #define DOC_consensus_get_custody_groups \
   "The custody groups of a node ID of 32 bytes, most significant first."
@@ -873,7 +873,7 @@
   "The name of the active fork of Hoodi at a block, or no bytes when no fork is active."
 
 #define DOC_active_fork \
-  "The name of the active fork of a configured chain at a block, or no bytes when none is active."
+  "The name of the active fork of a configured chain at a block, or `None` when none is active."
 
 #define DOC_engine_new_payload \
   "The payload status of an `engine_newPayload` request, without the parent's state."

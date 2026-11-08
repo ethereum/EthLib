@@ -32,18 +32,17 @@ eth_consensus_get_execution_payload_envelope(
 
 extern lean_object*
 eth_consensus_preset(
-  lean_object* name
+  lean_object* args
 );
 
 extern lean_object*
 eth_consensus_config(
-  lean_object* name
+  lean_object* args
 );
 
 extern lean_object*
 eth_consensus_parameters(
-  lean_object* name,
-  lean_object* fork
+  lean_object* args
 );
 
 extern lean_object*
@@ -556,11 +555,7 @@ py_consensus_preset(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject* obj;
-  if (!PyArg_ParseTuple(args, "O", &obj)) return NULL;
-  lean_object* name = str_arg(obj, "name");
-  if (!name) return NULL;
-  return except_into_pybytes(eth_consensus_preset(name), CONSENSUS_ERROR);
+  return call_pyvalue_export(eth_consensus_preset, args, 1, CONSENSUS_ERROR);
 }
 
 PyObject*
@@ -568,11 +563,7 @@ py_consensus_config(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject* obj;
-  if (!PyArg_ParseTuple(args, "O", &obj)) return NULL;
-  lean_object* name = str_arg(obj, "name");
-  if (!name) return NULL;
-  return except_into_pybytes(eth_consensus_config(name), CONSENSUS_ERROR);
+  return call_pyvalue_export(eth_consensus_config, args, 1, CONSENSUS_ERROR);
 }
 
 PyObject*
@@ -580,17 +571,7 @@ py_consensus_parameters(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject* name_obj;
-  PyObject* fork_obj;
-  if (!PyArg_ParseTuple(args, "OO", &name_obj, &fork_obj)) return NULL;
-  lean_object* name = str_arg(name_obj, "preset");
-  if (!name) return NULL;
-  lean_object* fork = str_arg(fork_obj, "fork");
-  if (!fork) {
-    lean_dec(name);
-    return NULL;
-  }
-  return except_into_pybytes(eth_consensus_parameters(name, fork), CONSENSUS_ERROR);
+  return call_pyvalue_export(eth_consensus_parameters, args, 2, CONSENSUS_ERROR);
 }
 
 PyObject*
