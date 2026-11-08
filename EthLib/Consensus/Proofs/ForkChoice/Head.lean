@@ -25,9 +25,9 @@ The boost applies after a parent older than the previous slot, and after a paren
 
 The head has no child among the viable nodes, so the walk stops only at a leaf.
 
-The head descends from the justified block, at every fork.
+At every fork, the head descends from the justified block.
 
-From Gloas the walk from any known node reaches a descendant of that node.
+From Gloas the walk from any known node ends at a descendant of that node.
 
 A viable node with children has a viable child, so from Gloas the head is never a pending node.
 
@@ -567,7 +567,7 @@ theorem filterNodeTree_known {node : ForkChoiceNode} {nodes : List ForkChoiceNod
     simp [nodeRank, found, throw, throwThe, MonadExceptOf.throw] at below
 
 /-- Before Gloas, the head descends from the justified checkpoint block. -/
-theorem isAncestor_getHead (before : fork < .glamsterdam) {head : ForkChoiceNode}
+theorem isAncestor_getHead_of_lt_gloas (before : fork < .glamsterdam) {head : ForkChoiceNode}
     (found : store.getHead config = .ok head) :
     store.isAncestor head ⟨store.justifiedCheckpoint.root, .pending⟩ = .ok true := by
   have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
@@ -582,11 +582,11 @@ theorem isAncestor_getHead (before : fork < .glamsterdam) {head : ForkChoiceNode
     simp [isAncestor, block_ok_iff.mpr justifiedFound, walked, later, bind, Except.bind, pure,
       Except.pure]
 
-/-- From Gloas, the walk from a known node ends at a node that descends from it.
+/-- From Gloas, let the walk from a known node end at some node.
 
-From a pending start, the walk back to the slot of the start reaches a node of the same block.
+The ancestor of that end at the slot of the start has the block of the start.
 
-From an empty or full start, the walk back to the slot of the start reaches the start itself. -/
+When the start is empty or full, that ancestor is the start itself. -/
 theorem getAncestor_getHeadFrom_of_gloas (gloas : .glamsterdam ≤ fork)
     {nodes : List ForkChoiceNode} {start head : ForkChoiceNode}
     (walk : store.getHeadFrom config nodes start = .ok head)
@@ -657,10 +657,8 @@ theorem isAncestor_getHeadFrom_of_gloas (gloas : .glamsterdam ≤ fork)
     store.isAncestor head start = .ok true := by
   obtain ⟨ancestor, walked, rootEq, statusOk⟩ :=
     getAncestor_getHeadFrom_of_gloas gloas walk found
-  rcases statusOk with statusEq | pending
-  · simp [isAncestor, block_ok_iff.mpr found, walked, gloas, rootEq, statusEq, bind, Except.bind,
-      pure, Except.pure]
-  · simp [isAncestor, block_ok_iff.mpr found, walked, gloas, rootEq, pending, bind, Except.bind,
+  rcases statusOk with status | status <;>
+    simp [isAncestor, block_ok_iff.mpr found, walked, gloas, rootEq, status, bind, Except.bind,
       pure, Except.pure]
 
 /-- From Gloas, the head descends from the justified checkpoint block. -/
@@ -684,12 +682,12 @@ theorem isAncestor_getHead_of_gloas (gloas : .glamsterdam ≤ fork) {head : Fork
     · exact isAncestor_getHeadFrom_of_gloas gloas found justifiedFound
 
 /-- At every fork, the head descends from the justified checkpoint block. -/
-theorem isAncestor_getHead_all {head : ForkChoiceNode}
+theorem isAncestor_getHead {head : ForkChoiceNode}
     (found : store.getHead config = .ok head) :
     store.isAncestor head ⟨store.justifiedCheckpoint.root, .pending⟩ = .ok true := by
   by_cases gloas : .glamsterdam ≤ fork
   · exact isAncestor_getHead_of_gloas gloas found
-  · exact isAncestor_getHead (Nat.lt_of_not_le gloas) found
+  · exact isAncestor_getHead_of_lt_gloas (Nat.lt_of_not_le gloas) found
 
 /-- The head has no child among the viable nodes. -/
 theorem getHead_leaf {head : ForkChoiceNode} (found : store.getHead config = .ok head) :
