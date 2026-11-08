@@ -341,17 +341,41 @@ def pyExport {α β : Type} [FromPyItems α] [ToPy β] [FromPy β] [LawfulPy β]
   let a ← (FromPyItems.ofItems items).mapError fun message => (0, message)
   return toPy (← f a)
 
-/-- The digits of a number in base 16, which the C layer reads for a large `int`. -/
-@[export eth_pyvalue_nat_to_hex]
-def natToHex (n : Nat) : String := String.ofList (Nat.toDigits 16 n)
-
 /-- The value of a digit in base 16, in lower case. -/
 def hexDigit (c : Char) : Nat :=
   if c.isDigit then c.toNat - '0'.toNat else c.toNat - 'a'.toNat + 10
 
+/-- The last `m` digits of a number in base 16, with leading zeros.
+
+It splits the digits in two halves, so a large number costs a shift and a mask per level. -/
+def hexDigitsPadded (m n : Nat) : List Char :=
+  if m ≤ 1 then List.replicate m (Nat.digitChar (n % 16))
+  else
+    hexDigitsPadded (m - m / 2) (n >>> (4 * (m / 2))) ++
+      hexDigitsPadded (m / 2) (n &&& (2 ^ (4 * (m / 2)) - 1))
+termination_by m
+decreasing_by all_goals omega
+
+/-- The digits of a number in base 16, which the C layer reads for a large `int`.
+
+It writes one digit for each started group of four bits, so only zero starts with a zero. -/
+@[export eth_pyvalue_nat_to_hex]
+def natToHex (n : Nat) : String := String.ofList (hexDigitsPadded (n.log2 / 4 + 1) n)
+
+/-- The number that lower-case digits in base 16 write, most significant first.
+
+It splits the digits in two halves, so a large number costs a shift and an addition per level. -/
+def natOfHexDigits (digits : List Char) : Nat :=
+  if digits.length ≤ 1 then digits.foldl (fun n c => 16 * n + hexDigit c) 0
+  else
+    natOfHexDigits (digits.take (digits.length - digits.length / 2)) <<<
+        (4 * (digits.length / 2)) +
+      natOfHexDigits (digits.drop (digits.length - digits.length / 2))
+termination_by digits.length
+decreasing_by all_goals simp only [List.length_take, List.length_drop]; omega
+
 /-- The number that lower-case digits in base 16 write, for a large `int` from the C layer. -/
 @[export eth_pyvalue_nat_of_hex]
-def natOfHex (digits : String) : Nat :=
-  digits.foldl (fun n c => 16 * n + hexDigit c) 0
+def natOfHex (digits : String) : Nat := natOfHexDigits digits.toList
 
 end EthLib.Exports

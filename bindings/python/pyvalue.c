@@ -35,7 +35,7 @@ enum {
 
 /* The widest `int` that Python may pass, in bits.
  *
- * Lean reads the digits of a large `int` one by one, in time quadratic in their number.
+ * Lean reads and writes the digits of a large `int` by halves, in time about d log d for d digits.
  * The bound keeps that time short. */
 #define PV_MAX_INT_BITS 65536
 
