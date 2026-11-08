@@ -39,7 +39,8 @@ namespace EthLib.Cryptography.Xmss.Unforgeability
 
 open EthLib.Cryptography.Xmss
 open EthLib.Cryptography.Xmss.Constants
-open EthLib.Cryptography.HashSig (toList_data_append toList_data_packBytes toList_uintToBytes)
+open EthLib.Cryptography.HashSig (toList_data_append toList_data_packBytes toList_uintToBytes
+  ofFnInOrder_eq_sequenceFin)
 
 variable {m : Type → Type} [Monad m] [LawfulMonad m] [HasQuery XmssSecurity.HashSpec m]
 
@@ -69,37 +70,6 @@ theorem toList_packDigests_ofChains (f : XmssSecurity.ChainIndex → XmssSecurit
     _ = XmssSecurity.Concrete.leafPayload f := (flatMap_ofFn (XmssSecurity.bytesLE 16) f).symm
 
 /-! ## Computing in order -/
-
-omit [HasQuery XmssSecurity.HashSpec m] in
-/-- EthLib's vector computed in order is the model's function computed in order. -/
-theorem ofFnInOrder_eq_sequenceFin {α β : Type} :
-    ∀ (n : Nat) (c : Fin n → m α) (g : α → β),
-      ofFnInOrder n (fun i => g <$> c i)
-        = (fun f => Vector.ofFn fun i => g (f i)) <$> XmssSecurity.Concrete.sequenceFin c
-  | 0, c, g => by
-    simp only [ofFnInOrder, XmssSecurity.Concrete.sequenceFin, map_pure]
-    congr 1
-  | n + 1, c, g => by
-    simp only [ofFnInOrder, XmssSecurity.Concrete.sequenceFin, map_bind, bind_map_left, map_pure]
-    refine bind_congr fun head => ?_
-    rw [ofFnInOrder_eq_sequenceFin n (fun i => c i.succ) g]
-    simp only [bind_map_left]
-    refine bind_congr fun tail => ?_
-    congr 1
-    apply Vector.ext
-    intro i hi
-    -- Entry 0 is the head, entry `i + 1` is entry `i` of the tail.
-    cases i with
-    | zero => simp
-    | succ i => simp
-
-omit [HasQuery XmssSecurity.HashSpec m] in
-/-- A vector computed in order is the model's function computed in order, as a vector. -/
-theorem ofFnInOrder_eq_map_sequenceFin {α : Type} (n : Nat) (c : Fin n → m α) :
-    ofFnInOrder n c = (fun f => Vector.ofFn f) <$> XmssSecurity.Concrete.sequenceFin c := by
-  have h := ofFnInOrder_eq_sequenceFin n c id
-  simp only [id_map] at h
-  exact h
 
 omit [LawfulMonad m] [HasQuery XmssSecurity.HashSpec m] in
 /-- Vectors computed in order from equal computations are equal. -/
