@@ -323,7 +323,7 @@ That list has the root of the sidecar's list.
 
 Otherwise the search over the two climbs names two different 64-byte messages with one hash.
 
-This holds at Fulu and the BPO forks, for every preset. -/
+This holds at Fulu and the BPO forks; the full node builds the branch at both presets. -/
 theorem verifyDataColumnSidecarInclusionProof_body (fulu : .fusaka ≤ fork)
     (beforeGloas : fork < .glamsterdam) {sidecar : DataColumnSidecar preset fork}
     (valid : verifyDataColumnSidecarInclusionProof preset beforeGloas sidecar = true)

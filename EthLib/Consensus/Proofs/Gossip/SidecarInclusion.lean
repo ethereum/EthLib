@@ -4,7 +4,7 @@ public import EthLib.Consensus.Proofs.DataAvailability.Column
 public import EthLib.Consensus.Proofs.Gossip.Sidecar
 
 /-!
-# Proofs: what a valid sidecar proves about the block of its header
+# Proofs: the commitment roots that a valid sidecar binds to the block of its header
 
 A sidecar travels without its block, so its commitments come with a branch.
 
@@ -51,7 +51,7 @@ That commitment has the root of the sidecar's commitment.
 
 Otherwise the search over the two climbs names two different 64-byte messages with one hash.
 
-This holds at Deneb and Electra, for every preset. -/
+This holds at Deneb and Electra; the full node builds the branch at both presets. -/
 theorem validateBlobSidecar_accept_body {blobs : .dencun ≤ fork ∧ fork < .fusaka}
     {sidecar : BlobSidecar preset}
     (accepted : validateBlobSidecar config checks setup seen store blobs sidecar currentTimeMs
@@ -86,7 +86,7 @@ That list has the root of the sidecar's list.
 
 Otherwise the search over the two climbs names two different 64-byte messages with one hash.
 
-This holds at Fulu and the BPO forks, for every preset. -/
+This holds at Fulu and the BPO forks; the full node builds the branch at both presets. -/
 theorem validateDataColumnSidecar_accept_body {columns : .fusaka ≤ fork ∧ fork < .glamsterdam}
     {sidecar : DataColumnSidecar preset fork}
     (accepted : validateDataColumnSidecar config checks setup seen store columns sidecar

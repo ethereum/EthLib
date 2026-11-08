@@ -458,7 +458,7 @@ That commitment has the root of the sidecar's commitment.
 
 Otherwise the search over the two climbs names two different 64-byte messages with one hash.
 
-This holds from Deneb to the forks before Gloas, for every preset. -/
+This holds from Deneb to the forks before Gloas; the full node builds the branch at both presets. -/
 theorem verifyBlobSidecarInclusionProof_body (deneb : .dencun ≤ fork ∧ fork < .glamsterdam)
     {sidecar : BlobSidecar preset}
     (valid : verifyBlobSidecarInclusionProof preset fork sidecar = true)
