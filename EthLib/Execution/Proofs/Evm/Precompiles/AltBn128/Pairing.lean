@@ -72,10 +72,10 @@ theorem decodePair_eq_ok_iff (data : ByteArray) (index : Nat) (p : Point) (q : P
 
 /-- Each pair that decodes holds `a P1` and `b P2`, for some `a < q` and `b < q`. -/
 theorem exists_mulBits_generator_of_decodePair {data : ByteArray} {index : Nat} {p : Point}
-    {q : Point2} (h : decodePair data index = .ok (p, q)) :
+    {Q : Point2} (h : decodePair data index = .ok (p, Q)) :
     (∃ a < Fr.modulus, p = Point.mulBits 256 a Point.generator) ∧
-      ∃ b < Fr.modulus, q = Point2.mulBits 256 b Point2.generator := by
-  obtain ⟨hp, hq, hord⟩ := (decodePair_eq_ok_iff data index p q).mp h
+      ∃ b < Fr.modulus, Q = Point2.mulBits 256 b Point2.generator := by
+  obtain ⟨hp, hq, hord⟩ := (decodePair_eq_ok_iff data index p Q).mp h
   have hon := bytesToG2_isOnCurve hq
   exact ⟨Point.exists_eq_mulBits_generator (bytesToG1_isOnCurve hp),
     (Point2.mulBits_order_eq_infinity_iff_exists hon).mp

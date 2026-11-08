@@ -4,11 +4,14 @@ public import EthLib.Cryptography.AltBn128.Pairing
 public import EthLib.Cryptography.Proofs.AltBn128.Field
 public import Mathlib.Algebra.Field.Defs
 public import Mathlib.Tactic.LinearCombination
+public import Mathlib.SetTheory.Cardinal.Finite
 
 /-!
 # Proofs: `Fp2` of alt_bn128
 
 `Fp2` is `Fp[i] / (i^2 + 1)`, and it is a field with the operations of the specification.
+
+It has `p^2` elements.
 
 The norm `c0^2 + c1^2` of `c0 + c1 i` is zero only at zero.
 
@@ -175,3 +178,23 @@ theorem powBits_eq_pow (fuel : Nat) (a : Fp2) (e : Nat) (he : e < 2 ^ fuel) :
     split <;> [rw [← pow_succ']; skip] <;> congr 1 <;> omega
 
 end EthLib.Cryptography.AltBn128.Fp2
+
+namespace EthLib.Cryptography.AltBn128
+
+/-! ## Size -/
+
+/-- An element of `Fp2` is its two coefficients. -/
+def fp2Equiv : Fp2 ≃ Fp × Fp where
+  toFun a := (a.c0, a.c1)
+  invFun a := ⟨a.1, a.2⟩
+  left_inv _ := rfl
+  right_inv _ := rfl
+
+/-- `Fp2` is finite. -/
+noncomputable instance : Fintype Fp2 := Fintype.ofEquiv _ fp2Equiv.symm
+
+/-- `Fp2` has `p^2` elements. -/
+theorem card_fp2 : Fintype.card Fp2 = Fp.modulus ^ 2 := by
+  rw [Fintype.card_eq_nat_card, Nat.card_congr fp2Equiv, Nat.card_prod, Nat.card_fin, sq]
+
+end EthLib.Cryptography.AltBn128

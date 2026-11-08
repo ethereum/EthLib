@@ -8,7 +8,7 @@ public import Mathlib.Data.Fintype.Option
 
 [EIP-197][eip197] says that `G_2` is the only group of order `q` on the twist over `Fp2`.
 
-This file proves it: a point `Q` of the twist has `q Q = O` exactly when it is a multiple of `P2`.
+This file proves it, in a stronger form: `q Q = O` exactly when `Q` is a multiple of `P2`.
 
 The proof does not count the points of the twist.
 
@@ -16,7 +16,7 @@ A point is fixed by its `x` and a sign of its `y`, so the twist has at most `2 p
 
 The kernel checks a point of prime order `10069` on the twist, and `P2` has order `q`.
 
-So the number of points is a multiple of `10069 q`.
+`10069` is not `q`, so the number of points is a multiple of `10069 q`.
 
 If `q^2` divided it, then `10069 q^2` would too, but `10069 q^2 > 2 p^2 + 1`.
 
@@ -39,18 +39,9 @@ open WeierstrassCurve
 
 namespace Fp2
 
-/-- `Fp2` as the pairs of its two coefficients. -/
-def equivProd : Fp2 ≃ Fp × Fp where
-  toFun a := (a.c0, a.c1)
-  invFun x := ⟨x.1, x.2⟩
-  left_inv _ := rfl
-  right_inv _ := rfl
-
-instance : Finite Fp2 := Finite.of_equiv _ equivProd.symm
-
-theorem card_eq : Nat.card Fp2 = Fp.modulus * Fp.modulus := by
-  rw [Nat.card_congr equivProd, Nat.card_prod]
-  simp only [Nat.card_eq_fintype_card, Fintype.card_fin]
+/-- `Fp2` has `p` times `p` elements. -/
+theorem natCard_eq : Nat.card Fp2 = Fp.modulus * Fp.modulus := by
+  rw [Nat.card_eq_fintype_card, card_fp2, sq]
 
 /-- A sign of an element: the parity of `c0`, or of `c1` when `c0 = 0`. -/
 def sign (y : Fp2) : Bool :=
@@ -121,7 +112,7 @@ instance : Finite twist.Point := Finite.of_injective _ pointCode_injective
 /-- The twist over `Fp2` has at most `2 p^2 + 1` points. -/
 theorem card_point_le : Nat.card twist.Point ≤ 2 * (Fp.modulus * Fp.modulus) + 1 := by
   have := Nat.card_le_card_of_injective _ pointCode_injective
-  rwa [Finite.card_option, Nat.card_prod, Fp2.card_eq, Nat.card_eq_fintype_card (α := Bool),
+  rwa [Finite.card_option, Nat.card_prod, Fp2.natCard_eq, Nat.card_eq_fintype_card (α := Bool),
     Fintype.card_bool, mul_comm] at this
 
 /-! ## A point of order `10069` -/
@@ -140,11 +131,11 @@ theorem isOnCurve_torsionWitness : torsionWitness.isOnCurve = true := by decide 
 
 theorem torsionWitness_ne_infinity : torsionWitness ≠ infinity := by decide
 
-/-- `10069 R = O`, as the kernel computes it by double and add. -/
+/-- `10069` times the witness is `O`, as the kernel computes it by double and add. -/
 theorem mulBits_torsionWitness : mulBits 14 10069 torsionWitness = infinity := by
   decide +kernel
 
-theorem prime_10069 : Nat.Prime 10069 := by norm_num
+private theorem prime_10069 : Nat.Prime 10069 := by norm_num
 
 /-- The witness has order `10069`. -/
 theorem addOrderOf_torsionWitness : addOrderOf (toPoint torsionWitness) = 10069 := by
@@ -211,6 +202,18 @@ theorem torsion_eq_zmultiples_generator : torsion = AddSubgroup.zmultiples (toPo
 theorem nsmul_order_eq_zero_iff (X : twist.Point) :
     Fr.modulus • X = 0 ↔ X ∈ AddSubgroup.zmultiples (toPoint generator) := by
   rw [← mem_torsion, torsion_eq_zmultiples_generator]
+
+/-- Every subgroup of the twist with `q` elements is the group of the multiples of `P2`. -/
+theorem eq_zmultiples_generator_of_card_eq (H : AddSubgroup twist.Point)
+    (hH : Nat.card H = Fr.modulus) : H = AddSubgroup.zmultiples (toPoint generator) := by
+  -- Each element of `H` is killed by the order of `H`, so `H` lies in the torsion.
+  have hle : H ≤ torsion := fun X hX => mem_torsion.mpr (by
+    have h := card_nsmul_eq_zero' (G := H) (x := ⟨X, hX⟩)
+    rw [hH] at h
+    simpa only [AddSubgroup.coe_nsmul, AddSubgroup.coe_zero] using congrArg Subtype.val h)
+  have hcard : Nat.card torsion = Nat.card H := by
+    rw [hH, torsion_eq_zmultiples_generator, Nat.card_zmultiples, addOrderOf_generator]
+  exact (AddSubgroup.eq_of_le_of_card_ge hle hcard.le).trans torsion_eq_zmultiples_generator
 
 /-- A point on the twist passes the subgroup check of ECPAIRING exactly when it is `k P2`, `k < q`.
 
