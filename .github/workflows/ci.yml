@@ -109,8 +109,10 @@ jobs:
       - name: binding contract
         run: lake exe gen-bindings --check
 
-      # The build pipeline regressions below run in this Python environment.
+      # The build pipeline regressions below run in this Python environment,
+      # so it syncs even when the contract check above fails.
       - name: bindings
+        if: ${{ !cancelled() }}
         run: bash scripts/build_timing_report.sh run bindings_build "$BUILD_TIMING_RESULTS" -- uv sync --frozen --extra test
 
       # The steps below run even after a failed step above, so every result is reported.
