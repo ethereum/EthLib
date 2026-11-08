@@ -186,6 +186,34 @@ theorem two_pow_log2_add_mod {gindex : Nat} (named : 1 ≤ gindex) :
   rw [Nat.mod_eq_sub_mod lower, Nat.mod_eq_of_lt (by omega)]
   omega
 
+/-- Two valid branches at the depth and index of one generalized index open one leaf.
+
+The generalized index is at least two, and the depth is its base-2 logarithm.
+
+Otherwise the search over the two climbs names two different 64-byte messages with one hash. -/
+theorem isValidMerkleBranch_findBranchCollision {leaf other root : Vector UInt8 32}
+    {branch otherBranch : List (Vector UInt8 32)} {gindex depth : Nat} (named : 2 ≤ gindex)
+    (deep : Nat.log2 gindex = depth)
+    (first : isValidMerkleBranch leaf branch depth (gindex % 2 ^ depth) root = true)
+    (second : isValidMerkleBranch other otherBranch depth (gindex % 2 ^ depth) root = true) :
+    leaf = other ∨ ∃ a b,
+      findBranchCollision gindex 0 leaf.toArray other.toArray (branch.map Vector.toArray)
+          (otherBranch.map Vector.toArray) = some (a, b) ∧
+      a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
+      Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
+        Cryptography.Hash.Sha256.hash (ByteArray.mk b) := by
+  subst deep
+  have reduced := Nat.mod_lt gindex (Nat.two_pow_pos (Nat.log2 gindex))
+  have firstVerified :=
+    (isValidMerkleBranch_iff_verifyMerkleProof (log2_pos named) reduced).mp first
+  have secondVerified :=
+    (isValidMerkleBranch_iff_verifyMerkleProof (log2_pos named) reduced).mp second
+  rw [two_pow_log2_add_mod (by omega)] at firstVerified secondVerified
+  rcases verifyMerkleProof_binding firstVerified secondVerified with same | collision
+  · exact .inl (Vector.toArray_inj.mp same)
+  · obtain ⟨a, b, found, -, -, rest⟩ := collision
+    exact .inr ⟨a, b, found, rest⟩
+
 /--
 Take a generalized index of at least two.
 

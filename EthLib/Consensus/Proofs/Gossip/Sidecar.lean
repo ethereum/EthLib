@@ -20,6 +20,10 @@ A valid sidecar records its key, and the same sidecar is then ignored.
 
 A sidecar with another index keeps the outcome of the seen check.
 
+Before Gloas, a valid sidecar was unseen and has an index in range, whatever the store and clock.
+
+Its branch reaches the body root of its header, and its KZG proofs match its commitments.
+
 A partial column sidecar is checked in three parts: its counts, its header, then its cells.
 
 The counts read nothing but the sidecar, so they decide first whatever the store holds.
@@ -171,6 +175,37 @@ theorem validateSidecarHeader_eq
     apply_ite (Except.ok (ε := ForkChoiceError))]
   cases checked <;> simp only [ValidationResult.andThenM, ValidationResult.andThen, pure,
     Except.pure]
+
+/-- A check that may run fallible next checks accepts exactly when it and the next checks do. -/
+theorem andThenM_eq_ok_accept {ε : Type} {first : ValidationResult}
+    {next : Unit → Except ε ValidationResult} :
+    first.andThenM next = .ok accept ↔ first = accept ∧ next () = .ok accept := by
+  cases first <;> simp [andThenM, pure, Except.pure]
+
+/-- When the header checks accept, the proofs of the data of the sidecar accept too.
+
+This holds whatever the parent, the store and the clock. -/
+theorem validateSidecarHeader_accept {proofs : Unit → Except ForkChoiceError ValidationResult}
+    (accepted : validateSidecarHeader config checks store noun signedNoun signed currentTimeMs
+      proofs = .ok accept) :
+    proofs () = .ok accept := by
+  unfold validateSidecarHeader at accepted
+  simp only [bind_ok_iff, andThenM_eq_ok_accept] at accepted
+  obtain ⟨_, -, -, _, -, -, rest⟩ := accepted
+  -- The parent, its state and the proposer must be found, then each check passes.
+  split at rest
+  · simp [pure, Except.pure] at rest
+  split at rest
+  · simp [pure, Except.pure] at rest
+  simp only [bind_ok_iff] at rest
+  obtain ⟨_, -, rest⟩ := rest
+  split at rest
+  · simp [pure, Except.pure] at rest
+  simp only [bind_ok_iff, andThenM_eq_ok_accept] at rest
+  obtain ⟨_, -, -, -, _, -, -, verdict, proved, rest⟩ := rest
+  cases verdict with
+  | accept => exact proved
+  | _ => simp [pure, Except.pure] at rest
 
 end Header
 
@@ -382,6 +417,32 @@ theorem validateBlobSidecar_rejected
   generalize ValidationResult.andThen _ _ = outcome at accepted ignored ⊢
   cases outcome <;> simp [UInt64.not_le] at accepted ignored ⊢ <;> grind
 
+/-- A valid blob sidecar was unseen, names a blob within the limit, and proves its blob.
+
+Its branch climbs to the body root of its header, and its KZG proof matches its commitment.
+
+This holds whatever the store, the clock and the subnet. -/
+theorem validateBlobSidecar_accept
+    (accepted : validateBlobSidecar config checks setup seen store blobs sidecar currentTimeMs
+      subnetId = .ok accept) :
+    blobSidecarKey sidecar ∉ seen.blobSidecarTuples ∧
+      sidecar.index < blobSidecarLimit config fork ∧
+      verifyBlobSidecarInclusionProof preset fork sidecar = true ∧
+      verifyBlobKzgProof setup sidecar.blob sidecar.kzgCommitment sidecar.kzgProof = .ok true := by
+  unfold validateBlobSidecar at accepted
+  simp only [bind_ok_iff, andThenM_eq_ok_accept, ignoreUnless_eq_accept,
+    rejectUnless_eq_accept] at accepted
+  obtain ⟨unseen, inside, _, -, -, header⟩ := accepted
+  have proved := validateSidecarHeader_accept header
+  unfold blobSidecarProofs at proved
+  simp only [bind_ok_iff, andThenM_eq_ok_accept, rejectUnless_eq_accept] at proved
+  obtain ⟨included, valid, kzg, final⟩ := proved
+  simp [pure, Except.pure] at final
+  subst final
+  refine ⟨by simpa using unseen, by simpa using inside, included, ?_⟩
+  cases checked : verifyBlobKzgProof setup sidecar.blob sidecar.kzgCommitment sidecar.kzgProof <;>
+    simp_all [Except.mapError]
+
 end Blob
 
 /-! ## Column sidecars, from Fulu before Gloas -/
@@ -589,6 +650,41 @@ theorem validateDataColumnSidecar_rejected
     signature checkpoint kzg proposerOf] at accepted ignored ⊢
   generalize ValidationResult.andThen _ _ = outcome at accepted ignored ⊢
   cases outcome <;> simp [UInt64.not_le] at accepted ignored ⊢ <;> grind
+
+/-- A valid column sidecar was unseen, has a valid shape, and proves its column.
+
+Its branch climbs to the body root of its header, and its KZG proofs match its commitments.
+
+This holds whatever the store, the clock and the subnet. -/
+theorem validateDataColumnSidecar_accept
+    (accepted : validateDataColumnSidecar config checks setup seen store columns sidecar
+      currentTimeMs subnetId = .ok accept) :
+    dataColumnSidecarKey columns.2 sidecar ∉ seen.dataColumnSidecarTuples ∧
+      verifyDataColumnSidecar preset config sidecar (noBidBeforeGloas columns.2) = true ∧
+      verifyDataColumnSidecarInclusionProof preset columns.2 sidecar = true ∧
+      verifyDataColumnSidecarKzgProofs setup sidecar (noBidBeforeGloas columns.2) = .ok true := by
+  unfold validateDataColumnSidecar at accepted
+  simp only [bind_ok_iff, andThenM_eq_ok_accept, ignoreUnless_eq_accept,
+    rejectUnless_eq_accept] at accepted
+  obtain ⟨unseen, shape, _, -, -, header⟩ := accepted
+  have proved := validateSidecarHeader_accept header
+  unfold dataColumnSidecarProofs at proved
+  simp only [bind_ok_iff, andThenM_eq_ok_accept, rejectUnless_eq_accept] at proved
+  obtain ⟨included, valid, kzg, final⟩ := proved
+  simp [pure, Except.pure] at final
+  subst final
+  refine ⟨by simpa using unseen, shape, included, ?_⟩
+  cases checked : verifyDataColumnSidecarKzgProofs setup sidecar (noBidBeforeGloas columns.2) <;>
+    simp_all [Except.mapError]
+
+/-- A valid column sidecar names a column of the extended matrix. -/
+theorem validateDataColumnSidecar_index_lt
+    (accepted : validateDataColumnSidecar config checks setup seen store columns sidecar
+      currentTimeMs subnetId = .ok accept) :
+    sidecar.index < preset.NUMBER_OF_COLUMNS := by
+  have shape := (validateDataColumnSidecar_accept accepted).2.1
+  simp only [verifyDataColumnSidecar, Bool.and_eq_true, decide_eq_true_eq] at shape
+  exact shape.1.1.1.1
 
 end Column
 
