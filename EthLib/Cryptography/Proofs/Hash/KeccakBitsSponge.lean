@@ -15,6 +15,8 @@ This file proves that the two sponges agree in that order for one squeezed block
 
 The proof covers every positive byte rate up to 136 that is a multiple of 8.
 
+The bound 136 holds because the lane implementation absorbs only the first 17 lanes.
+
 Keccak-256 and Keccak-512 therefore equal their bit models on every message.
 -/
 
@@ -88,31 +90,26 @@ theorem messageBits_append (a b : ByteArray) :
 /-! ## Padding -/
 
 /-- pad10*1 of the model at `rateBits` bits has its length from FIPS 202 Algorithm 9. -/
-theorem paddingAt_length (rateBits length : Nat) :
-    (paddingAt rateBits length).length =
+theorem padding_length (rateBits length : Nat) :
+    (padding rateBits length).length =
       ((rateBits - ((length + 2) % rateBits)) % rateBits) + 2 := by
-  simp only [paddingAt, List.length_cons, List.length_append, List.length_replicate,
+  simp only [padding, List.length_cons, List.length_append, List.length_replicate,
     List.length_nil]
 
-/-- pad10*1 of the model has its length from FIPS 202 Algorithm 9. -/
-theorem padding_length (length : Nat) :
-    (padding length).length = ((1088 - ((length + 2) % 1088)) % 1088) + 2 :=
-  paddingAt_length 1088 length
-
 /-- A padding bit at `rateBits` bits is one exactly at the first and at the last position. -/
-theorem paddingAt_get (rateBits length i : Nat) (h : i < (paddingAt rateBits length).length) :
-    (paddingAt rateBits length)[i] =
-      (decide (i = 0) || decide (i + 1 = (paddingAt rateBits length).length)) := by
+theorem padding_get (rateBits length i : Nat) (h : i < (padding rateBits length).length) :
+    (padding rateBits length)[i] =
+      (decide (i = 0) || decide (i + 1 = (padding rateBits length).length)) := by
   cases i with
-  | zero => simp [paddingAt]
+  | zero => simp [padding]
   | succ j =>
     let n := (rateBits - ((length + 2) % rateBits)) % rateBits
     have bound : j < n + 1 := by
-      simp only [paddingAt_length] at h
+      simp only [padding_length] at h
       dsimp [n]
       omega
-    simp only [paddingAt_length]
-    unfold paddingAt
+    simp only [padding_length]
+    unfold padding
     change (List.replicate n false ++ [true])[j]'(by simp; omega) =
       (decide (j + 1 = 0) || decide (j + 1 + 1 = n + 2))
     by_cases hj : j < n
@@ -121,11 +118,6 @@ theorem paddingAt_get (rateBits length i : Nat) (h : i < (paddingAt rateBits len
     · have eq : j = n := by omega
       subst j
       simp
-
-/-- A padding bit is one exactly at the first and at the last position. -/
-theorem padding_get (length i : Nat) (h : i < (padding length).length) :
-    (padding length)[i] = (decide (i = 0) || decide (i + 1 = (padding length).length)) :=
-  paddingAt_get 1088 length i h
 
 /-- Bit `i` of the padding mask is bit 0 of the first flag, or bit 7 of the last flag. -/
 private theorem maskBits : ∀ (first last : Bool) (i : Fin 8),
@@ -144,11 +136,11 @@ theorem _root_.EthLib.Cryptography.Hash.Keccak.paddingByte_testBit (rate len pos
   simpa [Keccak.paddingByte, Bool.and_eq_true] using hb
 
 /-- The byte padding at `rate` bytes spells the bits of pad10*1 at `8 * rate` bits. -/
-theorem paddingAtBits_eq {rate : Nat} (hr : 0 < rate) (len : Nat) :
-    messageBits (Keccak.padding rate len) = paddingAt (8 * rate) (8 * len) := by
+theorem paddingBits_eq {rate : Nat} (hr : 0 < rate) (len : Nat) :
+    messageBits (Keccak.padding rate len) = padding (8 * rate) (8 * len) := by
   have hl : (messageBits (Keccak.padding rate len)).length =
-      (paddingAt (8 * rate) (8 * len)).length := by
-    rw [messageBits_length, Keccak.size_padding, paddingAt_length]
+      (padding (8 * rate) (8 * len)).length := by
+    rw [messageBits_length, Keccak.size_padding, padding_length]
     have hrem : len % rate < rate := Nat.mod_lt len hr
     have hmod : (8 * len + 2) % (8 * rate) = 8 * (len % rate) + 2 := by
       have hd := Nat.div_add_mod len rate
@@ -165,7 +157,7 @@ theorem paddingAtBits_eq {rate : Nat} (hr : 0 < rate) (len : Nat) :
   apply List.ext_getElem hl
   intro i hi hj
   have hb : i < 8 * (Keccak.padding rate len).size := by simpa [messageBits_length] using hi
-  rw [messageBits_get _ i hb, paddingAt_get _ _ i hj]
+  rw [messageBits_get _ i hb, padding_get _ _ i hj]
   have bitBound : i % 8 < 8 := Nat.mod_lt _ (by decide)
   have iByte : i / 8 < rate - len % rate := by
     rw [Keccak.size_padding] at hb
@@ -175,38 +167,24 @@ theorem paddingAtBits_eq {rate : Nat} (hr : 0 < rate) (len : Nat) :
       exact iByte) = Keccak.paddingByte rate len (i / 8) := by
     simp [Keccak.padding_data]
   rw [byteEq, Keccak.paddingByte_testBit _ _ _ _ bitBound]
-  have plen : (paddingAt (8 * rate) (8 * len)).length = 8 * (rate - len % rate) := by
+  have plen : (padding (8 * rate) (8 * len)).length = 8 * (rate - len % rate) := by
     rw [← hl, messageBits_length, Keccak.size_padding]
   -- The first padding bit is bit 0 of byte 0, and the last is bit 7 of the last byte.
   have first : (i / 8 = 0 ∧ i % 8 = 0) ↔ i = 0 := by omega
   have last : (i / 8 + 1 = rate - len % rate ∧ i % 8 = 7) ↔
-      i + 1 = (paddingAt (8 * rate) (8 * len)).length := by omega
+      i + 1 = (padding (8 * rate) (8 * len)).length := by omega
   simp only [first, last]
 
-/-- The byte padding at the rate of 136 bytes spells the bits of pad10*1 at 1088 bits. -/
-theorem paddingBits_eq (len : Nat) :
-    messageBits (Keccak.padding 136 len) = padding (8 * len) := by
-  simpa only [padding] using paddingAtBits_eq (rate := 136) (by decide) len
-
 /-- The bits of a byte string padded at `rate` bytes are the padded bits of the model. -/
-theorem paddedAtBits_eq {rate : Nat} (hr : 0 < rate) (msg : ByteArray) :
-    messageBits (Keccak.pad rate msg) = paddedAt (8 * rate) msg := by
-  simp only [Keccak.pad, messageBits_append, paddedAt, messageBits_length, paddingAtBits_eq hr]
+theorem paddedBits_eq {rate : Nat} (hr : 0 < rate) (msg : ByteArray) :
+    messageBits (Keccak.pad rate msg) = padded (8 * rate) msg := by
+  simp only [Keccak.pad, messageBits_append, padded, messageBits_length, paddingBits_eq hr]
 
-/-- The bits of the padded byte string are the padded bits of the model. -/
-theorem paddedBits_eq (msg : ByteArray) : messageBits (Keccak.pad 136 msg) = padded msg := by
-  simpa only [padded] using paddedAtBits_eq (rate := 136) (by decide) msg
-
-/-- The model and the lane implementation cut a message into the same number of blocks. -/
-theorem paddedAt_blockCount_eq {rate : Nat} (hr : 0 < rate) (msg : ByteArray) :
-    (paddedAt (8 * rate) msg).length / (8 * rate) = Keccak.blockCount rate msg.size := by
-  rw [← paddedAtBits_eq hr, messageBits_length, Keccak.size_pad hr, ← Nat.mul_assoc]
+/-- At a rate of `rate` bytes, the model and the lane implementation cut a message alike. -/
+theorem padded_blockCount_eq {rate : Nat} (hr : 0 < rate) (msg : ByteArray) :
+    (padded (8 * rate) msg).length / (8 * rate) = Keccak.blockCount rate msg.size := by
+  rw [← paddedBits_eq hr, messageBits_length, Keccak.size_pad hr, ← Nat.mul_assoc]
   exact Nat.mul_div_right (Keccak.blockCount rate msg.size) (by omega)
-
-/-- The model and the lane implementation cut a Keccak-256 message into the same block count. -/
-theorem padded_blockCount_eq (msg : ByteArray) :
-    (padded msg).length / 1088 = Keccak.blockCount 136 msg.size := by
-  simpa only [padded] using paddedAt_blockCount_eq (rate := 136) (by decide) msg
 
 /-! ## Absorbing -/
 
@@ -274,49 +252,28 @@ theorem _root_.EthLib.Cryptography.Hash.Keccak.Internal.laneAt_testBit (bytes : 
   -- Byte 0 holds bit `i` itself, since `i < 8`.
   rw [Nat.mod_eq_of_lt low]
 
-/-- The bits of the block of `rate` bytes from byte `start`, as a `8 * rate`-bit block. -/
-def blockBitsAt (rate : Nat) (bytes : ByteArray) (start : Nat) : BlockOf (8 * rate) :=
+/-- The bits of the block of `rate` bytes from byte `start`, as an `8 * rate`-bit block. -/
+def blockBits (rate : Nat) (bytes : ByteArray) (start : Nat) : Block (8 * rate) :=
   Vector.ofFn fun i => (EthLib.Base.byteAt bytes (start + i.val / 8)).toNat.testBit (i.val % 8)
 
-/-- The bits of the block of 136 bytes from byte `start`, as a block of the model. -/
-def blockBits (bytes : ByteArray) (start : Nat) : Block := blockBitsAt 136 bytes start
-
-/-- Lane `(x, y)` after absorbing at most 136 bytes is XORed with block lane `x + 5 * y`. -/
-theorem _root_.EthLib.Cryptography.Hash.Keccak.Internal.absorbBlock_lane_le {rate : Nat}
-    (hr : rate ≤ 136) (a : Keccak.State) (bytes : ByteArray) (start : Nat) (x y : Fin 5) :
+/-- After absorbing at most 136 bytes, lane `(x, y)` is XORed with block lane `x + 5 * y`. -/
+theorem _root_.EthLib.Cryptography.Hash.Keccak.Internal.absorbBlock_lane {rate : Nat}
+    (hle : rate ≤ 136) (a : Keccak.State) (bytes : ByteArray) (start : Nat) (x y : Fin 5) :
     (Keccak.Internal.absorbBlock rate a bytes start).lane x y =
       a.lane x y ^^^ Keccak.Internal.blockLane rate bytes start (x.val + 5 * y.val) := by
-  have z17 : Keccak.Internal.blockLane rate bytes start 17 = 0 := by
-    unfold Keccak.Internal.blockLane; exact ite_eq_right (by omega)
-  have z18 : Keccak.Internal.blockLane rate bytes start 18 = 0 := by
-    unfold Keccak.Internal.blockLane; exact ite_eq_right (by omega)
-  have z19 : Keccak.Internal.blockLane rate bytes start 19 = 0 := by
-    unfold Keccak.Internal.blockLane; exact ite_eq_right (by omega)
-  have z20 : Keccak.Internal.blockLane rate bytes start 20 = 0 := by
-    unfold Keccak.Internal.blockLane; exact ite_eq_right (by omega)
-  have z21 : Keccak.Internal.blockLane rate bytes start 21 = 0 := by
-    unfold Keccak.Internal.blockLane; exact ite_eq_right (by omega)
-  have z22 : Keccak.Internal.blockLane rate bytes start 22 = 0 := by
-    unfold Keccak.Internal.blockLane; exact ite_eq_right (by omega)
-  have z23 : Keccak.Internal.blockLane rate bytes start 23 = 0 := by
-    unfold Keccak.Internal.blockLane; exact ite_eq_right (by omega)
-  have z24 : Keccak.Internal.blockLane rate bytes start 24 = 0 := by
-    unfold Keccak.Internal.blockLane; exact ite_eq_right (by omega)
+  -- Lanes 17 to 24 lie in the capacity, so their block lanes are zero.
+  have zero (k : Nat) (hk : 17 ≤ k) : Keccak.Internal.blockLane rate bytes start k = 0 :=
+    ite_eq_right (by omega)
   fin_cases x <;> fin_cases y <;>
-    simp [Keccak.Internal.absorbBlock, Keccak.State.lane, z17, z18, z19, z20, z21, z22, z23, z24]
-
-/-- Lane `(x, y)` after absorbing a block is the lane XOR block lane `x + 5 * y`. -/
-theorem _root_.EthLib.Cryptography.Hash.Keccak.Internal.absorbBlock_lane (a : Keccak.State)
-    (bytes : ByteArray) (start : Nat) (x y : Fin 5) :
-    (Keccak.Internal.absorbBlock 136 a bytes start).lane x y =
-      a.lane x y ^^^ Keccak.Internal.blockLane 136 bytes start (x.val + 5 * y.val) :=
-  Keccak.Internal.absorbBlock_lane_le (by decide) a bytes start x y
+    simp [Keccak.Internal.absorbBlock, Keccak.State.lane, zero 17 (by omega), zero 18 (by omega),
+      zero 19 (by omega), zero 20 (by omega), zero 21 (by omega), zero 22 (by omega),
+      zero 23 (by omega), zero 24 (by omega)]
 
 /-- Absorbing a `rate`-byte block, for `8 ∣ rate` and `rate ≤ 136`, equals absorbing its bits. -/
-theorem absorbBlockAt_ofLanes {rate : Nat} (hlanes : 8 ∣ rate) (hr : rate ≤ 136)
+theorem absorbBlock_ofLanes {rate : Nat} (hlanes : 8 ∣ rate) (hle : rate ≤ 136)
     (a : Keccak.State) (bytes : ByteArray) (start : Nat) :
     ofLanes (Keccak.Internal.absorbBlock rate a bytes start) =
-      absorbAt (ofLanes a) (blockBitsAt rate bytes start) := by
+      absorb (ofLanes a) (blockBits rate bytes start) := by
   obtain ⟨m, rfl⟩ := hlanes
   funext x y z
   have hz := z.isLt
@@ -325,14 +282,14 @@ theorem absorbBlockAt_ofLanes {rate : Nat} (hlanes : 8 ∣ rate) (hr : rate ≤ 
     have := y.isLt
     omega
   have address : index x y z = 64 * (x.val + 5 * y.val) + z.val := rfl
-  simp only [ofLanes, Keccak.Internal.absorbBlock_lane_le hr, UInt64.toBitVec_xor,
-    BitVec.getLsbD_xor, absorbAt, Keccak.Internal.blockLane]
+  simp only [ofLanes, Keccak.Internal.absorbBlock_lane hle, UInt64.toBitVec_xor,
+    BitVec.getLsbD_xor, absorb, Keccak.Internal.blockLane]
   congr 1
   by_cases hrate : x.val + 5 * y.val < m
   -- A rate lane reads 8 bytes of the block.
   · have inside : index x y z < 8 * (8 * m) := by omega
     simp only [show 8 * (x.val + 5 * y.val) < 8 * m by omega, ↓reduceIte, dite_eq_left inside,
-      Keccak.Internal.laneAt_testBit _ _ _ hz, blockBitsAt, Vector.getElem_ofFn]
+      Keccak.Internal.laneAt_testBit _ _ _ hz, blockBits, Vector.getElem_ofFn]
     have byte : start + 8 * (x.val + 5 * y.val) + z.val / 8 = start + index x y z / 8 := by
       omega
     have bit : z.val % 8 = index x y z % 8 := by omega
@@ -343,44 +300,29 @@ theorem absorbBlockAt_ofLanes {rate : Nat} (hlanes : 8 ∣ rate) (hr : rate ≤ 
       dite_eq_right outside]
     simp
 
-/-- Absorbing a block of 136 bytes is absorbing its bits in the model. -/
-theorem absorbBlock_ofLanes (a : Keccak.State) (bytes : ByteArray) (start : Nat) :
-    ofLanes (Keccak.Internal.absorbBlock 136 a bytes start) =
-      absorb (ofLanes a) (blockBits bytes start) := by
-  simpa only [absorb, blockBits] using
-    absorbBlockAt_ofLanes (rate := 136) ⟨17, rfl⟩ (by decide) a bytes start
-
 /-- Absorbing `n` blocks of `rate` bytes from byte `start` is absorbing their bits in order. -/
-theorem absorbBlocksAt_ofLanes {rate : Nat} (hlanes : 8 ∣ rate) (hr : rate ≤ 136)
+theorem absorbBlocks_ofLanes {rate : Nat} (hlanes : 8 ∣ rate) (hle : rate ≤ 136)
     (bytes : ByteArray) (n start : Nat) (a : Keccak.State) :
     ofLanes (Keccak.Internal.absorbBlocks Keccak.keccakF rate bytes n start a) =
       (List.range n).foldl
-        (fun s j => permutation (absorbAt s (blockBitsAt rate bytes (start + rate * j))))
+        (fun s j => permutation (absorb s (blockBits rate bytes (start + rate * j))))
         (ofLanes a) := by
   induction n generalizing start a with
   | zero => rfl
   | succ n ih =>
-    rw [Keccak.Internal.absorbBlocks, ih, permutation_ofLanes, absorbBlockAt_ofLanes hlanes hr,
+    rw [Keccak.Internal.absorbBlocks, ih, permutation_ofLanes, absorbBlock_ofLanes hlanes hle,
       List.range_succ_eq_map, List.foldl_cons, List.foldl_map]
     simp only [Nat.mul_zero, Nat.add_zero, Nat.succ_eq_add_one, Nat.mul_add, Nat.mul_one,
       Nat.add_assoc, Nat.add_comm rate]
 
-/-- Absorbing `n` blocks from byte `start` is absorbing their bits in the model, in order. -/
-theorem absorbBlocks_ofLanes (bytes : ByteArray) (n start : Nat) (a : Keccak.State) :
-    ofLanes (Keccak.Internal.absorbBlocks Keccak.keccakF 136 bytes n start a) =
-      (List.range n).foldl
-        (fun s j => permutation (absorb s (blockBits bytes (start + 136 * j)))) (ofLanes a) := by
-  simpa only [absorb, blockBits] using
-    absorbBlocksAt_ofLanes (rate := 136) ⟨17, rfl⟩ (by decide) bytes n start a
-
 /-- Block `i` of the bits padded at `8 * rate` bits is the bits of block `i` of the padded bytes. -/
-theorem paddedBlockAt_eq {rate : Nat} (hr : 0 < rate) (msg : ByteArray)
-    (i : Fin ((paddedAt (8 * rate) msg).length / (8 * rate))) :
-    paddedBlockAt (Nat.mul_pos (by decide) hr) msg i =
-      blockBitsAt rate (Keccak.pad rate msg) (rate * i.val) := by
+theorem paddedBlock_eq {rate : Nat} (hr : 0 < rate) (msg : ByteArray)
+    (i : Fin ((padded (8 * rate) msg).length / (8 * rate))) :
+    paddedBlock (Nat.mul_pos (by decide) hr) msg i =
+      blockBits rate (Keccak.pad rate msg) (rate * i.val) := by
   apply Vector.ext
   intro j hj
-  have count := paddedAt_blockCount_eq hr msg
+  have count := padded_blockCount_eq hr msg
   have hi := i.isLt
   have size := Keccak.size_pad hr msg
   have hjByte : j / 8 < rate := by omega
@@ -395,43 +337,33 @@ theorem paddedBlockAt_eq {rate : Nat} (hr : 0 < rate) (msg : ByteArray)
       Nat.mul_le_mul_left 8 inside
     omega
   have bit := messageBits_get (Keccak.pad rate msg) (8 * rate * i.val + j) bitBound
-  simp only [paddedAtBits_eq hr] at bit
+  simp only [paddedBits_eq hr] at bit
   have byteIndex : (8 * rate * i.val + j) / 8 = rate * i.val + j / 8 := by
     rw [heq, Nat.add_mul_div_left _ _ (by decide), Nat.add_comm]
   have bitIndex : (8 * rate * i.val + j) % 8 = j % 8 := by
     rw [heq, Nat.add_mul_mod_self_left]
   simp only [byteIndex, bitIndex] at bit
-  simp only [paddedBlockAt, blockBitsAt, Vector.getElem_ofFn, EthLib.Base.byteAt,
+  simp only [paddedBlock, blockBits, Vector.getElem_ofFn, EthLib.Base.byteAt,
     dite_eq_left inside, ByteArray.getElem_eq_getElem_data]
   exact bit
 
-/-- Block `i` of the padded bits is the bits of block `i` of the padded bytes. -/
-theorem paddedBlock_eq (msg : ByteArray) (i : Fin ((padded msg).length / 1088)) :
-    paddedBlock msg i = blockBits (Keccak.pad 136 msg) (136 * i.val) := by
-  simpa only [paddedBlock, blockBits] using paddedBlockAt_eq (rate := 136) (by decide) msg i
-
 /-- The lane sponge at `rate` bytes absorbs every message to the state of the bit model. -/
-theorem absorbAllAt_eq {rate : Nat} (hr : 0 < rate) (hlanes : 8 ∣ rate) (hle : rate ≤ 136)
+theorem absorbAll_eq {rate : Nat} (hr : 0 < rate) (hlanes : 8 ∣ rate) (hle : rate ≤ 136)
     (msg : ByteArray) :
     ofLanes (Keccak.spongeAbsorb Keccak.keccakF rate msg) =
-      absorbAllAt (rateBits := 8 * rate) (Nat.mul_pos (by decide) hr) msg := by
+      absorbAll (rateBits := 8 * rate) (Nat.mul_pos (by decide) hr) msg := by
   have zero : ofLanes Keccak.State.zero = (fun _ _ _ => false) := by
     funext x y z
     fin_cases x <;> fin_cases y <;> simp [ofLanes, Keccak.State.zero, Keccak.State.lane]
-  have values : (List.finRange ((paddedAt (8 * rate) msg).length / (8 * rate))).map Fin.val =
+  have values : (List.finRange ((padded (8 * rate) msg).length / (8 * rate))).map Fin.val =
       List.range (Keccak.blockCount rate msg.size) := by
-    rw [← paddedAt_blockCount_eq hr]
+    rw [← padded_blockCount_eq hr]
     apply List.ext_getElem (by simp)
     intro j _ _
     simp
-  rw [Keccak.spongeAbsorb, absorbBlocksAt_ofLanes hlanes hle, zero, absorbAllAt, ← values,
+  rw [Keccak.spongeAbsorb, absorbBlocks_ofLanes hlanes hle, zero, absorbAll, ← values,
     List.foldl_map]
-  simp only [Nat.zero_add, paddedBlockAt_eq hr]
-
-/-- The lane sponge absorbs Keccak-256 input to the state of the model, read bit by bit. -/
-theorem absorbAll_eq (msg : ByteArray) :
-    ofLanes (Keccak.spongeAbsorb Keccak.keccakF 136 msg) = absorbAll msg := by
-  simpa only [absorbAll] using absorbAllAt_eq (rate := 136) (by decide) ⟨17, rfl⟩ (by decide) msg
+  simp only [Nat.zero_add, paddedBlock_eq hr]
 
 /-! ## Squeezing -/
 
@@ -446,15 +378,15 @@ private theorem bytesOfLane_bit (v : UInt64) (m j : Nat) (hm : m < 8) (hj : j < 
       BitVec.getLsbD_ushiftRight, hj]
 
 /-- Squeezed byte `i` is byte `i % 8` of lane `(i / 8, 0)`. -/
-theorem squeeze_get (a : Keccak.State) (i : Fin 32) :
+private theorem squeeze_get (a : Keccak.State) (i : Fin 32) :
     (Keccak.Internal.squeeze a)[i] =
       (Keccak.Internal.bytesOfLane (a.lane ⟨i.val / 8, by omega⟩ 0))[i.val % 8]'(by
         simp [Keccak.Internal.bytesOfLane]
         omega) := by
   fin_cases i <;> rfl
 
-/-- Squeezed byte `i` of `squeeze512` is byte `i % 8` of lane `((i / 8) % 5, i / 40)`. -/
-theorem squeeze512_get (a : Keccak.State) (i : Fin 64) :
+/-- Squeezed Keccak-512 byte `i` is byte `i % 8` of lane `((i / 8) % 5, i / 40)`. -/
+private theorem squeeze512_get (a : Keccak.State) (i : Fin 64) :
     (Keccak.Internal.squeeze512 a)[i] =
       (Keccak.Internal.bytesOfLane
         (a.lane ⟨(i.val / 8) % 5, by omega⟩ ⟨i.val / 40, by omega⟩))[i.val % 8]'(by
@@ -513,7 +445,7 @@ theorem outputByte_ofLanes (a : Keccak.State) {i : Nat} (hi : i < 200) :
   have hz : (8 * i + j) % 64 = 8 * (i % 8) + j := by omega
   simp only [stateBit, ofLanes, zcoord, hx, hy, hz]
 
-/-- Each of the first 32 output bytes of the model is the squeezed byte of `squeeze`. -/
+/-- Each of the first 32 output bytes of the model is the squeezed Keccak-256 byte. -/
 theorem outputByte_eq_squeeze (a : Keccak.State) (i : Fin 32) :
     outputByte (ofLanes a) i.val = (Keccak.Internal.squeeze a)[i] := by
   rw [outputByte_ofLanes a (by omega), squeeze_get]
@@ -523,38 +455,37 @@ theorem outputByte_eq_squeeze (a : Keccak.State) (i : Fin 32) :
     Fin.ext (by simp; omega)
   simp only [hx, hy]
 
-/-- Each of the first 64 output bytes of the model is the squeezed byte of `squeeze512`. -/
+/-- Each of the first 64 output bytes of the model is the squeezed Keccak-512 byte. -/
 theorem outputByte_eq_squeeze512 (a : Keccak.State) (i : Fin 64) :
     outputByte (ofLanes a) i.val = (Keccak.Internal.squeeze512 a)[i] := by
   rw [outputByte_ofLanes a (by omega), squeeze512_get]
 
 /-! ## The hashes -/
 
-/-- A lane squeeze of the first `outBytes` bytes of the absorbed state equals `sponge`.
+/-- A squeeze that reads the first `outBytes` output bytes of the absorbed state is the bit sponge.
 
-The output fits one rate block, as FIPS 202 Algorithm 8 requires before a further permutation. -/
+The output fits in one rate block, so FIPS 202 Algorithm 8 stops before another permutation. -/
 theorem sponge_eq_of_squeeze {rate outBytes : Nat} (hr : 0 < rate) (hlanes : 8 ∣ rate)
     (hle : rate ≤ 136) (hout : outBytes ≤ rate) (sq : Keccak.State → Vector UInt8 outBytes)
     (hsq : ∀ (a : Keccak.State) (i : Fin outBytes), (sq a)[i] = outputByte (ofLanes a) i.val)
     (msg : ByteArray) :
     sq (Keccak.spongeAbsorb Keccak.keccakF rate msg) =
-      sponge (rateBits := 8 * rate) (Nat.mul_pos (by decide) hr)
+      sponge (rateBits := 8 * rate) (Nat.mul_pos (by decide) hr) (by omega)
         (Nat.mul_le_mul_left 8 hout) msg := by
   apply Vector.ext
   intro i hi
   have out := hsq (Keccak.spongeAbsorb Keccak.keccakF rate msg) ⟨i, hi⟩
-  simp only [Fin.getElem_fin, absorbAllAt_eq hr hlanes hle] at out
+  simp only [Fin.getElem_fin, absorbAll_eq hr hlanes hle] at out
   simpa only [sponge, squeezeBytes, Vector.getElem_ofFn] using out
 
 /-- Byte `i` of the Keccak-256 digest of the model is output byte `i` of the absorbed state. -/
 theorem keccak256_getElem (msg : ByteArray) (i : Nat) (h : i < 32) :
-    (keccak256 msg)[i] = outputByte (absorbAll msg) i := by
-  simp only [keccak256, sponge, squeezeBytes, absorbAll, Vector.getElem_ofFn]
+    (keccak256 msg)[i] = outputByte (absorbAll (rateBits := 1088) (by decide) msg) i := by
+  simp only [keccak256, sponge, squeezeBytes, Vector.getElem_ofFn]
 
 /-- Byte `i` of the Keccak-512 digest of the model is output byte `i` of the absorbed state. -/
 theorem keccak512_getElem (msg : ByteArray) (i : Nat) (h : i < 64) :
-    (keccak512 msg)[i] =
-      outputByte (absorbAllAt (rateBits := 576) (by decide) msg) i := by
+    (keccak512 msg)[i] = outputByte (absorbAll (rateBits := 576) (by decide) msg) i := by
   simp only [keccak512, sponge, squeezeBytes, Vector.getElem_ofFn]
 
 /-- The lane implementation of Keccak-256 equals the bit model, for every message. -/
