@@ -206,20 +206,6 @@ theorem linefunc_eq_line {x₁ y₁ x₂ y₂ : Fp2} (h₁ : (Point2.affine x₁
     field_simp
     ring
 
-/-- An element of `Fp2` is its two coefficients. -/
-def fp2Equiv : Fp2 ≃ Fp × Fp where
-  toFun a := (a.c0, a.c1)
-  invFun a := ⟨a.1, a.2⟩
-  left_inv _ := rfl
-  right_inv _ := rfl
-
-/-- `Fp2` is finite. -/
-noncomputable instance : Fintype Fp2 := Fintype.ofEquiv _ fp2Equiv.symm
-
-/-- `Fp2` has `p^2` elements. -/
-theorem card_fp2 : Fintype.card Fp2 = Fp.modulus ^ 2 := by
-  rw [Fintype.card_eq_nat_card, Nat.card_congr fp2Equiv, Nat.card_prod, Nat.card_fin, sq]
-
 /-- The vertical `xt - x w^2` through the untwist of a point with `x ≠ 0` is not zero. -/
 theorem vertical_ne_zero {x : Fp2} (hx : x ≠ 0) (xt : Fp) :
     ofFpHom xt - ofFp2Hom x * wPow 1 ^ 2 ≠ 0 := by
