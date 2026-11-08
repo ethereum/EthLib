@@ -136,13 +136,17 @@ def preCounter (H : Block) (iv : ByteArray) : Block :=
     -- The padding `0^s` completes the last block, and `0^64 || [len(IV)]_64` is one more block.
     ghash H (blocksOf iv ++ [blockOfNat (8 * iv.size)])
 
+/-- The padded input of GHASH in GCM, SP 800-38D §7.1, step 5.
+
+It is the padded additional data, the padded ciphertext, and one block of both bit lengths. -/
+def ghashInput (aad c : ByteArray) : List Block :=
+  blocksOf aad ++ blocksOf c ++ [blockOfNat (8 * aad.size * 2 ^ 64 + 8 * c.size)]
+
 /-- The tag `MSB_t(GCTR_K(J_0, S))` of SP 800-38D §7.1, steps 4 to 6, of `t` bytes.
 
 `S` is GHASH of the padded additional data, the padded ciphertext, and both lengths in bits. -/
 def tag (ciph : Block → Block) (t : Nat) (H J0 : Block) (aad c : ByteArray) : ByteArray :=
-  let lengths := blockOfNat (8 * aad.size * 2 ^ 64 + 8 * c.size)
-  let S := ghash H (blocksOf aad ++ blocksOf c ++ [lengths])
-  (gctr ciph J0 ⟨S.toArray⟩).extract 0 t
+  (gctr ciph J0 ⟨(ghash H (ghashInput aad c)).toArray⟩).extract 0 t
 
 /-- GCM-AE of SP 800-38D §7.1, Algorithm 4: the ciphertext and the tag.
 

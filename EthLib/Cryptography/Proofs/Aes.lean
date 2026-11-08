@@ -5,6 +5,7 @@ public import EthLib.Cryptography.Proofs.Aes.Ctr
 public import EthLib.Cryptography.Proofs.Aes.Gcm
 public import EthLib.Cryptography.Proofs.Aes.GaloisField
 public import EthLib.Cryptography.Proofs.Aes.Field
+public import EthLib.Cryptography.Proofs.Aes.Universal
 
 /-!
 # `EthLib.Cryptography.Proofs.Aes`
