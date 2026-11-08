@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Types
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Convert
+public import EthLib.Cryptography.Proofs.HashSig
 
 /-!
 # The leanXMSS model
@@ -56,15 +57,7 @@ def topEncodingPayload (root : Digest) (randomness : Randomness) : HashInput :=
 def nodePayload (left right : Digest) : HashInput :=
   bytesLE 16 left ++ bytesLE 16 right
 
-/-- Run the `n` computations in index order and collect their results. -/
-def sequenceFin {m : Type → Type} [Monad m] {n : Nat}
-    (computation : Fin n → m α) : m (Fin n → α) :=
-  match n with
-  | 0 => pure Fin.elim0
-  | n + 1 => do
-      let head ← computation 0
-      let tail ← sequenceFin fun index : Fin n => computation index.succ
-      return Fin.cases head tail
+export EthLib.Cryptography.HashSig (sequenceFin)
 
 variable {m : Type → Type} [Monad m] [HasQuery HashSpec m]
 

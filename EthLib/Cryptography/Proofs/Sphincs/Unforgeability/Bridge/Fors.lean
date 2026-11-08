@@ -25,6 +25,7 @@ namespace EthLib.Cryptography.Sphincs.Unforgeability.Bridge
 open EthLib.Cryptography.Sphincs
 open EthLib.Cryptography.Sphincs.Constants
 open SphincsSecurity.Concrete (tweakableHash sequenceFin)
+open EthLib.Cryptography.HashSig (ofFnInOrder_eq_sequenceFin ofFnInOrder_eq_sequenceFin_cast)
 
 /-- A model opening as EthLib's. -/
 def ofOpening (o : SphincsSecurity.TreeOpening) : TreeOpening :=

@@ -532,17 +532,7 @@ The hashing routines work in any monad that can query the hash.
 
 namespace Concrete
 
-export EthLib.Cryptography.HashSig (oracleHash)
-
-/-- Run the `n` computations in index order and collect their results. -/
-def sequenceFin {m : Type → Type} [Monad m] {α : Type} {n : Nat}
-    (computation : Fin n → m α) : m (Fin n → α) :=
-  match n with
-  | 0 => pure Fin.elim0
-  | n + 1 => do
-      let head ← computation 0
-      let tail ← sequenceFin fun index : Fin n => computation index.succ
-      return Fin.cases head tail
+export EthLib.Cryptography.HashSig (oracleHash sequenceFin)
 
 variable {m : Type → Type} [Monad m] [HasQuery HashSpec m]
 

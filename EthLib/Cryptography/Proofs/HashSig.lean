@@ -13,6 +13,10 @@ A read out of a concatenation reads the part it covers.
 In the identity monad, a vector computed in order is the vector of its entries.
 
 A map of monads that keeps `pure` and `bind` commutes with computing a vector in order.
+
+The models of the security proofs compute a function in order instead of a vector.
+
+Both make the same calls in the same order.
 -/
 
 @[expose] public section
@@ -138,5 +142,60 @@ theorem ofFnInOrder_map_monad {m n : Type → Type} [Monad m] [Monad n]
   | 0, _ => map_pure _
   | k + 1, f => by
     simp only [ofFnInOrder, map_bind, map_pure, ofFnInOrder_map_monad φ map_pure map_bind k]
+
+/-! ## Computing a function in order -/
+
+/-- Run the `n` computations in index order and collect their results. -/
+def sequenceFin {m : Type → Type} [Monad m] {α : Type} {n : Nat}
+    (computation : Fin n → m α) : m (Fin n → α) :=
+  match n with
+  | 0 => pure Fin.elim0
+  | n + 1 => do
+      let head ← computation 0
+      let tail ← sequenceFin fun index : Fin n => computation index.succ
+      return Fin.cases head tail
+
+section InOrder
+
+variable {m : Type → Type} [Monad m] [LawfulMonad m]
+
+/-- A vector computed in order is the function computed in order, each result mapped. -/
+theorem ofFnInOrder_eq_sequenceFin {α β : Type} :
+    ∀ (n : Nat) (c : Fin n → m α) (g : α → β),
+      ofFnInOrder n (fun i => g <$> c i)
+        = (fun f => Vector.ofFn fun i => g (f i)) <$> sequenceFin c
+  | 0, c, g => by
+    simp only [ofFnInOrder, sequenceFin, map_pure]
+    congr 1
+  | n + 1, c, g => by
+    simp only [ofFnInOrder, sequenceFin, map_bind, bind_map_left, map_pure]
+    refine bind_congr fun head => ?_
+    rw [ofFnInOrder_eq_sequenceFin n (fun i => c i.succ) g]
+    simp only [bind_map_left]
+    refine bind_congr fun tail => ?_
+    congr 1
+    apply Vector.ext
+    intro i hi
+    -- Entry 0 is the head, entry `i + 1` is entry `i` of the tail.
+    cases i with
+    | zero => simp
+    | succ i => simp
+
+/-- A vector computed in order is the function computed in order, over equal lengths. -/
+theorem ofFnInOrder_eq_sequenceFin_cast {α β : Type} {n n' : Nat} (h : n = n')
+    (c : Fin n' → m α) (g : α → β) :
+    ofFnInOrder n (fun i => g <$> c (Fin.cast h i))
+      = (fun f => Vector.ofFn fun i => g (f (Fin.cast h i))) <$> sequenceFin c := by
+  subst h
+  exact ofFnInOrder_eq_sequenceFin n c g
+
+/-- A vector computed in order is the function computed in order, as a vector. -/
+theorem ofFnInOrder_eq_map_sequenceFin {α : Type} (n : Nat) (c : Fin n → m α) :
+    ofFnInOrder n c = (fun f => Vector.ofFn f) <$> sequenceFin c := by
+  have h := ofFnInOrder_eq_sequenceFin n c id
+  simp only [id_map] at h
+  exact h
+
+end InOrder
 
 end EthLib.Cryptography.HashSig

@@ -3,6 +3,8 @@ module
 public import EthLib.Cryptography.Proofs.EvalDistEq
 public import VCVio.OracleComp.QueryTracking.LoggingOracle.Core
 public import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
+public import EthLib.Cryptography.Proofs.HashSig
+public import ToCslib.Data.Fin.MOfFn
 
 /-!
 # Proofs: the random oracle of the hash-based signatures
@@ -14,6 +16,8 @@ It takes any byte string and answers 256 uniform bits.
 The games also sample uniform values privately, and those samples are not hash calls.
 
 The low 128 bits of a uniform answer are a uniform 128-bit value.
+
+The games compute a function in order, as the lemmas of the oracle framework do.
 -/
 
 @[expose] public section
@@ -124,5 +128,15 @@ theorem evalDist_truncate_uniformHashOutput :
       simp only [map_eq_bind_pure_comp, bind_assoc, pure_bind,
         Function.comp_apply, bind_pure]
       exact OracleComp.EvalDistEq.bind_const _ _
+
+/-! ## Computing a function in order -/
+
+/-- The games' function computed in order is the one the oracle framework's lemmas use. -/
+theorem sequenceFin_eq_mOfFn {m : Type → Type} [Monad m] {α : Type} :
+    ∀ (n : Nat) (c : Fin n → m α), sequenceFin c = Fin.mOfFn n c
+  | 0, _ => rfl
+  | n + 1, c => by
+    simp only [sequenceFin, Fin.mOfFn, sequenceFin_eq_mOfFn n]
+    rfl
 
 end EthLib.Cryptography.HashSig
