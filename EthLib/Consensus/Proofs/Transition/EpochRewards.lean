@@ -22,11 +22,13 @@ From Altair, a validator that did not set a flag earns no reward for it.
 
 A validator that set it pays no penalty for it, and nobody pays one for the head flag.
 
-An unslashed validator that set a flag earns nothing for it in a leak.
+An unslashed validator that set a flag in the previous epoch earns nothing for it in a leak.
 
 Otherwise it earns the weight of the flag in its base reward, scaled by the share that set it.
 
-That needs a registry within its limit, in which the eligible validators increase strictly.
+That needs a registry within its limit.
+
+In such a registry, the eligible indices increase strictly.
 
 The inactivity deltas hold no reward.
 
@@ -170,7 +172,7 @@ private theorem replicate_getD_zero (size j : Nat) :
 
 /-- One step of the flag deltas keeps the reward of a validator that did not set the flag.
 
-It keeps the reward at each other index. -/
+It also keeps the reward at every index other than its own. -/
 theorem addFlagDelta_reward {flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.length}
     {participated : Array Bool} {total participatingIncrements activeIncrements : Gwei}
     {deltas next : Array Gwei × Array Gwei} {index : ValidatorIndex}
@@ -296,8 +298,8 @@ theorem getFlagIndexDeltas_head {altair : .altair ≤ fork}
   exact foldlM_getD_zero Prod.snd (fun _ _ _ step => addFlagDelta_penalty step (.inr head))
     (replicate_getD_zero _ _) folded
 
-/-- One step of the flag deltas reads the base reward of its validator. -/
-private theorem addFlagDelta_base {flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.length}
+/-- A step of the flag deltas that succeeds has a base reward for its validator. -/
+theorem addFlagDelta_base {flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.length}
     {participated : Array Bool} {total participatingIncrements activeIncrements : Gwei}
     {deltas next : Array Gwei × Array Gwei} {index : ValidatorIndex}
     (computed : addFlagDelta state flagIndex participated total participatingIncrements
@@ -308,8 +310,8 @@ private theorem addFlagDelta_base {flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.le
   obtain ⟨base, based, -⟩ := computed
   exact ⟨base, based⟩
 
-/-- One step of the flag deltas at a validator that set the flag reads the leak. -/
-private theorem addFlagDelta_leak {flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.length}
+/-- A step that succeeds at a validator that set the flag has a result for the leak check. -/
+theorem addFlagDelta_leak {flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.length}
     {participated : Array Bool} {total participatingIncrements activeIncrements : Gwei}
     {deltas next : Array Gwei × Array Gwei} {index : ValidatorIndex}
     (computed : addFlagDelta state flagIndex participated total participatingIncrements
@@ -355,7 +357,7 @@ theorem addFlagDelta_reward_of_set {flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.l
     subst computed
     simp
 
-/-- A fold of the flag deltas over other validators keeps the reward of a validator. -/
+/-- A fold of the flag deltas over a list without a validator keeps the reward of that validator. -/
 private theorem foldlM_addFlagDelta_reward_of_not_mem
     {flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.length} {participated : Array Bool}
     {total participatingIncrements activeIncrements : Gwei} {index : ValidatorIndex} :
@@ -373,46 +375,21 @@ private theorem foldlM_addFlagDelta_reward_of_not_mem
     rw [foldlM_addFlagDelta_reward_of_not_mem absent.2 computed]
     exact addFlagDelta_reward first (.inr fun same => absent.1 (UInt64.toNat_inj.mp same))
 
-/-- A filter map in `Except` that succeeds is a filter map of the values of its calls. -/
-private theorem filterMapM_ok_eq_filterMap {α β ε : Type} {f : α → Except ε (Option β)}
-    {g : α → Option β} :
-    ∀ {l : List α} {out : List β}, (∀ x ∈ l, ∀ y, f x = .ok y → g x = y) →
-      l.filterMapM f = .ok out → out = l.filterMap g
-  | [], out, _, mapped => by
-    simp only [List.filterMapM_nil, pure, Except.pure, Except.ok.injEq] at mapped
-    simp [← mapped]
-  | x :: l, out, values, mapped => by
-    rw [List.filterMapM_cons, bind_ok_iff] at mapped
-    obtain ⟨image, first, mapped⟩ := mapped
-    have rest : ∀ x' ∈ l, ∀ y, f x' = .ok y → g x' = y :=
-      fun x' member => values x' (List.mem_cons_of_mem x member)
-    rw [List.filterMap_cons, values x List.mem_cons_self image first]
-    cases image with
-    | none => exact filterMapM_ok_eq_filterMap rest mapped
-    | some z =>
-      simp only at mapped
-      rw [bind_ok_iff] at mapped
-      obtain ⟨tail, tailOk, mapped⟩ := mapped
-      simp only [pure, Except.pure, Except.ok.injEq] at mapped
-      subst mapped
-      simp only [filterMapM_ok_eq_filterMap rest tailOk]
-
-/-- The eligible indices are the positions of the validators whose test holds. -/
+/-- The eligible indices are the positions of the validators that pass the eligibility check. -/
 private theorem getEligibleValidatorIndices_eq {eligible : List ValidatorIndex}
     (computed : getEligibleValidatorIndices state = .ok eligible) :
-    eligible = state.validators.data.toList.zipIdx.filterMap fun pair =>
-      (match isEligibleValidator (getPreviousEpoch state) pair.1 with
-        | .ok true => some pair.2.toUInt64
-        | _ => none) := by
+    eligible = state.validators.data.toList.zipIdx.filterMap fun (validator, index) =>
+      if (match isEligibleValidator (getPreviousEpoch state) validator with
+        | .ok eligible => eligible
+        | .error _ => false) then some index.toUInt64 else none := by
   unfold getEligibleValidatorIndices at computed
-  refine filterMapM_ok_eq_filterMap (fun ⟨validator, position⟩ _ image step => ?_) computed
+  refine eq_filterMap_of_filterMapM_ok (fun ⟨validator, position⟩ _ image step => ?_) computed
   dsimp only at step ⊢
   rw [bind_ok_iff] at step
   obtain ⟨eligibility, tested, step⟩ := step
   simp only [pure, Except.pure, Except.ok.injEq] at step
   subst step
   rw [tested]
-  cases eligibility <;> rfl
 
 /-- The eligible indices increase strictly, for a registry within its limit. -/
 theorem getEligibleValidatorIndices_sorted {eligible : List ValidatorIndex}
@@ -420,26 +397,10 @@ theorem getEligibleValidatorIndices_sorted {eligible : List ValidatorIndex}
     (computed : getEligibleValidatorIndices state = .ok eligible) :
     eligible.Pairwise (· < ·) := by
   rw [getEligibleValidatorIndices_eq computed]
-  -- Each index is the position of its validator, as a 64-bit index.
-  have image : ∀ {validator : Validator} {position : Nat} {index : ValidatorIndex},
-      index ∈ (match isEligibleValidator (getPreviousEpoch state) validator with
-        | .ok true => some position.toUInt64
-        | _ => none) → index = position.toUInt64 := by
-    intro validator position index member
-    split at member
-    · exact (Option.some.inj (Option.mem_def.mp member)).symm
-    · cases member
-  have base : state.validators.data.toList.zipIdx.Pairwise (fun a b => a.2 < b.2) := by
-    have := List.pairwise_lt_range' (s := 0) (n := state.validators.data.toList.length)
-    rw [← List.zipIdx_map_snd 0] at this
-    exact List.pairwise_map.mp this
-  refine List.Pairwise.filterMap _ ?_ (List.Pairwise.and_mem.mp base)
-  rintro ⟨v, i⟩ ⟨w, j⟩ ⟨mi, mj, lt⟩ a ha b hb
-  rw [image (validator := v) (position := i) ha, image (validator := w) (position := j) hb]
-  have hi : i < state.validators.data.size := by simpa using (List.mem_zipIdx' mi).1
-  have hj : j < state.validators.data.size := by simpa using (List.mem_zipIdx' mj).1
-  rw [UInt64.lt_iff_toNat_lt, toNat_toUInt64_of_lt within hi, toNat_toUInt64_of_lt within hj]
-  exact lt
+  exact validatorPositions_sorted within fun validator =>
+    match isEligibleValidator (getPreviousEpoch state) validator with
+    | .ok eligible => eligible
+    | .error _ => false
 
 /-- Each validator active in the previous epoch is eligible for the rewards of that epoch. -/
 theorem mem_getEligibleValidatorIndices_of_active {eligible : List ValidatorIndex}
@@ -453,7 +414,7 @@ theorem mem_getEligibleValidatorIndices_of_active {eligible : List ValidatorInde
     simpa using found
   · simp [isEligibleValidator, active, pure, Except.pure]
 
-/-- From Altair, take an unslashed validator that set a flag in the previous epoch.
+/-- From Altair, take a validator active and unslashed in the previous epoch that set a flag in it.
 
 It earns nothing for the flag in a leak.
 

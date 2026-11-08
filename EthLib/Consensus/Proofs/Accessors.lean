@@ -76,11 +76,13 @@ theorem mem_getActiveValidatorIndices {state : BeaconState preset fork}
     refine ⟨validator, index.toNat, by simpa using found, active, ?_⟩
     simp
 
-/-- The active indices increase strictly. -/
-theorem getActiveValidatorIndices_sorted {state : BeaconState preset fork}
-    (within : state.RegistryWithinLimit) (epoch : Epoch) :
-    (getActiveValidatorIndices state epoch).Pairwise (· < ·) := by
-  unfold getActiveValidatorIndices
+/-- The positions of the validators that pass a test increase strictly, as 64-bit indices.
+
+That needs a registry within its limit. -/
+theorem validatorPositions_sorted {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit) (test : Validator → Bool) :
+    (state.validators.data.toList.zipIdx.filterMap fun (validator, index) =>
+      if test validator then some index.toUInt64 else none).Pairwise (· < ·) := by
   have base : state.validators.data.toList.zipIdx.Pairwise (fun a b => a.2 < b.2) := by
     have := List.pairwise_lt_range' (s := 0) (n := state.validators.data.toList.length)
     rw [← List.zipIdx_map_snd 0] at this
@@ -94,6 +96,12 @@ theorem getActiveValidatorIndices_sorted {state : BeaconState preset fork}
   have hj : j < state.validators.data.size := by simpa using (List.mem_zipIdx' mj).1
   rw [UInt64.lt_iff_toNat_lt, toNat_toUInt64_of_lt within hi, toNat_toUInt64_of_lt within hj]
   exact lt
+
+/-- The active indices increase strictly. -/
+theorem getActiveValidatorIndices_sorted {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit) (epoch : Epoch) :
+    (getActiveValidatorIndices state epoch).Pairwise (· < ·) :=
+  validatorPositions_sorted within (isActiveValidator · epoch)
 
 /-- Marking indices one after the other sets exactly the entries that some index names. -/
 theorem getElem?_foldl_mark (indices : List ValidatorIndex) (init : Array Bool) (j : Nat) :
@@ -238,7 +246,8 @@ theorem getPreviousEpoch_le (state : BeaconState preset fork) :
 
 /-- After genesis, the previous epoch is the epoch just before the current one. -/
 theorem getPreviousEpoch_add_one {state : BeaconState preset fork}
-    (positive : getCurrentEpoch state ≠ 0) : getPreviousEpoch state + 1 = getCurrentEpoch state := by
+    (positive : getCurrentEpoch state ≠ 0) :
+    getPreviousEpoch state + 1 = getCurrentEpoch state := by
   unfold getPreviousEpoch saturatingSub
   have nonzero : (getCurrentEpoch state).toNat ≠ 0 :=
     fun zero => positive (UInt64.toNat_inj.mp (by simpa using zero))
@@ -681,7 +690,8 @@ theorem mem_getActiveValidatorIndices_of_getAttestingIndices {state : BeaconStat
     {attestation : Attestation preset fork} {attesters : List ValidatorIndex}
     (computed : getAttestingIndices state attestation = .ok attesters)
     {attester : ValidatorIndex} (mem : attester ∈ attesters) :
-    attester ∈ getActiveValidatorIndices state (computeEpochAtSlot preset attestation.data.slot) := by
+    attester ∈
+      getActiveValidatorIndices state (computeEpochAtSlot preset attestation.data.slot) := by
   unfold getAttestingIndices at computed
   split at computed
   · simp only [bind, Except.bind, pure, Except.pure] at computed

@@ -427,4 +427,28 @@ theorem filterMapM_ok_of_forall {α β ε : Type} {f : α → Except ε (Option 
       exact ⟨z :: rest, by simp [List.filterMapM_cons, first, restOk, bind, Except.bind, pure,
         Except.pure]⟩
 
+/-- A monadic filter map in `Except` that succeeds is the filter map of the values of its calls. -/
+theorem eq_filterMap_of_filterMapM_ok {α β ε : Type} {f : α → Except ε (Option β)}
+    {g : α → Option β} :
+    ∀ {l : List α} {out : List β}, (∀ x ∈ l, ∀ y, f x = .ok y → g x = y) →
+      l.filterMapM f = .ok out → out = l.filterMap g
+  | [], out, _, mapped => by
+    simp only [List.filterMapM_nil, pure, Except.pure, Except.ok.injEq] at mapped
+    simp [← mapped]
+  | x :: l, out, values, mapped => by
+    rw [List.filterMapM_cons, bind_ok_iff] at mapped
+    obtain ⟨image, first, mapped⟩ := mapped
+    have rest : ∀ x' ∈ l, ∀ y, f x' = .ok y → g x' = y :=
+      fun x' member => values x' (List.mem_cons_of_mem x member)
+    rw [List.filterMap_cons, values x List.mem_cons_self image first]
+    cases image with
+    | none => exact eq_filterMap_of_filterMapM_ok rest mapped
+    | some z =>
+      simp only at mapped
+      rw [bind_ok_iff] at mapped
+      obtain ⟨tail, tailOk, mapped⟩ := mapped
+      simp only [pure, Except.pure, Except.ok.injEq] at mapped
+      subst mapped
+      simp only [eq_filterMap_of_filterMapM_ok rest tailOk]
+
 end EthLib.Base
