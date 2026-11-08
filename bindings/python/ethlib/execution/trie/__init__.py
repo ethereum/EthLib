@@ -69,7 +69,9 @@ def verify_account_proof(state_root: bytes, answer: dict) -> list[bool] | None:
     # A field that does not match the pattern of its type raises ValueError.
     # An answer that does not hold raises TrieError.
     #
-    # None means that the proof shows no account at the address: no field or slot is judged.
+    # None means that the proof shows no account at the address.
+    # The nonce, the balance and each slot are then 0, and the slot proofs are not read.
+    # Each hash is zero, or that of no code or of no storage.
     # Otherwise the fields hold.
     # Each slot is True when it is set and holds its value.
     # It is False when its proof shows that it is not set and its value is 0.

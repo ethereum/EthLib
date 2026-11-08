@@ -13,6 +13,8 @@ If the account check passes, the trie gives the address the account of the answe
 
 When the check reports the account absent, the trie gives the address no value.
 
+The fields of the answer then fit an address with no account.
+
 Otherwise a search finds a collision between the account proof and the trie's own proof.
 
 Or it finds two keys of the trie with one hash.
@@ -25,7 +27,7 @@ Completeness: the proof that the trie builds for the address passes the check.
 
 It passes with the fields of the account that the trie holds.
 
-It reports an address without a value as absent.
+It reports an address without a value as absent, when the fields fit an address with no account.
 
 The same holds for each slot, when the answer gives the word `0` to a slot without a value.
 
@@ -34,6 +36,8 @@ The state and storage tries of a state have distinct keys, so soundness holds fo
 Completeness needs distinct paths, which in a secured trie means keys with distinct hashes.
 
 Each of the two checks passes exactly when the proof gives no value, or a value matching the answer.
+
+An address without a value also needs fields that fit an address with no account.
 
 A slot without a value also needs the word `0` in the answer.
 
@@ -59,7 +63,8 @@ theorem verifyAccount_eq_ok {stateRoot : Hash32} {p : AccountProof} {present : B
       verifyProof hash stateRoot true ⟨p.address.toArray⟩ p.accountProof = .ok value ∧
       match value with
       | some bytes => decodeAccount bytes = .ok (p.account, p.storageHash) ∧ present = true
-      | none => present = false := by
+      | none =>
+        p.absentFields hash = true ∧ present = false := by
   unfold verifyAccount at h
   cases hv : verifyProof hash stateRoot true ⟨p.address.toArray⟩ p.accountProof with
   | error e => simp [hv, Except.mapError, bind, Except.bind] at h
@@ -68,8 +73,10 @@ theorem verifyAccount_eq_ok {stateRoot : Hash32} {p : AccountProof} {present : B
     simp only [hv, Except.mapError, bind, Except.bind] at h
     cases value with
     | none =>
-      simp only [pure, Except.pure, Except.ok.injEq] at h
-      exact h.symm
+      by_cases hm : p.absentFields hash = true
+      · simp only [hm, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at h
+        exact ⟨hm, h.symm⟩
+      · simp [hm, throw, throwThe, MonadExceptOf.throw] at h
     | some bytes =>
       cases hd : decodeAccount bytes with
       | error e => simp [hd] at h
@@ -88,20 +95,23 @@ A value must decode to the account and the storage root of the answer.
 
 The check then reports the account present.
 
-No value means the account is absent. -/
+No value means the account is absent.
+
+The fields of the answer must then fit an address with no account. -/
 theorem verifyAccount_eq_ok_iff {stateRoot : Hash32} {p : AccountProof} {present : Bool} :
     p.verifyAccount hash stateRoot = .ok present ↔
       ∃ value,
         verifyProof hash stateRoot true ⟨p.address.toArray⟩ p.accountProof = .ok value ∧
         match value with
         | some bytes => decodeAccount bytes = .ok (p.account, p.storageHash) ∧ present = true
-        | none => present = false := by
+        | none =>
+          p.absentFields hash = true ∧ present = false := by
   refine ⟨verifyAccount_eq_ok, fun ⟨value, hv, hmatch⟩ => ?_⟩
   unfold verifyAccount
   cases value with
   | none =>
-    subst hmatch
-    simp [hv, Except.mapError, bind, Except.bind, pure, Except.pure]
+    obtain ⟨ha, rfl⟩ := hmatch
+    simp [hv, ha, Except.mapError, bind, Except.bind, pure, Except.pure]
   | some bytes =>
     obtain ⟨hd, rfl⟩ := hmatch
     simp [hv, hd, Except.mapError, bind, Except.bind, pure, Except.pure]
@@ -168,6 +178,14 @@ theorem verifyAccount_eq_accountMismatch {stateRoot : Hash32} {p : AccountProof}
     (hne : ¬(account = p.account ∧ storageRoot = p.storageHash)) :
     p.verifyAccount hash stateRoot = .error .accountMismatch := by
   simp [verifyAccount, hv, hd, hne, Except.mapError, bind, Except.bind, throw, throwThe,
+    MonadExceptOf.throw]
+
+/-- An absent account whose fields do not fit an address with no account fails with a mismatch. -/
+theorem verifyAccount_eq_accountMismatch_absent {stateRoot : Hash32} {p : AccountProof}
+    (hv : verifyProof hash stateRoot true ⟨p.address.toArray⟩ p.accountProof = .ok none)
+    (ha : p.absentFields hash = false) :
+    p.verifyAccount hash stateRoot = .error .accountMismatch := by
+  simp [verifyAccount, hv, ha, Except.mapError, bind, Except.bind, throw, throwThe,
     MonadExceptOf.throw]
 
 /-- A slot whose proven word differs from that of the answer fails with `slotMismatch`. -/
@@ -237,6 +255,19 @@ theorem verifySlots_eq_ok_iff {storageRoot : Hash32} :
             cases hrest
             rw [h0]
 
+/-- The slot checks of an absent account pass exactly when each slot gives the word `0`. -/
+theorem verifyAbsentSlots_eq_ok_iff :
+    ∀ {index : Nat} {slots : List StorageProof},
+      verifyAbsentSlots index slots = .ok () ↔ ∀ s ∈ slots, s.value = 0
+  | _, [] => by simp [verifyAbsentSlots, pure, Except.pure]
+  | index, s :: rest => by
+    have ih := verifyAbsentSlots_eq_ok_iff (index := index + 1) (slots := rest)
+    by_cases hs : s.value = 0
+    · simp [verifyAbsentSlots, hs, ih]
+    · simp only [verifyAbsentSlots, ite_eq_right hs]
+      simp only [throw, throwThe, MonadExceptOf.throw, bind, Except.bind, reduceCtorEq, false_iff]
+      exact fun h => hs (h s List.mem_cons_self)
+
 /-- A whole answer shows the account exactly when the account check passes with it present.
 
 The slots then come out of the slot checks, from index 0. -/
@@ -250,22 +281,27 @@ theorem verify_eq_ok_present_iff {stateRoot : Hash32} {p : AccountProof}
   | error e => simp [bind, Except.bind]
   | ok present =>
     cases present with
-    | false => simp [bind, Except.bind, pure, Except.pure]
+    | false =>
+      cases verifyAbsentSlots 0 p.storageProof <;> simp [bind, Except.bind, pure, Except.pure]
     | true =>
       cases verifySlots hash p.storageHash 0 p.storageProof <;>
         simp [bind, Except.bind, pure, Except.pure]
 
 /-- A whole answer shows the address absent exactly when the account check passes with it absent.
 
-The slots are then not checked. -/
+Each slot of the answer must then give the word `0`. -/
 theorem verify_eq_ok_absent_iff {stateRoot : Hash32} {p : AccountProof} :
-    p.verify hash stateRoot = .ok .absent ↔ p.verifyAccount hash stateRoot = .ok false := by
+    p.verify hash stateRoot = .ok .absent ↔
+      p.verifyAccount hash stateRoot = .ok false ∧ ∀ s ∈ p.storageProof, s.value = 0 := by
+  rw [← verifyAbsentSlots_eq_ok_iff (index := 0)]
   unfold verify
   cases ha : p.verifyAccount hash stateRoot with
   | error e => simp [bind, Except.bind]
   | ok present =>
     cases present with
-    | false => simp [bind, Except.bind, pure, Except.pure]
+    | false =>
+      cases h : verifyAbsentSlots 0 p.storageProof <;>
+        simp [bind, Except.bind, pure, Except.pure]
     | true =>
       cases verifySlots hash p.storageHash 0 p.storageProof <;>
         simp [bind, Except.bind, pure, Except.pure]
@@ -278,6 +314,8 @@ When the check passes, the trie gives the address the account of the answer.
 
 When it reports the account absent, the trie gives the address no value.
 
+The fields of the answer then fit an address with no account.
+
 Otherwise a search finds a collision with the trie's own proof, or two keys with one hash. -/
 theorem verifyAccount_sound {trie : Trie} {stateRoot : Hash32} {honest : List ByteArray}
     {p : AccountProof} {present : Bool}
@@ -287,7 +325,8 @@ theorem verifyAccount_sound {trie : Trie} {stateRoot : Hash32} {honest : List By
     (h : p.verifyAccount hash stateRoot = .ok present) :
     (match valueAt hash trie ⟨p.address.toArray⟩ with
       | some bytes => decodeAccount bytes = .ok (p.account, p.storageHash) ∧ present = true
-      | none => present = false) ∨
+      | none =>
+        p.absentFields hash = true ∧ present = false) ∨
       (∃ pair,
         findProofCollision hash p.accountProof honest = some pair ∧ IsCollision hash pair) ∨
       ∃ pair, findPathCollision hash trie = some pair ∧ IsCollision hash pair := by
@@ -332,7 +371,8 @@ theorem verifyAccount_sound_state {state : State} {entries : List (ByteArray × 
     (h : p.verifyAccount hash stateRoot = .ok present) :
     (match valueAt hash ⟨true, entries⟩ ⟨p.address.toArray⟩ with
       | some bytes => decodeAccount bytes = .ok (p.account, p.storageHash) ∧ present = true
-      | none => present = false) ∨
+      | none =>
+        p.absentFields hash = true ∧ present = false) ∨
       (∃ pair,
         findProofCollision hash p.accountProof honest = some pair ∧ IsCollision hash pair) ∨
       ∃ pair, findPathCollision hash ⟨true, entries⟩ = some pair ∧ IsCollision hash pair :=
@@ -359,7 +399,7 @@ theorem verifySlot_sound_storage {storage : Std.ExtTreeMap Bytes32 U256}
 
 It passes when the answer has the fields of the account that the trie holds.
 
-It reports an address without a value as absent, whatever the fields of the answer.
+It reports an address without a value as absent, when the fields fit an address with no account.
 
 The keys of the trie must have distinct paths. -/
 theorem verifyAccount_getProof {trie : Trie} {stateRoot : Hash32} {p : AccountProof}
@@ -370,13 +410,15 @@ theorem verifyAccount_getProof {trie : Trie} {stateRoot : Hash32} {p : AccountPr
     | some bytes =>
       decodeAccount bytes = .ok (p.account, p.storageHash) →
         p.verifyAccount hash stateRoot = .ok true
-    | none => p.verifyAccount hash stateRoot = .ok false := by
+    | none =>
+      p.absentFields hash = true → p.verifyAccount hash stateRoot = .ok false := by
   have hverify := verifyProof_getProof hash hroot hhonest hpaths
   rw [hsecured] at hverify
   unfold verifyAccount
   cases hv : valueAt hash trie ⟨p.address.toArray⟩ with
   | none =>
-    simp [hverify, hv, Except.mapError, bind, Except.bind, pure, Except.pure]
+    intro ha
+    simp [hverify, hv, ha, Except.mapError, bind, Except.bind, pure, Except.pure]
   | some bytes =>
     intro hd
     simp [hverify, hv, hd, Except.mapError, bind, Except.bind, pure, Except.pure]

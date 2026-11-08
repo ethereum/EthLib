@@ -123,7 +123,7 @@ The list goes on with the nodes of the account proof, then the slots.
 
 Each slot is the list of the slot on 32 bytes, the word, and the nodes of its proof.
 
-No bytes means that the address has no account, and that no field or slot was judged.
+No bytes means that the address has no account: the nonce, the balance and each slot word are `0`.
 
 Otherwise the byte 1 comes first, then one byte for each slot: 1 if it is set, 0 if it is not.
 
