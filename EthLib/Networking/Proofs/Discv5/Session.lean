@@ -12,10 +12,12 @@ The WHOAREYOU challenge and the ordinary message packet read back.
 - A WHOAREYOU packet has 63 bytes, the smallest packet.
 - Node A reads the challenge of node B back, with the challenge data that node B keeps.
 - Node B reads an ordinary message packet of node A back, under its key.
-- An ordinary message packet that opens under the sender's key was sealed under that key.
+- An ordinary message packet that opens under a key is the sealing of its plaintext under that key.
 - Two errors with one code come from one constructor.
 
 The theorems say nothing about the freshness of a nonce, an ID nonce or an `enr-seq`.
+
+They give no bound on forging an AES-GCM tag.
 -/
 
 @[expose] public section
@@ -86,13 +88,18 @@ theorem openMessage_sealMessage {key : Aes.Key .aes128} {nodeIdA nodeIdB : NodeI
     openPacket_sealPacket (decryptionError := SessionError.decryption) h (by simp [Authdata.flag])
   simp only [openMessage, hdec, hkey, hopen, Except.mapError, bind, Except.bind, pure, Except.pure]
 
-/-- An ordinary message packet that opens under the sender's key was sealed under that key. -/
+/-- An ordinary message packet that opens under a key is the sealing of its plaintext.
+
+The sealing uses the key that node B holds for the sender.
+
+It also uses the masking IV and the header nonce of the decoded packet. -/
 theorem sealMessage_of_openMessage {keyOf : NodeId → Option (Aes.Key .aes128)}
     {key : Aes.Key .aes128} {nodeIdA nodeIdB : NodeId} {bytes plaintext : ByteArray}
     (ho : openMessage keyOf nodeIdB bytes = .ok (nodeIdA, plaintext))
     (hk : keyOf nodeIdA = some key) :
-    ∃ maskingIv nonce,
-      sealMessage key nodeIdA nodeIdB maskingIv nonce plaintext = .ok bytes := by
+    ∃ packet, Packet.decode nodeIdB bytes = .ok packet ∧
+      sealMessage key nodeIdA nodeIdB packet.maskingIv packet.header.nonce plaintext
+        = .ok bytes := by
   unfold openMessage at ho
   cases hd : Packet.decode nodeIdB bytes with
   | error err => simp [hd, Except.mapError, bind, Except.bind] at ho
@@ -114,7 +121,7 @@ theorem sealMessage_of_openMessage {keyOf : NodeId → Option (Aes.Key .aes128)}
           obtain ⟨rfl, rfl⟩ := ho
           rw [hk] at hkey
           cases hkey
-          refine ⟨packet.maskingIv, packet.header.nonce, ?_⟩
+          refine ⟨packet, rfl, ?_⟩
           have hseal := sealPacket_of_openPacket
             (packetError' := SessionError.packet) (encryptionError := SessionError.encryption) hd hp
           obtain ⟨iv, ⟨nonce, authdata⟩, message⟩ := packet

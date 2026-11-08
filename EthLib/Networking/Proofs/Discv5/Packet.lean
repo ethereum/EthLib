@@ -625,7 +625,9 @@ theorem decryptMessage_encryptMessage {key : Aes.Key .aes128} {nonce : Vector UI
       ByteArray.extract_append_eq_right rfl (by rw [ByteArray.size_append])]
     exact Aes.Gcm.decrypt_encrypt _ _ _ _ _ _ _ he
 
-/-- A message that decrypts is the encryption of its plaintext. -/
+/-- A message that decrypts is the encryption of its plaintext.
+
+The encryption uses the same key, nonce and additional data. -/
 theorem encryptMessage_of_decryptMessage {key : Aes.Key .aes128} {nonce : Vector UInt8 12}
     {message ad plaintext : ByteArray}
     (h : decryptMessage key nonce message ad = .ok plaintext) :
@@ -687,7 +689,9 @@ theorem openPacket_sealPacket {ε : Type} {packetError : PacketError → ε}
         simp only [openPacket, had, decryptMessage_encryptMessage hm, Except.mapError, bind,
           Except.bind]
 
-/-- A decoded packet that opens under a key seals to its packet bytes under that key. -/
+/-- A decoded packet that opens under a key seals to its packet bytes under that key.
+
+The sealing reuses the masking IV and the header of the packet. -/
 theorem sealPacket_of_openPacket {ε ε' : Type} {packetError : PacketError → ε}
     {decryptionError : Aes.Gcm.Error → ε} {packetError' : PacketError → ε'}
     {encryptionError : Aes.Gcm.Error → ε'} {key : Aes.Key .aes128} {destId : NodeId}
