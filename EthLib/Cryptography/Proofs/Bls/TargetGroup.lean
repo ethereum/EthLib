@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Bls.PairingBilinear
+import EthLib.Cryptography.Proofs.Bls.PairingAte
 
 /-!
 # Proofs: a model of the target group of the pairing
@@ -13,7 +14,7 @@ An element represents a scalar `t` of `Fr` when it is `gT^t`.
 
 The pairing law of the model says that the pairing of `a g1` and `b g2` represents `a b`.
 
-The pairing of BLS12-381, into `Fp12`, is such a model under the pairing law of the check.
+The pairing of BLS12-381, into `Fp12`, is such a model.
 -/
 
 @[expose] public section
@@ -95,13 +96,13 @@ end TargetGroup
 /-- Pairs of representatives whose products of scalars sum to zero.
 
 The check accepts them, so the product of their pairings is 1. -/
-private theorem pairing_mul_eq_one (laws : PairingLaws) (l : List (G1 × G2)) (a b : List Fr)
+private theorem pairing_mul_eq_one (l : List (G1 × G2)) (a b : List Fr)
     (ha : a.length = l.length) (hb : b.length = l.length)
     (hr : ∀ i (h : i < l.length),
       G1.Represents (l[i]).1 (a[i]'(ha ▸ h)) ∧ G2.Represents (l[i]).2 (b[i]'(hb ▸ h)))
     (hsum : (List.zipWith (· * ·) a b).sum = 0) :
     (l.map fun pq => pairing pq.1 pq.2).prod = 1 :=
-  (pairingCheck_toArray_iff l).mp ((laws.pairingCheck_iff l a b ha hb hr).mpr hsum)
+  (pairingCheck_toArray_iff l).mp ((pairingLaws.pairingCheck_iff l a b ha hb hr).mpr hsum)
 
 /-- The scalars of the check on `(P, Q)` and `(-(a b) g1, g2)`. -/
 private theorem sum_two (a b : Fr) :
@@ -131,21 +132,21 @@ private theorem getElem_replicate_append {α : Type} {n i : Nat} (x y : α)
     have hin : i - (List.replicate n x).length = 0 := by simp only [List.length_replicate]; omega
     simp only [hin, List.getElem_singleton]
 
-/-- Under the pairing law of the check, `e(P, Q) = e(g1, g2)^(a b)` for representatives. -/
-theorem pairing_eq_pow_of_laws (laws : PairingLaws) {P : G1} {Q : G2} {a b : Fr}
+/-- `e(P, Q) = e(g1, g2)^(a b)` for representatives. -/
+theorem pairing_eq_pow_of_laws {P : G1} {Q : G2} {a b : Fr}
     (hP : G1.Represents P a) (hQ : G2.Represents Q b) :
     pairing P Q = pairing G1.generator G2.generator ^ (a * b).val := by
   -- Both sides times `e(-(a b) g1, g2)` give 1, by the check on two lists of pairs.
   set c := a * b
   set N := G1.mul (G1.generator : G1) (-c)
   have hN : G1.Represents N (-c) := G1.represents_mul_generator (-c)
-  have h₁ := pairing_mul_eq_one laws [(P, Q), (N, G2.generator)] [a, -c] [b, 1] rfl rfl
+  have h₁ := pairing_mul_eq_one [(P, Q), (N, G2.generator)] [a, -c] [b, 1] rfl rfl
     (fun i hi => by
       match i, hi with
       | 0, _ => exact ⟨hP, hQ⟩
       | 1, _ => exact ⟨hN, G2.represents_generator⟩)
     (by exact sum_two a b)
-  have h₂ := pairing_mul_eq_one laws
+  have h₂ := pairing_mul_eq_one
     (List.replicate c.val (G1.generator, G2.generator) ++ [(N, G2.generator)])
     (List.replicate c.val (1 : Fr) ++ [(-c : Fr)]) (List.replicate c.val (1 : Fr) ++ [(1 : Fr)])
     (by simp)
@@ -166,14 +167,14 @@ theorem pairing_eq_pow_of_laws (laws : PairingLaws) {P : G1} {Q : G2} {a b : Fr}
         ring
     _ = _ := by rw [h₁, mul_one]
 
-/-- The pairing of BLS12-381 is a model of the target group, under the pairing law of the check.
+/-- The pairing of BLS12-381 is a model of the target group.
 
 Its target is `Fp12`, and its generator is `e(g1, g2)`. -/
-noncomputable def TargetGroup.ofPairingLaws (laws : PairingLaws) : TargetGroup Fp12 where
+noncomputable def TargetGroup.ofPairingLaws : TargetGroup Fp12 where
   pair := pairing
   generator := pairing G1.generator G2.generator
   pow_modulus := orderOf_pairing_generators ▸ pow_orderOf_eq_one _
   generator_ne_one := pairing_generators_ne_one
-  pair_represents hP hQ := pairing_eq_pow_of_laws laws hP hQ
+  pair_represents hP hQ := pairing_eq_pow_of_laws hP hQ
 
 end EthLib.Cryptography.Bls

@@ -5,11 +5,12 @@ public import EthLib.Cryptography.Proofs.Bls.Represents
 public import EthLib.Cryptography.Proofs.Bls.KeyValidate
 public import EthLib.Cryptography.Proofs.Bls.CofactorSubgroupLanding
 public import EthLib.Base.Proofs.MapM
+import EthLib.Cryptography.Proofs.Bls.PairingAte
 
 /-!
 # Proofs: honest BLS signatures verify
 
-Under the pairing law, an honest signature passes verification.
+An honest signature passes verification.
 
 So do an honest proof of possession and an aggregate of honest signatures.
 
@@ -80,14 +81,14 @@ theorem coreSign_eq {msg dst : ByteArray} {Q : G2}
 /-- The core verification accepts a key for `a • g1` and a signature for `(a * b) • g2`.
 
 Here the message hashes to a representative of `b • g2`, and `a` is not zero. -/
-theorem coreVerify_of_represents (laws : PairingLaws) {P : G1} {S Q : G2} {a b : Fr}
+theorem coreVerify_of_represents {P : G1} {S Q : G2} {a b : Fr}
     {msg dst : ByteArray} (hP : G1.Represents P a) (ha : a ≠ 0)
     (hQ : HashToCurve.hashToG2 msg dst = .ok Q) (hb : G2.Represents Q b)
     (hS : G2.Represents S (a * b)) :
     coreVerify (G1.compress P) msg (G2.compress S) dst = true := by
   obtain ⟨r, hr, hsub, hrep⟩ := G2.uncompress_compress_of_represents hS
   obtain ⟨P', hP', hP'rep⟩ := G1.keyValidatePoint_compress_of_represents hP ha
-  have hcheck := (laws.two_pairs G1.represents_generator hrep hP'rep.neg hb).mpr
+  have hcheck := (pairingLaws.two_pairs G1.represents_generator hrep hP'rep.neg hb).mpr
     (one_mul_add_neg_mul a b)
   unfold coreVerify
   -- Rewrite every discriminant first, or the kernel evaluates the hash on a variable message.
@@ -98,7 +99,7 @@ theorem coreVerify_of_represents (laws : PairingLaws) {P : G1} {S Q : G2} {a b :
   exact hcheck
 
 /-- An honest core signature passes the core verification under the same tag. -/
-theorem coreVerify_coreSign (laws : PairingLaws) (sk : SecretKey) (msg dst : ByteArray) :
+theorem coreVerify_coreSign (sk : SecretKey) (msg dst : ByteArray) :
     ∃ sig, coreSign sk msg dst = .ok sig ∧
       coreVerify ⟨(skToPk sk).toArray⟩ msg ⟨sig.toArray⟩ dst = true := by
   obtain ⟨Q, hQ, hv, hs⟩ := HashToCurve.hashToG2_total_inSubgroup msg dst
@@ -107,19 +108,19 @@ theorem coreVerify_coreSign (laws : PairingLaws) (sk : SecretKey) (msg dst : Byt
   · exact coreSign_eq hQ sk
   refine (congrArg₂ (fun pk sig => coreVerify pk msg sig dst = true) (skToPk_bytes sk)
     (pointToSignature_bytes _)).mpr ?_
-  exact coreVerify_of_represents laws (G1.represents_mul_generator sk.val) sk.property hQ hb
+  exact coreVerify_of_represents (G1.represents_mul_generator sk.val) sk.property hQ hb
     (hb.mul sk.val)
 
 /-- An honest signature verifies. -/
-theorem verify_sign (laws : PairingLaws) (sk : SecretKey) (msg : ByteArray) :
+theorem verify_sign (sk : SecretKey) (msg : ByteArray) :
     ∃ sig, sign sk msg = .ok sig ∧ verify ⟨(skToPk sk).toArray⟩ msg ⟨sig.toArray⟩ = true :=
-  coreVerify_coreSign laws sk msg DST
+  coreVerify_coreSign sk msg DST
 
 /-- An honest proof of possession verifies. -/
-theorem popVerify_popProve (laws : PairingLaws) (sk : SecretKey) :
+theorem popVerify_popProve (sk : SecretKey) :
     ∃ proof, popProve sk = .ok proof ∧
       popVerify ⟨(skToPk sk).toArray⟩ ⟨proof.toArray⟩ = true :=
-  coreVerify_coreSign laws sk _ POP_DST
+  coreVerify_coreSign sk _ POP_DST
 
 
 /-! ## Aggregation on one message -/
@@ -247,7 +248,7 @@ private theorem forIn_pkBytes (sks : List SecretKey) {acc : G1} {a : Fr}
 /-- The fast aggregate verification accepts honest keys and a signature for their sum.
 
 The signature must represent `(sum_i sk_i * b) • g2`, where the message hashes to `b • g2`. -/
-theorem fastAggregateVerify_of_represents (laws : PairingLaws) {sks : List SecretKey}
+theorem fastAggregateVerify_of_represents {sks : List SecretKey}
     (hne : sks ≠ []) (hsum : (sks.map (·.val)).sum ≠ 0) {msg : ByteArray} {Q S : G2} {b : Fr}
     (hQ : HashToCurve.hashToG2 msg DST = .ok Q) (hb : G2.Represents Q b)
     (hS : G2.Represents S ((sks.map (·.val)).sum * b)) :
@@ -263,14 +264,14 @@ theorem fastAggregateVerify_of_represents (laws : PairingLaws) {sks : List Secre
   -- The loop starts from the point at infinity, so its sum carries a leading `0 +`.
   have hPrep' : G1.Represents P (sks.map (·.val)).sum :=
     (congrArg (G1.Represents P) (zero_add _)).mp hPrep
-  exact coreVerify_of_represents laws hPrep' hsum hQ hb hS
+  exact coreVerify_of_represents hPrep' hsum hQ hb hS
 
 /-- Honest signatures on one message aggregate to a signature that verifies under the key sum.
 
 The secret keys must not sum to zero.
 
 If they sum to zero, the aggregate key is the point at infinity, which key validation rejects. -/
-theorem fastAggregateVerify_aggregate (laws : PairingLaws) (sks : List SecretKey) (hne : sks ≠ [])
+theorem fastAggregateVerify_aggregate (sks : List SecretKey) (hne : sks ≠ [])
     (hsum : (sks.map (·.val)).sum ≠ 0) (msg : ByteArray) :
     ∃ sigs, sks.mapM (fun sk => sign sk msg) = .ok sigs ∧
       ∃ sig, aggregate (sigs.map sigBytes).toArray = .ok sig ∧
@@ -290,11 +291,11 @@ theorem fastAggregateVerify_aggregate (laws : PairingLaws) (sks : List SecretKey
       List.map (fun sk => sigBytes (pointToSignature (G2.mul Q sk.val))) sks from rfl, hS]
     rfl
   · -- The sum of the signatures is the sum of the keys times the discrete logarithm of the hash.
-    exact fastAggregateVerify_of_represents laws hne hsum hQ hb
+    exact fastAggregateVerify_of_represents hne hsum hQ hb
       ((sum_map_mul sks (·.val) b) ▸ hSrep)
 
 /-- An honest signature passes the fast aggregate verification under its one public key. -/
-theorem fastAggregateVerify_sign (laws : PairingLaws) (sk : SecretKey) (msg : ByteArray)
+theorem fastAggregateVerify_sign (sk : SecretKey) (msg : ByteArray)
     {sig : BLSSignature} (signed : sign sk msg = .ok sig) :
     fastAggregateVerify #[pkBytes sk] msg (sigBytes sig) = true := by
   obtain ⟨Q, hQ, hv, hs⟩ := HashToCurve.hashToG2_total_inSubgroup msg DST
@@ -302,7 +303,7 @@ theorem fastAggregateVerify_sign (laws : PairingLaws) (sk : SecretKey) (msg : By
   unfold sign at signed
   rw [coreSign_eq hQ sk, Except.ok.injEq] at signed
   subst signed
-  have verifies := fastAggregateVerify_of_represents laws (sks := [sk]) (List.cons_ne_nil _ _)
+  have verifies := fastAggregateVerify_of_represents (sks := [sk]) (List.cons_ne_nil _ _)
     (by simpa using sk.property) hQ hb (by simpa using hb.mul sk.val)
   rw [← pointToSignature_bytes] at verifies
   exact verifies
@@ -380,7 +381,7 @@ private theorem zip_map_map {α β γ : Type} (l : List α) (f : α → β) (g :
 /-- Honest signatures on several messages aggregate to a signature that verifies.
 
 The messages need not differ, as the proof-of-possession scheme allows. -/
-theorem aggregateVerify_aggregate (laws : PairingLaws) (l : List (SecretKey × ByteArray))
+theorem aggregateVerify_aggregate (l : List (SecretKey × ByteArray))
     (hne : l ≠ []) :
     ∃ sigs, l.mapM (fun p => sign p.1 p.2) = .ok sigs ∧
       ∃ sig, aggregate (sigs.map sigBytes).toArray = .ok sig ∧
@@ -416,7 +417,7 @@ theorem aggregateVerify_aggregate (laws : PairingLaws) (l : List (SecretKey × B
         ((G1.generator, r) :: l.map fun p => (G1.neg (keyPoint p.1), hashPoint p.2)).toArray := by
       simp
     rw [hpairs]
-    refine (laws.pairingCheck_iff
+    refine (pairingLaws.pairingCheck_iff
       ((G1.generator, r) :: l.map fun p => (G1.neg (keyPoint p.1), hashPoint p.2))
       (1 :: l.map fun p => -p.1.val)
       ((0 + (l.map fun p => p.1.val * hashScalar p.2).sum) :: l.map fun p => hashScalar p.2)
@@ -446,12 +447,12 @@ theorem pointToSignature_zero : pointToSignature G2.zero = infinitySignature := 
 /-- Honest signatures on one message pass the Ethereum fast aggregate verification.
 
 The secret keys must not sum to zero. -/
-theorem ethFastAggregateVerify_aggregate (laws : PairingLaws) (sks : List SecretKey)
+theorem ethFastAggregateVerify_aggregate (sks : List SecretKey)
     (hne : sks ≠ []) (hsum : (sks.map (·.val)).sum ≠ 0) (msg : ByteArray) :
     ∃ sigs, sks.mapM (fun sk => sign sk msg) = .ok sigs ∧
       ∃ sig, aggregate (sigs.map sigBytes).toArray = .ok sig ∧
         ethFastAggregateVerify (sks.map pkBytes).toArray msg (sigBytes sig) = true := by
-  obtain ⟨sigs, hsigs, sig, hagg, hv⟩ := fastAggregateVerify_aggregate laws sks hne hsum msg
+  obtain ⟨sigs, hsigs, sig, hagg, hv⟩ := fastAggregateVerify_aggregate sks hne hsum msg
   refine ⟨sigs, hsigs, sig, hagg, ?_⟩
   unfold ethFastAggregateVerify
   rw [ite_eq_right (by cases sks with

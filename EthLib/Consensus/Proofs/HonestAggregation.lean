@@ -27,7 +27,7 @@ That holds when the length of an epoch is positive and at most the number of rec
 
 The slot of the state plus that number must also fit in 64 bits.
 
-Under the pairing laws, honest signatures on one message aggregate to a signature that verifies.
+Honest signatures on one message aggregate to a signature that verifies.
 
 The keys must not sum to zero, and the signature verifies under the keys in the order of the votes.
 
@@ -276,10 +276,8 @@ theorem mapM_sign_eq_of_forall₂ {attestations : List (Attestation preset fork)
 
 Each attestation carries the signature of the message by its key, in the order of the keys.
 
-The keys must not sum to zero.
-
-The statement holds under the laws of the pairing, as BLS correctness does. -/
-theorem fastAggregateVerify_getAggregateSignature (laws : PairingLaws)
+The keys must not sum to zero. -/
+theorem fastAggregateVerify_getAggregateSignature
     {attestations : List (Attestation preset fork)} {keys : List Signatures.SecretKey}
     {message : ByteArray}
     (signed : List.Forall₂ (fun attestation key =>
@@ -289,7 +287,7 @@ theorem fastAggregateVerify_getAggregateSignature (laws : PairingLaws)
       Signatures.fastAggregateVerify (keys.map Signatures.pkBytes).toArray message
         (Signatures.sigBytes signature) = true := by
   obtain ⟨signatures, signs, signature, aggregated, verifies⟩ :=
-    Signatures.fastAggregateVerify_aggregate laws keys nonempty sum message
+    Signatures.fastAggregateVerify_aggregate keys nonempty sum message
   -- Signing is a function, so the signatures of the keys are those of the attestations.
   rw [mapM_sign_eq_of_forall₂ signed, Except.ok.injEq] at signs
   subst signs
