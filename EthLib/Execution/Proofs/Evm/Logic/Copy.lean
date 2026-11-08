@@ -214,6 +214,51 @@ theorem returndatacopy (hfork : .byzantium ≤ fork) {start offset size : U256}
       (ofByte_of_decode (op := .returndatacopy) rfl hfork) instruction_returndatacopy ok,
     ⟨hcode, hj, hm, by simp [hpc], rfl, rfl, rfl, hrun, herr, hout, hs, hss, rfl⟩⟩
 
+/-- From Berlin, EXTCODECOPY copies a range of the code of an account.
+
+The address is the low 20 bytes of the word, and the state holds the code `c` of its account.
+
+The code reads as zeros past its end.
+
+The address is cold when the transaction has not accessed it yet, by EIP-2929.
+
+Up to BPO5 it pays 2600 for a cold address and 100 for a warm one, by EIP-2929.
+
+From Glamsterdam it pays the access to the address and one warm access to read the code.
+
+It also pays 3 gas a word and the growth of memory.
+
+It then adds the address to the accessed addresses, and records the read of the account. -/
+theorem extcodecopy_of_berlin_le (hfork : .berlin ≤ fork)
+    {word start offset size : U256} {rest : List U256} {cold : Bool} {c : ByteArray}
+    (hlt : pc < code.size) (hbyte : code[pc] = 0x3c)
+    (hcode : state.getCode (state.getAccount (Base.toAddressMasked word)).codeHash = .ok c)
+    (hcold : decide (Base.toAddressMasked word ∉ substate.accessedAddresses) = cold)
+    (hgas : externalBaseCost fork cold + 3 * wordCount size.toNat +
+      (extendMemory memory.size [(start, size)]).cost ≤ gas) :
+    Hoare fork
+      (At code message pc (word :: start :: offset :: size :: rest) memory gas state substate
+        returnData)
+      (At code message (pc + 1) rest
+        (memoryWrite (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
+          start.toNat ⟨(bufferRead c offset.toNat size.toNat).toArray⟩)
+        (gas - (externalBaseCost fork cold + 3 * wordCount size.toNat +
+          (extendMemory memory.size [(start, size)]).cost))
+        (state.recordAccountRead (Base.toAddressMasked word))
+        { substate with
+          accessedAddresses :=
+            substate.accessedAddresses.insert (Base.toAddressMasked word) } returnData) := by
+  apply At.rule hlt hbyte (ofByte_of_decode (op := .extcodecopy) rfl (Fork.frontier_le _))
+    instruction_extcodecopy
+  rintro evm ⟨hc, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
+  have found : accountCode evm (Base.toAddressMasked word) = .ok c := by
+    simp [accountCode, hs, hcode, Except.mapError]
+  have hword : OPCODE_COPY_PER_WORD = 3 := rfl
+  rw [extcodecopyStep_of_accountCode hst found]
+  simp only [accessAddress, hfork, ↓reduceIte, hss, hcold, hword, hg, hmem, charge_nat hgas]
+  exact ⟨_, rfl, hc, hj, hm, by simp [hpc], rfl, rfl, rfl, hrun, herr, hout, by simp [hs],
+    by simp, hrd⟩
+
 /-- From Berlin to before Glamsterdam, EXTCODECOPY copies a range of the code of an account.
 
 The address is the low 20 bytes of the word, and the state holds the code `c` of its account.
@@ -244,16 +289,7 @@ theorem extcodecopy (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
         { substate with
           accessedAddresses :=
             substate.accessedAddresses.insert (Base.toAddressMasked word) } returnData) := by
-  apply At.rule hlt hbyte (ofByte_of_decode (op := .extcodecopy) rfl (Fork.frontier_le _))
-    instruction_extcodecopy
-  rintro evm ⟨hc, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
-  have found : accountCode evm (Base.toAddressMasked word) = .ok c := by
-    simp [accountCode, hs, hcode, Except.mapError]
-  have hword : OPCODE_COPY_PER_WORD = 3 := rfl
-  rw [extcodecopyStep_of_accountCode hst found]
-  simp only [accessAddress, hfork, ↓reduceIte, hss, hcold,
-    externalBaseCost_of_berlin hfork hglam, hword, hg, hmem, charge_nat hgas]
-  exact ⟨_, rfl, hc, hj, hm, by simp [hpc], rfl, rfl, rfl, hrun, herr, hout, by simp [hs],
-    by simp, hrd⟩
+  rw [← externalBaseCost_of_berlin hfork hglam cold] at hgas ⊢
+  exact extcodecopy_of_berlin_le hfork hlt hbyte hcode hcold hgas
 
 end EthLib.Execution.Evm.Logic

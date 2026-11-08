@@ -816,6 +816,38 @@ theorem externalBaseCost_of_berlin (hfork : .berlin ≤ fork) (hglam : fork < .g
   have hng : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hglam
   simp [externalBaseCost, hfork, hng, accountAccessCost, gasSchedule, WARM_ACCESS]
 
+/-- From Berlin, EXTCODESIZE pushes the size of the code of an account.
+
+The address is the low 20 bytes of the word, and the state holds the code `c` of its account.
+
+The address is cold when the transaction has not accessed it yet, by EIP-2929.
+
+Up to BPO5 it pays 2600 for a cold address and 100 for a warm one, by EIP-2929.
+
+From Glamsterdam it pays the access to the address and one warm access to read the code.
+
+It then adds the address to the accessed addresses, and records the read of the account. -/
+theorem extcodesize_of_berlin_le (hfork : .berlin ≤ fork) {word : U256} {rest : List U256}
+    {cold : Bool} {c : ByteArray} (hlt : pc < code.size) (hbyte : code[pc] = 0x3b)
+    (hcode : state.getCode (state.getAccount (Base.toAddressMasked word)).codeHash = .ok c)
+    (hcold : decide (Base.toAddressMasked word ∉ substate.accessedAddresses) = cold)
+    (hgas : externalBaseCost fork cold ≤ gas) :
+    Hoare fork (At code message pc (word :: rest) memory gas state substate returnData)
+      (At code message (pc + 1) (BitVec.ofNat 256 c.size :: rest) memory
+        (gas - externalBaseCost fork cold)
+        (state.recordAccountRead (Base.toAddressMasked word))
+        { substate with
+          accessedAddresses :=
+            substate.accessedAddresses.insert (Base.toAddressMasked word) } returnData) := by
+  apply At.rule hlt hbyte (ofByte_of_decode (op := .extcodesize) rfl (Fork.frontier_le _)) rfl
+  rintro evm ⟨hc, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
+  have found : accountCode evm (Base.toAddressMasked word) = .ok c := by
+    simp [accountCode, hs, hcode, Except.mapError]
+  rw [extcodesizeStep_of_accountCode hst found]
+  simp only [accessAddress, hfork, ↓reduceIte, hss, hcold, hg, charge_nat hgas]
+  exact ⟨_, rfl, hc, hj, hm, by simp [hpc], rfl, hmem, rfl, hrun, herr, hout, by simp [hs],
+    by simp, hrd⟩
+
 /-- From Berlin to before Glamsterdam, EXTCODESIZE pushes the size of the code of an account.
 
 The address is the low 20 bytes of the word, and the state holds the code `c` of its account.
@@ -838,14 +870,7 @@ theorem extcodesize (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {wo
         { substate with
           accessedAddresses :=
             substate.accessedAddresses.insert (Base.toAddressMasked word) } returnData) := by
-  apply At.rule hlt hbyte (ofByte_of_decode (op := .extcodesize) rfl (Fork.frontier_le _)) rfl
-  rintro evm ⟨hc, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
-  have found : accountCode evm (Base.toAddressMasked word) = .ok c := by
-    simp [accountCode, hs, hcode, Except.mapError]
-  rw [extcodesizeStep_of_accountCode hst found]
-  simp only [accessAddress, hfork, ↓reduceIte, hss, hcold,
-    externalBaseCost_of_berlin hfork hglam, hg, charge_nat hgas]
-  exact ⟨_, rfl, hc, hj, hm, by simp [hpc], rfl, hmem, rfl, hrun, herr, hout, by simp [hs],
-    by simp, hrd⟩
+  rw [← externalBaseCost_of_berlin hfork hglam cold] at hgas ⊢
+  exact extcodesize_of_berlin_le hfork hlt hbyte hcode hcold hgas
 
 end EthLib.Execution.Evm.Logic
