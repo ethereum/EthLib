@@ -39,24 +39,7 @@ Source: [EIP-197][eip197], section Specification.
 namespace EthLib.Execution.Evm.Precompiles.AltBn128
 
 open EthLib.Cryptography.AltBn128
-open EthLib.Base (bind_ok_iff)
 open EthLib.Execution.Evm (bufferRead)
-
-/-- A decoded point of the twist is on the twist. -/
-theorem bytesToG2_isOnCurve {raw : List UInt8} {q : Point2} (h : bytesToG2 raw = .ok q) :
-    q.isOnCurve = true := by
-  simp only [bytesToG2, pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at h
-  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-  split at h
-  · cases h
-    rfl
-  · split at h
-    · cases h
-      assumption
-    · cases h
 
 /-- A pair decodes exactly when both points decode and `q` kills the point of the twist. -/
 theorem decodePair_eq_ok_iff (data : ByteArray) (index : Nat) (p : Point) (q : Point2) :

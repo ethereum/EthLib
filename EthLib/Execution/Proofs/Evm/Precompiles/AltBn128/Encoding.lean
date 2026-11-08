@@ -71,7 +71,7 @@ theorem bytesToG1_g1ToBytes {p : Point} (hp : p.isOnCurve = true) :
       ite_false, ite_true, pure, Except.pure]
 
 /-- Each 64 bytes that the decoder accepts are the encoding of the point that it returns. -/
-theorem g1ToBytes_of_bytesToG1 {raw : List UInt8} {p : Point} (hlen : raw.length = 64)
+theorem g1ToBytes_bytesToG1 {raw : List UInt8} {p : Point} (hlen : raw.length = 64)
     (h : bytesToG1 raw = .ok p) : g1ToBytes p = raw := by
   -- Each half has 32 bytes, so it is its value written on 32 bytes.
   have htake : natToBytes 32 (bytesToNat (raw.take 32)) = raw.take 32 := by
@@ -102,7 +102,7 @@ theorem g1ToBytes_of_bytesToG1 {raw : List UInt8} {p : Point} (hlen : raw.length
 /-- 64 bytes decode to a point exactly when the point is on the curve and the bytes encode it. -/
 theorem bytesToG1_eq_ok_iff {raw : List UInt8} (hlen : raw.length = 64) (p : Point) :
     bytesToG1 raw = .ok p ↔ p.isOnCurve = true ∧ g1ToBytes p = raw :=
-  ⟨fun h => ⟨bytesToG1_isOnCurve h, g1ToBytes_of_bytesToG1 hlen h⟩,
+  ⟨fun h => ⟨bytesToG1_isOnCurve h, g1ToBytes_bytesToG1 hlen h⟩,
     fun ⟨hp, hraw⟩ => hraw ▸ bytesToG1_g1ToBytes hp⟩
 
 end EthLib.Execution.Evm.Precompiles.AltBn128
