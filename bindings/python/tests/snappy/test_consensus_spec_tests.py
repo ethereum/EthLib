@@ -5,15 +5,11 @@
 # `tests/consensus/snappy/README.md` gives the origin of the files and how they were chosen.
 
 import hashlib
-import json
-from pathlib import Path
 
 import pytest
 
 from ethlib.networking import snappy
-
-FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "snappy"
-CASES = json.loads((Path(__file__).resolve().parent / "consensus_spec_tests.json").read_text())
+from snappy_reference import CASES, FILES, SpecCase
 
 
 def test_digests():
@@ -26,14 +22,14 @@ def test_digests():
 
 
 @pytest.mark.parametrize("case", CASES, ids=[case["file"] for case in CASES])
-def test_decompress(case: dict) -> None:
+def test_decompress(case: SpecCase) -> None:
     data = snappy.decompress((FILES / case["file"]).read_bytes())
     assert len(data) == case["size"]
     assert hashlib.sha256(data).hexdigest() == case["sha256"]
 
 
 @pytest.mark.parametrize("case", CASES, ids=[case["file"] for case in CASES])
-def test_encode_frames_round_trip(case: dict) -> None:
+def test_encode_frames_round_trip(case: SpecCase) -> None:
     # The data of each file, framed by the encoder that compresses, decodes back to itself.
     data = snappy.decompress((FILES / case["file"]).read_bytes())
     stream = snappy.encode_frames(data)

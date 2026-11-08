@@ -1,17 +1,12 @@
 """The ssz_snappy req/resp encoding against hand-built messages and a reference decoder."""
 
-import hashlib
 import random
 
 import pytest
-from snappy.test_independent_decoder import (
-    CASES as SPEC_CASES,
-    FILES as SPEC_FILES,
-    _decode as _decode_block,
-)
 
 from ethlib.networking import reqresp
 from raising import raises
+from snappy_reference import CASES as SPEC_CASES, SpecCase, decode_block, spec_object
 
 # Each message is built from the framing format of google/snappy and the protobuf varint.
 # The framing format is framing_format.txt, so no value comes from the code under test.
@@ -291,7 +286,7 @@ def _decode_frames(stream: bytes) -> tuple[bytes, list[tuple[int, int]]]:
         at += 4 + length
         # Type 0 is a compressed chunk, and type 1 an uncompressed one.
         assert chunk_type in (0x00, 0x01)
-        piece = _decode_block(body[4:]) if chunk_type == 0x00 else body[4:]
+        piece = decode_block(body[4:]) if chunk_type == 0x00 else body[4:]
         assert len(piece) <= 65536
         assert body[:4] == _masked_crc(piece).to_bytes(4, "little")
         data += piece
@@ -320,7 +315,7 @@ def test_reference_decoder():
     compressed = _varint(4) + STREAM_IDENTIFIER + _compressed_literal(PAYLOAD)
     assert _decode_payload(compressed) == (PAYLOAD, [(0, 4)])
     # 32 zero bytes: a literal of one zero byte, then a copy of 31 bytes from 1 back.
-    assert _decode_block(bytes.fromhex("2000007a0100")) == bytes(32)
+    assert decode_block(bytes.fromhex("2000007a0100")) == bytes(32)
 
 
 # Each input of the payload encoder, and the type and data size of each chunk that it writes.
@@ -346,12 +341,9 @@ def test_encode_payload(data: bytes, chunks: list[tuple[int, int]]):
 
 # The SSZ objects of the 50 ssz_snappy files of consensus-spec-tests that the Snappy tests read.
 # `tests/consensus/snappy/README.md` gives their origin.
-# The JSON file of the Snappy tests gives the size and the SHA-256 digest of each object.
 @pytest.mark.parametrize("case", SPEC_CASES, ids=[case["file"] for case in SPEC_CASES])
-def test_encode_payload_of_spec_objects(case: dict):
-    data = _decode_block((SPEC_FILES / case["file"]).read_bytes())
-    assert len(data) == case["size"]
-    assert hashlib.sha256(data).hexdigest() == case["sha256"]
+def test_encode_payload_of_spec_objects(case: SpecCase):
+    data = spec_object(case)
     decoded, _ = _decode_payload(reqresp.encode_payload(data))
     assert decoded == data
 
