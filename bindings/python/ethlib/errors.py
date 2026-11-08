@@ -110,6 +110,14 @@ class HkdfError(EthLibError, ValueError):
     """HKDF rejected its input."""
 
 
+class Pbkdf2Error(EthLibError, ValueError):
+    """PBKDF2 rejected its input."""
+
+
+class ScryptError(EthLibError, ValueError):
+    """scrypt or one of its steps rejected its input."""
+
+
 class ConcatKdfError(EthLibError, ValueError):
     """The Concatenation KDF rejected its input."""
 
@@ -254,6 +262,8 @@ __all__ = [
     "LightClientError",
     "ForkChoiceError",
     "HkdfError",
+    "Pbkdf2Error",
+    "ScryptError",
     "ConcatKdfError",
     "AesError",
     "BlockError",

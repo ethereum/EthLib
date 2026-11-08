@@ -191,6 +191,21 @@
 #define DOC_concat_kdf_sha256 \
   "The first `length` bytes of `K(1) | K(2) | ...`, SP 800-56C Rev. 2 §4.1."
 
+#define DOC_pbkdf2_sha256 \
+  "PBKDF2-HMAC-SHA-256, RFC 8018 §5.2, with the output length in bytes."
+
+#define DOC_salsa208 \
+  "Salsa20/8 on exactly 64 bytes, RFC 7914 §3."
+
+#define DOC_scrypt_block_mix \
+  "BlockMix on `2 * r` consecutive 64-byte blocks, RFC 7914 §4."
+
+#define DOC_scrypt_romix \
+  "ROMix on `128 * r` bytes with a valid power-of-two cost, RFC 7914 §5."
+
+#define DOC_scrypt \
+  "Expand, mix and compress the password, RFC 7914 §6, with the output length in bytes."
+
 #define DOC_secp256k1_verify \
   "Whether `(r, s)` is a valid signature on `hash` under the public key `q`, by SEC 1 v2 §4.1.4."
 

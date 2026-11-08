@@ -828,7 +828,7 @@
       {"constructor": "badMessageSize", "code": 5}]}],
    "error_class": "XmssError",
    "docstring":
-   "`Sig(sk, idx, m)` over a hash `H`: sign a message at a leaf index.\n\n1. The scheme seed `S` and the public parameter `P`, from the secret key's seed.\n2. The signature from `S` and `P`.\n\n# Warning\n\nNever sign two different messages at one leaf index with one secret key.\n\nThe top key `b` signs only the root of bottom tree `b`.\n\nSo it signs one message, however many leaf indices of that tree are used.\n\n# Errors\n\n- Either layer's one-time signature finds no codeword."},
+   "`Sig(sk, idx, m)` over a hash `H`: sign a message at a leaf index.\n\n1. The scheme seed `S` and the public parameter `P`, from the secret key's seed.\n2. The signature from the derivations of `S` and from `P`.\n\n# Warning\n\nNever sign two different messages at one leaf index with one secret key.\n\nThe top key `b` signs only the root of bottom tree `b`.\n\nSo it signs one message, however many leaf indices of that tree are used.\n\n# Errors\n\n- Either layer's one-time signature finds no codeword."},
   {"summary":
    "`Ver(pk, m, sigma)` over a hash `H`: whether a signature signs a message under a public key.",
    "signature": "(public_key: bytes, message: bytes, signature: bytes) -> bool",
@@ -1223,6 +1223,91 @@
    "error_class": "ConcatKdfError",
    "docstring":
    "The first `length` bytes of `K(1) | K(2) | ...`, SP 800-56C Rev. 2 §4.1.\n\nThe shared secret is secret, and this function makes no constant-time claim."},
+  {"summary":
+   "PBKDF2-HMAC-SHA-256, RFC 8018 §5.2, with the output length in bytes.",
+   "signature":
+   "(password: bytes, salt: bytes, iterations: int, length: int) -> bytes",
+   "operation": "EthLib.Cryptography.Hash.Pbkdf2.pbkdf2",
+   "method": "pbkdf2_sha256",
+   "errors":
+   [{"type": "EthLib.Cryptography.Hash.Pbkdf2.Pbkdf2Error",
+     "codes":
+     [{"constructor": "zeroIterations", "code": 1},
+      {"constructor": "emptyOutput", "code": 2},
+      {"constructor": "outputTooLong", "code": 3},
+      {"constructor": "inputTooLong", "code": 4}]}],
+   "error_class": "Pbkdf2Error",
+   "docstring":
+   "PBKDF2-HMAC-SHA-256, RFC 8018 §5.2, with the output length in bytes."},
+  {"summary": "Salsa20/8 on exactly 64 bytes, RFC 7914 §3.",
+   "signature": "(block: bytes) -> bytes",
+   "operation": "EthLib.Cryptography.Hash.Scrypt.salsa208",
+   "method": "salsa208",
+   "errors":
+   [{"type": "EthLib.Cryptography.Hash.Scrypt.ScryptError",
+     "codes":
+     [{"constructor": "invalidCost", "code": 1},
+      {"constructor": "invalidBlockSize", "code": 2},
+      {"constructor": "invalidParallelization", "code": 3},
+      {"constructor": "emptyOutput", "code": 4},
+      {"constructor": "outputTooLong", "code": 5},
+      {"constructor": "invalidInputSize", "code": 6},
+      {"constructor": "pbkdf2", "code": 7}]}],
+   "error_class": "ScryptError",
+   "docstring": "Salsa20/8 on exactly 64 bytes, RFC 7914 §3."},
+  {"summary": "BlockMix on `2 * r` consecutive 64-byte blocks, RFC 7914 §4.",
+   "signature": "(block: bytes, r: int) -> bytes",
+   "operation": "EthLib.Cryptography.Hash.Scrypt.blockMix",
+   "method": "scrypt_block_mix",
+   "errors":
+   [{"type": "EthLib.Cryptography.Hash.Scrypt.ScryptError",
+     "codes":
+     [{"constructor": "invalidCost", "code": 1},
+      {"constructor": "invalidBlockSize", "code": 2},
+      {"constructor": "invalidParallelization", "code": 3},
+      {"constructor": "emptyOutput", "code": 4},
+      {"constructor": "outputTooLong", "code": 5},
+      {"constructor": "invalidInputSize", "code": 6},
+      {"constructor": "pbkdf2", "code": 7}]}],
+   "error_class": "ScryptError",
+   "docstring": "BlockMix on `2 * r` consecutive 64-byte blocks, RFC 7914 §4."},
+  {"summary":
+   "ROMix on `128 * r` bytes with a valid power-of-two cost, RFC 7914 §5.",
+   "signature": "(block: bytes, n: int, r: int) -> bytes",
+   "operation": "EthLib.Cryptography.Hash.Scrypt.romix",
+   "method": "scrypt_romix",
+   "errors":
+   [{"type": "EthLib.Cryptography.Hash.Scrypt.ScryptError",
+     "codes":
+     [{"constructor": "invalidCost", "code": 1},
+      {"constructor": "invalidBlockSize", "code": 2},
+      {"constructor": "invalidParallelization", "code": 3},
+      {"constructor": "emptyOutput", "code": 4},
+      {"constructor": "outputTooLong", "code": 5},
+      {"constructor": "invalidInputSize", "code": 6},
+      {"constructor": "pbkdf2", "code": 7}]}],
+   "error_class": "ScryptError",
+   "docstring":
+   "ROMix on `128 * r` bytes with a valid power-of-two cost, RFC 7914 §5."},
+  {"summary":
+   "Expand, mix and compress the password, RFC 7914 §6, with the output length in bytes.",
+   "signature":
+   "(password: bytes, salt: bytes, n: int, r: int, p: int, length: int) -> bytes",
+   "operation": "EthLib.Cryptography.Hash.Scrypt.scrypt",
+   "method": "scrypt",
+   "errors":
+   [{"type": "EthLib.Cryptography.Hash.Scrypt.ScryptError",
+     "codes":
+     [{"constructor": "invalidCost", "code": 1},
+      {"constructor": "invalidBlockSize", "code": 2},
+      {"constructor": "invalidParallelization", "code": 3},
+      {"constructor": "emptyOutput", "code": 4},
+      {"constructor": "outputTooLong", "code": 5},
+      {"constructor": "invalidInputSize", "code": 6},
+      {"constructor": "pbkdf2", "code": 7}]}],
+   "error_class": "ScryptError",
+   "docstring":
+   "Expand, mix and compress the password, RFC 7914 §6, with the output length in bytes."},
   {"summary":
    "Whether `(r, s)` is a valid signature on `hash` under the public key `q`, by SEC 1 v2 §4.1.4.",
    "signature":

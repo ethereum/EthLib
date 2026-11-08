@@ -1,11 +1,19 @@
-"""Key derivation with SHA-256: HKDF of RFC 5869 and the Concatenation KDF of SP 800-56C."""
+"""Key derivation with SHA-256."""
 
 from ethlib.cryptography._native import (
+    PBKDF2_HASH_LEN,
+    SALSA_BLOCK_SIZE,
+    SCRYPT_BLOCK_SIZE,
     concat_kdf_sha256 as native_concat_kdf_sha256,
     hkdf_sha256 as native_hkdf_sha256,
     hmac_sha256 as native_hmac_sha256,
+    pbkdf2_sha256 as native_pbkdf2_sha256,
+    salsa208 as native_salsa208,
+    scrypt as native_scrypt,
+    scrypt_block_mix as native_scrypt_block_mix,
+    scrypt_romix as native_scrypt_romix,
 )
-from ethlib.errors import ConcatKdfError, HkdfError
+from ethlib.errors import ConcatKdfError, HkdfError, Pbkdf2Error, ScryptError
 
 # The input keying material and the shared secret are secret.
 # EthLib makes no constant-time claim.
@@ -32,10 +40,45 @@ def concat_kdf(z: bytes, fixed_info: bytes, length: int) -> bytes:
     return native_concat_kdf_sha256(z, fixed_info, length)
 
 
+def pbkdf2(password: bytes, salt: bytes, iterations: int, length: int) -> bytes:
+    """PBKDF2-HMAC-SHA-256 of RFC 8018 §5.2: `length` bytes of key."""
+    return native_pbkdf2_sha256(password, salt, iterations, length)
+
+
+def salsa208(block: bytes) -> bytes:
+    """The Salsa20/8 core of RFC 7914 §3 on one 64-byte input."""
+    return native_salsa208(block)
+
+
+def block_mix(block: bytes, r: int) -> bytes:
+    """The scryptBlockMix step of RFC 7914 §4 on a `128 * r`-byte input."""
+    return native_scrypt_block_mix(block, r)
+
+
+def romix(block: bytes, n: int, r: int) -> bytes:
+    """The scryptROMix step of RFC 7914 §5 with `n` table entries."""
+    return native_scrypt_romix(block, n, r)
+
+
+def scrypt(password: bytes, salt: bytes, n: int, r: int, p: int, length: int) -> bytes:
+    """The scrypt derivation of RFC 7914 §6: `length` bytes of key."""
+    return native_scrypt(password, salt, n, r, p, length)
+
+
 __all__ = [
+    "PBKDF2_HASH_LEN",
+    "SALSA_BLOCK_SIZE",
+    "SCRYPT_BLOCK_SIZE",
     "ConcatKdfError",
     "HkdfError",
+    "Pbkdf2Error",
+    "ScryptError",
+    "block_mix",
     "concat_kdf",
     "hkdf",
     "hkdf_extract",
+    "pbkdf2",
+    "romix",
+    "salsa208",
+    "scrypt",
 ]
