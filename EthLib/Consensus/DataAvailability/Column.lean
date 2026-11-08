@@ -207,11 +207,15 @@ def verifyDataColumnSidecarInclusionProof (preset : Preset) {fork : Fork}
 def computeMaxRequestDataColumnSidecars (preset : Preset) (config : Config) : UInt64 :=
   config.MAX_REQUEST_BLOCKS_DENEB * preset.NUMBER_OF_COLUMNS
 
-/-- The entries of one row: each of its 128 cells with its proof, in the order of the columns. -/
+/-- The entries of one row: each cell with its proof, in the order of the columns.
+
+Cell `i` and proof `i` form the entry of column `i`.
+
+The row stops at the shorter of the two arrays; an extended blob gives 128 of each. -/
 def matrixRow (row : RowIndex) (cells : Array Cell) (proofs : Array KZGProof) :
     List MatrixEntry :=
-  (List.range Constants.CELLS_PER_EXT_BLOB).map fun column =>
-    ⟨cells[column]!, proofs[column]!, column.toUInt64, row⟩
+  (cells.toList.zip proofs.toList).zipIdx.map fun ((cell, proof), column) =>
+    ⟨cell, proof, column.toUInt64, row⟩
 
 /-- The row of one blob: the cells and proofs of its extended blob. -/
 def computeMatrixRow (setup : TrustedSetup) (blob : Blob) (row : Nat) :

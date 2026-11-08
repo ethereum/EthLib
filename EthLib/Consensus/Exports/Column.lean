@@ -162,11 +162,14 @@ def recoverMatrixExport (entries : ByteArray) (count : UInt64) : Result ByteArra
 def readRows (rows : ByteArray) : Result (List (Array Cell × Array KZGProof)) := do
   let width := CELLS_PER_EXT_BLOB * (BYTES_PER_CELL + BYTES_PER_PROOF)
   let some rows := pieces width rows | throw (0, "rows have a wrong length")
-  return rows.toList.map fun row =>
+  rows.toList.mapM fun row => do
     let bytes : ByteArray := ⟨row.toArray⟩
     let cellBytes := CELLS_PER_EXT_BLOB * BYTES_PER_CELL
-    ((pieces BYTES_PER_CELL (bytes.extract 0 cellBytes)).getD #[],
-      (pieces BYTES_PER_PROOF (bytes.extract cellBytes width)).getD #[])
+    let some cells := pieces BYTES_PER_CELL (bytes.extract 0 cellBytes)
+      | throw (0, "a row does not split into cells")
+    let some proofs := pieces BYTES_PER_PROOF (bytes.extract cellBytes width)
+      | throw (0, "a row does not split into proofs")
+    return (cells, proofs)
 
 /-- The bytes of a list of sidecars, in the SSZ encoding of a list. -/
 def sidecarsBytes {preset : Preset} {fork : Fork}
