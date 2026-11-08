@@ -125,7 +125,7 @@ theorem processCreateMessage_eq_ok {message : Message fork} {state : Transaction
       exact hd
   have hmap := congrArg (Except.map Subtype.val) hrun
   cases hr : runFrame (step fork) (step_decreases fork) message.gas
-      (processRunner fork message.gas)
+      (processRunner fork (Meter := Nat) message.gas)
       (startFrame message (startState fork message prepared) substate
         (GasMeter.start message.gas message.reservoir)) (Nat.le_refl _) with
   | error e =>

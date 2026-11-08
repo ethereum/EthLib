@@ -27,7 +27,7 @@ No primary source writes these bounds as functions, so the rules below state the
 
 namespace EthLib.Serialization.Ssz
 
-/-- The bytes of one element or field: its own, and an offset when its size can vary. -/
+/-- The bytes of the offset of one element or field: four when its size can vary, else none. -/
 def offsetWidth (shape : Desc) : Nat :=
   if shape.isFixed then 0 else bytesPerOffset
 

@@ -137,19 +137,41 @@ theorem removeBlocks_proposerBoostRoot (roots : List Root) :
       else store.proposerBoostRoot := by
   simp [removeBlocks]
 
-/-- A removal keeps the clock, the checkpoints, their states and the equivocators. -/
-theorem removeBlocks_frame (roots : List Root) :
-    (store.removeBlocks roots).timeMs = store.timeMs ∧
-      (store.removeBlocks roots).genesisTimeMs = store.genesisTimeMs ∧
-      (store.removeBlocks roots).justifiedCheckpoint = store.justifiedCheckpoint ∧
-      (store.removeBlocks roots).finalizedCheckpoint = store.finalizedCheckpoint ∧
-      (store.removeBlocks roots).unrealizedJustifiedCheckpoint =
-        store.unrealizedJustifiedCheckpoint ∧
-      (store.removeBlocks roots).unrealizedFinalizedCheckpoint =
-        store.unrealizedFinalizedCheckpoint ∧
-      (store.removeBlocks roots).checkpointStates = store.checkpointStates ∧
-      (store.removeBlocks roots).equivocatingIndices = store.equivocatingIndices :=
-  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+/-- A removal keeps the clock. -/
+theorem removeBlocks_timeMs (roots : List Root) :
+    (store.removeBlocks roots).timeMs = store.timeMs := rfl
+
+/-- A removal keeps the time of genesis. -/
+theorem removeBlocks_genesisTimeMs (roots : List Root) :
+    (store.removeBlocks roots).genesisTimeMs = store.genesisTimeMs := rfl
+
+/-- A removal keeps the justified checkpoint. -/
+theorem removeBlocks_justifiedCheckpoint (roots : List Root) :
+    (store.removeBlocks roots).justifiedCheckpoint = store.justifiedCheckpoint := rfl
+
+/-- A removal keeps the finalized checkpoint. -/
+theorem removeBlocks_finalizedCheckpoint (roots : List Root) :
+    (store.removeBlocks roots).finalizedCheckpoint = store.finalizedCheckpoint := rfl
+
+/-- A removal keeps the unrealized justified checkpoint. -/
+theorem removeBlocks_unrealizedJustifiedCheckpoint (roots : List Root) :
+    (store.removeBlocks roots).unrealizedJustifiedCheckpoint =
+      store.unrealizedJustifiedCheckpoint :=
+  rfl
+
+/-- A removal keeps the unrealized finalized checkpoint. -/
+theorem removeBlocks_unrealizedFinalizedCheckpoint (roots : List Root) :
+    (store.removeBlocks roots).unrealizedFinalizedCheckpoint =
+      store.unrealizedFinalizedCheckpoint :=
+  rfl
+
+/-- A removal keeps the states of the checkpoints. -/
+theorem removeBlocks_checkpointStates (roots : List Root) :
+    (store.removeBlocks roots).checkpointStates = store.checkpointStates := rfl
+
+/-- A removal keeps the equivocating validators. -/
+theorem removeBlocks_equivocatingIndices (roots : List Root) :
+    (store.removeBlocks roots).equivocatingIndices = store.equivocatingIndices := rfl
 
 /-- The blocks that a removal of descendants drops are the known descendants of its root.
 

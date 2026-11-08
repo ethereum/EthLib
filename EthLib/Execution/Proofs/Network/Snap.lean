@@ -78,7 +78,7 @@ theorem number_injective : Function.Injective number := fun a b h => by
   rwa [h, ofNumber?_number, Option.some.injEq, eq_comm] at this
 
 /-- Every snap version has at least one message ID. -/
-theorem messageCount_pos (v : SnapVersion) : 0 < v.messageCount := by
+theorem messageCount_ne_zero (v : SnapVersion) : v.messageCount ≠ 0 := by
   cases v <;> decide
 
 end SnapVersion
@@ -94,7 +94,7 @@ theorem capabilityLength_eth (v : EthVersion) :
   cases v <;> rfl
 
 /-- The names of the two capabilities differ. -/
-theorem SNAP_NAME_ne_ETH_NAME : SNAP_NAME ≠ ETH_NAME := by
+private theorem SNAP_NAME_ne_ETH_NAME : SNAP_NAME ≠ ETH_NAME := by
   decide
 
 /-- The snap and eth count of message IDs is nonzero exactly on a snap or an eth capability. -/
@@ -121,7 +121,7 @@ theorem capabilityLength_ne_zero_iff {c : Networking.Devp2p.Capability} :
     · rintro ⟨v, rfl⟩
       simp only [SnapVersion.capability, SnapVersion.ofNumber?_number, Option.map_some,
         Option.getD_some]
-      exact Nat.pos_iff_ne_zero.mp (SnapVersion.messageCount_pos v)
+      exact SnapVersion.messageCount_ne_zero v
   next hname =>
     -- A snap capability has another name.
     have hsnap : ¬∃ v : SnapVersion, v.capability = c := by

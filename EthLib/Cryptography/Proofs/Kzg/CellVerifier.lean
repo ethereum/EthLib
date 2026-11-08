@@ -428,16 +428,6 @@ theorem cellToCosetEvals_inj {a a' : Cell} {e : CosetEvals} (h : cellToCosetEval
 
 /-! ## The outer check returns a verdict -/
 
-/-- A fold whose steps all succeed returns no error. -/
-theorem list_foldlM_ne_error {ε σ α : Type} {f : σ → α → Except ε σ} {e : ε} :
-    ∀ (L : List α) (init : σ), (∀ acc, ∀ p ∈ L, ∃ r, f acc p = .ok r) →
-      L.foldlM f init ≠ .error e
-  | [], _, _ => fun h => nomatch h
-  | p :: L, init, h => by
-    obtain ⟨r, hr⟩ := h init p List.mem_cons_self
-    simp only [List.foldlM_cons, bind, Except.bind, hr]
-    exact list_foldlM_ne_error L r fun acc q hq => h acc q (List.mem_cons_of_mem p hq)
-
 /-- **The outer check returns a verdict.**
 
 The cells, the proofs and the cell indices are as many as the commitments.
@@ -467,7 +457,7 @@ theorem verifyCellKzgProofBatch_exists_ok {s : TrustedSetup} {bs : Array Bytes48
   split at hO
   · rename_i e hdd
     rw [← Array.foldlM_toList] at hdd
-    refine list_foldlM_ne_error _ _ (fun acc p hp => ?_) hdd
+    refine Base.foldlM_ne_error _ _ (fun acc p hp => ?_) hdd
     · have hv : validateKzgG1 p.1 = true :=
         hbs _ (Array.fst_mem_of_mem_zipIdx (Array.mem_toList_iff.mp hp))
       have hb : bytesToKzgCommitment p.1 = .ok p.1 := bytesToKzgCommitment_ok_iff.mpr ⟨hv, rfl⟩
