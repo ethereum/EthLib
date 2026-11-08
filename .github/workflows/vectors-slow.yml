@@ -152,15 +152,17 @@ jobs:
           restore-keys: |
             ethlib-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
 
-      - name: install Lean and fetch Mathlib cache
+      - name: install Lean
         if: matrix.bindings
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           bash scripts/install_elan.sh
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-          export PATH="$HOME/.elan/bin:$PATH"
-          MATHLIB_CACHE_GET_URL="https://cache.mathlib.org/mathlib4" lake exe cache get
+
+      - name: fetch the Mathlib cache
+        if: matrix.bindings
+        run: lake exe cache get
 
       - name: library
         if: matrix.bindings
