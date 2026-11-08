@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Serialization.Ssz.Codec.Root
+public import EthLib.Serialization.Proofs.Ssz.Codec.RootHasher
 public import EthLib.Serialization.Proofs.Ssz.Codec.LayoutLaws
 public import EthLib.Base.Proofs.MapM
 
@@ -49,15 +49,15 @@ theorem hashTreeRootAt_budget_eq (shape : Desc) (value : Value) (left right : Na
     rcases right with _ | right; · omega
     -- Layout selection itself is independent of recursion budget.
     cases hl : merkleLayout shape value with
-    | error e => simp [hashTreeRootAt, hl, Bind.bind, Except.bind]
+    | error e => simp [hashTreeRootAt_succ, hl, Bind.bind, Except.bind]
     | ok layout =>
       -- Equal child roots give equal leaves before either tree shape hashes them.
       have chunksEq : layoutChunksAt left layout = layoutChunksAt right layout := by
         rcases layout with ⟨leaves, limit, mixin⟩
         cases leaves with
-        | packed data => simp [layoutChunksAt]
+        | packed data => simp [layoutChunksAt_eq]
         | nested slots =>
-          simp only [layoutChunksAt, Leaves.count, Option.getD_none,
+          simp only [layoutChunksAt_eq, Leaves.count, Option.getD_none,
             List.drop_zero, Nat.sub_zero, List.take_length]
           apply congrArg (fun result : Except Err (List Bytes) =>
             result.bind (fun nodes => .ok nodes.toArray))
@@ -71,7 +71,7 @@ theorem hashTreeRootAt_budget_eq (shape : Desc) (value : Value) (left right : Na
               pair.1 pair.2 member
             exact ih pair.1.nesting (by omega) pair.1 pair.2 left right
               (by omega) (by omega) rfl
-      simp [hashTreeRootAt, hl, chunksEq, Bind.bind, Except.bind]
+      simp [hashTreeRootAt_succ, hl, chunksEq, Bind.bind, Except.bind]
 
 /-- Any sufficient recursion budget agrees with the root computed at the type's own depth. -/
 theorem hashTreeRootAt_eq_hashTreeRoot (shape : Desc) (value : Value) (budget : Nat)
@@ -94,25 +94,28 @@ theorem hashTreeRoot_materializes (shape : Desc) (value : Value) (root : Bytes)
         | some word => mixIn contents word) := by
   -- Every intermediate failure is propagated before the final root can be returned.
   have positive : 0 < shape.nesting := by cases shape <;> simp [Desc.nesting]
-  unfold hashTreeRoot at success
+  rw [hashTreeRoot_eq_nesting] at success
   cases depth : shape.nesting with
   | zero => omega
   | succ budget =>
     cases laid : merkleLayout shape value with
-    | error e => simp [depth, hashTreeRootAt, laid, Bind.bind, Except.bind] at success
+    | error e => simp [depth, hashTreeRootAt_succ, laid, Bind.bind, Except.bind] at success
     | ok layout =>
       cases materialized : layoutChunksAt budget layout with
-      | error e => simp [depth, hashTreeRootAt, laid, materialized, Bind.bind, Except.bind] at success
+      | error e => simp [depth, hashTreeRootAt_succ, laid, materialized, Bind.bind,
+          Except.bind] at success
       | ok chunks =>
         cases contents : (match layout.limit with
           | none => Except.ok (merkleizeProgressiveUnchecked chunks.toList)
           | some capacity => merkleizeBoundedUnchecked chunks (some capacity)) with
         | error e =>
-          simp only [depth, hashTreeRootAt, laid, materialized, Bind.bind, Except.bind] at success
+          simp only [depth, hashTreeRootAt_succ, laid, materialized, Bind.bind,
+            Except.bind] at success
           cases limit : layout.limit <;> simp_all
         | ok tree =>
           refine ⟨layout, chunks, tree, rfl, by simpa [depth] using materialized, contents, ?_⟩
-          simp only [depth, hashTreeRootAt, laid, materialized, Bind.bind, Except.bind] at success
+          simp only [depth, hashTreeRootAt_succ, laid, materialized, Bind.bind,
+            Except.bind] at success
           cases limit : layout.limit <;>
             simp_all [Pure.pure, Except.pure]
           all_goals exact success.symm
@@ -127,9 +130,9 @@ theorem layoutChunksAt_budget_eq (layout : MerkleLayout) (left right : Nat)
   -- Slicing only removes leaves, so the depth bound still covers every visited value.
   rcases layout with ⟨leaves, limit, mixin⟩
   cases leaves with
-  | packed data => simp [layoutChunksAt]
+  | packed data => simp [layoutChunksAt_eq]
   | nested slots =>
-    simp only [layoutChunksAt]
+    simp only [layoutChunksAt_eq]
     apply congrArg (fun result : Except Err (List Bytes) =>
       result.bind (fun nodes => .ok nodes.toArray))
     apply mapM_congr_on
@@ -150,12 +153,12 @@ theorem layoutChunksAt_size (budget : Nat) (layout : MerkleLayout)
   rcases layout with ⟨leaves, limit, mixin⟩
   cases leaves with
   | packed data =>
-    simp only [layoutChunksAt, pure, Except.pure, Leaves.count, Option.getD_none, Array.extract_size,
-      Except.ok.injEq] at success
+    simp only [layoutChunksAt_eq, pure, Except.pure, Leaves.count, Option.getD_none,
+      Array.extract_size, Except.ok.injEq] at success
     subst chunks
     rfl
   | nested values =>
-    simp only [layoutChunksAt, Leaves.count, Option.getD_none, List.drop_zero,
+    simp only [layoutChunksAt_eq, Leaves.count, Option.getD_none, List.drop_zero,
       Nat.sub_zero, List.take_length] at success
     let f : Option (Desc × Value) → Except Err Bytes := fun slot =>
       match slot with
@@ -176,7 +179,7 @@ theorem layoutChunksAt_child_root (budget : Nat) (layout : MerkleLayout)
     (child : Desc) (inner : Value) (member : some (child, inner) ∈ slots) :
     ∃ root, hashTreeRootAt budget child inner = .ok root := by
   -- Materialization roots every present slot before returning the array of leaves.
-  simp only [layoutChunksAt, nested, Leaves.count, Option.getD_none, List.drop_zero,
+  simp only [layoutChunksAt_eq, nested, Leaves.count, Option.getD_none, List.drop_zero,
     Nat.sub_zero, List.take_length] at success
   let f : Option (Desc × Value) → Except Err Bytes := fun slot =>
     match slot with
@@ -196,8 +199,8 @@ theorem layoutChunksAt_window (budget : Nat) (layout : MerkleLayout)
   rcases layout with ⟨leaves, limit, mixin⟩
   cases leaves with
   | packed data =>
-    simp only [layoutChunksAt, pure, Except.pure, Leaves.count, Option.getD_none, Array.extract_size,
-      Except.ok.injEq, Option.getD_some] at success ⊢
+    simp only [layoutChunksAt_eq, pure, Except.pure, Leaves.count, Option.getD_none,
+      Array.extract_size, Except.ok.injEq, Option.getD_some] at success ⊢
     subst chunks
     rfl
   | nested values =>
@@ -205,7 +208,7 @@ theorem layoutChunksAt_window (budget : Nat) (layout : MerkleLayout)
       match slot with
       | none => pure zeroChunk
       | some (shape, value) => hashTreeRootAt budget shape value
-    simp only [layoutChunksAt, Leaves.count, Option.getD_none, List.drop_zero,
+    simp only [layoutChunksAt_eq, Leaves.count, Option.getD_none, List.drop_zero,
       Nat.sub_zero, List.take_length] at success
     change (do let ys ← values.mapM root; pure ys.toArray) = .ok chunks at success
     cases h : values.mapM root with
@@ -216,7 +219,7 @@ theorem layoutChunksAt_window (budget : Nat) (layout : MerkleLayout)
       -- List slicing and array slicing use the same half-open interval.
       -- Rooting and slicing commute because each retained position has an independent successful root.
       have window := mapM_window root h start (stop - start)
-      simp only [layoutChunksAt, Option.getD_some]
+      simp only [layoutChunksAt_eq, Option.getD_some]
       change (do
         let zs ← ((values.drop start).take (stop - start)).mapM root
         pure zs.toArray) = .ok (ys.toArray.extract start stop)
@@ -235,7 +238,7 @@ theorem layoutChunksAt_singleton (budget : Nat) (layout : MerkleLayout)
           | some (child, inner) => hashTreeRootAt budget child inner
         pure #[root]) := by
   -- A one-position half-open interval retains exactly the selected slot after its prefix is removed.
-  simp only [layoutChunksAt, nested, Option.getD_some, Nat.add_sub_cancel_left,
+  simp only [layoutChunksAt_eq, nested, Option.getD_some, Nat.add_sub_cancel_left,
     List.drop_eq_getElem_cons inside, List.take_succ_cons, List.take_zero,
     List.mapM_cons, List.mapM_nil]
   cases slot : slots[index] with
@@ -252,6 +255,6 @@ theorem layoutChunksAt_suffix (budget : Nat) (layout : MerkleLayout)
   -- An omitted upper endpoint is the leaf count, which successful materialization preserves.
   have sized := layoutChunksAt_size budget layout chunks success
   have window := layoutChunksAt_window budget layout chunks success start layout.leaves.count
-  simpa [layoutChunksAt, sized] using window
+  simpa [layoutChunksAt_eq, sized] using window
 
 end EthLib.Serialization.Ssz

@@ -31,7 +31,7 @@ private theorem packing_materialized (budget : Nat) (chunks : Array Bytes)
     (limit : Option Nat) (mixin : Option Bytes) :
     layoutChunksAt budget (.packing chunks limit mixin) = .ok chunks := by
   -- Packed data already consists of leaves, so materialization only preserves their order.
-  simp [layoutChunksAt, MerkleLayout.packing, Leaves.count, Pure.pure, Except.pure]
+  simp [layoutChunksAt_eq, MerkleLayout.packing, Leaves.count, Pure.pure, Except.pure]
 
 /-- A byte-vector position selects its containing packed chunk. -/
 theorem PathSelects.byteVector (count : Nat) (data : Bytes)

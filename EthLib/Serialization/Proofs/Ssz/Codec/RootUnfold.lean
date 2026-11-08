@@ -44,7 +44,7 @@ theorem hashTreeRoot_unfold (shape : Desc) (value : Value) :
   -- Every type nests at least one level, so the root spends one budget step on the layout.
   have positive : 0 < shape.nesting := by cases shape <;> simp [Desc.nesting]
   obtain ⟨budget, eq⟩ : ∃ budget, shape.nesting = budget + 1 := ⟨shape.nesting - 1, by omega⟩
-  rw [hashTreeRoot, eq, hashTreeRootAt]
+  rw [hashTreeRoot_eq_nesting, eq, hashTreeRootAt_succ]
   cases layoutEq : merkleLayout shape value with
   | error e => rfl
   | ok layout =>
@@ -52,14 +52,14 @@ theorem hashTreeRoot_unfold (shape : Desc) (value : Value) :
     rcases layout with ⟨leaves, limit, mixin⟩
     cases leaves with
     | packed chunks =>
-      simp only [layoutChunksAt, leafChunks, Leaves.count, pure, Except.pure, Option.getD_none,
+      simp only [layoutChunksAt_eq, leafChunks, Leaves.count, pure, Except.pure, Option.getD_none,
         Array.extract_size, finishLayout, Bind.bind, Except.bind]
       cases limit with
       | none => cases mixin <;> rfl
       | some c => cases merkleizeBoundedUnchecked chunks (some c) <;> cases mixin <;> rfl
     | nested values =>
-      simp only [layoutChunksAt, leafChunks, Leaves.count, List.drop_zero, Nat.sub_zero, Option.getD_none,
-        List.take_length, Bind.bind, Except.bind, pure, Except.pure]
+      simp only [layoutChunksAt_eq, leafChunks, Leaves.count, List.drop_zero, Nat.sub_zero,
+        Option.getD_none, List.take_length, Bind.bind, Except.bind, pure, Except.pure]
       -- Each nested value has a smaller nesting, which the remaining budget covers.
       rw [mapM_congr_mem _ slotRoot values ?same]
       case same =>

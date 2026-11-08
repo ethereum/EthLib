@@ -3,7 +3,7 @@ module
 public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.Uint
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Tree
-public import EthLib.Serialization.Ssz.Codec.Root
+public import EthLib.Serialization.Proofs.Ssz.Codec.RootHasher
 
 /-! A byte array and its sequence of one-byte integer values have the same SSZ meaning. -/
 
@@ -22,8 +22,7 @@ theorem serializeEach_bytes (data : List UInt8) :
   -- Encoding proceeds one byte at a time and preserves both its value and its position.
   have bound (byte : UInt8) : byte.toNat < 256 := byte.toNat_lt
   induction data <;> simp_all [serializeEach_nil, serializeEach_cons, serialize, uintBytes_zero,
-      uintBytes_succ,
-    Nat.mod_eq_of_lt, Bind.bind, Except.bind, pure, Except.pure]
+      uintBytes_succ, Nat.mod_eq_of_lt, Bind.bind, Except.bind, pure, Except.pure]
 
 /-- Singleton fixed slots contribute one byte each, all in the fixed part. -/
 private theorem byteSlots_width (data : List UInt8) :
@@ -182,10 +181,11 @@ theorem hashTreeRoot_byteVector_alias (data : Bytes) (length : Nat) :
       hashTreeRoot (.vector (.uint 1) length) (.seq (byteValues data)) := by
   -- Packed leaves consume no recursive rooting budget, so the two type depths are immaterial.
   by_cases counted : data.size = length <;>
-    simp [hashTreeRoot, Desc.nesting, hashTreeRootAt, merkleLayout, counted, sequenceLayout,
-      Desc.isBasic, Desc.itemLength, byteValues, serializeEach_bytes, packElements_bytes,
-      chunksForBytes, packBytes_size, layoutChunksAt, MerkleLayout.packing, Leaves.count,
-      Bind.bind, Except.bind, pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
+    simp [hashTreeRoot_eq_nesting, Desc.nesting, hashTreeRootAt_succ, merkleLayout, counted,
+      sequenceLayout, Desc.isBasic, Desc.itemLength, byteValues, serializeEach_bytes,
+      packElements_bytes, chunksForBytes, packBytes_size, layoutChunksAt_eq, MerkleLayout.packing,
+      Leaves.count, Bind.bind, Except.bind, pure, Except.pure, throw, throwThe,
+      MonadExceptOf.throw]
 
 /-- Bounded byte arrays and byte lists have identical roots and identical limit failures. -/
 theorem hashTreeRoot_byteList_alias (data : Bytes) (limit : Nat) :
@@ -193,9 +193,9 @@ theorem hashTreeRoot_byteList_alias (data : Bytes) (limit : Nat) :
       hashTreeRoot (.list (.uint 1) limit) (.seq (byteValues data)) := by
   -- Both paths pack the same bytes and mix in the same element count.
   by_cases over : limit < data.size <;>
-    simp [hashTreeRoot, Desc.nesting, hashTreeRootAt, merkleLayout, over, sequenceLayout,
-      Desc.isBasic, Desc.itemLength, byteValues, serializeEach_bytes, packElements_bytes,
-      layoutChunksAt, MerkleLayout.packing, Leaves.count, Bind.bind, Except.bind, pure, Except.pure,
-      throw, throwThe, MonadExceptOf.throw]
+    simp [hashTreeRoot_eq_nesting, Desc.nesting, hashTreeRootAt_succ, merkleLayout, over,
+      sequenceLayout, Desc.isBasic, Desc.itemLength, byteValues, serializeEach_bytes,
+      packElements_bytes, layoutChunksAt_eq, MerkleLayout.packing, Leaves.count, Bind.bind,
+      Except.bind, pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
 
 end EthLib.Serialization.Ssz

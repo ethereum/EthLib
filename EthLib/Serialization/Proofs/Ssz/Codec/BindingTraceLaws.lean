@@ -101,14 +101,15 @@ theorem valueTreeAt_of_hashTreeRootAt (budget : Nat) (shape : Desc) (value : Val
     ∃ tree, valueTreeAt budget shape value = .ok tree ∧ tree.root = root ∧ tree.Complete := by
   -- Each occupied child uses one less recursion step, matching the executable root computation.
   induction budget generalizing shape value root with
-  | zero => simp [hashTreeRootAt] at success
+  | zero => simp [hashTreeRootAt_zero] at success
   | succ budget ih =>
     -- Overall success requires the layout and all selected child roots to exist.
     cases laid : merkleLayout shape value with
-    | error err => simp [hashTreeRootAt, laid, Bind.bind, Except.bind] at success
+    | error err => simp [hashTreeRootAt_succ, laid, Bind.bind, Except.bind] at success
     | ok layout =>
       cases materialized : layoutChunksAt budget layout with
-      | error err => simp [hashTreeRootAt, laid, materialized, Bind.bind, Except.bind] at success
+      | error err => simp [hashTreeRootAt_succ, laid, materialized, Bind.bind,
+          Except.bind] at success
       | ok chunks =>
         -- Successful layouts contain 32-byte packed nodes and 32-byte mixing words.
         have width := merkleLayout_width shape value layout laid
@@ -119,7 +120,7 @@ theorem valueTreeAt_of_hashTreeRootAt (budget : Nat) (shape : Desc) (value : Val
           -- Packed nodes need no internal hashes, so plain leaves already reproduce them.
           | packed data =>
             have eqChunks : data = chunks := by
-              simpa [layoutChunksAt, leaves, Leaves.count, pure, Except.pure] using materialized
+              simpa [layoutChunksAt_eq, leaves, Leaves.count, pure, Except.pure] using materialized
             subst chunks
             exact ⟨data.map CommitmentTree.leaf, by simp [layoutTreesAt, leaves],
               by simp [Array.map_map, Function.comp_def, CommitmentTree.root], by
@@ -128,7 +129,7 @@ theorem valueTreeAt_of_hashTreeRootAt (budget : Nat) (shape : Desc) (value : Val
                 exact width.1 data leaves node inside⟩
           -- Nested slots are expanded in order, including the zero leaves occupying gaps.
           | nested slots =>
-            simp only [layoutChunksAt, leaves, Leaves.count, Option.getD_none,
+            simp only [layoutChunksAt_eq, leaves, Leaves.count, Option.getD_none,
               List.drop_zero, Nat.sub_zero, List.take_length] at materialized
             -- Express list materialization before conversion to the final array so each slot remains identifiable.
             have normalized : (slots.mapM (fun slot : Option (Desc × Value) => match slot with
@@ -157,8 +158,8 @@ theorem valueTreeAt_of_hashTreeRootAt (budget : Nat) (shape : Desc) (value : Val
         | none =>
           have eqRoot : ((CommitmentTree.progressive trees.toList).withMixin layout.mixin).root = root := by
             cases mixed : layout.mixin <;>
-              simpa [mixed, hashTreeRootAt, laid, materialized, limited, Bind.bind, Except.bind,
-              pure, Except.pure, CommitmentTree.withMixin_root,
+              simpa [mixed, hashTreeRootAt_succ, laid, materialized, limited, Bind.bind,
+              Except.bind, pure, Except.pure, CommitmentTree.withMixin_root,
               CommitmentTree.progressive_root, List.map_toArray, ← Array.toList_map, rooted]
               using success
           refine ⟨(CommitmentTree.progressive trees.toList).withMixin layout.mixin,
@@ -173,15 +174,15 @@ theorem valueTreeAt_of_hashTreeRootAt (budget : Nat) (shape : Desc) (value : Val
         -- A bounded root can succeed only when its capacity covers every materialized child.
         | some capacity =>
           by_cases over : capacity < chunks.size
-          · simp [hashTreeRootAt, laid, materialized, limited, merkleizeBoundedUnchecked, over,
-              Bind.bind, Except.bind] at success
+          · simp [hashTreeRootAt_succ, laid, materialized, limited, merkleizeBoundedUnchecked_eq,
+              over, Bind.bind, Except.bind] at success
           · have bounded := CommitmentTree.bounded_complete trees capacity complete
             -- Expanding zero padding and nested children leaves the perfect-tree root and final metadata hash unchanged.
             have eqRoot : ((CommitmentTree.bounded trees capacity).withMixin layout.mixin).root = root := by
               cases mixed : layout.mixin <;>
-                simpa [mixed, hashTreeRootAt, laid, materialized, limited, merkleizeBoundedUnchecked, over,
-                Bind.bind, Except.bind, pure, Except.pure, CommitmentTree.withMixin_root,
-                CommitmentTree.bounded_root, rooted] using success
+                simpa [mixed, hashTreeRootAt_succ, laid, materialized, limited,
+                merkleizeBoundedUnchecked_eq, over, Bind.bind, Except.bind, pure, Except.pure,
+                CommitmentTree.withMixin_root, CommitmentTree.bounded_root, rooted] using success
             refine ⟨(CommitmentTree.bounded trees capacity).withMixin layout.mixin,
               by simp [valueTreeAt, laid, traced, limited, counts, over, Bind.bind, Except.bind,
                 pure, Except.pure], eqRoot, ?_⟩

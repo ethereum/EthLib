@@ -139,7 +139,7 @@ private theorem layoutChunksAt_width (budget : Nat) (layout : MerkleLayout)
   -- Extracting packed leaves preserves width, and nested leaves use their successful root widths.
   cases leaves : layout.leaves with
   | packed data =>
-    simp only [layoutChunksAt, leaves, pure, Except.pure, Except.ok.injEq] at success
+    simp only [layoutChunksAt_eq, leaves, pure, Except.pure, Except.ok.injEq] at success
     subst chunks
     intro chunk member
     obtain ⟨i, inside, same⟩ := Array.mem_extract_iff_getElem.mp member
@@ -148,7 +148,7 @@ private theorem layoutChunksAt_width (budget : Nat) (layout : MerkleLayout)
     let f : Option (Desc × Value) → Except Err Bytes := fun slot => match slot with
       | none => .ok zeroChunk
       | some (shape, value) => hashTreeRootAt budget shape value
-    simp only [layoutChunksAt, leaves] at success
+    simp only [layoutChunksAt_eq, leaves] at success
     change (do
       let nodes ← ((slots.drop start).take ((stop.getD slots.length) - start)).mapM f
       pure nodes.toArray) = .ok chunks at success
@@ -170,18 +170,18 @@ theorem hashTreeRootAt_size (budget : Nat) (shape : Desc) (value : Value) (root 
     (success : hashTreeRootAt budget shape value = .ok root) : root.size = bytesPerChunk := by
   -- Each nesting level roots complete leaves before building its bounded tree or progressive spine.
   induction budget generalizing shape value root with
-  | zero => simp [hashTreeRootAt] at success
+  | zero => simp [hashTreeRootAt_zero] at success
   | succ budget ih =>
     cases laid : merkleLayout shape value with
-    | error e => simp [hashTreeRootAt, laid, Bind.bind, Except.bind] at success
+    | error e => simp [hashTreeRootAt_succ, laid, Bind.bind, Except.bind] at success
     | ok layout =>
       cases materialized : layoutChunksAt budget layout with
-      | error e => simp [hashTreeRootAt, laid, materialized, Bind.bind, Except.bind] at success
+      | error e => simp [hashTreeRootAt_succ, laid, materialized, Bind.bind, Except.bind] at success
       | ok chunks =>
         -- The successful materialization carries complete widths into either merkleization shape.
         have complete := layoutChunksAt_width budget layout (merkleLayout_width shape value layout laid)
           ih 0 none chunks materialized
-        simp only [hashTreeRootAt, laid, materialized, Bind.bind, Except.bind] at success
+        simp only [hashTreeRootAt_succ, laid, materialized, Bind.bind, Except.bind] at success
         cases limit : layout.limit with
         | none =>
           cases mixed : layout.mixin <;>

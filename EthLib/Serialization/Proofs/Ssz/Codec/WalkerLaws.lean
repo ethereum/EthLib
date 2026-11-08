@@ -131,7 +131,7 @@ theorem nodeRoot_closed (shape : Desc) (value : Value) (root : Bytes)
         simp [contents, limit, progressiveNode_zero, materialized, treeRoot,
           merkleizeProgressiveFrom, show Nat.log2 1 = 0 from rfl, budget, Bind.bind, Except.bind, Pure.pure, Except.pure]
       | some capacity =>
-        simp only [limit, merkleizeBoundedUnchecked] at treeRoot
+        simp only [limit, merkleizeBoundedUnchecked_eq] at treeRoot
         split at treeRoot <;>
           simp [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind,
             Pure.pure, Except.pure] at treeRoot

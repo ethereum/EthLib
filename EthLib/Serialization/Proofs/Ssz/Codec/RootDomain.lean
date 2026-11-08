@@ -265,11 +265,11 @@ private theorem materialize_layout (budget : Nat) (layout : MerkleLayout)
   cases leaves with
   | packed chunks =>
     refine ⟨chunks, ?_, fitted.1, fitted.2⟩
-    simp [layoutChunksAt, Leaves.count, pure, Except.pure]
+    simp [layoutChunksAt_eq, Leaves.count, pure, Except.pure]
   | nested slots =>
     obtain ⟨chunks, rooted, widths⟩ := root_slots budget slots (each slots rfl)
     have wrote : layoutChunksAt budget ⟨.nested slots, limit, mixin⟩ = .ok chunks.toArray := by
-      simp only [layoutChunksAt, Leaves.count, Option.getD_none, List.drop_zero, Nat.sub_zero,
+      simp only [layoutChunksAt_eq, Leaves.count, Option.getD_none, List.drop_zero, Nat.sub_zero,
         List.take_length, pure, Except.pure]
       apply Eq.trans ?_ (congrArg (fun result : Except Err (List Bytes) =>
         result.bind fun result => Except.ok result.toArray) rooted)
@@ -308,7 +308,7 @@ theorem hashTreeRootAt_total (budget : Nat) (shape : Desc) (value : Value)
       | some limit =>
         have within := bounded limit capacity
         refine ⟨subtreeAt chunks (depthFor limit) 0, ?_, subtreeAt_size chunks widths _ _⟩
-        simp [merkleizeBoundedUnchecked, Nat.not_lt.mpr within, pure, Except.pure]
+        simp [merkleizeBoundedUnchecked_eq, Nat.not_lt.mpr within, pure, Except.pure]
     -- An optional count, layout, or selector is hashed with the contents root.
     obtain ⟨contents, rooted, sized⟩ := contents
     refine ⟨match layout.mixin with | none => contents | some word => mixIn contents word, ?_, ?_⟩
@@ -316,13 +316,13 @@ theorem hashTreeRootAt_total (budget : Nat) (shape : Desc) (value : Value)
       | none =>
         simp only [limit, Except.ok.injEq] at rooted
         subst contents
-        simp only [hashTreeRootAt, bind, Except.bind, laid, materialized, limit, pure, Except.pure,
-          Except.ok.injEq]
+        simp only [hashTreeRootAt_succ, bind, Except.bind, laid, materialized, limit, pure,
+          Except.pure, Except.ok.injEq]
         cases layout.mixin <;> rfl
       | some capacity =>
         simp only [limit] at rooted
-        simp only [hashTreeRootAt, bind, Except.bind, laid, materialized, limit, rooted, pure, Except.pure,
-          Except.ok.injEq]
+        simp only [hashTreeRootAt_succ, bind, Except.bind, laid, materialized, limit, rooted, pure,
+          Except.pure, Except.ok.injEq]
         cases layout.mixin <;> rfl
     · cases layout.mixin <;> simp [sized]
 

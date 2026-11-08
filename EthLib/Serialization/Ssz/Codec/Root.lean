@@ -2,11 +2,19 @@ module
 
 public import EthLib.Serialization.Ssz.Codec.Layout
 
-/-! The Merkle root of a value, taken from the tree its layout describes. -/
+/-!
+The Merkle root of a value, taken from the tree its layout describes.
+
+The hash may answer in a monad, and the specification is SHA-256 in the identity monad.
+-/
 
 @[expose] public section
 
 namespace EthLib.Serialization.Ssz
+
+section
+
+variable {m : Type → Type} [Monad m] (hasher : Hasher m)
 
 mutual
 
@@ -19,19 +27,19 @@ Rooting evaluates that layout without restating any type-specific tree rule.
 
 The budget bounds how far the rooting may descend into nested values.
 -/
-def hashTreeRootAt : Nat → Desc → Value → Except Err Bytes
+def hashTreeRootAtM : Nat → Desc → Value → ExceptT Err m Bytes
   -- A budget of the type's nesting never runs out, so this answers only a budget set too low.
-  | 0, _, _ => .error .proofIncomplete
+  | 0, _, _ => throw .proofIncomplete
   | budget + 1, shape, value => do
     let layout ← merkleLayout shape value
-    let chunks ← layoutChunksAt budget layout
+    let chunks ← layoutChunksAtM budget layout
     let root ← match layout.limit with
-      | none => .ok (merkleizeProgressiveUnchecked chunks.toList)
-      | some capacity => merkleizeBoundedUnchecked chunks (some capacity)
+      | none => ExceptT.lift (merkleizeProgressiveUncheckedM hasher chunks.toList)
+      | some capacity => merkleizeBoundedUncheckedM hasher chunks (some capacity)
     -- A shape mixing a word in puts its contents on the left and the word on the right.
-    return match layout.mixin with
-      | none => root
-      | some word => mixIn root word
+    match layout.mixin with
+    | none => return root
+    | some word => ExceptT.lift (mixInM hasher root word)
 
 /--
 The leaves in a half-open range, as nodes, each nested value rooted here.
@@ -40,8 +48,8 @@ A range is asked for where a proof walks into one part of a tree.
 
 Building that proof then does not hash the whole value.
 -/
-def layoutChunksAt (budget : Nat) (layout : MerkleLayout)
-    (start : Nat := 0) (stop : Option Nat := none) : Except Err (Array Bytes) := do
+def layoutChunksAtM (budget : Nat) (layout : MerkleLayout)
+    (start : Nat := 0) (stop : Option Nat := none) : ExceptT Err m (Array Bytes) := do
   -- An absent end means every leaf the shape produced.
   let last := stop.getD layout.leaves.count
   match layout.leaves with
@@ -52,7 +60,7 @@ def layoutChunksAt (budget : Nat) (layout : MerkleLayout)
       match slot with
       -- A position carrying no value merkleizes as a zero leaf.
       | none => pure zeroChunk
-      | some (shape, value) => hashTreeRootAt budget shape value
+      | some (shape, value) => hashTreeRootAtM budget shape value
     return chunks.toArray
 
 end
@@ -62,7 +70,22 @@ The SSZ Merkle root of a value, read against the type it is meant to fit.
 
 The budget is the type's own nesting, which is more than the rooting can spend.
 -/
+def hashTreeRootM (shape : Desc) (value : Value) : ExceptT Err m Bytes :=
+  hashTreeRootAtM hasher shape.nesting shape value
+
+end
+
+/-- The SSZ Merkle root of a value, under a budget, with SHA-256. -/
+def hashTreeRootAt (budget : Nat) (shape : Desc) (value : Value) : Except Err Bytes :=
+  (hashTreeRootAtM sha256Hasher budget shape value).run
+
+/-- The leaves in a half-open range, as nodes, with SHA-256. -/
+def layoutChunksAt (budget : Nat) (layout : MerkleLayout)
+    (start : Nat := 0) (stop : Option Nat := none) : Except Err (Array Bytes) :=
+  (layoutChunksAtM sha256Hasher budget layout start stop).run
+
+/-- The SSZ Merkle root of a value, with SHA-256. -/
 def hashTreeRoot (shape : Desc) (value : Value) : Except Err Bytes :=
-  hashTreeRootAt shape.nesting shape value
+  (hashTreeRootM sha256Hasher shape value).run
 
 end EthLib.Serialization.Ssz

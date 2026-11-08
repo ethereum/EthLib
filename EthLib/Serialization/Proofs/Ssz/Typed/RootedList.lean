@@ -67,7 +67,7 @@ theorem hashTreeRoot_list_leafRoots {limit : Nat} (composite : (desc α).isBasic
   have size : (leafRoots data).size = data.size := by simp [leafRoots]
   rw [hashTreeRoot_unfold]
   simp [merkleLayout, sequenceLayout, composite, MerkleLayout.nesting, leafChunks,
-    slotRoot, List.mapM_map, Function.comp_def, rooted, finishLayout, merkleizeBoundedUnchecked,
+    slotRoot, List.mapM_map, Function.comp_def, rooted, finishLayout, merkleizeBoundedUnchecked_eq,
     bind, Except.bind, pure, Except.pure, within, leaves, size]
 
 /-- The packed leaves of basic elements within a limit fit in the leaves of that limit. -/
@@ -102,7 +102,7 @@ theorem hashTreeRoot_list_packed {limit : Nat} (basic : (desc α).isBasic = true
     Nat.not_lt.mpr (size_packedChunks_le basic data bound)
   rw [hashTreeRoot_unfold]
   simp [merkleLayout, sequenceLayout, basic, MerkleLayout.packing, leafChunks,
-    serializeEach_elementBytes basic, finishLayout, merkleizeBoundedUnchecked,
+    serializeEach_elementBytes basic, finishLayout, merkleizeBoundedUnchecked_eq,
     bind, Except.bind, pure, Except.pure, packed, fit, within]
 
 /-- The leaves of a progressive list are those of its elements, packed or rooted. -/
@@ -142,11 +142,11 @@ theorem spineRoot_spineLevels (leaves : Array Bytes) :
       rw [show 4 ^ level = 2 ^ (2 * level) by rw [Nat.pow_mul]]
       exact depthFor_pow _
     rw [spineLevels.eq_1 leaves, ite_eq_left inside, spineRoot, ih,
-      merkleizeProgressiveUnchecked.eq_1 (leaves.toList.drop start), nonempty]
+      merkleizeProgressiveUnchecked_unfold (leaves.toList.drop start), nonempty]
     simp only [Bool.false_eq_true, ↓reduceIte, slice, depth, List.drop_drop, topOfLevels_eq]
   | case2 start level outside =>
-    rw [spineLevels.eq_1 leaves, ite_eq_right outside, spineRoot, merkleizeProgressiveUnchecked,
-      List.drop_eq_nil_of_le (by simp; omega)]
+    rw [spineLevels.eq_1 leaves, ite_eq_right outside, spineRoot,
+      merkleizeProgressiveUnchecked_unfold, List.drop_eq_nil_of_le (by simp; omega)]
     rfl
 
 namespace RootedForkList

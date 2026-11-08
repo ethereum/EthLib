@@ -43,6 +43,7 @@ def merkleizeUpward (chunks : Array Bytes) (limit : Option Nat) : Except Err Byt
 theorem merkleizeUpward_eq (chunks : Array Bytes) (limit : Option Nat) :
     merkleizeUpward chunks limit = merkleizeBoundedUnchecked chunks limit := by
   -- Either both refuse the capacity, or both fold the same tree at the same width.
-  cases limit <;> simp [merkleizeUpward, merkleizeBoundedUnchecked, merkleizeFlat_eq_subtreeAt chunks]
+  cases limit <;> simp [merkleizeUpward, merkleizeBoundedUnchecked_eq,
+    merkleizeFlat_eq_subtreeAt chunks]
 
 end EthLib.Serialization.Ssz
