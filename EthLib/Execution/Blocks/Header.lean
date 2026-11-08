@@ -39,7 +39,7 @@ Each later field names the EIP that adds it:
 [EIP-4399][eip-4399] puts the RANDAO mix in the mix digest from Paris.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
-[eip-3675]: https://eips.ethereum.org/EIPS/eip-3675#block-structure
+[eip-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#block-structure
 [eip-4399]: https://eips.ethereum.org/EIPS/eip-4399#block-structure
 [eip-4788]: https://eips.ethereum.org/EIPS/eip-4788#block-structure-and-validity
 [eip-4895]: https://eips.ethereum.org/EIPS/eip-4895#new-field-in-the-execution-payload-header-withdrawals-root

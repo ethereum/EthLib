@@ -97,7 +97,7 @@ That value is a block that the chain configuration sets.
 
 So the block of Paris is not a fork block, and `FORK_NEXT_VALUE` is one when the chain sets it.
 
-[eip-3675]: https://eips.ethereum.org/EIPS/eip-3675#fork-identifier
+[eip-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#fork-identifier
 -/
 def blocks (s : Schedule) : List Nat :=
   let listed := s.config.activations.filterMap fun (fork, activation) =>

@@ -42,7 +42,7 @@ It holds the slot number too, by [EIP-7843][eip-7843].
 
 Whether the list matches the execution of the block is a check of the state transition.
 
-[eip-3675]: https://eips.ethereum.org/EIPS/eip-3675#block-structure
+[eip-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#block-structure
 [eip-4399]: https://eips.ethereum.org/EIPS/eip-4399#block-structure
 [v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#specification
 [v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/prague.md#specification
