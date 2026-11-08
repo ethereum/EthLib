@@ -325,9 +325,7 @@ theorem costRun_withReveals_layerCostSearch (parameter : PublicParameter) (data 
       (data.keyMessage lay (treeIndexAt index lay) (leafIndexAt index lay)) encodingAttemptLimit 0,
           []) := by
   unfold layerCostSearch at hresult
-  obtain ⟨r1, h1, r2, h2, rfl⟩ := costRun_withReveals_bind f table _ _ result hresult
-  obtain rfl := costRun_withReveals_tick f table _ r1 h1
-  obtain ⟨r3, h3, r4, h4, rfl⟩ := costRun_withReveals_bind f table _ _ r2 h2
+  obtain ⟨r3, h3, r4, h4, rfl⟩ := costRun_withReveals_bind f table _ _ result hresult
   obtain rfl := costRun_withReveals_liftHash f table _ r3 h3
   dsimp only at h4 ⊢
   simp only [layerSearch, ReferenceChoice.eval_search] at h4 ⊢
@@ -470,8 +468,8 @@ def SignOutcome (parameter : PublicParameter) (seed : MasterSeed) (data : Public
   (result.1 = none → result.2 = []) ∧
   ∀ signature, result.1 = some signature → ∃ randomness,
     Landed parameter (digestIndex (Completeness.digestValue f
-        ⟨seed, parameter, data.root⟩ message randomness)) ∧
-    evalWithAnswerFn f (Seeded.finishSign ⟨seed, parameter, data.root⟩ message randomness) =
+        ⟨seed, 0, parameter, data.root⟩ message randomness)) ∧
+    evalWithAnswerFn f (Seeded.finishSign ⟨seed, 0, parameter, data.root⟩ message randomness) =
       some signature ∧
     result.2 = revealsOf f parameter data message randomness
 
@@ -510,12 +508,10 @@ theorem signLoop_support (parameter : PublicParameter) (seed : MasterSeed) (data
       split at h4
       · rename_i hland
         have hland' : Landed parameter (digestIndex (Completeness.digestValue f
-            ⟨seed, parameter, data.root⟩ message randomness)) := by
-          simpa only [Completeness.digestValue, messageDigest, evalWithAnswerFn_bind,
-            evalWithAnswerFn_pure, Completeness.eval_sequenceFin, digestIndex_truncate] using hland
+            ⟨seed, 0, parameter, data.root⟩ message randomness)) := landed_full _ _
         obtain ⟨hvalue, hreveals⟩ := finish_support f table parameter data message randomness r4 h4
-        have hsign := eval_finishSign_assembled f parameter seed data table hdata htable message
-            randomness hland'
+        have hsign := eval_finishSign_assembled f parameter seed data table hdata htable 0 message
+          randomness (landed_full _ _)
         refine ⟨fun hnone => ?_, fun signature hsome => ⟨randomness, hland', ?_, hreveals⟩⟩
         · rw [hreveals]
           exact revealsOf_of_assembled_none f table parameter data message _ (hvalue ▸ hnone)
@@ -542,8 +538,8 @@ def LogGood (parameter : PublicParameter) (seed : MasterSeed) (data : PublicData
     (log : QueryLog SigningSpec) (reveals : List HiddenGraph.Coordinate) : Prop :=
   (∀ entry ∈ log, ∀ signature, entry.2 = some signature → ∃ randomness,
     Landed parameter (digestIndex (Completeness.digestValue f
-        ⟨seed, parameter, data.root⟩ entry.1 randomness)) ∧
-    evalWithAnswerFn f (Seeded.finishSign ⟨seed, parameter, data.root⟩ entry.1 randomness) =
+        ⟨seed, 0, parameter, data.root⟩ entry.1 randomness)) ∧
+    evalWithAnswerFn f (Seeded.finishSign ⟨seed, 0, parameter, data.root⟩ entry.1 randomness) =
       some signature) ∧
   ∀ coordinate ∈ reveals, ∃ entry ∈ log, ∃ signature, entry.2 = some signature ∧
     coordinate ∈ revealsOf f parameter data entry.1 signature.randomness

@@ -44,20 +44,20 @@ variable (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
     (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
 
 /--
-The input of the encoding hash: the message, then the counter.
+The input of the encoding hash: the message, then the counter in four big-endian bytes.
 
-The message is the FORS key, or the root of the tree below.
+The message is the FORS public key, or the root of the tree below.
 -/
 def encodingInput (message : HashInput) (counter : Counter) : HashInput :=
-  tweakableHashInput parameter (.encoding lay tree leaf) (message ++ bytesLE 4 counter)
+  tweakableHashInput parameter (.encoding lay tree leaf) (message ++ bytesBE 4 counter)
 
 theorem encodingInput_injective {message message' : HashInput} {counter counter' : Counter}
     (h : encodingInput parameter lay tree leaf message counter =
       encodingInput parameter lay tree leaf message' counter') :
     message = message' ∧ counter = counter' := by
   have hpayload := List.append_cancel_left h
-  obtain ⟨hm, hc⟩ := List.append_inj' hpayload (by rw [bytesLE_length, bytesLE_length])
-  exact ⟨hm, bytesLE_injective hc⟩
+  obtain ⟨hm, hc⟩ := List.append_inj' hpayload (by rw [bytesBE_length, bytesBE_length])
+  exact ⟨hm, bytesBE_injective hc⟩
 
 theorem encode_query_mem (message : HashInput) (counter : Counter) :
     encodingInput parameter lay tree leaf message counter ∈
@@ -102,22 +102,25 @@ theorem otsLeaf_leaf_query_mem (message : HashInput) (counter : Counter)
   simp only [Completeness.eval_sequenceFin, leafHash, queriedInputs_tweakableHash,
     List.mem_singleton]
 
-/-- A queried encoding output that decodes to a unit neighbor of the reference word. -/
+/-- A queried encoding output that decodes to a unit neighbor of the reference word.
+
+Its message has 16 bytes, like every message that the verifier encodes. -/
 def EncodingMarker (reference : Encoding) (lowered : ChainIndex) (trace : List HashInput) : Prop :=
-  ∃ message counter candidate,
+  ∃ message counter candidate, message.length = 16 ∧
     encodingInput parameter lay tree leaf message counter ∈ trace ∧
     TargetSum.decodeDigest
       (truncateHash (f (encodingInput parameter lay tree leaf message counter))) = some candidate ∧
     EncodingCode.UnitNeighborAt reference candidate lowered
 
-theorem otsLeaf_marker (reference : Encoding) (message : HashInput) (counter : Counter)
+theorem otsLeaf_marker (reference : Encoding) (message : HashInput) (hmessage : message.length = 16)
+    (counter : Counter)
     (values : ChainIndex → Digest) (candidate : Encoding) (trace : List HashInput)
     (hencode : evalWithAnswerFn f (encode parameter lay tree leaf message counter
       : OracleComp HashSpec (Option Encoding)) = some candidate)
     (hrun : ContainsRun f trace (otsLeaf parameter lay tree leaf message counter values))
     (index : ChainIndex) (hneighbor : EncodingCode.UnitNeighborAt reference candidate index) :
     EncodingMarker f parameter lay tree leaf reference index trace :=
-  ⟨message, counter, candidate,
+  ⟨message, counter, candidate, hmessage,
     hrun.bind_left _ (encode_query_mem f parameter lay tree leaf message counter),
     decode_of_encode f parameter lay tree leaf message counter candidate hencode, hneighbor⟩
 
@@ -141,7 +144,8 @@ def ChainException (trace : List HashInput) : Prop :=
     Contact f parameter lay tree leaf index (reference index)
       (frontier f parameter lay tree leaf reference secret index) trace)
 
-theorem otsLeaf_chain_classification (message : HashInput) (counter : Counter)
+theorem otsLeaf_chain_classification (message : HashInput) (hmessage : message.length = 16)
+    (counter : Counter)
     (values : ChainIndex → Digest) (candidate : Encoding) (trace : List HashInput)
     (hvalid : TargetSum.Valid reference)
     (hencode : evalWithAnswerFn f (encode parameter lay tree leaf message counter
@@ -184,8 +188,8 @@ theorem otsLeaf_chain_classification (message : HashInput) (counter : Counter)
       (reference index) (candidate index) (values index) trace (by rw [hd])
       (hendpoints index) (hc index) (hn index)
   · refine Or.inr (Or.inr (Or.inr (Or.inr ⟨index,
-      otsLeaf_marker f parameter lay tree leaf reference message counter values candidate trace
-        hencode hrun index hneighbor, ?_⟩)))
+      otsLeaf_marker f parameter lay tree leaf reference message hmessage counter values candidate
+        trace hencode hrun index hneighbor, ?_⟩)))
     have hd := hneighbor.2.2.1
     exact hcontact index (by omega)
   · exact Or.inr (Or.inr (Or.inl ⟨index,
@@ -212,7 +216,8 @@ A verifier that recovers the honest leaf read the reference word with the honest
 
 Otherwise its trace holds a leaf match or a chain exception.
 -/
-theorem otsLeaf_classification (message : HashInput) (counter : Counter)
+theorem otsLeaf_classification (message : HashInput) (hmessage : message.length = 16)
+    (counter : Counter)
     (values : ChainIndex → Digest) (candidate : Encoding) (trace : List HashInput)
     (hvalid : TargetSum.Valid reference)
     (hencode : evalWithAnswerFn f (encode parameter lay tree leaf message counter
@@ -234,7 +239,7 @@ theorem otsLeaf_classification (message : HashInput) (counter : Counter)
   by_cases hp : leafPayload endpoints = leafPayload
       (fun index => honestChain f parameter lay tree leaf index (secret index) (chainLength - 1))
   · have hs := otsLeaf_chain_classification f parameter lay tree leaf reference secret message
-      counter values candidate trace hvalid hencode hrun
+      hmessage counter values candidate trace hvalid hencode hrun
       (fun index => congrFun (leafPayload_injective hp) index)
     exact hs.imp_right Or.inr
   · refine Or.inr (Or.inl ⟨endpoints, hp, ?_, ?_⟩)

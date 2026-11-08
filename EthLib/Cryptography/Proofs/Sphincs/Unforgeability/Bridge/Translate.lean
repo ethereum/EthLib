@@ -34,87 +34,96 @@ theorem toList_data_packBytes_ofDigest (v : SphincsSecurity.Digest) :
     (packBytes (ofDigest v)).data.toList = SphincsSecurity.bytesLE 16 v := by
   simp
 
-omit [LawfulMonad m] in
-/-- EthLib's whole-output hash with the query is the model's oracle call, on the same bytes. -/
-theorem thFull_queryH (P : SphincsSecurity.PublicParameter) (A : Address) (payload : ByteArray)
-    (fields : SphincsSecurity.TweakFields) (msg : HashSig.HashInput)
-    (hA : A.toList = fieldBytes fields) (hpayload : payload.data.toList = msg) :
-    thFull (queryH (m := m)) (ofParam P) A payload
-      = ofOutput <$> HashSig.oracleHash (m := m)
-          (SphincsSecurity.bytesLE 16 P ++ fieldBytes fields ++ msg) := by
-  simp only [thFull, queryH, thInput, toList_data_append, toList_data_packBytes, hA, hpayload]
-  rfl
+/-- The first 16 bytes of an answer, read as bytes, are the bytes of the model's truncation. -/
+theorem trunc_oracleHash (input : HashSig.HashInput) :
+    (do let x ← ofOutput <$> HashSig.oracleHash (m := m) input; pure (trunc N x))
+      = ofDigest <$>
+          (do let a ← HashSig.oracleHash (m := m) input; pure (HashSig.truncateHash a)) := by
+  simp only [bind_map_left, trunc_ofOutput_truncateHash, map_bind, map_pure]
 
-/-- The first half of an answer, read as bytes, is the bytes of the model's truncation. -/
-theorem halfOf_zero_oracleHash {α : Type} (input : HashSig.HashInput) (f : Digest → α) :
-    (do let x ← ofOutput <$> HashSig.oracleHash (m := m) input; pure (f (halfOf 0 x)))
-      = (do let a ← HashSig.oracleHash (m := m) input
-            pure (f (ofDigest (HashSig.truncateHash a)))) := by
-  simp only [bind_map_left, halfOf_zero_ofOutput]
+/-- EthLib's `Th` with the query hashes `PK.seed`, the address and the payload, in that order. -/
+theorem th_queryH_input (P : SphincsSecurity.PublicParameter) (A : Adrs) (payload : ByteArray)
+    (input : HashSig.HashInput)
+    (hinput : SphincsSecurity.bytesLE 16 P ++ A.toList ++ payload.data.toList = input) :
+    th (queryH (m := m)) (ofParam P) A payload
+      = ofDigest <$>
+          (do let a ← HashSig.oracleHash (m := m) input; pure (HashSig.truncateHash a)) := by
+  rw [th, ← trunc_oracleHash]
+  simp only [queryH, thInput, toList_data_append, toList_data_packBytes, toList_ofParam, hinput]
 
 /-- EthLib's `Th` with the query is the model's, at the same address and payload bytes. -/
-theorem th_queryH (P : SphincsSecurity.PublicParameter) (A : Address) (payload : ByteArray)
+theorem th_queryH (P : SphincsSecurity.PublicParameter) (A : Adrs) (payload : ByteArray)
     (domain : SphincsSecurity.HashDomain) (msg : HashSig.HashInput)
     (hA : A.toList = tweakBytes domain) (hpayload : payload.data.toList = msg) :
     th (queryH (m := m)) (ofParam P) A payload
       = ofDigest <$> tweakableHash (m := m) P domain msg := by
-  rw [th, thFull_queryH P A payload _ msg hA hpayload, tweakableHash, map_bind]
-  simp only [map_pure]
-  exact halfOf_zero_oracleHash (m := m) _ id
+  rw [th_queryH_input P A payload _ (by rw [hA, hpayload])]
+  rfl
 
 /-! ## Derivations from the seed -/
 
-omit [LawfulMonad m] in
-/-- A derivation from the scheme seed is the model's derivation, all 32 bytes. -/
-theorem seedPrf_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.PublicParameter)
-    (A : Address) (domain : SphincsSecurity.KeygenDomain)
+/-- `PRF(PK.seed, SK.seed, ADRS)` is the model's derivation of the same domain. -/
+theorem prf_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.PublicParameter)
+    (A : Adrs) (domain : SphincsSecurity.KeygenDomain)
     (hA : A.toList = fieldBytes (SphincsSecurity.keygenDomainFields domain)) :
-    seedPrf (queryH (m := m)) (ofSeed S) (ofParam P) A .empty
-      = ofOutput <$> SphincsSecurity.deriveOutput (m := m) P domain S := by
-  rw [seedPrf, thFull_queryH P A _ _ (SphincsSecurity.bytesLE 32 S) hA (by simp)]
+    prf (queryH (m := m)) (ofParam P) (ofSeed S) A
+      = ofDigest <$> SphincsSecurity.deriveKey (m := m) P domain S := by
+  rw [prf, th_queryH_input P A _ (SphincsSecurity.keygenHashInput P domain S)
+    (by simp only [hA, toList_data_packBytes, toList_ofSeed]; rfl)]
   rfl
 
-/-- The derivation of the public parameter, from the all-zero parameter. -/
-theorem publicParamOf_queryH (S : SphincsSecurity.MasterSeed) :
-    publicParamOf (seedPrf (queryH (m := m)) (ofSeed S))
-      = ofParam <$> SphincsSecurity.deriveKey (m := m) 0 .parameter S := by
-  -- The all-zero parameter is the bytes of the zero bit vector.
-  have hzero : Vector.replicate PUBLIC_PARAM_LEN (0 : UInt8)
-      = ofParam (0 : SphincsSecurity.PublicParameter) := by
-    rw [ofParam, ofBV_eq_uintToBytes]
-    apply Vector.ext
-    intro i hi
-    simp [uintToBytes]
-  unfold publicParamOf
-  rw [hzero, seedPrf_queryH S 0 addrParam .parameter toList_addrParam]
-  simp only [SphincsSecurity.deriveKey, SphincsSecurity.deriveOutput, map_bind, map_pure]
-  exact halfOf_zero_oracleHash (m := m) _ id
+/-- The 44 bytes of a key expansion are the model's key-seed input of the same domain. -/
+theorem toList_expandInput (S : SphincsSecurity.MasterSeed) (domain : UInt8) :
+    (expandInput (ofSeed S) domain).data.toList
+      = SphincsSecurity.keySeedInput S domain.toNat := by
+  simp only [expandInput, toList_data_append, toList_data_packBytes, toList_ofSeed,
+    SphincsSecurity.keySeedInput, UInt8.ofNat_toNat]
+  rfl
+
+/-- The model's `PK.seed` and `SK.prf` as EthLib's expanded key. -/
+def ofExpanded (P : SphincsSecurity.PublicParameter) (prf : HashSig.HashOutput) :
+    ExpandedKey :=
+  { pkSeed := ofParam P, skPrf := ofOutput prf }
+
+/-- A computation that reads the model's `PK.seed` reads the truncation of its key-seed hash. -/
+theorem derivePublicSeed_bind {γ : Type} (S : SphincsSecurity.MasterSeed)
+    (g : SphincsSecurity.PublicParameter → m γ) :
+    SphincsSecurity.derivePublicSeed (m := m) S >>= g
+      = HashSig.oracleHash (m := m) (SphincsSecurity.keySeedInput S 0) >>= fun a =>
+          g (HashSig.truncateHash a) :=
+  (bind_assoc _ _ _).trans (bind_congr fun _ => pure_bind _ _)
+
+/-- The key expansion is the model's two key-seed hashes, `PK.seed` first. -/
+theorem expandKey_queryH (S : SphincsSecurity.MasterSeed) :
+    expandKey (queryH (m := m)) (ofSeed S)
+      = (do
+          let P ← SphincsSecurity.derivePublicSeed (m := m) S
+          let prf ← SphincsSecurity.derivePrf (m := m) S
+          pure (ofExpanded P prf)) := by
+  rw [derivePublicSeed_bind, SphincsSecurity.derivePrf]
+  simp only [expandKey, queryH, toList_expandInput, bind_map_left,
+    trunc_ofOutput_truncateHash, UInt8.reduceToNat]
+  exact bind_congr fun _ => bind_congr fun _ => rfl
+
+/-- The 93 bytes that `PRF_msg` hashes are the model's randomizer input. -/
+theorem toList_prfMsgInput (prf : HashSig.HashOutput) (P : SphincsSecurity.PublicParameter)
+    (msg : SphincsSecurity.Message) :
+    (packBytes (n := HASH_LEN) (ofOutput prf) ++ packBytes (ofParam P)
+        ++ framedMessage (ofMessage msg)).data.toList
+      = SphincsSecurity.randomizerHashInput prf P msg := by
+  simp only [framedMessage, toList_data_append, toList_data_packBytes_ofOutput,
+    toList_data_packBytes, toList_ofParam, toList_ofMessage, SphincsSecurity.randomizerHashInput,
+    SphincsSecurity.framedMessage, List.append_assoc, seedTag_eq, ofNat_length_seedTag]
 
 /-- The randomizer is the first half of the model's randomizer hash. -/
-theorem randomizer_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.PublicParameter)
+theorem prfMsg_queryH (prf : HashSig.HashOutput) (P : SphincsSecurity.PublicParameter)
     (msg : SphincsSecurity.Message) :
-    randomizer (ofParam P) (seedPrf (queryH (m := m)) (ofSeed S)) (ofMessage msg)
+    prfMsg (queryH (m := m)) (ofOutput prf : HashOutput) (ofParam P) (ofMessage msg)
       = (fun walk => ofRandomizer walk.1) <$>
-          SphincsSecurity.deriveRandomizer (m := m) P S msg := by
-  unfold randomizer seedPrf
-  rw [thFull_queryH P addrRnd _ _ (SphincsSecurity.bytesLE 32 S ++ SphincsSecurity.bytesLE 32 msg)
-    toList_addrRnd (by simp)]
-  simp only [SphincsSecurity.deriveRandomizer, SphincsSecurity.randomizerHashInput, map_bind,
-    map_pure, List.append_assoc]
-  exact halfOf_zero_oracleHash (m := m) _ id
-
-omit [LawfulMonad m] in
-/-- The scheme seed is the model's, the whole hash of the tag and `S_0`. -/
-theorem schemeSeed_queryH (S0 : SphincsSecurity.MasterSeed) :
-    schemeSeed (queryH (m := m)) (ofSeed S0)
-      = ofSeed <$> SphincsSecurity.schemeSeed (m := m) S0 := by
-  have hinput : (ByteArray.mk SEED_TAG.toArray ++ packBytes (ofSeed S0)).data.toList
-      = SphincsSecurity.schemeSeedInput S0 := by
-    simp only [toList_data_append, toList_data_packBytes, toList_ofSeed]
-    rfl
-  unfold schemeSeed queryH
-  rw [hinput]
-  rfl
+          SphincsSecurity.deriveRandomizer (m := m) prf P msg := by
+  conv_rhs => simp only [SphincsSecurity.deriveRandomizer, map_bind, map_pure]
+  simp only [prfMsg, queryH, toList_prfMsgInput, bind_map_left, trunc_ofOutput_truncateHash]
+  exact bind_congr fun _ => rfl
 
 /-! ## Chains, leaves and nodes -/
 
@@ -125,7 +134,7 @@ theorem chainStep_queryH (P : SphincsSecurity.PublicParameter) (lay : SphincsSec
     chainStep (queryH (m := m)) (ofParam P) (keyOf lay tree leaf) i mu (ofDigest v)
       = ofDigest <$> tweakableHash (m := m) P (.chain lay tree leaf ⟨i.val, i.isLt⟩
           ⟨mu.val, mu.isLt⟩) (SphincsSecurity.bytesLE 16 v) :=
-  th_queryH P _ _ _ _ (toList_addrChain lay tree leaf i mu) (toList_data_packBytes_ofDigest v)
+  th_queryH P _ _ _ _ (toList_adrsChain lay tree leaf i mu) (toList_data_packBytes_ofDigest v)
 
 /-- A walk along a chain. -/
 theorem chain_queryH (P : SphincsSecurity.PublicParameter) (lay : SphincsSecurity.Layer)
@@ -149,18 +158,24 @@ theorem chain_queryH (P : SphincsSecurity.PublicParameter) (lay : SphincsSecurit
     simp only [hs, ↓reduceDIte]
     exact chainStep_queryH P lay tree leaf i _ prev
 
-/-- The bytes of the digests of a function on chains, in order, as the model's leaf payload. -/
-theorem toList_packDigests (f : SphincsSecurity.ChainIndex → SphincsSecurity.Digest) :
-    (packDigests (Vector.ofFn fun i : Fin V => ofDigest (f ⟨i.val, i.isLt⟩))).data.toList
-      = SphincsSecurity.Concrete.leafPayload f := by
+/-- The bytes of the digests of a function on `n` values, in order, as the model's payload. -/
+theorem toList_packDigests {n : Nat} (f : Fin n → SphincsSecurity.Digest) :
+    (packDigests (Vector.ofFn fun i => ofDigest (f i))).data.toList
+      = (List.ofFn f).flatMap (SphincsSecurity.bytesLE 16) := by
   have hflat : ∀ {n} (ds : Vector Digest n),
       (packDigests ds).data.toList = (ds.toList.map Vector.toList).flatten := by
     intro n ds
     simp [packDigests, packBytes, Vector.flatten, Array.toList_flatten, Vector.toList]
     rfl
-  rw [hflat, Vector.toList_ofFn, List.map_ofFn, SphincsSecurity.Concrete.leafPayload]
-  simp [List.flatMap, Function.comp_def]
-  rfl
+  rw [hflat, Vector.toList_ofFn, List.map_ofFn]
+  simp only [Function.comp_def, toList_ofDigest]
+  exact congrArg List.flatten (List.map_ofFn (f := f) (g := SphincsSecurity.bytesLE 16)).symm
+
+/-- The bytes of the chain ends, in order, as the model's leaf payload. -/
+theorem toList_packDigests_chains (f : SphincsSecurity.ChainIndex → SphincsSecurity.Digest) :
+    (packDigests (Vector.ofFn fun i : Fin V => ofDigest (f ⟨i.val, i.isLt⟩))).data.toList
+      = SphincsSecurity.Concrete.leafPayload f :=
+  toList_packDigests (n := V) fun i => f ⟨i.val, i.isLt⟩
 
 /-- A key's leaf, from its chain ends. -/
 theorem otsLeafHash_queryH (P : SphincsSecurity.PublicParameter) (lay : SphincsSecurity.Layer)
@@ -169,70 +184,101 @@ theorem otsLeafHash_queryH (P : SphincsSecurity.PublicParameter) (lay : SphincsS
     otsLeafHash (queryH (m := m)) (ofParam P) (keyOf lay tree leaf)
         (Vector.ofFn fun i : Fin V => ofDigest (ends ⟨i.val, i.isLt⟩))
       = ofDigest <$> SphincsSecurity.Concrete.leafHash (m := m) P lay tree leaf ends :=
-  th_queryH P _ _ _ _ (toList_addrLeaf lay tree leaf) (toList_packDigests ends)
+  th_queryH P _ _ _ _ (toList_adrsPk lay tree leaf) (toList_packDigests_chains ends)
 
-/-- A tree node at level `level`, `1 <= level <= 10`, from its two children. -/
+/-- A tree node at height `z` and index `j`, from its two children. -/
 theorem nodeHash_queryH (P : SphincsSecurity.PublicParameter) (lay : SphincsSecurity.Layer)
-    (tree : SphincsSecurity.TreeIndex) (level j : Nat) (hlevel : level ≤ TOP_HEIGHT)
-    (left right : SphincsSecurity.Digest) :
-    nodeHash (queryH (m := m)) (ofParam P) (layerOf lay) tree.val level j (ofDigest left)
+    (tree : SphincsSecurity.TreeIndex) (z j : Nat) (left right : SphincsSecurity.Digest) :
+    nodeHash (queryH (m := m)) (ofParam P) (layerOf lay) tree.val z j (ofDigest left)
         (ofDigest right)
-      = ofDigest <$> tweakableHash (m := m) P (.node lay tree level j)
+      = ofDigest <$> tweakableHash (m := m) P (.node lay tree z j)
           (SphincsSecurity.Concrete.nodePayload left right) :=
-  th_queryH P _ _ _ _ (toList_addrNode lay tree level j hlevel) (by
+  th_queryH P _ _ _ _ (toList_adrsNode lay tree z j) (by
     simp [SphincsSecurity.Concrete.nodePayload])
 
 /-! ## FORS -/
 
+/-- The secret of a FORS leaf is the model's derivation. -/
+theorem forsSecret_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.PublicParameter)
+    (index : SphincsSecurity.Index) (κ : SphincsSecurity.FTree) (leaf : SphincsSecurity.FLeaf) :
+    forsSecret (prf (queryH (m := m)) (ofParam P) (ofSeed S)) index.val (treeOf κ) leaf.val
+      = ofDigest <$> SphincsSecurity.Seeded.forsSecret (m := m) P index κ leaf S :=
+  prf_queryH S P _ _ (toList_adrsFprf index κ leaf)
+
 /-- A FORS leaf, from its secret. -/
 theorem forsLeafHash_queryH (P : SphincsSecurity.PublicParameter) (index : SphincsSecurity.Index)
     (κ : SphincsSecurity.FTree) (leaf : SphincsSecurity.FLeaf) (secret : SphincsSecurity.Digest) :
-    forsLeafHash (queryH (m := m)) (ofParam P) index.val (treeOf κ) leaf (ofDigest secret)
+    forsLeafHash (queryH (m := m)) (ofParam P) index.val (treeOf κ) leaf.val (ofDigest secret)
       = ofDigest <$> SphincsSecurity.Concrete.forsLeafHash (m := m) P index κ leaf secret :=
-  th_queryH P _ _ _ _ (toList_addrForsLeaf index κ leaf) (toList_data_packBytes_ofDigest secret)
+  th_queryH P _ _ _ _ (toList_adrsFors_leaf index κ leaf) (toList_data_packBytes_ofDigest secret)
 
-/-- A FORS node at tree level `level + 1`, from its two children. -/
+/-- A FORS node at height `level + 1`, from its two children, below the width of its height. -/
 theorem forsNodeHash_queryH (P : SphincsSecurity.PublicParameter) (index : SphincsSecurity.Index)
     (κ : SphincsSecurity.FTree) (level : SphincsSecurity.FLevel) (node : SphincsSecurity.FLeaf)
-    (left right : SphincsSecurity.Digest) :
+    (hnode : node.val < 2 ^ (FORS_HEIGHT - (level.val + 1))) (left right : SphincsSecurity.Digest) :
     forsNodeHash (queryH (m := m)) (ofParam P) index.val (treeOf κ) (level.val + 1) node.val
         (ofDigest left) (ofDigest right)
       = ofDigest <$> tweakableHash (m := m) P (.forsNode index κ level node)
           (SphincsSecurity.Concrete.nodePayload left right) :=
-  th_queryH P _ _ _ _ (toList_addrForsNode index κ level node) (by
+  th_queryH P _ _ _ _ (toList_adrsFors_node index κ level node hnode) (by
     simp [SphincsSecurity.Concrete.nodePayload])
 
-omit [LawfulMonad m] in
-/-- A derivation of the secrets of a pair of FORS leaves. -/
-theorem forsPrf_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.PublicParameter)
-    (index : SphincsSecurity.Index) (κ : SphincsSecurity.FTree) (pair : SphincsSecurity.FPair) :
-    seedPrf (queryH (m := m)) (ofSeed S) (ofParam P) (addrForsPrf index.val (treeOf κ)
-        ⟨pair.val, pair.isLt⟩) .empty
-      = ofOutput <$> SphincsSecurity.deriveOutput (m := m) P (.fors index κ pair) S :=
-  seedPrf_queryH S P _ _ (toList_addrForsPrf index κ pair)
+/-- A FORS node at height `level + 1` and index `j`, below the width of its height.
 
-omit [LawfulMonad m] in
-/-- A derivation of the starts of a pair of chains. -/
-theorem otsPrf_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.PublicParameter)
-    (lay : SphincsSecurity.Layer) (tree : SphincsSecurity.TreeIndex)
-    (leaf : SphincsSecurity.LeafIndex) (pair : SphincsSecurity.ChainPair) :
-    seedPrf (queryH (m := m)) (ofSeed S) (ofParam P) (addrPrf (keyOf lay tree leaf)
-        ⟨pair.val, pair.isLt⟩) .empty
-      = ofOutput <$> SphincsSecurity.deriveOutput (m := m) P (.ots lay tree leaf pair) S :=
-  seedPrf_queryH S P _ _ (toList_addrPrf lay tree leaf pair)
+The model stores its index as a FORS leaf, modulo `2^10`. -/
+theorem forsNodeHash_queryH_mod (P : SphincsSecurity.PublicParameter)
+    (index : SphincsSecurity.Index) (κ : SphincsSecurity.FTree) (level : SphincsSecurity.FLevel)
+    (j : Nat) (hj : j < 2 ^ (FORS_HEIGHT - (level.val + 1))) (left right : SphincsSecurity.Digest) :
+    forsNodeHash (queryH (m := m)) (ofParam P) index.val (treeOf κ) (level.val + 1) j
+        (ofDigest left) (ofDigest right)
+      = ofDigest <$> tweakableHash (m := m) P (.forsNode index κ level
+          ⟨j % 2 ^ SphincsSecurity.forsHeight, Nat.mod_lt _ (Nat.two_pow_pos _)⟩)
+          (SphincsSecurity.Concrete.nodePayload left right) := by
+  -- The index is below `2^10`, so the model's reduction keeps it.
+  have hmod : j % 2 ^ SphincsSecurity.forsHeight = j :=
+    Nat.mod_eq_of_lt (hj.trans_le (Nat.pow_le_pow_right (by decide) (Nat.sub_le _ _)))
+  have h := forsNodeHash_queryH (m := m) P index κ level
+    ⟨j % 2 ^ SphincsSecurity.forsHeight, Nat.mod_lt _ (Nat.two_pow_pos _)⟩
+    (by simp only [hmod]; exact hj) left right
+  rwa [show (⟨j % 2 ^ SphincsSecurity.forsHeight, Nat.mod_lt _ (Nat.two_pow_pos _)⟩ :
+    SphincsSecurity.FLeaf).val = j from hmod] at h
+
+/-- The bytes of the FORS roots, in order, as the model's payload of `T_k`. -/
+theorem toList_packDigests_roots (roots : SphincsSecurity.ForsKey) :
+    (packDigests (Vector.ofFn fun κ : Fin FORS_TREES =>
+        ofDigest (roots ⟨κ.val, κ.isLt⟩))).data.toList
+      = SphincsSecurity.Concrete.rootsPayload roots :=
+  toList_packDigests (n := FORS_TREES) fun κ => roots ⟨κ.val, κ.isLt⟩
+
+/-- The FORS public key `T_k` of the roots. -/
+theorem forsPkFromRoots_queryH (P : SphincsSecurity.PublicParameter)
+    (index : SphincsSecurity.Index) (roots : SphincsSecurity.ForsKey) :
+    forsPkFromRoots (queryH (m := m)) (ofParam P) index.val
+        (Vector.ofFn fun κ : Fin FORS_TREES => ofDigest (roots ⟨κ.val, κ.isLt⟩))
+      = ofDigest <$> SphincsSecurity.Concrete.forsPublicKey (m := m) P index roots :=
+  th_queryH P _ _ _ _ (toList_adrsRoots index) (toList_packDigests_roots roots)
 
 /-! ## The message digest -/
 
+/-- The 84 bytes of digest call `i`: `R`, `PK.seed`, `PK.root`, the message, then `BE_32(i)`. -/
+theorem toList_digestInput (P : SphincsSecurity.PublicParameter) (root : SphincsSecurity.Digest)
+    (msg : SphincsSecurity.Message) (rho : SphincsSecurity.Randomness)
+    (call : SphincsSecurity.DigestCall) :
+    (packBytes (ofRandomizer rho) ++ packBytes (ofParam P) ++ packBytes (ofDigest root)
+        ++ packBytes (ofMessage msg) ++ packBytes (toByte 4 call.val)).data.toList
+      = SphincsSecurity.messageDigestInput P root msg rho call := by
+  simp only [toList_data_append, toList_data_packBytes, toList_ofRandomizer, toList_ofParam,
+    toList_ofDigest, toList_ofMessage, toList_toByte_bytesBE, SphincsSecurity.messageDigestInput]
+
 omit [LawfulMonad m] in
-/-- A digest call: the message, then the randomizer, under the call's address. -/
+/-- A digest call of `H_msg` is the model's digest call. -/
 theorem digestCall_queryH (P : SphincsSecurity.PublicParameter) (root : SphincsSecurity.Digest)
     (msg : SphincsSecurity.Message) (rho : SphincsSecurity.Randomness)
     (call : SphincsSecurity.DigestCall) :
-    thFull (queryH (m := m)) (ofParam P) (addrMsg ⟨call.val, call.isLt⟩)
-        (packBytes (ofMessage msg) ++ packBytes (ofRandomizer rho))
+    queryH (m := m) (packBytes (ofRandomizer rho) ++ packBytes (ofParam P)
+        ++ packBytes (ofDigest root) ++ packBytes (ofMessage msg) ++ packBytes (toByte 4 call.val))
       = ofOutput <$> SphincsSecurity.Concrete.messageDigestCall (m := m) P root msg rho call := by
-  rw [thFull_queryH P _ _ _ (SphincsSecurity.Concrete.messageDigestPayload root msg rho)
-    (toList_addrMsg call) (by simp [SphincsSecurity.Concrete.messageDigestPayload])]
+  rw [queryH, toList_digestInput]
   rfl
 
 end EthLib.Cryptography.Sphincs.Unforgeability.Bridge

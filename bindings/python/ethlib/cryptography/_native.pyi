@@ -128,15 +128,15 @@ def xmss_signature_index(signature: bytes) -> int:
     ...
 
 def sphincs_key_gen(seed: bytes) -> bytes:
-    """The public key grown from a seed."""
+    """The public key `PK.seed | PK.root` of `SK.seed`."""
     ...
 
 def sphincs_sign(seed: bytes, message: bytes) -> bytes:
-    """`Sign(sk, m)`: sign a message."""
+    """`Sign(SK, M)`: sign a message."""
     ...
 
 def sphincs_verify(public_key: bytes, message: bytes, signature: bytes) -> bool:
-    """`Ver(pk, m, sigma)`: whether a signature signs a message under a public key."""
+    """`Ver(PK, M, sigma)`: whether a signature signs a message under a public key."""
     ...
 
 def sha256(data: bytes) -> bytes:

@@ -61,10 +61,14 @@ def SecondOrderInput (input : HashInput) : Prop :=
       (preparedWord results (lay, tree, leaf) chain).val ≤ step.val)) ∨
   ∃ index κ leaf payload, input = fleafInput parameter index κ leaf payload
 
-/-- First-order targets. -/
+/-- First-order targets, which exclude the message-digest inputs.
+
+A message-digest input parses as an address only with a 36-byte payload.
+
+No first-order hit has such a payload. -/
 noncomputable def targetsA (tab : TargetAssignment.Table) (input : HashInput) : Finset Digest :=
-  if SecondOrderInput parameter results input then ∅ else TargetAssignment.targets parameter tab
-      input
+  if SecondOrderInput parameter results input then ∅
+  else if ForsSigner.IsMsgInput input then ∅ else TargetAssignment.targets parameter tab input
 
 /-- The table value at a chain position. -/
 def chainValue (key : OtsKey) (chain : ChainIndex) (position : Digit) : Digest :=
@@ -90,9 +94,16 @@ def TwoEdgeAt (key : OtsKey) (chain : ChainIndex) : Prop :=
     cache (chainInput parameter key chain second (truncateHash answer)) = some answer' ∧
     truncateHash answer' = frontierValue results table key chain
 
-/-- A cached encoding answer of the key decodes to a unit neighbour lowering the chain. -/
+/-- A cached encoding answer of the key decodes to a unit neighbour lowering the chain.
+
+Its message has 16 bytes, like every message that the verifier encodes.
+
+The length keeps the input apart from the message-digest inputs.
+
+An encoding input has the 84 bytes of a message-digest input only for a 32-byte message. -/
 def MarkerAt (key : OtsKey) (chain : ChainIndex) : Prop :=
   ∃ (message : HashInput) (counter : Counter) (answer : HashOutput) (candidate : Encoding),
+    message.length = 16 ∧
     cache (Wots.encodingInput parameter key.1 key.2.1 key.2.2 message counter) = some answer ∧
     TargetSum.decodeDigest (truncateHash answer) = some candidate ∧
     EncodingCode.UnitNeighborAt (preparedWord results key) candidate chain

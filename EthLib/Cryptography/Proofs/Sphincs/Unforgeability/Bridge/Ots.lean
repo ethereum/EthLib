@@ -8,6 +8,8 @@ public import EthLib.Cryptography.Proofs.Sphincs.Encoding
 
 A digest is a codeword in EthLib exactly when it is one in the model, with the same digits.
 
+Both read digit `i` from bits `6 - 2 (i mod 4)` and above of byte `floor(i / 4)`.
+
 So EthLib's encoding with the query is the model's, and so is the leaf that a verifier recovers.
 -/
 
@@ -18,8 +20,7 @@ namespace EthLib.Cryptography.Sphincs.Unforgeability.Bridge
 open EthLib.Cryptography.Sphincs
 open EthLib.Cryptography.Sphincs.Constants
 open SphincsSecurity.Concrete (tweakableHash)
-open EthLib.Cryptography.HashSig
-  (toList_data_append toList_data_packBytes toList_uintToBytes bytesToUint_ofBV)
+open EthLib.Cryptography.HashSig (toList_data_append toList_data_packBytes bytesToUint_ofBV)
 
 /-! ## Codewords -/
 
@@ -27,8 +28,9 @@ open EthLib.Cryptography.HashSig
 def ofEncoding (e : SphincsSecurity.Encoding) : Codeword :=
   Vector.ofFn fun i : Fin V => ⟨(e ⟨i.val, i.isLt⟩).val, (e ⟨i.val, i.isLt⟩).isLt⟩
 
-/-- A digest's bytes read back as a number are the digest's number. -/
-theorem bytesToUint_ofDigest (d : SphincsSecurity.Digest) : bytesToUint (ofDigest d) = d.toNat :=
+/-- A digest's bytes read back as a little-endian number are the digest's number. -/
+theorem bytesToUint_ofDigest (d : SphincsSecurity.Digest) :
+    Base.bytesToUint (ofDigest d) = d.toNat :=
   bytesToUint_ofBV 16 d
 
 /-- EthLib's digits of a digest are the model's. -/
@@ -37,11 +39,11 @@ theorem digits_ofDigest (d : SphincsSecurity.Digest) :
   apply Vector.ext
   intro i hi
   apply Fin.ext
-  rw [digits_getElem_val, bytesToUint_ofDigest]
+  rw [digits_getElem_val_bytesToUint, bytesToUint_ofDigest]
+  -- Both read the two bits at offset `8 floor(i / 4) + 6 - 2 (i mod 4)`.
   simp only [ofEncoding, Vector.getElem_ofFn, SphincsSecurity.TargetSum.digestEncoding,
     SphincsSecurity.TargetSum.digitOffset, SphincsSecurity.winternitzBits]
-  rw [show (4 : Nat) ^ i = 2 ^ (2 * i) by rw [pow_mul]; norm_num, BitVec.val_toFin,
-    BitVec.extractLsb'_toNat, Nat.shiftRight_eq_div_pow]
+  rw [BitVec.val_toFin, BitVec.extractLsb'_toNat, Nat.shiftRight_eq_div_pow]
 
 /-- EthLib's digit sum of a model word is the model's. -/
 theorem digitSum_ofEncoding (e : SphincsSecurity.Encoding) :
@@ -63,17 +65,24 @@ theorem codeword?_ofDigest (d : SphincsSecurity.Digest) :
 
 variable {m : Type → Type} [Monad m] [LawfulMonad m] [HasQuery HashSig.HashSpec m]
 
+/-- The bytes of a counter, as the model's big-endian counter. -/
+theorem toList_data_packBytes_counter (counter : UInt32) :
+    (packBytes (toByte COUNTER_LEN counter.toNat)).data.toList
+      = SphincsSecurity.bytesBE 4 (BitVec.ofNat 32 counter.toNat) := by
+  rw [toList_data_packBytes, toList_toByte_bytesBE]
+  rfl
+
 /-- EthLib's encoding of a message under a counter is the model's, with the same codeword. -/
 theorem encode_queryH (P : SphincsSecurity.PublicParameter) (lay : SphincsSecurity.Layer)
-    (tree : SphincsSecurity.TreeIndex) (leaf : SphincsSecurity.LeafIndex) (msg : ByteArray)
+    (tree : SphincsSecurity.TreeIndex) (leaf : SphincsSecurity.LeafIndex) (msg : Digest)
     (counter : UInt32) :
     encode (queryH (m := m)) (ofParam P) (keyOf lay tree leaf) msg counter
       = Option.map ofEncoding <$> SphincsSecurity.Concrete.encode (m := m) P lay tree leaf
-          msg.data.toList (BitVec.ofNat 32 counter.toNat) := by
+          msg.toList (BitVec.ofNat 32 counter.toNat) := by
   rw [encode, th_queryH P _ _ (.encoding lay tree leaf)
-    (msg.data.toList ++ SphincsSecurity.bytesLE 4 (BitVec.ofNat 32 counter.toNat))
-    (toList_addrEncoding lay tree leaf)
-    (by simp only [toList_data_append, toList_data_packBytes, toList_uintToBytes]; rfl)]
+    (msg.toList ++ SphincsSecurity.bytesBE 4 (BitVec.ofNat 32 counter.toNat))
+    (toList_adrsEnc lay tree leaf)
+    (by rw [toList_data_append, toList_data_packBytes, toList_data_packBytes_counter])]
   simp only [SphincsSecurity.Concrete.encode, map_eq_bind_pure_comp, bind_assoc, pure_bind,
     Function.comp_apply, codeword?_ofDigest]
 
@@ -107,11 +116,11 @@ def ofChains (f : SphincsSecurity.ChainIndex → SphincsSecurity.Digest) : Vecto
 
 /-- The leaf a verifier recovers from a one-time signature is the model's. -/
 theorem otsLeaf_queryH (P : SphincsSecurity.PublicParameter) (lay : SphincsSecurity.Layer)
-    (tree : SphincsSecurity.TreeIndex) (leaf : SphincsSecurity.LeafIndex) (msg : ByteArray)
+    (tree : SphincsSecurity.TreeIndex) (leaf : SphincsSecurity.LeafIndex) (msg : Digest)
     (counter : UInt32) (values : SphincsSecurity.ChainIndex → SphincsSecurity.Digest) :
     otsLeaf (queryH (m := m)) (ofParam P) (keyOf lay tree leaf) msg counter (ofChains values)
       = Option.map ofDigest <$> SphincsSecurity.Concrete.otsLeaf (m := m) P lay tree leaf
-          msg.data.toList (BitVec.ofNat 32 counter.toNat) values := by
+          msg.toList (BitVec.ofNat 32 counter.toNat) values := by
   unfold otsLeaf SphincsSecurity.Concrete.otsLeaf
   rw [encode_queryH, bind_map_left, map_bind]
   refine bind_congr fun r => ?_

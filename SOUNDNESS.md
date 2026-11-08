@@ -221,8 +221,8 @@ Its game runs EthLib's `keyGenWith`, `signWith` and `verifyWith`, with the hash 
 `keyGen`, `sign` and `verify` are the same definitions with Keccak-256 as `H`.
 
 The proof is a port of leanVM's model of the scheme, and `Proofs/Sphincs/Security/README.md` lists what changed here.
-The ported model signs the layers of the hypertree from the bottom up, as EthLib and leanVM's Rust signer do.
-The published model signed them from the top down, and its author confirmed in [leanVM#720](https://github.com/leanEthereum/leanVM/issues/720) that this order is a bug.
+The model comes from the commit that merged [leanVM#662](https://github.com/leanEthereum/leanVM/pull/662), which moves the scheme to the hash layout of FIPS 205.
+The model signs the layers of the hypertree from the bottom up, as EthLib and leanVM's Rust signer do.
 The bridge in `Proofs/Sphincs/Unforgeability/Bridge/` connects the model to EthLib's algorithms.
 An EthLib forgery is a model forgery of a translated adversary (`forgeAdvantage_le`).
 Under every fixed answer of the oracle, a signing request costs the model at most what it costs EthLib (`hashCalls_sign_le`).
@@ -1388,12 +1388,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 284 operations and 41 size constants.
-The Python extension calls 284 of the operations and 41 of the constants.
+Lean exports 284 operations and 40 size constants.
+The Python extension calls 284 of the operations and 40 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-9566 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (2528), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1179), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (513), `xmss.c` (134).
+9558 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (2528), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (112), `evm.c` (140), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1171), `pow.c` (105), `precompile.c` (95), `reqresp.c` (85), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (251), `trie.c` (120), `vrf.c` (119), `wrappers.h` (513), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

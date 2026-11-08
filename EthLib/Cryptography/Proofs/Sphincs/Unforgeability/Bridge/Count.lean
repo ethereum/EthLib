@@ -205,29 +205,13 @@ end CountLe
 
 open EthLib.Cryptography.Sphincs
 
-/-- The model's secret key holds, under `f`, the scheme seed and the parameter derived from `S0`. -/
-theorem eval_keygen_snd (seed : SphincsSecurity.MasterSeed) :
-    (evalWithAnswerFn f (SphincsSecurity.Seeded.keygen seed : OracleComp HashSpec _)).2 =
-      ⟨evalWithAnswerFn f (SphincsSecurity.schemeSeed seed : OracleComp HashSpec _),
-        evalWithAnswerFn f (SphincsSecurity.deriveKey 0 .parameter
-          (evalWithAnswerFn f (SphincsSecurity.schemeSeed seed : OracleComp HashSpec _)) :
-            OracleComp HashSpec _),
-        (evalWithAnswerFn f
-          (SphincsSecurity.Seeded.keygen seed : OracleComp HashSpec _)).2.root⟩ := by
-  rw [keygen_eq]
-  simp only [evalWithAnswerFn_bind, evalWithAnswerFn_map]
-  rfl
-
 /-- If every request compares under `f`, so do EthLib's game and the game with the model's signer.
 
 A request compares when `a` times the model's calls is at most `b` times EthLib's. -/
 theorem countLe_signedGame {a b : Nat} (hab : a ≤ b) (adversary : Adversary)
-    (hreq : ∀ (S0 : SphincsSecurity.MasterSeed) (root : SphincsSecurity.Digest) (m : Message),
+    (hreq : ∀ (S0 : SphincsSecurity.MasterSeed) (m : Message),
       a * hashCalls f (SphincsSecurity.Seeded.sign
-        ⟨evalWithAnswerFn f (SphincsSecurity.schemeSeed S0 : OracleComp HashSpec _),
-          evalWithAnswerFn f (SphincsSecurity.deriveKey 0 .parameter
-            (evalWithAnswerFn f (SphincsSecurity.schemeSeed S0 : OracleComp HashSpec _)) :
-              OracleComp HashSpec _), root⟩
+        (evalWithAnswerFn f (SphincsSecurity.Seeded.keygen S0 : OracleComp HashSpec _)).2
         (toMessage m) : OracleComp HashSpec _) ≤
       b * hashCalls f (signWith H ⟨ofSeed S0⟩ m)) :
     CountLe f a b (gameCore adversary) (signedGame adversary) := by
@@ -248,24 +232,19 @@ theorem countLe_signedGame {a b : Nat} (hab : a ≤ b) (adversary : Adversary)
   rw [← liftComp_eq_liftM, ← liftComp_eq_liftM, ← liftComp_map, ← liftComp_map]
   simp only [liftComp_eq_liftM]
   apply CountLe.lift
-  · rw [eval_keygen_snd]
-    conv_lhs => rw [← ofMessage_toMessage m]
-    rw [signWith_answers f seed _ (toMessage m), evalWithAnswerFn_map]
-  · rw [hashCalls_map, hashCalls_map, eval_keygen_snd]
-    exact hreq seed _ m
+  · conv_lhs => rw [← ofMessage_toMessage m]
+    rw [signWith_answers f seed (toMessage m), evalWithAnswerFn_map]
+  · rw [hashCalls_map, hashCalls_map]
+    exact hreq seed m
 
 omit f in
 /-- If every signing request compares under every answer function, budgets transfer.
 
 An adversary with `q` hash calls against EthLib gives one with `b * q / a` against the model. -/
 theorem hasHashQueryBound_translate {a b : Nat} (ha : 0 < a) (hab : a ≤ b)
-    (hreq : ∀ (f : QueryImpl HashSpec Id) (S0 : SphincsSecurity.MasterSeed)
-      (root : SphincsSecurity.Digest) (m : Message),
+    (hreq : ∀ (f : QueryImpl HashSpec Id) (S0 : SphincsSecurity.MasterSeed) (m : Message),
       a * hashCalls f (SphincsSecurity.Seeded.sign
-        ⟨evalWithAnswerFn f (SphincsSecurity.schemeSeed S0 : OracleComp HashSpec _),
-          evalWithAnswerFn f (SphincsSecurity.deriveKey 0 .parameter
-            (evalWithAnswerFn f (SphincsSecurity.schemeSeed S0 : OracleComp HashSpec _)) :
-              OracleComp HashSpec _), root⟩
+        (evalWithAnswerFn f (SphincsSecurity.Seeded.keygen S0 : OracleComp HashSpec _)).2
         (toMessage m) : OracleComp HashSpec _) ≤
       b * hashCalls f (signWith H ⟨ofSeed S0⟩ m))
     (adversary : Adversary) (q : Nat) (hq : HasHashQueryBound adversary q) :

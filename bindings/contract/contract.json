@@ -860,7 +860,7 @@
    "error_class": "XmssError",
    "docstring":
    "The leaf index a 2404-byte signature carries.\n\nIt reads only the first 4 bytes.\n\nIt does not verify the signature, so the index is only what the signer claims.\n\nA caller can use it to require a given leaf before verifying.\n\nFor example, a proof of possession requires leaf 0."},
-  {"summary": "The public key grown from a seed.",
+  {"summary": "The public key `PK.seed | PK.root` of `SK.seed`.",
    "signature": "(seed: bytes) -> bytes",
    "operation": "EthLib.Cryptography.Sphincs.Exports.keyGenExport",
    "method": "sphincs_key_gen",
@@ -874,8 +874,8 @@
       {"constructor": "badMessageSize", "code": 5}]}],
    "error_class": "SphincsError",
    "docstring":
-   "The public key grown from a seed.\n\nIt builds the whole top tree, `2^10` one-time keys."},
-  {"summary": "`Sign(sk, m)`: sign a message.",
+   "The public key `PK.seed | PK.root` of `SK.seed`.\n\nIt builds the whole top tree, `2^10` one-time keys."},
+  {"summary": "`Sign(SK, M)`: sign a message.",
    "signature": "(seed: bytes, message: bytes) -> bytes",
    "operation": "EthLib.Cryptography.Sphincs.sign",
    "method": "sphincs_sign",
@@ -889,9 +889,9 @@
       {"constructor": "badMessageSize", "code": 5}]}],
    "error_class": "SphincsError",
    "docstring":
-   "`Sign(sk, m)`: sign a message.\n\n1. The randomizer and the message give the digest: the index and one leaf per FORS tree.\n2. FORS instance `idx` opens those leaves.\n3. Each layer's key signs what the layer below gives, with its path.\n\n# Warning\n\nNever sign more than `2^30` messages with one secret key.\n\n# Errors\n\n- A one-time signature finds no codeword."},
+   "`Sign(SK, M)`: sign a message.\n\n1. The randomizer and the message give the digest: the index and one leaf per FORS tree.\n2. FORS instance `idx` opens those leaves.\n3. Each layer's key signs what the layer below gives, with its path.\n\n# Warning\n\nNever sign more than `2^30` messages with one secret key.\n\n# Errors\n\n- A one-time signature finds no codeword."},
   {"summary":
-   "`Ver(pk, m, sigma)`: whether a signature signs a message under a public key.",
+   "`Ver(PK, M, sigma)`: whether a signature signs a message under a public key.",
    "signature": "(public_key: bytes, message: bytes, signature: bytes) -> bool",
    "operation": "EthLib.Cryptography.Sphincs.verify",
    "method": "sphincs_verify",
@@ -905,7 +905,7 @@
       {"constructor": "badMessageSize", "code": 5}]}],
    "error_class": "SphincsError",
    "docstring":
-   "`Ver(pk, m, sigma)`: whether a signature signs a message under a public key.\n\nA yes or a no, never a reason.\n\nWhich step rejected a well-formed signature carries no meaning for the caller."},
+   "`Ver(PK, M, sigma)`: whether a signature signs a message under a public key.\n\nA yes or a no, never a reason.\n\nWhich step rejected a well-formed signature carries no meaning for the caller."},
   {"summary":
    "SHA-256 of a byte string shorter than 2^61 bytes, the bound of FIPS 180-4 §1.",
    "signature": "(data: bytes) -> bytes",

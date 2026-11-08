@@ -12,10 +12,14 @@ public import EthLib.Cryptography.Proofs.Sphincs.Digest
 
 A signature this specification produces is one it accepts.
 
-- The FORS openings recover the FORS key of instance `idx`.
+The signer rebuilds the public key as key generation computes it.
+
+So the signer and the verifier hash the message into the same digest, and read the same `idx`.
+
+- The FORS openings recover the FORS public key of instance `idx`.
 - The bottom layer leads to the root of bottom tree `idx >> 8`.
 - The middle layer leads to the root of middle tree `idx >> 16`.
-- The top layer leads to the root of the top tree, which is the public key's.
+- The top layer leads to the root of the top tree, which is `PK.root`.
 
 Each layer's key signs exactly what the layer below leads to.
 
@@ -27,7 +31,7 @@ Every theorem here assumes that signing succeeded.
 
 Signing fails only when a one-time key finds no codeword in `2^32` counters.
 
-How often that happens is not proved: it needs the random oracle model.
+This file does not bound how often that happens, since a bound needs the random oracle model.
 -/
 
 @[expose] public section
@@ -73,11 +77,11 @@ theorem OtsKey.ofIndex_child (idx : Nat) :
 variable {f : ByteArray → Vector UInt8 32}
 
 /-- An honest layer signature leads to the root of its key's tree. -/
-theorem layerRoot_signLayer {pp : PublicParam} {prf : SeedPrf Id} {layer : Layer} {idx : Nat}
-    {msg : ByteArray} {sig : LayerSignature layer}
-    (h : (signLayer (pureHash f) pp prf layer idx msg).run = .ok sig) :
-    (layerRoot (pureHash f) pp layer idx msg sig).run
-      = some (treeRoot (pureHash f) pp prf layer (OtsKey.ofIndex layer idx).tree).run := by
+theorem layerRoot_signLayer {pkSeed : PkSeed} {prf : Prf Id} {layer : Layer} {idx : Nat}
+    {msg : Digest} {sig : LayerSignature layer}
+    (h : (signLayer (pureHash f) pkSeed prf layer idx msg).run = .ok sig) :
+    (layerRoot (pureHash f) pkSeed layer idx msg sig).run
+      = some (treeRoot (pureHash f) pkSeed prf layer (OtsKey.ofIndex layer idx).tree).run := by
   obtain ⟨hots, hpath⟩ := signLayer_eq_ok h
   -- The one-time signature recovers the key's leaf, and the honest path climbs to the root.
   rw [layerRoot_run, otsLeaf_otsSign hots, Option.map_some, hpath]
@@ -87,25 +91,19 @@ theorem layerRoot_signLayer {pp : PublicParam} {prf : SeedPrf Id} {layer : Layer
 
 /-- Verification accepts every signature the secret key produces.
 
-The public key is the one its scheme seed `S = H("leanSPHINCS" | S_0)` gives. -/
+The public key is the one key generation gives `SK.seed`. -/
 theorem verify_sign {sk : SecretKey} {m : Message} {σ : Signature}
     (h : (signWith (pureHash f) sk m).run = .ok σ) :
-    (verifyWith (pureHash f)
-      (publicKeyOf (pureHash f) (seedPrf (pureHash f) (schemeSeed (pureHash f) sk.seed).run)).run
-      m σ).run = true := by
-  obtain ⟨-, hfors, hbottom, hmiddle, htop⟩ := sign_eq_ok rfl rfl h
+    (verifyWith (pureHash f) (keyGenWith (pureHash f) sk.seed).run.2 m σ).run = true := by
+  obtain ⟨-, hfors, hbottom, hmiddle, htop⟩ := sign_eq_ok rfl h
   simp only [layerMessage_run] at hbottom hmiddle htop
   rw [verify_iff, signatureRoot]
-  -- The public key's parameter is the one the signer derives.
-  rw [show (publicKeyOf (pureHash f)
-        (seedPrf (pureHash f) (schemeSeed (pureHash f) sk.seed).run)).run.publicParam
-      = (publicParamOf (seedPrf (pureHash f) (schemeSeed (pureHash f) sk.seed).run)).run from rfl]
-  -- Step 1: the FORS openings recover the FORS key the bottom key signed.
+  -- Step 1: the FORS openings recover the FORS public key the bottom key signed.
   rw [hfors, forsRecover_forsSign]
   -- Step 2: each layer leads to the root of its key's tree, which the layer above signed.
   rw [layerRoot_signLayer hbottom, Option.bind_some, layerRoot_signLayer hmiddle, Option.bind_some,
     layerRoot_signLayer htop]
-  -- Step 3: the top key's tree is the one top tree, whose root is the public key's.
+  -- Step 3: the top key's tree is the one top tree, whose root key generation computed.
   rw [OtsKey.ofIndex_top_tree (digestIndex_lt _)]
   rfl
 

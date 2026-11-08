@@ -166,7 +166,6 @@ theorem revealsIn_layerCostSearch (P : Coordinate → Prop) (parameter : PublicP
     (data : PublicData) (index : Index) (lay : Layer) :
     RevealsIn (D := HashInput) (R := HashOutput) P (layerCostSearch parameter data index lay) := by
   unfold layerCostSearch
-  refine revealsIn_bind _ (revealsIn_tick _ _) fun _ => ?_
   refine revealsIn_bind _ (revealsIn_liftHash _ _) fun found => ?_
   rcases found with _ | pair
   · exact revealsIn_pure _ _

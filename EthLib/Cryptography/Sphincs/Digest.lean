@@ -8,32 +8,31 @@ public import EthLib.Cryptography.Sphincs.Fors
 The message digest, and the randomizer the signer hashes into it.
 
 ```text
-    R   = H_0(P | A_rnd | S | m)
-    D_c = H(P | A_msg(c) | m | R),   c = 0, 1
-    D   = D_0 | D_1
+    M'  = 0x00 | 0x0b | "leanSPHINCS" | M
+    R   = PRF_msg(SK.prf, PK.seed, M') = Trunc_n(H(SK.prf | PK.seed | M'))
+    Z   = R | PK.seed | PK.root | M
+    D   = H_msg(R, PK.seed, PK.root, M) = Trunc_m(H(Z | BE_32(0)) | H(Z | BE_32(1)))
 ```
 
-`D` is read as one 512-bit little-endian number, so `D_0` holds its low 256 bits.
+`H_msg` is MGF1 of RFC 8017 on Keccak-256, and `D` has `m = 34` bytes `g_0` to `g_33`.
 
-Its low `h + k a = 266` bits are the fields:
+FIPS 205 Algorithm 19 splits them into three fields, each read most significant bit first:
 
 ```text
-    [ idx: 26 | leaf_0: 10 | leaf_1: 10 | ... | leaf_23: 10 ]
+    [ md: 30 | tree: 3 | leaf: 1 ]
 ```
 
-- `idx` is bits 0 to 25: the bottom leaf.
-  It fixes the FORS instance and the path up the hypertree.
-- `leaf_kappa` is bits `26 + 10 kappa` to `35 + 10 kappa`.
-  It is the leaf of FORS tree `kappa` that the signature opens.
+- `md` gives the leaf of each FORS tree: `(s_0, ..., s_23) = base_2b(md, a, k)`.
+- `tree` is a big-endian integer cut to `h - h_0 = 18` bits: the bottom tree.
+- `leaf` is cut to `h_0 = 8` bits: the leaf in that tree.
 
-The index and leaves 0 to 22 fill the 256 bits of `D_0` exactly.
+The index is `idx = tree * 2^8 + leaf`, a bottom leaf and so a FORS instance.
 
-Leaf 23 is the low 10 bits of `D_1`.
+Every index names a bottom leaf of the key, so every digest is valid.
 
-The public key's root is not hashed: `P` already binds the digest to the key.
+Source: [main.tex][main] §2 and §5, and FIPS 205 Algorithms 19 and 22.
 
-Source: `deriveRandomizer`, `messageDigest`, `digestIndex` and `digestLeaves` in FORS/Scheme.lean.
-<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean>
+[main]: https://github.com/leanEthereum/leanVM/blob/5e3ade21d339a45e1b3b0dba97ad9300ab50e49b/doc/lean_sphincs/main.tex
 -/
 
 @[expose] public section
@@ -46,45 +45,89 @@ variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 
 /-! ## The randomizer -/
 
-/-- `R`: the randomizer of a message, the first half of one derivation from the seed.
+/-- `M' = BE_8(0) | BE_8(len(ctx)) | ctx | M`: the message as pure SLH-DSA frames it.
 
-The derivation's suffix is the message.
+The context `ctx` is the scheme's name, 11 bytes, so `M'` has 45 bytes.
 
-The seed is in the input, so the randomizer is unpredictable to anyone without the secret key.
+The framing separates `PRF_msg` from the other calls.
 
-Every index is a leaf of this key, so the first randomizer is always kept.
+Verification never computes `PRF_msg`, so no signature depends on the context. -/
+def framedMessage (msg : Message) : ByteArray :=
+  ByteArray.mk #[0, UInt8.ofNat SEED_TAG.length] ++ ByteArray.mk SEED_TAG.toArray ++ packBytes msg
 
-The note's signer would try `R + i delta` for `i = 1, 2, ...`.
+/-- `R = PRF_msg(SK.prf, opt_rand, M') = Trunc_n(H(SK.prf | opt_rand | M'))`.
 
-It does so only if an index could miss the key. -/
-def randomizer (pp : PublicParam) (prf : SeedPrf m) (msg : Message) : m Randomizer := do
-  return halfOf 0 (← prf pp addrRnd (packBytes msg))
+Signing is deterministic, with `opt_rand = PK.seed`, so the input has `32 + 16 + 45 = 93` bytes.
+
+`SK.prf` is secret, so the randomizer is unpredictable to anyone without the secret key. -/
+def prfMsg (skPrf : HashOutput) (optRand : PkSeed) (msg : Message) : m Randomizer := do
+  return trunc N (← H (packBytes skPrf ++ packBytes optRand ++ framedMessage msg))
 
 /-! ## The digest -/
 
-/-- The bytes of the message digest: the outputs of its two calls, call 0 first. -/
-abbrev MessageDigest := Vector UInt8 (DIGEST_CALLS * HASH_LEN)
+/-- The `m = 34` bytes of the message digest. -/
+abbrev MessageDigest := Vector UInt8 DIGEST_BYTES
 
-/-- `D = D_0 | D_1`, with `D_c = H(P | A_msg(c) | m | R)`.
+/-- `H_msg(R, PK.seed, PK.root, M)`: the first 34 bytes of two Keccak-256 calls.
 
-Each call's input is 80 bytes, one Keccak-256 block.
+Call `i` hashes `Z | BE_32(i)` with `Z = R | PK.seed | PK.root | M`, 84 bytes, call 0 first.
 
-Call 0 is made first. -/
-def messageDigest (pp : PublicParam) (msg : Message) (rho : Randomizer) : m MessageDigest := do
-  -- The calls hash the same payload, and only their address differs.
-  let calls ← ofFnInOrder DIGEST_CALLS fun call =>
-    thFull H pp (addrMsg call) (packBytes msg ++ packBytes rho)
-  return calls.flatten
+The message is not framed, so it stays on 16-byte boundaries. -/
+def hMsg (rho : Randomizer) (pkSeed : PkSeed) (pkRoot : Digest) (msg : Message) :
+    m MessageDigest := do
+  let z := packBytes rho ++ packBytes pkSeed ++ packBytes pkRoot ++ packBytes msg
+  -- The calls hash the same `Z`, and only their counter differs.
+  let calls ← ofFnInOrder DIGEST_CALLS fun i => H (z ++ packBytes (toByte 4 i.val))
+  return trunc DIGEST_BYTES calls.flatten
 
-/-- `idx`: the low 26 bits of the digest. -/
-def digestIndex (d : MessageDigest) : Nat :=
-  bytesToUint d % 2 ^ HEIGHT
+/-- Bit `p` of a byte string, most significant bit first, as `base_2b` reads it.
 
-/-- The leaf of each FORS tree: bits `26 + 10 kappa` to `35 + 10 kappa` of the digest. -/
+Bit `p` is bit `7 - p mod 8` of byte `floor(p / 8)`, and every bit past the end is 0. -/
+def msbBit {k : Nat} (x : Vector UInt8 k) (p : Nat) : Nat :=
+  (((x[p / 8]?).getD 0).toNat >>> (7 - p % 8)) % 2
+
+/-- The `width` bits of a byte string from bit `offset`, most significant first.
+
+It is one integer of `base_2b`. -/
+def msbField {k : Nat} (x : Vector UInt8 k) (offset width : Nat) : Nat :=
+  (List.range width).foldl (fun value j => 2 * value + msbBit x (offset + j)) 0
+
+/-- A bit is 0 or 1. -/
+theorem msbBit_lt_two {k : Nat} (x : Vector UInt8 k) (p : Nat) : msbBit x p < 2 :=
+  Nat.mod_lt _ (by decide)
+
+/-- A field of `width` bits is below `2^width`. -/
+theorem msbField_lt {k : Nat} (x : Vector UInt8 k) (offset width : Nat) :
+    msbField x offset width < 2 ^ width := by
+  induction width with
+  | zero => simp [msbField]
+  | succ width ih =>
+    -- The last bit doubles the field read so far and adds itself.
+    simp only [msbField, List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil]
+      at ih ⊢
+    have := msbBit_lt_two x (offset + width)
+    rw [Nat.pow_succ]
+    omega
+
+/-- `(s_0, ..., s_23) = base_2b(md, a, k)`: the leaf of each FORS tree, from the first 30 bytes.
+
+Leaf `s_kappa` is bits `10 kappa` to `10 kappa + 9` of the digest, most significant first. -/
 def digestLeaves (d : MessageDigest) : Vector (Fin (2 ^ FORS_HEIGHT)) FORS_TREES :=
-  -- The digest is read once, as one 512-bit little-endian integer.
-  let value := bytesToUint d
   Vector.ofFn fun kappa =>
-    ⟨value / 2 ^ (HEIGHT + FORS_HEIGHT * kappa.val) % 2 ^ FORS_HEIGHT, Nat.mod_lt _ (by decide)⟩
+    ⟨msbField d (FORS_HEIGHT * kappa.val) FORS_HEIGHT, msbField_lt d _ FORS_HEIGHT⟩
+
+/-- The tree index: bytes 30 to 32 of the digest, as a big-endian integer cut to 18 bits. -/
+def digestTree (d : MessageDigest) : Nat :=
+  EthLib.Base.bytesToNat ((d.toList.drop MD_BYTES).take TREE_INDEX_BYTES)
+    % 2 ^ (HEIGHT - LOWER_HEIGHT)
+
+/-- The bottom leaf index: byte 33 of the digest, cut to 8 bits. -/
+def digestLeaf (d : MessageDigest) : Nat :=
+  EthLib.Base.bytesToNat ((d.toList.drop (MD_BYTES + TREE_INDEX_BYTES)).take LEAF_INDEX_BYTES)
+    % 2 ^ LOWER_HEIGHT
+
+/-- `idx = tree * 2^h_0 + leaf`: the bottom leaf the digest names, below `2^26`. -/
+def digestIndex (d : MessageDigest) : Nat :=
+  digestTree d * 2 ^ LOWER_HEIGHT + digestLeaf d
 
 end EthLib.Cryptography.Sphincs

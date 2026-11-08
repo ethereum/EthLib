@@ -8,6 +8,8 @@ public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Ots
 EthLib computes a one-time key, a tree node, a path and a fold with the same calls as the model.
 
 The calls come in the same order, so each routine with the query is the model's, value for value.
+
+The secrets of a key come from `PRF(PK.seed, SK.seed, ADRS)`, one call per chain, in both.
 -/
 
 @[expose] public section
@@ -20,6 +22,11 @@ open SphincsSecurity.Concrete (tweakableHash sequenceFin)
 
 variable {m : Type → Type} [Monad m] [LawfulMonad m] [HasQuery HashSig.HashSpec m]
 
+/-- EthLib's secrets with the query: `PRF(PK.seed, SK.seed, ADRS)` of the model's seeds. -/
+abbrev secretsOf (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.PublicParameter) :
+    Prf m :=
+  prf (queryH (m := m)) (ofParam P) (ofSeed S)
+
 /-! ## One-time keys -/
 
 omit [HasQuery HashSig.HashSpec m] in
@@ -31,35 +38,27 @@ theorem ofFnInOrder_eq_sequenceFin_cast {α β : Type} {n n' : Nat} (h : n = n')
   subst h
   exact ofFnInOrder_eq_sequenceFin n c g
 
-/-- The starts of a key's chains are the model's secrets. -/
+/-- The starts of a key's chains are the model's secrets, one derivation per chain. -/
 theorem chainStarts_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.PublicParameter)
     (lay : SphincsSecurity.Layer) (tree : SphincsSecurity.TreeIndex)
     (leaf : SphincsSecurity.LeafIndex) :
-    chainStarts (ofParam P) (seedPrf (queryH (m := m)) (ofSeed S)) (keyOf lay tree leaf)
+    chainStarts (secretsOf (m := m) S P) (keyOf lay tree leaf)
       = ofChains <$> SphincsSecurity.Seeded.otsSecrets (m := m) P lay tree leaf S := by
-  have h : V / 2 = 32 := rfl
+  have h : V = SphincsSecurity.numChains := rfl
+  have hprf : (fun i : Fin V => secretsOf (m := m) S P (adrsPrf (keyOf lay tree leaf) i))
+      = fun i => ofDigest <$> SphincsSecurity.deriveKey (m := m) P
+          (.ots lay tree leaf (Fin.cast h i)) S :=
+    funext fun i => prf_queryH S P _ _ (toList_adrsPrf lay tree leaf i)
   unfold chainStarts SphincsSecurity.Seeded.otsSecrets
-  have hprf : (fun j : Fin (V / 2) => seedPrf (queryH (m := m)) (ofSeed S) (ofParam P)
-      (addrPrf (keyOf lay tree leaf) j) .empty) = fun j => (ofOutput <$>
-        SphincsSecurity.deriveOutput (m := m) P (.ots lay tree leaf (Fin.cast h j)) S :
-          m EthLib.Cryptography.Sphincs.HashOutput) :=
-    funext fun j => otsPrf_queryH S P lay tree leaf (Fin.cast h j)
-  rw [hprf, ofFnInOrder_eq_sequenceFin_cast (β := EthLib.Cryptography.Sphincs.HashOutput) h
-    (fun pair : SphincsSecurity.ChainPair =>
-      SphincsSecurity.deriveOutput (m := m) P (.ots lay tree leaf pair) S) ofOutput]
-  simp only [map_bind, map_pure]
-  refine (bind_map_left _ _ _).trans (bind_congr fun outs => ?_)
-  refine congrArg pure (Vector.ext fun i hi => ?_)
-  simp only [ofChains, Vector.getElem_ofFn]
-  erw [Vector.getElem_ofFn]
-  exact halfOf_mod_two_ofOutput _ i
+  rw [hprf, ofFnInOrder_eq_sequenceFin_cast h (fun chain : SphincsSecurity.ChainIndex =>
+    SphincsSecurity.deriveKey (m := m) P (.ots lay tree leaf chain) S) ofDigest]
+  rfl
 
-/-- The leaf of a key, from its seed derivations, is the model's leaf of its chain ends. -/
+/-- The leaf of a key, from its secrets, is the model's leaf of its chain ends. -/
 theorem otsPublicLeaf_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.PublicParameter)
     (lay : SphincsSecurity.Layer) (tree : SphincsSecurity.TreeIndex)
     (leaf : SphincsSecurity.LeafIndex) :
-    otsPublicLeaf (queryH (m := m)) (ofParam P) (seedPrf (queryH (m := m)) (ofSeed S))
-        (keyOf lay tree leaf)
+    otsPublicLeaf (queryH (m := m)) (ofParam P) (secretsOf S P) (keyOf lay tree leaf)
       = ofDigest <$> (SphincsSecurity.Seeded.oneTimePublicKey (m := m) P lay tree leaf S >>=
           SphincsSecurity.Concrete.leafHash P lay tree leaf) := by
   unfold otsPublicLeaf SphincsSecurity.Seeded.oneTimePublicKey
@@ -91,20 +90,19 @@ def ofOts (s : SphincsSecurity.Counter × (SphincsSecurity.ChainIndex → Sphinc
 /-- The counter search, then the chains, is the model's search from the same counter. -/
 theorem findCounter_bind_queryH (S : SphincsSecurity.MasterSeed)
     (P : SphincsSecurity.PublicParameter) (lay : SphincsSecurity.Layer)
-    (tree : SphincsSecurity.TreeIndex) (leaf : SphincsSecurity.LeafIndex) (msg : ByteArray) :
+    (tree : SphincsSecurity.TreeIndex) (leaf : SphincsSecurity.LeafIndex) (msg : Digest) :
     ∀ (fuel c : Nat),
       (Internal.findCounter (queryH (m := m)) (ofParam P) (keyOf lay tree leaf) msg c fuel >>=
         fun r => match r with
           | none => pure none
           | some (counter, x) => do
-            let starts ← chainStarts (ofParam P) (seedPrf (queryH (m := m)) (ofSeed S))
-              (keyOf lay tree leaf)
+            let starts ← chainStarts (secretsOf S P) (keyOf lay tree leaf)
             let y ← ofFnInOrder V fun i =>
               chain (queryH (m := m)) (ofParam P) (keyOf lay tree leaf) i 0 x[i] (by simp)
                 starts[i]
             pure (some (counter, y)))
         = Option.map ofOts <$> SphincsSecurity.Seeded.otsSignFrom (m := m) P lay tree leaf S
-            msg.data.toList fuel c
+            msg.toList fuel c
   | 0, c => by
     simp [Internal.findCounter, Wots.findFirst, SphincsSecurity.Seeded.otsSignFrom]
   | fuel + 1, c => by
@@ -144,11 +142,10 @@ theorem findCounter_bind_queryH (S : SphincsSecurity.MasterSeed)
 /-- EthLib's one-time signature is the model's. -/
 theorem otsSign_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.PublicParameter)
     (lay : SphincsSecurity.Layer) (tree : SphincsSecurity.TreeIndex)
-    (leaf : SphincsSecurity.LeafIndex) (msg : ByteArray) :
-    otsSign (queryH (m := m)) (ofParam P) (seedPrf (queryH (m := m)) (ofSeed S))
-        (keyOf lay tree leaf) msg
+    (leaf : SphincsSecurity.LeafIndex) (msg : Digest) :
+    otsSign (queryH (m := m)) (ofParam P) (secretsOf S P) (keyOf lay tree leaf) msg
       = Option.map ofOts <$> SphincsSecurity.Seeded.otsSign (m := m) P lay tree leaf S
-          msg.data.toList := by
+          msg.toList := by
   rw [otsSign, SphincsSecurity.Seeded.otsSign,
     show SphincsSecurity.encodingAttemptLimit = MAX_COUNTER_TRIALS from rfl,
     ← findCounter_bind_queryH]
@@ -159,13 +156,12 @@ theorem otsSign_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.Pub
 
 /-- A node is the model's node, on every layer.
 
-Its level is at most the top height, and its leaves are among the first `2 ^ TOP_HEIGHT`. -/
+Its height is at most the top height, and its leaves are among the first `2 ^ TOP_HEIGHT`. -/
 theorem node_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.PublicParameter)
     (lay : SphincsSecurity.Layer) (tree : SphincsSecurity.TreeIndex) :
     ∀ (level j : Nat), level ≤ TOP_HEIGHT → j < 2 ^ (TOP_HEIGHT - level) →
       Merkle.node (nodeHash (queryH (m := m)) (ofParam P) (layerOf lay) tree.val)
-          (leaves (queryH (m := m)) (ofParam P) (seedPrf (queryH (m := m)) (ofSeed S))
-            (layerOf lay) tree.val) level j
+          (leaves (queryH (m := m)) (ofParam P) (secretsOf S P) (layerOf lay) tree.val) level j
         = ofDigest <$> SphincsSecurity.Seeded.treeNode (m := m) P lay tree S level j
   | 0, j, _, hj => by
     have hleaf : keyOf lay tree (SphincsSecurity.Concrete.leafOfNat j)
@@ -182,7 +178,7 @@ theorem node_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.Public
       node_queryH S P lay tree level (2 * j + 1) (by omega) (by omega)]
     simp only [SphincsSecurity.Seeded.treeNode, bind_map_left, map_bind]
     refine bind_congr fun left => bind_congr fun right => ?_
-    exact nodeHash_queryH P lay tree (level + 1) j hlevel left right
+    exact nodeHash_queryH P lay tree (level + 1) j left right
 
 /-- In EthLib's configuration the kept part of every tree is the whole tree. -/
 theorem keptHeight_eq (lay : SphincsSecurity.Layer) :
@@ -198,8 +194,7 @@ theorem keptPosition_eq (P : SphincsSecurity.PublicParameter) (lay : SphincsSecu
 /-- The root of a tree is the model's root. -/
 theorem treeRoot_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.PublicParameter)
     (lay : SphincsSecurity.Layer) (tree : SphincsSecurity.TreeIndex) :
-    treeRoot (queryH (m := m)) (ofParam P) (seedPrf (queryH (m := m)) (ofSeed S)) (layerOf lay)
-        tree.val
+    treeRoot (queryH (m := m)) (ofParam P) (secretsOf S P) (layerOf lay) tree.val
       = ofDigest <$> SphincsSecurity.Seeded.treeRoot (m := m) P lay tree S := by
   have hh := height_layerOf lay
   have hle : (layerOf lay).height ≤ TOP_HEIGHT := Layer.height_le _
@@ -213,14 +208,14 @@ theorem treeRoot_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.Pu
 def ofPath {n : Nat} (g : Fin n → SphincsSecurity.Digest) : Vector Digest n :=
   Vector.ofFn fun i => ofDigest (g i)
 
-/-- The siblings above a leaf in the tree are the model's nodes, level by level. -/
+/-- The siblings above a leaf in the tree are the model's nodes, height by height. -/
 theorem siblings_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.PublicParameter)
     (lay : SphincsSecurity.Layer) (tree : SphincsSecurity.TreeIndex) (e : Nat)
     (he : e < 2 ^ TOP_HEIGHT) :
     ∀ (n level : Nat), level + n ≤ TOP_HEIGHT →
       Merkle.siblings (nodeHash (queryH (m := m)) (ofParam P) (layerOf lay) tree.val)
-          (leaves (queryH (m := m)) (ofParam P) (seedPrf (queryH (m := m)) (ofSeed S))
-            (layerOf lay) tree.val) level (e / 2 ^ level) n
+          (leaves (queryH (m := m)) (ofParam P) (secretsOf S P) (layerOf lay) tree.val) level
+          (e / 2 ^ level) n
         = ofPath <$> sequenceFin (m := m) fun i : Fin n =>
             SphincsSecurity.Seeded.treeNode P lay tree S (level + i.val)
               (Nat.xor (e / 2 ^ (level + i.val)) 1)
@@ -228,7 +223,7 @@ theorem siblings_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.Pu
     simp only [Merkle.siblings, sequenceFin, map_pure]
     congr 1
   | n + 1, level, hn => by
-    -- The node below level `TOP_HEIGHT - level` has index below `2^(TOP_HEIGHT - level)`.
+    -- The node below height `TOP_HEIGHT - level` has index below `2^(TOP_HEIGHT - level)`.
     have hlt : e / 2 ^ level < 2 ^ (TOP_HEIGHT - level) := by
       rw [Nat.div_lt_iff_lt_mul (Nat.two_pow_pos _), ← pow_add]
       exact he.trans_le (Nat.pow_le_pow_right (by decide) (by omega))
@@ -259,8 +254,7 @@ theorem siblings_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.Pu
 theorem path_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.PublicParameter)
     (lay : SphincsSecurity.Layer) (tree : SphincsSecurity.TreeIndex)
     (leaf : SphincsSecurity.LeafIndex) :
-    path (queryH (m := m)) (ofParam P) (seedPrf (queryH (m := m)) (ofSeed S)) (layerOf lay)
-        tree.val leaf.val
+    path (queryH (m := m)) (ofParam P) (secretsOf S P) (layerOf lay) tree.val leaf.val
       = ofPath <$> sequenceFin (m := m) fun i : Fin (layerOf lay).height =>
           SphincsSecurity.Seeded.treeNode P lay tree S i.val
             (Nat.xor (leaf.val / 2 ^ i.val) 1) := by
@@ -271,20 +265,20 @@ theorem path_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.Public
 
 /-! ## Folding a path -/
 
-/-- The climb from a level is the model's fold, continued from that level. -/
+/-- The climb from a height is the model's fold, continued from that height. -/
 theorem climb_queryH (P : SphincsSecurity.PublicParameter) (lay : SphincsSecurity.Layer)
     (tree : SphincsSecurity.TreeIndex) (leaf : SphincsSecurity.LeafIndex)
     (path : Nat → SphincsSecurity.Digest) (v : SphincsSecurity.Digest) :
-    ∀ (n level : Nat), level + n ≤ TOP_HEIGHT →
+    ∀ (n level : Nat),
       ofDigest <$> SphincsSecurity.Concrete.treeFold (m := m) P lay tree leaf path (level + n) v
         = SphincsSecurity.Concrete.treeFold (m := m) P lay tree leaf path level v >>= fun c =>
             Merkle.climb (nodeHash (queryH (m := m)) (ofParam P) (layerOf lay) tree.val) level
               (leaf.val / 2 ^ level) (ofDigest c)
               (List.ofFn fun i : Fin n => ofDigest (path (level + i.val)))
-  | 0, level, _ => by simp [Merkle.climb]
-  | n + 1, level, hn => by
+  | 0, level => by simp [Merkle.climb]
+  | n + 1, level => by
     rw [show level + (n + 1) = level + 1 + n by omega,
-      climb_queryH P lay tree leaf path v n (level + 1) (by omega)]
+      climb_queryH P lay tree leaf path v n (level + 1)]
     simp only [SphincsSecurity.Concrete.treeFold, bind_assoc, List.ofFn_succ, Fin.val_zero,
       Nat.add_zero, Fin.val_succ]
     refine bind_congr fun c => ?_
@@ -297,8 +291,8 @@ theorem climb_queryH (P : SphincsSecurity.PublicParameter) (lay : SphincsSecurit
     rcases Nat.mod_two_eq_zero_or_one (leaf.val / 2 ^ level) with h | h
     · simp only [h, Merkle.ordered, ↓reduceIte, Nat.zero_ne_one, decide_false,
         Bool.false_eq_true]
-      rw [nodeHash_queryH P lay tree (level + 1) _ (by omega), bind_map_left]
+      rw [nodeHash_queryH P lay tree (level + 1), bind_map_left]
     · simp only [h, Merkle.ordered, ↓reduceIte, Nat.one_ne_zero, decide_true]
-      rw [nodeHash_queryH P lay tree (level + 1) _ (by omega), bind_map_left]
+      rw [nodeHash_queryH P lay tree (level + 1), bind_map_left]
 
 end EthLib.Cryptography.Sphincs.Unforgeability.Bridge
