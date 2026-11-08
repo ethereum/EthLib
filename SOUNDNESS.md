@@ -1514,6 +1514,28 @@ The client then reads the state with the layout of that fork.
 The store keeps the committee that its bootstrap proves.
 Its root is the root of the current committee of the trusted state, or the search returns a collision.
 It makes the same assumption on the index, at the slot of the bootstrap header.
+`stateForkAtSlot_gindices` discharges that assumption from the fork schedule.
+Take a slot whose scheduled fork is from Altair, and a store of that fork or later.
+The schedule must start Electra no later than Fulu, and Gloas no later than Heze.
+The client then reads the three nodes at the indices of the fork of the slot, so at the deeper indices of Electra from Electra.
+
+From Capella a header also carries the execution data of its block, which `Consensus/Proofs/LightClient/Execution.lean` binds to the block.
+From Capella to Fulu, `isValidLightClientHeader_executionPayload` takes a valid header at a slot from Capella.
+It also takes a body of a fork from Capella to Fulu whose root is the body root of the header.
+The execution root of the header is then the root of the execution payload of that body, or `findBranchCollision` returns a SHA-256 collision.
+`BeaconBlockBody.nodeRoot_executionPayload` reads node 25 of such a body as the root of its payload.
+Like the state theorems, these take the lawful type of the body.
+`ExecutionPayload.hashTreeRoot_header` shows that before Gloas the header of a payload has the root of the payload.
+So `isValidLightClientHeader_execution_eq` takes the binding to the fields, for a body of the fork of the header, at a slot from Capella, and from Deneb for a header from Deneb.
+The execution header of the light client header is then the header of the payload of the body, field by field.
+Otherwise a search over the two branch climbs, or one over the hash inputs of the two header roots, names a SHA-256 collision.
+From Deneb, `isValidLightClientHeader_blobGas` applies this to the blob gas used and the excess blob gas, at a slot from Deneb.
+The schedule must start Capella no later than Deneb.
+`isValidLightClientHeader_blobGas_zero` shows that a valid header of an earlier slot has zero for both.
+From Gloas, `isValidLightClientHeader_parentBlockHash` binds the block hash of a header at a slot from Gloas to the parent block hash of the bid of a Gloas body.
+`isValidLightClientHeader_executionBlockHash` binds it, for an earlier slot from Capella, to the block hash of the payload of a body from Capella to Fulu that is from Deneb exactly when the slot is.
+The headers that the client checks are valid: `initializeLightClientStore_header_valid`, `validateLightClientUpdate_attestedHeader_valid`, and `validateLightClientUpdate_finalizedHeader_valid` after the genesis slot.
+The index theorems `executionPayloadGindex_eq`, `payloadHeaderBlockHashGindex_eq`, `executionBlockHashGindex_eq` and `executionBlockHashGindexGloas_eq` hold at every preset.
 
 The signature theorems assume `SignatureChecks.AggregateSound`, listed in A4.
 Under it, `validateLightClientUpdate_signed` shows that every member whose bit is set signed the signing root.

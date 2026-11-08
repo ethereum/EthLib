@@ -53,13 +53,7 @@ theorem computeMerkleProof_isValidNormalizedMerkleBranch {α : Type} [SszType α
   refine ⟨root, branch, rooted, ?_, ?_⟩
   · simp only [computeMerkleProof, built, bind, Except.bind]
     exact mapM_toChunk_map_toArray branch
-  · -- The branch has exactly the depth of the index, so no node is in front.
-    have counted := (isValidMerkleBranch_eq_true_iff.mp valid).1
-    rw [isValidNormalizedMerkleBranch_iff named, counted, Nat.sub_self, List.drop_zero]
-    refine ⟨by simp, ?_⟩
-    rw [← two_pow_log2_add_mod (by omega : 1 ≤ gindex)]
-    exact (isValidMerkleBranch_iff_verifyMerkleProof (log2_pos named)
-      (Nat.mod_lt _ (Nat.two_pow_pos _))).mp valid
+  · exact isValidNormalizedMerkleBranch_of_isValidMerkleBranch named valid
 
 /-- Zero nodes in front of a branch leave the check of a normalized branch unchanged.
 
