@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Blocks.Header
+public import EthLib.Execution.Proofs.Trie.Binding
 public import EthLib.Serialization.Proofs.Rlp.Codec
 
 /-!
@@ -17,6 +18,14 @@ So its RLP list has exactly the count of fields of that fork.
 A list with another count never decodes as a header of that fork.
 
 The hash of a decoded header is the hash of the bytes that it decodes from.
+
+Two headers at one fork with one hash are equal.
+
+Otherwise a search returns their encodings, which form a Keccak-256 collision.
+
+Keccak-256 has collisions, so no theorem can rule one out.
+
+The theorems give no bound on the cost of finding one.
 -/
 
 @[expose] public section
@@ -24,6 +33,7 @@ The hash of a decoded header is the hash of the bytes that it decodes from.
 namespace EthLib.Execution.Blocks
 
 open EthLib.Base
+open EthLib.Execution.Trie (IsCollision)
 open EthLib.Serialization.Rlp
 open EthLib.Cryptography.Hash.Keccak (keccak256)
 
@@ -105,6 +115,66 @@ theorem ofItem_wrongFieldCount {items : List Item} (hLen : items.length ≠ fiel
     (Codec.ofItem (.list items) : Except RlpError (Header fork)) =
       .error (.wrongFieldCount (fieldCount fork) items.length) := by
   simp [Codec.ofItem, ofItem, Item.fields, Item.toItems, hLen, bind, Except.bind]
+
+/-- A header hashes to a digest exactly when its encoding hashes to that digest. -/
+theorem hash_eq_ok_iff {h : Header fork} {digest : Hash32} :
+    h.hash = .ok digest ↔ ∃ bytes, Codec.encode h = .ok bytes ∧ keccak256 bytes = digest := by
+  unfold hash
+  cases Codec.encode h with
+  | error e => simp [bind, Except.bind]
+  | ok bytes =>
+    constructor
+    · intro hh
+      exact ⟨bytes, rfl, Except.ok.inj hh⟩
+    · rintro ⟨_, hb, rfl⟩
+      cases hb
+      rfl
+
+/-- The encodings of two headers, when the encodings differ and share one Keccak-256 hash. -/
+def findCollision (h₁ h₂ : Header fork) : Option (ByteArray × ByteArray) :=
+  match Codec.encode h₁, Codec.encode h₂ with
+  | .ok b₁, .ok b₂ => if b₁ ≠ b₂ ∧ keccak256 b₁ = keccak256 b₂ then some (b₁, b₂) else none
+  | _, _ => none
+
+/-- Every pair that the search returns holds the two encodings, in order, and is a collision. -/
+theorem findCollision_valid {h₁ h₂ : Header fork} {pair : ByteArray × ByteArray}
+    (hFound : findCollision h₁ h₂ = some pair) :
+    Codec.encode h₁ = .ok pair.1 ∧ Codec.encode h₂ = .ok pair.2 ∧ IsCollision keccak256 pair := by
+  unfold findCollision at hFound
+  split at hFound
+  · rename_i b₁ b₂ hb₁ hb₂
+    split at hFound
+    · rename_i hcol
+      cases hFound
+      exact ⟨hb₁, hb₂, hcol⟩
+    · cases hFound
+  · cases hFound
+
+/-- A header compared with itself has no collision. -/
+theorem findCollision_self (h : Header fork) : findCollision h h = none := by
+  unfold findCollision
+  split
+  · rename_i b₁ b₂ hb₁ hb₂
+    rw [hb₁] at hb₂
+    cases hb₂
+    simp
+  · rfl
+
+/-- Two headers at one fork with one hash are equal, or the search returns their encodings.
+
+Those encodings then form a Keccak-256 collision. -/
+theorem hash_binding {h₁ h₂ : Header fork} {digest : Hash32}
+    (hh₁ : h₁.hash = .ok digest) (hh₂ : h₂.hash = .ok digest) :
+    h₁ = h₂ ∨ ∃ pair, findCollision h₁ h₂ = some pair ∧
+      Codec.encode h₁ = .ok pair.1 ∧ Codec.encode h₂ = .ok pair.2 ∧ IsCollision keccak256 pair := by
+  obtain ⟨b₁, hb₁, hk₁⟩ := hash_eq_ok_iff.mp hh₁
+  obtain ⟨b₂, hb₂, hk₂⟩ := hash_eq_ok_iff.mp hh₂
+  by_cases hne : b₁ = b₂
+  · subst hne
+    exact .inl (Codec.encode_injective hb₁ hb₂)
+  · have hk : keccak256 b₁ = keccak256 b₂ := hk₁.trans hk₂.symm
+    refine .inr ⟨(b₁, b₂), ?_, hb₁, hb₂, hne, hk⟩
+    simp [findCollision, hb₁, hb₂, hne, hk]
 
 end Header
 
