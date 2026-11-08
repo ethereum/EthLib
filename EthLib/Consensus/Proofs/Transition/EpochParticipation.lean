@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Consensus.Proofs.Transition.EpochRewards
+public import EthLib.Consensus.Proofs.Transition.RewardDeltas
 public import EthLib.Consensus.Transition.EpochParticipation
 
 /-!
@@ -22,9 +22,9 @@ An unslashed validator that set the target flag in the previous epoch loses one 
 
 The other eligible validators gain the score bias.
 
-Outside a leak each of those scores then loses the recovery rate, and no score falls below zero.
+Outside a leak each of those scores then loses the recovery rate, stopping at zero.
 
-That needs a registry within its limit.
+The value of each score needs a registry within its limit.
 
 None of these steps changes the size of the registry or of the balances.
 -/
@@ -162,7 +162,7 @@ A hit loses one point, and a miss gains the score bias.
 
 Outside a leak the score then loses the recovery rate.
 
-A score never falls below zero. -/
+Each subtraction stops at zero. -/
 theorem nextInactivityScore_toNat {config : Config} {hit leak : Bool} {score score' : UInt64}
     (computed : nextInactivityScore config hit (.ok leak) score = .ok score') :
     score'.toNat = (if hit then score.toNat - 1
@@ -189,7 +189,7 @@ theorem nextInactivityScore_toNat {config : Config} {hit leak : Bool} {score sco
     · simp only [↓reduceIte, Nat.sub_zero, toNat_saturatingSub, UInt64.toNat_one]
 
 /-- A score update that succeeds has a result for the leak test. -/
-private theorem nextInactivityScore_leak {config : Config} {hit : Bool}
+theorem nextInactivityScore_leak {config : Config} {hit : Bool}
     {leaking : Except TransitionError Bool} {score score' : UInt64}
     (computed : nextInactivityScore config hit leaking score = .ok score') :
     ∃ leak, leaking = .ok leak := by
@@ -225,46 +225,7 @@ private theorem updateInactivityScore_getElem? {config : Config}
     simp [Ne.symm other]
   · simp [throw, throwThe, MonadExceptOf.throw] at computed
 
-/-- A fold of score updates over increasing indices sets the score of each of them once.
-
-The other scores stay. -/
-private theorem foldlM_updateInactivityScore {config : Config}
-    {hit : Except TransitionError (Array Bool)} {leaking : Except TransitionError Bool} :
-    ∀ {indices : List ValidatorIndex} {start result : InactivityScores preset fork},
-      indices.Pairwise (· < ·) →
-      indices.foldlM (updateInactivityScore config hit leaking) start = .ok result →
-      (∀ j, (∀ index ∈ indices, index.toNat ≠ j) → result.data[j]? = start.data[j]?) ∧
-      ∀ index ∈ indices, ∃ marks score score', hit = .ok marks ∧
-        start.data[index.toNat]? = some score ∧
-        nextInactivityScore config (marks.getD index.toNat false) leaking score = .ok score' ∧
-        result.data[index.toNat]? = some score'
-  | [], _, _, _, computed => by
-    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact ⟨fun _ _ => rfl, fun _ absent => absurd absent List.not_mem_nil⟩
-  | first :: rest, _, _, sorted, computed => by
-    rw [List.foldlM_cons, bind_ok_iff] at computed
-    obtain ⟨middle, step, folded⟩ := computed
-    obtain ⟨below, restSorted⟩ := List.pairwise_cons.mp sorted
-    obtain ⟨others, listed⟩ := foldlM_updateInactivityScore restSorted folded
-    obtain ⟨⟨marks, score, score', marked, found, next, set⟩, kept⟩ :=
-      updateInactivityScore_getElem? step
-    refine ⟨fun j absent => ?_, fun index member => ?_⟩
-    · rw [others j fun index member => absent index (List.mem_cons_of_mem _ member)]
-      exact kept j fun same => absent first List.mem_cons_self same.symm
-    · rcases List.mem_cons.mp member with rfl | member
-      · refine ⟨marks, score, score', marked, found, next, ?_⟩
-        rw [others _ fun other inside same => ?_]
-        · exact set
-        · have := UInt64.lt_iff_toNat_lt.mp (below other inside)
-          omega
-      · obtain ⟨marks', score₀, score₁, marked', found', next', set'⟩ := listed index member
-        refine ⟨marks', score₀, score₁, marked', ?_, next', set'⟩
-        have := UInt64.lt_iff_toNat_lt.mp (below index member)
-        rw [← kept index.toNat (by omega)]
-        exact found'
-
-/-- A validator is marked exactly when it is among the unslashed validators that set the flag. -/
+/-- A validator is marked exactly when it is unslashed and set the flag in the given epoch. -/
 private theorem getD_markIndices_iff {flagIndex : UInt64} {epoch : Epoch}
     {altair : .altair ≤ fork} {participating : List ValidatorIndex}
     (computed : getUnslashedParticipatingIndices state altair flagIndex epoch = .ok participating)
@@ -299,7 +260,7 @@ That depends on whether it is unslashed and set the target flag in the previous 
 
 A hit loses one point, and a miss gains the score bias.
 
-Outside a leak the score then loses the recovery rate, and it never falls below zero.
+Outside a leak the score then loses the recovery rate, stopping at zero.
 
 The other scores stay.
 
@@ -322,10 +283,18 @@ theorem processInactivityUpdates_scores {config : Config} {altair : .altair ≤ 
   unfold processInactivityUpdates at computed
   simp only [later, ↓reduceIte, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨eligible, listed, scores, folded, rfl⟩ := computed
-  obtain ⟨others, updated⟩ :=
-    foldlM_updateInactivityScore (getEligibleValidatorIndices_sorted within listed) folded
-  refine ⟨eligible, listed, others, fun index member => ?_⟩
-  obtain ⟨marks, score, score', marked, found, next, set⟩ := updated index member
+  -- The eligible indices name each validator once, so the fold sets each eligible score once.
+  have distinct := (getEligibleValidatorIndices_ok within listed).1
+  have entry (j : Nat) := foldlM_entry (entry := fun scores : InactivityScores preset fork =>
+    scores.data[j]?) (j := j)
+    (fun _ _ _ step other => (updateInactivityScore_getElem? step).2 j (Ne.symm other))
+    distinct folded
+  refine ⟨eligible, listed, fun j absent => (entry j).1 absent, fun index member => ?_⟩
+  obtain ⟨last, stepped, start, step, result⟩ := (entry index.toNat).2 index member rfl
+  obtain ⟨marks, score, score', marked, found, next, set⟩ :=
+    (updateInactivityScore_getElem? step).1
+  rw [start] at found
+  rw [set] at result
   -- The marks are the unslashed validators that set the target flag in the previous epoch.
   have mapped := liftAccessor_ok.mp marked
   obtain ⟨hitters, hit⟩ : ∃ hitters, getUnslashedParticipatingIndices state altair
@@ -342,7 +311,7 @@ theorem processInactivityUpdates_scores {config : Config} {altair : .altair ≤ 
   subst same
   obtain ⟨leak, leaking⟩ := nextInactivityScore_leak next
   rw [leaking] at next
-  refine ⟨hitters, leak, score, score', hit, leaking, found, set, ?_⟩
+  refine ⟨hitters, leak, score, score', hit, leaking, found, result, ?_⟩
   rw [nextInactivityScore_toNat next]
   by_cases member' : index ∈ hitters
   · simp only [(getD_markIndices_iff hit index).mpr member', member', ↓reduceIte]
