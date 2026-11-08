@@ -18,6 +18,7 @@ Properties of the discv5 packet encoding.
 - The additional data of a message is the masking IV and the unmasked bytes up to the message.
 - A destination reads that additional data from the packet bytes and their masking IV.
 - A message that the encryption writes decrypts back, also after encoding and decoding.
+- A sealed message packet decodes back and opens to its plaintext.
 -/
 
 @[expose] public section
@@ -635,6 +636,41 @@ theorem decryptMessage_of_decode {destId : NodeId} {key : Aes.Key .aes128} {p q 
   rw [ha] at ha'
   cases ha'
   exact decryptMessage_encryptMessage hm
+
+/-- The unmasked header is the 23 bytes of the static header, then the authdata. -/
+theorem Header.length_encode {h : Header} {bytes : List UInt8} (he : h.encode = .ok bytes) :
+    bytes.length = 23 + h.authdata.encode.length :=
+  (Header.encode_size_field [] he).1
+
+/-- A sealed message packet decodes back, and opens to its plaintext under the same key.
+
+The packet must not be a WHOAREYOU packet, whose message the decoder requires to be empty. -/
+theorem openPacket_sealPacket {ε : Type} {packetError : PacketError → ε}
+    {encryptionError decryptionError : Aes.Gcm.Error → ε} {key : Aes.Key .aes128}
+    {destId : NodeId} {maskingIv : Vector UInt8 16} {header : Header} {plaintext bytes : ByteArray}
+    (h : sealPacket packetError encryptionError key destId maskingIv header plaintext = .ok bytes)
+    (hflag : header.authdata.flag ≠ 1) :
+    ∃ message, Packet.decode destId bytes = .ok ⟨maskingIv, header, message⟩ ∧
+      openPacket packetError decryptionError key ⟨maskingIv, header, message⟩ = .ok plaintext := by
+  unfold sealPacket at h
+  cases ha : Packet.messageAd ⟨maskingIv, header, .empty⟩ with
+  | error err => simp [ha, Except.mapError, bind, Except.bind] at h
+  | ok ad =>
+    cases hm : encryptMessage key header.nonce plaintext ad with
+    | error err => simp [ha, hm, Except.mapError, bind, Except.bind] at h
+    | ok message =>
+      simp only [ha, hm, Except.mapError, bind, Except.bind] at h
+      cases hb : Packet.encode destId ⟨maskingIv, header, message⟩ with
+      | error err => simp [hb] at h
+      | ok packetBytes =>
+        simp only [hb, Except.ok.injEq] at h
+        subst h
+        refine ⟨message, Packet.decode_encode hb fun one => absurd one hflag, ?_⟩
+        -- The additional data depends only on the masking IV and the header.
+        have had : Packet.messageAd ⟨maskingIv, header, message⟩ = .ok ad := by
+          simpa [Packet.messageAd] using ha
+        simp only [openPacket, had, decryptMessage_encryptMessage hm, Except.mapError, bind,
+          Except.bind]
 
 /-! ## Error codes -/
 
