@@ -5,39 +5,19 @@ public import EthLib.Consensus.Proofs.Transition.EpochRewards
 /-!
 # Proofs: the amount of each reward and penalty
 
-Each eligible validator appears once among the eligible indices, and the others not at all.
+For each validator of a registry within its limit, these proofs state its reward and penalty.
 
-So a fold of the deltas over those indices touches the entry of each validator at most once.
+They cover the flag and inactivity deltas from Altair, and the attestation deltas before Altair.
 
-That entry holds the amount that the step for its validator adds, and zero if no step adds one.
+Each eligible validator appears once among the eligible indices, so a fold touches its entry once.
 
-The registry must be within its limit, so that each position is its own 64-bit index.
+The proposer of the earliest inclusion of a signer earns a share of the signer's base reward.
 
-From Altair, a flag earns its weight of the base reward, scaled by the participating increments.
-
-A missed flag other than the head costs its weight of the base reward.
-
-A missed target also costs the effective balance times the inactivity score, over a fixed divisor.
-
-Before Altair, each kind of vote earns the base reward scaled by the attesting increments.
-
-In a leak it earns the whole base reward instead.
-
-A missed vote costs the base reward, in a leak or not.
-
-In a leak, every eligible validator also pays four base rewards less the proposer share.
-
-A missed target then also costs the effective balance times the finality delay, over a quotient.
-
-The inclusion rewards sum, for each validator, the shares of the signers whose votes it included.
-
-The earliest inclusion of a signer is the first attestation with its least inclusion delay.
-
-The attestation deltas are the sums of these parts.
+The signer earns the rest, divided by its inclusion delay.
 
 Every quotient rounds down, and no sum or product overflows.
 
-No EIP specifies these Phase 0 and Altair rules, so this comment states them.
+No EIP specifies these Phase 0 and Altair rules, so the theorems below state them.
 -/
 
 @[expose] public section
@@ -52,7 +32,7 @@ variable {preset : Preset} {fork : Base.Fork} {state : BeaconState preset fork}
 
 /-- For a registry within its limit, the eligible indices name each validator at most once.
 
-Each one names a validator of the registry, and that validator is eligible.
+A position is listed exactly when its validator is eligible.
 
 The eligibility of every validator of the registry is decided without an error. -/
 theorem getEligibleValidatorIndices_ok {eligible : List ValidatorIndex}
@@ -65,23 +45,12 @@ theorem getEligibleValidatorIndices_ok {eligible : List ValidatorIndex}
   -- The indices increase strictly, so no position repeats.
   refine ⟨List.pairwise_map.mpr ((getEligibleValidatorIndices_sorted within computed).imp
     fun lt => Nat.ne_of_lt (UInt64.lt_iff_toNat_lt.mp lt)), ?_⟩
-  have succeeds := ok_of_filterMapM_ok computed
+  have succeeds := filterMapM_ok_of_mem computed
   have member {x : Validator × Nat} : x ∈ state.validators.data.toList.zipIdx ↔
       ∃ inside : x.2 < state.validators.data.size, state.validators.data[x.2] = x.1 := by
     rw [List.mem_zipIdx_iff_getElem?, Array.getElem?_toList, Array.getElem?_eq_some_iff]
   -- Each step succeeds, so it keeps the position exactly when it decides that it is eligible.
-  let decide (x : Validator × Nat) : Bool :=
-    match isEligibleValidator (getPreviousEpoch state) x.1 with
-    | .ok decided => decided
-    | .error _ => false
-  obtain rfl := eq_filterMap_of_filterMapM_ok
-    (g := fun x => if decide x then some x.2.toUInt64 else none)
-    (fun ⟨validator, index⟩ _ image step => by
-      simp only [bind_ok_iff] at step
-      obtain ⟨decided, ok, step⟩ := step
-      simp only [pure, Except.pure, Except.ok.injEq] at step
-      subst step
-      simp [decide, ok]) computed
+  obtain rfl := getEligibleValidatorIndices_eq computed
   intro j inside
   obtain ⟨_, found⟩ := succeeds (state.validators.data[j], j) (member.mpr ⟨inside, rfl⟩)
   simp only [bind_ok_iff] at found
@@ -92,14 +61,15 @@ theorem getEligibleValidatorIndices_ok {eligible : List ValidatorIndex}
     dsimp only at image lt same
     subst same
     split at image
-    · rename_i chose
-      simp only [Option.some.injEq] at image
-      subst image
+    · rename_i passes chose
+      obtain ⟨passed, picked⟩ := Option.ite_none_right_eq_some.mp image
+      obtain rfl := Option.some.inj picked
       obtain rfl : k = j := (toNat_toUInt64_of_lt within lt).symm.trans named
-      simpa [decide, ok] using chose
-    · cases image
+      rw [ok, Except.ok.injEq] at chose
+      exact chose ▸ passed
+    · simp at image
   · refine ⟨j.toUInt64, List.mem_filterMap.mpr ⟨(state.validators.data[j], j),
-      member.mpr ⟨inside, rfl⟩, by simp [decide, ok, yes]⟩, toNat_toUInt64_of_lt within inside⟩
+      member.mpr ⟨inside, rfl⟩, by simp [ok, yes]⟩, toNat_toUInt64_of_lt within inside⟩
 
 /-! ## One entry of a fold over distinct indices -/
 
@@ -144,7 +114,7 @@ theorem foldlM_entry {σ ε β : Type} {step : σ → ValidatorIndex → Except 
 
 /-- One step of the flag deltas, read at the index of its own validator.
 
-A validator that set the flag reads the leak.
+For a validator that set the flag, the reward depends on the leak.
 
 In a leak it earns nothing; otherwise it earns the rounded share of the weighted base reward.
 
@@ -174,7 +144,7 @@ theorem addFlagDelta_getD_self {flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.lengt
               WEIGHT_DENOMINATOR.toNat)) := by
   obtain ⟨base, baseOk⟩ := addFlagDelta_base computed
   refine ⟨base, baseOk, fun set => ?_, fun unset => ?_⟩
-  · -- The set branch is upstream's reward of a set flag, and keeps the penalty.
+  · -- The set branch adds the reward of a set flag, and keeps the penalty.
     obtain ⟨leak, leakOk⟩ := addFlagDelta_leak computed set
     exact ⟨leak, leakOk, addFlagDelta_reward_of_set computed set baseOk leakOk,
       addFlagDelta_penalty computed (.inl set)⟩
@@ -240,7 +210,9 @@ theorem markIndices_getD_iff (within : state.RegistryWithinLimit) {j : Nat}
 
 A validator that is not eligible has no reward and no penalty.
 
-An eligible validator that set the flag reads the leak, and pays no penalty.
+An eligible validator among the unslashed participants pays no penalty.
+
+Its reward depends on the leak.
 
 In a leak it earns nothing.
 
@@ -248,7 +220,7 @@ Otherwise it earns its base reward times the weight of the flag times the partic
 
 That product is divided by the active increments times the weight denominator, rounding down.
 
-An eligible validator that did not set the flag earns nothing.
+An eligible validator that is not among them earns nothing.
 
 It pays its base reward times the weight of the flag, over the weight denominator, rounding down.
 
@@ -279,6 +251,7 @@ theorem getFlagIndexDeltas_getD {altair : .altair ≤ fork}
             (penalties.getD j 0).toNat = (if flagIndex.val.toUInt64 = TIMELY_HEAD_FLAG_INDEX then 0
               else base.toNat * PARTICIPATION_FLAG_WEIGHTS[flagIndex].toNat /
                 WEIGHT_DENOMINATOR.toNat))) := by
+  have whole := computed
   simp only [getFlagIndexDeltas, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨participating, participatingOk, participatingBalance, balanceOk, total, totalOk,
     eligible, eligibleOk, folded⟩ := computed
@@ -303,25 +276,26 @@ theorem getFlagIndexDeltas_getD {altair : .altair ≤ fork}
     obtain ⟨last, next, start, step, result⟩ := entry.2 index member same
     obtain rfl : index = j.toUInt64 := UInt64.toNat_inj.mp (same.trans small.symm)
     simp only [Prod.mk.injEq] at start result
-    obtain ⟨base, baseOk, set, unset⟩ := addFlagDelta_getD_self step
-    simp only [Array.getD_eq_getD_getElem?, small] at set unset
+    obtain ⟨base, baseOk, -, unset⟩ := addFlagDelta_getD_self step
+    simp only [Array.getD_eq_getD_getElem?, small] at unset
     refine ⟨base, baseOk, fun present => ?_, fun absent => ?_⟩
-    · have marked := (markIndices_getD_iff within inside participating).mpr present
-      rw [Array.getD_eq_getD_getElem?] at marked
-      obtain ⟨leak, leakOk, reward, penalty⟩ := set marked
-      refine ⟨leak, leakOk, ?_, ?_⟩
-      · simp only [Array.getD_eq_getD_getElem?, result.1, reward, start.1]
-        simp
-      · simp only [Array.getD_eq_getD_getElem?, result.2, penalty, start.2]
+    -- A participant's reward and penalty are the merged theorems on the set flag.
+    · obtain ⟨base', leak, baseOk', leakOk, reward⟩ :=
+        getFlagIndexDeltas_reward within whole participatingOk balanceOk totalOk present
+      obtain rfl : base' = base := Except.ok.inj (baseOk'.symm.trans baseOk)
+      have penalty := getFlagIndexDeltas_present whole participatingOk present
+        (by rw [small]; exact inside)
+      rw [small] at reward penalty
+      exact ⟨leak, leakOk, reward, penalty⟩
     · have unmarked : (markIndices state.validators.data.size participating)[j]?.getD false =
           false := by
         rw [← Array.getD_eq_getD_getElem?]
         simpa using mt (markIndices_getD_iff within inside participating).mp absent
-      obtain ⟨reward, penalty⟩ := unset unmarked
-      refine ⟨?_, ?_⟩
-      · simp only [Array.getD_eq_getD_getElem?, result.1, reward, start.1]
-      · simp only [Array.getD_eq_getD_getElem?, result.2, penalty, start.2]
-        simp
+      obtain ⟨-, penalty⟩ := unset unmarked
+      refine ⟨getFlagIndexDeltas_absent whole participatingOk fun participant member named =>
+        absent (UInt64.toNat_inj.mp (named.trans small.symm) ▸ member), ?_⟩
+      simp only [Array.getD_eq_getD_getElem?, result.2, penalty, start.2]
+      simp
 
 /-! ## The inactivity deltas from Altair -/
 
@@ -384,9 +358,11 @@ theorem getValidator_toUInt64 (within : state.RegistryWithinLimit) {j : Nat}
 
 They hold no reward.
 
-A validator pays no inactivity penalty if it is not eligible, or if it had a timely target.
+A validator pays no inactivity penalty if it is not eligible.
 
-An eligible validator that missed the target pays its effective balance times its inactivity score.
+Neither does one among the unslashed validators with a timely target.
+
+Any other eligible validator pays its effective balance times its inactivity score.
 
 That product is divided by the score bias times the penalty quotient, rounding down.
 
@@ -406,6 +382,7 @@ theorem getInactivityPenaltyDeltas_getD_of_altair {config : Config} (altair : .a
             score.toNat / (config.INACTIVITY_SCORE_BIAS.toNat *
               (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat)) := by
   have noRewards := getInactivityPenaltyDeltas_rewards computed
+  have whole := computed
   unfold getInactivityPenaltyDeltas at computed
   dsimp only at computed
   simp only [altair, ↓reduceDIte, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
@@ -419,21 +396,15 @@ theorem getInactivityPenaltyDeltas_getD_of_altair {config : Config} (altair : .a
   have entry := foldlM_entry (entry := fun deltas : Array Gwei => deltas.getD j 0) (j := j)
     (fun _ _ _ step other => addInactivityScorePenalty_getD_of_ne step (Ne.symm other))
     distinct folded
-  have zero : (Array.replicate state.validators.data.size (0 : Gwei)).getD j 0 = 0 := by
-    simp [Array.getD_eq_getD_getElem?, inside]
-  rw [zero] at entry
+  rw [replicate_getD_zero] at entry
   refine ⟨isEligible, eligibleJ, noRewards j, fun exempt => ?_, fun yes missed => ?_⟩
   · rcases exempt with no | present
     · exact entry.1 fun index member same =>
         Bool.false_ne_true (no ▸ named.mp ⟨index, member, same⟩)
-    · by_cases listed : ∃ index ∈ eligible, index.toNat = j
-      · obtain ⟨index, member, same⟩ := listed
-        obtain ⟨last, next, start, step, result⟩ := entry.2 index member same
-        obtain rfl : index = j.toUInt64 := UInt64.toNat_inj.mp (same.trans small.symm)
-        have marked := (markIndices_getD_iff within inside matching).mpr present
-        rw [result, ← small, addInactivityScorePenalty_matched step (small.symm ▸ marked), small,
-          start]
-      · exact entry.1 fun index member same => listed ⟨index, member, same⟩
+    -- A timely target is the merged theorem.
+    · have penalty := getInactivityPenaltyDeltas_target altair whole matchingOk present
+        (by rw [small]; exact inside)
+      rwa [small] at penalty
   · obtain ⟨index, member, same⟩ := named.mpr yes
     obtain ⟨last, next, start, step, result⟩ := entry.2 index member same
     obtain rfl : index = j.toUInt64 := UInt64.toNat_inj.mp (same.trans small.symm)
@@ -452,7 +423,9 @@ theorem getInactivityPenaltyDeltas_getD_of_altair {config : Config} (altair : .a
 
 /-! ## The deltas of each kind of vote before Altair -/
 
-/-- A validator whose vote matches reads the leak, and pays no penalty for that kind of vote.
+/-- A validator whose vote matches pays no penalty for that kind of vote.
+
+Its reward depends on the leak.
 
 In a leak it earns its base reward.
 
@@ -484,7 +457,9 @@ The matching votes are those of some pending attestations.
 
 A validator that is not eligible has no reward and no penalty.
 
-An eligible validator among the unslashed signers reads the leak, and pays no penalty.
+An eligible validator among the unslashed signers pays no penalty.
+
+Its reward depends on the leak.
 
 In a leak it earns its base reward.
 
@@ -509,6 +484,7 @@ theorem getAttestationComponentDeltas_getD {attestations : Array (PendingAttesta
                 (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ∧
             penalties.getD j 0 = 0) ∧
           (j.toUInt64 ∉ attesters → rewards.getD j 0 = 0 ∧ penalties.getD j 0 = base)) := by
+  have whole := computed
   simp only [getAttestationComponentDeltas, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨total, totalOk, attesters, attestersOk, attestingBalance, balanceOk, eligible,
     eligibleOk, folded⟩ := computed
@@ -558,13 +534,12 @@ theorem getAttestationComponentDeltas_getD {attestations : Array (PendingAttesta
       rw [Array.getD_eq_getD_getElem?] at unmarked
       rw [small, unmarked, componentDelta_unmatched, Except.ok.injEq, Prod.mk.injEq] at delta
       obtain ⟨rfl, rfl⟩ := delta
-      refine ⟨?_, ?_⟩
-      · apply UInt64.toNat_inj.mp
-        simp only [Array.getD_eq_getD_getElem?, result.1, rewardAdded]
-        simp
-      · apply UInt64.toNat_inj.mp
-        simp only [Array.getD_eq_getD_getElem?, result.2, penaltyAdded]
-        simp
+      -- An absent signer earns nothing, by the merged theorem.
+      refine ⟨getAttestationComponentDeltas_absent whole attestersOk fun attester member named =>
+        absent (UInt64.toNat_inj.mp (named.trans small.symm) ▸ member), ?_⟩
+      apply UInt64.toNat_inj.mp
+      simp only [Array.getD_eq_getD_getElem?, result.2, penaltyAdded]
+      simp
 
 /-- One step of the inactivity penalties before Altair keeps the entries of the other validators. -/
 theorem addInactivityPenalty_getD_of_ne {total : Gwei} {delay : Epoch}
@@ -665,8 +640,7 @@ theorem getInactivityPenaltyDeltas_getD_of_lt_altair {config : Config} (before :
     simp only [Bool.false_eq_true, ↓reduceIte, pure, Except.pure, Except.ok.injEq,
       Prod.mk.injEq] at computed
     obtain ⟨-, rfl⟩ := computed
-    simp only [Array.getD_eq_getD_getElem?, Array.getElem?_replicate]
-    split <;> rfl
+    exact replicate_getD_zero _ _
   subst leaking
   simp only [↓reduceIte, bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq,
     Prod.mk.injEq] at computed
@@ -681,9 +655,7 @@ theorem getInactivityPenaltyDeltas_getD_of_lt_altair {config : Config} (before :
   have entry := foldlM_entry (entry := fun deltas : Array Gwei => deltas.getD j 0) (j := j)
     (fun _ _ _ step other => addInactivityPenalty_getD_of_ne step (Ne.symm other))
     distinct folded
-  have zero : (Array.replicate state.validators.data.size (0 : Gwei)).getD j 0 = 0 := by
-    simp [Array.getD_eq_getD_getElem?, inside]
-  rw [zero] at entry
+  rw [replicate_getD_zero] at entry
   refine ⟨isEligible, eligibleJ, fun no => ?_, fun yes => ?_⟩
   · exact entry.1 fun index member same =>
       Bool.false_ne_true (no ▸ named.mp ⟨index, member, same⟩)
@@ -780,7 +752,11 @@ private theorem foldl_signers_getElem? (attestation : PendingAttestation preset)
       · rfl
     · simp [same]
 
-/-- Keeping the earliest over a list of attestations of some length. -/
+/-- Keeping the earliest over a list of attestations of a given length, from none.
+
+It keeps none exactly when the list is empty.
+
+Otherwise it keeps the first attestation with the least inclusion delay. -/
 private theorem foldl_keepEarliest_of_length (count : Nat) :
     ∀ attestations : List (PendingAttestation preset), attestations.length = count →
       (attestations.foldl (fun kept attestation => keepEarliest attestation kept) none = none ↔
@@ -1036,9 +1012,7 @@ theorem getInclusionDelayDeltas_getD (before : fork < .altair) {rewards penaltie
     Except.ok.injEq, Prod.mk.injEq] at computed
   obtain ⟨attestations, attestationsOk, signers, signersOk, attesters, attestersOk, total,
     totalOk, rewards, folded, rfl, rfl⟩ := computed
-  have zero (j : Nat) : (Array.replicate state.validators.data.size (0 : Gwei)).getD j 0 = 0 := by
-    simp only [Array.getD_eq_getD_getElem?, Array.getElem?_replicate]
-    split <;> rfl
+  have zero := replicate_getD_zero state.validators.data.size
   obtain ⟨shares, named, facts, sums⟩ := foldlM_addInclusionReward_getD folded
   refine ⟨zero, attestations, signers, attesters, total, attestationsOk, signersOk, attestersOk,
     totalOk, shares, named, facts, fun j => ?_⟩
@@ -1071,7 +1045,7 @@ theorem getAttestationComponentDeltas_size {attestations : Array (PendingAttesta
   obtain ⟨_, _, _, _, _, rewardsOk, _, penaltiesOk, rfl⟩ := step
   exact ⟨(addDelta_size rewardsOk).trans sizes.1, (addDelta_size penaltiesOk).trans sizes.2⟩
 
-/-- The sums of four lists of deltas have one entry for each entry of the first list.
+/-- The sums of four lists of deltas, read at one index below the size of the first list.
 
 Each entry is the sum of the four entries at its index, without overflow.
 
