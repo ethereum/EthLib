@@ -191,11 +191,33 @@ Two values of one type with one root are equal, or `findMessageCollision` return
 It has three hypotheses on each value.
 The type is well formed, the value fits the type, and the value is `CommitmentSized`: every variable-size count in it is below `2^256`.
 A larger count would be truncated in the 256-bit word mixed into the root, and the proof needs the exact count.
+`hashTreeRootM_binding` states the same, with the same hypotheses, for any hash with 32-byte digests.
+It computes the roots of the all-zero subtrees with that hash too.
 
 Layout separation is `hashTreeRoot_progressiveContainer_layouts_separate` (`Proofs/Ssz/Codec/LayoutSeparation.lean`).
 Two legal progressive containers with one root have one layout, or `findMixinCollision` returns the inputs of the two last hashes.
 
-No theorem bounds the probability of finding any of these collisions.
+No theorem bounds the probability of finding a collision in a branch, a multiproof or a layout.
+
+`Proofs/Ssz/RandomOracle.lean` bounds whole-value binding, with the node hash a random oracle.
+The merkleization takes its hash in any monad, so the experiment runs the root of the specification with a hasher that queries the oracle.
+That hasher also computes the roots of the all-zero subtrees with the oracle, one query per level.
+The type is fixed before the run, and an adversary outputs two values of it.
+The experiment computes both roots, then hashes every node of both expanded computations again with the oracle.
+The adversary wins when the two values differ, fit the well-formed type, are `CommitmentSized`, and have one root.
+`collision_of_extract` shows that every win leaves two different cached inputs with one answer.
+Its proof finds them with `findMessageCollision`, run with a table that agrees with the cache.
+`prEvent_wins_le` then bounds a win by `Q^2 / N` through `prEvent_collision_le`, and `prEvent_wins_le_two_pow` states it with `N = 2^256`.
+`Q` counts every oracle call of the experiment, repeats included.
+The extraction makes many: the expanded computations hash every node of the padded tree of each value, one query each.
+So `Q` grows with the capacity of the type, not with the length of the values.
+A list with a capacity of `2^38` nodes costs about `2^38` queries for each value, so about `2^39` for the two.
+For an Electra beacon state the padded trees hold about `2^40.6` nodes for each value, so `Q` is at least about `2^41.6`, and with `Q = 2^42` the bound is `2^-172`.
+A rehash that shares the all-zero subtrees would bring `Q` down to the size of the values, and is left for later.
+`prEvent_secondValue_le_two_pow` fixes the first value as an honest one: its root is computed in the experiment, with the same oracle.
+That is still the birthday bound, not a sharper fixed-target bound.
+The bound needs no hypothesis that the cache covers the witnesses, since the experiment queries them itself.
+One oracle answers inner nodes and mixed-in words alike, so a collision between any two inputs counts.
 
 ### leanSPHINCS
 
@@ -283,6 +305,7 @@ The theorems that take `PairingLaws` as a hypothesis, or build a model of the ta
 - `Cryptography/Proofs/Kzg/Arsdh.lean`
 - `Cryptography/Proofs/Kzg/BatchBinding.lean`
 - `Cryptography/Proofs/Kzg/Binding.lean`
+- `Cryptography/Proofs/Kzg/BlobBinding.lean`
 - `Cryptography/Proofs/Kzg/BlobVerifier.lean`
 - `Cryptography/Proofs/Kzg/CellBatchBinding.lean`
 - `Cryptography/Proofs/Kzg/CellBinding.lean`
@@ -586,6 +609,19 @@ That proof needs no pairing law.
 It is not computational binding: no theorem bounds the cost of finding two such blobs without the secret.
 Under the pairing law and for a well-formed setup, honest KZG proofs and blob proofs verify (`verifyKzgProof_computeKzgProof`, `verifyBlobKzgProof_computeBlobKzgProof`, `Proofs/Kzg/Verify.lean`).
 `verifyKzgProofImpl_iff` states when the check accepts: `c - y = w (τ - z)`, for decoded points representing `c` and `w`.
+Under the pairing law and on a well-formed setup (assumption D3), `verifyBlobKzgProof_binding` (`Proofs/Kzg/BlobBinding.lean`) splits an accepted blob opening into three cases.
+Let the validated commitment and proof represent `f(τ)` and `g(τ)` for polynomials `f` and `g` of degree below 4096.
+Let `p` be the interpolant of the blob's decoded values, and let `z` be the evaluation challenge.
+Then `f = p`; or `f ≠ p`, `f - p` has degree below 4096, and `z` is a root of `f - p`.
+Or `h = f - p(z) - g (X - z)` is nonzero of degree at most 4096, and the secret `τ` is a root of `h`.
+The cases can overlap.
+They carry meaning only when an algebraic adversary outputs `f` and `g` over the setup's points, without `τ`.
+This reading is the algebraic group model, an assumption.
+For other choices, such as the constants that the points represent, the third case only restates the check.
+The second case is unlikely if the challenge hash is modelled as a random oracle.
+The third is unlikely if the discrete logarithm problem with the setup's powers of `τ` is hard.
+Both are assumptions, and no theorem here proves either bound.
+It is not computational binding: no theorem bounds the cost of finding such polynomials without the secret.
 `verifyKzgProofBatch_ok_iff_root` (`Proofs/Kzg/BatchBinding.lean`) states when the batch check of openings accepts, as an equivalence.
 Let opening `i` have commitment `c_i`, value `y_i`, point `z_i` and proof `w_i`.
 Under `PairingLaws` and a well-formed setup, its verdict is true exactly when its challenge `r` is a root of `P(X) = sum_i X^i (c_i - y_i - w_i (τ - z_i))`.
@@ -1694,6 +1730,12 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
   Reading it as a second-preimage bound conditions on the honest digest, a modelling step that no theorem proves.
   Only classical queries are counted.
   No SHA-256, Keccak or quantum security claim follows from this model.
+- SSZ root bound: the SHA-256 node hash is a random oracle on byte strings, shared by every node of the tree.
+  The roots of the all-zero subtrees, constants of the specification, are oracle answers in the model.
+  The type is fixed before the run.
+  Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
+  Only classical queries are counted, and the adversary's private sampling is not.
+  The bound says nothing about an attack that uses the structure of SHA-256.
 - Trie root bound: Keccak-256 is a random oracle on byte strings, shared by the keys and the nodes of the trie.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.

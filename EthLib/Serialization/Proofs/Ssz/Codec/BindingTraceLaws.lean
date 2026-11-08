@@ -45,17 +45,19 @@ end EthLib.Serialization.Ssz.CommitmentTree
 
 namespace EthLib.Serialization.Ssz
 
-private theorem trace_slots (budget : Nat)
-    (children : ∀ shape value root, hashTreeRootAt budget shape value = .ok root →
-      ∃ tree, valueTreeAt budget shape value = .ok tree ∧ tree.root = root ∧ tree.Complete) :
+private theorem trace_slots (hash : ByteArray → ByteArray) (budget : Nat)
+    (children : ∀ shape value root,
+      (hashTreeRootAtM (Hasher.ofHash (m := Id) hash) budget shape value).run = .ok root →
+      ∃ tree, valueTreeAt budget shape value = .ok tree ∧ tree.root hash = root ∧ tree.Complete) :
     ∀ (slots : List (Option (Desc × Value))) (roots : List Bytes),
     slots.mapM (fun slot : Option (Desc × Value) => match slot with
       | none => Except.ok zeroChunk
-      | some (shape, value) => hashTreeRootAt budget shape value) = .ok roots →
+      | some (shape, value) =>
+        (hashTreeRootAtM (Hasher.ofHash (m := Id) hash) budget shape value).run) = .ok roots →
     ∃ trees : List CommitmentTree, slots.mapM (fun slot : Option (Desc × Value) => match slot with
       | none => Except.ok (CommitmentTree.leaf zeroChunk)
       | some (shape, value) => valueTreeAt budget shape value) = .ok trees ∧
-      trees.map CommitmentTree.root = roots ∧ ∀ tree ∈ trees, tree.Complete := by
+      trees.map (·.root hash) = roots ∧ ∀ tree ∈ trees, tree.Complete := by
   -- Expand each occupied slot recursively while preserving its position in the root sequence.
   intro slots
   induction slots with
@@ -70,10 +72,12 @@ private theorem trace_slots (budget : Nat)
     -- Successful materialization requires the head slot and the remaining slots to root successfully.
     cases first : (match slot with
       | none => Except.ok zeroChunk
-      | some (shape, value) => hashTreeRootAt budget shape value) <;>
+      | some (shape, value) =>
+        (hashTreeRootAtM (Hasher.ofHash (m := Id) hash) budget shape value).run) <;>
     cases rest : slots.mapM (fun slot : Option (Desc × Value) => match slot with
       | none => Except.ok zeroChunk
-      | some (shape, value) => hashTreeRootAt budget shape value) <;>
+      | some (shape, value) =>
+        (hashTreeRootAtM (Hasher.ofHash (m := Id) hash) budget shape value).run) <;>
       simp only [first, rest, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq,
         reduceCtorEq] at success
     rename_i root _
@@ -83,7 +87,7 @@ private theorem trace_slots (budget : Nat)
     obtain ⟨tree, wrote, rooted, width⟩ : ∃ tree, (match slot with
         | none => Except.ok (CommitmentTree.leaf zeroChunk)
         | some (shape, value) => valueTreeAt budget shape value) = .ok tree ∧
-        tree.root = root ∧ tree.Complete := by
+        tree.root hash = root ∧ tree.Complete := by
       cases slot with
       | none => cases first; exact ⟨.leaf zeroChunk, rfl, rfl, zeroChunk_size⟩
       | some pair => exact children pair.1 pair.2 root first
@@ -93,57 +97,69 @@ private theorem trace_slots (budget : Nat)
       by simpa [same, rooted] using success, List.forall_mem_cons.mpr ⟨width, complete⟩⟩
 
 /--
-Every successful SSZ root has a complete expanded computation with exactly the same result.
-Cached zero subtrees are expanded into the binary hashes they represent.
+Every root that a hash computes has a complete expanded computation with exactly that result.
+
+The zero subtrees are expanded into the binary hashes they stand for.
 -/
-theorem valueTreeAt_of_hashTreeRootAt (budget : Nat) (shape : Desc) (value : Value)
-    (root : Bytes) (success : hashTreeRootAt budget shape value = .ok root) :
-    ∃ tree, valueTreeAt budget shape value = .ok tree ∧ tree.root = root ∧ tree.Complete := by
+theorem valueTreeAt_of_hashTreeRootAtM (hash : ByteArray → ByteArray)
+    (budget : Nat) (shape : Desc) (value : Value) (root : Bytes)
+    (success : (hashTreeRootAtM (Hasher.ofHash (m := Id) hash) budget shape value).run = .ok root) :
+    ∃ tree, valueTreeAt budget shape value = .ok tree ∧ tree.root hash = root ∧ tree.Complete := by
   -- Each occupied child uses one less recursion step, matching the executable root computation.
   induction budget generalizing shape value root with
-  | zero => simp [hashTreeRootAt_zero] at success
+  | zero => simp [hashTreeRootAtM_id_zero] at success
   | succ budget ih =>
+    -- Read the run as a plain computation with errors.
+    replace success : @Eq (Except Err Bytes)
+        (hashTreeRootAtM (Hasher.ofHash (m := Id) hash) (budget + 1) shape value).run
+        (.ok root) := success
     -- Overall success requires the layout and all selected child roots to exist.
     cases laid : merkleLayout shape value with
-    | error err => simp [hashTreeRootAt_succ, laid, Bind.bind, Except.bind] at success
+    | error err => simp [hashTreeRootAtM_id_succ, laid, Bind.bind, Except.bind] at success
     | ok layout =>
-      cases materialized : layoutChunksAt budget layout with
-      | error err => simp [hashTreeRootAt_succ, laid, materialized, Bind.bind,
+      cases materialized : (layoutChunksAtM (Hasher.ofHash (m := Id) hash) budget layout).run with
+      | error err => simp [hashTreeRootAtM_id_succ, laid, materialized, Bind.bind,
           Except.bind] at success
       | ok chunks =>
+        replace materialized : @Eq (Except Err (Array Bytes))
+            (layoutChunksAtM (Hasher.ofHash (m := Id) hash) budget layout).run
+            (.ok chunks) := materialized
         -- Successful layouts contain 32-byte packed nodes and 32-byte mixing words.
-        have width := merkleLayout_width shape value layout laid
-        -- Replace every materialized root by a complete computation that produces exactly that root.
+        have widths := merkleLayout_width shape value layout laid
+        -- Replace every materialized root by a complete computation with exactly that root.
         have tracing : ∃ trees, layoutTreesAt budget layout = .ok trees ∧
-            trees.map CommitmentTree.root = chunks ∧ ∀ tree ∈ trees, tree.Complete := by
+            trees.map (·.root hash) = chunks ∧ ∀ tree ∈ trees, tree.Complete := by
           cases leaves : layout.leaves with
           -- Packed nodes need no internal hashes, so plain leaves already reproduce them.
           | packed data =>
             have eqChunks : data = chunks := by
-              simpa [layoutChunksAt_eq, leaves, Leaves.count, pure, Except.pure] using materialized
+              simpa [layoutChunksAtM_id_eq, leaves, Leaves.count, pure, Except.pure]
+                using materialized
             subst chunks
             exact ⟨data.map CommitmentTree.leaf, by simp [layoutTreesAt, leaves],
               by simp [Array.map_map, Function.comp_def, CommitmentTree.root], by
                 intro tree member
                 obtain ⟨node, inside, rfl⟩ := Array.mem_map.mp member
-                exact width.1 data leaves node inside⟩
+                exact widths.1 data leaves node inside⟩
           -- Nested slots are expanded in order, including the zero leaves occupying gaps.
           | nested slots =>
-            simp only [layoutChunksAt_eq, leaves, Leaves.count, Option.getD_none,
+            simp only [layoutChunksAtM_id_eq, leaves, Leaves.count, Option.getD_none,
               List.drop_zero, Nat.sub_zero, List.take_length] at materialized
-            -- Express list materialization before conversion to the final array so each slot remains identifiable.
+            -- List materialization comes before the array, so each slot remains identifiable.
             have normalized : (slots.mapM (fun slot : Option (Desc × Value) => match slot with
                 | none => Except.ok zeroChunk
-                | some (shape, value) => hashTreeRootAt budget shape value)).bind
+                | some (shape, value) =>
+                  (hashTreeRootAtM (Hasher.ofHash (m := Id) hash) budget shape value).run)).bind
                 (fun roots => Except.ok roots.toArray) = .ok chunks := by
               apply Eq.trans ?_ materialized
               congr 2
             cases rooted : slots.mapM (fun slot : Option (Desc × Value) => match slot with
               | none => Except.ok zeroChunk
-              | some (shape, value) => hashTreeRootAt budget shape value) <;>
+              | some (shape, value) =>
+                (hashTreeRootAtM (Hasher.ofHash (m := Id) hash) budget shape value).run) <;>
               simp only [Except.bind, rooted, Except.ok.injEq, reduceCtorEq] at normalized
-            -- The slot expansion preserves the ordered root list and establishes complete child computations.
-            obtain ⟨trees, traced, same, complete⟩ := trace_slots budget ih slots _ rooted
+            -- The slot expansion keeps the ordered roots and gives complete child computations.
+            obtain ⟨trees, traced, same, complete⟩ := trace_slots hash budget ih slots _ rooted
             refine ⟨trees.toArray, ?_, by simpa [List.map_toArray, same] using normalized,
               by simpa using complete⟩
             simp only [layoutTreesAt, leaves, pure, Except.pure, Bind.bind, Except.bind]
@@ -156,11 +172,14 @@ theorem valueTreeAt_of_hashTreeRootAt (budget : Nat) (shape : Desc) (value : Val
         cases limited : layout.limit with
         -- With no fixed capacity, the expanded progressive spine uses the same prefix roots and suffixes.
         | none =>
-          have eqRoot : ((CommitmentTree.progressive trees.toList).withMixin layout.mixin).root = root := by
+          have eqRoot :
+              ((CommitmentTree.progressive trees.toList).withMixin layout.mixin).root hash
+                = root := by
             cases mixed : layout.mixin <;>
-              simpa [mixed, hashTreeRootAt_succ, laid, materialized, limited, Bind.bind,
-              Except.bind, pure, Except.pure, CommitmentTree.withMixin_root,
-              CommitmentTree.progressive_root, List.map_toArray, ← Array.toList_map, rooted]
+              simpa [mixed, hashTreeRootAtM_id_succ, laid, materialized, limited, Bind.bind,
+              Except.bind, pure, Except.pure, CommitmentTree.withMixin_root_ofHash (hash := hash),
+              CommitmentTree.progressive_root_ofHash (hash := hash), List.map_toArray,
+              ← Array.toList_map, rooted]
               using success
           refine ⟨(CommitmentTree.progressive trees.toList).withMixin layout.mixin,
             by simp [valueTreeAt, laid, traced, limited, Bind.bind, Except.bind, pure, Except.pure],
@@ -170,25 +189,40 @@ theorem valueTreeAt_of_hashTreeRootAt (budget : Nat) (shape : Desc) (value : Val
           -- A complete metadata word preserves completeness when attached as the final right child.
           cases mixed : layout.mixin with
           | none => exact full
-          | some word => exact ⟨full, width.2 word mixed⟩
+          | some word => exact ⟨full, widths.2 word mixed⟩
         -- A bounded root can succeed only when its capacity covers every materialized child.
         | some capacity =>
           by_cases over : capacity < chunks.size
-          · simp [hashTreeRootAt_succ, laid, materialized, limited, merkleizeBoundedUnchecked_eq,
-              over, Bind.bind, Except.bind] at success
+          · simp [hashTreeRootAtM_id_succ, laid, materialized, limited,
+              merkleizeBoundedUncheckedM_id_eq, over, Bind.bind, Except.bind] at success
           · have bounded := CommitmentTree.bounded_complete trees capacity complete
-            -- Expanding zero padding and nested children leaves the perfect-tree root and final metadata hash unchanged.
-            have eqRoot : ((CommitmentTree.bounded trees capacity).withMixin layout.mixin).root = root := by
+            -- Expanding padding and nested children keeps the tree root and the final hash.
+            have eqRoot :
+                ((CommitmentTree.bounded trees capacity).withMixin layout.mixin).root hash
+                  = root := by
               cases mixed : layout.mixin <;>
-                simpa [mixed, hashTreeRootAt_succ, laid, materialized, limited,
-                merkleizeBoundedUnchecked_eq, over, Bind.bind, Except.bind, pure, Except.pure,
-                CommitmentTree.withMixin_root, CommitmentTree.bounded_root, rooted] using success
+                simpa [mixed, hashTreeRootAtM_id_succ, laid, materialized, limited,
+                merkleizeBoundedUncheckedM_id_eq, over, Bind.bind, Except.bind, pure, Except.pure,
+                CommitmentTree.withMixin_root_ofHash (hash := hash),
+                CommitmentTree.bounded_root_ofHash (hash := hash), rooted] using success
             refine ⟨(CommitmentTree.bounded trees capacity).withMixin layout.mixin,
               by simp [valueTreeAt, laid, traced, limited, counts, over, Bind.bind, Except.bind,
                 pure, Except.pure], eqRoot, ?_⟩
             cases mixed : layout.mixin with
             | none => exact bounded
-            | some word => exact ⟨bounded, width.2 word mixed⟩
+            | some word => exact ⟨bounded, widths.2 word mixed⟩
+
+/--
+Every successful SSZ root has a complete expanded computation with exactly the same result.
+
+Cached zero subtrees are expanded into the binary hashes they represent.
+-/
+theorem valueTreeAt_of_hashTreeRootAt (budget : Nat) (shape : Desc) (value : Value)
+    (root : Bytes) (success : hashTreeRootAt budget shape value = .ok root) :
+    ∃ tree, valueTreeAt budget shape value = .ok tree ∧ tree.root = root ∧ tree.Complete := by
+  -- The specification's hasher is the one built from SHA-256 alone.
+  rw [hashTreeRootAt, ← ofHash_sha256] at success
+  exact valueTreeAt_of_hashTreeRootAtM _ budget shape value root success
 
 /-- A successful expanded computation with sufficient type depth is complete and refines the SSZ root. -/
 theorem valueTreeAt_complete {budget : Nat} {shape : Desc} {value : Value}
@@ -212,6 +246,13 @@ theorem valueTree_of_hashTreeRoot (shape : Desc) (value : Value) (root : Bytes)
   -- The public root and its expansion use the same budget derived from the type depth.
   valueTreeAt_of_hashTreeRootAt shape.nesting shape value root success
 
+/-- The root that any hash computes has a complete trace with exactly that commitment. -/
+theorem valueTree_of_hashTreeRootM (hash : ByteArray → ByteArray) (shape : Desc) (value : Value)
+    (root : Bytes)
+    (success : (hashTreeRootM (Hasher.ofHash (m := Id) hash) shape value).run = .ok root) :
+    ∃ tree, valueTree shape value = .ok tree ∧ tree.root hash = root ∧ tree.Complete :=
+  -- The root and its expansion use the same budget derived from the type depth.
+  valueTreeAt_of_hashTreeRootAtM hash shape.nesting shape value root success
 
 private theorem mapM_success_relation {α β ε : Type} (f : α → Except ε β)
     {xs : List α} {ys : List β} (success : xs.mapM f = .ok ys) :

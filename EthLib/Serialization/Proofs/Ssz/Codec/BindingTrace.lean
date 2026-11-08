@@ -18,8 +18,11 @@ def perfectTrees : Nat → (Nat → CommitmentTree) → CommitmentTree
       (perfectTrees depth fun i => leaves (i + 2 ^ depth))
 
 /-- Executing the expanded perfect tree agrees with folding its child roots. -/
-@[simp] theorem perfectTrees_root (depth : Nat) (leaves : Nat → CommitmentTree) :
-    (perfectTrees depth leaves).root = subtreeRoot combine depth (fun i => (leaves i).root) := by
+@[simp] theorem perfectTrees_root (depth : Nat) (leaves : Nat → CommitmentTree)
+    (hash : ByteArray → ByteArray := Cryptography.Hash.Sha256.hash) :
+    (perfectTrees depth leaves).root hash
+      = subtreeRoot (fun a b => (combineM (m := Id) hash a b).run) depth
+          (fun i => (leaves i).root hash) := by
   -- Each binary fork performs the same hash as the perfect-tree fold.
   induction depth generalizing leaves with
   | zero => rfl
@@ -31,8 +34,9 @@ def paddedTrees (trees : Array CommitmentTree) (i : Nat) : CommitmentTree :=
   trees[i]?.getD (.leaf zeroChunk)
 
 /-- Padding a computation and padding its resulting root give the same node. -/
-@[simp] theorem paddedTrees_root (trees : Array CommitmentTree) (i : Nat) :
-    (paddedTrees trees i).root = padded zeroChunk (trees.map root) i := by
+@[simp] theorem paddedTrees_root (trees : Array CommitmentTree) (i : Nat)
+    (hash : ByteArray → ByteArray := Cryptography.Hash.Sha256.hash) :
+    (paddedTrees trees i).root hash = padded zeroChunk (trees.map (·.root hash)) i := by
   -- Present positions keep their child roots, while absent positions read as 32 zero bytes.
   simp only [paddedTrees, padded, Array.getElem?_map]
   cases trees[i]? <;> rfl
@@ -42,11 +46,22 @@ def bounded (trees : Array CommitmentTree) (capacity : Nat) : CommitmentTree :=
   -- The least sufficient perfect-tree depth includes the declared capacity.
   perfectTrees (depthFor capacity) (paddedTrees trees)
 
+/-- Expanding a bounded tree preserves the subtree root that any hash computes. -/
+theorem bounded_root_ofHash (trees : Array CommitmentTree) (capacity : Nat)
+    (hash : ByteArray → ByteArray := Cryptography.Hash.Sha256.hash) :
+    (bounded trees capacity).root hash
+      = (subtreeAtM (Hasher.ofHash (m := Id) hash) (trees.map (·.root hash))
+          (depthFor capacity) 0).run := by
+  -- The chosen depth and zero-padded leaf supply are the same on both sides.
+  simp only [bounded, perfectTrees_root (hash := hash), paddedTrees_root (hash := hash),
+    subtreeAtM_ofHash_zero_eq]
+
 /-- Expanding a bounded tree preserves the executable subtree root. -/
 @[simp] theorem bounded_root (trees : Array CommitmentTree) (capacity : Nat) :
     (bounded trees capacity).root = subtreeAt (trees.map root) (depthFor capacity) 0 := by
-  -- The chosen depth and zero-padded leaf supply are the same on both sides.
-  simp only [bounded, perfectTrees_root, paddedTrees_root, subtreeAt_zero_eq]
+  -- The specification's hasher is the one built from SHA-256 alone.
+  rw [bounded_root_ofHash, ofHash_sha256]
+  rfl
 
 /-- The progressive spine of EIP-7916, retaining the nested computations at each position. -/
 def progressive (trees : List CommitmentTree) (level : Nat := 0) : CommitmentTree :=
@@ -64,18 +79,31 @@ decreasing_by
   simp only [List.length_drop]
   omega
 
+/-- Executing the expanded progressive spine preserves the root that any hash computes. -/
+theorem progressive_root_ofHash (trees : List CommitmentTree) (level : Nat)
+    (hash : ByteArray → ByteArray := Cryptography.Hash.Sha256.hash) :
+    (progressive trees level).root hash
+      = (merkleizeProgressiveUncheckedM (Hasher.ofHash (m := Id) hash)
+          (trees.map (·.root hash)) level).run := by
+  rw [merkleizeProgressiveUncheckedM_ofHash_eq]
+  -- Both computations consume the same prefix before continuing down the right spine.
+  induction trees, level using progressive.induct with
+  | case1 trees level empty =>
+    rw [progressive, ite_eq_left empty, progressiveRoot, ite_eq_left (by simpa using empty)]
+    rfl
+  | case2 trees level nonempty ih =>
+    -- The level splits into a bounded prefix and the progressive suffix, rooted by recursion.
+    rw [progressive, ite_eq_right nonempty, progressiveRoot,
+      ite_eq_right (by simpa using nonempty)]
+    simp only [root, bounded_root_ofHash (hash := hash), subtreeAtM_ofHash_zero_eq, ih,
+      List.map_toArray, List.map_take, List.map_drop]
+
 /-- Executing the expanded progressive spine preserves the executable root. -/
 @[simp] theorem progressive_root (trees : List CommitmentTree) (level : Nat) :
     (progressive trees level).root = merkleizeProgressiveUnchecked (trees.map root) level := by
-  -- Both computations consume the same prefix before continuing down the right spine.
-  induction trees, level using progressive.induct with
-  | case1 trees level empty => simp [progressive, merkleizeProgressiveUnchecked_unfold, empty, root]
-  | case2 trees level nonempty ih =>
-    -- The current level separates into a bounded prefix and the remaining progressive suffix.
-    -- The suffix has the same root by recursion, and taking prefixes commutes with reading child roots.
-    rw [progressive, ite_eq_right nonempty, merkleizeProgressiveUnchecked_unfold]
-    simp only [List.isEmpty_map, nonempty, Bool.false_eq_true, ite_false, root,
-      bounded_root, ih, List.map_toArray, List.map_take, List.map_drop]
+  -- The specification's hasher is the one built from SHA-256 alone.
+  rw [progressive_root_ofHash, ofHash_sha256]
+  rfl
 
 /-- The bounded or progressive contents of one layout. -/
 def content (trees : Array CommitmentTree) : Option Nat → CommitmentTree
@@ -91,13 +119,21 @@ def withMixin (tree : CommitmentTree) : Option Bytes → CommitmentTree
   -- Length, selector, or active-field information occupies the right child of the final hash.
   | some word => .fork tree (.leaf word)
 
+/-- Attaching a mixing word preserves the final hash that any hash computes. -/
+theorem withMixin_root_ofHash (tree : CommitmentTree) (mixin : Option Bytes)
+    (hash : ByteArray → ByteArray := Cryptography.Hash.Sha256.hash) :
+    (tree.withMixin mixin).root hash = match mixin with
+      | none => tree.root hash
+      | some word => (mixInM (Hasher.ofHash (m := Id) hash) (tree.root hash) word).run := by
+  -- An absent word leaves the contents root alone, and a present word is its right sibling.
+  cases mixin <;> rfl
+
 /-- Attaching a mixing word preserves the executable final hash. -/
 @[simp] theorem withMixin_root (tree : CommitmentTree) (mixin : Option Bytes) :
     (tree.withMixin mixin).root = match mixin with
       | none => tree.root
       | some word => mixIn tree.root word := by
-  -- An absent word leaves the contents root alone.
-  -- A present word becomes its right sibling.
+  -- An absent word leaves the contents root alone, and a present word is its right sibling.
   cases mixin <;> rfl
 
 end EthLib.Serialization.Ssz.CommitmentTree
