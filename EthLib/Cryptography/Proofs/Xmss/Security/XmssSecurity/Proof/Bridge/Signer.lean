@@ -50,11 +50,13 @@ theorem halfOf_zero_ofOutput_randomizer (y : HashOutput) :
 Stated at the randomizer's type, so later binds associate with it. -/
 theorem randomizerBase_queryH (pp : Xmss.PublicParam) (s : Xmss.Seed) (layer : Xmss.Layer)
     (e : UInt32) (msg : ByteArray) :
-    (Xmss.randomizerBase queryH pp s layer e msg : OracleComp HashSpec Xmss.Randomizer)
+    (Xmss.randomizerBase pp (Xmss.seedPrf queryH s) layer e msg :
+      OracleComp HashSpec Xmss.Randomizer)
       = liftM (HashSpec.query
           (Xmss.thInput pp (Xmss.addrRnd layer e) (Xmss.packBytes s ++ msg)).data.toList) >>=
         fun y => pure (ofRandomizer (y.extractLsb' 0 randomnessBits)) := by
-  unfold Xmss.randomizerBase Xmss.th
+  rw [Xmss.randomizerBase_seedPrf]
+  unfold Xmss.th
   simp only [queryH_eq, bind_assoc, pure_bind]
   refine bind_congr fun y => ?_
   exact congrArg pure (halfOf_zero_ofOutput_randomizer y)
@@ -181,7 +183,7 @@ theorem realBottomChains (h : Prepared seed d result cache) (index : LeafIndex)
 
 /-- A top key's path resolves to the key's stored nodes. -/
 theorem realTopPath (h : Prepared seed d result cache) (key : TopIndex) :
-    Resolves cache (Xmss.path queryH (ofParam d.parameter) (ofSeed seed) .top key.val :
+    Resolves cache (Xmss.path queryH (ofParam d.parameter) (realPrf seed) .top key.val :
         OracleComp HashSpec _)
       (ofPath fun level =>
         (modelSecretKey d result).topTreeValue level.castSucc
@@ -197,7 +199,7 @@ theorem realTopPath (h : Prepared seed d result cache) (key : TopIndex) :
 
 /-- A bottom key's path resolves to the key's stored nodes. -/
 theorem realBottomPath (h : Prepared seed d result cache) (index : LeafIndex) :
-    Resolves cache (Xmss.path queryH (ofParam d.parameter) (ofSeed seed) .bottom index.val :
+    Resolves cache (Xmss.path queryH (ofParam d.parameter) (realPrf seed) .bottom index.val :
         OracleComp HashSpec _)
       (ofPath fun level => (modelSecretKey d result).treeValue level.castSucc
         (Concrete.authenticationPathNode index level)) := by
@@ -212,7 +214,7 @@ theorem realBottomPath (h : Prepared seed d result cache) (index : LeafIndex) :
 
 /-- The top layer's signature of bottom tree `b`, or its error, as the key stores it. -/
 theorem realTopLayer (h : Prepared seed d result cache) (key : TopIndex) :
-    Resolves cache (Xmss.signLayer queryH (ofParam d.parameter) (ofSeed seed) .top key.val
+    Resolves cache (Xmss.signLayer queryH (ofParam d.parameter) (realPrf seed) .top key.val
         (Xmss.packBytes (ofDigest (h.root key))) : OracleComp HashSpec _)
       (match (modelSecretKey d result).topSigned key with
         | some _ => .ok (ofLayerSig (Concrete.topPart (modelSecretKey d result) key))
@@ -249,7 +251,7 @@ theorem bottomKey_lt (index : LeafIndex) : (topKeyOf index).val < 2 ^ (32 - 16) 
 
 /-- The root of bottom tree `b` resolves to the one the key stores. -/
 theorem root_resolves (h : Prepared seed d result cache) (index : LeafIndex) :
-    Resolves cache (Xmss.node queryH (ofParam d.parameter) (ofSeed seed) .bottom LAYER_HEIGHT
+    Resolves cache (Xmss.node queryH (ofParam d.parameter) (realPrf seed) .bottom LAYER_HEIGHT
         (topKeyOf index).val : OracleComp HashSpec Xmss.Digest)
       (ofDigest (h.root (topKeyOf index))) := by
   have hroot := h.realBottomNode 16 le_rfl (topKeyOf index).val (bottomKey_lt index)
@@ -259,7 +261,7 @@ theorem root_resolves (h : Prepared seed d result cache) (index : LeafIndex) :
 
 /-- EthLib's signer from `S` and `P` erases to the table signer, its signatures translated. -/
 theorem erases_sign (h : Prepared seed d result cache) (index : LeafIndex) (message : Message) :
-    Erases cache (Except.toOption <$> Xmss.signDerived queryH (ofSeed seed) (ofParam d.parameter)
+    Erases cache (Except.toOption <$> Xmss.signDerived queryH (realPrf seed) (ofParam d.parameter)
         (ofLeafIndex index) (ofMessage message))
       (Option.map (ofSignature index) <$> (tableSign d.rnd (modelSecretKey d result) index message :
         OracleComp HashSpec (Option Signature))) := by

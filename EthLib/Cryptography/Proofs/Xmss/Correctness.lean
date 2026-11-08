@@ -44,12 +44,12 @@ theorem bottomTree_lt (idx : LeafIndex) : bottomTree idx < 2 ^ LAYER_HEIGHT := b
 variable {f : ByteArray → Vector UInt8 32}
 
 /-- An honest layer signature leads to the root its key's leaf and path give. -/
-theorem layerRoot_signLayer {pp : PublicParam} {s : Seed} {layer : Layer} {e : Nat}
+theorem layerRoot_signLayer {pp : PublicParam} {prf : SeedPrf Id} {layer : Layer} {e : Nat}
     {msg : ByteArray} {sig : LayerSignature}
-    (h : (signLayer (pureHash f) pp s layer e msg).run = .ok sig) :
+    (h : (signLayer (pureHash f) pp prf layer e msg).run = .ok sig) :
     (layerRoot (pureHash f) pp layer e msg sig).run
       = some (fold (pureHash f) pp layer e
-          (otsPublicLeaf (pureHash f) pp s layer (UInt32.ofNat e)).run sig.path).run := by
+          (otsPublicLeaf (pureHash f) pp prf layer (UInt32.ofNat e)).run sig.path).run := by
   obtain ⟨hots, -⟩ := signLayer_eq_ok h
   rw [layerRoot_run, otsLeaf_otsSign hots, Option.map_some]
 
@@ -67,8 +67,9 @@ theorem verifyWith_keyGenWith_signWith {seed : Seed} {sk : SecretKey} {pk : Publ
   -- Step 1: the bottom layer leads to the root of bottom tree `b`, which the top key signed.
   have hb := layerRoot_signLayer hbottom
   rw [(signLayer_eq_ok hbottom).2] at hb
-  have hbroot := fold_path (f := f) (pp := (publicParamOf (pureHash f)
-    (schemeSeed (pureHash f) seed).run).run) (seed := (schemeSeed (pureHash f) seed).run)
+  have hbroot := fold_path (f := f) (pp := (publicParamOf
+    (seedPrf (pureHash f) (schemeSeed (pureHash f) seed).run)).run)
+    (prf := seedPrf (pureHash f) (schemeSeed (pureHash f) seed).run)
     (layer := .bottom) σ.leafIndex.toNat
   -- The bottom tree of `idx` is `idx` shifted down by one layer.
   rw [Nat.shiftRight_eq_div_pow] at hbroot
@@ -76,8 +77,9 @@ theorem verifyWith_keyGenWith_signWith {seed : Seed} {sk : SecretKey} {pk : Publ
   have ht := layerRoot_signLayer htop
   rw [(signLayer_eq_ok htop).2] at ht
   -- Step 3: the top key's leaf and honest path reach the root of the top tree.
-  have hroot := fold_path_top (f := f) (pp := (publicParamOf (pureHash f)
-    (schemeSeed (pureHash f) seed).run).run) (seed := (schemeSeed (pureHash f) seed).run)
+  have hroot := fold_path_top (f := f) (pp := (publicParamOf
+    (seedPrf (pureHash f) (schemeSeed (pureHash f) seed).run)).run)
+    (prf := seedPrf (pureHash f) (schemeSeed (pureHash f) seed).run)
     (bottomTree_lt σ.leafIndex)
   -- A key's leaf is the level-0 node of its index, by definition.
   exact verify_of_layerRoot (hb.trans (congrArg some hbroot)) (ht.trans (congrArg some hroot))

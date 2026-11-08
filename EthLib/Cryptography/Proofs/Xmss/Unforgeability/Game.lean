@@ -64,7 +64,7 @@ theorem schemeSeed_queryH (S0 : MasterSeed) :
 
 /-- `P = Th(0^128, A_param, S)`, one query of the parameter's input. -/
 theorem publicParamOf_queryH (S : MasterSeed) :
-    (publicParamOf queryH (ofSeed S) : OracleComp HashSpec PublicParam)
+    (publicParamOf (seedPrf queryH (ofSeed S)) : OracleComp HashSpec PublicParam)
       = liftM (HashSpec.query (paramInput S)) >>= fun y => pure (ofParam (truncateHash y)) := by
   -- The all-zero parameter is the bytes of the zero bit vector.
   have hzero : Vector.replicate PUBLIC_PARAM_LEN (0 : UInt8)
@@ -79,7 +79,8 @@ theorem publicParamOf_queryH (S : MasterSeed) :
     simp only [thInput, toList_data_append, toList_data_packBytes, toList_ofParam, toList_ofSeed,
       toList_addrParam]
     rfl
-  unfold publicParamOf th queryH
+  rw [publicParamOf_seedPrf]
+  unfold th queryH
   rw [hzero, hinput]
   simp only [map_eq_bind_pure_comp, bind_assoc, Function.comp_apply, pure_bind]
   refine bind_congr fun y => ?_
@@ -113,7 +114,8 @@ set_option backward.isDefEq.respectTransparency false in
 /-- EthLib's signer erases to the real game's: the cache answers its calls for `S` and `P`. -/
 theorem erases_signWith (S0 : MasterSeed) (S Pf : HashOutput) (idx : LeafIndex) (msg : Message) :
     Erases (knownKeys S0 S Pf) (Except.toOption <$> signWith queryH ⟨ofSeed S0⟩ idx msg)
-      (Except.toOption <$> signDerived queryH (ofSeed S) (ofParam (truncateHash Pf)) idx msg) := by
+      (Except.toOption <$> signDerived queryH (seedPrf queryH (ofSeed S))
+        (ofParam (truncateHash Pf)) idx msg) := by
   unfold signWith
   rw [schemeSeed_queryH]
   simp only [bind_assoc, pure_bind, map_bind]
@@ -287,8 +289,8 @@ theorem knownKeys_le (S0 : MasterSeed) (S Pf : HashOutput) (c1 c2 : QueryCache H
 
 /-- The top tree's root, from `S` and the parameter. -/
 noncomputable def topRoot (S Pf : HashOutput) : OracleComp OracleWorld Digest :=
-  liftM (node (queryH (m := OracleComp HashSpec)) (ofParam (truncateHash Pf)) (ofSeed S) .top
-    LAYER_HEIGHT 0)
+  liftM (node (queryH (m := OracleComp HashSpec)) (ofParam (truncateHash Pf))
+    (seedPrf queryH (ofSeed S)) .top LAYER_HEIGHT 0)
 
 -- `S` is a hash value and a seed has 256 bits, so definitional checks may unfold the widths.
 set_option backward.isDefEq.respectTransparency false in
