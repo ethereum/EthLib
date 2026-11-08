@@ -19,7 +19,7 @@ MAX_DEPTH = 64
 MAX_INT_BITS = 65536
 
 # The most parts that one call may pass, counting each value inside a container.
-MAX_PARTS = 1_000_000
+MAX_PARTS = 1 << 22
 
 # The most bytes that one call may pass, over its bytes, its str and its large int.
 MAX_BYTES = 1 << 29

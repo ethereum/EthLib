@@ -10,5 +10,3 @@
 # A new entry is an exception that a maintainer approves, and the diff shows it.
 # A pull request that moves a conversion to another function renames its entry.
 
-bindings/python/ethlib/serialization/ssz/__init__.py _dump json
-bindings/python/ethlib/serialization/ssz/__init__.py deserialize json

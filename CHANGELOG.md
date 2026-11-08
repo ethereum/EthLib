@@ -134,7 +134,7 @@ Not yet released.
   An argument that crosses to Lean but that Lean cannot read raises the error class of the method with code 0, where it raised `TypeError`.
   Examples are `bytes` given for a name and `str` given for a state.
   A `bool` given for a slot count, and `1` or `None` given for `verify`, now raise the same error, where they were read as 0 or 1 or by truthiness.
-  The limits of the converter, 2^29 bytes and 1,000,000 values in one call, now apply to the states and the blocks.
+  The limits of the converter, 2^29 bytes and 2^22 values in one call, now apply to the states and the blocks.
 - The honest validator exports that take a state, and the optimistic sync exports of the ancestor and the payload verdicts, now take and return typed values ([#1558](https://github.com/ethereum/EthLib/pull/1558)).
   These are the committee, proposer, sync committee and PTC assignments, the sync committee subnets and the upcoming proposal slots.
   They are also the signature of a duty, the construction of an attestation and of a single attestation, the Eth1 vote, the pending deposit count and the new state root.
@@ -167,7 +167,7 @@ Not yet released.
   A `bool` given for a slot or an epoch raises the error class of the method with code 0, where it was read as 0 or 1.
   A `bytearray` or a `memoryview` given for the data of an update raises `TypeError`, where it was read as bytes.
   Every argument is read before the names, so a root of the wrong length is reported before an unknown preset or a fork before Altair.
-  The limits of the converter, 2^29 bytes and 1,000,000 values in one call, now apply to the states, the blocks and the steps.
+  The limits of the converter, 2^29 bytes and 2^22 values in one call, now apply to the states, the blocks and the steps.
   An argument that crosses to Lean but that Lean cannot read raises the error class of the method with code 0, where some raised `TypeError`.
 - The gossip validation export now takes and returns typed values ([#1561](https://github.com/ethereum/EthLib/pull/1561)).
   Its C export takes the tuple of its arguments as one value, in the order it had, and a configuration replacement as a `dict`, as the transition exports do.
@@ -186,7 +186,20 @@ Not yet released.
   A `bytearray` or a `memoryview` given for the bytes of a block, an envelope or a message raises `TypeError`, where it was read as bytes.
   An argument that crosses to Lean but that Lean cannot read raises the error class of the method with code 0, where some raised `TypeError` or `AttributeError`.
   A root of the finalized checkpoint of another length than 32 bytes raises `ForkChoiceError` with code 0 and the message `expected 32 bytes, got N`, where the message was `the finalized checkpoint is not 40 bytes`.
-  Every argument is read before the names, and the limits of the converter, 2^29 bytes and 1,000,000 values in one call, now apply.
+  Every argument is read before the names, and the limits of the converter, 2^29 bytes and 2^22 values in one call, now apply.
+- The generic SSZ exports now take and return typed values ([#1563](https://github.com/ethereum/EthLib/pull/1563)).
+  The C exports `eth_ssz_serialize`, `eth_ssz_deserialize` and `eth_ssz_hash_tree_root` take the tuple of their arguments as one value.
+  A type and a value cross as the Python values of their tagged form, such as `{"uint": 2}` and `{"uint": 258}`, where they crossed as JSON text.
+  `eth_ssz_deserialize` returns the value as a `dict`, where it returned JSON text.
+  In Python, `bytes` inside a type or a value now crosses as `0x` hex, where `json.dumps` refused it.
+  A `float` or a `dict` key that is not a `str` raises `TypeError`, and a negative `int` raises `ValueError`, where each raised `SszError` with code 0.
+  Data that is not `bytes` raises `SszError` with code 0, where it raised `TypeError`.
+  The converter reads an argument nested at most 64 levels below it, where 256 SSZ levels were read.
+  So a value of more than 31 `seq` or `union` levels raises `ValueError`, and so does a type of more than 32 `vector` or `list` levels or more than 21 `container` levels.
+  A value that `deserialize` returns past these bounds, or past the converter budget, cannot be given back to `serialize`.
+- A Python value of a list or a `dict` with many items no longer overflows the stack when an export reads it as JSON or writes JSON as a Python value ([#1563](https://github.com/ethereum/EthLib/pull/1563)).
+  Every export that reads a typed value as JSON, or returns JSON as a typed value, reads and writes the items in a loop.
+- The converter of typed values now passes up to 2^22 values in one call, where it passed 1,000,000, so that the longest `ssz_generic` vectors of consensus-spec-tests cross ([#1563](https://github.com/ethereum/EthLib/pull/1563)).
 - A chain configuration that the exports read as JSON is now rejected, with code 0, when a fork by block number comes after a fork by timestamp ([#1110](https://github.com/ethereum/EthLib/pull/1110)).
   EIP-6122 requires the forks by timestamp to be scheduled at or after the forks by block.
 

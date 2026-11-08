@@ -669,13 +669,13 @@
   "The value of the named type that the bytes encode, as a Python value."
 
 #define DOC_ssz_serialize \
-  "The SSZ bytes of a value of a type, both given as JSON."
+  "The SSZ bytes of a value of a type, both given in their tagged form."
 
 #define DOC_ssz_deserialize \
-  "The value, as JSON, that SSZ bytes hold for a type given as JSON."
+  "The value that SSZ bytes hold for a type given in its tagged form, as a tagged `dict`."
 
 #define DOC_ssz_hash_tree_root \
-  "The 32-byte hash tree root of a value of a type, both given as JSON."
+  "The 32-byte hash tree root of a value of a type, both given in their tagged form."
 
 #define DOC_rlpx_ecies_encrypt \
   "The ciphertext `R || iv || c || d` of `m` to the public key `recipient`."

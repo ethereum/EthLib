@@ -47,8 +47,9 @@ extern lean_object* eth_pyvalue_echo(lean_object* args);
  *
  * A container that appears twice is converted twice.
  * So a few shared lists can stand for very many parts.
- * The bound keeps the time and the memory of a conversion small. */
-#define PV_MAX_PARTS 1000000
+ * The bound keeps the time and the memory of a conversion bounded and linear in its size.
+ * It admits every value of the `ssz_generic` vectors of consensus-spec-tests. */
+#define PV_MAX_PARTS (1 << 22)
 
 /* The most bytes that one call may pass, over its `bytes`, its `str` and its large `int`.
  *

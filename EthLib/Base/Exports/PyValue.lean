@@ -81,26 +81,30 @@ def toJson : PyValue → Json
   | .bytes data => .str (Base.hexString data.toList)
   | .str s => .str s
   | .list items | .tuple items => .arr (toJsonArray items)
-  | .dict entries => Json.mkObj (toJsonEntries entries)
+  | .dict entries => Json.mkObj (toJsonEntries entries).toList
 termination_by structural v => v
 
 /-- The items of a sequence as JSON. -/
 def toJsonArray : Array PyValue → Array Json
-  | ⟨items⟩ => (toJsonList items).toArray
+  | ⟨items⟩ => toJsonList items #[]
 
-/-- The items of a sequence as JSON. -/
-def toJsonList : List PyValue → List Json
-  | [] => []
-  | v :: vs => toJson v :: toJsonList vs
+/-- The JSON of some items so far, then the JSON of the items, in order.
 
-/-- The entries of a `dict` as JSON. -/
-def toJsonEntries : Array (String × PyValue) → List (String × Json)
-  | ⟨entries⟩ => toJsonPairs entries
+The loop runs in constant stack for any number of items. -/
+def toJsonList : List PyValue → Array Json → Array Json
+  | [], out => out
+  | v :: vs, out => toJsonList vs (out.push (toJson v))
 
 /-- The entries of a `dict` as JSON. -/
-def toJsonPairs : List (String × PyValue) → List (String × Json)
-  | [] => []
-  | (key, v) :: rest => (key, toJson v) :: toJsonPairs rest
+def toJsonEntries : Array (String × PyValue) → Array (String × Json)
+  | ⟨entries⟩ => toJsonPairs entries #[]
+
+/-- The JSON of some entries so far, then the JSON of the entries, in order.
+
+The loop runs in constant stack for any number of entries. -/
+def toJsonPairs : List (String × PyValue) → Array (String × Json) → Array (String × Json)
+  | [], out => out
+  | (key, v) :: rest, out => toJsonPairs rest (out.push (key, toJson v))
 
 end
 
@@ -122,12 +126,14 @@ termination_by structural j => j
 
 /-- The values of the items of a JSON array. -/
 def ofJsonArray : Array Json → Array PyValue
-  | ⟨items⟩ => (ofJsonList items).toArray
+  | ⟨items⟩ => ofJsonList items #[]
 
-/-- The values of the items of a JSON array. -/
-def ofJsonList : List Json → List PyValue
-  | [] => []
-  | j :: js => ofJson j :: ofJsonList js
+/-- The values of some items so far, then the values of the items of a JSON array, in order.
+
+The loop runs in constant stack for any number of items. -/
+def ofJsonList : List Json → Array PyValue → Array PyValue
+  | [], out => out
+  | j :: js, out => ofJsonList js (out.push (ofJson j))
 
 /-- The entries of a JSON object, in the order of its keys, after some entries. -/
 def ofJsonTree : Std.DTreeMap.Internal.Impl String (fun _ => Json) →

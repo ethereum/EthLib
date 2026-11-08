@@ -6635,8 +6635,9 @@
    "error_class": "RlpError",
    "docstring":
    "The value of the named type that the bytes encode, as a Python value.\n\nThe arguments are the name of the type and the bytes.\n\nThe names are `nat`, `u256`, `uint64`, `bool`, `address`, `recipient` and `list_nat`.\n\nA recipient is an address, or `None` for a contract creation."},
-  {"summary": "The SSZ bytes of a value of a type, both given as JSON.",
-   "signature": "(type: bytes, value: bytes) -> bytes",
+  {"summary":
+   "The SSZ bytes of a value of a type, both given in their tagged form.",
+   "signature": "(type: str | dict[str, Any], value: dict[str, Any]) -> bytes",
    "operation": "EthLib.Serialization.Ssz.Exports.serializeExport",
    "method": "ssz_serialize",
    "errors":
@@ -6718,10 +6719,11 @@
       {"constructor": "structNotAnObject", "code": 74},
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
-   "docstring": "The SSZ bytes of a value of a type, both given as JSON."},
+   "docstring":
+   "The SSZ bytes of a value of a type, both given in their tagged form."},
   {"summary":
-   "The value, as JSON, that SSZ bytes hold for a type given as JSON.",
-   "signature": "(type: bytes, data: bytes) -> bytes",
+   "The value that SSZ bytes hold for a type given in its tagged form, as a tagged `dict`.",
+   "signature": "(type: str | dict[str, Any], data: bytes) -> dict[str, Any]",
    "operation": "EthLib.Serialization.Ssz.Exports.deserializeExport",
    "method": "ssz_deserialize",
    "errors":
@@ -6804,10 +6806,10 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
    "docstring":
-   "The value, as JSON, that SSZ bytes hold for a type given as JSON."},
+   "The value that SSZ bytes hold for a type given in its tagged form, as a tagged `dict`."},
   {"summary":
-   "The 32-byte hash tree root of a value of a type, both given as JSON.",
-   "signature": "(type: bytes, value: bytes) -> bytes",
+   "The 32-byte hash tree root of a value of a type, both given in their tagged form.",
+   "signature": "(type: str | dict[str, Any], value: dict[str, Any]) -> bytes",
    "operation": "EthLib.Serialization.Ssz.Exports.hashTreeRootExport",
    "method": "ssz_hash_tree_root",
    "errors":
@@ -6890,7 +6892,7 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
    "docstring":
-   "The 32-byte hash tree root of a value of a type, both given as JSON."},
+   "The 32-byte hash tree root of a value of a type, both given in their tagged form."},
   {"summary":
    "The ciphertext `R || iv || c || d` of `m` to the public key `recipient`.",
    "signature":

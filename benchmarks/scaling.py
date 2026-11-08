@@ -139,7 +139,7 @@ if want("snappy"):
 if want("ssz"):
     sizes = [250, 500, 1000, 2000]
     T = {"list": [{"uint": 8}, 2**40]}
-    docs = {n: (ssz._dump(T), ssz._dump({"seq": [{"uint": i} for i in range(n)]})) for n in sizes}
+    docs = {n: (T, {"seq": [{"uint": i} for i in range(n)]}) for n in sizes}
     show(
         "ssz serialize List[uint64] n",
         sizes,
@@ -152,7 +152,7 @@ if want("ssz"):
         [t(lambda n=n: N.ssz_deserialize(docs[n][0], by[n])) for n in sizes],
     )
     TB = {"byte_list": 2**30}
-    docsb = {n: (ssz._dump(TB), ssz._dump({"bytes": "0x" + bytes(8 * n).hex()})) for n in sizes}
+    docsb = {n: (TB, {"bytes": "0x" + bytes(8 * n).hex()}) for n in sizes}
     show(
         "ssz serialize ByteList 8n",
         sizes,
@@ -184,7 +184,7 @@ if want("ssz"):
         ]
     }
     sizes2 = [125, 250, 500, 1000]
-    docsv = {n: (ssz._dump(VL), ssz._dump({"seq": [val] * n})) for n in sizes2}
+    docsv = {n: (VL, {"seq": [val] * n}) for n in sizes2}
     show(
         "ssz serialize List[Validator] n",
         sizes2,
