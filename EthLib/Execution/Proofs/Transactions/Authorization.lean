@@ -2,7 +2,6 @@ module
 
 public import EthLib.Base.Except
 public import EthLib.Execution.Proofs.Evm.Call.Delegation
-public import EthLib.Execution.Proofs.State.Frame
 public import EthLib.Execution.Proofs.State.Tracker
 public import EthLib.Execution.Transactions.Authorization
 
@@ -25,9 +24,9 @@ An authorization with no valid signature changes nothing.
 
 A parity of `y` above 1, `r` outside `[1, n - 1]` or `s` outside `[1, n / 2]` names no authority.
 
-An out-of-range `yParity`, `r` or `s` changes nothing.
+Here `n` is the order of the secp256k1 group.
 
-An out-of-range `yParity`, `r` or `s` leaves the state as it was, up to the records of reads.
+Such an authorization changes nothing.
 
 The hash that an authority signs ignores the signature of the authorization.
 
@@ -162,7 +161,7 @@ theorem refund_applyAuthorization_of_accepts (hfork : fork < .glamsterdam)
     simp only [hfork, true_and]
     rfl
 
-/-! ## The ranges of `yParity`, `r` and `s` -/
+/-! ## The ranges of the parity of `y`, `r` and `s` -/
 
 /-- A parity of `y` above 1 names no authority. -/
 theorem recoverAuthority_yParity_gt (h : 1 < auth.yParity.toNat) :
@@ -225,28 +224,27 @@ theorem applyAuthorization_of_recoverAuthority_none (h : recoverAuthority auth =
   unfold applyAuthorization
   split <;> simp only [h]
 
-/-- An out-of-range `yParity`, `r` or `s` changes nothing. -/
+/-- A parity of `y`, an `r` or an `s` out of range changes nothing. -/
 theorem applyAuthorization_of_out_of_range
     (h : 1 < auth.yParity.toNat ∨ auth.r.toNat = 0 ∨ Fn.modulus ≤ auth.r.toNat ∨
       auth.s.toNat = 0 ∨ Fn.modulus / 2 < auth.s.toNat) :
     applyAuthorization fork chainId done auth = .ok done := by
   apply applyAuthorization_of_recoverAuthority_none
-  rcases h with hy | hr0 | hrge | hs0 | hshigh
+  rcases h with hy | hr | hr | hs0 | hshigh
   · exact recoverAuthority_yParity_gt hy
-  · exact recoverAuthority_r_zero hr0
-  · exact recoverAuthority_r_ge hrge
+  · exact recoverAuthority_r_out (.inl hr)
+  · exact recoverAuthority_r_out (.inr hr)
   · exact recoverAuthority_s_zero hs0
   · exact recoverAuthority_high_s hshigh
 
-/-- An out-of-range `yParity`, `r` or `s` leaves the state as it was, up to the records of reads. -/
-theorem sameOutside_applyAuthorization_of_out_of_range
+/-- A parity of `y`, an `r` or an `s` out of range leaves the state and its records as they were. -/
+theorem eq_of_applyAuthorization_of_out_of_range
     (h : 1 < auth.yParity.toNat ∨ auth.r.toNat = 0 ∨ Fn.modulus ≤ auth.r.toNat ∨
       auth.s.toNat = 0 ∨ Fn.modulus / 2 < auth.s.toNat)
     (happly : applyAuthorization fork chainId done auth = .ok done') :
-    SameOutside [] done.state done'.state := by
+    done' = done := by
   rw [applyAuthorization_of_out_of_range h, Except.ok.injEq] at happly
-  subst happly
-  exact SameOutside.refl [] done.state
+  exact happly.symm
 
 /-- An authorization that its authority refuses only marks the authority as accessed and read. -/
 theorem applyAuthorization_of_refused (hscope : authorizationInScope chainId auth = true)
