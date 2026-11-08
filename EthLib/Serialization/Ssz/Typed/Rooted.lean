@@ -253,6 +253,13 @@ theorem getElem?_leafRoots {α : Type} [SszType α] (elements : Array α) (index
   simp only [leafRoots, Array.getElem?_ofFn]
   split <;> simp_all
 
+/-- The leaves of a rooted sequence are the leaf of each element, in order. -/
+theorem leafRoots_eq_map {α : Type} [SszType α] (elements : Array α) :
+    leafRoots elements = elements.map leafRoot := by
+  apply Array.ext_getElem?
+  intro index
+  rw [getElem?_leafRoots, Array.getElem?_map]
+
 /-- The encoding of an element, or no bytes if it has none. -/
 def elementBytes {α : Type} [SszType α] (a : α) : Bytes :=
   -- A lawful element always has an encoding, so the empty one never stands in.
@@ -465,6 +472,68 @@ def set (v : RootedVector α length) (index : Nat) (a : α)
     apply sequenceLeaves_write (by simp [inside]) (.inl (by simp))
     intro other differ
     simp [Vector.toArray_set, Ne.symm differ]⟩
+
+/-- The leaves of the tree, read from its first level. -/
+def leaves (v : RootedVector α length) : Array Bytes :=
+  -- The levels always start with the leaves, so the fallback is never taken.
+  v.levels.get.headD (sequenceLeaves v.elements.toArray)
+
+/-- The first level of the tree holds the leaves of the elements. -/
+theorem leaves_eq (v : RootedVector α length) :
+    v.leaves = sequenceLeaves v.elements.toArray := by
+  unfold leaves
+  rw [v.built]
+  cases depthFor (leafCapacity α length) <;> rfl
+
+/-- The elements after the first `count`, then the fresh elements, so that the length stays. -/
+def shiftElements (v : RootedVector α length) {count : Nat} (fresh : Vector α count)
+    (le : count ≤ length) : Vector α length :=
+  ⟨v.elements.toArray.extract count length ++ fresh.toArray, by simp; omega⟩
+
+/-- Each element after a shift is the one `count` places later, or else a fresh one. -/
+theorem getElem_shiftElements (v : RootedVector α length) {count : Nat} (fresh : Vector α count)
+    (le : count ≤ length) (index : Nat) (inside : index < length) :
+    (v.shiftElements fresh le)[index] =
+      if kept : index + count < length then v.elements[index + count]
+      else fresh[index + count - length]'(by omega) := by
+  have size : (v.elements.toArray.extract count length).size = length - count := by simp
+  simp only [shiftElements, Vector.getElem_mk, Array.getElem_append, size]
+  split <;> split
+  · simp [Array.getElem_extract, Nat.add_comm count index]
+  · omega
+  · omega
+  · simp only [Vector.getElem_toArray]
+    congr 1
+    omega
+
+/--
+The vector with its first `count` elements dropped and the fresh elements appended.
+
+Composite elements keep the leaves of the elements that stay, so only the fresh leaves are hashed.
+
+The levels above the leaves are built again on their first read.
+-/
+def shift (v : RootedVector α length) {count : Nat} (fresh : Vector α count)
+    (le : count ≤ length) : RootedVector α length :=
+  let elements := v.shiftElements fresh le
+  let depth := depthFor (leafCapacity α length)
+  -- Basic elements share leaves, so a shift that is not by whole leaves moves every leaf.
+  let leaves := fun _ : Unit =>
+    if (desc α).isBasic then sequenceLeaves elements.toArray
+    else v.leaves.extract count length ++ leafRoots fresh.toArray
+  ⟨elements, .later fun _ => buildLevels 0 (leaves ()) depth, by
+    simp only [Deferred.get_later]
+    congr 1
+    simp only [leaves, sequenceLeaves]
+    split
+    · rfl
+    · rw [leaves_eq, sequenceLeaves, ite_eq_right (by assumption), leafRoots_eq_map,
+        leafRoots_eq_map, leafRoots_eq_map]
+      simp [elements, shiftElements, Array.map_append, Array.map_extract]⟩
+
+/-- The elements of a shifted vector are the shifted elements. -/
+@[simp] theorem elements_shift (v : RootedVector α length) {count : Nat} (fresh : Vector α count)
+    (le : count ≤ length) : (v.shift fresh le).elements = v.shiftElements fresh le := rfl
 
 /-- Two rooted vectors with the same elements are the same, since the elements fix the levels. -/
 theorem ext {v w : RootedVector α length} (same : v.elements = w.elements) : v = w := by
