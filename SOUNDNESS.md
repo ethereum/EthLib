@@ -1163,7 +1163,23 @@ The path searches return nothing there, since the trie is not secured.
 `indexedRoot_binding` concludes that the two lists are equal, or `findIndexedCollision` returns a collision in the proofs of one index.
 Two transactions, or two withdrawals, with the same bytes are equal, so `transactionsRoot_binding` and `withdrawalsRoot_binding` conclude the same for the lists themselves.
 `receiptsRoot_binding` does so for receipts whose types are below `0xc0`, which holds for type 0 and for every type that a fork adds.
-No theorem bounds the probability of finding a collision.
+No theorem bounds the probability of the indexed-root search itself.
+The bound below covers two tries that give one key two values.
+
+`Execution/Proofs/Trie/RandomOracle.lean` turns this binding into a probability bound, with the hash a random oracle.
+The trie definitions take their hash in any monad, so the experiment runs the root of the specification with a hash that queries the oracle.
+An adversary outputs two tries and a key.
+The experiment computes both roots and both proofs of the key, then queries the key, every key of both tries and every node of both proofs.
+The adversary wins when the tries are both secured or both plain, each has distinct keys, and they have one root, yet give the key different values.
+`collision_of_extract` shows that every win leaves two different cached inputs with one answer.
+The searches `findCollision`, `findPathCollision` and `findLookupCollision` name them, run with a table that agrees with the cache.
+`prEvent_wins_le` then bounds a win by `Q^2 / N` through `prEvent_collision_le`, where `Q` bounds the queries of the whole experiment.
+`prEvent_wins_le_two_pow` states it with `N = 2^256`.
+The bound needs no hypothesis that the cache covers the witnesses, since the experiment queries them itself.
+One oracle answers keys and nodes alike, so a collision between a key and a node counts too.
+The first trie may be fixed before the run, so the same bound covers a second trie with the root of a given one.
+That bound is still `Q^2 / N`, not a sharper fixed-target bound.
+`Q` counts every hash call of the experiment, repeats included, and the extraction makes many: each proof level rebuilds its subtree.
 
 An answer of `eth_getProof` (EIP-1186) is checked against a state root by `AccountProof.verify` (`Execution/State/AccountProof.lean`).
 It checks the account proof, then each slot proof against the storage root of the answer.
@@ -1651,6 +1667,10 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
   Reading it as a second-preimage bound conditions on the honest digest, a modelling step that no theorem proves.
   Only classical queries are counted.
   No SHA-256, Keccak or quantum security claim follows from this model.
+- Trie root bound: Keccak-256 is a random oracle on byte strings, shared by the keys and the nodes of the trie.
+  Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
+  Only classical queries are counted, and the adversary's private sampling is not.
+  The bound says nothing about an attack that uses the structure of Keccak.
 - VRF unpredictability: Keccak-256 is a random oracle on byte strings, as for leanXMSS.
   The bound says nothing about an attack that uses the structure of Keccak.
   It counts classical queries only, so it says nothing about a quantum adversary.
