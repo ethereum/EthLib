@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.List
 public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Consensus.Proofs.Participation
 public import EthLib.Consensus.Proofs.Transition.Operations
@@ -55,6 +56,16 @@ Take a step that succeeds on a registry within its limit.
 Then each addition of a reward to a balance stays below `2^64`.
 
 The balances past the registry stay.
+
+From Altair, the rewards of one flag have a bound in the increments that set it.
+
+So the step raises the sum of the balances by at most the sum of those bounds.
+
+Take a step where no flag of the previous epoch was set by more balance than is active.
+
+Then that sum rises by at most 54/64 of the base reward per increment for each active increment.
+
+These bounds need a registry within its limit, and the last also needs an increment above zero.
 -/
 
 @[expose] public section
@@ -872,5 +883,276 @@ theorem processRewardsAndPenalties_balances_of_altair {config : Config}
   obtain ⟨flagDeltas, flagged, inactivityDeltas, penalized, applied⟩ := computed
   exact ⟨flagDeltas, inactivityDeltas, flagged, penalized,
     foldlM_applyAllDeltas_balances within applied⟩
+
+/-! ## A bound on what the step adds -/
+
+/-- Bounds at each position by a factor times a quotient bound the sum in the same way. -/
+private theorem sum_map_mul_le {n scale factor divisor : Nat} {f g : Nat → Nat}
+    (pointwise : ∀ j ∈ List.range n, f j * scale ≤ factor * (g j / divisor)) :
+    ((List.range n).map f).sum * scale ≤ factor * (((List.range n).map g).sum / divisor) := by
+  rw [← sum_map_mul_right]
+  refine Nat.le_trans (sum_map_le_sum_map pointwise) ?_
+  rw [sum_map_mul_left]
+  exact Nat.mul_le_mul_left _ (sum_map_div_le _ _ _)
+
+/-- From Altair, take the rewards of one flag over the registry.
+
+In all they are at most the weight of the flag in the base reward per increment.
+
+It counts once for each increment that set the flag in the previous epoch.
+
+It is scaled by those increments over the active ones, a ratio that can exceed one.
+
+Both sides are multiplied by 64 for each active increment, so with none the bound says nothing.
+
+That needs a registry within its limit. -/
+theorem getFlagIndexDeltas_rewards_le {altair : .altair ≤ fork}
+    {flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.length} {rewards penalties : Array Gwei}
+    (within : state.RegistryWithinLimit)
+    (computed : getFlagIndexDeltas state altair flagIndex = .ok (rewards, penalties))
+    {participating : List ValidatorIndex}
+    (flagged : getUnslashedParticipatingIndices state altair flagIndex.val.toUInt64
+      (getPreviousEpoch state) = .ok participating)
+    {participatingBalance total perIncrement : Gwei}
+    (weighed : getTotalBalance state participating = .ok participatingBalance)
+    (active : getTotalActiveBalance state = .ok total)
+    (per : getBaseRewardPerIncrement preset total = .ok perIncrement) :
+    ((List.range state.validators.data.size).map fun index =>
+        (rewards.getD index 0).toNat).sum *
+        (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * WEIGHT_DENOMINATOR.toNat) ≤
+      PARTICIPATION_FLAG_WEIGHTS[flagIndex].toNat * perIncrement.toNat *
+        (participatingBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ^ 2 := by
+  obtain ⟨named, small, balance⟩ := getTotalBalance_ok_iff.mp weighed
+  -- The effective balance of each validator that set the flag, and zero elsewhere.
+  let marked : Nat → Nat := fun j =>
+    if ((markIndices state.validators.data.size participating)[j]?).getD false then
+      ((state.validators.data[j]?).map (·.effectiveBalance.toNat)).getD 0
+    else 0
+  have pointwise : ∀ j ∈ List.range state.validators.data.size,
+      (rewards.getD j 0).toNat *
+          (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * WEIGHT_DENOMINATOR.toNat) ≤
+        PARTICIPATION_FLAG_WEIGHTS[flagIndex].toNat * perIncrement.toNat *
+          (participatingBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) *
+          (marked j / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
+    intro j _
+    by_cases present : ∃ participant ∈ participating, participant.toNat = j
+    · obtain ⟨participant, member, rfl⟩ := present
+      obtain ⟨base, leak, based, -, reward⟩ :=
+        getFlagIndexDeltas_reward within computed flagged weighed active member
+      obtain ⟨validator, found, value⟩ := getBaseReward_eq_mul_of_altair altair per based
+      have mark :
+          ((markIndices state.validators.data.size participating)[participant.toNat]?).getD false =
+            true := by
+        rw [getElem?_markIndices]
+        simp only [named participant member, ↓reduceIte, Option.getD_some, List.any_eq_true,
+          beq_iff_eq]
+        exact ⟨participant, member, rfl⟩
+      have height : marked participant.toNat = validator.effectiveBalance.toNat := by
+        simp only [marked, mark, ↓reduceIte, found, Option.map_some, Option.getD_some]
+      rw [reward, height]
+      split
+      · simp
+      · refine Nat.le_trans (Nat.div_mul_le_self _ _) (Nat.le_of_eq ?_)
+        rw [value]
+        ac_rfl
+    · have absent : ∀ participant ∈ participating, participant.toNat ≠ j :=
+        fun participant member same => present ⟨participant, member, same⟩
+      rw [getFlagIndexDeltas_absent computed flagged absent]
+      simp
+  -- The marked effective balances add up to at most the balance that set the flag.
+  have whole : ((List.range state.validators.data.size).map marked).sum ≤
+      participatingBalance.toNat := by
+    have covers : sumMarked state.validators.data
+        (markIndices state.validators.data.size participating) ≤ participatingBalance.toNat := by
+      rw [balance, toNat_max, Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt small]
+      exact Nat.le_max_right _ _
+    rw [sumMarked_eq_sum] at covers
+    exact covers
+  refine Nat.le_trans (sum_map_mul_le pointwise) ?_
+  rw [Nat.pow_two, ← Nat.mul_assoc]
+  exact Nat.mul_le_mul_left _ (Nat.div_le_div_right whole)
+
+/-- Applying the deltas of one validator raises the sum of the balances by at most its reward. -/
+private theorem balanceSum_applyDeltas_le {rewards penalties : Array Gwei} {index : Nat}
+    (computed : applyDeltas rewards penalties state index = .ok after) :
+    balanceSum after ≤ balanceSum state + (rewards.getD index 0).toNat := by
+  obtain ⟨inside, fits, rfl⟩ := applyDeltas_eq_ok_iff.mp computed
+  unfold balanceSum BeaconState.putBalance
+  simp only [Array.toList_set, List.map_set]
+  have replaced := sum_set_add (l := state.balances.data.toList.map (·.toNat))
+    (i := index.toUInt64.toNat) (by simpa using inside)
+    (saturatingSub (state.balances.data[index.toUInt64.toNat] + rewards.getD index 0)
+      (penalties.getD index 0)).toNat
+  simp only [List.getElem_map, Array.getElem_toList] at replaced
+  have value : (saturatingSub (state.balances.data[index.toUInt64.toNat] + rewards.getD index 0)
+      (penalties.getD index 0)).toNat = state.balances.data[index.toUInt64.toNat].toNat +
+        (rewards.getD index 0).toNat - (penalties.getD index 0).toNat := by
+    rw [toNat_saturatingSub, toNat_add_of_lt fits]
+  omega
+
+/-- The deltas at some positions raise the sum of the balances by at most their rewards. -/
+private theorem balanceSum_foldlM_applyDeltas_le {rewards penalties : Array Gwei} :
+    ∀ {indices : List Nat} {state after : BeaconState preset fork},
+      indices.foldlM (applyDeltas rewards penalties) state = .ok after →
+        balanceSum after ≤ balanceSum state +
+          (indices.map fun index => (rewards.getD index 0).toNat).sum
+  | [], state, after, computed => by
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    simp
+  | index :: rest, state, after, computed => by
+    simp only [List.foldlM_cons, bind_ok_iff] at computed
+    obtain ⟨next, step, folded⟩ := computed
+    have first := balanceSum_applyDeltas_le step
+    have others := balanceSum_foldlM_applyDeltas_le folded
+    simp only [List.map_cons, List.sum_cons]
+    omega
+
+/-- Deltas applied in turn raise the sum of the balances by at most all their rewards. -/
+private theorem balanceSum_foldlM_applyAllDeltas_le :
+    ∀ {deltas : List (Array Gwei × Array Gwei)} {state after : BeaconState preset fork},
+      deltas.foldlM applyAllDeltas state = .ok after →
+        balanceSum after ≤ balanceSum state + (deltas.map fun delta =>
+          ((List.range state.validators.data.size).map fun index =>
+            (delta.1.getD index 0).toNat).sum).sum
+  | [], state, after, computed => by
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    simp
+  | delta :: rest, state, after, computed => by
+    simp only [List.foldlM_cons, bind_ok_iff] at computed
+    obtain ⟨next, step, folded⟩ := computed
+    have first : balanceSum next ≤ balanceSum state +
+        ((List.range state.validators.data.size).map fun index =>
+          (delta.1.getD index 0).toNat).sum :=
+      balanceSum_foldlM_applyDeltas_le step
+    have others := balanceSum_foldlM_applyAllDeltas_le folded
+    rw [(sameSizes_applyAllDeltas step).1] at others
+    simp only [List.map_cons, List.sum_cons]
+    omega
+
+/-- From Altair, the step raises the sum of the balances by at most the sum of three bounds.
+
+Each bound is the weight of its flag in the base reward per increment.
+
+It counts once for each increment that set the flag in the previous epoch.
+
+It is scaled by those increments over the active ones, a ratio that can exceed one.
+
+Both sides are multiplied by 64 for each active increment, so with none the bound says nothing.
+
+That needs a registry within its limit. -/
+theorem processRewardsAndPenalties_balanceSum_le {config : Config}
+    (altair : .altair ≤ fork) (within : state.RegistryWithinLimit)
+    (computed : processRewardsAndPenalties config state = .ok after)
+    {total perIncrement : Gwei} (active : getTotalActiveBalance state = .ok total)
+    (per : getBaseRewardPerIncrement preset total = .ok perIncrement)
+    {participatingBalance : Fin PARTICIPATION_FLAG_WEIGHTS.length → Gwei}
+    (weighed : ∀ flagIndex, ∃ indices,
+      getUnslashedParticipatingIndices state altair flagIndex.val.toUInt64
+          (getPreviousEpoch state) = .ok indices ∧
+        getTotalBalance state indices = .ok (participatingBalance flagIndex)) :
+    balanceSum after *
+        (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * WEIGHT_DENOMINATOR.toNat) ≤
+      balanceSum state *
+          (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * WEIGHT_DENOMINATOR.toNat) +
+        ((List.finRange PARTICIPATION_FLAG_WEIGHTS.length).map fun flagIndex =>
+          PARTICIPATION_FLAG_WEIGHTS[flagIndex].toNat * perIncrement.toNat *
+            ((participatingBalance flagIndex).toNat /
+              preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ^ 2).sum := by
+  by_cases genesis : getCurrentEpoch state = GENESIS_EPOCH
+  · rw [processRewardsAndPenalties_genesis config genesis] at computed
+    cases computed
+    exact Nat.le_add_right _ _
+  simp only [processRewardsAndPenalties, genesis, altair, ↓reduceIte, ↓reduceDIte,
+    bind_ok_iff] at computed
+  obtain ⟨flagDeltas, flagged, ⟨inactivityRewards, inactivityPenalties⟩, penalized, applied⟩ :=
+    computed
+  have raised := balanceSum_foldlM_applyAllDeltas_le applied
+  -- The inactivity deltas hold no reward.
+  simp only [List.map_append, List.map_cons, List.map_nil, List.sum_append, List.sum_cons,
+    List.sum_nil, getInactivityPenaltyDeltas_rewards penalized, UInt64.toNat_zero, List.map_const',
+    List.sum_replicate_nat, Nat.mul_zero, Nat.add_zero] at raised
+  have flags : (flagDeltas.map fun deltas =>
+      ((List.range state.validators.data.size).map fun index =>
+        (deltas.1.getD index 0).toNat).sum *
+        (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * WEIGHT_DENOMINATOR.toNat)).sum ≤
+      ((List.finRange PARTICIPATION_FLAG_WEIGHTS.length).map fun flagIndex =>
+        PARTICIPATION_FLAG_WEIGHTS[flagIndex].toNat * perIncrement.toNat *
+          ((participatingBalance flagIndex).toNat /
+            preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ^ 2).sum := by
+    refine sum_map_le_sum_map_of_mapM_ok ?_ flagged
+    rintro flagIndex ⟨rewards, penalties⟩ step
+    obtain ⟨indices, listed, weighs⟩ := weighed flagIndex
+    exact getFlagIndexDeltas_rewards_le within step listed weighs active per
+  have scaled := Nat.mul_le_mul_right
+    (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * WEIGHT_DENOMINATOR.toNat) raised
+  rw [Nat.add_mul, ← sum_map_mul_right _ _ flagDeltas] at scaled
+  exact Nat.le_trans scaled (Nat.add_le_add_left flags _)
+
+/-- The weights of the three flags add up to 54. -/
+private theorem sum_flag_weights :
+    ((List.finRange PARTICIPATION_FLAG_WEIGHTS.length).map fun flagIndex =>
+      PARTICIPATION_FLAG_WEIGHTS[flagIndex].toNat).sum = 54 := by
+  decide
+
+/-- From Altair, take a step where no flag was set by more balance than is active.
+
+The flags are those of the previous epoch, and the active balance is that of the current one.
+
+Then the step raises the sum of the balances by at most 54/64 of the base reward per increment.
+
+It counts once for each active increment.
+
+That needs a registry within its limit, and an increment above zero. -/
+theorem processRewardsAndPenalties_balanceSum_le_of_participating_le {config : Config}
+    (altair : .altair ≤ fork) (within : state.RegistryWithinLimit)
+    (computed : processRewardsAndPenalties config state = .ok after)
+    {total perIncrement : Gwei} (active : getTotalActiveBalance state = .ok total)
+    (per : getBaseRewardPerIncrement preset total = .ok perIncrement)
+    {participatingBalance : Fin PARTICIPATION_FLAG_WEIGHTS.length → Gwei}
+    (weighed : ∀ flagIndex, ∃ indices,
+      getUnslashedParticipatingIndices state altair flagIndex.val.toUInt64
+          (getPreviousEpoch state) = .ok indices ∧
+        getTotalBalance state indices = .ok (participatingBalance flagIndex))
+    (kept : ∀ flagIndex, participatingBalance flagIndex ≤ total)
+    (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat) :
+    balanceSum after ≤ balanceSum state +
+      total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * perIncrement.toNat * 54 / 64 := by
+  have bound := processRewardsAndPenalties_balanceSum_le altair within computed active per weighed
+  have denominator : WEIGHT_DENOMINATOR.toNat = 64 := by decide
+  rw [denominator] at bound
+  have positive : 0 < total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
+    Nat.div_pos (UInt64.le_iff_toNat_le.mp (le_getTotalBalance active)) increment
+  -- Each flag counts at most every active increment.
+  have flags : ((List.finRange PARTICIPATION_FLAG_WEIGHTS.length).map fun flagIndex =>
+      PARTICIPATION_FLAG_WEIGHTS[flagIndex].toNat * perIncrement.toNat *
+        ((participatingBalance flagIndex).toNat /
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ^ 2).sum ≤
+      ((List.finRange PARTICIPATION_FLAG_WEIGHTS.length).map fun flagIndex =>
+        PARTICIPATION_FLAG_WEIGHTS[flagIndex].toNat).sum *
+        (perIncrement.toNat * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+          (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat))) := by
+    rw [← sum_map_mul_right]
+    refine sum_map_le_sum_map fun flagIndex _ => ?_
+    have share : (participatingBalance flagIndex).toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
+        total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
+      Nat.div_le_div_right (UInt64.le_iff_toNat_le.mp (kept flagIndex))
+    rw [Nat.pow_two, Nat.mul_assoc]
+    exact Nat.mul_le_mul_left _ (Nat.mul_le_mul_left _ (Nat.mul_le_mul share share))
+  rw [sum_flag_weights] at flags
+  -- From here on the active increments are one number, and the rest rearranges products.
+  generalize total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat = increments at *
+  have combined : balanceSum after * 64 * increments ≤
+      (balanceSum state * 64 + increments * perIncrement.toNat * 54) * increments := by
+    calc balanceSum after * 64 * increments = balanceSum after * (increments * 64) := by ac_rfl
+      _ ≤ balanceSum state * (increments * 64) +
+          54 * (perIncrement.toNat * (increments * increments)) :=
+        Nat.le_trans bound (Nat.add_le_add_left flags _)
+      _ = (balanceSum state * 64 + increments * perIncrement.toNat * 54) * increments := by
+        rw [Nat.add_mul]
+        ac_rfl
+  have cancelled := Nat.le_of_mul_le_mul_right combined positive
+  omega
 
 end EthLib.Consensus

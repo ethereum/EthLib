@@ -54,6 +54,26 @@ theorem merkleizeBoundedUnchecked_eq (chunks : Array Bytes) (limit : Option Nat)
     · simp only [over, ↓reduceIte]
       rfl
 
+/-- With any hasher in the identity monad, the bounded root checks the capacity first. -/
+theorem merkleizeBoundedUncheckedM_id_eq (hasher : Hasher Id) (chunks : Array Bytes)
+    (limit : Option Nat) :
+    (merkleizeBoundedUncheckedM hasher chunks limit).run = (do
+      match limit with
+      | some capacity =>
+        if capacity < chunks.size then throw (.merkleizeLimit chunks.size capacity)
+        return (subtreeAtM hasher chunks (depthFor capacity) 0).run
+      | none => return (subtreeAtM hasher chunks (depthFor chunks.size) 0).run
+        : Except Err Bytes) := by
+  unfold merkleizeBoundedUncheckedM
+  cases limit with
+  | none => rfl
+  | some capacity =>
+    by_cases over : capacity < chunks.size
+    · simp only [over, ↓reduceIte]
+      rfl
+    · simp only [over, ↓reduceIte]
+      rfl
+
 /-- The progressive root closes an empty suffix with a zero node.
 
 Otherwise it hashes the root of one level against the root of the rest. -/
