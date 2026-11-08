@@ -222,9 +222,9 @@ The code reads as zeros past its end.
 
 The address is cold when the transaction has not accessed it yet, by EIP-2929.
 
-Up to BPO5 it pays 2600 for a cold address and 100 for a warm one, by EIP-2929.
+Up to BPO5 it pays 2600 for a cold address and 100 for a warm one.
 
-From Glamsterdam it pays the access to the address and one warm access to read the code.
+From Glamsterdam it pays the access to the address and a warm access to read the code, by EIP-8038.
 
 It also pays 3 gas a word and the growth of memory.
 

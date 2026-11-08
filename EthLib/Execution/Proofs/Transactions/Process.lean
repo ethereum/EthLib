@@ -168,7 +168,9 @@ omit [LawfulGasMeter Meter] in
 
 The recipient `target` holds the code `c`, which from Pectra is no delegation indicator.
 
-The frame runs `c` with the gas that the meter holds, which commits the fresh meter of the message.
+Its meter is the fresh meter of the message, committed.
+
+The frame runs `c` with the gas that this meter holds.
 
 Its state records the read of the recipient, its substate is the one given, and it has no refund. -/
 theorem prepareFirstFrame_of_value_eq_zero {target : Address} {c : ByteArray}

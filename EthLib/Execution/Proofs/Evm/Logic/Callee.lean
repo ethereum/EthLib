@@ -46,7 +46,7 @@ variable {fork : Fork}
 
 The frame that ends the message is the stopped frame of that run, rolled back on a failure.
 
-The frame starts with the meter `meter`, of any lawful meter.
+The frame starts with any lawful meter `meter` that holds at most the gas of the message.
 
 A run that fails makes the message fail with the same error. -/
 theorem processMessage_map_val {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter]
@@ -95,7 +95,7 @@ theorem processMessage_map_val {Meter : Type} [GasMeter Meter] [LawfulGasMeter M
 
 The value moves from the caller to the target first, and the frame starts from that state.
 
-The frame starts with the meter `meter`, of any lawful meter. -/
+The frame starts with any lawful meter `meter` that holds at most the gas of the message. -/
 theorem processMessage_map_val_value {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter]
     {message : Message fork} {state movedState : TransactionState} {substate : Substate}
     {meter : Meter} {held : GasMeter.gasHeld meter ≤ message.gas}

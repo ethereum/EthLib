@@ -822,9 +822,9 @@ The address is the low 20 bytes of the word, and the state holds the code `c` of
 
 The address is cold when the transaction has not accessed it yet, by EIP-2929.
 
-Up to BPO5 it pays 2600 for a cold address and 100 for a warm one, by EIP-2929.
+Up to BPO5 it pays 2600 for a cold address and 100 for a warm one.
 
-From Glamsterdam it pays the access to the address and one warm access to read the code.
+From Glamsterdam it pays the access to the address and a warm access to read the code, by EIP-8038.
 
 It then adds the address to the accessed addresses, and records the read of the account. -/
 theorem extcodesize_of_berlin_le (hfork : .berlin ≤ fork) {word : U256} {rest : List U256}
