@@ -11,6 +11,7 @@ FORK_OF_NETWORK = {
     "Osaka": "fusaka",
     "BPO1": "bpo1",
     "BPO2": "bpo2",
+    "Amsterdam": "glamsterdam",
 }
 
 # The forks up to Paris, which the fixtures activate at block 0.
@@ -29,7 +30,7 @@ BLOCK_FORKS = [
 ]
 
 # The forks from Shapella, which activate by timestamp.
-TIME_FORKS = ["shapella", "dencun", "pectra", "fusaka", "bpo1", "bpo2"]
+TIME_FORKS = ["shapella", "dencun", "pectra", "fusaka", "bpo1", "bpo2", "glamsterdam"]
 
 # A transition network runs its second fork from this timestamp on.
 TRANSITION_TIME = 15_000
@@ -82,7 +83,7 @@ def check(network: str, method: str, params: list, error: str | None, code: str 
         assert status["status"] == "SYNCING", status
         return "valid"
     if status["status"] == "SYNCING":
-        # The payload fails only when its transactions run.
+        # The payload fails only when its block runs.
         return "execution"
     reason = int(status["validationError"].split(":")[0])
     assert EXCEPTIONS[reason] & set(error.split("|")), (status, error)

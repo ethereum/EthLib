@@ -4,11 +4,14 @@
 They come from the release `tests@v21.0.2`, whose target is commit `e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e`, under CC0-1.0.
 Its archive `fixtures.tar.gz` has sha256 `e2fa7ea2ea516459f9ab92284b2927892f318f4e1f78ca802cb05a6c3b479ed9`.
 
-The cases come from the directory `blockchain_tests_engine`, for the networks from Paris to BPO2.
-They hold every payload that expects a JSON-RPC error.
-They hold every payload that the checks before execution reject: a wrong block hash, a transaction that does not decode, or a wrong structure.
+The cases come from the directory `blockchain_tests_engine`, for the networks from Paris to Amsterdam.
+Amsterdam has two networks here: `Amsterdam` and `BPO2ToAmsterdamAtTime15k`.
+The networks after Amsterdam that change only the blob schedule are left out.
+The cases hold every payload that expects a JSON-RPC error.
+They hold every payload whose expected exception a check before execution can find: a wrong block hash, a transaction that does not decode, or a wrong structure.
+For two block access lists of Amsterdam, with accounts out of order or listed twice, EthLib finds the exception only when the block runs.
 They also hold the first six valid payloads of each network whose parameters have at most 8,000 bytes of JSON.
-Of the large rejected payloads, they keep the first one for each expected exception.
+Of the large rejected payloads, they keep the first one for each expected exception, once among the networks of Amsterdam and once among the others.
 
 Each case keeps the path of its file in the archive, the name of its test, the index of the payload and its network.
 Its method, its parameters, its expected exception and its expected error code are copied from the fixture without change.

@@ -472,6 +472,7 @@ def _header_of_json(fields: dict) -> bytes:
 def _engine_payload(fixture: dict, payload: dict, state: bytes, recent: list) -> tuple:
     """Run one payload on the chain; return its kind, and the next state and recent blocks."""
     from ethlib import engine
+    from ethlib.cryptography.keccak import keccak256
     from ethlib.serialization import rlp
 
     config, _ = chain_of(fixture)
@@ -497,8 +498,14 @@ def _engine_payload(fixture: dict, payload: dict, state: bytes, recent: list) ->
     if int(code) == 405:
         assert status["status"] == "INVALID", status
         assert any(names_block_error(e, message) for e in names), (status, names)
+        # A payload invalid in execution names its most recent valid ancestor.
+        # That is the head of the chain, which is its parent.
+        # The zero hash for an ancestor before Paris never applies: engine chains start at Paris.
+        assert status["latestValidHash"] == "0x" + keccak256(recent[-1][1]).hex(), status
         return "execution", state, recent
     assert ENGINE_EXCEPTIONS[int(code)] & set(names), (status, names)
+    # A payload that a check before execution rejects has a null latest valid hash.
+    assert status["latestValidHash"] is None, status
     return "invalid", state, recent
 
 
