@@ -197,6 +197,16 @@ Not yet released.
   The converter reads an argument nested at most 64 levels below it, where 256 SSZ levels were read.
   So a value of more than 31 `seq` or `union` levels raises `ValueError`, and so does a type of more than 32 `vector` or `list` levels or more than 21 `container` levels.
   A value that `deserialize` returns past these bounds, or past the converter budget, cannot be given back to `serialize`.
+- The active fork of mainnet and of Hoodi, the seal hash, the proof-of-work check, the gossip message ID and the recent blocks of a chain now cross as typed values ([#1571](https://github.com/ethereum/EthLib/pull/1571)).
+  The C exports `eth_mainnet_active_fork`, `eth_hoodi_active_fork`, `eth_pow_seal_hash`, `eth_pow_check` and `eth_gossip_message_id` take the tuple of their arguments as one value.
+  A fork crosses as its name, a `str`, where it crossed as UTF-8 bytes, and the active fork comes back as a `str` or `None`, where it came back as bytes.
+  `eth_state_transition` and `eth_engine_new_payload_on_chain` take the recent blocks as a list of tuples, where they took one RLP list.
+  Each tuple is the fork name, the header in RLP form and the list of the RLP forms of its ommers.
+  In Python, `mainnet_active_fork` and `hoodi_active_fork` raise `ChainError` with code 0 for a block number or a timestamp of 2^64 or more.
+  They raise `ValueError` for a negative one, where both raised `OverflowError`.
+  A `bool` given there raises `ChainError` with code 0, where it was read as 0 or 1.
+  A recent block whose header or ommer does not decode raises `BlockError` from `state_transition` and `EngineError` from `new_payload_on_chain`, with code 0, where it raised `RlpError`.
+  A fork name given as `bytes` to `seal_hash`, `check_proof_of_work` or `message_id` raises the error class of the method with code 0.
 - A Python value of a list or a `dict` with many items no longer overflows the stack when an export reads it as JSON or writes JSON as a Python value ([#1563](https://github.com/ethereum/EthLib/pull/1563)).
   Every export that reads a typed value as JSON, or returns JSON as a typed value, reads and writes the items in a loop.
 - The converter of typed values now passes up to 2^22 values in one call, where it passed 1,000,000, so that the longest `ssz_generic` vectors of consensus-spec-tests cross ([#1563](https://github.com/ethereum/EthLib/pull/1563)).

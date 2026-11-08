@@ -25,12 +25,12 @@ def block_difficulty(
 
 def seal_hash(fork: str, header: bytes) -> bytes:
     """The Keccak-256 hash of a header without its mix digest and nonce."""
-    return _native.pow_seal_hash(fork.encode(), header)
+    return _native.pow_seal_hash(fork, header)
 
 
 def check_proof_of_work(fork: str, header: bytes) -> bool:
     """Check the proof of work of a header in RLP form, at a fork before Paris."""
-    return _native.pow_check(fork.encode(), header)
+    return _native.pow_check(fork, header)
 
 
 def chain_forks(forks: str | Sequence[tuple[str, int]]) -> bytes:

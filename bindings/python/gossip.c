@@ -7,9 +7,7 @@
 
 extern lean_object*
 eth_gossip_message_id(
-  lean_object* fork,
-  lean_object* topic,
-  lean_object* data
+  lean_object* args
 );
 
 extern lean_object*
@@ -38,17 +36,7 @@ py_gossip_message_id(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *fork_obj, *topic_obj, *data_obj;
-  if (!PyArg_ParseTuple(args, "OOO", &fork_obj, &topic_obj, &data_obj)) return NULL;
-  /* Check every argument before building any, so a failure leaks nothing. */
-  if (!PyBytes_Check(fork_obj) || !PyBytes_Check(topic_obj) || !PyBytes_Check(data_obj)) {
-    PyErr_SetString(PyExc_TypeError, "fork, topic and data must be bytes");
-    return NULL;
-  }
-  lean_object* fork = bytes_arg(fork_obj, "fork");
-  lean_object* topic = bytes_arg(topic_obj, "topic");
-  lean_object* data = bytes_arg(data_obj, "data");
-  return except_into_pybytes(eth_gossip_message_id(fork, topic, data), GOSSIP_ERROR);
+  return call_pyvalue_export(eth_gossip_message_id, args, 3, GOSSIP_ERROR);
 }
 
 PyObject*

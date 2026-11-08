@@ -2,7 +2,7 @@
 
 import pytest
 
-from ethlib.chain import mainnet_active_fork
+from ethlib.chain import ChainError, mainnet_active_fork
 from raising import raises
 
 # The first block of each fork by block number, with the fork before it.
@@ -70,10 +70,23 @@ def test_largest_inputs() -> None:
     assert mainnet_active_fork(2**64 - 1, 2**64 - 1) == "bpo2"
 
 
-@pytest.mark.parametrize(
-    "number, timestamp, message",
-    [(-1, 0, "can't convert negative int to unsigned"), (0, 2**64, "int too big to convert")],
-)
-def test_out_of_range(number: int, timestamp: int, message: str) -> None:
-    with raises(OverflowError, message):
+@pytest.mark.parametrize("number, timestamp", [(2**64, 0), (0, 2**64)])
+def test_value_out_of_range(number: int, timestamp: int) -> None:
+    """A block number or a timestamp of 2^64 is not a 64-bit number, so it fails with code 0."""
+    with raises(ChainError, f"expected an int below {2**64}, got {2**64}") as error:
         mainnet_active_fork(number, timestamp)
+    assert error.value.code == 0
+
+
+@pytest.mark.parametrize("number, timestamp", [(-1, 0), (0, -1)])
+def test_negative_value(number: int, timestamp: int) -> None:
+    """A negative block number or timestamp never reaches Lean."""
+    with raises(ValueError, "cannot pass a negative int to Lean"):
+        mainnet_active_fork(number, timestamp)
+
+
+def test_bool_is_not_a_number() -> None:
+    """A bool is not read as a block number, and fails with code 0."""
+    with raises(ChainError, "expected an int") as error:
+        mainnet_active_fork(True, 0)
+    assert error.value.code == 0

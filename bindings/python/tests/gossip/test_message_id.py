@@ -88,3 +88,10 @@ def test_phase0_ignores_topic() -> None:
 def test_unknown_fork() -> None:
     with raises(GossipError, "no fork named nofork"):
         gossip.message_id("nofork", TOPIC, RAW)
+
+
+def test_fork_name_as_bytes() -> None:
+    """A fork name crosses as a `str`, so bytes fail with code 0."""
+    with raises(GossipError, "expected a str") as error:
+        gossip.message_id(b"phase0", TOPIC, RAW)  # ty: ignore[invalid-argument-type]
+    assert error.value.code == 0

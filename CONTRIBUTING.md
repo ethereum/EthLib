@@ -273,7 +273,7 @@ The C exports and the Python package are the public surface for clients.
   So a wrapper never reads the items of a list in place, since another thread may change the list.
   It reads them through `sequence_snapshot`, which copies a list into a tuple, or it passes the list to the generic converter, which copies it too.
 - A Python function passes its arguments to the export and returns its result.
-  It never encodes or decodes bytes by hand: no slices, no integers to or from bytes, no JSON text.
+  It never encodes or decodes bytes by hand: no slices, no integers or text to or from bytes, no JSON text.
   Lean then defines every value that crosses the boundary, and its proofs can cover that value.
 
 `scripts/check_python_boundary.py` finds the usual forms of such conversions in `bindings/python/ethlib`.
