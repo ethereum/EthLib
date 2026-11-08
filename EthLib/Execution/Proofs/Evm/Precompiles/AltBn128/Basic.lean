@@ -148,8 +148,7 @@ theorem ecpairing_invalidInputLength {fork : Fork} {data : ByteArray} {gas : Nat
 /-- Every output of ECPAIRING is the word 0 or 1. -/
 theorem ecpairing_ok {fork : Fork} {data : ByteArray} {gas : Nat} {out : ByteArray}
     (h : ecpairing fork data gas = .ok out) :
-    ∃ result : Bool,
-      out = ⟨(List.replicate 31 (0 : UInt8) ++ [if result then 1 else 0]).toArray⟩ := by
+    ∃ result : Bool, out = ⟨(ecpairingWord result).toArray⟩ := by
   simp only [ecpairing, bind, throw, throwThe, MonadExceptOf.throw] at h
   split at h
   · cases h
@@ -165,8 +164,7 @@ The call data must be a whole number of pairs. -/
 theorem ecpairing_eq_ok_iff (fork : Fork) (data : ByteArray) (gas : Nat) (out : ByteArray) :
     ecpairing fork data gas = .ok out ↔ ecpairingGas fork data.size ≤ gas ∧ data.size % 192 = 0 ∧
       ∃ pairs, (List.range (data.size / 192)).mapM (decodePair data) = .ok pairs ∧
-        out = ⟨(List.replicate 31 (0 : UInt8) ++
-          [if pairingCheck pairs then 1 else 0]).toArray⟩ := by
+        out = ⟨(ecpairingWord (pairingCheck pairs)).toArray⟩ := by
   by_cases hgas : gas < ecpairingGas fork data.size
   · simp [ecpairing_outOfGas fork data hgas, Nat.not_le.mpr hgas]
   by_cases hsize : data.size % 192 ≠ 0

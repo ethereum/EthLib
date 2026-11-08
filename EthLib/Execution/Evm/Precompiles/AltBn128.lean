@@ -124,6 +124,17 @@ def bytesToG2 (raw : List UInt8) : Except AltBn128Error Point2 := do
   let point := Point2.affine x y
   if point.isOnCurve then return point else throw .notOnCurve
 
+/-- The 128 bytes of a point of the twist, with the `i` part of each coordinate first.
+
+The point at infinity is 128 zero bytes.
+
+No precompile returns a point of the twist; this encoding is the inverse of the decoder above. -/
+def g2ToBytes : Point2 → List UInt8
+  | .infinity => List.replicate 128 0
+  | .affine x y =>
+    natToBytes 32 x.c1.val ++ natToBytes 32 x.c0.val ++
+      natToBytes 32 y.c1.val ++ natToBytes 32 y.c0.val
+
 /-- One pair of the call data, decoded and checked to be in the groups of order `q`.
 
 For `G_1`, the encoding and the curve equation, or the encoding of infinity, are enough.
@@ -142,6 +153,10 @@ def decodePair (data : ByteArray) (index : Nat) : Except AltBn128Error (Point ×
     throw .notInSubgroup
   return (p, q)
 
+/-- The 32-byte word of a boolean: 31 zero bytes, then `1` for true and `0` for false. -/
+def ecpairingWord (result : Bool) : List UInt8 :=
+  List.replicate 31 0 ++ [if result then 1 else 0]
+
 /-- ECPAIRING: the word 1 when the product of the pairings of the pairs is 1, and 0 otherwise.
 
 The gas is charged before the length is checked.
@@ -153,6 +168,6 @@ def ecpairing (fork : Fork) (data : ByteArray) (gas : Nat) : Except AltBn128Erro
   if data.size % 192 ≠ 0 then
     throw (.invalidInputLength data.size)
   let pairs ← (List.range (data.size / 192)).mapM (decodePair data)
-  return ⟨(List.replicate 31 (0 : UInt8) ++ [if pairingCheck pairs then 1 else 0]).toArray⟩
+  return ⟨(ecpairingWord (pairingCheck pairs)).toArray⟩
 
 end EthLib.Execution.Evm.Precompiles.AltBn128

@@ -474,7 +474,7 @@ This is the optimal ate pairing of Beuchat et al. (ePrint 2010/354, §2).
 `AltBn128.pairingBilinear` (`Proofs/AltBn128/PairingAte.lean`) proves that the pairing is bilinear on the multiples of the generators: `e(a P1, b P2) = e(P1, P2)^(a b)` for all `a` and `b` in `Fr`.
 `orderOf_pairing_generators` (`Proofs/AltBn128/Nondegenerate.lean`) proves that the pairing of `P1` and `P2` has order `q`, so it is not 1; the kernel evaluates that pairing.
 `pairingCheck_eq_true_iff` (`Proofs/AltBn128/PairingBilinear.lean`) proves that the check passes exactly when the product of the pairings of its pairs is 1.
-The pairing law is a hypothesis, `AltBn128.PairingLaws` (`Proofs/AltBn128/PairingLaws.lean`), in the shape of the BLS one.
+The pairing law is stated as a structure, `AltBn128.PairingLaws` (`Proofs/AltBn128/PairingLaws.lean`), in the shape of the BLS one.
 It states the check of EIP-197: the pairs `(a_i P1, b_i P2)` pass exactly when `sum_i a_i b_i = 0`.
 `PairingLaws.of_bilinear` (`Proofs/AltBn128/PairingBilinear.lean`) derives it from one smaller hypothesis, `PairingBilinear`: `e(a P1, b P2) = e(P1, P2)^(a b)` for all `a` and `b` in `Fr`.
 `AltBn128.pairingLaws` (`Proofs/AltBn128/PairingAte.lean`) proves `AltBn128.PairingLaws` from it, so every theorem that assumes it holds once it is supplied.
@@ -489,7 +489,10 @@ It states the check of EIP-197: the pairs `(a_i P1, b_i P2)` pass exactly when `
 `Point2.nsmul_order_eq_zero_iff` (`Proofs/AltBn128/G2Torsion.lean`) proves that every point `Q` with `q Q = O` on the twist is a multiple of `P2`, as EIP-197 says.
 `Point2.mulBits_order_eq_infinity_iff_exists` restates it for the subgroup check of ECPAIRING, and `Point.exists_eq_mulBits_generator` (`Proofs/AltBn128/Order.lean`) does the same for `P1`.
 `exists_mulBits_generator_of_decodePair` (`Execution/Proofs/Evm/Precompiles/AltBn128/Pairing.lean`) combines them: every pair that ECPAIRING decodes is a pair of multiples of the generators, where the law above holds.
-No theorem yet states the law for the decoded pairs themselves.
+`exists_represents_of_decodePairs` and `exists_represents_of_ecpairing` (`Execution/Proofs/Evm/Precompiles/AltBn128/PairingProduct.lean`) lift this to lists of scalars `a_i` and `b_i` in `ZMod q`, for every successful decoding and every successful call.
+`ecpairing_eq_one_iff` and `ecpairing_eq_zero_iff` apply `AltBn128.pairingLaws`, with no hypothesis on the pairing.
+On a successful call, they prove that ECPAIRING returns the word 1 exactly when `sum_i a_i * b_i = 0`, and the word 0 otherwise.
+`ecpairing_encodePairs` computes the output on the encodings of represented pairs, and `ecpairing_generators`, `ecpairing_generator_neg` and `ecpairing_empty` reach both outputs.
 
 `ecadd_toPoint` and `ecmul_toPoint` (`Execution/Proofs/Evm/Precompiles/AltBn128/Group.lean`) carry this group law to the precompiles.
 A call of ECADD that succeeds returns the sum of its two points, and a call of ECMUL returns its point times its 32-byte scalar.
