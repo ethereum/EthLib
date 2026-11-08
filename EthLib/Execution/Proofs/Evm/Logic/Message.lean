@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Proofs.Evm.Logic.Loop
 public import EthLib.Execution.Proofs.Evm.Call.MessageCall
+public import EthLib.Execution.Proofs.Evm.Call.Parent
 
 /-!
 # Proofs: the frames that a frame reaches through its messages
@@ -227,6 +228,19 @@ theorem meets_process [LawfulGasMeter Meter] (fork : Fork) (bound : Nat) :
   split at h
   · exact (aborts_of_process_eq_error message.gas message rfl).1 _ _ _ _ _ h
   · exact (aborts_of_process_eq_error message.gas message rfl).2 _ _ _ _ _ h
+
+/-- The runner of the messages of a frame of a message keeps the block of the state.
+
+It ends each call or creation that succeeds with the block of its caller.
+
+That holds for every bound on the gas of messages. -/
+theorem keepsParent_processRunner [LawfulGasMeter Meter] (fork : Fork) (bound : Nat) :
+    KeepsParent (processRunner fork (Meter := Meter) bound) := by
+  intro caller message _ ended h
+  unfold processRunner at h
+  split at h
+  · exact parent_processMessage h
+  · exact parent_processCreateMessage h
 
 /-- Under every runner that meets the assumption, each frame of `P` reaches a frame of `Q`.
 
