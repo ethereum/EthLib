@@ -198,7 +198,7 @@ def squeezeBytes (outBytes : Nat) (a : State) : Vector UInt8 outBytes :=
 
 /-- The sponge of FIPS 202 section 4, Algorithm 8, when `outBytes` fits in one rate block.
 
-The rate is below the 1600-bit width, so the capacity is positive as section 5.2 requires. -/
+FIPS 202 section 4 requires a rate below the 1600-bit width, so the capacity is positive. -/
 def sponge {rateBits outBytes : Nat} (hr : 0 < rateBits) (_hb : rateBits < 1600)
     (_hout : 8 * outBytes ≤ rateBits) (msg : ByteArray) : Vector UInt8 outBytes :=
   squeezeBytes outBytes (absorbAll hr msg)
