@@ -58,7 +58,7 @@ The safe and the finalized block of the update come from the fork choice, throug
 
 The call to the execution layer, and the payload that it builds, are not specified here.
 
-[EIP-3675]: https://eips.ethereum.org/EIPS/eip-3675#definitions
+[EIP-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#definitions
 -/
 
 @[expose] public section

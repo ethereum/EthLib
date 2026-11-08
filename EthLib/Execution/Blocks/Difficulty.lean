@@ -107,9 +107,12 @@ def timeFactor (fork : Fork) (timestamp parentTimestamp : Nat) (parentHasOmmers 
 
 The factor is the one of the time since the parent.
 
-From Paris on, [EIP-3675](https://eips.ethereum.org/EIPS/eip-3675#block-structure) sets it to 0.
+From Paris on, [EIP-3675] sets it to 0.
 
-The genesis block has no parent, and its difficulty is part of the chain's configuration. -/
+The genesis block has no parent, and its difficulty is part of the chain's configuration.
+
+[EIP-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#block-structure
+-/
 def blockDifficulty (fork : Fork) (number timestamp parentTimestamp parentDifficulty : Nat)
     (parentHasOmmers : Bool) : Nat :=
   if .paris ≤ fork then 0
