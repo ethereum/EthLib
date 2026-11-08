@@ -16,9 +16,7 @@ So the product is 1, and ECPAIRING returns the word 1, exactly when `sum_i a_i *
 
 Every pair that ECPAIRING decodes holds such multiples of `P1` and `P2`.
 
-The pairing law is proved in `PairingAte.lean`.
-
-No theorem here assumes a hypothesis on the pairing.
+The pairing law is proved in `PairingAte.lean`, so no theorem here assumes it.
 
 Source: [EIP-197][eip197], section Specification.
 
@@ -44,7 +42,7 @@ theorem exists_represents_of_decodePair {data : ByteArray} {index : Nat} {p : Po
   exact ⟨⟨a, by rw [Point.Represents, ZMod.val_cast_of_lt ha]; exact hp⟩,
     ⟨b, by rw [Point2.Represents, ZMod.val_cast_of_lt hb]; exact hQ⟩⟩
 
-/-- A list of pairs with a discrete logarithm for each point has lists of them. -/
+/-- When each point of a list of pairs has a discrete logarithm, lists of them exist. -/
 private theorem exists_lists {pairs : List (Point × Point2)}
     (h : ∀ pair ∈ pairs, (∃ a, pair.1.Represents a) ∧ ∃ b, pair.2.Represents b) :
     ∃ a b : List (ZMod Fr.modulus), ∃ (ha : a.length = pairs.length)
@@ -91,10 +89,6 @@ theorem exists_represents_of_ecpairing {fork : Fork} {data : ByteArray} {gas : N
   exact ⟨pairs, hdec, exists_represents_of_decodePairs hdec⟩
 
 /-! ## The output of ECPAIRING -/
-
-/-- The 32-byte word of a boolean: 31 zero bytes, then `1` for true and `0` for false. -/
-def ecpairingWord (result : Bool) : List UInt8 :=
-  List.replicate 31 0 ++ [if result then 1 else 0]
 
 /-- The words of the two booleans differ. -/
 theorem ecpairingWord_injective : Function.Injective ecpairingWord := by
@@ -152,15 +146,6 @@ theorem ecpairing_eq_zero_iff {fork : Fork} {data : ByteArray} {gas : Nat} {out 
     simp [ecpairingWord, hcheck]
 
 /-! ## The encodings of represented pairs -/
-
-/-- The 128 bytes of a point of the twist, with the `i` part of each coordinate first.
-
-The point at infinity is 128 zero bytes. -/
-def g2ToBytes : Point2 → List UInt8
-  | .infinity => List.replicate 128 0
-  | .affine x y =>
-    natToBytes 32 x.c1.val ++ natToBytes 32 x.c0.val ++
-      natToBytes 32 y.c1.val ++ natToBytes 32 y.c0.val
 
 /-- The 128 bytes of a point of the twist. -/
 theorem length_g2ToBytes : (q : Point2) → (g2ToBytes q).length = 128
@@ -234,7 +219,7 @@ theorem bytesToG2_g2ToBytes {q : Point2} (hq : q.isOnCurve = true) :
         congrArg Fp2.c0 hzero.2, congrArg Fp2.c1 hzero.2⟩ hnz
     · rfl
 
-/-- The 192 bytes of a pair: its `G_1` point, then its `G_2` point. -/
+/-- The 192 bytes of a pair: its point of the curve, then its point of the twist. -/
 def encodePair (pair : Point × Point2) : List UInt8 :=
   g1ToBytes pair.1 ++ g2ToBytes pair.2
 
@@ -252,7 +237,7 @@ private theorem length_encodePairs (pairs : List (Point × Point2)) :
     rw [List.map_cons, List.flatten_cons, List.length_append, ih, length_encodePair,
       List.length_cons, Nat.mul_succ, Nat.add_comm]
 
-/-- Slicing `n` bytes at `start` from a list of bytes takes `n` bytes after dropping `start`. -/
+/-- Slicing `size` bytes at `start` takes `size` bytes after dropping `start`. -/
 private theorem bufferRead_of_le {bytes : List UInt8} {start size : Nat}
     (h : start + size ≤ bytes.length) :
     bufferRead ⟨bytes.toArray⟩ start size = (bytes.drop start).take size := by
@@ -328,7 +313,9 @@ private theorem decodePair_encodePair {pair : Point × Point2}
     List.take_left' hlen1, List.drop_left' hlen1, bytesToG1_g1ToBytes hp, bytesToG2_g2ToBytes hq]
   simp [hord, bind, Except.bind, pure, Except.pure]
 
-/-- With enough gas, ECPAIRING on encoded pairs returns the word of `sum_i a_i * b_i = 0`.
+/-- With enough gas, ECPAIRING on encoded pairs returns the word 1 when `sum_i a_i * b_i = 0`.
+
+Otherwise it returns the word 0.
 
 Here `P_i = a_i P1` and `Q_i = b_i P2`.
 
@@ -360,73 +347,14 @@ theorem ecpairing_encodePairs {pairs : List (Point × Point2)}
     have hon2 : (pairs[i]).2.isOnCurve = true := by
       rw [Point2.Represents] at hQ
       exact hQ ▸ Point2.isOnCurve_mulBits _ _ Point2.isOnCurve_generator
-    have hord : Point2.mulBits 256 Fr.modulus (pairs[i]).2 = .infinity := by
-      rw [Point2.Represents] at hQ
-      have hongen := Point2.isOnCurve_generator
-      have honmul := Point2.isOnCurve_mulBits 256 (b[i]'(hb ▸ hi')).val hongen
-      have hgen_ord : Fr.modulus • Point2.toPoint Point2.generator = 0 := by
-        rw [← Point2.addOrderOf_generator, addOrderOf_nsmul_eq_zero]
-      rw [hQ, ← Point2.toPoint_eq_zero (Point2.isOnCurve_mulBits _ _ honmul),
-        Point2.toPoint_mulBits 256 _ honmul (by decide),
-        Point2.toPoint_mulBits 256 _ hongen (lt_trans (ZMod.val_lt _) (by decide)),
-        smul_smul, Nat.mul_comm, ← smul_smul, hgen_ord, nsmul_zero]
+    have hord : Point2.mulBits 256 Fr.modulus (pairs[i]).2 = .infinity :=
+      (Point2.mulBits_order_eq_infinity_iff_exists hon2).mpr ⟨_, ZMod.val_lt _, hQ⟩
     exact decodePair_encodePair hon1 hon2 hord hread
   have hcheck : pairingCheck pairs = decide ((List.zipWith (· * ·) a b).sum = 0) := by
     rw [Bool.eq_iff_iff, decide_eq_true_iff]
     exact pairingLaws.pairingCheck_iff pairs a b ha hb hrep
   refine (ecpairing_eq_ok_iff fork data gas _).mpr ⟨hsize ▸ hgas, hwhole, pairs, hk ▸ hdec, ?_⟩
   rw [hcheck, ecpairingWord]
-
-/-! ## Negating a point of the twist -/
-
-end EthLib.Execution.Evm.Precompiles.AltBn128
-
-namespace EthLib.Cryptography.AltBn128
-
-/-- The negative of a point of the twist: `-(x, y) = (x, -y)`. -/
-def Point2.neg : Point2 → Point2
-  | .infinity => .infinity
-  | .affine x y => .affine x (-y)
-
-/-- The negative of a point on the twist is on the twist. -/
-theorem Point2.isOnCurve_neg {p : Point2} (h : p.isOnCurve = true) : p.neg.isOnCurve = true := by
-  cases p with
-  | infinity => rfl
-  | affine x y =>
-    show (Point2.affine x (-y)).isOnCurve = true
-    rw [Point2.isOnCurve_affine] at h ⊢
-    rwa [neg_mul_neg]
-
-/-- Negation on the twist negates the group element. -/
-theorem Point2.toPoint_neg {p : Point2} (h : p.isOnCurve = true) :
-    Point2.toPoint p.neg = -Point2.toPoint p := by
-  cases p with
-  | infinity => simp [Point2.neg]
-  | affine x y =>
-    show Point2.toPoint (Point2.affine x (-y)) = _
-    rw [Point2.toPoint_affine h, Point2.toPoint_affine (Point2.isOnCurve_neg h),
-      WeierstrassCurve.Affine.Point.neg_some]
-    simp [EthLib.Cryptography.ShortWeierstrass.curve]
-
-/-- `P2` negated is `(-1) P2`. -/
-theorem Point2.represents_neg_generator : Point2.generator.neg.Represents (-1) := by
-  have h := Point2.isOnCurve_generator
-  have hval : (-1 : ZMod Fr.modulus).val = Fr.modulus - 1 := by decide
-  rw [Point2.Represents, hval,
-    ← Point2.toPoint_inj (Point2.isOnCurve_neg h) (Point2.isOnCurve_mulBits _ _ h),
-    Point2.toPoint_mulBits 256 _ h (by decide), Point2.toPoint_neg h]
-  have hord : Fr.modulus • Point2.toPoint Point2.generator = 0 := by
-    rw [← Point2.addOrderOf_generator, addOrderOf_nsmul_eq_zero]
-  have hmod : Fr.modulus = (Fr.modulus - 1) + 1 := by decide
-  rw [hmod, succ_nsmul] at hord
-  exact neg_eq_of_add_eq_zero_left hord
-
-end EthLib.Cryptography.AltBn128
-
-namespace EthLib.Execution.Evm.Precompiles.AltBn128
-
-open EthLib.Base (Fork)
-open EthLib.Cryptography.AltBn128
 
 /-! ## Both outputs are reached -/
 
@@ -446,22 +374,22 @@ theorem ecpairing_generators {fork : Fork} {gas : Nat}
     decide_eq_false hsum] at h
   exact h
 
-/-- With enough gas, ECPAIRING on `(P1, P2)` and `(P1, -P2)` returns the word 1.
+/-- With enough gas, ECPAIRING on `(P1, P2)` and `(-P1, P2)` returns the word 1.
 
 The product is `e(P1, P2) * e(P1, P2)^(-1) = 1`. -/
 theorem ecpairing_generator_neg {fork : Fork} {gas : Nat}
     (hgas : ecpairingGas fork 384 ≤ gas) :
     ecpairing fork ⟨(encodePair (Point.generator, Point2.generator) ++
-        encodePair (Point.generator, Point2.generator.neg)).toArray⟩ gas =
+        encodePair (Point.generator.neg, Point2.generator)).toArray⟩ gas =
       .ok ⟨(ecpairingWord true).toArray⟩ := by
   have h := ecpairing_encodePairs
     (pairs := [(Point.generator, Point2.generator),
-      (Point.generator, Point2.generator.neg)])
-    (a := [1, 1]) (b := [1, -1]) rfl rfl (fun i hi => by
+      (Point.generator.neg, Point2.generator)])
+    (a := [1, -1]) (b := [1, 1]) rfl rfl (fun i hi => by
       match i, hi with
       | 0, _ => exact ⟨Point.represents_generator, Point2.represents_generator⟩
-      | 1, _ => exact ⟨Point.represents_generator, Point2.represents_neg_generator⟩) hgas
-  have hsum : (List.zipWith (· * ·) [(1 : ZMod Fr.modulus), 1] [1, -1]).sum = 0 := by simp
+      | 1, _ => exact ⟨Point.represents_generator.neg, Point2.represents_generator⟩) hgas
+  have hsum : (List.zipWith (· * ·) [(1 : ZMod Fr.modulus), -1] [1, 1]).sum = 0 := by simp
   simp only [List.map_cons, List.map_nil, List.flatten_cons, List.flatten_nil, List.append_nil,
     decide_eq_true hsum] at h
   exact h
