@@ -336,6 +336,30 @@ def test_sidecars_need_one_row_per_commitment():
         consensus.get_data_column_sidecars_from_block("minimal", "fusaka", block, rows)
 
 
+@pytest.mark.parametrize("cells, proofs", [(127, 128), (128, 129)])
+def test_rows_need_every_cell_and_proof(cells: int, proofs: int):
+    case = sorted(PROOFS.glob("minimal/fulu/merkle_proof/*/BeaconBlockBody/*"))[0]
+    body = snappy.decompress((case / "object.ssz_snappy").read_bytes())
+    block = (100).to_bytes(4, "little") + bytes(96) + bytes(80) + (84).to_bytes(4, "little") + body
+    rows = [([bytes(CELL)] * cells, [bytes(PROOF)] * proofs)]
+    message = f"a row holds {cells} cells and {proofs} proofs, not 128 of each"
+    with raises(SszError, message) as caught:
+        consensus.get_data_column_sidecars_from_block("minimal", "fusaka", block, rows)
+    assert caught.value.code == 0
+
+
+def test_matrix_entry_of_wrong_length():
+    with raises(KzgError, "expected 2112 bytes, got 1") as caught:
+        consensus.recover_matrix([b"\x00"], 1)
+    assert caught.value.code == 0
+
+
+def test_matrix_blob_of_wrong_length():
+    with raises(KzgError, "expected 131072 bytes, got 1") as caught:
+        consensus.compute_matrix([b"\x00"])
+    assert caught.value.code == 0
+
+
 def _kzg_case(i: int) -> tuple:
     name = f"compute_cells_and_kzg_proofs_case_valid_{i}"
     data = _yaml(KZG / "compute_cells_and_kzg_proofs" / name / "data.yaml")

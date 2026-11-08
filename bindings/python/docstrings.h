@@ -297,10 +297,10 @@
   "The parameters of a preset at a fork, as a `dict`."
 
 #define DOC_consensus_get_custody_groups \
-  "The custody groups of a node ID of 32 bytes, most significant first."
+  "The custody groups of a node ID, in increasing order, as a list."
 
 #define DOC_consensus_compute_columns_for_custody_group \
-  "The columns of a custody group."
+  "The columns of a custody group, as a list."
 
 #define DOC_consensus_ssz_static \
   "The root of the value that the bytes encode, and the bytes of that value, as a pair."
@@ -516,19 +516,19 @@
   "At Fulu: whether the cells of a partial sidecar match their commitments by their proofs."
 
 #define DOC_consensus_compute_matrix \
-  "The matrix of the blobs, given one after another, as its entries one after another."
+  "The matrix of the blobs, as the SSZ bytes of each of its entries, in a list."
 
 #define DOC_consensus_recover_matrix \
-  "The full matrix of `count` rows, from some entries given one after another."
+  "The full matrix of a count of rows, from the SSZ bytes of some of its entries, in a list."
 
 #define DOC_consensus_get_data_column_sidecars_from_block \
-  "The column sidecars of a signed block, from its bytes and the rows of its blobs."
+  "The column sidecars of a signed block, as the SSZ bytes of each, in a list."
 
 #define DOC_consensus_get_data_column_sidecars_from_column_sidecar \
-  "All the column sidecars of a block, from the bytes of one of them and the rows of its blobs."
+  "All the column sidecars of a block, as the SSZ bytes of each, in a list."
 
 #define DOC_consensus_compute_shuffled_permutation \
-  "The shuffled position of every index below the count, which must be at most `2^40`."
+  "The shuffled position of every index below a count of at most `2^40`, as a list."
 
 #define DOC_consensus_compute_shuffled_index \
   "The shuffled position of one index, which must be below the count."

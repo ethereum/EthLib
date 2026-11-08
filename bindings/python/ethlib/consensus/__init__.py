@@ -20,17 +20,6 @@ from ethlib.errors import (
 )
 
 
-def _value(value: Any) -> Any:
-    # The export writes every integer as a string of decimal digits.
-    if isinstance(value, str) and not value.startswith("0x") and value.isdigit():
-        return int(value)
-    if isinstance(value, list):
-        return [_value(item) for item in value]
-    if isinstance(value, dict):
-        return {key: _value(item) for key, item in value.items()}
-    return value
-
-
 def preset(name: str) -> dict[str, int]:
     """The values of a preset, with the values that it derives from them."""
     return _native.consensus_preset(name)
@@ -47,22 +36,14 @@ def parameters(name: str, fork: str) -> dict[str, int]:
     return _native.consensus_parameters(name, fork)
 
 
-def get_custody_groups(node_id: int, custody_group_count: int, name: str = "mainnet") -> list:
+def get_custody_groups(node_id: int, custody_group_count: int, name: str = "mainnet") -> list[int]:
     """The sorted custody groups of a node, or ConsensusError when they cannot be selected."""
-    if not 0 <= node_id < 2**256 or not 0 <= custody_group_count < 2**64:
-        raise OverflowError("node_id or custody_group_count is out of range")
-    groups = _native.consensus_get_custody_groups(
-        name, node_id.to_bytes(32, "big"), custody_group_count
-    )
-    return _value(json.loads(groups))
+    return _native.consensus_get_custody_groups(name, node_id, custody_group_count)
 
 
-def compute_columns_for_custody_group(custody_group: int, name: str = "mainnet") -> list:
+def compute_columns_for_custody_group(custody_group: int, name: str = "mainnet") -> list[int]:
     """The columns of a custody group, or ConsensusError for a group out of range."""
-    if not 0 <= custody_group < 2**64:
-        raise OverflowError("custody_group is out of range")
-    columns = _native.consensus_compute_columns_for_custody_group(name, custody_group)
-    return _value(json.loads(columns))
+    return _native.consensus_compute_columns_for_custody_group(name, custody_group)
 
 
 def ssz_static(name: str, fork: str, type_name: str, data: bytes) -> tuple[bytes, bytes]:
@@ -97,9 +78,9 @@ def pq_keys_is_valid_possession_proof(
     )
 
 
-def compute_shuffled_permutation(count: int, seed: bytes, name: str = "mainnet") -> list:
+def compute_shuffled_permutation(count: int, seed: bytes, name: str = "mainnet") -> list[int]:
     """The shuffled position of every index below the count."""
-    return _value(json.loads(_native.consensus_compute_shuffled_permutation(name, count, seed)))
+    return _native.consensus_compute_shuffled_permutation(name, count, seed)
 
 
 def compute_shuffled_index(index: int, count: int, seed: bytes, name: str = "mainnet") -> int:
@@ -185,25 +166,15 @@ def verify_blob_sidecar_inclusion_proof(name: str, fork: str, data: bytes) -> bo
     return _native.consensus_verify_blob_sidecar_inclusion_proof(name, fork, data)
 
 
-# The bytes of one matrix entry: a cell, a proof, a column index and a row index.
-MATRIX_ENTRY_BYTES = 2048 + 48 + 8 + 8
-
-
-def _list_items(data: bytes) -> list:
-    # Split the SSZ encoding of a list of variable-size items at its offsets.
-    if not data:
-        return []
-    first = int.from_bytes(data[:4], "little")
-    offsets = [int.from_bytes(data[i : i + 4], "little") for i in range(0, first, 4)]
-    return [data[a:b] for a, b in zip(offsets, offsets[1:] + [len(data)], strict=True)]
-
-
 def verify_data_column_sidecar(
-    name: str, fork: str, data: bytes, block: bytes = b"", config: dict | None = None
+    name: str,
+    fork: str,
+    data: bytes,
+    block: bytes = b"",
+    config: dict[str, Any] | None = None,
 ) -> bool:
     """Whether a data column sidecar has a valid shape; from Gloas, against its signed block."""
-    replacements = json.dumps(config).encode() if config else b""
-    return _native.consensus_verify_data_column_sidecar(name, fork, data, block, replacements)
+    return _native.consensus_verify_data_column_sidecar(name, fork, data, block, config)
 
 
 def verify_data_column_sidecar_inclusion_proof(name: str, fork: str, data: bytes) -> bool:
@@ -371,34 +342,39 @@ def compute_fork_digest(
     return _native.consensus_compute_fork_digest(name, replacements, genesis_validators_root, epoch)
 
 
-def compute_matrix(blobs: list) -> list:
+def compute_matrix(blobs: Sequence[bytes]) -> list[bytes]:
     """The entries of the matrix of the blobs, each in its SSZ encoding."""
-    out = _native.consensus_compute_matrix(b"".join(blobs))
-    return [out[i : i + MATRIX_ENTRY_BYTES] for i in range(0, len(out), MATRIX_ENTRY_BYTES)]
+    return _native.consensus_compute_matrix(list(blobs))
 
 
-def recover_matrix(entries: list, blob_count: int) -> list:
+def recover_matrix(entries: Sequence[bytes], blob_count: int) -> list[bytes]:
     """The entries of the full matrix of `blob_count` rows, recovered from some of its entries."""
-    out = _native.consensus_recover_matrix(b"".join(entries), blob_count)
-    return [out[i : i + MATRIX_ENTRY_BYTES] for i in range(0, len(out), MATRIX_ENTRY_BYTES)]
+    return _native.consensus_recover_matrix(list(entries), blob_count)
 
 
-def get_data_column_sidecars_from_block(name: str, fork: str, block: bytes, rows: list) -> list:
+# The cells of an extended blob and their proofs.
+CellsAndProofs: TypeAlias = tuple[Sequence[bytes], Sequence[bytes]]
+
+
+def get_data_column_sidecars_from_block(
+    name: str, fork: str, block: bytes, rows: Sequence[CellsAndProofs]
+) -> list[bytes]:
     """The data column sidecars of a signed block, from the cells and proofs of each blob."""
-    joined = b"".join(b"".join(cells) + b"".join(proofs) for cells, proofs in rows)
-    return _list_items(
-        _native.consensus_get_data_column_sidecars_from_block(name, fork, block, joined)
-    )
+    return _native.consensus_get_data_column_sidecars_from_block(name, fork, block, _rows(rows))
 
 
 def get_data_column_sidecars_from_column_sidecar(
-    name: str, fork: str, sidecar: bytes, rows: list
-) -> list:
+    name: str, fork: str, sidecar: bytes, rows: Sequence[CellsAndProofs]
+) -> list[bytes]:
     """All the data column sidecars of a block, from one of them and the cells of each blob."""
-    joined = b"".join(b"".join(cells) + b"".join(proofs) for cells, proofs in rows)
-    return _list_items(
-        _native.consensus_get_data_column_sidecars_from_column_sidecar(name, fork, sidecar, joined)
+    return _native.consensus_get_data_column_sidecars_from_column_sidecar(
+        name, fork, sidecar, _rows(rows)
     )
+
+
+def _rows(rows: Sequence[CellsAndProofs]) -> list[tuple[list[bytes], list[bytes]]]:
+    # The converter reads lists and tuples, so any other sequence becomes a list.
+    return [(list(cells), list(proofs)) for cells, proofs in rows]
 
 
 def process_operation(
@@ -1046,12 +1022,15 @@ def get_execution_payload_envelope(
 
 
 def get_validators_custody_requirement(
-    name: str, fork: str, state: bytes, validator_indices: list, config: dict | None = None
+    name: str,
+    fork: str,
+    state: bytes,
+    validator_indices: Sequence[int],
+    config: dict[str, Any] | None = None,
 ) -> int:
     """The number of custody groups of a node with these validators."""
-    indices = [struct.pack("<Q", index) for index in validator_indices]
     return _native.consensus_get_validators_custody_requirement(
-        name, fork, state, _replacements(config), indices
+        name, fork, state, config, list(validator_indices)
     )
 
 
@@ -1096,6 +1075,7 @@ __all__ = [
     "verify_partial_data_column_header_inclusion_proof",
     "verify_partial_data_column_sidecar_kzg_proofs",
     "compute_matrix",
+    "CellsAndProofs",
     "recover_matrix",
     "get_data_column_sidecars_from_block",
     "get_data_column_sidecars_from_column_sidecar",

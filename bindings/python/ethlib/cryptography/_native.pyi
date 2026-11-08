@@ -395,12 +395,12 @@ def consensus_parameters(name: str, fork: str) -> dict[str, int]:
     """The parameters of a preset at a fork, as a `dict`."""
     ...
 
-def consensus_get_custody_groups(name: str, node_id: bytes, custody_group_count: int) -> bytes:
-    """The custody groups of a node ID of 32 bytes, most significant first."""
+def consensus_get_custody_groups(name: str, node_id: int, custody_group_count: int) -> list[int]:
+    """The custody groups of a node ID, in increasing order, as a list."""
     ...
 
-def consensus_compute_columns_for_custody_group(name: str, custody_group: int) -> bytes:
-    """The columns of a custody group."""
+def consensus_compute_columns_for_custody_group(name: str, custody_group: int) -> list[int]:
+    """The columns of a custody group, as a list."""
     ...
 
 def consensus_ssz_static(name: str, fork: str, type: str, data: bytes) -> tuple[bytes, bytes]:
@@ -607,7 +607,7 @@ def consensus_get_execution_payload_envelope(name: str, fork: str, block: bytes,
     """From Gloas: the envelope that reveals a payload after the block of its bid, as SSZ bytes."""
     ...
 
-def consensus_get_validators_custody_requirement(name: str, fork: str, state: bytes, config: bytes, validator_indices: list[bytes]) -> int:
+def consensus_get_validators_custody_requirement(name: str, fork: str, state: bytes, config: dict[str, Any] | None, validator_indices: list[int]) -> int:
     """From Fulu: the number of custody groups of a node, from the indices of its validators."""
     ...
 
@@ -667,7 +667,7 @@ def pq_keys_is_valid_possession_proof(name: str, genesis_validators_root: bytes,
     """Whether a proof of possession of a leanXMSS key for a BLS key is valid, with Keccak-256."""
     ...
 
-def consensus_verify_data_column_sidecar(name: str, fork: str, data: bytes, block: bytes, config: bytes) -> bool:
+def consensus_verify_data_column_sidecar(name: str, fork: str, data: bytes, block: bytes, config: dict[str, Any] | None) -> bool:
     """Whether a sidecar, given as bytes, has a valid shape."""
     ...
 
@@ -687,24 +687,24 @@ def consensus_verify_partial_data_column_sidecar_kzg_proofs(name: str, fork: str
     """At Fulu: whether the cells of a partial sidecar match their commitments by their proofs."""
     ...
 
-def consensus_compute_matrix(blobs: bytes) -> bytes:
-    """The matrix of the blobs, given one after another, as its entries one after another."""
+def consensus_compute_matrix(blobs: list[bytes]) -> list[bytes]:
+    """The matrix of the blobs, as the SSZ bytes of each of its entries, in a list."""
     ...
 
-def consensus_recover_matrix(entries: bytes, blob_count: int) -> bytes:
-    """The full matrix of `count` rows, from some entries given one after another."""
+def consensus_recover_matrix(entries: list[bytes], blob_count: int) -> list[bytes]:
+    """The full matrix of a count of rows, from the SSZ bytes of some of its entries, in a list."""
     ...
 
-def consensus_get_data_column_sidecars_from_block(name: str, fork: str, block: bytes, rows: bytes) -> bytes:
-    """The column sidecars of a signed block, from its bytes and the rows of its blobs."""
+def consensus_get_data_column_sidecars_from_block(name: str, fork: str, block: bytes, rows: list[tuple[list[bytes], list[bytes]]]) -> list[bytes]:
+    """The column sidecars of a signed block, as the SSZ bytes of each, in a list."""
     ...
 
-def consensus_get_data_column_sidecars_from_column_sidecar(name: str, fork: str, sidecar: bytes, rows: bytes) -> bytes:
-    """All the column sidecars of a block, from the bytes of one of them and the rows of its blobs."""
+def consensus_get_data_column_sidecars_from_column_sidecar(name: str, fork: str, sidecar: bytes, rows: list[tuple[list[bytes], list[bytes]]]) -> list[bytes]:
+    """All the column sidecars of a block, as the SSZ bytes of each, in a list."""
     ...
 
-def consensus_compute_shuffled_permutation(name: str, count: int, seed: bytes) -> bytes:
-    """The shuffled position of every index below the count, which must be at most `2^40`."""
+def consensus_compute_shuffled_permutation(name: str, count: int, seed: bytes) -> list[int]:
+    """The shuffled position of every index below a count of at most `2^40`, as a list."""
     ...
 
 def consensus_compute_shuffled_index(name: str, index: int, count: int, seed: bytes) -> int:

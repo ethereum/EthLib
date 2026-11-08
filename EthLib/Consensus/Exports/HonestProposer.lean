@@ -20,7 +20,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz Cryptography.Bls
-open EthLib.Exports (Result)
+open EthLib.Exports (Result PyValue pyExport)
 
 /-- The result of a step of a proposer, with the code of its error. -/
 def runProposer {α : Type} (result : Except ProposerError α) : Result α :=
@@ -110,17 +110,25 @@ def getExecutionRequestsExport (name fork : ByteArray) (list : Array ByteArray) 
   let requests ← runProposer (getExecutionRequests (preset := preset) (fork := fork) list.toList)
   (SszType.serialize requests).mapError fun e => (0, s!"requests rejected: {reprStr e}")
 
-/-- From Fulu: the number of custody groups of a node, from the indices of its validators.
-
-Each index is 8 bytes, little-endian. -/
-@[export eth_consensus_get_validators_custody_requirement]
-def getValidatorsCustodyRequirementExport (name fork state replacements : ByteArray)
-    (indices : Array ByteArray) : Result UInt64 := do
-  let (preset, fork) ← transitionPresetAndFork name fork
-  let config ← configWith name replacements
+/-- From Fulu: the number of custody groups of a node, from the indices of its validators. -/
+def getValidatorsCustodyRequirementOf
+    (args : String × String × ByteArray × Option PyValue × List UInt64) :
+    Result UInt64 := do
+  let (name, fork, state, replacements, indices) := args
+  let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
+  let config ← configWithValue name replacements
   unless .fusaka ≤ fork do throw (0, s!"no validator custody at {fork.name}")
   let state ← decodeInput (BeaconState preset fork) state
-  let indices ← indices.toList.mapM (decodeInput UInt64)
   runProposer (getValidatorsCustodyRequirement config state indices)
+
+/-- From Fulu: the number of custody groups of a node, from the indices of its validators.
+
+The arguments are the name of the preset and the configuration, the fork and the state.
+
+Then come replacements of values of the configuration, and the list of the indices. -/
+@[export eth_consensus_get_validators_custody_requirement]
+def getValidatorsCustodyRequirementExport (args : PyValue) :
+    Result PyValue :=
+  pyExport getValidatorsCustodyRequirementOf args
 
 end EthLib.Consensus.Exports

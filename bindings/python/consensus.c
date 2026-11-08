@@ -47,15 +47,12 @@ eth_consensus_parameters(
 
 extern lean_object*
 eth_consensus_get_custody_groups(
-  lean_object* name,
-  lean_object* node_id,
-  uint64_t count
+  lean_object* args
 );
 
 extern lean_object*
 eth_consensus_compute_columns_for_custody_group(
-  lean_object* name,
-  uint64_t group
+  lean_object* args
 );
 
 extern lean_object*
@@ -87,17 +84,12 @@ eth_pq_keys_is_valid_possession_proof(
 
 extern lean_object*
 eth_consensus_compute_shuffled_permutation(
-  lean_object* name,
-  uint64_t count,
-  lean_object* seed
+  lean_object* args
 );
 
 extern lean_object*
 eth_consensus_compute_shuffled_index(
-  lean_object* name,
-  uint64_t index,
-  uint64_t count,
-  lean_object* seed
+  lean_object* args
 );
 
 extern lean_object*
@@ -416,8 +408,8 @@ eth_consensus_get_execution_requests(
 
 extern lean_object*
 eth_consensus_get_validators_custody_requirement(
-  lean_object* name, lean_object* fork, lean_object* state, lean_object* config,
-  lean_object* indices);
+  lean_object* args
+);
 
 extern lean_object*
 eth_consensus_state_transition_across(
@@ -467,9 +459,7 @@ eth_consensus_verify_blob_sidecar_inclusion_proof(
   lean_object* data
 );
 
-extern lean_object* eth_consensus_verify_data_column_sidecar(
-  lean_object* name, lean_object* fork, lean_object* data, lean_object* block,
-  lean_object* config);
+extern lean_object* eth_consensus_verify_data_column_sidecar(lean_object* args);
 extern lean_object* eth_consensus_verify_data_column_sidecar_inclusion_proof(
   lean_object* name, lean_object* fork, lean_object* data);
 extern lean_object* eth_consensus_verify_data_column_sidecar_kzg_proofs(
@@ -479,12 +469,10 @@ extern lean_object* eth_consensus_verify_partial_data_column_header_inclusion_pr
 extern lean_object* eth_consensus_verify_partial_data_column_sidecar_kzg_proofs(
   lean_object* name, lean_object* fork, lean_object* data, lean_object* commitments,
   uint64_t column_index);
-extern lean_object* eth_consensus_compute_matrix(lean_object* blobs);
-extern lean_object* eth_consensus_recover_matrix(lean_object* entries, uint64_t blob_count);
-extern lean_object* eth_consensus_get_data_column_sidecars_from_block(
-  lean_object* name, lean_object* fork, lean_object* block, lean_object* rows);
-extern lean_object* eth_consensus_get_data_column_sidecars_from_column_sidecar(
-  lean_object* name, lean_object* fork, lean_object* sidecar, lean_object* rows);
+extern lean_object* eth_consensus_compute_matrix(lean_object* args);
+extern lean_object* eth_consensus_recover_matrix(lean_object* args);
+extern lean_object* eth_consensus_get_data_column_sidecars_from_block(lean_object* args);
+extern lean_object* eth_consensus_get_data_column_sidecars_from_column_sidecar(lean_object* args);
 extern lean_object* eth_consensus_light_client_sync(
   lean_object* name, lean_object* fork, lean_object* bootstrap_fork, lean_object* config,
   lean_object* trusted, lean_object* genesis_validators_root, lean_object* bootstrap,
@@ -561,18 +549,7 @@ py_consensus_get_custody_groups(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *count_obj;
-  const uint8_t* node_id;
-  Py_ssize_t node_id_len;
-  if (!PyArg_ParseTuple(args, "Oy#O", &name_obj, &node_id, &node_id_len, &count_obj)) return NULL;
-  /* A count outside [0, 2^64) raises OverflowError. */
-  unsigned long long count = PyLong_AsUnsignedLongLong(count_obj);
-  if (PyErr_Occurred()) return NULL;
-  lean_object* name = str_arg(name_obj, "name");
-  if (!name) return NULL;
-  lean_object* id = mk_bytearray(node_id, node_id_len);
-  return except_into_pybytes(
-    eth_consensus_get_custody_groups(name, id, (uint64_t) count), CONSENSUS_ERROR);
+  return call_pyvalue_export(eth_consensus_get_custody_groups, args, 3, CONSENSUS_ERROR);
 }
 
 PyObject*
@@ -580,15 +557,8 @@ py_consensus_compute_columns_for_custody_group(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *group_obj;
-  if (!PyArg_ParseTuple(args, "OO", &name_obj, &group_obj)) return NULL;
-  /* A group outside [0, 2^64) raises OverflowError. */
-  unsigned long long group = PyLong_AsUnsignedLongLong(group_obj);
-  if (PyErr_Occurred()) return NULL;
-  lean_object* name = str_arg(name_obj, "name");
-  if (!name) return NULL;
-  return except_into_pybytes(
-    eth_consensus_compute_columns_for_custody_group(name, (uint64_t) group), CONSENSUS_ERROR);
+  return call_pyvalue_export(
+    eth_consensus_compute_columns_for_custody_group, args, 2, CONSENSUS_ERROR);
 }
 
 PyObject*
@@ -649,17 +619,7 @@ py_consensus_compute_shuffled_permutation(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *count_obj;
-  const uint8_t* seed;
-  Py_ssize_t seed_len;
-  if (!PyArg_ParseTuple(args, "OOy#", &name_obj, &count_obj, &seed, &seed_len)) return NULL;
-  uint64_t count;
-  if (parse_uint64(count_obj, "count", &count)) return NULL;
-  lean_object* name = str_arg(name_obj, "name");
-  if (!name) return NULL;
-  return except_into_pybytes(
-    eth_consensus_compute_shuffled_permutation(name, count, mk_bytearray(seed, seed_len)),
-    CONSENSUS_ERROR);
+  return call_pyvalue_export(eth_consensus_compute_shuffled_permutation, args, 3, CONSENSUS_ERROR);
 }
 
 PyObject*
@@ -667,20 +627,7 @@ py_consensus_compute_shuffled_index(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *index_obj, *count_obj;
-  const uint8_t* seed;
-  Py_ssize_t seed_len;
-  if (!PyArg_ParseTuple(args, "OOOy#", &name_obj, &index_obj, &count_obj, &seed, &seed_len)) {
-    return NULL;
-  }
-  uint64_t index, count;
-  if (parse_uint64(index_obj, "index", &index)) return NULL;
-  if (parse_uint64(count_obj, "count", &count)) return NULL;
-  lean_object* name = str_arg(name_obj, "name");
-  if (!name) return NULL;
-  return except_into_pyint(
-    eth_consensus_compute_shuffled_index(name, index, count, mk_bytearray(seed, seed_len)),
-    CONSENSUS_ERROR);
+  return call_pyvalue_export(eth_consensus_compute_shuffled_index, args, 4, CONSENSUS_ERROR);
 }
 
 PyObject*
@@ -875,10 +822,7 @@ py_consensus_verify_data_column_sidecar(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object *name, *fork, *data[3];
-  if (!name_fork_bytes_args(args, 3, &name, &fork, data)) return NULL;
-  return except_into_pybool(
-    eth_consensus_verify_data_column_sidecar(name, fork, data[0], data[1], data[2]), SSZ_ERROR);
+  return call_pyvalue_export(eth_consensus_verify_data_column_sidecar, args, 5, SSZ_ERROR);
 }
 
 PyObject*
@@ -944,13 +888,7 @@ py_consensus_compute_matrix(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject* blobs_obj;
-  if (!PyArg_ParseTuple(args, "O", &blobs_obj)) return NULL;
-  if (!PyBytes_Check(blobs_obj)) {
-    PyErr_SetString(PyExc_TypeError, "blobs must be bytes");
-    return NULL;
-  }
-  return except_into_pybytes(eth_consensus_compute_matrix(bytes_arg(blobs_obj)), KZG_ERROR);
+  return call_pyvalue_export(eth_consensus_compute_matrix, args, 1, KZG_ERROR);
 }
 
 PyObject*
@@ -958,17 +896,7 @@ py_consensus_recover_matrix(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *entries_obj, *count_obj;
-  if (!PyArg_ParseTuple(args, "OO", &entries_obj, &count_obj)) return NULL;
-  if (!PyBytes_Check(entries_obj)) {
-    PyErr_SetString(PyExc_TypeError, "entries must be bytes");
-    return NULL;
-  }
-  /* A count outside [0, 2^64) raises OverflowError. */
-  unsigned long long count = PyLong_AsUnsignedLongLong(count_obj);
-  if (PyErr_Occurred()) return NULL;
-  return except_into_pybytes(
-    eth_consensus_recover_matrix(bytes_arg(entries_obj), (uint64_t) count), KZG_ERROR);
+  return call_pyvalue_export(eth_consensus_recover_matrix, args, 2, KZG_ERROR);
 }
 
 PyObject*
@@ -976,10 +904,7 @@ py_consensus_get_data_column_sidecars_from_block(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object *name, *fork, *data[2];
-  if (!name_fork_bytes_args(args, 2, &name, &fork, data)) return NULL;
-  return except_into_pybytes(
-    eth_consensus_get_data_column_sidecars_from_block(name, fork, data[0], data[1]), SSZ_ERROR);
+  return call_pyvalue_export(eth_consensus_get_data_column_sidecars_from_block, args, 4, SSZ_ERROR);
 }
 
 PyObject*
@@ -987,11 +912,8 @@ py_consensus_get_data_column_sidecars_from_column_sidecar(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object *name, *fork, *data[2];
-  if (!name_fork_bytes_args(args, 2, &name, &fork, data)) return NULL;
-  return except_into_pybytes(
-    eth_consensus_get_data_column_sidecars_from_column_sidecar(name, fork, data[0], data[1]),
-    SSZ_ERROR);
+  return call_pyvalue_export(
+    eth_consensus_get_data_column_sidecars_from_column_sidecar, args, 4, SSZ_ERROR);
 }
 
 PyObject*
@@ -2129,23 +2051,8 @@ py_consensus_get_validators_custody_requirement(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *fork_obj, *indices_obj;
-  const uint8_t *state, *config;
-  Py_ssize_t state_len, config_len;
-  if (!PyArg_ParseTuple(args, "OOy#y#O", &name_obj, &fork_obj, &state, &state_len, &config,
-                        &config_len, &indices_obj))
-    return NULL;
-  /* Each validator index is 8 bytes, little-endian. */
-  lean_object* indices = fixed_bytes_list_arg(indices_obj, 8, "validator_indices");
-  if (!indices) return NULL;
-  lean_object* a[4];
-  if (duty_args(name_obj, fork_obj, state, state_len, config, config_len, a) < 0) {
-    lean_dec(indices);
-    return NULL;
-  }
-  return except_into_pyint(
-    eth_consensus_get_validators_custody_requirement(a[0], a[1], a[2], a[3], indices),
-    PROPOSER_ERROR);
+  return call_pyvalue_export(
+    eth_consensus_get_validators_custody_requirement, args, 5, PROPOSER_ERROR);
 }
 
 PyObject*

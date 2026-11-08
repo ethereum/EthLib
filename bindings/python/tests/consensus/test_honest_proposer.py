@@ -257,6 +257,24 @@ def test_validators_custody_requirement(balances: list, indices: list):
     assert got == expected
 
 
+def test_custody_with_a_replacement():
+    # A higher floor of groups per node raises the requirement of a small validator set.
+    state = state_at("fusaka", [32 * GWEI] * 4)
+    config = {"VALIDATOR_CUSTODY_REQUIREMENT": 16}
+    got = consensus.get_validators_custody_requirement("mainnet", "fusaka", state, [0], config)
+    assert got == 16
+    assert consensus.get_validators_custody_requirement("mainnet", "fusaka", state, [0]) == 8
+
+
+def test_custody_index_out_of_range():
+    state = state_at("fusaka", [32 * GWEI])
+    with raises(ProposerError, f"expected an int below {2**64}, got {2**64}") as caught:
+        consensus.get_validators_custody_requirement("mainnet", "fusaka", state, [2**64])
+    assert caught.value.code == 0
+    with raises(ValueError, "cannot pass a negative int to Lean"):
+        consensus.get_validators_custody_requirement("mainnet", "fusaka", state, [-1])
+
+
 def test_custody_of_an_unknown_validator():
     state = state_at("fusaka", [32 * GWEI])
     with raises(ProposerError, "proposer step failed with code 2"):

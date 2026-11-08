@@ -104,6 +104,20 @@ Not yet released.
   A `bool` given for one of them raises the same error, where it read as 0 or 1.
   A negative number raises `ValueError`, where it raised `OverflowError`.
   An argument that crosses to Lean but that Lean cannot read raises the error class of the method with code 0, where some raised `TypeError`.
+- The custody exports, the shuffle, the matrix, the shape check of a data column sidecar and the sidecars of a block now take and return typed values ([#1552](https://github.com/ethereum/EthLib/pull/1552)).
+  The C exports `eth_consensus_get_custody_groups`, `eth_consensus_compute_columns_for_custody_group`, `eth_consensus_compute_shuffled_permutation`, `eth_consensus_compute_shuffled_index` and `eth_consensus_get_validators_custody_requirement` take the tuple of their arguments as one value.
+  So do `eth_consensus_verify_data_column_sidecar`, `eth_consensus_compute_matrix`, `eth_consensus_recover_matrix` and the two exports of the sidecars of a block.
+  A list of groups, columns or positions comes back as a list of `int`, where it came back as JSON text.
+  A node ID crosses as an `int`, a validator index as an `int`, and a configuration replacement as a `dict`.
+  The blobs and the matrix entries cross as a list of bytes, where they crossed joined in one byte string.
+  The sidecars come back as a list of bytes, where they came back as the SSZ encoding of a list.
+  A row of cells crosses as a pair of lists, and a row with another count than 128 cells and 128 proofs raises `SszError` with code 0.
+  In Python, a node ID of 2^256 or more, or a count, group or index of 2^64 or more, raises the error class of the method with code 0.
+  A `bool` or a `str` given for one of these numbers raises the same error.
+  Before, these cases raised `OverflowError` or `TypeError`, or read a `bool` as 0 or 1, and for a validator index they raised `struct.error`.
+  A negative number raises `ValueError`.
+  A seed, a blob, a matrix entry, or a cell or proof of a row, of the wrong length, raises the error class of the method with code 0 and the message `expected N bytes, got M`.
+  A `bytearray` or a `memoryview` given for bytes raises `TypeError`, where some were read as bytes.
 - A chain configuration that the exports read as JSON is now rejected, with code 0, when a fork by block number comes after a fork by timestamp ([#1110](https://github.com/ethereum/EthLib/pull/1110)).
   EIP-6122 requires the forks by timestamp to be scheduled at or after the forks by block.
 
