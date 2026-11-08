@@ -1715,12 +1715,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 296 operations and 41 size constants.
-The Python extension calls 296 of the operations and 41 of the constants.
+Lean exports 297 operations and 41 size constants.
+The Python extension calls 297 of the operations and 41 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10084 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (432), `bls.c` (378), `chain.c` (79), `consensus.c` (2679), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1234), `pow.c` (101), `precompile.c` (85), `pyvalue.c` (420), `reqresp.c` (142), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (181), `trie.c` (120), `vrf.c` (119), `wrappers.h` (563), `xmss.c` (134).
+10014 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (372), `bls.c` (378), `chain.c` (79), `consensus.c` (2679), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (345), `engine.c` (88), `enr.c` (205), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1235), `pow.c` (110), `precompile.c` (85), `pyvalue.c` (420), `reqresp.c` (142), `rlp.c` (148), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (88), `state.c` (108), `transactions.c` (181), `trie.c` (113), `vrf.c` (119), `wrappers.h` (564), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

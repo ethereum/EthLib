@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Exports
+public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Execution.State.AccountProof
 public import EthLib.Execution.Trie.HexPrefix
@@ -18,6 +18,8 @@ Both hash with Keccak-256.
 
 The pairs of a trie and the nodes of a proof cross the boundary as RLP lists.
 
+The hex-prefix encoding takes typed Python values: a list of nibbles and a bool.
+
 A trie or proof error comes back with its code and a message.
 
 A malformed RLP input has code 0, since no error type of the specification covers that format.
@@ -27,7 +29,7 @@ public section
 
 namespace EthLib.Execution.Trie.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result PyValue pyExport)
 
 open EthLib.Base
 open EthLib.Serialization.Rlp
@@ -80,15 +82,24 @@ def verifyProofExport (root : ByteArray) (secured : UInt8) (key proof : ByteArra
   else
     throw (0, s!"bad root size: {root.size}, expected 32")
 
-/-- The hex-prefix encoding of a path, with one nibble in each input byte.
+/-- The hex-prefix encoding of a path of nibbles, for a leaf or an extension.
 
-A byte of 16 or more is not a nibble, and fails with code 0. -/
+A value of 16 or more is not a nibble, and fails with code 0. -/
+def hexPrefixOf (args : List Nat × Bool) : Result ByteArray := do
+  let (nibbles, isLeaf) := args
+  let path ← nibbles.mapM fun n =>
+    if h : n < 16 then pure (⟨n, h⟩ : Nibble)
+    else throw (0, s!"{n} is not a nibble")
+  return nibbleListToCompact path isLeaf
+
+/-- The hex-prefix encoding of a path of nibbles, for a leaf or an extension.
+
+The arguments are the list of the nibbles and whether the path ends at a leaf.
+
+A value of 16 or more is not a nibble, and fails with code 0. -/
 @[export eth_trie_hex_prefix]
-def hexPrefixExport (nibbles : ByteArray) (isLeaf : UInt8) : Result ByteArray := do
-  let path ← nibbles.toList.mapM fun b =>
-    if h : b.toNat < 16 then pure (⟨b.toNat, h⟩ : Nibble)
-    else throw (0, s!"{b} is not a nibble")
-  return nibbleListToCompact path (isLeaf != 0)
+def hexPrefixExport (args : PyValue) : Result PyValue :=
+  pyExport hexPrefixOf args
 
 /-- The nodes of a proof, from a list of byte strings. -/
 def nodesOfItem (item : Item) : Except RlpError (List ByteArray) := do

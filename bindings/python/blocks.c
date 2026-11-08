@@ -86,27 +86,17 @@ eth_state_transition(
 
 extern lean_object*
 eth_genesis_block(
-  lean_object* fork,
-  lean_object* params,
-  lean_object* state
+  lean_object* args
 );
 
 extern lean_object*
 eth_block_validate_header(
-  lean_object* parent_fork,
-  lean_object* fork,
-  lean_object* parent,
-  lean_object* header,
-  lean_object* blob_schedules
+  lean_object* args
 );
 
 extern lean_object*
 eth_block_check_header(
-  lean_object* parent_fork,
-  lean_object* fork,
-  lean_object* parent,
-  lean_object* header,
-  lean_object* blob_schedules
+  lean_object* args
 );
 
 extern lean_object*
@@ -313,48 +303,12 @@ py_block_validate_size(
   return except_into_pybool(eth_block_validate_size(fork, block), BLOCK_ERROR);
 }
 
-/* Read the parent fork, the fork, the parent, the header and the blob schedules of a header
- * check.
- *
- * It returns 0 with a Python error set when an argument is wrong, and builds nothing then. */
-static int
-parse_header_args(
-  PyObject* args,
-  lean_object** out
-) {
-  PyObject *parent_fork_obj, *fork_obj, *parent_obj, *header_obj, *schedules_obj;
-  if (!PyArg_ParseTuple(args, "OOOOO", &parent_fork_obj, &fork_obj, &parent_obj, &header_obj,
-                        &schedules_obj)) {
-    return 0;
-  }
-  if (!PyBytes_Check(parent_obj) || !PyBytes_Check(header_obj) || !PyBytes_Check(schedules_obj)) {
-    PyErr_SetString(PyExc_TypeError, "parent, header and blob_schedules must be bytes");
-    return 0;
-  }
-  lean_object* parent_fork = parse_fork(parent_fork_obj);
-  if (!parent_fork) return 0;
-  lean_object* fork = parse_fork(fork_obj);
-  if (!fork) { lean_dec(parent_fork); return 0; }
-  out[0] = parent_fork;
-  out[1] = fork;
-  out[2] = mk_bytearray(
-    (const uint8_t*) PyBytes_AS_STRING(parent_obj), PyBytes_GET_SIZE(parent_obj));
-  out[3] = mk_bytearray(
-    (const uint8_t*) PyBytes_AS_STRING(header_obj), PyBytes_GET_SIZE(header_obj));
-  out[4] = mk_bytearray(
-    (const uint8_t*) PyBytes_AS_STRING(schedules_obj), PyBytes_GET_SIZE(schedules_obj));
-  return 1;
-}
-
 PyObject*
 py_block_validate_header(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object* a[5];
-  if (!parse_header_args(args, a)) return NULL;
-  return except_into_pybool(eth_block_validate_header(a[0], a[1], a[2], a[3], a[4]),
-                            BLOCK_ERROR);
+  return call_pyvalue_export(eth_block_validate_header, args, 5, BLOCK_ERROR);
 }
 
 PyObject*
@@ -362,9 +316,7 @@ py_block_check_header(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object* a[5];
-  if (!parse_header_args(args, a)) return NULL;
-  return except_into_pybool(eth_block_check_header(a[0], a[1], a[2], a[3], a[4]), BLOCK_ERROR);
+  return call_pyvalue_export(eth_block_check_header, args, 5, BLOCK_ERROR);
 }
 
 PyObject*
@@ -416,17 +368,5 @@ py_genesis_block(
   PyObject* self,
   PyObject* args
 ) {
-  const char *params, *state;
-  Py_ssize_t params_len, state_len;
-  PyObject* fork_obj;
-  if (!PyArg_ParseTuple(args, "Oy#y#", &fork_obj, &params, &params_len, &state, &state_len)) {
-    return NULL;
-  }
-  lean_object* fork = parse_fork(fork_obj);
-  if (!fork) return NULL;
-  return except_into_pybytes(
-    eth_genesis_block(
-      fork, mk_bytearray((const uint8_t*) params, (size_t) params_len),
-      mk_bytearray((const uint8_t*) state, (size_t) state_len)),
-    BLOCK_ERROR);
+  return call_pyvalue_export(eth_genesis_block, args, 3, BLOCK_ERROR);
 }

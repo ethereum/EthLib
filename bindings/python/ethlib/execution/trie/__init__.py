@@ -3,6 +3,7 @@
 # Both hash with Keccak-256, and a secured trie hashes each key before it becomes a path.
 
 import re
+from collections.abc import Sequence
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
@@ -99,12 +100,10 @@ def verify_account_proof(state_root: bytes, answer: dict) -> list[bool] | None:
     return [byte == 1 for byte in outcome[1:]]
 
 
-def hex_prefix(nibbles: list[int], is_leaf: bool) -> bytes:
+def hex_prefix(nibbles: Sequence[int], is_leaf: bool) -> bytes:
     """The hex-prefix encoding of a path of nibbles, HP of Appendix C of the Yellow Paper."""
-    # A value outside a byte raises OverflowError, and a byte of 16 or more TrieError with code 0.
-    if any(not 0 <= n < 256 for n in nibbles):
-        raise OverflowError("a nibble must be in [0, 256)")
-    return _native.trie_hex_prefix(bytes(nibbles), is_leaf)
+    # A number of 16 or more raises TrieError with code 0, and a negative one ValueError.
+    return _native.trie_hex_prefix(list(nibbles), is_leaf)
 
 
 __all__ = ["root", "verify_proof", "verify_account_proof", "hex_prefix", "TrieError"]

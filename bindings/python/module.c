@@ -921,6 +921,7 @@ static PyMethodDef methods[] = {
   {"block_header_hash", py_block_header_hash, METH_VARARGS, DOC_block_header_hash},
   {"block_reencode", py_block_reencode, METH_VARARGS, DOC_block_reencode},
   {"pow_block_difficulty", py_pow_block_difficulty, METH_VARARGS, DOC_pow_block_difficulty},
+  {"pow_chain_forks", py_pow_chain_forks, METH_VARARGS, DOC_pow_chain_forks},
   {"pow_seal_hash", py_pow_seal_hash, METH_VARARGS, DOC_pow_seal_hash},
   {"pow_check", py_pow_check, METH_VARARGS, DOC_pow_check},
   {"pow_validate_ommers", py_pow_validate_ommers, METH_VARARGS, DOC_pow_validate_ommers},

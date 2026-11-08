@@ -365,8 +365,10 @@ def test_ranges_out_of_their_type() -> None:
         extend_memory(0, [(2**256, 1)])
     assert info.value.code == 0
     with raises(EvmError, "expected a tuple") as info:
-        extend_memory(0, [[0, 32]])  # ty: ignore[invalid-argument-type]
+        extend_memory(0, [0, 32])  # ty: ignore[invalid-argument-type]
     assert info.value.code == 0
+    # A range given as a list reads as a tuple.
+    assert extend_memory(0, [[0, 32]]) == (3, 32)  # ty: ignore[invalid-argument-type]
     with raises(ValueError, "cannot pass a negative int to Lean"):
         extend_memory(-1, [])
 

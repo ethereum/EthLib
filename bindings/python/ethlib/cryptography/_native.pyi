@@ -187,8 +187,8 @@ def trie_verify_proof(root: bytes, secured: int, key: bytes, proof: bytes) -> by
     """The value of `key` in the trie of `root`, as the nodes of `proof` show."""
     ...
 
-def trie_hex_prefix(nibbles: bytes, is_leaf: bool) -> bytes:
-    """The hex-prefix encoding of a path, with one nibble in each input byte."""
+def trie_hex_prefix(nibbles: list[int], is_leaf: bool) -> bytes:
+    """The hex-prefix encoding of a path of nibbles, for a leaf or an extension."""
     ...
 
 def trie_verify_account_proof(root: bytes, answer: bytes) -> bytes:
@@ -791,6 +791,10 @@ def pow_block_difficulty(fork: str, number: int, timestamp: int, parent_timestam
     """The difficulty of a block at a fork: `D(H)` of the Yellow Paper, 4.3.4, before Paris."""
     ...
 
+def pow_chain_forks(forks: list[tuple[str, int]]) -> bytes:
+    """The RLP form of the forks of a chain, each with its first block."""
+    ...
+
 def pow_seal_hash(fork: bytes, header: bytes) -> bytes:
     """The seal hash of a header: the Keccak-256 hash of the header without mix digest and nonce."""
     ...
@@ -884,7 +888,7 @@ def rlp_decode(data: bytes) -> Any:
     ...
 
 def rlp_decode_as(kind: str, data: bytes) -> Any:
-    """The value of the named type that the bytes encode, given as the item of the value."""
+    """The value of the named type that the bytes encode, as a Python value."""
     ...
 
 def ssz_serialize(type: bytes, value: bytes) -> bytes:
@@ -1099,11 +1103,11 @@ def rlpx_read_frames(aes_secret: bytes, mac_secret: bytes, mac_init: bytes, inpu
     """The frame data of the frames in `input`, as an RLP list, from the start of a direction."""
     ...
 
-def block_validate_header(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: bytes) -> bool:
+def block_validate_header(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: list[tuple[int, int, int, int]]) -> None:
     """Check a header at a fork against its parent at the parent's fork, at every fork."""
     ...
 
-def block_check_header(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: bytes) -> bool:
+def block_check_header(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: list[tuple[int, int, int, int]]) -> None:
     """Check a header against its parent at two named forks, every check but the proof of work."""
     ...
 
@@ -1115,7 +1119,7 @@ def state_transition(config: bytes, state: bytes, recent: bytes, fork: str, bloc
     """Run the state transition of a block on a chain, and give the state after it."""
     ...
 
-def genesis_block(fork: str, params: bytes, state: bytes) -> bytes:
+def genesis_block(fork: str, params: tuple[bytes, int, int, int, bytes, bytes, bytes, int, int, int], state: bytes) -> bytes:
     """The genesis block at a fork, in RLP form."""
     ...
 

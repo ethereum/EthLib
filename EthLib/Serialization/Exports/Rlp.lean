@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Exports
+public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Base.Address
 public import EthLib.Serialization.Rlp
 
@@ -11,7 +11,7 @@ C-ABI exports for RLP, callable from the Python C extension.
 
 An item crosses the boundary as itself: a byte string, or a list of items.
 
-A typed value crosses it as the item of the value, and its type as a short name.
+The typed decoder takes the type as a short name, and returns the value as a typed Python value.
 
 A rejected input comes back as the code of its error and a message that names the fault.
 
@@ -22,7 +22,7 @@ public section
 
 namespace EthLib.Serialization.Rlp.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result PyValue ToPy toPy pyExport)
 
 open EthLib.Base
 
@@ -40,24 +40,37 @@ def encodeExport (item : Item) : Result ByteArray :=
 def decodeExport (data : ByteArray) : Result Item :=
   runRlp "input rejected" (decode data)
 
-/-- Decode a value of one type, and return the item of the value. -/
-def decodeAs (α : Type) [Codec α] (data : ByteArray) : Result Item := do
+/-- Decode a value of one type, and return it as a Python value. -/
+def decodeAs (α : Type) [Codec α] [ToPy α] (data : ByteArray) : Result PyValue := do
   let x : α ← runRlp "input rejected" (Codec.decode data)
-  return Codec.toItem x
+  return toPy x
 
-/-- The value of the named type that the bytes encode, given as the item of the value.
+/-- The value of the named type that the bytes encode, as a Python value.
 
-An unbounded integer goes through the scalar decoder itself. -/
-@[export eth_rlp_decode_as]
-def decodeAsExport (kind data : ByteArray) : Result Item := do
-  match String.fromUTF8? kind with
-  | some "nat" => return .scalar (← runRlp "input rejected" (decodeScalar data))
-  | some "u256" => decodeAs U256 data
-  | some "uint64" => decodeAs UInt64 data
-  | some "bool" => decodeAs Bool data
-  | some "address" => decodeAs Address data
-  | some "recipient" => decodeAs (Option Address) data
-  | some "list_nat" => decodeAs (List Nat) data
+An unbounded integer goes through the scalar decoder itself.
+
+A recipient is an address, or `None` for a contract creation. -/
+def decodeAsOf (args : String × ByteArray) : Result PyValue := do
+  let (kind, data) := args
+  match kind with
+  | "nat" => return toPy (← runRlp "input rejected" (decodeScalar data))
+  | "u256" => decodeAs U256 data
+  | "uint64" => decodeAs UInt64 data
+  | "bool" => decodeAs Bool data
+  | "address" => decodeAs Address data
+  | "recipient" => decodeAs (Option Address) data
+  | "list_nat" => decodeAs (List Nat) data
   | _ => throw (0, "unknown RLP type")
+
+/-- The value of the named type that the bytes encode, as a Python value.
+
+The arguments are the name of the type and the bytes.
+
+The names are `nat`, `u256`, `uint64`, `bool`, `address`, `recipient` and `list_nat`.
+
+A recipient is an address, or `None` for a contract creation. -/
+@[export eth_rlp_decode_as]
+def decodeAsExport (args : PyValue) : Result PyValue :=
+  pyExport decodeAsOf args
 
 end EthLib.Serialization.Rlp.Exports

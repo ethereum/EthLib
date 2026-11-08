@@ -11,7 +11,7 @@ public import EthLib.Execution.Exports.Blocks
 
 C-ABI exports of proof of work before Paris, for the Python C extension.
 
-The difficulty takes and returns typed Python values, and a number crosses as an `int`.
+The difficulty and the forks of a chain take typed Python values, and a number crosses as an `int`.
 
 The difficulty takes a fork as its name, a `str`, and the other exports as its UTF-8 bytes.
 
@@ -46,6 +46,21 @@ Then come the timestamp, the difficulty and the number of ommers of the parent. 
 @[export eth_pow_block_difficulty]
 def blockDifficultyExport (args : PyValue) : Result PyValue :=
   pyExport blockDifficultyOf args
+
+/-- The RLP form of the forks of a chain, each with its first block: a list of `[name, block]`.
+
+The ommer check and the rewards root read the forks of a chain in this form. -/
+def chainForksOf (forks : List (String × Nat)) : Result ByteArray :=
+  (Serialization.Rlp.encode (.list (forks.map fun (name, first) =>
+    .list [.bytes name.toUTF8, Serialization.Rlp.Codec.toItem first]))).mapError
+    fun e => (e.code, s!"forks have no encoding: {reprStr e}")
+
+/-- The RLP form of the forks of a chain, each with its first block.
+
+The argument is the list of the forks, each its name and its first block. -/
+@[export eth_pow_chain_forks]
+def chainForksExport (args : PyValue) : Result PyValue :=
+  pyExport chainForksOf args
 
 /-- The header at a named fork that RLP bytes hold. -/
 def headerOf (fork header : ByteArray) : Result (Σ fork : Base.Fork, Header fork) := do
