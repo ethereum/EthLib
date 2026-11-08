@@ -828,7 +828,7 @@
       {"constructor": "badMessageSize", "code": 5}]}],
    "error_class": "XmssError",
    "docstring":
-   "`Sig(sk, idx, m)` over a hash `H`: sign a message at a leaf index.\n\n1. The scheme seed `S` and the public parameter `P`, from the secret key's seed.\n2. The signature from `S` and `P`.\n\n# Warning\n\nNever sign two different messages at one leaf index with one secret key.\n\nThe top key `b` signs only the root of bottom tree `b`.\n\nSo it signs one message, however many leaf indices of that tree are used.\n\n# Errors\n\n- Either layer's one-time signature finds no codeword."},
+   "`Sig(sk, idx, m)` over a hash `H`: sign a message at a leaf index.\n\n1. The scheme seed `S` and the public parameter `P`, from the secret key's seed.\n2. The signature from the derivations of `S` and from `P`.\n\n# Warning\n\nNever sign two different messages at one leaf index with one secret key.\n\nThe top key `b` signs only the root of bottom tree `b`.\n\nSo it signs one message, however many leaf indices of that tree are used.\n\n# Errors\n\n- Either layer's one-time signature finds no codeword."},
   {"summary":
    "`Ver(pk, m, sigma)` over a hash `H`: whether a signature signs a message under a public key.",
    "signature": "(public_key: bytes, message: bytes, signature: bytes) -> bool",
