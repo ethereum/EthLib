@@ -227,8 +227,10 @@ Let `last` be `a ^ (s - 1)`.
 Then the extended table holds `a ^ 0` to `a ^ (s + k - 1)`. -/
 theorem powTableAux_spec (a : Montgomery M) (k : ℕ) (last : Montgomery M)
     (t : Array (Montgomery M)) (hlast : toZMod last = toZMod a ^ (t.size - 1)) (ht : 0 < t.size)
-    (h : ∀ i < t.size, toZMod t[i]! = toZMod a ^ i) :
-    ∀ i < t.size + k, toZMod (powTableAux a k last t)[i]! = toZMod a ^ i := by
+    (h : ∀ i (hi : i < t.size), toZMod t[i] = toZMod a ^ i) :
+    ∀ i (hi : i < t.size + k),
+      toZMod ((powTableAux a k last t)[i]'(by rw [size_powTableAux]; exact hi)) =
+        toZMod a ^ i := by
   induction k generalizing last t with
   | zero => exact h
   | succ k ih =>
@@ -243,22 +245,21 @@ theorem powTableAux_spec (a : Montgomery M) (k : ℕ) (last : Montgomery M)
       intro i hi
       rw [Array.size_push] at hi
       rcases Nat.lt_or_ge i t.size with hlt | hge
-      · rw [getElem!_pos (t.push _) i (by simp; omega), Array.getElem_push_lt hlt,
-          ← getElem!_pos t i hlt]
+      · rw [Array.getElem_push_lt hlt]
         exact h i hlt
       · obtain rfl : i = t.size := by omega
-        rw [getElem!_pos (t.push _) t.size (by simp), Array.getElem_push_eq, hnext])
-    rw [powTableAux]
-    exact fun i hi => hv i (by simp; omega)
+        rw [Array.getElem_push_eq, hnext])
+    intro i hi
+    simp only [powTableAux]
+    exact hv i (by simp; omega)
 
 /-- The table holds `a ^ 0` to `a ^ 15`. -/
 theorem powTable_spec (a : Montgomery M) {i : ℕ} (hi : i < 16) :
-    toZMod (powTable a)[i] = toZMod a ^ i := by
-  have h := powTableAux_spec a 15 one #[one] (toZMod_one.trans (pow_zero _).symm) (by simp) (by
+    toZMod (powTable a)[i] = toZMod a ^ i :=
+  powTableAux_spec a 15 one #[one] (toZMod_one.trans (pow_zero _).symm) (by simp) (by
     intro i hi
     obtain rfl : i = 0 := by simpa using hi
     exact toZMod_one.trans (pow_zero _).symm) i (by simpa using hi)
-  rwa [getElem!_pos _ i (by rw [size_powTableAux]; simpa using hi)] at h
 
 /-- A window raises the accumulator to the 16th power and multiplies by `a ^ d`. -/
 theorem toZMod_window (a acc : Montgomery M) (d : UInt32) (hd : d.toNat < 16) :
