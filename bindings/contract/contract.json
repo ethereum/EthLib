@@ -4686,7 +4686,7 @@
   {"summary":
    "The headers of a sync, step by step, from a bootstrap for a trusted block root.",
    "signature":
-   "(name: str, fork: str, bootstrap_fork: str, config: bytes, trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, steps: bytes) -> bytes",
+   "(name: str, fork: str, bootstrap_fork: str, config: dict[str, Any] | None, trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, steps: list[tuple[str, str, int, bytes] | tuple[str, int] | tuple[str, str]]) -> list[tuple[tuple[int, bytes, bytes], tuple[int, bytes, bytes]]]",
    "operation": "EthLib.Consensus.Exports.lightClientSyncExport",
    "method": "consensus_light_client_sync",
    "errors":
@@ -4715,10 +4715,11 @@
       {"constructor": "finalizedNotOfState", "code": 21}]}],
    "error_class": "LightClientError",
    "docstring":
-   "The headers of a sync, step by step, from a bootstrap for a trusted block root.\n\nThe store starts at the given fork, and the bootstrap may be of an earlier fork.\n\nThe configuration of the name holds, with the replacements that the JSON object gives.\n\nEach update is checked with the BLS signature scheme."},
+   "The headers of a sync, step by step, from a bootstrap for a trusted block root.\n\nThe arguments are the names of the preset, the fork of the store and the fork of the bootstrap.\n\nThen come replacements of values of the configuration and the trusted block root.\n\nThen come the root of the genesis validators, the bootstrap in SSZ and the steps.\n\nA step is an update of a fork at a slot, an update forced at a slot, or an upgrade to a fork.\n\nEach step gives the finalized header, then the optimistic header, each a slot and two roots.\n\nEach update is checked with the BLS signature scheme."},
   {"summary":
-   "The root of a block, given as bytes, then the bytes of its light client header.",
-   "signature": "(name: str, fork: str, config: bytes, block: bytes) -> bytes",
+   "The root of a block, given as bytes, and the bytes of its light client header, as a pair.",
+   "signature":
+   "(name: str, fork: str, config: dict[str, Any] | None, block: bytes) -> tuple[bytes, bytes]",
    "operation": "EthLib.Consensus.Exports.blockToLightClientHeaderExport",
    "method": "consensus_block_to_light_client_header",
    "errors":
@@ -4747,11 +4748,11 @@
       {"constructor": "finalizedNotOfState", "code": 21}]}],
    "error_class": "LightClientError",
    "docstring":
-   "The root of a block, given as bytes, then the bytes of its light client header."},
+   "The root of a block, given as bytes, and the bytes of its light client header, as a pair."},
   {"summary":
    "Whether the proofs of an update or a finality update, given as bytes, verify.",
    "signature":
-   "(name: str, fork: str, type: str, config: bytes, data: bytes) -> bool",
+   "(name: str, fork: str, type: str, config: dict[str, Any] | None, data: bytes) -> bool",
    "operation": "EthLib.Consensus.Exports.lightClientUpdateProofsExport",
    "method": "consensus_light_client_update_proofs",
    "errors":
@@ -4784,7 +4785,7 @@
   {"summary":
    "Whether a new update, given as bytes, ranks above an old one for a forced update.",
    "signature":
-   "(name: str, fork: str, old_fork: str, config: bytes, new_update: bytes, old_update: bytes) -> bool",
+   "(name: str, fork: str, old_fork: str, config: dict[str, Any] | None, new_update: bytes, old_update: bytes) -> bool",
    "operation": "EthLib.Consensus.Exports.isBetterUpdateExport",
    "method": "consensus_is_better_update",
    "errors":
@@ -4849,7 +4850,7 @@
   {"summary":
    "The bootstrap that a full node serves for a block, from the block and its post state.",
    "signature":
-   "(name: str, fork: str, config: bytes, state: bytes, block: bytes) -> bytes",
+   "(name: str, fork: str, config: dict[str, Any] | None, state: bytes, block: bytes) -> bytes",
    "operation": "EthLib.Consensus.Exports.createLightClientBootstrapExport",
    "method": "consensus_create_light_client_bootstrap",
    "errors":
@@ -4882,7 +4883,7 @@
   {"summary":
    "The update that a full node serves for a block, from the blocks and their post states.",
    "signature":
-   "(name: str, fork: str, attested_fork: str, finalized_fork: str, type: str, config: bytes, state: bytes, block: bytes, attested_state: bytes, attested_block: bytes, finalized_block: bytes) -> bytes",
+   "(name: str, fork: str, attested_fork: str, finalized_fork: str, type: str, config: dict[str, Any] | None, state: bytes, block: bytes, attested_state: bytes, attested_block: bytes, finalized_block: bytes | None) -> bytes",
    "operation": "EthLib.Consensus.Exports.createLightClientUpdateExport",
    "method": "consensus_create_light_client_update",
    "errors":
@@ -4911,11 +4912,11 @@
       {"constructor": "finalizedNotOfState", "code": 21}]}],
    "error_class": "LightClientError",
    "docstring":
-   "The update that a full node serves for a block, from the blocks and their post states.\n\nThe type names the update, the finality update or the optimistic update that it gives.\n\nThe first fork is that of the block, the second that of its parent, which the update takes.\n\nThe third is the fork of the finalized block, at or before the second.\n\nEmpty bytes for the finalized block stand for a finalized block that the node does not know."},
+   "The update that a full node serves for a block, from the blocks and their post states.\n\nThe type names the update, the finality update or the optimistic update that it gives.\n\nThe first fork is that of the block, the second that of its parent, which the update takes.\n\nThe third is the fork of the finalized block, at or before the second.\n\n`None` for the finalized block stands for a finalized block that the node does not know."},
   {"summary":
    "The fork digest at an epoch, on the chain with the given root of the genesis validators.",
    "signature":
-   "(name: str, config: bytes, genesis_validators_root: bytes, epoch: int) -> bytes",
+   "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, epoch: int) -> bytes",
    "operation": "EthLib.Consensus.Exports.computeForkDigestExport",
    "method": "consensus_compute_fork_digest",
    "errors":
@@ -4998,7 +4999,7 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
    "docstring":
-   "The fork digest at an epoch, on the chain with the given root of the genesis validators.\n\nThe configuration of the name holds, with the replacements that the JSON object gives."},
+   "The fork digest at an epoch, on the chain with the given root of the genesis validators.\n\nThe configuration of the name holds, with the replacements that a `dict` gives."},
   {"summary":
    "The root of the value that the bytes encode, and the bytes of that value, as a pair.",
    "signature": "(type: str, data: bytes) -> tuple[bytes, bytes]",

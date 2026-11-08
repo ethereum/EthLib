@@ -623,19 +623,19 @@ def consensus_gossip_validation(name: str, fork: str, anchor_state: bytes, ancho
     """Validate the messages of a topic in turn, against the store of an anchor and later blocks."""
     ...
 
-def consensus_light_client_sync(name: str, fork: str, bootstrap_fork: str, config: bytes, trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, steps: bytes) -> bytes:
+def consensus_light_client_sync(name: str, fork: str, bootstrap_fork: str, config: dict[str, Any] | None, trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, steps: list[tuple[str, str, int, bytes] | tuple[str, int] | tuple[str, str]]) -> list[tuple[tuple[int, bytes, bytes], tuple[int, bytes, bytes]]]:
     """The headers of a sync, step by step, from a bootstrap for a trusted block root."""
     ...
 
-def consensus_block_to_light_client_header(name: str, fork: str, config: bytes, block: bytes) -> bytes:
-    """The root of a block, given as bytes, then the bytes of its light client header."""
+def consensus_block_to_light_client_header(name: str, fork: str, config: dict[str, Any] | None, block: bytes) -> tuple[bytes, bytes]:
+    """The root of a block, given as bytes, and the bytes of its light client header, as a pair."""
     ...
 
-def consensus_light_client_update_proofs(name: str, fork: str, type: str, config: bytes, data: bytes) -> bool:
+def consensus_light_client_update_proofs(name: str, fork: str, type: str, config: dict[str, Any] | None, data: bytes) -> bool:
     """Whether the proofs of an update or a finality update, given as bytes, verify."""
     ...
 
-def consensus_is_better_update(name: str, fork: str, old_fork: str, config: bytes, new_update: bytes, old_update: bytes) -> bool:
+def consensus_is_better_update(name: str, fork: str, old_fork: str, config: dict[str, Any] | None, new_update: bytes, old_update: bytes) -> bool:
     """Whether a new update, given as bytes, ranks above an old one for a forced update."""
     ...
 
@@ -643,15 +643,15 @@ def consensus_genesis_block(name: str, fork: str, state: bytes) -> bytes:
     """The genesis block of a state, given as bytes, with a signature of zero bytes."""
     ...
 
-def consensus_create_light_client_bootstrap(name: str, fork: str, config: bytes, state: bytes, block: bytes) -> bytes:
+def consensus_create_light_client_bootstrap(name: str, fork: str, config: dict[str, Any] | None, state: bytes, block: bytes) -> bytes:
     """The bootstrap that a full node serves for a block, from the block and its post state."""
     ...
 
-def consensus_create_light_client_update(name: str, fork: str, attested_fork: str, finalized_fork: str, type: str, config: bytes, state: bytes, block: bytes, attested_state: bytes, attested_block: bytes, finalized_block: bytes) -> bytes:
+def consensus_create_light_client_update(name: str, fork: str, attested_fork: str, finalized_fork: str, type: str, config: dict[str, Any] | None, state: bytes, block: bytes, attested_state: bytes, attested_block: bytes, finalized_block: bytes | None) -> bytes:
     """The update that a full node serves for a block, from the blocks and their post states."""
     ...
 
-def consensus_compute_fork_digest(name: str, config: bytes, genesis_validators_root: bytes, epoch: int) -> bytes:
+def consensus_compute_fork_digest(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, epoch: int) -> bytes:
     """The fork digest at an epoch, on the chain with the given root of the genesis validators."""
     ...
 

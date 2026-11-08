@@ -6,7 +6,9 @@ import pytest
 from ruamel.yaml import YAML
 
 from ethlib import consensus
+from ethlib.errors import SszError
 from ethlib.networking import snappy
+from raising import raises
 
 from .containers import FORKS
 from .test_data_column import replacements
@@ -184,3 +186,67 @@ def test_every_fork_has_cases():
     for handler, per_fork in (("sync", counts), ("update_ranking", rankings)):
         forks = [param.values[1] for param in _cases(handler)]
         assert {fork: forks.count(fork) for fork in SPECIFIED} == per_fork
+
+
+def test_unknown_step():
+    with raises(consensus.LightClientError, "no constructor is named rewind") as info:
+        consensus.light_client_sync(
+            "minimal",
+            "altair",
+            "altair",
+            bytes(32),
+            bytes(32),
+            b"",
+            [("rewind", 1)],  # ty: ignore[invalid-argument-type]
+        )
+    assert info.value.code == 0
+
+
+def test_trusted_root_length():
+    with raises(consensus.LightClientError, "expected 32 bytes, got 31") as info:
+        consensus.light_client_sync("minimal", "altair", "altair", bytes(31), bytes(32), b"", [])
+    assert info.value.code == 0
+
+
+@pytest.mark.parametrize(
+    "slot, error, message",
+    [
+        (2**64, consensus.LightClientError, f"expected an int below {2**64}, got {2**64}"),
+        (True, consensus.LightClientError, "expected an int"),
+        (-1, ValueError, "cannot pass a negative int to Lean"),
+    ],
+)
+def test_step_slot_is_a_64_bit_int(slot, error, message):
+    with raises(error, message):
+        consensus.light_client_sync(
+            "minimal", "altair", "altair", bytes(32), bytes(32), b"", [("force", slot)]
+        )
+
+
+def test_step_as_a_list():
+    # A list step reads as the tuple it holds, so the run goes on to the empty bootstrap.
+    with raises(
+        consensus.LightClientError, "input rejected: EthLib.Serialization.Ssz.Err.scope 1856 0"
+    ) as info:
+        consensus.light_client_sync(
+            "minimal",
+            "altair",
+            "altair",
+            bytes(32),
+            bytes(32),
+            b"",
+            [["force", 1]],  # ty: ignore[invalid-argument-type]
+        )
+    assert info.value.code == 0
+
+
+@pytest.mark.parametrize(
+    "epoch, error, message",
+    [
+        (2**64, SszError, f"expected an int below {2**64}, got {2**64}"),
+        (-1, ValueError, "cannot pass a negative int to Lean"),
+    ],
+)
+def test_fork_digest_epoch_is_a_64_bit_int(epoch, error, message):
+    with raises(error, message):
+        consensus.compute_fork_digest("minimal", bytes(32), epoch)
