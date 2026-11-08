@@ -102,11 +102,7 @@ theorem map_mulNat (f : Hom F G) (p : G1 F) (k : Nat) :
 theorem map_mul (f : Hom F G) (p : G1 F) (s : Fr) : map f (p.mul s) = (map f p).mul s :=
   map_mulNat f p s.val
 
-/-! ### Multi-scalar multiplication
-
-The buckets are arrays of points, and a read out of bounds gives the default point.
-
-So these lemmas assume that the map sends the default point to the default point. -/
+/-! ### Multi-scalar multiplication -/
 
 theorem map_msmCombine (f : Hom F G) (nW : Nat) (acc : G1 F) (kk : Nat) (S : G1 F) :
     map f (msmCombine nW acc kk S) = msmCombine nW (map f acc) kk (map f S) := by
@@ -118,39 +114,29 @@ theorem map_msmCombine (f : Hom F G) (nW : Nat) (acc : G1 F) (kk : Nat) (S : G1 
     rfl
   · exact map_add f _ _
 
-section Buckets
-
-variable [Inhabited F] [Inhabited G]
-
-private theorem map_getElem! (f : Hom F G) (hd : map f default = default) (bs : Array (G1 F))
-    (i : Nat) : map f bs[i]! = (bs.map (map f))[i]! := by
-  by_cases h : i < bs.size
-  · rw [getElem!_pos bs i h, getElem!_pos (bs.map (map f)) i (by simpa using h),
-      Array.getElem_map]
-  · rw [getElem!_neg bs i h, getElem!_neg (bs.map (map f)) i (by simpa using h), hd]
-
-theorem map_msmBuckets (f : Hom F G) (hd : map f default = default) (points : Array (G1 F))
-    (vals : Array Nat) (n k : Nat) :
-    (msmBuckets points vals n k).map (map f) = msmBuckets (points.map (map f)) vals n k := by
+/-- A map of base fields commutes with the buckets of a window. -/
+theorem map_msmBuckets (f : Hom F G) {n nW : Nat} (points : Vector (G1 F) n)
+    (digits : Vector (Vector (Fin 256) nW) n) (k : Fin nW) :
+    (msmBuckets points digits k).map (map f) = msmBuckets (points.map (map f)) digits k := by
   unfold msmBuckets
-  rw [show Array.replicate (1 <<< 8) (zero : G1 G) = (Array.replicate (1 <<< 8) zero).map (map f)
-    by rw [Array.map_replicate, map_zero]]
-  refine (List.foldl_hom (Array.map (map f)) fun bs j => ?_).symm
-  by_cases hc : windowVal vals[j]! k ≠ 0
-  · rw [ite_eq_left hc, ite_eq_left hc, Array.set!_eq_setIfInBounds, Array.set!_eq_setIfInBounds,
-      Array.map_setIfInBounds, ← map_getElem! f hd, ← map_getElem! f hd]
-    exact congrArg _ (map_add f _ _).symm
+  rw [show Vector.replicate 256 (zero : G1 G) = (Vector.replicate 256 zero).map (map f)
+    by rw [Vector.map_replicate, map_zero]]
+  refine (List.foldl_hom (Vector.map (map f)) fun bs j => ?_).symm
+  dsimp only
+  by_cases hc : (digits[j.val][k.val]).val ≠ 0
+  · rw [ite_eq_left hc, ite_eq_left hc, Vector.map_set, Vector.getElem_map, Vector.getElem_map,
+      map_add']
   · rw [ite_eq_right hc, ite_eq_right hc]
 
-theorem map_msmRunning (f : Hom F G) (hd : map f default = default) (bs : Array (G1 F)) :
+/-- A map of base fields commutes with the running sum of the buckets. -/
+theorem map_msmRunning (f : Hom F G) (bs : Vector (G1 F) 256) :
     msmRunning (bs.map (map f)) = ⟨map f (msmRunning bs).1, map f (msmRunning bs).2⟩ := by
   unfold msmRunning
   rw [show (⟨zero, zero⟩ : MProd (G1 G) (G1 G)) = ⟨map f zero, map f zero⟩ by rw [map_zero]]
   refine List.foldl_hom (init := (⟨zero, zero⟩ : MProd (G1 F) (G1 F)))
     (fun rp : MProd (G1 F) (G1 F) => (⟨map f rp.1, map f rp.2⟩ : MProd (G1 G) (G1 G)))
     fun rp vv => ?_
-  rw [← map_getElem! f hd]
-  simp only [map_add']
+  simp only [Vector.getElem_map, map_add']
 
 /-- A fold over a list zipped with its own image, read through a map of the state. -/
 private theorem foldl_zip_hom {α β₁ β₂ γ₁ γ₂ : Type} (g : γ₁ → γ₂) (ws : List α)
@@ -161,16 +147,43 @@ private theorem foldl_zip_hom {α β₁ β₂ γ₁ γ₂ : Type} (g : γ₁ →
   | nil => rfl
   | cons w ws ih => simp only [List.map_cons, List.zip_cons_cons, List.foldl_cons, ih, H]
 
-theorem map_msm (f : Hom F G) (hd : map f default = default) (points : Array (G1 F))
-    (scalars : Array Fr) : map f (msm points scalars) = msm (points.map (map f)) scalars := by
-  rw [msm, msm, Array.size_map]
-  dsimp only
-  generalize (if points.size ≤ scalars.size then points.size else scalars.size) = n
+/-- The body of the multi-scalar multiplication, on vectors of `n` points and values. -/
+private def msmBody {n : Nat} (pts : Vector (G1 F) n) (vals : Vector Nat n) : G1 F :=
+  if n = 0 then zero
+  else if msmMaxBits vals = 0 then zero
+  else
+    let nW := (msmMaxBits vals + 8 - 1) / 8
+    let digits := vals.map (msmDigits nW)
+    let windows := List.finRange nW
+    (Task.spawn fun _ =>
+      let sums := windows.map fun kk => Task.spawn fun _ =>
+        (msmRunning (msmBuckets pts digits kk.rev)).1
+      (windows.zip sums).foldl (fun acc w => msmCombine nW acc w.1.val w.2.get) zero).get
+
+private theorem msm_eq_msmBody (points : Array (G1 F)) (scalars : Array Fr) :
+    msm points scalars = msmBody (n := min points.size scalars.size)
+      (Vector.ofFn fun j => points[j.val]'(Nat.lt_of_lt_of_le j.isLt (Nat.min_le_left _ _)))
+      (Vector.ofFn fun j =>
+        (scalars[j.val]'(Nat.lt_of_lt_of_le j.isLt (Nat.min_le_right _ _))).val) :=
+  rfl
+
+/-- The body depends only on the entries of its vectors, across equal lengths. -/
+private theorem msmBody_congr {n n' : Nat} (h : n = n') (pts : Vector (G1 F) n)
+    (pts' : Vector (G1 F) n') (vals : Vector Nat n) (vals' : Vector Nat n')
+    (hp : ∀ j (hj : j < n) (hj' : j < n'), pts'[j] = pts[j])
+    (hv : ∀ j (hj : j < n) (hj' : j < n'), vals'[j] = vals[j]) :
+    msmBody pts vals = msmBody pts' vals' := by
+  subst h
+  rw [Vector.ext fun j hj => hp j hj hj, Vector.ext fun j hj => hv j hj hj]
+
+private theorem map_msmBody (f : Hom F G) {n : Nat} (pts : Vector (G1 F) n)
+    (vals : Vector Nat n) : map f (msmBody pts vals) = msmBody (pts.map (map f)) vals := by
+  unfold msmBody
   by_cases h0 : n = 0
   · rw [ite_eq_left h0, ite_eq_left h0]
     exact map_zero f
   rw [ite_eq_right h0, ite_eq_right h0]
-  by_cases h1 : msmMaxBits (scalars.map Fr.val) n = 0
+  by_cases h1 : msmMaxBits vals = 0
   · rw [ite_eq_left h1, ite_eq_left h1]
     exact map_zero f
   rw [ite_eq_right h1, ite_eq_right h1]
@@ -179,10 +192,16 @@ theorem map_msm (f : Hom F G) (hd : map f default = default) (points : Array (G1
   refine foldl_zip_hom (map f) _ _ _ _ _ _ fun a w => ?_
   rw [map_msmCombine]
   congr 1
-  simp only [Task.spawn]
-  rw [← map_msmBuckets f hd, map_msmRunning f hd]
+  rw [← map_msmBuckets, map_msmRunning]
+  rfl
 
-end Buckets
+/-- A map of base fields commutes with the multi-scalar multiplication. -/
+theorem map_msm (f : Hom F G) (points : Array (G1 F)) (scalars : Array Fr) :
+    map f (msm points scalars) = msm (points.map (map f)) scalars := by
+  rw [msm_eq_msmBody, msm_eq_msmBody, map_msmBody]
+  refine msmBody_congr (by rw [Array.size_map]) _ _ _ _ (fun j hj hj' => ?_) (fun j _ _ => ?_)
+  · rw [Vector.getElem_map, Vector.getElem_ofFn, Vector.getElem_ofFn, Array.getElem_map]
+  · rw [Vector.getElem_ofFn, Vector.getElem_ofFn]
 
 end G1
 
