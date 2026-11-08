@@ -103,6 +103,37 @@ theorem forall_fits_map (items : List α) : ∀ value ∈ items.map toValue, Fit
 
 end SszType
 
+/-- The bytes of elements written one after another are those of the untyped encoder. -/
+theorem encodeElementsOnto_eq {α : Type} [SszType α] [LawfulSszType α] (items : Array α)
+    (i : Nat) (out : ByteArray) :
+    encodeElementsOnto items i out =
+      (serializeEach (desc α) ((items.toList.drop i).map toValue)).map
+        fun parts => out ++ ⟨concatParts parts⟩ := by
+  rw [encodeElementsOnto]
+  by_cases inside : i < items.size
+  · rw [dite_eq_left inside,
+      List.drop_eq_getElem_cons (by simpa using inside), List.map_cons, serializeEach_cons,
+      LawfulSszType.encode_eq]
+    simp only [Array.getElem_toList]
+    cases serialize (desc α) (toValue items[i]) with
+    | error fault => rfl
+    | ok head =>
+      simp only [bind, Except.bind, pure, Except.pure]
+      rw [encodeElementsOnto_eq items (i + 1)]
+      cases serializeEach (desc α) ((items.toList.drop (i + 1)).map toValue) with
+      | error fault => rfl
+      | ok parts =>
+        simp only [Except.map, Except.ok.injEq]
+        ext1
+        simp [concatParts, Array.append_assoc]
+  · rw [dite_eq_right inside,
+      List.drop_eq_nil_of_le (by simp; omega)]
+    simp only [List.map_nil, serializeEach_nil, Except.map]
+    congr 1
+    ext1
+    simp [concatParts]
+termination_by items.size - i
+
 instance {α : Type} [SszType α] [LawfulSszType α] {length : Nat} [NeZero length] :
     LawfulSszType (Vector α length) where
   wellFormed := by
@@ -128,6 +159,28 @@ instance {α : Type} [SszType α] [LawfulSszType α] {length : Nat} [NeZero leng
     | vector count each =>
       obtain ⟨items, read, size⟩ := ofElements_ok each
       simp [ofValue, read, count, size, bind, Except.bind, pure, Except.pure] at made
+  encode_eq v := by
+    by_cases fixed : (desc α).isFixed
+    · -- Fixed elements: their bytes one after another, as the untyped encoder lays them out.
+      simp only [encode, fixed, ite_true, encodeFixedElements, desc, toValue, Ssz.serialize,
+        List.length_map, Vector.length_toList, beq_self_eq_true, serializeSequence,
+        assemble_inline_eq]
+      rw [encodeElementsOnto_eq, List.drop_zero]
+      rw [show v.toList = v.toArray.toList from rfl]
+      cases serializeEach (desc α) (v.toArray.toList.map toValue) with
+      | error fault => rfl
+      | ok parts =>
+        have empty : ∀ c, ByteArray.emptyWithCapacity c ++ ⟨concatParts parts⟩ =
+            ⟨concatParts parts⟩ := fun c => by
+          ext1
+          simp [show (ByteArray.emptyWithCapacity c).data = #[] from rfl]
+        have size : (⟨concatParts parts⟩ : ByteArray).size = (concatParts parts).size := rfl
+        by_cases big : (concatParts parts).size ≥ 2 ^ (8 * bytesPerOffset)
+        · simp [Except.map, empty, bind, Except.bind, size, big, throw, throwThe,
+            MonadExceptOf.throw]
+        · simp [Except.map, empty, bind, Except.bind, size, big, pure, Except.pure]
+    · simp only [encode, fixed, Bool.false_eq_true, ite_false]
+      rfl
 
 instance {α : Type} [SszType α] [LawfulSszType α] {limit : Nat} :
     LawfulSszType (SszList α limit) where

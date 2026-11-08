@@ -36,6 +36,21 @@ def decodeUint {α : Type} (width : Nat) (make : Nat → α) (data : ByteArray) 
   if data.size != width then .error (.scope width data.size)
   else .ok (make (readUintBytes data 0 width))
 
+/-- The bytes so far, then the `width` little-endian bytes of `n`, its lowest byte first. -/
+def pushUintBytes : (width n : Nat) → ByteArray → ByteArray
+  | 0, _, out => out
+  | width + 1, n, out => pushUintBytes width (n / 256) (out.push (UInt8.ofNat n))
+
+/--
+The `width` little-endian bytes of `n`, written straight into a byte array.
+
+A number past the width loses its high bytes.
+
+A typed value always fits its width, so its bytes are those of the untyped encoder.
+-/
+def encodeUint (width n : Nat) : Except Err ByteArray :=
+  .ok (pushUintBytes width n (ByteArray.emptyWithCapacity width))
+
 end SszType
 
 open SszType
@@ -58,6 +73,7 @@ instance : SszType UInt8 where
   desc := Desc.uint8
   toValue a := .uint a.toNat
   ofValue := ofUint 1 UInt8.ofNat
+  encode a := encodeUint 1 a.toNat
   decode := decodeUint 1 UInt8.ofNat
 
 /-- `uint16`. -/
@@ -65,6 +81,7 @@ instance : SszType UInt16 where
   desc := Desc.uint16
   toValue a := .uint a.toNat
   ofValue := ofUint 2 UInt16.ofNat
+  encode a := encodeUint 2 a.toNat
   decode := decodeUint 2 UInt16.ofNat
 
 /-- `uint32`. -/
@@ -72,6 +89,7 @@ instance : SszType UInt32 where
   desc := Desc.uint32
   toValue a := .uint a.toNat
   ofValue := ofUint 4 UInt32.ofNat
+  encode a := encodeUint 4 a.toNat
   decode := decodeUint 4 UInt32.ofNat
 
 /-- `uint64`. -/
@@ -79,6 +97,7 @@ instance : SszType UInt64 where
   desc := Desc.uint64
   toValue a := .uint a.toNat
   ofValue := ofUint 8 UInt64.ofNat
+  encode a := encodeUint 8 a.toNat
   decode := decodeUint 8 UInt64.ofNat
 
 /-- `uint128`, held as a `BitVec 128`, since Lean has no 128-bit machine integer. -/
@@ -86,6 +105,7 @@ instance : SszType (BitVec 128) where
   desc := Desc.uint128
   toValue a := .uint a.toNat
   ofValue := ofUint 16 (BitVec.ofNat 128)
+  encode a := encodeUint 16 a.toNat
   decode := decodeUint 16 (BitVec.ofNat 128)
 
 /-- `uint256`. -/
@@ -93,6 +113,7 @@ instance : SszType Base.U256 where
   desc := Desc.uint256
   toValue a := .uint a.toNat
   ofValue := ofUint 32 (BitVec.ofNat 256)
+  encode a := encodeUint 32 a.toNat
   decode := decodeUint 32 (BitVec.ofNat 256)
 
 /--
@@ -107,5 +128,8 @@ instance (priority := high) {n : Nat} : SszType (Vector UInt8 n) where
     | .bytes data =>
       if exact : data.size = n then .ok ⟨data, exact⟩ else .error (.count n data.size)
     | _ => .error .typeMismatch
+  -- The bytes are the encoding; a length of `2^32` or more is refused, as for any byte sequence.
+  encode v :=
+    if n ≥ 2 ^ (8 * bytesPerOffset) then .error (.offsetOverflow n) else .ok ⟨v.toArray⟩
 
 end EthLib.Serialization.Ssz

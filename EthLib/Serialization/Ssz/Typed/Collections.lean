@@ -65,6 +65,33 @@ def ofElementsOnto {α : Type} [SszType α] : List Value → Array α → Except
 def ofElements {α : Type} [SszType α] (elements : List Value) : Except Err (Array α) :=
   ofElementsOnto elements #[]
 
+/--
+The bytes so far, then the bytes of each element from index `i` on, one after another.
+
+The loop calls itself last, so it runs in constant stack for any number of elements.
+-/
+def encodeElementsOnto {α : Type} [SszType α] (elements : Array α) (i : Nat) (out : ByteArray) :
+    Except Err ByteArray :=
+  if inside : i < elements.size then
+    match encode elements[i] with
+    | .ok bytes => encodeElementsOnto elements (i + 1) (out ++ bytes)
+    | .error fault => .error fault
+  else .ok out
+termination_by elements.size - i
+
+/--
+The bytes of a sequence of fixed-size elements: their bytes, one after another.
+
+They are written into one array, sized once for all the elements.
+
+As in any sequence, a count of bytes that four bytes cannot name is refused.
+-/
+def encodeFixedElements {α : Type} [SszType α] (elements : Array α) : Except Err ByteArray := do
+  let width := (desc α).fixedSize.getD 0
+  let out ← encodeElementsOnto elements 0 (ByteArray.emptyWithCapacity (width * elements.size))
+  if out.size ≥ 2 ^ (8 * bytesPerOffset) then throw (.offsetOverflow out.size)
+  return out
+
 end SszType
 
 open SszType
@@ -79,6 +106,10 @@ instance {α : Type} [SszType α] {length : Nat} : SszType (Vector α length) wh
       if exact : items.size = length then return ⟨items, exact⟩
       else throw (.count length items.size)
     | _ => .error .typeMismatch
+  -- Fixed-size elements need no offset table, so their bytes follow one another.
+  encode v :=
+    if (desc α).isFixed then encodeFixedElements v.toArray
+    else do return ⟨← Ssz.serialize (.vector (desc α) length) (.seq (v.toList.map toValue))⟩
 
 instance {α : Type} [SszType α] {limit : Nat} : SszType (SszList α limit) where
   desc := .list (desc α) limit

@@ -562,5 +562,6 @@ instance {α : Type} [SszType α] {length : Nat} : SszType (RootedVector α leng
   toValue v := toValue v.elements
   ofValue value := ofVector <$> ofValue value
   root v := .ok (topOfLevels (depthFor (leafCapacity α length)) v.levels.get)
+  encode v := encode v.elements
 
 end EthLib.Serialization.Ssz
