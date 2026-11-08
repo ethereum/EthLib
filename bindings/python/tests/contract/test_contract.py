@@ -42,15 +42,29 @@ RESULT_MARKERS = {
 
 def arity(method) -> int:
     """The number of arguments a wrapper takes, read from the TypeError of a short call."""
-    # A wrapper that reads its first argument itself, such as the opcode, needs it first.
-    for args in ((), (0,)):
-        try:
-            method(*args)
-        except TypeError as error:
-            found = re.search(r"(?:exactly|expected) (\d+) arguments?", str(error))
-            if found:
-                return int(found.group(1))
+    try:
+        method()
+    except TypeError as error:
+        found = re.search(r"(?:exactly|expected) (\d+) arguments?", str(error))
+        if found:
+            return int(found.group(1))
     raise AssertionError(f"{method.__name__} does not state its arity")
+
+
+def parameter_count(params: str) -> int:
+    """The number of parameters in a signature, whose types may hold commas inside brackets."""
+    if not params.strip():
+        return 0
+    depth = 0
+    commas = 0
+    for char in params:
+        if char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+        elif char == "," and depth == 0:
+            commas += 1
+    return commas + 1
 
 
 @pytest.mark.parametrize("entry", CONTRACT, ids=[m["method"] for m in CONTRACT])
@@ -64,8 +78,7 @@ def test_method_matches_contract(entry: dict) -> None:
         assert inspect.isclass(getattr(errors, entry["error_class"]))
     # The wrapper states how many arguments it takes when it gets too few.
     params = entry["signature"].split(") ->")[0].lstrip("(")
-    count = len([p for p in params.split(",") if p.strip()])
-    assert arity(method) == count
+    assert arity(method) == parameter_count(params)
     # The C wrapper builds the result type that the signature declares.
     returns = entry["signature"].split(") -> ")[1]
     body = WRAPPERS["py_" + entry["method"]]

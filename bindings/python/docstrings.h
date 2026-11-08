@@ -639,7 +639,7 @@
   "The excess blob gas of a block at a fork, from its parent's excess, blob gas and base fee."
 
 #define DOC_evm_word_op \
-  "The word that the instruction of an opcode pushes."
+  "The word that the instruction of an opcode pushes, for at most three operands."
 
 #define DOC_evm_immediate_depths \
   "The depths, counted from 1 at the top, that the immediate byte of an opcode encodes."
@@ -647,14 +647,11 @@
 #define DOC_evm_memory_gas_cost \
   "The price of a memory of a given size in bytes."
 
-#define DOC_evm_extend_memory_cost \
-  "The price of growing a memory for a list of ranges."
-
-#define DOC_evm_extend_memory_expand_by \
-  "The number of bytes that a memory grows by for a list of ranges."
+#define DOC_evm_extend_memory \
+  "The price of growing a memory for a list of ranges, and the bytes that it grows by."
 
 #define DOC_evm_create_address \
-  "The address of the contract that a sender makes with CREATE at a big-endian nonce."
+  "The address of the contract that a sender makes with CREATE at a nonce."
 
 #define DOC_evm_create2_address \
   "The address of the contract that a sender makes with CREATE2, from a salt and init code."

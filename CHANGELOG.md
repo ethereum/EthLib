@@ -32,6 +32,16 @@ Not yet released.
   Examples are a `str` given for bytes and a `bool` given for an `int`.
   A negative number raises `ValueError`, where it raised `OverflowError`.
   An address of 2^64 or more has no precompile, so its price raises `PrecompileError`, where it raised `OverflowError`.
+- The EVM word and memory exports, the CREATE address, the fee exports and the block difficulty now take and return typed values ([#1524](https://github.com/ethereum/EthLib/pull/1524)).
+  `eth_evm_word_op` takes the opcode and a list of at most three operands, each an `int` below 2^256.
+  `eth_evm_extend_memory` replaces `eth_evm_extend_memory_cost` and `eth_evm_extend_memory_expand_by`, and returns the price and the growth as a pair.
+  Each range is a tuple of two words, and a range given as a list is rejected.
+  The base fee and the fake exponential now return a result that can fail, as every typed export does.
+  The error codes 101 and 102 of `EvmError` are gone, since no export reads the lengths of operands or ranges now.
+  In Python, an argument that Lean cannot read raises the error class of the method with code 0.
+  Examples are an operand, a range word or an opcode out of range, more than three operands, a `bool` given for an `int` and `bytes` given for a fork name.
+  Before, these raised `OverflowError`, `ValueError`, `TypeError` or `AttributeError`.
+  A negative number raises `ValueError`, where it raised `OverflowError`.
 - A chain configuration that the exports read as JSON is now rejected, with code 0, when a fork by block number comes after a fork by timestamp ([#1110](https://github.com/ethereum/EthLib/pull/1110)).
   EIP-6122 requires the forks by timestamp to be scheduled at or after the forks by block.
 

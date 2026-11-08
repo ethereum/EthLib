@@ -219,6 +219,11 @@ instance : ToPy UInt64 := ⟨fun n => .int n.toNat⟩
 
 instance : FromPy UInt64 := ⟨fun v => do return UInt64.ofNatLT _ (← fromPyBelow UInt64.size v).2⟩
 
+instance {w : Nat} : ToPy (BitVec w) := ⟨fun v => .int v.toNat⟩
+
+instance {w : Nat} : FromPy (BitVec w) := ⟨fun v => do
+  return BitVec.ofNatLT _ (← fromPyBelow (2 ^ w) v).2⟩
+
 instance : ToPy ByteArray := ⟨.bytes⟩
 
 instance : FromPy ByteArray := ⟨fun

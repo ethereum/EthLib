@@ -787,7 +787,7 @@ def block_reencode(fork: str, block: bytes) -> bytes:
     """The RLP form of a block, decoded at the fork and encoded again."""
     ...
 
-def pow_block_difficulty(fork: bytes, number: bytes, timestamp: bytes, parent_timestamp: bytes, parent_difficulty: bytes, parent_ommers: bytes) -> bytes:
+def pow_block_difficulty(fork: str, number: int, timestamp: int, parent_timestamp: int, parent_difficulty: int, parent_ommers: int) -> int:
     """The difficulty of a block at a fork: `D(H)` of the Yellow Paper, 4.3.4, before Paris."""
     ...
 
@@ -831,48 +831,44 @@ def block_validate_size(fork: str, block: bytes) -> bool:
     """Check the RLP size of a block, decoded at the fork: from Fusaka, at most 8 MiB."""
     ...
 
-def fees_base_fee_per_gas(parent_gas_limit: bytes, parent_gas_used: bytes, parent_base_fee_per_gas: bytes) -> bytes:
+def fees_base_fee_per_gas(parent_gas_limit: int, parent_gas_used: int, parent_base_fee_per_gas: int) -> int:
     """The base fee per gas of a block, from its parent's gas limit, gas used and base fee."""
     ...
 
-def fees_fake_exponential(factor: bytes, numerator: bytes, denominator: bytes) -> bytes:
+def fees_fake_exponential(factor: int, numerator: int, denominator: int) -> int:
     """`factor * e^(numerator / denominator)`, the integer approximation of EIP-4844."""
     ...
 
-def fees_base_fee_per_blob_gas(fork: bytes, excess_blob_gas: bytes) -> bytes:
+def fees_base_fee_per_blob_gas(fork: str, excess_blob_gas: int) -> int:
     """The base fee per blob gas at an excess, under the blob schedule of a fork."""
     ...
 
-def fees_blob_data_fee(fork: bytes, excess_blob_gas: bytes, transaction: bytes) -> bytes:
+def fees_blob_data_fee(fork: str, excess_blob_gas: int, transaction: bytes) -> int:
     """The fee of the blobs of a transaction, decoded at a fork, at an excess blob gas."""
     ...
 
-def fees_excess_blob_gas(fork: bytes, parent_excess_blob_gas: bytes, parent_blob_gas_used: bytes, parent_base_fee_per_gas: bytes) -> bytes:
+def fees_excess_blob_gas(fork: str, parent_excess_blob_gas: int, parent_blob_gas_used: int, parent_base_fee_per_gas: int) -> int:
     """The excess blob gas of a block at a fork, from its parent's excess, blob gas and base fee."""
     ...
 
-def evm_word_op(opcode: int, a: bytes, b: bytes, c: bytes) -> bytes:
-    """The word that the instruction of an opcode pushes."""
+def evm_word_op(opcode: int, operands: list[int]) -> int:
+    """The word that the instruction of an opcode pushes, for at most three operands."""
     ...
 
 def evm_immediate_depths(opcode: int, immediate: int) -> bytes:
     """The depths, counted from 1 at the top, that the immediate byte of an opcode encodes."""
     ...
 
-def evm_memory_gas_cost(size: bytes) -> bytes:
+def evm_memory_gas_cost(size: int) -> int:
     """The price of a memory of a given size in bytes."""
     ...
 
-def evm_extend_memory_cost(current_size: bytes, ranges: bytes) -> bytes:
-    """The price of growing a memory for a list of ranges."""
+def evm_extend_memory(current_size: int, ranges: list[tuple[int, int]]) -> tuple[int, int]:
+    """The price of growing a memory for a list of ranges, and the bytes that it grows by."""
     ...
 
-def evm_extend_memory_expand_by(current_size: bytes, ranges: bytes) -> bytes:
-    """The number of bytes that a memory grows by for a list of ranges."""
-    ...
-
-def evm_create_address(sender: bytes, nonce: bytes) -> bytes:
-    """The address of the contract that a sender makes with CREATE at a big-endian nonce."""
+def evm_create_address(sender: bytes, nonce: int) -> bytes:
+    """The address of the contract that a sender makes with CREATE at a nonce."""
     ...
 
 def evm_create2_address(sender: bytes, salt: bytes, init_code: bytes) -> bytes:

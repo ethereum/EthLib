@@ -1,21 +1,20 @@
 /* Python wrappers of the proof-of-work exports.
  *
- * A number crosses the boundary as its big-endian bytes, and a fork as its name in UTF-8.
- * The Python package converts both. */
+ * The difficulty takes and returns typed values, which the generic converter passes.
+ * The other exports take a fork as its name in UTF-8, and a header or a block in RLP. */
 #include "wrappers.h"
 
 /* ---- Lean externs ----------------------------------------------------- */
 
 /* Each export consumes its object arguments, so the caller never releases them. */
 
-extern lean_object* eth_pow_block_difficulty(
-  lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+extern lean_object* eth_pow_block_difficulty(lean_object*);
 extern lean_object* eth_pow_seal_hash(lean_object*, lean_object*);
 extern lean_object* eth_pow_check(lean_object*, lean_object*);
 extern lean_object* eth_pow_validate_ommers(lean_object*, lean_object*, lean_object*, uint8_t);
 
-/* The largest number of arguments of a proof-of-work export: those of the difficulty. */
-#define POW_MAX_ARGS 6
+/* The largest number of `bytes` arguments of a proof-of-work export: those of a header. */
+#define POW_MAX_ARGS 2
 
 /* ---- Helpers ---------------------------------------------------------- */
 
@@ -54,10 +53,7 @@ py_pow_block_difficulty(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object* a[POW_MAX_ARGS];
-  if (!parse_bytes_args(args, 6, a)) return NULL;
-  return except_into_pybytes(
-    eth_pow_block_difficulty(a[0], a[1], a[2], a[3], a[4], a[5]), BLOCK_ERROR);
+  return call_pyvalue_export(eth_pow_block_difficulty, args, 6, BLOCK_ERROR);
 }
 
 PyObject*

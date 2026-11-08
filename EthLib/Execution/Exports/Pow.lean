@@ -1,22 +1,23 @@
 module
 
-public import EthLib.Base.Exports
+public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Execution.Blocks.Difficulty
 public import EthLib.Execution.Blocks.ProofOfWork
 public import EthLib.Execution.Blocks.Ommers
 public import EthLib.Execution.Exports.Blocks
-public import EthLib.Execution.Exports.Evm
 
 /-!
 # `Exports.Pow`
 
 C-ABI exports of proof of work before Paris, for the Python C extension.
 
-Each number crosses the boundary as its big-endian bytes, so no value is truncated.
+The difficulty takes and returns typed Python values, and a number crosses as an `int`.
 
-A fork crosses it as its name, and an unknown name fails with code 0.
+The difficulty takes a fork as its name, a `str`, and the other exports as its UTF-8 bytes.
 
-A header crosses it as its RLP bytes, and a header that the decoder rejects fails with its RLP code.
+An unknown name fails with code 0.
+
+A header crosses as its RLP bytes, and a header that the decoder rejects fails with its RLP code.
 
 The proof-of-work check takes a fork before Paris, and fails with code 0 at a later one.
 
@@ -27,20 +28,24 @@ public section
 
 namespace EthLib.Execution.Blocks.Exports
 
-open EthLib.Base (bytesToNat)
-open EthLib.Exports (Result forkUpTo)
-open EthLib.Execution.Evm.Exports (bytesOfNat)
+open EthLib.Exports (Result PyValue forkUpTo pyExport)
 
 /-- The difficulty of a block at a named fork, from its number, its timestamp and its parent.
 
 The parent's ommers count only as none or some. -/
+def blockDifficultyOf (args : String × Nat × Nat × Nat × Nat × Nat) : Result Nat := do
+  let (fork, number, timestamp, parentTimestamp, parentDifficulty, parentOmmers) := args
+  let fork ← forkUpTo .glamsterdam fork.toUTF8
+  pure (blockDifficulty fork number timestamp parentTimestamp parentDifficulty (parentOmmers ≠ 0))
+
+/-- The difficulty of a block at a named fork, from its number, its timestamp and its parent.
+
+The arguments are the name of the fork, then the number and the timestamp of the block.
+
+Then come the timestamp, the difficulty and the number of ommers of the parent. -/
 @[export eth_pow_block_difficulty]
-def blockDifficultyExport (fork number timestamp parentTimestamp parentDifficulty
-    parentOmmers : ByteArray) : Result ByteArray := do
-  let fork ← forkUpTo .glamsterdam fork
-  let n (bytes : ByteArray) := bytesToNat bytes.toList
-  pure (bytesOfNat (blockDifficulty fork (n number) (n timestamp) (n parentTimestamp)
-    (n parentDifficulty) (n parentOmmers ≠ 0)))
+def blockDifficultyExport (args : PyValue) : Result PyValue :=
+  pyExport blockDifficultyOf args
 
 /-- The header at a named fork that RLP bytes hold. -/
 def headerOf (fork header : ByteArray) : Result (Σ fork : Base.Fork, Header fork) := do
