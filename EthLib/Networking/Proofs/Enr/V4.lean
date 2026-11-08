@@ -24,7 +24,7 @@ A record that the signer signs verifies, keeps its pairs, and reads back from it
 
 A record that the builder makes reads back from its bytes, verifies, and has its key pairs.
 
-These are correctness statements: no theorem here states that a signature cannot be forged.
+These are correctness statements; a separate module states forgery and malleability.
 -/
 
 @[expose] public section

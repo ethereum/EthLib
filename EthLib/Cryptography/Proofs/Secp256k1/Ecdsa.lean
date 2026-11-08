@@ -167,6 +167,19 @@ theorem isLowS_neg (s : Nat) : isLowS (Fn.modulus - s) = !isLowS s := by
   · simp [h]
     omega
 
+/-! ## Forgeries -/
+
+/-- An existential forgery of hash-then-sign ECDSA under the key `q`, against the messages `signed`.
+
+The message is not among them, and ECDSA accepts the pair `(r, s)` on its hash.
+
+This is the winning condition of the chosen-message game, with the hash inside the scheme.
+
+ECDSA on raw digests is forgeable from the public key alone, so it is no target. -/
+def IsForgery (hash : ByteArray → Vector UInt8 32) (q : Point) (signed : List ByteArray)
+    (f : ByteArray × Nat × Nat) : Prop :=
+  f.1 ∉ signed ∧ verify q (hash f.1) f.2.1 f.2.2 = true
+
 end Ecdsa
 
 end EthLib.Cryptography.Secp256k1
