@@ -618,7 +618,9 @@ The cases can overlap.
 They carry meaning only when an algebraic adversary outputs `f` and `g` over the setup's points, without `τ`.
 This reading is the algebraic group model, an assumption.
 For other choices, such as the constants that the points represent, the third case only restates the check.
-The second case is unlikely only if the challenge hash is modelled as a random oracle, and the third only if `τ` stays secret.
+The second case is unlikely if the challenge hash is modelled as a random oracle.
+The third is unlikely if the discrete logarithm problem with the setup's powers of `τ` is hard.
+Both are assumptions, and no theorem here proves either bound.
 It is not computational binding: no theorem bounds the cost of finding such polynomials without the secret.
 `verifyKzgProofBatch_ok_iff_root` (`Proofs/Kzg/BatchBinding.lean`) states when the batch check of openings accepts, as an equivalence.
 Let opening `i` have commitment `c_i`, value `y_i`, point `z_i` and proof `w_i`.

@@ -190,6 +190,7 @@ Let `p` be the interpolant of the blob's decoded values, and let `z` be the eval
 Then `f = p`; or `f ≠ p`, `f - p` has degree below 4096, and `z` is a root of `f - p`.
 Or `τ` is a root of `f - p(z) - g (X - z)`, which is nonzero of degree at most 4096.
 These cases mean something only when an algebraic adversary outputs `f` and `g` without knowing `τ`.
+The cases can overlap, and for constants `f` and `g` the third case only restates the check.
 The theorem does not bound the cost of finding such polynomials without `τ`.
 
 **The ceremony.**
