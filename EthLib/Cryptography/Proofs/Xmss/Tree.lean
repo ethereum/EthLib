@@ -35,18 +35,18 @@ open EthLib.Cryptography.Xmss.Constants
 section Monad
 
 variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
-  (pp : PublicParam) (seed : Seed) (layer : Layer)
+  (pp : PublicParam) (prf : SeedPrf m) (layer : Layer)
 
 /-- A node on level 0 is the leaf of one-time key `j`. -/
 theorem node_zero (j : Nat) :
-    node H pp seed layer 0 j = otsPublicLeaf H pp seed layer (UInt32.ofNat j) :=
+    node H pp prf layer 0 j = otsPublicLeaf H pp prf layer (UInt32.ofNat j) :=
   rfl
 
 /-- A node above level 0 hashes its two children, the left subtree first. -/
 theorem node_succ (l j : Nat) :
-    node H pp seed layer (l + 1) j = (do
-      let left ← node H pp seed layer l (2 * j)
-      let right ← node H pp seed layer l (2 * j + 1)
+    node H pp prf layer (l + 1) j = (do
+      let left ← node H pp prf layer l (2 * j)
+      let right ← node H pp prf layer l (2 * j + 1)
       nodeHash H pp layer (l + 1) j left right) :=
   rfl
 
@@ -54,13 +54,13 @@ theorem node_succ (l j : Nat) :
 
 The sibling on `level` is node `floor(e / 2^level) xor 1`. -/
 theorem path_eq_ofFnInOrder [LawfulMonad m] (e : Nat) :
-    path H pp seed layer e
+    path H pp prf layer e
       = ofFnInOrder LAYER_HEIGHT fun level =>
-          node H pp seed layer level ((e / 2 ^ level.val) ^^^ 1) := by
+          node H pp prf layer level ((e / 2 ^ level.val) ^^^ 1) := by
   -- From any level, the siblings are the nodes above it in order.
   have siblings_eq : ∀ (n level j : Nat),
-      Merkle.siblings (nodeHash H pp layer) (leaves H pp seed layer) level j n
-        = ofFnInOrder n fun i => node H pp seed layer (level + i.val) ((j / 2 ^ i.val) ^^^ 1) := by
+      Merkle.siblings (nodeHash H pp layer) (leaves H pp prf layer) level j n
+        = ofFnInOrder n fun i => node H pp prf layer (level + i.val) ((j / 2 ^ i.val) ^^^ 1) := by
     intro n
     induction n with
     | zero => intro level j; rfl
@@ -69,9 +69,9 @@ theorem path_eq_ofFnInOrder [LawfulMonad m] (e : Nat) :
       simp only [Merkle.siblings, ofFnInOrder, ih]
       -- Entry `i + 1` is entry `i` one level up, with the index halved once more.
       have shift :
-          (fun i : Fin n => node H pp seed layer (level + 1 + i.val) ((j / 2 / 2 ^ i.val) ^^^ 1))
+          (fun i : Fin n => node H pp prf layer (level + 1 + i.val) ((j / 2 / 2 ^ i.val) ^^^ 1))
             = fun i : Fin n =>
-              node H pp seed layer (level + i.succ.val) ((j / 2 ^ i.succ.val) ^^^ 1) := by
+              node H pp prf layer (level + i.succ.val) ((j / 2 ^ i.succ.val) ^^^ 1) := by
         funext i
         rw [Fin.val_succ, Merkle.div_two_div_pow, Nat.add_assoc, Nat.add_comm 1 i.val]
       simp only [shift, Fin.val_zero, Nat.add_zero, Nat.pow_zero, Nat.div_one]
@@ -96,13 +96,13 @@ theorem nodeHash_of_le {level : Nat} (hlevel : level ≤ LAYER_HEIGHT) (j : Nat)
 theorem node_eq_of_agree (hash' : Nat → Nat → Digest → Digest → m Digest)
     (agree : ∀ k, 1 ≤ k → k ≤ LAYER_HEIGHT → nodeHash H pp layer k = hash' k)
     {level : Nat} (hlevel : level ≤ LAYER_HEIGHT) (j : Nat) :
-    node H pp seed layer level j = Merkle.node hash' (leaves H pp seed layer) level j :=
+    node H pp prf layer level j = Merkle.node hash' (leaves H pp prf layer) level j :=
   Merkle.node_congr _ hash' _ level j fun k h1 h2 => agree k h1 (by omega)
 
 /-- A path is the same with any node hash that agrees on levels 1 to 16. -/
 theorem path_eq_of_agree (hash' : Nat → Nat → Digest → Digest → m Digest)
     (agree : ∀ k, 1 ≤ k → k ≤ LAYER_HEIGHT → nodeHash H pp layer k = hash' k) (e : Nat) :
-    path H pp seed layer e = Merkle.path hash' (leaves H pp seed layer) LAYER_HEIGHT e :=
+    path H pp prf layer e = Merkle.path hash' (leaves H pp prf layer) LAYER_HEIGHT e :=
   Merkle.path_congr _ hash' _ _ e fun k h1 h2 => agree k h1 (by omega)
 
 /-- A fold is the same with any node hash that agrees on levels 1 to 16. -/
@@ -116,21 +116,21 @@ end Monad
 
 /-! ## The path reaches the root -/
 
-variable {f : ByteArray → Vector UInt8 32} {pp : PublicParam} {seed : Seed} {layer : Layer}
+variable {f : ByteArray → Vector UInt8 32} {pp : PublicParam} {prf : SeedPrf Id} {layer : Layer}
 
 /-- An honest path leads from key `e`'s leaf to node `floor(e / 2^16)` on the top level. -/
 theorem fold_path (e : Nat) :
-    (fold (pureHash f) pp layer e (node (pureHash f) pp seed layer 0 e).run
-        (path (pureHash f) pp seed layer e).run).run
-      = (node (pureHash f) pp seed layer LAYER_HEIGHT (e >>> LAYER_HEIGHT)).run := by
+    (fold (pureHash f) pp layer e (node (pureHash f) pp prf layer 0 e).run
+        (path (pureHash f) pp prf layer e).run).run
+      = (node (pureHash f) pp prf layer LAYER_HEIGHT (e >>> LAYER_HEIGHT)).run := by
   rw [Nat.shiftRight_eq_div_pow]
   exact Merkle.climb_path _ _ _ _
 
 /-- On the top layer, key `b < 2^16` reaches the root of the one top tree. -/
 theorem fold_path_top {b : Nat} (hb : b < 2 ^ LAYER_HEIGHT) :
-    (fold (pureHash f) pp .top b (node (pureHash f) pp seed .top 0 b).run
-        (path (pureHash f) pp seed .top b).run).run
-      = (node (pureHash f) pp seed .top LAYER_HEIGHT 0).run :=
+    (fold (pureHash f) pp .top b (node (pureHash f) pp prf .top 0 b).run
+        (path (pureHash f) pp prf .top b).run).run
+      = (node (pureHash f) pp prf .top LAYER_HEIGHT 0).run :=
   Merkle.climb_path_root _ _ hb
 
 /-! ## A path binds its leaf -/
@@ -148,16 +148,16 @@ The preimage is under the address of an ancestor of the leaf:
 -/
 theorem fold_binding {e : Nat} {leaf : Digest} {pi : Vector Digest LAYER_HEIGHT}
     (heq : (fold (pureHash f) pp layer e leaf pi).run
-      = (node (pureHash f) pp seed layer LAYER_HEIGHT (e >>> LAYER_HEIGHT)).run) :
-    (leaf = (node (pureHash f) pp seed layer 0 e).run ∧
-        pi = (path (pureHash f) pp seed layer e).run) ∨
+      = (node (pureHash f) pp prf layer LAYER_HEIGHT (e >>> LAYER_HEIGHT)).run) :
+    (leaf = (node (pureHash f) pp prf layer 0 e).run ∧
+        pi = (path (pureHash f) pp prf layer e).run) ∨
       ∃ w, Merkle.findSecondPreimage (nodeHash (pureHash f) pp layer)
-          (leaves (pureHash f) pp seed layer) 0 e leaf pi.toList = some w ∧
-        w.Valid (nodeHash (pureHash f) pp layer) (leaves (pureHash f) pp seed layer) ∧
+          (leaves (pureHash f) pp prf layer) 0 e leaf pi.toList = some w ∧
+        w.Valid (nodeHash (pureHash f) pp layer) (leaves (pureHash f) pp prf layer) ∧
         w.level < LAYER_HEIGHT := by
   rw [Nat.shiftRight_eq_div_pow] at heq
   rcases Merkle.climb_binding_node (nodeHash (pureHash f) pp layer)
-      (leaves (pureHash f) pp seed layer)
+      (leaves (pureHash f) pp prf layer)
       LAYER_HEIGHT 0 e leaf pi.toList (by simp) heq with ⟨hleaf, hpi⟩ | hfound
   · -- The siblings are the honest path, as lists and so as vectors.
     exact .inl ⟨hleaf, Vector.toList_inj.mp hpi⟩

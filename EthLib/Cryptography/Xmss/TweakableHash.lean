@@ -24,7 +24,13 @@ Every definition that hashes takes the hash `H` as an argument, in a monad `m`.
 
 So the definitions that run are the definitions that the security proof is about.
 
+A derivation from the scheme seed `S` is a hash of `P | A | S | suffix`.
+
+Definitions that derive a value from the seed take the derivations as one function argument.
+
 Source: the leanXMSS specification draft, sections "Hashing and parameters" and "Security".
+
+The derivations follow its section "WOTS+C".
 -/
 
 @[expose] public section
@@ -63,5 +69,24 @@ def thInput (pp : PublicParam) (address : Address) (payload : ByteArray) : ByteA
 def th {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32)) (pp : PublicParam)
     (address : Address) (payload : ByteArray) : m Digest := do
   return halfOf 0 (← H (thInput pp address payload))
+
+/-! ## Derivations from the seed -/
+
+/-- A source of derived values: the derivation at a parameter, an address and a suffix.
+
+The signer derives the public parameter and every secret through one such source.
+
+So a proof can replace the derivations as a whole.
+
+It takes the parameter because the public parameter is itself a derivation.
+
+It returns all 32 bytes because a pair of chains starts at the two halves of one derivation. -/
+abbrev SeedPrf (m : Type → Type) := PublicParam → Address → ByteArray → m (Vector UInt8 32)
+
+/-- `H(P | A | S | suffix)`: the derivations from the scheme seed `S`.
+
+The seed comes right after the address, and the suffix comes last. -/
+def seedPrf {m : Type → Type} (H : ByteArray → m (Vector UInt8 32)) (s : Seed) : SeedPrf m :=
+  fun pp address suffix => H (thInput pp address (packBytes s ++ suffix))
 
 end EthLib.Cryptography.Xmss

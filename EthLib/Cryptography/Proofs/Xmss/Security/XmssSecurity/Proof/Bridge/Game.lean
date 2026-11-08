@@ -82,8 +82,8 @@ def derivedSigningOracle (s : Xmss.Seed) (pp : Xmss.PublicParam) :
     QueryImpl Xmss.Unforgeability.SigningSpec
       (WriterT (QueryLog Xmss.Unforgeability.SigningSpec) (OracleComp OracleWorld)) :=
   QueryImpl.withLogging fun request =>
-    liftM (Except.toOption <$> Xmss.signDerived queryH s pp request.leafIndex request.message :
-      OracleComp HashSpec _)
+    liftM (Except.toOption <$> Xmss.signDerived queryH (Xmss.seedPrf queryH s) pp
+      request.leafIndex request.message : OracleComp HashSpec _)
 
 /-- EthLib's game after key generation, its signer keeping `S` and `P`. -/
 noncomputable def realRest (adversary : Xmss.Unforgeability.Adversary) (pk : Xmss.PublicKey)
