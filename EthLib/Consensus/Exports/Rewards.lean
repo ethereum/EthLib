@@ -21,7 +21,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz
-open EthLib.Exports (Result)
+open EthLib.Exports (Result PyValue pyExport)
 
 /-- The rewards and the penalties of each validator for one kind of vote, as the vectors hold them.
 
@@ -74,20 +74,35 @@ def encodeDeltas (preset : Preset) (deltas : Array Gwei × Array Gwei) : Result 
     (SszType.serialize deltas).mapError fun e => (0, s!"deltas rejected: {reprStr e}")
   else throw (0, "deltas longer than the registry limit")
 
+/-- The rewards and the penalties of each validator for one kind of vote, as SSZ bytes. -/
+def rewardsDeltasOf
+    (args : String × String × String × ByteArray × Option PyValue) :
+    Result ByteArray := do
+  let (name, fork, component, pre, replacements) := args
+  let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
+  let config ← configWithValue name replacements
+  let state ← decodeInput (BeaconState preset fork) pre
+  encodeDeltas preset (← runDeltas config component state)
+
 /-- The rewards and the penalties of each validator for one kind of vote, as SSZ bytes.
 
-The preset, the configuration, the fork and the kind of vote are named in UTF-8.
+The preset, the configuration, the fork and the kind of vote are named by `str`.
 
 The kinds are the file names of the vectors without their extension, such as source deltas.
 
 A list longer than the registry limit has code 0. -/
 @[export eth_consensus_rewards_deltas]
-def rewardsDeltasExport (name fork component pre replacements : ByteArray) :
-    Result ByteArray := do
-  let (preset, fork) ← transitionPresetAndFork name fork
-  let config ← configWith name replacements
+def rewardsDeltasExport (args : PyValue) : Result PyValue := pyExport rewardsDeltasOf args
+
+/-- The deltas of several kinds of vote for one state, as SSZ bytes, in the order of the kinds. -/
+def rewardsDeltasBatchOf (args : String × String × Array String × ByteArray × Option PyValue) :
+    Result (Array ByteArray) := do
+  let (name, fork, components, pre, replacements) := args
+  let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
+  let config ← configWithValue name replacements
   let state ← decodeInput (BeaconState preset fork) pre
-  encodeDeltas preset (← runDeltas config (← nameOf component) state)
+  components.mapM fun component => do
+    encodeDeltas preset (← runDeltas config component state)
 
 /-- The deltas of several kinds of vote for one state, as SSZ bytes, in the order of the kinds.
 
@@ -97,12 +112,6 @@ Each kind gives the same bytes as the export for one kind.
 
 The first kind that fails gives the error. -/
 @[export eth_consensus_rewards_deltas_batch]
-def rewardsDeltasBatchExport (name fork : ByteArray) (components : Array ByteArray)
-    (pre replacements : ByteArray) : Result (Array ByteArray) := do
-  let (preset, fork) ← transitionPresetAndFork name fork
-  let config ← configWith name replacements
-  let state ← decodeInput (BeaconState preset fork) pre
-  components.mapM fun component => do
-    encodeDeltas preset (← runDeltas config (← nameOf component) state)
+def rewardsDeltasBatchExport (args : PyValue) : Result PyValue := pyExport rewardsDeltasBatchOf args
 
 end EthLib.Consensus.Exports

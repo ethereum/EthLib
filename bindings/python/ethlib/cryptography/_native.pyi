@@ -415,55 +415,55 @@ def consensus_verify_blob_sidecar_inclusion_proof(name: str, fork: str, data: by
     """Whether the branch of a blob sidecar, given as bytes, climbs to the body root of its header."""
     ...
 
-def consensus_process_operation(name: str, fork: str, handler: str, pre: bytes, operation: bytes, config: bytes, verify: bool, execution_valid: bool) -> bytes:
+def consensus_process_operation(name: str, fork: str, handler: str, pre: bytes, operation: bytes, config: dict[str, Any] | None, verify: bool, execution_valid: bool) -> bytes:
     """The state after a block operation of a handler of the vectors, as SSZ bytes."""
     ...
 
-def consensus_process_epoch(name: str, fork: str, handler: str, pre: bytes, config: bytes) -> bytes:
+def consensus_process_epoch(name: str, fork: str, handler: str, pre: bytes, config: dict[str, Any] | None) -> bytes:
     """The state after one step of the epoch transition of a handler of the vectors, as SSZ bytes."""
     ...
 
-def consensus_rewards_deltas(name: str, fork: str, component: str, pre: bytes, config: bytes) -> bytes:
+def consensus_rewards_deltas(name: str, fork: str, component: str, pre: bytes, config: dict[str, Any] | None) -> bytes:
     """The rewards and the penalties of each validator for one kind of vote, as SSZ bytes."""
     ...
 
-def consensus_rewards_deltas_batch(name: str, fork: str, components: list[bytes], pre: bytes, config: bytes) -> list[bytes]:
+def consensus_rewards_deltas_batch(name: str, fork: str, components: list[str], pre: bytes, config: dict[str, Any] | None) -> list[bytes]:
     """The deltas of several kinds of vote for one state, as SSZ bytes, in the order of the kinds."""
     ...
 
-def consensus_process_slots(name: str, fork: str, pre: bytes, config: bytes, slots: int) -> bytes:
+def consensus_process_slots(name: str, fork: str, pre: bytes, config: dict[str, Any] | None, slots: int) -> bytes:
     """The state some slots later, as SSZ bytes."""
     ...
 
-def consensus_state_transition(name: str, fork: str, pre: bytes, block: bytes, config: bytes, verify: bool) -> bytes:
+def consensus_state_transition(name: str, fork: str, pre: bytes, block: bytes, config: dict[str, Any] | None, verify: bool) -> bytes:
     """The state after a signed block, as SSZ bytes, with the signature and the state root checked."""
     ...
 
-def consensus_state_transition_across(name: str, fork: str, pre: bytes, block_fork: str, block: bytes, config: bytes, verify: bool) -> bytes:
+def consensus_state_transition_across(name: str, fork: str, pre: bytes, block_fork: str, block: bytes, config: dict[str, Any] | None, verify: bool) -> bytes:
     """The state after a signed block of a fork, from a state of that fork or an earlier one."""
     ...
 
-def consensus_state_transitions(name: str, fork: str, pre: bytes, blocks: list[bytes], config: bytes, verify: bool) -> bytes:
+def consensus_state_transitions(name: str, fork: str, pre: bytes, blocks: list[bytes], config: dict[str, Any] | None, verify: bool) -> bytes:
     """The state after signed blocks in order, as SSZ bytes, with each state root checked."""
     ...
 
-def consensus_state_transitions_across(name: str, fork: str, pre: bytes, block_forks: list[bytes], blocks: list[bytes], config: bytes, verify: bool) -> bytes:
+def consensus_state_transitions_across(name: str, fork: str, pre: bytes, block_forks: list[str], blocks: list[bytes], config: dict[str, Any] | None, verify: bool) -> bytes:
     """The state after signed blocks in order, as SSZ bytes, across the fork epochs on the way."""
     ...
 
-def consensus_initialize_genesis(name: str, fork: str, eth1_block_hash: bytes, deposits: bytes, config: bytes, eth1_timestamp: int, verify: bool) -> bytes:
+def consensus_initialize_genesis(name: str, fork: str, eth1_block_hash: bytes, deposits: list[bytes], config: dict[str, Any] | None, eth1_timestamp: int, verify: bool) -> bytes:
     """The candidate genesis state of a block of the proof-of-work chain, as SSZ bytes."""
     ...
 
-def consensus_is_valid_genesis_state(name: str, fork: str, state: bytes, config: bytes) -> bool:
+def consensus_is_valid_genesis_state(name: str, fork: str, state: bytes, config: dict[str, Any] | None) -> bool:
     """Whether a candidate genesis state launches the chain."""
     ...
 
-def consensus_compute_weak_subjectivity_period(name: str, fork: str, state: bytes, config: bytes) -> int:
+def consensus_compute_weak_subjectivity_period(name: str, fork: str, state: bytes, config: dict[str, Any] | None) -> int:
     """The weak subjectivity period of a state, in epochs."""
     ...
 
-def consensus_is_within_weak_subjectivity_period(name: str, fork: str, state: bytes, checkpoint: bytes, config: bytes, genesis_time_ms: int, time_ms: int) -> bool:
+def consensus_is_within_weak_subjectivity_period(name: str, fork: str, state: bytes, checkpoint: bytes, config: dict[str, Any] | None, genesis_time_ms: int, time_ms: int) -> bool:
     """Whether a checkpoint is within the weak subjectivity period of its state, at a time."""
     ...
 
@@ -611,7 +611,7 @@ def consensus_get_validators_custody_requirement(name: str, fork: str, state: by
     """From Fulu: the number of custody groups of a node, from the indices of its validators."""
     ...
 
-def consensus_upgrade_state(name: str, fork: str, pre: bytes, config: bytes, verify: bool) -> bytes:
+def consensus_upgrade_state(name: str, fork: str, pre: bytes, config: dict[str, Any] | None, verify: bool) -> bytes:
     """The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes."""
     ...
 

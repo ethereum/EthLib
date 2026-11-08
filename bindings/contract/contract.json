@@ -2228,7 +2228,7 @@
   {"summary":
    "The state after a block operation of a handler of the vectors, as SSZ bytes.",
    "signature":
-   "(name: str, fork: str, handler: str, pre: bytes, operation: bytes, config: bytes, verify: bool, execution_valid: bool) -> bytes",
+   "(name: str, fork: str, handler: str, pre: bytes, operation: bytes, config: dict[str, Any] | None, verify: bool, execution_valid: bool) -> bytes",
    "operation": "EthLib.Consensus.Exports.processOperationExport",
    "method": "consensus_process_operation",
    "errors":
@@ -2320,11 +2320,11 @@
       {"constructor": "wrongPayloadSlot", "code": 89}]}],
    "error_class": "TransitionError",
    "docstring":
-   "The state after a block operation of a handler of the vectors, as SSZ bytes.\n\nThe preset, the configuration and the fork are named in UTF-8, and the handler too.\n\nThe signature checks run unless the verify flag is false.\n\nThe last argument is the answer of the execution layer to a payload."},
+   "The state after a block operation of a handler of the vectors, as SSZ bytes.\n\nThe preset, the configuration and the fork are named by `str`, and the handler too.\n\nThe signature checks run unless the verify flag is false.\n\nThe last argument is the answer of the execution layer to a payload."},
   {"summary":
    "The state after one step of the epoch transition of a handler of the vectors, as SSZ bytes.",
    "signature":
-   "(name: str, fork: str, handler: str, pre: bytes, config: bytes) -> bytes",
+   "(name: str, fork: str, handler: str, pre: bytes, config: dict[str, Any] | None) -> bytes",
    "operation": "EthLib.Consensus.Exports.processEpochExport",
    "method": "consensus_process_epoch",
    "errors":
@@ -2416,11 +2416,11 @@
       {"constructor": "wrongPayloadSlot", "code": 89}]}],
    "error_class": "TransitionError",
    "docstring":
-   "The state after one step of the epoch transition of a handler of the vectors, as SSZ bytes.\n\nThe preset, the configuration and the fork are named in UTF-8, and the handler too.\n\nThe signature of a pending deposit to a new key is always checked."},
+   "The state after one step of the epoch transition of a handler of the vectors, as SSZ bytes.\n\nThe preset, the configuration and the fork are named by `str`, and the handler too.\n\nThe signature of a pending deposit to a new key is always checked."},
   {"summary":
    "The rewards and the penalties of each validator for one kind of vote, as SSZ bytes.",
    "signature":
-   "(name: str, fork: str, component: str, pre: bytes, config: bytes) -> bytes",
+   "(name: str, fork: str, component: str, pre: bytes, config: dict[str, Any] | None) -> bytes",
    "operation": "EthLib.Consensus.Exports.rewardsDeltasExport",
    "method": "consensus_rewards_deltas",
    "errors":
@@ -2512,11 +2512,11 @@
       {"constructor": "wrongPayloadSlot", "code": 89}]}],
    "error_class": "TransitionError",
    "docstring":
-   "The rewards and the penalties of each validator for one kind of vote, as SSZ bytes.\n\nThe preset, the configuration, the fork and the kind of vote are named in UTF-8.\n\nThe kinds are the file names of the vectors without their extension, such as source deltas.\n\nA list longer than the registry limit has code 0."},
+   "The rewards and the penalties of each validator for one kind of vote, as SSZ bytes.\n\nThe preset, the configuration, the fork and the kind of vote are named by `str`.\n\nThe kinds are the file names of the vectors without their extension, such as source deltas.\n\nA list longer than the registry limit has code 0."},
   {"summary":
    "The deltas of several kinds of vote for one state, as SSZ bytes, in the order of the kinds.",
    "signature":
-   "(name: str, fork: str, components: list[bytes], pre: bytes, config: bytes) -> list[bytes]",
+   "(name: str, fork: str, components: list[str], pre: bytes, config: dict[str, Any] | None) -> list[bytes]",
    "operation": "EthLib.Consensus.Exports.rewardsDeltasBatchExport",
    "method": "consensus_rewards_deltas_batch",
    "errors":
@@ -2611,7 +2611,7 @@
    "The deltas of several kinds of vote for one state, as SSZ bytes, in the order of the kinds.\n\nThe state is decoded once for all the kinds.\n\nEach kind gives the same bytes as the export for one kind.\n\nThe first kind that fails gives the error."},
   {"summary": "The state some slots later, as SSZ bytes.",
    "signature":
-   "(name: str, fork: str, pre: bytes, config: bytes, slots: int) -> bytes",
+   "(name: str, fork: str, pre: bytes, config: dict[str, Any] | None, slots: int) -> bytes",
    "operation": "EthLib.Consensus.Exports.processSlotsExport",
    "method": "consensus_process_slots",
    "errors":
@@ -2703,11 +2703,11 @@
       {"constructor": "wrongPayloadSlot", "code": 89}]}],
    "error_class": "TransitionError",
    "docstring":
-   "The state some slots later, as SSZ bytes.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nFrom Electra the pending deposits check the signatures of new keys with BLS, as the vectors expect.\n\nA target slot that reaches `2^64` is an error."},
+   "The state some slots later, as SSZ bytes.\n\nThe preset, the configuration and the fork are named by `str`.\n\nFrom Electra the pending deposits check the signatures of new keys with BLS, as the vectors expect.\n\nA target slot that reaches `2^64` is an error."},
   {"summary":
    "The state after a signed block, as SSZ bytes, with the signature and the state root checked.",
    "signature":
-   "(name: str, fork: str, pre: bytes, block: bytes, config: bytes, verify: bool) -> bytes",
+   "(name: str, fork: str, pre: bytes, block: bytes, config: dict[str, Any] | None, verify: bool) -> bytes",
    "operation": "EthLib.Consensus.Exports.stateTransitionExport",
    "method": "consensus_state_transition",
    "errors":
@@ -2799,11 +2799,11 @@
       {"constructor": "wrongPayloadSlot", "code": 89}]}],
    "error_class": "TransitionError",
    "docstring":
-   "The state after a signed block, as SSZ bytes, with the signature and the state root checked.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nThe signature checks run unless the last argument is false.\n\nThe execution layer accepts every payload, as in the vectors, which fix no answer for blocks."},
+   "The state after a signed block, as SSZ bytes, with the signature and the state root checked.\n\nThe preset, the configuration and the fork are named by `str`.\n\nThe signature checks run unless the last argument is false.\n\nThe execution layer accepts every payload, as in the vectors, which fix no answer for blocks."},
   {"summary":
    "The state after a signed block of a fork, from a state of that fork or an earlier one.",
    "signature":
-   "(name: str, fork: str, pre: bytes, block_fork: str, block: bytes, config: bytes, verify: bool) -> bytes",
+   "(name: str, fork: str, pre: bytes, block_fork: str, block: bytes, config: dict[str, Any] | None, verify: bool) -> bytes",
    "operation": "EthLib.Consensus.Exports.stateTransitionAcrossExport",
    "method": "consensus_state_transition_across",
    "errors":
@@ -2895,11 +2895,11 @@
       {"constructor": "wrongPayloadSlot", "code": 89}]}],
    "error_class": "TransitionError",
    "docstring":
-   "The state after a signed block of a fork, from a state of that fork or an earlier one.\n\nThe state advances to the slot of the block and upgrades at each fork epoch on the way.\n\nThe fork epochs are those of the configuration, with its replacements.\n\nThe block must be of the fork that the state then has.\n\nThe preset, the configuration and both forks are named in UTF-8, each fork up to Heze.\n\nThe signature checks run unless the last argument is false.\n\nThe execution layer accepts every payload, as in the vectors, which fix no answer for blocks."},
+   "The state after a signed block of a fork, from a state of that fork or an earlier one.\n\nThe state advances to the slot of the block and upgrades at each fork epoch on the way.\n\nThe fork epochs are those of the configuration, with its replacements.\n\nThe block must be of the fork that the state then has.\n\nThe preset, the configuration and both forks are named by `str`, each fork up to Heze.\n\nThe signature checks run unless the last argument is false.\n\nThe execution layer accepts every payload, as in the vectors, which fix no answer for blocks."},
   {"summary":
    "The state after signed blocks in order, as SSZ bytes, with each state root checked.",
    "signature":
-   "(name: str, fork: str, pre: bytes, blocks: list[bytes], config: bytes, verify: bool) -> bytes",
+   "(name: str, fork: str, pre: bytes, blocks: list[bytes], config: dict[str, Any] | None, verify: bool) -> bytes",
    "operation": "EthLib.Consensus.Exports.stateTransitionsExport",
    "method": "consensus_state_transitions",
    "errors":
@@ -2991,11 +2991,11 @@
       {"constructor": "wrongPayloadSlot", "code": 89}]}],
    "error_class": "TransitionError",
    "docstring":
-   "The state after signed blocks in order, as SSZ bytes, with each state root checked.\n\nThe preset, the configuration and the fork are named in UTF-8, and every block is of that fork.\n\nThe first block that fails stops the call with its error.\n\nThe signature checks run unless the last argument is false.\n\nThe execution layer accepts every payload, as in the vectors, which fix no answer for blocks."},
+   "The state after signed blocks in order, as SSZ bytes, with each state root checked.\n\nThe preset, the configuration and the fork are named by `str`, and every block is of that fork.\n\nThe first block that fails stops the call with its error.\n\nThe signature checks run unless the last argument is false.\n\nThe execution layer accepts every payload, as in the vectors, which fix no answer for blocks."},
   {"summary":
    "The state after signed blocks in order, as SSZ bytes, across the fork epochs on the way.",
    "signature":
-   "(name: str, fork: str, pre: bytes, block_forks: list[bytes], blocks: list[bytes], config: bytes, verify: bool) -> bytes",
+   "(name: str, fork: str, pre: bytes, block_forks: list[str], blocks: list[bytes], config: dict[str, Any] | None, verify: bool) -> bytes",
    "operation": "EthLib.Consensus.Exports.stateTransitionsAcrossExport",
    "method": "consensus_state_transitions_across",
    "errors":
@@ -3087,11 +3087,11 @@
       {"constructor": "wrongPayloadSlot", "code": 89}]}],
    "error_class": "TransitionError",
    "docstring":
-   "The state after signed blocks in order, as SSZ bytes, across the fork epochs on the way.\n\nThe state may be of the fork of the first block or of an earlier one.\n\nBefore each block, the state advances to the slot of the block and upgrades at each fork epoch.\n\nEach block names its fork, which must be the fork that the state then has.\n\nThe preset, the configuration and every fork are named in UTF-8, each fork up to Heze.\n\nThe first block that fails stops the call with its error, as does a count of forks that differs.\n\nThe signature checks run unless the last argument is false.\n\nThe execution layer accepts every payload, as in the vectors, which fix no answer for blocks."},
+   "The state after signed blocks in order, as SSZ bytes, across the fork epochs on the way.\n\nThe state may be of the fork of the first block or of an earlier one.\n\nBefore each block, the state advances to the slot of the block and upgrades at each fork epoch.\n\nEach block names its fork, which must be the fork that the state then has.\n\nThe preset, the configuration and every fork are named by `str`, each fork up to Heze.\n\nThe first block that fails stops the call with its error, as does a count of forks that differs.\n\nThe signature checks run unless the last argument is false.\n\nThe execution layer accepts every payload, as in the vectors, which fix no answer for blocks."},
   {"summary":
    "The candidate genesis state of a block of the proof-of-work chain, as SSZ bytes.",
    "signature":
-   "(name: str, fork: str, eth1_block_hash: bytes, deposits: bytes, config: bytes, eth1_timestamp: int, verify: bool) -> bytes",
+   "(name: str, fork: str, eth1_block_hash: bytes, deposits: list[bytes], config: dict[str, Any] | None, eth1_timestamp: int, verify: bool) -> bytes",
    "operation": "EthLib.Consensus.Exports.initializeGenesisExport",
    "method": "consensus_initialize_genesis",
    "errors":
@@ -3183,17 +3183,19 @@
       {"constructor": "wrongPayloadSlot", "code": 89}]}],
    "error_class": "TransitionError",
    "docstring":
-   "The candidate genesis state of a block of the proof-of-work chain, as SSZ bytes.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nThe deposits come as the SSZ bytes of a list of deposits.\n\nThe signature checks of the deposits run unless the last argument is false."},
+   "The candidate genesis state of a block of the proof-of-work chain, as SSZ bytes.\n\nThe preset, the configuration and the fork are named by `str`.\n\nEach deposit comes as its SSZ bytes, in a list.\n\nThe signature checks of the deposits run unless the last argument is false."},
   {"summary": "Whether a candidate genesis state launches the chain.",
-   "signature": "(name: str, fork: str, state: bytes, config: bytes) -> bool",
+   "signature":
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None) -> bool",
    "operation": "EthLib.Consensus.Exports.isValidGenesisStateExport",
    "method": "consensus_is_valid_genesis_state",
    "errors": [],
    "error_class": "TransitionError",
    "docstring":
-   "Whether a candidate genesis state launches the chain.\n\nThe preset, the configuration and the fork are named in UTF-8."},
+   "Whether a candidate genesis state launches the chain.\n\nThe preset, the configuration and the fork are named by `str`."},
   {"summary": "The weak subjectivity period of a state, in epochs.",
-   "signature": "(name: str, fork: str, state: bytes, config: bytes) -> int",
+   "signature":
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None) -> int",
    "operation": "EthLib.Consensus.Exports.computeWeakSubjectivityPeriodExport",
    "method": "consensus_compute_weak_subjectivity_period",
    "errors":
@@ -3206,11 +3208,11 @@
       {"constructor": "epochMismatch", "code": 5}]}],
    "error_class": "WeakSubjectivityError",
    "docstring":
-   "The weak subjectivity period of a state, in epochs.\n\nThe preset, the configuration and the fork are named in UTF-8."},
+   "The weak subjectivity period of a state, in epochs.\n\nThe preset, the configuration and the fork are named by `str`."},
   {"summary":
    "Whether a checkpoint is within the weak subjectivity period of its state, at a time.",
    "signature":
-   "(name: str, fork: str, state: bytes, checkpoint: bytes, config: bytes, genesis_time_ms: int, time_ms: int) -> bool",
+   "(name: str, fork: str, state: bytes, checkpoint: bytes, config: dict[str, Any] | None, genesis_time_ms: int, time_ms: int) -> bool",
    "operation": "EthLib.Consensus.Exports.isWithinWeakSubjectivityPeriodExport",
    "method": "consensus_is_within_weak_subjectivity_period",
    "errors":
@@ -3223,7 +3225,7 @@
       {"constructor": "epochMismatch", "code": 5}]}],
    "error_class": "WeakSubjectivityError",
    "docstring":
-   "Whether a checkpoint is within the weak subjectivity period of its state, at a time.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nThe checkpoint comes as its SSZ bytes, and the state as the state at the checkpoint.\n\nThe two times are those of a store, in milliseconds since the Unix epoch."},
+   "Whether a checkpoint is within the weak subjectivity period of its state, at a time.\n\nThe preset, the configuration and the fork are named by `str`.\n\nThe checkpoint comes as its SSZ bytes, and the state as the state at the checkpoint.\n\nThe two times are those of a store, in milliseconds since the Unix epoch."},
   {"summary": "The committee assignment of a validator in an epoch, as JSON.",
    "signature":
    "(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) -> bytes",
@@ -4461,7 +4463,7 @@
   {"summary":
    "The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes.",
    "signature":
-   "(name: str, fork: str, pre: bytes, config: bytes, verify: bool) -> bytes",
+   "(name: str, fork: str, pre: bytes, config: dict[str, Any] | None, verify: bool) -> bytes",
    "operation": "EthLib.Consensus.Exports.upgradeStateExport",
    "method": "consensus_upgrade_state",
    "errors":
@@ -4553,7 +4555,7 @@
       {"constructor": "wrongPayloadSlot", "code": 89}]}],
    "error_class": "TransitionError",
    "docstring":
-   "The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes.\n\nThe preset, the configuration and the target fork are named in UTF-8.\n\nThe upgrades are those from Altair to Heze, each from the consensus fork before it.\n\nThe signature checks of the deposits at the upgrade to Gloas run unless the last argument is false."},
+   "The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes.\n\nThe preset, the configuration and the target fork are named by `str`.\n\nThe upgrades are those from Altair to Heze, each from the consensus fork before it.\n\nThe signature checks of the deposits at the upgrade to Gloas run unless the last argument is false."},
   {"summary":
    "The outcome of each step of a fork choice case, from an anchor state and an anchor block.",
    "signature":

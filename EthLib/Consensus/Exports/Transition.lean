@@ -42,7 +42,9 @@ Two more run a sequence of signed blocks in one call, in each of these two ways.
 
 The state is then decoded and encoded once, not once for each block.
 
-The configuration of a name holds, with the replacements that a JSON object gives.
+The configuration of a name holds, with the replacements that a `dict` gives.
+
+The exports take the tuple of their arguments as typed Python values.
 
 It checks the BLS signatures, or accepts every signature for the vectors with placeholder ones.
 
@@ -56,7 +58,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz
-open EthLib.Exports (Result)
+open EthLib.Exports (Result PyValue pyExport)
 
 /-- The value of a type that SSZ bytes encode. -/
 def decodeInput (α : Type) [SszType α] (data : ByteArray) : Result α :=
@@ -223,73 +225,93 @@ def runEpochStep {preset : Preset} {fork : Fork} (config : Config) (handler : St
     else throw (0, s!"no epoch step proposer_lookahead at {fork.name}")
   | handler => throw (0, s!"no epoch step {handler}")
 
-/-- The state after a block operation of a handler of the vectors, as SSZ bytes.
-
-The preset, the configuration and the fork are named in UTF-8, and the handler too.
-
-The signature checks run unless the verify flag is false.
-
-The last argument is the answer of the execution layer to a payload. -/
-@[export eth_consensus_process_operation]
-def processOperationExport (name fork handler pre operation replacements : ByteArray)
-    (verify executionValid : Bool) : Result ByteArray := do
-  let (preset, fork) ← transitionPresetAndFork name fork
-  let config ← configWith name replacements
+/-- The state after a block operation of a handler of the vectors, as SSZ bytes. -/
+def processOperationOf
+    (args : String × String × String × ByteArray × ByteArray × Option PyValue × Bool × Bool) :
+    Result ByteArray := do
+  let (name, fork, handler, pre, operation, replacements, verify, executionValid) := args
+  let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
+  let config ← configWithValue name replacements
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
-  let handler ← nameOf handler
   if .glamsterdam ≤ fork ∧ handler ∉ gloasOperations then
     throw (0, s!"no operation {handler} at {fork.name}")
   let state ← decodeInput (BeaconState preset fork) pre
   let after ← runOperation config checks executionValid handler state operation
   (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")
 
+/-- The state after a block operation of a handler of the vectors, as SSZ bytes.
+
+The preset, the configuration and the fork are named by `str`, and the handler too.
+
+The signature checks run unless the verify flag is false.
+
+The last argument is the answer of the execution layer to a payload. -/
+@[export eth_consensus_process_operation]
+def processOperationExport (args : PyValue) : Result PyValue := pyExport processOperationOf args
+
+/-- The state after one step of the epoch transition of a handler of the vectors, as SSZ bytes. -/
+def processEpochOf
+    (args : String × String × String × ByteArray × Option PyValue) :
+    Result ByteArray := do
+  let (name, fork, handler, pre, replacements) := args
+  let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
+  let config ← configWithValue name replacements
+  let state ← decodeInput (BeaconState preset fork) pre
+  let after ← runEpochStep config handler state
+  (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")
+
 /-- The state after one step of the epoch transition of a handler of the vectors, as SSZ bytes.
 
-The preset, the configuration and the fork are named in UTF-8, and the handler too.
+The preset, the configuration and the fork are named by `str`, and the handler too.
 
 The signature of a pending deposit to a new key is always checked. -/
 @[export eth_consensus_process_epoch]
-def processEpochExport (name fork handler pre replacements : ByteArray) : Result ByteArray := do
-  let (preset, fork) ← transitionPresetAndFork name fork
-  let config ← configWith name replacements
-  let state ← decodeInput (BeaconState preset fork) pre
-  let after ← runEpochStep config (← nameOf handler) state
-  (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")
+def processEpochExport (args : PyValue) : Result PyValue := pyExport processEpochOf args
 
-/-- The state some slots later, as SSZ bytes.
-
-The preset, the configuration and the fork are named in UTF-8.
-
-From Electra the pending deposits check the signatures of new keys with BLS, as the vectors expect.
-
-A target slot that reaches `2^64` is an error. -/
-@[export eth_consensus_process_slots]
-def processSlotsExport (name fork pre replacements : ByteArray) (slots : UInt64) :
+/-- The state some slots later, as SSZ bytes. -/
+def processSlotsOf
+    (args : String × String × ByteArray × Option PyValue × UInt64) :
     Result ByteArray := do
-  let (preset, fork) ← transitionPresetAndFork name fork
-  let config ← configWith name replacements
+  let (name, fork, pre, replacements, slots) := args
+  let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
+  let config ← configWithValue name replacements
   let state ← decodeInput (BeaconState preset fork) pre
   let target ← runTransition (liftAccessor (liftArith (Uint64.addChecked state.slot slots)))
   let after ← runTransition (processSlots config .bls state target)
   (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")
 
-/-- The state after a signed block, as SSZ bytes, with the signature and the state root checked.
+/-- The state some slots later, as SSZ bytes.
 
-The preset, the configuration and the fork are named in UTF-8.
+The preset, the configuration and the fork are named by `str`.
 
-The signature checks run unless the last argument is false.
+From Electra the pending deposits check the signatures of new keys with BLS, as the vectors expect.
 
-The execution layer accepts every payload, as in the vectors, which fix no answer for blocks. -/
-@[export eth_consensus_state_transition]
-def stateTransitionExport (name fork pre block replacements : ByteArray) (verify : Bool) :
+A target slot that reaches `2^64` is an error. -/
+@[export eth_consensus_process_slots]
+def processSlotsExport (args : PyValue) : Result PyValue := pyExport processSlotsOf args
+
+/-- The state after a signed block, as SSZ bytes, with the signature and the state root checked. -/
+def stateTransitionOf
+    (args : String × String × ByteArray × ByteArray × Option PyValue × Bool) :
     Result ByteArray := do
-  let (preset, fork) ← transitionPresetAndFork name fork
-  let config ← configWith name replacements
+  let (name, fork, pre, block, replacements, verify) := args
+  let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
+  let config ← configWithValue name replacements
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   let state ← decodeInput (BeaconState preset fork) pre
   let signed ← decodeInput (SignedBeaconBlock preset fork) block
   let after ← runTransition (stateTransition config checks (.constant true) state signed)
   (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")
+
+/-- The state after a signed block, as SSZ bytes, with the signature and the state root checked.
+
+The preset, the configuration and the fork are named by `str`.
+
+The signature checks run unless the last argument is false.
+
+The execution layer accepts every payload, as in the vectors, which fix no answer for blocks. -/
+@[export eth_consensus_state_transition]
+def stateTransitionExport (args : PyValue) : Result PyValue := pyExport stateTransitionOf args
 
 /-- The consensus fork before a fork, from Altair to Heze. -/
 def forkBefore : Fork → Result Fork
@@ -303,24 +325,44 @@ def forkBefore : Fork → Result Fork
   | .hegota => pure .glamsterdam
   | fork => throw (0, s!"no upgrade to {fork.name}")
 
+/-- The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes. -/
+def upgradeStateOf
+    (args : String × String × ByteArray × Option PyValue × Bool) :
+    Result ByteArray := do
+  let (name, fork, pre, replacements, verify) := args
+  let preset ← presetOf name
+  let previous ← forkBefore (← forkOf fork.toUTF8)
+  let config ← configWithValue name replacements
+  let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
+  let state ← decodeInput (BeaconState preset previous) pre
+  let post ← runTransition (upgradeNext config checks ⟨previous, state⟩)
+  (SszType.serialize post.val.state).mapError fun e => (0, s!"state rejected: {reprStr e}")
+
 /-- The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes.
 
-The preset, the configuration and the target fork are named in UTF-8.
+The preset, the configuration and the target fork are named by `str`.
 
 The upgrades are those from Altair to Heze, each from the consensus fork before it.
 
 The signature checks of the deposits at the upgrade to Gloas run unless the last argument is false.
 -/
 @[export eth_consensus_upgrade_state]
-def upgradeStateExport (name fork pre replacements : ByteArray) (verify : Bool) :
+def upgradeStateExport (args : PyValue) : Result PyValue := pyExport upgradeStateOf args
+
+/-- The state after a signed block of a fork, from a state of that fork or an earlier one. -/
+def stateTransitionAcrossOf
+    (args : String × String × ByteArray × String × ByteArray × Option PyValue × Bool) :
     Result ByteArray := do
-  let preset ← presetOf (← nameOf name)
-  let previous ← forkBefore (← forkOf fork)
-  let config ← configWith name replacements
+  let (name, fork, pre, blockFork, block, replacements, verify) := args
+  let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
+  let (_, blockFork) ← transitionPresetAndFork name.toUTF8 blockFork.toUTF8
+  let config ← configWithValue name replacements
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
-  let state ← decodeInput (BeaconState preset previous) pre
-  let post ← runTransition (upgradeNext config checks ⟨previous, state⟩)
-  (SszType.serialize post.val.state).mapError fun e => (0, s!"state rejected: {reprStr e}")
+  let state ← decodeInput (BeaconState preset fork) pre
+  let signed ← decodeInput (SignedBeaconBlock preset blockFork) block
+  let after ← runTransition
+    (stateTransitionAcross config checks (.constant true) ⟨fork, state⟩ signed)
+  (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")
 
 /-- The state after a signed block of a fork, from a state of that fork or an earlier one.
 
@@ -330,27 +372,32 @@ The fork epochs are those of the configuration, with its replacements.
 
 The block must be of the fork that the state then has.
 
-The preset, the configuration and both forks are named in UTF-8, each fork up to Heze.
+The preset, the configuration and both forks are named by `str`, each fork up to Heze.
 
 The signature checks run unless the last argument is false.
 
 The execution layer accepts every payload, as in the vectors, which fix no answer for blocks. -/
 @[export eth_consensus_state_transition_across]
-def stateTransitionAcrossExport (name fork pre blockFork block replacements : ByteArray)
-    (verify : Bool) : Result ByteArray := do
-  let (preset, fork) ← transitionPresetAndFork name fork
-  let (_, blockFork) ← transitionPresetAndFork name blockFork
-  let config ← configWith name replacements
+def stateTransitionAcrossExport (args : PyValue) : Result PyValue :=
+  pyExport stateTransitionAcrossOf args
+
+/-- The state after signed blocks in order, as SSZ bytes, with each state root checked. -/
+def stateTransitionsOf
+    (args : String × String × ByteArray × Array ByteArray × Option PyValue × Bool) :
+    Result ByteArray := do
+  let (name, fork, pre, blocks, replacements, verify) := args
+  let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
+  let config ← configWithValue name replacements
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
-  let state ← decodeInput (BeaconState preset fork) pre
-  let signed ← decodeInput (SignedBeaconBlock preset blockFork) block
-  let after ← runTransition
-    (stateTransitionAcross config checks (.constant true) ⟨fork, state⟩ signed)
-  (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")
+  let mut state ← decodeInput (BeaconState preset fork) pre
+  for block in blocks do
+    let signed ← decodeInput (SignedBeaconBlock preset fork) block
+    state ← runTransition (stateTransition config checks (.constant true) state signed)
+  (SszType.serialize state).mapError fun e => (0, s!"state rejected: {reprStr e}")
 
 /-- The state after signed blocks in order, as SSZ bytes, with each state root checked.
 
-The preset, the configuration and the fork are named in UTF-8, and every block is of that fork.
+The preset, the configuration and the fork are named by `str`, and every block is of that fork.
 
 The first block that fails stops the call with its error.
 
@@ -358,16 +405,25 @@ The signature checks run unless the last argument is false.
 
 The execution layer accepts every payload, as in the vectors, which fix no answer for blocks. -/
 @[export eth_consensus_state_transitions]
-def stateTransitionsExport (name fork pre : ByteArray) (blocks : Array ByteArray)
-    (replacements : ByteArray) (verify : Bool) : Result ByteArray := do
-  let (preset, fork) ← transitionPresetAndFork name fork
-  let config ← configWith name replacements
+def stateTransitionsExport (args : PyValue) : Result PyValue := pyExport stateTransitionsOf args
+
+/-- The state after signed blocks in order, as SSZ bytes, across the fork epochs on the way. -/
+def stateTransitionsAcrossOf
+    (args : String × String × ByteArray × Array String × Array ByteArray × Option PyValue × Bool) :
+    Result ByteArray := do
+  let (name, fork, pre, blockForks, blocks, replacements, verify) := args
+  let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
+  let config ← configWithValue name replacements
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
-  let mut state ← decodeInput (BeaconState preset fork) pre
-  for block in blocks do
-    let signed ← decodeInput (SignedBeaconBlock preset fork) block
-    state ← runTransition (stateTransition config checks (.constant true) state signed)
-  (SszType.serialize state).mapError fun e => (0, s!"state rejected: {reprStr e}")
+  if blockForks.size != blocks.size then
+    throw (0, s!"{blockForks.size} block forks for {blocks.size} blocks")
+  let mut forked : ForkedBeaconState preset := ⟨fork, ← decodeInput (BeaconState preset fork) pre⟩
+  for (blockFork, block) in blockForks.zip blocks do
+    let (_, blockFork) ← transitionPresetAndFork name.toUTF8 blockFork.toUTF8
+    let signed ← decodeInput (SignedBeaconBlock preset blockFork) block
+    forked := ⟨blockFork,
+      ← runTransition (stateTransitionAcross config checks (.constant true) forked signed)⟩
+  (SszType.serialize forked.state).mapError fun e => (0, s!"state rejected: {reprStr e}")
 
 /-- The state after signed blocks in order, as SSZ bytes, across the fork epochs on the way.
 
@@ -377,7 +433,7 @@ Before each block, the state advances to the slot of the block and upgrades at e
 
 Each block names its fork, which must be the fork that the state then has.
 
-The preset, the configuration and every fork are named in UTF-8, each fork up to Heze.
+The preset, the configuration and every fork are named by `str`, each fork up to Heze.
 
 The first block that fails stops the call with its error, as does a count of forks that differs.
 
@@ -385,19 +441,7 @@ The signature checks run unless the last argument is false.
 
 The execution layer accepts every payload, as in the vectors, which fix no answer for blocks. -/
 @[export eth_consensus_state_transitions_across]
-def stateTransitionsAcrossExport (name fork pre : ByteArray) (blockForks blocks : Array ByteArray)
-    (replacements : ByteArray) (verify : Bool) : Result ByteArray := do
-  let (preset, fork) ← transitionPresetAndFork name fork
-  let config ← configWith name replacements
-  let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
-  if blockForks.size != blocks.size then
-    throw (0, s!"{blockForks.size} block forks for {blocks.size} blocks")
-  let mut forked : ForkedBeaconState preset := ⟨fork, ← decodeInput (BeaconState preset fork) pre⟩
-  for (blockFork, block) in blockForks.zip blocks do
-    let (_, blockFork) ← transitionPresetAndFork name blockFork
-    let signed ← decodeInput (SignedBeaconBlock preset blockFork) block
-    forked := ⟨blockFork,
-      ← runTransition (stateTransitionAcross config checks (.constant true) forked signed)⟩
-  (SszType.serialize forked.state).mapError fun e => (0, s!"state rejected: {reprStr e}")
+def stateTransitionsAcrossExport (args : PyValue) : Result PyValue :=
+  pyExport stateTransitionsAcrossOf args
 
 end EthLib.Consensus.Exports
