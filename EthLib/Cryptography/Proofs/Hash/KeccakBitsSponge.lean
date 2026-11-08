@@ -120,7 +120,8 @@ private theorem maskBits : ∀ (first last : Bool) (i : Fin 8),
 /-- Byte `pos` of the padding sets bit 0 when it is the first byte, and bit 7 when it is the last.
 
 It sets no other bit. -/
-theorem paddingByte_testBit (rate len pos bit : Nat) (h : bit < 8) :
+theorem _root_.EthLib.Cryptography.Hash.Keccak.paddingByte_testBit (rate len pos bit : Nat)
+    (h : bit < 8) :
     (Keccak.paddingByte rate len pos).toNat.testBit bit =
       (decide (pos = 0 ∧ bit = 0) || decide (pos + 1 = rate - len % rate ∧ bit = 7)) := by
   have hb := maskBits (decide (pos = 0)) (decide (pos + 1 = rate - len % rate)) ⟨bit, h⟩
@@ -145,7 +146,7 @@ theorem paddingBits_eq (len : Nat) :
       simp only [Keccak.padding_data, Array.size_ofFn]
       exact iByte) = Keccak.paddingByte 136 len (i / 8) := by
     simp [Keccak.padding_data]
-  rw [byteEq, paddingByte_testBit _ _ _ _ bitBound]
+  rw [byteEq, Keccak.paddingByte_testBit _ _ _ _ bitBound]
   have plen : (padding (8 * len)).length = 8 * (136 - len % 136) := by
     rw [← hl, messageBits_length, Keccak.size_padding]
   -- The first padding bit is bit 0 of byte 0, and the last is bit 7 of the last byte.
@@ -210,7 +211,8 @@ private theorem laneAt_eq (bytes : ByteArray) (s : Nat) :
   rfl
 
 /-- Bit `i` of the lane at byte `s` is bit `i % 8` of byte `s + i / 8`, as in FIPS 202 §3.1.2. -/
-theorem laneAt_testBit (bytes : ByteArray) (s i : Nat) (hi : i < 64) :
+theorem _root_.EthLib.Cryptography.Hash.Keccak.Internal.laneAt_testBit (bytes : ByteArray)
+    (s i : Nat) (hi : i < 64) :
     (Keccak.Internal.laneAt bytes s).toBitVec.getLsbD i =
       (EthLib.Base.byteAt bytes (s + i / 8)).toNat.testBit (i % 8) := by
   rw [laneAt_eq]
@@ -234,7 +236,8 @@ def blockBits (bytes : ByteArray) (start : Nat) : Block :=
   Vector.ofFn fun i => (EthLib.Base.byteAt bytes (start + i.val / 8)).toNat.testBit (i.val % 8)
 
 /-- Lane `(x, y)` after absorbing a block is the lane XOR block lane `x + 5 * y`. -/
-theorem absorbBlock_lane (a : Keccak.State) (bytes : ByteArray) (start : Nat) (x y : Fin 5) :
+theorem _root_.EthLib.Cryptography.Hash.Keccak.Internal.absorbBlock_lane (a : Keccak.State)
+    (bytes : ByteArray) (start : Nat) (x y : Fin 5) :
     (Keccak.Internal.absorbBlock 136 a bytes start).lane x y =
       a.lane x y ^^^ Keccak.Internal.blockLane 136 bytes start (x.val + 5 * y.val) := by
   fin_cases x <;> fin_cases y <;>
@@ -251,14 +254,14 @@ theorem absorbBlock_ofLanes (a : Keccak.State) (bytes : ByteArray) (start : Nat)
     have := y.isLt
     omega
   have address : index x y z = 64 * (x.val + 5 * y.val) + z.val := rfl
-  simp only [ofLanes, absorbBlock_lane, UInt64.toBitVec_xor, BitVec.getLsbD_xor, absorb,
-    Keccak.Internal.blockLane]
+  simp only [ofLanes, Keccak.Internal.absorbBlock_lane, UInt64.toBitVec_xor, BitVec.getLsbD_xor,
+    absorb, Keccak.Internal.blockLane]
   congr 1
   by_cases rate : x.val + 5 * y.val < 17
   -- A rate lane reads 8 bytes of the block.
   · have inside : index x y z < 1088 := by omega
     simp only [show 8 * (x.val + 5 * y.val) < 136 by omega, ↓reduceIte, dite_eq_left inside,
-      laneAt_testBit _ _ _ hz, blockBits, Vector.getElem_ofFn]
+      Keccak.Internal.laneAt_testBit _ _ _ hz, blockBits, Vector.getElem_ofFn]
     have byte : start + 8 * (x.val + 5 * y.val) + z.val / 8 = start + index x y z / 8 := by
       omega
     have bit : z.val % 8 = index x y z % 8 := by omega

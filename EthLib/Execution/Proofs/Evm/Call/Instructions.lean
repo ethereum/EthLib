@@ -308,17 +308,6 @@ theorem accessAddress_message (evm : Evm fork Meter) (address : Base.Address) :
   obtain ⟨_, h⟩ := accessAddress_snd evm address
   rw [h]
 
-/-- The rest of an instruction that keeps its reads fails only with an error that aborts the run.
-
-That error is the error of the rest. -/
-theorem keepReads_eq_error {α : Type} {evm : Evm fork Meter} {halted : Evm fork Meter → α}
-    {rest : Except EvmError α} {e : EvmError} :
-    keepReads evm halted rest = .error e ↔ rest = .error e ∧ e.aborts = true := by
-  unfold keepReads
-  split
-  · split <;> simp_all <;> rintro rfl <;> assumption
-  · simp
-
 /-- The access to a delegate keeps the message of the frame. -/
 theorem accessDelegation_message {evm after : Evm fork Meter} {address : Base.Address}
     {known : Nat} {callee : Callee} (h : accessDelegation evm address known = .ok (callee, after)) :

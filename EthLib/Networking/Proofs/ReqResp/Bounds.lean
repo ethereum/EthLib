@@ -21,9 +21,6 @@ open EthLib.Networking.ReqResp
 open EthLib.Networking.Proofs.ReqResp.Encoding
 open EthLib.Serialization.Ssz
 
-/-- The payload cap is 10 MiB. -/
-theorem toNat_MAX_PAYLOAD_SIZE : MAX_PAYLOAD_SIZE.toNat = 10485760 := rfl
-
 /-- The smallest length of a type, held to one byte past the cap. -/
 theorem toNat_payloadBounds_fst (shape : Desc) :
     (payloadBounds shape).1.toNat = min shape.minSize (MAX_PAYLOAD_SIZE.toNat + 1) := by

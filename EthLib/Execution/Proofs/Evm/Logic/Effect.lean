@@ -460,7 +460,7 @@ theorem untouched_of_not_mem {touched : List (Address × U256)} {fact : SlotFact
     have : slot = fact.slot := by
       obtain ⟨a, k⟩ := slot
       simp only at ha hk
-      simp [SlotFact.slot, ha, toBeBytes_inj hk]
+      simp [SlotFact.slot, ha, U256.toBeBytes_inj hk]
     rw [← this]
     exact hs
   · exact .inl ha

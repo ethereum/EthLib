@@ -108,33 +108,6 @@ private theorem list_foldl_push {σ α β : Type} {step : σ → α → σ} (p :
     rw [List.foldl_cons, list_foldl_push p g hp L, hp, List.map_cons, List.toArray_cons]
     ext i h₁ h₂ <;> simp [Array.getElem_append]
 
-/-- If a fold over a list succeeds, every member satisfies any condition needed by one step. -/
-private theorem list_foldlM_forall {ε σ α : Type} {f : σ → α → Except ε σ} {P : α → Prop}
-    (hf : ∀ acc x r, f acc x = .ok r → P x) :
-    ∀ (L : List α) init out, L.foldlM f init = .ok out → ∀ x ∈ L, P x
-  | [], _, _, _, _, hx => absurd hx List.not_mem_nil
-  | x :: xs, init, out, h, q, hq => by
-    simp only [List.foldlM_cons, bind, Except.bind] at h
-    cases hx : f init x with
-    | error e => rw [hx] at h; cases h
-    | ok mid =>
-      rw [hx] at h
-      rcases List.mem_cons.mp hq with rfl | hmem
-      · exact hf init q mid hx
-      · exact list_foldlM_forall hf xs mid out h q hmem
-
-/-- A monadic fold whose every step succeeds with a pure step returns the pure fold. -/
-private theorem list_foldlM_eq_foldl {ε σ α : Type} {f : σ → α → Except ε σ} {step : σ → α → σ}
-    {L : List α} (hstep : ∀ acc x, x ∈ L → f acc x = .ok (step acc x)) :
-    ∀ init, L.foldlM f init = .ok (L.foldl step init) := by
-  induction L with
-  | nil => intro init; rfl
-  | cons x xs ih =>
-    intro init
-    rw [List.foldlM_cons, hstep init x List.mem_cons_self, List.foldl_cons]
-    simp only [bind, Except.bind]
-    exact ih (fun acc q hq => hstep acc q (List.mem_cons_of_mem x hq)) _
-
 /-- One step of the loop of the batch check of blobs, on inputs that decode. -/
 private theorem blobLoopStep_of_ok (acc : BlobBatchAcc) (blob : Blob) (cb pb : Bytes48) (i : Nat)
     {c p : G1} {poly : Polynomial} (hcb : validateKzgG1Point cb = .ok c)
@@ -265,7 +238,7 @@ private theorem blobLoop_eq_ok {blobs : Array Blob} {commitmentsBytes proofsByte
   let pureEntry : (Blob × Bytes48 × Bytes48) × Nat →
       Blob × Bytes48 × Bytes48 × G1 × G1 × Polynomial :=
     fun e => (e.1.1, e.1.2.1, e.1.2.2, csG1[e.2]!, psG1[e.2]!, ps[e.2]!)
-  rw [list_foldlM_eq_foldl (L := L)
+  rw [Base.foldlM_eq_ok_foldl (L := L)
     (step := fun acc e => blobPureStep acc (pureEntry e)) fun acc e he => by
       obtain ⟨k, hk, rfl⟩ := List.getElem_of_mem he
       rw [hgetL k hk]
@@ -355,7 +328,7 @@ theorem verifyBlobKzgProofBatch_eq_ok {s : TrustedSetup} {blobs : Array Blob}
     exact Array.mem_toList_iff.mpr (Array.getElem_mem hkz)
   have hfoldL := hfold
   rw [← Array.foldlM_toList] at hfoldL
-  have hall := list_foldlM_forall
+  have hall := Base.foldlM_forall_of_ok
     (fun s₀ (e : (Blob × Bytes48 × Bytes48) × Nat) r hr =>
       blobLoopStep_valid s₀ r e.1.1 e.1.2.1 e.1.2.2 e.2 hr) _ _ _ hfoldL
   obtain ⟨ps, hps⟩ := array_mapM_exists_ok (f := blobToPolynomial) (xs := blobs) fun bl hbl => by

@@ -157,25 +157,6 @@ structure CellOpening where
 def CellOpening.Verifies (s : TrustedSetup) (commitment : Bytes48) (o : CellOpening) : Prop :=
   verifyCellKzgProofBatch s #[commitment] #[o.cellIndex] #[o.cell] #[o.proof] = .ok true
 
-/-- A fold whose steps fail on an invalid commitment validates every commitment it reads. -/
-private theorem foldlM_validates {ε : Type}
-    {f : Array KZGCommitment × Array CommitmentIndex → Bytes48 × Nat →
-      Except ε (Array KZGCommitment × Array CommitmentIndex)}
-    (hf : ∀ acc p r, f acc p = .ok r → validateKzgG1 p.1 = true) :
-    ∀ (L : List (Bytes48 × Nat)) init r, L.foldlM f init = .ok r →
-      ∀ p ∈ L, validateKzgG1 p.1 = true
-  | [], _, _, _ => fun _ hp => absurd hp List.not_mem_nil
-  | q :: L, init, r, h => by
-    simp only [List.foldlM_cons, bind, Except.bind] at h
-    cases hq : f init q with
-    | error e => rw [hq] at h; cases h
-    | ok r' =>
-      rw [hq] at h
-      intro p hp
-      rcases List.mem_cons.mp hp with rfl | hp
-      · exact hf _ _ _ hq
-      · exact foldlM_validates hf L r' r h p hp
-
 /-- A map that fails on an invalid proof validates every proof it reads. -/
 private theorem zipIdx_mapM_validates {ε : Type} {g : Bytes48 × Nat → Except ε Bytes48}
     (hg : ∀ p r, g p = .ok r → validateKzgG1 p.1 = true) {ps qs : Array Bytes48}
@@ -217,7 +198,8 @@ theorem validates_of_verifyCellKzgProofBatch {s : TrustedSetup} {bs : Array Byte
   constructor
   · intro c hc
     rw [← Array.foldlM_toList] at hdd
-    have hall := foldlM_validates (fun acc p r hr => by
+    have hall := Base.foldlM_forall_of_ok (P := fun p : Bytes48 × Nat => validateKzgG1 p.1 = true)
+      (fun acc p r hr => by
       cases hb : bytesToKzgCommitment p.1 with
       | error e =>
         simp [hb, throw, throwThe, MonadExceptOf.throw] at hr

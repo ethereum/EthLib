@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Hash.Blake2b
+public import EthLib.Base.Proofs.BitVec
 public import Mathlib.Logic.Function.Defs
 
 /-!
@@ -168,16 +169,7 @@ theorem rotr_rotr (x n : UInt64) (h0 : 0 < n.toNat) (h64 : n.toNat < 64) :
   have hsub := (sixtyFour_sub_cancel h0 h64).1
   apply UInt64.toBitVec_inj.mp
   rw [rotr_toBitVec _ _ (by omega) (by omega), rotr_toBitVec _ _ h0 h64, hsub]
-  refine BitVec.eq_of_getLsbD_eq fun i hi => ?_
-  simp only [BitVec.getLsbD_rotateRight, Nat.mod_eq_of_lt (by omega : 64 - n.toNat < 64),
-    Nat.mod_eq_of_lt h64, hi, decide_true, Bool.true_and]
-  rw [show 64 - (64 - n.toNat) = n.toNat by omega]
-  by_cases hlt : i < n.toNat
-  · have hlt2 : 64 - n.toNat + i < 64 := by omega
-    have hge2 : ¬ (64 - n.toNat + i < 64 - n.toNat) := by omega
-    simp [hlt, hlt2, hge2, show 64 - n.toNat + i - (64 - n.toNat) = i by omega]
-  · have hlt3 : i - n.toNat < 64 - n.toNat := by omega
-    simp [hlt, hlt3, show n.toNat + (i - n.toNat) = i by omega]
+  exact Base.rotateRight_rotateRight_sub _ h64
 
 /-- Right rotation by a fixed `n` with `0 < n < 64` permutes the 64-bit words. -/
 theorem rotr_left_bijective {n : UInt64} (h0 : 0 < n.toNat) (h64 : n.toNat < 64) :

@@ -2,6 +2,7 @@ module
 
 public import EthLib.Serialization.Ssz.Type.Bounds
 public import EthLib.Serialization.Proofs.Ssz.Codec.Size
+public import EthLib.Base.Proofs.List
 
 /-!
 # `Serialization.Proofs.Ssz.Type.Bounds`
@@ -26,28 +27,6 @@ theorem fieldSize_eq (shape : Desc) (size : Nat) :
 /-- The bounds of a size: at least `low`, and at most `high` where there is one. -/
 def WithinBounds (low : Nat) (high : Option Nat) (size : Nat) : Prop :=
   low ≤ size ∧ ∀ bound, high = some bound → size ≤ bound
-
-/-! ## Sums -/
-
-/-- Each term at least `low` makes the sum at least the count times `low`. -/
-theorem le_sum_map {α : Type} {f : α → Nat} {low : Nat} :
-    ∀ {xs : List α}, (∀ x ∈ xs, low ≤ f x) → xs.length * low ≤ (xs.map f).sum
-  | [], _ => by simp
-  | x :: xs, h => by
-    have hx := h x List.mem_cons_self
-    have := le_sum_map (xs := xs) fun y hy => h y (List.mem_cons_of_mem x hy)
-    simp only [List.length_cons, List.map_cons, List.sum_cons, Nat.succ_mul]
-    omega
-
-/-- Each term at most `high` makes the sum at most the count times `high`. -/
-theorem sum_map_le {α : Type} {f : α → Nat} {high : Nat} :
-    ∀ {xs : List α}, (∀ x ∈ xs, f x ≤ high) → (xs.map f).sum ≤ xs.length * high
-  | [], _ => by simp
-  | x :: xs, h => by
-    have hx := h x List.mem_cons_self
-    have := sum_map_le (xs := xs) fun y hy => h y (List.mem_cons_of_mem x hy)
-    simp only [List.length_cons, List.map_cons, List.sum_cons, Nat.succ_mul]
-    omega
 
 /-- The fields of a struct, each within the bounds of its type, are within the struct's bounds. -/
 theorem fields_withinBounds {g : Desc → Value → Nat} :
@@ -207,7 +186,7 @@ theorem withinBounds_of_representable {shape : Desc} {value : Value} {size : Nat
       have bounds v (hv : v ∈ values) := ih v hv (fitsEach v hv)
       simp only [fieldSize_eq]
       refine ⟨?_, ?_⟩
-      · have := le_sum_map (f := fun v => sizes v + offsetWidth element)
+      · have := Base.le_sum_map (f := fun v => sizes v + offsetWidth element)
           (low := element.minSize + offsetWidth element) fun v hv => by
             have := (bounds v hv).1
             omega
@@ -217,7 +196,7 @@ theorem withinBounds_of_representable {shape : Desc} {value : Value} {size : Nat
       · intro bound hb
         simp only [Desc.maxSize, Option.map_eq_some_iff] at hb
         obtain ⟨m, hm, rfl⟩ := hb
-        have := sum_map_le (f := fun v => sizes v + offsetWidth element)
+        have := Base.sum_map_le (f := fun v => sizes v + offsetWidth element)
           (high := m + offsetWidth element) fun v hv => by
             have := (bounds v hv).2 m hm
             omega
@@ -233,7 +212,7 @@ theorem withinBounds_of_representable {shape : Desc} {value : Value} {size : Nat
       simp only [Desc.maxSize, Option.map_eq_some_iff] at hb
       obtain ⟨m, hm, rfl⟩ := hb
       simp only [fieldSize_eq]
-      have := sum_map_le (f := fun v => sizes v + offsetWidth element)
+      have := Base.sum_map_le (f := fun v => sizes v + offsetWidth element)
         (high := m + offsetWidth element) fun v hv => by
           have := (bounds v hv).2 m hm
           omega
@@ -254,7 +233,7 @@ theorem withinBounds_of_representable {shape : Desc} {value : Value} {size : Nat
         cases hl
         simp only [withinBound, decide_eq_true_eq] at within
         simp only [fieldSize_eq]
-        have := sum_map_le (f := fun v => sizes v + offsetWidth element)
+        have := Base.sum_map_le (f := fun v => sizes v + offsetWidth element)
           (high := m + offsetWidth element) fun v hv => by
             have := (bounds v hv).2 m hm
             omega

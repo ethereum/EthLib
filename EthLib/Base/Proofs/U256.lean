@@ -67,4 +67,8 @@ theorem toBeBytes_fromBeBytes (bytes : Vector UInt8 32) :
   apply Vector.toList_inj.mp
   rw [toList_toBeBytes, natToBytes_toNat_fromBeBytes]
 
+/-- Two words with the same bytes are the same word. -/
+theorem toBeBytes_inj {a b : U256} (h : toBeBytes a = toBeBytes b) : a = b := by
+  rw [← fromBeBytes_toBeBytes a, h, fromBeBytes_toBeBytes]
+
 end EthLib.Base.U256

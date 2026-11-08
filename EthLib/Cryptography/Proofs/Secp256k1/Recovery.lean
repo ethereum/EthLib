@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Nat
 public import EthLib.Cryptography.Secp256k1.Recovery
 public import EthLib.Cryptography.Proofs.Secp256k1.Ecdsa
 public import EthLib.Cryptography.Proofs.Secp256k1.Encoding
@@ -285,17 +286,6 @@ theorem verify_eq_true_iff {q : Point} {hash : Vector UInt8 32} {r s : Nat} :
     rw [heq]
     simp [hx]
 
-/-- An `x` below `p` with `x mod n = r` is `r`, when `p <= r + n`. -/
-theorem val_eq_of_mod_eq {x : Fp} {r : Nat} (hx : x.val % Fn.modulus = r)
-    (hp : Fp.modulus ≤ r + Fn.modulus) : x.val = r := by
-  have hdiv := Nat.mod_add_div x.val Fn.modulus
-  have hlt := x.isLt
-  by_cases h0 : x.val / Fn.modulus = 0
-  · rw [h0, Nat.mul_zero, Nat.add_zero] at hdiv
-    omega
-  · have := Nat.le_mul_of_pos_right Fn.modulus (Nat.pos_of_ne_zero h0)
-    omega
-
 /-- Completeness of recovery: a key that verifies a signature is recovered by one of the two ids.
 
 The bound `p <= r + n` makes `x_R = r`: the other candidate `r + n` is not below `p`. -/
@@ -308,7 +298,7 @@ theorem recover_of_verify {q : Point} {hash : Vector UInt8 32} {r s : Nat} (hv :
   have hs0 : Fn.toZMod ⟨s, hs.2⟩ ≠ 0 :=
     toZMod_ne_zero (fun h0 => by have h1 := congrArg Fin.val h0; simp at h1; omega)
   -- `x_R = r`, since `x_R = r mod n` and `x_R < p <= r + n`.
-  have hxr : x.val = r := val_eq_of_mod_eq hx hp
+  have hxr : x.val = r := Base.eq_of_mod_eq_of_lt hx x.isLt hp
   have hxx : (Fin.ofNat _ r : Fp) = x := Fin.ext (by rw [Fin.val_ofNat, ← hxr, Nat.mod_eq_of_lt x.isLt])
   have hRc : (Point.affine x y).isOnCurve = true := hR ▸ isOnCurve_add (isOnCurve_mul _ hG) (isOnCurve_mul _ hqc)
   refine ⟨parityId y, recover_of_decompress (R := .affine x y) hr hs ?_ hqc hqi ?_⟩
