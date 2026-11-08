@@ -12,7 +12,7 @@ The queue never grows.
 
 A pass never credits more inside the churn than the churn available.
 
-The churn that a pass uses is the sum of the amounts of the deposits it reads that take churn.
+The churn that a pass uses grows by the amounts of the deposits it reads that take churn.
 
 A pass reads a prefix of the queue, applies some of it in order, and postpones the others.
 
@@ -134,7 +134,9 @@ theorem passPendingDeposits_processed_le {stop : PendingDeposit → Bool} {nextE
     exact passPendingDeposits_processed_le (deposits := rest) ‹_›
       (UInt64.not_lt.mp fits)
 
-/-- A deposit keeps, at each epoch and key, whether its validator exits and whether it is withdrawn.
+/-- A deposit keeps, at each epoch and key, the two tests of the validator with that key.
+
+They ask whether it exits and whether it is withdrawn.
 
 A new validator does neither, as at a key that no validator has.
 
@@ -153,7 +155,7 @@ theorem depositTargetStatus_applyPendingDeposit {deposit : PendingDeposit}
     obtain ⟨_, _, computed⟩ := computed
     split at computed
     · have pushed := (addValidatorToRegistry_push computed holds small).1
-      -- The new validator exits and is withdrawable only at the far future, which no epoch passes.
+      -- The new validator has no exit before the far future, and no epoch passes the far future.
       have far : ¬FAR_FUTURE_EPOCH < nextEpoch := by
         rw [UInt64.lt_iff_toNat_lt]
         have := nextEpoch.toNat_lt
@@ -175,7 +177,7 @@ theorem depositTargetStatus_applyPendingDeposit {deposit : PendingDeposit}
 
 /-- The churn that a pass uses grows by the amount of each deposit it reads that takes churn.
 
-Those are the deposits where no validator with its key exits or is withdrawn.
+Those are the deposits whose validator, at the start of the pass, neither exits nor is withdrawn.
 
 It grows by nothing else.
 
@@ -226,7 +228,7 @@ theorem passPendingDeposits_processed {stop : PendingDeposit → Bool} {nextEpoc
         revert isWithdrawn
         cases depositTargetStatus state nextEpoch deposit.pubkey with
         | mk exited withdrawn => cases exited <;> cases withdrawn <;> simp
-      -- The rest of the pass reads the test after the deposit, which keeps it.
+      -- The rest of the pass tests the state after the deposit, which keeps both tests at each key.
       rw [depositTargetStatus_applyPendingDeposit step holds small] at used
       refine ⟨deposit :: read, congrArg (deposit :: ·) queue, ?_⟩
       simp only [List.filter_cons, outside, Bool.false_eq_true, ↓reduceIte, used]
@@ -269,7 +271,7 @@ theorem passPendingDeposits_processed {stop : PendingDeposit → Bool} {nextEpoc
       cases depositTargetStatus state nextEpoch deposit.pubkey with
       | mk exited withdrawn => cases exited <;> cases withdrawn <;> simp
     have sum := (addChecked_ok_iff.mp (mapError_ok_iff.mp (liftAccessor_ok.mp checked))).2
-    -- The rest of the pass reads the test after the deposit, which keeps it.
+    -- The rest of the pass tests the state after the deposit, which keeps both tests at each key.
     rw [depositTargetStatus_applyPendingDeposit step holds small] at used
     refine ⟨deposit :: read, congrArg (deposit :: ·) queue, ?_⟩
     simp only [List.filter_cons, inside, ↓reduceIte, pendingAmount, List.map_cons,
