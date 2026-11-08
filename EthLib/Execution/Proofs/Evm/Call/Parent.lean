@@ -5,7 +5,7 @@ public import EthLib.Execution.Proofs.Evm.Call.StaticMessage
 /-!
 # Proofs: every message keeps the block of the state
 
-The block of a state of a transaction holds the writes of the block before that transaction.
+The block of a transaction state is the state before the block, with the writes of the block so far.
 
 Every successful step of every frame keeps the block, at every fork, static frame or not.
 
@@ -58,7 +58,7 @@ theorem parent_prepareCreation {tx tx' : TransactionState} {address : Address}
 
 /-! ## The instructions that give the next frame -/
 
-/-- A successful SSTORE keeps the block of the state, static frame or not. -/
+/-- A successful SSTORE keeps the block of the state. -/
 theorem parent_sstoreStep {evm after : Evm fork Meter} (h : sstoreStep evm = .ok after) :
     after.state.parent = evm.state.parent := by
   unfold sstoreStep at h
@@ -138,7 +138,7 @@ theorem parent_selfdestructStep {evm after : Evm fork Meter}
 
 /-- Each instruction that gives the next frame keeps the block of the state when it succeeds.
 
-That holds static frame or not. -/
+That holds in a static frame and in any other frame. -/
 theorem parent_instruction {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)} {evm after : Evm fork Meter}
     (hrun : instruction fork op = some run) (h : run evm = .ok after) :
