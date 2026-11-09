@@ -1800,8 +1800,12 @@ Each definition is named and shaped after its source, so that a reader can compa
 The KZG and BLS vectors in `tests/cryptography/` match consensus-specs `v1.7.0-alpha.12` and `ethereum/bls12-381-tests` `v0.1.2` byte for byte, and EthLib produced none of them.
 Finally, the consistency theorems on the constants, listed under BLS12-381, catch a wrong digit.
 
-One definition also does what its source does not.
+Two definitions also do what their sources do not.
 The PeerDAS custody search fails after `2^16` node IDs in the export, where its source loops on, and no theorem bounds the steps it needs.
+BLS key generation fails after 16 attempts, a bound that EthLib chose.
+[The IRTF BLS draft, version 4, §2.3](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04#section-2.3) and `HKDF_mod_r` of [ERC-2333](https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2333.md#hkdf_mod_r) loop until the key is not zero.
+The ERC-2333 master and child derivations reuse key generation, so they share the bound.
+An attempt fails only when its 48-byte output is a multiple of `r`.
 
 Some official vectors expect more than a source says.
 The transaction tests of ethereum/tests reject 43 results whose gas limit is `2^64`, or whose gas limit times gas price exceeds `2^256 - 1`.
