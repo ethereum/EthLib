@@ -12,7 +12,7 @@ import Mathlib.Data.List.Sort
 
 The indexed attestation sorts its validator indices before reading their keys.
 
-Read in that order, the keys of distinct honest signers are a permutation of their keys.
+Read in that order, the keys are a permutation of the signers' keys in the order of their votes.
 
 Fast aggregate verification does not depend on that order.
 
@@ -277,7 +277,9 @@ theorem isValidIndexedAttestation_constructAggregateOfSingleAttestations {config
 
 This holds before Electra.
 
-The honest construction passes the aggregate signature check, so that check is not a condition. -/
+The honest construction passes the aggregate signature check, so that check is not a condition.
+
+The head state must be the state of the construction, and the other computations must succeed. -/
 theorem validateAggregateInCommittee_constructAggregate_eq_accept {config : Config}
     {state : BeaconState preset fork} {before : fork < .pectra} {data : AttestationData}
     {signers : List ValidatorIndex} {key : ValidatorIndex → Signatures.SecretKey}
@@ -337,7 +339,9 @@ theorem validateAggregateInCommittee_constructAggregate_eq_accept {config : Conf
 
 This holds from Electra.
 
-The honest construction passes the aggregate signature check, so that check is not a condition. -/
+The honest construction passes the aggregate signature check, so that check is not a condition.
+
+The head state must be the state of the construction, and the other computations must succeed. -/
 theorem validateAggregateInCommittee_constructAggregateOfSingleAttestations_eq_accept
     {config : Config} {state : BeaconState preset fork} (electra : .pectra ≤ fork)
     {data : AttestationData} {committeeIndex : CommitteeIndex} {signers : List ValidatorIndex}

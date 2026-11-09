@@ -1460,8 +1460,8 @@ It verifies under the keys in the order of the attestations.
 The selected signers must have distinct validator indices, use their registered keys and have a nonzero sum of secret keys.
 From Gloas, their number must also fit the check's bound.
 The proof derives the permutation from those signers to the sorted indices that the receiver reads.
-The aggregate adds the signature of every vote, so two votes of one validator give an aggregate that fails the check.
-The theorems exclude this case by requiring distinct signers.
+The aggregate adds the signature of every vote, so a validator that votes twice counts twice in the signature but once in the keys.
+The theorems avoid this case by requiring distinct signers.
 
 `isValidContributionSignature_constructSyncCommitteeContribution` (`Consensus/Proofs/HonestContributionSignatures.lean`) proves that a contribution of honest matching messages passes its signature check.
 The domain and signing root must compute successfully, and the messages must sign that root under their registered keys.
