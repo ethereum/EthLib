@@ -14,6 +14,10 @@ The Lamport expansion reads 255 HKDF blocks without the checks of HKDF-Expand.
 It asks for 255 * 32 bytes, which HKDF accepts and which are 255 whole blocks.
 
 So HKDF gives the same bytes.
+
+A child key is derived from a SHA-256 digest of 32 bytes, so it never rejects a short input.
+
+So derivation fails only on a seed shorter than 32 bytes, or when the attempts of one key run out.
 -/
 
 @[expose] public section
@@ -68,17 +72,17 @@ theorem derivePath_nil (seed : ByteArray) : derivePath seed [] = deriveMasterSk 
 
 /-- The Lamport public key is one SHA-256 digest, so it has 32 bytes. -/
 @[simp] theorem parentSkToLamportPk_size (parent : SecretKey) (index : UInt32) :
-    (parentSkToLamportPk parent index).size = 32 := by
-  unfold parentSkToLamportPk
-  simp
+    (parentSkToLamportPk parent index).size = 32 :=
+  Sha256.hash_size _
 
-/-- Child derivation gives a key, or the attempts run out.
+/-- Child derivation gives a key, or its attempts run out.
 
 Its input keying material is a digest of 32 bytes, so it never rejects a short input. -/
 theorem deriveChildSk_eq_ok_or_noKey (parent : SecretKey) (index : UInt32) :
     (∃ sk, deriveChildSk parent index = .ok sk) ∨
       deriveChildSk parent index = .error .keyGenNoKey :=
-  keyGen_eq_ok_or_noKey_of_size (by simp) ByteArray.empty
+  keyGen_eq_ok_or_noKey_of_size (Nat.le_of_eq (parentSkToLamportPk_size parent index).symm)
+    ByteArray.empty
 
 /-- A path of child indices gives a key, or the attempts run out. -/
 theorem deriveChildPath_eq_ok_or_noKey (parent : SecretKey) (indices : List UInt32) :
@@ -92,18 +96,20 @@ theorem deriveChildPath_eq_ok_or_noKey (parent : SecretKey) (indices : List UInt
     · rw [h]; exact ih child
     · rw [h]; exact Or.inr rfl
 
-/-- Derivation from a seed fails only on a short seed, or when an attempt runs out.
+/-- Derivation from a seed fails only on a seed shorter than 32 bytes.
+
+It also fails when the attempts of the master key or of one child key run out.
 
 So a caller of the derivation path can rule out every other error code. -/
 theorem derivePath_eq_ikmTooShort_or_ok_or_noKey (seed : ByteArray) (indices : List UInt32) :
     derivePath seed indices = .error (.keyGenIkmTooShort seed.size) ∨
       (∃ sk, derivePath seed indices = .ok sk) ∨
       derivePath seed indices = .error .keyGenNoKey := by
-  rw [derivePath]
+  rw [derivePath, deriveMasterSk_eq_keyGen]
   rcases keyGen_eq_ikmTooShort_or_ok_or_noKey seed ByteArray.empty with h | ⟨master, h⟩ | h
-  · exact Or.inl (by rw [show deriveMasterSk seed = keyGen seed from rfl, h]; rfl)
-  · rw [show deriveMasterSk seed = keyGen seed from rfl, h]
+  · exact Or.inl (by rw [h]; rfl)
+  · rw [h]
     exact Or.inr (deriveChildPath_eq_ok_or_noKey master indices)
-  · exact Or.inr (Or.inr (by rw [show deriveMasterSk seed = keyGen seed from rfl, h]; rfl))
+  · exact Or.inr (Or.inr (by rw [h]; rfl))
 
 end EthLib.Cryptography.Bls.KeyDerivation
