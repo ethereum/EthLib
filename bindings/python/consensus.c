@@ -387,6 +387,11 @@ eth_consensus_upgrade_state(
 );
 
 extern lean_object*
+eth_consensus_upgrade_operation(
+  lean_object* args
+);
+
+extern lean_object*
 eth_consensus_verify_blob_sidecar_inclusion_proof(
   lean_object* name,
   lean_object* fork,
@@ -484,6 +489,14 @@ py_consensus_ssz_static(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_ssz_static, args, 4, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_upgrade_operation(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_upgrade_operation, args, 3, SSZ_ERROR);
 }
 
 PyObject*

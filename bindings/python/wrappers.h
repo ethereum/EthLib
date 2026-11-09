@@ -375,6 +375,7 @@ PyObject* py_consensus_get_custody_groups                 (PyObject* self, PyObj
 PyObject* py_consensus_compute_columns_for_custody_group  (PyObject* self, PyObject* args);
 PyObject* py_consensus_ssz_static                         (PyObject* self, PyObject* args);
 PyObject* py_consensus_merkle_proof                       (PyObject* self, PyObject* args);
+PyObject* py_consensus_upgrade_operation (PyObject* self, PyObject* args);
 PyObject* py_consensus_verify_blob_sidecar_inclusion_proof (PyObject* self, PyObject* args);
 PyObject* py_consensus_process_operation (PyObject* self, PyObject* args);
 PyObject* py_consensus_upgrade_state (PyObject* self, PyObject* args);
