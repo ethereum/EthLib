@@ -92,7 +92,7 @@ def parseIndex (segment : String) : Except KeyPathError UInt32 := do
 
 /-- Parse a purpose-12381 path of at least four indices, ERC-2334, Path and Purpose. -/
 def parsePath (text : String) : Except KeyPathError Path := do
-  match text.splitOn "/" with
+  match text.splitToList (· == '/') with
   | root :: parts =>
     if root != "m" then throw .invalidRoot
     match parts with

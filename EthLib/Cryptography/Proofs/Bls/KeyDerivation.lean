@@ -32,39 +32,25 @@ theorem deriveMasterSk_ikmTooShort {seed : ByteArray} (h : seed.size < 32) :
     deriveMasterSk seed = .error (.keyGenIkmTooShort seed.size) :=
   keyGen_ikmTooShort h _
 
-/-- The expansion of the input to a Lamport secret key never fails. -/
-theorem ikmToLamportSk_ne_error (ikm salt : ByteArray) (e : BlsError) :
-    ikmToLamportSk ikm salt ≠ .error e := by
-  have hok : ∀ e', Hkdf.hkdf salt ikm ByteArray.empty (LAMPORT_CHUNKS * LAMPORT_CHUNK_SIZE) ≠
-      .error e' := fun e' h => by
-    have := (Hkdf.hkdf_eq_error_iff.mp h).2
-    simp [LAMPORT_CHUNKS, LAMPORT_CHUNK_SIZE, Hkdf.HASH_LEN] at this
-  unfold ikmToLamportSk
-  unfold Hkdf.hkdf at hok
-  cases h : Hkdf.expand (Hkdf.extract salt ikm) ByteArray.empty
-      (LAMPORT_CHUNKS * LAMPORT_CHUNK_SIZE) with
-  | error e' => exact absurd h (hok e')
-  | ok bytes => intro h; cases h
-
-/-- The compressed Lamport public key never fails. -/
-theorem parentSkToLamportPk_ne_error (parent : SecretKey) (index : UInt32) (e : BlsError) :
-    parentSkToLamportPk parent index ≠ .error e := by
-  unfold parentSkToLamportPk
-  cases h₁ : ikmToLamportSk (Fr.toBytesBE parent.val) (Base.natToBytes4 index.toNat) with
-  | error e' => exact absurd h₁ (ikmToLamportSk_ne_error _ _ e')
-  | ok first =>
-    cases h₂ : ikmToLamportSk ⟨(Fr.toBytesBE parent.val).data.map (~~~ ·)⟩
-        (Base.natToBytes4 index.toNat) with
-    | error e' => exact absurd h₂ (ikmToLamportSk_ne_error _ _ e')
-    | ok second => simp [h₁, h₂, bind, Except.bind, pure, Except.pure]
+/-- The Lamport expansion is exactly HKDF's maximum output length, so it cannot fail. -/
+theorem expand_eq_ok_lamport (ikm salt : ByteArray) :
+    Hkdf.expand (Hkdf.extract salt ikm) ByteArray.empty
+      (LAMPORT_CHUNKS * LAMPORT_CHUNK_SIZE) =
+      .ok (Hkdf.expandBlocks (Hkdf.extract salt ikm) ByteArray.empty ByteArray.empty
+        1 LAMPORT_CHUNKS) := by
+  simp only [Hkdf.expand, Hkdf.extract, Hmac.hmac_size, Hkdf.HASH_LEN,
+    LAMPORT_CHUNKS, LAMPORT_CHUNK_SIZE]
+  simp only [show ¬ 32 < 32 by decide, show ¬ 255 * 32 < 255 * 32 by decide, ite_false]
+  have hsize := Hkdf.expandBlocks_size (Hmac.hmac salt ikm)
+    ByteArray.empty ByteArray.empty 1 255
+  change (Except.ok ((Hkdf.expandBlocks (Hmac.hmac salt ikm) ByteArray.empty ByteArray.empty
+    1 255).extract 0 (Hkdf.HASH_LEN * 255)) : Except Hkdf.HkdfError ByteArray) = _
+  rw [← hsize, ByteArray.extract_zero_size]
 
 /-- Child derivation never fails in HKDF, as key generation never does. -/
 theorem deriveChildSk_ne_hkdf (parent : SecretKey) (index : UInt32) :
-    deriveChildSk parent index ≠ .error .keyGenHkdf := by
-  unfold deriveChildSk
-  cases h : parentSkToLamportPk parent index with
-  | error e => exact absurd h (parentSkToLamportPk_ne_error _ _ e)
-  | ok compressed => simpa [bind, Except.bind] using keyGen_ne_hkdf compressed ByteArray.empty
+    deriveChildSk parent index ≠ .error .keyGenHkdf :=
+  keyGen_ne_hkdf (parentSkToLamportPk parent index) ByteArray.empty
 
 /-- A path with no indices leaves the parent unchanged. -/
 theorem deriveChildPath_nil (parent : SecretKey) : deriveChildPath parent [] = .ok parent :=
