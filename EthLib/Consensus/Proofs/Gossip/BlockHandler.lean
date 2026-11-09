@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Gossip.Block
 public import EthLib.Consensus.Proofs.ForkChoice.Handlers
+public import EthLib.Consensus.Proofs.Gossip.Block
 public import EthLib.Consensus.Proofs.Gossip.Payload
 public import EthLib.Consensus.Proofs.Transition.Operations
 public import EthLib.Consensus.Proofs.Transition.PayloadInputs
@@ -23,11 +24,15 @@ In the same way, it checks four lists of requests that the block carries for its
 
 It also checks the blob commitments of the bid against the blob limit of the epoch of the block.
 
+Before Gloas it checks the blob commitments of the block itself in the same way.
+
 The block handler checks the size of each list of operations against the same limit.
 
 On a full parent it checks the four counts of the requests, and an empty parent takes no request.
 
 Its bid step checks the same blob limit, on a state at the slot of the block.
+
+Before Gloas its payload step does the same.
 
 So the handler fails on every new block that these checks reject.
 
@@ -104,5 +109,27 @@ theorem blobKzgCommitments_size_le_of_onBlock (gloas : .glamsterdam ≤ fork)
   -- The header step checks the slot of the block, and the header and withdrawal steps keep it.
   rwa [getCurrentEpoch, (payloadInputs_processWithdrawals withdrawnOk).slot,
     (payloadInputs_processBlockHeader headedOk).slot, ← slot] at blobs
+
+/-- Before Gloas, a new block that the block handler accepts passes the blob check of the topic.
+
+From Deneb it commits to at most the blobs per block that the epoch of the block allows. -/
+theorem blobCountWithinLimit_of_onBlock (before : fork < .glamsterdam) {after : Store preset fork}
+    (root : SszType.hashTreeRoot signed.message = .ok blockRoot)
+    (new : ¬ store.blocks.contains blockRoot)
+    (added : store.onBlock config checks sources signed = .ok after) :
+    blobCountWithinLimit config before signed.message = true := by
+  by_cases deneb : .dencun ≤ fork
+  · obtain ⟨-, -, _, _, -, transition, -⟩ := Store.onBlock_new root new added
+    obtain ⟨_, -, -, -, computed, -⟩ := stateTransition_ok transition
+    obtain ⟨_, _, _, _, headedOk, withdrawnOk, paidOk⟩ :=
+      processBlock_steps_of_lt_gloas (Nat.le_trans (by decide) deneb) before computed
+    obtain ⟨slot, -⟩ := processBlockHeader_checks headedOk
+    have blobs := processExecutionPayload_blobCommitments paidOk
+    -- The header step checks the slot of the block, and the header and withdrawal steps keep it.
+    rw [maxBlobsPerBlock, getCurrentEpoch, (payloadInputs_processWithdrawals withdrawnOk).slot,
+      (payloadInputs_processBlockHeader headedOk).slot, ← slot] at blobs
+    -- So the payload step reads the limit of the topic, from Fulu at the epoch of the block.
+    simpa [blobCountWithinLimit, deneb, BeaconBlockBody.blobCommitments] using blobs
+  · exact blobCountWithinLimit_of_lt_deneb deneb
 
 end EthLib.Consensus
