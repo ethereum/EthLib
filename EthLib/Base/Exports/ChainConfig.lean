@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.ChainConfig
+public import EthLib.Base.Hex
 public import EthLib.Base.Exports.Proofs.PyValue
 public import Lean.Data.Json
 
@@ -17,7 +18,9 @@ A fork crosses it as its name, a `str` such as `bellatrix`.
 
 A chain configuration crosses it as the typed value of its JSON, a `dict`.
 
-Its keys are its chain ID, its activations and its blob schedules.
+Its keys are its chain ID, its deposit contract, its activations and its blob schedules.
+
+The deposit contract is its address: `0x` and forty hex digits, which Python `bytes` become.
 
 An activation is a fork name, `block` or `time`, and a number.
 
@@ -80,7 +83,23 @@ def blobScheduleOfJson (j : Json) : Result (Activation × BlobSchedule) := do
     return (← activationOf kind n, ⟨target, max, fraction, h.1, h.2.1, h.2.2⟩)
   else throw (0, "a blob schedule needs target ≤ max, 0 < max and 0 < update fraction")
 
+/-- The deposit contract address of a configuration: `0x` and forty hex digits. -/
+def depositContractOfJson (j : Json) : Result Address := do
+  let text ← match j with
+    | .str text => pure text
+    | .null => throw (0, "config: no depositContractAddress")
+    | _ => throw (0, "config: depositContractAddress is not text")
+  let '0' :: 'x' :: digits := text.toList
+    | throw (0, "config: depositContractAddress does not start with 0x")
+  unless digits.length = 40 do throw (0, "config: depositContractAddress is not forty hex digits")
+  let some bytes := hexBytes? digits
+    | throw (0, "config: depositContractAddress is not hex")
+  if h : bytes.data.size = 20 then return ⟨bytes.data, h⟩
+  else throw (0, "config: depositContractAddress is not 20 bytes")
+
 /-- A chain configuration given as JSON, with no blob schedule of its own when none is given.
+
+The deposit contract address must be given, since no address is right for every chain.
 
 No fork by block number may come after a fork by timestamp in the timeline, as EIP-6122 requires.
 
@@ -88,6 +107,7 @@ The chain ID is a 64-bit number, so a larger one is rejected rather than reduced
 def configOfJson (j : Json) : Result ChainConfig := do
   let some chainId := (j.getObjValAs? Nat "chainId").toOption | throw (0, "config: no chainId")
   unless chainId < 2 ^ 64 do throw (0, "config: chainId is not below 2^64")
+  let depositContractAddress ← depositContractOfJson (j.getObjValD "depositContractAddress")
   let .arr activations := j.getObjValD "activations" | throw (0, "config: no activations")
   let activations ← activations.toList.mapM activationOfJson
   -- EIP-6122 puts forks by time after forks by block, so none comes before a fork by block.
@@ -97,7 +117,8 @@ def configOfJson (j : Json) : Result ChainConfig := do
     | .arr entries => entries.toList.mapM blobScheduleOfJson
     | .null => pure []
     | _ => throw (0, "config: blobSchedules is not an array")
-  return { chainId := UInt64.ofNat chainId, activations, blobSchedules := schedules }
+  return { chainId := UInt64.ofNat chainId, depositContractAddress := depositContractAddress,
+            activations := activations, blobSchedules := schedules }
 
 /-- The name of the active fork of a configured chain at a block, if a fork is active.
 

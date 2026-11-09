@@ -8,6 +8,7 @@ from raising import raises
 # Frontier to Paris at block 0, then Shapella from time 100 and Dencun from time 200.
 TIMED = {
     "chainId": 1,
+    "depositContractAddress": bytes(20),
     "activations": [
         ["frontier", "block", 0],
         ["london", "block", 0],
@@ -20,6 +21,7 @@ TIMED = {
 # Byzantium at block 0, then Constantinople and Petersburg together at block 10.
 SHARED = {
     "chainId": 1,
+    "depositContractAddress": bytes(20),
     "activations": [
         ["byzantium", "block", 0],
         ["constantinople", "block", 10],
@@ -45,13 +47,21 @@ def test_two_forks_at_one_block() -> None:
 
 def test_no_activation_reached() -> None:
     """A block before every activation has no active fork."""
-    config = {"chainId": 1, "activations": [["homestead", "block", 5]]}
+    config = {
+        "chainId": 1,
+        "depositContractAddress": bytes(20),
+        "activations": [["homestead", "block", 5]],
+    }
     assert active_fork(config, 4, 0) is None
 
 
 def test_unknown_activation_kind() -> None:
     """An activation that is neither by block nor by time is malformed, with code 0."""
-    config = {"chainId": 1, "activations": [["paris", "slot", 0]]}
+    config = {
+        "chainId": 1,
+        "depositContractAddress": bytes(20),
+        "activations": [["paris", "slot", 0]],
+    }
     with raises(ChainError, "no activation kind slot") as error:
         active_fork(config, 0, 0)
     assert error.value.code == 0
@@ -59,7 +69,11 @@ def test_unknown_activation_kind() -> None:
 
 def test_activations_as_tuples() -> None:
     """An activation given as a tuple reads as one given as a list."""
-    config = {"chainId": 1, "activations": [("frontier", "block", 0), ("homestead", "block", 5)]}
+    config = {
+        "chainId": 1,
+        "depositContractAddress": bytes(20),
+        "activations": [("frontier", "block", 0), ("homestead", "block", 5)],
+    }
     assert active_fork(config, 5, 0) == "homestead"
 
 

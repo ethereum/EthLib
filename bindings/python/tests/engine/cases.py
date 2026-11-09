@@ -35,6 +35,9 @@ TIME_FORKS = ["shapella", "dencun", "pectra", "fusaka", "bpo1", "bpo2", "glamste
 # A transition network runs its second fork from this timestamp on.
 TRANSITION_TIME = 15_000
 
+# The fixtures use the deposit contract of mainnet, at the address of EIP-6110.
+DEPOSIT_CONTRACT_ADDRESS = bytes.fromhex("00000000219ab540356cbb839cbe05303d7705fa")
+
 # The exceptions that each reason of an invalid payload stands for, by the code of the reason.
 EXCEPTIONS = {
     # A transaction does not decode at the fork of the payload.
@@ -63,7 +66,11 @@ def config(network: str) -> dict:
         activations += [[fork, "time", 0] for fork in TIME_FORKS[: TIME_FORKS.index(first) + 1]]
     if after:
         activations.append([FORK_OF_NETWORK[after], "time", TRANSITION_TIME])
-    return {"chainId": 1, "activations": activations}
+    return {
+        "chainId": 1,
+        "depositContractAddress": DEPOSIT_CONTRACT_ADDRESS,
+        "activations": activations,
+    }
 
 
 def check(network: str, method: str, params: list, error: str | None, code: str | None) -> str:

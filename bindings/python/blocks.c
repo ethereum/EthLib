@@ -31,6 +31,7 @@ eth_block_withdrawals_root(
 
 extern lean_object*
 eth_block_deposit_requests(
+  lean_object* deposit_contract,
   lean_object* logs
 );
 
@@ -211,9 +212,21 @@ py_block_deposit_requests(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object* logs = parse_one_bytes(args, "logs");
-  if (!logs) return NULL;
-  return except_into_pybytes(eth_block_deposit_requests(logs), BLOCK_ERROR);
+  PyObject *contract_obj, *logs_obj;
+  if (!PyArg_ParseTuple(args, "OO", &contract_obj, &logs_obj)) return NULL;
+  if (!PyBytes_Check(contract_obj)) {
+    PyErr_SetString(PyExc_TypeError, "deposit_contract must be bytes");
+    return NULL;
+  }
+  if (!PyBytes_Check(logs_obj)) {
+    PyErr_SetString(PyExc_TypeError, "logs must be bytes");
+    return NULL;
+  }
+  lean_object* contract = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(contract_obj), PyBytes_GET_SIZE(contract_obj));
+  lean_object* logs =
+    mk_bytearray((const uint8_t*) PyBytes_AS_STRING(logs_obj), PyBytes_GET_SIZE(logs_obj));
+  return except_into_pybytes(eth_block_deposit_requests(contract, logs), BLOCK_ERROR);
 }
 
 PyObject*

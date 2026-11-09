@@ -507,6 +507,9 @@ def run_dao(root: Path, case: Case) -> None:
 # The legacy tests run on chain 1.
 CHAIN_ID = 1
 
+# The fixtures use the deposit contract of mainnet, at the address of EIP-6110.
+DEPOSIT_CONTRACT_ADDRESS = bytes.fromhex("00000000219ab540356cbb839cbe05303d7705fa")
+
 
 def chain_config(network: str) -> dict:
     """The chain configuration of a network: each fork with the block from which it runs."""
@@ -515,7 +518,12 @@ def chain_config(network: str) -> dict:
     forks = [fork for fork in FORK_ORDER if fork != "daoFork"]
     activations = [[fork, "block", 0] for fork in forks[: forks.index(first) + 1]]
     activations += [[fork, "block", TRANSITION_BLOCK] for fork in second]
-    return {"chainId": CHAIN_ID, "activations": activations, "blobSchedules": []}
+    return {
+        "chainId": CHAIN_ID,
+        "depositContractAddress": DEPOSIT_CONTRACT_ADDRESS,
+        "activations": activations,
+        "blobSchedules": [],
+    }
 
 
 # The error of the state transition that each exception of the tests names, as a pattern.

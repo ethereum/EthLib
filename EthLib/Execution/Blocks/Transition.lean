@@ -194,11 +194,13 @@ def onBlock (block : BlockState)
 
 /-- The requests of a block at `fork`, after its transactions and withdrawals.
 
-The deposits come from the logs of the block, the other requests from their contracts. -/
-def blockRequests {fork : Fork} (env : BlockEnvironment fork) (body : BodyState)
-    (logs : List Log) : Except BlockError (BodyState × List ByteArray) := do
+The deposits come from the logs of the deposit contract at `depositContract`.
+
+The other requests come from their contracts. -/
+def blockRequests {fork : Fork} (depositContract : Address) (env : BlockEnvironment fork)
+    (body : BodyState) (logs : List Log) : Except BlockError (BodyState × List ByteArray) := do
   if .pectra ≤ fork then
-    let deposits ← (depositRequests logs).mapError .deposit
+    let deposits ← (depositRequests depositContract logs).mapError .deposit
     let (body, requests) ← readRequests env body
     return (body, requestList DEPOSIT_REQUEST_TYPE deposits ++ requests)
   else return (body, [])
@@ -242,7 +244,7 @@ def applyBody {fork : Fork} (config : ChainConfig) (env : BlockEnvironment fork)
       let tx ← (withdrawalState fork body.block (block.withdrawals h)).mapError .state
       (body.join tx).mapError .state
     else pure body
-  let (body, requests) ← blockRequests env body output.logs
+  let (body, requests) ← blockRequests config.depositContractAddress env body output.logs
   let ommers := block.ommers.map fun ommer => (ommer.2.coinbase, ommer.2.number)
   let state ← onBlock body.block fun tx =>
     payRewards fork tx block.header.coinbase block.header.number ommers

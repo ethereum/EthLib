@@ -9,7 +9,11 @@ from ethlib.serialization import rlp
 from raising import raises
 
 # A chain at Frontier from block 0, with no account.
-CONFIG = {"chainId": 1, "activations": [["frontier", "block", 0]]}
+CONFIG = {
+    "chainId": 1,
+    "depositContractAddress": bytes(20),
+    "activations": [["frontier", "block", 0]],
+}
 STATE = rlp.encode([])
 
 # The fifteen fields of a Frontier header, from the parent hash to the nonce.
