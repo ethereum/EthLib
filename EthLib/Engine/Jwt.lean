@@ -11,6 +11,10 @@ The Engine profile uses a 32-byte secret, HS256 and an `iat` within 60 seconds o
 
 HS256 is HMAC-SHA-256 over the original encoded header, a period, and the encoded claims.
 
+The tag is checked before any JSON is read, so a token with a wrong tag never reaches the reader.
+
+That order is allowed by RFC 7515 §5.2, since this profile fixes the algorithm to HS256.
+
 Unknown claims are ignored, as [Engine authentication, JWT Claims][engine] requires.
 
 The compact form and critical headers follow [RFC 7515 §§3.1 and 4.1.11][jws].
@@ -93,15 +97,16 @@ def issuedAt (header claims : String) : Except JwtError Json.Number := do
   let some (.num time) := fields.lookup "iat" | throw .claims
   return time
 
-/-- Authenticate the compact token and return its issued-at time before checking the clock. -/
+/-- Authenticate the compact token and return its issued-at time before checking the clock.
+
+The tag is checked first, so the JSON reader sees only a token whose tag matches its parts. -/
 def authenticate (secret : ByteArray) (token : String) : Except JwtError Json.Number := do
   if secret.size ≠ 32 then throw .secretLength else do
   let some p := parts token | throw .compact
-  let time ← issuedAt p.header p.claims
   let .ok mac := Base64.decode p.signature | throw .signature
-  if mac = Cryptography.Hash.Hmac.hmac secret (signingInput p.header p.claims) then
-    return time
-  else throw .signature
+  if mac ≠ Cryptography.Hash.Hmac.hmac secret (signingInput p.header p.claims) then
+    throw .signature
+  else issuedAt p.header p.claims
 
 /-- Accept an authenticated Engine token only within 60 seconds of its issued-at claim. -/
 def check (secret : ByteArray) (token : String) (clock : Nat) : Bool :=
@@ -109,18 +114,23 @@ def check (secret : ByteArray) (token : String) (clock : Nat) : Bool :=
   | .ok time => Json.within time clock
   | .error _ => false
 
+/-- The encoded header of a built token: HS256 and the type JWT. -/
+def headerPart : String := Base64.encode "{\"alg\":\"HS256\",\"typ\":\"JWT\"}".toUTF8
+
+/-- The encoded claims of a built token: only the issued-at time, in decimal. -/
+def claimsPart (time : Nat) : String := Base64.encode ("{\"iat\":" ++ time.repr ++ "}").toUTF8
+
 /-- Build a token for an integral issued-at time, then sign its compact header and claims.
 
 The builder checks that its generated JSON reads back with that time before signing.
 
-A disagreement is a serialization error, so a successful build carries no parser assumption. -/
+That check never fails, so a 32-byte secret always gives a token. -/
 def build (secret : ByteArray) (time : Nat) : Except JwtError String := do
   if secret.size ≠ 32 then throw .secretLength else do
-  let header := Base64.encode "{\"alg\":\"HS256\",\"typ\":\"JWT\"}".toUTF8
-  let claims := Base64.encode ("{\"iat\":" ++ time.repr ++ "}").toUTF8
-  match issuedAt header claims with
+  match issuedAt headerPart (claimsPart time) with
   | .ok parsed =>
-    if parsed = ⟨time, 0⟩ then return compact header claims (signature secret header claims)
+    if parsed = ⟨time, 0⟩ then
+      return compact headerPart (claimsPart time) (signature secret headerPart (claimsPart time))
     else throw .serialization
   | .error _ => throw .serialization
 
