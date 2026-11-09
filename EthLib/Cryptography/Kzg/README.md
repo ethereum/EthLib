@@ -177,14 +177,14 @@ The proof needs no pairing law, and it does not bound the cost of finding such b
 That a secret makes the embedded setup well formed is an assumption, recorded in SOUNDNESS.md D3.
 
 **The proofs.**
-Under the pairing law and for a well-formed setup, honest single proofs and blob proofs verify.
+For a well-formed setup, honest single proofs and blob proofs verify.
 `Proofs/Kzg/Verify.lean` proves both, at every point, inside or outside the domain.
 
 **Binding.**
 For single proofs, a theorem reduces binding to a hard problem.
 Two accepted openings to different values give a strong Diffie–Hellman solution,
 in `Proofs/Kzg/Binding.lean`.
-For one accepted blob opening, a theorem in `Proofs/Kzg/BlobBinding.lean` assumes the pairing law and a well-formed setup.
+For one accepted blob opening, a theorem in `Proofs/Kzg/BlobBinding.lean` assumes a well-formed setup.
 It also assumes that the commitment and the proof represent `f(τ)` and `g(τ)`, for polynomials `f` and `g` of degree below 4096.
 Let `p` be the interpolant of the blob's decoded values, and let `z` be the evaluation challenge.
 Then `f = p`; or `f ≠ p`, `f - p` has degree below 4096, and `z` is a root of `f - p`.
@@ -200,8 +200,8 @@ The trusted setup came from a ceremony in which many participants each mixed in 
 They force each point of a contribution to represent the expected power of the secret.
 A point represents a scalar when its group element is that multiple of the generator.
 The coordinates of the point do not matter, so the theorem applies to decoded points.
-It assumes the pairing law, the subgroup checks, and that two points are not at infinity.
-The BLS12-381 proofs prove the pairing law (`pairingLaws`, `Proofs/Bls/PairingAte.lean`).
+It assumes the subgroup checks, and that two points are not at infinity.
+The KZG proofs use the proved pairing law of BLS12-381 (`pairingLaws`, `Proofs/Bls/PairingAte.lean`).
 
 ## What is not proved
 
