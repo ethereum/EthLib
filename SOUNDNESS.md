@@ -1127,6 +1127,7 @@ Both hold for every bound on the gas of messages and every runner of messages.
 `Logic.SpecG.halted` proves that the run then ends in the normal halt of a specification from a frame of `At`, with `k` less gas.
 `Logic.SpecG.not_ok` proves that the run does not end with no error when every frame of the postcondition has an error.
 `Logic.halted_of_specG` takes a specification over `Logic.StepG` to a normal halt that pays `cost`, from a frame of `At` with every gas from some bound on.
+The specification needs to hold only with at least `cost` gas.
 It proves that every run of that frame that succeeds, with any gas, had at least `cost` gas.
 That run ends in that halt with exactly `cost` less gas.
 `Logic.no_ok_of_specG` proves that every frame that the loop runs a frame of `At` to, with any gas, has an error.

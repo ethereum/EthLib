@@ -90,10 +90,10 @@ variable {code : ByteArray} {message : Message fork} {pc : Nat} {stack : List U2
 
 A specification to a normal halt that pays `cost` must hold from the frame.
 
-It must hold with any gas from `B` on. -/
+It must hold with any gas from `B` on that is at least `cost`. -/
 theorem not_runsOk_of_lt {B cost : Nat} (hlt : gas < cost) {output : ByteArray}
     {state' : State.TransactionState} {substate' : Substate}
-    (hspec : ∀ g, B ≤ g →
+    (hspec : ∀ g, B ≤ g → cost ≤ g →
       SpecG fork (At code message pc stack memory g state substate returnData)
         (Halted false output (g - cost) state' substate'))
     (start : At code message pc stack memory gas state substate returnData evm)

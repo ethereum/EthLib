@@ -162,13 +162,16 @@ theorem SpecG.not_ok {P Q : Evm fork Nat → Prop} (h : SpecG fork P Q)
 
 /-- A specification to a normal halt that pays `cost`, from a frame with any gas from `B` on.
 
+The specification needs to hold only with at least `cost` gas.
+
 Say the loop runs that frame with any gas to a frame `s` with no error.
 
 The starting frame then had at least `cost` gas, and `s` is that halt with exactly `cost` less. -/
 theorem halted_of_specG {B cost : Nat} {out : ByteArray} {state' : State.TransactionState}
     {substate' : Substate}
-    (h : ∀ g, B ≤ g → SpecG fork (At code message pc stack memory g state substate returnData)
-      (Halted false out (g - cost) state' substate'))
+    (h : ∀ g, B ≤ g → cost ≤ g →
+      SpecG fork (At code message pc stack memory g state substate returnData)
+        (Halted false out (g - cost) state' substate'))
     {evm s : Evm fork Nat}
     (start : At code message pc stack memory gas state substate returnData evm)
     (within : GasMeter.gasHeld evm.gas ≤ bound)
@@ -178,7 +181,8 @@ theorem halted_of_specG {B cost : Nat} {out : ByteArray} {state' : State.Transac
       s.substate = substate' := by
   have hB : B ≤ gas + max B cost := Nat.le_trans (Nat.le_max_left B cost) (Nat.le_add_left _ _)
   have hcost : cost ≤ max B cost := Nat.le_max_right B cost
-  obtain ⟨hr, ho, hg, hst, hss⟩ := SpecG.halted (h _ hB) start within hs hok
+  obtain ⟨hr, ho, hg, hst, hss⟩ :=
+    SpecG.halted (h _ hB (Nat.le_trans hcost (Nat.le_add_left _ _))) start within hs hok
   exact ⟨by omega, hr, ho, by omega, hst, hss⟩
 
 /-- A specification to frames with an error, from a frame with any gas from `B` on.
