@@ -1,4 +1,4 @@
-"""BLS signatures on the BLS12-381 curve, with their aggregation and their proofs of possession."""
+"""BLS12-381 signatures and validator key derivation."""
 
 from ethlib.cryptography._native import (
     BYTES_PER_PUBKEY,
@@ -7,6 +7,9 @@ from ethlib.cryptography._native import (
     bls_aggregate_verify as aggregate_verify,
     bls_decode_g1 as decode_g1,
     bls_decode_g2 as decode_g2,
+    bls_derive_child_sk as derive_child_sk,
+    bls_derive_master_sk as derive_master_sk,
+    bls_derive_path as derive_path,
     bls_expand_message_xmd as expand_message_xmd,
     bls_fast_aggregate_verify as fast_aggregate_verify,
     bls_hash_to_g2 as hash_to_g2,
@@ -15,11 +18,13 @@ from ethlib.cryptography._native import (
     bls_pop_prove as pop_prove,
     bls_pop_verify as pop_verify,
     bls_sign as sign,
+    bls_signing_path as signing_path,
     bls_verify as verify,
+    bls_withdrawal_path as withdrawal_path,
     eth_aggregate_pubkeys,
     eth_fast_aggregate_verify,
 )
-from ethlib.errors import BlsError
+from ethlib.errors import BlsError, KeyDerivationError
 
 
 def key_gen(ikm: bytes, key_info: bytes = b"") -> bytes:
@@ -35,6 +40,11 @@ __all__ = [
     "eth_aggregate_pubkeys",
     "eth_fast_aggregate_verify",
     "key_gen",
+    "derive_master_sk",
+    "derive_child_sk",
+    "derive_path",
+    "withdrawal_path",
+    "signing_path",
     "sign",
     "verify",
     "aggregate",
@@ -50,4 +60,5 @@ __all__ = [
     "BYTES_PER_PUBKEY",
     "BYTES_PER_SIGNATURE",
     "BlsError",
+    "KeyDerivationError",
 ]

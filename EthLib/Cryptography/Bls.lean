@@ -14,6 +14,8 @@ public import EthLib.Cryptography.Bls.HashToCurve
 public import EthLib.Cryptography.Bls.MapToCurve
 public import EthLib.Cryptography.Bls.Signatures
 public import EthLib.Cryptography.Bls.KeyGen
+public import EthLib.Cryptography.Bls.KeyDerivation
+public import EthLib.Cryptography.Bls.KeyPath
 
 /-!
 # `EthLib.Cryptography.Bls`

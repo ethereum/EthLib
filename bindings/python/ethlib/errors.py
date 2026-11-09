@@ -42,6 +42,10 @@ class BlsError(EthLibError, ValueError, RuntimeError):
     """A BLS operation rejected its input."""
 
 
+class KeyDerivationError(EthLibError, ValueError):
+    """Validator key derivation (code 1) or its path (code 2) failed; bad arguments have code 0."""
+
+
 class XmssError(EthLibError, ValueError, RuntimeError):
     """A leanXMSS operation rejected its input."""
 

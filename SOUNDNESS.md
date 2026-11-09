@@ -1817,6 +1817,7 @@ This matters where secret data is handled.
 XMSS and leanSPHINCS `keyGen` and `sign` handle secret data.
 The Python bindings expose all four, as `key_gen` and `sign` in each module, which take the secret seed.
 BLS key generation, signing and the proof of possession handle secret data, and the Python bindings expose all three.
+The bindings `derive_master_sk`, `derive_child_sk` and `derive_path` handle secret seeds or keys.
 HMAC-SHA-256, HKDF and the Concatenation KDF take a secret key, input keying material or shared secret.
 The Python bindings expose them as `hmac_sha256`, `hkdf_extract`, `hkdf` and `concat_kdf`.
 PBKDF2 and scrypt take a secret password, and the bindings expose them as `pbkdf2` and `scrypt`.
@@ -1934,12 +1935,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 304 operations and 44 size constants.
-The Python extension calls 304 of the operations and 44 of the constants.
+Lean exports 309 operations and 44 size constants.
+The Python extension calls 309 of the operations and 44 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-8858 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (351), `bls.c` (378), `chain.c` (45), `consensus.c` (1652), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (45), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1263), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (119), `wrappers.h` (573), `xmss.c` (134).
+8919 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (351), `bls.c` (426), `chain.c` (45), `consensus.c` (1652), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (45), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1270), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (119), `wrappers.h` (579), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

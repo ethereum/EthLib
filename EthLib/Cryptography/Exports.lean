@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Exports.Bls
+public import EthLib.Cryptography.Exports.KeyDerivation
 public import EthLib.Cryptography.Exports.Kzg
 public import EthLib.Cryptography.Exports.Keccak
 public import EthLib.Cryptography.Exports.Ethash

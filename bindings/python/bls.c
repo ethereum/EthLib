@@ -376,3 +376,51 @@ py_bls_pairing(
   if (parse_bytes(q_obj, "g2_point", &q)) { lean_dec(p); return NULL; }
   return except_into_pybytes(eth_bls_pairing(p, q), BLS_ERROR);
 }
+
+/* ---- Validator key derivation ----------------------------------------- */
+
+extern lean_object* eth_bls_derive_master_sk(lean_object* args);
+extern lean_object* eth_bls_derive_child_sk(lean_object* args);
+extern lean_object* eth_bls_derive_path(lean_object* args);
+extern lean_object* eth_bls_withdrawal_path(lean_object* args);
+extern lean_object* eth_bls_signing_path(lean_object* args);
+
+PyObject*
+py_bls_derive_master_sk(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_bls_derive_master_sk, args, 1, KEY_DERIVATION_ERROR);
+}
+
+PyObject*
+py_bls_derive_child_sk(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_bls_derive_child_sk, args, 2, KEY_DERIVATION_ERROR);
+}
+
+PyObject*
+py_bls_derive_path(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_bls_derive_path, args, 2, KEY_DERIVATION_ERROR);
+}
+
+PyObject*
+py_bls_withdrawal_path(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_bls_withdrawal_path, args, 1, KEY_DERIVATION_ERROR);
+}
+
+PyObject*
+py_bls_signing_path(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_bls_signing_path, args, 1, KEY_DERIVATION_ERROR);
+}

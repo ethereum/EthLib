@@ -28,7 +28,7 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 - secp256k1: ECDSA signatures with RFC 6979 nonces, public key recovery, the address of a public key, and ECDH.
 - secp256r1: signature verification for the P256VERIFY precompile of EIP-7951.
 - alt_bn128: the curve operations and the pairing of EIP-196 and EIP-197.
-- BLS12-381: the fields, the curves, the pairing, hashing to the curve of RFC 9380, and BLS signatures with their aggregation.
+- BLS12-381: the fields, the curves, the pairing, hashing to the curve of RFC 9380, BLS signatures with their aggregation, and validator key derivation.
 - KZG: commitments and proofs to blobs of EIP-4844, and to cells of EIP-7594.
 - Merkle trees: the binary trees of SSZ and of hash-based signatures, with their proofs.
 - Ethash: the proof of work of the execution layer before Paris.

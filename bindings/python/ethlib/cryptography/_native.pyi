@@ -15,6 +15,26 @@ def bls_key_gen(ikm: bytes, key_info: bytes) -> bytes:
     """Key generation (§2.3): a secret key from at least 32 bytes of input keying material."""
     ...
 
+def bls_derive_master_sk(seed: bytes) -> bytes:
+    """The ERC-2333 master secret key, as 32 big-endian bytes."""
+    ...
+
+def bls_derive_child_sk(parent_sk: bytes, index: int) -> bytes:
+    """The ERC-2333 child of a secret key at an index, as 32 big-endian bytes."""
+    ...
+
+def bls_derive_path(seed: bytes, path: str) -> bytes:
+    """The key at an ERC-2334 path from a seed, as 32 big-endian bytes."""
+    ...
+
+def bls_withdrawal_path(index: int) -> str:
+    """The ERC-2334 withdrawal path `m/12381/3600/index/0`."""
+    ...
+
+def bls_signing_path(index: int) -> str:
+    """The ERC-2334 signing path `m/12381/3600/index/0/0`."""
+    ...
+
 def bls_sign(secret_key: bytes, message: bytes) -> bytes:
     """Sign a message under the message tag."""
     ...
