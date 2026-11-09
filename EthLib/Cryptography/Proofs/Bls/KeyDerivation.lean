@@ -66,4 +66,44 @@ theorem derivePath_nil (seed : ByteArray) : derivePath seed [] = deriveMasterSk 
   simp only [derivePath]
   cases deriveMasterSk seed <;> rfl
 
+/-- The Lamport public key is one SHA-256 digest, so it has 32 bytes. -/
+@[simp] theorem parentSkToLamportPk_size (parent : SecretKey) (index : UInt32) :
+    (parentSkToLamportPk parent index).size = 32 := by
+  unfold parentSkToLamportPk
+  simp
+
+/-- Child derivation gives a key, or the attempts run out.
+
+Its input keying material is a digest of 32 bytes, so it never rejects a short input. -/
+theorem deriveChildSk_eq_ok_or_noKey (parent : SecretKey) (index : UInt32) :
+    (∃ sk, deriveChildSk parent index = .ok sk) ∨
+      deriveChildSk parent index = .error .keyGenNoKey :=
+  keyGen_eq_ok_or_noKey_of_size (by simp) ByteArray.empty
+
+/-- A path of child indices gives a key, or the attempts run out. -/
+theorem deriveChildPath_eq_ok_or_noKey (parent : SecretKey) (indices : List UInt32) :
+    (∃ sk, deriveChildPath parent indices = .ok sk) ∨
+      deriveChildPath parent indices = .error .keyGenNoKey := by
+  induction indices generalizing parent with
+  | nil => exact Or.inl ⟨parent, rfl⟩
+  | cons index rest ih =>
+    rw [deriveChildPath]
+    rcases deriveChildSk_eq_ok_or_noKey parent index with ⟨child, h⟩ | h
+    · rw [h]; exact ih child
+    · rw [h]; exact Or.inr rfl
+
+/-- Derivation from a seed fails only on a short seed, or when an attempt runs out.
+
+So a caller of the derivation path can rule out every other error code. -/
+theorem derivePath_eq_ikmTooShort_or_ok_or_noKey (seed : ByteArray) (indices : List UInt32) :
+    derivePath seed indices = .error (.keyGenIkmTooShort seed.size) ∨
+      (∃ sk, derivePath seed indices = .ok sk) ∨
+      derivePath seed indices = .error .keyGenNoKey := by
+  rw [derivePath]
+  rcases keyGen_eq_ikmTooShort_or_ok_or_noKey seed ByteArray.empty with h | ⟨master, h⟩ | h
+  · exact Or.inl (by rw [show deriveMasterSk seed = keyGen seed from rfl, h]; rfl)
+  · rw [show deriveMasterSk seed = keyGen seed from rfl, h]
+    exact Or.inr (deriveChildPath_eq_ok_or_noKey master indices)
+  · exact Or.inr (Or.inr (by rw [show deriveMasterSk seed = keyGen seed from rfl, h]; rfl))
+
 end EthLib.Cryptography.Bls.KeyDerivation
