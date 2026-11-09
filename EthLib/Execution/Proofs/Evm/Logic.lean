@@ -8,6 +8,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Subroutine
 public import EthLib.Execution.Proofs.Evm.Logic.Message
 public import EthLib.Execution.Proofs.Evm.Logic.FailsOn
 public import EthLib.Execution.Proofs.Evm.Logic.Call
+public import EthLib.Execution.Proofs.Evm.Logic.Route
 public import EthLib.Execution.Proofs.Evm.Logic.Log
 public import EthLib.Execution.Proofs.Evm.Logic.Static
 public import EthLib.Execution.Proofs.Evm.Logic.Create
@@ -40,6 +41,8 @@ Its run may also abort, when the runner of messages fails.
 Another form of triple lets the runner fail with any error.
 
 It names the messages on which a run may stop because the runner fails.
+
+A rule for calls in that form also follows an EIP-7702 delegation to the code of the delegate.
 
 A code can be stored as one number, and a tactic steps through its opcodes.
 -/
