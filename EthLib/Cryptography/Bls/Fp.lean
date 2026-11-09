@@ -167,7 +167,7 @@ instance : BaseField Fp where
   inverse := inverse
   powNat := powNat
   sqrt a := (Fp.sqrt a).toOption
-  sqrtCandidate := some Fp.sqrtCandidate
+  sqrtCandidate := Fp.sqrtCandidate
   sgn0 a := a.val % 2 == 1
 
 /-- Decode a 48-byte big-endian integer as an element of `Fp`.

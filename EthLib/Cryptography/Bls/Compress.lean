@@ -48,51 +48,28 @@ section Sqrt
 
 variable {F : Type} [BaseField F]
 
-/-- The complex method with checked base-field roots, used when no raw candidate is available. -/
-def Fp2.sqrtReference (a : Fp2 F) : Except BlsError (Fp2 F) :=
-  -- Real input: handle the case `a1 = 0` directly.
-  if BaseField.isZero a.c1 then
-    match sqrtOrError a.c0 with
-    | .ok s => .ok ⟨s, BaseField.zero⟩
-    | .error _ =>
-      -- −a₀ might be a square.
-      --
-      -- If so, `sqrt(a) = 0 + sqrt(−a₀)·i`, because `(s·i)² = s²·(−1) = −s²`.
-      match sqrtOrError (-a.c0) with
-      | .ok s    => .ok ⟨BaseField.zero, s⟩
-      | .error _ => .error .notASquare
-  else
-    -- Norm = a₀² + a₁² in Fp; we need its sqrt to exist.
-    let n := a.c0 * a.c0 + a.c1 * a.c1
-    match sqrtOrError n with
-    | .error _ => .error .notASquare
-    | .ok s =>
-      let twoInv := BaseField.inverse (BaseField.ofNat 2 : F)
-      -- Try c₀² = (a₀ + s)/2, then fall back to (a₀ − s)/2.
-      let try1 := sqrtOrError ((a.c0 + s) * twoInv)
-      let c0Opt :=
-        match try1 with
-        | .ok _    => try1
-        | .error _ => sqrtOrError ((a.c0 - s) * twoInv)
-      match c0Opt with
-      | .error _ => .error .notASquare
-      | .ok c0Fp =>
-        let c1Fp := a.c1 * BaseField.inverse (BaseField.ofNat 2 * c0Fp)
-        .ok ⟨c0Fp, c1Fp⟩
+/-- A square root in `Fp2`, by the [complex method][source] of Adj and Rodríguez-Henríquez, §V.A.
 
-/-- The [complex method][source] of Adj and Rodríguez-Henríquez, §V.A, equation (6).
+It relies on the base-field candidate, whose square is its input or the negation of its input.
 
-The candidate must square to its input or its negation.
+Over `Fp`, it fails with the error for a non-square exactly when the input has no root.
 
-If `c^2 = -(a0 + s)/2`, then `(a1/(2*c)) + c*i` is a root.
+Which of the two roots it returns is not fixed, since every caller chooses the sign afterwards.
 
-At `Fp`, real inputs use one exponentiation, and other inputs use at most two.
+Write the input as `a0 + a1*i` with `i^2 = -1`, and let `s` be a root of the norm `a0^2 + a1^2`.
+
+The base-field candidate `c` of `(a0 + s)/2` squares to it or to its negation.
+
+In the first case `c + (a1/(2*c))*i` is a root, and in the second `a1/(2*c) + c*i` is one.
+
+So over `Fp`, a real input needs one exponentiation, and any other input at most two.
 
 [source]: https://eprint.iacr.org/2012/685
 -/
-def Fp2.sqrtComplex (candidate : F → F) (a : Fp2 F) : Except BlsError (Fp2 F) :=
+def Fp2.sqrt (a : Fp2 F) : Except BlsError (Fp2 F) :=
+  -- Real input: the candidate of `a0` squares to `a0` or to `-a0`.
   if BaseField.isZero a.c1 then
-    let c := candidate a.c0
+    let c := BaseField.sqrtCandidate a.c0
     if BaseField.beq (c * c) a.c0 then .ok ⟨c, BaseField.zero⟩
     else .ok ⟨BaseField.zero, c⟩
   else
@@ -100,17 +77,9 @@ def Fp2.sqrtComplex (candidate : F → F) (a : Fp2 F) : Except BlsError (Fp2 F) 
     | .error _ => .error .notASquare
     | .ok s =>
       let u := (a.c0 + s) * BaseField.inverse (BaseField.ofNat 2 : F)
-      let c := candidate u
+      let c := BaseField.sqrtCandidate u
       let d := a.c1 * BaseField.inverse (BaseField.ofNat 2 * c)
       if BaseField.beq (c * c) u then .ok ⟨c, d⟩ else .ok ⟨d, c⟩
-
-/-- A square root in `Fp2`, or `notASquare` when no root exists.
-
-The optional raw candidate avoids a second exponentiation when the first root test fails. -/
-def Fp2.sqrt (a : Fp2 F) : Except BlsError (Fp2 F) :=
-  match BaseField.sqrtCandidate (F := F) with
-  | none => Fp2.sqrtReference a
-  | some candidate => Fp2.sqrtComplex candidate a
 
 end Sqrt
 
@@ -276,11 +245,8 @@ theorem size_compress (p : G2) : (compress p).size = 96 := by
 
 /-- Decompress 96 bytes into a point of `G2`.
 
-It fails on a malformed input and on a point off the curve.
-
-A custom `sqrtFn` must return a root on success and reject exactly the nonsquares. -/
-def uncompress (bytes : ByteArray)
-    (sqrtFn : Fp2 → Except BlsError Fp2 := Fp2.sqrt) : Except BlsError G2 :=
+It fails on a malformed input and on a point off the curve. -/
+def uncompress (bytes : ByteArray) : Except BlsError G2 :=
   if bytes.size ≠ 96 then .error .invalidG2Point
   else
     let head := bytes.get! 0
@@ -299,7 +265,7 @@ def uncompress (bytes : ByteArray)
       | .ok c1, .ok c0 =>
         let x : Fp2 := ⟨c0, c1⟩
         let rhs := x * x * x + bTwist
-        match sqrtFn rhs with
+        match Fp2.sqrt rhs with
         | .error _ => .error .invalidG2Point
         | .ok yPos =>
           let yNeg := -yPos
