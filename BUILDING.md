@@ -64,6 +64,10 @@ CI restores EthLib's `.lake/build` only from successful pushes to `master`, whil
 The EthLib cache key includes the operating system, the architecture, the toolchain and the dependency manifest.
 Pull requests read the cache but never publish one.
 
+The library and the exports import no module of Mathlib, VCVio or their dependencies.
+So the jobs that need only the library and the exports do not fetch the Mathlib cache: the `suites` job and the workflows `bench` and `vectors-slow`.
+They run `lake env true`, which clones the packages that Lake needs to load the workspace.
+
 A new push to a pull request cancels the run still in progress on that pull request.
 On `master`, the run in progress finishes, and the latest push waits until it ends.
 GitHub keeps one waiting run for each group, so a newer push replaces the older waiting run.
