@@ -49,7 +49,7 @@ inductive KeystoreError where
   | scrypt (error : Hash.Scrypt.ScryptError)
   /-- The checksum did not match, so the password was not verified. -/
   | checksumMismatch
-  /-- Key derivation would need more memory or work than the caller allows. -/
+  /-- Key derivation would need more memory or work than the caller allows; both are given. -/
   | limitExceeded (memory work : Nat)
   deriving Repr
 
@@ -72,36 +72,60 @@ inductive Kdf where
   /-- scrypt, with cost, block size, parallelization, output length and salt. -/
   | scrypt (n r p length : Nat) (salt : ByteArray)
 
-/-- The memory, in bytes, that a key derivation holds at once.
+/-- The payload memory, in bytes, that a key derivation holds at once, before runtime overhead.
 
 PBKDF2 holds its output.
 
-scrypt holds `N` blocks of `128 * r` bytes in ROMix, `p` such blocks of input, and its output.
+scrypt holds `N` blocks of `128 * r` bytes in ROMix, two buffers of `p` such blocks, and its output.
 -/
 def Kdf.memory : Kdf → Nat
   | .pbkdf2 _ length _ => length
-  | .scrypt n r p length _ => 128 * r * (n + p) + length
+  | .scrypt n r p length _ => 128 * r * (n + 2 * p) + length
 
-/-- The work of a key derivation, in calls of its core function.
+/-- The SHA-256 compressions that hash a message of `n` bytes, padding included (FIPS 180-4). -/
+def shaBlocks (n : Nat) : Nat :=
+  (n + 9 + 63) / 64
 
-PBKDF2 makes one HMAC-SHA-256 call per iteration for each 32-byte block of output.
+/-- The SHA-256 compressions of one HMAC call (RFC 2104), from the key and message sizes.
 
-scrypt makes `4 * r` Salsa20/8 calls per ROMix step, and `2 * N` steps for each of `p` blocks.
+A key longer than a block is hashed first; the inner and outer hashes each start with a block.
 -/
-def Kdf.work : Kdf → Nat
-  | .pbkdf2 iterations length _ => iterations * ((length + 31) / 32)
-  | .scrypt n r p _ _ => 4 * n * r * p
+def hmacBlocks (key message : Nat) : Nat :=
+  (if key > 64 then shaBlocks key else 0) + shaBlocks (64 + message) + shaBlocks (64 + 32)
+
+/-- The SHA-256 compressions of PBKDF2-HMAC-SHA-256 (RFC 8018, section 5.2).
+
+Each 32-byte block of output makes one HMAC call on the salt and the block index.
+
+It then makes one HMAC call on the previous 32-byte value for each further iteration.
+-/
+def pbkdf2Blocks (password salt iterations length : Nat) : Nat :=
+  (length + 31) / 32 * (hmacBlocks password (salt + 4) + (iterations - 1) * hmacBlocks password 32)
+
+/-- The work of a key derivation with a password of the given size, in 64-byte block functions.
+
+Those functions are the SHA-256 compression and the Salsa20/8 core.
+
+scrypt makes `2 * r` Salsa20/8 calls per BlockMix, and `2 * N` BlockMix calls per block.
+
+It also runs PBKDF2 once to expand the password into `p` blocks, and once on them for its output.
+-/
+def Kdf.work (password : Nat) : Kdf → Nat
+  | .pbkdf2 iterations length salt => pbkdf2Blocks password salt.size iterations length
+  | .scrypt n r p length salt =>
+    4 * n * r * p + pbkdf2Blocks password salt.size 1 (128 * r * p) +
+      pbkdf2Blocks password (128 * r * p) 1 length
 
 /-- The largest key derivation that a caller accepts from a keystore. -/
 structure KdfLimits where
   /-- The largest memory, in bytes. -/
   memory : Nat
-  /-- The largest work, in calls of the derivation's core function. -/
+  /-- The largest work, in SHA-256 compressions and Salsa20/8 cores. -/
   work : Nat
 
-/-- Whether a key derivation stays within the caller's limits. -/
-def KdfLimits.admits (limits : KdfLimits) (kdf : Kdf) : Bool :=
-  kdf.memory ≤ limits.memory && kdf.work ≤ limits.work
+/-- Whether a key derivation with a password of the given size stays within the limits. -/
+def KdfLimits.admits (limits : KdfLimits) (password : Nat) (kdf : Kdf) : Bool :=
+  kdf.memory ≤ limits.memory && kdf.work password ≤ limits.work
 
 /-- The cryptographic fields read by decryption; the IV and checksum have fixed sizes. -/
 structure Store where
@@ -236,8 +260,9 @@ def decryptWithKey (store : Store) (key : ByteArray) : Except KeystoreError Byte
 /-- Decrypt a parsed keystore with its prepared password, within the caller's limits. -/
 def decryptStore (limits : KdfLimits) (store : Store) (password : String) :
     Except KeystoreError ByteArray := do
-  unless limits.admits store.kdf do
-    throw (.limitExceeded store.kdf.memory store.kdf.work)
+  let size := (passwordBytes password).size
+  unless limits.admits size store.kdf do
+    throw (.limitExceeded store.kdf.memory (store.kdf.work size))
   decryptWithKey store (← deriveKey password store.kdf)
 
 /-- Decrypt an ERC-2335 keystore value, or report the step that failed.

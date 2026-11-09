@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Keystore
 
 /-!
-# Proofs: ERC-2335 password verification
+# Proofs: ERC-2335 decryption refusals
 
 A mismatched checksum prevents secret decryption.
 
@@ -30,9 +30,9 @@ theorem decryptWithKey_of_checksum_mismatch (store : Store) (key : ByteArray)
 
 /-- A key derivation beyond the caller's limits is refused, so it never runs. -/
 theorem decryptStore_of_not_admits (limits : KdfLimits) (store : Store) (password : String)
-    (h : limits.admits store.kdf = false) :
+    (h : limits.admits (passwordBytes password).size store.kdf = false) :
     decryptStore limits store password =
-      .error (.limitExceeded store.kdf.memory store.kdf.work) := by
+      .error (.limitExceeded store.kdf.memory (store.kdf.work (passwordBytes password).size)) := by
   simp [decryptStore, h]
   rfl
 

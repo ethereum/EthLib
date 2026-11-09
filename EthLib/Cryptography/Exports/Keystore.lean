@@ -8,7 +8,11 @@ public import EthLib.Cryptography.Keystore
 
 JSON text is parsed at this boundary, outside the specification's decoder of JSON values.
 
-A screen runs first, so that no text can make the parser exhaust memory or stack.
+A linear pass first refuses deep nesting, long digit runs and large positive exponents.
+
+Each could make the parser exhaust its stack, its time or its memory.
+
+The bounds refuse some valid JSON, such as `0.0e10000`, that no keystore writer produces.
 
 The exports return the code and message of the step that failed.
 -/
@@ -32,11 +36,17 @@ def password (args : PyValue) : Result PyValue :=
 /-- The deepest nesting of arrays and objects accepted; a keystore nests four levels. -/
 def maxDepth : Nat := 64
 
-/-- The most significant digits of a positive exponent accepted, so a number stays small.
+/-- The longest run of digits accepted, enough for any 256-bit integer.
 
-The parser multiplies by ten to the exponent, so `1e1000000000` alone would need gigabytes.
+The parser takes time quadratic in the length of a run.
 -/
-def maxExponentDigits : Nat := 4
+def maxDigits : Nat := 80
+
+/-- The largest sum of the positive exponents of all numbers in the text.
+
+The parser multiplies by ten to each such exponent, so the sum bounds the digits it creates.
+-/
+def maxExponentSum : Nat := 4096
 
 /-- The state of the screen after a prefix of the text. -/
 structure Screen where
@@ -48,20 +58,37 @@ structure Screen where
   depth : Nat := 0
   /-- The last character of the prefix. -/
   previous : Char := ' '
-  /-- Inside an exponent: whether it is negative, and its significant digits so far. -/
+  /-- The length of the run of digits that ends the prefix, outside strings. -/
+  digits : Nat := 0
+  /-- Inside an exponent: whether it is negative, and its value so far if it is not. -/
   exponent : Option (Bool × Nat) := none
+  /-- The sum of the positive exponents so far, including the one in progress. -/
+  exponentSum : Nat := 0
   /-- The first reason to refuse the text, if any. -/
   refused : Option String := none
 
 /-- One character outside a string and outside an exponent. -/
 def Screen.outside (s : Screen) (c : Char) : Screen :=
-  let s := { s with previous := c }
   if c = '"' then { s with inString := true }
   else if c = '[' ∨ c = '{' then
     if s.depth + 1 > maxDepth then { s with refused := some "nesting too deep" }
     else { s with depth := s.depth + 1 }
   else if c = ']' ∨ c = '}' then { s with depth := s.depth - 1 }
+  else if (c = 'e' ∨ c = 'E') ∧ (s.previous.isDigit ∨ s.previous = '.') then
+    { s with exponent := some (false, 0) }
   else s
+
+/-- One character outside a string, inside an exponent, given its sign and value so far. -/
+def Screen.inExponent (s : Screen) (c : Char) (negative : Bool) (value : Nat) : Screen :=
+  if (c = '+' ∨ c = '-') ∧ (s.previous = 'e' ∨ s.previous = 'E') then
+    { s with exponent := some (c = '-', value) }
+  else if c.isDigit ∧ !negative then
+    let next := 10 * value + (c.toNat - '0'.toNat)
+    let sum := s.exponentSum - value + next
+    if sum > maxExponentSum then { s with refused := some "exponents too large" }
+    else { s with exponent := some (false, next), exponentSum := sum }
+  else if c.isDigit then s
+  else { s with exponent := none }.outside c
 
 /-- One more character of the text. -/
 def Screen.step (s : Screen) (c : Char) : Screen :=
@@ -69,23 +96,17 @@ def Screen.step (s : Screen) (c : Char) : Screen :=
   else if s.inString then
     if s.escaped then { s with escaped := false, previous := c }
     else { s with escaped := c = '\\', inString := c ≠ '"', previous := c }
-  else match s.exponent with
-    | some (negative, digits) =>
-      if (c = '+' ∨ c = '-') ∧ (s.previous = 'e' ∨ s.previous = 'E') then
-        { s with exponent := some (c = '-', digits), previous := c }
-      else if c.isDigit then
-        -- Leading zeros do not change the exponent.
-        let digits := if c = '0' ∧ digits = 0 then 0 else digits + 1
-        if !negative ∧ digits > maxExponentDigits then
-          { s with refused := some "exponent too large" }
-        else { s with exponent := some (negative, digits), previous := c }
-      else { s with exponent := none }.outside c
-    | none =>
-      if (c = 'e' ∨ c = 'E') ∧ (s.previous.isDigit ∨ s.previous = '.') then
-        { s with exponent := some (false, 0), previous := c }
-      else s.outside c
+  else
+    let digits := if c.isDigit then s.digits + 1 else 0
+    if digits > maxDigits then { s with refused := some "digit run too long" }
+    else
+      let s := { s with digits }
+      let s := match s.exponent with
+        | some (negative, value) => s.inExponent c negative value
+        | none => s.outside c
+      { s with previous := c }
 
-/-- Refuse text that the parser would expand into a huge number or recurse into too deeply. -/
+/-- Refuse text that the parser would take too long on, or expand or recurse into too far. -/
 def screen (text : String) : Except String Unit :=
   match (text.foldl Screen.step {}).refused with
   | some reason => .error reason

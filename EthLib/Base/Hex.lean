@@ -5,7 +5,7 @@ module
 
 The sixteen hex digits, as the encodings that write bytes in hex use them.
 
-Decoding reads digits in either letter case and runs in constant stack.
+Decoding reads digits in either letter case, and long inputs do not grow the stack.
 -/
 
 @[expose] public section
