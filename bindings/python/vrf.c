@@ -22,7 +22,13 @@ eth_vrf_evaluate(
   uint32_t index
 );
 
-/* The size of a seed, of a root and of an output. */
+extern lean_object*
+eth_vrf_mix(
+  lean_object* output,
+  lean_object* randomness
+);
+
+/* The size of a seed, of a root, of an output and of the randomness of a mix. */
 #define VRF_HASH_SIZE 32
 
 /* ---- Local helpers ---------------------------------------------------- */
@@ -116,4 +122,20 @@ py_vrf_evaluate(
   uint32_t index;
   if (parse_seed_index(args, &seed, &index)) return NULL;
   return except_into_pybytes(eth_vrf_evaluate(mk_bytearray(seed, VRF_HASH_SIZE), index), VRF_ERROR);
+}
+
+PyObject*
+py_vrf_mix(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *output_obj, *randomness_obj;
+  if (!PyArg_ParseTuple(args, "OO", &output_obj, &randomness_obj)) return NULL;
+  const uint8_t* output = parse_bytes_of_size(output_obj, VRF_HASH_SIZE, "output");
+  if (!output) return NULL;
+  const uint8_t* randomness = parse_bytes_of_size(randomness_obj, VRF_HASH_SIZE, "randomness");
+  if (!randomness) return NULL;
+  return except_into_pybytes(
+    eth_vrf_mix(mk_bytearray(output, VRF_HASH_SIZE), mk_bytearray(randomness, VRF_HASH_SIZE)),
+    VRF_ERROR);
 }

@@ -74,6 +74,6 @@ def prove (seed : Seed) (i : UInt32) : Opening :=
 
 /-- The output at index `i` of the tree of a seed. -/
 def evaluate (seed : Seed) (i : UInt32) : Digest :=
-  outputHash (secret seed i)
+  outputHash i (secret seed i)
 
 end EthLib.Cryptography.Vrf

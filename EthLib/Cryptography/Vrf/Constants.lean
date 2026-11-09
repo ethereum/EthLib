@@ -15,7 +15,7 @@ namespace EthLib.Cryptography.Vrf.Constants
 One leaf per index, so the indices are `[0, 2^32)`. -/
 def VRF_TREE_HEIGHT : Nat := 32
 
-/-- The size in bytes of a root, a node, a leaf secret and an output.
+/-- The size in bytes of a root, a node, a leaf secret, an output and a mixed value.
 
 Uniqueness must hold against the validator that built the tree.
 
@@ -50,6 +50,10 @@ def VRF_NODE_DST : Vector UInt8 11 :=
 /-- The prefix of an output hash: the ASCII bytes of `PQ_VRF_OUTPUT`. -/
 def VRF_OUTPUT_DST : Vector UInt8 13 :=
   #v[0x50, 0x51, 0x5f, 0x56, 0x52, 0x46, 0x5f, 0x4f, 0x55, 0x54, 0x50, 0x55, 0x54]
+
+/-- The prefix of a mixed value: the ASCII bytes of `PQ_VRF_MIX`. -/
+def VRF_MIX_DST : Vector UInt8 10 :=
+  #v[0x50, 0x51, 0x5f, 0x56, 0x52, 0x46, 0x5f, 0x4d, 0x49, 0x58]
 
 /-- The prefix of a leaf secret: the ASCII bytes of `PQ_VRF_SECRET`. -/
 def VRF_SECRET_DST : Vector UInt8 13 :=

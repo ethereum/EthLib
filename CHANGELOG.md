@@ -9,6 +9,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- The output of the VRF tree at index `i` now hashes the index before the secret: `keccak256(PQ_VRF_OUTPUT | LE32(i) | s)` ([#1652](https://github.com/ethereum/EthLib/pull/1652)).
+  Every output changes, for every root, index and seed.
+  Roots and openings are unchanged, so an existing opening still verifies, but returns a different output.
+  `verify`, `verifyBytes` and `evaluate` keep their arguments, and `outputHash` takes the index.
+  Before, one secret placed at every leaf gave every index the same output, which the holder could choose.
+  A new `mixOutput`, the C export `eth_vrf_mix` and `vrf.mix` in Python hash an output with randomness.
+  A selection must compare that mixed value, with randomness revealed after the root is registered.
 - `engine_forkchoiceUpdated` now applies step 2 of its specification ([#1018](https://github.com/ethereum/EthLib/pull/1018)).
   The execution layer may know a finalized block from an earlier update.
   A valid head below that block is answered `VALID`, and the forkchoice state is not checked.

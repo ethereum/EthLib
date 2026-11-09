@@ -149,6 +149,16 @@ If an example needs a general lemma that EthLib lacks, add the lemma, stated for
 A new rule or tactic is justified by its general statement.
 Show its example in the description of the pull request, not in the tree.
 
+### No benchmarks
+
+A benchmark is a measurement on one machine, at one commit, against one set of references.
+It is not part of the specification, and it ages as soon as EthLib or a reference changes.
+So the repository keeps no benchmark code, benchmark inputs or tables of results.
+
+Benchmarking is welcome for a given problem or pull request.
+Run it locally, outside the tree, and keep its scripts and data out of your commits.
+Give the numbers in the description of the pull request, with the machine and the command that produced them.
+
 ## Writing
 
 Developers all over the world read EthLib, many of them in their second language.

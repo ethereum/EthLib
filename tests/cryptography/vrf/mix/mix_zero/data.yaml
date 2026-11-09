@@ -1,0 +1,4 @@
+input:
+  output: '0xa4de0b38b395e4b742d9ab39fd58bdb5b5ae61dab57359aa26db11d1fee1a4c2'
+  randomness: '0x01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3da'
+output: '0xdf8660355cf6c1c23ce0aa1e9e4befa5f1bd4cfd989a9dc7c369748afbc67452'

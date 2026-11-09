@@ -690,6 +690,7 @@ static PyMethodDef methods[] = {
   {"vrf_verify", py_vrf_verify, METH_VARARGS, DOC_vrf_verify},
   {"vrf_secret", py_vrf_secret, METH_VARARGS, DOC_vrf_secret},
   {"vrf_evaluate", py_vrf_evaluate, METH_VARARGS, DOC_vrf_evaluate},
+  {"vrf_mix", py_vrf_mix, METH_VARARGS, DOC_vrf_mix},
   {"crc32", py_crc32, METH_VARARGS, DOC_crc32},
   {"crc32_number", py_crc32_number, METH_VARARGS, DOC_crc32_number},
   {"crc32c", py_crc32c, METH_VARARGS, DOC_crc32c},

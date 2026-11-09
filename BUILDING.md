@@ -65,7 +65,7 @@ The EthLib cache key includes the operating system, the architecture, the toolch
 Pull requests read the cache but never publish one.
 
 The library and the exports import no module of Mathlib, VCVio or their dependencies.
-So the jobs that need only the library and the exports do not fetch the Mathlib cache: the `suites` job and the workflows `bench` and `vectors-slow`.
+So the jobs that need only the library and the exports do not fetch the Mathlib cache: the `suites` job and the workflow `vectors-slow`.
 They run `lake env true`, which clones the packages that Lake needs to load the workspace.
 
 A new push to a pull request cancels the run still in progress on that pull request.
