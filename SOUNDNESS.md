@@ -281,8 +281,8 @@ The BLS theorems check the constants, because a wrong digit in a modulus or in t
 `orderOf_pairing_generators` (`Proofs/Bls/Nondegenerate.lean`) proves that the pairing of the two generators has order `r`, so it is not 1; the kernel evaluates that pairing.
 `PairingLaws.of_bilinear` (`Proofs/Bls/PairingBilinear.lean`) derives `PairingLaws` from one smaller hypothesis, `PairingBilinear`: `e(a g_1, b g_2) = e(g_1, g_2)^(a b)` for all `a` and `b` in `Fr`.
 `pairingBilinear` proves `PairingBilinear`.
-`PairingLaws` (`Proofs/Bls/PairingLaws.lean`) states the consequence that verification needs, as one hypothesis.
-`pairingLaws` (`Proofs/Bls/PairingAte.lean`) proves `PairingLaws`, so every theorem that assumes it holds once it is supplied.
+`PairingLaws` (`Proofs/Bls/PairingLaws.lean`) states the consequence that verification needs, as one structure.
+`pairingLaws` (`Proofs/Bls/PairingAte.lean`) proves `PairingLaws`.
 Let `P_i` represent `a_i * g_1` and `Q_i` represent `b_i * g_2`, where a representative is any valid point with that group element.
 Then the check of the pairs `(P_i, Q_i)` passes exactly when `sum_i a_i * b_i = 0` in `Fr`.
 The law holds when the check tests `prod_i e(P_i, Q_i) = 1` for any bilinear map `e` with `e(g_1, g_2) != 1` into a group of order `r`.
@@ -291,7 +291,7 @@ The law holds when the check tests `prod_i e(P_i, Q_i) = 1` for any bilinear map
 Its target is `Fp12` and its generator is `e(g_1, g_2)`.
 In this model, `pairing P Q = e(g_1, g_2)^(a b)` when `P` represents `a * g_1` and `Q` represents `b * g_2`.
 An element of the model represents `t` in `Fr` when it is `e(g_1, g_2)^t`.
-The BLS signature, consensus and EIP-2537 theorems use `pairingLaws` inside their proofs.
+The BLS signature, consensus, KZG, PeerDAS and EIP-2537 theorems use `pairingLaws` inside their proofs.
 Only the lemmas of `Proofs/Bls/PairingLaws.lean`, which derive consequences of the law, take `PairingLaws` as a hypothesis.
 
 `finalExponentiation_eq_pow` (`Proofs/Bls/FinalExponentiation.lean`) proves that the final exponentiation raises every element of `Fp12` to exactly `(p^12 - 1) / r`.
@@ -450,7 +450,7 @@ This is the optimal ate pairing of Beuchat et al. (ePrint 2010/354, §2).
 The pairing law is stated as a structure, `AltBn128.PairingLaws` (`Proofs/AltBn128/PairingLaws.lean`), in the shape of the BLS one.
 It states the check of EIP-197: the pairs `(a_i P1, b_i P2)` pass exactly when `sum_i a_i b_i = 0`.
 `PairingLaws.of_bilinear` (`Proofs/AltBn128/PairingBilinear.lean`) derives it from one smaller hypothesis, `PairingBilinear`: `e(a P1, b P2) = e(P1, P2)^(a b)` for all `a` and `b` in `Fr`.
-`AltBn128.pairingLaws` (`Proofs/AltBn128/PairingAte.lean`) proves `AltBn128.PairingLaws` from it, so every theorem that assumes it holds once it is supplied.
+`AltBn128.pairingLaws` (`Proofs/AltBn128/PairingAte.lean`) proves `AltBn128.PairingLaws` from it.
 `Ate.frobenius_generator` (`Proofs/AltBn128/PairingAte.lean`) proves, by a kernel computation on the twist, that the Frobenius map of the specification sends `P2` to `p P2`.
 `Ate.frobenius_of_mem` proves that `pi` acts as `p` on the untwist of `G_2`.
 `Ate.eq_zero_of_frobenius_eq` proves that `pi` fixes only `O` there, because `q` does not divide `p - 1`.
@@ -1695,10 +1695,9 @@ EthLib accepts them, and the suite asserts that it does, as `tests/execution/eth
 A conditional theorem is only as strong as its hypotheses.
 The ceremony theorem `checksSufficient_of_subgroupChecks` is one, and its hypotheses are listed under KZG.
 Only the lemmas in `Proofs/Bls/PairingLaws.lean` and `Proofs/AltBn128/PairingLaws.lean` take `PairingLaws` as a hypothesis.
-The BLS signature, consensus, KZG, PeerDAS and EIP-2537 theorems need no such hypothesis.
+The BLS signature, consensus, KZG, PeerDAS, EIP-2537 and EIP-197 theorems need no such hypothesis.
 `PairingLaws` is a `Prop`, never an axiom, so `lake exe check-decls` still sees only the standard axioms.
-`pairingLaws` proves the BLS12-381 law, so the theorems that assume it hold once it is supplied.
-`AltBn128.pairingLaws` proves the alt_bn128 law in the same way.
+`pairingLaws` proves the law for BLS12-381, and `AltBn128.pairingLaws` proves it for alt_bn128.
 Whatever those hypotheses leave unproved is part of what a reader trusts.
 
 ### A3. Side channels

@@ -7,7 +7,7 @@ import EthLib.Cryptography.Proofs.Bls.PairingAte
 /-!
 # Proofs: unique signatures, and the rogue-key attack
 
-A key and a message have exactly one signature that verifies.
+A key and a message have at most one signature that verifies, byte for byte.
 
 The fast aggregate verification alone does not bind each key to its owner.
 
