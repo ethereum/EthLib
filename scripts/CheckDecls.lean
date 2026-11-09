@@ -107,7 +107,7 @@ def axiomChildren (c : ConstantInfo) : Array Name :=
 
 They are the types of its declaration, mutual ones included, and all their constructors.
 
-They refer to each other, and no other cycle exists among constants. -/
+They refer to each other, and among safe constants they are the only cycle. -/
 def inductiveGroup (env : Environment) (c : ConstantInfo) : Array Name :=
   let types := match c with
     | .inductInfo v => v.all
@@ -124,11 +124,15 @@ def inductiveGroup (env : Environment) (c : ConstantInfo) : Array Name :=
 
 `Lean.collectAxioms` of Lean v4.35.0 is not used.
 
-When it reaches an inductive type from a constructor, it caches the type with no axioms.
+It can reach an inductive type from a constructor.
 
-The type then hides an axiom that only a constructor carries.
+It then caches the type without the axioms that only its constructors carry.
 
-So does every declaration that uses the type, in its module and in the modules that import it.
+The same happens to a type of a mutual declaration reached from another type of it.
+
+Each module records these results when it is compiled.
+
+So a declaration that uses the type, in any module that imports it, hides the axiom too.
 
 Here an inductive type and its constructors are walked together.
 

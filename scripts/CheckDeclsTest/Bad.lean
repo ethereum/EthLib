@@ -74,6 +74,11 @@ inductive Carrier where
 Its proof names no axiom, so only the walk through the type and its constructor finds it. -/
 theorem usesCycle : Nonempty (CheckDeclsForeign.Cycle → CheckDeclsForeign.Cycle) := ⟨id⟩
 
+/-- A theorem that uses one type of a dependency's mutual declaration.
+
+The other type's constructor carries an axiom, and the kernel checked both types as one. -/
+theorem usesLeft : Nonempty CheckDeclsForeign.Left := ⟨.a⟩
+
 /-- A panic whose fallback is a dependency's opaque constant.
 The kernel sees the fallback, `CheckDeclsForeign.hiddenNat`, so this cannot unfold. -/
 def fallback : Nat := @panic Nat ⟨CheckDeclsForeign.hiddenNat⟩ "message"
