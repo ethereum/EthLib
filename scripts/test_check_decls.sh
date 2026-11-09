@@ -23,6 +23,8 @@ axiom CheckDeclsTest.Bad.Phantom._native
 axiom CheckDeclsTest.Bad.assumed
 axioms CheckDeclsTest.Bad.Carrier
 axioms CheckDeclsTest.Bad.usesAssumed
+axioms CheckDeclsTest.Bad.usesCycle
+axioms CheckDeclsTest.Bad.usesLeft
 csimp CheckDeclsTest.Bad.double_eq_doubleFast
 extern CheckDeclsTest.Bad.external
 implemented_by CheckDeclsTest.Bad.slow
