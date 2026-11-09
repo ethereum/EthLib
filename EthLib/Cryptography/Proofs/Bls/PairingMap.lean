@@ -70,7 +70,7 @@ theorem map_millerLoop (f : Hom F G) (s : Nat) (q : Fp2 F × Fp2 F) (p : F × F)
 theorem map_finalExponentiation (f : Hom F G) (g : Fp12 F) :
     (finalExponentiation g).map f = finalExponentiation (g.map f) := by
   simp only [finalExponentiation, Fp12.map_mul, Fp12.map_conjugate, Fp12.map_inverse,
-    Fp12.map_frobenius, Fp12.map_powNat]
+    Fp12.map_frobenius, Fp12.map_cyclotomicPow]
 
 theorem map_pairing (f : Hom F G) (P : G1 F) (Q : G2 F) :
     (pairing P Q).map f = pairing (P.map f) (Q.map f) := by

@@ -59,3 +59,40 @@ An exponent near 1 means linear time, and near 2 quadratic time:
 ```bash
 .venv/bin/python benchmarks/scaling.py rlp,ssz
 ```
+
+## BLS final exponentiation
+
+`bench_bls_pairing.py` times pairing and verification on the ten valid verification cases from `ethereum/bls12-381-tests` v0.1.2.
+Each worker first checks all 29 verification cases and saves the complete pairing outputs for comparison.
+Each timed call processes ten inputs, so divide its reported time by ten for a time per input.
+
+With two built Linux checkouts in `/tmp/ethlib-bench/before` and `/tmp/ethlib-bench/after`, alternate their process order:
+
+```bash
+BENCH_ROOT=/tmp/ethlib-bench
+mkdir -p "$BENCH_ROOT/results"
+for round in {1..9}; do
+  sides="before after"
+  if (( round % 2 == 0 )); then sides="after before"; fi
+  for side in $sides; do
+    BENCH_BUDGET=0.2 BENCH_REPEATS=3 LEAN_NUM_THREADS=1 taskset -c 2 \
+      .venv/bin/python benchmarks/bench_bls_pairing.py \
+      "$BENCH_ROOT/$side/bindings/python" "$BENCH_ROOT/before" \
+      "$BENCH_ROOT/results/$side-$round.json"
+  done
+done
+```
+
+On 9 November 2026, `0b028a98` and `codex/cyclotomic-square-1412` ran for nine rounds of three repeats.
+Both used Lean 4.35.0 and CPython 3.11.2 in an aarch64 Linux 6.8 virtual machine on an Apple M4 Pro with 24 GiB.
+The Python extension was built with GCC 12.2.0.
+Each worker and its Lean runtime threads had affinity to guest CPU 2.
+The host's physical-core scheduling was not pinned.
+All complete pairing outputs and verification digests agreed.
+Each round contributes its median of three repeats.
+The table gives the median and range of those round values in milliseconds per input.
+
+| Operation | Before (ms) | After (ms) | Before / after |
+| --- | ---: | ---: | ---: |
+| `pairing` | 4.810 (4.774-4.974) | 3.380 (3.362-3.527) | 1.423 |
+| `verify` | 7.575 (7.525-8.045) | 6.259 (6.146-6.355) | 1.210 |

@@ -60,6 +60,37 @@ instance : Neg (Fp12 F) := ⟨neg⟩
 /-- Squaring. -/
 @[inline] def square (a : Fp12 F) : Fp12 F := a * a
 
+/-- Squaring in the cyclotomic subgroup, by [Granger and Scott][source], §3.2, equation (5).
+
+Over `Fp`, it equals `a * a` when `a^(p^4 - p^2 + 1) = 1`, and also at zero.
+
+Here `p` is the modulus of `Fp`, and `z_k` is the coefficient of `w^k`.
+
+The pairs `A=(z0,z3)`, `B=(z1,z4)` and `C=(z2,z5)` represent elements of `Fp4`.
+
+Each pair uses the quadratic squaring formula of §3.1, with `y^2 = 1 + i`.
+
+[source]: https://eprint.iacr.org/2009/565
+-/
+def cyclotomicSquare (a : Fp12 F) : Fp12 F :=
+  let squareFp4 (x y : Fp2 F) :=
+    let xy := x * y
+    ((x + y.mulByOnePlusI) * (x + y) - xy - xy.mulByOnePlusI, xy + xy)
+  let tripleSubDouble (x y : Fp2 F) :=
+    let d := x - y
+    d + d + x
+  let tripleAddDouble (x y : Fp2 F) :=
+    let d := x + y
+    d + d + x
+  let sa := squareFp4 a.c0.c0 a.c1.c1
+  let sb := squareFp4 a.c1.c0 a.c0.c2
+  let sc := squareFp4 a.c0.c1 a.c1.c2
+  -- The pair formulas are `3*A^2 - 2*conj A`, `3*y*C^2 + 2*conj B`, `3*B^2 - 2*conj C`.
+  ⟨⟨tripleSubDouble sa.1 a.c0.c0, tripleSubDouble sb.1 a.c0.c1,
+      tripleSubDouble sc.1 a.c0.c2⟩,
+    ⟨tripleAddDouble sc.2.mulByOnePlusI a.c1.c0, tripleAddDouble sa.2 a.c1.c1,
+      tripleAddDouble sb.2 a.c1.c2⟩⟩
+
 /-- Inversion via the conjugate. -/
 def inverse (a : Fp12 F) : Fp12 F :=
   let norm := a.c0 * a.c0 - (a.c1 * a.c1).mulByV
@@ -99,6 +130,17 @@ def powNat (base : Fp12 F) (e : Nat) : Fp12 F :=
     let half := powNat (base * base) (e / 2)
     if e % 2 = 1 then base * half else half
 -- Every nonzero exponent decreases when divided by two.
+termination_by e
+decreasing_by omega
+
+/-- Square-and-multiply using cyclotomic squaring.
+
+Over `Fp`, it agrees with `powNat` on zero and on the cyclotomic subgroup. -/
+def cyclotomicPow (base : Fp12 F) (e : Nat) : Fp12 F :=
+  if e = 0 then one
+  else
+    let half := cyclotomicPow base.cyclotomicSquare (e / 2)
+    if e % 2 = 1 then base * half else half
 termination_by e
 decreasing_by omega
 
