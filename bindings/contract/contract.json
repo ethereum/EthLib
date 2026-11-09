@@ -1415,7 +1415,7 @@
   {"summary":
    "X25519 scalar multiplication of two 32-byte inputs, RFC 7748 §5.",
    "signature": "(scalar: bytes, u: bytes) -> bytes",
-   "operation": "EthLib.Cryptography.NoisePrimitives.Exports.x25519Export",
+   "operation": "EthLib.Cryptography.X25519.Exports.x25519Export",
    "method": "x25519",
    "errors": [],
    "error_class": "X25519Error",
@@ -1423,8 +1423,7 @@
    "X25519 scalar multiplication of two 32-byte inputs, RFC 7748 §5."},
   {"summary": "X25519 public key at Montgomery coordinate 9, RFC 7748 §6.1.",
    "signature": "(scalar: bytes) -> bytes",
-   "operation":
-   "EthLib.Cryptography.NoisePrimitives.Exports.x25519PublicKeyExport",
+   "operation": "EthLib.Cryptography.X25519.Exports.x25519PublicKeyExport",
    "method": "x25519_public_key",
    "errors": [],
    "error_class": "X25519Error",
@@ -1432,7 +1431,7 @@
   {"summary": "The four-word quarter round, RFC 8439 §2.1.",
    "signature": "(a: int, b: int, c: int, d: int) -> tuple[int, int, int, int]",
    "operation":
-   "EthLib.Cryptography.NoisePrimitives.Exports.quarterRoundExport",
+   "EthLib.Cryptography.ChaCha20Poly1305.Exports.quarterRoundExport",
    "method": "chacha20_quarter_round",
    "errors": [],
    "error_class": "ChaCha20Poly1305Error",
@@ -1441,7 +1440,7 @@
    "A quarter round on a 64-byte state at four indices, RFC 8439 §2.2.",
    "signature": "(state: bytes, a: int, b: int, c: int, d: int) -> bytes",
    "operation":
-   "EthLib.Cryptography.NoisePrimitives.Exports.quarterRoundStateExport",
+   "EthLib.Cryptography.ChaCha20Poly1305.Exports.quarterRoundStateExport",
    "method": "chacha20_quarter_round_state",
    "errors": [],
    "error_class": "ChaCha20Poly1305Error",
@@ -1449,7 +1448,7 @@
    "A quarter round on a 64-byte state at four indices, RFC 8439 §2.2."},
   {"summary": "The 64-byte ChaCha20 block at a 32-bit counter, RFC 8439 §2.3.",
    "signature": "(key: bytes, counter: int, nonce: bytes) -> bytes",
-   "operation": "EthLib.Cryptography.NoisePrimitives.Exports.blockExport",
+   "operation": "EthLib.Cryptography.ChaCha20Poly1305.Exports.blockExport",
    "method": "chacha20_block",
    "errors": [],
    "error_class": "ChaCha20Poly1305Error",
@@ -1459,10 +1458,10 @@
    "ChaCha20 encryption or decryption without counter wrap, RFC 8439 §2.4.",
    "signature":
    "(key: bytes, counter: int, nonce: bytes, message: bytes) -> bytes",
-   "operation": "EthLib.Cryptography.NoisePrimitives.Exports.cryptExport",
+   "operation": "EthLib.Cryptography.ChaCha20Poly1305.Exports.cryptExport",
    "method": "chacha20_crypt",
    "errors":
-   [{"type": "EthLib.Cryptography.ChaCha20Poly1305.CipherError",
+   [{"type": "EthLib.Cryptography.ChaCha20Poly1305.ChaCha20Poly1305Error",
      "codes":
      [{"constructor": "counterExhausted", "code": 1},
       {"constructor": "aadTooLong", "code": 2},
@@ -1472,14 +1471,15 @@
    "ChaCha20 encryption or decryption without counter wrap, RFC 8439 §2.4."},
   {"summary": "Poly1305 with a 32-byte one-time key, RFC 8439 §2.5.",
    "signature": "(key: bytes, message: bytes) -> bytes",
-   "operation": "EthLib.Cryptography.NoisePrimitives.Exports.poly1305Export",
+   "operation": "EthLib.Cryptography.ChaCha20Poly1305.Exports.poly1305Export",
    "method": "poly1305",
    "errors": [],
    "error_class": "ChaCha20Poly1305Error",
    "docstring": "Poly1305 with a 32-byte one-time key, RFC 8439 §2.5."},
   {"summary": "Derive a Poly1305 key from ChaCha20 block zero, RFC 8439 §2.6.",
    "signature": "(key: bytes, nonce: bytes) -> bytes",
-   "operation": "EthLib.Cryptography.NoisePrimitives.Exports.poly1305KeyExport",
+   "operation":
+   "EthLib.Cryptography.ChaCha20Poly1305.Exports.poly1305KeyExport",
    "method": "poly1305_key",
    "errors": [],
    "error_class": "ChaCha20Poly1305Error",
@@ -1489,10 +1489,10 @@
    "Encrypt and authenticate, returning ciphertext and a separate tag, RFC 8439 §2.8.",
    "signature":
    "(key: bytes, nonce: bytes, aad: bytes, plaintext: bytes) -> tuple[bytes, bytes]",
-   "operation": "EthLib.Cryptography.NoisePrimitives.Exports.encryptExport",
+   "operation": "EthLib.Cryptography.ChaCha20Poly1305.Exports.encryptExport",
    "method": "chacha20_poly1305_encrypt",
    "errors":
-   [{"type": "EthLib.Cryptography.ChaCha20Poly1305.CipherError",
+   [{"type": "EthLib.Cryptography.ChaCha20Poly1305.ChaCha20Poly1305Error",
      "codes":
      [{"constructor": "counterExhausted", "code": 1},
       {"constructor": "aadTooLong", "code": 2},
@@ -1503,10 +1503,10 @@
   {"summary": "Authenticate before returning plaintext, RFC 8439 §2.8.",
    "signature":
    "(key: bytes, nonce: bytes, aad: bytes, ciphertext: bytes, tag: bytes) -> bytes",
-   "operation": "EthLib.Cryptography.NoisePrimitives.Exports.decryptExport",
+   "operation": "EthLib.Cryptography.ChaCha20Poly1305.Exports.decryptExport",
    "method": "chacha20_poly1305_decrypt",
    "errors":
-   [{"type": "EthLib.Cryptography.ChaCha20Poly1305.CipherError",
+   [{"type": "EthLib.Cryptography.ChaCha20Poly1305.ChaCha20Poly1305Error",
      "codes":
      [{"constructor": "counterExhausted", "code": 1},
       {"constructor": "aadTooLong", "code": 2},

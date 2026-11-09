@@ -10,6 +10,8 @@ The first byte is the least significant one:
 ```text
     [0x34, 0x12]  reads as  0x34 + 256 * 0x12 = 0x1234
 ```
+
+The 32-bit word helpers serve the ciphers whose state is a list of little-endian words.
 -/
 
 @[expose] public section
@@ -41,5 +43,19 @@ Fewer than eight bytes are allowed, and `k` bytes read as a value below `256^k`.
 The bound on `k` keeps the value below `2^64`, so it never wraps. -/
 def bytesToUint64 {k : Nat} (data : Vector UInt8 k) (_ : k ≤ 8 := by decide) : UInt64 :=
   UInt64.ofNat (bytesToUint data)
+
+/-- Rotate a 32-bit word left by `shift` bits, counted modulo 32. -/
+@[inline] def rotl32 (x shift : UInt32) : UInt32 :=
+  (x <<< shift) ||| (x >>> (32 - shift))
+
+/-- Four bytes, least significant first, read as a 32-bit word. -/
+@[inline] def uint32OfBytes (b0 b1 b2 b3 : UInt8) : UInt32 :=
+  b0.toUInt32 ||| b1.toUInt32 <<< 8 ||| b2.toUInt32 <<< 16 ||| b3.toUInt32 <<< 24
+
+/-- Byte `i` of the little-endian encoding of a 32-bit word, for `i` below 4.
+
+For example, byte 1 of `0x12345678` is `0x56`. -/
+@[inline] def uint32Byte (word : UInt32) (i : Nat) : UInt8 :=
+  (word >>> UInt32.ofNat (8 * i)).toUInt8
 
 end EthLib.Base

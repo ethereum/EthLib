@@ -1,25 +1,19 @@
 module
 
 public import EthLib.Base.Exports.Proofs.PyValue
-public import EthLib.Cryptography.X25519
 public import EthLib.Cryptography.ChaCha20Poly1305
 
 /-!
-# Exports: the X25519 and ChaCha20-Poly1305 primitives
+# Exports: ChaCha20 and Poly1305
 
 The typed adapters reject wrong byte lengths before any cryptographic operation.
 -/
 
 public section
 
-namespace EthLib.Cryptography.NoisePrimitives.Exports
+namespace EthLib.Cryptography.ChaCha20Poly1305.Exports
 
 open EthLib.Exports (Result PyValue pyExport)
-open ChaCha20Poly1305
-
-/-- The X25519 key and coordinate length in bytes, RFC 7748 §5. -/
-@[export eth_x25519_const_key_size]
-def x25519KeySize (_ : Unit) : UInt64 := 32
 
 /-- The ChaCha20-Poly1305 key length in bytes, RFC 8439 §2.8. -/
 @[export eth_chachapoly_const_key_size]
@@ -38,18 +32,8 @@ def tagSize (_ : Unit) : UInt64 := 16
 def blockSize (_ : Unit) : UInt64 := 64
 
 /-- Map primitive failures to their stable code and constructor name. -/
-def cipherResult {α : Type} (r : Except CipherError α) : Result α :=
+def cipherResult {α : Type} (r : Except ChaCha20Poly1305Error α) : Result α :=
   r.mapError fun e => (e.code, reprStr e)
-
-/-- X25519 scalar multiplication of two 32-byte inputs, RFC 7748 §5. -/
-@[export eth_x25519]
-def x25519Export (args : PyValue) : Result PyValue :=
-  pyExport (fun (scalar, u) => pure (X25519.x25519 scalar u)) args
-
-/-- X25519 public key at Montgomery coordinate 9, RFC 7748 §6.1. -/
-@[export eth_x25519_public_key]
-def x25519PublicKeyExport (args : PyValue) : Result PyValue :=
-  pyExport (fun scalar => pure (X25519.publicKey scalar)) args
 
 /-- The four-word quarter round, RFC 8439 §2.1. -/
 @[export eth_chacha20_quarter_round]
@@ -107,4 +91,4 @@ def decryptExport (args : PyValue) : Result PyValue :=
   pyExport (fun (key, nonce, aad, ciphertext, tag) =>
     cipherResult (decrypt key nonce aad ciphertext tag)) args
 
-end EthLib.Cryptography.NoisePrimitives.Exports
+end EthLib.Cryptography.ChaCha20Poly1305.Exports

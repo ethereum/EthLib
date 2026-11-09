@@ -130,11 +130,11 @@ class ScryptError(EthLibError, ValueError):
 
 
 class X25519Error(EthLibError, ValueError):
-    """An X25519 key has the wrong size."""
+    """An X25519 scalar or coordinate has the wrong size."""
 
 
 class ChaCha20Poly1305Error(EthLibError, ValueError):
-    """ChaCha20-Poly1305 rejected a size, counter or authentication tag."""
+    """ChaCha20-Poly1305 rejected a size, index, counter, AAD length or authentication tag."""
 
 
 class KeystoreError(EthLibError, ValueError):

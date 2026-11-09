@@ -12,6 +12,10 @@ Never reuse a nonce with one AEAD key, or a Poly1305 one-time key.
 
 The keys are secret, and this specification makes no constant-time claim.
 
+RFC 8439 §4 requires a constant-time tag comparison in online protocols.
+
+This specification does not provide one.
+
 [rfc]: https://www.rfc-editor.org/rfc/rfc8439#section-2
 -/
 
@@ -21,38 +25,41 @@ namespace EthLib.Cryptography.ChaCha20Poly1305
 
 open EthLib.Base
 
+/-- A 256-bit ChaCha20 key or Poly1305 one-time key, RFC 8439 §§2.3 and 2.5. -/
 abbrev Key := Vector UInt8 32
+
+/-- A 96-bit ChaCha20 nonce, RFC 8439 §2.3. -/
 abbrev Nonce := Vector UInt8 12
+
+/-- A 128-bit Poly1305 tag, RFC 8439 §2.5. -/
 abbrev Tag := Vector UInt8 16
+
+/-- The sixteen 32-bit words of the ChaCha20 state, RFC 8439 §2.3. -/
 abbrev State := Vector UInt32 16
 
 /-- Counter exhaustion, an unencodable length, or failed authentication, RFC 8439 §2.8. -/
-inductive CipherError where
+inductive ChaCha20Poly1305Error where
   | counterExhausted
   | aadTooLong
   | authenticationFailed
 deriving DecidableEq, Repr
 
 /-- Stable error codes for the bindings. -/
-def CipherError.code : CipherError → UInt32
+def ChaCha20Poly1305Error.code : ChaCha20Poly1305Error → UInt32
   | .counterExhausted => 1
   | .aadTooLong => 2
   | .authenticationFailed => 3
 
-/-- Rotate a word left, RFC 8439 §2.1. -/
-@[inline] def rotl (x shift : UInt32) : UInt32 :=
-  (x <<< shift) ||| (x >>> (32 - shift))
-
 /-- Add, XOR and rotate four 32-bit words, RFC 8439 §2.1. -/
 def quarterRound (a b c d : UInt32) : UInt32 × UInt32 × UInt32 × UInt32 :=
   let a := a + b
-  let d := rotl (d ^^^ a) 16
+  let d := rotl32 (d ^^^ a) 16
   let c := c + d
-  let b := rotl (b ^^^ c) 12
+  let b := rotl32 (b ^^^ c) 12
   let a := a + b
-  let d := rotl (d ^^^ a) 8
+  let d := rotl32 (d ^^^ a) 8
   let c := c + d
-  let b := rotl (b ^^^ c) 7
+  let b := rotl32 (b ^^^ c) 7
   (a, b, c, d)
 
 /-- Apply a quarter round at four positions of the state, RFC 8439 §2.2. -/
@@ -71,28 +78,25 @@ def doubleRound (s : State) : State :=
   let s := quarterRoundState s 2 7 8 13
   quarterRoundState s 3 4 9 14
 
-/-- Read four bytes as a little-endian word, RFC 8439 §2.3. -/
-def little32 {n : Nat} (v : Vector UInt8 n) (i : Nat) (h : i + 4 ≤ n) : UInt32 :=
-  (v[i]'(by omega)).toUInt32 ||| (v[i + 1]'(by omega)).toUInt32 <<< 8 |||
-    (v[i + 2]'(by omega)).toUInt32 <<< 16 ||| (v[i + 3]'(by omega)).toUInt32 <<< 24
-
 /-- Constants, key, counter and nonce form the initial state, RFC 8439 §2.3. -/
 def initialState (key : Key) (counter : UInt32) (nonce : Nonce) : State :=
+  let k (i : Fin 8) : UInt32 :=
+    uint32OfBytes key[4 * i.val] key[4 * i.val + 1] key[4 * i.val + 2] key[4 * i.val + 3]
+  let n (i : Fin 3) : UInt32 :=
+    uint32OfBytes nonce[4 * i.val] nonce[4 * i.val + 1] nonce[4 * i.val + 2]
+      nonce[4 * i.val + 3]
   #v[0x61707865, 0x3320646e, 0x79622d32, 0x6b206574,
-    little32 key 0 (by decide), little32 key 4 (by decide),
-    little32 key 8 (by decide), little32 key 12 (by decide),
-    little32 key 16 (by decide), little32 key 20 (by decide),
-    little32 key 24 (by decide), little32 key 28 (by decide), counter,
-    little32 nonce 0 (by decide), little32 nonce 4 (by decide), little32 nonce 8 (by decide)]
+    k 0, k 1, k 2, k 3, k 4, k 5, k 6, k 7, counter, n 0, n 1, n 2]
 
 /-- Read a state as sixteen little-endian words, RFC 8439 §2.3. -/
 def stateOfBytes (bytes : Vector UInt8 64) : State :=
-  Vector.ofFn fun i : Fin 16 => little32 bytes (4 * i.val) (by omega)
+  Vector.ofFn fun i : Fin 16 =>
+    uint32OfBytes bytes[4 * i.val] bytes[4 * i.val + 1] bytes[4 * i.val + 2]
+      bytes[4 * i.val + 3]
 
 /-- Serialize sixteen words as 64 little-endian bytes, RFC 8439 §2.3. -/
 def serializeState (words : State) : Vector UInt8 64 :=
-  Vector.ofFn fun i : Fin 64 =>
-    (words[i.val / 4]'(by omega) >>> UInt32.ofNat (8 * (i.val % 4))).toUInt8
+  Vector.ofFn fun i : Fin 64 => uint32Byte (words[i.val / 4]'(by omega)) (i.val % 4)
 
 /-- Twenty rounds and feed-forward, serialized little-endian, RFC 8439 §2.3. -/
 def block (key : Key) (counter : UInt32) (nonce : Nonce) : Vector UInt8 64 :=
@@ -108,7 +112,7 @@ def keyStream (key : Key) (counter : UInt32) (nonce : Nonce) (blocks : Nat) : By
 
 /-- Encrypt or decrypt, rejecting counter wrap, RFC 8439 §§2.4 and 2.8. -/
 def crypt (key : Key) (counter : UInt32) (nonce : Nonce) (input : ByteArray) :
-    Except CipherError ByteArray :=
+    Except ChaCha20Poly1305Error ByteArray :=
   if counter.toNat + (input.size + 63) / 64 > 2 ^ 32 then
     .error .counterExhausted
   else
@@ -146,21 +150,25 @@ def macData (aad ciphertext : ByteArray) : ByteArray :=
     packBytes (uintToBytes 8 aad.size) ++ packBytes (uintToBytes 8 ciphertext.size)
 
 /-- AEAD admits at most `2^32 - 1` blocks and `2^64 - 1` AAD bytes, RFC 8439 §2.8. -/
-def checkLengths (aadLength textLength : Nat) : Except CipherError Unit :=
+def checkLengths (aadLength textLength : Nat) : Except ChaCha20Poly1305Error Unit :=
   if aadLength ≥ 2 ^ 64 then .error .aadTooLong
   else if textLength > (2 ^ 32 - 1) * 64 then .error .counterExhausted
   else .ok ()
 
 /-- Encrypt and authenticate, returning the ciphertext and its tag, RFC 8439 §2.8. -/
 def encrypt (key : Key) (nonce : Nonce) (aad plaintext : ByteArray) :
-    Except CipherError (ByteArray × Tag) := do
+    Except ChaCha20Poly1305Error (ByteArray × Tag) := do
   checkLengths aad.size plaintext.size
   let ciphertext ← crypt key 1 nonce plaintext
   return (ciphertext, poly1305 (poly1305Key key nonce) (macData aad ciphertext))
 
-/-- Authenticate the ciphertext before returning plaintext, RFC 8439 §2.8. -/
+/-- Authenticate the ciphertext before returning plaintext, RFC 8439 §2.8.
+
+RFC 8439 §4 requires a constant-time tag comparison in online protocols.
+
+This comparison is not constant-time. -/
 def decrypt (key : Key) (nonce : Nonce) (aad ciphertext : ByteArray) (tag : Tag) :
-    Except CipherError ByteArray := do
+    Except ChaCha20Poly1305Error ByteArray := do
   checkLengths aad.size ciphertext.size
   if poly1305 (poly1305Key key nonce) (macData aad ciphertext) = tag then
     crypt key 1 nonce ciphertext

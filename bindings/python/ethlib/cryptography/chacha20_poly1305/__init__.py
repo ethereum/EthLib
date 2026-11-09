@@ -1,11 +1,10 @@
-"""X25519 of RFC 7748 and ChaCha20-Poly1305 of RFC 8439."""
+"""ChaCha20, Poly1305 and the ChaCha20-Poly1305 AEAD of RFC 8439."""
 
 from ethlib.cryptography._native import (
     CHACHA20_BLOCK_SIZE,
     CHACHAPOLY_KEY_SIZE,
     CHACHAPOLY_NONCE_SIZE,
     CHACHAPOLY_TAG_SIZE,
-    X25519_KEY_SIZE,
     chacha20_block,
     chacha20_crypt,
     chacha20_poly1305_decrypt,
@@ -14,16 +13,19 @@ from ethlib.cryptography._native import (
     chacha20_quarter_round_state,
     poly1305,
     poly1305_key,
-    x25519,
-    x25519_public_key,
 )
+from ethlib.errors import ChaCha20Poly1305Error
+
+# The keys are secret.
+# EthLib makes no constant-time claim, and the tag comparison is not constant-time.
+# RFC 8439 §4 requires a constant-time tag comparison in online protocols.
 
 __all__ = [
     "CHACHA20_BLOCK_SIZE",
     "CHACHAPOLY_KEY_SIZE",
     "CHACHAPOLY_NONCE_SIZE",
     "CHACHAPOLY_TAG_SIZE",
-    "X25519_KEY_SIZE",
+    "ChaCha20Poly1305Error",
     "chacha20_block",
     "chacha20_crypt",
     "chacha20_poly1305_decrypt",
@@ -32,6 +34,4 @@ __all__ = [
     "chacha20_quarter_round_state",
     "poly1305",
     "poly1305_key",
-    "x25519",
-    "x25519_public_key",
 ]
