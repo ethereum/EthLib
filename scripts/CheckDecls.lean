@@ -89,21 +89,9 @@ def isUnsafeRec (env : Environment) (n : Name) : Bool :=
 
 /-! ## Axioms, followed through every dependency -/
 
-/-- Read-only access to one environment, which is all `Lean.collectAxioms` needs. -/
-instance : MonadEnv (ReaderT Environment Id) where
-  getEnv := read
-  modifyEnv _ := pure ()
-
-/-- Every axiom that some declaration of `decls` depends on, by `Lean.collectAxioms`.
-Each module records the axioms of its own constants when it is compiled, so an imported dependency is looked up, not walked again. -/
-def axiomsOfAll (env : Environment) (decls : List Name) : Array Name :=
-  let all := decls.foldl (init := ({} : NameSet)) fun acc n =>
-    (collectAxioms (m := ReaderT Environment Id) n |>.run env).foldl (·.insert ·) acc
-  all.toArray
-
-
 /-- The constants whose axioms `c` inherits.
-This is what `Lean.collectAxioms` visits: the type, the value or proof, and the constructors of an inductive type. -/
+
+They are its type, its value or proof, and the constructors of an inductive type. -/
 def axiomChildren (c : ConstantInfo) : Array Name :=
   match c with
   | .axiomInfo v => v.type.getUsedConstants
@@ -115,17 +103,51 @@ def axiomChildren (c : ConstantInfo) : Array Name :=
   | .recInfo v => v.type.getUsedConstants
   | .inductInfo v => v.type.getUsedConstants ++ v.ctors.toArray
 
-/-- A memoized `Lean.collectAxioms`.
-An inductive type and its constructors refer to each other, so a constant still being visited contributes nothing. -/
+/-- The constants that the kernel adds with `c`, if `c` is an inductive type or a constructor.
+
+They are the types of its declaration, mutual ones included, and all their constructors.
+
+They refer to each other, and no other cycle exists among constants. -/
+def inductiveGroup (env : Environment) (c : ConstantInfo) : Array Name :=
+  let types := match c with
+    | .inductInfo v => v.all
+    | .ctorInfo v => match env.find? v.induct with
+      | some (.inductInfo w) => w.all
+      | _ => [v.induct]
+    | _ => []
+  types.foldl (init := #[]) fun acc t =>
+    match env.find? t with
+    | some (.inductInfo w) => acc.push t ++ w.ctors.toArray
+    | _ => acc.push t
+
+/-- Every axiom that `n` depends on, memoized.
+
+`Lean.collectAxioms` of Lean v4.35.0 is not used.
+
+When it reaches an inductive type from a constructor, it caches the type with no axioms.
+
+The type then hides an axiom that only a constructor carries.
+
+So does every declaration that uses the type, in its module and in the modules that import it.
+
+Here an inductive type and its constructors are walked together.
+
+All of them get the axioms of the whole group. -/
 partial def axiomsOf (env : Environment) (n : Name) : StateM (NameMap NameSet) NameSet := do
   if let some s := (← get).find? n then return s
-  modify (·.insert n {})
   let some c := env.find? n | return {}
-  let mut s : NameSet := if c matches .axiomInfo _ then ({} : NameSet).insert n else {}
-  for child in axiomChildren c do
-    for a in ← axiomsOf env child do
-      s := s.insert a
-  modify (·.insert n s)
+  let group := inductiveGroup env c
+  let members := if group.isEmpty then #[n] else group
+  -- A member reached again from inside the group adds nothing: the group is being walked.
+  for m in members do modify (·.insert m {})
+  let mut s : NameSet := {}
+  for m in members do
+    let some cm := env.find? m | continue
+    if cm matches .axiomInfo _ then s := s.insert m
+    for child in axiomChildren cm do
+      for a in ← axiomsOf env child do
+        s := s.insert a
+  for m in members do modify (·.insert m s)
   return s
 
 /-! ## Opaque constants, followed through definitions -/
@@ -231,7 +253,10 @@ def check (env : Environment) (scope : Name) : Array Finding := Id.run do
   -- Axioms are reported where they enter the scope, not at every declaration that inherits them.
   -- An unsafe declaration is a finding already, and the kernel never relies on what it depends on.
   let decls := decls.filter fun (_, c) => !c.isUnsafe
-  let extra := (axiomsOfAll env (decls.map (·.1))).filter (!allowedAxioms.contains ·)
+  let (_, memo) := (decls.forM fun (n, _) => discard (axiomsOf env n)).run {}
+  let extra := decls.foldl (init := ({} : NameSet)) fun acc (n, _) =>
+    ((memo.find? n).getD {}).foldl (·.insert ·) acc
+  let extra := extra.toList.filter (!allowedAxioms.contains ·)
   let mut foreign : NameSet := {}
   for a in extra do
     if a == ``sorryAx then
@@ -246,9 +271,7 @@ def check (env : Environment) (scope : Name) : Array Finding := Id.run do
           out := out.push ⟨"axioms", n, s!"depends on {a}"⟩
     else
       foreign := foreign.insert a
-  -- An axiom from a dependency is rare, so only then is every declaration followed on its own.
   unless foreign.isEmpty do
-    let (_, memo) := (decls.forM fun (n, _) => discard (axiomsOf env n)).run {}
     let mut attributed : NameSet := {}
     for (n, c) in decls do
       unless c matches .axiomInfo _ do
