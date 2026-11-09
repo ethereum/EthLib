@@ -162,10 +162,15 @@ def test_topic_not_at_fork() -> None:
     assert info.value.code == 303
 
 
-def test_topics_not_yet_specified() -> None:
-    with raises(ConsensusError, "the gossip topics of hegota are not yet specified") as info:
-        consensus.gossip_topic_bound("hegota", "voluntary_exit")
-    assert info.value.code == 304
+def test_inclusion_list_topic_from_heze() -> None:
+    with raises(ConsensusError, "inclusion_list is not a topic of glamsterdam") as info:
+        consensus.gossip_topic_bound("glamsterdam", "inclusion_list")
+    assert info.value.code == 303
+
+
+def test_voluntary_exit_topic_at_heze() -> None:
+    # An epoch and a validator index, then the signature.
+    assert consensus.gossip_topic_bound("hegota", "voluntary_exit") == 8 + 8 + 96
 
 
 def test_unknown_topic() -> None:

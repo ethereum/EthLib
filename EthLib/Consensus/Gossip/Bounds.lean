@@ -4,6 +4,7 @@ public import EthLib.Consensus.Containers.Bid
 public import EthLib.Consensus.DataAvailability.Blob
 public import EthLib.Consensus.DataAvailability.Column
 public import EthLib.Consensus.Containers.Block
+public import EthLib.Consensus.Containers.InclusionList
 public import EthLib.Consensus.Containers.PayloadAttestation
 public import EthLib.Consensus.Containers.ProposerPreferences
 public import EthLib.Consensus.Gossip.Topics
@@ -18,8 +19,6 @@ The SSZ type of the message of each gossip topic, and the bound on the length of
 The fork is that of the fork digest of the topic.
 
 A topic that the configuration does not list at the fork has no type.
-
-A fork for which that list is not written has no type for any topic.
 
 - Blocks, aggregates, attester slashings and light client updates take their type at the fork.
 - An attestation subnet carries an `Attestation` before Electra, a `SingleAttestation` from it.
@@ -56,13 +55,12 @@ def GossipTopic.messageDesc (preset : Preset) (fork : Fork) : GossipTopic → De
   | .executionPayload => SszType.desc (SignedExecutionPayloadEnvelope preset fork)
   | .payloadAttestationMessage => SszType.desc PayloadAttestationMessage
   | .proposerPreferences => SszType.desc SignedProposerPreferences
+  | .inclusionList => SszType.desc SignedInclusionList
 
 /-- The SSZ type of the message of a topic at a fork, if the fork lists the topic. -/
 def topicDesc (preset : Preset) (config : Config) (fork : Fork) (topic : GossipTopic) :
     Option Desc :=
-  match config.gossipTopics fork with
-  | some topics => if topic ∈ topics then some (topic.messageDesc preset fork) else none
-  | none => none
+  if topic ∈ config.gossipTopics fork then some (topic.messageDesc preset fork) else none
 
 /-- The bound on the payload length of a topic at a fork, if the fork lists the topic. -/
 def topicBound (preset : Preset) (config : Config) (fork : Fork) (topic : GossipTopic) :

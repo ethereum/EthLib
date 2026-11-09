@@ -218,6 +218,10 @@ Not yet released.
   The sizes are unchanged: a 32-byte seed, a 32-byte public key and a 7740-byte signature.
   The public key is now `PK.seed` then the root, 16 bytes each, in place of the root then the public parameter.
   The Python constant `sphincs.PUBLIC_PARAM_LEN` and the C export `eth_sphincs_const_public_param_len` are removed.
+- The gossip topics of Heze are now those of Gloas followed by `inclusion_list` ([#1469](https://github.com/ethereum/EthLib/issues/1469)).
+  `consensus.gossip_topics` and `consensus.gossip_topic_bound` now answer at `hegota`, where they raised `ConsensusError`.
+  The error of code 304 is gone, since every fork now has a list of topics, and no other error takes that code.
+  In Lean, `Config.gossipTopics` returns a `List GossipTopic`, where it returned an `Option`.
 
 ## 0.3.0
 
