@@ -1,8 +1,6 @@
-/* Typed wrappers of RFC 7748 X25519 and RFC 8439 ChaCha20-Poly1305. */
+/* Typed wrappers of RFC 8439 ChaCha20, Poly1305 and ChaCha20-Poly1305. */
 #include "wrappers.h"
 
-extern lean_object* eth_x25519(lean_object* args);
-extern lean_object* eth_x25519_public_key(lean_object* args);
 extern lean_object* eth_chacha20_quarter_round(lean_object* args);
 extern lean_object* eth_chacha20_quarter_round_state(lean_object* args);
 extern lean_object* eth_chacha20_block(lean_object* args);
@@ -11,22 +9,6 @@ extern lean_object* eth_poly1305(lean_object* args);
 extern lean_object* eth_poly1305_key(lean_object* args);
 extern lean_object* eth_chacha20_poly1305_encrypt(lean_object* args);
 extern lean_object* eth_chacha20_poly1305_decrypt(lean_object* args);
-
-PyObject*
-py_x25519(
-  PyObject* self,
-  PyObject* args
-) {
-  return call_pyvalue_export(eth_x25519, args, 2, X25519_ERROR);
-}
-
-PyObject*
-py_x25519_public_key(
-  PyObject* self,
-  PyObject* args
-) {
-  return call_pyvalue_export(eth_x25519_public_key, args, 1, X25519_ERROR);
-}
 
 PyObject*
 py_chacha20_quarter_round(

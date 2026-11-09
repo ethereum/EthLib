@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Bytes
+public import EthLib.Base.LittleEndian
 public import EthLib.Cryptography.Hash.Pbkdf2
 
 /-!
@@ -27,6 +28,8 @@ SOUNDNESS.md D1 says what a caller must bound.
 @[expose] public section
 
 namespace EthLib.Cryptography.Hash.Scrypt
+
+open EthLib.Base (rotl32 uint32OfBytes uint32Byte)
 
 /-- The input and output size of Salsa20/8, RFC 7914 §3, in bytes. -/
 def SALSA_BLOCK_SIZE : Nat := 64
@@ -73,47 +76,36 @@ abbrev MixBlock (r : Nat) := { bytes : ByteArray // bytes.size = 128 * r }
 structure State where
   (x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : UInt32)
 
-/-- A left rotation in a 32-bit word, RFC 7914 §3. -/
-@[inline] def rotl (x shift : UInt32) : UInt32 :=
-  (x <<< shift) ||| (x >>> (32 - shift))
-
-/-- Four bytes read as a little-endian word, RFC 7914 §3. -/
-@[inline] def little32 (a b c d : UInt8) : UInt32 :=
-  a.toUInt32 ||| b.toUInt32 <<< 8 ||| c.toUInt32 <<< 16 ||| d.toUInt32 <<< 24
-
 /-- Read the sixteen words of a whole 64-byte block. -/
 def State.ofBytes (bytes : ByteArray) (start : Nat) (whole : start + 64 ≤ bytes.size) :
     State :=
   let word (i : Nat) (within : i < 16) : UInt32 :=
-    little32 (bytes[start + 4 * i]'(by omega)) (bytes[start + 4 * i + 1]'(by omega))
+    uint32OfBytes (bytes[start + 4 * i]'(by omega)) (bytes[start + 4 * i + 1]'(by omega))
       (bytes[start + 4 * i + 2]'(by omega)) (bytes[start + 4 * i + 3]'(by omega))
   ⟨word 0 (by decide), word 1 (by decide), word 2 (by decide), word 3 (by decide),
     word 4 (by decide), word 5 (by decide), word 6 (by decide), word 7 (by decide),
     word 8 (by decide), word 9 (by decide), word 10 (by decide), word 11 (by decide),
     word 12 (by decide), word 13 (by decide), word 14 (by decide), word 15 (by decide)⟩
 
-/-- The byte selected by a shift of a word. -/
-@[inline] def byteAt (word shift : UInt32) : UInt8 := (word >>> shift).toUInt8
-
 /-- The words of a state as 64 little-endian bytes, RFC 7914 §3. -/
 def State.bytes (s : State) : ByteArray :=
   ⟨#[
-    byteAt s.x0 0, byteAt s.x0 8, byteAt s.x0 16, byteAt s.x0 24,
-    byteAt s.x1 0, byteAt s.x1 8, byteAt s.x1 16, byteAt s.x1 24,
-    byteAt s.x2 0, byteAt s.x2 8, byteAt s.x2 16, byteAt s.x2 24,
-    byteAt s.x3 0, byteAt s.x3 8, byteAt s.x3 16, byteAt s.x3 24,
-    byteAt s.x4 0, byteAt s.x4 8, byteAt s.x4 16, byteAt s.x4 24,
-    byteAt s.x5 0, byteAt s.x5 8, byteAt s.x5 16, byteAt s.x5 24,
-    byteAt s.x6 0, byteAt s.x6 8, byteAt s.x6 16, byteAt s.x6 24,
-    byteAt s.x7 0, byteAt s.x7 8, byteAt s.x7 16, byteAt s.x7 24,
-    byteAt s.x8 0, byteAt s.x8 8, byteAt s.x8 16, byteAt s.x8 24,
-    byteAt s.x9 0, byteAt s.x9 8, byteAt s.x9 16, byteAt s.x9 24,
-    byteAt s.x10 0, byteAt s.x10 8, byteAt s.x10 16, byteAt s.x10 24,
-    byteAt s.x11 0, byteAt s.x11 8, byteAt s.x11 16, byteAt s.x11 24,
-    byteAt s.x12 0, byteAt s.x12 8, byteAt s.x12 16, byteAt s.x12 24,
-    byteAt s.x13 0, byteAt s.x13 8, byteAt s.x13 16, byteAt s.x13 24,
-    byteAt s.x14 0, byteAt s.x14 8, byteAt s.x14 16, byteAt s.x14 24,
-    byteAt s.x15 0, byteAt s.x15 8, byteAt s.x15 16, byteAt s.x15 24]⟩
+    uint32Byte s.x0 0, uint32Byte s.x0 1, uint32Byte s.x0 2, uint32Byte s.x0 3,
+    uint32Byte s.x1 0, uint32Byte s.x1 1, uint32Byte s.x1 2, uint32Byte s.x1 3,
+    uint32Byte s.x2 0, uint32Byte s.x2 1, uint32Byte s.x2 2, uint32Byte s.x2 3,
+    uint32Byte s.x3 0, uint32Byte s.x3 1, uint32Byte s.x3 2, uint32Byte s.x3 3,
+    uint32Byte s.x4 0, uint32Byte s.x4 1, uint32Byte s.x4 2, uint32Byte s.x4 3,
+    uint32Byte s.x5 0, uint32Byte s.x5 1, uint32Byte s.x5 2, uint32Byte s.x5 3,
+    uint32Byte s.x6 0, uint32Byte s.x6 1, uint32Byte s.x6 2, uint32Byte s.x6 3,
+    uint32Byte s.x7 0, uint32Byte s.x7 1, uint32Byte s.x7 2, uint32Byte s.x7 3,
+    uint32Byte s.x8 0, uint32Byte s.x8 1, uint32Byte s.x8 2, uint32Byte s.x8 3,
+    uint32Byte s.x9 0, uint32Byte s.x9 1, uint32Byte s.x9 2, uint32Byte s.x9 3,
+    uint32Byte s.x10 0, uint32Byte s.x10 1, uint32Byte s.x10 2, uint32Byte s.x10 3,
+    uint32Byte s.x11 0, uint32Byte s.x11 1, uint32Byte s.x11 2, uint32Byte s.x11 3,
+    uint32Byte s.x12 0, uint32Byte s.x12 1, uint32Byte s.x12 2, uint32Byte s.x12 3,
+    uint32Byte s.x13 0, uint32Byte s.x13 1, uint32Byte s.x13 2, uint32Byte s.x13 3,
+    uint32Byte s.x14 0, uint32Byte s.x14 1, uint32Byte s.x14 2, uint32Byte s.x14 3,
+    uint32Byte s.x15 0, uint32Byte s.x15 1, uint32Byte s.x15 2, uint32Byte s.x15 3]⟩
 
 /-- Every encoded state has the 64 bytes required by BlockMix. -/
 theorem State.bytes_size (s : State) : s.bytes.size = 64 := rfl
@@ -138,38 +130,38 @@ Each round applies four quarter-rounds, one per column or row. -/
   let x13 := s.x13
   let x14 := s.x14
   let x15 := s.x15
-  let x4 := x4 ^^^ rotl (x0 + x12) 7
-  let x8 := x8 ^^^ rotl (x4 + x0) 9
-  let x12 := x12 ^^^ rotl (x8 + x4) 13
-  let x0 := x0 ^^^ rotl (x12 + x8) 18
-  let x9 := x9 ^^^ rotl (x5 + x1) 7
-  let x13 := x13 ^^^ rotl (x9 + x5) 9
-  let x1 := x1 ^^^ rotl (x13 + x9) 13
-  let x5 := x5 ^^^ rotl (x1 + x13) 18
-  let x14 := x14 ^^^ rotl (x10 + x6) 7
-  let x2 := x2 ^^^ rotl (x14 + x10) 9
-  let x6 := x6 ^^^ rotl (x2 + x14) 13
-  let x10 := x10 ^^^ rotl (x6 + x2) 18
-  let x3 := x3 ^^^ rotl (x15 + x11) 7
-  let x7 := x7 ^^^ rotl (x3 + x15) 9
-  let x11 := x11 ^^^ rotl (x7 + x3) 13
-  let x15 := x15 ^^^ rotl (x11 + x7) 18
-  let x1 := x1 ^^^ rotl (x0 + x3) 7
-  let x2 := x2 ^^^ rotl (x1 + x0) 9
-  let x3 := x3 ^^^ rotl (x2 + x1) 13
-  let x0 := x0 ^^^ rotl (x3 + x2) 18
-  let x6 := x6 ^^^ rotl (x5 + x4) 7
-  let x7 := x7 ^^^ rotl (x6 + x5) 9
-  let x4 := x4 ^^^ rotl (x7 + x6) 13
-  let x5 := x5 ^^^ rotl (x4 + x7) 18
-  let x11 := x11 ^^^ rotl (x10 + x9) 7
-  let x8 := x8 ^^^ rotl (x11 + x10) 9
-  let x9 := x9 ^^^ rotl (x8 + x11) 13
-  let x10 := x10 ^^^ rotl (x9 + x8) 18
-  let x12 := x12 ^^^ rotl (x15 + x14) 7
-  let x13 := x13 ^^^ rotl (x12 + x15) 9
-  let x14 := x14 ^^^ rotl (x13 + x12) 13
-  let x15 := x15 ^^^ rotl (x14 + x13) 18
+  let x4 := x4 ^^^ rotl32 (x0 + x12) 7
+  let x8 := x8 ^^^ rotl32 (x4 + x0) 9
+  let x12 := x12 ^^^ rotl32 (x8 + x4) 13
+  let x0 := x0 ^^^ rotl32 (x12 + x8) 18
+  let x9 := x9 ^^^ rotl32 (x5 + x1) 7
+  let x13 := x13 ^^^ rotl32 (x9 + x5) 9
+  let x1 := x1 ^^^ rotl32 (x13 + x9) 13
+  let x5 := x5 ^^^ rotl32 (x1 + x13) 18
+  let x14 := x14 ^^^ rotl32 (x10 + x6) 7
+  let x2 := x2 ^^^ rotl32 (x14 + x10) 9
+  let x6 := x6 ^^^ rotl32 (x2 + x14) 13
+  let x10 := x10 ^^^ rotl32 (x6 + x2) 18
+  let x3 := x3 ^^^ rotl32 (x15 + x11) 7
+  let x7 := x7 ^^^ rotl32 (x3 + x15) 9
+  let x11 := x11 ^^^ rotl32 (x7 + x3) 13
+  let x15 := x15 ^^^ rotl32 (x11 + x7) 18
+  let x1 := x1 ^^^ rotl32 (x0 + x3) 7
+  let x2 := x2 ^^^ rotl32 (x1 + x0) 9
+  let x3 := x3 ^^^ rotl32 (x2 + x1) 13
+  let x0 := x0 ^^^ rotl32 (x3 + x2) 18
+  let x6 := x6 ^^^ rotl32 (x5 + x4) 7
+  let x7 := x7 ^^^ rotl32 (x6 + x5) 9
+  let x4 := x4 ^^^ rotl32 (x7 + x6) 13
+  let x5 := x5 ^^^ rotl32 (x4 + x7) 18
+  let x11 := x11 ^^^ rotl32 (x10 + x9) 7
+  let x8 := x8 ^^^ rotl32 (x11 + x10) 9
+  let x9 := x9 ^^^ rotl32 (x8 + x11) 13
+  let x10 := x10 ^^^ rotl32 (x9 + x8) 18
+  let x12 := x12 ^^^ rotl32 (x15 + x14) 7
+  let x13 := x13 ^^^ rotl32 (x12 + x15) 9
+  let x14 := x14 ^^^ rotl32 (x13 + x12) 13
+  let x15 := x15 ^^^ rotl32 (x14 + x13) 18
   ⟨x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15⟩
 
 /-- Four double rounds give the eight rounds of Salsa20/8, RFC 7914 §3. -/

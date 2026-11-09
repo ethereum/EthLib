@@ -10,7 +10,8 @@ public import EthLib.Cryptography.Exports.Crc32c
 public import EthLib.Cryptography.Exports.Aes
 public import EthLib.Cryptography.Exports.Hmac
 public import EthLib.Cryptography.Exports.PasswordKdf
-public import EthLib.Cryptography.Exports.NoisePrimitives
+public import EthLib.Cryptography.Exports.X25519
+public import EthLib.Cryptography.Exports.ChaCha20Poly1305
 public import EthLib.Cryptography.Exports.Keystore
 public import EthLib.Cryptography.Exports.Sha256
 public import EthLib.Cryptography.Exports.Xmss
