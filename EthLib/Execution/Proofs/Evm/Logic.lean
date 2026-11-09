@@ -25,6 +25,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Branch
 public import EthLib.Execution.Proofs.Evm.Logic.Stack
 public import EthLib.Execution.Proofs.Evm.Logic.NatCode
 public import EthLib.Execution.Proofs.Evm.Logic.Steps
+public import EthLib.Execution.Proofs.Evm.Logic.GasMono
 public import EthLib.Execution.Proofs.Evm.Logic.Fault
 public import EthLib.Execution.Proofs.Evm.Logic.LessGas
 
@@ -47,5 +48,5 @@ A rule for calls in that form also follows an EIP-7702 delegation to the code of
 
 A code can be stored as one number, and a tactic steps through its opcodes.
 
-With the one-counter meter, a run with less gas follows the run with more gas, or it fails.
+By steps monotone in gas, a run with less gas follows the run with more gas, or it fails.
 -/

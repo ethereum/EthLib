@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Proofs.Evm.Logic.Steps
 public import EthLib.Execution.Proofs.Evm.Interpreter
+public import EthLib.Execution.Proofs.Evm.Logic.GasMono
 
 /-!
 # Proofs: frames that halt exceptionally
@@ -59,14 +60,29 @@ theorem At.fault {e : EvmError} (halts : e.aborts = false)
   obtain ⟨-, -, -, -, -, -, -, hrun, -, -, hs, hss, -⟩ := id hat
   exact ⟨_, Step.halt hrun (h evm hat) halts, rfl, rfl, rfl, rfl, rfl, hs, hss⟩
 
+/-- A byte that is no opcode at the fork halts the frame with that byte as an invalid opcode.
+
+The step is monotone in gas, since it fails with any gas. -/
+theorem invalidG {byte : UInt8} (hlt : pc < code.size) (hbyte : code[pc] = byte)
+    (none : Op.ofByte fork byte = none) :
+    SpecG fork (At code message pc stack memory gas state substate returnData)
+      (Faulted (.invalidOpcode byte) state substate) := by
+  apply Triple.of_step
+  intro evm hat
+  obtain ⟨hcode, -, -, hpc, -, -, -, hrun, -, -, hs, hss, -⟩ := hat
+  subst hcode hpc
+  have hnone : Op.ofByte fork evm.code[evm.pc] = .none := by rw [hbyte]; exact none
+  have hstep : step fork evm = .error (.invalidOpcode byte) := by
+    rw [step_of_ofByte_eq_none hlt hnone, hbyte]
+  exact ⟨_, ⟨Step.halt hrun hstep rfl, gasMono_of_none hlt hnone⟩,
+    rfl, rfl, rfl, rfl, rfl, hs, hss⟩
+
 /-- A byte that is no opcode at the fork halts the frame with that byte as an invalid opcode. -/
 theorem invalid {byte : UInt8} (hlt : pc < code.size) (hbyte : code[pc] = byte)
     (none : Op.ofByte fork byte = none) :
     Spec fork (At code message pc stack memory gas state substate returnData)
-      (Faulted (.invalidOpcode byte) state substate) := by
-  refine At.fault rfl fun evm ⟨hcode, _, _, hpc, _⟩ => ?_
-  subst hcode hpc
-  rw [step_of_ofByte_eq_none hlt (by rw [hbyte]; exact none), hbyte]
+      (Faulted (.invalidOpcode byte) state substate) :=
+  (invalidG hlt hbyte none).toSpec
 
 /-- The byte `0xfe` is no opcode at any fork, so it halts the frame as an invalid opcode. -/
 theorem invalid_fe (hlt : pc < code.size) (hbyte : code[pc] = 0xfe) :
