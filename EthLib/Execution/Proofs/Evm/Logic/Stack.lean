@@ -21,9 +21,11 @@ Each SWAP costs 3 gas.
 
 EXP pays its base price and the price per byte of its exponent that the fork sets.
 
-Each rule here is first proved over the steps from frames that are monotone in gas.
+Each rule here is first proved over the steps that also never abort with less gas.
 
-The rule over the steps of the logic then follows from that form.
+That form gives the rule over the steps from frames that are monotone in gas.
+
+That rule gives the rule over the steps of the logic.
 
 The rules work out the charge of one counter of gas, at every fork.
 
@@ -56,6 +58,22 @@ variable {code : ByteArray} {message : Message fork} {pc : Nat} {stack : List U2
 
 /-- A three-operand instruction of the stack, on `x`, `y`, `z`, puts `f x y z` in their place.
 
+It holds over the steps from frames that are monotone in gas and never abort with less gas. -/
+theorem ternaryGA {byte : UInt8} {op : Op} {cost : Nat} {f : U256 → U256 → U256 → U256}
+    {x y z : U256} {rest : List U256} (hlt : pc < code.size) (hbyte : code[pc] = byte)
+    (decoded : Op.ofByte fork byte = some op)
+    (hrun : instruction (Meter := Nat) fork op = some (ternaryOp cost f)) (hgas : cost ≤ gas) :
+    HoareGA fork (At code message pc (x :: y :: z :: rest) memory gas state substate returnData)
+      (At code message (pc + 1) (f x y z :: rest) memory (gas - cost) state substate
+        returnData) := by
+  apply At.ruleGA hlt hbyte decoded hrun (runMono_ternaryOp cost f) (noAbort_ternaryOp cost f)
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
+  rw [ternaryOp_cons hst, charge_nat (by rw [hg]; exact hgas)]
+  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, hmem, by simp [hg], hrun, herr, hout, hs, hss,
+    hrd⟩
+
+/-- A three-operand instruction of the stack, on `x`, `y`, `z`, puts `f x y z` in their place.
+
 It holds over the steps from frames that are monotone in gas. -/
 theorem ternaryG {byte : UInt8} {op : Op} {cost : Nat} {f : U256 → U256 → U256 → U256}
     {x y z : U256} {rest : List U256} (hlt : pc < code.size) (hbyte : code[pc] = byte)
@@ -63,12 +81,8 @@ theorem ternaryG {byte : UInt8} {op : Op} {cost : Nat} {f : U256 → U256 → U2
     (hrun : instruction (Meter := Nat) fork op = some (ternaryOp cost f)) (hgas : cost ≤ gas) :
     HoareG fork (At code message pc (x :: y :: z :: rest) memory gas state substate returnData)
       (At code message (pc + 1) (f x y z :: rest) memory (gas - cost) state substate
-        returnData) := by
-  apply At.ruleG hlt hbyte decoded hrun (runMono_ternaryOp cost f)
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
-  rw [ternaryOp_cons hst, charge_nat (by rw [hg]; exact hgas)]
-  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, hmem, by simp [hg], hrun, herr, hout, hs, hss,
-    hrd⟩
+        returnData) :=
+  (ternaryGA hlt hbyte decoded hrun hgas).toG
 
 /-- A three-operand instruction of the stack, on `x`, `y`, `z`, puts `f x y z` in their place. -/
 theorem ternary {byte : UInt8} {op : Op} {cost : Nat} {f : U256 → U256 → U256 → U256}
@@ -82,17 +96,26 @@ theorem ternary {byte : UInt8} {op : Op} {cost : Nat} {f : U256 → U256 → U25
 
 /-- POP drops the top word, for 2 gas.
 
-It holds over the steps from frames that are monotone in gas. -/
-theorem popG {x : U256} {rest : List U256} (hlt : pc < code.size) (hbyte : code[pc] = 0x50)
+It holds over the steps from frames that are monotone in gas and never abort with less gas. -/
+theorem popGA {x : U256} {rest : List U256} (hlt : pc < code.size) (hbyte : code[pc] = 0x50)
     (hgas : 2 ≤ gas) :
-    HoareG fork (At code message pc (x :: rest) memory gas state substate returnData)
+    HoareGA fork (At code message pc (x :: rest) memory gas state substate returnData)
       (At code message (pc + 1) rest memory (gas - 2) state substate returnData) := by
-  apply At.ruleG hlt hbyte (ofByte_of_decode (op := .pop) rfl (Fork.frontier_le _))
-    (instruction_of_stackOnlyStep rfl) runMono_pop
+  apply At.ruleGA hlt hbyte (ofByte_of_decode (op := .pop) rfl (Fork.frontier_le _))
+    (instruction_of_stackOnlyStep rfl) runMono_pop noAbort_pop
   rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   rw [popStep_cons hst, charge_nat (by rw [hg]; exact hgas)]
   exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, hmem, by simp [hg, OPCODE_POP, BASE], hrun,
     herr, hout, hs, hss, hrd⟩
+
+/-- POP drops the top word, for 2 gas.
+
+It holds over the steps from frames that are monotone in gas. -/
+theorem popG {x : U256} {rest : List U256} (hlt : pc < code.size) (hbyte : code[pc] = 0x50)
+    (hgas : 2 ≤ gas) :
+    HoareG fork (At code message pc (x :: rest) memory gas state substate returnData)
+      (At code message (pc + 1) rest memory (gas - 2) state substate returnData) :=
+  (popGA hlt hbyte hgas).toG
 
 /-- POP drops the top word, for 2 gas. -/
 theorem pop {x : U256} {rest : List U256} (hlt : pc < code.size) (hbyte : code[pc] = 0x50)
@@ -105,19 +128,32 @@ theorem pop {x : U256} {rest : List U256} (hlt : pc < code.size) (hbyte : code[p
 
 It exchanges the top word with the word `x` at depth `n + 1`, for 3 gas.
 
+It holds over the steps from frames that are monotone in gas and never abort with less gas. -/
+theorem swap_of_decodeGA {byte : UInt8} {n : Fin 16} {top x : U256} {rest : List U256}
+    (hlt : pc < code.size) (hbyte : code[pc] = byte) (decoded : Op.decode byte = some (.swap n))
+    (hx : rest[n.val]? = some x) (hgas : 3 ≤ gas) :
+    HoareGA fork (At code message pc (top :: rest) memory gas state substate returnData)
+      (At code message (pc + 1) (x :: rest.set n.val top) memory (gas - 3) state substate
+        returnData) := by
+  apply At.ruleGA hlt hbyte (ofByte_of_decode decoded (Fork.frontier_le _))
+    (instruction_of_stackOnlyStep rfl) (runMono_swapN n) (noAbort_swapN n)
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
+  rw [swapN_of_getElem? hst hx, charge_nat (by rw [hg]; exact hgas)]
+  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, hmem,
+    by simp [hg, OPCODE_SWAP, VERY_LOW], hrun, herr, hout, hs, hss, hrd⟩
+
+/-- SWAP(n + 1), for the `n` that the byte at the program counter decodes to.
+
+It exchanges the top word with the word `x` at depth `n + 1`, for 3 gas.
+
 It holds over the steps from frames that are monotone in gas. -/
 theorem swap_of_decodeG {byte : UInt8} {n : Fin 16} {top x : U256} {rest : List U256}
     (hlt : pc < code.size) (hbyte : code[pc] = byte) (decoded : Op.decode byte = some (.swap n))
     (hx : rest[n.val]? = some x) (hgas : 3 ≤ gas) :
     HoareG fork (At code message pc (top :: rest) memory gas state substate returnData)
       (At code message (pc + 1) (x :: rest.set n.val top) memory (gas - 3) state substate
-        returnData) := by
-  apply At.ruleG hlt hbyte (ofByte_of_decode decoded (Fork.frontier_le _))
-    (instruction_of_stackOnlyStep rfl) (runMono_swapN n)
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
-  rw [swapN_of_getElem? hst hx, charge_nat (by rw [hg]; exact hgas)]
-  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, hmem,
-    by simp [hg, OPCODE_SWAP, VERY_LOW], hrun, herr, hout, hs, hss, hrd⟩
+        returnData) :=
+  (swap_of_decodeGA hlt hbyte decoded hx hgas).toG
 
 /-- SWAP(n + 1), for the `n` that the byte at the program counter decodes to.
 
@@ -132,13 +168,23 @@ theorem swap_of_decode {byte : UInt8} {n : Fin 16} {top x : U256} {rest : List U
 
 /-- SWAP(n + 1) exchanges the top word with the word `x` at depth `n + 1`, for 3 gas.
 
+It holds over the steps from frames that are monotone in gas and never abort with less gas. -/
+theorem swapGA (n : Fin 16) {top x : U256} {rest : List U256} (hlt : pc < code.size)
+    (hbyte : code[pc] = (0x90 + n.val).toUInt8) (hx : rest[n.val]? = some x) (hgas : 3 ≤ gas) :
+    HoareGA fork (At code message pc (top :: rest) memory gas state substate returnData)
+      (At code message (pc + 1) (x :: rest.set n.val top) memory (gas - 3) state substate
+        returnData) :=
+  swap_of_decodeGA hlt hbyte (decode_swap n) hx hgas
+
+/-- SWAP(n + 1) exchanges the top word with the word `x` at depth `n + 1`, for 3 gas.
+
 It holds over the steps from frames that are monotone in gas. -/
 theorem swapG (n : Fin 16) {top x : U256} {rest : List U256} (hlt : pc < code.size)
     (hbyte : code[pc] = (0x90 + n.val).toUInt8) (hx : rest[n.val]? = some x) (hgas : 3 ≤ gas) :
     HoareG fork (At code message pc (top :: rest) memory gas state substate returnData)
       (At code message (pc + 1) (x :: rest.set n.val top) memory (gas - 3) state substate
         returnData) :=
-  swap_of_decodeG hlt hbyte (decode_swap n) hx hgas
+  (swapGA n hlt hbyte hx hgas).toG
 
 /-- SWAP(n + 1) exchanges the top word with the word `x` at depth `n + 1`, for 3 gas. -/
 theorem swap (n : Fin 16) {top x : U256} {rest : List U256} (hlt : pc < code.size)
@@ -152,6 +198,27 @@ theorem swap (n : Fin 16) {top x : U256} {rest : List U256} (hlt : pc < code.siz
 
 It pays 10 and the price per byte of the exponent that the fork sets.
 
+It holds over the steps from frames that are monotone in gas and never abort with less gas. -/
+theorem expGA {base exponent : U256} {rest : List U256} (hlt : pc < code.size)
+    (hbyte : code[pc] = 0x0a)
+    (hgas : OPCODE_EXP_BASE + (gasSchedule fork).OPCODE_EXP_PER_BYTE * exponentBytes exponent ≤
+      gas) :
+    HoareGA fork
+      (At code message pc (base :: exponent :: rest) memory gas state substate returnData)
+      (At code message (pc + 1) (Evm.exp base exponent :: rest) memory
+        (gas - (OPCODE_EXP_BASE + (gasSchedule fork).OPCODE_EXP_PER_BYTE *
+          exponentBytes exponent)) state substate returnData) := by
+  apply At.ruleGA hlt hbyte (ofByte_of_decode (op := .exp) rfl (Fork.frontier_le _))
+    (instruction_of_stackOnlyStep rfl) runMono_exp noAbort_exp
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
+  rw [expStep_of_cons hst, charge_nat (by rw [hg]; exact hgas)]
+  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, hmem, by simp [hg], hrun, herr, hout, hs, hss,
+    hrd⟩
+
+/-- EXP puts `base` to the power `exponent` in place of both.
+
+It pays 10 and the price per byte of the exponent that the fork sets.
+
 It holds over the steps from frames that are monotone in gas. -/
 theorem expG {base exponent : U256} {rest : List U256} (hlt : pc < code.size)
     (hbyte : code[pc] = 0x0a)
@@ -160,13 +227,8 @@ theorem expG {base exponent : U256} {rest : List U256} (hlt : pc < code.size)
     HoareG fork (At code message pc (base :: exponent :: rest) memory gas state substate returnData)
       (At code message (pc + 1) (Evm.exp base exponent :: rest) memory
         (gas - (OPCODE_EXP_BASE + (gasSchedule fork).OPCODE_EXP_PER_BYTE *
-          exponentBytes exponent)) state substate returnData) := by
-  apply At.ruleG hlt hbyte (ofByte_of_decode (op := .exp) rfl (Fork.frontier_le _))
-    (instruction_of_stackOnlyStep rfl) runMono_exp
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
-  rw [expStep_of_cons hst, charge_nat (by rw [hg]; exact hgas)]
-  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], rfl, hmem, by simp [hg], hrun, herr, hout, hs, hss,
-    hrd⟩
+          exponentBytes exponent)) state substate returnData) :=
+  (expGA hlt hbyte hgas).toG
 
 /-- EXP puts `base` to the power `exponent` in place of both.
 
