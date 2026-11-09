@@ -1,11 +1,11 @@
 """Password-based key derivation against RFC 7914 and Python's independent implementation."""
 
 import hashlib
-from time import perf_counter
+import os
 
 import pytest
 
-from ethlib.cryptography.kdf import block_mix, pbkdf2, romix, salsa208, scrypt
+from ethlib.cryptography.kdf import pbkdf2, salsa208, scrypt, scrypt_block_mix, scrypt_romix
 from ethlib.errors import Pbkdf2Error, ScryptError
 from raising import raises
 
@@ -109,7 +109,7 @@ SCRYPT_VECTORS = [
         "7023bdcb3afd7348461c06cd81fd38ebfda8fbba904f8e3ea9b543f6545da1f2"
         "d5432955613f0fcf62d49705242a9af9e61e85dc0d651e40dfcf017b45575887",
     ),
-    (
+    pytest.param(
         b"pleaseletmein",
         b"SodiumChloride",
         1048576,
@@ -117,6 +117,10 @@ SCRYPT_VECTORS = [
         1,
         "2101cb9b6a511aaeaddbbe09cf70f881ec568d574a2ffd4dabe5ee9820adaa47"
         "8e56fd8f4ba5d09ffa1c6d927c40f4c337304049e8a952fbcbf45c6fa77a41a4",
+        marks=pytest.mark.skipif(
+            os.environ.get("ETHLIB_SLOW_VECTORS") != "1",
+            reason="a 1 GiB table, run weekly with ETHLIB_SLOW_VECTORS=1",
+        ),
     ),
 ]
 # RFC 7914 extracted test vectors end.
@@ -126,12 +130,12 @@ def test_salsa208_rfc7914() -> None:
     assert salsa208(SALSA_INPUT) == SALSA_OUTPUT
 
 
-def test_block_mix_rfc7914() -> None:
-    assert block_mix(BLOCK_INPUT, 1) == BLOCK_OUTPUT
+def test_scrypt_block_mix_rfc7914() -> None:
+    assert scrypt_block_mix(BLOCK_INPUT, 1) == BLOCK_OUTPUT
 
 
-def test_romix_rfc7914() -> None:
-    assert romix(BLOCK_INPUT, 16, 1) == ROMIX_OUTPUT
+def test_scrypt_romix_rfc7914() -> None:
+    assert scrypt_romix(BLOCK_INPUT, 16, 1) == ROMIX_OUTPUT
 
 
 @pytest.mark.parametrize("password, salt, iterations, expected", PBKDF2_VECTORS)
@@ -164,17 +168,24 @@ def test_scrypt_binary_input_and_partial_blocks(length: int) -> None:
     )
 
 
-def test_scrypt_keystore_cost() -> None:
-    # Issue #1502 requires the 256 MiB keystore parameters through the bindings.
+def test_scrypt_largest_cost_for_r_1() -> None:
+    # RFC 7914 §2 requires N < 2^(16 * r), so N = 2^15 is the largest cost for r = 1.
     password, salt = b"password", b"salt"
-    expected = hashlib.scrypt(
+    assert scrypt(password, salt, 2**15, 1, 1, 32) == hashlib.scrypt(
+        password, salt=salt, n=2**15, r=1, p=1, dklen=32
+    )
+
+
+@pytest.mark.skipif(
+    os.environ.get("ETHLIB_SLOW_VECTORS") != "1",
+    reason="a 256 MiB table, run weekly with ETHLIB_SLOW_VECTORS=1",
+)
+def test_scrypt_keystore_cost() -> None:
+    # These are the usual scrypt parameters of an Ethereum keystore file.
+    password, salt = b"password", b"salt"
+    assert scrypt(password, salt, 2**18, 8, 1, 32) == hashlib.scrypt(
         password, salt=salt, n=2**18, r=8, p=1, dklen=32, maxmem=512 * 1024 * 1024
     )
-    start = perf_counter()
-    derived = scrypt(password, salt, 2**18, 8, 1, 32)
-    elapsed = perf_counter() - start
-    assert derived == expected
-    print(f"scrypt N=2^18 r=8 p=1 dkLen=32 through bindings: {elapsed:.3f} s")
 
 
 @pytest.mark.parametrize(
@@ -219,12 +230,26 @@ def test_salsa208_rejects_input_size(size: int) -> None:
 
 
 @pytest.mark.parametrize("size", [127, 129])
-def test_block_mix_and_romix_reject_input_size(size: int) -> None:
+def test_scrypt_steps_reject_input_size(size: int) -> None:
     message = f"EthLib.Cryptography.Hash.Scrypt.ScryptError.invalidInputSize 128 {size}"
     with raises(ScryptError, message):
-        block_mix(bytes(size), 1)
+        scrypt_block_mix(bytes(size), 1)
     with raises(ScryptError, message):
-        romix(bytes(size), 16, 1)
+        scrypt_romix(bytes(size), 16, 1)
+
+
+def test_scrypt_steps_reject_zero_block_size() -> None:
+    message = "EthLib.Cryptography.Hash.Scrypt.ScryptError.invalidBlockSize 0"
+    with raises(ScryptError, message):
+        scrypt_block_mix(b"", 0)
+    with raises(ScryptError, message):
+        scrypt_romix(b"", 16, 0)
+
+
+@pytest.mark.parametrize("n", [0, 1, 3, 2**16])
+def test_scrypt_romix_rejects_cost(n: int) -> None:
+    with raises(ScryptError, f"EthLib.Cryptography.Hash.Scrypt.ScryptError.invalidCost {n}"):
+        scrypt_romix(BLOCK_INPUT, n, 1)
 
 
 def test_rejects_non_bytes() -> None:
@@ -232,8 +257,12 @@ def test_rejects_non_bytes() -> None:
         pbkdf2("password", b"salt", 1, 32)  # ty: ignore[invalid-argument-type]
     with raises(TypeError, "salt must be bytes"):
         scrypt(b"password", "salt", 16, 1, 1, 32)  # ty: ignore[invalid-argument-type]
-    with raises(TypeError, "input must be bytes"):
-        salsa208("input")  # ty: ignore[invalid-argument-type]
+    with raises(TypeError, "block must be bytes"):
+        salsa208("block")  # ty: ignore[invalid-argument-type]
+    with raises(TypeError, "block must be bytes"):
+        scrypt_block_mix("block", 1)  # ty: ignore[invalid-argument-type]
+    with raises(TypeError, "block must be bytes"):
+        scrypt_romix("block", 16, 1)  # ty: ignore[invalid-argument-type]
 
 
 @pytest.mark.parametrize(

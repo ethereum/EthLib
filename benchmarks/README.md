@@ -59,15 +59,3 @@ An exponent near 1 means linear time, and near 2 quadratic time:
 ```bash
 .venv/bin/python benchmarks/scaling.py rlp,ssz
 ```
-
-## Password derivation
-
-The password derivation test times one scrypt call through the bindings and checks its result against Python's `hashlib.scrypt`:
-
-```bash
-uv run --no-sync pytest -q -s bindings/python/tests/hmac_kdf/test_password_kdf.py::test_scrypt_keystore_cost
-```
-
-On 8 November 2026, one call took 7.413 s on an Apple M4 Pro with 24 GiB of memory, macOS 26.3, CPython 3.12.16 and Lean 4.35.0.
-The password was `password`, the salt was `salt`, and the parameters were `N = 2^18`, `r = 8`, `p = 1` and 32 output bytes.
-The table payload was 256 MiB.

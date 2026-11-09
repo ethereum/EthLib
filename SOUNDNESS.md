@@ -1728,6 +1728,10 @@ BLS key generation, signing and the proof of possession handle secret data, and 
 HMAC-SHA-256, HKDF and the Concatenation KDF take a secret key, input keying material or shared secret.
 The Python bindings expose them as `hmac_sha256`, `hkdf_extract`, `hkdf` and `concat_kdf`.
 PBKDF2 and scrypt take a secret password, and the bindings expose them as `pbkdf2` and `scrypt`.
+The steps of scrypt take values derived from the password, and the bindings expose them as `salsa208`, `scrypt_block_mix` and `scrypt_romix`.
+
+ROMix, the memory-hard step of scrypt, reads its table at indices that depend on the password, as AES reads its S-box below.
+Its memory use depends on its parameters, and D1 says what a caller must bound.
 
 Every AES function that takes a key handles secret data.
 Its S-box is a table, and the cipher reads it at indices that depend on the key.
@@ -1939,6 +1943,12 @@ leanSPHINCS adds another.
 Never sign more than `2^30` messages with one secret key.
 Nothing in EthLib counts signatures, so the caller must.
 The Lean and Python docstrings of `sign` both say so.
+
+scrypt adds a bound on memory.
+Its table holds `128 * r * N` bytes, and parameters within the bounds of RFC 7914 can ask for more memory than any machine has.
+For example, `N = 2^40` and `r = 8` pass the check on the cost and ask for `2^50` bytes, one pebibyte.
+The Lean runtime then aborts the process instead of returning an error.
+A keystore file gives `N`, `r` and `p`, so a caller that reads one must bound them before it calls scrypt.
 
 ### D2. Dependencies
 
