@@ -24,7 +24,9 @@ In the same way, it checks four lists of requests that the block carries for its
 
 It also checks the blob commitments of the bid against the blob limit of the epoch of the block.
 
-Before Gloas it checks the blob commitments of the block itself in the same way.
+From Deneb to Fulu it checks the blob commitments of the block itself against the limit of its fork.
+
+From Fulu that limit is the one of the epoch of the block.
 
 The block handler checks the size of each list of operations against the same limit.
 
@@ -32,7 +34,9 @@ On a full parent it checks the four counts of the requests, and an empty parent 
 
 Its bid step checks the same blob limit, on a state at the slot of the block.
 
-Before Gloas its payload step does the same.
+From Deneb to Fulu its payload step checks the same limit.
+
+A new block that the handler accepts passes the block step of the transition.
 
 So the handler fails on every new block that these checks reject.
 
@@ -49,6 +53,20 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
   {store : Store preset fork} {sources : BlockSources preset fork}
   {signed : SignedBeaconBlock preset fork} {blockRoot : Root}
 
+/-- A new block that the block handler accepts passes the block step of the transition.
+
+That step runs on the state of its parent, advanced to the slot of the block. -/
+theorem processBlock_of_onBlock {after : Store preset fork}
+    (root : SszType.hashTreeRoot signed.message = .ok blockRoot)
+    (new : ¬ store.blocks.contains blockRoot)
+    (added : store.onBlock config checks sources signed = .ok after) :
+    ∃ advanced computed,
+      advanced.slot = signed.message.slot ∧
+      processBlock config checks sources.engine advanced signed.message = .ok computed := by
+  obtain ⟨-, -, _, _, -, transition, -⟩ := Store.onBlock_new root new added
+  obtain ⟨advanced, -, slot, -, computed, -⟩ := stateTransition_ok transition
+  exact ⟨advanced, _, slot, computed⟩
+
 /-- From Gloas, a new block that the block handler accepts passes the operation checks of the topic.
 
 So the topic rejects a new block for too many operations or a deposit only if the handler fails. -/
@@ -57,8 +75,7 @@ theorem checkBlockBodyLimits_of_onBlock (gloas : .glamsterdam ≤ fork) {after :
     (new : ¬ store.blocks.contains blockRoot)
     (added : store.onBlock config checks sources signed = .ok after) :
     checkBlockBodyLimits gloas signed.message.body = .accept := by
-  obtain ⟨-, -, _, _, -, transition, -⟩ := Store.onBlock_new root new added
-  obtain ⟨_, -, -, -, computed, -⟩ := stateTransition_ok transition
+  obtain ⟨_, _, -, computed⟩ := processBlock_of_onBlock root new added
   obtain ⟨_, _, operatedOk⟩ := processBlock_operations gloas computed
   have noDeposit := processOperations_no_deposit (Nat.le_trans (by decide) gloas) operatedOk
   -- From Gloas the operations step is the Gloas form, which checks each count.
@@ -83,8 +100,7 @@ theorem checkExecutionRequestsLimits_of_onBlock (gloas : .glamsterdam ≤ fork)
     (added : store.onBlock config checks sources signed = .ok after) :
     checkExecutionRequestsLimits gloas (signed.message.body.parentExecutionRequests gloas) =
       .accept := by
-  obtain ⟨-, -, _, _, -, transition, -⟩ := Store.onBlock_new root new added
-  obtain ⟨_, -, -, -, computed, -⟩ := stateTransition_ok transition
+  obtain ⟨_, _, -, computed⟩ := processBlock_of_onBlock root new added
   obtain ⟨_, _, _, _, _, parentOk, -⟩ := processBlock_steps gloas computed
   obtain ⟨withdrawals, consolidations, builderDeposits, exits⟩ :=
     processParentExecutionPayload_counts parentOk
@@ -101,8 +117,7 @@ theorem blobKzgCommitments_size_le_of_onBlock (gloas : .glamsterdam ≤ fork)
     (signed.message.body.signedExecutionPayloadBid gloas).message.blobKzgCommitments.data.size ≤
       (config.getBlobParameters
         (computeEpochAtSlot preset signed.message.slot)).maxBlobsPerBlock.toNat := by
-  obtain ⟨-, -, _, _, -, transition, -⟩ := Store.onBlock_new root new added
-  obtain ⟨_, -, -, -, computed, -⟩ := stateTransition_ok transition
+  obtain ⟨_, _, -, computed⟩ := processBlock_of_onBlock root new added
   obtain ⟨_, _, _, _, _, -, headedOk, withdrawnOk, bid, -⟩ := processBlock_steps gloas computed
   obtain ⟨slot, -⟩ := processBlockHeader_checks headedOk
   obtain ⟨-, blobs, -⟩ := checkExecutionPayloadBid_ok_iff.mp (processExecutionPayloadBid_ok bid).1
@@ -112,16 +127,15 @@ theorem blobKzgCommitments_size_le_of_onBlock (gloas : .glamsterdam ≤ fork)
 
 /-- Before Gloas, a new block that the block handler accepts passes the blob check of the topic.
 
-From Deneb it commits to at most the blobs per block that the epoch of the block allows. -/
+From Deneb it commits to at most the blobs that its fork allows, from Fulu at its epoch. -/
 theorem blobCountWithinLimit_of_onBlock (before : fork < .glamsterdam) {after : Store preset fork}
     (root : SszType.hashTreeRoot signed.message = .ok blockRoot)
     (new : ¬ store.blocks.contains blockRoot)
     (added : store.onBlock config checks sources signed = .ok after) :
     blobCountWithinLimit config before signed.message = true := by
   by_cases deneb : .dencun ≤ fork
-  · obtain ⟨-, -, _, _, -, transition, -⟩ := Store.onBlock_new root new added
-    obtain ⟨_, -, -, -, computed, -⟩ := stateTransition_ok transition
-    obtain ⟨_, _, _, _, headedOk, withdrawnOk, paidOk⟩ :=
+  · obtain ⟨_, _, -, computed⟩ := processBlock_of_onBlock root new added
+    obtain ⟨_, _, _, headedOk, withdrawnOk, paidOk⟩ :=
       processBlock_steps_of_lt_gloas (Nat.le_trans (by decide) deneb) before computed
     obtain ⟨slot, -⟩ := processBlockHeader_checks headedOk
     have blobs := processExecutionPayload_blobCommitments paidOk
