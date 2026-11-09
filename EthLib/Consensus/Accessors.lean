@@ -375,7 +375,7 @@ termination_by 2 ^ 64 - i
 
 The draw walks the indices in shuffled order, and each candidate passes a weighted draw.
 
-It shuffles only the positions that it reads, so its cost does not grow with the count.
+It shuffles only the positions that it reads, so no candidate costs more for more indices.
 
 It fails as the shuffle does, for more than `2^40` indices. -/
 def computeProposerIndex (state : BeaconState preset fork) (indices : Array ValidatorIndex)
@@ -383,7 +383,7 @@ def computeProposerIndex (state : BeaconState preset fork) (indices : Array Vali
   if indices.size = 0 then throw .noCandidates
   unless indices.size < 2 ^ 64 do throw (.arith .overflow)
   if 2 ^ 40 < indices.size then throw (.shuffle (.countTooLarge indices.size.toUInt64))
-  -- The pivots depend only on the seed and the count, so the candidates share them.
+  -- The pivots depend only on the preset, the seed and the count, so the candidates share them.
   let pivots := Shuffle.pivots preset.SHUFFLE_ROUND_COUNT.toNat seed indices.size
   proposerSearch preset fork state.validators.data indices
     (Shuffle.shuffledIndexBy pivots seed indices.size) seed 0
