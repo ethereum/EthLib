@@ -199,7 +199,8 @@ which kills every torsion point of the cofactor (`clearCofactorG1_inSubgroup`).
 
 - Unforgeability is proved only in the random oracle model, with the hash to G2 as the oracle.
   It covers signing and verification, not aggregation or proofs of possession.
-  A forger on bytes wins no more often than the group forger that decodes its output (`byteForgeAdvantage_le`).
+  A forger on bytes wins no more often than the group forger built by decoding its output (`byteForgeAdvantage_le`).
+  So the co-CDH bound also holds for a forger on bytes (`byteForgeAdvantage_le_coCdhAdvantage_of_byteHashCallBound`).
   It rests on a co-Diffie-Hellman problem that no theorem proves hard.
 
 ## What the kernel can evaluate
