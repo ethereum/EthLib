@@ -96,20 +96,34 @@ theorem deriveChildPath_eq_ok_or_noKey (parent : SecretKey) (indices : List UInt
     · rw [h]; exact ih child
     · rw [h]; exact Or.inr rfl
 
-/-- Derivation from a seed fails only on a seed shorter than 32 bytes.
+/-- Derivation from a seed shorter than 32 bytes rejects the seed. -/
+theorem derivePath_ikmTooShort {seed : ByteArray} (h : seed.size < 32) (indices : List UInt32) :
+    derivePath seed indices = .error (.keyGenIkmTooShort seed.size) := by
+  rw [derivePath, deriveMasterSk_ikmTooShort h]
+  rfl
 
-It also fails when the attempts of the master key or of one child key run out.
+/-- Derivation from a seed of at least 32 bytes gives a key, or the attempts of one key run out.
+
+The attempts can run out for the master key or for any child key on the path. -/
+theorem derivePath_eq_ok_or_noKey_of_size {seed : ByteArray} (h : 32 ≤ seed.size)
+    (indices : List UInt32) :
+    (∃ sk, derivePath seed indices = .ok sk) ∨ derivePath seed indices = .error .keyGenNoKey := by
+  rw [derivePath, deriveMasterSk_eq_keyGen]
+  rcases keyGen_eq_ok_or_noKey_of_size h ByteArray.empty with ⟨master, hm⟩ | hm
+  · rw [hm]
+    exact deriveChildPath_eq_ok_or_noKey master indices
+  · rw [hm]
+    exact Or.inr rfl
+
+/-- Derivation from a seed gives the short-input error, a key, or the error of running out.
 
 So a caller of the derivation path can rule out every other error code. -/
 theorem derivePath_eq_ikmTooShort_or_ok_or_noKey (seed : ByteArray) (indices : List UInt32) :
     derivePath seed indices = .error (.keyGenIkmTooShort seed.size) ∨
       (∃ sk, derivePath seed indices = .ok sk) ∨
       derivePath seed indices = .error .keyGenNoKey := by
-  rw [derivePath, deriveMasterSk_eq_keyGen]
-  rcases keyGen_eq_ikmTooShort_or_ok_or_noKey seed ByteArray.empty with h | ⟨master, h⟩ | h
-  · exact Or.inl (by rw [h]; rfl)
-  · rw [h]
-    exact Or.inr (deriveChildPath_eq_ok_or_noKey master indices)
-  · exact Or.inr (Or.inr (by rw [h]; rfl))
+  by_cases h : seed.size < 32
+  · exact Or.inl (derivePath_ikmTooShort h indices)
+  · exact Or.inr (derivePath_eq_ok_or_noKey_of_size (Nat.not_lt.mp h) indices)
 
 end EthLib.Cryptography.Bls.KeyDerivation

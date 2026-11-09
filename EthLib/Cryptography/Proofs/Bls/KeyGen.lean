@@ -40,12 +40,11 @@ private theorem mapError_ok_bind {ε ε' α β : Type} (f : ε → ε') (a : α)
     (k : α → Except ε' β) : (Except.mapError f (.ok a) >>= k) = k a :=
   rfl
 
-
 /-- The expansion of an attempt succeeds: its pseudorandom key has 32 bytes, and its output 48. -/
 theorem keyGenLoop_expand_ok (ikm keyInfo salt : ByteArray) :
     ∃ okm, Hkdf.expand (Hkdf.extract (Sha256.hash salt) (ikm ++ HashToCurve.i2osp 0 1))
       (keyInfo ++ HashToCurve.i2osp KEYGEN_L 2) KEYGEN_L = .ok okm :=
-  ⟨_, Hkdf.expand_eq (by simp [Hkdf.extract, Hkdf.HASH_LEN]) (by simp [KEYGEN_L, Hkdf.HASH_LEN])⟩
+  ⟨_, Hkdf.hkdf_eq (by simp [KEYGEN_L, Hkdf.HASH_LEN])⟩
 
 /-- An attempt whose expansion is not a multiple of `r` gives the key.
 
@@ -95,7 +94,7 @@ theorem keyGenLoop_eq_ok_or_noKey (ikm keyInfo salt : ByteArray) (attempts : Nat
       exact ih _
     · exact Or.inl ⟨_, keyGenLoop_succ_of_ne_zero attempts hokm h⟩
 
-/-- HKDF never fails in an attempt: its pseudorandom key has 32 bytes, and its output 48. -/
+/-- The attempts never fail in HKDF, since they give a key or run out. -/
 theorem keyGenLoop_ne_hkdf (ikm keyInfo salt : ByteArray) (attempts : Nat) :
     keyGenLoop ikm keyInfo salt attempts ≠ .error .keyGenHkdf := by
   rcases keyGenLoop_eq_ok_or_noKey ikm keyInfo salt attempts with ⟨_, h⟩ | h <;>
@@ -109,7 +108,9 @@ theorem keyGen_eq_ok_or_noKey_of_size {ikm : ByteArray} (h : 32 ≤ ikm.size)
   simp only [Nat.not_lt.mpr h, ↓reduceIte]
   exact keyGenLoop_eq_ok_or_noKey _ _ _ _
 
-/-- Key generation fails only on a short input, or when every attempt gives a multiple of `r`.
+/-- Key generation gives the short-input error, a key, or the error of running out of attempts.
+
+Only an input shorter than 32 bytes gives the short-input error, as the lemma above shows.
 
 A caller that reads the error code can rule out every other code. -/
 theorem keyGen_eq_ikmTooShort_or_ok_or_noKey (ikm keyInfo : ByteArray) :
