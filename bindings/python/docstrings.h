@@ -170,6 +170,9 @@
 #define DOC_vrf_evaluate \
   "The output at index `i` of the tree of a seed."
 
+#define DOC_vrf_mix \
+  "An output mixed with randomness: the value a selection compares with its threshold."
+
 #define DOC_crc32 \
   "The four digest bytes of CRC-32: the highest power of each byte at its least significant bit."
 

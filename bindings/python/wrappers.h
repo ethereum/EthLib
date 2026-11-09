@@ -287,6 +287,7 @@ PyObject* py_trie_verify_account_proof                    (PyObject* self, PyObj
 PyObject* py_vrf_verify                                   (PyObject* self, PyObject* args);
 PyObject* py_vrf_secret                                   (PyObject* self, PyObject* args);
 PyObject* py_vrf_evaluate                                 (PyObject* self, PyObject* args);
+PyObject* py_vrf_mix                                      (PyObject* self, PyObject* args);
 PyObject* py_crc32                                       (PyObject* self, PyObject* args);
 PyObject* py_crc32_number                                (PyObject* self, PyObject* args);
 PyObject* py_crc32c                                      (PyObject* self, PyObject* args);
