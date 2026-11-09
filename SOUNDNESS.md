@@ -1312,7 +1312,15 @@ Later entries replace earlier values of the same key, and an empty value removes
 This construction is the path of Python `trie.root`, through `Execution/Exports/Trie.lean`.
 `root_of_rootExport` (`Execution/Exports/Proofs/Trie.lean`) proves that the export returns the root of this trie, built from its decoded pairs.
 `rootExport_of_root` proves the converse, so the two variants apply to the output of Python `trie.root`.
-The state and storage roots in `Execution/State/Root.lean` build tries directly, and `stateEntries_nodup` and `storageEntries_nodup` supply their distinct keys.
+The state and storage roots in `Execution/State/Root.lean` build tries directly, and `stateEntries_nodup` and `storageEntries_nodup` (`Execution/Proofs/State/Root.lean`) supply their distinct keys.
+`storageRoot_binding` proves that two storages with one root give every key the same word (`0` when unset), or `findStorageCollision` returns a collision.
+`stateRoot_binding` applies `root_binding` to the state trie and then `storageRoot_binding` at each address with an account.
+Two states with one state root give every address the same account.
+At every address with an account, the two states also give every key the same word, or `findStateCollision` returns a collision.
+Storage at an address without an account is outside `stateEntries`, and code is committed only through `codeHash`.
+So the state root binds neither orphan storage nor the code map directly.
+Both searches are proved to return only collisions, and to return none for an input compared with itself.
+No theorem bounds the probability of the storage-root or state-root search itself.
 The indexed roots in `Execution/Blocks/Roots.lean` also build tries directly, with the RLP encoding of each index as its key.
 `indexedEntries_nodup` (`Execution/Proofs/Blocks/Roots.lean`) supplies their distinct keys, since the RLP decoder reads each index back from its encoding.
 Applied to the plain tries of two lists with these distinct keys, `root_binding` shows that two lists with one root give every key one value.
