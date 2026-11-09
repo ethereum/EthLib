@@ -16,6 +16,8 @@ Heze changes neither the fork nor the version of anything before it.
 The blob limit at an epoch is that of the latest schedule entry that has started by then.
 
 So is the gas limit that the schedule of Gloas recommends.
+
+The blob limit at each epoch is at most the largest blob limit, which is one of the limits.
 -/
 
 @[expose] public section
@@ -127,6 +129,42 @@ theorem getBlobParameters_spec (epoch : Epoch) :
     ⟨entry, found, member, started, latest⟩ | ⟨found, early⟩ <;> rw [found]
   · exact .inl ⟨entry, member, started, rfl, latest⟩
   · exact .inr ⟨early, rfl⟩
+
+/-- The largest blob limit is one of the limits, and at least each of them. -/
+theorem largestBlobLimit_spec :
+    (config.largestBlobLimit = config.MAX_BLOBS_PER_BLOCK_ELECTRA ∨
+        ∃ entry ∈ config.BLOB_SCHEDULE, config.largestBlobLimit = entry.MAX_BLOBS_PER_BLOCK) ∧
+      config.MAX_BLOBS_PER_BLOCK_ELECTRA ≤ config.largestBlobLimit ∧
+      ∀ entry ∈ config.BLOB_SCHEDULE, entry.MAX_BLOBS_PER_BLOCK ≤ config.largestBlobLimit := by
+  unfold largestBlobLimit
+  generalize config.MAX_BLOBS_PER_BLOCK_ELECTRA = start
+  generalize config.BLOB_SCHEDULE = entries
+  induction entries generalizing start with
+  | nil => simp
+  | cons head tail ih =>
+    obtain ⟨found, above, bounded⟩ := ih (max start head.MAX_BLOBS_PER_BLOCK)
+    simp only [List.foldl_cons, List.mem_cons, forall_eq_or_imp, exists_eq_or_imp]
+    -- One step keeps the larger of the two limits.
+    have step : max start head.MAX_BLOBS_PER_BLOCK = start ∨
+        max start head.MAX_BLOBS_PER_BLOCK = head.MAX_BLOBS_PER_BLOCK := by
+      rw [UInt64.max_def]
+      split <;> simp
+    refine ⟨?_, UInt64.le_trans Std.left_le_max above, UInt64.le_trans Std.right_le_max above,
+      bounded⟩
+    rcases found with same | ⟨entry, member, same⟩
+    · rcases step with kept | taken
+      · exact .inl (same.trans kept)
+      · exact .inr (.inl (same.trans taken))
+    · exact .inr (.inr ⟨entry, member, same⟩)
+
+/-- The blob limit at each epoch is at most the largest blob limit. -/
+theorem getBlobParameters_le_largestBlobLimit (epoch : Epoch) :
+    (config.getBlobParameters epoch).maxBlobsPerBlock ≤ config.largestBlobLimit := by
+  obtain ⟨-, electra, entries⟩ := largestBlobLimit_spec (config := config)
+  rcases getBlobParameters_spec epoch with ⟨entry, member, -, found, -⟩ | ⟨-, found⟩ <;>
+    rw [found]
+  · exact entries entry member
+  · exact electra
 
 /-- The fork at an epoch is Gloas exactly from the first epoch of Gloas. -/
 theorem forkAtEpoch_eq_glamsterdam_iff (epoch : Epoch) :
