@@ -8,7 +8,9 @@ set_option autoImplicit false
 /-!
 # Proofs: random-oracle bounds for blob binding
 
-A fresh field element is rarely a root, including after embedding it in a polynomial ring.
+Each fresh answer of the shared oracle is rarely a root of the polynomial its request fixes.
+
+The individual and batch queries are counted separately, including the verifier's own queries.
 -/
 
 @[expose] public section
@@ -18,34 +20,6 @@ namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)
 open OracleComp OracleSpec ENNReal Polynomial
 open scoped EthLib.Cryptography.Bls.Fr
-
-/-- An injective map into an integral domain preserves the bound on polynomial roots. -/
-theorem card_roots_embedding_le {R : Type*} [CommRing R] [IsDomain R]
-    (embed : Fr ↪ R) (P : R[X]) {d : Nat} (hd : P.natDegree ≤ d)
-    [DecidablePred fun r : Fr => P ≠ 0 ∧ P.eval (embed r) = 0] :
-    (Finset.univ.filter fun r : Fr => P ≠ 0 ∧ P.eval (embed r) = 0).card ≤ d := by
-  classical
-  by_cases hP : P = 0
-  · simp [hP]
-  let roots := Finset.univ.filter fun r : Fr => P ≠ 0 ∧ P.eval (embed r) = 0
-  have hroots : roots.map embed ⊆ P.roots.toFinset := by
-    intro r hr
-    obtain ⟨x, hx, rfl⟩ := Finset.mem_map.mp hr
-    exact Multiset.mem_toFinset.mpr ((mem_roots hP).mpr (Finset.mem_filter.mp hx).2.2)
-  calc roots.card = (roots.map embed).card := by simp
-    _ ≤ P.roots.toFinset.card := Finset.card_le_card hroots
-    _ ≤ P.roots.card := Multiset.toFinset_card_le _
-    _ ≤ P.natDegree := card_roots' P
-    _ ≤ d := hd
-
-/-- Uniform field elements hit roots along an embedding with probability at most `d / r`. -/
-theorem prEvent_uniform_embedding_root_le {R : Type*} [CommRing R] [IsDomain R]
-    (embed : Fr ↪ R) (P : R[X]) {d : Nat} (hd : P.natDegree ≤ d) :
-    Pr{let r ← $ᵗ Fr}[P ≠ 0 ∧ P.eval (embed r) = 0] ≤ d / Fr.modulus := by
-  classical
-  rw [SampleableType.prEvent_uniformSample, Bls.Fr.card_eq]
-  gcongr
-  exact_mod_cast card_roots_embedding_le embed P hd
 
 namespace BlobBinding
 

@@ -367,7 +367,7 @@ def Reply.BadBlob (reply : Reply) : Prop :=
       blobError b commitment ≠ 0 ∧ (blobError b commitment).eval reply.answer = 0
     | .batch _ => False
 
-/-- A fresh batch challenge that annihilates a nonzero symbolic batch polynomial. -/
+/-- A fresh challenge of at most `n` openings that annihilates their nonzero batch polynomial. -/
 def Reply.BadBatch (n : Nat) (reply : Reply) : Prop :=
   reply.fresh = true ∧ match reply.request with
     | .blob _ _ => False

@@ -47,20 +47,39 @@ def batchRomExperiment {X : Type} (adversary : OracleComp (X →ₒ Fr) X) :
   let r ← liftM ((X →ₒ Fr).query x)
   return (x, r)
 
-/-- A nonzero polynomial of degree at most `d` has at most `d` roots in `Fr`. -/
-theorem card_roots_filter_le (P : Fr[X]) {d : Nat} (hd : P.natDegree ≤ d) [DecidablePred
-    fun r : Fr => P ≠ 0 ∧ P.eval r = 0] :
-    (Finset.univ.filter fun r : Fr => P ≠ 0 ∧ P.eval r = 0).card ≤ d := by
+/-- An injective map into an integral domain preserves the bound on polynomial roots. -/
+theorem card_roots_embedding_le {R : Type*} [CommRing R] [IsDomain R]
+    (embed : Fr ↪ R) (P : R[X]) {d : Nat} (hd : P.natDegree ≤ d)
+    [DecidablePred fun r : Fr => P ≠ 0 ∧ P.eval (embed r) = 0] :
+    (Finset.univ.filter fun r : Fr => P ≠ 0 ∧ P.eval (embed r) = 0).card ≤ d := by
   classical
   by_cases hP : P = 0
   · simp [hP]
-  calc (Finset.univ.filter fun r : Fr => P ≠ 0 ∧ P.eval r = 0).card
-      ≤ P.roots.toFinset.card := Finset.card_le_card fun r hr => by
-        simp only [Finset.mem_filter] at hr
-        exact Multiset.mem_toFinset.mpr ((mem_roots hP).mpr hr.2.2)
+  let roots := Finset.univ.filter fun r : Fr => P ≠ 0 ∧ P.eval (embed r) = 0
+  have hroots : roots.map embed ⊆ P.roots.toFinset := by
+    intro r hr
+    obtain ⟨x, hx, rfl⟩ := Finset.mem_map.mp hr
+    exact Multiset.mem_toFinset.mpr ((mem_roots hP).mpr (Finset.mem_filter.mp hx).2.2)
+  calc roots.card = (roots.map embed).card := by simp
+    _ ≤ P.roots.toFinset.card := Finset.card_le_card hroots
     _ ≤ P.roots.card := Multiset.toFinset_card_le _
     _ ≤ P.natDegree := card_roots' P
     _ ≤ d := hd
+
+/-- Uniform field elements hit roots along an embedding with probability at most `d / |Fr|`. -/
+theorem prEvent_uniform_embedding_root_le {R : Type*} [CommRing R] [IsDomain R]
+    (embed : Fr ↪ R) (P : R[X]) {d : Nat} (hd : P.natDegree ≤ d) :
+    Pr{let r ← $ᵗ Fr}[P ≠ 0 ∧ P.eval (embed r) = 0] ≤ d / Fr.modulus := by
+  classical
+  rw [SampleableType.prEvent_uniformSample, Bls.Fr.card_eq]
+  gcongr
+  exact_mod_cast card_roots_embedding_le embed P hd
+
+/-- A nonzero polynomial of degree at most `d` has at most `d` roots in `Fr`. -/
+theorem card_roots_filter_le (P : Fr[X]) {d : Nat} (hd : P.natDegree ≤ d) [DecidablePred
+    fun r : Fr => P ≠ 0 ∧ P.eval r = 0] :
+    (Finset.univ.filter fun r : Fr => P ≠ 0 ∧ P.eval r = 0).card ≤ d :=
+  card_roots_embedding_le (Function.Embedding.refl Fr) P hd
 
 /-- **The adversary of `q` queries wins with probability at most `(q + 1) d / r`.**
 
@@ -94,10 +113,8 @@ theorem prEvent_batchRomRoot_le {X : Type} [DecidableEq X] (errorPoly : X → Fr
     by_cases ha : admissible x
     · calc _ ≤ Pr{let u ← $ᵗ Fr}[errorPoly x ≠ 0 ∧ (errorPoly x).eval u = 0] :=
             prEvent_mono _ _ _ fun _ h => h.2
-        _ ≤ _ := by
-          rw [SampleableType.prEvent_uniformSample, Bls.Fr.card_eq]
-          gcongr
-          exact_mod_cast card_roots_filter_le _ (hdeg x ha)
+        _ ≤ _ := prEvent_uniform_embedding_root_le (Function.Embedding.refl Fr)
+          (errorPoly x) (hdeg x ha)
     · simp only [ha, false_and, prEvent_false]
       exact zero_le
   · -- A winning batch is the last query of the game.

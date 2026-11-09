@@ -15,21 +15,21 @@ It shares one cached oracle with the verifier.
 
 The oracle has two typed input domains and uniform answers in `Fr`.
 
-The verifier rejects final batches above `n` blobs.
+The experiment rejects final batches above `n` blobs before verification.
 
 The adversary makes at most `qBlob` individual queries.
 
 It makes at most `qBatch` batch queries.
 
-The root bound is `(qBlob + n) 4095 / r + (qBatch + 1) (n - 1) / r`.
+The root bound is `(qBlob + n) 4095 / r + (qBatch + 1) (n - 1) / r`, where `r` is the order of `Fr`.
 
-Add the success probability of `setupSecretReduction`, which recovers the setup secret.
+Add the success probability of a named reduction that recovers the setup secret.
 
 Recovery is measured from the full public setup powers.
 
 The reduction searches roots of explicit polynomials; its running time is not formalized.
 
-`verifyBlobKzgProofBatch_ok_iff_symbolic` connects the equation to the concrete verifier.
+A separate equivalence connects the equation to the concrete verifier.
 
 That equivalence uses concrete challenges; the probability bound uses the idealized oracle.
 -/
@@ -60,6 +60,12 @@ noncomputable def blobBindingAdvantage (n : Nat)
     BindingWins n τ result]
 
 /-- Blob-batch binding reduces to fresh challenge roots or recovery of the setup secret.
+
+The adversary is algebraic: each point that decodes carries a representation correct at the secret.
+
+This hypothesis stands for the algebraic group model, an assumption.
+
+Nothing restricts how the adversary computes its representations.
 
 The individual and batch budgets count the adversary's queries, including repeated inputs.
 
