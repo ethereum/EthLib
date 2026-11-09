@@ -138,16 +138,20 @@ So `m^h` needs only powers by `|x|` and `(|x| + 1) / 3`, Frobenius maps and conj
 
 These exponents have at most 64 bits.
 
+The hard part uses cyclotomic squaring on the nonzero output of the easy part.
+
+The formula also squares zero correctly.
+
 The steps compute exactly `f^((p¹² − 1) / r)`, and a theorem proves it. -/
 def finalExponentiation (f : Fp12 F) : Fp12 F :=
   let t := f.conjugate * f.inverse
   let m := t.frobenius.frobenius * t
   -- `a = m^((|x| + 1)² / 3)`.
-  let a := (m.powNat ((blsX + 1) / 3)).powNat (blsX + 1)
+  let a := (m.cyclotomicPow ((blsX + 1) / 3)).cyclotomicPow (blsX + 1)
   -- `b = a^(p − |x|)`.
-  let b := a.frobenius * (a.powNat blsX).conjugate
+  let b := a.frobenius * (a.cyclotomicPow blsX).conjugate
   -- `c = b^(|x|² + p² − 1)`.
-  let c := (b.powNat blsX).powNat blsX * b.frobenius.frobenius * b.conjugate
+  let c := (b.cyclotomicPow blsX).cyclotomicPow blsX * b.frobenius.frobenius * b.conjugate
   c * m
 
 /-! ## The pairing -/
