@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Networking.Enr.Base64
+public import EthLib.Base.Base64
 public import EthLib.Serialization.Rlp.Codec
 
 /-!
@@ -33,6 +33,7 @@ The text form is `enr:`, then the URL-safe base64 of the RLP bytes, without padd
 
 namespace EthLib.Networking.Enr
 
+open EthLib.Base
 open EthLib.Serialization.Rlp
 
 /-- The largest size of an encoded record, in bytes. -/

@@ -1,7 +1,7 @@
 module
 
+public import EthLib.Base.Proofs.Base64
 public import EthLib.Networking.Enr.Record
-public import EthLib.Networking.Proofs.Enr.Base64
 public import EthLib.Serialization.Proofs.Rlp.Codec
 
 /-!
@@ -26,6 +26,7 @@ Two errors with one code come from one constructor.
 
 namespace EthLib.Networking.Enr
 
+open EthLib.Base
 open EthLib.Serialization.Rlp
 
 /-! ## Rejections -/

@@ -11,7 +11,6 @@ public import EthLib.Networking.Discv5.Packet
 public import EthLib.Networking.Discv5.Session
 public import EthLib.Networking.Encoding.Varint
 public import EthLib.Networking.Noise.Identity
-public import EthLib.Networking.Enr.Base64
 public import EthLib.Networking.Enr.Consensus
 public import EthLib.Networking.Enr.Eth
 public import EthLib.Networking.Enr.Record
