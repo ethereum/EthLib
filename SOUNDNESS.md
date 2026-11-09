@@ -553,6 +553,16 @@ No theorem relates either primitive to an independent model of its RFC.
 The Python tests compare the bindings with the RFC 7748 and RFC 8439 vectors.
 The million-iteration X25519 vector requires `ETHLIB_SLOW_VECTORS=1`.
 
+### Noise XX and libp2p identities
+
+`complete_authenticates` (`Networking/Proofs/Noise.lean`) ties successful completion to an incoming message that the XX reader accepts.
+The reported identity signature verifies against the static key read from that message, and the reported peer ID derives from the signing public key.
+This is an acceptance theorem, not a proof of protocol security, confidentiality or constant-time execution.
+
+The bindings take explicit keys and state tuples.
+Callers must use fresh ephemeral keys and use the returned state after each successful cipher call.
+They must discard handshake state after an error.
+
 ### RIPEMD-160
 
 `compress_toBitVec` (`Proofs/Hash/Ripemd160.lean`) proves that the compression of one block, read as 32-bit vectors, is the compression of a model of the authors' pseudo-code.
@@ -2021,12 +2031,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 319 operations and 49 size constants.
-The Python extension calls 319 of the operations and 49 of the constants.
+Lean exports 331 operations and 49 size constants.
+The Python extension calls 331 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-9048 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (351), `bls.c` (426), `chain.c` (45), `consensus.c` (1652), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (45), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1294), `noise_primitives.c` (93), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (119), `wrappers.h` (591), `xmss.c` (134).
+9186 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (351), `bls.c` (426), `chain.c` (45), `consensus.c` (1652), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (45), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1308), `noise.c` (111), `noise_primitives.c` (93), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (119), `wrappers.h` (604), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

@@ -1,0 +1,103 @@
+module
+
+public import EthLib.Base.BigEndian
+public import EthLib.Cryptography.Hash.Sha256
+public import EthLib.Cryptography.Secp256k1.Sign
+
+/-!
+# libp2p secp256k1 identity keys
+
+Ethereum's libp2p identity uses the secp256k1 profile of [peer IDs][peerids].
+
+Its public-key protobuf is deterministic, and its peer ID is an identity multihash.
+
+Message signatures use SHA-256, low-s ECDSA and strict DER, without a transaction sighash byte.
+
+The DER and low-s rules are those linked by the profile in [BIP 62][bip62].
+
+[peerids]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/peer-ids/peer-ids.md#secp256k1
+[bip62]: https://github.com/bitcoin/bips/blob/master/bip-0062.mediawiki#der-encoding
+-/
+
+@[expose] public section
+
+namespace EthLib.Networking.Libp2p
+
+open EthLib.Cryptography.Secp256k1
+
+/-- A malformed key, secret or DER signature. -/
+inductive IdentityError where
+  | publicKey
+  | privateKey
+  | signature
+  | signing (error : Secp256k1Error)
+deriving Repr, DecidableEq
+
+/-- Deterministic protobuf `PublicKey`, type 2 and 33 compressed bytes, peer-IDs "Keys". -/
+def encodePublicKey (point : Point) : ByteArray :=
+  ⟨#[0x08, 0x02, 0x12, 0x21]⟩ ++ point.encodeCompressed
+
+/-- Accept exactly the canonical secp256k1 protobuf and a usable compressed point. -/
+def decodePublicKey (key : ByteArray) : Except IdentityError Point := do
+  if key.size != 37 then throw .publicKey
+  let point ← (Point.decode (key.extract 4 37)).mapError fun _ => .publicKey
+  if encodePublicKey point = key then return point else throw .publicKey
+
+/-- The identity multihash of a canonical secp256k1 public-key protobuf, peer-IDs "Peer Ids". -/
+def peerId (publicKey : ByteArray) : ByteArray := ⟨#[0x00, 0x25]⟩ ++ publicKey
+
+/-- Derive and serialize the public key of a nonzero 32-byte secret. -/
+def publicKey (secret : Vector UInt8 32) : Except IdentityError ByteArray :=
+  let n := EthLib.Base.bytesToNat secret.toList
+  if h : 0 < n ∧ n < Fn.modulus then
+    .ok (encodePublicKey (Point.mul ⟨n, h.2⟩ .generator))
+  else .error .privateKey
+
+/-- A positive DER INTEGER with the required leading zero when its high bit is set, BIP 62. -/
+def derInteger (n : Nat) : List UInt8 :=
+  let bytes := (EthLib.Base.natToBytes 32 n).dropWhile (· == 0)
+  let bytes := match bytes with
+    | [] => [0]
+    | b :: _ => if b.toNat ≥ 128 then 0 :: bytes else bytes
+  [0x02, UInt8.ofNat bytes.length] ++ bytes
+
+/-- The DER sequence of the two ECDSA scalars, without a transaction sighash flag, BIP 62. -/
+def encodeSignature (r s : Nat) : ByteArray :=
+  let integers := derInteger r ++ derInteger s
+  ⟨([0x30, UInt8.ofNat integers.length] ++ integers).toArray⟩
+
+/-- Decode a strict DER sequence and require the secp256k1 low-s scalar ranges, BIP 62. -/
+def decodeSignature (signature : ByteArray) : Except IdentityError (Nat × Nat) := do
+  match signature.data.toList with
+  | 0x30 :: total :: 0x02 :: rLength :: rest =>
+    if total.toNat + 2 != signature.size then throw .signature
+    let rBytes := rest.take rLength.toNat
+    match rest.drop rLength.toNat with
+    | 0x02 :: sLength :: sBytes =>
+      if sLength.toNat != sBytes.length then throw .signature
+      let r := EthLib.Base.bytesToNat rBytes
+      let s := EthLib.Base.bytesToNat sBytes
+      if 0 < r ∧ r < Fn.modulus ∧ 0 < s ∧ s ≤ Fn.modulus / 2 ∧
+          encodeSignature r s = signature then
+        return (r, s)
+      else throw .signature
+    | _ => throw .signature
+  | _ => throw .signature
+
+/-- Sign SHA-256 of the message, then write its low-s signature in DER, peer-IDs "Secp256k1". -/
+def sign (secret : Vector UInt8 32) (message : ByteArray) : Except IdentityError ByteArray := do
+  let n := EthLib.Base.bytesToNat secret.toList
+  if h : 0 < n ∧ n < Fn.modulus then
+    let (r, s, _) ← (Ecdsa.sign ⟨n, h.2⟩
+      (EthLib.Cryptography.Hash.Sha256.hash32 message)).mapError IdentityError.signing
+    return encodeSignature r.val s.val
+  else throw .privateKey
+
+/-- Check the canonical key and DER signature on SHA-256 of the message, peer-IDs "Secp256k1". -/
+def verify (publicKey message signature : ByteArray) : Bool :=
+  match decodePublicKey publicKey, decodeSignature signature with
+  | .ok point, .ok (r, s) =>
+    Ecdsa.verify point (EthLib.Cryptography.Hash.Sha256.hash32 message) r s
+  | _, _ => false
+
+end EthLib.Networking.Libp2p

@@ -129,6 +129,10 @@ class ScryptError(EthLibError, ValueError):
     """scrypt or one of its steps rejected its input."""
 
 
+class NoiseError(EthLibError, ValueError):
+    """A Noise handshake, identity, frame or authenticated message was rejected."""
+
+
 class X25519Error(EthLibError, ValueError):
     """An X25519 key has the wrong size."""
 
@@ -285,6 +289,7 @@ __all__ = [
     "Pbkdf2Error",
     "ScryptError",
     "X25519Error",
+    "NoiseError",
     "ChaCha20Poly1305Error",
     "ConcatKdfError",
     "AesError",

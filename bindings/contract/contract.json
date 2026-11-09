@@ -1711,6 +1711,239 @@
    "error_class": "EnrError",
    "docstring":
    "The record of a text form.\n\nIt fails unless the text is `enr:`, then the base64 of bytes that the decoder accepts."},
+  {"summary":
+   "Initialize the raw XX state with explicit private keys and prologue, Noise §5.3.",
+   "signature":
+   "(initiator: bool, static_key: bytes, ephemeral_key: bytes, prologue: bytes) -> tuple",
+   "operation": "EthLib.Networking.Noise.Exports.initializeExport",
+   "method": "noise_initialize",
+   "errors": [],
+   "error_class": "NoiseError",
+   "docstring":
+   "Initialize the raw XX state with explicit private keys and prologue, Noise §5.3."},
+  {"summary":
+   "Write the next raw XX message and return the updated state, Noise §5.3.",
+   "signature": "(state: tuple, payload: bytes) -> tuple[tuple, bytes]",
+   "operation": "EthLib.Networking.Noise.Exports.writeExport",
+   "method": "noise_write_message",
+   "errors":
+   [{"type": "EthLib.Networking.Noise.NoiseError",
+     "codes":
+     [{"constructor": "wrongPhase", "code": 1},
+      {"constructor": "missingKey", "code": 2},
+      {"constructor": "truncated", "code": 3},
+      {"constructor": "messageTooLong", "code": 4},
+      {"constructor": "frameLength", "code": 5},
+      {"constructor": "nonceExhausted", "code": 6},
+      {"constructor": "cipher", "code": 7},
+      {"constructor": "protobuf", "code": 8},
+      {"constructor": "identity", "code": 9},
+      {"constructor": "firstMessageExtensions", "code": 10}]}],
+   "error_class": "NoiseError",
+   "docstring":
+   "Write the next raw XX message and return the updated state, Noise §5.3."},
+  {"summary":
+   "Read the next raw XX message and return its payload and updated state, Noise §5.3.",
+   "signature": "(state: tuple, message: bytes) -> tuple[tuple, bytes]",
+   "operation": "EthLib.Networking.Noise.Exports.readExport",
+   "method": "noise_read_message",
+   "errors":
+   [{"type": "EthLib.Networking.Noise.NoiseError",
+     "codes":
+     [{"constructor": "wrongPhase", "code": 1},
+      {"constructor": "missingKey", "code": 2},
+      {"constructor": "truncated", "code": 3},
+      {"constructor": "messageTooLong", "code": 4},
+      {"constructor": "frameLength", "code": 5},
+      {"constructor": "nonceExhausted", "code": 6},
+      {"constructor": "cipher", "code": 7},
+      {"constructor": "protobuf", "code": 8},
+      {"constructor": "identity", "code": 9},
+      {"constructor": "firstMessageExtensions", "code": 10}]}],
+   "error_class": "NoiseError",
+   "docstring":
+   "Read the next raw XX message and return its payload and updated state, Noise §5.3."},
+  {"summary":
+   "Split a completed raw XX state into send and receive ciphers and its hash, Noise §5.3.",
+   "signature": "(state: tuple) -> tuple",
+   "operation": "EthLib.Networking.Noise.Exports.transportExport",
+   "method": "noise_transport",
+   "errors":
+   [{"type": "EthLib.Networking.Noise.NoiseError",
+     "codes":
+     [{"constructor": "wrongPhase", "code": 1},
+      {"constructor": "missingKey", "code": 2},
+      {"constructor": "truncated", "code": 3},
+      {"constructor": "messageTooLong", "code": 4},
+      {"constructor": "frameLength", "code": 5},
+      {"constructor": "nonceExhausted", "code": 6},
+      {"constructor": "cipher", "code": 7},
+      {"constructor": "protobuf", "code": 8},
+      {"constructor": "identity", "code": 9},
+      {"constructor": "firstMessageExtensions", "code": 10}]}],
+   "error_class": "NoiseError",
+   "docstring":
+   "Split a completed raw XX state into send and receive ciphers and its hash, Noise §5.3."},
+  {"summary":
+   "Encrypt with a cipher state and associated data, returning its next state, Noise §5.1.",
+   "signature":
+   "(state: tuple, aad: bytes, plaintext: bytes) -> tuple[tuple, bytes]",
+   "operation": "EthLib.Networking.Noise.Exports.cipherEncryptExport",
+   "method": "noise_cipher_encrypt",
+   "errors":
+   [{"type": "EthLib.Networking.Noise.NoiseError",
+     "codes":
+     [{"constructor": "wrongPhase", "code": 1},
+      {"constructor": "missingKey", "code": 2},
+      {"constructor": "truncated", "code": 3},
+      {"constructor": "messageTooLong", "code": 4},
+      {"constructor": "frameLength", "code": 5},
+      {"constructor": "nonceExhausted", "code": 6},
+      {"constructor": "cipher", "code": 7},
+      {"constructor": "protobuf", "code": 8},
+      {"constructor": "identity", "code": 9},
+      {"constructor": "firstMessageExtensions", "code": 10}]}],
+   "error_class": "NoiseError",
+   "docstring":
+   "Encrypt with a cipher state and associated data, returning its next state, Noise §5.1."},
+  {"summary":
+   "Authenticate and decrypt, advancing the nonce only on success, Noise §5.1.",
+   "signature":
+   "(state: tuple, aad: bytes, ciphertext: bytes) -> tuple[tuple, bytes]",
+   "operation": "EthLib.Networking.Noise.Exports.cipherDecryptExport",
+   "method": "noise_cipher_decrypt",
+   "errors":
+   [{"type": "EthLib.Networking.Noise.NoiseError",
+     "codes":
+     [{"constructor": "wrongPhase", "code": 1},
+      {"constructor": "missingKey", "code": 2},
+      {"constructor": "truncated", "code": 3},
+      {"constructor": "messageTooLong", "code": 4},
+      {"constructor": "frameLength", "code": 5},
+      {"constructor": "nonceExhausted", "code": 6},
+      {"constructor": "cipher", "code": 7},
+      {"constructor": "protobuf", "code": 8},
+      {"constructor": "identity", "code": 9},
+      {"constructor": "firstMessageExtensions", "code": 10}]}],
+   "error_class": "NoiseError",
+   "docstring":
+   "Authenticate and decrypt, advancing the nonce only on success, Noise §5.1."},
+  {"summary":
+   "Prefix the 16-bit big-endian message length, noise-libp2p \"Wire Format\".",
+   "signature": "(message: bytes) -> bytes",
+   "operation": "EthLib.Networking.Noise.Exports.frameExport",
+   "method": "noise_frame",
+   "errors":
+   [{"type": "EthLib.Networking.Noise.NoiseError",
+     "codes":
+     [{"constructor": "wrongPhase", "code": 1},
+      {"constructor": "missingKey", "code": 2},
+      {"constructor": "truncated", "code": 3},
+      {"constructor": "messageTooLong", "code": 4},
+      {"constructor": "frameLength", "code": 5},
+      {"constructor": "nonceExhausted", "code": 6},
+      {"constructor": "cipher", "code": 7},
+      {"constructor": "protobuf", "code": 8},
+      {"constructor": "identity", "code": 9},
+      {"constructor": "firstMessageExtensions", "code": 10}]}],
+   "error_class": "NoiseError",
+   "docstring":
+   "Prefix the 16-bit big-endian message length, noise-libp2p \"Wire Format\"."},
+  {"summary":
+   "Read exactly one complete 16-bit frame, noise-libp2p \"Wire Format\".",
+   "signature": "(frame: bytes) -> bytes",
+   "operation": "EthLib.Networking.Noise.Exports.unframeExport",
+   "method": "noise_unframe",
+   "errors":
+   [{"type": "EthLib.Networking.Noise.NoiseError",
+     "codes":
+     [{"constructor": "wrongPhase", "code": 1},
+      {"constructor": "missingKey", "code": 2},
+      {"constructor": "truncated", "code": 3},
+      {"constructor": "messageTooLong", "code": 4},
+      {"constructor": "frameLength", "code": 5},
+      {"constructor": "nonceExhausted", "code": 6},
+      {"constructor": "cipher", "code": 7},
+      {"constructor": "protobuf", "code": 8},
+      {"constructor": "identity", "code": 9},
+      {"constructor": "firstMessageExtensions", "code": 10}]}],
+   "error_class": "NoiseError",
+   "docstring":
+   "Read exactly one complete 16-bit frame, noise-libp2p \"Wire Format\"."},
+  {"summary":
+   "Initialize libp2p XX with its empty prologue and explicit X25519 private keys.",
+   "signature":
+   "(initiator: bool, static_key: bytes, ephemeral_key: bytes) -> tuple",
+   "operation": "EthLib.Networking.Noise.Exports.initializeLibp2pExport",
+   "method": "noise_libp2p_initialize",
+   "errors": [],
+   "error_class": "NoiseError",
+   "docstring":
+   "Initialize libp2p XX with its empty prologue and explicit X25519 private keys."},
+  {"summary":
+   "Write the next libp2p message with a signed identity payload, hiding remote extensions.",
+   "signature":
+   "(state: tuple, identity_secret: bytes, extensions: bytes | None) -> tuple[tuple, bytes]",
+   "operation": "EthLib.Networking.Noise.Exports.writeLibp2pExport",
+   "method": "noise_libp2p_write",
+   "errors":
+   [{"type": "EthLib.Networking.Noise.NoiseError",
+     "codes":
+     [{"constructor": "wrongPhase", "code": 1},
+      {"constructor": "missingKey", "code": 2},
+      {"constructor": "truncated", "code": 3},
+      {"constructor": "messageTooLong", "code": 4},
+      {"constructor": "frameLength", "code": 5},
+      {"constructor": "nonceExhausted", "code": 6},
+      {"constructor": "cipher", "code": 7},
+      {"constructor": "protobuf", "code": 8},
+      {"constructor": "identity", "code": 9},
+      {"constructor": "firstMessageExtensions", "code": 10}]}],
+   "error_class": "NoiseError",
+   "docstring":
+   "Write the next libp2p message with a signed identity payload, hiding remote extensions."},
+  {"summary":
+   "Read the next libp2p message, authenticating its actual remote static key.",
+   "signature": "(state: tuple, message: bytes) -> tuple",
+   "operation": "EthLib.Networking.Noise.Exports.readLibp2pExport",
+   "method": "noise_libp2p_read",
+   "errors":
+   [{"type": "EthLib.Networking.Noise.NoiseError",
+     "codes":
+     [{"constructor": "wrongPhase", "code": 1},
+      {"constructor": "missingKey", "code": 2},
+      {"constructor": "truncated", "code": 3},
+      {"constructor": "messageTooLong", "code": 4},
+      {"constructor": "frameLength", "code": 5},
+      {"constructor": "nonceExhausted", "code": 6},
+      {"constructor": "cipher", "code": 7},
+      {"constructor": "protobuf", "code": 8},
+      {"constructor": "identity", "code": 9},
+      {"constructor": "firstMessageExtensions", "code": 10}]}],
+   "error_class": "NoiseError",
+   "docstring":
+   "Read the next libp2p message, authenticating its actual remote static key."},
+  {"summary":
+   "Return the authenticated peer and transport keys only after completion.",
+   "signature": "(state: tuple) -> tuple",
+   "operation": "EthLib.Networking.Noise.Exports.completeExport",
+   "method": "noise_libp2p_complete",
+   "errors":
+   [{"type": "EthLib.Networking.Noise.NoiseError",
+     "codes":
+     [{"constructor": "wrongPhase", "code": 1},
+      {"constructor": "missingKey", "code": 2},
+      {"constructor": "truncated", "code": 3},
+      {"constructor": "messageTooLong", "code": 4},
+      {"constructor": "frameLength", "code": 5},
+      {"constructor": "nonceExhausted", "code": 6},
+      {"constructor": "cipher", "code": 7},
+      {"constructor": "protobuf", "code": 8},
+      {"constructor": "identity", "code": 9},
+      {"constructor": "firstMessageExtensions", "code": 10}]}],
+   "error_class": "NoiseError",
+   "docstring":
+   "Return the authenticated peer and transport keys only after completion."},
   {"summary": "The sequence number of a record.",
    "signature": "(record: bytes) -> int",
    "operation": "EthLib.Networking.Enr.Exports.seqExport",
