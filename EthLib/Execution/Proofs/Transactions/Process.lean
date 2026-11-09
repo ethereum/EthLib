@@ -45,6 +45,10 @@ At Glamsterdam, the block counts two amounts of gas, by [EIP-7778][e7778] and [E
 - the state gas used of the message, or 0 when it is negative, a case that the EIPs leave open;
 - the gas used before the refund minus that state gas, and at least the call data floor.
 
+At every fork, the block counts the blob gas of the transaction.
+
+Up to BPO5, the block counts at most the gas limit, when that limit covers the least gas.
+
 [e3529]: https://eips.ethereum.org/EIPS/eip-3529#specification
 [e7623]: https://eips.ethereum.org/EIPS/eip-7623#specification
 [e7778]: https://eips.ethereum.org/EIPS/eip-7778#specification
@@ -530,5 +534,46 @@ theorem processTransaction_gasUsed_of_glamsterdam {env : BlockEnvironment fork}
   · simp only [settleGas_gasUsed hSettle, gasUsed, gasRefund, maxRefundQuotient, hLondon, hPectra,
       ↓reduceIte, GE.ge]
   · simp only [hBlock, transactionBlockGas, hGlam, ↓reduceIte, GE.ge]
+
+/-! ## The counts of the block -/
+
+/-- A transaction that runs adds its own blob gas to the blob gas of its block, at every fork. -/
+theorem processTransaction_blockGas_blob {env : BlockEnvironment fork}
+    {block : State.BlockState} {included : Included} {out : TransactionOutput}
+    (h : processTransaction env block included tx = .ok out) :
+    out.blockGas.blob = Fees.BlobBaseFee.calculateTotalBlobGas tx := by
+  unfold processTransaction at h
+  split at h
+  · cases h
+  · have hBlock : ∀ {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter],
+        runTransaction Meter env block included tx = .ok out →
+          out.blockGas.blob = Fees.BlobBaseFee.calculateTotalBlobGas tx := by
+      intro Meter _ _ hRun
+      obtain ⟨_, _, _, _, _, -, -, -, -, hGas, -⟩ := runTransaction_eq_ok hRun
+      rw [hGas, transactionBlockGas]
+      split <;> rfl
+    split at h
+    · exact hBlock h
+    · exact hBlock h
+
+/-- Up to BPO5, a transaction that runs adds at most its gas limit to the gas of its block.
+
+The gas limit is assumed to cover the least gas, as the validity check ensures. -/
+theorem processTransaction_blockGas_execution_le_of_lt {env : BlockEnvironment fork}
+    {block : State.BlockState} {included : Included} {out : TransactionOutput}
+    (hlt : fork < .glamsterdam) (hMin : minimumGas fork included.sender tx ≤ tx.gas.toNat)
+    (h : processTransaction env block included tx = .ok out) :
+    out.blockGas.execution ≤ tx.gas.toNat := by
+  obtain ⟨_, _, _, output, _, -, -, -, -, hBlock, -, -⟩ := processTransaction_eq_ok_of_lt hlt h
+  rw [hBlock, transactionBlockGas_of_lt hlt]
+  exact gasUsed_le_gas hMin _ _
+
+/-- Up to BPO5, a transaction that runs adds no state gas to its block. -/
+theorem processTransaction_blockGas_state_of_lt {env : BlockEnvironment fork}
+    {block : State.BlockState} {included : Included} {out : TransactionOutput}
+    (hlt : fork < .glamsterdam) (h : processTransaction env block included tx = .ok out) :
+    out.blockGas.state = 0 := by
+  obtain ⟨_, _, _, output, _, -, -, -, -, hBlock, -, -⟩ := processTransaction_eq_ok_of_lt hlt h
+  rw [hBlock, transactionBlockGas_of_lt hlt]
 
 end EthLib.Execution.Transactions
