@@ -71,3 +71,6 @@ def test_hash_to_g2(dst: bytes, test: dict) -> None:
     assert _compress(bls.hash_to_g2(bytes.fromhex(test["msg"]), dst)) == expected
     # EthLib decodes the expected point and encodes it back unchanged.
     assert bls.decode_g2(expected) == expected
+    # Its negative has the same x coordinate and the other compressed sign bit.
+    negative = bytes([expected[0] ^ 0x20]) + expected[1:]
+    assert bls.decode_g2(negative) == negative

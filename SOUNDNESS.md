@@ -1312,7 +1312,17 @@ Later entries replace earlier values of the same key, and an empty value removes
 This construction is the path of Python `trie.root`, through `Execution/Exports/Trie.lean`.
 `root_of_rootExport` (`Execution/Exports/Proofs/Trie.lean`) proves that the export returns the root of this trie, built from its decoded pairs.
 `rootExport_of_root` proves the converse, so the two variants apply to the output of Python `trie.root`.
-The state and storage roots in `Execution/State/Root.lean` build tries directly, and `stateEntries_nodup` and `storageEntries_nodup` supply their distinct keys.
+The state and storage roots in `Execution/State/Root.lean` build tries directly, and `stateEntries_nodup` and `storageEntries_nodup` (`Execution/Proofs/State/Root.lean`) supply their distinct keys.
+`root_binding_secured` (`Execution/Proofs/Trie/Binding.lean`) applies `root_binding` to two secured tries with distinct keys and one root.
+The two tries give every key one value, or `findSecuredCollision` returns a collision in the proofs of the key or among the keys.
+`storageRoot_binding` proves that two storages with one root give every key the same word, `0` when unset.
+Otherwise `findStorageCollision` returns a collision.
+`stateRoot_binding` applies `root_binding_secured` to the state trie and then `storageRoot_binding` at each address with an account.
+Two states with one state root give every address the same account, and at every address with an account every key the same word, or `findStateCollision` returns a collision.
+Storage at an address without an account is outside `stateEntries`, and code is committed only through `codeHash`.
+So the state root binds no storage at an address without an account, does not separate a key set to `0` from an unset key, and binds nothing in the code map beyond each account's `codeHash`.
+The storage and state searches are proved to return only collisions, and none for an input compared with itself.
+No theorem bounds the probability of finding two storages or two states with one root that differ.
 The indexed roots in `Execution/Blocks/Roots.lean` also build tries directly, with the RLP encoding of each index as its key.
 `indexedEntries_nodup` (`Execution/Proofs/Blocks/Roots.lean`) supplies their distinct keys, since the RLP decoder reads each index back from its encoding.
 Applied to the plain tries of two lists with these distinct keys, `root_binding` shows that two lists with one root give every key one value.
@@ -1456,17 +1466,20 @@ The bit of a seat is set when its key is the key of the validator of a message o
 That theorem assumes that the secret keys do not sum to zero.
 It verifies under the keys in the order of the attestations.
 
-`isValidIndexedAttestation_constructAggregate` and `isValidIndexedAttestation_constructAggregateOfSingleAttestations` (`Proofs/HonestAggregateSignatures.lean`) prove that successfully constructed honest aggregates have indexed forms that pass the check.
+`isValidIndexedAttestation_constructAggregate` and `isValidIndexedAttestation_constructAggregateOfSingleAttestations` (`Consensus/Proofs/HonestAggregateSignatures.lean`) prove that successfully constructed honest aggregates have indexed forms that pass the signature check of an indexed attestation.
 The selected signers must have distinct validator indices, use their registered keys and have a nonzero sum of secret keys.
 From Gloas, their number must also fit the check's bound.
 The proof derives the permutation from those signers to the sorted indices that the receiver reads.
+The aggregate adds the signature of every vote, so a validator that votes twice counts twice in the signature but once in the keys.
+The theorems avoid this case by requiring distinct signers.
 
-`isValidContributionSignature_constructSyncCommitteeContribution` (`Proofs/HonestContributionSignatures.lean`) proves that a contribution of honest matching messages passes its signature check.
+`isValidContributionSignature_constructSyncCommitteeContribution` (`Consensus/Proofs/HonestContributionSignatures.lean`) proves that a contribution of honest matching messages passes its signature check.
 The domain and signing root must compute successfully, and the messages must sign that root under their registered keys.
 The sum of the secret keys for the selected seats must be nonzero.
-Each selected seat counts once, so repeated committee keys and duplicate incoming messages are allowed.
+A key counts once for each of its selected seats, and each seat takes the first matching message, so duplicate messages add nothing.
 The gossip corollaries characterize acceptance of the aggregate's committee check and the contribution topic by their remaining conditions.
 These include the checks of time, membership and the aggregator's signatures.
+The corollaries assume that the head state of the receiver is the state of the construction.
 
 The contribution takes the sync committee as an argument.
 The caller passes the committee of the next slot, which gossip and the next block check.
@@ -1799,8 +1812,10 @@ Finally, the consistency theorems on the constants, listed under BLS12-381, catc
 
 Two definitions also do what their sources do not.
 The PeerDAS custody search fails after `2^16` node IDs in the export, where its source loops on, and no theorem bounds the steps it needs.
-BLS key generation and ERC-2333 master and child key derivation stop after 16 attempts, while the draft's `KeyGen` and ERC-2333's `HKDF_mod_r` retry without a bound.
-They return an error if all 16 attempts produce zero modulo `r`.
+BLS key generation fails after 16 attempts, a bound that EthLib chose.
+[The IRTF BLS draft, version 4, §2.3](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04#section-2.3) and `HKDF_mod_r` of [ERC-2333](https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2333.md#hkdf_mod_r) loop until the key is not zero.
+The ERC-2333 master and child derivations reuse key generation, so they share the bound.
+An attempt fails only when its 48-byte output is a multiple of `r`.
 
 Some official vectors expect more than a source says.
 The transaction tests of ethereum/tests reject 43 results whose gas limit is `2^64`, or whose gas limit times gas price exceeds `2^256 - 1`.

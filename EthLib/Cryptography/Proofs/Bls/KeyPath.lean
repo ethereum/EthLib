@@ -16,6 +16,10 @@ Paths have the required purpose and at least four child indices.
 
 namespace EthLib.Cryptography.Bls.KeyPath
 
+/-- Path error codes start at 101, so they never meet a BLS error code. -/
+theorem KeyPathError.code_ge (e : KeyPathError) : 101 ≤ e.code := by
+  cases e <;> simp [KeyPathError.code]
+
 /-- Every path includes purpose, coin type, account and use. -/
 theorem four_le_length_indices (path : Path) : 4 ≤ path.indices.length := by
   simp [Path.indices]

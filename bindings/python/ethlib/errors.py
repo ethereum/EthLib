@@ -2,6 +2,7 @@
 
 
 # Each primitive has one exception class.
+# `KeyDerivationError` alone subclasses another, `BlsError`, so a BLS handler also catches it.
 # Each class also derives from `RuntimeError`, `ValueError` or both.
 # So a caller can catch a failure with `except ValueError` or `except RuntimeError`.
 #
@@ -42,8 +43,14 @@ class BlsError(EthLibError, ValueError, RuntimeError):
     """A BLS operation rejected its input."""
 
 
-class KeyDerivationError(EthLibError, ValueError):
-    """Derivation failed with a BLS code, a path code from 101, or code 0 for bad arguments."""
+class KeyDerivationError(BlsError):
+    """
+    A derivation from an ERC-2334 path, or the building of a validator path, failed.
+
+    Derivation errors keep their BLS codes, and path errors have codes from 101.
+
+    An argument that Lean cannot read has code 0.
+    """
 
 
 class XmssError(EthLibError, ValueError, RuntimeError):

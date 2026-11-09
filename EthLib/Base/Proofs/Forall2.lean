@@ -9,6 +9,10 @@ public import Mathlib.Data.List.Forall2
 A successful map over a list in `Except` relates its inputs and outputs pairwise.
 
 Each input is related to its output, and is a member of the list.
+
+Conversely, inputs related pairwise to outputs make the map succeed with those outputs.
+
+Each member of the left list of a pairing has a partner in the right list.
 -/
 
 @[expose] public section
@@ -47,5 +51,24 @@ theorem forall₂_mem_of_mapM_ok {α β ε : Type} {f : α → Except ε β} {xs
     obtain ⟨y, rest, head, tail, rfl⟩ := mapM_cons_ok.mp made
     exact .cons ⟨List.mem_cons_self, head⟩
       ((ih tail).imp fun _ _ related => ⟨List.mem_cons_of_mem _ related.1, related.2⟩)
+
+/-- Inputs that each map to their partner make the monadic map succeed with the partners. -/
+theorem mapM_ok_of_forall₂ {α β ε : Type} {f : α → Except ε β} {xs : List α} {ys : List β}
+    (related : List.Forall₂ (fun x y => f x = .ok y) xs ys) : xs.mapM f = .ok ys := by
+  induction related with
+  | nil => rfl
+  | cons head _ ih =>
+    rw [List.mapM_cons, head, ih]
+    rfl
+
+/-- Each member of the left list of a pairing has a partner in the right list. -/
+theorem exists_mem_of_forall₂ {α β : Type} {R : α → β → Prop} :
+    ∀ {xs : List α} {ys : List β}, List.Forall₂ R xs ys → ∀ {x}, x ∈ xs → ∃ y ∈ ys, R x y
+  | _, _, .nil, _, mem => by simp at mem
+  | _, _, .cons head tail, _, mem => by
+    rcases List.mem_cons.mp mem with rfl | mem
+    · exact ⟨_, List.mem_cons_self, head⟩
+    · obtain ⟨y, mem', related⟩ := exists_mem_of_forall₂ tail mem
+      exact ⟨y, List.mem_cons_of_mem _ mem', related⟩
 
 end EthLib.Base

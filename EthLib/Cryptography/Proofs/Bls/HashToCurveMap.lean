@@ -33,27 +33,18 @@ theorem map_sqrt (f : Hom F G) (a : Fp2 F) :
     Fp2.sqrt (a.map f) = (Fp2.sqrt a).map (Fp2.map f) := by
   obtain ⟨a0, a1⟩ := a
   unfold Fp2.sqrt
-  simp only [Fp2.map, f.map_isZero, ← f.map_neg, ← f.map_mul, ← f.map_add, ← f.map_ofNat,
+  simp only [Fp2.map, f.map_isZero, ← f.map_mul, ← f.map_add, ← f.map_ofNat,
     ← f.map_inverse, map_sqrtOrError]
   cases BaseField.isZero a1
   · simp only [Bool.false_eq_true, ↓reduceIte]
     cases sqrtOrError (a0 * a0 + a1 * a1) with
     | error e => rfl
     | ok s =>
-      simp only [Except.map, ← f.map_add, ← f.map_sub, ← f.map_mul, map_sqrtOrError]
-      cases sqrtOrError ((a0 + s) * BaseField.inverse (BaseField.ofNat 2)) with
-      | ok r => simp only [Fp2.map, f.map_mul, f.map_inverse]
-      | error e =>
-        cases sqrtOrError ((a0 - s) * BaseField.inverse (BaseField.ofNat 2)) with
-        | ok r => simp only [Fp2.map, f.map_mul, f.map_inverse]
-        | error e => rfl
-  · simp only [↓reduceIte]
-    cases sqrtOrError a0 with
-    | ok s => simp only [Except.map, Fp2.map, f.map_zero]
-    | error e =>
-      cases sqrtOrError (-a0) with
-      | ok s => simp only [Except.map, Fp2.map, f.map_zero]
-      | error e => rfl
+      simp only [Except.map, ← f.map_add, ← f.map_mul, ← f.map_inverse, f.map_sqrtCandidate,
+        f.map_beq]
+      split <;> simp only [Fp2.map, f.map_mul, f.map_inverse, f.map_ofNat]
+  · simp only [↓reduceIte, f.map_sqrtCandidate, ← f.map_mul, f.map_beq]
+    split <;> simp only [Except.map, Fp2.map, f.map_zero]
 
 end Fp2
 

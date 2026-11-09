@@ -93,110 +93,16 @@ private theorem sq_ite_neg (P : Prop) [Decidable P] (y : Fp2) :
 section SwuComplete
 open scoped EthLib.Cryptography.Bls.Fp
 
-private theorem sq_pm_zmod {s n : ZMod Fp.modulus} (h : s * s = n * n) :
-    s = n ∨ s = -n := by
-  have hfac : (s - n) * (s + n) = 0 := by linear_combination h
-  rcases mul_eq_zero.mp hfac with h1 | h2
-  · exact Or.inl (sub_eq_zero.mp h1)
-  · exact Or.inr (eq_neg_of_add_eq_zero_left h2)
-
-/-- Because `p = 3 mod 4`, `(x^((p + 1) / 4))^2` equals either `x` or `-x` in `Fp`. -/
-private theorem sq_or_neg_sq_zmod (x : ZMod Fp.modulus) :
-    let s := x ^ ((Fp.modulus + 1) / 4)
-    s * s = x ∨ s * s = -x := by
-  intro s
-  by_cases hx : x = 0
-  · left
-    subst hx
-    simp [s, zero_pow (by decide : (Fp.modulus + 1) / 4 ≠ 0)]
-  · apply sq_pm_zmod
-    change (x ^ ((Fp.modulus + 1) / 4) * x ^ ((Fp.modulus + 1) / 4)) *
-      (x ^ ((Fp.modulus + 1) / 4) * x ^ ((Fp.modulus + 1) / 4)) = x * x
-    rw [← pow_add, ← pow_add,
-        show ((Fp.modulus + 1) / 4 + (Fp.modulus + 1) / 4) +
-             ((Fp.modulus + 1) / 4 + (Fp.modulus + 1) / 4)
-          = (Fp.modulus - 1) + 2 by decide,
-        pow_add, ZMod.pow_card_sub_one_eq_one hx, one_mul, pow_two]
-
 /-- Because `p = 3 mod 4`, the candidate root squares to `a` or to `-a`. -/
 theorem sq_or_neg_sq (a : Fp) :
     let s := Fp.powNat a ((Fp.modulus + 1) / 4)
     s * s = a ∨ s * s = -a := by
-  dsimp only
-  have h := sq_or_neg_sq_zmod (Fp.toZMod a)
-  dsimp only at h
-  rw [← Fp.toZMod_powNat] at h
-  rcases h with h | h
-  · exact Or.inl (Fp.toZMod.injective (by rw [Fp.toZMod_mul]; exact h))
-  · exact Or.inr (Fp.toZMod.injective (by rw [Fp.toZMod_mul, Fp.toZMod_neg]; exact h))
-
-private theorem try_sub_sq_zmod {a0 a1 s twoInv r rInv : ZMod Fp.modulus}
-    (hs : s * s = a0 * a0 + a1 * a1)
-    (hr : r * r = -((a0 + s) * twoInv))
-    (hrInv : r * rInv = 1) :
-    (a1 * twoInv * rInv) * (a1 * twoInv * rInv) = (a0 - s) * twoInv := by
-  linear_combination
-    -rInv * rInv * ((a0 - s) * twoInv) * hr
-    - rInv * rInv * twoInv * twoInv * hs
-    + ((a0 - s) * twoInv) * (r * rInv + 1) * hrInv
-
-private theorem r_ne_zero_of_neg_try1 {a0 a1 s twoInv r : ZMod Fp.modulus}
-    (ha1 : a1 ≠ 0) (h2inv : (2 : ZMod Fp.modulus) * twoInv = 1)
-    (hs : s * s = a0 * a0 + a1 * a1)
-    (hr : r * r = -((a0 + s) * twoInv)) : r ≠ 0 := by
-  intro hr0
-  have h2ne : twoInv ≠ 0 := fun h0 => by
-    rw [h0, mul_zero] at h2inv; exact zero_ne_one h2inv
-  have hprod : (a1 * twoInv) * (a1 * twoInv) = 0 := by
-    linear_combination -((a0 - s) * twoInv) * hr - twoInv * twoInv * hs
-      + r * ((a0 - s) * twoInv) * hr0
-  exact mul_ne_zero ha1 h2ne (mul_self_eq_zero.mp hprod)
+  simpa only [Fp.sqrtCandidate, Fp.powLimbs_sqrtExponent] using Fp.sqrtCandidate_sq_or_neg a
 
 /-- Any `a : Fp2` whose `Fp` norm is a square in `Fp` has a square root returned by `Fp2.sqrt`. -/
 theorem sqrt_of_norm_sq {a : Fp2} {sn : Fp} (hsn : sn * sn = Fp2.norm a) :
-    ∃ c, Fp2.sqrt a = .ok c := by
-  have hsqrt : ∀ {x b : Fp}, b * b = x →
-      sqrtOrError x = .ok (Fp.powNat x ((Fp.modulus + 1) / 4)) :=
-    fun hb => (Fp.sqrtOrError_eq _).trans (Fp.sqrt_complete hb)
-  cases hz : BaseField.isZero a.c1
-  · have ha1 : Fp.toZMod a.c1 ≠ 0 := fun h0 => by
-      have h' : BaseField.isZero a.c1 = true := G1.isZero_iff.mpr h0
-      rw [hz] at h'
-      cases h'
-    have hsqrt_n := hsqrt hsn
-    refine Fp2.sqrt_isOk_of_c1_ne hz hsqrt_n ?_
-    -- The inverse of 2 becomes a variable, so the kernel never evaluates it.
-    generalize htwo : BaseField.inverse (BaseField.ofNat 2 : Fp) = twoInv
-    -- The prime `p` does not divide 2, since `p > 2`.
-    have h2ne : (2 : ZMod Fp.modulus) ≠ 0 := fun h =>
-      absurd (Nat.le_of_dvd two_pos ((ZMod.natCast_eq_zero_iff 2 _).mp (by exact_mod_cast h)))
-        (by simp [Fp.modulus])
-    have h2inv : (2 : ZMod Fp.modulus) * Fp.toZMod twoInv = 1 := by
-      subst htwo
-      rw [Fp.baseField_inverse, Fp.baseField_ofNat, Fp.toZMod_inverse, Fp.toZMod_ofNat,
-        Nat.cast_ofNat]
-      exact mul_inv_cancel₀ h2ne
-    set s := Fp.powNat (a.c0 * a.c0 + a.c1 * a.c1) ((Fp.modulus + 1) / 4)
-    have hs : s * s = a.c0 * a.c0 + a.c1 * a.c1 := Fp.sqrt_ok (Fp.sqrt_complete hsn)
-    have hsZ := congrArg Fp.toZMod hs
-    push_toZMod at hsZ
-    rcases sq_or_neg_sq ((a.c0 + s) * twoInv) with htry1 | hneg1
-    · exact Or.inl ⟨_, hsqrt htry1⟩
-    · set r := Fp.powNat ((a.c0 + s) * twoInv) ((Fp.modulus + 1) / 4)
-      have hrZ := congrArg Fp.toZMod hneg1
-      push_toZMod at hrZ
-      have hr_ne : Fp.toZMod r ≠ 0 := r_ne_zero_of_neg_try1 ha1 h2inv hsZ hrZ
-      have hrInv : Fp.toZMod r * Fp.toZMod r.inverse = 1 := by
-        rw [Fp.toZMod_inverse]
-        exact mul_inv_cancel₀ hr_ne
-      refine Or.inr ⟨_, hsqrt (b := a.c1 * twoInv * r.inverse) ?_⟩
-      apply Fp.toZMod.injective
-      push_toZMod
-      exact try_sub_sq_zmod hsZ hrZ hrInv
-  · refine Fp2.sqrt_isOk_of_c1_zero hz ?_
-    rcases sq_or_neg_sq a.c0 with hs1 | hs2
-    · exact Or.inl ⟨_, hsqrt hs1⟩
-    · exact Or.inr ⟨_, hsqrt hs2⟩
+    ∃ c, Fp2.sqrt a = .ok c :=
+  Fp2.sqrt_isOk_of_norm ⟨_, (Fp.sqrtOrError_eq _).trans (Fp.sqrt_complete hsn)⟩
 
 private def sqrtNegNormZ : Fp :=
   Fp.ofNat 0x186417302d5a65347a88b0f999ab2b504614aa5e2eebdeb1a014c40bceb7d2306c12a6d436befcf94d39c9db7b263cd4

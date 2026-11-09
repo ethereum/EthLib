@@ -48,37 +48,38 @@ section Sqrt
 
 variable {F : Type} [BaseField F]
 
-/-- Square root in `Fp2`. Returns `none` when `a` isn't a square. -/
+/-- A square root in `Fp2`, by the [complex method][source] of Adj and Rodríguez-Henríquez, §V.A.
+
+It relies on the base-field candidate, whose square is its input or the negation of its input.
+
+Over `Fp`, it fails with the error for a non-square exactly when the input has no root.
+
+Which of the two roots it returns is not fixed, since every caller chooses the sign afterwards.
+
+Write the input as `a0 + a1*i` with `i^2 = -1`, and let `s` be a root of the norm `a0^2 + a1^2`.
+
+The base-field candidate `c` of `(a0 + s)/2` squares to it or to its negation.
+
+In the first case `c + (a1/(2*c))*i` is a root, and in the second `a1/(2*c) + c*i` is one.
+
+So over `Fp`, a real input needs one exponentiation, and any other input at most two.
+
+[source]: https://eprint.iacr.org/2012/685
+-/
 def Fp2.sqrt (a : Fp2 F) : Except BlsError (Fp2 F) :=
-  -- Pure-imaginary input: handle the case `a1 = 0` directly.
+  -- Real input: the candidate of `a0` squares to `a0` or to `-a0`.
   if BaseField.isZero a.c1 then
-    match sqrtOrError a.c0 with
-    | .ok s => .ok ⟨s, BaseField.zero⟩
-    | .error _ =>
-      -- −a₀ might be a square.
-      --
-      -- If so, `sqrt(a) = 0 + sqrt(−a₀)·i`, because `(s·i)² = s²·(−1) = −s²`.
-      match sqrtOrError (-a.c0) with
-      | .ok s    => .ok ⟨BaseField.zero, s⟩
-      | .error _ => .error .notASquare
+    let c := BaseField.sqrtCandidate a.c0
+    if BaseField.beq (c * c) a.c0 then .ok ⟨c, BaseField.zero⟩
+    else .ok ⟨BaseField.zero, c⟩
   else
-    -- Norm = a₀² + a₁² in Fp; we need its sqrt to exist.
-    let n := a.c0 * a.c0 + a.c1 * a.c1
-    match sqrtOrError n with
+    match sqrtOrError (a.c0 * a.c0 + a.c1 * a.c1) with
     | .error _ => .error .notASquare
     | .ok s =>
-      let twoInv := BaseField.inverse (BaseField.ofNat 2 : F)
-      -- Try c₀² = (a₀ + s)/2, then fall back to (a₀ − s)/2.
-      let try1 := sqrtOrError ((a.c0 + s) * twoInv)
-      let c0Opt :=
-        match try1 with
-        | .ok _    => try1
-        | .error _ => sqrtOrError ((a.c0 - s) * twoInv)
-      match c0Opt with
-      | .error _ => .error .notASquare
-      | .ok c0Fp =>
-        let c1Fp := a.c1 * BaseField.inverse (BaseField.ofNat 2 * c0Fp)
-        .ok ⟨c0Fp, c1Fp⟩
+      let u := (a.c0 + s) * BaseField.inverse (BaseField.ofNat 2 : F)
+      let c := BaseField.sqrtCandidate u
+      let d := a.c1 * BaseField.inverse (BaseField.ofNat 2 * c)
+      if BaseField.beq (c * c) u then .ok ⟨c, d⟩ else .ok ⟨d, c⟩
 
 end Sqrt
 

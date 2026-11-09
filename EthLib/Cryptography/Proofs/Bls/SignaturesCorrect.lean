@@ -6,6 +6,7 @@ public import EthLib.Cryptography.Proofs.Bls.KeyValidate
 public import EthLib.Cryptography.Proofs.Bls.CofactorSubgroupLanding
 public import EthLib.Base.Proofs.MapM
 import EthLib.Cryptography.Proofs.Bls.PairingAte
+import EthLib.Base.Proofs.Forall2
 
 /-!
 # Proofs: honest BLS signatures verify
@@ -266,7 +267,7 @@ theorem fastAggregateVerify_of_represents {sks : List SecretKey}
     (congrArg (G1.Represents P) (zero_add _)).mp hPrep
   exact coreVerify_of_represents hPrep' hsum hQ hb hS
 
-/-- Fast verification of honest keys is verification under their scalar sum.
+/-- Fast verification of honest keys is verification under the key of their scalar sum.
 
 The list must be nonempty, but its scalar sum may be zero. -/
 theorem fastAggregateVerify_eq_verify (sks : List SecretKey) (hne : sks ≠ [])
@@ -319,6 +320,24 @@ theorem fastAggregateVerify_aggregate (sks : List SecretKey) (hne : sks ≠ [])
   · -- The sum of the signatures is the sum of the keys times the discrete logarithm of the hash.
     exact fastAggregateVerify_of_represents hne hsum hQ hb
       ((sum_map_mul sks (·.val) b) ▸ hSrep)
+
+/-- An aggregate of signatures on one message verifies under their signing keys.
+
+The keys must be nonempty and have a nonzero scalar sum. -/
+theorem fastAggregateVerify_aggregate_of_forall₂ {keys : List SecretKey}
+    {signatures : List BLSSignature} {message : ByteArray} {signature : BLSSignature}
+    (signed : List.Forall₂ (fun key sig => sign key message = .ok sig) keys signatures)
+    (nonempty : keys ≠ []) (sum : (keys.map (·.val)).sum ≠ 0)
+    (aggregated : aggregate (signatures.map sigBytes).toArray = .ok signature) :
+    fastAggregateVerify (keys.map pkBytes).toArray message (sigBytes signature) = true := by
+  obtain ⟨signatures', signs, signature', built, verifies⟩ :=
+    fastAggregateVerify_aggregate keys nonempty sum message
+  have sameSignatures : signatures' = signatures :=
+    Except.ok.inj (signs.symm.trans (Base.mapM_ok_of_forall₂ signed))
+  subst signatures'
+  have sameAggregate : signature' = signature :=
+    Except.ok.inj (built.symm.trans aggregated)
+  simpa only [sameAggregate] using verifies
 
 /-- An honest signature passes the fast aggregate verification under its one public key. -/
 theorem fastAggregateVerify_sign (sk : SecretKey) (msg : ByteArray)

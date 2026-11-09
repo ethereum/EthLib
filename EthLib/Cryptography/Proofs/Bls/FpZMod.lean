@@ -651,6 +651,10 @@ theorem one_isZero : Fp.one.isZero = false :=
 /-- The square root that the extensions read from `Fp` is its own square root, as an option. -/
 theorem baseField_sqrt (a : Fp) : BaseField.sqrt a = (Fp.sqrt a).toOption := rfl
 
+/-- The candidate root that the extensions read from `Fp` is its own candidate. -/
+@[simp] theorem baseField_sqrtCandidate (a : Fp) :
+    BaseField.sqrtCandidate a = Fp.sqrtCandidate a := rfl
+
 /-- The square root's power by limbs is the power by `(p + 1) / 4`. -/
 theorem powLimbs_sqrtExponent (a : Fp) :
     (Montgomery.powLimbs a sqrtExponent : Fp) = powNat a ((modulus + 1) / 4) := by
@@ -665,7 +669,7 @@ The square root of `Fp` fails only with the error for a non-square, so the two a
 theorem sqrtOrError_eq (a : Fp) : sqrtOrError a = Fp.sqrt a := by
   -- The test is left as a Boolean variable, so no proof step evaluates the power.
   have hs : Fp.sqrt a = .error .notASquare ∨ ∃ s, Fp.sqrt a = .ok s := by
-    unfold Fp.sqrt
+    unfold Fp.sqrt Fp.sqrtCandidate
     rw [powLimbs_sqrtExponent]
     generalize powNat a ((modulus + 1) / 4) = c
     by_cases h : (c * c).beq a = true

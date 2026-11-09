@@ -71,22 +71,21 @@ theorem proposerDraw_of_pectra {fork' : Base.Fork} (electra : .pectra ≤ fork)
 
 /-- A selection of one candidate that succeeds draws the proposer that the proposer search draws.
 
-The two walk the candidates in the same shuffled order, and draw on the same random bytes.
+The two walk the candidates in the same order, and draw on the same random bytes.
 
 Each candidate must name a validator, whose effective balance the selection reads. -/
 theorem proposerSearch_of_balanceWeightedSearch
     {validators : Array Validator} {indices : Array ValidatorIndex} {balances : Array Gwei}
-    {shuffled : Array UInt64} {seed : Bytes32} (nonempty : 0 < indices.size)
-    (positions : ∀ place < indices.size, (shuffled.getD place 0).toNat < indices.size)
+    {order : Nat → Nat} {seed : Bytes32} (nonempty : 0 < indices.size)
+    (positions : ∀ place < indices.size, order place < indices.size)
     (weights : ∀ k (lt : k < indices.size), ∃ validator,
       validators[indices[k].toNat]? = some validator ∧
         balances.getD k 0 = validator.effectiveBalance) :
     ∀ {bound : (#[] : Array ValidatorIndex).size ≤ 1} {i : Nat}
       {random : { random // random = drawHash fork seed i }} {result : Vector ValidatorIndex 1},
-      balanceWeightedSearch preset fork indices balances
-          (fun place => (shuffled.getD place 0).toNat)
-          seed 1 #[] bound i random = .ok result →
-        proposerSearch preset fork validators indices shuffled seed i = .ok result[0] := by
+      balanceWeightedSearch preset fork indices balances order seed 1 #[] bound i random =
+          .ok result →
+        proposerSearch preset fork validators indices order seed i = .ok result[0] := by
   intro bound i random result found
   obtain ⟨left, leftEq⟩ : ∃ left, left = 2 ^ 64 - i := ⟨_, rfl⟩
   induction left using Nat.strongRecOn generalizing i random with
@@ -102,8 +101,8 @@ theorem proposerSearch_of_balanceWeightedSearch
     simp only [bind, Except.bind] at found
     have inside := positions _ (Nat.mod_lt i nonempty)
     obtain ⟨validator, registered, weight⟩ := weights _ inside
-    have candidate : indices.getD (shuffled.getD (i % indices.size) 0).toNat 0 =
-        indices[(shuffled.getD (i % indices.size) 0).toNat] := by
+    have candidate : indices.getD (order (i % indices.size)) 0 =
+        indices[order (i % indices.size)] := by
       rw [Array.getD_eq_getD_getElem?, Array.getElem?_eq_getElem inside, Option.getD_some]
     rw [weight, carried] at found
     rw [proposerSearch, candidate, registered]
@@ -144,31 +143,17 @@ theorem computeProposerIndex_of_computeBalanceWeightedSelection
     split at computed
     · cases computed
     rename_i guard
-    have small : indices.size ≤ 2 ^ 40 := Nat.le_of_not_lt fun large => guard (by simp [large])
-    have sizeEq : indices.size.toUInt64.toNat = indices.size := by
-      rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt fits]
+    have small : ¬2 ^ 40 < indices.size := fun large => guard (by simp [large])
     have onList := congrArg (Array.toList <$> ·) read
     rw [Array.toList_mapM] at onList
     change _ = Except.ok balances.toList at onList
     have sizes : balances.size = indices.size := by
       simpa using mapM_ok_length onList
-    -- Both read the shuffled position of each draw.
-    have agree : ∀ place < indices.size,
-        Shuffle.shuffledIndexBy (Shuffle.pivots preset.SHUFFLE_ROUND_COUNT.toNat seed indices.size)
-            seed indices.size place =
-          ((Shuffle.shuffledPositions preset.SHUFFLE_ROUND_COUNT.toNat seed indices.size).getD
-            place 0).toNat := by
-      intro place lt
-      change Shuffle.shuffledIndex preset.SHUFFLE_ROUND_COUNT.toNat seed indices.size place = _
-      rw [Array.getD_eq_getD_getElem?, Shuffle.shuffledPositions_getElem lt, Option.getD_some,
-        UInt64.toNat_ofNat', Nat.mod_eq_of_lt (Nat.lt_trans (Shuffle.shuffledIndex_lt lt) fits)]
-    rw [balanceWeightedSearch_congr (Nat.pos_of_ne_zero empty) agree] at computed
+    -- Both read the shuffled position of each draw, from the same pivots.
     unfold computeProposerIndex
-    simp only [empty, fits, ↓reduceIte, computeShuffledPermutation_eq (by rw [sizeEq]; exact small),
-      sizeEq, Except.mapError, bind, Except.bind]
+    simp only [empty, fits, small, ↓reduceIte]
     refine proposerSearch_of_balanceWeightedSearch (Nat.pos_of_ne_zero empty)
-      (fun place lt => ?_) (fun k lt => ?_) computed
-    · exact Shuffle.shuffledPositions_getD_lt fits lt
+      (fun place lt => Shuffle.shuffledIndex_lt lt) (fun k lt => ?_) computed
     · have entry := mapM_ok_getElem onList k (by simpa using lt)
       simp only [Array.getElem_toList] at entry
       cases found : getValidator state indices[k] with

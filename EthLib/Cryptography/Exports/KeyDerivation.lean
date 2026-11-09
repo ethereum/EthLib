@@ -1,14 +1,16 @@
 module
 
 public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Cryptography.Exports.Bls
 public import EthLib.Cryptography.Bls.KeyDerivation
 public import EthLib.Cryptography.Bls.KeyPath
-public import EthLib.Cryptography.Exports.Bls
 
 /-!
 # Exports: validator key derivation
 
 ERC-2333 keys cross the boundary as 32 big-endian bytes, as BLS secret keys do.
+
+The derivations fail with the BLS error codes, and the path parser with codes from 101.
 
 ERC-2334 paths cross as strings, and child indices as checked 32-bit integers.
 -/
@@ -19,22 +21,22 @@ namespace EthLib.Cryptography.Bls.Exports
 
 open EthLib.Exports (Result PyValue pyExport)
 
-/-- The derivation or path error, with its detailed reason. -/
+/-- The error of a derivation from a path: the path text, or a step of the derivation. -/
 inductive KeyDerivationError where
   | bls (error : BlsError)
   | path (error : KeyPath.KeyPathError)
 
-/-- Keep BLS codes and start path errors at 101. -/
+/-- The code of the wrapped error: a BLS code below 101, or a path code from 101. -/
 def KeyDerivationError.code : KeyDerivationError → UInt32
   | .bls error => error.code
-  | .path error => 100 + error.code
+  | .path error => error.code
 
 /-- The detailed message of the failing step. -/
 def KeyDerivationError.message : KeyDerivationError → String
   | .bls error => error.message
   | .path error => error.message
 
-/-- Pass the error kind and its message to Python. -/
+/-- Pass the code and the message of a derivation error to Python. -/
 def runKeyDerivation {α : Type} (act : Except KeyDerivationError α) : Result α :=
   act.mapError fun error => (error.code, error.message)
 
