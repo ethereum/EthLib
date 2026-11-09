@@ -554,7 +554,7 @@ An address with real code refuses every authorization, so the authorizations kee
 
 It needs one hypothesis: no authorization sets a code whose hash is the code hash of the address.
 
-When the state stores each code under its own hash, only a collision of Keccak-256 breaks it.
+If each code is stored under its own hash, only a collision of Keccak-256 breaks this hypothesis.
 
 A code that an authorization sets is stored under its hash, over any code with that hash. -/
 

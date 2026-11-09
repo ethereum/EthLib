@@ -1296,19 +1296,19 @@ From Hegotá a run fails as not yet specified, so there is no gas used to state.
 `state_payAuthorization` proves that a payment keeps the state, the accesses and the refund.
 `sameOutside_delegate` proves that a delegation changes no account, storage or transient storage but the authority's.
 `getCode_delegate_of_ne` proves that a delegation keeps the code under every hash but the hash of the code it sets.
-`getCode_delegate_self` proves that a delegation stores the code it sets under its hash, unless that is the hash of the empty code.
+`getCode_delegate_self` proves that a delegation stores the code it sets under its hash, when that hash is not the hash of the empty code.
 
 Real code is neither empty nor a delegation indicator.
 `authorityAccepts_of_code` proves that an authority with real code refuses every authorization.
 `foldlM_applyAuthorization_keeps` proves that the authorizations keep the account, storage, transient storage and code of an address with real code.
-It assumes that no authorization sets a code whose Keccak-256 hash is the code hash of that address.
+It assumes that no authorization of the list carries a code to set whose Keccak-256 hash is the code hash of that address.
 When the state stores each code under its own hash, only a collision of Keccak-256 breaks this assumption.
 `meter_foldlM_applyAuthorization_of_lt_glamsterdam` proves that up to BPO5 the authorizations keep the meter.
 
 The two theorems below hold for any recovery of an authority.
 Both assume that the state holds the code of every account.
 `foldlM_applyAuthorization_isOk_of_lt_glamsterdam` proves that up to BPO5 the authorizations succeed over any meter.
-`foldlM_applyAuthorization_isOk` proves that the authorizations succeed, and from Glamsterdam take at most 227790 execution gas each.
+`foldlM_applyAuthorization_isOk` proves that the authorizations succeed, and from Glamsterdam take at most 227790 execution gas times their number.
 From Glamsterdam, it assumes that the meter holds that much gas for every authorization.
 From Glamsterdam, it also assumes that the state holds the code of every account before the transaction.
 From Glamsterdam, it also assumes that every charge within the gas left succeeds and takes at most its amount.
