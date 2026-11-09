@@ -4,6 +4,7 @@ public import EthLib.Consensus.Proofs.HonestAggregation
 public import EthLib.Consensus.Transition.Block
 import EthLib.Cryptography.Proofs.Bls.AggregatePerm
 import EthLib.Consensus.Proofs.Gossip.Attestation
+import EthLib.Base.Proofs.Forall2
 import Mathlib.Data.List.Sort
 
 /-!
@@ -11,9 +12,13 @@ import Mathlib.Data.List.Sort
 
 The indexed attestation sorts its validator indices before reading their keys.
 
-Distinct honest signers give the same keys, with the same multiplicities, in that order.
+Read in that order, the keys are a permutation of the signers' keys in the order of their votes.
 
-Their aggregate key must not be zero, and the number of signers must fit the indexed check.
+Fast aggregate verification does not depend on that order.
+
+Their secret keys must not sum to zero.
+
+From Gloas, the number of signers must also fit the bound of the check.
 
 The aggregate topic runs this same indexed attestation check.
 -/
@@ -27,18 +32,6 @@ open Networking.Gossip Networking.Gossip.ValidationResult
 open scoped EthLib.Cryptography.Bls.Fr
 
 variable {preset : Preset} {fork : Fork}
-
-/-- Each member on the left of a pointwise relation has a related member on the right. -/
-private theorem exists_related_of_mem {α β : Type} {R : α → β → Prop}
-    {xs : List α} {ys : List β} (related : List.Forall₂ R xs ys)
-    {x : α} (member : x ∈ xs) : ∃ y ∈ ys, R x y := by
-  induction related with
-  | nil => cases member
-  | @cons head other xs ys headRelated tailRelated ih =>
-    rcases List.mem_cons.mp member with rfl | member
-    · exact ⟨other, List.mem_cons_self, headRelated⟩
-    · obtain ⟨y, member, related⟩ := ih member
-      exact ⟨y, List.mem_cons_of_mem _ member, related⟩
 
 /-- A signature of attestation data fixes a domain and a signing root for that data. -/
 private theorem attestation_signing_root {config : Config} {state : BeaconState preset fork}
@@ -70,7 +63,7 @@ private theorem attestation_sign_eq {config : Config} {state : BeaconState prese
   subst rooted'
   exact mapError_ok_iff.mp signed
 
-/-- Sorted attesters read the same public keys as a permutation of their honest signers. -/
+/-- Attesters that permute distinct honest signers give an indexed form that passes its check. -/
 private theorem indexed_attestation_of_aggregate {config : Config}
     {state : BeaconState preset fork} {data : AttestationData}
     {attestation : Attestation preset fork} {indices signers : List ValidatorIndex}
@@ -145,9 +138,9 @@ private theorem indexed_attestation_of_aggregate {config : Config}
 
 /-- Before Electra, an aggregate of distinct honest attesters passes the indexed signature check.
 
-The registry must hold each signer's public key, and their keys must not sum to zero.
+The registry must hold each signer's public key, and their secret keys must not sum to zero.
 
-The attestation's size bound also bounds its distinct signers. -/
+The check bounds the number of signers only from Gloas, so no bound is assumed. -/
 theorem isValidIndexedAttestation_constructAggregate {config : Config}
     {state : BeaconState preset fork} {before : fork < .pectra} {data : AttestationData}
     {signers : List ValidatorIndex} {key : ValidatorIndex → Signatures.SecretKey}
@@ -169,14 +162,14 @@ theorem isValidIndexedAttestation_constructAggregate {config : Config}
     rw [members]
     constructor
     · rintro ⟨attestation, member, same, attesters, attestersOf, attesting⟩
-      obtain ⟨signer, signerMember, made⟩ := exists_related_of_mem honest.flip
+      obtain ⟨signer, signerMember, made⟩ := exists_mem_of_forall₂ honest.flip
         (List.mem_filter.mpr ⟨member, by simp [same]⟩)
       rw [getAttestingIndices_constructAttestation made, Except.ok.injEq] at attestersOf
       subst attestersOf
       have same : index = signer := by simpa using attesting
       exact same.symm ▸ signerMember
     · intro member
-      obtain ⟨attestation, attestationMember, made⟩ := exists_related_of_mem honest member
+      obtain ⟨attestation, attestationMember, made⟩ := exists_mem_of_forall₂ honest member
       obtain ⟨rawMember, same⟩ := List.mem_filter.mp attestationMember
       exact ⟨attestation, rawMember, by simpa using same,
         [index], getAttestingIndices_constructAttestation made, by simp⟩
@@ -187,7 +180,7 @@ theorem isValidIndexedAttestation_constructAggregate {config : Config}
     intro empty
     simp [empty] at sum
   obtain ⟨signer, signerMember⟩ := List.exists_mem_of_ne_nil signers nonempty
-  obtain ⟨attestation, _, made⟩ := exists_related_of_mem honest signerMember
+  obtain ⟨attestation, _, made⟩ := exists_mem_of_forall₂ honest signerMember
   obtain ⟨_, _, _, _, _, signedOne⟩ := constructAttestation_spec made
   obtain ⟨domain, root, domained, rooted⟩ := attestation_signing_root signedOne
   have signed : List.Forall₂ (fun secret signature =>
@@ -220,9 +213,9 @@ private theorem single_attestation_spec {config : Config} {state : BeaconState p
 
 /-- From Electra, an aggregate of distinct honest single attesters passes its indexed check.
 
-The registry must hold each signer's public key, and their keys must not sum to zero.
+The registry must hold each signer's public key, and their secret keys must not sum to zero.
 
-The number of signers must fit the check's bound, including from Gloas. -/
+From Gloas, the number of signers must fit the bound of the check. -/
 theorem isValidIndexedAttestation_constructAggregateOfSingleAttestations {config : Config}
     {state : BeaconState preset fork} (electra : .pectra ≤ fork) {data : AttestationData}
     {committeeIndex : CommitteeIndex} {signers : List ValidatorIndex}
@@ -250,12 +243,12 @@ theorem isValidIndexedAttestation_constructAggregateOfSingleAttestations {config
     rw [members]
     constructor
     · rintro ⟨single, member, sameData, sameCommittee, attester⟩
-      obtain ⟨signer, signerMember, made⟩ := exists_related_of_mem honest.flip
+      obtain ⟨signer, signerMember, made⟩ := exists_mem_of_forall₂ honest.flip
         (List.mem_filter.mpr ⟨member, by simp [sameData, sameCommittee]⟩)
       have same : index = signer := attester.symm.trans (single_attestation_spec made).1
       exact same.symm ▸ signerMember
     · intro member
-      obtain ⟨single, singleMember, made⟩ := exists_related_of_mem honest member
+      obtain ⟨single, singleMember, made⟩ := exists_mem_of_forall₂ honest member
       obtain ⟨sameIndex, sameData, sameCommittee, _⟩ := single_attestation_spec made
       exact ⟨single, (List.mem_filter.mp singleMember).1, sameData, sameCommittee, sameIndex⟩
   have permuted : indices.Perm signers :=
@@ -265,7 +258,7 @@ theorem isValidIndexedAttestation_constructAggregateOfSingleAttestations {config
     intro empty
     simp [empty] at sum
   obtain ⟨signer, signerMember⟩ := List.exists_mem_of_ne_nil signers nonempty
-  obtain ⟨single, _, made⟩ := exists_related_of_mem honest signerMember
+  obtain ⟨single, _, made⟩ := exists_mem_of_forall₂ honest signerMember
   obtain ⟨_, _, _, signedOne⟩ := single_attestation_spec made
   obtain ⟨domain, root, domained, rooted⟩ := attestation_signing_root signedOne
   have signed : List.Forall₂ (fun secret signature =>
@@ -280,9 +273,13 @@ theorem isValidIndexedAttestation_constructAggregateOfSingleAttestations {config
   simpa only [List.map_map, Function.comp_def, Signatures.sigBytes, Base.packBytes]
     using aggregateSignature
 
-/-- Before Electra, the topic's committee check accepts exactly when its other checks pass.
+/-- The topic's committee check accepts an honest aggregate exactly when its other checks pass.
 
-The aggregate signature check needs no additional hypothesis. -/
+This holds before Electra.
+
+The honest construction passes the aggregate signature check, so that check is not a condition.
+
+The head state must be the state of the construction, and the other computations must succeed. -/
 theorem validateAggregateInCommittee_constructAggregate_eq_accept {config : Config}
     {state : BeaconState preset fork} {before : fork < .pectra} {data : AttestationData}
     {signers : List ValidatorIndex} {key : ValidatorIndex → Signatures.SecretKey}
@@ -338,9 +335,13 @@ theorem validateAggregateInCommittee_constructAggregate_eq_accept {config : Conf
   simpa using validateAggregateInCommittee_eq_accept rootOf head clock committeeOf
     participantsOf found selectedOf signedOf indexedOf signature ancestryOf
 
-/-- From Electra, the topic's committee check accepts exactly when its other checks pass.
+/-- The topic's committee check accepts an honest aggregate exactly when its other checks pass.
 
-The aggregate signature check needs no additional hypothesis. -/
+This holds from Electra.
+
+The honest construction passes the aggregate signature check, so that check is not a condition.
+
+The head state must be the state of the construction, and the other computations must succeed. -/
 theorem validateAggregateInCommittee_constructAggregateOfSingleAttestations_eq_accept
     {config : Config} {state : BeaconState preset fork} (electra : .pectra ≤ fork)
     {data : AttestationData} {committeeIndex : CommitteeIndex} {signers : List ValidatorIndex}

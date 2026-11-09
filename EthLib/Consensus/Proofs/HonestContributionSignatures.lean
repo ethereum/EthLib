@@ -136,7 +136,9 @@ private theorem contributionEntries_verify
 
 /-- A contribution of honest messages passes the signature check of its topic.
 
-Each matching message signs the root under its registry key.
+Each message on the block root at the state's slot signs the signing root.
+
+It signs with the secret key behind the registered public key of its validator.
 
 The selected secret keys, counted once per set seat, must not sum to zero.
 
@@ -254,7 +256,9 @@ private theorem any_of_nonzero_selected (pubkeys : List BLSPubkey) (bits : List 
 
 The topic accepts it exactly when the remaining checks pass.
 
-The earlier clock, state, committee and aggregator-signature computations are kept explicit. -/
+The clock, head state, committee and aggregator signature computations must succeed.
+
+The subnet range and the nonempty participation checks pass with no further hypothesis. -/
 theorem validateContributionAndProof_eq_accept_of_construct
     {config : Config} {state : BeaconState preset fork} {committee : SyncCommittee preset}
     {blockRoot : Root} {subcommitteeIndex : UInt64} {messages : List SyncCommitteeMessage}
