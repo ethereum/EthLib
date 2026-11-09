@@ -221,6 +221,36 @@
 #define DOC_scrypt \
   "Expand, mix and compress the password, RFC 7914 §6, with the output length in bytes."
 
+#define DOC_x25519 \
+  "X25519 scalar multiplication of two 32-byte inputs, RFC 7748 §5."
+
+#define DOC_x25519_public_key \
+  "X25519 public key at Montgomery coordinate 9, RFC 7748 §6.1."
+
+#define DOC_chacha20_quarter_round \
+  "The four-word quarter round, RFC 8439 §2.1."
+
+#define DOC_chacha20_quarter_round_state \
+  "A quarter round on a 64-byte state at four indices, RFC 8439 §2.2."
+
+#define DOC_chacha20_block \
+  "The 64-byte ChaCha20 block at a 32-bit counter, RFC 8439 §2.3."
+
+#define DOC_chacha20_crypt \
+  "ChaCha20 encryption or decryption without counter wrap, RFC 8439 §2.4."
+
+#define DOC_poly1305 \
+  "Poly1305 with a 32-byte one-time key, RFC 8439 §2.5."
+
+#define DOC_poly1305_key \
+  "Derive a Poly1305 key from ChaCha20 block zero, RFC 8439 §2.6."
+
+#define DOC_chacha20_poly1305_encrypt \
+  "Encrypt and authenticate, returning ciphertext and a separate tag, RFC 8439 §2.8."
+
+#define DOC_chacha20_poly1305_decrypt \
+  "Authenticate before returning plaintext, RFC 8439 §2.8."
+
 #define DOC_secp256k1_verify \
   "Whether `(r, s)` is a valid signature on `hash` under the public key `q`, by SEC 1 v2 §4.1.4."
 

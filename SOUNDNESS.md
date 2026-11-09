@@ -546,6 +546,13 @@ Under them, the counters of the text differ from each other and from `J_0`, the 
 `encrypt_shortTag` and `decrypt_shortTag` prove that both functions reject the 64-bit and 32-bit tags, which SP 800-38D Appendix C restricts.
 The Python tests check seven test cases of the NIST CAVP file `gcmtestvectors.zip`, one of them a forged tag that decryption rejects.
 
+### X25519 and ChaCha20-Poly1305
+
+The ChaCha20-Poly1305 proofs cover output length, counter exhaustion and rejection of a wrong tag (`Proofs/ChaCha20Poly1305.lean`).
+No theorem relates either primitive to an independent model of its RFC.
+The Python tests compare the bindings with the RFC 7748 and RFC 8439 vectors.
+The million-iteration X25519 vector requires `ETHLIB_SLOW_VECTORS=1`.
+
 ### RIPEMD-160
 
 `compress_toBitVec` (`Proofs/Hash/Ripemd160.lean`) proves that the compression of one block, read as 32-bit vectors, is the compression of a model of the authors' pseudo-code.
@@ -2014,12 +2021,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 309 operations and 44 size constants.
-The Python extension calls 309 of the operations and 44 of the constants.
+Lean exports 319 operations and 49 size constants.
+The Python extension calls 319 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-8919 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (351), `bls.c` (426), `chain.c` (45), `consensus.c` (1652), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (45), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1270), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (119), `wrappers.h` (579), `xmss.c` (134).
+9048 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (351), `bls.c` (426), `chain.c` (45), `consensus.c` (1652), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (45), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1294), `noise_primitives.c` (93), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (119), `wrappers.h` (591), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
