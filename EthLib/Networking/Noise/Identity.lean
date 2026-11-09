@@ -29,15 +29,15 @@ structure Payload where
   signature : ByteArray := .empty
   extensions : Option ByteArray := none
 
-/-- The signed domain and the actual Noise static coordinate, noise-libp2p "Handshake Payload". -/
+/-- The domain prefix and the Noise static public key, noise-libp2p "Static Key Authentication". -/
 def signedStatic (staticKey : Key) : ByteArray :=
   "noise-libp2p-static-key:".toUTF8 ++ EthLib.Base.packBytes staticKey
 
-/-- A length-delimited field after the payload length has been bounded. -/
+/-- A length-delimited protobuf field: its tag byte, varint length and value. -/
 def payloadField (tag : UInt8) (value : ByteArray) : ByteArray :=
   ⟨#[tag]⟩ ++ ⟨(Encoding.Varint.encode value.size.toUInt64).toArray⟩ ++ value
 
-/-- Serialize the payload's bytes fields and opaque extension message, noise-libp2p schema. -/
+/-- Serialize the payload, noise-libp2p "The libp2p Handshake Payload". -/
 def encodePayload (p : Payload) : Except NoiseError ByteArray := do
   if p.publicKey.size + p.signature.size +
       (p.extensions.map ByteArray.size).getD 0 > 65535 then throw .messageTooLong
@@ -117,7 +117,11 @@ where
           else skipPayloadScalar wire rest
         go fuel rest payload
 
-/-- Sign the Noise static key with the Ethereum identity key, noise-libp2p payload rules. -/
+/-- Sign the Noise static public key with the secp256k1 identity secret.
+
+The rule is noise-libp2p "Static Key Authentication".
+
+The secret is secret, and this function makes no constant-time claim. -/
 def makePayload (identitySecret staticKey : Key) (extensions : Option ByteArray) :
     Except NoiseError ByteArray := do
   let publicKey ← (Libp2p.publicKey identitySecret).mapError fun _ => .identity
@@ -151,7 +155,9 @@ structure Libp2pState where
   handshake : HandshakeState
   remoteMessage : Option (HandshakeState × ByteArray)
 
-/-- Initialize the libp2p suite with its empty prologue. -/
+/-- Initialize the libp2p suite.
+
+noise-libp2p sets no prologue, so this specification uses the empty one. -/
 def initializeLibp2p (initiator : Bool) (staticKey ephemeralKey : Key) : Libp2pState :=
   ⟨initializeHandshake initiator staticKey ephemeralKey .empty, none⟩
 

@@ -582,8 +582,13 @@ The million-iteration X25519 vector requires `ETHLIB_SLOW_VECTORS=1`.
 ### Noise XX and libp2p identities
 
 `complete_authenticates` (`Networking/Proofs/Noise.lean`) ties successful completion to an incoming message that the XX reader accepts.
-The reported identity signature verifies against the static key read from that message, and the reported peer ID derives from the signing public key.
+The reported public key, signature and extensions are the fields of the payload decrypted from that message.
+The signature verifies against the static key read from that message, and the reported peer ID derives from the signing public key.
+`readLibp2p_authenticates` states the same check for the read of message 2 or 3.
 This is an acceptance theorem, not a proof of protocol security, confidentiality or constant-time execution.
+It holds for any state that a caller passes in, so it does not relate the identity to the transport keys or the handshake hash of that state.
+Only the libp2p completion carries the guarantee; the raw transport split of an XX state checks no identity.
+The Python tests compare the raw XX handshake with a published test vector.
 
 The bindings take explicit keys and state tuples.
 Callers must use fresh ephemeral keys and use the returned state after each successful cipher call.

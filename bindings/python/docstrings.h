@@ -297,7 +297,7 @@
   "Read the next raw XX message and return its payload and updated state, Noise §5.3."
 
 #define DOC_noise_transport \
-  "Split a completed raw XX state into send and receive ciphers and its hash, Noise §5.3."
+  "Split a completed raw XX state into its two ciphers and the handshake hash, Noise §5.2."
 
 #define DOC_noise_cipher_encrypt \
   "Encrypt with a cipher state and associated data, returning its next state, Noise §5.1."
@@ -315,10 +315,10 @@
   "Initialize libp2p XX with its empty prologue and explicit X25519 private keys."
 
 #define DOC_noise_libp2p_write \
-  "Write the next libp2p message with a signed identity payload, hiding remote extensions."
+  "Write the next libp2p message with a signed identity payload."
 
 #define DOC_noise_libp2p_read \
-  "Read the next libp2p message, authenticating its actual remote static key."
+  "Read the next libp2p message and authenticate its remote static key."
 
 #define DOC_noise_libp2p_complete \
   "Return the authenticated peer and transport keys only after completion."

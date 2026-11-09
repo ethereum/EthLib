@@ -27,6 +27,17 @@ structure Binding where
   /-- The class of `ethlib.errors` that the method raises, if it can fail. -/
   errorClass : Option String
 
+/-- The Python type of a Noise cipher state: its key, if set, and its next nonce. -/
+def noiseCipherType : String := "tuple[bytes | None, int]"
+
+/-- The Python type of a Noise XX handshake state, in the field order of its export. -/
+def noiseStateType : String :=
+  "tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int]"
+
+/-- The Python type of a libp2p Noise state: the XX state and the saved remote message. -/
+def noiseLibp2pType : String :=
+  "tuple[" ++ noiseStateType ++ ", tuple[" ++ noiseStateType ++ ", bytes] | None]"
+
 /-- Every method of the Python extension, in the order of its method table. -/
 def bindings : List Binding := [
   ⟨"eth_aggregate_pubkeys", `EthLib.Cryptography.Bls.Signatures.ethAggregatePubkeys,
@@ -313,37 +324,46 @@ def bindings : List Binding := [
     "(text: str) -> bytes",
     [`EthLib.Networking.Enr.EnrError], some "EnrError"⟩,
   ⟨"noise_initialize", `EthLib.Networking.Noise.Exports.initializeExport,
-    "(initiator: bool, static_key: bytes, ephemeral_key: bytes, prologue: bytes) -> tuple",
+    "(initiator: bool, static_key: bytes, ephemeral_key: bytes, prologue: bytes) -> " ++
+      noiseStateType,
     [], some "NoiseError"⟩,
   ⟨"noise_write_message", `EthLib.Networking.Noise.Exports.writeExport,
-    "(state: tuple, payload: bytes) -> tuple[tuple, bytes]",
+    "(state: " ++ noiseStateType ++ ", payload: bytes) -> tuple[" ++ noiseStateType ++ ", bytes]",
     [`EthLib.Networking.Noise.NoiseError], some "NoiseError"⟩,
   ⟨"noise_read_message", `EthLib.Networking.Noise.Exports.readExport,
-    "(state: tuple, message: bytes) -> tuple[tuple, bytes]",
+    "(state: " ++ noiseStateType ++ ", message: bytes) -> tuple[" ++ noiseStateType ++ ", bytes]",
     [`EthLib.Networking.Noise.NoiseError], some "NoiseError"⟩,
   ⟨"noise_transport", `EthLib.Networking.Noise.Exports.transportExport,
-    "(state: tuple) -> tuple",
+    "(state: " ++ noiseStateType ++ ") -> " ++
+      "tuple[" ++ noiseCipherType ++ ", " ++ noiseCipherType ++ ", bytes]",
     [`EthLib.Networking.Noise.NoiseError], some "NoiseError"⟩,
   ⟨"noise_cipher_encrypt", `EthLib.Networking.Noise.Exports.cipherEncryptExport,
-    "(state: tuple, aad: bytes, plaintext: bytes) -> tuple[tuple, bytes]",
+    "(state: " ++ noiseCipherType ++ ", aad: bytes, plaintext: bytes) -> " ++
+      "tuple[" ++ noiseCipherType ++ ", bytes]",
     [`EthLib.Networking.Noise.NoiseError], some "NoiseError"⟩,
   ⟨"noise_cipher_decrypt", `EthLib.Networking.Noise.Exports.cipherDecryptExport,
-    "(state: tuple, aad: bytes, ciphertext: bytes) -> tuple[tuple, bytes]",
+    "(state: " ++ noiseCipherType ++ ", aad: bytes, ciphertext: bytes) -> " ++
+      "tuple[" ++ noiseCipherType ++ ", bytes]",
     [`EthLib.Networking.Noise.NoiseError], some "NoiseError"⟩,
   ⟨"noise_frame", `EthLib.Networking.Noise.Exports.frameExport,
     "(message: bytes) -> bytes", [`EthLib.Networking.Noise.NoiseError], some "NoiseError"⟩,
   ⟨"noise_unframe", `EthLib.Networking.Noise.Exports.unframeExport,
     "(frame: bytes) -> bytes", [`EthLib.Networking.Noise.NoiseError], some "NoiseError"⟩,
   ⟨"noise_libp2p_initialize", `EthLib.Networking.Noise.Exports.initializeLibp2pExport,
-    "(initiator: bool, static_key: bytes, ephemeral_key: bytes) -> tuple", [], some "NoiseError"⟩,
+    "(initiator: bool, static_key: bytes, ephemeral_key: bytes) -> " ++ noiseLibp2pType,
+    [], some "NoiseError"⟩,
   ⟨"noise_libp2p_write", `EthLib.Networking.Noise.Exports.writeLibp2pExport,
-    "(state: tuple, identity_secret: bytes, extensions: bytes | None) -> tuple[tuple, bytes]",
+    "(state: " ++ noiseLibp2pType ++ ", identity_secret: bytes, extensions: bytes | None) -> " ++
+      "tuple[" ++ noiseLibp2pType ++ ", bytes]",
     [`EthLib.Networking.Noise.NoiseError], some "NoiseError"⟩,
   ⟨"noise_libp2p_read", `EthLib.Networking.Noise.Exports.readLibp2pExport,
-    "(state: tuple, message: bytes) -> tuple",
+    "(state: " ++ noiseLibp2pType ++ ", message: bytes) -> " ++ noiseLibp2pType,
     [`EthLib.Networking.Noise.NoiseError], some "NoiseError"⟩,
   ⟨"noise_libp2p_complete", `EthLib.Networking.Noise.Exports.completeExport,
-    "(state: tuple) -> tuple", [`EthLib.Networking.Noise.NoiseError], some "NoiseError"⟩,
+    "(state: " ++ noiseLibp2pType ++ ") -> tuple[bytes, " ++
+      "tuple[bytes, bytes, bytes, bytes | None], " ++
+      noiseCipherType ++ ", " ++ noiseCipherType ++ ", bytes]",
+    [`EthLib.Networking.Noise.NoiseError], some "NoiseError"⟩,
   ⟨"enr_seq", `EthLib.Networking.Enr.Exports.seqExport,
     "(record: bytes) -> int",
     [`EthLib.Networking.Enr.EnrError], some "EnrError"⟩,
