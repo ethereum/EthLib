@@ -6,6 +6,7 @@ public import EthLib.Consensus.DataAvailability.Custody
 public import EthLib.Consensus.ForkSchedule
 public import EthLib.Consensus.Time
 public import EthLib.Cryptography.Kzg.Recovery
+public import EthLib.Serialization.Ssz.Type.Bounds
 
 /-!
 # `Consensus.DataAvailability.Column`
@@ -23,6 +24,8 @@ At Fulu, a column sidecar carries one column, the commitments of the block and i
 A Merkle branch shows that the list of commitments is in the body that the header names.
 
 Gloas moves the commitments into the bid of the builder, so a sidecar names its block by root.
+
+From Gloas, the largest size of a serialized sidecar follows from the largest blob limit.
 
 At Fulu, a node may also send part of a column: the cells that a bitmap marks, with their proofs.
 
@@ -177,6 +180,20 @@ def verifyDataColumnSidecarKzgProofs {preset : Preset} {fork : Fork} (setup : Tr
   verifyCellKzgProofBatch setup (sidecar.commitments bidCommitments).data
     (Array.replicate sidecar.column.data.size sidecar.index.toNat) sidecar.column.data
     sidecar.kzgProofs.data
+
+/-- From Gloas: the largest size of a serialized data column sidecar.
+
+It is the size of a sidecar with a cell and a proof for each blob of the largest blob limit.
+
+Only the cells and proofs vary in size, so it adds their bytes to the fewest bytes of a sidecar.
+
+Heze keeps the sidecar of Gloas, so the size reads the layout of Gloas.
+
+It is the largest 64-bit integer when the size does not fit. -/
+def computeMaxDataColumnSidecarSize (preset : Preset) (config : Config) : UInt64 :=
+  UInt64.ofNat (min ((SszType.desc (DataColumnSidecar preset .glamsterdam)).minSize +
+    config.largestBlobLimit.toNat * (Constants.BYTES_PER_CELL + Constants.BYTES_PER_PROOF))
+    UINT64_MAX.toNat)
 
 /-- Whether a branch climbs from a list of blob commitments to the root of a block body.
 

@@ -331,6 +331,27 @@ theorem mem_of_findKeyCollision (hash : ByteArray → Hash32) :
     · obtain ⟨hfirst, hsecond⟩ := mem_of_findKeyCollision hash rest h
       exact ⟨List.mem_cons_of_mem key hfirst, List.mem_cons_of_mem key hsecond⟩
 
+/-- When the key search finds no pair, no two different keys in the list share a hash. -/
+theorem hash_ne_of_findKeyCollision (hash : ByteArray → Hash32) :
+    (keys : List ByteArray) → findKeyCollision hash keys = none →
+      ∀ x ∈ keys, ∀ y ∈ keys, x ≠ y → hash x ≠ hash y
+  | [], _, _, hmem, _, _, _ => by cases hmem
+  | first :: rest, h, x, hx, y, hy, hne => by
+    unfold findKeyCollision at h
+    split at h
+    · cases h
+    · rename_i hfind
+      have hno : ∀ z ∈ rest, z ≠ first → hash z ≠ hash first := by
+        intro z hz hzne hzhash
+        exact absurd (List.find?_eq_none.mp hfind z hz) (by simp [hzne, hzhash])
+      rcases List.mem_cons.mp hx with rfl | hx'
+      · rcases List.mem_cons.mp hy with rfl | hy'
+        · exact absurd rfl hne
+        · exact fun heq => hno y hy' hne.symm heq.symm
+      · rcases List.mem_cons.mp hy with rfl | hy'
+        · exact hno x hx' hne
+        · exact hash_ne_of_findKeyCollision hash rest h x hx' y hy' hne
+
 /-- Two different keys of a trie with one path.
 
 Only a secured trie can have them, as two keys with one hash. -/
@@ -519,5 +540,82 @@ theorem root_secured_perm (hash : ByteArray → Hash32) {data data' : List (Byte
     have hbytes := nodup_map_of_injective hashBytes_injective hhashes
     simpa [keyPath_eq, List.map_map, Function.comp_def] using
       nodup_map_of_injective (fun _ _ h => bytesToNibbleList_injective h) hbytes
+
+/-! ## Two secured tries with one root -/
+
+/-- A collision in the proofs of a key in two secured tries, or among the keys, if any.
+
+First, the search checks the proofs of the key in both tries.
+
+When the two entry lists differ, the search then checks that key and all keys of both tries. -/
+def findSecuredCollision (hash : ByteArray → Hash32)
+    (entries₁ entries₂ : List (ByteArray × ByteArray)) (key : ByteArray) :
+    Option (ByteArray × ByteArray) :=
+  (findCollision hash ⟨true, entries₁⟩ ⟨true, entries₂⟩ key).or
+    (if entries₁ = entries₂ then none
+     else findKeyCollision hash (key :: entries₁.map Prod.fst ++ entries₂.map Prod.fst))
+
+/-- Every pair that the secured-trie search returns is a collision. -/
+theorem findSecuredCollision_valid (hash : ByteArray → Hash32)
+    {entries₁ entries₂ : List (ByteArray × ByteArray)} {key : ByteArray}
+    {pair : ByteArray × ByteArray}
+    (h : findSecuredCollision hash entries₁ entries₂ key = some pair) :
+    IsCollision hash pair := by
+  unfold findSecuredCollision at h
+  rcases Option.or_eq_some_iff.mp h with hcol | ⟨-, hkey⟩
+  · exact findCollision_valid hash hcol
+  · split at hkey
+    · cases hkey
+    · exact findKeyCollision_valid hash _ hkey
+
+/-- A secured trie compared with itself has no collision. -/
+theorem findSecuredCollision_self (hash : ByteArray → Hash32)
+    (entries : List (ByteArray × ByteArray)) (key : ByteArray) :
+    findSecuredCollision hash entries entries key = none := by
+  simp [findSecuredCollision, findCollision_self]
+
+/-- Binding of a secured root: two secured tries with one root give a key one value.
+
+Otherwise the secured-trie search returns a collision.
+
+The keys of each trie must be distinct. -/
+theorem root_binding_secured (hash : ByteArray → Hash32)
+    {entries₁ entries₂ : List (ByteArray × ByteArray)} {root' : Hash32}
+    (hroot₁ : root hash ⟨true, entries₁⟩ = .ok root')
+    (hroot₂ : root hash ⟨true, entries₂⟩ = .ok root')
+    (hkeys₁ : (entries₁.map Prod.fst).Nodup) (hkeys₂ : (entries₂.map Prod.fst).Nodup)
+    (key : ByteArray) :
+    (entries₁.find? fun entry => sameBytes entry.1 key).map Prod.snd =
+        (entries₂.find? fun entry => sameBytes entry.1 key).map Prod.snd ∨
+      ∃ pair, findSecuredCollision hash entries₁ entries₂ key = some pair ∧
+        IsCollision hash pair := by
+  cases hsearch : findSecuredCollision hash entries₁ entries₂ key with
+  | some pair => exact .inr ⟨pair, rfl, findSecuredCollision_valid hash hsearch⟩
+  | none =>
+  refine .inl ?_
+  obtain ⟨hcol, hkeys⟩ := Option.or_eq_none_iff.mp hsearch
+  by_cases hsame : entries₁ = entries₂
+  · rw [hsame]
+  · simp only [hsame, ↓reduceIte] at hkeys
+    have hdisj := hash_ne_of_findKeyCollision hash _ hkeys
+    -- No two keys of either trie share a hash, so neither trie has two keys with one path.
+    have hpath₁ : findPathCollision hash ⟨true, entries₁⟩ = none := by
+      simp only [findPathCollision, ↓reduceIte]
+      exact findKeyCollision_of_nodup hash _ (List.pairwise_map.mpr
+        (List.Pairwise.imp_of_mem (fun hx hy hne => hdisj _ (by simp [hx]) _ (by simp [hy]) hne)
+          hkeys₁))
+    have hpath₂ : findPathCollision hash ⟨true, entries₂⟩ = none := by
+      simp only [findPathCollision, ↓reduceIte]
+      exact findKeyCollision_of_nodup hash _ (List.pairwise_map.mpr
+        (List.Pairwise.imp_of_mem (fun hx hy hne => hdisj _ (by simp [hx]) _ (by simp [hy]) hne)
+          hkeys₂))
+    rw [← valueAt_secured hash fun k hk hne => hdisj k (by simp [hk]) key (by simp) hne,
+      ← valueAt_secured hash fun k hk hne => hdisj k (by simp [hk]) key (by simp) hne]
+    rcases root_binding hash (trie₁ := ⟨true, entries₁⟩) (trie₂ := ⟨true, entries₂⟩) rfl
+        hroot₁ hroot₂ hkeys₁ hkeys₂ key with hval | ⟨_, hf, -⟩ | ⟨_, hf, -⟩ | ⟨_, hf, -⟩
+    · exact hval
+    · simp [hcol] at hf
+    · simp [hpath₁] at hf
+    · simp [hpath₂] at hf
 
 end EthLib.Execution.Trie

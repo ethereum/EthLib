@@ -6,6 +6,7 @@ public import EthLib.Cryptography.Proofs.Bls.KeyValidate
 public import EthLib.Cryptography.Proofs.Bls.CofactorSubgroupLanding
 public import EthLib.Base.Proofs.MapM
 import EthLib.Cryptography.Proofs.Bls.PairingAte
+import EthLib.Base.Proofs.Forall2
 
 /-!
 # Proofs: honest BLS signatures verify
@@ -266,6 +267,32 @@ theorem fastAggregateVerify_of_represents {sks : List SecretKey}
     (congrArg (G1.Represents P) (zero_add _)).mp hPrep
   exact coreVerify_of_represents hPrep' hsum hQ hb hS
 
+/-- Fast verification of honest keys is verification under the key of their scalar sum.
+
+The list must be nonempty, but its scalar sum may be zero. -/
+theorem fastAggregateVerify_eq_verify (sks : List SecretKey) (hne : sks ≠ [])
+    (msg sig : ByteArray) :
+    fastAggregateVerify (sks.map pkBytes).toArray msg sig =
+      verify (G1.compress (G1.mul G1.generator (sks.map (·.val)).sum)) msg sig := by
+  obtain ⟨P, hP, hPrep⟩ := forIn_pkBytes sks G1.represents_zero
+  unfold fastAggregateVerify
+  rw [ite_eq_right (by cases sks with
+    | nil => exact absurd rfl hne
+    | cons _ _ => exact Bool.false_ne_true)]
+  simp only [List.forIn_toArray]
+  rw [Id.run_bind]
+  erw [hP]
+  have hPrep' : G1.Represents P (sks.map (·.val)).sum :=
+    (congrArg (G1.Represents P) (zero_add _)).mp hPrep
+  obtain ⟨hi, ha⟩ := G1.toAffine_congr hPrep'.1
+    (G1.valid_mul G1.valid_generator _) hPrep'.2
+  change verify (G1.compress P) msg sig = _
+  have compressed : G1.compress P =
+      G1.compress (G1.mul G1.generator (sks.map (·.val)).sum) := by
+    unfold G1.compress
+    rw [hi, ha]
+  rw [compressed]
+
 /-- Honest signatures on one message aggregate to a signature that verifies under the key sum.
 
 The secret keys must not sum to zero.
@@ -293,6 +320,24 @@ theorem fastAggregateVerify_aggregate (sks : List SecretKey) (hne : sks ≠ [])
   · -- The sum of the signatures is the sum of the keys times the discrete logarithm of the hash.
     exact fastAggregateVerify_of_represents hne hsum hQ hb
       ((sum_map_mul sks (·.val) b) ▸ hSrep)
+
+/-- An aggregate of signatures on one message verifies under their signing keys.
+
+The keys must be nonempty and have a nonzero scalar sum. -/
+theorem fastAggregateVerify_aggregate_of_forall₂ {keys : List SecretKey}
+    {signatures : List BLSSignature} {message : ByteArray} {signature : BLSSignature}
+    (signed : List.Forall₂ (fun key sig => sign key message = .ok sig) keys signatures)
+    (nonempty : keys ≠ []) (sum : (keys.map (·.val)).sum ≠ 0)
+    (aggregated : aggregate (signatures.map sigBytes).toArray = .ok signature) :
+    fastAggregateVerify (keys.map pkBytes).toArray message (sigBytes signature) = true := by
+  obtain ⟨signatures', signs, signature', built, verifies⟩ :=
+    fastAggregateVerify_aggregate keys nonempty sum message
+  have sameSignatures : signatures' = signatures :=
+    Except.ok.inj (signs.symm.trans (Base.mapM_ok_of_forall₂ signed))
+  subst signatures'
+  have sameAggregate : signature' = signature :=
+    Except.ok.inj (built.symm.trans aggregated)
+  simpa only [sameAggregate] using verifies
 
 /-- An honest signature passes the fast aggregate verification under its one public key. -/
 theorem fastAggregateVerify_sign (sk : SecretKey) (msg : ByteArray)

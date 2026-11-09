@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.DataAvailability.Column
 public import EthLib.Consensus.Proofs.Containers.Block
 public import EthLib.Consensus.Proofs.DataAvailability.Blob
+public import EthLib.Consensus.Proofs.ForkSchedule
 public import EthLib.Serialization.Proofs.Ssz.Typed.ForkKind
 public import EthLib.Serialization.Proofs.Ssz.Typed.Since
 public import EthLib.Cryptography.Proofs.Kzg.RecoveryRoundTrip
@@ -14,6 +15,8 @@ public import EthLib.Cryptography.Proofs.Kzg.PeerDasColumnGames
 Each container has distinct field names, and converts to and from its fields.
 
 So its bytes decode back to it.
+
+The largest size of a sidecar covers the blob limit at every epoch.
 
 Two sidecars whose branches verify for one body root carry one root of commitments.
 
@@ -247,6 +250,39 @@ theorem kzgCommitmentsInclusionProofDepth_eq {preset : Preset} {fork : Fork}
     · rcases named with rfl | rfl <;> rfl
   rcases named with rfl | rfl <;> cases fork <;> first
     | exact absurd fulu (by decide) | exact absurd beforeGloas (by decide) | decide +kernel
+
+open Cryptography.Kzg.Constants in
+/-- The largest size of a sidecar, as a natural number, held to the largest 64-bit integer.
+
+It adds a cell and a proof for each blob of the largest blob limit to the fewest bytes. -/
+theorem toNat_computeMaxDataColumnSidecarSize {preset : Preset} {config : Config} :
+    (computeMaxDataColumnSidecarSize preset config).toNat =
+      min ((SszType.desc (DataColumnSidecar preset .glamsterdam)).minSize +
+        config.largestBlobLimit.toNat * (BYTES_PER_CELL + BYTES_PER_PROOF)) UINT64_MAX.toNat := by
+  have max : UINT64_MAX.toNat < 2 ^ 64 := by decide
+  unfold computeMaxDataColumnSidecarSize
+  -- The size is at most the largest 64-bit integer, so it converts back without loss.
+  exact UInt64.toNat_ofNat_of_lt' (Nat.lt_of_le_of_lt (Nat.min_le_right _ _) max)
+
+open Cryptography.Kzg.Constants in
+/-- The largest size of a sidecar covers the blob limit at every epoch.
+
+The fewest bytes of a sidecar, with a cell and a proof per blob up to that limit, are within it.
+
+This holds when that sum fits in 64 bits. -/
+theorem size_le_computeMaxDataColumnSidecarSize {preset : Preset} {config : Config}
+    (epoch : Epoch) {blobs : Nat}
+    (within : blobs ≤ (config.getBlobParameters epoch).maxBlobsPerBlock.toNat)
+    (fits : (SszType.desc (DataColumnSidecar preset .glamsterdam)).minSize +
+      blobs * (BYTES_PER_CELL + BYTES_PER_PROOF) ≤ UINT64_MAX.toNat) :
+    (SszType.desc (DataColumnSidecar preset .glamsterdam)).minSize +
+        blobs * (BYTES_PER_CELL + BYTES_PER_PROOF) ≤
+      (computeMaxDataColumnSidecarSize preset config).toNat := by
+  have largest := UInt64.le_iff_toNat_le.mp
+    (Config.getBlobParameters_le_largestBlobLimit (config := config) epoch)
+  have more := Nat.mul_le_mul_right (BYTES_PER_CELL + BYTES_PER_PROOF) (within.trans largest)
+  rw [toNat_computeMaxDataColumnSidecarSize]
+  exact Nat.le_min.mpr ⟨Nat.add_le_add_left more _, fits⟩
 
 section Inclusion
 

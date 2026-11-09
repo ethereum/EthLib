@@ -64,6 +64,7 @@ size_t SCRYPT_BLOCK_SIZE;
 
 PyObject* KZG_ERROR;
 PyObject* BLS_ERROR;
+PyObject* KEY_DERIVATION_ERROR;
 PyObject* XMSS_ERROR;
 PyObject* SPHINCS_ERROR;
 PyObject* SECP256K1_ERROR;
@@ -627,6 +628,11 @@ static PyMethodDef methods[] = {
   {"eth_aggregate_pubkeys", py_eth_aggregate_pubkeys, METH_VARARGS, DOC_eth_aggregate_pubkeys},
   {"eth_fast_aggregate_verify", py_eth_fast_aggregate_verify, METH_VARARGS, DOC_eth_fast_aggregate_verify},
   {"bls_key_gen", py_bls_key_gen, METH_VARARGS, DOC_bls_key_gen},
+  {"bls_derive_master_sk", py_bls_derive_master_sk, METH_VARARGS, DOC_bls_derive_master_sk},
+  {"bls_derive_child_sk", py_bls_derive_child_sk, METH_VARARGS, DOC_bls_derive_child_sk},
+  {"bls_derive_path", py_bls_derive_path, METH_VARARGS, DOC_bls_derive_path},
+  {"bls_withdrawal_path", py_bls_withdrawal_path, METH_VARARGS, DOC_bls_withdrawal_path},
+  {"bls_signing_path", py_bls_signing_path, METH_VARARGS, DOC_bls_signing_path},
   {"bls_sign", py_bls_sign, METH_VARARGS, DOC_bls_sign},
   {"bls_verify", py_bls_verify, METH_VARARGS, DOC_bls_verify},
   {"bls_aggregate", py_bls_aggregate, METH_VARARGS, DOC_bls_aggregate},
@@ -1058,6 +1064,7 @@ PyInit__native(void) {
     if (!errors) return NULL;
     KZG_ERROR = PyObject_GetAttrString(errors, "KzgError");
     BLS_ERROR = PyObject_GetAttrString(errors, "BlsError");
+    KEY_DERIVATION_ERROR = PyObject_GetAttrString(errors, "KeyDerivationError");
     XMSS_ERROR = PyObject_GetAttrString(errors, "XmssError");
     SPHINCS_ERROR = PyObject_GetAttrString(errors, "SphincsError");
     SECP256K1_ERROR = PyObject_GetAttrString(errors, "Secp256k1Error");

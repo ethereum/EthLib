@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
+public import EthLib.Base.Proofs.Forall2
 public import EthLib.Consensus.DataAvailability.Blob
 public import EthLib.Consensus.HonestProposer
 public import EthLib.Consensus.Proofs.Containers.Requests
@@ -880,16 +881,6 @@ theorem eq_of_requestSlot {requests other : ExecutionRequests preset fork}
     exact (builders gloas).1
   · funext gloas
     exact (builders gloas).2
-
-/-- Each member of the left list of a pairing has a partner in the right list. -/
-theorem exists_mem_of_forall₂ {α β : Type} {R : α → β → Prop} :
-    ∀ {xs : List α} {ys : List β}, List.Forall₂ R xs ys → ∀ {x}, x ∈ xs → ∃ y ∈ ys, R x y
-  | _, _, .nil, _, mem => by simp at mem
-  | _, _, .cons head tail, _, mem => by
-    rcases List.mem_cons.mp mem with rfl | mem
-    · exact ⟨_, List.mem_cons_self, head⟩
-    · obtain ⟨y, mem', related⟩ := exists_mem_of_forall₂ tail mem
-      exact ⟨y, List.mem_cons_of_mem _ mem', related⟩
 
 /-- A pairing that names each left member by its partner maps the right list onto the left. -/
 theorem map_eq_of_forall₂ {α β : Type} {f : β → α} :

@@ -1312,7 +1312,17 @@ Later entries replace earlier values of the same key, and an empty value removes
 This construction is the path of Python `trie.root`, through `Execution/Exports/Trie.lean`.
 `root_of_rootExport` (`Execution/Exports/Proofs/Trie.lean`) proves that the export returns the root of this trie, built from its decoded pairs.
 `rootExport_of_root` proves the converse, so the two variants apply to the output of Python `trie.root`.
-The state and storage roots in `Execution/State/Root.lean` build tries directly, and `stateEntries_nodup` and `storageEntries_nodup` supply their distinct keys.
+The state and storage roots in `Execution/State/Root.lean` build tries directly, and `stateEntries_nodup` and `storageEntries_nodup` (`Execution/Proofs/State/Root.lean`) supply their distinct keys.
+`root_binding_secured` (`Execution/Proofs/Trie/Binding.lean`) applies `root_binding` to two secured tries with distinct keys and one root.
+The two tries give every key one value, or `findSecuredCollision` returns a collision in the proofs of the key or among the keys.
+`storageRoot_binding` proves that two storages with one root give every key the same word, `0` when unset.
+Otherwise `findStorageCollision` returns a collision.
+`stateRoot_binding` applies `root_binding_secured` to the state trie and then `storageRoot_binding` at each address with an account.
+Two states with one state root give every address the same account, and at every address with an account every key the same word, or `findStateCollision` returns a collision.
+Storage at an address without an account is outside `stateEntries`, and code is committed only through `codeHash`.
+So the state root binds no storage at an address without an account, does not separate a key set to `0` from an unset key, and binds nothing in the code map beyond each account's `codeHash`.
+The storage and state searches are proved to return only collisions, and none for an input compared with itself.
+No theorem bounds the probability of finding two storages or two states with one root that differ.
 The indexed roots in `Execution/Blocks/Roots.lean` also build tries directly, with the RLP encoding of each index as its key.
 `indexedEntries_nodup` (`Execution/Proofs/Blocks/Roots.lean`) supplies their distinct keys, since the RLP decoder reads each index back from its encoding.
 Applied to the plain tries of two lists with these distinct keys, `root_binding` shows that two lists with one root give every key one value.
@@ -1429,7 +1439,7 @@ It checks each payload timeliness assignment and the upcoming proposal slots aga
 Before Electra the vote is an attestation with one bit, and from Electra it is a single attestation.
 An aggregator joins the votes of one committee on the same data into one attestation.
 From Altair, a sync aggregator joins the messages on one block root into the contribution of its subcommittee.
-The theorems are in `Consensus/Proofs/HonestAggregation.lean`.
+The construction theorems are in `Consensus/Proofs/HonestAggregation.lean`.
 Each of them assumes only that the construction succeeds, except the theorem on signatures and the two that attestation data and the root of its target have a value.
 
 An attester first builds attestation data from the head block and the state at its slot.
@@ -1456,11 +1466,21 @@ The bit of a seat is set when its key is the key of the validator of a message o
 That theorem assumes that the secret keys do not sum to zero.
 It verifies under the keys in the order of the attestations.
 
-No theorem shows that an aggregate passes the signature check of an indexed attestation.
-That check reads the keys in the sorted order of the attesters.
-No theorem covers the signature of a contribution.
-The guide aggregates the signature of every vote.
-So an aggregate verifies only when no two votes share a seat, a condition that no theorem states.
+`isValidIndexedAttestation_constructAggregate` and `isValidIndexedAttestation_constructAggregateOfSingleAttestations` (`Consensus/Proofs/HonestAggregateSignatures.lean`) prove that successfully constructed honest aggregates have indexed forms that pass the signature check of an indexed attestation.
+The selected signers must have distinct validator indices, use their registered keys and have a nonzero sum of secret keys.
+From Gloas, their number must also fit the check's bound.
+The proof derives the permutation from those signers to the sorted indices that the receiver reads.
+The aggregate adds the signature of every vote, so a validator that votes twice counts twice in the signature but once in the keys.
+The theorems avoid this case by requiring distinct signers.
+
+`isValidContributionSignature_constructSyncCommitteeContribution` (`Consensus/Proofs/HonestContributionSignatures.lean`) proves that a contribution of honest matching messages passes its signature check.
+The domain and signing root must compute successfully, and the messages must sign that root under their registered keys.
+The sum of the secret keys for the selected seats must be nonzero.
+A key counts once for each of its selected seats, and each seat takes the first matching message, so duplicate messages add nothing.
+The gossip corollaries characterize acceptance of the aggregate's committee check and the contribution topic by their remaining conditions.
+These include the checks of time, membership and the aggregator's signatures.
+The corollaries assume that the head state of the receiver is the state of the construction.
+
 The contribution takes the sync committee as an argument.
 The caller passes the committee of the next slot, which gossip and the next block check.
 The Python suite checks each vote and each aggregate against values worked out in the test from the guide, with py_ecc for the signatures.
@@ -1790,8 +1810,12 @@ Each definition is named and shaped after its source, so that a reader can compa
 The KZG and BLS vectors in `tests/cryptography/` match consensus-specs `v1.7.0-alpha.12` and `ethereum/bls12-381-tests` `v0.1.2` byte for byte, and EthLib produced none of them.
 Finally, the consistency theorems on the constants, listed under BLS12-381, catch a wrong digit.
 
-One definition also does what its source does not.
+Two definitions also do what their sources do not.
 The PeerDAS custody search fails after `2^16` node IDs in the export, where its source loops on, and no theorem bounds the steps it needs.
+BLS key generation fails after 16 attempts, a bound that EthLib chose.
+[The IRTF BLS draft, version 4, §2.3](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04#section-2.3) and `HKDF_mod_r` of [ERC-2333](https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2333.md#hkdf_mod_r) loop until the key is not zero.
+The ERC-2333 master and child derivations reuse key generation, so they share the bound.
+An attempt fails only when its 48-byte output is a multiple of `r`.
 
 Some official vectors expect more than a source says.
 The transaction tests of ethereum/tests reject 43 results whose gas limit is `2^64`, or whose gas limit times gas price exceeds `2^256 - 1`.
@@ -1817,6 +1841,7 @@ This matters where secret data is handled.
 XMSS and leanSPHINCS `keyGen` and `sign` handle secret data.
 The Python bindings expose all four, as `key_gen` and `sign` in each module, which take the secret seed.
 BLS key generation, signing and the proof of possession handle secret data, and the Python bindings expose all three.
+The bindings `derive_master_sk`, `derive_child_sk` and `derive_path` handle secret seeds or keys.
 HMAC-SHA-256, HKDF and the Concatenation KDF take a secret key, input keying material or shared secret.
 The Python bindings expose them as `hmac_sha256`, `hkdf_extract`, `hkdf` and `concat_kdf`.
 PBKDF2 and scrypt take a secret password, and the bindings expose them as `pbkdf2` and `scrypt`.
@@ -1934,12 +1959,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 304 operations and 44 size constants.
-The Python extension calls 304 of the operations and 44 of the constants.
+Lean exports 309 operations and 44 size constants.
+The Python extension calls 309 of the operations and 44 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-8858 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (351), `bls.c` (378), `chain.c` (45), `consensus.c` (1652), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (45), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1263), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (119), `wrappers.h` (573), `xmss.c` (134).
+8919 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (351), `bls.c` (426), `chain.c` (45), `consensus.c` (1652), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (45), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1270), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (119), `wrappers.h` (579), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

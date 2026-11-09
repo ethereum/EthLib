@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.InclusionListCommittee
+public import EthLib.Consensus.Proofs.PayloadTimeliness
 public import EthLib.Consensus.Proofs.Time
 public import EthLib.Cryptography.Proofs.Bls.SignaturesCorrect
 
@@ -31,19 +32,20 @@ open Base Cryptography.Bls Serialization.Ssz
 variable {preset : Preset} {fork : Fork} {state : BeaconState preset fork} {slot : Slot}
 
 /-- A validator is among the members of a slot exactly when a beacon committee of it holds it. -/
-theorem mem_getSlotCommitteeMembers {members : Array ValidatorIndex}
-    (found : getSlotCommitteeMembers state slot = .ok members) {validator : ValidatorIndex} :
+theorem mem_slotCommitteeMembers {members : Array ValidatorIndex}
+    (found : slotCommitteeMembers state slot = .ok members) {validator : ValidatorIndex} :
     validator ∈ members ↔
       ∃ i < (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat,
         ∃ committee, getBeaconCommittee state slot i.toUInt64 = .ok committee ∧
           validator ∈ committee := by
-  simp only [getSlotCommitteeMembers, bind, Except.bind] at found
+  rw [slotCommitteeMembers_eq, foldlM_append_eq_flatten_mapM] at found
+  simp only [bind, Except.bind] at found
   split at found
   · cases found
   rename_i committees mapped
   simp only [pure, Except.pure, Except.ok.injEq] at found
   subst found
-  simp only [Array.mem_flatten, List.mem_toArray]
+  simp only [Array.empty_append, Array.mem_flatten, List.mem_toArray]
   constructor
   · rintro ⟨committee, member, holds⟩
     obtain ⟨i, inRange, made⟩ := mapM_ok_mem mapped committee member
@@ -62,7 +64,7 @@ theorem mem_getSlotCommitteeMembers {members : Array ValidatorIndex}
 The slot then has at least one member. -/
 theorem getInclusionListCommittee_seat {members : Array ValidatorIndex}
     {committee : InclusionListCommittee preset}
-    (found : getSlotCommitteeMembers state slot = .ok members)
+    (found : slotCommitteeMembers state slot = .ok members)
     (made : getInclusionListCommittee state slot = .ok committee) :
     ∃ nonempty : 0 < members.size, ∀ i : Fin preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat,
       committee[i] = members[i.val % members.size]'(Nat.mod_lt _ nonempty) := by
@@ -76,7 +78,7 @@ theorem getInclusionListCommittee_seat {members : Array ValidatorIndex}
 
 /-- The committee fails exactly when the beacon committees of the slot hold no validator. -/
 theorem getInclusionListCommittee_eq_error_iff {members : Array ValidatorIndex}
-    (found : getSlotCommitteeMembers state slot = .ok members) :
+    (found : slotCommitteeMembers state slot = .ok members) :
     getInclusionListCommittee state slot = .error .noCandidates ↔ members.size = 0 := by
   simp only [getInclusionListCommittee, found, bind, Except.bind]
   split
@@ -93,13 +95,13 @@ theorem getInclusionListCommittee_mem {committee : InclusionListCommittee preset
     (i : Fin preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat) :
     ∃ j < (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat,
       ∃ beacon, getBeaconCommittee state slot j.toUInt64 = .ok beacon ∧ committee[i] ∈ beacon := by
-  cases found : getSlotCommitteeMembers state slot with
+  cases found : slotCommitteeMembers state slot with
   | error e =>
     simp [getInclusionListCommittee, found, bind, Except.bind] at made
   | ok members =>
     obtain ⟨nonempty, seat⟩ := getInclusionListCommittee_seat found made
     rw [seat i]
-    exact (mem_getSlotCommitteeMembers found).mp (Array.getElem_mem _)
+    exact (mem_slotCommitteeMembers found).mp (Array.getElem_mem _)
 
 /-- A list signed with the secret key of its member passes the signature check.
 
