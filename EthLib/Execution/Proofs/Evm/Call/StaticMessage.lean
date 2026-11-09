@@ -19,6 +19,8 @@ Each touched address goes from no account to the empty account.
 
 The only change left is the deletion of accounts that were empty before.
 
+The storage of each deleted account reads zero.
+
 From Paris, [EIP-7523][e7523] allows no empty account, so a call drops the touch.
 
 Every address then stays as it was, up to the records of reads.
@@ -445,8 +447,11 @@ theorem staticTouchResult_genericCall {evm : Evm fork Meter} {message : Message 
       ⟨StateKept.refl _, rfl, rfl, rfl, rfl⟩
     exact pre.trans_touchStep (staticTouchStep_resumeCall hres kept parent hrec)
 
-/-- A call in a static frame that has paid gives a step that keeps state, or a static touch child.
--/
+/-- A paid call in a static frame gives a static step, or a static touch child.
+
+The frame must hold code at its own account.
+
+The callee must hold code at the account called when it has code. -/
 theorem staticTouchResult_finishCall {kind : CallKind} {call : CallOperands} {callee : Callee}
     {subCall newAccount expandBy : Nat} {evm : Evm fork Meter} {result : StepResult fork Meter}
     (static : evm.message.isStatic = true) (hv : kind.sendsValue = false → call.value = 0)
@@ -604,7 +609,11 @@ variable {step : Evm fork Meter → Except EvmError (StepResult fork Meter)}
     result.Decreases evm}
   {bound : Nat} {runChild : MessageRunner fork Meter bound}
 
-/-- A whole run of a static frame is a static touch step. -/
+/-- A whole run of a static frame is a static touch step.
+
+The step must give static steps and static touch children from a static frame.
+
+The runner must end each static child with a state that differs from its caller's by touches. -/
 theorem staticTouchStep_runFrame
     (next : ∀ {evm after : Evm fork Meter}, StaticFrame evm → step evm = .ok (.next after) →
       StaticStep evm after)
@@ -653,7 +662,7 @@ end TouchLoop
 
 It touches only when it succeeds before Paris.
 
-It is the induction on the gas of the message that the theorem below states for one message. -/
+It is the induction on the gas of the message behind the theorems below. -/
 theorem processMessage_touchesOnly_static [LawfulGasMeter Meter] :
     ∀ (n : Nat) (message : Message fork) (state : TransactionState) (substate : Substate)
       (meter : Meter) (held : GasMeter.gasHeld meter ≤ message.gas),
@@ -896,7 +905,7 @@ theorem destroyTouchedEmptyAccounts_at (hfork : .spuriousDragon ≤ fork)
 
 /-- From Byzantium, deleting touched empty accounts after a static message only deletes them.
 
-The bound comes from [EIP-214](https://eips.ethereum.org/EIPS/eip-214#specification).
+STATICCALL comes from [EIP-214](https://eips.ethereum.org/EIPS/eip-214#specification), at Byzantium.
 
 The deletion is that of [EIP-161](https://eips.ethereum.org/EIPS/eip-161#specification).
 
