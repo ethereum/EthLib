@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Pairing
 public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Group
 public import EthLib.Cryptography.Proofs.Bls.KeyValidate
+import EthLib.Cryptography.Proofs.Bls.PairingAte
 import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.G1
 import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.G2
 
@@ -16,10 +17,6 @@ Then `prod_i e(P_i, Q_i) = e(g1, g2)^(sum_i a_i * b_i)`, and `e(g1, g2)` has pri
 So the product is 1 exactly when that sum is 0 in `Fr`.
 
 Every point that the check decodes lies in its subgroup, so it has such a discrete logarithm.
-
-The theorems take the pairing law as a hypothesis.
-
-EthLib does not prove that law for its Miller loop.
 -/
 
 @[expose] public section
@@ -27,7 +24,7 @@ EthLib does not prove that law for its Miller loop.
 namespace EthLib.Execution.Evm.Precompiles.Bls12381
 
 open EthLib.Base (bind_ok_iff mapM_cons_ok mapM_ok_mem mapM_ok_getElem mapM_exists_ok)
-open EthLib.Cryptography.Bls (Fr G1 G2 PairingLaws pairingCheck)
+open EthLib.Cryptography.Bls (Fr G1 G2 pairingLaws pairingCheck)
 open scoped EthLib.Cryptography.Bls.Fr
 
 /-! ## Discrete logarithms of decoded points -/
@@ -87,14 +84,14 @@ theorem exists_represents_of_decodePairs {rawPairs : List (List UInt8 × List UI
 
 /-! ## The output of the pairing check -/
 
-/-- Under the pairing law, the pairing check returns the word 1 exactly when `sum_i a_i * b_i = 0`.
+/-- The pairing check returns the word 1 exactly when `sum_i a_i * b_i = 0`.
 
 Here `(P_i, Q_i)` are the decoded pairs.
 
 `P_i` represents `a_i • g1`, and `Q_i` represents `b_i • g2`.
 
 Such `a` and `b` exist for every successful call. -/
-theorem bls12Pairing_eq_one_iff (hlaws : PairingLaws) {data : ByteArray} {gas : Nat}
+theorem bls12Pairing_eq_one_iff {data : ByteArray} {gas : Nat}
     {out : ByteArray} (h : bls12Pairing data gas = .ok out)
     {rawPairs : List (List UInt8 × List UInt8)} {pairs : List (G1 × G2)}
     (hraw : (chunks LENGTH_PER_PAIRING_PAIR (data.size / LENGTH_PER_PAIRING_PAIR)
@@ -112,7 +109,7 @@ theorem bls12Pairing_eq_one_iff (hlaws : PairingLaws) {data : ByteArray} {gas : 
   cases hraw'
   rw [hdec] at hdec'
   cases hdec'
-  rw [← hlaws.pairingCheck_iff pairs a b ha hb hrep]
+  rw [← pairingLaws.pairingCheck_iff pairs a b ha hb hrep]
   constructor
   · intro hout
     have hword : boolWord (pairingCheck pairs.toArray) = boolWord true := by
@@ -173,12 +170,12 @@ private theorem unpad_encodePairs :
       unpadG1_padG1 (length_g1ToBytes pair.1), unpadG2_padG2 (length_g2ToBytes pair.2)]
     rfl
 
-/-- Under the pairing law, the check of encoded pairs returns the word of `sum_i a_i * b_i = 0`.
+/-- The check of encoded pairs returns the word of `sum_i a_i * b_i = 0`.
 
 Here `P_i` represents `a_i • g1` and `Q_i` represents `b_i • g2`.
 
 There must be at least one pair, and gas for all of them. -/
-theorem bls12Pairing_encodePairs (hlaws : PairingLaws) {pairs : List (G1 × G2)}
+theorem bls12Pairing_encodePairs {pairs : List (G1 × G2)}
     (hne : pairs ≠ []) {a b : List Fr} (ha : a.length = pairs.length)
     (hb : b.length = pairs.length)
     (hrep : ∀ i (hi : i < pairs.length),
@@ -248,7 +245,7 @@ theorem bls12Pairing_encodePairs (hlaws : PairingLaws) {pairs : List (G1 × G2)}
       ⟨valid_of_bytesToG2_eq_ok h2, hqt.trans hQ.2⟩⟩
   have hcheck : pairingCheck decoded.toArray = decide ((List.zipWith (· * ·) a b).sum = 0) := by
     rw [Bool.eq_iff_iff, decide_eq_true_iff]
-    exact hlaws.pairingCheck_iff decoded a b ha' hb' hrep'
+    exact pairingLaws.pairingCheck_iff decoded a b ha' hb' hrep'
   refine (bls12Pairing_eq_ok_iff data gas _).mpr ⟨?_, hk ▸ hgas, _, decoded, ?_, hdec, ?_⟩
   · rw [hsize, LENGTH_PER_PAIRING_PAIR]
     omega
@@ -258,14 +255,14 @@ theorem bls12Pairing_encodePairs (hlaws : PairingLaws) {pairs : List (G1 × G2)}
 
 /-! ## Both outputs are reached -/
 
-/-- Under the pairing law, the check of the generators `(g1, g2)` returns the word 0.
+/-- The check of the generators `(g1, g2)` returns the word 0.
 
 The product is `e(g1, g2)`, which is not 1. -/
-theorem bls12Pairing_generators (hlaws : PairingLaws) {gas : Nat}
+theorem bls12Pairing_generators {gas : Nat}
     (hgas : bls12PairingGas 1 ≤ gas) :
     bls12Pairing ⟨(padG1 (g1ToBytes G1.generator) ++ padG2 (g2ToBytes G2.generator)).toArray⟩ gas =
       .ok ⟨(boolWord false).toArray⟩ := by
-  have h := bls12Pairing_encodePairs hlaws (pairs := [(G1.generator, G2.generator)])
+  have h := bls12Pairing_encodePairs (pairs := [(G1.generator, G2.generator)])
     (List.cons_ne_nil _ _) (a := [1]) (b := [1]) rfl rfl (fun i hi => by
       match i, hi with
       | 0, _ => exact ⟨G1.represents_generator, G2.represents_generator⟩) hgas
@@ -274,15 +271,15 @@ theorem bls12Pairing_generators (hlaws : PairingLaws) {gas : Nat}
     decide_eq_false hsum] at h
   exact h
 
-/-- Under the pairing law, the check of `(g1, g2)` and `(-g1, g2)` returns the word 1.
+/-- The check of `(g1, g2)` and `(-g1, g2)` returns the word 1.
 
 The product is `e(g1, g2) * e(g1, g2)^(-1) = 1`. -/
-theorem bls12Pairing_generator_neg (hlaws : PairingLaws) {gas : Nat}
+theorem bls12Pairing_generator_neg {gas : Nat}
     (hgas : bls12PairingGas 2 ≤ gas) :
     bls12Pairing ⟨(padG1 (g1ToBytes G1.generator) ++ padG2 (g2ToBytes G2.generator) ++
         (padG1 (g1ToBytes (G1.neg G1.generator)) ++ padG2 (g2ToBytes G2.generator))).toArray⟩ gas =
       .ok ⟨(boolWord true).toArray⟩ := by
-  have h := bls12Pairing_encodePairs hlaws
+  have h := bls12Pairing_encodePairs
     (pairs := [(G1.generator, G2.generator), (G1.neg G1.generator, G2.generator)])
     (List.cons_ne_nil _ _) (a := [1, -1]) (b := [1, 1]) rfl rfl (fun i hi => by
       match i, hi with

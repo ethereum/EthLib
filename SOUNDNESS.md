@@ -287,25 +287,12 @@ Let `P_i` represent `a_i * g_1` and `Q_i` represent `b_i * g_2`, where a represe
 Then the check of the pairs `(P_i, Q_i)` passes exactly when `sum_i a_i * b_i = 0` in `Fr`.
 The law holds when the check tests `prod_i e(P_i, Q_i) = 1` for any bilinear map `e` with `e(g_1, g_2) != 1` into a group of order `r`.
 `pairingCheck_congr` (`Proofs/Bls/PairingCongr.lean`) proves that the check depends only on the group elements of valid points, so the law can quantify over representatives.
-`TargetGroup.ofPairingLaws` (`Proofs/Bls/TargetGroup.lean`) builds a model of the target group from `PairingLaws`.
+`TargetGroup.ofPairingLaws` (`Proofs/Bls/TargetGroup.lean`) builds a model of the target group from the proved law.
 Its target is `Fp12` and its generator is `e(g_1, g_2)`.
-Under the law, `pairing P Q = e(g_1, g_2)^(a b)` when `P` represents `a * g_1` and `Q` represents `b * g_2`.
+In this model, `pairing P Q = e(g_1, g_2)^(a b)` when `P` represents `a * g_1` and `Q` represents `b * g_2`.
 An element of the model represents `t` in `Fr` when it is `e(g_1, g_2)^t`.
-The theorems that take `PairingLaws` as a hypothesis, or build a model of the target group from it, sit in these files:
-
-- `Consensus/Proofs/HonestAggregation.lean`
-- `Consensus/Proofs/HonestBuilder.lean`
-- `Consensus/Proofs/HonestValidator.lean`
-- `Consensus/Proofs/InclusionListCommittee.lean`
-- `Cryptography/Proofs/Bls/PairingLaws.lean`
-- `Cryptography/Proofs/Bls/Security/Refinement.lean`
-- `Cryptography/Proofs/Bls/SignaturesCorrect.lean`
-- `Cryptography/Proofs/Bls/SignaturesUnique.lean`
-- `Cryptography/Proofs/Bls/TargetGroup.lean`
-- `Execution/Proofs/Evm/Precompiles/Bls12381/PairingProduct.lean`
-
-With `pairingLaws` passed for that hypothesis, none of them depends on the pairing law.
-Their other hypotheses, such as a well-formed setup, stay.
+The BLS signature, consensus and EIP-2537 theorems use `pairingLaws` inside their proofs.
+Only the lemmas of `Proofs/Bls/PairingLaws.lean`, which derive consequences of the law, take `PairingLaws` as a hypothesis.
 
 `finalExponentiation_eq_pow` (`Proofs/Bls/FinalExponentiation.lean`) proves that the final exponentiation raises every element of `Fp12` to exactly `(p^12 - 1) / r`.
 `millerDouble_snd` and `millerAdd_snd` (`Proofs/Bls/MillerLoop.lean`) prove that each step of the Miller loop multiplies by the line through the untwisted points, times `c w^3` for some `c` in `Fp2`.
@@ -358,11 +345,11 @@ It assumes a message shorter than 2^61 - 323 bytes and a DST shorter than 2^61 -
 No theorem yet compares the SSWU map or the isogeny with a model of RFC 9380.
 
 `sign_ok` and `popProve_ok` (`Proofs/Bls/Signatures.lean`) prove that BLS signing never fails.
-Under the pairing law, an honest signature, an honest proof of possession and an aggregate of honest signatures verify (`verify_sign`, `popVerify_popProve`, `aggregateVerify_aggregate`, `Proofs/Bls/SignaturesCorrect.lean`).
+An honest signature, an honest proof of possession and an aggregate of honest signatures verify (`verify_sign`, `popVerify_popProve`, `aggregateVerify_aggregate`, `Proofs/Bls/SignaturesCorrect.lean`).
 For the fast aggregate verification on one message, `fastAggregateVerify_aggregate` also assumes that the secret keys do not sum to zero modulo `r`.
 Otherwise the aggregate key is the point at infinity, and key validation rejects it.
 
-Under the pairing law, a key and a message have at most one signature that verifies, byte for byte (`verify_unique`, `Proofs/Bls/SignaturesUnique.lean`).
+A key and a message have at most one signature that verifies, byte for byte (`verify_unique`, `Proofs/Bls/SignaturesUnique.lean`).
 From a victim's key alone, an attacker builds a second key and a signature that passes the fast aggregate verification for both (`fastAggregateVerify_rogue`).
 So each key of that verification needs a verified proof of possession.
 
@@ -379,7 +366,7 @@ The source needs it when no computable map from `G1` to `G2` is known.
 
 `forgeAdvantage_blsScheme_le` (`Proofs/Bls/Security/Refinement.lean`) applies the theorem to EthLib.
 The groups are the multiples of the generators of G1 and G2, and the test is the pairing check.
-Under the pairing law, the test is sound (`blsScheme_sound`).
+The test is sound (`blsScheme_sound`).
 `sign_eq` and `verify_iff_isDh` prove that EthLib's `sign` and `verify` compute the scheme.
 There `H(m)` is the hash to G2 of `m` under the message tag.
 Aggregation and proofs of possession lie outside the game.
@@ -398,7 +385,7 @@ EthLib's secret keys exclude zero, and a zero key always loses.
 `nonzeroByteForgeAdvantage_eq` (`Proofs/Bls/Security/Refinement.lean`) draws a uniform nonzero key instead.
 Against that key, a forger wins exactly `r / (r - 1)` times its byte advantage.
 `nonzeroByteForgeAdvantage_le_coCdhAdvantage` carries this factor into the co-CDH bound below.
-Under the pairing law, `byteForgeAdvantage_le_coCdhAdvantage` gives the same `q`-factor co-CDH bound when the decoded forger makes at most `q` hash calls.
+`byteForgeAdvantage_le_coCdhAdvantage` gives the same `q`-factor co-CDH bound when the decoded forger makes at most `q` hash calls.
 `byteForgeAdvantage_le_coCdhAdvantage_of_byteHashCallBound` states the bound with the hash-call bound on the byte forger itself.
 `byteHashCallBound_iff` proves that the two bounds are equivalent, because the encoding forwards each query once.
 
@@ -644,7 +631,7 @@ Otherwise a search on the two cells returns a solution of the bilinear strong Di
 The problem is Definition 2.4 of the extended KZG paper.
 The solution is `(c, x)` with `x` the element `e(g_1, g_2)^(1 / (τ + c))` of the target group.
 The theorem holds in any model of that group, `TargetGroup`.
-`TargetGroup.ofPairingLaws Bls.pairingLaws` gives the model of the pairing itself.
+`TargetGroup.ofPairingLaws` gives the model of the pairing itself.
 `Proofs/Kzg/CellVerifier.lean` lifts these three results to the outer check, `verifyCellKzgProofBatch`, which the bindings call.
 That check takes one commitment per cell, keeps the first copy of each, and runs the core check.
 `verifyCellKzgProofBatch_valid_or_root` checks each cell against its own commitment.
@@ -1163,7 +1150,6 @@ Each scalar `m_i` is the integer of its 32 bytes, not reduced modulo the subgrou
 It then returns the word of `pairingCheck` on the decoded pairs.
 `exists_represents_of_decodePairs` (`PairingProduct.lean`) proves that each decoded `P_i` represents some `a_i • g_1`, and each `Q_i` some `b_i • g_2`.
 `bls12Pairing_eq_one_iff` proves that the output is the word 1 exactly when `sum_i a_i * b_i = 0`, that is, when the product of the pairings is 1.
-It assumes `PairingLaws`, which `pairingLaws` proves.
 `bls12Pairing_encodePairs` computes the output on the encodings of any represented pairs.
 `bls12Pairing_generators` and `bls12Pairing_generator_neg` apply it to reach both outputs: 0 for `(g_1, g_2)`, and 1 for `(g_1, g_2)` with `(-g_1, g_2)`.
 
@@ -1299,14 +1285,12 @@ It finds the committee of a validator in an epoch, whether it proposes, and, fro
 It also signs each message that a validator sends, under the domain type and the epoch that the receivers check.
 The theorems in `Consensus/Proofs/HonestValidator.lean` relate these duties to the checks of the transition and of gossip.
 
-The signature theorems assume `PairingLaws`, the hypothesis of BLS correctness that `pairingLaws` proves under BLS12-381.
-Under it, `isValidSignatureAtEpoch_of_signAtEpoch` shows that a duty signature passes the check of a signature at the same domain type and epoch, under the public key of the secret key.
+`isValidSignatureAtEpoch_of_signAtEpoch` shows that a duty signature passes the check of a signature at the same domain type and epoch, under the public key of the secret key.
 `verifyBlockSignature_of_getBlockSignature` shows that a block signed by its proposer passes the check of the block signature.
 `processRandao_ne_invalidRandaoReveal` shows that the RANDAO reveal of the proposer never fails the RANDAO check.
 Both assume a block of the current epoch, and a proposer whose public key is that of the secret key.
 The gossip checks of a selection proof and of an aggregate and proof read the target epoch, so their theorems assume it is the epoch of the slot.
 
-The committee theorems need no such hypothesis.
 `getCommitteeAssignment_sound` shows that an assignment is a committee of the epoch that holds the validator.
 `getCommitteeAssignment_unique` shows that no other committee of the epoch holds it.
 It assumes that the registry stays within its limit, and that the active validators times the committees of the epoch fit in 64 bits.
@@ -1320,7 +1304,7 @@ From Gloas, a validator also finds the slot of its payload timeliness committee 
 `not_mem_of_getPtcAssignment_none` shows that no committee of the epoch holds a validator without one, when an epoch has a slot.
 `getUpcomingProposalSlots_spec` shows which slots are the upcoming proposal slots, in increasing order.
 They are exactly the slots after the slot of the state whose proposer in the lookahead is the validator.
-Under `PairingLaws`, `validatePtcMessage_getPayloadAttestationMessageSignature` covers a payload attestation message for the current slot that its validator signed.
+`validatePtcMessage_getPayloadAttestationMessageSignature` covers a payload attestation message for the current slot that its validator signed.
 It shows that the message passes the wire checks of the fork choice: its slot and its signature.
 No theorem covers the other checks of the handler: a known block, the slot of the state and a seat in the committee.
 It rests on `fastAggregateVerify_sign`: an honest signature passes the fast aggregate verification under its one key.
@@ -1360,7 +1344,7 @@ From Electra, `mem_getAttestingIndices_constructAggregateOfSingleAttestations` s
 `getCommitteeIndices_constructAggregateOfSingleAttestations` shows that the committee bits of that aggregate name its one committee.
 `constructSyncCommitteeContribution_spec` states the bits of a contribution.
 The bit of a seat is set when its key is the key of the validator of a message on the slot and the root.
-Under `PairingLaws`, `fastAggregateVerify_getAggregateSignature` shows that honest signatures of attestations on one message aggregate to a signature that the fast aggregate verification accepts.
+`fastAggregateVerify_getAggregateSignature` shows that honest signatures of attestations on one message aggregate to a signature that the fast aggregate verification accepts.
 That theorem assumes that the secret keys do not sum to zero.
 It verifies under the keys in the order of the attestations.
 
@@ -1710,8 +1694,9 @@ EthLib accepts them, and the suite asserts that it does, as `tests/execution/eth
 
 A conditional theorem is only as strong as its hypotheses.
 The ceremony theorem `checksSufficient_of_subgroupChecks` is one, and its hypotheses are listed under KZG.
-`PairingLaws`, listed under BLS12-381 and alt_bn128, remains an explicit hypothesis of some pairing theorems.
-It is a `Prop`, never an axiom, so `lake exe check-decls` still sees only the standard axioms.
+Only the lemmas in `Proofs/Bls/PairingLaws.lean` and `Proofs/AltBn128/PairingLaws.lean` take `PairingLaws` as a hypothesis.
+The BLS signature, consensus, KZG, PeerDAS and EIP-2537 theorems need no such hypothesis.
+`PairingLaws` is a `Prop`, never an axiom, so `lake exe check-decls` still sees only the standard axioms.
 `pairingLaws` proves the BLS12-381 law, so the theorems that assume it hold once it is supplied.
 `AltBn128.pairingLaws` proves the alt_bn128 law in the same way.
 Whatever those hypotheses leave unproved is part of what a reader trusts.
