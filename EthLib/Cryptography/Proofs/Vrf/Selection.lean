@@ -273,6 +273,12 @@ The mixed value of its output lands in `S` with probability at most the sum of t
 - `q / 2^256`: a mix query that already used the randomness.
 - The chance that the search returns a collision, with the opening and the honest opening.
 
+No theorem bounds the last term: it is the chance that the holder finds a Keccak-256 collision.
+
+In the model, `q` counts every evaluation of the mix by the holder.
+
+That includes its own Keccak-256 calls on mix inputs, as the random oracle assumption requires.
+
 With one index, `|S| = 2^200` and `q = 2^64`, the first two terms are below `2^-55`. -/
 theorem prEvent_selected_le {σ : Type} (adversary : SelectionAdversary σ) (I : Finset UInt32)
     (S : Finset Digest) {q : ℕ} (hq : IsQueryBoundP adversary.commit IsMixQuery q) :
