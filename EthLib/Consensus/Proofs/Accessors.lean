@@ -34,6 +34,8 @@ The indices of an attestation increase strictly, as the check of an indexed atte
 
 An attestation has at most as many signers as bits, so its indexed form never exceeds its limit.
 
+A proposer draw that shuffles only the positions it reads returns what the full shuffle gives.
+
 Before Fulu, the proposer is active in the epoch of the state.
 
 A signature domain always has a value.
@@ -908,16 +910,16 @@ theorem getIndexedAttestation_of_getAttestingIndices {state : BeaconState preset
     exact absurd (fun before => Nat.le_trans (length_getAttestingIndices_le computed)
       (attestation.aggregationBits.bound before)) over
 
-/-- The proposer search returns one of the indices, when each shuffled position is in range. -/
+/-- The proposer search returns one of the indices, when each position of the order is in range. -/
 theorem mem_of_proposerSearch {preset : Preset} {fork : Base.Fork}
-    {validators : Array Validator} {indices : Array ValidatorIndex} {shuffled : Array UInt64}
+    {validators : Array Validator} {indices : Array ValidatorIndex} {order : Nat → Nat}
     {seed : Bytes32} (nonempty : 0 < indices.size)
-    (positions : ∀ place < indices.size, (shuffled.getD place 0).toNat < indices.size)
+    (positions : ∀ place < indices.size, order place < indices.size)
     {i : Nat} {proposer : ValidatorIndex}
-    (found : proposerSearch preset fork validators indices shuffled seed i = .ok proposer) :
+    (found : proposerSearch preset fork validators indices order seed i = .ok proposer) :
     proposer ∈ indices := by
   -- The candidate of every step is one of the indices.
-  have candidateMem : ∀ j, indices.getD (shuffled.getD (j % indices.size) 0).toNat 0 ∈ indices := by
+  have candidateMem : ∀ j, indices.getD (order (j % indices.size)) 0 ∈ indices := by
     intro j
     have lt := positions _ (Nat.mod_lt j nonempty)
     rw [Array.getD_eq_getD_getElem?, Array.getElem?_eq_getElem lt, Option.getD_some]
@@ -949,19 +951,67 @@ theorem mem_of_computeProposerIndex {state : BeaconState preset fork}
   · simp [empty, bind, Except.bind, throw, throwThe, MonadExcept.throw,
       MonadExceptOf.throw] at computed
   by_cases fits : indices.size < 2 ^ 64
-  · simp only [empty, fits, ↓reduceIte, bind, Except.bind] at computed
-    split at computed
-    · cases computed
-    rename_i shuffled shuffleOk
-    obtain ⟨_, shuffledEq⟩ := computeShuffledPermutation_ok (mapError_ok_iff.mp shuffleOk)
-    subst shuffledEq
-    have sizeEq : indices.size.toUInt64.toNat = indices.size := by
-      rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt fits]
-    refine mem_of_proposerSearch (Nat.pos_of_ne_zero empty) (fun place lt => ?_) computed
-    rw [sizeEq]
-    exact Shuffle.shuffledPositions_getD_lt fits lt
+  · by_cases large : 2 ^ 40 < indices.size
+    · simp [empty, fits, large, bind, Except.bind, throw, throwThe, MonadExcept.throw,
+        MonadExceptOf.throw] at computed
+    simp only [empty, fits, large, ↓reduceIte] at computed
+    exact mem_of_proposerSearch (Nat.pos_of_ne_zero empty)
+      (fun place lt => Shuffle.shuffledIndex_lt lt) computed
   · simp [empty, fits, bind, Except.bind, throw, throwThe, MonadExcept.throw,
       MonadExceptOf.throw] at computed
+
+/-- Two orders that agree on the positions below the number of indices give one proposer search.
+
+The search reads the order only at a candidate number modulo that number. -/
+theorem proposerSearch_congr {preset : Preset} {fork : Base.Fork}
+    {validators : Array Validator} {indices : Array ValidatorIndex} {first second : Nat → Nat}
+    {seed : Bytes32} (nonempty : 0 < indices.size)
+    (agree : ∀ place < indices.size, first place = second place) :
+    ∀ {i : Nat}, proposerSearch preset fork validators indices first seed i =
+      proposerSearch preset fork validators indices second seed i := by
+  intro i
+  obtain ⟨left, leftEq⟩ : ∃ left, left = 2 ^ 64 - i := ⟨_, rfl⟩
+  induction left using Nat.strongRecOn generalizing i with
+  | _ left ih =>
+    unfold proposerSearch
+    simp only [agree _ (Nat.mod_lt i nonempty), bind, Except.bind]
+    repeat' split
+    all_goals first
+      | rfl
+      | exact ih _ (by omega) rfl
+
+/-- The proposer draw returns what a walk over the full shuffle of its indices returns.
+
+Each position it shuffles alone lands where the full shuffle puts it, and the errors agree. -/
+theorem computeProposerIndex_eq (state : BeaconState preset fork) (indices : Array ValidatorIndex)
+    (seed : Bytes32) :
+    computeProposerIndex state indices seed = (do
+      if indices.size = 0 then throw .noCandidates
+      unless indices.size < 2 ^ 64 do throw (.arith .overflow)
+      let shuffled ←
+        (computeShuffledPermutation preset indices.size.toUInt64 seed).mapError .shuffle
+      proposerSearch preset fork state.validators.data indices
+        (fun place => (shuffled.getD place 0).toNat) seed 0) := by
+  unfold computeProposerIndex
+  by_cases empty : indices.size = 0
+  · simp [empty, bind, Except.bind, throw, throwThe, MonadExcept.throw, MonadExceptOf.throw]
+  by_cases fits : indices.size < 2 ^ 64
+  · have sizeEq : indices.size.toUInt64.toNat = indices.size := by
+      rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt fits]
+    by_cases large : 2 ^ 40 < indices.size
+    · rw [computeShuffledPermutation_countTooLarge (by rw [sizeEq]; exact large)]
+      simp [empty, fits, large, Except.mapError, bind, Except.bind, throw, throwThe,
+        MonadExcept.throw, MonadExceptOf.throw]
+    simp only [empty, fits, large, ↓reduceIte,
+      computeShuffledPermutation_eq (by rw [sizeEq]; exact Nat.le_of_not_lt large), sizeEq,
+      Except.mapError, bind, Except.bind]
+    -- Both read the shuffled position of each candidate.
+    refine proposerSearch_congr (Nat.pos_of_ne_zero empty) fun place lt => ?_
+    change Shuffle.shuffledIndex preset.SHUFFLE_ROUND_COUNT.toNat seed indices.size place = _
+    rw [Array.getD_eq_getD_getElem?, Shuffle.shuffledPositions_getElem lt, Option.getD_some,
+      UInt64.toNat_ofNat', Nat.mod_eq_of_lt (Nat.lt_trans (Shuffle.shuffledIndex_lt lt) fits)]
+  · simp [empty, fits, bind, Except.bind, throw, throwThe, MonadExcept.throw,
+      MonadExceptOf.throw]
 
 /-- Before Fulu, the proposer of a slot is active in the epoch of the state. -/
 theorem mem_getActiveValidatorIndices_of_getBeaconProposerIndex
