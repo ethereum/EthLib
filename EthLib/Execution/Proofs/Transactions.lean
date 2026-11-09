@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Proofs.Transactions.Authorization
 public import EthLib.Execution.Proofs.Transactions.Envelope
+public import EthLib.Execution.Proofs.Transactions.Failed
 public import EthLib.Execution.Proofs.Transactions.Inclusion
 public import EthLib.Execution.Proofs.Transactions.Network
 public import EthLib.Execution.Proofs.Transactions.Process
