@@ -322,7 +322,7 @@ theorem proofs_size_of_verifyCellKzgProofBatchImpl {s : TrustedSetup}
 
 /-- **Binding of the batch check of cells.**
 
-Take a model of the target group, the pairing law and a well-formed setup of the secret `τ`.
+Take a model of the target group and a well-formed setup of the secret `τ`.
 
 Let an accepted batch hold two cells of 64 values at one cell index below 128.
 
@@ -334,7 +334,7 @@ Then one of three cases holds.
 - The search on the two cells returns a bilinear strong Diffie–Hellman solution for `τ`.
 - The challenge is a root of the error polynomial of the cells, which is not zero. -/
 theorem verifyCellKzgProofBatchImpl_binding {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
-    (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ)
+    {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ)
     {commitments : Array KZGCommitment} {commitmentIndices : Array CommitmentIndex}
     {cellIndices : Array CellIndex} {cosetsEvals : Array CosetEvals} {proofs : Array KZGProof}
     {commitmentsG1 proofsG1 : Array G1} {c w : Nat → Fr}
@@ -358,7 +358,7 @@ theorem verifyCellKzgProofBatchImpl_binding {GT : Type} [CommMonoid GT] (M : Tar
             cosetsEvals proofs) = 0) := by
   by_cases hne : cosetsEvals[k]! = cosetsEvals[k']!
   · exact Or.inl hne
-  rcases verifyCellKzgProofBatchImpl_valid_or_root laws hs hCd hPd hC hP h with hall | hroot
+  rcases verifyCellKzgProofBatchImpl_valid_or_root hs hCd hPd hC hP h with hall | hroot
   · -- The batch has as many proofs as cells, so both proofs represent their scalars.
     have hsize : proofsG1.size = cellIndices.size :=
       (array_mapM_ok hPd).1.trans (proofs_size_of_verifyCellKzgProofBatchImpl h)

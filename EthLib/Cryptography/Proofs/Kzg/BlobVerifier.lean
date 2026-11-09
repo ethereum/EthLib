@@ -19,7 +19,7 @@ Each root below is a root of the error polynomial of the batch.
 
 - On well-formed inputs of one size, the batch check of blobs returns a verdict, with no error.
 - The empty batch verifies, for every setup.
-- Under the pairing law, the verdict is true exactly when the batch challenge is a root.
+- For a well-formed setup, the verdict is true exactly when the batch challenge is a root.
 - Every entry of an accepted batch satisfies the opening equation, or the batch challenge is a root.
 - With the hash a random oracle, the root case has probability at most `(q + 1) (n - 1) / r`.
   Here `q` bounds the queries, `n` the commitments, and `r` is the order of `Fr`.
@@ -401,7 +401,7 @@ theorem verifyBlobKzgProofBatch_empty (s : TrustedSetup) :
 
 /-- **The verdict of the blob batch check, as a root.**
 
-Assume the pairing law and a well-formed setup of the secret `τ`.
+Assume a well-formed setup of the secret `τ`.
 
 Let each commitment that decodes give a point that represents the scalar `c` of its bytes.
 
@@ -410,7 +410,7 @@ Let each proof that decodes give a point that represents the scalar `w` of its b
 Let the batch check of blobs return the verdict `b`.
 
 Then `b` is true exactly when the batch challenge is a root of the error polynomial of the batch. -/
-theorem verifyBlobKzgProofBatch_ok_iff_root (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
+theorem verifyBlobKzgProofBatch_ok_iff_root {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) (y : BlobBatchInput) {c w : Bytes48 → Fr}
     (hC : ∀ i < y.commitments.size, ∀ P, uncompressG1 y.commitments[i]! = .ok P →
       G1.Represents P (c y.commitments[i]!))
@@ -431,11 +431,11 @@ theorem verifyBlobKzgProofBatch_ok_iff_root (laws : Bls.PairingLaws) {s : Truste
       have h1 := hpgk i (hpgsz ▸ hi) hi
       rw [← getElem!_pos y.proofs i (hpgsz ▸ hi), ← getElem!_pos psG1 i hi] at h1
       exact hP i (hpgsz ▸ hi) _ (uncompressG1_of_validateKzgG1Point h1)
-  exact verifyKzgProofBatch_ok_iff_root laws hs hC' hP' hbatch
+  exact verifyKzgProofBatch_ok_iff_root hs hC' hP' hbatch
 
 /-- **An accepted batch of blobs is valid, or its batch challenge is a root.**
 
-Assume the pairing law and a well-formed setup of the secret `τ`.
+Assume a well-formed setup of the secret `τ`.
 
 Let each commitment that decodes give a point that represents the scalar `c` of its bytes.
 
@@ -448,7 +448,7 @@ Then every entry satisfies `c - y = w (τ - z)` at its evaluation challenge `z` 
 Each entry also passes the check of one blob.
 
 Otherwise the error polynomial of the batch is not zero, and the batch challenge is a root of it. -/
-theorem verifyBlobKzgProofBatch_valid_or_root (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
+theorem verifyBlobKzgProofBatch_valid_or_root {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) (y : BlobBatchInput) {c w : Bytes48 → Fr}
     (hC : ∀ i < y.commitments.size, ∀ P, uncompressG1 y.commitments[i]! = .ok P →
       G1.Represents P (c y.commitments[i]!))
@@ -485,11 +485,11 @@ theorem verifyBlobKzgProofBatch_valid_or_root (laws : Bls.PairingLaws) {s : Trus
     have heval : y.evals[i]! = (interpolant ps[i]!).eval y.challenges[i]! := by
       rw [getElem!_pos y.evals i (by simp [BlobBatchInput.evals, hi])]
       simp [BlobBatchInput.evals, hdec]
-    refine verifyBlobKzgProof_of_blobOpeningValid laws hs
+    refine verifyBlobKzgProof_of_blobOpeningValid hs
       ⟨ps[i]!, _, _, _, _, hbl, hcb, hrC, hpb, hrP, ?_⟩
     rw [← hchal, ← heval]
     exact heq
-  · exact Or.inr ⟨hzero, (verifyBlobKzgProofBatch_ok_iff_root laws hs y hC hP h).mp rfl⟩
+  · exact Or.inr ⟨hzero, (verifyBlobKzgProofBatch_ok_iff_root hs y hC hP h).mp rfl⟩
 
 /-! ## The batch challenge from a random oracle -/
 
@@ -519,7 +519,7 @@ An accepted batch runs on inputs of one size, so `n` bounds the number of blobs 
 
 The event does not ask that the check accepts.
 
-Take the pairing law, a well-formed setup of `τ`, and the oracle in place of the hash.
+Take a well-formed setup of `τ` and the oracle in place of the hash.
 
 Let each scalar be the scalar of its bytes.
 
@@ -546,14 +546,14 @@ theorem prEvent_blobInput_root_le (τ : Fr) (c w : Bytes48 → Fr) {n : Nat}
 
 /-- **The blob batch check accepts every batch of valid blob openings.**
 
-Assume the pairing law and a well-formed setup of the secret `τ`.
+Assume a well-formed setup of the secret `τ`.
 
 Take arrays of blobs, commitments and proofs of one size.
 
 Let every entry be a valid blob opening at `τ`.
 
 Then the batch check of blobs accepts. -/
-theorem verifyBlobKzgProofBatch_of_blobOpeningValid (laws : Bls.PairingLaws) {s : TrustedSetup}
+theorem verifyBlobKzgProofBatch_of_blobOpeningValid {s : TrustedSetup}
     {τ : Fr} (hs : s.WellFormed τ) {blobs : Array Blob} {commitments proofs : Array Bytes48}
     (hc : commitments.size = blobs.size) (hp : proofs.size = blobs.size)
     (hv : ∀ i < blobs.size, BlobOpeningValid τ blobs[i]! commitments[i]! proofs[i]!) :
@@ -595,7 +595,7 @@ theorem verifyBlobKzgProofBatch_of_blobOpeningValid (laws : Bls.PairingLaws) {s 
       simp [y, BlobBatchInput.evals, hdec, hpoly_eq, hchal]
     rw [scalarOf_eq hCv hCr, scalarOf_eq hPv hPr, hchal, heval]
     exact heq
-  have hroot := (verifyBlobKzgProofBatch_ok_iff_root laws hs y
+  have hroot := (verifyBlobKzgProofBatch_ok_iff_root hs y
     (fun i hi _ hu => represents_scalarOf
       (hcs y.commitments[i]! (getElem!_pos y.commitments i hi ▸ Array.getElem_mem hi)) hu)
     (fun i hi _ hu => represents_scalarOf
@@ -605,20 +605,20 @@ theorem verifyBlobKzgProofBatch_of_blobOpeningValid (laws : Bls.PairingLaws) {s 
 
 /-- **The blob batch check accepts honestly computed commitments and proofs.**
 
-Assume the pairing law and a well-formed setup of the secret `τ`.
+Assume a well-formed setup of the secret `τ`.
 
 Take arrays of blobs, commitments and proofs of one size.
 
 Let each commitment and proof come from `blobToKzgCommitment` and `computeBlobKzgProof`.
 
 Then the batch check of blobs accepts. -/
-theorem verifyBlobKzgProofBatch_computeBlobKzgProof (laws : Bls.PairingLaws) {s : TrustedSetup}
+theorem verifyBlobKzgProofBatch_computeBlobKzgProof {s : TrustedSetup}
     {τ : Fr} (hs : s.WellFormed τ) {blobs : Array Blob} {commitments proofs : Array Bytes48}
     (hc : commitments.size = blobs.size) (hp : proofs.size = blobs.size)
     (hhonest : ∀ i < blobs.size, blobToKzgCommitment s blobs[i]! = .ok commitments[i]! ∧
       computeBlobKzgProof s blobs[i]! commitments[i]! = .ok proofs[i]!) :
     verifyBlobKzgProofBatch s blobs commitments proofs = .ok true :=
-  verifyBlobKzgProofBatch_of_blobOpeningValid laws hs hc hp fun i hi =>
+  verifyBlobKzgProofBatch_of_blobOpeningValid hs hc hp fun i hi =>
     blobOpeningValid_computeBlobKzgProof hs (hhonest i hi).1 (hhonest i hi).2
 
 /-! ## Non-vacuity witness -/
@@ -643,10 +643,10 @@ private theorem blobToPolynomial_oneHotBlob :
 
 /-- **A non-empty honest batch of blobs exists and is accepted.**
 
-Under the pairing law, every secret `τ` has a well-formed setup and a non-empty batch.
+Every secret `τ` has a well-formed setup and a non-empty batch.
 
 Its commitments and proofs are computed honestly, and the batch check of blobs accepts it. -/
-theorem exists_honest_blob_batch (laws : Bls.PairingLaws) (τ : Fr) :
+theorem exists_honest_blob_batch (τ : Fr) :
     ∃ (s : TrustedSetup) (y : BlobBatchInput),
       s.WellFormed τ ∧ y.blobs.size > 0 ∧
       (∀ i < y.blobs.size, blobToKzgCommitment s y.blobs[i]! = .ok y.commitments[i]! ∧
@@ -667,7 +667,7 @@ theorem exists_honest_blob_batch (laws : Bls.PairingLaws) (τ : Fr) :
     exact ⟨hC, hP⟩
   exact ⟨TrustedSetup.ofPowers (setupPowers τ), ⟨#[oneHotBlob], #[C], #[P]⟩,
     wellFormed_ofPowers τ, Nat.zero_lt_one, hhonest,
-    verifyBlobKzgProofBatch_computeBlobKzgProof laws (wellFormed_ofPowers τ) rfl rfl hhonest⟩
+    verifyBlobKzgProofBatch_computeBlobKzgProof (wellFormed_ofPowers τ) rfl rfl hhonest⟩
 
 /-- The all-zero blob, built as 4096 canonical encodings of zero. -/
 private def zeroBlob : Blob :=

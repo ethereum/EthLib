@@ -23,7 +23,7 @@ It accepts a column when the batch check of cells returns a verdict on it.
 
 The challenge of the column must also be a root of its error polynomial.
 
-Under the pairing law, at the challenge of the hash, this is the batch check of cells.
+For a well-formed setup, this is the batch check of cells at the challenge of the hash.
 
 An opening counts when one of the columns holds it, for the commitment, at the index of the column.
 
@@ -214,14 +214,14 @@ theorem getElem!_replicate {α : Type} [Inhabited α] {n k : Nat} (a : α) (hk :
 
 /-- **A column with a zero error polynomial holds only openings that verify alone.**
 
-Assume the pairing law and a well-formed setup of the secret `τ`.
+Assume a well-formed setup of the secret `τ`.
 
 Let the batch check of cells return a verdict on the column.
 
 Let the error polynomial of the column be zero, where each point has the scalar of its bytes.
 
 Then every opening that the column holds verifies alone for its commitment. -/
-theorem ColumnBatch.verifies_of_holds (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
+theorem ColumnBatch.verifies_of_holds {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) {c : ColumnBatch} {x : Fr} (ha : c.toInput.AcceptsAt s τ x)
     (hz : c.key.errorPoly τ scalarOf scalarOf = 0) {commitment : Bytes48} {o : CellOpening}
     (hh : c.Holds commitment o) : o.Verifies s commitment := by
@@ -232,18 +232,18 @@ theorem ColumnBatch.verifies_of_holds (laws : Bls.PairingLaws) {s : TrustedSetup
     (by simp only [ColumnBatch.toInput] at h₁ ⊢; omega)
   simp only [ColumnBatch.toInput, getElem!_replicate _ hk] at hv
   rw [hC, hcell, hproof, hi] at hv
-  exact (CellOpening.verifies_iff laws hs).mpr hv
+  exact (CellOpening.verifies_iff hs).mpr hv
 
 /-- **Accepted columns hold only openings that verify alone, or a challenge is a root.**
 
-Assume the pairing law and a well-formed setup of the secret `τ`.
+Assume a well-formed setup of the secret `τ`.
 
 Let every column have at most `n` cells and be accepted with its challenge.
 
 Then every opening that a column holds verifies alone for its commitment.
 
 Otherwise the challenge of some column is a root of its error polynomial, which is not zero. -/
-theorem columnsAccepted_cases (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
+theorem columnsAccepted_cases {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) {n : Nat} {cs : List (ColumnBatch × Fr)}
     (h : ColumnsAccepted s τ n cs) :
     (∀ c ∈ cs, ∀ commitment o, c.1.Holds commitment o → o.Verifies s commitment) ∨
@@ -254,7 +254,7 @@ theorem columnsAccepted_cases (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : 
     refine Or.inr ⟨c, hc, ?_, hne, hr⟩
     simpa [ColumnBatch.key, CellBatchInput.toCellBatch, ColumnBatch.toInput] using hn
   · simp only [not_exists, not_and, not_not] at hz
-    exact Or.inl fun c hc _ _ hh => ColumnBatch.verifies_of_holds laws hs (h c hc).2 (hz c hc) hh
+    exact Or.inl fun c hc _ _ hh => ColumnBatch.verifies_of_holds hs (h c hc).2 (hz c hc) hh
 
 /-- **The verifier accepts a column of honest blobs with every challenge.**
 
@@ -284,13 +284,13 @@ theorem ColumnBatch.acceptsAt_computeCellsAndKzgProofs {s : TrustedSetup} {τ : 
 
 /-- **At the challenge of its hash, the check of a column is the batch check of cells.**
 
-Assume the pairing law and a well-formed setup of the secret `τ`.
+Assume a well-formed setup of the secret `τ`.
 
 A column is accepted with the challenge of its hash exactly when the batch check accepts it. -/
-theorem ColumnBatch.acceptsAt_challenge_iff (laws : Bls.PairingLaws) {s : TrustedSetup}
+theorem ColumnBatch.acceptsAt_challenge_iff {s : TrustedSetup}
     {τ : Fr} (hs : s.WellFormed τ) (c : ColumnBatch) :
     c.toInput.AcceptsAt s τ c.key.challenge ↔ c.verify s = .ok true :=
-  CellBatchInput.acceptsAt_challenge_iff laws hs c.toInput
+  CellBatchInput.acceptsAt_challenge_iff hs c.toInput
 
 /-! ## The games -/
 
@@ -380,22 +380,22 @@ noncomputable def columnPositionBsdhReduction {GT : Type} [CommMonoid GT] (M : T
 
 /-- **When the adversary wins position-binding with columns, the search wins or a root occurs.**
 
-Assume the pairing law and a well-formed setup of the secret `τ`. -/
+Assume a well-formed setup of the secret `τ`. -/
 theorem columnPositionBinding_cases {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
-    (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ) {n m : Nat}
+    {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ) {n m : Nat}
     {p : (Bytes48 × (CellOpening × CellOpening) × Vector ColumnBatch m) ×
       List (ColumnBatch × Fr)}
     (hw : ColumnPositionBindingWins s τ n p) :
     IsBsdhSolutionSub M τ (positionBsdhSearch M s (p.1.1, p.1.2.1)) ∨ ColumnRoot τ n p.2 := by
   obtain ⟨hidx, hne, hacc, ⟨c, hc, hh⟩, ⟨c', hc', hh'⟩⟩ := hw
-  rcases columnsAccepted_cases laws hs hacc with hall | hroot
-  · exact Or.inl (isBsdhSolutionSub_positionBsdhSearch M laws hs
+  rcases columnsAccepted_cases hs hacc with hall | hroot
+  · exact Or.inl (isBsdhSolutionSub_positionBsdhSearch M hs
       ⟨hidx, hne, hall c hc _ _ hh, hall c' hc' _ _ hh'⟩)
   · exact Or.inr hroot
 
 /-- **Position-binding of PeerDAS, with the batches of columns.**
 
-Assume the pairing law, and take a model of the target group.
+Take a model of the target group.
 
 Let the adversary make at most `q` queries to the random oracle, and output `m` columns.
 
@@ -406,7 +406,7 @@ Its advantage is at most the sum of two terms.
 
 Here `r` is the order of `Fr`, and the term `m` counts the queries of the verifier. -/
 theorem columnPositionBindingAdvantage_le {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
-    (laws : Bls.PairingLaws) (n : Nat) {m : Nat}
+    (n : Nat) {m : Nat}
     (adversary : SetupPowers →
       OracleComp (CellBatch →ₒ Fr) (Bytes48 × (CellOpening × CellOpening) × Vector ColumnBatch m))
     {q : Nat} (hq : ∀ pw, IsTotalQueryBound (adversary pw) q) :
@@ -417,7 +417,7 @@ theorem columnPositionBindingAdvantage_le {GT : Type} [CommMonoid GT] (M : Targe
     (fun pw p => positionBsdhSearch M (TrustedSetup.ofPowers pw) (p.1.1, p.1.2.1))
     (fun τ p => ColumnPositionBindingWins (TrustedSetup.ofPowers (setupPowers τ)) τ n p)
     (fun τ sol => IsBsdhSolutionSub M τ sol) (fun τ p => ColumnRoot τ n p.2)
-    fun τ _ hw => columnPositionBinding_cases M laws (wellFormed_ofPowers τ) hw
+    fun τ _ hw => columnPositionBinding_cases M (wellFormed_ofPowers τ) hw
   have hroot := prEvent_bind_le_of_forall ($ᵗ Fr)
     (fun τ => columnsRun (·.2.2) adversary (setupPowers τ)) (fun τ p => ColumnRoot τ n p.2)
     fun τ => prEvent_columnsRun_root_le _ adversary hq n τ (setupPowers τ)
@@ -477,7 +477,7 @@ noncomputable def columnCodeArsdhReduction {m : Nat}
 
 /-- **When the adversary wins code-binding with columns, a search wins or a challenge is a root.**
 
-Assume the pairing law and a well-formed setup of the secret `τ`.
+Assume a well-formed setup of the secret `τ`.
 
 If no challenge is a root, every opening verifies alone.
 
@@ -485,26 +485,26 @@ Then the adversary wins code-binding with cells checked alone.
 
 Then one of the two searches of Lemma 4 returns a solution. -/
 theorem columnCodeBinding_cases {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
-    (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ) {n m : Nat}
+    {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ) {n m : Nat}
     {p : (Bytes48 × List CellOpening × Vector ColumnBatch m) × List (ColumnBatch × Fr)}
     (hw : ColumnCodeBindingWins s τ n p) :
     IsBsdhSolutionSub M τ (codeBsdhSearch M s (p.1.1, p.1.2.1)) ∨
       IsArsdhSolution (FIELD_ELEMENTS_PER_BLOB - 1) τ (codeArsdhSearch s (p.1.1, p.1.2.1)) ∨
       ColumnRoot τ n p.2 := by
   obtain ⟨hnd, hacc, hheld, hno⟩ := hw
-  rcases columnsAccepted_cases laws hs hacc with hall | hroot
+  rcases columnsAccepted_cases hs hacc with hall | hroot
   · have hwin : CodeBindingWins s (p.1.1, p.1.2.1) := by
       refine ⟨hnd, fun o ho => ?_, hno⟩
       obtain ⟨c, hc, hh⟩ := hheld o ho
       exact hall c hc _ _ hh
-    rcases codeBinding_searches M laws hs hwin with h | h
+    rcases codeBinding_searches M hs hwin with h | h
     · exact Or.inl h
     · exact Or.inr (Or.inl h)
   · exact Or.inr (Or.inr hroot)
 
 /-- **Code-binding of PeerDAS, with the batches of columns.**
 
-Assume the pairing law, and take a model of the target group.
+Take a model of the target group.
 
 Let the adversary make at most `q` queries to the random oracle, and output `m` columns.
 
@@ -516,7 +516,7 @@ Its advantage is at most the sum of three terms.
 
 Here `r` is the order of `Fr`, and the term `m` counts the queries of the verifier. -/
 theorem columnCodeBindingAdvantage_le {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
-    (laws : Bls.PairingLaws) (n : Nat) {m : Nat}
+    (n : Nat) {m : Nat}
     (adversary : SetupPowers →
       OracleComp (CellBatch →ₒ Fr) (Bytes48 × List CellOpening × Vector ColumnBatch m))
     {q : Nat} (hq : ∀ pw, IsTotalQueryBound (adversary pw) q) :
@@ -531,7 +531,7 @@ theorem columnCodeBindingAdvantage_le {GT : Type} [CommMonoid GT] (M : TargetGro
     (fun τ sol => IsBsdhSolutionSub M τ sol)
     (fun τ sol => IsArsdhSolution (FIELD_ELEMENTS_PER_BLOB - 1) τ sol)
     (fun τ p => ColumnRoot τ n p.2)
-    fun τ _ hw => columnCodeBinding_cases M laws (wellFormed_ofPowers τ) hw).trans
+    fun τ _ hw => columnCodeBinding_cases M (wellFormed_ofPowers τ) hw).trans
       (add_le_add le_rfl (prEvent_bind_le_of_forall _ _ _ fun τ =>
         prEvent_columnsRun_root_le _ adversary hq n τ (setupPowers τ)))
 

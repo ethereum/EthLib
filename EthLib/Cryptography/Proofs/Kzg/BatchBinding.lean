@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Kzg.Binding
+import EthLib.Cryptography.Proofs.Bls.PairingAte
 
 /-!
 # Proofs: binding of the batch check of KZG openings
@@ -11,7 +12,7 @@ Opening `i` claims `p_i(z_i) = y_i`, with commitment `c_i` and proof `w_i`.
 
 Its error is `c_i - y_i - w_i (τ - z_i)`, which is zero exactly when the single check accepts it.
 
-Under the pairing law, the batch check accepts exactly when `r` is a root of the error polynomial.
+For a well-formed setup, the batch check accepts exactly when `r` is a root of the error polynomial.
 
 That polynomial is `P(X) = sum_i e_i X^i`, with `e_i` the error of opening `i`.
 
@@ -139,14 +140,14 @@ theorem verifyKzgProofBatch_exists_ok (s : TrustedSetup)
 
 /-- **The batch check as a scalar identity.**
 
-Assume the pairing law and a well-formed setup of the secret `τ`.
+Assume a well-formed setup of the secret `τ`.
 
 Let commitment `i` represent `c i` and proof `i` represent `w i`.
 
 Let the batch check return the verdict `b`.
 
 Then `b` is true exactly when the challenge is a root of the error polynomial. -/
-theorem verifyKzgProofBatch_ok_iff_root (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
+theorem verifyKzgProofBatch_ok_iff_root {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) {commitments : Array KZGCommitment} {commitmentsG1 : Array G1}
     {zs ys : Array Fr} {proofs : Array KZGProof} {proofsG1 : Array G1} {c w : Nat → Fr} {b : Bool}
     (hC : ∀ i < commitmentsG1.size, G1.Represents commitmentsG1[i]! (c i))
@@ -195,7 +196,7 @@ theorem verifyKzgProofBatch_ok_iff_root (laws : Bls.PairingLaws) {s : TrustedSet
     have h := hs.monomial_g2 ⟨1, by decide⟩
     simp only [Fin.getElem_fin, pow_one] at h
     exact h
-  have hid := laws.two_pairs hA hs2.neg (hB.add hD) G2.represents_generator
+  have hid := Bls.pairingLaws.two_pairs hA hs2.neg (hB.add hD) G2.represents_generator
   rw [hcm, h₅] at hid
   subst h
   -- The value of the error polynomial at `r` is the left side of the identity of the check.
@@ -216,7 +217,7 @@ theorem verifyKzgProofBatch_ok_iff_root (laws : Bls.PairingLaws) {s : TrustedSet
 Under the hypotheses of the scalar identity, let the batch check accept.
 
 Then its challenge is a root of the error polynomial. -/
-theorem verifyKzgProofBatch_root (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
+theorem verifyKzgProofBatch_root {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) {commitments : Array KZGCommitment} {commitmentsG1 : Array G1}
     {zs ys : Array Fr} {proofs : Array KZGProof} {proofsG1 : Array G1} {c w : Nat → Fr}
     (hC : ∀ i < commitmentsG1.size, G1.Represents commitmentsG1[i]! (c i))
@@ -224,7 +225,7 @@ theorem verifyKzgProofBatch_root (laws : Bls.PairingLaws) {s : TrustedSetup} {τ
     (h : verifyKzgProofBatch s commitments commitmentsG1 zs ys proofs proofsG1 = .ok true) :
     (batchErrorPoly τ c (ys[·]!) w (zs[·]!) commitments.size).eval
       (computeVerifyKzgProofBatchChallenge commitments zs ys proofs) = 0 :=
-  (verifyKzgProofBatch_ok_iff_root laws hs hC hP h).mp rfl
+  (verifyKzgProofBatch_ok_iff_root hs hC hP h).mp rfl
 
 /-- A batch that the check accepts has as many proofs as commitments. -/
 theorem proofsG1_size_of_ok {s : TrustedSetup} {commitments : Array KZGCommitment}
@@ -250,7 +251,7 @@ Take the hypotheses of the scalar identity.
 Then every opening of an accepted batch satisfies `c_i - y_i = w_i (τ - z_i)`.
 
 Otherwise the error polynomial is not zero, and the challenge is one of its roots. -/
-theorem verifyKzgProofBatch_valid_or_root (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
+theorem verifyKzgProofBatch_valid_or_root {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) {commitments : Array KZGCommitment} {commitmentsG1 : Array G1}
     {zs ys : Array Fr} {proofs : Array KZGProof} {proofsG1 : Array G1} {c w : Nat → Fr}
     (hC : ∀ i < commitmentsG1.size, G1.Represents commitmentsG1[i]! (c i))
@@ -262,7 +263,7 @@ theorem verifyKzgProofBatch_valid_or_root (laws : Bls.PairingLaws) {s : TrustedS
           (computeVerifyKzgProofBatchChallenge commitments zs ys proofs) = 0) := by
   by_cases hzero : batchErrorPoly τ c (ys[·]!) w (zs[·]!) commitments.size = 0
   · exact Or.inl ((batchErrorPoly_eq_zero_iff τ c _ w _ _).mp hzero)
-  · exact Or.inr ⟨hzero, verifyKzgProofBatch_root laws hs hC hP h⟩
+  · exact Or.inr ⟨hzero, verifyKzgProofBatch_root hs hC hP h⟩
 
 /-! ## Binding -/
 
@@ -275,7 +276,7 @@ Then one of three cases holds.
 - The two values agree.
 - The search on the two openings returns a strong Diffie–Hellman solution for `τ`.
 - The challenge is a root of the error polynomial, which is not zero. -/
-theorem verifyKzgProofBatch_binding (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
+theorem verifyKzgProofBatch_binding {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) {commitments : Array KZGCommitment} {commitmentsG1 : Array G1}
     {zs ys : Array Fr} {proofs : Array KZGProof} {proofsG1 : Array G1} {c w : Nat → Fr}
     (hC : ∀ i < commitmentsG1.size, G1.Represents commitmentsG1[i]! (c i))
@@ -291,7 +292,7 @@ theorem verifyKzgProofBatch_binding (laws : Bls.PairingLaws) {s : TrustedSetup} 
           (computeVerifyKzgProofBatchChallenge commitments zs ys proofs) = 0) := by
   by_cases hne : ys[i]! = ys[j]!
   · exact Or.inl hne
-  rcases verifyKzgProofBatch_valid_or_root laws hs hC hP h with hall | hroot
+  rcases verifyKzgProofBatch_valid_or_root hs hC hP h with hall | hroot
   · -- The batch has as many proofs as commitments, or it would not be accepted.
     have hsize : proofsG1.size = commitments.size := proofsG1_size_of_ok h
     have hid := hall i hi
@@ -312,7 +313,7 @@ Then one of three cases holds.
 - The two values agree.
 - The search on the two openings returns a strong Diffie–Hellman solution for `τ`.
 - The challenge of the batch is a root of its error polynomial, which is not zero. -/
-theorem verifyKzgProofBatch_binding_single (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
+theorem verifyKzgProofBatch_binding_single {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) {commitments : Array KZGCommitment} {commitmentsG1 : Array G1}
     {zs ys : Array Fr} {proofs : Array KZGProof} {proofsG1 : Array G1} {c w : Nat → Fr}
     (hC : ∀ i < commitmentsG1.size, G1.Represents commitmentsG1[i]! (c i))
@@ -328,10 +329,10 @@ theorem verifyKzgProofBatch_binding_single (laws : Bls.PairingLaws) {s : Trusted
           (computeVerifyKzgProofBatchChallenge commitments zs ys proofs) = 0) := by
   by_cases hne : ys[i]! = y
   · exact Or.inl hne
-  rcases verifyKzgProofBatch_valid_or_root laws hs hC hP h with hall | hroot
+  rcases verifyKzgProofBatch_valid_or_root hs hC hP h with hall | hroot
   · have hsize : proofsG1.size = commitments.size := proofsG1_size_of_ok h
     exact Or.inr (Or.inl (findSdh_valid_of_identity (hP i (by omega)) hP' hne (hall i hi)
-      ((verifyKzgProofImpl_iff laws hs hC' hP' zs[i]! y).mp h')))
+      ((verifyKzgProofImpl_iff hs hC' hP' zs[i]! y).mp h')))
   · exact Or.inr (Or.inr hroot)
 
 end EthLib.Cryptography.Kzg
