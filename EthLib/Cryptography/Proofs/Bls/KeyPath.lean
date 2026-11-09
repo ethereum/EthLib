@@ -10,6 +10,8 @@ import Init.Data.String.Lemmas.Pattern.Split.Char
 # Proofs: ERC-2334 key paths
 
 Paths have the required purpose and at least four child indices.
+
+Parsing the written form of a path gives back the same path, at any depth.
 -/
 
 @[expose] public section
@@ -55,12 +57,14 @@ private theorem decimalValue_utf8Encode (cs : List Char) (init : Nat)
     simpa [decimalValue, Nat.ofDigitChars_cons, hval, UInt8.le_iff_toNat_le,
       hc'.1, hc'.2] using ih (10 * init + (c.toNat - 48)) ht
 
-private theorem parseIndex_toString (index : UInt32) :
+/-- Parsing the decimal form of an index gives back the index. -/
+theorem parseIndex_toString (index : UInt32) :
     parseIndex (toString index.toNat) = .ok index := by
   have hd : decimalValue (Nat.toDigits 10 index.toNat).utf8Encode.data.toList 0 =
       some index.toNat := by
     simpa using decimalValue_utf8Encode (Nat.toDigits 10 index.toNat) 0
       (fun c hc => Nat.isDigit_of_mem_toDigits (by decide) (by decide) hc)
+  -- The decimal form of a number has at least one digit.
   have hn : ¬(Nat.toDigits 10 index.toNat).utf8Encode.data.toList.isEmpty := by
     simp only [List.isEmpty_iff, Array.toList_eq_nil_iff]
     intro hh
@@ -80,9 +84,9 @@ private theorem slash_not_mem_toString (n : Nat) : '/' ∉ (toString n).toList :
   have := Nat.isDigit_of_mem_toDigits (by decide) (by decide) hc
   contradiction
 
-/-- Parsing the decimal form of a path recovers every index, including deeper indices. -/
+/-- Parsing the written form of a path gives back the same path, at any depth. -/
 theorem parsePath_toString (path : Path) : parsePath path.toString = .ok path := by
-  -- Include the master node in the intercalation to use the split inverse.
+  -- Write `m` as the first segment, so that splitting at `/` undoes the join.
   have hf : path.toString = "/".intercalate ("m" ::
       path.indices.map (fun index => toString index.toNat)) := by
     simp [Path.toString, Path.indices, String.append_assoc]

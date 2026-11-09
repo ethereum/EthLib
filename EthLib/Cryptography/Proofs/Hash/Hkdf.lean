@@ -198,6 +198,13 @@ theorem hkdf_ok {salt ikm info : ByteArray} {length : Nat} (h : length ≤ 255 *
     ∃ okm, hkdf salt ikm info length = .ok okm ∧ okm.size = length :=
   ⟨_, hkdf_eq h, hkdf_size (hkdf_eq h)⟩
 
+/-- An output of whole blocks is the first `n` blocks, with no byte cut, for `n <= 255`. -/
+theorem hkdf_hashLen_mul {salt ikm info : ByteArray} {n : Nat} (hn : n ≤ 255) :
+    hkdf salt ikm info (HASH_LEN * n) = .ok (blocks (hmac salt ikm) info n) := by
+  have hcount : (HASH_LEN * n + HASH_LEN - 1) / HASH_LEN = n := by simp only [HASH_LEN]; omega
+  rw [hkdf_eq (by simp only [HASH_LEN]; omega), hcount, ← blocks_size (hmac salt ikm) info n,
+    ByteArray.extract_zero_size]
+
 /-! ## Error codes -/
 
 /-- Two errors with one code come from one constructor. -/

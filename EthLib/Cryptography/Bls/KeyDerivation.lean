@@ -46,9 +46,12 @@ def LAMPORT_CHUNKS : Nat := 255
 /-- The 32 bytes of each Lamport chunk, ERC-2333 `IKM_to_lamport_SK`. -/
 def LAMPORT_CHUNK_SIZE : Nat := 32
 
-/-- Expand the input to 255 consecutive 32-byte chunks, ERC-2333 `IKM_to_lamport_SK`. -/
+/-- Expand the input to 255 consecutive 32-byte chunks, ERC-2333 `IKM_to_lamport_SK`.
+
+ERC-2333 asks HKDF-Expand for 255 * 32 bytes, which are exactly the first 255 HKDF blocks. -/
 def ikmToLamportSk (ikm salt : ByteArray) : Vector ByteArray 255 :=
-  -- The extracted key is 32 bytes, and 255 blocks exactly reach HKDF's limit.
+  -- The extracted key is 32 bytes and 255 blocks are HKDF's limit, so neither check can fail.
+  -- Each HMAC-SHA-256 block is one 32-byte chunk.
   let bytes := Hkdf.expandBlocks (Hkdf.extract salt ikm) ByteArray.empty ByteArray.empty
     1 LAMPORT_CHUNKS
   Vector.ofFn fun i =>
