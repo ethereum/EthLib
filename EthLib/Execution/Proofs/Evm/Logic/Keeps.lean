@@ -12,17 +12,19 @@ The assumption here says what the messages of a named set do to the state.
 
 Take each such message that the runner ends with no error.
 
-The relation holds from the state of its caller to the state of the frame that ends it.
+The relation holds from the state of the frame that sends it to the state of the frame that ends it.
 
-One set names the calls that a code makes to an address, with no value.
+One set names the CALLs with no value that a code makes to an address.
 
 Such a call runs the code that the address holds in a state, along its route.
 
-The state of its caller reads as that state, with the same accounts, storage and code.
+The state of the frame that sends it reads as that state.
 
-So the code that the message runs is the real code of the address, and not any code.
+It has the same accounts, current storage and code.
 
-A call along a route, from a state that reads as the state before the call, is in that set.
+So the message runs the real code of the address, or its precompile, and not any code.
+
+The message of a CALL along a route is in that set, with the state before the call.
 -/
 
 @[expose] public section
@@ -42,7 +44,13 @@ It has the account, the storage and the transient storage of `S` at every addres
 
 It has the code of `S` at every code hash.
 
-The two may differ in the reads that they record, which no read of the state returns. -/
+The two may differ in the reads that they record.
+
+They may also differ in the block before the transaction.
+
+And they may differ in the accounts that the transaction created and the storage that it wiped.
+
+So the original storage and the account before the transaction may differ. -/
 def ReadsAs (tx S : TransactionState) : Prop :=
   TransactionState.SameOutside [] S tx ∧ ∀ codeHash, tx.getCode codeHash = S.getCode codeHash
 
@@ -84,7 +92,7 @@ theorem Routes.of_readsAs {tx S : TransactionState} {c : ByteArray} {route : Rou
 
 /-! ## The calls that a code makes to an address -/
 
-/-- The frame `caller` sends `msg`, a call with no value to `to`, along the route that `S` gives.
+/-- `msg` is a CALL with no value to `to`, along the route that `S` gives, from the frame `caller`.
 
 The current account of `message` makes the call, from a frame whose state reads as `S`.
 
@@ -92,7 +100,9 @@ The message runs the code that `to` holds in `S`, along its route.
 
 It has the depth, the static flag, the block and the transaction of a call from `message`.
 
-Its data and its gas may be any. -/
+Its data, its gas and its reservoir may be any.
+
+So may the frame `caller`, apart from its state. -/
 def SentVia (message : Message fork) (S : TransactionState) (to : Address)
     (caller : Evm fork Meter) (msg : Message fork) : Prop :=
   ∃ c route, S.getCode (S.getAccount to).codeHash = .ok c ∧ Routes fork S c route ∧
@@ -103,7 +113,7 @@ def SentVia (message : Message fork) (S : TransactionState) (to : Address)
     msg.depth = message.depth + 1 ∧ msg.isStatic = message.isStatic ∧
     msg.blockEnv = message.blockEnv ∧ msg.txEnv = message.txEnv
 
-/-- A CALL with no value along a route sends a message of the calls to its address.
+/-- The message of a CALL along a route is a call to its address via the state before the call.
 
 The state `state` before the call holds the code of the address, and the route goes from it.
 
@@ -135,8 +145,8 @@ It is an assumption on the runner, and so on the code that each message of `S` r
 def KeepsOn {bound : Nat} (runChild : MessageRunner fork Meter bound)
     (S : Evm fork Meter → Message fork → Prop) (R : TransactionState → TransactionState → Prop) :
     Prop :=
-  ∀ caller message lt ended, S caller message → runChild caller message lt = .ok ended →
-    ended.val.error = none → R caller.state ended.val.state
+  MeetsOk (fun caller message child => S caller message → child.error = none →
+    R caller.state child.state) runChild
 
 /-- A smaller set of messages and a weaker relation keep the assumption. -/
 theorem KeepsOn.mono {bound : Nat} {runChild : MessageRunner fork Meter bound}
@@ -144,13 +154,14 @@ theorem KeepsOn.mono {bound : Nat} {runChild : MessageRunner fork Meter bound}
     {R R' : TransactionState → TransactionState → Prop} (h : KeepsOn runChild S R)
     (smaller : ∀ caller message, S' caller message → S caller message)
     (weaker : ∀ tx tx', R tx tx' → R' tx tx') : KeepsOn runChild S' R' :=
-  fun caller message lt ended hS ran halted =>
-    weaker _ _ (h caller message lt ended (smaller caller message hS) ran halted)
+  fun caller message lt ended ran hS halted =>
+    weaker _ _ (h caller message lt ended ran (smaller caller message hS) halted)
 
 /-- A runner that keeps the block of the state keeps it on every set of messages. -/
-theorem KeepsParent.keepsOn {bound : Nat} {runChild : MessageRunner fork Meter bound}
+theorem _root_.EthLib.Execution.Evm.KeepsParent.keepsOn {bound : Nat}
+    {runChild : MessageRunner fork Meter bound}
     (h : KeepsParent runChild) (S : Evm fork Meter → Message fork → Prop) :
     KeepsOn runChild S fun tx tx' => tx'.parent = tx.parent :=
-  fun caller message lt ended _ ran _ => h caller message lt ended ran
+  fun caller message lt ended ran _ _ => h caller message lt ended ran
 
 end EthLib.Execution.Evm.Logic
