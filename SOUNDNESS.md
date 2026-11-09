@@ -1082,6 +1082,21 @@ Its set holds only the message of the call, so a run may stop because the runner
 Unlike `Logic.callWith`, neither rule asks that the code be no delegation, or that the fork come before Glamsterdam.
 `Logic.callStep_child` and `Logic.callKindWith` are their cases with no delegation, so the step has one proof.
 
+A triple says about the state after a message only what its assumption says, so a proof needs an assumption on what the callee does.
+`Logic.KeepsOn runChild S R` (`Logic/Keeps.lean`) says that each message of `S` that the runner ends with no error keeps the relation `R`.
+It is the assumption `Logic.MeetsOk` of a triple, for that condition on the frame that ends the message.
+`R` holds from the state of the frame that sends the message to the state of the frame that ends it.
+`Logic.KeepsOn.mono` proves that a smaller set of messages and a weaker relation keep the assumption.
+`Logic.ReadsAs tx S` says that `tx` has the account, the storage and the transient storage of `S` at every address, and its code at every hash.
+It leaves free the block before the transaction, the created accounts, the wiped storage and the read records.
+`Logic.ReadsAs.recordAccountRead` proves that a record of an account read keeps this relation.
+`Logic.ReadsAs.recordStorageRead` proves the same for a record of a storage read.
+`Logic.ReadsAs.routeState` proves the same for the state once a call follows a route.
+`Logic.Routes.of_readsAs` proves that a state that reads as `S` gives each code the route that `S` gives it.
+`Logic.SentVia message S to` names the CALLs with no value from the current account of `message` to `to`, from a frame that reads as `S`.
+Each such call runs the code that `to` holds in `S`, along its route, with any data, any gas and any reservoir.
+`Logic.CallSends.sentVia` proves that the message of a CALL with no value along a route is such a call, via the state before the call.
+
 The block of a transaction state is the state before the block, with the writes of the block so far.
 A rollback restores the storage of a snapshot only when both states have the same block.
 `parentResult_step` (`Execution/Proofs/Evm/Call/Parent.lean`) proves that every successful step keeps the block of the state, at every fork.
@@ -1091,6 +1106,7 @@ A step that sends a message keeps it once the frame that ends the message has th
 `parent_processMessage` proves that a successful call keeps the block of the state it is sent from, at every fork.
 `parent_processCreateMessage` proves the same for a successful creation.
 `keepsParent_processRunner` (`Logic/Message.lean`) proves that the runner of the code of a message meets `KeepsParent`, for every bound.
+`KeepsParent.keepsOn` (`Logic/Keeps.lean`) proves that such a runner keeps the block on every set of messages of `Logic.KeepsOn`.
 `processMessage_sameOutside_of_error` proves that a call that ends with an error reads as the state it is sent from at every address, at every fork.
 That covers the account, the storage and the transient storage, and `getStorage_processMessage_of_error` states it for one storage word.
 
