@@ -52,6 +52,14 @@ def test_secret_reads_index_little_endian(index: int) -> None:
     assert vrf.secret(fixtures.SEED, index) == expected
 
 
+@pytest.mark.parametrize("index", [0, 1, 0x0102_0304, 0xFFFF_FFFF])
+def test_evaluate_reads_index_little_endian(index: int) -> None:
+    # The output hashes the prefix, the index on 4 bytes least significant first, then the secret.
+    secret = vrf.secret(fixtures.SEED, index)
+    expected = keccak.keccak256(b"PQ_VRF_OUTPUT" + index.to_bytes(4, "little") + secret)
+    assert vrf.evaluate(fixtures.SEED, index) == expected
+
+
 def test_rejects_bad_arguments() -> None:
     # The seed is exactly 32 bytes, and the index is below 2^32.
     with raises(ValueError, "seed: expected 32 bytes, got 31"):

@@ -8,11 +8,9 @@ public import EthLib.Cryptography.Merkle.Tree
 
 Verify an opening at an index, and return the output there.
 
-```text
-    leaf = leaf(s)
-    accept when the path leads from leaf to the root
-    output = output(s)
-```
+- The leaf is the leaf hash of the secret.
+- The opening is valid when its path leads from that leaf to the root.
+- The output is then the output hash of the index and the secret.
 
 The output is a hash of the secret, not the leaf.
 -/
@@ -31,7 +29,7 @@ def verify (root : Digest) (i : UInt32) (opening : Opening) : Option Digest :=
   let leaf := leafHash opening.secret
   -- The opening is valid when its path leads from that leaf to the root.
   if (Merkle.climb treeHash 0 i.toNat leaf opening.path.toList).run = root then
-    some (outputHash opening.secret)
+    some (outputHash i opening.secret)
   else none
 
 end EthLib.Cryptography.Vrf

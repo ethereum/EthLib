@@ -104,7 +104,7 @@ def gameOf (pass : QueryImpl (unifSpec + HashSpec) (OracleComp spec))
   let r ← rootOf (fun x => pass (.inr x)) sec
   let z ← (simulateQ (logKeys (holderOf pass sec) openedIndex) (adversary r)).run ∅
   let s ← sec z.1.1
-  let output ← pass (.inr (outputInput s))
+  let output ← pass (.inr (outputInput z.1.1 s))
   return decide (z.1.1 ∉ z.2 ∧ z.1.2 = output)
 
 /-- Answering the queries of the game through a handler gives the game over the answered source. -/

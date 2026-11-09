@@ -5,24 +5,33 @@ What makes it useful is that each output is fixed before it is revealed, and the
 
 The VRF tree is a hash-based VRF over `2^32` indices.
 Its holder commits to one 32-byte secret per index, by placing the secrets as the leaves of a Merkle tree of height 32 and publishing the root.
-Opening index `i` reveals secret `i` together with its path to the root, and the output at `i` is a hash of that secret.
+Opening index `i` reveals secret `i` together with its path to the root, and the output at `i` is a hash of the index and that secret.
 Since the root fixes every leaf, it fixes one output per index before any index is opened.
+
+```text
+    output_i = keccak256(PQ_VRF_OUTPUT | LE32(i) | s_i)
+```
 
 ## Source
 
 This module is the specification of the VRF tree.
+[EIP-8450](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8450.md#cryptographic-helpers) registers the root of such a tree for each validator, and calls it through `vrf.Verify(root, index, opening)`, which returns the output at the index or nothing.
+The EIP specifies that interface and the properties it relies on, not the construction, and this module keeps the interface.
+Its rationale ([Two keys per validator](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8450.md#two-keys-per-validator)) says that the root fixes one output per index at registration, before the validator knows its inputs.
+That holds, but the holder chose those outputs, so a fork that selects with them must mix them as [The holder chooses the outputs](#the-holder-chooses-the-outputs) explains.
 The hash is Keccak-256, as in [FIPS 202](https://csrc.nist.gov/pubs/fips/202/final) but with Keccak's original padding (`EthLib/Cryptography/Hash/Keccak.lean`).
 A VRF is defined in [Micali, Rabin and Vadhan, "Verifiable Random Functions", FOCS 1999](https://doi.org/10.1109/SFFCS.1999.814584) by three properties: provability, uniqueness and pseudorandomness.
 The proofs here cover the first two.
 
 ## Operations
 
-The module offers four groups of operations:
+The module offers five groups of operations:
 
 - `verify` (`Verify.lean`) returns the output at an index, or nothing.
 - `verifyBytes` (`Serialization.lean`) does the same over bytes, and rejects a malformed root, opening or index.
 - `root` and `opening` (`KeyGen.lean`) build the tree and open it, from any function that gives the secret of each index.
 - `keyGen`, `prove` and `evaluate` (`KeyGen.lean`) do the same from one 32-byte seed.
+- `mixOutput` (`Hash.lean`) mixes an output with randomness, for a selection (see [The holder chooses the outputs](#the-holder-chooses-the-outputs)).
 
 The tree is the Merkle tree of [`EthLib.Cryptography.Merkle`](../Merkle/), with the VRF's node hash at every position.
 Its two guarantees, completeness and binding, are proved there, and the proofs about the VRF build on them.
@@ -47,17 +56,32 @@ It is specified anyway, so that every implementation rebuilds the same tree from
 
 Verification cannot tell a tree built from a seed from a tree whose secrets the holder chose.
 So a dishonest holder can pick every secret before it publishes the root, and keep only secrets whose output it likes.
-The output hashes the secret alone, not the index, so one good secret serves every leaf.
 
-For example, about 256 random secrets give one whose output starts with a zero byte.
-The holder places that secret at all `2^32` leaves.
-Each level of the tree then has one node value, so the tree costs 33 Keccak-256 calls.
-Every index opens to that same output, and every opening verifies.
-With about `2^40` tries instead, every output starts with five zero bytes.
+The output hashes the index with the secret, so a secret with a good output at one index has no reason to have one at another.
+Placing one secret at all `2^32` leaves still gives a valid tree: each level has one node value, so the tree costs 33 Keccak-256 calls, and every index opens.
+But each index then has its own output, and a secret chosen for one index says nothing about the output of another.
+Without the index, one secret found in about 256 tries would make every output start with a zero byte.
+
+Binding the index does not stop the holder from choosing, though: it only makes the holder choose index by index.
+A threshold that one output in `2^k` passes costs about `2^k` tries per index, so about `2^(32 + k)` Keccak-256 calls make every index pass.
+For a threshold of one in 256, that is about `2^40` calls, well within reach.
+And a holder needs only the indices that its protocol will actually use.
 
 So the outputs are fixed once the root is published, but the holder chose them.
 A protocol that compares outputs with a threshold, as a lottery does, must not use them alone.
-It must first mix each output with randomness that becomes known only after the root is registered.
+It must compare the mixed value instead, which hashes the output with randomness `r` that becomes known only after the root is registered:
+
+```text
+    mixed = keccak256(PQ_VRF_MIX | output_i | r)
+```
+
+The holder cannot choose secrets for an `r` that it does not know yet, so each mixed value is a fresh random value for it.
+`prEvent_selected_le` (`Proofs/Vrf/Selection.lean`) proves this in the random oracle model, for a holder that chose all its secrets.
+
+The randomness must be unknown at registration, and that is a property of the protocol, not of this module.
+If `r` was already known when the root was registered, the holder can grind its secrets against it.
+For example, a finalized root does not change while the chain does not finalize, so a holder could grind against it until it changes.
+A protocol should therefore mix in randomness that is new for each duty, such as randomness revealed for that duty's slot.
 
 ## What is proved
 
@@ -81,7 +105,11 @@ The search makes at most 68 Keccak-256 calls, no more than verifying the two ope
 The count is read from the definitions, and no theorem proves it.
 
 A third statement, which is not one of those properties, says exactly what verification checks.
-An opening verifies if and only if its path leads from its leaf to the root, and its output is the hash of its secret (`verify_eq_some_iff`).
+An opening verifies if and only if its path leads from its leaf to the root, and its output is the hash of its index and its secret (`verify_eq_some_iff`).
+
+The output binds its index (`Verify.lean`).
+Two outputs are equal only for one index and one secret, or their two output inputs, which differ, are a Keccak-256 collision (`outputHash_binding`).
+So two openings that verify at two different indices, under any roots and even with one secret, give two different outputs, or their output inputs collide (`verify_index_binding`).
 
 The same guarantees hold for a tree built from a seed (`KeyGen.lean`).
 That tree verifies at every index, with the output of that index's secret (`verify_prove`).
@@ -89,7 +117,9 @@ Every valid opening of it gives that output, or `findHashCollision` returns a co
 
 Uniqueness turns two outputs into a collision only if no two different kinds of hash input can be confused.
 The proofs establish this domain separation (`Hash.lean`, `KeyGen.lean`).
-The secret, leaf, node and output inputs are 49, 43, 75 and 45 bytes long, so no input of one kind is an input of another.
+The leaf, node, output and mix inputs are 43, 75, 49 and 74 bytes long, so no input of one of these kinds is an input of another.
+The secret inputs of key generation are 49 bytes too, like the output inputs, but they start with `PQ_VRF_SECRET` where an output input starts with `PQ_VRF_OUTPUT`.
+So no input of one kind is an input of another.
 Each input determines its arguments, and each prefix is the ASCII string of its name.
 
 An opening also travels as bytes (`Serialization.lean`).
@@ -123,13 +153,23 @@ The game computes the root and the openings of the tree of a seed, with the hash
 
 None of these theorems covers a holder who chooses its own secrets: such a holder can bias its outputs.
 
+*A mixed selection* is what covers such a holder (`prEvent_selected_le`, `Selection.lean`).
+There the mix is a random oracle, and the tree hash is Keccak-256 itself.
+The holder chooses every secret of its tree, and queries the mix at most `q` times before the randomness `r` is drawn.
+Then `r` is uniform, and the holder opens any index of a set `I` fixed in advance, with any opening.
+It is selected when the opening verifies and the mixed value of its output is in a target set `S`.
+That happens with probability at most `|I| |S| / 2^256 + q / 2^256`, plus the chance that `findHashCollision` returns a collision with the honest opening at that index.
+The first term is one fresh uniform value per allowed index, and the second is a mix query that already used `r`.
+With one index, `|S| = 2^200` (a selection of one in `2^56`) and `q = 2^64`, the first two terms are below `2^-55`.
+The theorem does not cover a holder that registers a root without knowing a tree under it, nor randomness known at registration.
+
 ## Test vectors
 
-`tests/cryptography/vrf/` has cases for `verify`, `secret` and `evaluate`, which the Python suite checks through the bindings.
+`tests/cryptography/vrf/` has cases for `verify`, `secret`, `evaluate` and `mix`, which the Python suite checks through the bindings.
 One opening at index 0 and one at index `2^32 - 1` verify, with their outputs.
 Each is rejected with a wrong secret, with a wrong sibling, and at another index.
 The roots and outputs were computed outside EthLib, by an independent implementation of this specification.
-The secrets and outputs of one seed at the same two indices were computed outside EthLib too.
+The secrets and outputs of one seed at the same two indices, and the mixed value of the output at index 0, were computed outside EthLib too.
 
 ## What is not proved
 

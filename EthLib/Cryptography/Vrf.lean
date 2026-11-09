@@ -13,4 +13,6 @@ public import EthLib.Cryptography.Vrf.Serialization
 The VRF tree is a Merkle tree over `2^32` leaf secrets.
 
 It fixes one verifiable random output per index.
+
+The holder chooses those outputs, so a selection mixes them with randomness revealed later.
 -/

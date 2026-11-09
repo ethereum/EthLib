@@ -271,6 +271,27 @@ Its bound is `2^32 (1 + 2 Q) / 2^256`, because the proof splits a win by the ind
 One hidden-seed step adds `Q / 2^256` to its bound.
 Verification accepts any tree, so a holder that chooses its secrets can bias every output.
 
+The output hashes its index with its secret: `keccak256(PQ_VRF_OUTPUT | LE32(i) | s)`.
+`outputHash_binding` (`Proofs/Vrf/Verify.lean`) says that two equal outputs come from one index and one secret, or their two output inputs, which differ, are a Keccak-256 collision.
+`verify_index_binding` applies it to two openings that verify at two different indices, under any roots.
+So a secret chosen for its output at one index does not fix the output at another.
+A holder can still grind index by index, at about `2^k` hashes per index for a threshold of one in `2^k`.
+
+A selection therefore compares `mixOutput`, the hash of the output with randomness revealed after the root is registered.
+`prEvent_selected_le` (`Proofs/Vrf/Selection.lean`) covers a holder that chooses every secret of its tree.
+The mix is a random oracle, and the tree hash is Keccak-256 itself.
+The holder makes at most `q` mix queries before the randomness is drawn, then opens any index of a set `I` fixed in advance.
+The mixed value of its output lands in a target set `S` with probability at most `|I| |S| / 2^256 + q / 2^256`, plus the chance that `findHashCollision` returns a collision with the honest opening at that index.
+No theorem bounds that last chance, as for uniqueness.
+The theorem says nothing about a holder that registers a root without knowing a tree under it.
+That case would need the tree hash as a random oracle too, and an extractor of the tree from the queries.
+It says nothing either about randomness that the holder knows at registration: then the holder can grind against it.
+
+[EIP-8450](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8450.md#cryptographic-helpers) specifies the interface `vrf.Verify` and the property of unique outputs, not the construction.
+The index in the output keeps that interface, and changes every output of the construction that EthLib specified before.
+The EIP's rationale ([Two keys per validator](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8450.md#two-keys-per-validator)) says that the root fixes one output per index before the validator knows its inputs.
+That does not stop a holder from choosing its outputs, so the fork that uses the root must select with the mix.
+
 ### BLS12-381
 
 The BLS theorems check the constants, because a wrong digit in a modulus or in the generator would very likely make one of them fail.
@@ -1980,6 +2001,10 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
 - VRF unpredictability: Keccak-256 is a random oracle on byte strings, as for leanXMSS.
   The bound says nothing about an attack that uses the structure of Keccak.
   It counts classical queries only, so it says nothing about a quantum adversary.
+- VRF mixed selection: Keccak-256 on the 74-byte inputs that start with `PQ_VRF_MIX` is a uniformly random function of the output and the randomness.
+  No other input of the VRF has that length, so the mix shares no input with the tree, whose hash stays Keccak-256 itself.
+  The randomness is uniform and drawn after the holder registers its tree.
+  The bound counts classical mix queries only, and says nothing about an attack that uses the structure of Keccak.
 - BLS: the hash to G2 under the message tag is a random oracle onto the multiples of `g2`.
   [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380), §3, calls its `hash_to_curve` suitable where a random oracle onto the group is needed, and §8.8.2 gives the suite that encoding.
   Nothing in EthLib proves that the hash behaves as such an oracle.
@@ -2054,12 +2079,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 324 operations and 49 size constants.
-The Python extension calls 324 of the operations and 49 of the constants.
+Lean exports 325 operations and 49 size constants.
+The Python extension calls 325 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-9113 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (351), `bls.c` (426), `chain.c` (45), `consensus.c` (1652), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (64), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `module.c` (1303), `noise_primitives.c` (93), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (119), `wrappers.h` (598), `xmss.c` (134).
+9137 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (351), `bls.c` (426), `chain.c` (45), `consensus.c` (1652), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (64), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `module.c` (1304), `noise_primitives.c` (93), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (141), `wrappers.h` (599), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

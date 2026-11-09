@@ -100,6 +100,67 @@ theorem prEvent_logKeys_le {τ : Type} (ro : QueryImpl spec' (StateT τ ProbComp
     ← extendStateLeft_run_proj_eq (ro ∘ₛ impl₂) aux oa s S]
   simpa [Functor.map_map, Function.comp_def, bad] using h
 
+/-- Recording the keys of the queries leaves the answers of a handler unchanged. -/
+theorem fst_map_run_simulateQ_logKeys
+    (impl : QueryImpl spec (OracleComp spec')) (key : spec.Domain → Option K) {α : Type}
+    (oa : OracleComp spec α) (s : Finset K) :
+    Prod.fst <$> (simulateQ (logKeys impl key) oa).run s = simulateQ impl oa := by
+  induction oa using OracleComp.inductionOn generalizing s with
+  | pure a => simp
+  | query_bind t k ih =>
+    simp [simulateQ_bind, StateT.run_bind, logKeys, map_bind, ih]
+
+/-- A run of at most `q` keyed queries records at most `q` new keys. -/
+theorem card_le_of_mem_support_run_logKeys
+    (impl : QueryImpl spec (OracleComp spec')) {key : spec.Domain → Option K}
+    {p : spec.Domain → Prop} [DecidablePred p] (hkey : ∀ t, ¬ p t → key t = none) {α : Type}
+    {oa : OracleComp spec α} {q : ℕ} (hq : IsQueryBoundP oa p q) (s : Finset K)
+    {z : α × Finset K} (hz : z ∈ support ((simulateQ (logKeys impl key) oa).run s)) :
+    z.2.card ≤ s.card + q := by
+  induction oa using OracleComp.inductionOn generalizing s q with
+  | pure a =>
+    simp only [simulateQ_pure, StateT.run_pure, support_pure, Set.mem_singleton_iff] at hz
+    subst hz
+    exact Nat.le_add_right _ _
+  | query_bind t k ih =>
+    rw [isQueryBoundP_query_bind_iff] at hq
+    simp only [simulateQ_bind, simulateQ_query, StateT.run_bind, logKeys] at hz
+    simp at hz
+    obtain ⟨u, -, hz⟩ := hz
+    have h := ih u (hq.2 u) _ hz
+    by_cases ht : p t
+    · have hq0 : 0 < q := hq.1.resolve_left (not_not.mpr ht)
+      rw [ite_eq_left ht] at h
+      have h1 : (key t).toFinset.card ≤ 1 := by cases key t <;> simp
+      have := Finset.card_union_le s (key t).toFinset
+      omega
+    · rwa [ite_eq_right ht, hkey t ht, Option.toFinset_none, Finset.union_empty] at h
+
+/-- The handler that passes each sampling query on, with no state. -/
+def liftUnif : QueryImpl unifSpec (StateT Unit ProbComp) :=
+  fun n => StateT.lift (unifSpec.query n)
+
+/-- Passing each sampling query on, with no state, leaves a program unchanged. -/
+theorem run'_simulateQ_liftUnif {α : Type} (x : ProbComp α) (u : Unit) :
+    (simulateQ liftUnif x).run' u = x := by
+  induction x using OracleComp.inductionOn generalizing u with
+  | pure a => simp
+  | query_bind t k ih =>
+    simp only [liftUnif, StateT.run'_eq, simulateQ_bind, simulateQ_spec_query, StateT.run_bind,
+      StateT.run_lift, bind_assoc, pure_bind, map_bind] at *
+    exact bind_congr fun a => ih a u
+
+/-- Two handlers into probabilistic programs that agree away from key `k`.
+
+An event of the first run, with `k` never recorded, has at most its mass in the second run. -/
+theorem prEvent_run_logKeys_le {impl₁ impl₂ : QueryImpl spec ProbComp}
+    {key : spec.Domain → Option K} {k : K} (hagree : ∀ t, key t ≠ some k → impl₁ t = impl₂ t)
+    {α : Type} (oa : OracleComp spec α) (S : Finset K) (P : α → Prop) :
+    Pr{let z ← (simulateQ (logKeys impl₁ key) oa).run S}[P z.1 ∧ k ∉ z.2]
+      ≤ Pr{let z ← simulateQ impl₂ oa}[P z] := by
+  have h := prEvent_logKeys_le liftUnif hagree oa S () P
+  rwa [run'_simulateQ_liftUnif, run'_simulateQ_liftUnif] at h
+
 end LogKeys
 
 end EthLib.Cryptography
@@ -133,7 +194,7 @@ def adaptiveGame (secrets : UInt32 → Digest) (adversary : AdaptiveAdversary) :
     OracleComp (unifSpec + HashSpec) Bool := do
   let r ← rootWith queryHash secrets
   let z ← (simulateQ (logKeys (honestImpl secrets) openedIndex) (adversary r)).run ∅
-  let output ← queryHash (outputInput (secrets z.1.1))
+  let output ← queryHash (outputInput z.1.1 (secrets z.1.1))
   return decide (z.1.1 ∉ z.2 ∧ z.1.2 = output)
 
 /-! ## One guess of the index -/
@@ -151,7 +212,7 @@ theorem honestImpl_eq_openImpl (secrets : UInt32 → Digest) (c : UInt32)
 def withOutput (secrets : UInt32 → Digest) (adversary : AdaptiveAdversary) (r : Digest) :
     OracleComp AdversarySpec ((UInt32 × Digest) × Digest) := do
   let x ← adversary r
-  let output ← AdversarySpec.query (.inl (.inr (outputInput (secrets x.1))))
+  let output ← AdversarySpec.query (.inl (.inr (outputInput x.1 (secrets x.1))))
   return (x, output)
 
 /-- The game, with the output query folded into the adversary's run. -/
@@ -176,7 +237,7 @@ theorem prEvent_withOutput_le (secrets : UInt32 → Digest) (c : UInt32)
         (z.1.1.1 ∉ z.2 ∧ z.1.1.2 = z.1.2) ∧ z.1.1.1 = c]
       ≤ Pr{let z ← (simulateQ HashSpec.romImpl (do
           let guess ← simulateQ (openImpl secrets c) (Prod.snd <$> adversary r)
-          let output ← queryHash (outputInput (secrets c))
+          let output ← queryHash (outputInput c (secrets c))
           return (guess, output))).run' cache}[z.1 = z.2] := by
   calc _ ≤ Pr{let z ← (simulateQ HashSpec.romImpl ((simulateQ (logKeys (honestImpl secrets)
           openedIndex) (withOutput secrets adversary r)).run ∅)).run' cache}[
@@ -198,9 +259,9 @@ theorem prEvent_withOutput_le (secrets : UInt32 → Digest) (c : UInt32)
       have key := prEvent_bind_mono_of_forall_le (m := ProbComp)
         ((simulateQ HashSpec.romImpl (simulateQ (openImpl secrets c) (adversary r))).run cache)
         (fun a => (fun b => (a.1, b.1)) <$>
-          (simulateQ HashSpec.romImpl (queryHash (outputInput (secrets a.1.1)))).run a.2)
+          (simulateQ HashSpec.romImpl (queryHash (outputInput a.1.1 (secrets a.1.1)))).run a.2)
         (fun a => (fun b => (a.1.2, b.1)) <$>
-          (simulateQ HashSpec.romImpl (queryHash (outputInput (secrets c)))).run a.2)
+          (simulateQ HashSpec.romImpl (queryHash (outputInput c (secrets c)))).run a.2)
         (fun z => z.1.1 = c ∧ z.1.2 = z.2) (fun z => z.1 = z.2) fun a => by
           rw [prEvent_map, prEvent_map]
           by_cases ha : a.1.1 = c
@@ -230,7 +291,7 @@ theorem prEvent_adaptiveRun_le (secrets : UInt32 → Digest) (c : UInt32)
       (withOutput secrets adversary p.1)).run ∅)).run' p.2)
     (fun p => (simulateQ HashSpec.romImpl (do
       let guess ← simulateQ (openImpl secrets c) (Prod.snd <$> adversary p.1)
-      let output ← queryHash (outputInput (secrets c))
+      let output ← queryHash (outputInput c (secrets c))
       return (guess, output))).run' p.2)
     (fun z => (z.1.1.1 ∉ z.2 ∧ z.1.1.2 = z.1.2) ∧ z.1.1.1 = c) (fun z => z.1 = z.2)
     fun p => prEvent_withOutput_le secrets c adversary p.1 p.2

@@ -227,6 +227,10 @@ def vrf_evaluate(seed: bytes, index: int) -> bytes:
     """The output at index `i` of the tree of a seed."""
     ...
 
+def vrf_mix(output: bytes, randomness: bytes) -> bytes:
+    """An output mixed with randomness, or an error if either is not 32 bytes."""
+    ...
+
 def crc32(data: bytes) -> bytes:
     """The four digest bytes of CRC-32: the highest power of each byte at its least significant bit."""
     ...

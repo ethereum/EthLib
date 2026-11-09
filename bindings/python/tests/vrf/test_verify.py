@@ -5,7 +5,7 @@
 import pytest
 
 from dumper import hex_str, write_case
-from ethlib.cryptography import vrf
+from ethlib.cryptography import keccak, vrf
 from raising import raises
 
 from . import fixtures
@@ -78,6 +78,23 @@ def test_wrong_length(field: str, size: int) -> None:
     root = fixtures.ROOT_ZERO[:size] if field == "root" else fixtures.ROOT_ZERO
     opening = fixtures.OPENING_ZERO[:size] if field == "opening" else fixtures.OPENING_ZERO
     _emit(f"{HANDLER}_short_{field}", root, fixtures.INDEX_ZERO, opening, None)
+
+
+def test_one_secret_at_every_leaf() -> None:
+    # One secret at all 2^32 leaves: each level has one node value, so 33 hashes build the tree.
+    # The same opening verifies at every index, and the output of each index reads that index.
+    secret = fixtures.SECRET_ZERO
+    path = [keccak.keccak256(b"PQ_VRF_LEAF" + secret)]
+    for _ in range(31):
+        path.append(keccak.keccak256(b"PQ_VRF_NODE" + path[-1] + path[-1]))
+    root = keccak.keccak256(b"PQ_VRF_NODE" + path[-1] + path[-1])
+    opening = secret + b"".join(path)
+    outputs = {
+        index: vrf.verify(root, index, opening) for index in (0, 1, 0x0102_0304, 0xFFFF_FFFF)
+    }
+    for index, output in outputs.items():
+        assert output == keccak.keccak256(b"PQ_VRF_OUTPUT" + index.to_bytes(4, "little") + secret)
+    assert len(set(outputs.values())) == len(outputs)
 
 
 def test_rejects_non_bytes() -> None:

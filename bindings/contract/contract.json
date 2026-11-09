@@ -1198,6 +1198,15 @@
    "error_class": "VrfError",
    "docstring": "The output at index `i` of the tree of a seed."},
   {"summary":
+   "An output mixed with randomness, or an error if either is not 32 bytes.",
+   "signature": "(output: bytes, randomness: bytes) -> bytes",
+   "operation": "EthLib.Cryptography.Vrf.Exports.mix",
+   "method": "vrf_mix",
+   "errors": [],
+   "error_class": "VrfError",
+   "docstring":
+   "An output mixed with randomness, or an error if either is not 32 bytes.\n\nThe randomness must become known only after the root is published."},
+  {"summary":
    "The four digest bytes of CRC-32: the highest power of each byte at its least significant bit.",
    "signature": "(data: bytes) -> bytes",
    "operation": "EthLib.Cryptography.Hash.Crc32.digest",

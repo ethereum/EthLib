@@ -1,9 +1,9 @@
-"""The VRF tree: verify an opening, and compute the secret and the output of a seed."""
+"""The VRF tree: verify an opening, compute the secret and output of a seed, and mix an output."""
 
 # Malformed arguments raise TypeError, ValueError or OverflowError.
 # Verification never raises on bytes: it returns None for every input it rejects.
 
-from ethlib.cryptography._native import vrf_evaluate, vrf_secret, vrf_verify
+from ethlib.cryptography._native import vrf_evaluate, vrf_mix, vrf_secret, vrf_verify
 from ethlib.errors import VrfError
 
 
@@ -24,9 +24,15 @@ def evaluate(seed: bytes, index: int) -> bytes:
     return vrf_evaluate(seed, index)
 
 
+def mix(output: bytes, randomness: bytes) -> bytes:
+    """A 32-byte output mixed with 32 bytes of randomness that became known after the root."""
+    return vrf_mix(output, randomness)
+
+
 __all__ = [
     "VrfError",
     "verify",
     "secret",
     "evaluate",
+    "mix",
 ]

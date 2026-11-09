@@ -7,7 +7,8 @@ public import EthLib.Cryptography.Proofs.Vrf.Verify
 /-!
 # Proofs: VRF key generation
 
-- A secret input is 49 bytes, so it is never a leaf, node or output input.
+- A secret input is 49 bytes, so it is never a leaf, node or mixed input.
+- An output input is 49 bytes too, but its prefix differs, so it is never a secret input.
 - A secret input determines its seed and its index.
 - The tree of a seed verifies at every index, with the output of that index's secret.
 - Every valid opening of that tree gives that output.
@@ -65,9 +66,26 @@ theorem secretInput_ne_nodeInput (seed : Seed) (i : UInt32) (l r : Digest) :
   have := congrArg ByteArray.size h
   simp at this
 
-/-- A secret input is never an output input. -/
-theorem secretInput_ne_outputInput (seed : Seed) (i : UInt32) (s : Digest) :
-    secretInput seed i ≠ outputInput s := by
+/-- The secret prefix is not the output prefix. -/
+theorem VRF_SECRET_DST_ne_VRF_OUTPUT_DST : VRF_SECRET_DST ≠ VRF_OUTPUT_DST := by
+  decide
+
+/-- A secret input is never an output input.
+
+Both are 49 bytes, but they start with two different 13-byte prefixes. -/
+theorem secretInput_ne_outputInput (seed : Seed) (i j : UInt32) (s : Digest) :
+    secretInput seed i ≠ outputInput j s := by
+  intro h
+  have hd := congrArg ByteArray.data h
+  simp only [secretInput, outputInput, ByteArray.data_append, packBytes, Array.append_assoc]
+    at hd
+  -- The bytes after the prefix start at byte 13 on both sides.
+  obtain ⟨hp, -⟩ := Array.append_inj hd (by simp)
+  exact VRF_SECRET_DST_ne_VRF_OUTPUT_DST (Vector.toArray_inj.mp hp)
+
+/-- A secret input is never a mixed input. -/
+theorem secretInput_ne_mixInput (seed : Seed) (i : UInt32) (y r : Digest) :
+    secretInput seed i ≠ mixInput y r := by
   intro h
   have := congrArg ByteArray.size h
   simp at this

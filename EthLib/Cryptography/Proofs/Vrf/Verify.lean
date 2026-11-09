@@ -43,21 +43,21 @@ The output is then the secret's.
 theorem verify_eq_some_iff {root : Digest} {i : UInt32} {o : Opening} {y : Digest} :
     verify root i o = some y ↔
       (Merkle.climb treeHash 0 i.toNat (leafHash o.secret) o.path.toList).run = root ∧
-        y = outputHash o.secret := by
+        y = outputHash i o.secret := by
   unfold verify
   by_cases hp : (Merkle.climb treeHash 0 i.toNat (leafHash o.secret) o.path.toList).run = root <;>
     simp [hp, eq_comm]
 
 /-- The output of a valid opening is the hash of its secret. -/
 theorem verify_output {root : Digest} {i : UInt32} {o : Opening} {y : Digest}
-    (h : verify root i o = some y) : y = outputHash o.secret :=
+    (h : verify root i o = some y) : y = outputHash i o.secret :=
   (verify_eq_some_iff.mp h).2
 
 /-! ## Provability -/
 
 /-- The opening of an honest tree at index `i` verifies, with the output of secret `i`. -/
 theorem verify_opening (secrets : UInt32 → Digest) (i : UInt32) :
-    verify (root secrets) i (opening secrets i) = some (outputHash (secrets i)) := by
+    verify (root secrets) i (opening secrets i) = some (outputHash i (secrets i)) := by
   refine verify_eq_some_iff.mpr ⟨?_, rfl⟩
   -- Leaf `i` of the tree commits to secret `i`.
   have hleaf : leaves secrets i.toNat = leafHash (secrets i) := by simp [leaves]
@@ -110,6 +110,35 @@ theorem findHashCollision_valid {i : UInt32} {o o' : Opening} {p : ByteArray × 
       cases h
       exact ⟨fun he => hleaf.1 (leafInput_inj.mp he), hleaf.2⟩
     · cases h
+
+/-! ## The output binds its index -/
+
+/-- Two outputs are equal only for one index and one secret.
+
+Otherwise their two output inputs, which differ, are a Keccak-256 collision. -/
+theorem outputHash_binding {i j : UInt32} {s s' : Digest} (h : outputHash i s = outputHash j s') :
+    (i = j ∧ s = s') ∨ IsHashCollision (outputInput i s, outputInput j s') := by
+  by_cases he : outputInput i s = outputInput j s'
+  · exact .inl (outputInput_inj.mp he)
+  · exact .inr ⟨he, h⟩
+
+/-- One secret at two different indices gives two different outputs.
+
+Otherwise its two output inputs are a Keccak-256 collision. -/
+theorem outputHash_index_binding {i j : UInt32} (hij : i ≠ j) (s : Digest)
+    (h : outputHash i s = outputHash j s) : IsHashCollision (outputInput i s, outputInput j s) :=
+  (outputHash_binding h).resolve_left fun he => hij he.1
+
+/-- Two openings that verify at two different indices give two different outputs.
+
+The roots may differ, and the two secrets may be equal.
+
+Otherwise the two output inputs of the openings are a Keccak-256 collision. -/
+theorem verify_index_binding {root root' : Digest} {i j : UInt32} (hij : i ≠ j) {o o' : Opening}
+    {y : Digest} (h : verify root i o = some y) (h' : verify root' j o' = some y) :
+    IsHashCollision (outputInput i o.secret, outputInput j o'.secret) :=
+  ((outputHash_binding ((verify_output h).symm.trans (verify_output h'))).resolve_left
+    fun he => hij he.1)
 
 /-- One opening compared with itself exposes no collision. -/
 theorem findHashCollision_self (i : UInt32) (o : Opening) : findHashCollision i o o = none := by
@@ -171,7 +200,7 @@ theorem verify_unique {root : Digest} {i : UInt32} {o o' : Opening} {y y' : Dige
 Otherwise the collision search returns a Keccak-256 collision with the honest opening. -/
 theorem verify_root_unique {secrets : UInt32 → Digest} {i : UInt32} {o : Opening} {y : Digest}
     (h : verify (root secrets) i o = some y) :
-    y = outputHash (secrets i) ∨
+    y = outputHash i (secrets i) ∨
       ∃ p, findHashCollision i o (opening secrets i) = some p ∧ IsHashCollision p :=
   verify_unique h (verify_opening secrets i)
 

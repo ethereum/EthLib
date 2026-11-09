@@ -15,7 +15,9 @@ It returns the 32-byte output, or no bytes when it rejects.
 
 The secret and the output of an index read a 32-byte seed, and fail on any other length.
 
-That failure has code 0, since no error type of the specification covers it.
+The mixed value reads a 32-byte output and 32 bytes of randomness, and fails on any other length.
+
+Each failure has code 0, since no error type of the specification covers it.
 -/
 
 public section
@@ -56,5 +58,17 @@ The seed is secret: EthLib makes no constant-time claim. -/
 @[export eth_vrf_evaluate]
 def evaluate (seed : ByteArray) (index : UInt32) : Result ByteArray := do
   return packBytes (Vrf.evaluate (← readSeed seed) index)
+
+/-- 32 bytes, or an error that names the argument for any other length. -/
+def readDigest (name : String) (bytes : ByteArray) : Result Digest :=
+  if h : bytes.size = VRF_HASH_SIZE then pure ⟨bytes.data, h⟩
+  else throw (0, s!"bad {name} size: {bytes.size}, expected {VRF_HASH_SIZE}")
+
+/-- An output mixed with randomness, or an error if either is not 32 bytes.
+
+The randomness must become known only after the root is published. -/
+@[export eth_vrf_mix]
+def mix (output randomness : ByteArray) : Result ByteArray := do
+  return packBytes (mixOutput (← readDigest "output" output) (← readDigest "randomness" randomness))
 
 end EthLib.Cryptography.Vrf.Exports
