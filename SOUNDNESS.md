@@ -781,7 +781,7 @@ Its first relation covers frames that send no message.
 `Spec fork P Q` is total correctness for such frames: every frame of `P` reaches a stopped frame of `Q`.
 A run that ends out of gas ends in an exceptional halt, so a postcondition of a normal halt needs a precondition with enough gas.
 `Logic.At` is a running frame of a code that names every field of the frame, its return data included.
-`Logic/Rules.lean` gives rules for the opcodes that read call data and the caller, compare, jump, hash memory, read and write storage, and return or revert.
+`Logic/Rules.lean` gives rules for the opcodes that push bytes of the code, read call data and the caller, compare, jump, hash memory, read and write storage, and return or revert.
 `Logic/Stack.lean` gives rules for POP, SWAP1 to SWAP16, EXP and the opcodes of three operands, at every fork with the one-counter meter.
 The rules of `Logic/Rules.lean`, `Logic/Stack.lean`, `Logic/Copy.lean` and `Logic/Log.lean` keep the return data that `At` names.
 `Logic/Rules.lean` gives the rule for DUP1 to DUP16, and the rule for DUP1 is its case at depth 0.
@@ -1082,6 +1082,21 @@ Its set holds only the message of the call, so a run may stop because the runner
 Unlike `Logic.callWith`, neither rule asks that the code be no delegation, or that the fork come before Glamsterdam.
 `Logic.callStep_child` and `Logic.callKindWith` are their cases with no delegation, so the step has one proof.
 
+A triple says about the state after a message only what its assumption says, so a proof needs an assumption on what the callee does.
+`Logic.KeepsOn runChild S R` (`Logic/Keeps.lean`) says that each message of `S` that the runner ends with no error keeps the relation `R`.
+It is the assumption `Logic.MeetsOk` of a triple, for that condition on the frame that ends the message.
+`R` holds from the state of the frame that sends the message to the state of the frame that ends it.
+`Logic.KeepsOn.mono` proves that a smaller set of messages and a weaker relation keep the assumption.
+`Logic.ReadsAs tx S` says that `tx` has the account, the storage and the transient storage of `S` at every address, and its code at every hash.
+It leaves free the block before the transaction, the created accounts, the wiped storage and the read records.
+`Logic.ReadsAs.recordAccountRead` proves that a record of an account read keeps this relation.
+`Logic.ReadsAs.recordStorageRead` proves the same for a record of a storage read.
+`Logic.ReadsAs.routeState` proves the same for the state once a call follows a route.
+`Logic.Routes.of_readsAs` proves that a state that reads as `S` gives each code the route that `S` gives it.
+`Logic.SentVia message S to` names the CALLs with no value from the current account of `message` to `to`, from a frame that reads as `S`.
+Each such call runs the code that `to` holds in `S`, along its route, with any data, any gas and any reservoir.
+`Logic.CallSends.sentVia` proves that the message of a CALL with no value along a route is such a call, via the state before the call.
+
 The block of a transaction state is the state before the block, with the writes of the block so far.
 A rollback restores the storage of a snapshot only when both states have the same block.
 `parentResult_step` (`Execution/Proofs/Evm/Call/Parent.lean`) proves that every successful step keeps the block of the state, at every fork.
@@ -1091,6 +1106,7 @@ A step that sends a message keeps it once the frame that ends the message has th
 `parent_processMessage` proves that a successful call keeps the block of the state it is sent from, at every fork.
 `parent_processCreateMessage` proves the same for a successful creation.
 `keepsParent_processRunner` (`Logic/Message.lean`) proves that the runner of the code of a message meets `KeepsParent`, for every bound.
+`KeepsParent.keepsOn` (`Logic/Keeps.lean`) proves that such a runner keeps the block on every set of messages of `Logic.KeepsOn`.
 `processMessage_sameOutside_of_error` proves that a call that ends with an error reads as the state it is sent from at every address, at every fork.
 That covers the account, the storage and the transient storage, and `getStorage_processMessage_of_error` states it for one storage word.
 
@@ -1115,6 +1131,36 @@ Both hold for every bound on the gas of messages and every runner of messages.
 `Logic.no_ok_stuck` proves the same for a frame of `At` that reaches a stuck frame with every gas from some bound on.
 `Logic.no_ok_stuck_at` proves the same for a frame of `At` that reaches a stuck frame with its own gas.
 GAS has no rule of this kind, since it pushes the gas left, and no theorem here covers a step that sends a message.
+`Logic.At.ruleG_of_follows` is the rule of an opcode whose instruction, run on each frame of the rule with less gas, fails or gives its frame with less gas.
+Each instruction that `Logic/RunMono.lean` covers is `RunMono`, such as `Logic.runMono_sstore` for SSTORE.
+`Logic.follows_readFrame` proves that an instruction that pushes a word of the frame, run with less gas, fails or gives its frame with less gas.
+It needs the word not to depend on the gas.
+The opcode rules of `Logic/Rules.lean`, `Logic/Stack.lean` and `Logic/Log.lean` are proved over the steps from frames that are `GasMono`, such as `Logic.calldataloadG`.
+Each such rule has the hypotheses and the conclusion of the rule over `Step` of the same opcode, which follows from it by `Logic.HoareG.toHoare` or `Logic.SpecG.toSpec`.
+Of the opcode rules there, the one for GAS has no such form, since it pushes the gas left.
+Those for EXTCODESIZE, a frame past the end of its code and `Logic.sstore_of_account` have none yet.
+`Logic.branchTable` has no such form yet.
+`Logic.At.stuck` proves that a frame is stuck at an opcode whose instruction fails on every frame with the same message, stack and state, and at most the same gas.
+`Logic.sstore_stuck` proves that SSTORE is stuck in a static frame, or when the current address has no account.
+`Logic.sstore_low_stuck` proves that from Istanbul SSTORE is stuck with 2300 gas or less, by EIP-2200.
+
+The facts of `Logic/NoAbort.lean` are for the one-counter meter too.
+`Logic.NoAbort` says that a result is no error that aborts the run.
+An error of the state aborts, and so do an opcode with no instruction, an encoding error and a fork with no specification.
+Each instruction of `Logic/RunMono.lean` except SSTORE never aborts, such as `Logic.noAbort_log` for LOG0 to LOG4.
+`Logic.NoAbortLow` says that the step from every frame with less gas than a frame does not abort.
+`Logic.HoareGA` and `Logic.SpecGA` are triples over the steps of `Logic.StepG` from frames that are `Logic.NoAbortLow`.
+`Logic.HoareGA.toG` proves that such a triple is a triple over `Logic.StepG`.
+`Logic.At.ruleGA_of_follows` is the rule of an opcode whose instruction never aborts.
+Run with less gas on each frame of the rule, the instruction must fail or give its frame with less gas.
+`Logic.At.ruleGA` is the same rule for an instruction that is `RunMono`.
+Each opcode rule over `Logic.StepG` whose instruction never aborts is proved over `Logic.StepGA` first, such as `Logic.calldataloadGA`.
+The rule over `Logic.StepG` of the same opcode follows from it by `Logic.HoareGA.toG` or `Logic.SpecGA.toG`.
+`Logic.no_error_of_reaches` proves that the loop runs a frame `l` to a frame, never to an error.
+It assumes that these steps reach a stopped frame from `l` with `k` more gas.
+`Logic.no_error` proves that the loop runs a frame of `At` to a frame, with any gas.
+It assumes a specification over these steps from that frame with every gas from some bound on.
+Both hold for every bound on the gas of messages and every runner of messages.
 
 ### SHA-256 precompile
 

@@ -222,6 +222,10 @@ Not yet released.
   `consensus.gossip_topics` and `consensus.gossip_topic_bound` now answer at `hegota`, where they raised `ConsensusError`.
   The error of code 304 is gone, since every fork now has a list of topics, and no other error takes that code.
   In Lean, `Config.gossipTopics` returns a `List GossipTopic`, where it returned an `Option`.
+- The gossip bounds of four topics are now held to the size limits that the networking specification sets on their messages ([#1610](https://github.com/ethereum/EthLib/issues/1610)).
+  `consensus.gossip_topic_bound` answers the limit for `beacon_aggregate_and_proof`, `attester_slashing` and `execution_payload_bid` from `glamsterdam`, and for `inclusion_list` at `hegota`, where it answered the payload cap of 10485760 bytes.
+  On mainnet the limits are 16829, 2097616, 196932 and 41112 bytes, and that of a bid is 196934 bytes at `hegota`.
+  In Lean, `topicBound_eq` now takes a topic without a size limit, and `decodePayload_message` a message within the size limit of its topic.
 
 ## 0.3.0
 

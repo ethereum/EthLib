@@ -10,6 +10,8 @@ By default, the execution layer rejects a payload with a transaction of no bytes
 
 A block passes the payload step only when the execution layer accepts its payload request.
 
+The step also bounds the number of blob commitments of the block by the limit of the state.
+
 Once the merge is complete, and always from Capella, the payload extends the latest payload.
 
 The state after the step differs from the state before only in the header of the latest payload.
@@ -117,6 +119,20 @@ theorem processExecutionPayload_randao_time {config : Config}
   obtain ⟨_, _, mix, mixOk, _, isMix, time, timeOk, _, isTime, _⟩ := computed
   subst isMix isTime
   exact ⟨mixOk, mapError_ok_iff.mp timeOk⟩
+
+/-- A block whose payload step succeeds commits to at most as many blobs as the state allows.
+
+Before Deneb a block commits to no blob. -/
+theorem processExecutionPayload_blobCommitments {config : Config}
+    {engine : ExecutionEngine preset fork} {state after : BeaconState preset fork}
+    {body : BeaconBlockBody preset fork} {bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam}
+    (computed : processExecutionPayload config engine state body bellatrix = .ok after) :
+    (body.blobCommitments bellatrix).size ≤ (maxBlobsPerBlock config state).toNat := by
+  unfold processExecutionPayload at computed
+  simp only [bind_ok_iff, ensure_ok_iff] at computed
+  -- The blob check comes after the checks of the parent, the mix and the time.
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, blobs, -⟩ := computed
+  exact blobs
 
 /-- An execution layer that rejects every request makes every payload step fail. -/
 theorem processExecutionPayload_constant_false {config : Config}

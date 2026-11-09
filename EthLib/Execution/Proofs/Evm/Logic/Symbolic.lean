@@ -23,7 +23,7 @@ The equations are for the meter of one counter of gas, the meter of every fork b
 
 At a later fork they hold of that meter, not of the meter of the fork.
 
-A rule for an opcode, such as the rule for PUSH1, is a triple from one frame of a code to the next.
+A rule for an opcode is a triple from one frame of a code to the next.
 
 A run of straight-line code is a sequence of such rules, so each rule is checked once on its own.
 -/
@@ -141,42 +141,5 @@ theorem decode_push (n : Fin 33) (hn : n.val ≠ 0) :
   revert hn
   revert n
   decide
-
-/-- PUSHn, for the `n` from 1 that the byte at the program counter decodes to.
-
-It pushes the word of the `n` bytes after it, for 3 gas. -/
-theorem push_of_decode {byte : UInt8} {n : Fin 33} {word : U256} (hlt : pc < code.size)
-    (hbyte : code[pc] = byte) (decoded : Op.decode byte = some (.push n)) (hn : n.val ≠ 0)
-    (hword : pushData code pc n = word) (hgas : 3 ≤ gas) (hstack : stack.length < STACK_LIMIT) :
-    Hoare fork (At code message pc stack memory gas state substate returnData)
-      (At code message (pc + (1 + n)) (word :: stack) memory (gas - 3) state substate
-        returnData) := by
-  have hn' : n ≠ 0 := fun h => hn (by simp [h])
-  apply At.rule hlt hbyte
-    (ofByte_of_decode decoded (by simp [Op.since, hn', Fork.frontier_le])) (instruction_push n)
-  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
-  have hlen : evm.stack.val.length < STACK_LIMIT := by rw [hst]; exact hstack
-  rw [pushN_nat hn (by rw [hg]; exact hgas) hlen]
-  refine ⟨_, rfl, hcode, hj, hm, by simp [hpc], by simp [hst, hcode, hpc, hword], hmem,
-    by simp [hg, OPCODE_PUSH, VERY_LOW], hrun, herr, hout, hs, hss, hrd⟩
-
-/-- PUSHn, for `n` from 1, pushes the word of the `n` bytes after it, for 3 gas. -/
-theorem push {n : Fin 33} {word : U256} (hn : n.val ≠ 0) (hlt : pc < code.size)
-    (hbyte : code[pc] = 0x5f + UInt8.ofNat n.val)
-    (decoded : Op.decode (0x5f + UInt8.ofNat n.val) = some (.push n))
-    (hword : pushData code pc n = word) (hgas : 3 ≤ gas) (hstack : stack.length < STACK_LIMIT) :
-    Hoare fork (At code message pc stack memory gas state substate returnData)
-      (At code message (pc + (1 + n)) (word :: stack) memory (gas - 3) state substate
-        returnData) :=
-  push_of_decode hlt hbyte decoded hn hword hgas hstack
-
-/-- PUSH1 pushes the byte after it and costs 3, with room on the stack. -/
-theorem push1 {byte : UInt8} (hlt : pc + 1 < code.size) (hop : code[pc]'(by omega) = 0x60)
-    (hbyte : code[pc + 1] = byte) (hgas : 3 ≤ gas) (hstack : stack.length < STACK_LIMIT) :
-    Hoare fork (At code message pc stack memory gas state substate returnData)
-      (At code message (pc + 2) (BitVec.ofNat 256 byte.toNat :: stack) memory (gas - 3) state
-        substate returnData) :=
-  push (n := 1) (by decide) (by omega) (by rw [hop]; decide) rfl
-    (by simp [pushData, bufferRead, Base.byteAt, hlt, hbyte, Base.bytesToNat]) hgas hstack
 
 end EthLib.Execution.Evm.Logic

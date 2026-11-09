@@ -29,6 +29,8 @@ So from Gloas a block leaves its own bid as the latest bid, and its header as th
 The latest block hash after the block is then the parent hash of that bid.
 
 From Gloas a block that succeeds also runs an operations step that succeeds.
+
+From Capella to Fulu a block that succeeds runs header, withdrawal and payload steps that succeed.
 -/
 
 @[expose] public section
@@ -526,6 +528,34 @@ theorem payloadInputs_processEth1Data {before : fork < .hegota}
   obtain ⟨_, _, rest⟩ := processEth1Data_eq computed
   rw [← rest]
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+/-! ## A block from Capella to Fulu -/
+
+/-- From Capella to Fulu, a block step that succeeds runs its header, withdrawal and payload steps.
+
+The header step runs on the state before the block.
+
+Each later step runs on the state that the step before it returns.
+
+The withdrawal step reads the payload of the block. -/
+theorem processBlock_steps_of_lt_gloas (capella : .shapella ≤ fork) (before : fork < .glamsterdam)
+    {block : BeaconBlock preset fork}
+    (computed : processBlock config checks engine state block = .ok after) :
+    ∃ headed withdrawn paid,
+      processBlockHeader state block = .ok headed ∧
+      processWithdrawals headed capella
+        (fun _ => block.body.executionPayload ⟨Nat.le_trans (by decide) capella, before⟩) =
+        .ok withdrawn ∧
+      processExecutionPayload config engine withdrawn block.body
+        ⟨Nat.le_trans (by decide) capella, before⟩ = .ok paid := by
+  have altair : .altair ≤ fork := Nat.le_trans (by decide) capella
+  have bellatrix : .bellatrix ≤ fork := Nat.le_trans (by decide) capella
+  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  simp only [processBlock, altair, ↓reduceDIte, processBlockAltair, notGloas, bellatrix,
+    processBlockExecution, capella, pure_bind, bind_ok_iff] at computed
+  -- Before Gloas no parent step comes first, and from Capella the withdrawals precede the payload.
+  obtain ⟨headed, headedOk, paid, ⟨withdrawn, withdrawnOk, paidOk⟩, -⟩ := computed
+  exact ⟨headed, withdrawn, paid, headedOk, withdrawnOk, paidOk⟩
 
 /-! ## A block from Gloas -/
 
