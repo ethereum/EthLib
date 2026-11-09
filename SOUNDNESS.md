@@ -1456,17 +1456,20 @@ The bit of a seat is set when its key is the key of the validator of a message o
 That theorem assumes that the secret keys do not sum to zero.
 It verifies under the keys in the order of the attestations.
 
-`isValidIndexedAttestation_constructAggregate` and `isValidIndexedAttestation_constructAggregateOfSingleAttestations` (`Proofs/HonestAggregateSignatures.lean`) prove that successfully constructed honest aggregates have indexed forms that pass the check.
+`isValidIndexedAttestation_constructAggregate` and `isValidIndexedAttestation_constructAggregateOfSingleAttestations` (`Consensus/Proofs/HonestAggregateSignatures.lean`) prove that successfully constructed honest aggregates have indexed forms that pass the signature check of an indexed attestation.
 The selected signers must have distinct validator indices, use their registered keys and have a nonzero sum of secret keys.
 From Gloas, their number must also fit the check's bound.
 The proof derives the permutation from those signers to the sorted indices that the receiver reads.
+The aggregate adds the signature of every vote, so two votes of one validator give an aggregate that fails the check.
+The theorems exclude this case by requiring distinct signers.
 
-`isValidContributionSignature_constructSyncCommitteeContribution` (`Proofs/HonestContributionSignatures.lean`) proves that a contribution of honest matching messages passes its signature check.
+`isValidContributionSignature_constructSyncCommitteeContribution` (`Consensus/Proofs/HonestContributionSignatures.lean`) proves that a contribution of honest matching messages passes its signature check.
 The domain and signing root must compute successfully, and the messages must sign that root under their registered keys.
 The sum of the secret keys for the selected seats must be nonzero.
-Each selected seat counts once, so repeated committee keys and duplicate incoming messages are allowed.
+A key counts once for each of its selected seats, and each seat takes the first matching message, so duplicate messages add nothing.
 The gossip corollaries characterize acceptance of the aggregate's committee check and the contribution topic by their remaining conditions.
 These include the checks of time, membership and the aggregator's signatures.
+The corollaries assume that the head state of the receiver is the state of the construction.
 
 The contribution takes the sync committee as an argument.
 The caller passes the committee of the next slot, which gossip and the next block check.
