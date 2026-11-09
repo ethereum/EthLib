@@ -32,8 +32,8 @@ SHA-256 follows FIPS 180-4 (`EthLib/Cryptography/Hash/Sha256.lean`).
 
 [draft-04]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04
 [rfc9380]: https://www.rfc-editor.org/rfc/rfc9380
-[erc2333]: https://eips.ethereum.org/EIPS/eip-2333
-[erc2334]: https://eips.ethereum.org/EIPS/eip-2334
+[erc2333]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2333.md#key-derivation
+[erc2334]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2334.md#path
 
 ## Operations
 
@@ -79,7 +79,8 @@ The message length is also left to the caller.
 Ethereum signs 32-byte roots, but nothing in EthLib checks that length.
 
 `KeyDerivation.lean` implements the master and child key derivations of [ERC-2333][erc2333].
-The master key uses `keyGen` with empty key information and the same retry bound.
+The master and child keys both use `keyGen`, the master with empty key information, so they share its bound of 16 salts.
+ERC-2333's `HKDF_mod_r` loops until the key is not zero, without a bound, so that bound is EthLib's choice.
 `KeyPath.lean` parses [ERC-2334][erc2334] paths, including Ethereum's withdrawal and signing paths.
 
 ## Test vectors

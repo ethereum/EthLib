@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Cryptography.Exports.Bls
 public import EthLib.Cryptography.Bls.KeyDerivation
 public import EthLib.Cryptography.Bls.KeyPath
 
@@ -8,6 +9,8 @@ public import EthLib.Cryptography.Bls.KeyPath
 # Exports: validator key derivation
 
 ERC-2333 keys cross the boundary as 32 big-endian bytes, as BLS secret keys do.
+
+The derivations fail with the BLS error codes, and the path parser with codes from 101.
 
 ERC-2334 paths cross as strings, and child indices as checked 32-bit integers.
 -/
@@ -18,28 +21,28 @@ namespace EthLib.Cryptography.Bls.Exports
 
 open EthLib.Exports (Result PyValue pyExport)
 
-/-- The derivation or path error, with its detailed reason. -/
+/-- The error of a derivation from a path: the path text, or a step of the derivation. -/
 inductive KeyDerivationError where
   | bls (error : BlsError)
   | path (error : KeyPath.KeyPathError)
 
-/-- Stable codes for the two kinds of failure. -/
+/-- The code of the wrapped error: a BLS code below 101, or a path code from 101. -/
 def KeyDerivationError.code : KeyDerivationError → UInt32
-  | .bls _ => 1
-  | .path _ => 2
+  | .bls error => error.code
+  | .path error => error.code
 
 /-- The detailed message of the failing step. -/
 def KeyDerivationError.message : KeyDerivationError → String
   | .bls error => error.message
   | .path error => error.message
 
-/-- Pass the error kind and its message to Python. -/
+/-- Pass the code and the message of a derivation error to Python. -/
 def runKeyDerivation {α : Type} (act : Except KeyDerivationError α) : Result α :=
   act.mapError fun error => (error.code, error.message)
 
 /-- Derive and encode the master key. -/
-def deriveMasterSkBytes (seed : ByteArray) : Result ByteArray := runKeyDerivation do
-  let key ← (KeyDerivation.deriveMasterSk seed).mapError KeyDerivationError.bls
+def deriveMasterSkBytes (seed : ByteArray) : Result ByteArray := runBls do
+  let key ← KeyDerivation.deriveMasterSk seed
   return Fr.toBytesBE key.val
 
 /-- The ERC-2333 master secret key, as 32 big-endian bytes. -/
@@ -48,10 +51,10 @@ def deriveMasterSkExport (args : PyValue) : Result PyValue :=
   pyExport deriveMasterSkBytes args
 
 /-- Read the parent key, derive its child and encode the result. -/
-def deriveChildSkBytes (args : ByteArray × UInt32) : Result ByteArray := runKeyDerivation do
+def deriveChildSkBytes (args : ByteArray × UInt32) : Result ByteArray := runBls do
   let (parent, index) := args
-  let parent ← (Signatures.SecretKey.fromBytes parent).mapError KeyDerivationError.bls
-  let key ← (KeyDerivation.deriveChildSk parent index).mapError KeyDerivationError.bls
+  let parent ← Signatures.SecretKey.fromBytes parent
+  let key ← KeyDerivation.deriveChildSk parent index
   return Fr.toBytesBE key.val
 
 /-- The ERC-2333 child of a secret key at an index, as 32 big-endian bytes. -/

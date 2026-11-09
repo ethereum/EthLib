@@ -5,13 +5,32 @@ public import EthLib.Cryptography.Bls.KeyGen
 /-!
 # ERC-2333 key derivation
 
-[ERC-2333, Key derivation][erc2333] derives child keys through two Lamport secret keys.
+[ERC-2333, Key derivation][kd] derives child keys through two Lamport secret keys.
 
-The master and child operations reuse BLS key generation, including its bound of 16 attempts.
+The master and child operations reuse BLS key generation, which is [`HKDF_mod_r`][mod].
+
+That function loops until its key is not zero, without a bound.
+
+EthLib stops after 16 attempts, its own choice, and fails if every attempt gives zero.
 
 Seeds and secret keys are secret, and EthLib makes no constant-time claim (SOUNDNESS.md A3).
 
-[erc2333]: https://eips.ethereum.org/EIPS/eip-2333#key-derivation
+The Lamport keys follow [`IKM_to_lamport_SK`][lamport] and [`parent_SK_to_lamport_PK`][lamportPk].
+
+The keys follow [`derive_master_SK`][master] and [`derive_child_SK`][child].
+
+A list of child indices walks [the tree][tree] from the master key.
+
+The links pin ERC-2333 at the commit that the Python vectors read.
+
+[kd]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2333.md#key-derivation
+[mod]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2333.md#hkdf_mod_r
+[lamport]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2333.md#ikm_to_lamport_sk
+[lamportPk]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2333.md#parent_sk_to_lamport_pk
+[child]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2333.md#derive_child_sk
+[master]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2333.md#derive_master_sk
+[tree]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2333.md#the-tree-structure
+
 -/
 
 @[expose] public section
@@ -46,11 +65,15 @@ def parentSkToLamportPk (parent : SecretKey) (index : UInt32) : Except BlsError 
   let second ← ikmToLamportSk ⟨ikm.data.map (~~~ ·)⟩ salt
   return Sha256.hash (hashLamportSk first ++ hashLamportSk second)
 
-/-- The master key of ERC-2333 `derive_master_SK`, with the BLS retry bound. -/
+/-- The master key of ERC-2333 `derive_master_SK`.
+
+It fails after 16 attempts of `HKDF_mod_r`, a bound that ERC-2333 does not have. -/
 def deriveMasterSk (seed : ByteArray) : Except BlsError SecretKey :=
   keyGen seed
 
-/-- The child key of ERC-2333 `derive_child_SK`, with the BLS retry bound. -/
+/-- The child key of ERC-2333 `derive_child_SK`.
+
+It fails after 16 attempts of `HKDF_mod_r`, a bound that ERC-2333 does not have. -/
 def deriveChildSk (parent : SecretKey) (index : UInt32) : Except BlsError SecretKey := do
   let compressed ← parentSkToLamportPk parent index
   keyGen compressed
