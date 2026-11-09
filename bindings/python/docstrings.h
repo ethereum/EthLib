@@ -312,7 +312,7 @@
   "Read exactly one complete 16-bit frame, noise-libp2p \"Wire Format\"."
 
 #define DOC_noise_libp2p_initialize \
-  "Initialize libp2p XX with the empty prologue and explicit X25519 private keys."
+  "Initialize libp2p XX with explicit X25519 private keys and an empty prologue."
 
 #define DOC_noise_libp2p_write \
   "Write the next libp2p message with a signed identity payload."

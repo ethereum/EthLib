@@ -82,7 +82,7 @@ def readExport (args : PyValue) : Result PyValue :=
 
 /-- Split a completed raw XX state into its send cipher, receive cipher and hash.
 
-The split is Noise §5.2, and the order by role is Noise §5.3. -/
+The split is Noise §5.2, and its first cipher carries initiator-to-responder messages, Noise §5. -/
 @[export eth_noise_transport]
 def transportExport (args : PyValue) : Result PyValue :=
   letI : EthLib.Exports.FromPyItems StateValue := EthLib.Exports.instFromPyItemsOfFromPy
@@ -115,7 +115,9 @@ def frameExport (args : PyValue) : Result PyValue :=
 def unframeExport (args : PyValue) : Result PyValue :=
   pyExport (fun bytes => result (unframe bytes)) args
 
-/-- Initialize libp2p XX with the empty prologue and explicit X25519 private keys. -/
+/-- Initialize libp2p XX with explicit X25519 private keys and an empty prologue.
+
+noise-libp2p sets no prologue. -/
 @[export eth_noise_libp2p_initialize]
 def initializeLibp2pExport (args : PyValue) : Result PyValue :=
   pyExport (fun (initiator, staticKey, ephemeralKey) =>

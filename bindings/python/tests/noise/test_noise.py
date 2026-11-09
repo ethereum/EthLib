@@ -123,10 +123,10 @@ def test_authenticated_exchange(exchange: tuple) -> None:
     assert static_r == x25519_public_key(STATIC_R)
     assert static_i == x25519_public_key(STATIC_I)
     for secret, static, compressed, (key, peer_id, signature, _) in (
-        (1, static_i, IDENTITY_KEY_I, identity_i),
-        (2, static_r, IDENTITY_KEY_R, identity_r),
+        (IDENTITY_I, static_i, IDENTITY_KEY_I, identity_i),
+        (IDENTITY_R, static_r, IDENTITY_KEY_R, identity_r),
     ):
-        x, y = reference.multiply(reference.G, secret)
+        x, y = reference.multiply(reference.G, int.from_bytes(secret, "big"))
         assert compressed == bytes([2 + y % 2]) + x.to_bytes(32, "big")
         assert key == b"\x08\x02\x12\x21" + compressed
         assert peer_id == b"\x00\x25" + key

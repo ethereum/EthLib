@@ -153,7 +153,7 @@ def decryptAndHash (s : SymmetricState) (ciphertext : ByteArray) :
   let (cipher, plaintext) ← decryptWithAd s.cipher (packBytes s.hash) ciphertext
   return (mixHash { s with cipher := cipher } ciphertext, plaintext)
 
-/-- Transport ciphers, ordered initiator-to-responder then responder-to-initiator, Noise §5.2. -/
+/-- Transport ciphers, ordered initiator-to-responder then responder-to-initiator, Noise §5. -/
 def split (s : SymmetricState) : CipherState × CipherState :=
   let (first, second) := hkdf2 s.chainingKey .empty
   (initializeKey (some first), initializeKey (some second))

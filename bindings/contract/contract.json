@@ -1829,7 +1829,7 @@
       {"constructor": "firstMessageExtensions", "code": 10}]}],
    "error_class": "NoiseError",
    "docstring":
-   "Split a completed raw XX state into its send cipher, receive cipher and hash.\n\nThe split is Noise §5.2, and the order by role is Noise §5.3."},
+   "Split a completed raw XX state into its send cipher, receive cipher and hash.\n\nThe split is Noise §5.2, and its first cipher carries initiator-to-responder messages, Noise §5."},
   {"summary":
    "Encrypt with a cipher state and associated data, returning its next state, Noise §5.1.",
    "signature":
@@ -1917,7 +1917,7 @@
    "docstring":
    "Read exactly one complete 16-bit frame, noise-libp2p \"Wire Format\"."},
   {"summary":
-   "Initialize libp2p XX with the empty prologue and explicit X25519 private keys.",
+   "Initialize libp2p XX with explicit X25519 private keys and an empty prologue.",
    "signature":
    "(initiator: bool, static_key: bytes, ephemeral_key: bytes) -> tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None]",
    "operation": "EthLib.Networking.Noise.Exports.initializeLibp2pExport",
@@ -1925,7 +1925,7 @@
    "errors": [],
    "error_class": "NoiseError",
    "docstring":
-   "Initialize libp2p XX with the empty prologue and explicit X25519 private keys."},
+   "Initialize libp2p XX with explicit X25519 private keys and an empty prologue.\n\nnoise-libp2p sets no prologue."},
   {"summary": "Write the next libp2p message with a signed identity payload.",
    "signature":
    "(state: tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None], identity_secret: bytes, extensions: bytes | None) -> tuple[tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None], bytes]",
