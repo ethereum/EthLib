@@ -141,6 +141,10 @@ class ChaCha20Poly1305Error(EthLibError, ValueError):
     """ChaCha20-Poly1305 rejected a size, counter or authentication tag."""
 
 
+class KeystoreError(EthLibError, ValueError):
+    """An ERC-2335 keystore failed to decode, derive its key or decrypt."""
+
+
 class ConcatKdfError(EthLibError, ValueError):
     """The Concatenation KDF rejected its input."""
 
@@ -253,6 +257,10 @@ class EngineError(EthLibError, ValueError):
     """An Engine API method returned a JSON-RPC error, whose code is the negative of this code."""
 
 
+class JwtError(EthLibError, ValueError):
+    """An Engine API authentication token could not be built or checked."""
+
+
 class ChainError(EthLibError, ValueError):
     """A chain configuration was malformed, with code 0."""
 
@@ -291,6 +299,7 @@ __all__ = [
     "X25519Error",
     "NoiseError",
     "ChaCha20Poly1305Error",
+    "KeystoreError",
     "ConcatKdfError",
     "AesError",
     "BlockError",
@@ -312,5 +321,6 @@ __all__ = [
     "EvmError",
     "FeesError",
     "EngineError",
+    "JwtError",
     "ChainError",
 ]

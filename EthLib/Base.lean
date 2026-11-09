@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Address
+public import EthLib.Base.Base64
 public import EthLib.Base.BigEndian
 public import EthLib.Base.BlobSchedule
 public import EthLib.Base.Bytes
@@ -13,6 +14,7 @@ public import EthLib.Base.Length
 public import EthLib.Base.LittleEndian
 public import EthLib.Base.U256
 public import EthLib.Base.Uint64
+public import EthLib.Base.Unicode
 
 /-!
 # `EthLib.Base`

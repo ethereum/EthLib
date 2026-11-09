@@ -16,6 +16,7 @@ public import EthLib.Cryptography.Proofs.Wots.Binding
 public import EthLib.Cryptography.Proofs.Wots.TargetSum
 public import EthLib.Cryptography.Proofs.QueryAvoidance
 public import EthLib.Cryptography.Proofs.LoggedUntilBad
+public import EthLib.Cryptography.Proofs.LogKeys
 public import EthLib.Cryptography.Proofs.DerivationTable
 public import EthLib.Cryptography.Proofs.Xmss
 public import EthLib.Cryptography.Proofs.Sphincs
@@ -28,6 +29,7 @@ public import EthLib.Cryptography.Proofs.Ethash
 public import EthLib.Cryptography.Proofs.Montgomery
 public import EthLib.Cryptography.Proofs.BaseField
 public import EthLib.Cryptography.Proofs.ChaCha20Poly1305
+public import EthLib.Cryptography.Proofs.Keystore
 public import EthLib.Cryptography.Proofs.MillerFunction
 public import EthLib.Cryptography.Proofs.MillerDivisor
 public import EthLib.Cryptography.Proofs.MillerLines

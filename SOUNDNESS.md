@@ -73,7 +73,8 @@ The binding of the batch check of KZG openings reduces to the same problem, or t
 The binding of the batch check of KZG cells reduces to the bilinear variant of that problem, or to such a root.
 That reduction holds in a model of the target group of the pairing.
 
-No theorem states binding for the batch check of blobs.
+The binding of the batch check of blobs reduces to a challenge that is a root of a nonzero polynomial, or to recovery of the setup secret.
+That reduction holds for algebraic adversaries, with the challenge hash modelled as a random oracle.
 No theorem covers the code that runs, the C boundary, or timing.
 
 ### XMSS
@@ -269,6 +270,30 @@ Its bound is `2^32 (1 + 2 Q) / 2^256`, because the proof splits a win by the ind
 `prEvent_seedGame_le` (`Proofs/Vrf/SeedSecrets.lean`) does the same for secrets derived from a uniform seed, as key generation derives them.
 One hidden-seed step adds `Q / 2^256` to its bound.
 Verification accepts any tree, so a holder that chooses its secrets can bias every output.
+
+The output hashes its index with its secret: `keccak256(PQ_VRF_OUTPUT | LE32(i) | s)`.
+`outputHash_binding` (`Proofs/Vrf/Verify.lean`) says that two equal outputs come from one index and one secret, or their two output inputs, which differ, are a Keccak-256 collision.
+`verify_index_binding` applies it to two openings that verify at two different indices, under any roots.
+So one secret gives different outputs at different indices, unless Keccak-256 collides.
+That two such outputs behave as independent values is a random-oracle heuristic, which no theorem states.
+A holder can still grind index by index, at about `2^k` hashes per index for a threshold of one in `2^k`.
+
+A selection therefore compares `mixOutput`, the hash of the output with randomness revealed after the root is registered.
+`prEvent_selected_le` (`Proofs/Vrf/Selection.lean`) covers a holder that chooses every secret of its tree.
+The mix is a random oracle, and the tree hash is Keccak-256 itself.
+The holder makes at most `q` mix queries before the randomness is drawn, then opens any index of a set `I` fixed in advance.
+The mixed value of its output lands in a target set `S` with probability at most `|I| |S| / 2^256 + q / 2^256`, plus the chance that `findHashCollision` returns a collision with the honest opening at that index.
+No theorem bounds that last chance, as for uniqueness.
+The theorem says nothing about a holder that registers a root without knowing a tree under it.
+That case would need the tree hash as a random oracle too, and an extractor of the tree from the queries.
+It says nothing either about randomness that the holder knows at registration, or can bias: the game draws it uniformly and independently of the holder.
+The game is EthLib's own.
+`selected_iff_mixOutput` shows that, with `mixOutput` in place of the oracle, its event is exactly the protocol's check.
+
+[EIP-8450](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8450.md#cryptographic-helpers) specifies the interface `vrf.Verify` and the property of unique outputs, not the construction.
+The index in the output keeps that interface, and changes every output of the construction that EthLib specified before.
+The EIP's rationale ([Two keys per validator](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8450.md#two-keys-per-validator)) says that the root fixes one output per index before the validator knows its inputs.
+That does not stop a holder from choosing its outputs, so the fork that uses the root must select with the mix.
 
 ### BLS12-381
 
@@ -563,6 +588,22 @@ The bindings take explicit keys and state tuples.
 Callers must use fresh ephemeral keys and use the returned state after each successful cipher call.
 They must discard handshake state after an error.
 
+### Engine API authentication
+
+`Jwt.check_build` (`Engine/Proofs/Jwt.lean`) proves that every successful string build passes with the same secret at clocks within 60 seconds of its issued-at time.
+The builder validates the JSON it generates and reports a serialization error if its decoder disagrees.
+`Jwt.check_eq_false_of_algorithm_ne` proves rejection when the decoded algorithm differs from HS256.
+The total JSON reader has no separate theorem of agreement with RFC 8259.
+These theorems do not establish HMAC unforgeability or constant-time execution.
+
+### ERC-2335 keystores
+
+The keystore proofs show that a short intermediate key or mismatched checksum prevents decryption (`Proofs/Keystore.lean`).
+They do not prove Unicode normalization correct for every input, or prove the cryptographic security of the keystore.
+The Python suite compares NFKD with Unicode 16.0.0's normalization tests and checks the two ERC-2335 vectors.
+JSON text parsing stays in the export boundary; the specification consumes a `Lean.Json` value.
+The caller must bound the password-derivation parameters as D1 describes.
+
 ### RIPEMD-160
 
 `compress_toBitVec` (`Proofs/Hash/Ripemd160.lean`) proves that the compression of one block, read as 32-bit vectors, is the compression of a model of the authors' pseudo-code.
@@ -625,10 +666,23 @@ The cases can overlap.
 They carry meaning only when an algebraic adversary outputs `f` and `g` over the setup's points, without `τ`.
 This reading is the algebraic group model, an assumption.
 For other choices, such as the constants that the points represent, the third case only restates the check.
-The second case is unlikely if the challenge hash is modelled as a random oracle.
-The third is unlikely if the discrete logarithm problem with the setup's powers of `τ` is hard.
-Both are assumptions, and no theorem here proves either bound.
+For this single check, no theorem bounds the probability of the second or the third case.
 It is not computational binding: no theorem bounds the cost of finding such polynomials without the secret.
+
+`blobBindingAdvantage_le` (`Proofs/Kzg/BlobBindingAdvantage.lean`) bounds an accepted blob batch that contains a commitment different from its blob's computed commitment.
+The game samples the setup secret uniformly in `Fr` and gives the algebraic adversary only the public setup powers.
+The adversary supplies polynomial representations for the group encodings in its queries and output.
+The theorem assumes that each representation of a valid encoding evaluates to its point at the secret, on every run.
+This hypothesis stands for the algebraic group model, an assumption; nothing restricts how the adversary computes its representations.
+The game rejects final batches above `n` blobs.
+With at most `qBlob` individual challenge queries and `qBatch` batch challenge queries by the adversary, the bound is `(qBlob + n) 4095 / r + (qBatch + 1) (n - 1) / r` plus the success probability of `setupSecretReduction`.
+Here `r` is the order of `Fr`.
+The reduction runs the same experiment once and recovers `τ` from roots of representation differences or the final batch error.
+The secret-recovery term is defined on the full setup powers.
+Root search is noncomputable in the model; no theorem proves the reduction's running time.
+No theorem relates the secret-recovery term to the discrete logarithm or the strong Diffie–Hellman problem.
+`verifyBlobKzgProofBatch_ok_iff_symbolic` (`Proofs/Kzg/BlobBindingVerifier.lean`) connects the game's scalar acceptance equation to the concrete verifier at its concrete challenges.
+
 `verifyKzgProofBatch_ok_iff_root` (`Proofs/Kzg/BatchBinding.lean`) states when the batch check of openings accepts, as an equivalence.
 Let opening `i` have commitment `c_i`, value `y_i`, point `z_i` and proof `w_i`.
 For a well-formed setup, its verdict is true exactly when its challenge `r` is a root of `P(X) = sum_i X^i (c_i - y_i - w_i (τ - z_i))`.
@@ -1929,7 +1983,7 @@ The Python bindings expose the block cipher, CTR and GCM, as `encrypt_block`, `d
 ### A4. Idealisations
 
 A security theorem rests on a model, such as a random oracle for a hash.
-Each such theorem of EthLib rests on one idealisation, listed below.
+Each such theorem of EthLib rests on the idealisations listed below, and on any hypothesis that its statement names.
 The two theorems of Casper FFG share one bullet, as do the signature theorems of the light client.
 The binding of a proof of possession shares the bullet of leanXMSS, and the codeword searches of each scheme share the bullet of that scheme:
 
@@ -1960,6 +2014,12 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
 - VRF unpredictability: Keccak-256 is a random oracle on byte strings, as for leanXMSS.
   The bound says nothing about an attack that uses the structure of Keccak.
   It counts classical queries only, so it says nothing about a quantum adversary.
+- VRF mixed selection: Keccak-256 on the 74-byte inputs that start with `PQ_VRF_MIX` is a uniformly random function of the output and the randomness, independent of the tree hash.
+  That is the random-oracle assumption for the domain of the mix, and the tree hash stays Keccak-256 itself.
+  The holder can still compute Keccak-256 on mix inputs, and the model ignores those values.
+  No other input of the VRF has 74 bytes, so the mix shares no input with the tree; that is necessary for the assumption, not a proof of it.
+  The randomness is uniform, drawn after the holder registers its tree, and independent of the holder.
+  The bound counts classical mix queries only, and says nothing about an attack that uses the structure of Keccak.
 - BLS: the hash to G2 under the message tag is a random oracle onto the multiples of `g2`.
   [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380), §3, calls its `hash_to_curve` suitable where a random oracle onto the group is needed, and §8.8.2 gives the suite that encoding.
   Nothing in EthLib proves that the hash behaves as such an oracle.
@@ -1977,6 +2037,9 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
   In `prEvent_blobInput_root_le`, the evaluation challenges `computeChallenge` are a fixed function of the blobs and commitments, not part of the oracle.
   Their hash input starts with a different 16-byte domain tag from that of the batch challenge, so the two hashes never read the same bytes.
   So the bound `(q + 1) (n - 1) / r` covers grinding, where the adversary hashes many batches and keeps one whose challenge is a root.
+  `blobBindingAdvantage_le` instead models both individual and batch challenges with one shared cache and uniform answers in `Fr`.
+  Its typed keys erase polynomial annotations and stand for the two domain-separated byte encodings; no theorem proves those encodings jointly injective.
+  That theorem also assumes correct representations from the adversary, a reading of the algebraic group model.
   The theorems say nothing about an attack that uses the structure of SHA-256.
 
 ## Gap B: does the code that runs match the definitions?
@@ -2031,12 +2094,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 331 operations and 49 size constants.
-The Python extension calls 331 of the operations and 49 of the constants.
+Lean exports 337 operations and 49 size constants.
+The Python extension calls 337 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-9186 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (351), `bls.c` (426), `chain.c` (45), `consensus.c` (1652), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (45), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1308), `noise.c` (111), `noise_primitives.c` (93), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (119), `wrappers.h` (604), `xmss.c` (134).
+9275 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (351), `bls.c` (426), `chain.c` (45), `consensus.c` (1652), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (64), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `module.c` (1318), `noise.c` (111), `noise_primitives.c` (93), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (141), `wrappers.h` (612), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

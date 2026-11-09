@@ -15,7 +15,8 @@ All bytes are hex strings prefixed with `0x`.
 
 ## Condition
 
-The output of index `i` is `keccak256(PQ_VRF_OUTPUT | s_i)`, with `s_i` the secret of index `i`.
+The output of index `i` is `keccak256(PQ_VRF_OUTPUT | LE32(i) | s_i)`, with `s_i` the secret of index `i`.
+Here `LE32(i)` is the index on 4 bytes, least significant first.
 
 The result must match `output`.
 

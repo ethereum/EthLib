@@ -170,6 +170,9 @@
 #define DOC_vrf_evaluate \
   "The output at index `i` of the tree of a seed."
 
+#define DOC_vrf_mix \
+  "An output mixed with randomness: the value a selection compares with its threshold."
+
 #define DOC_crc32 \
   "The four digest bytes of CRC-32: the highest power of each byte at its least significant bit."
 
@@ -250,6 +253,15 @@
 
 #define DOC_chacha20_poly1305_decrypt \
   "Authenticate before returning plaintext, RFC 8439 §2.8."
+
+#define DOC_keystore_nfkd \
+  "Unicode 16.0.0 Normalization Form KD, UAX #15 rev. 56, §1.3."
+
+#define DOC_keystore_password \
+  "NFKD, control removal and UTF-8 encoding, ERC-2335 \"Password requirements\"."
+
+#define DOC_keystore_decrypt \
+  "Decrypt an ERC-2335 JSON keystore and return its secret octets."
 
 #define DOC_secp256k1_verify \
   "Whether `(r, s)` is a valid signature on `hash` under the public key `q`, by SEC 1 v2 §4.1.4."
@@ -973,6 +985,12 @@
 
 #define DOC_engine_new_payload \
   "The payload status of an `engine_newPayload` request, without the parent's state."
+
+#define DOC_engine_jwt_build \
+  "Build an HS256 Engine token from a 32-byte secret and an issued-at time in seconds."
+
+#define DOC_engine_jwt_check \
+  "Accept an HS256 Engine token only within 60 seconds of its issued-at time."
 
 #define DOC_engine_new_payload_on_chain \
   "The payload status of an `engine_newPayload` request, on a chain that holds the parent."

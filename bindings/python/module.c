@@ -82,10 +82,12 @@ PyObject* PBKDF2_ERROR;
 PyObject* SCRYPT_ERROR;
 PyObject* X25519_ERROR;
 PyObject* CHACHAPOLY_ERROR;
+PyObject* KEYSTORE_ERROR;
 PyObject* AES_ERROR;
 PyObject* CONCAT_KDF_ERROR;
 PyObject* BLOCK_ERROR;
 PyObject* ENGINE_ERROR;
+PyObject* JWT_ERROR;
 PyObject* CHAIN_ERROR;
 PyObject* RLP_ERROR;
 PyObject* SSZ_ERROR;
@@ -689,6 +691,7 @@ static PyMethodDef methods[] = {
   {"vrf_verify", py_vrf_verify, METH_VARARGS, DOC_vrf_verify},
   {"vrf_secret", py_vrf_secret, METH_VARARGS, DOC_vrf_secret},
   {"vrf_evaluate", py_vrf_evaluate, METH_VARARGS, DOC_vrf_evaluate},
+  {"vrf_mix", py_vrf_mix, METH_VARARGS, DOC_vrf_mix},
   {"crc32", py_crc32, METH_VARARGS, DOC_crc32},
   {"crc32_number", py_crc32_number, METH_VARARGS, DOC_crc32_number},
   {"crc32c", py_crc32c, METH_VARARGS, DOC_crc32c},
@@ -716,6 +719,9 @@ static PyMethodDef methods[] = {
   {"poly1305_key", py_poly1305_key, METH_VARARGS, DOC_poly1305_key},
   {"chacha20_poly1305_encrypt", py_chacha20_poly1305_encrypt, METH_VARARGS, DOC_chacha20_poly1305_encrypt},
   {"chacha20_poly1305_decrypt", py_chacha20_poly1305_decrypt, METH_VARARGS, DOC_chacha20_poly1305_decrypt},
+  {"keystore_nfkd", py_keystore_nfkd, METH_VARARGS, DOC_keystore_nfkd},
+  {"keystore_password", py_keystore_password, METH_VARARGS, DOC_keystore_password},
+  {"keystore_decrypt", py_keystore_decrypt, METH_VARARGS, DOC_keystore_decrypt},
   {"secp256k1_verify", py_secp256k1_verify, METH_VARARGS, DOC_secp256k1_verify},
   {"secp256k1_is_low_s", py_secp256k1_is_low_s, METH_VARARGS, DOC_secp256k1_is_low_s},
   {"secp256k1_recover", py_secp256k1_recover, METH_VARARGS, DOC_secp256k1_recover},
@@ -1061,6 +1067,8 @@ static PyMethodDef methods[] = {
   {"hoodi_active_fork", py_hoodi_active_fork, METH_VARARGS, DOC_hoodi_active_fork},
   {"active_fork", py_active_fork, METH_VARARGS, DOC_active_fork},
   {"engine_new_payload", py_engine_new_payload, METH_VARARGS, DOC_engine_new_payload},
+  {"engine_jwt_build", py_engine_jwt_build, METH_VARARGS, DOC_engine_jwt_build},
+  {"engine_jwt_check", py_engine_jwt_check, METH_VARARGS, DOC_engine_jwt_check},
   {"engine_new_payload_on_chain", py_engine_new_payload_on_chain, METH_VARARGS,
    DOC_engine_new_payload_on_chain},
   {"engine_forkchoice_updated", py_engine_forkchoice_updated, METH_VARARGS,
@@ -1112,6 +1120,7 @@ PyInit__native(void) {
     SCRYPT_ERROR = PyObject_GetAttrString(errors, "ScryptError");
     X25519_ERROR = PyObject_GetAttrString(errors, "X25519Error");
     CHACHAPOLY_ERROR = PyObject_GetAttrString(errors, "ChaCha20Poly1305Error");
+    KEYSTORE_ERROR = PyObject_GetAttrString(errors, "KeystoreError");
     AES_ERROR = PyObject_GetAttrString(errors, "AesError");
     CONCAT_KDF_ERROR = PyObject_GetAttrString(errors, "ConcatKdfError");
     BLOCK_ERROR = PyObject_GetAttrString(errors, "BlockError");
@@ -1133,6 +1142,7 @@ PyInit__native(void) {
     EVM_ERROR = PyObject_GetAttrString(errors, "EvmError");
     FEES_ERROR = PyObject_GetAttrString(errors, "FeesError");
     ENGINE_ERROR = PyObject_GetAttrString(errors, "EngineError");
+    JWT_ERROR = PyObject_GetAttrString(errors, "JwtError");
     TRANSITION_ERROR = PyObject_GetAttrString(errors, "TransitionError");
     LIGHT_CLIENT_ERROR = PyObject_GetAttrString(errors, "LightClientError");
     FORK_CHOICE_ERROR = PyObject_GetAttrString(errors, "ForkChoiceError");

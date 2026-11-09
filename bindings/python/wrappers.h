@@ -153,6 +153,7 @@ extern PyObject* PBKDF2_ERROR;
 extern PyObject* SCRYPT_ERROR;
 extern PyObject* X25519_ERROR;
 extern PyObject* CHACHAPOLY_ERROR;
+extern PyObject* KEYSTORE_ERROR;
 extern PyObject* AES_ERROR;
 extern PyObject* CONCAT_KDF_ERROR;
 extern PyObject* BLOCK_ERROR;
@@ -174,6 +175,7 @@ extern PyObject* TRIE_ERROR;
 extern PyObject* EVM_ERROR;
 extern PyObject* FEES_ERROR;
 extern PyObject* ENGINE_ERROR;
+extern PyObject* JWT_ERROR;
 extern PyObject* TRANSITION_ERROR;
 extern PyObject* LIGHT_CLIENT_ERROR;
 extern PyObject* FORK_CHOICE_ERROR;
@@ -286,6 +288,7 @@ PyObject* py_trie_verify_account_proof                    (PyObject* self, PyObj
 PyObject* py_vrf_verify                                   (PyObject* self, PyObject* args);
 PyObject* py_vrf_secret                                   (PyObject* self, PyObject* args);
 PyObject* py_vrf_evaluate                                 (PyObject* self, PyObject* args);
+PyObject* py_vrf_mix                                      (PyObject* self, PyObject* args);
 PyObject* py_crc32                                       (PyObject* self, PyObject* args);
 PyObject* py_crc32_number                                (PyObject* self, PyObject* args);
 PyObject* py_crc32c                                      (PyObject* self, PyObject* args);
@@ -325,6 +328,9 @@ PyObject* py_poly1305                                    (PyObject* self, PyObje
 PyObject* py_poly1305_key                                (PyObject* self, PyObject* args);
 PyObject* py_chacha20_poly1305_encrypt                    (PyObject* self, PyObject* args);
 PyObject* py_chacha20_poly1305_decrypt                    (PyObject* self, PyObject* args);
+PyObject* py_keystore_nfkd                               (PyObject* self, PyObject* args);
+PyObject* py_keystore_password                           (PyObject* self, PyObject* args);
+PyObject* py_keystore_decrypt                            (PyObject* self, PyObject* args);
 
 PyObject* py_secp256k1_verify                             (PyObject* self, PyObject* args);
 PyObject* py_secp256k1_is_low_s                           (PyObject* self, PyObject* args);
@@ -565,6 +571,8 @@ PyObject* py_hoodi_active_fork                            (PyObject* self, PyObj
 PyObject* py_active_fork                                  (PyObject* self, PyObject* args);
 
 PyObject* py_engine_new_payload                          (PyObject* self, PyObject* args);
+PyObject* py_engine_jwt_build                            (PyObject* self, PyObject* args);
+PyObject* py_engine_jwt_check                            (PyObject* self, PyObject* args);
 PyObject* py_engine_new_payload_on_chain                 (PyObject* self, PyObject* args);
 PyObject* py_engine_forkchoice_updated                   (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload            (PyObject* self, PyObject* args);

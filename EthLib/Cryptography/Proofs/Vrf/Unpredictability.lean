@@ -126,7 +126,7 @@ def game (others : UInt32 → Digest) (c : UInt32) (s : Digest) (adversary : Adv
   let secrets := Function.update others c s
   let r ← rootWith queryHash secrets
   let guess ← simulateQ (openImpl secrets c) (adversary r)
-  let output ← queryHash (outputInput s)
+  let output ← queryHash (outputInput c s)
   return (guess, output)
 
 /-! ## The game with the challenge leaf and output as derivations
@@ -166,24 +166,25 @@ def gameD (others : UInt32 → Digest) (c : UInt32) (adversary : Adversary) :
   let output ← deriveD true
   return (guess, output)
 
-/-- The challenge leaf and the output are the hash at two points of the secret. -/
-def encoding : SecretEncoding HashSpec Digest Bool Digest where
-  enc s b := if b then outputInput s else leafInput s
+/-- The challenge leaf and the output at index `c` are the hash at two points of the secret. -/
+def encoding (c : UInt32) : SecretEncoding HashSpec Digest Bool Digest where
+  enc s b := if b then outputInput c s else leafInput s
   range_eq _ _ := rfl
   injective s b b' h := by
     cases b <;> cases b' <;>
-      simp_all [leafInput_ne_outputInput, (leafInput_ne_outputInput _ _).symm]
+      simp_all [leafInput_ne_outputInput, (leafInput_ne_outputInput _ _ _).symm]
 
 /-- Answering the derivations with the hash at the secret's points gives the game. -/
 theorem simulateQ_deriveImpl_gameD (others : UInt32 → Digest) (c : UInt32) (s : Digest)
     (adversary : Adversary) :
-    simulateQ (encoding.deriveImpl s) (gameD others c adversary) = game others c s adversary := by
-  have hhash : ∀ x, simulateQ (encoding.deriveImpl s) (hashD x) = queryHash x := fun x => by
+    simulateQ ((encoding c).deriveImpl s) (gameD others c adversary) =
+      game others c s adversary := by
+  have hhash : ∀ x, simulateQ ((encoding c).deriveImpl s) (hashD x) = queryHash x := fun x => by
     simp [hashD, queryHash, SecretEncoding.deriveImpl]
-  have hderive : ∀ b, simulateQ (encoding.deriveImpl s) (deriveD b) =
-      queryHash (encoding.enc s b) := fun b => by
+  have hderive : ∀ b, simulateQ ((encoding c).deriveImpl s) (deriveD b) =
+      queryHash ((encoding c).enc s b) := fun b => by
     simp [deriveD, queryHash, SecretEncoding.deriveImpl]
-  have hleaf : ∀ j, simulateQ (encoding.deriveImpl s) (leafD others c j) =
+  have hleaf : ∀ j, simulateQ ((encoding c).deriveImpl s) (leafD others c j) =
       leafWith queryHash (Function.update others c s) j := fun j => by
     unfold leafD leafWith
     split
@@ -193,25 +194,26 @@ theorem simulateQ_deriveImpl_gameD (others : UInt32 → Digest) (c : UInt32) (s 
     · rename_i h
       rw [hhash, Function.update_of_ne h]
   have hbind : ∀ {β γ : Type} (x : OracleComp DerivedSpec β) (f : β → OracleComp DerivedSpec γ),
-      simulateQ (encoding.deriveImpl s) (x >>= f) =
-        simulateQ (encoding.deriveImpl s) x >>= fun b => simulateQ (encoding.deriveImpl s) (f b) :=
+      simulateQ ((encoding c).deriveImpl s) (x >>= f) =
+        simulateQ ((encoding c).deriveImpl s) x >>= fun b =>
+          simulateQ ((encoding c).deriveImpl s) (f b) :=
     fun x f => simulateQ_bind _ _ _
   have hnode : ∀ (l j : Nat) (a b : Digest),
-      simulateQ (encoding.deriveImpl s) (nodeWith hashD l j a b) = nodeWith queryHash l j a b :=
+      simulateQ ((encoding c).deriveImpl s) (nodeWith hashD l j a b) = nodeWith queryHash l j a b :=
     fun _ _ _ _ => hhash _
-  have hpath : ∀ i : UInt32, simulateQ (encoding.deriveImpl s)
+  have hpath : ∀ i : UInt32, simulateQ ((encoding c).deriveImpl s)
       (Merkle.path (nodeWith hashD) (leafD others c) VRF_TREE_HEIGHT i.toNat) =
       Merkle.path (nodeWith queryHash) (leafWith queryHash (Function.update others c s))
         VRF_TREE_HEIGHT i.toNat := fun i => by
     rw [Merkle.path_map _ _ (fun b => simulateQ_pure _ b) hbind]
     simp only [hnode, hleaf]
-  have hroot : simulateQ (encoding.deriveImpl s)
+  have hroot : simulateQ ((encoding c).deriveImpl s)
       (Merkle.root (nodeWith hashD) (leafD others c) VRF_TREE_HEIGHT) =
       rootWith queryHash (Function.update others c s) := by
     rw [Merkle.root, Merkle.node_map _ _ hbind]
     simp only [hnode, hleaf]
     rfl
-  have himpl : encoding.deriveImpl s ∘ₛ openImplD others c =
+  have himpl : (encoding c).deriveImpl s ∘ₛ openImplD others c =
       openImpl (Function.update others c s) c := by
     funext t
     rcases t with t | i
@@ -383,22 +385,23 @@ theorem natCard_digest : Nat.card Digest = 2 ^ 256 := by
   norm_num
 
 /-- A given input is one of the two points of a uniform secret with probability `<= 2 / 2^256`. -/
-theorem prEvent_mem_range_enc_le (t : ByteArray) :
-    Pr{let s ← $ᵗ Digest}[t ∈ Set.range (encoding.enc s)] ≤ 2 * (2 ^ 256 : ℝ≥0∞)⁻¹ := by
+theorem prEvent_mem_range_enc_le (c : UInt32) (t : ByteArray) :
+    Pr{let s ← $ᵗ Digest}[t ∈ Set.range ((encoding c).enc s)] ≤ 2 * (2 ^ 256 : ℝ≥0∞)⁻¹ := by
   have hone : ∀ {f : Digest → ByteArray}, Function.Injective f →
       Pr{let s ← $ᵗ Digest}[f s = t] ≤ (2 ^ 256 : ℝ≥0∞)⁻¹ := fun hf => by
     have := SampleableType.prEvent_uniformSample_apply_eq_le hf t
     rwa [natCard_digest, Nat.cast_pow, Nat.cast_ofNat] at this
-  calc Pr{let s ← $ᵗ Digest}[t ∈ Set.range (encoding.enc s)]
-      ≤ Pr{let s ← $ᵗ Digest}[leafInput s = t ∨ outputInput s = t] :=
+  calc Pr{let s ← $ᵗ Digest}[t ∈ Set.range ((encoding c).enc s)]
+      ≤ Pr{let s ← $ᵗ Digest}[leafInput s = t ∨ outputInput c s = t] :=
         prEvent_mono _ _ _ fun s ⟨b, hb⟩ => by
           cases b
           · exact Or.inl hb
           · exact Or.inr hb
-    _ ≤ Pr{let s ← $ᵗ Digest}[leafInput s = t] + Pr{let s ← $ᵗ Digest}[outputInput s = t] :=
+    _ ≤ Pr{let s ← $ᵗ Digest}[leafInput s = t] + Pr{let s ← $ᵗ Digest}[outputInput c s = t] :=
         prEvent_or_le _ _ _
     _ ≤ (2 ^ 256 : ℝ≥0∞)⁻¹ + (2 ^ 256 : ℝ≥0∞)⁻¹ :=
-        add_le_add (hone fun _ _ h => leafInput_inj.mp h) (hone fun _ _ h => outputInput_inj.mp h)
+        add_le_add (hone fun _ _ h => leafInput_inj.mp h)
+          (hone fun _ _ h => (outputInput_inj.mp h).2)
     _ = 2 * (2 ^ 256 : ℝ≥0∞)⁻¹ := (two_mul _).symm
 
 /-! ## The ideal game -/
@@ -497,7 +500,7 @@ theorem prEvent_guess_le (others : UInt32 → Digest) (c : UInt32) (adversary : 
        let z ← (simulateQ HashSpec.romImpl (game others c s adversary)).run' ∅}[z.1 = z.2]
       ≤ (2 ^ 256 : ℝ≥0∞)⁻¹ + ((qh + (qo + 1) * 2 ^ 33 : ℕ) : ℝ≥0∞) * (2 * (2 ^ 256 : ℝ≥0∞)⁻¹) := by
   have hreal : ∀ s, (simulateQ HashSpec.romImpl (game others c s adversary)).run' ∅ =
-      Prod.fst <$> (simulateQ (encoding.realImpl s) (gameD others c adversary)).run ∅ := by
+      Prod.fst <$> (simulateQ ((encoding c).realImpl s) (gameD others c adversary)).run ∅ := by
     intro s
     rw [← simulateQ_deriveImpl_gameD, SecretEncoding.realImpl, QueryImpl.simulateQ_compose]
     rfl
@@ -506,12 +509,13 @@ theorem prEvent_guess_le (others : UInt32 → Digest) (c : UInt32) (adversary : 
         z.1.1 = z.1.2] ≤ (2 ^ 256 : ℝ≥0∞)⁻¹ := by
     rw [OracleComp.prEvent_bind_const]
     exact prEvent_idealImpl_gameD_le others c adversary
-  calc _ = Pr{let s ← $ᵗ Digest; let z ← (simulateQ (encoding.realImpl s)
+  calc _ = Pr{let s ← $ᵗ Digest; let z ← (simulateQ ((encoding c).realImpl s)
           (gameD others c adversary)).run ∅}[z.1.1 = z.1.2] := by
         simp only [hreal, map_eq_bind_pure_comp, bind_assoc, pure_bind, Function.comp_apply]
         rfl
-    _ ≤ _ := (encoding.prEvent_realImpl_le_add_mul (ms := $ᵗ Digest) prEvent_mem_range_enc_le
-        (p := IsHashD) (fun _ _ => trivial) (isQueryBoundP_gameD others c adversary hh ho)
-        fun _ z => z.1.1 = z.1.2).trans (add_le_add hideal le_rfl)
+    _ ≤ _ := ((encoding c).prEvent_realImpl_le_add_mul (ms := $ᵗ Digest)
+        (prEvent_mem_range_enc_le c) (p := IsHashD) (fun _ _ => trivial)
+        (isQueryBoundP_gameD others c adversary hh ho) fun _ z => z.1.1 = z.1.2).trans
+          (add_le_add hideal le_rfl)
 
 end EthLib.Cryptography.Vrf

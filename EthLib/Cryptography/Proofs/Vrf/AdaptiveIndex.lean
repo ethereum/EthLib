@@ -2,8 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Vrf.Unpredictability
 public import EthLib.Cryptography.Proofs.EvalDistEq
-public import VCVio.OracleComp.SimSemantics.StateT.UntilBad
-public import VCVio.EvalDist.ProbabilityBounds
+public import EthLib.Cryptography.Proofs.LogKeys
 
 /-!
 # Proofs: an output is unpredictable at an index the adversary chooses
@@ -37,73 +36,6 @@ Source: "Verifiable Random Functions", [FOCS 1999](https://doi.org/10.1109/SFFCS
 
 open OracleSpec OracleComp ENNReal
 
-namespace EthLib.Cryptography
-
-/-! ## Two handlers that differ only at one key -/
-
-section LogKeys
-
-variable {ι ι' : Type} {spec : OracleSpec ι} {spec' : OracleSpec ι'} {K : Type} [DecidableEq K]
-
-/-- Answer each query with a handler, and record the key of each query that has one. -/
-def logKeys (impl : QueryImpl spec (OracleComp spec')) (key : spec.Domain → Option K) :
-    QueryImpl spec (StateT (Finset K) (OracleComp spec')) := fun t =>
-  StateT.mk fun S => (fun u => (u, S ∪ (key t).toFinset)) <$> impl t
-
-/-- **Identical until a key is recorded.**
-
-Two handlers answer alike every query whose key is not `k`.
-
-Both are run over a second, stateful handler, such as a random oracle.
-
-An event of the first run, with `k` never recorded, has at most its mass in the second run. -/
-theorem prEvent_logKeys_le {τ : Type} (ro : QueryImpl spec' (StateT τ ProbComp))
-    {impl₁ impl₂ : QueryImpl spec (OracleComp spec')} {key : spec.Domain → Option K} {k : K}
-    (hagree : ∀ t, key t ≠ some k → impl₁ t = impl₂ t)
-    {α : Type} (oa : OracleComp spec α) (S : Finset K) (s : τ) (P : α → Prop) :
-    Pr{let z ← (simulateQ ro ((simulateQ (logKeys impl₁ key) oa).run S)).run' s}[
-        P z.1 ∧ k ∉ z.2]
-      ≤ Pr{let z ← (simulateQ ro (simulateQ impl₂ oa)).run' s}[P z] := by
-  let aux : (t : spec.Domain) → τ → spec.Range t → τ → Finset K → Finset K :=
-    fun t _ _ _ S => S ∪ (key t).toFinset
-  have hflat : ∀ impl : QueryImpl spec (OracleComp spec'),
-      (ro.mapStateTBase (logKeys impl key)).flattenStateT = (ro ∘ₛ impl).extendStateLeft aux := by
-    intro impl
-    funext t
-    refine StateT.ext fun st => ?_
-    simp [QueryImpl.flattenStateT, QueryImpl.mapStateTBase, logKeys, aux,
-      QueryImpl.apply_compose, map_eq_bind_pure_comp]
-  let bad : Finset K × τ → Prop := fun st => k ∈ st.1
-  have hsupp : ∀ (impl : QueryImpl spec (OracleComp spec')) t st z,
-      z ∈ support (((ro ∘ₛ impl).extendStateLeft aux t).run st) →
-        z.2.1 = st.1 ∪ (key t).toFinset := by
-    intro impl t st z hz
-    simp only [QueryImpl.extendStateLeft_apply, mem_support_bind_iff, support_pure,
-      Set.mem_singleton_iff] at hz
-    obtain ⟨p, -, rfl⟩ := hz
-    rfl
-  have hagree' : QueryImpl.AgreeUntilBad ((ro ∘ₛ impl₁).extendStateLeft aux)
-      ((ro ∘ₛ impl₂).extendStateLeft aux) bad := by
-    refine QueryImpl.AgreeUntilBad.of_run_eq_or_bad fun t st _ => ?_
-    by_cases hk : key t = some k
-    · refine .inr ⟨fun z hz => ?_, fun z hz => ?_⟩ <;>
-        simp [bad, hsupp _ t st z hz, hk]
-    · left
-      simp only [QueryImpl.extendStateLeft_apply, QueryImpl.apply_compose, hagree t hk]
-  have hpres : QueryImpl.PreservesInv ((ro ∘ₛ impl₁).extendStateLeft aux) bad :=
-    fun t st hst z hz => by
-      simp only [bad, hsupp _ t st z hz, Finset.mem_union]
-      exact Or.inl hst
-  have h := hagree'.prEvent_simulateQ_run_and_not_bad_le hpres oa (S, s) fun z => P z.1
-  rw [StateT.run'_eq, simulateQ_mapStateTBase_run_eq_map_flattenStateT, hflat,
-    ← QueryImpl.simulateQ_compose, StateT.run'_eq,
-    ← extendStateLeft_run_proj_eq (ro ∘ₛ impl₂) aux oa s S]
-  simpa [Functor.map_map, Function.comp_def, bad] using h
-
-end LogKeys
-
-end EthLib.Cryptography
-
 namespace EthLib.Cryptography.Vrf
 
 /-! ## The game with an adaptive index -/
@@ -133,7 +65,7 @@ def adaptiveGame (secrets : UInt32 → Digest) (adversary : AdaptiveAdversary) :
     OracleComp (unifSpec + HashSpec) Bool := do
   let r ← rootWith queryHash secrets
   let z ← (simulateQ (logKeys (honestImpl secrets) openedIndex) (adversary r)).run ∅
-  let output ← queryHash (outputInput (secrets z.1.1))
+  let output ← queryHash (outputInput z.1.1 (secrets z.1.1))
   return decide (z.1.1 ∉ z.2 ∧ z.1.2 = output)
 
 /-! ## One guess of the index -/
@@ -151,7 +83,7 @@ theorem honestImpl_eq_openImpl (secrets : UInt32 → Digest) (c : UInt32)
 def withOutput (secrets : UInt32 → Digest) (adversary : AdaptiveAdversary) (r : Digest) :
     OracleComp AdversarySpec ((UInt32 × Digest) × Digest) := do
   let x ← adversary r
-  let output ← AdversarySpec.query (.inl (.inr (outputInput (secrets x.1))))
+  let output ← AdversarySpec.query (.inl (.inr (outputInput x.1 (secrets x.1))))
   return (x, output)
 
 /-- The game, with the output query folded into the adversary's run. -/
@@ -176,7 +108,7 @@ theorem prEvent_withOutput_le (secrets : UInt32 → Digest) (c : UInt32)
         (z.1.1.1 ∉ z.2 ∧ z.1.1.2 = z.1.2) ∧ z.1.1.1 = c]
       ≤ Pr{let z ← (simulateQ HashSpec.romImpl (do
           let guess ← simulateQ (openImpl secrets c) (Prod.snd <$> adversary r)
-          let output ← queryHash (outputInput (secrets c))
+          let output ← queryHash (outputInput c (secrets c))
           return (guess, output))).run' cache}[z.1 = z.2] := by
   calc _ ≤ Pr{let z ← (simulateQ HashSpec.romImpl ((simulateQ (logKeys (honestImpl secrets)
           openedIndex) (withOutput secrets adversary r)).run ∅)).run' cache}[
@@ -198,9 +130,9 @@ theorem prEvent_withOutput_le (secrets : UInt32 → Digest) (c : UInt32)
       have key := prEvent_bind_mono_of_forall_le (m := ProbComp)
         ((simulateQ HashSpec.romImpl (simulateQ (openImpl secrets c) (adversary r))).run cache)
         (fun a => (fun b => (a.1, b.1)) <$>
-          (simulateQ HashSpec.romImpl (queryHash (outputInput (secrets a.1.1)))).run a.2)
+          (simulateQ HashSpec.romImpl (queryHash (outputInput a.1.1 (secrets a.1.1)))).run a.2)
         (fun a => (fun b => (a.1.2, b.1)) <$>
-          (simulateQ HashSpec.romImpl (queryHash (outputInput (secrets c)))).run a.2)
+          (simulateQ HashSpec.romImpl (queryHash (outputInput c (secrets c)))).run a.2)
         (fun z => z.1.1 = c ∧ z.1.2 = z.2) (fun z => z.1 = z.2) fun a => by
           rw [prEvent_map, prEvent_map]
           by_cases ha : a.1.1 = c
@@ -230,7 +162,7 @@ theorem prEvent_adaptiveRun_le (secrets : UInt32 → Digest) (c : UInt32)
       (withOutput secrets adversary p.1)).run ∅)).run' p.2)
     (fun p => (simulateQ HashSpec.romImpl (do
       let guess ← simulateQ (openImpl secrets c) (Prod.snd <$> adversary p.1)
-      let output ← queryHash (outputInput (secrets c))
+      let output ← queryHash (outputInput c (secrets c))
       return (guess, output))).run' p.2)
     (fun z => (z.1.1.1 ∉ z.2 ∧ z.1.1.2 = z.1.2) ∧ z.1.1.1 = c) (fun z => z.1 = z.2)
     fun p => prEvent_withOutput_le secrets c adversary p.1 p.2

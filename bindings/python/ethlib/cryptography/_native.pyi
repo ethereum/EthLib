@@ -227,6 +227,10 @@ def vrf_evaluate(seed: bytes, index: int) -> bytes:
     """The output at index `i` of the tree of a seed."""
     ...
 
+def vrf_mix(output: bytes, randomness: bytes) -> bytes:
+    """An output mixed with randomness: the value a selection compares with its threshold."""
+    ...
+
 def crc32(data: bytes) -> bytes:
     """The four digest bytes of CRC-32: the highest power of each byte at its least significant bit."""
     ...
@@ -333,6 +337,18 @@ def chacha20_poly1305_encrypt(key: bytes, nonce: bytes, aad: bytes, plaintext: b
 
 def chacha20_poly1305_decrypt(key: bytes, nonce: bytes, aad: bytes, ciphertext: bytes, tag: bytes) -> bytes:
     """Authenticate before returning plaintext, RFC 8439 §2.8."""
+    ...
+
+def keystore_nfkd(text: str) -> str:
+    """Unicode 16.0.0 Normalization Form KD, UAX #15 rev. 56, §1.3."""
+    ...
+
+def keystore_password(password: str) -> bytes:
+    """NFKD, control removal and UTF-8 encoding, ERC-2335 "Password requirements"."""
+    ...
+
+def keystore_decrypt(keystore: str, password: str) -> bytes:
+    """Decrypt an ERC-2335 JSON keystore and return its secret octets."""
     ...
 
 def secp256k1_verify(public_key: bytes, msg_hash: bytes, signature: bytes) -> bool:
@@ -1297,6 +1313,14 @@ def active_fork(config: dict[str, Any], number: int, timestamp: int) -> str | No
 
 def engine_new_payload(config: dict, request: dict) -> dict:
     """The payload status of an `engine_newPayload` request, without the parent's state."""
+    ...
+
+def engine_jwt_build(secret: bytes, issued_at: int) -> str:
+    """Build an HS256 Engine token from a 32-byte secret and an issued-at time in seconds."""
+    ...
+
+def engine_jwt_check(secret: bytes, token: str, clock: int) -> bool:
+    """Accept an HS256 Engine token only within 60 seconds of its issued-at time."""
     ...
 
 def engine_new_payload_on_chain(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], request: dict) -> tuple[dict, bytes, bytes] | tuple[dict, None, None]:

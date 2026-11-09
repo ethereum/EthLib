@@ -149,6 +149,7 @@ def _make_extension() -> Extension:
             "bindings/python/password_kdf.c",
             "bindings/python/noise_primitives.c",
             "bindings/python/noise.c",
+            "bindings/python/keystore.c",
             "bindings/python/secp256k1.c",
             "bindings/python/secp256r1.c",
             "bindings/python/precompile.c",

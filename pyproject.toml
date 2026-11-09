@@ -7,7 +7,8 @@ name = "ethlib"
 version = "0.3.0"
 description = "Formally verified Ethereum primitives, written in Lean"
 readme = { file = "README.md", content-type = "text/markdown" }
-license = "CC0-1.0 AND MIT AND Apache-2.0"
+license = "CC0-1.0 AND MIT AND Apache-2.0 AND Unicode-3.0"
+license-files = ["LICENSE", "EthLib/Base/Unicode/LICENSE"]
 requires-python = ">=3.10"
 authors = [{ name = "ethereum" }]
 urls = { homepage = "https://github.com/ethereum/ethlib" }
@@ -95,8 +96,8 @@ ban-relative-imports = "all"
 [tool.ruff.lint.isort]
 combine-as-imports = true
 known-first-party = ["ethlib"]
-# The benchmarks import python-snappy and ssz-specs, whose names two suites share.
-known-third-party = ["snappy", "ssz"]
+# The key generator imports ssz-specs, whose name a suite shares.
+known-third-party = ["ssz"]
 
 [tool.ruff.lint.per-file-ignores]
 # Each suite imports its own `fixtures` module, which shares its name with the other suites',
@@ -104,9 +105,6 @@ known-third-party = ["snappy", "ssz"]
 "bindings/python/tests/**" = ["D", "TID252"]
 "scripts/test_*.py" = ["D"]
 "tests/**" = ["D"]
-# A benchmark builds each timed input in a lambda default, outside the timing,
-# and names the modules and types of the specifications by one letter.
-"benchmarks/*.py" = ["B008", "N803", "N812", "N814"]
 # The evaluator dispatches on the name of each `ast` node class.
 "bindings/python/tests/precompile/extract_alt_bn128_cases.py" = ["N802"]
 
@@ -121,9 +119,8 @@ python-version = "3.12"
 root = ["bindings/python", "bindings/python/tests", "scripts"]
 
 [tool.ty.src]
-# The benchmarks and the key generator import the reference specifications,
-# which only their own environments install.
-exclude = [".claude/", "benchmarks/", "tests/consensus/pq_keys/generate.py"]
+# The key generator imports ssz-specs, which only its own environment installs.
+exclude = [".claude/", "tests/consensus/pq_keys/generate.py"]
 
 [tool.ty.analysis]
 # setup.py runs in the build environment, which installs setuptools.

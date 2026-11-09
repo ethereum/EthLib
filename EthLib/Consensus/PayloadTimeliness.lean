@@ -238,10 +238,26 @@ The previous epoch holds committees of index zero, and the other epochs their co
 -/
 def initializePtcWindow (state : BeaconState preset fork) :
     Except AccessorError (PayloadTimelinessCommitteeWindow preset) :=
+  let perEpoch := preset.SLOTS_PER_EPOCH.toNat
+  let current := getCurrentEpoch state
+  -- The committees of an epoch read the same two seeds, shuffle and count of committees per slot.
+  --
+  -- So these are computed once for the current epoch, and once for each epoch of the lookahead.
+  let inputs : Array (Except AccessorError _) :=
+    (Array.range (preset.MIN_SEED_LOOKAHEAD.toNat + 1)).map fun ahead => do
+      -- This sum may wrap, but then the checked sum of each slot of that epoch fails first.
+      let epoch := current + ahead.toUInt64
+      return (← getSeed state epoch DOMAIN_PTC_ATTESTER, getCommitteeCountPerSlot state epoch,
+        ← attesterShuffle state epoch)
   RootedVector.ofVector <$> (Vector.range _).mapM fun position => do
-    let perEpoch := preset.SLOTS_PER_EPOCH.toNat
     if position < perEpoch then return Vector.replicate _ 0
-    computePtc state (← ptcWindowSlot preset (getCurrentEpoch state) (position - perEpoch))
+    let slot ← ptcWindowSlot preset current (position - perEpoch)
+    match inputs[(position - perEpoch) / perEpoch]? with
+    | some shared =>
+      let (epochSeed, perSlot, active, shuffled) ← shared
+      computePtcOf state slot epochSeed perSlot active shuffled
+    -- Every position after the previous epoch reads an epoch of the inputs, so this never fails.
+    | none => throw (.ptcSlotOutOfRange slot state.slot)
 
 /-- The state with its window of committees moved by one epoch.
 
