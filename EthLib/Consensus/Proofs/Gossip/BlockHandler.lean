@@ -21,9 +21,13 @@ Before Heze it also rejects a block with a deposit.
 
 In the same way, it checks four lists of requests that the block carries for its parent payload.
 
+It also checks the blob commitments of the bid against the blob limit of the epoch of the block.
+
 The block handler checks the size of each list of operations against the same limit.
 
 On a full parent it checks the four counts of the requests, and an empty parent takes no request.
+
+Its bid step checks the same blob limit, on a state at the slot of the block.
 
 So the handler fails on every new block that these checks reject.
 
@@ -81,5 +85,24 @@ theorem checkExecutionRequestsLimits_of_onBlock (gloas : .glamsterdam ≤ fork)
     processParentExecutionPayload_counts parentOk
   exact checkExecutionRequestsLimits_eq_accept.mpr
     ⟨withdrawals, consolidations, builderDeposits, exits⟩
+
+/-- From Gloas, a new block that the block handler accepts passes the blob check of the topic.
+
+Its bid commits to at most the blobs per block that the epoch of the block allows. -/
+theorem blobKzgCommitments_size_le_of_onBlock (gloas : .glamsterdam ≤ fork)
+    {after : Store preset fork} (root : SszType.hashTreeRoot signed.message = .ok blockRoot)
+    (new : ¬ store.blocks.contains blockRoot)
+    (added : store.onBlock config checks sources signed = .ok after) :
+    (signed.message.body.signedExecutionPayloadBid gloas).message.blobKzgCommitments.data.size ≤
+      (config.getBlobParameters
+        (computeEpochAtSlot preset signed.message.slot)).maxBlobsPerBlock.toNat := by
+  obtain ⟨-, -, _, _, -, transition, -⟩ := Store.onBlock_new root new added
+  obtain ⟨_, -, -, -, computed, -⟩ := stateTransition_ok transition
+  obtain ⟨_, _, _, _, _, -, headedOk, withdrawnOk, bid, -⟩ := processBlock_steps gloas computed
+  obtain ⟨slot, -⟩ := processBlockHeader_checks headedOk
+  obtain ⟨-, blobs, -⟩ := checkExecutionPayloadBid_ok_iff.mp (processExecutionPayloadBid_ok bid).1
+  -- The header step checks the slot of the block, and the header and withdrawal steps keep it.
+  rwa [getCurrentEpoch, (payloadInputs_processWithdrawals withdrawnOk).slot,
+    (payloadInputs_processBlockHeader headedOk).slot, ← slot] at blobs
 
 end EthLib.Consensus
