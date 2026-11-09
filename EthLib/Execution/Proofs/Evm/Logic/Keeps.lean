@@ -20,7 +20,7 @@ Such a call runs the code that the address holds in a state, along its route.
 
 The state of the frame that sends it reads as that state.
 
-It has the same accounts, current storage and code.
+It has the same accounts, current storage, transient storage and code.
 
 So the message runs the real code of the address, or its precompile, and not any code.
 
@@ -113,7 +113,7 @@ def SentVia (message : Message fork) (S : TransactionState) (to : Address)
     msg.depth = message.depth + 1 ∧ msg.isStatic = message.isStatic ∧
     msg.blockEnv = message.blockEnv ∧ msg.txEnv = message.txEnv
 
-/-- The message of a CALL along a route is a call to its address via the state before the call.
+/-- The message of a CALL with no value along a route is a call to its address.
 
 The state `state` before the call holds the code of the address, and the route goes from it.
 

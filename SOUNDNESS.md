@@ -1094,8 +1094,8 @@ It leaves free the block before the transaction, the created accounts, the wiped
 `Logic.ReadsAs.routeState` proves the same for the state once a call follows a route.
 `Logic.Routes.of_readsAs` proves that a state that reads as `S` gives each code the route that `S` gives it.
 `Logic.SentVia message S to` names the CALLs with no value from the current account of `message` to `to`, from a frame that reads as `S`.
-Each such call runs the code that `to` holds in `S`, along its route, with any data and any gas.
-`Logic.CallSends.sentVia` proves that the message of a CALL along a route is such a call, via the state before the call.
+Each such call runs the code that `to` holds in `S`, along its route, with any data, any gas and any reservoir.
+`Logic.CallSends.sentVia` proves that the message of a CALL with no value along a route is such a call, via the state before the call.
 
 The block of a transaction state is the state before the block, with the writes of the block so far.
 A rollback restores the storage of a snapshot only when both states have the same block.
