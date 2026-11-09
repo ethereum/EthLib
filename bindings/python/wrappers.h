@@ -150,6 +150,8 @@ extern PyObject* CONSENSUS_ERROR;
 extern PyObject* HKDF_ERROR;
 extern PyObject* PBKDF2_ERROR;
 extern PyObject* SCRYPT_ERROR;
+extern PyObject* X25519_ERROR;
+extern PyObject* CHACHAPOLY_ERROR;
 extern PyObject* AES_ERROR;
 extern PyObject* CONCAT_KDF_ERROR;
 extern PyObject* BLOCK_ERROR;
@@ -300,6 +302,16 @@ PyObject* py_salsa208                                    (PyObject* self, PyObje
 PyObject* py_scrypt_block_mix                            (PyObject* self, PyObject* args);
 PyObject* py_scrypt_romix                                (PyObject* self, PyObject* args);
 PyObject* py_scrypt                                      (PyObject* self, PyObject* args);
+PyObject* py_x25519                                      (PyObject* self, PyObject* args);
+PyObject* py_x25519_public_key                           (PyObject* self, PyObject* args);
+PyObject* py_chacha20_quarter_round                      (PyObject* self, PyObject* args);
+PyObject* py_chacha20_quarter_round_state                (PyObject* self, PyObject* args);
+PyObject* py_chacha20_block                              (PyObject* self, PyObject* args);
+PyObject* py_chacha20_crypt                              (PyObject* self, PyObject* args);
+PyObject* py_poly1305                                    (PyObject* self, PyObject* args);
+PyObject* py_poly1305_key                                (PyObject* self, PyObject* args);
+PyObject* py_chacha20_poly1305_encrypt                    (PyObject* self, PyObject* args);
+PyObject* py_chacha20_poly1305_decrypt                    (PyObject* self, PyObject* args);
 
 PyObject* py_secp256k1_verify                             (PyObject* self, PyObject* args);
 PyObject* py_secp256k1_is_low_s                           (PyObject* self, PyObject* args);

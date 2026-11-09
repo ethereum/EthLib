@@ -129,6 +129,14 @@ class ScryptError(EthLibError, ValueError):
     """scrypt or one of its steps rejected its input."""
 
 
+class X25519Error(EthLibError, ValueError):
+    """An X25519 key has the wrong size."""
+
+
+class ChaCha20Poly1305Error(EthLibError, ValueError):
+    """ChaCha20-Poly1305 rejected a size, counter or authentication tag."""
+
+
 class ConcatKdfError(EthLibError, ValueError):
     """The Concatenation KDF rejected its input."""
 
@@ -276,6 +284,8 @@ __all__ = [
     "HkdfError",
     "Pbkdf2Error",
     "ScryptError",
+    "X25519Error",
+    "ChaCha20Poly1305Error",
     "ConcatKdfError",
     "AesError",
     "BlockError",
