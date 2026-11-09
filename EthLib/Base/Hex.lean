@@ -4,6 +4,8 @@ module
 # `Base.Hex`
 
 The sixteen hex digits, as the encodings that write bytes in hex use them.
+
+Decoding reads digits in either letter case and runs in constant stack.
 -/
 
 @[expose] public section
@@ -42,5 +44,25 @@ theorem toList_hexString (bytes : List UInt8) :
       rw [List.foldl_cons, ih]
       simp [byteHexDigits]
   simpa [hexString] using general bytes "0x"
+
+/-- The value of one hex digit, in either letter case. -/
+def hexValue? (c : Char) : Option UInt8 :=
+  if '0' ≤ c ∧ c ≤ '9' then some (c.toNat - '0'.toNat).toUInt8
+  else if 'a' ≤ c ∧ c ≤ 'f' then some (c.toNat - 'a'.toNat + 10).toUInt8
+  else if 'A' ≤ c ∧ c ≤ 'F' then some (c.toNat - 'A'.toNat + 10).toUInt8
+  else none
+
+/-- The bytes so far, then one byte for each pair of digits.
+
+An odd count of digits, or a character that is not a digit, gives nothing. -/
+def hexBytesFrom? : List Char → ByteArray → Option ByteArray
+  | [], out => some out
+  | [_], _ => none
+  | high :: low :: rest, out => do
+    hexBytesFrom? rest (out.push (16 * (← hexValue? high) + (← hexValue? low)))
+
+/-- The bytes that a run of hex digits holds, with no `0x` marker. -/
+def hexBytes? (digits : List Char) : Option ByteArray :=
+  hexBytesFrom? digits .empty
 
 end EthLib.Base

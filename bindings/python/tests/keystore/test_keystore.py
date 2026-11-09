@@ -228,3 +228,93 @@ def test_required_module_field() -> None:
         '"property not found: message"',
     ):
         keystore.decrypt(json.dumps(store), "password")
+
+
+def test_unsupported_kdf_before_parameters() -> None:
+    store = empty_store()
+    store["crypto"]["kdf"]["function"] = "argon2id"
+    store["crypto"]["kdf"]["params"] = {}
+    with raises(
+        KeystoreError,
+        'EthLib.Cryptography.Keystore.KeystoreError.unsupportedFunction "kdf" "argon2id"',
+    ) as exc:
+        keystore.decrypt(json.dumps(store), "password")
+    assert exc.value.code == 4
+
+
+def test_uppercase_hex() -> None:
+    store = empty_store()
+    store["crypto"]["checksum"]["message"] = store["crypto"]["checksum"]["message"].upper()
+    assert keystore.decrypt(json.dumps(store), "password") == b""
+
+
+@pytest.mark.parametrize(
+    "name, memory, work",
+    [
+        # 262144 iterations of one 32-byte block.
+        ("pbkdf2", 32, 262144),
+        # 128 * r * (n + p) + dklen and 4 * n * r * p, with n = 262144, r = 8, p = 1, dklen = 32.
+        ("scrypt", 268436512, 8388608),
+    ],
+)
+def test_erc2335_limits(name: str, memory: int, work: int) -> None:
+    text = (ROOT / f"{name}.json").read_text()
+    assert keystore.decrypt(text, PASSWORD, max_memory=memory, max_work=work) == SECRET
+    for max_memory, max_work in [(memory - 1, work), (memory, work - 1)]:
+        with raises(
+            KeystoreError,
+            f"EthLib.Cryptography.Keystore.KeystoreError.limitExceeded {memory} {work}",
+        ) as exc:
+            keystore.decrypt(text, PASSWORD, max_memory=max_memory, max_work=max_work)
+        assert exc.value.code == 9
+
+
+def test_huge_scrypt_cost_refused() -> None:
+    store = empty_store()
+    store["crypto"]["kdf"] = {
+        "function": "scrypt",
+        "params": {"dklen": 32, "n": 2**40, "r": 8, "p": 1, "salt": ""},
+        "message": "",
+    }
+    with raises(
+        KeystoreError,
+        "EthLib.Cryptography.Keystore.KeystoreError.limitExceeded "
+        f"{128 * 8 * (2**40 + 1) + 32} {4 * 2**40 * 8}",
+    ):
+        keystore.decrypt(json.dumps(store), "password")
+
+
+@pytest.mark.parametrize("number", ["1e1000000000", "1E+00010000", "2.5e99999"])
+def test_huge_exponent_refused(number: str) -> None:
+    text = json.dumps(empty_store()).replace('"version": 4', f'"version": {number}')
+    with raises(
+        KeystoreError, 'EthLib.Cryptography.Keystore.KeystoreError.invalidJson "exponent too large"'
+    ) as exc:
+        keystore.decrypt(text, "password")
+    assert exc.value.code == 1
+
+
+@pytest.mark.parametrize("number", ["4e0", "4E+0000", "0.4e1"])
+def test_small_exponent_read(number: str) -> None:
+    text = json.dumps(empty_store()).replace('"version": 4', f'"version": {number}')
+    assert keystore.decrypt(text, "password") == b""
+
+
+def test_exponent_letters_in_strings_ignored() -> None:
+    store = empty_store()
+    store["description"] = "1e999999999 " + "[" * 100
+    assert keystore.decrypt(json.dumps(store), "password") == b""
+
+
+@pytest.mark.parametrize("depth, accepted", [(63, True), (65, False)])
+def test_nesting_bound(depth: int, accepted: bool) -> None:
+    # The keystore object is one level, so the extra field reaches depth plus one.
+    text = json.dumps(empty_store())[:-1] + ', "x": ' + "[" * depth + "]" * depth + "}"
+    if accepted:
+        assert keystore.decrypt(text, "password") == b""
+    else:
+        with raises(
+            KeystoreError,
+            'EthLib.Cryptography.Keystore.KeystoreError.invalidJson "nesting too deep"',
+        ):
+            keystore.decrypt(text, "password")

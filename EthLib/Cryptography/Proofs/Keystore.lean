@@ -6,6 +6,8 @@ public import EthLib.Cryptography.Keystore
 # Proofs: ERC-2335 password verification
 
 A mismatched checksum prevents secret decryption.
+
+A key derivation beyond the caller's limits is refused before it runs.
 -/
 
 @[expose] public section
@@ -24,6 +26,14 @@ theorem decryptWithKey_of_checksum_mismatch (store : Store) (key : ByteArray)
     (hcheck : (passwordChecksum key store.message != ⟨store.checksum.toArray⟩) = true) :
     decryptWithKey store key = .error .checksumMismatch := by
   simp [decryptWithKey, hsize, hcheck]
+  rfl
+
+/-- A key derivation beyond the caller's limits is refused, so it never runs. -/
+theorem decryptStore_of_not_admits (limits : KdfLimits) (store : Store) (password : String)
+    (h : limits.admits store.kdf = false) :
+    decryptStore limits store password =
+      .error (.limitExceeded store.kdf.memory store.kdf.work) := by
+  simp [decryptStore, h]
   rfl
 
 end EthLib.Cryptography.Keystore
