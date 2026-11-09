@@ -1137,8 +1137,8 @@ Each instruction that `Logic/RunMono.lean` covers is `RunMono`, such as `Logic.r
 It needs the word not to depend on the gas.
 The opcode rules of `Logic/Rules.lean`, `Logic/Stack.lean` and `Logic/Log.lean` are proved over the steps from frames that are `GasMono`, such as `Logic.calldataloadG`.
 Each such rule has the hypotheses and the conclusion of the rule over `Step` of the same opcode, which follows from it by `Logic.HoareG.toHoare` or `Logic.SpecG.toSpec`.
-Of the opcode rules there, those for GAS, EXTCODESIZE and a frame past the end of its code have no such form.
-`Logic.sstore_of_account` has no such form either.
+Of the opcode rules there, the one for GAS has no such form, since it pushes the gas left.
+Those for EXTCODESIZE, a frame past the end of its code and `Logic.sstore_of_account` have none yet.
 `Logic.branchTable` has no such form yet.
 `Logic.At.stuck` proves that a frame is stuck at an opcode whose instruction fails on every frame with the same message, stack and state, and at most the same gas.
 `Logic.sstore_stuck` proves that SSTORE is stuck in a static frame, or when the current address has no account.

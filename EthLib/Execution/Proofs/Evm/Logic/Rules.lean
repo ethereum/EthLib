@@ -943,7 +943,9 @@ theorem stop_of_size_le (hle : code.size ≤ pc) :
   exact ⟨_, .next hrun (step_of_size_le (by rw [hcode, hpc]; exact hle)), rfl, rfl, herr, hout,
     hg, hs, hss⟩
 
-/-- RETURN stops the frame with a range of memory as its output, and pays the growth of memory. -/
+/-- RETURN stops the frame with a range of memory as its output, and pays the growth of memory.
+
+It holds over the steps from frames that are monotone in gas. -/
 theorem returnG {start size : U256} {rest : List U256} (hlt : pc < code.size)
     (hbyte : code[pc] = 0xf3) (hgas : (extendMemory memory.size [(start, size)]).cost ≤ gas) :
     SpecG fork (At code message pc (start :: size :: rest) memory gas state substate returnData)

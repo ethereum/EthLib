@@ -29,7 +29,7 @@ SSTORE never completes in a static frame, or when the current address has no acc
 
 From Istanbul, it also fails with 2300 gas left or less, by EIP-2200.
 
-In each of these cases a frame at SSTORE with two words on its stack is stuck.
+In each of these cases a frame at SSTORE with at least two words on its stack is stuck.
 
 GAS is not monotone in gas, and a step that sends a message is no step of the logic.
 
