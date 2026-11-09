@@ -29,10 +29,10 @@ theorem map_sqrtOrError (f : Hom F G) (a : F) :
 
 namespace Fp2
 
-theorem map_sqrt (f : Hom F G) (a : Fp2 F) :
-    Fp2.sqrt (a.map f) = (Fp2.sqrt a).map (Fp2.map f) := by
+theorem map_sqrtReference (f : Hom F G) (a : Fp2 F) :
+    Fp2.sqrtReference (a.map f) = (Fp2.sqrtReference a).map (Fp2.map f) := by
   obtain ⟨a0, a1⟩ := a
-  unfold Fp2.sqrt
+  unfold Fp2.sqrtReference
   simp only [Fp2.map, f.map_isZero, ← f.map_neg, ← f.map_mul, ← f.map_add, ← f.map_ofNat,
     ← f.map_inverse, map_sqrtOrError]
   cases BaseField.isZero a1
@@ -54,6 +54,35 @@ theorem map_sqrt (f : Hom F G) (a : Fp2 F) :
       cases sqrtOrError (-a0) with
       | ok s => simp only [Except.map, Fp2.map, f.map_zero]
       | error e => rfl
+
+theorem map_sqrtComplex (f : Hom F G) (cF : F → F) (cG : G → G)
+    (hc : ∀ a, cG (f a) = f (cF a)) (a : Fp2 F) :
+    Fp2.sqrtComplex cG (a.map f) = (Fp2.sqrtComplex cF a).map (Fp2.map f) := by
+  obtain ⟨a0, a1⟩ := a
+  unfold Fp2.sqrtComplex
+  simp only [Fp2.map, f.map_isZero, ← f.map_mul, ← f.map_add, ← f.map_ofNat,
+    ← f.map_inverse, map_sqrtOrError]
+  cases BaseField.isZero a1
+  · simp only [Bool.false_eq_true, ↓reduceIte]
+    cases sqrtOrError (a0 * a0 + a1 * a1) with
+    | error e => rfl
+    | ok s =>
+      simp only [Except.map, ← f.map_add, ← f.map_mul, ← f.map_inverse, hc, f.map_beq]
+      split <;> simp only [Fp2.map, f.map_mul, f.map_inverse, f.map_ofNat]
+  · simp only [↓reduceIte, hc, ← f.map_mul, f.map_beq]
+    split <;> simp only [Except.map, Fp2.map, f.map_zero]
+
+theorem map_sqrt (f : Hom F G) (a : Fp2 F) :
+    Fp2.sqrt (a.map f) = (Fp2.sqrt a).map (Fp2.map f) := by
+  have hc := f.map_sqrtCandidate
+  cases hF : BaseField.sqrtCandidate (F := F) <;>
+    cases hG : BaseField.sqrtCandidate (F := G) <;>
+    simp only [hF, hG, Option.map_none, Option.map_some] at hc
+  · simpa only [Fp2.sqrt, hF, hG] using map_sqrtReference f a
+  · cases hc
+  · cases hc
+  · simp only [Fp2.sqrt, hF, hG]
+    exact map_sqrtComplex f _ _ (fun x => congrFun (Option.some.inj hc) x) a
 
 end Fp2
 

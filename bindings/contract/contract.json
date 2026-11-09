@@ -371,7 +371,8 @@
       {"constructor": "keyGenNoKey", "code": 15},
       {"constructor": "keyGenHkdf", "code": 16}]}],
    "error_class": "BlsError",
-   "docstring": "Hash a message + DST to a G2 point on BLS12-381."},
+   "docstring":
+   "Hash a message + DST to a G2 point on BLS12-381.\n\nA custom `swuFn` must preserve the SSWU map, including its sign choice."},
   {"summary":
    "The pairing `e(P, Q)` of a compressed `G1` point and a compressed `G2` point.",
    "signature": "(g1_point: bytes, g2_point: bytes) -> bytes",

@@ -143,6 +143,9 @@ open Montgomery in
 /-- The limbs of the exponent write `(p + 1) / 4`. -/
 theorem val_sqrtExponent : Limbs.val sqrtExponent = (modulus + 1) / 4 := by decide
 
+/-- The power `a^((p + 1) / 4)` of RFC 9380, Appendix I.1, before checking its square. -/
+@[inline] def sqrtCandidate (a : Fp) : Fp := Montgomery.powLimbs a sqrtExponent
+
 /-- Square root, valid since `p = 3 mod 4`.
 
 The root it returns is `a ^ ((p + 1) / 4)`.
@@ -151,7 +154,7 @@ The power runs four bits of the exponent at a time.
 
 It fails when `a` is not a square. -/
 def sqrt (a : Fp) : Except BlsError Fp :=
-  let cand : Fp := Montgomery.powLimbs a sqrtExponent
+  let cand := sqrtCandidate a
   if (cand * cand).beq a then .ok cand else .error .notASquare
 
 /-- The operations that the extensions and curves of BLS12-381 read from `Fp`. -/
@@ -164,6 +167,7 @@ instance : BaseField Fp where
   inverse := inverse
   powNat := powNat
   sqrt a := (Fp.sqrt a).toOption
+  sqrtCandidate := some Fp.sqrtCandidate
   sgn0 a := a.val % 2 == 1
 
 /-- Decode a 48-byte big-endian integer as an element of `Fp`.

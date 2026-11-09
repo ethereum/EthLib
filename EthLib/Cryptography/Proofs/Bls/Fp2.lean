@@ -425,12 +425,12 @@ private theorem c0_ne_zero_sub_zmod {a0 a1 s' c0 inv2 : ZMod Fp.modulus}
     exact ha1 (mul_self_eq_zero.mp ha1_sq)
   exact mul_ne_zero h2ne hc0_ne
 
--- `sqrt.match_1` is the matcher of the library's `Fp2.sqrt`.
+-- `sqrtReference.match_1` is the matcher of the library's `Fp2.sqrtReference`.
 --
 -- It is named on purpose, so the statement matches that definition's unfolding.
 set_option linter.auxLemma false in
 private theorem c0Opt_eq_ok {F : Type} {sqrtFn : F → Except BlsError F} {x y c0 : F}
-    (h : sqrt.match_1 (fun _ => Except BlsError F) (sqrtFn x) (fun _ => sqrtFn x)
+    (h : sqrtReference.match_1 (fun _ => Except BlsError F) (sqrtFn x) (fun _ => sqrtFn x)
           (fun _ => sqrtFn y) = .ok c0) :
     sqrtFn x = .ok c0 ∨ sqrtFn y = .ok c0 := by
   cases h1 : sqrtFn x with
@@ -451,8 +451,8 @@ The statement is generic, so the kernel checks the case analysis on variables on
 
 At `Fp`, a proof that unfolds the square root directly makes the kernel evaluate the inverses.
 -/
-theorem sqrt_eq_ok_cases {F : Type} [BaseField F] {a c : Fp2 F}
-    (h : Fp2.sqrt a = .ok c) :
+theorem sqrtReference_eq_ok_cases {F : Type} [BaseField F] {a c : Fp2 F}
+    (h : Fp2.sqrtReference a = .ok c) :
     (BaseField.isZero a.c1 = true ∧
       ((sqrtOrError a.c0 = .ok c.c0 ∧ c.c1 = BaseField.zero) ∨
         (sqrtOrError (-a.c0) = .ok c.c1 ∧ c.c0 = BaseField.zero))) ∨
@@ -460,7 +460,7 @@ theorem sqrt_eq_ok_cases {F : Type} [BaseField F] {a c : Fp2 F}
       (sqrtOrError ((a.c0 + s) * BaseField.inverse (BaseField.ofNat 2)) = .ok c.c0 ∨
         sqrtOrError ((a.c0 - s) * BaseField.inverse (BaseField.ofNat 2)) = .ok c.c0) ∧
       c.c1 = a.c1 * BaseField.inverse (BaseField.ofNat 2 * c.c0)) := by
-  unfold Fp2.sqrt at h
+  unfold Fp2.sqrtReference at h
   split at h
   · rename_i hz
     refine Or.inl ⟨hz, ?_⟩
@@ -486,11 +486,11 @@ theorem sqrt_eq_ok_cases {F : Type} [BaseField F] {a c : Fp2 F}
         exact ⟨s, hs, c0Opt_eq_ok hc0, rfl⟩
 
 /-- The square root in `Fp2` succeeds when `c1` is zero and `c0` or `-c0` has a root. -/
-theorem sqrt_isOk_of_c1_zero {F : Type} [BaseField F] {a : Fp2 F}
+theorem sqrtReference_isOk_of_c1_zero {F : Type} [BaseField F] {a : Fp2 F}
     (hz : BaseField.isZero a.c1 = true)
     (h : (∃ s, sqrtOrError a.c0 = .ok s) ∨ ∃ s, sqrtOrError (-a.c0) = .ok s) :
-    ∃ c, Fp2.sqrt a = .ok c := by
-  unfold Fp2.sqrt
+    ∃ c, Fp2.sqrtReference a = .ok c := by
+  unfold Fp2.sqrtReference
   rw [ite_eq_left_of_eq_true _ _ (eq_true hz)]
   cases h0 : sqrtOrError a.c0 with
   | ok s => exact ⟨_, rfl⟩
@@ -502,19 +502,19 @@ theorem sqrt_isOk_of_c1_zero {F : Type} [BaseField F] {a : Fp2 F}
       rw [hs]
       exact ⟨_, rfl⟩
 
--- `sqrt.match_1` names the inner fallback branch of `Fp2.sqrt`.
+-- `sqrtReference.match_1` names the inner fallback branch of `Fp2.sqrtReference`.
 set_option linter.auxLemma false in
 /-- When `c1` is not zero, the square root in `Fp2` succeeds if two roots exist.
 
 The first is a root `s` of the norm, the second a root of `(a0 + s) / 2` or of `(a0 - s) / 2`.
 -/
-theorem sqrt_isOk_of_c1_ne {F : Type} [BaseField F] {a : Fp2 F} {s : F}
+theorem sqrtReference_isOk_of_c1_ne {F : Type} [BaseField F] {a : Fp2 F} {s : F}
     (hz : BaseField.isZero a.c1 = false)
     (hs : sqrtOrError (a.c0 * a.c0 + a.c1 * a.c1) = .ok s)
     (h : (∃ r, sqrtOrError ((a.c0 + s) * BaseField.inverse (BaseField.ofNat 2)) = .ok r) ∨
       ∃ r, sqrtOrError ((a.c0 - s) * BaseField.inverse (BaseField.ofNat 2)) = .ok r) :
-    ∃ c, Fp2.sqrt a = .ok c := by
-  unfold Fp2.sqrt
+    ∃ c, Fp2.sqrtReference a = .ok c := by
+  unfold Fp2.sqrtReference
   rw [ite_eq_right_of_eq_false _ _ (eq_false (by rw [hz]; decide))]
   dsimp only
   rw [hs]
@@ -525,7 +525,7 @@ theorem sqrt_isOk_of_c1_ne {F : Type} [BaseField F] {a : Fp2 F} {s : F}
     rcases h with ⟨r, hr⟩ | ⟨r, hr⟩
     · rw [hr] at h1
       cases h1
-    · dsimp only [sqrt.match_1]
+    · dsimp only [sqrtReference.match_1]
       rw [hr]
       exact ⟨_, rfl⟩
 
@@ -591,12 +591,12 @@ private theorem sqrt_branch_sub_gen_aux {invFn : Fp → Fp}
   · exact sqrt_c0_sub_zmod hs' h2inv hc0' h2c0_inv
   · exact sqrt_c1_zmod h2c0_inv
 
-/-- Soundness of `Fp2.sqrt`: if `Fp2.sqrt a = .ok c`, then `c * c = a`. -/
-theorem sqrt_ok {a c : Fp2} (h : Fp2.sqrt a = .ok c) : c * c = a := by
+/-- Soundness of `Fp2.sqrtReference`: if `Fp2.sqrtReference a = .ok c`, then `c * c = a`. -/
+theorem sqrtReference_ok {a c : Fp2} (h : Fp2.sqrtReference a = .ok c) : c * c = a := by
   have hinv : ∀ x : Fp, x ≠ 0 → Fp.toZMod x * Fp.toZMod (BaseField.inverse x) = 1 :=
     fun _ hx => fp_mul_inverse hx
   obtain ⟨c0, c1⟩ := c
-  rcases sqrt_eq_ok_cases h with ⟨hz, ⟨hs, h1⟩ | ⟨hs, h0⟩⟩ | ⟨hz, s, hs, htry, h1⟩
+  rcases sqrtReference_eq_ok_cases h with ⟨hz, ⟨hs, h1⟩ | ⟨hs, h0⟩⟩ | ⟨hz, s, hs, htry, h1⟩
   · have hc1 : a.c1 = 0 := Fp.isZero_iff.mp hz
     dsimp only at hs h1
     subst h1
@@ -712,9 +712,9 @@ private theorem half_sub_norm_zmod {a0 b0 b1 s twoInv : ZMod Fp.modulus}
     b0 * b0 = (a0 - s) * twoInv := by
   linear_combination -b0 * b0 * h2 - twoInv * ha0 + twoInv * hs
 
-/-- Completeness of `Fp2.sqrt`: if `b * b = a`, then `Fp2.sqrt a` returns a root. -/
-theorem sqrt_complete {a b : Fp2} (hb : b * b = a) :
-    ∃ c, Fp2.sqrt a = .ok c := by
+/-- The reference square root succeeds on every square. -/
+theorem sqrtReference_complete {a b : Fp2} (hb : b * b = a) :
+    ∃ c, Fp2.sqrtReference a = .ok c := by
   have ha0 : Fp.toZMod a.c0 =
       Fp.toZMod b.c0 * Fp.toZMod b.c0 - Fp.toZMod b.c1 * Fp.toZMod b.c1 := by
     rw [← hb, mul_c0]
@@ -732,7 +732,7 @@ theorem sqrt_complete {a b : Fp2} (hb : b * b = a) :
       rw [ha0, ha1]
       exact norm_sq_zmod _ _
     have hsqrt_n := sqrtOrError_complete hnsq
-    refine sqrt_isOk_of_c1_ne hz hsqrt_n ?_
+    refine sqrtReference_isOk_of_c1_ne hz hsqrt_n ?_
     -- The norm root s is +(b0^2 + b1^2) or -(b0^2 + b1^2), so (a0 + s)/2 or (a0 - s)/2 is b0^2.
     have hs_sq : Fp.toZMod (Fp.powNat (a.c0 * a.c0 + a.c1 * a.c1) ((Fp.modulus + 1) / 4)) *
         Fp.toZMod (Fp.powNat (a.c0 * a.c0 + a.c1 * a.c1) ((Fp.modulus + 1) / 4)) =
@@ -752,7 +752,7 @@ theorem sqrt_complete {a b : Fp2} (hb : b * b = a) :
   · -- When a.c1 = 0, we have 2 * b0 * b1 = 0, so either b0 = 0 or b1 = 0.
     have hc1 : Fp.toZMod a.c1 = 0 := by rw [Fp.isZero_iff.mp hz, Fp.toZMod_zero]
     rw [ha1] at hc1
-    refine sqrt_isOk_of_c1_zero hz ?_
+    refine sqrtReference_isOk_of_c1_zero hz ?_
     rcases c1_zero_factors_zmod hc1 with hb0 | hb1
     -- Purely imaginary root: b1^2 = -a0.
     · refine Or.inr ⟨_, sqrtOrError_complete (b := b.c1) ?_⟩
@@ -764,6 +764,229 @@ theorem sqrt_complete {a b : Fp2} (hb : b * b = a) :
       apply Fp.toZMod.injective
       push_toZMod
       exact sub_zero_mul_zmod ha0 hb1
+
+/-! ## Square roots with a reused candidate -/
+
+private theorem sqrt_eq_complex (a : Fp2) :
+    Fp2.sqrt a = Fp2.sqrtComplex Fp.sqrtCandidate a := rfl
+
+/-- The branches of the complex method, before using the laws of `Fp`. -/
+private theorem sqrtComplex_eq_ok_cases {F : Type} [BaseField F]
+    {candidate : F → F} {a c : Fp2 F} (h : sqrtComplex candidate a = .ok c) :
+    (BaseField.isZero a.c1 = true ∧
+      ((BaseField.beq (candidate a.c0 * candidate a.c0) a.c0 = true ∧
+          c = ⟨candidate a.c0, BaseField.zero⟩) ∨
+        (BaseField.beq (candidate a.c0 * candidate a.c0) a.c0 = false ∧
+          c = ⟨BaseField.zero, candidate a.c0⟩))) ∨
+    (BaseField.isZero a.c1 = false ∧ ∃ s,
+      sqrtOrError (a.c0 * a.c0 + a.c1 * a.c1) = .ok s ∧
+      let u := (a.c0 + s) * BaseField.inverse (BaseField.ofNat 2 : F)
+      let r := candidate u
+      let d := a.c1 * BaseField.inverse (BaseField.ofNat 2 * r)
+      (BaseField.beq (r * r) u = true ∧ c = ⟨r, d⟩) ∨
+        (BaseField.beq (r * r) u = false ∧ c = ⟨d, r⟩)) := by
+  unfold sqrtComplex at h
+  split at h
+  · rename_i hz
+    refine Or.inl ⟨hz, ?_⟩
+    dsimp only at h
+    split at h
+    · rename_i hc
+      exact Or.inl ⟨hc, Except.ok.inj h.symm⟩
+    · rename_i hc
+      exact Or.inr ⟨Bool.eq_false_iff.mpr hc, Except.ok.inj h.symm⟩
+  · rename_i hz
+    refine Or.inr ⟨Bool.eq_false_iff.mpr hz, ?_⟩
+    split at h
+    · cases h
+    · rename_i s hs
+      refine ⟨s, hs, ?_⟩
+      dsimp only at h ⊢
+      split at h
+      · rename_i hc
+        exact Or.inl ⟨hc, Except.ok.inj h.symm⟩
+      · rename_i hc
+        exact Or.inr ⟨Bool.eq_false_iff.mpr hc, Except.ok.inj h.symm⟩
+
+private theorem sqrt_branch_neg_zmod {a0 a1 s r t w : ZMod Fp.modulus}
+    (ha1 : a1 ≠ 0) (hs : s * s = a0 * a0 + a1 * a1)
+    (ht : 2 * t = 1) (hr : r * r = -((a0 + s) * t))
+    (hw : (2 * r) * w = 1) :
+    (a1 * w) * (a1 * w) - r * r = a0 ∧
+      (a1 * w) * r + r * (a1 * w) = a1 := by
+  have hr' : 2 * r * r + a0 + s = 0 := by
+    linear_combination 2 * hr - (a0 + s) * ht
+  have hrne : r ≠ 0 := by
+    intro hr0
+    have ha0 : a0 + s = 0 := by simpa [hr0] using hr'
+    have ha1sq : a1 * a1 = 0 := by
+      linear_combination -hs + (s - a0) * ha0
+    exact ha1 (mul_self_eq_zero.mp ha1sq)
+  have hreal : (4 * r * r) * ((a1 * w) * (a1 * w) - r * r - a0) = 0 := by
+    linear_combination a1 * a1 * (2 * r * w + 1) * hw -
+      (2 * r * r + a0 - s) * hr' - hs
+  have hnonzero : (4 : ZMod Fp.modulus) * r * r ≠ 0 :=
+    mul_ne_zero (mul_ne_zero (by decide) hrne) hrne
+  constructor
+  · exact sub_eq_zero.mp ((mul_eq_zero.mp hreal).resolve_left hnonzero)
+  · linear_combination a1 * hw
+
+private theorem sqrt_branch_neg_aux {a0 a1 s r t : Fp}
+    (ha1 : a1 ≠ 0) (hs : s * s = a0 * a0 + a1 * a1)
+    (ht : (2 : ZMod Fp.modulus) * Fp.toZMod t = 1)
+    (hr : r * r = -((a0 + s) * t)) :
+    (⟨a1 * (Fp.ofNat 2 * r).inverse, r⟩ : Fp2) *
+      ⟨a1 * (Fp.ofNat 2 * r).inverse, r⟩ = ⟨a0, a1⟩ := by
+  have hs' := congrArg Fp.toZMod hs
+  have hr' := congrArg Fp.toZMod hr
+  push_toZMod at hs' hr'
+  have ha1' : Fp.toZMod a1 ≠ 0 := fun h => ha1 (Fp.toZMod.injective (by simpa using h))
+  have hrne : Fp.toZMod r ≠ 0 := by
+    intro hr0
+    rw [hr0, mul_zero] at hr'
+    have ha0 : Fp.toZMod a0 + Fp.toZMod s = 0 := by
+      linear_combination 2 * hr' - (Fp.toZMod a0 + Fp.toZMod s) * ht
+    have ha1sq : Fp.toZMod a1 * Fp.toZMod a1 = 0 := by
+      linear_combination -hs' + (Fp.toZMod s - Fp.toZMod a0) * ha0
+    exact ha1' (mul_self_eq_zero.mp ha1sq)
+  have hw : (2 * Fp.toZMod r) * Fp.toZMod (Fp.ofNat 2 * r).inverse = 1 := by
+    rw [Fp.toZMod_inverse, Fp.toZMod_mul, Fp.toZMod_ofNat]
+    exact mul_inv_cancel₀ (mul_ne_zero (by decide) hrne)
+  have hout := sqrt_branch_neg_zmod ha1' hs' ht hr' hw
+  apply ext <;> apply Fp.toZMod.injective <;> simp only [mul_c0, mul_c1] <;> push_toZMod
+  · exact hout.1
+  · exact hout.2
+
+/-- A root returned by the complex method squares to its input. -/
+theorem sqrt_ok {a c : Fp2} (h : Fp2.sqrt a = .ok c) : c * c = a := by
+  rw [sqrt_eq_complex] at h
+  rcases sqrtComplex_eq_ok_cases h with ⟨hz, hcases⟩ | ⟨hz, s, hs, hcases⟩
+  · have ha1 : a.c1 = 0 := Fp.isZero_iff.mp hz
+    rcases hcases with ⟨hr, rfl⟩ | ⟨hr, rfl⟩
+    · have hs := Fp.beq_iff.mp hr
+      apply ext <;> apply Fp.toZMod.injective <;> simp only [mul_c0, mul_c1] <;>
+        push_toZMod <;> simp_all [← Fp.toZMod_mul]
+    · have hs : Fp.sqrtCandidate a.c0 * Fp.sqrtCandidate a.c0 = -a.c0 := by
+        rcases Fp.sqrtCandidate_sq_or_neg a.c0 with hpos | hneg
+        · rw [Fp.baseField_beq, Fp.beq_iff.mpr hpos] at hr
+          cases hr
+        · exact hneg
+      apply ext <;> apply Fp.toZMod.injective <;> simp only [mul_c0, mul_c1] <;>
+        push_toZMod <;> simp_all [← Fp.toZMod_mul]
+  · have ha1 : a.c1 ≠ 0 := fun h0 => by
+      rw [Fp.baseField_isZero, Fp.isZero_iff.mpr h0] at hz
+      cases hz
+    have hn := sqrtOrError_ok hs
+    dsimp only at hcases
+    rcases hcases with ⟨hr, rfl⟩ | ⟨hr, rfl⟩
+    · exact sqrt_branch_gen_aux (fun _ hx => fp_mul_inverse hx) ha1 hn two_mul_inverse
+        (Fp.beq_iff.mp hr)
+    · have hr' :
+          Fp.sqrtCandidate ((a.c0 + s) * BaseField.inverse (BaseField.ofNat 2 : Fp)) *
+            Fp.sqrtCandidate ((a.c0 + s) * BaseField.inverse (BaseField.ofNat 2 : Fp)) =
+            -((a.c0 + s) * BaseField.inverse (BaseField.ofNat 2 : Fp)) := by
+        rcases Fp.sqrtCandidate_sq_or_neg _ with hpos | hneg
+        · rw [Fp.baseField_beq, Fp.beq_iff.mpr hpos] at hr
+          cases hr
+        · exact hneg
+      exact sqrt_branch_neg_aux ha1 hn two_mul_inverse hr'
+
+private theorem sqrtComplex_isOk_of_norm {F : Type} [BaseField F]
+    (candidate : F → F) (a : Fp2 F)
+    (hn : ∃ s, sqrtOrError (a.c0 * a.c0 + a.c1 * a.c1) = .ok s) :
+    ∃ c, sqrtComplex candidate a = .ok c := by
+  obtain ⟨s, hs⟩ := hn
+  unfold sqrtComplex
+  split
+  · dsimp only
+    split <;> exact ⟨_, rfl⟩
+  · rw [hs]
+    dsimp only
+    split <;> exact ⟨_, rfl⟩
+
+/-- The complex method succeeds on every square. -/
+theorem sqrt_complete {a b : Fp2} (hb : b * b = a) :
+    ∃ c, Fp2.sqrt a = .ok c := by
+  rw [sqrt_eq_complex]
+  apply sqrtComplex_isOk_of_norm
+  have hn : (b.c0 * b.c0 + b.c1 * b.c1) * (b.c0 * b.c0 + b.c1 * b.c1) =
+      a.c0 * a.c0 + a.c1 * a.c1 := by
+    rw [← hb]
+    apply Fp.toZMod.injective
+    simp only [mul_c0, mul_c1]
+    push_toZMod
+    ring
+  exact ⟨_, sqrtOrError_complete hn⟩
+
+/-- The new and reference square roots succeed on the same inputs. -/
+theorem sqrt_isOk_iff_reference (a : Fp2) :
+    (∃ c, Fp2.sqrt a = .ok c) ↔ ∃ c, Fp2.sqrtReference a = .ok c := by
+  constructor
+  · rintro ⟨c, hc⟩
+    exact sqrtReference_complete (sqrt_ok hc)
+  · rintro ⟨c, hc⟩
+    exact sqrt_complete (sqrtReference_ok hc)
+
+private theorem sqrtComplex_error_cases {F : Type} [BaseField F]
+    (candidate : F → F) (a : Fp2 F) :
+    sqrtComplex candidate a = .error .notASquare ∨
+      ∃ c, sqrtComplex candidate a = .ok c := by
+  unfold sqrtComplex
+  split
+  · dsimp only
+    split <;> exact Or.inr ⟨_, rfl⟩
+  · split
+    · exact Or.inl rfl
+    · dsimp only
+      split <;> exact Or.inr ⟨_, rfl⟩
+
+/-- The complex square root fails only with `notASquare`. -/
+theorem sqrt_error_cases (a : Fp2) :
+    Fp2.sqrt a = .error .notASquare ∨ ∃ c, Fp2.sqrt a = .ok c := by
+  rw [sqrt_eq_complex]
+  exact sqrtComplex_error_cases _ _
+
+/-- The reference square root fails only with `notASquare`. -/
+theorem sqrtReference_error_cases {F : Type} [BaseField F] (a : Fp2 F) :
+    Fp2.sqrtReference a = .error .notASquare ∨ ∃ c, Fp2.sqrtReference a = .ok c := by
+  unfold sqrtReference
+  split
+  · split
+    · exact Or.inr ⟨_, rfl⟩
+    · split
+      · exact Or.inr ⟨_, rfl⟩
+      · exact Or.inl rfl
+  · dsimp only
+    split
+    · exact Or.inl rfl
+    · split
+      · exact Or.inl rfl
+      · exact Or.inr ⟨_, rfl⟩
+
+/-- Both routines reject exactly the same nonsquares. -/
+theorem sqrt_error_iff_reference (a : Fp2) :
+    Fp2.sqrt a = .error .notASquare ↔ Fp2.sqrtReference a = .error .notASquare := by
+  constructor
+  · intro h
+    rcases sqrtReference_error_cases a with href | href
+    · exact href
+    · obtain ⟨c, hc⟩ := (sqrt_isOk_iff_reference a).2 href
+      rw [h] at hc
+      cases hc
+  · intro h
+    rcases sqrt_error_cases a with hnew | hnew
+    · exact hnew
+    · obtain ⟨c, hc⟩ := (sqrt_isOk_iff_reference a).1 hnew
+      rw [h] at hc
+      cases hc
+
+/-- A successful root agrees with the reference root up to negation. -/
+theorem sqrt_ok_reference {a c : Fp2} (h : Fp2.sqrt a = .ok c) :
+    ∃ r, Fp2.sqrtReference a = .ok r ∧ (c = r ∨ c = -r) := by
+  obtain ⟨r, hr⟩ := (sqrt_isOk_iff_reference a).1 ⟨c, h⟩
+  refine ⟨r, hr, ?_⟩
+  have heq : c ^ 2 = r ^ 2 := by rw [pow_two, pow_two, sqrt_ok h, sqrtReference_ok hr]
+  exact (sq_eq_sq_iff_eq_or_eq_neg).mp heq
 
 /-! ## Equations decided in the model -/
 
