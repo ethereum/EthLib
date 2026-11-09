@@ -9,6 +9,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Message
 public import EthLib.Execution.Proofs.Evm.Logic.FailsOn
 public import EthLib.Execution.Proofs.Evm.Logic.Route
 public import EthLib.Execution.Proofs.Evm.Logic.Call
+public import EthLib.Execution.Proofs.Evm.Logic.CallSteps
 public import EthLib.Execution.Proofs.Evm.Logic.Keeps
 public import EthLib.Execution.Proofs.Evm.Logic.Log
 public import EthLib.Execution.Proofs.Evm.Logic.Static
