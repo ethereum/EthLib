@@ -737,6 +737,24 @@ theorem valueAt_plain (hash : ByteArray → Hash32) (data : List (ByteArray × B
   · intro h
     rw [h]
 
+/-- In a secured trie, the value that a proof gives is the value of the key itself.
+
+No other key of the trie may share the hash of the key. -/
+theorem valueAt_secured (hash : ByteArray → Hash32) {data : List (ByteArray × ByteArray)}
+    {key : ByteArray} (hkey : ∀ other ∈ data.map Prod.fst, other ≠ key → hash other ≠ hash key) :
+    valueAt hash ⟨true, data⟩ key =
+      (data.find? fun entry => sameBytes entry.1 key).map Prod.snd := by
+  unfold valueAt
+  congr 1
+  apply find?_congr
+  intro entry hmem
+  -- One path means one hash, and no other key has the hash of the key.
+  simp only [keyPath_eq, ↓reduceIte]
+  rw [Bool.eq_iff_iff, decide_eq_true_iff, sameBytes_iff]
+  refine ⟨fun h => ?_, fun h => by rw [h]⟩
+  have hhash := hashBytes_injective (bytesToNibbleList_injective h)
+  exact Decidable.byContradiction fun hne => hkey entry.1 (List.mem_map_of_mem hmem) hne hhash
+
 /-! ## Error codes -/
 
 /-- Two errors with one code come from one constructor. -/

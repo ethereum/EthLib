@@ -4,7 +4,6 @@ public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.State.Root
 public import EthLib.Execution.Proofs.Trie.Binding
 import EthLib.Execution.Proofs.State.Account
-import EthLib.Serialization.Proofs.Rlp.Codec
 
 /-!
 # Proofs: the state and storage roots
@@ -19,11 +18,7 @@ Every such order gives the same root.
 
 Otherwise a search over the keys returns two keys with one hash.
 
-Two storages with one storage root give every key the same word, with `0` for an unset key.
-
-Two states with one state root give every address the same account.
-
-At every address that has an account, the two states also give every key the same word.
+One storage root binds every word, and one state root binds every account and its storage.
 
 Otherwise a search over the tries returns a collision of the hash.
 
@@ -148,89 +143,8 @@ theorem stateRoot_perm (hash : ByteArray → Hash32) {state : State}
 
 /-! ## Binding of the storage and state roots -/
 
-/-- A collision in two secured tries that have one root and disagree at a key, if any.
-
-First, the search checks the proofs of the key in both tries.
-
-When the two entry lists differ, the search then checks all keys for two with one hash. -/
-def findSecuredCollision (hash : ByteArray → Hash32)
-    (entries₁ entries₂ : List (ByteArray × ByteArray)) (key : ByteArray) :
-    Option (ByteArray × ByteArray) :=
-  (findCollision hash ⟨true, entries₁⟩ ⟨true, entries₂⟩ key).or
-    (if entries₁ = entries₂ then none
-     else findKeyCollision hash (key :: entries₁.map Prod.fst ++ entries₂.map Prod.fst))
-
-/-- Every pair that the secured-trie search returns is a collision. -/
-theorem findSecuredCollision_valid (hash : ByteArray → Hash32)
-    {entries₁ entries₂ : List (ByteArray × ByteArray)} {key : ByteArray}
-    {pair : ByteArray × ByteArray}
-    (h : findSecuredCollision hash entries₁ entries₂ key = some pair) :
-    IsCollision hash pair := by
-  unfold findSecuredCollision at h
-  rcases Option.or_eq_some_iff.mp h with hcol | ⟨-, hkey⟩
-  · exact findCollision_valid hash hcol
-  · split at hkey
-    · cases hkey
-    · exact findKeyCollision_valid hash _ hkey
-
-/-- A secured trie compared with itself has no collision. -/
-theorem findSecuredCollision_self (hash : ByteArray → Hash32)
-    (entries : List (ByteArray × ByteArray)) (key : ByteArray) :
-    findSecuredCollision hash entries entries key = none := by
-  simp [findSecuredCollision, findCollision_self]
-
-/-- A key absent from `findKeyCollision` has no different key in the list with its hash. -/
-private theorem hash_ne_of_findKeyCollision_none (hash : ByteArray → Hash32) :
-    {keys : List ByteArray} → findKeyCollision hash keys = none →
-      ∀ x ∈ keys, ∀ y ∈ keys, x ≠ y → hash x ≠ hash y
-  | [], _, _, hmem, _, _, _ => by cases hmem
-  | first :: rest, h, x, hx, y, hy, hne => by
-    unfold findKeyCollision at h
-    split at h
-    · cases h
-    · rename_i hfind
-      have hno : ∀ z ∈ rest, z ≠ first → hash z ≠ hash first := by
-        intro z hz hzne hzhash
-        exact absurd (List.find?_eq_none.mp hfind z hz) (by simp [hzne, hzhash])
-      rcases List.mem_cons.mp hx with rfl | hx'
-      · rcases List.mem_cons.mp hy with rfl | hy'
-        · exact absurd rfl hne
-        · exact fun heq => hno y hy' hne.symm heq.symm
-      · rcases List.mem_cons.mp hy with rfl | hy'
-        · exact hno x hx' hne
-        · exact hash_ne_of_findKeyCollision_none hash h x hx' y hy' hne
-
-/-- In a secured trie, `valueAt` reads the first entry of `key` if no other key shares its hash. -/
-private theorem valueAt_secured_eq (hash : ByteArray → Hash32)
-    {entries : List (ByteArray × ByteArray)} {key : ByteArray}
-    (hno : ∀ k ∈ entries.map Prod.fst, k ≠ key → hash k ≠ hash key) :
-    valueAt hash ⟨true, entries⟩ key =
-      (entries.find? fun entry => entry.1 = key).map Prod.snd := by
-  unfold valueAt
-  congr 1
-  apply find?_congr
-  intro entry hmem
-  simp only [keyPath_eq, ↓reduceIte]
-  rw [Bool.eq_iff_iff, decide_eq_true_iff, decide_eq_true_iff]
-  refine ⟨fun h => ?_, fun h => by rw [h]⟩
-  have hhash := hashBytes_injective (bytesToNibbleList_injective h)
-  exact Decidable.byContradiction fun hne => hno entry.1 (List.mem_map_of_mem hmem) hne hhash
-
-/-- Distinct keys whose hashes never collide have distinct hashes. -/
-private theorem nodup_map_of_hash_ne (hash : ByteArray → Hash32) :
-    {keys : List ByteArray} → keys.Nodup →
-      (∀ x ∈ keys, ∀ y ∈ keys, x ≠ y → hash x ≠ hash y) → (keys.map hash).Nodup
-  | [], _, _ => List.nodup_nil
-  | key :: rest, hnodup, hdisj => by
-    rw [List.nodup_cons] at hnodup
-    simp only [List.map_cons, List.nodup_cons, List.mem_map, not_exists, not_and]
-    refine ⟨fun other hmem heq => ?_, nodup_map_of_hash_ne hash hnodup.2
-      (fun x hx y hy => hdisj x (List.mem_cons_of_mem _ hx) y (List.mem_cons_of_mem _ hy))⟩
-    exact hnodup.1 (Decidable.byContradiction (fun hne =>
-      hdisj other (List.mem_cons_of_mem _ hmem) key List.mem_cons_self hne heq) ▸ hmem)
-
-/-- Two secured tries with distinct keys and one root agree on `key` when the search finds none. -/
-private theorem find_eq_of_findSecuredCollision_none (hash : ByteArray → Hash32)
+/-- Two secured tries with distinct keys and one root agree on a key when the search finds none. -/
+private theorem find_eq_of_findSecuredCollision (hash : ByteArray → Hash32)
     {entries₁ entries₂ : List (ByteArray × ByteArray)} {root' : Hash32} {key : ByteArray}
     (hnodup₁ : (entries₁.map Prod.fst).Nodup) (hnodup₂ : (entries₂.map Prod.fst).Nodup)
     (hroot₁ : root hash ⟨true, entries₁⟩ = .ok root')
@@ -238,28 +152,13 @@ private theorem find_eq_of_findSecuredCollision_none (hash : ByteArray → Hash3
     (hnone : findSecuredCollision hash entries₁ entries₂ key = none) :
     (entries₁.find? fun entry => entry.1 = key).map Prod.snd =
       (entries₂.find? fun entry => entry.1 = key).map Prod.snd := by
-  unfold findSecuredCollision at hnone
-  obtain ⟨hcol, hkeys_branch⟩ := Option.or_eq_none_iff.mp hnone
-  by_cases hsame : entries₁ = entries₂
-  · rw [hsame]
-  · simp only [hsame, ↓reduceIte] at hkeys_branch
-    have hdisj := hash_ne_of_findKeyCollision_none hash hkeys_branch
-    have hpath₁ : findPathCollision hash ⟨true, entries₁⟩ = none := by
-      simp only [findPathCollision, ↓reduceIte]
-      exact findKeyCollision_of_nodup hash _ (nodup_map_of_hash_ne hash hnodup₁
-        fun x hx y hy => hdisj x (by simp [hx]) y (by simp [hy]))
-    have hpath₂ : findPathCollision hash ⟨true, entries₂⟩ = none := by
-      simp only [findPathCollision, ↓reduceIte]
-      exact findKeyCollision_of_nodup hash _ (nodup_map_of_hash_ne hash hnodup₂
-        fun x hx y hy => hdisj x (by simp [hx]) y (by simp [hy]))
-    rw [← valueAt_secured_eq hash (fun k hk hne => hdisj k (by simp [hk]) key (by simp) hne),
-      ← valueAt_secured_eq hash (fun k hk hne => hdisj k (by simp [hk]) key (by simp) hne)]
-    rcases root_binding hash (trie₁ := ⟨true, entries₁⟩) (trie₂ := ⟨true, entries₂⟩) rfl
-        hroot₁ hroot₂ hnodup₁ hnodup₂ key with hval | ⟨_, hf, -⟩ | ⟨_, hf, -⟩ | ⟨_, hf, -⟩
-    · exact hval
-    · simp [hcol] at hf
-    · simp [hpath₁] at hf
-    · simp [hpath₂] at hf
+  have hsame : ∀ entries : List (ByteArray × ByteArray),
+      (entries.find? fun entry => sameBytes entry.1 key) =
+        entries.find? fun entry => entry.1 = key := fun entries =>
+    find?_congr entries fun entry _ => by rw [Bool.eq_iff_iff, sameBytes_iff, decide_eq_true_iff]
+  rcases root_binding_secured hash hroot₁ hroot₂ hnodup₁ hnodup₂ key with hval | ⟨_, hf, -⟩
+  · rwa [hsame, hsame] at hval
+  · simp [hnone] at hf
 
 /-- A storage has a root exactly when its entries have that root, as a secured trie. -/
 theorem storageRoot_eq_ok_iff {hash : ByteArray → Hash32}
@@ -269,9 +168,9 @@ theorem storageRoot_eq_ok_iff {hash : ByteArray → Hash32}
   unfold storageRoot
   cases storageEntries storage <;> simp [Except.mapError, bind, Except.bind]
 
-/-- The entry of a key in `storageEntries` holds the encoding of its nonzero word.
+/-- The storage entry of a key holds the encoding of its word, which is nonzero.
 
-No entry holds a zero or unset key. -/
+A key whose word is zero or unset has no entry. -/
 private theorem find_storageEntries {storage : Std.ExtTreeMap Bytes32 U256}
     {entries : List (ByteArray × ByteArray)} (h : storageEntries storage = .ok entries)
     (key : Bytes32) :
@@ -351,7 +250,7 @@ private theorem storage_getD_eq_of_find_eq {storage₁ storage₂ : Std.ExtTreeM
     obtain ⟨w₂, hw₂, -, henc₂⟩ := hf₂
     rw [hw₁, hw₂, Codec.encode_injective henc₁ henc₂]
 
-/-- The collision of `hash` from the first key where two storages disagree on a word, if any. -/
+/-- A collision of the hash at a key where two storages hold different words, if any. -/
 def findStorageCollision (hash : ByteArray → Hash32)
     (storage₁ storage₂ : Std.ExtTreeMap Bytes32 U256) : Option (ByteArray × ByteArray) :=
   match storageEntries storage₁, storageEntries storage₂ with
@@ -388,7 +287,7 @@ theorem findStorageCollision_self (hash : ByteArray → Hash32)
 
 An unset key has the word `0`.
 
-Otherwise `findStorageCollision` returns a collision of `hash`. -/
+Otherwise the search over the two storages returns a collision of the hash. -/
 theorem storageRoot_binding (hash : ByteArray → Hash32)
     {storage₁ storage₂ : Std.ExtTreeMap Bytes32 U256} {root' : Hash32}
     (hroot₁ : storageRoot hash storage₁ = .ok root')
@@ -414,7 +313,7 @@ theorem storageRoot_binding (hash : ByteArray → Hash32)
     have hnone := List.findSome?_eq_none_iff.mp hsearch key hmem
     rw [ite_eq_left hdiff] at hnone
     exact storage_getD_eq_of_find_eq hentries₁ hentries₂
-      (find_eq_of_findSecuredCollision_none hash (storageEntries_nodup hentries₁)
+      (find_eq_of_findSecuredCollision hash (storageEntries_nodup hentries₁)
         (storageEntries_nodup hentries₂) htrie₁ htrie₂ hnone)
 
 /-- A state has a root exactly when its entries have that root, as a secured trie. -/
@@ -424,7 +323,7 @@ theorem stateRoot_eq_ok_iff {hash : ByteArray → Hash32} {state : State} {root'
   unfold stateRoot
   cases stateEntries hash state <;> simp [bind, Except.bind]
 
-/-- The entry of an address in `stateEntries` holds the encoding of its account and storage root.
+/-- The state entry of an address holds the encoding of its account and storage root.
 
 No entry holds an address without an account. -/
 private theorem find_stateEntries {hash : ByteArray → Hash32} {state : State}
@@ -504,7 +403,7 @@ private theorem account_and_storageRoot_of_find_eq {hash : ByteArray → Hash32}
     obtain ⟨rfl, rfl⟩ := hdec
     exact ⟨hacc₁.trans hacc₂.symm, fun _ => ⟨sr₁, hsr₁, hsr₂⟩⟩
 
-/-- The collision from the first address where two states differ on an account or its storage. -/
+/-- A collision at an address where two states differ on an account or its storage, if any. -/
 def findStateCollision (hash : ByteArray → Hash32) (state₁ state₂ : State) :
     Option (ByteArray × ByteArray) :=
   match stateEntries hash state₁, stateEntries hash state₂ with
@@ -566,7 +465,7 @@ At every address that has an account, the two states also give every key the sam
 
 An unset key has the word `0`.
 
-Otherwise `findStateCollision` returns a collision of `hash`. -/
+Otherwise the search over the two states returns a collision of the hash. -/
 theorem stateRoot_binding (hash : ByteArray → Hash32) {state₁ state₂ : State} {root' : Hash32}
     (hroot₁ : stateRoot hash state₁ = .ok root')
     (hroot₂ : stateRoot hash state₂ = .ok root') :
@@ -610,7 +509,7 @@ theorem stateRoot_binding (hash : ByteArray → Hash32) {state₁ state₂ : Sta
             · simp [hnone] at hf
           · simp only [hsr_eq, not_false_eq_true, ↓reduceIte] at hnone
             have ⟨_, hsr⟩ := account_and_storageRoot_of_find_eq hentries₁ hentries₂
-              (find_eq_of_findSecuredCollision_none hash (stateEntries_nodup hentries₁)
+              (find_eq_of_findSecuredCollision hash (stateEntries_nodup hentries₁)
                 (stateEntries_nodup hentries₂) htrie₁ htrie₂ hnone)
             obtain ⟨sr, h₁, h₂⟩ := hsr hmem
             rw [hsr₁] at h₁
@@ -619,7 +518,7 @@ theorem stateRoot_binding (hash : ByteArray → Hash32) {state₁ state₂ : Sta
             exact absurd (Except.ok.inj h₂).symm hsr_eq
     · simp only [ne_eq, hacc, not_false_eq_true, ↓reduceIte] at hnone
       have ⟨hacc', _⟩ := account_and_storageRoot_of_find_eq hentries₁ hentries₂
-        (find_eq_of_findSecuredCollision_none hash (stateEntries_nodup hentries₁)
+        (find_eq_of_findSecuredCollision hash (stateEntries_nodup hentries₁)
           (stateEntries_nodup hentries₂) htrie₁ htrie₂ hnone)
       exact absurd hacc' hacc
   · rw [List.mem_append, Std.ExtTreeMap.mem_keys, Std.ExtTreeMap.mem_keys] at hmem_keys
