@@ -5,11 +5,11 @@ public import EthLib.Cryptography.Proofs.Kzg.BlobBindingGame
 /-!
 # Proofs: the blob-binding equation and the concrete verifier
 
-`BlobBatchInput.toOpeningBatch` fixes each individual challenge to `computeChallenge`.
+The concrete batch fixes each individual challenge to the hash of its blob and commitment.
 
 It also fixes each value to the decoded blob's evaluation.
 
-The batch challenge is then the concrete `computeVerifyKzgProofBatchChallenge`.
+The batch challenge is then the verifier's own hash of those openings.
 -/
 
 @[expose] public section
@@ -85,7 +85,7 @@ theorem eval_batchErrorAt_eq_errorPoly {τ : Fr} {y : BlobBatchInput}
 
 The equality of opening batches fixes the individual challenges and evaluations.
 
-`y.challenge` is the actual hash of those openings. -/
+The batch challenge is the actual hash of those openings. -/
 theorem verifyBlobKzgProofBatch_ok_iff_symbolic {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) (y : BlobBatchInput) (openings : List Opening)
     (hbatch : Opening.toBatch openings = y.toOpeningBatch)
