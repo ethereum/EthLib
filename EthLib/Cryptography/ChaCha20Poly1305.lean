@@ -14,8 +14,6 @@ The keys are secret, and this specification makes no constant-time claim.
 
 RFC 8439 §4 requires a constant-time tag comparison in online protocols.
 
-This specification does not provide one.
-
 [rfc]: https://www.rfc-editor.org/rfc/rfc8439#section-2
 -/
 

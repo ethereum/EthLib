@@ -47,7 +47,7 @@ def decodeUCoordinate (u : Key) : Fp :=
 /-- Encode a reduced coordinate as 32 little-endian bytes, RFC 7748 §5. -/
 def encodeUCoordinate (u : Fp) : Key := uintToBytes 32 u.val
 
-/-- The ladder's projective points `(x2 : z2)` and `(x3 : z3)` and its pending swap, RFC 7748 §5. -/
+/-- The two projective points of the ladder and its pending swap, RFC 7748 §5. -/
 structure LadderState where
   x2 : Fp
   z2 : Fp
