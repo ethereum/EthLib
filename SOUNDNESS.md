@@ -1042,6 +1042,30 @@ Its return data is then empty.
 Its frame ends in the state that the move of the value gives.
 No rule covers CREATE, DELEGATECALL or STATICCALL.
 
+A triple under an assumption asks the runner to fail only with an error that aborts.
+It does not say on which message the runner fails.
+`HoareOn fork callee S P Q` (`Logic/FailsOn.lean`) asks nothing of the errors of the runner.
+Instead it names the messages on which a run may stop because the runner fails.
+`S` is a condition on the frame that the step hands to the runner, after it pays for the message, and on the message.
+`MeetsOk callee runChild` says that each frame that the runner gives meets `callee`, and lets the runner fail on every message with an error of any kind.
+`HoareOn` holds under every runner that meets `callee` in this sense, and for every bound that holds the gas of the frame.
+From every frame of `P`, the steps of `StepBy` reach a frame of `Q`.
+Or they reach a frame that sends a message of `S`, and the runner fails on that message.
+`SpecOn` is its case whose postcondition is a stopped frame.
+`hoareOn_true_iff` proves that `HoareOn` with the set of every message is `HoareUnder`.
+`HoareUnder.toOn` replaces each error of a runner with one that aborts, which keeps the steps and the frames on which the runner fails.
+With `HoareOn.toUnder` it gives `hoareOn_true_iff`.
+So a triple under an assumption is the case of the full set, and a smaller set gives a stronger triple.
+`HoareOn.toUnder` and `SpecOn.toUnder` prove that each such triple is a triple under the same assumption, for every set.
+`hoareOn_iff_triple` proves that `HoareOn` is a `Triple` over the steps under each runner, as `hoareUnder_iff_triple` does with no set.
+The rules of `HoareUnder` hold for `HoareOn` with the same set: `of_hoare`, `of_child`, `assumption`, `of_exists`, `seq`, `consequence`, `cases`, `loop_lt` and `loop`.
+`HoareOn.of_child` asks that the message be in `S`.
+`HoareOn.mono` and `SpecOn.mono` prove that a larger set of messages keeps a triple.
+`SpecOn.seq`, `SpecOn.consequence` and `SpecOn.of_spec` prove the rules of sequence, consequence and no message for a triple to a stopped frame.
+`SpecOn.runFrame` proves that `runFrame` returns a stopped frame of `Q`, or fails.
+When it fails, a frame that the steps reach sends a message of `S`, and the runner fails on it.
+Then `runFrame` fails with the same error.
+
 The block of a transaction state is the state before the block, with the writes of the block so far.
 A rollback restores the storage of a snapshot only when both states have the same block.
 `parentResult_step` (`Execution/Proofs/Evm/Call/Parent.lean`) proves that every successful step keeps the block of the state, at every fork.
