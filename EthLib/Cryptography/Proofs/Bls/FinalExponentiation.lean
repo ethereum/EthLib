@@ -96,7 +96,11 @@ theorem conjugate_eq_pow (a : Fp12) : a.conjugate = a ^ (Fp.modulus ^ 6) := by
 
 /-! ## Cyclotomic squaring
 
-The proof uses the `p^2`-power relation from Granger and Scott, §3.2, equation (5).
+The proof uses the relation `a^(p^4) * a = a^(p^2)`, from [Granger and Scott][source], §3.2.
+
+It is equation (5) there, and it holds on the cyclotomic subgroup and at zero.
+
+[source]: https://eprint.iacr.org/2009/565
 -/
 
 attribute [local irreducible] frobeniusCoeff
@@ -358,6 +362,21 @@ theorem cyclotomicSquare_eq_mul_self_of_order {a : Fp12}
   rw [cyclotomicSquare_eq_mul_self (by
     rw [zero_pow (by decide), zero_pow (by decide), zero_mul]), zero_mul]
 
+private theorem cyclotomic_relation_pow {a : Fp12}
+    (h : a ^ (Fp.modulus ^ 4) * a = a ^ (Fp.modulus ^ 2)) (n : Nat) :
+    (a ^ n) ^ (Fp.modulus ^ 4) * a ^ n = (a ^ n) ^ (Fp.modulus ^ 2) := by
+  simpa only [mul_pow, ← pow_mul, Nat.mul_comm] using congrArg (fun x => x ^ n) h
+
+private theorem cyclotomic_relation_mul {a b : Fp12}
+    (ha : a ^ (Fp.modulus ^ 4) * a = a ^ (Fp.modulus ^ 2))
+    (hb : b ^ (Fp.modulus ^ 4) * b = b ^ (Fp.modulus ^ 2)) :
+    (a * b) ^ (Fp.modulus ^ 4) * (a * b) = (a * b) ^ (Fp.modulus ^ 2) := by
+  rw [mul_pow, mul_pow]
+  calc
+    a ^ (Fp.modulus ^ 4) * b ^ (Fp.modulus ^ 4) * (a * b) =
+        (a ^ (Fp.modulus ^ 4) * a) * (b ^ (Fp.modulus ^ 4) * b) := by ac_rfl
+    _ = a ^ (Fp.modulus ^ 2) * b ^ (Fp.modulus ^ 2) := by rw [ha, hb]
+
 /-- Cyclotomic exponentiation is exponentiation under the `p^2`-power relation. -/
 theorem cyclotomicPow_eq_pow
     {a : Fp12} (ha : a ^ (Fp.modulus ^ 4) * a = a ^ (Fp.modulus ^ 2)) (e : Nat) :
@@ -371,14 +390,7 @@ theorem cyclotomicPow_eq_pow
       rw [pow_zero, one_eq_one]
     · rename_i he
       rw [cyclotomicSquare_eq_mul_self ha]
-      have hmul : (a * a) ^ (Fp.modulus ^ 4) * (a * a) =
-          (a * a) ^ (Fp.modulus ^ 2) := by
-        rw [mul_pow, mul_pow]
-        calc
-          a ^ (Fp.modulus ^ 4) * a ^ (Fp.modulus ^ 4) * (a * a) =
-              (a ^ (Fp.modulus ^ 4) * a) * (a ^ (Fp.modulus ^ 4) * a) := by ac_rfl
-          _ = a ^ (Fp.modulus ^ 2) * a ^ (Fp.modulus ^ 2) := by rw [ha]
-      rw [ih (e / 2) (by omega) hmul]
+      rw [ih (e / 2) (by omega) (cyclotomic_relation_mul ha ha)]
       by_cases h2 : e % 2 = 1
       · rw [ite_eq_left h2, ← pow_two, ← pow_mul, ← pow_succ']
         congr 1
@@ -408,20 +420,6 @@ private theorem pow_eq_pow_of_mod {f : Fp12} {m n : Nat} (hm : m ≠ 0) (hn : n 
     rw [← Nat.div_add_mod m (Fp.modulus ^ 12 - 1), ← Nat.div_add_mod n (Fp.modulus ^ 12 - 1),
       pow_add, pow_add, pow_mul, pow_mul, h1, one_pow, one_pow, h]
 
-private theorem cyclotomic_relation_pow {a : Fp12}
-    (h : a ^ (Fp.modulus ^ 4) * a = a ^ (Fp.modulus ^ 2)) (n : Nat) :
-    (a ^ n) ^ (Fp.modulus ^ 4) * a ^ n = (a ^ n) ^ (Fp.modulus ^ 2) := by
-  simpa only [mul_pow, ← pow_mul, Nat.mul_comm] using congrArg (fun x => x ^ n) h
-
-private theorem cyclotomic_relation_mul {a b : Fp12}
-    (ha : a ^ (Fp.modulus ^ 4) * a = a ^ (Fp.modulus ^ 2))
-    (hb : b ^ (Fp.modulus ^ 4) * b = b ^ (Fp.modulus ^ 2)) :
-    (a * b) ^ (Fp.modulus ^ 4) * (a * b) = (a * b) ^ (Fp.modulus ^ 2) := by
-  rw [mul_pow, mul_pow]
-  calc
-    a ^ (Fp.modulus ^ 4) * b ^ (Fp.modulus ^ 4) * (a * b) =
-        (a ^ (Fp.modulus ^ 4) * a) * (b ^ (Fp.modulus ^ 4) * b) := by ac_rfl
-    _ = a ^ (Fp.modulus ^ 2) * b ^ (Fp.modulus ^ 2) := by rw [ha, hb]
 
 private theorem cyclotomic_relation_frobenius {a : Fp12}
     (h : a ^ (Fp.modulus ^ 4) * a = a ^ (Fp.modulus ^ 2)) :

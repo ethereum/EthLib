@@ -315,33 +315,4 @@ instance : Field Fp12 where
   nnqsmul := _
   qsmul := _
 
-/-! ## Exponentiation (`powNat`) -/
-
-theorem powNat_eq_pow (a : Fp12) (e : Nat) : powNat a e = a ^ e := by
-  induction e using Nat.strongRecOn generalizing a with
-  | _ e ih =>
-    rw [powNat]
-    split
-    · rename_i h
-      subst h
-      rw [pow_zero, one_eq_one]
-    · rename_i h
-      rw [ih (e / 2) (by omega)]
-      by_cases h2 : e % 2 = 1
-      · rw [ite_eq_left h2, ← pow_two, ← pow_mul, ← pow_succ']
-        congr 1
-        omega
-      · rw [ite_eq_right h2, ← pow_two, ← pow_mul]
-        congr 1
-        omega
-
-theorem powNat_zero (a : Fp12) : powNat a 0 = one := by
-  rw [powNat_eq_pow, pow_zero, one_eq_one]
-
-theorem powNat_one (a : Fp12) : powNat a 1 = a := by
-  rw [powNat_eq_pow, pow_one]
-
-theorem powNat_succ (a : Fp12) (e : Nat) : powNat a (e + 1) = a * powNat a e := by
-  rw [powNat_eq_pow, powNat_eq_pow, pow_succ']
-
 end EthLib.Cryptography.Bls.Fp12

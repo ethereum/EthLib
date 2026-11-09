@@ -123,24 +123,15 @@ def frobenius (a : Fp12 F) : Fp12 F :=
   ⟨⟨a.c0.c0.conjugate, a.c0.c1.conjugate * g2, a.c0.c2.conjugate * (g2 * g2)⟩,
    ⟨a.c1.c0.conjugate * g1, a.c1.c1.conjugate * g3, a.c1.c2.conjugate * (g3 * g2)⟩⟩
 
-/-- Square-and-multiply modular exponentiation. -/
-def powNat (base : Fp12 F) (e : Nat) : Fp12 F :=
-  if e = 0 then one
-  else
-    let half := powNat (base * base) (e / 2)
-    if e % 2 = 1 then base * half else half
--- Every nonzero exponent decreases when divided by two.
-termination_by e
-decreasing_by omega
+/-- Square-and-multiply exponentiation that squares with the cyclotomic formula.
 
-/-- Square-and-multiply using cyclotomic squaring.
-
-Over `Fp`, it agrees with `powNat` on zero and on the cyclotomic subgroup. -/
+Over `Fp`, it equals `base^e` when `base` is zero or lies in the cyclotomic subgroup. -/
 def cyclotomicPow (base : Fp12 F) (e : Nat) : Fp12 F :=
   if e = 0 then one
   else
     let half := cyclotomicPow base.cyclotomicSquare (e / 2)
     if e % 2 = 1 then base * half else half
+-- Every nonzero exponent decreases when divided by two.
 termination_by e
 decreasing_by omega
 

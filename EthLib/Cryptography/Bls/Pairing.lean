@@ -138,9 +138,9 @@ So `m^h` needs only powers by `|x|` and `(|x| + 1) / 3`, Frobenius maps and conj
 
 These exponents have at most 64 bits.
 
-The hard part uses cyclotomic squaring on the nonzero output of the easy part.
+For a nonzero input, the easy part outputs an element of the cyclotomic subgroup.
 
-The formula also squares zero correctly.
+So the hard part squares with the cyclotomic formula, which also maps zero to zero.
 
 The steps compute exactly `f^((p¹² − 1) / r)`, and a theorem proves it. -/
 def finalExponentiation (f : Fp12 F) : Fp12 F :=
