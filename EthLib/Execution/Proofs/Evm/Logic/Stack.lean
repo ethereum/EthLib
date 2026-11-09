@@ -54,7 +54,9 @@ variable {code : ByteArray} {message : Message fork} {pc : Nat} {stack : List U2
   {memory : ByteArray} {gas : Nat} {state : State.TransactionState} {substate : Substate}
   {returnData : ByteArray}
 
-/-- A three-operand instruction of the stack, on `x`, `y`, `z`, puts `f x y z` in their place. -/
+/-- A three-operand instruction of the stack, on `x`, `y`, `z`, puts `f x y z` in their place.
+
+It holds over the steps from frames that are monotone in gas. -/
 theorem ternaryG {byte : UInt8} {op : Op} {cost : Nat} {f : U256 → U256 → U256 → U256}
     {x y z : U256} {rest : List U256} (hlt : pc < code.size) (hbyte : code[pc] = byte)
     (decoded : Op.ofByte fork byte = some op)
@@ -78,7 +80,9 @@ theorem ternary {byte : UInt8} {op : Op} {cost : Nat} {f : U256 → U256 → U25
         returnData) :=
   (ternaryG hlt hbyte decoded hrun hgas).toHoare
 
-/-- POP drops the top word, for 2 gas. -/
+/-- POP drops the top word, for 2 gas.
+
+It holds over the steps from frames that are monotone in gas. -/
 theorem popG {x : U256} {rest : List U256} (hlt : pc < code.size) (hbyte : code[pc] = 0x50)
     (hgas : 2 ≤ gas) :
     HoareG fork (At code message pc (x :: rest) memory gas state substate returnData)
@@ -99,7 +103,9 @@ theorem pop {x : U256} {rest : List U256} (hlt : pc < code.size) (hbyte : code[p
 
 /-- SWAP(n + 1), for the `n` that the byte at the program counter decodes to.
 
-It exchanges the top word with the word `x` at depth `n + 1`, for 3 gas. -/
+It exchanges the top word with the word `x` at depth `n + 1`, for 3 gas.
+
+It holds over the steps from frames that are monotone in gas. -/
 theorem swap_of_decodeG {byte : UInt8} {n : Fin 16} {top x : U256} {rest : List U256}
     (hlt : pc < code.size) (hbyte : code[pc] = byte) (decoded : Op.decode byte = some (.swap n))
     (hx : rest[n.val]? = some x) (hgas : 3 ≤ gas) :
@@ -124,7 +130,9 @@ theorem swap_of_decode {byte : UInt8} {n : Fin 16} {top x : U256} {rest : List U
         returnData) :=
   (swap_of_decodeG hlt hbyte decoded hx hgas).toHoare
 
-/-- SWAP(n + 1) exchanges the top word with the word `x` at depth `n + 1`, for 3 gas. -/
+/-- SWAP(n + 1) exchanges the top word with the word `x` at depth `n + 1`, for 3 gas.
+
+It holds over the steps from frames that are monotone in gas. -/
 theorem swapG (n : Fin 16) {top x : U256} {rest : List U256} (hlt : pc < code.size)
     (hbyte : code[pc] = (0x90 + n.val).toUInt8) (hx : rest[n.val]? = some x) (hgas : 3 ≤ gas) :
     HoareG fork (At code message pc (top :: rest) memory gas state substate returnData)
@@ -138,11 +146,13 @@ theorem swap (n : Fin 16) {top x : U256} {rest : List U256} (hlt : pc < code.siz
     Hoare fork (At code message pc (top :: rest) memory gas state substate returnData)
       (At code message (pc + 1) (x :: rest.set n.val top) memory (gas - 3) state substate
         returnData) :=
-  swap_of_decode hlt hbyte (decode_swap n) hx hgas
+  (swapG n hlt hbyte hx hgas).toHoare
 
 /-- EXP puts `base` to the power `exponent` in place of both.
 
-It pays 10 and the price per byte of the exponent that the fork sets. -/
+It pays 10 and the price per byte of the exponent that the fork sets.
+
+It holds over the steps from frames that are monotone in gas. -/
 theorem expG {base exponent : U256} {rest : List U256} (hlt : pc < code.size)
     (hbyte : code[pc] = 0x0a)
     (hgas : OPCODE_EXP_BASE + (gasSchedule fork).OPCODE_EXP_PER_BYTE * exponentBytes exponent ≤

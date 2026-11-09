@@ -29,7 +29,7 @@ SSTORE never completes in a static frame, or when the current address has no acc
 
 From Istanbul, it also fails with 2300 gas left or less, by EIP-2200.
 
-In each of these cases a frame at SSTORE is stuck.
+In each of these cases a frame at SSTORE with two words on its stack is stuck.
 
 GAS is not monotone in gas, and a step that sends a message is no step of the logic.
 
@@ -203,11 +203,11 @@ theorem no_ok_stuck_at
 
 end Loop
 
-/-! ## Stuck frames at SSTORE -/
+/-! ## Stuck frames -/
 
 /-- A frame of a code is stuck at an opcode whose instruction fails on some frames.
 
-These are the frames with its message, its stack and its state, and with at most its gas. -/
+These are the frames with the message, the stack and the state of the rule, and at most its gas. -/
 theorem At.stuck {byte : UInt8} {op : Op} {run : Evm fork Nat → Except EvmError (Evm fork Nat)}
     (hlt : pc < code.size) (hbyte : code[pc] = byte) (decoded : Op.ofByte fork byte = some op)
     (hrun : instruction fork op = some run)
@@ -244,9 +244,13 @@ theorem sstore_stuck {key new : U256} {rest : List U256}
 
 /-- From Istanbul, SSTORE with at most 2300 gas is stuck, by EIP-2200.
 
+This holds of one counter of gas.
+
+From Glamsterdam, that is not the meter of the fork.
+
 It fails with every gas up to 2300. -/
 theorem sstore_low_stuck (hist : Fork.istanbul ≤ fork) {key new : U256} {rest : List U256}
-    (hlt : pc < code.size) (hbyte : code[pc] = 0x55) (low : gas ≤ CALL_STIPEND) :
+    (hlt : pc < code.size) (hbyte : code[pc] = 0x55) (hstipend : gas ≤ CALL_STIPEND) :
     HoareG fork (At code message pc (key :: new :: rest) memory gas state substate returnData)
       Stuck := by
   refine At.stuck hlt hbyte (ofByte_of_decode (op := .sstore) rfl (Fork.frontier_le _))

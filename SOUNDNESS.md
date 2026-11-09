@@ -781,7 +781,7 @@ Its first relation covers frames that send no message.
 `Spec fork P Q` is total correctness for such frames: every frame of `P` reaches a stopped frame of `Q`.
 A run that ends out of gas ends in an exceptional halt, so a postcondition of a normal halt needs a precondition with enough gas.
 `Logic.At` is a running frame of a code that names every field of the frame, its return data included.
-`Logic/Rules.lean` gives rules for the opcodes that read call data and the caller, compare, jump, hash memory, read and write storage, and return or revert.
+`Logic/Rules.lean` gives rules for the opcodes that push bytes of the code, read call data and the caller, compare, jump, hash memory, read and write storage, and return or revert.
 `Logic/Stack.lean` gives rules for POP, SWAP1 to SWAP16, EXP and the opcodes of three operands, at every fork with the one-counter meter.
 The rules of `Logic/Rules.lean`, `Logic/Stack.lean`, `Logic/Copy.lean` and `Logic/Log.lean` keep the return data that `At` names.
 `Logic/Rules.lean` gives the rule for DUP1 to DUP16, and the rule for DUP1 is its case at depth 0.
@@ -1131,16 +1131,16 @@ Both hold for every bound on the gas of messages and every runner of messages.
 `Logic.no_ok_stuck` proves the same for a frame of `At` that reaches a stuck frame with every gas from some bound on.
 `Logic.no_ok_stuck_at` proves the same for a frame of `At` that reaches a stuck frame with its own gas.
 GAS has no rule of this kind, since it pushes the gas left, and no theorem here covers a step that sends a message.
-`Logic.At.ruleG_of_follows` is the rule of an opcode whose instruction, on each frame of the rule, follows its run with less gas.
+`Logic.At.ruleG_of_follows` is the rule of an opcode whose instruction, run on each frame of the rule with less gas, fails or gives its frame with less gas.
 Each instruction that `Logic/RunMono.lean` covers is `RunMono`, such as `Logic.runMono_sstore` for SSTORE.
-`Logic.follows_readFrame` proves that an instruction that pushes a word of the frame follows its run with less gas.
+`Logic.follows_readFrame` proves that an instruction that pushes a word of the frame, run with less gas, fails or gives its frame with less gas.
 It needs the word not to depend on the gas.
 The opcode rules of `Logic/Rules.lean`, `Logic/Stack.lean` and `Logic/Log.lean` are proved over the steps from frames that are `GasMono`, such as `Logic.calldataloadG`.
-Each such rule has the hypotheses and the conclusion of the rule over `Step` of the same opcode, which follows from it by `Logic.HoareG.toHoare`.
+Each such rule has the hypotheses and the conclusion of the rule over `Step` of the same opcode, which follows from it by `Logic.HoareG.toHoare` or `Logic.SpecG.toSpec`.
 Of the opcode rules there, those for GAS, EXTCODESIZE and a frame past the end of its code have no such form.
 `Logic.sstore_of_account` has no such form either.
 `Logic.branchTable` has no such form yet.
-`Logic.At.stuck` proves that a frame is stuck at an opcode whose instruction fails with every lower gas and the same message, stack and state.
+`Logic.At.stuck` proves that a frame is stuck at an opcode whose instruction fails on every frame with the same message, stack and state, and at most the same gas.
 `Logic.sstore_stuck` proves that SSTORE is stuck in a static frame, or when the current address has no account.
 `Logic.sstore_low_stuck` proves that from Istanbul SSTORE is stuck with 2300 gas or less, by EIP-2200.
 

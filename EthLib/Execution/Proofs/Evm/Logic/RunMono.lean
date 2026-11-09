@@ -35,7 +35,9 @@ open GasCosts
 
 variable {fork : Fork}
 
-/-- A result that pays `cost` from the gas `gas`, then gives `F` of the gas left. -/
+/-- A charge of `cost` from `gas`, then `F` of the gas left, fails or follows with `k` more gas.
+
+`F` must give its frame with `k` more gas when its argument has `k` more. -/
 theorem follows_map_charge {k gas cost : Nat} {F : Nat → Evm fork Nat}
     (hF : ∀ g, F (g + k) = addGas k (F g)) :
     Follows k ((GasMeter.charge gas cost).map F) ((GasMeter.charge (gas + k) cost).map F) := by
@@ -153,7 +155,9 @@ theorem runMono_return : RunMono (fork := fork) returnStep := by
     rw [returnStep_cons h, returnStep_cons (evm := addGas k evm) h]
     exact follows_map_charge fun _ => rfl
 
-/-- REVERT is monotone in gas, since it always halts the frame with an error. -/
+/-- REVERT is monotone in gas, since it always fails.
+
+It gives an error, or halts the frame with the error of a revert. -/
 theorem runMono_revert : RunMono (fork := fork) revertStep := by
   intro evm k
   rw [revertStep_eq]
@@ -213,13 +217,13 @@ theorem follows_readFrame (cost : Nat) (f : Evm fork Nat → U256) {evm : Evm fo
       rw [pushWord_of_length_eq (by rw [stack_of_chargeGas hb]; have := evm.stack.property; omega)]
       exact ⟨_, rfl⟩
 
-/-- An instruction that pushes a word of the frame that does not depend on the gas. -/
+/-- An instruction that pushes a word of the frame is monotone when the word ignores the gas. -/
 theorem runMono_readFrame (cost : Nat) (f : Evm fork Nat → U256)
     (hf : ∀ (evm : Evm fork Nat) gas, f { evm with gas := gas } = f evm) :
     RunMono (readFrame cost f) :=
   fun evm _ => follows_readFrame cost f (hf evm)
 
-/-- PUSHn is monotone in gas. -/
+/-- Each of PUSH0 to PUSH32 is monotone in gas. -/
 theorem runMono_pushN (n : Fin 33) : RunMono (fork := fork) (pushN n) := by
   intro evm k
   by_cases room : evm.stack.val.length < STACK_LIMIT
@@ -233,7 +237,7 @@ theorem runMono_pushN (n : Fin 33) : RunMono (fork := fork) (pushN n) := by
       rw [pushWord_of_length_eq (by rw [stack_of_chargeGas hb]; have := evm.stack.property; omega)]
       exact ⟨_, rfl⟩
 
-/-- DUPn is monotone in gas. -/
+/-- Each of DUP1 to DUP16 is monotone in gas. -/
 theorem runMono_dupN (n : Fin 16) : RunMono (fork := fork) (dupN n) := by
   intro evm k
   by_cases hroom : evm.stack.val.length < STACK_LIMIT ∧ ∃ x, evm.stack.val[n.val]? = some x
@@ -254,7 +258,7 @@ theorem runMono_dupN (n : Fin 16) : RunMono (fork := fork) (dupN n) := by
         rw [pushWord_of_length_eq (by rw [hs]; have := evm.stack.property; omega)]
         exact ⟨_, rfl⟩
 
-/-- SWAPn is monotone in gas. -/
+/-- Each of SWAP1 to SWAP16 is monotone in gas. -/
 theorem runMono_swapN (n : Fin 16) : RunMono (fork := fork) (swapN n) := by
   intro evm k
   have fails : ∀ {e : EvmError}, (∀ g, GasMeter.charge evm.gas OPCODE_SWAP = .ok g →
@@ -380,7 +384,7 @@ theorem runMono_log (n : Nat) : RunMono (fork := fork) (logStep n) := by
       simp only [hst, hst', Bool.false_eq_true, ↓reduceIte]
       exact .inr ⟨_, rfl, rfl⟩
 
-/-- A failure inside the body of SSTORE, after its reads, fails or halts the frame. -/
+/-- A failure after the reads gives an error, or halts the frame with an error. -/
 theorem fails_keepReads {evm : Evm fork Nat} {err : EvmError} :
     Fails (keepReads evm id (.error err)) := by
   simp only [keepReads]
@@ -388,7 +392,7 @@ theorem fails_keepReads {evm : Evm fork Nat} {err : EvmError} :
   · exact .inl ⟨_, rfl⟩
   · exact .inr ⟨_, rfl, rfl, by simp [exceptionalHalt]⟩
 
-/-- A charge that the gas covers, on a frame and on it with `k` more gas. -/
+/-- A charge that the gas covers succeeds, and with `k` more gas it gives `k` more gas. -/
 theorem chargeGas_addGas {evm : Evm fork Nat} {cost k : Nat} (h : ¬evm.gas < cost) :
     chargeGas evm cost = .ok { evm with gas := evm.gas - cost } ∧
       chargeGas (addGas k evm) cost = .ok (addGas k { evm with gas := evm.gas - cost }) := by
@@ -399,7 +403,7 @@ theorem chargeGas_addGas {evm : Evm fork Nat} {cost k : Nat} (h : ¬evm.gas < co
   congr 2
   omega
 
-/-- A charge of state gas that the gas covers, on a frame and on it with `k` more gas. -/
+/-- A charge of state gas that the gas covers succeeds, and with `k` more gas it gives `k` more. -/
 theorem chargeStateGas_addGas {evm : Evm fork Nat} {cost k : Nat} (h : ¬evm.gas < cost) :
     chargeStateGas evm cost = .ok { evm with gas := evm.gas - cost } ∧
       chargeStateGas (addGas k evm) cost =

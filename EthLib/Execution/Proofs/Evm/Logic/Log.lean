@@ -71,7 +71,9 @@ theorem instruction_log (n : Fin 5) :
 
 The data of the log is the range of memory from `start`, after memory grows to hold it.
 
-It pays the price of the log and the growth of memory, in a frame that may change the state. -/
+It pays the price of the log and the growth of memory, in a frame that may change the state.
+
+It holds over the steps from frames that are monotone in gas. -/
 theorem logG {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List U256}
     (hlen : words.length = n.val) (hlt : pc < code.size) (hbyte : code[pc] = byte)
     (decoded : Op.decode byte = some (.log n)) (hstatic : message.isStatic = false)
