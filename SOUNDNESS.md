@@ -1162,6 +1162,23 @@ It assumes that these steps reach a stopped frame from `l` with `k` more gas.
 It assumes a specification over these steps from that frame with every gas from some bound on.
 Both hold for every bound on the gas of messages and every runner of messages.
 
+`Logic/Exact.lean` says when a run succeeds, that is when the loop ends its frame in a frame with no error.
+`Logic.RunsOk` is that condition, for any meter.
+`Logic.Spec.runsOk` proves that a specification to frames with no error gives a run that succeeds, under every runner.
+`Logic.SpecOn.runsOk` proves the same for a specification whose run may stop when the runner fails.
+It assumes a runner that never fails on the messages that the specification names.
+`Logic.runsOk_iff` proves that a condition holds exactly when the run succeeds.
+It assumes that the condition gives such a specification, and that every run that succeeds meets it.
+The rest of that file is for the one-counter meter.
+`Logic.halted_of_specG` takes a specification over `Logic.StepG` to a normal halt that pays `cost`, from a frame of `At` with every gas from some bound on.
+It proves that every run of that frame that succeeds, with any gas, had at least `cost` gas.
+That run ends in that halt with exactly `cost` less gas.
+`Logic.no_ok_of_specG` proves that no run of a frame of `At` succeeds, with any gas, when a specification over `Logic.StepG` rules it out.
+That specification goes to frames with an error, and holds with every gas from some bound on.
+`Logic.not_runsOk_of_lt` proves that no run with less gas than `cost` succeeds, when a condition that every success meets gives such a specification to a halt.
+`Logic.not_runsOk_of_stuck` proves that no run succeeds when such a condition makes the frame reach a stuck frame with its own gas.
+`Logic.iff_and_max_le` gives the form of an exact threshold of gas at the larger of two bounds.
+
 ### SHA-256 precompile
 
 The precompile reuses the SHA-256 of the cryptography layer, so its theorems are about the gas and the failure.
