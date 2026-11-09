@@ -62,7 +62,7 @@ instance : BaseField Model where
   inverse a := Fin.inverse (a : Fin modulus)
   powNat := powNat
   sqrt := sqrt
-  sqrtCandidate := some (fun a => powNat a ((modulus + 1) / 4))
+  sqrtCandidate a := powNat a ((modulus + 1) / 4)
   sgn0 a := a.val % 2 == 1
 
 end Fp.Model
@@ -140,11 +140,9 @@ def Fp.toModel : BaseField.Hom Fp Fp.Model where
       rfl
     · rw [ite_eq_right h, ite_eq_right h]
       rfl
-  map_sqrtCandidate := by
-    change some (fun a => Fp.Model.powNat (Fp.toModelFun a) ((modulus + 1) / 4)) =
-      some (fun a => Fp.toModelFun (Fp.sqrtCandidate a))
-    congr 1
-    funext a
+  map_sqrtCandidate a := by
+    change Fp.Model.powNat (Fp.toModelFun a) ((modulus + 1) / 4) =
+      Fp.toModelFun (Fp.sqrtCandidate a)
     rw [Fp.sqrtCandidate, Fp.powLimbs_sqrtExponent, Fp.powNat_toModelFun]
   map_sgn0 _ := rfl
 

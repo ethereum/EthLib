@@ -651,6 +651,10 @@ theorem one_isZero : Fp.one.isZero = false :=
 /-- The square root that the extensions read from `Fp` is its own square root, as an option. -/
 theorem baseField_sqrt (a : Fp) : BaseField.sqrt a = (Fp.sqrt a).toOption := rfl
 
+/-- The candidate root that the extensions read from `Fp` is its own candidate. -/
+@[simp] theorem baseField_sqrtCandidate (a : Fp) :
+    BaseField.sqrtCandidate a = Fp.sqrtCandidate a := rfl
+
 /-- The square root's power by limbs is the power by `(p + 1) / 4`. -/
 theorem powLimbs_sqrtExponent (a : Fp) :
     (Montgomery.powLimbs a sqrtExponent : Fp) = powNat a ((modulus + 1) / 4) := by

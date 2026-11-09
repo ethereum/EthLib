@@ -59,25 +59,3 @@ An exponent near 1 means linear time, and near 2 quadratic time:
 ```bash
 .venv/bin/python benchmarks/scaling.py rlp,ssz
 ```
-
-## Fp2 square roots
-
-`bench_bls_sqrt.py` compares two built EthLib packages on 34 pinned Wycheproof hash-to-G2 inputs.
-It decodes their compressed points with both signs, giving 68 decode inputs.
-Each process warms the inputs before timing, and the process order alternates each round.
-Copy each built `bindings/python/ethlib` tree into a separate directory, then pass its parent:
-
-```bash
-.venv/bin/python benchmarks/bench_bls_sqrt.py \
-  --before /tmp/before --after /tmp/after --output /tmp/fp2-sqrt.json
-```
-
-On 9 November 2026, `f695099d` and `codex/fp2-sqrt-1413` ran for nine rounds of three passes.
-The machine was an Apple M4 Pro with 24 GiB, macOS 26.3, CPython 3.12.16 and Lean 4.35.0.
-The table gives the median microseconds per call, with the range across rounds in parentheses.
-All output digests agreed, including the full signed affine output of `hash_to_g2`.
-
-| Operation | Before (us) | After (us) | Before / after |
-| --- | ---: | ---: | ---: |
-| `decode_g2` | 448.4 (442.9-465.5) | 432.2 (429.9-465.2) | 1.037 |
-| `hash_to_g2` | 1784.0 (1720.3-1853.3) | 1730.1 (1716.3-1746.2) | 1.031 |
