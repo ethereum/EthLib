@@ -150,20 +150,12 @@ An absent key has no value, and reads as the empty byte string. -/
 theorem valueAt_getD (hash : ByteArray → Hash32) {trie : Trie} (key : ByteArray)
     (hsearch : trie.secured = true → findLookupCollision hash key (trie.data.map Prod.fst) = none) :
     (valueAt hash trie key).getD .empty = trieGet trie key := by
-  unfold valueAt trieGet
-  -- On every listed key, one path with the key means the key itself.
-  rw [find?_congr trie.data fun entry hmem => ?_]
-  rw [Bool.eq_iff_iff, decide_eq_true_iff, sameBytes_iff]
-  refine ⟨fun h => ?_, fun h => by rw [h]⟩
-  rw [keyPath_eq, keyPath_eq] at h
-  have hbytes := bytesToNibbleList_injective h
-  cases hsecured : trie.secured with
-  | false => simpa [hsecured] using hbytes
+  obtain ⟨secured, data⟩ := trie
+  cases secured with
+  | false => rw [valueAt_plain]; rfl
   | true =>
-    simp only [hsecured, ↓reduceIte] at hbytes
-    by_contra hne
-    exact hash_ne_of_findLookupCollision hash key _ (hsearch hsecured) entry.1
-      (List.mem_map_of_mem hmem) hne (hashBytes_injective hbytes)
+    rw [valueAt_secured hash (hash_ne_of_findLookupCollision hash key _ (hsearch rfl))]
+    rfl
 
 /-! ## The oracle run against a table -/
 
