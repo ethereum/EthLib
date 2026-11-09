@@ -168,7 +168,7 @@ omit [LawfulGasMeter Meter] in
 
 The recipient `target` holds the code `c` in the state of `done`.
 
-From Pectra, `c` is no delegation indicator.
+From Pectra, `c` must not be a delegation indicator.
 
 The meter of the frame is the meter of `done`, committed.
 
@@ -198,7 +198,7 @@ theorem prepareFirstFrame_of_applyAuthorizations {target : Address} {c : ByteArr
     Except.mapError, ne_eq, not_true_eq_false, false_and, and_false, ↓reduceIte, hcode', hnone]
 
 omit [LawfulGasMeter Meter] in
-/-- The first frame of a call fails with the error of its authorizations, and its state. -/
+/-- When the authorizations of a call fail, its first frame fails with the same error and state. -/
 theorem prepareFirstFrame_of_applyAuthorizations_error {target : Address}
     {e : EvmError × State.TransactionState} (htarget : message.target = some target)
     (hdone : applyAuthorizations fork chainId state substate.accessedAddresses

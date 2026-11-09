@@ -1,7 +1,9 @@
 module
 
 public import EthLib.Base.Except
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Proofs.Evm.Call.Delegation
+public import EthLib.Execution.Proofs.Evm.Gas.StateGas
 public import EthLib.Execution.Proofs.State.Frame
 public import EthLib.Execution.Proofs.State.Tracker
 public import EthLib.Execution.Transactions.Authorization
@@ -43,23 +45,23 @@ The authorizations keep the account, storage and transient storage of an address
 
 They keep that code under its hash.
 
-It needs one hypothesis on Keccak-256: no authorization sets a code with the hash of that code.
+This needs one hypothesis: no authorization sets a code whose hash is the code hash of the address.
 
 Up to BPO5, the authorizations keep the meter.
 
 The authorizations succeed when the state holds the code of every account.
 
-From Glamsterdam, it must also hold the code of every account before the transaction.
+From Glamsterdam, the state must also hold the code of every account before the transaction.
 
 From Glamsterdam, the meter must also hold 227790 execution gas for each authorization.
 
-Each charge of at most the gas left must succeed and take at most its amount.
+From Glamsterdam, each charge of at most the gas left must also succeed and take at most its amount.
 
 That holds for the meter up to BPO5 and for the meter of EIP-8037.
 
 Each authorization then takes at most 227790 execution gas.
 
-No theorem assumes anything of the recovery of an authority.
+The theorems that the authorizations succeed hold for any recovery of an authority.
 -/
 
 @[expose] public section
@@ -157,7 +159,7 @@ theorem getCode_delegate_of_ne {state state' : TransactionState} {refund : Nat}
   cases h
   rw [getCode_modifyState hnonce, getCode_setCode_of_ne hcode hne]
 
-/-- Taking an authorization keeps the code it sets under the hash of that code.
+/-- Taking an authorization stores the code it sets under the hash of that code.
 
 The hash must differ from the hash of the empty code. -/
 theorem getCode_delegate_self {state state' : TransactionState} {refund : Nat}
@@ -550,7 +552,9 @@ Real code is neither empty nor a delegation indicator.
 
 An address with real code refuses every authorization, so the authorizations keep it.
 
-It needs one hypothesis on Keccak-256: no authorization sets a code with the hash of that code.
+It needs one hypothesis: no authorization sets a code whose hash is the code hash of the address.
+
+When the state stores each code under its own hash, only a collision of Keccak-256 breaks it.
 
 A code that an authorization sets is stored under its hash, over any code with that hash. -/
 
@@ -558,7 +562,7 @@ A code that an authorization sets is stored under its hash, over any code with t
 
 It also keeps that code under its hash.
 
-The authorization must set no code with that hash. -/
+The hash of the code that the authorization sets must not be the code hash of the address. -/
 theorem applyAuthorization_keeps {address : Address} {code : ByteArray}
     (h : applyAuthorization fork chainId done auth = .ok done')
     (hcode : done.state.getCode (done.state.getAccount address).codeHash = .ok code)
@@ -590,7 +594,7 @@ theorem applyAuthorization_keeps {address : Address} {code : ByteArray}
 
 They keep its account, storage and transient storage, and that code under its hash.
 
-No authorization of the list may set a code with that hash. -/
+No authorization of the list may set a code whose hash is the code hash of the address. -/
 theorem foldlM_applyAuthorization_keeps {address : Address} {code : ByteArray}
     (hsize : code.size ≠ 0) (hindicator : isValidDelegation code = false) :
     ∀ {auths : List Authorization} {start done : Delegations Meter},
@@ -635,12 +639,10 @@ theorem meter_applyAuthorization_of_lt_glamsterdam (hfork : fork < .glamsterdam)
 /-- Up to BPO5, the authorizations of a list keep the meter. -/
 theorem meter_foldlM_applyAuthorization_of_lt_glamsterdam (hfork : fork < .glamsterdam) :
     ∀ {auths : List Authorization} {start done : Delegations Meter},
-      auths.foldlM (applyAuthorization fork chainId) start = .ok done → done.meter = start.meter
-  | [], _, _, h => by cases h; rfl
-  | auth :: rest, start, done, h => by
-    obtain ⟨next, hnext, h⟩ := bind_ok_iff.mp h
-    exact (meter_foldlM_applyAuthorization_of_lt_glamsterdam hfork h).trans
-      (meter_applyAuthorization_of_lt_glamsterdam hfork hnext)
+      auths.foldlM (applyAuthorization fork chainId) start = .ok done → done.meter = start.meter :=
+  fun {_ start _} => foldlM_ok_invariant (fun next => next.meter = start.meter)
+    (fun _ _ _ hheld hstep => (meter_applyAuthorization_of_lt_glamsterdam hfork hstep).trans hheld)
+    rfl
 
 /-! ## The authorizations succeed
 
@@ -714,7 +716,7 @@ theorem hasPreCodes_applyAuthorization (h : applyAuthorization fork chainId done
 
 The state must hold the code of every account, and the result keeps that fact.
 
-Its meter meets every condition `Q` that the meter before meets and that each payment leaves. -/
+The resulting meter meets `Q` when the meter before and the meter after each payment meet it. -/
 theorem applyAuthorization_isOk_of_pay (Q : Meter → Prop) (hQ : Q done.meter)
     (hcodes : HasCodes done.state)
     (hpay : ∀ authority, ∃ paid, payAuthorization fork { done with
@@ -742,29 +744,6 @@ theorem applyAuthorization_isOk_of_pay (Q : Meter → Prop) (hQ : Q done.meter)
           haccept hpaid
         rw [hdelegate] at happly
         exact ⟨_, happly, hcodes', hmeter⟩
-
-/-- Up to BPO5, one authorization succeeds over any meter.
-
-The state must hold the code of every account, and the result keeps that fact. -/
-theorem applyAuthorization_isOk_of_lt_glamsterdam (hfork : fork < .glamsterdam)
-    (hcodes : HasCodes done.state) :
-    ∃ done', applyAuthorization fork chainId done auth = .ok done' ∧ HasCodes done'.state := by
-  obtain ⟨done', h, hcodes', -⟩ := applyAuthorization_isOk_of_pay (fun _ => True) trivial
-    hcodes fun _ => ⟨_, payAuthorization_of_lt_glamsterdam hfork, trivial⟩
-  exact ⟨done', h, hcodes'⟩
-
-/-- Up to BPO5, the authorizations of every list succeed over any meter.
-
-The state must hold the code of every account. -/
-theorem foldlM_applyAuthorization_isOk_of_lt_glamsterdam (hfork : fork < .glamsterdam) :
-    ∀ (auths : List Authorization) {start : Delegations Meter}, HasCodes start.state →
-      ∃ done, auths.foldlM (applyAuthorization fork chainId) start = .ok done
-  | [], start, _ => ⟨start, rfl⟩
-  | auth :: rest, _, hcodes => by
-    obtain ⟨next, hnext, hcodes'⟩ :=
-      applyAuthorization_isOk_of_lt_glamsterdam (chainId := chainId) (auth := auth) hfork hcodes
-    obtain ⟨done, h⟩ := foldlM_applyAuthorization_isOk_of_lt_glamsterdam hfork rest hcodes'
-    exact ⟨done, by simp only [List.foldlM_cons, hnext, bind, Except.bind, h]⟩
 
 /-- Whether every charge of at most the execution gas left succeeds and takes at most its amount.
 
@@ -796,9 +775,7 @@ theorem chargesWithin_stateGasMeter : ChargesWithin Evm.StateGasMeter := by
   intro meter amount h
   simp only [GasMeter.gasLeft] at h ⊢
   refine ⟨?_, ?_⟩
-  · have hlt : ¬meter.gasLeft < amount := Nat.not_lt_of_le h
-    simp only [GasMeter.charge, Evm.StateGasMeter.charge, hlt, ↓reduceIte]
-    exact ⟨_, rfl, Nat.le_refl _, Nat.sub_le _ _⟩
+  · exact ⟨_, Evm.StateGasMeter.charge_eq_ok_iff.mpr ⟨h, rfl⟩, Nat.le_refl _, Nat.sub_le _ _⟩
   · simp only [GasMeter.chargeState, Evm.StateGasMeter.chargeState]
     by_cases hreservoir : amount ≤ meter.reservoir
     · simp only [hreservoir, ↓reduceIte]
@@ -807,7 +784,7 @@ theorem chargesWithin_stateGasMeter : ChargesWithin Evm.StateGasMeter := by
       simp only [hreservoir, hsum, ↓reduceIte]
       exact ⟨_, rfl, Nat.sub_le_sub_left (Nat.sub_le _ _) _, Nat.sub_le _ _⟩
 
-/-- From Glamsterdam, the charge of an accepted authorization succeeds with 227790 gas left.
+/-- The charge of an accepted authorization succeeds with at least 227790 execution gas left.
 
 It takes at most 227790 execution gas.
 
@@ -927,6 +904,28 @@ theorem foldlM_applyAuthorization_isOk (hcharges : .glamsterdam ≤ fork → Cha
       rest_gas at hlow' ⊢
     generalize NEW_ACCOUNT_STATE_GAS + ACCOUNT_WRITE + AUTH_BASE_STATE_GAS = one at hlow ⊢
     omega
+
+/-- Up to BPO5, one authorization succeeds over any meter.
+
+The state must hold the code of every account, and the result keeps that fact. -/
+theorem applyAuthorization_isOk_of_lt_glamsterdam (hfork : fork < .glamsterdam)
+    (hcodes : HasCodes done.state) :
+    ∃ done', applyAuthorization fork chainId done auth = .ok done' ∧ HasCodes done'.state := by
+  have hpre : ¬.glamsterdam ≤ fork := Nat.not_le_of_lt hfork
+  obtain ⟨done', h, hcodes', -⟩ := applyAuthorization_isOk (chainId := chainId) (auth := auth)
+    (absurd · hpre) (absurd · hpre) hcodes (absurd · hpre)
+  exact ⟨done', h, hcodes'⟩
+
+/-- Up to BPO5, the authorizations of every list succeed over any meter.
+
+The state must hold the code of every account. -/
+theorem foldlM_applyAuthorization_isOk_of_lt_glamsterdam (hfork : fork < .glamsterdam)
+    (auths : List Authorization) {start : Delegations Meter} (hcodes : HasCodes start.state) :
+    ∃ done, auths.foldlM (applyAuthorization fork chainId) start = .ok done := by
+  have hpre : ¬.glamsterdam ≤ fork := Nat.not_le_of_lt hfork
+  obtain ⟨done, h, -⟩ := foldlM_applyAuthorization_isOk (chainId := chainId) (absurd · hpre) auths
+    (absurd · hpre) hcodes (absurd · hpre)
+  exact ⟨done, h⟩
 
 /-! ## The hash that an authority signs -/
 
