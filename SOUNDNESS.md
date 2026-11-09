@@ -1082,6 +1082,20 @@ Its set holds only the message of the call, so a run may stop because the runner
 Unlike `Logic.callWith`, neither rule asks that the code be no delegation, or that the fork come before Glamsterdam.
 `Logic.callStep_child` and `Logic.callKindWith` are their cases with no delegation, so the step has one proof.
 
+A triple says about the state after a message only what its assumption says, so a proof needs an assumption on what the callee does.
+`Logic.KeepsOn runChild S R` (`Logic/Keeps.lean`) says that each message of `S` that the runner ends with no error keeps the relation `R`.
+`R` holds from the state of the frame that sends the message to the state of the frame that ends it.
+`Logic.KeepsOn.mono` proves that a smaller set of messages and a weaker relation keep the assumption.
+`Logic.KeepsParent.keepsOn` proves that a runner that keeps the block of the state keeps it on every set of messages.
+`Logic.ReadsAs tx S` says that `tx` has the account, the storage and the transient storage of `S` at every address, and its code at every hash.
+`Logic.ReadsAs.recordAccountRead` proves that a record of an account read keeps this relation.
+`Logic.ReadsAs.recordStorageRead` proves the same for a record of a storage read.
+`Logic.ReadsAs.routeState` proves the same for the state once a call follows a route.
+`Logic.Routes.of_readsAs` proves that a state that reads as `S` gives each code the route that `S` gives it.
+`Logic.SentVia message S to` names the calls with no value from the current account of `message` to `to`, from a frame that reads as `S`.
+Each such call runs the code that `to` holds in `S`, along its route, with any data and any gas.
+`Logic.CallSends.sentVia` proves that the message of a CALL with no value along a route is such a call.
+
 The block of a transaction state is the state before the block, with the writes of the block so far.
 A rollback restores the storage of a snapshot only when both states have the same block.
 `parentResult_step` (`Execution/Proofs/Evm/Call/Parent.lean`) proves that every successful step keeps the block of the state, at every fork.
