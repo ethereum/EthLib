@@ -1078,6 +1078,25 @@ A step that sends a message keeps it once the frame that ends the message has th
 `processMessage_sameOutside_of_error` proves that a call that ends with an error reads as the state it is sent from at every address, at every fork.
 That covers the account, the storage and the transient storage, and `getStorage_processMessage_of_error` states it for one storage word.
 
+The facts of `Logic/LessGas.lean` are for the one-counter meter, the meter of every fork before Glamsterdam.
+`Logic.addGas k` adds `k` to the gas of a frame.
+`Logic.RunMono` says that an instruction fails, or gives the same frame with `k` more gas when it runs on its frame with `k` more gas.
+`Logic.GasMono` says the same of the step from every frame with less gas than a frame.
+`Logic.HoareG` and `Logic.SpecG` are triples over the steps of `Step` from frames that are `GasMono`.
+`Logic.HoareG.toHoare` proves that such a triple is a triple over `Step`.
+`Logic.At.ruleG` is the rule of an opcode whose instruction is `RunMono`.
+`Logic.invalidG` is the rule for a byte that is no opcode at the fork.
+`Logic.low_of_reaches` proves that these steps from a frame with `k` more gas reach a stopped frame only at the end of the run of the frame, with `k` more gas.
+It holds when the loop runs the frame to a frame with no error, for every bound on the gas of messages and every runner of messages.
+`Logic.SpecG.low` proves that a specification from a frame with `k` more gas then holds of the end of the run with `k` more gas.
+`Logic.SpecG.halted` proves that the run then ends in the normal halt of a specification from a frame of `At`, with `k` less gas.
+`Logic.SpecG.not_ok` proves that the run ends with an error when every frame of the postcondition has an error.
+`Logic.Stuck` is a running frame from which the step fails, and from it with any less gas.
+`Logic.not_ok_of_reaches` proves that a run ends with an error when these steps from the frame with `k` more gas reach a stuck frame.
+`Logic.no_ok_stuck` proves the same for a frame of `At` that reaches a stuck frame with every gas from some bound on.
+`Logic.no_ok_stuck_at` proves the same for a frame of `At` that reaches a stuck frame with its own gas.
+GAS is not `RunMono`, and no theorem here covers a step that sends a message.
+
 ### SHA-256 precompile
 
 The precompile reuses the SHA-256 of the cryptography layer, so its theorems are about the gas and the failure.

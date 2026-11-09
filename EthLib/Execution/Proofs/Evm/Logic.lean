@@ -25,6 +25,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Stack
 public import EthLib.Execution.Proofs.Evm.Logic.NatCode
 public import EthLib.Execution.Proofs.Evm.Logic.Steps
 public import EthLib.Execution.Proofs.Evm.Logic.Fault
+public import EthLib.Execution.Proofs.Evm.Logic.LessGas
 
 /-!
 # `EthLib.Execution.Proofs.Evm.Logic`
@@ -42,4 +43,6 @@ Another form of triple lets the runner fail with any error.
 It names the messages on which a run may stop because the runner fails.
 
 A code can be stored as one number, and a tactic steps through its opcodes.
+
+With the one-counter meter, a run with less gas follows the run with more gas, or it fails.
 -/
