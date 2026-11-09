@@ -16,9 +16,14 @@ Keys and ephemeral randomness are explicit inputs, so every operation is a pure 
 
 The concrete suite is `Noise_XX_25519_ChaChaPoly_SHA256`.
 
+The protocol name follows [noise-libp2p][libp2p], "Noise Protocol Name".
+
+Framing follows its "Wire Format".
+
 Keys are secret, and this specification makes no constant-time claim.
 
 [noise]: https://noiseprotocol.org/noise_rev34.pdf
+[libp2p]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/noise/README.md
 -/
 
 @[expose] public section
@@ -148,7 +153,7 @@ def decryptAndHash (s : SymmetricState) (ciphertext : ByteArray) :
   let (cipher, plaintext) ← decryptWithAd s.cipher (packBytes s.hash) ciphertext
   return (mixHash { s with cipher := cipher } ciphertext, plaintext)
 
-/-- Transport ciphers, ordered initiator-to-responder then responder-to-initiator, Noise §5.2. -/
+/-- Transport ciphers, ordered initiator-to-responder then responder-to-initiator, Noise §5. -/
 def split (s : SymmetricState) : CipherState × CipherState :=
   let (first, second) := hkdf2 s.chainingKey .empty
   (initializeKey (some first), initializeKey (some second))

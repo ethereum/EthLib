@@ -13,10 +13,10 @@ Its public-key protobuf is deterministic, and its peer ID is an identity multiha
 
 Message signatures use SHA-256, low-s ECDSA and strict DER, without a transaction sighash byte.
 
-The DER and low-s rules are those linked by the profile in [BIP 62][bip62].
+The DER and low-s rules are rules 1 and 5 of [BIP 62, "New rules"][bip62], which the profile cites.
 
 [peerids]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/peer-ids/peer-ids.md#secp256k1
-[bip62]: https://github.com/bitcoin/bips/blob/master/bip-0062.mediawiki#der-encoding
+[bip62]: https://github.com/bitcoin/bips/blob/24e96e870fffaa257b465ce1f0370c14aac588e8/bip-0062.mediawiki#new-rules
 -/
 
 @[expose] public section
@@ -43,10 +43,14 @@ def decodePublicKey (key : ByteArray) : Except IdentityError Point := do
   let point ← (Point.decode (key.extract 4 37)).mapError fun _ => .publicKey
   if encodePublicKey point = key then return point else throw .publicKey
 
-/-- The identity multihash of a canonical secp256k1 public-key protobuf, peer-IDs "Peer Ids". -/
+/-- The identity multihash of a canonical secp256k1 public-key protobuf, peer-IDs "Peer Ids".
+
+The multihash length byte is 0x25 = 37, so the input must be a canonical 37-byte key protobuf. -/
 def peerId (publicKey : ByteArray) : ByteArray := ⟨#[0x00, 0x25]⟩ ++ publicKey
 
-/-- Derive and serialize the public key of a nonzero 32-byte secret. -/
+/-- Derive and serialize the public key of a secret in [1, n), with n the secp256k1 group order.
+
+The secret key must stay private, and this function makes no constant-time claim. -/
 def publicKey (secret : Vector UInt8 32) : Except IdentityError ByteArray :=
   let n := EthLib.Base.bytesToNat secret.toList
   if h : 0 < n ∧ n < Fn.modulus then
@@ -84,7 +88,9 @@ def decodeSignature (signature : ByteArray) : Except IdentityError (Nat × Nat) 
     | _ => throw .signature
   | _ => throw .signature
 
-/-- Sign SHA-256 of the message, then write its low-s signature in DER, peer-IDs "Secp256k1". -/
+/-- Sign SHA-256 of the message, then write its low-s signature in DER, peer-IDs "Secp256k1".
+
+The secret key must stay private, and this function makes no constant-time claim. -/
 def sign (secret : Vector UInt8 32) (message : ByteArray) : Except IdentityError ByteArray := do
   let n := EthLib.Base.bytesToNat secret.toList
   if h : 0 < n ∧ n < Fn.modulus then

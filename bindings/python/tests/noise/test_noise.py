@@ -1,10 +1,13 @@
 """Noise XX published vectors, authenticated libp2p handshakes and malformed messages."""
 
+import hashlib
 import json
 from pathlib import Path
 
 import pytest
+from py_ecc.secp256k1 import secp256k1 as reference
 
+from ethlib.cryptography.x25519 import x25519_public_key
 from ethlib.errors import NoiseError
 from ethlib.networking.noise import (
     noise_cipher_decrypt,
@@ -22,13 +25,31 @@ from ethlib.networking.noise import (
 )
 from raising import raises
 
-# Published vector: rweather/noise-c at cfe25410979a87391bb9ac8d4d4bef64e9f268c6.
-VECTOR = json.loads(Path(__file__).with_name("noise_xx_vector.json").read_text())["vector"]
+# The published XX vector, pinned in tests/sources.toml.
+VECTOR_FILE = Path(__file__).parent / "published_vector" / "noise_xx_vector.json"
+VECTOR = json.loads(VECTOR_FILE.read_text())["vector"]
 ERROR = "EthLib.Networking.Noise.NoiseError."
 STATIC_I, EPHEMERAL_I = bytes(range(32)), bytes(range(32, 64))
 STATIC_R, EPHEMERAL_R = bytes(range(64, 96)), bytes(range(96, 128))
 IDENTITY_I, IDENTITY_R = (1).to_bytes(32, "big"), (2).to_bytes(32, "big")
 EXT_I, EXT_R = b"\x12\x05yamux", b"\x0a\x02\x01\x02"
+# The compressed public keys of the secrets 1 and 2: the generator G of SEC 2 §2.4.1, and 2G.
+IDENTITY_KEY_I = bytes.fromhex("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
+IDENTITY_KEY_R = bytes.fromhex("02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5")
+
+
+def der_integers(signature: bytes) -> tuple[int, int]:
+    """The r and s of a DER ECDSA signature, after checking its tags and lengths."""
+    assert signature[0] == 0x30
+    assert signature[1] + 2 == len(signature)
+    assert signature[2] == 0x02
+    r_size = signature[3]
+    assert signature[4 + r_size] == 0x02
+    s_size = signature[5 + r_size]
+    assert 6 + r_size + s_size == len(signature)
+    r = int.from_bytes(signature[4 : 4 + r_size], "big")
+    s = int.from_bytes(signature[6 + r_size :], "big")
+    return r, s
 
 
 def raw_pair() -> tuple[tuple, tuple]:
@@ -99,14 +120,21 @@ def test_authenticated_exchange(exchange: tuple) -> None:
     static_r, identity_r, send_i, receive_i, h_i = noise_libp2p_complete(initiator)
     static_i, identity_i, send_r, receive_r, h_r = noise_libp2p_complete(responder)
     assert h_i == h_r
-    assert static_r == initiator[0][3]
-    assert static_i == responder[0][3]
-    for key, peer_id, signature, _ in (identity_i, identity_r):
-        assert key[:4] == b"\x08\x02\x12\x21"
-        assert len(key) == 37
+    assert static_r == x25519_public_key(STATIC_R)
+    assert static_i == x25519_public_key(STATIC_I)
+    for secret, static, compressed, (key, peer_id, signature, _) in (
+        (IDENTITY_I, static_i, IDENTITY_KEY_I, identity_i),
+        (IDENTITY_R, static_r, IDENTITY_KEY_R, identity_r),
+    ):
+        x, y = reference.multiply(reference.G, int.from_bytes(secret, "big"))
+        assert compressed == bytes([2 + y % 2]) + x.to_bytes(32, "big")
+        assert key == b"\x08\x02\x12\x21" + compressed
         assert peer_id == b"\x00\x25" + key
-        assert signature[0] == 0x30
-        assert signature[1] + 2 == len(signature)
+        r, s = der_integers(signature)
+        assert s <= reference.N // 2
+        digest = hashlib.sha256(b"noise-libp2p-static-key:" + static).digest()
+        signers = [reference.ecdsa_raw_recover(digest, (v, r, s)) for v in (27, 28)]
+        assert (x, y) in signers
     assert identity_i[3] == EXT_I
     assert identity_r[3] == EXT_R
     assert send_i == receive_r
@@ -147,7 +175,11 @@ def test_identity_tampering(exchange: tuple, field: str) -> None:
     if field == "public_key":
         payload[7] ^= 1
     else:
-        payload[43] ^= 1
+        # Flip bit 0 of the second byte of r: the DER stays strict and verification fails.
+        signature_field = 2 + payload[1]
+        start, size = signature_field + 2, payload[signature_field + 1]
+        payload[start + 5] ^= 1
+        der_integers(bytes(payload[start : start + size]))
     with raises(NoiseError, ERROR + "identity"):
         send_modified_payload(bytes(payload))
 
@@ -229,11 +261,12 @@ def test_incomplete_and_wrong_order(exchange: tuple) -> None:
 def test_completion_rechecks_saved_message(exchange: tuple, component: str) -> None:
     handshake, saved = exchange[0]
     if component == "static":
-        handshake = (*handshake[:3], bytes(32), *handshake[4:])
+        h = handshake
+        handshake = (h[0], h[1], h[2], bytes(32), h[4], h[5], h[6], h[7], h[8], h[9])
         error = "identity"
     else:
-        before, ciphertext = saved
-        saved = ((*before[:5], 0, *before[6:]), ciphertext)
+        b, ciphertext = saved
+        saved = ((b[0], b[1], b[2], b[3], b[4], 0, b[6], b[7], b[8], b[9]), ciphertext)
         error = "wrongPhase"
     with raises(NoiseError, ERROR + error):
         noise_libp2p_complete((handshake, saved))
