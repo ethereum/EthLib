@@ -217,6 +217,23 @@ Muir Glacier, Arrow Glacier and Gray Glacier only delay the difficulty bomb.
 Bellatrix and Paris, the two halves of the Merge, are two forks, because Bellatrix activated on 6 September 2022 and Paris on 15 September.
 A rule that none of these forks changed never mentions them.
 
+A drafted change is not yet a point on the timeline.
+The consensus specifications keep such drafts as features, each built on a named fork with a placeholder fork version.
+For example, the draft of EIP-8321 starts from a Heze state, but "Heze with EIP-8321" is neither Heze nor the fork after it.
+So one rule, for both layers, says when a change becomes work in EthLib: when a fork of the specifications includes it, and not before.
+On the consensus layer, that is when its document leaves the feature drafts (`specs/_features` in consensus-specs) for a fork directory such as `specs/heze`.
+On the execution layer, it is one of two events.
+Either the fork branch of execution-specs merges, so the fork's tests directory, such as `tests/bogota`, appears on the default branch.
+Or a `tests@` release of execution-specs holds that directory.
+`scripts/check_spec_releases.py` reports both execution events.
+Until then, a draft gets no constructor of `Fork`, no fork branch in a rule, and no place in the parity catalogue.
+
+A component that no fork uses yet, such as a new state tree, can still be specified on its own, outside `Fork`.
+Its EIP must first be stable enough to cite.
+For example, the binary tree of EIP-7864 could be specified with its root and its proofs, but no block rule would use it.
+It joins the timeline by the same rule, when a fork includes it.
+The Scope section lists what EthLib covers in the end, not the order of the work.
+
 ### A rule takes the fork
 
 A rule that no fork changes, such as SHA-256 or the RLP encoding, takes no fork.
