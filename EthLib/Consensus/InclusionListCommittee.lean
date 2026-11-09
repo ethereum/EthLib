@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Containers.InclusionList
 public import EthLib.Consensus.Mutators
+public import EthLib.Consensus.PayloadTimeliness
 
 /-!
 # `Consensus.InclusionListCommittee`
@@ -33,21 +34,16 @@ open Base Uint64 Cryptography.Bls Serialization.Ssz
 
 variable {preset : Preset} {fork : Fork}
 
-/-- The members of the beacon committees of a slot, committee after committee. -/
-def getSlotCommitteeMembers (state : BeaconState preset fork) (slot : Slot) :
-    Except AccessorError (Array ValidatorIndex) := do
-  let perSlot := getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)
-  let committees ← (List.range perSlot.toNat).mapM fun i => getBeaconCommittee state slot i.toUInt64
-  return committees.toArray.flatten
-
 /-- The inclusion list committee of a slot.
 
 Seat `i` holds member `i` of the beacon committees of the slot, counted modulo their number.
 
+Those committees share one shuffle of the active validators, computed once for the slot.
+
 A slot whose committees hold no validator has no committee, and that is an error. -/
 def getInclusionListCommittee (state : BeaconState preset fork) (slot : Slot) :
     Except AccessorError (InclusionListCommittee preset) := do
-  let members ← getSlotCommitteeMembers state slot
+  let members ← slotCommitteeMembers state slot
   if nonempty : 0 < members.size then
     return Vector.ofFn fun i => members[i.val % members.size]'(Nat.mod_lt _ nonempty)
   else throw .noCandidates

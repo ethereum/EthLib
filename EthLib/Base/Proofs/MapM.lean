@@ -27,6 +27,7 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - A successful fold reads only inputs that its steps accept.
 - A fold of steps that each succeed with a pure step is the pure fold.
 - A fold whose steps all succeed returns no error.
+- A fold that appends each output returns its start, then the outputs of the map, flattened.
 
 A mapped error leaves a success unchanged.
 -/
@@ -392,6 +393,21 @@ theorem foldlM_ne_error {σ : Type} {g : σ → α → Except ε σ} {e : ε} :
     obtain ⟨r, first⟩ := h init x List.mem_cons_self
     simp only [List.foldlM_cons, bind, Except.bind, first]
     exact foldlM_ne_error xs r fun acc y member => h acc y (List.mem_cons_of_mem x member)
+
+/-- A fold that appends each output returns its start, then the outputs of the map, flattened.
+
+When the map fails, the fold fails with the same error. -/
+theorem foldlM_append_eq_flatten_mapM {γ : Type} {g : α → Except ε (Array γ)} (xs : List α)
+    (init : Array γ) :
+    xs.foldlM (fun acc x => return acc ++ (← g x)) init =
+      (return init ++ (← xs.mapM g).toArray.flatten) := by
+  induction xs generalizing init with
+  | nil => simp [bind, Except.bind, pure, Except.pure]
+  | cons x xs ih =>
+    rw [List.foldlM_cons, List.mapM_cons]
+    simp only [ih]
+    cases g x <;> cases xs.mapM g <;>
+      simp [bind, Except.bind, pure, Except.pure, ← Array.toList_inj]
 
 /-- Each element of a list gives a result when the monadic flat map over the list succeeds. -/
 theorem flatMapM_ok_of_mem {α β ε : Type} {f : α → Except ε (List β)} :
