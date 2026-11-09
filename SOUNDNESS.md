@@ -1320,7 +1320,7 @@ Otherwise `findStorageCollision` returns a collision.
 `stateRoot_binding` applies `root_binding_secured` to the state trie and then `storageRoot_binding` at each address with an account.
 Two states with one state root give every address the same account, and at every address with an account every key the same word, or `findStateCollision` returns a collision.
 Storage at an address without an account is outside `stateEntries`, and code is committed only through `codeHash`.
-So the state root binds no storage at an address without an account, no zero word, and nothing in the code map beyond each account's `codeHash`.
+So the state root binds no storage at an address without an account, does not separate a key set to `0` from an unset key, and binds nothing in the code map beyond each account's `codeHash`.
 The storage and state searches are proved to return only collisions, and none for an input compared with itself.
 No theorem bounds the probability of finding two storages or two states with one root that differ.
 The indexed roots in `Execution/Blocks/Roots.lean` also build tries directly, with the RLP encoding of each index as its key.
