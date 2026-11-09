@@ -12,7 +12,6 @@ public import EthLib.Networking.Proofs.Devp2p.ForkId
 public import EthLib.Networking.Proofs.Devp2p.P2p
 public import EthLib.Networking.Proofs.Discv4.Packet
 public import EthLib.Networking.Proofs.Encoding.Varint
-public import EthLib.Networking.Proofs.Enr.Base64
 public import EthLib.Networking.Proofs.Enr.Consensus
 public import EthLib.Networking.Proofs.Enr.Eth
 public import EthLib.Networking.Proofs.Enr.Record
