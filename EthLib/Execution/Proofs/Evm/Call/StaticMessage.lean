@@ -9,13 +9,15 @@ public import EthLib.Execution.Proofs.Evm.Call.StaticStep
 
 A message that is static and is a call changes no storage and no transient storage.
 
-Before Paris, a call touches its target and gives an absent address the empty account.
+Before Paris, a call touches its target, which gives an absent target the empty account.
 
 From Byzantium, [EIP-214][e214] adds STATICCALL, and a static call changes the state by touches.
 
 Each touched address goes from no account to the empty account.
 
-[EIP-161][e161] deletes the touched empty accounts, leaving only deleted empty accounts.
+[EIP-161][e161] deletes the touched empty accounts.
+
+The only change left is the deletion of accounts that were empty before.
 
 From Paris, [EIP-7523][e7523] allows no empty account, so a call drops the touch.
 
@@ -31,7 +33,7 @@ A message that fails rolls back to its start, so the statements hold for it too.
 
 [e161]: https://eips.ethereum.org/EIPS/eip-161#specification
 [e214]: https://eips.ethereum.org/EIPS/eip-214#specification
-[e7523]: https://eips.ethereum.org/EIPS/eip-7523
+[e7523]: https://eips.ethereum.org/EIPS/eip-7523#specification
 -/
 
 @[expose] public section
@@ -55,7 +57,7 @@ theorem staticStep_runPrecompile {address : Nat} {evm after : Evm fork Meter}
     · cases h
       exact staticStep_exceptionalHalt _ _
     · cases h
-      exact ⟨StateKept.refl _, rfl, rfl, rfl⟩
+      exact ⟨StateKept.refl _, rfl, rfl, rfl, rfl⟩
 
 omit [GasMeter Meter] in
 /-- The frame that starts a static message is a static frame. -/
@@ -194,112 +196,7 @@ theorem StaticMessage.of_touchesOnly {touched : List Address} {before after : Tr
   · obtain ⟨c, hc⟩ := m4 t v
     exact ⟨c, by rw [h.getAccount_eq]; exact hc⟩
 
-/-- A message in a static frame leaves the state as it was, up to the records of its reads.
-
-It also keeps the block of the state.
-
-It is the induction on the gas of the message that the theorem below states for one message. -/
-theorem processMessage_static [LawfulGasMeter Meter] (hfork : .paris ≤ fork) :
-    ∀ (n : Nat) (message : Message fork) (state : State.TransactionState) (substate : Substate)
-      (meter : Meter) (held : GasMeter.gasHeld meter ≤ message.gas),
-      message.gas = n → StaticMessage state message →
-      ∀ ended, processMessage fork message state substate meter held = .ok ended →
-        State.TransactionState.SameOutside [] state ended.val.state ∧
-          ended.val.state.parent = state.parent := by
-  intro n
-  induction n using Nat.strongRecOn with
-  | _ n ih =>
-    intro message state substate meter held hn hmsg ended h
-    rw [processMessage] at h
-    obtain ⟨ended0, hdo, rolled⟩ := Base.map_ok_iff.mp h
-    simp only [startState, show ¬fork < Fork.paris from Nat.not_lt.mpr hfork, ite_false] at hdo
-    split at hdo
-    all_goals obtain ⟨state1, hm, hdo⟩ := Base.bind_ok_iff.mp hdo
-    all_goals
-      have hS1 : State.TransactionState.SameOutside [] state state1 ∧
-          state1.parent = state.parent ∧ StaticMessage state1 message := by
-        first
-        | (have ht := ‹message.shouldTransferValue = true ∧ message.value ≠ 0›
-           have hm' := Base.mapError_ok_iff.mp hm
-           obtain ⟨hcaller, hcode⟩ := hmsg.2.2.2 ht.1 ht.2
-           rw [hcaller] at hm'
-           have so := State.TransactionState.sameOutside_moveEther_self hcode hm'
-           exact ⟨so, State.TransactionState.parent_moveEther hm',
-             StaticMessage.of_sameOutside so hmsg⟩)
-        | (cases hm
-           exact ⟨State.TransactionState.SameOutside.refl _ _, rfl, hmsg⟩)
-    all_goals
-      obtain ⟨hso, hpar, hmsg1⟩ := hS1
-      have core : State.TransactionState.SameOutside [] state ended0.val.state ∧
-          ended0.val.state.parent = state.parent := by
-        have conclude : State.TransactionState.SameOutside [] state1 ended0.val.state →
-            ended0.val.state.parent = state1.parent →
-            State.TransactionState.SameOutside [] state ended0.val.state ∧
-              ended0.val.state.parent = state.parent :=
-          fun so par => ⟨hso.trans so, par.trans hpar⟩
-        rcases hpa : precompileAddress fork message with _ | addr
-        · simp only [hpa] at hdo
-          split at hdo
-          · cases hdo
-          · rename_i after hrun
-            cases hdo
-            have hst := staticStep_runFrame (hf := StaticFrame.start hmsg1 _ _) (h := hrun)
-              (fun {evm' after'} hf' hstep =>
-                staticResult_step hf'.1 hf'.2.1 hf'.2.2 hstep)
-              (fun {evm' caller' message' resume'} hf' hstep =>
-                staticResult_step hf'.1 hf'.2.1 hf'.2.2 hstep)
-              (by
-                intro caller' message' lt c used hf' hm hrun'
-                split at hrun'
-                · exact ih message'.gas (by omega) message' caller'.state _ _ _ rfl hm ⟨c, used⟩
-                    hrun'
-                · have := hm.2.1
-                  simp_all)
-            exact conclude hst.state hst.parent
-        · simp only [hpa] at hdo
-          split at hdo
-          · cases hdo
-            exact conclude (State.TransactionState.SameOutside.refl _ _) rfl
-          · split at hdo
-            · rename_i after hrp
-              cases hdo
-              exact conclude (staticStep_runPrecompile hrp).state
-                (staticStep_runPrecompile hrp).parent
-            · cases hdo
-              exact conclude (State.TransactionState.SameOutside.refl _ _) rfl
-      have hval := congrArg Subtype.val rolled
-      simp only at hval
-      rw [← hval]
-      unfold rollbackOnError
-      split
-      · exact ⟨State.TransactionState.sameOutside_restoreTxState core.2, core.2⟩
-      · exact core
-
-/-- A static message that is a call changes no address of the state, up to the records of reads.
-
-From Paris, the account, storage and transient storage of every address read as before.
-
-That holds whatever its code does, however deep its calls.
-
-The message must be static and be a call, not a creation.
-
-Its code, when it has any, runs at an account that holds code.
-
-A value that it sends goes to its own sender, whose account holds code.
-
-A message with no value, as STATICCALL sends, satisfies the last condition without a premise.
-
-Before Paris a call touches the account that it calls, so the statement does not cover it. -/
-theorem processMessage_sameOutside_static [LawfulGasMeter Meter] (hfork : .paris ≤ fork)
-    {message : Message fork} {state : State.TransactionState} {substate : Substate}
-    {meter : Meter} {held : GasMeter.gasHeld meter ≤ message.gas}
-    (hmsg : StaticMessage state message) {ended}
-    (h : processMessage fork message state substate meter held = .ok ended) :
-    State.TransactionState.SameOutside [] state ended.val.state :=
-  (processMessage_static hfork message.gas message state substate meter held rfl hmsg ended h).1
-
-
-/-! ## Touches from Byzantium -/
+/-! ## Touches of absent accounts -/
 
 /-- The second set holds every address of the first. -/
 def TouchedSubset (a b : Std.ExtTreeSet Address) : Prop :=
@@ -320,7 +217,9 @@ theorem TouchedSubset.trans {a b c : Std.ExtTreeSet Address}
 
 The step keeps the message, the code and the block.
 
-It keeps every touched account of the first frame, and records each new touch. -/
+It keeps every touched account of the first frame.
+
+From Spurious Dragon, it records each new touch. -/
 structure StaticTouchStep (touched : List Address) (before after : Evm fork Meter) : Prop where
   /-- The state changes by the touches. -/
   state : TouchesOnly touched before.state after.state
@@ -332,7 +231,7 @@ structure StaticTouchStep (touched : List Address) (before after : Evm fork Mete
   parent : after.state.parent = before.state.parent
   /-- The step keeps the touched accounts of the first frame. -/
   substate : TouchedSubset before.substate.touchedAccounts after.substate.touchedAccounts
-  /-- Each touch is recorded, from Spurious Dragon before Paris. -/
+  /-- Each touch happens before Paris, and from Spurious Dragon it is recorded. -/
   recorded : ∀ address ∈ touched,
     fork < .paris ∧ (.spuriousDragon ≤ fork → address ∈ after.substate.touchedAccounts)
 
@@ -362,11 +261,18 @@ theorem StaticTouchStep.of_sameContext {a b : Evm fork Meter} (h : SameContext a
     fun addr ha => by rw [h.substate]; exact ha, by simp⟩
 
 omit [GasMeter Meter] in
-/-- A static step that keeps the touched accounts is a static touch step, with no touch. -/
-theorem StaticTouchStep.of_staticKeep {a b : Evm fork Meter} (h : StaticStep a b)
-    (ht : b.substate.touchedAccounts = a.substate.touchedAccounts) : StaticTouchStep [] a b :=
+/-- A static step is a static touch step, with no touch. -/
+theorem StaticTouchStep.of_staticStep {a b : Evm fork Meter} (h : StaticStep a b) :
+    StaticTouchStep [] a b :=
   ⟨TouchesOnly.of_sameOutside h.state, h.message, h.code, h.parent,
-    fun addr ha => by rw [ht]; exact ha, by simp⟩
+    fun addr ha => by rw [h.touched]; exact ha, by simp⟩
+
+omit [GasMeter Meter] in
+/-- A static step before a static touch step keeps its touches. -/
+theorem StaticStep.trans_touchStep {touched : List Address} {a b c : Evm fork Meter}
+    (hab : StaticStep a b) (hbc : StaticTouchStep touched b c) : StaticTouchStep touched a c := by
+  have h := (StaticTouchStep.of_staticStep hab).trans hbc
+  rwa [List.nil_append, List.filter_eq_self.mpr (by simp)] at h
 
 omit [GasMeter Meter] in
 /-- The touched accounts of a frame stay touched when a failed child ends. -/
@@ -475,428 +381,6 @@ theorem staticTouchStep_resumeCall {caller child after : Evm fork Meter} {touche
     · right
       exact ⟨(accountExistsAndIsEmpty_iff_eq_some child.state _).mpr (kept.2.2.2 _ ha).2, rfl⟩
 
-/-- A static step that also keeps the touched accounts of the substate. -/
-structure StaticKeepStep (before after : Evm fork Meter) : Prop
-    extends StaticStep before after where
-  /-- The step keeps the touched accounts. -/
-  touched : after.substate.touchedAccounts = before.substate.touchedAccounts
-
-omit [GasMeter Meter] in
-/-- A frame keeps its own state and touched accounts. -/
-theorem StaticKeepStep.refl (evm : Evm fork Meter) : StaticKeepStep evm evm :=
-  ⟨StaticStep.refl _, rfl⟩
-
-omit [GasMeter Meter] in
-/-- Two steps that keep the state and touched accounts keep them together. -/
-theorem StaticKeepStep.trans {a b c : Evm fork Meter}
-    (hab : StaticKeepStep a b) (hbc : StaticKeepStep b c) : StaticKeepStep a c :=
-  ⟨hab.toStaticStep.trans hbc.toStaticStep, hbc.touched.trans hab.touched⟩
-
-omit [GasMeter Meter] in
-/-- A step that keeps the context keeps the state and touched accounts. -/
-theorem StaticKeepStep.of_sameContext {a b : Evm fork Meter} (h : SameContext a b) :
-    StaticKeepStep a b :=
-  ⟨StaticStep.of_sameContext h, by rw [h.substate]⟩
-
-omit [GasMeter Meter] in
-/-- Setting the memory keeps the state and touched accounts. -/
-theorem StaticKeepStep.withMemory (evm : Evm fork Meter) (memory : ByteArray) :
-    StaticKeepStep evm { evm with memory } := ⟨StaticStep.withMemory _ _, rfl⟩
-
-omit [GasMeter Meter] in
-/-- Advancing the program counter keeps the state and touched accounts. -/
-theorem StaticKeepStep.advance {a b : Evm fork Meter} (h : StaticKeepStep a b) (n : Nat := 1) :
-    StaticKeepStep a (advance b n) := ⟨h.toStaticStep.advance n, h.touched⟩
-
-omit [GasMeter Meter] in
-/-- A step that keeps the state and touched accounts is a static touch step, with no touch. -/
-theorem StaticKeepStep.toTouchStep {a b : Evm fork Meter} (h : StaticKeepStep a b) :
-    StaticTouchStep [] a b :=
-  StaticTouchStep.of_staticKeep h.toStaticStep h.touched
-
-omit [GasMeter Meter] in
-/-- A step that keeps the state and touched accounts before a touch step keeps its touches. -/
-theorem StaticKeepStep.transTouch {touched : List Address} {a b c : Evm fork Meter}
-    (hab : StaticKeepStep a b) (hbc : StaticTouchStep touched b c) :
-    StaticTouchStep touched a c := by
-  have ht := hab.toTouchStep.trans hbc
-  have hf : ∀ l : List Address, (l.filter fun addr => decide (addr ∉ ([] : List Address))) = l := by
-    intro l
-    induction l with
-    | nil => rfl
-    | cons head tail ih =>
-      simp only [List.filter_cons, ih]
-      rfl
-  rwa [List.nil_append, hf] at ht
-
-omit [GasMeter Meter] in
-/-- Recording a read of an account keeps the state and touched accounts. -/
-theorem staticKeepStep_recordAccountRead (evm : Evm fork Meter) (address : Address) :
-    StaticKeepStep evm (recordAccountRead evm address) :=
-  ⟨staticStep_recordAccountRead evm address, rfl⟩
-
-omit [GasMeter Meter] in
-/-- Recording a read of a storage slot keeps the state and touched accounts. -/
-theorem staticKeepStep_recordStorageRead (evm : Evm fork Meter) (address : Address)
-    (key : Bytes32) : StaticKeepStep evm (recordStorageRead evm address key) :=
-  ⟨staticStep_recordStorageRead evm address key, rfl⟩
-
-omit [GasMeter Meter] in
-/-- An access to an address keeps the state and touched accounts. -/
-theorem staticKeepStep_accessAddress (evm : Evm fork Meter) (address : Address) :
-    StaticKeepStep evm (accessAddress evm address).2 := by
-  obtain ⟨_, h⟩ := accessAddress_snd evm address
-  exact ⟨staticStep_accessAddress evm address, by rw [h]⟩
-
-omit [GasMeter Meter] in
-/-- An access to a storage key keeps the state and touched accounts. -/
-theorem staticKeepStep_accessStorageKey (evm : Evm fork Meter) (address : Address)
-    (key : Bytes32) : StaticKeepStep evm (accessStorageKey evm address key).2 := by
-  obtain ⟨_, h⟩ := accessStorageKey_snd evm address key
-  exact ⟨staticStep_accessStorageKey evm address key, by rw [h]⟩
-
-/-- An exceptional halt keeps the state and touched accounts. -/
-theorem staticKeepStep_exceptionalHalt (evm : Evm fork Meter) (e : EvmError) :
-    StaticKeepStep evm (exceptionalHalt evm e) := ⟨staticStep_exceptionalHalt evm e, rfl⟩
-
-/-- A precompile keeps the state and touched accounts. -/
-theorem staticKeepStep_runPrecompile {address : Nat} {evm after : Evm fork Meter}
-    (h : runPrecompile fork address evm = some after) : StaticKeepStep evm after := by
-  unfold runPrecompile at h
-  split at h
-  · cases h
-  · cases h
-    exact staticKeepStep_exceptionalHalt _ _
-  · split at h
-    · cases h
-      exact staticKeepStep_exceptionalHalt _ _
-    · cases h
-      exact ⟨⟨StateKept.refl _, rfl, rfl, rfl⟩, rfl⟩
-
-/-- BALANCE keeps the state and touched accounts. -/
-theorem staticKeepStep_balanceStep {evm after : Evm fork Meter}
-    (h : balanceStep evm = .ok after) : StaticKeepStep evm after := by
-  obtain ⟨⟨w, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  rcases hacc : accessAddress e1 (toAddressMasked w) with ⟨cold, e2⟩
-  simp only [hacc] at h
-  obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
-  cases h
-  have ha : StaticKeepStep e1 e2 := by
-    have := staticKeepStep_accessAddress e1 (toAddressMasked w)
-    rwa [hacc] at this
-  exact ((((StaticKeepStep.of_sameContext (popWord_sameContext h1)).trans ha).trans
-    (StaticKeepStep.of_sameContext (chargeGas_sameContext h3))).trans
-    (staticKeepStep_recordAccountRead _ _)).trans
-    (StaticKeepStep.of_sameContext (pushWord_sameContext h4)) |>.advance
-
-/-- EXTCODESIZE keeps the state and touched accounts. -/
-theorem staticKeepStep_extcodesizeStep {evm after : Evm fork Meter}
-    (h : extcodesizeStep evm = .ok after) : StaticKeepStep evm after := by
-  obtain ⟨⟨w, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  rcases hacc : accessAddress e1 (toAddressMasked w) with ⟨cold, e2⟩
-  simp only [hacc] at h
-  obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨code, h4, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
-  cases h
-  have ha : StaticKeepStep e1 e2 := by
-    have := staticKeepStep_accessAddress e1 (toAddressMasked w)
-    rwa [hacc] at this
-  exact ((((StaticKeepStep.of_sameContext (popWord_sameContext h1)).trans ha).trans
-    (StaticKeepStep.of_sameContext (chargeGas_sameContext h3))).trans
-    (staticKeepStep_recordAccountRead _ _)).trans
-    (StaticKeepStep.of_sameContext (pushWord_sameContext h5)) |>.advance
-
-/-- EXTCODEHASH keeps the state and touched accounts. -/
-theorem staticKeepStep_extcodehashStep {evm after : Evm fork Meter}
-    (h : extcodehashStep evm = .ok after) : StaticKeepStep evm after := by
-  obtain ⟨⟨w, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  rcases hacc : accessAddress e1 (toAddressMasked w) with ⟨cold, e2⟩
-  simp only [hacc] at h
-  obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
-  cases h
-  have ha : StaticKeepStep e1 e2 := by
-    have := staticKeepStep_accessAddress e1 (toAddressMasked w)
-    rwa [hacc] at this
-  exact ((((StaticKeepStep.of_sameContext (popWord_sameContext h1)).trans ha).trans
-    (StaticKeepStep.of_sameContext (chargeGas_sameContext h3))).trans
-    (staticKeepStep_recordAccountRead _ _)).trans
-    (StaticKeepStep.of_sameContext (pushWord_sameContext h4)) |>.advance
-
-/-- EXTCODECOPY keeps the state and touched accounts. -/
-theorem staticKeepStep_extcodecopyStep {evm after : Evm fork Meter}
-    (h : extcodecopyStep evm = .ok after) : StaticKeepStep evm after := by
-  obtain ⟨⟨w, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨st, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨off, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨sz, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
-  rcases hacc : accessAddress e4 (toAddressMasked w) with ⟨cold, e5⟩
-  simp only [hacc] at h
-  obtain ⟨e6, h6, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨code, h7, h⟩ := Base.bind_ok_iff.mp h
-  cases h
-  have ha : StaticKeepStep e4 e5 := by
-    have := staticKeepStep_accessAddress e4 (toAddressMasked w)
-    rwa [hacc] at this
-  exact (((((((StaticKeepStep.of_sameContext (popWord_sameContext h1)).trans
-    (StaticKeepStep.of_sameContext (popWord_sameContext h2))).trans
-    (StaticKeepStep.of_sameContext (popWord_sameContext h3))).trans
-    (StaticKeepStep.of_sameContext (popWord_sameContext h4))).trans ha).trans
-    (StaticKeepStep.of_sameContext (chargeGasAndMemory_sameContext h6))).trans
-    (staticKeepStep_recordAccountRead _ _)).trans (StaticKeepStep.withMemory _ _) |>.advance
-
-/-- Each instruction of account data keeps the state and touched accounts. -/
-theorem staticKeepStep_accountStep {op : Op}
-    {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
-    (hstep : accountStep fork op = some step) {evm after : Evm fork Meter}
-    (h : step evm = .ok after) : StaticKeepStep evm after := by
-  cases op <;> simp only [accountStep, Option.some.injEq, reduceCtorEq] at hstep
-  case balance => subst hstep; exact staticKeepStep_balanceStep h
-  case extcodesize => subst hstep; exact staticKeepStep_extcodesizeStep h
-  case extcodecopy => subst hstep; exact staticKeepStep_extcodecopyStep h
-  case selfbalance =>
-    split at hstep
-    · cases hstep
-      exact (staticKeepStep_recordAccountRead _ _).trans
-        (StaticKeepStep.of_sameContext (readFrame_sameContext h))
-    · cases hstep
-  case extcodehash =>
-    split at hstep
-    · cases hstep; exact staticKeepStep_extcodehashStep h
-    · cases hstep
-
-/-- SLOAD keeps the state and touched accounts. -/
-theorem staticKeepStep_sloadStep {evm after : Evm fork Meter} (h : sloadStep evm = .ok after) :
-    StaticKeepStep evm after := by
-  obtain ⟨⟨w, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  dsimp only at h
-  rcases hacc : accessStorageKey e1 e1.message.currentTarget (U256.toBeBytes w) with ⟨cold, e2⟩
-  simp only [hacc] at h
-  obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
-  cases h
-  have ha : StaticKeepStep e1 e2 := by
-    have := staticKeepStep_accessStorageKey e1 e1.message.currentTarget (U256.toBeBytes w)
-    rwa [hacc] at this
-  exact ((((StaticKeepStep.of_sameContext (popWord_sameContext h1)).trans ha).trans
-    (StaticKeepStep.of_sameContext (chargeGas_sameContext h3))).trans
-    (staticKeepStep_recordStorageRead _ _ _)).trans
-    (StaticKeepStep.of_sameContext (pushWord_sameContext h4)) |>.advance
-
-/-- SSTORE in a static frame keeps the state and touched accounts. -/
-theorem staticKeepStep_sstoreStep_of_isStatic {evm after : Evm fork Meter}
-    (static : evm.message.isStatic = true) (h : sstoreStep evm = .ok after) :
-    StaticKeepStep evm after := by
-  unfold sstoreStep at h
-  split at h
-  · simp [bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
-  obtain ⟨⟨k, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨n, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
-  have c2 := (StaticKeepStep.of_sameContext (popWord_sameContext h1)).trans
-    (StaticKeepStep.of_sameContext (popWord_sameContext h2))
-  have m2 : e2.message = evm.message := c2.message
-  simp only [] at h
-  split at h
-  · simp [throw, throwThe, MonadExceptOf.throw] at h
-  · rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
-    · obtain ⟨keys, hacc⟩ := accessStorageKey_snd e2 e2.message.currentTarget (U256.toBeBytes k)
-      rcases hpair : accessStorageKey e2 e2.message.currentTarget (U256.toBeBytes k) with
-        ⟨cold, e3⟩
-      rw [hpair] at hacc
-      simp only [hpair] at h
-      obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
-      obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
-      have m5 : e5.message = evm.message := by
-        obtain ⟨_, -, h5⟩ := Base.bind_ok_iff.mp h5
-        cases h5
-        rw [(chargeGas_sameContext h4).message]
-        cases hacc
-        exact m2
-      simp [m5, static, throw, throwThe, MonadExceptOf.throw] at h
-    · rcases hpair : accessStorageKey e2 e2.message.currentTarget (U256.toBeBytes k) with
-        ⟨cold, e3⟩
-      have ha : StaticKeepStep e2 e3 := by
-        have := staticKeepStep_accessStorageKey e2 e2.message.currentTarget (U256.toBeBytes k)
-        rwa [hpair] at this
-      exact ((c2.trans ha).trans (staticKeepStep_recordStorageRead _ _ _)).trans
-        (staticKeepStep_exceptionalHalt _ _)
-
-/-- Each instruction of storage in a static frame keeps the state and touched accounts. -/
-theorem staticKeepStep_storageStep_of_isStatic {op : Op}
-    {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
-    (hstep : storageStep op = some step) {evm after : Evm fork Meter}
-    (static : evm.message.isStatic = true) (h : step evm = .ok after) :
-    StaticKeepStep evm after := by
-  cases op <;> simp only [storageStep, Option.some.injEq, reduceCtorEq] at hstep
-  case sload => subst hstep; exact staticKeepStep_sloadStep h
-  case sstore => subst hstep; exact staticKeepStep_sstoreStep_of_isStatic static h
-
-/-- SELFDESTRUCT in a static frame keeps the state and touched accounts. -/
-theorem staticKeepStep_selfdestructStep_of_isStatic {evm after : Evm fork Meter}
-    (static : evm.message.isStatic = true) (h : selfdestructStep fork evm = .ok after) :
-    StaticKeepStep evm after := by
-  unfold selfdestructStep at h
-  by_cases hs : fork ≥ .glamsterdam ∧ evm.message.isStatic = true
-  · simp only [hs, and_self, ↓reduceIte] at h
-    cases h
-  simp only [hs, ↓reduceIte] at h
-  obtain ⟨⟨w, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  dsimp only at h
-  rcases hacc : accessAddress e1 (toAddressMasked w) with ⟨cold, e2⟩
-  simp only [hacc] at h
-  have ha : StaticKeepStep e1 e2 := by
-    have := staticKeepStep_accessAddress e1 (toAddressMasked w)
-    rwa [hacc] at this
-  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
-  have c := ((StaticKeepStep.of_sameContext (popWord_sameContext h1)).trans ha).trans
-    (staticKeepStep_recordAccountRead e2 (toAddressMasked w))
-  rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
-  · obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
-    have m4 : e4.message = evm.message := by
-      rw [(chargeStateGas_sameContext h4).message, (chargeGas_sameContext h3).message]
-      exact c.message
-    unfold finishSelfdestruct at h
-    simp [m4, static] at h
-  · exact c.trans (staticKeepStep_exceptionalHalt _ _)
-
-/-- Each instruction of transient storage in a static frame keeps the state and touched accounts. -/
-theorem staticKeepStep_transientStorageStep_of_isStatic {op : Op}
-    {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
-    (hstep : transientStorageStep fork op = some step) {evm after : Evm fork Meter}
-    (static : evm.message.isStatic = true) (h : step evm = .ok after) :
-    StaticKeepStep evm after := by
-  cases op <;> simp only [transientStorageStep, reduceCtorEq] at hstep <;> split at hstep <;>
-    simp only [Option.some.injEq, reduceCtorEq] at hstep <;> subst hstep
-  case tload => exact StaticKeepStep.of_sameContext (tloadStep_sameContext h)
-  case tstore => exact absurd h (tstoreStep_ne_ok_of_isStatic static)
-
-/-- RETURN and REVERT keep the state and touched accounts. -/
-theorem staticKeepStep_returnOpStep {op : Op}
-    {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
-    (hstep : returnOpStep fork op = some step) {evm after : Evm fork Meter}
-    (h : step evm = .ok after) : StaticKeepStep evm after := by
-  cases op <;> simp only [returnOpStep, Option.some.injEq, reduceCtorEq] at hstep
-  case «return» => subst hstep; exact StaticKeepStep.of_sameContext (returnStep_sameContext h)
-  case revert =>
-    split at hstep
-    · cases hstep; exact StaticKeepStep.of_sameContext (revertStep_sameContext h)
-    · cases hstep
-
-/-- The instruction of SELFDESTRUCT in a static frame keeps the state and touched accounts. -/
-theorem staticKeepStep_selfdestructOpStep_of_isStatic {op : Op}
-    {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
-    (hstep : selfdestructOpStep fork op = some step) {evm after : Evm fork Meter}
-    (static : evm.message.isStatic = true) (h : step evm = .ok after) :
-    StaticKeepStep evm after := by
-  cases op <;> simp only [selfdestructOpStep, Option.some.injEq, reduceCtorEq] at hstep
-  subst hstep
-  exact staticKeepStep_selfdestructStep_of_isStatic static h
-
-/-- The instructions of LOG in a static frame keep the state and touched accounts. -/
-theorem staticKeepStep_logOpStep_of_isStatic {op : Op}
-    {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
-    (hstep : logOpStep op = some step) {evm after : Evm fork Meter}
-    (static : evm.message.isStatic = true) (h : step evm = .ok after) :
-    StaticKeepStep evm after := by
-  cases op <;> simp only [logOpStep, Option.some.injEq, reduceCtorEq] at hstep
-  subst hstep
-  exact absurd h (logStep_ne_ok_of_isStatic static)
-
-/-- Each instruction that gives the next frame keeps the state and touched accounts. -/
-theorem staticKeepStep_instruction_of_isStatic {op : Op}
-    {run : Evm fork Meter → Except EvmError (Evm fork Meter)} {evm after : Evm fork Meter}
-    (hrun : instruction fork op = some run) (static : evm.message.isStatic = true)
-    (h : run evm = .ok after) : StaticKeepStep evm after := by
-  unfold instruction at hrun
-  rcases orElse_eq_some hrun with hf | hrun
-  · exact StaticKeepStep.of_sameContext (stackOnlyStep_sameContext hf h)
-  rcases orElse_eq_some hrun with hf | hrun
-  · exact StaticKeepStep.of_sameContext (controlFlowStep_sameContext hf h)
-  rcases orElse_eq_some hrun with hf | hrun
-  · exact StaticKeepStep.of_sameContext (memoryDataStep_sameContext hf h)
-  rcases orElse_eq_some hrun with hf | hrun
-  · exact staticKeepStep_returnOpStep hf h
-  rcases orElse_eq_some hrun with hf | hrun
-  · exact StaticKeepStep.of_sameContext (environmentStep_sameContext hf h)
-  rcases orElse_eq_some hrun with hf | hrun
-  · exact staticKeepStep_accountStep hf h
-  rcases orElse_eq_some hrun with hf | hrun
-  · exact staticKeepStep_storageStep_of_isStatic hf static h
-  rcases orElse_eq_some hrun with hf | hrun
-  · exact staticKeepStep_transientStorageStep_of_isStatic hf static h
-  rcases orElse_eq_some hrun with hf | hf
-  · exact staticKeepStep_logOpStep_of_isStatic hf static h
-  · exact staticKeepStep_selfdestructOpStep_of_isStatic hf static h
-
-omit [GasMeter Meter] in
-/-- The pops of the operands of a call keep the state and touched accounts. -/
-theorem staticKeepStep_popCallOperands {kind : CallKind} {evm after : Evm fork Meter}
-    {call : CallOperands} (h : popCallOperands kind evm = .ok (call, after)) :
-    StaticKeepStep evm after ∧ (kind.sendsValue = false → call.value = 0) := by
-  obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨v, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨_, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨_, e5⟩, h5, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨_, e6⟩, h6, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨_, e7⟩, h7, h⟩ := Base.bind_ok_iff.mp h
-  cases h
-  have p3 : StaticKeepStep e2 e3 ∧ (kind.sendsValue = false → v = 0) := by
-    unfold popCallValue at h3
-    split at h3
-    · exact ⟨StaticKeepStep.of_sameContext (popWord_sameContext h3), fun h => by simp_all⟩
-    · cases h3
-      exact ⟨StaticKeepStep.refl _, fun _ => rfl⟩
-  refine ⟨?_, p3.2⟩
-  exact (((((((StaticKeepStep.of_sameContext (popWord_sameContext h1)).trans
-    (StaticKeepStep.of_sameContext (popWord_sameContext h2))).trans p3.1).trans
-    (StaticKeepStep.of_sameContext (popWord_sameContext h4))).trans
-    (StaticKeepStep.of_sameContext (popWord_sameContext h5))).trans
-    (StaticKeepStep.of_sameContext (popWord_sameContext h6))).trans
-    (StaticKeepStep.of_sameContext (popWord_sameContext h7)))
-
-/-- The access to a delegate keeps the state and touched accounts. -/
-theorem staticKeepStep_accessDelegation {evm after : Evm fork Meter} {address : Address}
-    {known : Nat} {callee : Callee}
-    (h : accessDelegation evm address known = .ok (callee, after)) :
-    StaticKeepStep evm after := by
-  obtain ⟨code, -, h⟩ := Base.bind_ok_iff.mp h
-  dsimp only at h
-  split at h
-  · obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
-    cases h
-    exact (staticKeepStep_accessAddress _ _).trans (staticKeepStep_recordAccountRead _ _)
-  · cases h
-    exact StaticKeepStep.refl _
-
-/-- The payment of a call keeps the state and touched accounts. -/
-theorem staticKeepStep_payCall {kind : CallKind} {call : CallOperands}
-    {memoryCost extraGas newAccount subCall : Nat} {evm after : Evm fork Meter}
-    (h : payCall kind call memoryCost extraGas newAccount evm = .ok (subCall, after)) :
-    StaticKeepStep evm after := by
-  unfold payCall at h
-  split at h
-  · obtain ⟨e1, h1, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨e2, h2, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
-    cases h
-    exact ((StaticKeepStep.of_sameContext (chargeGas_sameContext h1)).trans
-      (StaticKeepStep.of_sameContext (chargeStateGas_sameContext h2))).trans
-      (StaticKeepStep.of_sameContext (chargeGas_sameContext h3))
-  · obtain ⟨e1, h1, h⟩ := Base.bind_ok_iff.mp h
-    cases h
-    exact StaticKeepStep.of_sameContext (chargeGas_sameContext h1)
-
-/-- A call that runs no message keeps the state and touched accounts. -/
-theorem staticKeepStep_skipCall {evm after : Evm fork Meter} {gas reservoir : Nat}
-    (h : skipCall evm gas reservoir = .ok after) : StaticKeepStep evm after := by
-  obtain ⟨stack, -, rfl⟩ := skipCall_eq_ok h
-  exact ⟨⟨StateKept.refl _, rfl, rfl, rfl⟩, rfl⟩
-
 omit [GasMeter Meter] in
 /-- A static touch step from a static frame ends in a static frame. -/
 theorem StaticFrame.of_touchStep {touched : List Address} {a b : Evm fork Meter}
@@ -911,7 +395,7 @@ theorem StaticFrame.of_touchStep {touched : List Address} {a b : Evm fork Meter}
 /-- The child of a step of a static frame, when calls may touch accounts. -/
 def StaticTouchChild (evm caller : Evm fork Meter) (message : Message fork)
     (resume : Evm fork Meter → Except EvmError (Evm fork Meter)) : Prop :=
-  StaticKeepStep evm caller ∧ StaticMessage caller.state message ∧
+  StaticStep evm caller ∧ StaticMessage caller.state message ∧
     ∀ touched child after, resume child = .ok after → TouchesOnly touched caller.state child.state →
       child.state.parent = caller.state.parent →
       (∀ address ∈ touched, child.error = none ∧ fork < .paris ∧
@@ -921,20 +405,20 @@ def StaticTouchChild (evm caller : Evm fork Meter) (message : Message fork)
 
 /-- What a step of a static frame gives when calls may touch accounts. -/
 def StaticTouchResult (evm : Evm fork Meter) : StepResult fork Meter → Prop
-  | .next after => StaticKeepStep evm after
+  | .next after => StaticStep evm after
   | .child caller message resume => StaticTouchChild evm caller message resume
 
 omit [GasMeter Meter] in
-/-- A frame reached by a step that keeps state and touched accounts gives the same result. -/
+/-- A frame reached by a static step gives the same result. -/
 theorem StaticTouchResult.lift {evm evm' : Evm fork Meter} {result : StepResult fork Meter}
-    (h : StaticKeepStep evm evm') (r : StaticTouchResult evm' result) :
+    (h : StaticStep evm evm') (r : StaticTouchResult evm' result) :
     StaticTouchResult evm result := by
   cases result with
   | next after => exact h.trans r
   | child caller message resume =>
     obtain ⟨c, m, m4⟩ := r
     refine ⟨h.trans c, m, fun touched child after hres kept parent hrec =>
-      h.transTouch (m4 touched child after hres kept parent hrec)⟩
+      h.trans_touchStep (m4 touched child after hres kept parent hrec)⟩
 
 /-- A call that has paid gives a step that keeps state, or a static touch child. -/
 theorem staticTouchResult_genericCall {evm : Evm fork Meter} {message : Message fork}
@@ -951,15 +435,15 @@ theorem staticTouchResult_genericCall {evm : Evm fork Meter} {message : Message 
     | ok after =>
       simp only [hs, Functor.map, Except.map, Except.ok.injEq] at h
       subst h
-      exact (⟨⟨StateKept.refl _, rfl, rfl, rfl⟩, rfl⟩ : StaticKeepStep evm
+      exact (⟨StateKept.refl _, rfl, rfl, rfl, rfl⟩ : StaticStep evm
         (refillStateGas { evm with returnData := .empty } newAccount)).trans
-        (staticKeepStep_skipCall hs)
+        (staticStep_skipCall hs)
   · cases h
-    refine ⟨⟨⟨StateKept.refl _, rfl, rfl, rfl⟩, rfl⟩, hmsg, ?_⟩
+    refine ⟨⟨StateKept.refl _, rfl, rfl, rfl, rfl⟩, hmsg, ?_⟩
     intro touched child after hres kept parent hrec
-    have pre : StaticKeepStep evm { evm with returnData := .empty } :=
-      ⟨⟨StateKept.refl _, rfl, rfl, rfl⟩, rfl⟩
-    exact pre.transTouch (staticTouchStep_resumeCall hres kept parent hrec)
+    have pre : StaticStep evm { evm with returnData := .empty } :=
+      ⟨StateKept.refl _, rfl, rfl, rfl, rfl⟩
+    exact pre.trans_touchStep (staticTouchStep_resumeCall hres kept parent hrec)
 
 /-- A call in a static frame that has paid gives a step that keeps state, or a static touch child.
 -/
@@ -976,9 +460,9 @@ theorem staticTouchResult_finishCall {kind : CallKind} {call : CallOperands} {ca
   · cases h
   rename_i hnot
   dsimp only at h
-  have pre : StaticKeepStep evm (recordAccountRead { evm with
+  have pre : StaticStep evm (recordAccountRead { evm with
       memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
-      evm.message.currentTarget) := ⟨⟨StateKept.refl _, rfl, rfl, rfl⟩, rfl⟩
+      evm.message.currentTarget) := ⟨StateKept.refl _, rfl, rfl, rfl, rfl⟩
   split at h
   · cases hs : skipCall (refillStateGas (recordAccountRead { evm with
         memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
@@ -987,13 +471,13 @@ theorem staticTouchResult_finishCall {kind : CallKind} {call : CallOperands} {ca
     | ok after =>
       simp only [hs, Functor.map, Except.map, Except.ok.injEq] at h
       subst h
-      have refill : StaticKeepStep (recordAccountRead { evm with
+      have refill : StaticStep (recordAccountRead { evm with
           memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
           evm.message.currentTarget)
           (refillStateGas (recordAccountRead { evm with
           memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
-          evm.message.currentTarget) newAccount) := ⟨⟨StateKept.refl _, rfl, rfl, rfl⟩, rfl⟩
-      exact (pre.trans refill).trans (staticKeepStep_skipCall hs)
+          evm.message.currentTarget) newAccount) := ⟨StateKept.refl _, rfl, rfl, rfl, rfl⟩
+      exact (pre.trans refill).trans (staticStep_skipCall hs)
   · refine StaticTouchResult.lift pre (staticTouchResult_genericCall ?_ h)
     have hcall : kind = .call → call.value = 0 := by
       intro hk
@@ -1021,39 +505,39 @@ theorem staticTouchResult_callStep {kind : CallKind} {evm : Evm fork Meter}
     (h : callStep kind evm = .ok result) : StaticTouchResult evm result := by
   unfold callStep at h
   obtain ⟨⟨call, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨c1, hv⟩ := staticKeepStep_popCallOperands h1
+  obtain ⟨c1, hv⟩ := staticStep_popCallOperands h1
   dsimp only at h
   split at h
   · simp only [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
     cases h
   rcases hacc : accessAddress e1 call.address with ⟨cold, e2⟩
   simp only [hacc] at h
-  have ha : StaticKeepStep e1 e2 := by
-    have := staticKeepStep_accessAddress e1 call.address
+  have ha : StaticStep e1 e2 := by
+    have := staticStep_accessAddress e1 call.address
     rwa [hacc] at this
-  have s3 : StaticKeepStep evm (recordAccountRead e2 call.address) :=
-    (c1.trans ha).trans (staticKeepStep_recordAccountRead e2 call.address)
+  have s3 : StaticStep evm (recordAccountRead e2 call.address) :=
+    (c1.trans ha).trans (staticStep_recordAccountRead e2 call.address)
   obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
   rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
   · obtain ⟨⟨callee, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
-    have s4 : StaticKeepStep evm e4 := s3.trans (staticKeepStep_accessDelegation h4)
+    have s4 : StaticStep evm e4 := s3.trans (staticStep_accessDelegation h4)
     dsimp only at h
     rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
     · obtain ⟨⟨subCall, e5⟩, h5, h⟩ := Base.bind_ok_iff.mp h
-      have s5 : StaticKeepStep evm e5 := s4.trans (staticKeepStep_payCall h5)
+      have s5 : StaticStep evm e5 := s4.trans (staticStep_payCall h5)
       refine StaticTouchResult.lift s5
         (staticTouchResult_finishCall (by rw [s5.message]; exact static) hv ?_ ?_ h)
-      · rw [getAccount_of_staticStep s5.toStaticStep, s5.message]
+      · rw [getAccount_of_staticStep s5, s5.message]
         exact self
       · intro nonempty
         have := accessDelegation_codeHash_ne h4 nonempty
-        rw [getAccount_of_staticStep ((staticKeepStep_accessDelegation h4).trans
-          (staticKeepStep_payCall h5)).toStaticStep call.address]
+        rw [getAccount_of_staticStep ((staticStep_accessDelegation h4).trans
+          (staticStep_payCall h5)) call.address]
         exact this
-    · exact s4.trans (staticKeepStep_exceptionalHalt _ _)
-  · exact s3.trans (staticKeepStep_exceptionalHalt _ _)
+    · exact s4.trans (staticStep_exceptionalHalt _ _)
+  · exact s3.trans (staticStep_exceptionalHalt _ _)
 
-/-- Each instruction that may send a message gives a keep step or a static touch child. -/
+/-- Each instruction that may send a message gives a static step or a static touch child. -/
 theorem staticTouchResult_messageInstruction {op : Op}
     {run : Evm fork Meter → Except EvmError (StepResult fork Meter)} {evm : Evm fork Meter}
     {result : StepResult fork Meter} (hrun : messageInstruction fork op = some run)
@@ -1084,7 +568,7 @@ theorem staticTouchResult_messageInstruction {op : Op}
            exact absurd h (createStep_ne_ok_of_isStatic static)
          · cases hrun)
 
-/-- A step of a static frame gives a keep step, or a static touch child. -/
+/-- A step of a static frame gives a static step, or a static touch child. -/
 theorem staticTouchResult_step {evm : Evm fork Meter} {result : StepResult fork Meter}
     (static : evm.message.isStatic = true) (hcode : evm.code = evm.message.code)
     (hhold : StaticCode evm.state evm.message) (h : step fork evm = .ok result) :
@@ -1102,7 +586,7 @@ theorem staticTouchResult_step {evm : Evm fork Meter} {result : StepResult fork 
         | ok after =>
           simp only [hr, Functor.map, Except.map, Except.ok.injEq] at h
           subst h
-          exact staticKeepStep_instruction_of_isStatic hop static hr
+          exact staticStep_instruction_of_isStatic hop static hr
       · split at h
         · rename_i hcall
           refine staticTouchResult_messageInstruction hcall static (hhold ?_) h
@@ -1111,7 +595,7 @@ theorem staticTouchResult_step {evm : Evm fork Meter} {result : StepResult fork 
         · cases h
   · simp only [stopStep, Functor.map, Except.map, Except.ok.injEq] at h
     subst h
-    exact StaticKeepStep.of_sameContext (controlFlowStep_sameContext (op := .stop) rfl rfl)
+    exact StaticStep.of_sameContext (controlFlowStep_sameContext (op := .stop) rfl rfl)
 
 section TouchLoop
 
@@ -1123,7 +607,7 @@ variable {step : Evm fork Meter → Except EvmError (StepResult fork Meter)}
 /-- A whole run of a static frame is a static touch step. -/
 theorem staticTouchStep_runFrame
     (next : ∀ {evm after : Evm fork Meter}, StaticFrame evm → step evm = .ok (.next after) →
-      StaticKeepStep evm after)
+      StaticStep evm after)
     (child : ∀ {evm caller : Evm fork Meter} {message : Message fork}
       {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}, StaticFrame evm →
       step evm = .ok (.child caller message resume) →
@@ -1143,19 +627,19 @@ theorem staticTouchStep_runFrame
     ∃ touched, StaticTouchStep touched evm after := by
   fun_induction runFrame step decreases bound runChild evm within
   case case1 => cases h
-  case case2 => cases h; exact ⟨[], (staticKeepStep_exceptionalHalt _ _).toTouchStep⟩
+  case case2 => cases h; exact ⟨[], .of_staticStep (staticStep_exceptionalHalt _ _)⟩
   case case3 =>
     rename_i result _ ih
     have n := next hf result
-    obtain ⟨t, ht⟩ := ih (StaticFrame.of_staticStep n.toStaticStep hf) h
-    exact ⟨_, n.toTouchStep.trans ht⟩
+    obtain ⟨t, ht⟩ := ih (StaticFrame.of_staticStep n hf) h
+    exact ⟨_, n.trans_touchStep ht⟩
   case case4 => cases h
   case case5 => cases h
-  case case6 => cases h; exact ⟨[], (staticKeepStep_exceptionalHalt _ _).toTouchStep⟩
+  case case6 => cases h; exact ⟨[], .of_staticStep (staticStep_exceptionalHalt _ _)⟩
   case case7 =>
     obtain ⟨c0, hmsg, hres⟩ := child hf ‹step _ = .ok (.child _ _ _)›
     obtain ⟨tc, kept, parent, hrec⟩ :=
-      runs (StaticFrame.of_staticStep c0.toStaticStep hf) hmsg ‹runChild _ _ _ = .ok _›
+      runs (StaticFrame.of_staticStep c0 hf) hmsg ‹runChild _ _ _ = .ok _›
     have n := hres tc _ _ (by assumption) kept parent hrec
     obtain ⟨tr, htr⟩ :=
       ‹StaticFrame _ → runFrame _ _ _ _ _ _ = .ok after → ∃ t, StaticTouchStep t _ after›
@@ -1165,7 +649,9 @@ theorem staticTouchStep_runFrame
 
 end TouchLoop
 
-/-- A static message changes the state by touches, and keeps the block.
+/-- A static message changes the state by touches, and keeps the block and the message.
+
+It touches only when it succeeds before Paris.
 
 It is the induction on the gas of the message that the theorem below states for one message. -/
 theorem processMessage_touchesOnly_static [LawfulGasMeter Meter] :
@@ -1257,16 +743,14 @@ theorem processMessage_touchesOnly_static [LawfulGasMeter Meter] :
           split at hdo
           · cases hdo
             exact stepCore h1 hp1
-              (StaticTouchStep.of_staticKeep ⟨TransactionState.SameOutside.refl _ _, rfl, rfl, rfl⟩
-                rfl)
+              (.of_staticStep ⟨TransactionState.SameOutside.refl _ _, rfl, rfl, rfl, rfl⟩)
           · split at hdo
             · rename_i after hrp
               cases hdo
-              exact stepCore h1 hp1 (staticKeepStep_runPrecompile hrp).toTouchStep
+              exact stepCore h1 hp1 (.of_staticStep (staticStep_runPrecompile hrp))
             · cases hdo
               exact stepCore h1 hp1
-                (StaticTouchStep.of_staticKeep
-                  ⟨TransactionState.SameOutside.refl _ _, rfl, rfl, rfl⟩ rfl)
+                (.of_staticStep ⟨TransactionState.SameOutside.refl _ _, rfl, rfl, rfl, rfl⟩)
     have hval := congrArg Subtype.val rolled
     simp only at hval
     rw [← hval]
@@ -1278,6 +762,47 @@ theorem processMessage_touchesOnly_static [LawfulGasMeter Meter] :
     · rename_i hnot
       have herr : ended0.val.error = none := Option.not_isSome_iff_eq_none.mp hnot
       exact ⟨t, ht, hpar, hmeq, fun addr ha => ⟨herr, (hrec addr ha).1, (hrec addr ha).2⟩⟩
+
+/-- A message in a static frame leaves the state as it was, up to the records of its reads.
+
+It also keeps the block of the state.
+
+It is the induction on the gas of the message that the theorem below states for one message. -/
+theorem processMessage_static [LawfulGasMeter Meter] (hfork : .paris ≤ fork) :
+    ∀ (n : Nat) (message : Message fork) (state : State.TransactionState) (substate : Substate)
+      (meter : Meter) (held : GasMeter.gasHeld meter ≤ message.gas),
+      message.gas = n → StaticMessage state message →
+      ∀ ended, processMessage fork message state substate meter held = .ok ended →
+        State.TransactionState.SameOutside [] state ended.val.state ∧
+          ended.val.state.parent = state.parent := by
+  intro n message state substate meter held hn hmsg ended h
+  obtain ⟨touched, hto, hpar, -, hrec⟩ :=
+    processMessage_touchesOnly_static n message state substate meter held hn hmsg ended h
+  exact ⟨fun address _ => hto.1 address fun ha => absurd (hrec address ha).2.1
+    (Nat.not_lt.mpr hfork), hpar⟩
+
+/-- A static message that is a call changes no address of the state, up to the records of reads.
+
+From Paris, the account, storage and transient storage of every address read as before.
+
+That holds whatever its code does, however deep its calls.
+
+The message must be static and be a call, not a creation.
+
+Its code, when it has any, runs at an account that holds code.
+
+A value that it sends goes to its own sender, whose account holds code.
+
+A message with no value, as STATICCALL sends, satisfies the last condition without a premise.
+
+Before Paris a call touches the account that it calls, so the statement does not cover it. -/
+theorem processMessage_sameOutside_static [LawfulGasMeter Meter] (hfork : .paris ≤ fork)
+    {message : Message fork} {state : State.TransactionState} {substate : Substate}
+    {meter : Meter} {held : GasMeter.gasHeld meter ≤ message.gas}
+    (hmsg : StaticMessage state message) {ended}
+    (h : processMessage fork message state substate meter held = .ok ended) :
+    State.TransactionState.SameOutside [] state ended.val.state :=
+  (processMessage_static hfork message.gas message state substate meter held rfl hmsg ended h).1
 
 /-- From Byzantium, a static message changes the state by touches of absent accounts.
 
@@ -1305,7 +830,7 @@ theorem processMessage_touches_static [LawfulGasMeter Meter] (hfork : .byzantium
   exact ⟨herr, hlt, hmem.imp_left fun f => f hsd⟩
 
 omit [GasMeter Meter] in
-/-- Deleting the touched empty accounts at a fork from Spurious Dragon removes those in `toDelete`.
+/-- From Spurious Dragon, the deletion removes each listed address that holds the empty account.
 
 Every other address keeps its account and its storage, and all transient storage stays. -/
 theorem destroyTouchedEmptyAccounts_at (hfork : .spuriousDragon ≤ fork)
@@ -1369,19 +894,27 @@ theorem destroyTouchedEmptyAccounts_at (hfork : .spuriousDragon ≤ fork)
       · simp only [he, Bool.false_eq_true, ↓reduceIte]
         exact ih state
 
-/-- From Byzantium, EIP-161 deletion after a static message leaves only deleted empty accounts.
+/-- From Byzantium, deleting touched empty accounts after a static message only deletes them.
 
-When the message succeeds before Paris, `toDelete` must cover the touched accounts of the substate.
+The bound comes from [EIP-214](https://eips.ethereum.org/EIPS/eip-214#specification).
 
-It must also cover the target when that account is empty.
+The deletion is that of [EIP-161](https://eips.ethereum.org/EIPS/eip-161#specification).
 
-Every address outside `toDelete` keeps its account, its storage and its transient storage.
+When the message succeeds before Paris, the list must hold the touched accounts of the substate.
 
-Each address in `toDelete` that held the empty account before is deleted.
+It must also hold the target when that account is empty.
 
-Every other address, even one that the call touched, keeps the optional account that it had before.
+Every address outside the list keeps its account, its storage and its transient storage.
 
-The storage of an address in `toDelete` that ends empty is zero, and other storage is unchanged. -/
+Each listed address that held the empty account before is deleted.
+
+Every other address keeps its account, or its absence, even one that the call touched.
+
+All transient storage stays as it was, and so does the block.
+
+The storage of a listed address that is empty when the message ends is zero.
+
+All other storage is unchanged. -/
 theorem destroyTouchedEmptyAccounts_processMessage_static [LawfulGasMeter Meter]
     (hfork : .byzantium ≤ fork) {message : Message fork} {state : TransactionState}
     {substate : Substate} {meter : Meter} {held : GasMeter.gasHeld meter ≤ message.gas}
@@ -1462,67 +995,5 @@ theorem destroyTouchedEmptyAccounts_processMessage_static [LawfulGasMeter Meter]
       exact hd.2 key
     · simp only [hend, ↓reduceIte] at hd ⊢
       exact (hd.2 key).trans (hto.2.1 address key)
-
-/-- The touched accounts of a message call, with any empty target added before Paris. -/
-def messageTouchedAccounts (evm : Evm fork Meter) : Std.ExtTreeSet Address :=
-  if fork ≥ .spuriousDragon ∧ fork < .paris ∧
-      evm.state.accountExistsAndIsEmpty evm.message.currentTarget then
-    evm.substate.touchedAccounts.insert evm.message.currentTarget
-  else
-    evm.substate.touchedAccounts
-
-/-- From Byzantium, EIP-161 deletion of the message touches leaves only deleted empty accounts.
-
-Every address outside `messageTouchedAccounts` keeps its account, storage and transient storage.
-
-Each address in `messageTouchedAccounts` that held the empty account before is deleted.
-
-Every other address, even one that the call touched, keeps the optional account that it had before.
-
-The storage of an address in `messageTouchedAccounts` that ends empty is zero.
-
-Every other storage slot stays unchanged. -/
-theorem destroyMessageTouchedEmptyAccounts_processMessage_static [LawfulGasMeter Meter]
-    (hfork : .byzantium ≤ fork) {message : Message fork} {state : TransactionState}
-    {substate : Substate} {meter : Meter} {held : GasMeter.gasHeld meter ≤ message.gas}
-    (hmsg : StaticMessage state message) {ended}
-    (h : processMessage fork message state substate meter held = .ok ended) :
-    TransactionState.SameOutside (messageTouchedAccounts ended.val).toList state
-      (ended.val.state.destroyTouchedEmptyAccounts fork
-        (messageTouchedAccounts ended.val).toList) ∧
-      (ended.val.state.destroyTouchedEmptyAccounts fork
-        (messageTouchedAccounts ended.val).toList).parent = state.parent ∧
-      (∀ address key,
-        (ended.val.state.destroyTouchedEmptyAccounts fork
-          (messageTouchedAccounts ended.val).toList).getTransientStorage address key =
-          state.getTransientStorage address key) ∧
-      (∀ address,
-        (ended.val.state.destroyTouchedEmptyAccounts fork
-          (messageTouchedAccounts ended.val).toList).getAccountOptional address =
-          if address ∈ (messageTouchedAccounts ended.val).toList ∧
-              state.getAccountOptional address = some EMPTY_ACCOUNT then none
-          else state.getAccountOptional address) ∧
-      ∀ address key,
-        (ended.val.state.destroyTouchedEmptyAccounts fork
-          (messageTouchedAccounts ended.val).toList).getStorage address key =
-          if address ∈ (messageTouchedAccounts ended.val).toList ∧
-              ended.val.state.getAccountOptional address = some EMPTY_ACCOUNT then 0
-          else state.getStorage address key := by
-  have hsd : .spuriousDragon ≤ fork := Nat.le_trans (by decide) hfork
-  have hmeq : ended.val.message = message :=
-    (processMessage_touchesOnly_static message.gas message state substate meter held rfl hmsg
-      ended h).choose_spec.2.2.1
-  refine destroyTouchedEmptyAccounts_processMessage_static hfork hmsg h fun _ hlt => ⟨?_, ?_⟩
-  · intro address hmem
-    rw [Std.ExtTreeSet.mem_toList]
-    unfold messageTouchedAccounts
-    split
-    · exact Std.ExtTreeSet.mem_insert.mpr (Or.inr hmem)
-    · exact hmem
-  · intro hempty
-    rw [Std.ExtTreeSet.mem_toList]
-    unfold messageTouchedAccounts
-    rw [hmeq]
-    simp [hsd, hlt, hempty, Std.ExtTreeSet.mem_insert]
 
 end EthLib.Execution.Evm
