@@ -1066,6 +1066,28 @@ Its return data is then empty.
 Its frame ends in the state that the move of the value gives.
 No rule covers CREATE, DELEGATECALL or STATICCALL.
 
+A triple under an assumption asks the runner to fail only with an error that aborts, and does not say on which message it fails.
+`HoareOn fork callee S P Q` (`Logic/FailsOn.lean`) asks nothing of the errors of the runner, and names the messages on which it may fail instead.
+`S` is a condition on the frame that sends a message and on the message.
+`MeetsOk callee runChild` says that each frame that the runner gives meets `callee`, and lets the runner fail on any message with any error.
+`HoareOn` holds under every runner that meets `callee` in this sense, and for every bound that holds the gas of the frame.
+From every frame of `P`, the steps of `StepBy` reach a frame of `Q`.
+Or they reach a frame that sends a message of `S`, and the runner fails on that message.
+`SpecOn` is its case whose postcondition is a stopped frame.
+`HoareOn.of_hoare` proves that a triple with no message holds for every set of messages.
+`HoareOn.of_child` proves the rule for a step that sends a message of `S`, as `HoareUnder.of_child` does with no set.
+`HoareOn.seq` proves the rule of sequence.
+`HoareOn.consequence` proves the rule of consequence.
+`HoareOn.mono_S` proves that a larger set of messages keeps a triple.
+`SpecOn.seq` proves the rule of sequence into a triple to a stopped frame.
+`SpecOn.consequence` proves the rule of consequence for a triple to a stopped frame.
+`Meets.meetsOk` proves that a runner that meets an assumption also meets it in this weaker sense.
+`AbortsOn.abortsBy` proves that a frame that sends a message of `S` on which the runner fails is a frame whose runner fails on its message.
+`HoareOn.toUnder` proves that each such triple is a triple under the same assumption.
+`SpecOn.toUnder` proves the same for a triple to a stopped frame.
+`SpecOn.runFrame` proves that `runFrame` then returns a stopped frame of `Q`, or fails.
+It fails only with the error of the runner on a message of `S` that a reached frame sends.
+
 The block of a transaction state is the state before the block, with the writes of the block so far.
 A rollback restores the storage of a snapshot only when both states have the same block.
 `parentResult_step` (`Execution/Proofs/Evm/Call/Parent.lean`) proves that every successful step keeps the block of the state, at every fork.

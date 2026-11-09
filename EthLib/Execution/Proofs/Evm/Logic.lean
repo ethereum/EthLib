@@ -6,6 +6,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Symbolic
 public import EthLib.Execution.Proofs.Evm.Logic.Loop
 public import EthLib.Execution.Proofs.Evm.Logic.Subroutine
 public import EthLib.Execution.Proofs.Evm.Logic.Message
+public import EthLib.Execution.Proofs.Evm.Logic.FailsOn
 public import EthLib.Execution.Proofs.Evm.Logic.Call
 public import EthLib.Execution.Proofs.Evm.Logic.Log
 public import EthLib.Execution.Proofs.Evm.Logic.Static
@@ -35,6 +36,8 @@ It has the frames that a frame reaches, triples over them, rules for opcodes and
 A triple over frames that send messages takes an assumption on the frames that end the messages.
 
 Its run may also abort, when the runner of messages fails.
+
+Another form of triple lets the runner fail with any error, but only on the messages of a named set.
 
 A code can be stored as one number, and a tactic steps through its opcodes.
 -/
