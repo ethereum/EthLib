@@ -13,9 +13,11 @@ The loop of the interpreter returns an error only for an error that aborts the w
 
 An error of the state aborts, and so does an opcode with no instruction.
 
+An encoding error aborts too, and so does a fork with no specification.
+
 An instruction that runs out of gas or of stack halts its frame instead.
 
-So does a jump to an invalid destination, and a write in a static frame.
+So do a jump to an invalid destination and a write in a static frame.
 
 That halt is no error of the loop.
 
@@ -186,7 +188,7 @@ theorem noAbort_return (evm : Evm fork Nat) : NoAbort (returnStep evm) :=
 /-- STOP never fails. -/
 theorem noAbort_stop (evm : Evm fork Nat) : NoAbort (stopStep evm) := NoAbort.ok _
 
-/-- An error that does not abort does not abort. -/
+/-- An error that halts only its frame is no error that aborts. -/
 theorem NoAbort.error {α : Type} {e : EvmError} (h : e.aborts = false) :
     NoAbort (.error e : Except EvmError α) :=
   fun _ he => by cases he; exact h
@@ -358,9 +360,9 @@ section Loop
 
 variable {bound : Nat} {runChild : MessageRunner fork Nat bound}
 
-/-- A chain of these steps from `l` with `k` more gas to a stopped frame.
+/-- A chain of these steps from `low` with `k` more gas to a stopped frame.
 
-The loop then runs `l` to a frame, never to an error.
+The loop then runs `low` to a frame, never to an error.
 
 With less gas, each step halts the frame, or follows the chain. -/
 theorem no_error_of_reaches {hi z : Evm fork Nat} (hr : Reaches (StepGA fork) hi z)

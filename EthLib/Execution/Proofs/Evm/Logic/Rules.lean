@@ -30,7 +30,7 @@ Most rules here also hold over the steps from frames that are monotone in gas.
 
 The rule over the steps of the logic then follows from that form.
 
-When the instruction never aborts, the rule is first proved over the steps that also never abort.
+If the instruction never aborts, its rule is first proved over steps that never abort with less gas.
 
 The form over the steps from frames that are monotone in gas then follows from it.
 
