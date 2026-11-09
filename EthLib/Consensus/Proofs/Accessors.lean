@@ -30,6 +30,10 @@ Each member of a committee, and each validator that an attestation shows, is act
 
 Every active validator is in a committee of its epoch, and no validator is in two of them.
 
+The members of the committees of a slot, cut from one shuffle, are those of each committee in turn.
+
+A validator is among those members exactly when one of the committees holds it.
+
 The indices of an attestation increase strictly, as the check of an indexed attestation asks.
 
 An attestation has at most as many signers as bits, so its indexed form never exceeds its limit.
@@ -577,6 +581,68 @@ theorem exists_mem_getBeaconCommittee {state : BeaconState preset fork} {epoch :
   simp only [getBeaconCommittee, beaconCommitteeOf, epochEq, seedOk, shuffleOk, activeSize,
     liftArith, productOk, sumOk, countOk, bind, Except.bind, Except.mapError, positionEq]
   rw [computed]
+
+/-- The members of the committees of a slot are those of each committee, one after the other.
+
+The committees of the slot share one shuffle, and each committee alone gives the same members. -/
+theorem slotCommitteeMembers_eq (state : BeaconState preset fork) (slot : Slot) :
+    slotCommitteeMembers state slot =
+      (List.range (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat).foldlM
+        (fun members index => return members ++ (← getBeaconCommittee state slot index.toUInt64))
+        #[] := by
+  unfold slotCommitteeMembers attesterShuffle slotCommitteeMembersOf
+  have perPos : 0 < (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat :=
+    UInt64.le_iff_toNat_le.mp (one_le_getCommitteeCountPerSlot _ _)
+  -- The first committee reads the same seed and shuffle, so a failure of either is on both sides.
+  obtain ⟨n, count⟩ : ∃ n,
+      (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat = n + 1 :=
+    ⟨_, (Nat.succ_pred_eq_of_pos perPos).symm⟩
+  cases seedOk : getSeed state (computeEpochAtSlot preset slot) DOMAIN_BEACON_ATTESTER with
+  | error e =>
+    rw [count, List.range_succ_eq_map, List.foldlM_cons]
+    simp [getBeaconCommittee, seedOk, bind, Except.bind]
+  | ok seed =>
+    cases shuffleOk : computeShuffledPermutation preset
+        (UInt64.ofNat (getActiveValidatorIndices state (computeEpochAtSlot preset slot)).length)
+        seed with
+    | error e =>
+      rw [count, List.range_succ_eq_map, List.foldlM_cons]
+      simp [getBeaconCommittee, seedOk, shuffleOk, bind, Except.bind, Except.mapError]
+    | ok shuffled =>
+      simp only [seedOk, List.size_toArray, shuffleOk, Except.mapError, bind, Except.bind, pure,
+        Except.pure]
+      congr 1
+      funext members index
+      simp [getBeaconCommittee, seedOk, shuffleOk, bind, Except.bind, Except.mapError]
+
+/-- A validator is among the members of a slot exactly when a beacon committee of it holds it. -/
+theorem mem_slotCommitteeMembers {state : BeaconState preset fork} {slot : Slot}
+    {members : Array ValidatorIndex} (found : slotCommitteeMembers state slot = .ok members)
+    {validator : ValidatorIndex} :
+    validator ∈ members ↔
+      ∃ i < (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat,
+        ∃ committee, getBeaconCommittee state slot i.toUInt64 = .ok committee ∧
+          validator ∈ committee := by
+  rw [slotCommitteeMembers_eq, foldlM_append_eq_flatten_mapM] at found
+  simp only [bind, Except.bind] at found
+  split at found
+  · cases found
+  rename_i committees mapped
+  simp only [pure, Except.pure, Except.ok.injEq] at found
+  subst found
+  simp only [Array.empty_append, Array.mem_flatten, List.mem_toArray]
+  constructor
+  · rintro ⟨committee, member, holds⟩
+    obtain ⟨i, inRange, made⟩ := mapM_ok_mem mapped committee member
+    exact ⟨i, List.mem_range.mp inRange, committee, made, holds⟩
+  · rintro ⟨i, inRange, committee, made, holds⟩
+    have bound : i < (List.range
+        (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat).length := by
+      simpa using inRange
+    have atIndex := mapM_ok_getElem mapped i bound
+    rw [List.getElem_range, made] at atIndex
+    cases atIndex
+    exact ⟨_, List.getElem_mem _, holds⟩
 
 /-- One step of the pass that drops repeats keeps its list decreasing, below the rest. -/
 theorem keepNew_step {kept rest : List ValidatorIndex} {first : ValidatorIndex}

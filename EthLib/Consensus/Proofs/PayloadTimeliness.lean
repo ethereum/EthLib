@@ -11,7 +11,7 @@ public import EthLib.Consensus.Proofs.Time
 
 Each validator that a balance-weighted selection draws is one of its candidates.
 
-So each member of a payload committee sits on an attestation committee of its slot.
+So each member of a payload committee sits on a beacon committee of its slot.
 
 The indexed form of a vote lists the members whose bit is set, sorted, with any repeats.
 
@@ -103,52 +103,7 @@ theorem mem_of_computeBalanceWeightedSelection {state : BeaconState preset fork}
   · simp [empty, fits, bind, Except.bind, throw, throwThe, MonadExcept.throw,
       MonadExceptOf.throw] at computed
 
-/-- A slot has at least one attestation committee. -/
-theorem getCommitteeCountPerSlot_pos (state : BeaconState preset fork) (epoch : Epoch) :
-    0 < (getCommitteeCountPerSlot state epoch).toNat := by
-  have atLeastOne : ∀ x : UInt64, 0 < (max 1 x).toNat := by
-    intro x
-    simp only [max]
-    split
-    · rename_i le
-      rw [UInt64.le_iff_toNat_le] at le
-      simp only [UInt64.toNat_one] at le
-      exact le
-    · simp
-  exact atLeastOne _
-
-/-- The members of the committees of a slot are those of each committee, one after the other.
-
-The committees of the slot share one shuffle, and each committee alone gives the same members. -/
-theorem slotCommitteeMembers_eq (state : BeaconState preset fork) (slot : Slot) :
-    slotCommitteeMembers state slot =
-      (List.range (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat).foldlM
-        (fun members index => return members ++ (← getBeaconCommittee state slot index.toUInt64))
-        #[] := by
-  unfold slotCommitteeMembers attesterShuffle slotCommitteeMembersOf
-  -- The first committee reads the same seed and shuffle, so a failure of either is on both sides.
-  obtain ⟨n, count⟩ : ∃ n,
-      (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat = n + 1 :=
-    ⟨_, (Nat.succ_pred_eq_of_pos (getCommitteeCountPerSlot_pos _ _)).symm⟩
-  cases seedOk : getSeed state (computeEpochAtSlot preset slot) DOMAIN_BEACON_ATTESTER with
-  | error e =>
-    rw [count, List.range_succ_eq_map, List.foldlM_cons]
-    simp [getBeaconCommittee, seedOk, bind, Except.bind]
-  | ok seed =>
-    cases shuffleOk : computeShuffledPermutation preset
-        (UInt64.ofNat (getActiveValidatorIndices state (computeEpochAtSlot preset slot)).length)
-        seed with
-    | error e =>
-      rw [count, List.range_succ_eq_map, List.foldlM_cons]
-      simp [getBeaconCommittee, seedOk, shuffleOk, bind, Except.bind, Except.mapError]
-    | ok shuffled =>
-      simp only [seedOk, List.size_toArray, shuffleOk, Except.mapError, bind, Except.bind, pure,
-        Except.pure]
-      congr 1
-      funext members index
-      simp [getBeaconCommittee, seedOk, shuffleOk, bind, Except.bind, Except.mapError]
-
-/-- Each member of the payload committee of a slot is on an attestation committee of the slot. -/
+/-- Each member of the payload committee of a slot is on a beacon committee of the slot. -/
 theorem mem_of_computePtc {state : BeaconState preset fork} {slot : Slot}
     {committee : PayloadTimelinessCommittee preset}
     (computed : computePtc state slot = .ok committee) :

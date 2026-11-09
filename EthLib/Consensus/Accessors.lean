@@ -21,6 +21,8 @@ A sum of 2^64 or more is an error, as in 64-bit arithmetic.
 
 The committees cut the shuffled active validators of an epoch, and the proposer is drawn from them.
 
+The members of the committees of a slot are cut from one shuffle, computed once for the slot.
+
 A failed assertion of the rule, or a read past the end of a list, is an error.
 
 A division by a parameter of the preset or the configuration assumes that it is not zero.
@@ -303,6 +305,38 @@ def getBeaconCommittee (state : BeaconState preset fork) (slot : Slot) (index : 
   let shuffled ← (computeShuffledPermutation preset (UInt64.ofNat active.size) seed).mapError
     .shuffle
   beaconCommitteeOf preset slot index (getCommitteeCountPerSlot state epoch) active shuffled
+
+/-- The active validators of an epoch, and their shuffle for the beacon committees.
+
+It fails as the shuffle does, for more than `2^40` active validators. -/
+def attesterShuffle (state : BeaconState preset fork) (epoch : Epoch) :
+    Except AccessorError (Array ValidatorIndex × Array UInt64) := do
+  let seed ← getSeed state epoch DOMAIN_BEACON_ATTESTER
+  let active := (getActiveValidatorIndices state epoch).toArray
+  return (active,
+    ← (computeShuffledPermutation preset (UInt64.ofNat active.size) seed).mapError .shuffle)
+
+/-- The members of the beacon committees of a slot, committee after committee.
+
+They are cut from the given active validators and shuffle, with the given count of committees.
+
+The caller computes the count once, since computing it reads the whole registry. -/
+def slotCommitteeMembersOf (preset : Preset) (slot : Slot) (perSlot : UInt64)
+    (active : Array ValidatorIndex) (shuffled : Array UInt64) :
+    Except AccessorError (Array ValidatorIndex) :=
+  (List.range perSlot.toNat).foldlM
+    (fun members index => do
+      return members ++ (← beaconCommitteeOf preset slot index.toUInt64 perSlot active shuffled))
+    #[]
+
+/-- The members of the beacon committees of a slot, committee after committee.
+
+The committees share one shuffle of the active validators, computed once for the slot. -/
+def slotCommitteeMembers (state : BeaconState preset fork) (slot : Slot) :
+    Except AccessorError (Array ValidatorIndex) := do
+  let epoch := computeEpochAtSlot preset slot
+  let (active, shuffled) ← attesterShuffle state epoch
+  slotCommitteeMembersOf preset slot (getCommitteeCountPerSlot state epoch) active shuffled
 
 /-- The number of draws that read one hash: 16 from Electra, 32 before. -/
 def drawsPerHash (fork : Base.Fork) : Nat :=
