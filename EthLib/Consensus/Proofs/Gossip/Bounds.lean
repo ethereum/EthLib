@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Gossip.Bounds
+public import EthLib.Consensus.Proofs.Gossip.Topics
 public import EthLib.Networking.Proofs.Gossip.Payload
 public import EthLib.Networking.Proofs.ReqResp.Bounds
 public import EthLib.Serialization.Proofs.Ssz.Typed.Class
@@ -13,6 +14,7 @@ The payload of a gossip message is bounded by the largest size of its topic's ty
 - A payload that the gossip decoder accepts at its topic's bound is within the type's largest size.
 - A message that a node serializes, within the payload cap, passes the decoder once compressed.
 - Its payload then reads back as the message.
+- From Heze, the topic of inclusion lists carries a signed inclusion list.
 -/
 
 @[expose] public section
@@ -72,5 +74,10 @@ theorem decodePayload_message {α : Type} [SszType α] [LawfulSszType α] {a : �
       omega
   rw [UInt64.min_def]
   split <;> omega
+
+/-- From Heze, the topic of inclusion lists carries a signed inclusion list. -/
+theorem topicDesc_inclusionList (heze : .hegota ≤ fork) :
+    topicDesc preset config fork .inclusionList = some (SszType.desc SignedInclusionList) := by
+  simp [topicDesc, Topics.gossipTopics_heze heze, GossipTopic.messageDesc]
 
 end EthLib.Consensus.Proofs.Gossip.Bounds

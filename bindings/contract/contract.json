@@ -5831,7 +5831,7 @@
    "errors": [],
    "error_class": "ConsensusError",
    "docstring":
-   "The gossip topics of a fork, in the order of the fork that adds each one.\n\nA fork before Altair has the topics of Phase 0.\n\nHeze has none yet, since its topics are not yet specified here."},
+   "The gossip topics of a fork, in the order of the fork that adds each one.\n\nA fork before Altair has the topics of Phase 0."},
   {"summary":
    "The smallest and the largest length of a request payload, as a pair.",
    "signature": "(name: str, fork: str, protocol: str) -> tuple[int, int]",
@@ -5842,8 +5842,7 @@
      "codes":
      [{"constructor": "notAtFork", "code": 301},
       {"constructor": "noRequest", "code": 302},
-      {"constructor": "topicNotAtFork", "code": 303},
-      {"constructor": "topicsNotSpecified", "code": 304}]}],
+      {"constructor": "topicNotAtFork", "code": 303}]}],
    "error_class": "ConsensusError",
    "docstring":
    "The smallest and the largest length of a request payload, as a pair.\n\nThe arguments are the name of the preset and the configuration, the fork and the protocol ID."},
@@ -5858,8 +5857,7 @@
      "codes":
      [{"constructor": "notAtFork", "code": 301},
       {"constructor": "noRequest", "code": 302},
-      {"constructor": "topicNotAtFork", "code": 303},
-      {"constructor": "topicsNotSpecified", "code": 304}]}],
+      {"constructor": "topicNotAtFork", "code": 303}]}],
    "error_class": "ConsensusError",
    "docstring":
    "The smallest and the largest length of the payload of a successful response chunk, as a pair.\n\nThe arguments are the name of the preset and the configuration, the fork of the chunk and the ID.\n\nThat fork is the one that the context bytes of the chunk name, and it must define the protocol."},
@@ -5872,8 +5870,7 @@
      "codes":
      [{"constructor": "notAtFork", "code": 301},
       {"constructor": "noRequest", "code": 302},
-      {"constructor": "topicNotAtFork", "code": 303},
-      {"constructor": "topicsNotSpecified", "code": 304}]}],
+      {"constructor": "topicNotAtFork", "code": 303}]}],
    "error_class": "ConsensusError",
    "docstring":
    "The largest length of the payload of a gossip topic at a fork."},

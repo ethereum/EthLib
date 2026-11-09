@@ -15,6 +15,7 @@ Properties of the gossip topics and of the subnets of messages.
 - Each subnet that a message is sent on is below that number.
 - A node subscribes to as many attestation subnets as the configuration says.
 - The topics of Gloas are those of Fulu, then the four topics that Gloas adds.
+- The topics of Heze are those of Gloas, then the topic of inclusion lists.
 -/
 
 @[expose] public section
@@ -100,26 +101,22 @@ theorem ofNat_lt {a : Nat} {count : UInt64} (lt : a < count.toNat) : UInt64.ofNa
   exact lt
 
 /-- Every attestation subnet topic of a fork is below the number of attestation subnets. -/
-theorem gossipTopics_beaconAttestation {config : Config} {fork : Fork}
-    {topics : List GossipTopic} (listed : config.gossipTopics fork = some topics)
-    {subnet : SubnetID} (member : .beaconAttestation subnet ∈ topics) :
+theorem gossipTopics_beaconAttestation {config : Config} {fork : Fork} {subnet : SubnetID}
+    (member : .beaconAttestation subnet ∈ config.gossipTopics fork) :
     subnet < config.ATTESTATION_SUBNET_COUNT := by
-  unfold Config.gossipTopics at listed
-  split at listed
-  · cases listed
-  · cases listed
-    -- Only the attestation subnets hold an attestation topic.
-    simp only [subnetTopics, List.mem_append, List.mem_cons, List.mem_map, List.mem_range,
-      List.mem_nil_iff, reduceCtorEq, or_false, false_or] at member
-    rcases member with ((((⟨a, lt, same⟩ | other) | other) | other) | other) | other
-    · cases same
-      exact ofNat_lt lt
-    all_goals simp [GossipTopic.gloas] at other
+  unfold Config.gossipTopics at member
+  -- Only the attestation subnets hold an attestation topic.
+  simp only [subnetTopics, List.mem_append, List.mem_cons, List.mem_map, List.mem_range,
+    List.mem_nil_iff, reduceCtorEq, or_false, false_or] at member
+  rcases member with (((((⟨a, lt, same⟩ | other) | other) | other) | other) | other) | other
+  · cases same
+    exact ofNat_lt lt
+  all_goals simp [GossipTopic.gloas] at other
 
 /-- The topics of Gloas are those of Fulu, then the four topics that Gloas adds. -/
 theorem gossipTopics_gloas {config : Config} {fork : Fork} (gloas : .glamsterdam ≤ fork)
     (beforeHeze : fork < .hegota) :
-    config.gossipTopics fork = (config.gossipTopics .fusaka).map (· ++ GossipTopic.gloas) := by
+    config.gossipTopics fork = config.gossipTopics .fusaka ++ GossipTopic.gloas := by
   have notHeze : ¬ (.hegota ≤ fork) := Nat.not_le_of_lt beforeHeze
   have altair : Fork.altair ≤ fork := Nat.le_trans (by decide) gloas
   have shapella : Fork.shapella ≤ fork := Nat.le_trans (by decide) gloas
@@ -127,6 +124,20 @@ theorem gossipTopics_gloas {config : Config} {fork : Fork} (gloas : .glamsterdam
   have blobs : config.blobSidecarSubnetCount fork = config.blobSidecarSubnetCount .fusaka := by
     simp (config := { decide := true }) [Config.blobSidecarSubnetCount, fusaka]
   simp only [Config.gossipTopics, notHeze, altair, shapella, fusaka, gloas, blobs,
+    ↓reduceIte, List.append_assoc]
+  simp (config := { decide := true }) [List.append_assoc]
+
+/-- The topics of Heze are those of Gloas, then the topic of inclusion lists. -/
+theorem gossipTopics_heze {config : Config} {fork : Fork} (heze : .hegota ≤ fork) :
+    config.gossipTopics fork = config.gossipTopics .glamsterdam ++ [.inclusionList] := by
+  have altair : Fork.altair ≤ fork := Nat.le_trans (by decide) heze
+  have shapella : Fork.shapella ≤ fork := Nat.le_trans (by decide) heze
+  have fusaka : Fork.fusaka ≤ fork := Nat.le_trans (by decide) heze
+  have gloas : Fork.glamsterdam ≤ fork := Nat.le_trans (by decide) heze
+  have blobs :
+      config.blobSidecarSubnetCount fork = config.blobSidecarSubnetCount .glamsterdam := by
+    simp (config := { decide := true }) [Config.blobSidecarSubnetCount, fusaka]
+  simp only [Config.gossipTopics, heze, altair, shapella, fusaka, gloas, blobs,
     ↓reduceIte, List.append_assoc]
   simp (config := { decide := true }) [List.append_assoc]
 
