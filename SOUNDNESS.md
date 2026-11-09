@@ -1429,7 +1429,7 @@ It checks each payload timeliness assignment and the upcoming proposal slots aga
 Before Electra the vote is an attestation with one bit, and from Electra it is a single attestation.
 An aggregator joins the votes of one committee on the same data into one attestation.
 From Altair, a sync aggregator joins the messages on one block root into the contribution of its subcommittee.
-The theorems are in `Consensus/Proofs/HonestAggregation.lean`.
+The construction theorems are in `Consensus/Proofs/HonestAggregation.lean`.
 Each of them assumes only that the construction succeeds, except the theorem on signatures and the two that attestation data and the root of its target have a value.
 
 An attester first builds attestation data from the head block and the state at its slot.
@@ -1456,11 +1456,18 @@ The bit of a seat is set when its key is the key of the validator of a message o
 That theorem assumes that the secret keys do not sum to zero.
 It verifies under the keys in the order of the attestations.
 
-No theorem shows that an aggregate passes the signature check of an indexed attestation.
-That check reads the keys in the sorted order of the attesters.
-No theorem covers the signature of a contribution.
-The guide aggregates the signature of every vote.
-So an aggregate verifies only when no two votes share a seat, a condition that no theorem states.
+`isValidIndexedAttestation_constructAggregate` and `isValidIndexedAttestation_constructAggregateOfSingleAttestations` (`Proofs/HonestAggregateSignatures.lean`) prove that successfully constructed honest aggregates have indexed forms that pass the check.
+The selected signers must have distinct validator indices, use their registered keys and have a nonzero sum of secret keys.
+From Gloas, their number must also fit the check's bound.
+The proof derives the permutation from those signers to the sorted indices that the receiver reads.
+
+`isValidContributionSignature_constructSyncCommitteeContribution` (`Proofs/HonestContributionSignatures.lean`) proves that a contribution of honest matching messages passes its signature check.
+The domain and signing root must compute successfully, and the messages must sign that root under their registered keys.
+The sum of the secret keys for the selected seats must be nonzero.
+Each selected seat counts once, so repeated committee keys and duplicate incoming messages are allowed.
+The gossip corollaries characterize acceptance of the aggregate's committee check and the contribution topic by their remaining conditions.
+These include the checks of time, membership and the aggregator's signatures.
+
 The contribution takes the sync committee as an argument.
 The caller passes the committee of the next slot, which gossip and the next block check.
 The Python suite checks each vote and each aggregate against values worked out in the test from the guide, with py_ecc for the signatures.
