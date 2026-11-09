@@ -282,12 +282,6 @@ theorem callStep_value (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     state, substate, error⟩
   simp only at hst
   subst hst
-  have hgc : ∀ (tx : State.TransactionState) (x : Base.Address) h,
-      (tx.recordAccountRead x).getCode h = tx.getCode h := fun _ _ _ => rfl
-  have hga : ∀ (tx : State.TransactionState) (x y : Base.Address),
-      (tx.recordAccountRead x).getAccount y = tx.getAccount y := fun _ _ _ => rfl
-  have hal : ∀ (tx : State.TransactionState) (x y : Base.Address),
-      (tx.recordAccountRead x).isAccountAlive y = tx.isAccountAlive y := fun _ _ _ => rfl
   simp only at hcode hgas hdepth hstatic hbal ⊢
   have hdel' : (if Fork.pectra ≤ fork then delegatedAddress calleeCode else none) = none := by
     split
@@ -310,7 +304,7 @@ theorem callStep_value (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     simpa [BitVec.lt_def, BitVec.le_def] using hbal
   simp [callStep, popCallOperands, popCallValue, CallKind.sendsValue, popWord, Stack.pop, bind,
     Except.bind, pure, Except.pure, accessAddress, hfork, checkGas, hng, accessDelegation,
-    accountCode, recordAccountRead, hgc, hga, hal, hcode, hdel', htw, hsd, Except.mapError,
+    accountCode, recordAccountRead, hcode, hdel', htw, hsd, Except.mapError,
     callExtraGas, callNewAccountCost, callNewAccountStateGas, callValueCost, hv',
     payCall, messageCallGas, chargeGas, GasMeter.charge, finishCall, genericCall, keepReads,
     GasMeter.gasLeft, GasMeter.drain, GasMeter.reservoir, Nat.not_lt.mpr hdepth, hstatic, hE,
@@ -361,12 +355,6 @@ theorem callStep_value_low (hfork : .berlin ≤ fork) (hglam : fork < .glamsterd
     state, substate, error⟩
   simp only at hst
   subst hst
-  have hgc : ∀ (tx : State.TransactionState) (x : Base.Address) h,
-      (tx.recordAccountRead x).getCode h = tx.getCode h := fun _ _ _ => rfl
-  have hga : ∀ (tx : State.TransactionState) (x y : Base.Address),
-      (tx.recordAccountRead x).getAccount y = tx.getAccount y := fun _ _ _ => rfl
-  have hal : ∀ (tx : State.TransactionState) (x y : Base.Address),
-      (tx.recordAccountRead x).isAccountAlive y = tx.isAccountAlive y := fun _ _ _ => rfl
   simp only at hcode hgas hstatic hbal ⊢
   have hdel' : (if Fork.pectra ≤ fork then delegatedAddress calleeCode else none) = none := by
     split
@@ -388,7 +376,7 @@ theorem callStep_value_low (hfork : .berlin ≤ fork) (hglam : fork < .glamsterd
   have hlen : rest.length ≠ STACK_LIMIT := by simp at hl; omega
   simp [callStep, popCallOperands, popCallValue, CallKind.sendsValue, popWord, Stack.pop, bind,
     Except.bind, pure, Except.pure, accessAddress, hfork, checkGas, hng, accessDelegation,
-    accountCode, recordAccountRead, hgc, hga, hal, hcode, hdel', htw, hsd, Except.mapError,
+    accountCode, recordAccountRead, hcode, hdel', htw, hsd, Except.mapError,
     callExtraGas, callNewAccountCost, callValueCost, hv',
     payCall, messageCallGas, chargeGas, GasMeter.charge, finishCall, keepReads,
     GasMeter.gasLeft, GasMeter.drain, hstatic, hE,

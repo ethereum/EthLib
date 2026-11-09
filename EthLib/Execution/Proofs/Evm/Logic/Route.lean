@@ -118,6 +118,169 @@ theorem Routes.recordAccountRead {state : State.TransactionState} {address : Add
 
 /-! ## The step of a call along a route -/
 
+/-- The step of a call that sends no value of its own, along a route, up to its checks of gas.
+
+The call pays `cb` for the access to the address, `dc` for the route, and `growth` for memory.
+
+From Glamsterdam, the step fails when the gas does not cover the access and the growth of memory.
+
+From Glamsterdam, the frame halts with only the read of the address when the gas misses the route.
+
+The frame halts with the reads of the route when the gas does not cover the charge of the call.
+
+That charge is the gas that the call passes on, the access, the route and the growth of memory.
+
+Otherwise the frame pays the charge, and the step finishes the call along the route. -/
+theorem callStep_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
+    {evm : Evm fork Nat} {g a i isz o osz : U256} {rest : List U256} {calleeCode : ByteArray}
+    {route : Route} {cb dc : Nat} {growth : ExtendMemory}
+    (hst : evm.stack.val =
+      g :: a :: ((if kind.sendsValue then [0] else []) ++ i :: isz :: o :: osz :: rest))
+    (hcode : evm.state.getCode (evm.state.getAccount (toAddressMasked a)).codeHash = .ok calleeCode)
+    (hroute : Routes fork evm.state calleeCode route)
+    (hcb : callBaseCost fork (decide (toAddressMasked a ∉ evm.substate.accessedAddresses)) = cb)
+    (hdc : routeCost fork (evm.substate.accessedAddresses.insert (toAddressMasked a)) route = dc)
+    (hgrowth : extendMemory evm.memory.size [(i, isz), (o, osz)] = growth) :
+    ∃ stack : Stack, stack.val = rest ∧
+      let read := { evm with
+        stack, state := evm.state.recordAccountRead (toAddressMasked a)
+        substate := { evm.substate with
+          accessedAddresses := evm.substate.accessedAddresses.insert (toAddressMasked a) } }
+      let pre := { read with
+        state := routeState read.state route, substate := routeSub read.substate route }
+      let callGas := messageCallGas fork 0 g.toNat evm.gas growth.cost (cb + dc)
+      callStep kind evm =
+        if fork ≥ .glamsterdam ∧ evm.gas < cb + growth.cost then .error .outOfGas
+        else if fork ≥ .glamsterdam ∧ evm.gas < cb + growth.cost + dc then
+          .ok (.next (exceptionalHalt read .outOfGas))
+        else if evm.gas < callGas.cost + growth.cost then
+          .ok (.next (exceptionalHalt pre .outOfGas))
+        else keepReads pre .next (finishCall kind ⟨g, toAddressMasked a, 0, i, isz, o, osz⟩
+          ⟨routeAddr (toAddressMasked a) route, routeCode calleeCode route, route.isSome, dc⟩
+          callGas.subCall 0 growth.expandBy
+          { pre with gas := evm.gas - (callGas.cost + growth.cost) }) := by
+  obtain ⟨stack, hstack, hpop⟩ : ∃ stack : Stack, stack.val = rest ∧
+      popCallOperands kind evm =
+        .ok (⟨g, toAddressMasked a, 0, i, isz, o, osz⟩, { evm with stack }) := by
+    rcases evm with ⟨pc, ⟨l, hl⟩, memory, code, valid, gas, running, message, output, returnData,
+      state, substate, error⟩
+    simp only at hst
+    subst hst
+    cases kind <;> exact ⟨_, rfl, rfl⟩
+  refine ⟨stack, hstack, ?_⟩
+  simp only [callStep, hpop, bind, Except.bind, ne_eq, not_true_eq_false, and_false, ite_false,
+    accessAddress, ge_iff_le, hfork, ite_true, hcb, hgrowth, callValueCost, checkGas,
+    recordAccountRead, GasMeter.gasLeft, Nat.add_zero]
+  have htw : Fork.tangerineWhistle ≤ fork := Nat.le_trans (by decide) hfork
+  have hsd : Fork.spuriousDragon ≤ fork := Nat.le_trans (by decide) hfork
+  have hacc : ∀ e : Evm fork Nat, e.state = evm.state.recordAccountRead (toAddressMasked a) →
+      e.substate.accessedAddresses = evm.substate.accessedAddresses.insert (toAddressMasked a) →
+      e.gas = evm.gas → ¬ (fork ≥ .glamsterdam ∧ evm.gas < cb + growth.cost) →
+      accessDelegation e (toAddressMasked a) (cb + growth.cost) =
+        if fork ≥ .glamsterdam ∧ evm.gas < cb + growth.cost + dc then .error .outOfGas
+        else .ok
+          (⟨routeAddr (toAddressMasked a) route, routeCode calleeCode route, route.isSome, dc⟩,
+            { e with
+              state := routeState e.state route
+              substate := routeSub e.substate route }) := by
+    intro e hs hsub hg hk1
+    have hcode' : e.state.getCode (e.state.getAccount (toAddressMasked a)).codeHash =
+        .ok calleeCode := by
+      rw [hs]
+      simpa using hcode
+    rcases route with _ | ⟨d, dCode⟩
+    · have hdel : (if Fork.pectra ≤ fork then delegatedAddress calleeCode else none) = none := by
+        split
+        · exact hroute ‹_›
+        · rfl
+      simp only [routeCost] at hdc
+      subst hdc
+      simp only [Nat.add_zero, hk1, ↓reduceIte]
+      simp [accessDelegation, accountCode, hcode', hdel, Except.mapError, bind, Except.bind,
+        pure, Except.pure, routeAddr, routeCode, routeState, routeSub]
+    · obtain ⟨hpec, hdel, hdcode⟩ := hroute
+      have hdel' : (if Fork.pectra ≤ fork then delegatedAddress calleeCode else none) = some d := by
+        simp [hpec, hdel]
+      have hdc' : accountAccessCost fork (!decide (d ∈ e.substate.accessedAddresses)) = dc := by
+        rw [hsub, ← hdc, routeCost]
+        simp
+      have hdcode' : e.state.getCode (e.state.getAccount d).codeHash = .ok dCode := by
+        rw [hs]
+        simpa using hdcode
+      simp [accessDelegation, accountCode, hcode', hdel', Except.mapError, bind, Except.bind,
+        pure, Except.pure, routeAddr, routeCode, routeState, routeSub, accessAddress, hfork,
+        checkGas, hdc', hg, recordAccountRead, hdcode', GasMeter.gasLeft]
+      by_cases hc : Fork.glamsterdam ≤ fork ∧ evm.gas < cb + growth.cost + dc <;>
+        simp only [hc, ↓reduceIte] <;> rfl
+  have hpay : ∀ e : Evm fork Nat, e.gas = evm.gas →
+      ¬ (fork ≥ .glamsterdam ∧ evm.gas < cb + growth.cost + dc) →
+      payCall kind ⟨g, toAddressMasked a, 0, i, isz, o, osz⟩ growth.cost (cb + dc) 0 e =
+        if evm.gas < (messageCallGas fork 0 g.toNat evm.gas growth.cost (cb + dc)).cost +
+            growth.cost then .error .outOfGas
+        else .ok ((messageCallGas fork 0 g.toNat evm.gas growth.cost (cb + dc)).subCall,
+          { e with gas := evm.gas - ((messageCallGas fork 0 g.toNat evm.gas growth.cost
+            (cb + dc)).cost + growth.cost) }) := by
+    intro e hg hk2
+    unfold payCall
+    by_cases hc : fork ≥ .glamsterdam ∧ kind = .call
+    · have h0 : cb + dc + growth.cost ≤ evm.gas :=
+        Nat.le_of_not_lt fun h => hk2 ⟨hc.1, by omega⟩
+      have hx : evm.gas - growth.cost - (cb + dc) = evm.gas - (cb + dc + growth.cost) := by omega
+      have hmx : maxMessageCallGas (evm.gas - (cb + dc + growth.cost)) ≤
+          evm.gas - (cb + dc + growth.cost) := Nat.sub_le _ _
+      have h1 : ¬ evm.gas - (cb + dc + growth.cost) <
+          min g.toNat (maxMessageCallGas (evm.gas - (cb + dc + growth.cost))) := by omega
+      have h2 : ¬ evm.gas < min g.toNat (maxMessageCallGas (evm.gas - (cb + dc + growth.cost))) +
+          (cb + dc) + growth.cost := by omega
+      have h3 : evm.gas - (cb + dc + growth.cost) -
+          min g.toNat (maxMessageCallGas (evm.gas - (cb + dc + growth.cost))) = evm.gas -
+          (min g.toNat (maxMessageCallGas (evm.gas - (cb + dc + growth.cost))) + (cb + dc) +
+            growth.cost) := by omega
+      simp [hc, chargeGas, GasMeter.charge, chargeStateGas, GasMeter.chargeState, messageCallGas,
+        GasMeter.gasLeft, hg, bind, Except.bind, pure, Except.pure, htw, hx, Nat.not_lt.mpr h0,
+        h0, h1, h2, h3]
+    · simp only [hc, ↓reduceIte, chargeGas, GasMeter.charge, GasMeter.gasLeft, hg, bind,
+        Except.bind, pure, Except.pure]
+      by_cases h : evm.gas <
+          (messageCallGas fork 0 g.toNat evm.gas growth.cost (cb + dc)).cost + growth.cost <;>
+        simp only [h, ↓reduceIte]
+  have hextra : ∀ st : State.TransactionState, callExtraGas fork kind st
+      ⟨g, toAddressMasked a, 0, i, isz, o, osz⟩
+      (decide (toAddressMasked a ∉ evm.substate.accessedAddresses))
+      ⟨routeAddr (toAddressMasked a) route, routeCode calleeCode route, route.isSome, dc⟩ =
+      cb + dc := by
+    intro st
+    simp [callExtraGas, callNewAccountCost, callValueCost, hsd, ← hcb]
+  have hnew : ∀ st : State.TransactionState,
+      callNewAccountStateGas fork kind st ⟨g, toAddressMasked a, 0, i, isz, o, osz⟩ = 0 := by
+    intro st
+    simp [callNewAccountStateGas]
+  by_cases hk1 : Fork.glamsterdam ≤ fork ∧ evm.gas < cb + growth.cost
+  · simp only [hk1]
+    rfl
+  simp only [hk1, ↓reduceIte, pure, Except.pure]
+  rw [hacc _ ?_ ?_ ?_ hk1]
+  rotate_left
+  · rfl
+  · rfl
+  · rfl
+  by_cases hk2 : Fork.glamsterdam ≤ fork ∧ evm.gas < cb + growth.cost + dc
+  · simp only [hk2]
+    rfl
+  simp only [hk2, ↓reduceIte, hextra, hnew]
+  rw [hpay _ ?_ hk2]
+  rotate_left
+  · rfl
+  by_cases hk3 : evm.gas <
+      (messageCallGas fork 0 g.toNat evm.gas growth.cost (cb + dc)).cost + growth.cost
+  · simp only [hk3, ↓reduceIte]
+    rfl
+  simp only [hk3, ↓reduceIte]
+  generalize finishCall (fork := fork) (Meter := Nat) kind _ _ _ _ _ _ = x
+  cases x with
+  | error e => by_cases h : e.aborts <;> simp [keepReads, h]
+  | ok r => rfl
+
 /-- The frame `caller` and the message `msg` of a call that sends no value of its own.
 
 The call is of kind `kind`, to `to`, along the route `route` to the code `calleeCode`.
@@ -209,71 +372,28 @@ theorem callStep_child_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
       caller.running = evm.running ∧ caller.error = evm.error ∧ caller.output = evm.output ∧
       CallSends kind evm.message evm.memory evm.gas evm.state evm.substate g a i isz o osz
         calleeCode route caller msg := by
-  rcases evm with ⟨pc, ⟨l, hl⟩, memory, code, valid, gas, running, message, output, returnData,
-    state, substate, error⟩
-  simp only at hst
-  subst hst
-  have hgc : ∀ (tx : State.TransactionState) (x : Address) h,
-      (tx.recordAccountRead x).getCode h = tx.getCode h := fun _ _ _ => rfl
-  have hga : ∀ (tx : State.TransactionState) (x y : Address),
-      (tx.recordAccountRead x).getAccount y = tx.getAccount y := fun _ _ _ => rfl
-  simp only at hcode hgas hdepth hroute ⊢
+  obtain ⟨stack, hstack, h⟩ := callStep_of_routes hfork hst hcode hroute rfl rfl rfl
+  simp only at h
   unfold CallSends
+  generalize callBaseCost fork (decide (toAddressMasked a ∉ evm.substate.accessedAddresses)) =
+    cb at h hgas ⊢
+  generalize routeCost fork (evm.substate.accessedAddresses.insert (toAddressMasked a)) route =
+    dc at h hgas ⊢
+  generalize extendMemory evm.memory.size [(i, isz), (o, osz)] = growth at h hgas ⊢
   have htw : Fork.tangerineWhistle ≤ fork := Nat.le_trans (by decide) hfork
-  have hsd : Fork.spuriousDragon ≤ fork := Nat.le_trans (by decide) hfork
-  generalize hcb : callBaseCost fork (decide (toAddressMasked a ∉ substate.accessedAddresses)) =
-    cb at hgas ⊢
-  have hcb' : callBaseCost fork (!decide (toAddressMasked a ∈ substate.accessedAddresses)) = cb :=
-    by simpa using hcb
-  generalize hdc : routeCost fork (substate.accessedAddresses.insert (toAddressMasked a)) route =
-    dc at hgas ⊢
-  generalize hM : (extendMemory memory.size [(i, isz), (o, osz)]).cost = M at hgas ⊢
-  have hmx : maxMessageCallGas (gas - (cb + dc + M)) ≤ gas - (cb + dc + M) := Nat.sub_le _ _
-  have hx : gas - M - (cb + dc) = gas - (cb + dc + M) := by omega
-  have hmin : ¬ gas - (cb + dc + M) < min g.toNat (maxMessageCallGas (gas - (cb + dc + M))) := by
-    omega
-  have hk1 : ¬ gas < cb + M := by omega
-  have hmin3 : ¬ gas < min g.toNat (maxMessageCallGas (gas - (cb + dc + M))) + (cb + dc) + M := by
-    omega
-  have hk2 : ¬ gas < cb + M + dc := by omega
-  have hdel : (if Fork.pectra ≤ fork then delegatedAddress calleeCode else none) =
-      route.map Prod.fst := by
-    rcases route with _ | ⟨d, dCode⟩
-    · split
-      · exact hroute ‹_›
-      · rfl
-    · simp [hroute.1, hroute.2.1]
-  rcases route with _ | ⟨d, dCode⟩
-  · simp only [routeCost] at hdc
-    subst hdc
-    simp only [Nat.add_zero] at hgas hmin hmin3 hx hk2 hmx ⊢
-    by_cases hG : fork ≥ .glamsterdam <;> cases kind <;>
-    simp [callStep, popCallOperands, popCallValue, CallKind.sendsValue, popWord, Stack.pop, bind,
-      Except.bind, pure, Except.pure, accessAddress, hfork, checkGas, hG, accessDelegation,
-      accountCode, recordAccountRead, hgc, hga, hcode, hdel, htw, hsd, Except.mapError,
-      callExtraGas, callNewAccountCost, callNewAccountStateGas, callValueCost,
-      payCall, messageCallGas, chargeGas, GasMeter.charge, finishCall, genericCall, keepReads,
-      GasMeter.gasLeft, GasMeter.drain, GasMeter.reservoir, hcb', Nat.not_lt.mpr hdepth, hM,
-      chargeStateGas, GasMeter.chargeState, hgas, hk1, hmin, hmin3, hx, routeState,
-      routeSub, routeAddr, routeCode] <;>
-    (refine ⟨?_, ?_, ?_⟩; rotate_left 2
-     and_intros <;> first | rfl | omega | (dsimp only; omega))
-  · have hdcode : state.getCode (state.getAccount d).codeHash = .ok dCode := hroute.2.2
-    have hdc' : accountAccessCost fork
-        (!decide (toAddressMasked a = d) && !decide (d ∈ substate.accessedAddresses)) = dc := by
-      rw [← hdc, routeCost]
-      simp
-    by_cases hG : fork ≥ .glamsterdam <;> cases kind <;>
-    simp [callStep, popCallOperands, popCallValue, CallKind.sendsValue, popWord, Stack.pop, bind,
-      Except.bind, pure, Except.pure, accessAddress, hfork, checkGas, hG, accessDelegation,
-      accountCode, recordAccountRead, hgc, hga, hcode, hdel, hdcode, htw, hsd, Except.mapError,
-      callExtraGas, callNewAccountCost, callNewAccountStateGas, callValueCost,
-      payCall, messageCallGas, chargeGas, GasMeter.charge, finishCall, genericCall, keepReads,
-      GasMeter.gasLeft, GasMeter.drain, GasMeter.reservoir, hcb', hdc', Nat.not_lt.mpr hdepth, hM,
-      chargeStateGas, GasMeter.chargeState, hgas, Nat.not_lt.mpr hgas, hk1, hk2, hmin, hmin3, hx,
-      routeState, routeSub, routeAddr, routeCode] <;>
-    (refine ⟨?_, ?_, ?_⟩; rotate_left 2
-     and_intros <;> first | rfl | omega | (dsimp only; omega))
+  have hmx : maxMessageCallGas (evm.gas - growth.cost - (cb + dc)) ≤
+      evm.gas - growth.cost - (cb + dc) := Nat.sub_le _ _
+  have hcost : (messageCallGas fork 0 g.toNat evm.gas growth.cost (cb + dc)).cost =
+      min g.toNat (maxMessageCallGas (evm.gas - growth.cost - (cb + dc))) + (cb + dc) := by
+    simp [messageCallGas, htw, show cb + dc + growth.cost ≤ evm.gas by omega]
+  have c1 : ¬ (fork ≥ .glamsterdam ∧ evm.gas < cb + growth.cost) := by omega
+  have c2 : ¬ (fork ≥ .glamsterdam ∧ evm.gas < cb + growth.cost + dc) := by omega
+  have c3 : ¬ evm.gas <
+      (messageCallGas fork 0 g.toNat evm.gas growth.cost (cb + dc)).cost + growth.cost := by omega
+  simp only [h, c1, c2, c3, ↓reduceIte, finishCall, genericCall, keepReads, recordAccountRead,
+    ne_eq, not_true_eq_false, and_false, Nat.not_lt.mpr hdepth]
+  refine ⟨_, _, rfl, ?_⟩
+  and_intros <;> first | rfl | exact hstack
 
 /-! ## The rule of a call along a route -/
 

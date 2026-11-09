@@ -120,8 +120,6 @@ theorem createStep_child (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
     intro g
     simp only [createMessageGas, htw, ite_true, maxMessageCallGas]
     omega
-  have hga : ∀ (tx : State.TransactionState) (x y : Address),
-      (tx.recordAccountRead x).getAccount y = tx.getAccount y := fun _ _ _ => rfl
   have hgd : ∀ (tx : State.TransactionState) (x y : Address),
       (tx.recordAccountRead x).accountDeployable y = tx.accountDeployable y := fun _ _ _ => rfl
   have hread : (memoryReadBytes (memoryExtend evm.memory
@@ -149,7 +147,7 @@ theorem createStep_child (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
     List.nil_append, List.cons_append] at haddr hgas ⊢ <;>
   simp [createStep, hng, popWord, Stack.pop, popSalt, bind, Except.bind, pure, Except.pure,
     chargeGasAndMemory, chargeGas, GasMeter.charge, Nat.not_lt.mpr hgas, genericCreate, hlim,
-    hstatic, launchCreate, recordAccountRead, hga, hgd, BitVec.not_lt.mpr hbal, hnonce,
+    hstatic, launchCreate, recordAccountRead, hgd, BitVec.not_lt.mpr hbal, hnonce,
     Nat.not_lt.mpr hdepth, haddr, accessAddress, hfork, keepReads, createNewAccountStateGas,
     chargeStateGas, GasMeter.chargeState, hmg, hdeploy, hinc, Except.mapError, GasMeter.gasLeft,
     GasMeter.drain, GasMeter.reservoir] <;>
