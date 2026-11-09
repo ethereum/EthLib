@@ -1115,6 +1115,18 @@ Both hold for every bound on the gas of messages and every runner of messages.
 `Logic.no_ok_stuck` proves the same for a frame of `At` that reaches a stuck frame with every gas from some bound on.
 `Logic.no_ok_stuck_at` proves the same for a frame of `At` that reaches a stuck frame with its own gas.
 GAS has no rule of this kind, since it pushes the gas left, and no theorem here covers a step that sends a message.
+`Logic.At.ruleG_of_follows` is the rule of an opcode whose instruction, on each frame of the rule, follows its run with less gas.
+Each instruction that `Logic/RunMono.lean` covers is `RunMono`, such as `Logic.runMono_sstore` for SSTORE.
+`Logic.follows_readFrame` proves that an instruction that pushes a word of the frame follows its run with less gas.
+It needs the word not to depend on the gas.
+The opcode rules of `Logic/Rules.lean`, `Logic/Stack.lean` and `Logic/Log.lean` are proved over the steps from frames that are `GasMono`, such as `Logic.calldataloadG`.
+Each such rule has the hypotheses and the conclusion of the rule over `Step` of the same opcode, which follows from it by `Logic.HoareG.toHoare`.
+Of the opcode rules there, those for GAS, EXTCODESIZE and a frame past the end of its code have no such form.
+`Logic.sstore_of_account` has no such form either.
+`Logic.branchTable` has no such form yet.
+`Logic.At.stuck` proves that a frame is stuck at an opcode whose instruction fails with every lower gas and the same message, stack and state.
+`Logic.sstore_stuck` proves that SSTORE is stuck in a static frame, or when the current address has no account.
+`Logic.sstore_low_stuck` proves that from Istanbul SSTORE is stuck with 2300 gas or less, by EIP-2200.
 
 ### SHA-256 precompile
 

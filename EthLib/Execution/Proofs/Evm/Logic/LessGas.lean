@@ -25,6 +25,12 @@ Say such steps reach a stuck frame from a frame with `k` more gas than a frame `
 
 Then every frame that the loop runs `l` to has an error.
 
+SSTORE never completes in a static frame, or when the current address has no account.
+
+From Istanbul, it also fails with 2300 gas left or less, by EIP-2200.
+
+In each of these cases a frame at SSTORE is stuck.
+
 GAS is not monotone in gas, and a step that sends a message is no step of the logic.
 
 So no fact here covers GAS, the calls and the creations.
@@ -35,6 +41,7 @@ So no fact here covers GAS, the calls and the creations.
 namespace EthLib.Execution.Evm.Logic
 
 open EthLib.Base (Fork U256)
+open GasCosts
 
 variable {fork : Fork}
 
@@ -195,5 +202,60 @@ theorem no_ok_stuck_at
   exact not_ok_of_reaches hr hz 0 evm (addGas_zero evm).symm within hs
 
 end Loop
+
+/-! ## Stuck frames at SSTORE -/
+
+/-- A frame of a code is stuck at an opcode whose instruction fails on some frames.
+
+These are the frames with its message, its stack and its state, and with at most its gas. -/
+theorem At.stuck {byte : UInt8} {op : Op} {run : Evm fork Nat → Except EvmError (Evm fork Nat)}
+    (hlt : pc < code.size) (hbyte : code[pc] = byte) (decoded : Op.ofByte fork byte = some op)
+    (hrun : instruction fork op = some run)
+    (fails : ∀ low : Evm fork Nat, low.message = message → low.stack.val = stack →
+      low.state = state → low.gas ≤ gas → Fails (run low)) :
+    HoareG fork (At code message pc stack memory gas state substate returnData) Stuck := by
+  refine Triple.of_imp fun evm hat => ⟨hat.2.2.2.2.2.2.2.1, ?_⟩
+  obtain ⟨hcode, -, hm, hpc, hst, -, hg, -, -, -, hs, -⟩ := hat
+  rintro k low rfl
+  have hc : low.code = code := hcode
+  have hp : low.pc = pc := hpc
+  subst hc hp
+  have hdec : Op.ofByte fork low.code[low.pc] = some op := by rw [hbyte]; exact decoded
+  rw [step_of_instruction hlt hdec hrun]
+  rcases fails low hm hst hs (by rw [← hg]; exact Nat.le_add_right _ _) with
+    ⟨e, he⟩ | ⟨b, hb, hbr, hbe⟩
+  · exact .inl ⟨e, by rw [he]; rfl⟩
+  · exact .inr ⟨b, by rw [hb]; rfl, hbr, hbe⟩
+
+/-- SSTORE in a static frame, or when the current address has no account, is stuck.
+
+It fails, or halts with an error, at every fork and with any gas. -/
+theorem sstore_stuck {key new : U256} {rest : List U256}
+    (hlt : pc < code.size) (hbyte : code[pc] = 0x55)
+    (bad : message.isStatic = true ∨ state.getAccountOptional message.currentTarget = none) :
+    HoareG fork (At code message pc (key :: new :: rest) memory gas state substate returnData)
+      Stuck := by
+  refine At.stuck hlt hbyte (ofByte_of_decode (op := .sstore) rfl (Fork.frontier_le _))
+    instruction_sstore fun low hm _ hs _ => ?_
+  rcases h : sstoreStep low with e | b
+  · exact .inl ⟨e, rfl⟩
+  · obtain ⟨hbr, hbe⟩ := sstoreStep_halts (by rw [hm, hs]; exact bad) h
+    exact .inr ⟨b, rfl, hbr, by simpa [Option.isSome_iff_ne_none] using hbe⟩
+
+/-- From Istanbul, SSTORE with at most 2300 gas is stuck, by EIP-2200.
+
+It fails with every gas up to 2300. -/
+theorem sstore_low_stuck (hist : Fork.istanbul ≤ fork) {key new : U256} {rest : List U256}
+    (hlt : pc < code.size) (hbyte : code[pc] = 0x55) (low : gas ≤ CALL_STIPEND) :
+    HoareG fork (At code message pc (key :: new :: rest) memory gas state substate returnData)
+      Stuck := by
+  refine At.stuck hlt hbyte (ofByte_of_decode (op := .sstore) rfl (Fork.frontier_le _))
+    instruction_sstore fun l _ hst _ hg => .inl ?_
+  by_cases first : fork ≥ .glamsterdam ∧ l.message.isStatic = true
+  · exact ⟨_, sstoreStep_of_isStatic first.1 first.2⟩
+  · refine ⟨_, sstoreStep_of_gasLeft_le hist hst (by simp only [GasMeter.gasLeft]; omega) ?_⟩
+    by_cases hg : fork ≥ .glamsterdam
+    · exact .inr (by simpa [hg] using first)
+    · exact .inl (Nat.lt_of_not_le hg)
 
 end EthLib.Execution.Evm.Logic

@@ -14,6 +14,10 @@ The rule holds at every fork, with one counter of gas, the meter of the forks be
 
 It pays 375, 8 for each byte of data, 375 for each topic, and the growth of memory.
 
+The rule is first proved over the steps from frames that are monotone in gas.
+
+The rule over the steps of the logic then follows from that form.
+
 The frame must be one that may change the state, since LOGn fails in a static frame.
 
 The rule says nothing of the order of the logs of several frames.
@@ -68,11 +72,11 @@ theorem instruction_log (n : Fin 5) :
 The data of the log is the range of memory from `start`, after memory grows to hold it.
 
 It pays the price of the log and the growth of memory, in a frame that may change the state. -/
-theorem log {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List U256}
+theorem logG {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List U256}
     (hlen : words.length = n.val) (hlt : pc < code.size) (hbyte : code[pc] = byte)
     (decoded : Op.decode byte = some (.log n)) (hstatic : message.isStatic = false)
     (hgas : logCost n.val size + (extendMemory memory.size [(start, size)]).cost ≤ gas) :
-    Hoare fork (At code message pc (start :: size :: (words ++ rest)) memory gas state substate
+    HoareG fork (At code message pc (start :: size :: (words ++ rest)) memory gas state substate
         returnData)
       (At code message (pc + 1) rest
         (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
@@ -84,7 +88,8 @@ theorem log {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List U2
               data := memoryReadBytes
                 (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
                 start.toNat size.toNat } } returnData) := by
-  apply At.rule hlt hbyte (ofByte_of_decode decoded (Fork.frontier_le _)) (instruction_log n)
+  apply At.ruleG hlt hbyte (ofByte_of_decode decoded (Fork.frontier_le _)) (instruction_log n)
+    (runMono_log n.val)
   rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   subst hm hg hs hss hmem
   have hl := evm.stack.property
@@ -102,5 +107,28 @@ theorem log {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List U2
     Bool.false_eq_true]
   exact ⟨_, rfl, hcode, hj, rfl, by simp [advance, hpc], rfl, rfl, rfl, hrun, herr, hout, rfl,
     rfl, hrd⟩
+
+/-- LOGn appends a log of the current address, with the `n` words below the range as its topics.
+
+The data of the log is the range of memory from `start`, after memory grows to hold it.
+
+It pays the price of the log and the growth of memory, in a frame that may change the state. -/
+theorem log {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List U256}
+    (hlen : words.length = n.val) (hlt : pc < code.size) (hbyte : code[pc] = byte)
+    (decoded : Op.decode byte = some (.log n)) (hstatic : message.isStatic = false)
+    (hgas : logCost n.val size + (extendMemory memory.size [(start, size)]).cost ≤ gas) :
+    Hoare fork (At code message pc (start :: size :: (words ++ rest)) memory gas state substate
+        returnData)
+      (At code message (pc + 1) rest
+        (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
+        (gas - (logCost n.val size + (extendMemory memory.size [(start, size)]).cost)) state
+        { substate with
+          logs := substate.logs.push
+            { address := message.currentTarget
+              topics := words.map U256.toBeBytes
+              data := memoryReadBytes
+                (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
+                start.toNat size.toNat } } returnData) :=
+  (logG hlen hlt hbyte decoded hstatic hgas).toHoare
 
 end EthLib.Execution.Evm.Logic

@@ -97,15 +97,26 @@ theorem Follows.next {k : Nat} {lo hi : Except EvmError (Evm fork Nat)} (h : Fol
   · exact .inl (.inr ⟨b, rfl, hr, he⟩)
   · exact .inr ⟨b, rfl, rfl⟩
 
+/-- A frame at an opcode is monotone in gas when its instruction there follows that with less gas.
+
+On every frame with `k` less gas, the instruction fails, or it gives a frame `b`.
+
+On the frame itself, the instruction then gives `b` with `k` more gas. -/
+theorem gasMono_of_follows {evm : Evm fork Nat} {op : Op}
+    {run : Evm fork Nat → Except EvmError (Evm fork Nat)} (hlt : evm.pc < evm.code.size)
+    (decoded : Op.ofByte fork evm.code[evm.pc] = some op) (hrun : instruction fork op = some run)
+    (mono : ∀ k low, evm = addGas k low → Follows k (run low) (run evm)) : GasMono evm := by
+  rintro k low rfl
+  rw [step_of_instruction (evm := low) hlt decoded hrun,
+    step_of_instruction (evm := addGas k low) hlt decoded hrun]
+  exact (mono k low rfl).next
+
 /-- A frame at an opcode whose instruction is monotone in gas is monotone in gas. -/
 theorem gasMono_of_run {evm : Evm fork Nat} {op : Op}
     {run : Evm fork Nat → Except EvmError (Evm fork Nat)} (hlt : evm.pc < evm.code.size)
     (decoded : Op.ofByte fork evm.code[evm.pc] = some op) (hrun : instruction fork op = some run)
-    (mono : RunMono run) : GasMono evm := by
-  rintro k low rfl
-  rw [step_of_instruction (evm := low) hlt decoded hrun,
-    step_of_instruction (evm := addGas k low) hlt decoded hrun]
-  exact (mono low k).next
+    (mono : RunMono run) : GasMono evm :=
+  gasMono_of_follows hlt decoded hrun fun k low h => by subst h; exact mono low k
 
 /-- A frame at a byte that is no opcode at the fork is monotone in gas, since both steps fail. -/
 theorem gasMono_of_none {evm : Evm fork Nat} (hlt : evm.pc < evm.code.size)
@@ -148,6 +159,28 @@ variable {code : ByteArray} {message : Message fork} {pc : Nat} {stack : List U2
   {memory : ByteArray} {gas : Nat} {state : State.TransactionState} {substate : Substate}
   {returnData : ByteArray}
 
+/-- The rule of an opcode whose instruction, on each frame of the rule, follows that with less gas.
+
+It comes from the instruction that its byte runs on a frame of the code. -/
+theorem At.ruleG_of_follows {byte : UInt8} {op : Op}
+    {run : Evm fork Nat → Except EvmError (Evm fork Nat)} {post : Evm fork Nat → Prop}
+    (hlt : pc < code.size) (hbyte : code[pc] = byte) (decoded : Op.ofByte fork byte = some op)
+    (hrun : instruction fork op = some run)
+    (mono : ∀ evm, At code message pc stack memory gas state substate returnData evm →
+      ∀ k low, evm = addGas k low → Follows k (run low) (run evm))
+    (h : ∀ evm, At code message pc stack memory gas state substate returnData evm →
+      ∃ after, run evm = .ok after ∧ post after) :
+    HoareG fork (At code message pc stack memory gas state substate returnData) post := by
+  apply Triple.of_step
+  intro evm hp
+  obtain ⟨after, ok, hpost⟩ := h evm hp
+  refine ⟨after, ⟨Step.of_code hp.2.2.2.2.2.2.2.1 hp.1 hp.2.2.2.1 hlt hbyte decoded hrun ok, ?_⟩,
+    hpost⟩
+  have hmono := mono evm hp
+  obtain ⟨hcode, -, -, hpc, -⟩ := hp
+  subst hcode hpc
+  exact gasMono_of_follows hlt (by rw [hbyte]; exact decoded) hrun hmono
+
 /-- The rule of an opcode whose instruction is monotone in gas.
 
 It comes from the instruction that its byte runs on a frame of the code. -/
@@ -157,15 +190,8 @@ theorem At.ruleG {byte : UInt8} {op : Op}
     (hrun : instruction fork op = some run) (mono : RunMono run)
     (h : ∀ evm, At code message pc stack memory gas state substate returnData evm →
       ∃ after, run evm = .ok after ∧ post after) :
-    HoareG fork (At code message pc stack memory gas state substate returnData) post := by
-  apply Triple.of_step
-  intro evm hp
-  obtain ⟨after, ok, hpost⟩ := h evm hp
-  refine ⟨after, ⟨Step.of_code hp.2.2.2.2.2.2.2.1 hp.1 hp.2.2.2.1 hlt hbyte decoded hrun ok, ?_⟩,
-    hpost⟩
-  obtain ⟨hcode, -, -, hpc, -⟩ := hp
-  subst hcode hpc
-  exact gasMono_of_run hlt (by rw [hbyte]; exact decoded) hrun mono
+    HoareG fork (At code message pc stack memory gas state substate returnData) post :=
+  At.ruleG_of_follows hlt hbyte decoded hrun (fun _ _ k low h => by subst h; exact mono low k) h
 
 /-- A frame of a code with some gas, with `k` more gas, is the frame of the code with `k` more. -/
 theorem At.addGas {evm : Evm fork Nat}
