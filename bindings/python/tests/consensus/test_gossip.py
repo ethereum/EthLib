@@ -30,6 +30,7 @@ GLOAS = [
     "payload_attestation_message",
     "proposer_preferences",
 ]
+HEZE = ["inclusion_list"]
 
 
 def _blobs(count: int) -> list:
@@ -46,6 +47,7 @@ EXPECTED = {
     "fusaka": PHASE0 + ALTAIR + CAPELLA + [f"data_column_sidecar_{i}" for i in range(128)],
 }
 EXPECTED["glamsterdam"] = EXPECTED["fusaka"] + GLOAS
+EXPECTED["hegota"] = EXPECTED["glamsterdam"] + HEZE
 
 
 @pytest.mark.parametrize("name", ["mainnet", "minimal"])
@@ -60,11 +62,6 @@ def test_topics(fork: str, name: str) -> None:
 )
 def test_topics_of_forks_without_a_consensus_change(fork: str, like: str) -> None:
     assert consensus.gossip_topics(fork) == EXPECTED[like]
-
-
-def test_topics_not_yet_specified() -> None:
-    with raises(ConsensusError, "the gossip topics of hegota are not yet specified"):
-        consensus.gossip_topics("hegota")
 
 
 def _attestation_subnet(committees_per_slot: int, slot: int, committee_index: int) -> int:

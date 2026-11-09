@@ -70,19 +70,18 @@ inductive BoundsError where
   | noRequest
   /-- The fork does not list the gossip topic. -/
   | topicNotAtFork
-  /-- The gossip topics of the fork are not yet written. -/
-  | topicsNotSpecified
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor.
 
 The codes start at 301, since the consensus errors of the bindings share one class.
 
-A new constructor takes a new code, so that each code keeps its meaning. -/
+A new constructor takes a new code, so that each code keeps its meaning.
+
+Code 304 stays unused, so that no code takes a second meaning. -/
 def BoundsError.code : BoundsError → UInt32
   | .notAtFork => 301
   | .noRequest => 302
   | .topicNotAtFork => 303
-  | .topicsNotSpecified => 304
 
 end EthLib.Consensus

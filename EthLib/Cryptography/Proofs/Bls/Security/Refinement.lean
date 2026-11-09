@@ -3,13 +3,14 @@ module
 public import EthLib.Cryptography.Proofs.Bls.Security.Reduction
 public import EthLib.Cryptography.Proofs.Bls.SignaturesUnique
 public import Mathlib.Algebra.Module.ZMod
+import EthLib.Cryptography.Proofs.Bls.PairingAte
 
 /-!
 # Proofs: EthLib's BLS signatures are the scheme of the game
 
 The groups of the game are the multiples of the generators of `G1` and `G2`.
 
-Under the pairing law, EthLib's pairing check is a sound test of co-Diffie-Hellman tuples.
+EthLib's pairing check is a sound test of co-Diffie-Hellman tuples.
 
 EthLib signs and verifies as the scheme does, with `H(m)` the hash to `G2` of `m`.
 
@@ -19,7 +20,9 @@ The byte game gives the adversary compressed keys, hashes and signatures.
 
 Decoding its output gives a group forger with at least the same advantage.
 
-That step needs no pairing law; only the bound from co-CDH uses it.
+The soundness of the pairing check and the refinement of verification use the proved pairing law.
+
+The step from bytes to group elements does not use that law.
 -/
 
 @[expose] public section
@@ -178,8 +181,8 @@ private theorem check_scalars_iff (c a b : Scalar) :
     ← map_zero Fr.toZMod.symm, EmbeddingLike.apply_eq_iff_eq]
   constructor <;> intro h <;> linear_combination h
 
-/-- Under the pairing law, the pairing check is a sound test of co-Diffie-Hellman tuples. -/
-theorem blsScheme_sound (laws : PairingLaws) : blsScheme.Sound Scalar := by
+/-- The pairing check is a sound test of co-Diffie-Hellman tuples. -/
+theorem blsScheme_sound : blsScheme.Sound Scalar := by
   intro a h σ
   have hσ : σ = a • h ↔ G2Sub.dlog σ = a * G2Sub.dlog h := by
     rw [Subtype.ext_iff, G2Sub.coe_smul, ← G2Sub.ofFr_dlog σ, ← G2Sub.ofFr_dlog h]
@@ -190,7 +193,7 @@ theorem blsScheme_sound (laws : PairingLaws) : blsScheme.Sound Scalar := by
     exact G2.ofFr_injective.eq_iff.trans Fr.toZMod.symm.injective.eq_iff
   change pairingCheck _ = true ↔ _
   rw [show blsScheme.g₁ = g1 from rfl,
-    laws.two_pairs G1.represents_generator (G2Sub.represents_rep σ)
+    pairingLaws.two_pairs G1.represents_generator (G2Sub.represents_rep σ)
     (G1Sub.represents_rep _).neg (G2Sub.represents_rep h), G1Sub.dlog_smul_g1, hσ]
   exact check_scalars_iff _ _ _
 
@@ -231,15 +234,15 @@ theorem sign_eq (sk : SecretKey) (msg : ByteArray) :
   rw [G2.toPoint_mul hv, G2Sub.coe_smul, Scalar.val_ofFr]
   rfl
 
-/-- Under the pairing law, EthLib accepts exactly the signatures that decode to `sk • H(msg)`. -/
-theorem verify_iff (laws : PairingLaws) (sk : SecretKey) (msg sig : ByteArray) :
+/-- EthLib accepts exactly the signatures that decode to `sk • H(msg)`. -/
+theorem verify_iff (sk : SecretKey) (msg sig : ByteArray) :
     verify (pkBytes sk) msg sig = true ↔
       ∃ R, G2.uncompress sig = .ok R ∧
         G2.toPoint R = (Scalar.ofFr sk.val • hashPoint msg : G2Sub) := by
   obtain ⟨P, hP, hPrep⟩ := G1.keyValidatePoint_compress_mul sk.property
   obtain ⟨hQ, hv, hs⟩ := hashRep_spec msg
   obtain ⟨b, hb⟩ := (G2.inSubgroup_iff_exists_represents hv).mp hs
-  refine (coreVerify_iff (pk := pkBytes sk) laws ((pkBytes_eq sk).symm ▸ hP) hPrep hQ hb).trans
+  refine (coreVerify_iff (pk := pkBytes sk) ((pkBytes_eq sk).symm ▸ hP) hPrep hQ hb).trans
     (exists_congr fun R => and_congr_right fun hR => ?_)
   have hpt : G2.toPoint (G2.mul G2.generator (sk.val * b)) =
       (Scalar.ofFr sk.val • hashPoint msg : G2Sub) := by
@@ -249,30 +252,28 @@ theorem verify_iff (laws : PairingLaws) (sk : SecretKey) (msg sig : ByteArray) :
   rw [G2.Represents, hpt]
   exact and_iff_right (G2.valid_of_uncompress hR)
 
-/-- Under the pairing law, EthLib's verification is the test of the scheme on the decoded point.
+/-- EthLib's verification is the test of the scheme on the decoded point.
 
 The key is `sk • g1`, and the hash is `H(msg)`. -/
-theorem verify_iff_isDh (laws : PairingLaws) (sk : SecretKey) (msg sig : ByteArray) :
+theorem verify_iff_isDh (sk : SecretKey) (msg sig : ByteArray) :
     verify (pkBytes sk) msg sig = true ↔
       ∃ R, G2.uncompress sig = .ok R ∧ ∃ hR : G2.toPoint R ∈ G2Sub,
         blsScheme.isDh (Scalar.ofFr sk.val • g1) (hashPoint msg) ⟨_, hR⟩ = true := by
-  rw [verify_iff laws]
+  rw [verify_iff]
   refine exists_congr fun R => and_congr_right fun _ => ⟨fun h => ?_, fun ⟨hR, hd⟩ => ?_⟩
   · exact ⟨h ▸ (Scalar.ofFr sk.val • hashPoint msg).2,
-      (blsScheme_sound laws _ _ _).mpr (Subtype.ext h)⟩
-  · exact congrArg Subtype.val ((blsScheme_sound laws _ _ _).mp hd)
+      (blsScheme_sound _ _ _).mpr (Subtype.ext h)⟩
+  · exact congrArg Subtype.val ((blsScheme_sound _ _ _).mp hd)
 
 /-- **EthLib's BLS signatures are unforgeable from co-CDH**, in the random oracle model.
 
-The oracle `H` stands for the hash to `G2` under the message tag.
-
-The bound needs the pairing law. -/
-theorem forgeAdvantage_blsScheme_le (laws : PairingLaws)
+The oracle `H` stands for the hash to `G2` under the message tag. -/
+theorem forgeAdvantage_blsScheme_le
     (adversary : Adversary G1Sub G2Sub ByteArray) {q : ℕ} (hq0 : 0 < q)
     (hq : HashCallBound Scalar blsScheme adversary q) :
     forgeAdvantage Scalar blsScheme adversary ≤
       q * coCdhAdvantage Scalar g1 g2 (reduction (F := Scalar) g2 adversary q) :=
-  forgeAdvantage_le blsScheme (blsScheme_sound laws) adversary hq0 hq
+  forgeAdvantage_le blsScheme blsScheme_sound adversary hq0 hq
 
 /-! ## The byte interface -/
 
@@ -585,22 +586,22 @@ theorem byteHashCallBound_iff (adversary : ByteAdversary) (q : ℕ) :
     exact hyz ▸ hb y hy
 
 /-- The byte-game bound follows from the same named co-CDH solver as the group-game bound. -/
-theorem byteForgeAdvantage_le_coCdhAdvantage (laws : PairingLaws) (adversary : ByteAdversary)
+theorem byteForgeAdvantage_le_coCdhAdvantage (adversary : ByteAdversary)
     {q : ℕ} (hq0 : 0 < q) (hq : HashCallBound Scalar blsScheme adversary.toGroup q) :
     byteForgeAdvantage adversary ≤
       q * coCdhAdvantage Scalar g1 g2 (reduction (F := Scalar) g2 adversary.toGroup q) :=
   (byteForgeAdvantage_le adversary).trans
-    (forgeAdvantage_blsScheme_le laws adversary.toGroup hq0 hq)
+    (forgeAdvantage_blsScheme_le adversary.toGroup hq0 hq)
 
 /-- **EthLib's BLS signatures on bytes are unforgeable from co-CDH**, in the random oracle model.
 
-The hash-call bound is on the byte forger itself, and the bound needs the pairing law.
+The hash-call bound is on the byte forger itself.
 -/
-theorem byteForgeAdvantage_le_coCdhAdvantage_of_byteHashCallBound (laws : PairingLaws)
+theorem byteForgeAdvantage_le_coCdhAdvantage_of_byteHashCallBound
     (adversary : ByteAdversary) {q : ℕ} (hq0 : 0 < q) (hq : ByteHashCallBound adversary q) :
     byteForgeAdvantage adversary ≤
       q * coCdhAdvantage Scalar g1 g2 (reduction (F := Scalar) g2 adversary.toGroup q) :=
-  byteForgeAdvantage_le_coCdhAdvantage laws adversary hq0
+  byteForgeAdvantage_le_coCdhAdvantage adversary hq0
     ((byteHashCallBound_iff adversary q).mp hq)
 
 /-! ## Keys with a nonzero scalar -/
@@ -693,15 +694,15 @@ This holds in the random oracle model.
 
 The bound is that of the byte game, times `r / (r - 1)`.
 
-The hash-call bound is on the byte game, and the bound needs the pairing law.
+The hash-call bound is on the byte game.
 -/
-theorem nonzeroByteForgeAdvantage_le_coCdhAdvantage (laws : PairingLaws)
+theorem nonzeroByteForgeAdvantage_le_coCdhAdvantage
     (adversary : ByteAdversary) {q : ℕ} (hq0 : 0 < q) (hq : ByteHashCallBound adversary q) :
     nonzeroByteForgeAdvantage adversary ≤
       (Fr.modulus : ℝ≥0∞) / ((Fr.modulus - 1 : ℕ) : ℝ≥0∞) *
         (q * coCdhAdvantage Scalar g1 g2 (reduction (F := Scalar) g2 adversary.toGroup q)) := by
   rw [nonzeroByteForgeAdvantage_eq]
   exact mul_le_mul_right
-    (byteForgeAdvantage_le_coCdhAdvantage_of_byteHashCallBound laws adversary hq0 hq) _
+    (byteForgeAdvantage_le_coCdhAdvantage_of_byteHashCallBound adversary hq0 hq) _
 
 end EthLib.Cryptography.Bls.Security

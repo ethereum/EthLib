@@ -7,7 +7,7 @@ public import EthLib.Cryptography.Proofs.Bls.G2Order
 public import EthLib.Cryptography.Proofs.Bls.G2Validity
 
 /-!
-# Proofs: the pairing law as one hypothesis
+# Proofs: the pairing law as one structure
 
 A BLS pairing is a non-degenerate bilinear map `e : G1 × G2 → GT`.
 
@@ -15,9 +15,9 @@ See [draft-04](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signatu
 
 The check of [EIP-2537](https://eips.ethereum.org/EIPS/eip-2537) tests `prod_i e(P_i, Q_i) = 1`.
 
-EthLib does not prove that its pairing check computes such a map.
+This module states the law that verification needs as one structure.
 
-So it states the law it needs as one hypothesis, never an axiom.
+`PairingAte.lean` proves the law, and the lemmas here derive its consequences.
 
 Let `P_i` represent `a_i * g_1` and `Q_i` represent `b_i * g_2`.
 

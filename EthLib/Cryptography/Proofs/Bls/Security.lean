@@ -9,7 +9,7 @@ In the random oracle model, a BLS forger gives a solver of a co-Diffie-Hellman p
 
 A forger within `q` hash calls wins at most `q` times as often as that solver.
 
-Under the pairing law, EthLib's signing and verification compute the scheme of that game.
+EthLib's signing and verification compute the scheme of that game.
 
 The byte game reduces a forger on compressed encodings to a group-element forger.
 

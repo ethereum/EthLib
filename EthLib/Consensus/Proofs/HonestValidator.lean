@@ -17,7 +17,7 @@ public import EthLib.Cryptography.Proofs.Bls.SignaturesCorrect
 /-!
 # Proofs: the duties of an honest validator
 
-Under the pairing laws, each signature of an honest validator passes the check of its receivers.
+Each signature of an honest validator passes the check of its receivers.
 
 They check it under the same domain type and epoch, against the public key of the secret key.
 
@@ -37,17 +37,17 @@ A validator without one is in no committee of the epoch, when an epoch has a slo
 
 The upcoming proposal slots are the later slots of the lookahead that the validator proposes.
 
-Under the pairing laws, a signed payload attestation message passes the wire checks.
+A signed payload attestation message passes the wire checks.
 
 These checks of the fork choice read only its slot, which must be current, and its signature.
 
 The validator must have the public key of the secret key.
 
-Under the pairing laws, signed preferences pass the check of their signature.
+Signed preferences pass the check of their signature.
 
 They name the dependent root of the head and the slot, validator and values they were made for.
 
-From Heze, a signed inclusion list passes the check of its signature, under the same laws.
+From Heze, a signed inclusion list passes the check of its signature.
 
 A bid whose bits cover the proposer's view of the inclusion lists is inclusive for it.
 -/
@@ -73,8 +73,8 @@ theorem ValidatorDutyError.code_injective (e₁ e₂ : ValidatorDutyError)
 
 /-- A signature at an epoch is a signature of the signing root of the object at that epoch.
 
-Under the laws of the pairing, it verifies under the public key of the secret key. -/
-theorem signAtEpoch_verifies (laws : PairingLaws) {α : Type} [SszType α] {config : Config}
+It verifies under the public key of the secret key. -/
+theorem signAtEpoch_verifies {α : Type} [SszType α] {config : Config}
     {state : BeaconState preset fork} {domainType : DomainType} {epoch : Epoch} {object : α}
     {key : Signatures.SecretKey} {signature : BLSSignature}
     (signed : signAtEpoch config state domainType epoch object key = .ok signature) :
@@ -87,31 +87,27 @@ theorem signAtEpoch_verifies (laws : PairingLaws) {α : Type} [SszType α] {conf
   obtain ⟨domain, domained, signed⟩ := bind_ok_iff.mp signed
   obtain ⟨root, rooted, signs⟩ := bind_ok_iff.mp signed
   rw [mapError_ok_iff] at domained rooted signs
-  obtain ⟨signature', signs', verifies⟩ := Signatures.verify_sign laws key (packBytes root)
+  obtain ⟨signature', signs', verifies⟩ := Signatures.verify_sign key (packBytes root)
   rw [signs', Except.ok.injEq] at signs
   subst signs
   exact ⟨domain, root, domained, rooted, verifies⟩
 
-/-- A signature at an epoch passes the check of a signature at that epoch, under its public key.
-
-The statement holds under the laws of the pairing, as BLS correctness does. -/
-theorem isValidSignatureAtEpoch_of_signAtEpoch (laws : PairingLaws) {α : Type} [SszType α]
+/-- A signature at an epoch passes the check of a signature at that epoch, under its public key. -/
+theorem isValidSignatureAtEpoch_of_signAtEpoch {α : Type} [SszType α]
     {config : Config} {state : BeaconState preset fork} {domainType : DomainType}
     {epoch : Epoch} {object : α} {key : Signatures.SecretKey} {signature : BLSSignature}
     (signed : signAtEpoch config state domainType epoch object key = .ok signature) :
     isValidSignatureAtEpoch config .bls state domainType epoch object (Signatures.skToPk key)
       signature = .ok true := by
-  obtain ⟨domain, root, domained, rooted, verifies⟩ := signAtEpoch_verifies laws signed
+  obtain ⟨domain, root, domained, rooted, verifies⟩ := signAtEpoch_verifies signed
   unfold isValidSignatureAtEpoch
   simp only [domained, rooted, bind, Except.bind, Except.mapError, pure, Except.pure]
   exact congrArg Except.ok verifies
 
 /-- A block signed by its proposer passes the check of the block's signature.
 
-The block must be for a slot of the current epoch, and the proposer must have the public key.
-
-The statement holds under the laws of the pairing, as BLS correctness does. -/
-theorem verifyBlockSignature_of_getBlockSignature (laws : PairingLaws) {config : Config}
+The block must be for a slot of the current epoch, and the proposer must have the public key. -/
+theorem verifyBlockSignature_of_getBlockSignature {config : Config}
     {state : BeaconState preset fork} {signed : SignedBeaconBlock preset fork}
     {key : Signatures.SecretKey} {proposer : Validator}
     (registered : getValidator state signed.message.proposerIndex = .ok proposer)
@@ -121,7 +117,7 @@ theorem verifyBlockSignature_of_getBlockSignature (laws : PairingLaws) {config :
     verifyBlockSignature config .bls state signed = .ok true := by
   unfold getBlockSignature at signedBy
   rw [current] at signedBy
-  obtain ⟨domain, root, domained, rooted, verifies⟩ := signAtEpoch_verifies laws signedBy
+  obtain ⟨domain, root, domained, rooted, verifies⟩ := signAtEpoch_verifies signedBy
   unfold verifyBlockSignature
   -- The domain of the current epoch is the default domain of the state.
   have domainDefault : getDomain config state DOMAIN_BEACON_PROPOSER = .ok domain := domained
@@ -132,10 +128,8 @@ theorem verifyBlockSignature_of_getBlockSignature (laws : PairingLaws) {config :
 
 The block must be for a slot of the current epoch, and the proposer must have the public key.
 
-The processing of the reveal may still fail for another reason, never for an invalid reveal.
-
-The statement holds under the laws of the pairing, as BLS correctness does. -/
-theorem processRandao_ne_invalidRandaoReveal (laws : PairingLaws) {config : Config}
+The processing of the reveal may still fail for another reason, never for an invalid reveal. -/
+theorem processRandao_ne_invalidRandaoReveal {config : Config}
     {state : BeaconState preset fork} {block : BeaconBlock preset fork}
     {key : Signatures.SecretKey} {proposerIndex : ValidatorIndex} {proposer : Validator}
     (proposes : getBeaconProposerIndex state = .ok proposerIndex)
@@ -146,7 +140,7 @@ theorem processRandao_ne_invalidRandaoReveal (laws : PairingLaws) {config : Conf
     processRandao config .bls state block.body ≠ .error .invalidRandaoReveal := by
   unfold getEpochSignature at signedBy
   simp only [current] at signedBy
-  obtain ⟨domain, root, domained, rooted, verifies⟩ := signAtEpoch_verifies laws signedBy
+  obtain ⟨domain, root, domained, rooted, verifies⟩ := signAtEpoch_verifies signedBy
   have domainDefault : getDomain config state DOMAIN_RANDAO = .ok domain := domained
   unfold processRandao
   simp only [liftAccessor, liftSsz, proposes, registered, domainDefault, rooted, Except.mapError,
@@ -161,24 +155,20 @@ theorem processRandao_ne_invalidRandaoReveal (laws : PairingLaws) {config : Conf
 
 /-- A selection proof for the slot of an aggregate passes the gossip check of a selection proof.
 
-The check reads the target epoch of the aggregate, which must be the epoch of its slot.
-
-The statement holds under the laws of the pairing, as BLS correctness does. -/
-theorem isValidSignatureAtEpoch_getSlotSignature (laws : PairingLaws) {config : Config}
+The check reads the target epoch of the aggregate, which must be the epoch of its slot. -/
+theorem isValidSignatureAtEpoch_getSlotSignature {config : Config}
     {state : BeaconState preset fork} {data : AttestationData} {key : Signatures.SecretKey}
     {proof : BLSSignature} (sameEpoch : data.target.epoch = computeEpochAtSlot preset data.slot)
     (signed : getSlotSignature config state data.slot key = .ok proof) :
     isValidSignatureAtEpoch config .bls state DOMAIN_SELECTION_PROOF data.target.epoch data.slot
       (Signatures.skToPk key) proof = .ok true := by
   rw [sameEpoch]
-  exact isValidSignatureAtEpoch_of_signAtEpoch laws signed
+  exact isValidSignatureAtEpoch_of_signAtEpoch signed
 
 /-- An aggregate and proof signed by its aggregator passes the gossip check of its signature.
 
-The check reads the target epoch of the aggregate, which must be the epoch of its slot.
-
-The statement holds under the laws of the pairing, as BLS correctness does. -/
-theorem isValidSignatureAtEpoch_getAggregateAndProofSignature (laws : PairingLaws)
+The check reads the target epoch of the aggregate, which must be the epoch of its slot. -/
+theorem isValidSignatureAtEpoch_getAggregateAndProofSignature
     {config : Config} {state : BeaconState preset fork} {proof : AggregateAndProof preset fork}
     {key : Signatures.SecretKey} {signature : BLSSignature}
     (sameEpoch : proof.aggregate.data.target.epoch =
@@ -187,14 +177,12 @@ theorem isValidSignatureAtEpoch_getAggregateAndProofSignature (laws : PairingLaw
     isValidSignatureAtEpoch config .bls state DOMAIN_AGGREGATE_AND_PROOF
       proof.aggregate.data.target.epoch proof (Signatures.skToPk key) signature = .ok true := by
   rw [sameEpoch]
-  exact isValidSignatureAtEpoch_of_signAtEpoch laws signed
+  exact isValidSignatureAtEpoch_of_signAtEpoch signed
 
 /-- A sync committee message passes the check of a signature at the epoch of its slot.
 
-The message takes its slot from the state, so that epoch is the current epoch that it signs in.
-
-The statement holds under the laws of the pairing, as BLS correctness does. -/
-theorem isValidSignatureAtSlot_getSyncCommitteeMessage (laws : PairingLaws) {config : Config}
+The message takes its slot from the state, so that epoch is the current epoch that it signs in. -/
+theorem isValidSignatureAtSlot_getSyncCommitteeMessage {config : Config}
     {state : BeaconState preset fork} {blockRoot : Root} {validatorIndex : ValidatorIndex}
     {key : Signatures.SecretKey} {message : SyncCommitteeMessage}
     (signed : getSyncCommitteeMessage config state blockRoot validatorIndex key = .ok message) :
@@ -204,18 +192,16 @@ theorem isValidSignatureAtSlot_getSyncCommitteeMessage (laws : PairingLaws) {con
   obtain ⟨signature, signs, made⟩ := bind_ok_iff.mp signed
   simp only [pure, Except.pure, Except.ok.injEq] at made
   subst made
-  exact isValidSignatureAtEpoch_of_signAtEpoch laws signs
+  exact isValidSignatureAtEpoch_of_signAtEpoch signs
 
-/-- A contribution and proof signed by its aggregator passes the check at the epoch of its slot.
-
-The statement holds under the laws of the pairing, as BLS correctness does. -/
-theorem isValidSignatureAtSlot_getContributionAndProofSignature (laws : PairingLaws)
+/-- A contribution and proof signed by its aggregator passes the check at the epoch of its slot. -/
+theorem isValidSignatureAtSlot_getContributionAndProofSignature
     {config : Config} {state : BeaconState preset fork} {proof : ContributionAndProof preset}
     {key : Signatures.SecretKey} {signature : BLSSignature}
     (signed : getContributionAndProofSignature config state proof key = .ok signature) :
     isValidSignatureAtSlot config .bls state DOMAIN_CONTRIBUTION_AND_PROOF
       proof.contribution.slot proof (Signatures.skToPk key) signature = .ok true :=
-  isValidSignatureAtEpoch_of_signAtEpoch laws signed
+  isValidSignatureAtEpoch_of_signAtEpoch signed
 
 /-! ## Committee assignments -/
 
@@ -765,26 +751,22 @@ theorem getUpcomingProposalSlots_spec {state : BeaconState preset fork}
       rw [UInt64.lt_iff_toNat_lt, toNat a, toNat b]
       exact Nat.add_lt_add_left lt _
 
-/-- From Gloas: a signed payload attestation message passes the check at the epoch of its slot.
-
-The statement holds under the laws of the pairing, as BLS correctness does. -/
-theorem isValidSignatureAtSlot_getPayloadAttestationMessageSignature (laws : PairingLaws)
+/-- From Gloas: a signed payload attestation message passes the check at the epoch of its slot. -/
+theorem isValidSignatureAtSlot_getPayloadAttestationMessageSignature
     {config : Config} {state : BeaconState preset fork} {message : PayloadAttestationMessage}
     {key : Signatures.SecretKey} {signature : BLSSignature}
     (signed : getPayloadAttestationMessageSignature config state message key = .ok signature) :
     isValidSignatureAtSlot config .bls state DOMAIN_PTC_ATTESTER message.data.slot message.data
       (Signatures.skToPk key) signature = .ok true :=
-  isValidSignatureAtEpoch_of_signAtEpoch laws signed
+  isValidSignatureAtEpoch_of_signAtEpoch signed
 
 /-- From Gloas: a signed payload attestation message passes the signature check of the fork choice.
 
 The fork choice checks it as an indexed vote whose one signer is the validator.
 
-The validator must have the public key of the secret key.
-
-The statement holds under the laws of the pairing, as BLS correctness does. -/
+The validator must have the public key of the secret key. -/
 theorem isValidIndexedPayloadAttestation_getPayloadAttestationMessageSignature
-    (laws : PairingLaws) {config : Config} {state : BeaconState preset fork}
+    {config : Config} {state : BeaconState preset fork}
     {message : PayloadAttestationMessage} {key : Signatures.SecretKey} {signature : BLSSignature}
     (signed : getPayloadAttestationMessageSignature config state message key = .ok signature)
     {validator : Validator} (found : getValidator state message.validatorIndex = .ok validator)
@@ -797,7 +779,7 @@ theorem isValidIndexedPayloadAttestation_getPayloadAttestationMessageSignature
   obtain ⟨domain, domained, signed⟩ := bind_ok_iff.mp signed
   obtain ⟨root, rooted, signs⟩ := bind_ok_iff.mp signed
   rw [mapError_ok_iff] at domained rooted signs
-  have verifies := Signatures.fastAggregateVerify_sign laws key (packBytes root) signs
+  have verifies := Signatures.fastAggregateVerify_sign key (packBytes root) signs
   unfold isValidIndexedPayloadAttestation
   simp only [List.mergeSort_singleton, List.toArray, ne_eq, not_true_eq_false, or_false,
     reduceCtorEq, ite_false, liftAccessor, liftSsz, domained, rooted, Except.mapError, bind,
@@ -812,10 +794,8 @@ These checks of the fork choice read only the slot of the message and its signat
 
 The handler of the message also needs a known block, the slot of the state and a committee seat.
 
-The validator must have the public key of the secret key.
-
-The statement holds under the laws of the pairing, as BLS correctness does. -/
-theorem validatePtcMessage_getPayloadAttestationMessageSignature (laws : PairingLaws)
+The validator must have the public key of the secret key. -/
+theorem validatePtcMessage_getPayloadAttestationMessageSignature
     {config : Config} {store : Store preset fork} {state : BeaconState preset fork}
     {message : PayloadAttestationMessage} {key : Signatures.SecretKey} {signature : BLSSignature}
     (signed : getPayloadAttestationMessageSignature config state message key = .ok signature)
@@ -824,7 +804,7 @@ theorem validatePtcMessage_getPayloadAttestationMessageSignature (laws : Pairing
     (current : store.getCurrentSlot config = .ok message.data.slot) :
     store.validatePtcMessage config .bls state { message with signature } bound = .ok () := by
   have valid :=
-    isValidIndexedPayloadAttestation_getPayloadAttestationMessageSignature laws signed found keyed
+    isValidIndexedPayloadAttestation_getPayloadAttestationMessageSignature signed found keyed
       bound
   unfold Store.validatePtcMessage
   simp only [current, bind, Except.bind, ne_eq, not_true_eq_false, ite_false, valid,
@@ -844,10 +824,8 @@ theorem proposerPreferencesSigningRoot_of_genesisValidatorsRoot {config : Config
 
 The validator must have the public key of the secret key in the state of the check.
 
-The signer may hold another state, of the same chain: the states share the genesis validators.
-
-The statement holds under the laws of the pairing, as BLS correctness does. -/
-theorem isValidProposerPreferencesSignature_of_sign (laws : PairingLaws) {config : Config}
+The signer may hold another state, of the same chain: the states share the genesis validators. -/
+theorem isValidProposerPreferencesSignature_of_sign {config : Config}
     {state signer : BeaconState preset fork} {signed : SignedProposerPreferences}
     {key : Signatures.SecretKey} {validator : Validator}
     (registered : getValidator state signed.message.validatorIndex = .ok validator)
@@ -861,7 +839,7 @@ theorem isValidProposerPreferencesSignature_of_sign (laws : PairingLaws) {config
   -- Split the bind with lemmas, so the kernel never evaluates the signature.
   obtain ⟨root, rooted, signs⟩ := bind_ok_iff.mp signedBy
   rw [mapError_ok_iff] at rooted signs
-  obtain ⟨signature, signs', verifies⟩ := Signatures.verify_sign laws key (packBytes root)
+  obtain ⟨signature, signs', verifies⟩ := Signatures.verify_sign key (packBytes root)
   rw [signs', Except.ok.injEq] at signs
   subst signs
   unfold isValidProposerPreferencesSignature
@@ -873,10 +851,10 @@ theorem isValidProposerPreferencesSignature_of_sign (laws : PairingLaws) {config
 
 The dependent root is the ancestor of the head at the dependent slot of the proposal epoch.
 
-Under the pairing laws, the preferences pass the check of their signature.
+The preferences pass the check of their signature.
 
 The state of the check must be of the same chain, and give the validator the key's public key. -/
-theorem getSignedProposerPreferences_ok (laws : PairingLaws) {config : Config}
+theorem getSignedProposerPreferences_ok {config : Config}
     {store : Store preset fork} {signer state : BeaconState preset fork} {headRoot : Root}
     {proposalSlot : Slot} {validatorIndex : ValidatorIndex} {feeRecipient : ExecutionAddress}
     {targetGasLimit : UInt64} {key : Signatures.SecretKey} {signed : SignedProposerPreferences}
@@ -899,14 +877,14 @@ theorem getSignedProposerPreferences_ok (laws : PairingLaws) {config : Config}
   simp only [pure, Except.pure, Except.ok.injEq] at made
   subst made
   exact ⟨rooted, rfl, rfl, rfl, rfl,
-    isValidProposerPreferencesSignature_of_sign laws registered owned sameChain signedBy⟩
+    isValidProposerPreferencesSignature_of_sign registered owned sameChain signedBy⟩
 
 /-- From Heze: a signed inclusion list names the dependent root of the head and the given values.
 
-Under the pairing laws, it passes the check of its signature in the state that signed it.
+It passes the check of its signature in the state that signed it.
 
 The member must have the public key of the secret key in that state. -/
-theorem getSignedInclusionList_ok (laws : PairingLaws) {config : Config}
+theorem getSignedInclusionList_ok {config : Config}
     {store : Store preset fork} {state : BeaconState preset fork} {headRoot : Root} {slot : Slot}
     {validatorIndex : ValidatorIndex} {transactions : List InclusionListTransaction}
     {key : Signatures.SecretKey} {signed : SignedInclusionList}
@@ -934,7 +912,7 @@ theorem getSignedInclusionList_ok (laws : PairingLaws) {config : Config}
     | error e => cases e <;> simp [Except.mapError]
     | ok value => simp [Except.mapError]
   exact ⟨rooted, rfl, rfl, by simp,
-    isValidInclusionListSignature_of_sign laws registered owned signs⟩
+    isValidInclusionListSignature_of_sign registered owned signs⟩
 
 /-- From Heze: a bid whose bits set every seat that the proposer's view sets is inclusive for it.
 

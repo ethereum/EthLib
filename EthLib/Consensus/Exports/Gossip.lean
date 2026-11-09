@@ -15,7 +15,7 @@ The topics and the subscribed subnets take and return typed Python values.
 
 A subnet comes back as an integer, or as the code and the message of its error.
 
-A node ID of 2^256 or more, an unknown name or a fork with no topic set has code 0.
+A node ID of 2^256 or more, an unknown name or a fork with no rules yet has code 0.
 
 The bound of a topic that the fork does not list has the code of its error.
 
@@ -38,10 +38,8 @@ def subnetResult {α : Type} (result : Except (SubnetError ShuffleError) α) : R
 def gossipTopicsOf (args : String × String) : Result (List String) := do
   let (name, fork) := args
   let config ← configOf name
-  let fork ← forkOfName fork.toUTF8
-  let some topics := config.gossipTopics fork
-    | throw (0, s!"the gossip topics of {fork.name} are not yet specified")
-  return topics.map GossipTopic.name
+  let fork ← forkUpTo .hegota fork.toUTF8
+  return (config.gossipTopics fork).map GossipTopic.name
 
 /-- The names of the gossip topics of a fork, as a list.
 
@@ -91,10 +89,7 @@ def gossipTopicBoundExport (name fork topic : ByteArray) : Result UInt64 := do
   let fork ← forkUpTo .hegota fork
   let topicName ← nameOf topic
   let some topic := GossipTopic.ofName? topicName | throw (0, s!"{topicName} names no topic")
-  let some topics := config.gossipTopics fork
-    | throw (BoundsError.topicsNotSpecified.code,
-        s!"the gossip topics of {fork.name} are not yet specified")
-  unless topics.contains topic do
+  unless (config.gossipTopics fork).contains topic do
     throw (BoundsError.topicNotAtFork.code, s!"{topicName} is not a topic of {fork.name}")
   let some bound := topicBound preset config fork topic
     | throw (BoundsError.topicNotAtFork.code, s!"{topicName} is not a topic of {fork.name}")
