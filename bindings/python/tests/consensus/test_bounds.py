@@ -173,6 +173,17 @@ def test_data_column_sidecar_response_from_gloas(
     assert consensus.reqresp_response_bounds(fork, _id(protocol, 1), name) == (56, bound)
 
 
+@pytest.mark.parametrize("protocol", DATA_COLUMN_PROTOCOLS)
+def test_data_column_sidecar_response_at_fulu(protocol: str) -> None:
+    # At Fulu the lists have a limit, so a sidecar keeps the bounds of its type.
+    # An index, three offsets, the signed header and an inclusion proof of 4 roots.
+    smallest = 8 + 3 * 4 + 208 + 4 * 32
+    # At most 4096 cells, commitments and proofs, of 2048, 48 and 48 bytes.
+    bound = smallest + 4096 * (2048 + 48 + 48)
+    protocol_id = _id(protocol, 1)
+    assert consensus.reqresp_response_bounds("fusaka", protocol_id) == (smallest, bound)
+
+
 @pytest.mark.parametrize("name", ["mainnet", "minimal"])
 def test_inclusion_list_response_at_heze(name: str) -> None:
     # An offset and the signature, then a slot, a validator index, a root and an offset.

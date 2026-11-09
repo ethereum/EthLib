@@ -226,9 +226,10 @@ Not yet released.
   `consensus.gossip_topic_bound` answers the limit for `beacon_aggregate_and_proof`, `attester_slashing` and `execution_payload_bid` from `glamsterdam`, and for `inclusion_list` at `hegota`, where it answered the payload cap of 10485760 bytes.
   On mainnet the limits are 16829, 2097616, 196932 and 41112 bytes, and that of a bid is 196934 bytes at `hegota`.
   In Lean, `topicBound_eq` now takes a topic without a size limit, and `decodePayload_message` a message within the size limit of its topic.
-- Data column sidecars and inclusion lists in responses are now held to the size limits of the networking specification ([#1618](https://github.com/ethereum/EthLib/issues/1618)).
+- Data column sidecars on gossip and in responses, and inclusion lists in responses, are now held to the size limits of the networking specification ([#1618](https://github.com/ethereum/EthLib/issues/1618)).
   From `glamsterdam`, `consensus.gossip_topic_bound` answers 44072 bytes on mainnet and 18920 on minimal for `data_column_sidecar_{subnet_id}`, where it answered the payload cap of 10485760 bytes.
   `consensus.reqresp_response_bounds` answers (56, 44072) on mainnet and (56, 18920) on minimal for `data_column_sidecars_by_range` and `data_column_sidecars_by_root`, and (152, 41112) for `inclusion_lists_by_indices` at `hegota`.
+  Their largest length was the payload cap of 10485760 bytes.
   The limit of a sidecar is its size with a cell and a proof for each blob of the largest blob limit.
   In Lean, `GossipTopic.sizeLimit` now takes the configuration, and the gossip `sizeLimit_ne_none_iff` names the data column sidecar topics.
   From `glamsterdam`, `decodePayload_message` at a sidecar topic now needs a message within the size limit of the topic.

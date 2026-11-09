@@ -16,7 +16,7 @@ Each container has distinct field names, and converts to and from its fields.
 
 So its bytes decode back to it.
 
-From Gloas, the largest size of a sidecar covers the blob limit at every epoch.
+The largest size of a sidecar covers the blob limit at every epoch.
 
 Two sidecars whose branches verify for one body root carry one root of commitments.
 
@@ -265,9 +265,11 @@ theorem toNat_computeMaxDataColumnSidecarSize {preset : Preset} {config : Config
   exact UInt64.toNat_ofNat_of_lt' (Nat.lt_of_le_of_lt (Nat.min_le_right _ _) max)
 
 open Cryptography.Kzg.Constants in
-/-- From Gloas, the largest size of a sidecar covers the blob limit at every epoch.
+/-- The largest size of a sidecar covers the blob limit at every epoch.
 
-It admits a cell and a proof for each blob up to that limit, if that size fits in 64 bits. -/
+The fewest bytes of a sidecar, with a cell and a proof per blob up to that limit, are within it.
+
+This holds when that sum fits in 64 bits. -/
 theorem size_le_computeMaxDataColumnSidecarSize {preset : Preset} {config : Config}
     (epoch : Epoch) {blobs : Nat}
     (within : blobs ≤ (config.getBlobParameters epoch).maxBlobsPerBlock.toNat)
