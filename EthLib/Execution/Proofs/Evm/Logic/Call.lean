@@ -21,9 +21,13 @@ Memory grows for both ranges, and the call pays that growth.
 
 The message carries the bytes of the input range as its data.
 
-It holds from Berlin to the fork before Glamsterdam, with one counter of gas.
+The rules hold from Berlin to the fork before Glamsterdam, with one counter of gas.
+
+The steps that they rest on hold at every fork from Berlin.
 
 The account must hold its code in the state, and from Pectra that code must be no delegation.
+
+Another rule for CALL with no value follows an EIP-7702 delegation, at every fork from Berlin.
 
 The depth of the frame must leave room for one more frame.
 

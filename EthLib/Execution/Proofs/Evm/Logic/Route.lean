@@ -30,7 +30,7 @@ The rule here covers a call that sends no value of its own, of every kind, along
 
 It holds at every fork from Berlin, with one counter of gas.
 
-The rules for calls with no delegation are its cases before Glamsterdam.
+The rules for calls with no delegation are its cases along the code of the address.
 
 From Glamsterdam a cold access costs 3000 instead of 2600, by EIP-8038, and the rule pays it.
 
