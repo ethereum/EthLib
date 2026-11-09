@@ -31,7 +31,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.RunMono
 public import EthLib.Execution.Proofs.Evm.Logic.NoAbort
 public import EthLib.Execution.Proofs.Evm.Logic.Fault
 public import EthLib.Execution.Proofs.Evm.Logic.LessGas
-public import EthLib.Execution.Proofs.Evm.Logic.Exact
+public import EthLib.Execution.Proofs.Evm.Logic.RunsOk
 
 /-!
 # `EthLib.Execution.Proofs.Evm.Logic`
@@ -56,5 +56,5 @@ By steps monotone in gas, a run with less gas follows the run with more gas, or 
 
 A specification to frames with no error gives a run that succeeds.
 
-Over steps monotone in gas, it fixes the end of every run that succeeds, with any gas.
+Over steps monotone in gas, a specification to a halt fixes the end of every run that succeeds.
 -/

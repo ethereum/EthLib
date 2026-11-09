@@ -19,6 +19,10 @@ Then that stopped frame, with `k` more gas, meets the postcondition.
 
 So a run with less gas that succeeds ends as the specification says, with exactly `k` less gas.
 
+A specification to a halt that pays `cost`, with any gas from some bound on, fixes every such run.
+
+That run had at least `cost` gas, and it ends with exactly `cost` less.
+
 A frame is stuck when it is running and the step from it, and from it with any less gas, fails.
 
 Say such steps reach a stuck frame from a frame with `k` more gas than a frame `l`.
@@ -155,6 +159,40 @@ theorem SpecG.not_ok {P Q : Evm fork Nat → Prop} (h : SpecG fork P Q)
     s.error ≠ none := by
   intro hok
   exact herr _ (SpecG.low h hp within hs hok) (by simpa using hok)
+
+/-- A specification to a normal halt that pays `cost`, from a frame with any gas from `B` on.
+
+Say the loop runs that frame with any gas to a frame `s` with no error.
+
+The starting frame then had at least `cost` gas, and `s` is that halt with exactly `cost` less. -/
+theorem halted_of_specG {B cost : Nat} {out : ByteArray} {state' : State.TransactionState}
+    {substate' : Substate}
+    (h : ∀ g, B ≤ g → SpecG fork (At code message pc stack memory g state substate returnData)
+      (Halted false out (g - cost) state' substate'))
+    {evm s : Evm fork Nat}
+    (start : At code message pc stack memory gas state substate returnData evm)
+    (within : GasMeter.gasHeld evm.gas ≤ bound)
+    (hs : runFrame (step fork) (step_decreases fork) bound runChild evm within = .ok s)
+    (hok : s.error = none) :
+    cost ≤ gas ∧ s.running = false ∧ s.output = out ∧ s.gas = gas - cost ∧ s.state = state' ∧
+      s.substate = substate' := by
+  have hB : B ≤ gas + max B cost := Nat.le_trans (Nat.le_max_left B cost) (Nat.le_add_left _ _)
+  have hcost : cost ≤ max B cost := Nat.le_max_right B cost
+  obtain ⟨hr, ho, hg, hst, hss⟩ := SpecG.halted (h _ hB) start within hs hok
+  exact ⟨by omega, hr, ho, by omega, hst, hss⟩
+
+/-- A specification to frames with an error, from a frame with any gas from `B` on.
+
+Every frame that the loop runs that frame to, with any gas, has an error. -/
+theorem no_ok_of_specG {B : Nat} {Q : Nat → Evm fork Nat → Prop}
+    (h : ∀ g, B ≤ g →
+      SpecG fork (At code message pc stack memory g state substate returnData) (Q g))
+    (herr : ∀ g evm, Q g evm → evm.error ≠ none) {evm s : Evm fork Nat}
+    (start : At code message pc stack memory gas state substate returnData evm)
+    (within : GasMeter.gasHeld evm.gas ≤ bound)
+    (hs : runFrame (step fork) (step_decreases fork) bound runChild evm within = .ok s) :
+    s.error ≠ none :=
+  SpecG.not_ok (h (gas + B) (Nat.le_add_left B gas)) (herr (gas + B)) (start.addGas B) within hs
 
 /-! ## Stuck frames -/
 

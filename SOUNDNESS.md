@@ -1126,6 +1126,11 @@ Both hold for every bound on the gas of messages and every runner of messages.
 `Logic.SpecG.low` proves that a specification from a frame with `k` more gas then holds of the end of the run with `k` more gas.
 `Logic.SpecG.halted` proves that the run then ends in the normal halt of a specification from a frame of `At`, with `k` less gas.
 `Logic.SpecG.not_ok` proves that the run does not end with no error when every frame of the postcondition has an error.
+`Logic.halted_of_specG` takes a specification over `Logic.StepG` to a normal halt that pays `cost`, from a frame of `At` with every gas from some bound on.
+It proves that every run of that frame that succeeds, with any gas, had at least `cost` gas.
+That run ends in that halt with exactly `cost` less gas.
+`Logic.no_ok_of_specG` proves that every frame that the loop runs a frame of `At` to, with any gas, has an error.
+It assumes a specification over `Logic.StepG` to frames with an error, with every gas from some bound on.
 `Logic.Stuck` is a running frame from which the step fails, and from it with any less gas.
 `Logic.not_ok_of_reaches` proves that a run does not end with no error when these steps from the frame with `k` more gas reach a stuck frame.
 `Logic.no_ok_stuck` proves the same for a frame of `At` that reaches a stuck frame with every gas from some bound on.
@@ -1162,22 +1167,12 @@ It assumes that these steps reach a stopped frame from `l` with `k` more gas.
 It assumes a specification over these steps from that frame with every gas from some bound on.
 Both hold for every bound on the gas of messages and every runner of messages.
 
-`Logic/Exact.lean` says when a run succeeds, that is when the loop ends its frame in a frame with no error.
-`Logic.RunsOk` is that condition, for any meter.
+`Logic/RunsOk.lean` says when a run succeeds, that is when the loop ends its frame in a frame with no error.
+`Logic.RunsOk` is that condition, for any lawful meter.
 `Logic.Spec.runsOk` proves that a specification to frames with no error gives a run that succeeds, under every runner.
-`Logic.SpecOn.runsOk` proves the same for a specification whose run may stop when the runner fails.
-It assumes a runner that never fails on the messages that the specification names.
-`Logic.runsOk_iff` proves that a condition holds exactly when the run succeeds.
-It assumes that the condition gives such a specification, and that every run that succeeds meets it.
-The rest of that file is for the one-counter meter.
-`Logic.halted_of_specG` takes a specification over `Logic.StepG` to a normal halt that pays `cost`, from a frame of `At` with every gas from some bound on.
-It proves that every run of that frame that succeeds, with any gas, had at least `cost` gas.
-That run ends in that halt with exactly `cost` less gas.
-`Logic.no_ok_of_specG` proves that no run of a frame of `At` succeeds, with any gas, when a specification over `Logic.StepG` rules it out.
-That specification goes to frames with an error, and holds with every gas from some bound on.
-`Logic.not_runsOk_of_lt` proves that no run with less gas than `cost` succeeds, when a condition that every success meets gives such a specification to a halt.
-`Logic.not_runsOk_of_stuck` proves that no run succeeds when such a condition makes the frame reach a stuck frame with its own gas.
-`Logic.iff_and_max_le` gives the form of an exact threshold of gas at the larger of two bounds.
+`Logic.SpecOn.runsOk` proves the same for a specification whose runner may fail only on the messages that it names.
+It assumes a runner that never fails on those messages.
+`Logic.not_runsOk_of_lt` proves that no run with less gas than `cost` succeeds, from a specification to a halt that pays `cost`, as above.
 
 ### SHA-256 precompile
 
