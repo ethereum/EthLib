@@ -207,12 +207,12 @@ Then some validators of `V` each signed two attestation data that the beacon cha
 
 Together they hold at least one third of the stake of `V`.
 
-The validator set and the stakes are the same for every vote, as in the model. -/
+The theorem takes one validator set and one stake for every vote, a special case of the model. -/
 theorem accountable_safety_isSlashableAttestationData [Preorder β] {V : Finset ν} {w : ν → ℕ}
     {genesis : β} {block : Root → β} {signed : Set (ν × AttestationData)}
     {c₁ c₂ : Models.Ffg.Checkpoint β}
-    (finalized₁ : Finalized V w genesis (ffgVotes block signed) c₁)
-    (finalized₂ : Finalized V w genesis (ffgVotes block signed) c₂)
+    (finalized₁ : Finalized (fun _ => V) w genesis (ffgVotes block signed) c₁)
+    (finalized₂ : Finalized (fun _ => V) w genesis (ffgVotes block signed) c₂)
     (conflicting : Conflicting c₁.block c₂.block) :
     stake w V ≤ 3 * stake w {validator ∈ V | ∃ data1 data2, (validator, data1) ∈ signed ∧
       (validator, data2) ∈ signed ∧ isSlashableAttestationData data1 data2 = true} :=

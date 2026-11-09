@@ -21,12 +21,12 @@ An honest validator votes only from a justified source, as Casper FFG §2, Table
 
 namespace EthLib.Consensus.Models.Ffg
 
-variable {ν β : Type*} [Preorder β] {V : Finset ν} {w : ν → ℕ} {genesis : β}
+variable {ν β : Type*} [Preorder β] {V : Checkpoint β → Finset ν} {w : ν → ℕ} {genesis : β}
   {votes votes' : Set (Vote ν β)}
 
 omit [Preorder β] in
-theorem signers_mono (h : votes ⊆ votes') (s t : Checkpoint β) :
-    signers V votes s t ⊆ signers V votes' s t := by
+theorem signers_mono {U : Finset ν} (h : votes ⊆ votes') (s t : Checkpoint β) :
+    signers U votes s t ⊆ signers U votes' s t := by
   classical
   intro v hv
   simp only [signers, Finset.mem_filter] at hv ⊢
@@ -43,12 +43,12 @@ theorem Justified.mono (h : votes ⊆ votes') {c : Checkpoint β}
   | root => exact .root
   | link _ hl ih => exact .link ih (hl.mono h)
 
-/-- With positive stake, a supermajority link has a vote. -/
-theorem SupermajorityLink.exists_vote (hV : 0 < stake w V) {s t : Checkpoint β}
+/-- With positive stake in the set of its target, a supermajority link has a vote. -/
+theorem SupermajorityLink.exists_vote {s t : Checkpoint β} (hV : 0 < stake w (V t))
     (hl : SupermajorityLink V w votes s t) : ∃ v, (⟨v, s, t⟩ : Vote ν β) ∈ votes := by
   classical
   by_contra hne
-  have hempty : signers V votes s t = ∅ := by
+  have hempty : signers (V t) votes s t = ∅ := by
     ext v
     simp only [signers, Finset.mem_filter, Finset.notMem_empty, iff_false, not_and]
     exact fun _ hv => hne ⟨v, hv⟩
@@ -57,21 +57,25 @@ theorem SupermajorityLink.exists_vote (hV : 0 < stake w V) {s t : Checkpoint β}
   simp only [stake, Finset.sum_empty] at h hV
   omega
 
-/-- With positive stake, a bound on the target epochs of the votes bounds every justified epoch. -/
-theorem Justified.epoch_le (hV : 0 < stake w V) {m : ℕ}
+/-- With positive stake in every set, a bound on the target epochs bounds every justified epoch. -/
+theorem Justified.epoch_le (hV : ∀ c, 0 < stake w (V c)) {m : ℕ}
     (hm : ∀ x ∈ votes, x.target.epoch ≤ m) {c : Checkpoint β}
     (hc : Justified V w genesis votes c) : c.epoch ≤ m := by
   cases hc with
   | root => exact Nat.zero_le _
   | link _ hl =>
-    obtain ⟨v, hv⟩ := hl.exists_vote hV
+    obtain ⟨v, hv⟩ := hl.exists_vote (hV _)
     exact hm _ hv
 
 /-- Plausible liveness.
 
-Take honest validators `H` in `V` with at least two thirds of its stake.
+Take honest validators `H` in the set `V c` of each checkpoint, with two thirds of its stake.
 
-The set of votes is finite, and the stake of `V` is positive.
+So no honest validator ever exits; the theorem does not cover an honest exit.
+
+A constant set gives the theorem of Casper FFG, with one set for all votes.
+
+The set of votes is finite, and the stake of each set is positive.
 
 Each honest vote has a justified source, and no honest validator is slashable.
 
@@ -82,8 +86,8 @@ Take any block `b` that has the block of `a` in its chain.
 Honest validators can add votes that finalize `b` at an epoch after every justified epoch.
 
 Each added vote has a justified source, and no honest validator becomes slashable. -/
-theorem plausible_liveness {H : Finset ν} (hfin : votes.Finite) (hV : 0 < stake w V)
-    (hH : H ⊆ V) (hq : 2 * stake w V ≤ 3 * stake w H)
+theorem plausible_liveness {H : Finset ν} (hfin : votes.Finite) (hV : ∀ c, 0 < stake w (V c))
+    (hH : ∀ c, H ⊆ V c) (hq : ∀ c, 2 * stake w (V c) ≤ 3 * stake w H)
     (hsrc : ∀ x ∈ votes, x.validator ∈ H → Justified V w genesis votes x.source)
     (hsafe : ∀ v ∈ H, ¬Slashable votes v) :
     ∃ a, Justified V w genesis votes a ∧ ∀ b, a.block ≤ b → ∃ e, ∃ votes' : Set (Vote ν β),
@@ -105,7 +109,7 @@ theorem plausible_liveness {H : Finset ν} (hfin : votes.Finite) (hV : 0 < stake
     cases hc with
     | root => exact Set.mem_insert _ _
     | link _ hl =>
-      obtain ⟨v, hv⟩ := hl.exists_vote hV
+      obtain ⟨v, hv⟩ := hl.exists_vote (hV _)
       exact Set.mem_insert_of_mem _ ⟨_, hv, rfl⟩
   -- `a` is a justified checkpoint of greatest epoch.
   obtain ⟨a, ha, hmax⟩ :=
@@ -122,9 +126,9 @@ theorem plausible_liveness {H : Finset ν} (hfin : votes.Finite) (hV : 0 < stake
   have hlink : ∀ s u : Checkpoint β, s.epoch < u.epoch → s.block ≤ u.block →
       (∀ v ∈ H, (⟨v, s, u⟩ : Vote ν β) ∈ new) →
       SupermajorityLink V w (votes ∪ new) s u := fun s u he hb hn => by
-    refine ⟨he, hb, hq.trans (Nat.mul_le_mul_left 3 (stake_mono fun v hv => ?_))⟩
+    refine ⟨he, hb, (hq _).trans (Nat.mul_le_mul_left 3 (stake_mono fun v hv => ?_))⟩
     simp only [signers, Finset.mem_filter]
-    exact ⟨hH hv, Or.inr (hn v hv)⟩
+    exact ⟨hH _ hv, Or.inr (hn v hv)⟩
   have hl₁ : SupermajorityLink V w (votes ∪ new) a t :=
     hlink a t hae hab fun v hv => ⟨hv, .inl ⟨rfl, rfl⟩⟩
   have hl₂ : SupermajorityLink V w (votes ∪ new) t t' :=
