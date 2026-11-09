@@ -83,6 +83,7 @@ PyObject* AES_ERROR;
 PyObject* CONCAT_KDF_ERROR;
 PyObject* BLOCK_ERROR;
 PyObject* ENGINE_ERROR;
+PyObject* JWT_ERROR;
 PyObject* CHAIN_ERROR;
 PyObject* RLP_ERROR;
 PyObject* SSZ_ERROR;
@@ -1031,6 +1032,8 @@ static PyMethodDef methods[] = {
   {"hoodi_active_fork", py_hoodi_active_fork, METH_VARARGS, DOC_hoodi_active_fork},
   {"active_fork", py_active_fork, METH_VARARGS, DOC_active_fork},
   {"engine_new_payload", py_engine_new_payload, METH_VARARGS, DOC_engine_new_payload},
+  {"engine_jwt_build", py_engine_jwt_build, METH_VARARGS, DOC_engine_jwt_build},
+  {"engine_jwt_check", py_engine_jwt_check, METH_VARARGS, DOC_engine_jwt_check},
   {"engine_new_payload_on_chain", py_engine_new_payload_on_chain, METH_VARARGS,
    DOC_engine_new_payload_on_chain},
   {"engine_forkchoice_updated", py_engine_forkchoice_updated, METH_VARARGS,
@@ -1100,6 +1103,7 @@ PyInit__native(void) {
     EVM_ERROR = PyObject_GetAttrString(errors, "EvmError");
     FEES_ERROR = PyObject_GetAttrString(errors, "FeesError");
     ENGINE_ERROR = PyObject_GetAttrString(errors, "EngineError");
+    JWT_ERROR = PyObject_GetAttrString(errors, "JwtError");
     TRANSITION_ERROR = PyObject_GetAttrString(errors, "TransitionError");
     LIGHT_CLIENT_ERROR = PyObject_GetAttrString(errors, "LightClientError");
     FORK_CHOICE_ERROR = PyObject_GetAttrString(errors, "ForkChoiceError");

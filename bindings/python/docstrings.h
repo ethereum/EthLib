@@ -908,6 +908,12 @@
 #define DOC_engine_new_payload \
   "The payload status of an `engine_newPayload` request, without the parent's state."
 
+#define DOC_engine_jwt_build \
+  "Build an HS256 Engine token from a 32-byte secret and an issued-at time in seconds."
+
+#define DOC_engine_jwt_check \
+  "Accept an HS256 Engine token only within 60 seconds of its issued-at time."
+
 #define DOC_engine_new_payload_on_chain \
   "The payload status of an `engine_newPayload` request, on a chain that holds the parent."
 

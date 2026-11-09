@@ -1211,6 +1211,14 @@ def engine_new_payload(config: dict, request: dict) -> dict:
     """The payload status of an `engine_newPayload` request, without the parent's state."""
     ...
 
+def engine_jwt_build(secret: bytes, issued_at: int) -> str:
+    """Build an HS256 Engine token from a 32-byte secret and an issued-at time in seconds."""
+    ...
+
+def engine_jwt_check(secret: bytes, token: str, clock: int) -> bool:
+    """Accept an HS256 Engine token only within 60 seconds of its issued-at time."""
+    ...
+
 def engine_new_payload_on_chain(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], request: dict) -> tuple[dict, bytes, bytes] | tuple[dict, None, None]:
     """The payload status of an `engine_newPayload` request, on a chain that holds the parent."""
     ...
