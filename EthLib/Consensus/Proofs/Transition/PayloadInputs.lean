@@ -31,6 +31,8 @@ The latest block hash after the block is then the parent hash of that bid.
 From Gloas a block that succeeds also runs an operations step that succeeds.
 
 From Capella to Fulu a block that succeeds runs header, withdrawal and payload steps that succeed.
+
+Before Gloas a block that succeeds first runs a header step that succeeds, on the state before it.
 -/
 
 @[expose] public section
@@ -528,6 +530,25 @@ theorem payloadInputs_processEth1Data {before : fork < .hegota}
   obtain ⟨_, _, rest⟩ := processEth1Data_eq computed
   rw [← rest]
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+/-! ## A block before Gloas -/
+
+/-- Before Gloas, a block step that succeeds passes the header step, on the state that it runs on.
+
+From Gloas the parent payload step runs first, and the header step runs on the state after it. -/
+theorem processBlock_header_of_lt_gloas (before : fork < .glamsterdam)
+    {block : BeaconBlock preset fork}
+    (computed : processBlock config checks engine state block = .ok after) :
+    ∃ headed, processBlockHeader state block = .ok headed := by
+  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  unfold processBlock at computed
+  split at computed
+  · simp only [processBlockAltair, notGloas, ↓reduceDIte, pure_bind, bind_ok_iff] at computed
+    obtain ⟨headed, headedOk, -⟩ := computed
+    exact ⟨headed, headedOk⟩
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨headed, headedOk, -⟩ := computed
+    exact ⟨headed, headedOk⟩
 
 /-! ## A block from Capella to Fulu -/
 
