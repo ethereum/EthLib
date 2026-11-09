@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Proofs.Blocks.AccessListBuilder
 public import EthLib.Execution.Proofs.Blocks.Block
 public import EthLib.Execution.Proofs.Blocks.BlockAccessList
+public import EthLib.Execution.Proofs.Blocks.BodyGas
 public import EthLib.Execution.Proofs.Blocks.Bloom
 public import EthLib.Execution.Proofs.Blocks.DaoFork
 public import EthLib.Execution.Proofs.Blocks.Difficulty
