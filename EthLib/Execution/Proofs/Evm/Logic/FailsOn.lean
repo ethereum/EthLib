@@ -291,7 +291,7 @@ The loop itself returns no error.
 
 Then it runs a frame of the postcondition to `stopped` too.
 
-It holds for every bound on the gas of messages and every runner of messages. -/
+It holds for every runner of messages, and every bound that holds the gas of the frame. -/
 theorem Hoare.runFrame_of_ok [LawfulGasMeter Meter] {bound : Nat}
     {runChild : MessageRunner fork Meter bound} {P Q : Evm fork Meter → Prop}
     (h : Hoare fork P Q) {evm stopped : Evm fork Meter} (hp : P evm)

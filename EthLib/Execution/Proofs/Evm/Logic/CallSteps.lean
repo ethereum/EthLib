@@ -1,34 +1,34 @@
 module
 
-public import EthLib.Execution.Proofs.Evm.Logic.Call
-public import EthLib.Execution.Proofs.Evm.Logic.LessGas
+public import EthLib.Execution.Proofs.Evm.Logic.GasMono
+public import EthLib.Execution.Proofs.Evm.Logic.Route
 
 /-!
 # Proofs: the steps of a call that sends no message
 
 The rule for calls along a route covers a call whose step sends a message.
 
-The facts here cover the other steps of a call that sends no value of its own, of every kind.
+The facts here cover the other outcomes of that step, for every kind of call that sends no value.
 
 They hold at every fork from Berlin, with one counter of gas, along either route.
 
-A call with less gas than its known price fails, or halts the frame with an error.
+A call with less gas than its price before the gas it passes on fails, or halts the frame.
 
-That price is the access to the address, the price of the route and the growth of memory.
+That price is the access to the address and to the delegate if any, and the growth of memory.
 
 Up to BPO5, the charge of the call fails and the frame halts.
 
-From Glamsterdam, a check of the gas fails first, before the step reads the delegate.
+From Glamsterdam, a check of the gas fails the step or halts the frame before it reads the delegate.
 
-A call at the greatest depth, with the gas of that price, sends no message.
+A call at the greatest depth, with at least that price in gas, sends no message.
 
-The frame then pushes 0 and goes on.
+The frame then pays that price, pushes 0 and goes on.
 
 From Pectra, the address may delegate, and the state may fail to give the code of the delegate.
 
 The call then fails, or halts the frame with an error.
 
-From Glamsterdam, a check of the gas may halt the frame first.
+From Glamsterdam, a check of the gas may come first: the step fails with out of gas, or halts.
 
 Out of scope: a call that sends value, and a creation.
 -/
@@ -42,9 +42,13 @@ open GasCosts
 
 variable {fork : Fork}
 
-/-- The step of a call that sends no value of its own, with less gas than its known price, fails.
+/-- The step of a call that sends no value of its own, short of its price, does not succeed.
 
-It fails, or halts the frame with an error. -/
+That price is the access to the address and to the delegate if any, and the growth of memory.
+
+The step fails, or halts the frame with an error.
+
+It holds at every fork from Berlin. -/
 theorem callStep_fails_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
     {evm : Evm fork Nat} {g a i isz o osz : U256} {rest : List U256} {calleeCode : ByteArray}
     {route : Route}
@@ -138,9 +142,13 @@ theorem callStep_fails_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
 
 /-- The step of a call that sends no value of its own, at the greatest depth, sends no message.
 
-The gas of the frame covers the known price of the call.
+The gas of the frame covers at least the price of the access, the route and memory.
 
-The frame then pushes 0 and goes on to the next opcode. -/
+The frame then pushes 0 and goes on to the next opcode, with empty return data.
+
+It pays only that price and grows its memory, and it gets back the gas it would pass on.
+
+It holds at every fork from Berlin. -/
 theorem callStep_deep_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
     {evm : Evm fork Nat} {g a i isz o osz : U256} {rest : List U256} {calleeCode : ByteArray}
     {route : Route}
@@ -155,7 +163,14 @@ theorem callStep_deep_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
     ∃ after, callStep kind evm = .ok (.next after) ∧
       after.code = evm.code ∧ after.validJumpDestinations = evm.validJumpDestinations ∧
       after.message = evm.message ∧ after.pc = evm.pc + 1 ∧ after.stack.val = 0 :: rest ∧
-      after.running = evm.running ∧ after.error = evm.error ∧ after.output = evm.output := by
+      after.running = evm.running ∧ after.error = evm.error ∧ after.output = evm.output ∧
+      after.returnData = .empty ∧
+      after.memory = memoryExtend evm.memory
+        (extendMemory evm.memory.size [(i, isz), (o, osz)]).expandBy ∧
+      after.gas = evm.gas -
+        (callBaseCost fork (decide (toAddressMasked a ∉ evm.substate.accessedAddresses)) +
+        routeCost fork (evm.substate.accessedAddresses.insert (toAddressMasked a)) route +
+        (extendMemory evm.memory.size [(i, isz), (o, osz)]).cost) := by
   rcases evm with ⟨pc, ⟨l, hl⟩, memory, code, valid, gas, running, message, output, returnData,
     state, substate, error⟩
   simp only at hst
@@ -170,12 +185,12 @@ theorem callStep_deep_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
   have htw : Fork.tangerineWhistle ≤ fork := Nat.le_trans (by decide) hfork
   have hsd : Fork.spuriousDragon ≤ fork := Nat.le_trans (by decide) hfork
   generalize hcb : callBaseCost fork (decide (toAddressMasked a ∉ substate.accessedAddresses)) =
-    cb at hgas
+    cb at hgas ⊢
   have hcb' : callBaseCost fork (!decide (toAddressMasked a ∈ substate.accessedAddresses)) = cb :=
     by simpa using hcb
   generalize hdc : routeCost fork (substate.accessedAddresses.insert (toAddressMasked a)) route =
-    dc at hgas
-  generalize hM : (extendMemory memory.size [(i, isz), (o, osz)]).cost = M at hgas
+    dc at hgas ⊢
+  generalize hM : (extendMemory memory.size [(i, isz), (o, osz)]).cost = M at hgas ⊢
   have hmx : maxMessageCallGas (gas - (cb + dc + M)) ≤ gas - (cb + dc + M) := Nat.sub_le _ _
   have hmx' : maxMessageCallGas (gas - M - (cb + dc)) ≤ gas - M - (cb + dc) := Nat.sub_le _ _
   have hmin : ¬ gas - (cb + dc + M) < min g.toNat (maxMessageCallGas (gas - (cb + dc + M))) := by
@@ -206,7 +221,7 @@ theorem callStep_deep_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
       GasMeter.gasLeft, GasMeter.drain, hcb', hM, hgas, Nat.not_lt.mpr hgas,
       hmin, hmin2, hdeep, chargeStateGas, GasMeter.chargeState,
       skipCall, refillStateGas, GasMeter.refill, GasMeter.credit, pushWord, Stack.push, hlen,
-      advance, Functor.map, Except.map]
+      advance, Functor.map, Except.map] <;> omega
   · have hdcode : state.getCode (state.getAccount d).codeHash = .ok dCode := hroute.2.2
     have hdc' : accountAccessCost fork
         (!decide (toAddressMasked a = d) && !decide (d ∈ substate.accessedAddresses)) = dc := by
@@ -221,15 +236,15 @@ theorem callStep_deep_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
       GasMeter.gasLeft, GasMeter.drain, hcb', hdc', hM, hgas,
       Nat.not_lt.mpr hgas, hmin, hmin2, hk1, hk2, hdeep, chargeStateGas, GasMeter.chargeState,
       skipCall, refillStateGas, GasMeter.refill, GasMeter.credit, pushWord, Stack.push, hlen,
-      advance, Functor.map, Except.map]
+      advance, Functor.map, Except.map] <;> omega
 
-/-- The step of a call that sends no value of its own fails when the delegate has no code.
+/-- The step of a call that sends no value of its own fails when the state lacks its delegate code.
 
 From Pectra, the code of the address delegates to `d`, and the state fails to give the code of `d`.
 
 The step then fails, or halts the frame with an error.
 
-From Glamsterdam, a check of the gas may halt the frame before the lookup. -/
+From Glamsterdam, a check of the gas may come first: the step fails with out of gas, or halts. -/
 theorem callStep_fails_of_missing {kind : CallKind}
     {evm : Evm fork Nat} {g a i isz o osz : U256} {rest : List U256} {calleeCode : ByteArray}
     {d : Address} {e : State.StateError}
