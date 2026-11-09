@@ -1809,7 +1809,7 @@
    "docstring":
    "Read the next raw XX message and return its payload and updated state, Noise §5.3."},
   {"summary":
-   "Split a completed raw XX state into its two ciphers and the handshake hash, Noise §5.2.",
+   "Split a completed raw XX state into its send cipher, receive cipher and hash.",
    "signature":
    "(state: tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int]) -> tuple[tuple[bytes | None, int], tuple[bytes | None, int], bytes]",
    "operation": "EthLib.Networking.Noise.Exports.transportExport",
@@ -1829,7 +1829,7 @@
       {"constructor": "firstMessageExtensions", "code": 10}]}],
    "error_class": "NoiseError",
    "docstring":
-   "Split a completed raw XX state into its two ciphers and the handshake hash, Noise §5.2."},
+   "Split a completed raw XX state into its send cipher, receive cipher and hash.\n\nThe split is Noise §5.2, and the order by role is Noise §5.3."},
   {"summary":
    "Encrypt with a cipher state and associated data, returning its next state, Noise §5.1.",
    "signature":
@@ -1917,7 +1917,7 @@
    "docstring":
    "Read exactly one complete 16-bit frame, noise-libp2p \"Wire Format\"."},
   {"summary":
-   "Initialize libp2p XX with its empty prologue and explicit X25519 private keys.",
+   "Initialize libp2p XX with the empty prologue and explicit X25519 private keys.",
    "signature":
    "(initiator: bool, static_key: bytes, ephemeral_key: bytes) -> tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None]",
    "operation": "EthLib.Networking.Noise.Exports.initializeLibp2pExport",
@@ -1925,7 +1925,7 @@
    "errors": [],
    "error_class": "NoiseError",
    "docstring":
-   "Initialize libp2p XX with its empty prologue and explicit X25519 private keys."},
+   "Initialize libp2p XX with the empty prologue and explicit X25519 private keys."},
   {"summary": "Write the next libp2p message with a signed identity payload.",
    "signature":
    "(state: tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None], identity_secret: bytes, extensions: bytes | None) -> tuple[tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None], bytes]",
@@ -1948,7 +1948,7 @@
    "docstring":
    "Write the next libp2p message with a signed identity payload."},
   {"summary":
-   "Read the next libp2p message and authenticate its remote static key.",
+   "Read the next libp2p message, and authenticate the static key of message 2 or 3.",
    "signature":
    "(state: tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None], message: bytes) -> tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None]",
    "operation": "EthLib.Networking.Noise.Exports.readLibp2pExport",
@@ -1968,7 +1968,7 @@
       {"constructor": "firstMessageExtensions", "code": 10}]}],
    "error_class": "NoiseError",
    "docstring":
-   "Read the next libp2p message and authenticate its remote static key."},
+   "Read the next libp2p message, and authenticate the static key of message 2 or 3."},
   {"summary":
    "Return the authenticated peer and transport keys only after completion.",
    "signature":

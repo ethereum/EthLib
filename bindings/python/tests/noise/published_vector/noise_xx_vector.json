@@ -1,8 +1,4 @@
 {
-  "source": "rweather/noise-c",
-  "commit": "cfe25410979a87391bb9ac8d4d4bef64e9f268c6",
-  "path": "tests/vector/noise-c-basic.txt",
-  "license": "MIT",
   "vector": {
     "name": "Noise_XX_25519_ChaChaPoly_SHA256",
     "pattern": "XX",

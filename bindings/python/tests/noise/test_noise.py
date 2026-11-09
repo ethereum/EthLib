@@ -1,12 +1,12 @@
 """Noise XX published vectors, authenticated libp2p handshakes and malformed messages."""
 
+import hashlib
 import json
 from pathlib import Path
 
 import pytest
+from py_ecc.secp256k1 import secp256k1 as reference
 
-from ethlib.cryptography.secp256k1 import is_low_s, verify
-from ethlib.cryptography.sha256 import sha256
 from ethlib.cryptography.x25519 import x25519_public_key
 from ethlib.errors import NoiseError
 from ethlib.networking.noise import (
@@ -25,8 +25,9 @@ from ethlib.networking.noise import (
 )
 from raising import raises
 
-# A published XX vector, pinned in tests/sources.toml at cfe25410979a87391bb9ac8d4d4bef64e9f268c6.
-VECTOR = json.loads(Path(__file__).with_name("noise_xx_vector.json").read_text())["vector"]
+# The published XX vector, pinned in tests/sources.toml.
+VECTOR_FILE = Path(__file__).parent / "published_vector" / "noise_xx_vector.json"
+VECTOR = json.loads(VECTOR_FILE.read_text())["vector"]
 ERROR = "EthLib.Networking.Noise.NoiseError."
 STATIC_I, EPHEMERAL_I = bytes(range(32)), bytes(range(32, 64))
 STATIC_R, EPHEMERAL_R = bytes(range(64, 96)), bytes(range(96, 128))
@@ -37,12 +38,18 @@ IDENTITY_KEY_I = bytes.fromhex("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28
 IDENTITY_KEY_R = bytes.fromhex("02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5")
 
 
-def der_to_compact(signature: bytes) -> bytes:
-    """The 64-byte r and s of a strict DER ECDSA signature."""
+def der_integers(signature: bytes) -> tuple[int, int]:
+    """The r and s of a DER ECDSA signature, after checking its tags and lengths."""
+    assert signature[0] == 0x30
+    assert signature[1] + 2 == len(signature)
+    assert signature[2] == 0x02
     r_size = signature[3]
-    r = signature[4 : 4 + r_size]
-    s = signature[6 + r_size :]
-    return r.rjust(33, b"\x00")[-32:] + s.rjust(33, b"\x00")[-32:]
+    assert signature[4 + r_size] == 0x02
+    s_size = signature[5 + r_size]
+    assert 6 + r_size + s_size == len(signature)
+    r = int.from_bytes(signature[4 : 4 + r_size], "big")
+    s = int.from_bytes(signature[6 + r_size :], "big")
+    return r, s
 
 
 def raw_pair() -> tuple[tuple, tuple]:
@@ -115,17 +122,19 @@ def test_authenticated_exchange(exchange: tuple) -> None:
     assert h_i == h_r
     assert static_r == x25519_public_key(STATIC_R)
     assert static_i == x25519_public_key(STATIC_I)
-    for static, compressed, (key, peer_id, signature, _) in (
-        (static_i, IDENTITY_KEY_I, identity_i),
-        (static_r, IDENTITY_KEY_R, identity_r),
+    for secret, static, compressed, (key, peer_id, signature, _) in (
+        (1, static_i, IDENTITY_KEY_I, identity_i),
+        (2, static_r, IDENTITY_KEY_R, identity_r),
     ):
+        x, y = reference.multiply(reference.G, secret)
+        assert compressed == bytes([2 + y % 2]) + x.to_bytes(32, "big")
         assert key == b"\x08\x02\x12\x21" + compressed
         assert peer_id == b"\x00\x25" + key
-        assert signature[0] == 0x30
-        assert signature[1] + 2 == len(signature)
-        compact = der_to_compact(signature)
-        assert is_low_s(compact)
-        assert verify(compressed, sha256(b"noise-libp2p-static-key:" + static), compact)
+        r, s = der_integers(signature)
+        assert s <= reference.N // 2
+        digest = hashlib.sha256(b"noise-libp2p-static-key:" + static).digest()
+        signers = [reference.ecdsa_raw_recover(digest, (v, r, s)) for v in (27, 28)]
+        assert (x, y) in signers
     assert identity_i[3] == EXT_I
     assert identity_r[3] == EXT_R
     assert send_i == receive_r
@@ -166,8 +175,11 @@ def test_identity_tampering(exchange: tuple, field: str) -> None:
     if field == "public_key":
         payload[7] ^= 1
     else:
-        # Byte 46 lies inside r, so the DER stays strict and only the check can fail.
-        payload[46] ^= 1
+        # Flip bit 0 of the second byte of r: the DER stays strict and verification fails.
+        signature_field = 2 + payload[1]
+        start, size = signature_field + 2, payload[signature_field + 1]
+        payload[start + 5] ^= 1
+        der_integers(bytes(payload[start : start + size]))
     with raises(NoiseError, ERROR + "identity"):
         send_modified_payload(bytes(payload))
 

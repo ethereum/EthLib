@@ -29,7 +29,9 @@ structure Payload where
   signature : ByteArray := .empty
   extensions : Option ByteArray := none
 
-/-- The domain prefix and the Noise static public key, noise-libp2p "Static Key Authentication". -/
+/-- The bytes that the identity key signs: a domain prefix, then the Noise static public key.
+
+The rule is noise-libp2p "The libp2p Handshake Payload". -/
 def signedStatic (staticKey : Key) : ByteArray :=
   "noise-libp2p-static-key:".toUTF8 ++ EthLib.Base.packBytes staticKey
 
@@ -119,9 +121,9 @@ where
 
 /-- Sign the Noise static public key with the secp256k1 identity secret.
 
-The rule is noise-libp2p "Static Key Authentication".
+The rule is noise-libp2p "Static Key Authentication" and "The libp2p Handshake Payload".
 
-The secret is secret, and this function makes no constant-time claim. -/
+The secret key must stay private, and this function makes no constant-time claim. -/
 def makePayload (identitySecret staticKey : Key) (extensions : Option ByteArray) :
     Except NoiseError ByteArray := do
   let publicKey ← (Libp2p.publicKey identitySecret).mapError fun _ => .identity

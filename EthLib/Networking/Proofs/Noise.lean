@@ -11,7 +11,7 @@ The reported public key, signature and extensions are the fields of the decrypte
 
 The reported peer ID is derived from that public key.
 
-Reading message 2 or 3 accepts it only if its payload signature verifies on its static key.
+Reading message 2 or 3 accepts only a payload signed over the static key the message carries.
 -/
 
 public section
@@ -88,7 +88,7 @@ theorem complete_authenticates (s : Libp2pState) (staticKey : Key)
       · simp [hphase, throw, throwThe, MonadExceptOf.throw] at h
   · simp_all
 
-/-- Reading message 2 or 3 accepts only a payload whose signature verifies on its static key.
+/-- Reading message 2 or 3 accepts only a payload signed over the static key the message carries.
 
 The new state keeps the message and the state that read it, for completion. -/
 theorem readLibp2p_authenticates {s next : Libp2pState} {message : ByteArray}

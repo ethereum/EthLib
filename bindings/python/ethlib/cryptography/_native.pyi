@@ -396,7 +396,7 @@ def noise_read_message(state: tuple[bool, bytes, bytes, bytes | None, bytes | No
     ...
 
 def noise_transport(state: tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int]) -> tuple[tuple[bytes | None, int], tuple[bytes | None, int], bytes]:
-    """Split a completed raw XX state into its two ciphers and the handshake hash, Noise §5.2."""
+    """Split a completed raw XX state into its send cipher, receive cipher and hash."""
     ...
 
 def noise_cipher_encrypt(state: tuple[bytes | None, int], aad: bytes, plaintext: bytes) -> tuple[tuple[bytes | None, int], bytes]:
@@ -416,7 +416,7 @@ def noise_unframe(frame: bytes) -> bytes:
     ...
 
 def noise_libp2p_initialize(initiator: bool, static_key: bytes, ephemeral_key: bytes) -> tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None]:
-    """Initialize libp2p XX with its empty prologue and explicit X25519 private keys."""
+    """Initialize libp2p XX with the empty prologue and explicit X25519 private keys."""
     ...
 
 def noise_libp2p_write(state: tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None], identity_secret: bytes, extensions: bytes | None) -> tuple[tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None], bytes]:
@@ -424,7 +424,7 @@ def noise_libp2p_write(state: tuple[tuple[bool, bytes, bytes, bytes | None, byte
     ...
 
 def noise_libp2p_read(state: tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None], message: bytes) -> tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None]:
-    """Read the next libp2p message and authenticate its remote static key."""
+    """Read the next libp2p message, and authenticate the static key of message 2 or 3."""
     ...
 
 def noise_libp2p_complete(state: tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None]) -> tuple[bytes, tuple[bytes, bytes, bytes, bytes | None], tuple[bytes | None, int], tuple[bytes | None, int], bytes]:

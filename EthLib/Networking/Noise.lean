@@ -16,7 +16,9 @@ Keys and ephemeral randomness are explicit inputs, so every operation is a pure 
 
 The concrete suite is `Noise_XX_25519_ChaChaPoly_SHA256`.
 
-The protocol name and framing follow [noise-libp2p][libp2p].
+The protocol name follows [noise-libp2p][libp2p], "Noise Protocol Name".
+
+Framing follows its "Wire Format".
 
 Keys are secret, and this specification makes no constant-time claim.
 

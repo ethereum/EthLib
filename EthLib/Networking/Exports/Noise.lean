@@ -14,9 +14,9 @@ Do not reuse a cipher state after a successful operation; use its returned state
 
 Discard the handshake state after a handshake error.
 
-The libp2p completion result contains only authenticated remote data.
+The libp2p completion result comes from a payload whose static-key signature verifies.
 
-Framing follows [noise-libp2p][libp2p].
+Framing follows [noise-libp2p][libp2p], "Wire Format".
 
 [libp2p]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/noise/README.md
 -/
@@ -80,7 +80,9 @@ def readExport (args : PyValue) : Result PyValue :=
     let (state, payload) ← readMessage (stateOfValue value) message
     return (stateToValue state, payload))) args
 
-/-- Split a completed raw XX state into its two ciphers and the handshake hash, Noise §5.2. -/
+/-- Split a completed raw XX state into its send cipher, receive cipher and hash.
+
+The split is Noise §5.2, and the order by role is Noise §5.3. -/
 @[export eth_noise_transport]
 def transportExport (args : PyValue) : Result PyValue :=
   letI : EthLib.Exports.FromPyItems StateValue := EthLib.Exports.instFromPyItemsOfFromPy
@@ -113,7 +115,7 @@ def frameExport (args : PyValue) : Result PyValue :=
 def unframeExport (args : PyValue) : Result PyValue :=
   pyExport (fun bytes => result (unframe bytes)) args
 
-/-- Initialize libp2p XX with its empty prologue and explicit X25519 private keys. -/
+/-- Initialize libp2p XX with the empty prologue and explicit X25519 private keys. -/
 @[export eth_noise_libp2p_initialize]
 def initializeLibp2pExport (args : PyValue) : Result PyValue :=
   pyExport (fun (initiator, staticKey, ephemeralKey) =>
@@ -126,7 +128,7 @@ def writeLibp2pExport (args : PyValue) : Result PyValue :=
     let (state, message) ← writeLibp2p (libp2pOfValue value) identitySecret extensions
     return (libp2pToValue state, message))) args
 
-/-- Read the next libp2p message and authenticate its remote static key. -/
+/-- Read the next libp2p message, and authenticate the static key of message 2 or 3. -/
 @[export eth_noise_libp2p_read]
 def readLibp2pExport (args : PyValue) : Result PyValue :=
   pyExport (fun (value, message) => result (do

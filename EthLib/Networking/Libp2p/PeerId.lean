@@ -45,12 +45,12 @@ def decodePublicKey (key : ByteArray) : Except IdentityError Point := do
 
 /-- The identity multihash of a canonical secp256k1 public-key protobuf, peer-IDs "Peer Ids".
 
-Its length byte is 37, so the input must be a 37-byte canonical public key. -/
+The multihash length byte is 0x25 = 37, so the input must be a canonical 37-byte key protobuf. -/
 def peerId (publicKey : ByteArray) : ByteArray := ⟨#[0x00, 0x25]⟩ ++ publicKey
 
-/-- Derive and serialize the public key of a secret, a 32-byte integer in [1, n).
+/-- Derive and serialize the public key of a secret in [1, n), with n the secp256k1 group order.
 
-The secret is secret, and this function makes no constant-time claim. -/
+The secret key must stay private, and this function makes no constant-time claim. -/
 def publicKey (secret : Vector UInt8 32) : Except IdentityError ByteArray :=
   let n := EthLib.Base.bytesToNat secret.toList
   if h : 0 < n ∧ n < Fn.modulus then
@@ -90,7 +90,7 @@ def decodeSignature (signature : ByteArray) : Except IdentityError (Nat × Nat) 
 
 /-- Sign SHA-256 of the message, then write its low-s signature in DER, peer-IDs "Secp256k1".
 
-The secret is secret, and this function makes no constant-time claim. -/
+The secret key must stay private, and this function makes no constant-time claim. -/
 def sign (secret : Vector UInt8 32) (message : ByteArray) : Except IdentityError ByteArray := do
   let n := EthLib.Base.bytesToNat secret.toList
   if h : 0 < n ∧ n < Fn.modulus then

@@ -586,9 +586,11 @@ The reported public key, signature and extensions are the fields of the payload 
 The signature verifies against the static key read from that message, and the reported peer ID derives from the signing public key.
 `readLibp2p_authenticates` states the same check for the read of message 2 or 3.
 This is an acceptance theorem, not a proof of protocol security, confidentiality or constant-time execution.
-It holds for any state that a caller passes in, so it does not relate the identity to the transport keys or the handshake hash of that state.
-Only the libp2p completion carries the guarantee; the raw transport split of an XX state checks no identity.
+Both theorems hold for any state that a caller passes in.
+They do not relate the identity to the transport keys or the handshake hash of that state.
+Only the libp2p read and completion check an identity; the raw transport split of an XX state checks none.
 The Python tests compare the raw XX handshake with a published test vector.
+No published vector covers the libp2p payload, so its tests check the keys and signatures with independent code.
 
 The bindings take explicit keys and state tuples.
 Callers must use fresh ephemeral keys and use the returned state after each successful cipher call.
