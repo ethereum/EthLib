@@ -266,6 +266,32 @@ theorem fastAggregateVerify_of_represents {sks : List SecretKey}
     (congrArg (G1.Represents P) (zero_add _)).mp hPrep
   exact coreVerify_of_represents hPrep' hsum hQ hb hS
 
+/-- Fast verification of honest keys is verification under their scalar sum.
+
+The list must be nonempty, but its scalar sum may be zero. -/
+theorem fastAggregateVerify_eq_verify (sks : List SecretKey) (hne : sks ≠ [])
+    (msg sig : ByteArray) :
+    fastAggregateVerify (sks.map pkBytes).toArray msg sig =
+      verify (G1.compress (G1.mul G1.generator (sks.map (·.val)).sum)) msg sig := by
+  obtain ⟨P, hP, hPrep⟩ := forIn_pkBytes sks G1.represents_zero
+  unfold fastAggregateVerify
+  rw [ite_eq_right (by cases sks with
+    | nil => exact absurd rfl hne
+    | cons _ _ => exact Bool.false_ne_true)]
+  simp only [List.forIn_toArray]
+  rw [Id.run_bind]
+  erw [hP]
+  have hPrep' : G1.Represents P (sks.map (·.val)).sum :=
+    (congrArg (G1.Represents P) (zero_add _)).mp hPrep
+  obtain ⟨hi, ha⟩ := G1.toAffine_congr hPrep'.1
+    (G1.valid_mul G1.valid_generator _) hPrep'.2
+  change verify (G1.compress P) msg sig = _
+  have compressed : G1.compress P =
+      G1.compress (G1.mul G1.generator (sks.map (·.val)).sum) := by
+    unfold G1.compress
+    rw [hi, ha]
+  rw [compressed]
+
 /-- Honest signatures on one message aggregate to a signature that verifies under the key sum.
 
 The secret keys must not sum to zero.

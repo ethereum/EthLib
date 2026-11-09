@@ -69,6 +69,7 @@ public import EthLib.Cryptography.Proofs.Bls.MapToCurve
 public import EthLib.Cryptography.Proofs.Bls.Signatures
 public import EthLib.Cryptography.Proofs.Bls.KeyGen
 public import EthLib.Cryptography.Proofs.Bls.SignaturesCorrect
+public import EthLib.Cryptography.Proofs.Bls.AggregatePerm
 public import EthLib.Cryptography.Proofs.Bls.SignaturesUnique
 public import EthLib.Cryptography.Proofs.Bls.Security
 public import EthLib.Cryptography.Proofs.Bls.Errors
