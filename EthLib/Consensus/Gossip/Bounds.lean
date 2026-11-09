@@ -29,6 +29,10 @@ A gossip payload has no smallest length, so only a largest length bounds it.
 
 From Gloas, the networking specification sets a size limit on the messages of some topics.
 
+[EIP-7688](https://eips.ethereum.org/EIPS/eip-7688#network-message-size-bounds) asks for them.
+
+The limits are preset values.
+
 - Aggregates, attester slashings and bids have one from Gloas.
 - Inclusion lists have one from Heze, and Heze raises the limit of a bid for its inclusion bits.
 
@@ -36,7 +40,7 @@ The bound is the largest size of the type, or the size limit of the topic if tha
 
 From Gloas the specification also bounds a data column sidecar, by a size from the blob schedule.
 
-That bound is not yet in EthLib, so the topic keeps the bound of its type.
+EthLib does not hold the topic to that size, so the topic keeps the bound of its type.
 -/
 
 @[expose] public section

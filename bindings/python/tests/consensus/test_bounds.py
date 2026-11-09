@@ -175,7 +175,9 @@ def test_voluntary_exit_topic_at_heze() -> None:
     assert consensus.gossip_topic_bound("hegota", "voluntary_exit") == 8 + 8 + 96
 
 
-# From Gloas the lists of these messages have no limit, so the specification bounds each size.
+# These messages hold lists without a limit, so the specification sets a size limit on each.
+#
+# Aggregates, attester slashings and bids have one from Gloas, and inclusion lists from Heze.
 #
 # A committee has at most 2048 members, and a slot has 64 committees on mainnet and 4 on minimal.
 COMMITTEES = [("mainnet", 64), ("minimal", 4)]
@@ -207,7 +209,7 @@ def test_attester_slashing_topic_from_gloas(fork: str, name: str, committees: in
 def test_execution_payload_bid_topic_from_gloas(fork: str, inclusion_bits: int, name: str) -> None:
     # Four 32-byte values, an address, five integers, an offset and the root of the requests.
     # Heze adds 16 inclusion bits, and the commitments of 48 bytes each come last.
-    # The constant counts 4096 commitments on both presets.
+    # The size limit counts 4096 commitments on both presets.
     bid = 4 * 32 + 20 + 5 * 8 + 4 + 32 + inclusion_bits // 8 + 4096 * 48
     # An offset and the signature come before the bid.
     bound = 4 + 96 + bid
@@ -217,8 +219,8 @@ def test_execution_payload_bid_topic_from_gloas(fork: str, inclusion_bits: int, 
 @pytest.mark.parametrize("name", ["mainnet", "minimal"])
 def test_inclusion_list_topic_at_heze(name: str) -> None:
     # A slot, a validator index, a root and an offset take 52 bytes.
-    # The transactions hold at most 8192 bytes and none is empty.
-    # So the list is longest with 8192 transactions of one byte, each after a 4-byte offset.
+    # The transactions hold at most 8192 bytes.
+    # The size limit counts 8192 transactions of one byte, each after a 4-byte offset.
     inclusion_list = 52 + 8192 * (4 + 1)
     # An offset and the signature come before the list.
     bound = 4 + 96 + inclusion_list

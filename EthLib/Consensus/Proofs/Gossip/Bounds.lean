@@ -17,9 +17,9 @@ From Gloas, a size limit of its topic bounds it too.
 - Only aggregates, attester slashings, bids and inclusion lists have one.
 - With a size limit, the bound of a topic is the lower of the limit and the bound of its type.
 - A payload that the gossip decoder accepts at its topic's bound is within the type's largest size.
-- It is also within the size limit of the topic.
+- That payload is also within the size limit of the topic.
 - A message that a node serializes, within the payload cap, passes the decoder once compressed.
-- It must also be within the size limit of its topic, if the topic has one.
+- That message must also be within the size limit of its topic, if the topic has one.
 - Its payload then reads back as the message.
 - From Heze, the topic of inclusion lists carries a signed inclusion list.
 -/
