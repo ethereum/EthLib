@@ -2,7 +2,6 @@ module
 
 public import EthLib.Consensus.Containers.InclusionList
 public import EthLib.Consensus.Mutators
-public import EthLib.Consensus.PayloadTimeliness
 
 /-!
 # `Consensus.InclusionListCommittee`

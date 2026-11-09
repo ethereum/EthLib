@@ -1,18 +1,14 @@
 module
 
-public import EthLib.Base.Proofs.MapM
-public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.InclusionListCommittee
-public import EthLib.Consensus.Proofs.PayloadTimeliness
+public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Consensus.Proofs.Time
 public import EthLib.Cryptography.Proofs.Bls.SignaturesCorrect
 
 /-!
 # Proofs: the inclusion list committee and its signature
 
-A validator is a member of the beacon committees of a slot exactly when one of them holds it.
-
-Each seat of the inclusion list committee holds such a member, in the order of the committees.
+Seat `i` of the committee holds member `i` of its slot, counted modulo the number of members.
 
 The committee fails exactly when the beacon committees of the slot hold no validator.
 
@@ -30,34 +26,6 @@ namespace EthLib.Consensus
 open Base Cryptography.Bls Serialization.Ssz
 
 variable {preset : Preset} {fork : Fork} {state : BeaconState preset fork} {slot : Slot}
-
-/-- A validator is among the members of a slot exactly when a beacon committee of it holds it. -/
-theorem mem_slotCommitteeMembers {members : Array ValidatorIndex}
-    (found : slotCommitteeMembers state slot = .ok members) {validator : ValidatorIndex} :
-    validator ∈ members ↔
-      ∃ i < (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat,
-        ∃ committee, getBeaconCommittee state slot i.toUInt64 = .ok committee ∧
-          validator ∈ committee := by
-  rw [slotCommitteeMembers_eq, foldlM_append_eq_flatten_mapM] at found
-  simp only [bind, Except.bind] at found
-  split at found
-  · cases found
-  rename_i committees mapped
-  simp only [pure, Except.pure, Except.ok.injEq] at found
-  subst found
-  simp only [Array.empty_append, Array.mem_flatten, List.mem_toArray]
-  constructor
-  · rintro ⟨committee, member, holds⟩
-    obtain ⟨i, inRange, made⟩ := mapM_ok_mem mapped committee member
-    exact ⟨i, List.mem_range.mp inRange, committee, made, holds⟩
-  · rintro ⟨i, inRange, committee, made, holds⟩
-    have bound : i < (List.range
-        (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat).length := by
-      simpa using inRange
-    have atIndex := mapM_ok_getElem mapped i bound
-    rw [List.getElem_range, made] at atIndex
-    cases atIndex
-    exact ⟨_, List.getElem_mem _, holds⟩
 
 /-- Seat `i` of a committee holds member `i` of the slot, counted modulo the number of members.
 
