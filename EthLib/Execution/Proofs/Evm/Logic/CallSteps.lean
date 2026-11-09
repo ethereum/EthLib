@@ -61,84 +61,27 @@ theorem callStep_fails_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
       routeCost fork (evm.substate.accessedAddresses.insert (toAddressMasked a)) route +
       (extendMemory evm.memory.size [(i, isz), (o, osz)]).cost) :
     StepFails (callStep kind evm) := by
-  rcases evm with ⟨pc, ⟨l, hl⟩, memory, code, valid, gas, running, message, output, returnData,
-    state, substate, error⟩
-  simp only at hst
-  subst hst
-  have hgc : ∀ (tx : State.TransactionState) (x : Address) h,
-      (tx.recordAccountRead x).getCode h = tx.getCode h := fun _ _ _ => rfl
-  have hga : ∀ (tx : State.TransactionState) (x y : Address),
-      (tx.recordAccountRead x).getAccount y = tx.getAccount y := fun _ _ _ => rfl
-  have hal : ∀ (tx : State.TransactionState) (x y : Address),
-      (tx.recordAccountRead x).isAccountAlive y = tx.isAccountAlive y := fun _ _ _ => rfl
-  simp only at hcode hgas hroute ⊢
-  have htw : Fork.tangerineWhistle ≤ fork := Nat.le_trans (by decide) hfork
-  have hsd : Fork.spuriousDragon ≤ fork := Nat.le_trans (by decide) hfork
-  generalize hcb : callBaseCost fork (decide (toAddressMasked a ∉ substate.accessedAddresses)) =
-    cb at hgas
-  have hcb' : callBaseCost fork (!decide (toAddressMasked a ∈ substate.accessedAddresses)) = cb :=
-    by simpa using hcb
-  generalize hdc : routeCost fork (substate.accessedAddresses.insert (toAddressMasked a)) route =
-    dc at hgas
-  generalize hM : (extendMemory memory.size [(i, isz), (o, osz)]).cost = M at hgas
-  have hab : EvmError.outOfGas.aborts = false := rfl
+  obtain ⟨stack, -, h⟩ := callStep_of_routes hfork hst hcode hroute rfl rfl rfl
+  simp only at h
+  generalize callBaseCost fork (decide (toAddressMasked a ∉ evm.substate.accessedAddresses)) =
+    cb at h hgas
+  generalize routeCost fork (evm.substate.accessedAddresses.insert (toAddressMasked a)) route =
+    dc at h hgas
+  generalize extendMemory evm.memory.size [(i, isz), (o, osz)] = growth at h hgas
+  rw [h]
   by_cases hG : fork ≥ .glamsterdam
-  · by_cases hk : gas < cb + M
-    · refine .inl ⟨.outOfGas, ?_⟩
-      cases kind <;>
-      simp [callStep, popCallOperands, popCallValue, CallKind.sendsValue, popWord, Stack.pop, bind,
-        Except.bind, pure, Except.pure, accessAddress, hfork, checkGas, hG, callValueCost, hcb', hM,
-        hk, GasMeter.gasLeft, throw, throwThe, MonadExceptOf.throw]
-    · refine .inr ?_
-      rcases route with _ | ⟨d, dCode⟩
-      · simp only [routeCost] at hdc
-        omega
-      obtain ⟨hpec, hdel, hdcode⟩ := hroute
-      have hdel' : (if Fork.pectra ≤ fork then delegatedAddress calleeCode else none) = some d := by
-        simp [hpec, hdel]
-      have hdc' : accountAccessCost fork
-          (!decide (toAddressMasked a = d) && !decide (d ∈ substate.accessedAddresses)) = dc := by
-        rw [← hdc, routeCost]
-        simp
-      have hk2 : gas < cb + M + dc := by omega
-      cases kind <;>
-      simp [hab, callStep, popCallOperands, popCallValue, CallKind.sendsValue, popWord, Stack.pop,
-        bind, Except.bind, pure, Except.pure, accessAddress, hfork, checkGas, hG, accessDelegation,
-        accountCode, recordAccountRead, hgc, hga, hcode, hdel', Except.mapError, callValueCost,
-        keepReads, GasMeter.gasLeft, hcb', hdc', hM, hk, hk2, exceptionalHalt, throw, throwThe,
-        MonadExceptOf.throw]
-  · refine .inr ?_
-    have h1 : ¬ (cb + dc + M ≤ gas) := by omega
-    have h2 : gas < g.toNat + (cb + dc) + M := by omega
-    rcases route with _ | ⟨d, dCode⟩
-    · have hdel' : (if Fork.pectra ≤ fork then delegatedAddress calleeCode else none) = none := by
-        split
-        · exact hroute ‹_›
-        · rfl
-      simp only [routeCost] at hdc
-      subst hdc
-      simp only [Nat.add_zero] at h1 h2
-      cases kind <;>
-      simp [hab, callStep, popCallOperands, popCallValue, CallKind.sendsValue, popWord, Stack.pop,
-        bind, Except.bind, pure, Except.pure, accessAddress, hfork, checkGas, hG, accessDelegation,
-        accountCode, recordAccountRead, hgc, hga, hal, hcode, hdel', htw, hsd, Except.mapError,
-        callExtraGas, callNewAccountCost, callValueCost,
-        payCall, messageCallGas, chargeGas, GasMeter.charge, keepReads, GasMeter.gasLeft, hcb', hM,
-        h1, h2, exceptionalHalt]
-    · obtain ⟨hpec, hdel, hdcode⟩ := hroute
-      have hdel' : (if Fork.pectra ≤ fork then delegatedAddress calleeCode else none) = some d := by
-        simp [hpec, hdel]
-      have hdc' : accountAccessCost fork
-          (!decide (toAddressMasked a = d) && !decide (d ∈ substate.accessedAddresses)) = dc := by
-        rw [← hdc, routeCost]
-        simp
-      cases kind <;>
-      simp [hab, callStep, popCallOperands, popCallValue, CallKind.sendsValue, popWord, Stack.pop,
-        bind, Except.bind, pure, Except.pure, accessAddress, hfork, checkGas, hG, accessDelegation,
-        accountCode, recordAccountRead, hgc, hga, hal, hcode, hdel', hdcode, htw, hsd,
-        Except.mapError, callExtraGas, callNewAccountCost, callValueCost,
-        payCall, messageCallGas, chargeGas, GasMeter.charge, keepReads, GasMeter.gasLeft, hcb',
-        hdc', hM, h1, h2, exceptionalHalt]
+  · by_cases c1 : evm.gas < cb + growth.cost
+    · simp only [hG, c1, and_self, ↓reduceIte]
+      exact .inl ⟨_, rfl⟩
+    have c2 : evm.gas < cb + growth.cost + dc := by omega
+    simp only [hG, c1, c2, and_self, and_false, ↓reduceIte]
+    exact .inr ⟨_, rfl, rfl, nofun⟩
+  have hle : cb + dc ≤ (messageCallGas fork 0 g.toNat evm.gas growth.cost (cb + dc)).cost := by
+    simp [messageCallGas]
+  have c3 : evm.gas <
+      (messageCallGas fork 0 g.toNat evm.gas growth.cost (cb + dc)).cost + growth.cost := by omega
+  simp only [hG, c3, false_and, ↓reduceIte]
+  exact .inr ⟨_, rfl, rfl, nofun⟩
 
 /-- The step of a call that sends no value of its own, at the greatest depth, sends no message.
 
@@ -171,72 +114,45 @@ theorem callStep_deep_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
         (callBaseCost fork (decide (toAddressMasked a ∉ evm.substate.accessedAddresses)) +
         routeCost fork (evm.substate.accessedAddresses.insert (toAddressMasked a)) route +
         (extendMemory evm.memory.size [(i, isz), (o, osz)]).cost) := by
-  rcases evm with ⟨pc, ⟨l, hl⟩, memory, code, valid, gas, running, message, output, returnData,
-    state, substate, error⟩
-  simp only at hst
-  subst hst
-  have hgc : ∀ (tx : State.TransactionState) (x : Address) h,
-      (tx.recordAccountRead x).getCode h = tx.getCode h := fun _ _ _ => rfl
-  have hga : ∀ (tx : State.TransactionState) (x y : Address),
-      (tx.recordAccountRead x).getAccount y = tx.getAccount y := fun _ _ _ => rfl
-  have hal : ∀ (tx : State.TransactionState) (x y : Address),
-      (tx.recordAccountRead x).isAccountAlive y = tx.isAccountAlive y := fun _ _ _ => rfl
-  simp only at hcode hgas hdeep hroute ⊢
+  obtain ⟨stack, hstack, h⟩ := callStep_of_routes hfork hst hcode hroute rfl rfl rfl
+  simp only at h
+  generalize callBaseCost fork (decide (toAddressMasked a ∉ evm.substate.accessedAddresses)) =
+    cb at h hgas ⊢
+  generalize routeCost fork (evm.substate.accessedAddresses.insert (toAddressMasked a)) route =
+    dc at h hgas ⊢
+  generalize extendMemory evm.memory.size [(i, isz), (o, osz)] = growth at h hgas ⊢
   have htw : Fork.tangerineWhistle ≤ fork := Nat.le_trans (by decide) hfork
-  have hsd : Fork.spuriousDragon ≤ fork := Nat.le_trans (by decide) hfork
-  generalize hcb : callBaseCost fork (decide (toAddressMasked a ∉ substate.accessedAddresses)) =
-    cb at hgas ⊢
-  have hcb' : callBaseCost fork (!decide (toAddressMasked a ∈ substate.accessedAddresses)) = cb :=
-    by simpa using hcb
-  generalize hdc : routeCost fork (substate.accessedAddresses.insert (toAddressMasked a)) route =
-    dc at hgas ⊢
-  generalize hM : (extendMemory memory.size [(i, isz), (o, osz)]).cost = M at hgas ⊢
-  have hmx : maxMessageCallGas (gas - (cb + dc + M)) ≤ gas - (cb + dc + M) := Nat.sub_le _ _
-  have hmx' : maxMessageCallGas (gas - M - (cb + dc)) ≤ gas - M - (cb + dc) := Nat.sub_le _ _
-  have hmin : ¬ gas - (cb + dc + M) < min g.toNat (maxMessageCallGas (gas - (cb + dc + M))) := by
+  have hmx : maxMessageCallGas (evm.gas - growth.cost - (cb + dc)) ≤
+      evm.gas - growth.cost - (cb + dc) := Nat.sub_le _ _
+  have hcost : (messageCallGas fork 0 g.toNat evm.gas growth.cost (cb + dc)).cost =
+      (messageCallGas fork 0 g.toNat evm.gas growth.cost (cb + dc)).subCall + (cb + dc) := by
+    simp [messageCallGas]
+  have hsub : (messageCallGas fork 0 g.toNat evm.gas growth.cost (cb + dc)).subCall ≤
+      evm.gas - growth.cost - (cb + dc) := by
+    simp only [messageCallGas, htw, show cb + dc + growth.cost ≤ evm.gas by omega]
+    simp only [and_self, ↓reduceIte, Nat.add_zero]
     omega
-  have hmin2 : ¬ gas < min g.toNat (maxMessageCallGas (gas - M - (cb + dc))) + (cb + dc) + M := by
+  have c1 : ¬ evm.gas < cb + growth.cost := by omega
+  have c2 : ¬ evm.gas < cb + growth.cost + dc := by omega
+  have c3 : ¬ evm.gas <
+      (messageCallGas fork 0 g.toNat evm.gas growth.cost (cb + dc)).cost + growth.cost := by omega
+  simp only [c1, c2, c3, and_false, ↓reduceIte] at h
+  generalize hf : finishCall (fork := fork) (Meter := Nat) kind _ _ _ _ _ _ = x at h
+  cases x with
+  | error e =>
+    have hlen : stack.val.length ≠ STACK_LIMIT := by
+      rw [hstack]
+      have := evm.stack.property
+      rw [hst] at this
+      cases kind <;> simp [CallKind.sendsValue] at this <;> omega
+    simp [finishCall, genericCall, skipCall, recordAccountRead, refillStateGas, GasMeter.refill,
+      hdeep, pushWord, Stack.push, hlen, bind, Except.bind, pure, Except.pure, Functor.map,
+      Except.map] at hf
+  | ok r =>
+    obtain ⟨after, stack', rfl, hst', rfl⟩ := finishCall_of_skip (.inr (by exact hdeep)) hf
+    refine ⟨_, h, ?_⟩
+    simp only [advance, hst', hstack, GasMeter.credit, GasMeter.refill, GasMeter.drain, true_and]
     omega
-  have hk1 : ¬ gas < cb + M := by omega
-  have hk2 : ¬ gas < cb + M + dc := by omega
-  have hlen : rest.length ≠ STACK_LIMIT := by
-    cases kind <;> simp [CallKind.sendsValue] at hl <;> omega
-  have hdel : (if Fork.pectra ≤ fork then delegatedAddress calleeCode else none) =
-      route.map Prod.fst := by
-    rcases route with _ | ⟨d, dCode⟩
-    · split
-      · exact hroute ‹_›
-      · rfl
-    · simp [hroute.1, hroute.2.1]
-  rcases route with _ | ⟨d, dCode⟩
-  · simp only [routeCost] at hdc
-    subst hdc
-    simp only [Nat.add_zero] at hgas hmin hmin2 hk2 ⊢
-    by_cases hG : fork ≥ .glamsterdam <;> cases kind <;>
-    simp [callStep, popCallOperands, popCallValue, CallKind.sendsValue, popWord, Stack.pop, bind,
-      Except.bind, pure, Except.pure, accessAddress, hfork, checkGas, hG, accessDelegation,
-      accountCode, recordAccountRead, hgc, hga, hal, hcode, hdel, htw, hsd, Except.mapError,
-      callExtraGas, callNewAccountCost, callNewAccountStateGas, callValueCost,
-      payCall, messageCallGas, chargeGas, GasMeter.charge, finishCall, genericCall, keepReads,
-      GasMeter.gasLeft, GasMeter.drain, hcb', hM, hgas, Nat.not_lt.mpr hgas,
-      hmin, hmin2, hdeep, chargeStateGas, GasMeter.chargeState,
-      skipCall, refillStateGas, GasMeter.refill, GasMeter.credit, pushWord, Stack.push, hlen,
-      advance, Functor.map, Except.map] <;> omega
-  · have hdcode : state.getCode (state.getAccount d).codeHash = .ok dCode := hroute.2.2
-    have hdc' : accountAccessCost fork
-        (!decide (toAddressMasked a = d) && !decide (d ∈ substate.accessedAddresses)) = dc := by
-      rw [← hdc, routeCost]
-      simp
-    by_cases hG : fork ≥ .glamsterdam <;> cases kind <;>
-    simp [callStep, popCallOperands, popCallValue, CallKind.sendsValue, popWord, Stack.pop, bind,
-      Except.bind, pure, Except.pure, accessAddress, hfork, checkGas, hG, accessDelegation,
-      accountCode, recordAccountRead, hgc, hga, hal, hcode, hdel, hdcode, htw, hsd,
-      Except.mapError, callExtraGas, callNewAccountCost, callNewAccountStateGas, callValueCost,
-      payCall, messageCallGas, chargeGas, GasMeter.charge, finishCall, genericCall, keepReads,
-      GasMeter.gasLeft, GasMeter.drain, hcb', hdc', hM, hgas,
-      Nat.not_lt.mpr hgas, hmin, hmin2, hk1, hk2, hdeep, chargeStateGas, GasMeter.chargeState,
-      skipCall, refillStateGas, GasMeter.refill, GasMeter.credit, pushWord, Stack.push, hlen,
-      advance, Functor.map, Except.map] <;> omega
 
 /-- The step of a call that sends no value of its own fails when the state lacks its delegate code.
 
@@ -258,10 +174,6 @@ theorem callStep_fails_of_missing {kind : CallKind}
     state, substate, error⟩
   simp only at hst
   subst hst
-  have hgc : ∀ (tx : State.TransactionState) (x : Address) h,
-      (tx.recordAccountRead x).getCode h = tx.getCode h := fun _ _ _ => rfl
-  have hga : ∀ (tx : State.TransactionState) (x y : Address),
-      (tx.recordAccountRead x).getAccount y = tx.getAccount y := fun _ _ _ => rfl
   simp only at hcode hmissing ⊢
   have hfork : Fork.berlin ≤ fork := Nat.le_trans (by decide) hpectra
   have hdel' : (if Fork.pectra ≤ fork then delegatedAddress calleeCode else none) = some d := by
@@ -286,19 +198,19 @@ theorem callStep_fails_of_missing {kind : CallKind}
         cases kind <;>
         simp [hab', callStep, popCallOperands, popCallValue, CallKind.sendsValue, popWord,
           Stack.pop, bind, Except.bind, pure, Except.pure, accessAddress, hfork, checkGas, hG,
-          accessDelegation, accountCode, recordAccountRead, hgc, hga, hcode, hdel',
+          accessDelegation, accountCode, recordAccountRead, hcode, hdel',
           Except.mapError, keepReads, callValueCost, hk1, hk2, GasMeter.gasLeft, exceptionalHalt,
           throw, throwThe, MonadExceptOf.throw]
       · refine .inl ⟨.state e, ?_⟩
         cases kind <;>
         simp [hab, callStep, popCallOperands, popCallValue, CallKind.sendsValue, popWord,
           Stack.pop, bind, Except.bind, pure, Except.pure, accessAddress, hfork, checkGas, hG,
-          accessDelegation, accountCode, recordAccountRead, hgc, hga, hcode, hdel', hmissing,
+          accessDelegation, accountCode, recordAccountRead, hcode, hdel', hmissing,
           Except.mapError, keepReads, callValueCost, hk1, hk2, GasMeter.gasLeft]
   · refine .inl ⟨.state e, ?_⟩
     cases kind <;>
     simp [hab, callStep, popCallOperands, popCallValue, CallKind.sendsValue, popWord, Stack.pop,
       bind, Except.bind, pure, Except.pure, accessAddress, hfork, checkGas, hG, accessDelegation,
-      accountCode, recordAccountRead, hgc, hga, hcode, hdel', hmissing, Except.mapError, keepReads]
+      accountCode, recordAccountRead, hcode, hdel', hmissing, Except.mapError, keepReads]
 
 end EthLib.Execution.Evm.Logic

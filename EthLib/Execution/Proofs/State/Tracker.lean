@@ -78,6 +78,15 @@ theorem _root_.EthLib.Execution.State.StateError.code_injective (e₁ e₂ : Sta
 @[simp] theorem getAccount_recordAccountRead (tx : TransactionState) (address other : Address) :
     (tx.recordAccountRead address).getAccount other = tx.getAccount other := rfl
 
+/-- A record of an account read changes no code. -/
+@[simp] theorem getCode_recordAccountRead (tx : TransactionState) (address : Address)
+    (codeHash : Hash32) : (tx.recordAccountRead address).getCode codeHash = tx.getCode codeHash :=
+  rfl
+
+/-- A record of an account read leaves every account alive or dead as it was. -/
+@[simp] theorem isAccountAlive_recordAccountRead (tx : TransactionState) (address other : Address) :
+    (tx.recordAccountRead address).isAccountAlive other = tx.isAccountAlive other := rfl
+
 /-- A record of an account read changes no record of created accounts. -/
 @[simp] theorem createdAccounts_recordAccountRead (tx : TransactionState) (address : Address) :
     (tx.recordAccountRead address).createdAccounts = tx.createdAccounts := rfl
