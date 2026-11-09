@@ -1,5 +1,7 @@
 """The length bounds of request, response and gossip payloads, against sizes worked out by hand."""
 
+import pytest
+
 from ethlib import consensus
 from ethlib.errors import ConsensusError
 from ethlib.networking import reqresp
@@ -171,6 +173,56 @@ def test_inclusion_list_topic_from_heze() -> None:
 def test_voluntary_exit_topic_at_heze() -> None:
     # An epoch and a validator index, then the signature.
     assert consensus.gossip_topic_bound("hegota", "voluntary_exit") == 8 + 8 + 96
+
+
+# From Gloas the lists of these messages have no limit, so the specification bounds each size.
+#
+# A committee has at most 2048 members, and a slot has 64 committees on mainnet and 4 on minimal.
+COMMITTEES = [("mainnet", 64), ("minimal", 4)]
+
+
+@pytest.mark.parametrize("fork", ["glamsterdam", "hegota"])
+@pytest.mark.parametrize("name, committees", COMMITTEES)
+def test_aggregate_topic_from_gloas(fork: str, name: str, committees: int) -> None:
+    # An offset, the data, the signature and the committee bits come first.
+    # Then come one bit for each member of every committee and an end bit, in whole bytes.
+    attestation = 4 + 128 + 96 + (committees + 7) // 8 + 2048 * committees // 8 + 1
+    # An offset and the signature, then the aggregator index, an offset and the selection proof.
+    bound = 4 + 96 + 8 + 4 + 96 + attestation
+    assert consensus.gossip_topic_bound(fork, "beacon_aggregate_and_proof", name) == bound
+
+
+@pytest.mark.parametrize("fork", ["glamsterdam", "hegota"])
+@pytest.mark.parametrize("name, committees", COMMITTEES)
+def test_attester_slashing_topic_from_gloas(fork: str, name: str, committees: int) -> None:
+    # Each attestation has an offset, the data, the signature and an index for each attester.
+    attestation = 4 + 128 + 96 + 8 * 2048 * committees
+    # Two offsets come before the two attestations.
+    bound = 4 + 4 + 2 * attestation
+    assert consensus.gossip_topic_bound(fork, "attester_slashing", name) == bound
+
+
+@pytest.mark.parametrize("name", ["mainnet", "minimal"])
+@pytest.mark.parametrize("fork, inclusion_bits", [("glamsterdam", 0), ("hegota", 16)])
+def test_execution_payload_bid_topic_from_gloas(fork: str, inclusion_bits: int, name: str) -> None:
+    # Four 32-byte values, an address, five integers, an offset and the root of the requests.
+    # Heze adds 16 inclusion bits, and the commitments of 48 bytes each come last.
+    # The constant counts 4096 commitments on both presets.
+    bid = 4 * 32 + 20 + 5 * 8 + 4 + 32 + inclusion_bits // 8 + 4096 * 48
+    # An offset and the signature come before the bid.
+    bound = 4 + 96 + bid
+    assert consensus.gossip_topic_bound(fork, "execution_payload_bid", name) == bound
+
+
+@pytest.mark.parametrize("name", ["mainnet", "minimal"])
+def test_inclusion_list_topic_at_heze(name: str) -> None:
+    # A slot, a validator index, a root and an offset take 52 bytes.
+    # The transactions hold at most 8192 bytes and none is empty.
+    # So the list is longest with 8192 transactions of one byte, each after a 4-byte offset.
+    inclusion_list = 52 + 8192 * (4 + 1)
+    # An offset and the signature come before the list.
+    bound = 4 + 96 + inclusion_list
+    assert consensus.gossip_topic_bound("hegota", "inclusion_list", name) == bound
 
 
 def test_unknown_topic() -> None:
