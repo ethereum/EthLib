@@ -164,6 +164,49 @@ theorem processMessageCall_of_halt {e : EvmError} {read : State.TransactionState
   simp only [processMessageCall, h, halts, Bool.false_eq_true, ↓reduceIte]
 
 omit [LawfulGasMeter Meter] in
+/-- The first frame of a call that moves no ether, after its authorizations end with `done`.
+
+The recipient `target` holds the code `c` in the state of `done`.
+
+From Pectra, `c` must not be a delegation indicator.
+
+The meter of the frame is the meter of `done`, committed.
+
+The frame runs `c` with the gas that this meter holds.
+
+Its state is the state of `done` with the read of the recipient.
+
+Its accessed addresses and its refund are those of `done`. -/
+theorem prepareFirstFrame_of_applyAuthorizations {target : Address} {c : ByteArray}
+    {done : Delegations Meter} (htarget : message.target = some target)
+    (hvalue : message.value = 0)
+    (hdone : applyAuthorizations fork chainId state substate.accessedAddresses
+      (GasMeter.start message.gas message.reservoir) paid auths = .ok done)
+    (hcode : done.state.getCode (done.state.getAccount target).codeHash = .ok c)
+    (hdelegate : fork ≥ .pectra → delegatedAddress c = none) :
+    prepareFirstFrame (Meter := Meter) chainId message state substate auths paid =
+      .ok (.ofMeter { message with code := c } (done.state.recordAccountRead target)
+        { substate with accessedAddresses := done.accessed } done.refund
+        (GasMeter.commit done.meter)) := by
+  have hcode' : (done.state.recordAccountRead target).getCode
+      ((done.state.recordAccountRead target).getAccount target).codeHash = .ok c := hcode
+  have hnone : (if fork ≥ .pectra then delegatedAddress c else none) = none := by
+    split
+    · exact hdelegate ‹_›
+    · rfl
+  simp only [prepareFirstFrame, htarget, hdone, hvalue, bind, Except.bind, pure, Except.pure,
+    Except.mapError, ne_eq, not_true_eq_false, false_and, and_false, ↓reduceIte, hcode', hnone]
+
+omit [LawfulGasMeter Meter] in
+/-- When the authorizations of a call fail, its first frame fails with the same error and state. -/
+theorem prepareFirstFrame_of_applyAuthorizations_error {target : Address}
+    {e : EvmError × State.TransactionState} (htarget : message.target = some target)
+    (hdone : applyAuthorizations fork chainId state substate.accessedAddresses
+      (GasMeter.start (Meter := Meter) message.gas message.reservoir) paid auths = .error e) :
+    prepareFirstFrame (Meter := Meter) chainId message state substate auths paid = .error e := by
+  simp only [prepareFirstFrame, htarget, hdone, bind, Except.bind]
+
+omit [LawfulGasMeter Meter] in
 /-- The first frame of a call that moves no ether and applies no authorization.
 
 The recipient `target` holds the code `c`, which from Pectra is no delegation indicator.
@@ -179,16 +222,9 @@ theorem prepareFirstFrame_of_value_eq_zero {target : Address} {c : ByteArray}
     (hdelegate : fork ≥ .pectra → delegatedAddress c = none) :
     prepareFirstFrame (Meter := Meter) chainId message state substate [] paid =
       .ok (.ofMeter { message with code := c } (state.recordAccountRead target) substate 0
-        (GasMeter.commit (GasMeter.start message.gas message.reservoir : Meter))) := by
-  have hcode' : (state.recordAccountRead target).getCode
-      ((state.recordAccountRead target).getAccount target).codeHash = .ok c := hcode
-  have hnone : (if fork ≥ .pectra then delegatedAddress c else none) = none := by
-    split
-    · exact hdelegate ‹_›
-    · rfl
-  simp only [prepareFirstFrame, htarget, applyAuthorizations, List.foldlM, hvalue, bind,
-    Except.bind, pure, Except.pure, Except.mapError, ne_eq, not_true_eq_false, false_and,
-    and_false, ↓reduceIte, hcode', hnone]
+        (GasMeter.commit (GasMeter.start message.gas message.reservoir : Meter))) :=
+  prepareFirstFrame_of_applyAuthorizations (done := ⟨state, substate.accessedAddresses, 0,
+    GasMeter.start message.gas message.reservoir, paid, ∅⟩) htarget hvalue rfl hcode hdelegate
 
 /-- A halt before the first frame leaves no execution gas, the whole reservoir and no state gas. -/
 theorem ofHalt_gas (state : State.TransactionState) (reservoir : Nat) (e : EvmError) :
