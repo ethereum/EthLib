@@ -73,7 +73,11 @@ def blocks (password salt : ByteArray) (iterations : Nat) :
     let next := block password salt iterations (UInt32.ofNat index)
     blocks password salt iterations count (index + 1) (out ++ ⟨next.toArray⟩)
 
-/-- PBKDF2-HMAC-SHA-256, RFC 8018 §5.2, with the output length in bytes. -/
+/-- PBKDF2-HMAC-SHA-256, RFC 8018 §5.2, with the output length in bytes.
+
+Its time grows with the iteration count times the 32-byte blocks of the output.
+
+The output can reach 128 GiB, so a caller must bound both first (SOUNDNESS.md D1). -/
 def pbkdf2 (password salt : ByteArray) (iterations length : Nat) :
     Except Pbkdf2Error ByteArray :=
   if iterations = 0 then .error .zeroIterations

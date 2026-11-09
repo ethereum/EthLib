@@ -293,9 +293,9 @@ def mixBlocks (input : ByteArray) (n r : Nat) :
 
 /-- Expand, mix and compress the password, RFC 7914 §6, with the output length in bytes.
 
-It holds `128 * r * N` bytes of table and `128 * r * p` bytes per buffer.
+It holds `128 * r * N` bytes of table, `128 * r * p` bytes per buffer and `length` bytes of key.
 
-So a caller must bound `r * N` and `r * p` first, as a keystore gives them. -/
+So a caller must bound `r * N`, `r * p` and `length` first, as a keystore gives them. -/
 def scrypt (password salt : ByteArray) (n r p length : Nat) : Except ScryptError ByteArray := do
   if r = 0 then throw (.invalidBlockSize r)
   if !validCost n r then throw (.invalidCost n)

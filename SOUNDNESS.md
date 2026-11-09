@@ -1945,14 +1945,18 @@ Nothing in EthLib counts signatures, so the caller must.
 The Lean and Python docstrings of `sign` both say so.
 
 Password derivations add bounds on memory and time.
-The ROMix table of scrypt has a payload of `128 * r * N` bytes, and the expanded password and the mixed blocks take `128 * r * p` bytes each.
+The ROMix table of scrypt has a payload of `128 * r * N` bytes, and the expanded password and the mixed blocks take at least `128 * r * p` bytes each.
+The key itself, of either derivation, can be up to `(2^32 - 1) * 32` bytes, about 128 GiB.
 Parameters within the bounds of RFC 7914 can ask for more memory than any machine has.
 For example, `N = 2^40` and `r = 8` pass the check on the cost and ask for a table of `2^50` bytes, one pebibyte.
 Likewise, `r = 1` and `p = 2^30 - 1` pass the check on `p` and ask for about 128 GiB per buffer.
 No error is returned then: the Lean runtime aborts the process, or the operating system kills it.
-The work grows with `N * r * p` for scrypt and with the iteration count `c` for PBKDF2, so a hostile parameter can also make a call run for an impractical time.
-A keystore file gives `N`, `r` and `p`, or `c`, so a caller that reads one must bound `r * N`, `r * p` and `c` before it calls the derivation.
-The Lean docstrings of `scrypt` and `romix` say so.
+The work of scrypt grows with `N * r * p` and with the key length.
+The work of PBKDF2 grows with `c` times the number of 32-byte blocks of the key.
+So a hostile parameter can also make a call run for an impractical time.
+A keystore file gives `N`, `r` and `p`, or `c`, and the key length `dklen`.
+So a caller that reads one must bound `r * N`, `r * p`, `c` and `dklen` before it calls the derivation.
+The Lean docstrings of `pbkdf2`, `scrypt` and `romix` say so.
 
 ### D2. Dependencies
 
