@@ -252,7 +252,9 @@ def test_cipher_failure_and_nonce() -> None:
     next_state, ciphertext = noise_cipher_encrypt(state, b"aad", b"message")
     with raises(
         NoiseError,
-        ERROR + "cipher (EthLib.Cryptography.ChaCha20Poly1305.CipherError.authenticationFailed)",
+        ERROR
+        + "cipher\n  (EthLib.Cryptography.ChaCha20Poly1305"
+        + ".ChaCha20Poly1305Error.authenticationFailed)",
     ):
         noise_cipher_decrypt(state, b"wrong aad", ciphertext)
     recovered, plaintext = noise_cipher_decrypt(state, b"aad", ciphertext)

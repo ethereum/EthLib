@@ -38,7 +38,7 @@ inductive NoiseError where
   | messageTooLong
   | frameLength
   | nonceExhausted
-  | cipher (error : ChaCha20Poly1305.CipherError)
+  | cipher (error : ChaCha20Poly1305.ChaCha20Poly1305Error)
   | protobuf
   | identity
   | firstMessageExtensions

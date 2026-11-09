@@ -3,6 +3,7 @@
 __all__ = [
     "aes",
     "bls",
+    "chacha20_poly1305",
     "crc32",
     "crc32c",
     "hmac",
@@ -14,5 +15,6 @@ __all__ = [
     "sha256",
     "sphincs",
     "vrf",
+    "x25519",
     "xmss",
 ]
