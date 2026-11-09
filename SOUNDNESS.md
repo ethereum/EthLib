@@ -1135,6 +1135,12 @@ Both hold for every bound on the gas of messages and every runner of messages.
 `Logic.SpecG.low` proves that a specification from a frame with `k` more gas then holds of the end of the run with `k` more gas.
 `Logic.SpecG.halted` proves that the run then ends in the normal halt of a specification from a frame of `At`, with `k` less gas.
 `Logic.SpecG.not_ok` proves that the run does not end with no error when every frame of the postcondition has an error.
+`Logic.halted_of_specG` takes a specification over `Logic.StepG` to a normal halt that pays `cost`, from a frame of `At` with every gas from some bound on.
+The specification needs to hold only with at least `cost` gas.
+It proves that every run of that frame that succeeds, with any gas, had at least `cost` gas.
+That run ends in that halt with exactly `cost` less gas.
+`Logic.no_ok_of_specG` proves that every frame that the loop runs a frame of `At` to, with any gas, has an error.
+It assumes a specification over `Logic.StepG` to frames with an error, with every gas from some bound on.
 `Logic.Stuck` is a running frame from which the step fails, and from it with any less gas.
 `Logic.not_ok_of_reaches` proves that a run does not end with no error when these steps from the frame with `k` more gas reach a stuck frame.
 `Logic.no_ok_stuck` proves the same for a frame of `At` that reaches a stuck frame with every gas from some bound on.
@@ -1170,6 +1176,13 @@ It assumes that these steps reach a stopped frame from `l` with `k` more gas.
 `Logic.no_error` proves that the loop runs a frame of `At` to a frame, with any gas.
 It assumes a specification over these steps from that frame with every gas from some bound on.
 Both hold for every bound on the gas of messages and every runner of messages.
+
+`Logic/RunsOk.lean` says when a run succeeds, that is when the loop ends its frame in a frame with no error.
+`Logic.RunsOk` is that condition, for any lawful meter.
+`Logic.Spec.runsOk` proves that a specification to frames with no error gives a run that succeeds, under every runner.
+`Logic.SpecOn.runsOk` proves the same for a specification whose runner may fail only on the messages that it names.
+It assumes a runner that never fails on those messages.
+`Logic.not_runsOk_of_lt` proves that no run with less gas than `cost` succeeds, from a specification to a halt that pays `cost`, as above.
 
 ### SHA-256 precompile
 
@@ -1290,7 +1303,40 @@ Its gas left is the execution gas left plus the reservoir left, and it gives the
 At Glamsterdam, a negative state gas used counts as 0 in both block gas counts, a case that EIP-8037 leaves open.
 From Hegotá a run fails as not yet specified, so there is no gas used to state.
 
+`prepareFirstFrame_of_applyAuthorizations` gives the first frame of a call that moves no ether, after its authorizations.
+`prepareFirstFrame_of_applyAuthorizations_error` proves that an error of the authorizations is the error of the first frame.
 `prepareFirstFrame_of_value_eq_zero` gives the first frame of a call that moves no ether and applies no authorization.
+
+### The authorizations of EIP-7702
+
+`Execution/Proofs/Transactions/Authorization.lean` covers every case of one authorization, at every fork.
+`applyAuthorization_cases` proves that an authorization that succeeds is skipped, refused, or accepted after it pays and delegates.
+`applyAuthorization_of_accepts_of_pay` gives an accepted authorization from what its payment leaves.
+`applyAuthorization_of_payAuthorization_error` proves that a failed payment stops the authorizations with its error.
+`applyAuthorization_of_authorityAccepts_error` proves that an authority whose code cannot be read stops them with that error.
+`payAuthorization_eq_ok_iff` proves that from Glamsterdam a payment succeeds exactly when its charge does.
+`state_payAuthorization` proves that a payment keeps the state, the accesses and the refund.
+`sameOutside_delegate` proves that a delegation changes no account, storage or transient storage but the authority's.
+`getCode_delegate_of_ne` proves that a delegation keeps the code under every hash but the hash of the code it sets.
+`getCode_delegate_self` proves that a delegation stores the code it sets under its hash, when that hash is not the hash of the empty code.
+
+Real code is neither empty nor a delegation indicator.
+`authorityAccepts_of_code` proves that an authority with real code refuses every authorization.
+`foldlM_applyAuthorization_keeps` proves that the authorizations keep the account, storage, transient storage and code of an address with real code.
+It assumes that no authorization of the list carries a code to set whose Keccak-256 hash is the code hash of that address.
+When the state stores each code under its own hash, only a collision of Keccak-256 breaks this assumption.
+`meter_foldlM_applyAuthorization_of_lt_glamsterdam` proves that up to BPO5 the authorizations keep the meter.
+
+The two theorems below hold for any recovery of an authority.
+Both assume that the state holds the code of every account.
+`foldlM_applyAuthorization_isOk_of_lt_glamsterdam` proves that up to BPO5 the authorizations succeed over any meter.
+`foldlM_applyAuthorization_isOk` proves that the authorizations succeed, and from Glamsterdam take at most 227790 execution gas times their number.
+From Glamsterdam, it assumes that the meter holds that much gas for every authorization.
+From Glamsterdam, it also assumes that the state holds the code of every account before the transaction.
+From Glamsterdam, it also assumes that every charge within the gas left succeeds and takes at most its amount.
+
+`chargesWithin_nat` proves this last condition for the meter up to BPO5.
+`chargesWithin_stateGasMeter` proves it for the meter of EIP-8037.
 
 ### Merkle Patricia Trie
 
