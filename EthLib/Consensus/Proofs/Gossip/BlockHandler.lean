@@ -34,7 +34,7 @@ On a full parent it checks the four counts of the requests, and an empty parent 
 
 Its bid step checks the same blob limit, on a state at the slot of the block.
 
-From Deneb to Fulu its payload step checks the same limit.
+From Deneb to Fulu its payload step checks the same limit, on a state at the slot of the block.
 
 A new block that the handler accepts passes the block step of the transition.
 
@@ -60,12 +60,13 @@ theorem processBlock_of_onBlock {after : Store preset fork}
     (root : SszType.hashTreeRoot signed.message = .ok blockRoot)
     (new : ¬ store.blocks.contains blockRoot)
     (added : store.onBlock config checks sources signed = .ok after) :
-    ∃ advanced computed,
+    ∃ pre advanced computed, store.blockStates[signed.message.parentRoot]? = some pre ∧
+      processSlots config checks pre signed.message.slot = .ok advanced ∧
       advanced.slot = signed.message.slot ∧
       processBlock config checks sources.engine advanced signed.message = .ok computed := by
-  obtain ⟨-, -, _, _, -, transition, -⟩ := Store.onBlock_new root new added
-  obtain ⟨advanced, -, slot, -, computed, -⟩ := stateTransition_ok transition
-  exact ⟨advanced, _, slot, computed⟩
+  obtain ⟨-, -, pre, _, found, transition, -⟩ := Store.onBlock_new root new added
+  obtain ⟨advanced, slots, slot, -, computed, -⟩ := stateTransition_ok transition
+  exact ⟨pre, advanced, _, found, slots, slot, computed⟩
 
 /-- From Gloas, a new block that the block handler accepts passes the operation checks of the topic.
 
@@ -75,7 +76,7 @@ theorem checkBlockBodyLimits_of_onBlock (gloas : .glamsterdam ≤ fork) {after :
     (new : ¬ store.blocks.contains blockRoot)
     (added : store.onBlock config checks sources signed = .ok after) :
     checkBlockBodyLimits gloas signed.message.body = .accept := by
-  obtain ⟨_, _, -, computed⟩ := processBlock_of_onBlock root new added
+  obtain ⟨_, _, _, -, -, -, computed⟩ := processBlock_of_onBlock root new added
   obtain ⟨_, _, operatedOk⟩ := processBlock_operations gloas computed
   have noDeposit := processOperations_no_deposit (Nat.le_trans (by decide) gloas) operatedOk
   -- From Gloas the operations step is the Gloas form, which checks each count.
@@ -100,7 +101,7 @@ theorem checkExecutionRequestsLimits_of_onBlock (gloas : .glamsterdam ≤ fork)
     (added : store.onBlock config checks sources signed = .ok after) :
     checkExecutionRequestsLimits gloas (signed.message.body.parentExecutionRequests gloas) =
       .accept := by
-  obtain ⟨_, _, -, computed⟩ := processBlock_of_onBlock root new added
+  obtain ⟨_, _, _, -, -, -, computed⟩ := processBlock_of_onBlock root new added
   obtain ⟨_, _, _, _, _, parentOk, -⟩ := processBlock_steps gloas computed
   obtain ⟨withdrawals, consolidations, builderDeposits, exits⟩ :=
     processParentExecutionPayload_counts parentOk
@@ -117,7 +118,7 @@ theorem blobKzgCommitments_size_le_of_onBlock (gloas : .glamsterdam ≤ fork)
     (signed.message.body.signedExecutionPayloadBid gloas).message.blobKzgCommitments.data.size ≤
       (config.getBlobParameters
         (computeEpochAtSlot preset signed.message.slot)).maxBlobsPerBlock.toNat := by
-  obtain ⟨_, _, -, computed⟩ := processBlock_of_onBlock root new added
+  obtain ⟨_, _, _, -, -, -, computed⟩ := processBlock_of_onBlock root new added
   obtain ⟨_, _, _, _, _, -, headedOk, withdrawnOk, bid, -⟩ := processBlock_steps gloas computed
   obtain ⟨slot, -⟩ := processBlockHeader_checks headedOk
   obtain ⟨-, blobs, -⟩ := checkExecutionPayloadBid_ok_iff.mp (processExecutionPayloadBid_ok bid).1
@@ -134,7 +135,7 @@ theorem blobCountWithinLimit_of_onBlock (before : fork < .glamsterdam) {after : 
     (added : store.onBlock config checks sources signed = .ok after) :
     blobCountWithinLimit config before signed.message = true := by
   by_cases deneb : .dencun ≤ fork
-  · obtain ⟨_, _, -, computed⟩ := processBlock_of_onBlock root new added
+  · obtain ⟨_, _, _, -, -, -, computed⟩ := processBlock_of_onBlock root new added
     obtain ⟨_, _, _, headedOk, withdrawnOk, paidOk⟩ :=
       processBlock_steps_of_lt_gloas (Nat.le_trans (by decide) deneb) before computed
     obtain ⟨slot, -⟩ := processBlockHeader_checks headedOk
