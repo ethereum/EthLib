@@ -26,22 +26,9 @@ theorem eval_batchErrorAt (openings : List Opening) (r τ : Fr) :
       ∑ i : Fin openings.length,
         openingError τ (openings[i].commitment.polynomial.eval τ) openings[i].y
           (openings[i].proof.polynomial.eval τ) openings[i].z * r ^ i.val := by
-  induction openings with
-  | nil => simp
-  | cons o openings ih =>
-    simp only [batchErrorAt_cons, eval_add, eval_mul, eval_C, ih, List.length_cons,
-      Fin.sum_univ_succ, Fin.getElem_fin, List.getElem_cons_zero, List.getElem_cons_succ,
-      Fin.val_zero, Fin.val_succ, pow_zero, mul_one]
-    rw [Finset.mul_sum]
-    have ho : o.error.eval τ = openingError τ (o.commitment.polynomial.eval τ) o.y
-        (o.proof.polynomial.eval τ) o.z := by
-      simp [Opening.error, eval_blobOpeningError_at, openingError]
-    rw [ho]
-    congr 1
-    apply Finset.sum_congr rfl
-    intro i _
-    rw [pow_succ]
-    ring
+  rw [batchErrorAt, batchError, eval_errorPoly, eval_finsetSum, ← Fin.sum_univ_eq_sum_range]
+  refine Finset.sum_congr rfl fun i _ => ?_
+  simp [List.getD_eq_getElem?_getD, Opening.error, eval_blobOpeningError_at, openingError]
 
 private theorem getElem!_map_toArray {α β : Type} [Inhabited β]
     (f : α → β) (xs : List α) (i : Fin xs.length) :

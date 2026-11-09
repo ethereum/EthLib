@@ -167,7 +167,7 @@ theorem batchError_eq_of_data_eq {out : List BlobOpening} {s : State}
       have hy := congrArg OpeningData.y hab
       have herr : a.error = b.error := by
         simp only [Opening.error, hC, hP, show a.z = b.z from hz, show a.y = b.y from hy]
-      rw [batchError, batchError, herr,
+      rw [batchError_cons, batchError_cons, herr,
         ih (fun p hp => hl p (List.mem_append_right _ hp))
         (fun p hp => hr p (List.mem_append_right _ hp))
         (fun o ho => hv o (by simp [ho])) htail]

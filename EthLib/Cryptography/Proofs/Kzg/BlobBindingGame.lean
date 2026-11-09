@@ -96,10 +96,13 @@ def Request.points : Request → List AlgebraicPoint
 noncomputable def Opening.error (o : Opening) : Fr[X] :=
   blobOpeningError o.commitment.polynomial o.proof.polynomial o.y o.z
 
-/-- The batch polynomial in an outer variable, with opening errors as coefficients. -/
-noncomputable def batchError : List Opening → (Fr[X])[X]
-  | [] => 0
-  | o :: openings => Polynomial.C o.error + X * batchError openings
+/-- The batch polynomial in an outer variable, with opening errors as coefficients.
+
+It is the error polynomial of the batch check, with errors that are polynomials in the secret.
+
+The default `0` lies past the last opening, so the sum never reads it. -/
+noncomputable def batchError (openings : List Opening) : (Fr[X])[X] :=
+  errorPoly (fun i => (openings.map Opening.error).getD i 0) openings.length
 
 /-- The symbolic error after substituting the batch challenge. -/
 noncomputable def batchErrorAt (openings : List Opening) (r : Fr) : Fr[X] :=
@@ -150,58 +153,50 @@ theorem natDegree_openingError_le (o : Opening) :
     o.error.natDegree ≤ FIELD_ELEMENTS_PER_BLOB :=
   natDegree_blobOpeningError_le o.commitment.degree_lt o.proof.degree_lt o.y o.z
 
+/-- The empty batch has the zero polynomial. -/
+@[simp] theorem batchError_nil : batchError [] = 0 :=
+  errorPoly_zero _
+
+/-- Horner's step of the symbolic batch polynomial. -/
+@[simp] theorem batchError_cons (o : Opening) (openings : List Opening) :
+    batchError (o :: openings) = Polynomial.C o.error + X * batchError openings := by
+  rw [batchError, List.length_cons, errorPoly_succ', batchError]
+  simp
+
 /-- The symbolic batch polynomial has degree at most the number of openings minus one. -/
 theorem natDegree_batchError_le (openings : List Opening) :
-    (batchError openings).natDegree ≤ openings.length - 1 := by
-  induction openings with
-  | nil => simp [batchError]
-  | cons o openings ih =>
-    cases openings with
-    | nil => simp [batchError]
-    | cons next rest =>
-      simp only [List.length_cons, Nat.add_sub_cancel] at ih ⊢
-      refine le_trans (natDegree_add_le _ _) (max_le ?_ ?_)
-      · simp
-      · exact (natDegree_mul_le).trans (by
-          have hx := natDegree_X_le (R := Fr[X])
-          omega)
+    (batchError openings).natDegree ≤ openings.length - 1 :=
+  natDegree_errorPoly_le _ _
 
 /-- Substituting a batch challenge leaves degree at most 4096 in the setup secret. -/
 theorem natDegree_batchErrorAt_le (openings : List Opening) (r : Fr) :
     (batchErrorAt openings r).natDegree ≤ FIELD_ELEMENTS_PER_BLOB := by
   induction openings with
-  | nil => simp [batchErrorAt, batchError]
+  | nil => simp [batchErrorAt]
   | cons o openings ih =>
-    simp only [batchErrorAt, batchError, eval_add, eval_C, eval_mul, eval_X]
+    simp only [batchErrorAt, batchError_cons, eval_add, eval_C, eval_mul, eval_X]
     refine le_trans (natDegree_add_le _ _) (max_le (natDegree_openingError_le o) ?_)
     exact (natDegree_mul_le).trans (by simpa [batchErrorAt, natDegree_C] using ih)
 
 /-- The empty symbolic batch has zero error at every challenge. -/
 @[simp] theorem batchErrorAt_nil (r : Fr) : batchErrorAt [] r = 0 := by
-  simp [batchErrorAt, batchError]
+  simp [batchErrorAt]
 
 /-- Horner evaluation of the symbolic batch polynomial. -/
 @[simp] theorem batchErrorAt_cons (o : Opening) (openings : List Opening) (r : Fr) :
     batchErrorAt (o :: openings) r = o.error + Polynomial.C r * batchErrorAt openings r := by
-  simp [batchErrorAt, batchError]
+  simp [batchErrorAt]
 
 /-- The symbolic batch polynomial is zero exactly when each opening error is zero. -/
 theorem batchError_eq_zero_iff (openings : List Opening) :
     batchError openings = 0 ↔ ∀ o ∈ openings, o.error = 0 := by
-  induction openings with
-  | nil => simp [batchError]
-  | cons o openings ih =>
-    constructor
-    · intro h
-      have ho : o.error = 0 := by
-        simpa [batchError] using congrArg (fun p : (Fr[X])[X] => p.coeff 0) h
-      have ht : batchError openings = 0 := by
-        rw [batchError, ho, C_0, zero_add] at h
-        exact (mul_eq_zero.mp h).resolve_left X_ne_zero
-      simpa [ho] using ih.mp ht
-    · intro h
-      rw [batchError, h o (by simp), C_0, zero_add,
-        ih.mpr (fun p hp => h p (by simp [hp])), mul_zero]
+  rw [batchError, errorPoly_eq_zero_iff]
+  constructor
+  · intro h o ho
+    obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem ho
+    simpa [List.getD_eq_getElem?_getD, hi] using h i hi
+  · intro h i hi
+    simpa [List.getD_eq_getElem?_getD, hi] using h _ (List.getElem_mem hi)
 
 /-- One public query and its answer, recording whether the actual input was fresh. -/
 structure Reply where
