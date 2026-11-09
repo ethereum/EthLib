@@ -24,7 +24,7 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 - Hash functions: Keccak-256, Keccak-512, SHA-256, RIPEMD-160, and the BLAKE2b compression function of EIP-152.
 - Checksums: CRC-32 for the fork identifier of EIP-2124, and CRC-32C for the Snappy framing format.
 - Symmetric encryption: AES with the CTR and GCM modes, which the RLPx transport and discv5 use.
-- Key derivation over SHA-256: HMAC, HKDF, and the Concatenation KDF.
+- Key derivation over SHA-256: HMAC, HKDF, the Concatenation KDF, PBKDF2, and scrypt.
 - secp256k1: ECDSA signatures with RFC 6979 nonces, public key recovery, the address of a public key, and ECDH.
 - secp256r1: signature verification for the P256VERIFY precompile of EIP-7951.
 - alt_bn128: the curve operations and the pairing of EIP-196 and EIP-197.

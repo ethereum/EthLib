@@ -17,6 +17,8 @@ public import EthLib.Cryptography.Proofs.Hash.Ripemd160
 public import EthLib.Cryptography.Proofs.Hash.Hmac
 public import EthLib.Cryptography.Proofs.Hash.Hkdf
 public import EthLib.Cryptography.Proofs.Hash.ConcatKdf
+public import EthLib.Cryptography.Proofs.Hash.Pbkdf2
+public import EthLib.Cryptography.Proofs.Hash.Scrypt
 
 /-!
 # Proofs: hash functions

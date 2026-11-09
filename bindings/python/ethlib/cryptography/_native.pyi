@@ -255,6 +255,26 @@ def concat_kdf_sha256(z: bytes, fixed_info: bytes, length: int) -> bytes:
     """The first `length` bytes of `K(1) | K(2) | ...`, SP 800-56C Rev. 2 §4.1."""
     ...
 
+def pbkdf2_sha256(password: bytes, salt: bytes, iterations: int, length: int) -> bytes:
+    """PBKDF2-HMAC-SHA-256, RFC 8018 §5.2, with the output length in bytes."""
+    ...
+
+def salsa208(block: bytes) -> bytes:
+    """Salsa20/8 on exactly 64 bytes, RFC 7914 §3."""
+    ...
+
+def scrypt_block_mix(block: bytes, r: int) -> bytes:
+    """BlockMix on `2 * r` consecutive 64-byte blocks, RFC 7914 §4."""
+    ...
+
+def scrypt_romix(block: bytes, n: int, r: int) -> bytes:
+    """ROMix on `128 * r` bytes with a valid power-of-two cost, RFC 7914 §5."""
+    ...
+
+def scrypt(password: bytes, salt: bytes, n: int, r: int, p: int, length: int) -> bytes:
+    """Expand, mix and compress the password, RFC 7914 §6, with the output length in bytes."""
+    ...
+
 def secp256k1_verify(public_key: bytes, msg_hash: bytes, signature: bytes) -> bool:
     """Whether `(r, s)` is a valid signature on `hash` under the public key `q`, by SEC 1 v2 §4.1.4."""
     ...
