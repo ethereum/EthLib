@@ -15,13 +15,18 @@ Since the root fixes every leaf, it fixes one output per index before any index 
 ## Source
 
 This module is the specification of the VRF tree.
-[EIP-8450](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8450.md#cryptographic-helpers) registers the root of such a tree for each validator, and calls it through `vrf.Verify(root, index, opening)`, which returns the output at the index or nothing.
-The EIP specifies that interface and the properties it relies on, not the construction, and this module keeps the interface.
-Its rationale ([Two keys per validator](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8450.md#two-keys-per-validator)) says that the root fixes one output per index at registration, before the validator knows its inputs.
-That holds, but the holder chose those outputs, so a fork that selects with them must mix them as [The holder chooses the outputs](#the-holder-chooses-the-outputs) explains.
 The hash is Keccak-256, as in [FIPS 202](https://csrc.nist.gov/pubs/fips/202/final) but with Keccak's original padding (`EthLib/Cryptography/Hash/Keccak.lean`).
 A VRF is defined in [Micali, Rabin and Vadhan, "Verifiable Random Functions", FOCS 1999](https://doi.org/10.1109/SFFCS.1999.814584) by three properties: provability, uniqueness and pseudorandomness.
 The proofs here cover the first two.
+
+## Use in EIP-8450
+
+[EIP-8450](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8450.md#cryptographic-helpers) registers the root of a VRF tree for each validator.
+It specifies the interface `vrf.Verify(root, index, opening)`, which returns the output at the index or nothing, and leaves its calls to a later fork.
+It specifies that interface and the properties it relies on, not the construction, and this module keeps the interface.
+Its rationale ([Two keys per validator](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8450.md#two-keys-per-validator)) says that the root fixes one output per index at registration, before the validator knows its inputs.
+That holds, but the holder chose those outputs.
+So a fork that selects with them must mix them, as [The holder chooses the outputs](#the-holder-chooses-the-outputs) explains.
 
 ## Operations
 
@@ -55,11 +60,12 @@ It is specified anyway, so that every implementation rebuilds the same tree from
 ## The holder chooses the outputs
 
 Verification cannot tell a tree built from a seed from a tree whose secrets the holder chose.
-So a dishonest holder can pick every secret before it publishes the root, and keep only secrets whose output it likes.
+So a dishonest holder can pick every secret before it registers the root, and keep only secrets whose output it likes.
 
-The output hashes the index with the secret, so a secret with a good output at one index has no reason to have one at another.
+The output hashes the index with the secret, so one secret gives a different output at each index, unless Keccak-256 collides.
 Placing one secret at all `2^32` leaves still gives a valid tree: each level has one node value, so the tree costs 33 Keccak-256 calls, and every index opens.
-But each index then has its own output, and a secret chosen for one index says nothing about the output of another.
+But each index then has its own output.
+If Keccak-256 behaves as a random oracle, a secret with a good output at one index is no better than any other at another index.
 Without the index, one secret found in about 256 tries would make every output start with a zero byte.
 
 Binding the index does not stop the holder from choosing, though: it only makes the holder choose index by index.
@@ -67,7 +73,7 @@ A threshold that one output in `2^k` passes costs about `2^k` tries per index, s
 For a threshold of one in 256, that is about `2^40` calls, well within reach.
 And a holder needs only the indices that its protocol will actually use.
 
-So the outputs are fixed once the root is published, but the holder chose them.
+So the outputs are fixed once the root is registered, but the holder chose them.
 A protocol that compares outputs with a threshold, as a lottery does, must not use them alone.
 It must compare the mixed value instead, which hashes the output with randomness `r` that becomes known only after the root is registered:
 
@@ -78,10 +84,16 @@ It must compare the mixed value instead, which hashes the output with randomness
 The holder cannot choose secrets for an `r` that it does not know yet, so each mixed value is a fresh random value for it.
 `prEvent_selected_le` (`Proofs/Vrf/Selection.lean`) proves this in the random oracle model, for a holder that chose all its secrets.
 
-The randomness must be unknown at registration, and that is a property of the protocol, not of this module.
+The theorem draws `r` uniformly, independently of the holder.
+A protocol must provide such randomness, and that is a property of the protocol, not of this module.
 If `r` was already known when the root was registered, the holder can grind its secrets against it.
-For example, a finalized root does not change while the chain does not finalize, so a holder could grind against it until it changes.
-A protocol should therefore mix in randomness that is new for each duty, such as randomness revealed for that duty's slot.
+For example, randomness taken from the finalized checkpoint does not change while the chain does not finalize, so a holder could grind against it until it changes.
+A protocol should therefore mix in randomness that is new for each duty.
+That randomness must also be beyond the holder's influence.
+Randomness that its last contributor can bias, for example by withholding its contribution, is outside the theorem.
+
+The mix does not read the holder's identity either.
+Two validators that register the same root have the same outputs and the same mixed values, so a fork must handle copied roots, as EIP-8450's security considerations ask.
 
 ## What is proved
 
@@ -154,14 +166,17 @@ The game computes the root and the openings of the tree of a seed, with the hash
 None of these theorems covers a holder who chooses its own secrets: such a holder can bias its outputs.
 
 *A mixed selection* is what covers such a holder (`prEvent_selected_le`, `Selection.lean`).
+The game is EthLib's own, and no paper defines it.
 There the mix is a random oracle, and the tree hash is Keccak-256 itself.
+With the mix of the specification in place of the oracle, the event is exactly the protocol's check (`selected_iff_mixOutput`).
 The holder chooses every secret of its tree, and queries the mix at most `q` times before the randomness `r` is drawn.
 Then `r` is uniform, and the holder opens any index of a set `I` fixed in advance, with any opening.
 It is selected when the opening verifies and the mixed value of its output is in a target set `S`.
 That happens with probability at most `|I| |S| / 2^256 + q / 2^256`, plus the chance that `findHashCollision` returns a collision with the honest opening at that index.
 The first term is one fresh uniform value per allowed index, and the second is a mix query that already used `r`.
 With one index, `|S| = 2^200` (a selection of one in `2^56`) and `q = 2^64`, the first two terms are below `2^-55`.
-The theorem does not cover a holder that registers a root without knowing a tree under it, nor randomness known at registration.
+The theorem does not cover a holder that registers a root without knowing a tree under it.
+Nor does it cover randomness that the holder knows at registration or can bias.
 
 ## Test vectors
 

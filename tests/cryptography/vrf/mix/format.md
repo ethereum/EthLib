@@ -1,13 +1,14 @@
 # Test format: VRF tree mix
 
-Mix an output of the VRF tree with randomness, for a selection.
+Mix an output of the VRF tree with randomness revealed after the root is registered.
+The mixed value is what a selection compares with its threshold.
 
 ## Test case format
 
 ```yaml
 input:
   output: Bytes32 -- an output of the tree
-  randomness: Bytes32 -- randomness that became known after the root was published
+  randomness: Bytes32 -- randomness that became known after the root was registered
 output: Bytes32 -- the mixed value
 ```
 
@@ -15,9 +16,9 @@ All bytes are hex strings prefixed with `0x`.
 
 ## Condition
 
-The mixed value is `keccak256(PQ_VRF_MIX | output | randomness)`.
+The mixed value is `keccak256(PQ_VRF_MIX | input.output | input.randomness)`.
 
-The result must match `output`.
+The result must match the top-level `output`.
 
 ## Sources
 

@@ -274,7 +274,8 @@ Verification accepts any tree, so a holder that chooses its secrets can bias eve
 The output hashes its index with its secret: `keccak256(PQ_VRF_OUTPUT | LE32(i) | s)`.
 `outputHash_binding` (`Proofs/Vrf/Verify.lean`) says that two equal outputs come from one index and one secret, or their two output inputs, which differ, are a Keccak-256 collision.
 `verify_index_binding` applies it to two openings that verify at two different indices, under any roots.
-So a secret chosen for its output at one index does not fix the output at another.
+So one secret gives different outputs at different indices, unless Keccak-256 collides.
+That two such outputs behave as independent values is a random-oracle heuristic, which no theorem states.
 A holder can still grind index by index, at about `2^k` hashes per index for a threshold of one in `2^k`.
 
 A selection therefore compares `mixOutput`, the hash of the output with randomness revealed after the root is registered.
@@ -285,7 +286,9 @@ The mixed value of its output lands in a target set `S` with probability at most
 No theorem bounds that last chance, as for uniqueness.
 The theorem says nothing about a holder that registers a root without knowing a tree under it.
 That case would need the tree hash as a random oracle too, and an extractor of the tree from the queries.
-It says nothing either about randomness that the holder knows at registration: then the holder can grind against it.
+It says nothing either about randomness that the holder knows at registration, or can bias: the game draws it uniformly and independently of the holder.
+The game is EthLib's own.
+`selected_iff_mixOutput` shows that, with `mixOutput` in place of the oracle, its event is exactly the protocol's check.
 
 [EIP-8450](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8450.md#cryptographic-helpers) specifies the interface `vrf.Verify` and the property of unique outputs, not the construction.
 The index in the output keeps that interface, and changes every output of the construction that EthLib specified before.
@@ -2001,9 +2004,11 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
 - VRF unpredictability: Keccak-256 is a random oracle on byte strings, as for leanXMSS.
   The bound says nothing about an attack that uses the structure of Keccak.
   It counts classical queries only, so it says nothing about a quantum adversary.
-- VRF mixed selection: Keccak-256 on the 74-byte inputs that start with `PQ_VRF_MIX` is a uniformly random function of the output and the randomness.
-  No other input of the VRF has that length, so the mix shares no input with the tree, whose hash stays Keccak-256 itself.
-  The randomness is uniform and drawn after the holder registers its tree.
+- VRF mixed selection: Keccak-256 on the 74-byte inputs that start with `PQ_VRF_MIX` is a uniformly random function of the output and the randomness, independent of the tree hash.
+  That is the random-oracle assumption for the domain of the mix, and the tree hash stays Keccak-256 itself.
+  The holder can still compute Keccak-256 on mix inputs, and the model ignores those values.
+  No other input of the VRF has 74 bytes, so the mix shares no input with the tree; that is necessary for the assumption, not a proof of it.
+  The randomness is uniform, drawn after the holder registers its tree, and independent of the holder.
   The bound counts classical mix queries only, and says nothing about an attack that uses the structure of Keccak.
 - BLS: the hash to G2 under the message tag is a random oracle onto the multiples of `g2`.
   [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380), §3, calls its `hash_to_curve` suitable where a random oracle onto the group is needed, and §8.8.2 gives the suite that encoding.

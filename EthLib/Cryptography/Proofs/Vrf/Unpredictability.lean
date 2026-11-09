@@ -166,7 +166,7 @@ def gameD (others : UInt32 → Digest) (c : UInt32) (adversary : Adversary) :
   let output ← deriveD true
   return (guess, output)
 
-/-- The challenge leaf and the output are the hash at two points of the secret. -/
+/-- The challenge leaf and the output at index `c` are the hash at two points of the secret. -/
 def encoding (c : UInt32) : SecretEncoding HashSpec Digest Bool Digest where
   enc s b := if b then outputInput c s else leafInput s
   range_eq _ _ := rfl

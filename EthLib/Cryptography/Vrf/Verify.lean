@@ -12,7 +12,7 @@ Verify an opening at an index, and return the output there.
 - The opening is valid when its path leads from that leaf to the root.
 - The output is then the output hash of the index and the secret.
 
-The output is a hash of the secret, not the leaf.
+The output hashes the index and the secret, not the leaf.
 -/
 
 @[expose] public section

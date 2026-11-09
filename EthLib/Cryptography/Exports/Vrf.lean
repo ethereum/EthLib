@@ -66,7 +66,7 @@ def readDigest (name : String) (bytes : ByteArray) : Result Digest :=
 
 /-- An output mixed with randomness, or an error if either is not 32 bytes.
 
-The randomness must become known only after the root is published. -/
+The randomness must become known only after the root is registered. -/
 @[export eth_vrf_mix]
 def mix (output randomness : ByteArray) : Result ByteArray := do
   return packBytes (mixOutput (← readDigest "output" output) (← readDigest "randomness" randomness))

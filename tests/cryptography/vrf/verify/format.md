@@ -18,6 +18,7 @@ All bytes are hex strings prefixed with `0x`.
 
 An opening verifies when the path from the leaf of its secret, ordered by the bits of the index, reaches the root.
 The output is then the output hash of the index and the secret: `keccak256(PQ_VRF_OUTPUT | LE32(i) | s)`.
+Here `s` is the secret of the opening, and `LE32(i)` is the index on 4 bytes, least significant first.
 
 A root of another length than 32 bytes, an opening of another length than 1056 bytes, and an index from `2^32` on are rejected.
 

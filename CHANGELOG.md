@@ -9,8 +9,9 @@ Not yet released.
 
 ### Changes that break callers
 
-- The output of the VRF tree at index `i` now hashes the index before the secret: `keccak256(PQ_VRF_OUTPUT | LE32(i) | s)`.
-  Every output changes, for every root, index and seed, so outputs computed before do not verify against the new ones.
+- The output of the VRF tree at index `i` now hashes the index before the secret: `keccak256(PQ_VRF_OUTPUT | LE32(i) | s)` ([#1652](https://github.com/ethereum/EthLib/pull/1652)).
+  Every output changes, for every root, index and seed.
+  Roots and openings are unchanged, so an existing opening still verifies, but returns a different output.
   `verify`, `verifyBytes` and `evaluate` keep their arguments, and `outputHash` takes the index.
   Before, one secret placed at every leaf gave every index the same output, which the holder could choose.
   A new `mixOutput`, the C export `eth_vrf_mix` and `vrf.mix` in Python hash an output with randomness.

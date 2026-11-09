@@ -25,7 +25,7 @@ def evaluate(seed: bytes, index: int) -> bytes:
 
 
 def mix(output: bytes, randomness: bytes) -> bytes:
-    """A 32-byte output mixed with 32 bytes of randomness that became known after the root."""
+    """An output mixed with randomness revealed only after the root is registered, 32 bytes each."""
     return vrf_mix(output, randomness)
 
 

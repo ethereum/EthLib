@@ -228,7 +228,7 @@ def vrf_evaluate(seed: bytes, index: int) -> bytes:
     ...
 
 def vrf_mix(output: bytes, randomness: bytes) -> bytes:
-    """An output mixed with randomness, or an error if either is not 32 bytes."""
+    """An output mixed with randomness: the value a selection compares with its threshold."""
     ...
 
 def crc32(data: bytes) -> bytes:

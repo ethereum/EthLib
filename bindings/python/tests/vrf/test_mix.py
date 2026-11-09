@@ -1,5 +1,7 @@
 """Test-vector generator: `mix`, an output mixed with randomness."""
 
+import pytest
+
 from dumper import hex_str, write_case
 from ethlib.cryptography import keccak, vrf
 from raising import raises
@@ -23,15 +25,18 @@ def test_mix() -> None:
     )
 
 
-def test_mix_hashes_prefix_output_randomness() -> None:
-    # The mix hashes the prefix, the output, then the randomness.
-    for output, randomness in [
+@pytest.mark.parametrize(
+    "output, randomness",
+    [
         (fixtures.OUTPUT_ZERO, fixtures.RANDOMNESS),
         (fixtures.RANDOMNESS, fixtures.OUTPUT_ZERO),
         (bytes(32), bytes(32)),
-    ]:
-        expected = keccak.keccak256(b"PQ_VRF_MIX" + output + randomness)
-        assert vrf.mix(output, randomness) == expected
+    ],
+)
+def test_mix_hashes_prefix_output_randomness(output: bytes, randomness: bytes) -> None:
+    # The mix hashes the prefix, the output, then the randomness.
+    expected = keccak.keccak256(b"PQ_VRF_MIX" + output + randomness)
+    assert vrf.mix(output, randomness) == expected
 
 
 def test_rejects_bad_arguments() -> None:

@@ -16,6 +16,11 @@ The two properties of a VRF that hold without assumptions on the hash.
 
 Uniqueness holds for every root, including one the holder built to cheat.
 
+The output also binds its index.
+
+- Index binding: two equal outputs come from one index and one secret.
+  Otherwise their two output inputs, which differ, are a collision of Keccak-256.
+
 The third property, pseudorandomness, needs a model of the hash and is not proved here.
 
 It could hold only for an honest tree: a holder that chooses its secrets can bias every output.
@@ -38,7 +43,7 @@ open EthLib.Cryptography.Vrf.Constants
 /--
 An opening verifies exactly when its path leads from its leaf to the root.
 
-The output is then the secret's.
+The output is then the output hash of the index and the secret.
 -/
 theorem verify_eq_some_iff {root : Digest} {i : UInt32} {o : Opening} {y : Digest} :
     verify root i o = some y ↔
@@ -48,7 +53,7 @@ theorem verify_eq_some_iff {root : Digest} {i : UInt32} {o : Opening} {y : Diges
   by_cases hp : (Merkle.climb treeHash 0 i.toNat (leafHash o.secret) o.path.toList).run = root <;>
     simp [hp, eq_comm]
 
-/-- The output of a valid opening is the hash of its secret. -/
+/-- The output of a valid opening is the hash of its index and its secret. -/
 theorem verify_output {root : Digest} {i : UInt32} {o : Opening} {y : Digest}
     (h : verify root i o = some y) : y = outputHash i o.secret :=
   (verify_eq_some_iff.mp h).2

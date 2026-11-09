@@ -1,7 +1,7 @@
 """Inputs and expected values shared by the VRF tree test-vector generators."""
 
 # The openings follow byte patterns, so they are written here as functions.
-# The roots, the outputs and the secrets were computed outside EthLib.
+# The roots, the outputs, the secrets and the mixed value were computed outside EthLib.
 # An independent implementation of the specification computed them.
 
 
@@ -49,8 +49,10 @@ OUTPUT_SEED_ZERO = bytes.fromhex("dc5ae8af27a545fbccdad5f6344767b5783400da170b00
 SECRET_LAST = bytes.fromhex("49306ebca12a70665becbaf9bec13453b4c253a9883bb81115a02d9dbc58f6d2")
 OUTPUT_SEED_LAST = bytes.fromhex("e16cdef6c3009b4b2576fe6ea49b13ae712e973bc87709d7b2fe97911c95e205")
 
+# ---- Mix -------------------------------------------------------------------
+
 # Byte k of the randomness of the mix is 7 k + 1 mod 256.
 RANDOMNESS = bytes((7 * k + 1) % 256 for k in range(32))
 
-# The output at index 0 of the opening above, mixed with that randomness.
+# The output of the opening at index 0, mixed with that randomness.
 MIX_ZERO = bytes.fromhex("df8660355cf6c1c23ce0aa1e9e4befa5f1bd4cfd989a9dc7c369748afbc67452")

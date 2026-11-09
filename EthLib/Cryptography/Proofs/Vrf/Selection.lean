@@ -1,6 +1,8 @@
 module
 
-public import EthLib.Cryptography.Proofs.Vrf.AdaptiveIndex
+public import EthLib.Cryptography.Proofs.Vrf.Unpredictability
+public import EthLib.Cryptography.Proofs.EvalDistEq
+public import EthLib.Cryptography.Proofs.LogKeys
 
 /-!
 # Proofs: a mixed selection cannot be ground
@@ -15,11 +17,11 @@ It may query the mix before the randomness is drawn, then open any index of a se
 
 The mix is a random oracle, and the tree hash is Keccak-256 itself.
 
-A mixed value of the registered tree lands in the target set with probability at most
+A mixed value of the registered tree lands in the target set with a probability bounded by a sum.
 
-- the number of allowed indices, times the size of the target set, over `2^256`,
-- plus the number of mix queries before the randomness, over `2^256`,
-- plus the chance that the opening and the honest opening at its index expose a Keccak collision.
+- The number of allowed indices times the size of the target set, over `2^256`.
+- The number of mix queries before the randomness, over `2^256`.
+- The chance that the opening and the honest opening at its index expose a Keccak-256 collision.
 
 The collision is the one the search of the uniqueness theorem returns.
 
@@ -27,14 +29,17 @@ The theorem covers a holder that registers a tree whose secrets it chose.
 
 It does not cover a holder that registers a root without knowing a tree under it.
 
-Nor does it cover randomness that the holder knows before it registers.
+The randomness is uniform and independent of the holder.
+
+So the theorem does not cover randomness that the holder knows at registration, or can bias.
+
+The game is EthLib's own: it bounds what a selection needs, for a holder that chose its key.
 -/
 
 @[expose] public section
 
 namespace EthLib.Cryptography.Vrf
 
-open EthLib.Cryptography.Vrf.Constants
 open OracleSpec OracleComp ENNReal
 
 /-! ## The mix as an oracle -/
@@ -63,6 +68,11 @@ Sampling passes through. -/
 def tableImpl (table : Digest → Digest → Digest) : QueryImpl HolderSpec ProbComp
   | .inl n => unifSpec.query n
   | .inr x => pure (table x.2 x.1)
+
+/-- With the table of the specification, a mix query is answered with the specified mixed value. -/
+theorem tableImpl_mixTable (y r : Digest) :
+    tableImpl mixTable (.inr (y, r)) = pure (mixOutput y r) :=
+  rfl
 
 /-! ## The game -/
 
@@ -97,12 +107,26 @@ noncomputable def selectionRun {σ : Type} (adversary : SelectionAdversary σ) :
 
 /-- A run is selected when its opening verifies under the root of the registered tree.
 
-The index must be in `I`, and the mixed value of the output must be in `S`. -/
+The index must be in `I`, and the mixed value of the output must be in `S`.
+
+The mixed value of an output `y` under a randomness `r` is read in the table at `r`, then `y`. -/
 def Selection.Selected (I : Finset UInt32) (S : Finset Digest) (z : Selection) : Prop :=
   z.index ∈ I ∧ ∃ y, verify (root z.secrets) z.index z.revealed = some y ∧
     z.table z.randomness y ∈ S
 
-/-- The opening and the honest opening of the registered tree expose a Keccak-256 collision. -/
+/-- With the table of the specification, a run is selected exactly when the protocol selects it.
+
+That is, the opening verifies at an index of `I`, and the specified mixed value is in `S`. -/
+theorem Selection.selected_iff_mixOutput {I : Finset UInt32} {S : Finset Digest} {z : Selection}
+    (h : z.table = mixTable) :
+    z.Selected I S ↔ z.index ∈ I ∧ ∃ y, verify (root z.secrets) z.index z.revealed = some y ∧
+      mixOutput y z.randomness ∈ S := by
+  rw [Selection.Selected, h]
+  rfl
+
+/-- The opening and the honest opening of the registered tree expose a Keccak-256 collision.
+
+The opening need not verify: every pair the search returns is a collision. -/
 def Selection.Collides (z : Selection) : Prop :=
   (findHashCollision z.index z.revealed (opening z.secrets z.index)).isSome
 
@@ -130,7 +154,8 @@ theorem prEvent_uniformFun_apply_mem (a : Digest) (T : Finset Digest) :
   exact h.symm
 
 /-- A selected run mixes an honest output at an allowed index, or exposes a collision. -/
-theorem Selection.selected_imp {I : Finset UInt32} {S : Finset Digest} {z : Selection}
+theorem Selection.Selected.honest_or_collides {I : Finset UInt32} {S : Finset Digest}
+    {z : Selection}
     (h : z.Selected I S) :
     (∃ i ∈ I, z.table z.randomness (outputHash i (z.secrets i)) ∈ S) ∨ z.Collides := by
   obtain ⟨hI, y, hy, hS⟩ := h
@@ -242,7 +267,7 @@ The holder chooses all its secrets, and makes at most `q` mix queries before the
 
 The randomness is uniform, and the holder then opens one index of `I`.
 
-The mixed value of its output lands in `S` with probability at most three terms.
+The mixed value of its output lands in `S` with probability at most the sum of three terms.
 
 - `|I| |S| / 2^256`: one fresh uniform value per allowed index.
 - `q / 2^256`: a mix query that already used the randomness.
@@ -256,7 +281,7 @@ theorem prEvent_selected_le {σ : Type} (adversary : SelectionAdversary σ) (I :
         Pr{let z ← selectionRun adversary}[z.Collides] := by
   calc _ ≤ Pr{let z ← selectionRun adversary}[
           (∃ i ∈ I, z.table z.randomness (outputHash i (z.secrets i)) ∈ S) ∨ z.Collides] :=
-        prEvent_mono _ _ _ fun _ h => Selection.selected_imp h
+        prEvent_mono _ _ _ fun _ h => Selection.Selected.honest_or_collides h
     _ ≤ _ := prEvent_or_le _ _ _
     _ ≤ _ := add_le_add ((prEvent_selectionRun_honest_le adversary I S).trans
         (prEvent_commit_mix_le adversary.commit I S hq)) le_rfl

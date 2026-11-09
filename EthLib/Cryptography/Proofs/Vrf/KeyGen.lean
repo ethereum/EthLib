@@ -1,6 +1,5 @@
 module
 
-public import EthLib.Base.Proofs.LittleEndian
 public import EthLib.Cryptography.Vrf.KeyGen
 public import EthLib.Cryptography.Proofs.Vrf.Verify
 
