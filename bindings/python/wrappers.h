@@ -152,6 +152,7 @@ extern PyObject* PBKDF2_ERROR;
 extern PyObject* SCRYPT_ERROR;
 extern PyObject* X25519_ERROR;
 extern PyObject* CHACHAPOLY_ERROR;
+extern PyObject* KEYSTORE_ERROR;
 extern PyObject* AES_ERROR;
 extern PyObject* CONCAT_KDF_ERROR;
 extern PyObject* BLOCK_ERROR;
@@ -313,6 +314,9 @@ PyObject* py_poly1305                                    (PyObject* self, PyObje
 PyObject* py_poly1305_key                                (PyObject* self, PyObject* args);
 PyObject* py_chacha20_poly1305_encrypt                    (PyObject* self, PyObject* args);
 PyObject* py_chacha20_poly1305_decrypt                    (PyObject* self, PyObject* args);
+PyObject* py_keystore_nfkd                               (PyObject* self, PyObject* args);
+PyObject* py_keystore_password                           (PyObject* self, PyObject* args);
+PyObject* py_keystore_decrypt                            (PyObject* self, PyObject* args);
 
 PyObject* py_secp256k1_verify                             (PyObject* self, PyObject* args);
 PyObject* py_secp256k1_is_low_s                           (PyObject* self, PyObject* args);

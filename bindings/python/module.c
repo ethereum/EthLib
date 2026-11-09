@@ -81,6 +81,7 @@ PyObject* PBKDF2_ERROR;
 PyObject* SCRYPT_ERROR;
 PyObject* X25519_ERROR;
 PyObject* CHACHAPOLY_ERROR;
+PyObject* KEYSTORE_ERROR;
 PyObject* AES_ERROR;
 PyObject* CONCAT_KDF_ERROR;
 PyObject* BLOCK_ERROR;
@@ -716,6 +717,9 @@ static PyMethodDef methods[] = {
   {"poly1305_key", py_poly1305_key, METH_VARARGS, DOC_poly1305_key},
   {"chacha20_poly1305_encrypt", py_chacha20_poly1305_encrypt, METH_VARARGS, DOC_chacha20_poly1305_encrypt},
   {"chacha20_poly1305_decrypt", py_chacha20_poly1305_decrypt, METH_VARARGS, DOC_chacha20_poly1305_decrypt},
+  {"keystore_nfkd", py_keystore_nfkd, METH_VARARGS, DOC_keystore_nfkd},
+  {"keystore_password", py_keystore_password, METH_VARARGS, DOC_keystore_password},
+  {"keystore_decrypt", py_keystore_decrypt, METH_VARARGS, DOC_keystore_decrypt},
   {"secp256k1_verify", py_secp256k1_verify, METH_VARARGS, DOC_secp256k1_verify},
   {"secp256k1_is_low_s", py_secp256k1_is_low_s, METH_VARARGS, DOC_secp256k1_is_low_s},
   {"secp256k1_recover", py_secp256k1_recover, METH_VARARGS, DOC_secp256k1_recover},
@@ -1101,6 +1105,7 @@ PyInit__native(void) {
     SCRYPT_ERROR = PyObject_GetAttrString(errors, "ScryptError");
     X25519_ERROR = PyObject_GetAttrString(errors, "X25519Error");
     CHACHAPOLY_ERROR = PyObject_GetAttrString(errors, "ChaCha20Poly1305Error");
+    KEYSTORE_ERROR = PyObject_GetAttrString(errors, "KeystoreError");
     AES_ERROR = PyObject_GetAttrString(errors, "AesError");
     CONCAT_KDF_ERROR = PyObject_GetAttrString(errors, "ConcatKdfError");
     BLOCK_ERROR = PyObject_GetAttrString(errors, "BlockError");

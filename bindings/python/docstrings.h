@@ -251,6 +251,15 @@
 #define DOC_chacha20_poly1305_decrypt \
   "Authenticate before returning plaintext, RFC 8439 §2.8."
 
+#define DOC_keystore_nfkd \
+  "Unicode 16.0.0 Normalization Form KD, UAX #15 rev. 56, §1.3."
+
+#define DOC_keystore_password \
+  "NFKD, control removal and UTF-8 encoding, ERC-2335 \"Password requirements\"."
+
+#define DOC_keystore_decrypt \
+  "Decrypt an ERC-2335 JSON keystore and return its secret octets."
+
 #define DOC_secp256k1_verify \
   "Whether `(r, s)` is a valid signature on `hash` under the public key `q`, by SEC 1 v2 §4.1.4."
 

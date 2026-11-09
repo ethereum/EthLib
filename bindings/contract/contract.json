@@ -1513,6 +1513,40 @@
       {"constructor": "authenticationFailed", "code": 3}]}],
    "error_class": "ChaCha20Poly1305Error",
    "docstring": "Authenticate before returning plaintext, RFC 8439 §2.8."},
+  {"summary": "Unicode 16.0.0 Normalization Form KD, UAX #15 rev. 56, §1.3.",
+   "signature": "(text: str) -> str",
+   "operation": "EthLib.Cryptography.Keystore.Exports.nfkd",
+   "method": "keystore_nfkd",
+   "errors": [],
+   "error_class": "KeystoreError",
+   "docstring": "Unicode 16.0.0 Normalization Form KD, UAX #15 rev. 56, §1.3."},
+  {"summary":
+   "NFKD, control removal and UTF-8 encoding, ERC-2335 \"Password requirements\".",
+   "signature": "(password: str) -> bytes",
+   "operation": "EthLib.Cryptography.Keystore.Exports.password",
+   "method": "keystore_password",
+   "errors": [],
+   "error_class": "KeystoreError",
+   "docstring":
+   "NFKD, control removal and UTF-8 encoding, ERC-2335 \"Password requirements\"."},
+  {"summary": "Decrypt an ERC-2335 JSON keystore and return its secret octets.",
+   "signature": "(keystore: str, password: str) -> bytes",
+   "operation": "EthLib.Cryptography.Keystore.Exports.decrypt",
+   "method": "keystore_decrypt",
+   "errors":
+   [{"type": "EthLib.Cryptography.Keystore.KeystoreError",
+     "codes":
+     [{"constructor": "invalidJson", "code": 1},
+      {"constructor": "invalidField", "code": 2},
+      {"constructor": "unsupportedVersion", "code": 3},
+      {"constructor": "unsupportedFunction", "code": 4},
+      {"constructor": "shortKey", "code": 5},
+      {"constructor": "pbkdf2", "code": 6},
+      {"constructor": "scrypt", "code": 7},
+      {"constructor": "checksumMismatch", "code": 8}]}],
+   "error_class": "KeystoreError",
+   "docstring":
+   "Decrypt an ERC-2335 JSON keystore and return its secret octets."},
   {"summary":
    "Whether `(r, s)` is a valid signature on `hash` under the public key `q`, by SEC 1 v2 §4.1.4.",
    "signature":

@@ -14,6 +14,7 @@ public import EthLib.Base.Length
 public import EthLib.Base.LittleEndian
 public import EthLib.Base.U256
 public import EthLib.Base.Uint64
+public import EthLib.Base.Unicode
 
 /-!
 # `EthLib.Base`
