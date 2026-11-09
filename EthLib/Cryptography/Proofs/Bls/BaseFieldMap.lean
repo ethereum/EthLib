@@ -199,17 +199,6 @@ theorem map_frobeniusCoeff (f : Hom F G) :
 theorem map_frobenius (f : Hom F G) (a : Fp12 F) : map f a.frobenius = (map f a).frobenius := by
   simp only [map, frobenius, Fp6.map, Fp2.map_mul, Fp2.map_conjugate, map_frobeniusCoeff]
 
-theorem map_powNat (f : Hom F G) (a : Fp12 F) (e : Nat) :
-    map f (powNat a e) = powNat (map f a) e := by
-  induction e using Nat.strongRecOn generalizing a with
-  | _ e ih =>
-    rw [powNat.eq_1 a e, powNat.eq_1 (map f a) e]
-    split
-    · exact map_one f
-    · have h := ih (e / 2) (by omega) (a * a)
-      rw [map_mul] at h
-      split <;> simp only [map_mul, h]
-
 theorem map_cyclotomicPow (f : Hom F G) (a : Fp12 F) (e : Nat) :
     map f (cyclotomicPow a e) = cyclotomicPow (map f a) e := by
   induction e using Nat.strongRecOn generalizing a with
