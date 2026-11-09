@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.BigEndian
 public import EthLib.Cryptography.Hash.Sha256
 
 /-!
@@ -41,15 +42,11 @@ def ConcatKdfError.code : ConcatKdfError → UInt32
   | .outputTooLong _ => 2
   | .inputTooLong => 3
 
-/-- The counter as four big-endian bytes. -/
-def counterBytes (counter : Nat) : ByteArray :=
-  ⟨#[UInt8.ofNat (counter >>> 24), UInt8.ofNat (counter >>> 16), UInt8.ofNat (counter >>> 8),
-    UInt8.ofNat counter]⟩
-
 /-- The blocks `K(i)` to `K(i + count - 1)` of step 6, each `H(counter | Z | FixedInfo)`. -/
 def blocks (z fixedInfo : ByteArray) (i : Nat) : (count : Nat) → ByteArray
   | 0 => ByteArray.empty
-  | count + 1 => Sha256.hash (counterBytes i ++ z ++ fixedInfo) ++ blocks z fixedInfo (i + 1) count
+  | count + 1 =>
+    Sha256.hash (Base.natToBytes4 i ++ z ++ fixedInfo) ++ blocks z fixedInfo (i + 1) count
 
 /--
 The first `length` bytes of `K(1) | K(2) | ...`, SP 800-56C Rev. 2 §4.1.

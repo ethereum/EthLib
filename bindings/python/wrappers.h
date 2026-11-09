@@ -147,6 +147,8 @@ extern PyObject* ETHASH_ERROR;
 extern PyObject* REQRESP_ERROR;
 extern PyObject* CONSENSUS_ERROR;
 extern PyObject* HKDF_ERROR;
+extern PyObject* PBKDF2_ERROR;
+extern PyObject* SCRYPT_ERROR;
 extern PyObject* AES_ERROR;
 extern PyObject* CONCAT_KDF_ERROR;
 extern PyObject* BLOCK_ERROR;
@@ -287,6 +289,11 @@ PyObject* py_aes_gcm_decrypt                              (PyObject* self, PyObj
 PyObject* py_hmac_sha256                                 (PyObject* self, PyObject* args);
 PyObject* py_hkdf_sha256                                 (PyObject* self, PyObject* args);
 PyObject* py_concat_kdf_sha256                           (PyObject* self, PyObject* args);
+PyObject* py_pbkdf2_sha256                               (PyObject* self, PyObject* args);
+PyObject* py_salsa208                                    (PyObject* self, PyObject* args);
+PyObject* py_scrypt_block_mix                            (PyObject* self, PyObject* args);
+PyObject* py_scrypt_romix                                (PyObject* self, PyObject* args);
+PyObject* py_scrypt                                      (PyObject* self, PyObject* args);
 
 PyObject* py_secp256k1_verify                             (PyObject* self, PyObject* args);
 PyObject* py_secp256k1_is_low_s                           (PyObject* self, PyObject* args);

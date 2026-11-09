@@ -302,20 +302,6 @@ The theorems that take `PairingLaws` as a hypothesis, or build a model of the ta
 - `Cryptography/Proofs/Bls/SignaturesCorrect.lean`
 - `Cryptography/Proofs/Bls/SignaturesUnique.lean`
 - `Cryptography/Proofs/Bls/TargetGroup.lean`
-- `Cryptography/Proofs/Kzg/Arsdh.lean`
-- `Cryptography/Proofs/Kzg/BatchBinding.lean`
-- `Cryptography/Proofs/Kzg/Binding.lean`
-- `Cryptography/Proofs/Kzg/BlobBinding.lean`
-- `Cryptography/Proofs/Kzg/BlobVerifier.lean`
-- `Cryptography/Proofs/Kzg/CellBatchBinding.lean`
-- `Cryptography/Proofs/Kzg/CellBinding.lean`
-- `Cryptography/Proofs/Kzg/CellVerifier.lean`
-- `Cryptography/Proofs/Kzg/CeremonyChecks.lean`
-- `Cryptography/Proofs/Kzg/HonestCells.lean`
-- `Cryptography/Proofs/Kzg/PeerDasBatchGames.lean`
-- `Cryptography/Proofs/Kzg/PeerDasColumnGames.lean`
-- `Cryptography/Proofs/Kzg/PeerDasGames.lean`
-- `Cryptography/Proofs/Kzg/Verify.lean`
 - `Execution/Proofs/Evm/Precompiles/Bls12381/PairingProduct.lean`
 
 With `pairingLaws` passed for that hypothesis, none of them depends on the pairing law.
@@ -589,6 +575,9 @@ The Python tests (`bindings/python/tests/precompile/test_ripemd160.py`) check th
 
 ### KZG
 
+The KZG and PeerDAS proofs use `Bls.pairingLaws`, which proves the pairing law of the check.
+Their theorems take no pairing-law hypothesis.
+
 Blobs, cells, commitments, proofs and field elements are byte vectors with their length in the type.
 `Proofs/Kzg/Core.lean` proves that parsing rejects bytes of any other length.
 It and `Proofs/Kzg/Cells.lean` prove that the operations reject other malformed inputs.
@@ -621,9 +610,9 @@ Here `p` and `p'` are the interpolants: the polynomials of degree below 4096 tha
 The theorem also proves that `p - p'` is nonzero and has degree below 4096.
 That proof needs no pairing law.
 It is not computational binding: no theorem bounds the cost of finding two such blobs without the secret.
-Under the pairing law and for a well-formed setup, honest KZG proofs and blob proofs verify (`verifyKzgProof_computeKzgProof`, `verifyBlobKzgProof_computeBlobKzgProof`, `Proofs/Kzg/Verify.lean`).
+For a well-formed setup, honest KZG proofs and blob proofs verify (`verifyKzgProof_computeKzgProof`, `verifyBlobKzgProof_computeBlobKzgProof`, `Proofs/Kzg/Verify.lean`).
 `verifyKzgProofImpl_iff` states when the check accepts: `c - y = w (τ - z)`, for decoded points representing `c` and `w`.
-Under the pairing law and on a well-formed setup (assumption D3), `verifyBlobKzgProof_binding` (`Proofs/Kzg/BlobBinding.lean`) splits an accepted blob opening into three cases.
+On a well-formed setup (assumption D3), `verifyBlobKzgProof_binding` (`Proofs/Kzg/BlobBinding.lean`) splits an accepted blob opening into three cases.
 Let the validated commitment and proof represent `f(τ)` and `g(τ)` for polynomials `f` and `g` of degree below 4096.
 Let `p` be the interpolant of the blob's decoded values, and let `z` be the evaluation challenge.
 Then `f = p`; or `f ≠ p`, `f - p` has degree below 4096, and `z` is a root of `f - p`.
@@ -638,11 +627,11 @@ Both are assumptions, and no theorem here proves either bound.
 It is not computational binding: no theorem bounds the cost of finding such polynomials without the secret.
 `verifyKzgProofBatch_ok_iff_root` (`Proofs/Kzg/BatchBinding.lean`) states when the batch check of openings accepts, as an equivalence.
 Let opening `i` have commitment `c_i`, value `y_i`, point `z_i` and proof `w_i`.
-Under `PairingLaws` and a well-formed setup, its verdict is true exactly when its challenge `r` is a root of `P(X) = sum_i X^i (c_i - y_i - w_i (τ - z_i))`.
+For a well-formed setup, its verdict is true exactly when its challenge `r` is a root of `P(X) = sum_i X^i (c_i - y_i - w_i (τ - z_i))`.
 `P` is zero exactly when every opening satisfies the identity of the single check.
 `verifyKzgProofBatch_exists_ok` shows that the batch check returns a verdict, with no error, when its six arrays have one size.
 `verifyCellKzgProofBatchImpl_ok_iff_root` (`Proofs/Kzg/CellBatchBinding.lean`) states the same for the batch check of cells, as an equivalence.
-Under `PairingLaws`, a well-formed setup, and decoded points that represent `c` and `w`, its verdict is true exactly when the challenge is a root.
+For a well-formed setup and decoded points that represent `c` and `w`, its verdict is true exactly when the challenge is a root.
 Let cell `k` have commitment `c_{i_k}` at commitment index `i_k`, proof `w_k`, coset shift `h_k`, and values that interpolate to `I_k` of degree below 64.
 Then the challenge is a root of `sum_k X^k (c_{i_k} - I_k(τ) - w_k (τ^64 - h_k^64))`.
 That polynomial is zero exactly when every cell is valid.
@@ -654,7 +643,8 @@ Then the values agree, or the challenge is a root of a nonzero error polynomial.
 Otherwise a search on the two cells returns a solution of the bilinear strong Diffie–Hellman problem.
 The problem is Definition 2.4 of the extended KZG paper.
 The solution is `(c, x)` with `x` the element `e(g_1, g_2)^(1 / (τ + c))` of the target group.
-The theorem holds in any model of that group, `TargetGroup`, such as the pairing itself under `PairingLaws`.
+The theorem holds in any model of that group, `TargetGroup`.
+`TargetGroup.ofPairingLaws Bls.pairingLaws` gives the model of the pairing itself.
 `Proofs/Kzg/CellVerifier.lean` lifts these three results to the outer check, `verifyCellKzgProofBatch`, which the bindings call.
 That check takes one commitment per cell, keeps the first copy of each, and runs the core check.
 `verifyCellKzgProofBatch_valid_or_root` checks each cell against its own commitment.
@@ -680,7 +670,7 @@ Otherwise a search returns a bilinear strong Diffie–Hellman solution, or a sec
 Both searches read only the setup, the commitment, the cells and the proofs.
 `Proofs/Kzg/BlobVerifier.lean` lifts the batch check of openings to `verifyBlobKzgProofBatch`, which checks the blobs of a block and of a blob transaction before Fusaka.
 `verifyBlobKzgProofBatch_exists_ok` shows that it returns a verdict, with no error, when the sizes match, each blob decodes, and each commitment and proof passes KZG validation.
-Assume `PairingLaws`, a well-formed setup, and decoded points that represent the scalars `c` and `w` of their bytes.
+Assume a well-formed setup and decoded points that represent the scalars `c` and `w` of their bytes.
 Then `verifyBlobKzgProofBatch_ok_iff_root` states that this verdict is true exactly when the batch challenge is a root of the error polynomial of the blob batch.
 `verifyBlobKzgProofBatch_valid_or_root` assumes the same and splits an accepted batch into two cases.
 Every entry satisfies `c_i - y_i = w_i (τ - z_i)` and passes `verifyBlobKzgProof`, or the batch challenge is a root of a nonzero error polynomial.
@@ -713,7 +703,7 @@ The advantage of every adversary is at most the BSDH advantage of one reduction.
 `codeBindingAdvantage_le` is Lemma 4, code-binding, Definition 5 there.
 The advantage of every adversary is at most the BSDH advantage of one reduction plus the ARSDH advantage of a second.
 Each reduction runs the adversary once, then a deterministic search; their running times are not formalized.
-Both theorems assume the pairing law, `PairingLaws`, and the BSDH reductions work in any model of the target group, `TargetGroup`.
+The BSDH reductions work in any model of the target group, `TargetGroup`.
 That BSDH and ARSDH are hard stays an informal hypothesis: no theorem assumes it, and the bounds hold for every adversary.
 An adversary is any Lean function, so without a model of cost, hardness cannot be stated as a Lean hypothesis.
 The BSDH advantage is relative to a model of the target group; `TargetGroup.ofPairingLaws` is the model of the real pairing.
@@ -722,7 +712,7 @@ These games check one cell per call.
 The hash of the challenge is a random oracle into `Fr` on the inputs of the core check, and the adversary makes at most `q` queries.
 That idealises SHA-256 reduced modulo `r`, whose values are not exactly uniform.
 The verifier accepts when the batch check returns a verdict and its challenge is a root of the error polynomial of the batch.
-At the challenge of the hash, and under `PairingLaws`, this is the batch check of cells (`CellBatchInput.acceptsAt_challenge_iff`); no theorem relates the two at another challenge.
+At the challenge of the hash, this is the batch check of cells (`CellBatchInput.acceptsAt_challenge_iff`); no theorem relates the two at another challenge.
 The bound is the bound of Lemma 4 plus `(q + 1) 127 / r`, the root term of the random-oracle game, for at most 128 distinct cells.
 The verifier accepts valid openings with every challenge (`CellBatchInput.acceptsAt_of_cellOpeningValid`).
 A client that samples a column checks it in its own batch, with many commitments at one cell index.
@@ -743,7 +733,7 @@ The verifier accepts a column of cells and proofs of blobs with every challenge 
 Under every well-formed setup, they are valid openings for the commitment of the blob, so also under the setup that the games build.
 A valid opening satisfies the scalar equation of a valid cell, with points that pass KZG validation.
 `verifyCellKzgProofBatch_of_cellOpeningValid` proves that the batch check of cells accepts every batch of valid openings.
-It assumes `PairingLaws` and a well-formed setup, and the commitments of the batch may repeat.
+It assumes a well-formed setup, and the commitments of the batch may repeat.
 So the batch check accepts the cells and proofs of blobs (`verifyCellKzgProofBatch_computeCellsAndKzgProofs`).
 For one cell, `CellOpening.verifies_iff` shows that the verifier of the games accepts an opening exactly when it is valid.
 `CellOpening.verifies_computeCellsAndKzgProofs` applies this to the setup that the games build: the openings of a blob verify there.
@@ -756,12 +746,12 @@ The steps are §3.2 of ePrint 2024/1362, for many blobs, and the framework of Ha
 `findSdh_valid_bytes` (`Proofs/Kzg/Binding.lean`) is the evaluation binding of single proofs.
 Let the check accept one commitment at one point with two different values.
 Then a search over the two openings returns a strong Diffie–Hellman solution for the secret.
-It needs the pairing law and a well-formed setup, and no model of a hash.
+It needs a well-formed setup and no model of a hash.
 
 `verifyKzgProofBatch_binding` and `verifyKzgProofBatch_binding_single` (`Proofs/Kzg/BatchBinding.lean`) are the binding of the batch check of openings.
 Let an accepted batch open one commitment at one point to two values, or let a single check accept a second value.
 Then the values agree, or the search on the two openings returns a strong Diffie–Hellman solution, or the challenge is a root of a nonzero `P`.
-They need the pairing law and a well-formed setup.
+They need a well-formed setup.
 `prEvent_batchErrorPoly_root_le` (`Proofs/Kzg/BatchChallenge.lean`) bounds the last case.
 Its game takes the hash of the challenge as a random oracle on the inputs of the batch.
 The adversary makes at most `q` queries to that oracle, then outputs a batch of at most `n` openings.
@@ -776,7 +766,6 @@ It proves that the ceremony's pairing checks force each G1 and G2 point of a con
 A point represents a scalar when its group element is that multiple of the generator, whatever its coordinates.
 It holds under these hypotheses besides the checks themselves:
 
-- `PairingLaws`, the pairing law of A2.
 - Every point is valid and passes the subgroup check of its group.
 - `previousTauNonzero`: the previous transcript's tau point is not at infinity.
 - `pubkeyNonzero`: the contributor's public key is not at infinity.
@@ -1721,8 +1710,8 @@ EthLib accepts them, and the suite asserts that it does, as `tests/execution/eth
 
 A conditional theorem is only as strong as its hypotheses.
 The ceremony theorem `checksSufficient_of_subgroupChecks` is one, and its hypotheses are listed under KZG.
-`PairingLaws`, listed under BLS12-381 and alt_bn128, is the hypothesis of every theorem about the result of a pairing check.
-It is a `Prop` passed as an explicit argument, never an axiom, so `lake exe check-decls` still sees only the standard axioms.
+`PairingLaws`, listed under BLS12-381 and alt_bn128, remains an explicit hypothesis of some pairing theorems.
+It is a `Prop`, never an axiom, so `lake exe check-decls` still sees only the standard axioms.
 `pairingLaws` proves the BLS12-381 law, so the theorems that assume it hold once it is supplied.
 `AltBn128.pairingLaws` proves the alt_bn128 law in the same way.
 Whatever those hypotheses leave unproved is part of what a reader trusts.
@@ -1738,6 +1727,11 @@ The Python bindings expose all four, as `key_gen` and `sign` in each module, whi
 BLS key generation, signing and the proof of possession handle secret data, and the Python bindings expose all three.
 HMAC-SHA-256, HKDF and the Concatenation KDF take a secret key, input keying material or shared secret.
 The Python bindings expose them as `hmac_sha256`, `hkdf_extract`, `hkdf` and `concat_kdf`.
+PBKDF2 and scrypt take a secret password, and the bindings expose them as `pbkdf2` and `scrypt`.
+The steps of scrypt take values derived from the password, and the bindings expose them as `salsa208`, `scrypt_block_mix` and `scrypt_romix`.
+
+ROMix, the memory-hard step of scrypt, reads its table at indices that depend on the password, as AES reads its S-box below.
+Its memory use depends on its parameters, and D1 says what a caller must bound.
 
 Every AES function that takes a key handles secret data.
 Its S-box is a table, and the cipher reads it at indices that depend on the key.
@@ -1848,12 +1842,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 299 operations and 41 size constants.
-The Python extension calls 299 of the operations and 41 of the constants.
+Lean exports 304 operations and 44 size constants.
+The Python extension calls 304 of the operations and 44 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-8724 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (351), `bls.c` (378), `chain.c` (45), `consensus.c` (1652), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (45), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1241), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (119), `wrappers.h` (566), `xmss.c` (134).
+8858 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (351), `bls.c` (378), `chain.c` (45), `consensus.c` (1652), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (45), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (1263), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (119), `wrappers.h` (573), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
@@ -1949,6 +1943,20 @@ leanSPHINCS adds another.
 Never sign more than `2^30` messages with one secret key.
 Nothing in EthLib counts signatures, so the caller must.
 The Lean and Python docstrings of `sign` both say so.
+
+Password derivations add bounds on memory and time.
+The ROMix table of scrypt has a payload of `128 * r * N` bytes, and the expanded password and the mixed blocks take at least `128 * r * p` bytes each.
+The key itself, of either derivation, can be up to `(2^32 - 1) * 32` bytes, about 128 GiB.
+Parameters within the bounds of RFC 7914 can ask for more memory than any machine has.
+For example, `N = 2^40` and `r = 8` pass the check on the cost and ask for a table of `2^50` bytes, one pebibyte.
+Likewise, `r = 1` and `p = 2^30 - 1` pass the check on `p` and ask for about 128 GiB per buffer.
+No error is returned then: the Lean runtime aborts the process, or the operating system kills it.
+The work of scrypt grows with `N * r * p` and with the key length.
+The work of PBKDF2 grows with `c` times the number of 32-byte blocks of the key.
+So a hostile parameter can also make a call run for an impractical time.
+A keystore file gives `N`, `r` and `p`, or `c`, and the key length `dklen`.
+So a caller that reads one must bound `r * N`, `r * p`, `c` and `dklen` before it calls the derivation.
+The Lean docstrings of `pbkdf2`, `scrypt` and `romix` say so.
 
 ### D2. Dependencies
 

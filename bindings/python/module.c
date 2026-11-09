@@ -55,6 +55,9 @@ size_t SECP256K1_SIGNATURE_LEN;
 size_t SECP256R1_PUBLIC_KEY_LEN;
 size_t SECP256R1_HASH_LEN;
 size_t SECP256R1_SIGNATURE_LEN;
+size_t PBKDF2_HASH_LEN;
+size_t SALSA_BLOCK_SIZE;
+size_t SCRYPT_BLOCK_SIZE;
 
 
 /* ---- Exception classes (looked up in `PyInit__native`) --------------- */
@@ -73,6 +76,8 @@ PyObject* ETHASH_ERROR;
 PyObject* REQRESP_ERROR;
 PyObject* CONSENSUS_ERROR;
 PyObject* HKDF_ERROR;
+PyObject* PBKDF2_ERROR;
+PyObject* SCRYPT_ERROR;
 PyObject* AES_ERROR;
 PyObject* CONCAT_KDF_ERROR;
 PyObject* BLOCK_ERROR;
@@ -105,6 +110,10 @@ PyObject* SLASHING_PROTECTION_ERROR;
 PyObject* BINDING_ERROR;
 
 /* ---- Lean externs: size accessors ------------------------------------ */
+
+extern uint64_t eth_pbkdf2_const_hash_len(lean_object* unit);
+extern uint64_t eth_scrypt_const_salsa_block_size(lean_object* unit);
+extern uint64_t eth_scrypt_const_block_size(lean_object* unit);
 
 extern uint64_t
 eth_bls_const_bytes_per_pubkey(
@@ -678,6 +687,11 @@ static PyMethodDef methods[] = {
   {"hmac_sha256", py_hmac_sha256, METH_VARARGS, DOC_hmac_sha256},
   {"hkdf_sha256", py_hkdf_sha256, METH_VARARGS, DOC_hkdf_sha256},
   {"concat_kdf_sha256", py_concat_kdf_sha256, METH_VARARGS, DOC_concat_kdf_sha256},
+  {"pbkdf2_sha256", py_pbkdf2_sha256, METH_VARARGS, DOC_pbkdf2_sha256},
+  {"salsa208", py_salsa208, METH_VARARGS, DOC_salsa208},
+  {"scrypt_block_mix", py_scrypt_block_mix, METH_VARARGS, DOC_scrypt_block_mix},
+  {"scrypt_romix", py_scrypt_romix, METH_VARARGS, DOC_scrypt_romix},
+  {"scrypt", py_scrypt, METH_VARARGS, DOC_scrypt},
   {"secp256k1_verify", py_secp256k1_verify, METH_VARARGS, DOC_secp256k1_verify},
   {"secp256k1_is_low_s", py_secp256k1_is_low_s, METH_VARARGS, DOC_secp256k1_is_low_s},
   {"secp256k1_recover", py_secp256k1_recover, METH_VARARGS, DOC_secp256k1_recover},
@@ -1056,6 +1070,8 @@ PyInit__native(void) {
     REQRESP_ERROR = PyObject_GetAttrString(errors, "ReqRespError");
     CONSENSUS_ERROR = PyObject_GetAttrString(errors, "ConsensusError");
     HKDF_ERROR = PyObject_GetAttrString(errors, "HkdfError");
+    PBKDF2_ERROR = PyObject_GetAttrString(errors, "Pbkdf2Error");
+    SCRYPT_ERROR = PyObject_GetAttrString(errors, "ScryptError");
     AES_ERROR = PyObject_GetAttrString(errors, "AesError");
     CONCAT_KDF_ERROR = PyObject_GetAttrString(errors, "ConcatKdfError");
     BLOCK_ERROR = PyObject_GetAttrString(errors, "BlockError");
@@ -1177,6 +1193,9 @@ PyInit__native(void) {
     RLPX_SECRETS_SIZE       = (size_t) eth_rlpx_const_secrets_size(lean_box(0));
     REQRESP_MAX_PAYLOAD_SIZE = (size_t) eth_reqresp_const_max_payload_size(lean_box(0));
     REQRESP_MAX_ERROR_MESSAGE_SIZE = (size_t) eth_reqresp_const_max_error_message_size(lean_box(0));
+    PBKDF2_HASH_LEN = (size_t) eth_pbkdf2_const_hash_len(lean_box(0));
+    SALSA_BLOCK_SIZE = (size_t) eth_scrypt_const_salsa_block_size(lean_box(0));
+    SCRYPT_BLOCK_SIZE = (size_t) eth_scrypt_const_block_size(lean_box(0));
 
 
     initialized = 1;
@@ -1237,5 +1256,8 @@ PyInit__native(void) {
   PyModule_AddIntConstant(m, "RLPX_SECRETS_SIZE", RLPX_SECRETS_SIZE);
   PyModule_AddIntConstant(m, "REQRESP_MAX_PAYLOAD_SIZE", REQRESP_MAX_PAYLOAD_SIZE);
   PyModule_AddIntConstant(m, "REQRESP_MAX_ERROR_MESSAGE_SIZE", REQRESP_MAX_ERROR_MESSAGE_SIZE);
+  PyModule_AddIntConstant(m, "PBKDF2_HASH_LEN", PBKDF2_HASH_LEN);
+  PyModule_AddIntConstant(m, "SALSA_BLOCK_SIZE", SALSA_BLOCK_SIZE);
+  PyModule_AddIntConstant(m, "SCRYPT_BLOCK_SIZE", SCRYPT_BLOCK_SIZE);
   return m;
 }

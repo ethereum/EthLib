@@ -567,7 +567,7 @@ noncomputable def CellBatch.errorPoly (x : CellBatch) (τ : Fr) (c w : Bytes48 �
 
 /-- **The verdict of the outer check, as a root.**
 
-Assume the pairing law and a well-formed setup of the secret `τ`.
+Assume a well-formed setup of the secret `τ`.
 
 Let each commitment decode to a point that represents the scalar `c` of its bytes.
 
@@ -576,7 +576,7 @@ Let each proof decode to a point that represents the scalar `w` of its bytes.
 Let the outer check return the verdict `b`.
 
 Then `b` is true exactly when the challenge is a root of the error polynomial of the batch. -/
-theorem verifyCellKzgProofBatch_ok_iff_root (laws : Bls.PairingLaws) {s : TrustedSetup}
+theorem verifyCellKzgProofBatch_ok_iff_root {s : TrustedSetup}
     {τ : Fr} (hs : s.WellFormed τ) (y : CellBatchInput) {c w : Bytes48 → Fr}
     (hC : ∀ k < y.commitments.size, ∀ P, uncompressG1 y.commitments[k]! = .ok P →
       G1.Represents P (c y.commitments[k]!))
@@ -602,12 +602,12 @@ theorem verifyCellKzgProofBatch_ok_iff_root (laws : Bls.PairingLaws) {s : Truste
     fun k hk => hP k (hQsz ▸ hk) _ (by
       have hQk' := hQk k (hQsz ▸ hk) hk
       rwa [← getElem!_pos _ k (hQsz ▸ hk), ← getElem!_pos Q k hk] at hQk')
-  have := verifyCellKzgProofBatchImpl_ok_iff_root laws hs hG hQ hC' hP' hI
+  have := verifyCellKzgProofBatchImpl_ok_iff_root hs hG hQ hC' hP' hI
   simpa only [CellBatch.errorPoly, CellBatch.challenge, CellBatchInput.toCellBatch, hx] using this
 
 /-- **An accepted batch of cells is valid, or its challenge is a root.**
 
-Assume the pairing law and a well-formed setup of the secret `τ`.
+Assume a well-formed setup of the secret `τ`.
 
 Let each commitment decode to a point that represents the scalar `c` of its bytes.
 
@@ -616,7 +616,7 @@ Let each proof decode to a point that represents the scalar `w` of its bytes.
 If the outer check accepts, then every cell is valid for its own commitment.
 
 Otherwise the error polynomial of the batch is not zero, and the challenge is one of its roots. -/
-theorem verifyCellKzgProofBatch_valid_or_root (laws : Bls.PairingLaws) {s : TrustedSetup}
+theorem verifyCellKzgProofBatch_valid_or_root {s : TrustedSetup}
     {τ : Fr} (hs : s.WellFormed τ) (y : CellBatchInput) {c w : Bytes48 → Fr}
     (hC : ∀ k < y.commitments.size, ∀ P, uncompressG1 y.commitments[k]! = .ok P →
       G1.Represents P (c y.commitments[k]!))
@@ -640,11 +640,11 @@ theorem verifyCellKzgProofBatch_valid_or_root (laws : Bls.PairingLaws) {s : Trus
     have hd := (hdidx k (by omega)).2
     simp only [CellBatchInput.toCellBatch] at hv ⊢
     rwa [hd] at hv
-  · exact Or.inr ⟨hzero, (verifyCellKzgProofBatch_ok_iff_root laws hs y hC hP h).mp rfl⟩
+  · exact Or.inr ⟨hzero, (verifyCellKzgProofBatch_ok_iff_root hs y hC hP h).mp rfl⟩
 
 /-- **Binding of the outer batch check of cells.**
 
-Take a model of the target group, the pairing law and a well-formed setup of the secret `τ`.
+Take a model of the target group and a well-formed setup of the secret `τ`.
 
 Let the scalars `c` and `w` be as in the previous theorem, and let the outer check accept.
 
@@ -658,7 +658,7 @@ Then one of three cases holds.
 - The search on the two cells returns a bilinear strong Diffie–Hellman solution for `τ`.
 - The challenge is a root of the error polynomial of the batch, which is not zero. -/
 theorem verifyCellKzgProofBatch_binding {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
-    (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ)
+    {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ)
     (y : CellBatchInput) {c w : Bytes48 → Fr}
     (hC : ∀ k < y.commitments.size, ∀ P, uncompressG1 y.commitments[k]! = .ok P →
       G1.Represents P (c y.commitments[k]!))
@@ -685,7 +685,7 @@ theorem verifyCellKzgProofBatch_binding {GT : Type} [CommMonoid GT] (M : TargetG
   · exact Or.inl hne
   have hne' : evals[k]! ≠ evals[k']! := fun heq =>
     hne (cellToCosetEvals_inj hdec (heq ▸ hdec'))
-  rcases verifyCellKzgProofBatch_valid_or_root laws hs y hC hP h with hall | hroot
+  rcases verifyCellKzgProofBatch_valid_or_root hs y hC hP h with hall | hroot
   · have hv := hall k hk
     have hv' := hall k' hk'
     rw [← hc, ← hj] at hv'

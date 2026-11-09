@@ -32,7 +32,7 @@ Conversely, let the batch check return a verdict, with a zero error polynomial.
 
 Then every entry is valid.
 
-Under the pairing law, the batch check of cells accepts every batch of valid openings.
+The batch check of cells accepts every batch of valid openings.
 
 So the batch check accepts the cells and proofs of blobs, and so does the verifier of the games.
 -/
@@ -325,7 +325,7 @@ theorem exists_ok_of_cellOpeningValid {s : TrustedSetup} {τ : Fr} {y : CellBatc
 
 /-- **The batch check of cells accepts valid openings.**
 
-Assume the pairing law and a well-formed setup of the secret `τ`.
+Assume a well-formed setup of the secret `τ`.
 
 Take a batch with one commitment, one cell index, one cell and one proof per entry.
 
@@ -334,7 +334,7 @@ Let each entry be a valid opening at `τ`.
 Then the batch check of cells accepts.
 
 The commitments may repeat, as when several cells come from one blob. -/
-theorem verifyCellKzgProofBatch_of_cellOpeningValid (laws : Bls.PairingLaws) {s : TrustedSetup}
+theorem verifyCellKzgProofBatch_of_cellOpeningValid {s : TrustedSetup}
     {τ : Fr} (hs : s.WellFormed τ) {bs : Array Bytes48} {cellIndices : Array CellIndex}
     {cells : Array Cell} {ps : Array Bytes48} (h₁ : cells.size = bs.size)
     (h₂ : ps.size = bs.size) (h₃ : cellIndices.size = bs.size)
@@ -344,7 +344,7 @@ theorem verifyCellKzgProofBatch_of_cellOpeningValid (laws : Bls.PairingLaws) {s 
   obtain ⟨⟨b, hb⟩, hbs, hps⟩ := exists_ok_of_cellOpeningValid (s := s) (y := y) h₁ h₂ h₃ hv
   have hz : y.toCellBatch.errorPoly τ scalarOf scalarOf = 0 :=
     errorPoly_eq_zero_of_cellOpeningValid h₁ h₃ hv
-  have hroot := (verifyCellKzgProofBatch_ok_iff_root laws hs y
+  have hroot := (verifyCellKzgProofBatch_ok_iff_root hs y
     (fun k hk _ hu => represents_scalarOf
       (hbs y.commitments[k]! (getElem!_pos y.commitments k hk ▸ Array.getElem_mem hk)) hu)
     (fun k hk _ hu => represents_scalarOf
@@ -354,7 +354,7 @@ theorem verifyCellKzgProofBatch_of_cellOpeningValid (laws : Bls.PairingLaws) {s 
 
 /-- **The batch check of cells accepts the cells and proofs of blobs.**
 
-Assume the pairing law and a well-formed setup of the secret `τ`.
+Assume a well-formed setup of the secret `τ`.
 
 Take a batch where each entry comes from a blob.
 
@@ -363,7 +363,7 @@ The commitment of the entry is the commitment of its blob.
 The cell and the proof of the entry are those of its cell index, below 128.
 
 Then the batch check of cells accepts. -/
-theorem verifyCellKzgProofBatch_computeCellsAndKzgProofs (laws : Bls.PairingLaws)
+theorem verifyCellKzgProofBatch_computeCellsAndKzgProofs
     {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ) {bs : Array Bytes48}
     {cellIndices : Array CellIndex} {cells : Array Cell} {ps : Array Bytes48}
     (h₁ : cells.size = bs.size) (h₂ : ps.size = bs.size) (h₃ : cellIndices.size = bs.size)
@@ -371,7 +371,7 @@ theorem verifyCellKzgProofBatch_computeCellsAndKzgProofs (laws : Bls.PairingLaws
       computeCellsAndKzgProofs s blob = .ok (cs, qs) ∧ cellIndices[k]! < CELLS_PER_EXT_BLOB ∧
       cells[k]! = cs[cellIndices[k]!]! ∧ ps[k]! = qs[cellIndices[k]!]!) :
     verifyCellKzgProofBatch s bs cellIndices cells ps = .ok true := by
-  refine verifyCellKzgProofBatch_of_cellOpeningValid laws hs h₁ h₂ h₃ fun k hk => ?_
+  refine verifyCellKzgProofBatch_of_cellOpeningValid hs h₁ h₂ h₃ fun k hk => ?_
   obtain ⟨blob, cs, qs, hC, hP, hj, hcell, hproof⟩ := hblobs k hk
   rw [hcell, hproof]
   exact cellOpeningValid_computeCellsAndKzgProofs hs hC hP hj
@@ -380,15 +380,15 @@ theorem verifyCellKzgProofBatch_computeCellsAndKzgProofs (laws : Bls.PairingLaws
 
 /-- **An opening of one cell verifies exactly when it is valid.**
 
-Assume the pairing law and a well-formed setup of the secret `τ`.
+Assume a well-formed setup of the secret `τ`.
 
 The verifier of the games accepts an opening for a commitment exactly when it is valid at `τ`. -/
-theorem CellOpening.verifies_iff (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
+theorem CellOpening.verifies_iff {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) {commitment : Bytes48} {o : CellOpening} :
     o.Verifies s commitment ↔ CellOpeningValid τ commitment o.cellIndex o.cell o.proof := by
   constructor
   · intro h
-    obtain ⟨hci, e, C, c, P, w, he, hC, hc, hP, hw, hval⟩ := h.valid laws hs
+    obtain ⟨hci, e, C, c, P, w, he, hC, hc, hP, hw, hval⟩ := h.valid hs
     obtain ⟨hvc, hvp⟩ := validateKzgG1_of_verifyCellKzgProofBatch h
     obtain ⟨C', hC'⟩ := exists_validateKzgG1Point_of_validateKzgG1 hvc
     obtain ⟨P', hP'⟩ := exists_validateKzgG1Point_of_validateKzgG1 hvp
@@ -397,25 +397,25 @@ theorem CellOpening.verifies_iff (laws : Bls.PairingLaws) {s : TrustedSetup} {τ
     subst hCC hPP
     exact ⟨hci, e, C', c, P', w, he, hC', hc, hP', hw, hval⟩
   · intro h
-    refine verifyCellKzgProofBatch_of_cellOpeningValid laws hs rfl rfl rfl fun k hk => ?_
+    refine verifyCellKzgProofBatch_of_cellOpeningValid hs rfl rfl rfl fun k hk => ?_
     obtain rfl : k = 0 := by simpa using hk
     exact h
 
 /-- **The verifier of the games accepts the cells and proofs of a blob.**
 
-Assume the pairing law, and take the setup of the games for the secret `τ`.
+Take the setup of the games for the secret `τ`.
 
 Let the code compute the commitment of a blob, and its cells and proofs, with this setup.
 
 Then the opening of cell `j` by cell `j` and proof `j` verifies, for every `j` below 128. -/
-theorem CellOpening.verifies_computeCellsAndKzgProofs (laws : Bls.PairingLaws) (τ : Fr)
+theorem CellOpening.verifies_computeCellsAndKzgProofs (τ : Fr)
     {blob : Blob} {commitment : Bytes48} {cells : Array Cell} {proofs : Array Bytes48}
     (hC : blobToKzgCommitment (TrustedSetup.ofPowers (setupPowers τ)) blob = .ok commitment)
     (hP : computeCellsAndKzgProofs (TrustedSetup.ofPowers (setupPowers τ)) blob =
       .ok (cells, proofs)) {j : Nat} (hj : j < CELLS_PER_EXT_BLOB) :
     (⟨j, cells[j]!, proofs[j]!⟩ : CellOpening).Verifies (TrustedSetup.ofPowers (setupPowers τ))
       commitment :=
-  (CellOpening.verifies_iff laws (wellFormed_ofPowers τ)).mpr
+  (CellOpening.verifies_iff (wellFormed_ofPowers τ)).mpr
     (cellOpeningValid_computeCellsAndKzgProofs (wellFormed_ofPowers τ) hC hP hj)
 
 end EthLib.Cryptography.Kzg

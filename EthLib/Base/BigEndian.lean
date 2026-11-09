@@ -65,4 +65,12 @@ theorem natToBytes_length (len n : Nat) : (natToBytes len n).length = len := by
   | zero => rfl
   | succ len ih => simp [natToBytes_succ, ih]
 
+/-- `n` as four big-endian bytes, keeping only `n mod 2^32`, such as a 32-bit block counter. -/
+def natToBytes4 (n : Nat) : ByteArray :=
+  ⟨(natToBytes 4 n).toArray⟩
+
+/-- The counter is always four bytes. -/
+theorem natToBytes4_size (n : Nat) : (natToBytes4 n).size = 4 := by
+  simp [natToBytes4, ByteArray.size, natToBytes_length]
+
 end EthLib.Base

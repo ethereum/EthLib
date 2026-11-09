@@ -2,13 +2,14 @@ module
 
 public import EthLib.Cryptography.Proofs.Kzg.Quotient
 public import EthLib.Cryptography.Proofs.Kzg.ValidateG1
+import EthLib.Cryptography.Proofs.Bls.PairingAte
 
 /-!
 # Proofs: honest KZG proofs verify
 
 The check of an opening of `c` at `z` to `y`, with proof `w`, holds when `c - y = w (τ - z)`.
 
-This needs the pairing law, as a hypothesis, and the secret `τ` of a well-formed setup.
+This needs the secret `τ` of a well-formed setup.
 
 An honest proof commits to the quotient `q = (p - p(z)) / (X - z)`, so the identity holds.
 
@@ -30,20 +31,20 @@ private theorem opening_iff (c y w t z : Fr) :
     (c + -y) * -1 + w * (t + -z) = 0 ↔ c - y = w * (t - z) := by
   constructor <;> intro h <;> linear_combination -h
 
-/-- Under the pairing law, the check with `[τ]_2` accepts exactly when `c - y = w (τ - z)`.
+/-- The check with `[τ]_2` accepts exactly when `c - y = w (τ - z)`.
 
 Here the commitment represents `c • g1` and the proof `w • g1`. -/
-theorem verifyKzgProofWith_iff (laws : Bls.PairingLaws) {s2 : G2} {τ : Fr}
+theorem verifyKzgProofWith_iff {s2 : G2} {τ : Fr}
     (hs2 : G2.Represents s2 τ) {C P : G1} {c w : Fr}
     (hC : G1.Represents C c) (hP : G1.Represents P w) (z y : Fr) :
     verifyKzgProofWith s2 C z y P = true ↔ c - y = w * (τ - z) := by
   have hCy := hC.add (G1.represents_mul_generator (-y))
   have hX := hs2.add (G2.represents_mul_generator (-z))
-  have h := laws.two_pairs hCy G2.represents_generator.neg hP hX
+  have h := Bls.pairingLaws.two_pairs hCy G2.represents_generator.neg hP hX
   exact h.trans (opening_iff c y w τ z)
 
-/-- Under the pairing law and a well-formed setup, the check accepts iff `c - y = w (τ - z)`. -/
-theorem verifyKzgProofImpl_iff (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
+/-- For a well-formed setup, the check accepts iff `c - y = w (τ - z)`. -/
+theorem verifyKzgProofImpl_iff {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) {C P : G1} {c w : Fr}
     (hC : G1.Represents C c) (hP : G1.Represents P w) (z y : Fr) :
     verifyKzgProofImpl s C z y P = true ↔ c - y = w * (τ - z) := by
@@ -51,7 +52,7 @@ theorem verifyKzgProofImpl_iff (laws : Bls.PairingLaws) {s : TrustedSetup} {τ :
     have h := hs.monomial_g2 ⟨1, by decide⟩
     simp only [Fin.getElem_fin, pow_one] at h
     exact h
-  exact verifyKzgProofWith_iff laws hs2 hC hP z y
+  exact verifyKzgProofWith_iff hs2 hC hP z y
 
 /-- The compressed encoding of a representative passes KZG validation.
 
@@ -64,7 +65,7 @@ theorem validateKzgG1Point_compressG1 {P : G1} {a : Fr} (h : G1.Represents P a) 
     G1.modulus_smul_generator, nsmul_zero]
 
 /-- An opening whose scalars satisfy `c - y = w (τ - z)` verifies, from its bytes. -/
-theorem verifyKzgProof_of_represents (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
+theorem verifyKzgProof_of_represents {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) {C P : G1} {c w z y : Fr} {zBytes : Bytes32}
     (hC : G1.Represents C c) (hP : G1.Represents P w) (hz : bytesToBlsField zBytes = .ok z)
     (hid : c - y = w * (τ - z)) :
@@ -74,7 +75,7 @@ theorem verifyKzgProof_of_represents (laws : Bls.PairingLaws) {s : TrustedSetup}
   unfold verifyKzgProof
   rw [hC', hP', hz, bytesToBlsField_blsFieldToBytes]
   simp only [bind, Except.bind, pure, Except.pure]
-  rw [(verifyKzgProofImpl_iff laws hs hrC hrP z y).mpr hid]
+  rw [(verifyKzgProofImpl_iff hs hrC hrP z y).mpr hid]
 
 /-- The proof that the computation returns represents the quotient at `τ`. -/
 theorem represents_quotient {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ)
@@ -102,10 +103,10 @@ theorem eval_interpolant_sub (poly : Polynomial) (z τ : Fr) :
 
 /-- **Honest proofs verify.**
 
-Under the pairing law and a well-formed setup, a proof that the computation returns verifies.
+For a well-formed setup, a proof that the computation returns verifies.
 
 It holds for every point `z`, inside or outside the domain. -/
-theorem verifyKzgProof_computeKzgProof (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
+theorem verifyKzgProof_computeKzgProof {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) {blob : Blob} {C P : KZGCommitment} {zBytes yBytes : Bytes32}
     (hC : blobToKzgCommitment s blob = .ok C)
     (hP : computeKzgProof s blob zBytes = .ok (P, yBytes)) :
@@ -142,7 +143,7 @@ theorem verifyKzgProof_computeKzgProof (laws : Bls.PairingLaws) {s : TrustedSetu
         rfl
       rw [hcomp] at hP
       obtain ⟨rfl, rfl⟩ := Prod.mk.inj (Except.ok.inj hP)
-      exact verifyKzgProof_of_represents laws hs (represents_lagrange_msm hs hsize)
+      exact verifyKzgProof_of_represents hs (represents_lagrange_msm hs hsize)
         (represents_quotient hs hQs hQv) hz (eval_interpolant_sub poly z τ)
 
 /-- For a blob that decodes, the proof computation accepts the commitment of the blob.
@@ -223,8 +224,8 @@ theorem blobOpeningValid_computeBlobKzgProof {s : TrustedSetup} {τ : Fr} (hs : 
     obtain ⟨P', hP', hrP'⟩ := validateKzgG1Point_compressG1 (represents_quotient hs hQs hQv)
     exact ⟨poly, C', _, P', _, hblob, hC', hrC', hP', hrP', eval_interpolant_sub poly _ τ⟩
 
-/-- Under the pairing law and a well-formed setup, a valid blob opening verifies. -/
-theorem verifyBlobKzgProof_of_blobOpeningValid (laws : Bls.PairingLaws) {s : TrustedSetup}
+/-- For a well-formed setup, a valid blob opening verifies. -/
+theorem verifyBlobKzgProof_of_blobOpeningValid {s : TrustedSetup}
     {τ : Fr} (hs : s.WellFormed τ) {blob : Blob} {commitment proof : Bytes48}
     (h : BlobOpeningValid τ blob commitment proof) :
     verifyBlobKzgProof s blob commitment proof = .ok true := by
@@ -234,7 +235,7 @@ theorem verifyBlobKzgProof_of_blobOpeningValid (laws : Bls.PairingLaws) {s : Tru
   simp only [bind, Except.bind, pure, Except.pure]
   rw [evaluatePolynomialInEvaluationForm_eq_interpolate poly _
     (size_blobToPolynomial blob poly hblob)]
-  exact congrArg Except.ok ((verifyKzgProofImpl_iff laws hs hrC hrP _ _).mpr hid)
+  exact congrArg Except.ok ((verifyKzgProofImpl_iff hs hrC hrP _ _).mpr hid)
 
 /-- An accepted check of a blob decodes the blob, the commitment and the proof.
 
@@ -278,13 +279,13 @@ theorem verifyBlobKzgProof_eq_ok_true {s : TrustedSetup} {blob : Blob}
 
 /-- **Honest blob proofs verify.**
 
-Under the pairing law and a well-formed setup, a blob's proof verifies against its commitment. -/
-theorem verifyBlobKzgProof_computeBlobKzgProof (laws : Bls.PairingLaws) {s : TrustedSetup}
+For a well-formed setup, a blob's proof verifies against its commitment. -/
+theorem verifyBlobKzgProof_computeBlobKzgProof {s : TrustedSetup}
     {τ : Fr} (hs : s.WellFormed τ) {blob : Blob} {C P : KZGCommitment}
     (hC : blobToKzgCommitment s blob = .ok C)
     (hP : computeBlobKzgProof s blob C = .ok P) :
     verifyBlobKzgProof s blob C P = .ok true := by
-  exact verifyBlobKzgProof_of_blobOpeningValid laws hs
+  exact verifyBlobKzgProof_of_blobOpeningValid hs
     (blobOpeningValid_computeBlobKzgProof hs hC hP)
 
 end EthLib.Cryptography.Kzg

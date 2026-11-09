@@ -5,7 +5,7 @@ public import EthLib.Cryptography.Proofs.Kzg.Verify
 /-!
 # Proofs: an accepted blob opening binds its blob, or names a root
 
-Let the check of a blob opening accept, under the pairing law and on a well-formed setup.
+Let the check of a blob opening accept on a well-formed setup.
 
 Let its commitment and proof represent `f(τ)` and `g(τ)`, for `f` and `g` of degree below 4096.
 
@@ -103,7 +103,7 @@ theorem natDegree_blobOpeningError_le {F : Type*} [Field F] {f g : F[X]} {n : Na
 
 /-- **An accepted blob opening binds its blob, or names a root.**
 
-Assume the pairing law and a well-formed setup of the secret `τ`.
+Assume a well-formed setup of the secret `τ`.
 
 Let the blob decode, and let the commitment and the proof pass validation.
 
@@ -120,7 +120,7 @@ Then one of three cases holds, with `h = f - p(z) - g (X - z)`:
 - or `h` is nonzero of degree at most 4096, and `τ` is a root of `h`.
 
 This theorem gives no bound on the cost of finding such polynomials when `τ` is secret. -/
-theorem verifyBlobKzgProof_binding (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
+theorem verifyBlobKzgProof_binding {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) {blob : Blob} {commitment proof : Bytes48} {poly : Polynomial}
     {C P : G1} {f g : Fr[X]} (hblob : blobToPolynomial blob = .ok poly)
     (hC : validateKzgG1Point commitment = .ok C) (hf : G1.Represents C (f.eval τ))
@@ -144,7 +144,7 @@ theorem verifyBlobKzgProof_binding (laws : Bls.PairingLaws) {s : TrustedSetup} {
   cases hblob.symm.trans hblob'
   cases hC.symm.trans hC'
   cases hP.symm.trans hP'
-  rcases opening_eq_or_root ((verifyKzgProofImpl_iff laws hs hf hg
+  rcases opening_eq_or_root ((verifyKzgProofImpl_iff hs hf hg
       (computeChallenge blob commitment)
       ((interpolant poly).eval (computeChallenge blob commitment))).mp hv)
     with hfp | ⟨hne, hroot⟩ | ⟨hne, hroot⟩
