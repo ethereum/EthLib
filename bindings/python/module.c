@@ -79,6 +79,7 @@ PyObject* CONSENSUS_ERROR;
 PyObject* HKDF_ERROR;
 PyObject* PBKDF2_ERROR;
 PyObject* SCRYPT_ERROR;
+PyObject* KEYSTORE_ERROR;
 PyObject* AES_ERROR;
 PyObject* CONCAT_KDF_ERROR;
 PyObject* BLOCK_ERROR;
@@ -698,6 +699,9 @@ static PyMethodDef methods[] = {
   {"scrypt_block_mix", py_scrypt_block_mix, METH_VARARGS, DOC_scrypt_block_mix},
   {"scrypt_romix", py_scrypt_romix, METH_VARARGS, DOC_scrypt_romix},
   {"scrypt", py_scrypt, METH_VARARGS, DOC_scrypt},
+  {"keystore_nfkd", py_keystore_nfkd, METH_VARARGS, DOC_keystore_nfkd},
+  {"keystore_password", py_keystore_password, METH_VARARGS, DOC_keystore_password},
+  {"keystore_decrypt", py_keystore_decrypt, METH_VARARGS, DOC_keystore_decrypt},
   {"secp256k1_verify", py_secp256k1_verify, METH_VARARGS, DOC_secp256k1_verify},
   {"secp256k1_is_low_s", py_secp256k1_is_low_s, METH_VARARGS, DOC_secp256k1_is_low_s},
   {"secp256k1_recover", py_secp256k1_recover, METH_VARARGS, DOC_secp256k1_recover},
@@ -1079,6 +1083,7 @@ PyInit__native(void) {
     HKDF_ERROR = PyObject_GetAttrString(errors, "HkdfError");
     PBKDF2_ERROR = PyObject_GetAttrString(errors, "Pbkdf2Error");
     SCRYPT_ERROR = PyObject_GetAttrString(errors, "ScryptError");
+    KEYSTORE_ERROR = PyObject_GetAttrString(errors, "KeystoreError");
     AES_ERROR = PyObject_GetAttrString(errors, "AesError");
     CONCAT_KDF_ERROR = PyObject_GetAttrString(errors, "ConcatKdfError");
     BLOCK_ERROR = PyObject_GetAttrString(errors, "BlockError");

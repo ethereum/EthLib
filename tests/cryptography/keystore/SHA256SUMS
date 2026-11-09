@@ -1,0 +1,7 @@
+# Source: ethereum/ERCs at be307c948f28897adb8f25afcc253c2c909de35d
+# Source: Unicode Character Database 16.0.0, UnicodeData.txt and NormalizationTest.txt
+3075215d396a9d84c70d48ca2b0ea483cb2dc891d19845da008da3bff9db5b70  scrypt.json
+61fe23b5fcc1a6411d86ef21573478b7f7232913eb7296210da3161ccf2faf96  pbkdf2.json
+ff58e5823bd095166564a006e47d111130813dcf8bf234ef79fa51a870edb48f  unicode/UnicodeData.txt
+d811971453e7075e1ad56fb1b301eece5aa80757b81f6156e74a1bfb3ae5ceb1  unicode/NormalizationTest.txt
+e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96  unicode/LICENSE

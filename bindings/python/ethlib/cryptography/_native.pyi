@@ -295,6 +295,18 @@ def scrypt(password: bytes, salt: bytes, n: int, r: int, p: int, length: int) ->
     """Expand, mix and compress the password, RFC 7914 §6, with the output length in bytes."""
     ...
 
+def keystore_nfkd(text: str) -> str:
+    """Unicode 16.0.0 Normalization Form KD, UAX #15 rev. 56, §1.3."""
+    ...
+
+def keystore_password(password: str) -> bytes:
+    """NFKD, control removal and UTF-8 encoding, ERC-2335 "Password requirements"."""
+    ...
+
+def keystore_decrypt(keystore: str, password: str) -> bytes:
+    """Decrypt an ERC-2335 JSON keystore and return its secret octets."""
+    ...
+
 def secp256k1_verify(public_key: bytes, msg_hash: bytes, signature: bytes) -> bool:
     """Whether `(r, s)` is a valid signature on `hash` under the public key `q`, by SEC 1 v2 §4.1.4."""
     ...

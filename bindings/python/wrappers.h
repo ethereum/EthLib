@@ -150,6 +150,7 @@ extern PyObject* CONSENSUS_ERROR;
 extern PyObject* HKDF_ERROR;
 extern PyObject* PBKDF2_ERROR;
 extern PyObject* SCRYPT_ERROR;
+extern PyObject* KEYSTORE_ERROR;
 extern PyObject* AES_ERROR;
 extern PyObject* CONCAT_KDF_ERROR;
 extern PyObject* BLOCK_ERROR;
@@ -300,6 +301,9 @@ PyObject* py_salsa208                                    (PyObject* self, PyObje
 PyObject* py_scrypt_block_mix                            (PyObject* self, PyObject* args);
 PyObject* py_scrypt_romix                                (PyObject* self, PyObject* args);
 PyObject* py_scrypt                                      (PyObject* self, PyObject* args);
+PyObject* py_keystore_nfkd                               (PyObject* self, PyObject* args);
+PyObject* py_keystore_password                           (PyObject* self, PyObject* args);
+PyObject* py_keystore_decrypt                            (PyObject* self, PyObject* args);
 
 PyObject* py_secp256k1_verify                             (PyObject* self, PyObject* args);
 PyObject* py_secp256k1_is_low_s                           (PyObject* self, PyObject* args);

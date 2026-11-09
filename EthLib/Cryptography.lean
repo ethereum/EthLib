@@ -16,6 +16,7 @@ public import EthLib.Cryptography.Aes
 public import EthLib.Cryptography.Ethash
 public import EthLib.Cryptography.Montgomery
 public import EthLib.Cryptography.BaseField
+public import EthLib.Cryptography.Keystore
 
 /-!
 # `EthLib.Cryptography`

@@ -129,6 +129,10 @@ class ScryptError(EthLibError, ValueError):
     """scrypt or one of its steps rejected its input."""
 
 
+class KeystoreError(EthLibError, ValueError):
+    """An ERC-2335 keystore failed to decode, derive its key or decrypt."""
+
+
 class ConcatKdfError(EthLibError, ValueError):
     """The Concatenation KDF rejected its input."""
 
@@ -276,6 +280,7 @@ __all__ = [
     "HkdfError",
     "Pbkdf2Error",
     "ScryptError",
+    "KeystoreError",
     "ConcatKdfError",
     "AesError",
     "BlockError",
