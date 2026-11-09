@@ -1144,6 +1144,24 @@ Those for EXTCODESIZE, a frame past the end of its code and `Logic.sstore_of_acc
 `Logic.sstore_stuck` proves that SSTORE is stuck in a static frame, or when the current address has no account.
 `Logic.sstore_low_stuck` proves that from Istanbul SSTORE is stuck with 2300 gas or less, by EIP-2200.
 
+The facts of `Logic/NoAbort.lean` are for the one-counter meter too.
+`Logic.NoAbort` says that a result is no error that aborts the run.
+An error of the state aborts, and so do an opcode with no instruction, an encoding error and a fork with no specification.
+Each instruction of `Logic/RunMono.lean` except SSTORE never aborts, such as `Logic.noAbort_log` for LOG0 to LOG4.
+`Logic.NoAbortLow` says that the step from every frame with less gas than a frame does not abort.
+`Logic.HoareGA` and `Logic.SpecGA` are triples over the steps of `Logic.StepG` from frames that are `Logic.NoAbortLow`.
+`Logic.HoareGA.toG` proves that such a triple is a triple over `Logic.StepG`.
+`Logic.At.ruleGA_of_follows` is the rule of an opcode whose instruction never aborts.
+Run with less gas on each frame of the rule, the instruction must fail or give its frame with less gas.
+`Logic.At.ruleGA` is the same rule for an instruction that is `RunMono`.
+Each opcode rule over `Logic.StepG` whose instruction never aborts is proved over `Logic.StepGA` first, such as `Logic.calldataloadGA`.
+The rule over `Logic.StepG` of the same opcode follows from it by `Logic.HoareGA.toG` or `Logic.SpecGA.toG`.
+`Logic.no_error_of_reaches` proves that the loop runs a frame `l` to a frame, never to an error.
+It assumes that these steps reach a stopped frame from `l` with `k` more gas.
+`Logic.no_error` proves that the loop runs a frame of `At` to a frame, with any gas.
+It assumes a specification over these steps from that frame with every gas from some bound on.
+Both hold for every bound on the gas of messages and every runner of messages.
+
 ### SHA-256 precompile
 
 The precompile reuses the SHA-256 of the cryptography layer, so its theorems are about the gas and the failure.

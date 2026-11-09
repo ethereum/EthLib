@@ -14,9 +14,11 @@ The rule holds at every fork, with one counter of gas, the meter of the forks be
 
 It pays 375, 8 for each byte of data, 375 for each topic, and the growth of memory.
 
-The rule is first proved over the steps from frames that are monotone in gas.
+The rule is first proved over the steps that also never abort with less gas.
 
-The rule over the steps of the logic then follows from that form.
+That form gives the rule over the steps from frames that are monotone in gas.
+
+That rule gives the rule over the steps of the logic.
 
 The frame must be one that may change the state, since LOGn fails in a static frame.
 
@@ -73,12 +75,12 @@ The data of the log is the range of memory from `start`, after memory grows to h
 
 It pays the price of the log and the growth of memory, in a frame that may change the state.
 
-It holds over the steps from frames that are monotone in gas. -/
-theorem logG {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List U256}
+It holds over the steps from frames that are monotone in gas and never abort with less gas. -/
+theorem logGA {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List U256}
     (hlen : words.length = n.val) (hlt : pc < code.size) (hbyte : code[pc] = byte)
     (decoded : Op.decode byte = some (.log n)) (hstatic : message.isStatic = false)
     (hgas : logCost n.val size + (extendMemory memory.size [(start, size)]).cost ≤ gas) :
-    HoareG fork (At code message pc (start :: size :: (words ++ rest)) memory gas state substate
+    HoareGA fork (At code message pc (start :: size :: (words ++ rest)) memory gas state substate
         returnData)
       (At code message (pc + 1) rest
         (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
@@ -90,8 +92,8 @@ theorem logG {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List U
               data := memoryReadBytes
                 (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
                 start.toNat size.toNat } } returnData) := by
-  apply At.ruleG hlt hbyte (ofByte_of_decode decoded (Fork.frontier_le _)) (instruction_log n)
-    (runMono_log n.val)
+  apply At.ruleGA hlt hbyte (ofByte_of_decode decoded (Fork.frontier_le _)) (instruction_log n)
+    (runMono_log n.val) (noAbort_log n.val)
   rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   subst hm hg hs hss hmem
   have hl := evm.stack.property
@@ -109,6 +111,31 @@ theorem logG {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List U
     Bool.false_eq_true]
   exact ⟨_, rfl, hcode, hj, rfl, by simp [advance, hpc], rfl, rfl, rfl, hrun, herr, hout, rfl,
     rfl, hrd⟩
+
+/-- LOGn appends a log of the current address, with the `n` words below the range as its topics.
+
+The data of the log is the range of memory from `start`, after memory grows to hold it.
+
+It pays the price of the log and the growth of memory, in a frame that may change the state.
+
+It holds over the steps from frames that are monotone in gas. -/
+theorem logG {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List U256}
+    (hlen : words.length = n.val) (hlt : pc < code.size) (hbyte : code[pc] = byte)
+    (decoded : Op.decode byte = some (.log n)) (hstatic : message.isStatic = false)
+    (hgas : logCost n.val size + (extendMemory memory.size [(start, size)]).cost ≤ gas) :
+    HoareG fork (At code message pc (start :: size :: (words ++ rest)) memory gas state substate
+        returnData)
+      (At code message (pc + 1) rest
+        (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
+        (gas - (logCost n.val size + (extendMemory memory.size [(start, size)]).cost)) state
+        { substate with
+          logs := substate.logs.push
+            { address := message.currentTarget
+              topics := words.map U256.toBeBytes
+              data := memoryReadBytes
+                (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
+                start.toNat size.toNat } } returnData) :=
+  (logGA hlen hlt hbyte decoded hstatic hgas).toG
 
 /-- LOGn appends a log of the current address, with the `n` words below the range as its topics.
 
