@@ -28,6 +28,8 @@ From Deneb to Fulu it checks the blob commitments of the block itself against th
 
 From Fulu that limit is the one of the epoch of the block.
 
+Before Gloas the topic checks the proposer that the parent state expects at the slot of the block.
+
 The block handler checks the size of each list of operations against the same limit.
 
 On a full parent it checks the four counts of the requests, and an empty parent takes no request.
@@ -35,6 +37,8 @@ On a full parent it checks the four counts of the requests, and an empty parent 
 Its bid step checks the same blob limit, on a state at the slot of the block.
 
 From Deneb to Fulu its payload step checks the same limit, on a state at the slot of the block.
+
+Before Gloas its header step checks the same proposer, on the parent state advanced to that slot.
 
 A new block that the handler accepts passes the block step of the transition.
 
@@ -146,5 +150,24 @@ theorem blobCountWithinLimit_of_onBlock (before : fork < .glamsterdam) {after : 
     -- So the payload step reads the limit of the topic, from Fulu at the epoch of the block.
     simpa [blobCountWithinLimit, deneb, BeaconBlockBody.blobCommitments] using blobs
   · exact blobCountWithinLimit_of_lt_deneb deneb
+
+/-- Before Gloas, a new block that the handler accepts names the proposer that the topic expects.
+
+The topic expects the proposer of the state of the parent, advanced to the slot of the block. -/
+theorem expectedProposer_of_onBlock (before : fork < .glamsterdam) {after : Store preset fork}
+    (root : SszType.hashTreeRoot signed.message = .ok blockRoot)
+    (new : ¬ store.blocks.contains blockRoot)
+    (added : store.onBlock config checks sources signed = .ok after)
+    {parentState : BeaconState preset fork}
+    (parentKnown : store.blockStates[signed.message.parentRoot]? = some parentState) :
+    expectedProposer config checks parentState signed.message.slot =
+      .ok signed.message.proposerIndex := by
+  obtain ⟨pre, advanced, _, stored, slots, -, computed⟩ := processBlock_of_onBlock root new added
+  obtain ⟨_, headedOk⟩ := processBlock_header_of_lt_gloas before computed
+  obtain ⟨-, -, proposer, -⟩ := processBlockHeader_checks headedOk
+  -- The topic and the handler read the same state of the parent.
+  obtain rfl : pre = parentState := Option.some.inj (stored.symm.trans parentKnown)
+  -- The topic advances that state as the handler does, then reads the same proposer.
+  simp only [expectedProposer, slots, proposer, bind, Except.bind, Except.mapError]
 
 end EthLib.Consensus

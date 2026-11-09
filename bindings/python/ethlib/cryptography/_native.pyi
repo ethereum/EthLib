@@ -295,6 +295,46 @@ def scrypt(password: bytes, salt: bytes, n: int, r: int, p: int, length: int) ->
     """Expand, mix and compress the password, RFC 7914 §6, with the output length in bytes."""
     ...
 
+def x25519(scalar: bytes, u: bytes) -> bytes:
+    """X25519 scalar multiplication of two 32-byte inputs, RFC 7748 §5."""
+    ...
+
+def x25519_public_key(scalar: bytes) -> bytes:
+    """X25519 public key at Montgomery coordinate 9, RFC 7748 §6.1."""
+    ...
+
+def chacha20_quarter_round(a: int, b: int, c: int, d: int) -> tuple[int, int, int, int]:
+    """The four-word quarter round, RFC 8439 §2.1."""
+    ...
+
+def chacha20_quarter_round_state(state: bytes, a: int, b: int, c: int, d: int) -> bytes:
+    """A quarter round on a 64-byte state at four indices, RFC 8439 §2.2."""
+    ...
+
+def chacha20_block(key: bytes, counter: int, nonce: bytes) -> bytes:
+    """The 64-byte ChaCha20 block at a 32-bit counter, RFC 8439 §2.3."""
+    ...
+
+def chacha20_crypt(key: bytes, counter: int, nonce: bytes, message: bytes) -> bytes:
+    """ChaCha20 encryption or decryption without counter wrap, RFC 8439 §2.4."""
+    ...
+
+def poly1305(key: bytes, message: bytes) -> bytes:
+    """Poly1305 with a 32-byte one-time key, RFC 8439 §2.5."""
+    ...
+
+def poly1305_key(key: bytes, nonce: bytes) -> bytes:
+    """Derive a Poly1305 key from ChaCha20 block zero, RFC 8439 §2.6."""
+    ...
+
+def chacha20_poly1305_encrypt(key: bytes, nonce: bytes, aad: bytes, plaintext: bytes) -> tuple[bytes, bytes]:
+    """Encrypt and authenticate, returning ciphertext and a separate tag, RFC 8439 §2.8."""
+    ...
+
+def chacha20_poly1305_decrypt(key: bytes, nonce: bytes, aad: bytes, ciphertext: bytes, tag: bytes) -> bytes:
+    """Authenticate before returning plaintext, RFC 8439 §2.8."""
+    ...
+
 def keystore_nfkd(text: str) -> str:
     """Unicode 16.0.0 Normalization Form KD, UAX #15 rev. 56, §1.3."""
     ...
@@ -1221,6 +1261,14 @@ def active_fork(config: dict[str, Any], number: int, timestamp: int) -> str | No
 
 def engine_new_payload(config: dict, request: dict) -> dict:
     """The payload status of an `engine_newPayload` request, without the parent's state."""
+    ...
+
+def engine_jwt_build(secret: bytes, issued_at: int) -> str:
+    """Build an HS256 Engine token from a 32-byte secret and an issued-at time in seconds."""
+    ...
+
+def engine_jwt_check(secret: bytes, token: str, clock: int) -> bool:
+    """Accept an HS256 Engine token only within 60 seconds of its issued-at time."""
     ...
 
 def engine_new_payload_on_chain(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], request: dict) -> tuple[dict, bytes, bytes] | tuple[dict, None, None]:

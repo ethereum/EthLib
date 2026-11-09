@@ -1412,6 +1412,107 @@
    "error_class": "ScryptError",
    "docstring":
    "Expand, mix and compress the password, RFC 7914 §6, with the output length in bytes.\n\nIt holds `128 * r * N` bytes of table, `128 * r * p` bytes per buffer and `length` bytes of key.\n\nSo a caller must bound `r * N`, `r * p` and `length` first, as a keystore gives them."},
+  {"summary":
+   "X25519 scalar multiplication of two 32-byte inputs, RFC 7748 §5.",
+   "signature": "(scalar: bytes, u: bytes) -> bytes",
+   "operation": "EthLib.Cryptography.NoisePrimitives.Exports.x25519Export",
+   "method": "x25519",
+   "errors": [],
+   "error_class": "X25519Error",
+   "docstring":
+   "X25519 scalar multiplication of two 32-byte inputs, RFC 7748 §5."},
+  {"summary": "X25519 public key at Montgomery coordinate 9, RFC 7748 §6.1.",
+   "signature": "(scalar: bytes) -> bytes",
+   "operation":
+   "EthLib.Cryptography.NoisePrimitives.Exports.x25519PublicKeyExport",
+   "method": "x25519_public_key",
+   "errors": [],
+   "error_class": "X25519Error",
+   "docstring": "X25519 public key at Montgomery coordinate 9, RFC 7748 §6.1."},
+  {"summary": "The four-word quarter round, RFC 8439 §2.1.",
+   "signature": "(a: int, b: int, c: int, d: int) -> tuple[int, int, int, int]",
+   "operation":
+   "EthLib.Cryptography.NoisePrimitives.Exports.quarterRoundExport",
+   "method": "chacha20_quarter_round",
+   "errors": [],
+   "error_class": "ChaCha20Poly1305Error",
+   "docstring": "The four-word quarter round, RFC 8439 §2.1."},
+  {"summary":
+   "A quarter round on a 64-byte state at four indices, RFC 8439 §2.2.",
+   "signature": "(state: bytes, a: int, b: int, c: int, d: int) -> bytes",
+   "operation":
+   "EthLib.Cryptography.NoisePrimitives.Exports.quarterRoundStateExport",
+   "method": "chacha20_quarter_round_state",
+   "errors": [],
+   "error_class": "ChaCha20Poly1305Error",
+   "docstring":
+   "A quarter round on a 64-byte state at four indices, RFC 8439 §2.2."},
+  {"summary": "The 64-byte ChaCha20 block at a 32-bit counter, RFC 8439 §2.3.",
+   "signature": "(key: bytes, counter: int, nonce: bytes) -> bytes",
+   "operation": "EthLib.Cryptography.NoisePrimitives.Exports.blockExport",
+   "method": "chacha20_block",
+   "errors": [],
+   "error_class": "ChaCha20Poly1305Error",
+   "docstring":
+   "The 64-byte ChaCha20 block at a 32-bit counter, RFC 8439 §2.3."},
+  {"summary":
+   "ChaCha20 encryption or decryption without counter wrap, RFC 8439 §2.4.",
+   "signature":
+   "(key: bytes, counter: int, nonce: bytes, message: bytes) -> bytes",
+   "operation": "EthLib.Cryptography.NoisePrimitives.Exports.cryptExport",
+   "method": "chacha20_crypt",
+   "errors":
+   [{"type": "EthLib.Cryptography.ChaCha20Poly1305.CipherError",
+     "codes":
+     [{"constructor": "counterExhausted", "code": 1},
+      {"constructor": "aadTooLong", "code": 2},
+      {"constructor": "authenticationFailed", "code": 3}]}],
+   "error_class": "ChaCha20Poly1305Error",
+   "docstring":
+   "ChaCha20 encryption or decryption without counter wrap, RFC 8439 §2.4."},
+  {"summary": "Poly1305 with a 32-byte one-time key, RFC 8439 §2.5.",
+   "signature": "(key: bytes, message: bytes) -> bytes",
+   "operation": "EthLib.Cryptography.NoisePrimitives.Exports.poly1305Export",
+   "method": "poly1305",
+   "errors": [],
+   "error_class": "ChaCha20Poly1305Error",
+   "docstring": "Poly1305 with a 32-byte one-time key, RFC 8439 §2.5."},
+  {"summary": "Derive a Poly1305 key from ChaCha20 block zero, RFC 8439 §2.6.",
+   "signature": "(key: bytes, nonce: bytes) -> bytes",
+   "operation": "EthLib.Cryptography.NoisePrimitives.Exports.poly1305KeyExport",
+   "method": "poly1305_key",
+   "errors": [],
+   "error_class": "ChaCha20Poly1305Error",
+   "docstring":
+   "Derive a Poly1305 key from ChaCha20 block zero, RFC 8439 §2.6."},
+  {"summary":
+   "Encrypt and authenticate, returning ciphertext and a separate tag, RFC 8439 §2.8.",
+   "signature":
+   "(key: bytes, nonce: bytes, aad: bytes, plaintext: bytes) -> tuple[bytes, bytes]",
+   "operation": "EthLib.Cryptography.NoisePrimitives.Exports.encryptExport",
+   "method": "chacha20_poly1305_encrypt",
+   "errors":
+   [{"type": "EthLib.Cryptography.ChaCha20Poly1305.CipherError",
+     "codes":
+     [{"constructor": "counterExhausted", "code": 1},
+      {"constructor": "aadTooLong", "code": 2},
+      {"constructor": "authenticationFailed", "code": 3}]}],
+   "error_class": "ChaCha20Poly1305Error",
+   "docstring":
+   "Encrypt and authenticate, returning ciphertext and a separate tag, RFC 8439 §2.8."},
+  {"summary": "Authenticate before returning plaintext, RFC 8439 §2.8.",
+   "signature":
+   "(key: bytes, nonce: bytes, aad: bytes, ciphertext: bytes, tag: bytes) -> bytes",
+   "operation": "EthLib.Cryptography.NoisePrimitives.Exports.decryptExport",
+   "method": "chacha20_poly1305_decrypt",
+   "errors":
+   [{"type": "EthLib.Cryptography.ChaCha20Poly1305.CipherError",
+     "codes":
+     [{"constructor": "counterExhausted", "code": 1},
+      {"constructor": "aadTooLong", "code": 2},
+      {"constructor": "authenticationFailed", "code": 3}]}],
+   "error_class": "ChaCha20Poly1305Error",
+   "docstring": "Authenticate before returning plaintext, RFC 8439 §2.8."},
   {"summary": "Unicode 16.0.0 Normalization Form KD, UAX #15 rev. 56, §1.3.",
    "signature": "(text: str) -> str",
    "operation": "EthLib.Cryptography.Keystore.Exports.nfkd",
@@ -8433,6 +8534,34 @@
    "error_class": "EngineError",
    "docstring":
    "The payload status of an `engine_newPayload` request, without the parent's state.\n\nThe arguments are the chain configuration and the request."},
+  {"summary":
+   "Build an HS256 Engine token from a 32-byte secret and an issued-at time in seconds.",
+   "signature": "(secret: bytes, issued_at: int) -> str",
+   "operation": "EthLib.Engine.Exports.jwtBuildExport",
+   "method": "engine_jwt_build",
+   "errors":
+   [{"type": "EthLib.Engine.Jwt.JwtError",
+     "codes":
+     [{"constructor": "secretLength", "code": 1},
+      {"constructor": "compact", "code": 2},
+      {"constructor": "header", "code": 3},
+      {"constructor": "algorithm", "code": 4},
+      {"constructor": "critical", "code": 5},
+      {"constructor": "claims", "code": 6},
+      {"constructor": "signature", "code": 7},
+      {"constructor": "serialization", "code": 8}]}],
+   "error_class": "JwtError",
+   "docstring":
+   "Build an HS256 Engine token from a 32-byte secret and an issued-at time in seconds.\n\nThe arguments are the secret and the issued-at time.\n\nThe result is the compact token text."},
+  {"summary":
+   "Accept an HS256 Engine token only within 60 seconds of its issued-at time.",
+   "signature": "(secret: bytes, token: str, clock: int) -> bool",
+   "operation": "EthLib.Engine.Exports.jwtCheckExport",
+   "method": "engine_jwt_check",
+   "errors": [],
+   "error_class": "JwtError",
+   "docstring":
+   "Accept an HS256 Engine token only within 60 seconds of its issued-at time.\n\nThe arguments are the 32-byte secret, the compact token text and the clock in seconds.\n\nA malformed token, a wrong secret or a failed check returns false."},
   {"summary":
    "The payload status of an `engine_newPayload` request, on a chain that holds the parent.",
    "signature":

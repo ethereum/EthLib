@@ -79,11 +79,14 @@ PyObject* CONSENSUS_ERROR;
 PyObject* HKDF_ERROR;
 PyObject* PBKDF2_ERROR;
 PyObject* SCRYPT_ERROR;
+PyObject* X25519_ERROR;
+PyObject* CHACHAPOLY_ERROR;
 PyObject* KEYSTORE_ERROR;
 PyObject* AES_ERROR;
 PyObject* CONCAT_KDF_ERROR;
 PyObject* BLOCK_ERROR;
 PyObject* ENGINE_ERROR;
+PyObject* JWT_ERROR;
 PyObject* CHAIN_ERROR;
 PyObject* RLP_ERROR;
 PyObject* SSZ_ERROR;
@@ -116,6 +119,11 @@ PyObject* BINDING_ERROR;
 extern uint64_t eth_pbkdf2_const_hash_len(lean_object* unit);
 extern uint64_t eth_scrypt_const_salsa_block_size(lean_object* unit);
 extern uint64_t eth_scrypt_const_block_size(lean_object* unit);
+extern uint64_t eth_x25519_const_key_size(lean_object* unit);
+extern uint64_t eth_chachapoly_const_key_size(lean_object* unit);
+extern uint64_t eth_chachapoly_const_nonce_size(lean_object* unit);
+extern uint64_t eth_chachapoly_const_tag_size(lean_object* unit);
+extern uint64_t eth_chacha20_const_block_size(lean_object* unit);
 
 extern uint64_t
 eth_bls_const_bytes_per_pubkey(
@@ -699,6 +707,16 @@ static PyMethodDef methods[] = {
   {"scrypt_block_mix", py_scrypt_block_mix, METH_VARARGS, DOC_scrypt_block_mix},
   {"scrypt_romix", py_scrypt_romix, METH_VARARGS, DOC_scrypt_romix},
   {"scrypt", py_scrypt, METH_VARARGS, DOC_scrypt},
+  {"x25519", py_x25519, METH_VARARGS, DOC_x25519},
+  {"x25519_public_key", py_x25519_public_key, METH_VARARGS, DOC_x25519_public_key},
+  {"chacha20_quarter_round", py_chacha20_quarter_round, METH_VARARGS, DOC_chacha20_quarter_round},
+  {"chacha20_quarter_round_state", py_chacha20_quarter_round_state, METH_VARARGS, DOC_chacha20_quarter_round_state},
+  {"chacha20_block", py_chacha20_block, METH_VARARGS, DOC_chacha20_block},
+  {"chacha20_crypt", py_chacha20_crypt, METH_VARARGS, DOC_chacha20_crypt},
+  {"poly1305", py_poly1305, METH_VARARGS, DOC_poly1305},
+  {"poly1305_key", py_poly1305_key, METH_VARARGS, DOC_poly1305_key},
+  {"chacha20_poly1305_encrypt", py_chacha20_poly1305_encrypt, METH_VARARGS, DOC_chacha20_poly1305_encrypt},
+  {"chacha20_poly1305_decrypt", py_chacha20_poly1305_decrypt, METH_VARARGS, DOC_chacha20_poly1305_decrypt},
   {"keystore_nfkd", py_keystore_nfkd, METH_VARARGS, DOC_keystore_nfkd},
   {"keystore_password", py_keystore_password, METH_VARARGS, DOC_keystore_password},
   {"keystore_decrypt", py_keystore_decrypt, METH_VARARGS, DOC_keystore_decrypt},
@@ -1035,6 +1053,8 @@ static PyMethodDef methods[] = {
   {"hoodi_active_fork", py_hoodi_active_fork, METH_VARARGS, DOC_hoodi_active_fork},
   {"active_fork", py_active_fork, METH_VARARGS, DOC_active_fork},
   {"engine_new_payload", py_engine_new_payload, METH_VARARGS, DOC_engine_new_payload},
+  {"engine_jwt_build", py_engine_jwt_build, METH_VARARGS, DOC_engine_jwt_build},
+  {"engine_jwt_check", py_engine_jwt_check, METH_VARARGS, DOC_engine_jwt_check},
   {"engine_new_payload_on_chain", py_engine_new_payload_on_chain, METH_VARARGS,
    DOC_engine_new_payload_on_chain},
   {"engine_forkchoice_updated", py_engine_forkchoice_updated, METH_VARARGS,
@@ -1083,6 +1103,8 @@ PyInit__native(void) {
     HKDF_ERROR = PyObject_GetAttrString(errors, "HkdfError");
     PBKDF2_ERROR = PyObject_GetAttrString(errors, "Pbkdf2Error");
     SCRYPT_ERROR = PyObject_GetAttrString(errors, "ScryptError");
+    X25519_ERROR = PyObject_GetAttrString(errors, "X25519Error");
+    CHACHAPOLY_ERROR = PyObject_GetAttrString(errors, "ChaCha20Poly1305Error");
     KEYSTORE_ERROR = PyObject_GetAttrString(errors, "KeystoreError");
     AES_ERROR = PyObject_GetAttrString(errors, "AesError");
     CONCAT_KDF_ERROR = PyObject_GetAttrString(errors, "ConcatKdfError");
@@ -1105,6 +1127,7 @@ PyInit__native(void) {
     EVM_ERROR = PyObject_GetAttrString(errors, "EvmError");
     FEES_ERROR = PyObject_GetAttrString(errors, "FeesError");
     ENGINE_ERROR = PyObject_GetAttrString(errors, "EngineError");
+    JWT_ERROR = PyObject_GetAttrString(errors, "JwtError");
     TRANSITION_ERROR = PyObject_GetAttrString(errors, "TransitionError");
     LIGHT_CLIENT_ERROR = PyObject_GetAttrString(errors, "LightClientError");
     FORK_CHOICE_ERROR = PyObject_GetAttrString(errors, "ForkChoiceError");
@@ -1271,5 +1294,10 @@ PyInit__native(void) {
   PyModule_AddIntConstant(m, "PBKDF2_HASH_LEN", PBKDF2_HASH_LEN);
   PyModule_AddIntConstant(m, "SALSA_BLOCK_SIZE", SALSA_BLOCK_SIZE);
   PyModule_AddIntConstant(m, "SCRYPT_BLOCK_SIZE", SCRYPT_BLOCK_SIZE);
+  PyModule_AddIntConstant(m, "X25519_KEY_SIZE", (long) eth_x25519_const_key_size(lean_box(0)));
+  PyModule_AddIntConstant(m, "CHACHAPOLY_KEY_SIZE", (long) eth_chachapoly_const_key_size(lean_box(0)));
+  PyModule_AddIntConstant(m, "CHACHAPOLY_NONCE_SIZE", (long) eth_chachapoly_const_nonce_size(lean_box(0)));
+  PyModule_AddIntConstant(m, "CHACHAPOLY_TAG_SIZE", (long) eth_chachapoly_const_tag_size(lean_box(0)));
+  PyModule_AddIntConstant(m, "CHACHA20_BLOCK_SIZE", (long) eth_chacha20_const_block_size(lean_box(0)));
   return m;
 }
