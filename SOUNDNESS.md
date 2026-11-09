@@ -1072,7 +1072,7 @@ The route is the code of the address itself, or a delegate with the code that th
 `Logic.Routes.congr` proves that the route depends on the state only through the code at each address.
 `Logic.Routes.recordAccountRead` proves that a recorded read leaves the route unchanged.
 `Logic.CallSends` gives the frame and the message of a call that sends no value of its own, along a route.
-The message runs the code of the route, with the delegate as its code address and no precompile when delegated.
+The message runs the code of the route; when delegated, its code address is the delegate and it runs no precompile.
 `Logic.callStep_child_of_routes` proves that the step of such a call sends that message, for each kind of call.
 It holds at every fork from Berlin, with the one-counter meter.
 The call pays the access to the address, the access to the delegate, the growth of memory, and the gas it passes on.
@@ -1080,6 +1080,7 @@ The call pays the access to the address, the access to the delegate, the growth 
 Its set holds only the message of the call, so a run may stop because the runner fails only on that message.
 `Logic.callRoute` proves its case for CALL.
 Unlike `Logic.callWith`, neither rule asks that the code be no delegation, or that the fork come before Glamsterdam.
+`Logic.callStep_child` and `Logic.callKindWith` are their cases with no delegation, so the step has one proof.
 
 The block of a transaction state is the state before the block, with the writes of the block so far.
 A rollback restores the storage of a snapshot only when both states have the same block.

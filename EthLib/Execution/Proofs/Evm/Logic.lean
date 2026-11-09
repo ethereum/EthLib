@@ -7,8 +7,8 @@ public import EthLib.Execution.Proofs.Evm.Logic.Loop
 public import EthLib.Execution.Proofs.Evm.Logic.Subroutine
 public import EthLib.Execution.Proofs.Evm.Logic.Message
 public import EthLib.Execution.Proofs.Evm.Logic.FailsOn
-public import EthLib.Execution.Proofs.Evm.Logic.Call
 public import EthLib.Execution.Proofs.Evm.Logic.Route
+public import EthLib.Execution.Proofs.Evm.Logic.Call
 public import EthLib.Execution.Proofs.Evm.Logic.Log
 public import EthLib.Execution.Proofs.Evm.Logic.Static
 public import EthLib.Execution.Proofs.Evm.Logic.Create

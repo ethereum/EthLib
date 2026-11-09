@@ -1,7 +1,9 @@
 module
 
-public import EthLib.Execution.Proofs.Evm.Logic.Call
 public import EthLib.Execution.Proofs.Evm.Logic.FailsOn
+public import EthLib.Execution.Proofs.Evm.Logic.Rules
+public import EthLib.Execution.Proofs.Evm.Call.Instructions
+public import EthLib.Execution.Proofs.Evm.Gas.CallGas
 
 /-!
 # Proofs: the route of a call to the code that it runs
@@ -28,13 +30,20 @@ The rule here covers a call that sends no value of its own, of every kind, along
 
 It holds at every fork from Berlin, with one counter of gas.
 
-From Glamsterdam the access to an address costs more, by EIP-8038, and the rule pays that price.
+The rules for calls with no delegation are its cases before Glamsterdam.
+
+From Glamsterdam a cold access costs 3000 instead of 2600, by EIP-8038, and the rule pays it.
 
 The rule names the message that the call sends.
 
 So a run may stop because the runner fails, but only on that message.
 
-Sources: EIP-150, EIP-2929, EIP-7702 and EIP-8038.
+Sources: [EIP-150][eip150], [EIP-2929][eip2929], [EIP-7702][eip7702] and [EIP-8038][eip8038].
+
+[eip150]: https://eips.ethereum.org/EIPS/eip-150#specification
+[eip2929]: https://eips.ethereum.org/EIPS/eip-2929#specification
+[eip7702]: https://eips.ethereum.org/EIPS/eip-7702#delegation-indicator
+[eip8038]: https://eips.ethereum.org/EIPS/eip-8038#parameters
 -/
 
 @[expose] public section
@@ -50,12 +59,12 @@ variable {fork : Fork}
 
 /-- The code that a call runs.
 
-None is the code of the address itself.
+`none` is the code of the address itself.
 
 A delegate `d` and a code `c` mean that the call runs `c`, the code of `d`. -/
 abbrev Route := Option (Address × ByteArray)
 
-/-- The route of a call to an account with the code `c`, in the state `state`.
+/-- Whether a route is that of a call to an account with the code `c`, in the state `state`.
 
 Before Pectra, or when `c` is no delegation indicator, the route is the code of the address.
 
@@ -121,7 +130,11 @@ The caller has recorded the reads of `to`, of the delegate, and of its own accou
 
 It has accessed `to` and the delegate.
 
-The message gets the gas that EIP-150 allows after the access, the route and the growth of memory.
+The message gets the gas it asks for, at most all but one 64th of the gas left.
+
+The gas left is what remains after the access, the route and the growth of memory.
+
+It gets no reservoir, since the meter has one counter.
 
 CALL and STATICCALL run on `to`, and CALLCODE and DELEGATECALL on the current account.
 
@@ -146,6 +159,7 @@ def CallSends (kind : CallKind) (message : Message fork) (memory : ByteArray) (g
       (extendMemory memory.size [(i, isz), (o, osz)]).cost
       (callBaseCost fork (decide (toAddressMasked to ∉ substate.accessedAddresses)) +
         routeCost fork (substate.accessedAddresses.insert (toAddressMasked to)) route)).subCall ∧
+    msg.reservoir = 0 ∧
     msg.caller = (if kind = .delegatecall then message.caller else message.currentTarget) ∧
     msg.currentTarget = (if kind = .call ∨ kind = .staticcall then toAddressMasked to
       else message.currentTarget) ∧
@@ -263,6 +277,35 @@ theorem callStep_child_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
 
 /-! ## The rule of a call along a route -/
 
+/-- A caller with room on its stack resumes from every frame that ends its message.
+
+It pushes 1 for a frame with no error and 0 otherwise, and gets back the gas of the frame.
+
+It writes the start of the output of the frame at the start of its output range.
+
+It writes as many bytes as both the output and the range hold.
+
+The caller keeps its own output. -/
+theorem resumeCall_eq {caller child : Evm fork Nat} {o osz : U256}
+    (hlen : caller.stack.val.length < STACK_LIMIT) :
+    ∃ after, resumeCall fork caller 0 o osz child = .ok after ∧
+      after.code = caller.code ∧ after.validJumpDestinations = caller.validJumpDestinations ∧
+      after.message = caller.message ∧ after.pc = caller.pc + 1 ∧
+      after.stack.val = (if child.error.isNone then 1 else 0) :: caller.stack.val ∧
+      after.memory = memoryWrite caller.memory o.toNat
+        (child.output.extract 0 (min osz.toNat child.output.size)) ∧
+      after.gas = caller.gas + child.gas ∧
+      after.running = caller.running ∧ after.error = caller.error ∧ after.output = caller.output ∧
+      after.state = (incorporateChild fork caller child).state ∧
+      after.substate = (incorporateChild fork caller child).substate ∧
+      after.returnData = child.output := by
+  have hne : caller.stack.val.length ≠ STACK_LIMIT := Nat.ne_of_lt hlen
+  unfold resumeCall incorporateChild
+  split <;>
+    simp [pushWord, Stack.push, bind, Except.bind, pure, Except.pure, advance, refillStateGas,
+      GasMeter.refill, GasMeter.absorb, *]
+
+
 variable {code : ByteArray} {message : Message fork} {pc : Nat} {memory : ByteArray} {gas : Nat}
   {state : State.TransactionState} {substate : Substate} {returnData : ByteArray}
 
@@ -274,7 +317,7 @@ CALL and CALLCODE pop a value, here 0, and DELEGATECALL and STATICCALL pop none.
 
 The state holds the code `calleeCode` for `to`, and the route goes from it to the code that runs.
 
-The frame holds the access to `to`, the price of the route, and the growth of memory.
+The gas of the frame covers the access to `to`, the price of the route, and the growth of memory.
 
 The call sends one message, and the caller and the message are those of a call along the route.
 
@@ -348,64 +391,5 @@ theorem callKindRoute (hfork : .berlin ≤ fork) {kind : CallKind} {byte : UInt8
     refine ⟨by rw [a1, c1, hc], by rw [a2, c2, hj], by rw [a3, c3], by rw [a4, c4, hpc],
       by rw [a5, c5], by rw [a6, c6], by rw [a7, c7], by rw [a8, c8, hrun'], by rw [a9, c9, herr],
       by rw [ao, co, hout], a10, a11, a12⟩
-
-/-- CALL with no value, to `to`, along the route `route`, with a range of input and one of output.
-
-The state holds the code `calleeCode` for `to`, and the route goes from it to the code that runs.
-
-The frame holds the access to `to`, the price of the route, and the growth of memory.
-
-The caller and the message are those of a call along the route.
-
-The message is static when the frame is.
-
-The runner may fail on that message, with any error, and then the run ends there.
-
-Otherwise the rule holds for every frame that ends the message and meets the assumption.
-
-The caller pushes 1 when the callee ends with no error, and 0 otherwise.
-
-It writes the start of the output of the callee at the start of the output range.
-
-It writes as many bytes as both the output and the range hold, and leaves the rest of memory.
-
-It gets back the gas that the callee leaves, and its state and substate come from the callee. -/
-theorem callRoute (hfork : .berlin ≤ fork)
-    {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
-    {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
-    {calleeCode : ByteArray} {route : Route} (hlt : pc < code.size) (hbyte : code[pc] = 0xf1)
-    (hcode : state.getCode (state.getAccount (toAddressMasked to)).codeHash = .ok calleeCode)
-    (hroute : Routes fork state calleeCode route)
-    (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
-    (hgas : callBaseCost fork (decide (toAddressMasked to ∉ substate.accessedAddresses)) +
-      routeCost fork (substate.accessedAddresses.insert (toAddressMasked to)) route +
-      (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost ≤
-        gas) :
-    HoareOn fork callee
-      (CallSends .call message memory gas state substate asked to inputStart inputSize outputStart
-        outputSize calleeCode route)
-      (At code message pc
-        (asked :: to :: 0 :: inputStart :: inputSize :: outputStart :: outputSize :: rest)
-        memory gas state substate returnData)
-      fun after => ∃ caller msg child,
-        CallSends .call message memory gas state substate asked to inputStart inputSize outputStart
-          outputSize calleeCode route caller msg ∧
-        callee caller msg child ∧ child.gas ≤ msg.gas ∧
-        At code message (pc + 1) ((if child.error.isNone then 1 else 0) :: rest)
-          (memoryWrite (memoryExtend memory
-            (extendMemory memory.size
-              [(inputStart, inputSize), (outputStart, outputSize)]).expandBy)
-            outputStart.toNat (child.output.extract 0 (min outputSize.toNat child.output.size)))
-          (gas - ((messageCallGas fork 0 asked.toNat gas
-            (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost
-            (callBaseCost fork (decide (toAddressMasked to ∉ substate.accessedAddresses)) +
-              routeCost fork (substate.accessedAddresses.insert (toAddressMasked to)) route)).cost +
-            (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
-            child.gas)
-          (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
-          child.output after :=
-  callKindRoute (kind := .call) hfork hlt hbyte
-    (ofByte_of_decode (op := .call) rfl (Fork.frontier_le _)) instruction_call
-    messageInstruction_call hcode hroute hdepth hgas
 
 end EthLib.Execution.Evm.Logic
