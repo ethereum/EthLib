@@ -40,19 +40,25 @@ open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
 open Polynomial
 
-/-- The polynomial `sum_{i < n} e_i X^i` of the errors `e_i` of `n` checks. -/
-noncomputable def errorPoly (e : Nat → Fr) (n : Nat) : Fr[X] :=
+section ErrorPoly
+
+variable {R : Type*} [Semiring R]
+
+/-- The polynomial `sum_{i < n} e_i X^i` of the errors `e_i` of `n` checks.
+
+The errors lie in any semiring, such as the scalars or the polynomials in the setup secret. -/
+noncomputable def errorPoly (e : Nat → R) (n : Nat) : R[X] :=
   ∑ i ∈ Finset.range n, C (e i) * X ^ i
 
 /-- Coefficient `i` of the error polynomial is the error of check `i`, below `n`. -/
-theorem coeff_errorPoly (e : Nat → Fr) (n i : Nat) :
+theorem coeff_errorPoly (e : Nat → R) (n i : Nat) :
     (errorPoly e n).coeff i = if i < n then e i else 0 := by
   simp only [errorPoly, finsetSum_coeff, coeff_C_mul_X_pow]
   rw [Finset.sum_ite_eq (Finset.range n) i]
   simp only [Finset.mem_range]
 
 /-- The error polynomial is zero exactly when every error is zero. -/
-theorem errorPoly_eq_zero_iff (e : Nat → Fr) (n : Nat) :
+theorem errorPoly_eq_zero_iff (e : Nat → R) (n : Nat) :
     errorPoly e n = 0 ↔ ∀ i < n, e i = 0 := by
   constructor
   · intro h i hi
@@ -68,14 +74,29 @@ theorem errorPoly_eq_zero_iff (e : Nat → Fr) (n : Nat) :
     · rfl
 
 /-- The error polynomial has degree at most `n - 1`. -/
-theorem natDegree_errorPoly_le (e : Nat → Fr) (n : Nat) : (errorPoly e n).natDegree ≤ n - 1 := by
+theorem natDegree_errorPoly_le (e : Nat → R) (n : Nat) : (errorPoly e n).natDegree ≤ n - 1 := by
   refine natDegree_le_iff_coeff_eq_zero.mpr fun i hi => ?_
   rw [coeff_errorPoly, ite_eq_right (by omega)]
 
 /-- The value of the error polynomial at `r`, as a sum. -/
-theorem eval_errorPoly (e : Nat → Fr) (n : Nat) (r : Fr) :
+theorem eval_errorPoly (e : Nat → R) (n : Nat) (r : R) :
     (errorPoly e n).eval r = ∑ i ∈ Finset.range n, e i * r ^ i := by
   simp [errorPoly, eval_finsetSum]
+
+/-- No checks give the zero polynomial. -/
+@[simp] theorem errorPoly_zero (e : Nat → R) : errorPoly e 0 = 0 := by
+  simp [errorPoly]
+
+/-- Horner's step: the first error, plus `X` times the polynomial of the remaining errors. -/
+theorem errorPoly_succ' (e : Nat → R) (n : Nat) :
+    errorPoly e (n + 1) = C (e 0) + X * errorPoly (fun i => e (i + 1)) n := by
+  rw [errorPoly, Finset.sum_range_succ', errorPoly, Finset.mul_sum, add_comm]
+  congr 1
+  · simp
+  · refine Finset.sum_congr rfl fun i _ => ?_
+    rw [X_mul, mul_assoc, ← pow_succ]
+
+end ErrorPoly
 
 /-- The error of an opening: zero exactly when `c - y = w (τ - z)`. -/
 def openingError (τ c y w z : Fr) : Fr := c - y - w * (τ - z)
