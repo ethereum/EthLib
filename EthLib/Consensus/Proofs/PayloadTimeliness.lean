@@ -19,6 +19,8 @@ After the window is initialized, the state reads the computed committee of each 
 
 The covered slots are those of the current epoch and of the lookahead.
 
+Initializing the window uses one shuffle per epoch, and gives what each committee alone gives.
+
 Moving the window shifts every committee back by one epoch.
 
 The last epoch of the moved window holds the computed committees of the epoch after the lookahead.
@@ -166,24 +168,32 @@ theorem processPayloadAttestation_eq {config : Config} {checks : SignatureChecks
   obtain ⟨_, _, _, _, _, _, _, _, _, _, same⟩ := computed
   exact same.symm
 
+/-- The epoch of the slot at a position is `position / SLOTS_PER_EPOCH` epochs after the first. -/
+theorem computeEpochAtSlot_ptcWindowSlot_eq_add {epoch : Epoch} {position : Nat} {slot : Slot}
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (computed : ptcWindowSlot preset epoch position = .ok slot) :
+    computeEpochAtSlot preset slot =
+      epoch + (position / preset.SLOTS_PER_EPOCH.toNat).toUInt64 := by
+  simp only [ptcWindowSlot, liftArith, mapError_ok_iff, bind_ok_iff, addChecked_ok_iff,
+    computeStartSlotAtEpoch, mulChecked_ok_iff] at computed
+  obtain ⟨later, ⟨fits, laterNat⟩, start, ⟨_, startNat⟩, _, slotNat⟩ := computed
+  have rest := Nat.mod_lt position positive
+  have smallRest : position % preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 :=
+    Nat.lt_trans rest preset.SLOTS_PER_EPOCH.toNat_lt
+  rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt smallRest] at slotNat
+  apply UInt64.toNat_inj.mp
+  rw [computeEpochAtSlot, UInt64.toNat_div, slotNat, startNat, Nat.add_comm,
+    Nat.add_mul_div_right _ _ positive, Nat.div_eq_of_lt rest, Nat.zero_add, laterNat,
+    toNat_add_of_lt fits]
+
 /-- A position of the window within its first epoch names a slot of that epoch. -/
 theorem computeEpochAtSlot_ptcWindowSlot {epoch : Epoch} {position : Nat} {slot : Slot}
     (first : position < preset.SLOTS_PER_EPOCH.toNat)
     (computed : ptcWindowSlot preset epoch position = .ok slot) :
     computeEpochAtSlot preset slot = epoch := by
-  simp only [ptcWindowSlot, liftArith, mapError_ok_iff, bind_ok_iff, addChecked_ok_iff,
-    computeStartSlotAtEpoch, mulChecked_ok_iff] at computed
-  obtain ⟨same, ⟨_, sameNat⟩, start, ⟨_, startNat⟩, _, slotNat⟩ := computed
-  have smallPosition : position < 2 ^ 64 :=
-    Nat.lt_trans first preset.SLOTS_PER_EPOCH.toNat_lt
-  rw [Nat.div_eq_of_lt first, Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.zero_mod,
-    Nat.add_zero] at sameNat
-  rw [Nat.mod_eq_of_lt first, Nat.toUInt64_eq, UInt64.toNat_ofNat',
-    Nat.mod_eq_of_lt smallPosition] at slotNat
-  apply UInt64.toNat_inj.mp
-  have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := Nat.lt_of_le_of_lt (Nat.zero_le _) first
-  rw [computeEpochAtSlot, UInt64.toNat_div, slotNat, startNat, sameNat, Nat.add_comm,
-    Nat.add_mul_div_right _ _ positive, Nat.div_eq_of_lt first, Nat.zero_add]
+  rw [computeEpochAtSlot_ptcWindowSlot_eq_add (Nat.lt_of_le_of_lt (Nat.zero_le _) first)
+    computed, Nat.div_eq_of_lt first]
+  exact UInt64.add_zero epoch
 
 /-- Moving the window computes each new committee as the committee of its slot.
 
@@ -339,6 +349,39 @@ theorem ptcWindowPosition_of_le {config : Config} {state : BeaconState preset fo
   simp [ptcWindowPosition, forkEpoch, notBefore, liftArith, lastOk, within, plusOneOk,
     offsetOk, positionOk, bind, Except.bind, Except.mapError]
 
+/-- Initializing the window computes each committee after the previous epoch as that of its slot.
+
+The committees of an epoch share its two seeds and its shuffle, with the same result.
+
+The two sides fail with the same error too. -/
+theorem initializePtcWindow_eq (state : BeaconState preset fork) :
+    initializePtcWindow state =
+      (RootedVector.ofVector <$> (Vector.range _).mapM fun position => do
+        let perEpoch := preset.SLOTS_PER_EPOCH.toNat
+        if position < perEpoch then return Vector.replicate _ 0
+        computePtc state
+          (← ptcWindowSlot preset (getCurrentEpoch state) (position - perEpoch))) := by
+  unfold initializePtcWindow
+  refine congrArg (RootedVector.ofVector <$> ·) (vector_mapM_congr fun position inRange => ?_)
+  simp only [Vector.getElem_range]
+  by_cases before : position < preset.SLOTS_PER_EPOCH.toNat
+  · simp only [before, ↓reduceIte]
+  simp only [before, ↓reduceIte, bind, Except.bind]
+  split
+  · rfl
+  rename_i slot computed
+  split
+  · rename_i shared found
+    obtain ⟨_, rfl⟩ := Array.getElem?_eq_some_iff.mp found
+    have positive : 0 < preset.SLOTS_PER_EPOCH.toNat :=
+      Nat.pos_of_ne_zero fun zero => by simp [zero] at inRange
+    -- The slot is in the epoch of those inputs, so its committee reads the same seeds and shuffle.
+    have epoch := computeEpochAtSlot_ptcWindowSlot_eq_add positive computed
+    simp only [Array.getElem_map, Array.getElem_range, computePtc, ← epoch]
+    cases getSeed state (computeEpochAtSlot preset slot) DOMAIN_PTC_ATTESTER <;>
+      cases attesterShuffle state (computeEpochAtSlot preset slot) <;> rfl
+  · rfl
+
 /-- After the window is initialized, the state reads the computed committee of a slot.
 
 The slot must be from the fork, in the current epoch or the lookahead.
@@ -358,7 +401,7 @@ theorem getPtc_initializePtcWindow {config : Config} {state : BeaconState preset
     getPtc config { state with ptcWindow := fun _ => window } gloas slot =
       computePtc state slot := by
   -- The window is the vector of computed committees, with its tree.
-  unfold initializePtcWindow at initialized
+  rw [initializePtcWindow_eq] at initialized
   obtain ⟨committees, mapped, rfl⟩ := map_ok_iff.mp initialized
   obtain ⟨position, positionOk, positionNat⟩ :=
     ptcWindowPosition_of_le (state := state) positive forkEpoch current lookahead fits windowFits
