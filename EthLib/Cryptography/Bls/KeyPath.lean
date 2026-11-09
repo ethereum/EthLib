@@ -87,7 +87,7 @@ Leading zeros are accepted and spaces are rejected.
 [path]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2334.md#path
 -/
 def parsePath (text : String) : Except KeyPathError Path := do
-  match (text.split '/').toList.map String.Slice.copy with
+  match text.splitToList (· == '/') with
   | root :: parts =>
     if root != "m" then throw .invalidRoot
     match parts with

@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Bls.KeyPath
 
+import Batteries.Data.String.Lemmas
 import Init.Data.Nat.ToString
 import Init.Data.String.Lemmas.Pattern.Split.Char
 
@@ -93,7 +94,8 @@ theorem parsePath_toString (path : Path) : parsePath path.toString = .ok path :=
         exact slash_not_mem_toString index.toNat
     simpa using String.toList_split_intercalate (c := '/') hnone
   unfold parsePath
-  rw [hs]
+  rw [String.splitToList_of_valid, ← List.splitOn_eq_splitOnP,
+    ← String.toList_split_char, hs]
   simp only [Path.indices, List.map_cons]
   simp only [parseIndex_toString]
   simp only [List.mapM_map, Function.comp_def, parseIndex_toString]
