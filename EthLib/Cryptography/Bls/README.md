@@ -32,6 +32,8 @@ SHA-256 follows FIPS 180-4 (`EthLib/Cryptography/Hash/Sha256.lean`).
 
 [draft-04]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04
 [rfc9380]: https://www.rfc-editor.org/rfc/rfc9380
+[erc2333]: https://eips.ethereum.org/EIPS/eip-2333
+[erc2334]: https://eips.ethereum.org/EIPS/eip-2334
 
 ## Operations
 
@@ -75,6 +77,10 @@ From a victim's key alone, an attacker builds a second key and one signature tha
 The message length is also left to the caller.
 `ethFastAggregateVerify` takes a message of any length, as the draft's `FastAggregateVerify` does.
 Ethereum signs 32-byte roots, but nothing in EthLib checks that length.
+
+`KeyDerivation.lean` implements the master and child key derivations of [ERC-2333][erc2333].
+The master key uses `keyGen` with empty key information and the same retry bound.
+`KeyPath.lean` parses [ERC-2334][erc2334] paths, including Ethereum's withdrawal and signing paths.
 
 ## Test vectors
 

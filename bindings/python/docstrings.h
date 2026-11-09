@@ -11,6 +11,21 @@
 #define DOC_bls_key_gen \
   "Key generation (§2.3): a secret key from at least 32 bytes of input keying material."
 
+#define DOC_bls_derive_master_sk \
+  "The ERC-2333 master secret key, as 32 big-endian bytes."
+
+#define DOC_bls_derive_child_sk \
+  "The ERC-2333 child of a secret key at an index, as 32 big-endian bytes."
+
+#define DOC_bls_derive_path \
+  "The key at an ERC-2334 path from a seed, as 32 big-endian bytes."
+
+#define DOC_bls_withdrawal_path \
+  "The ERC-2334 withdrawal path `m/12381/3600/index/0`."
+
+#define DOC_bls_signing_path \
+  "The ERC-2334 signing path `m/12381/3600/index/0/0`."
+
 #define DOC_bls_sign \
   "Sign a message under the message tag."
 

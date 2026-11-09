@@ -135,6 +135,7 @@ except_into_pybool(
 /* One class of `ethlib.errors` per primitive. */
 extern PyObject* KZG_ERROR;
 extern PyObject* BLS_ERROR;
+extern PyObject* KEY_DERIVATION_ERROR;
 extern PyObject* XMSS_ERROR;
 extern PyObject* SPHINCS_ERROR;
 extern PyObject* SECP256K1_ERROR;
@@ -227,6 +228,11 @@ parse_bytes_sequence(
 PyObject* py_eth_aggregate_pubkeys                        (PyObject* self, PyObject* args);
 PyObject* py_eth_fast_aggregate_verify                    (PyObject* self, PyObject* args);
 PyObject* py_bls_key_gen                                  (PyObject* self, PyObject* args);
+PyObject* py_bls_derive_master_sk                         (PyObject* self, PyObject* args);
+PyObject* py_bls_derive_child_sk                          (PyObject* self, PyObject* args);
+PyObject* py_bls_derive_path                              (PyObject* self, PyObject* args);
+PyObject* py_bls_withdrawal_path                          (PyObject* self, PyObject* args);
+PyObject* py_bls_signing_path                             (PyObject* self, PyObject* args);
 PyObject* py_bls_sign                                     (PyObject* self, PyObject* args);
 PyObject* py_bls_verify                                   (PyObject* self, PyObject* args);
 PyObject* py_bls_aggregate                                (PyObject* self, PyObject* args);

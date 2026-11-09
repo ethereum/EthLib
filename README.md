@@ -23,7 +23,7 @@ A module imports only from its own layer or from those below it, and the executi
 | Cryptography | [`AltBn128`](EthLib/Cryptography/AltBn128/) | the alt_bn128 curve of EIP-196 and EIP-197, also called BN254, and its pairing |
 | Cryptography | [`Aes`](EthLib/Cryptography/Aes/) | the AES block cipher for 128-bit and 256-bit keys, and the CTR and GCM modes |
 | Cryptography | [`Ethash`](EthLib/Cryptography/Ethash/) | the proof of work before Paris: its sizes, seed, cache, dataset items and loop |
-| Cryptography | [`Bls`](EthLib/Cryptography/Bls/) | BLS12-381 and BLS signatures |
+| Cryptography | [`Bls`](EthLib/Cryptography/Bls/) | BLS12-381, BLS signatures and validator key derivation |
 | Cryptography | [`Kzg`](EthLib/Cryptography/Kzg/) | KZG commitments to blobs and cells |
 | Cryptography | [`Merkle`](EthLib/Cryptography/Merkle/) | the perfect binary Merkle tree that leanXMSS, leanSPHINCS, SSZ and the VRF share |
 | Cryptography | [`Xmss`](EthLib/Cryptography/Xmss/) | leanXMSS, a hash-based signature for a post-quantum consensus layer |
