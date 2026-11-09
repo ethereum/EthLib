@@ -56,8 +56,10 @@ jobs:
           bash scripts/install_elan.sh
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
-      - name: fetch the Mathlib cache
-        run: lake exe cache get
+      # The library and the exports import no module of Mathlib or of the other packages.
+      # So this step only clones the packages, which Lake needs to load the workspace.
+      - name: fetch the dependencies
+        run: lake env true
 
       - name: bindings
         run: uv sync --frozen --extra test
