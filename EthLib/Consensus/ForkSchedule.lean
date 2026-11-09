@@ -16,6 +16,8 @@ Such a change is not a fork of the consensus layer.
 
 So the fork at an epoch is never one of BPO1 to BPO5.
 
+From Gloas, the largest blob limit bounds the size of a data column sidecar.
+
 From Gloas on, a gas limit schedule recommends a gas limit at given epochs, without a validity rule.
 -/
 
@@ -111,6 +113,13 @@ def getBlobParameters (config : Config) (epoch : Epoch) : BlobParameters :=
   match latestStarted (·.EPOCH) config.BLOB_SCHEDULE epoch with
   | some entry => ⟨entry.EPOCH, entry.MAX_BLOBS_PER_BLOCK⟩
   | none => ⟨config.ELECTRA_FORK_EPOCH, config.MAX_BLOBS_PER_BLOCK_ELECTRA⟩
+
+/-- The largest blob limit, among the limit of Electra and the limits of the schedule.
+
+It need not be the limit at the current epoch. -/
+def largestBlobLimit (config : Config) : UInt64 :=
+  config.BLOB_SCHEDULE.foldl (fun largest entry => max largest entry.MAX_BLOBS_PER_BLOCK)
+    config.MAX_BLOBS_PER_BLOCK_ELECTRA
 
 /-- From Gloas: the gas limit that the schedule recommends at an epoch, if any.
 

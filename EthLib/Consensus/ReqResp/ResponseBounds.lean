@@ -30,6 +30,15 @@ This module does not compute it, and it does not check that the protocol exists 
 An unknown version of the status or metadata protocol has no type.
 
 An error chunk carries an error message instead, which the chunk decoder bounds by itself.
+
+From Gloas, the networking specification also sets a size limit on the chunks of some protocols.
+
+[EIP-7688](https://eips.ethereum.org/EIPS/eip-7688#network-message-size-bounds) asks for them.
+
+- Data column sidecars by range and by root have one from Gloas, from the largest blob limit.
+- Inclusion lists by indices have one from Heze, a preset value.
+
+The largest length of a chunk is that of its type, or the size limit if that is lower.
 -/
 
 @[expose] public section
@@ -62,9 +71,26 @@ def responseDesc (preset : Preset) (config : Config) (chunkFork : Fork) (id : Pr
     some (SszType.desc (SignedExecutionPayloadEnvelope preset chunkFork))
   | .inclusionListsByIndices => some (SszType.desc SignedInclusionList)
 
-/-- The length bounds of one successful response chunk of a protocol version, for its fork. -/
+/-- The size limit that the networking specification sets on the chunks of a protocol, at a fork.
+
+Data column sidecars have one from Gloas, and inclusion lists from Heze. -/
+def ReqRespProtocol.sizeLimit (preset : Preset) (config : Config) (chunkFork : Fork) :
+    ReqRespProtocol → Option UInt64
+  | .dataColumnSidecarsByRange | .dataColumnSidecarsByRoot =>
+    if .glamsterdam ≤ chunkFork then some (computeMaxDataColumnSidecarSize preset config) else none
+  | .inclusionListsByIndices =>
+    if .hegota ≤ chunkFork then some preset.MAX_SIGNED_INCLUSION_LIST_SIZE else none
+  | _ => none
+
+/-- The length bounds of one successful response chunk of a protocol version, for its fork.
+
+They are the bounds of its type, with the largest held to the size limit of the protocol. -/
 def responseBounds (preset : Preset) (config : Config) (chunkFork : Fork) (id : ProtocolId) :
     Option (UInt64 × UInt64) :=
-  (responseDesc preset config chunkFork id).map Networking.ReqResp.payloadBounds
+  (responseDesc preset config chunkFork id).map fun shape =>
+    let bounds := Networking.ReqResp.payloadBounds shape
+    match id.protocol.sizeLimit preset config chunkFork with
+    | some limit => (bounds.1, min bounds.2 limit)
+    | none => bounds
 
 end EthLib.Consensus

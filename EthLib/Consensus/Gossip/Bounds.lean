@@ -31,16 +31,12 @@ From Gloas, the networking specification sets a size limit on the messages of so
 
 [EIP-7688](https://eips.ethereum.org/EIPS/eip-7688#network-message-size-bounds) asks for them.
 
-The limits are preset values.
+The limits are preset values, but that of a data column sidecar follows from the largest blob limit.
 
-- Aggregates, attester slashings and bids have one from Gloas.
+- Aggregates, attester slashings, data column sidecars and bids have one from Gloas.
 - Inclusion lists have one from Heze, and Heze raises the limit of a bid for its inclusion bits.
 
 The bound is the largest size of the type, or the size limit of the topic if that is lower.
-
-From Gloas the specification also bounds a data column sidecar, by a size from the blob schedule.
-
-EthLib does not hold the topic to that size, so the topic keeps the bound of its type.
 -/
 
 @[expose] public section
@@ -79,14 +75,21 @@ def topicDesc (preset : Preset) (config : Config) (fork : Fork) (topic : GossipT
 
 /-- The size limit that the networking specification sets on the message of a topic at a fork.
 
-Aggregates, attester slashings and bids have one from Gloas, and inclusion lists from Heze.
+Aggregates, attester slashings, data column sidecars and bids have one from Gloas.
 
-The limit of a bid is that of its fork, which Heze raises for the inclusion bits. -/
-def GossipTopic.sizeLimit (preset : Preset) (fork : Fork) : GossipTopic → Option UInt64
+Inclusion lists have one from Heze.
+
+The limit of a bid is that of its fork, which Heze raises for the inclusion bits.
+
+The limit of a data column sidecar follows from the largest blob limit of the configuration. -/
+def GossipTopic.sizeLimit (preset : Preset) (config : Config) (fork : Fork) :
+    GossipTopic → Option UInt64
   | .beaconAggregateAndProof =>
     if .glamsterdam ≤ fork then some preset.MAX_SIGNED_AGGREGATE_AND_PROOF_SIZE else none
   | .attesterSlashing =>
     if .glamsterdam ≤ fork then some preset.MAX_ATTESTER_SLASHING_SIZE else none
+  | .dataColumnSidecar _ =>
+    if .glamsterdam ≤ fork then some (computeMaxDataColumnSidecarSize preset config) else none
   | .executionPayloadBid =>
     if .glamsterdam ≤ fork then some (parameters preset fork).MAX_SIGNED_EXECUTION_PAYLOAD_BID_SIZE
     else none
@@ -99,7 +102,7 @@ It is the largest payload length of the type, held to the size limit of the topi
 def topicBound (preset : Preset) (config : Config) (fork : Fork) (topic : GossipTopic) :
     Option UInt64 :=
   (topicDesc preset config fork topic).map fun shape =>
-    match topic.sizeLimit preset fork with
+    match topic.sizeLimit preset config fork with
     | some limit => min (Networking.ReqResp.payloadBounds shape).2 limit
     | none => (Networking.ReqResp.payloadBounds shape).2
 

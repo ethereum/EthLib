@@ -148,6 +148,42 @@ def test_response_protocol_not_at_fork() -> None:
     assert info.value.code == 301
 
 
+# From Gloas the cells and proofs of a sidecar are lists without a limit.
+#
+# So the specification sets a size limit on a sidecar, from the largest blob limit.
+#
+# A sidecar with no blob takes 56 bytes: its index, two offsets, its slot and its block root.
+#
+# The largest blob limit is 21 on mainnet, from its blob schedule.
+#
+# Minimal has no blob schedule, so its largest blob limit is 9, that of Electra.
+BLOB_LIMITS = [("mainnet", 21), ("minimal", 9)]
+
+DATA_COLUMN_PROTOCOLS = ["data_column_sidecars_by_range", "data_column_sidecars_by_root"]
+
+
+@pytest.mark.parametrize("protocol", DATA_COLUMN_PROTOCOLS)
+@pytest.mark.parametrize("fork", ["glamsterdam", "hegota"])
+@pytest.mark.parametrize("name, blobs", BLOB_LIMITS)
+def test_data_column_sidecar_response_from_gloas(
+    protocol: str, fork: str, name: str, blobs: int
+) -> None:
+    # Each blob adds a cell of 2048 bytes and a proof of 48 bytes.
+    bound = 56 + blobs * (2048 + 48)
+    assert consensus.reqresp_response_bounds(fork, _id(protocol, 1), name) == (56, bound)
+
+
+@pytest.mark.parametrize("name", ["mainnet", "minimal"])
+def test_inclusion_list_response_at_heze(name: str) -> None:
+    # An offset and the signature, then a slot, a validator index, a root and an offset.
+    smallest = 4 + 96 + 52
+    # The transactions hold at most 8192 bytes.
+    # The size limit counts 8192 transactions of one byte, each after a 4-byte offset.
+    bound = smallest + 8192 * (4 + 1)
+    protocol = _id("inclusion_lists_by_indices", 1)
+    assert consensus.reqresp_response_bounds("hegota", protocol, name) == (smallest, bound)
+
+
 def test_voluntary_exit_topic() -> None:
     # An epoch and a validator index, then the signature.
     assert consensus.gossip_topic_bound("phase0", "voluntary_exit") == 8 + 8 + 96
@@ -177,7 +213,9 @@ def test_voluntary_exit_topic_at_heze() -> None:
 
 # These messages hold lists without a limit, so the specification sets a size limit on each.
 #
-# Aggregates, attester slashings and bids have one from Gloas, and inclusion lists from Heze.
+# Aggregates, attester slashings, data column sidecars and bids have one from Gloas.
+#
+# Inclusion lists have one from Heze.
 #
 # A committee has at most 2048 members, and a slot has 64 committees on mainnet and 4 on minimal.
 COMMITTEES = [("mainnet", 64), ("minimal", 4)]
@@ -214,6 +252,14 @@ def test_execution_payload_bid_topic_from_gloas(fork: str, inclusion_bits: int, 
     # An offset and the signature come before the bid.
     bound = 4 + 96 + bid
     assert consensus.gossip_topic_bound(fork, "execution_payload_bid", name) == bound
+
+
+@pytest.mark.parametrize("fork", ["glamsterdam", "hegota"])
+@pytest.mark.parametrize("name, blobs", BLOB_LIMITS)
+def test_data_column_sidecar_topic_from_gloas(fork: str, name: str, blobs: int) -> None:
+    # A sidecar takes 56 bytes, then a cell and a proof for each blob, as in a response.
+    bound = 56 + blobs * (2048 + 48)
+    assert consensus.gossip_topic_bound(fork, "data_column_sidecar_0", name) == bound
 
 
 @pytest.mark.parametrize("name", ["mainnet", "minimal"])

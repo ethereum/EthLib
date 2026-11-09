@@ -14,7 +14,8 @@ The payload of a gossip message is bounded by the largest size of its topic's ty
 From Gloas, a size limit of its topic bounds it too.
 
 - Before Gloas, no topic has a size limit.
-- Only aggregates, attester slashings, bids and inclusion lists have one.
+- Only aggregates, attester slashings, data column sidecars, bids and inclusion lists have one.
+- From Gloas, the size limit of a data column sidecar topic is the largest size of a sidecar.
 - With a size limit, the bound of a topic is the lower of the limit and the bound of its type.
 - A payload that the gossip decoder accepts at its topic's bound is within the type's largest size.
 - That payload is also within the size limit of the topic.
@@ -37,32 +38,42 @@ variable {preset : Preset} {config : Config} {fork : Base.Fork} {topic : GossipT
 
 /-- Before Gloas, no topic has a size limit. -/
 theorem sizeLimit_of_lt_gloas (early : ¬ .glamsterdam ≤ fork) :
-    topic.sizeLimit preset fork = none := by
+    topic.sizeLimit preset config fork = none := by
   have notHeze : ¬ .hegota ≤ fork := fun heze => early (Nat.le_trans (by decide) heze)
   cases topic <;> simp [GossipTopic.sizeLimit, early, notHeze]
 
-/-- Only aggregates, attester slashings, bids and inclusion lists have a size limit.
+/-- Only the topics of five kinds of message have a size limit.
 
-The first three have one from Gloas, and inclusion lists from Heze. -/
+Aggregates, attester slashings, data column sidecars and bids have one from Gloas.
+
+Inclusion lists have one from Heze. -/
 theorem sizeLimit_ne_none_iff :
-    topic.sizeLimit preset fork ≠ none ↔
+    topic.sizeLimit preset config fork ≠ none ↔
       .glamsterdam ≤ fork ∧ (topic = .beaconAggregateAndProof ∨ topic = .attesterSlashing ∨
-        topic = .executionPayloadBid) ∨ .hegota ≤ fork ∧ topic = .inclusionList := by
+        (∃ subnet, topic = .dataColumnSidecar subnet) ∨ topic = .executionPayloadBid) ∨
+        .hegota ≤ fork ∧ topic = .inclusionList := by
   cases topic <;> by_cases gloas : .glamsterdam ≤ fork <;> by_cases heze : .hegota ≤ fork <;>
     simp [GossipTopic.sizeLimit, gloas, heze]
+
+/-- From Gloas, the size limit of a data column sidecar topic is the largest size of a sidecar. -/
+theorem sizeLimit_dataColumnSidecar {subnet : Networking.Gossip.SubnetID}
+    (gloas : .glamsterdam ≤ fork) :
+    (GossipTopic.dataColumnSidecar subnet).sizeLimit preset config fork =
+      some (computeMaxDataColumnSidecarSize preset config) := by
+  simp [GossipTopic.sizeLimit, gloas]
 
 /-- The bound of a topic without a size limit is the bound of its type.
 
 That is the largest payload length of the type, held to the cap. -/
 theorem topicBound_eq {shape : Desc} (h : topicDesc preset config fork topic = some shape)
-    (unlimited : topic.sizeLimit preset fork = none) :
+    (unlimited : topic.sizeLimit preset config fork = none) :
     topicBound preset config fork topic = some (payloadBounds shape).2 := by
   simp [topicBound, h, unlimited]
 
 /-- The bound of a topic with a size limit is the lower of the limit and the bound of its type. -/
 theorem topicBound_eq_min {shape : Desc} {limit : UInt64}
     (h : topicDesc preset config fork topic = some shape)
-    (limited : topic.sizeLimit preset fork = some limit) :
+    (limited : topic.sizeLimit preset config fork = some limit) :
     topicBound preset config fork topic = some (min (payloadBounds shape).2 limit) := by
   simp [topicBound, h, limited]
 
@@ -75,7 +86,7 @@ theorem size_le_of_decodePayload {shape : Desc} {bound : UInt64} {data payload :
   intro largest hm
   -- A size limit only lowers the bound, so the bound is within that of the type.
   have hle : bound ≤ (payloadBounds shape).2 := by
-    cases hl : topic.sizeLimit preset fork with
+    cases hl : topic.sizeLimit preset config fork with
     | none =>
       rw [topicBound_eq h hl, Option.some.injEq] at hb
       subst hb
@@ -92,7 +103,7 @@ theorem size_le_of_decodePayload {shape : Desc} {bound : UInt64} {data payload :
 
 /-- A payload that the gossip decoder accepts at the bound of a topic is within its size limit. -/
 theorem size_le_sizeLimit_of_decodePayload {limit bound : UInt64} {data payload : ByteArray}
-    (limited : topic.sizeLimit preset fork = some limit)
+    (limited : topic.sizeLimit preset config fork = some limit)
     (hb : topicBound preset config fork topic = some bound)
     (hd : Networking.Gossip.decodePayload bound data = .ok payload) :
     payload.size ≤ limit.toNat := by
@@ -113,7 +124,7 @@ Its payload then reads back as the message. -/
 theorem decodePayload_message {α : Type} [SszType α] [LawfulSszType α] {a : α}
     {data : ByteArray} (h : topicDesc preset config fork topic = some (SszType.desc α))
     (wrote : SszType.serialize a = .ok data) (hcap : data.size ≤ MAX_PAYLOAD_SIZE.toNat)
-    (hlimit : ∀ limit, topic.sizeLimit preset fork = some limit → data.size ≤ limit.toNat) :
+    (hlimit : ∀ limit, topic.sizeLimit preset config fork = some limit → data.size ≤ limit.toNat) :
     ∃ bound, topicBound preset config fork topic = some bound ∧
       Networking.Gossip.decodePayload bound (Networking.Snappy.compress data) = .ok data ∧
       SszType.deserialize α data = .ok a := by
@@ -132,7 +143,7 @@ theorem decodePayload_message {α : Type} [SszType α] [LawfulSszType α] {a : �
   -- A size limit of the topic holds the length too, so the bound of the topic admits it.
   obtain ⟨bound, hb, within⟩ : ∃ bound, topicBound preset config fork topic = some bound ∧
       data.size ≤ bound.toNat := by
-    cases hl : topic.sizeLimit preset fork with
+    cases hl : topic.sizeLimit preset config fork with
     | none => exact ⟨_, topicBound_eq h hl, hbound⟩
     | some limit =>
       have := hlimit limit hl
