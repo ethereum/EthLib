@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Cryptography.Bls.KeyDerivation
 public import EthLib.Cryptography.Bls.KeyPath
+public import EthLib.Cryptography.Exports.Bls
 
 /-!
 # Exports: validator key derivation
@@ -23,10 +24,10 @@ inductive KeyDerivationError where
   | bls (error : BlsError)
   | path (error : KeyPath.KeyPathError)
 
-/-- Stable codes for the two kinds of failure. -/
+/-- Keep BLS codes and start path errors at 101. -/
 def KeyDerivationError.code : KeyDerivationError → UInt32
-  | .bls _ => 1
-  | .path _ => 2
+  | .bls error => error.code
+  | .path error => 100 + error.code
 
 /-- The detailed message of the failing step. -/
 def KeyDerivationError.message : KeyDerivationError → String
@@ -38,8 +39,8 @@ def runKeyDerivation {α : Type} (act : Except KeyDerivationError α) : Result �
   act.mapError fun error => (error.code, error.message)
 
 /-- Derive and encode the master key. -/
-def deriveMasterSkBytes (seed : ByteArray) : Result ByteArray := runKeyDerivation do
-  let key ← (KeyDerivation.deriveMasterSk seed).mapError KeyDerivationError.bls
+def deriveMasterSkBytes (seed : ByteArray) : Result ByteArray := runBls do
+  let key ← KeyDerivation.deriveMasterSk seed
   return Fr.toBytesBE key.val
 
 /-- The ERC-2333 master secret key, as 32 big-endian bytes. -/
@@ -48,10 +49,10 @@ def deriveMasterSkExport (args : PyValue) : Result PyValue :=
   pyExport deriveMasterSkBytes args
 
 /-- Read the parent key, derive its child and encode the result. -/
-def deriveChildSkBytes (args : ByteArray × UInt32) : Result ByteArray := runKeyDerivation do
+def deriveChildSkBytes (args : ByteArray × UInt32) : Result ByteArray := runBls do
   let (parent, index) := args
-  let parent ← (Signatures.SecretKey.fromBytes parent).mapError KeyDerivationError.bls
-  let key ← (KeyDerivation.deriveChildSk parent index).mapError KeyDerivationError.bls
+  let parent ← Signatures.SecretKey.fromBytes parent
+  let key ← KeyDerivation.deriveChildSk parent index
   return Fr.toBytesBE key.val
 
 /-- The ERC-2333 child of a secret key at an index, as 32 big-endian bytes. -/

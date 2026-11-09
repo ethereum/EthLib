@@ -7,7 +7,7 @@ module
 
 The parser accepts decimal indices separated by `/`, after the master node `m`.
 
-[erc2334]: https://eips.ethereum.org/EIPS/eip-2334#path
+[erc2334]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2334.md#path
 -/
 
 @[expose] public section
@@ -39,10 +39,16 @@ def KeyPathError.message : KeyPathError → String
   | .tooShort => "ERC-2334 path needs at least four indices"
   | .invalidPurpose value => s!"invalid path purpose: {value.toNat}"
 
-/-- The fixed purpose of ERC-2334, Purpose. -/
+/-- The fixed purpose of [ERC-2334, Purpose][purpose].
+
+[purpose]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2334.md#purpose
+-/
 def PURPOSE : UInt32 := 12381
 
-/-- The fields after purpose, including any deeper indices, ERC-2334, Path. -/
+/-- The fields after purpose, including any deeper indices, [ERC-2334, Path][path].
+
+[path]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2334.md#path
+-/
 structure Path where
   coinType : UInt32
   account : UInt32
@@ -50,7 +56,7 @@ structure Path where
   subpath : List UInt32 := []
 deriving DecidableEq, Repr
 
-/-- All child indices, starting with the required purpose and four levels. -/
+/-- All child indices, including purpose, coin type, account, use and any deeper indices. -/
 def Path.indices (path : Path) : List UInt32 :=
   PURPOSE :: path.coinType :: path.account :: path.use :: path.subpath
 
@@ -62,7 +68,10 @@ def decimalValue : List UInt8 → Nat → Option Nat
       decimalValue rest (10 * value + (byte.toNat - 48))
     else none
 
-/-- Parse one decimal child index without a BIP-32 apostrophe, ERC-2334, Backwards Compatibility. -/
+/-- Parse a decimal child index, rejecting apostrophes, [ERC-2334, Backwards Compatibility][compat].
+
+[compat]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2334.md#backwards-compatibility
+-/
 def parseIndex (segment : String) : Except KeyPathError UInt32 := do
   let bytes := segment.toByteArray.data.toList
   if bytes.isEmpty then throw (.invalidIndex segment)
@@ -70,9 +79,15 @@ def parseIndex (segment : String) : Except KeyPathError UInt32 := do
   if value < 2 ^ 32 then return UInt32.ofNat value
   else throw (.indexOutOfRange value)
 
-/-- Parse a purpose-12381 path of at least four indices, ERC-2334, Path and Purpose. -/
+/-- Parse a [purpose-12381][purpose] path of at least four indices, [ERC-2334, Path][path].
+
+Leading zeros are accepted and spaces are rejected.
+
+[purpose]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2334.md#purpose
+[path]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2334.md#path
+-/
 def parsePath (text : String) : Except KeyPathError Path := do
-  match text.splitOn "/" with
+  match (text.split '/').toList.map String.Slice.copy with
   | root :: parts =>
     if root != "m" then throw .invalidRoot
     match parts with
@@ -84,14 +99,23 @@ def parsePath (text : String) : Except KeyPathError Path := do
     | _ => throw .tooShort
   | [] => throw .invalidRoot
 
-/-- Write a path with decimal indices and no spaces, ERC-2334, Notation. -/
+/-- Write a path with decimal indices and no spaces, [ERC-2334, Validator keys][keys].
+
+[keys]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2334.md#validator-keys
+-/
 def Path.toString (path : Path) : String :=
   "m/" ++ String.intercalate "/" (path.indices.map fun index => ToString.toString index.toNat)
 
-/-- The Ethereum withdrawal path, ERC-2334, Validator keys. -/
+/-- The Ethereum withdrawal path, [ERC-2334, Validator keys][keys].
+
+[keys]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2334.md#validator-keys
+-/
 def withdrawalPath (index : UInt32) : Path := ⟨3600, index, 0, []⟩
 
-/-- The signing key is child zero of the withdrawal key, ERC-2334, Validator keys. -/
+/-- The signing key is child zero of the withdrawal key, [ERC-2334, Validator keys][keys].
+
+[keys]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2334.md#validator-keys
+-/
 def signingPath (index : UInt32) : Path := ⟨3600, index, 0, [0]⟩
 
 end EthLib.Cryptography.Bls.KeyPath

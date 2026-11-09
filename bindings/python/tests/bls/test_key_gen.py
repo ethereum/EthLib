@@ -10,11 +10,10 @@ from raising import raises
 # ERC-2333 Test Cases 0 to 3: seed, master key, child index and child key.
 #
 # File: ERCS/erc-2333.md, Test Cases
-# File: ERCS/erc-2334.md, Path and Beacon Chain Specific Parameters
 # Repository: ethereum/ERCs
 # Commit: be307c948f28897adb8f25afcc253c2c909de35d
 
-EIP_2333 = [
+ERC_2333 = [
     (
         "c55257c360c07c72029aebc1b53c05ed0362ada38ead3e3e9efa3708e53495531f09a6987599d18264"
         "c1e1c92f2cf141630c7a3c4ab7c81b2f001698e7463b04",
@@ -43,7 +42,7 @@ EIP_2333 = [
 ]
 
 
-@pytest.mark.parametrize("seed, master_sk, child_index, child_sk", EIP_2333)
+@pytest.mark.parametrize("seed, master_sk, child_index, child_sk", ERC_2333)
 def test_erc2333_keys(seed: str, master_sk: int, child_index: int, child_sk: int) -> None:
     seed_bytes, master = bytes.fromhex(seed), master_sk.to_bytes(32, "big")
     assert bls.key_gen(seed_bytes) == master
@@ -59,12 +58,20 @@ def test_matches_reference(ikm: bytes, key_info: bytes) -> None:
 
 
 def test_rejects_short_input() -> None:
-    with raises(ValueError, "input keying material too short: 31 bytes"):
+    with raises(bls.BlsError, "input keying material too short: 31 bytes") as error:
         bls.key_gen(b"\x01" * 31)
-    with raises(bls.KeyDerivationError, "input keying material too short: 31 bytes"):
+    assert error.value.code == 14
+    with raises(bls.BlsError, "input keying material too short: 31 bytes") as error:
         bls.derive_master_sk(b"\x01" * 31)
+    assert error.value.code == 14
+    with raises(bls.KeyDerivationError, "input keying material too short: 31 bytes") as path_error:
+        bls.derive_path(b"\x01" * 31, "m/12381/3600/0/0")
+    assert path_error.value.code == 14
 
 
+# File: ERCS/erc-2334.md, Path and Beacon Chain Specific Parameters
+# Repository: ethereum/ERCs
+# Commit: be307c948f28897adb8f25afcc253c2c909de35d
 @pytest.mark.parametrize(
     "path, indices",
     [
@@ -93,45 +100,58 @@ def test_validator_paths(index: int) -> None:
     [b"", bytes(31), bytes(33), bytes(32), curve_order.to_bytes(32, "big")],
 )
 def test_rejects_invalid_parent(parent: bytes) -> None:
-    with raises(bls.KeyDerivationError, "invalid secret key"):
+    with raises(bls.BlsError, "invalid secret key") as error:
         bls.derive_child_sk(parent, 0)
+    assert error.value.code == 13
+
+
+def test_accepts_largest_parent() -> None:
+    child = bls.derive_child_sk((curve_order - 1).to_bytes(32, "big"), 0)
+    assert len(child) == 32
+    assert 0 < int.from_bytes(child, "big") < curve_order
 
 
 def test_rejects_index_out_of_range() -> None:
     parent = (1).to_bytes(32, "big")
-    with raises(bls.KeyDerivationError, f"expected an int below {2**32}, got {2**32}"):
+    with raises(bls.BlsError, f"expected an int below {2**32}, got {2**32}") as error:
         bls.derive_child_sk(parent, 2**32)
+    assert error.value.code == 0
     with raises(ValueError, "cannot pass a negative int to Lean"):
         bls.derive_child_sk(parent, -1)
 
 
 @pytest.mark.parametrize(
-    "path, message",
+    "path, message, code",
     [
-        ("M/12381/3600/0/0", "path must start with m"),
-        ("m/12381/3600/0", "ERC-2334 path needs at least four indices"),
-        ("m/12380/3600/0/0", "invalid path purpose: 12380"),
-        ("m/12381/3600/0/0/", "invalid path index: "),
-        ("m/12381/3600/-1/0", "invalid path index: -1"),
-        ("m/12381/3600/0/0'", "invalid path index: 0'"),
-        ("m/12381/3600/0/x", "invalid path index: x"),
-        ("m/12381/3600/0/９", "invalid path index: ９"),
-        ("m/12381/3600/4294967296/0", "path index out of range: 4294967296"),
+        ("M/12381/3600/0/0", "path must start with m", 101),
+        ("m/12381/3600/0", "ERC-2334 path needs at least four indices", 104),
+        ("m/12380/3600/0/0", "invalid path purpose: 12380", 105),
+        ("m/12381/3600/0/0/", "invalid path index: ", 102),
+        ("m/12381/3600/-1/0", "invalid path index: -1", 102),
+        ("m/12381/3600/0/0'", "invalid path index: 0'", 102),
+        ("m/12381/3600/0/x", "invalid path index: x", 102),
+        ("m/12381/3600/0/９", "invalid path index: ９", 102),
+        ("m/12381/3600/0/ 0", "invalid path index:  0", 102),
+        ("m/12381/3600/4294967296/0", "path index out of range: 4294967296", 103),
     ],
 )
-def test_rejects_invalid_path(path: str, message: str) -> None:
+def test_rejects_invalid_path(path: str, message: str, code: int) -> None:
     with raises(bls.KeyDerivationError, message) as error:
         bls.derive_path(bytes(32), path)
-    assert error.value.code == 2
+    assert error.value.code == code
 
 
 def test_rejects_wrong_types() -> None:
     parent = (1).to_bytes(32, "big")
-    with raises(bls.KeyDerivationError, "expected bytes"):
+    with raises(bls.BlsError, "expected bytes") as error:
         bls.derive_master_sk("seed")  # ty: ignore[invalid-argument-type]
-    with raises(bls.KeyDerivationError, "expected bytes"):
+    assert error.value.code == 0
+    with raises(bls.BlsError, "expected bytes") as error:
         bls.derive_child_sk(1, 0)  # ty: ignore[invalid-argument-type]
-    with raises(bls.KeyDerivationError, "expected a str"):
+    assert error.value.code == 0
+    with raises(bls.KeyDerivationError, "expected a str") as path_error:
         bls.derive_path(bytes(32), b"m/12381/3600/0/0")  # ty: ignore[invalid-argument-type]
-    with raises(bls.KeyDerivationError, "expected an int"):
+    assert path_error.value.code == 0
+    with raises(bls.BlsError, "expected an int") as error:
         bls.derive_child_sk(parent, True)
+    assert error.value.code == 0

@@ -43,7 +43,7 @@ class BlsError(EthLibError, ValueError, RuntimeError):
 
 
 class KeyDerivationError(EthLibError, ValueError):
-    """Validator key derivation (code 1) or its path (code 2) failed; bad arguments have code 0."""
+    """Derivation failed with a BLS code, a path code from 101, or code 0 for bad arguments."""
 
 
 class XmssError(EthLibError, ValueError, RuntimeError):
@@ -247,6 +247,7 @@ __all__ = [
     "BindingError",
     "KzgError",
     "BlsError",
+    "KeyDerivationError",
     "XmssError",
     "SphincsError",
     "Secp256k1Error",

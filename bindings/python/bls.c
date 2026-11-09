@@ -390,7 +390,7 @@ py_bls_derive_master_sk(
   PyObject* self,
   PyObject* args
 ) {
-  return call_pyvalue_export(eth_bls_derive_master_sk, args, 1, KEY_DERIVATION_ERROR);
+  return call_pyvalue_export(eth_bls_derive_master_sk, args, 1, BLS_ERROR);
 }
 
 PyObject*
@@ -398,7 +398,7 @@ py_bls_derive_child_sk(
   PyObject* self,
   PyObject* args
 ) {
-  return call_pyvalue_export(eth_bls_derive_child_sk, args, 2, KEY_DERIVATION_ERROR);
+  return call_pyvalue_export(eth_bls_derive_child_sk, args, 2, BLS_ERROR);
 }
 
 PyObject*
