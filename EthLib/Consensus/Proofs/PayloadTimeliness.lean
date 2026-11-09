@@ -19,7 +19,9 @@ After the window is initialized, the state reads the computed committee of each 
 
 The covered slots are those of the current epoch and of the lookahead.
 
-Initializing the window uses one shuffle per epoch, and gives what each committee alone gives.
+Initializing the window shares the seeds and the shuffle of each epoch among its committees.
+
+It gives what each committee alone gives, errors included.
 
 Moving the window shifts every committee back by one epoch.
 
@@ -168,7 +170,9 @@ theorem processPayloadAttestation_eq {config : Config} {checks : SignatureChecks
   obtain ⟨_, _, _, _, _, _, _, _, _, _, same⟩ := computed
   exact same.symm
 
-/-- The epoch of the slot at a position is `position / SLOTS_PER_EPOCH` epochs after the first. -/
+/-- A slot computed at a position is in the first epoch plus the position over the epoch length.
+
+The epoch length must be positive. -/
 theorem computeEpochAtSlot_ptcWindowSlot_eq_add {epoch : Epoch} {position : Nat} {slot : Slot}
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (computed : ptcWindowSlot preset epoch position = .ok slot) :
@@ -351,9 +355,9 @@ theorem ptcWindowPosition_of_le {config : Config} {state : BeaconState preset fo
 
 /-- Initializing the window computes each committee after the previous epoch as that of its slot.
 
-The committees of an epoch share its two seeds and its shuffle, with the same result.
+The committees of an epoch share its two seeds, its shuffle and its count of committees per slot.
 
-The two sides fail with the same error too. -/
+Sharing them changes no committee and no error. -/
 theorem initializePtcWindow_eq (state : BeaconState preset fork) :
     initializePtcWindow state =
       (RootedVector.ofVector <$> (Vector.range _).mapM fun position => do
@@ -370,17 +374,26 @@ theorem initializePtcWindow_eq (state : BeaconState preset fork) :
   split
   · rfl
   rename_i slot computed
+  have positive : 0 < preset.SLOTS_PER_EPOCH.toNat :=
+    Nat.pos_of_ne_zero fun zero => by simp [zero] at inRange
   split
   · rename_i shared found
     obtain ⟨_, rfl⟩ := Array.getElem?_eq_some_iff.mp found
-    have positive : 0 < preset.SLOTS_PER_EPOCH.toNat :=
-      Nat.pos_of_ne_zero fun zero => by simp [zero] at inRange
     -- The slot is in the epoch of those inputs, so its committee reads the same seeds and shuffle.
     have epoch := computeEpochAtSlot_ptcWindowSlot_eq_add positive computed
     simp only [Array.getElem_map, Array.getElem_range, computePtc, ← epoch]
     cases getSeed state (computeEpochAtSlot preset slot) DOMAIN_PTC_ATTESTER <;>
       cases attesterShuffle state (computeEpochAtSlot preset slot) <;> rfl
-  · rfl
+  -- The window ends with the last epoch of the lookahead, so every position finds its inputs.
+  · rename_i found
+    rw [Array.getElem?_eq_none_iff, Array.size_map, Array.size_range,
+      ← Nat.not_lt, Nat.div_lt_iff_lt_mul positive] at found
+    have sizes : (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat =
+        (preset.MIN_SEED_LOOKAHEAD.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat +
+          preset.SLOTS_PER_EPOCH.toNat := by
+      rw [Nat.add_mul, Nat.add_mul]
+      omega
+    omega
 
 /-- After the window is initialized, the state reads the computed committee of a slot.
 
