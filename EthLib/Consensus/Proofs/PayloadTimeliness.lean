@@ -78,31 +78,6 @@ theorem mem_of_balanceWeightedSearch {indices : Array ValidatorIndex} {balances 
       · exact start
     · simp [throw, throwThe, MonadExcept.throw, MonadExceptOf.throw] at found
 
-/-- Two orders that agree on the positions below the number of candidates give one search.
-
-The search reads the order only at a draw number modulo that number. -/
-theorem balanceWeightedSearch_congr {indices : Array ValidatorIndex} {balances : Array Gwei}
-    {first second : Nat → Nat} {seed : Bytes32} {size : Nat} (nonempty : 0 < indices.size)
-    (agree : ∀ place < indices.size, first place = second place) :
-    ∀ {selected : Array ValidatorIndex} {bound : selected.size ≤ size} {i : Nat}
-      {random : { random // random = drawHash fork seed i }},
-      balanceWeightedSearch preset fork indices balances first seed size selected bound i random =
-        balanceWeightedSearch preset fork indices balances second seed size selected bound i
-          random := by
-  intro selected bound i random
-  obtain ⟨left, leftEq⟩ : ∃ left, left = 2 ^ 64 - i := ⟨_, rfl⟩
-  induction left using Nat.strongRecOn generalizing selected i random with
-  | _ left ih =>
-    unfold balanceWeightedSearch
-    split
-    · rfl
-    simp only [agree _ (Nat.mod_lt i nonempty), bind, Except.bind]
-    split
-    · rfl
-    split
-    · exact ih _ (by omega) rfl
-    · rfl
-
 /-- Each validator that a balance-weighted selection draws is one of its candidates. -/
 theorem mem_of_computeBalanceWeightedSelection {state : BeaconState preset fork}
     {indices : Array ValidatorIndex} {seed : Bytes32} {size : UInt64} {shuffleIndices : Bool}

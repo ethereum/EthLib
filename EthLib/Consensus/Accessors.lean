@@ -354,20 +354,20 @@ def proposerDraw (preset : Preset) (fork : Base.Fork) (seed : Bytes32) (i : Nat)
 
 /-- The search for a proposer, from candidate number `i` on.
 
-Candidate `i` is the index at shuffled position `i mod n`, among `n` indices.
+Candidate `i` is the index at position `order (i mod n)`, among `n` indices.
 
 The counter is a 64-bit integer, so the search fails when it would reach `2^64`.
 
 No bound below that is proved, since each draw depends on a hash.
 
-The default index is never read, since each shuffled position is below the number of indices. -/
+The default index is never read when each position of the order is in range. -/
 def proposerSearch (preset : Preset) (fork : Base.Fork) (validators : Array Validator)
-    (indices : Array ValidatorIndex) (shuffled : Array UInt64) (seed : Bytes32) (i : Nat) :
+    (indices : Array ValidatorIndex) (order : Nat → Nat) (seed : Bytes32) (i : Nat) :
     Except AccessorError ValidatorIndex := do
-  let candidate := indices.getD (shuffled.getD (i % indices.size) 0).toNat 0
+  let candidate := indices.getD (order (i % indices.size)) 0
   let some validator := validators[candidate.toNat]? | throw (.indexOutOfRange candidate)
   if ← proposerDraw preset fork seed i validator.effectiveBalance then return candidate
-  if next : i + 1 < 2 ^ 64 then proposerSearch preset fork validators indices shuffled seed (i + 1)
+  if next : i + 1 < 2 ^ 64 then proposerSearch preset fork validators indices order seed (i + 1)
   else throw (.arith .overflow)
 termination_by 2 ^ 64 - i
 
@@ -375,13 +375,18 @@ termination_by 2 ^ 64 - i
 
 The draw walks the indices in shuffled order, and each candidate passes a weighted draw.
 
+It shuffles only the positions that it reads, so no candidate costs more for more indices.
+
 It fails as the shuffle does, for more than `2^40` indices. -/
 def computeProposerIndex (state : BeaconState preset fork) (indices : Array ValidatorIndex)
     (seed : Bytes32) : Except AccessorError ValidatorIndex := do
   if indices.size = 0 then throw .noCandidates
   unless indices.size < 2 ^ 64 do throw (.arith .overflow)
-  let shuffled ← (computeShuffledPermutation preset indices.size.toUInt64 seed).mapError .shuffle
-  proposerSearch preset fork state.validators.data indices shuffled seed 0
+  if 2 ^ 40 < indices.size then throw (.shuffle (.countTooLarge indices.size.toUInt64))
+  -- The pivots depend only on the preset, the seed and the count, so the candidates share them.
+  let pivots := Shuffle.pivots preset.SHUFFLE_ROUND_COUNT.toNat seed indices.size
+  proposerSearch preset fork state.validators.data indices
+    (Shuffle.shuffledIndexBy pivots seed indices.size) seed 0
 
 /-- The proposer of the slot of a state.
 
