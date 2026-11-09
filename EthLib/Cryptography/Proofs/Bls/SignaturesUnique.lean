@@ -2,11 +2,12 @@ module
 
 public import EthLib.Cryptography.Proofs.Bls.SignaturesCorrect
 public import EthLib.Cryptography.Proofs.Bls.PairingCongr
+import EthLib.Cryptography.Proofs.Bls.PairingAte
 
 /-!
 # Proofs: unique signatures, and the rogue-key attack
 
-Under the pairing law, a key and a message have exactly one signature that verifies.
+A key and a message have at most one signature that verifies, byte for byte.
 
 The fast aggregate verification alone does not bind each key to its owner.
 
@@ -54,7 +55,7 @@ private theorem verify_scalars (a b : Fr) : 1 * (a * b) + -a * b = 0 := by
 /-- The core verification accepts exactly the signatures that decode to `(a * b) • g2`.
 
 Here the key validates to a representative of `a • g1`, and the message hashes to `b • g2`. -/
-theorem coreVerify_iff (laws : PairingLaws) {pk msg sig dst : ByteArray} {P : G1} {Q : G2}
+theorem coreVerify_iff {pk msg sig dst : ByteArray} {P : G1} {Q : G2}
     {a b : Fr} (hP : G1.keyValidatePoint pk = .ok P) (hPa : G1.Represents P a)
     (hQ : HashToCurve.hashToG2 msg dst = .ok Q) (hb : G2.Represents Q b) :
     coreVerify pk msg sig dst = true ↔
@@ -71,13 +72,13 @@ theorem coreVerify_iff (laws : PairingLaws) {pk msg sig dst : ByteArray} {P : G1
     · intro h
       rw [Bool.and_eq_true] at h
       obtain ⟨c, hc⟩ := (signatureSubgroupCheck_iff hRv).mp h.1
-      have hs := (laws.two_pairs G1.represents_generator hc hPa.neg hb).mp h.2
+      have hs := (pairingLaws.two_pairs G1.represents_generator hc hPa.neg hb).mp h.2
       exact ⟨R, rfl, eq_of_verify_scalars c a b hs ▸ hc⟩
     · rintro ⟨R', hR', hrep⟩
       obtain rfl : R = R' := Except.ok.inj hR'
       rw [show signatureSubgroupCheck R = true from (signatureSubgroupCheck_iff hRv).mpr ⟨_, hrep⟩,
         Bool.true_and]
-      exact (laws.two_pairs G1.represents_generator hrep hPa.neg hb).mpr (verify_scalars a b)
+      exact (pairingLaws.two_pairs G1.represents_generator hrep hPa.neg hb).mpr (verify_scalars a b)
 
 /-- A key that passes the core verification passes key validation. -/
 private theorem keyValidatePoint_of_coreVerify {pk msg sig dst : ByteArray}
@@ -93,7 +94,7 @@ private theorem keyValidatePoint_of_coreVerify {pk msg sig dst : ByteArray}
     · simp at h
 
 /-- A key and a message have at most one signature that verifies, byte for byte. -/
-theorem coreVerify_unique (laws : PairingLaws) {pk msg sig sig' dst : ByteArray}
+theorem coreVerify_unique {pk msg sig sig' dst : ByteArray}
     (h : coreVerify pk msg sig dst = true) (h' : coreVerify pk msg sig' dst = true) :
     sig = sig' := by
   obtain ⟨P, hP⟩ := keyValidatePoint_of_coreVerify h
@@ -102,15 +103,15 @@ theorem coreVerify_unique (laws : PairingLaws) {pk msg sig sig' dst : ByteArray}
     ((G1.inSubgroup_iff_modulus_smul_eq_zero hPv).mpr hPr)
   obtain ⟨Q, hQ, hQv, hQs⟩ := HashToCurve.hashToG2_total_inSubgroup msg dst
   obtain ⟨b, hb⟩ := (G2.inSubgroup_iff_exists_represents hQv).mp hQs
-  obtain ⟨R, hR, hRrep⟩ := (coreVerify_iff laws hP ha hQ hb).mp h
-  obtain ⟨R', hR', hR'rep⟩ := (coreVerify_iff laws hP ha hQ hb).mp h'
+  obtain ⟨R, hR, hRrep⟩ := (coreVerify_iff hP ha hQ hb).mp h
+  obtain ⟨R', hR', hR'rep⟩ := (coreVerify_iff hP ha hQ hb).mp h'
   rw [← G2.compress_uncompress hR, ← G2.compress_uncompress hR']
   exact G2.compress_congr hRrep.1 hR'rep.1 (hRrep.2.trans hR'rep.2.symm)
 
 /-- A key and a message have at most one signature that verifies, byte for byte. -/
-theorem verify_unique (laws : PairingLaws) {pk msg sig sig' : ByteArray}
+theorem verify_unique {pk msg sig sig' : ByteArray}
     (h : verify pk msg sig = true) (h' : verify pk msg sig' = true) : sig = sig' :=
-  coreVerify_unique laws h h'
+  coreVerify_unique h h'
 
 /-- The rogue key cancels the victim's key in the key sum. -/
 private theorem rogue_sum (a c : Fr) : [a, c + -a].sum = c := by
@@ -128,7 +129,7 @@ The attacker picks `c` and publishes the key `c • g1 - PK`, from the victim's 
 The signature `c • H(msg)` then passes for the victim's key together with the rogue key.
 
 The attacker never learns the victim's secret key. -/
-theorem fastAggregateVerify_rogue (laws : PairingLaws) (sk : SecretKey) {c : Fr} (hc0 : c ≠ 0)
+theorem fastAggregateVerify_rogue (sk : SecretKey) {c : Fr} (hc0 : c ≠ 0)
     (hc : c ≠ sk.val) (msg : ByteArray) :
     ∃ P Q, G1.keyValidatePoint (pkBytes sk) = .ok P ∧ HashToCurve.hashToG2 msg DST = .ok Q ∧
       fastAggregateVerify
@@ -152,7 +153,7 @@ theorem fastAggregateVerify_rogue (laws : PairingLaws) (sk : SecretKey) {c : Fr}
   have h2 : G2.Represents (G2.mul Q c) (([sk, rogue].map (·.val)).sum * b) := by
     rw [hsum]
     exact hb.mul c
-  exact fastAggregateVerify_of_represents laws (List.cons_ne_nil _ _) h1 hQ hb h2
+  exact fastAggregateVerify_of_represents (List.cons_ne_nil _ _) h1 hQ hb h2
 
 end Signatures
 

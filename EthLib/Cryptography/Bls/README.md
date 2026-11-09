@@ -99,7 +99,7 @@ Each directory has a `SHA256SUMS` that pins its cases, and CI checks the pins.
 
 The proofs are in `EthLib/Cryptography/Proofs/Bls/`.
 They cover the two fields, the groups G1 and G2, hash-to-curve and the signature functions.
-The law of the pairing check is a hypothesis.
+`pairingLaws` (`PairingAte.lean`) proves the law of the pairing check.
 
 Most statements concern valid points.
 A G1 point is stored as a representative in coordinates,
@@ -175,14 +175,15 @@ The pairing check reads only the group elements of valid points
 The pairing is bilinear on the multiples of the generators: `e(a g_1, b g_2) = e(g_1, g_2)^(a b)` for all `a` and `b` in `Fr` (`pairingBilinear`, `PairingAte.lean`).
 The pairing of the generators has order `r` (`orderOf_pairing_generators`, `Nondegenerate.lean`).
 So the pairing law holds: on representatives of `a_i * g_1` and `b_i * g_2`, the check passes exactly when `sum_i a_i * b_i = 0` (`pairingLaws`, `PairingAte.lean`).
-Theorems about the result of a pairing check take the law as a hypothesis, which `pairingLaws` supplies.
+Only the lemmas in `PairingLaws.lean` take the law as a hypothesis.
+The signature and EIP-2537 theorems use the proved law internally.
 
 **Signatures.**
 Signing never fails (`sign_ok`, `popProve_ok`, `Signatures.lean`).
-Under the pairing law, honest signatures, proofs of possession and aggregates verify
+Honest signatures, proofs of possession and aggregates verify
 (`verify_sign`, `popVerify_popProve`, `aggregateVerify_aggregate`, `SignaturesCorrect.lean`).
 
-Under the same law, the core verification accepts exactly one kind of signature.
+The core verification accepts exactly one kind of signature.
 Let the key validate to a representative of `a * g_1`, and the message hash to one of `b * g_2`.
 Then a signature passes exactly when it decodes to a representative of `(a * b) * g_2`
 (`coreVerify_iff`, `SignaturesUnique.lean`).
@@ -198,7 +199,8 @@ which kills every torsion point of the cofactor (`clearCofactorG1_inSubgroup`).
 
 - Unforgeability is proved only in the random oracle model, with the hash to G2 as the oracle.
   It covers signing and verification, not aggregation or proofs of possession.
-  Its adversary works on group elements, and the step to a forger on bytes is not proved.
+  A forger on bytes wins no more often than the group forger built by decoding its output (`byteForgeAdvantage_le`).
+  So the co-CDH bound also holds for a forger on bytes (`byteForgeAdvantage_le_coCdhAdvantage_of_byteHashCallBound`).
   It rests on a co-Diffie-Hellman problem that no theorem proves hard.
 
 ## What the kernel can evaluate

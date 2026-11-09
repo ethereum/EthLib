@@ -15,7 +15,7 @@ Each seat of the inclusion list committee holds such a member, in the order of t
 
 The committee fails exactly when the beacon committees of the slot hold no validator.
 
-A list signed with the key of its member passes the signature check, under the pairing laws.
+A list signed with the key of its member passes the signature check.
 
 An assignment names the first slot of the epoch whose committee seats the validator.
 
@@ -103,10 +103,8 @@ theorem getInclusionListCommittee_mem {committee : InclusionListCommittee preset
 
 /-- A list signed with the secret key of its member passes the signature check.
 
-The member must be in the registry with the public key of that secret key.
-
-The statement holds under the laws of the pairing, as BLS correctness does. -/
-theorem isValidInclusionListSignature_of_sign (laws : PairingLaws) {config : Config}
+The member must be in the registry with the public key of that secret key. -/
+theorem isValidInclusionListSignature_of_sign {config : Config}
     {signed : SignedInclusionList} {key : Signatures.SecretKey} {validator : Validator}
     (registered : getValidator state signed.message.validatorIndex = .ok validator)
     (owned : validator.pubkey = Signatures.skToPk key)
@@ -120,7 +118,7 @@ theorem isValidInclusionListSignature_of_sign (laws : PairingLaws) {config : Con
   have rootOk : inclusionListSigningRoot config state signed.message = .ok root := by
     cases h : inclusionListSigningRoot config state signed.message <;>
       simp_all [Except.mapError]
-  obtain ⟨signature, signs, verifies⟩ := Signatures.verify_sign laws key (packBytes root)
+  obtain ⟨signature, signs, verifies⟩ := Signatures.verify_sign key (packBytes root)
   have same : signature = signed.signature := by
     rw [signs] at signedBy
     simpa [Except.mapError] using signedBy
