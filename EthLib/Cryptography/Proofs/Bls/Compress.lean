@@ -66,9 +66,42 @@ theorem sqrt_complete {a b : Fp} (h : b * b = a) :
     apply toZMod.injective
     rw [toZMod_mul, toZMod_powNat]
     exact pow_sqrt_exponent (by rw [← toZMod_mul, h])
-  rw [Fp.sqrt, Fp.powLimbs_sqrtExponent,
+  rw [Fp.sqrt, Fp.sqrtCandidate, Fp.powLimbs_sqrtExponent,
     ite_eq_left (show (Fp.powNat a ((Fp.modulus + 1) / 4) *
       Fp.powNat a ((Fp.modulus + 1) / 4)).beq a = true from Fp.beq_iff.mpr hcand)]
+
+/-- The candidate for a square root squares to the input or its negation. -/
+theorem sqrtCandidate_sq_or_neg (a : Fp) :
+    Fp.sqrtCandidate a * Fp.sqrtCandidate a = a ∨
+      Fp.sqrtCandidate a * Fp.sqrtCandidate a = -a := by
+  have h (x : ZMod Fp.modulus) :
+      let s := x ^ ((Fp.modulus + 1) / 4)
+      s * s = x ∨ s * s = -x := by
+    intro s
+    by_cases hx : x = 0
+    · left
+      subst hx
+      simp [s, zero_pow (by decide : (Fp.modulus + 1) / 4 ≠ 0)]
+    · have hs : (s * s) * (s * s) = x * x := by
+        dsimp only [s]
+        rw [← pow_add, ← pow_add,
+          show ((Fp.modulus + 1) / 4 + (Fp.modulus + 1) / 4) +
+              ((Fp.modulus + 1) / 4 + (Fp.modulus + 1) / 4) =
+              (Fp.modulus - 1) + 2 by decide,
+          pow_add, ZMod.pow_card_sub_one_eq_one hx, one_mul, pow_two]
+      have hfac : (s * s - x) * (s * s + x) = 0 := by linear_combination hs
+      rcases mul_eq_zero.mp hfac with hpos | hneg
+      · exact Or.inl (sub_eq_zero.mp hpos)
+      · exact Or.inr (eq_neg_of_add_eq_zero_left hneg)
+  have hs := h (Fp.toZMod a)
+  dsimp only at hs
+  rw [← Fp.toZMod_powNat] at hs
+  change Montgomery.powLimbs a Fp.sqrtExponent * Montgomery.powLimbs a Fp.sqrtExponent = a ∨
+    Montgomery.powLimbs a Fp.sqrtExponent * Montgomery.powLimbs a Fp.sqrtExponent = -a
+  rw [Fp.powLimbs_sqrtExponent]
+  rcases hs with hs | hs
+  · exact Or.inl (Fp.toZMod.injective (by rw [Fp.toZMod_mul]; exact hs))
+  · exact Or.inr (Fp.toZMod.injective (by rw [Fp.toZMod_mul, Fp.toZMod_neg]; exact hs))
 
 /-! ## Big-endian bytes
 

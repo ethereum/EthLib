@@ -28,6 +28,7 @@ public import EthLib.Cryptography.Proofs.Bls.G2Order
 public import EthLib.Cryptography.Proofs.Bls.G2Subgroup
 public import EthLib.Cryptography.Proofs.Bls.G2Compress
 public import EthLib.Cryptography.Proofs.Bls.HashToCurve
+public import EthLib.Cryptography.Proofs.Bls.SqrtCompatibility
 public import EthLib.Cryptography.Proofs.Bls.ExpandMessage
 public import EthLib.Cryptography.Proofs.Bls.Isogeny
 public import EthLib.Cryptography.Proofs.Bls.HashToCurveValidity

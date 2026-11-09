@@ -665,7 +665,7 @@ The square root of `Fp` fails only with the error for a non-square, so the two a
 theorem sqrtOrError_eq (a : Fp) : sqrtOrError a = Fp.sqrt a := by
   -- The test is left as a Boolean variable, so no proof step evaluates the power.
   have hs : Fp.sqrt a = .error .notASquare ∨ ∃ s, Fp.sqrt a = .ok s := by
-    unfold Fp.sqrt
+    unfold Fp.sqrt Fp.sqrtCandidate
     rw [powLimbs_sqrtExponent]
     generalize powNat a ((modulus + 1) / 4) = c
     by_cases h : (c * c).beq a = true

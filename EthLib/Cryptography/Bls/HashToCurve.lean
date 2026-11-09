@@ -121,8 +121,12 @@ def Bprime : Fp2 F := ⟨BaseField.ofNat 1012, BaseField.ofNat 1012⟩
 
 `Z` is not a square in `Fp2`, so one of `g(x1)` and `g(x2)` is a square.
 
-The error is the case where neither is, which the RFC excludes. -/
-def simpleSwu (u : Fp2 F) : Except BlsError (Fp2 F × Fp2 F) := do
+The error is the case where neither is, which the RFC excludes.
+
+A custom `sqrtFn` must return a root on success and reject exactly the nonsquares. -/
+def simpleSwu (u : Fp2 F)
+    (sqrtFn : Fp2 F → Except BlsError (Fp2 F) := Fp2.sqrt) :
+    Except BlsError (Fp2 F × Fp2 F) := do
   let u2 := u * u
   let zu2 := Z * u2
   let denom := zu2 * zu2 + zu2          -- Z^2·u^4 + Z·u^2
@@ -133,13 +137,13 @@ def simpleSwu (u : Fp2 F) : Except BlsError (Fp2 F × Fp2 F) := do
     else
       (-Bprime / Aprime) * (Fp2.one + denom.inverse)
   let gx1 := x1 * x1 * x1 + Aprime * x1 + Bprime
-  match Fp2.sqrt gx1 with
+  match sqrtFn gx1 with
   | .ok y =>
     -- The sign of `y` follows the sign of `u`.
     return (x1, if sgn0Fp2 u = sgn0Fp2 y then y else -y)
   | .error _ =>
     let x2 := zu2 * x1
-    let y ← Fp2.sqrt (x2 * x2 * x2 + Aprime * x2 + Bprime)
+    let y ← sqrtFn (x2 * x2 * x2 + Aprime * x2 + Bprime)
     return (x2, if sgn0Fp2 u = sgn0Fp2 y then y else -y)
 
 /-! ## 3-isogeny map `E' → E` (RFC 9380 Appendix E.3)
@@ -257,11 +261,15 @@ def H_EFF_G2 : Nat :=
 
 /-! ## Top-level pipeline -/
 
-/-- Hash a message + DST to a G2 point on BLS12-381. -/
-def hashToG2 [Inhabited F] (msg : ByteArray) (dst : ByteArray) : Except BlsError (G2 F) := do
+/-- Hash a message + DST to a G2 point on BLS12-381.
+
+A custom `swuFn` must preserve the SSWU map, including its sign choice. -/
+def hashToG2 [Inhabited F] (msg : ByteArray) (dst : ByteArray)
+    (swuFn : Fp2 F → Except BlsError (Fp2 F × Fp2 F) := fun u => simpleSwu u) :
+    Except BlsError (G2 F) := do
   let us ← hashToFieldFp2 msg dst 2
-  let (x0, y0) ← simpleSwu us[0]!
-  let (x1, y1) ← simpleSwu us[1]!
+  let (x0, y0) ← swuFn us[0]!
+  let (x1, y1) ← swuFn us[1]!
   return clearCofactor (G2.add (isoMapG2 x0 y0) (isoMapG2 x1 y1))
 
 end EthLib.Cryptography.Bls.HashToCurve

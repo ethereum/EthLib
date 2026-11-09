@@ -43,6 +43,12 @@ class BaseField (F : Type) extends Add F, Sub F, Mul F, Neg F where
 
   Each instance states which of the two roots it returns. -/
   sqrt : F → Option F
+  /-- An optional candidate whose square is the input or its negation.
+
+  For a field of order `q = 3 mod 4`, the power `a^((q + 1) / 4)` has this property.
+
+  The default keeps the checked square-root algorithm for other base fields. -/
+  sqrtCandidate : Option (F → F) := none
   /-- The sign `sgn0` of RFC 9380, §4.1: whether the canonical integer of the element is odd. -/
   sgn0 : F → Bool
 
