@@ -255,7 +255,52 @@ theorem loop {I : Nat → Evm fork Meter → Prop} {Q : Evm fork Meter → Prop}
       (fun k => hoareOn_iff_triple.mp (body k) bound runChild meets)
       (hoareOn_iff_triple.mp exit bound runChild meets) n
 
+/-- A run that succeeds through a triple goes on from a frame of the postcondition.
+
+Say the loop runs a frame of the precondition to a stopped frame `stopped`.
+
+The loop itself returns no error.
+
+Then it runs a frame of the postcondition to `stopped` too.
+
+It holds for every runner whose frames meet the assumption.
+
+The bound on the gas of messages is any bound that holds the gas of the frame. -/
+theorem runFrame_of_ok {bound : Nat}
+    {runChild : MessageRunner fork Meter bound} {P Q : Evm fork Meter → Prop}
+    (h : HoareOn fork callee S P Q) (meets : MeetsOk callee runChild) {evm stopped : Evm fork Meter}
+    (hp : P evm) (within : GasMeter.gasHeld evm.gas ≤ bound)
+    (hs : runFrame (step fork) (step_decreases fork) bound runChild evm within = .ok stopped) :
+    ∃ after, Q after ∧ ∃ within' : GasMeter.gasHeld after.gas ≤ bound,
+      runFrame (step fork) (step_decreases fork) bound runChild after within' = .ok stopped := by
+  obtain ⟨after, hreach, hq | ⟨running, caller, message, resume, sent, -, lt, e, failed⟩⟩ :=
+    h bound runChild meets evm hp within
+  · rw [runFrame_eq_of_reaches StepBy.gasHeld_le StepBy.runFrame_eq hreach within] at hs
+    exact ⟨after, hq, _, hs⟩
+  · rw [runFrame_eq_of_reaches StepBy.gasHeld_le StepBy.runFrame_eq hreach within,
+      runFrame_of_runChild_eq_error running sent lt failed] at hs
+    cases hs
+
 end HoareOn
+
+/-- A run that succeeds through a triple over the steps goes on from a frame of the postcondition.
+
+Say the loop runs a frame of the precondition to a stopped frame `stopped`.
+
+The loop itself returns no error.
+
+Then it runs a frame of the postcondition to `stopped` too.
+
+It holds for every bound on the gas of messages and every runner of messages. -/
+theorem Hoare.runFrame_of_ok [LawfulGasMeter Meter] {bound : Nat}
+    {runChild : MessageRunner fork Meter bound} {P Q : Evm fork Meter → Prop}
+    (h : Hoare fork P Q) {evm stopped : Evm fork Meter} (hp : P evm)
+    (within : GasMeter.gasHeld evm.gas ≤ bound)
+    (hs : runFrame (step fork) (step_decreases fork) bound runChild evm within = .ok stopped) :
+    ∃ after, Q after ∧ ∃ within' : GasMeter.gasHeld after.gas ≤ bound,
+      runFrame (step fork) (step_decreases fork) bound runChild after within' = .ok stopped :=
+  HoareOn.runFrame_of_ok (callee := fun _ _ _ => True) (S := fun _ _ => False)
+    (HoareOn.of_hoare h) (fun _ _ _ _ _ => trivial) hp within hs
 
 /-- A triple under an assumption is a triple whose runner may fail on every message.
 

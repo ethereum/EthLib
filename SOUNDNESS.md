@@ -1065,6 +1065,9 @@ The rules of `HoareUnder` hold for `HoareOn` with the same set: `of_hoare`, `of_
 `SpecOn.runFrame` proves that `runFrame` returns a stopped frame of `Q`, or fails.
 When it fails, a frame that the steps reach sends a message of `S`, and the runner fails on it.
 Then `runFrame` fails with the same error.
+`HoareOn.runFrame_of_ok` proves that a run that succeeds through such a triple goes on from a frame of `Q`.
+That run ends where the run from that frame ends.
+`Hoare.runFrame_of_ok` proves the same for a triple over the steps, under every runner.
 
 From Pectra, a call to an account whose code is an EIP-7702 delegation indicator runs the code of the delegate.
 `Logic.Routes fork state c route` (`Logic/Route.lean`) says which code a call to an account with the code `c` runs.
@@ -1081,6 +1084,12 @@ Its set holds only the message of the call, so a run may stop because the runner
 `Logic.callRoute` proves its case for CALL.
 Unlike `Logic.callWith`, neither rule asks that the code be no delegation, or that the fork come before Glamsterdam.
 `Logic.callStep_child` and `Logic.callKindWith` are their cases with no delegation, so the step has one proof.
+`Logic.callStep_fails_of_routes` (`Logic/CallSteps.lean`) proves that such a call with less gas than its known price fails, or halts the frame with an error.
+That price is the access to the address, the access to the delegate if any, and the growth of memory.
+`Logic.callStep_deep_of_routes` proves that such a call at the greatest depth, with the gas of that price, sends no message and pushes 0.
+`Logic.callStep_fails_of_missing` proves that from Pectra such a call fails when the lookup of the code of the delegate fails.
+Instead of failing, the step may halt the frame with an error.
+Each holds for every kind of call, at every fork from Berlin.
 
 A triple says about the state after a message only what its assumption says, so a proof needs an assumption on what the callee does.
 `Logic.KeepsOn runChild S R` (`Logic/Keeps.lean`) says that each message of `S` that the runner ends with no error keeps the relation `R`.
