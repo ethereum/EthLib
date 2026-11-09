@@ -20,7 +20,7 @@ The byte game gives the adversary compressed keys, hashes and signatures.
 
 Decoding its output gives a group forger with at least the same advantage.
 
-The soundness of the pairing check and the refinement of `verify` use the proved pairing law.
+The soundness of the pairing check and the refinement of verification use the proved pairing law.
 
 The step from bytes to group elements does not use that law.
 -/
