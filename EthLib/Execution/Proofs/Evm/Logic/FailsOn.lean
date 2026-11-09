@@ -351,8 +351,8 @@ theorem runFrame [LawfulGasMeter Meter] {bound : Nat} {runChild : MessageRunner 
     (∃ stopped, runFrame (step fork) (step_decreases fork) bound runChild evm within =
       .ok stopped ∧ Q stopped) ∨
     ∃ after caller message resume lt e, Reaches (StepBy fork bound runChild) evm after ∧
-      step fork after = .ok (.child caller message resume) ∧ S caller message ∧
-      runChild caller message lt = .error e ∧
+      after.running = true ∧ step fork after = .ok (.child caller message resume) ∧
+      S caller message ∧ runChild caller message lt = .error e ∧
       runFrame (step fork) (step_decreases fork) bound runChild evm within = .error e := by
   obtain ⟨after, hreach, ⟨halted, hq⟩ | failed⟩ := h bound runChild meets evm hp within
   · rw [runFrame_eq_of_reaches StepBy.gasHeld_le StepBy.runFrame_eq hreach within,
@@ -360,7 +360,7 @@ theorem runFrame [LawfulGasMeter Meter] {bound : Nat} {runChild : MessageRunner 
     exact .inl ⟨after, rfl, hq⟩
   · obtain ⟨running, caller, message, resume, sent, hS, lt, e, ran⟩ := failed
     rw [runFrame_eq_of_reaches StepBy.gasHeld_le StepBy.runFrame_eq hreach within]
-    exact .inr ⟨after, caller, message, resume, lt, e, hreach, sent, hS, ran,
+    exact .inr ⟨after, caller, message, resume, lt, e, hreach, running, sent, hS, ran,
       runFrame_of_runChild_eq_error running sent lt ran⟩
 
 end SpecOn

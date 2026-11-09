@@ -37,7 +37,9 @@ A triple over frames that send messages takes an assumption on the frames that e
 
 Its run may also abort, when the runner of messages fails.
 
-Another form of triple lets the runner fail with any error, but only on the messages of a named set.
+Another form of triple lets the runner fail with any error.
+
+It names the messages on which a run may stop because the runner fails.
 
 A code can be stored as one number, and a tactic steps through its opcodes.
 -/
