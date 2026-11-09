@@ -1,4 +1,4 @@
-"""Key derivation with SHA-256."""
+"""Key derivation with SHA-256: HKDF, the Concatenation KDF, PBKDF2 and scrypt."""
 
 from ethlib.cryptography._native import (
     PBKDF2_HASH_LEN,
@@ -15,7 +15,7 @@ from ethlib.cryptography._native import (
 )
 from ethlib.errors import ConcatKdfError, HkdfError, Pbkdf2Error, ScryptError
 
-# The input keying material and the shared secret are secret.
+# The input keying material, the shared secret and the password are secret.
 # EthLib makes no constant-time claim.
 
 
@@ -50,12 +50,12 @@ def salsa208(block: bytes) -> bytes:
     return native_salsa208(block)
 
 
-def block_mix(block: bytes, r: int) -> bytes:
+def scrypt_block_mix(block: bytes, r: int) -> bytes:
     """The scryptBlockMix step of RFC 7914 §4 on a `128 * r`-byte input."""
     return native_scrypt_block_mix(block, r)
 
 
-def romix(block: bytes, n: int, r: int) -> bytes:
+def scrypt_romix(block: bytes, n: int, r: int) -> bytes:
     """The scryptROMix step of RFC 7914 §5 with `n` table entries."""
     return native_scrypt_romix(block, n, r)
 
@@ -73,12 +73,12 @@ __all__ = [
     "HkdfError",
     "Pbkdf2Error",
     "ScryptError",
-    "block_mix",
     "concat_kdf",
     "hkdf",
     "hkdf_extract",
     "pbkdf2",
-    "romix",
     "salsa208",
     "scrypt",
+    "scrypt_block_mix",
+    "scrypt_romix",
 ]

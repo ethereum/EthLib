@@ -65,4 +65,28 @@ It reads the byte in place, since the array of all the bytes would cost a copy o
 def xorBytes {n : Nat} (a b : Vector UInt8 n) : Vector UInt8 n :=
   Vector.zipWith (· ^^^ ·) a b
 
+/-- The exclusive or of two untyped byte strings, byte by byte, over the length of the first.
+
+A byte past the end of the second string reads as zero.
+
+It writes into the first string, so the bytes stay unboxed and an unshared string is not copied. -/
+def xorByteArray (a b : ByteArray) : ByteArray :=
+  go 0 a
+where
+  /-- Each byte from the index on is XORed with the byte of the second string. -/
+  go (i : Nat) (acc : ByteArray) : ByteArray :=
+    if h : i < acc.size then go (i + 1) (acc.set i (acc[i] ^^^ byteAt b i)) else acc
+  termination_by acc.size - i
+  decreasing_by simp only [ByteArray.set, ByteArray.size, Array.size_set] at h ⊢; omega
+
+/-- The exclusive or keeps the length of the first string. -/
+theorem xorByteArray_size (a b : ByteArray) : (xorByteArray a b).size = a.size := by
+  suffices ∀ i acc, (xorByteArray.go b i acc).size = acc.size from this 0 a
+  intro i acc
+  induction i, acc using xorByteArray.go.induct b with
+  | case1 i acc h ih =>
+    rw [xorByteArray.go, dite_eq_left h, ih]
+    simp only [ByteArray.set, ByteArray.size, Array.size_set]
+  | case2 i acc h => rw [xorByteArray.go, dite_eq_right h]
+
 end EthLib.Base

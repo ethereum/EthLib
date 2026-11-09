@@ -1238,7 +1238,7 @@
       {"constructor": "inputTooLong", "code": 4}]}],
    "error_class": "Pbkdf2Error",
    "docstring":
-   "PBKDF2-HMAC-SHA-256, RFC 8018 §5.2, with the output length in bytes."},
+   "PBKDF2-HMAC-SHA-256, RFC 8018 §5.2, with the output length in bytes.\n\nIts time grows with the iteration count times the 32-byte blocks of the output.\n\nThe output can reach 128 GiB, so a caller must bound both first (SOUNDNESS.md D1)."},
   {"summary": "Salsa20/8 on exactly 64 bytes, RFC 7914 §3.",
    "signature": "(block: bytes) -> bytes",
    "operation": "EthLib.Cryptography.Hash.Scrypt.salsa208",
@@ -1288,7 +1288,7 @@
       {"constructor": "pbkdf2", "code": 7}]}],
    "error_class": "ScryptError",
    "docstring":
-   "ROMix on `128 * r` bytes with a valid power-of-two cost, RFC 7914 §5."},
+   "ROMix on `128 * r` bytes with a valid power-of-two cost, RFC 7914 §5.\n\nIts table has a payload of `128 * r * N` bytes, so a caller must bound `r * N` first."},
   {"summary":
    "Expand, mix and compress the password, RFC 7914 §6, with the output length in bytes.",
    "signature":
@@ -1307,7 +1307,7 @@
       {"constructor": "pbkdf2", "code": 7}]}],
    "error_class": "ScryptError",
    "docstring":
-   "Expand, mix and compress the password, RFC 7914 §6, with the output length in bytes."},
+   "Expand, mix and compress the password, RFC 7914 §6, with the output length in bytes.\n\nIt holds `128 * r * N` bytes of table, `128 * r * p` bytes per buffer and `length` bytes of key.\n\nSo a caller must bound `r * N`, `r * p` and `length` first, as a keystore gives them."},
   {"summary":
    "Whether `(r, s)` is a valid signature on `hash` under the public key `q`, by SEC 1 v2 §4.1.4.",
    "signature":

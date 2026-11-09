@@ -1728,6 +1728,10 @@ BLS key generation, signing and the proof of possession handle secret data, and 
 HMAC-SHA-256, HKDF and the Concatenation KDF take a secret key, input keying material or shared secret.
 The Python bindings expose them as `hmac_sha256`, `hkdf_extract`, `hkdf` and `concat_kdf`.
 PBKDF2 and scrypt take a secret password, and the bindings expose them as `pbkdf2` and `scrypt`.
+The steps of scrypt take values derived from the password, and the bindings expose them as `salsa208`, `scrypt_block_mix` and `scrypt_romix`.
+
+ROMix, the memory-hard step of scrypt, reads its table at indices that depend on the password, as AES reads its S-box below.
+Its memory use depends on its parameters, and D1 says what a caller must bound.
 
 Every AES function that takes a key handles secret data.
 Its S-box is a table, and the cipher reads it at indices that depend on the key.
@@ -1939,6 +1943,20 @@ leanSPHINCS adds another.
 Never sign more than `2^30` messages with one secret key.
 Nothing in EthLib counts signatures, so the caller must.
 The Lean and Python docstrings of `sign` both say so.
+
+Password derivations add bounds on memory and time.
+The ROMix table of scrypt has a payload of `128 * r * N` bytes, and the expanded password and the mixed blocks take at least `128 * r * p` bytes each.
+The key itself, of either derivation, can be up to `(2^32 - 1) * 32` bytes, about 128 GiB.
+Parameters within the bounds of RFC 7914 can ask for more memory than any machine has.
+For example, `N = 2^40` and `r = 8` pass the check on the cost and ask for a table of `2^50` bytes, one pebibyte.
+Likewise, `r = 1` and `p = 2^30 - 1` pass the check on `p` and ask for about 128 GiB per buffer.
+No error is returned then: the Lean runtime aborts the process, or the operating system kills it.
+The work of scrypt grows with `N * r * p` and with the key length.
+The work of PBKDF2 grows with `c` times the number of 32-byte blocks of the key.
+So a hostile parameter can also make a call run for an impractical time.
+A keystore file gives `N`, `r` and `p`, or `c`, and the key length `dklen`.
+So a caller that reads one must bound `r * N`, `r * p`, `c` and `dklen` before it calls the derivation.
+The Lean docstrings of `pbkdf2`, `scrypt` and `romix` say so.
 
 ### D2. Dependencies
 

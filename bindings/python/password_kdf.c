@@ -4,9 +4,9 @@
 /* Each export consumes its object arguments. */
 extern lean_object* eth_pbkdf2_sha256(
   lean_object* password, lean_object* salt, uint64_t iterations, uint64_t length);
-extern lean_object* eth_salsa208(lean_object* input);
-extern lean_object* eth_scrypt_block_mix(lean_object* input, uint64_t r);
-extern lean_object* eth_scrypt_romix(lean_object* input, uint64_t n, uint64_t r);
+extern lean_object* eth_salsa208(lean_object* block);
+extern lean_object* eth_scrypt_block_mix(lean_object* block, uint64_t r);
+extern lean_object* eth_scrypt_romix(lean_object* block, uint64_t n, uint64_t r);
 extern lean_object* eth_scrypt(
   lean_object* password, lean_object* salt, uint64_t n, uint64_t r, uint64_t p, uint64_t length);
 
@@ -45,11 +45,11 @@ py_salsa208(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject* input_obj;
-  if (!PyArg_ParseTuple(args, "O", &input_obj)) return NULL;
-  lean_object* input;
-  if (parse_bytes(input_obj, "input", &input)) return NULL;
-  return except_into_pybytes(eth_salsa208(input), SCRYPT_ERROR);
+  PyObject* block_obj;
+  if (!PyArg_ParseTuple(args, "O", &block_obj)) return NULL;
+  lean_object* block;
+  if (parse_bytes(block_obj, "block", &block)) return NULL;
+  return except_into_pybytes(eth_salsa208(block), SCRYPT_ERROR);
 }
 
 PyObject*
@@ -57,13 +57,13 @@ py_scrypt_block_mix(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *input_obj, *r_obj;
-  if (!PyArg_ParseTuple(args, "OO", &input_obj, &r_obj)) return NULL;
+  PyObject *block_obj, *r_obj;
+  if (!PyArg_ParseTuple(args, "OO", &block_obj, &r_obj)) return NULL;
   uint64_t r = PyLong_AsUnsignedLongLong(r_obj);
   if (PyErr_Occurred()) return NULL;
-  lean_object* input;
-  if (parse_bytes(input_obj, "input", &input)) return NULL;
-  return except_into_pybytes(eth_scrypt_block_mix(input, r), SCRYPT_ERROR);
+  lean_object* block;
+  if (parse_bytes(block_obj, "block", &block)) return NULL;
+  return except_into_pybytes(eth_scrypt_block_mix(block, r), SCRYPT_ERROR);
 }
 
 PyObject*
@@ -71,15 +71,15 @@ py_scrypt_romix(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *input_obj, *n_obj, *r_obj;
-  if (!PyArg_ParseTuple(args, "OOO", &input_obj, &n_obj, &r_obj)) return NULL;
+  PyObject *block_obj, *n_obj, *r_obj;
+  if (!PyArg_ParseTuple(args, "OOO", &block_obj, &n_obj, &r_obj)) return NULL;
   uint64_t n = PyLong_AsUnsignedLongLong(n_obj);
   if (PyErr_Occurred()) return NULL;
   uint64_t r = PyLong_AsUnsignedLongLong(r_obj);
   if (PyErr_Occurred()) return NULL;
-  lean_object* input;
-  if (parse_bytes(input_obj, "input", &input)) return NULL;
-  return except_into_pybytes(eth_scrypt_romix(input, n, r), SCRYPT_ERROR);
+  lean_object* block;
+  if (parse_bytes(block_obj, "block", &block)) return NULL;
+  return except_into_pybytes(eth_scrypt_romix(block, n, r), SCRYPT_ERROR);
 }
 
 PyObject*
