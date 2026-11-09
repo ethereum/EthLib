@@ -98,7 +98,9 @@ theorem conjugate_eq_pow (a : Fp12) : a.conjugate = a ^ (Fp.modulus ^ 6) := by
 
 The proof uses the relation `a^(p^4) * a = a^(p^2)`, from [Granger and Scott][source], §3.2.
 
-It is equation (5) there, and it holds on the cyclotomic subgroup and at zero.
+It is equation (5) there, where the paper writes `q` for our `p^2`.
+
+It holds on the cyclotomic subgroup, and also at zero, since `0 * 0 = 0`.
 
 [source]: https://eprint.iacr.org/2009/565
 -/
@@ -419,7 +421,6 @@ private theorem pow_eq_pow_of_mod {f : Fp12} {m n : Nat} (hm : m ≠ 0) (hn : n 
       exact FiniteField.pow_card_sub_one_eq_one f hf
     rw [← Nat.div_add_mod m (Fp.modulus ^ 12 - 1), ← Nat.div_add_mod n (Fp.modulus ^ 12 - 1),
       pow_add, pow_add, pow_mul, pow_mul, h1, one_pow, one_pow, h]
-
 
 private theorem cyclotomic_relation_frobenius {a : Fp12}
     (h : a ^ (Fp.modulus ^ 4) * a = a ^ (Fp.modulus ^ 2)) :

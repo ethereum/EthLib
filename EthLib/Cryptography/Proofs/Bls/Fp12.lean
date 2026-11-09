@@ -17,8 +17,6 @@ The norm is zero only at zero, because `v` is not a square in `Fp6`.
 Taking norms twice more sends `v` to `2` in `Fp`.
 
 And `2` is not a square in `Fp`, because `p = 3 mod 8`.
-
-It also proves that the library's exponentiation is the field power.
 -/
 
 @[expose] public section
