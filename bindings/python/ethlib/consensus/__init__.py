@@ -49,6 +49,11 @@ def ssz_static(name: str, fork: str, type_name: str, data: bytes) -> tuple[bytes
     return _native.consensus_ssz_static(name, fork, type_name, data)
 
 
+def upgrade_operation(name: str, type_name: str, data: bytes) -> tuple[bytes, bytes]:
+    """The Gloas root and bytes of a Fulu attestation, indexed attestation or attester slashing."""
+    return _native.consensus_upgrade_operation(name, type_name, data)
+
+
 def pq_keys_ssz(type_name: str, data: bytes) -> tuple[bytes, bytes]:
     """The root of the EIP-8450 container that SSZ bytes encode, and its bytes encoded again."""
     return _native.pq_keys_ssz(type_name, data)
@@ -971,6 +976,7 @@ __all__ = [
     "get_custody_groups",
     "compute_columns_for_custody_group",
     "ssz_static",
+    "upgrade_operation",
     "pq_keys_ssz",
     "pq_keys_possession_signing_root",
     "pq_keys_is_valid_possession_proof",

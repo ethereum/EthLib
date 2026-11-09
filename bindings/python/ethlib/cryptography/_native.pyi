@@ -555,6 +555,10 @@ def consensus_merkle_proof(name: str, fork: str, type: str, data: bytes, gindex:
     """The node at a generalized index of the value that the bytes encode, and its branch, as a pair."""
     ...
 
+def consensus_upgrade_operation(name: str, type: str, data: bytes) -> tuple[bytes, bytes]:
+    """The root and the bytes of the Gloas form of a container of Fulu, as a pair."""
+    ...
+
 def consensus_verify_blob_sidecar_inclusion_proof(name: str, fork: str, data: bytes) -> bool:
     """Whether the branch of a blob sidecar, given as bytes, climbs to the body root of its header."""
     ...

@@ -119,6 +119,12 @@ theorem IndexedAttestation.upgradeToGloas_injective :
   rfl
 
 /-- The upgrade of an attester slashing to Gloas upgrades each of its two attestations. -/
+theorem AttesterSlashing.upgradeToGloas_spec (pre : AttesterSlashing preset .fusaka) :
+    pre.upgradeToGloas.attestation1 = pre.attestation1.upgradeToGloas ∧
+      pre.upgradeToGloas.attestation2 = pre.attestation2.upgradeToGloas :=
+  ⟨rfl, rfl⟩
+
+/-- Two attester slashings with one upgrade are equal, so the upgrade loses nothing. -/
 theorem AttesterSlashing.upgradeToGloas_injective :
     Function.Injective (AttesterSlashing.upgradeToGloas (preset := preset)) := by
   intro a b same

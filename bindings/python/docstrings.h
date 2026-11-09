@@ -416,6 +416,9 @@
 #define DOC_consensus_merkle_proof \
   "The node at a generalized index of the value that the bytes encode, and its branch, as a pair."
 
+#define DOC_consensus_upgrade_operation \
+  "The root and the bytes of the Gloas form of a container of Fulu, as a pair."
+
 #define DOC_consensus_verify_blob_sidecar_inclusion_proof \
   "Whether the branch of a blob sidecar, given as bytes, climbs to the body root of its header."
 
