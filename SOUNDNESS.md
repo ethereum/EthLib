@@ -1858,15 +1858,27 @@ No theorem links an honest signer to the canonical chain; that is a property of 
 ### Casper FFG
 
 Casper FFG finalizes checkpoints, each a block with an epoch, from the votes of validators.
-The model in `Consensus/Proofs/Models/Ffg/` follows Casper FFG §2 and Gasper §4.
-It fixes one validator set and one stake for each validator, for every vote.
+The model in `Consensus/Proofs/Models/Ffg/` follows Casper FFG §2 and Gasper §4 and §8.6.
+Each checkpoint has its own validator set, as each block has in Gasper §8.6, and a link counts the stake of the set of its target.
+Each validator keeps one stake for every vote, as Gasper §8.6 assumes; the model does not follow a balance as it changes.
+So a refinement from the beacon state must still fix the effective balances over its window, or bound how much they move.
+A constant validator set gives the model of Casper FFG and Gasper §4.
 
-`accountable_safety` (`AccountableSafety.lean`) takes two finalized checkpoints whose blocks conflict.
+`accountable_safety_dynamic` (`AccountableSafety.lean`) is Gasper Theorem 8.3.
+It takes two finalized checkpoints whose blocks conflict.
+Then two justified checkpoints, with epochs between those of the two finalized ones, have the following property.
+Validators of both their sets broke a slashing condition, and their stake is bounded below.
+The bound is two thirds of the stake of one set, less one third of the stake of the other, less the stake that activated into the first set or exited from the second since any reference set.
+Gasper states it with a maximum and divisions by three; the theorem states its two terms, multiplied by three, in natural numbers.
+If one of the two sets has no stake, both bounds hold with no slashable validator.
+The reader does not choose the two checkpoints, so the theorem says something only when every justified checkpoint between the two finalized epochs has a set with positive stake.
+
+`accountable_safety` (`AccountableSafety.lean`) takes one validator set for every vote, and follows from the theorem above.
 Then validators with at least one third of the stake broke a slashing condition.
 With a total stake of zero this holds for every set of votes, so the theorem says something only for positive stake.
 
-`plausible_liveness` (`PlausibleLiveness.lean`) takes honest validators with at least two thirds of the stake.
-The votes so far are finite, the total stake is positive, and no honest validator is slashable.
+`plausible_liveness` (`PlausibleLiveness.lean`) takes honest validators in every validator set, with at least two thirds of its stake.
+The votes so far are finite, the stake of each set is positive, and no honest validator is slashable.
 Each honest vote comes from a justified source.
 
 Then there is a justified checkpoint with the following property.

@@ -13,9 +13,17 @@ There, a checkpoint is an epoch boundary pair: a block with an epoch.
 
 A preorder on blocks gives the chains: `a ≤ b` means that `a` is in the chain of `b`.
 
-One validator set `V` and one stake function `w` hold for every vote, as in both papers.
+Each checkpoint `c` has its own validator set `V c`, as Gasper §8.6 gives each block its own set.
 
-A supermajority link counts only the stake of validators in `V`.
+So one epoch can have two sets on two conflicting branches.
+
+A supermajority link counts only the stake of the validators of its target checkpoint.
+
+Gasper §8.6 counts the stake of the attestation epoch of a pair, which Gasper §4.1 defines.
+
+One stake function `w` holds for every validator, as Gasper §8.6 assumes.
+
+A constant set gives the model of Casper FFG §2 and Gasper §4, with one set for all votes.
 -/
 
 @[expose] public section
@@ -87,18 +95,20 @@ The source comes before the target, in epoch and in the chain of the target.
 
 Casper FFG §2 ignores a vote that breaks this order.
 
-Validators of `V` that hold at least two thirds of its stake vote for the link. -/
-def SupermajorityLink (V : Finset ν) (w : ν → ℕ) (votes : Set (Vote ν β))
+Validators of the set of the target vote for the link.
+
+They hold at least two thirds of the stake of that set. -/
+def SupermajorityLink (V : Checkpoint β → Finset ν) (w : ν → ℕ) (votes : Set (Vote ν β))
     (s t : Checkpoint β) : Prop :=
-  s.epoch < t.epoch ∧ s.block ≤ t.block ∧ 2 * stake w V ≤ 3 * stake w (signers V votes s t)
+  s.epoch < t.epoch ∧ s.block ≤ t.block ∧ 2 * stake w (V t) ≤ 3 * stake w (signers (V t) votes s t)
 
 /-- The justified checkpoints.
 
 The genesis block at epoch 0 is justified.
 
 A supermajority link from a justified checkpoint justifies its target. -/
-inductive Justified (V : Finset ν) (w : ν → ℕ) (genesis : β) (votes : Set (Vote ν β)) :
-    Checkpoint β → Prop
+inductive Justified (V : Checkpoint β → Finset ν) (w : ν → ℕ) (genesis : β)
+    (votes : Set (Vote ν β)) : Checkpoint β → Prop
   /-- The genesis checkpoint is justified. -/
   | root : Justified V w genesis votes ⟨genesis, 0⟩
   /-- A supermajority link from a justified checkpoint justifies its target. -/
@@ -119,8 +129,8 @@ Gasper also asks that these checkpoints are epoch boundary pairs.
 The model drops that condition.
 
 It then finalizes more checkpoints, so its safety theorem is stronger. -/
-def KFinalized (V : Finset ν) (w : ν → ℕ) (genesis : β) (votes : Set (Vote ν β)) (k : ℕ)
-    (c : Checkpoint β) : Prop :=
+def KFinalized (V : Checkpoint β → Finset ν) (w : ν → ℕ) (genesis : β) (votes : Set (Vote ν β))
+    (k : ℕ) (c : Checkpoint β) : Prop :=
   ∃ b : ℕ → β, b 0 = c.block ∧ (∀ i < k, b i ≤ b (i + 1)) ∧
     (∀ i < k, Justified V w genesis votes ⟨b i, c.epoch + i⟩) ∧
     SupermajorityLink V w votes c ⟨b k, c.epoch + k⟩
@@ -128,7 +138,7 @@ def KFinalized (V : Finset ν) (w : ν → ℕ) (genesis : β) (votes : Set (Vot
 /-- The finalized checkpoints: the genesis checkpoint, and every `k`-finalized one with `k ≥ 1`.
 
 The case `k = 1` is the finalization of Casper FFG §2. -/
-def Finalized (V : Finset ν) (w : ν → ℕ) (genesis : β) (votes : Set (Vote ν β))
+def Finalized (V : Checkpoint β → Finset ν) (w : ν → ℕ) (genesis : β) (votes : Set (Vote ν β))
     (c : Checkpoint β) : Prop :=
   c = ⟨genesis, 0⟩ ∨ ∃ k, 1 ≤ k ∧ KFinalized V w genesis votes k c
 
