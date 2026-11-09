@@ -536,10 +536,45 @@ def Consistent (out : List BlobOpening) (s : State) : Prop :=
   ∀ p ∈ allPoints out s, ∀ q ∈ allPoints out s, p.bytes = q.bytes →
     validateKzgG1 p.bytes = true → p.polynomial = q.polynomial
 
-/-- Differences of representations of the same group encoding. -/
+/-- The first point of a list with the given encoding, if there is one. -/
+def firstWithBytes (points : List AlgebraicPoint) (bytes : Bytes48) : Option AlgebraicPoint :=
+  points.find? fun q => q.bytes = bytes
+
+/-- The difference of each point and the first point with its encoding.
+
+Two different representations of one valid encoding cannot both equal that first one.
+
+So one polynomial per point finds every conflict, rather than one polynomial per pair of points.
+
+The first point always exists, so the default `0` is never used. -/
 noncomputable def representationDifferences (points : List AlgebraicPoint) : List Fr[X] :=
-  points.flatMap fun p => points.flatMap fun q =>
-    if p.bytes = q.bytes then [p.polynomial - q.polynomial] else []
+  points.map fun p =>
+    (firstWithBytes points p.bytes).elim 0 fun q => p.polynomial - q.polynomial
+
+/-- Each point gives exactly one candidate. -/
+theorem length_representationDifferences (points : List AlgebraicPoint) :
+    (representationDifferences points).length = points.length :=
+  List.length_map _
+
+/-- Each candidate has degree below 4096 in the setup secret. -/
+theorem natDegree_lt_of_mem_representationDifferences {points : List AlgebraicPoint}
+    {d : Fr[X]} (hd : d ∈ representationDifferences points) :
+    d.natDegree < FIELD_ELEMENTS_PER_BLOB := by
+  obtain ⟨p, -, rfl⟩ := List.mem_map.mp hd
+  cases firstWithBytes points p.bytes with
+  | none => simpa using (by decide : 0 < FIELD_ELEMENTS_PER_BLOB)
+  | some q => exact natDegree_polynomialDifference_lt _ _ p.degree_lt q.degree_lt
+
+/-- A point of the list has a first point with its encoding, also in the list. -/
+theorem exists_firstWithBytes {points : List AlgebraicPoint} {p : AlgebraicPoint}
+    (hp : p ∈ points) :
+    ∃ f ∈ points, firstWithBytes points p.bytes = some f ∧ f.bytes = p.bytes := by
+  unfold firstWithBytes
+  cases h : points.find? (fun q => decide (q.bytes = p.bytes)) with
+  | none =>
+    have := List.find?_eq_none.mp h p hp
+    simp at this
+  | some f => exact ⟨f, List.mem_of_find?_eq_some h, rfl, by simpa using List.find?_some h⟩
 
 /-- Algebraicity applies to every representation in the combined transcript. -/
 theorem algebraic_allPoints {τ : Fr} {out : List BlobOpening} {s : State}
@@ -550,13 +585,11 @@ theorem algebraic_allPoints {τ : Fr} {out : List BlobOpening} {s : State}
     exact h.1 reply hr point hp
   · exact h.2 point hp
 
-/-- Two representations of the same encoding contribute their difference to the search. -/
-theorem representationDifference_mem {points : List AlgebraicPoint} {p q : AlgebraicPoint}
-    (hp : p ∈ points) (hq : q ∈ points) (heq : p.bytes = q.bytes) :
-    p.polynomial - q.polynomial ∈ representationDifferences points := by
-  apply List.mem_flatMap.mpr
-  refine ⟨p, hp, List.mem_flatMap.mpr ⟨q, hq, ?_⟩⟩
-  simp [heq]
+/-- A point contributes its difference from the first point with its encoding. -/
+theorem sub_mem_representationDifferences {points : List AlgebraicPoint} {p f : AlgebraicPoint}
+    (hp : p ∈ points) (hf : firstWithBytes points p.bytes = some f) :
+    p.polynomial - f.polynomial ∈ representationDifferences points :=
+  List.mem_map.mpr ⟨p, hp, by rw [hf, Option.elim_some]⟩
 
 /-- Different valid representations of one encoding give a nonzero polynomial rooted at `τ`. -/
 theorem root_of_not_consistent {τ : Fr} {out : List BlobOpening} {s : State}
@@ -566,11 +599,23 @@ theorem root_of_not_consistent {τ : Fr} {out : List BlobOpening} {s : State}
   unfold Consistent at hc
   push Not at hc
   obtain ⟨p, hp, q, hq, hbytes, hvalid, hne⟩ := hc
+  -- Both points differ from the first point with their encoding, which represents the same scalar.
+  obtain ⟨f, hf, hfirst, hfb⟩ := exists_firstWithBytes hp
+  have hfirst' : firstWithBytes (allPoints out s) q.bytes = some f := by
+    rw [← hbytes]
+    exact hfirst
   obtain ⟨P, hP⟩ := exists_validateKzgG1Point_of_validateKzgG1 hvalid
   have hQ : validateKzgG1Point q.bytes = .ok P := by rw [← hbytes]; exact hP
-  have hscalar := (algebraic_allPoints ha p hp P hP).unique
-    (algebraic_allPoints ha q hq P hQ)
-  refine ⟨_, representationDifference_mem hp hq hbytes, sub_ne_zero.mpr hne, ?_⟩
-  simpa only [eval_sub, sub_eq_zero] using hscalar
+  have hF : validateKzgG1Point f.bytes = .ok P := by rw [hfb]; exact hP
+  have hpf := (algebraic_allPoints ha p hp P hP).unique (algebraic_allPoints ha f hf P hF)
+  have hqf := (algebraic_allPoints ha q hq P hQ).unique (algebraic_allPoints ha f hf P hF)
+  -- If `p` agrees with the first point, then `q` does not.
+  by_cases h0 : p.polynomial - f.polynomial = 0
+  · refine ⟨_, sub_mem_representationDifferences hq hfirst', fun h => hne ?_, ?_⟩
+    · rw [sub_eq_zero] at h0 h
+      rw [h0, h]
+    · simpa only [eval_sub, sub_eq_zero] using hqf
+  · exact ⟨_, sub_mem_representationDifferences hp hfirst, h0,
+      by simpa only [eval_sub, sub_eq_zero] using hpf⟩
 
 end EthLib.Cryptography.Kzg.BlobBinding

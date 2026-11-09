@@ -20,6 +20,7 @@ Its input contains the public setup powers, never the secret.
 namespace EthLib.Cryptography.Kzg.BlobBinding
 
 open EthLib.Cryptography.Bls (Fr)
+open EthLib.Cryptography.Kzg.Constants
 open OracleComp OracleSpec ENNReal Polynomial
 open scoped EthLib.Cryptography.Bls.Fr
 
@@ -39,6 +40,36 @@ noncomputable def candidatePolynomials (result : Outcome) : List Fr[X] :=
   representationDifferences (allPoints result.1.1 result.2) ++ match result.1.2 with
     | none => []
     | some (openings, r) => [batchErrorAt openings r]
+
+/-- The search has one candidate per supplied point, plus the final batch error. -/
+theorem length_candidatePolynomials_le (result : Outcome) :
+    (candidatePolynomials result).length ≤ (allPoints result.1.1 result.2).length + 1 := by
+  unfold candidatePolynomials
+  rw [List.length_append, length_representationDifferences]
+  refine Nat.add_le_add_left ?_ _
+  split <;> simp
+
+/-- Each candidate has degree at most 4096 in the setup secret. -/
+theorem natDegree_le_of_mem_candidatePolynomials {result : Outcome} {p : Fr[X]}
+    (hp : p ∈ candidatePolynomials result) : p.natDegree ≤ FIELD_ELEMENTS_PER_BLOB := by
+  unfold candidatePolynomials at hp
+  rcases List.mem_append.mp hp with hp | hp
+  · exact (natDegree_lt_of_mem_representationDifferences hp).le
+  · split at hp
+    · simp at hp
+    · rw [List.mem_singleton.mp hp]
+      exact natDegree_batchErrorAt_le _ _
+
+/-- The search tests at most 4096 roots per supplied point, and 4096 more for the batch error. -/
+theorem length_setupSecretCandidates_le_points (result : Outcome) :
+    (setupSecretCandidates (candidatePolynomials result)).length ≤
+      ((allPoints result.1.1 result.2).length + 1) * FIELD_ELEMENTS_PER_BLOB := by
+  refine (length_setupSecretCandidates_le _).trans ?_
+  refine (List.sum_le_length_nsmul _ FIELD_ELEMENTS_PER_BLOB fun d hd => ?_).trans ?_
+  · obtain ⟨p, hp, rfl⟩ := List.mem_map.mp hd
+    exact natDegree_le_of_mem_candidatePolynomials hp
+  · rw [List.length_map, smul_eq_mul]
+    exact Nat.mul_le_mul_right _ (length_candidatePolynomials_le result)
 
 /-- Every representation difference is a candidate for extraction. -/
 theorem mem_candidatePolynomials_of_mem_representationDifferences {result : Outcome} {p : Fr[X]}

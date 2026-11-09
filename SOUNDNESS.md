@@ -690,6 +690,7 @@ Here `r` is the order of `Fr`.
 The reduction runs the same experiment once and recovers `τ` from roots of representation differences or the final batch error.
 The secret-recovery term is defined on the full setup powers.
 Root search is noncomputable in the model; no theorem proves the reduction's running time.
+`length_setupSecretCandidates_le_points` (`Proofs/Kzg/BlobBindingReduction.lean`) bounds the roots that the search tests by 4096 for each annotated point, plus 4096 for the final batch error.
 No theorem relates the secret-recovery term to the discrete logarithm or the strong Diffie–Hellman problem.
 `verifyBlobKzgProofBatch_ok_iff_symbolic` (`Proofs/Kzg/BlobBindingVerifier.lean`) connects the game's scalar acceptance equation to the concrete verifier at its concrete challenges.
 
