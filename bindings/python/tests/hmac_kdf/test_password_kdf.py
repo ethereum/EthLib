@@ -9,6 +9,8 @@ from ethlib.cryptography.kdf import pbkdf2, salsa208, scrypt, scrypt_block_mix, 
 from ethlib.errors import Pbkdf2Error, ScryptError
 from raising import raises
 
+SLOW = os.environ.get("ETHLIB_SLOW_VECTORS") == "1"
+
 # RFC 7914, C. Percival and S. Josefsson, August 2016: extracted test vectors begin.
 # Copyright (c) 2016 IETF Trust and the persons identified as authors of the code.
 # All rights reserved.
@@ -118,8 +120,7 @@ SCRYPT_VECTORS = [
         "2101cb9b6a511aaeaddbbe09cf70f881ec568d574a2ffd4dabe5ee9820adaa47"
         "8e56fd8f4ba5d09ffa1c6d927c40f4c337304049e8a952fbcbf45c6fa77a41a4",
         marks=pytest.mark.skipif(
-            os.environ.get("ETHLIB_SLOW_VECTORS") != "1",
-            reason="a 1 GiB table, run weekly with ETHLIB_SLOW_VECTORS=1",
+            not SLOW, reason="a 1 GiB table, run weekly with ETHLIB_SLOW_VECTORS=1"
         ),
     ),
 ]
@@ -176,12 +177,10 @@ def test_scrypt_largest_cost_for_r_1() -> None:
     )
 
 
-@pytest.mark.skipif(
-    os.environ.get("ETHLIB_SLOW_VECTORS") != "1",
-    reason="a 256 MiB table, run weekly with ETHLIB_SLOW_VECTORS=1",
-)
+@pytest.mark.skipif(not SLOW, reason="a 256 MiB table, run weekly with ETHLIB_SLOW_VECTORS=1")
 def test_scrypt_keystore_cost() -> None:
-    # These are the usual scrypt parameters of an Ethereum keystore file.
+    # These are the scrypt parameters of the keystore example of EIP-2335.
+    # https://eips.ethereum.org/EIPS/eip-2335
     password, salt = b"password", b"salt"
     assert scrypt(password, salt, 2**18, 8, 1, 32) == hashlib.scrypt(
         password, salt=salt, n=2**18, r=8, p=1, dklen=32, maxmem=512 * 1024 * 1024
@@ -277,3 +276,9 @@ def test_rejects_integer_overflow(value: int, message: str) -> None:
         pbkdf2(b"password", b"salt", 1, value)
     with raises(OverflowError, message):
         scrypt(b"password", b"salt", value, 1, 1, 32)
+    with raises(OverflowError, message):
+        scrypt_block_mix(BLOCK_INPUT, value)
+    with raises(OverflowError, message):
+        scrypt_romix(BLOCK_INPUT, value, 1)
+    with raises(OverflowError, message):
+        scrypt_romix(BLOCK_INPUT, 16, value)

@@ -16,7 +16,9 @@ Passwords are secret, and EthLib makes no constant-time claim (SOUNDNESS.md A3).
 
 ROMix reads its table at indices that depend on the password.
 
-Parameters within the bounds can still ask for more memory than the machine has.
+Parameters within the bounds can still ask for more memory or time than a machine has.
+
+SOUNDNESS.md D1 says what a caller must bound.
 
 [scrypt]: https://www.rfc-editor.org/rfc/rfc7914#section-3
 [params]: https://www.rfc-editor.org/rfc/rfc7914#section-2
@@ -268,7 +270,9 @@ def romixCore (r : Nat) (positive : 0 < r) (n : Nat) (nonzero : 0 < n)
 def validCost (n r : Nat) : Bool :=
   1 < n && n &&& (n - 1) == 0 && n.log2 < 16 * r
 
-/-- ROMix on `128 * r` bytes with a valid power-of-two cost, RFC 7914 §5. -/
+/-- ROMix on `128 * r` bytes with a valid power-of-two cost, RFC 7914 §5.
+
+Its table has a payload of `128 * r * N` bytes, so a caller must bound `r * N` first. -/
 def romix (input : ByteArray) (n r : Nat) : Except ScryptError ByteArray :=
   if positive : 0 < r then
     if cost : validCost n r then
@@ -287,7 +291,11 @@ def mixBlocks (input : ByteArray) (n r : Nat) :
     let mixed ← romix (input.extract offset (offset + 128 * r)) n r
     mixBlocks input n r count (offset + 128 * r) (out ++ mixed)
 
-/-- Expand, mix and compress the password, RFC 7914 §6, with the output length in bytes. -/
+/-- Expand, mix and compress the password, RFC 7914 §6, with the output length in bytes.
+
+It holds `128 * r * N` bytes of table and `128 * r * p` bytes per buffer.
+
+So a caller must bound `r * N` and `r * p` first, as a keystore gives them. -/
 def scrypt (password salt : ByteArray) (n r p length : Nat) : Except ScryptError ByteArray := do
   if r = 0 then throw (.invalidBlockSize r)
   if !validCost n r then throw (.invalidCost n)

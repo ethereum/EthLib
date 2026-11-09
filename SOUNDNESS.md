@@ -1944,11 +1944,15 @@ Never sign more than `2^30` messages with one secret key.
 Nothing in EthLib counts signatures, so the caller must.
 The Lean and Python docstrings of `sign` both say so.
 
-scrypt adds a bound on memory.
-Its table holds `128 * r * N` bytes, and parameters within the bounds of RFC 7914 can ask for more memory than any machine has.
-For example, `N = 2^40` and `r = 8` pass the check on the cost and ask for `2^50` bytes, one pebibyte.
-The Lean runtime then aborts the process instead of returning an error.
-A keystore file gives `N`, `r` and `p`, so a caller that reads one must bound them before it calls scrypt.
+Password derivations add bounds on memory and time.
+The ROMix table of scrypt has a payload of `128 * r * N` bytes, and the expanded password and the mixed blocks take `128 * r * p` bytes each.
+Parameters within the bounds of RFC 7914 can ask for more memory than any machine has.
+For example, `N = 2^40` and `r = 8` pass the check on the cost and ask for a table of `2^50` bytes, one pebibyte.
+Likewise, `r = 1` and `p = 2^30 - 1` pass the check on `p` and ask for about 128 GiB per buffer.
+No error is returned then: the Lean runtime aborts the process, or the operating system kills it.
+The work grows with `N * r * p` for scrypt and with the iteration count `c` for PBKDF2, so a hostile parameter can also make a call run for an impractical time.
+A keystore file gives `N`, `r` and `p`, or `c`, so a caller that reads one must bound `r * N`, `r * p` and `c` before it calls the derivation.
+The Lean docstrings of `scrypt` and `romix` say so.
 
 ### D2. Dependencies
 

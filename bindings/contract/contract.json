@@ -1288,7 +1288,7 @@
       {"constructor": "pbkdf2", "code": 7}]}],
    "error_class": "ScryptError",
    "docstring":
-   "ROMix on `128 * r` bytes with a valid power-of-two cost, RFC 7914 §5."},
+   "ROMix on `128 * r` bytes with a valid power-of-two cost, RFC 7914 §5.\n\nIts table has a payload of `128 * r * N` bytes, so a caller must bound `r * N` first."},
   {"summary":
    "Expand, mix and compress the password, RFC 7914 §6, with the output length in bytes.",
    "signature":
@@ -1307,7 +1307,7 @@
       {"constructor": "pbkdf2", "code": 7}]}],
    "error_class": "ScryptError",
    "docstring":
-   "Expand, mix and compress the password, RFC 7914 §6, with the output length in bytes."},
+   "Expand, mix and compress the password, RFC 7914 §6, with the output length in bytes.\n\nIt holds `128 * r * N` bytes of table and `128 * r * p` bytes per buffer.\n\nSo a caller must bound `r * N` and `r * p` first, as a keystore gives them."},
   {"summary":
    "Whether `(r, s)` is a valid signature on `hash` under the public key `q`, by SEC 1 v2 §4.1.4.",
    "signature":

@@ -58,7 +58,9 @@ def iterate (password : ByteArray) : Nat → Vector UInt8 32 → Vector UInt8 32
     let next := prf password ⟨previous.toArray⟩
     iterate password count next (Base.xorBytes acc next)
 
-/-- Block `F(P, S, c, i)`, with the four-byte big-endian index of RFC 8018 §5.2, step 3. -/
+/-- Block `F(P, S, c, i)`, with the four-byte big-endian index of RFC 8018 §5.2, step 3.
+
+A derivation has a positive iteration count, and zero iterations give the block of one. -/
 def block (password salt : ByteArray) (iterations : Nat) (index : UInt32) : Vector UInt8 32 :=
   let first := prf password (salt ++ Base.natToBytes4 index.toNat)
   iterate password (iterations - 1) first first

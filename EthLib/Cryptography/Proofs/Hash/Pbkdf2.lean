@@ -33,7 +33,7 @@ The key is then the first `dkLen` bytes of the blocks.
 -/
 theorem pbkdf2_eq_ok_iff {password salt key : ByteArray} {iterations length : Nat} :
     pbkdf2 password salt iterations length = .ok key ↔
-      (iterations ≠ 0 ∧ length ≠ 0 ∧ length ≤ MAX_LENGTH ∧ password.size < 2 ^ 61 ∧
+      (0 < iterations ∧ 0 < length ∧ length ≤ MAX_LENGTH ∧ password.size < 2 ^ 61 ∧
         64 + salt.size + 4 < 2 ^ 61) ∧
       key = (blocks password salt iterations ((length + HASH_LEN - 1) / HASH_LEN) 1
         ByteArray.empty).extract 0 length := by
@@ -51,14 +51,14 @@ theorem pbkdf2_eq_ok_iff {password salt key : ByteArray} {iterations length : Na
   simp only [zero, empty, long, input, ite_false, Except.ok.injEq]
   constructor
   · rintro rfl
-    exact ⟨⟨zero, empty, by omega, by omega, by omega⟩, rfl⟩
+    exact ⟨⟨by omega, by omega, by omega, by omega, by omega⟩, rfl⟩
   · rintro ⟨-, rfl⟩
     rfl
 
 /-- The derivation succeeds exactly when the parameters and the input sizes are within bounds. -/
 theorem pbkdf2_ok_iff {password salt : ByteArray} {iterations length : Nat} :
     (∃ key, pbkdf2 password salt iterations length = .ok key) ↔
-      iterations ≠ 0 ∧ length ≠ 0 ∧ length ≤ MAX_LENGTH ∧ password.size < 2 ^ 61 ∧
+      0 < iterations ∧ 0 < length ∧ length ≤ MAX_LENGTH ∧ password.size < 2 ^ 61 ∧
         64 + salt.size + 4 < 2 ^ 61 := by
   simp only [pbkdf2_eq_ok_iff, exists_and_left, exists_eq, and_true]
 

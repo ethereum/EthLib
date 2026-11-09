@@ -8,7 +8,9 @@ public import EthLib.Cryptography.Proofs.Hash.Pbkdf2
 
 Each step and the derivation succeed exactly for the parameters and block sizes of RFC 7914.
 
-So the inner ROMix calls of a derivation never fail.
+The derivation also needs a password and a salt that SHA-256 admits.
+
+So within these bounds, the inner ROMix calls of a derivation succeed.
 
 The steps preserve their block sizes, and a derivation returns the requested key length.
 -/
@@ -151,12 +153,12 @@ theorem scrypt_ok_iff {password salt : ByteArray} {n r p length : Nat} :
     -- The expanded password holds `p` blocks of `128 * r` bytes.
     have order : p * 128 * r = 128 * r * p := by
       rw [Nat.mul_comm p 128, Nat.mul_assoc, Nat.mul_comm p r, Nat.mul_assoc]
-    have nonzero : p * 128 * r ≠ 0 := Nat.ne_of_gt (Nat.mul_pos (Nat.mul_pos hp (by decide)) hr)
-    obtain ⟨expanded, h1⟩ := Pbkdf2.pbkdf2_ok_iff.mpr ⟨Nat.one_ne_zero, nonzero, hpm, hpw, hs⟩
+    have expandedPos : 0 < p * 128 * r := Nat.mul_pos (Nat.mul_pos hp (by decide)) hr
+    obtain ⟨expanded, h1⟩ := Pbkdf2.pbkdf2_ok_iff.mpr ⟨Nat.one_pos, expandedPos, hpm, hpw, hs⟩
     obtain ⟨mixed, h2, hsize⟩ := mixBlocks_ok hr hc p 0 ByteArray.empty (by
       rw [Pbkdf2.pbkdf2_size h1, order]
       omega)
-    obtain ⟨key, h3⟩ := Pbkdf2.pbkdf2_ok_iff.mpr ⟨Nat.one_ne_zero, by omega, hL, hpw, by
+    obtain ⟨key, h3⟩ := Pbkdf2.pbkdf2_ok_iff.mpr ⟨Nat.one_pos, hl, hL, hpw, by
       rw [hsize, ByteArray.size_empty, ← order]
       simp only [Pbkdf2.MAX_LENGTH, Pbkdf2.HASH_LEN] at hpm
       omega⟩
