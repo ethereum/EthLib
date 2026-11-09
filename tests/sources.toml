@@ -80,6 +80,9 @@ directories = ["bindings/python/tests/state/dao"]
 commit = "be307c948f28897adb8f25afcc253c2c909de35d"
 directories = ["tests/cryptography/keystore"]
 
+[repositories."rweather/noise-c"]
+commit = "cfe25410979a87391bb9ac8d4d4bef64e9f268c6"
+
 [repositories."ethereum/tests"]
 commit = "c67e485ff8b5be9abc8ad15345ec21aa22e290d9"
 directories = [

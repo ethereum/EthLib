@@ -383,6 +383,54 @@ def enr_from_text(text: str) -> bytes:
     """The record of a text form."""
     ...
 
+def noise_initialize(initiator: bool, static_key: bytes, ephemeral_key: bytes, prologue: bytes) -> tuple:
+    """Initialize the raw XX state with explicit private keys and prologue, Noise §5.3."""
+    ...
+
+def noise_write_message(state: tuple, payload: bytes) -> tuple[tuple, bytes]:
+    """Write the next raw XX message and return the updated state, Noise §5.3."""
+    ...
+
+def noise_read_message(state: tuple, message: bytes) -> tuple[tuple, bytes]:
+    """Read the next raw XX message and return its payload and updated state, Noise §5.3."""
+    ...
+
+def noise_transport(state: tuple) -> tuple:
+    """Split a completed raw XX state into send and receive ciphers and its hash, Noise §5.3."""
+    ...
+
+def noise_cipher_encrypt(state: tuple, aad: bytes, plaintext: bytes) -> tuple[tuple, bytes]:
+    """Encrypt with a cipher state and associated data, returning its next state, Noise §5.1."""
+    ...
+
+def noise_cipher_decrypt(state: tuple, aad: bytes, ciphertext: bytes) -> tuple[tuple, bytes]:
+    """Authenticate and decrypt, advancing the nonce only on success, Noise §5.1."""
+    ...
+
+def noise_frame(message: bytes) -> bytes:
+    """Prefix the 16-bit big-endian message length, noise-libp2p "Wire Format"."""
+    ...
+
+def noise_unframe(frame: bytes) -> bytes:
+    """Read exactly one complete 16-bit frame, noise-libp2p "Wire Format"."""
+    ...
+
+def noise_libp2p_initialize(initiator: bool, static_key: bytes, ephemeral_key: bytes) -> tuple:
+    """Initialize libp2p XX with its empty prologue and explicit X25519 private keys."""
+    ...
+
+def noise_libp2p_write(state: tuple, identity_secret: bytes, extensions: bytes | None) -> tuple[tuple, bytes]:
+    """Write the next libp2p message with a signed identity payload, hiding remote extensions."""
+    ...
+
+def noise_libp2p_read(state: tuple, message: bytes) -> tuple:
+    """Read the next libp2p message, authenticating its actual remote static key."""
+    ...
+
+def noise_libp2p_complete(state: tuple) -> tuple:
+    """Return the authenticated peer and transport keys only after completion."""
+    ...
+
 def enr_seq(record: bytes) -> int:
     """The sequence number of a record."""
     ...

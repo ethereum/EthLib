@@ -70,6 +70,7 @@ PyObject* SPHINCS_ERROR;
 PyObject* SECP256K1_ERROR;
 PyObject* SECP256R1_ERROR;
 PyObject* ENR_ERROR;
+PyObject* NOISE_ERROR;
 PyObject* PRECOMPILE_ERROR;
 PyObject* STATE_ERROR;
 PyObject* KECCAK_ERROR;
@@ -729,6 +730,18 @@ static PyMethodDef methods[] = {
   {"secp256k1_address", py_secp256k1_address, METH_VARARGS, DOC_secp256k1_address},
   {"secp256r1_verify", py_secp256r1_verify, METH_VARARGS, DOC_secp256r1_verify},
   {"enr_from_text", py_enr_from_text, METH_VARARGS, DOC_enr_from_text},
+  {"noise_initialize", py_noise_initialize, METH_VARARGS, DOC_noise_initialize},
+  {"noise_write_message", py_noise_write_message, METH_VARARGS, DOC_noise_write_message},
+  {"noise_read_message", py_noise_read_message, METH_VARARGS, DOC_noise_read_message},
+  {"noise_transport", py_noise_transport, METH_VARARGS, DOC_noise_transport},
+  {"noise_cipher_encrypt", py_noise_cipher_encrypt, METH_VARARGS, DOC_noise_cipher_encrypt},
+  {"noise_cipher_decrypt", py_noise_cipher_decrypt, METH_VARARGS, DOC_noise_cipher_decrypt},
+  {"noise_frame", py_noise_frame, METH_VARARGS, DOC_noise_frame},
+  {"noise_unframe", py_noise_unframe, METH_VARARGS, DOC_noise_unframe},
+  {"noise_libp2p_initialize", py_noise_libp2p_initialize, METH_VARARGS, DOC_noise_libp2p_initialize},
+  {"noise_libp2p_write", py_noise_libp2p_write, METH_VARARGS, DOC_noise_libp2p_write},
+  {"noise_libp2p_read", py_noise_libp2p_read, METH_VARARGS, DOC_noise_libp2p_read},
+  {"noise_libp2p_complete", py_noise_libp2p_complete, METH_VARARGS, DOC_noise_libp2p_complete},
   {"enr_seq", py_enr_seq, METH_VARARGS, DOC_enr_seq},
   {"enr_verify_v4", py_enr_verify_v4, METH_VARARGS, DOC_enr_verify_v4},
   {"enr_node_id", py_enr_node_id, METH_VARARGS, DOC_enr_node_id},
@@ -1095,6 +1108,7 @@ PyInit__native(void) {
     SECP256K1_ERROR = PyObject_GetAttrString(errors, "Secp256k1Error");
     SECP256R1_ERROR = PyObject_GetAttrString(errors, "Secp256r1Error");
     ENR_ERROR = PyObject_GetAttrString(errors, "EnrError");
+    NOISE_ERROR = PyObject_GetAttrString(errors, "NoiseError");
     PRECOMPILE_ERROR = PyObject_GetAttrString(errors, "PrecompileError");
     STATE_ERROR = PyObject_GetAttrString(errors, "StateError");
     KECCAK_ERROR = PyObject_GetAttrString(errors, "KeccakError");

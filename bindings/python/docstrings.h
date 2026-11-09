@@ -287,6 +287,42 @@
 #define DOC_enr_from_text \
   "The record of a text form."
 
+#define DOC_noise_initialize \
+  "Initialize the raw XX state with explicit private keys and prologue, Noise §5.3."
+
+#define DOC_noise_write_message \
+  "Write the next raw XX message and return the updated state, Noise §5.3."
+
+#define DOC_noise_read_message \
+  "Read the next raw XX message and return its payload and updated state, Noise §5.3."
+
+#define DOC_noise_transport \
+  "Split a completed raw XX state into send and receive ciphers and its hash, Noise §5.3."
+
+#define DOC_noise_cipher_encrypt \
+  "Encrypt with a cipher state and associated data, returning its next state, Noise §5.1."
+
+#define DOC_noise_cipher_decrypt \
+  "Authenticate and decrypt, advancing the nonce only on success, Noise §5.1."
+
+#define DOC_noise_frame \
+  "Prefix the 16-bit big-endian message length, noise-libp2p \"Wire Format\"."
+
+#define DOC_noise_unframe \
+  "Read exactly one complete 16-bit frame, noise-libp2p \"Wire Format\"."
+
+#define DOC_noise_libp2p_initialize \
+  "Initialize libp2p XX with its empty prologue and explicit X25519 private keys."
+
+#define DOC_noise_libp2p_write \
+  "Write the next libp2p message with a signed identity payload, hiding remote extensions."
+
+#define DOC_noise_libp2p_read \
+  "Read the next libp2p message, authenticating its actual remote static key."
+
+#define DOC_noise_libp2p_complete \
+  "Return the authenticated peer and transport keys only after completion."
+
 #define DOC_enr_seq \
   "The sequence number of a record."
 

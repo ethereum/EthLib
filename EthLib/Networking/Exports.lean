@@ -5,6 +5,7 @@ public import EthLib.Networking.Exports.Discv4
 public import EthLib.Networking.Exports.Discv5
 public import EthLib.Networking.Exports.ForkId
 public import EthLib.Networking.Exports.Enr
+public import EthLib.Networking.Exports.Noise
 public import EthLib.Networking.Exports.Gossip
 public import EthLib.Networking.Exports.ReqResp
 public import EthLib.Networking.Exports.Rlpx
