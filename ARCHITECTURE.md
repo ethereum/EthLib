@@ -217,6 +217,28 @@ Muir Glacier, Arrow Glacier and Gray Glacier only delay the difficulty bomb.
 Bellatrix and Paris, the two halves of the Merge, are two forks, because Bellatrix activated on 6 September 2022 and Paris on 15 September.
 A rule that none of these forks changed never mentions them.
 
+A drafted change is not yet a point on the timeline.
+The consensus specifications keep such drafts as features, most of them built on a named fork with a placeholder fork version.
+For example, the draft of EIP-8321 starts from a Heze state, but "Heze with EIP-8321" is neither Heze nor the fork after it.
+So one rule, for both layers, says when a change becomes work in EthLib: when a fork of the specifications includes it, and not before.
+On the consensus layer, that is when its document leaves the feature drafts (`specs/_features` in consensus-specs) for a fork directory such as `specs/heze`.
+On the execution layer, the default branch of execution-specs holds the next fork, and an EIP enters when it merges there.
+The first merge creates the fork's tests directory, such as `tests/bogota`, and a `tests@` release that holds this directory marks the same event.
+`scripts/check_spec_releases.py` reports both signals for the first EIP of a fork, and a reviewer checks the later merges.
+Until then, a draft gets no fork branch in any rule.
+
+The rule governs changes, not forks.
+A fork such as Hegotá keeps its constructor of `Fork` once some of its changes have entered.
+The rules that wait for its other changes reject it as not yet specified.
+The parity catalogue lists the Bogota cases of each pinned devnet, but none of them runs.
+Each waits, with its plan, for a merge into the Bogota fork branch or a release of Bogota.
+
+A component that no fork uses yet, such as a new state tree, can still be specified on its own, outside `Fork`.
+Its EIP must first be stable enough to cite.
+For example, the binary tree of EIP-7864 could be specified with its root and its proofs, but no block rule would use it.
+It joins the timeline by the same rule, when a fork includes it.
+The Scope section lists what EthLib covers in the end, not the order of the work.
+
 ### A rule takes the fork
 
 A rule that no fork changes, such as SHA-256 or the RLP encoding, takes no fork.
