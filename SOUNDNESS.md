@@ -73,7 +73,7 @@ The binding of the batch check of KZG openings reduces to the same problem, or t
 The binding of the batch check of KZG cells reduces to the bilinear variant of that problem, or to such a root.
 That reduction holds in a model of the target group of the pairing.
 
-No theorem states binding for the batch check of blobs.
+The binding of blob batches has a probability bound in the algebraic random oracle model, with a term for recovery of the setup secret.
 No theorem covers the code that runs, the C boundary, or timing.
 
 ### XMSS
@@ -631,10 +631,17 @@ The cases can overlap.
 They carry meaning only when an algebraic adversary outputs `f` and `g` over the setup's points, without `τ`.
 This reading is the algebraic group model, an assumption.
 For other choices, such as the constants that the points represent, the third case only restates the check.
-The second case is unlikely if the challenge hash is modelled as a random oracle.
-The third is unlikely if the discrete logarithm problem with the setup's powers of `τ` is hard.
-Both are assumptions, and no theorem here proves either bound.
-It is not computational binding: no theorem bounds the cost of finding such polynomials without the secret.
+
+`blobBindingAdvantage_le` (`Proofs/Kzg/BlobBindingAdvantage.lean`) bounds an accepted blob batch that contains a commitment different from its blob's computed commitment.
+The game samples the setup secret uniformly in `Fr` and gives the algebraic adversary only the public setup powers.
+The adversary supplies polynomial representations for the group encodings in its queries and output.
+The game rejects final batches above `n` blobs.
+With at most `qBlob` individual challenge queries and `qBatch` batch challenge queries by the adversary, the bound is `(qBlob + n) 4095 / r + (qBatch + 1) (n - 1) / r` plus the success probability of `setupSecretReduction`.
+The reduction runs the same experiment once and recovers `τ` from roots of representation differences or the final batch error.
+The secret-recovery term is defined on the full setup powers.
+Root search is noncomputable in the model; no theorem proves the reduction's running time.
+`verifyBlobKzgProofBatch_ok_iff_symbolic` (`Proofs/Kzg/BlobBindingVerifier.lean`) connects the game's scalar acceptance equation to the concrete verifier at its concrete challenges.
+
 `verifyKzgProofBatch_ok_iff_root` (`Proofs/Kzg/BatchBinding.lean`) states when the batch check of openings accepts, as an equivalence.
 Let opening `i` have commitment `c_i`, value `y_i`, point `z_i` and proof `w_i`.
 For a well-formed setup, its verdict is true exactly when its challenge `r` is a root of `P(X) = sum_i X^i (c_i - y_i - w_i (τ - z_i))`.
@@ -1981,6 +1988,8 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
   The encoding is injective on the batches that the checks accept: their arrays have matching lengths, and each cell has 64 values.
   In `prEvent_batchErrorPoly_root_le`, `prEvent_cellErrorPoly_root_le`, `prEvent_cellInput_root_le` and `prEvent_blobInput_root_le`, the adversary queries that oracle at most `q` times.
   In `prEvent_blobInput_root_le`, the evaluation challenges `computeChallenge` are a fixed function of the blobs and commitments, not part of the oracle.
+  `blobBindingAdvantage_le` instead models both individual and batch challenges with one shared cache and uniform answers in `Fr`.
+  Its typed keys erase polynomial annotations and separate the two hash domains; the probability theorem idealizes the byte encodings as well as the hash distribution.
   Their hash input starts with a different 16-byte domain tag from that of the batch challenge, so the two hashes never read the same bytes.
   So the bound `(q + 1) (n - 1) / r` covers grinding, where the adversary hashes many batches and keeps one whose challenge is a root.
   The theorems say nothing about an attack that uses the structure of SHA-256.
