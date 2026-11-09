@@ -173,6 +173,7 @@ extern PyObject* TRIE_ERROR;
 extern PyObject* EVM_ERROR;
 extern PyObject* FEES_ERROR;
 extern PyObject* ENGINE_ERROR;
+extern PyObject* JWT_ERROR;
 extern PyObject* TRANSITION_ERROR;
 extern PyObject* LIGHT_CLIENT_ERROR;
 extern PyObject* FORK_CHOICE_ERROR;
@@ -552,6 +553,8 @@ PyObject* py_hoodi_active_fork                            (PyObject* self, PyObj
 PyObject* py_active_fork                                  (PyObject* self, PyObject* args);
 
 PyObject* py_engine_new_payload                          (PyObject* self, PyObject* args);
+PyObject* py_engine_jwt_build                            (PyObject* self, PyObject* args);
+PyObject* py_engine_jwt_check                            (PyObject* self, PyObject* args);
 PyObject* py_engine_new_payload_on_chain                 (PyObject* self, PyObject* args);
 PyObject* py_engine_forkchoice_updated                   (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload            (PyObject* self, PyObject* args);

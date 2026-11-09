@@ -7,8 +7,18 @@ from typing import Any
 # That module lives in the `cryptography` package.
 from ethlib.consensus import ForkChoiceStep
 from ethlib.cryptography import _native
-from ethlib.errors import EngineError, ProposerError
+from ethlib.errors import EngineError, JwtError, ProposerError
 from ethlib.execution.blocks import RecentBlock
+
+
+def jwt_build(secret: bytes, issued_at: int) -> str:
+    """Build an HS256 Engine token from a 32-byte secret and an issued-at time in seconds."""
+    return _native.engine_jwt_build(secret, issued_at)
+
+
+def jwt_check(secret: bytes, token: str, clock: int) -> bool:
+    """Accept an HS256 Engine token only within 60 seconds of its issued-at time."""
+    return _native.engine_jwt_check(secret, token, clock)
 
 
 def new_payload(config: dict, method: str, params: list) -> dict:
@@ -96,11 +106,14 @@ def prepare_execution_payload_gloas(
 
 
 __all__ = [
+    "jwt_build",
+    "jwt_check",
     "new_payload",
     "new_payload_on_chain",
     "forkchoice_updated",
     "prepare_execution_payload",
     "prepare_execution_payload_gloas",
     "EngineError",
+    "JwtError",
     "ProposerError",
 ]

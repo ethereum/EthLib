@@ -1099,6 +1099,11 @@ def bindings : List Binding := [
   ⟨"engine_new_payload", `EthLib.Engine.Exports.newPayloadExport,
     "(config: dict, request: dict) -> dict",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
+  ⟨"engine_jwt_build", `EthLib.Engine.Exports.jwtBuildExport,
+    "(secret: bytes, issued_at: int) -> str",
+    [`EthLib.Engine.Jwt.JwtError], some "JwtError"⟩,
+  ⟨"engine_jwt_check", `EthLib.Engine.Exports.jwtCheckExport,
+    "(secret: bytes, token: str, clock: int) -> bool", [], some "JwtError"⟩,
   ⟨"engine_new_payload_on_chain", `EthLib.Engine.Exports.newPayloadOnChainExport,
     "(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], " ++
       "request: dict) -> tuple[dict, bytes, bytes] | tuple[dict, None, None]",

@@ -8501,6 +8501,34 @@
    "docstring":
    "The payload status of an `engine_newPayload` request, without the parent's state.\n\nThe arguments are the chain configuration and the request."},
   {"summary":
+   "Build an HS256 Engine token from a 32-byte secret and an issued-at time in seconds.",
+   "signature": "(secret: bytes, issued_at: int) -> str",
+   "operation": "EthLib.Engine.Exports.jwtBuildExport",
+   "method": "engine_jwt_build",
+   "errors":
+   [{"type": "EthLib.Engine.Jwt.JwtError",
+     "codes":
+     [{"constructor": "secretLength", "code": 1},
+      {"constructor": "compact", "code": 2},
+      {"constructor": "header", "code": 3},
+      {"constructor": "algorithm", "code": 4},
+      {"constructor": "critical", "code": 5},
+      {"constructor": "claims", "code": 6},
+      {"constructor": "signature", "code": 7},
+      {"constructor": "serialization", "code": 8}]}],
+   "error_class": "JwtError",
+   "docstring":
+   "Build an HS256 Engine token from a 32-byte secret and an issued-at time in seconds.\n\nThe arguments are the secret and the issued-at time.\n\nThe result is the compact token text."},
+  {"summary":
+   "Accept an HS256 Engine token only within 60 seconds of its issued-at time.",
+   "signature": "(secret: bytes, token: str, clock: int) -> bool",
+   "operation": "EthLib.Engine.Exports.jwtCheckExport",
+   "method": "engine_jwt_check",
+   "errors": [],
+   "error_class": "JwtError",
+   "docstring":
+   "Accept an HS256 Engine token only within 60 seconds of its issued-at time.\n\nThe arguments are the 32-byte secret, the compact token text and the clock in seconds.\n\nA malformed token, a wrong secret or a failed check returns false."},
+  {"summary":
    "The payload status of an `engine_newPayload` request, on a chain that holds the parent.",
    "signature":
    "(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], request: dict) -> tuple[dict, bytes, bytes] | tuple[dict, None, None]",
