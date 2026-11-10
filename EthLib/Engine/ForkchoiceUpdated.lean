@@ -42,7 +42,13 @@ From version 4 the custody columns may follow, as 16 bytes or `null`.
 
 Any other value of them is an invalid parameter.
 
-EIP-8070 makes them optional, so version 4 also takes two parameters.
+EIP-8070 and the OpenRPC description of the method make them optional.
+
+So version 4 also takes two parameters.
+
+That description also makes the payload attributes optional in every version.
+
+This model still asks for them, as `null` when there are none.
 
 The source runs the update of the custody set apart from the forkchoice update.
 
@@ -91,6 +97,7 @@ The method specifications state these rules, at commit `3284ee8` of execution-ap
 - [`engine_forkchoiceUpdatedV1`][v1], steps 2, 4, 5, 7, 8 and 9
 - [`engine_forkchoiceUpdatedV2`][v2] and [`engine_forkchoiceUpdatedV3`][v3]
 - [`engine_forkchoiceUpdatedV4`][v4], and the custody columns of [EIP-8070][eip8070]
+- the [OpenRPC description][rpc] of the four versions, for the parameters that each requires
 
 Each version has its payload attributes: [version 1][a1], [version 2][a2] and [version 3][a3].
 
@@ -101,6 +108,7 @@ From Glamsterdam, [version 4][a4] adds the slot number of EIP-7843 and a target 
 [v3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#engine_forkchoiceupdatedv3
 [v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#engine_forkchoiceupdatedv4
 [eip8070]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8070.md#engine-api-extensions
+[rpc]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/openrpc/methods/forkchoice.yaml
 [a1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payloadattributesv1
 [a2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#payloadattributesv2
 [a3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#payloadattributesv3

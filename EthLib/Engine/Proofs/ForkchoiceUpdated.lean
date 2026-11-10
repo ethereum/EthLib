@@ -420,18 +420,63 @@ theorem forkchoiceUpdatedCall_of_null {version version' : Nat} {stateJson : Lean
     simp [forkchoiceUpdatedCall, forkchoiceUpdatedParams, Json.paramsArray, custodyColumnsOfJson,
       hs, bind, Except.bind, pure, Except.pure]
 
-/-- When the update applies a valid head, attributes that fit no structure of the version fail.
+/-- Version 4 with custody columns that decode and no attributes answers as version 3. -/
+theorem forkchoiceUpdatedCall_four_of_null {stateJson custody : Lean.Json}
+    {columns : Option (Vector UInt8 16)} (decoded : custodyColumnsOfJson custody = .ok columns) :
+    forkchoiceUpdatedCall 4 tree finalized (.arr #[stateJson, .null, custody]) =
+      forkchoiceUpdatedCall 3 tree finalized (.arr #[stateJson, .null]) := by
+  rw [forkchoiceUpdatedCall_custody decoded, forkchoiceUpdatedCall_of_null]
+
+/-- Attributes without exactly the fields of a version of their structure do not decode at it. -/
+theorem payloadAttributesOfJson_wrong_fields {v : Nat} {j : Lean.Json}
+    {fs : List (String × Lean.Json)} (hf : Json.fields "payloadAttributes" j = .ok fs)
+    (hx : Json.hasExactly fs (attributesFields v) = false) :
+    payloadAttributesOfJson v j = .error (.invalidParams "payloadAttributes: wrong fields") := by
+  simp [payloadAttributesOfJson, hf, hx, bind, Except.bind, Json.invalid, throw, throwThe,
+    MonadExceptOf.throw]
+
+/-- The attributes of a version of the method fail exactly when no structure that it takes decodes.
+
+The error is then that of invalid payload attributes. -/
+theorem payloadAttributesOfVersion_eq_error_iff {version : Nat} {j : Lean.Json}
+    {e : EngineError} :
+    payloadAttributesOfVersion version j = .error e ↔
+      e = .invalidPayloadAttributes ∧
+        ∀ v ∈ attributesVersions version, ∃ e', payloadAttributesOfJson v j = .error e' := by
+  unfold payloadAttributesOfVersion
+  constructor
+  · intro h
+    split at h
+    · cases h
+    · next hn =>
+      cases h
+      refine ⟨rfl, fun v hv => ?_⟩
+      have := List.findSome?_eq_none_iff.mp hn v hv
+      cases hj : payloadAttributesOfJson v j <;> simp_all [Except.toOption]
+  · rintro ⟨rfl, h⟩
+    split
+    · next a ha =>
+      obtain ⟨v, hv, hf⟩ := List.exists_of_findSome?_eq_some ha
+      obtain ⟨e', he⟩ := h v hv
+      simp [he, Except.toOption] at hf
+    · rfl
+
+/-- On an applied valid head, attributes whose fields fit no structure of the version fail.
 
 The answer is then the error of invalid payload attributes, `-38003`, not the status of the head.
 -/
 theorem forkchoiceUpdatedCall_eq_error_of_attributes {version : Nat}
     {stateJson : Lean.Json} {kvs : Std.TreeMap.Raw String Lean.Json compare}
-    {s : ForkchoiceState} {status : PayloadStatus} {head : Hash32}
-    (hs : forkchoiceStateOfJson stateJson = .ok s)
+    {fs : List (String × Lean.Json)} {s : ForkchoiceState} {status : PayloadStatus}
+    {head : Hash32} (hs : forkchoiceStateOfJson stateJson = .ok s)
     (hf : forkchoiceUpdated tree finalized s = .ok (status, some head))
-    (hm : payloadAttributesOfVersion version (.obj kvs) = .error .invalidPayloadAttributes) :
+    (hfs : Json.fields "payloadAttributes" (.obj kvs) = .ok fs)
+    (hx : ∀ v ∈ attributesVersions version, Json.hasExactly fs (attributesFields v) = false) :
     forkchoiceUpdatedCall version tree finalized (.arr #[stateJson, .obj kvs]) =
       .error .invalidPayloadAttributes := by
+  have hm : payloadAttributesOfVersion version (.obj kvs) = .error .invalidPayloadAttributes :=
+    payloadAttributesOfVersion_eq_error_iff.mpr ⟨rfl, fun v hv =>
+      ⟨_, payloadAttributesOfJson_wrong_fields hfs (hx v hv)⟩⟩
   simp [forkchoiceUpdatedCall, forkchoiceUpdatedParams, Json.paramsArray, custodyColumnsOfJson,
     hs, hf, hm, bind, Except.bind, pure, Except.pure]
 
