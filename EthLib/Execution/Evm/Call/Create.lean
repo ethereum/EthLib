@@ -31,13 +31,13 @@ From Glamsterdam, a dead address costs the state gas of a new account, by EIP-80
 
 From Tangerine Whistle, it then passes on all but one 64th of the gas left, and before, all of it.
 
-An address with code or a nonce takes that gas and pushes 0, and the frame's nonce still grows.
+An address with code, a nonce or storage takes that gas and pushes 0.
 
-An address with storage alone is not a collision: the creation clears that storage first.
+The frame's nonce still grows.
 
-[EIP-7610][eip7610], in Last Call, would make such a creation fail, at every fork back to Frontier.
+[EIP-7610][eip7610] adds the storage to the code and the nonce of EIP-684.
 
-EthLib does not apply EIP-7610 at any fork.
+It applies at every fork back to Frontier.
 
 Otherwise the frame's nonce grows and the init code runs at the new address.
 
@@ -57,6 +57,7 @@ The EIPs that add or change an instruction define it:
 - [EIP-211][eip211], the return data of a creation
 - [EIP-214][eip214], no creation in a static frame
 - [EIP-684][eip684], no creation at an address with code or a nonce
+- [EIP-7610][eip7610], no creation at an address with storage, in Last Call
 - [EIP-1014][eip1014], CREATE2
 - [EIP-2681][eip2681], the greatest nonce
 - [EIP-2929][eip2929], the access to the new address
@@ -154,7 +155,7 @@ Otherwise it accesses the new address, and pays the state gas of a new account i
 
 It then keeps the gas of the message, and the nonce of the frame grows by one.
 
-An address with code or a nonce gets no message.
+An address with code, a nonce or storage gets no message.
 
 Otherwise the frame passes on its whole reservoir to the message.
 

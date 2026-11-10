@@ -537,8 +537,8 @@ private theorem Sends.lift {evm evm' : Evm fork Meter} {result : StepResult fork
     obtain ⟨r1, r2, r3⟩ := r
     have hd : ∀ a, evm'.state.accountDeployable a = evm.state.accountDeployable a := by
       intro a
-      unfold State.TransactionState.accountDeployable
-      rw [getAccount_of_staticStep h]
+      exact State.TransactionState.accountDeployable_congr (getAccount_of_staticStep h a)
+        (h.state a List.not_mem_nil).2.1
     refine ⟨r1, fun c => ?_, fun c => ?_⟩
     · rw [← hd]
       exact r2 c
@@ -646,8 +646,8 @@ private theorem sends_launchCreate {evm : Evm fork Meter} {value : U256}
     · rename_i hd
       cases hr
       refine ⟨.inr ⟨_, _, rfl⟩, fun _ => ?_, fun c => absurd rfl c⟩
-      unfold State.TransactionState.accountDeployable at hd ⊢
-      rw [getAccount_of_staticStep c2] at hd
+      rw [← State.TransactionState.accountDeployable_congr (getAccount_of_staticStep c2 _)
+        (c2.state _ List.not_mem_nil).2.1]
       exact hd
     · obtain ⟨e3, -, hr⟩ := Base.bind_ok_iff.mp hr
       cases hr

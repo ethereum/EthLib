@@ -79,11 +79,9 @@ The call ran on `block`.
 
 A key that the call did not write reads as it did in `block`, so a wipe hides no word.
 
-This excludes a creation at an address with storage but no nonce and no code.
+This excludes a change that deletes an empty account with storage, which wipes that storage.
 
-EthLib wipes that storage, since it does not apply [EIP-7610][eip7610].
-
-It also excludes a change that deletes an empty account with storage, which wipes it too.
+A creation wipes no word, since [EIP-7610][eip7610] makes it fail at an address with storage.
 
 The code that the call reads for an account it wrote has the code hash of that account.
 

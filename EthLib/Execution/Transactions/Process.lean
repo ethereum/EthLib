@@ -20,7 +20,9 @@ A call runs the code of its recipient, and a creation runs the data as init code
 
 A creation goes to the address that the sender and its nonce before the transaction give.
 
-It fails at once, with no gas left, when that address has code or a nonce.
+It fails at once, with no gas left, when that address has code, a nonce or storage.
+
+[EIP-684][eip684] forbids the code and the nonce, and [EIP-7610][eip7610] the storage.
 
 From Berlin, the transaction starts with some addresses and storage keys accessed:
 
@@ -82,6 +84,8 @@ The run records what it reads, for the block access list of EIP-7928.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [eip161]: https://eips.ethereum.org/EIPS/eip-161#specification
+[eip684]: https://eips.ethereum.org/EIPS/eip-684#specification
+[eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification
 [eip2929]: https://eips.ethereum.org/EIPS/eip-2929#specification
 [eip2930]: https://eips.ethereum.org/EIPS/eip-2930#specification
 [eip3651]: https://eips.ethereum.org/EIPS/eip-3651#specification
@@ -251,7 +255,7 @@ def FirstFrame.ofMeter {fork : Fork} (message : Message fork) (state : Transacti
 
 The meter starts with the gas and the reservoir of the message.
 
-A creation fails at an address with code or a nonce.
+A creation fails at an address with code, a nonce or storage.
 
 From Glamsterdam, it pays the state gas of a new account when the address had none before.
 

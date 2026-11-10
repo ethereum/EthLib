@@ -9,6 +9,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- A contract creation now fails at an address with non-empty storage, at every fork, as [EIP-7610](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification) asks ([#1823](https://github.com/ethereum/EthLib/issues/1823)).
+  Before, such a creation wiped the storage and ran the init code.
+  It now fails exactly like a creation at an address with code or a nonce, as [EIP-684](https://eips.ethereum.org/EIPS/eip-684#specification) asks: a creation transaction ends with `addressCollision`, and CREATE or CREATE2 takes the gas of the message and pushes 0.
+  So a block with such a creation can now have another gas used, another state root, or be rejected.
+  `accountDeployable` also requires empty storage, through the new `accountHasStorage`.
+  The rules `create_stored` and `create2_stored` take a new hypothesis: no fact of a slot gives the new address a word other than zero.
 - The forkchoice update now checks the timestamp of payload attributes, on an applied valid head ([#1479](https://github.com/ethereum/EthLib/issues/1479)).
   A known payload holds the number and the timestamp of its block, so `KnownPayload` has two new fields, `number` and `timestamp`.
   `forkchoiceUpdatedCall` takes the chain configuration first, and returns the attributes at the fork of their timestamp.
