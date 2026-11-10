@@ -218,6 +218,12 @@ theorem checkInclusion_ok {fork : Fork} {chainId : UInt64} {env : BlockEnvironme
     checkInclusion_eq_ok_iff.mp h
   exact ⟨hs, hv, hGas, hBlobEq, hBlob, hFee, hBlobFee, hPrice, hNonce, hBal, hState⟩
 
+/-- A transaction that may enter its block has a type that exists at the fork of the block. -/
+theorem checkInclusion_fork_le {fork : Fork} {chainId : UInt64} {env : BlockEnvironment fork}
+    {used : BlockGas} {state : TransactionState} {tx : Transaction} {inc : Included}
+    (h : checkInclusion chainId env used state tx = .ok inc) : tx.fork ≤ fork :=
+  validateTransaction_fork_le (checkInclusion_ok h).2.1
+
 /-! ## What a passing transaction pays -/
 
 /-- A transaction that may enter its block pays at least the base fee per gas. -/

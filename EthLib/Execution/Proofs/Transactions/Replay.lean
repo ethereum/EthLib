@@ -298,20 +298,18 @@ private theorem processTransaction_nonce_le_bought {env : BlockEnvironment fork}
 
 The transaction passes the inclusion check on the state of the block it runs on.
 
-Its type must exist at its fork, as decoding asks.
-
 That holds whether or not its message ends with an error.
 
 From Hegotá, no transaction runs yet, so the claim is empty there. -/
 theorem processTransaction_nonce_lt {env : BlockEnvironment fork} {block : State.BlockState}
     {chainId : UInt64} {used : BlockGas} {included : Included} {out : TransactionOutput}
-    (hfork : tx.fork ≤ fork)
     (hcheck : checkInclusion chainId env used (.ofBlock block) tx = .ok included)
     (h : processTransaction env block included tx = .ok out) :
     tx.nonce.toNat < (out.state.getAccount included.sender).nonce := by
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, hnonce, _, _, _, hcodeOf⟩ :=
     checkInclusion_eq_ok_iff.mp hcheck
-  obtain ⟨bought, hbought, le⟩ := processTransaction_nonce_le_bought hfork h
+  obtain ⟨bought, hbought, le⟩ :=
+    processTransaction_nonce_le_bought (checkInclusion_fork_le hcheck) h
   have bumped := (buyGas_sender rfl hbought).2.2
   have := le included.sender (by omega) (fun hd => by
     rw [(buyGas_keeps hbought).1]
@@ -322,7 +320,7 @@ theorem processTransaction_nonce_lt {env : BlockEnvironment fork} {block : State
 
 /-- A transaction that runs lowers no nonce of any account.
 
-Its type must exist at its fork, as decoding asks.
+Its type must exist at the fork of the block, which a passing inclusion check gives.
 
 Before Cancun, the account must have no code in the state of the block.
 
