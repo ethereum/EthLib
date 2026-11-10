@@ -2466,7 +2466,7 @@ Justification and finalization need two slots an epoch and a buffer of block roo
 With one slot an epoch the specification itself can fail there.
 Before Altair they also assume that the committees of the pending attestations can be computed (`PendingResolved`), which a block checked when it included them.
 From Altair the rewards and penalties need `RewardsFit`, a set of bounds on the preset, the configuration, a budget of Gwei and a bound on the inactivity scores that the step reads.
-They also need the finalized epoch at most the previous epoch, and each balance and the sum of the effective balances within the budget.
+They also need each effective balance at most the largest cap, the finalized epoch at most the previous epoch, and each balance and the sum of the effective balances within the budget.
 The inactivity penalty multiplies an effective balance by an inactivity score, and a score grows by at most the score bias in each epoch.
 So the bound on the scores limits the length of the run that the theorems cover.
 On mainnet the bounds hold for a budget of `2^57` Gwei, about `1.44 * 10^8` ETH, and scores up to `2^23`.
