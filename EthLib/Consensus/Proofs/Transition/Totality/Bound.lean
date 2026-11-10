@@ -4,6 +4,7 @@ public import EthLib.Base.Proofs.List
 public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.Config
 public import EthLib.Consensus.Proofs.Accessors
+public import EthLib.Consensus.Proofs.Transition.Operations
 
 /-!
 # Proofs: the bounds under which a run of slots succeeds
@@ -31,6 +32,18 @@ The file also names two sums of a state that the bounds of the steps use.
 They are the sum of the effective balances and the sum of the recent slashed balances.
 
 It shows that a checked sum of a list and the total active balance succeed under such bounds.
+
+It then names the bounds on a state under which a run of slots succeeds.
+
+They hold a budget of Gwei, and a bound on the inactivity scores.
+
+The budget covers the larger of each balance and its effective balance, and the pending deposits.
+
+It also covers the recent slashed balances, on their own.
+
+A run of slots adds no deposit and no slashing, which only blocks bring.
+
+The budget is an assumption about the ether at stake, not a fact that a state keeps forever.
 -/
 
 @[expose] public section
@@ -171,5 +184,107 @@ theorem getTotalActiveBalance_exists_ok {state : BeaconState preset fork}
     rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt lt]
     exact sumMarked_le_effectiveBalanceSum _
   · exact .inl rfl
+
+/-- The sum over the registry of the larger of each balance and its effective balance.
+
+The registry and the balances are read in step, so a balance past the registry does not count. -/
+def stakeSum (state : BeaconState preset fork) : Nat :=
+  (state.validators.data.toList.zipWith (fun validator balance =>
+    max validator.effectiveBalance.toNat balance.toNat) state.balances.data.toList).sum
+
+/-- From Electra: the sum of the amounts of the pending deposits, and zero before. -/
+def pendingDepositSum (state : BeaconState preset fork) : Nat :=
+  if electra : .pectra ≤ fork then pendingAmount (state.pendingDeposits electra).data.toList
+  else 0
+
+/-- The bounds on a state under which a run of slots succeeds.
+
+The registry stays within its limit, and has one balance for each validator.
+
+Each effective balance is at most the largest one of its validator.
+
+The larger of each balance and its effective balance, plus the pending deposits, fit in a budget.
+
+The slashed balances of the recent epochs fit in the same budget, on their own.
+
+From Altair each inactivity score is at most a bound. -/
+structure WithinBudget (budget scoreBound : Nat) (state : BeaconState preset fork) : Prop where
+  within : state.RegistryWithinLimit
+  matched : BalancesMatch state
+  capped : ∀ validator ∈ state.validators.data,
+    validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator
+  funded : stakeSum state + pendingDepositSum state ≤ budget
+  slashed : slashedBalanceSum state ≤ budget
+  scored : ∀ altair : .altair ≤ fork, ∀ score ∈ (state.inactivityScores altair).data,
+    score.toNat ≤ scoreBound
+
+namespace WithinBudget
+
+/-- A sum over a list is at most a sum read in step with a second list at least as long.
+
+Each term of the first sum must be at most the term read in step with it. -/
+private theorem sum_map_le_sum_zipWith {α β : Type} (f : α → Nat) (g : α → β → Nat)
+    (bounded : ∀ a b, f a ≤ g a b) :
+    ∀ (first : List α) (second : List β), first.length ≤ second.length →
+      (first.map f).sum ≤ (first.zipWith g second).sum
+  | [], _, _ => by simp
+  | _ :: _, [], long => by simp at long
+  | a :: first, b :: second, long => by
+    simp only [List.map_cons, List.sum_cons, List.zipWith_cons_cons]
+    have := sum_map_le_sum_zipWith f g bounded first second (by simpa using long)
+    have := bounded a b
+    omega
+
+/-- A member of a list of natural numbers is at most its sum. -/
+private theorem le_sum_of_mem {x : Nat} : ∀ {xs : List Nat}, x ∈ xs → x ≤ xs.sum
+  | _ :: _, .head _ => by simp
+  | _ :: _, .tail _ member => by have := le_sum_of_mem member; simp; omega
+
+/-- The term of the stake sum at an index of the registry is at most the stake sum. -/
+private theorem le_stakeSum {state : BeaconState preset fork} (matched : BalancesMatch state)
+    (i : Nat) (inside : i < state.validators.data.size) :
+    max (state.validators.data[i]).effectiveBalance.toNat
+      (state.balances.data[i]'(by unfold BalancesMatch at matched; omega)).toNat ≤
+      stakeSum state := by
+  unfold stakeSum
+  apply le_sum_of_mem
+  rw [List.mem_iff_getElem]
+  refine ⟨i, by unfold BalancesMatch at matched; simp; omega, ?_⟩
+  simp
+
+variable {budget scoreBound : Nat} {state : BeaconState preset fork}
+
+/-- Under the bounds, each balance is at most the budget. -/
+theorem balance_le (holds : WithinBudget budget scoreBound state) :
+    ∀ balance ∈ state.balances.data, balance.toNat ≤ budget := by
+  intro balance member
+  obtain ⟨i, inside, rfl⟩ := Array.mem_iff_getElem.mp member
+  have matched := holds.matched
+  unfold BalancesMatch at matched
+  have := le_stakeSum holds.matched i (by omega)
+  have := holds.funded
+  omega
+
+/-- Under the bounds, each effective balance is at most the budget. -/
+theorem effectiveBalance_le (holds : WithinBudget budget scoreBound state) :
+    ∀ validator ∈ state.validators.data, validator.effectiveBalance.toNat ≤ budget := by
+  intro validator member
+  obtain ⟨i, inside, rfl⟩ := Array.mem_iff_getElem.mp member
+  have := le_stakeSum holds.matched i inside
+  have := holds.funded
+  omega
+
+/-- Under the bounds, the sum of the effective balances is at most the budget. -/
+theorem effectiveBalanceSum_le (holds : WithinBudget budget scoreBound state) :
+    effectiveBalanceSum state ≤ budget := by
+  have matched := holds.matched
+  unfold BalancesMatch at matched
+  have := sum_map_le_sum_zipWith (fun validator : Validator => validator.effectiveBalance.toNat)
+    (fun validator (balance : UInt64) => max validator.effectiveBalance.toNat balance.toNat)
+    (fun _ _ => Nat.le_max_left _ _) state.validators.data.toList state.balances.data.toList
+    (by simp [matched])
+  exact Nat.le_trans this (Nat.le_trans (Nat.le_add_right _ _) holds.funded)
+
+end WithinBudget
 
 end EthLib.Consensus
