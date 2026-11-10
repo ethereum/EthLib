@@ -49,6 +49,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.Reachable
 public import EthLib.Consensus.Proofs.ForkChoice.Supporters
 public import EthLib.Consensus.Proofs.ForkChoice.Store
 public import EthLib.Consensus.Proofs.ForkChoice.UnrealizedCheckpoints
+public import EthLib.Consensus.Proofs.ForkChoice.VoteOrigins
 public import EthLib.Consensus.Proofs.ForkSchedule
 public import EthLib.Consensus.Proofs.Gossip.Attestation
 public import EthLib.Consensus.Proofs.Gossip.Bid
@@ -144,7 +145,9 @@ public import EthLib.Consensus.Proofs.Transition.TargetPending
 public import EthLib.Consensus.Proofs.Transition.TargetSlots
 public import EthLib.Consensus.Proofs.Transition.TargetUpgrades
 public import EthLib.Consensus.Proofs.Transition.TargetVotes
+public import EthLib.Consensus.Proofs.Transition.Totality.Bound
 public import EthLib.Consensus.Proofs.Transition.Totality.EffectiveBalances
+public import EthLib.Consensus.Proofs.Transition.Totality.Slashings
 public import EthLib.Consensus.Proofs.Transition.Totality.Slot
 public import EthLib.Consensus.Proofs.Transition.Upgrade
 public import EthLib.Consensus.Proofs.Transition.WeakSubjectivitySafety
