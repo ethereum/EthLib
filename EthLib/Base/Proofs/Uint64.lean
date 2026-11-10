@@ -91,6 +91,14 @@ theorem divChecked_ok_iff {a b c : UInt64} :
     simp only [Except.ok.injEq, ne_eq, h, not_false_eq_true, true_and]
     rw [← UInt64.toNat_inj, UInt64.toNat_div, eq_comm]
 
+/-- No 64-bit integer is above the largest one, `2^64 - 1`. -/
+theorem eq_of_le_max {a : UInt64} (le : UInt64.ofNat (2 ^ 64 - 1) ≤ a) :
+    a = UInt64.ofNat (2 ^ 64 - 1) := by
+  have far : (UInt64.ofNat (2 ^ 64 - 1)).toNat = 2 ^ 64 - 1 := rfl
+  have := UInt64.le_iff_toNat_le.mp le
+  have := a.toNat_lt_size
+  exact UInt64.toNat_inj.mp (by simp only [UInt64.size] at *; omega)
+
 /-- The saturating difference is the difference on `Nat`, which stops at 0. -/
 theorem toNat_saturatingSub (a b : UInt64) :
     (saturatingSub a b).toNat = a.toNat - b.toNat := by
