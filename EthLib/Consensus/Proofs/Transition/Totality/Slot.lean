@@ -5,7 +5,7 @@ public import EthLib.Consensus.Proofs.Containers.Misc
 public import EthLib.Consensus.Transition.StateTransition
 
 /-!
-# Proofs: the caching of a slot and the resets of an epoch succeed
+# Proofs: the caching of a slot, the resets of an epoch and the update of the history succeed
 
 Advancing a state to a later slot can fail, for example on an overflow or on a full list.
 
@@ -54,7 +54,9 @@ The SSZ type of the state is assumed lawful, which holds when its fixed lengths 
 
 The circular buffers of roots must have a positive length.
 
-Only from Gloas does the step read the next slot. -/
+Before Gloas the step succeeds without a next slot.
+
+The hypothesis is kept at every fork, so that a run of slots can supply it. -/
 theorem processSlot_total [LawfulSszType (BeaconState preset fork)]
     [NeZero preset.SLOTS_PER_HISTORICAL_ROOT.toNat] (fits : state.slot.toNat + 1 < 2 ^ 64) :
     ∃ after, processSlot state = .ok after := by

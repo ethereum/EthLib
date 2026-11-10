@@ -360,7 +360,9 @@ theorem getCurrentEpoch_toNat_le_slot (state : BeaconState preset fork) :
   rw [getCurrentEpoch_toNat]
   exact Nat.div_le_self _ _
 
-/-- The epoch after the current one exists when a next slot exists. -/
+/-- The epoch after the current one exists when a next slot exists.
+
+A next epoch alone would be enough for a caller that needs only that epoch. -/
 theorem addChecked_getCurrentEpoch_one_total (state : BeaconState preset fork)
     (fits : state.slot.toNat + 1 < 2 ^ 64) :
     ∃ next, addChecked (getCurrentEpoch state) 1 = .ok next := by
