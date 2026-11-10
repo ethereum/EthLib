@@ -688,73 +688,47 @@ Otherwise it is that state with its slots processed to the start of the epoch. -
 theorem Store.Reachable.checkpointStatesFromBlocks
     (reachable : Store.Reachable config anchorState anchorBlock store) :
     store.CheckpointStatesFromBlocks config := by
-  -- Each state belongs to a known block, so a new block takes a root with no state yet.
-  suffices store.CheckpointStatesFromBlocks config ∧
-      ∀ ⦃root : Root⦄, store.blocks[root]? = none → store.blockStates[root]? = none from this.1
   induction reachable with
   | anchor made =>
     obtain ⟨anchorRoot, rootOk, states⟩ := getForkchoiceStore_checkpointStates made
     obtain ⟨_, rootOk', blocks, blockStates⟩ := getForkchoiceStore_maps made
     rw [rootOk, Except.ok.injEq] at rootOk'
     subst rootOk'
-    refine ⟨fun checkpoint state found => ?_, fun root unknown => ?_⟩
-    · rw [states, Std.TreeMap.getElem?_insert] at found
-      split at found
-      · rename_i same
-        cases found
-        obtain rfl := Store.checkpoint_eq_of_compare_eq same
-        have startOk := computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset)
-          anchorState.slot
-        refine ⟨anchorState, _, by simp [blockStates], startOk, .inl ⟨?_, rfl⟩⟩
-        obtain ⟨-, value⟩ := computeStartSlotAtEpoch_ok_iff.mp startOk
-        rw [UInt64.le_iff_toNat_le, value, computeEpochAtSlot, UInt64.toNat_div]
-        exact Nat.div_mul_le_self _ _
-      · simp at found
-    · rw [blocks, getElem?_insert_root] at unknown
-      rw [blockStates, getElem?_insert_root]
-      split at unknown
-      · cases unknown
-      · rename_i other
-        simp only [other, ↓reduceIte]
-        simp
+    intro checkpoint state found
+    rw [states, Std.TreeMap.getElem?_insert] at found
+    split at found
+    · rename_i same
+      cases found
+      obtain rfl := Store.checkpoint_eq_of_compare_eq same
+      have startOk := computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset)
+        anchorState.slot
+      refine ⟨anchorState, _, by simp [blockStates], startOk, .inl ⟨?_, rfl⟩⟩
+      obtain ⟨-, value⟩ := computeStartSlotAtEpoch_ok_iff.mp startOk
+      rw [UInt64.le_iff_toNat_le, value, computeEpochAtSlot, UInt64.toNat_div]
+      exact Nat.div_mul_le_self _ _
+    · simp at found
   | tick _ ticked ih =>
-    obtain ⟨-, -, blocks, states⟩ := Store.onTick_frame ticked
-    refine ⟨ih.1.of_maps states (Store.onTick_checkpointStates_latestMessages ticked).1,
-      fun root unknown => ?_⟩
-    rw [states]
-    rw [blocks] at unknown
-    exact ih.2 unknown
-  | block _ added ih =>
+    exact ih.of_maps (Store.onTick_frame ticked).2.2.2
+      (Store.onTick_checkpointStates_latestMessages ticked).1
+  | block previous added ih =>
     rcases Store.onBlock_same_or_insert added with
       same | ⟨blockRoot, -, fresh, blocks, -, state, -, -, states⟩
     · subst same
       exact ih
     have kept := (Store.onBlock_checkpointStates_latestMessages added).1
-    refine ⟨fun checkpoint checkpointState found => ?_, fun root unknown => ?_⟩
-    · rw [kept] at found
-      obtain ⟨base, start, baseFound, rest⟩ := ih.1 found
-      refine ⟨base, start, ?_, rest⟩
-      have other : blockRoot ≠ checkpoint.root := by
-        rintro rfl
-        rw [ih.2 fresh] at baseFound
-        cases baseFound
-      rw [states, getElem?_insert_root]
-      simp only [other, ↓reduceIte]
-      exact baseFound
-    · rw [blocks, getElem?_insert_root] at unknown
-      rw [states, getElem?_insert_root]
-      split at unknown
-      · cases unknown
-      · rename_i other
-        simp only [other, ↓reduceIte]
-        exact ih.2 unknown
+    intro checkpoint checkpointState found
+    rw [kept] at found
+    obtain ⟨base, start, baseFound, rest⟩ := ih found
+    refine ⟨base, start, ?_, rest⟩
+    have other : blockRoot ≠ checkpoint.root := by
+      rintro rfl
+      rw [previous.blockState_eq_none fresh] at baseFound
+      cases baseFound
+    rw [states, getElem?_insert_root]
+    simp only [other, ↓reduceIte]
+    exact baseFound
   | attestation _ attested ih =>
-    obtain ⟨-, blocks, states⟩ := Store.onAttestation_frame attested
-    refine ⟨?_, fun root unknown => ?_⟩
-    rotate_left
-    · rw [states]
-      rw [blocks] at unknown
-      exact ih.2 unknown
+    obtain ⟨-, -, states⟩ := Store.onAttestation_frame attested
     unfold Store.onAttestation at attested
     simp only [bind_ok_iff] at attested
     obtain ⟨_, _, stored, storing, _, _, _, _, _, _, _, _, attested⟩ := attested
@@ -763,7 +737,7 @@ theorem Store.Reachable.checkpointStatesFromBlocks
       split at storing
       · simp only [pure, Except.pure, Except.ok.injEq] at storing
         subst storing
-        exact ih.1
+        exact ih
       · simp only [bind_ok_iff] at storing
         obtain ⟨computedState, computed, storing⟩ := storing
         simp only [pure, Except.pure, Except.ok.injEq] at storing
@@ -775,7 +749,7 @@ theorem Store.Reachable.checkpointStatesFromBlocks
           cases keptFound
           obtain rfl := Store.checkpoint_eq_of_compare_eq same
           exact Store.computeCheckpointState_fromBlock computed
-        · exact ih.1 keptFound
+        · exact ih keptFound
     split at attested
     · simp only [pure, Except.pure, Except.ok.injEq] at attested
       subst attested
@@ -783,12 +757,8 @@ theorem Store.Reachable.checkpointStatesFromBlocks
       exact storedFrom found
     · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at attested
   | attesterSlashing _ slashed ih =>
-    obtain ⟨-, blocks, states⟩ := Store.onAttesterSlashing_frame slashed
-    refine ⟨ih.1.of_maps states
-      (Store.onAttesterSlashing_checkpointStates_latestMessages slashed).1, fun root unknown => ?_⟩
-    rw [states]
-    rw [blocks] at unknown
-    exact ih.2 unknown
+    exact ih.of_maps (Store.onAttesterSlashing_frame slashed).2.2
+      (Store.onAttesterSlashing_checkpointStates_latestMessages slashed).1
   | payloadAttestation _ voted ih =>
     obtain ⟨_, _, rfl⟩ := onPayloadAttestationMessage_onlyPtcVotes voted
     exact ih
