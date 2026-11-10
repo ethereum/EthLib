@@ -4713,7 +4713,8 @@
       {"constructor": "notPossibleDependentBlock", "code": 49},
       {"constructor": "notInInclusionListCommittee", "code": 50},
       {"constructor": "invalidInclusionListSignature", "code": 51},
-      {"constructor": "payloadNotOptimistic", "code": 52}]}],
+      {"constructor": "payloadNotOptimistic", "code": 52},
+      {"constructor": "supportDiscountAboveMaximum", "code": 53}]}],
    "error_class": "ForkChoiceError",
    "docstring":
    "From Bellatrix: whether a block carries a payload other than the empty one.\n\nFrom Gloas: whether the bid of the block names a nonzero block hash."},
@@ -4777,7 +4778,8 @@
       {"constructor": "notPossibleDependentBlock", "code": 49},
       {"constructor": "notInInclusionListCommittee", "code": 50},
       {"constructor": "invalidInclusionListSignature", "code": 51},
-      {"constructor": "payloadNotOptimistic", "code": 52}]}],
+      {"constructor": "payloadNotOptimistic", "code": 52},
+      {"constructor": "supportDiscountAboveMaximum", "code": 53}]}],
    "error_class": "ForkChoiceError",
    "docstring":
    "From Bellatrix: whether a block may be imported optimistically, given the known blocks.\n\nThe clock is at a slot, and the user sets the number of slots to wait."},
@@ -4841,7 +4843,8 @@
       {"constructor": "notPossibleDependentBlock", "code": 49},
       {"constructor": "notInInclusionListCommittee", "code": 50},
       {"constructor": "invalidInclusionListSignature", "code": 51},
-      {"constructor": "payloadNotOptimistic", "code": 52}]}],
+      {"constructor": "payloadNotOptimistic", "code": 52},
+      {"constructor": "supportDiscountAboveMaximum", "code": 53}]}],
    "error_class": "ForkChoiceError",
    "docstring":
    "From Bellatrix: the root of the latest block of a chain that is not optimistic.\n\nThe arguments are the names of the preset and the fork, the blocks and the optimistic roots.\n\nThen come the root of a block and the code of the status of its payload in the node."},
@@ -4905,7 +4908,8 @@
       {"constructor": "notPossibleDependentBlock", "code": 49},
       {"constructor": "notInInclusionListCommittee", "code": 50},
       {"constructor": "invalidInclusionListSignature", "code": 51},
-      {"constructor": "payloadNotOptimistic", "code": 52}]}],
+      {"constructor": "payloadNotOptimistic", "code": 52},
+      {"constructor": "supportDiscountAboveMaximum", "code": 53}]}],
    "error_class": "ForkChoiceError",
    "docstring":
    "From Bellatrix: the optimistic roots after the payload of a block is found valid, as a list.\n\nThe arguments are the names of the preset and the fork, the blocks and the optimistic roots.\n\nThen comes the root of a block."},
@@ -4969,7 +4973,8 @@
       {"constructor": "notPossibleDependentBlock", "code": 49},
       {"constructor": "notInInclusionListCommittee", "code": 50},
       {"constructor": "invalidInclusionListSignature", "code": 51},
-      {"constructor": "payloadNotOptimistic", "code": 52}]}],
+      {"constructor": "payloadNotOptimistic", "code": 52},
+      {"constructor": "supportDiscountAboveMaximum", "code": 53}]}],
    "error_class": "ForkChoiceError",
    "docstring":
    "From Bellatrix: the optimistic roots after a block is found the first invalid one, as a list.\n\nThe arguments are the names of the preset and the fork, the blocks and the optimistic roots.\n\nThen comes the root of the first invalid block."},
@@ -5033,7 +5038,8 @@
       {"constructor": "notPossibleDependentBlock", "code": 49},
       {"constructor": "notInInclusionListCommittee", "code": 50},
       {"constructor": "invalidInclusionListSignature", "code": 51},
-      {"constructor": "payloadNotOptimistic", "code": 52}]}],
+      {"constructor": "payloadNotOptimistic", "code": 52},
+      {"constructor": "supportDiscountAboveMaximum", "code": 53}]}],
    "error_class": "ForkChoiceError",
    "docstring":
    "From Bellatrix: whether a node is optimistic, after a run of fork choice steps.\n\nThe first seven arguments are those of the fork choice run.\n\nThen come the optimistic roots, the root of the head of the node and the code of its status."},
@@ -5097,7 +5103,8 @@
       {"constructor": "notPossibleDependentBlock", "code": 49},
       {"constructor": "notInInclusionListCommittee", "code": 50},
       {"constructor": "invalidInclusionListSignature", "code": 51},
-      {"constructor": "payloadNotOptimistic", "code": 52}]}],
+      {"constructor": "payloadNotOptimistic", "code": 52},
+      {"constructor": "supportDiscountAboveMaximum", "code": 53}]}],
    "error_class": "ForkChoiceError",
    "docstring":
    "From Heze: the answers on the inclusion lists after a run of fork choice steps.\n\nThe first seven arguments are those of the fork choice run.\n\nThen come the code of the status of each payload and the answer of the execution layer.\n\nThen come the root whose payload turns valid, if any, and the roots to read."},
@@ -5721,7 +5728,8 @@
       {"constructor": "notPossibleDependentBlock", "code": 49},
       {"constructor": "notInInclusionListCommittee", "code": 50},
       {"constructor": "invalidInclusionListSignature", "code": 51},
-      {"constructor": "payloadNotOptimistic", "code": 52}]}],
+      {"constructor": "payloadNotOptimistic", "code": 52},
+      {"constructor": "supportDiscountAboveMaximum", "code": 53}]}],
    "error_class": "ForkChoiceError",
    "docstring":
    "The outcome of each step of a fork choice case, from an anchor state and an anchor block.\n\nThe arguments are the preset, the fork, the anchor state and the anchor block in SSZ, and the steps.\n\nThen come whether the signature checks run, and replacements of values of the configuration.\n\nFrom Gloas the node on which a proposer builds is not yet specified here, so that read fails."},
@@ -5785,7 +5793,8 @@
       {"constructor": "notPossibleDependentBlock", "code": 49},
       {"constructor": "notInInclusionListCommittee", "code": 50},
       {"constructor": "invalidInclusionListSignature", "code": 51},
-      {"constructor": "payloadNotOptimistic", "code": 52}]}],
+      {"constructor": "payloadNotOptimistic", "code": 52},
+      {"constructor": "supportDiscountAboveMaximum", "code": 53}]}],
    "error_class": "ForkChoiceError",
    "docstring":
    "Validate the messages of a topic in turn, against the store of an anchor and later blocks.\n\nThe arguments are the names of the preset and the fork, the anchor state and the anchor block.\n\nThen come the later blocks, the finalized checkpoint or none, the topic and the messages.\n\nThen come replacements of values of the configuration, and whether the signature checks run.\n\nEvery topic is specified here up to Heze."},
@@ -10043,7 +10052,8 @@
       {"constructor": "notPossibleDependentBlock", "code": 49},
       {"constructor": "notInInclusionListCommittee", "code": 50},
       {"constructor": "invalidInclusionListSignature", "code": 51},
-      {"constructor": "payloadNotOptimistic", "code": 52}]}],
+      {"constructor": "payloadNotOptimistic", "code": 52},
+      {"constructor": "supportDiscountAboveMaximum", "code": 53}]}],
    "error_class": "ForkChoiceError",
    "docstring":
    "From Bellatrix: the 32 bytes of the finalized block hash of a store.\n\nThe arguments are the preset, the fork, the anchor state and the anchor block, and the steps.\n\nThen come whether the signature checks run, and replacements of values of the configuration."},

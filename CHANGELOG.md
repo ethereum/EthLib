@@ -9,6 +9,9 @@ Not yet released.
 
 ### Changes that break callers
 
+- The safety threshold of the fast confirmation rule now fails when the discount for empty slots exceeds the weight of the committees since the parent ([#1832](https://github.com/ethereum/EthLib/issues/1832)).
+  It fails with the new fork choice error `supportDiscountAboveMaximum`, of code 53, where it used to return half of what was left, or 0.
+  A block at or before the current slot never reaches that error, and a proof shows it.
 - The fast confirmation rule now weighs the committees of a range of slots exactly, in place of an average per slot ([#1828](https://github.com/ethereum/EthLib/issues/1828)).
   Each active member of the committees counts once, by its effective balance in the source of balances, and a range with a whole epoch still weighs the total active balance.
   The average did not bound a given committee, so the rule could confirm a block that an attack then reorgs.

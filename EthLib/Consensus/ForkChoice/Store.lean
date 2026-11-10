@@ -222,6 +222,8 @@ inductive ForkChoiceError where
   | invalidInclusionListSignature
   /-- From Heze: the payload of the block with the root is not optimistic. -/
   | payloadNotOptimistic (root : Root)
+  /-- The discount of the block with the root exceeds the committee weight since its parent. -/
+  | supportDiscountAboveMaximum (root : Root)
   deriving Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -282,6 +284,7 @@ def ForkChoiceError.code : ForkChoiceError → UInt32
   | .notInInclusionListCommittee _ => 50
   | .invalidInclusionListSignature => 51
   | .payloadNotOptimistic _ => 52
+  | .supportDiscountAboveMaximum _ => 53
 
 variable (preset : Preset) (fork : Fork)
 
