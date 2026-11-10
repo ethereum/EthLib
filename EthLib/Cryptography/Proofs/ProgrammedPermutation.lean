@@ -117,6 +117,13 @@ theorem ProgrammedCache.mem_programmed_of_mem (c : ProgrammedCache A) (f : A × 
     exact ⟨e, ⟨he, by simp [ht]⟩, rfl⟩
   · exact List.mem_map.2 ⟨e, List.mem_filter.2 ⟨he, by simp [ht]⟩, rfl⟩
 
+/-- Programmed pairs at the head of the cache leave its relayed pairs unchanged. -/
+theorem ProgrammedCache.relayed_append_of_forall {new pc : ProgrammedCache A}
+    (h : ∀ e ∈ new, e.2 = true) : ProgrammedCache.relayed (new ++ pc) = pc.relayed := by
+  rw [ProgrammedCache.relayed, List.filter_append,
+    List.filter_eq_nil_iff.2 fun e he => by simp [h e he], List.nil_append]
+  rfl
+
 variable [FinEnum A]
 
 /-- A query missing from the cache is missing from the relayed pairs. -/
@@ -228,6 +235,45 @@ theorem overlayLazyOracle_inr_run (b : A) (c : ProgrammedCache A) (l : PermCache
   cases ((TaggedCache.untag c).map Prod.swap).lookup b with
   | some a => simp
   | none => simp [Functor.map_map]
+
+/-- A query whose most recent pair was relayed has that answer among the relayed pairs. -/
+theorem ProgrammedCache.lookup_relayed_of_lookupTagged_eq_some {c : ProgrammedCache A} {a b : A}
+    (h : c.lookupTagged a = some (b, false)) : c.relayed.lookup a = some b := by
+  induction c with
+  | nil => simp [TaggedCache.lookupTagged] at h
+  | cons e c ih =>
+    obtain ⟨⟨a', b'⟩, o⟩ := e
+    by_cases ha : a' = a
+    · subst ha
+      simp only [TaggedCache.lookupTagged, List.find?_cons, decide_true, Option.map_some,
+        Option.some.injEq, Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      simp
+    · have h' : TaggedCache.lookupTagged c a = some (b, false) := by
+        simpa [TaggedCache.lookupTagged, List.find?_cons, ha] using h
+      have hne : (a == a') = false := beq_false_of_ne (Ne.symm ha)
+      cases o
+      · simpa [List.lookup, hne] using ih h'
+      · simpa using ih h'
+
+/-- A forward query to the overlay answers as the lazy permutation, in some cases.
+
+The most recent pair at the query must not be programmed.
+
+The cache of the lazy permutation must hold the relayed pairs. -/
+theorem map_fst_overlayLazyOracle_inl {pc : ProgrammedCache A} {a : A}
+    (h : ∀ b, pc.lookupTagged a ≠ some (b, true)) :
+    Prod.fst <$> (overlayLazyOracle (.inl a)).run (pc, pc.relayed) =
+      Prod.fst <$> (lazyPermOracle (.inl a)).run pc.relayed := by
+  rw [overlayLazyOracle_inl_run]
+  rcases hl : (TaggedCache.untag pc).lookup a with _ | b
+  · simp [Functor.map_map]
+  · rw [← TaggedCache.map_fst_lookupTagged, Option.map_eq_some_iff] at hl
+    obtain ⟨⟨b', o⟩, ho, rfl⟩ := hl
+    cases o
+    · rw [lazyPermOracle_inl_run, ProgrammedCache.lookup_relayed_of_lookupTagged_eq_some ho]
+      simp
+    · exact absurd ho (h b')
 
 /-- A query to the overlay keeps both caches, or adds one relayed pair to the overlay's cache.
 

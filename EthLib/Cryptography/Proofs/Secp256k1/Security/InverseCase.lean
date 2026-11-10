@@ -315,13 +315,6 @@ def extractInverse (scheme : Scheme F G A M) (X : G) (z : M × F × F) (a : F) :
   let c := z.2.1⁻¹ * (z.2.2 * a - scheme.hash z.1)
   if c • scheme.g = X then c else z.2.1⁻¹ * (-(z.2.2 * a) - scheme.hash z.1)
 
-omit [DecidableEq F] [DecidableEq G] [FinEnum F] [FinEnum A] in
-/-- The forgery's point on the key `x g` is the encoding of `((H(m) + t x) / s) g`. -/
-theorem forgeryPoint_smul (scheme : Scheme F G A M) (x t s : F) (m : M) :
-    forgeryPoint scheme (x • scheme.g) (m, t, s) =
-      scheme.encode ((s⁻¹ * (scheme.hash m + t * x)) • scheme.g) := by
-  simp only [forgeryPoint, smul_smul, ← add_smul, mul_add]
-
 omit [DecidableEq F] [FinEnum F] [FinEnum A] in
 /-- The key from a valid forgery whose point encodes `a g`, for a nonzero `a`, is the key.
 

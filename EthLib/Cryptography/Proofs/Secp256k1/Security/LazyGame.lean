@@ -83,6 +83,23 @@ def verifyQ (scheme : Scheme F G A M) (X : G) (m : M) (t s : F) : PermComp A Boo
     (fun c => decide (c = t)) <$> conversionQ scheme (s⁻¹ • U)
   else pure false
 
+/-- The check of a forgery `(m, t, s)` asks `Π` once, when its guard holds.
+
+It asks at the encoding of `U / s`, where `U = H(m) g + t X`. -/
+theorem simulateQ_verifyQ_run {σ : Type}
+    (perm : QueryImpl (PermSpec A) (StateT σ ProbComp)) (scheme : Scheme F G A M) (X : G)
+    (m : M) (t s : F) (st : σ) :
+    (simulateQ (unifSpec.passthrough + perm) (verifyQ scheme X m t s)).run st =
+      if X ≠ 0 ∧ t ≠ 0 ∧ s ≠ 0 ∧ scheme.hash m • scheme.g + t • X ≠ 0 then
+        (fun w => (decide (scheme.reduce w.1 = t), w.2)) <$>
+          (perm (.inl (scheme.encode (s⁻¹ • (scheme.hash m • scheme.g + t • X))))).run st
+      else pure (false, st) := by
+  unfold verifyQ conversionQ
+  dsimp only
+  split_ifs
+  · simp [Functor.map_map]
+  · simp
+
 variable [SampleableType F]
 
 /-- Signing with at most `fuel` uniform nonces, with `Π` asked of the oracle. -/
