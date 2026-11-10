@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Security.Game
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.JointGame
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.LazyGame
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Origin
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.QueryBound
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Refinement
 
 /-!
@@ -34,6 +35,12 @@ Each pair of the cache of `Π` can also carry its origin: a forward or inverse q
 A forgery that wins has its pair in the final cache.
 
 Its tag is `forward` if the final check asked first, and otherwise the tag it had before.
+
+Take an adversary with at most `q_Π` queries to `Π` or its inverse.
+
+Let it also make at most `q_S` signing queries.
+
+The game as a program then asks `Π` or its inverse at most `q_Π + fuel · q_S + 1` times.
 
 No theorem bounds the advantage of a forger yet.
 -/
