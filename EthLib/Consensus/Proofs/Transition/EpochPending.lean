@@ -176,8 +176,8 @@ theorem depositTargetStatus_applyPendingDeposit {deposit : PendingDeposit}
         cases converted : liftArith (ofNatChecked position) with
         | error _ => rfl
         | ok index =>
-          have same := (ofNatChecked_ok_iff.mp (mapError_ok_iff.mp converted)).2
-          simp only [same, Array.getElem?_push_lt below, Array.getElem?_eq_getElem below]
+          simp only [getElem?_toNat_eq_of_ofNatChecked (mapError_ok_iff.mp converted),
+            Array.getElem?_push_lt below, Array.getElem?_eq_getElem below]
       | none =>
         simp only [Option.none_or]
         by_cases key : deposit.pubkey = pubkey
@@ -190,6 +190,24 @@ theorem depositTargetStatus_applyPendingDeposit {deposit : PendingDeposit}
   · simp only [liftAccessor_ok, bind_ok_iff] at computed
     obtain ⟨_, _, computed⟩ := computed
     simp only [depositTargetStatus, increaseBalance_validators computed]
+
+/-- The status of a deposit target never fails on an index.
+
+The validator found with the key is the one that the read at its converted index finds. -/
+theorem depositTargetStatus_ne_indexOutOfRange (state : BeaconState preset fork)
+    (nextEpoch : Epoch) (pubkey : Cryptography.Bls.BLSPubkey) (index : ValidatorIndex) :
+    depositTargetStatus state nextEpoch pubkey ≠ .error (.indexOutOfRange index) := by
+  unfold depositTargetStatus
+  split
+  · rename_i position found
+    obtain ⟨inside, _⟩ := Array.findIdx?_eq_some_iff_getElem.mp found
+    cases converted : ofNatChecked position with
+    | error _ => simp [liftArith, Except.mapError, bind, Except.bind]
+    | ok checked =>
+      simp [liftArith, Except.mapError, bind, Except.bind,
+        getElem?_toNat_eq_of_ofNatChecked converted, Array.getElem?_eq_getElem inside, pure,
+        Except.pure]
+  · simp [pure, Except.pure]
 
 /-- The pending deposits of an epoch end with a pass over the queue from its front.
 

@@ -79,6 +79,11 @@ theorem ofNatChecked_of_lt {n : Nat} (h : n < 2 ^ 64) : ofNatChecked n = .ok n.t
 theorem ofNatChecked_toNat (a : UInt64) : ofNatChecked a.toNat = .ok a :=
   ofNatChecked_ok_iff.mpr ⟨a.toNat_lt, rfl⟩
 
+/-- A successful conversion of a position reads the same entry of an array at its value. -/
+theorem getElem?_toNat_eq_of_ofNatChecked {α : Type} {data : Array α} {n : Nat} {a : UInt64}
+    (converted : ofNatChecked n = .ok a) : data[a.toNat]? = data[n]? := by
+  rw [(ofNatChecked_ok_iff.mp converted).2]
+
 /-- The conversions of a list succeed exactly when every entry is below `2^64`.
 
 They then return the plain conversions. -/
