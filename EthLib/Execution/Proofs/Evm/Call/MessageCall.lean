@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Evm.Call.MessageCall
 public import EthLib.Execution.Proofs.Evm.Interpreter
 
@@ -23,6 +24,10 @@ A message ends with no more execution gas than it was given.
 From Glamsterdam, a revert rolls the state gas of the frame back to its baseline.
 
 A message and a creation fail only with an error that aborts the run.
+
+The deposit of code at the end of a creation keeps the substate and the memory.
+
+Its state is the snapshot restored, the state it was given, or that state with the code set.
 -/
 
 @[expose] public section
@@ -216,5 +221,40 @@ theorem aborts_of_process_eq_error [LawfulGasMeter Meter] (n : Nat) :
                · exact aborts_of_mapError_state hm
                · cases hdep)
         · cases h
+
+/-! ## The deposit of code -/
+
+/-- A successful deposit of code keeps the substate and the memory of the frame of the init code.
+
+Its state is the snapshot restored, the state of that frame, or that state with the code set.
+
+The code is the output of the frame, at its current target. -/
+theorem depositCode_cases {snapshot : TransactionState} {evm after : Evm fork Meter}
+    (h : depositCode fork snapshot evm = .ok after) :
+    after.substate = evm.substate ∧ after.memory = evm.memory ∧
+      (after.state = evm.state.restoreTxState snapshot ∨ after.state = evm.state ∨
+        evm.state.setCode fork evm.message.currentTarget evm.output = .ok after.state) := by
+  unfold depositCode at h
+  dsimp only at h
+  split at h
+  · cases h
+    exact ⟨rfl, rfl, .inl rfl⟩
+  split at h
+  · cases h
+    exact ⟨rfl, rfl, .inl rfl⟩
+  split at h
+  · cases h
+    exact ⟨rfl, rfl, .inl rfl⟩
+  split at h
+  · cases h
+    split
+    · exact ⟨rfl, rfl, .inl rfl⟩
+    · exact ⟨rfl, rfl, .inr (.inl rfl)⟩
+  split at h
+  · cases h
+    exact ⟨rfl, rfl, .inl rfl⟩
+  obtain ⟨st, hst, h⟩ := Base.bind_ok_iff.mp h
+  cases h
+  exact ⟨rfl, rfl, .inr (.inr (Base.mapError_ok_iff.mp hst))⟩
 
 end EthLib.Execution.Evm
