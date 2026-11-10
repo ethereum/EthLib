@@ -8,6 +8,7 @@ public import EthLib.Consensus.Proofs.Transition.Operations
 public import EthLib.Consensus.Proofs.Transition.Payload
 public import EthLib.Consensus.Proofs.Transition.Requests
 public import EthLib.Consensus.Proofs.Transition.StateTransition
+public import EthLib.Consensus.Proofs.Transition.TargetFlags
 
 /-!
 # Proofs: invariants of the state transition
@@ -1659,6 +1660,163 @@ theorem getPreviousEpoch_toNat (state : BeaconState preset fork) :
 
 theorem Frame.invariant (frame : Frame state after) (holds : Invariant state) :
     Invariant after where
+  balancesMatch := frame.balancesMatch holds.balancesMatch
+  exitsOrdered := frame.exitsOrdered holds.exitsOrdered
+  ordered := by
+    have := holds.ordered
+    unfold CheckpointsOrdered at this ⊢
+    rw [frame.finalized, frame.previousJustified, frame.currentJustified]
+    exact this
+  settled := by
+    have := holds.settled
+    unfold JustifiedSettled getPreviousEpoch getCurrentEpoch at this ⊢
+    rw [frame.currentJustified, frame.slot]
+    exact this
+
+/-- A state of another fork keeps the invariant when it keeps what the invariant reads.
+
+That is the registry, the number of balances, the slot and the three checkpoints. -/
+theorem Invariant.of_carried {fork post : Fork} {pre : BeaconState preset fork}
+    {after : BeaconState preset post} (holds : Invariant pre)
+    (validators : after.validators.data = pre.validators.data)
+    (balances : after.balances.data.size = pre.balances.data.size) (slot : after.slot = pre.slot)
+    (finalized : after.finalizedCheckpoint = pre.finalizedCheckpoint)
+    (previousJustified : after.previousJustifiedCheckpoint = pre.previousJustifiedCheckpoint)
+    (currentJustified : after.currentJustifiedCheckpoint = pre.currentJustifiedCheckpoint) :
+    Invariant after where
+  balancesMatch := by
+    have := holds.balancesMatch
+    unfold BalancesMatch at this ⊢
+    rw [balances, validators]
+    exact this
+  exitsOrdered := by
+    have := holds.exitsOrdered
+    unfold ExitsOrdered at this ⊢
+    rw [validators]
+    exact this
+  ordered := by
+    have := holds.ordered
+    unfold CheckpointsOrdered at this ⊢
+    rw [finalized, previousJustified, currentJustified]
+    exact this
+  settled := by
+    have := holds.settled
+    unfold JustifiedSettled getPreviousEpoch getCurrentEpoch at this ⊢
+    rw [currentJustified, slot]
+    exact this
+
+/-- A step that keeps each byte of flags or zeroes it adds no target flag. -/
+theorem TargetFlagAt.of_flagsKeptOrZero {altair : .altair ≤ fork} {current : Bool}
+    {position : Nat} (kept : FlagsKeptOrZero state after)
+    (flagged : TargetFlagAt (recentParticipation after altair current) position) :
+    TargetFlagAt (recentParticipation state altair current) position := by
+  obtain ⟨flags, found, set⟩ := flagged
+  have kept := kept altair position flags
+  cases current
+  · rcases kept.1 found with old | rfl
+    · exact ⟨flags, old, set⟩
+    · exact absurd set (by decide)
+  · rcases kept.2 found with old | rfl
+    · exact ⟨flags, old, set⟩
+    · exact absurd set (by decide)
+
+/-- An upgrade to a fork no earlier than the fork before.
+
+It keeps the slot, the three checkpoints, the block roots and the genesis validators root.
+
+The current fork version becomes the previous one, and the new one is that of the fork after.
+
+It never shrinks the registry, and keeps the keys while the registry stays below 2^64 validators.
+
+It transports the balance-count and exit-order properties.
+
+From Altair, a target flag after it was a target flag at its position before. -/
+structure UpgradeFrame (config : Config) {fork post : Fork} (pre : BeaconState preset fork)
+    (after : BeaconState preset post) : Prop where
+  forward : fork ≤ post
+  slot : after.slot = pre.slot
+  finalized : after.finalizedCheckpoint = pre.finalizedCheckpoint
+  previousJustified : after.previousJustifiedCheckpoint = pre.previousJustifiedCheckpoint
+  currentJustified : after.currentJustifiedCheckpoint = pre.currentJustifiedCheckpoint
+  blockRoots : after.blockRoots = pre.blockRoots
+  genesisValidatorsRoot : after.genesisValidatorsRoot = pre.genesisValidatorsRoot
+  previousVersion : after.forkVersions.previousVersion = pre.forkVersions.currentVersion
+  currentVersion : after.forkVersions.currentVersion = config.forkVersion post
+  registryGrows : pre.validators.data.size ≤ after.validators.data.size
+  keysKept : after.validators.data.size < 2 ^ 64 → KeysKept pre after
+  balancesMatch : BalancesMatch pre → BalancesMatch after
+  exitsOrdered : ExitsOrdered pre → ExitsOrdered after
+  flags : ∀ (altair : .altair ≤ fork) (current : Bool) (position : Nat),
+    TargetFlagAt (recentParticipation after (Nat.le_trans altair forward) current) position →
+      TargetFlagAt (recentParticipation pre altair current) position
+
+/-- An upgrade that carries the registry and the flags, and keeps the number of balances. -/
+theorem UpgradeFrame.of_carried {fork post : Fork} {pre : BeaconState preset fork}
+    {after : BeaconState preset post} (forward : fork ≤ post) (slot : after.slot = pre.slot)
+    (finalized : after.finalizedCheckpoint = pre.finalizedCheckpoint)
+    (previousJustified : after.previousJustifiedCheckpoint = pre.previousJustifiedCheckpoint)
+    (currentJustified : after.currentJustifiedCheckpoint = pre.currentJustifiedCheckpoint)
+    (blockRoots : after.blockRoots = pre.blockRoots)
+    (genesisValidatorsRoot : after.genesisValidatorsRoot = pre.genesisValidatorsRoot)
+    (previousVersion : after.forkVersions.previousVersion = pre.forkVersions.currentVersion)
+    (currentVersion : after.forkVersions.currentVersion = config.forkVersion post)
+    (validators : after.validators.data = pre.validators.data)
+    (balances : after.balances.data.size = pre.balances.data.size)
+    (participation : ∀ (altair : .altair ≤ fork) (current : Bool),
+      (recentParticipation after (Nat.le_trans altair forward) current).data =
+        (recentParticipation pre altair current).data) :
+    UpgradeFrame config pre after where
+  forward := forward
+  slot := slot
+  finalized := finalized
+  previousJustified := previousJustified
+  currentJustified := currentJustified
+  blockRoots := blockRoots
+  genesisValidatorsRoot := genesisValidatorsRoot
+  previousVersion := previousVersion
+  currentVersion := currentVersion
+  registryGrows := by rw [validators]; exact Nat.le_refl _
+  keysKept _ index validator found := ⟨validator, by
+    unfold getValidator at found ⊢
+    rw [validators]
+    exact found, rfl⟩
+  balancesMatch holds := by
+    unfold BalancesMatch at holds ⊢
+    rw [balances, validators]
+    exact holds
+  exitsOrdered holds := by
+    unfold ExitsOrdered at holds ⊢
+    rw [validators]
+    exact holds
+  flags altair current position flagged := by
+    obtain ⟨flags, found, set⟩ := flagged
+    exact ⟨flags, by rw [← participation altair current]; exact found, set⟩
+
+/-- An upgrade followed by a block frame of the new fork is an upgrade. -/
+theorem UpgradeFrame.trans_blockFrame {fork post : Fork} {pre : BeaconState preset fork}
+    {middle after : BeaconState preset post} (one : UpgradeFrame config pre middle)
+    (two : BlockFrame middle after) : UpgradeFrame config pre after where
+  forward := one.forward
+  slot := two.slot.trans one.slot
+  finalized := two.finalized.trans one.finalized
+  previousJustified := two.previousJustified.trans one.previousJustified
+  currentJustified := two.currentJustified.trans one.currentJustified
+  blockRoots := two.blockRoots.trans one.blockRoots
+  genesisValidatorsRoot := two.genesisValidatorsRoot.trans one.genesisValidatorsRoot
+  previousVersion := by rw [two.forkVersions]; exact one.previousVersion
+  currentVersion := by rw [two.forkVersions]; exact one.currentVersion
+  registryGrows := Nat.le_trans one.registryGrows two.registryGrows
+  keysKept small :=
+    (one.keysKept (Nat.lt_of_le_of_lt two.registryGrows small)).trans (two.keysKept small)
+  balancesMatch := two.balancesMatch ∘ one.balancesMatch
+  exitsOrdered := two.exitsOrdered ∘ one.exitsOrdered
+  flags altair current position flagged :=
+    one.flags altair current position (flagged.of_flagsKeptOrZero two.flags)
+
+/-- An upgrade frame carries the invariant to the later fork. -/
+theorem UpgradeFrame.invariant {fork post : Fork} {pre : BeaconState preset fork}
+    {after : BeaconState preset post} (frame : UpgradeFrame config pre after)
+    (holds : Invariant pre) : Invariant after where
   balancesMatch := frame.balancesMatch holds.balancesMatch
   exitsOrdered := frame.exitsOrdered holds.exitsOrdered
   ordered := by
