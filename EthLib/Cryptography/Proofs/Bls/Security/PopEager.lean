@@ -135,6 +135,25 @@ theorem length_le_of_mem_support_hash {g₂ : G₂} {m : M} {st : State F M} {w 
     (hw : w ∈ support (hash g₂ m st)) : st.table.length ≤ w.2.table.length := by
   rcases (mem_support_hash (st := st) hw).2.1 with h | ⟨e, h⟩ <;> simp [h]
 
+/-- One message hash call with a fixed scalar answers the scalar of its entry times `g2`.
+
+It only appends to the table, and keeps the signed messages. -/
+theorem mem_support_hashAt {g₂ : G₂} {j : ℕ} {z : F} {m : M} {st : State F M}
+    {w : G₂ × State F M} (hw : w ∈ support (hashAt g₂ j z m st)) :
+    (∃ k t, lookup m w.2.table = some (k, t) ∧ w.1 = t • g₂) ∧
+      (∃ r, w.2.table = st.table ++ r) ∧ w.2.signed = st.signed := by
+  by_cases hnew : lookup m st.table = none ∧ st.table.length = j
+  · rw [hashAt_of_new hnew.1 hnew.2] at hw
+    simp only [support_pure, Set.mem_singleton_iff] at hw
+    subst hw
+    exact ⟨⟨_, z, lookup_append_of_none hnew.1 z, rfl⟩, ⟨_, rfl⟩, rfl⟩
+  · rw [hashAt_eq_hash fun hl hj => hnew ⟨hl, hj⟩] at hw
+    obtain ⟨h, htable, hsigned, -⟩ := mem_support_hash hw
+    refine ⟨h, ?_, hsigned⟩
+    rcases htable with h | ⟨e, h⟩
+    · exact ⟨[], by simp [h]⟩
+    · exact ⟨[e], h⟩
+
 namespace Pop
 
 variable [DecidableEq G₁] [AddCommGroup G₁] [Module F G₁]

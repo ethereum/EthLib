@@ -28,9 +28,13 @@ That needs every key to be a multiple of `g1`, no `r x` to be zero, and a nonzer
 
 The game is unchanged in distribution when one message hash scalar is drawn right after the key.
 
-The reduction answers every oracle without the secret key.
+The aggregate game's reduction answers every oracle without the secret key.
 
-When the scalar drawn first is nonzero, its run follows the game's until that message is signed.
+Let the co-CDH challenge be `z • g2`, with `z` the scalar drawn first and `z ≠ 0`.
+
+Then an event of the game is at most as likely as in the reduction's run.
+
+This holds until the message at the reduction's guessed position is signed.
 
 No bound on the aggregate game is proved yet.
 -/

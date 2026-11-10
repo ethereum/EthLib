@@ -168,6 +168,28 @@ def shiftState (c : F) (j : ℕ) (st : State F M) : State F M :=
 /-- The bad event: the message at position `j` was signed, so the reduction could not answer. -/
 def Bad (j : ℕ) (st : State F M) : Prop := ∃ e, st.table[j]? = some e ∧ e.1 ∈ st.signed
 
+omit [DecidableEq M] [CommRing F] [SampleableType F] in
+/-- A state that only appends to the table and to the signed messages keeps the bad event. -/
+theorem Bad.mono {j : ℕ} {st st' : State F M} {r : List (M × F)}
+    (htable : st'.table = st.table ++ r) (hsigned : st.signed ⊆ st'.signed) (h : Bad j st) :
+    Bad j st' := by
+  obtain ⟨e, he, hs⟩ := h
+  refine ⟨e, ?_, hsigned hs⟩
+  rw [htable, List.getElem?_append_left (List.getElem?_eq_some_iff.mp he).1, he]
+
+omit [SampleableType F] in
+/-- Before the bad event, the reduction signs a hashed message as the game does, after the shift.
+
+The game's signature on the hash `t • g2` is `a • (t • g2)`. -/
+theorem embedSignature_shiftState_of_not_bad {g₂ : G₂} {a c : F} {j k : ℕ} {m : M} {t : F}
+    {w : State F M} (hk : lookup m w.table = some (k, t))
+    (hbad : ¬Bad j { w with signed := w.signed ++ [m] }) :
+    embedSignature (a • g₂) j m (shiftState c j w) = a • (t • g₂) := by
+  have hkj : k ≠ j := by
+    rintro rfl
+    exact hbad ⟨(m, t), getElem?_of_lookup hk, by simp⟩
+  simp [embedSignature, shiftState, lookup_shift, hk, hkj, smul_comm a t]
+
 /-- One hash call of the game: the answer is the scalar of the entry, times `g2`. -/
 theorem mem_support_hash {g₂ : G₂} {m : M} {st : State F M} {z : G₂ × State F M}
     (hz : z ∈ support ((hash g₂ m).run st)) :
@@ -226,10 +248,9 @@ theorem grows_of_mem_support_impl {g₂ : G₂} {a : F} {t : (Spec M G₂).Domai
 /-- Once the message at position `j` is signed, it stays signed. -/
 theorem impl_preservesInv_bad (g₂ : G₂) (a : F) (j : ℕ) :
     QueryImpl.PreservesInv (impl (M := M) g₂ a) (Bad j) := by
-  intro t st ⟨e, he, hs⟩ z hz
+  intro t st hbad z hz
   obtain ⟨⟨r, hr⟩, hsigned, -⟩ := grows_of_mem_support_impl hz
-  refine ⟨e, ?_, hsigned hs⟩
-  rw [hr, List.getElem?_append_left (List.getElem?_eq_some_iff.mp he).1, he]
+  exact hbad.mono hr hsigned
 
 /-- The table never has more entries than there were hash calls. -/
 theorem impl_preservesInv_length (g₂ : G₂) (a : F) :
@@ -318,12 +339,7 @@ theorem dominatedUntilBad (g₂ : G₂) (a c : F) (j : ℕ) :
     refine le_trans ?_ hshift.le
     refine prEvent_mono_of_support _ _ _ fun z hz ⟨hQ, hbad⟩ => ?_
     obtain ⟨⟨k, t, hk, hz1⟩, -⟩ := mem_support_hash (st := st) hz
-    have hkj : k ≠ j := by
-      rintro rfl
-      exact hbad ⟨(m, t), getElem?_of_lookup hk, by simp⟩
-    have hsig : embedSignature (a • g₂) j m (shiftState c j z.2) = a • z.1 := by
-      simp [embedSignature, shiftState, lookup_shift, hk, hkj, hz1, smul_comm a t]
-    rw [hsig]
+    rw [embedSignature_shiftState_of_not_bad hk hbad, ← hz1]
     exact hQ
 
 /-- The game's run on the public key `pk`, under the secret key `a`. -/

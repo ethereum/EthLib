@@ -16,18 +16,20 @@ It answers the oracles itself, without the secret `a`.
 - A signature on a message with hash `s • g2` is `s • X2`, which is `a • (s • g2)`.
 - At position `j` it cannot sign, and returns 0.
 - The honest key hashes to `s • g2`, so its proof is `s • X2`.
-- Any other key hashes to `r • Y`, with `r` fresh and kept in its table.
+- Any other key hashes to `r • Y`, with `r` fresh and kept in the key table.
 
-The answer is the extraction step of the aggregate: it needs the key scalars `r` from the table.
+The reduction's answer is the extraction step, with the key scalars `r` read from its key table.
 
 The coupling compares it with the game whose message scalar at `j` is drawn first, as `z`.
 
-When `c = z` and `z ≠ 0`, each answer of the game is an answer of the reduction.
+Let `c = z` and `z ≠ 0`.
 
-- A message scalar is the same, except the one at `j`, which the reduction never reads.
+Each step of the game, seen through a map of states, is at most as likely as the reduction's step.
+
+- A message scalar is the same, except the one at `j`: the game keeps `z`, the reduction 0.
 - A key scalar `t` of a key other than the honest one is `r * z`, a bijection in `r`.
 
-This holds until the bad event of the reduction for one key: the message at `j` was signed.
+This holds until the bad event of the single-key reduction: the message at `j` was signed.
 -/
 
 @[expose] public section
@@ -91,7 +93,9 @@ def keyScalar (x : G₁) (st : State F G₁ M) : F :=
 
 /-- The reduction's answer: the extraction step, when the forged message is at position `j`.
 
-It reads the scalar of each key hash from the final key table. -/
+It reads the scalar of each key hash from the final key table.
+
+Otherwise it is 0. -/
 def extract (pk : G₁) (j : ℕ) (w : (List (G₁ × G₂) × M × G₂) × G₂ × List G₂)
     (st : State F G₁ M) : G₂ :=
   match lookup w.1.2.1 st.msg.table with
@@ -100,7 +104,7 @@ def extract (pk : G₁) (j : ℕ) (w : (List (G₁ × G₂) × M × G₂) × G�
 
 /-- The co-CDH solver built from an aggregate forger, for a budget of `q` message hash calls.
 
-It guesses `j`, hashes the honest key with a fresh scalar `s`, and gives the proof `s • X2`. -/
+It guesses `j`, records a fresh scalar `s` for the honest key, and gives the proof `s • X2`. -/
 def reduction (g₂ : G₂) (adversary : Adversary G₁ G₂ M) (q : ℕ) : CoCdhAdversary G₁ G₂ :=
   fun X₁ X₂ Y => do
     let j ← $[0..q - 1]
@@ -120,7 +124,7 @@ def scaleKeys (pk : G₁) (u : F) (l : List (G₁ × F)) : List (G₁ × F) :=
 The message scalar at `j` becomes 0.
 
 The scalar of every key other than `pk` is divided by `z`. -/
-def project (pk : G₁) (j : ℕ) (z : F) (st : State F G₁ M) : State F G₁ M :=
+def projectState (pk : G₁) (j : ℕ) (z : F) (st : State F G₁ M) : State F G₁ M :=
   ⟨shiftState z j st.msg, scaleKeys pk z⁻¹ st.keyTable, st.keyCalls⟩
 
 omit [SampleableType F] in
@@ -142,26 +146,9 @@ theorem lookup_scaleKeys (pk x : G₁) (u : F) (l : List (G₁ × F)) :
 
 omit [DecidableEq M] [SampleableType F] in
 /-- The projection keeps the state after the honest key hash. -/
-theorem project_withKey (pk : G₁) (j : ℕ) (z s : F) :
-    project pk j z (State.withKey (M := M) pk s) = State.withKey pk s := by
-  simp [project, State.withKey, scaleKeys, shiftState, shift, Security.State.init]
-
-/-- One message hash call with a fixed scalar: the answer is the scalar of the entry, times `g2`. -/
-theorem mem_support_hashAt {g₂ : G₂} {j : ℕ} {z : F} {m : M} {st : Security.State F M}
-    {w : G₂ × Security.State F M} (hw : w ∈ support (hashAt g₂ j z m st)) :
-    (∃ k t, lookup m w.2.table = some (k, t) ∧ w.1 = t • g₂) ∧
-      (∃ r, w.2.table = st.table ++ r) ∧ w.2.signed = st.signed := by
-  by_cases hnew : lookup m st.table = none ∧ st.table.length = j
-  · rw [hashAt_of_new hnew.1 hnew.2] at hw
-    simp only [support_pure, Set.mem_singleton_iff] at hw
-    subst hw
-    exact ⟨⟨_, z, lookup_append_of_none hnew.1 z, rfl⟩, ⟨_, rfl⟩, rfl⟩
-  · rw [hashAt_eq_hash fun hl hj => hnew ⟨hl, hj⟩] at hw
-    obtain ⟨h, htable, hsigned, -⟩ := mem_support_hash hw
-    refine ⟨h, ?_, hsigned⟩
-    rcases htable with h | ⟨e, h⟩
-    · exact ⟨[], by simp [h]⟩
-    · exact ⟨[e], h⟩
+theorem projectState_withKey (pk : G₁) (j : ℕ) (z s : F) :
+    projectState pk j z (State.withKey (M := M) pk s) = State.withKey pk s := by
+  simp [projectState, State.withKey, scaleKeys, shiftState, shift, Security.State.init]
 
 /-- Away from a new message at position `j`, the reduction's message hash is the one for one key. -/
 theorem embedHashAt_eq_embedHash {g₂ Y : G₂} {j : ℕ} {m : M} {st : Security.State F M}
@@ -180,8 +167,9 @@ theorem embedHashAt_of_new {g₂ Y : G₂} {j : ℕ} {m : M} {st : Security.Stat
   unfold embedHashAt
   simp [hl, hj]
 
-/-- One message hash call of the game with the scalar `z` at `j`, seen through the shift by `z`,
-is one message hash call of the reduction. -/
+/-- One message hash call of the game with the scalar `z` at `j` is one call of the reduction.
+
+This holds once the game's table is shifted by `z` at `j`. -/
 theorem prEvent_hashAt_shift (g₂ : G₂) (j : ℕ) (z : F) (m : M) (st : Security.State F M)
     (Φ : G₂ × Security.State F M → Prop) :
     Pr{let w ← hashAt g₂ j z m st}[Φ (w.1, shiftState z j w.2)] =
@@ -201,10 +189,10 @@ theorem prEvent_hashAt_shift (g₂ : G₂) (j : ℕ) (z : F) (m : M) (st : Secur
     rw [hashAt_eq_hash fun hl hj => hnew ⟨hl, hj⟩, embedHashAt_eq_embedHash hl]
     exact prEvent_hash_shift g₂ z j m st Φ
 
-/-- Once the message at position `j` is signed, it stays signed, with the scalar at `j` fixed. -/
+/-- Under the oracles with a fixed scalar at `j`, a signed message at `j` stays signed. -/
 theorem implAt_preservesInv_bad (g₂ : G₂) (a : F) (j : ℕ) (z : F) :
     QueryImpl.PreservesInv (implAt (M := M) (G₁ := G₁) g₂ a j z) fun st => Bad j st.msg := by
-  intro t st ⟨e, he, hs⟩ x hx
+  intro t st hbad x hx
   obtain ⟨r, hr, hsub⟩ : ∃ r, x.2.msg.table = st.msg.table ++ r ∧
       st.msg.signed ⊆ x.2.msg.signed := by
     rcases t with n | (m | m) | y
@@ -231,17 +219,17 @@ theorem implAt_preservesInv_bad (g₂ : G₂) (a : F) (j : ℕ) (z : F) :
       · simp only [support_map, Set.mem_image] at hx
         obtain ⟨_, -, rfl⟩ := hx
         exact ⟨[], by simp, fun _ h => h⟩
-  refine ⟨e, ?_, hsub hs⟩
-  rw [hr, List.getElem?_append_left (List.getElem?_eq_some_iff.mp he).1, he]
+  exact hbad.mono hr hsub
 
 omit [DecidableEq M] in
-/-- One key hash call of the game, seen through the projection, is one key hash call of the
-reduction with `Y = z • g2`. -/
-theorem prEvent_keyHash_project (g₂ : G₂) (pk : G₁) (j : ℕ) {z : F} (hz : z ≠ 0) (x : G₁)
+/-- One key hash call of the game, seen through the projection, is one of the reduction.
+
+The reduction gets `Y = z • g2`. -/
+theorem prEvent_keyHash_projectState (g₂ : G₂) (pk : G₁) (j : ℕ) {z : F} (hz : z ≠ 0) (x : G₁)
     (st : State F G₁ M) (Φ : G₂ × State F G₁ M → Prop) :
-    Pr{let w ← keyHash g₂ x st}[Φ (w.1, project pk j z w.2)] =
-      Pr{let w ← embedKeyHash g₂ (z • g₂) pk x (project pk j z st)}[Φ w] := by
-  have hl : lookup x (project pk j z st).keyTable =
+    Pr{let w ← keyHash g₂ x st}[Φ (w.1, projectState pk j z w.2)] =
+      Pr{let w ← embedKeyHash g₂ (z • g₂) pk x (projectState pk j z st)}[Φ w] := by
+  have hl : lookup x (projectState pk j z st).keyTable =
       (lookup x st.keyTable).map fun p => (p.1, if x = pk then p.2 else p.2 * z⁻¹) :=
     lookup_scaleKeys pk x z⁻¹ st.keyTable
   unfold keyHash embedKeyHash
@@ -252,8 +240,8 @@ theorem prEvent_keyHash_project (g₂ : G₂) (pk : G₁) (j : ℕ) {z : F} (hz 
     obtain ⟨k, t⟩ := p
     dsimp only
     by_cases hx : x = pk
-    · simp [project, keyAnswer, hx]
-    · simp [project, keyAnswer, hx, smul_smul, hz]
+    · simp [projectState, keyAnswer, hx]
+    · simp [projectState, keyAnswer, hx, smul_smul, hz]
   | none =>
     rw [h, Option.map_none] at hl
     rw [hl]
@@ -261,67 +249,66 @@ theorem prEvent_keyHash_project (g₂ : G₂) (pk : G₁) (j : ℕ) {z : F} (hz 
     rw [prEvent_map, prEvent_map]
     by_cases hx : x = pk
     · refine prEvent_congr _ _ _ fun t => ?_
-      simp [project, scaleKeys, keyAnswer, hx]
+      simp [projectState, scaleKeys, keyAnswer, hx]
     · conv_rhs => rw [← SampleableType.prEvent_uniformSample_equiv
         (Equiv.mulRight₀ z⁻¹ (inv_ne_zero hz))]
       refine prEvent_congr _ _ _ fun t => ?_
-      simp [project, scaleKeys, keyAnswer, hx, smul_smul, hz]
+      simp [projectState, scaleKeys, keyAnswer, hx, smul_smul, hz]
 
-/-- Before the bad event, each step of the game with the scalar `z ≠ 0` at `j`, seen through the
-projection, is a step of the reduction.
+/-- Before the bad event, each step of the game is at most as likely as the reduction's step.
+
+The game has the scalar `z ≠ 0` at `j`, and its states are seen through the projection.
 
 The reduction gets `X2 = a • g2` and `Y = z • g2`. -/
 theorem dominatedUntilBad (g₂ : G₂) (pk : G₁) (a : F) {z : F} (hz : z ≠ 0) (j : ℕ) :
     QueryImpl.DominatedUntilBad (implAt (M := M) (G₁ := G₁) g₂ a j z)
-      (embedImpl g₂ (a • g₂) (z • g₂) pk j) (project pk j z) (fun _ => True)
+      (embedImpl g₂ (a • g₂) (z • g₂) pk j) (projectState pk j z) (fun _ => True)
       (fun st => Bad j st.msg) := by
   intro t st _ hst Q
   rcases t with n | (m | m) | x
-  · change Pr{let w ← (·, st) <$> _}[_] ≤ Pr{let w ← (·, project pk j z st) <$> _}[_]
+  · change Pr{let w ← (·, st) <$> _}[_] ≤ Pr{let w ← (·, projectState pk j z st) <$> _}[_]
     rw [prEvent_map, prEvent_map]
     exact prEvent_mono _ _ _ fun _ h => h.1
   · change Pr{let w ← (fun w => (w.1, { st with msg := w.2 })) <$> hashAt g₂ j z m st.msg}[
-        Q (w.1, project pk j z w.2) ∧ _] ≤
-      Pr{let w ← (fun w => (w.1, { project pk j z st with msg := w.2 })) <$>
+        Q (w.1, projectState pk j z w.2) ∧ _] ≤
+      Pr{let w ← (fun w => (w.1, { projectState pk j z st with msg := w.2 })) <$>
         embedHashAt g₂ (z • g₂) j m (shiftState z j st.msg)}[Q w]
     rw [prEvent_map, prEvent_map]
     exact (prEvent_mono _ _ _ fun _ h => h.1).trans (prEvent_hashAt_shift g₂ j z m st.msg
-      fun w => Q (w.1, { project pk j z st with msg := w.2 })).le
+      fun w => Q (w.1, { projectState pk j z st with msg := w.2 })).le
   · change Pr{let w ← (fun w => (w.1, { st with msg := w.2 })) <$>
           ((fun w => (a • w.1, { w.2 with signed := w.2.signed ++ [m] })) <$>
-            hashAt g₂ j z m st.msg)}[Q (w.1, project pk j z w.2) ∧ ¬Bad j w.2.msg] ≤
-      Pr{let w ← (fun w => (w.1, { project pk j z st with msg := w.2 })) <$>
+            hashAt g₂ j z m st.msg)}[Q (w.1, projectState pk j z w.2) ∧ ¬Bad j w.2.msg] ≤
+      Pr{let w ← (fun w => (w.1, { projectState pk j z st with msg := w.2 })) <$>
         ((fun w => (embedSignature (a • g₂) j m w.2, { w.2 with signed := w.2.signed ++ [m] })) <$>
           embedHashAt g₂ (z • g₂) j m (shiftState z j st.msg))}[Q w]
     rw [prEvent_map, prEvent_map, prEvent_map, prEvent_map]
     let Q' : G₂ × State F G₁ M → Prop := Q
     have hshift := prEvent_hashAt_shift g₂ j z m st.msg fun w =>
       Q' (embedSignature (a • g₂) j m w.2,
-        { project pk j z st with msg := { w.2 with signed := w.2.signed ++ [m] } })
+        { projectState pk j z st with msg := { w.2 with signed := w.2.signed ++ [m] } })
     refine le_trans ?_ hshift.le
     refine prEvent_mono_of_support _ _ _ fun w hw ⟨hQ, hbad⟩ => ?_
     obtain ⟨⟨k, t, hk, hw1⟩, -⟩ := mem_support_hashAt hw
-    have hkj : k ≠ j := by
-      rintro rfl
-      exact hbad ⟨(m, t), getElem?_of_lookup hk, by simp⟩
-    have hsig : embedSignature (a • g₂) j m (shiftState z j w.2) = a • w.1 := by
-      simp [embedSignature, shiftState, lookup_shift, hk, hkj, hw1, smul_comm a t]
-    rw [hsig]
+    rw [embedSignature_shiftState_of_not_bad hk hbad, ← hw1]
     exact hQ
-  · change Pr{let w ← keyHash g₂ x st}[Q (w.1, project pk j z w.2) ∧ _] ≤
-      Pr{let w ← embedKeyHash g₂ (z • g₂) pk x (project pk j z st)}[Q w]
+  · change Pr{let w ← keyHash g₂ x st}[Q (w.1, projectState pk j z w.2) ∧ _] ≤
+      Pr{let w ← embedKeyHash g₂ (z • g₂) pk x (projectState pk j z st)}[Q w]
     exact (prEvent_mono _ _ _ fun _ h => h.1).trans
-      (prEvent_keyHash_project g₂ pk j hz x st Q).le
+      (prEvent_keyHash_projectState g₂ pk j hz x st Q).le
 
-/-- The game's run with the scalar `z ≠ 0` at `j`, seen through the projection and before the bad
-event, is the reduction's run. -/
-theorem prEvent_run_project_le (g₂ : G₂) (adversary : Adversary G₁ G₂ M) (pk : G₁) (a : F)
+/-- The game's run with the scalar `z ≠ 0` at `j` is bounded by the reduction's run.
+
+An event of the game, seen through the projection and without the bad event, is at most as likely.
+
+The reduction starts from the projected state. -/
+theorem prEvent_run_projectState_le (g₂ : G₂) (adversary : Adversary G₁ G₂ M) (pk : G₁) (a : F)
     {z : F} (hz : z ≠ 0) (j : ℕ) (proof : G₂) (st : State F G₁ M)
     (P : ((List (G₁ × G₂) × M × G₂) × G₂ × List G₂) × State F G₁ M → Prop) :
     Pr{let w ← (simulateQ (implAt g₂ a j z) (run adversary pk proof)).run st}[
-        P (w.1, project pk j z w.2) ∧ ¬Bad j w.2.msg] ≤
+        P (w.1, projectState pk j z w.2) ∧ ¬Bad j w.2.msg] ≤
       Pr{let w ← (simulateQ (embedImpl g₂ (a • g₂) (z • g₂) pk j)
-          (run adversary pk proof)).run (project pk j z st)}[P w] :=
+          (run adversary pk proof)).run (projectState pk j z st)}[P w] :=
   (dominatedUntilBad g₂ pk a hz j).prEvent_simulateQ_run_map_and_not_bad_le
     (fun _ _ _ _ _ => trivial) (implAt_preservesInv_bad g₂ a j z) _ st trivial P
 
