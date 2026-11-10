@@ -318,34 +318,13 @@ theorem spec_getFee {m : Nat} (hfork : .shapella ≤ fork) (_hglam : fork < .gla
 
 /-! ## A call that adds a request -/
 
-/-- What a stopped frame holds when a call adds the request `words` with the log data `data`.
-
-The frame stops with no error and no output.
-
-The state holds the storage after the request is added, at the contract, and keeps the rest.
-
-The logs gain one log of the contract, with no topic and the data `data`.
-
-The pseudocode of the EIP has no log; its code writes this one. -/
-def Added {fork : Fork} (target : Address) (words : List U256) (data : ByteArray)
-    (state : TransactionState) (substate : Substate) (evm : Evm fork Nat) : Prop :=
-  evm.error = none ∧ evm.output = .empty ∧
-    WritesStorage target (afterAdd SLOTS_PER_REQUEST words (storageOf state target)) state
-      evm.state ∧
-    evm.substate.logs = substate.logs.push { address := target, topics := [], data := data }
-
-/-- Equal storages, keys and words give equal storages after the write. -/
-private theorem setSlot_congr {r r' : U256 → U256} {k k' v v' : U256} (hr : r = r') (hk : k = k')
-    (hv : v = v') : setSlot r k v = setSlot r' k' v' := by
-  rw [hr, hk, hv]
-
 /-- From byte 143, the code adds the request of the caller and the input, and logs it. -/
 private theorem add_tail {S : TransactionState} {ss : Substate} {g : Nat}
     (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam) (hstatic : message.isStatic = false)
     (hacc : (S.getAccountOptional message.currentTarget).isSome = true)
     (hsize : message.data.size = 96) (hgas : 150000 ≤ g) :
     Spec fork (At CODE message 143 [] .empty g S ss returnData)
-      (Added message.currentTarget (requestWords message.caller message.data)
+      (Added SLOTS_PER_REQUEST message.currentTarget (requestWords message.caller message.data)
         (logData message.caller message.data) S ss) := by
   evm_step [CODE, CODE_NUMBER_eq]
   refine sload_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
@@ -513,7 +492,7 @@ theorem spec_add {m : Nat} (hfork : .shapella ≤ fork) (hglam : fork < .glamste
     (hgas : 200000 + 100 * m ≤ gas) :
     Spec fork (At CODE message 0 [] .empty gas state substate returnData) fun evm =>
       if pays (storageOf state message.currentTarget) message.value then
-        Added message.currentTarget (requestWords message.caller message.data)
+        Added SLOTS_PER_REQUEST message.currentTarget (requestWords message.caller message.data)
           (logData message.caller message.data) state substate evm
       else Answer state none evm := by
   have hz : equal 96#256 (BitVec.ofNat 256 message.data.size) ≠ 0 := by
@@ -755,11 +734,6 @@ private theorem deq_body {read : U256 → U256} {S : TransactionState} {ss : Sub
   rw [e]
   exact hrec
 
-/-- The gas of the loop with `n` runs left: 9,000 for each run, and 30 for the exit. -/
-private def deqGas : Nat → Nat
-  | 0 => 30
-  | n + 1 => deqGas n + 9000
-
 /-- From the head of the loop at byte 233, the loop writes the records from request `k` up to `c`.
 
 It leaves at byte 297, with the records of the first `c` requests in memory. -/
@@ -795,13 +769,6 @@ private theorem deq_loop {read : U256 → U256} {tail : U256} {c : Nat} {Q : Evm
       ih (by omega) (funext hw₁.1) hM₁ hM₁s (by omega) fun M' S' g' ss' hM' hM's hw' hg' =>
         next M' S' g' ss' hM' hM's (WritesStorage.trans hw₁ hw')
           (Nat.le_trans hg₁ (by rw [← Nat.add_assoc]; exact Nat.add_le_add_right hg' _))
-
-/-- What a stopped frame holds at the end of the system call, from the state `S`.
-
-It stops with no error, returns `size` bytes of the memory `M`, and holds the storage `store`. -/
-private def Returned {fork : Fork} (target : Address) (M : ByteArray) (size : Nat)
-    (store : U256 → U256) (S : TransactionState) (evm : Evm fork Nat) : Prop :=
-  evm.error = none ∧ evm.output = memoryReadBytes M 0 size ∧ WritesStorage target store S evm.state
 
 /-- From byte 398, the code writes the excess `v` and resets the count of the block.
 
@@ -998,40 +965,6 @@ private theorem deq_excess {S : TransactionState} {ss : Substate} {M : ByteArray
     rw [hp]
     exact h
 
-/-- The writes of the system call give the storage after the requests are taken.
-
-The head and the tail go back to 0 when the queue empties, and the head moves on otherwise.
-
-Then the excess is updated and the count reset. -/
-private theorem deq_store (r : U256 → U256) (F : U256 → U256)
-    (hF : F = if (r 2).toNat + numDequeued 2 r = (r 3).toNat then setSlot (setSlot r 2 0) 3 0
-      else setSlot r 2 (BitVec.ofNat 256 ((r 2).toNat + numDequeued 2 r))) :
-    setSlot (setSlot F 0 (BitVec.ofNat 256 (newExcess 1 (F 0) (F 1)))) 1 0 =
-      afterDequeue 2 1 r := by
-  funext slot
-  subst hF
-  by_cases h : (r 2).toNat + numDequeued 2 r = (r 3).toNat
-  · simp only [h, ite_true, setSlot, afterDequeue]
-    by_cases h1 : slot = 1
-    · simp [h1]
-    · by_cases h0 : slot = 0
-      · simp [h0]
-      · by_cases h2 : slot = 2
-        · simp [h2]
-        · by_cases h3 : slot = 3
-          · simp [h3]
-          · simp_all
-  · simp only [h, ite_false, setSlot, afterDequeue]
-    by_cases h1 : slot = 1
-    · simp [h1]
-    · by_cases h0 : slot = 0
-      · simp [h0]
-      · by_cases h2 : slot = 2
-        · simp [h2]
-        · by_cases h3 : slot = 3
-          · simp [h3]
-          · simp_all
-
 /-- From byte 297, the code moves the head of the queue, or empties it, then updates the excess.
 
 It returns the records of the requests it took, which memory holds. -/
@@ -1110,7 +1043,7 @@ private theorem deq_head {S : TransactionState} {ss : Substate} {M : ByteArray} 
     obtain ⟨h1, h2, h3⟩ := h
     refine ⟨h1, by rw [h2, hmul], ?_⟩
     have hw := WritesStorage.trans (WritesStorage.trans hw₁ hw₂) h3
-    rw [eF, deq_store r (setSlot (setSlot r 2 0) 3 0) (by rw [hc, ite_eq_left hnt])] at hw
+    rw [eF, deq_store 2 1 r (setSlot (setSlot r 2 0) 3 0) (by rw [hc, ite_eq_left hnt])] at hw
     exact hw
   · have hz : equal (r 3) (BitVec.ofNat 256 ((r 2).toNat + c)) = 0 := by
       simp only [equal]
@@ -1134,7 +1067,7 @@ private theorem deq_head {S : TransactionState} {ss : Substate} {M : ByteArray} 
     obtain ⟨h1, h2, h3⟩ := h
     refine ⟨h1, by rw [h2, hmul], ?_⟩
     have hw := WritesStorage.trans hw₁ h3
-    rw [eF, deq_store r (setSlot r 2 (BitVec.ofNat 256 ((r 2).toNat + c)))
+    rw [eF, deq_store 2 1 r (setSlot r 2 (BitVec.ofNat 256 ((r 2).toNat + c)))
       (by rw [hc, ite_eq_right hnt])] at hw
     exact hw
 
