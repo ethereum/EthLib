@@ -93,7 +93,9 @@ The attestation checks use one of the two versions of the state, for the target 
 
 They also bound the number of indices from Gloas, which this leaves out.
 
-Two upgrades in one epoch change the version of the previous epoch, so any earlier fork counts. -/
+Two upgrades in one epoch change the version of the previous epoch, so any earlier fork counts.
+
+So a signature of the same data in the domain of an earlier fork also counts. -/
 def SignedVote (config : Config) (checks : SignatureChecks) (state : BeaconState preset fork)
     (vote : ValidatorIndex × AttestationData) : Prop :=
   ∃ (indices : List ValidatorIndex) (signer : Base.Fork) (signature : BLSSignature)
@@ -395,7 +397,7 @@ private theorem voteFrame_processAttestationAltair {attestation : Attestation pr
 
 /-- An attestation sets target flags only from votes for the right link, with its own data.
 
-While the registry stays below 2^64 validators, each of them is signed after the step
+While the registry stays below 2^64 validators, each of them is signed after the step.
 
 That also needs the fork versions to be those of forks of the chain. -/
 theorem voteFrame_processAttestation {attestation : Attestation preset fork} {parentSlot : Slot}
@@ -454,7 +456,7 @@ private theorem voteFrame_foldlM_processAttestation {parentSlot : Slot}
 
 Each of those votes holds the data of an attestation of the body.
 
-While the registry stays below 2^64 validators, each of them is signed after the operations
+While the registry stays below 2^64 validators, each of them is signed after the operations.
 
 That also needs the fork versions to be those of forks of the chain. -/
 theorem voteFrame_processOperations {body : BeaconBlockBody preset fork} {parentSlot : Slot}
@@ -472,7 +474,7 @@ theorem voteFrame_processOperations {body : BeaconBlockBody preset fork} {parent
 
 Each of those votes holds the data of an attestation of its body.
 
-While the registry stays below 2^64 validators, each of them is signed after the block
+While the registry stays below 2^64 validators, each of them is signed after the block.
 
 That also needs the fork versions to be those of forks of the chain. -/
 theorem voteFrame_processBlock {block : BeaconBlock preset fork}

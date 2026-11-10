@@ -2086,6 +2086,7 @@ The theorem also assumes the registry below 2^64 validators after the block, whi
 It also assumes `ForkVersionsKnown` after the block.
 The genesis state built from deposits satisfies that and the equal justified checkpoints, and the slots, the blocks and every upgrade keep both (`Consensus/Proofs/Transition/TargetUpgrades.lean`).
 `TargetFlagsSigned.of_processUpgrades` carries the target-flag fact across the upgrades from Altair on.
+It assumes the registry below 2^64 validators after the upgrades.
 At least five gaps remain before a refinement.
 No theorem yet establishes the target-flag fact at the first Altair state, which the upgrade from Phase 0 builds from the pending attestations.
 None covers the forks before Altair.

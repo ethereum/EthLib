@@ -347,7 +347,7 @@ theorem ForkVersionsKnown.of_stateTransition {fork : Fork} {state after : Beacon
   obtain ⟨_, -, slotsOk⟩ := slotsOk
   exact (known.of_advanceSlots slotsOk).of_frame (frame_processBlock blockOk)
 
-/-- The genesis state built from deposits has the fork versions of genesis.
+/-- The fork versions of the genesis state built from deposits are those of forks of the chain.
 
 Its two justified checkpoints are also equal. -/
 theorem initializeBeaconStateFromEth1_target {fork : Fork} {after : BeaconState preset fork}

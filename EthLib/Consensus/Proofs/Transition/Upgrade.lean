@@ -563,7 +563,7 @@ theorem upgradeToAltair_invariant {pre : BeaconState preset .phase0}
 
 /-- Queueing a validator that is not yet active changes no exit epoch.
 
-It keeps the block roots and the flags. -/
+It keeps the block roots, and keeps each byte of flags or zeroes it. -/
 theorem frame_queuePreActivation {fork : Fork} {state after : BeaconState preset fork}
     {electra : .pectra ≤ fork} {index : ValidatorIndex}
     (computed : queuePreActivation state electra index = .ok after) :
@@ -580,7 +580,7 @@ theorem frame_queuePreActivation {fork : Fork} {state after : BeaconState preset
 
 /-- Queueing the excess balance of a validator with compounding credentials keeps the frame.
 
-It keeps the block roots and the flags. -/
+It keeps the block roots, and keeps each byte of flags or zeroes it. -/
 theorem frame_queueCompoundingExcess {fork : Fork} {state after : BeaconState preset fork}
     {electra : .pectra ≤ fork} {index : Nat}
     (computed : queueCompoundingExcess state electra index = .ok after) :
