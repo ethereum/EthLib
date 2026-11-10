@@ -1451,18 +1451,34 @@ Its first theorems bound the writes to the sender, the beneficiary and the autho
 It changes no nonce, code hash or code.
 Storage stays at the sender when its nonce is not 0, and at the beneficiary unless it is deleted.
 
-`authority_applyAuthorization` proves that one accepted authorization in scope sets the code hash of its authority to that of the delegation code, and raises its nonce by one.
-The authorities after the whole list are given against the state that the authorizations leave; the fold over the list is not unrolled.
+`authority_applyAuthorization` in `Authorization.lean` proves that one accepted authorization in scope sets the code hash of its authority to that of the delegation code, and raises its nonce by one.
+`foldlM_applyAuthorization_authority` unrolls the whole list for an authority whose code is empty or a delegation indicator.
+`acceptedBy` lists the authorizations that such an authority accepts, in order: those in scope, signed by it, with its nonce at that point.
+After the list, the authority has one more nonce for each of them and the code of the last one, and the rest of its account stays.
+The hypothesis on the code matters: an authority with other code refuses every authorization.
+`foldlM_applyAuthorization_keeps` covers such an authority, under the hypothesis that no authorization sets a code with its code hash.
 `processMessageCall_of_halt` in `Process.lean` puts the state back to the state before the authorizations when the message halts before its first frame, as EIP-8037 asks.
 `processMessageCall_reads_of_error` proves that a failed frame reads as the state of its first frame, so a failed call keeps its accepted authorizations, as EIP-7702 asks.
 
 `runTransaction_values_of_error` combines these results for one gas meter.
 It names the output of the message call.
 It gives the nonce, the code hash and the balance of every address against the state before settlement.
-It gives the storage of every address but a deleted beneficiary, and of the sender while its nonce is not 0.
+It gives the storage of every address but a deleted beneficiary.
 That state reads as the state after the gas purchase when the transaction creates a contract or its first frame never starts.
 When the first frame of a call starts and fails, it reads as the state that the authorizations leave.
 `processTransaction_values_of_error` gives the same conclusion for every fork before Hegotá, with the gas meter of that fork.
+`processTransaction_authority_of_error` gives each authority whose code is empty or a delegation indicator its values after the transaction.
+Its nonce is its nonce before the transaction, plus one for the sender, plus one per accepted authorization.
+Its code hash is that of the code the last one sets.
+From Glamsterdam it needs the first frame of the call to start, which `FirstFrameHalts` denies.
+Up to BPO5 it needs nothing more, since `aborts_of_prepareFirstFrame_of_lt_glamsterdam` in `Process.lean` shows that a call halts before its first frame only with an error that aborts the run.
+`processTransaction_authority_of_firstFrameHalts` covers the halt from Glamsterdam: every authority keeps its code hash and its nonce, plus one for the sender, as EIP-8037 asks.
+`processTransaction_authority_keeps_of_error` covers an authority with other code, which refuses every authorization: its account and its storage stay.
+It assumes that no authorization sets a code with the code hash of the authority.
+No theorem yet gives the storage of an authority that takes a delegation.
+From Paris, an authority left empty by an authorization to the zero address is deleted with its storage, so that claim needs a condition.
+`processTransaction_selfAuthorization_of_error` in `Replay.lean` applies the first theorem to a sender that signs its only authorization with the nonce of the transaction plus one.
+It ends two nonces above the transaction.
 `block_of_output` proves that the block after the transaction reads as the state that the transaction leaves.
 
 ### Transaction gas
