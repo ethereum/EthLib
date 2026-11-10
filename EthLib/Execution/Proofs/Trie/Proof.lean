@@ -55,6 +55,54 @@ theorem proofBelow_succ (hash : ByteArray → Hash32) (fuel : Nat)
     exceptT_id_monadLift, except_bind_eq]
   rfl
 
+/-- Below an extension that the path follows, the proof holds the child, then the proof below it.
+
+It holds the child only when the child is held by hash. -/
+theorem proofBelow_extension {hash : ByteArray → Hash32} {fuel : Nat}
+    {obj : List (List Nibble × ByteArray)} {level : Nat} {path keySegment : List Nibble}
+    {subnode : Item} {child : Option InternalNode} {encoded : ByteArray} {below : List ByteArray}
+    (hnode : patricialize hash obj level = .ok (some (.extension keySegment subnode)))
+    (hchild : patricialize hash obj (level + keySegment.length) = .ok child)
+    (hencode : encode (unencoded child) = .ok encoded)
+    (hfollow : keySegment = path.take keySegment.length)
+    (h : proofBelow hash (fuel + 1) obj level path = .ok below) :
+    ∃ below', proofBelow hash fuel obj (level + keySegment.length)
+        (path.drop keySegment.length) = .ok below' ∧
+      below = (if encoded.size < 32 then [] else [encoded]) ++ below' := by
+  simp only [proofBelow_succ, hnode, Bind.bind, Except.bind] at h
+  rw [ite_eq_left_of_eq_true _ _ (eq_true hfollow)] at h
+  simp only [hchild, hencode] at h
+  cases hrest : proofBelow hash fuel obj (level + keySegment.length)
+      (path.drop keySegment.length) with
+  | error => simp [hrest] at h
+  | ok below' =>
+    simp only [hrest, pure, Except.pure, Except.ok.injEq] at h
+    exact ⟨below', rfl, h.symm⟩
+
+/-- Below a branch, the proof holds the child of the next nibble, then the proof below it.
+
+It holds the child only when the child is held by hash. -/
+theorem proofBelow_branch {hash : ByteArray → Hash32} {fuel : Nat}
+    {obj : List (List Nibble × ByteArray)} {level : Nat} {nibble : Nibble} {path : List Nibble}
+    {subnodes : Vector Item 16} {value : ByteArray} {child : Option InternalNode}
+    {encoded : ByteArray} {below : List ByteArray}
+    (hnode : patricialize hash obj level = .ok (some (.branch subnodes value)))
+    (hchild : patricialize hash (obj.filter fun entry => decide (entry.1[level]? = some nibble))
+      (level + 1) = .ok child)
+    (hencode : encode (unencoded child) = .ok encoded)
+    (h : proofBelow hash (fuel + 1) obj level (nibble :: path) = .ok below) :
+    ∃ below', proofBelow hash fuel (obj.filter fun entry => decide (entry.1[level]? = some nibble))
+        (level + 1) path = .ok below' ∧
+      below = (if encoded.size < 32 then [] else [encoded]) ++ below' := by
+  simp only [proofBelow_succ, hnode, Bind.bind, Except.bind] at h
+  simp only [hchild, hencode] at h
+  cases hrest : proofBelow hash fuel
+      (obj.filter fun entry => decide (entry.1[level]? = some nibble)) (level + 1) path with
+  | error => simp [hrest] at h
+  | ok below' =>
+    simp only [hrest, pure, Except.pure, Except.ok.injEq] at h
+    exact ⟨below', rfl, h.symm⟩
+
 /-- The proof of a key, with a plain hash. -/
 theorem getProof_eq (hash : ByteArray → Hash32) (trie : Trie) (key : ByteArray) :
     getProof hash trie key = do
@@ -124,6 +172,13 @@ theorem unencoded_shape : (node : Option InternalNode) → (∃ items, unencoded
   | some (.leaf _ _) => .inl ⟨_, rfl⟩
   | some (.extension _ _) => .inl ⟨_, rfl⟩
   | some (.branch _ _) => .inl ⟨_, rfl⟩
+
+/-- The item of a node is never the empty byte string. -/
+theorem unencoded_some_ne_empty (node : InternalNode) : unencoded (some node) ≠ .bytes .empty := by
+  rcases unencoded_shape (some node) with ⟨items, h⟩ | h
+  · rw [h]
+    exact Item.noConfusion
+  · cases node <;> cases h
 
 /-- A node held inside its parent is followed without a proof node. -/
 theorem resolve_unencoded (hash : ByteArray → Hash32) (node : Option InternalNode) (proof : List ByteArray) :
@@ -512,59 +567,55 @@ theorem walk_honest (hash : ByteArray → Hash32) :
   | 0, _, _, _, _, _, _, _, hfuel, _, _, _ => absurd hfuel (Nat.not_lt_zero _)
   | _, 0, _, _, _, _, _, _, _, hfuel', _, _ => absurd hfuel' (Nat.not_lt_zero _)
   | fuel + 1, fuel' + 1, obj, level, path, node, below, honest, hfuel, hfuel', hnode, hbelow => by
-    simp only [proofBelow_succ, hnode, Bind.bind, Except.bind] at hbelow
+    have hstep := hbelow
+    simp only [proofBelow_succ, hnode, Bind.bind, Except.bind] at hstep
     cases built_of_patricialize hash hnode with
     | none hobj =>
       -- No node: no proof node, and the key is not set.
-      simp only [pure, Except.pure, Except.ok.injEq] at hbelow
-      subst hbelow hobj
+      simp only [pure, Except.pure, Except.ok.injEq] at hstep
+      subst hstep hobj
       exact walk_none hash fuel path
     | leaf key value hobj =>
       -- A leaf: no proof node, and its value when the path is the rest of its key.
-      simp only [pure, Except.pure, Except.ok.injEq] at hbelow
-      subst hbelow hobj
+      simp only [pure, Except.pure, Except.ok.injEq] at hstep
+      subst hstep hobj
       intro rest
       rw [walk_leaf, lookupAt_single]
       simp
     | extension keySegment subnode child hsegment hcommon hchild hsubnode =>
       obtain ⟨encoded, hencode, rfl⟩ := encode_of_encodeInternalNode hsubnode
-      dsimp only at hbelow
       by_cases hfollow : keySegment = path.take keySegment.length
       · -- The path follows the extension: the child, after the segment.
-        rw [ite_eq_left_of_eq_true _ _ (eq_true hfollow)] at hbelow
-        simp only [hchild, hencode] at hbelow
-        cases hrest : proofBelow hash fuel' obj (level + keySegment.length) (path.drop keySegment.length) with
-        | error => simp [hrest] at hbelow
-        | ok below' =>
-          simp only [hrest, pure, Except.pure, Except.ok.injEq] at hbelow
-          subst hbelow
-          -- The segment has at least one nibble, so the rest of the path is shorter.
-          have hlength : keySegment.length ≤ path.length := by
-            have := congrArg List.length hfollow
-            simp only [List.length_take] at this
-            omega
-          have hpositive : 0 < keySegment.length := List.length_pos_iff.mpr hsegment
-          have ih := walk_honest hash fuel fuel' (honest.extension hcommon)
-            (by simp only [List.length_drop]; omega) (by simp only [List.length_drop]; omega) hchild hrest
-          rw [lookupAt_extension hcommon hfollow]
-          intro rest
-          rw [walk_extension hash fuel hsegment, ite_eq_left_of_eq_true _ _ (eq_true hfollow)]
-          exact follow_child hash hencode ih rest
+        obtain ⟨below', hrest, rfl⟩ := proofBelow_extension hnode hchild hencode hfollow hbelow
+        -- The segment has at least one nibble, so the rest of the path is shorter.
+        have hlength : keySegment.length ≤ path.length := by
+          have := congrArg List.length hfollow
+          simp only [List.length_take] at this
+          omega
+        have hpositive : 0 < keySegment.length := List.length_pos_iff.mpr hsegment
+        have ih := walk_honest hash fuel fuel' (honest.extension hcommon)
+          (by simp only [List.length_drop]; omega) (by simp only [List.length_drop]; omega)
+          hchild hrest
+        rw [lookupAt_extension hcommon hfollow]
+        intro rest
+        rw [walk_extension hash fuel hsegment, ite_eq_left_of_eq_true _ _ (eq_true hfollow)]
+        exact follow_child hash hencode ih rest
       · -- The path leaves the extension: no proof node, and the key is not set.
-        rw [ite_eq_right_of_eq_false _ _ (eq_false hfollow)] at hbelow
-        simp only [pure, Except.pure, Except.ok.injEq] at hbelow
-        subst hbelow
+        dsimp only at hstep
+        rw [ite_eq_right_of_eq_false _ _ (eq_false hfollow)] at hstep
+        simp only [pure, Except.pure, Except.ok.injEq] at hstep
+        subst hstep
         rw [lookupAt_extension_none hcommon hfollow]
         intro rest
         rw [walk_extension hash fuel hsegment, ite_eq_right_of_eq_false _ _ (eq_false hfollow)]
         rfl
     | branch subnodes hchildren value hvalue =>
-      dsimp only at hbelow
       match path with
       | [] =>
         -- The path ends here: no proof node, and the branch's value.
-        simp only [pure, Except.pure, Except.ok.injEq] at hbelow
-        subst hbelow hvalue
+        dsimp only at hstep
+        simp only [pure, Except.pure, Except.ok.injEq] at hstep
+        subst hstep hvalue
         rw [lookupAt_branch_nil honest]
         intro rest
         rw [walk_branch_nil]
@@ -573,20 +624,15 @@ theorem walk_honest (hash : ByteArray → Hash32) :
         -- The path continues: the child of its next nibble.
         obtain ⟨child, hchild, hsubnode⟩ := hchildren nibble
         obtain ⟨encoded, hencode, hreference⟩ := encode_of_encodeInternalNode hsubnode
-        simp only [hchild, hencode] at hbelow
-        cases hrest : proofBelow hash fuel' (obj.filter fun (key, _) => key[level]? = some nibble) (level + 1)
-            restOfPath with
-        | error => simp [hrest] at hbelow
-        | ok below' =>
-          simp only [hrest, pure, Except.pure, Except.ok.injEq] at hbelow
-          subst hbelow
-          have ih := walk_honest hash fuel fuel' (honest.filter nibble)
-            (by simp only [List.length_cons] at hfuel; omega) (by simp only [List.length_cons] at hfuel'; omega)
-            hchild hrest
-          rw [lookupAt_branch]
-          intro rest
-          rw [walk_branch_cons, hreference]
-          exact follow_child hash hencode ih rest
+        obtain ⟨below', hrest, rfl⟩ := proofBelow_branch hnode hchild hencode hbelow
+        have ih := walk_honest hash fuel fuel' (honest.filter nibble)
+          (by simp only [List.length_cons] at hfuel; omega)
+          (by simp only [List.length_cons] at hfuel'; omega)
+          hchild hrest
+        rw [lookupAt_branch]
+        intro rest
+        rw [walk_branch_cons, hreference]
+        exact follow_child hash hencode ih rest
 
 /-! ## Building a proof -/
 
@@ -651,6 +697,15 @@ theorem getProof_ok (hash : ByteArray → Hash32) {trie : Trie} {root' : Hash32}
         generalize keyPath hash trie.secured key = path
         obtain ⟨below, hbelow⟩ := proofBelow_ok hash (path.length + 1) hnode path
         exact ⟨encoded :: below, by simp [hnode, hencode, hbelow, pure, Except.pure]⟩
+
+/-- The proof of a key is never empty. -/
+theorem getProof_ne_nil {hash : ByteArray → Hash32} {trie : Trie} {key : ByteArray}
+    {proof : List ByteArray} (h : getProof hash trie key = .ok proof) : proof ≠ [] := by
+  rw [getProof_eq] at h
+  simp only [Bind.bind, Except.bind, Except.mapError] at h
+  rintro rfl
+  repeat' split at h
+  all_goals simp_all [pure, Except.pure]
 
 /-! ## Completeness -/
 

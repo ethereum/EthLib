@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnly
 public import EthLib.Cryptography.Proofs.IndependentOutside
+public import VCVio.CryptoFoundations.ReplayFork
 
 /-!
 # Proofs: the key-only game with new forward answers asked of one oracle
@@ -16,9 +17,13 @@ With the key drawn uniformly, it wins with the chance of the game with independe
 
 The run logs at most one more pair than the forger asks for `Π` or its inverse.
 
-When the outside oracle answered the conversion of a forgery, a later proof can rewind there.
+When the outside oracle answered the conversion of a forgery, a replay fork can rewind there.
 
-No theorem forks the run yet.
+The fork index is the position of the forgery's point in the log of new forward pairs.
+
+The new forward queries of both runs at that index then share the point and differ in answer.
+
+The forking lemma bounds the chance of such a fork from below.
 
 A later proof can split forgeries from forward and inverse pairs on this run.
 
@@ -35,6 +40,18 @@ Their Game G2 also changes the inverse answers, in lines 26 to 28, which this ru
 Their `Q` counts the query of the conversion, which their forger asks first.
 
 Here the check may ask it, hence one more pair.
+
+The fork is the forking algorithm of their Figure 2, on an analogue of their Figure 8.
+
+In that analogue, a forgery on an inverse pair gives no fork index.
+
+Their Lemma 1 is the general forking lemma of Bellare and Neven.
+
+The fork here reruns the run from the selected query on, with fresh answers and fresh coins.
+
+Its bound has the form of their Lemma 1 for one fixed key, with `q + 1` for `Q` and `|A|` for `|B|`.
+
+Their Lemma 1 draws the key at random; no theorem averages over the key yet.
 -/
 
 @[expose] public section
@@ -80,6 +97,162 @@ theorem length_forward_le_of_mem_support_keyOnlyOutsideRun (scheme : Scheme F G 
   obtain ⟨r, hr, rfl⟩ := htr
   simpa using length_log_le_of_mem_support_simulateQ_outsideImpl
     (isQueryBoundP_keyOnlyRunQ scheme adversary X hq) _ r hr
+
+/-! ## The fork at the forgery's point -/
+
+/-- The point at which the check of a forgery `(m, t, s)` asks `Π`, on the key `X`.
+
+It is the encoding of `U / s`, where `U = H(m) g + t X`. -/
+def forgeryPoint (scheme : Scheme F G A M) (X : G) (z : M × F × F) : A :=
+  scheme.encode (z.2.2⁻¹ • (scheme.hash z.1 • scheme.g + z.2.1 • X))
+
+/-- The bound on each oracle index that the fork reads: `q` for the outside oracle.
+
+The fork reads only the outside oracle, so the bound on the coins is never used. -/
+def forkBound (q : ℕ) : ℕ ⊕ Unit → ℕ
+  | .inl _ => 0
+  | .inr () => q
+
+/-- The fork index of a run: the position of the forgery's point in the log of new forward pairs.
+
+It is `none` unless the check passed with no flag raised.
+
+It is also `none` when the point is not in the log, or not among its first `q + 1` pairs. -/
+def forkIndex (scheme : Scheme F G A M) (X : G) (q : ℕ) (tr : KeyOnlyTrace F A M) :
+    Option (Fin (forkBound q (.inr ()) + 1)) :=
+  if tr.verified && !tr.bad then
+    match tr.forward.findIdx? fun p => decide (p.1 = forgeryPoint scheme X tr.forgery) with
+    | some j => if h : j < q + 1 then some ⟨j, h⟩ else none
+    | none => none
+  else none
+
+omit [DecidableEq F] [DecidableEq G] in
+/-- A run with a fork index passed the check with no flag raised.
+
+The pair of the log at that index is a new forward query at the forgery's point. -/
+theorem verified_and_forward_of_forkIndex_eq_some {scheme : Scheme F G A M} {X : G} {q : ℕ}
+    {tr : KeyOnlyTrace F A M} {j : Fin (forkBound q (.inr ()) + 1)}
+    (h : forkIndex scheme X q tr = some j) :
+    tr.verified = true ∧ tr.bad = false ∧
+      ∃ hj : (j : ℕ) < tr.forward.length, tr.forward[j].1 = forgeryPoint scheme X tr.forgery := by
+  unfold forkIndex at h
+  split_ifs at h with hv
+  simp only [Bool.and_eq_true, Bool.not_eq_eq_eq_not, Bool.not_true] at hv
+  refine ⟨hv.1, hv.2, ?_⟩
+  split at h
+  · rename_i k hk
+    split_ifs at h with hkq
+    cases h
+    obtain ⟨hlt, hp, -⟩ := List.findIdx?_eq_some_iff_getElem.mp hk
+    exact ⟨hlt, by simpa using hp⟩
+  · cases h
+
+/-- The transcript of a run of the outside oracles is the one of its log of new forward pairs. -/
+theorem outsideTranscript_of_mem_support_keyOnlyOutsideRun (scheme : Scheme F G A M)
+    (adversary : KeyOnlyAdversary F G A M) (X : G) {tr : KeyOnlyTrace F A M}
+    {log : QueryLog (OutsideSpec A)}
+    (h : (tr, log) ∈ support (replayFirstRun (keyOnlyOutsideRun scheme adversary X))) :
+    OutsideTranscript tr.forward log := by
+  rw [replayFirstRun, keyOnlyOutsideRun, map_eq_bind_pure_comp,
+    OracleComp.withQueryLog_bind] at h
+  simp only [Function.comp_apply, OracleComp.withQueryLog_pure, map_pure, support_bind,
+    support_pure, Set.mem_iUnion, Set.mem_singleton_iff] at h
+  obtain ⟨⟨r, l⟩, hr, hz⟩ := h
+  simp only [Prod.map, id, Prod.mk.injEq, List.append_nil] at hz
+  obtain ⟨rfl, rfl⟩ := hz
+  obtain ⟨new, hnew, htr⟩ := outsideTranscript_of_mem_support_withQueryLog _ _ hr
+  simpa [hnew] using htr
+
+/-- The fork index of a run always points at a query of the outside oracle in its transcript. -/
+theorem cfReachable_forkIndex (scheme : Scheme F G A M) (adversary : KeyOnlyAdversary F G A M)
+    (X : G) (q : ℕ) :
+    CfReachable (keyOnlyOutsideRun scheme adversary X) (forkBound q) (.inr ())
+      (forkIndex scheme X q) := by
+  intro tr log h j hj
+  obtain ⟨-, -, hlt, -⟩ := verified_and_forward_of_forkIndex_eq_some hj
+  have htr := outsideTranscript_of_mem_support_keyOnlyOutsideRun scheme adversary X h
+  rw [htr.getQueryValue?_inr, List.getElem?_eq_getElem hlt]
+  rfl
+
+/-- **Both runs of the fork ask `Π` at the same point, and get different answers.**
+
+Take two runs that the fork returns, on the key `X`.
+
+They have the same fork index `j`.
+
+Their `j`-th new forward pairs have the same point and different answers. -/
+theorem forward_point_eq_answer_ne_of_mem_support_contextFork (scheme : Scheme F G A M)
+    (adversary : KeyOnlyAdversary F G A M) (X : G) (q : ℕ) {tr₁ tr₂ : KeyOnlyTrace F A M}
+    (h : some (tr₁, tr₂) ∈ support
+      (contextFork (keyOnlyOutsideRun scheme adversary X) (forkBound q) (.inr ())
+        (forkIndex scheme X q))) :
+    ∃ j, forkIndex scheme X q tr₁ = some j ∧ forkIndex scheme X q tr₂ = some j ∧
+      ∃ (h₁ : (j : ℕ) < tr₁.forward.length) (h₂ : (j : ℕ) < tr₂.forward.length),
+        tr₁.forward[j].1 = tr₂.forward[j].1 ∧ tr₁.forward[j].2 ≠ tr₂.forward[j].2 := by
+  set main := keyOnlyOutsideRun scheme adversary X
+  obtain ⟨path, s, located, second, hpath, hcf₁, -, hne, hcf₂, rfl, rfl⟩ :=
+    contextFork_success main (forkBound q) (.inr ()) (forkIndex scheme X q) h
+  have hT₁ := outsideTranscript_of_mem_support_keyOnlyOutsideRun scheme adversary X
+    (replayPathResult_mem_support_replayFirstRun main path hpath)
+  have hT₂ := outsideTranscript_of_mem_support_keyOnlyOutsideRun scheme adversary X
+    (replayPathResult_mem_support_replayFirstRun main second.path
+      (mem_support_replayFirstPath main second.path))
+  let before : QueryLog (OutsideSpec A) := located.occurrence.before
+  let log₁ : QueryLog (OutsideSpec A) := PFunctor.FreeM.Path.trace main path
+  let log₂ : QueryLog (OutsideSpec A) := PFunctor.FreeM.Path.trace main second.path
+  let rest₁ : QueryLog (OutsideSpec A) := PFunctor.FreeM.Path.trace
+    (located.occurrence.resume located.completion.answer) located.completion.suffix
+  let rest₂ : QueryLog (OutsideSpec A) := PFunctor.FreeM.Path.trace
+    (located.occurrence.resume second.answer) second.suffix
+  have hlog₁ : log₁ = before ++ ⟨.inr (), located.completion.answer⟩ :: rest₁ :=
+    (congrArg (PFunctor.FreeM.Path.trace main) located.path_eq).symm.trans
+      (PFunctor.FreeM.Cursor.Occurrence.trace_plug
+        located.occurrence located.completion.answer located.completion.suffix)
+  have hlog₂ : log₂ = before ++ ⟨.inr (), second.answer⟩ :: rest₂ :=
+    PFunctor.FreeM.Cursor.Occurrence.trace_plug located.occurrence second.answer second.suffix
+  have hc : before.countQ (· = .inr ()) = s := by
+    rw [QueryLog.countQ_eq_occurrences]
+    simp [before]
+  obtain ⟨hk₁, u₁, hl₁⟩ := hT₁.getLast?_of_eq_append (log := log₁) hlog₁
+  obtain ⟨hk₂, u₂, hl₂⟩ := hT₂.getLast?_of_eq_append (log := log₂) hlog₂
+  have hv₁ : log₁.getQueryValue? (.inr ()) (before.countQ (· = .inr ())) = _ :=
+    hT₁.getQueryValue?_inr _
+  have hv₂ : log₂.getQueryValue? (.inr ()) (before.countQ (· = .inr ())) = _ :=
+    hT₂.getQueryValue?_inr _
+  rw [hlog₁, QueryLog.getQueryValue?_append_self_at_countQ, List.getElem?_eq_getElem hk₁]
+    at hv₁
+  rw [hlog₂, QueryLog.getQueryValue?_append_self_at_countQ, List.getElem?_eq_getElem hk₂]
+    at hv₂
+  rw [hl₁] at hl₂
+  simp only [Option.some.injEq, Option.map_some] at hl₂ hv₁ hv₂
+  have hcode := Sum.inl_injective (congrArg Sigma.fst hl₂)
+  clear hl₁ hl₂ u₁ u₂
+  generalize before.countQ (· = .inr ()) = n at hc hk₁ hk₂ hcode hv₁ hv₂
+  subst hc
+  refine ⟨s, hcf₁, hcf₂, hk₁, hk₂, FinEnum.equiv.injective (Fin.ext hcode), ?_⟩
+  simpa only [Fin.getElem_fin, ← hv₁, ← hv₂] using hne
+
+/-- **The forking lemma for the run on one key.**
+
+Let `acc` be the chance that the run has a fork index.
+
+Then the fork succeeds with chance at least `acc (acc / (q + 1) - 1 / |A|)`. -/
+theorem le_prEvent_isSome_contextFork_keyOnlyOutsideRun
+    [UniformAnswerMeasure (Unit →ₒ A)] (scheme : Scheme F G A M)
+    (adversary : KeyOnlyAdversary F G A M) (X : G) (q : ℕ) :
+    (let acc := Pr{let tr ← keyOnlyOutsideRun scheme adversary X}[
+        (forkIndex scheme X q tr).isSome]
+     acc * (acc / (q + 1 : ℝ≥0∞) - (FinEnum.card A : ℝ≥0∞)⁻¹)) ≤
+      Pr{let r ← (contextFork (keyOnlyOutsideRun scheme adversary X) (forkBound q) (.inr ())
+        (forkIndex scheme X q))}[r.isSome] := by
+  have h := le_prEvent_isSome_contextFork (keyOnlyOutsideRun scheme adversary X) (forkBound q)
+    (.inr ()) (forkIndex scheme X q)
+    (CfReachable.toPathCfReachable (cfReachable_forkIndex scheme adversary X q))
+  simp only [← prEvent_isSome_eq_sum] at h
+  have hcard : Fintype.card ((OutsideSpec A).Range (.inr ())) = FinEnum.card A := by
+    rw [FinEnum.card_eq_fintypeCard]
+    rfl
+  simpa only [forkBound, Nat.cast_add, Nat.cast_one, hcard] using h
 
 variable [SampleableType F]
 

@@ -934,7 +934,8 @@ theorem launchCreate_keeps (rules : MeterRules Q)
       exact ⟨md, fun _ _ hres _ => rules.trans md (rules.resumeCreate_keeps hres)⟩
     · obtain ⟨e3, h3, hr⟩ := Base.bind_ok_iff.mp hr
       cases hr
-      exact (rules.trans ms (rules.pushWord_keeps h3 :) :)
+      exact (rules.trans ms (rules.trans (refillStateGas_keeps rules _ _ :)
+        (rules.pushWord_keeps h3 :)) :)
   · exact (rules.trans access (rules.exhaust _) :)
 
 /-- A successful step of CREATE or CREATE2 keeps the relation. -/

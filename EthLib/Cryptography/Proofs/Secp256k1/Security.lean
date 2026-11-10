@@ -56,7 +56,9 @@ The advantage falls by at most `q_Π (q_Π + 1) / 2` over `|A|`.
 
 With independent answers, each new forward answer can be one query to an outside oracle.
 
-The chance to win stays, and a later proof can rewind the run at such a query.
+The chance to win stays, and a replay fork can rewind the run at the forgery's query.
+
+Both runs of the fork then queried the same point, with different answers.
 
 No theorem bounds the advantage of a forger yet.
 -/

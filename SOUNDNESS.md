@@ -472,8 +472,10 @@ That is the step from Game G0 to Game G1 of §4.2 of the source, in the proof of
 The source draws the key from the nonzero scalars; the key-only game here draws it from all scalars, and the key `0` never verifies.
 So its advantage is the source's times `(n - 1) / n`, where `n` is the number of scalars.
 `keyOnlyIndepAdvantage_eq_outside` (`Proofs/Secp256k1/Security/KeyOnlyOutside.lean`) proves that the advantage with independent answers stays the same when each new forward answer is one query to an outside oracle with no input.
-A replay fork can later rewind the run at that oracle's query; unlike Figure 2 of the source, it draws the coins after the fork again.
-No theorem forks the run yet.
+`forward_point_eq_answer_ne_of_mem_support_contextFork` proves that the two runs returned by a replay fork at the new forward query of the forgery's point share that point and got different answers there.
+`le_prEvent_isSome_contextFork_keyOnlyOutsideRun` bounds the chance of the fork from below on each fixed key, in the form of Lemma 1 of the source; Lemma 1 draws the key at random, and no theorem averages over the key yet.
+Unlike Figure 2 of the source, the fork draws the coins after the fork point again.
+No theorem yet proves that the check's answer from the bijection is the logged answer at the fork index, nor extracts the key from the two forgeries.
 `ecdsa_verify_eq_verify_ecdsaScheme` (`Proofs/Secp256k1/Security/Refinement.lean`) proves that `verify` is the game's verification, with the bijection the identity, for `r` and `s` below `n`.
 `exists_signNonce_of_sign` proves that every signature from `sign` is the game's signature for some nonzero nonce; that is correctness of signing, and says nothing about how RFC 6979 draws the nonces.
 The game draws the bijection uniformly, so a bound on it would apply to EthLib, where the bijection is the identity, only under the heuristic of the source that the identity behaves as a bijective random oracle.
@@ -1696,6 +1698,29 @@ The rule does not imply that hypothesis: with `N = 2^23` validators of 32 ether,
 Over 6280 epochs, the churn of validators alone lowers the bound of Gasper Theorem 8.3 to about 14% of the stake.
 With small balances, `230 T ≥ 320 t`, no theorem relates the period to the margin.
 The Python suite checks the periods against the three tables of the rule, except for the rows whose states take minutes to build.
+
+### Fast confirmation rule
+
+`Consensus/ForkChoice/FastConfirmation.lean` holds the fast confirmation rule of [arXiv 2405.00549v4](https://arxiv.org/abs/2405.00549v4).
+The rule weighs the committees of a range of slots exactly.
+Each active member of their union counts once, by its effective balance in the source of balances, and a range with a whole epoch weighs the total active balance.
+An earlier form of the rule estimated that weight as an average per slot, which is not an upper bound on a given committee.
+[A counterexample on #1458](https://github.com/ethereum/EthLib/issues/1458#issuecomment-6764027413) shows that the estimate lets the rule confirm a block that an attack then reorgs, under the assumptions of the paper.
+The pinned fast confirmation vectors of consensus-specs `v1.7.0-beta.4` were generated with that estimate.
+In 24 of them, five cases at several forks, the rule now confirms another block, and `tests/parity/disagreements.toml` lists them as expected failures.
+The vendored fast confirmation cases in `tests/consensus/fork_choice` still pass.
+
+`stake_le_computeCommitteeWeightBetweenSlots` (`Consensus/Proofs/ForkChoice/FastConfirmationIndicators.lean`) shows that the weight covers the stake of the active members of the committees.
+`lt_two_mul_honest_support_of_isOneConfirmed` then gives Lemmas 4 and 3 of the paper for a block that the store confirms.
+Twice its honest support, plus the discount for empty slots, exceeds the committee weight since its parent plus the boost.
+It assumes that the Byzantine validators hold at most the configured share of the stake of the committees, as Assumption 2 of the paper does.
+It also assumes that the effective balances of those validators are whole numbers of 100 Gwei, since the store rounds the weight down to 100 Gwei for its share of the adversary.
+Effective balances are whole increments of 10^9 Gwei, but no theorem yet derives that from the state transition.
+The supporters and the equivocators are sets whose stakes are the store's numbers; no theorem yet builds them from the store.
+Like the paper, the theorem takes a static set of validators, Assumption 1.
+The honest support of the target of the current epoch takes the total active balance less the weight of the committees so far as the weight still to vote.
+No theorem proves that, which rests on the shuffling of the head and its pulled-up state agreeing on the active validators of the epoch.
+Each member of the committees must also be in the source of balances, or the rule fails; no theorem bounds the epochs between that source and the range.
 
 ### Honest validator duties
 

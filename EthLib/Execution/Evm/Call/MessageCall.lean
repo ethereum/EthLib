@@ -40,6 +40,10 @@ The caller checks the depth of the message and the balance it sends before the m
 
 A creation first wipes the storage of the new account and records it as created.
 
+A creation runs only at an address whose storage reads zero, by EIP-7610.
+
+So the wipe changes no word.
+
 From Spurious Dragon, the new account starts with nonce 1, by EIP-161.
 
 Once the init code succeeds, its output is the code of the new account, at 200 gas a byte.
@@ -171,6 +175,10 @@ def rollbackOnError (snapshot : TransactionState) (evm : Evm fork Meter) : Evm f
 /-- The state at the start of the creation of the account at `address`, at fork `fork`.
 
 Its storage is wiped, and it is recorded as created.
+
+Its callers create only at an address whose storage reads zero, by EIP-7610.
+
+So the wipe changes no word.
 
 From Spurious Dragon, its nonce grows from 0 to 1. -/
 def prepareCreation (fork : Fork) (state : TransactionState) (address : Address) :

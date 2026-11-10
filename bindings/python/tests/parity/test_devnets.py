@@ -12,7 +12,7 @@ CASES = (
 
 # Most cases of a devnet run in the pinned release, so only the files of the others are unpacked.
 ROOTS = {suite: harness.unpack_read(catalogue.DEVNETS[suite], CASES[suite]) for suite in CASES}
-DISAGREEMENTS = {suite: harness.disagreements(suite) for suite in catalogue.DEVNETS}
+DISAGREEMENTS = {suite: archives.disagreements(suite) for suite in catalogue.DEVNETS}
 
 pytestmark = pytest.mark.archive
 

@@ -163,29 +163,12 @@ The first case is a creation that fails, and rolls back to the snapshot. -/
 theorem supply_depositCode {snapshot : TransactionState} {evm after : Evm fork Meter}
     (hp : evm.state.parent = snapshot.parent) (h : depositCode fork snapshot evm = .ok after) :
     after.state.supply = snapshot.supply ∨ after.state.supply = evm.state.supply := by
-  have back := TransactionState.supply_restoreTxState hp
-  unfold depositCode at h
-  dsimp only at h
-  split at h
-  · cases h
-    exact .inl back
-  split at h
-  · cases h
-    exact .inl back
-  split at h
-  · cases h
-    exact .inl back
-  split at h
-  · cases h
-    split
-    · exact .inl back
-    · exact .inr rfl
-  split at h
-  · cases h
-    exact .inl back
-  obtain ⟨st, hst, h⟩ := Base.bind_ok_iff.mp h
-  cases h
-  exact .inr (TransactionState.supply_setCode (Base.mapError_ok_iff.mp hst))
+  rcases (depositCode_cases h).2.2 with hs | hs | hs
+  · rw [hs]
+    exact .inl (TransactionState.supply_restoreTxState hp)
+  · rw [hs]
+    exact .inr rfl
+  · exact .inr (TransactionState.supply_setCode hs)
 
 /-- A successful deposit of code keeps or lowers the supply of the state before the creation.
 
