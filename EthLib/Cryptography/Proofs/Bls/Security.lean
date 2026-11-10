@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Bls.Security.PopGame
+public import EthLib.Cryptography.Proofs.Bls.Security.PopExtract
 public import EthLib.Cryptography.Proofs.Bls.Security.Refinement
 
 /-!
@@ -16,5 +16,13 @@ The byte game reduces a forger on compressed encodings to a group-element forger
 
 Freshness excludes every message submitted to signing, regardless of signature bytes.
 
-A second game states unforgeability of aggregates with proofs of possession; no bound is proved yet.
+A second game states unforgeability of aggregates with proofs of possession.
+
+The algebraic step of its reduction is proved, on programmed hashes.
+
+A valid aggregate with valid proofs on key hashes `r x • Z` gives `a • Z`, for the key `a • g1`.
+
+That needs every key to be a multiple of `g1`, no `r x` to be zero, and a nonzero honest count.
+
+No bound on that game is proved yet.
 -/
