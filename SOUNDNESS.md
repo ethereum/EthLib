@@ -1598,8 +1598,20 @@ The state must hold the root of the checkpoint at its epoch and be at that epoch
 The answer is then whether the current epoch is at most the epoch of the checkpoint plus the period.
 By `isWithinWeakSubjectivityPeriod_of_slot_le`, a checkpoint within its period at some slot is within it at every earlier slot.
 
-No theorem says that the period gives the safety margin that the rule intends.
-That margin is the claim of the analysis behind the rule, and EthLib does not model it.
+From Electra, `accountable_safety_of_weakSubjectivityPeriod` (`Consensus/Proofs/Transition/WeakSubjectivitySafety.lean`) relates the period to the safety margin that the rule intends, under an assumption on the change of the validator sets.
+The trusted set is the active validators of the state at the checkpoint, weighed by their effective balances, with at least one increment of stake.
+Take two conflicting finalized checkpoints of the Casper FFG model.
+The change of a set since the trusted set counts the stake that joined plus twice the stake that left.
+Assume that the change of each justified set between their epochs is at most `3 c` for each of the `n` epochs of churn, the period less the withdrawal delay, with `c` the churn of the period.
+Then the slashable validators hold at least `1/3 - SAFETY_DECAY/100` of the trusted stake, `7/30` with `SAFETY_DECAY` at 10.
+The arithmetic is `safetyMargin_of_balanceChurnPeriod_eq_ok`, from `200 n c ≤ SAFETY_DECAY · t`.
+In Electra an epoch adds at most the activation-exit churn `a ≤ c` and removes at most `c`, consolidation sources included, so its change is at most `a + 2 c ≤ 3 c`.
+From Gloas an epoch changes the set by at most three times the weighted churn, plus 4 Gwei of rounding when the consolidation churn is zero.
+The queues carry unused churn to later epochs, so the bound can hold over the window without holding in each epoch.
+No theorem yet derives it from the state transition, and the model fixes the effective balances over the window.
+The rule spends the withdrawal delay on keeping exits slashable and the other epochs of the period on churn, and the assumption takes the change over those epochs as given.
+Activations have no such delay, and a validator outside the registry of the checkpoint weighs zero in the model.
+No theorem covers the Phase 0 period, which counts validators and top-ups.
 The Python suite checks the periods against the three tables of the rule, except for the rows whose states take minutes to build.
 
 ### Honest validator duties
@@ -2009,10 +2021,12 @@ The reader does not choose the two checkpoints, so the theorem says something on
 `accountable_safety_reference` (`AccountableSafety.lean`) restates the first bound against one fixed reference set `V₀`, such as the set of a trusted checkpoint.
 The stake of `V₀` is at most three times the slashable stake, plus the change of each of the two sets since `V₀`.
 The change of a set counts the stake that joined once and the stake that left twice.
+`accountable_safety_of_change` assumes that the change of every justified set between the two finalized epochs is at most `b`, and bounds the stake of `V₀` by three times the slashable stake plus `2 b`.
 `accountable_safety_of_steps` assumes that every justified checkpoint between the two finalized epochs has a set reached from `V₀` in at most `n` steps.
 Each step changes the set by at most `d` in that measure, so the stake of `V₀` is at most three times the slashable stake plus `2 n d`.
 As above, the reader does not choose the two checkpoints, so the hypothesis covers every justified checkpoint between the two finalized epochs.
-A step of one epoch has `d` at most the stake that activates plus twice the stake that exits, the source of a consolidation included.
+For a step of one epoch, `d` bounds the stake that activates plus twice the stake that exits, the source of a consolidation included.
+The churn queues carry unused churn to later epochs, so such a bound can fail in one epoch while the total over a window holds; `accountable_safety_of_change` takes that total.
 The model does not follow withdrawals; the specification covers them with the withdrawability delay in the weak subjectivity period.
 The model also fixes the stake of each validator, so a top-up, a consolidation or a penalty of a validator that stays in the set is outside these theorems.
 No theorem yet derives those steps from the beacon state.
