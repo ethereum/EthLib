@@ -9,6 +9,9 @@ public import EthLib.Networking.Proofs.Encoding.Varint
 - Reading a varint, a key or a record back from its encoding returns it, whatever bytes follow.
 - Reading the records of an encoded sequence returns the sequence.
 - The key needs a field number in range; a record also needs a value shorter than `2^64` bytes.
+- Reading a serialized message returns its records, for fields in range and a short message.
+- Short means fewer than `2^64` bytes.
+- The values of one field follow the order of the records.
 - Two errors with one code come from one constructor.
 -/
 
@@ -155,6 +158,64 @@ theorem records_encodeRecords {rs : List Record} (h : ∀ r ∈ rs, r.WellFormed
     records (encodeRecords rs) = .ok rs := by
   have := records_go_encodeRecords h _ (Nat.le_refl _) []
   simpa [records] using this
+
+/-- The bytes of a serialized message are the encoding of its records. -/
+theorem toList_serialize (rs : List Record) :
+    (serialize rs).data.toList = encodeRecords rs := by
+  simp [serialize]
+
+/-- A serialized message is as long as the encoding of its records. -/
+theorem size_serialize (rs : List Record) :
+    (serialize rs).size = (encodeRecords rs).length := by
+  simp [serialize, ByteArray.size]
+
+/-- A length-delimited value is no longer than the encoding of a sequence that holds it. -/
+theorem size_le_of_mem {rs : List Record} {n : Nat} {b : ByteArray} (h : lenRecord n b ∈ rs) :
+    b.size ≤ (encodeRecords rs).length := by
+  induction rs with
+  | nil => simp at h
+  | cons r rs ih =>
+    simp only [encodeRecords, List.flatMap_cons, List.length_append] at ih ⊢
+    rcases List.mem_cons.mp h with rfl | h
+    · simp only [lenRecord, encodeRecord, encodeValue, List.length_append, Array.length_toList]
+      have : b.data.size = b.size := rfl
+      omega
+    · have := ih h; omega
+
+/-- A length-delimited value in a message shorter than `2^64` bytes is shorter too. -/
+theorem size_lt_of_mem {rs : List Record} {n : Nat} {b : ByteArray} (hm : lenRecord n b ∈ rs)
+    (h : (serialize rs).size < 2 ^ 64) : b.size < 2 ^ 64 := by
+  have := size_le_of_mem hm
+  rw [size_serialize] at h
+  omega
+
+/-- Reading the records of a serialized message returns them.
+
+Every field number must be in range, and the message shorter than `2^64` bytes. -/
+theorem records_serialize {rs : List Record}
+    (hf : ∀ r ∈ rs, 0 < r.field ∧ r.field ≤ maxField) (h : (serialize rs).size < 2 ^ 64) :
+    records (serialize rs).data.toList = .ok rs := by
+  have hw : ∀ r ∈ rs, r.WellFormed := by
+    intro ⟨n, v⟩ hr
+    refine ⟨(hf _ hr).1, (hf _ hr).2, ?_⟩
+    cases v with
+    | len b => exact size_lt_of_mem hr h
+    | _ => trivial
+  rw [toList_serialize, records_encodeRecords hw]
+
+/-- With no records, a field has no values. -/
+theorem valuesOf_nil (field : Nat) : valuesOf [] field = [] := rfl
+
+/-- A record of the field puts its value first; a record of another field adds nothing. -/
+theorem valuesOf_cons (r : Record) (rs : List Record) (field : Nat) :
+    valuesOf (r :: rs) field =
+      if r.field = field then r.value :: valuesOf rs field else valuesOf rs field := by
+  by_cases h : r.field = field <;> simp [valuesOf, h]
+
+/-- The values of two sequences of records follow one another. -/
+theorem valuesOf_append (rs rs' : List Record) (field : Nat) :
+    valuesOf (rs ++ rs') field = valuesOf rs field ++ valuesOf rs' field := by
+  simp [valuesOf]
 
 /-- Two errors with one code come from one constructor. -/
 theorem _root_.EthLib.Networking.Encoding.Protobuf.ProtobufError.code_injective

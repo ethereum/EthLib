@@ -22,6 +22,7 @@ public import EthLib.Networking.Proofs.Enr.Security
 public import EthLib.Networking.Proofs.Enr.V4
 public import EthLib.Networking.Proofs.Gossip.MessageId
 public import EthLib.Networking.Proofs.Gossip.Payload
+public import EthLib.Networking.Proofs.Gossip.Rpc
 public import EthLib.Networking.Proofs.Gossip.Subnet
 public import EthLib.Networking.Proofs.Gossip.Topic
 public import EthLib.Networking.Proofs.Gossip.Validation
