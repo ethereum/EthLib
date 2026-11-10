@@ -475,7 +475,9 @@ So its advantage is the source's times `(n - 1) / n`, where `n` is the number of
 `forward_point_eq_answer_ne_of_mem_support_contextFork` proves that the two runs returned by a replay fork at the new forward query of the forgery's point share that point and got different answers there.
 `le_prEvent_isSome_contextFork_keyOnlyOutsideRun` bounds the chance of the fork from below on each fixed key, in the form of Lemma 1 of the source; Lemma 1 draws the key at random, and no theorem averages over the key yet.
 Unlike Figure 2 of the source, the fork draws the coins after the fork point again.
-No theorem yet proves that the check's answer from the bijection is the logged answer at the fork index, nor extracts the key from the two forgeries.
+`reduce_forward_eq_of_forkIndex_eq_some` (`Proofs/Secp256k1/Security/ForwardCase.lean`) proves that the check of a run with a fork index read the logged answer at that index, so `ψ` maps that answer to the forgery's `t`.
+It rests on an invariant of the run: each logged pair stays cached, and while no flag is raised the cache is a partial bijection.
+No theorem yet extracts the key from the two forgeries, states the ψ-relative division resistance of the hash (Definition 5 of the source) or bounds by it the abort of line 10 of Figure 9, splits a win into the forward and inverse cases, or averages the fork's bound over the key.
 `redrawInverse_fst_evalDistEq` (`Proofs/Secp256k1/Security/Redraw.lean`) proves the step of lines 25 to 28 of Figure 7 of the source: a uniform answer that encodes a nonzero multiple of the base point, redrawn as the encoding of `a g` for a uniform nonzero `a`, is still uniform.
 It assumes that the base point is nonzero, that `2` is nonzero in the scalars, that the encoding is semi-injective, and that opposite points share their encoding; the encoding is then exactly 2-to-1 on those points.
 So it covers ECDSA, not the injective case of Definition 2 (b) of the source.

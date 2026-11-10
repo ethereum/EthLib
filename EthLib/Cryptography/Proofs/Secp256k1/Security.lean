@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.ForwardCase
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Game
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.InverseCase
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.JointGame
@@ -61,6 +62,10 @@ With independent answers, each new forward answer can be one query to an outside
 The chance to win stays, and a replay fork can rewind the run at the forgery's query.
 
 Both runs of the fork then queried the same point, with different answers.
+
+With no flag raised, the check of a forgery read the logged answer at the fork index.
+
+The map `ψ` sends that answer to `t`.
 
 A new inverse answer that encodes a nonzero multiple of the base point can be redrawn.
 

@@ -285,7 +285,7 @@ theorem extensions_cons (p : A × A) (c : PermCache A) :
   simp [extensions, Agrees, and_comm]
 
 /-- A query found in the cache is the first entry of a pair with that answer. -/
-private theorem mem_of_lookup_eq_some {c : PermCache A} {a b : A} (h : c.lookup a = some b) :
+theorem mem_of_lookup_eq_some {c : PermCache A} {a b : A} (h : c.lookup a = some b) :
     (a, b) ∈ c := by
   induction c with
   | nil => simp at h
@@ -299,7 +299,7 @@ private theorem mem_of_lookup_eq_some {c : PermCache A} {a b : A} (h : c.lookup 
       exact List.mem_cons_of_mem _ (ih h)
 
 /-- A query missing from the cache is no query of the cache. -/
-private theorem ne_of_lookup_eq_none {c : PermCache A} {a : A} (h : c.lookup a = none) :
+theorem ne_of_lookup_eq_none {c : PermCache A} {a : A} (h : c.lookup a = none) :
     ∀ p ∈ c, p.1 ≠ a := fun p hp hpa => by
   have := List.lookup_eq_none_iff.1 h p hp
   simp [hpa] at this
