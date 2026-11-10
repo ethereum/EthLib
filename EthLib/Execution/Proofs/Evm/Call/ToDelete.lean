@@ -179,7 +179,7 @@ theorem createdAccounts_startState (message : Message fork) (state : Transaction
   · rfl
 
 /-- The state that a message enters has the created accounts of the state it is sent from. -/
-theorem createdAccounts_of_entered {message : Message fork} {state entry : TransactionState}
+theorem createdAccounts_entered {message : Message fork} {state entry : TransactionState}
     {substate entrySubstate : Substate}
     (h : Entered fork message state substate entry entrySubstate) :
     entry.createdAccounts = state.createdAccounts := by

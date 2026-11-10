@@ -165,6 +165,54 @@ theorem supply_selfdestructTransfer {tx tx' : TransactionState}
       simp only [Ne.symm same, ↓reduceIte] at hs
       omega
 
+/-- An account with no balance burns nothing. -/
+theorem selfdestructBurn_eq_zero {state : TransactionState} {originator beneficiary : Address}
+    (balance : state.balanceOf originator = 0) :
+    selfdestructBurn fork state originator beneficiary = 0 := by
+  unfold selfdestructBurn
+  split <;> first | assumption | rfl
+
+/-- A move of the balance of SELFDESTRUCT that burns some wei leaves its account with no balance. -/
+theorem balanceOf_selfdestructTransfer_eq_zero {state after : TransactionState}
+    {originator beneficiary : Address}
+    (h : selfdestructTransfer fork state originator beneficiary = .ok after)
+    (nonzero : selfdestructBurn fork state originator beneficiary ≠ 0) :
+    after.balanceOf originator = 0 := by
+  have setZero : ∀ {a b : TransactionState}, a.setAccountBalance fork originator 0 = .ok b →
+      b.balanceOf originator = 0 := by
+    intro a b h
+    obtain ⟨account, changed, read, -⟩ := TransactionState.modifyState_eq_ok h
+    cases changed
+    unfold TransactionState.balanceOf
+    rw [read]
+    rfl
+  unfold selfdestructTransfer at h
+  split at h
+  · rename_i hdencun
+    obtain ⟨mid, moved, h⟩ := Base.bind_ok_iff.mp h
+    split at h
+    · exact setZero h
+    · rename_i notCreated
+      cases h
+      apply False.elim
+      apply nonzero
+      unfold selfdestructBurn
+      split
+      · rename_i condition
+        rcases condition.2 with early | created
+        · exact False.elim (Nat.not_lt_of_ge hdencun early)
+        · exact False.elim (notCreated
+            (TransactionState.createdAccounts_moveEther moved ▸ created))
+      · rfl
+  · obtain ⟨mid, _, h⟩ := Base.bind_ok_iff.mp h
+    exact setZero h
+
+/-- A burn of SELFDESTRUCT above 0 is from an account to itself, at a fork before Glamsterdam. -/
+theorem selfdestructBurn_ne_zero {tx : TransactionState} {originator beneficiary : Address}
+    (h : selfdestructBurn fork tx originator beneficiary ≠ 0) :
+    originator = beneficiary ∧ fork < .glamsterdam := by
+  sorry
+
 /-- A successful move of the balance of SELFDESTRUCT keeps or lowers the supply.
 
 It keeps it exactly from Glamsterdam, and from Cancun when the end state has no created account. -/
@@ -228,7 +276,7 @@ theorem supply_startState (message : Message fork) (state : TransactionState) :
 /-- The state that a message enters has the supply of the state it is sent from.
 
 A move of its value keeps the supply. -/
-theorem supply_of_entered {message : Message fork} {state entry : TransactionState}
+theorem supply_entered {message : Message fork} {state entry : TransactionState}
     {substate entrySubstate : Substate}
     (h : Entered fork message state substate entry entrySubstate) :
     entry.supply = state.supply := by
@@ -315,8 +363,8 @@ theorem processMessage_supplyLe [LawfulGasMeter Meter] (n : Nat) :
       SupplyLe fork state ended.state ∧ ended.state.parent = state.parent)
     (fun {message state state1 _ _ _ ended} hentry hrun => by
       have h1 : SupplyLe fork state state1 ∧ state1.parent = state.parent :=
-        ⟨SupplyLe.of_eq (supply_of_entered hentry) (createdAccounts_of_entered hentry),
-          parent_of_entered hentry⟩
+        ⟨SupplyLe.of_eq (supply_entered hentry) (createdAccounts_entered hentry),
+          parent_entered hentry⟩
       obtain ⟨hle, hpar⟩ := hrun
       have hp : ended.state.parent = state.parent := hpar.trans h1.2
       refine ⟨?_, (parent_rollbackOnError state ended).trans hp⟩

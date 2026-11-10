@@ -137,7 +137,7 @@ theorem parent_startState (message : Message fork) (state : TransactionState) :
   · rfl
 
 /-- The state that a message enters has the block of the state it is sent from. -/
-theorem parent_of_entered {message : Message fork} {state entry : TransactionState}
+theorem parent_entered {message : Message fork} {state entry : TransactionState}
     {substate entrySubstate : Substate}
     (h : Entered fork message state substate entry entrySubstate) :
     entry.parent = state.parent := by

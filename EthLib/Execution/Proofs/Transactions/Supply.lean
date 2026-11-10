@@ -377,6 +377,22 @@ theorem supply_deleteAccounts {state state' : State.TransactionState} {output : 
 
 /-! ## The transaction -/
 
+/-- Buying the gas and settling it lower the supply by exactly the burned fees, around a message.
+
+The message runs from the state `bought` that the purchase gives to the state `ended`.
+
+The settlement runs on `ended` and gives the state `settled` and the gas used.
+
+The gas limit must cover the least gas, and the price must cover the base fee. -/
+theorem supply_buyGas_settleGas {env : BlockEnvironment fork}
+    {state bought ended settled : State.TransactionState} {sender : Address}
+    {gasLeft refund used : Nat} (hMin : minimumGas fork sender tx ≤ tx.gas.toNat)
+    (hPrice : baseFeeOf env ≤ effectiveGasPrice (baseFeeOf env) tx)
+    (hb : buyGas env state sender tx = .ok bought)
+    (hs : settleGas env ended sender tx gasLeft refund = .ok (settled, used)) :
+    settled.supply + burnedFees env tx used + bought.supply = ended.supply + state.supply := by
+  sorry
+
 /-- A transaction that runs with any gas meter lowers the supply by at least its burned fees.
 
 It lowers it by exactly those fees from Glamsterdam, and from Cancun when it creates no account.

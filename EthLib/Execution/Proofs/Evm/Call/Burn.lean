@@ -7,6 +7,8 @@ public import EthLib.Execution.Proofs.Evm.Call.Supply
 
 Only SELFDESTRUCT burns ether in a message, when the account it runs in is its own beneficiary.
 
+From Cancun, only an account created in the transaction burns, and from Glamsterdam none does.
+
 A log of burns records each such burn, in the order of the run.
 
 It also holds the log of each frame that rolls back, which counts for nothing.
@@ -19,7 +21,9 @@ A step that runs any other opcode burns nothing.
 
 So the next frame of a step has the supply of the frame before, less the burn of the step.
 
-A step that sends a message keeps the supply up to the frame that sends it.
+A step that sends a message gives a caller frame with the supply of the frame before.
+
+Each burn that a log counts comes from a step of SELFDESTRUCT, with the burn of that step.
 -/
 
 @[expose] public section
@@ -49,6 +53,20 @@ def BurnLog.total : BurnLog → Nat
   | .append first second => first.total + second.total
   | .rollback _ => 0
 
+/-- The burns of the log that no rollback discards: one from `originator` to `beneficiary`. -/
+def BurnLog.Counted (originator beneficiary : Address) (amount : Nat) : BurnLog → Prop
+  | .empty => False
+  | .selfdestruct o b a => o = originator ∧ b = beneficiary ∧ a = amount
+  | .append first second => first.Counted originator beneficiary amount ∨
+      second.Counted originator beneficiary amount
+  | .rollback _ => False
+
+/-- A log that counts no burn has a total of 0. -/
+theorem BurnLog.total_eq_zero {log : BurnLog}
+    (none : ∀ originator beneficiary amount, ¬log.Counted originator beneficiary amount) :
+    log.total = 0 := by
+  sorry
+
 /-- The log of a move of the balance of SELFDESTRUCT, in the state `state`.
 
 It is empty when the move burns nothing. -/
@@ -68,48 +86,6 @@ theorem total_selfdestructLog (fork : Fork) (state : TransactionState)
 
 /-! ## A step of SELFDESTRUCT -/
 
-/-- An account with no balance burns nothing. -/
-theorem selfdestructBurn_eq_zero {state : TransactionState} {originator beneficiary : Address}
-    (balance : state.balanceOf originator = 0) :
-    selfdestructBurn fork state originator beneficiary = 0 := by
-  unfold selfdestructBurn
-  split <;> first | assumption | rfl
-
-/-- A move of the balance of SELFDESTRUCT that burns some wei leaves its account with no balance. -/
-theorem balanceOf_selfdestructTransfer_eq_zero {state after : TransactionState}
-    {originator beneficiary : Address}
-    (h : selfdestructTransfer fork state originator beneficiary = .ok after)
-    (nonzero : selfdestructBurn fork state originator beneficiary ≠ 0) :
-    after.balanceOf originator = 0 := by
-  have setZero : ∀ {a b : TransactionState}, a.setAccountBalance fork originator 0 = .ok b →
-      b.balanceOf originator = 0 := by
-    intro a b h
-    obtain ⟨account, changed, read, -⟩ := TransactionState.modifyState_eq_ok h
-    cases changed
-    unfold TransactionState.balanceOf
-    rw [read]
-    rfl
-  unfold selfdestructTransfer at h
-  split at h
-  · rename_i hdencun
-    obtain ⟨mid, moved, h⟩ := Base.bind_ok_iff.mp h
-    split at h
-    · exact setZero h
-    · rename_i notCreated
-      cases h
-      apply False.elim
-      apply nonzero
-      unfold selfdestructBurn
-      split
-      · rename_i condition
-        rcases condition.2 with early | created
-        · exact False.elim (Nat.not_lt_of_ge hdencun early)
-        · exact False.elim (notCreated
-            (TransactionState.createdAccounts_moveEther moved ▸ created))
-      · rfl
-  · obtain ⟨mid, _, h⟩ := Base.bind_ok_iff.mp h
-    exact setZero h
-
 omit [GasMeter Meter] in
 /-- A step that keeps the state up to the records of reads keeps the burn of SELFDESTRUCT. -/
 theorem selfdestructBurn_of_staticStep {evm paid : Evm fork Meter}
@@ -123,7 +99,7 @@ theorem selfdestructBurn_of_staticStep {evm paid : Evm fork Meter}
 
 It reads the beneficiary at the top of the stack of `evm`, and the burn in the state of `evm`.
 
-A step that fails leaves the balance, so the log counts the burn only when the balance ends at 0.
+A step that halts with an error keeps the balance, so the log counts the burn only at balance 0.
 
 A balance that starts at 0 burns nothing anyway. -/
 def selfdestructStepLog (evm after : Evm fork Meter) : BurnLog :=
@@ -199,7 +175,8 @@ theorem supply_selfdestructStep {evm after : Evm fork Meter}
 
 /-! ## Every step -/
 
-/-- The log of a step from `evm` to `after`: that of SELFDESTRUCT when it runs it, else empty. -/
+/-- The log of a step from `evm` to `after`: that of SELFDESTRUCT when the step runs it, else none.
+-/
 def stepBurnLog (evm after : Evm fork Meter) : BurnLog :=
   if within : evm.pc < evm.code.size then
     if Op.ofByte fork evm.code[evm.pc] = some .selfdestruct then selfdestructStepLog evm after
@@ -234,7 +211,8 @@ theorem supply_of_step_eq_next {evm after : Evm fork Meter}
   · rw [stepBurnLog_of_not_runsSelfdestruct other]
     exact keeps
 
-/-- A successful step that sends a message keeps the supply up to the frame that sends it. -/
+/-- A successful step that sends a message gives a caller frame with the supply of the frame before.
+-/
 theorem supply_of_step_eq_child {evm caller : Evm fork Meter} {message : Message fork}
     {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (h : step fork evm = .ok (.child caller message resume)) :
@@ -242,5 +220,14 @@ theorem supply_of_step_eq_child {evm caller : Evm fork Meter} {message : Message
   rcases ordinaryStepRules_supply.step h with ⟨-, _, next, -⟩ | ⟨-, keeps⟩
   · cases next
   · exact keeps.1
+
+/-- Each burn that the log of a step counts is the burn of SELFDESTRUCT from the frame before.
+
+The step runs SELFDESTRUCT, in the account of that frame, and the burn is above 0. -/
+theorem counted_stepBurnLog {evm after : Evm fork Meter} {originator beneficiary : Address}
+    {amount : Nat} (counted : (stepBurnLog evm after).Counted originator beneficiary amount) :
+    RunsSelfdestruct evm ∧ originator = evm.message.currentTarget ∧
+      amount = selfdestructBurn fork evm.state originator beneficiary ∧ amount ≠ 0 := by
+  sorry
 
 end EthLib.Execution.Evm

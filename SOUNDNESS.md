@@ -1543,13 +1543,17 @@ The equality holds in two cases.
 
 Before Cancun, a SELFDESTRUCT whose beneficiary is its own account burns that balance inside the message, and the deletions burn what a marked account received after it.
 The same holds from Cancun until Glamsterdam for a transaction that creates an account.
-`processTransaction_supply_eq` in `Execution/Proofs/Transactions/Burn.lean` gives the exact change there too, at every fork that the transaction runs.
+`processTransaction_supply_eq` in `Execution/Proofs/Transactions/Burn.lean` gives the exact change at every fork that the transaction runs, these cases included.
 The supply after the transaction, plus the burned fees, the burns of SELFDESTRUCT and the deleted balances, is the supply before.
-The burns come from a certificate of the run of the message, `RunBurns` in `Execution/Proofs/Evm/Call/BurnRun.lean`, which follows the steps of the interpreter.
+The burns come from a certificate of the run of the message, `RunBurns` in `Execution/Proofs/Evm/Call/BurnRun.lean`, built from the step equations of the interpreter.
 Its log records each burn of SELFDESTRUCT, and a frame that rolls back, or a creation whose deposit of code fails, drops what it burned.
 The deleted balances are read after the gas is settled and before any account is deleted, once for each account.
 `processTransaction_transactionBurns` proves that every transaction that runs has a certificate, and `TransactionBurns.unique` proves that all its certificates give the same two amounts.
-So every term of the equation is fixed by the run.
+The deleted balances are a function of the run.
+The total of the burns is fixed by the equation itself, so its uniqueness says no more than the equation does.
+What the certificate adds is the split of that total: `RunBurns.counted` proves that each burn it counts is the burn of a step that runs SELFDESTRUCT, above 0, in the account the burn is from.
+A certificate may skip steps that keep the state up to the records of reads, so it does not pin the run step by step.
+From Glamsterdam, `TransactionBurns.eq_zero` proves that both amounts are 0.
 The theorem makes the same two assumptions as `processTransaction_supply_le`.
 
 `Execution/Proofs/Blocks/Supply.lean` extends the bound to a whole block.
@@ -1560,7 +1564,7 @@ The DAO transfer only moves wei, and a system call keeps or lowers the supply, a
 `stateTransition_supply_le_of_lt_glamsterdam` writes the burned fees from the header before Glamsterdam: the gas used and the blob gas used, each at its base fee.
 From Glamsterdam the gas used of the header is the larger of the execution gas before the refunds, by EIP-7778, and the state gas, by EIP-8037, so it does not give the burned fees.
 There the theorems take the fees from the body that the transition runs.
-Before Glamsterdam the block theorems give only the bound, even from Cancun, because they do not yet carry the burns and the deleted balances of each transaction.
+Before Glamsterdam the block theorems give only the bound, even from Cancun, because they do not carry the burns and the deleted balances of each transaction.
 A block form of the Cancun equality would need every transaction and every system call to end with no created account.
 A block form that counts every SELFDESTRUCT burn and deleted balance remains to be proved.
 

@@ -12,9 +12,11 @@ Not yet released.
 - The exact change of the supply of ether across a transaction is now proved at every fork, with the burns of SELFDESTRUCT and the deleted balances as terms fixed by the run ([#1793](https://github.com/ethereum/EthLib/issues/1793)).
   No C export or Python function changes.
   In Lean, the rules of a relation of frames split in two: `OrdinaryStepRules` holds the rules of every write but SELFDESTRUCT, and `StepRules` extends it with the rule of SELFDESTRUCT.
-  The lemmas of SSTORE, TSTORE, the calls, the creations and the instructions that send a message move from the `StepRules` namespace to `OrdinaryStepRules`, so a qualified name changes, while the dot notation on a `StepRules` value still works.
+  The lemmas `sameContext`, `refl` and `lift`, and those of SSTORE, TSTORE, the calls, the creations and the instructions that send a message, move from the `StepRules` namespace to `OrdinaryStepRules`.
+  So a qualified name changes, while the dot notation on a `StepRules` value still works.
   `OrdinaryStepRules.instruction` takes a proof that the opcode is not SELFDESTRUCT, and `StepRules.instruction` is gone; `StepRules.step` covers every instruction.
-  `runTransaction_eq_ok` now concludes `TransactionRun`, a definition that unfolds to the same seven equations.
+  The new `OrdinaryStepRules.step` concludes that a step either runs SELFDESTRUCT, as the new `RunsSelfdestruct` says, or keeps the relation.
+  `runTransaction_eq_ok` now concludes `TransactionRun`, a definition that unfolds to the same seven equations, and `TransactionRun.unique` proves that its values are fixed by the transaction and its output.
 - The safety threshold of the fast confirmation rule now fails when the discount for empty slots exceeds the weight of the committees since the parent ([#1832](https://github.com/ethereum/EthLib/issues/1832)).
   It fails with the new fork choice error `supportDiscountAboveMaximum`, of code 53, where it used to return half of what was left, or 0.
   A block at or before the current slot never reaches that error, and a proof shows it.

@@ -19,7 +19,11 @@ Their logs then count for nothing.
 
 The supply at the end plus the total of the log is the supply at the start.
 
-So two certificates of the same run have the same total.
+So the supplies at the two ends fix the total, whatever the certificate.
+
+The log splits that total into burns, and each burn it counts comes from a step of SELFDESTRUCT.
+
+From Glamsterdam, no step burns, so the total is 0.
 
 Every successful call and creation has a certificate.
 -/
@@ -28,7 +32,7 @@ Every successful call and creation has a certificate.
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Fork)
+open EthLib.Base (Address Fork)
 open EthLib.Execution.State (TransactionState)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
@@ -137,7 +141,7 @@ theorem RunBurns.supply {start : BurnStart fork Meter} {ended : Evm fork Meter} 
     simp only [BurnStart.state]
     omega
   | @call message state entry substate entrySubstate meter ended log entered _ hp ih =>
-    have entrySupply := supply_of_entered entered
+    have entrySupply := supply_entered entered
     unfold rollbackOnError
     split
     · simp only [BurnLog.total, BurnStart.state, Nat.add_zero]
@@ -164,6 +168,23 @@ theorem RunBurns.total_eq {start : BurnStart fork Meter} {ended : Evm fork Meter
   have := h'.supply
   omega
 
+/-- Each burn that a certified log counts is the burn of a step of SELFDESTRUCT.
+
+That step runs SELFDESTRUCT in the account the burn is from, and the burn is above 0. -/
+theorem RunBurns.counted {start : BurnStart fork Meter} {ended : Evm fork Meter} {log : BurnLog}
+    {originator beneficiary : Address} {amount : Nat} (h : RunBurns fork Meter start ended log)
+    (counted : log.Counted originator beneficiary amount) :
+    ∃ evm after, step fork evm = .ok (.next after) ∧ RunsSelfdestruct evm ∧
+      originator = evm.message.currentTarget ∧
+      amount = selfdestructBurn fork evm.state originator beneficiary ∧ amount ≠ 0 := by
+  sorry
+
+/-- From Glamsterdam, a certified log counts no burn, so its total is 0. -/
+theorem RunBurns.total_eq_zero {start : BurnStart fork Meter} {ended : Evm fork Meter}
+    {log : BurnLog} (hfork : .glamsterdam ≤ fork) (h : RunBurns fork Meter start ended log) :
+    log.total = 0 := by
+  sorry
+
 private theorem childRelByKind_burns {caller : Evm fork Meter} {message : Message fork}
     {child : Evm fork Meter}
     (c : ChildRelByKind
@@ -179,7 +200,7 @@ private theorem childRelByKind_burns {caller : Evm fork Meter} {message : Messag
   unfold BurnStart.child
   split at c <;> rename_i h <;> simp only [h] <;> exact c
 
-/-- Every successful call and creation has a certificate of its run, and keeps its block.
+/-- Every successful call and creation has a certificate of its run.
 
 The proof is by strong induction on the gas of the message, for calls and creations together. -/
 theorem processMessage_runBurns [LawfulGasMeter Meter] (n : Nat) :
@@ -220,7 +241,7 @@ theorem processMessage_runBurns [LawfulGasMeter Meter] (n : Nat) :
     (by
       intro message state entry substate entrySubstate meter ended hentry hrun
       obtain ⟨⟨log, run⟩, hp⟩ := hrun trivial
-      have hp' : ended.state.parent = state.parent := hp.trans (parent_of_entered hentry)
+      have hp' : ended.state.parent = state.parent := hp.trans (parent_entered hentry)
       exact ⟨⟨_, .call hentry run hp'⟩, (parent_rollbackOnError state ended).trans hp'⟩)
     (by
       intro message state prepared substate meter evm after hprep hm hd
