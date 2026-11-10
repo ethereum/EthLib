@@ -7,7 +7,7 @@ public import EthLib.Consensus.Proofs.Transition.EpochUpdates
 
 The update adds a band of hysteresis to each balance and to each effective balance.
 
-Each sum is checked, so an amount near 2^64 Gwei makes the update fail.
+Each sum is checked, so an amount near 2^64 Gwei can make the update fail.
 
 The update succeeds when each balance and each effective balance is below 2^63 Gwei.
 
@@ -17,9 +17,11 @@ The registry must hold one balance for each validator, and stay within its limit
 
 The update leaves the balances unchanged.
 
-It changes only the effective balance of each validator.
+Each validator keeps every field except its effective balance.
 
-The new effective balance is the old one, or at most both the balance and its largest value.
+The new effective balance is the old one, or at most the balance.
+
+In the second case it is also at most the largest effective balance of the validator.
 -/
 
 @[expose] public section
@@ -30,7 +32,9 @@ open Base Uint64
 
 variable {preset : Preset} {fork : Base.Fork} {state after : BeaconState preset fork}
 
-/-- The two bands of hysteresis of a preset are each below 2^63 Gwei. -/
+/-- The two bands of hysteresis of a preset are each below 2^63 Gwei.
+
+A zero quotient or a zero increment also passes, though the division by it is undefined. -/
 abbrev Preset.HysteresisBandsBelow (preset : Preset) : Prop :=
   (preset.EFFECTIVE_BALANCE_INCREMENT / preset.HYSTERESIS_QUOTIENT).toNat *
       preset.HYSTERESIS_DOWNWARD_MULTIPLIER.toNat < 2 ^ 63 ∧
@@ -189,9 +193,11 @@ theorem processEffectiveBalanceUpdates_balances
       current.balances = state.balances)
     (fun _ _ _ kept step => (updateEffectiveBalance_ok step).1.trans kept) rfl computed
 
-/-- The update changes only the effective balance of each validator.
+/-- After the update, each validator keeps every field except its effective balance.
 
-The new effective balance is the old one, or at most both the balance and its largest value.
+The new effective balance is the old one, or at most the balance.
+
+In the second case it is also at most the largest effective balance of the validator.
 
 The largest value is that of the fork, which from Electra depends on the credentials.
 
