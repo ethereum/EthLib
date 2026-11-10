@@ -294,20 +294,6 @@ def beaconCommitteeOf (preset : Preset) (slot : Slot) (index : CommitteeIndex) (
   let count ← liftArith (mulChecked perSlot preset.SLOTS_PER_EPOCH)
   (shuffledCommittee active shuffled position count).mapError .shuffle
 
-/-- The committee of a slot with a given index, cut from the shuffled active validators.
-
-The committees of an epoch are numbered across its slots, in the order of the slots.
-
-It fails as the shuffle does, for more than `2^40` active validators. -/
-def getBeaconCommittee (state : BeaconState preset fork) (slot : Slot) (index : CommitteeIndex) :
-    Except AccessorError (Array ValidatorIndex) := do
-  let epoch := computeEpochAtSlot preset slot
-  let seed ← getSeed state epoch DOMAIN_BEACON_ATTESTER
-  let active := (getActiveValidatorIndices state epoch).toArray
-  let shuffled ← (computeShuffledPermutation preset (UInt64.ofNat active.size) seed).mapError
-    .shuffle
-  beaconCommitteeOf preset slot index (getCommitteeCountPerSlot state epoch) active shuffled
-
 /-- The active validators of an epoch, and their shuffle for the beacon committees.
 
 It fails as the shuffle does, for more than `2^40` active validators. -/
@@ -317,6 +303,17 @@ def attesterShuffle (state : BeaconState preset fork) (epoch : Epoch) :
   let active := (getActiveValidatorIndices state epoch).toArray
   return (active,
     ← (computeShuffledPermutation preset (UInt64.ofNat active.size) seed).mapError .shuffle)
+
+/-- The committee of a slot with a given index, cut from the shuffled active validators.
+
+The committees of an epoch are numbered across its slots, in the order of the slots.
+
+It fails as the shuffle does, for more than `2^40` active validators. -/
+def getBeaconCommittee (state : BeaconState preset fork) (slot : Slot) (index : CommitteeIndex) :
+    Except AccessorError (Array ValidatorIndex) := do
+  let epoch := computeEpochAtSlot preset slot
+  let (active, shuffled) ← attesterShuffle state epoch
+  beaconCommitteeOf preset slot index (getCommitteeCountPerSlot state epoch) active shuffled
 
 /-- The members of the beacon committees of a slot, committee after committee.
 

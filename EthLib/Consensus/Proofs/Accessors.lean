@@ -370,8 +370,9 @@ theorem getBeaconCommittee_ok {state : BeaconState preset fork} {slot : Slot}
       computeCommittee preset
         (getActiveValidatorIndices state (computeEpochAtSlot preset slot)).toArray seed position
         count = .ok committee := by
-  simp only [getBeaconCommittee, beaconCommitteeOf, bind_ok_iff, liftArith, mapError_ok_iff,
-    Base.Uint64.mulChecked_ok_iff, Base.Uint64.addChecked_ok_iff] at computed
+  simp only [getBeaconCommittee, attesterShuffle, bind_assoc, pure_bind, beaconCommitteeOf,
+    bind_ok_iff, liftArith, mapError_ok_iff, Base.Uint64.mulChecked_ok_iff,
+    Base.Uint64.addChecked_ok_iff] at computed
   obtain ⟨seed, seedOk, shuffled, shuffleOk, position, ⟨product, ⟨_, productEq⟩, _, positionEq⟩,
     count, ⟨_, countEq⟩, committeeOk⟩ := computed
   refine ⟨seed, position, count, seedOk, by rw [positionEq, productEq], countEq, ?_⟩
@@ -582,8 +583,9 @@ theorem exists_mem_getBeaconCommittee {state : BeaconState preset fork} {epoch :
     (count := UInt64.ofNat (getActiveValidatorIndices state epoch).toArray.size)
     (by rw [activeSize]; simpa using small)
   rw [computeCommittee_of_le (by simpa using small)] at computed
-  simp only [getBeaconCommittee, beaconCommitteeOf, epochEq, seedOk, shuffleOk, activeSize,
-    liftArith, productOk, sumOk, countOk, bind, Except.bind, Except.mapError, positionEq]
+  simp only [getBeaconCommittee, attesterShuffle, beaconCommitteeOf, epochEq, seedOk, shuffleOk,
+    activeSize, liftArith, productOk, sumOk, countOk, bind, Except.bind, Except.mapError, pure,
+    Except.pure, positionEq]
   rw [computed]
 
 /-- A beacon committee is cut from the shuffle of the epoch of its slot.
@@ -594,21 +596,8 @@ theorem getBeaconCommittee_eq (state : BeaconState preset fork) (slot : Slot)
     getBeaconCommittee state slot index = (do
       let (active, shuffled) ← attesterShuffle state (computeEpochAtSlot preset slot)
       beaconCommitteeOf preset slot index
-        (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)) active shuffled) := by
-  -- Both sides read the seed, then the shuffle, so each case rewrites both to one result.
-  cases seedOk : getSeed state (computeEpochAtSlot preset slot) DOMAIN_BEACON_ATTESTER with
-  | error e => simp only [getBeaconCommittee, attesterShuffle, seedOk, bind, Except.bind]
-  | ok seed =>
-    cases shuffleOk : computeShuffledPermutation preset
-        (UInt64.ofNat
-          (getActiveValidatorIndices state (computeEpochAtSlot preset slot)).toArray.size)
-        seed with
-    | error e =>
-      simp only [getBeaconCommittee, attesterShuffle, seedOk, shuffleOk, Except.mapError, bind,
-        Except.bind]
-    | ok shuffled =>
-      simp only [getBeaconCommittee, attesterShuffle, seedOk, shuffleOk, Except.mapError, bind,
-        Except.bind, pure, Except.pure]
+        (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)) active shuffled) :=
+  rfl
 
 /-- The members of the committees of a slot are those of each committee, one after the other.
 
@@ -628,20 +617,22 @@ theorem slotCommitteeMembers_eq (state : BeaconState preset fork) (slot : Slot) 
   cases seedOk : getSeed state (computeEpochAtSlot preset slot) DOMAIN_BEACON_ATTESTER with
   | error e =>
     rw [count, List.range_succ_eq_map, List.foldlM_cons]
-    simp [getBeaconCommittee, seedOk, bind, Except.bind]
+    simp [getBeaconCommittee, attesterShuffle, seedOk, bind, Except.bind]
   | ok seed =>
     cases shuffleOk : computeShuffledPermutation preset
         (UInt64.ofNat (getActiveValidatorIndices state (computeEpochAtSlot preset slot)).length)
         seed with
     | error e =>
       rw [count, List.range_succ_eq_map, List.foldlM_cons]
-      simp [getBeaconCommittee, seedOk, shuffleOk, bind, Except.bind, Except.mapError]
+      simp [getBeaconCommittee, attesterShuffle, seedOk, shuffleOk, bind, Except.bind,
+        Except.mapError]
     | ok shuffled =>
       simp only [seedOk, List.size_toArray, shuffleOk, Except.mapError, bind, Except.bind, pure,
         Except.pure]
       congr 1
       funext members index
-      simp [getBeaconCommittee, seedOk, shuffleOk, bind, Except.bind, Except.mapError]
+      simp [getBeaconCommittee, attesterShuffle, seedOk, shuffleOk, bind, Except.bind,
+        Except.mapError, pure, Except.pure]
 
 /-- A validator is among the members of a slot exactly when a beacon committee of it holds it. -/
 theorem mem_slotCommitteeMembers {state : BeaconState preset fork} {slot : Slot}

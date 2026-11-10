@@ -129,7 +129,9 @@ def checkInclusionDeadline (state : BeaconState preset fork) (slot : Slot) :
 
 The committees are cut from the given active validators and shuffle.
 
-Each index must be below `count`, and each committee is cut with `perSlot` committees per slot. -/
+Each index must be below the given bound.
+
+Each committee is cut with the given count of committees per slot. -/
 def attestationCommitteesSizeOf (preset : Preset) (slot : Slot) (bits : Array Bool)
     (count perSlot : UInt64) (active : Array ValidatorIndex) (shuffled : Array UInt64) :
     List CommitteeIndex → Nat → Except TransitionError Nat

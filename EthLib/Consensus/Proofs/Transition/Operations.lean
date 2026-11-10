@@ -239,7 +239,7 @@ theorem checkInclusionDeadline_of_dencun {slot : Slot} (dencun : .dencun ≤ for
 
 Each index is checked against the count of committees per slot of the target epoch.
 
-Each committee is cut with that count for the epoch of the slot. -/
+Each committee is cut with the count of committees per slot of the epoch of the slot. -/
 theorem attestationCommitteesSize_of_attesterShuffle {data : AttestationData}
     {active : Array ValidatorIndex} {shuffled : Array UInt64}
     (shuffleOk :
