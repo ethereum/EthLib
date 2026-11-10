@@ -10,6 +10,8 @@ The consensus models weigh a set of validators by the sum of their stakes.
 The stake of each validator is a natural number.
 
 Along a sequence of sets, the stake that joins or leaves is at most the sum over the steps.
+
+A bound on the Byzantine validators caps the fraction of the stake that they hold.
 -/
 
 @[expose] public section
@@ -100,5 +102,55 @@ theorem stake_inter [DecidableEq ν] {V A B : Finset ν} (hA : A ⊆ V) (hB : B 
   simp only [Finset.sdiff_self, stake, Finset.sum_empty] at h
   simp only [stake]
   omega
+
+/-- The Byzantine validators of `V` hold at most the fraction `num / den` of its stake.
+
+The validators outside `J` are the Byzantine ones.
+
+The denominator is positive.
+
+The bound is not strict, as in Assumption 2 of the fast confirmation paper.
+
+That assumption is in §3.2 of [arXiv 2405.00549v4](https://arxiv.org/abs/2405.00549v4).
+
+It says nothing when the fraction is at least one, or when `V` has no stake. -/
+def ByzantineStakeAtMost (w : ν → ℕ) (V : Finset ν) (J : Set ν) [DecidablePred (· ∈ J)]
+    (num den : ℕ) : Prop :=
+  0 < den ∧ den * stake w {v ∈ V | v ∉ J} ≤ num * stake w V
+
+namespace ByzantineStakeAtMost
+
+variable {V : Finset ν} {J : Set ν} [DecidablePred (· ∈ J)] {num den : ℕ}
+
+/-- The honest validators of `V` then hold at least the fraction `1 - num / den` of its stake. -/
+theorem honest (bound : ByzantineStakeAtMost w V J num den) :
+    (den - num) * stake w V ≤ den * stake w {v ∈ V | v ∈ J} := by
+  have split : stake w {v ∈ V | v ∈ J} + stake w {v ∈ V | v ∉ J} = stake w V :=
+    Finset.sum_filter_add_sum_filter_not V (· ∈ J) w
+  have bound := bound.2
+  have scaled :
+      den * stake w V = den * stake w {v ∈ V | v ∈ J} + den * stake w {v ∈ V | v ∉ J} := by
+    rw [← split, Nat.mul_add]
+  rw [Nat.sub_mul]
+  omega
+
+/-- The bound holds for every fraction when every validator of `V` is honest. -/
+theorem of_subset (num : ℕ) (positive : 0 < den) (all : ↑V ⊆ J) :
+    ByzantineStakeAtMost w V J num den := by
+  have : ({v ∈ V | v ∉ J} : Finset ν) = ∅ :=
+    Finset.filter_eq_empty_iff.mpr fun v member => not_not.mpr (all member)
+  simp [ByzantineStakeAtMost, this, stake, positive]
+
+/-- The bound fails below one when every validator is Byzantine and `V` has stake. -/
+theorem not_of_empty (below : num < den) (positive : 0 < stake w V) :
+    ¬ByzantineStakeAtMost w V ∅ num den := by
+  intro bound
+  simp only [ByzantineStakeAtMost, Set.mem_empty_iff_false, not_false_eq_true,
+    Finset.filter_true] at bound
+  have := bound.2
+  have := Nat.mul_lt_mul_of_pos_right below positive
+  omega
+
+end ByzantineStakeAtMost
 
 end EthLib.Consensus.Models
