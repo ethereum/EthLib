@@ -39,6 +39,7 @@ theorem emptyGenesisState_invariant (before : fork < .altair) (genesisTime : UIn
   exitsOrdered := fun _ member => by simp [emptyGenesisState] at member
   ordered := ⟨UInt64.le_refl _, UInt64.le_refl _⟩
   settled := UInt64.zero_le
+  aligned _ _ member := by simp [emptyGenesisState] at member
 
 theorem frame_genesisDeposit {before : fork < .hegota} {leaves : Array DepositData}
     {entry : Deposit × Nat}
@@ -66,7 +67,7 @@ theorem frame_activateAtGenesis {index : Nat}
 The invariant reads no such root. -/
 private theorem Invariant.withGenesisValidatorsRoot {root : Root} (holds : Invariant state) :
     Invariant { state with genesisValidatorsRoot := root } :=
-  ⟨holds.balancesMatch, holds.exitsOrdered, holds.ordered, holds.settled⟩
+  ⟨holds.balancesMatch, holds.exitsOrdered, holds.ordered, holds.settled, holds.aligned⟩
 
 /-- A candidate genesis state exists only before Altair.
 

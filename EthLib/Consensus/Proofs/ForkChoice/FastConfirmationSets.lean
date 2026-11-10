@@ -34,6 +34,14 @@ Before Gloas the store does not record the slot of a latest vote, so that hypoth
 
 From Gloas it records the slot, but the committees of the vote must still match those of the head.
 
+They also need each effective balance of the source of balances to be a whole number of increments.
+
+In the rule, the source of those lemmas is the state of an observed justified checkpoint.
+
+In a reachable store that state keeps the invariant of the state transition.
+
+So in a reachable store that hypothesis holds, when the largest of the preset are whole.
+
 [fcr]: https://arxiv.org/abs/2405.00549v4
 -/
 
