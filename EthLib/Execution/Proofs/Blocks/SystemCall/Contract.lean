@@ -23,6 +23,8 @@ The code of such a return, and of such a revert, is the same in each contract.
 A system call to a contract with code runs that code with the gas of a system call.
 
 So a run of the code to a stop with no error gives a system call that succeeds.
+
+From Paris, an unchecked call to empty code outside the precompiles only records its target.
 -/
 
 @[expose] public section
@@ -305,5 +307,67 @@ theorem systemCall_of_writesStorage {env : BlockEnvironment fork} {block : State
     fun message state substate hcaller htarget hstatic henv hdata hgas hacc hstate =>
       hspec message state substate hcaller htarget hstatic henv hdata hgas hacc
         (by subst hstate; exact hread)
+
+/-! ## A system call to no code -/
+
+private theorem processSystemMessage_empty (Meter : Type) [GasMeter Meter] [LawfulGasMeter Meter]
+    {env : BlockEnvironment fork} {block : State.BlockState} {target : Address}
+    {data : ByteArray} (hfork : .paris ≤ fork) (hcode : codeAt block target = .ok .empty)
+    (hpre : Precompiles.addedAt target.toU256.toNat = none) :
+    (processMessageCall (Meter := Meter) env.chainId.toNat (systemMessage env target data)
+      (.ofBlock block) Substate.empty).map (fun out =>
+        SystemCallOutput.mk out.state out.output out.error) =
+      .ok ⟨(TransactionState.ofBlock block).recordAccountRead target, .empty, none⟩ := by
+  have hfirst := prepareFirstFrame_of_value_eq_zero (Meter := Meter)
+    (chainId := env.chainId.toNat) (message := systemMessage env target data)
+    (state := .ofBlock block) (substate := Substate.empty) (paid := ∅) rfl rfl
+    (EthLib.Base.mapError_ok_iff.mp hcode) (fun _ => delegatedAddress_empty)
+  generalize hF : Transactions.FirstFrame.ofMeter (Meter := Meter) _ _ _ _ _ = first at hfirst
+  have hstart : startState fork first.message first.state = first.state := by
+    have hnot : ¬fork < .paris := Nat.not_lt.mpr hfork
+    simp only [startState, hnot, ↓reduceIte]
+  have hpre' : precompileAddress fork first.message = none := by
+    subst hF
+    simp [Transactions.FirstFrame.ofMeter, precompileAddress, systemMessage,
+      Precompiles.isPrecompile, hpre]
+  have ran := runFrame_startFrame_of_code_empty (message := first.message) (state := first.state)
+    (substate := first.substate) (meter := first.meter)
+    (runChild := processRunner fork first.message.gas) (within := first.held)
+    (by subst hF; rfl)
+  have hp := processMessage_map_val
+    (state := first.state) (substate := first.substate) (meter := first.meter) (held := first.held)
+    (result := .ok (advance { startFrame first.message first.state first.substate first.meter
+      with running := false }))
+    (by subst hF; simp [Transactions.FirstFrame.ofMeter, systemMessage]) hpre'
+    (by simpa only [hstart] using ran)
+  cases hc : processMessage fork first.message first.state first.substate first.meter
+      first.held with
+  | error e => rw [hc] at hp; cases hp
+  | ok ended =>
+    rw [hc] at hp
+    have he := Except.ok.inj hp
+    have ht : (systemMessage env target data).target = some target := rfl
+    simp only [processMessageCall, hfirst, ht, hc, bind, Except.bind, pure,
+      Except.pure, Except.map]
+    rw [he]
+    subst hF
+    rfl
+
+/-- From Paris, an unchecked call to empty code outside the precompiles succeeds without writes.
+
+It returns no output and records only the read of its target, with either gas meter.
+
+The code lookup must succeed: unavailable code is not empty code. -/
+theorem systemCall_of_empty {env : BlockEnvironment fork} {block : State.BlockState}
+    {target : Address} {data : ByteArray} (hfork : .paris ≤ fork)
+    (hcode : codeAt block target = .ok .empty)
+    (hpre : Precompiles.addedAt target.toU256.toNat = none) :
+    systemCall env block target data =
+      .ok ⟨(TransactionState.ofBlock block).recordAccountRead target, .empty, none⟩ := by
+  by_cases hglam : .glamsterdam ≤ fork
+  · rw [systemCall_of_glamsterdam hglam]
+    exact processSystemMessage_empty StateGasMeter hfork hcode hpre
+  · rw [systemCall_of_lt_glamsterdam (Nat.lt_of_not_le hglam)]
+    exact processSystemMessage_empty Nat hfork hcode hpre
 
 end EthLib.Execution.Blocks.SystemContract

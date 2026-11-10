@@ -29,6 +29,10 @@ A system call has 30,000,000 gas at every fork.
 Up to BPO5 it has no reservoir and runs with one counter of the gas left.
 
 From Glamsterdam it has a reservoir of 1,566,720 state gas, and runs with the meter of EIP-8037.
+
+Joining a call that only read its target keeps the block state.
+
+It adds that address to the block access list builder.
 -/
 
 @[expose] public section
@@ -173,6 +177,18 @@ theorem BodyState.join_eq_ok {body body' : BodyState} {tx : State.TransactionSta
   cases h
   exact ⟨b, hb, rfl⟩
 
+/-- Joining a call that only read its target keeps the block and records that address. -/
+theorem BodyState.join_recordAccountRead (body : BodyState) (target : Address) :
+    body.join ((State.TransactionState.ofBlock body.block).recordAccountRead target) =
+      .ok { body with builder := body.builder.record target id } := by
+  have hlist : ((∅ : Std.ExtTreeSet Address).insert target).toList = [target] := rfl
+  simp [BodyState.join, AccessListBuilder.recordTransaction, State.TransactionState.ofBlock,
+    State.TransactionState.recordAccountRead, State.TransactionState.incorporateTxIntoBlock,
+    Std.ExtTreeMap.foldl_eq_foldl_toList, Std.ExtTreeMap.foldlM_eq_foldlM_toList,
+    Std.ExtTreeSet.foldl_eq_foldl_toList, Std.ExtTreeMap.toList_eq_nil_iff.mpr,
+    Std.ExtTreeSet.toList_eq_nil_iff.mpr, hlist,
+    bind, Except.bind, pure, Except.pure]
+
 /-! ## The calls at the start of a block -/
 
 /-- The system calls at the start of a block pass through one body between the two calls.
@@ -227,6 +243,12 @@ theorem startSystemCalls_eq_ok {parentHash : Hash32} {body body' : BodyState}
     exact ⟨body, fun h => absurd h hDencun, fun _ => rfl, second _ h⟩
 
 /-! ## The requests -/
+
+/-- Reading a request contract with empty code rejects the block before joining any state. -/
+theorem readRequest_of_empty {state : BodyState × List ByteArray} {contract : UInt8 × Address}
+    (hcode : codeAt state.1.block contract.2 = .ok .empty) :
+    readRequest env state contract = .error (.systemContractEmpty contract.2) := by
+  simp [readRequest, checkedSystemCall_of_size_eq_zero hcode rfl, bind, Except.bind]
 
 /-- The call to one request contract must succeed on the body so far, and then joins it.
 
@@ -360,5 +382,17 @@ theorem blockRequests_eq_ok {depositContract : Address} {body : BodyState} {logs
     obtain ⟨read, hRead, h⟩ := bind_ok_iff.mp h
     rw [readRequests_of_pectra hPectra] at hRead
     exact ⟨deposits, read, mapError_ok_iff.mp hDeposits, hRead, (Except.ok.inj h).symm⟩
+
+/-- From Pectra, a failed read of the request contracts prevents success.
+
+The error returned may be another one, such as that of the deposits. -/
+theorem blockRequests_ne_ok_of_readRequests_error {depositContract : Address} {body : BodyState}
+    {logs : List Log} {result : BodyState × List ByteArray} {error : BlockError}
+    (hfork : .pectra ≤ fork) (hread : readRequests env body = .error error) :
+    blockRequests depositContract env body logs ≠ .ok result := by
+  intro h
+  obtain ⟨_, read, _, hr, _⟩ := (blockRequests_eq_ok h).2 hfork
+  rw [← readRequests_of_pectra hfork, hread] at hr
+  cases hr
 
 end EthLib.Execution.Blocks

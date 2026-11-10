@@ -8,6 +8,8 @@ public import EthLib.Consensus.Proofs.Models.Stake
 
 The stake of a validator is its effective balance, and a total balance is the stake of a set.
 
+With aligned effective balances, each stake is a multiple of each divisor of the increment.
+
 The total is never below one increment, which matters only for small totals.
 
 Above one and a half increments of active stake, the test of justification compares stakes.
@@ -32,6 +34,20 @@ variable {preset : Preset} {fork : Base.Fork}
 A position outside the registry weighs nothing. -/
 def balanceAt (state : BeaconState preset fork) (index : ℕ) : ℕ :=
   (state.validators.data[index]?.map (·.effectiveBalance.toNat)).getD 0
+
+/-- With aligned effective balances, each stake is a multiple of each divisor of the increment. -/
+theorem dvd_balanceAt_of_aligned {state : BeaconState preset fork} {divisor : ℕ}
+    (aligned : EffectiveBalancesAligned state)
+    (divides : divisor ∣ preset.EFFECTIVE_BALANCE_INCREMENT.toNat) (index : ℕ) :
+    divisor ∣ balanceAt state index := by
+  cases found : state.validators.data[index]? with
+  | none => simp [balanceAt, found]
+  | some validator =>
+    have increments := (aligned validator
+      (Array.mem_toList_iff.mpr (Array.mem_of_getElem? found))).1
+    rw [← UInt64.toNat_inj, UInt64.toNat_mod] at increments
+    simp only [balanceAt, found, Option.map_some, Option.getD_some]
+    exact Nat.dvd_trans divides (Nat.dvd_of_mod_eq_zero increments)
 
 /-- The sum of the effective balances at some indices is their stake, read as a set.
 

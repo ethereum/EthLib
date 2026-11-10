@@ -33,7 +33,7 @@ From Dencun, a system call to the contract succeeds with the gas meter of its fo
 
 It leaves the storage that the EIP describes.
 
-A system call to an address with no code is not covered here.
+A call to empty code keeps the block state and records the address, at every fork from Dencun.
 
 [eip-4788-bytecode]: https://eips.ethereum.org/EIPS/eip-4788#bytecode
 [eip-4788-contract]: https://eips.ethereum.org/EIPS/eip-4788#beacon-roots-contract
@@ -421,5 +421,27 @@ theorem systemCall_set {env : BlockEnvironment fork} {block : State.BlockState} 
       rw [← htarget]
       exact spec_set (Nat.le_trans (by decide) hfork) hcaller hstatic (htarget ▸ hacc)
         (by rw [hgas]; have := storageGasScale_le fork; simp only [SYSTEM_TRANSACTION_GAS]; omega)
+
+/-- With no beacon roots code, the beacon roots call records its address and changes no block state.
+
+From Pectra the history storage call follows; before Pectra the start calls end there.
+
+This is the silent failure required by [EIP-4788][eip4788].
+
+It holds at every fork from Dencun, with either gas meter.
+
+[eip4788]: https://eips.ethereum.org/EIPS/eip-4788#block-processing -/
+theorem startSystemCalls_of_empty {env : BlockEnvironment fork} {body : BodyState}
+    {parentHash : EthLib.Base.Hash32} (hfork : .dencun ≤ fork)
+    (hcode : codeAt body.block BEACON_ROOTS_ADDRESS = .ok .empty) :
+    startSystemCalls env parentHash body = (do
+      let mid := { body with builder := body.builder.record BEACON_ROOTS_ADDRESS id }
+      if .pectra ≤ fork then do
+        let out ← systemCall env mid.block HISTORY_STORAGE_ADDRESS ⟨parentHash.toArray⟩
+        (mid.join out.state).mapError EvmError.state
+      else pure mid) := by
+  simp only [startSystemCalls, hfork, ↓reduceDIte,
+    systemCall_of_empty (Nat.le_trans (by decide) hfork) hcode addedAt_BEACON_ROOTS_ADDRESS,
+    bind, Except.bind, BodyState.join_recordAccountRead, Except.mapError, pure, Except.pure]
 
 end EthLib.Execution.Blocks.BeaconRoots

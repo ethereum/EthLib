@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.Accessors
+public import EthLib.Consensus.Credentials
 public import EthLib.Consensus.Proofs.ShufflePermutation
 public import EthLib.Consensus.Proofs.Signing
 
@@ -13,6 +14,10 @@ The active indices are exactly the indices of the active validators, in increasi
 That needs the registry to stay within the limit of the preset, which its type says before Gloas.
 
 From Gloas the registry is a progressive list, so these theorems take the bound as a hypothesis.
+
+A position of the registry is active in an epoch when the validator there is.
+
+The effective balances are aligned when each is a whole number of increments, at most its largest.
 
 A marked sum of effective balances is their sum over the marked positions.
 
@@ -62,6 +67,19 @@ namespace EthLib.Consensus
 open Base Uint64 Serialization.Ssz
 
 variable {preset : Preset} {fork : Base.Fork}
+
+/-- Whether the validator at a position of the registry is active in an epoch.
+
+A position outside the registry is not active. -/
+def isActiveAt (state : BeaconState preset fork) (epoch : Epoch) (position : Nat) : Bool :=
+  (state.validators.data[position]?.map (isActiveValidator · epoch)).getD false
+
+/-- Every effective balance is a whole number of increments, and at most its largest at the fork.
+-/
+def EffectiveBalancesAligned (state : BeaconState preset fork) : Prop :=
+  ∀ validator ∈ state.validators.data.toList,
+    validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0 ∧
+      validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator
 
 /-- A position of the validator registry, as a validator index, keeps its value.
 
