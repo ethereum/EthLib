@@ -260,6 +260,8 @@ private theorem builderFrame_passPendingDeposits {stop : PendingDeposit → Bool
     · cases computed
       exact BuilderFrame.refl _
     split at computed
+    · cases computed
+    split at computed
     · split at computed
       · cases computed
       rename_i credited

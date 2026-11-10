@@ -51,19 +51,27 @@ structure PendingDepositsPass (preset : Preset) (fork : Base.Fork) where
 
 /-- From Electra: whether a validator with a key exits, and whether it is withdrawn.
 
-A key that no validator has is neither. -/
+The validator is the first with the key.
+
+A key that no validator has is neither.
+
+A known key at a position of `2^64` or more has no validator index, an overflow. -/
 def depositTargetStatus (state : BeaconState preset fork) (nextEpoch : Epoch)
-    (pubkey : BLSPubkey) : Bool × Bool :=
-  match state.validators.data.find? (·.pubkey == pubkey) with
-  | some validator =>
-    (validator.exitEpoch < FAR_FUTURE_EPOCH, validator.withdrawableEpoch < nextEpoch)
-  | none => (false, false)
+    (pubkey : BLSPubkey) : Except AccessorError (Bool × Bool) :=
+  match state.validators.data.findIdx? (·.pubkey == pubkey) with
+  | some position => do
+    let index ← liftArith (ofNatChecked position)
+    let some validator := state.validators.data[index.toNat]? | throw (.indexOutOfRange index)
+    return (validator.exitEpoch < FAR_FUTURE_EPOCH, validator.withdrawableEpoch < nextEpoch)
+  | none => return (false, false)
 
 /-- From Electra: one pass over the pending deposits, from the front.
 
 The pass stops at a deposit that the stop condition holds for, and after the most per epoch.
 
 It also stops at a deposit beyond the churn that is available.
+
+A deposit it reads to a known key at a position of `2^64` or more is an error.
 
 The deposits not reached and those postponed never outnumber the deposits read. -/
 def passPendingDeposits (config : Config) (checks : SignatureChecks)
@@ -77,7 +85,7 @@ def passPendingDeposits (config : Config) (checks : SignatureChecks)
   | deposit :: rest => do
     if stop deposit || preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat ≤ count then
       return ⟨⟨state, deposit :: rest, postponed, processed, false⟩, Nat.le_refl _⟩
-    let (exited, withdrawn) := depositTargetStatus state nextEpoch deposit.pubkey
+    let (exited, withdrawn) ← liftAccessor (depositTargetStatus state nextEpoch deposit.pubkey)
     if withdrawn then
       let state ← applyPendingDeposit config checks state deposit
       let pass ← passPendingDeposits config checks stop nextEpoch available state processed
@@ -124,7 +132,8 @@ The queue keeps the deposits not reached, then the postponed ones.
 
 If the pass stopped at the churn, the churn not used carries over, and else none does.
 
-A 64-bit overflow is an error. -/
+A 64-bit overflow is an error, and so is a deposit read to a key at a position of `2^64` or more.
+-/
 def processPendingDeposits (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (electra : .pectra ≤ fork) :
     Except TransitionError (BeaconState preset fork) := do
