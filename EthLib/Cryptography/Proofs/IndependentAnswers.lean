@@ -88,18 +88,33 @@ theorem prEvent_uniformOutside_nil_and_notMem_le (used : List A) (d d' : A) (p :
       Pr{let y ← uniformOutside used d'}[p y] :=
   prEvent_uniformOutside_and_notMem_le (List.nil_subset _) d d' p
 
+/-- A uniform value outside a list lies in a second list with chance at most a ratio.
+
+Let `n` be the length of the first list.
+
+The ratio is the length of the second list over `|A| - n`. -/
+theorem prEvent_uniformOutside_mem_le (used L : List A) (d : A) :
+    Pr{let y ← uniformOutside used d}[y ∈ L] ≤
+      (L.length : ℝ≥0∞) / ((FinEnum.card A - used.length : ℕ) : ℝ≥0∞) := by
+  have hcard := card_sub_length_le_length_filter used
+  by_cases hL : ((FinEnum.toList A).filter fun b => b ∉ used) = []
+  · rw [hL, List.length_nil, Nat.le_zero] at hcard
+    rw [hcard, Nat.cast_zero]
+    rcases L with _ | ⟨y, L⟩
+    · rw [prEvent_eq_zero_of_forall_not _ _ fun y hy => List.not_mem_nil hy]
+      exact zero_le
+    · rw [ENNReal.div_zero (by simp)]
+      exact le_top
+  · rw [uniformOutside, prEvent_uniformFrom_eq_countP hL d]
+    refine ENNReal.div_le_div ?_ (by exact_mod_cast hcard)
+    rw [List.countP_eq_length_filter]
+    exact_mod_cast (List.subperm_of_subset ((FinEnum.nodup_toList).filter _ |>.filter _)
+      fun y hy => by simpa using (List.mem_filter.1 hy).2).length_le
+
 /-- A uniform value of `A` lies in a list with chance at most its length over `|A|`. -/
 theorem prEvent_uniformOutside_nil_mem_le (used : List A) (d : A) :
     Pr{let y ← uniformOutside [] d}[y ∈ used] ≤ (used.length : ℝ≥0∞) / FinEnum.card A := by
-  have hne : FinEnum.toList A ≠ [] := List.ne_nil_of_mem (FinEnum.mem_toList d)
-  have hnil : ((FinEnum.toList A).filter fun b => b ∉ []) = FinEnum.toList A := by simp
-  rw [uniformOutside, hnil, prEvent_uniformFrom_eq_countP hne d]
-  have hlen : (FinEnum.toList A).length = FinEnum.card A := by simp [FinEnum.toList]
-  rw [hlen]
-  refine ENNReal.div_le_div_right ?_ _
-  rw [List.countP_eq_length_filter]
-  exact_mod_cast ((List.subperm_of_subset ((FinEnum.nodup_toList).filter _)
-    fun y hy => by simpa using (List.mem_filter.1 hy).2).length_le)
+  simpa using prEvent_uniformOutside_mem_le [] used d
 
 /-- A uniform value of `A` avoiding nothing is the framework's uniform sample of `A`. -/
 theorem uniformOutside_nil_evalDistEq [SampleableType A] (d : A) :

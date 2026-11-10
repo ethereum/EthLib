@@ -63,9 +63,9 @@ The check of the forgery may relay one more query, which their Definition 4 rule
 
 So a bound on the chance of a conflict counts that query too.
 
-No theorem bounds that chance yet.
+The module on conflicts bounds that chance.
 
-Such a bound needs a nonzero base point and a semi-injective `φ`.
+That bound assumes a nonzero base point and a semi-injective `φ`.
 
 With the base point `0`, every nonce programs the same query, and the second one conflicts.
 

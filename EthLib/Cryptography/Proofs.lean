@@ -16,6 +16,7 @@ public import EthLib.Cryptography.Proofs.Wots.Binding
 public import EthLib.Cryptography.Proofs.Wots.TargetSum
 public import EthLib.Cryptography.Proofs.QueryAvoidance
 public import EthLib.Cryptography.Proofs.LoggedUntilBad
+public import EthLib.Cryptography.Proofs.BadOnBudget
 public import EthLib.Cryptography.Proofs.BadOnGrowth
 public import EthLib.Cryptography.Proofs.LogKeys
 public import EthLib.Cryptography.Proofs.LazyPermutation
