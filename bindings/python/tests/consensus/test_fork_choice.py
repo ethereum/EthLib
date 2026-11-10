@@ -331,7 +331,7 @@ def test_fast_confirmation_discount_bound():
     blocks = [_read(case, step["block"]) for step in steps if "block" in step]
     state = consensus.state_transitions("minimal", "altair", anchor_state, blocks, verify=False)
     # A signed block is the offset of its message, its 96-byte signature, then the message.
-    signature, message = blocks[0][:100], blocks[0][100:]
+    prefix, message = blocks[0][:100], blocks[0][100:]
     parent_root = consensus.ssz_static("minimal", "altair", "BeaconBlock", blocks[-1][100:])[0]
     parent_slot, child_slot = 2, 7
     # A slot of the minimal preset lasts 6 seconds.
@@ -351,7 +351,7 @@ def test_fast_confirmation_discount_bound():
         "minimal", "altair", state, bytes(child), verify=False
     )
     child_root = consensus.ssz_static("minimal", "altair", "BeaconBlock", bytes(child))[0]
-    # The full committees of slot 6 vote again at slot 7, for the child.
+    # Moved to slot 7, the full votes of slot 6 come from the committees of slot 7, for the child.
     # An attestation holds the offset of its bits, then its slot, its index and its block root.
     attestations: list[consensus.ForkChoiceStep] = []
     for step in steps:
@@ -365,7 +365,7 @@ def test_fast_confirmation_discount_bound():
     assert len(attestations) == 2
     # The votes of slot 7 count from slot 8 on, so the clock reaches slot 8 before it moves back.
     inputs: list[consensus.ForkChoiceStep] = [one for step in steps for one in _inputs(case, step)]
-    inputs += [("block", signature + bytes(child)), ("tick", 8 * seconds_per_slot), *attestations]
+    inputs += [("block", prefix + bytes(child)), ("tick", 8 * seconds_per_slot), *attestations]
 
     def confirm(current_slot: int, boost: int = 0) -> list:
         """The outcomes of the steps, with the clock set back to a slot, then a confirmation."""
