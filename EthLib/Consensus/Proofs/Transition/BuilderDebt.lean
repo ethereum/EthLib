@@ -179,31 +179,42 @@ theorem paymentAt_of_lt {gloas : .glamsterdam ≤ fork} {position : Nat}
   simp [paymentAt, inside]
   rfl
 
-/-- A step that keeps the builder fields and the two slots of its frame keeps the invariant.
+/-- A step that keeps the builder fields and the position of the parent payment keeps the
+invariant.
 
 The invariant reads nothing else of the state. -/
-theorem BuilderDebtCovered.of_frame {gloas : .glamsterdam ≤ fork}
-    (frame : BuilderFrame state after) (holds : BuilderDebtCovered state gloas) :
-    BuilderDebtCovered after gloas := by
-  have position := parentPaymentPosition_congr frame.slot frame.headerSlot
+theorem BuilderDebtCovered.of_position {gloas : .glamsterdam ≤ fork}
+    (position : parentPaymentPosition after = parentPaymentPosition state)
+    (builders : after.builders = state.builders)
+    (payments : after.builderPendingPayments = state.builderPendingPayments)
+    (withdrawals : after.builderPendingWithdrawals = state.builderPendingWithdrawals)
+    (bid : after.latestExecutionPayloadBid = state.latestExecutionPayloadBid)
+    (holds : BuilderDebtCovered state gloas) : BuilderDebtCovered after gloas := by
   have total : ∀ index,
       pendingBuilderTotal after gloas index = pendingBuilderTotal state gloas index :=
-    fun _ => by simp only [pendingBuilderTotal, frame.payments, frame.withdrawals]
+    fun _ => by simp only [pendingBuilderTotal, payments, withdrawals]
   have opened : latePaymentOpen after gloas = latePaymentOpen state gloas := by
-    simp only [latePaymentOpen, paymentAt, position, frame.payments]
+    simp only [latePaymentOpen, paymentAt, position, payments]
   have late : ∀ index, lateBidValue after gloas index = lateBidValue state gloas index :=
-    fun _ => by simp only [lateBidValue, opened, frame.bid]
+    fun _ => by simp only [lateBidValue, opened, bid]
   have balance : ∀ index, builderBalance after gloas index = builderBalance state gloas index :=
-    fun _ => by simp only [builderBalance, frame.builders]
+    fun _ => by simp only [builderBalance, builders]
   refine ⟨fun index => ?_, fun index builder found exited => ?_, fun p found => ?_,
     fun k later => ?_⟩
   · rw [total, late, balance]
     exact holds.covered index
   · rw [total, late]
-    exact holds.exitedClear index builder (by rwa [frame.builders] at found) exited
-  · simp only [paymentAt, latestBidWithdrawal, frame.payments, frame.bid]
+    exact holds.exitedClear index builder (by rwa [builders] at found) exited
+  · simp only [paymentAt, latestBidWithdrawal, payments, bid]
     exact holds.parentFresh p (position ▸ found)
-  · simp only [paymentAt, frame.payments]
+  · simp only [paymentAt, payments]
     exact holds.laterEmpty k fun parent found => later parent (position ▸ found)
+
+/-- A step that keeps the builder fields and the two slots of its frame keeps the invariant. -/
+theorem BuilderDebtCovered.of_frame {gloas : .glamsterdam ≤ fork}
+    (frame : BuilderFrame state after) (holds : BuilderDebtCovered state gloas) :
+    BuilderDebtCovered after gloas :=
+  .of_position (parentPaymentPosition_congr frame.slot frame.headerSlot) frame.builders
+    frame.payments frame.withdrawals frame.bid holds
 
 end EthLib.Consensus

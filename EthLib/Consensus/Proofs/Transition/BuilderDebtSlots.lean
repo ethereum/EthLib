@@ -6,10 +6,13 @@ public import EthLib.Consensus.Proofs.Transition.Invariants
 /-!
 # Proofs: slots keep the builder debt invariant
 
-A slot caches the roots of the state and of the latest block, and from Gloas marks the next payload
-as not yet available.
+A slot caches the roots of the state and of the latest block.
+
+From Gloas it also marks the next payload as not yet available.
 
 None of this touches the builders, their payments, their withdrawals or the latest bid.
+
+It keeps the slot and the slot of the latest block too, which place the parent payment.
 
 The last slot of an epoch runs the epoch transition.
 
@@ -35,27 +38,32 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
 
 /-! ## The steps that keep the builder fields -/
 
-private theorem builderFrame_setValidator {index : ValidatorIndex} {validator : Validator}
+/-- Setting a validator keeps the builder fields and the two slots. -/
+theorem builderFrame_setValidator {index : ValidatorIndex} {validator : Validator}
     (set : state.setValidator index validator = .ok after) : BuilderFrame state after := by
   obtain ⟨_, rfl⟩ := setValidator_ok set
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
 
-private theorem builderFrame_setBalance {index : ValidatorIndex} {balance : Gwei}
+/-- Setting a balance keeps the builder fields and the two slots. -/
+theorem builderFrame_setBalance {index : ValidatorIndex} {balance : Gwei}
     (set : state.setBalance index balance = .ok after) : BuilderFrame state after := by
   obtain ⟨_, rfl⟩ := setBalance_ok set
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
 
-private theorem builderFrame_increaseBalance {index : ValidatorIndex} {delta : Gwei}
+/-- Raising a balance keeps the builder fields and the two slots. -/
+theorem builderFrame_increaseBalance {index : ValidatorIndex} {delta : Gwei}
     (computed : increaseBalance state index delta = .ok after) : BuilderFrame state after :=
   let ⟨_, set⟩ := increaseBalance_ok computed
   builderFrame_setBalance set
 
-private theorem builderFrame_decreaseBalance {index : ValidatorIndex} {delta : Gwei}
+/-- Lowering a balance keeps the builder fields and the two slots. -/
+theorem builderFrame_decreaseBalance {index : ValidatorIndex} {delta : Gwei}
     (computed : decreaseBalance state index delta = .ok after) : BuilderFrame state after :=
   let ⟨_, set⟩ := decreaseBalance_ok computed
   builderFrame_setBalance set
 
-private theorem builderFrame_initiateValidatorExit {index : ValidatorIndex}
+/-- Starting the exit of a validator keeps the builder fields and the two slots. -/
+theorem builderFrame_initiateValidatorExit {index : ValidatorIndex}
     (computed : initiateValidatorExit config state index = .ok after) :
     BuilderFrame state after := by
   obtain ⟨_, _, ⟨_, rfl⟩ | ⟨_, _, _, _, queue, _, set⟩⟩ := initiateValidatorExit_ok computed
@@ -198,7 +206,8 @@ private theorem builderFrame_processEth1DataReset {before : fork < .hegota}
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ BuilderFrame.refl _
 
-private theorem builderFrame_addValidatorToRegistry {pubkey withdrawalCredentials amount}
+/-- Adding a validator keeps the builder fields and the two slots. -/
+theorem builderFrame_addValidatorToRegistry {pubkey withdrawalCredentials amount}
     (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
     BuilderFrame state after := by
   unfold addValidatorToRegistry at computed
@@ -212,7 +221,8 @@ private theorem builderFrame_addValidatorToRegistry {pubkey withdrawalCredential
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
   · cases computed
 
-private theorem builderFrame_applyPendingDeposit {deposit : PendingDeposit}
+/-- Applying a pending deposit keeps the builder fields and the two slots. -/
+theorem builderFrame_applyPendingDeposit {deposit : PendingDeposit}
     (computed : applyPendingDeposit config checks state deposit = .ok after) :
     BuilderFrame state after := by
   unfold applyPendingDeposit at computed
@@ -448,22 +458,8 @@ private theorem BuilderDebtCovered.withSlot {gloas : .glamsterdam ≤ fork} {nex
     (same : next.toNat / preset.SLOTS_PER_EPOCH.toNat =
       state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat)
     (holds : BuilderDebtCovered state gloas) :
-    BuilderDebtCovered { state with slot := next } gloas := by
-  have position := parentPaymentPosition_withSlot same
-  have opened :
-      latePaymentOpen { state with slot := next } gloas = latePaymentOpen state gloas := by
-    simp only [latePaymentOpen, paymentAt, position]
-  have late : ∀ index,
-      lateBidValue { state with slot := next } gloas index = lateBidValue state gloas index :=
-    fun _ => by simp only [lateBidValue, opened]
-  refine ⟨fun index => ?_, fun index builder found exited => ?_, fun p found => ?_,
-    fun k later => ?_⟩
-  · rw [late]
-    exact holds.covered index
-  · rw [late]
-    exact holds.exitedClear index builder found exited
-  · exact holds.parentFresh p (position ▸ found)
-  · exact holds.laterEmpty k fun parent found => later parent (position ▸ found)
+    BuilderDebtCovered { state with slot := next } gloas :=
+  .of_position (parentPaymentPosition_withSlot same) rfl rfl rfl rfl holds
 
 /-- With a positive quorum, one slot keeps the builder debt invariant. -/
 theorem BuilderDebtCovered.advanceSlot (positive : preset.PaymentQuorumPositive)
