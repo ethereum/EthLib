@@ -6,15 +6,9 @@ public import EthLib.Execution.Proofs.Trie.Proof
 /-!
 # Proofs: the range check of a trie
 
-Two errors of the range check with one code come from one constructor.
+The codes of the range errors, the order of the paths, and where a subtree lies against the range.
 
-Every code is at least 201, and differs from every code of a trie or proof error.
-
-So one Python class carries all three.
-
-Paths in strictly increasing order are distinct, and each is below every later path.
-
-A subtree before the range lies wholly below its first end, and one after it wholly above its last.
+Then the nodes that the check reads, and the checks it makes before the proof.
 -/
 
 @[expose] public section
@@ -22,6 +16,7 @@ A subtree before the range lies wholly below its first end, and one after it who
 namespace EthLib.Execution.Trie
 
 open EthLib.Base
+open EthLib.Serialization.Rlp
 
 /-- Two errors with one code come from one constructor. -/
 theorem RangeError.code_injective (e₁ e₂ : RangeError) (h : e₁.code = e₂.code) :
@@ -59,25 +54,30 @@ theorem append_lt_of_not_prefix : (a b c : List Nibble) → a < b → ¬a <+: b 
     · refine List.cons_lt_cons_iff.mpr (.inr ⟨rfl, append_lt_of_not_prefix a b c hab ?_⟩)
       exact fun h => hprefix (List.prefix_cons_inj x |>.mpr h)
 
-/-- Paths in strictly increasing order are each below every later path. -/
-theorem pairwise_of_strictlyIncreasing :
-    (keys : List (List Nibble)) → strictlyIncreasing keys = true → keys.Pairwise (· < ·)
-  | [], _ => .nil
-  | [_], _ => List.pairwise_singleton _ _
-  | a :: b :: rest, h => by
+/-- Paths are in strictly increasing order exactly when each is below every later path. -/
+theorem strictlyIncreasing_iff_pairwise :
+    (keys : List (List Nibble)) → (strictlyIncreasing keys = true ↔ keys.Pairwise (· < ·))
+  | [] => iff_of_true rfl .nil
+  | [_] => iff_of_true rfl (List.pairwise_singleton _ _)
+  | a :: b :: rest => by
+    have hrest := strictlyIncreasing_iff_pairwise (b :: rest)
     simp only [strictlyIncreasing, List.tail_cons, List.zip_cons_cons, List.all_cons,
-      Bool.and_eq_true, decide_eq_true_eq] at h
-    have hrest := pairwise_of_strictlyIncreasing (b :: rest) h.2
-    refine .cons ?_ hrest
-    intro x hx
-    rcases List.mem_cons.mp hx with rfl | hx
-    · exact h.1
-    · exact List.lt_trans h.1 (List.rel_of_pairwise_cons hrest hx)
+      Bool.and_eq_true, decide_eq_true_eq] at hrest ⊢
+    rw [hrest]
+    constructor
+    · rintro ⟨hab, hrest⟩
+      refine .cons ?_ hrest
+      intro x hx
+      rcases List.mem_cons.mp hx with rfl | hx
+      · exact hab
+      · exact List.lt_trans hab (List.rel_of_pairwise_cons hrest hx)
+    · intro h
+      exact ⟨List.rel_of_pairwise_cons h List.mem_cons_self, List.Pairwise.of_cons h⟩
 
 /-- Paths in strictly increasing order have no repeat. -/
 theorem nodup_of_strictlyIncreasing {keys : List (List Nibble)}
     (h : strictlyIncreasing keys = true) : keys.Nodup :=
-  (pairwise_of_strictlyIncreasing keys h).imp fun {a b} (hlt : a < b) (heq : a = b) =>
+  ((strictlyIncreasing_iff_pairwise keys).mp h).imp fun {a b} (hlt : a < b) (heq : a = b) =>
     List.lt_irrefl a (by rwa [← heq] at hlt)
 
 /-- Every path that extends a subtree before the range is below the first end. -/
@@ -112,6 +112,55 @@ theorem lt_append_of_rangePlace_after {left pre : List Nibble}
           · simp [hafter] at h
         exact ⟨last, rfl, lt_append_right c hafter⟩
 
+/-- Every path that extends a subtree inside the range lies strictly between its two ends. -/
+theorem between_of_rangePlace_inside {left pre : List Nibble}
+    {right : Option (List Nibble)} (h : rangePlace left right pre = .inside) (c : List Nibble) :
+    left < pre ++ c ∧ ∀ last, right = some last → pre ++ c < last := by
+  unfold rangePlace at h
+  by_cases hboundary : (pre.isPrefixOf left || right.any pre.isPrefixOf) = true
+  · simp only [hboundary, ↓reduceIte, reduceCtorEq] at h
+  · by_cases hlt : pre < left
+    · simp only [hboundary, hlt, Bool.false_eq_true, ↓reduceIte, reduceCtorEq] at h
+    · simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at hboundary
+      -- The subtree is above the first end, and no prefix of it.
+      have hleft : left < pre ++ c := by
+        rcases Std.lt_trichotomy pre left with hlt' | heq | hgt
+        · exact absurd hlt' hlt
+        · subst heq
+          simp [List.isPrefixOf_iff_prefix.mpr (List.prefix_refl pre)] at hboundary
+        · exact lt_append_right c hgt
+      refine ⟨hleft, ?_⟩
+      rintro last rfl
+      have hafter : ¬last < pre := by
+        intro hafter
+        simp [hboundary, hlt, hafter] at h
+      have hprefix : ¬pre <+: last := fun hp => by
+        simp [List.isPrefixOf_iff_prefix.mpr hp] at hboundary
+      have hpre : pre < last := by
+        rcases Std.lt_trichotomy pre last with hlt' | heq | hgt
+        · exact hlt'
+        · exact absurd (heq ▸ List.prefix_refl pre) hprefix
+        · exact absurd hgt hafter
+      exact append_lt_of_not_prefix pre last c hpre hprefix
+
+/-- A subtree on the path of an end has a path that is a prefix of that end. -/
+theorem exists_end_of_rangePlace_boundary {left pre : List Nibble}
+    {right : Option (List Nibble)} (h : rangePlace left right pre = .boundary) :
+    ∃ path, (path = left ∨ right = some path) ∧ pre.isPrefixOf path = true := by
+  unfold rangePlace at h
+  by_cases hboundary : (pre.isPrefixOf left || right.any pre.isPrefixOf) = true
+  · rcases Bool.or_eq_true_iff.mp hboundary with hl | hr
+    · exact ⟨left, .inl rfl, hl⟩
+    · cases hright : right with
+      | none => simp [hright] at hr
+      | some last =>
+        rw [hright, Option.any_some] at hr
+        exact ⟨last, .inr rfl, hr⟩
+  · simp only [hboundary, Bool.false_eq_true, ↓reduceIte] at h
+    split at h
+    · cases h
+    · split at h <;> cases h
+
 /-- Hash keys whose paths are in strictly increasing order are distinct byte strings. -/
 theorem nodup_toArray_of_strictlyIncreasing {data : List (Hash32 × ByteArray)}
     (h : strictlyIncreasing (data.map fun entry => bytesToNibbleList ⟨entry.1.toArray⟩) = true) :
@@ -121,5 +170,78 @@ theorem nodup_toArray_of_strictlyIncreasing {data : List (Hash32 × ByteArray)}
       ((data.map fun entry => ((⟨entry.1.toArray⟩ : ByteArray), entry.2)).map Prod.fst).map
         bytesToNibbleList by simp [List.map_map, Function.comp_def]] at hpaths
   exact nodup_of_map bytesToNibbleList hpaths
+
+/-! ## The nodes that the check reads -/
+
+/-- A node held inside its parent is read from the parent. -/
+theorem lookupNode_unencoded (nodes : List (Hash32 × ByteArray))
+    (node : Option InternalNode) : lookupNode nodes (unencoded node) = .ok (unencoded node) := by
+  rcases unencoded_shape node with ⟨items, h⟩ | h <;> rw [h]
+  · rfl
+  · simp [lookupNode, ByteArray.size_empty]
+
+/-- A node held by hash is read from the proof, when it is the only node there with its hash. -/
+theorem lookupNode_hash (hash : ByteArray → Hash32) {proof : List ByteArray}
+    {node : Option InternalNode} {encoded : ByteArray}
+    (hencode : encode (unencoded node) = .ok encoded) (hmem : encoded ∈ proof)
+    (hcoll : ∀ x ∈ proof, hash x = hash encoded → x = encoded) :
+    lookupNode (proof.map fun encoded => (hash encoded, encoded))
+      (.bytes ⟨(hash encoded).toArray⟩) = .ok (unencoded node) := by
+  have hdecode : decode encoded = .ok (unencoded node) := (decode_eq_ok_iff _ _).mpr hencode
+  simp only [lookupNode, size_hashBytes]
+  simp only [Nat.succ_ne_zero, ↓reduceIte]
+  cases hfind : (proof.map fun encoded => (hash encoded, encoded)).find?
+      (fun x => x.1.toList == (hash encoded).toArray.toList) with
+  | none =>
+    have := List.find?_eq_none.mp hfind (hash encoded, encoded) (List.mem_map_of_mem hmem)
+    simp [Vector.toList] at this
+  | some found =>
+    obtain ⟨digest, other⟩ := found
+    have hmatch := List.find?_some hfind
+    obtain ⟨other', hother, heq⟩ := List.mem_map.mp (List.mem_of_find?_eq_some hfind)
+    simp only [Prod.mk.injEq] at heq
+    obtain ⟨rfl, rfl⟩ := heq
+    simp only [beq_iff_eq, Vector.toList] at hmatch
+    have hsame : hash other' = hash encoded := Vector.toArray_inj.mp (Array.toList_inj.mp hmatch)
+    rw [hcoll _ hother hsame]
+    simp [hdecode, Except.mapError]
+
+/-! ## The checks before the proof -/
+
+/-- Sorted keys from the start on, with no empty value, reduce the check to its last step. -/
+theorem verifyRange_eq (hash : ByteArray → Hash32) (root start : Hash32)
+    (entries : List (Hash32 × ByteArray)) (proof : List ByteArray)
+    (hsorted : strictlyIncreasing (entries.map fun entry =>
+      bytesToNibbleList ⟨entry.1.toArray⟩) = true)
+    (hstart : ∀ entry ∈ entries,
+      bytesToNibbleList ⟨start.toArray⟩ ≤ bytesToNibbleList ⟨entry.1.toArray⟩)
+    (hfull : ∀ entry ∈ entries, entry.2.size ≠ 0) :
+    verifyRange hash root start entries proof =
+      if proof.isEmpty then
+        match Trie.root hash ⟨false, entries.map fun (key, value) => (⟨key.toArray⟩, value)⟩ with
+        | .ok built => if built = root then .ok false else .error .mismatch
+        | .error (.rlp error) => .error (.rlp error)
+        | .error .emptyValue => .error .emptyValue
+      else
+        checkSubtree hash (proof.map fun encoded => (hash encoded, encoded))
+          (bytesToNibbleList ⟨start.toArray⟩)
+          ((entries.map fun entry => (bytesToNibbleList ⟨entry.1.toArray⟩, entry.2)).getLast?.map
+            Prod.fst)
+          ((bytesToNibbleList ⟨start.toArray⟩).length + 2) (.bytes ⟨root.toArray⟩) []
+          (entries.map fun entry => (bytesToNibbleList ⟨entry.1.toArray⟩, entry.2)) := by
+  have hbefore : ((entries.map fun entry => (bytesToNibbleList ⟨entry.1.toArray⟩, entry.2)).any
+      fun x => decide (x.fst < bytesToNibbleList ⟨start.toArray⟩)) = false := by
+    simp only [List.any_map, List.any_eq_false, Function.comp_apply, decide_eq_true_eq]
+    exact fun entry hmem => List.not_lt.mpr (hstart entry hmem)
+  have hzero : ((entries.map fun entry => (bytesToNibbleList ⟨entry.1.toArray⟩, entry.2)).any
+      fun x => decide (x.snd.size = 0)) = false := by
+    simp only [List.any_map, List.any_eq_false, Function.comp_apply, decide_eq_true_eq]
+    exact hfull
+  unfold verifyRange
+  have hsorted' : strictlyIncreasing ((entries.map fun entry =>
+      (bytesToNibbleList ⟨entry.1.toArray⟩, entry.2)).map Prod.fst) = true := by
+    rwa [List.map_map]
+  simp only [hsorted', hbefore, hzero, Bool.false_eq_true, ↓reduceIte]
+  rfl
 
 end EthLib.Execution.Trie
