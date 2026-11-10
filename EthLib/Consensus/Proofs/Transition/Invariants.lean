@@ -1438,7 +1438,7 @@ theorem applyDeltas {rewards penalties : Array Gwei} {index : Nat}
     (computed : Consensus.applyDeltas rewards penalties state index = .ok after) :
     R state after := by
   simp only [Consensus.applyDeltas, bind_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨_, raised, lowered⟩ := computed
+  obtain ⟨_, _, _, raised, lowered⟩ := computed
   exact laws.trans (laws.increaseBalance raised) (laws.decreaseBalance lowered)
 
 theorem applyAllDeltas {deltas : Array Gwei × Array Gwei}
