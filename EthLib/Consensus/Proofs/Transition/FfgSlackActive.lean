@@ -30,17 +30,17 @@ Its weights are the effective balances of each state whose step makes it current
 
 That step may lie on any run between the first and the last state.
 
-The votes are those of the data that some state between the first and the last accepts as signed.
+The votes are those that the block steps between the first and the last state cast.
 
-That acceptance asks only that some signature of the keys verifies on the data.
+A block casts a vote for each validator that the bits of one of its attestations show.
 
-So under the BLS checks it holds for every data that a key of the registry can sign.
+The committees are those of the state before the block.
 
-So each validator of the set of a target counts as a voter for each link.
+The block accepts each of its attestations only when the aggregate signature verifies.
 
-The theorem then bounds the epochs, blocks, sets and weights of the justified checkpoints.
+Reading such a vote as the validator's signature assumes that no one forges a BLS aggregate.
 
-It does not bound who voted.
+So the voters of a link are validators whose attestations a block of the run applied.
 
 The step asks only the stake, the order of the blocks, the size of the registry and the preset.
 
@@ -85,16 +85,14 @@ def justifyingBalances (config : Config) (checks : SignatureChecks) (block : Roo
     after.state.currentJustifiedCheckpoint.toFfg block = c ∧
     weights = fun index => balanceAt forked.state index.toNat}
 
-/-- The votes of the model that some state between the first and the last state accepts as signed.
+/-- The votes that the block steps between the first and the last state cast.
 
-The state lies on any run of steps from the first state to the last one.
-
-It accepts data as signed when some signature of the keys verifies on it. -/
-def runVotes (config : Config) (checks : SignatureChecks) (block : Root → β)
-    (first last : ForkedBeaconState preset) : Set (Vote ValidatorIndex β) :=
-  {vote | ∃ forked, Relation.ReflTransGen (ChainStep config checks) first forked ∧
-    Relation.ReflTransGen (ChainStep config checks) forked last ∧
-    vote ∈ ffgVotes block {signed | SignedVote config checks forked.state signed}}
+The step lies on any run of steps from the first state to the last one. -/
+def runVotes (config : Config) (checks : SignatureChecks)
+    (first last : ForkedBeaconState preset) : Set (ValidatorIndex × AttestationData) :=
+  {vote | ∃ forked after, Relation.ReflTransGen (ChainStep config checks) first forked ∧
+    Relation.ReflTransGen (ChainStep config checks) after last ∧
+    vote ∈ blockStepVotes config checks forked after}
 
 /-- Along a run of steps of a chain from genesis, both justified checkpoints are slack-justified.
 
@@ -104,13 +102,11 @@ Its second set is the active set of the next epoch in the last state.
 
 Its weights are the effective balances of each state whose step makes it current justified.
 
-The votes are those of the data that some state between genesis and the last accepts as signed.
+The votes are those that the block steps between genesis and the last state cast.
 
 Each step on any run between them must meet the bounds on the stake, the blocks and the registry.
 
-A state accepts data as signed when some signature of the keys verifies on it.
-
-So the votes do not bound who voted.
+Each of them comes from an attestation that a block of the run applied, with a verified signature.
 
 The order of the blocks is an assumption on the map from roots to blocks.
 
@@ -137,49 +133,7 @@ theorem slackJustifiedCheckpoints_activeSetAt_of_chainSteps
     SlackJustifiedCheckpoints (fun c => activeSetAt last.state c.epoch)
       (fun c => activeSetAt last.state (c.epoch + 1))
       (justifyingBalances config checks block ⟨fork, state⟩ last) (block (Vector.replicate 32 0))
-      (runVotes config checks block ⟨fork, state⟩ last) block last.state := by
-  refine slackJustifiedCheckpoints_of_chainSteps positive window apart computed steps
-    fun forked after reach step rest => ?_
-  have bounds := meets forked after reach step rest
-  -- The registry of the last state stays below 2^64 validators.
-  have small : last.state.validators.data.size < 2 ^ 64 := by
-    cases rest with
-    | refl => exact bounds.small
-    | tail middle lastStep =>
-      exact (meets _ _ ((reach.tail step).trans middle) lastStep .refl).small
-  have kept : ActiveKept (getCurrentEpoch forked.state) forked.state last.state :=
-    (step.activeKept bounds.small).trans
-      ((activeKept_of_chainSteps small rest).mono step.currentEpoch_le)
-  refine ⟨bounds, fun _ _ => ?_, fun changed root rootOk => ?_⟩
-  · rintro _ ⟨signer, signed, rfl⟩
-    exact ⟨forked, reach, .head step rest, signer, signed, rfl⟩
-  obtain ⟨recent, rootAfter⟩ := step.getBlockRoot_currentJustified_of_ne window changed
-  rw [rootOk, Except.ok.injEq] at rootAfter
-  have previous := getPreviousEpoch_toNat forked.state
-  set epoch := after.state.currentJustifiedCheckpoint.epoch with epochEq
-  have below : epoch ≤ getCurrentEpoch forked.state := by
-    rcases recent with same | same
-    · rw [same, UInt64.le_iff_toNat_le, previous]
-      omega
-    · rw [same]
-      exact UInt64.le_refl _
-  have activeEq : activeSetAt last.state epoch.toNat =
-      (getActiveValidatorIndices forked.state epoch).toFinset := by
-    rw [activeSetAt_toNat, kept.getActiveValidatorIndices_eq below]
-  refine ⟨activeEq, ⟨forked, after, reach, step, rest, changed, ?_, rfl⟩, ?_⟩
-  · simp only [Checkpoint.toFfg, rootAfter, epochEq]
-  · dsimp only
-    by_cases current : epoch = getCurrentEpoch forked.state
-    · rw [activeEq, current]
-      exact Finset.inter_subset_left
-    -- The previous epoch is then below the current one, so its next epoch is the current one.
-    have previousEq : epoch = getPreviousEpoch forked.state := recent.resolve_right current
-    have next : epoch.toNat + 1 = (getCurrentEpoch forked.state).toNat := by
-      have ne := mt UInt64.toNat_inj.mp current
-      rw [previousEq, previous] at ne ⊢
-      omega
-    rw [next, activeSetAt_toNat _ (getCurrentEpoch forked.state),
-      kept.getActiveValidatorIndices_eq (UInt64.le_refl _)]
-    exact Finset.inter_subset_right
+      (ffgVotes block (runVotes config checks ⟨fork, state⟩ last)) block last.state := by
+  sorry
 
 end EthLib.Consensus

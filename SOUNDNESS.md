@@ -2242,7 +2242,7 @@ The block is finalized at an epoch above every justified epoch so far.
 The new votes come from justified sources, and no honest validator becomes slashable.
 
 A vote names the validator that signed it, so both theorems assume that no one forges a vote.
-The votes of the model come from the beacon chain only one epoch step at a time, below, so neither theorem is yet about what a client runs.
+Below, the votes of the model come from the attestations that the blocks of a chain apply, but neither theorem is yet applied to them, so neither is yet about what a client runs.
 
 These pieces of that link exist.
 `FfgVotes.lean` relates the slashing conditions of the beacon chain to those of the model.
@@ -2256,42 +2256,38 @@ With the BLS checks, the aggregate signature verifies under keys that include th
 Reading this as a signature by that attester assumes that BLS aggregate signatures cannot be forged.
 The source of that attestation is the justified checkpoint of the epoch of the flags.
 Its target is the checkpoint of that epoch, with the block root that the state records for its first slot.
-`voteFrame_processBlock` (`Consensus/Proofs/Transition/TargetVotes.lean`) carries that fact across a whole block.
-A block sets a target flag only from a vote, a pair of a validator and attestation data, for the link of the epoch of the flag at the position of the flag.
-Each such vote holds the data of an attestation of the block, and is signed in the state after the block.
-A vote is signed in a state when an aggregate signature over its data verifies under keys of the state that include the validator's key.
-The domain is the attester domain at the version of a fork of the chain, up to the fork of the state, with the state's genesis validators root.
-The attestation check implies this when the two fork versions of the state are such versions, which `ForkVersionsKnown` states.
-The version stays free among those forks, since two upgrades in one epoch change the version that the state gives to the previous epoch.
-With the BLS checks, a signed vote means that the validator signed the data, if BLS aggregates with proofs of possession cannot be forged.
-The block keeps the slot, the block roots, the justified checkpoints, the fork versions, the genesis validators root and the key of each validator.
-So `TargetFlagsSigned.of_voteFrame` keeps each target flag backed by a signed vote for its link.
-From Gloas the theorem assumes the registry within its limit, since its type does not bound its size.
-`TargetFlagsSigned.of_stateTransition` (`Consensus/Proofs/Transition/TargetSlots.lean`) carries the same fact across the slots, the epoch step included, and then the block.
+A vote is a pair of a validator and attestation data.
+An attestation casts a vote for each validator that its bits show in its committees, with its data (`attestationVotes`, `Consensus/Proofs/Transition/TargetVotes.lean`).
+A block casts the votes of its attestations, read in the committees of the state before the block (`blockVotes`).
+`processBlock_attestationSplit` (`ActiveKept.lean`) shows that the block reads those same committees when it processes each attestation.
+The steps before the attestations keep activity up to the current epoch and write only the RANDAO mix of the current epoch, which the seeds of the previous and current epochs do not read.
+That needs more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes, and the registry below 2^64 validators after the block.
+`voteFrame_processBlock` then shows that a block sets a target flag only from one of its votes, for the link of the epoch of the flag at the position of the flag.
+The block keeps the slot, the block roots and the justified checkpoints.
+So `TargetFlagsVoted.of_voteFrame` keeps each target flag backed by a vote for its link, from the earlier votes or those of the block.
+`TargetFlagsVoted.of_advanceSlots` (`Consensus/Proofs/Transition/TargetSlots.lean`) carries the same fact across the slots, the epoch step included.
 The slot step writes one block root, so the roots at the first slots of the current and previous epochs stay.
 That needs at least one slot per epoch, and a buffer of roots that covers two epochs, as both presets do.
 The epoch step moves the flags of the current epoch to the previous one, and justification moves the current justified checkpoint to the previous one.
 Justification does not run in the first two epochs, so the theorem assumes the two justified checkpoints equal there, and the slots keep that.
-The theorem also assumes the registry below 2^64 validators after the block, which its type already bounds before Gloas.
-It also assumes `ForkVersionsKnown` after the block.
-The genesis state built from deposits satisfies that and the equal justified checkpoints, and the slots, the blocks and every upgrade keep both (`Consensus/Proofs/Transition/TargetUpgrades.lean`).
-`TargetFlagsSigned.of_processUpgrades` carries the target-flag fact across the upgrades from Altair on.
-It assumes the registry below 2^64 validators after the upgrades.
-Before Altair, `PendingSigned` (`Consensus/Proofs/Transition/TargetPending.lean`) says the same of each pending attestation of the two epochs, across attestations, blocks and slots.
+The genesis state built from deposits has equal justified checkpoints, and the slots, the blocks and every upgrade keep that (`Consensus/Proofs/Transition/TargetUpgrades.lean`).
+`TargetFlagsVoted.of_processUpgrades` carries the target-flag fact across the upgrades from Altair on.
+Before Altair, `PendingVoted` (`Consensus/Proofs/Transition/TargetPending.lean`) says the same of each pending attestation of the two epochs, across attestations, blocks and slots.
 It relies on the beacon committees of those epochs staying fixed while the epoch is recent (`Committees.lean`), which needs more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes.
-`TargetFlagsSigned.of_upgradeToAltair` (`TargetUpgrades.lean`) builds the target flags of the first Altair state from such pending attestations.
+`TargetFlagsVoted.of_upgradeToAltair` (`TargetUpgrades.lean`) builds the target flags of the first Altair state from such pending attestations.
+A vote of a block is evidence that its validator signed the data only under the assumption that BLS aggregates with proofs of possession cannot be forged, since the block accepts the attestation only when its aggregate signature verifies.
 
 `processJustificationAndFinalization_linkWithChurn` (`Consensus/Proofs/Transition/FfgJustification.lean`) refines one epoch step.
 It takes the target-flag fact from Altair, the pending-attestation fact before Altair, and an active stake of more than one and a half increments.
-The two facts are needed at the state after the slot step where justification runs, which no public theorem reaches yet.
+The two facts are needed at the state after the slot step where justification runs; `advanceSlot_slackJustifiedCheckpoints` (`FfgSlack.lean`) reaches it from the state before the slot.
 The validator set of a target is the active set of its epoch, as each checkpoint has its own set in Gasper §8.6.
 Each validator weighs its effective balance in the state before the step.
-The votes of the model must hold those of the data that the state signs.
+The votes of the model must hold those of a set of votes from which the target flags and the pending attestations come.
 The step keeps the current justified checkpoint, or replaces it by the checkpoint of the previous or the current epoch, whose test passes; the link goes from the justified checkpoint of that epoch to the new checkpoint.
 Then twice the stake of the set of the target is at most three times the stake of the voters of the link, plus a term of churn.
 The term is twice the stake of that set outside the active set of the current epoch, because the step divides by the active balance of the current epoch.
-`linkWithChurn_of_test` gives the same bound for one epoch whose test passes, when each counted attester is active in that epoch and signed a vote for its link.
-`TargetFlagsSigned.attester` from Altair and `PendingSigned.attester` before it give that fact.
+`linkWithChurn_of_test` gives the same bound for one epoch whose test passes, when each counted attester is active in that epoch and cast a vote of the set for its link.
+`TargetFlagsVoted.attester` from Altair and `PendingVoted.attester` before it give that fact.
 With them, `linkWithChurn_of_test` would give the bound for the previous epoch when both pass, whose bit the finalization rules read; no theorem states that yet.
 For the current epoch the term is zero.
 For the previous epoch, `exists_exitEpoch_eq_of_mem_sdiff_active` shows that it counts only validators that exit at the current epoch, while the registry stays below 2^64 validators.
@@ -2308,7 +2304,10 @@ On one chain only the step that changes the current justified checkpoint reads t
 Two branches can justify the same checkpoint in different states; its set of weights holds the balances of both, but its validator set must be the active set of its epoch in both states, and no theorem shows that yet.
 The step asks a match only for the new current justified checkpoint; finalization also reads a previous target that the same step justifies, which a refinement of finality will need to match too.
 The step also needs the previous justified epoch below the previous epoch once justification runs, and the source block of each recent link in the chain of its target block.
-No theorem yet turns these steps into a justified or finalized checkpoint of the model along a chain.
+`slackJustifiedCheckpoints_of_chain` (`Consensus/Proofs/Transition/FfgSlackChain.lean`) carries these steps along a chain from the genesis state built from deposits, for a set of votes that holds the votes of each block step.
+`slackJustifiedCheckpoints_activeSetAt_of_chainSteps` (`FfgSlackActive.lean`) takes the votes that the block steps of the run cast, the active sets and the effective balances.
+Its step asks only the active stake, the order of the blocks, the size of the registry and the preset.
+The order of the blocks of the model is an assumption on the map from roots to blocks, and no theorem gives a finalized checkpoint of the model along a chain yet.
 
 ### Engine API
 
