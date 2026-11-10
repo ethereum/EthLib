@@ -161,7 +161,10 @@ def test_deposit_contract_of_wrong_length(address: bytes) -> None:
 def test_deposit_contract_not_bytes() -> None:
     # The configuration takes an address as hex text, but this function takes only its bytes.
     with raises(TypeError, "deposit_contract must be bytes"):
-        blocks.deposit_requests("0x" + DEPOSIT_CONTRACT.hex(), rlp.encode([]))
+        blocks.deposit_requests(
+            "0x" + DEPOSIT_CONTRACT.hex(),  # ty: ignore[invalid-argument-type]
+            rlp.encode([]),
+        )
 
 
 def test_requests_hash_skips_lists_without_data() -> None:
