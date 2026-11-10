@@ -9,6 +9,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- From Gloas, the rewards and penalties and the inactivity updates of an epoch now fail where a registry position of 2^64 or more would become a validator index ([#1883](https://github.com/ethereum/EthLib/issues/1883)).
+  The specification builds a `ValidatorIndex` for each position when it applies the deltas, and for each eligible validator when it lists the eligible indices.
+  EthLib took such a position modulo 2^64, so it credited the balance, or updated the inactivity score, of another validator.
+  Before Gloas the registry stays within its limit, which is below 2^64, so nothing changes there.
+  No C export or Python function changes.
+  In Lean, `applyDeltas_eq_ok_iff` now reads the balance at the position itself, not at the position modulo 2^64, and adds the condition that the position is below 2^64.
+  `applyAllDeltas_balances`, `foldlM_applyAllDeltas_balances` and `processRewardsAndPenalties_balances_of_altair` no longer take a bound on the size of the registry.
 - The FFG chain theorems now prove that the block of each justified checkpoint is in the chain of the block of its recent epoch, instead of assuming it ([#1420](https://github.com/ethereum/EthLib/issues/1420)).
   No C export or Python function changes.
   In Lean, the field `chain` of `SlackStepBounds` becomes `links`, which asks the map from roots to blocks to keep in order the roots of consecutive slots (`rootLinks`).

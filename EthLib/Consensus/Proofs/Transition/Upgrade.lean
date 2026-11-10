@@ -637,6 +637,21 @@ theorem upgradeToGloas_spec {pre : BeaconState preset .fusaka}
         ⟨pre.forkVersions.currentVersion, config.GLOAS_FORK_VERSION, getCurrentEpoch pre⟩ :=
   (upgradeToGloas_frame_spec computed).2
 
+/-- The upgrade to Gloas starts with no pending payment and no pending withdrawal of a builder.
+
+The latest bid of the upgraded state has no value. -/
+theorem upgradeToGloas_builderFields {pre : BeaconState preset .fusaka}
+    {after : BeaconState preset .glamsterdam}
+    (computed : upgradeToGloas config checks pre = .ok after) :
+    (after.builderPendingPayments (by decide)).elements = Vector.replicate _ .empty ∧
+      (after.builderPendingWithdrawals (by decide)).data = #[] ∧
+      (after.latestExecutionPayloadBid (by decide)).value = 0 := by
+  unfold upgradeToGloas at computed
+  obtain ⟨root, -, rest⟩ := bind_ok_iff.mp computed
+  obtain ⟨window, -, onboarded⟩ := bind_ok_iff.mp rest
+  obtain ⟨⟨builders, pending, rfl⟩, -⟩ := onboardBuildersFromPendingDeposits_spec onboarded
+  exact ⟨rfl, rfl, rfl⟩
+
 /-- The upgraded bid keeps every field of the Gloas bid, and sets no inclusion list bit. -/
 theorem upgradeBidToHeze_spec (bid : ExecutionPayloadBid preset .glamsterdam) :
     (upgradeBidToHeze bid).parentBlockHash = bid.parentBlockHash ∧

@@ -856,7 +856,7 @@ theorem balanceSum_applyPendingDeposit {deposit : PendingDeposit}
     exact .inl (balanceSum_increaseBalance computed)
 
 /-- A deposit raises the sum of the balances by at most its amount. -/
-private theorem balanceSum_applyPendingDeposit_le {deposit : PendingDeposit}
+theorem balanceSum_applyPendingDeposit_le {deposit : PendingDeposit}
     (computed : applyPendingDeposit config checks state deposit = .ok after) :
     balanceSum after ≤ balanceSum state + deposit.amount.toNat := by
   unfold applyPendingDeposit at computed

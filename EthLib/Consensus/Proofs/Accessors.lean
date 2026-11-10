@@ -78,6 +78,14 @@ A position outside the registry is not active. -/
 def isActiveAt (state : BeaconState preset fork) (epoch : Epoch) (position : Nat) : Bool :=
   (state.validators.data[position]?.map (isActiveValidator · epoch)).getD false
 
+/-- A position is active in an epoch exactly when it holds a validator active in that epoch. -/
+theorem isActiveAt_eq_true_iff {state : BeaconState preset fork} {epoch : Epoch}
+    {position : Nat} :
+    isActiveAt state epoch position = true ↔ ∃ validator,
+      state.validators.data[position]? = some validator ∧
+        isActiveValidator validator epoch = true := by
+  cases found : state.validators.data[position]? <;> simp [isActiveAt, found]
+
 /-- Every effective balance of the registry is a whole number of increments. -/
 def EffectiveBalancesAligned (state : BeaconState preset fork) : Prop :=
   ∀ validator ∈ state.validators.data,
@@ -123,24 +131,31 @@ theorem toNat_toUInt64_of_lt {state : BeaconState preset fork}
   have limit := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
   rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (by omega)]
 
+/-- An index whose position holds a validator active in an epoch is active in that epoch. -/
+theorem mem_getActiveValidatorIndices_of_isActiveAt {state : BeaconState preset fork}
+    {epoch : Epoch} {index : ValidatorIndex} (active : isActiveAt state epoch index.toNat = true) :
+    index ∈ getActiveValidatorIndices state epoch := by
+  obtain ⟨validator, found, isActive⟩ := isActiveAt_eq_true_iff.mp active
+  simp only [getActiveValidatorIndices, List.mem_filterMap, Option.ite_none_right_eq_some,
+    Option.some.injEq, List.mem_zipIdx_iff_getElem?, Prod.exists]
+  exact ⟨validator, index.toNat, by simpa using found, isActive, by simp⟩
+
 /-- An index is active exactly when it names a validator that is active in the epoch. -/
 theorem mem_getActiveValidatorIndices {state : BeaconState preset fork}
     (within : state.RegistryWithinLimit) {epoch : Epoch} {index : ValidatorIndex} :
     index ∈ getActiveValidatorIndices state epoch ↔
       ∃ validator, state.validators.data[index.toNat]? = some validator ∧
         isActiveValidator validator epoch = true := by
+  refine ⟨fun member => ?_, fun found =>
+    mem_getActiveValidatorIndices_of_isActiveAt (isActiveAt_eq_true_iff.mpr found)⟩
   simp only [getActiveValidatorIndices, List.mem_filterMap, Option.ite_none_right_eq_some,
-    Option.some.injEq, List.mem_zipIdx_iff_getElem?, Prod.exists]
-  constructor
-  · rintro ⟨validator, i, found, active, rfl⟩
-    have lt : i < state.validators.data.size := by
-      have := (List.getElem?_eq_some_iff.mp found).1
-      simpa using this
-    rw [toNat_toUInt64_of_lt within lt]
-    exact ⟨validator, by simpa using found, active⟩
-  · rintro ⟨validator, found, active⟩
-    refine ⟨validator, index.toNat, by simpa using found, active, ?_⟩
-    simp
+    Option.some.injEq, List.mem_zipIdx_iff_getElem?, Prod.exists] at member
+  obtain ⟨validator, i, found, active, rfl⟩ := member
+  have lt : i < state.validators.data.size := by
+    have := (List.getElem?_eq_some_iff.mp found).1
+    simpa using this
+  rw [toNat_toUInt64_of_lt within lt]
+  exact ⟨validator, by simpa using found, active⟩
 
 /-- The positions of the validators that pass a test increase strictly, as 64-bit indices.
 
@@ -162,6 +177,56 @@ theorem validatorPositions_sorted {state : BeaconState preset fork}
   have hj : j < state.validators.data.size := by simpa using (List.mem_zipIdx' mj).1
   rw [UInt64.lt_iff_toNat_lt, toNat_toUInt64_of_lt within hi, toNat_toUInt64_of_lt within hj]
   exact lt
+
+/-- Converting the positions that pass a test with a check agrees with converting them without one.
+
+They agree exactly when each position that passes is below `2^64`. -/
+private theorem mapM_ofNatChecked_filterMap {α : Type} (test : α → Bool) :
+    ∀ entries : List (α × Nat),
+      (entries.filterMap fun (value, position) =>
+          if test value then some position else none).mapM ofNatChecked =
+        .ok (entries.filterMap fun (value, position) =>
+          if test value then some position.toUInt64 else none) ↔
+      ∀ entry ∈ entries, test entry.1 = true → entry.2 < 2 ^ 64
+  | [] => by simp [pure, Except.pure]
+  | (value, position) :: rest => by
+    have later := mapM_ofNatChecked_filterMap test rest
+    cases passes : test value
+    · simp only [List.filterMap_cons, passes, Bool.false_eq_true, ↓reduceIte, later,
+        List.forall_mem_cons, false_implies, true_and]
+    · simp only [List.filterMap_cons, passes, ↓reduceIte, List.mapM_cons, List.forall_mem_cons,
+        forall_const]
+      by_cases small : position < 2 ^ 64
+      · simp only [ofNatChecked_of_lt small, small, true_and, ← later]
+        cases rest.filterMap (fun (value, position) =>
+            if test value then some position else none) |>.mapM ofNatChecked <;>
+          simp [bind, Except.bind, pure, Except.pure]
+      · simp [ofNatChecked, small, bind, Except.bind]
+
+/-- The specification converts each active position to an index, and fails at `2^64` or more.
+
+That conversion gives the active indices exactly when each active position is below `2^64`.
+
+Otherwise the specification gives no such result.
+
+The active indices then take some active position modulo `2^64`. -/
+theorem getActiveValidatorIndices_eq_mapM_ofNatChecked {state : BeaconState preset fork}
+    {epoch : Epoch} :
+    (state.validators.data.toList.zipIdx.filterMap fun (validator, position) =>
+        if isActiveValidator validator epoch then some position else none).mapM ofNatChecked =
+      .ok (getActiveValidatorIndices state epoch) ↔
+    ∀ position (inside : position < state.validators.data.size),
+      isActiveValidator state.validators.data[position] epoch = true → position < 2 ^ 64 := by
+  rw [getActiveValidatorIndices]
+  refine (mapM_ofNatChecked_filterMap (isActiveValidator · epoch) _).trans ?_
+  constructor
+  · intro below position inside active
+    exact below (state.validators.data[position], position)
+      (List.mem_zipIdx_iff_getElem?.mpr (by simp [inside])) active
+  · rintro below ⟨validator, position⟩ member active
+    obtain ⟨inside, read⟩ := Array.getElem?_eq_some_iff.mp
+      (by simpa using List.mem_zipIdx_iff_getElem?.mp member)
+    exact below position inside (read ▸ active)
 
 /-- The active indices increase strictly. -/
 theorem getActiveValidatorIndices_sorted {state : BeaconState preset fork}

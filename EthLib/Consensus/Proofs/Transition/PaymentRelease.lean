@@ -89,6 +89,16 @@ def ValuedBidAtLatestBlock (state : BeaconState preset fork) (gloas : .glamsterd
   0 < (state.latestExecutionPayloadBid gloas).value →
     (state.latestExecutionPayloadBid gloas).slot = state.latestBlockHeader.slot
 
+/-- A step that keeps the latest bid and the slot of the latest block keeps a valued bid there. -/
+theorem ValuedBidAtLatestBlock.of_fields {gloas : .glamsterdam ≤ fork}
+    (holds : ValuedBidAtLatestBlock state gloas)
+    (header : after.latestBlockHeader.slot = state.latestBlockHeader.slot)
+    (bid : after.latestExecutionPayloadBid = state.latestExecutionPayloadBid) :
+    ValuedBidAtLatestBlock after gloas := by
+  unfold ValuedBidAtLatestBlock at *
+  rw [header, bid]
+  exact holds
+
 /-- The withdrawal that pays the bid of the block at a slot.
 
 It is the payment in the window, if the window holds it with a positive amount.

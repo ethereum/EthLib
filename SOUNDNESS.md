@@ -1776,13 +1776,16 @@ In 24 of them, five cases at several forks, the rule now confirms another block,
 The vendored fast confirmation cases in `tests/consensus/fork_choice` still pass.
 
 `stake_le_computeCommitteeWeightBetweenSlots` (`Consensus/Proofs/ForkChoice/FastConfirmationIndicators.lean`) shows that the weight covers the stake of the active members of the committees.
+`stake_le_computeCommitteeWeightBetweenSlots_of_covered` shows that the weight of a range with a whole epoch covers the stake of every validator active in the source of balances.
 `lt_two_mul_honest_support_of_isOneConfirmed` then gives Lemmas 4 and 3 of the paper for a block that the store confirms.
 Twice its honest support, plus the discount for empty slots, exceeds the committee weight since its parent plus the boost.
-It assumes that the Byzantine validators hold at most the configured share of the stake of the committees, as Assumption 2 of the paper does.
+It takes any set `W` of validators whose stake the committee weight of the range covers.
+It assumes that the Byzantine validators hold at most the configured share of the stake of `W`.
+That is Assumption 2 of the paper when `W` is the set of active members of the committees of the range.
 It also assumes that no validator the store knows to equivocate is honest.
 It also assumes that the effective balances of those validators are whole numbers of 100 Gwei, since the store rounds the weight down to 100 Gwei for its share of the adversary.
 `lt_two_mul_honest_supportersOf_of_isOneConfirmed` (`Consensus/Proofs/ForkChoice/FastConfirmationSets.lean`) builds the supporters, the equivocators and the committee members from the store, and their stakes are the store's numbers.
-It replaces that assumption with an invariant of the state: each effective balance of the source of balances is a whole number of increments, and at most its cap.
+It replaces that assumption with an invariant of the state: each effective balance of the source of balances is a whole number of increments.
 It also assumes that the increment of the preset is a whole number of 100 Gwei, as 10^9 Gwei is.
 No theorem yet derives that from the state transition.
 The update of effective balances keeps it, but the other steps and the upgrades have no proof.
@@ -1790,6 +1793,14 @@ It also assumes that each supporter of the block is a member of the committees o
 Before Gloas the store keeps the target epoch and the root of each latest vote, not its slot, so no theorem yet proves that.
 From Gloas it keeps the slot, but the committees of the vote must still match those of the head.
 The store checks a vote against the committees in the state of its target, while the rule reads them in the state of the head.
+Both corollaries apply `lt_two_mul_honest_supportersOf_of_weighed`, which builds those sets for any `W` that holds the supporters and the active members of the committees, and whose stake the weight covers.
+`lt_two_mul_honest_supportersOf_of_covered` drops that assumption when the range of the adversary holds a whole epoch.
+Its set `W` is then every validator active in the source of balances, which holds each supporter.
+Its Byzantine bound is Assumption 2 when every validator active in the source is a member of a committee of the range.
+Otherwise it implies Assumption 2 when the validators that have left the committees are Byzantine, as Assumption 1 of the paper ensures.
+With an honest one gone the two bounds are incomparable.
+The tally of the source still counts the votes of validators that have left the committees, so the proof bounds their stake.
+For a range with part of an epoch the assumption on the supporters stays.
 Like the paper, the theorem takes a static set of validators, Assumption 1.
 The honest support of the target of the current epoch takes the total active balance less the weight of the committees so far as the weight still to vote.
 No theorem proves that, which rests on the shuffling of the head and its pulled-up state agreeing on the active validators of the epoch.
@@ -2405,6 +2416,20 @@ In Lean a division of 64-bit integers by zero returns zero and a remainder retur
 Block processing divides by further constants, such as the quotients of the slashing penalty and of the whistleblower reward, which these predicates do not list.
 A theorem that a step succeeds takes a predicate only where its proof needs a positive divisor.
 For a preset or configuration with a zero divisor, any theorem about a step that divides by it describes EthLib's transition, not the specification's.
+
+The accessor that lists the active validators keeps a result where the specification fails.
+The specification lists the active validators of an epoch by their indices, and builds each index as a `ValidatorIndex`, a 64-bit integer.
+That construction rejects a value of `2^64` or more, so the specification fails when a validator at a registry position of `2^64` or more is active.
+`getActiveValidatorIndices` returns a plain list and never fails; at such a position it would take the position modulo `2^64`.
+Before Gloas the type of the registry bounds it by the limit of the preset, a 64-bit integer (`2^40` in the mainnet and minimal presets), so no position reaches `2^64`.
+From Gloas the type of the registry has no length limit ([EIP-7688](https://eips.ethereum.org/EIPS/eip-7688#converted-types)).
+A new validator still gets the size of the registry as its index, and that index must be below `2^64` (`getIndexForNewValidator_ok_iff`).
+So a transition never adds a validator at a position of `2^64` or more, and only a starting state built outside the transition can hold one.
+
+`getActiveValidatorIndices_eq_mapM_ofNatChecked` in `Consensus/Proofs/Accessors.lean` states the divergence exactly.
+The checked conversion of the active positions, which the specification computes, succeeds and gives EthLib's list exactly when every active position is below `2^64`.
+The number of committees per slot, the churn limit of validators before Electra and the Phase 0 weak subjectivity period also convert the number of active validators to a 64-bit integer without a check.
+The specification fails there at `2^64` active validators, a count that a registry of `2^64` positions allows, so that case can arise through the transition, at least in principle.
 
 Some official vectors expect more than a source says.
 The transaction tests of ethereum/tests reject 43 results whose gas limit is `2^64`, or whose gas limit times gas price exceeds `2^256 - 1`.
