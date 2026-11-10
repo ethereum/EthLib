@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Execution.Proofs.Evm.Call.Burn
+public import EthLib.Execution.Proofs.Evm.Call.BurnRun
 public import EthLib.Execution.Proofs.Evm.Call.ContractAddress
 public import EthLib.Execution.Proofs.Evm.Call.Create
 public import EthLib.Execution.Proofs.Evm.Call.Delegation
