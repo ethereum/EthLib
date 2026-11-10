@@ -13,7 +13,7 @@ public import EthLib.Consensus.Proofs.Transition.StateTransition
 /-!
 # Proofs: invariants of the state transition
 
-A valid block keeps four properties of a state, at every fork.
+A valid block keeps five properties of a state, at every fork.
 
 The registry and the balances keep one entry for each validator.
 
@@ -26,6 +26,10 @@ The current justified epoch is at most the previous epoch.
 So the next epoch transition cannot lower the finalized epoch.
 
 The finalized epoch then never decreases.
+
+Let the largest effective balances of the preset be whole numbers of increments.
+
+Each effective balance of the registry is then a whole number of increments too.
 
 Most steps change neither the slot, nor the checkpoints, nor the justification bits.
 
@@ -1698,12 +1702,17 @@ theorem processJustificationAndFinalization_keeps
 def JustifiedSettled (state : BeaconState preset fork) : Prop :=
   state.currentJustifiedCheckpoint.epoch ≤ getPreviousEpoch state
 
-/-- The properties that each valid block keeps. -/
+/-- The properties that each valid block keeps.
+
+The last one says that each effective balance is a whole number of increments.
+
+It holds when the largest effective balances of the preset are whole numbers of increments. -/
 structure Invariant (state : BeaconState preset fork) : Prop where
   balancesMatch : BalancesMatch state
   exitsOrdered : ExitsOrdered state
   ordered : CheckpointsOrdered state
   settled : JustifiedSettled state
+  aligned : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state
 
 theorem getPreviousEpoch_toNat (state : BeaconState preset fork) :
     (getPreviousEpoch state).toNat = (getCurrentEpoch state).toNat - 1 := by
@@ -1732,6 +1741,7 @@ theorem Frame.invariant (frame : Frame state after) (holds : Invariant state) :
     unfold JustifiedSettled getPreviousEpoch getCurrentEpoch at this ⊢
     rw [frame.currentJustified, frame.slot]
     exact this
+  aligned maxAligned := frame.aligned maxAligned (holds.aligned maxAligned)
 
 /-- Justification and finalization keep the checkpoints in order, and the finalized epoch rises.
 
@@ -1791,6 +1801,18 @@ private theorem epoch_invariant {justified : BeaconState preset fork} (holds : I
     exact finalized
   · rw [frame.currentJustified]
     exact current
+
+/-- An epoch transition keeps the effective balances whole when the largest ones are. -/
+private theorem processEpoch_aligned (holds : Invariant state)
+    (computed : processEpoch config checks state = .ok after)
+    (maxAligned : MaxEffectiveBalancesAligned preset) : EffectiveBalancesAligned after := by
+  obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame computed
+  obtain ⟨_, _, _, _, validators, _⟩ :=
+    processJustificationAndFinalization_invariant holds.ordered holds.settled justifiedOk
+  refine frame.toFrame.aligned maxAligned ?_
+  unfold EffectiveBalancesAligned
+  rw [validators]
+  exact holds.aligned maxAligned
 
 /-- The epoch transition keeps the order of the checkpoints and the slot.
 
@@ -1858,7 +1880,8 @@ theorem advanceSlot_invariant (holds : Invariant state)
     obtain ⟨_, balancesMatch, exitsOrdered, ordered, finalized, current⟩ :=
       processEpoch_invariant cachedHolds epochedOk
     have step := nextSlot_epoch_of_boundary sum boundary
-    refine ⟨⟨balancesMatch, exitsOrdered, ordered, ?_⟩, ?_⟩
+    have whole := fun maxAligned => processEpoch_aligned cachedHolds epochedOk maxAligned
+    refine ⟨⟨balancesMatch, exitsOrdered, ordered, ?_, whole⟩, ?_⟩
     · have current' := UInt64.le_iff_toNat_le.mp current
       rw [getCurrentEpoch_toNat, cachedFrame.slot] at current'
       unfold JustifiedSettled
@@ -1871,7 +1894,8 @@ theorem advanceSlot_invariant (holds : Invariant state)
     simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
     subst epochedOk
     have step := nextSlot_epoch_of_inside sum notBoundary
-    refine ⟨⟨cachedHolds.balancesMatch, cachedHolds.exitsOrdered, cachedHolds.ordered, ?_⟩, ?_⟩
+    refine ⟨⟨cachedHolds.balancesMatch, cachedHolds.exitsOrdered, cachedHolds.ordered, ?_,
+      cachedHolds.aligned⟩, ?_⟩
     · have settled := UInt64.le_iff_toNat_le.mp holds.settled
       rw [getPreviousEpoch_toNat, getCurrentEpoch_toNat] at settled
       unfold JustifiedSettled
