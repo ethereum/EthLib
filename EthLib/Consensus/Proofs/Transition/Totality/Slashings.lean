@@ -18,15 +18,15 @@ The step succeeds when the sums and the effective balances are small enough.
 
 The registry must hold one balance for each validator, and stay within its limit.
 
-Before Electra the share is a product of the effective balance in increments and the active balance.
+Before Electra the step multiplies the effective balance in increments by the capped slashed sum.
 
-That product must stay below 2^64 Gwei.
+That sum is at most one increment or the sum of the effective balances.
 
-From Electra the step divides the active balance by the increment.
+The product with the sum of the effective balances must fit in 64 bits.
 
-So the increment must be positive.
+The step divides by the increment at every fork, and from Electra divides the active balance by it.
 
-The specification also fails there on a zero increment.
+The specification fails on a zero increment, so the theorem asks for positive divisors.
 -/
 
 @[expose] public section
@@ -37,67 +37,9 @@ open Base Uint64
 
 variable {preset : Preset} {fork : Base.Fork} {state : BeaconState preset fork}
 
-/-- A fold of checked sums succeeds when the start and the list sum below 2^64.
+/-- A state has the registry, the slot and the sizes of another.
 
-It returns the sum on natural numbers. -/
-private theorem foldlM_addChecked_exists (list : List Gwei) (start : Gwei)
-    (fits : start.toNat + (list.map (·.toNat)).sum < 2 ^ 64) :
-    ∃ sum, list.foldlM addChecked start = .ok sum ∧
-      sum.toNat = start.toNat + (list.map (·.toNat)).sum := by
-  induction list generalizing start with
-  | nil => exact ⟨start, rfl, by simp⟩
-  | cons head tail ih =>
-    simp only [List.map_cons, List.sum_cons] at fits ⊢
-    have step := addChecked_of_lt (a := start) (b := head) (by omega)
-    obtain ⟨sum, computed, value⟩ := ih (start + head) (by rw [toNat_add_of_lt (by omega)]; omega)
-    exact ⟨sum, by rw [List.foldlM_cons, step]; exact computed,
-      by rw [value, toNat_add_of_lt (by omega)]; omega⟩
-
-/-- The marked sum of the effective balances is at most the sum of all of them. -/
-private theorem sumMarked_le_effectiveBalanceSum (marks : Array Bool) :
-    sumMarked state.validators.data marks ≤ effectiveBalanceSum state := by
-  rw [sumMarked_eq_sum]
-  have : effectiveBalanceSum state = ((List.range state.validators.data.size).map fun j =>
-      ((state.validators.data[j]?).map (·.effectiveBalance.toNat)).getD 0).sum := by
-    unfold effectiveBalanceSum
-    congr 1
-    apply List.ext_getElem
-    · simp
-    · intro i first second
-      simp [Array.getElem?_eq_getElem (by simpa using first)]
-  rw [this]
-  refine sum_map_le_sum_map fun j _ => ?_
-  split <;> omega
-
-/-- The total active balance succeeds, and is one increment or at most the sum of the balances.
-
-It is at least one increment. -/
-private theorem getTotalActiveBalance_exists (within : state.RegistryWithinLimit)
-    (summed : effectiveBalanceSum state < 2 ^ 64) :
-    ∃ total, getTotalActiveBalance state = .ok total ∧
-      preset.EFFECTIVE_BALANCE_INCREMENT ≤ total ∧
-      (total = preset.EFFECTIVE_BALANCE_INCREMENT ∨ total.toNat ≤ effectiveBalanceSum state) := by
-  have inside : ∀ i ∈ getActiveValidatorIndices state (getCurrentEpoch state),
-      i.toNat < state.validators.data.size := by
-    intro i member
-    obtain ⟨_, found, -⟩ := (mem_getActiveValidatorIndices within).mp member
-    exact (Array.getElem?_eq_some_iff.mp found).1
-  have lt := Nat.lt_of_le_of_lt (sumMarked_le_effectiveBalanceSum (state := state)
-    (markIndices state.validators.data.size
-      (getActiveValidatorIndices state (getCurrentEpoch state)))) summed
-  have ok : getTotalActiveBalance state = .ok (max preset.EFFECTIVE_BALANCE_INCREMENT
-      (sumMarked state.validators.data (markIndices state.validators.data.size
-        (getActiveValidatorIndices state (getCurrentEpoch state)))).toUInt64) :=
-    getTotalBalance_ok_iff.mpr ⟨inside, lt, rfl⟩
-  refine ⟨_, ok, le_getTotalBalance ok, ?_⟩
-  rw [UInt64.max_def]
-  split
-  · right
-    rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt lt]
-    exact sumMarked_le_effectiveBalanceSum _
-  · exact .inl rfl
-
-/-- A state has the registry, the slot and the sizes of another. -/
+The fold needs this invariant forward, from the start, before any step is known to succeed. -/
 private def Kept (state current : BeaconState preset fork) : Prop :=
   current.validators = state.validators ∧ current.slot = state.slot ∧ SameSizes state current
 
@@ -122,7 +64,7 @@ private theorem getValidator_kept {current : BeaconState preset fork} (kept : Ke
     Array.getElem?_eq_getElem lt]
 
 /-- The penalty step from Electra succeeds when the penalty per increment fits the balances. -/
-private theorem applySlashingPenaltyElectra_exists (within : state.RegistryWithinLimit)
+private theorem applySlashingPenaltyElectra_exists_ok (within : state.RegistryWithinLimit)
     (matched : BalancesMatch state) (perIncrement : Gwei)
     (halfway : (getCurrentEpoch state).toNat +
       (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat < 2 ^ 64)
@@ -170,7 +112,7 @@ private theorem applySlashingPenaltyElectra_exists (within : state.RegistryWithi
     exact ⟨current, rfl, kept⟩
 
 /-- The penalty step before Electra succeeds when its two products fit. -/
-private theorem applySlashingPenalty_exists (within : state.RegistryWithinLimit)
+private theorem applySlashingPenalty_exists_ok (within : state.RegistryWithinLimit)
     (matched : BalancesMatch state) (total adjusted : Gwei)
     (halfway : (getCurrentEpoch state).toNat +
       (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat < 2 ^ 64)
@@ -240,15 +182,17 @@ private theorem applySlashingPenalty_exists (within : state.RegistryWithinLimit)
 
 The sum of the effective balances must be below 2^64 Gwei, and each one below 2^63 Gwei.
 
+Only the step from Electra needs the second bound.
+
 The sum of the slashed balances of the recent epochs must fit, and so must its scaled value.
 
-The epoch at which a slashed validator is halfway to its withdrawal must exist.
+The current epoch plus half the length of the slashings vector must be below 2^64.
 
 Before Electra the effective balance in increments must fit when multiplied by a sum.
 
 That sum is the sum of the effective balances.
 
-The divisors of the preset must be positive, as the step from Electra divides by the increment.
+The divisors of the preset must be positive, as each step divides by the increment.
 
 The registry must hold one balance for each validator, and stay within its limit. -/
 theorem processSlashings_total (divisors : preset.DivisorsPositive)
@@ -264,8 +208,8 @@ theorem processSlashings_total (divisors : preset.DivisorsPositive)
       (validator.effectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT).toNat *
         effectiveBalanceSum state < 2 ^ 64) :
     ∃ after, processSlashings state = .ok after := by
-  obtain ⟨total, totalOk, incLe, totalCases⟩ := getTotalActiveBalance_exists within summed
-  obtain ⟨sum, sumOk, sumVal⟩ := foldlM_addChecked_exists state.slashings.elements.toList 0
+  obtain ⟨total, totalOk, incLe, totalCases⟩ := getTotalActiveBalance_exists_ok within summed
+  obtain ⟨sum, sumOk, sumVal⟩ := foldlM_addChecked_exists_ok state.slashings.elements.toList 0
     (by simpa [slashedBalanceSum] using fits)
   have sumOk' : slashingsSum state = .ok sum := by
     unfold slashingsSum
@@ -338,7 +282,7 @@ theorem processSlashings_total (divisors : preset.DivisorsPositive)
       omega
     refine foldlM_exists_ok_of_invariant (Kept state) (fun current index member kept => ?_)
       state ⟨rfl, rfl, SameSizes.refl state⟩
-    refine applySlashingPenaltyElectra_exists within matched perIncrement halfway
+    refine applySlashingPenaltyElectra_exists_ok within matched perIncrement halfway
       (fun validator member => ?_) kept (List.mem_range.mp member)
     have := quotient validator
     have := effective validator member
@@ -357,7 +301,7 @@ theorem processSlashings_total (divisors : preset.DivisorsPositive)
     simp only [electra, ↓reduceIte]
     refine foldlM_exists_ok_of_invariant (Kept state) (fun current index member kept => ?_)
       state ⟨rfl, rfl, SameSizes.refl state⟩
-    refine applySlashingPenalty_exists within matched total (min scaled total) halfway
+    refine applySlashingPenalty_exists_ok within matched total (min scaled total) halfway
       (fun validator member => ?_) (fun validator member => ?_) kept (List.mem_range.mp member)
     · have times : (validator.effectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT).toNat *
           (min scaled total).toNat ≤ (validator.effectiveBalance /
