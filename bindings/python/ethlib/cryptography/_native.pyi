@@ -715,6 +715,10 @@ def consensus_on_invalidated_payload(name: str, fork: str, blocks: list[bytes], 
     """From Bellatrix: the optimistic roots after a block is found the first invalid one, as a list."""
     ...
 
+def consensus_is_optimistic_node(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None, optimistic_roots: list[bytes], head: bytes) -> bool:
+    """From Bellatrix: whether a node is optimistic, after a run of fork choice steps."""
+    ...
+
 def consensus_is_optimistic_restricted_domain(domain_type: bytes) -> bool:
     """Whether an optimistic validator may not sign under a domain type of 4 bytes."""
     ...

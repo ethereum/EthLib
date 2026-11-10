@@ -1787,8 +1787,16 @@ The same theorem shows that this ancestor is not optimistic, or has the zero par
 The rule of the latest valid hash in `Consensus/ForkChoice/Optimistic.lean` names the first invalid block.
 The theorems here take that block as given.
 No theorem relates the optimistic set to the blocks that the store of the fork choice removes.
-The second case of an optimistic node, a block tree without a viable branch, is not defined.
-Neither is the re-run of the merge block checks, nor the answer to an execution layer that fails to respond.
+A node is optimistic when its head is optimistic, or when invalid payloads left its block tree with no viable branch.
+`isOptimisticNode_of_isHeadOptimistic` shows that the first case alone makes an optimistic node.
+`isOptimisticNode_of_not_isHeadOptimistic` shows that, before Gloas, the second case needs a block that the fork choice dropped at or above the justified block.
+So a tree that empties with nothing invalidated does not count.
+This assumes that the optimistic store holds only blocks that the fork choice accepted.
+The rule approximates the guide, which asks that every viable branch was invalidated: one invalidated block above the justified block is enough.
+EthLib counts a dropped justified block as no viable branch, a choice of its own.
+`hasNoViableBranch_eq_ok_true_iff` shows that, with the justified block known and the filter successful, no viable branch means that no leaf above it passes the viability filter.
+`filterNodeTree_eq_nil_iff` gives the same fact for the filtered tree of any node.
+The re-run of the merge block checks is not defined, nor the answer to an execution layer that fails to respond.
 From Gloas these rules are not specified.
 The Python suite checks each rule on Bellatrix blocks built in the test, with roots from the SSZ export.
 
@@ -2122,12 +2130,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 338 operations and 49 size constants.
-The Python extension calls 338 of the operations and 49 of the constants.
+Lean exports 339 operations and 49 size constants.
+The Python extension calls 339 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-9294 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (351), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1665), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (64), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `module.c` (1320), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (141), `wrappers.h` (613), `x25519.c` (21), `xmss.c` (134).
+9323 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1678), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (64), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `module.c` (1322), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (141), `wrappers.h` (614), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Exports.ForkChoice
 public import EthLib.Consensus.Exports.Transition
 public import EthLib.Consensus.ForkChoice.OptimisticSync
 
@@ -19,6 +20,8 @@ The exports of the ancestor and of the payload verdicts take and return typed va
 They take the optimistic roots as a list.
 
 An optimistic store is built from its blocks, each under the root of its SSZ bytes.
+
+Whether a node is optimistic is read from a fork choice store, built by a run of steps.
 
 An input that does not decode, an unknown name or a fork without the rule has code 0.
 
@@ -125,6 +128,44 @@ Then comes the root of the first invalid block. -/
 @[export eth_consensus_on_invalidated_payload]
 def onInvalidatedPayloadExport (args : PyValue) : Result PyValue :=
   pyExport onInvalidatedPayloadOf args
+
+/-- From Bellatrix: whether a node is optimistic, after a run of fork choice steps.
+
+The head and the optimistic roots of the node are given; the head is not checked against the store.
+
+The optimistic store holds the anchor and every block that the store accepted. -/
+def isOptimisticNodeOf (args : String × String × ByteArray × ByteArray × List ForkChoiceStep ×
+    Bool × Option PyValue × List Root × Root) : Result Bool := do
+  let (name, fork, anchorState, anchorBlock, steps, verify, replacements, roots, head) := args
+  let (preset, fork) ← optimisticPresetAndFork name.toUTF8 fork.toUTF8
+  let config ← configWithValue name replacements
+  let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
+  let anchorState ← decodeInput (BeaconState preset fork) anchorState
+  let anchorBlock ← decodeInput (BeaconBlock preset fork) anchorBlock
+  let (store, outcomes) ← replayForkChoice config checks anchorState anchorBlock steps
+  -- Only blocks that the store accepted count, so a rejected block never looks dropped.
+  let blocks ← (steps.zip outcomes).filterMapM fun
+    | (.block input, .ok _) => do
+      let signed ← decodeInput (SignedBeaconBlock preset fork) input.block
+      let root ← (SszType.hashTreeRoot signed.message).mapError fun e =>
+        (0, s!"block rejected: {reprStr e}")
+      return some (root, signed.message)
+    | _ => pure none
+  let anchorRoot ← (SszType.hashTreeRoot anchorBlock).mapError fun e =>
+    (0, s!"block rejected: {reprStr e}")
+  let optimistic : OptimisticStore preset fork :=
+    { optimisticRoots := roots, headBlockRoot := head,
+      blocks := Std.TreeMap.ofList ((anchorRoot, anchorBlock) :: blocks) }
+  runOptimistic (isOptimisticNode config optimistic store)
+
+/-- From Bellatrix: whether a node is optimistic, after a run of fork choice steps.
+
+The first seven arguments are those of the fork choice run.
+
+Then come the optimistic roots and the root of the head of the node. -/
+@[export eth_consensus_is_optimistic_node]
+def isOptimisticNodeExport (args : PyValue) : Result PyValue :=
+  pyExport isOptimisticNodeOf args
 
 /-- Whether an optimistic validator may not sign under a domain type of 4 bytes. -/
 @[export eth_consensus_is_optimistic_restricted_domain]

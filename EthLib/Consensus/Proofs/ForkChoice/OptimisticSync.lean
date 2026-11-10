@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Except
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Consensus.ForkChoice.OptimisticSync
 public import EthLib.Consensus.Proofs.ForkChoice.Optimistic
 
@@ -18,6 +19,14 @@ It is not optimistic, or its parent root is zero.
 A valid payload removes exactly the block and its known ancestors from the optimistic set.
 
 The first invalid block removes exactly the optimistic roots whose chain holds it.
+
+A tree filtered from a node is empty exactly when no viable leaf is reached from that node.
+
+So the second case of an optimistic node holds exactly when the filtered tree has no viable leaf.
+
+A node whose head is optimistic is an optimistic node.
+
+Otherwise, before Gloas, it needs a dropped block at or above the justified block.
 
 An optimistic validator may not sign exactly under seven domain types.
 -/
@@ -184,6 +193,140 @@ theorem onInvalidatedPayload_spec {first : Root} {after : OptimisticStore preset
     simp [chained, holds, bind, Except.bind]
 
 end OptimisticStore
+
+namespace Store
+
+variable {config : Config} {store : Store preset fork}
+
+variable (config store) in
+/-- A leaf that agrees with the checkpoints, reached from a node through children. -/
+inductive ViableLeafAbove : ForkChoiceNode → ForkChoiceNode → Prop where
+  /-- A node without children that agrees with the checkpoints is its own viable leaf. -/
+  | leaf {node : ForkChoiceNode} : store.getNodeChildren node = .ok [] →
+      store.isViableLeaf config node = .ok true → ViableLeafAbove node node
+  /-- A viable leaf of a child is a viable leaf of its parent. -/
+  | child {node child leaf : ForkChoiceNode} {children : List ForkChoiceNode} :
+      store.getNodeChildren node = .ok children → child ∈ children →
+      ViableLeafAbove child leaf → ViableLeafAbove node leaf
+
+/-- A tree filtered from a node is non-empty exactly when a viable leaf is reached from it. -/
+private theorem filterNodeTree_ne_nil_iff :
+    ∀ {node : ForkChoiceNode} {nodes : List ForkChoiceNode},
+      store.filterNodeTree config node = .ok nodes →
+      (nodes ≠ [] ↔ ∃ leaf, store.ViableLeafAbove config node leaf) := by
+  intro node
+  induction hrank : store.nodeRank node using Nat.strong_induction_on generalizing node with
+  | _ rank ih =>
+  intro nodes walk
+  rw [filterNodeTree, bind_ok_iff] at walk
+  obtain ⟨children, childrenOk, walk⟩ := walk
+  by_cases empty : children.isEmpty
+  · have nil : children = [] := List.isEmpty_iff.mp empty
+    subst nil
+    simp only [empty, ↓reduceIte, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at walk
+    obtain ⟨isViable, viableOk, rfl⟩ := walk
+    constructor
+    · intro ne
+      cases isViable
+      · exact absurd rfl ne
+      · exact ⟨node, .leaf childrenOk viableOk⟩
+    · rintro ⟨leaf, reach⟩
+      cases reach with
+      | leaf _ ok =>
+        rw [viableOk, Except.ok.injEq] at ok
+        subst ok
+        simp
+      | child ok mem _ =>
+        rw [childrenOk, Except.ok.injEq] at ok
+        subst ok
+        cases mem
+  simp only [empty, Bool.false_eq_true, ↓reduceIte, bind_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at walk
+  obtain ⟨viable, viableOk, rfl⟩ := walk
+  have below_iff : ∀ child ∈ children, ∀ below,
+      store.nodeRank child < store.nodeRank node → store.filterNodeTree config child = .ok below →
+        (below ≠ [] ↔ ∃ leaf, store.ViableLeafAbove config child leaf) :=
+    fun child _ below lower belowOk => ih _ (hrank ▸ lower) rfl belowOk
+  constructor
+  · intro ne
+    have ne' : viable ≠ [] := fun h => ne (by simp [h])
+    obtain ⟨y, yMem⟩ := List.exists_mem_of_ne_nil _ ne'
+    obtain ⟨child, childMem, below, belowOk, yBelow⟩ := (mem_of_flatMapM_ok viableOk y).mp yMem
+    split at belowOk
+    · rename_i lower
+      obtain ⟨leaf, reach⟩ := (below_iff child childMem below lower belowOk).mp
+        (List.ne_nil_of_mem yBelow)
+      exact ⟨leaf, .child childrenOk childMem reach⟩
+    · simp [throw, throwThe, MonadExceptOf.throw] at belowOk
+  · rintro ⟨leaf, reach⟩
+    cases reach with
+    | leaf nil _ =>
+      rw [childrenOk, Except.ok.injEq] at nil
+      subst nil
+      simp at empty
+    | child ok childMem reach =>
+      rw [childrenOk, Except.ok.injEq] at ok
+      subst ok
+      obtain ⟨below, belowOk⟩ := flatMapM_ok_of_mem viableOk _ childMem
+      split at belowOk
+      · rename_i lower
+        have nonempty := (below_iff _ childMem below lower belowOk).mpr ⟨leaf, reach⟩
+        obtain ⟨y, yBelow⟩ := List.exists_mem_of_ne_nil _ nonempty
+        have yMem := (mem_of_flatMapM_ok viableOk y).mpr
+          ⟨_, childMem, below, by simp [lower, belowOk], yBelow⟩
+        have ne' : viable ≠ [] := List.ne_nil_of_mem yMem
+        simp [ne']
+      · simp [throw, throwThe, MonadExceptOf.throw] at belowOk
+
+/-- A tree filtered from a node is empty exactly when no viable leaf is reached from it. -/
+theorem filterNodeTree_eq_nil_iff {node : ForkChoiceNode} {nodes : List ForkChoiceNode}
+    (tree : store.filterNodeTree config node = .ok nodes) :
+    nodes = [] ↔ ¬∃ leaf, store.ViableLeafAbove config node leaf := by
+  rw [← filterNodeTree_ne_nil_iff tree]
+  exact not_not.symm
+
+/-- When the justified block was dropped, the tree has no viable branch. -/
+theorem hasNoViableBranch_of_not_contains
+    (dropped : store.blocks.contains store.justifiedCheckpoint.root = false) :
+    store.hasNoViableBranch config = .ok true := by
+  simp [hasNoViableBranch, dropped]
+  rfl
+
+/-- With the justified block known, the second case holds exactly when no viable leaf is reached.
+
+The leaves are reached from the justified block, and the filter of the tree must succeed. -/
+theorem hasNoViableBranch_eq_ok_true_iff
+    (known : store.blocks.contains store.justifiedCheckpoint.root = true)
+    {nodes : List ForkChoiceNode} (tree : store.getFilteredNodeTree config = .ok nodes) :
+    store.hasNoViableBranch config = .ok true ↔
+      ¬∃ leaf, store.ViableLeafAbove config ⟨store.justifiedCheckpoint.root, .pending⟩ leaf := by
+  rw [← filterNodeTree_eq_nil_iff tree]
+  simp [hasNoViableBranch, known, tree, bind, Except.bind, pure, Except.pure]
+
+end Store
+
+/-- A node whose head is optimistic is an optimistic node, whatever its block tree. -/
+theorem isOptimisticNode_of_isHeadOptimistic {config : Config}
+    {optimistic : OptimisticStore preset fork} (store : Store preset fork)
+    (head : optimistic.isHeadOptimistic = true) :
+    isOptimisticNode config optimistic store = .ok true := by
+  simp [isOptimisticNode, head]
+  rfl
+
+/-- Before Gloas, a node whose head is not optimistic is optimistic exactly in the second case.
+
+That case needs a dropped block at or above the justified block, then no viable branch. -/
+theorem isOptimisticNode_of_not_isHeadOptimistic {config : Config}
+    {optimistic : OptimisticStore preset fork} (store : Store preset fork)
+    (head : optimistic.isHeadOptimistic = false) (before : fork < .glamsterdam)
+    {dropped : Bool} (found : optimistic.invalidatedAbove store = .ok dropped) :
+    isOptimisticNode config optimistic store =
+      if dropped then store.hasNoViableBranch config else .ok false := by
+  have notGloas : ¬(Fork.glamsterdam ≤ fork) := Nat.not_le_of_lt before
+  cases dropped
+  · simp [isOptimisticNode, head, notGloas, found, bind, Except.bind]
+    rfl
+  · simp [isOptimisticNode, head, notGloas, found, bind, Except.bind]
 
 /-- An optimistic validator may not sign exactly under the seven domain types of the rule.
 

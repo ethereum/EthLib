@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.ForkChoice.Head
 public import EthLib.Consensus.ForkChoice.Optimistic
 
 /-!
@@ -25,15 +26,17 @@ The rule of the latest valid hash names that first block.
 
 The store of the fork choice removes those blocks, and the optimistic store keeps them.
 
-A node whose head is optimistic is an optimistic node, and its validators sign none of these:
+A node is optimistic when its head is optimistic.
+
+It is also optimistic when invalid payloads left its block tree with no viable branch.
+
+That needs a block dropped at or above the justified block, and no viable leaf left.
+
+The validators of an optimistic node sign none of these:
 
 - A block, under the proposer domain.
 - An attestation, a selection proof or an aggregate and proof.
 - A sync committee message, a sync selection proof or a contribution and proof.
-
-The guide also calls a node optimistic when every viable branch of its block tree is invalid.
-
-That case is not defined here.
 
 The re-run of the checks of the merge block, once its payload is valid, is not defined here.
 
@@ -99,7 +102,7 @@ def isOptimistic (root : Root) : Bool :=
   store.optimisticRoots.contains root
 
 /-- Whether the head of the node is optimistic, the first case of an optimistic node. -/
-def isOptimisticNode : Bool :=
+def isHeadOptimistic : Bool :=
   store.isOptimistic store.headBlockRoot
 
 /-- The roots of a known block and of its known ancestors, from the block up.
@@ -171,6 +174,59 @@ def onInvalidatedPayload (first : Root) : Except ForkChoiceError (OptimisticStor
   return { store with optimisticRoots := kept }
 
 end OptimisticStore
+
+namespace Store
+
+variable (config : Config) (store : Store preset fork)
+
+/-- Whether the block tree has no viable branch above the justified block.
+
+The case holds when the justified block is not in the store, a choice of EthLib.
+
+Otherwise it holds when no leaf above the justified block agrees with the checkpoints.
+
+It fails as the filter of the tree does. -/
+def hasNoViableBranch : Except ForkChoiceError Bool :=
+  if store.blocks.contains store.justifiedCheckpoint.root then
+    return (← store.getFilteredNodeTree config).isEmpty
+  else pure true
+
+end Store
+
+/-- Whether a block that the fork choice dropped is the justified block or descends from it.
+
+The optimistic store keeps the blocks that the fork choice drops for an invalid payload.
+
+It fails as the chain of such a block does. -/
+def OptimisticStore.invalidatedAbove (optimistic : OptimisticStore preset fork)
+    (store : Store preset fork) : Except ForkChoiceError Bool :=
+  optimistic.blocks.keys.anyM fun root => do
+    if store.blocks.contains root then return false
+    return (← optimistic.chain root).contains store.justifiedCheckpoint.root
+
+/-- Whether a node is optimistic: its head is optimistic, or its tree lost every viable branch.
+
+The first case holds at every fork, and the second is read only when the first does not hold.
+
+From Bellatrix to Fulu, the second case needs a dropped block at or above the justified block.
+
+It also needs no viable branch left.
+
+The optimistic store must hold only blocks that the fork choice accepted, so dropped means invalid.
+
+So a tree that empties with nothing invalidated, as in a long stall, does not count.
+
+The guide asks that every viable branch was invalidated, which needs history the store drops.
+
+This rule approximates it: one invalidated block above the justified block is enough.
+
+From Gloas the fork choice changes, and the second case is not specified here. -/
+def isOptimisticNode (config : Config) (optimistic : OptimisticStore preset fork)
+    (store : Store preset fork) : Except ForkChoiceError Bool := do
+  if optimistic.isHeadOptimistic then return true
+  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
+  if !(← optimistic.invalidatedAbove store) then return false
+  store.hasNoViableBranch config
 
 /-- Whether an optimistic validator may not sign under a domain type.
 

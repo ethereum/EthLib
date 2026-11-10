@@ -403,6 +403,7 @@ PyObject* py_consensus_get_validator_signature (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_eth1_vote (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_execution_block (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_optimistic_candidate_block (PyObject* self, PyObject* args);
+PyObject* py_consensus_is_optimistic_node (PyObject* self, PyObject* args);
 PyObject* py_consensus_latest_verified_ancestor (PyObject* self, PyObject* args);
 PyObject* py_consensus_on_valid_payload (PyObject* self, PyObject* args);
 PyObject* py_consensus_on_invalidated_payload (PyObject* self, PyObject* args);

@@ -638,6 +638,10 @@ def bindings : List Binding := [
     "(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], " ++
       "first: bytes) -> list[bytes]",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_is_optimistic_node", `EthLib.Consensus.Exports.isOptimisticNodeExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, config: dict | None, optimistic_roots: list[bytes], head: bytes) -> bool",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_is_optimistic_restricted_domain",
     `EthLib.Consensus.Exports.isOptimisticRestrictedDomainExport,
     "(domain_type: bytes) -> bool", [], some "ForkChoiceError"⟩,
