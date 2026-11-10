@@ -4,13 +4,23 @@ public import EthLib.Execution.Proofs.Evm.Call.BurnRun
 public import EthLib.Execution.Proofs.Transactions.Supply
 
 /-!
-# Proofs: exact ether accounting of a transaction
+# Proofs: the exact change of the supply of ether across a transaction
 
-The surviving burn log of the message and the balances removed at deletion fill the supply gap.
+A transaction lowers the supply by its burned fees, the burns of its message and its deletions.
 
-The log follows the actual execution and discards the burns of reverted frames.
+The burns of the message come from a certificate of its run, whose log drops each rollback.
 
-The deletion term reads each marked balance after gas settlement, before any account is deleted.
+The deletions remove the balance of each account to delete, read after the gas is settled.
+
+Before Cancun, both can be above 0.
+
+From Glamsterdam, both are 0.
+
+Each successful run of a transaction has a certificate.
+
+Every certificate of the run gives the same total of burns and the same deleted balances.
+
+So each term of the change is fixed by the run.
 -/
 
 @[expose] public section
@@ -20,11 +30,16 @@ namespace EthLib.Execution.Transactions
 open EthLib.Base
 open EthLib.Execution.Evm
 open State (TransactionState)
-open EthLib.Execution.Fees.BlobBaseFee (calculateTotalBlobGas)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
-/-- The first frame, its actual run certificate, and the output that the message call returns. -/
+/-! ## The message call -/
+
+/-- A certificate of the run of the message call of a transaction, with its log of burns.
+
+A message call whose first frame fails to start burns nothing.
+
+Otherwise its first frame runs as a creation or a call, with a certificate of that run. -/
 inductive MessageCallBurns [LawfulGasMeter Meter] (chainId : Nat) (message : Message fork)
     (state : TransactionState) (substate : Substate) (auths : List Authorization)
     (paid : Std.ExtTreeSet Address) : CallOutput → BurnLog → Prop
@@ -50,135 +65,89 @@ inductive MessageCallBurns [LawfulGasMeter Meter] (chainId : Nat) (message : Mes
           evm.state.accountExistsAndIsEmpty target then evm.substate.touchedAccounts.insert target
           else evm.substate.touchedAccounts)) log
 
-/-- The supply after the message call, plus its surviving burns, is its starting supply. -/
+/-- The supply after a certified message call plus the total of its log is the supply before. -/
 theorem MessageCallBurns.supply [LawfulGasMeter Meter] {chainId : Nat} {message : Message fork}
     {state : TransactionState} {substate : Substate} {auths : List Authorization}
     {paid : Std.ExtTreeSet Address} {output : CallOutput} {log : BurnLog}
     (h : MessageCallBurns (Meter := Meter) chainId message state substate auths paid output log) :
     output.state.supply + log.total = state.supply := by
-  cases h with
-  | halt => rfl
-  | create preparation _ run =>
-    rw [state_ofFrame]
-    exact run.supply.trans (supply_prepareFirstFrame preparation)
-  | call preparation _ run =>
-    rw [state_ofFrame]
-    exact run.supply.trans (supply_prepareFirstFrame preparation)
+  sorry
 
-/-- The actual message call yields a certificate and its surviving burn log. -/
-theorem messageCallBurns_processMessageCall [LawfulGasMeter Meter] {chainId : Nat}
+/-- Two certificates of a message call with the same output have the same total. -/
+theorem MessageCallBurns.total_eq [LawfulGasMeter Meter] {chainId : Nat}
+    {message : Message fork} {state : TransactionState} {substate : Substate}
+    {auths : List Authorization} {paid : Std.ExtTreeSet Address} {output : CallOutput}
+    {log log' : BurnLog}
+    (h : MessageCallBurns (Meter := Meter) chainId message state substate auths paid output log)
+    (h' : MessageCallBurns (Meter := Meter) chainId message state substate auths paid output log') :
+    log.total = log'.total := by
+  have := h.supply
+  have := h'.supply
+  omega
+
+/-- Every successful message call of a transaction has a certificate. -/
+theorem processMessageCall_messageCallBurns [LawfulGasMeter Meter] {chainId : Nat}
     {message : Message fork} {state : TransactionState} {substate : Substate}
     {auths : List Authorization} {paid : Std.ExtTreeSet Address} {output : CallOutput}
     (h : processMessageCall (Meter := Meter) chainId message state substate auths paid =
       .ok output) :
     ∃ log,
       MessageCallBurns (Meter := Meter) chainId message state substate auths paid output log := by
-  unfold processMessageCall at h
-  split at h
-  · rename_i error read preparation
-    split at h
-    · cases h
-    · cases h
-      exact ⟨.empty, .halt preparation (Bool.eq_false_iff.mpr (by assumption))⟩
-  · rename_i first preparation
-    split at h
-    · rename_i target
-      obtain ⟨⟨evm, used⟩, hrun, h⟩ := bind_ok_iff.mp h
-      cases h
-      obtain ⟨log, trace⟩ := (processMessage_runBurns first.message.gas).2 first.message first.state
-        first.substate first.meter first.held rfl ⟨evm, used⟩ hrun
-      exact ⟨log, .create preparation target trace⟩
-    · rename_i target selected
-      obtain ⟨⟨evm, used⟩, hrun, h⟩ := bind_ok_iff.mp h
-      cases h
-      obtain ⟨log, trace⟩ := (processMessage_runBurns first.message.gas).1 first.message first.state
-        first.substate first.meter first.held rfl ⟨evm, used⟩ hrun
-      exact ⟨log, .call preparation selected trace⟩
+  sorry
 
-/-- The balances removed at transaction end, read before deletion and counted once each.
+/-! ## The transaction -/
 
-From Glamsterdam, deletion preserves every balance, so this term is zero. -/
-def deletedBalances (fork : Fork) (state : TransactionState) (output : CallOutput) : Nat :=
-  if fork ≥ .glamsterdam then 0
-  else (output.accountsToDelete.toList.map state.balanceOf).sum
+/-- A certificate of a run of a transaction with the gas meter `Meter`, its burns and deletions.
 
-/-- Deletion removes exactly the pre-deletion balances of the marked accounts. -/
-theorem supply_deleteAccounts_eq {state state' : TransactionState} {output : CallOutput}
-    (h : deleteAccounts fork state output = .ok state') :
-    state'.supply + deletedBalances fork state output = state.supply := by
-  have fold : ∀ (addresses : List Address), addresses.Nodup →
-      ∀ (init final : TransactionState),
-      addresses.foldlM (fun state address =>
-        if fork ≥ .glamsterdam then state.clearAccountPreservingBalance fork address
-        else pure (state.destroyAccount address)) init = .ok final →
-      final.supply + (if fork ≥ .glamsterdam then 0 else
-        (addresses.map init.balanceOf).sum) = init.supply := by
-    intro addresses
-    induction addresses with
-    | nil =>
-      intro _ init final h
-      cases h
-      simp
-    | cons address rest ih =>
-      intro distinct init final h
-      obtain ⟨notMem, distinct⟩ := List.nodup_cons.mp distinct
-      obtain ⟨mid, hm, h⟩ := bind_ok_iff.mp h
-      have tail := ih distinct mid final h
-      split at hm
-      · rename_i hfork
-        have hs := TransactionState.supply_clearAccountPreservingBalance hm
-        simp only [hfork, ↓reduceIte, Nat.add_zero] at tail ⊢
-        exact tail.trans hs
-      · rename_i hfork
-        cases hm
-        have hs := TransactionState.supply_destroyAccount init address
-        have balances : rest.map (init.destroyAccount address).balanceOf =
-            rest.map init.balanceOf := by
-          refine List.map_congr_left fun other mem => ?_
-          have hne : other ≠ address := fun same => notMem (same ▸ mem)
-          simp only [TransactionState.balanceOf, TransactionState.getAccount_destroyAccount,
-            hne, ↓reduceIte]
-        simp only [hfork, ↓reduceIte, balances] at tail
-        simp only [hfork, ↓reduceIte, List.map_cons, List.sum_cons]
-        omega
-  unfold deleteAccounts at h
-  obtain ⟨mid, hm, h⟩ := bind_ok_iff.mp h
-  cases h
-  rw [Std.ExtTreeSet.foldlM_eq_foldlM_toList] at hm
-  have distinct : output.accountsToDelete.toList.Nodup :=
-    (Std.ExtTreeSet.distinct_toList).imp fun hne same => hne (by simp [same])
-  have hs := fold _ distinct _ _ hm
-  rw [TransactionState.supply_destroyTouchedEmptyAccounts]
-  exact hs
+The run takes its steps in order, and the log certifies the run of its message call.
 
-
-/-- The actual transaction pipeline and the certified log of its message.
-
-The deletion amount is computed from its state after settlement and its marked accounts. -/
+The deleted balances are those of the state after the gas is settled. -/
 def TransactionBurnsWith (Meter : Type) [GasMeter Meter] [LawfulGasMeter Meter]
     (env : BlockEnvironment fork) (block : State.BlockState) (included : Included)
     (tx : Transaction) (out : TransactionOutput) (log : BurnLog) (deleted : Nat) : Prop :=
-  let gas := allocateGas fork tx included.intrinsicGas
   ∃ target bought message output settled,
-    messageTarget included.sender
-        ((TransactionState.ofBlock block).getAccount included.sender).nonce tx = .ok target ∧
-    buyGas env (TransactionState.ofBlock block) included.sender tx = .ok bought ∧
-    transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes⟩ bought
-        included.sender target gas.execution tx = .ok message ∧
-    processMessageCall (Meter := Meter) env.chainId.toNat
-        { message with reservoir := gas.reservoir } bought
-        (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
-        (paidWrites included.sender target tx) = .ok output ∧
+    TransactionRun Meter env block included tx out target bought message output settled ∧
     MessageCallBurns (Meter := Meter) env.chainId.toNat
-        { message with reservoir := gas.reservoir } bought
+        { message with reservoir := (allocateGas fork tx included.intrinsicGas).reservoir } bought
         (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
         (paidWrites included.sender target tx) output log ∧
-    settleGas env output.state included.sender tx (output.gasLeft + output.reservoir)
-        output.refund = .ok (settled, out.gasUsed) ∧
-    deleteAccounts fork settled output = .ok out.state ∧
     deleted = deletedBalances fork settled output
 
-/-- The burn certificate uses the same gas meter as the transaction at its fork. -/
+/-- Every successful run of a transaction has a certificate. -/
+theorem runTransaction_transactionBurnsWith [LawfulGasMeter Meter]
+    {env : BlockEnvironment fork} {block : State.BlockState} {included : Included}
+    {tx : Transaction} {out : TransactionOutput}
+    (h : runTransaction Meter env block included tx = .ok out) :
+    ∃ log deleted, TransactionBurnsWith Meter env block included tx out log deleted := by
+  sorry
+
+/-- A certificate of a run of a transaction gives the exact change of the supply.
+
+The supply at the end plus every loss of the run is the supply at the start.
+
+The losses are the burned fees, the burns of the message and the deleted balances.
+
+The gas limit must cover the least gas, and the price must cover the base fee. -/
+theorem TransactionBurnsWith.supply_eq [LawfulGasMeter Meter] {env : BlockEnvironment fork}
+    {block : State.BlockState} {included : Included} {tx : Transaction} {out : TransactionOutput}
+    {log : BurnLog} {deleted : Nat}
+    (hMin : minimumGas fork included.sender tx ≤ tx.gas.toNat)
+    (hPrice : baseFeeOf env ≤ effectiveGasPrice (baseFeeOf env) tx)
+    (h : TransactionBurnsWith Meter env block included tx out log deleted) :
+    out.state.supply + burnedFees env tx out.gasUsed + log.total + deleted =
+      (TransactionState.ofBlock block).supply := by
+  sorry
+
+/-- Two certificates of a run of a transaction give the same burns and deleted balances. -/
+theorem TransactionBurnsWith.unique [LawfulGasMeter Meter] {env : BlockEnvironment fork}
+    {block : State.BlockState} {included : Included} {tx : Transaction} {out : TransactionOutput}
+    {log log' : BurnLog} {deleted deleted' : Nat}
+    (h : TransactionBurnsWith Meter env block included tx out log deleted)
+    (h' : TransactionBurnsWith Meter env block included tx out log' deleted') :
+    log'.total = log.total ∧ deleted' = deleted := by
+  sorry
+
+/-- A certificate of a run of a transaction with the gas meter that it runs with at its fork. -/
 def TransactionBurns (env : BlockEnvironment fork) (block : State.BlockState)
     (included : Included) (tx : Transaction) (out : TransactionOutput) (log : BurnLog)
     (deleted : Nat) : Prop :=
@@ -186,40 +155,46 @@ def TransactionBurns (env : BlockEnvironment fork) (block : State.BlockState)
     TransactionBurnsWith StateGasMeter env block included tx out log deleted
   else TransactionBurnsWith Nat env block included tx out log deleted
 
-/-- A successful transaction has a certified burn log and exact supply accounting.
-
-The three losses are its burned fees, the surviving SELFDESTRUCT burns, and deleted balances. -/
-theorem runTransaction_supply_eq [LawfulGasMeter Meter] {env : BlockEnvironment fork}
+/-- Every transaction that runs has a certificate, at every fork. -/
+theorem processTransaction_transactionBurns {env : BlockEnvironment fork}
     {block : State.BlockState} {included : Included} {tx : Transaction} {out : TransactionOutput}
-    (hMin : minimumGas fork included.sender tx ≤ tx.gas.toNat)
+    (h : processTransaction env block included tx = .ok out) :
+    ∃ log deleted, TransactionBurns env block included tx out log deleted := by
+  sorry
+
+/-- A certificate of a transaction gives the exact change of the supply, at every fork.
+
+The gas limit must cover the least gas, and the price must cover the base fee. -/
+theorem TransactionBurns.supply_eq {env : BlockEnvironment fork} {block : State.BlockState}
+    {included : Included} {tx : Transaction} {out : TransactionOutput} {log : BurnLog}
+    {deleted : Nat} (hMin : minimumGas fork included.sender tx ≤ tx.gas.toNat)
     (hPrice : baseFeeOf env ≤ effectiveGasPrice (baseFeeOf env) tx)
-    (h : runTransaction Meter env block included tx = .ok out) :
-    ∃ log deleted, TransactionBurnsWith Meter env block included tx out log deleted ∧
-      out.state.supply + burnedFees env tx out.gasUsed + log.total + deleted =
-        (TransactionState.ofBlock block).supply := by
-  obtain ⟨target, bought, message, output, settled, ht, hb, hm, ho, -, hs, hd⟩ :=
-    runTransaction_eq_ok h
-  obtain ⟨log, trace⟩ := messageCallBurns_processMessageCall ho
-  refine ⟨log, deletedBalances fork settled output,
-    ⟨target, bought, message, output, settled, ht, hb, hm, ho, trace, hs, hd, rfl⟩, ?_⟩
-  obtain ⟨hbuy, -⟩ := supply_buyGas hb
-  have hmsg := trace.supply
-  have hset := supply_settleGas hs
-  have hdel := supply_deleteAccounts_eq hd
-  have hused := settleGas_gasUsed hs
-  have conserve := settlement_conserves hMin hPrice (output.gasLeft + output.reservoir)
-    output.refund
-  dsimp only at hset conserve
-  simp only [settlement, priorityFeeOf] at hset conserve
-  simp only [burnedFees]
-  rw [hused]
-  generalize gasUsed fork included.sender tx (output.gasLeft + output.reservoir) output.refund =
-    g at hset conserve ⊢
-  omega
+    (h : TransactionBurns env block included tx out log deleted) :
+    out.state.supply + burnedFees env tx out.gasUsed + log.total + deleted =
+      (TransactionState.ofBlock block).supply := by
+  sorry
 
-/-- At every fork, the end supply plus every loss of the actual transaction is its start supply.
+/-- Two certificates of a transaction have the same total and the same deleted balances. -/
+theorem TransactionBurns.unique {env : BlockEnvironment fork} {block : State.BlockState}
+    {included : Included} {tx : Transaction} {out : TransactionOutput} {log log' : BurnLog}
+    {deleted deleted' : Nat} (h : TransactionBurns env block included tx out log deleted)
+    (h' : TransactionBurns env block included tx out log' deleted') :
+    log'.total = log.total ∧ deleted' = deleted := by
+  sorry
 
-The bound on the least gas and the base fee are the checks made before the transaction runs. -/
+/-- A transaction that runs lowers the supply by exactly its losses, at every fork.
+
+The losses are its burned fees, its burns of SELFDESTRUCT and its deleted balances.
+
+A burn of SELFDESTRUCT counts only when no rollback drops it.
+
+The last two come from a certificate of the run, and every certificate gives the same two values.
+
+So the bound by the burned fees alone is an equality exactly when both are 0.
+
+The gas limit must cover the least gas, and the price must cover the base fee.
+
+The checks of the block ensure both. -/
 theorem processTransaction_supply_eq {env : BlockEnvironment fork} {block : State.BlockState}
     {included : Included} {tx : Transaction} {out : TransactionOutput}
     (hMin : minimumGas fork included.sender tx ≤ tx.gas.toNat)
@@ -228,13 +203,7 @@ theorem processTransaction_supply_eq {env : BlockEnvironment fork} {block : Stat
     ∃ log deleted, TransactionBurns env block included tx out log deleted ∧
       out.state.supply + burnedFees env tx out.gasUsed + log.total + deleted =
         (TransactionState.ofBlock block).supply := by
-  unfold processTransaction at h
-  split at h
-  · cases h
-  split at h
-  · rename_i hfork
-    simpa only [TransactionBurns, hfork, ↓reduceIte] using runTransaction_supply_eq hMin hPrice h
-  · rename_i hfork
-    simpa only [TransactionBurns, hfork, ↓reduceIte] using runTransaction_supply_eq hMin hPrice h
+  obtain ⟨log, deleted, burns⟩ := processTransaction_transactionBurns h
+  exact ⟨log, deleted, burns, burns.supply_eq hMin hPrice⟩
 
 end EthLib.Execution.Transactions

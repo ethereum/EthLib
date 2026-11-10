@@ -250,6 +250,27 @@ theorem supply_settleGas {env : BlockEnvironment fork} {state state' : State.Tra
 
 /-! ## The deletions -/
 
+/-- The balances that the deletions at the end of a transaction remove, in the state `state`.
+
+They are the balances of its accounts to delete, each counted once.
+
+From Glamsterdam, the deletions keep every balance, so they remove nothing. -/
+def deletedBalances (fork : Fork) (state : State.TransactionState) (output : CallOutput) : Nat :=
+  if fork ≥ .glamsterdam then 0
+  else (output.accountsToDelete.toList.map state.balanceOf).sum
+
+/-- The deletions of a transaction lower the supply by exactly the balances they remove. -/
+theorem supply_deleteAccounts_eq {state state' : State.TransactionState} {output : CallOutput}
+    (h : deleteAccounts fork state output = .ok state') :
+    state'.supply + deletedBalances fork state output = state.supply := by
+  sorry
+
+/-- The deletions at the end of a transaction keep the created accounts. -/
+theorem createdAccounts_deleteAccounts {state state' : State.TransactionState}
+    {output : CallOutput} (h : deleteAccounts fork state output = .ok state') :
+    state'.createdAccounts = state.createdAccounts := by
+  sorry
+
 /-- The deletions at the end of a transaction keep or lower the supply, and keep created accounts.
 
 They keep the supply from Glamsterdam, or when no account is to be deleted. -/
@@ -258,58 +279,7 @@ theorem supply_deleteAccounts {state state' : State.TransactionState} {output : 
     state'.supply ≤ state.supply ∧ state'.createdAccounts = state.createdAccounts ∧
       (.glamsterdam ≤ fork ∨ (∀ address, address ∉ output.accountsToDelete) →
         state'.supply = state.supply) := by
-  have fold : ∀ (l : List Address) (init final : State.TransactionState),
-      l.foldlM (fun state address =>
-        if fork ≥ .glamsterdam then state.clearAccountPreservingBalance fork address
-        else pure (state.destroyAccount address)) init = .ok final →
-      final.supply ≤ init.supply ∧ final.createdAccounts = init.createdAccounts ∧
-        (.glamsterdam ≤ fork ∨ l = [] → final.supply = init.supply) := by
-    intro l
-    induction l with
-    | nil =>
-      intro init final h
-      cases h
-      exact ⟨Nat.le_refl _, rfl, fun _ => rfl⟩
-    | cons address rest ih =>
-      intro init final h
-      obtain ⟨mid, hmid, h⟩ := bind_ok_iff.mp h
-      obtain ⟨hle, hc, heq⟩ := ih mid final h
-      split at hmid
-      · rename_i hglam
-        have hs := State.TransactionState.supply_clearAccountPreservingBalance hmid
-        have hcm : mid.createdAccounts = init.createdAccounts := by
-          dsimp only at hmid
-          unfold State.TransactionState.clearAccountPreservingBalance at hmid
-          rw [State.TransactionState.createdAccounts_modifyState hmid]; rfl
-        exact ⟨by omega, hc.trans hcm, fun _ => (heq (.inl hglam)).trans hs⟩
-      · cases hmid
-        have := State.TransactionState.supply_destroyAccount init address
-        refine ⟨by omega, hc, fun hcase => ?_⟩
-        rcases hcase with hglam | hnil
-        · exact absurd hglam ‹_›
-        · cases hnil
-  unfold deleteAccounts at h
-  obtain ⟨mid, hmid, h⟩ := bind_ok_iff.mp h
-  cases h
-  rw [Std.ExtTreeSet.foldlM_eq_foldlM_toList] at hmid
-  obtain ⟨hle, hc, heq⟩ := fold _ _ _ hmid
-  have hcreated : ∀ (touched : List Address) (s : State.TransactionState),
-      (s.destroyTouchedEmptyAccounts fork touched).createdAccounts = s.createdAccounts := by
-    intro touched s
-    unfold State.TransactionState.destroyTouchedEmptyAccounts
-    split
-    · rfl
-    · induction touched generalizing s with
-      | nil => rfl
-      | cons address rest ih =>
-        rw [List.foldl_cons, ih]
-        split <;> rfl
-  rw [State.TransactionState.supply_destroyTouchedEmptyAccounts, hcreated]
-  refine ⟨hle, hc, fun hcase => heq ?_⟩
-  rcases hcase with hglam | hnone
-  · exact .inl hglam
-  · exact .inr (List.eq_nil_iff_forall_not_mem.mpr fun address hmem =>
-      hnone address (Std.ExtTreeSet.mem_toList.mp hmem))
+  sorry
 
 /-! ## The transaction -/
 

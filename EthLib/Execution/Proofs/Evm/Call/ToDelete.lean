@@ -178,6 +178,15 @@ theorem createdAccounts_startState (message : Message fork) (state : Transaction
   · exact TransactionState.createdAccounts_touchAccount _ _
   · rfl
 
+/-- The state that a message enters has the created accounts of the state it is sent from. -/
+theorem createdAccounts_of_entered {message : Message fork} {state entry : TransactionState}
+    {substate entrySubstate : Substate}
+    (h : Entered fork message state substate entry entrySubstate) :
+    entry.createdAccounts = state.createdAccounts := by
+  rcases h with ⟨-, rfl, -⟩ | ⟨-, moved, -⟩
+  · exact createdAccounts_startState _ _
+  · exact (TransactionState.createdAccounts_moveEther moved).trans (createdAccounts_startState _ _)
+
 /-- A rollback keeps the created accounts and the substate of the frame. -/
 theorem createdAccounts_rollbackOnError (snapshot : TransactionState) (evm : Evm fork Meter) :
     (rollbackOnError snapshot evm).state.createdAccounts = evm.state.createdAccounts ∧

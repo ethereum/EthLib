@@ -408,39 +408,49 @@ private theorem processMessageCall_reservoir {chainId : Nat} {message : Message 
       unfold CallOutput.ofFrame
       split <;> rfl
 
-/-- A transaction that runs takes each step of the run, in order, with any gas meter.
+/-- The steps of a run of a transaction, in order, with the values that they give.
 
-The gas past the intrinsic gas splits into the execution gas and the reservoir of the message.
+The message goes to `target`, and the sender buys the gas, which gives the state `bought`.
+
+The gas past the intrinsic gas splits into the execution gas and the reservoir of `message`.
+
+The message call gives `output`.
 
 The gas left of the run is the execution gas left plus the reservoir left.
 
 The block counts the gas of the transaction.
 
-The gas is then settled on the state that the message leaves.
+The gas is then settled on the state that the message leaves, which gives the state `settled`.
 
 Then the accounts to delete and the empty touched accounts are deleted. -/
+def TransactionRun (Meter : Type) [GasMeter Meter] [LawfulGasMeter Meter]
+    (env : BlockEnvironment fork) (block : State.BlockState) (included : Included)
+    (tx : Transaction) (out : TransactionOutput) (target : Address)
+    (bought : State.TransactionState) (message : Message fork) (output : CallOutput)
+    (settled : State.TransactionState) : Prop :=
+  let gas := allocateGas fork tx included.intrinsicGas
+  messageTarget included.sender
+      ((State.TransactionState.ofBlock block).getAccount included.sender).nonce tx = .ok target ∧
+    buyGas env (State.TransactionState.ofBlock block) included.sender tx = .ok bought ∧
+    transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes⟩ bought
+        included.sender target gas.execution tx = .ok message ∧
+    processMessageCall (Meter := Meter) env.chainId.toNat
+        { message with reservoir := gas.reservoir } bought
+        (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
+        (paidWrites included.sender target tx) = .ok output ∧
+    out.blockGas =
+      transactionBlockGas fork included.sender tx (output.gasLeft + output.reservoir)
+        output.refund output.stateGasUsed ∧
+    settleGas env output.state included.sender tx (output.gasLeft + output.reservoir)
+        output.refund = .ok (settled, out.gasUsed) ∧
+    deleteAccounts fork settled output = .ok out.state
+
+/-- A transaction that runs takes each step of the run, in order, with any gas meter. -/
 theorem runTransaction_eq_ok {env : BlockEnvironment fork} {block : State.BlockState}
     {included : Included} {out : TransactionOutput}
     (h : runTransaction Meter env block included tx = .ok out) :
-    let gas := allocateGas fork tx included.intrinsicGas
     ∃ target bought message output settled,
-      messageTarget included.sender
-          ((State.TransactionState.ofBlock block).getAccount included.sender).nonce tx =
-        .ok target ∧
-      buyGas env (State.TransactionState.ofBlock block) included.sender tx = .ok bought ∧
-      transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes⟩ bought
-          included.sender target gas.execution tx = .ok message ∧
-      processMessageCall (Meter := Meter) env.chainId.toNat
-          { message with reservoir := gas.reservoir } bought
-          (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
-          (paidWrites included.sender target tx) = .ok output ∧
-      out.blockGas =
-        transactionBlockGas fork included.sender tx (output.gasLeft + output.reservoir)
-          output.refund output.stateGasUsed ∧
-      settleGas env output.state included.sender tx (output.gasLeft + output.reservoir)
-          output.refund =
-        .ok (settled, out.gasUsed) ∧
-      deleteAccounts fork settled output = .ok out.state := by
+      TransactionRun Meter env block included tx out target bought message output settled := by
   unfold runTransaction at h
   obtain ⟨target, hTarget, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨bought, hBought, h⟩ := Base.bind_ok_iff.mp h
@@ -451,6 +461,18 @@ theorem runTransaction_eq_ok {env : BlockEnvironment fork} {block : State.BlockS
   cases h
   exact ⟨target, bought, message, output, settled, hTarget, Base.mapError_ok_iff.mp hBought,
     hMessage, hOutput, rfl, Base.mapError_ok_iff.mp hSettle, Base.mapError_ok_iff.mp hDeleted⟩
+
+/-- Two runs of a transaction to the same output take the same steps, with the same values. -/
+theorem TransactionRun.unique {env : BlockEnvironment fork} {block : State.BlockState}
+    {included : Included} {out : TransactionOutput} {target target' : Address}
+    {bought bought' : State.TransactionState} {message message' : Message fork}
+    {output output' : CallOutput} {settled settled' : State.TransactionState}
+    (h : TransactionRun Meter env block included tx out target bought message output settled)
+    (h' : TransactionRun Meter env block included tx out target' bought' message' output'
+      settled') :
+    target' = target ∧ bought' = bought ∧ message' = message ∧ output' = output ∧
+      settled' = settled := by
+  sorry
 
 /-- Up to BPO5, a transaction that runs takes each step of the run, in order.
 

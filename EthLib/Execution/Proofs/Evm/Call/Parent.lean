@@ -136,6 +136,15 @@ theorem parent_startState (message : Message fork) (state : TransactionState) :
   · exact TransactionState.parent_touchAccount _ _
   · rfl
 
+/-- The state that a message enters has the block of the state it is sent from. -/
+theorem parent_of_entered {message : Message fork} {state entry : TransactionState}
+    {substate entrySubstate : Substate}
+    (h : Entered fork message state substate entry entrySubstate) :
+    entry.parent = state.parent := by
+  rcases h with ⟨-, rfl, -⟩ | ⟨-, moved, -⟩
+  · exact parent_startState _ _
+  · exact (TransactionState.parent_moveEther moved).trans (parent_startState _ _)
+
 /-- The rollback of a frame keeps the block of that frame. -/
 theorem parent_rollbackOnError (snapshot : TransactionState) (evm : Evm fork Meter) :
     (rollbackOnError snapshot evm).state.parent = evm.state.parent := by
