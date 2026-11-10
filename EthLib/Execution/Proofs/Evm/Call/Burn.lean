@@ -120,64 +120,39 @@ def selfdestructStepLog (evm after : Evm fork Meter) : BurnLog :=
 theorem supply_selfdestructStep {evm after : Evm fork Meter}
     (h : selfdestructStep fork evm = .ok after) :
     after.state.supply + (selfdestructStepLog evm after).total = evm.state.supply := by
-  unfold selfdestructStep at h
-  by_cases hs : fork ≥ .glamsterdam ∧ evm.message.isStatic = true
-  · simp only [hs, and_self, ↓reduceIte] at h
-    cases h
-  simp only [hs, ↓reduceIte] at h
-  obtain ⟨⟨word, e1⟩, hp, h⟩ := Base.bind_ok_iff.mp h
-  have stack := (popWord_eq_ok hp).1
-  dsimp only at h
-  rcases ha : accessAddress e1 (toAddressMasked word) with ⟨cold, e2⟩
-  simp only [ha] at h
-  have access := staticStep_accessAddress e1 (toAddressMasked word)
-  rw [ha] at access
-  have pre : StaticStep evm (recordAccountRead e2 (toAddressMasked word)) :=
-    ((StaticStep.of_sameContext (popWord_sameContext hp)).trans access).trans
-      (staticStep_recordAccountRead _ _)
-  obtain ⟨_, _, h⟩ := Base.bind_ok_iff.mp h
-  rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
-  · obtain ⟨e3, hg, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨e4, hsg, h⟩ := Base.bind_ok_iff.mp h
-    have paid : StaticStep evm e4 := pre.trans (.of_sameContext
-      ((chargeGas_sameContext hg).trans (chargeStateGas_sameContext hsg)))
-    unfold finishSelfdestruct at h
-    split at h
-    · cases h
-    · obtain ⟨state, ht, h⟩ := Base.bind_ok_iff.mp h
-      cases h
+  obtain ⟨word, rest, paid, stack, hpaid, ⟨refund, finished⟩ | halted⟩ := selfdestructStep_eq_ok h
+  · unfold finishSelfdestruct at finished
+    split at finished
+    · cases finished
+    · obtain ⟨state, ht, finished⟩ := Base.bind_ok_iff.mp finished
+      cases finished
       have transfer := Base.mapError_ok_iff.mp ht
       have hsum := supply_selfdestructTransfer transfer
-      rw [selfdestructBurn_of_staticStep paid] at hsum
-      have prior := TransactionState.supply_eq_of_sameOutside paid.state
+      rw [selfdestructBurn_of_staticStep hpaid] at hsum
+      have prior := TransactionState.supply_eq_of_sameOutside hpaid.state
       simp only [selfdestructStepLog, stack]
       by_cases zero : selfdestructBurn fork evm.state evm.message.currentTarget
           (toAddressMasked word) = 0
       · simp only [selfdestructLog, zero, ↓reduceIte]
         split <;> simp only [BurnLog.total] <;> omega
       · have cleared := balanceOf_selfdestructTransfer_eq_zero transfer
-            (fun hzero => zero ((selfdestructBurn_of_staticStep paid _).symm.trans hzero))
-        rw [paid.message] at cleared
+            (fun hzero => zero ((selfdestructBurn_of_staticStep hpaid _).symm.trans hzero))
+        rw [hpaid.message] at cleared
         simp only [cleared, ↓reduceIte, total_selfdestructLog]
         omega
-  · have unchanged := TransactionState.supply_eq_of_sameOutside pre.state
-    have balance : (recordAccountRead e2 (toAddressMasked word)).state.balanceOf
-        evm.message.currentTarget = evm.state.balanceOf evm.message.currentTarget := by
+  · have unchanged := TransactionState.supply_eq_of_sameOutside halted.state
+    have balance : after.state.balanceOf evm.message.currentTarget =
+        evm.state.balanceOf evm.message.currentTarget := by
       unfold TransactionState.balanceOf
-      rw [getAccount_of_staticStep pre]
+      rw [getAccount_of_staticStep halted]
     simp only [selfdestructStepLog, stack]
-    change (recordAccountRead e2 (toAddressMasked word)).state.supply +
-      BurnLog.total (if (recordAccountRead e2 (toAddressMasked word)).state.balanceOf
-          evm.message.currentTarget = 0 then
-        selfdestructLog fork evm.state evm.message.currentTarget (toAddressMasked word)
-      else .empty) = evm.state.supply
     split
     · rename_i cleared
-      have zero := selfdestructBurn_eq_zero_of_balanceOf_eq_zero (fork := fork) (beneficiary := toAddressMasked word)
-        (balance.symm.trans cleared)
+      have zero := selfdestructBurn_eq_zero_of_balanceOf_eq_zero (fork := fork)
+        (beneficiary := toAddressMasked word) (balance.symm.trans cleared)
       simp only [selfdestructLog, zero, ↓reduceIte, BurnLog.total, Nat.add_zero]
       exact unchanged
-    · exact unchanged
+    · simpa only [BurnLog.total, Nat.add_zero] using unchanged
 
 /-! ## Every step -/
 
@@ -189,19 +164,14 @@ def stepBurnLog (evm after : Evm fork Meter) : BurnLog :=
 omit [GasMeter Meter] in
 /-- The log of a step that runs SELFDESTRUCT is the log of SELFDESTRUCT. -/
 theorem stepBurnLog_of_runsSelfdestruct {evm : Evm fork Meter} (runs : RunsSelfdestruct evm)
-    (after : Evm fork Meter) : stepBurnLog evm after = selfdestructStepLog evm after := by
-  obtain ⟨within, decoded⟩ := runs
-  simp only [stepBurnLog, within, ↓reduceDIte, decoded, ↓reduceIte]
+    (after : Evm fork Meter) : stepBurnLog evm after = selfdestructStepLog evm after :=
+  ite_eq_left runs
 
 omit [GasMeter Meter] in
 /-- The log of a step that runs another opcode is empty. -/
 theorem stepBurnLog_of_not_runsSelfdestruct {evm : Evm fork Meter}
-    (other : ¬RunsSelfdestruct evm) (after : Evm fork Meter) : stepBurnLog evm after = .empty := by
-  unfold stepBurnLog
-  split
-  · rename_i within
-    rw [ite_eq_right_of_eq_false _ _ (eq_false fun decoded => other ⟨within, decoded⟩)]
-  · rfl
+    (other : ¬RunsSelfdestruct evm) (after : Evm fork Meter) : stepBurnLog evm after = .empty :=
+  ite_eq_right other
 
 /-- A successful step that gives the next frame lowers the supply by the total of its log. -/
 theorem supply_of_step_eq_next {evm after : Evm fork Meter}
@@ -234,22 +204,19 @@ theorem counted_stepBurnLog {evm after : Evm fork Meter} {originator beneficiary
       amount = selfdestructBurn fork evm.state originator beneficiary ∧ amount ≠ 0 := by
   unfold stepBurnLog at counted
   split at counted
-  · rename_i within
+  · rename_i runs
+    unfold selfdestructStepLog at counted
     split at counted
-    · rename_i decoded
-      unfold selfdestructStepLog at counted
-      split at counted
-      · exact counted.elim
-      · split at counted
-        · unfold selfdestructLog at counted
-          dsimp only at counted
-          split at counted
-          · exact counted.elim
-          · rename_i nonzero
-            obtain ⟨rfl, rfl, rfl⟩ := counted
-            exact ⟨⟨within, decoded⟩, rfl, rfl, nonzero⟩
-        · exact counted.elim
     · exact counted.elim
+    · split at counted
+      · unfold selfdestructLog at counted
+        dsimp only at counted
+        split at counted
+        · exact counted.elim
+        · rename_i nonzero
+          obtain ⟨rfl, rfl, rfl⟩ := counted
+          exact ⟨runs, rfl, rfl, nonzero⟩
+      · exact counted.elim
   · exact counted.elim
 
 end EthLib.Execution.Evm
