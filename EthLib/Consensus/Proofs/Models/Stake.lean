@@ -30,6 +30,11 @@ variable {w : ν → ℕ}
 theorem stake_empty : stake w ∅ = 0 :=
   Finset.sum_empty
 
+/-- Two stake functions that agree on a set give it the same stake. -/
+theorem stake_congr {w' : ν → ℕ} {S : Finset ν} (agree : ∀ v ∈ S, w v = w' v) :
+    stake w S = stake w' S :=
+  Finset.sum_congr rfl agree
+
 theorem stake_mono {S T : Finset ν} (h : S ⊆ T) : stake w S ≤ stake w T :=
   Finset.sum_le_sum_of_subset h
 
