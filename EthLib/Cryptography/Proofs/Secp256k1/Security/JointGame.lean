@@ -13,11 +13,13 @@ A signer that only asks for `Π` cannot set it.
 
 Theorem 1 of the source needs one that does: it signs without the key and sets `Π` to match.
 
-So here every oracle reads and writes both states at once.
+So here the signing oracle reads and writes both states at once.
 
-The permutation oracle and the signer are parameters.
+The permutation oracle and the signer of new messages are parameters.
 
-With a signer that asks for `Π`, run against that oracle, this is the game as a program.
+The signing oracle answers a repeated message from its cache, and records each new answer.
+
+With the real signer, run against the permutation oracle, this is the game as a program.
 
 The run also returns the forgery and both final states.
 
@@ -40,55 +42,78 @@ The joint state is the challenger's side of the games of that proof.
 
 namespace EthLib.Cryptography.Secp256k1.Security
 
-open OracleComp OracleSpec ENNReal LazyPermutation
+open OracleComp OracleSpec LazyPermutation
 
 variable {F G A M σ : Type}
 
 /-- The joint state: the answers of the signing oracle, and the state of the permutation oracle. -/
 abbrev JointState (F M σ : Type) := Cache F M × σ
 
-/-- A signing oracle that reads and writes the joint state.
-
-The check of the forgery reads the signing cache that this oracle keeps.
-
-So the oracle must record each answer, as the real signer does.
-
-It may also change the state of the permutation oracle.
+/-- A signer of new messages, which may read and write the state of the permutation oracle.
 
 A signer that breaks the partial bijection of the lazy permutation's cache leaves the model.
 
-No permutation then agrees with the cache, and the draw at the end gives the identity. -/
-abbrev JointSigner (F M σ : Type) := M → StateT (JointState F M σ) ProbComp (Option (F × F))
+Then a permutation may fail to agree with the cache, and the draw at the end gives the identity. -/
+abbrev FreshSigner (F M σ : Type) := M → StateT σ ProbComp (Option (F × F))
 
-/-- The oracles of the game over the joint state, with a permutation oracle and a signing oracle.
+variable [DecidableEq M]
+
+/-- The oracles of the game over the joint state, with a permutation oracle and a signer.
 
 Coins leave both states unchanged.
 
 `Π` and its inverse go to the permutation oracle on the second state.
 
-They leave the signing cache unchanged. -/
-def jointImpl (perm : QueryImpl (PermSpec A) (StateT σ ProbComp)) (signer : JointSigner F M σ) :
+They leave the signing cache unchanged.
+
+A repeated message gets the answer it got first.
+
+A new message goes to the signer, and its answer joins the signing cache. -/
+def jointImpl (perm : QueryImpl (PermSpec A) (StateT σ ProbComp)) (fresh : FreshSigner F M σ) :
     QueryImpl (Spec F A M) (StateT (JointState F M σ) ProbComp)
   | .inl n => fun s => (·, s) <$> (query (spec := unifSpec) n : ProbComp (Fin (n + 1)))
   | .inr (.inl α) => fun s => (fun z => (z.1, (s.1, z.2))) <$> (perm (.inl α)).run s.2
   | .inr (.inr (.inl β)) => fun s => (fun z => (z.1, (s.1, z.2))) <$> (perm (.inr β)).run s.2
-  | .inr (.inr (.inr m)) => signer m
+  | .inr (.inr (.inr m)) => fun s =>
+    match s.1.lookup m with
+    | some a => pure (a, s)
+    | none => (fun z => (z.1, (s.1 ++ [(m, z.1)], z.2))) <$> (fresh m).run s.2
 
-/-- A signing oracle that asks for `Π`, run against the permutation oracle.
+/-- A signer of new messages that asks for `Π`, run against the permutation oracle.
 
 It reads and writes the state of that oracle only through its queries. -/
-def liftSigner (perm : QueryImpl (PermSpec A) (StateT σ ProbComp)) (signer : SignerQ F A M) :
-    JointSigner F M σ := fun m s =>
-  (fun z => (z.1.1, (z.1.2, z.2))) <$>
-    (simulateQ (unifSpec.passthrough + perm) ((signer m).run s.1)).run s.2
+def liftFresh (perm : QueryImpl (PermSpec A) (StateT σ ProbComp))
+    (fresh : M → PermComp A (Option (F × F))) : FreshSigner F M σ := fun m ps =>
+  (simulateQ (unifSpec.passthrough + perm) (fresh m)).run ps
 
-/-- Take a signer that asks for `Π`, and run its oracles against the permutation oracle.
+variable [Field F] [DecidableEq F] [AddCommGroup G] [Module F G] [DecidableEq G]
 
-Those are the joint oracles with that signer lifted to the joint state. -/
-theorem flattenStateT_mapStateTBase_implQ (perm : QueryImpl (PermSpec A) (StateT σ ProbComp))
-    (signer : SignerQ F A M) :
-    ((unifSpec.passthrough + perm).mapStateTBase (implQ signer)).flattenStateT =
-      jointImpl perm (liftSigner perm signer) := by
+/-- Run the adversary on the key `X` over the joint state, and check its forgery.
+
+The signing cache starts empty, and the permutation oracle starts from `init`.
+
+The check asks the permutation oracle for `Π`, once or never.
+
+It returns the forgery, the result, the final signing cache and the final state of that oracle. -/
+def jointRun (scheme : Scheme F G A M) (adversary : Adversary F G A M) (X : G)
+    (perm : QueryImpl (PermSpec A) (StateT σ ProbComp)) (init : σ) (fresh : FreshSigner F M σ) :
+    ProbComp (((M × F × F) × Bool × Cache F M) × σ) := do
+  let ((m, t, s), (cache, ps)) ←
+    (simulateQ (jointImpl perm fresh) (adversary.main X)).run ([], init)
+  if signed cache m then return (((m, t, s), false, cache), ps) else
+    (fun z => (((m, t, s), z.1, cache), z.2)) <$>
+      (simulateQ (unifSpec.passthrough + perm) (verifyQ scheme X m t s)).run ps
+
+variable [SampleableType F]
+
+omit [DecidableEq G] in
+/-- Run the oracles of the real signing oracle under the key `x` against the permutation oracle.
+
+Those are the joint oracles with the real signer of new messages. -/
+theorem flattenStateT_mapStateTBase_implQ_signQ (perm : QueryImpl (PermSpec A) (StateT σ ProbComp))
+    (scheme : Scheme F G A M) (fuel : ℕ) (x : F) :
+    ((unifSpec.passthrough + perm).mapStateTBase (implQ (signQ scheme fuel x))).flattenStateT =
+      jointImpl perm (liftFresh perm fun m => signFreshQ scheme x m fuel) := by
   funext q
   refine StateT.ext fun s => ?_
   rcases q with n | α | β | m
@@ -104,44 +129,35 @@ theorem flattenStateT_mapStateTBase_implQ (perm : QueryImpl (PermSpec A) (StateT
         ((·, s.1) <$> query (spec := unifSpec + PermSpec A) (.inr (.inr β)))).run s.2 =
       (fun z => (z.1, (s.1, z.2))) <$> (perm (.inr β)).run s.2
     simp [Functor.map_map]
-  · rfl
+  · change (fun y => (y.1.1, (y.1.2, y.2))) <$>
+        (simulateQ (unifSpec.passthrough + perm) (signQ scheme fuel x m s.1)).run s.2 = _
+    obtain ⟨cache, ps⟩ := s
+    change _ = match cache.lookup m with
+      | some a => pure (a, (cache, ps))
+      | none => (fun z : Option (F × F) × σ => (z.1, (cache ++ [(m, z.1)], z.2))) <$>
+        (simulateQ (unifSpec.passthrough + perm) (signFreshQ scheme x m fuel)).run ps
+    simp only [signQ]
+    cases cache.lookup m with
+    | some a => simp
+    | none => simp [Functor.map_map]
 
-variable [Field F] [DecidableEq F] [AddCommGroup G] [Module F G] [DecidableEq G] [DecidableEq M]
+/-- Run the program with the real signer against the permutation oracle.
 
-/-- Run the adversary on the key `X` over the joint state, and check its forgery.
-
-The signing cache starts empty, and the permutation oracle starts from `init`.
-
-The check asks the permutation oracle for `Π`, once or never.
-
-It returns the forgery, the result and both final states. -/
-def jointRun (scheme : Scheme F G A M) (adversary : Adversary F G A M) (X : G)
-    (perm : QueryImpl (PermSpec A) (StateT σ ProbComp)) (init : σ)
-    (signer : JointSigner F M σ) : ProbComp ((M × F × F) × Bool × JointState F M σ) := do
-  let ((m, t, s), (cache, ps)) ←
-    (simulateQ (jointImpl perm signer) (adversary.main X)).run ([], init)
-  if signed cache m then return ((m, t, s), false, (cache, ps)) else
-    (fun z => ((m, t, s), z.1, (cache, z.2))) <$>
-      (simulateQ (unifSpec.passthrough + perm) (verifyQ scheme X m t s)).run ps
-
-/-- Run the program with a signer that asks for `Π` against the permutation oracle.
-
-That is the joint run with the signer lifted. -/
-theorem simulateQ_runCacheQ (scheme : Scheme F G A M) (adversary : Adversary F G A M) (X : G)
-    (perm : QueryImpl (PermSpec A) (StateT σ ProbComp)) (init : σ) (signer : SignerQ F A M) :
-    (simulateQ (unifSpec.passthrough + perm) (runCacheQ scheme adversary X signer)).run init =
-      (fun z => ((z.1, z.2.1, z.2.2.1), z.2.2.2)) <$>
-        jointRun scheme adversary X perm init (liftSigner perm signer) := by
+That is the joint run with the real signer of new messages. -/
+theorem simulateQ_runCacheQ_run (scheme : Scheme F G A M) (adversary : Adversary F G A M) (X : G)
+    (perm : QueryImpl (PermSpec A) (StateT σ ProbComp)) (init : σ) (fuel : ℕ) (x : F) :
+    (simulateQ (unifSpec.passthrough + perm)
+        (runCacheQ scheme adversary X (signQ scheme fuel x))).run init =
+      jointRun scheme adversary X perm init
+        (liftFresh perm fun m => signFreshQ scheme x m fuel) := by
   simp only [runCacheQ, jointRun, simulateQ_bind, StateT.run_bind,
-    simulateQ_mapStateTBase_run_eq_map_flattenStateT, flattenStateT_mapStateTBase_implQ,
-    bind_map_left, map_bind]
+    simulateQ_mapStateTBase_run_eq_map_flattenStateT, flattenStateT_mapStateTBase_implQ_signQ,
+    bind_map_left]
   refine bind_congr fun z => ?_
   obtain ⟨⟨m, t, s⟩, cache, ps⟩ := z
-  by_cases h : signed cache m
-  · simp [h]
-  · simp [h]
+  by_cases h : signed cache m <;> simp [h]
 
-variable [SampleableType F] [FinEnum A]
+variable [FinEnum A]
 
 /-- The lazy game over the joint state: draw the key, then run with the real signer.
 
@@ -149,29 +165,29 @@ The permutation oracle is the lazy permutation, from the empty cache.
 
 It returns the forgery, the result and both final caches. -/
 def jointExperiment (scheme : Scheme F G A M) (fuel : ℕ) (adversary : Adversary F G A M) :
-    ProbComp ((M × F × F) × Bool × JointState F M (PermCache A)) := do
+    ProbComp (((M × F × F) × Bool × Cache F M) × PermCache A) := do
   let x ← $ᵗ F
   jointRun scheme adversary (x • scheme.g) lazyPermOracle []
-    (liftSigner lazyPermOracle (signQ scheme fuel x))
+    (liftFresh lazyPermOracle fun m => signFreshQ scheme x m fuel)
 
 /-- Run the program with the forgery and the signing cache against the lazy permutation.
 
 That is the joint lazy game. -/
-theorem simulateQ_lazyPermImpl_experimentViewQ (scheme : Scheme F G A M) (fuel : ℕ)
+theorem simulateQ_lazyPermImpl_experimentViewQ_run (scheme : Scheme F G A M) (fuel : ℕ)
     (adversary : Adversary F G A M) :
     (simulateQ lazyPermImpl (experimentViewQ scheme fuel adversary)).run [] =
-      (fun z => ((z.1, z.2.1, z.2.2.1), z.2.2.2)) <$> jointExperiment scheme fuel adversary := by
+      jointExperiment scheme fuel adversary := by
   simp only [experimentViewQ, jointExperiment, simulateQ_bind, StateT.run_bind,
-    simulateQ_lazyPermImpl_liftM_run, bind_map_left, map_bind]
-  exact bind_congr fun x => simulateQ_runCacheQ scheme adversary _ lazyPermOracle [] _
+    simulateQ_lazyPermImpl_liftM_run, bind_map_left]
+  exact bind_congr fun x => simulateQ_runCacheQ_run scheme adversary _ lazyPermOracle [] fuel x
 
 /-- Keep only the result of the joint lazy game, and it is the lazy game. -/
 theorem lazyExperiment_eq_result_map_jointExperiment (scheme : Scheme F G A M) (fuel : ℕ)
     (adversary : Adversary F G A M) :
     lazyExperiment scheme fuel adversary =
-      (fun z => z.2.1) <$> jointExperiment scheme fuel adversary := by
-  rw [lazyExperiment, ← result_map_experimentViewQ, StateT.run'_eq, simulateQ_map,
-    StateT.run_map, simulateQ_lazyPermImpl_experimentViewQ]
+      (fun z => z.1.2.1) <$> jointExperiment scheme fuel adversary := by
+  rw [lazyExperiment, experimentQ, StateT.run'_eq, simulateQ_map, StateT.run_map,
+    simulateQ_lazyPermImpl_experimentViewQ_run]
   simp [Functor.map_map]
 
 /-- The game with its forgery, signing cache and `Π` has the law of the joint lazy game.
@@ -183,16 +199,16 @@ theorem experimentView_evalDistEq_jointExperiment (scheme : Scheme F G A M) (fue
     (adversary : Adversary F G A M) :
     experimentView scheme fuel adversary =ᵈ
       (do
-        let (f, b, cache, c) ← jointExperiment scheme fuel adversary
+        let (f, c) ← jointExperiment scheme fuel adversary
         let π ← uniformExtension c
-        pure (f, b, cache, π)) := by
+        pure (f.1, f.2.1, f.2.2, π)) := by
   rw [experimentView_eq_permImpl]
   refine (EvalDistEq.of_eq ?_).trans
     (((uniformSample_bind_simulateQ_permImpl_joint_evalDistEq
       (experimentViewQ scheme fuel adversary)).map
       fun w => (w.1.1, w.1.2.1, w.1.2.2, w.2)).trans (EvalDistEq.of_eq ?_))
   · simp
-  · rw [simulateQ_lazyPermImpl_experimentViewQ]
+  · rw [simulateQ_lazyPermImpl_experimentViewQ_run]
     simp
 
 end EthLib.Cryptography.Secp256k1.Security
