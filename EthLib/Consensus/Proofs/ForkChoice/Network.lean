@@ -178,7 +178,7 @@ theorem onTick_timeMs {store : Store preset fork} {slot : Slot}
       Except.mapError]
   simp [Store.onTick, slotted, caught, ticked, Except.mapError, bind, Except.bind]
 
-/-- A store built from an anchor can tick, on a chain with nonempty slots.
+/-- A store built from an anchor can tick to its own time, when slots last a positive time.
 
 So an honest validator can move from such a store, whatever its view. -/
 theorem Handles.tick_anchor {checks : SignatureChecks} {sources : BlockSources preset fork}
@@ -196,29 +196,38 @@ theorem Handles.tick_anchor {checks : SignatureChecks} {sources : BlockSources p
 
 No message carries a signed statement here, so unforgeability asks nothing.
 
-Each validator starts from a store built from an anchor.
+Each validator starts from a store built from an anchor, and the clock starts at its time.
 
 An honest validator sends a block from an empty view, as the protocol allows.
 
-Every validator then has the block in its view, and the stores stay reachable.
+Two events later every validator has the block in its view, and the stores stay reachable.
+
+There the honest validator may also move, by a tick of its store, when slots last a positive time.
 
 The execution is partially synchronous for every GST and every positive delay. -/
 theorem exists_forkChoice_execution {ν κ : Type*} [DecidableEq ν] (checks : SignatureChecks)
     (sources : BlockSources preset fork) {store : Store preset fork}
+    (slots : 0 < config.SLOT_DURATION_MS)
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok store)
     {J : Set ν} {v : ν} (honest : v ∈ J) (signed : SignedBeaconBlock preset fork) {Δ : ℕ}
     (positive : 0 < Δ) :
     ∃ e : Execution (forkChoice config checks sources (fun _ => (∅ : Set (ν × κ)))
         fun _ _ _ _ m => m = .block signed) J,
       e.events 0 = .send v (.block signed) ∧ (∀ u, .block signed ∈ (e.world 2).view u) ∧
+      Allowed (forkChoice config checks sources (fun _ => (∅ : Set (ν × κ)))
+        fun _ _ _ _ m => m = .block signed) J (e.world 2) (.move v store) ∧
       (∀ GST, e.PartiallySynchronous GST Δ) ∧
       ∀ n, ∀ u ∈ J, Store.Reachable config anchorState anchorBlock ((e.world n).state u) := by
-  obtain ⟨e, -, start, sends, delivered, sync⟩ :=
+  obtain ⟨e, -, start, sends, time, states, delivered, sync⟩ :=
     exists_partiallySynchronous
       (P := forkChoice config checks sources (fun _ => (∅ : Set (ν × κ)))
-        fun _ _ _ _ m => m = .block signed) (time := 0) (state := fun _ => store)
-      honest rfl (fun _ none => none.elim) positive
-  refine ⟨e, sends, delivered, sync, e.reachable fun u _ => ?_⟩
+        fun _ _ _ _ m => m = .block signed) (time := store.timeMs.toNat)
+      (state := fun _ => store) honest rfl (fun _ none => none.elim) positive
+  refine ⟨e, sends, delivered, ⟨honest, ?_⟩, sync, e.reachable fun u _ => ?_⟩
+  · show Handles config checks sources (e.world 2).time ((e.world 2).view v)
+      ((e.world 2).state v) store
+    rw [time, states]
+    exact Handles.tick_anchor slots anchored _
   rw [start]
   exact .anchor anchored
 

@@ -27,6 +27,10 @@ A message in the view of an honest validator at time `t` reaches every honest va
 
 The rule follows from the network rule of §2 and its assumption that honest validators gossip.
 
+It is weaker, since §2 also delivers each message that a Byzantine validator sends.
+
+So a result proved here holds under §2.
+
 A message that no honest validator holds may never be delivered, as a Byzantine sender may keep it.
 
 Footnote 1 of §2 compares it with the partial synchrony of Dwork, Lynch and Stockmeyer,
@@ -275,10 +279,14 @@ end Execution
 
 The validators outside `J` are the Byzantine ones.
 
-The bound says nothing when the fraction is at least one, or when `V` has no stake. -/
+The denominator is positive.
+
+The bound is not strict, as in Assumption 2 of §3.2.
+
+It says nothing when the fraction is at least one, or when `V` has no stake. -/
 def ByzantineStakeAtMost (w : ν → ℕ) (V : Finset ν) (J : Set ν) [DecidablePred (· ∈ J)]
     (num den : ℕ) : Prop :=
-  den * stake w {v ∈ V | v ∉ J} ≤ num * stake w V
+  0 < den ∧ den * stake w {v ∈ V | v ∉ J} ≤ num * stake w V
 
 namespace ByzantineStakeAtMost
 
@@ -291,7 +299,7 @@ theorem honest (bound : ByzantineStakeAtMost w V J num den) :
     (den - num) * stake w V ≤ den * stake w {v ∈ V | v ∈ J} := by
   have split : stake w {v ∈ V | v ∈ J} + stake w {v ∈ V | v ∉ J} = stake w V :=
     Finset.sum_filter_add_sum_filter_not V (· ∈ J) w
-  unfold ByzantineStakeAtMost at bound
+  have bound := bound.2
   have scaled :
       den * stake w V = den * stake w {v ∈ V | v ∈ J} + den * stake w {v ∈ V | v ∉ J} := by
     rw [← split, Nat.mul_add]
@@ -299,10 +307,11 @@ theorem honest (bound : ByzantineStakeAtMost w V J num den) :
   omega
 
 /-- The bound holds for every fraction when every validator of `V` is honest. -/
-theorem of_subset (num den : ℕ) (all : ↑V ⊆ J) : ByzantineStakeAtMost w V J num den := by
+theorem of_subset (num : ℕ) (positive : 0 < den) (all : ↑V ⊆ J) :
+    ByzantineStakeAtMost w V J num den := by
   have : ({v ∈ V | v ∉ J} : Finset ν) = ∅ :=
     Finset.filter_eq_empty_iff.mpr fun v member => not_not.mpr (all member)
-  simp [ByzantineStakeAtMost, this, stake]
+  simp [ByzantineStakeAtMost, this, stake, positive]
 
 /-- The bound fails below one when every validator is Byzantine and `V` has stake. -/
 theorem not_of_empty (below : num < den) (positive : 0 < stake w V) :
@@ -310,6 +319,7 @@ theorem not_of_empty (below : num < den) (positive : 0 < stake w V) :
   intro bound
   simp only [ByzantineStakeAtMost, Set.mem_empty_iff_false, not_false_eq_true,
     Finset.filter_true] at bound
+  have := bound.2
   have := Nat.mul_lt_mul_of_pos_right below positive
   omega
 
@@ -352,13 +362,15 @@ An honest validator `v` sends a message `m` that the protocol allows from an emp
 
 The message carries no statement of another honest validator.
 
-Every validator then has `m`, and the execution is partially synchronous for every GST and every
-positive delay. -/
+Two events later every validator has `m`, at the start time and with the start states.
+
+The execution is partially synchronous for every GST and every positive delay. -/
 theorem exists_partiallySynchronous {time : ℕ} {state : ν → σ} {v : ν} {m : μ} (honest : v ∈ J)
     (sends : P.Sends v time ∅ (state v) m) (own : ∀ x ∈ P.signed m, x.1 ∈ J → x.1 = v)
     {Δ : ℕ} (positive : 0 < Δ) :
     ∃ e : Execution P J, e.startTime = time ∧ e.start = state ∧ e.events 0 = .send v m ∧
-      (∀ u, m ∈ (e.world 2).view u) ∧ ∀ GST, e.PartiallySynchronous GST Δ := by
+      (e.world 2).time = time ∧ (e.world 2).state = state ∧ (∀ u, m ∈ (e.world 2).view u) ∧
+      ∀ GST, e.PartiallySynchronous GST Δ := by
   let e : Execution P J :=
     { startTime := time
       start := state
@@ -386,7 +398,8 @@ theorem exists_partiallySynchronous {time : ℕ} {state : ν → σ} {v : ν} {m
     match n, lt with
     | 0, _ => rfl
     | 1, _ => exact congrArg World.time worldAt_flood_one
-  refine ⟨e, rfl, rfl, rfl, fun u => by simp [later 2 le_rfl],
+  refine ⟨e, rfl, rfl, rfl, by simp [later 2 le_rfl], by simp [later 2 le_rfl],
+    fun u => by simp [later 2 le_rfl],
     fun GST => ⟨positive, fun T => ?_, ?_⟩⟩
   · refine ⟨T + 2, ?_⟩
     simp [later (T + 2) (by omega)]
