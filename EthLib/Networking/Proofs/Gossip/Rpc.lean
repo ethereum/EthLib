@@ -7,9 +7,9 @@ public import EthLib.Networking.Proofs.Encoding.Protobuf
 # Proofs: the gossip RPC
 
 - Decoding the encoding of an RPC returns it, for an encoding shorter than `2^64` bytes.
-- A message that holds a field `StrictNoSign` forbids is rejected, whatever else it holds.
+- A message whose records parse is rejected for signing exactly when it holds a forbidden field.
 - So is every RPC that publishes such a message.
-- Such messages exist for each forbidden field: any message with that field added, even empty.
+- Such messages exist for each forbidden field: any message with that field written first.
 -/
 
 @[expose] public section
@@ -248,6 +248,9 @@ theorem decodeControl_encode (c : Control) (h : c.encode.size < 2 ^ 64) :
       bind, Except.bind, pure, Except.pure]
   · simp [lenRecord, maxField, or_imp, forall_and]
 
+private theorem merge_empty_left (c : Control) : Control.merge {} c = c := by
+  cases c; simp [Control.merge]
+
 /-- Decoding the encoding of an RPC returns it. -/
 theorem decodeRpc_encode (rpc : Rpc) (h : rpc.encode.size < 2 ^ 64) :
     decodeRpc rpc.encode = .ok rpc := by
@@ -261,10 +264,9 @@ theorem decodeRpc_encode (rpc : Rpc) (h : rpc.encode.size < 2 ^ 64) :
       (List.mem_append_left _ <| List.mem_append_right _ <| mem_map_comp hx 2 _) h
   by_cases hc : c = {}
   · subst hc
-    have h3 : decodeControl .empty = .ok {} := decodeControl_encode {} (by decide)
     simp only [ite_true] at h ⊢
     rw [decodeRpc, recordsOf_serialize ?_ h]
-    · simp [repeated, valuesOf_append, valuesOf_map_comp, mapM_comp_len_comp, h1, h2, h3, bind,
+    · simp [repeated, valuesOf_append, valuesOf_map_comp, mapM_comp_len_comp, h1, h2, bind,
         Except.bind, pure, Except.pure]
     · simp [lenRecord, maxField, or_imp, forall_and]
   · have h3 : decodeControl c.encode = .ok c :=
@@ -273,31 +275,99 @@ theorem decodeRpc_encode (rpc : Rpc) (h : rpc.encode.size < 2 ^ 64) :
     rw [decodeRpc, recordsOf_serialize ?_ h]
     · simp [repeated, valuesOf_append, valuesOf_map_comp, valuesOf_cons, valuesOf_nil,
         mapM_comp_len_comp, lenRecord_field, lenRecord_value, h1, h2, h3, bytesOf, bind,
-        Except.bind, pure, Except.pure]
+        Except.bind, pure, Except.pure, merge_empty_left]
     · simp [lenRecord, maxField, or_imp, forall_and]
 
 /-! ## `StrictNoSign` -/
 
-/-- A message whose records hold a forbidden field is rejected, naming a forbidden field. -/
+/-- A message whose records hold a forbidden field is rejected, naming one of its records. -/
 theorem decodeMessage_signed {bytes : ByteArray} {rs : List Record}
     (h : records bytes.data.toList = .ok rs) (hs : ∃ r ∈ rs, r.field ∈ signedFields) :
-    ∃ n ∈ signedFields, decodeMessage bytes = .error (.signed n) := by
+    ∃ r ∈ rs, r.field ∈ signedFields ∧ decodeMessage bytes = .error (.signed r.field) := by
   obtain ⟨r, hr, hf⟩ := hs
   cases hfind : rs.find? (·.field ∈ signedFields) with
   | none =>
     rw [List.find?_eq_none] at hfind
     exact absurd (by simpa using hf) (hfind r hr)
   | some r' =>
-    refine ⟨r'.field, by simpa using List.find?_some hfind, ?_⟩
+    refine ⟨r', List.mem_of_find?_eq_some hfind, by simpa using List.find?_some hfind, ?_⟩
     simp [decodeMessage, recordsOf_ok h, hfind, bind, Except.bind, throw, throwThe,
       MonadExceptOf.throw]
+
+private theorem mapM_error {f : α → Except ε β} :
+    ∀ {l : List α} {e : ε}, l.mapM f = .error e → ∃ x ∈ l, f x = .error e
+  | [], _, h => by simp [pure, Except.pure] at h
+  | a :: l, e, h => by
+    rw [List.mapM_cons] at h
+    cases ha : f a with
+    | error e' =>
+      simp only [ha, bind, Except.bind] at h
+      cases h
+      exact ⟨a, by simp, ha⟩
+    | ok b =>
+      cases hl : l.mapM f with
+      | error e' =>
+        simp only [ha, hl, bind, Except.bind] at h
+        cases h
+        obtain ⟨x, hx, hfx⟩ := mapM_error hl
+        exact ⟨x, by simp [hx], hfx⟩
+      | ok bs => simp [ha, hl, bind, Except.bind, pure, Except.pure] at h
+
+private theorem bytesOf_ne_signed {field n : Nat} {v : Value} {e : RpcError}
+    (h : bytesOf field v = .error e) : e ≠ .signed n := by
+  cases v <;> simp [bytesOf] at h <;> subst h <;> simp
+
+private theorem stringOf_ne_signed {field n : Nat} {v : Value} {e : RpcError}
+    (h : stringOf field v = .error e) : e ≠ .signed n := by
+  unfold stringOf at h
+  cases hb : bytesOf field v with
+  | error e' =>
+    simp only [hb, bind, Except.bind] at h
+    cases h
+    exact bytesOf_ne_signed hb
+  | ok b =>
+    simp only [hb, bind, Except.bind] at h
+    split at h <;> simp [pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at h
+    subst h; simp
+
+private theorem repeated_ne_signed {read : Nat → Value → Except RpcError α}
+    (hread : ∀ field v e n, read field v = .error e → e ≠ .signed n) {rs : List Record}
+    {field n : Nat} {e : RpcError} (h : repeated read rs field = .error e) : e ≠ .signed n := by
+  obtain ⟨v, -, hv⟩ := mapM_error h
+  exact hread field v e n hv
+
+/-- A parsed message is rejected for signing exactly when it holds a forbidden field. -/
+theorem decodeMessage_signed_iff {bytes : ByteArray} {rs : List Record}
+    (h : records bytes.data.toList = .ok rs) :
+    (∃ n, decodeMessage bytes = .error (.signed n)) ↔ ∃ r ∈ rs, r.field ∈ signedFields := by
+  refine ⟨fun ⟨n, hn⟩ => ?_, fun hs => ?_⟩
+  · refine Classical.byContradiction fun hno => ?_
+    have hfind : rs.find? (·.field ∈ signedFields) = none := by
+      rw [List.find?_eq_none]
+      intro r hr hf
+      exact hno ⟨r, hr, by simpa using hf⟩
+    have hb : ∀ field v e n, bytesOf field v = .error e → e ≠ .signed n :=
+      fun _ _ _ _ h => bytesOf_ne_signed h
+    have hs : ∀ field v e n, stringOf field v = .error e → e ≠ .signed n :=
+      fun _ _ _ _ h => stringOf_ne_signed h
+    simp only [decodeMessage, recordsOf_ok h, hfind, singular, bind, Except.bind] at hn
+    cases hd : repeated bytesOf rs 2 with
+    | error e => simp only [hd] at hn; exact repeated_ne_signed hb hd (Except.error.inj hn)
+    | ok ds =>
+      cases ht : repeated stringOf rs 4 with
+      | error e => simp [hd, ht, pure, Except.pure] at hn; exact repeated_ne_signed hs ht hn
+      | ok ts =>
+        simp only [hd, ht, pure, Except.pure] at hn
+        split at hn <;> simp [throw, throwThe, MonadExceptOf.throw] at hn
+  · obtain ⟨r, -, -, hr⟩ := decodeMessage_signed h hs
+    exact ⟨_, hr⟩
 
 /-- An RPC that publishes a message holding a forbidden field is rejected. -/
 theorem decodeRpc_signed {frame message : ByteArray} {rs ms : List Record}
     (hframe : records frame.data.toList = .ok rs) (hm : lenRecord 2 message ∈ rs)
     (hms : records message.data.toList = .ok ms) (hs : ∃ r ∈ ms, r.field ∈ signedFields)
     (rpc : Rpc) : decodeRpc frame ≠ .ok rpc := by
-  obtain ⟨n, -, hn⟩ := decodeMessage_signed hms hs
+  obtain ⟨n, -, -, hn⟩ := decodeMessage_signed hms hs
   have hv : Value.len message ∈ valuesOf rs 2 :=
     List.mem_filterMap.mpr ⟨_, hm, by simp [lenRecord]⟩
   intro heq

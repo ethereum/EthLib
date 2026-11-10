@@ -17,17 +17,21 @@ So a message must not hold the field `from`, `seqno`, `signature` or `key`, not 
 
 A message must hold a topic, since [the message schema][message] makes it required.
 
-The consensus layer makes topics UTF-8 strings, so each topic must be valid UTF-8.
+The consensus layer makes topics UTF-8 strings, as [proto2][string] asks of every string.
+
+So every topic must be valid UTF-8, or the whole RPC is rejected.
 
 A field the schema does not name is skipped.
 
-A field the schema names must have the wire type of its type.
+A field the schema names must have the wire type of its type, which is a choice of EthLib.
+
+The four forbidden fields are rejected whatever their wire type.
 
 A missing singular field reads as its default: false, zero or empty.
 
 A singular field that occurs twice keeps its last value, as [the encoding guide][last] says.
 
-Two control messages merge, so their lists join.
+Two control messages are decoded one by one, then merged, so their lists join.
 
 [rpc]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/README.md#the-rpc
 [message]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/README.md#the-message
@@ -35,6 +39,7 @@ Two control messages merge, so their lists join.
 [v10]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.0.md#protobuf
 [v11]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.1.md#protobuf
 [v12]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.2.md#protobuf-extension
+[string]: https://github.com/protocolbuffers/protocolbuffers.github.io/blob/bc2f346991e20631ed0a884e345110738228bfae/content/programming-guides/proto2.md#scalar-value-types-scalar
 [last]: https://github.com/protocolbuffers/protocolbuffers.github.io/blob/bc2f346991e20631ed0a884e345110738228bfae/content/programming-guides/encoding.md#last-one-wins
 -/
 
@@ -122,13 +127,15 @@ inductive RpcError where
   | utf8 (field : Nat)
   deriving Repr, DecidableEq
 
-/-- The stable code of an error, one per constructor, for the C exports. -/
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The codes start at 101, since the Python class of these errors also holds the payload errors. -/
 def RpcError.code : RpcError → UInt32
-  | .protobuf _ => 1
-  | .signed _ => 2
-  | .missingTopic => 3
-  | .wireType .. => 4
-  | .utf8 _ => 5
+  | .protobuf _ => 101
+  | .signed _ => 102
+  | .missingTopic => 103
+  | .wireType .. => 104
+  | .utf8 _ => 105
 
 /-- The field numbers that `StrictNoSign` forbids in a message. -/
 def signedFields : List Nat := [1, 3, 5, 6]
@@ -174,7 +181,9 @@ def recordsOf (bytes : ByteArray) : Except RpcError (List Record) :=
 /-- A subscription change. -/
 def decodeSubOpts (bytes : ByteArray) : Except RpcError SubOpts := do
   let rs ← recordsOf bytes
-  -- A bool is a varint, and any value other than zero is true.
+  -- A bool is written as 0 or 1.
+  --
+  -- Reading any other value as true is a choice of EthLib.
   let subscribe ← singular uint64Of 0 rs 1
   return { subscribe := subscribe != 0, topicId := ← singular stringOf "" rs 2 }
 
@@ -226,14 +235,19 @@ def decodeControl (bytes : ByteArray) : Except RpcError Control := do
     prune := ← (← repeated bytesOf rs 4).mapM decodePrune
     idontwant := ← (← repeated bytesOf rs 5).mapM decodeIDontWant }
 
+/-- Merge two control messages: each list of the second follows that of the first. -/
+def Control.merge (a b : Control) : Control :=
+  ⟨a.ihave ++ b.ihave, a.iwant ++ b.iwant, a.graft ++ b.graft, a.prune ++ b.prune,
+    a.idontwant ++ b.idontwant⟩
+
 /-- An RPC.
 
-The control field is singular, and its occurrences merge, so their bytes are joined first. -/
+The control field is singular, so each occurrence is decoded alone, then they merge. -/
 def decodeRpc (bytes : ByteArray) : Except RpcError Rpc := do
   let rs ← recordsOf bytes
   let subscriptions ← (← repeated bytesOf rs 1).mapM decodeSubOpts
   let publish ← (← repeated bytesOf rs 2).mapM decodeMessage
-  let control ← decodeControl ((← repeated bytesOf rs 3).foldl (· ++ ·) .empty)
+  let control := (← (← repeated bytesOf rs 3).mapM decodeControl).foldl Control.merge {}
   return { subscriptions, publish, control }
 
 /-! ## Encoding
