@@ -86,6 +86,8 @@ By default, Lake also adds that shared library to the trace of the proof, so a c
 The `Proofs` library sets `platformIndependent`, which keeps platform-dependent inputs such as this shared library out of the traces of its modules.
 A proof then does not rebuild for a change to a specification module that it does not import.
 It still rebuilds when the `.olean` files of a module that it imports change.
+The `Exports` library sets `platformIndependent` too, so an export re-elaborates only for a change to a module that it imports.
+Its native object is still relinked, because it links against the specification's shared library.
 
 Before saving, CI deletes the generated `*.setup.json` files from the build directory.
 These files contain absolute runner paths, and Lake regenerates them.
