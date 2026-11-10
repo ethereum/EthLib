@@ -425,7 +425,7 @@ private theorem getFlagIndexDeltas_exists_ok {config : Config} {budget scoreBoun
   obtain ⟨participatingBalance, balanceOk, balanceLe⟩ :=
     getTotalBalance_exists_ok inRange (Nat.lt_of_le_of_lt summed budgetLt)
   obtain ⟨eligible, eligibleOk⟩ := getEligibleValidatorIndices_exists_ok within
-  have distinct := (getEligibleValidatorIndices_ok within eligibleOk).1
+  have distinct := (getEligibleValidatorIndices_ok eligibleOk).1
   have eligibleLt := getEligibleValidatorIndices_lt within eligibleOk
   have leakOk := isInInactivityLeak_eq_ok finalized
   -- The increments that set the flag, and the active ones, are at most those of the budget.
@@ -568,7 +568,7 @@ private theorem getInactivityPenaltyDeltas_exists_ok {config : Config} {budget s
   obtain ⟨matching, matchingOk, -⟩ := getUnslashedParticipatingIndices_exists_ok within altair
     TIMELY_TARGET_FLAG_INDEX (Or.inl rfl) sized
   obtain ⟨eligible, eligibleOk⟩ := getEligibleValidatorIndices_exists_ok within
-  have distinct := (getEligibleValidatorIndices_ok within eligibleOk).1
+  have distinct := (getEligibleValidatorIndices_ok eligibleOk).1
   have eligibleLt := getEligibleValidatorIndices_lt within eligibleOk
   obtain ⟨penalties, folded⟩ := foldlM_exists_ok_of_distinct UInt64.toNat
     (fun (last : Array Gwei) (index : ValidatorIndex) =>

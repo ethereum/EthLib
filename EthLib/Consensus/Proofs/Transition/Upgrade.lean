@@ -34,8 +34,6 @@ The latest bid differs from the Gloas bid only by its inclusion list bits, which
 
 Each upgrade keeps the slot, the three checkpoints and the block roots.
 
-It keeps the keys while the registry stays below 2^64 validators.
-
 From Altair, an upgrade adds no target flag.
 
 Each upgrade keeps the invariant that each valid block keeps, and the finalized checkpoint.
@@ -75,7 +73,7 @@ It also keeps the genesis validators root.
 
 The current fork version becomes the previous one, and the new one is that of the fork after.
 
-It never shrinks the registry, and keeps the keys while the registry stays below 2^64 validators.
+It never shrinks the registry.
 
 When each validator has one balance before it, each has one after it.
 
@@ -99,7 +97,6 @@ structure UpgradeFrame (config : Config) {fork post : Fork} (pre : BeaconState p
   previousVersion : after.forkVersions.previousVersion = pre.forkVersions.currentVersion
   currentVersion : after.forkVersions.currentVersion = config.forkVersion post
   registryGrows : pre.validators.data.size ≤ after.validators.data.size
-  keysKept : after.validators.data.size < 2 ^ 64 → KeysKept pre after
   balancesMatch : BalancesMatch pre → BalancesMatch after
   exitsOrdered : ExitsOrdered pre → ExitsOrdered after
   aligned : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned pre →
@@ -138,7 +135,6 @@ theorem UpgradeFrame.of_carried {fork post : Fork} {pre : BeaconState preset for
   previousVersion := previousVersion
   currentVersion := currentVersion
   registryGrows := by rw [validators]; exact Nat.le_refl _
-  keysKept _ := KeysKept.of_validators validators
   balancesMatch holds := by
     unfold BalancesMatch at holds ⊢
     rw [balances, validators]
@@ -170,8 +166,6 @@ theorem UpgradeFrame.trans_blockFrame {fork post : Fork} {pre : BeaconState pres
   previousVersion := by rw [two.forkVersions]; exact one.previousVersion
   currentVersion := by rw [two.forkVersions]; exact one.currentVersion
   registryGrows := Nat.le_trans one.registryGrows two.registryGrows
-  keysKept small :=
-    (one.keysKept (Nat.lt_of_le_of_lt two.registryGrows small)).trans (two.keysKept small)
   balancesMatch := two.balancesMatch ∘ one.balancesMatch
   exitsOrdered := two.exitsOrdered ∘ one.exitsOrdered
   aligned maxAligned := two.aligned maxAligned ∘ one.aligned maxAligned
@@ -382,7 +376,7 @@ theorem frame_queuePreActivation {fork : Fork} {state after : BeaconState preset
   have sizes := sameSizes_setBalance set₁
   obtain ⟨_, rfl⟩ := setBalance_ok set₁
   have zeroed := BlockFrame.of_validators sizes
-  have reset := frame_setValidator_of_whole set₂ found rfl
+  have reset := frame_setValidator_of_whole set₂
     (fun ordered => ordered validator (mem_of_getValidator found)) fun _ _ => UInt64.zero_mod
   exact (zeroed.trans reset.toBlockFrame).trans (BlockFrame.of_validators ⟨rfl, rfl⟩)
 
@@ -516,6 +510,7 @@ theorem onboardDeposit_cases {validatorKeys : List BLSPubkey}
   split at computed
   · -- A known builder adds the amount to its balance.
     rename_i index _
+    obtain ⟨_, _, computed⟩ := bind_ok_iff.mp computed
     obtain ⟨balance, summed, rest⟩ := bind_ok_iff.mp computed
     rw [liftAccessor_ok, liftArith, mapError_ok_iff, addChecked_ok_iff] at summed
     cases rest
@@ -535,13 +530,16 @@ theorem onboardDeposit_cases {validatorKeys : List BLSPubkey}
   obtain ⟨valid, checked, rest⟩ := bind_ok_iff.mp rest
   split at rest
   · -- A new key with a valid signature becomes a builder.
+    obtain ⟨_, added, rest⟩ := bind_ok_iff.mp rest
     cases rest
-    refine .inr (.inl ⟨rfl, builderBalanceSum_addBuilderToRegistry, ?_⟩)
-    unfold addBuilderToRegistry BeaconState.putBuilder
-    dsimp only
-    split
-    · exact ⟨_, rfl⟩
-    · exact ⟨_, rfl⟩
+    refine .inr (.inl ⟨rfl, builderBalanceSum_addBuilderToRegistry added, ?_⟩)
+    simp only [addBuilderToRegistry, bind_ok_iff] at added
+    obtain ⟨_, _, added⟩ := added
+    split at added
+    · cases added
+      exact ⟨_, rfl⟩
+    · cases added
+      exact ⟨_, rfl⟩
   · cases rest
     rename_i invalid
     simp only [Bool.not_eq_true] at invalid

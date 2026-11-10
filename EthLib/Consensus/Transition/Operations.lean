@@ -159,7 +159,7 @@ def attestationCommitteesSize (state : BeaconState preset fork) (data : Attestat
     (bits : Array Bool) : List CommitteeIndex → Nat → Except TransitionError Nat
   | [], offset => pure offset
   | index :: rest, offset => do
-    let count := getCommitteeCountPerSlot state data.target.epoch
+    let count ← liftAccessor (getCommitteeCountPerSlotChecked state data.target.epoch)
     -- A first index out of range fails here, before the shuffle is computed.
     ensure (index < count) (.committeeIndexOutOfRange index count)
     let epoch := computeEpochAtSlot preset data.slot
@@ -191,7 +191,7 @@ def checkAttestationCommittees (state : BeaconState preset fork)
       (getCommitteeIndices (attestation.committeeBits electra)) 0
     ensure (bits.size = size) (.aggregationBitsLength bits.size size)
   else
-    let count := getCommitteeCountPerSlot state data.target.epoch
+    let count ← liftAccessor (getCommitteeCountPerSlotChecked state data.target.epoch)
     ensure (data.index < count) (.committeeIndexOutOfRange data.index count)
     let committee ← liftAccessor (getBeaconCommittee state data.slot data.index)
     ensure (bits.size = committee.size) (.aggregationBitsLength bits.size committee.size)
@@ -337,7 +337,7 @@ def processAttestation (config : Config) (checks : SignatureChecks)
     ensure (earliest ≤ state.slot) (.attestationTooEarly data.slot state.slot)
     let latest ← liftAccessor (liftArith (addChecked data.slot preset.SLOTS_PER_EPOCH))
     ensure (state.slot ≤ latest) (.attestationTooLate data.slot state.slot)
-    let count := getCommitteeCountPerSlot state data.target.epoch
+    let count ← liftAccessor (getCommitteeCountPerSlotChecked state data.target.epoch)
     ensure (data.index < count) (.committeeIndexOutOfRange data.index count)
     let committee ← liftAccessor (getBeaconCommittee state data.slot data.index)
     let bits := attestation.aggregationBits.bits

@@ -2299,7 +2299,7 @@ An attestation casts a vote for each validator that its bits show in its committ
 A block casts the votes of its attestations, read in the committees of the state before the block (`blockVotes`).
 `processBlock_attestationSplit` (`ActiveKept.lean`) shows that the block reads those same committees when it processes each attestation.
 The steps before the attestations keep activity up to the current epoch and write only the RANDAO mix of the current epoch, which the seeds of the previous and current epochs do not read.
-That needs more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes, and the registry below 2^64 validators after the block.
+That needs more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes.
 `voteFrame_processBlock` then shows that a block sets a target flag only from one of its votes, for the link of the epoch of the flag at the position of the flag.
 The block keeps the slot, the block roots and the justified checkpoints.
 So `TargetFlagsVoted.of_voteFrame` keeps each target flag backed by a vote for its link, from the earlier votes or those of the block.
@@ -2328,7 +2328,8 @@ The term is twice the stake of that set outside the active set of the current ep
 `TargetFlagsVoted.attester` from Altair and `PendingVoted.attester` before it give that fact.
 With them, `linkWithChurn_of_test` would give the bound for the previous epoch when both pass, whose bit the finalization rules read; no theorem states that yet.
 For the current epoch the term is zero.
-For the previous epoch, `exists_exitEpoch_eq_of_mem_sdiff_active` shows that it counts only validators that exit at the current epoch, while the registry stays below 2^64 validators.
+For the previous epoch, `exists_exitEpoch_eq_of_mem_sdiff_active` shows that it counts only validators that exit at the current epoch, when the registry stays within the limit of the preset.
+The theorem reads the unchecked active indices, and the bound makes each index equal to its registry position.
 The exit churn bounds that stake, but no theorem states that bound yet.
 So one step gives the stake condition of a supermajority link of the model, up to that term.
 The beacon chain leaves slashed attesters out, and the model counts them, so the converse does not hold.
@@ -2344,12 +2345,12 @@ That single step asks a match only for the new current justified checkpoint; the
 The step also needs the previous justified epoch below the previous epoch once justification runs, and the source block of each recent link in the chain of its target block.
 `slackJustifiedCheckpoints_of_chain` (`Consensus/Proofs/Transition/FfgSlackChain.lean`) carries these steps along a chain from the genesis state built from deposits, for a set of votes that holds the votes of each block step.
 `slackJustifiedCheckpoints_activeSetAt_of_chainSteps` (`FfgSlackActive.lean`) takes the votes that the block steps of the run cast, the active sets and the effective balances.
-Its step asks only the active stake, the order of the blocks, the size of the registry and the preset.
+Its step asks only the active stake, the order of the blocks and the preset.
 The order of the blocks asks that the map from roots to blocks keeps in order the roots that a state records at two consecutive slots, and the zero root before the root of slot zero (`rootLinks`, `Consensus/Proofs/Transition/FfgRoots.lean`).
 Two consecutive slots record the same root, or a block and its child, since the header check makes the parent root of a block the root recorded at the slot before it; no theorem states that yet.
 Without a collision of header roots, such pairs order the roots by ancestry.
 `RootsAbove.of_chainStep` then keeps each justified checkpoint below every root that the state records from its epoch on, which gives the source block of each recent link in the chain of its target block.
-`slackJustifiedCheckpoints_chainRoot_of_chainSteps` (`FfgSlackActive.lean`) takes the roots themselves as the blocks of the model, ordered by the links of every state that genesis reaches (`ChainRoot`), so the order holds by construction and the step asks only the active stake and the size of the registry.
+`slackJustifiedCheckpoints_chainRoot_of_chainSteps` (`FfgSlackActive.lean`) takes the roots themselves as the blocks of the model, ordered by the links of every state that genesis reaches (`ChainRoot`), so the order holds by construction and the step asks only the active stake.
 That order does not depend on the last state, so two branches from one genesis share it.
 It holds the links of every reachable state, so it also holds every collision of header roots among reachable headers, and such collisions exist by counting.
 A collision of header roots makes two conflicting blocks comparable, so this order does not serve a safety theorem for two chains; that needs the order of the states of the given runs, with a named search for a collision.
@@ -2457,10 +2458,17 @@ From Gloas the type of the registry has no length limit ([EIP-7688](https://eips
 A new validator still gets the size of the registry as its index, and that index must be below `2^64` (`getIndexForNewValidator_ok_iff`).
 So a transition never adds a validator at a position of `2^64` or more, and only a starting state built outside the transition can hold one.
 
-`getActiveValidatorIndices_eq_mapM_ofNatChecked` in `Consensus/Proofs/Accessors.lean` states the divergence exactly.
-The checked conversion of the active positions, which the specification computes, succeeds and gives EthLib's list exactly when every active position is below `2^64`.
-The number of committees per slot, the churn limit of validators before Electra and the Phase 0 weak subjectivity period also convert the number of active validators to a 64-bit integer without a check.
-The specification fails there at `2^64` active validators, a count that a registry of `2^64` positions allows, so that case can arise through the transition, at least in principle.
+`getActiveValidatorIndicesChecked_eq_ok_iff` in `Consensus/Proofs/Accessors.lean` states the divergence exactly.
+The checked read converts each active position as the specification does, and it gives EthLib's list exactly when every active position is below `2^64`.
+The specification also converts the number of active validators to a 64-bit integer, and rejects a count of `2^64`, which a registry of `2^64` positions allows.
+Such a registry can arise through the transition from Gloas, at least in principle.
+
+The transition reads the active validators through `getActiveValidatorIndicesChecked`, which fails at an active position of `2^64` or more, as the specification does.
+The shuffle of the beacon committees and the committee count of an attestation also fail at `2^64` active validators, so the transition agrees with the specification on the count of committees.
+The churn limit of validators before Electra and the Phase 0 weak subjectivity period still convert the count of the pure list without a check.
+Both run only before Electra, where the type of the registry keeps it within the limit of the preset (`BeaconState.registryWithinLimit_of_lt`).
+There the count is below `2^64` (`length_getActiveValidatorIndices_lt`), so the conversion keeps its value (`toNat_length_getActiveValidatorIndices`) and agrees with the specification.
+The genesis validity check, fork choice, gossip and the honest-validator duties call the pure list directly, and keep the difference.
 
 Some official vectors expect more than a source says.
 The transaction tests of ethereum/tests reject 43 results whose gas limit is `2^64`, or whose gas limit times gas price exceeds `2^256 - 1`.

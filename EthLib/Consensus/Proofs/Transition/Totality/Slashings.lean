@@ -60,10 +60,9 @@ private theorem decreaseBalance_kept {current : BeaconState preset fork}
 
 /-- The validator read at a position of the registry is the one of the registry. -/
 private theorem getValidator_kept {current : BeaconState preset fork} (kept : Kept state current)
-    (within : state.RegistryWithinLimit) {index : Nat} (lt : index < state.validators.data.size) :
-    getValidator current index.toUInt64 = .ok state.validators.data[index] := by
-  rw [getValidator_eq_ok_iff, toNat_toUInt64_of_lt within lt, kept.1,
-    Array.getElem?_eq_getElem lt]
+    {index : Nat} (lt : index < state.validators.data.size) :
+    getValidatorAt current index = .ok state.validators.data[index] := by
+  rw [getValidatorAt_eq_ok_iff, kept.1, Array.getElem?_eq_getElem lt]
 
 /-- The penalty step from Electra succeeds when the penalty per increment fits the balances. -/
 private theorem applySlashingPenaltyElectra_exists_ok (within : state.RegistryWithinLimit)
@@ -76,11 +75,15 @@ private theorem applySlashingPenaltyElectra_exists_ok (within : state.RegistryWi
     (lt : index < state.validators.data.size) :
     ∃ after, applySlashingPenaltyElectra current perIncrement index = .ok after ∧
       Kept state after := by
-  have found := getValidator_kept kept within lt
+  have found := getValidator_kept kept lt
+  have indexOk : liftAccessor (liftArith (ofNatChecked index)) = .ok index.toUInt64 := by
+    rw [ofNatChecked_of_lt (Nat.lt_of_lt_of_le lt
+      (Nat.le_trans within (Nat.le_of_lt preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt)))]
+    rfl
   have epoch : getCurrentEpoch current = getCurrentEpoch state := by
     unfold getCurrentEpoch
     rw [kept.2.1]
-  have read : liftAccessor (getValidator current index.toUInt64) =
+  have read : liftAccessor (getValidatorAt current index) =
       .ok state.validators.data[index] := by rw [found]; rfl
   have due : liftAccessor (liftArith (addChecked (getCurrentEpoch current)
       (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2))) =
@@ -103,7 +106,7 @@ private theorem applySlashingPenaltyElectra_exists_ok (within : state.RegistryWi
           (state.validators.data[index].effectiveBalance /
             preset.EFFECTIVE_BALANCE_INCREMENT)) := by
         rw [mulChecked_of_lt product]; rfl
-      rw [penalty]
+      rw [penalty, indexOk]
       obtain ⟨after, lowered, kept'⟩ := decreaseBalance_kept matched kept lt within
         (perIncrement * (state.validators.data[index].effectiveBalance /
           preset.EFFECTIVE_BALANCE_INCREMENT))
@@ -128,11 +131,15 @@ private theorem applySlashingPenalty_exists_ok (within : state.RegistryWithinLim
     (lt : index < state.validators.data.size) :
     ∃ after, applySlashingPenalty current total adjusted index = .ok after ∧
       Kept state after := by
-  have found := getValidator_kept kept within lt
+  have found := getValidator_kept kept lt
+  have indexOk : liftAccessor (liftArith (ofNatChecked index)) = .ok index.toUInt64 := by
+    rw [ofNatChecked_of_lt (Nat.lt_of_lt_of_le lt
+      (Nat.le_trans within (Nat.le_of_lt preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt)))]
+    rfl
   have epoch : getCurrentEpoch current = getCurrentEpoch state := by
     unfold getCurrentEpoch
     rw [kept.2.1]
-  have read : liftAccessor (getValidator current index.toUInt64) =
+  have read : liftAccessor (getValidatorAt current index) =
       .ok state.validators.data[index] := by rw [found]; rfl
   have due : liftAccessor (liftArith (addChecked (getCurrentEpoch current)
       (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2))) =
@@ -169,7 +176,7 @@ private theorem applySlashingPenalty_exists_ok (within : state.RegistryWithinLim
           rw [UInt64.toNat_div, UInt64.toNat_mul, Nat.mod_eq_of_lt first]
           exact second)]
         rfl
-      rw [penalty]
+      rw [penalty, indexOk]
       obtain ⟨after, lowered, kept'⟩ := decreaseBalance_kept matched kept lt within
         ((((state.validators.data[index].effectiveBalance /
             preset.EFFECTIVE_BALANCE_INCREMENT) * adjusted) / total) *

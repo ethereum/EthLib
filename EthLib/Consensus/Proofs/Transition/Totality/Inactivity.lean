@@ -224,7 +224,7 @@ theorem processInactivityUpdates_total (config : Config) (altair : .altair ≤ f
   obtain ⟨hits, hitsOk, _⟩ := getUnslashedParticipatingIndices_exists_ok within altair
     TIMELY_TARGET_FLAG_INDEX (Or.inl rfl) sized
   have leakOk := isInInactivityLeak_eq_ok finalized
-  have distinct := (getEligibleValidatorIndices_ok within eligibleOk).1
+  have distinct := (getEligibleValidatorIndices_ok eligibleOk).1
   have inRange := getEligibleValidatorIndices_lt within eligibleOk
   obtain ⟨scores, folded⟩ := foldlM_updateInactivityScore_exists_ok config
     (hit := markIndices state.validators.data.size hits) (leaking := _) eligible

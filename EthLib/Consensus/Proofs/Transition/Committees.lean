@@ -54,8 +54,6 @@ theorem ActiveKept.mono {post : Base.Fork} {bound lower : Epoch}
 
 /-- The fixed epoch of a state: the steps below keep the active validators of each epoch up to it.
 
-They assume the registry after the step holds fewer than 2^64 validators.
-
 It is the current epoch plus `MAX_SEED_LOOKAHEAD`, capped at the largest epoch.
 
 Every activation or exit that a step sets lands after it, and an activation lands just after it.
@@ -187,6 +185,37 @@ theorem ActiveKept.getActiveValidatorIndices_eq {post : Base.Fork} {bound epoch 
     getActiveValidatorIndices_eq_range state epoch (Nat.le_max_right other.validators.data.size _)]
   exact filterMap_congr_mem fun index _ => by rw [kept epoch le index]
 
+/-- Every active position of a registry fits in 64 bits, read by position or by activity. -/
+private theorem activePositionsFit_iff {post : Base.Fork} (state : BeaconState preset post)
+    (epoch : Epoch) :
+    (∀ position (inside : position < state.validators.data.size),
+      isActiveValidator state.validators.data[position] epoch = true → position < 2 ^ 64) ↔
+      ∀ position, isActiveAt state epoch position = true → position < 2 ^ 64 := by
+  constructor
+  · intro fits position active
+    obtain ⟨_, found, active⟩ := isActiveAt_eq_true_iff.mp active
+    obtain ⟨inside, rfl⟩ := Array.getElem?_eq_some_iff.mp found
+    exact fits position inside active
+  · intro fits position inside active
+    exact fits position (isActiveAt_eq_true_iff.mpr ⟨_, by simp [inside], active⟩)
+
+/-- Two states with the same activity have the same checked active indices, including errors. -/
+theorem ActiveKept.getActiveValidatorIndicesChecked_eq {post : Base.Fork} {bound epoch : Epoch}
+    {other : BeaconState preset post} (kept : ActiveKept bound state other) (le : epoch ≤ bound) :
+    getActiveValidatorIndicesChecked other epoch =
+      getActiveValidatorIndicesChecked state epoch := by
+  have same : (∀ position, isActiveAt other epoch position = true → position < 2 ^ 64) ↔
+      ∀ position, isActiveAt state epoch position = true → position < 2 ^ 64 := by
+    simp only [kept epoch le]
+  by_cases small : ∀ position, isActiveAt state epoch position = true → position < 2 ^ 64
+  · rw [getActiveValidatorIndicesChecked_eq_ok_iff.mpr ((activePositionsFit_iff _ _).mpr small),
+      getActiveValidatorIndicesChecked_eq_ok_iff.mpr
+        ((activePositionsFit_iff _ _).mpr (same.mpr small)),
+      kept.getActiveValidatorIndices_eq le]
+  · rw [getActiveValidatorIndicesChecked_eq_error (mt (activePositionsFit_iff _ _).mp small),
+      getActiveValidatorIndicesChecked_eq_error
+        (mt (activePositionsFit_iff _ _).mp (mt same.mp small))]
+
 /-- The RANDAO mixes of two states agree, except perhaps at the position of one epoch. -/
 def MixesKeptBut {post : Base.Fork} (written : Epoch) (state : BeaconState preset fork)
     (after : BeaconState preset post) : Prop :=
@@ -215,13 +244,15 @@ theorem CommitteesKept.trans {middle last : Base.Fork} {epoch : Epoch}
 theorem CommitteesKept.of_seed {post : Base.Fork} {other : BeaconState preset post}
     {epoch : Epoch}
     (active : getActiveValidatorIndices other epoch = getActiveValidatorIndices state epoch)
+    (checked : getActiveValidatorIndicesChecked other epoch =
+      getActiveValidatorIndicesChecked state epoch)
     (seed :
       getSeed other epoch DOMAIN_BEACON_ATTESTER = getSeed state epoch DOMAIN_BEACON_ATTESTER) :
     CommitteesKept epoch state other := by
   intro slot index inside
   unfold getBeaconCommittee attesterShuffle getCommitteeCountPerSlot
   subst inside
-  simp only [active, seed]
+  simp only [active, checked, seed]
 
 /-- Two states with the same registry and the same RANDAO mixes have the same committees. -/
 theorem CommitteesKept.of_eq {post : Base.Fork} {other : BeaconState preset post}
@@ -229,6 +260,7 @@ theorem CommitteesKept.of_eq {post : Base.Fork} {other : BeaconState preset post
     (mixes : other.randaoMixes.elements = state.randaoMixes.elements) (epoch : Epoch) :
     CommitteesKept epoch state other :=
   CommitteesKept.of_seed (by unfold getActiveValidatorIndices; rw [validators])
+    (by unfold getActiveValidatorIndicesChecked; rw [validators])
     (by unfold getSeed getRandaoMix; rw [mixes])
 
 /-- The seed of an epoch is the same in two states with the same mix at the position it reads.
@@ -298,6 +330,7 @@ theorem CommitteesKept.of_activeKept {post : Base.Fork} {other : BeaconState pre
     (low : epoch ≤ written) (high : written.toNat ≤ epoch.toNat + 1) :
     CommitteesKept epoch state other :=
   CommitteesKept.of_seed (active.getActiveValidatorIndices_eq (UInt64.le_refl _))
+    (active.getActiveValidatorIndicesChecked_eq (UInt64.le_refl _))
     (getSeed_eq_of_mixesKeptBut apart mixes low high _)
 
 /-- Two states agree on the attesters of an attestation, given the same active indices and seed.
@@ -307,12 +340,15 @@ private theorem getAttestingIndices_eq_of_seed {other : BeaconState preset fork}
     {attestation : Attestation preset fork}
     (active : getActiveValidatorIndices other (computeEpochAtSlot preset attestation.data.slot) =
       getActiveValidatorIndices state (computeEpochAtSlot preset attestation.data.slot))
+    (checked : getActiveValidatorIndicesChecked other
+        (computeEpochAtSlot preset attestation.data.slot) =
+      getActiveValidatorIndicesChecked state (computeEpochAtSlot preset attestation.data.slot))
     (seed : getSeed other (computeEpochAtSlot preset attestation.data.slot)
         DOMAIN_BEACON_ATTESTER =
       getSeed state (computeEpochAtSlot preset attestation.data.slot) DOMAIN_BEACON_ATTESTER) :
     getAttestingIndices other attestation = getAttestingIndices state attestation := by
   unfold getAttestingIndices attesterShuffle getCommitteeCountPerSlot
-  simp only [active, seed]
+  simp only [active, checked, seed]
 
 /-- Two states with the same registry and RANDAO mixes agree on the attesters of an attestation.
 -/
@@ -322,6 +358,7 @@ theorem getAttestingIndices_eq_of_eq {other : BeaconState preset fork}
     (attestation : Attestation preset fork) :
     getAttestingIndices other attestation = getAttestingIndices state attestation :=
   getAttestingIndices_eq_of_seed (by unfold getActiveValidatorIndices; rw [validators])
+    (by unfold getActiveValidatorIndicesChecked; rw [validators])
     (by unfold getSeed getRandaoMix; rw [mixes])
 
 /-- Two states agree on the attesters of an attestation, when two facts hold.
@@ -340,6 +377,7 @@ theorem getAttestingIndices_eq_of_activeKept {other : BeaconState preset fork}
     (high : written.toNat ≤ (computeEpochAtSlot preset attestation.data.slot).toNat + 1) :
     getAttestingIndices other attestation = getAttestingIndices state attestation :=
   getAttestingIndices_eq_of_seed (active.getActiveValidatorIndices_eq (UInt64.le_refl _))
+    (active.getActiveValidatorIndicesChecked_eq (UInt64.le_refl _))
     (getSeed_eq_of_mixesKeptBut apart mixes low high _)
 
 /-! ## Exits and slashings -/
@@ -356,13 +394,13 @@ theorem ActiveStep.of_validators (validators : after.validators.data = state.val
     (slot : after.slot = state.slot) : ActiveStep state after :=
   ⟨slot, ActiveKept.of_validators validators _⟩
 
-/-- A write of one validator changes activity only at its position. -/
-private theorem isActiveAt_setValidator {index : ValidatorIndex} {validator : Validator}
-    (set : state.setValidator index validator = .ok after) (epoch : Epoch) (position : Nat) :
+/-- A write at a plain position changes activity only at that position. -/
+private theorem isActiveAt_setValidatorAt {index : Nat} {validator : Validator}
+    (set : state.setValidatorAt index validator = .ok after) (epoch : Epoch) (position : Nat) :
     isActiveAt after epoch position =
-      if position = index.toNat then isActiveValidator validator epoch
+      if position = index then isActiveValidator validator epoch
       else isActiveAt state epoch position := by
-  obtain ⟨inside, rfl⟩ := setValidator_ok set
+  obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
   unfold isActiveAt
   split
   · rename_i same
@@ -371,29 +409,38 @@ private theorem isActiveAt_setValidator {index : ValidatorIndex} {validator : Va
   · rename_i other
     simp [BeaconState.putValidator, Ne.symm other]
 
-/-- A write of a validator with the activity of the old one, up to a bound, keeps activity. -/
-private theorem activeKept_setValidator {bound : Epoch} {index : ValidatorIndex}
-    {validator old : Validator} (found : getValidator state index = .ok old)
+/-- A write at a plain position with the activity of the old validator keeps activity. -/
+private theorem activeKept_setValidatorAt {bound : Epoch} {index : Nat}
+    {validator old : Validator} (found : getValidatorAt state index = .ok old)
     (same : ∀ epoch ≤ bound, isActiveValidator validator epoch = isActiveValidator old epoch)
-    (set : state.setValidator index validator = .ok after) : ActiveKept bound state after := by
+    (set : state.setValidatorAt index validator = .ok after) : ActiveKept bound state after := by
   intro epoch le position
-  rw [isActiveAt_setValidator set]
+  rw [isActiveAt_setValidatorAt set]
   split
   · rename_i here
     subst here
     rw [same epoch le]
-    simp [isActiveAt, getValidator_eq_ok_iff.mp found]
+    simp [isActiveAt, getValidatorAt_eq_ok_iff.mp found]
   · rfl
+
+/-- A write at a plain position that keeps validator activity keeps the slot and activity. -/
+theorem activeStep_setValidatorAt {index : Nat} {validator old : Validator}
+    (found : getValidatorAt state index = .ok old)
+    (same : ∀ epoch ≤ activityFixedEpoch state,
+      isActiveValidator validator epoch = isActiveValidator old epoch)
+    (set : state.setValidatorAt index validator = .ok after) : ActiveStep state after := by
+  have active := activeKept_setValidatorAt found same set
+  obtain ⟨_, rfl⟩ := setValidatorAt_ok set
+  exact ⟨rfl, active⟩
 
 /-- A write of a validator with the activity of the old one keeps the slot and activity. -/
 theorem activeStep_setValidator {index : ValidatorIndex} {validator old : Validator}
     (found : getValidator state index = .ok old)
     (same : ∀ epoch ≤ activityFixedEpoch state,
       isActiveValidator validator epoch = isActiveValidator old epoch)
-    (set : state.setValidator index validator = .ok after) : ActiveStep state after := by
-  have active := activeKept_setValidator found same set
-  obtain ⟨_, rfl⟩ := setValidator_ok set
-  exact ⟨rfl, active⟩
+    (set : state.setValidator index validator = .ok after) : ActiveStep state after :=
+  activeStep_setValidatorAt (by rwa [← getValidator_eq_getValidatorAt]) same
+    (by rwa [← setValidator_eq_setValidatorAt])
 
 /-- A new exit epoch after a bound, from the far future, keeps activity up to the bound.
 
@@ -515,14 +562,22 @@ private theorem keeps_decreaseBalance {index : ValidatorIndex} {delta : Gwei}
     (computed : decreaseBalance state index delta = .ok after) : Keeps state after :=
   keeps_setBalance (decreaseBalance_ok computed).choose_spec
 
+private theorem keeps_setValidatorAt {index : Nat} {validator old : Validator}
+    (found : getValidatorAt state index = .ok old)
+    (same : ∀ epoch ≤ activityFixedEpoch state,
+      isActiveValidator validator epoch = isActiveValidator old epoch)
+    (set : state.setValidatorAt index validator = .ok after) : Keeps state after := by
+  have step := activeStep_setValidatorAt found same set
+  obtain ⟨_, rfl⟩ := setValidatorAt_ok set
+  exact ⟨⟨rfl, rfl, rfl⟩, step.2, rfl⟩
+
 private theorem keeps_setValidator {index : ValidatorIndex} {validator old : Validator}
     (found : getValidator state index = .ok old)
     (same : ∀ epoch ≤ activityFixedEpoch state,
       isActiveValidator validator epoch = isActiveValidator old epoch)
-    (set : state.setValidator index validator = .ok after) : Keeps state after := by
-  have step := activeStep_setValidator found same set
-  obtain ⟨_, rfl⟩ := setValidator_ok set
-  exact ⟨⟨rfl, rfl, rfl⟩, step.2, rfl⟩
+    (set : state.setValidator index validator = .ok after) : Keeps state after :=
+  keeps_setValidatorAt (by rwa [← getValidator_eq_getValidatorAt]) same
+    (by rwa [← setValidator_eq_setValidatorAt])
 
 /-- Starting an exit keeps activity up to the fixed epoch, at every fork.
 
@@ -886,11 +941,12 @@ private theorem keeps_updateRegistryEntry {index : Nat}
       exact ⟨rfl, rfl⟩
     · simp only [pure, Except.pure, Except.ok.injEq] at queuedOk
       exact queuedOk ▸ ⟨rfl, rfl⟩
-  have set : Keeps state marked := keeps_setValidator found
+  have set : Keeps state marked := keeps_setValidatorAt found
     (fun _ _ => by simp only [isActiveValidator, same.1, same.2]) markedOk
   split at computed
-  · rw [liftAccessor_ok] at computed
-    exact set.trans (keeps_initiateValidatorExit computed)
+  · simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, _, exited⟩ := computed
+    exact set.trans (keeps_initiateValidatorExit exited)
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ set
 
@@ -962,7 +1018,7 @@ private theorem keeps_processSlashings (computed : processSlashings state = .ok 
       obtain ⟨_, _, ok⟩ := ok
       split at ok
       · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, _, lowered⟩ := ok
+        obtain ⟨_, _, _, _, lowered⟩ := ok
         exact keeps_decreaseBalance lowered
       · simp only [pure, Except.pure, Except.ok.injEq] at ok
         exact ok ▸ Keeps.refl _
@@ -976,7 +1032,7 @@ private theorem keeps_processSlashings (computed : processSlashings state = .ok 
       obtain ⟨_, _, ok⟩ := ok
       split at ok
       · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, _, _, _, lowered⟩ := ok
+        obtain ⟨_, _, _, _, _, _, lowered⟩ := ok
         exact keeps_decreaseBalance lowered
       · simp only [pure, Except.pure, Except.ok.injEq] at ok
         exact ok ▸ Keeps.refl _
@@ -1000,7 +1056,7 @@ private theorem keeps_processEffectiveBalanceUpdates
   refine Keeps.foldlM (fun _ _ _ ok => ?_) computed
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
   obtain ⟨validator, found, _, _, effectiveBalance, _, set⟩ := ok
-  exact keeps_setValidator (validator := { validator with effectiveBalance }) found
+  exact keeps_setValidatorAt (validator := { validator with effectiveBalance }) found
     (fun _ _ => rfl) set
 
 private theorem keeps_processSlashingsReset (computed : processSlashingsReset state = .ok after) :

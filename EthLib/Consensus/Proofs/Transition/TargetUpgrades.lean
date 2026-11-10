@@ -381,7 +381,7 @@ theorem initializeBeaconStateFromEth1_pending {fork : Fork} {after : BeaconState
       activatedOk
     simp only [activateAtGenesis, bind_ok_iff, liftAccessor_ok] at ok
     obtain ⟨_, _, _, _, set⟩ := ok
-    obtain ⟨_, rfl⟩ := setValidator_ok set
+    obtain ⟨_, rfl⟩ := setValidatorAt_ok set
     exact empty
   cases current
   · exact afterActivation.1
