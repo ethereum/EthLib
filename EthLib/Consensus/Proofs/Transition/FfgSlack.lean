@@ -27,6 +27,22 @@ The set of weights of that checkpoint then holds the balances of both states.
 
 Its validator set must still be one set in both states, which no theorem shows yet.
 
+Justification runs in the epoch step, at the state after the caching of the last slot of an epoch.
+
+The caching writes the root of that slot only.
+
+So the roots of the recent epochs stay when the buffer of roots covers two epochs.
+
+So one slot keeps the two checkpoints slack-justified, under hypotheses on the state before it.
+
+The link of the previous epoch needs its source below its target.
+
+So the previous justified epoch must be below the previous epoch once justification runs.
+
+One slot keeps that, given the two invariants on the justified checkpoints.
+
+The blocks and the upgrades keep it too.
+
 Gasper §4.4, Definitions 4.5 and 4.6, justify a checkpoint by a supermajority link.
 
 The slack is the stake of the set `E(V t, U t)` of Gasper §8.6, Definition 8.1.
@@ -138,8 +154,7 @@ theorem processJustificationAndFinalization_slackJustifiedCheckpoints
     (block : Root → β)
     (contains : ffgVotes block {vote | SignedVote config checks state vote} ⊆ votes)
     (settled : JustifiedSettled state)
-    (separated : GENESIS_EPOCH + 1 < getCurrentEpoch state →
-      state.previousJustifiedCheckpoint.epoch < getPreviousEpoch state)
+    (separated : JustifiedSeparated state)
     (sets : after.currentJustifiedCheckpoint ≠ state.currentJustifiedCheckpoint →
       TargetSetsMatch V U W block state after.currentJustifiedCheckpoint.epoch)
     (chain : ∀ (current : Bool) (root : Root),
@@ -190,5 +205,143 @@ theorem processJustificationAndFinalization_slackJustifiedCheckpoints
     simp only [↓reduceIte] at link before rootOk targetSets ⊢
     exact .link holds.2 (link.slackLink targetSets rootOk (by simp only [Checkpoint.toFfg]; omega)
       before)
+
+/-- One slot keeps the two justified checkpoints slack-justified in the model.
+
+When the slot ends an epoch, justification runs at the state after the caching of the slot.
+
+That caching keeps the roots of the recent epochs, the flags, the checkpoints and the stakes.
+
+So the hypotheses of justification are asked of the state before the slot.
+
+The bound on the active stake, the votes and the chain are asked only when the slot ends an epoch.
+
+The buffer of roots must cover two epochs, as both presets do, so that the caching keeps them.
+
+The previous justified epoch must be below the previous epoch once justification runs.
+
+If the slot changes the current justified checkpoint, the sets and weights of the model must match.
+
+They must match the state before the slot for the epoch of the new checkpoint.
+
+The chain hypothesis also reads the roots of the state before the slot. -/
+theorem advanceSlot_slackJustifiedCheckpoints
+    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    (flagsSigned : TargetFlagsSigned config checks state)
+    (pendingSigned : PendingSigned config checks state)
+    (large : (state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 →
+      3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
+        2 * stake (fun index => balanceAt state index.toNat)
+          (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset)
+    (block : Root → β)
+    (contains : (state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 →
+      ffgVotes block {vote | SignedVote config checks state vote} ⊆ votes)
+    (settled : JustifiedSettled state) (separated : JustifiedSeparated state)
+    (sets : after.currentJustifiedCheckpoint ≠ state.currentJustifiedCheckpoint →
+      TargetSetsMatch V U W block state after.currentJustifiedCheckpoint.epoch)
+    (chain : (state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 → ∀ (current : Bool) (root : Root),
+      getBlockRoot state (if current then getCurrentEpoch state else getPreviousEpoch state) =
+          .ok root →
+        block (if current then state.currentJustifiedCheckpoint
+          else state.previousJustifiedCheckpoint).root ≤ block root)
+    (holds : SlackJustifiedCheckpoints V U W genesis votes block state)
+    (computed : advanceSlot config checks state = .ok after) :
+    SlackJustifiedCheckpoints V U W genesis votes block after := by
+  obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
+  have cachedFrame := frame_processSlot cachedOk
+  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  have validators : cached.validators = state.validators := by rw [cachedEq]
+  have currentEq : getCurrentEpoch cached = getCurrentEpoch state := by
+    simp only [getCurrentEpoch, cachedFrame.slot]
+  have previousEq : getPreviousEpoch cached = getPreviousEpoch state := by
+    unfold getPreviousEpoch
+    rw [currentEq]
+  unfold epochIfLast at epochedOk
+  split at epochedOk
+  · rename_i boundary
+    have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := by
+      apply Nat.pos_of_ne_zero
+      intro zero
+      have mod := congrArg UInt64.toNat boundary
+      rw [UInt64.toNat_mod, zero, Nat.mod_zero] at mod
+      simp only [UInt64.toNat_zero] at mod
+      omega
+    -- The caching keeps the roots of both recent epochs.
+    have roots : ∀ current : Bool,
+        getBlockRoot cached (if current then getCurrentEpoch state else getPreviousEpoch state) =
+          getBlockRoot state
+            (if current then getCurrentEpoch state else getPreviousEpoch state) := by
+      intro current
+      refine getBlockRoot_processSlot cachedOk (slot_lt_epoch_add_historical positive window ?_)
+      cases current
+      · exact .inr rfl
+      · exact .inl rfl
+    have last : (state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 := by
+      have nextEq : next = state.slot + 1 := by
+        apply UInt64.toNat_inj.mp
+        rw [UInt64.toNat_add, UInt64.toNat_one, ← sum, Nat.mod_eq_of_lt next.toNat_lt]
+      rw [← nextEq]
+      exact boundary
+    have keysBack : KeysKept cached state := KeysKept.of_validators (by rw [validators])
+    have active : ∀ epoch, getActiveValidatorIndices cached epoch =
+        getActiveValidatorIndices state epoch := by
+      intro epoch
+      unfold getActiveValidatorIndices
+      rw [validators]
+    have balances : ∀ index, balanceAt cached index = balanceAt state index := by
+      intro index
+      unfold balanceAt
+      rw [validators]
+    have flagsCached : TargetFlagsSigned config checks cached :=
+      flagsSigned.of_processSlot positive window cachedOk
+    have pendingCached : PendingSigned config checks cached :=
+      pendingSigned.of_processSlot cachedOk
+    have largeCached : 3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
+        2 * stake (fun index => balanceAt cached index.toNat)
+          (getActiveValidatorIndices cached (getCurrentEpoch cached)).toFinset := by
+      simp only [balances, active, currentEq]
+      exact large last
+    have containsCached :
+        ffgVotes block {vote | SignedVote config checks cached vote} ⊆ votes := by
+      rintro _ ⟨signer, signed, rfl⟩
+      exact contains last ⟨signer, signed.of_keys (Nat.le_refl _)
+        cachedFrame.genesisValidatorsRoot.symm keysBack, rfl⟩
+    obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame epochedOk
+    suffices key : SlackJustifiedCheckpoints V U W genesis votes block justified by
+      unfold SlackJustifiedCheckpoints at key ⊢
+      rw [frame.previousJustified, frame.currentJustified]
+      exact key
+    refine processJustificationAndFinalization_slackJustifiedCheckpoints flagsCached pendingCached
+      largeCached block containsCached ?_ ?_ ?_ ?_ ?_ justifiedOk
+    · unfold JustifiedSettled
+      rw [cachedFrame.currentJustified, previousEq]
+      exact settled
+    · exact separated.of_frame cachedFrame
+    · intro changed
+      dsimp only at sets
+      rw [frame.currentJustified] at sets
+      rw [cachedFrame.currentJustified] at changed
+      rcases processJustificationAndFinalization_linkWithChurn flagsCached pendingCached
+        largeCached block containsCached justifiedOk with same | ⟨current, epoch, -⟩
+      · exact absurd (same.trans cachedFrame.currentJustified) changed
+      rw [currentEq, previousEq] at epoch
+      have targetSets := sets changed
+      rw [epoch] at targetSets ⊢
+      intro root rootOk
+      rw [roots] at rootOk
+      simp only [active, balances, currentEq]
+      exact targetSets root rootOk
+    · intro current root rootOk
+      rw [currentEq, previousEq, roots] at rootOk
+      rw [cachedFrame.currentJustified, cachedFrame.previousJustified]
+      exact chain last current root rootOk
+    · unfold SlackJustifiedCheckpoints
+      rw [cachedFrame.previousJustified, cachedFrame.currentJustified]
+      exact holds
+  · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
+    subst epochedOk
+    unfold SlackJustifiedCheckpoints
+    rw [cachedFrame.previousJustified, cachedFrame.currentJustified]
+    exact holds
 
 end EthLib.Consensus
