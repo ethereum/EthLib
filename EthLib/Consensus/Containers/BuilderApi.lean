@@ -5,7 +5,7 @@ public import EthLib.Consensus.Containers.Block
 /-!
 # `Consensus.Containers.BuilderApi`
 
-From Bellatrix to Fulu: the containers of the Builder API.
+The containers of the Builder API, from Bellatrix on.
 
 A validator registers its fee recipient and its gas limit with builders.
 
@@ -19,11 +19,23 @@ Its documents for [Capella], [Deneb] and [Electra] extend the bid and the blinde
 
 The [Fulu] document changes only the blobs bundle, so Fulu keeps the bid and body of Electra.
 
+From Gloas the bid is part of the protocol.
+
+The proposer preferences of the protocol replace registrations.
+
+The Builder API then adds the authentication of a request and preferences for one builder.
+
+The [Gloas validator] document gives their containers.
+
+The [Gloas builder] document gives the authentication data limit and the execution payment cap.
+
 [builder specification]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/bellatrix/builder.md#containers
 [Capella]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/capella/builder.md#containers
 [Deneb]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/deneb/builder.md#containers
 [Electra]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/electra/builder.md#containers
 [Fulu]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/fulu/builder.md#containers
+[Gloas validator]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/gloas/validator.md#containers
+[Gloas builder]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/gloas/builder.md#constants
 -/
 
 @[expose] public section
@@ -34,8 +46,58 @@ open Base Cryptography.Bls Serialization.Ssz
 
 variable {preset : Preset} {fork : Fork}
 
-/-- Whether a fork has the Builder API of this module: from Bellatrix to Fulu. -/
+/-- Whether a fork has the Builder API of registrations and bids: from Bellatrix to Fulu. -/
 abbrev HasBuilderApi (fork : Fork) : Prop := .bellatrix ≤ fork ∧ fork < .glamsterdam
+
+/-- The largest authentication data of a Gloas builder request, in bytes. -/
+def MAX_BUILDER_AUTH_DATA_SIZE : Nat := 4096
+
+/-- The largest execution payment cap, in Gwei. -/
+def MAX_EXECUTION_PAYMENT : Gwei := UINT64_MAX
+
+/-- From Gloas: the agreed authentication data and the proposal slot of a builder request. -/
+structure BuilderRequestAuth where
+  /-- The data agreed with the builder, or by default the hostname of the builder's URL. -/
+  data : SszList UInt8 MAX_BUILDER_AUTH_DATA_SIZE
+  /-- The proposal slot the request authenticates. -/
+  slot : Slot
+
+instance : SszType BuilderRequestAuth :=
+  .container ["data", "slot"] (fun a => (a.data, a.slot))
+    (fun (data, slot) => ⟨data, slot⟩)
+
+/-- From Gloas: request authentication signed by the proposer whose key the endpoint names. -/
+structure SignedBuilderRequestAuth where
+  /-- The authentication data and proposal slot. -/
+  message : BuilderRequestAuth
+  /-- The proposer's signature under the builder request authentication domain. -/
+  signature : BLSSignature
+
+instance : SszType SignedBuilderRequestAuth :=
+  .container ["message", "signature"] (fun a => (a.message, a.signature))
+    (fun (message, signature) => ⟨message, signature⟩)
+
+/-- From Gloas: a proposer's cap on the execution payment counted in a builder's bid. -/
+structure BuilderPreferences where
+  /-- The largest execution payment counted when valuing a bid, in Gwei. -/
+  maxExecutionPayment : Gwei
+
+instance : SszType BuilderPreferences :=
+  .container ["max_execution_payment"] (fun p => p.maxExecutionPayment)
+    (fun maxExecutionPayment => ⟨maxExecutionPayment⟩)
+
+/-- From Gloas: preferences for one builder, with the authentication of the proposer. -/
+structure BuilderPreferencesRequest where
+  /-- The preferences submitted to this builder. -/
+  preferences : BuilderPreferences
+  /-- The signed authentication, whose slot is the proposal slot the preferences apply to.
+
+  Its signature does not cover the preferences. -/
+  auth : SignedBuilderRequestAuth
+
+instance : SszType BuilderPreferencesRequest :=
+  .container ["preferences", "auth"] (fun p => (p.preferences, p.auth))
+    (fun (preferences, auth) => ⟨preferences, auth⟩)
 
 /-- The fee recipient and the gas limit that a validator registers with builders. -/
 structure ValidatorRegistrationV1 where

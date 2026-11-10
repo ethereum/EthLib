@@ -135,14 +135,7 @@ theorem foldlM_applyWithdrawal_builder (gloas : .glamsterdam ≤ fork) {index : 
       obtain ⟨builder, builderOk, set⟩ := step
       obtain ⟨inside, rfl⟩ := setBuilder_ok set
       -- The withdrawal names this builder exactly when its builder index is this one.
-      have named : convertValidatorIndexToBuilderIndex withdrawal.validatorIndex = index ↔
-          withdrawal.validatorIndex = convertBuilderIndexToValidatorIndex index := by
-        constructor
-        · intro same
-          rw [← same, convertBuilderIndexToValidatorIndex_convertValidatorIndexToBuilderIndex
-            flagged.2]
-        · intro same
-          rw [same, convertValidatorIndexToBuilderIndex_convertBuilderIndexToValidatorIndex small]
+      have named := convertValidatorIndexToBuilderIndex_eq_iff flagged.2 small
       by_cases same : convertValidatorIndexToBuilderIndex withdrawal.validatorIndex = index
       · have equal := named.mp same
         simp only [getBuilder, same] at builderOk
@@ -687,12 +680,8 @@ theorem processWithdrawals_sweep {capella : .shapella ≤ fork}
   obtain ⟨pays, distinct⟩ := getValidatorsSweepWithdrawals_sweepPays within sweepOk
   obtain ⟨validator, balance, left, validatorOk, found, leftOk, kind⟩ :=
     withdrawnFrom_of_sweepPays pays distinct inside
-  have member : sweep[k].validatorIndex.toNat < state.validators.data.size := by
-    simp only [getValidator] at validatorOk
-    split at validatorOk
-    · rename_i read
-      exact (Array.getElem?_eq_some_iff.mp read).1
-    · cases validatorOk
+  have member : sweep[k].validatorIndex.toNat < state.validators.data.size :=
+    (Array.getElem?_eq_some_iff.mp (getValidator_eq_ok_iff.mp validatorOk)).1
   obtain ⟨_, lowered⟩ :=
     processWithdrawals_balance_of_registry computed expectedOk full within limit member found
   rw [split] at lowered
@@ -819,6 +808,8 @@ theorem getPendingPartialWithdrawals_pays {electra : .pectra ≤ fork} {start : 
 
 From Gloas, the queued builder withdrawals come first.
 
+The count of queued builder withdrawals read is the count of that first part.
+
 From Electra, the queued partial withdrawals follow.
 
 From Gloas, the sweep of builders follows.
@@ -838,6 +829,7 @@ theorem getExpectedWithdrawals_parts {capella : .shapella ≤ fork}
     ∃ (builders partials buildersSweep sweep : Array Withdrawal)
       (index1 index2 index3 index4 : WithdrawalIndex) (count1 count2 count3 count4 : Nat),
       expected.withdrawals = builders ++ partials ++ buildersSweep ++ sweep ∧
+      expected.processedBuilderWithdrawalsCount = count1 ∧
       (∀ gloas : .glamsterdam ≤ fork, getBuilderWithdrawals state gloas
         (state.nextWithdrawalIndex capella) #[] = .ok (builders, index1, count1)) ∧
       (fork < .glamsterdam → builders = #[] ∧ index1 = state.nextWithdrawalIndex capella) ∧
@@ -855,7 +847,7 @@ theorem getExpectedWithdrawals_parts {capella : .shapella ≤ fork}
     ⟨buildersSweep, index3, count3⟩, buildersSweepOk, ⟨sweep, index4, count4⟩, sweepOk, rfl⟩ :=
     computed
   refine ⟨builders, partials, buildersSweep, sweep, index1, index2, index3, index4, count1,
-    count2, count3, count4, rfl, fun gloas => ?_, fun before => ?_, fun electra => ?_,
+    count2, count3, count4, rfl, rfl, fun gloas => ?_, fun before => ?_, fun electra => ?_,
     fun before => ?_, fun gloas => ?_, fun before => ?_, sweepOk⟩
   · simpa only [gloas, ↓reduceDIte] using buildersOk
   · have outside : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before

@@ -184,6 +184,21 @@ theorem rollbackOnError_of_error_eq_none {snapshot : TransactionState} {evm : Ev
     (h : evm.error = none) : rollbackOnError snapshot evm = evm := by
   simp [rollbackOnError, h]
 
+/-- A frame of no code stops at once, with any lawful gas meter.
+
+The frame it ends with is its start frame, advanced and stopped. -/
+theorem runFrame_startFrame_of_code_empty {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter]
+    {message : Message fork} {state : TransactionState} {substate : Substate} {meter : Meter}
+    (hcode : message.code = .empty) {bound : Nat} {runChild : MessageRunner fork Meter bound}
+    {within} :
+    runFrame (step fork) (step_decreases fork) bound runChild
+        (startFrame message state substate meter) within =
+      .ok (advance { startFrame message state substate meter with running := false }) := by
+  have hs : step fork (startFrame message state substate meter) =
+      .ok (.next (advance { startFrame message state substate meter with running := false })) :=
+    step_of_size_le (by simp [startFrame, hcode])
+  rw [runFrame_of_step_eq_next rfl hs, runFrame_of_running_eq_false rfl]
+
 /-- A frame of no code stops at once, with no error and with the state it starts from. -/
 theorem runFrame_startFrame_empty {message : Message fork} {state : TransactionState}
     {substate : Substate} (hcode : message.code = .empty) {bound : Nat}
@@ -191,15 +206,8 @@ theorem runFrame_startFrame_empty {message : Message fork} {state : TransactionS
     ∃ stopped, runFrame (step fork) (step_decreases fork) bound runChild
         (startFrame (Meter := Nat) message state substate
           (GasMeter.start message.gas message.reservoir)) within =
-        .ok stopped ∧ stopped.error = none ∧ stopped.state = state := by
-  have hs : step fork (startFrame (Meter := Nat) message state substate
-      (GasMeter.start message.gas message.reservoir)) =
-      .ok (.next (advance { startFrame message state substate
-        (GasMeter.start message.gas message.reservoir) with running := false })) :=
-    step_of_size_le (by simp [startFrame, hcode])
-  refine ⟨advance { startFrame (Meter := Nat) message state substate
-    (GasMeter.start message.gas message.reservoir) with running := false }, ?_, rfl, rfl⟩
-  rw [runFrame_of_step_eq_next rfl hs, runFrame_of_running_eq_false rfl]
+        .ok stopped ∧ stopped.error = none ∧ stopped.state = state :=
+  ⟨_, runFrame_startFrame_of_code_empty hcode, rfl, rfl⟩
 
 /-- A message with value to no code ends with no error, in the state that the move gives. -/
 theorem processMessage_empty_value {message : Message fork} {state movedState : TransactionState}

@@ -75,6 +75,12 @@ theorem findCrossCollision_of_injective (hash : ByteArray → Hash32)
     findCrossCollision hash honest proof = none :=
   (findCrossCollision_eq_none_iff hash).mpr fun _ _ _ _ h => hinjective h
 
+/-- When the honest proofs hold no collision, sending them unchanged makes the search find none. -/
+theorem findCrossCollision_self (hash : ByteArray → Hash32) {honest : List ByteArray}
+    (hdistinct : ∀ x ∈ honest, ∀ y ∈ honest, hash x = hash y → x = y) :
+    findCrossCollision hash honest honest = none :=
+  (findCrossCollision_eq_none_iff hash).mpr fun y hy x hx h => hdistinct x hx y hy h
+
 /-- The pair that the search returns holds a node of the sent proof, then an honest node. -/
 theorem mem_of_findCrossCollision (hash : ByteArray → Hash32) {honest proof : List ByteArray}
     {pair : ByteArray × ByteArray} (h : findCrossCollision hash honest proof = some pair) :

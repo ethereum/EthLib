@@ -19,6 +19,10 @@ That query changes no law, since its answer is dropped, but it records the point
 
 The cache and the flag change as before, and each new forward query is logged with its answer.
 
+Each logged pair stays in the cache.
+
+While the flag is down, no two cached pairs share their query or their answer.
+
 With uniform answers from the outside oracle, the output, the cache and the flag keep their law.
 
 A replay forking lemma rewinds a run at one query of an oracle.
@@ -134,6 +138,121 @@ theorem length_log_le_of_mem_support_simulateQ_outsideImpl {α : Type} {oa : Per
     (fun t ht s w hw => by simpa [ht] using length_log_le_of_mem_support_outsideImpl t s w hw)
     (fun t ht s w hw => by simpa [ht] using length_log_le_of_mem_support_outsideImpl t s w hw)
     s z hz
+
+/-! ## The cache and the log -/
+
+/-- What a run with the outside oracle keeps true of its state.
+
+Each pair of the log is a pair of the cache.
+
+While the flag is down, no two cached pairs share their query or their answer.
+
+The flag rises when a new answer repeats a cached value in the direction of its query. -/
+def OutsideInv (s : OutsideState A) : Prop :=
+  (∀ p ∈ s.2, p ∈ s.1.1) ∧ (s.1.2 = false → s.1.1.IsPartialBijection)
+
+omit [FinEnum A] in
+/-- The empty state meets the invariant. -/
+theorem outsideInv_empty : OutsideInv ((([] : PermCache A), false), ([] : List (A × A))) := by
+  refine ⟨fun p hp => by simp at hp, fun _ => ?_⟩
+  simp [PermCache.IsPartialBijection]
+
+/-- A lookup that finds nothing means the query is not a cached query. -/
+private theorem not_mem_map_fst_of_lookup_eq_none {c : PermCache A} {a : A}
+    (h : c.lookup a = none) : a ∉ c.map Prod.fst := fun ha => by
+  obtain ⟨p, hp, hpa⟩ := List.mem_map.1 ha
+  exact ne_of_lookup_eq_none h p hp hpa
+
+/-- A reversed lookup that finds nothing means the answer is not a cached answer. -/
+private theorem not_mem_map_snd_of_lookup_swap_eq_none {c : PermCache A} {b : A}
+    (h : (c.map Prod.swap).lookup b = none) : b ∉ c.map Prod.snd := by
+  have := not_mem_map_fst_of_lookup_eq_none h
+  simpa [Function.comp_def] using this
+
+/-- A new forward pair keeps the invariant. -/
+private theorem outsideInv_forward {s : OutsideState A} (hs : OutsideInv s) {a b : A}
+    (ha : s.1.1.lookup a = none) :
+    OutsideInv ((IndepState.addForward s.1 a b, s.2 ++ [(a, b)]) : OutsideState A) := by
+  obtain ⟨h1, h2⟩ := hs
+  have hna := not_mem_map_fst_of_lookup_eq_none ha
+  refine ⟨fun p hp => ?_, fun hf => ?_⟩
+  · simp only [List.mem_append, List.mem_singleton] at hp
+    rcases hp with hp | rfl
+    · exact List.mem_cons_of_mem _ (h1 p hp)
+    · exact List.mem_cons_self
+  · simp only [Bool.or_eq_false_iff, decide_eq_false_iff_not] at hf
+    obtain ⟨hf1, hf2⟩ := hf
+    obtain ⟨hn1, hn2⟩ := h2 hf1
+    exact ⟨by simpa [hna] using hn1, by simpa [hf2] using hn2⟩
+
+/-- A new inverse pair keeps the invariant. -/
+private theorem outsideInv_inverse {s : OutsideState A} (hs : OutsideInv s) {a b : A}
+    (hb : (s.1.1.map Prod.swap).lookup b = none) :
+    OutsideInv ((IndepState.addInverse s.1 a b, s.2) : OutsideState A) := by
+  obtain ⟨h1, h2⟩ := hs
+  have hnb := not_mem_map_snd_of_lookup_swap_eq_none hb
+  refine ⟨fun p hp => List.mem_cons_of_mem _ (h1 p hp), fun hf => ?_⟩
+  simp only [Bool.or_eq_false_iff, decide_eq_false_iff_not] at hf
+  obtain ⟨hf1, hf2⟩ := hf
+  obtain ⟨hn1, hn2⟩ := h2 hf1
+  exact ⟨by simpa [hf2] using hn1, by simpa [hnb] using hn2⟩
+
+/-- A forward query of `a` that returns `b` leaves the pair `(a, b)` in the cache. -/
+theorem mem_cache_of_mem_support_outsideOracle_inl (a : A) (s : OutsideState A) (z)
+    (hz : z ∈ support ((outsideOracle (.inl a)).run s)) : (a, z.1) ∈ z.2.1.1 := by
+  simp only [outsideOracle, StateT.run] at hz
+  split at hz
+  · rename_i b hb
+    simp only [support_pure, Set.mem_singleton_iff] at hz
+    subst hz
+    exact mem_of_lookup_eq_some hb
+  · simp only [support_bind, support_map, Set.mem_iUnion, Set.mem_image] at hz
+    obtain ⟨_, -, _, -, rfl⟩ := hz
+    exact List.mem_cons_self
+
+/-- One step keeps the invariant. -/
+theorem outsideInv_of_mem_support_outsideImpl (t : (unifSpec + PermSpec A).Domain)
+    {s : OutsideState A} (hs : OutsideInv s) {z} (hz : z ∈ support ((outsideImpl t).run s)) :
+    OutsideInv z.2 := by
+  rcases t with n | a | b
+  · simp only [outsideImpl, StateT.run, support_map, Set.mem_image] at hz
+    obtain ⟨_, -, rfl⟩ := hz
+    exact hs
+  · simp only [outsideImpl, outsideOracle, StateT.run] at hz
+    split at hz
+    · simp only [support_pure, Set.mem_singleton_iff] at hz
+      subst hz
+      exact hs
+    · rename_i ha
+      simp only [support_bind, support_map, Set.mem_iUnion, Set.mem_image] at hz
+      obtain ⟨_, -, _, -, rfl⟩ := hz
+      exact outsideInv_forward hs ha
+  · simp only [outsideImpl, outsideOracle, StateT.run] at hz
+    split at hz
+    · simp only [support_pure, Set.mem_singleton_iff] at hz
+      subst hz
+      exact hs
+    · rename_i hb
+      simp only [support_map, Set.mem_image] at hz
+      obtain ⟨_, -, rfl⟩ := hz
+      exact outsideInv_inverse hs hb
+
+/-- **A run with the outside oracle keeps the invariant.**
+
+Each logged pair stays cached, and while the flag is down the cache is a partial bijection. -/
+theorem outsideInv_of_mem_support_simulateQ_outsideImpl {α : Type} (oa : PermComp A α)
+    {s : OutsideState A} (hs : OutsideInv s) {z : α × OutsideState A}
+    (hz : z ∈ support ((simulateQ outsideImpl oa).run s)) : OutsideInv z.2 := by
+  induction oa using OracleComp.inductionOn generalizing s z with
+  | pure x =>
+    simp only [simulateQ_pure, StateT.run_pure, support_pure, Set.mem_singleton_iff] at hz
+    subst hz
+    exact hs
+  | query_bind t k ih =>
+    simp only [simulateQ_bind, simulateQ_query, OracleQuery.cont_query, id_map,
+      OracleQuery.input_query, StateT.run_bind, support_bind, Set.mem_iUnion] at hz
+    obtain ⟨w, hw, hz'⟩ := hz
+    exact ih w.1 (outsideInv_of_mem_support_outsideImpl t hs hw) hz'
 
 /-! ## The transcript of the outside oracles -/
 

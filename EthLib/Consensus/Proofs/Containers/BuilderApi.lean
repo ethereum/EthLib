@@ -49,6 +49,18 @@ instance : LawfulSszType ValidatorRegistrationV1 :=
 instance : LawfulSszType SignedValidatorRegistrationV1 :=
   .container ⟨rfl, by simp, by decide⟩ (fun _ => rfl) (fun _ => rfl)
 
+instance : LawfulSszType BuilderRequestAuth :=
+  .container ⟨rfl, by simp, by decide⟩ (fun _ => rfl) (fun _ => rfl)
+
+instance : LawfulSszType SignedBuilderRequestAuth :=
+  .container ⟨rfl, by simp, by decide⟩ (fun _ => rfl) (fun _ => rfl)
+
+instance : LawfulSszType BuilderPreferences :=
+  .container ⟨rfl, by simp, by decide⟩ (fun _ => rfl) (fun _ => rfl)
+
+instance : LawfulSszType BuilderPreferencesRequest :=
+  .container ⟨rfl, by simp, by decide⟩ (fun _ => rfl) (fun _ => rfl)
+
 variable [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
   [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat]
 

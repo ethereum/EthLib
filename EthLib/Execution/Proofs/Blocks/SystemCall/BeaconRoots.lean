@@ -27,13 +27,17 @@ Each operation of [the EIP][eip-4788-contract] is a function here.
 
 A theorem runs the code and shows that it computes that function.
 
-It holds from Shapella, which adds PUSH0, up to BPO5, for a frame that counts gas as one number.
+The set specification uses a conservative one-counter budget.
 
-From Dencun up to BPO5, a system call to the contract succeeds.
+It holds from Shapella, the fork that adds PUSH0.
+
+From Glamsterdam, that one-counter frame is a model for the proof, not the meter of EIP-8037.
+
+From Dencun, a system call to the contract succeeds with the gas meter of its fork.
 
 It leaves the storage that the EIP describes.
 
-A system call to an address with no code is not covered here.
+A call to empty code keeps the block state and records the address, at every fork from Dencun.
 
 [eip-4788-bytecode]: https://eips.ethereum.org/EIPS/eip-4788#bytecode
 [eip-4788-contract]: https://eips.ethereum.org/EIPS/eip-4788#beacon-roots-contract
@@ -67,6 +71,10 @@ def CODE_NUMBER : Nat :=
 
 /-- The code of the beacon roots contract, 97 bytes, by EIP-4788. -/
 def CODE : ByteArray := NatCode.ofNat CODE_NUMBER 97
+
+/-- The opcode scan skips PUSH data and finds only instructions supported by both meters. -/
+theorem supportedCode_CODE : SupportedCode CODE = true := by
+  decide +kernel
 
 /-- The slot of the timestamp `t`: `t` modulo 8191. -/
 def timestampSlot (t : U256) : U256 := BitVec.ofNat 256 (t.toNat % HISTORY_BUFFER_LENGTH)
@@ -124,10 +132,10 @@ variable {fork : Fork} {message : Message fork} {gas : Nat} {state : Transaction
 /-- From byte 87, the code writes the word of the input 8191 slots above `idx`.
 
 It then stops with no error and no output. -/
-private theorem set_tail (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam)
+private theorem set_tail (hfork : .shapella ≤ fork)
     (hstatic : message.isStatic = false)
     (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
-    (hgas : 25000 ≤ gas) (idx : U256) :
+    (hgas : 25000 * storageGasScale fork ≤ gas) (idx : U256) :
     Spec fork (At CODE message 87 [idx] .empty gas state substate returnData) fun evm =>
       evm.error = none ∧ evm.output = .empty ∧
       evm.state.getStorage message.currentTarget (U256.toBeBytes (add 8191#256 idx)) =
@@ -136,6 +144,7 @@ private theorem set_tail (hfork : .shapella ≤ fork) (hglam : fork < .glamsterd
         evm.state.getStorage other slot = state.getStorage other slot) ∧
       (∀ other, evm.state.getAccountOptional other = state.getAccountOptional other) ∧
       (∀ codeHash, evm.state.getCode codeHash = state.getCode codeHash) := by
+  have hscale := one_le_storageGasScale fork
   evm_step [CODE, CODE_NUMBER]
   evm_step [CODE, CODE_NUMBER]
   evm_step [CODE, CODE_NUMBER]
@@ -143,10 +152,10 @@ private theorem set_tail (hfork : .shapella ≤ fork) (hglam : fork < .glamsterd
   evm_step [CODE, CODE_NUMBER]
   obtain ⟨s', hs', ho', -, ha', hc', -, h'⟩ := sstore_of_account (code := CODE) (pc := 95)
     (gas := gas - 14) (rest := []) (key := add 8191#256 idx) (new := loadWord message.data 0 32)
-    (Nat.le_trans (by decide) hfork) hglam (by evm_code [CODE, CODE_NUMBER])
+    (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER])
     (by evm_code [CODE, CODE_NUMBER]) hstatic rfl (by simp only [CALL_STIPEND]; omega)
-    (Nat.le_trans (sstoreCost_le (Nat.le_trans (by decide) hfork) hglam _ _ _ _)
-      (by simp only [COLD_STORAGE_ACCESS, STORAGE_SET]; omega)) hacc
+    (Nat.le_trans (sstoreTotalCost_le (Nat.le_trans (by decide) hfork) _ _ _ _)
+      (by omega)) hacc
   refine Triple.seq h' ?_
   refine Spec.consequence (stop (by evm_code [CODE, CODE_NUMBER])
     (by evm_code [CODE, CODE_NUMBER])) (fun _ h => h) ?_
@@ -156,24 +165,27 @@ private theorem set_tail (hfork : .shapella ≤ fork) (hglam : fork < .glamsterd
 
 /-- A call from the system address sets a root, as EIP-4788 describes.
 
-It holds from Shapella up to BPO5, on a frame that may change the state.
+It holds from Shapella, on a frame that may change the state.
 
-The account of the contract exists, and the frame has at least 50,000 gas.
+The account of the contract exists.
+
+The one-counter budget is 50,000 gas before Glamsterdam and 250,000 from Glamsterdam.
 
 The frame stops with no error and no output.
 
 The storage of the contract is then the storage after the timestamp and the input are set.
 
 It keeps the storage of every other account, the accounts and the codes. -/
-theorem spec_set (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam)
+theorem spec_set (hfork : .shapella ≤ fork)
     (hcaller : message.caller = SYSTEM_ADDRESS) (hstatic : message.isStatic = false)
     (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
-    (hgas : 50000 ≤ gas) :
+    (hgas : 50000 * storageGasScale fork ≤ gas) :
     Spec fork (At CODE message 0 [] .empty gas state substate returnData) fun evm =>
       evm.error = none ∧ evm.output = .empty ∧
       WritesStorage message.currentTarget
         (setRoot message.blockEnv.timestamp message.data (storageOf state message.currentTarget))
         state evm.state := by
+  have hscale := one_le_storageGasScale fork
   evm_step [CODE, CODE_NUMBER]
   rw [hcaller, toU256_SYSTEM_ADDRESS]
   evm_step [CODE, CODE_NUMBER]
@@ -190,14 +202,14 @@ theorem spec_set (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam)
   obtain ⟨s1, hs1, ho1, -, ha1, hc1, -, h1⟩ := sstore_of_account (code := CODE) (pc := 86)
     (gas := gas - 37) (rest := [mod message.blockEnv.timestamp 8191#256])
     (key := mod message.blockEnv.timestamp 8191#256) (new := message.blockEnv.timestamp)
-    hberlin hglam (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER]) hstatic rfl
+    hberlin (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER]) hstatic rfl
     (by simp only [CALL_STIPEND]; omega)
-    (Nat.le_trans (sstoreCost_le hberlin hglam _ _ _ _)
-      (by simp only [COLD_STORAGE_ACCESS, STORAGE_SET]; omega)) hacc
+    (Nat.le_trans (sstoreTotalCost_le hberlin _ _ _ _)
+      (by omega)) hacc
   refine Triple.seq h1 ?_
-  refine Spec.consequence (set_tail hfork hglam hstatic (by rw [ha1]; exact hacc)
-    (Nat.le_trans (by simp only [COLD_STORAGE_ACCESS, STORAGE_SET]; omega)
-      (Nat.sub_le_sub_left (sstoreCost_le hberlin hglam _ _ _ _) _)) _) (fun _ h => h) ?_
+  refine Spec.consequence (set_tail hfork hstatic (by rw [ha1]; exact hacc)
+    (Nat.le_trans (by omega)
+      (Nat.sub_le_sub_left (sstoreTotalCost_le hberlin _ _ _ _) _)) _) (fun _ h => h) ?_
   rintro evm ⟨herr, hout, hs2, ho2, ha2, hc2⟩
   rw [mod_eq_timestampSlot] at hs1 ho1 hs2 ho2
   rw [add_timestampSlot] at hs2 ho2
@@ -384,7 +396,7 @@ theorem addedAt_BEACON_ROOTS_ADDRESS :
 theorem delegatedAddress_CODE : delegatedAddress CODE = none := by
   simp [delegatedAddress, isValidDelegation, CODE, NatCode.size_ofNat, DELEGATION_SIZE]
 
-/-- From Dencun up to BPO5, a system call to the contract sets a root.
+/-- From Dencun, a system call to the contract sets a root.
 
 It writes the first 32 bytes of its data as the root.
 
@@ -398,7 +410,7 @@ A block passes the root of its parent beacon block as that data, by EIP-4788.
 
 The call keeps the storage of every other account, the accounts and the codes. -/
 theorem systemCall_set {env : BlockEnvironment fork} {block : State.BlockState} {data : ByteArray}
-    (hfork : .dencun ≤ fork) (hglam : fork < .glamsterdam)
+    (hfork : .dencun ≤ fork)
     (hcode : codeAt block BEACON_ROOTS_ADDRESS = .ok CODE) :
     ∃ out, systemCall env block BEACON_ROOTS_ADDRESS data = .ok out ∧ out.error = none ∧
       out.output = .empty ∧
@@ -406,12 +418,35 @@ theorem systemCall_set {env : BlockEnvironment fork} {block : State.BlockState} 
         (setRoot env.timestamp data (storageOf (.ofBlock block) BEACON_ROOTS_ADDRESS))
         (.ofBlock block) out.state :=
   systemCall_of_writesStorage (P := fun _ => True) (fun _ => .empty) _
-    (Nat.le_trans (by decide) hfork) hglam hcode (by simp [CODE, NatCode.size_ofNat])
+    (Nat.le_trans (by decide) hfork) (fun _ => supportedCode_CODE) hcode
+    (by simp [CODE, NatCode.size_ofNat])
     addedAt_BEACON_ROOTS_ADDRESS delegatedAddress_CODE trivial
     fun message _ _ hcaller htarget hstatic henv hdata hgas hacc _ => by
       subst henv hdata
       rw [← htarget]
-      exact spec_set (Nat.le_trans (by decide) hfork) hglam hcaller hstatic (htarget ▸ hacc)
-        (by rw [hgas]; decide)
+      exact spec_set (Nat.le_trans (by decide) hfork) hcaller hstatic (htarget ▸ hacc)
+        (by rw [hgas]; have := storageGasScale_le fork; simp only [SYSTEM_TRANSACTION_GAS]; omega)
+
+/-- With no beacon roots code, the beacon roots call records its address and changes no block state.
+
+From Pectra the history storage call follows; before Pectra the start calls end there.
+
+This is the silent failure required by [EIP-4788][eip4788].
+
+It holds at every fork from Dencun, with either gas meter.
+
+[eip4788]: https://eips.ethereum.org/EIPS/eip-4788#block-processing -/
+theorem startSystemCalls_of_empty {env : BlockEnvironment fork} {body : BodyState}
+    {parentHash : EthLib.Base.Hash32} (hfork : .dencun ≤ fork)
+    (hcode : codeAt body.block BEACON_ROOTS_ADDRESS = .ok .empty) :
+    startSystemCalls env parentHash body = (do
+      let mid := { body with builder := body.builder.record BEACON_ROOTS_ADDRESS id }
+      if .pectra ≤ fork then do
+        let out ← systemCall env mid.block HISTORY_STORAGE_ADDRESS ⟨parentHash.toArray⟩
+        (mid.join out.state).mapError EvmError.state
+      else pure mid) := by
+  simp only [startSystemCalls, hfork, ↓reduceDIte,
+    systemCall_of_empty (Nat.le_trans (by decide) hfork) hcode addedAt_BEACON_ROOTS_ADDRESS,
+    bind, Except.bind, BodyState.join_recordAccountRead, Except.mapError, pure, Except.pure]
 
 end EthLib.Execution.Blocks.BeaconRoots
