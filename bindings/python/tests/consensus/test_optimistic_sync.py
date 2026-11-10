@@ -255,6 +255,45 @@ def test_gloas_invalidated_payload(first: bytes, expected: list[bytes]):
     assert got == expected
 
 
+# The status of the payload of a block in the node, by its code.
+EMPTY, FULL, PENDING = 0, 1, 2
+
+
+@pytest.mark.parametrize(
+    ("optimistic", "status", "expected"),
+    [
+        # The payload chain of c holds c, b and g, and not a; a full node holds all three payloads.
+        ([GB, GC], FULL, GG),
+        ([GA, GC], FULL, GB),
+        ([GA], FULL, GC),
+        # An empty or pending node holds only the payloads of b and g, so c is never the answer.
+        ([GA], EMPTY, GB),
+        ([GB], EMPTY, GG),
+        ([], PENDING, GB),
+    ],
+    ids=["two optimistic", "a skipped", "verified", "empty", "empty parent", "pending"],
+)
+def test_gloas_latest_verified_ancestor(optimistic: list[bytes], status: int, expected: bytes):
+    got = consensus.latest_verified_ancestor(
+        "minimal", GLOAS_FORK, GLOAS_BLOCKS, optimistic, GC, payload_status=status
+    )
+    assert got == expected
+
+
+@pytest.mark.parametrize(
+    ("optimistic", "start", "status"),
+    [([GG, GB, GC], GC, FULL), ([GB, GG], GC, EMPTY), ([], GG, EMPTY)],
+    ids=["all optimistic", "held all optimistic", "nothing held"],
+)
+def test_gloas_no_verified_ancestor(optimistic: list[bytes], start: bytes, status: int):
+    # Every payload that the node holds is optimistic, or it holds none.
+    with raises(ERROR, "optimistic sync failed with code 39") as info:
+        consensus.latest_verified_ancestor(
+            "minimal", GLOAS_FORK, GLOAS_BLOCKS, optimistic, start, payload_status=status
+        )
+    assert info.value.code == 39
+
+
 RESTRICTED = [0, 1, 5, 6, 7, 8, 9]
 
 
@@ -368,16 +407,113 @@ def test_no_optimistic_sync_before_bellatrix(call, fork: str):
     assert info.value.code == 0
 
 
-def test_no_latest_verified_ancestor_from_gloas():
-    with raises(ERROR, "no optimistic sync at glamsterdam") as info:
-        consensus.latest_verified_ancestor("minimal", GLOAS_FORK, GLOAS_BLOCKS, [], GG)
+@pytest.mark.parametrize("fork", ["phase0", "altair"])
+def test_no_optimistic_node_before_bellatrix(fork: str):
+    with raises(ERROR, f"no optimistic sync at {fork}") as info:
+        consensus.is_optimistic_node("minimal", fork, b"", b"", [], [], ZERO)
     assert info.value.code == 0
 
 
-@pytest.mark.parametrize("fork", ["phase0", "altair", "glamsterdam"])
-def test_no_optimistic_node_outside_bellatrix_to_fulu(fork: str):
-    with raises(ERROR, f"no optimistic sync at {fork}") as info:
-        consensus.is_optimistic_node("minimal", fork, b"", b"", [], [], ZERO)
+# A Gloas case of the consensus-specs vectors, pinned in tests/sources.toml.
+# Its block 1 has its payload imported, and block 2 builds on that payload.
+GLOAS_CASE = (
+    Path(__file__).resolve().parents[4]
+    / "tests/consensus/fork_choice/minimal/gloas/fork_choice/on_block/pyspec_tests"
+    / "on_block_parent_full_accepts_verified_payload"
+)
+BLOCK_1 = bytes.fromhex("29874e204fad82a30293db7910390d39dc70d4e7c5a7302cfbc10a1b8f17dcf4")
+BLOCK_2 = bytes.fromhex("68066a5504528f3329d4ee97b17219501b21c1cdec09843ee5b5357eff6b8054")
+
+
+def _gloas_file(name: str) -> bytes:
+    """The SSZ bytes of a file of the Gloas case, without the Snappy framing."""
+    return snappy.decompress((GLOAS_CASE / f"{name}.ssz_snappy").read_bytes())
+
+
+def _gloas_steps() -> list[consensus.ForkChoiceStep]:
+    """The ticks, blocks and payloads of the Gloas case, as fork choice steps."""
+    steps: list[consensus.ForkChoiceStep] = []
+    for step in YAML(typ="safe").load((GLOAS_CASE / "steps.yaml").read_text()):
+        if "tick" in step:
+            steps.append(("tick", step["tick"]))
+        elif "block" in step:
+            steps.append(("block", _gloas_file(step["block"])))
+        elif "execution_payload" in step:
+            steps.append(("execution_payload", _gloas_file(step["execution_payload"])))
+        elif "checks" not in step:
+            raise ValueError(f"no runner for the step {step}")
+    return steps
+
+
+def _gloas_optimistic_node(roots: list[bytes], status: int, head: bytes = BLOCK_2) -> bool:
+    """Whether the node of the Gloas case is optimistic, with block 2 as its head by default."""
+    return consensus.is_optimistic_node(
+        "minimal",
+        GLOAS_FORK,
+        _gloas_file("anchor_state"),
+        _gloas_file("anchor_block"),
+        _gloas_steps(),
+        roots,
+        head,
+        verify=False,
+        head_payload_status=status,
+    )
+
+
+@pytest.mark.parametrize(
+    ("roots", "status"),
+    [
+        # A full head reads the payload of its block.
+        ([BLOCK_2], FULL),
+        # An empty head reads the payload that its block builds on, that of block 1.
+        ([BLOCK_1], EMPTY),
+        # A pending head reads both.
+        ([BLOCK_2], PENDING),
+        ([BLOCK_1], PENDING),
+    ],
+    ids=["full", "empty", "pending own", "pending parent"],
+)
+def test_gloas_optimistic_head(roots: list[bytes], status: int):
+    assert _gloas_optimistic_node(roots, status) is True
+
+
+@pytest.mark.parametrize(
+    ("roots", "status"),
+    [([BLOCK_1], FULL), ([BLOCK_2], EMPTY), ([], PENDING)],
+    ids=["full", "empty", "pending"],
+)
+def test_gloas_head_not_optimistic(roots: list[bytes], status: int):
+    # The second case of an optimistic node is not yet specified from Gloas.
+    with raises(ERROR, "optimistic sync failed with code 24") as info:
+        _gloas_optimistic_node(roots, status)
+    assert info.value.code == 24
+
+
+# The anchor builds on a payload that the store does not hold.
+GLOAS_ANCHOR_ROOT = gloas_root(_gloas_file("anchor_block"))
+
+
+@pytest.mark.parametrize("status", [EMPTY, PENDING], ids=["empty", "pending"])
+def test_gloas_head_on_a_payload_the_store_lacks(status: int):
+    # Without its own optimistic payload, the head cannot be judged.
+    with raises(ERROR, "optimistic sync failed with code 39") as info:
+        _gloas_optimistic_node([], status, GLOAS_ANCHOR_ROOT)
+    assert info.value.code == 39
+
+
+def test_gloas_pending_head_reads_its_own_payload_first():
+    # Its own optimistic payload settles it before the missing one is read.
+    assert _gloas_optimistic_node([GLOAS_ANCHOR_ROOT], PENDING, GLOAS_ANCHOR_ROOT) is True
+
+
+def test_unknown_head_payload_status():
+    with raises(ERROR, "unknown payload status 3") as info:
+        _gloas_optimistic_node([], 3)
+    assert info.value.code == 0
+    with raises(ERROR, "unknown payload status 3") as info:
+        consensus.latest_verified_ancestor(
+            "minimal", GLOAS_FORK, GLOAS_BLOCKS, [], GC, payload_status=3
+        )
     assert info.value.code == 0
 
 

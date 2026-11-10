@@ -1474,7 +1474,7 @@ py_consensus_is_optimistic_node(
   PyObject* self,
   PyObject* args
 ) {
-  return call_pyvalue_export(eth_consensus_is_optimistic_node, args, 9, FORK_CHOICE_ERROR);
+  return call_pyvalue_export(eth_consensus_is_optimistic_node, args, 10, FORK_CHOICE_ERROR);
 }
 
 PyObject*
@@ -1482,7 +1482,7 @@ py_consensus_latest_verified_ancestor(
   PyObject* self,
   PyObject* args
 ) {
-  return call_pyvalue_export(eth_consensus_latest_verified_ancestor, args, 5, FORK_CHOICE_ERROR);
+  return call_pyvalue_export(eth_consensus_latest_verified_ancestor, args, 6, FORK_CHOICE_ERROR);
 }
 
 PyObject*

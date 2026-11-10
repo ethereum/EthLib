@@ -667,7 +667,7 @@ def bindings : List Binding := [
   ⟨"consensus_latest_verified_ancestor",
     `EthLib.Consensus.Exports.latestVerifiedAncestorExport,
     "(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], " ++
-      "root: bytes) -> bytes",
+      "root: bytes, payload_status: int) -> bytes",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_on_valid_payload", `EthLib.Consensus.Exports.onValidPayloadExport,
     "(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], " ++
@@ -679,7 +679,8 @@ def bindings : List Binding := [
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_is_optimistic_node", `EthLib.Consensus.Exports.isOptimisticNodeExport,
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
-      "verify: bool, config: dict | None, optimistic_roots: list[bytes], head: bytes) -> bool",
+      "verify: bool, config: dict | None, optimistic_roots: list[bytes], head: bytes, " ++
+      "head_payload_status: int) -> bool",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_is_optimistic_restricted_domain",
     `EthLib.Consensus.Exports.isOptimisticRestrictedDomainExport,

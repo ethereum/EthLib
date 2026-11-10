@@ -12,9 +12,13 @@ A block passes the optimistic check exactly when its parent carries a payload or
 
 It is old enough when its slot is far enough before the clock.
 
-The latest verified ancestor of a block is reached through optimistic blocks only.
+Before Gloas, the latest verified ancestor of a node is reached through optimistic blocks only.
 
 It is not optimistic, or its parent root is zero.
+
+From Gloas it is the first payload that the node holds and that is not optimistic.
+
+It fails when there is none, and a node without its payload is never its own answer.
 
 Before Gloas the payload chain of a block is its chain.
 
@@ -32,11 +36,13 @@ A tree filtered from a node is empty exactly when no viable leaf is reached from
 
 So the second case of an optimistic node holds exactly when the filtered tree has no viable leaf.
 
-Before Gloas, a node whose head is optimistic is an optimistic node.
+From Gloas a full head reads its own payload, and an empty one the payload it builds on.
 
-Otherwise it needs a dropped block at or above the justified block.
+A node whose head is optimistic is an optimistic node, at every fork.
 
-From Gloas the latest verified ancestor and the optimistic node are not yet specified, and fail.
+Otherwise, before Gloas, it needs a dropped block at or above the justified block.
+
+From Gloas that second case is not yet specified, and fails.
 
 An optimistic validator may not sign exactly under seven domain types.
 -/
@@ -126,37 +132,32 @@ inductive OptimisticWalk : Root → Root → Prop where
       (notGenesis : block.parentRoot ≠ Vector.replicate 32 0)
       (rest : OptimisticWalk block.parentRoot last) : OptimisticWalk root last
 
-/-- Before Gloas, the latest verified ancestor is reached through optimistic blocks.
+/-- The latest verified block is reached through optimistic blocks.
 
-It is known, and it is not optimistic or its parent root is zero.
-
-From Gloas the function always fails, so the hypothesis never holds there. -/
-theorem latestVerifiedAncestor_spec {root ancestor : Root}
-    (found : store.latestVerifiedAncestor root = .ok ancestor) :
+It is known, and it is not optimistic or its parent root is zero. -/
+theorem latestVerifiedBlock_spec {root ancestor : Root}
+    (found : store.latestVerifiedBlock root = .ok ancestor) :
     store.OptimisticWalk root ancestor ∧ ∃ block, store.blocks[ancestor]? = some block ∧
       (store.isOptimistic ancestor = false ∨ block.parentRoot = Vector.replicate 32 0) := by
-  induction root using latestVerifiedAncestor.induct (store := store) with
-  | case1 root gloas =>
-    rw [latestVerifiedAncestor, ite_eq_left_of_eq_true _ _ (eq_true gloas)] at found
+  induction root using latestVerifiedBlock.induct (store := store) with
+  | case1 root unknown =>
+    rw [latestVerifiedBlock, unknown] at found
     simp [throw, throwThe, MonadExceptOf.throw] at found
-  | case2 root notGloas unknown =>
-    rw [latestVerifiedAncestor, ite_eq_right_of_eq_false _ _ (eq_false notGloas), unknown] at found
-    simp [throw, throwThe, MonadExceptOf.throw] at found
-  | case3 root notGloas block known stops =>
-    rw [latestVerifiedAncestor, ite_eq_right_of_eq_false _ _ (eq_false notGloas), known] at found
+  | case2 root block known stops =>
+    rw [latestVerifiedBlock, known] at found
     simp only [stops, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at found
     subst found
     refine ⟨.here _, block, known, ?_⟩
     simp only [Bool.or_eq_true, Bool.not_eq_eq_eq_not, Bool.not_true, beq_iff_eq] at stops
     exact stops
-  | case4 root notGloas block known goes unknown =>
-    rw [latestVerifiedAncestor, ite_eq_right_of_eq_false _ _ (eq_false notGloas), known] at found
+  | case3 root block known goes unknown =>
+    rw [latestVerifiedBlock, known] at found
     simp only [goes, Bool.false_eq_true, ↓reduceIte] at found
     split at found
     · simp [throw, throwThe, MonadExceptOf.throw] at found
     · simp_all
-  | case5 root notGloas block known goes parent parentFound lower ih =>
-    rw [latestVerifiedAncestor, ite_eq_right_of_eq_false _ _ (eq_false notGloas), known] at found
+  | case4 root block known goes parent parentFound lower ih =>
+    rw [latestVerifiedBlock, known] at found
     simp only [goes, Bool.false_eq_true, ↓reduceIte] at found
     split at found
     · simp_all
@@ -168,8 +169,8 @@ theorem latestVerifiedAncestor_spec {root ancestor : Root}
       simp only [Bool.or_eq_true, Bool.not_eq_eq_eq_not, Bool.not_true, beq_iff_eq,
         not_or, Bool.not_eq_false] at goes
       exact ⟨.parent known goes.1 goes.2 walk, rest⟩
-  | case6 root notGloas block known goes parent parentFound notLower =>
-    rw [latestVerifiedAncestor, ite_eq_right_of_eq_false _ _ (eq_false notGloas), known] at found
+  | case5 root block known goes parent parentFound notLower =>
+    rw [latestVerifiedBlock, known] at found
     simp only [goes, Bool.false_eq_true, ↓reduceIte] at found
     split at found
     · simp_all
@@ -179,11 +180,22 @@ theorem latestVerifiedAncestor_spec {root ancestor : Root}
       simp only [notLower, ↓reduceDIte] at found
       simp [throw, throwThe, MonadExceptOf.throw] at found
 
-/-- From Gloas the latest verified ancestor is not yet specified, and fails. -/
-theorem latestVerifiedAncestor_of_glamsterdam (gloas : .glamsterdam ≤ fork) (root : Root) :
-    store.latestVerifiedAncestor root = .error (.forkNotYetSpecified fork) := by
-  rw [latestVerifiedAncestor, ite_eq_left_of_eq_true _ _ (eq_true gloas)]
-  rfl
+/-- Before Gloas, the latest verified ancestor of a node reads only its block, and walks back. -/
+theorem latestVerifiedAncestor_of_lt_glamsterdam (before : fork < .glamsterdam)
+    (node : ForkChoiceNode) :
+    store.latestVerifiedAncestor node = store.latestVerifiedBlock node.root := by
+  have notGloas : ¬(Fork.glamsterdam ≤ fork) := Nat.not_le_of_lt before
+  rw [latestVerifiedAncestor, ite_eq_right_of_eq_false _ _ (eq_false notGloas)]
+
+/-- Before Gloas, the latest verified ancestor is reached through optimistic blocks.
+
+It is known, and it is not optimistic or its parent root is zero. -/
+theorem latestVerifiedAncestor_spec {node : ForkChoiceNode} {ancestor : Root}
+    (before : fork < .glamsterdam) (found : store.latestVerifiedAncestor node = .ok ancestor) :
+    store.OptimisticWalk node.root ancestor ∧ ∃ block, store.blocks[ancestor]? = some block ∧
+      (store.isOptimistic ancestor = false ∨ block.parentRoot = Vector.replicate 32 0) := by
+  rw [latestVerifiedAncestor_of_lt_glamsterdam store before] at found
+  exact latestVerifiedBlock_spec store found
 
 /-- The chain of a block that is not known fails. -/
 private theorem chain_of_unknown {root : Root} (unknown : store.blocks[root]? = none) :
@@ -736,6 +748,181 @@ theorem mem_payloadChain_trans {root middle last : Root} {roots rest : List Root
   subst afterOk split
   exact List.mem_append_right before onInner
 
+/-- From Gloas, the latest verified ancestor of a node, when one payload it holds is not optimistic.
+
+It is the first such root among those payloads, and every root before it is optimistic.
+
+The status of the node is trusted: a full node must name a payload that the store holds.
+
+A full node holds every payload of its payload chain, and another node all but the first. -/
+theorem latestVerifiedAncestor_of_glamsterdam (gloas : .glamsterdam ≤ fork)
+    {node : ForkChoiceNode} {roots : List Root}
+    (walked : store.payloadChain node.root = .ok roots)
+    (verified : ∃ root ∈ node.heldPayloads roots, store.isOptimistic root = false) :
+    ∃ before ancestor after, store.latestVerifiedAncestor node = .ok ancestor ∧
+      node.heldPayloads roots = before ++ ancestor :: after ∧
+      (∀ optimistic ∈ before, store.isOptimistic optimistic = true) ∧
+      store.isOptimistic ancestor = false := by
+  cases found : (node.heldPayloads roots).find? (!store.isOptimistic ·) with
+  | none =>
+    obtain ⟨root, member, notOptimistic⟩ := verified
+    have := List.find?_eq_none.mp found root member
+    simp [notOptimistic] at this
+  | some ancestor =>
+    obtain ⟨stops, before, after, split, goes⟩ := List.find?_eq_some_iff_append.mp found
+    refine ⟨before, ancestor, after, ?_, split, fun optimistic member => ?_,
+      by simpa using stops⟩
+    · simp only [latestVerifiedAncestor, gloas, ↓reduceIte, walked, bind, Except.bind, found]
+      rfl
+    · simpa using goes optimistic member
+
+/-- From Gloas, a node whose held payloads are all optimistic has no verified ancestor.
+
+The error names the last of those payloads, or the block of the node when it holds none. -/
+theorem latestVerifiedAncestor_eq_error_of_optimistic (gloas : .glamsterdam ≤ fork)
+    {node : ForkChoiceNode} {roots : List Root}
+    (walked : store.payloadChain node.root = .ok roots)
+    (optimistic : ∀ root ∈ node.heldPayloads roots, store.isOptimistic root = true) :
+    store.latestVerifiedAncestor node =
+      .error (.payloadNotVerified ((node.heldPayloads roots).getLastD node.root)) := by
+  have found : (node.heldPayloads roots).find? (!store.isOptimistic ·) = none :=
+    List.find?_eq_none.mpr fun root member => by simp [optimistic root member]
+  simp only [latestVerifiedAncestor, gloas, ↓reduceIte, walked, bind, Except.bind, found]
+  rfl
+
+/-- From Gloas, the latest verified ancestor fails as the payload chain of the block does. -/
+theorem latestVerifiedAncestor_eq_error_of_payloadChain (gloas : .glamsterdam ≤ fork)
+    {node : ForkChoiceNode} {error : ForkChoiceError}
+    (failed : store.payloadChain node.root = .error error) :
+    store.latestVerifiedAncestor node = .error error := by
+  simp only [latestVerifiedAncestor, gloas, ↓reduceIte, failed, bind, Except.bind]
+
+/-- Before Gloas, the head is optimistic exactly when its block is, whatever its status. -/
+theorem isHeadOptimistic_of_lt_glamsterdam (before : fork < .glamsterdam) :
+    store.isHeadOptimistic = .ok (store.isOptimistic store.head.root) := by
+  have notGloas : ¬(Fork.glamsterdam ≤ fork) := Nat.not_le_of_lt before
+  rw [isHeadOptimistic, ite_eq_right_of_eq_false _ _ (eq_false notGloas)]
+  rfl
+
+/-- From Gloas, a full head is optimistic exactly when the payload of its block is. -/
+theorem isHeadOptimistic_of_full (gloas : .glamsterdam ≤ fork)
+    (full : store.head.payloadStatus = .full) :
+    store.isHeadOptimistic = .ok (store.isOptimistic store.head.root) := by
+  rw [isHeadOptimistic, ite_eq_left_of_eq_true _ _ (eq_true gloas), full]
+  rfl
+
+/-- From Gloas, an empty head reads the payload that its block builds on, as a pending one may. -/
+theorem isHeadOptimistic_eq_buildsOnOptimistic_of_empty (gloas : .glamsterdam ≤ fork)
+    (empty : store.head.payloadStatus = .empty) :
+    store.isHeadOptimistic = store.buildsOnOptimistic store.head.root := by
+  rw [isHeadOptimistic, ite_eq_left_of_eq_true _ _ (eq_true gloas), empty]
+
+/-- From Gloas, an empty head reads the payload that its block builds on.
+
+That payload is the second root of the payload chain of the head. -/
+theorem isHeadOptimistic_of_empty (gloas : .glamsterdam ≤ fork)
+    (empty : store.head.payloadStatus = .empty) {roots : List Root} {parent : Root}
+    (walked : store.payloadChain store.head.root = .ok roots) (second : roots[1]? = some parent) :
+    store.isHeadOptimistic = .ok (store.isOptimistic parent) := by
+  rw [isHeadOptimistic_eq_buildsOnOptimistic_of_empty store gloas empty]
+  simp only [buildsOnOptimistic, walked, bind, Except.bind, second]
+  rfl
+
+/-- From Gloas, an empty head is optimistic exactly when the payload its bid names is.
+
+That payload is held by the first block below the head whose bid names the parent block hash. -/
+theorem isHeadOptimistic_of_empty_of_named (gloas : .glamsterdam ≤ fork)
+    (empty : store.head.payloadStatus = .empty) {block : BeaconBlock preset fork} {next : Root}
+    {all : List Root} (found : store.blocks[store.head.root]? = some block)
+    (chained : store.chain store.head.root = .ok (store.head.root :: all))
+    (named : all.find? (store.namesBlockHash gloas
+      (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash) = some next) :
+    store.isHeadOptimistic = .ok (store.isOptimistic next) := by
+  obtain ⟨-, -, -, -, tail, nextWalked, walked⟩ :=
+    payloadChain_of_find?_some store gloas found chained named
+  have first := payloadChain_head? store nextWalked
+  cases tail with
+  | nil => simp at first
+  | cons head rest =>
+    simp only [List.head?_cons, Option.some.injEq] at first
+    subst first
+    exact isHeadOptimistic_of_empty store gloas empty walked rfl
+
+/-- From Gloas, an empty head whose bid names no payload of the store fails.
+
+The store then lacks the payload that the head builds on, so it cannot tell if it is verified. -/
+theorem isHeadOptimistic_of_empty_of_unnamed (gloas : .glamsterdam ≤ fork)
+    (empty : store.head.payloadStatus = .empty) {block : BeaconBlock preset fork}
+    {all : List Root} (found : store.blocks[store.head.root]? = some block)
+    (chained : store.chain store.head.root = .ok (store.head.root :: all))
+    (unnamed : all.find? (store.namesBlockHash gloas
+      (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash) = none) :
+    store.isHeadOptimistic = .error (.payloadNotVerified store.head.root) := by
+  rw [isHeadOptimistic, ite_eq_left_of_eq_true _ _ (eq_true gloas), empty]
+  simp only [buildsOnOptimistic, payloadChain_of_find?_none store gloas found chained unnamed,
+    bind, Except.bind]
+  rfl
+
+/-- From Gloas, a pending head whose own payload is optimistic is optimistic. -/
+theorem isHeadOptimistic_of_pending_of_optimistic (gloas : .glamsterdam ≤ fork)
+    (pending : store.head.payloadStatus = .pending)
+    (own : store.isOptimistic store.head.root = true) : store.isHeadOptimistic = .ok true := by
+  rw [isHeadOptimistic, ite_eq_left_of_eq_true _ _ (eq_true gloas), pending]
+  simp only [own, ↓reduceIte]
+  rfl
+
+/-- From Gloas, a pending head whose own payload is not optimistic reads as an empty head. -/
+theorem isHeadOptimistic_of_pending_of_not_optimistic (gloas : .glamsterdam ≤ fork)
+    (pending : store.head.payloadStatus = .pending)
+    (own : store.isOptimistic store.head.root = false) :
+    store.isHeadOptimistic = store.buildsOnOptimistic store.head.root := by
+  rw [isHeadOptimistic, ite_eq_left_of_eq_true _ _ (eq_true gloas), pending]
+  simp only [own, Bool.false_eq_true, ↓reduceIte]
+
+/-- The roots of a payload chain are distinct. -/
+theorem payloadChain_nodup {root : Root} {roots : List Root}
+    (walked : store.payloadChain root = .ok roots) : roots.Nodup := by
+  obtain ⟨all, chained, sublist⟩ := payloadChain_sublist store walked
+  exact sublist.nodup (chain_nodup store chained)
+
+/-- From Gloas, a node that does not hold its own payload is never its own verified ancestor. -/
+theorem latestVerifiedAncestor_ne_root (gloas : .glamsterdam ≤ fork) {node : ForkChoiceNode}
+    (notFull : node.payloadStatus ≠ .full) {ancestor : Root}
+    (found : store.latestVerifiedAncestor node = .ok ancestor) : ancestor ≠ node.root := by
+  cases walked : store.payloadChain node.root with
+  | error error =>
+    rw [latestVerifiedAncestor_eq_error_of_payloadChain store gloas walked] at found
+    cases found
+  | ok roots =>
+    have first := payloadChain_head? store walked
+    have distinct := payloadChain_nodup store walked
+    cases roots with
+    | nil => simp at first
+    | cons head tail =>
+      simp only [List.head?_cons, Option.some.injEq] at first
+      subst first
+      have held : node.heldPayloads (node.root :: tail) = tail := by
+        simp [ForkChoiceNode.heldPayloads, notFull]
+      by_cases verified : ∃ root ∈ tail, store.isOptimistic root = false
+      · obtain ⟨before, answer, after, ok, split, -, -⟩ :=
+          latestVerifiedAncestor_of_glamsterdam store gloas walked (by rw [held]; exact verified)
+        rw [ok, Except.ok.injEq] at found
+        subst found
+        intro same
+        rw [held] at split
+        have member : answer ∈ tail := by simp [split]
+        exact (List.nodup_cons.mp distinct).1 (same ▸ member)
+      · have optimistic : ∀ root ∈ node.heldPayloads (node.root :: tail),
+            store.isOptimistic root = true := by
+          intro root member
+          rw [held] at member
+          cases on : store.isOptimistic root
+          · exact absurd ⟨root, member, on⟩ verified
+          · rfl
+        rw [latestVerifiedAncestor_eq_error_of_optimistic store gloas walked optimistic]
+          at found
+        cases found
+
 /-- A valid payload removes exactly the roots of its payload chain from the optimistic set.
 
 Those are the block and its known ancestors whose payloads it builds on.
@@ -748,7 +935,7 @@ theorem onValidPayload_spec {root : Root} {after : OptimisticStore preset fork}
     ∃ ancestors, store.payloadChain root = .ok ancestors ∧
       (∀ optimistic, optimistic ∈ after.optimisticRoots ↔
         optimistic ∈ store.optimisticRoots ∧ optimistic ∉ ancestors) ∧
-      after.headBlockRoot = store.headBlockRoot ∧ after.blocks = store.blocks := by
+      after.head = store.head ∧ after.blocks = store.blocks := by
   simp only [onValidPayload, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at updated
   obtain ⟨ancestors, chained, rfl⟩ := updated
   refine ⟨ancestors, chained, fun optimistic => ?_, rfl, rfl⟩
@@ -766,7 +953,7 @@ theorem onInvalidatedPayload_spec {first : Root} {after : OptimisticStore preset
     (∀ optimistic, optimistic ∈ after.optimisticRoots ↔
       optimistic ∈ store.optimisticRoots ∧
         ∃ chain, store.payloadChain optimistic = .ok chain ∧ first ∉ chain) ∧
-      after.headBlockRoot = store.headBlockRoot ∧ after.blocks = store.blocks := by
+      after.head = store.head ∧ after.blocks = store.blocks := by
   simp only [onInvalidatedPayload, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at updated
   obtain ⟨kept, keptOk, rfl⟩ := updated
   refine ⟨fun optimistic => ?_, rfl, rfl⟩
@@ -899,21 +1086,27 @@ theorem hasNoViableBranch_eq_ok_true_iff
 
 end Store
 
-/-- Before Gloas, a node whose head is optimistic is an optimistic node, whatever its tree. -/
+/-- A node whose head is optimistic is an optimistic node, whatever its tree, at every fork. -/
 theorem isOptimisticNode_of_isHeadOptimistic {config : Config}
     {optimistic : OptimisticStore preset fork} (store : Store preset fork)
-    (before : fork < .glamsterdam) (head : optimistic.isHeadOptimistic = true) :
+    (head : optimistic.isHeadOptimistic = .ok true) :
     isOptimisticNode config optimistic store = .ok true := by
-  have notGloas : ¬(Fork.glamsterdam ≤ fork) := Nat.not_le_of_lt before
-  simp [isOptimisticNode, head, notGloas]
+  simp only [isOptimisticNode, head, bind, Except.bind, ↓reduceIte]
   rfl
 
-/-- From Gloas whether a node is optimistic is not yet specified, and fails. -/
+/-- A node fails, at every fork, as the optimism of its head fails. -/
+theorem isOptimisticNode_of_isHeadOptimistic_error {config : Config}
+    {optimistic : OptimisticStore preset fork} (store : Store preset fork)
+    {error : ForkChoiceError} (failed : optimistic.isHeadOptimistic = .error error) :
+    isOptimisticNode config optimistic store = .error error := by
+  simp only [isOptimisticNode, failed, bind, Except.bind]
+
+/-- From Gloas, when the head is not optimistic, the second case is not yet specified, and fails. -/
 theorem isOptimisticNode_of_glamsterdam {config : Config}
-    (optimistic : OptimisticStore preset fork) (store : Store preset fork)
-    (gloas : .glamsterdam ≤ fork) :
+    {optimistic : OptimisticStore preset fork} (store : Store preset fork)
+    (gloas : .glamsterdam ≤ fork) (head : optimistic.isHeadOptimistic = .ok false) :
     isOptimisticNode config optimistic store = .error (.forkNotYetSpecified fork) := by
-  simp [isOptimisticNode, gloas]
+  simp only [isOptimisticNode, head, bind, Except.bind, Bool.false_eq_true, ↓reduceIte, gloas]
   rfl
 
 /-- Before Gloas, a node whose head is not optimistic is optimistic exactly in the second case.
@@ -921,7 +1114,7 @@ theorem isOptimisticNode_of_glamsterdam {config : Config}
 That case needs a dropped block at or above the justified block, then no viable branch. -/
 theorem isOptimisticNode_of_not_isHeadOptimistic {config : Config}
     {optimistic : OptimisticStore preset fork} (store : Store preset fork)
-    (head : optimistic.isHeadOptimistic = false) (before : fork < .glamsterdam)
+    (head : optimistic.isHeadOptimistic = .ok false) (before : fork < .glamsterdam)
     {dropped : Bool} (found : optimistic.invalidatedAbove store = .ok dropped) :
     isOptimisticNode config optimistic store =
       if dropped then store.hasNoViableBranch config else .ok false := by

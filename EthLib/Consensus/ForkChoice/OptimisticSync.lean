@@ -28,6 +28,8 @@ The store of the fork choice removes those blocks, and the optimistic store keep
 
 A node is optimistic when its head is optimistic.
 
+From Gloas the head is a block with or without its payload, which decides the payload it reads.
+
 It is also optimistic when invalid payloads left its block tree with no viable branch.
 
 That needs a block dropped at or above the justified block, and no viable leaf left.
@@ -66,9 +68,23 @@ An invalid one clears itself and only the payloads that build on it.
 
 From Gloas the rule of the latest valid hash is not defined, so the caller names the first block.
 
-From Gloas the latest verified ancestor is not yet specified here.
+From Gloas the latest verified ancestor of a node reads only the payloads that the node holds.
 
-Neither is an optimistic node, whose head is a block with or without its payload.
+So a block without its payload is never its own verified ancestor.
+
+From Gloas the store may lack the payload that a block builds on.
+
+A node without its own payload is then neither optimistic nor not, and the rules fail.
+
+That happens at an empty first block of Gloas, which builds on a payload of Fulu.
+
+It happens too at an empty anchor of a store started from a checkpoint.
+
+From Gloas the status of a node is trusted: a full node must name a payload that the store holds.
+
+From Gloas the second case of an optimistic node is not yet specified here.
+
+It needs the removal of an invalid payload from the store of the fork choice.
 
 The store holds the blocks of one fork, so a payload chain never crosses into Fulu.
 
@@ -95,8 +111,10 @@ structure OptimisticStore (preset : Preset) (fork : Fork) where
 
   From Gloas, the roots of the blocks whose payload was imported optimistically, not yet judged. -/
   optimisticRoots : List Root
-  /-- The root of the head block. -/
-  headBlockRoot : Root
+  /-- The head of the fork choice: the root of a block and the status of its payload.
+
+  Before Gloas only the root is read. -/
+  head : ForkChoiceNode
   /-- The blocks that the node imported, fully or optimistically. -/
   blocks : Std.TreeMap Root (BeaconBlock preset fork)
 
@@ -140,10 +158,6 @@ variable (store : OptimisticStore preset fork)
 /-- Whether a block, by its root, is optimistic. -/
 def isOptimistic (root : Root) : Bool :=
   store.optimisticRoots.contains root
-
-/-- Whether the head of the node is optimistic, the first case of an optimistic node. -/
-def isHeadOptimistic : Bool :=
-  store.isOptimistic store.headBlockRoot
 
 /-- The roots of a known block and of its known ancestors, from the block up.
 
@@ -205,6 +219,44 @@ def payloadChain (root : Root) : Except ForkChoiceError (List Root) := do
   if gloas : .glamsterdam ≤ fork then return store.payloadsOnChain gloas none roots
   else return roots
 
+/-- From Gloas: whether a known block builds on an optimistic payload.
+
+That payload is the second root of the payload chain of the block.
+
+It fails as the payload chain of the block does.
+
+It also fails when the chain has no second root, since the store then lacks that payload.
+
+That happens at the first block of Gloas, which builds on a payload of Fulu. -/
+def buildsOnOptimistic (root : Root) : Except ForkChoiceError Bool := do
+  let some parent := (← store.payloadChain root)[1]? | throw (.payloadNotVerified root)
+  return store.isOptimistic parent
+
+/-- Whether the head of the node is optimistic, the first case of an optimistic node.
+
+Before Gloas it is whether the head block is optimistic.
+
+From Gloas a full head reads the payload of its block.
+
+An empty head reads the payload that its block builds on.
+
+A pending head stands for both: it reads the payload of its block, then the one it builds on.
+
+The search of the head never stops at a pending node, and that reading is a choice of EthLib.
+
+From Gloas an empty head fails as the read of the payload its block builds on does.
+
+A pending head fails that way only when the payload of its block is not optimistic. -/
+def isHeadOptimistic : Except ForkChoiceError Bool :=
+  if .glamsterdam ≤ fork then
+    match store.head.payloadStatus with
+    | .full => return store.isOptimistic store.head.root
+    | .empty => store.buildsOnOptimistic store.head.root
+    | .pending =>
+      if store.isOptimistic store.head.root then return true
+      else store.buildsOnOptimistic store.head.root
+  else return store.isOptimistic store.head.root
+
 /-- Two known blocks, by root, where the bid of the first builds on the payload of the second.
 
 The parent block hash of the first bid is the block hash of the second bid.
@@ -217,19 +269,16 @@ def PayloadLink (child parent : Root) : Prop :=
     store.blocks[parent]? = some parentBlock ∧
     Store.parentPayloadStatus childBlock parentBlock = .full
 
-/-- The latest block of the chain of a known block that is not optimistic, by root.
-
-The walk also stops at a block whose parent root is zero, the genesis block.
+/-- Before Gloas: the latest block of the chain of a known block that is not optimistic, by root.
 
 The guide assumes that the execution layer never found the block itself invalid.
 
+The walk follows parent roots, and also stops at the genesis block, whose parent root is zero.
+
 It fails when an optimistic block on the way has a parent that is not known.
 
-It also fails when the block is not known, or when a parent is not at a lower slot.
-
-From Gloas it is not yet specified, and fails. -/
-def latestVerifiedAncestor (root : Root) : Except ForkChoiceError Root :=
-  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork) else
+It also fails when the block is not known, or when a parent is not at a lower slot. -/
+def latestVerifiedBlock (root : Root) : Except ForkChoiceError Root :=
   match _found : store.blocks[root]? with
   | none => throw (.unknownBlock root)
   | some block =>
@@ -238,12 +287,46 @@ def latestVerifiedAncestor (root : Root) : Except ForkChoiceError Root :=
       match _parentFound : store.blocks[block.parentRoot]? with
       | none => throw (.unknownBlock block.parentRoot)
       | some parent =>
-        if _lower : parent.slot < block.slot then latestVerifiedAncestor block.parentRoot
+        if _lower : parent.slot < block.slot then latestVerifiedBlock block.parentRoot
         else throw (.parentSlotNotLower root)
 termination_by (store.blocks[root]?.map (·.slot.toNat)).getD 0
 decreasing_by
   simp only [_found, _parentFound, Option.map_some, Option.getD_some]
   exact UInt64.lt_iff_toNat_lt.mp _lower
+
+/-- From Gloas: the roots of a payload chain whose payloads a node of its block holds.
+
+A full node holds the payload of its block, so all of them; the caller vouches for that status.
+
+An empty or pending node holds only the payloads that its block builds on: all but the first. -/
+def _root_.EthLib.Consensus.ForkChoiceNode.heldPayloads (node : ForkChoiceNode)
+    (roots : List Root) : List Root :=
+  if node.payloadStatus = .full then roots else roots.tail
+
+/-- The latest block of the chain of a node whose payload is not optimistic, by root.
+
+Before Gloas it reads only the block of the node, and walks its chain.
+
+From Gloas it is the first root not optimistic among the payloads that the node holds.
+
+A full node must name a payload that the store holds, which the rule does not check.
+
+A pending node stands for its block whatever its payload, so it reads as empty.
+
+That reading is a choice of EthLib.
+
+From Gloas it fails when every payload that the node holds is optimistic, or when it holds none.
+
+The error then names the last root of those payloads, or the block of the node.
+
+It also fails as the payload chain of the block does. -/
+def latestVerifiedAncestor (node : ForkChoiceNode) : Except ForkChoiceError Root :=
+  if .glamsterdam ≤ fork then do
+    let held := node.heldPayloads (← store.payloadChain node.root)
+    let some ancestor := held.find? (!store.isOptimistic ·)
+      | throw (.payloadNotVerified (held.getLastD node.root))
+    return ancestor
+  else store.latestVerifiedBlock node.root
 
 /-- The optimistic roots after the payload of a known block is found valid.
 
@@ -327,11 +410,13 @@ The guide asks that every viable branch was invalidated, which needs history the
 
 This rule approximates it: one invalidated block above the justified block is enough.
 
-From Gloas the head is a block with or without its payload, and the rule is not yet specified. -/
+From Gloas the second case is not yet specified, and the rule fails when the head is not optimistic.
+
+It also fails as the optimism of the head does. -/
 def isOptimisticNode (config : Config) (optimistic : OptimisticStore preset fork)
     (store : Store preset fork) : Except ForkChoiceError Bool := do
+  if ← optimistic.isHeadOptimistic then return true
   if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
-  if optimistic.isHeadOptimistic then return true
   if !(← optimistic.invalidatedAbove store) then return false
   store.hasNoViableBranch config
 
