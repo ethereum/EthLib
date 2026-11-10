@@ -1790,9 +1790,15 @@ It also assumes that the increment of the preset is a whole number of 100 Gwei, 
 No theorem yet derives that from the state transition.
 The update of effective balances keeps it, but the other steps and the upgrades have no proof.
 It also assumes that each supporter of the block is a member of the committees of the range.
-Before Gloas the store keeps the target epoch and the root of each latest vote, not its slot, so no theorem yet proves that.
-From Gloas it keeps the slot, but the committees of the vote must still match those of the head.
+No theorem yet proves that assumption.
 The store checks a vote against the committees in the state of its target, while the rule reads them in the state of the head.
+In a store with a forward clock, `Store.ForwardReachable.votesHaveOrigins` gives each latest vote the facts of its attestation.
+From those facts, `VoteOrigin.exists_mem_committee` (`Consensus/Proofs/ForkChoice/VoteOrigins.lean`) places the voter in a committee of the slot of its attestation, in the state of its target.
+`mem_getCommitteesBetweenSlots` (`Consensus/Proofs/ForkChoice/FastConfirmation.lean`) places each member of a committee of a slot of the range, in the state of the head, among the members that the rule reads.
+What remains is that the slot of the vote lies in the range, and that the two states agree on the count and the committees of that slot.
+They should agree when both states hold the same RANDAO mix of the epoch `MIN_SEED_LOOKAHEAD + 1` epochs before the epoch of the slot, two in both presets, and the same active validators in the epoch of the slot.
+No theorem yet proves that.
+For a range with part of an epoch that should hold when the head descends from the block, since the range then lies in the epoch of the block and the next one.
 Both corollaries apply `lt_two_mul_honest_supportersOf_of_weighed`, which builds those sets for any `W` that holds the supporters and the active members of the committees, and whose stake the weight covers.
 `lt_two_mul_honest_supportersOf_of_covered` drops that assumption when the range of the adversary holds a whole epoch.
 Its set `W` is then every validator active in the source of balances, which holds each supporter.

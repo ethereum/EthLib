@@ -30,9 +30,11 @@ With these sets, Lemmas 4 and 3 of the paper hold for a block that the store con
 
 They need each supporter to be a member of the committees of the range.
 
-Before Gloas the store does not record the slot of a latest vote, so that hypothesis stays.
+No theorem yet proves it.
 
-From Gloas it records the slot, but the committees of the vote must still match those of the head.
+The store checks a vote against the committees in the state of its target.
+
+The rule reads them in the state of the head, and the two must agree on the slot of the vote.
 
 A range with a whole epoch is weighed by the total active balance of the source of balances.
 

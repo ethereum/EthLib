@@ -102,6 +102,24 @@ theorem VoteOrigin.mono {validator : ValidatorIndex} {attestation : Attestation 
     ⟨targetState, indexed, states state, committees, indexedOk, voter⟩,
     ⟨later, laterOk, UInt64.lt_of_lt_of_le lt laterLe⟩⟩
 
+/-- The voter of a vote sits in a committee of the slot of its attestation, in its target state.
+
+Its index is below the count of committees per slot of the epoch of the slot. -/
+theorem VoteOrigin.exists_mem_committee {validator : ValidatorIndex}
+    {attestation : Attestation preset fork}
+    (origin : store.VoteOrigin config validator attestation) :
+    ∃ targetState index committee,
+      store.checkpointStates[attestation.data.target]? = some targetState ∧
+      index < getCommitteeCountPerSlot targetState
+        (computeEpochAtSlot preset attestation.data.slot) ∧
+      getBeaconCommittee targetState attestation.data.slot index = .ok committee ∧
+      validator ∈ committee := by
+  obtain ⟨targetState, indexed, state, checked, indexedOk, voter⟩ := origin.committees
+  obtain ⟨index, committee, below, committeeOk, member⟩ :=
+    exists_mem_getBeaconCommittee_of_checkAttestationCommittees checked indexedOk voter
+  rw [origin.targetEpoch] at below
+  exact ⟨targetState, index, committee, state, below, committeeOk, member⟩
+
 /-- The latest votes keep their facts in a store with the same votes, blocks, states and clock. -/
 private theorem VotesHaveOrigins.of_same (holds : store.VotesHaveOrigins config)
     (messages : after.latestMessages = store.latestMessages)

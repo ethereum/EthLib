@@ -965,41 +965,6 @@ theorem committeesAttestersOf_cons_of_attesterShuffle {state : BeaconState prese
         (offset + committee.size))) := by
   simp only [committeesAttestersOf, getBeaconCommittee_eq, shuffleOk, bind, Except.bind]
 
-/-- From Electra: each attester of a list of committees is active in the epoch of the slot.
-
-The committees are cut from the shuffle of that epoch, which has a value. -/
-theorem mem_of_committeesAttestersOf {state : BeaconState preset fork} {slot : Slot}
-    {active : Array ValidatorIndex} {shuffled : Array UInt64}
-    (shuffleOk : attesterShuffle state (computeEpochAtSlot preset slot) = .ok (active, shuffled))
-    {bits : Array Bool} {committees : List CommitteeIndex} {offset : Nat}
-    {attesters : List ValidatorIndex}
-    (computed : committeesAttestersOf preset slot bits
-      (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)) active shuffled committees
-      offset = .ok attesters)
-    {attester : ValidatorIndex} (mem : attester ∈ attesters) :
-    attester ∈ getActiveValidatorIndices state (computeEpochAtSlot preset slot) := by
-  induction committees generalizing offset attesters with
-  | nil =>
-    cases computed
-    simp at mem
-  | cons index rest ih =>
-    simp only [committeesAttestersOf_cons_of_attesterShuffle shuffleOk, bind, Except.bind, pure,
-      Except.pure] at computed
-    split at computed
-    · cases computed
-    rename_i committee committeeOk
-    split at computed
-    · cases computed
-    rename_i here hereOk
-    split at computed
-    · cases computed
-    rename_i later laterOk
-    cases computed
-    rcases List.mem_append.mp mem with inHere | inLater
-    · exact mem_getActiveValidatorIndices_of_getBeaconCommittee committeeOk
-        (mem_of_committeeAttesters hereOk inHere)
-    · exact ih laterOk inLater
-
 /-- A committee that has a value comes from a shuffle of the epoch of its slot that has one. -/
 theorem attesterShuffle_ok_of_getBeaconCommittee {state : BeaconState preset fork}
     {slot : Slot} {index : CommitteeIndex} {committee : Array ValidatorIndex}
@@ -1073,24 +1038,72 @@ theorem getAttestingIndices_ok {state : BeaconState preset fork}
     · simp only [shuffleOk, bind, Except.bind] at computed
       cases computed
 
-/-- Each validator that an attestation shows as a signer is active in the epoch of its slot. -/
-theorem mem_getActiveValidatorIndices_of_getAttestingIndices {state : BeaconState preset fork}
+/-- Each signer of an attestation sits in one of the committees that the attestation names.
+
+Before Electra that committee has the index of the attestation.
+
+From Electra its index is one of the committee bits, as [EIP-7549] specifies.
+
+[EIP-7549]: https://eips.ethereum.org/EIPS/eip-7549#consensus-layer
+-/
+theorem exists_mem_getBeaconCommittee_of_getAttestingIndices {state : BeaconState preset fork}
     {attestation : Attestation preset fork} {attesters : List ValidatorIndex}
     (computed : getAttestingIndices state attestation = .ok attesters)
     {attester : ValidatorIndex} (mem : attester ∈ attesters) :
-    attester ∈
-      getActiveValidatorIndices state (computeEpochAtSlot preset attestation.data.slot) := by
+    ∃ index committee,
+      (if electra : .pectra ≤ fork then
+        index ∈ getCommitteeIndices (attestation.committeeBits electra)
+      else index = attestation.data.index) ∧
+      getBeaconCommittee state attestation.data.slot index = .ok committee ∧
+      attester ∈ committee := by
   rcases getAttestingIndices_ok computed with rfl | ⟨active, shuffled, shuffleOk, computed⟩
   · simp at mem
   unfold attestingIndicesOf at computed
   split at computed
-  · simp only [bind, Except.bind, pure, Except.pure] at computed
+  · rename_i electra
+    simp only [bind, Except.bind, pure, Except.pure] at computed
     split at computed
     · cases computed
     rename_i listed listedOk
     cases computed
-    exact mem_of_committeesAttestersOf shuffleOk listedOk (mem_sortedSet.mp mem)
-  · simp only [bind, Except.bind, pure, Except.pure] at computed
+    -- Each attester of the walk sits in a committee of the list that the walk reads.
+    have walk : ∀ {committees : List CommitteeIndex} {offset : Nat} {listed : List ValidatorIndex},
+        committeesAttestersOf preset attestation.data.slot attestation.aggregationBits.bits
+          (getCommitteeCountPerSlot state (computeEpochAtSlot preset attestation.data.slot))
+          active shuffled committees offset = .ok listed →
+        attester ∈ listed → ∃ index ∈ committees, ∃ committee,
+          getBeaconCommittee state attestation.data.slot index = .ok committee ∧
+          attester ∈ committee := by
+      intro committees
+      induction committees with
+      | nil =>
+        intro offset listed computed mem
+        cases computed
+        simp at mem
+      | cons index rest ih =>
+        intro offset listed computed mem
+        simp only [committeesAttestersOf_cons_of_attesterShuffle shuffleOk, bind, Except.bind,
+          pure, Except.pure] at computed
+        split at computed
+        · cases computed
+        rename_i committee committeeOk
+        split at computed
+        · cases computed
+        rename_i here hereOk
+        split at computed
+        · cases computed
+        rename_i later laterOk
+        cases computed
+        rcases List.mem_append.mp mem with inHere | inLater
+        · exact ⟨index, List.mem_cons_self, committee, committeeOk,
+            mem_of_committeeAttesters hereOk inHere⟩
+        · obtain ⟨other, named, committee, committeeOk, inCommittee⟩ := ih laterOk inLater
+          exact ⟨other, List.mem_cons_of_mem _ named, committee, committeeOk, inCommittee⟩
+    obtain ⟨index, named, committee, committeeOk, inCommittee⟩ :=
+      walk listedOk (mem_sortedSet.mp mem)
+    exact ⟨index, committee, by simpa [electra] using named, committeeOk, inCommittee⟩
+  · rename_i electra
+    simp only [bind, Except.bind, pure, Except.pure] at computed
     split at computed
     · cases computed
     rename_i committee committeeOk
@@ -1101,8 +1114,19 @@ theorem mem_getActiveValidatorIndices_of_getAttestingIndices {state : BeaconStat
     have readOk : getBeaconCommittee state attestation.data.slot attestation.data.index =
         .ok committee := by
       simp only [getBeaconCommittee_eq, shuffleOk, bind, Except.bind, committeeOk]
-    exact mem_getActiveValidatorIndices_of_getBeaconCommittee readOk
-      (mem_of_committeeAttesters listedOk (mem_sortedSet.mp mem))
+    exact ⟨_, committee, by simp [electra], readOk,
+      mem_of_committeeAttesters listedOk (mem_sortedSet.mp mem)⟩
+
+/-- Each validator that an attestation shows as a signer is active in the epoch of its slot. -/
+theorem mem_getActiveValidatorIndices_of_getAttestingIndices {state : BeaconState preset fork}
+    {attestation : Attestation preset fork} {attesters : List ValidatorIndex}
+    (computed : getAttestingIndices state attestation = .ok attesters)
+    {attester : ValidatorIndex} (mem : attester ∈ attesters) :
+    attester ∈
+      getActiveValidatorIndices state (computeEpochAtSlot preset attestation.data.slot) := by
+  obtain ⟨_, _, -, committeeOk, inCommittee⟩ :=
+    exists_mem_getBeaconCommittee_of_getAttestingIndices computed mem
+  exact mem_getActiveValidatorIndices_of_getBeaconCommittee committeeOk inCommittee
 
 /-- The validators that an attestation shows as signers increase strictly. -/
 theorem getAttestingIndices_sorted {state : BeaconState preset fork}
@@ -1117,20 +1141,6 @@ theorem getAttestingIndices_sorted {state : BeaconState preset fork}
     repeat' (split at computed; · cases computed)
     cases computed
     exact sortedSet_sorted _
-
-/-- The indices of an indexed attestation increase strictly, as its validity check asks. -/
-theorem getIndexedAttestation_sorted {state : BeaconState preset fork}
-    {attestation : Attestation preset fork} {indexed : IndexedAttestation preset fork}
-    (computed : getIndexedAttestation state attestation = .ok indexed) :
-    indexed.attestingIndices.data.toList.Pairwise (· < ·) := by
-  simp only [getIndexedAttestation, indexedAttestationOf, bind, Except.bind] at computed
-  split at computed
-  · cases computed
-  rename_i attesters attestersOk
-  split at computed
-  · cases computed
-    simpa using getAttestingIndices_sorted attestersOk
-  · cases computed
 
 /-- The pass that drops repeats adds at most one index for each index it reads. -/
 theorem length_foldl_keepNew_le (indices kept : List ValidatorIndex) :
@@ -1256,6 +1266,30 @@ theorem getIndexedAttestation_eq_error_iff {state : BeaconState preset fork}
     · rename_i over
       exact absurd (fun before => Nat.le_trans (length_getAttestingIndices_le attestersOk)
         (attestation.aggregationBits.bound before)) over
+
+/-- The signers of an indexed attestation that has a value are the signers of the attestation. -/
+theorem getAttestingIndices_of_getIndexedAttestation {state : BeaconState preset fork}
+    {attestation : Attestation preset fork} {indexed : IndexedAttestation preset fork}
+    (computed : getIndexedAttestation state attestation = .ok indexed) :
+    ∃ attesters, getAttestingIndices state attestation = .ok attesters ∧
+      indexed.attestingIndices.data = attesters.toArray := by
+  simp only [getIndexedAttestation, indexedAttestationOf, bind, Except.bind] at computed
+  split at computed
+  · cases computed
+  rename_i attesters attestersOk
+  split at computed
+  · cases computed
+    exact ⟨attesters, attestersOk, rfl⟩
+  · cases computed
+
+/-- The indices of an indexed attestation increase strictly, as its validity check asks. -/
+theorem getIndexedAttestation_sorted {state : BeaconState preset fork}
+    {attestation : Attestation preset fork} {indexed : IndexedAttestation preset fork}
+    (computed : getIndexedAttestation state attestation = .ok indexed) :
+    indexed.attestingIndices.data.toList.Pairwise (· < ·) := by
+  obtain ⟨attesters, attestersOk, data⟩ := getAttestingIndices_of_getIndexedAttestation computed
+  rw [data]
+  exact getAttestingIndices_sorted attestersOk
 
 /-- When the signers of an attestation have a value, its indexed form lists them in order. -/
 theorem getIndexedAttestation_of_getAttestingIndices {state : BeaconState preset fork}
