@@ -32,11 +32,11 @@ That share is then multiplied by the threshold in percent, and the equivocators 
 
 So a confirmed block meets the condition of the paper with the store's estimates in it.
 
-It meets the paper's condition on `β W` only when the share of the store covers `β` of `W`.
+It meets the paper's condition on `β W` when the estimate covers the true stake of `W`.
 
-The share does not always cover it, since the estimate is the average weight of a committee.
+The estimate does not always cover it, since it is the average weight of a committee.
 
-So that cover is a hypothesis of the last theorem.
+So that cover is a hypothesis of the last theorem, with the estimate rounded down to 100 Gwei.
 
 With it, Lemmas 4 and 3 of the paper give the honest support of the block.
 
@@ -219,7 +219,9 @@ Assume that the Byzantine validators hold at most β of the stake of `W`, as in 
 
 Here β is the threshold of the configuration, in percent, and no equivocator is honest.
 
-Assume also that the store's share of the adversary covers β of the stake of `W`.
+Assume also that the store's estimate for that range covers the stake of `W`.
+
+The estimate is rounded down to 100 Gwei there, as the store's share of the adversary rounds it.
 
 The store does not check that cover, and it can fail within one epoch. -/
 theorem lt_two_mul_honest_support_of_isOneConfirmed {ν : Type*} {w : ν → ℕ} {J : Set ν}
@@ -254,14 +256,21 @@ theorem lt_two_mul_honest_support_of_isOneConfirmed {ν : Type*} {w : ν → ℕ
     (supportersIn : supporters ⊆ W) (equivocatorsIn : equivocators ⊆ W)
     (apart : Disjoint supporters equivocators) (dishonest : ∀ v ∈ equivocators, v ∉ J)
     (byzantine : ByzantineStakeAtMost w W J config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat 100)
-    (cover : config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat * stake w W ≤
-      100 * (estimate.toNat / 100 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat)) :
+    (cover : stake w W ≤ estimate.toNat / 100 * 100) :
     maximumSupport.toNat + proposerScore.toNat <
       discount.toNat + 2 * stake w {v ∈ supporters | v ∈ J} := by
   have bound := computeSafetyThreshold_bound slotOk blockOk parentOk totalOk boostOk firstOk lastOk
     maximumOk discountOk adversaryOk thresholdOk
   have above := threshold_lt_of_isOneConfirmed supportOk thresholdOk confirmed
   have share := computeAdversarialWeight_share totalOk estimateOk equivocationOk rangeOk
+  -- The cover of the stake gives the cover of its Byzantine share.
+  replace cover : config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat * stake w W ≤
+      100 * (estimate.toNat / 100 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat) := by
+    calc config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat * stake w W
+        ≤ config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat * (estimate.toNat / 100 * 100) :=
+          Nat.mul_le_mul_left _ cover
+      _ = 100 * (estimate.toNat / 100 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat) := by
+          ring
   -- A discount above the other terms makes the bound hold at once.
   by_cases large : maximumSupport.toNat + proposerScore.toNat < discount.toNat
   · omega
