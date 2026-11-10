@@ -405,6 +405,31 @@ def epochBeforePayments (config : Config) (checks : SignatureChecks)
   let state ← (if before : fork < .hegota then processEth1DataReset before state else pure state)
   processPendingBalances config checks state
 
+/-- From Altair, the epoch transition first runs the steps that come before the payments.
+
+It then runs the rest of its steps in their order.
+
+So those first steps are a factor of the epoch transition, and not a second form of it. -/
+theorem processEpochAltair_eq_epochBeforePayments_bind (config : Config) (checks : SignatureChecks)
+    (state : BeaconState preset fork) (altair : .altair ≤ fork) :
+    processEpochAltair config checks state altair = (do
+      let state ← epochBeforePayments config checks state
+      let state ← (if gloas : .glamsterdam ≤ fork then
+          liftAccessor (processBuilderPendingPayments state gloas)
+        else pure state)
+      let state ← processEffectiveBalanceUpdates state
+      let state ← processSlashingsReset state
+      let state ← processRandaoMixesReset state
+      let state ← if capella : .shapella ≤ fork then processHistoricalSummariesUpdate state capella
+        else processHistoricalRootsUpdate state
+      let state := processParticipationFlagUpdates state altair
+      let state ← processSyncCommitteeUpdates state altair
+      let state ← (if fulu : .fusaka ≤ fork then liftAccessor (processProposerLookahead state fulu)
+        else pure state)
+      if gloas : .glamsterdam ≤ fork then liftAccessor (processPtcWindow state gloas)
+      else pure state) := by
+  simp only [processEpochAltair, epochBeforePayments, altair, ↓reduceDIte, bind_assoc]
+
 /-- From Gloas, the epoch transition keeps the builder fields, except the step of the payments.
 
 The step of the payments reads the state that the epoch transition reaches before it. -/
@@ -416,22 +441,21 @@ theorem processEpoch_builderSplit {gloas : .glamsterdam ≤ fork}
   have altair : .altair ≤ fork := Nat.le_trans (by decide) gloas
   have capella : .shapella ≤ fork := Nat.le_trans (by decide) gloas
   have fulu : .fusaka ≤ fork := Nat.le_trans (by decide) gloas
-  unfold processEpoch processEpochAltair at computed
-  simp only [bind_ok_iff, altair, capella, fulu, gloas, ↓reduceDIte, liftAccessor_ok] at computed
-  obtain ⟨justified, justifiedOk, scored, scoredOk, rewarded, rewardedOk, registered,
-    registeredOk, slashed, slashedOk, reset, resetOk, pending, pendingOk, paid, paidOk, balanced,
-    balancedOk, cleared, clearedOk, mixed, mixedOk, rooted, rootedOk, synced, syncedOk, looked,
-    lookedOk, windowed⟩ := computed
-  have resetFrame : BuilderFrame slashed reset := by
-    split at resetOk
-    · exact builderFrame_processEth1DataReset resetOk
-    · simp only [pure, Except.pure, Except.ok.injEq] at resetOk
-      exact resetOk ▸ BuilderFrame.refl _
-  refine ⟨pending, paid, ?_, ?_, paidOk, ?_⟩
-  · simp only [epochBeforePayments, bind_ok_iff, altair, ↓reduceDIte]
-    exact ⟨justified, justifiedOk, scored, scoredOk, rewarded, rewardedOk, registered,
-      registeredOk, slashed, slashedOk, reset, resetOk, pendingOk⟩
-  · exact (builderFrame_processJustificationAndFinalization justifiedOk).trans <|
+  unfold processEpoch at computed
+  rw [dite_eq_left altair, processEpochAltair_eq_epochBeforePayments_bind] at computed
+  simp only [bind_ok_iff, capella, fulu, gloas, ↓reduceDIte, liftAccessor_ok] at computed
+  obtain ⟨pending, pendingOk, paid, paidOk, balanced, balancedOk, cleared, clearedOk, mixed,
+    mixedOk, rooted, rootedOk, synced, syncedOk, looked, lookedOk, windowed⟩ := computed
+  refine ⟨pending, paid, pendingOk, ?_, paidOk, ?_⟩
+  · simp only [epochBeforePayments, bind_ok_iff, altair, ↓reduceDIte] at pendingOk
+    obtain ⟨justified, justifiedOk, scored, scoredOk, rewarded, rewardedOk, registered,
+      registeredOk, slashed, slashedOk, reset, resetOk, pendingOk⟩ := pendingOk
+    have resetFrame : BuilderFrame slashed reset := by
+      split at resetOk
+      · exact builderFrame_processEth1DataReset resetOk
+      · simp only [pure, Except.pure, Except.ok.injEq] at resetOk
+        exact resetOk ▸ BuilderFrame.refl _
+    exact (builderFrame_processJustificationAndFinalization justifiedOk).trans <|
       (builderFrame_processInactivityUpdates scoredOk).trans <|
       (builderFrame_processRewardsAndPenalties rewardedOk).trans <|
       (builderFrame_processRegistryUpdates registeredOk).trans <|
