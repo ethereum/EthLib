@@ -48,16 +48,23 @@ theorem frame_genesisDeposit {before : fork < .hegota} {leaves : Array DepositDa
   obtain ⟨depositRoot, _, deposited⟩ := computed
   exact (Frame.of_validators (state := state)
     (after := { state with eth1Data := fun _ => { state.eth1Data before with depositRoot } })
-    ⟨rfl, rfl⟩ rfl rfl rfl rfl rfl rfl).trans (frame_processDeposit deposited)
+    ⟨rfl, rfl⟩ rfl rfl rfl rfl rfl rfl).trans (frame_processDeposit deposited).toFrame
 
 /-- Setting the effective balance and the activation at genesis changes no exit. -/
 theorem frame_activateAtGenesis {index : Nat}
     (computed : activateAtGenesis state index = .ok after) : Frame state after := by
   simp only [activateAtGenesis, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨validator, found, _, _, set⟩ := computed
-  refine (frame_setValidator set fun ordered => ?_).toFrame
+  refine (frame_setValidator set found (by split <;> rfl) fun ordered => ?_).toFrame
   have le := ordered validator (mem_of_getValidator found)
   split <;> exact le
+
+/-- A new genesis validators root keeps the invariant.
+
+The invariant reads no such root. -/
+private theorem Invariant.withGenesisValidatorsRoot {root : Root} (holds : Invariant state) :
+    Invariant { state with genesisValidatorsRoot := root } :=
+  ⟨holds.balancesMatch, holds.exitsOrdered, holds.ordered, holds.settled⟩
 
 /-- A candidate genesis state exists only before Altair.
 
@@ -81,9 +88,7 @@ theorem initializeBeaconStateFromEth1_invariant {eth1BlockHash : Hash32} {eth1Ti
   refine ⟨before, ?_⟩
   have frame := (Frame.foldlM (fun _ _ _ ok => frame_genesisDeposit ok) depositedOk).trans
     (Frame.foldlM (fun _ _ _ ok => frame_activateAtGenesis ok) activatedOk)
-  have rooted : Frame activated { activated with genesisValidatorsRoot := root } :=
-    Frame.of_validators ⟨rfl, rfl⟩
-  exact rooted.invariant (frame.invariant (emptyGenesisState_invariant before _ _ _ _))
+  exact (frame.invariant (emptyGenesisState_invariant before _ _ _ _)).withGenesisValidatorsRoot
 
 /-- A candidate state launches the chain exactly when it is late enough.
 
