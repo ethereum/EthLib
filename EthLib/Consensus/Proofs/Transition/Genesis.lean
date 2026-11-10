@@ -55,7 +55,7 @@ theorem frame_activateAtGenesis {index : Nat}
     (computed : activateAtGenesis state index = .ok after) : Frame state after := by
   simp only [activateAtGenesis, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨validator, found, _, _, set⟩ := computed
-  refine frame_setValidator set fun ordered => ?_
+  refine (frame_setValidator set fun ordered => ?_).toFrame
   have le := ordered validator (mem_of_getValidator found)
   split <;> exact le
 
@@ -82,7 +82,7 @@ theorem initializeBeaconStateFromEth1_invariant {eth1BlockHash : Hash32} {eth1Ti
   have frame := (Frame.foldlM (fun _ _ _ ok => frame_genesisDeposit ok) depositedOk).trans
     (Frame.foldlM (fun _ _ _ ok => frame_activateAtGenesis ok) activatedOk)
   have rooted : Frame activated { activated with genesisValidatorsRoot := root } :=
-    Frame.of_validators ⟨rfl, rfl⟩ rfl rfl rfl rfl rfl rfl
+    Frame.of_validators ⟨rfl, rfl⟩
   exact rooted.invariant (frame.invariant (emptyGenesisState_invariant before _ _ _ _))
 
 /-- A candidate state launches the chain exactly when it is late enough.

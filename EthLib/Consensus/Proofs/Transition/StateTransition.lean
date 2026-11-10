@@ -8,6 +8,8 @@ public import EthLib.Consensus.Transition.StateTransition
 
 The caching of a slot keeps the slot, and each slot step moves it on by exactly one.
 
+The caching writes the root of its new latest block header into the buffer of block roots.
+
 From Gloas the caching also marks the payload of the next slot as not yet available.
 
 Advancing to a slot fails when the slot is not after that of the state.
@@ -66,6 +68,24 @@ theorem processSlot_ok (computed : processSlot state = .ok after) :
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     subst computed
     exact ⟨_, _, _, _, rfl⟩
+
+/-- The caching of a slot writes one block root, at the position of the slot.
+
+That root is the root of the latest block header of the result. -/
+theorem processSlot_blockRoots (computed : processSlot state = .ok after) :
+    ∃ root, hashTreeRoot after.latestBlockHeader = .ok root ∧
+      writeCircular state.blockRoots.elements state.slot root = .ok after.blockRoots.elements := by
+  unfold processSlot at computed
+  simp only [bind_ok_iff, liftSsz_ok, liftAccessor_ok] at computed
+  obtain ⟨_, _, _, _, root, hashed, _, written, computed⟩ := computed
+  have elements := writeCircularRooted_elements state.blockRoots state.slot root
+  rw [written] at elements
+  split at computed
+  · obtain ⟨_, _, _, _, rfl⟩ := unsetNextPayloadAvailability_ok (liftAccessor_ok.mp computed)
+    exact ⟨root, hashed, elements.symm⟩
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact ⟨root, hashed, elements.symm⟩
 
 /-- The caching of a slot keeps the slot. -/
 theorem processSlot_slot (computed : processSlot state = .ok after) : after.slot = state.slot := by
