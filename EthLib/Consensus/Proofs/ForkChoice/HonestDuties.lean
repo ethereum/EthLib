@@ -185,9 +185,7 @@ Its store follows the time of genesis, and is up to date.
 
 The data is that of an honest vote from the store.
 
-No vote of the validator in its view is slashable together with it, in either order.
-
-Two new votes in one message are not checked against each other. -/
+No vote of the validator in its view is slashable together with it, in either order. -/
 def MaySign (validator : ValidatorIndex) (time : ℕ) (view : Set (Message preset fork))
     (store : Store preset fork) (data : AttestationData) : Prop :=
   ∃ committeeIndex, assignment.committee validator data.slot = some committeeIndex ∧
@@ -248,9 +246,13 @@ When the execution starts by then, and `stable` is past, the validator votes, as
 
 Before `stable`, honest stores may disagree with the assignment on the committees.
 
-From `stable` on, the duty excludes the schedules where they still disagree.
+From `stable` on, the store of each honest validator reads its vote at its deadline as assigned.
 
-The paper rules those out after its stabilisation time, in §2. -/
+The time is in milliseconds, like the deadlines.
+
+The paper shares committees after its stabilization time, in §2, which comes after GST.
+
+Each theorem relates that time to GST itself. -/
 def Votes {J : Set ValidatorIndex} (stable : ℕ)
     (e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
       genesisTimeMs) J) : Prop :=
