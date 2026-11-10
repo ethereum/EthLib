@@ -7,6 +7,7 @@ public import EthLib.Execution.Proofs.Evm.Call.Instructions
 public import EthLib.Execution.Proofs.Evm.Call.MessageCall
 public import EthLib.Execution.Proofs.Evm.Call.Nonce
 public import EthLib.Execution.Proofs.Evm.Call.Parent
+public import EthLib.Execution.Proofs.Evm.Call.Run
 public import EthLib.Execution.Proofs.Evm.Call.StaticMessage
 public import EthLib.Execution.Proofs.Evm.Call.StaticStep
 public import EthLib.Execution.Proofs.Evm.Call.TransferLog
