@@ -2066,8 +2066,15 @@ With the BLS checks, that means the validator signed it, if BLS aggregates with 
 The block keeps the slot, the block roots, the justified checkpoints, the fork versions, the genesis validators root and the key of each validator.
 So `TargetFlagsSigned.of_voteFrame` keeps each target flag backed by a vote that passes the checks in the current state.
 From Gloas the theorem assumes the registry within its limit, since its type does not bound its size.
+`TargetFlagsSigned.of_stateTransition` (`Consensus/Proofs/Transition/TargetSlots.lean`) carries the same fact across the slots, the epoch step included, and then the block.
+The slot step writes one block root, so the roots at the first slots of the current and previous epochs stay.
+That needs at least one slot per epoch, and a buffer of roots that covers two epochs, as both presets do.
+The epoch step moves the flags of the current epoch to the previous one, and justification moves the current justified checkpoint to the previous one.
+Justification does not run in the first two epochs, so the theorem assumes the two justified checkpoints equal there, and the slots keep that.
+The theorem also assumes the registry below 2^64 validators after the block, which its type already bounds before Gloas.
 At least five gaps remain before a refinement.
-No theorem yet carries that fact across the slots, the epoch step and the upgrades, or establishes it at the first Altair state.
+No theorem yet carries that fact across the upgrades.
+None establishes it at the first Altair state, nor the equal justified checkpoints of the first two epochs there.
 None covers the forks before Altair.
 So none yet shows that the attesters of an epoch signed the link that the model counts.
 The attesters of the previous epoch are filtered by activity in that epoch, but the total counts the active validators of the current one.

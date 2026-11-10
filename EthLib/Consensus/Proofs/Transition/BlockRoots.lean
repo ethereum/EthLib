@@ -49,15 +49,12 @@ private theorem advanceSlot_cachedRoots
       after.latestBlockHash = cached.latestBlockHash ∧
       after.latestExecutionPayloadBid = cached.latestExecutionPayloadBid ∧
       after.slot.toNat = state.slot.toNat + 1 := by
-  have sum := advanceSlot_slot computed
-  simp only [advanceSlot, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    addChecked_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨next, -, cached, cachedOk, epoched, epochedOk, rfl⟩ := computed
+  obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
   refine ⟨cached, cachedOk, ?_⟩
   unfold epochIfLast at epochedOk
   split at epochedOk
   · obtain ⟨_, justifiedOk, frame⟩ := processEpoch_frame epochedOk
-    obtain ⟨genesis, roots, header, hash, bid⟩ :=
+    obtain ⟨genesis, roots, header, hash, bid, -⟩ :=
       processJustificationAndFinalization_keeps justifiedOk
     exact ⟨frame.genesisTime.trans genesis, frame.blockRoots.trans roots,
       frame.latestBlockHeader.trans header, frame.latestBlockHash.trans hash,
@@ -65,6 +62,51 @@ private theorem advanceSlot_cachedRoots
   · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
     subst epochedOk
     exact ⟨rfl, rfl, rfl, rfl, rfl, sum⟩
+
+/-- One slot keeps the root recorded at a slot while that slot stays in the buffer of roots. -/
+theorem getBlockRootAtSlot_advanceSlot {slot : Slot} {root : Root}
+    (computed : advanceSlot config checks state = .ok after)
+    (read : getBlockRootAtSlot state slot = .ok root)
+    (recent : state.slot.toNat < slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat) :
+    getBlockRootAtSlot after slot = .ok root := by
+  obtain ⟨cached, cachedOk, -, roots, -, -, -, afterSlot⟩ := advanceSlot_cachedRoots computed
+  obtain ⟨_, -, written⟩ := processSlot_blockRoots cachedOk
+  obtain ⟨before, readOk⟩ := getBlockRootAtSlot_read read
+  have before' := UInt64.lt_iff_toNat_lt.mp before
+  have other : state.slot % preset.SLOTS_PER_HISTORICAL_ROOT ≠
+      slot % preset.SLOTS_PER_HISTORICAL_ROOT := by
+    intro same
+    have same' := congrArg UInt64.toNat same
+    rw [UInt64.toNat_mod, UInt64.toNat_mod] at same'
+    exact Nat.mod_ne_of_sub_lt before' (by omega) same'
+  unfold getBlockRootAtSlot at read
+  simp only [before, ↓reduceIte, bind_ok_iff, liftArith, mapError_ok_iff,
+    addChecked_ok_iff] at read
+  obtain ⟨bound, ⟨fits, boundEq⟩, -⟩ := read
+  unfold getBlockRootAtSlot
+  have later : slot < after.slot := UInt64.lt_iff_toNat_lt.mpr (by omega)
+  simp only [later, ↓reduceIte, bind_ok_iff, liftArith, mapError_ok_iff, addChecked_ok_iff]
+  refine ⟨bound, ⟨fits, boundEq⟩, ?_⟩
+  have within : after.slot ≤ bound := UInt64.le_iff_toNat_le.mpr (by omega)
+  simp only [within, ↓reduceIte, roots]
+  rw [readCircular_writeCircular_of_ne written other]
+  exact readOk
+
+/-- One slot keeps the root of the block at the first slot of an epoch.
+
+That slot must stay in the buffer of roots at the next slot. -/
+theorem getBlockRoot_advanceSlot {epoch : Epoch} {root : Root}
+    (computed : advanceSlot config checks state = .ok after)
+    (read : getBlockRoot state epoch = .ok root)
+    (recent : state.slot.toNat <
+      epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat) :
+    getBlockRoot after epoch = .ok root := by
+  unfold getBlockRoot at read ⊢
+  simp only [bind_ok_iff, liftArith, mapError_ok_iff] at read ⊢
+  obtain ⟨start, startOk, read⟩ := read
+  refine ⟨start, startOk, getBlockRootAtSlot_advanceSlot computed read ?_⟩
+  rw [(mulChecked_ok_iff.mp startOk).2]
+  exact recent
 
 /-- After one slot, the root at the slot before the new one is that of the header. -/
 private theorem advanceSlot_latestBlockRoot
