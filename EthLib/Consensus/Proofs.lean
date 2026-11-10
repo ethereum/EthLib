@@ -133,6 +133,7 @@ public import EthLib.Consensus.Proofs.Transition.ParentPayload
 public import EthLib.Consensus.Proofs.Transition.Payload
 public import EthLib.Consensus.Proofs.Transition.PaymentRelease
 public import EthLib.Consensus.Proofs.Transition.PaymentReleaseChain
+public import EthLib.Consensus.Proofs.Transition.PaymentReleaseWithdrawals
 public import EthLib.Consensus.Proofs.Transition.Requests
 public import EthLib.Consensus.Proofs.Transition.RewardDeltas
 public import EthLib.Consensus.Proofs.Transition.Slot

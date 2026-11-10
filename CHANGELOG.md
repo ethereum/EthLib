@@ -9,6 +9,9 @@ Not yet released.
 
 ### Changes that break callers
 
+- The theorem that an attestation keeps the registry and the RANDAO mixes now holds at every fork ([#1888](https://github.com/ethereum/EthLib/issues/1888)).
+  No C export or Python function changes.
+  In Lean, `processAttestation_registry` drops its argument `before : fork < .altair`, so a caller removes it.
 - From Gloas, a deposit, a withdrawal or consolidation request, or a sync aggregate now fails where a registry position of 2^64 or more would become a validator index ([#1883](https://github.com/ethereum/EthLib/issues/1883)).
   Such a position used to wrap modulo 2^64, so a deposit at 2^64 validators overwrote validator 0.
   The step now fails with the accessor error `arith overflow`, as the specification fails to build a `ValidatorIndex` there.

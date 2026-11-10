@@ -197,6 +197,45 @@ theorem BuilderFrame.withSlot (frame : BuilderFrame state after) (next : Slot) :
     BuilderFrame { state with slot := next } { after with slot := next } :=
   ⟨rfl, frame.headerSlot, frame.builders, frame.payments, frame.withdrawals, frame.bid⟩
 
+/-- A step that keeps what the payments read, except that it may empty a payment.
+
+It keeps the slot, the slot of the latest block, the latest bid and the queue.
+
+At each position, the withdrawal of the payment stays, or has no amount after the step.
+
+It may change the weights of the payments and the builders. -/
+structure PaymentCancel (state after : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
+    Prop where
+  slot : after.slot = state.slot
+  headerSlot : after.latestBlockHeader.slot = state.latestBlockHeader.slot
+  bid : after.latestExecutionPayloadBid gloas = state.latestExecutionPayloadBid gloas
+  withdrawals : after.builderPendingWithdrawals gloas = state.builderPendingWithdrawals gloas
+  read : ∀ position,
+    (paymentAt after gloas position).withdrawal = (paymentAt state gloas position).withdrawal ∨
+      (paymentAt after gloas position).withdrawal.amount = 0
+
+theorem PaymentCancel.refl (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
+    PaymentCancel state state gloas :=
+  ⟨rfl, rfl, rfl, rfl, fun _ => Or.inl rfl⟩
+
+theorem PaymentCancel.trans {gloas : .glamsterdam ≤ fork}
+    {first second third : BeaconState preset fork}
+    (one : PaymentCancel first second gloas) (two : PaymentCancel second third gloas) :
+    PaymentCancel first third gloas :=
+  ⟨two.slot.trans one.slot, two.headerSlot.trans one.headerSlot, two.bid.trans one.bid,
+    two.withdrawals.trans one.withdrawals, fun position => by
+      rcases two.read position with same | empty
+      · rcases one.read position with same' | empty'
+        · exact Or.inl (same.trans same')
+        · exact Or.inr (same ▸ empty')
+      · exact Or.inr empty⟩
+
+/-- A step that keeps the builder fields may only empty pending payments. -/
+theorem PaymentCancel.of_frame {gloas : .glamsterdam ≤ fork} (frame : BuilderFrame state after) :
+    PaymentCancel state after gloas :=
+  ⟨frame.slot, frame.headerSlot, congrFun frame.bid gloas, congrFun frame.withdrawals gloas,
+    fun position => Or.inl (by rw [frame.paymentAt gloas])⟩
+
 /-- The position of the payment of each slot reads only the slot of the state. -/
 theorem slotPaymentPosition_congr (same : after.slot = state.slot) (slot : Slot) :
     slotPaymentPosition after slot = slotPaymentPosition state slot := by
