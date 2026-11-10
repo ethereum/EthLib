@@ -154,8 +154,9 @@ theorem slackJustifiedCheckpoints_activeSetAt_of_chainSteps
     | tail middle lastStep =>
       exact (meets _ _ ((reach.tail step).trans middle) lastStep .refl).small
   have kept : ActiveKept (getCurrentEpoch forked.state) forked.state last.state :=
-    (step.activeKept bounds.small).trans
-      ((activeKept_of_chainSteps small rest).mono step.currentEpoch_le)
+    ((step.activeKept bounds.small).trans ((activeKept_of_chainSteps small rest).mono
+      (activityFixedEpoch_mono step.currentEpoch_le))).mono
+        (getCurrentEpoch_le_activityFixedEpoch _)
   refine ⟨bounds, fun vote member => ⟨forked, after, reach, rest, member⟩,
     fun changed root rootOk => ?_⟩
   obtain ⟨recent, rootAfter⟩ := step.getBlockRoot_currentJustified_of_ne window changed
