@@ -22,7 +22,7 @@ A store reads them in the state of the target of the vote, with a valid signatur
 
 A store reachable from the anchor may read an attestation, and all of its readings count.
 
-So two stores read the same signers, unless they hold two states for one checkpoint.
+Two stores can read different signers only when they hold two states for one checkpoint.
 
 An attester slashing signs the data of its two votes for each of their validators.
 
@@ -42,7 +42,7 @@ The assignment of validators to slots is a parameter, shared by honest validator
 
 It gives each validator at most one slot in each epoch, as the committees of an epoch do.
 
-The paper shares it too once GST has passed long enough.
+The paper shares it too once GST has passed long enough, in §2, under stabilization time.
 
 The duty to vote is a condition on an execution, and the paper asks it of every slot.
 
@@ -50,9 +50,13 @@ So an execution with that duty never asks for a vote that slashing protection fo
 
 That excludes the schedules where the adversary would lead an honest validator there.
 
-The paper assumes as much: an honest validator votes in each of its slots, never slashable.
+The paper assumes as much in §2, under slashing and under voting time.
 
-A signature of a block by its proposer is no statement here, so any validator may send any block.
+There an honest validator votes once in each of its slots, and never commits a slashable offence.
+
+A signature of a block by its proposer is no statement here.
+
+So any validator may send a block whose votes it may carry.
 
 That strengthens the adversary, and no honest validator has to propose.
 
@@ -181,7 +185,9 @@ Its store follows the time of genesis, and is up to date.
 
 The data is that of an honest vote from the store.
 
-No vote of the validator in its view is slashable together with it, in either order. -/
+No vote of the validator in its view is slashable together with it, in either order.
+
+Two new votes in one message are not checked against each other. -/
 def MaySign (validator : ValidatorIndex) (time : ℕ) (view : Set (Message preset fork))
     (store : Store preset fork) (data : AttestationData) : Prop :=
   ∃ committeeIndex, assignment.committee validator data.slot = some committeeIndex ∧
@@ -234,16 +240,23 @@ structure VoteAt {J : Set ValidatorIndex}
   reads : ReadsAttestation config checks ((e.world n).state v) attestation indexed
   alone : indexed.attestingIndices.data.toList = [v]
 
-/-- The duty to vote, on an execution with honest validators `J`.
+/-- The duty to vote, on an execution with honest validators `J`, from a time `stable` on.
 
 Take an honest validator, a slot of its assignment, and the attestation deadline of that slot.
 
-When the execution starts by then, the validator votes at that time, as its duty asks. -/
-def Votes {J : Set ValidatorIndex}
+When the execution starts by then, and `stable` is past, the validator votes, as its duty asks.
+
+Before `stable`, honest stores may disagree with the assignment on the committees.
+
+From `stable` on, the duty excludes the schedules where they still disagree.
+
+The paper rules those out after its stabilisation time, in §2. -/
+def Votes {J : Set ValidatorIndex} (stable : ℕ)
     (e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
       genesisTimeMs) J) : Prop :=
   ∀ v ∈ J, ∀ slot committeeIndex time, assignment.committee v slot = some committeeIndex →
     IsAttestationDeadline fork config genesisTimeMs slot time → e.startTime ≤ time →
+    stable ≤ time →
     ∃ n attestation indexed, VoteAt e v slot committeeIndex time n attestation indexed
 
 /-- Under synchrony with delay `Δ`, a vote of a duty reaches every honest validator `Δ` later. -/
@@ -470,7 +483,7 @@ theorem exists_votes_execution {anchorState : BeaconState preset fork}
         (Assignment.single v 0 0) store.genesisTimeMs) {v},
       e.startTime = store.timeMs.toNat ∧ e.start = (fun _ => store) ∧
       (∃ attestation, e.events 2 = .send v (.attestation attestation)) ∧
-      Votes e ∧ e.Synchronous Δ ∧
+      Votes 0 e ∧ e.Synchronous Δ ∧
       ∀ n, Store.Reachable config anchorState anchorBlock ((e.world n).state v) := by
   obtain ⟨anchorRoot, blockRooted, checkpoints⟩ := getForkchoiceStore_checkpointStates anchored
   have stored : store.checkpointStates[(⟨getCurrentEpoch anchorState, anchorRoot⟩ : Checkpoint)]? =
@@ -603,7 +616,7 @@ theorem exists_votes_execution {anchorState : BeaconState preset fork}
   refine ⟨e, rfl, rfl, ⟨attestation, rfl⟩, ?_, ⟨positive, fun T => ⟨T + 3, ?_⟩, ?_⟩,
     fun n => e.reachable (fun u _ => .anchor anchored) n v rfl⟩
   · -- The only duty is in slot zero, at the deadline, and the vote of the third event does it.
-    intro u honest slot committeeIndex time assigned atDeadline _
+    intro u honest slot committeeIndex time assigned atDeadline _ _
     rw [Set.mem_singleton_iff] at honest
     subst honest
     obtain ⟨rfl, rfl⟩ : slot = 0 ∧ committeeIndex = 0 := by
