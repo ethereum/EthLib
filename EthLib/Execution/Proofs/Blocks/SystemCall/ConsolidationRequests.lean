@@ -33,6 +33,8 @@ It returns the requests and leaves the storage that the EIP describes.
 
 At every fork from Pectra, reading this contract with no code rejects the block.
 
+This holds once the withdrawal request call before it succeeds.
+
 [eip-7251-deployment]: https://eips.ethereum.org/EIPS/eip-7251#deployment
 [eip-7251-contract]: https://eips.ethereum.org/EIPS/eip-7251#consolidation-request-contract
 -/
@@ -1282,7 +1284,9 @@ theorem readRequests_of_empty {env : BlockEnvironment fork} {body : BodyState}
 
 /-- No block request result succeeds when consolidation code is empty after withdrawals.
 
-EIP-7251 requires rejection, not an empty list of consolidation requests. -/
+[EIP-7251][eip7251] requires rejection, not an empty list of consolidation requests.
+
+[eip7251]: https://eips.ethereum.org/EIPS/eip-7251#system-call -/
 theorem blockRequests_ne_ok_of_empty {env : BlockEnvironment fork} {body : BodyState}
     {mid : BodyState × List ByteArray} {depositContract : Address} {logs : List Log}
     {result : BodyState × List ByteArray} (hfork : .pectra ≤ fork)

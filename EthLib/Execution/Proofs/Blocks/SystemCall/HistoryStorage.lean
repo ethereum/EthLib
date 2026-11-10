@@ -368,11 +368,13 @@ theorem systemCall_set {env : BlockEnvironment fork} {block : State.BlockState} 
       exact spec_set (Nat.le_trans (by decide) hfork) hglam hcaller hstatic (htarget ▸ hacc)
         hnumber hbound (by rw [hgas]; decide)
 
-/-- Empty history storage code leaves the body after the beacon call unchanged except its reads.
+/-- Empty history storage code keeps the body after the beacon call and records the address.
 
 The empty-code condition is on that intermediate state, not on the state before the beacon call.
 
-This is the silent failure required by [EIP-2935][eip2935], including with the state gas meter.
+This is the silent failure required by [EIP-2935][eip2935].
+
+It holds at every fork from Pectra, with either gas meter.
 
 [eip2935]: https://eips.ethereum.org/EIPS/eip-2935#block-processing -/
 theorem startSystemCalls_of_empty {env : BlockEnvironment fork} {body mid : BodyState}

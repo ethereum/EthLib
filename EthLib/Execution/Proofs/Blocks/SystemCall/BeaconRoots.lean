@@ -414,11 +414,13 @@ theorem systemCall_set {env : BlockEnvironment fork} {block : State.BlockState} 
       exact spec_set (Nat.le_trans (by decide) hfork) hglam hcaller hstatic (htarget ▸ hacc)
         (by rw [hgas]; decide)
 
-/-- With no beacon roots code, the start calls record its address and continue to history storage.
+/-- With no beacon roots code, the start calls record its address and change no block state.
 
-The block state does not change before that second call.
+From Pectra the history storage call follows; before Pectra the start calls end there.
 
-This is the silent failure required by [EIP-4788][eip4788], including with the state gas meter.
+This is the silent failure required by [EIP-4788][eip4788].
+
+It holds at every fork from Dencun, with either gas meter.
 
 [eip4788]: https://eips.ethereum.org/EIPS/eip-4788#block-processing -/
 theorem startSystemCalls_of_empty {env : BlockEnvironment fork} {body : BodyState}

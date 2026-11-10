@@ -1327,7 +1327,7 @@ theorem systemCall_dequeue {env : BlockEnvironment fork} {block : State.BlockSta
 
 /-- Empty withdrawal request code rejects the request phase of a block from Pectra.
 
-The code is read after transactions and withdrawals, as [EIP-7002][eip7002] requires.
+A block with no code there is invalid, as [EIP-7002][eip7002] requires.
 
 [eip7002]: https://eips.ethereum.org/EIPS/eip-7002#system-call -/
 theorem readRequests_of_empty {env : BlockEnvironment fork} {body : BodyState}
@@ -1340,7 +1340,11 @@ theorem readRequests_of_empty {env : BlockEnvironment fork} {body : BodyState}
   unfold requestContracts
   split <;> simp [REQUEST_CONTRACTS, List.foldlM_cons, hread, bind, Except.bind]
 
-/-- No block request result succeeds when the withdrawal contract has no code, by EIP-7002. -/
+/-- No block request result succeeds when the withdrawal contract has no code.
+
+This is the rejection required by [EIP-7002][eip7002].
+
+[eip7002]: https://eips.ethereum.org/EIPS/eip-7002#system-call -/
 theorem blockRequests_ne_ok_of_empty {env : BlockEnvironment fork} {body : BodyState}
     {depositContract : Address} {logs : List Log} {result : BodyState × List ByteArray}
     (hfork : .pectra ≤ fork)
