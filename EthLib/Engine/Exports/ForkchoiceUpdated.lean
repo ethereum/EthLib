@@ -1,12 +1,13 @@
 module
 
+public import EthLib.Engine.BuildPayload
 public import EthLib.Engine.Exports.NewPayload
 public import EthLib.Engine.ForkchoiceUpdated
 
 /-!
 # `Exports.ForkchoiceUpdated`
 
-The C export of `engine_forkchoiceUpdated`, versions 1 to 4, without a payload build.
+The C export of `engine_forkchoiceUpdated`, versions 1 to 4.
 
 The configuration, the payload tree, the finalized block and the request cross as Python values.
 
@@ -26,15 +27,15 @@ The finalized block that the execution layer knows is a block hash, or `null` fo
 
 The request is a JSON-RPC request object, with its method and its parameters.
 
-The result is the value of the JSON of the response: the payload status, and no payload ID.
+The result is the value of the JSON of the response: the payload status and the payload ID.
 
 A JSON-RPC error has the code of its Engine API error: 32602, 38002, 38003 or 38005.
 
-Payload attributes on an applied valid head that pass every check ask for a build.
+Payload attributes on an applied valid head that pass every check start a build.
 
-That build is not specified, so they have code 0.
+The payload ID is then the ID of that build, from the head and the attributes, and else `null`.
 
-So do an unknown method and an argument that Lean cannot read.
+An unknown method and an argument that Lean cannot read have code 0.
 -/
 
 public section
@@ -80,13 +81,15 @@ def forkchoiceUpdatedOf (args : PyValue × PyValue × PyValue × PyValue) : Resu
     | throw (0, "request: no method")
   let some version := forkchoiceUpdatedVersion method | throw (0, s!"no method {method}")
   let answer := forkchoiceUpdatedCall config version tree finalized (request.getObjValD "params")
-  let (status, _, attributes) ← answer.mapError fun e => (e.code, s!"engine error: {reprStr e}")
-  -- Step 8: valid attributes on an applied valid head start a build, which is not specified.
-  if attributes.isSome then
-    throw (0, "payload attributes: building a payload is not specified")
+  let (status, head, attributes) ←
+    answer.mapError fun e => (e.code, s!"engine error: {reprStr e}")
+  -- Step 8: valid attributes on an applied valid head start a build, named by its ID.
+  let id := match head, attributes with
+    | some h, some a => Engine.Json.dataJson (payloadId h a.2).toList
+    | _, _ => .null
   let response := Json.mkObj [
     ("payloadStatus", statusJson status none),
-    ("payloadId", .null)]
+    ("payloadId", id)]
   return .ofJson response
 
 /-- The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.

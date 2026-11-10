@@ -37,6 +37,34 @@ def new_payload_on_chain(
     return _native.engine_new_payload_on_chain(config, state, items, request)
 
 
+def build_payload(
+    config: dict,
+    state: bytes,
+    recent: Sequence[RecentBlock],
+    method: str,
+    attributes: dict,
+    fee_recipient: bytes,
+    extra_data: bytes,
+    target_gas_limit: int,
+    transactions: Sequence[bytes],
+) -> tuple[bytes, bytes, list[bytes], int]:
+    """The block that payload attributes build on a chain, its accounts, requests and value."""
+    # The attributes pass the checks of the forkchoice update `method` against the last block.
+    # It returns the block and the accounts after it in RLP form, the requests and the value in wei.
+    items = [(name, header, list(ommers)) for name, header, ommers in recent]
+    return _native.engine_build_payload(
+        config,
+        state,
+        items,
+        method,
+        attributes,
+        fee_recipient,
+        extra_data,
+        target_gas_limit,
+        list(transactions),
+    )
+
+
 def forkchoice_updated(
     config: dict, tree: list, method: str, params: list, finalized: str | None = None
 ) -> dict:

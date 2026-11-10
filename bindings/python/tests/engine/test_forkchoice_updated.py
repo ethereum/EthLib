@@ -1,11 +1,13 @@
 """The head that engine_forkchoiceUpdated selects, on chains of the engine blockchain tests."""
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
 
 from ethlib import engine
+from ethlib.cryptography.keccak import keccak256
 from raising import raises
 
 from .cases import BLOCK_FORKS, DEPOSIT_CONTRACT_ADDRESS, TIME_FORKS, config
@@ -182,15 +184,59 @@ OFF_HEAD_ATTRIBUTES = pytest.mark.parametrize(
         pytest.param(4, ATTRIBUTES_V4, id="v4"),
     ],
 )
-def test_build_not_specified(version: int, attributes: dict[str, object]) -> None:
-    """Attributes that the version takes, on a new valid head, ask for an unspecified build."""
-    with raises(
-        engine.EngineError, "payload attributes: building a payload is not specified"
-    ) as error:
+def test_build_starts(version: int, attributes: dict[str, object]) -> None:
+    """Attributes that the version takes, on a new valid head, start a build named by its ID."""
+    response = engine.forkchoice_updated(
+        CONFIG, TREE, f"engine_forkchoiceUpdatedV{version}", [NEW_HEAD, attributes]
+    )
+    assert response == {
+        "payloadStatus": {"status": "VALID", "latestValidHash": _hash(3), "validationError": None},
+        "payloadId": _payload_id(_hash(3), attributes),
+    }
+
+
+def _payload_id(head: str, attributes: Mapping[str, object]) -> str:
+    """The first 8 bytes of the Keccak-256 hash of the head and the attributes, in order."""
+
+    def raw(value: object) -> bytes:
+        return bytes.fromhex(str(value).removeprefix("0x"))
+
+    def word(value: object) -> bytes:
+        return int(str(value), 16).to_bytes(8, "big")
+
+    data = raw(head) + word(attributes["timestamp"]) + raw(attributes["prevRandao"])
+    data += raw(attributes["suggestedFeeRecipient"])
+    withdrawals = attributes.get("withdrawals") or []
+    assert isinstance(withdrawals, list)
+    for withdrawal in withdrawals:
+        assert isinstance(withdrawal, dict)
+        data += word(withdrawal["index"]) + word(withdrawal["validatorIndex"])
+        data += raw(withdrawal["address"]) + word(withdrawal["amount"])
+    if attributes.get("parentBeaconBlockRoot") is not None:
+        data += raw(attributes["parentBeaconBlockRoot"])
+    if "slotNumber" in attributes:
+        data += word(attributes["slotNumber"]) + word(attributes["targetGasLimit"])
+    return "0x" + keccak256(data)[:8].hex()
+
+
+def test_payload_id_reads_each_attribute() -> None:
+    """Two builds whose attributes differ in one field have different IDs."""
+    ids = {
         engine.forkchoice_updated(
-            CONFIG, TREE, f"engine_forkchoiceUpdatedV{version}", [NEW_HEAD, attributes]
-        )
-    assert error.value.code == 0
+            CONFIG, TREE, "engine_forkchoiceUpdatedV4", [NEW_HEAD, attributes]
+        )["payloadId"]
+        for attributes in [
+            ATTRIBUTES_V4,
+            ATTRIBUTES_V4 | {"timestamp": "0x2bd"},
+            ATTRIBUTES_V4 | {"prevRandao": "0x" + "01" * 32},
+            ATTRIBUTES_V4 | {"suggestedFeeRecipient": "0x" + "01" * 20},
+            ATTRIBUTES_V4 | {"withdrawals": []},
+            ATTRIBUTES_V4 | {"parentBeaconBlockRoot": _hash(1)},
+            ATTRIBUTES_V4 | {"slotNumber": "0x2"},
+            ATTRIBUTES_V4 | {"targetGasLimit": "0x1c9c381"},
+        ]
+    }
+    assert len(ids) == 8
 
 
 @pytest.mark.parametrize(
@@ -260,12 +306,9 @@ def test_version_4_without_attributes(params: list[object]) -> None:
             38003,
             id="invalid",
         ),
-        pytest.param(
-            ATTRIBUTES_V4, "payload attributes: building a payload is not specified", 0, id="build"
-        ),
     ],
 )
-def test_custody_columns_with_attributes(
+def test_custody_columns_with_invalid_attributes(
     attributes: dict[str, object], message: str, code: int
 ) -> None:
     """Custody columns that decode leave the answer to the attributes."""
@@ -274,6 +317,13 @@ def test_custody_columns_with_attributes(
             CONFIG, TREE, "engine_forkchoiceUpdatedV4", [NEW_HEAD, attributes, CUSTODY_COLUMNS]
         )
     assert error.value.code == code
+
+
+def test_custody_columns_with_build() -> None:
+    """Custody columns that decode leave the payload ID of the build unchanged."""
+    params = [NEW_HEAD, ATTRIBUTES_V4, CUSTODY_COLUMNS]
+    response = engine.forkchoice_updated(CONFIG, TREE, "engine_forkchoiceUpdatedV4", params)
+    assert response["payloadId"] == _payload_id(_hash(3), ATTRIBUTES_V4)
 
 
 @pytest.mark.parametrize(
@@ -508,14 +558,11 @@ def _paris_at(block: int) -> dict:
 
 
 def test_fork_of_the_next_block() -> None:
-    """The fork of the attributes is that of the block after the head, number 3 here."""
-    with raises(
-        engine.EngineError, "payload attributes: building a payload is not specified"
-    ) as error:
-        engine.forkchoice_updated(
-            _paris_at(4), TREE, "engine_forkchoiceUpdatedV1", [NEW_HEAD, ATTRIBUTES_V1]
-        )
-    assert error.value.code == 0
+    """The fork of the attributes is that of the block after the head, number 4 here."""
+    response = engine.forkchoice_updated(
+        _paris_at(4), TREE, "engine_forkchoiceUpdatedV1", [NEW_HEAD, ATTRIBUTES_V1]
+    )
+    assert response["payloadId"] == _payload_id(_hash(3), ATTRIBUTES_V1)
     # With Paris at block 5, block 4 is of London, which version 1 does not take.
     with raises(
         engine.EngineError, "engine error: EthLib.Engine.EngineError.unsupportedFork"

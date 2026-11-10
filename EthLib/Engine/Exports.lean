@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Engine.Exports.BuildPayload
 public import EthLib.Engine.Exports.ForkchoiceUpdated
 public import EthLib.Engine.Exports.GetBlobs
 public import EthLib.Engine.Exports.GetProof

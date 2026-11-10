@@ -114,7 +114,7 @@ def _hex(value: str) -> bytes:
     return bytes.fromhex(value.removeprefix("0x"))
 
 
-def _pre_state(pre: dict) -> bytes:
+def pre_state(pre: dict) -> bytes:
     """The state in the form of the state root export: address, nonce, balance, code, storage."""
     from ethlib.serialization import rlp
 
@@ -206,7 +206,7 @@ def _state_test(root: Path, case: Case) -> None:
         fork,
         int(fixture["config"]["chainid"], 16),
         _hex(post["txbytes"]),
-        _pre_state(fixture["pre"]),
+        pre_state(fixture["pre"]),
         _environment(fixture["env"]),
     )
     if "expectException" in post:
@@ -367,7 +367,7 @@ def genesis_of(fork: str, header: dict, pre: dict) -> bytes:
 
     return blocks.genesis_block(
         fork,
-        _pre_state(pre),
+        pre_state(pre),
         coinbase=_hex(header["coinbase"]),
         difficulty=number("difficulty"),
         gas_limit=number("gasLimit"),
@@ -395,7 +395,7 @@ def _blockchain_test(root: Path, case: Case) -> None:
     assert genesis_of(recent[0][0], fixture["genesisBlockHeader"], fixture["pre"]) == _hex(
         fixture["genesisRLP"]
     )
-    state = _pre_state(fixture["pre"])
+    state = pre_state(fixture["pre"])
     for block in fixture["blocks"]:
         raw = _hex(block["rlp"])
         expected = block.get("expectException")
@@ -518,7 +518,7 @@ def _start(pre: dict, genesis: dict, fork: str) -> tuple[bytes, bytes]:
     """The state of a chain before its first payload, and the header of its genesis block."""
     from ethlib.serialization import rlp
 
-    return _pre_state(pre), rlp.encode(rlp.decode(genesis_of(fork, genesis, pre))[0])
+    return pre_state(pre), rlp.encode(rlp.decode(genesis_of(fork, genesis, pre))[0])
 
 
 # The fixtures of a group of blockchain_test_engine_x share one state, of up to 14 MB of JSON.
