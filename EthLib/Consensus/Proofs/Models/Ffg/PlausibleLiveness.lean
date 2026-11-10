@@ -21,7 +21,8 @@ An honest validator votes only from a justified source, as Casper FFG §2, Table
 
 namespace EthLib.Consensus.Models.Ffg
 
-variable {ν β : Type*} [Preorder β] {V : Checkpoint β → Finset ν} {w : ν → ℕ} {genesis : β}
+variable {ν β : Type*} [Preorder β] {V : Checkpoint β → Finset ν} {w : Checkpoint β → ν → ℕ}
+  {genesis : β}
   {votes votes' : Set (Vote ν β)}
 
 omit [Preorder β] in
@@ -44,7 +45,7 @@ theorem Justified.mono (h : votes ⊆ votes') {c : Checkpoint β}
   | link _ hl ih => exact .link ih (hl.mono h)
 
 /-- With positive stake in the set of its target, a supermajority link has a vote. -/
-theorem SupermajorityLink.exists_vote {s t : Checkpoint β} (hV : 0 < stake w (V t))
+theorem SupermajorityLink.exists_vote {s t : Checkpoint β} (hV : 0 < stake (w t) (V t))
     (hl : SupermajorityLink V w votes s t) : ∃ v, (⟨v, s, t⟩ : Vote ν β) ∈ votes := by
   classical
   by_contra hne
@@ -58,7 +59,7 @@ theorem SupermajorityLink.exists_vote {s t : Checkpoint β} (hV : 0 < stake w (V
   omega
 
 /-- With positive stake in every set, a bound on the target epochs bounds every justified epoch. -/
-theorem Justified.epoch_le (hV : ∀ c, 0 < stake w (V c)) {m : ℕ}
+theorem Justified.epoch_le (hV : ∀ c, 0 < stake (w c) (V c)) {m : ℕ}
     (hm : ∀ x ∈ votes, x.target.epoch ≤ m) {c : Checkpoint β}
     (hc : Justified V w genesis votes c) : c.epoch ≤ m := by
   cases hc with
@@ -69,11 +70,13 @@ theorem Justified.epoch_le (hV : ∀ c, 0 < stake w (V c)) {m : ℕ}
 
 /-- Plausible liveness.
 
-Take honest validators `H` in the set `V c` of each checkpoint, with two thirds of its stake.
+Take honest validators `H` in the set `V c` of each checkpoint.
+
+Under the weights of `c`, they hold two thirds of the stake of `V c`.
 
 So no honest validator ever exits; the theorem does not cover an honest exit.
 
-A constant set gives the theorem of Casper FFG, with one set for all votes.
+A constant set and constant weights give the theorem of Casper FFG, with one set for all votes.
 
 The set of votes is finite, and the stake of each set is positive.
 
@@ -86,8 +89,9 @@ Take any block `b` that has the block of `a` in its chain.
 Honest validators can add votes that finalize `b` at an epoch after every justified epoch.
 
 Each added vote has a justified source, and no honest validator becomes slashable. -/
-theorem plausible_liveness {H : Finset ν} (hfin : votes.Finite) (hV : ∀ c, 0 < stake w (V c))
-    (hH : ∀ c, H ⊆ V c) (hq : ∀ c, 2 * stake w (V c) ≤ 3 * stake w H)
+theorem plausible_liveness {H : Finset ν} (hfin : votes.Finite)
+    (hV : ∀ c, 0 < stake (w c) (V c)) (hH : ∀ c, H ⊆ V c)
+    (hq : ∀ c, 2 * stake (w c) (V c) ≤ 3 * stake (w c) H)
     (hsrc : ∀ x ∈ votes, x.validator ∈ H → Justified V w genesis votes x.source)
     (hsafe : ∀ v ∈ H, ¬Slashable votes v) :
     ∃ a, Justified V w genesis votes a ∧ ∀ b, a.block ≤ b → ∃ e, ∃ votes' : Set (Vote ν β),

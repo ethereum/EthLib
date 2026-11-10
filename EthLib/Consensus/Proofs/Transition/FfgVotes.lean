@@ -211,8 +211,8 @@ The theorem takes one validator set and one stake for every vote, a special case
 theorem accountable_safety_isSlashableAttestationData [Preorder β] {V : Finset ν} {w : ν → ℕ}
     {genesis : β} {block : Root → β} {signed : Set (ν × AttestationData)}
     {c₁ c₂ : Models.Ffg.Checkpoint β}
-    (finalized₁ : Finalized (fun _ => V) w genesis (ffgVotes block signed) c₁)
-    (finalized₂ : Finalized (fun _ => V) w genesis (ffgVotes block signed) c₂)
+    (finalized₁ : Finalized (fun _ => V) (fun _ => w) genesis (ffgVotes block signed) c₁)
+    (finalized₂ : Finalized (fun _ => V) (fun _ => w) genesis (ffgVotes block signed) c₂)
     (conflicting : Conflicting c₁.block c₂.block) :
     stake w V ≤ 3 * stake w {validator ∈ V | ∃ data1 data2, (validator, data1) ∈ signed ∧
       (validator, data2) ∈ signed ∧ isSlashableAttestationData data1 data2 = true} :=

@@ -11,6 +11,8 @@ The stake of each validator is a natural number.
 
 Along a sequence of sets, the stake that joins or leaves is at most the sum over the steps.
 
+A quorum under one stake function stays a quorum under another, up to the change between them.
+
 A bound on the Byzantine validators caps the fraction of the stake that they hold.
 -/
 
@@ -77,22 +79,56 @@ theorem stake_sdiff_add_two_mul_le [DecidableEq ν] (S : ℕ → Finset ν) {d :
     have : (n + 1) * d = n * d + d := Nat.succ_mul n d
     omega
 
+/-- The change from weights `w₀` to weights `w` on a set.
+
+It counts the weight that the validators of the set gain once and the weight they lose twice.
+
+It is zero when the two weights agree on the set. -/
+def weightChange (w₀ w : ν → ℕ) (S : Finset ν) : ℕ :=
+  stake (fun v => w v - w₀ v) S + 2 * stake (fun v => w₀ v - w v) S
+
+@[simp]
+theorem weightChange_self (S : Finset ν) : weightChange w w S = 0 := by
+  simp [weightChange, stake]
+
+/-- A quorum under weights `w` is a quorum under weights `w₀`, up to the change of the weights.
+
+The quorum `A` of `L` holds two thirds of the stake of `L` under `w`, up to a slack `a`.
+
+Under `w₀` the slack grows by the change from `w₀` to `w` on `L`.
+
+A gain counts once and a loss twice, as for a validator that joins or leaves the set. -/
+theorem two_mul_stake_le_of_weights {w₀ : ν → ℕ} {L A : Finset ν} {a : ℕ} (hA : A ⊆ L)
+    (h : 2 * stake w L ≤ 3 * stake w A + a) :
+    2 * stake w₀ L ≤ 3 * stake w₀ A + weightChange w₀ w L + a := by
+  -- Pointwise, `w + (w₀ - w) = w₀ + (w - w₀)` and `w ≤ w₀ + (w - w₀)`.
+  have hL : stake w L + stake (fun v => w₀ v - w v) L =
+      stake w₀ L + stake (fun v => w v - w₀ v) L := by
+    simp only [stake, ← Finset.sum_add_distrib]
+    exact Finset.sum_congr rfl fun v _ => by omega
+  have hA' : stake w A ≤ stake w₀ A + stake (fun v => w v - w₀ v) A := by
+    simp only [stake, ← Finset.sum_add_distrib]
+    exact Finset.sum_le_sum fun v _ => by omega
+  have hgain := stake_mono (w := fun v => w v - w₀ v) hA
+  unfold weightChange
+  omega
+
 /-- Two quorums up to slacks of two validator sets share stake, up to the change between the sets.
 
-The quorum `A` holds two thirds of what is left of the stake of `L` once `a` is removed.
+The quorum `A` holds two thirds of the stake of `L`, up to a slack `a`.
 
-The quorum `B` holds the same share of the stake of `R` once `b` is removed.
+The quorum `B` holds the same share of the stake of `R`, up to a slack `b`.
 
 The stake of `L \ V₀` and `V₀ \ R` measures that change against any reference set `V₀`.
 
-The bound loses twice each slack.
+The bound loses each slack once.
 
 With no slack, this is the bound in the proof of Gasper Theorem 8.3, times three. -/
 theorem two_mul_stake_le_stake_inter_add_slack [DecidableEq ν] {L R A B : Finset ν}
     (V₀ : Finset ν) {a b : ℕ} (hA : A ⊆ L) (hB : B ⊆ R)
-    (hA' : 2 * stake w L ≤ 3 * stake w A + 2 * a) (hB' : 2 * stake w R ≤ 3 * stake w B + 2 * b) :
+    (hA' : 2 * stake w L ≤ 3 * stake w A + a) (hB' : 2 * stake w R ≤ 3 * stake w B + b) :
     2 * stake w L ≤ 3 * stake w (A ∩ B) + stake w R +
-      3 * (stake w (L \ V₀) + stake w (V₀ \ R)) + 2 * (a + b) := by
+      3 * (stake w (L \ V₀) + stake w (V₀ \ R)) + (a + b) := by
   have hsum : stake w (A ∪ B) + stake w (A ∩ B) = stake w A + stake w B :=
     Finset.sum_union_inter
   -- A validator of `L` outside `R` either joined after `V₀` or left `V₀` before `R`.
@@ -119,8 +155,7 @@ theorem two_mul_stake_le_stake_inter_add [DecidableEq ν] {L R A B : Finset ν} 
     (hB' : 2 * stake w R ≤ 3 * stake w B) :
     2 * stake w L ≤
       3 * stake w (A ∩ B) + stake w R + 3 * (stake w (L \ V₀) + stake w (V₀ \ R)) := by
-  simpa using two_mul_stake_le_stake_inter_add_slack (a := 0) (b := 0) V₀ hA hB
-    (by simpa using hA') (by simpa using hB')
+  simpa using two_mul_stake_le_stake_inter_add_slack (a := 0) (b := 0) V₀ hA hB hA' hB'
 
 /-- Two sets of validators of `V`, each with two thirds of its stake, share one third of it. -/
 theorem stake_inter [DecidableEq ν] {V A B : Finset ν} (hA : A ⊆ V) (hB : B ⊆ V)

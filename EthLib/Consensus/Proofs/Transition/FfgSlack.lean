@@ -11,11 +11,11 @@ So the step keeps the two justified checkpoints of a state slack-justified in th
 
 This is the step of an induction over the epochs of a chain, from the genesis checkpoint.
 
-The model has one stake for each validator, and here it is the effective balance.
+Each checkpoint of the model has its own weights, here the effective balances of one state.
 
-Over a chain each validator keeps one stake, so its effective balance must not change while active.
+A target is read at the step of its epoch and again at the next step, with new balances between.
 
-That is an assumption, since the update of effective balances can change them.
+So the sets and weights of a checkpoint need to match only the step that first justifies it.
 
 Gasper §4.4, Definitions 4.5 and 4.6, justify a checkpoint by a supermajority link.
 
@@ -32,15 +32,16 @@ open Base Uint64 Models Models.Ffg
 
 variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : SignatureChecks}
   {state after : BeaconState preset fork} {β : Type*} [Preorder β]
-  {V U : Models.Ffg.Checkpoint β → Finset ValidatorIndex} {w : ValidatorIndex → ℕ} {genesis : β}
+  {V U : Models.Ffg.Checkpoint β → Finset ValidatorIndex}
+  {w : Models.Ffg.Checkpoint β → ValidatorIndex → ℕ} {genesis : β}
   {votes : Set (Vote ValidatorIndex β)}
 
 /-- The two justified checkpoints of the state are slack-justified in the model.
 
 Each root maps to a block of the model. -/
 def SlackJustifiedCheckpoints (V U : Models.Ffg.Checkpoint β → Finset ValidatorIndex)
-    (w : ValidatorIndex → ℕ) (genesis : β) (votes : Set (Vote ValidatorIndex β))
-    (block : Root → β) (state : BeaconState preset fork) : Prop :=
+    (w : Models.Ffg.Checkpoint β → ValidatorIndex → ℕ) (genesis : β)
+    (votes : Set (Vote ValidatorIndex β)) (block : Root → β) (state : BeaconState preset fork) : Prop :=
   SlackJustified V U w genesis votes (state.previousJustifiedCheckpoint.toFfg block) ∧
     SlackJustified V U w genesis votes (state.currentJustifiedCheckpoint.toFfg block)
 
@@ -50,7 +51,7 @@ That checkpoint has the block of the root that the state records for the start o
 
 Its validator set is the active set of the epoch.
 
-The stake of each of its validators is its effective balance in the state.
+Under its weights, each of its validators weighs its effective balance in the state.
 
 Each of its validators in its second set is active in the current epoch.
 
@@ -58,11 +59,13 @@ For the current epoch that always holds.
 
 As the second set, the active set of the next epoch meets it for both recent epochs. -/
 def TargetSetsMatch (V U : Models.Ffg.Checkpoint β → Finset ValidatorIndex)
-    (w : ValidatorIndex → ℕ) (block : Root → β) (state : BeaconState preset fork)
+    (w : Models.Ffg.Checkpoint β → ValidatorIndex → ℕ) (block : Root → β)
+    (state : BeaconState preset fork)
     (epoch : Epoch) : Prop :=
   ∀ root, getBlockRoot state epoch = .ok root →
     V ⟨block root, epoch.toNat⟩ = (getActiveValidatorIndices state epoch).toFinset ∧
-      (∀ index ∈ V ⟨block root, epoch.toNat⟩, w index = balanceAt state index.toNat) ∧
+      (∀ index ∈ V ⟨block root, epoch.toNat⟩,
+        w ⟨block root, epoch.toNat⟩ index = balanceAt state index.toNat) ∧
       V ⟨block root, epoch.toNat⟩ ∩ U ⟨block root, epoch.toNat⟩ ⊆
         (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset
 
@@ -82,14 +85,14 @@ theorem LinkWithChurn.slackLink {block : Root → β} {epoch : Epoch} {root : Ro
   set t : Models.Ffg.Checkpoint β := ⟨block root, epoch.toNat⟩
   refine ⟨epochs, chain, ?_⟩
   -- Each set in the bound lies in the target set, where the two stakes agree.
-  have agree : ∀ S ⊆ V t, stake w S = stake (fun index => balanceAt state index.toNat) S :=
+  have agree : ∀ S ⊆ V t, stake (w t) S = stake (fun index => balanceAt state index.toNat) S :=
     fun S sub => stake_congr fun index member => weights index (sub member)
   have exited : V t \ (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset ⊆
       V t \ U t := by
     intro index member
     simp only [Finset.mem_sdiff] at member ⊢
     exact ⟨member.1, fun inU => member.2 (later (Finset.mem_inter.mpr ⟨member.1, inU⟩))⟩
-  have slack := stake_mono (w := w) exited
+  have slack := stake_mono (w := w t) exited
   unfold LinkWithChurn at link
   rw [← set, ← agree _ subset_rfl, ← agree (signers (V t) votes s t) (Finset.filter_subset _ _),
     ← agree _ Finset.sdiff_subset] at link
@@ -103,9 +106,15 @@ The current justified epoch must be at most the previous epoch.
 
 Once justification runs, the previous justified epoch must be below the previous epoch.
 
-The sets of the model must match the state for the previous and the current epoch.
+If the step changes the current justified checkpoint, the new one is the checkpoint of its epoch.
 
-For each of these epochs, the block of the source of its link must be in the chain of its block.
+The sets and weights of the model must then match the state for that epoch.
+
+Otherwise they need not match.
+
+Take each of the two recent epochs and the source of its link.
+
+The block of that source must be in the chain of the block of the epoch.
 
 That block is the block of the root that the state records for the start of the epoch.
 
@@ -123,8 +132,8 @@ theorem processJustificationAndFinalization_slackJustifiedCheckpoints
     (settled : JustifiedSettled state)
     (separated : GENESIS_EPOCH + 1 < getCurrentEpoch state →
       state.previousJustifiedCheckpoint.epoch < getPreviousEpoch state)
-    (previousSets : TargetSetsMatch V U w block state (getPreviousEpoch state))
-    (currentSets : TargetSetsMatch V U w block state (getCurrentEpoch state))
+    (sets : after.currentJustifiedCheckpoint ≠ state.currentJustifiedCheckpoint →
+      TargetSetsMatch V U w block state after.currentJustifiedCheckpoint.epoch)
     (chain : ∀ (current : Bool) (root : Root),
       getBlockRoot state (if current then getCurrentEpoch state else getPreviousEpoch state) =
           .ok root →
@@ -149,7 +158,11 @@ theorem processJustificationAndFinalization_slackJustifiedCheckpoints
     contains computed with same | ⟨current, epoch, rootOk, link⟩
   · rw [same]
     exact holds.2
-  rw [epoch] at rootOk
+  by_cases kept : after.currentJustifiedCheckpoint = state.currentJustifiedCheckpoint
+  · rw [kept]
+    exact holds.2
+  have targetSets := sets kept
+  rw [epoch] at rootOk targetSets
   have before := chain current _ rootOk
   have settled' := UInt64.le_iff_toNat_le.mp settled
   have previous := getPreviousEpoch_toNat state
@@ -161,13 +174,13 @@ theorem processJustificationAndFinalization_slackJustifiedCheckpoints
   rw [target] at link ⊢
   cases current
   · -- The previous epoch: its source is the previous justified checkpoint.
-    simp only [Bool.false_eq_true, ↓reduceIte] at link before rootOk ⊢
+    simp only [Bool.false_eq_true, ↓reduceIte] at link before rootOk targetSets ⊢
     have below := UInt64.lt_iff_toNat_lt.mp
       (separated (UInt64.lt_iff_toNat_lt.mpr (by rw [one]; exact late)))
-    exact .link holds.1 (link.slackLink previousSets rootOk below before)
+    exact .link holds.1 (link.slackLink targetSets rootOk below before)
   · -- The current epoch: its source is the current justified checkpoint.
-    simp only [↓reduceIte] at link before rootOk ⊢
-    exact .link holds.2 (link.slackLink currentSets rootOk (by simp only [Checkpoint.toFfg]; omega)
+    simp only [↓reduceIte] at link before rootOk targetSets ⊢
+    exact .link holds.2 (link.slackLink targetSets rootOk (by simp only [Checkpoint.toFfg]; omega)
       before)
 
 end EthLib.Consensus
