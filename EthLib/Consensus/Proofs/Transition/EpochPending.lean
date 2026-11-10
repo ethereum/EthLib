@@ -609,8 +609,8 @@ theorem processPendingDeposits_postponed {electra : .pectra ≤ fork}
     obtain ⟨read, applied, _, facts⟩ := passPendingDeposits_applied ‹_›
     have applies := facts.applies
     rw [facts.appliedFilter] at applies
-    refine ⟨read, _, _, _, _, facts.split, ?_, by simpa using facts.bounded, facts.statusOk, applies,
-      rfl⟩
+    refine ⟨read, _, _, _, _, facts.split, ?_, by simpa using facts.bounded, facts.statusOk,
+      applies, rfl⟩
     rw [← facts.movedFilter]
     simpa using facts.pushed
 
