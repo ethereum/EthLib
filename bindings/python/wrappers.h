@@ -420,6 +420,7 @@ PyObject* py_consensus_get_eth1_vote (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_execution_block (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_optimistic_candidate_block (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_optimistic_node (PyObject* self, PyObject* args);
+PyObject* py_consensus_inclusion_list_satisfaction (PyObject* self, PyObject* args);
 PyObject* py_consensus_latest_verified_ancestor (PyObject* self, PyObject* args);
 PyObject* py_consensus_on_valid_payload (PyObject* self, PyObject* args);
 PyObject* py_consensus_on_invalidated_payload (PyObject* self, PyObject* args);
@@ -478,6 +479,7 @@ PyObject* py_consensus_compute_min_epochs_for_block_requests(PyObject* self, PyO
 PyObject* py_consensus_gossip_topics                      (PyObject* self, PyObject* args);
 PyObject* py_consensus_reqresp_request_bounds             (PyObject* self, PyObject* args);
 PyObject* py_consensus_reqresp_response_bounds            (PyObject* self, PyObject* args);
+PyObject* py_consensus_reqresp_response_valid             (PyObject* self, PyObject* args);
 PyObject* py_consensus_gossip_topic_bound                 (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_subnet_for_attestation     (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_subnet_for_blob_sidecar    (PyObject* self, PyObject* args);

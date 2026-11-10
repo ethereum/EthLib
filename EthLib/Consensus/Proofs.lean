@@ -114,6 +114,7 @@ public import EthLib.Consensus.Proofs.Transition.TargetFlags
 public import EthLib.Consensus.Proofs.Transition.TargetSlots
 public import EthLib.Consensus.Proofs.Transition.TargetVotes
 public import EthLib.Consensus.Proofs.Transition.Upgrade
+public import EthLib.Consensus.Proofs.Transition.WeakSubjectivitySafety
 public import EthLib.Consensus.Proofs.Transition.WithdrawalAmounts
 public import EthLib.Consensus.Proofs.Transition.Withdrawals
 public import EthLib.Consensus.Proofs.WeakSubjectivity

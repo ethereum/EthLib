@@ -128,6 +128,11 @@ eth_consensus_reqresp_response_bounds(
 );
 
 extern lean_object*
+eth_consensus_reqresp_response_valid(
+  lean_object* args
+);
+
+extern lean_object*
 eth_consensus_gossip_topic_bound(
   lean_object* name,
   lean_object* fork,
@@ -346,6 +351,11 @@ eth_consensus_latest_verified_ancestor(
 
 extern lean_object*
 eth_consensus_is_optimistic_node(
+  lean_object* args
+);
+
+extern lean_object*
+eth_consensus_inclusion_list_satisfaction(
   lean_object* args
 );
 
@@ -1474,6 +1484,15 @@ py_consensus_is_optimistic_node(
 }
 
 PyObject*
+py_consensus_inclusion_list_satisfaction(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(
+    eth_consensus_inclusion_list_satisfaction, args, 11, FORK_CHOICE_ERROR);
+}
+
+PyObject*
 py_consensus_latest_verified_ancestor(
   PyObject* self,
   PyObject* args
@@ -1623,6 +1642,14 @@ py_consensus_reqresp_response_bounds(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_reqresp_response_bounds, args, 3, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_reqresp_response_valid(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_reqresp_response_valid, args, 6, CONSENSUS_ERROR);
 }
 
 PyObject*

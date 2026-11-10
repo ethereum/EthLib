@@ -46,9 +46,9 @@ def noiseCipherType : String := "tuple[bytes | None, int]"
 def noiseStateType : String :=
   "tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int]"
 
-/-- The Python type of a libp2p Noise state: the XX state, and the saved message and reader. -/
+/-- The Python type of a libp2p Noise state: the XX state and its authenticated remote. -/
 def noiseLibp2pType : String :=
-  "tuple[" ++ noiseStateType ++ ", tuple[" ++ noiseStateType ++ ", bytes] | None]"
+  "tuple[" ++ noiseStateType ++ ", tuple[bytes, bytes, bytes, bytes | None] | None]"
 
 /-- Every method of the Python extension, in the order of its method table. -/
 def bindings : List Binding := [
@@ -685,6 +685,12 @@ def bindings : List Binding := [
       "verify: bool, config: dict | None, optimistic_roots: list[bytes], head: bytes, " ++
       "head_payload_status: int) -> bool",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_inclusion_list_satisfaction",
+    `EthLib.Consensus.Exports.inclusionListSatisfactionExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, config: dict | None, validation_status: int, satisfied: bool, " ++
+      "validated_root: bytes | None, roots: list[bytes]) -> list[bool | None]",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_is_optimistic_restricted_domain",
     `EthLib.Consensus.Exports.isOptimisticRestrictedDomainExport,
     "(domain_type: bytes) -> bool", [], some "ForkChoiceError"⟩,
@@ -870,6 +876,11 @@ def bindings : List Binding := [
   ⟨"consensus_reqresp_response_bounds", `EthLib.Consensus.Exports.reqRespResponseBoundsExport,
     "(name: str, chunk_fork: str, protocol: str) -> tuple[int, int]",
     [`EthLib.Consensus.BoundsError], some "ConsensusError"⟩,
+  ⟨"consensus_reqresp_response_valid", `EthLib.Consensus.Exports.reqRespResponseValidExport,
+    "(name: str, fork: str, protocol: str, request: bytes, " ++
+      "items: list[tuple[int | bytes, ...]], " ++
+      "committee: list[int]) -> bool",
+    [`EthLib.Consensus.BoundsError, `EthLib.Serialization.Ssz.Err], some "ConsensusError"⟩,
   ⟨"consensus_gossip_topic_bound", `EthLib.Consensus.Exports.gossipTopicBoundExport,
     "(name: str, fork: str, topic: str) -> int",
     [`EthLib.Consensus.BoundsError], some "ConsensusError"⟩,

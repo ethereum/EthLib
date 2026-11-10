@@ -27,6 +27,8 @@ Whether a node is optimistic is read from a fork choice store, built by a run of
 An input that does not decode, an unknown name or a fork without the rule has code 0.
 
 A failed step has the code of its fork choice error.
+
+From Heze an export reads the answers on the inclusion lists after a run of steps.
 -/
 
 public section
@@ -182,6 +184,68 @@ Then come the optimistic roots, the root of the head of the node and the code of
 @[export eth_consensus_is_optimistic_node]
 def isOptimisticNodeExport (args : PyValue) : Result PyValue :=
   pyExport isOptimisticNodeOf args
+
+/-- From Heze: the answers on the inclusion lists after a run of fork choice steps.
+
+Every payload of the run has the same status.
+
+The execution layer gives one answer on the inclusion lists for all of them.
+
+A status code other than 0 valid, 1 invalidated or 2 not validated fails with code 0.
+
+An envelope with an invalidated payload is rejected.
+
+The outcomes of the steps are not returned.
+
+The payloads kept with the status not validated are the optimistic ones.
+
+When a root is named, its payload then turns valid, and that answer is recorded for its block.
+
+A named root whose payload is not optimistic fails with the code of that error.
+
+The answers are read for the given roots, none for a root that has none.
+
+A fork before Heze has code 0. -/
+def inclusionListSatisfactionOf (args : String × String × ByteArray × ByteArray ×
+    List ForkChoiceStep × Bool × Option PyValue × UInt8 × Bool × Option Root × List Root) :
+    Result (List (Option Bool)) := do
+  let (name, fork, anchorState, anchorBlock, steps, verify, replacements, status, satisfied,
+    validated, roots) := args
+  let (preset, fork) ← optimisticPresetAndFork name.toUTF8 fork.toUTF8
+  if heze : .hegota ≤ fork then
+    unless status ≤ PAYLOAD_STATUS_NOT_VALIDATED do
+      throw (0, s!"unknown payload validation status {status}")
+    let config ← configWithValue name replacements
+    let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
+    let anchorState ← decodeInput (BeaconState preset fork) anchorState
+    let anchorBlock ← decodeInput (BeaconBlock preset fork) anchorBlock
+    let answer (sources : BlockSources preset fork) : BlockSources preset fork :=
+      { sources with inclusionListSatisfied := fun _ _ => satisfied }
+    let (store, _) ← replayForkChoice config checks anchorState anchorBlock steps
+      (fun sources => (answer sources).withPayloadStatus status)
+    let store ← match validated with
+      | none => pure store
+      | some root => do
+        let kept := (store.payloads (Nat.le_trans (by decide) heze)).keys
+        let optimistic : OptimisticStore preset fork := {
+          optimisticRoots := if status = PAYLOAD_STATUS_NOT_VALIDATED then kept else []
+          head := { root := Vector.replicate 32 0 }
+          blocks := store.blocks }
+        let (_, store) ← runOptimistic (optimistic.onValidatedPayload store heze root satisfied)
+        pure store
+    return roots.map ((store.payloadInclusionListSatisfaction heze)[·]?)
+  else throw (0, s!"no inclusion lists at {fork.name}")
+
+/-- From Heze: the answers on the inclusion lists after a run of fork choice steps.
+
+The first seven arguments are those of the fork choice run.
+
+Then come the code of the status of each payload and the answer of the execution layer.
+
+Then come the root whose payload turns valid, if any, and the roots to read. -/
+@[export eth_consensus_inclusion_list_satisfaction]
+def inclusionListSatisfactionExport (args : PyValue) : Result PyValue :=
+  pyExport inclusionListSatisfactionOf args
 
 /-- Whether an optimistic validator may not sign under a domain type of 4 bytes. -/
 @[export eth_consensus_is_optimistic_restricted_domain]

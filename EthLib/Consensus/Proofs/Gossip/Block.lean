@@ -63,6 +63,42 @@ theorem payloadOutcome_of_lt_bellatrix {state : BeaconState preset fork}
     payloadOutcome config state before block status = .ok accept := by
   simp [payloadOutcome, early, pure, Except.pure]
 
+/-- The payload checks reject a block only from Bellatrix, for the time of its payload. -/
+theorem payloadOutcome_eq_reject {state : BeaconState preset fork}
+    {before : fork < .glamsterdam} {block : BeaconBlock preset fork}
+    {status : PayloadValidationStatus} {reason : String}
+    (rejected : payloadOutcome config state before block status = .ok (.reject reason)) :
+    .bellatrix ≤ fork ∧ reason = "incorrect execution payload timestamp" := by
+  unfold payloadOutcome at rejected
+  split at rejected
+  next bellatrix =>
+    refine ⟨bellatrix, ?_⟩
+    simp only [bind, Except.bind, Except.mapError, pure, Except.pure] at rejected
+    split at rejected
+    · split at rejected
+      · simp at rejected
+      · rename_i time _
+        simp only [Except.ok.injEq] at rejected
+        by_cases same : (block.body.executionPayload ⟨bellatrix, before⟩).timestamp == time
+        · simp only [same, rejectUnless, ite_true, ValidationResult.accept_andThen] at rejected
+          simp [ignoreUnless] at rejected
+          split at rejected <;> simp at rejected
+        · simp only [same, rejectUnless, Bool.false_eq_true, ite_false] at rejected
+          simpa [ValidationResult.andThen] using rejected.symm
+    · simp at rejected
+  next => simp [pure, Except.pure] at rejected
+
+/-- From Capella the payload checks never reject a payload with the time of its slot. -/
+theorem payloadOutcome_ne_reject_of_capella {state : BeaconState preset fork}
+    {before : fork < .glamsterdam} {block : BeaconBlock preset fork}
+    {status : PayloadValidationStatus} {reason : String} (capella : .shapella ≤ fork)
+    (time : computeTimeAtSlot config state.genesisTime block.slot =
+      .ok (block.body.executionPayload ⟨Nat.le_trans (by decide) capella, before⟩).timestamp) :
+    payloadOutcome config state before block status ≠ .ok (.reject reason) := by
+  have bellatrix : .bellatrix ≤ fork := Nat.le_trans (by decide) capella
+  simp [payloadOutcome, bellatrix, capella, time, bind, Except.bind, Except.mapError, pure,
+    Except.pure, rejectUnless, ignoreUnless]
+
 /-- Before Deneb a block commits to no blob, so the limit holds. -/
 theorem blobCountWithinLimit_of_lt_deneb {before : fork < .glamsterdam}
     {block : BeaconBlock preset fork} (early : ¬ .dencun ≤ fork) :

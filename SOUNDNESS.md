@@ -601,14 +601,17 @@ The million-iteration X25519 vector requires `ETHLIB_SLOW_VECTORS=1`.
 
 ### Noise XX and libp2p identities
 
-`complete_authenticates` (`Networking/Proofs/Noise/Identity.lean`) ties successful completion to an incoming message that the XX reader accepts.
-The reported public key, signature and extensions are the fields of the payload decrypted from that message.
-The signature verifies against the static key read from that message, and the reported peer ID derives from the signing public key.
-`readLibp2p_authenticates` states the same check for the read of message 2 or 3.
-This is an acceptance theorem, not a proof of protocol security, confidentiality or constant-time execution.
-Both theorems hold for any state that a caller passes in.
-They do not relate the identity to the transport keys or the handshake hash of that state.
-Only the libp2p read and completion check an identity; the raw transport split of an XX state checks none.
+`readLibp2p_authenticates` (`Networking/Proofs/Noise/Identity.lean`) says that the read of message 2 or 3 accepts only a payload whose signature verifies on the static key that the message carries.
+The state then stores that remote, and completion returns it without reading a message or verifying the signature again.
+`complete_ok` holds for any state: the returned remote is the stored one, its static key is the remote static key of the handshake, and the ciphers are those of that handshake.
+`Produced.complete_authenticates` adds, for states that the libp2p initialize, write and read functions produce, that the signature verifies on that static key and that the public key decodes to the stored point.
+A caller that edits the state can therefore complete with a remote whose signature does not verify.
+`Produced.complete_isOk` says that completion of such a state after message 3 succeeds.
+These are acceptance theorems, not a proof of protocol security, confidentiality or constant-time execution.
+They relate the identity to the transport keys only through the shared handshake state.
+No theorem says that the chaining key mixed a Diffie-Hellman output with the remote static key, and none covers the handshake hash.
+Only the libp2p read verifies an identity, and completion checks that the stored remote has the remote static key of the handshake.
+The raw transport split of an XX state checks neither.
 The Python tests compare the raw XX handshake with a published test vector.
 No published vector covers the libp2p payload, so its tests check the keys and signatures with independent code.
 
@@ -1595,8 +1598,20 @@ The state must hold the root of the checkpoint at its epoch and be at that epoch
 The answer is then whether the current epoch is at most the epoch of the checkpoint plus the period.
 By `isWithinWeakSubjectivityPeriod_of_slot_le`, a checkpoint within its period at some slot is within it at every earlier slot.
 
-No theorem says that the period gives the safety margin that the rule intends.
-That margin is the claim of the analysis behind the rule, and EthLib does not model it.
+From Electra, `accountable_safety_of_weakSubjectivityPeriod` (`Consensus/Proofs/Transition/WeakSubjectivitySafety.lean`) relates the period to the safety margin that the rule intends, under an assumption on the change of the validator sets.
+The trusted set is the active validators of the state at the checkpoint, weighed by their effective balances, with at least one increment of stake.
+Take two conflicting finalized checkpoints of the Casper FFG model.
+The change of a set since the trusted set counts the stake that joined plus twice the stake that left.
+Assume that the change of each justified set between their epochs is at most `3 c` for each of the `n` epochs of churn, the period less the withdrawal delay, with `c` the churn of the period.
+Then the slashable validators hold at least `1/3 - SAFETY_DECAY/100` of the trusted stake, `7/30` with `SAFETY_DECAY` at 10.
+The arithmetic is `safetyMargin_of_balanceChurnPeriod_eq_ok`, from `200 n c ≤ SAFETY_DECAY · t`.
+In Electra an epoch adds at most the activation-exit churn `a ≤ c` and removes at most `c`, consolidation sources included, so its change is at most `a + 2 c ≤ 3 c`.
+From Gloas an epoch changes the set by at most three times the weighted churn, plus 4 Gwei of rounding when the consolidation churn is zero.
+The queues carry unused churn to later epochs, so the bound can hold over the window without holding in each epoch.
+No theorem yet derives it from the state transition, and the model fixes the effective balances over the window.
+The rule spends the withdrawal delay on keeping exits slashable and the other epochs of the period on churn, and the assumption takes the change over those epochs as given.
+Activations have no such delay, and a validator outside the registry of the checkpoint weighs zero in the model.
+No theorem covers the Phase 0 period, which counts validators and top-ups.
 The Python suite checks the periods against the three tables of the rule, except for the rows whose states take minutes to build.
 
 ### Honest validator duties
@@ -1896,10 +1911,24 @@ That case needs the removal of an invalid payload from the store of the fork cho
 `isOptimisticNode_of_glamsterdam` shows that the rule then fails when the head is not optimistic.
 `isOptimisticNode_of_isHeadOptimistic_error` shows that it fails as the optimism of the head does.
 The store holds the blocks of one fork, so a payload chain does not cross from Gloas into Fulu.
-The Heze record of whether a payload satisfies the inclusion lists is not modelled here.
+From Heze the store also records whether a payload satisfies the inclusion lists of the slot before.
+The Heze guide derives that answer from the status that the execution layer gives a payload.
+The verdict of the execution layer follows from the same status.
+`BlockSources.withPayloadStatus` puts the status into the sources that the handlers read.
+For a payload not yet validated, its execution layer accepts every payload and the payload satisfies its lists.
+For an invalidated one, it rejects every payload and the payload does not satisfy them.
+`Store.isPayloadInclusionListSatisfied_of_notValidated` shows the answer `true` for an envelope that the handler accepts.
+`Store.onExecutionPayloadEnvelope_ne_ok_of_invalidated` shows that an invalidated payload is never kept.
+A status outside the three of the guide counts as invalidated, a choice of EthLib: such a payload is never kept.
+The export rejects such a status before any step runs.
+`Store.recordValidatedInclusionListSatisfaction_satisfied` shows that a payload that turns valid takes the answer that the execution layer gives with its verdict.
+`Store.recordValidatedInclusionListSatisfaction_eq` shows that nothing else in the store changes, and `Store.recordValidatedInclusionListSatisfaction_other` that every other answer stays, those of its ancestors among them.
+The store of the fork choice does not keep the status of a payload, but the optimistic store does.
+`OptimisticStore.onValidatedPayload_ok` shows that the move to valid succeeds only for an optimistic payload, which then leaves the optimistic set as a valid payload does.
 The Python suite checks each rule on Bellatrix blocks built in the test, with roots from the SSZ export.
 At Gloas it checks the execution block, the candidate rule, the two payload answers and the latest verified ancestor.
 It checks the optimistic head of each status on a pinned Gloas fork choice case, and that the second case is refused.
+At Heze it checks the answer on the inclusion lists for each status, and once the payload turns valid, on a pinned Heze case.
 
 ### Light client
 
@@ -1989,7 +2018,20 @@ Gasper states it with a maximum and divisions by three; the theorem states its t
 If one of the two sets has no stake, both bounds hold with no slashable validator.
 The reader does not choose the two checkpoints, so the theorem says something only when every justified checkpoint between the two finalized epochs has a set with positive stake.
 
-`accountable_safety` (`AccountableSafety.lean`) takes one validator set for every vote, and follows from the theorem above.
+`accountable_safety_reference` (`AccountableSafety.lean`) restates the first bound against one fixed reference set `V₀`, such as the set of a trusted checkpoint.
+The stake of `V₀` is at most three times the slashable stake, plus the change of each of the two sets since `V₀`.
+The change of a set counts the stake that joined once and the stake that left twice.
+`accountable_safety_of_change` assumes that the change of every justified set between the two finalized epochs is at most `b`, and bounds the stake of `V₀` by three times the slashable stake plus `2 b`.
+`accountable_safety_of_steps` assumes that every justified checkpoint between the two finalized epochs has a set reached from `V₀` in at most `n` steps.
+Each step changes the set by at most `d` in that measure, so the stake of `V₀` is at most three times the slashable stake plus `2 n d`.
+As above, the reader does not choose the two checkpoints, so the hypothesis covers every justified checkpoint between the two finalized epochs.
+For a step of one epoch, `d` bounds the stake that activates plus twice the stake that exits, the source of a consolidation included.
+The churn queues carry unused churn to later epochs, so such a bound can fail in one epoch while the total over a window holds; `accountable_safety_of_change` takes that total.
+The model does not follow withdrawals; the specification covers them with the withdrawability delay in the weak subjectivity period.
+The model also fixes the stake of each validator, so a top-up, a consolidation or a penalty of a validator that stays in the set is outside these theorems.
+No theorem yet derives those steps from the beacon state.
+
+`accountable_safety` (`AccountableSafety.lean`) takes one validator set for every vote, and follows from `accountable_safety_dynamic`.
 Then validators with at least one third of the stake broke a slashing condition.
 With a total stake of zero this holds for every set of votes, so the theorem says something only for positive stake.
 
@@ -2272,12 +2314,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 367 operations and 49 size constants.
-The Python extension calls 367 of the operations and 49 of the constants.
+Lean exports 368 operations and 49 size constants.
+The Python extension calls 368 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-9686 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1703), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (90), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (102), `module.c` (1375), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (648), `x25519.c` (21), `xmss.c` (134).
+9703 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1717), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (90), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (102), `module.c` (1377), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (649), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

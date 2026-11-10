@@ -419,19 +419,19 @@ def noise_unframe(frame: bytes) -> bytes:
     """Read exactly one complete 16-bit frame, noise-libp2p "Wire Format"."""
     ...
 
-def noise_libp2p_initialize(initiator: bool, static_key: bytes, ephemeral_key: bytes) -> tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None]:
+def noise_libp2p_initialize(initiator: bool, static_key: bytes, ephemeral_key: bytes) -> tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[bytes, bytes, bytes, bytes | None] | None]:
     """Initialize libp2p XX with explicit X25519 private keys and an empty prologue."""
     ...
 
-def noise_libp2p_write(state: tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None], identity_secret: bytes, extensions: bytes | None) -> tuple[tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None], bytes]:
+def noise_libp2p_write(state: tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[bytes, bytes, bytes, bytes | None] | None], identity_secret: bytes, extensions: bytes | None) -> tuple[tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[bytes, bytes, bytes, bytes | None] | None], bytes]:
     """Write the next libp2p message with a signed identity payload."""
     ...
 
-def noise_libp2p_read(state: tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None], message: bytes) -> tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None]:
+def noise_libp2p_read(state: tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[bytes, bytes, bytes, bytes | None] | None], message: bytes) -> tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[bytes, bytes, bytes, bytes | None] | None]:
     """Read the next libp2p message, and authenticate the static key of message 2 or 3."""
     ...
 
-def noise_libp2p_complete(state: tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None]) -> tuple[bytes, tuple[bytes, bytes, bytes, bytes | None], tuple[bytes | None, int], tuple[bytes | None, int], bytes]:
+def noise_libp2p_complete(state: tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[bytes, bytes, bytes, bytes | None] | None]) -> tuple[bytes, tuple[bytes, bytes, bytes, bytes | None], tuple[bytes | None, int], tuple[bytes | None, int], bytes]:
     """Return the authenticated peer and transport keys only after completion."""
     ...
 
@@ -759,6 +759,10 @@ def consensus_is_optimistic_node(name: str, fork: str, anchor_state: bytes, anch
     """From Bellatrix: whether a node is optimistic, after a run of fork choice steps."""
     ...
 
+def consensus_inclusion_list_satisfaction(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None, validation_status: int, satisfied: bool, validated_root: bytes | None, roots: list[bytes]) -> list[bool | None]:
+    """From Heze: the answers on the inclusion lists after a run of fork choice steps."""
+    ...
+
 def consensus_is_optimistic_restricted_domain(domain_type: bytes) -> bool:
     """Whether an optimistic validator may not sign under a domain type of 4 bytes."""
     ...
@@ -941,6 +945,10 @@ def consensus_reqresp_request_bounds(name: str, fork: str, protocol: str) -> tup
 
 def consensus_reqresp_response_bounds(name: str, chunk_fork: str, protocol: str) -> tuple[int, int]:
     """The smallest and the largest length of the payload of a successful response chunk, as a pair."""
+    ...
+
+def consensus_reqresp_response_valid(name: str, fork: str, protocol: str, request: bytes, items: list[tuple[int | bytes, ...]], committee: list[int]) -> bool:
+    """Whether a response is valid for its request, as a Boolean."""
     ...
 
 def consensus_gossip_topic_bound(name: str, fork: str, topic: str) -> int:

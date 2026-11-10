@@ -569,6 +569,9 @@
 #define DOC_consensus_is_optimistic_node \
   "From Bellatrix: whether a node is optimistic, after a run of fork choice steps."
 
+#define DOC_consensus_inclusion_list_satisfaction \
+  "From Heze: the answers on the inclusion lists after a run of fork choice steps."
+
 #define DOC_consensus_is_optimistic_restricted_domain \
   "Whether an optimistic validator may not sign under a domain type of 4 bytes."
 
@@ -706,6 +709,9 @@
 
 #define DOC_consensus_reqresp_response_bounds \
   "The smallest and the largest length of the payload of a successful response chunk, as a pair."
+
+#define DOC_consensus_reqresp_response_valid \
+  "Whether a response is valid for its request, as a Boolean."
 
 #define DOC_consensus_gossip_topic_bound \
   "The largest length of the payload of a gossip topic at a fork."
