@@ -67,6 +67,13 @@ theorem SameOutside.mono {first second : List Address} {tx tx' : TransactionStat
     (h : SameOutside first tx tx') (sub : first ⊆ second) : SameOutside second tx tx' :=
   fun address hmem => h address fun hfirst => hmem (sub hfirst)
 
+/-- Outside the list, the second state reads the same account as the first. -/
+theorem SameOutside.getAccount_eq {touched : List Address} {tx tx' : TransactionState}
+    {address : Address} (h : SameOutside touched tx tx') (hout : address ∉ touched) :
+    tx'.getAccount address = tx.getAccount address := by
+  unfold getAccount
+  rw [(h address hout).1]
+
 /-! ## Each write -/
 
 /-- Setting an account touches that address only. -/

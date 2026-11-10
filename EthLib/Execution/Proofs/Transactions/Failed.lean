@@ -2,7 +2,6 @@ module
 
 public import EthLib.Execution.Proofs.Evm.Call.Nonce
 public import EthLib.Execution.Proofs.Transactions.Authorization
-public import EthLib.Execution.Proofs.Transactions.Inclusion
 public import EthLib.Execution.Proofs.Transactions.Process
 
 /-!
@@ -39,8 +38,6 @@ It holds up to Glamsterdam, whether the message fails in its first frame or befo
 Up to BPO5, a call halts before its first frame only when a code is missing.
 
 That error aborts the whole run, so up to BPO5 a failed call keeps its authorizations.
-
-A sender that signs its own authorization then ends two nonces above its transaction.
 
 From Hegotá a transaction is not yet specified, so none runs.
 
@@ -388,14 +385,6 @@ theorem processTransaction_sameOutside_of_error {env : BlockEnvironment fork}
 /-! ## The values -/
 
 open State.TransactionState
-
-/-- Two states that read the same outside a list read the same account at an address off it. -/
-private theorem getAccount_of_sameOutside {touched : List Address}
-    {state state' : State.TransactionState} {address : Address}
-    (h : SameOutside touched state state') (hout : address ∉ touched) :
-    state'.getAccount address = state.getAccount address := by
-  unfold getAccount
-  rw [(h address hout).1]
 
 /-- The purchase of gas keeps the code hash of the sender.
 
@@ -779,46 +768,6 @@ theorem createdAccounts_prepareFirstFrame {chainId : Nat} {message : Message for
           cases h
           exact base
 
-/-- Up to BPO5, the first frame of a call fails only when the state lacks a code.
-
-That error aborts the whole run, so a call that fails up to BPO5 always starts its first frame. -/
-theorem aborts_of_prepareFirstFrame_of_lt_glamsterdam (hfork : fork < .glamsterdam)
-    {chainId : Nat} {message : Message fork} {state : State.TransactionState}
-    {substate : Substate} {auths : List Authorization} {paid : Std.ExtTreeSet Address}
-    {target : Address} {e : EvmError} {read : State.TransactionState}
-    (htarget : message.target = some target)
-    (h : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid =
-      .error (e, read)) :
-    e.aborts = true := by
-  have hpre : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hfork
-  -- A missing code comes out as an error of the state.
-  have hstate : ∀ {α : Type} {x : Except State.StateError α} {s : State.TransactionState},
-      x.mapError (fun e => (EvmError.state e, s)) = .error (e, read) → e.aborts = true := by
-    intro α x s hx
-    cases x with
-    | error e' =>
-      simp only [Except.mapError, Except.error.injEq, Prod.mk.injEq] at hx
-      rw [← hx.1]
-      rfl
-    | ok _ => cases hx
-  unfold prepareFirstFrame at h
-  rw [htarget] at h
-  dsimp only at h
-  rcases bind_eq_error h with hauth | ⟨done, -, h⟩
-  · exact aborts_of_foldlM_applyAuthorization_of_lt_glamsterdam hfork hauth
-  simp only [hpre, false_and, ↓reduceIte] at h
-  rcases bind_eq_error h with hcharge | ⟨meter, -, h⟩
-  · cases hcharge
-  rcases bind_eq_error h with hcode | ⟨code, -, h⟩
-  · exact hstate hcode
-  split at h
-  · rcases bind_eq_error h with hcharge | ⟨meter', -, h⟩
-    · cases hcharge
-    rcases bind_eq_error h with hcode | ⟨code', -, h⟩
-    · exact hstate hcode
-    · cases h
-  · cases h
-
 end Meter
 
 section Values
@@ -864,6 +813,21 @@ abbrev transactionFirstFrame (Meter : Type) [GasMeter Meter] (tx : Transaction)
     { message with reservoir := (allocateGas fork tx included.intrinsicGas).reservoir } bought
     (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
     (paidWrites included.sender target tx)
+
+/-- The first frame of the message of a transaction never starts: its preparation halts.
+
+The preparation runs after the gas purchase, on the message that the transaction sends. -/
+abbrev FirstFrameHalts (Meter : Type) [GasMeter Meter] (tx : Transaction)
+    (env : BlockEnvironment fork) (block : State.BlockState) (included : Included) : Prop :=
+  let pre := State.TransactionState.ofBlock block
+  ∃ target bought message e read,
+    messageTarget included.sender (pre.getAccount included.sender).nonce tx = .ok target ∧
+    buyGas env pre included.sender tx = .ok bought ∧
+    transactionMessage env
+      { origin := included.sender, gasPrice := included.gasPrice,
+        blobVersionedHashes := fun _ => tx.blobHashes } bought included.sender target
+      (allocateGas fork tx included.intrinsicGas).execution tx = .ok message ∧
+    transactionFirstFrame Meter tx env included bought target message = .error (e, read)
 
 /-- What a failed run leaves: it buys the gas, then settles it against the state of the message.
 
@@ -956,10 +920,10 @@ theorem runTransaction_values_of_error {Meter : Type} [GasMeter Meter] [LawfulGa
       have hle : (bought.getAccount included.sender).nonce ≤
           (output.state.getAccount included.sender).nonce := by
         rcases hcases with ⟨e, read, -, hstate⟩ | ⟨first, hfirst, hsame, -⟩
-        · rw [hstate, getAccount_of_sameOutside (sameOutside_withReadsOf bought read)
+        · rw [hstate, (sameOutside_withReadsOf bought read).getAccount_eq
             List.not_mem_nil]
           exact Nat.le_refl _
-        · rw [getAccount_of_sameOutside hsame List.not_mem_nil]
+        · rw [hsame.getAccount_eq List.not_mem_nil]
           exact nonceLe_prepareFirstFrame hfirst _
       omega
     obtain ⟨-, hnonce, hcode, hbal, hstore, -⟩ := settleGas_accounts hsettle' address
@@ -1045,14 +1009,15 @@ private theorem failedRun_authority {Meter : Type} [GasMeter Meter] [LawfulGasMe
     (((out.state.getAccount authority).nonce = start + accepted.length ∧
         (out.state.getAccount authority).codeHash =
           delegatedCodeHash accepted (pre.getAccount authority).codeHash) ∨
-      (.glamsterdam ≤ fork ∧ (out.state.getAccount authority).nonce = start ∧
+      (.glamsterdam ≤ fork ∧ FirstFrameHalts Meter tx env block included ∧
+        (out.state.getAccount authority).nonce = start ∧
         (out.state.getAccount authority).codeHash = (pre.getAccount authority).codeHash)) ∧
     (authority ≠ included.sender → authority ≠ env.coinbase →
       (out.state.getAccount authority).balance.toNat =
         (pre.getAccount authority).balance.toNat) := by
   intro pre start accepted
-  obtain ⟨target, bought, message, output, base, gasLeft, refund, -, hbought, hmessage, houtput,
-    rfl, -, -, -, -, hsettled, -, hcases⟩ := hrun
+  obtain ⟨target, bought, message, output, base, gasLeft, refund, htarget0, hbought, hmessage,
+    houtput, rfl, -, -, -, -, hsettled, -, hcases⟩ := hrun
   obtain ⟨hnonce, hhash, hbal, -⟩ := hsettled authority
   -- The gas purchase changes only the nonce and the balance of the sender.
   have hbought_hash : (bought.getAccount authority).codeHash = (pre.getAccount authority).codeHash
@@ -1064,7 +1029,7 @@ private theorem failedRun_authority {Meter : Type} [GasMeter Meter] [LawfulGasMe
       refine ⟨(buyGas_keeps hbought).1, ?_, fun hne => absurd rfl hne⟩
       rw [(buyGas_sender rfl hbought).2.2]
       simp [start, pre, hs]
-    · rw [getAccount_of_sameOutside (sameOutside_buyGas hbought) (by simpa using hs)]
+    · rw [(sameOutside_buyGas hbought).getAccount_eq (by simpa using hs)]
       exact ⟨rfl, by simp [start, pre, hs], fun _ => rfl⟩
   obtain ⟨hb_hash, hb_nonce, hb_bal⟩ := hbought_hash
   have hb_code : bought.getCode (bought.getAccount authority).codeHash = .ok code := by
@@ -1083,7 +1048,7 @@ private theorem failedRun_authority {Meter : Type} [GasMeter Meter] [LawfulGasMe
         (out.state.getAccount authority).balance.toNat =
           (pre.getAccount authority).balance.toNat) := by
     intro hsame hnil
-    have hbase := getAccount_of_sameOutside hsame (address := authority) List.not_mem_nil
+    have hbase := hsame.getAccount_eq (address := authority) List.not_mem_nil
     rw [hnil]
     refine ⟨⟨by rw [hnonce, hbase, hb_nonce]; rfl, by rw [hhash, hbase, hb_hash]; rfl⟩,
       fun hs hc => ?_⟩
@@ -1099,10 +1064,11 @@ private theorem failedRun_authority {Meter : Type} [GasMeter Meter] [LawfulGasMe
       rcases hhalt with hnone | ⟨e, read, hprep⟩
       · rw [hto] at hnone
         cases hnone
-      have hbase := getAccount_of_sameOutside hsame (address := authority) List.not_mem_nil
+      have hbase := hsame.getAccount_eq (address := authority) List.not_mem_nil
       refine ⟨?_, fun hs hc => by rw [hfees hs hc, hbase, hb_bal hs]⟩
       by_cases hglam : .glamsterdam ≤ fork
-      · exact .inr ⟨hglam, by rw [hnonce, hbase, hb_nonce], by rw [hhash, hbase, hb_hash]⟩
+      · exact .inr ⟨hglam, ⟨target, bought, message, e, read, htarget0, hbought, hmessage, hprep⟩,
+          by rw [hnonce, hbase, hb_nonce], by rw [hhash, hbase, hb_hash]⟩
       · -- Up to BPO5, the first frame of a call fails only with an error that aborts the run.
         have htarget : ({ message with reservoir :=
             (allocateGas fork tx included.intrinsicGas).reservoir }).target = some to := by
@@ -1114,7 +1080,7 @@ private theorem failedRun_authority {Meter : Type} [GasMeter Meter] [LawfulGasMe
         rw [hprep] at houtput
         simp [habort] at houtput
   · have hdelegated := foldlM_applyAuthorization_authority hdone hb_code hdelegable
-    have hbase := getAccount_of_sameOutside hsame_done (address := authority) List.not_mem_nil
+    have hbase := hsame_done.getAccount_eq (address := authority) List.not_mem_nil
     rw [hdelegated] at hbase
     refine ⟨.inl ⟨?_, ?_⟩, fun hs hc => ?_⟩
     · rw [hnonce, hbase]
@@ -1131,11 +1097,15 @@ Its nonce starts at its nonce before the transaction, plus one for the sender, w
 
 It gains one per accepted authorization, and its code hash is that of the code the last one sets.
 
-Up to BPO5, a failed call always keeps its authorizations, as [EIP-7702][e7702] asks.
+A failed call keeps its authorizations, as [EIP-7702][e7702] asks.
 
-From Glamsterdam, a halt before the first frame undoes them, as [EIP-8037][e8037] asks.
+From Glamsterdam, the other case needs a halt before the first frame.
+
+That halt undoes the authorizations, as [EIP-8037][e8037] asks.
 
 The authority then keeps its code hash and that starting nonce.
+
+Up to BPO5, a call never halts there without aborting the run, so only the first case holds.
 
 Its balance stays unless it is the sender or the beneficiary.
 
@@ -1153,51 +1123,19 @@ theorem processTransaction_authority_of_error {block : State.BlockState}
     (((out.state.getAccount authority).nonce = start + accepted.length ∧
         (out.state.getAccount authority).codeHash =
           delegatedCodeHash accepted (pre.getAccount authority).codeHash) ∨
-      (.glamsterdam ≤ fork ∧ (out.state.getAccount authority).nonce = start ∧
+      (.glamsterdam ≤ fork ∧ FirstFrameHalts StateGasMeter tx env block included ∧
+        (out.state.getAccount authority).nonce = start ∧
         (out.state.getAccount authority).codeHash = (pre.getAccount authority).codeHash)) ∧
     (authority ≠ included.sender → authority ≠ env.coinbase →
       (out.state.getAccount authority).balance.toNat =
         (pre.getAccount authority).balance.toNat) := by
-  rcases processTransaction_values_of_error h failed with ⟨-, hrun⟩ | ⟨-, -, hrun⟩
+  rcases processTransaction_values_of_error h failed with ⟨hlt, hrun⟩ | ⟨-, -, hrun⟩
+  · obtain ⟨hvalues, hbalance⟩ := failedRun_authority hrun hcode hdelegable
+    refine ⟨?_, hbalance⟩
+    rcases hvalues with hkept | ⟨hglam, -, -⟩
+    · exact .inl hkept
+    · exact absurd hglam (Nat.not_le_of_lt hlt)
   · exact failedRun_authority hrun hcode hdelegable
-  · exact failedRun_authority hrun hcode hdelegable
-
-/-- A sender that signs its own authorization ends a failed call two nonces above its transaction.
-
-The authorization is the only one of the transaction, and it is in scope.
-
-Its nonce is the nonce of the transaction plus one, since the gas purchase comes first.
-
-From Glamsterdam, a halt before the first frame undoes it, and the sender ends one nonce above. -/
-theorem processTransaction_selfAuthorization_of_error {chainId : UInt64} {used : BlockGas}
-    {block : State.BlockState} {auth : Authorization}
-    (hcheck : checkInclusion chainId env used (.ofBlock block) tx = .ok included)
-    (h : processTransaction env block included tx = .ok out) (failed : out.error.isSome = true)
-    (hauths : tx.authorizations = [auth])
-    (hscope : authorizationInScope env.chainId.toNat auth = true)
-    (hrecover : recoverAuthority auth = some included.sender)
-    (hnonce : auth.nonce.toNat = tx.nonce.toNat + 1) :
-    (out.state.getAccount included.sender).nonce = tx.nonce.toNat + 2 ∨
-      (.glamsterdam ≤ fork ∧
-        (out.state.getAccount included.sender).nonce = tx.nonce.toNat + 1) := by
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, hsender, _, code, hcode, hkind⟩ :=
-    checkInclusion_eq_ok_iff.mp hcheck
-  have hdelegable : (code.size = 0 || isValidDelegation code) = true := by
-    rcases hkind with hempty | ⟨-, hvalid⟩
-    · rw [hempty] at hcode
-      simp only [getCode, ↓reduceIte, Except.ok.injEq] at hcode
-      subst hcode
-      rfl
-    · simp [hvalid]
-  have hvalues := (processTransaction_authority_of_error h failed hcode hdelegable).1
-  have haccepted : acceptedBy env.chainId.toNat included.sender (tx.nonce.toNat + 1) [auth] =
-      [auth] := by
-    simp [acceptedBy, hscope, hrecover, hnonce]
-  simp only [↓reduceIte, hauths, ← hsender] at hvalues
-  simp only [haccepted, List.length_singleton] at hvalues
-  rcases hvalues with ⟨hn, -⟩ | ⟨hglam, hn, -⟩
-  · exact .inl hn
-  · exact .inr ⟨hglam, hn⟩
 
 end Values
 

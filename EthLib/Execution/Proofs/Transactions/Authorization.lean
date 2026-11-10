@@ -503,6 +503,30 @@ theorem applyAuthorization_of_code {code : ByteArray}
 
 /-! ## Every authorization that succeeds -/
 
+/-- An authorization that its authority accepts pays, then delegates the authority. -/
+theorem applyAuthorization_of_accepts_eq_ok
+    (h : applyAuthorization fork chainId done auth = .ok done')
+    (hscope : authorizationInScope chainId auth = true)
+    (hrecover : recoverAuthority auth = some authority)
+    (haccept : authorityAccepts done.state authority auth = .ok true) :
+    ∃ paid state refund,
+      payAuthorization fork { done with
+        state := done.state.recordAccountRead authority
+        accessed := done.accessed.insert authority } authority auth = .ok paid ∧
+      delegate fork paid.state authority auth = .ok (state, refund) ∧
+      done' = { paid with state := state, refund := paid.refund + refund } := by
+  cases hpay : payAuthorization fork { done with
+      state := done.state.recordAccountRead authority
+      accessed := done.accessed.insert authority } authority auth with
+  | error e =>
+    rw [applyAuthorization_of_payAuthorization_error hscope hrecover haccept hpay] at h
+    cases h
+  | ok paid =>
+    obtain ⟨state, hdelegate⟩ := delegate_isOk (fork := fork) (authority := authority)
+      (auth := auth) paid.state
+    rw [applyAuthorization_of_accepts_of_pay hscope hrecover haccept hpay, hdelegate] at h
+    exact ⟨paid, state, _, rfl, hdelegate, (Except.ok.inj h).symm⟩
+
 /-- An authorization that succeeds is skipped, refused or accepted.
 
 A skipped authorization keeps the delegations.
@@ -541,18 +565,7 @@ theorem applyAuthorization_cases (h : applyAuthorization fork chainId done auth 
       cases accepts
       · rw [applyAuthorization_of_refused hscope hrecover haccept] at h
         exact .inl ⟨rfl, (Except.ok.inj h).symm⟩
-      · refine .inr ⟨rfl, ?_⟩
-        cases hpay : payAuthorization fork { done with
-            state := done.state.recordAccountRead authority
-            accessed := done.accessed.insert authority } authority auth with
-        | error e =>
-          rw [applyAuthorization_of_payAuthorization_error hscope hrecover haccept hpay] at h
-          cases h
-        | ok paid =>
-          obtain ⟨state, hdelegate⟩ := delegate_isOk (fork := fork) (authority := authority)
-            (auth := auth) paid.state
-          rw [applyAuthorization_of_accepts_of_pay hscope hrecover haccept hpay, hdelegate] at h
-          exact ⟨paid, state, _, rfl, hdelegate, (Except.ok.inj h).symm⟩
+      · exact .inr ⟨rfl, applyAuthorization_of_accepts_eq_ok h hscope hrecover haccept⟩
 
 /-! ## An address with real code
 
@@ -1009,9 +1022,9 @@ theorem foldlM_applyAuthorization_isOk_of_lt_glamsterdam (hfork : fork < .glamst
     (absurd · hpre) hcodes (absurd · hpre)
   exact ⟨done, h⟩
 
-/-- Up to BPO5, an authorization fails only when the state lacks a code.
+/-- Up to BPO5, an authorization fails only with an error that aborts the whole run.
 
-That error aborts the whole run. -/
+That error comes from a missing code. -/
 theorem aborts_of_applyAuthorization_of_lt_glamsterdam (hfork : fork < .glamsterdam)
     {e : Evm.EvmError × TransactionState}
     (h : applyAuthorization fork chainId done auth = .error e) : e.1.aborts = true := by
@@ -1037,9 +1050,7 @@ theorem aborts_of_applyAuthorization_of_lt_glamsterdam (hfork : fork < .glamster
         rw [applyAuthorization_of_accepts hfork hscope hrecover haccept, hdelegate] at h
         simp [Except.mapError, Except.map] at h
 
-/-- Up to BPO5, the authorizations of a list fail only when the state lacks a code.
-
-That error aborts the whole run. -/
+/-- Up to BPO5, the authorizations of a list fail only with an error that aborts the whole run. -/
 theorem aborts_of_foldlM_applyAuthorization_of_lt_glamsterdam (hfork : fork < .glamsterdam) :
     ∀ {auths : List Authorization} {start : Delegations Meter}
       {e : Evm.EvmError × TransactionState},
@@ -1060,7 +1071,9 @@ The account of the authority after the list then depends only on its own account
 
 /-- The authorizations of a list that the authority `authority` accepts, in order.
 
-The authority starts with the nonce `nonce`, and its code must be empty or a delegation indicator.
+The authority starts with the nonce `nonce`.
+
+The list is what it accepts when its code is empty or a delegation indicator; no code is read here.
 
 An authorization counts when it is in scope on the chain `chainId` and is signed by the authority.
 
@@ -1123,30 +1136,6 @@ theorem nonce_of_authorityAccepts {state : TransactionState}
     simp only [hcode, bind, Except.bind, pure, Except.pure, Except.ok.injEq, Bool.and_eq_true,
       decide_eq_true_eq] at h
     exact h.2
-
-/-- An authorization that its authority accepts pays, then delegates the authority. -/
-private theorem applyAuthorization_of_accepts_eq_ok
-    (h : applyAuthorization fork chainId done auth = .ok done')
-    (hscope : authorizationInScope chainId auth = true)
-    (hrecover : recoverAuthority auth = some authority)
-    (haccept : authorityAccepts done.state authority auth = .ok true) :
-    ∃ paid state refund,
-      payAuthorization fork { done with
-        state := done.state.recordAccountRead authority
-        accessed := done.accessed.insert authority } authority auth = .ok paid ∧
-      delegate fork paid.state authority auth = .ok (state, refund) ∧
-      done' = { paid with state := state, refund := paid.refund + refund } := by
-  cases hpay : payAuthorization fork { done with
-      state := done.state.recordAccountRead authority
-      accessed := done.accessed.insert authority } authority auth with
-  | error e =>
-    rw [applyAuthorization_of_payAuthorization_error hscope hrecover haccept hpay] at h
-    cases h
-  | ok paid =>
-    obtain ⟨state, hdelegate⟩ := delegate_isOk (fork := fork) (authority := authority)
-      (auth := auth) paid.state
-    rw [applyAuthorization_of_accepts_of_pay hscope hrecover haccept hpay, hdelegate] at h
-    exact ⟨paid, state, _, rfl, hdelegate, (Except.ok.inj h).symm⟩
 
 /-- An accepted authorization in scope adds one to the nonce of its authority.
 
@@ -1214,10 +1203,8 @@ private theorem account_applyAuthorization
       · subst hsame
         exact absurd ⟨hscope, hrecover, nonce_of_authorityAccepts haccept⟩ hnot
       · obtain ⟨hstate, -, -⟩ := state_payAuthorization hpay
-        have hkeep := (delegate_eq_ok hdelegate).2.2 authority (Ne.symm hsame)
-        rw [hstate] at hkeep
-        unfold getAccount
-        rw [hkeep]
+        rw [(sameOutside_delegate hdelegate).1.getAccount_eq (by simpa using Ne.symm hsame),
+          hstate]
         rfl
 
 /-- Authorizations that succeed, seen from an authority with code of the right kind. -/

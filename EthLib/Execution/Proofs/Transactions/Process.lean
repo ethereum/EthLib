@@ -220,6 +220,47 @@ theorem prepareFirstFrame_of_applyAuthorizations_error {target : Address}
   simp only [prepareFirstFrame, htarget, hdone, bind, Except.bind]
 
 omit [LawfulGasMeter Meter] in
+/-- Up to BPO5, the first frame of a call fails only with an error that aborts the whole run.
+
+That error comes from a missing code.
+
+So a call that fails up to BPO5 always starts its first frame. -/
+theorem aborts_of_prepareFirstFrame_of_lt_glamsterdam (hfork : fork < .glamsterdam)
+    {target : Address} {e : EvmError} {read : State.TransactionState}
+    (htarget : message.target = some target)
+    (h : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid =
+      .error (e, read)) :
+    e.aborts = true := by
+  have hpre : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hfork
+  -- A missing code comes out as an error of the state.
+  have hstate : ∀ {α : Type} {x : Except State.StateError α} {s : State.TransactionState},
+      x.mapError (fun e => (EvmError.state e, s)) = .error (e, read) → e.aborts = true := by
+    intro α x s hx
+    cases x with
+    | error e' =>
+      simp only [Except.mapError, Except.error.injEq, Prod.mk.injEq] at hx
+      rw [← hx.1]
+      rfl
+    | ok _ => cases hx
+  unfold prepareFirstFrame at h
+  rw [htarget] at h
+  dsimp only at h
+  rcases bind_eq_error h with hauth | ⟨done, -, h⟩
+  · exact aborts_of_foldlM_applyAuthorization_of_lt_glamsterdam hfork hauth
+  simp only [hpre, false_and, ↓reduceIte] at h
+  rcases bind_eq_error h with hcharge | ⟨meter, -, h⟩
+  · cases hcharge
+  rcases bind_eq_error h with hcode | ⟨code, -, h⟩
+  · exact hstate hcode
+  split at h
+  · rcases bind_eq_error h with hcharge | ⟨meter', -, h⟩
+    · cases hcharge
+    rcases bind_eq_error h with hcode | ⟨code', -, h⟩
+    · exact hstate hcode
+    · cases h
+  · cases h
+
+omit [LawfulGasMeter Meter] in
 /-- The first frame of a call that moves no ether and applies no authorization.
 
 The recipient `target` holds the code `c`, which from Pectra is no delegation indicator.
