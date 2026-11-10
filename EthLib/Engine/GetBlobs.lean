@@ -200,30 +200,26 @@ def getBlobsParams (version : Nat) (params : Json) :
       some (← fixed "indices_bitarray" CELL_BITARRAY_BYTES bits))
   | _, _ => invalid s!"params: got {params.length}, expected {count}"
 
-/-- A request that names more versioned hashes than the pool takes is too large. -/
-def checkRequestSize (pool : BlobPool) (hashes : List Bytes32) : Except EngineError Unit :=
-  if pool.maxRequest < hashes.length then throw .tooLargeRequest else pure ()
-
 /-- Version 1 at the active fork of the node: a blob and its proof for each hash, or `null`.
 
 From Fusaka the version is an unsupported fork. -/
 def getBlobsV1 (pool : BlobPool) (fork : Fork) (hashes : List Bytes32) :
     Except EngineError (List (Option BlobAndProofV1)) := do
   if fork ≥ .fusaka then throw .unsupportedFork
-  checkRequestSize pool hashes
+  checkRequestSize pool.maxRequest hashes.length
   return hashes.map fun h => if pool.serving then (pool.lookup h).bind PooledBlob.toV1 else none
 
 /-- Version 2: each blob with its cell proofs, or `null` alone if one is missing. -/
 def getBlobsV2 (pool : BlobPool) (hashes : List Bytes32) :
     Except EngineError (Option (List BlobAndProofV2)) := do
-  checkRequestSize pool hashes
+  checkRequestSize pool.maxRequest hashes.length
   if pool.serving then return hashes.mapM fun h => (pool.lookup h).bind PooledBlob.toV2
   else return none
 
 /-- Version 3: each blob with its cell proofs, with `null` in place of each missing blob. -/
 def getBlobsV3 (pool : BlobPool) (hashes : List Bytes32) :
     Except EngineError (Option (List (Option BlobAndProofV2))) := do
-  checkRequestSize pool hashes
+  checkRequestSize pool.maxRequest hashes.length
   if pool.serving then return some (hashes.map fun h => (pool.lookup h).bind PooledBlob.toV2)
   else return none
 
@@ -232,7 +228,7 @@ def getBlobsV3 (pool : BlobPool) (hashes : List Bytes32) :
 A blob of which the pool holds no cell is `null`. -/
 def getBlobsV4 (pool : BlobPool) (hashes : List Bytes32) (bits : CellBitarray) :
     Except EngineError (Option (List (Option BlobCellsAndProofsV1))) := do
-  checkRequestSize pool hashes
+  checkRequestSize pool.maxRequest hashes.length
   if pool.serving then
     return some (hashes.map fun h => (pool.lookup h).bind (·.toV4 (selectedCells bits)))
   else return none
