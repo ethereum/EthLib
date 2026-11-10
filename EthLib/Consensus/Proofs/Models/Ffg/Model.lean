@@ -24,6 +24,18 @@ Gasper §8.6 counts the stake of the attestation epoch of a pair, which Gasper �
 One stake function `w` holds for every validator, as Gasper §8.6 assumes.
 
 A constant set gives the model of Casper FFG §2 and Gasper §4, with one set for all votes.
+
+A slack link weakens a supermajority link by a second set `U c` for each checkpoint `c`.
+
+A chain can count the votes for `c` against the stake of a later set `U c`, not of `V c`.
+
+A validator of `V c` that left before `U c` then counts as a voter, but not in the total.
+
+The slack is the stake of such validators, the exited set of Gasper §8.6, Definition 8.1.
+
+Accountable safety then loses that slack too.
+
+With `U = V` the slack is zero, and a slack link is a supermajority link.
 -/
 
 @[expose] public section
@@ -141,5 +153,48 @@ The case `k = 1` is the finalization of Casper FFG §2. -/
 def Finalized (V : Checkpoint β → Finset ν) (w : ν → ℕ) (genesis : β) (votes : Set (Vote ν β))
     (c : Checkpoint β) : Prop :=
   c = ⟨genesis, 0⟩ ∨ ∃ k, 1 ≤ k ∧ KFinalized V w genesis votes k c
+
+open scoped Classical in
+/-- A slack link from `s` to `t`: a supermajority link up to a slack.
+
+The source comes before the target, in epoch and in the chain of the target.
+
+Twice the stake of the set of the target is at most three times the stake of its voters.
+
+The slack adds twice the stake of the set `V t` outside the set `U t`. -/
+def SlackLink (V U : Checkpoint β → Finset ν) (w : ν → ℕ) (votes : Set (Vote ν β))
+    (s t : Checkpoint β) : Prop :=
+  s.epoch < t.epoch ∧ s.block ≤ t.block ∧
+    2 * stake w (V t) ≤ 3 * stake w (signers (V t) votes s t) + 2 * stake w (V t \ U t)
+
+/-- The slack-justified checkpoints.
+
+The genesis block at epoch 0 is slack-justified.
+
+A slack link from a slack-justified checkpoint justifies its target. -/
+inductive SlackJustified (V U : Checkpoint β → Finset ν) (w : ν → ℕ) (genesis : β)
+    (votes : Set (Vote ν β)) : Checkpoint β → Prop
+  /-- The genesis checkpoint is slack-justified. -/
+  | root : SlackJustified V U w genesis votes ⟨genesis, 0⟩
+  /-- A slack link from a slack-justified checkpoint justifies its target. -/
+  | link {s t : Checkpoint β} :
+      SlackJustified V U w genesis votes s → SlackLink V U w votes s t →
+        SlackJustified V U w genesis votes t
+
+/-- The checkpoint `c` is slack `k`-finalized.
+
+This is `k`-finality with slack links in place of supermajority links. -/
+def SlackKFinalized (V U : Checkpoint β → Finset ν) (w : ν → ℕ) (genesis : β)
+    (votes : Set (Vote ν β)) (k : ℕ) (c : Checkpoint β) : Prop :=
+  ∃ b : ℕ → β, b 0 = c.block ∧ (∀ i < k, b i ≤ b (i + 1)) ∧
+    (∀ i < k, SlackJustified V U w genesis votes ⟨b i, c.epoch + i⟩) ∧
+    SlackLink V U w votes c ⟨b k, c.epoch + k⟩
+
+/-- The slack-finalized checkpoints.
+
+They are the genesis checkpoint, and every slack `k`-finalized one with `k ≥ 1`. -/
+def SlackFinalized (V U : Checkpoint β → Finset ν) (w : ν → ℕ) (genesis : β)
+    (votes : Set (Vote ν β)) (c : Checkpoint β) : Prop :=
+  c = ⟨genesis, 0⟩ ∨ ∃ k, 1 ≤ k ∧ SlackKFinalized V U w genesis votes k c
 
 end EthLib.Consensus.Models.Ffg
