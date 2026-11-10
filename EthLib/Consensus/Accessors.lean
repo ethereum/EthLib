@@ -360,7 +360,7 @@ theorem drawHash_succ {fork : Base.Fork} {seed : Bytes32} {i : Nat}
 
 /-- Whether draw number `i` accepts a candidate of an effective balance, from its hash.
 
-The draw accepts with a chance of the balance over the largest effective balance.
+The comparison is inclusive, so a zero random value is accepted even at zero balance.
 
 Before Electra it compares with byte `i mod 32` of the hash.
 
