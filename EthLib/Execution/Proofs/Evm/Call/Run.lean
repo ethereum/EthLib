@@ -182,6 +182,176 @@ def ChildRel
   M message caller.state caller.substate.child (GasMeter.start message.gas message.reservoir)
     ended
 
+/-- A relation of a caller and a child: by `Mcall` for a call, by `Mcreate` for a creation.
+
+A message with a target is a call, and one with none is a creation. -/
+def ChildRelByKind
+    (Mcall Mcreate : Message fork → TransactionState → Substate → Meter → Evm fork Meter → Prop)
+    (caller : Evm fork Meter) (message : Message fork) (ended : Evm fork Meter) : Prop :=
+  match message.target with
+  | some _ => ChildRel Mcall caller message ended
+  | none => ChildRel Mcreate caller message ended
+
+/-- Every successful call satisfies a relation `Mcall`, and every creation a relation `Mcreate`.
+
+That holds at every fork.
+
+The relation `R` of frames must be reflexive and transitive, and keep the invariant `Inv`.
+
+It must hold of each exceptional halt, each stop and each precompile.
+
+Each of these starts from a frame with the invariant.
+
+Each step from a frame with the invariant must keep `R`.
+
+It may use `Mcall` for the calls it sends, and `Mcreate` for the creations.
+
+A call must satisfy `Mcall` after its rollback, when its frame ends related to its start frame.
+
+That frame starts from the state and substate before or after the transfer of value.
+
+A call may use that relation only when its start frame has the invariant.
+
+After its deposit of code, a creation must satisfy `Mcreate` when its init code satisfies `Mcall`.
+
+The proof is by strong induction on the gas of the message, for calls and creations together. -/
+theorem processMessage_rel_byKind [LawfulGasMeter Meter]
+    {R : Evm fork Meter → Evm fork Meter → Prop} {Inv : Evm fork Meter → Prop}
+    {Mcall Mcreate : Message fork → TransactionState → Substate → Meter → Evm fork Meter → Prop}
+    (refl : ∀ evm, R evm evm) (trans : ∀ {a b c}, R a b → R b c → R a c)
+    (keeps : ∀ {a b}, Inv a → R a b → Inv b)
+    (halt : ∀ evm error, Inv evm → R evm (exceptionalHalt evm error))
+    (steps : ∀ {evm result}, Inv evm → step fork evm = .ok result →
+      StepResult.Keeps R (ChildRelByKind Mcall Mcreate) evm result)
+    (stop : ∀ evm : Evm fork Meter, Inv evm → R evm { evm with running := false })
+    (precompile : ∀ {address : Nat} {evm after : Evm fork Meter},
+      runPrecompile fork address evm = some after → Inv evm → R evm after)
+    (call : ∀ {message : Message fork} {state entry : TransactionState}
+      {substate entrySubstate : Substate} {meter : Meter} {ended : Evm fork Meter},
+      Entered fork message state substate entry entrySubstate →
+      (Inv (startFrame message entry entrySubstate meter) →
+        R (startFrame message entry entrySubstate meter) ended) →
+      Mcall message state substate meter (rollbackOnError state ended))
+    (create : ∀ {message : Message fork} {state prepared : TransactionState}
+      {substate : Substate} {meter : Meter} {evm after : Evm fork Meter},
+      prepareCreation fork state message.currentTarget = .ok prepared →
+      Mcall message prepared substate meter evm → depositCode fork state evm = .ok after →
+      Mcreate message state substate meter after)
+    (n : Nat) :
+    (∀ (message : Message fork) (state : TransactionState) (substate : Substate) (meter : Meter)
+      (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
+      ∀ ended, processMessage fork message state substate meter held = .ok ended →
+        Mcall message state substate meter ended.val) ∧
+    (∀ (message : Message fork) (state : TransactionState) (substate : Substate) (meter : Meter)
+      (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
+      ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
+        Mcreate message state substate meter ended.val) := by
+  induction n using Nat.strongRecOn with
+  | _ n ih =>
+    have callCase : ∀ (message : Message fork) (state : TransactionState) (substate : Substate)
+        (meter : Meter) (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
+        ∀ ended, processMessage fork message state substate meter held = .ok ended →
+          Mcall message state substate meter ended.val := by
+      intro message state substate meter held hn ended h
+      rw [processMessage] at h
+      obtain ⟨ended0, hdo, rolled⟩ := Base.map_ok_iff.mp h
+      have hval := congrArg Subtype.val rolled
+      simp only at hval
+      rw [← hval]
+      dsimp only at hdo
+      split at hdo
+      all_goals obtain ⟨state1, hm, hdo⟩ := Base.bind_ok_iff.mp hdo
+      all_goals
+        rcases hpa : precompileAddress fork message with _ | addr
+        · simp only [hpa] at hdo
+          split at hdo
+          · cases hdo
+          · rename_i after hrun
+            cases hdo
+            refine call (by first
+                | exact Or.inr ⟨‹message.shouldTransferValue = true ∧ message.value ≠ 0›,
+                    Base.mapError_ok_iff.mp hm,
+                    by first | rfl | (split <;> first | rfl | contradiction)⟩
+                | (cases hm
+                   exact Or.inl ⟨‹_›, rfl,
+                     by first | rfl | (split <;> first | rfl | contradiction)⟩))
+              fun hinv => rel_runFrame refl trans keeps halt steps ?_ hinv hrun
+            rintro caller' message' lt ⟨c, used⟩ - hrun'
+            unfold ChildRelByKind
+            split at hrun'
+            · rename_i ht
+              simp only [ht]
+              exact (ih message'.gas (by omega)).1 message' caller'.state _ _ _ rfl ⟨c, used⟩
+                hrun'
+            · rename_i ht
+              simp only [ht]
+              exact (ih message'.gas (by omega)).2 message' caller'.state _ _ _ rfl ⟨c, used⟩
+                hrun'
+        · simp only [hpa] at hdo
+          split at hdo
+          · cases hdo
+            exact call (by first
+                | exact Or.inr ⟨‹message.shouldTransferValue = true ∧ message.value ≠ 0›,
+                    Base.mapError_ok_iff.mp hm,
+                    by first | rfl | (split <;> first | rfl | contradiction)⟩
+                | (cases hm
+                   exact Or.inl ⟨‹_›, rfl,
+                     by first | rfl | (split <;> first | rfl | contradiction)⟩)) (stop _)
+          · split at hdo
+            · rename_i after hrp
+              cases hdo
+              exact call (by first
+                | exact Or.inr ⟨‹message.shouldTransferValue = true ∧ message.value ≠ 0›,
+                    Base.mapError_ok_iff.mp hm,
+                    by first | rfl | (split <;> first | rfl | contradiction)⟩
+                | (cases hm
+                   exact Or.inl ⟨‹_›, rfl,
+                     by first | rfl | (split <;> first | rfl | contradiction)⟩)) (precompile hrp)
+            · cases hdo
+              exact call (by first
+                | exact Or.inr ⟨‹message.shouldTransferValue = true ∧ message.value ≠ 0›,
+                    Base.mapError_ok_iff.mp hm,
+                    by first | rfl | (split <;> first | rfl | contradiction)⟩
+                | (cases hm
+                   exact Or.inl ⟨‹_›, rfl,
+                     by first | rfl | (split <;> first | rfl | contradiction)⟩)) (stop _)
+    refine ⟨callCase, ?_⟩
+    intro message state substate meter held hn ended h
+    rw [processCreateMessage] at h
+    obtain ⟨prepared, hp, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨evm, used⟩, hrun, h⟩ := Base.bind_ok_iff.mp h
+    dsimp only at h
+    split at h
+    · cases h
+    · cases h
+      exact create hp (callCase message prepared substate meter held hn _ hrun)
+        ‹depositCode _ _ _ = .ok _›
+
+/-- A relation of messages, as a relation of a caller and a child, is the same for both kinds. -/
+theorem childRelByKind_self
+    (M : Message fork → TransactionState → Substate → Meter → Evm fork Meter → Prop) :
+    ChildRelByKind M M = ChildRel M := by
+  funext caller message ended
+  unfold ChildRelByKind
+  split <;> rfl
+
+/-- A relation of a caller and a child gives one for weaker relations of calls and creations. -/
+theorem ChildRelByKind.mono
+    {Mcall Mcreate Mcall' Mcreate' :
+      Message fork → TransactionState → Substate → Meter → Evm fork Meter → Prop}
+    (hcall : ∀ message state substate meter ended,
+      Mcall message state substate meter ended → Mcall' message state substate meter ended)
+    (hcreate : ∀ message state substate meter ended,
+      Mcreate message state substate meter ended → Mcreate' message state substate meter ended)
+    {caller : Evm fork Meter} {message : Message fork} {ended : Evm fork Meter}
+    (h : ChildRelByKind Mcall Mcreate caller message ended) :
+    ChildRelByKind Mcall' Mcreate' caller message ended := by
+  revert h
+  unfold ChildRelByKind ChildRel
+  split
+  · exact hcall _ _ _ _ _
+  · exact hcreate _ _ _ _ _
+
 /-- Every successful call and creation satisfies a relation `M` of messages, at every fork.
 
 The relation `R` of frames must be reflexive and transitive, and keep the invariant `Inv`.
@@ -231,81 +401,8 @@ theorem processMessage_rel [LawfulGasMeter Meter]
     (∀ (message : Message fork) (state : TransactionState) (substate : Substate) (meter : Meter)
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
       ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
-        M message state substate meter ended.val) := by
-  induction n using Nat.strongRecOn with
-  | _ n ih =>
-    have callCase : ∀ (message : Message fork) (state : TransactionState) (substate : Substate)
-        (meter : Meter) (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
-        ∀ ended, processMessage fork message state substate meter held = .ok ended →
-          M message state substate meter ended.val := by
-      intro message state substate meter held hn ended h
-      rw [processMessage] at h
-      obtain ⟨ended0, hdo, rolled⟩ := Base.map_ok_iff.mp h
-      have hval := congrArg Subtype.val rolled
-      simp only at hval
-      rw [← hval]
-      dsimp only at hdo
-      split at hdo
-      all_goals obtain ⟨state1, hm, hdo⟩ := Base.bind_ok_iff.mp hdo
-      all_goals
-        rcases hpa : precompileAddress fork message with _ | addr
-        · simp only [hpa] at hdo
-          split at hdo
-          · cases hdo
-          · rename_i after hrun
-            cases hdo
-            refine call (by first
-                | exact Or.inr ⟨‹message.shouldTransferValue = true ∧ message.value ≠ 0›,
-                    Base.mapError_ok_iff.mp hm,
-                    by first | rfl | (split <;> first | rfl | contradiction)⟩
-                | (cases hm
-                   exact Or.inl ⟨‹_›, rfl,
-                     by first | rfl | (split <;> first | rfl | contradiction)⟩))
-              fun hinv => rel_runFrame refl trans keeps halt steps ?_ hinv hrun
-            rintro caller' message' lt ⟨c, used⟩ - hrun'
-            split at hrun'
-            · exact (ih message'.gas (by omega)).1 message' caller'.state _ _ _ rfl ⟨c, used⟩
-                hrun'
-            · exact (ih message'.gas (by omega)).2 message' caller'.state _ _ _ rfl ⟨c, used⟩
-                hrun'
-        · simp only [hpa] at hdo
-          split at hdo
-          · cases hdo
-            exact call (by first
-                | exact Or.inr ⟨‹message.shouldTransferValue = true ∧ message.value ≠ 0›,
-                    Base.mapError_ok_iff.mp hm,
-                    by first | rfl | (split <;> first | rfl | contradiction)⟩
-                | (cases hm
-                   exact Or.inl ⟨‹_›, rfl,
-                     by first | rfl | (split <;> first | rfl | contradiction)⟩)) (stop _)
-          · split at hdo
-            · rename_i after hrp
-              cases hdo
-              exact call (by first
-                | exact Or.inr ⟨‹message.shouldTransferValue = true ∧ message.value ≠ 0›,
-                    Base.mapError_ok_iff.mp hm,
-                    by first | rfl | (split <;> first | rfl | contradiction)⟩
-                | (cases hm
-                   exact Or.inl ⟨‹_›, rfl,
-                     by first | rfl | (split <;> first | rfl | contradiction)⟩)) (precompile hrp)
-            · cases hdo
-              exact call (by first
-                | exact Or.inr ⟨‹message.shouldTransferValue = true ∧ message.value ≠ 0›,
-                    Base.mapError_ok_iff.mp hm,
-                    by first | rfl | (split <;> first | rfl | contradiction)⟩
-                | (cases hm
-                   exact Or.inl ⟨‹_›, rfl,
-                     by first | rfl | (split <;> first | rfl | contradiction)⟩)) (stop _)
-    refine ⟨callCase, ?_⟩
-    intro message state substate meter held hn ended h
-    rw [processCreateMessage] at h
-    obtain ⟨prepared, hp, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨⟨evm, used⟩, hrun, h⟩ := Base.bind_ok_iff.mp h
-    dsimp only at h
-    split at h
-    · cases h
-    · cases h
-      exact create hp (callCase message prepared substate meter held hn _ hrun)
-        ‹depositCode _ _ _ = .ok _›
+        M message state substate meter ended.val) :=
+  processMessage_rel_byKind refl trans keeps halt
+    (fun hinv h => childRelByKind_self M ▸ steps hinv h) stop precompile call create n
 
 end EthLib.Execution.Evm

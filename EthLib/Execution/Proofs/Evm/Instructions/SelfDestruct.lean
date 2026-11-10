@@ -159,6 +159,30 @@ theorem memory_finishSelfdestruct {beneficiary : Address} {refund : Nat}
     cases h
     rfl
 
+omit [GasMeter Meter] in
+/-- The end of SELFDESTRUCT keeps the message. -/
+theorem message_finishSelfdestruct {beneficiary : Address} {refund : Nat}
+    {evm after : Evm fork Meter} (h : finishSelfdestruct fork beneficiary refund evm = .ok after) :
+    after.message = evm.message := by
+  unfold finishSelfdestruct at h
+  split at h
+  · cases h
+  · obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    rfl
+
+omit [GasMeter Meter] in
+/-- The end of SELFDESTRUCT keeps the code. -/
+theorem code_finishSelfdestruct {beneficiary : Address} {refund : Nat}
+    {evm after : Evm fork Meter} (h : finishSelfdestruct fork beneficiary refund evm = .ok after) :
+    after.code = evm.code := by
+  unfold finishSelfdestruct at h
+  split at h
+  · cases h
+  · obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    rfl
+
 /-- SELFDESTRUCT keeps memory. -/
 theorem memory_selfdestructOpStep {op : Op}
     {step : Evm fork Meter → Except EvmError (Evm fork Meter)}

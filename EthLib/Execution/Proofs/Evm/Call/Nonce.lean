@@ -200,7 +200,7 @@ theorem stepRules_nonceLe :
   static h := h.nonceLe
   sstore _ _ _ _ _ _ h := nonceLe_setStorage h
   tstore _ _ _ _ := NonceLe.of_getAccountOptional fun _ => rfl
-  log _ hs _ := by rw [hs]; exact NonceLe.refl _
+  log _ hs _ _ _ := by rw [hs]; exact NonceLe.refl _
   selfdestruct _ _ h := nonceLe_finishSelfdestruct h
   incrementNonce _ _ _ h := nonceLe_incrementNonce h
   incorporate h := by rw [state_incorporateChild]; exact h
@@ -278,6 +278,45 @@ theorem nonceLe_startState (message : Message fork) (state : TransactionState) :
   · exact nonceLe_touchAccount _ _
   · exact NonceLe.refl _
 
+/-- A call that keeps or raises every nonce of the state it enters still does so after its rollback.
+
+It must also keep the block of that state.
+
+The call then keeps the block and lowers no nonce from the state it is sent from. -/
+theorem nonceLe_rollbackOnError {message : Message fork} {state entry : TransactionState}
+    {substate entrySubstate : Substate} {ended : Evm fork Meter}
+    (hentry : Entered fork message state substate entry entrySubstate)
+    (hrun : NonceLe entry ended.state ∧ ended.state.parent = entry.parent) :
+    NonceLe state (rollbackOnError state ended).state ∧
+      (rollbackOnError state ended).state.parent = state.parent := by
+  have h1 : NonceLe state entry ∧ entry.parent = state.parent := by
+    rcases hentry with ⟨-, rfl, -⟩ | ⟨-, hm, -⟩
+    · exact ⟨nonceLe_startState message state, parent_startState message state⟩
+    · exact ⟨(nonceLe_startState message state).trans (nonceLe_moveEther hm),
+        (TransactionState.parent_moveEther hm).trans (parent_startState message state)⟩
+  obtain ⟨hle, hpar⟩ := hrun
+  have hp : ended.state.parent = state.parent := hpar.trans h1.2
+  refine ⟨?_, (parent_rollbackOnError state ended).trans hp⟩
+  unfold rollbackOnError
+  split
+  · exact nonceLe_restoreTxState hp
+  · exact h1.1.trans hle
+
+/-- A creation whose init code keeps or raises every nonce does so after its deposit of code.
+
+The init code must also keep the block of the state it runs from.
+
+The creation then keeps the block and lowers no nonce from the state it is sent from. -/
+theorem nonceLe_prepareCreation_depositCode {state prepared : TransactionState}
+    {address : Address} {evm after : Evm fork Meter}
+    (hp : prepareCreation fork state address = .ok prepared)
+    (hm : NonceLe prepared evm.state ∧ evm.state.parent = prepared.parent)
+    (hd : depositCode fork state evm = .ok after) :
+    NonceLe state after.state ∧ after.state.parent = state.parent :=
+  ⟨nonceLe_depositCode ((nonceLe_prepareCreation hp).trans hm.1)
+      (hm.2.trans (parent_prepareCreation hp)) hd,
+    (parent_depositCode hd).trans (hm.2.trans (parent_prepareCreation hp))⟩
+
 /-- Every successful call and creation keeps or raises every nonce, at every fork.
 
 The proof is by strong induction on the gas of the message, for calls and creations together. -/
@@ -293,23 +332,8 @@ theorem processMessage_nonceLe [LawfulGasMeter Meter] (n : Nat) :
   have both := (stepRules_nonceLe (fork := fork) (Meter := Meter)).and stepRules_parent
     |>.processMessage
     (M := fun _ state _ _ ended => NonceLe state ended.state ∧ ended.state.parent = state.parent)
-    (fun {message state state1 _ _ _ ended} hentry hrun => by
-      have h1 : NonceLe state state1 ∧ state1.parent = state.parent := by
-        rcases hentry with ⟨-, rfl, -⟩ | ⟨-, hm, -⟩
-        · exact ⟨nonceLe_startState message state, parent_startState message state⟩
-        · exact ⟨(nonceLe_startState message state).trans (nonceLe_moveEther hm),
-            (TransactionState.parent_moveEther hm).trans (parent_startState message state)⟩
-      obtain ⟨hle, hpar⟩ := hrun
-      have hp : ended.state.parent = state.parent := hpar.trans h1.2
-      refine ⟨?_, (parent_rollbackOnError state ended).trans hp⟩
-      unfold rollbackOnError
-      split
-      · exact nonceLe_restoreTxState hp
-      · exact h1.1.trans hle)
-    (fun hp hm hd =>
-      ⟨nonceLe_depositCode ((nonceLe_prepareCreation hp).trans hm.1)
-          (hm.2.trans (parent_prepareCreation hp)) hd,
-        (parent_depositCode hd).trans (hm.2.trans (parent_prepareCreation hp))⟩)
+    (fun hentry hrun => nonceLe_rollbackOnError hentry hrun)
+    (fun hp hm hd => nonceLe_prepareCreation_depositCode hp hm hd)
     (fun h => h) n
   exact ⟨fun message state substate meter held hn ended h =>
       (both.1 message state substate meter held hn ended h).1,

@@ -66,7 +66,7 @@ theorem stepRules_touchedLe (hfork : .paris ≤ fork) :
   static h x hx := h.touched ▸ hx
   sstore _ _ _ _ _ _ _ _ hx := hx
   tstore _ _ _ _ _ hx := hx
-  log _ _ hsub x hx := by rw [hsub] at hx; exact hx
+  log _ _ hsub _ _ x hx := by rw [hsub] at hx; exact hx
   selfdestruct _ _ h x hx := touchedAccounts_finishSelfdestruct hfork h ▸ hx
   incrementNonce _ _ _ _ _ hx := hx
   incorporate _ x hx := by rw [touchedAccounts_incorporateChild hfork] at hx; exact hx

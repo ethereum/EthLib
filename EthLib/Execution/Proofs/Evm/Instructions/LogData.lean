@@ -45,10 +45,12 @@ theorem popTopics_eq_ok {evm after : Evm fork Meter} {n : Nat} {topics : List Ha
     obtain ⟨hlen, hctx⟩ := ih h2
     exact ⟨by simp [hlen], (popWord_sameContext h1).trans hctx⟩
 
-/-- LOGn appends one log of the current account with `n` topics, and changes nothing else. -/
+/-- LOGn appends one log of the current account with `n` topics.
+
+It keeps the message, the code and the state of the frame. -/
 theorem logStep_eq_ok {n : Nat} {evm after : Evm fork Meter} (h : logStep n evm = .ok after) :
     ∃ log : Log, log.address = evm.message.currentTarget ∧ log.topics.length = n ∧
-      after.message = evm.message ∧ after.state = evm.state ∧
+      after.message = evm.message ∧ after.code = evm.code ∧ after.state = evm.state ∧
       after.substate = { evm.substate with logs := evm.substate.logs.push log } := by
   obtain ⟨⟨st, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨sz, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
@@ -61,7 +63,7 @@ theorem logStep_eq_ok {n : Nat} {evm after : Evm fork Meter} (h : logStep n evm 
   · simp [throw, throwThe, MonadExceptOf.throw] at h
   · cases h
     refine ⟨⟨e4.message.currentTarget, topics, memoryReadBytes e4.memory st.toNat sz.toNat⟩,
-      by rw [c.message], hlen, c.message, c.state, ?_⟩
+      by rw [c.message], hlen, c.message, c.code, c.state, ?_⟩
     simp only [advance, c.substate]
 
 /-- LOGn never succeeds in a static frame. -/
