@@ -100,6 +100,31 @@ theorem Preset.divisorsPositive_mainnet : Preset.mainnet.DivisorsPositive := by
 theorem Preset.divisorsPositive_minimal : Preset.minimal.DivisorsPositive := by
   constructor <;> decide
 
+/-- An epoch has two slots at least, and the buffer of block roots reaches the epoch before.
+
+The epoch steps run at the last slot of an epoch.
+
+They read the roots of the first slots of that epoch and of the one before.
+
+With one slot an epoch, the first slot of the current epoch is the slot of the state.
+
+The specification then refuses to read its root, which a justification of that epoch needs.
+
+The first slot of the previous epoch is two epochs less one slot back.
+
+The buffer must reach that far. -/
+structure Preset.RootsReachPreviousEpoch (preset : Preset) : Prop where
+  twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat
+  reach : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat + 1
+
+/-- The buffer of block roots of the mainnet preset reaches the epoch before. -/
+theorem Preset.rootsReachPreviousEpoch_mainnet : Preset.mainnet.RootsReachPreviousEpoch := by
+  constructor <;> decide
+
+/-- The buffer of block roots of the minimal preset reaches the epoch before. -/
+theorem Preset.rootsReachPreviousEpoch_minimal : Preset.minimal.RootsReachPreviousEpoch := by
+  constructor <;> decide
+
 /-- Each constant of a configuration that a run of slots divides by is positive.
 
 The limits of churn divide the active validators or the active balance by a quotient.
@@ -194,6 +219,33 @@ theorem getTotalActiveBalance_exists_ok {state : BeaconState preset fork}
     rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt lt]
     exact sumMarked_le_effectiveBalanceSum _
   · exact .inl rfl
+
+/-- The total balance of indices of the registry succeeds when the effective balances fit.
+
+Their sum must be below 2^64.
+
+The total is then at most one increment or that sum, whichever is larger. -/
+theorem getTotalBalance_exists_ok {state : BeaconState preset fork}
+    {indices : List ValidatorIndex}
+    (inside : ∀ index ∈ indices, index.toNat < state.validators.data.size)
+    (summed : effectiveBalanceSum state < 2 ^ 64) :
+    ∃ total, getTotalBalance state indices = .ok total ∧
+      total.toNat ≤ max preset.EFFECTIVE_BALANCE_INCREMENT.toNat (effectiveBalanceSum state) := by
+  have bounded := sumMarked_le_effectiveBalanceSum (state := state)
+    (markIndices state.validators.data.size indices)
+  have lt := Nat.lt_of_le_of_lt bounded summed
+  refine ⟨_, getTotalBalance_ok_iff.mpr ⟨inside, lt, rfl⟩, ?_⟩
+  rw [UInt64.max_def]
+  split
+  · rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt lt]
+    omega
+  · omega
+
+/-- From Altair, the lists of participation flags have one entry for each validator. -/
+def ParticipationMatches (state : BeaconState preset fork) : Prop :=
+  ∀ altair : .altair ≤ fork,
+    (state.previousEpochParticipation altair).data.size = state.validators.data.size ∧
+      (state.currentEpochParticipation altair).data.size = state.validators.data.size
 
 /-- The sum over the registry of the larger of each balance and its effective balance.
 
