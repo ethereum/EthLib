@@ -13,13 +13,15 @@ So it must know that hash before the run, while the game samples it at the first
 
 This file shows that the two orders give the same distribution.
 
-The message hash may fix the scalar of its `j`-th new message to `z` in advance.
+The message hash may fix in advance, to `z`, the scalar of the new message at table position `j`.
+
+Positions count from 0, as in the reduction for one key.
 
 Running the game with a uniform `z` sampled first is then the game itself.
 
 The argument is the usual one for lazy sampling, for one sample.
 
-- Before the `j`-th new message, a step either ignores `z` or uses it in place of a fresh sample.
+- Before the message at position `j`, a step either ignores `z` or uses it as its fresh sample.
 - After it, the two oracles agree.
 -/
 
@@ -68,7 +70,7 @@ theorem EagerAt.run_eq_of_used {impl : QueryImpl spec (StateT σ ProbComp)}
     rw [h.agree z t st hst]
     exact EvalDistEq.bind_congr_of_support _ fun p hp => ih p.1 p.2 (h.keep t st hst p hp)
 
-/-- **Eager sampling.** Running with `z` drawn first is running with the sample drawn when used. -/
+/-- **Eager sampling.** Drawing `z` first gives the distribution of drawing the sample when used. -/
 theorem EagerAt.evalDist_run {impl : QueryImpl spec (StateT σ ProbComp)}
     {implAt : F → QueryImpl spec (StateT σ ProbComp)} {used : σ → Prop}
     (h : EagerAt impl implAt used) {α : Type} (oa : OracleComp spec α) (st : σ) :
@@ -97,7 +99,7 @@ end Generic
 variable {F G₁ G₂ M : Type} [DecidableEq M] [CommRing F] [SampleableType F]
   [AddCommGroup G₂] [Module F G₂]
 
-/-- The random oracle `H` with the scalar of its `j`-th new message fixed to `z`.
+/-- The random oracle `H` with the scalar of its new message at position `j` fixed to `z`.
 
 The new message at position `j` hashes to `z • g2`; every other call is as in `H`. -/
 def hashAt (g₂ : G₂) (j : ℕ) (z : F) (m : M) : StateT (State F M) ProbComp G₂ := fun st =>
@@ -108,7 +110,7 @@ def hashAt (g₂ : G₂) (j : ℕ) (z : F) (m : M) : StateT (State F M) ProbComp
       pure (z • g₂, { st with table := st.table ++ [(m, z)], calls := st.calls + 1 })
     else hash g₂ m st
 
-/-- The signing oracle under `a`, on the message hash with its `j`-th scalar fixed to `z`. -/
+/-- The signing oracle under `a`, on the message hash with its scalar at `j` fixed to `z`. -/
 def signAt (g₂ : G₂) (a : F) (j : ℕ) (z : F) (m : M) : StateT (State F M) ProbComp G₂ :=
   fun st => (fun w => (a • w.1, { w.2 with signed := w.2.signed ++ [m] })) <$> hashAt g₂ j z m st
 
@@ -131,20 +133,13 @@ theorem hashAt_of_new {g₂ : G₂} {j : ℕ} {z : F} {m : M} {st : State F M}
 /-- A hash call never shortens the table. -/
 theorem length_le_of_mem_support_hash {g₂ : G₂} {m : M} {st : State F M} {w : G₂ × State F M}
     (hw : w ∈ support (hash g₂ m st)) : st.table.length ≤ w.2.table.length := by
-  unfold hash at hw
-  split at hw
-  · simp only [support_pure, Set.mem_singleton_iff] at hw
-    subst hw
-    exact le_rfl
-  · simp only [support_map, Set.mem_image] at hw
-    obtain ⟨t, -, rfl⟩ := hw
-    simp
+  rcases (mem_support_hash (st := st) hw).2.1 with h | ⟨e, h⟩ <;> simp [h]
 
 namespace Pop
 
 variable [DecidableEq G₁] [AddCommGroup G₁] [Module F G₁]
 
-/-- The oracles of the aggregate game, with the `j`-th scalar of the message hash fixed to `z`. -/
+/-- The oracles of the aggregate game, with the message hash scalar at `j` fixed to `z`. -/
 def implAt (g₂ : G₂) (a : F) (j : ℕ) (z : F) :
     QueryImpl (Spec M G₁ G₂) (StateT (State F G₁ M) ProbComp)
   | .inl n => fun st => (·, st) <$> (query (spec := unifSpec) n : ProbComp (Fin (n + 1)))
@@ -153,7 +148,7 @@ def implAt (g₂ : G₂) (a : F) (j : ℕ) (z : F) :
   | .inr (.inr x) => (keyHash g₂ x : StateT (State F G₁ M) ProbComp G₂)
 
 omit [AddCommGroup G₁] [Module F G₁] in
-/-- The oracles with the `j`-th message scalar fixed sample it early, for the game's oracles.
+/-- The oracles with the message scalar at `j` fixed draw that scalar early, against the game's.
 
 The sample is used once the message table has more than `j` entries. -/
 theorem eagerAt_implAt (g₂ : G₂) (a : F) (j : ℕ) :
@@ -235,14 +230,36 @@ theorem eagerAt_implAt (g₂ : G₂) (a : F) (j : ℕ) :
     · exact Or.inl fun _ => rfl
 
 omit [AddCommGroup G₁] [Module F G₁] in
-/-- **The aggregate game with one message scalar drawn first.**
-
-Every run of the game's oracles has the distribution of the run that draws that scalar first. -/
-theorem evalDist_simulateQ_impl_eq {α : Type} (g₂ : G₂) (a : F) (j : ℕ)
+/-- Every run of the game's oracles has the distribution of the run that draws that scalar first. -/
+theorem run_impl_eq_uniform_implAt {α : Type} (g₂ : G₂) (a : F) (j : ℕ)
     (oa : OracleComp (Spec M G₁ G₂) α) (st : State F G₁ M) :
     (simulateQ (impl g₂ a) oa).run st =ᵈ
       (($ᵗ F) >>= fun z => (simulateQ (implAt g₂ a j z) oa).run st) :=
   (eagerAt_implAt g₂ a j).evalDist_run oa st
+
+/-- The aggregate game, with the message hash scalar at `j` drawn right after the secret key. -/
+def experimentAt (scheme : Scheme G₁ G₂) (adversary : Adversary G₁ G₂ M) (j : ℕ) :
+    ProbComp (Bool × State F G₁ M) := do
+  let a ← $ᵗ F
+  let z ← $ᵗ F
+  let pk := a • scheme.g₁
+  let (w, st) ← (do
+    let hpk ← keyHash scheme.g₂ pk
+    simulateQ (implAt scheme.g₂ a j z) (run adversary pk (a • hpk))).run State.init
+  return (wins scheme pk st.msg.signed w, st)
+
+/-- **The aggregate game with one message scalar drawn first.**
+
+For every position `j`, the game has the distribution of the game that draws that scalar first. -/
+theorem experiment_eq_experimentAt (scheme : Scheme G₁ G₂) (adversary : Adversary G₁ G₂ M)
+    (j : ℕ) : experiment (F := F) scheme adversary =ᵈ experimentAt scheme adversary j := by
+  unfold experiment experimentAt
+  refine EvalDistEq.bind_right _ fun a => ?_
+  simp only [StateT.run_bind, bind_assoc]
+  refine (EvalDistEq.bind_right _ fun (p : G₂ × State F G₁ M) =>
+    EvalDistEq.bind_left (run_impl_eq_uniform_implAt scheme.g₂ a j _ p.2) _).trans ?_
+  simp only [bind_assoc]
+  exact EvalDistEq.bind_bind_swap _ _ _
 
 end Pop
 

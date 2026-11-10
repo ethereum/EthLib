@@ -25,7 +25,7 @@ A valid aggregate with valid proofs on key hashes `r x • Z` gives `a • Z`, f
 
 That needs every key to be a multiple of `g1`, no `r x` to be zero, and a nonzero honest count.
 
-The game is unchanged in distribution when one message hash scalar is drawn before the run.
+The game is unchanged in distribution when one message hash scalar is drawn right after the key.
 
 No bound on that game is proved yet.
 -/
