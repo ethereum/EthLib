@@ -9,9 +9,9 @@ Not yet released.
 
 ### Changes that break callers
 
-- From Gloas, the rewards and penalties of an epoch now fail where a registry position of 2^64 or more would become a validator index ([#1883](https://github.com/ethereum/EthLib/issues/1883)).
+- From Gloas, the rewards and penalties and the inactivity updates of an epoch now fail where a registry position of 2^64 or more would become a validator index ([#1883](https://github.com/ethereum/EthLib/issues/1883)).
   The specification builds a `ValidatorIndex` for each position when it applies the deltas, and for each eligible validator when it lists the eligible indices.
-  EthLib took such a position modulo 2^64, so it credited the balance of another validator.
+  EthLib took such a position modulo 2^64, so it credited the balance, or updated the inactivity score, of another validator.
   Before Gloas the registry stays within its limit, which is below 2^64, so nothing changes there.
   No C export or Python function changes.
   In Lean, `applyDeltas_eq_ok_iff` now states the position directly, with a bound of 2^64 on it.

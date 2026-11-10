@@ -408,8 +408,7 @@ theorem getEligibleValidatorIndices_eq {eligible : List ValidatorIndex}
     obtain ⟨index, converted, rfl⟩ := step
     -- A position that converts is below `2^64`, so it is its own index.
     obtain ⟨_, same⟩ := ofNatChecked_ok_iff.mp (mapError_ok_iff.mp (liftAccessor_ok.mp converted))
-    rw [← same]
-    simp
+    rw [← same, Nat.toUInt64_eq, UInt64.ofNat_toNat]
 
 /-- The eligible indices increase strictly, for a registry within its limit. -/
 theorem getEligibleValidatorIndices_sorted {eligible : List ValidatorIndex}
@@ -668,20 +667,22 @@ theorem earliestInclusions_size_and_mem {size : Nat}
 
 /-! ## Balances after the rewards and penalties -/
 
-/-- The deltas of one validator apply exactly when its position is below `2^64` and names a balance.
+/-- The deltas of one validator apply exactly when three conditions hold.
 
-The reward added to the balance stays below `2^64`.
+Its position is below `2^64`, and it names a balance.
+
+The reward added to that balance stays below `2^64`.
 
 The new balance is the old one plus the reward, minus the penalty, or zero if the penalty is larger.
 
 A reward or penalty past the end of its array counts as zero. -/
-theorem applyDeltas_eq_ok_iff {rewards penalties : Array Gwei} {index : Nat} :
-    applyDeltas rewards penalties state index = .ok after ↔
-      index < 2 ^ 64 ∧ ∃ inside : index < state.balances.data.size,
-        state.balances.data[index].toNat + (rewards.getD index 0).toNat < 2 ^ 64 ∧
-          after = state.putBalance index inside
-            (saturatingSub (state.balances.data[index] + rewards.getD index 0)
-              (penalties.getD index 0)) := by
+theorem applyDeltas_eq_ok_iff {rewards penalties : Array Gwei} {position : Nat} :
+    applyDeltas rewards penalties state position = .ok after ↔
+      position < 2 ^ 64 ∧ ∃ inside : position < state.balances.data.size,
+        state.balances.data[position].toNat + (rewards.getD position 0).toNat < 2 ^ 64 ∧
+          after = state.putBalance position inside
+            (saturatingSub (state.balances.data[position] + rewards.getD position 0)
+              (penalties.getD position 0)) := by
   simp only [applyDeltas, liftAccessor_ok, bind_ok_iff, increaseBalance_eq_ok_iff,
     decreaseBalance_eq_ok_iff]
   constructor
@@ -690,11 +691,11 @@ theorem applyDeltas_eq_ok_iff {rewards penalties : Array Gwei} {index : Nat} :
     subst same
     exact ⟨small, inside, fits, by simp [BeaconState.putBalance]⟩
   · rintro ⟨small, inside, fits, rfl⟩
-    -- Below `2^64` the position is its own validator index.
-    have same : index.toUInt64.toNat = index := by
-      rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt small]
-    have inside' : index.toUInt64.toNat < state.balances.data.size := by rw [same]; exact inside
-    refine ⟨index.toUInt64, by rw [liftArith, ofNatChecked_of_lt small]; rfl, _,
+    -- Below `2^64` the position is its own validator position.
+    have same : position.toUInt64.toNat = position := by
+      rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small]
+    have inside' : position.toUInt64.toNat < state.balances.data.size := by rw [same]; exact inside
+    refine ⟨position.toUInt64, by rw [liftArith, ofNatChecked_of_lt small]; rfl, _,
       ⟨inside', by simpa [same] using fits, rfl⟩, by simpa [BeaconState.putBalance] using inside',
       by simp [BeaconState.putBalance, same]⟩
 
