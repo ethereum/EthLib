@@ -25,7 +25,9 @@ Partial synchrony bounds the delay after a global stabilisation time, written GS
 A message in the view of an honest validator at time `t` reaches every honest validator by
 `max t GST + Δ`.
 
-That is the network rule of §2 together with its assumption that honest validators gossip.
+The rule follows from the network rule of §2 and its assumption that honest validators gossip.
+
+A message that no honest validator holds may never be delivered, as a Byzantine sender may keep it.
 
 Footnote 1 of §2 compares it with the partial synchrony of Dwork, Lynch and Stockmeyer,
 [doi:10.1145/42282.42283](https://doi.org/10.1145/42282.42283).
@@ -148,15 +150,15 @@ def world (e : Execution P J) (n : ℕ) : World ν μ σ :=
 
 /-- Partial synchrony with a stabilisation time `GST` and a delay `Δ`.
 
+The delay is positive, since a send and a delivery are two events.
+
 Time grows without bound.
 
 A message in the view of an honest validator at time `t` is in the view of every honest validator
-at each time from `max t GST + Δ` on.
-
-With a zero delay, every honest validator must hold the message in the world where it is sent. -/
+at each later time from `max t GST + Δ` on. -/
 def PartiallySynchronous (e : Execution P J) (GST Δ : ℕ) : Prop :=
-  (∀ T, ∃ n, T ≤ (e.world n).time) ∧
-    ∀ n k, ∀ v ∈ J, ∀ u ∈ J, ∀ m ∈ (e.world n).view v,
+  0 < Δ ∧ (∀ T, ∃ n, T ≤ (e.world n).time) ∧
+    ∀ n k, n ≤ k → ∀ v ∈ J, ∀ u ∈ J, ∀ m ∈ (e.world n).view v,
       max (e.world n).time GST + Δ ≤ (e.world k).time → m ∈ (e.world k).view u
 
 /-- Synchrony with a delay `Δ`: partial synchrony from time zero. -/
@@ -258,43 +260,53 @@ theorem mem_view_of_send {GST Δ : ℕ} (sync : e.PartiallySynchronous GST Δ) {
     simp [world_succ, sends, World.apply]
   have same : (e.world (n + 1)).time = (e.world n).time := by
     simp [world_succ, sends, World.apply]
-  exact sync.2 (n + 1) k v honest u receiver m own (same ▸ late)
+  -- The bound lies after the time of sending, so the later world comes after the send.
+  have after : n + 1 ≤ k := by
+    by_contra! before
+    have earlier : (e.world k).time ≤ (e.world n).time :=
+      e.monotone_time (Nat.le_of_lt_succ before)
+    have := sync.1
+    omega
+  exact sync.2.2 (n + 1) k after v honest u receiver m own (same ▸ late)
 
 end Execution
 
-/-- The Byzantine validators of `V` hold at most `β` percent of its stake.
+/-- The Byzantine validators of `V` hold at most the fraction `num / den` of its stake.
 
 The validators outside `J` are the Byzantine ones.
 
-The bound is meant for a percentage, at most 100. -/
+The bound says nothing when the fraction is at least one, or when `V` has no stake. -/
 def ByzantineStakeAtMost (w : ν → ℕ) (V : Finset ν) (J : Set ν) [DecidablePred (· ∈ J)]
-    (β : ℕ) : Prop :=
-  100 * stake w {v ∈ V | v ∉ J} ≤ β * stake w V
+    (num den : ℕ) : Prop :=
+  den * stake w {v ∈ V | v ∉ J} ≤ num * stake w V
 
 namespace ByzantineStakeAtMost
 
 omit [DecidableEq ν]
 
-variable {w : ν → ℕ} {V : Finset ν} [DecidablePred (· ∈ J)] {β : ℕ}
+variable {w : ν → ℕ} {V : Finset ν} [DecidablePred (· ∈ J)] {num den : ℕ}
 
-/-- The honest validators of `V` then hold at least `100 - β` percent of its stake. -/
-theorem honest (bound : ByzantineStakeAtMost w V J β) :
-    (100 - β) * stake w V ≤ 100 * stake w {v ∈ V | v ∈ J} := by
+/-- The honest validators of `V` then hold at least the fraction `1 - num / den` of its stake. -/
+theorem honest (bound : ByzantineStakeAtMost w V J num den) :
+    (den - num) * stake w V ≤ den * stake w {v ∈ V | v ∈ J} := by
   have split : stake w {v ∈ V | v ∈ J} + stake w {v ∈ V | v ∉ J} = stake w V :=
     Finset.sum_filter_add_sum_filter_not V (· ∈ J) w
   unfold ByzantineStakeAtMost at bound
+  have scaled :
+      den * stake w V = den * stake w {v ∈ V | v ∈ J} + den * stake w {v ∈ V | v ∉ J} := by
+    rw [← split, Nat.mul_add]
   rw [Nat.sub_mul]
   omega
 
-/-- The bound holds for every `β` when every validator of `V` is honest. -/
-theorem of_subset (β : ℕ) (all : ↑V ⊆ J) : ByzantineStakeAtMost w V J β := by
+/-- The bound holds for every fraction when every validator of `V` is honest. -/
+theorem of_subset (num den : ℕ) (all : ↑V ⊆ J) : ByzantineStakeAtMost w V J num den := by
   have : ({v ∈ V | v ∉ J} : Finset ν) = ∅ :=
     Finset.filter_eq_empty_iff.mpr fun v member => not_not.mpr (all member)
   simp [ByzantineStakeAtMost, this, stake]
 
-/-- The bound fails below 100 percent when every validator is Byzantine and `V` has stake. -/
-theorem not_of_empty (below : β < 100) (positive : 0 < stake w V) :
-    ¬ByzantineStakeAtMost w V ∅ β := by
+/-- The bound fails below one when every validator is Byzantine and `V` has stake. -/
+theorem not_of_empty (below : num < den) (positive : 0 < stake w V) :
+    ¬ByzantineStakeAtMost w V ∅ num den := by
   intro bound
   simp only [ByzantineStakeAtMost, Set.mem_empty_iff_false, not_false_eq_true,
     Finset.filter_true] at bound
@@ -374,10 +386,11 @@ theorem exists_partiallySynchronous {time : ℕ} {state : ν → σ} {v : ν} {m
     match n, lt with
     | 0, _ => rfl
     | 1, _ => exact congrArg World.time worldAt_flood_one
-  refine ⟨e, rfl, rfl, rfl, fun u => by simp [later 2 le_rfl], fun GST => ⟨fun T => ?_, ?_⟩⟩
+  refine ⟨e, rfl, rfl, rfl, fun u => by simp [later 2 le_rfl],
+    fun GST => ⟨positive, fun T => ?_, ?_⟩⟩
   · refine ⟨T + 2, ?_⟩
     simp [later (T + 2) (by omega)]
-  · intro n k w _ u _ m' member bound
+  · intro n k _ w _ u _ m' member bound
     -- The view at `n` is empty before the send, so `n` is past it.
     have past : 1 ≤ n := by
       rcases Nat.eq_zero_or_pos n with zero | pos

@@ -15,6 +15,8 @@ The messages are those of the fork choice handlers.
 
 A block is processed with the votes and slashings that it carries.
 
+The block is rejected with them when one of them is rejected.
+
 A message that the handler rejects leaves the store as it was, and may be processed later.
 
 What lies outside the beacon chain, such as the execution engine, is one source for all.
@@ -51,7 +53,7 @@ A tick sets the store to the time, which must fit in 64 bits.
 
 Every other move processes a message of the view, as one from the network.
 
-The votes inside a block are processed with it.
+The votes inside a block are processed with it, and a rejected vote rejects the block.
 
 Blocks and envelopes are judged with the given sources outside the beacon chain. -/
 inductive Handles (config : Config) (checks : SignatureChecks) (sources : BlockSources preset fork)
@@ -136,7 +138,9 @@ theorem Execution.reachable {ν κ : Type*} [DecidableEq ν] {checks : Signature
     ∀ v ∈ J, Store.Reachable config anchorState anchorBlock ((e.world n).state v) :=
   e.state_induction start (fun _ _ _ _ _ _ reachable moved => moved.reachable reachable) n
 
-/-- A mainnet store can start from a state at slot zero and a block with the root of that state.
+/-- A store can start from a mainnet state at slot zero and a block with the root of that state.
+
+Other presets are not covered.
 -/
 theorem exists_getForkchoiceStore (config : Config) {state : BeaconState .mainnet fork}
     (zero : state.slot = 0) (block : BeaconBlock .mainnet fork) :
@@ -156,7 +160,41 @@ theorem exists_getForkchoiceStore (config : Config) {state : BeaconState .mainne
     Except.bind, ne_eq, not_true_eq_false, ite_false]
   exact ⟨_, rfl⟩
 
+/-- A store whose clock has a slot ticks to its own time and stays as it is. -/
+theorem onTick_timeMs {store : Store preset fork} {slot : Slot}
+    (current : store.getCurrentSlot config = .ok slot) :
+    store.onTick config store.timeMs = .ok store := by
+  have slotted : computeSlotAtTimeMs config store.genesisTimeMs store.timeMs = .ok slot := by
+    unfold Store.getCurrentSlot at current
+    cases computed : computeSlotAtTimeMs config store.genesisTimeMs store.timeMs with
+    | error e => simp [computed, Except.mapError] at current
+    | ok s => simpa [computed, Except.mapError] using current
+  have caught : Store.catchUp config store slot = .ok store := by
+    rw [Store.catchUp]
+    simp [current, bind, Except.bind, pure, Except.pure]
+  have ticked : store.onTickPerSlot config store.timeMs = .ok store := by
+    simp [Store.onTickPerSlot, current, computeSlotsSinceEpochStart,
+      computeStartSlotAtEpoch_computeEpochAtSlot, bind, Except.bind, pure, Except.pure,
+      Except.mapError]
+  simp [Store.onTick, slotted, caught, ticked, Except.mapError, bind, Except.bind]
+
+/-- A store built from an anchor can tick, on a chain with nonempty slots.
+
+So an honest validator can move from such a store, whatever its view. -/
+theorem Handles.tick_anchor {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {store : Store preset fork} (positive : 0 < config.SLOT_DURATION_MS)
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok store)
+    (view : Set (Message preset fork)) :
+    Handles config checks sources store.timeMs.toNat view store store := by
+  refine .tick (UInt64.toNat_lt _) ?_
+  have round : store.timeMs.toNat.toUInt64 = store.timeMs :=
+    UInt64.toNat_inj.mp (by simp)
+  rw [round]
+  exact onTick_timeMs (getCurrentSlot_getForkchoiceStore positive anchored)
+
 /-- Honest validators that run the fork choice have an execution where a block reaches all.
+
+No message carries a signed statement here, so unforgeability asks nothing.
 
 Each validator starts from a store built from an anchor.
 
