@@ -267,6 +267,16 @@ theorem toPoint_inj {p q : Point} (hp : p.isOnCurve = true) (hq : q.isOnCurve = 
 theorem toPoint_eq_zero {p : Point} (hp : p.isOnCurve = true) : toPoint p = 0 ↔ p = infinity :=
   toPoint_inj (q := infinity) hp rfl
 
+/-- A pair off the curve goes to `0`. -/
+theorem toPoint_eq_zero_of_isOnCurve_eq_false {p : Point} (hp : p.isOnCurve = false) :
+    toPoint p = 0 := by
+  cases p with
+  | infinity => cases hp
+  | affine x y =>
+    have h : ¬(Fp.toZMod y * Fp.toZMod y = Fp.toZMod x * Fp.toZMod x * Fp.toZMod x + 7) :=
+      fun h => by simp [(isOnCurve_affine x y).mpr h] at hp
+    exact dite_eq_right_iff.mpr fun h0 => absurd h0 h
+
 /-- Every group element is the element of a point on the curve. -/
 theorem toPoint_surjective (P : curve.Point) : ∃ p : Point, p.isOnCurve = true ∧ toPoint p = P := by
   cases P with

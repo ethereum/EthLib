@@ -190,6 +190,9 @@ theorem modulus_prime : Nat.Prime modulus :=
 
 instance : Fact (Nat.Prime modulus) := ⟨modulus_prime⟩
 
+/-- `p` is below `2^256`, so every field element fits in 256 bits. -/
+theorem modulus_lt_two_pow : modulus < 2 ^ 256 := by decide
+
 /-- `Fp` is `ZMod modulus` as a ring.
 
 The map is the identity, so it carries every operation over, and the algebra of `ZMod` applies. -/

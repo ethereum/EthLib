@@ -63,7 +63,7 @@ private theorem val_neg {s : Fn} (hs : s ≠ 0) : (-s).val = Fn.modulus - s.val 
   exact Nat.mod_eq_of_lt (by omega)
 
 /-- What signing returns: the loop's signature, with `s` replaced by `n - s` when it is high. -/
-private theorem sign_spec {sk : Fn} {hash : Vector UInt8 32} {r s : Fn} {odd : Bool}
+theorem sign_spec {sk : Fn} {hash : Vector UInt8 32} {r s : Fn} {odd : Bool}
     (h : sign sk hash = .ok (r, s, odd)) :
     sk ≠ 0 ∧ ∃ s0 odd0, signWith sk (Fin.ofNat _ (hashToInt hash)) MAX_NONCES (nonceSeed sk hash)
         = .ok (r, s0, odd0) ∧
