@@ -155,8 +155,7 @@ structure SlackStepHypotheses (config : Config) (checks : SignatureChecks)
     where
   /-- The set holds each vote that a block step casts. -/
   applied : blockStepVotes config checks forked after ⊆ attested
-  /-- At a slot that ends an epoch, the sets and weights match the state for both recent epochs.
-  -/
+  /-- At the end of an epoch, the sets and weights match the state for both recent epochs. -/
   sets : after.state.slot ≠ forked.state.slot →
     (forked.state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 → ∀ current : Bool,
       TargetSetsMatch V U W block forked.state
@@ -171,50 +170,15 @@ def SlackStep (config : Config) (checks : SignatureChecks)
   ChainStep config checks forked after ∧
     SlackStepHypotheses config checks V U W attested block forked after
 
-/-- A step that changes the current justified checkpoint makes it that of a recent epoch.
-
-That epoch is the previous or the current epoch of the state before the step.
-
-The root of the new checkpoint is the root that this state records for the epoch.
-
-The buffer of roots must cover two epochs. -/
-theorem ChainStep.getBlockRoot_currentJustified_of_ne
-    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
-    {forked after : ForkedBeaconState preset} (step : ChainStep config checks forked after)
-    (changed : after.state.currentJustifiedCheckpoint ≠ forked.state.currentJustifiedCheckpoint) :
-    (after.state.currentJustifiedCheckpoint.epoch = getPreviousEpoch forked.state ∨
-        after.state.currentJustifiedCheckpoint.epoch = getCurrentEpoch forked.state) ∧
-      getBlockRoot forked.state after.state.currentJustifiedCheckpoint.epoch =
-        .ok after.state.currentJustifiedCheckpoint.root := by
-  cases step with
-  | slot computed =>
-    obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp computed
-    have currentKept := (processUpgrades_justified upgraded).2
-    dsimp only at currentKept
-    rw [currentKept] at changed ⊢
-    exact advanceSlot_getBlockRoot_currentJustified_of_ne window advancedOk changed
-  | block engine signed validateResult applied =>
-    obtain ⟨-, blockOk, -⟩ := applySignedBlock_ok applied
-    exact absurd (frame_processBlock blockOk).currentJustified changed
-
-/-- A slot that changes the current justified checkpoint ends an epoch. -/
-private theorem advanceSlot_boundary_of_currentJustified_ne {fork : Fork}
-    {state after : BeaconState preset fork} (computed : advanceSlot config checks state = .ok after)
-    (changed : after.currentJustifiedCheckpoint ≠ state.currentJustifiedCheckpoint) :
-    (state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 := by
-  obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
-  have cachedFrame := frame_processSlot cachedOk
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · rename_i boundary
-    have nextEq : next = state.slot + 1 := by
-      apply UInt64.toNat_inj.mp
-      rw [UInt64.toNat_add, UInt64.toNat_one, ← sum, Nat.mod_eq_of_lt next.toNat_lt]
-    rw [← nextEq]
-    exact boundary
-  · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    subst epochedOk
-    exact absurd cachedFrame.currentJustified changed
+/-- A slot step of a chain moves the slot, which the upgrades keep. -/
+theorem advanceSlotAcross_slot_ne {forked after : ForkedBeaconState preset}
+    (computed : advanceSlotAcross config checks forked = .ok after) :
+    after.state.slot ≠ forked.state.slot := by
+  obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp computed
+  intro same
+  have next := advanceSlot_slot advancedOk
+  rw [← processUpgrades_slot upgraded, same] at next
+  omega
 
 /-- One step of a chain keeps the properties of its states.
 
@@ -235,13 +199,7 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
     have small : advanced.validators.data.size < 2 ^ 64 :=
       Nat.lt_of_le_of_lt (processUpgrades_registryGrows upgraded) hypotheses.small
     have early := holds.early.of_advanceSlot advancedOk
-    -- The slot moves on by one, and the upgrades keep it.
-    have moved : after.state.slot ≠ forked.state.slot := by
-      have kept : after.state.slot = advanced.slot := processUpgrades_slot upgraded
-      intro same
-      have next := advanceSlot_slot advancedOk
-      rw [← kept, same] at next
-      omega
+    have moved := advanceSlotAcross_slot_ne computed
     obtain ⟨previousKept, currentKept⟩ := processUpgrades_justified upgraded
     have pending : PendingVoted attested advanced := by
       by_cases before : forked.fork < .altair
@@ -252,9 +210,8 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
       holds.pendingVoted (hypotheses.large moved) block subset_rfl
       holds.invariant.settled
       holds.separated (fun ne => by
-        have boundary := advanceSlot_boundary_of_currentJustified_ne advancedOk ne
-        rcases (advanceSlot_getBlockRoot_currentJustified_of_ne window advancedOk ne).1 with
-          recent | recent
+        obtain ⟨recent | recent, -, boundary⟩ :=
+          advanceSlot_getBlockRoot_currentJustified_of_ne window advancedOk ne
         · rw [recent]
           exact hypotheses.sets moved boundary false
         · rw [recent]

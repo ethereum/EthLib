@@ -26,7 +26,7 @@ For a checkpoint of the current epoch, the step reads no second set.
 
 Its validators that exit at the next epoch then count as slack, which that step does not need.
 
-Its weights are the effective balances of each state that records its root for a recent epoch.
+Its weights are the effective balances of each state at the end of an epoch that records its root.
 
 That state may lie on any run between the first and the last state.
 
@@ -78,22 +78,24 @@ def activeSetAt {fork : Fork} (state : BeaconState preset fork) (epoch : ℕ) :
     activeSetAt state epoch.toNat = (getActiveValidatorIndices state epoch).toFinset := by
   simp only [activeSetAt, UInt64.ofNat_toNat]
 
-/-- The effective balances of each state that may justify a checkpoint.
+/-- The effective balances of each state whose next step may justify a checkpoint.
 
 The state lies on any run of steps from the first state to the last one.
 
-The epoch of the checkpoint is its previous or its current epoch.
+Its next step on that run is a slot that ends an epoch.
+
+The epoch of the checkpoint is the previous or the current epoch of the state.
 
 Its block is that of the root that the state records for the start of that epoch.
 
-The epoch step of such a state may justify the checkpoint, and the finalization rules may read it.
-
-Effective balances change only at the epoch step, so a branch adds those of at most two steps. -/
+The epoch step of that slot may justify the checkpoint, and the finalization rules may read it. -/
 def justifyingBalances (config : Config) (checks : SignatureChecks) (block : Root → β)
     (first last : ForkedBeaconState preset) (c : Models.Ffg.Checkpoint β) :
     Set (ValidatorIndex → ℕ) :=
-  {weights | ∃ forked, Relation.ReflTransGen (ChainStep config checks) first forked ∧
-    Relation.ReflTransGen (ChainStep config checks) forked last ∧
+  {weights | ∃ forked after, Relation.ReflTransGen (ChainStep config checks) first forked ∧
+    ChainStep config checks forked after ∧ after.state.slot ≠ forked.state.slot ∧
+    (forked.state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 ∧
+    Relation.ReflTransGen (ChainStep config checks) after last ∧
     ∃ (current : Bool) (root : Root),
       getBlockRoot forked.state
           (if current then getCurrentEpoch forked.state else getPreviousEpoch forked.state) =
@@ -113,14 +115,14 @@ def runVotes (config : Config) (checks : SignatureChecks)
     Relation.ReflTransGen (ChainStep config checks) after last ∧
     vote ∈ blockStepVotes config checks forked after}
 
-/-- The active sets, the balances and the votes of a run meet the hypotheses of each of its steps.
+/-- The active sets, the balances and the votes of a run meet the hypotheses of one of its steps.
 
 The step lies on a run from the first state to the last one.
 
 It must meet the bounds on the stake, the blocks and the registry.
 
 The registry of the last state must stay below 2^64 validators. -/
-theorem slackStepHypotheses_activeSetAt
+theorem SlackStepHypotheses.of_activeSetAt
     {first forked after last : ForkedBeaconState preset}
     (reach : Relation.ReflTransGen (ChainStep config checks) first forked)
     (step : ChainStep config checks forked after)
@@ -136,7 +138,7 @@ theorem slackStepHypotheses_activeSetAt
       (activityFixedEpoch_mono step.currentEpoch_le))).mono
         (getCurrentEpoch_le_activityFixedEpoch _)
   refine ⟨bounds, fun vote member => ⟨forked, after, reach, rest, member⟩,
-    fun _ _ current root rootOk => ?_⟩
+    fun moved boundary current root rootOk => ?_⟩
   have previous := getPreviousEpoch_toNat forked.state
   set epoch := if current then getCurrentEpoch forked.state else getPreviousEpoch forked.state
     with epochEq
@@ -153,7 +155,8 @@ theorem slackStepHypotheses_activeSetAt
   have activeEq : activeSetAt last.state epoch.toNat =
       (getActiveValidatorIndices forked.state epoch).toFinset := by
     rw [activeSetAt_toNat, kept.getActiveValidatorIndices_eq below]
-  refine ⟨activeEq, ⟨forked, reach, rest.head step, current, root, rootOk, rfl, rfl⟩, ?_⟩
+  refine ⟨activeEq, ⟨forked, after, reach, step, moved, boundary, rest, current, root, rootOk,
+    rfl, rfl⟩, ?_⟩
   dsimp only
   by_cases same : epoch = getCurrentEpoch forked.state
   · rw [activeEq, same]
@@ -168,13 +171,68 @@ theorem slackStepHypotheses_activeSetAt
     kept.getActiveValidatorIndices_eq (UInt64.le_refl _)]
   exact Finset.inter_subset_right
 
+/-- The active sets, the balances and the votes of a run meet the hypotheses of each of its steps.
+
+Each step on any run from the first state to the last one must meet the bounds of a step. -/
+theorem SlackStepHypotheses.of_activeSetAt_of_chainSteps {first last : ForkedBeaconState preset}
+    (meets : ∀ forked after,
+      Relation.ReflTransGen (ChainStep config checks) first forked →
+      ChainStep config checks forked after →
+      Relation.ReflTransGen (ChainStep config checks) after last →
+      SlackStepBounds block forked after)
+    (forked after : ForkedBeaconState preset)
+    (reach : Relation.ReflTransGen (ChainStep config checks) first forked)
+    (step : ChainStep config checks forked after)
+    (rest : Relation.ReflTransGen (ChainStep config checks) after last) :
+    SlackStepHypotheses config checks (fun c => activeSetAt last.state c.epoch)
+      (fun c => activeSetAt last.state (c.epoch + 1))
+      (justifyingBalances config checks block first last) (runVotes config checks first last)
+      block forked after := by
+  have bounds := meets forked after reach step rest
+  -- The registry of the last state stays below 2^64 validators.
+  have small : last.state.validators.data.size < 2 ^ 64 := by
+    cases rest with
+    | refl => exact bounds.small
+    | tail middle lastStep =>
+      exact (meets _ _ ((reach.tail step).trans middle) lastStep .refl).small
+  exact .of_activeSetAt reach step rest bounds small
+
+/-- The roots ordered by the links of reached states meet the bounds of each step of a run.
+
+Each step on any run from the first state to the last one must meet the bound on the stake.
+
+It must also keep the registry below 2^64 validators. -/
+theorem SlackStepBounds.of_toChainRoot {first last : ForkedBeaconState preset}
+    (large : ∀ forked after,
+      Relation.ReflTransGen (ChainStep config checks) first forked →
+      ChainStep config checks forked after →
+      Relation.ReflTransGen (ChainStep config checks) after last →
+      after.state.slot ≠ forked.state.slot →
+      (forked.state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 →
+      3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
+        2 * stake (fun index => balanceAt forked.state index.toNat)
+          (getActiveValidatorIndices forked.state (getCurrentEpoch forked.state)).toFinset)
+    (small : ∀ forked after,
+      Relation.ReflTransGen (ChainStep config checks) first forked →
+      ChainStep config checks forked after →
+      Relation.ReflTransGen (ChainStep config checks) after last →
+      after.state.validators.data.size < 2 ^ 64)
+    (forked after : ForkedBeaconState preset)
+    (reach : Relation.ReflTransGen (ChainStep config checks) first forked)
+    (step : ChainStep config checks forked after)
+    (rest : Relation.ReflTransGen (ChainStep config checks) after last) :
+    SlackStepBounds (toChainRoot config checks first) forked after :=
+  ⟨large forked after reach step rest,
+    fun _ member => Relation.ReflTransGen.single ⟨after, reach.tail step, member⟩,
+    small forked after reach step rest⟩
+
 /-- Along a run of steps of a chain from genesis, both justified checkpoints are slack-justified.
 
 The validator set of a checkpoint is the active set of its epoch in the last state.
 
 Its second set is the active set of the next epoch in the last state.
 
-Its weights are the effective balances of each state that records its root for a recent epoch.
+Its weights are the effective balances of each state at the end of an epoch that records its root.
 
 The votes are those that the block steps between genesis and the last state cast.
 
@@ -207,17 +265,9 @@ theorem slackJustifiedCheckpoints_activeSetAt_of_chainSteps
     SlackJustifiedCheckpoints (fun c => activeSetAt last.state c.epoch)
       (fun c => activeSetAt last.state (c.epoch + 1))
       (justifyingBalances config checks block ⟨fork, state⟩ last) (block (Vector.replicate 32 0))
-      (ffgVotes block (runVotes config checks ⟨fork, state⟩ last)) block last.state := by
-  refine slackJustifiedCheckpoints_of_chainSteps positive window apart computed steps
-    fun forked after reach step rest => ?_
-  have bounds := meets forked after reach step rest
-  -- The registry of the last state stays below 2^64 validators.
-  have small : last.state.validators.data.size < 2 ^ 64 := by
-    cases rest with
-    | refl => exact bounds.small
-    | tail middle lastStep =>
-      exact (meets _ _ ((reach.tail step).trans middle) lastStep .refl).small
-  exact slackStepHypotheses_activeSetAt reach step rest bounds small
+      (ffgVotes block (runVotes config checks ⟨fork, state⟩ last)) block last.state :=
+  slackJustifiedCheckpoints_of_chainSteps positive window apart computed steps
+    (SlackStepHypotheses.of_activeSetAt_of_chainSteps meets)
 
 /-- Along a run of steps of a chain from genesis, both justified checkpoints are slack-justified.
 
@@ -265,9 +315,6 @@ theorem slackJustifiedCheckpoints_chainRoot_of_chainSteps
         (runVotes config checks ⟨fork, state⟩ last))
       (toChainRoot config checks ⟨fork, state⟩) last.state :=
   slackJustifiedCheckpoints_activeSetAt_of_chainSteps positive window apart computed steps
-    fun forked after reach step rest =>
-      ⟨large forked after reach step rest,
-        fun _ member => Relation.ReflTransGen.single ⟨after, reach.tail step, member⟩,
-        small forked after reach step rest⟩
+    (SlackStepBounds.of_toChainRoot large small)
 
 end EthLib.Consensus

@@ -352,10 +352,7 @@ theorem JustifiedEarly.of_initializeBeaconStateFromEth1 {fork : Fork}
     (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
       .ok after) :
     JustifiedEarly after := by
-  obtain ⟨_, _, _, _, activated, _, depositedOk, activatedOk, rfl⟩ :=
-    initializeBeaconStateFromEth1_ok computed
-  have frame := (Frame.foldlM (fun _ _ _ ok => frame_genesisDeposit ok) depositedOk).trans
-    (Frame.foldlM (fun _ _ _ ok => frame_activateAtGenesis ok) activatedOk)
+  obtain ⟨_, _, _, activated, _, frame, rfl⟩ := initializeBeaconStateFromEth1_frame computed
   intro _
   show activated.previousJustifiedCheckpoint = activated.currentJustifiedCheckpoint
   rw [frame.previousJustified, frame.currentJustified]

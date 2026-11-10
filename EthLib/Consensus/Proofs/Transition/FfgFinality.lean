@@ -93,6 +93,27 @@ structure SlackBits (V U : Models.Ffg.Checkpoint β → Finset ValidatorIndex)
     older.toNat + 2 = epoch → getBlockRoot state older = .ok root →
       SlackJustified V U W genesis votes ⟨block root, older.toNat⟩
 
+/-- A state with the same slot, roots, bits and justified checkpoints as another has its bits. -/
+theorem SlackBits.congr {block : Root → β} {epoch : ℕ} {fork post : Fork}
+    {state : BeaconState preset fork} {other : BeaconState preset post}
+    (slot : other.slot = state.slot) (roots : other.blockRoots = state.blockRoots)
+    (bitsEq : other.justificationBits = state.justificationBits)
+    (previous : other.previousJustifiedCheckpoint = state.previousJustifiedCheckpoint)
+    (current : other.currentJustifiedCheckpoint = state.currentJustifiedCheckpoint)
+    (holds : SlackBits V U W genesis votes block epoch state) :
+    SlackBits V U W genesis votes block epoch other := by
+  have rootEq : ∀ epoch, getBlockRoot other epoch = getBlockRoot state epoch := fun epoch => by
+    simp only [getBlockRoot, getBlockRootAtSlot_congr slot roots]
+  refine ⟨fun early => ?_, fun set => ?_, fun set older root sum read => ?_⟩
+  · rw [bitsEq]
+    exact holds.early early
+  · rw [bitsEq] at set
+    rw [rootEq, previous, current]
+    exact holds.current set
+  · rw [bitsEq] at set
+    rw [rootEq] at read
+    exact holds.previous set older root sum read
+
 /-- The epoch after genesis is epoch 1. -/
 private theorem toNat_genesisEpoch_add_one : (GENESIS_EPOCH + 1 : Epoch).toNat = 1 := by
   decide
