@@ -72,6 +72,32 @@ theorem length_encodeAux_le (n fuel : Nat) : (encodeAux n fuel).length ≤ fuel 
       -- A continued byte, then at most the remaining budget.
       · simpa using ih (n / groupSize)
 
+/-- A value below `128^(k+1)` encodes in at most `k+1` bytes, whatever the recursion bound. -/
+theorem length_encodeAux_le_of_lt {k : Nat} :
+    ∀ {n fuel : Nat}, n < groupSize ^ (k + 1) → (encodeAux n fuel).length ≤ k + 1 := by
+  induction k with
+  | zero =>
+      intro n fuel h
+      cases fuel with
+      | zero => simp [encodeAux]
+      | succ fuel =>
+          have h' : n < groupSize := by simpa using h
+          simp [encodeAux, h']
+  | succ k ih =>
+      intro n fuel h
+      cases fuel with
+      | zero => simp [encodeAux]
+      | succ fuel =>
+          rw [encodeAux]
+          split
+          · simp
+          · have hn : n / groupSize < groupSize ^ (k + 1) := by
+              rw [Nat.pow_succ] at h
+              exact Nat.div_lt_of_lt_mul (by rwa [Nat.mul_comm])
+            have := ih (n := n / groupSize) (fuel := fuel) hn
+            simp only [List.length_cons]
+            omega
+
 /-- Every varint fits in the ten bytes the specification allows. -/
 theorem encode_length_le (v : UInt64) : (encode v).length ≤ maxLength :=
   length_encodeAux_le _ _
