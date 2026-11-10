@@ -15,7 +15,7 @@ A one-counter meter pays both execution gas and state gas from its counter.
 
 The state gas meter can pay state gas from its reservoir, and refills can return execution gas.
 
-So its execution gas stays above the counter when it starts above it and makes the same payments.
+So its execution gas stays at least the counter when it starts there and makes the same payments.
 -/
 
 @[expose] public section

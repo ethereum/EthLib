@@ -471,7 +471,7 @@ The frame may change the state, and the account of the contract exists.
 
 The budget is 25,000 gas before Glamsterdam and 125,000 from Glamsterdam.
 
-The write changes one slot and pays at most 22,100 gas times the storage-gas scale.
+The write changes one slot and pays at most 22,100 gas before Glamsterdam and 110,500 from it.
 
 It keeps the logs. -/
 theorem sstore_writes (hfork : .berlin ≤ fork) {pc : Nat}
@@ -489,7 +489,7 @@ theorem sstore_writes (hfork : .berlin ≤ fork) {pc : Nat}
     (S.getStorageOriginal message.currentTarget (U256.toBeBytes key))
     (S.getStorage message.currentTarget (U256.toBeBytes key)) new
     (decide (U256.toBeBytes key ∉ substate.accessedStorageKeys.getD message.currentTarget ∅))
-  obtain ⟨S', hs, ho, -, ha, hc, -, h⟩ := sstore_of_account_total (code := code) (pc := pc)
+  obtain ⟨S', hs, ho, -, ha, hc, -, h⟩ := sstore_of_account (code := code) (pc := pc)
     (gas := gas) (rest := rest) (key := key) (new := new) (memory := memory)
     (substate := substate) (returnData := returnData) hfork hlt hbyte hstatic rfl
     (by simp only [GasCosts.CALL_STIPEND]; omega) (by omega) hacc

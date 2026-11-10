@@ -51,7 +51,7 @@ private theorem meterFields_map {α : Type} {result : Except EvmError α}
   | error e => cases ok
   | ok x => cases ok; exact fields x
 
-/-- binaryOp keeps the opcode scan and the code. -/
+/-- A binary stack operation keeps the opcode scan and the code. -/
 private theorem binaryOp_meterFields {cost : Nat} {f : U256 → U256 → U256}
     {evm after : Evm fork Nat} (ok : binaryOp cost f evm = .ok after) :
     MeterFields evm after (evm.pc + 1) := by
@@ -63,7 +63,7 @@ private theorem binaryOp_meterFields {cost : Nat} {f : U256 → U256 → U256}
     rw [binaryOp_cons words] at ok
     exact meterFields_map ok fun _ => by simp [MeterFields]
 
-/-- unaryOp keeps the opcode scan and the code. -/
+/-- A unary stack operation keeps the opcode scan and the code. -/
 private theorem unaryOp_meterFields {cost : Nat} {f : U256 → U256}
     {evm after : Evm fork Nat} (ok : unaryOp cost f evm = .ok after) :
     MeterFields evm after (evm.pc + 1) := by
@@ -73,7 +73,7 @@ private theorem unaryOp_meterFields {cost : Nat} {f : U256 → U256}
     rw [unaryOp_cons words] at ok
     exact meterFields_map ok fun _ => by simp [MeterFields]
 
-/-- popStep keeps the opcode scan and the code. -/
+/-- POP keeps the opcode scan and the code. -/
 private theorem popStep_meterFields
     {evm after : Evm fork Nat} (ok : popStep evm = .ok after) :
     MeterFields evm after (evm.pc + 1) := by
@@ -83,7 +83,7 @@ private theorem popStep_meterFields
     rw [popStep_cons words] at ok
     exact meterFields_map ok fun _ => by simp [MeterFields]
 
-/-- pushN keeps the opcode scan and the code. -/
+/-- PUSH keeps the opcode scan and the code. -/
 private theorem pushN_meterFields {n : Fin 33}
     {evm after : Evm fork Nat} (ok : pushN n evm = .ok after) :
     MeterFields evm after (evm.pc + (1 + n.val)) := by
@@ -96,7 +96,7 @@ private theorem pushN_meterFields {n : Fin 33}
       simp [pushN, chargeGas, paid, bind, Except.bind, pure, Except.pure, pushWord,
         Stack.push, full] at ok
 
-/-- dupN keeps the opcode scan and the code. -/
+/-- DUP keeps the opcode scan and the code. -/
 private theorem dupN_meterFields {n : Fin 16}
     {evm after : Evm fork Nat} (ok : dupN n evm = .ok after) :
     MeterFields evm after (evm.pc + 1) := by
@@ -113,7 +113,7 @@ private theorem dupN_meterFields {n : Fin 16}
         simp [dupN, chargeGas, paid, bind, Except.bind, pure, Except.pure, value,
           pushWord, Stack.push, full] at ok
 
-/-- swapN keeps the opcode scan and the code. -/
+/-- SWAP keeps the opcode scan and the code. -/
 private theorem swapN_meterFields {n : Fin 16}
     {evm after : Evm fork Nat} (ok : swapN n evm = .ok after) :
     MeterFields evm after (evm.pc + 1) := by
@@ -129,7 +129,7 @@ private theorem swapN_meterFields {n : Fin 16}
       rw [swapN_of_getElem? words value] at ok
       exact meterFields_map ok fun _ => by simp [MeterFields]
 
-/-- calldataloadStep keeps the opcode scan and the code. -/
+/-- CALLDATALOAD keeps the opcode scan and the code. -/
 private theorem calldataloadStep_meterFields
     {evm after : Evm fork Nat} (ok : calldataloadStep evm = .ok after) :
     MeterFields evm after (evm.pc + 1) := by
@@ -139,7 +139,7 @@ private theorem calldataloadStep_meterFields
     rw [calldataloadStep_cons words] at ok
     exact meterFields_map ok fun _ => by simp [MeterFields]
 
-/-- mstoreStep keeps the opcode scan and the code. -/
+/-- MSTORE keeps the opcode scan and the code. -/
 private theorem mstoreStep_meterFields
     {evm after : Evm fork Nat} (ok : mstoreStep evm = .ok after) :
     MeterFields evm after (evm.pc + 1) := by
@@ -150,7 +150,7 @@ private theorem mstoreStep_meterFields
     rw [mstoreStep_cons words] at ok
     exact meterFields_map ok fun _ => by simp [MeterFields]
 
-/-- mstore8Step keeps the opcode scan and the code. -/
+/-- MSTORE8 keeps the opcode scan and the code. -/
 private theorem mstore8Step_meterFields
     {evm after : Evm fork Nat} (ok : mstore8Step evm = .ok after) :
     MeterFields evm after (evm.pc + 1) := by
@@ -161,7 +161,7 @@ private theorem mstore8Step_meterFields
     rw [mstore8Step_cons words] at ok
     exact meterFields_map ok fun _ => by simp [MeterFields]
 
-/-- returnStep keeps the opcode scan and the code. -/
+/-- RETURN keeps the opcode scan and the code. -/
 private theorem returnStep_meterFields
     {evm after : Evm fork Nat} (ok : returnStep evm = .ok after) :
     MeterFields evm after (evm.pc + 1) := by
@@ -173,7 +173,7 @@ private theorem returnStep_meterFields
     rw [returnStep_cons words] at ok
     exact meterFields_map ok fun _ => by simp [MeterFields]
 
-/-- copyToMemory keeps the opcode scan and the code. -/
+/-- A copy of bytes to memory keeps the opcode scan and the code. -/
 private theorem copyToMemory_meterFields {base : Nat} {data : ByteArray}
     {evm after : Evm fork Nat} (ok : copyToMemory base data evm = .ok after) :
     MeterFields evm after (evm.pc + 1) := by
@@ -187,7 +187,7 @@ private theorem copyToMemory_meterFields {base : Nat} {data : ByteArray}
     rw [copyToMemory_cons words] at ok
     exact meterFields_map ok fun _ => by simp [MeterFields]
 
-/-- sloadStep keeps the opcode scan and the code. -/
+/-- SLOAD keeps the opcode scan and the code. -/
 private theorem sloadStep_meterFields
     {evm after : Evm fork Nat} (ok : sloadStep evm = .ok after) :
     MeterFields evm after (evm.pc + 1) := by

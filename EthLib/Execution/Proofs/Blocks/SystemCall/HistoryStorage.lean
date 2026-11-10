@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Proofs.Blocks.SystemCall.Meter
+public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
 
 /-!
 # Proofs: the history storage contract of EIP-2935 does what its EIP describes
@@ -25,7 +25,11 @@ Each operation of [the EIP][eip-2935-contract] is a function here.
 
 A theorem runs the code and shows that it computes that function.
 
-The set specification uses a conservative one-counter budget from Shapella, which adds PUSH0.
+The set specification uses a conservative one-counter budget.
+
+It holds from Shapella, the fork that adds PUSH0.
+
+From Glamsterdam, that one-counter frame is a model for the proof, not the meter of EIP-8037.
 
 The block number must be at least 1 and less than `2^256`, as the code computes on words.
 
@@ -149,7 +153,7 @@ theorem spec_set (hfork : .shapella ≤ fork)
   evm_step [CODE, CODE_NUMBER]
   rw [mod_sub_eq_slot hnumber hbound]
   have hberlin : Fork.berlin ≤ fork := Nat.le_trans (by decide) hfork
-  obtain ⟨s1, hs1, ho1, -, ha1, hc1, -, h1⟩ := sstore_of_account_total (code := CODE) (pc := 81)
+  obtain ⟨s1, hs1, ho1, -, ha1, hc1, -, h1⟩ := sstore_of_account (code := CODE) (pc := 81)
     (gas := gas - 43) (rest := []) (key := slot (message.blockEnv.number - 1))
     (new := loadWord message.data 0 32)
     hberlin (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER]) hstatic rfl
@@ -366,7 +370,7 @@ theorem systemCall_set {env : BlockEnvironment fork} {block : State.BlockState} 
       WritesStorage HISTORY_STORAGE_ADDRESS
         (setHash env.number data (storageOf (.ofBlock block) HISTORY_STORAGE_ADDRESS))
         (.ofBlock block) out.state :=
-  systemCall_of_writesStorage_all (P := fun _ => True) (fun _ => .empty) _
+  systemCall_of_writesStorage (P := fun _ => True) (fun _ => .empty) _
     (Nat.le_trans (by decide) hfork) supportedCode_CODE hcode (by simp [CODE, NatCode.size_ofNat])
     addedAt_HISTORY_STORAGE_ADDRESS delegatedAddress_CODE trivial
     fun message _ _ hcaller htarget hstatic henv hdata hgas hacc _ => by

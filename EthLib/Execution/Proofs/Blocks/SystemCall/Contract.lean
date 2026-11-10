@@ -1,11 +1,11 @@
 module
 
 public import EthLib.Base.Proofs.Address
-public import EthLib.Execution.Proofs.Evm.Logic.StateGas
 public import EthLib.Execution.Proofs.Evm.Logic.Steps
 public import EthLib.Execution.Proofs.Evm.Logic.Callee
 public import EthLib.Execution.Proofs.Evm.Logic.Region
 public import EthLib.Execution.Proofs.Evm.Logic.Keeps
+public import EthLib.Execution.Proofs.Evm.Logic.MeterReach
 public import EthLib.Execution.Proofs.Blocks.SystemCall
 public import EthLib.Execution.Proofs.Transactions.Process
 
@@ -173,7 +173,16 @@ theorem returnWord {word : U256} (hfork : .shapella ≤ fork) (hlt : pc + 5 < co
   rw [size_wordBytes]
   rfl
 
-/-! ## The system call -/
+/-! ## The system call
+
+A successful conservative run of code that does not observe gas gives the same state and output.
+
+From Glamsterdam, this lifts that run to the execution and state gas meter of EIP-8037.
+
+The system call receives its reservoir for sixteen new slots, and 30,000,000 execution gas.
+
+The conservative run pays both gas dimensions from its execution counter.
+-/
 
 /-- An account exists when its code hash maps to a code that is not empty. -/
 theorem isSome_of_getCode {address : Address} (hsize : code.size ≠ 0)
@@ -186,11 +195,85 @@ theorem isSome_of_getCode {address : Address} (hsize : code.size ≠ 0)
     simp only [TransactionState.getCode, State.EMPTY_ACCOUNT, ↓reduceIte, Except.ok.injEq] at h
     exact absurd (congrArg ByteArray.size h).symm hsize
 
-/-- From Paris up to BPO5, a system call to a contract with code runs that code to its end.
+/-- From Paris, a system message succeeds when its first frame stops with no error.
+
+It holds with any lawful gas meter.
+
+The first frame comes from the system address, to the contract, with the block and the data.
+
+It runs the code of the contract, with the fresh meter of a system call and the gas it holds.
+
+It starts from the state of the block, with the read of the contract recorded. -/
+private theorem processSystemMessage_of_run (Meter : Type) [GasMeter Meter]
+    [LawfulGasMeter Meter] {env : BlockEnvironment fork} {block : State.BlockState}
+    {target : Address} {data : ByteArray}
+    {Q : TransactionState → TransactionState → ByteArray → Prop}
+    (hparis : .paris ≤ fork) (hcode : codeAt block target = .ok code)
+    (hpre : Precompiles.addedAt target.toU256.toNat = none)
+    (hdelegate : delegatedAddress code = none)
+    (hrun : ∀ (message : Message fork) (state : TransactionState) (substate : Substate)
+      (meter : Meter) (held : GasMeter.gasHeld meter ≤ message.gas),
+      message.caller = SYSTEM_ADDRESS → message.currentTarget = target →
+      message.isStatic = false → message.blockEnv = env → message.data = data →
+      message.code = code → state = (TransactionState.ofBlock block).recordAccountRead target →
+      meter = GasMeter.commit (GasMeter.start SYSTEM_TRANSACTION_GAS (systemReservoir fork)) →
+      message.gas = GasMeter.gasHeld meter →
+      ∃ stopped, runFrame (step fork) (step_decreases fork) message.gas
+        (processRunner fork message.gas) (startFrame message state substate meter) held =
+          .ok stopped ∧ stopped.error = none ∧ Q state stopped.state stopped.output) :
+    ∃ out, (processMessageCall (Meter := Meter) env.chainId.toNat
+      (systemMessage env target data) (.ofBlock block) Substate.empty).map (fun out =>
+        SystemCallOutput.mk out.state out.output out.error) = .ok out ∧ out.error = none ∧
+      Q ((TransactionState.ofBlock block).recordAccountRead target) out.state out.output := by
+  have hfirst := prepareFirstFrame_of_value_eq_zero (Meter := Meter)
+    (chainId := env.chainId.toNat) (message := systemMessage env target data)
+    (state := .ofBlock block) (substate := Substate.empty) (paid := ∅) rfl rfl
+    (EthLib.Base.mapError_ok_iff.mp hcode) (fun _ => hdelegate)
+  generalize hF : Transactions.FirstFrame.ofMeter (Meter := Meter) _ _ _ _ _ = first at hfirst
+  have hstart : startState fork first.message first.state = first.state := by
+    have hnot : ¬fork < .paris := Nat.not_lt.mpr hparis
+    simp only [startState, hnot, ↓reduceIte]
+  have hpre' : precompileAddress fork first.message = none := by
+    subst hF
+    simp [Transactions.FirstFrame.ofMeter, precompileAddress, systemMessage,
+      Precompiles.isPrecompile, hpre]
+  obtain ⟨stopped, ran, herr, hq⟩ := hrun first.message first.state first.substate first.meter
+    first.held (by subst hF; rfl) (by subst hF; rfl) (by subst hF; rfl) (by subst hF; rfl)
+    (by subst hF; rfl) (by subst hF; rfl) (by subst hF; rfl) (by subst hF; rfl)
+    (by subst hF; rfl)
+  have hp := processMessage_map_val (result := .ok stopped)
+    (by subst hF; simp [Transactions.FirstFrame.ofMeter, systemMessage]) hpre'
+    (by rw [hstart]; exact ran)
+  have noRollback : rollbackOnError first.state stopped = stopped := by
+    simp [rollbackOnError, herr]
+  simp only [Except.map] at hp
+  rw [noRollback] at hp
+  cases hc : processMessage fork first.message first.state first.substate first.meter
+      first.held with
+  | error e => rw [hc] at hp; cases hp
+  | ok ended =>
+    rw [hc] at hp
+    have hv : ended.val = stopped := Except.ok.inj hp
+    have ht : (systemMessage env target data).target = some target := rfl
+    simp only [processMessageCall, hfirst, ht, hc, bind, Except.bind, pure, Except.pure,
+      Except.map]
+    refine ⟨_, rfl, ?_⟩
+    simp only [Transactions.CallOutput.ofFrame, hv, herr, Option.isSome_none,
+      Bool.false_eq_true, ↓reduceIte]
+    subst hF
+    exact ⟨trivial, hq⟩
+
+/-- From Paris, a system call to a contract with code runs that code to its end.
+
+It runs with the gas meter of each fork.
+
+The code passes the opcode check.
 
 The address is not a precompile, and the code is not a delegation indicator.
 
 The code must stop with no error, from every frame that a system call starts.
+
+Such a frame counts its gas with one counter, at every fork.
 
 Its state and output must meet `Q`, with the state that the frame starts from.
 
@@ -206,7 +289,7 @@ In the conclusion, `Q` gets that start state. -/
 theorem systemCall_of_spec {env : BlockEnvironment fork} {block : State.BlockState}
     {target : Address} {data : ByteArray}
     {Q : TransactionState → TransactionState → ByteArray → Prop}
-    (hparis : .paris ≤ fork) (hglam : fork < .glamsterdam)
+    (hparis : .paris ≤ fork) (supported : SupportedCode code = true)
     (hcode : codeAt block target = .ok code) (hsize : code.size ≠ 0)
     (hpre : Precompiles.addedAt target.toU256.toNat = none)
     (hdelegate : delegatedAddress code = none)
@@ -219,60 +302,51 @@ theorem systemCall_of_spec {env : BlockEnvironment fork} {block : State.BlockSta
         fun evm => evm.error = none ∧ Q state evm.state evm.output) :
     ∃ out, systemCall env block target data = .ok out ∧ out.error = none ∧
       Q ((TransactionState.ofBlock block).recordAccountRead target) out.state out.output := by
-  have hc := EthLib.Base.mapError_ok_iff.mp hcode
-  have hfirst := prepareFirstFrame_of_value_eq_zero (Meter := Nat) (chainId := env.chainId.toNat)
-    (message := systemMessage env target data) (state := .ofBlock block)
-    (substate := Substate.empty) (paid := ∅) rfl rfl hc (fun _ => hdelegate)
-  generalize hF : Transactions.FirstFrame.ofMeter (Meter := Nat) _ _ _ _ _ = first at hfirst
-  have hnot : ¬fork < .paris := Nat.not_lt.mpr hparis
-  have hstart : startState fork first.message first.state = first.state := by
-    simp only [startState, hnot, ↓reduceIte]
-  have hacc : (first.state.getAccountOptional target).isSome = true := by
-    subst hF
-    exact isSome_of_getCode hsize hc
-  have hpre' : precompileAddress fork first.message = none := by
-    subst hF
-    simp [Transactions.FirstFrame.ofMeter, precompileAddress, systemMessage,
-      Precompiles.isPrecompile, hpre]
-  have hvalue : ¬(first.message.shouldTransferValue = true ∧ first.message.value ≠ 0) := by
-    subst hF
-    simp [Transactions.FirstFrame.ofMeter, systemMessage]
-  have hcodeM : first.message.code = code := by subst hF; rfl
-  obtain ⟨stopped, ⟨herr, hq⟩, hpm⟩ := processMessage_of_spec (message := first.message)
-    (state := first.state) (substate := first.substate)
-    (hspec first.message (startState fork first.message first.state) first.substate
-      (by subst hF; rfl) (by subst hF; rfl) (by subst hF; rfl) (by subst hF; rfl)
-      (by subst hF; rfl) (by subst hF; rfl) (by rw [hstart]; exact hacc)
-      (by rw [hstart]; subst hF; rfl))
-    hvalue hpre' (at_startFrame hcodeM _ _)
-  rw [rollbackOnError_of_error_eq_none herr] at hpm
-  rw [hstart] at hq
-  cases hp : processMessage (Meter := Nat) fork first.message first.state first.substate with
-  | error e => rw [hp] at hpm; cases hpm
-  | ok ended =>
-    rw [hp] at hpm
-    have hv : ended.val = stopped := Except.ok.inj hpm
-    have hp' : processMessage fork first.message first.state first.substate first.meter
-        first.held = .ok ended := by
-      subst hF
-      exact hp
-    rw [systemCall_of_lt_glamsterdam hglam]
-    have htarget : (systemMessage env target data).target = some target := rfl
-    simp only [processMessageCall, hfirst, hp', htarget, bind, Except.bind, pure, Except.pure,
-      Except.map]
-    refine ⟨_, rfl, ?_⟩
-    simp only [Transactions.CallOutput.ofFrame, hv, herr, Option.isSome_none,
-      Bool.false_eq_true, ↓reduceIte]
-    subst hF
-    exact ⟨trivial, hq⟩
+  have hacc : ∀ state : TransactionState,
+      state = (TransactionState.ofBlock block).recordAccountRead target →
+      (state.getAccountOptional target).isSome = true := by
+    rintro _ rfl
+    exact isSome_of_getCode hsize (EthLib.Base.mapError_ok_iff.mp hcode)
+  by_cases hglam : fork < .glamsterdam
+  · rw [systemCall_of_lt_glamsterdam hglam]
+    refine processSystemMessage_of_run Nat hparis hcode hpre hdelegate
+      fun message state substate meter held hcaller htarget hstatic henv hdata hcodeM hstate
+        hmeter hheld => ?_
+    change message.gas = meter at hheld
+    subst hheld
+    have hgas : message.gas = SYSTEM_TRANSACTION_GAS := hmeter
+    exact (hspec message state substate hcaller htarget hstatic henv hdata hgas
+      (hacc state hstate) hstate).runFrame (at_startFrame hcodeM state substate) held
+  · rw [systemCall_of_glamsterdam (Nat.le_of_not_gt hglam)]
+    refine processSystemMessage_of_run StateGasMeter hparis hcode hpre hdelegate
+      fun message state substate meter held hcaller htarget hstatic henv hdata hcodeM hstate
+        hmeter hheld => ?_
+    subst hmeter
+    have hgas : message.gas = SYSTEM_TRANSACTION_GAS := hheld
+    let low : Evm fork Nat := startFrame message state substate message.gas
+    obtain ⟨stopped, reached, halted, herr, hq⟩ := hspec message state substate hcaller
+      htarget hstatic henv hdata hgas (hacc state hstate) hstate low
+      (at_startFrame hcodeM _ _)
+    have hbound : low.pc ∈ opcodePositions low.code :=
+      mem_opcodePositions_iff.mpr (.here (by change 0 < message.code.size; rw [hcodeM]; omega))
+    obtain ⟨after, _, highReached⟩ := reached.followsMeter
+      (by change SupportedCode message.code = true; rw [hcodeM]; exact supported)
+      rfl (.inr hbound) herr (Nat.le_of_eq hheld)
+    exact ⟨_, runFrame_of_reaches highReached halted held, herr, hq⟩
 
-/-- From Paris up to BPO5, a system call to a contract whose code writes its storage.
+/-- From Paris, a system call to a contract whose code writes its storage.
+
+It runs with the gas meter of each fork.
 
 The contract has code at an address that is not a precompile, and its code is not a delegation.
+
+The code passes the opcode check.
 
 The storage of the contract in the block meets `P`.
 
 From every frame that a system call starts on a storage that meets `P`, the code stops.
+
+Such a frame counts its gas with one counter, at every fork.
 
 It stops with no error, and returns `output` of that storage.
 
@@ -284,7 +358,7 @@ Its state holds `store` of the storage in the block at the contract, and keeps t
 theorem systemCall_of_writesStorage {env : BlockEnvironment fork} {block : State.BlockState}
     {target : Address} {data : ByteArray} {P : (U256 → U256) → Prop}
     (output : (U256 → U256) → ByteArray) (store : (U256 → U256) → U256 → U256)
-    (hparis : .paris ≤ fork) (hglam : fork < .glamsterdam)
+    (hparis : .paris ≤ fork) (supported : SupportedCode code = true)
     (hcode : codeAt block target = .ok code) (hsize : code.size ≠ 0)
     (hpre : Precompiles.addedAt target.toU256.toNat = none)
     (hdelegate : delegatedAddress code = none)
@@ -303,7 +377,7 @@ theorem systemCall_of_writesStorage {env : BlockEnvironment fork} {block : State
         out.state :=
   systemCall_of_spec (Q := fun S post out => out = output (storageOf S target) ∧
       WritesStorage target (store (storageOf S target)) S post)
-    hparis hglam hcode hsize hpre hdelegate
+    hparis supported hcode hsize hpre hdelegate
     fun message state substate hcaller htarget hstatic henv hdata hgas hacc hstate =>
       hspec message state substate hcaller htarget hstatic henv hdata hgas hacc
         (by subst hstate; exact hread)
@@ -318,40 +392,11 @@ private theorem processSystemMessage_empty (Meter : Type) [GasMeter Meter] [Lawf
       (.ofBlock block) Substate.empty).map (fun out =>
         SystemCallOutput.mk out.state out.output out.error) =
       .ok ⟨(TransactionState.ofBlock block).recordAccountRead target, .empty, none⟩ := by
-  have hfirst := prepareFirstFrame_of_value_eq_zero (Meter := Meter)
-    (chainId := env.chainId.toNat) (message := systemMessage env target data)
-    (state := .ofBlock block) (substate := Substate.empty) (paid := ∅) rfl rfl
-    (EthLib.Base.mapError_ok_iff.mp hcode) (fun _ => delegatedAddress_empty)
-  generalize hF : Transactions.FirstFrame.ofMeter (Meter := Meter) _ _ _ _ _ = first at hfirst
-  have hstart : startState fork first.message first.state = first.state := by
-    have hnot : ¬fork < .paris := Nat.not_lt.mpr hfork
-    simp only [startState, hnot, ↓reduceIte]
-  have hpre' : precompileAddress fork first.message = none := by
-    subst hF
-    simp [Transactions.FirstFrame.ofMeter, precompileAddress, systemMessage,
-      Precompiles.isPrecompile, hpre]
-  have ran := runFrame_startFrame_of_code_empty (message := first.message) (state := first.state)
-    (substate := first.substate) (meter := first.meter)
-    (runChild := processRunner fork first.message.gas) (within := first.held)
-    (by subst hF; rfl)
-  have hp := processMessage_map_val
-    (state := first.state) (substate := first.substate) (meter := first.meter) (held := first.held)
-    (result := .ok (advance { startFrame first.message first.state first.substate first.meter
-      with running := false }))
-    (by subst hF; simp [Transactions.FirstFrame.ofMeter, systemMessage]) hpre'
-    (by simpa only [hstart] using ran)
-  cases hc : processMessage fork first.message first.state first.substate first.meter
-      first.held with
-  | error e => rw [hc] at hp; cases hp
-  | ok ended =>
-    rw [hc] at hp
-    have he := Except.ok.inj hp
-    have ht : (systemMessage env target data).target = some target := rfl
-    simp only [processMessageCall, hfirst, ht, hc, bind, Except.bind, pure,
-      Except.pure, Except.map]
-    rw [he]
-    subst hF
-    rfl
+  obtain ⟨⟨_, _, _⟩, h, rfl, rfl, rfl⟩ := processSystemMessage_of_run Meter
+    (Q := fun start post out => post = start ∧ out = .empty) hfork hcode hpre
+    delegatedAddress_empty fun _ _ _ _ _ _ _ _ _ _ hcodeM _ _ _ =>
+      ⟨_, runFrame_startFrame_of_code_empty hcodeM, rfl, rfl, rfl⟩
+  exact h
 
 /-- From Paris, an unchecked call to empty code outside the precompiles succeeds without writes.
 

@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Proofs.Blocks.SystemCall.Meter
+public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
 public import EthLib.Execution.Proofs.Blocks.SystemCall.WithdrawalRequests.Record
 
 /-!
@@ -37,6 +37,8 @@ A theorem runs the code and shows that it computes that function.
 The fee and addition specifications use a one-counter frame from Shapella up to BPO5.
 
 The dequeue specification uses a conservative one-counter budget from Shapella.
+
+From Glamsterdam, that one-counter frame is a model for the proof, not the meter of EIP-8037.
 
 From Pectra, a system call to the contract succeeds with the gas meter of its fork.
 
@@ -1335,7 +1337,7 @@ theorem systemCall_dequeue {env : BlockEnvironment fork} {block : State.BlockSta
         (afterDequeue MAX_WITHDRAWAL_REQUESTS_PER_BLOCK TARGET_WITHDRAWAL_REQUESTS_PER_BLOCK
           (storageOf (.ofBlock block) WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS))
         (.ofBlock block) out.state :=
-  systemCall_of_writesStorage_all (P := Bounded) _ _ (Nat.le_trans (by decide) hfork)
+  systemCall_of_writesStorage (P := Bounded) _ _ (Nat.le_trans (by decide) hfork)
     supportedCode_CODE hcode
     (by simp [CODE, NatCode.size_ofNat]) addedAt_WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS
     delegatedAddress_CODE hbounded

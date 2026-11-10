@@ -97,6 +97,60 @@ theorem sstoreCost_le (h : fork ≥ .berlin) (hlt : fork < .glamsterdam)
   cases cold <;> simp only [ite_true, Bool.false_eq_true, ite_false, COLD_STORAGE_ACCESS,
     STORAGE_SET, COLD_STORAGE_WRITE, WARM_ACCESS] <;> split <;> (try split) <;> omega
 
+/-- The charge of a storage write when one counter pays both execution gas and state gas. -/
+def sstoreTotalCost (fork : Fork) (original current new : U256) (cold : Bool) : Nat :=
+  sstoreCost fork original current new cold + sstoreStateGas fork original current new
+
+/-- Before Glamsterdam, a write charges no state gas, so its total charge is its price. -/
+theorem sstoreTotalCost_of_lt (hlt : fork < .glamsterdam) (original current new : U256)
+    (cold : Bool) :
+    sstoreTotalCost fork original current new cold = sstoreCost fork original current new cold := by
+  have hg : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hlt
+  simp [sstoreTotalCost, sstoreStateGas, hg]
+
+/-- A factor for one-counter gas budgets: 1 before Glamsterdam, and 5 from Glamsterdam.
+
+It is a loose bound chosen for proofs, not a value of the protocol.
+
+From Glamsterdam, 5 times 22,100 covers the 12,100 execution gas and 97,920 state gas of a write. -/
+def storageGasScale (fork : Fork) : Nat := if fork ≥ .glamsterdam then 5 else 1
+
+/-- The factor is at least 1, so scaling never lowers a gas budget. -/
+theorem one_le_storageGasScale (fork : Fork) : 1 ≤ storageGasScale fork := by
+  unfold storageGasScale
+  split <;> decide
+
+/-- The factor is at most 5. -/
+theorem storageGasScale_le (fork : Fork) : storageGasScale fork ≤ 5 := by
+  unfold storageGasScale
+  split <;> decide
+
+/-- Before Glamsterdam, the factor is 1. -/
+theorem storageGasScale_of_lt (h : fork < .glamsterdam) : storageGasScale fork = 1 := by
+  have hn : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt h
+  simp only [storageGasScale, hn, ↓reduceIte]
+
+/-- From Berlin, the total charge of a write is at most 22,100 gas times the factor. -/
+theorem sstoreTotalCost_le (hfork : fork ≥ .berlin) (original current new : U256) (cold : Bool) :
+    sstoreTotalCost fork original current new cold ≤ 22100 * storageGasScale fork := by
+  by_cases hglam : fork ≥ .glamsterdam
+  · have he : sstoreCost fork original current new cold ≤ 12100 := by
+      rw [sstoreCost, ite_eq_left hglam]
+      have hw : (if original = current ∧ current ≠ new then STORAGE_WRITE else 0) ≤ 10000 := by
+        split <;> decide
+      cases cold <;> simp only [Bool.false_eq_true, ↓reduceIte, COLD_STORAGE_ACCESS,
+        WARM_ACCESS] <;> omega
+    have hs : sstoreStateGas fork original current new ≤ 97920 := by
+      unfold sstoreStateGas
+      split <;> decide
+    simp only [sstoreTotalCost, storageGasScale, hglam, ↓reduceIte, Nat.reduceMul]
+    omega
+  · have hlt := Nat.lt_of_not_ge hglam
+    rw [sstoreTotalCost_of_lt hlt, storageGasScale_of_lt hlt]
+    have hcost := sstoreCost_le hfork hlt original current new cold
+    simp only [COLD_STORAGE_ACCESS, STORAGE_SET] at hcost
+    omega
+
 /-- From Glamsterdam, a write and the write that restores the original value cost two accesses.
 
 That is net of refunds: the second write gives back the write price of the first.

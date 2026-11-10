@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Proofs.Blocks.SystemCall.Meter
+public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
 
 /-!
 # Proofs: the beacon roots contract of EIP-4788 does what its EIP describes
@@ -27,7 +27,11 @@ Each operation of [the EIP][eip-4788-contract] is a function here.
 
 A theorem runs the code and shows that it computes that function.
 
-The set specification uses a conservative one-counter budget from Shapella, which adds PUSH0.
+The set specification uses a conservative one-counter budget.
+
+It holds from Shapella, the fork that adds PUSH0.
+
+From Glamsterdam, that one-counter frame is a model for the proof, not the meter of EIP-8037.
 
 From Dencun, a system call to the contract succeeds with the gas meter of its fork.
 
@@ -146,7 +150,7 @@ private theorem set_tail (hfork : .shapella ≤ fork)
   evm_step [CODE, CODE_NUMBER]
   evm_step [CODE, CODE_NUMBER]
   evm_step [CODE, CODE_NUMBER]
-  obtain ⟨s', hs', ho', -, ha', hc', -, h'⟩ := sstore_of_account_total (code := CODE) (pc := 95)
+  obtain ⟨s', hs', ho', -, ha', hc', -, h'⟩ := sstore_of_account (code := CODE) (pc := 95)
     (gas := gas - 14) (rest := []) (key := add 8191#256 idx) (new := loadWord message.data 0 32)
     (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER])
     (by evm_code [CODE, CODE_NUMBER]) hstatic rfl (by simp only [CALL_STIPEND]; omega)
@@ -195,7 +199,7 @@ theorem spec_set (hfork : .shapella ≤ fork)
   evm_step [CODE, CODE_NUMBER]
   evm_step [CODE, CODE_NUMBER]
   have hberlin : Fork.berlin ≤ fork := Nat.le_trans (by decide) hfork
-  obtain ⟨s1, hs1, ho1, -, ha1, hc1, -, h1⟩ := sstore_of_account_total (code := CODE) (pc := 86)
+  obtain ⟨s1, hs1, ho1, -, ha1, hc1, -, h1⟩ := sstore_of_account (code := CODE) (pc := 86)
     (gas := gas - 37) (rest := [mod message.blockEnv.timestamp 8191#256])
     (key := mod message.blockEnv.timestamp 8191#256) (new := message.blockEnv.timestamp)
     hberlin (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER]) hstatic rfl
@@ -413,7 +417,7 @@ theorem systemCall_set {env : BlockEnvironment fork} {block : State.BlockState} 
       WritesStorage BEACON_ROOTS_ADDRESS
         (setRoot env.timestamp data (storageOf (.ofBlock block) BEACON_ROOTS_ADDRESS))
         (.ofBlock block) out.state :=
-  systemCall_of_writesStorage_all (P := fun _ => True) (fun _ => .empty) _
+  systemCall_of_writesStorage (P := fun _ => True) (fun _ => .empty) _
     (Nat.le_trans (by decide) hfork) supportedCode_CODE hcode (by simp [CODE, NatCode.size_ofNat])
     addedAt_BEACON_ROOTS_ADDRESS delegatedAddress_CODE trivial
     fun message _ _ hcaller htarget hstatic henv hdata hgas hacc _ => by
