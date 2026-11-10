@@ -565,6 +565,14 @@ def consensus_is_valid_builder_signature(name: str, fork: str, config: dict[str,
     """Whether the signature of a signed message of the Builder API verifies."""
     ...
 
+def consensus_verify_builder_request_auth_signature(name: str, fork: str, config: dict[str, Any] | None, pubkey: bytes, data: bytes) -> bool:
+    """Check a Gloas request signature from its chain, fork, replacements, proposer key and SSZ."""
+    ...
+
+def consensus_builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
+    """The value of a builder's bid from its two payments and the proposer's execution payment cap."""
+    ...
+
 def consensus_merkle_proof(name: str, fork: str, type: str, data: bytes, gindex: int) -> tuple[bytes, list[bytes]]:
     """The node at a generalized index of the value that the bytes encode, and its branch, as a pair."""
     ...

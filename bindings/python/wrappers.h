@@ -385,6 +385,8 @@ PyObject* py_consensus_get_custody_column_bits            (PyObject* self, PyObj
 PyObject* py_consensus_compute_columns_for_custody_group  (PyObject* self, PyObject* args);
 PyObject* py_consensus_ssz_static                         (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_valid_builder_signature (PyObject* self, PyObject* args);
+PyObject* py_consensus_verify_builder_request_auth_signature (PyObject* self, PyObject* args);
+PyObject* py_consensus_builder_bid_value (PyObject* self, PyObject* args);
 PyObject* py_consensus_merkle_proof                       (PyObject* self, PyObject* args);
 PyObject* py_consensus_upgrade_operation (PyObject* self, PyObject* args);
 PyObject* py_consensus_verify_blob_sidecar_inclusion_proof (PyObject* self, PyObject* args);

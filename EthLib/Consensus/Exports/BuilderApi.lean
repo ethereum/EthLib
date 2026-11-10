@@ -7,9 +7,11 @@ public import EthLib.Serialization.Exports.Ssz
 /-!
 # `Exports.BuilderApi`
 
-A C-ABI export that checks the signature of a message of the Builder API, from Bellatrix to Fulu.
+C-ABI exports for Builder API signature checks and capped bid valuation.
 
-The message is a signed registration or a signed bid, in SSZ.
+From Bellatrix to Fulu, a signed registration or bid carries the key that signed it.
+
+From Gloas, request authentication receives the proposer's key separately.
 
 The configuration names the chain, whose genesis fork version enters the domain.
 
@@ -53,5 +55,28 @@ Then come the name of the container and its SSZ bytes. -/
 @[export eth_consensus_is_valid_builder_signature]
 def isValidBuilderSignatureExport (args : PyValue) : Result PyValue :=
   pyExport isValidBuilderSignatureOf args
+
+/-- Whether a Gloas request authentication carries a signature of the endpoint's proposer key. -/
+def verifyBuilderRequestAuthSignatureOf
+    (args : String × String × Option PyValue × Cryptography.Bls.BLSPubkey × ByteArray) :
+    Result Bool := do
+  let (name, fork, replacements, pubkey, data) := args
+  let fork ← forkOf fork.toUTF8
+  unless .glamsterdam ≤ fork do
+    throw (0, s!"no builder request authentication at {fork.name}")
+  let config ← configWithValue name replacements
+  let signed ← runSsz "input rejected" (SszType.deserialize SignedBuilderRequestAuth data)
+  runSsz "root rejected" (verifyBuilderRequestAuthSignature config .bls signed pubkey)
+
+/-- Check a Gloas request signature from its chain, fork, replacements, proposer key and SSZ. -/
+@[export eth_consensus_verify_builder_request_auth_signature]
+def verifyBuilderRequestAuthSignatureExport (args : PyValue) : Result PyValue :=
+  pyExport verifyBuilderRequestAuthSignatureOf args
+
+/-- The value of a builder's bid from its two payments and the proposer's execution payment cap. -/
+@[export eth_consensus_builder_bid_value]
+def builderBidValueExport (args : PyValue) : Result PyValue :=
+  pyExport (fun (value, payment, cap) =>
+    .ok (builderBidValue value payment ⟨cap⟩) : Gwei × Gwei × Gwei → Result Nat) args
 
 end EthLib.Consensus.Exports

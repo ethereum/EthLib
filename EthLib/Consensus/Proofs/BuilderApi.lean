@@ -20,6 +20,10 @@ From Bellatrix to Fulu, blinding a body or a block always succeeds and keeps its
 So a signature over a blinded block is a signature over the full block.
 
 When the block names the proposer of the state, the two checks of a signature agree.
+
+Request authentication has its own application domain, distinct from every protocol domain.
+
+A bid's execution payment contributes no more than the proposer's cap to its value.
 -/
 
 @[expose] public section
@@ -37,6 +41,52 @@ theorem DOMAIN_APPLICATION_BUILDER_masked :
 theorem DOMAIN_APPLICATION_BUILDER_not_mem :
     DOMAIN_APPLICATION_BUILDER ∉ protocolDomainTypes := fun mem =>
   DOMAIN_APPLICATION_BUILDER_masked (domainTypes_not_application _ mem 3)
+
+/-- The request authentication domain type sets the bit of the application mask. -/
+theorem DOMAIN_BUILDER_REQUEST_AUTH_masked :
+    DOMAIN_BUILDER_REQUEST_AUTH[3] &&& DOMAIN_APPLICATION_MASK[3] ≠ 0 := by
+  decide
+
+/-- No protocol domain type is the domain type for request authentication. -/
+theorem DOMAIN_BUILDER_REQUEST_AUTH_not_mem :
+    DOMAIN_BUILDER_REQUEST_AUTH ∉ protocolDomainTypes := fun mem =>
+  DOMAIN_BUILDER_REQUEST_AUTH_masked (domainTypes_not_application _ mem 3)
+
+/-- The request authentication domain type differs from the older Builder API domain type. -/
+theorem DOMAIN_BUILDER_REQUEST_AUTH_ne_APPLICATION_BUILDER :
+    DOMAIN_BUILDER_REQUEST_AUTH ≠ DOMAIN_APPLICATION_BUILDER := by
+  decide
+
+/-- The signature domain of request authentication differs from every protocol domain. -/
+theorem builderRequestAuthDomain_ne {config : Config} {domainType : DomainType} {version : Version}
+    {root : Root} {auth domain : Domain} (protocol : domainType ∈ protocolDomainTypes)
+    (built : builderRequestAuthDomain config = .ok auth)
+    (computed : computeDomain config domainType version root = .ok domain) :
+    auth ≠ domain := by
+  refine computeDomain_ne (first := DOMAIN_BUILDER_REQUEST_AUTH) ?_ built computed
+  intro same
+  exact DOMAIN_BUILDER_REQUEST_AUTH_not_mem (same ▸ protocol)
+
+/-- The execution payment contributes at most the cap to the value of a bid. -/
+theorem builderBidValue_le (value executionPayment : Gwei) (preferences : BuilderPreferences) :
+    builderBidValue value executionPayment preferences ≤
+      value.toNat + preferences.maxExecutionPayment.toNat :=
+  Nat.add_le_add_left (Nat.min_le_right _ _) _
+
+/-- A zero cap leaves the bid valued at its beacon-chain payment alone. -/
+theorem builderBidValue_zero_cap (value executionPayment : Gwei) :
+    builderBidValue value executionPayment ⟨0⟩ = value.toNat := by
+  simp [builderBidValue]
+
+/-- The largest cap counts the execution payment in full, without wrapping the sum. -/
+theorem builderBidValue_max_cap (value executionPayment : Gwei) :
+    builderBidValue value executionPayment ⟨MAX_EXECUTION_PAYMENT⟩ =
+      value.toNat + executionPayment.toNat := by
+  unfold builderBidValue
+  rw [Nat.min_eq_left]
+  have bound := executionPayment.toNat_lt
+  change executionPayment.toNat ≤ 18446744073709551615
+  omega
 
 /-- No domain of a fork is the domain of the Builder API, whatever its fork version and chain. -/
 theorem builderDomain_ne {config : Config} {domainType : DomainType} {version : Version}
