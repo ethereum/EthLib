@@ -113,6 +113,22 @@ theorem getCurrentSlot_le_of_onTick {timeMs : UInt64} {slot later : Slot}
   unfold Store.getCurrentSlot at current
   exact computeSlotAtTimeMs_mono forward (mapError_ok_iff.mp current) (mapError_ok_iff.mp next)
 
+/-- A tick to a time no earlier than that of the store keeps the current slot defined.
+
+It does not lower that slot. -/
+theorem exists_getCurrentSlot_onTick_ge {timeMs : UInt64} {current : Slot}
+    (forward : store.timeMs ≤ timeMs) (ticked : store.onTick config timeMs = .ok after)
+    (slotOk : store.getCurrentSlot config = .ok current) :
+    ∃ later, after.getCurrentSlot config = .ok later ∧ current ≤ later := by
+  have slotAt := ticked
+  unfold onTick at slotAt
+  simp only [bind_ok_iff] at slotAt
+  obtain ⟨tickSlot, tickOk, -⟩ := slotAt
+  refine ⟨tickSlot, ?_, ?_⟩
+  · rw [getCurrentSlot_onTick ticked, tickOk]
+  · exact getCurrentSlot_le_of_onTick forward ticked slotOk
+      (by rw [getCurrentSlot_onTick ticked, tickOk])
+
 end Store
 
 end EthLib.Consensus

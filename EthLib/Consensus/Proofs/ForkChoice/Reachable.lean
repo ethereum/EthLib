@@ -195,6 +195,24 @@ theorem onBlock_same_or_insert {config : Config} {checks : SignatureChecks}
       exact .inr ⟨blockRoot, rfl, Std.TreeMap.getElem?_eq_none_of_contains_eq_false
         (Bool.eq_false_iff.mpr known), blocks, rest⟩
 
+/-- A block keeps every block of the store. -/
+theorem onBlock_blocks_of_found {config : Config} {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {signed : SignedBeaconBlock preset fork} {root : Root}
+    {block : BeaconBlock preset fork}
+    (added : store.onBlock config checks sources signed = .ok after)
+    (found : store.blocks[root]? = some block) :
+    after.blocks[root]? = some block := by
+  rcases onBlock_same_or_insert added with same | ⟨blockRoot, -, fresh, blocks, -⟩
+  · rw [same]
+    exact found
+  · rw [blocks, getElem?_insert_root]
+    split
+    · rename_i same
+      subst same
+      rw [fresh] at found
+      cases found
+    · exact found
+
 /-- A store that the handlers build from an anchor block and the state after it.
 
 The handlers are the tick, the block, the attestation and the attester slashing.
