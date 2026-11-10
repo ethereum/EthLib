@@ -435,7 +435,12 @@ The parity of `y` must be the recovery id.
 Under them, `(r, s')` verifies under the same key and hash exactly when `s'` is `s` or `n - s`.
 `verify_and_isLowS_iff` adds that `s` is low, and then that signature is the only valid low-s one with that `r`.
 
-No theorem states unforgeability, which rests on the discrete logarithm problem.
+No theorem bounds the probability of forging a signature, which rests on the discrete logarithm problem and on properties of the hash, in an idealised model.
+`Proofs/Secp256k1/Security/Game.lean` states the unforgeability game of GenDSA, the abstraction of ECDSA in [Fersch, Kiltz and Poettering](https://doi.org/10.1145/2976749.2978413), Definition 6, in their bijective random oracle model.
+There, `verify_neg` shows that `(r, -s)` verifies whenever `(r, s)` does, when opposite points share their encoding, as `x` coordinates do.
+So the game counts only messages that were never signed.
+`forgeAdvantage_collision_pos` shows that a collision of the message hash wins that game with positive probability.
+No theorem connects that game to EthLib's signing and verification.
 
 `ecdh_eq_ok_iff` (`Proofs/Secp256k1/Ecdh.lean`) states ECDH in the group of the curve.
 It is the Diffie-Hellman primitive of SEC 1 v2 §3.3.1, with no key derivation function.
@@ -2083,6 +2088,12 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
   BLS signatures with proofs of possession are meant to give this, except with negligible probability, and EthLib proves no such bound.
   `Proofs/Bls/Security/PopGame.lean` states the unforgeability game of such aggregates, with both hashes as random oracles; no theorem bounds its advantage yet.
   The theorems say nothing about a forged aggregate signature.
+- ECDSA: the bijection in the middle of the conversion `x_R mod n` is a uniform permutation, which the adversary evaluates in both directions.
+  In ECDSA that bijection is the identity on integers below `2^256`, so the model idealises the conversion, as §4 of [Fersch, Kiltz and Poettering](https://doi.org/10.1145/2976749.2978413) does.
+  The model draws the deterministic nonces of RFC 6979 as a random function of the message, so each message has one signature.
+  [RFC 6979 §3.2](https://www.rfc-editor.org/rfc/rfc6979#section-3.2) computes them with HMAC_DRBG, whose seed holds the private key; the model assumes that output is pseudorandom, and no theorem proves it.
+  The hash of messages is a fixed public function, so a bound on this game must charge its collisions to a named reduction.
+  `Proofs/Secp256k1/Security/Game.lean` states that game; no theorem bounds its advantage yet.
 - Casper FFG: a vote names its signer, so no one can forge a vote.
   The theorems of accountable safety and plausible liveness say nothing about an attack on the signatures.
 - KZG batch checks: the challenge hash `Fr.hashToBlsField` is a random oracle from the inputs of the batch onto `Fr`.
