@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Proofs.Blocks.AccessListCoverage
+public import EthLib.Execution.Proofs.Blocks.AccessListBuilder
 public import EthLib.Execution.Proofs.State.Tracker
 
 /-!
@@ -45,7 +45,14 @@ open EthLib.Cryptography.Hash.Keccak (keccak256)
 
 namespace BlockAccessList
 
-/-- The entry of an account in the list, if it has one. -/
+/-! These read a list in its own order.
+
+On a list that passes the checks of EIP-7928, an account has one entry.
+
+Its changes are sorted by position there, so the last change is the one at the greatest position.
+-/
+
+/-- The first entry of an account in the list, if it has one. -/
 def entry? (bal : BlockAccessList) (address : Address) : Option AccountChanges :=
   bal.find? (·.address = address)
 
@@ -75,11 +82,21 @@ end BlockAccessList
 
 /-- The builder follows a call that ran on the block state `block` and ends with the state `tx`.
 
+These are assumptions on the call, which the builder cannot check itself.
+
 The call ran on `block`.
 
 A key that the call did not write reads as it did in `block`, so a wipe hides no word.
 
-The code that the call reads for an account it wrote has the code hash of that account. -/
+This excludes a creation at an address with storage but no nonce and no code.
+
+EthLib wipes that storage, since it does not apply [EIP-7610][eip7610].
+
+The code that the call reads for an account it wrote has the code hash of that account.
+
+The builder reads only a code that changed, but a code map keyed by hash gives every one.
+
+[eip7610]: https://eips.ethereum.org/EIPS/eip-7610#specification -/
 structure Followable (block : BlockState) (tx : TransactionState) : Prop where
   /-- The call ran on the block state. -/
   parent : tx.parent = block
@@ -292,62 +309,6 @@ private theorem FieldTracks.write {α β : Type} [DecidableEq β] {view : α →
     exact Option.map_eq_none_iff.mp hat
   · simp [hat, Ne.symm hne]
 
-/-- A fold whose every step keeps a value keeps it. -/
-private theorem foldl_keep {α β γ : Type} (f : β → α → β) (g : β → γ)
-    (hf : ∀ b x, g (f b x) = g b) : ∀ (l : List α) (b : β), g (l.foldl f b) = g b
-  | [], _ => rfl
-  | x :: l, b => (foldl_keep f g hf l (f b x)).trans (hf b x)
-
-/-- A fold that can fail, over distinct keys, whose step changes a value only at its own key. -/
-private theorem foldlM_point {α β γ ε κ : Type} {f : β → α → Except ε β} (P : β → Prop)
-    (g : β → γ) (key : α → κ) (k : κ) (H : α → γ → γ) :
-    ∀ (l : List α), l.Pairwise (fun x y => key x ≠ key y) →
-    (∀ x ∈ l, ∀ b b', P b → f b x = .ok b' → P b') →
-    (∀ x ∈ l, ∀ b b', P b → f b x = .ok b' → key x ≠ k → g b' = g b) →
-    (∀ x ∈ l, ∀ b b', P b → f b x = .ok b' → key x = k → g b' = H x (g b)) →
-    ∀ b b', P b → l.foldlM f b = .ok b' →
-      P b' ∧ ((∀ x ∈ l, key x ≠ k) → g b' = g b) ∧ (∀ x ∈ l, key x = k → g b' = H x (g b))
-  | [], _, _, _, _, b, b', hb, h => by
-    cases h
-    exact ⟨hb, fun _ => rfl, fun _ hx => absurd hx List.not_mem_nil⟩
-  | x :: l, hl, hP, hother, hself, b, b', hb, h => by
-    rw [List.foldlM_cons] at h
-    obtain ⟨b₁, h₁, h⟩ := bind_ok_iff.mp h
-    obtain ⟨hhead, htail⟩ := List.pairwise_cons.mp hl
-    have hb₁ := hP x List.mem_cons_self b b₁ hb h₁
-    obtain ⟨hb', hnone, hsome⟩ := foldlM_point P g key k H l htail
-      (fun y hy => hP y (List.mem_cons_of_mem _ hy))
-      (fun y hy => hother y (List.mem_cons_of_mem _ hy))
-      (fun y hy => hself y (List.mem_cons_of_mem _ hy)) b₁ b' hb₁ h
-    refine ⟨hb', fun hall => ?_, fun y hy hky => ?_⟩
-    · rw [hnone fun y hy => hall y (List.mem_cons_of_mem _ hy)]
-      exact hother x List.mem_cons_self b b₁ hb h₁ (hall x List.mem_cons_self)
-    · rcases List.mem_cons.mp hy with rfl | hy
-      · rw [hnone fun z hz hkz => hhead z hz (hky.trans hkz.symm)]
-        exact hself y List.mem_cons_self b b₁ hb h₁ hky
-      · rw [hsome y hy hky]
-        rw [hother x List.mem_cons_self b b₁ hb h₁ fun hkx => hhead y hy (hkx.trans hky.symm)]
-
-/-- A fold over distinct keys whose step changes a value only at its own key. -/
-private theorem foldl_point {α β γ κ : Type} (f : β → α → β) (P : β → Prop)
-    (g : β → γ) (key : α → κ) (k : κ) (H : α → γ → γ) (l : List α)
-    (hl : l.Pairwise (fun x y => key x ≠ key y))
-    (hP : ∀ x ∈ l, ∀ b, P b → P (f b x))
-    (hother : ∀ x ∈ l, ∀ b, P b → key x ≠ k → g (f b x) = g b)
-    (hself : ∀ x ∈ l, ∀ b, P b → key x = k → g (f b x) = H x (g b)) (b : β) (hb : P b) :
-    P (l.foldl f b) ∧ ((∀ x ∈ l, key x ≠ k) → g (l.foldl f b) = g b) ∧
-      (∀ x ∈ l, key x = k → g (l.foldl f b) = H x (g b)) :=
-  foldlM_point (ε := Empty) (f := fun b x => .ok (f b x)) P g key k H l hl
-    (fun x hx b b' hb h => by cases h; exact hP x hx b hb)
-    (fun x hx b b' hb h => by cases h; exact hother x hx b hb)
-    (fun x hx b b' hb h => by cases h; exact hself x hx b hb) b _ hb
-    (foldlM_eq_ok_foldl (fun _ _ _ => rfl) b)
-
-/-- The entries of a map have distinct keys. -/
-private theorem pairwise_toList {κ β : Type} [Ord κ] [Std.TransOrd κ] [Std.LawfulEqOrd κ]
-    (m : Std.ExtTreeMap κ β) : m.toList.Pairwise (fun x y => x.1 ≠ y.1) :=
-  Std.ExtTreeMap.distinct_keys_toList.imp fun h heq => h (Std.compare_eq_iff_eq.mpr heq)
-
 /-- A field of the record of an account, read at a position. -/
 private theorem getElem?_field {β : Type} (b : AccessListBuilder) (address : Address)
     (get : AccountRecord → Std.ExtTreeMap UInt32 β) (j : UInt32) :
@@ -360,235 +321,8 @@ private theorem getElem?_slotChanges (b : AccessListBuilder) (address : Address)
     (key : Bytes32) (j : UInt32) :
     (b.slotChanges address key)[j]? =
       b.accounts[address]?.bind fun r => (r.storageChanges.getD key ∅)[j]? := by
-  unfold slotChanges
-  cases b.accounts[address]? with
-  | none => simp
-  | some r => cases h : r.storageChanges[key]? <;> simp [Std.ExtTreeMap.getD_eq_getD_getElem?, h]
-
-/-- The changes of a key, read through the map of keys or through its default, agree. -/
-private theorem slot_bind (x : Option AccountRecord) (key : Bytes32) (j : UInt32) :
-    ((x.bind fun r => r.storageChanges[key]?).bind (·[j]?)) =
-      x.bind fun r => (r.storageChanges.getD key ∅)[j]? := by
-  cases x with
-  | none => rfl
-  | some r => cases h : r.storageChanges[key]? <;> simp [Std.ExtTreeMap.getD_eq_getD_getElem?, h]
-
-/-- A change of a record that keeps a field keeps each value of that field. -/
-private theorem record_keep {β : Type} (b : AccessListBuilder) (address other : Address)
-    (f : AccountRecord → AccountRecord) (get : AccountRecord → Std.ExtTreeMap UInt32 β)
-    (hget : ∀ r, get (f r) = get r) (hempty : get {} = ∅) (index : UInt32) :
-    ((b.record address f).accounts[other]?.bind fun r => (get r)[index]?) =
-      b.accounts[other]?.bind fun r => (get r)[index]? := by
-  unfold record
-  cases h : b.accounts[address]? <;> cases h' : b.accounts[other]? <;>
-    simp [Std.ExtTreeMap.getElem?_insert, Std.ExtTreeMap.getD_eq_getD_getElem?, h, h', hempty,
-      hget] <;>
-    first | (rintro rfl; simp_all) | (split <;> simp_all)
-
-/-- A change of the record of an account keeps the record of every other account. -/
-private theorem record_ne (b : AccessListBuilder) {address other : Address}
-    (f : AccountRecord → AccountRecord) (hne : address ≠ other) :
-    (b.record address f).accounts[other]? = b.accounts[other]? := by
-  simp [record, Std.ExtTreeMap.getElem?_insert, hne]
-
-/-- A field change keeps the record of every other account. -/
-private theorem setField_ne {α : Type} (b : AccessListBuilder) {address other : Address}
-    (changed : Bool) (value : α) (field : AccountRecord → Std.ExtTreeMap UInt32 α)
-    (update : AccountRecord → Std.ExtTreeMap UInt32 α → AccountRecord) (hne : address ≠ other) :
-    (b.setField address changed value field update).accounts[other]? = b.accounts[other]? := by
-  unfold setField
-  split
-  · exact record_ne _ _ hne
-  · simp [amend, Std.ExtTreeMap.getElem?_modify, hne]
-
-/-- A field change keeps the position and its start. -/
-private theorem setField_index {α : Type} (b : AccessListBuilder) (address : Address)
-    (changed : Bool) (value : α) (field : AccountRecord → Std.ExtTreeMap UInt32 α)
-    (update : AccountRecord → Std.ExtTreeMap UInt32 α → AccountRecord) :
-    (b.setField address changed value field update).index = b.index ∧
-      (b.setField address changed value field update).start = b.start := by
-  unfold setField
-  split <;> exact ⟨rfl, rfl⟩
-
-/-- An account write keeps the position and its start. -/
-private theorem recordAccountWrite_index {b b' : AccessListBuilder} {tx : TransactionState}
-    {address : Address} {written : Option Account}
-    (h : b.recordAccountWrite tx address written = .ok b') :
-    b'.index = b.index ∧ b'.start = b.start := by
-  unfold recordAccountWrite at h
-  dsimp only at h
-  split at h
-  all_goals
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    cases h
-    refine ⟨(setField_index _ _ _ _ _ _).1.trans ?_, (setField_index _ _ _ _ _ _).2.trans ?_⟩
-    · exact ((setField_index _ _ _ _ _ _).1.trans (setField_index _ _ _ _ _ _).1)
-    · exact ((setField_index _ _ _ _ _ _).2.trans (setField_index _ _ _ _ _ _).2)
-
-/-- An account write keeps the record of every other account. -/
-private theorem recordAccountWrite_ne {b b' : AccessListBuilder} {tx : TransactionState}
-    {address other : Address} {written : Option Account}
-    (h : b.recordAccountWrite tx address written = .ok b') (hne : address ≠ other) :
-    b'.accounts[other]? = b.accounts[other]? := by
-  unfold recordAccountWrite at h
-  dsimp only at h
-  split at h
-  all_goals
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    cases h
-    rw [setField_ne _ _ _ _ _ hne, setField_ne _ _ _ _ _ hne, setField_ne _ _ _ _ _ hne,
-      record_ne _ _ hne]
-
-/-- An account write keeps the changes of every storage key. -/
-private theorem recordAccountWrite_slot {b b' : AccessListBuilder} {tx : TransactionState}
-    {address : Address} {written : Option Account}
-    (h : b.recordAccountWrite tx address written = .ok b') (other : Address) (key : Bytes32)
-    (index : UInt32) :
-    (b'.accounts[other]?.bind fun r => (r.storageChanges.getD key ∅)[index]?) =
-      b.accounts[other]?.bind fun r => (r.storageChanges.getD key ∅)[index]? := by
-  unfold recordAccountWrite at h
-  dsimp only at h
-  split at h
-  all_goals
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    cases h
-    rw [setField_other (get := fun r => r.storageChanges.getD key ∅) (hget := by intros; rfl)
-        (hempty := rfl),
-      setField_other (get := fun r => r.storageChanges.getD key ∅) (hget := by intros; rfl)
-        (hempty := rfl),
-      setField_other (get := fun r => r.storageChanges.getD key ∅) (hget := by intros; rfl)
-        (hempty := rfl),
-      record_id_at (get := fun r => r.storageChanges.getD key ∅) (hempty := rfl)]
-
-/-- An account write records its nonce at the current position when the nonce changed. -/
-private theorem recordAccountWrite_nonce_at {b b' : AccessListBuilder} {tx : TransactionState}
-    {address : Address} {written : Option Account}
-    (h : b.recordAccountWrite tx address written = .ok b') (index : UInt32) :
-    (b'.accounts[address]?.bind fun r => r.nonceChanges[index]?) =
-      let before := (b.startAccount address).nonce
-      let after := (written.getD EMPTY_ACCOUNT).nonce
-      if index = b.index then (if before ≠ after then some after else none)
-      else b.accounts[address]?.bind fun r => r.nonceChanges[index]? := by
-  unfold recordAccountWrite at h
-  dsimp only at h
-  split at h
-  all_goals
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    cases h
-    rw [setField_other (get := fun r => r.nonceChanges) (hget := by intros; rfl) (hempty := rfl),
-      setField_at (hfield := by intros; rfl) (hempty := rfl),
-      setField_other (get := fun r => r.nonceChanges) (hget := by intros; rfl) (hempty := rfl),
-      record_id_at (get := fun r => r.nonceChanges) (hempty := rfl),
-      (setField_index _ _ _ _ _ _).1]
-    simp only [decide_eq_true_eq]
-    rfl
-
-/-- An account write records its code at the current position when the code hash changed. -/
-private theorem recordAccountWrite_code_at {b b' : AccessListBuilder} {tx : TransactionState}
-    {address : Address} {written : Option Account}
-    (h : b.recordAccountWrite tx address written = .ok b') (index : UInt32) :
-    (b'.accounts[address]?.bind fun r => r.codeChanges[index]?) =
-      if index = b.index then
-        (if (b.startAccount address).codeHash ≠ (written.getD EMPTY_ACCOUNT).codeHash then
-          (tx.getCode (written.getD EMPTY_ACCOUNT).codeHash).toOption else none)
-      else b.accounts[address]?.bind fun r => r.codeChanges[index]? := by
-  unfold recordAccountWrite at h
-  dsimp only at h
-  split at h
-  all_goals
-    obtain ⟨code, hcode, h⟩ := bind_ok_iff.mp h
-    cases h
-    rw [setField_at (hfield := by intros; rfl) (hempty := rfl),
-      setField_other (get := fun r => r.codeChanges) (hget := by intros; rfl) (hempty := rfl),
-      setField_other (get := fun r => r.codeChanges) (hget := by intros; rfl) (hempty := rfl),
-      record_id_at (get := fun r => r.codeChanges) (hempty := rfl),
-      (setField_index _ _ _ _ _ _).1, (setField_index _ _ _ _ _ _).1]
-    rename_i hc
-    simp only [show (b.record address id).index = b.index from rfl,
-      show (b.record address id).startAccount address = b.startAccount address from rfl] at hc ⊢
-    first | simp [hc, hcode, Except.toOption] | simp [hc]
-
-/-- An account write whose code hash changed found the new code. -/
-private theorem recordAccountWrite_getCode {b b' : AccessListBuilder} {tx : TransactionState}
-    {address : Address} {written : Option Account}
-    (h : b.recordAccountWrite tx address written = .ok b')
-    (hne : (b.startAccount address).codeHash ≠ (written.getD EMPTY_ACCOUNT).codeHash) :
-    ∃ code, tx.getCode (written.getD EMPTY_ACCOUNT).codeHash = .ok code := by
-  unfold recordAccountWrite at h
-  dsimp only at h
-  split at h
-  · obtain ⟨code, hcode, -⟩ := bind_ok_iff.mp h
-    exact ⟨code, hcode⟩
-  · exact absurd hne ‹_›
-
-/-- A storage write keeps the position and its start. -/
-private theorem recordStorageWrite_index (b : AccessListBuilder) (address : Address)
-    (key : Bytes32) (value : U256) :
-    (b.recordStorageWrite address key value).index = b.index ∧
-      (b.recordStorageWrite address key value).start = b.start := by
-  unfold recordStorageWrite
-  split <;> exact ⟨rfl, rfl⟩
-
-/-- A storage write keeps each field outside the storage. -/
-private theorem recordStorageWrite_keep {β : Type} (b : AccessListBuilder)
-    (address other : Address) (key : Bytes32) (value : U256)
-    (get : AccountRecord → Std.ExtTreeMap UInt32 β)
-    (hget : ∀ r s c, get { r with storageChanges := s, storageReads := c } = get r)
-    (hempty : get {} = ∅) (index : UInt32) :
-    ((b.recordStorageWrite address key value).accounts[other]?.bind fun r => (get r)[index]?) =
-      b.accounts[other]?.bind fun r => (get r)[index]? := by
-  unfold recordStorageWrite
-  split
-  · exact record_keep _ _ _ _ _ (fun r => hget r _ r.storageReads) hempty _
-  · exact record_keep _ _ _ _ _ (fun r => hget r _ _) hempty _
-
-/-- A storage write records its value at its own key and position, and keeps every other. -/
-private theorem recordStorageWrite_slot (b : AccessListBuilder) (address : Address)
-    (key : Bytes32) (value : U256) (other : Address) (k : Bytes32) (j : UInt32) :
-    ((b.recordStorageWrite address key value).accounts[other]?.bind
-        fun r => (r.storageChanges.getD k ∅)[j]?) =
-      if other = address ∧ k = key ∧ j = b.index then
-        (if b.startStorage address key ≠ value then some value else none)
-      else b.accounts[other]?.bind fun r => (r.storageChanges.getD k ∅)[j]? := by
-  by_cases ha : other = address
-  · subst ha
-    by_cases hk : k = key
-    · subst hk
-      rw [← slot_bind, ← slot_bind, recordStorageWrite_at]
-      simp
-    · rw [ite_eq_right_of_eq_false _ _ (eq_false fun h => hk h.2.1)]
-      unfold recordStorageWrite
-      split
-      · exact record_keep _ _ _ _ (fun r => r.storageChanges.getD k ∅)
-          (fun r => by simp [Std.ExtTreeMap.getD_insert, Ne.symm hk]) (by simp) _
-      · exact record_keep _ _ _ _ (fun r => r.storageChanges.getD k ∅)
-          (fun r => dropSlotChange_getD_of_ne _ _ (Ne.symm hk)) (by simp) _
-  · rw [ite_eq_right_of_eq_false _ _ (eq_false fun h => ha h.1)]
-    unfold recordStorageWrite
-    split <;> rw [record_ne _ _ (Ne.symm ha)]
-
-/-- A fold that can fail, whose every step keeps a value, keeps it. -/
-private theorem foldlM_keep {α β γ ε : Type} {f : β → α → Except ε β} (g : β → γ)
-    (hf : ∀ b x b', f b x = .ok b' → g b' = g b) :
-    ∀ (l : List α) (b b' : β), l.foldlM f b = .ok b' → g b' = g b
-  | [], _, _, h => by cases h; rfl
-  | x :: l, b, b', h => by
-    rw [List.foldlM_cons] at h
-    obtain ⟨b₁, h₁, h⟩ := bind_ok_iff.mp h
-    exact (foldlM_keep g hf l b₁ b' h).trans (hf b x b₁ h₁)
-
-/-- Every step of a fold that succeeds succeeds, from a value that keeps an invariant. -/
-private theorem foldlM_each {α β ε : Type} {f : β → α → Except ε β} (P : β → Prop)
-    (hP : ∀ b x b', P b → f b x = .ok b' → P b') :
-    ∀ (l : List α) (b b' : β), P b → l.foldlM f b = .ok b' →
-      ∀ x ∈ l, ∃ c c', P c ∧ f c x = .ok c'
-  | [], _, _, _, _, x, hx => absurd hx List.not_mem_nil
-  | y :: l, b, b', hb, h, x, hx => by
-    rw [List.foldlM_cons] at h
-    obtain ⟨b₁, h₁, h⟩ := bind_ok_iff.mp h
-    rcases List.mem_cons.mp hx with rfl | hx
-    · exact ⟨b, b₁, hb, h₁⟩
-    · exact foldlM_each P hP l b₁ b' (hP b y b₁ hb h₁) h x hx
+  rw [← bind_storageChanges_getD, slotChanges]
+  cases b.accounts[address]?.bind fun r => r.storageChanges[key]? <;> simp
 
 /-- The steps of the record of a call: the reads, then the account writes, then the storage. -/
 private theorem recordTransaction_eq {b b' : AccessListBuilder} {tx : TransactionState}
@@ -605,9 +339,10 @@ private theorem recordTransaction_eq {b b' : AccessListBuilder} {tx : Transactio
   cases h
   rw [Std.ExtTreeMap.foldlM_eq_foldlM_toList] at h₃
   refine ⟨_, b₃, fun g h₁ h₂ => ?_, h₃, ?_⟩
-  · rw [Std.ExtTreeMap.foldl_eq_foldl_toList, Std.ExtTreeSet.foldl_eq_foldl_toList,
-      foldl_keep _ g (fun c (x : Address × Std.ExtTreeSet Bytes32) => h₂ c x.1 x.2.toList),
-      foldl_keep _ g (fun c x => h₁ c x)]
+  · rw [Std.ExtTreeMap.foldl_eq_foldl_toList, Std.ExtTreeSet.foldl_eq_foldl_toList]
+    refine List.foldlRecOn _ _ (motive := fun c => g c = g b) ?_
+      fun c hc (x : Address × Std.ExtTreeSet Bytes32) _ => (h₂ c x.1 x.2.toList).trans hc
+    exact List.foldlRecOn _ _ (motive := fun c => g c = g b) rfl fun c hc x _ => (h₁ c x).trans hc
   · simp only [Std.ExtTreeMap.foldl_eq_foldl_toList]
 
 /-- The storage writes of a call keep every value that each storage write keeps. -/
@@ -615,21 +350,9 @@ private theorem storageWrites_keep {γ : Type} (tx : TransactionState) (c : Acce
     (g : AccessListBuilder → γ) (hg : ∀ d a k v, g (d.recordStorageWrite a k v) = g d) :
     g (tx.storageWrites.toList.foldl
       (fun c x => x.2.toList.foldl (fun c y => c.recordStorageWrite x.1 y.1 y.2) c) c) = g c :=
-  foldl_keep _ g (fun d (x : Address × Std.ExtTreeMap Bytes32 U256) =>
-    foldl_keep _ g (fun d (y : Bytes32 × U256) => hg d x.1 y.1 y.2) x.2.toList d) _ _
-
-/-- The start of a builder gives the account at an address. -/
-private theorem startAccount_eq {c d : AccessListBuilder} (h : c.start = d.start)
-    (address : Address) : c.startAccount address = d.startAccount address := by
-  unfold startAccount
-  rw [h]
-
-/-- The start of a builder gives the word at a key. -/
-private theorem startStorage_eq {c d : AccessListBuilder} (h : c.start = d.start)
-    (address : Address) (key : Bytes32) :
-    c.startStorage address key = d.startStorage address key := by
-  unfold startStorage
-  rw [h]
+  List.foldlRecOn _ _ (motive := fun d => g d = g c) rfl fun d hd x _ =>
+    (List.foldlRecOn _ _ (motive := fun e => g e = g d) rfl fun e he y _ =>
+      (hg e x.1 y.1 y.2).trans he).trans hd
 
 /-- The storage writes of a call record each written word at its key, and nothing else. -/
 private theorem storageWrites_slot (tx : TransactionState) (c : AccessListBuilder)
@@ -646,39 +369,38 @@ private theorem storageWrites_slot (tx : TransactionState) (c : AccessListBuilde
     fun d => d.accounts[a]?.bind fun r => (r.storageChanges.getD k ∅)[j]?
   let H : Bytes32 × U256 → Option U256 → Option U256 := fun y old =>
     if j = c.index then (if c.startStorage a k ≠ y.2 then some y.2 else none) else old
-  have hindex : ∀ (x : Address × Std.ExtTreeMap Bytes32 U256) d, P d →
-      P (x.2.toList.foldl (fun c y => c.recordStorageWrite x.1 y.1 y.2) d) := by
-    intro x d hd
-    have := foldl_keep _ (fun d : AccessListBuilder => (d.index, d.start))
-      (fun d y => Prod.ext (recordStorageWrite_index d x.1 y.1 y.2).1
-        (recordStorageWrite_index d x.1 y.1 y.2).2) x.2.toList d
-    exact ⟨(Prod.mk.inj this).1.trans hd.1, (Prod.mk.inj this).2.trans hd.2⟩
+  have hstep : ∀ d (address : Address) (y : Bytes32 × U256), P d →
+      P (d.recordStorageWrite address y.1 y.2) := fun d address y hd =>
+    ⟨(recordStorageWrite_index d address y.1 y.2).1.trans hd.1,
+      (recordStorageWrite_index d address y.1 y.2).2.trans hd.2⟩
   have inner : ∀ slots : Std.ExtTreeMap Bytes32 U256, ∀ d, P d →
       ((∀ y ∈ slots.toList, y.1 ≠ k) →
         g (slots.toList.foldl (fun c y => c.recordStorageWrite a y.1 y.2) d) = g d) ∧
       (∀ y ∈ slots.toList, y.1 = k →
         g (slots.toList.foldl (fun c y => c.recordStorageWrite a y.1 y.2) d) = H y (g d)) := by
     intro slots d hd
-    refine (foldl_point (fun c y => c.recordStorageWrite a y.1 y.2) P g Prod.fst k H
-      slots.toList (pairwise_toList _) (fun y _ e he => ?_) (fun y _ e _ hne => ?_)
-      (fun y _ e he hy => ?_) d hd).2
-    · exact ⟨(recordStorageWrite_index e a y.1 y.2).1.trans he.1,
-        (recordStorageWrite_index e a y.1 y.2).2.trans he.2⟩
+    refine (foldl_pointwise (fun c y => c.recordStorageWrite a y.1 y.2) P g Prod.fst k H
+      (Std.ExtTreeMap.map_fst_toList_eq_keys (t := slots) ▸ slots.nodup_keys)
+      (fun y _ e he => hstep e a y he) (fun y _ e _ hne => ?_) (fun y _ e he hy => ?_) hd).2
     · simp only [g]
       rw [recordStorageWrite_slot, ite_eq_right_of_eq_false _ _ (eq_false fun h => hne h.2.1.symm)]
     · simp only [g, H]
-      rw [recordStorageWrite_slot, he.1, startStorage_eq he.2, hy]
+      rw [recordStorageWrite_slot, he.1, hy]
+      unfold startStorage
+      rw [he.2]
       simp
-  have outer := foldl_point
+  have outer := foldl_pointwise
     (fun c x => x.2.toList.foldl (fun c y => c.recordStorageWrite x.1 y.1 y.2) c) P g Prod.fst a
     (fun x old => match x.2[k]? with
       | some v => H (k, v) old
       | none => old)
-    tx.storageWrites.toList (pairwise_toList _) (fun x _ d hd => hindex x d hd)
-    (fun x _ d _ hne => foldl_keep _ g (fun e y => by
-      simp only [g]
+    (Std.ExtTreeMap.map_fst_toList_eq_keys (t := tx.storageWrites) ▸ tx.storageWrites.nodup_keys)
+    (fun x _ d hd => List.foldlRecOn _ _ hd fun e he y _ => hstep e x.1 y he)
+    (fun x _ d _ hne => List.foldlRecOn _ _ (motive := fun e => g e = g d) rfl fun e he y _ => by
+      simp only [g] at he ⊢
       rw [recordStorageWrite_slot,
-        ite_eq_right_of_eq_false _ _ (eq_false fun h => hne h.1.symm)]) x.2.toList d)
+        ite_eq_right_of_eq_false _ _ (eq_false fun h => hne h.1.symm)]
+      exact he)
     (fun x _ d hd hx => by
       obtain ⟨x, slots⟩ := x
       dsimp only at hx
@@ -692,7 +414,7 @@ private theorem storageWrites_slot (tx : TransactionState) (c : AccessListBuilde
         refine (inner slots d hd).1 fun y hy hyk => ?_
         rw [← hyk, Std.ExtTreeMap.mem_toList_iff_getElem?_eq_some.mp hy] at hk
         cases hk)
-    c ⟨rfl, rfl⟩
+    (b := c) ⟨rfl, rfl⟩
   simp only [State.StorageMap.slot]
   cases hw : tx.storageWrites[a]? with
   | none =>
@@ -721,10 +443,10 @@ private theorem accountWrites_point {β : Type} {tx : TransactionState}
       match tx.accountWrites[a]? with
       | some w => if j = b.index then V a w else b₂.accounts[a]?.bind fun r => (get r)[j]?
       | none => b₂.accounts[a]?.bind fun r => (get r)[j]? := by
-  have point := foldlM_point (fun c => c.index = b.index ∧ c.start = b.start)
+  have point := foldlM_ok_pointwise (fun c => c.index = b.index ∧ c.start = b.start)
     (fun c => c.accounts[a]?.bind fun r => (get r)[j]?) Prod.fst a
-    (fun x old => if j = b.index then V a x.2 else old) tx.accountWrites.toList
-    (pairwise_toList _)
+    (fun x old => if j = b.index then V a x.2 else old)
+    (Std.ExtTreeMap.map_fst_toList_eq_keys (t := tx.accountWrites) ▸ tx.accountWrites.nodup_keys)
     (fun _ _ c c' hc h => ⟨(recordAccountWrite_index h).1.trans hc.1,
       (recordAccountWrite_index h).2.trans hc.2⟩)
     (fun _ _ c c' _ h hne => by simp only [recordAccountWrite_ne h hne])
@@ -733,7 +455,7 @@ private theorem accountWrites_point {β : Type} {tx : TransactionState}
       dsimp only at hx h ⊢
       subst hx
       exact hat c c' x w hc.1 hc.2 h j)
-    b₂ b₃ hP₂ h₃
+    hP₂ h₃
   cases hw : tx.accountWrites[a]? with
   | none =>
     refine point.2.1 fun x hx hxa => ?_
@@ -771,11 +493,13 @@ theorem Tracks.recordTransaction {b b' : AccessListBuilder} {base block : BlockS
   -- The position and its start stay.
   have hP₂ : b₂.index = b.index ∧ b₂.start = b.start :=
     Prod.mk.inj (hkeep (fun c => (c.index, c.start)) (fun _ _ => rfl) (fun _ _ _ => rfl))
-  have hP₃ : b₃.index = b.index ∧ b₃.start = b.start := by
-    have := foldlM_keep (fun c : AccessListBuilder => (c.index, c.start))
-      (fun _ _ _ h => Prod.ext (recordAccountWrite_index h).1 (recordAccountWrite_index h).2)
-      _ b₂ b₃ h₃
-    exact ⟨(Prod.mk.inj this).1.trans hP₂.1, (Prod.mk.inj this).2.trans hP₂.2⟩
+  have hstepP : ∀ (c : AccessListBuilder) (x : Address × Option Account) c',
+      c.index = b.index ∧ c.start = b.start → c.recordAccountWrite tx x.1 x.2 = .ok c' →
+      c'.index = b.index ∧ c'.start = b.start := fun _ _ _ hc h =>
+    ⟨(recordAccountWrite_index h).1.trans hc.1, (recordAccountWrite_index h).2.trans hc.2⟩
+  have hP₃ : b₃.index = b.index ∧ b₃.start = b.start :=
+    foldlM_ok_invariant (fun c : AccessListBuilder => c.index = b.index ∧ c.start = b.start)
+      hstepP hP₂ h₃
   have hidx : b'.index = b.index ∧ b'.start = b.start := by
     have := storageWrites_keep tx b₃ (fun c => (c.index, c.start))
       (fun d a k v => Prod.ext (recordStorageWrite_index d a k v).1
@@ -795,8 +519,8 @@ theorem Tracks.recordTransaction {b b' : AccessListBuilder} {base block : BlockS
       exact storageWrites_keep tx b₃ (fun c => c.accounts[a]?.bind fun r => (get r)[j]?)
         (fun d a' k v => recordStorageWrite_keep d a' a k v get hget hempty j)
     · exact hkeep (fun c => c.accounts[a]?.bind fun r => (get r)[j]?)
-        (fun c a' => record_keep c a' a id get (fun _ => rfl) hempty j)
-        (fun c a' _ => record_keep c a' a _ get (fun r => hget r r.storageChanges _) hempty j)
+        (fun c a' => record_id_at c a' a get hempty j)
+        (fun c a' _ => record_at_of_get c a' a _ get (fun r => hget r r.storageChanges _) hempty j)
   -- Only the storage writes change the storage changes.
   have hslot : ∀ (a : Address) (k : Bytes32) (j : UInt32), (b'.slotChanges a k)[j]? =
       match tx.storageWrites.slot a k with
@@ -804,120 +528,107 @@ theorem Tracks.recordTransaction {b b' : AccessListBuilder} {base block : BlockS
         else (b.slotChanges a k)[j]?
       | none => (b.slotChanges a k)[j]? := by
     intro a k j
-    have h3 := foldlM_keep
-      (fun c : AccessListBuilder => c.accounts[a]?.bind fun r => (r.storageChanges.getD k ∅)[j]?)
-      (fun _ _ _ h => recordAccountWrite_slot h a k j) _ b₂ b₃ h₃
+    have h3 := foldlM_ok_invariant
+      (fun c : AccessListBuilder => (c.accounts[a]?.bind fun r =>
+        (r.storageChanges.getD k ∅)[j]?) = b₂.accounts[a]?.bind fun r =>
+          (r.storageChanges.getD k ∅)[j]?)
+      (fun _ _ _ hc h => (recordAccountWrite_slot h a k j).trans hc) rfl h₃
     have h2 := hkeep
       (fun c => c.accounts[a]?.bind fun r => (r.storageChanges.getD k ∅)[j]?)
-      (fun c a' => record_keep c a' a id (fun r => r.storageChanges.getD k ∅) (fun _ => rfl)
-        (by simp) j)
-      (fun c a' keys => record_keep c a' a
+      (fun c a' => record_id_at c a' a (fun r => r.storageChanges.getD k ∅) (by simp) j)
+      (fun c a' keys => record_at_of_get c a' a
         (fun r => { r with storageReads := r.storageReads.insertMany keys })
         (fun r => r.storageChanges.getD k ∅) (fun _ => rfl) (by simp) j)
-    rw [getElem?_slotChanges, getElem?_slotChanges, hb', storageWrites_slot, hP₃.1,
-      startStorage_eq hP₃.2]
-    rw [h3, h2]
-  refine ⟨fun a => ?_, fun a => ?_, fun a => ?_, fun a k => ?_⟩
-  · -- The balance.
-    rw [hidx.1, startAccount_eq hidx.2]
-    have hdata : ∀ j, (b'.balances a)[j]? =
-        b₃.accounts[a]?.bind fun r => r.balanceChanges[j]? := fun j => by
-      unfold balances
+    rw [getElem?_slotChanges, getElem?_slotChanges, hb', storageWrites_slot, hP₃.1]
+    unfold startStorage
+    rw [hP₃.2, h3, h2]
+  -- A field of an account follows the block, given what the account writes record for it.
+  have hfield : ∀ {β γ : Type} [DecidableEq γ] (view : β → γ)
+      (get : AccountRecord → Std.ExtTreeMap UInt32 β) (F : Account → γ)
+      (V : Address → Option Account → Option β) (a : Address) (old : γ),
+      get {} = ∅ → (∀ r s c, get { r with storageChanges := s, storageReads := c } = get r) →
+      (∀ (c c' : AccessListBuilder) (a : Address) (w : Option Account), c.index = b.index →
+        c.start = b.start → c.recordAccountWrite tx a w = .ok c' →
+        ∀ j, (c'.accounts[a]?.bind fun r => (get r)[j]?) =
+          if j = b.index then V a w else c.accounts[a]?.bind fun r => (get r)[j]?) →
+      (∀ w, tx.accountWrites[a]? = some w → (V a w).map view =
+        if F (b.startAccount a) ≠ F (w.getD EMPTY_ACCOUNT) then some (F (w.getD EMPTY_ACCOUNT))
+        else none) →
+      FieldTracks view ((b.accounts[a]?.map get).getD ∅) b.index old (F (b.startAccount a))
+        (F ((TransactionState.ofBlock block).getAccount a)) →
+      FieldTracks view ((b'.accounts[a]?.map get).getD ∅) b.index old (F (b.startAccount a))
+        (F ((TransactionState.ofBlock tx.incorporateTxIntoBlock.parent).getAccount a)) := by
+    intro β γ _ view get F V a old hempty hget hat hV ht
+    have hdata : ∀ j, ((b'.accounts[a]?.map get).getD ∅)[j]? =
+        b₃.accounts[a]?.bind fun r => (get r)[j]? := fun j => by
       rw [getElem?_field]
-      exact (hacc (fun r => r.balanceChanges) rfl (fun _ _ _ => rfl) a j).1
-    have hold : ∀ j, (b₂.accounts[a]?.bind fun r => r.balanceChanges[j]?) =
-        (b.balances a)[j]? := fun j => by
-      unfold balances
+      exact (hacc get hempty hget a j).1
+    have hold : ∀ j, (b₂.accounts[a]?.bind fun r => (get r)[j]?) =
+        ((b.accounts[a]?.map get).getD ∅)[j]? := fun j => by
       rw [getElem?_field]
-      exact (hacc (fun r => r.balanceChanges) rfl (fun _ _ _ => rfl) a j).2
-    have hpoint := accountWrites_point hP₂ h₃ (fun r => r.balanceChanges)
-      (fun a w => if (b.startAccount a).balance ≠ (w.getD EMPTY_ACCOUNT).balance then
-        some (w.getD EMPTY_ACCOUNT).balance else none)
-      (fun c c' a w hi hs h j => by
-        simp only [recordAccountWrite_balance_at h j, hi, startAccount_eq hs]) a
+      exact (hacc get hempty hget a j).2
+    have hpoint := accountWrites_point hP₂ h₃ get V hat a
     cases hw : tx.accountWrites[a]? with
     | none =>
       rw [getAccount_incorporate_none hw, hfollow.parent]
-      exact (h.balance a).congr fun j => by simp only [hdata, hpoint j, hw, hold]
+      exact ht.congr fun j => by simp only [hdata, hpoint j, hw, hold]
     | some w =>
       rw [getAccount_incorporate_some hw]
-      refine (h.balance a).write _ (fun j hj => ?_) ?_
-      · simp only [hdata, hpoint j, hw, hold, hj, ↓reduceIte]
-      · simp [hdata, hpoint b.index, hw]
-  · -- The nonce.
-    rw [hidx.1, startAccount_eq hidx.2]
-    have hdata : ∀ j, (b'.nonces a)[j]? =
-        b₃.accounts[a]?.bind fun r => r.nonceChanges[j]? := fun j => by
-      unfold nonces
-      rw [getElem?_field]
-      exact (hacc (fun r => r.nonceChanges) rfl (fun _ _ _ => rfl) a j).1
-    have hold : ∀ j, (b₂.accounts[a]?.bind fun r => r.nonceChanges[j]?) =
-        (b.nonces a)[j]? := fun j => by
-      unfold nonces
-      rw [getElem?_field]
-      exact (hacc (fun r => r.nonceChanges) rfl (fun _ _ _ => rfl) a j).2
-    have hpoint := accountWrites_point hP₂ h₃ (fun r => r.nonceChanges)
-      (fun a w => if (b.startAccount a).nonce ≠ (w.getD EMPTY_ACCOUNT).nonce then
-        some (w.getD EMPTY_ACCOUNT).nonce else none)
-      (fun c c' a w hi hs h j => by
-        simp only [recordAccountWrite_nonce_at h j, hi, startAccount_eq hs]) a
-    cases hw : tx.accountWrites[a]? with
-    | none =>
-      rw [getAccount_incorporate_none hw, hfollow.parent]
-      exact (h.nonce a).congr fun j => by simp only [hdata, hpoint j, hw, hold]
-    | some w =>
-      rw [getAccount_incorporate_some hw]
-      refine (h.nonce a).write _ (fun j hj => ?_) ?_
-      · simp only [hdata, hpoint j, hw, hold, hj, ↓reduceIte]
-      · simp [hdata, hpoint b.index, hw]
-  · -- The code, by its hash.
-    rw [hidx.1, startAccount_eq hidx.2]
-    have hdata : ∀ j, (b'.codes a)[j]? =
-        b₃.accounts[a]?.bind fun r => r.codeChanges[j]? := fun j => by
-      unfold codes
-      rw [getElem?_field]
-      exact (hacc (fun r => r.codeChanges) rfl (fun _ _ _ => rfl) a j).1
-    have hold : ∀ j, (b₂.accounts[a]?.bind fun r => r.codeChanges[j]?) =
-        (b.codes a)[j]? := fun j => by
-      unfold codes
-      rw [getElem?_field]
-      exact (hacc (fun r => r.codeChanges) rfl (fun _ _ _ => rfl) a j).2
-    have hpoint := accountWrites_point hP₂ h₃ (fun r => r.codeChanges)
-      (fun a w => if (b.startAccount a).codeHash ≠ (w.getD EMPTY_ACCOUNT).codeHash then
-        (tx.getCode (w.getD EMPTY_ACCOUNT).codeHash).toOption else none)
-      (fun c c' a w hi hs h j => by
-        simp only [recordAccountWrite_code_at h j, hi, startAccount_eq hs]) a
-    cases hw : tx.accountWrites[a]? with
-    | none =>
-      rw [getAccount_incorporate_none hw, hfollow.parent]
-      exact (h.code a).congr fun j => by simp only [hdata, hpoint j, hw, hold]
-    | some w =>
-      rw [getAccount_incorporate_some hw]
-      refine (h.code a).write _ (fun j hj => ?_) ?_
+      refine ht.write _ (fun j hj => ?_) ?_
       · simp only [hdata, hpoint j, hw, hold, hj, ↓reduceIte]
       · simp only [hdata, hpoint b.index, hw, ↓reduceIte]
-        by_cases hc : (b.startAccount a).codeHash ≠ (w.getD EMPTY_ACCOUNT).codeHash
-        · -- The write ran, so it found the code, whose hash is the new code hash.
-          obtain ⟨c, c', hc', hstep⟩ := foldlM_each
-            (fun c : AccessListBuilder => c.index = b.index ∧ c.start = b.start)
-            (fun _ _ _ hc h => ⟨(recordAccountWrite_index h).1.trans hc.1,
-              (recordAccountWrite_index h).2.trans hc.2⟩)
-            _ b₂ b₃ hP₂ h₃ (a, w) (Std.ExtTreeMap.mem_toList_iff_getElem?_eq_some.mpr hw)
-          obtain ⟨code, hcode⟩ := recordAccountWrite_getCode hstep
-            (by rw [startAccount_eq hc'.2]; exact hc)
-          have hcode' : tx.getCode (w.getD EMPTY_ACCOUNT).codeHash = .ok code := hcode
-          rw [hcode']
-          -- The two conditions agree; the hash type differs only by its name.
-          split <;> split <;>
-            first
-            | exact congrArg some (hfollow.code a w code hw hcode')
-            | exact absurd hc ‹_›
-        · simp only [hc, ↓reduceIte, Option.map_none]
-          split
-          · exact absurd ‹_› hc
-          · rfl
+        exact hV w hw
+  refine ⟨fun a => ?_, fun a => ?_, fun a => ?_, fun a k => ?_⟩
+  · -- The balance.
+    simp only [hidx.1, startAccount, hidx.2]
+    refine hfield id (·.balanceChanges) (·.balance)
+      (fun a w => if (b.startAccount a).balance ≠ (w.getD EMPTY_ACCOUNT).balance then
+        some (w.getD EMPTY_ACCOUNT).balance else none) a _ rfl (fun _ _ _ => rfl)
+      (fun c c' a w hi hs h j => ?_) (fun _ _ => by simp) (h.balance a)
+    simp only [recordAccountWrite_balance_at h j, hi]
+    unfold startAccount
+    rw [hs]
+  · -- The nonce.
+    simp only [hidx.1, startAccount, hidx.2]
+    refine hfield id (·.nonceChanges) (·.nonce)
+      (fun a w => if (b.startAccount a).nonce ≠ (w.getD EMPTY_ACCOUNT).nonce then
+        some (w.getD EMPTY_ACCOUNT).nonce else none) a _ rfl (fun _ _ _ => rfl)
+      (fun c c' a w hi hs h j => ?_) (fun _ _ => by simp) (h.nonce a)
+    simp only [recordAccountWrite_nonce_at h j, hi]
+    unfold startAccount
+    rw [hs]
+  · -- The code, by its hash.
+    simp only [hidx.1, startAccount, hidx.2]
+    refine hfield keccak256 (·.codeChanges) (·.codeHash)
+      (fun a w => if (b.startAccount a).codeHash ≠ (w.getD EMPTY_ACCOUNT).codeHash then
+        (tx.getCode (w.getD EMPTY_ACCOUNT).codeHash).toOption else none) a _ rfl
+      (fun _ _ _ => rfl) (fun c c' a w hi hs h j => ?_) (fun w hw => ?_) (h.code a)
+    · simp only [recordAccountWrite_code_at h j, hi]
+      unfold startAccount
+      rw [hs]
+    · by_cases hc : (b.startAccount a).codeHash ≠ (w.getD EMPTY_ACCOUNT).codeHash
+      · -- The write ran, so it found the code, whose hash is the new code hash.
+        obtain ⟨i, hi, hx⟩ :=
+          List.getElem_of_mem (Std.ExtTreeMap.mem_toList_iff_getElem?_eq_some.mpr hw)
+        obtain ⟨c, c', hc₁, hstep, -⟩ := (foldlM_ok_steps (fun _ _ => True)
+          (fun _ => trivial) (fun _ _ => trivial) (fun _ _ _ _ => trivial) h₃).2 i hi
+        have hc' := foldlM_ok_invariant _ hstepP hP₂ hc₁
+        simp only [hx] at hstep
+        obtain ⟨code, hcode⟩ := recordAccountWrite_getCode hstep
+          (by simpa only [startAccount, hc'.2] using hc)
+        have hcode' : tx.getCode (w.getD EMPTY_ACCOUNT).codeHash = .ok code := hcode
+        rw [hcode']
+        -- The two conditions agree; the hash type differs only by its name.
+        split <;> split <;>
+          first
+          | exact congrArg some (hfollow.code a w code hw hcode')
+          | exact absurd hc ‹_›
+      · simp only [hc, ↓reduceIte, Option.map_none]
+        split
+        · exact absurd ‹_› hc
+        · rfl
   · -- The word at a key.
-    rw [hidx.1, startStorage_eq hidx.2]
+    simp only [hidx.1, startStorage, hidx.2]
     have hnow : (TransactionState.ofBlock tx.incorporateTxIntoBlock.parent).getStorage a k =
         tx.getStorage a k := TransactionState.getStorage_incorporateTxIntoBlock tx a k
     cases hs : tx.storageWrites.slot a k with
@@ -1005,51 +716,71 @@ private theorem storage_find (r : AccountRecord) (address : Address) (key : Byte
           ⟨Std.ExtTreeMap.mem_toList_iff_getElem?_eq_some.mpr hk, by simp [he]⟩
       · simp [Std.ExtTreeMap.isEmpty_iff.mp he, toList_empty]
 
-/-- The list of a builder that follows the block gives each field as it is now.
+/-- The list of a builder that follows the block gives each balance as it is now.
 
-A field whose list entry has no change is as it was in `base`.
+An account with no balance change in the list keeps its balance from `base`. -/
+theorem Tracks.balance_build {b : AccessListBuilder} {base now : BlockState}
+    (h : b.Tracks base now) (address : Address) :
+    ((TransactionState.ofBlock now).getAccount address).balance =
+      b.build.balanceAfter address
+        ((TransactionState.ofBlock base).getAccount address).balance := by
+  rw [← (h.balance address).lastOr_eq]
+  simp only [BlockAccessList.balanceAfter, entry?_build, balances, lastOr]
+  cases b.accounts[address]? <;>
+    simp [AccountRecord.toChanges, List.getLast?_map, toList_empty] <;>
+    rfl
+
+/-- The list of a builder that follows the block gives each nonce as it is now.
+
+An account with no nonce change in the list keeps its nonce from `base`.
 
 The nonce is in 64 bits, as the list holds it. -/
-theorem Tracks.build {b : AccessListBuilder} {base now : BlockState} (h : b.Tracks base now)
-    (address : Address) :
-    ((TransactionState.ofBlock now).getAccount address).balance =
-        b.build.balanceAfter address ((TransactionState.ofBlock base).getAccount address).balance ∧
-      UInt64.ofNat ((TransactionState.ofBlock now).getAccount address).nonce =
-        b.build.nonceAfter address
-          (UInt64.ofNat ((TransactionState.ofBlock base).getAccount address).nonce) ∧
-      ((TransactionState.ofBlock now).getAccount address).codeHash =
-        b.build.codeHashAfter address
-          ((TransactionState.ofBlock base).getAccount address).codeHash ∧
-      ∀ key, (TransactionState.ofBlock now).getStorage address key =
-        b.build.storageAfter address key
-          ((TransactionState.ofBlock base).getStorage address key) := by
-  refine ⟨?_, ?_, ?_, fun key => ?_⟩
-  · rw [← (h.balance address).lastOr_eq]
-    simp only [BlockAccessList.balanceAfter, entry?_build, balances, lastOr]
-    cases b.accounts[address]? <;>
-      simp [AccountRecord.toChanges, List.getLast?_map, toList_empty] <;>
-      rfl
-  · rw [← (h.nonce address).lastOr_eq]
-    simp only [BlockAccessList.nonceAfter, entry?_build, nonces, lastOr]
-    cases b.accounts[address]? with
-    | none => simp [toList_empty]
-    | some r =>
-      simp only [Option.map_some, Option.getD_some, Option.bind_some, AccountRecord.toChanges,
-        List.getLast?_map, Option.map_map]
-      cases r.nonceChanges.toList.getLast? <;> rfl
-  · rw [← (h.code address).lastOr_eq]
-    simp only [BlockAccessList.codeHashAfter, entry?_build, codes, lastOr]
-    cases b.accounts[address]? <;>
-      simp [AccountRecord.toChanges, List.getLast?_map, toList_empty] <;>
-      rfl
-  · rw [← (h.storage address key).lastOr_eq]
-    simp only [BlockAccessList.storageAfter, entry?_build, slotChanges, lastOr]
-    cases b.accounts[address]? with
-    | none => simp [toList_empty]
-    | some r =>
-      simp only [Option.map_some, Option.bind_some]
-      rw [storage_find, Std.ExtTreeMap.getD_eq_getD_getElem?]
-      cases (r.storageChanges[key]?.getD ∅).toList.getLast? <;> rfl
+theorem Tracks.nonce_build {b : AccessListBuilder} {base now : BlockState}
+    (h : b.Tracks base now) (address : Address) :
+    UInt64.ofNat ((TransactionState.ofBlock now).getAccount address).nonce =
+      b.build.nonceAfter address
+        (UInt64.ofNat ((TransactionState.ofBlock base).getAccount address).nonce) := by
+  rw [← (h.nonce address).lastOr_eq]
+  simp only [BlockAccessList.nonceAfter, entry?_build, nonces, lastOr]
+  cases b.accounts[address]? with
+  | none => simp [toList_empty]
+  | some r =>
+    simp only [Option.map_some, Option.getD_some, Option.bind_some, AccountRecord.toChanges,
+      List.getLast?_map, Option.map_map]
+    cases r.nonceChanges.toList.getLast? <;> rfl
+
+/-- The list of a builder that follows the block gives each code hash as it is now.
+
+It is the hash of the last code in the list.
+
+An account with no code change in the list keeps its code hash from `base`. -/
+theorem Tracks.codeHash_build {b : AccessListBuilder} {base now : BlockState}
+    (h : b.Tracks base now) (address : Address) :
+    ((TransactionState.ofBlock now).getAccount address).codeHash =
+      b.build.codeHashAfter address
+        ((TransactionState.ofBlock base).getAccount address).codeHash := by
+  rw [← (h.code address).lastOr_eq]
+  simp only [BlockAccessList.codeHashAfter, entry?_build, codes, lastOr]
+  cases b.accounts[address]? <;>
+    simp [AccountRecord.toChanges, List.getLast?_map, toList_empty] <;>
+    rfl
+
+/-- The list of a builder that follows the block gives each word of storage as it is now.
+
+A key with no change in the list keeps its word from `base`. -/
+theorem Tracks.storage_build {b : AccessListBuilder} {base now : BlockState}
+    (h : b.Tracks base now) (address : Address) (key : Bytes32) :
+    (TransactionState.ofBlock now).getStorage address key =
+      b.build.storageAfter address key
+        ((TransactionState.ofBlock base).getStorage address key) := by
+  rw [← (h.storage address key).lastOr_eq]
+  simp only [BlockAccessList.storageAfter, entry?_build, slotChanges, lastOr]
+  cases b.accounts[address]? with
+  | none => simp [toList_empty]
+  | some r =>
+    simp only [Option.map_some, Option.bind_some]
+    rw [storage_find, Std.ExtTreeMap.getD_eq_getD_getElem?]
+    cases (r.storageChanges[key]?.getD ∅).toList.getLast? <;> rfl
 
 end AccessListBuilder
 

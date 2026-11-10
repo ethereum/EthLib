@@ -25,6 +25,7 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - A failed map fails on some input, and succeeds on every input before it.
 - A property that each step keeps holds after a successful fold.
 - A successful fold reads only inputs that its steps accept.
+- A fold over distinct keys, whose steps each change only their own key, sets each key once.
 - A fold of steps that each succeed with a pure step is the pure fold.
 - A fold whose steps all succeed returns no error.
 - A fold that appends each output returns its start, then the outputs of the map, flattened.
@@ -395,6 +396,47 @@ theorem foldlM_ok_steps {g : β → α → Except ε β} (R : β → β → Prop
       rw [List.take_succ_cons, List.foldlM_cons, first]
       exact hMid
 
+/-- A successful fold over inputs with distinct keys changes a view only at the key `k`.
+
+Each step keeps an invariant, and changes the view only when its input has the key `k`.
+
+Then the end keeps the invariant.
+
+With no input of key `k`, the end has the view of the start.
+
+With one, the end has the view that its step makes from the view of the start. -/
+theorem foldlM_ok_pointwise {γ κ : Type} {g : β → α → Except ε β} (P : β → Prop)
+    (view : β → γ) (key : α → κ) (k : κ) (H : α → γ → γ) :
+    ∀ {xs : List α}, (xs.map key).Nodup →
+    (∀ x ∈ xs, ∀ b b', P b → g b x = .ok b' → P b') →
+    (∀ x ∈ xs, ∀ b b', P b → g b x = .ok b' → key x ≠ k → view b' = view b) →
+    (∀ x ∈ xs, ∀ b b', P b → g b x = .ok b' → key x = k → view b' = H x (view b)) →
+    ∀ {b b' : β}, P b → xs.foldlM g b = .ok b' →
+      P b' ∧ ((∀ x ∈ xs, key x ≠ k) → view b' = view b) ∧
+        (∀ x ∈ xs, key x = k → view b' = H x (view b))
+  | [], _, _, _, _, b, b', holds, computed => by
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact ⟨holds, fun _ => rfl, fun _ member => absurd member List.not_mem_nil⟩
+  | x :: _, distinct, keeps, other, self, b, _, holds, computed => by
+    rw [List.foldlM_cons, bind_ok_iff] at computed
+    obtain ⟨middle, first, rest⟩ := computed
+    obtain ⟨head, tail⟩ := List.nodup_cons.mp distinct
+    have hMiddle := keeps x List.mem_cons_self b middle holds first
+    obtain ⟨hEnd, hNone, hSome⟩ := foldlM_ok_pointwise P view key k H tail
+      (fun y hy => keeps y (List.mem_cons_of_mem _ hy))
+      (fun y hy => other y (List.mem_cons_of_mem _ hy))
+      (fun y hy => self y (List.mem_cons_of_mem _ hy)) hMiddle rest
+    refine ⟨hEnd, fun missing => ?_, fun y member hy => ?_⟩
+    · rw [hNone fun y hy => missing y (List.mem_cons_of_mem _ hy)]
+      exact other x List.mem_cons_self b middle holds first (missing x List.mem_cons_self)
+    · rcases List.mem_cons.mp member with rfl | member
+      · rw [hNone fun z hz hkz => head (List.mem_map.mpr ⟨z, hz, hkz.trans hy.symm⟩)]
+        exact self y List.mem_cons_self b middle holds first hy
+      · rw [hSome y member hy,
+          other x List.mem_cons_self b middle holds first fun hkx =>
+            head (List.mem_map.mpr ⟨y, member, hy.trans hkx.symm⟩)]
+
 /-- Every input of a successful fold meets a condition that each successful step checks. -/
 theorem foldlM_forall_of_ok {σ : Type} {g : σ → α → Except ε σ} {P : α → Prop}
     (step : ∀ acc x r, g acc x = .ok r → P x) :
@@ -418,6 +460,24 @@ theorem foldlM_eq_ok_foldl {σ : Type} {g : σ → α → Except ε σ} {step : 
     rw [List.foldlM_cons, pureStep init x List.mem_cons_self, List.foldl_cons]
     simp only [bind, Except.bind]
     exact ih (fun acc y member => pureStep acc y (List.mem_cons_of_mem x member)) _
+
+/-- A fold over inputs with distinct keys, whose steps cannot fail, changes a view only at `k`.
+
+The conditions and the result are those of the fold whose steps can fail. -/
+theorem foldl_pointwise {γ κ : Type} (g : β → α → β) (P : β → Prop) (view : β → γ)
+    (key : α → κ) (k : κ) (H : α → γ → γ) {xs : List α}
+    (distinct : (xs.map key).Nodup)
+    (keeps : ∀ x ∈ xs, ∀ b, P b → P (g b x))
+    (other : ∀ x ∈ xs, ∀ b, P b → key x ≠ k → view (g b x) = view b)
+    (self : ∀ x ∈ xs, ∀ b, P b → key x = k → view (g b x) = H x (view b)) {b : β}
+    (holds : P b) :
+    P (xs.foldl g b) ∧ ((∀ x ∈ xs, key x ≠ k) → view (xs.foldl g b) = view b) ∧
+      (∀ x ∈ xs, key x = k → view (xs.foldl g b) = H x (view b)) :=
+  foldlM_ok_pointwise (ε := Empty) (g := fun b x => .ok (g b x)) P view key k H distinct
+    (fun x hx b _ hb h => by cases h; exact keeps x hx b hb)
+    (fun x hx b _ hb h => by cases h; exact other x hx b hb)
+    (fun x hx b _ hb h => by cases h; exact self x hx b hb) holds
+    (foldlM_eq_ok_foldl (fun _ _ _ => rfl) b)
 
 /-- A fold whose steps all succeed returns no error. -/
 theorem foldlM_ne_error {σ : Type} {g : σ → α → Except ε σ} {e : ε} :
