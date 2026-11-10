@@ -62,13 +62,6 @@ theorem StaticStep.nonceLe {a b : Evm fork Meter} (h : StaticStep a b) :
     NonceLe a.state b.state :=
   NonceLe.of_sameOutside h.state
 
-omit [GasMeter Meter] in
-/-- A step that keeps the state lowers no nonce. -/
-theorem SameContext.nonceLe {a b : Evm fork Meter} (h : SameContext a b) :
-    NonceLe a.state b.state := by
-  rw [h.state]
-  exact NonceLe.refl _
-
 /-- A rollback to a snapshot of the same block lowers no nonce of the snapshot. -/
 theorem nonceLe_restoreTxState {tx snapshot : TransactionState}
     (h : tx.parent = snapshot.parent) : NonceLe snapshot (tx.restoreTxState snapshot) :=
@@ -186,126 +179,31 @@ theorem nonceLe_prepareCreation {tx tx' : TransactionState} {address : Address}
   · cases h
     exact h0
 
-/-! ## The instructions that give the next frame -/
-
-/-- A successful SSTORE lowers no nonce. -/
-theorem nonceLe_sstoreStep {evm after : Evm fork Meter} (h : sstoreStep evm = .ok after) :
+omit [GasMeter Meter] in
+/-- The end of a successful SELFDESTRUCT lowers no nonce. -/
+theorem nonceLe_finishSelfdestruct {beneficiary : Address} {refund : Nat}
+    {evm after : Evm fork Meter} (h : finishSelfdestruct fork beneficiary refund evm = .ok after) :
     NonceLe evm.state after.state := by
-  unfold sstoreStep at h
+  unfold finishSelfdestruct at h
   split at h
-  · simp [bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
-  obtain ⟨⟨k, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨n, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
-  have c2 : StaticStep evm e2 :=
-    StaticStep.of_sameContext ((popWord_sameContext h1).trans (popWord_sameContext h2))
-  simp only [] at h
-  split at h
-  · simp [throw, throwThe, MonadExceptOf.throw] at h
-  · rcases hpair : accessStorageKey e2 e2.message.currentTarget (U256.toBeBytes k) with
-      ⟨cold, e3⟩
-    have ha :
-        StaticStep evm (recordStorageRead e3 e2.message.currentTarget (U256.toBeBytes k)) := by
-      have := staticStep_accessStorageKey e2 e2.message.currentTarget (U256.toBeBytes k)
-      rw [hpair] at this
-      exact (c2.trans this).trans (staticStep_recordStorageRead _ _ _)
-    simp only [hpair] at h
-    rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
-    · obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
-      obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
-      have m5 : NonceLe evm.state e5.state := by
-        rw [(chargeStateGas_sameContext h5).state, (chargeGas_sameContext h4).state]
-        exact ha.nonceLe
-      split at h
-      · simp [throw, throwThe, MonadExceptOf.throw] at h
-      · obtain ⟨st, hst, h⟩ := Base.bind_ok_iff.mp h
-        cases h
-        exact m5.trans (nonceLe_setStorage (Base.mapError_ok_iff.mp hst))
-    · exact (ha.trans (staticStep_exceptionalHalt _ _)).nonceLe
-
-/-- A successful TSTORE lowers no nonce. -/
-theorem nonceLe_tstoreStep {evm after : Evm fork Meter} (h : tstoreStep evm = .ok after) :
-    NonceLe evm.state after.state := by
-  obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
-  split at h
-  · simp [throw, throwThe, MonadExceptOf.throw] at h
   · cases h
-    exact ((popWord_sameContext h1).trans ((popWord_sameContext h2).trans
-      (chargeGas_sameContext h3))).nonceLe.trans (NonceLe.of_getAccountOptional fun _ => rfl)
-
-/-- A successful SELFDESTRUCT lowers no nonce, static frame or not. -/
-theorem nonceLe_selfdestructStep {evm after : Evm fork Meter}
-    (h : selfdestructStep fork evm = .ok after) : NonceLe evm.state after.state := by
-  unfold selfdestructStep at h
-  by_cases hs : fork ≥ .glamsterdam ∧ evm.message.isStatic = true
-  · simp only [hs, and_self, ↓reduceIte] at h
+  · obtain ⟨st, hst, h⟩ := Base.bind_ok_iff.mp h
     cases h
-  simp only [hs, ↓reduceIte] at h
-  obtain ⟨⟨w, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  dsimp only at h
-  rcases hacc : accessAddress e1 (toAddressMasked w) with ⟨cold, e2⟩
-  simp only [hacc] at h
-  have ha : StaticStep e1 e2 := by
-    have := staticStep_accessAddress e1 (toAddressMasked w)
-    rwa [hacc] at this
-  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
-  have c : StaticStep evm (recordAccountRead e2 (toAddressMasked w)) :=
-    ((StaticStep.of_sameContext (popWord_sameContext h1)).trans ha).trans
-      (staticStep_recordAccountRead _ _)
-  rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
-  · obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
-    have m4 : NonceLe evm.state e4.state :=
-      c.nonceLe.trans ((chargeGas_sameContext h3).trans (chargeStateGas_sameContext h4)).nonceLe
-    unfold finishSelfdestruct at h
-    split at h
-    · cases h
-    · obtain ⟨st, hst, h⟩ := Base.bind_ok_iff.mp h
-      cases h
-      exact m4.trans (nonceLe_selfdestructTransfer (Base.mapError_ok_iff.mp hst))
-  · exact (c.trans (staticStep_exceptionalHalt _ _)).nonceLe
+    exact nonceLe_selfdestructTransfer (Base.mapError_ok_iff.mp hst)
 
-/-- Each instruction that gives the next frame keeps or raises every nonce when it succeeds.
+/-! ## A step -/
 
-That holds in a static frame and in any other frame. -/
-theorem nonceLe_instruction {op : Op}
-    {run : Evm fork Meter → Except EvmError (Evm fork Meter)} {evm after : Evm fork Meter}
-    (hrun : instruction fork op = some run) (h : run evm = .ok after) :
-    NonceLe evm.state after.state := by
-  unfold instruction at hrun
-  rcases orElse_eq_some hrun with hf | hrun
-  · exact (stackOnlyStep_sameContext hf h).nonceLe
-  rcases orElse_eq_some hrun with hf | hrun
-  · exact (controlFlowStep_sameContext hf h).nonceLe
-  rcases orElse_eq_some hrun with hf | hrun
-  · exact (memoryDataStep_sameContext hf h).nonceLe
-  rcases orElse_eq_some hrun with hf | hrun
-  · exact (staticStep_returnOpStep hf h).nonceLe
-  rcases orElse_eq_some hrun with hf | hrun
-  · exact (environmentStep_sameContext hf h).nonceLe
-  rcases orElse_eq_some hrun with hf | hrun
-  · exact (staticStep_accountStep hf h).nonceLe
-  rcases orElse_eq_some hrun with hf | hrun
-  · cases op <;> simp only [storageStep, Option.some.injEq, reduceCtorEq] at hf
-    case sload => subst hf; exact (staticStep_sloadStep h).nonceLe
-    case sstore => subst hf; exact nonceLe_sstoreStep h
-  rcases orElse_eq_some hrun with hf | hrun
-  · cases op <;> simp only [transientStorageStep, reduceCtorEq] at hf <;> split at hf <;>
-      simp only [Option.some.injEq, reduceCtorEq] at hf <;> subst hf
-    · exact (tloadStep_sameContext h).nonceLe
-    · exact nonceLe_tstoreStep h
-  rcases orElse_eq_some hrun with hf | hf
-  · cases op <;> simp only [logOpStep, Option.some.injEq, reduceCtorEq] at hf
-    subst hf
-    obtain ⟨_, -, -, -, hs, -⟩ := logStep_eq_ok h
-    rw [hs]
-    exact NonceLe.refl _
-  · cases op <;> simp only [selfdestructOpStep, Option.some.injEq, reduceCtorEq] at hf
-    subst hf
-    exact nonceLe_selfdestructStep h
-
-/-! ## The calls and the creations -/
+/-- Each write of a step lowers no nonce, static frame or not. -/
+theorem stepRules_nonceLe :
+    StepRules fork (fun a b : Evm fork Meter => NonceLe a.state b.state) where
+  trans := NonceLe.trans
+  static h := h.nonceLe
+  sstore _ _ _ _ _ _ h := nonceLe_setStorage h
+  tstore _ _ _ _ := NonceLe.of_getAccountOptional fun _ => rfl
+  log _ hs _ := by rw [hs]; exact NonceLe.refl _
+  selfdestruct _ _ h := nonceLe_finishSelfdestruct h
+  incrementNonce _ _ _ h := nonceLe_incrementNonce h
+  incorporate h := by rw [state_incorporateChild]; exact h
 
 /-- A result of a step from `evm` that keeps or raises every nonce.
 
@@ -318,194 +216,10 @@ abbrev NonceResult (evm : Evm fork Meter) : StepResult fork Meter → Prop :=
   StepResult.Keeps (fun a b => NonceLe a.state b.state)
     (fun caller _ child => NonceLe caller.state child.state) evm
 
-omit [GasMeter Meter] in
-/-- A result that keeps the nonces of a frame keeps those of each frame with lower nonces. -/
-theorem NonceResult.lift {evm evm' : Evm fork Meter} {result : StepResult fork Meter}
-    (h : NonceLe evm.state evm'.state) (r : NonceResult evm' result) :
-    NonceResult evm result :=
-  StepResult.Keeps.lift (R := fun a b => NonceLe a.state b.state) (fun hab hbc => hab.trans hbc) h r
-
-/-- A successful send of a message lowers no nonce. -/
-theorem nonceResult_genericCall {evm : Evm fork Meter} {message : Message fork}
-    {newAccount : Nat} {outputStart outputSize : U256} {result : StepResult fork Meter}
-    (h : genericCall evm message newAccount outputStart outputSize = .ok result) :
-    NonceResult evm result := by
-  unfold genericCall at h
-  dsimp only at h
-  split at h
-  · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
-    exact (staticStep_skipCall hs).nonceLe
-  · cases h
-    refine ⟨NonceLe.refl _, fun child after hres p => ?_⟩
-    show NonceLe _ after.state
-    rw [state_resumeCall hres]
-    exact p
-
-/-- The successful end of a call instruction lowers no nonce. -/
-theorem nonceResult_finishCall {kind : CallKind} {call : CallOperands} {callee : Callee}
-    {subCall newAccount expandBy : Nat} {evm : Evm fork Meter} {result : StepResult fork Meter}
-    (h : finishCall kind call callee subCall newAccount expandBy evm = .ok result) :
-    NonceResult evm result := by
-  unfold finishCall at h
-  split at h
-  · cases h
-  dsimp only at h
-  split at h
-  · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
-    exact (staticStep_skipCall hs).nonceLe
-  · refine NonceResult.lift ?_ (nonceResult_genericCall h)
-    exact NonceLe.of_getAccountOptional fun _ => rfl
-
-/-- A successful step of a call instruction lowers no nonce. -/
-theorem nonceResult_callStep {kind : CallKind} {evm : Evm fork Meter}
-    {result : StepResult fork Meter} (h : callStep kind evm = .ok result) :
-    NonceResult evm result := by
-  unfold callStep at h
-  obtain ⟨⟨call, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  have c1 := (staticStep_popCallOperands h1).1
-  dsimp only at h
-  split at h
-  · simp only [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
-    cases h
-  rcases hacc : accessAddress e1 call.address with ⟨cold, e2⟩
-  simp only [hacc] at h
-  have ha : StaticStep e1 e2 := by
-    have := staticStep_accessAddress e1 call.address
-    rwa [hacc] at this
-  have s3 : StaticStep evm (recordAccountRead e2 call.address) :=
-    (c1.trans ha).trans (staticStep_recordAccountRead e2 call.address)
-  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
-  rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
-  · obtain ⟨⟨callee, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
-    have s4 : StaticStep evm e4 := s3.trans (staticStep_accessDelegation h4)
-    dsimp only at h
-    rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
-    · obtain ⟨⟨subCall, e5⟩, h5, h⟩ := Base.bind_ok_iff.mp h
-      exact NonceResult.lift (s4.trans (staticStep_payCall h5)).nonceLe
-        (nonceResult_finishCall h)
-    · exact (s4.trans (staticStep_exceptionalHalt _ _)).nonceLe
-  · exact (s3.trans (staticStep_exceptionalHalt _ _)).nonceLe
-
-/-- A successful launch of a creation keeps or raises every nonce. -/
-theorem nonceResult_launchCreate {evm : Evm fork Meter} {value : U256} {initCode : ByteArray}
-    {salt : Option U256} {result : StepResult fork Meter}
-    (h : launchCreate evm value initCode salt = .ok result) : NonceResult evm result := by
-  unfold launchCreate at h
-  dsimp only at h
-  split at h
-  · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
-    exact (staticStep_skipCall hs).nonceLe
-  obtain ⟨address, -, h⟩ := Base.bind_ok_iff.mp h
-  have c0 : NonceLe evm.state (recordAccountRead (accessAddress (recordAccountRead
-      { evm with returnData := .empty } evm.message.currentTarget) address).2
-      address).state :=
-    (((staticStep_recordAccountRead { evm with returnData := .empty }
-      evm.message.currentTarget).trans (staticStep_accessAddress _ address)).trans
-      (staticStep_recordAccountRead _ address)).nonceLe
-  rcases keepReads_eq_ok h with hr | ⟨e, rfl⟩
-  · obtain ⟨e1, h1, hr⟩ := Base.bind_ok_iff.mp hr
-    obtain ⟨e2, h2, hr⟩ := Base.bind_ok_iff.mp hr
-    obtain ⟨state, hst, hr⟩ := Base.bind_ok_iff.mp hr
-    have m2 : NonceLe evm.state e2.state := by
-      rw [(chargeGas_sameContext h2).state, (chargeStateGas_sameContext h1).state]
-      exact c0
-    have ms : NonceLe evm.state state :=
-      m2.trans (nonceLe_incrementNonce (Base.mapError_ok_iff.mp hst))
-    split at hr
-    · cases hr
-      refine ⟨ms, fun child after hres p => ?_⟩
-      show NonceLe _ after.state
-      rw [state_resumeCreate hres]
-      exact ms.trans p
-    · obtain ⟨e3, h3, hr⟩ := Base.bind_ok_iff.mp hr
-      cases hr
-      exact ms.trans (pushWord_sameContext h3).nonceLe
-  · exact c0
-
-/-- A successful step of CREATE or CREATE2 keeps or raises every nonce. -/
-theorem nonceResult_createStep {create2 : Bool} {evm : Evm fork Meter}
-    {result : StepResult fork Meter} (h : createStep create2 evm = .ok result) :
-    NonceResult evm result := by
-  unfold createStep at h
-  by_cases hs : fork ≥ .glamsterdam ∧ evm.message.isStatic = true
-  · simp [hs, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
-  rw [ite_eq_right_of_eq_false _ _ (eq_false hs)] at h
-  obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨_, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨salt, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
-  have m4 : e4.state = e3.state := by
-    unfold popSalt at h4
-    split at h4
-    · obtain ⟨⟨_, e⟩, he, h4⟩ := Base.bind_ok_iff.mp h4
-      cases h4
-      exact (popWord_sameContext he).state
-    · cases h4
-      rfl
-  have m5 : NonceLe evm.state e5.state := by
-    rw [(chargeGasAndMemory_sameContext h5).state, m4, (popWord_sameContext h3).state,
-      (popWord_sameContext h2).state, (popWord_sameContext h1).state]
-    exact NonceLe.refl _
-  unfold genericCreate at h
-  split at h
-  · cases h
-  split at h
-  · cases h
-  exact NonceResult.lift m5 (nonceResult_launchCreate h)
-
-/-- A successful instruction that may send a message keeps or raises every nonce. -/
-theorem nonceResult_messageInstruction {op : Op}
-    {run : Evm fork Meter → Except EvmError (StepResult fork Meter)} {evm : Evm fork Meter}
-    {result : StepResult fork Meter} (hrun : messageInstruction fork op = some run)
-    (h : run evm = .ok result) : NonceResult evm result := by
-  unfold messageInstruction at hrun
-  cases hc : callInstruction (Meter := Meter) fork op with
-  | some call =>
-    simp only [hc, HOrElse.hOrElse, OrElse.orElse, Option.orElse, Option.some.injEq] at hrun
-    subst hrun
-    cases op <;> simp only [callInstruction, Option.some.injEq, reduceCtorEq] at hc
-    all_goals first
-      | (subst hc; exact nonceResult_callStep h)
-      | (split at hc
-         · simp only [Option.some.injEq] at hc
-           subst hc
-           exact nonceResult_callStep h
-         · cases hc)
-  | none =>
-    simp only [hc, HOrElse.hOrElse, OrElse.orElse, Option.orElse] at hrun
-    cases op <;> simp only [createInstruction, Option.some.injEq, reduceCtorEq] at hrun
-    all_goals first
-      | (subst hrun; exact nonceResult_createStep h)
-      | (split at hrun
-         · simp only [Option.some.injEq] at hrun
-           subst hrun
-           exact nonceResult_createStep h
-         · cases hrun)
-
 /-- Every successful step of every frame keeps or raises every nonce, static frame or not. -/
 theorem nonceResult_step {evm : Evm fork Meter} {result : StepResult fork Meter}
-    (h : step fork evm = .ok result) : NonceResult evm result := by
-  unfold step at h
-  split at h
-  · dsimp only at h
-    split at h
-    · cases h
-    · split at h
-      · rename_i hop
-        cases hr : ‹Evm fork Meter → Except EvmError (Evm fork Meter)› evm with
-        | error => simp [hr, Functor.map, Except.map] at h
-        | ok after =>
-          simp only [hr, Functor.map, Except.map, Except.ok.injEq] at h
-          subst h
-          exact nonceLe_instruction hop hr
-      · split at h
-        · rename_i hcall
-          exact nonceResult_messageInstruction hcall h
-        · cases h
-  · simp only [stopStep, Functor.map, Except.map, Except.ok.injEq] at h
-    subst h
-    exact (controlFlowStep_sameContext (op := .stop) rfl rfl).nonceLe
+    (h : step fork evm = .ok result) : NonceResult evm result :=
+  stepRules_nonceLe.step h
 
 /-! ## A run of a frame -/
 
@@ -513,8 +227,7 @@ theorem nonceResult_step {evm : Evm fork Meter} {result : StepResult fork Meter}
 
 Each message that it runs successfully ends with nonces at least those of its sender. -/
 def KeepsNonce {bound : Nat} (runChild : MessageRunner fork Meter bound) : Prop :=
-  ∀ caller message lt ended, runChild caller message lt = .ok ended →
-    NonceLe caller.state ended.val.state
+  RunnerEnsures (fun caller _ child => NonceLe caller.state child.state) runChild
 
 /-- A successful run of a frame keeps or raises every nonce.
 
@@ -524,11 +237,7 @@ theorem nonceLe_runFrame [LawfulGasMeter Meter] {bound : Nat}
     {evm after : Evm fork Meter} {within : GasMeter.gasHeld evm.gas ≤ bound}
     (h : runFrame (step fork) (step_decreases fork) bound runChild evm within = .ok after) :
     NonceLe evm.state after.state :=
-  rel_runFrame (R := fun a b => NonceLe a.state b.state)
-    (C := fun caller _ child => NonceLe caller.state child.state) (Inv := fun _ => True)
-    (fun _ => NonceLe.refl _) NonceLe.trans (fun _ _ => trivial)
-    (fun _ _ _ => NonceLe.of_getAccountOptional fun _ => rfl) (fun _ h => nonceResult_step h)
-    (fun _ _ _ _ _ => runs _ _ _ _) trivial h
+  stepRules_nonceLe.runFrame runs h
 
 /-! ## Messages -/
 
@@ -581,23 +290,16 @@ theorem processMessage_nonceLe [LawfulGasMeter Meter] (n : Nat) :
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
       ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
         NonceLe state ended.val.state) := by
-  have both := processMessage_rel (fork := fork) (Meter := Meter)
-    (R := fun a b => NonceLe a.state b.state ∧ b.state.parent = a.state.parent)
-    (Inv := fun _ => True)
+  have both := (stepRules_nonceLe (fork := fork) (Meter := Meter)).and stepRules_parent
+    |>.processMessage
     (M := fun _ state _ _ ended => NonceLe state ended.state ∧ ended.state.parent = state.parent)
-    (fun _ => ⟨NonceLe.refl _, rfl⟩)
-    (fun hab hbc => ⟨hab.1.trans hbc.1, hbc.2.trans hab.2⟩) (fun _ _ => trivial)
-    (fun _ _ _ => ⟨NonceLe.of_getAccountOptional fun _ => rfl, rfl⟩)
-    (fun _ h => (nonceResult_step h).and (parentResult_step h))
-    (fun _ _ => ⟨NonceLe.refl _, rfl⟩)
-    (fun h _ => ⟨(staticStep_runPrecompile h).nonceLe, (staticStep_runPrecompile h).parent⟩)
-    (fun {message state state1 _ _ _ ended} hstate hrun => by
+    (fun {message state state1 _ _ _ ended} hentry hrun => by
       have h1 : NonceLe state state1 ∧ state1.parent = state.parent := by
-        rcases hstate with ⟨rfl, -, -⟩ | ⟨-, hm, -⟩
+        rcases hentry with ⟨-, rfl, -⟩ | ⟨-, hm, -⟩
         · exact ⟨nonceLe_startState message state, parent_startState message state⟩
         · exact ⟨(nonceLe_startState message state).trans (nonceLe_moveEther hm),
             (TransactionState.parent_moveEther hm).trans (parent_startState message state)⟩
-      obtain ⟨hle, hpar⟩ := hrun trivial
+      obtain ⟨hle, hpar⟩ := hrun
       have hp : ended.state.parent = state.parent := hpar.trans h1.2
       refine ⟨?_, (parent_rollbackOnError state ended).trans hp⟩
       unfold rollbackOnError
@@ -607,7 +309,8 @@ theorem processMessage_nonceLe [LawfulGasMeter Meter] (n : Nat) :
     (fun hp hm hd =>
       ⟨nonceLe_depositCode ((nonceLe_prepareCreation hp).trans hm.1)
           (hm.2.trans (parent_prepareCreation hp)) hd,
-        (parent_depositCode hd).trans (hm.2.trans (parent_prepareCreation hp))⟩) n
+        (parent_depositCode hd).trans (hm.2.trans (parent_prepareCreation hp))⟩)
+    (fun h => h) n
   exact ⟨fun message state substate meter held hn ended h =>
       (both.1 message state substate meter held hn ended h).1,
     fun message state substate meter held hn ended h =>

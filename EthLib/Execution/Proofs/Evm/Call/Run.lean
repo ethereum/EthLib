@@ -29,6 +29,8 @@ It also supplies the rollback of a call and the deposit of code.
 The steps may assume a frame invariant that the relation keeps.
 
 The run then needs that invariant at its start.
+
+A call starts from the state it enters: its target touched before Paris, then its value moved.
 -/
 
 @[expose] public section
@@ -72,20 +74,25 @@ theorem StepResult.Keeps.lift {R : Evm fork Meter → Evm fork Meter → Prop}
     exact ⟨trans h c, fun child after hres p => trans h (m child after hres p)⟩
 
 omit [GasMeter Meter] in
-/-- Two relations that a step keeps, it keeps together. -/
-theorem StepResult.Keeps.and {R S : Evm fork Meter → Evm fork Meter → Prop}
-    {C D : Evm fork Meter → Message fork → Evm fork Meter → Prop} {evm : Evm fork Meter}
-    {result : StepResult fork Meter} (r : StepResult.Keeps R C evm result)
-    (s : StepResult.Keeps S D evm result) :
-    StepResult.Keeps (fun a b => R a b ∧ S a b) (fun a m b => C a m b ∧ D a m b) evm result := by
+/-- A result that keeps a relation under a fact of each message keeps it under a stronger fact. -/
+theorem StepResult.Keeps.of_child {R : Evm fork Meter → Evm fork Meter → Prop}
+    {C D : Evm fork Meter → Message fork → Evm fork Meter → Prop}
+    (stronger : ∀ {caller message child}, D caller message child → C caller message child)
+    {evm : Evm fork Meter} {result : StepResult fork Meter} (r : StepResult.Keeps R C evm result) :
+    StepResult.Keeps R D evm result := by
   cases result with
-  | next after => exact ⟨r, s⟩
+  | next after => exact r
   | child caller message resume =>
-    obtain ⟨rc, rm⟩ := r
-    obtain ⟨sc, sm⟩ := s
-    exact ⟨⟨rc, sc⟩, fun child after hres p => ⟨rm child after hres p.1, sm child after hres p.2⟩⟩
+    exact ⟨r.1, fun child after hres p => r.2 child after hres (stronger p)⟩
 
 /-! ## A run of a frame -/
+
+/-- A runner of messages ends each message that it runs successfully in a frame that `C` relates.
+
+`C` relates the frame that sends the message, the message and the frame that ends it. -/
+def RunnerEnsures (C : Evm fork Meter → Message fork → Evm fork Meter → Prop) {bound : Nat}
+    (runChild : MessageRunner fork Meter bound) : Prop :=
+  ∀ caller message lt ended, runChild caller message lt = .ok ended → C caller message ended.val
 
 section Frame
 
@@ -136,6 +143,36 @@ end Frame
 
 /-! ## Messages -/
 
+/-- The state and the substate that the frame of a message starts from, after those of its caller.
+
+Before Paris, the target of the message is touched first.
+
+A message that moves a value then moves it from its sender to its target.
+
+From Glamsterdam, it also logs a move to another account, by EIP-7708.
+
+Any other message starts from there with the substate of its caller. -/
+def Entered (fork : Fork) (message : Message fork) (state : TransactionState)
+    (substate : Substate) (entry : TransactionState) (entrySubstate : Substate) : Prop :=
+  (¬(message.shouldTransferValue = true ∧ message.value ≠ 0) ∧
+      entry = startState fork message state ∧ entrySubstate = substate) ∨
+    ((message.shouldTransferValue = true ∧ message.value ≠ 0) ∧
+      (startState fork message state).moveEther fork message.caller message.currentTarget
+        message.value = .ok entry ∧
+      entrySubstate = { substate with
+        logs := pushTransferLog fork substate.logs message.caller message.currentTarget
+          message.value })
+
+/-- A message that moves no value starts from the start state and the substate of its caller. -/
+theorem Entered.of_not_transfers {message : Message fork} {state entry : TransactionState}
+    {substate entrySubstate : Substate}
+    (h : Entered fork message state substate entry entrySubstate)
+    (hno : ¬(message.shouldTransferValue = true ∧ message.value ≠ 0)) :
+    entry = startState fork message state ∧ entrySubstate = substate := by
+  rcases h with ⟨-, h⟩ | ⟨ht, -⟩
+  · exact h
+  · exact absurd ht hno
+
 /-- A relation `M` of messages, as a relation of a caller, a message and the frame that ends it.
 
 The message starts from the caller's state, a child of the caller's substate and a new meter. -/
@@ -175,18 +212,11 @@ theorem processMessage_rel [LawfulGasMeter Meter]
     (stop : ∀ evm : Evm fork Meter, Inv evm → R evm { evm with running := false })
     (precompile : ∀ {address : Nat} {evm after : Evm fork Meter},
       runPrecompile fork address evm = some after → Inv evm → R evm after)
-    (call : ∀ {message : Message fork} {state state1 : TransactionState}
-      {substate substate1 : Substate} {meter : Meter} {ended : Evm fork Meter},
-      (state1 = startState fork message state ∧ substate1 = substate ∧
-          ¬(message.shouldTransferValue = true ∧ message.value ≠ 0) ∨
-        (message.shouldTransferValue = true ∧ message.value ≠ 0) ∧
-          (startState fork message state).moveEther fork message.caller message.currentTarget
-            message.value = .ok state1 ∧
-          substate1 = { substate with
-            logs := pushTransferLog fork substate.logs message.caller message.currentTarget
-              message.value }) →
-      (Inv (startFrame message state1 substate1 meter) →
-        R (startFrame message state1 substate1 meter) ended) →
+    (call : ∀ {message : Message fork} {state entry : TransactionState}
+      {substate entrySubstate : Substate} {meter : Meter} {ended : Evm fork Meter},
+      Entered fork message state substate entry entrySubstate →
+      (Inv (startFrame message entry entrySubstate meter) →
+        R (startFrame message entry entrySubstate meter) ended) →
       M message state substate meter (rollbackOnError state ended))
     (create : ∀ {message : Message fork} {state prepared : TransactionState}
       {substate : Substate} {meter : Meter} {evm after : Evm fork Meter},
@@ -229,8 +259,8 @@ theorem processMessage_rel [LawfulGasMeter Meter]
                     Base.mapError_ok_iff.mp hm,
                     by first | rfl | (split <;> first | rfl | contradiction)⟩
                 | (cases hm
-                   exact Or.inl ⟨rfl, by first | rfl | (split <;> first | rfl | contradiction),
-                     ‹_›⟩))
+                   exact Or.inl ⟨‹_›, rfl,
+                     by first | rfl | (split <;> first | rfl | contradiction)⟩))
               fun hinv => rel_runFrame refl trans keeps halt steps ?_ hinv hrun
             rintro caller' message' lt ⟨c, used⟩ - hrun'
             split at hrun'
@@ -246,8 +276,8 @@ theorem processMessage_rel [LawfulGasMeter Meter]
                     Base.mapError_ok_iff.mp hm,
                     by first | rfl | (split <;> first | rfl | contradiction)⟩
                 | (cases hm
-                   exact Or.inl ⟨rfl, by first | rfl | (split <;> first | rfl | contradiction),
-                     ‹_›⟩)) (stop _)
+                   exact Or.inl ⟨‹_›, rfl,
+                     by first | rfl | (split <;> first | rfl | contradiction)⟩)) (stop _)
           · split at hdo
             · rename_i after hrp
               cases hdo
@@ -256,16 +286,16 @@ theorem processMessage_rel [LawfulGasMeter Meter]
                     Base.mapError_ok_iff.mp hm,
                     by first | rfl | (split <;> first | rfl | contradiction)⟩
                 | (cases hm
-                   exact Or.inl ⟨rfl, by first | rfl | (split <;> first | rfl | contradiction),
-                     ‹_›⟩)) (precompile hrp)
+                   exact Or.inl ⟨‹_›, rfl,
+                     by first | rfl | (split <;> first | rfl | contradiction)⟩)) (precompile hrp)
             · cases hdo
               exact call (by first
                 | exact Or.inr ⟨‹message.shouldTransferValue = true ∧ message.value ≠ 0›,
                     Base.mapError_ok_iff.mp hm,
                     by first | rfl | (split <;> first | rfl | contradiction)⟩
                 | (cases hm
-                   exact Or.inl ⟨rfl, by first | rfl | (split <;> first | rfl | contradiction),
-                     ‹_›⟩)) (stop _)
+                   exact Or.inl ⟨‹_›, rfl,
+                     by first | rfl | (split <;> first | rfl | contradiction)⟩)) (stop _)
     refine ⟨callCase, ?_⟩
     intro message state substate meter held hn ended h
     rw [processCreateMessage] at h

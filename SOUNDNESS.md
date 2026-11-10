@@ -1077,8 +1077,8 @@ Its new base agrees with the old one outside the touched slots, the moved and re
 `Logic.create_stored` proves this for CREATE.
 `Logic.create2_stored` proves this for CREATE2.
 `Logic.nonce_of_shape` proves that an account with the nonce and the code hash of an account that exists has its nonce.
-`Logic.Entered` gives the state and the substate that the frame of a message starts from, after the move of its value.
-`Logic.Entered.of_not_transfers` proves that a message that moves no value starts from the start state and the substate of its caller.
+`Entered` (`Execution/Proofs/Evm/Call/Run.lean`) gives the state and the substate that the frame of a message starts from, after the move of its value.
+`Entered.of_not_transfers` proves that a message that moves no value starts from the start state and the substate of its caller.
 `Logic.meets_runsAll` proves that the runner of the interpreter meets the specifications of a family of codes that call each other, at every bound.
 Each specification is a triple under the assumption that the whole family runs as specified, so a callee may call its caller back.
 Each specification holds from every frame that a message with its code enters, so a message may move a value.
@@ -1196,6 +1196,13 @@ It leaves free the block before the transaction, the created accounts, the wiped
 `Logic.SentVia message S to` names the CALLs with no value from the current account of `message` to `to`, from a frame that reads as `S`.
 Each such call runs the code that `to` holds in `S`, along its route, with any data, any gas and any reservoir.
 `Logic.CallSends.sentVia` proves that the message of a CALL with no value along a route is such a call, via the state before the call.
+
+`StepRules fork R` (`Execution/Proofs/Evm/Call/StepRules.lean`) lists the rules for a transitive relation `R` of two frames.
+`R` must hold of each step that keeps the state up to the records of reads.
+It must also hold of each write of storage, transient storage, a log or SELFDESTRUCT, of the rise of a nonce, and of a child taken in by its caller.
+`StepRules.step` proves that such a relation holds of every successful step, given it for the frame that ends each message sent.
+`StepRules.runFrame` proves the relation for a successful run of a frame.
+`StepRules.processMessage` turns it into a fact of every call and creation, by induction on the gas of the message.
 
 The block of a transaction state is the state before the block, with the writes of the block so far.
 A rollback restores the storage of a snapshot only when both states have the same block.
