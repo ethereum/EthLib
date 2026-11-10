@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.ForkChoice.PayloadVotes
+public import Std.Data.HashMap.Basic
 
 /-!
 # `Consensus.ForkChoice.Head`
@@ -96,6 +97,17 @@ def chooseHeaviest : List WeightedNode → Option ForkChoiceNode
   | [] => none
   | first :: rest => some (rest.foldl heavier first).1
 
+/-- The latest votes that count in a state, grouped by the node that each one supports.
+
+Once the tally is built, the count for one node reads only its groups, not the validators.
+
+The groups stop at the first vote whose node cannot be found, and keep its error. -/
+structure VoteTally where
+  /-- Each supported node and the sum of the balances of its votes, by first vote. -/
+  groups : List (ForkChoiceNode × Nat)
+  /-- The error of the first vote whose node cannot be found, if there is one. -/
+  failure : Option ForkChoiceError
+
 namespace Store
 
 variable (config : Config) (store : Store preset fork)
@@ -129,22 +141,63 @@ def getSupportedNode (message : LatestMessage fork) : Except ForkChoiceError For
     else return ⟨message.root, .pending⟩
   else return ⟨message.root, .pending⟩
 
+/-- The votes that count, grouped by the node that each one supports.
+
+The validators are read in order, and each balance is added to the sum of its supported node.
+
+A new supported node goes on the front of the given list, which is kept in reverse.
+
+A validator without a message is left out, and so is an equivocator.
+
+It gives the sums, and the given nodes in reverse followed by the new nodes by first vote.
+
+It stops at the first vote whose node cannot be found, and gives its error. -/
+def groupVotes : List (ValidatorIndex × Gwei) → List ForkChoiceNode →
+    Std.HashMap ForkChoiceNode Nat →
+    List ForkChoiceNode × Std.HashMap ForkChoiceNode Nat × Option ForkChoiceError
+  | [], nodes, sums => (nodes.reverse, sums, none)
+  | (index, balance) :: rest, nodes, sums =>
+    match store.latestMessages[index]? with
+    | none => groupVotes rest nodes sums
+    | some message =>
+      if store.equivocatingIndices.contains index then groupVotes rest nodes sums
+      else
+        match store.getSupportedNode message with
+        | .error error => (nodes.reverse, sums, some error)
+        | .ok node =>
+          groupVotes rest (if sums.contains node then nodes else node :: nodes)
+            (sums.insert node (sums.getD node 0 + balance.toNat))
+
+/-- The votes that count in a state, from the validators active and not slashed there.
+
+One pass over the validators sums the balances of the votes for each supported node.
+
+No equivocator counts. -/
+def tallyVotes (state : BeaconState preset fork) : VoteTally :=
+  let (nodes, sums, failure) := store.groupVotes (unslashedActiveBalances state) [] ∅
+  { groups := nodes.map fun node => (node, sums.getD node 0), failure }
+
+/-- The votes for a node from a tally of the store: the sums of the groups whose node descends.
+
+The groups are checked in order, and the first failed check is the error.
+
+Then comes the error of the first vote whose node cannot be found, if there is one.
+
+A sum that leaves the 64-bit range is an overflow. -/
+def scoreFromTally (tally : VoteTally) (node : ForkChoiceNode) : Except ForkChoiceError Gwei := do
+  let total ← tally.groups.foldlM (init := 0) fun (total : Nat) (supported, weight) => do
+    if ← store.isAncestor supported node then return total + weight
+    return total
+  if let some error := tally.failure then throw error
+  if 2 ^ 64 ≤ total then throw (.arith .overflow)
+  return total.toUInt64
+
 /-- The votes for a node: the effective balance of the validators that vote in its subtree.
 
 Only the validators active and not slashed in the given state count, and no equivocator does. -/
 def getAttestationScore (node : ForkChoiceNode) (state : BeaconState preset fork) :
-    Except ForkChoiceError Gwei := do
-  let total ← (unslashedActiveBalances state).foldlM (init := 0)
-      fun (total : Nat) (index, balance) =>
-        match store.latestMessages[index]? with
-        | none => pure total
-        | some message => do
-          if store.equivocatingIndices.contains index then return total
-          if ← store.isAncestor (← store.getSupportedNode message) node then
-            return total + balance.toNat
-          return total
-  if 2 ^ 64 ≤ total then throw (.arith .overflow)
-  return total.toUInt64
+    Except ForkChoiceError Gwei :=
+  store.scoreFromTally (store.tallyVotes state) node
 
 /-- The boost of a timely block, from the state of the justified checkpoint. -/
 def getProposerScore : Except ForkChoiceError Gwei := do
