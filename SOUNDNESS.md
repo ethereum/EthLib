@@ -693,6 +693,7 @@ Root search is noncomputable in the model; no theorem proves the reduction's run
 `length_setupSecretCandidates_le_points` (`Proofs/Kzg/BlobBindingReduction.lean`) bounds the roots that the search tests by 4096 for each annotated point, plus 4096 for the final batch error.
 No theorem relates the secret-recovery term to the discrete logarithm or the strong Diffie–Hellman problem.
 `verifyBlobKzgProofBatch_ok_iff_symbolic` (`Proofs/Kzg/BlobBindingVerifier.lean`) connects the game's scalar acceptance equation to the concrete verifier at its concrete challenges.
+`verifyBlobKzgProofBatch_ok_iff_game` specializes it to openings that match the submission, as every successful challenge loop gives: when each blob challenge is the concrete hash of its blob and commitment, those openings are the concrete batch.
 
 `verifyKzgProofBatch_ok_iff_root` (`Proofs/Kzg/BatchBinding.lean`) states when the batch check of openings accepts, as an equivalence.
 Let opening `i` have commitment `c_i`, value `y_i`, point `z_i` and proof `w_i`.
