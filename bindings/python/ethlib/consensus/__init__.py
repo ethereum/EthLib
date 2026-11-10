@@ -50,6 +50,18 @@ def ssz_static(name: str, fork: str, type_name: str, data: bytes) -> tuple[bytes
     return _native.consensus_ssz_static(name, fork, type_name, data)
 
 
+def is_valid_builder_signature(
+    name: str,
+    fork: str,
+    type_name: str,
+    data: bytes,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+) -> bool:
+    """Whether a signed registration or bid of the Builder API verifies."""
+    return _native.consensus_is_valid_builder_signature(name, fork, config, type_name, data)
+
+
 def upgrade_operation(name: str, type_name: str, data: bytes) -> tuple[bytes, bytes]:
     """The Gloas root and bytes of a Fulu attestation, indexed attestation or attester slashing."""
     return _native.consensus_upgrade_operation(name, type_name, data)
@@ -1202,6 +1214,7 @@ __all__ = [
     "get_custody_groups",
     "compute_columns_for_custody_group",
     "ssz_static",
+    "is_valid_builder_signature",
     "upgrade_operation",
     "pq_keys_ssz",
     "pq_keys_possession_signing_root",

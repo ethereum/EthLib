@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Containers.Attestation
 public import EthLib.Consensus.Containers.Bid
 public import EthLib.Consensus.Containers.Block
+public import EthLib.Consensus.Containers.BuilderApi
 public import EthLib.Consensus.Containers.Builder
 public import EthLib.Consensus.Containers.Execution
 public import EthLib.Consensus.Containers.InclusionList
@@ -36,6 +37,8 @@ A name with no container at the fork comes back as code 0, since no error type c
 From Glamsterdam on, a container whose form EthLib does not hold yet fails with code 0 too.
 
 Another export upgrades an attestation, indexed attestation or attester slashing of Fulu to Gloas.
+
+From Bellatrix to Fulu the names also cover the containers of the Builder API.
 -/
 
 public section
@@ -179,6 +182,20 @@ def containerOf (preset : Preset) (fork : Fork) : String → Option Container
     if .glamsterdam ≤ fork then some ⟨SignedProposerPreferences⟩ else none
   | "InclusionList" => if .hegota ≤ fork then some ⟨InclusionList⟩ else none
   | "SignedInclusionList" => if .hegota ≤ fork then some ⟨SignedInclusionList⟩ else none
+  | "ValidatorRegistrationV1" =>
+    if HasBuilderApi fork then some ⟨ValidatorRegistrationV1⟩ else none
+  | "SignedValidatorRegistrationV1" =>
+    if HasBuilderApi fork then some ⟨SignedValidatorRegistrationV1⟩ else none
+  | "BuilderBid" =>
+    if HasBuilderApi fork then some ⟨BuilderBid preset fork⟩ else none
+  | "SignedBuilderBid" =>
+    if HasBuilderApi fork then some ⟨SignedBuilderBid preset fork⟩ else none
+  | "BlindedBeaconBlockBody" =>
+    if HasBuilderApi fork then some ⟨BlindedBeaconBlockBody preset fork⟩ else none
+  | "BlindedBeaconBlock" =>
+    if HasBuilderApi fork then some ⟨BlindedBeaconBlock preset fork⟩ else none
+  | "SignedBlindedBeaconBlock" =>
+    if HasBuilderApi fork then some ⟨SignedBlindedBeaconBlock preset fork⟩ else none
   | _ => none
 
 /-- The containers whose form EthLib holds from Glamsterdam on.

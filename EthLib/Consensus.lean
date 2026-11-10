@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Accessors
+public import EthLib.Consensus.BuilderApi
 public import EthLib.Consensus.Builders
 public import EthLib.Consensus.Churn
 public import EthLib.Consensus.Mutators
@@ -11,6 +12,7 @@ public import EthLib.Consensus.Constants
 public import EthLib.Consensus.Containers.Attestation
 public import EthLib.Consensus.Containers.Bid
 public import EthLib.Consensus.Containers.Block
+public import EthLib.Consensus.Containers.BuilderApi
 public import EthLib.Consensus.Containers.Builder
 public import EthLib.Consensus.Containers.Execution
 public import EthLib.Consensus.Containers.InclusionList
