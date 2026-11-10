@@ -454,19 +454,20 @@ private theorem BuilderDebtSettled.processBuilderDepositRequest {gloas : .glamst
   · simp only [bind_ok_iff] at computed
     obtain ⟨_, _, computed⟩ := computed
     split at computed
-    · simp only [pure, Except.pure, Except.ok.injEq] at computed
-      subst computed
-      unfold addBuilderToRegistry
-      dsimp only
-      split
+    · simp only [addBuilderToRegistry, bind_ok_iff] at computed
+      obtain ⟨_, _, computed⟩ := computed
+      split at computed
       · rename_i inside
+        cases computed
         have reusable := isReusableBuilder_of_getIndexForNewBuilder_lt inside
         simp only [isReusableBuilder, Bool.and_eq_true, beq_iff_eq] at reusable
         exact holds.putBuilder (by simp [reusable.2]) fun far => absurd rfl far
-      · exact holds.pushBuilder
+      · cases computed
+        exact holds.pushBuilder
     · simp only [pure, Except.pure, Except.ok.injEq] at computed
       exact computed ▸ holds
-  · dsimp only at computed
+  · obtain ⟨_, _, computed⟩ := bind_ok_iff.mp computed
+    dsimp only at computed
     split at computed
     all_goals
       simp only [bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,

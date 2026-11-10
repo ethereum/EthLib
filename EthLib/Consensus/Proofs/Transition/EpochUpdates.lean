@@ -217,18 +217,26 @@ theorem updatedEffectiveBalance_aligned {largest balance effectiveBalance result
   · exact old
   · exact min_sub_mod_mod_self _ maxAligned
 
-/-- Replacing a validator by an aligned one keeps the effective balances aligned. -/
-theorem effectiveBalancesAligned_setValidator {index : ValidatorIndex} {validator : Validator}
+/-- An aligned validator written at a plain position keeps the effective balances aligned. -/
+theorem effectiveBalancesAligned_setValidatorAt {index : Nat} {validator : Validator}
     (holds : EffectiveBalancesAligned state)
     (good : validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
-    (set : state.setValidator index validator = .ok after) :
+    (set : state.setValidatorAt index validator = .ok after) :
     EffectiveBalancesAligned after := by
-  obtain ⟨inside, rfl⟩ := setValidator_ok set
+  obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
   intro other member
   simp only [BeaconState.putValidator, RootedForkList.data_set] at member
   rcases Array.mem_or_eq_of_mem_set (w := inside) member with old | rfl
   · exact holds other old
   · exact good
+
+/-- Replacing a validator by an aligned one keeps the effective balances aligned. -/
+theorem effectiveBalancesAligned_setValidator {index : ValidatorIndex} {validator : Validator}
+    (holds : EffectiveBalancesAligned state)
+    (good : validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
+    (set : state.setValidator index validator = .ok after) :
+    EffectiveBalancesAligned after :=
+  effectiveBalancesAligned_setValidatorAt holds good (by rwa [← setValidator_eq_setValidatorAt])
 
 /-- The update of one effective balance keeps them aligned.
 
@@ -240,15 +248,10 @@ theorem updateEffectiveBalance_aligned {index : Nat}
     EffectiveBalancesAligned after := by
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨validator, found, _, _, effectiveBalance, updated, set⟩ := computed
-  refine effectiveBalancesAligned_setValidator holds ?_ set
+  refine effectiveBalancesAligned_setValidatorAt holds ?_ set
   apply updatedEffectiveBalance_aligned (withdrawalMaxEffectiveBalance_aligned maxAligned validator)
     _ updated
-  unfold getValidator at found
-  split at found
-  · rename_i read
-    cases found
-    exact holds _ (Array.mem_of_getElem? read)
-  · cases found
+  exact holds _ (mem_of_getValidatorAt found)
 
 /-- The update of the effective balances keeps them aligned.
 
@@ -268,7 +271,7 @@ theorem sameSizes_updateEffectiveBalance {index : Nat}
     (computed : updateEffectiveBalance state index = .ok after) : SameSizes state after := by
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨_, _, _, _, _, _, set⟩ := computed
-  exact sameSizes_setValidator set
+  exact sameSizes_setValidatorAt set
 
 theorem sameSizes_processEffectiveBalanceUpdates
     (computed : processEffectiveBalanceUpdates state = .ok after) : SameSizes state after := by
@@ -284,10 +287,11 @@ theorem sameSizes_updateRegistryEntry {config : Config} {index : Nat}
   simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨_, _, _, _, _, set, computed⟩ := computed
   split at computed
-  · rw [liftAccessor_ok] at computed
-    exact (sameSizes_setValidator set).trans (sameSizes_initiateValidatorExit computed)
+  · simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, _, exited⟩ := computed
+    exact (sameSizes_setValidatorAt set).trans (sameSizes_initiateValidatorExit exited)
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ sameSizes_setValidator set
+    exact computed ▸ sameSizes_setValidatorAt set
 
 theorem sameSizes_activateValidator {index : ValidatorIndex}
     (computed : activateValidator state index = .ok after) : SameSizes state after := by
@@ -315,6 +319,18 @@ theorem activationEpochAt_setValidator {index : ValidatorIndex} {validator : Val
   · subst other
     simp [activationEpochAt, getValidator_setValidator_self set, Except.map]
   · simp [activationEpochAt, getValidator_setValidator_of_ne set equal, equal]
+
+/-- A write at a plain position leaves every other activation epoch unchanged. -/
+theorem activationEpochAt_setValidatorAt {index : Nat} {validator : Validator}
+    (set : state.setValidatorAt index validator = .ok after) (other : ValidatorIndex) :
+    activationEpochAt after other =
+      if other.toNat = index then .ok validator.activationEpoch
+      else activationEpochAt state other := by
+  obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
+  by_cases equal : other.toNat = index
+  · simp [activationEpochAt, getValidator, BeaconState.putValidator, equal, inside, Except.map]
+  · simp [activationEpochAt, getValidator, BeaconState.putValidator, equal, Ne.symm equal,
+      Except.map]
 
 /-- In a registry within its limit, a queued index has the far-future activation epoch. -/
 theorem activationEpochAt_of_mem_activationQueue (within : state.RegistryWithinLimit)
@@ -384,19 +400,23 @@ theorem updateRegistryEntry_activationEpochs {config : Config} {index : Nat}
       rfl
   have first : ∀ other, activationEpochAt middle other = activationEpochAt state other := by
     intro other
-    rw [activationEpochAt_setValidator set]
+    rw [activationEpochAt_setValidatorAt set]
     split
     · rename_i equal
-      subst other
-      simp [activationEpochAt, found, kept, Except.map]
+      simp [activationEpochAt, getValidator, equal, getValidatorAt_eq_ok_iff.mp found,
+        kept, Except.map]
     · rfl
+  have markedSlot : middle.slot = state.slot := by
+    obtain ⟨_, rfl⟩ := setValidatorAt_ok set
+    rfl
   split at rest
-  · rw [liftAccessor_ok] at rest
-    obtain ⟨slot, epochs⟩ := initiateValidatorExit_activationEpochs rest
-    exact ⟨slot.trans (setValidator_slot set), fun other => (epochs other).trans (first other)⟩
+  · simp only [bind_ok_iff, liftAccessor_ok] at rest
+    obtain ⟨_, _, exited⟩ := rest
+    obtain ⟨slot, epochs⟩ := initiateValidatorExit_activationEpochs exited
+    exact ⟨slot.trans markedSlot, fun other => (epochs other).trans (first other)⟩
   · simp only [pure, Except.pure, Except.ok.injEq] at rest
     subst after
-    exact ⟨setValidator_slot set, first⟩
+    exact ⟨markedSlot, first⟩
 
 /-- Activating one validator writes the computed epoch, and keeps the slot and the other epochs. -/
 theorem activateValidator_activationEpochs {index : ValidatorIndex}
@@ -574,13 +594,14 @@ theorem sameSizes_updateRegistryEntryElectra {config : Config} {activationEpoch 
   split at computed
   · simp only [bind_ok_iff, liftAccessor_ok] at computed
     obtain ⟨_, _, set⟩ := computed
-    exact sameSizes_setValidator set
+    exact sameSizes_setValidatorAt set
+  split at computed
+  · simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, _, exited⟩ := computed
+    exact sameSizes_initiateValidatorExit exited
   split at computed
   · rw [liftAccessor_ok] at computed
-    exact sameSizes_initiateValidatorExit computed
-  split at computed
-  · rw [liftAccessor_ok] at computed
-    exact sameSizes_setValidator computed
+    exact sameSizes_setValidatorAt computed
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ SameSizes.refl _
 
@@ -612,7 +633,7 @@ theorem sameSizes_applySlashingPenalty {total adjusted : Gwei} {index : Nat}
     obtain ⟨_, _, computed⟩ := computed
     split at computed
     · simp only [bind_ok_iff, liftAccessor_ok] at computed
-      obtain ⟨_, _, _, _, lowered⟩ := computed
+      obtain ⟨_, _, _, _, _, _, lowered⟩ := computed
       exact sameSizes_decreaseBalance lowered
     · simp only [pure, Except.pure, Except.ok.injEq] at computed
       exact computed ▸ SameSizes.refl _
@@ -629,7 +650,7 @@ theorem sameSizes_applySlashingPenaltyElectra {perIncrement : Gwei} {index : Nat
     obtain ⟨_, _, computed⟩ := computed
     split at computed
     · simp only [bind_ok_iff, liftAccessor_ok] at computed
-      obtain ⟨_, _, lowered⟩ := computed
+      obtain ⟨_, _, _, _, lowered⟩ := computed
       exact sameSizes_decreaseBalance lowered
     · simp only [pure, Except.pure, Except.ok.injEq] at computed
       exact computed ▸ SameSizes.refl _
@@ -674,7 +695,7 @@ The balance at its position loses the penalty if it is due, stopping at zero.
 The other balances stay. -/
 private theorem slashingStep_balances {last next : BeaconState preset fork} {j : Nat}
     (small : j < 2 ^ 64) {validator : Validator} {penalty : Gwei}
-    (found : getValidator last j.toUInt64 = .ok validator)
+    (found : getValidatorAt last j = .ok validator)
     (cases : (SlashingPenaltyDue preset (getCurrentEpoch last) validator ∧
         decreaseBalance last j.toUInt64 penalty = .ok next) ∨
       (¬ SlashingPenaltyDue preset (getCurrentEpoch last) validator ∧ next = last)) :
@@ -687,13 +708,7 @@ private theorem slashingStep_balances {last next : BeaconState preset fork} {j :
       ∀ k, k ≠ j → next.balances.data[k]? = last.balances.data[k]? := by
   have same : j.toUInt64.toNat = j := by
     rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt small]
-  have registered : last.validators.data[j]? = some validator := by
-    unfold getValidator at found
-    rw [same] at found
-    split at found
-    · cases found
-      assumption
-    · cases found
+  have registered : last.validators.data[j]? = some validator := getValidatorAt_eq_ok_iff.mp found
   rcases cases with ⟨due, lowered⟩ | ⟨notDue, kept⟩
   · obtain ⟨inside, rfl⟩ := decreaseBalance_eq_ok_iff.mp lowered
     have inside' : j < last.balances.data.size := same ▸ inside
@@ -753,7 +768,10 @@ theorem applySlashingPenalty_balances {total adjusted : Gwei} {last next : Beaco
       split at computed
       · rename_i isDue
         simp only [bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff] at computed
-        obtain ⟨numerator, product, penalty, scaled, lowered⟩ := computed
+        obtain ⟨numerator, product, penalty, scaled, validatorIndex, converted, lowered⟩ := computed
+        have indexEq : validatorIndex = j.toUInt64 :=
+          Except.ok.inj (converted.symm.trans (ofNatChecked_of_lt small))
+        rw [indexEq] at lowered
         have product := Except.ok.inj
           ((mulChecked_of_lt (mulChecked_ok_iff.mp product).1).symm.trans product)
         have scaled := Except.ok.inj
@@ -803,7 +821,10 @@ theorem applySlashingPenaltyElectra_balances {perIncrement : Gwei}
       split at computed
       · rename_i isDue
         simp only [bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff] at computed
-        obtain ⟨penalty, product, lowered⟩ := computed
+        obtain ⟨penalty, product, validatorIndex, converted, lowered⟩ := computed
+        have indexEq : validatorIndex = j.toUInt64 :=
+          Except.ok.inj (converted.symm.trans (ofNatChecked_of_lt small))
+        rw [indexEq] at lowered
         have product := Except.ok.inj
           ((mulChecked_of_lt (mulChecked_ok_iff.mp product).1).symm.trans product)
         subst product

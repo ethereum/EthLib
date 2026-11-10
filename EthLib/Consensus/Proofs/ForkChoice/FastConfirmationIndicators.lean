@@ -380,7 +380,8 @@ theorem stake_le_computeCommitteeWeightBetweenSlots_of_covered {head : Root}
         (getActiveValidatorIndices balanceSource (getCurrentEpoch balanceSource)).toFinset ≤
       weight.toNat := by
   rw [computeCommitteeWeightBetweenSlots_of_covered covered, mapError_ok_iff] at weightOk
-  exact stake_le_of_getTotalBalance weightOk fun v member => List.mem_toFinset.mp member
+  exact stake_le_of_getTotalBalance (getTotalActiveBalance_ok weightOk)
+    fun v member => List.mem_toFinset.mp member
 
 /-- The store's weight of the committees of a range covers the stake of active members.
 

@@ -319,8 +319,9 @@ theorem getElem?_toNat_of_ofNatChecked {position : Fin state.validators.data.siz
     {index : ValidatorIndex}
     (checked : liftAccessor (liftArith (ofNatChecked position.val)) = .ok index) :
     state.validators.data[index.toNat]? = some state.validators.data[position] := by
-  rw [liftAccessor_ok, liftArith, mapError_ok_iff, ofNatChecked_ok_iff] at checked
-  simp [checked.2]
+  rw [liftAccessor_ok, liftArith, mapError_ok_iff] at checked
+  rw [getElem?_toNat_eq_of_ofNatChecked checked]
+  simp
 
 /-- Queueing a consolidation keeps the sizes of the registry and the balances. -/
 theorem sameSizes_queueConsolidation {electra : .pectra ≤ fork} {sourceIndex : ValidatorIndex}

@@ -72,39 +72,32 @@ theorem JustifiedEarly.previousJustified_of_justification (early : JustifiedEarl
 
 /-! ## One slot -/
 
-/-- One slot keeps the fork versions, the genesis validators root and the keys.
+/-- One slot keeps the fork versions and the genesis validators root.
 
-It never shrinks the registry.
-
-It keeps the keys while the registry stays below 2^64 validators after the slot. -/
-theorem advanceSlot_keys (computed : advanceSlot config checks state = .ok after) :
+It never shrinks the registry. -/
+theorem advanceSlot_kept (computed : advanceSlot config checks state = .ok after) :
     after.forkVersions = state.forkVersions ∧
       after.genesisValidatorsRoot = state.genesisValidatorsRoot ∧
-      state.validators.data.size ≤ after.validators.data.size ∧
-      (after.validators.data.size < 2 ^ 64 → KeysKept state after) := by
+      state.validators.data.size ≤ after.validators.data.size := by
   obtain ⟨next, cached, epoched, -, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
   have cachedFrame := frame_processSlot cachedOk
   suffices kept : epoched.forkVersions = cached.forkVersions ∧
       epoched.genesisValidatorsRoot = cached.genesisValidatorsRoot ∧
-      cached.validators.data.size ≤ epoched.validators.data.size ∧
-      (epoched.validators.data.size < 2 ^ 64 → KeysKept cached epoched) by
-    obtain ⟨forkVersions, root, grows, keys⟩ := kept
-    refine ⟨forkVersions.trans cachedFrame.forkVersions,
+      cached.validators.data.size ≤ epoched.validators.data.size by
+    obtain ⟨forkVersions, root, grows⟩ := kept
+    exact ⟨forkVersions.trans cachedFrame.forkVersions,
       root.trans cachedFrame.genesisValidatorsRoot,
-      Nat.le_trans cachedFrame.registryGrows grows, fun small => ?_⟩
-    exact (cachedFrame.keysKept (Nat.lt_of_le_of_lt grows small)).trans
-      ((keys small).trans fun _ validator found => ⟨validator, found, rfl⟩)
+      Nat.le_trans cachedFrame.registryGrows grows⟩
   unfold epochIfLast at epochedOk
   split at epochedOk
   · obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame epochedOk
     obtain ⟨-, -, -, -, -, validators, forkVersions, root, -, -⟩ :=
       processJustificationAndFinalization_keeps justifiedOk
-    refine ⟨frame.forkVersions.trans forkVersions, frame.genesisValidatorsRoot.trans root,
-      validators ▸ frame.registryGrows, fun small => ?_⟩
-    exact (KeysKept.of_validators (by simp only [validators])).trans (frame.keysKept small)
+    exact ⟨frame.forkVersions.trans forkVersions, frame.genesisValidatorsRoot.trans root,
+      validators ▸ frame.registryGrows⟩
   · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
     subst epochedOk
-    exact ⟨rfl, rfl, Nat.le_refl _, fun _ => KeysKept.refl _⟩
+    exact ⟨rfl, rfl, Nat.le_refl _⟩
 
 /-- A frame keeps the two justified checkpoints equal in the first two epochs. -/
 theorem JustifiedEarly.of_frame (frame : Frame state after) (early : JustifiedEarly state) :
@@ -393,7 +386,7 @@ theorem advanceSlots_registryGrows :
   | count + 1, state, after, computed => by
     simp only [advanceSlots, bind_ok_iff] at computed
     obtain ⟨next, nextOk, rest⟩ := computed
-    exact Nat.le_trans (advanceSlot_keys nextOk).2.2.1 (advanceSlots_registryGrows rest)
+    exact Nat.le_trans (advanceSlot_kept nextOk).2.2 (advanceSlots_registryGrows rest)
 
 /-- Slots keep the two justified checkpoints equal in the first two epochs. -/
 theorem JustifiedEarly.of_advanceSlots :

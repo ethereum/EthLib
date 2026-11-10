@@ -68,8 +68,7 @@ theorem twoThirds_of_effectiveBalance_le {voters : List ValidatorIndex} {absents
     (strong : 2 * absents.length * threshold ≤ voterTotal.toNat) :
     2 * total.toNat ≤ 3 * voterTotal.toNat := by
   classical
-  unfold getTotalActiveBalance at active
-  obtain ⟨-, -, activeEq⟩ := getTotalBalance_ok_iff_stake.mp active
+  obtain ⟨-, -, activeEq⟩ := getTotalBalance_ok_iff_stake.mp (getTotalActiveBalance_ok active)
   obtain ⟨-, -, voterEq⟩ := getTotalBalance_ok_iff_stake.mp voting
   set weight : ValidatorIndex → ℕ := fun index => balanceAt state index.toNat with hweight
   set absentSet : Finset ValidatorIndex :=

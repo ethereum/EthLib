@@ -212,9 +212,10 @@ theorem getTotalActiveBalance_exists_ok {state : BeaconState preset fork}
       (getActiveValidatorIndices state (getCurrentEpoch state)))) summed
   have ok : getTotalActiveBalance state = .ok (max preset.EFFECTIVE_BALANCE_INCREMENT
       (sumMarked state.validators.data (markIndices state.validators.data.size
-        (getActiveValidatorIndices state (getCurrentEpoch state)))).toUInt64) :=
-    getTotalBalance_ok_iff.mpr ⟨inside, lt, rfl⟩
-  refine ⟨_, ok, le_getTotalBalance ok, ?_⟩
+        (getActiveValidatorIndices state (getCurrentEpoch state)))).toUInt64) := by
+    rw [getTotalActiveBalance, getActiveValidatorIndicesChecked_of_within within]
+    exact getTotalBalance_ok_iff.mpr ⟨inside, lt, rfl⟩
+  refine ⟨_, ok, le_getTotalBalance (getTotalActiveBalance_ok ok), ?_⟩
   rw [UInt64.max_def]
   split
   · right

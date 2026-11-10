@@ -37,8 +37,8 @@ def getNextSyncCommitteeIndices (state : BeaconState preset fork) :
     Except AccessorError (Vector ValidatorIndex preset.SYNC_COMMITTEE_SIZE.toNat) := do
   let epoch ← liftArith (addChecked (getCurrentEpoch state) 1)
   let seed ← getSeed state epoch DOMAIN_SYNC_COMMITTEE
-  computeBalanceWeightedSelection state (getActiveValidatorIndices state epoch).toArray seed
-    preset.SYNC_COMMITTEE_SIZE true
+  computeBalanceWeightedSelection state
+    (← getActiveValidatorIndicesChecked state epoch).toArray seed preset.SYNC_COMMITTEE_SIZE true
 
 /-- The aggregate of some public keys, as the public key of 48 bytes that it encodes.
 
