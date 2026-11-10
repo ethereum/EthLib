@@ -102,71 +102,6 @@ structure RootsAbove {fork : Fork} (block : Root → β) (state : BeaconState pr
       getBlockRootAtSlot state slot = .ok root →
         block (recentJustified state current).root ≤ block root
 
-/-- A read of a recorded root succeeds exactly when the slot is recent and its bound fits.
-
-The read of the buffer must then succeed too. -/
-private theorem getBlockRootAtSlot_ok_iff {fork : Fork} {state : BeaconState preset fork}
-    {slot : Slot} {root : Root} :
-    getBlockRootAtSlot state slot = .ok root ↔ slot.toNat < state.slot.toNat ∧
-      slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat < 2 ^ 64 ∧
-      state.slot.toNat ≤ slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ∧
-      readCircular state.blockRoots.elements slot = .ok root := by
-  unfold getBlockRootAtSlot
-  by_cases lt : slot < state.slot
-  · simp only [lt, ↓reduceIte, bind_ok_iff, liftArith, mapError_ok_iff, addChecked_ok_iff]
-    have lt' := UInt64.lt_iff_toNat_lt.mp lt
-    constructor
-    · rintro ⟨bound, ⟨fits, boundEq⟩, rest⟩
-      by_cases within : state.slot ≤ bound
-      · simp only [within, ↓reduceIte] at rest
-        exact ⟨lt', fits, boundEq ▸ UInt64.le_iff_toNat_le.mp within, rest⟩
-      · simp only [within, ↓reduceIte, bind_ok_iff] at rest
-        obtain ⟨_, thrown, _⟩ := rest
-        cases thrown
-    · rintro ⟨-, fits, within, rest⟩
-      have sum : (slot + preset.SLOTS_PER_HISTORICAL_ROOT).toNat =
-          slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
-        rw [UInt64.toNat_add, Nat.mod_eq_of_lt fits]
-      refine ⟨slot + preset.SLOTS_PER_HISTORICAL_ROOT, ⟨fits, sum⟩, ?_⟩
-      simp only [UInt64.le_iff_toNat_le.mpr (sum ▸ within), ↓reduceIte]
-      exact rest
-  · have lt' : ¬slot.toNat < state.slot.toNat := fun lt' => lt (UInt64.lt_iff_toNat_lt.mpr lt')
-    simp only [lt, lt', ↓reduceIte, false_and, iff_false]
-    intro computed
-    rw [bind_ok_iff] at computed
-    obtain ⟨_, thrown, _⟩ := computed
-    cases thrown
-
-/-- A read of a recorded root succeeds when the slot is recent and its bound does not overflow.
-
-The buffer of roots must not be empty. -/
-private theorem getBlockRootAtSlot_exists {fork : Fork} {state : BeaconState preset fork}
-    {slot : Slot} (before : slot.toNat < state.slot.toNat)
-    (fits : slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat < 2 ^ 64)
-    (within : state.slot.toNat ≤ slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
-    (nonempty : 0 < preset.SLOTS_PER_HISTORICAL_ROOT.toNat) :
-    ∃ root, getBlockRootAtSlot state slot = .ok root := by
-  have nonzero : preset.SLOTS_PER_HISTORICAL_ROOT ≠ 0 := fun zero => by
-    rw [zero] at nonempty
-    exact Nat.lt_irrefl 0 nonempty
-  exact ⟨_, getBlockRootAtSlot_ok_iff.mpr ⟨before, fits, within, dite_eq_right nonzero⟩⟩
-
-/-- A read of a recorded root succeeds at each slot between two slots where it succeeds. -/
-private theorem getBlockRootAtSlot_between {fork : Fork} {state : BeaconState preset fork}
-    {low middle high : Slot} {lowRoot highRoot : Root}
-    (lowRead : getBlockRootAtSlot state low = .ok lowRoot)
-    (highRead : getBlockRootAtSlot state high = .ok highRoot)
-    (above : low.toNat ≤ middle.toNat) (below : middle.toNat ≤ high.toNat) :
-    ∃ root, getBlockRootAtSlot state middle = .ok root := by
-  obtain ⟨-, -, lowWithin, -⟩ := getBlockRootAtSlot_ok_iff.mp lowRead
-  obtain ⟨highLt, highFits, -, highBuffer⟩ := getBlockRootAtSlot_ok_iff.mp highRead
-  unfold readCircular at highBuffer
-  split at highBuffer
-  · cases highBuffer
-  rename_i nonzero
-  exact getBlockRootAtSlot_exists (by omega) (by omega) (by omega)
-    (Nat.pos_of_ne_zero fun zero => nonzero (UInt64.toNat_inj.mp (by simpa using zero)))
-
 /-- Ordered links order the roots that a state records at two slots, the earlier one first. -/
 private theorem le_of_rootLinks {fork : Fork} {state : BeaconState preset fork}
     (links : ∀ link ∈ rootLinks state, block link.1 ≤ block link.2) {low : Slot} {lowRoot : Root}
@@ -223,13 +158,6 @@ theorem RootsAbove.of_initializeBeaconStateFromEth1 {fork : Fork}
     rw [slot] at before
     simp [GENESIS_SLOT] at before
 
-/-- Two states with the same slot and buffer of roots read the same root at each slot. -/
-private theorem getBlockRootAtSlot_congr {fork post : Fork} {state : BeaconState preset fork}
-    {other : BeaconState preset post} (slot : other.slot = state.slot)
-    (roots : other.blockRoots = state.blockRoots) (index : Slot) :
-    getBlockRootAtSlot other index = getBlockRootAtSlot state index := by
-  simp only [getBlockRootAtSlot, slot, roots]
-
 /-- Two states with the same slot and buffer of roots have the same links. -/
 private theorem rootLinks_congr {fork post : Fork} {state : BeaconState preset fork}
     {other : BeaconState preset post} (slot : other.slot = state.slot)
@@ -258,50 +186,6 @@ private theorem RootsAbove.congr {fork post : Fork} {state : BeaconState preset 
   · rw [recent] at bound ⊢
     rw [getBlockRootAtSlot_congr slot roots] at read
     exact holds.below current index root bound read
-
-/-- A block keeps the buffer of roots. -/
-private theorem processBlock_blockRoots {fork : Fork} {state after : BeaconState preset fork}
-    {engine : ExecutionEngine preset fork} {beaconBlock : BeaconBlock preset fork}
-    (computed : processBlock config checks engine state beaconBlock = .ok after) :
-    after.blockRoots = state.blockRoots := by
-  obtain ⟨_, _, head, operated, tail⟩ := processBlock_split computed
-  obtain ⟨_, _, first, attested, last⟩ := processOperations_split operated
-  have middle := (foldlM_ok_steps
-    (fun state after : BeaconState preset fork => after.blockRoots = state.blockRoots)
-    (fun _ => rfl) (fun one two => two.trans one)
-    (fun _ _ _ ok => (voteFrame_processAttestation ok).blockRoots) attested).1
-  rw [tail.blockRoots, last.blockRoots, middle, first.blockRoots, head.blockRoots]
-
-/-- One slot keeps the previous justified checkpoint, or makes it the old current one.
-
-It does the second only when the slot ends an epoch, whose epoch is then the new previous epoch. -/
-private theorem advanceSlot_previousJustified {fork : Fork} {state after : BeaconState preset fork}
-    (computed : advanceSlot config checks state = .ok after) :
-    after.previousJustifiedCheckpoint = state.previousJustifiedCheckpoint ∨
-      (after.previousJustifiedCheckpoint = state.currentJustifiedCheckpoint ∧
-        (getPreviousEpoch after).toNat = (getCurrentEpoch state).toNat) := by
-  obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
-  have cachedFrame := frame_processSlot cachedOk
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · rename_i boundary
-    have epochs := nextSlot_epoch_of_boundary sum boundary
-    obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame epochedOk
-    dsimp only
-    rw [frame.previousJustified]
-    rcases processJustificationAndFinalization_ok justifiedOk with same | ⟨_, _, _, weighed⟩
-    · left
-      rw [same, cachedFrame.previousJustified]
-    · right
-      refine ⟨(weighJustificationAndFinalization_checkpoints weighed).1.trans
-        cachedFrame.currentJustified, ?_⟩
-      rw [getPreviousEpoch_toNat, getCurrentEpoch_toNat, getCurrentEpoch_toNat]
-      dsimp only
-      rw [epochs]
-      exact Nat.add_sub_cancel _ _
-  · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    subst epochedOk
-    exact .inl cachedFrame.previousJustified
 
 /-- One slot keeps each justified checkpoint below the roots recorded from its epoch on.
 
@@ -392,6 +276,22 @@ private theorem RootsAbove.of_advanceSlot (positive : 0 < preset.SLOTS_PER_EPOCH
     have recent := slot_lt_epoch_add_historical positive window (state := state) near.symm
     have startAfter := forward startRead (by rw [startEq]; exact recent)
     exact le_of_rootLinks links startAfter (slot.toNat - start.toNat) (by omega) read
+  -- A justified checkpoint of the state keeps its facts at the next slot, below a later epoch.
+  have carried : ∀ (flag : Bool) (bound : Nat),
+      (if flag then getCurrentEpoch state else getPreviousEpoch state).toNat ≤ bound →
+      (recentJustified state flag).epoch.toNat ≤ bound ∧
+        ((recentJustified state flag).epoch.toNat * preset.SLOTS_PER_EPOCH.toNat <
+            after.slot.toNat ∨
+          ((recentJustified state flag).epoch = 0 ∧
+            (recentJustified state flag).root = Vector.replicate 32 0)) ∧
+        ∀ (slot : Slot) (root : Root),
+          (recentJustified state flag).epoch.toNat * preset.SLOTS_PER_EPOCH.toNat ≤ slot.toNat →
+            getBlockRootAtSlot after slot = .ok root →
+              block (recentJustified state flag).root ≤ block root := by
+    intro flag bound le
+    have epoch := UInt64.le_iff_toNat_le.mp (holds.epoch flag)
+    have started := holds.started flag
+    exact ⟨by omega, started.imp_left (by omega), kept _ started (holds.below flag)⟩
   have currentFacts : after.currentJustifiedCheckpoint.epoch.toNat ≤
         (getCurrentEpoch after).toNat ∧
       (after.currentJustifiedCheckpoint.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat <
@@ -404,11 +304,7 @@ private theorem RootsAbove.of_advanceSlot (positive : 0 < preset.SLOTS_PER_EPOCH
             block after.currentJustifiedCheckpoint.root ≤ block root := by
     by_cases same : after.currentJustifiedCheckpoint = state.currentJustifiedCheckpoint
     · rw [same]
-      have epoch := UInt64.le_iff_toNat_le.mp (holds.epoch true)
-      have started := holds.started true
-      have below := holds.below true
-      simp only [recentJustified, ↓reduceIte] at epoch started below
-      exact ⟨by omega, started.imp_left (by omega), kept _ started below⟩
+      exact carried true _ currentLe
     · obtain ⟨near, rootOk⟩ := advanceSlot_getBlockRoot_currentJustified_of_ne window computed same
       have nearLe : after.currentJustifiedCheckpoint.epoch.toNat ≤
           (getCurrentEpoch state).toNat := by
@@ -428,17 +324,9 @@ private theorem RootsAbove.of_advanceSlot (positive : 0 < preset.SLOTS_PER_EPOCH
             block after.previousJustifiedCheckpoint.root ≤ block root := by
     rcases advanceSlot_previousJustified computed with same | ⟨same, epochs⟩
     · rw [same]
-      have epoch := UInt64.le_iff_toNat_le.mp (holds.epoch false)
-      have started := holds.started false
-      have below := holds.below false
-      simp only [recentJustified, Bool.false_eq_true, ↓reduceIte] at epoch started below
-      exact ⟨by omega, started.imp_left (by omega), kept _ started below⟩
+      exact carried false _ previousLe
     · rw [same]
-      have epoch := UInt64.le_iff_toNat_le.mp (holds.epoch true)
-      have started := holds.started true
-      have below := holds.below true
-      simp only [recentJustified, ↓reduceIte] at epoch started below
-      exact ⟨by omega, started.imp_left (by omega), kept _ started below⟩
+      exact carried true _ epochs.ge
   refine ⟨fun flag => ?_, fun flag => ?_, fun flag => ?_⟩ <;> cases flag <;>
     simp only [recentJustified, Bool.false_eq_true, ↓reduceIte]
   · exact UInt64.le_iff_toNat_le.mpr previousFacts.1
@@ -463,17 +351,9 @@ theorem RootsAbove.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
   | slot computed =>
     obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp computed
     -- The upgrades keep the slot, the roots and both justified checkpoints.
-    obtain ⟨slot, roots, previous, current⟩ := processUpgrades_induction
-      (property := fun upgradedState => upgradedState.state.slot = advanced.slot ∧
-        upgradedState.state.blockRoots = advanced.blockRoots ∧
-        upgradedState.state.previousJustifiedCheckpoint = advanced.previousJustifiedCheckpoint ∧
-        upgradedState.state.currentJustifiedCheckpoint = advanced.currentJustifiedCheckpoint)
-      (fun ⟨slot, roots, previous, current⟩ stepOk =>
-        ⟨(upgradeFrame_upgradeNext stepOk).slot.trans slot,
-          (upgradeFrame_upgradeNext stepOk).blockRoots.trans roots,
-          (upgradeFrame_upgradeNext stepOk).previousJustified.trans previous,
-          (upgradeFrame_upgradeNext stepOk).currentJustified.trans current⟩)
-      ⟨rfl, rfl, rfl, rfl⟩ upgraded
+    have slot := processUpgrades_slot upgraded
+    have roots := processUpgrades_blockRoots upgraded
+    obtain ⟨previous, current⟩ := processUpgrades_justified upgraded
     rw [rootLinks_congr slot roots] at links
     exact (RootsAbove.of_advanceSlot positive window holds links advancedOk).congr slot roots
       previous current

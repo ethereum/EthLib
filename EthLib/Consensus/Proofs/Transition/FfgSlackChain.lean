@@ -215,9 +215,7 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
     have early := holds.early.of_advanceSlot advancedOk
     -- The slot moves on by one, and the upgrades keep it.
     have moved : after.state.slot ≠ forked.state.slot := by
-      have kept : after.state.slot = advanced.slot :=
-        processUpgrades_induction (property := fun state => state.state.slot = advanced.slot)
-          (fun same stepOk => (upgradeFrame_upgradeNext stepOk).slot.trans same) rfl upgraded
+      have kept : after.state.slot = advanced.slot := processUpgrades_slot upgraded
       intro same
       have next := advanceSlot_slot advancedOk
       rw [← kept, same] at next

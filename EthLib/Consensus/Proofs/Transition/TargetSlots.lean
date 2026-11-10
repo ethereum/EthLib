@@ -201,6 +201,36 @@ theorem JustifiedSeparated.of_advanceSlot (early : JustifiedEarly state)
     rw [afterPrevious, afterEpoch, epochs, cachedFrame.previousJustified]
     exact below
 
+/-- One slot keeps the previous justified checkpoint, or makes it the old current one.
+
+It does the second only when the slot ends an epoch, whose epoch is then the new previous epoch. -/
+theorem advanceSlot_previousJustified (computed : advanceSlot config checks state = .ok after) :
+    after.previousJustifiedCheckpoint = state.previousJustifiedCheckpoint ∨
+      (after.previousJustifiedCheckpoint = state.currentJustifiedCheckpoint ∧
+        (getPreviousEpoch after).toNat = (getCurrentEpoch state).toNat) := by
+  obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
+  have cachedFrame := frame_processSlot cachedOk
+  unfold epochIfLast at epochedOk
+  split at epochedOk
+  · rename_i boundary
+    have epochs := nextSlot_epoch_of_boundary sum boundary
+    obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame epochedOk
+    dsimp only
+    rw [frame.previousJustified]
+    rcases processJustificationAndFinalization_ok justifiedOk with same | ⟨_, _, _, weighed⟩
+    · left
+      rw [same, cachedFrame.previousJustified]
+    · right
+      refine ⟨(weighJustificationAndFinalization_checkpoints weighed).1.trans
+        cachedFrame.currentJustified, ?_⟩
+      rw [getPreviousEpoch_toNat, getCurrentEpoch_toNat, getCurrentEpoch_toNat]
+      dsimp only
+      rw [epochs]
+      exact Nat.add_sub_cancel _ _
+  · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
+    subst epochedOk
+    exact .inl cachedFrame.previousJustified
+
 /-- The first slot of the current or the previous epoch is less than two epochs back.
 
 So it stays in a buffer of roots that covers two epochs, at the next slot. -/

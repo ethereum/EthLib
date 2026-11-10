@@ -118,8 +118,8 @@ private theorem LinkVote.congr {other : BeaconState preset fork} {current : Bool
     (previous : other.previousJustifiedCheckpoint = state.previousJustifiedCheckpoint)
     (current' : other.currentJustifiedCheckpoint = state.currentJustifiedCheckpoint) :
     LinkVote other current position vote ↔ LinkVote state current position vote := by
-  simp only [LinkVote, getCurrentEpoch, getPreviousEpoch, getBlockRoot, getBlockRootAtSlot, slot,
-    blockRoots, previous, current']
+  simp only [LinkVote, getCurrentEpoch, getPreviousEpoch, getBlockRoot,
+    getBlockRootAtSlot_congr slot blockRoots, slot, previous, current']
 
 /-- A vote for a link stays one in a state with the same slot, block roots and checkpoints. -/
 theorem LinkVote.of_voteFrame {votes : Set (ValidatorIndex × AttestationData)}
@@ -235,6 +235,18 @@ theorem voteFrame_processAttestation {attestation : Attestation preset fork} {pa
   · obtain ⟨_, rest⟩ := kept
     rw [← rest]
     exact BlockFrame.of_validators ⟨rfl, rfl⟩
+
+/-- A block keeps the buffer of roots. -/
+theorem processBlock_blockRoots {beaconBlock : BeaconBlock preset fork}
+    (computed : processBlock config checks engine state beaconBlock = .ok after) :
+    after.blockRoots = state.blockRoots := by
+  obtain ⟨_, _, head, operated, tail⟩ := processBlock_split computed
+  obtain ⟨_, _, first, attested, last⟩ := processOperations_split operated
+  have middle := (foldlM_ok_steps
+    (fun state after : BeaconState preset fork => after.blockRoots = state.blockRoots)
+    (fun _ => rfl) (fun one two => two.trans one)
+    (fun _ _ _ ok => (voteFrame_processAttestation ok).blockRoots) attested).1
+  rw [tail.blockRoots, last.blockRoots, middle, first.blockRoots, head.blockRoots]
 
 /-- An attestation casts the same votes in two states with the same registry and mixes. -/
 theorem attestationVotes_eq_of_eq {other : BeaconState preset fork}
