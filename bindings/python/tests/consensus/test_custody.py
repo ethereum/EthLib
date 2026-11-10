@@ -134,6 +134,7 @@ def test_get_custody_column_bits(preset, case):
         for group in consensus.get_custody_groups(node_id, count, preset)
         for column in consensus.compute_columns_for_custody_group(group, preset)
     }
+    # Both presets have 128 columns, so the bitvector takes 16 bytes.
     assert len(bits) == 16
     assert {i for i in range(128) if bits[i // 8] >> (i % 8) & 1} == columns
 

@@ -56,9 +56,7 @@ From Heze the proposer also reads the transactions of the inclusion lists of the
 
 The safe and the finalized block of the update come from the fork choice, through the caller.
 
-The caller reads the finalized block from the store, with the rule of this module.
-
-That block is the payload of the finalized checkpoint.
+The caller reads the finalized block from the store: the payload of the finalized beacon block.
 
 From Gloas it is the parent payload that the bid of that block builds on.
 
@@ -133,27 +131,6 @@ def getTerminalPowBlock (config : Config) (powChain : List PowBlock) :
   if config.TERMINAL_BLOCK_HASH ≠ EMPTY_BLOCK_HASH then
     .ok (findPowBlock powChain config.TERMINAL_BLOCK_HASH)
   else getPowBlockAtTerminalTotalDifficulty config powChain
-
-/-! ## The finalized block of an update -/
-
-/-- From Bellatrix: the hash of the execution block that the execution layer takes as finalized.
-
-Before Gloas it is the block hash of the payload of the finalized block of the store.
-
-Before the merge that payload is empty, so its block hash is the zero hash.
-
-From Gloas a block carries a bid instead of a payload.
-
-The finalized hash is then the parent hash of that bid, the payload that the bid builds on.
-
-It fails when the store does not hold the finalized block. -/
-def getFinalizedExecutionBlockHash (store : Store preset fork) (bellatrix : .bellatrix ≤ fork) :
-    Except ForkChoiceError Hash32 := do
-  let finalizedBlock ← store.block store.finalizedCheckpoint.root
-  if gloas : .glamsterdam ≤ fork then
-    return (finalizedBlock.body.signedExecutionPayloadBid gloas).message.parentBlockHash
-  else
-    return (finalizedBlock.body.executionPayload ⟨bellatrix, Nat.lt_of_not_le gloas⟩).blockHash
 
 /-! ## The forkchoice update of a proposer -/
 

@@ -43,10 +43,6 @@ The block that carries the bid must carry the requests of the stored payload, fr
 The hashes of the latest bid must differ, and the latest block hash must be its parent hash.
 
 The state must also record the root of its latest block header as the root of the slot before.
-
-The finalized hash that a store gives is the hash of the finalized payload before Gloas.
-
-From Gloas it is the parent hash in the bid of the finalized block.
 -/
 
 @[expose] public section
@@ -199,37 +195,6 @@ theorem findPowBlock_of_mem {powChain : List PowBlock} {block : PowBlock}
     · simp
     · have other : head.blockHash ≠ block.blockHash := fun same => distinct.1 block later same.symm
       simp [other, step distinct.2 later]
-
-/-! ## The finalized block -/
-
-/-- Before Gloas, the finalized hash is the block hash of the payload of the finalized block. -/
-theorem getFinalizedExecutionBlockHash_of_lt {store : Store preset fork}
-    {bellatrix : .bellatrix ≤ fork} {finalized : BeaconBlock preset fork}
-    (held : store.block store.finalizedCheckpoint.root = .ok finalized)
-    (beforeGloas : fork < .glamsterdam) :
-    getFinalizedExecutionBlockHash store bellatrix =
-      .ok (finalized.body.executionPayload ⟨bellatrix, beforeGloas⟩).blockHash := by
-  have gloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt beforeGloas
-  simp only [getFinalizedExecutionBlockHash, held, gloas, ↓reduceDIte]
-  rfl
-
-/-- From Gloas, the finalized hash is the parent block hash in the bid of the finalized block. -/
-theorem getFinalizedExecutionBlockHash_of_gloas {store : Store preset fork}
-    {bellatrix : .bellatrix ≤ fork} {finalized : BeaconBlock preset fork}
-    (held : store.block store.finalizedCheckpoint.root = .ok finalized)
-    (gloas : .glamsterdam ≤ fork) :
-    getFinalizedExecutionBlockHash store bellatrix =
-      .ok (finalized.body.signedExecutionPayloadBid gloas).message.parentBlockHash := by
-  simp only [getFinalizedExecutionBlockHash, held, gloas, ↓reduceDIte]
-  rfl
-
-/-- The finalized hash fails exactly as the read of the finalized block fails. -/
-theorem getFinalizedExecutionBlockHash_eq_error {store : Store preset fork}
-    {bellatrix : .bellatrix ≤ fork} {fault : ForkChoiceError}
-    (missing : store.block store.finalizedCheckpoint.root = .error fault) :
-    getFinalizedExecutionBlockHash store bellatrix = .error fault := by
-  simp only [getFinalizedExecutionBlockHash, missing]
-  rfl
 
 /-! ## The forkchoice update -/
 

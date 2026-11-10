@@ -53,7 +53,7 @@ def _steps(fork: str) -> tuple[list, bytes]:
 
 
 def _hash_in_block(fork: str, signed: bytes) -> bytes:
-    """Read the hash that the update names out of a signed block, by the offsets of its SSZ."""
+    """The hash that the update names, read out of a signed block by the offsets of its SSZ."""
     # A signed block opens with the offset of the block.
     # The body follows the slot, the proposer index, two roots and its own offset.
     body = _offset(signed, 0) + _offset(signed, _offset(signed, 0) + 8 + 8 + 32 + 32)

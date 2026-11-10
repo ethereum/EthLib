@@ -9,9 +9,11 @@ public import EthLib.Engine.PreparePayload
 
 The C exports of the forkchoice update that an honest proposer sends.
 
-One covers Bellatrix to Fulu, and the other Gloas and Heze.
+Two cover the update, one from Bellatrix to Fulu and one from Gloas.
 
-The state, the two block hashes, the fee recipient and each block of proof of work are SSZ bytes.
+A third gives the finalized block hash of a store, from Bellatrix.
+
+The state, the block hashes, the fee recipient and each block of proof of work are SSZ bytes.
 
 The preset, the configuration and the fork are named in UTF-8.
 
@@ -27,7 +29,7 @@ From Gloas the slot number and the target gas limit appear.
 
 The custody columns are 16 bytes of an SSZ bitvector that the caller gives, else `null`.
 
-The Engine API gives no bit order, so EthLib takes that of the bitvector, as for blob cells.
+The consensus layer types this set as an SSZ bitvector: column `i` is bit `i mod 8` of byte `i / 8`.
 
 The export from Gloas builds its store from an anchor state, an anchor block and steps.
 
@@ -46,8 +48,6 @@ The Engine API has no field for them, so they sit beside the payload attributes.
 An input that does not decode, an unknown name or a fork that the export does not cover has code 0.
 
 So do a step that does not read and a payload status above 2.
-
-A third export gives the finalized block hash of a store, from Bellatrix.
 -/
 
 public section
@@ -166,7 +166,7 @@ def preparePayloadOnStore
       pure (dataJson bytes.toList)
     | none => pure Json.null
   let finalized ← runProposer
-    ((getFinalizedExecutionBlockHash store (Nat.le_trans (by decide) gloas)).mapError .forkChoice)
+    ((store.getFinalizedExecutionBlockHash (Nat.le_trans (by decide) gloas)).mapError .forkChoice)
   let (update, attributes, transactions) ← runProposer (prepareExecutionPayloadGloas config checks
     store head state gloas safe finalized feeRecipient targetGasLimit)
   let lists := match sinceValue transactions with
@@ -204,7 +204,7 @@ def finalizedExecutionBlockHashOf (args : String × String × ByteArray × ByteA
   let anchorState ← decodeInput (BeaconState preset fork) anchorState
   let anchorBlock ← decodeInput (BeaconBlock preset fork) anchorBlock
   let (store, _) ← replayForkChoice config checks anchorState anchorBlock steps
-  let hash ← runForkChoice (getFinalizedExecutionBlockHash store bellatrix)
+  let hash ← runForkChoice (store.getFinalizedExecutionBlockHash bellatrix)
   return ⟨hash.toArray⟩
 
 /-- From Bellatrix: the 32 bytes of the finalized block hash of a store.

@@ -115,7 +115,8 @@ def _hex(data: bytes) -> str:
 def check_update(fork: str, update: dict, head: bytes) -> None:
     """Compare an update with the values worked out from the guide, and the length of the mix."""
     genesis_time = int.from_bytes(_read(fork, "anchor_state")[:8], "little")
-    # The store finalizes its anchor; its own export reads the hash of that block.
+    # The store finalizes only its anchor, so the export of a store gives the hash of that block.
+    # That export is checked against block files in `test_finalized_hash.py`.
     finalized = engine.finalized_execution_block_hash(
         "minimal",
         NAMES[fork],

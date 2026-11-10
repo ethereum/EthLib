@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.DataAvailability.CustodyColumns
 public import EthLib.Consensus.Exports.Parameters
+public import EthLib.Serialization.Exports.Ssz
 
 /-!
 # `Exports.Custody`
@@ -71,11 +72,12 @@ def getCustodyColumnBitsOf (args : String × NodeID × UInt64) : Result ByteArra
   let preset ← presetOf name
   let bits ← (getCustodyColumnBits (← configOf name) preset id count custodyFuel).mapError
     fun e => (e.code, custodyErrorText e)
-  return ⟨Serialization.Ssz.packBits bits.bits.toArray ((preset.NUMBER_OF_COLUMNS.toNat + 7) / 8)⟩
+  Serialization.Ssz.Exports.runSsz "bits rejected" (Serialization.Ssz.SszType.serialize bits)
 
 /-- The columns that a node custodies, one bit per column, as the bytes of an SSZ bitvector.
 
-The arguments are the name of the configuration, the node ID and the custody group count. -/
+The arguments are the name of the preset and the configuration, the node ID and the group count.
+-/
 @[export eth_consensus_get_custody_column_bits]
 def getCustodyColumnBitsExport (args : PyValue) : Result PyValue :=
   pyExport getCustodyColumnBitsOf args

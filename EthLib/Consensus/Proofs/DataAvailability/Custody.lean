@@ -294,7 +294,7 @@ theorem getCustodyColumnBits_groups {preset : Preset} {nodeId : NodeID} {count :
   · exact ⟨_, by assumption⟩
 
 /-- A custody column bit is set exactly when a group of the node has that column. -/
-theorem getCustodyColumnBits_get_iff {preset : Preset} {nodeId : NodeID} {count : UInt64}
+theorem getCustodyColumnBits_getElem_iff {preset : Preset} {nodeId : NodeID} {count : UInt64}
     {fuel : Nat} {bits : Serialization.Ssz.Bitvector preset.NUMBER_OF_COLUMNS.toNat}
     {groups : List CustodyIndex}
     (computed : getCustodyColumnBits config preset nodeId count fuel = .ok bits)
@@ -324,8 +324,8 @@ Let `C` be the number of columns.
 
 A custody column bit is set exactly when the column is below `N * (C / N)`.
 
-Its residue modulo `N` must also be one of the groups of the node. -/
-theorem getCustodyColumnBits_get_iff_mod {preset : Preset} {nodeId : NodeID} {count : UInt64}
+It also needs a residue modulo `N` among the groups of the node. -/
+theorem getCustodyColumnBits_getElem_iff_mod {preset : Preset} {nodeId : NodeID} {count : UInt64}
     {fuel : Nat} {bits : Serialization.Ssz.Bitvector preset.NUMBER_OF_COLUMNS.toNat}
     {groups : List CustodyIndex}
     (computed : getCustodyColumnBits config preset nodeId count fuel = .ok bits)
@@ -336,7 +336,7 @@ theorem getCustodyColumnBits_get_iff_mod {preset : Preset} {nodeId : NodeID} {co
       ∃ group ∈ groups, column.val % config.NUMBER_OF_CUSTODY_GROUPS.toNat = group.toNat := by
   have noWrap : (UInt64.ofNat column.val).toNat = column.val :=
     Nat.mod_eq_of_lt (Nat.lt_trans column.isLt (UInt64.toNat_lt _))
-  rw [getCustodyColumnBits_get_iff computed chosen column]
+  rw [getCustodyColumnBits_getElem_iff computed chosen column]
   have inRange := (getCustodyGroups_ok chosen).2.2
   constructor
   · rintro ⟨group, mem, columns, found, member⟩
@@ -347,7 +347,7 @@ theorem getCustodyColumnBits_get_iff_mod {preset : Preset} {nodeId : NodeID} {co
     have found : computeColumnsForCustodyGroup config preset group =
         .ok (((List.range (preset.NUMBER_OF_COLUMNS / config.NUMBER_OF_CUSTODY_GROUPS).toNat).map
           fun i => config.NUMBER_OF_CUSTODY_GROUPS * UInt64.ofNat i + group)) := by
-      simp [computeColumnsForCustodyGroup, inRange group mem]
+      simp only [computeColumnsForCustodyGroup, inRange group mem, ↓reduceIte]
     refine ⟨group, mem, _, found, ?_⟩
     rw [mem_computeColumnsForCustodyGroup found, noWrap]
     exact ⟨below, residue⟩
