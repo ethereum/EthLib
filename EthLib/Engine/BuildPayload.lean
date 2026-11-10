@@ -31,7 +31,7 @@ The source does not say how far one block moves toward the target; that step is 
 
 From Glamsterdam a bid of Gloas must take the same step, so the choice matches it.
 
-A parent of at most 5002 with a target below 5000 makes them differ.
+They can differ only on a parent of at most 5002 and a target below 5000.
 
 The build raises such a target to 5000, the smallest gas limit, and the bid does not.
 
@@ -149,7 +149,9 @@ structure BuiltPayload (fork : Fork) where
   state : Execution.State.State
   /-- The requests of the block, each list with its type byte first; none before Pectra. -/
   requests : List ByteArray
-  /-- The value of the block to its fee recipient, in wei: the sum of its priority fees. -/
+  /-- The value of the block, in wei.
+
+  It sums the gas used of each receipt times its price above the base fee. -/
   blockValue : Nat
 
 /-- Build a payload at `fork` from attributes and transactions, on the last block of a chain.
@@ -167,6 +169,8 @@ They also fail on extra data of more than 32 bytes.
 From Fusaka they fail on a block above the size limit of [EIP-7934][eip-7934].
 
 Before Paris the build always fails, since its header has a difficulty of 0.
+
+From Hegotá it fails, since the rules of that fork are not here yet.
 
 [eip-7934]: https://eips.ethereum.org/EIPS/eip-7934#specification -/
 def buildPayload (chain : BlockChain) (attributes : PayloadAttributes fork)

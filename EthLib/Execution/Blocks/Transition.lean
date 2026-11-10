@@ -371,7 +371,7 @@ def BodyResult.post {fork : Fork} (result : BodyResult fork) : State :=
 
 The body runs in the environment of its header and of the recent hashes of the chain.
 
-The body reads none of the header fields that it gives: the roots, the gas used and the logs Bloom.
+The body reads none of the header fields that it gives: the roots, the gas counts, the logs Bloom.
 
 Nor does it read the requests hash and the block access list hash.
 
