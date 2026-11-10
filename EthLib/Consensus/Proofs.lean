@@ -118,6 +118,7 @@ public import EthLib.Consensus.Proofs.Transition.Slot
 public import EthLib.Consensus.Proofs.Transition.StateTransition
 public import EthLib.Consensus.Proofs.Transition.SyncAggregate
 public import EthLib.Consensus.Proofs.Transition.TargetFlags
+public import EthLib.Consensus.Proofs.Transition.TargetPending
 public import EthLib.Consensus.Proofs.Transition.TargetSlots
 public import EthLib.Consensus.Proofs.Transition.TargetUpgrades
 public import EthLib.Consensus.Proofs.Transition.TargetVotes
