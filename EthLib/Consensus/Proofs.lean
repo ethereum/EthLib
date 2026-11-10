@@ -30,6 +30,7 @@ public import EthLib.Consensus.Proofs.DepositTree
 public import EthLib.Consensus.Proofs.ForkChoice.AttestationScores
 public import EthLib.Consensus.Proofs.ForkChoice.Checkpoints
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationIndicators
 public import EthLib.Consensus.Proofs.ForkChoice.Ghost
 public import EthLib.Consensus.Proofs.ForkChoice.Handlers
 public import EthLib.Consensus.Proofs.ForkChoice.Head
