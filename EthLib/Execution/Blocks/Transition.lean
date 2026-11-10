@@ -15,7 +15,7 @@ The block is first checked alone and against its parent.
 
 - From Fusaka, its RLP form must fit the most bytes of EIP-7934.
 - Its header must pass the checks against the parent's header.
-- At the DAO Fork and its next nine blocks, the extra data must be `dao-hard-fork`.
+- Before Paris, at the DAO Fork and its next nine blocks, the extra data must be `dao-hard-fork`.
 - Before Paris its ommers must be valid, and from Paris it has none.
 
 Then its body runs on the state after the parent.
@@ -196,9 +196,13 @@ def onBlock (block : BlockState)
 
 The transfer runs at the first block of the DAO Fork on the chain `config`, and only before Paris.
 
-[EIP-779][eip-779] makes that fork an irregular state change at a block of proof of work.
+[EIP-779][eip-779] activates that fork at block 1,920,000 of Mainnet.
 
-[eip-779]: https://eips.ethereum.org/EIPS/eip-779#abstract -/
+The gate at Paris is a choice of this specification, so that no later block can run the transfer.
+
+The extra data rule of the fork has the same gate.
+
+[eip-779]: https://eips.ethereum.org/EIPS/eip-779#specification -/
 def daoTransfer (config : ChainConfig) (fork : Fork) (number : Nat) (start : BlockState) :
     Except BlockError BlockState :=
   if fork < .paris ∧ daoForkBlock config = some number then onBlock start (applyDaoFork fork)

@@ -216,7 +216,7 @@ def checkHeaderExport (args : PyValue) : Result PyValue :=
 
 The chain activates the DAO Fork at block `daoBlock`, which is 1,920,000 on mainnet.
 
-A header outside those ten blocks passes. -/
+A header outside those ten blocks passes, and from Paris every header passes. -/
 @[export eth_block_dao_extra_data_valid]
 def daoExtraDataValidExport (daoBlock : UInt64) (fork header : ByteArray) : Result UInt8 := do
   let fork ← forkUpTo .glamsterdam fork

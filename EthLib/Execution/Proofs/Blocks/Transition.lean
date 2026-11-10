@@ -219,6 +219,13 @@ theorem daoTransfer_of_paris_le {config : ChainConfig} {number : Nat} {start : B
   simp only [daoTransfer, hNot, false_and, ↓reduceIte]
   rfl
 
+/-- At a block that the configuration does not name for the DAO Fork, the state stays. -/
+theorem daoTransfer_of_daoForkBlock_ne {config : ChainConfig} {number : Nat} {start : BlockState}
+    (h : daoForkBlock config ≠ some number) :
+    daoTransfer config fork number start = .ok start := by
+  simp only [daoTransfer, h, and_false, ↓reduceIte]
+  rfl
+
 /-- Before Paris, at the DAO Fork block of the configuration, the DAO ether moves. -/
 theorem daoTransfer_of_lt_paris {config : ChainConfig} {number : Nat} {start : BlockState}
     (h : fork < .paris) (hBlock : daoForkBlock config = some number) :
