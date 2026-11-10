@@ -87,7 +87,7 @@ The code that the call reads for an account it wrote has the code hash of that a
 
 A code map is a plain map, so nothing else ties the code that it gives to its hash.
 
-[eip7610]: https://eips.ethereum.org/EIPS/eip-7610#specification -/
+[eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification -/
 structure Followable (block : BlockState) (tx : TransactionState) : Prop where
   /-- The call ran on the block state. -/
   parent : tx.parent = block

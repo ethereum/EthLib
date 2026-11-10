@@ -20,7 +20,9 @@ The new address is the one that the specification derives from the base state.
 
 It must hold no code and a nonce of 0 in the base state, as EIP-684 asks.
 
-Its storage must be empty there, and no fact of a slot gives it a word, as EIP-7610 asks.
+Its storage must be empty there, as EIP-7610 asks.
+
+No fact of a slot may give it a word other than zero.
 
 The nonce of the creator grows by one, whatever the creation does.
 

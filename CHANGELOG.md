@@ -13,8 +13,10 @@ Not yet released.
   Before, such a creation wiped the storage and ran the init code.
   It now fails exactly like a creation at an address with code or a nonce, as [EIP-684](https://eips.ethereum.org/EIPS/eip-684#specification) asks: a creation transaction ends with `addressCollision`, and CREATE or CREATE2 takes the gas of the message and pushes 0.
   So a block with such a creation can now have another gas used, another state root, or be rejected.
+  From Glamsterdam, CREATE or CREATE2 that collides gets back the state gas of the new account that it paid, as [EIP-8037](https://eips.ethereum.org/EIPS/eip-8037#gas-accounting-for-new-accounts) asks of a collision; only a storage-only target that is not alive pays any.
   `accountDeployable` also requires empty storage, through the new `accountHasStorage`.
-  The rules `create_stored` and `create2_stored` take a new hypothesis: no fact of a slot gives the new address a word other than zero.
+  The rules `createKind_stored`, `create_stored` and `create2_stored` take a new hypothesis: no fact of a slot gives the new address a word other than zero.
+  The new theorems `accountHasStorage_eq_true_iff`, `accountDeployable_eq_true_iff` and `accountDeployable_congr` state the rule.
 - The forkchoice update now checks the timestamp of payload attributes, on an applied valid head ([#1479](https://github.com/ethereum/EthLib/issues/1479)).
   A known payload holds the number and the timestamp of its block, so `KnownPayload` has two new fields, `number` and `timestamp`.
   `forkchoiceUpdatedCall` takes the chain configuration first, and returns the attributes at the fork of their timestamp.

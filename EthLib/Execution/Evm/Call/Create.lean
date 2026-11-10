@@ -39,6 +39,10 @@ The frame's nonce still grows.
 
 It applies at every fork back to Frontier.
 
+Such a collision gets back the state gas of the new account, as EIP-8037 asks of a collision.
+
+EIP-8037 says that storage alone causes no collision; EthLib follows EIP-7610 there.
+
 Otherwise the frame's nonce grows and the init code runs at the new address.
 
 The caller pushes the new address on success, and 0 on failure with the output as return data.
@@ -57,11 +61,11 @@ The EIPs that add or change an instruction define it:
 - [EIP-211][eip211], the return data of a creation
 - [EIP-214][eip214], no creation in a static frame
 - [EIP-684][eip684], no creation at an address with code or a nonce
-- [EIP-7610][eip7610], no creation at an address with storage, in Last Call
 - [EIP-1014][eip1014], CREATE2
 - [EIP-2681][eip2681], the greatest nonce
 - [EIP-2929][eip2929], the access to the new address
 - [EIP-3860][eip3860], the price and the limit of init code
+- [EIP-7610][eip7610], no creation at an address with storage, in Last Call
 - [EIP-8037][eip8037], the state gas of a new account, in Last Call
 - [EIP-8038][eip8038], the price of a creation, in Last Call
 
@@ -155,7 +159,7 @@ Otherwise it accesses the new address, and pays the state gas of a new account i
 
 It then keeps the gas of the message, and the nonce of the frame grows by one.
 
-An address with code, a nonce or storage gets no message.
+An address with code, a nonce or storage gets no message, and gets back the state gas paid.
 
 Otherwise the frame passes on its whole reservoir to the message.
 
@@ -203,7 +207,7 @@ def launchCreate (evm : Evm fork Meter) (value : U256) (initCode : ByteArray)
             disablePrecompiles := false }
         .ok (.child evm message (resumeCreate fork evm newAccount address))
       else do
-        let evm ← pushWord evm 0
+        let evm ← pushWord (refillStateGas evm newAccount) 0
         return .next (advance evm)
 
 /-- The step of a creation once it has paid its price and grown memory.
@@ -321,7 +325,8 @@ theorem launchCreate_decreases [LawfulGasMeter Meter] {before evm : Evm fork Met
         cases h
         show measure _ < measure before
         exact Pays.measure_lt
-          (((paid'.trans (pushWord_pays hp)).mono (by omega)).congr rfl rfl) running
+          ((((paid'.trans (refillStateGas_pays _ _)).trans (pushWord_pays hp)).mono
+            (by omega)).congr rfl rfl) running
     · show measure _ < measure before
       rw [measure_exceptionalHalt]
       simp [measure, running]

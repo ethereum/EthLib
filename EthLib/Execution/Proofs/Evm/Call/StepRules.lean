@@ -358,7 +358,8 @@ theorem launchCreate (rules : StepRules fork R) {evm : Evm fork Meter} {value : 
     · obtain ⟨e3, h3, hr⟩ := Base.bind_ok_iff.mp hr
       cases hr
       exact rules.trans ms
-        (rules.sameContext ((pushWord_sameContext h3).trans ⟨rfl, rfl, rfl, rfl⟩))
+        (rules.sameContext ((sameContext_refillStateGas _ _).trans
+          ((pushWord_sameContext h3).trans ⟨rfl, rfl, rfl, rfl⟩)))
   · exact rules.static (c0.trans (staticStep_exceptionalHalt _ _))
 
 /-- A successful step of CREATE or CREATE2 keeps the relation. -/
