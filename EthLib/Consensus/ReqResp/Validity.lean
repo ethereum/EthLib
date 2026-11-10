@@ -187,11 +187,14 @@ The fork is the one in effect when the request is served; it sets the limits.
 
 Served under Electra, the check allows the Electra count of blobs, even at an older slot.
 
-From Fulu no new blob sidecars exist, so the Electra count stays the limit. -/
+From Fulu no new blob sidecars exist, so the Electra count stays the limit.
+
+The request limit is the most blobs of the most blocks, taken without overflow. -/
 def isValidBlobSidecarsByRangeResponse (config : Config) (fork : Fork)
     (request : BlobSidecarsByRangeRequest) (sidecars : List ResponseSidecar) : Bool :=
   sidecars.length ≤ request.count.toNat * (blobSidecarLimit config fork).toNat &&
-    sidecars.length ≤ (computeMaxRequestBlobSidecars config fork).toNat &&
+    sidecars.length ≤
+      config.MAX_REQUEST_BLOCKS_DENEB.toNat * (blobSidecarLimit config fork).toNat &&
     sidecars.all (fun sidecar => slotInRange request.startSlot request.count sidecar.slot &&
       sidecar.index.toNat < (blobSidecarLimit config fork).toNat) &&
     sidecars.head?.all (fun first => first.index == 0) &&
@@ -209,11 +212,13 @@ def ResponseSidecar.groupBySlot (sidecars : List ResponseSidecar) : List (List R
 
 /-- Whether the sidecars of a response are valid for a request for column sidecars by range.
 
-Each block of the response has every requested column. -/
+A response holds every sidecar of each block it serves; here that means every requested column.
+
+The request limit is the most sidecars of the most blocks, taken without overflow. -/
 def isValidDataColumnSidecarsByRangeResponse (preset : Preset) (config : Config)
     (request : DataColumnSidecarsByRangeRequest preset) (sidecars : List ResponseSidecar) : Bool :=
   sidecars.length ≤ request.count.toNat * preset.NUMBER_OF_COLUMNS.toNat &&
-    sidecars.length ≤ (computeMaxRequestDataColumnSidecars preset config).toNat &&
+    sidecars.length ≤ config.MAX_REQUEST_BLOCKS_DENEB.toNat * preset.NUMBER_OF_COLUMNS.toNat &&
     sidecars.all (fun sidecar => slotInRange request.startSlot request.count sidecar.slot &&
       sidecar.index < preset.NUMBER_OF_COLUMNS && request.columns.data.contains sidecar.index) &&
     allAdjacent ResponseSidecar.nextColumn sidecars &&

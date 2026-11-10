@@ -85,7 +85,9 @@ def verifyBlobSidecarInclusionProof (preset : Preset) (fork : Fork)
     | .error _ => false
   | _, _ => false
 
-/-- The number of blobs that a block may carry: Electra raises the limit of Deneb.
+/-- The most blob sidecars of one block: Electra raises the limit of Deneb.
+
+From Fulu blocks carry no blob sidecars, so the Electra limit stays.
 
 The limits of gossip and of requests for blob sidecars both use it.
 

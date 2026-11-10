@@ -183,7 +183,8 @@ theorem isValidBlobSidecarsByRangeResponse_iff (config : Config) (fork : Base.Fo
     (request : BlobSidecarsByRangeRequest) (sidecars : List ResponseSidecar) :
     isValidBlobSidecarsByRangeResponse config fork request sidecars = true ↔
       sidecars.length ≤ request.count.toNat * (blobSidecarLimit config fork).toNat ∧
-      sidecars.length ≤ (computeMaxRequestBlobSidecars config fork).toNat ∧
+      sidecars.length ≤
+        config.MAX_REQUEST_BLOCKS_DENEB.toNat * (blobSidecarLimit config fork).toNat ∧
       (∀ sidecar ∈ sidecars, (request.startSlot.toNat ≤ sidecar.slot.toNat ∧
         sidecar.slot.toNat < request.startSlot.toNat + request.count.toNat) ∧
         sidecar.index.toNat < (blobSidecarLimit config fork).toNat) ∧
@@ -220,7 +221,7 @@ theorem isValidDataColumnSidecarsByRangeResponse_iff (preset : Preset) (config :
     (request : DataColumnSidecarsByRangeRequest preset) (sidecars : List ResponseSidecar) :
     isValidDataColumnSidecarsByRangeResponse preset config request sidecars = true ↔
       sidecars.length ≤ request.count.toNat * preset.NUMBER_OF_COLUMNS.toNat ∧
-      sidecars.length ≤ (computeMaxRequestDataColumnSidecars preset config).toNat ∧
+      sidecars.length ≤ config.MAX_REQUEST_BLOCKS_DENEB.toNat * preset.NUMBER_OF_COLUMNS.toNat ∧
       (∀ sidecar ∈ sidecars, (request.startSlot.toNat ≤ sidecar.slot.toNat ∧
         sidecar.slot.toNat < request.startSlot.toNat + request.count.toNat) ∧
         sidecar.index < preset.NUMBER_OF_COLUMNS ∧ sidecar.index ∈ request.columns.data) ∧
