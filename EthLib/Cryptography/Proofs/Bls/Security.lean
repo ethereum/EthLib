@@ -46,7 +46,9 @@ Then some other key gets the scalar 0 with probability at most `(qK - 1) / |F|`.
 
 A winning forgery at the guessed position gives the reduction its answer.
 
-That holds under the hypotheses of the extraction step, with no other key of scalar 0.
+That needs `z ≠ 0`, every key a multiple of `g1`, no other key of scalar 0, and a nonzero count.
+
+So such a win is at most as likely as a success of the reduction.
 
 No bound on the aggregate game is proved yet.
 -/

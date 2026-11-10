@@ -6,7 +6,7 @@ public import EthLib.Cryptography.Proofs.Bls.Security.PopReduction
 /-!
 # Proofs: a winning aggregate forgery gives the reduction its answer
 
-The game here draws the scalar `z` of the message hash at position `j` first.
+The game here fixes the scalar `z` of the message hash at position `j`.
 
 Take a run that wins with its forged message at position `j`.
 
@@ -27,7 +27,7 @@ A winning run never signed its message, so it is before the bad event of the cou
 
 So such a winning run at `j` is at most as likely as a success of the reduction with the guess `j`.
 
-The final bound pays for the zero scalars, and gets the honest count from the hash call bound.
+A later bound still has to pay for the zero scalars and bound the honest count.
 -/
 
 @[expose] public section
@@ -153,9 +153,9 @@ theorem keyCalls_of_mem_support {g₂ : G₂} {a : F} {j : ℕ} {z : F}
 
 Assume the scheme is sound and every element of `G1` is a multiple of `g1`, and let `z ≠ 0`.
 
-No key other than the honest one hashes with the scalar 0.
+Assume also that no key other than the honest one has the scalar 0.
 
-The number of copies of the honest key is not zero in the scalars.
+Assume the number of copies of the honest key is not zero in the scalars.
 
 The run never signed the message at `j`, so it is before the bad event. -/
 theorem extract_of_wins {scheme : Scheme G₁ G₂} (hsound : scheme.Sound F)

@@ -74,7 +74,6 @@ theorem lookup_append_of_some {x : M} {v : ℕ × F} :
       rw [lookup_append_of_some r hw]
       rfl
 
-
 variable [CommRing F]
 
 /-- The table with the scalar at position `j` lowered by `c`. -/
