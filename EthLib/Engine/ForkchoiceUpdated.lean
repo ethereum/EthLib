@@ -505,13 +505,11 @@ The source asks that each new build has its own ID, and leaves the rest to the e
 
 The same head and attributes give the same ID.
 
-Under one configuration and one tree, the head and the timestamp fix the fork.
+In an update, the configuration, the tree, the head and the timestamp fix the fork.
 
-So other attributes or another head give other bytes to hash.
+So within an update, other attributes or another head give other bytes to hash.
 
-Two such inputs share an ID only if their hashes share the first 8 bytes.
-
-This model assumes that this does not happen.
+Distinct builds get distinct IDs unless their hashes share the first 8 bytes.
 
 The hash is that of the head and then the attributes, each number in 8 big-endian bytes. -/
 def payloadId (head : Hash32) (attributes : PayloadAttributes fork) : Bytes8 :=

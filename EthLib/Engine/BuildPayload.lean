@@ -218,7 +218,9 @@ So the attributes must pass the checks of that version against it, which fix the
 
 The transactions are in the form of an execution payload, and decode at that fork.
 
-The parent's number and time are read in 64 bits, as the payload tree of the update holds them. -/
+The parent's number and time are read in 64 bits, as the payload tree of the update holds them.
+
+The result is meaningful only for a parent whose number and time fit 64 bits. -/
 def buildPayloadOnChain (chain : BlockChain) (version : Nat) (attributes : Σ f, PayloadAttributes f)
     (choices : BuildChoices) (transactions : List ByteArray) :
     Except BuildError (Σ fork, BuiltPayload fork) := do
