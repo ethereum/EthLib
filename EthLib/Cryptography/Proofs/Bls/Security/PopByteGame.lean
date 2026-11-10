@@ -33,6 +33,10 @@ Other bytes get their own lazily drawn uniform answers, from the coins of the ga
 
 Verification never hashes them, since key validation rejects them first.
 
+The run of the game accepts a forger with any output that it reads as an aggregate forgery.
+
+A game that wins only when the byte game wins on that reading is won at most as often.
+
 Decoding the output gives a forger of the group game that wins at least as often.
 
 So the group bound applies, over the scalars modulo `r`, with `qK` at most `r`.
@@ -81,16 +85,45 @@ noncomputable def encodingImpl :
         (fun t => (G2Sub.encode (t • g2), cache ++ [(x, t)])) <$>
           (liftM ($ᵗ Scalar : ProbComp Scalar) : OracleComp GroupSpec Scalar)
 
+/-- Run a forger with any output on the encoded honest key and proof, through the encoded oracles.
+-/
+noncomputable def encodedMain {α : Type}
+    (main : ByteArray → ByteArray → OracleComp (Spec ByteArray ByteArray ByteArray) α)
+    (pk : G1Sub) (proof : G2Sub) : OracleComp GroupSpec α :=
+  (simulateQ encodingImpl (main (G1Sub.encode pk) (G2Sub.encode proof))).run' []
+
 /-- Run a byte forger on the encoded honest key and proof, through the encoded oracles. -/
 noncomputable def byteMain (adversary : ByteAdversary) (pk : G1Sub) (proof : G2Sub) :
     OracleComp GroupSpec (List (ByteArray × ByteArray) × ByteArray × ByteArray) :=
-  (simulateQ encodingImpl (adversary.main (G1Sub.encode pk) (G2Sub.encode proof))).run' []
+  encodedMain adversary.main pk proof
 
 /-- Decode the keys and proofs of a forgery.
 
 If any key fails to decode, it returns no keys, so the group forgery loses. -/
 noncomputable def decodeKeys (keys : List (ByteArray × ByteArray)) : List (G1Sub × G2Sub) :=
   (keys.mapM fun k => (decodeKey k.1).map fun x => (x, (decodeSignature k.2).getD 0)).getD []
+
+/-- The run of the byte game for the secret scalar `a`, for a forger with any output.
+
+The output is read as an aggregate forgery by `read`.
+
+The honest proof is `a • H'(pk)`, with the key hash of the group game.
+
+After the forger's run, verification hashes the message and each decoded key.
+
+It returns the output, the hashes of verification and the final state. -/
+noncomputable def runAt {α : Type}
+    (main : ByteArray → ByteArray → OracleComp (Spec ByteArray ByteArray ByteArray) α)
+    (read : α → List (ByteArray × ByteArray) × ByteArray × ByteArray) (a : Scalar) :
+    ProbComp ((α × G2Sub × List G2Sub) × State Scalar G1Sub ByteArray) :=
+  (do
+    let hpk ← keyHash g2 (a • g1)
+    simulateQ (impl g2 a) (do
+      let out ← encodedMain main (a • g1) (a • hpk)
+      let h ← query (spec := GroupSpec) (.inr (.inl (.inl (read out).2.1)))
+      let hs ← (decodeKeys (read out).1).mapM fun (k : G1Sub × G2Sub) =>
+        query (spec := GroupSpec) (.inr (.inr k.1))
+      return (out, h, hs))).run State.init
 
 /-- The group forger decodes the byte output.
 
@@ -124,17 +157,9 @@ The honest proof is `a • H'(pk)`, with the key hash of the group game.
 
 After the forger's run, verification hashes the message and each decoded key. -/
 noncomputable def byteExperimentAt (adversary : ByteAdversary) (a : Scalar) :
-    ProbComp (Bool × State Scalar G1Sub ByteArray) := do
-  let pk := a • g1
-  let ((out, h, hs), st) ← (do
-    let hpk ← keyHash g2 pk
-    simulateQ (impl g2 a) (do
-      let out ← byteMain adversary pk (a • hpk)
-      let h ← query (spec := GroupSpec) (.inr (.inl (.inl out.2.1)))
-      let hs ← (decodeKeys out.1).mapM fun (k : G1Sub × G2Sub) =>
-        query (spec := GroupSpec) (.inr (.inr k.1))
-      return (out, h, hs))).run State.init
-  return (byteWins pk st.msg.signed out h hs, st)
+    ProbComp (Bool × State Scalar G1Sub ByteArray) :=
+  (fun z => (byteWins (a • g1) z.2.msg.signed z.1.1 z.1.2.1 z.1.2.2, z.2)) <$>
+    runAt adversary.main id a
 
 /-- The byte game draws the secret scalar uniformly, as the group game does.
 
@@ -221,7 +246,17 @@ private theorem run_toGroup (adversary : ByteAdversary) (pk : G1Sub) (proof : G2
           let hs ← (decodeKeys out.1).mapM fun (k : G1Sub × G2Sub) =>
             query (spec := GroupSpec) (.inr (.inr k.1))
           return (out, h, hs)) := by
-  simp [run, ByteAdversary.toGroup, map_bind]
+  simp only [run, ByteAdversary.toGroup, map_bind, bind_map_left, map_pure]
+
+/-- The group game for the scalar `a` is the byte run with its output decoded. -/
+private theorem run_experiment_toGroup (adversary : ByteAdversary) (a : Scalar) :
+    (do
+      let hpk ← keyHash g2 (a • g1)
+      simulateQ (impl g2 a) (run adversary.toGroup (a • g1) (a • hpk))).run State.init =
+      (fun z => (((decodeKeys z.1.1.1, z.1.1.2.1, (decodeSignature z.1.1.2.2).getD 0),
+        z.1.2.1, z.1.2.2), z.2)) <$> runAt adversary.main id a := by
+  simp only [run_toGroup, simulateQ_map, StateT.run_bind, StateT.run_map]
+  simp only [runAt, byteMain, id, StateT.run_bind, map_bind]
 
 /-- A byte forger wins at most as often as its decoded group forger. -/
 theorem byteForgeAdvantage_le (adversary : ByteAdversary) :
@@ -230,12 +265,9 @@ theorem byteForgeAdvantage_le (adversary : ByteAdversary) :
   rw [prEvent_bind_eq_lintegral_of_discrete, prEvent_bind_eq_lintegral_of_discrete]
   apply MeasureTheory.lintegral_mono
   intro a
-  simp only [run_toGroup, simulateQ_map, StateT.run_bind, StateT.run_map]
-  simp only [bind_assoc, bind_map_left]
-  rw [show blsScheme.g₁ = g1 from rfl, show blsScheme.g₂ = g2 from rfl]
-  simp only [bind_pure_comp]
-  simp only [← map_bind]
-  rw [prEvent_map, prEvent_map]
+  dsimp only
+  rw [show blsScheme.g₁ = g1 from rfl, show blsScheme.g₂ = g2 from rfl, run_experiment_toGroup]
+  simp only [bind_pure_comp, Functor.map_map]
   exact prEvent_mono _ _ _ fun z hw => wins_of_byteWins hw
 
 /-- The byte game and the game of the decoded forger end in the same states.
@@ -245,23 +277,64 @@ theorem snd_map_byteExperiment (adversary : ByteAdversary) :
     Prod.snd <$> byteExperiment adversary =
       Prod.snd <$> experiment (F := Scalar) blsScheme adversary.toGroup := by
   unfold byteExperiment byteExperimentAt experiment
-  simp only [run_toGroup, simulateQ_map, StateT.run_bind, StateT.run_map]
-  simp only [map_bind, map_pure]
-  simp only [bind_assoc, bind_map_left]
-  rfl
+  rw [show blsScheme.g₁ = g1 from rfl, show blsScheme.g₂ = g2 from rfl]
+  simp only [run_experiment_toGroup, map_bind, bind_pure_comp, Functor.map_map]
 
 /-- A byte forger has a hash-call bound exactly when its decoded forger has the same bound. -/
 theorem byteHashCallBound_iff (adversary : ByteAdversary) (q qK : ℕ) :
-    ByteHashCallBound adversary q qK ↔ HashCallBound Scalar blsScheme adversary.toGroup q qK := by
-  have h := congrArg support (snd_map_byteExperiment adversary)
-  simp only [support_map] at h
-  constructor
-  · intro hb z hz
-    obtain ⟨y, hy, hyz⟩ := (Set.ext_iff.mp h z.2).mpr ⟨z, hz, rfl⟩
-    exact hyz ▸ hb y hy
-  · intro hb z hz
-    obtain ⟨y, hy, hyz⟩ := (Set.ext_iff.mp h z.2).mp ⟨z, hz, rfl⟩
-    exact hyz ▸ hb y hy
+    ByteHashCallBound adversary q qK ↔ HashCallBound Scalar blsScheme adversary.toGroup q qK :=
+  Security.forall_mem_support_snd_iff (snd_map_byteExperiment adversary)
+    fun s => s.msg.calls ≤ q ∧ s.keyCalls ≤ qK
+
+/-! ## Forgers with any output -/
+
+section Read
+
+variable {α : Type}
+  (main : ByteArray → ByteArray → OracleComp (Spec ByteArray ByteArray ByteArray) α)
+  (read : α → List (ByteArray × ByteArray) × ByteArray × ByteArray)
+
+/-- Reading the output after the run is the run of the forger that reads its own output. -/
+theorem map_runAt_read (a : Scalar) :
+    (fun z => ((read z.1.1, z.1.2), z.2)) <$> runAt main read a =
+      runAt (fun pk proof => read <$> main pk proof) id a := by
+  simp only [runAt, encodedMain, StateT.run_bind, simulateQ_bind, simulateQ_map, simulateQ_pure,
+    StateT.run_map, StateT.run_pure, StateT.run'_eq, map_bind, map_pure,
+    bind_map_left, id]
+
+/-- A game on the run that wins only when the byte game wins is won at most as often.
+
+The byte game is that of the forger that reads its own output. -/
+theorem prEvent_runAt_le (W : G1Sub → List ByteArray → α → G2Sub → List G2Sub → Bool)
+    (hW : ∀ {pk signed x h hs}, W pk signed x h hs = true →
+      byteWins pk signed (read x) h hs = true) :
+    Pr{let z ← (do
+        let a ← $ᵗ Scalar
+        (fun (z : (α × G2Sub × List G2Sub) × State Scalar G1Sub ByteArray) =>
+          (W (a • g1) z.2.msg.signed z.1.1 z.1.2.1 z.1.2.2, z.2)) <$>
+          runAt main read a)}[z.1 = true] ≤
+      byteForgeAdvantage ⟨fun pk proof => read <$> main pk proof⟩ := by
+  unfold byteForgeAdvantage byteExperiment byteExperimentAt
+  rw [prEvent_bind_eq_lintegral_of_discrete, prEvent_bind_eq_lintegral_of_discrete]
+  apply MeasureTheory.lintegral_mono
+  intro a
+  dsimp only
+  rw [← map_runAt_read]
+  simp only [Functor.map_map]
+  exact prEvent_mono _ _ _ fun z hw => hW hw
+
+/-- A game on the run ends in the same states as the byte game of the forger that reads. -/
+theorem snd_map_runAt (W : G1Sub → List ByteArray → α → G2Sub → List G2Sub → Bool) :
+    Prod.snd <$> (do
+        let a ← $ᵗ Scalar
+        (fun (z : (α × G2Sub × List G2Sub) × State Scalar G1Sub ByteArray) =>
+          (W (a • g1) z.2.msg.signed z.1.1 z.1.2.1 z.1.2.2, z.2)) <$>
+          runAt main read a) =
+      Prod.snd <$> byteExperiment ⟨fun pk proof => read <$> main pk proof⟩ := by
+  unfold byteExperiment byteExperimentAt
+  simp only [← map_runAt_read, map_bind, Functor.map_map]
+
+end Read
 
 /-- **EthLib's BLS aggregates with proofs of possession are unforgeable on bytes, from co-CDH.**
 

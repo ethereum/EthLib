@@ -25,11 +25,15 @@ A new store trusts a block.
 
 Its committee, which the bootstrap proves, is the current committee of the state of that block.
 
-The signature needs an assumption, since EthLib proves no unforgeability of BLS here.
-
-The assumption says that an aggregate signature verifies only if every signer signed the message.
+The signature needs an assumption: an aggregate verifies only if every signer signed the message.
 
 Under it, every member whose bit is set signed the signing root of the attested header.
+
+No signature scheme meets it with certainty.
+
+A separate module bounds the probability of a forgery, for keys with proofs of possession.
+
+Ethereum's keys carry deposit signatures instead, so the assumption stays unproved for them.
 -/
 
 @[expose] public section
@@ -496,9 +500,15 @@ theorem initializeLightClientStore_currentSyncCommittee {config : Config}
 
 The relation says which messages the holder of each key signed.
 
-BLS with proofs of possession is meant to give this, except with negligible probability.
+BLS with proofs of possession is meant to give this, except with small probability.
 
-EthLib does not prove that, so the theorems below take it as a hypothesis. -/
+A separate module bounds how often one honest member's bit is forged, with random oracles.
+
+It needs a proof of possession for every signer, and it is not a proof of this assumption.
+
+Ethereum's keys carry deposit signatures instead.
+
+The theorems below reason about one accepted update, so they take the assumption instead. -/
 def SignatureChecks.AggregateSound (checks : SignatureChecks)
     (signed : ByteArray → ByteArray → Prop) : Prop :=
   ∀ keys message signature, checks.fastAggregateVerify keys message signature = true →

@@ -676,18 +676,24 @@ theorem snd_map_byteExperiment (adversary : ByteAdversary) :
     bind_pure_comp, map_bind, Functor.map_map]
   rfl
 
-/-- A byte forger has a hash-call bound exactly when its decoded forger has the same bound. -/
-theorem byteHashCallBound_iff (adversary : ByteAdversary) (q : ℕ) :
-    ByteHashCallBound adversary q ↔ HashCallBound Scalar blsScheme adversary.toGroup q := by
-  have h := congrArg support (snd_map_byteExperiment adversary)
-  simp only [support_map] at h
+/-- Two runs that end in the same states satisfy the same properties of their final states. -/
+theorem forall_mem_support_snd_iff {α β γ : Type} {A : ProbComp (α × γ)} {B : ProbComp (β × γ)}
+    (h : Prod.snd <$> A = Prod.snd <$> B) (P : γ → Prop) :
+    (∀ z ∈ support A, P z.2) ↔ ∀ z ∈ support B, P z.2 := by
+  have h' := congrArg support h
+  simp only [support_map] at h'
   constructor
   · intro hb z hz
-    obtain ⟨y, hy, hyz⟩ := (Set.ext_iff.mp h z.2).mpr ⟨z, hz, rfl⟩
+    obtain ⟨y, hy, hyz⟩ := (Set.ext_iff.mp h' z.2).mpr ⟨z, hz, rfl⟩
     exact hyz ▸ hb y hy
   · intro hb z hz
-    obtain ⟨y, hy, hyz⟩ := (Set.ext_iff.mp h z.2).mp ⟨z, hz, rfl⟩
+    obtain ⟨y, hy, hyz⟩ := (Set.ext_iff.mp h' z.2).mp ⟨z, hz, rfl⟩
     exact hyz ▸ hb y hy
+
+/-- A byte forger has a hash-call bound exactly when its decoded forger has the same bound. -/
+theorem byteHashCallBound_iff (adversary : ByteAdversary) (q : ℕ) :
+    ByteHashCallBound adversary q ↔ HashCallBound Scalar blsScheme adversary.toGroup q :=
+  forall_mem_support_snd_iff (snd_map_byteExperiment adversary) fun s => s.calls ≤ q
 
 /-- The byte-game bound follows from the same named co-CDH solver as the group-game bound. -/
 theorem byteForgeAdvantage_le_coCdhAdvantage (adversary : ByteAdversary)

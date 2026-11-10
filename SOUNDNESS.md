@@ -409,8 +409,15 @@ It must pass EthLib's proof verification for every key and EthLib's fast aggrega
 `byteVerify_eq_popVerify` and `byteFastAggregateVerify_hashPoint` show that with the real hashes these checks are `popVerify` and `fastAggregateVerify`, and `popProve_eq` that the honest proof is `popProve`.
 The key hash of bytes that decode to a multiple of `g1` is the group oracle on the decoded element; other bytes get independent uniform answers.
 The key-call count leaves those other bytes out, since verification never hashes them.
-The light client still assumes `SignatureChecks.AggregateSound`.
-Its keys are registered with deposit signatures, not with the proofs of the game.
+`LightClientForgery.forgeAdvantage_le` (`Consensus/Proofs/LightClient/Unforgeable.lean`) applies the bound to the light client.
+One sync committee member is honest; the forger chooses the configuration, the store, the update and the clock, and gives a proof of possession for each signer.
+It wins if `validateLightClientUpdate` accepts the update with the honest member's bit set, with the oracle's hash of the signing root, and the honest member never signed that root.
+Its advantage is at most the byte bound above.
+`validateLightClientUpdate_oracleChecks` shows that with the real hash of the signing root, the game's check is the light client's check with the BLS checks.
+The light client theorems of `Authenticate.lean` still take `SignatureChecks.AggregateSound`, because they reason about one accepted update, not a probability.
+The game requires a proof of possession that passes PopVerify, §3.3.3, under the key tag.
+Ethereum registers a validator key with a deposit signature instead, a signature on a message that holds the key, under the message tag and the deposit domain.
+The bound does not cover that form of proof.
 
 `Security.byteForgeAdvantage_le` (`Proofs/Bls/Security/Refinement.lean`) turns a forger on byte encodings into a named group-element forger with at least the same advantage.
 The byte forger receives a compressed key and compressed hash and signing answers, and returns arbitrary message and signature bytes.
@@ -2012,6 +2019,15 @@ The signature theorems assume `SignatureChecks.AggregateSound`, listed in A4.
 Under it, `validateLightClientUpdate_signed` shows that every member whose bit is set signed the signing root.
 `validateLightClientUpdate_signed_outside` adds that a set of keys holding fewer seats of the committee than there are signers leaves a signer outside the set.
 `SignatureChecks.not_aggregateSound_acceptAll` shows that the assumption has content: the checks that accept every signature do not meet it.
+`LightClientForgery.forgeAdvantage_le` bounds how often a forger makes the light client accept an aggregate with one designated honest member's bit set, on a root that member never signed.
+It assumes the random oracle model, a proof of possession for every signer, and at most `q` and `qK` hash calls; the bound is small if co-CDH is hard and the solver built from the forger is efficient, which no theorem bounds.
+It is not a proof of `AggregateSound`, and Ethereum's keys carry deposit signatures, not those proofs.
+The bound protects that member's bit only.
+Covering every honest member of a committee needs a guess among them, losing up to a factor of the number of honest seats; that step is not proved.
+Updates signed by corrupted members alone are still accepted, so the safety of headers also needs an honest supermajority of the committee.
+The reduction loses a factor `q`, the number of all message hash calls, and no theorem bounds its running time.
+A deposit signature cannot simply count as a proof of possession here: it is a signature under the message hash, and Ristenpart and Yilek ([ePrint 2007/264](https://eprint.iacr.org/2007/264)) show that such proofs fail when the honest key signs chosen messages.
+With the signing oracle of this game, the honest key's signature on the deposit message of a rogue key `x g1 - pk` gives that key a valid deposit signature.
 The header slots of the store never move back.
 `applyLightClientUpdate_finalizedSlot_le`, `processLightClientUpdate_finalizedSlot_le` and `processLightClientStoreForceUpdate_finalizedSlot_le` show that the finalized slot never decreases.
 `applyLightClientUpdate_optimisticSlot_le`, `processLightClientUpdate_optimisticSlot_le` and `processLightClientStoreForceUpdate_optimisticSlot_le` show the same for the optimistic slot.
@@ -2266,11 +2282,12 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
   [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380), §3, calls its `hash_to_curve` suitable where a random oracle onto the group is needed, and §8.8.2 gives the suite that encoding.
   Nothing in EthLib proves that the hash behaves as such an oracle.
 - Light client: an aggregate signature check accepts a message only if every key in its set signed it (`SignatureChecks.AggregateSound`).
-  BLS signatures with proofs of possession are meant to give this, except with negligible probability, and EthLib proves no such bound.
+  BLS signatures with proofs of possession are meant to give this, except with small probability, and EthLib proves only the bound below.
   `Pop.byteForgeAdvantage_le_coCdhAdvantage` bounds the forger of such aggregates on EthLib's bytes, with both hashes as random oracles.
   That is the draft's scheme, whose proofs of possession hash the key under the key tag.
   Ethereum registers keys with deposit signatures under the message tag instead, which that game does not model.
-  The theorems say nothing about a forged aggregate signature.
+  `LightClientForgery.forgeAdvantage_le` bounds the probability that the light client accepts a forged signature of one designated honest member, when every signer carries a proof of possession that passes PopVerify, §3.3.3.
+  The theorems on one accepted update say nothing about a forged aggregate signature; the bound gives its probability.
 - ECDSA: the bijection in the middle of the conversion `x_R mod n` is a uniform permutation, which the adversary evaluates in both directions.
   In ECDSA that bijection is the identity on integers below `2^256`, so the model idealises the conversion, as §4 of [Fersch, Kiltz and Poettering](https://doi.org/10.1145/2976749.2978413) does.
   The model draws the deterministic nonces of RFC 6979 as a random function of the message, so each message has one signature.
