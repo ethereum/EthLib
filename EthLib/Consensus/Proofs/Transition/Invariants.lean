@@ -676,13 +676,13 @@ theorem frame_addValidatorToRegistry {pubkey : BLSPubkey}
 
 They leave out justification, the builder payments and the rotation of the flags.
 
-A validator write must relate its states only when it keeps the key.
+A validator write must relate its states when it keeps the key and meets two more conditions.
 
-It must also exit no later than it withdraws, when the exits of the state are ordered.
+Its exit comes no later than its withdrawal, when the exits of the state are ordered.
 
-Its effective balance must also be a whole number of increments, when the balances are aligned.
+Its effective balance is a whole number of increments, when the preset and the state are aligned.
 
-The other laws cover balance changes, exits, new validators and replacements of one field. -/
+The other laws cover balance changes, exits, new validators and the record updates of the steps. -/
 structure EpochFrameLaws (R : BeaconState preset fork → BeaconState preset fork → Prop) : Prop where
   refl : ∀ state, R state state
   trans : ∀ {first second third}, R first second → R second third → R first third
