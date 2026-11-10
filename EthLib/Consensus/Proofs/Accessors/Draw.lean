@@ -12,7 +12,9 @@ It counts the values one draw accepts, as a function of the balance.
 
 From Electra it also counts the pairs of bytes, read little-endian, that a draw accepts.
 
-It also shows that the checked draw makes the same comparison when no product overflows.
+It also shows that the checked draw makes the same comparison on natural numbers.
+
+This holds when the balance is at most the largest, and the largest times the scale fits in 64 bits.
 
 It states counts, not probabilities.
 -/
@@ -82,9 +84,11 @@ private theorem card_filter_digit_pairs (k : Nat) (P : Nat → Prop) [DecidableP
   · intro v _
     exact Nat.mod_add_div v k
 
-/-- From Electra, a draw accepts `e * (2^16 - 1) / M + 1` pairs of bytes, read little-endian.
+/-- A draw from Electra accepts `e * (2^16 - 1) / M + 1` pairs of bytes.
 
-The balance `e` must be at most `M`. -/
+The first byte of a pair is the low one, so the pair reads as the first plus 256 times the second.
+
+The balance `e` must be at most `M`, and `M` must be positive. -/
 theorem card_draw_byte_pairs (M e : Nat) (positive : 0 < M) (balance : e ≤ M) :
     ((Finset.range 256 ×ˢ Finset.range 256).filter
       (fun p => M * (p.1 + 256 * p.2) ≤ e * (2 ^ 16 - 1))).card =

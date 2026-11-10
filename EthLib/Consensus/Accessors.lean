@@ -360,7 +360,7 @@ theorem drawHash_succ {fork : Base.Fork} {seed : Bytes32} {i : Nat}
 
 /-- Whether draw number `i` accepts a candidate of an effective balance, from its hash.
 
-It accepts when the largest effective balance times the selected value is at most a bound.
+It accepts when the fork's largest effective balance times the selected value is at most a bound.
 
 The bound is the balance times `2^8 - 1` before Electra, and times `2^16 - 1` from Electra.
 
