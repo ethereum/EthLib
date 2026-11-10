@@ -608,11 +608,14 @@ These theorems do not establish HMAC unforgeability or constant-time execution.
 
 ### ERC-2335 keystores
 
-The keystore proofs show that a short intermediate key or mismatched checksum prevents decryption (`Proofs/Keystore.lean`).
+The keystore proofs show that a short intermediate key, a mismatched checksum, or a key derivation beyond the caller's limits prevents decryption (`Proofs/Keystore.lean`).
 They do not prove Unicode normalization correct for every input, or prove the cryptographic security of the keystore.
 The Python suite compares NFKD with Unicode 16.0.0's normalization tests and checks the two ERC-2335 vectors.
 JSON text parsing stays in the export boundary; the specification consumes a `Lean.Json` value.
-The caller must bound the password-derivation parameters as D1 describes.
+Before parsing, the export refuses deep nesting, long digit runs and large positive exponents, which could exhaust the parser's stack, time or memory.
+Decryption takes the caller's limits on memory and work, and refuses a key derivation whose modeled memory or work exceeds them.
+The model counts bytes of buffers and calls of 64-byte block functions; no theorem shows that it bounds the code.
+The Python binding sets default limits.
 
 ### RIPEMD-160
 
@@ -2233,6 +2236,7 @@ So a hostile parameter can also make a call run for an impractical time.
 A keystore file gives `N`, `r` and `p`, or `c`, and the key length `dklen`.
 So a caller that reads one must bound `r * N`, `r * p`, `c` and `dklen` before it calls the derivation.
 The Lean docstrings of `pbkdf2`, `scrypt` and `romix` say so.
+Keystore decryption does this itself with a model of the cost, against limits that its caller chooses.
 
 ### D2. Dependencies
 

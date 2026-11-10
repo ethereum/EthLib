@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Hex
 public import EthLib.Base.Unicode
 public import EthLib.Cryptography.Aes.Ctr
 public import EthLib.Cryptography.Hash.Pbkdf2
@@ -17,7 +18,9 @@ Unicode normalization uses the pinned Unicode 16.0.0 tables.
 
 Metadata does not authenticate a secret or prove that it is a BLS private key.
 
-The caller must bound KDF memory and time before reading an untrusted keystore (SOUNDNESS.md D1).
+Decryption takes bounds on the memory and work of key derivation, set by the caller.
+
+They are checked before any derivation step runs, since a keystore may request any cost.
 
 [erc]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2335.md#specification
 -/
@@ -46,6 +49,8 @@ inductive KeystoreError where
   | scrypt (error : Hash.Scrypt.ScryptError)
   /-- The checksum did not match, so the password was not verified. -/
   | checksumMismatch
+  /-- The modeled memory or work of key derivation exceeds the caller's limits; both are given. -/
+  | limitExceeded (memory work : Nat)
   deriving Repr
 
 /-- Stable error codes, one per constructor. -/
@@ -58,6 +63,7 @@ def KeystoreError.code : KeystoreError → UInt32
   | .pbkdf2 _ => 6
   | .scrypt _ => 7
   | .checksumMismatch => 8
+  | .limitExceeded _ _ => 9
 
 /-- The parameters of an ERC-2335 key derivation module. -/
 inductive Kdf where
@@ -65,6 +71,69 @@ inductive Kdf where
   | pbkdf2 (iterations length : Nat) (salt : ByteArray)
   /-- scrypt, with cost, block size, parallelization, output length and salt. -/
   | scrypt (n r p length : Nat) (salt : ByteArray)
+
+/-- A model of the memory of a key derivation, in bytes of its buffers.
+
+PBKDF2 holds its whole 32-byte output blocks, and the key cut from them.
+
+scrypt holds `N` blocks of `128 * r` bytes in ROMix, four buffers of `p` blocks, and its output.
+
+Those buffers are the expanded password, the mixed blocks, and two copies that hashing makes.
+
+It counts payload bytes only: no object headers, pointers or temporary blocks of ROMix.
+
+No theorem relates it to the memory that the code uses.
+-/
+def Kdf.memory : Kdf → Nat
+  | .pbkdf2 _ length _ => (length + 31) / 32 * 32 + length
+  | .scrypt n r p length _ => 128 * r * n + 4 * (128 * r * p) + (length + 31) / 32 * 32 + length
+
+/-- The SHA-256 compressions that hash a message of `n` bytes, padding included (FIPS 180-4). -/
+def shaBlocks (n : Nat) : Nat :=
+  (n + 9 + 63) / 64
+
+/-- The SHA-256 compressions of one HMAC call (RFC 2104), from the key and message sizes.
+
+A key longer than a block is hashed first; the inner and outer hashes each start with a block.
+-/
+def hmacBlocks (key message : Nat) : Nat :=
+  (if key > 64 then shaBlocks key else 0) + shaBlocks (64 + message) + shaBlocks (64 + 32)
+
+/-- The SHA-256 compressions of PBKDF2-HMAC-SHA-256 (RFC 8018, section 5.2).
+
+Each 32-byte block of output makes one HMAC call on the salt and the block index.
+
+It then makes one HMAC call on the previous 32-byte value for each further iteration.
+-/
+def pbkdf2Blocks (password salt iterations length : Nat) : Nat :=
+  (length + 31) / 32 * (hmacBlocks password (salt + 4) + (iterations - 1) * hmacBlocks password 32)
+
+/-- A model of the work of a key derivation with a password of the given size.
+
+It counts calls of a function on one 64-byte block: the SHA-256 compression and the Salsa20/8 core.
+
+It is a count, not a time: the other steps of BlockMix and ROMix weigh more when `r` is small.
+
+scrypt makes `2 * r` Salsa20/8 calls per BlockMix, and `2 * N` BlockMix calls per block.
+
+It also runs PBKDF2 once to expand the password into `p` blocks, and once on them for its output.
+-/
+def Kdf.work (password : Nat) : Kdf → Nat
+  | .pbkdf2 iterations length salt => pbkdf2Blocks password salt.size iterations length
+  | .scrypt n r p length salt =>
+    4 * n * r * p + pbkdf2Blocks password salt.size 1 (128 * r * p) +
+      pbkdf2Blocks password (128 * r * p) 1 length
+
+/-- The largest key derivation that a caller accepts from a keystore. -/
+structure KdfLimits where
+  /-- The largest memory, in bytes. -/
+  memory : Nat
+  /-- The largest work, in SHA-256 compressions and Salsa20/8 cores. -/
+  work : Nat
+
+/-- Whether a key derivation with a password of the given size stays within the limits. -/
+def KdfLimits.admits (limits : KdfLimits) (password : Nat) (kdf : Kdf) : Bool :=
+  kdf.memory ≤ limits.memory && kdf.work password ≤ limits.work
 
 /-- The cryptographic fields read by decryption; the IV and checksum have fixed sizes. -/
 structure Store where
@@ -97,25 +166,12 @@ def number (what : String) (value : Json) : Except KeystoreError Nat :=
 def object (what : String) (value : Json) : Except KeystoreError Unit :=
   value.getObj?.map (fun _ => ()) |>.mapError fun reason => .invalidField what reason
 
-/-- A hexadecimal digit, allowing uppercase and lowercase. -/
-def hexDigit (c : Char) : Option Nat :=
-  if '0' ≤ c ∧ c ≤ '9' then some (c.toNat - '0'.toNat)
-  else if 'a' ≤ c ∧ c ≤ 'f' then some (c.toNat - 'a'.toNat + 10)
-  else if 'A' ≤ c ∧ c ≤ 'F' then some (c.toNat - 'A'.toNat + 10)
-  else none
-
-/-- The pairs of digits of an ERC-2335 hex string, without a prefix. -/
-def hexBytes (what : String) : List Char → Except KeystoreError (List UInt8)
-  | [] => .ok []
-  | a :: b :: rest => do
-    let some hi := hexDigit a | throw (.invalidField what "not a hex digit")
-    let some lo := hexDigit b | throw (.invalidField what "not a hex digit")
-    return UInt8.ofNat (16 * hi + lo) :: (← hexBytes what rest)
-  | [_] => .error (.invalidField what "odd number of hex digits")
-
-/-- A byte string in the hex form used by ERC-2335. -/
+/-- A byte string in the hex form used by ERC-2335, in either letter case and with no prefix. -/
 def bytes (what : String) (value : Json) : Except KeystoreError ByteArray := do
-  return ⟨(← hexBytes what (← string what value).toList).toArray⟩
+  let digits := (← string what value).toList
+  if digits.length % 2 = 1 then throw (.invalidField what "odd number of hex digits")
+  let some data := Base.hexBytes? digits | throw (.invalidField what "not a hex digit")
+  return data
 
 /-- A byte string of the size its cryptographic step requires. -/
 def fixed (what : String) (size : Nat) (value : Json) :
@@ -134,20 +190,26 @@ def moduleFields (what : String) (value : Json) :
   let _ ← string s!"{what}.message" message
   return (name, params, message)
 
-/-- Read the selected key derivation, including PBKDF2's required `hmac-sha256` PRF. -/
+/-- Read the selected key derivation, including PBKDF2's required `hmac-sha256` PRF.
+
+An unsupported function is reported before any of its parameters is read.
+-/
 def readKdf (value : Json) : Except KeystoreError Kdf := do
   let (name, params, _) ← moduleFields "kdf" value
-  let length ← number "kdf.dklen" (← field "kdf.params" params "dklen")
-  if length < 32 then throw (.shortKey length)
-  let salt ← bytes "kdf.salt" (← field "kdf.params" params "salt")
+  let param (what name : String) := do number what (← field "kdf.params" params name)
+  -- The output length and salt, which both functions take.
+  let common : Except KeystoreError (Nat × ByteArray) := do
+    let length ← param "kdf.dklen" "dklen"
+    if length < 32 then throw (.shortKey length)
+    return (length, ← bytes "kdf.salt" (← field "kdf.params" params "salt"))
   if name = "pbkdf2" then
+    let (length, salt) ← common
     let prf ← string "kdf.prf" (← field "kdf.params" params "prf")
     if prf ≠ "hmac-sha256" then throw (.unsupportedFunction "kdf.prf" prf)
-    return .pbkdf2 (← number "kdf.c" (← field "kdf.params" params "c")) length salt
+    return .pbkdf2 (← param "kdf.c" "c") length salt
   else if name = "scrypt" then
-    return .scrypt (← number "kdf.n" (← field "kdf.params" params "n"))
-      (← number "kdf.r" (← field "kdf.params" params "r"))
-      (← number "kdf.p" (← field "kdf.params" params "p")) length salt
+    let (length, salt) ← common
+    return .scrypt (← param "kdf.n" "n") (← param "kdf.r" "r") (← param "kdf.p" "p") length salt
   else throw (.unsupportedFunction "kdf" name)
 
 /-- Read the version, required metadata and supported cryptographic modules ("JSON schema"). -/
@@ -169,12 +231,11 @@ def readStore (value : Json) : Except KeystoreError Store := do
   return ⟨kdf, checksum, ← fixed "cipher.iv" 16 (← field "cipher.params" params "iv"),
     ← bytes "cipher.message" message⟩
 
-/-- Derive the intermediate key ("Decryption key").
+/-- Derive the intermediate key from the prepared password ("Decryption key").
 
-A valid RFC parameter can still exceed machine resources; the caller must bound it first.
+This runs the derivation at any cost, so decryption checks the caller's limits first.
 -/
-def deriveKey (password : String) (kdf : Kdf) : Except KeystoreError ByteArray :=
-  let password := passwordBytes password
+def deriveKey (password : ByteArray) (kdf : Kdf) : Except KeystoreError ByteArray :=
   match kdf with
   | .pbkdf2 iterations length salt =>
     if length < 32 then .error (.shortKey length)
@@ -203,15 +264,20 @@ def decryptWithKey (store : Store) (key : ByteArray) : Except KeystoreError Byte
     return Aes.ctr (Aes.ciph .aes128 aesKey) 128 store.iv store.message
   else throw (.shortKey key.size)
 
-/-- Decrypt a parsed keystore with its prepared password. -/
-def decryptStore (store : Store) (password : String) : Except KeystoreError ByteArray := do
+/-- Prepare the password, check the caller's limits, then decrypt a parsed keystore. -/
+def decryptStore (limits : KdfLimits) (store : Store) (password : String) :
+    Except KeystoreError ByteArray := do
+  let password := passwordBytes password
+  unless limits.admits password.size store.kdf do
+    throw (.limitExceeded store.kdf.memory (store.kdf.work password.size))
   decryptWithKey store (← deriveKey password store.kdf)
 
 /-- Decrypt an ERC-2335 keystore value, or report the step that failed.
 
 The decrypted octets are returned without assuming a key length or authenticating metadata.
 -/
-def decrypt (value : Json) (password : String) : Except KeystoreError ByteArray := do
-  decryptStore (← readStore value) password
+def decrypt (limits : KdfLimits) (value : Json) (password : String) :
+    Except KeystoreError ByteArray := do
+  decryptStore limits (← readStore value) password
 
 end EthLib.Cryptography.Keystore

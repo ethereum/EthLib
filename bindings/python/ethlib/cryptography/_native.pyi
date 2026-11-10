@@ -347,7 +347,7 @@ def keystore_password(password: str) -> bytes:
     """NFKD, control removal and UTF-8 encoding, ERC-2335 "Password requirements"."""
     ...
 
-def keystore_decrypt(keystore: str, password: str) -> bytes:
+def keystore_decrypt(keystore: str, password: str, max_memory: int, max_work: int) -> bytes:
     """Decrypt an ERC-2335 JSON keystore and return its secret octets."""
     ...
 

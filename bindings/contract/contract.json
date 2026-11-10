@@ -1539,7 +1539,8 @@
    "docstring":
    "NFKD, control removal and UTF-8 encoding, ERC-2335 \"Password requirements\"."},
   {"summary": "Decrypt an ERC-2335 JSON keystore and return its secret octets.",
-   "signature": "(keystore: str, password: str) -> bytes",
+   "signature":
+   "(keystore: str, password: str, max_memory: int, max_work: int) -> bytes",
    "operation": "EthLib.Cryptography.Keystore.Exports.decrypt",
    "method": "keystore_decrypt",
    "errors":
@@ -1552,7 +1553,8 @@
       {"constructor": "shortKey", "code": 5},
       {"constructor": "pbkdf2", "code": 6},
       {"constructor": "scrypt", "code": 7},
-      {"constructor": "checksumMismatch", "code": 8}]}],
+      {"constructor": "checksumMismatch", "code": 8},
+      {"constructor": "limitExceeded", "code": 9}]}],
    "error_class": "KeystoreError",
    "docstring":
    "Decrypt an ERC-2335 JSON keystore and return its secret octets."},

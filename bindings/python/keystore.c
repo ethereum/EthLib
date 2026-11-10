@@ -26,5 +26,5 @@ py_keystore_decrypt(
   PyObject* self,
   PyObject* args
 ) {
-  return call_pyvalue_export(eth_keystore_decrypt, args, 2, KEYSTORE_ERROR);
+  return call_pyvalue_export(eth_keystore_decrypt, args, 4, KEYSTORE_ERROR);
 }

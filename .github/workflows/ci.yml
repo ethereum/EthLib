@@ -110,6 +110,10 @@ jobs:
       - name: binding contract
         run: lake exe gen-bindings --check
 
+      # The Unicode table in Lean must match the pinned UnicodeData.txt.
+      - name: unicode table
+        run: uv run --no-project --python 3.12 python scripts/generate_unicode_nfkd.py --check
+
       # The build pipeline regressions below run in this Python environment,
       # so it syncs even when the contract check above fails.
       # The sync builds the exports again, so it runs only when they built above.

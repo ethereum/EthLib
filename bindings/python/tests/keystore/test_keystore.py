@@ -228,3 +228,182 @@ def test_required_module_field() -> None:
         '"property not found: message"',
     ):
         keystore.decrypt(json.dumps(store), "password")
+
+
+def test_unsupported_kdf_before_parameters() -> None:
+    store = empty_store()
+    store["crypto"]["kdf"]["function"] = "argon2id"
+    store["crypto"]["kdf"]["params"] = {}
+    with raises(
+        KeystoreError,
+        'EthLib.Cryptography.Keystore.KeystoreError.unsupportedFunction "kdf" "argon2id"',
+    ) as exc:
+        keystore.decrypt(json.dumps(store), "password")
+    assert exc.value.code == 4
+
+
+def test_uppercase_hex() -> None:
+    store = empty_store()
+    store["crypto"]["checksum"]["message"] = store["crypto"]["checksum"]["message"].upper()
+    assert keystore.decrypt(json.dumps(store), "password") == b""
+
+
+def sha_blocks(size: int) -> int:
+    """SHA-256 compressions for a message of this many bytes, FIPS 180-4 padding included."""
+    return -(-(size + 9) // 64)
+
+
+def hmac_blocks(key: int, message: int) -> int:
+    """SHA-256 compressions of one RFC 2104 HMAC call, from the key and message sizes."""
+    return (sha_blocks(key) if key > 64 else 0) + sha_blocks(64 + message) + sha_blocks(96)
+
+
+def pbkdf2_blocks(password: int, salt: int, iterations: int, length: int) -> int:
+    """SHA-256 compressions of RFC 8018 PBKDF2: U_1 on the salt and index, then U_2 to U_c."""
+    per_block = hmac_blocks(password, salt + 4) + (iterations - 1) * hmac_blocks(password, 32)
+    return -(-length // 32) * per_block
+
+
+def scrypt_cost(password: int, salt: int, n: int, r: int, p: int, dklen: int) -> tuple[int, int]:
+    """Modeled memory and work of scrypt: its buffers, then Salsa20/8 cores and PBKDF2 blocks."""
+    memory = 128 * r * n + 4 * (128 * r * p) + -(-dklen // 32) * 32 + dklen
+    work = (
+        4 * n * r * p
+        + pbkdf2_blocks(password, salt, 1, 128 * r * p)
+        + pbkdf2_blocks(password, 128 * r * p, 1, dklen)
+    )
+    return memory, work
+
+
+@pytest.mark.parametrize(
+    "name, memory, work",
+    [
+        # c = 262144 with a 16-byte password, a 32-byte salt and one block: four compressions each.
+        # The output block and the key cut from it take 64 bytes.
+        ("pbkdf2", 64, 4 * 262144),
+        # n = 262144, r = 8, p = 1: the table, four buffers and two copies of the key.
+        # Work: the Salsa20/8 cores, 32 expansion blocks of 4, and 20 over the 1024-byte blocks.
+        ("scrypt", 128 * 8 * 262144 + 4 * 1024 + 64, 4 * 262144 * 8 + 32 * 4 + 20),
+    ],
+)
+def test_erc2335_limits(name: str, memory: int, work: int) -> None:
+    if name == "scrypt":
+        assert scrypt_cost(16, 32, 262144, 8, 1, 32) == (memory, work)
+    else:
+        assert pbkdf2_blocks(16, 32, 262144, 32) == work
+    text = (ROOT / f"{name}.json").read_text()
+    assert keystore.decrypt(text, PASSWORD, max_memory=memory, max_work=work) == SECRET
+    for max_memory, max_work in [(memory - 1, work), (memory, work - 1)]:
+        with raises(
+            KeystoreError,
+            f"EthLib.Cryptography.Keystore.KeystoreError.limitExceeded {memory} {work}",
+        ) as exc:
+            keystore.decrypt(text, PASSWORD, max_memory=max_memory, max_work=max_work)
+        assert exc.value.code == 9
+
+
+def scrypt_store(n: int, r: int, p: int, dklen: int) -> str:
+    """An empty-secret store whose KDF is scrypt with the given parameters and an empty salt."""
+    store = empty_store()
+    store["crypto"]["kdf"] = {
+        "function": "scrypt",
+        "params": {"dklen": dklen, "n": n, "r": r, "p": p, "salt": ""},
+        "message": "",
+    }
+    return json.dumps(store)
+
+
+@pytest.mark.parametrize(
+    "n, r, p, dklen",
+    [
+        # Twice the ERC-2335 example's p, just over the default work.
+        (2**18, 8, 2, 32),
+        # A long output from long blocks, with a tiny table.
+        (2, 2**16, 1, 2**12),
+        # A long output with tiny costs otherwise.
+        (2, 1, 1, 2**27),
+        # A table of 2^50 bytes.
+        (2**40, 8, 1, 32),
+    ],
+)
+def test_default_limits_refuse(n: int, r: int, p: int, dklen: int) -> None:
+    memory, work = scrypt_cost(len("password"), 0, n, r, p, dklen)
+    assert memory > keystore.MAX_MEMORY or work > keystore.MAX_WORK
+    with raises(
+        KeystoreError,
+        f"EthLib.Cryptography.Keystore.KeystoreError.limitExceeded {memory} {work}",
+    ) as exc:
+        keystore.decrypt(scrypt_store(n, r, p, dklen), "password")
+    assert exc.value.code == 9
+
+
+def test_default_limits_values() -> None:
+    assert (keystore.MAX_MEMORY, keystore.MAX_WORK) == (2**30, 2**24)
+
+
+def test_negative_limit() -> None:
+    with raises(ValueError, "cannot pass a negative int to Lean"):
+        keystore.decrypt(json.dumps(empty_store()), "password", max_memory=-1)
+
+
+def version_text(number: str) -> str:
+    """The empty-secret store with its version written as the given JSON number."""
+    return json.dumps(empty_store()).replace('"version": 4', f'"version": {number}')
+
+
+@pytest.mark.parametrize(
+    "number, reason",
+    [
+        ("1e1000000000", "exponents too large"),
+        ("1E+00004097", "exponents too large"),
+        ("[" + ",".join(["1e2048"] * 2) + ",1e1]", "exponents too large"),
+        ("1" * 81, "digit run too long"),
+        ("4e-" + "0" * 81, "digit run too long"),
+    ],
+)
+def test_screen_refuses(number: str, reason: str) -> None:
+    with raises(
+        KeystoreError, f'EthLib.Cryptography.Keystore.KeystoreError.invalidJson "{reason}"'
+    ) as exc:
+        keystore.decrypt(version_text(number), "password")
+    assert exc.value.code == 1
+
+
+@pytest.mark.parametrize("number", ["4e0", "4E+0000", "0.4e1"])
+def test_small_numbers_read(number: str) -> None:
+    assert keystore.decrypt(version_text(number), "password") == b""
+
+
+@pytest.mark.parametrize(
+    "number, message",
+    [
+        # A long value makes the error text wrap onto an indented line.
+        ("1e4096", f"unsupportedVersion\n  {10**4096}"),
+        ("1" + "0" * 79, f"unsupportedVersion\n  {10**79}"),
+        ("4e-99999999999999999999", 'invalidField "version" "Natural number expected"'),
+    ],
+)
+def test_screen_passes_to_reader(number: str, message: str) -> None:
+    # The screen lets each through, and the reader then finds no version 4.
+    with raises(KeystoreError, "EthLib.Cryptography.Keystore.KeystoreError." + message):
+        keystore.decrypt(version_text(number), "password")
+
+
+def test_exponent_letters_in_strings_ignored() -> None:
+    store = empty_store()
+    store["description"] = "1e999999999 " + "[" * 100 + "1" * 100
+    assert keystore.decrypt(json.dumps(store), "password") == b""
+
+
+@pytest.mark.parametrize("depth, accepted", [(63, True), (64, False)])
+def test_nesting_bound(depth: int, accepted: bool) -> None:
+    # The keystore object is one level, so the extra field reaches depth plus one.
+    text = json.dumps(empty_store())[:-1] + ', "x": ' + "[" * depth + "]" * depth + "}"
+    if accepted:
+        assert keystore.decrypt(text, "password") == b""
+    else:
+        with raises(
+            KeystoreError,
+            'EthLib.Cryptography.Keystore.KeystoreError.invalidJson "nesting too deep"',
+        ):
+            keystore.decrypt(text, "password")

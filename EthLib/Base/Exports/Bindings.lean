@@ -297,7 +297,7 @@ def bindings : List Binding := [
   ⟨"keystore_password", `EthLib.Cryptography.Keystore.Exports.password,
     "(password: str) -> bytes", [], some "KeystoreError"⟩,
   ⟨"keystore_decrypt", `EthLib.Cryptography.Keystore.Exports.decrypt,
-    "(keystore: str, password: str) -> bytes",
+    "(keystore: str, password: str, max_memory: int, max_work: int) -> bytes",
     [`EthLib.Cryptography.Keystore.KeystoreError], some "KeystoreError"⟩,
   ⟨"secp256k1_verify", `EthLib.Cryptography.Secp256k1.Ecdsa.verify,
     "(public_key: bytes, msg_hash: bytes, signature: bytes) -> bool",
