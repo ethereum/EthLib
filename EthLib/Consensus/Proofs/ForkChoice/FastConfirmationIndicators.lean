@@ -22,7 +22,7 @@ The store computes each term in Gwei, with its own estimates and roundings.
 
 Its estimate of `Φ` is the estimated committee weight since the parent, plus the boost.
 
-A discount is taken off that estimate.
+A discount is then taken off.
 
 It comes from the votes for the parent in the empty slots before the block.
 
@@ -36,11 +36,15 @@ It meets the paper's condition on `β W` when the estimate covers the true stake
 
 The estimate does not always cover it, since it is the average weight of a committee.
 
+With equal balances, a committee of the larger size in its epoch is above the average.
+
+Such committees exist in every epoch whose validator count the slots per epoch do not divide.
+
 So that cover is a hypothesis of the last theorem, with the estimate rounded down to 100 Gwei.
 
 With it, Lemmas 4 and 3 of the paper give the honest support of the block.
 
-That support exceeds half of the store's estimate of `Φ`.
+Twice that support, plus the discount, exceeds the committee weight and the boost.
 
 The range of slots of the adversary starts at the block, or at its epoch when its parent is older.
 
@@ -238,6 +242,21 @@ theorem getAdversarialWeight_eq_ok {head root : Root} {balanceSource : BeaconSta
     obtain ⟨start, startOk, l, lOk, done⟩ := range
     exact ⟨c, b, start, l, cOk, bOk, lOk, .inl startOk.symm, done⟩
 
+/-- The terms of the store's adversary over a range of slots, each from its own step.
+
+They are the total active balance, its estimate for the range, and the known equivocators. -/
+theorem computeAdversarialWeight_eq_ok {head : Root} {balanceSource : BeaconState preset fork}
+    {startSlot endSlot : Slot} {adversary : Gwei}
+    (result : store.computeAdversarialWeight config head balanceSource startSlot endSlot =
+      .ok adversary) :
+    ∃ total estimate equivocation, getTotalActiveBalance balanceSource = .ok total ∧
+      estimateCommitteeWeightBetweenSlots preset total startSlot endSlot = .ok estimate ∧
+      store.getEquivocationScore head balanceSource startSlot endSlot = .ok equivocation := by
+  have steps := result
+  simp only [computeAdversarialWeight, bind_ok_iff, mapError_ok_iff] at steps
+  obtain ⟨t, tOk, e, eOk, -, -, q, qOk, -⟩ := steps
+  exact ⟨t, e, q, tOk, eOk, qOk⟩
+
 /-- A block is confirmed when its support and its threshold are computed, the first above. -/
 theorem isOneConfirmed_eq_ok_true_iff {head root : Root}
     {balanceSource : BeaconState preset fork} {tally : VoteTally} :
@@ -268,7 +287,9 @@ The supporters are validators whose stake is the support of the block in the sto
 
 The equivocators are validators whose stake is that of the known equivocators in the store.
 
-Both lie in the committees `W` of a range of slots, and they are apart.
+Both lie in a set `W` of validators, meant as the committees of a range of slots.
+
+The supporters and the equivocators are apart.
 
 The store's adversary over that range must be its adversary for the block.
 
@@ -282,7 +303,9 @@ Assume also that the store's estimate for that range covers the stake of `W`.
 
 The estimate is rounded down to 100 Gwei there, as the store's share of the adversary rounds it.
 
-The store does not check that cover, and it can fail within one epoch. -/
+The store does not check that cover, and with equal balances it fails for the larger committees.
+
+When the discount exceeds the estimate and the boost, this says nothing on the honest support. -/
 theorem lt_two_mul_honest_support_of_isOneConfirmed {ν : Type*} {w : ν → ℕ} {J : Set ν}
     [DecidablePred (· ∈ J)] {W supporters equivocators : Finset ν} {head root : Root}
     {balanceSource : BeaconState preset fork} {tally : VoteTally}
