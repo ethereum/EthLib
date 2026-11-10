@@ -17,7 +17,9 @@ From Gloas the registry is a progressive list, so these theorems take the bound 
 
 A position of the registry is active in an epoch when the validator there is.
 
-The effective balances are aligned when each is a whole number of increments, at most its largest.
+The effective balances are aligned when each is a whole number of increments.
+
+When the largest values of the preset are aligned, so is the largest of each validator.
 
 A marked sum of effective balances is their sum over the marked positions.
 
@@ -74,12 +76,40 @@ A position outside the registry is not active. -/
 def isActiveAt (state : BeaconState preset fork) (epoch : Epoch) (position : Nat) : Bool :=
   (state.validators.data[position]?.map (isActiveValidator · epoch)).getD false
 
-/-- Every effective balance is a whole number of increments, and at most its largest at the fork.
--/
+/-- Every effective balance of the registry is a whole number of increments. -/
 def EffectiveBalancesAligned (state : BeaconState preset fork) : Prop :=
-  ∀ validator ∈ state.validators.data.toList,
-    validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0 ∧
-      validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator
+  ∀ validator ∈ state.validators.data,
+    validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0
+
+/-- Each largest effective balance of the preset is a whole number of increments.
+
+These are the largest before Electra, the activation balance and the largest from Electra. -/
+def MaxEffectiveBalancesAligned (preset : Preset) : Prop :=
+  preset.MAX_EFFECTIVE_BALANCE % preset.EFFECTIVE_BALANCE_INCREMENT = 0 ∧
+    preset.MIN_ACTIVATION_BALANCE % preset.EFFECTIVE_BALANCE_INCREMENT = 0 ∧
+    preset.MAX_EFFECTIVE_BALANCE_ELECTRA % preset.EFFECTIVE_BALANCE_INCREMENT = 0
+
+/-- The mainnet preset has aligned largest values. -/
+theorem maxEffectiveBalancesAligned_mainnet : MaxEffectiveBalancesAligned Preset.mainnet := by
+  unfold MaxEffectiveBalancesAligned
+  decide
+
+/-- The minimal preset has aligned largest values. -/
+theorem maxEffectiveBalancesAligned_minimal : MaxEffectiveBalancesAligned Preset.minimal := by
+  unfold MaxEffectiveBalancesAligned
+  decide
+
+/-- With aligned largest values in the preset, the largest of each validator is aligned. -/
+theorem withdrawalMaxEffectiveBalance_aligned (maxAligned : MaxEffectiveBalancesAligned preset)
+    (validator : Validator) :
+    withdrawalMaxEffectiveBalance preset fork validator % preset.EFFECTIVE_BALANCE_INCREMENT =
+      0 := by
+  unfold withdrawalMaxEffectiveBalance getMaxEffectiveBalance
+  split
+  · split
+    · exact maxAligned.2.2
+    · exact maxAligned.2.1
+  · exact maxAligned.1
 
 /-- A position of the validator registry, as a validator index, keeps its value.
 

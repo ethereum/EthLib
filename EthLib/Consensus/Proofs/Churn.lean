@@ -258,6 +258,15 @@ theorem sub_mod_mod_self (balance increment : Gwei) :
   rw [UInt64.toNat_mod, UInt64.toNat_sub_of_le _ _ le, UInt64.toNat_mod]
   simpa using Nat.sub_mod_eq_zero_of_mod_eq (Nat.mod_mod _ _).symm
 
+/-- A balance rounded down to an increment and capped is whole, when the cap is whole. -/
+theorem min_sub_mod_mod_self {cap increment : Gwei} (balance : Gwei)
+    (capAligned : cap % increment = 0) :
+    min (balance - balance % increment) cap % increment = 0 := by
+  rw [UInt64.min_def]
+  split
+  · exact sub_mod_mod_self _ _
+  · exact capAligned
+
 /-- From Gloas, the churn of exits is a whole number of effective balance increments. -/
 theorem getExitChurnLimit_mod {config : Config} {state : BeaconState preset fork} {exit : Gwei}
     (computed : getExitChurnLimit config state = .ok exit) :
