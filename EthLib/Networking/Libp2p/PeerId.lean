@@ -78,13 +78,6 @@ def decodePeerId (id : ByteArray) : Except IdentityError Point :=
   | 0x00 :: 0x25 :: key => decodePublicKey ⟨key.toArray⟩
   | _ => .error .peerId
 
-/-- Read 32 big-endian bytes as a secp256k1 secret scalar, which must be below the group order.
-
-The secret key must stay private, and this function makes no constant-time claim. -/
-def secretOfBytes (bytes : Vector UInt8 32) : Except IdentityError Fn :=
-  let n := EthLib.Base.bytesToNat bytes.toList
-  if h : n < Fn.modulus then .ok ⟨n, h⟩ else .error .privateKey
-
 /-- Derive and serialize the public key of a nonzero secp256k1 secret scalar.
 
 The secret key must stay private, and this function makes no constant-time claim. -/

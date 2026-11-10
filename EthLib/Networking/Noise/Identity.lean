@@ -23,6 +23,8 @@ Repeated identity fields use the last value, and extension messages merge.
 
 namespace EthLib.Networking.Noise
 
+open EthLib.Cryptography.Secp256k1 (Fn)
+
 /-- The two identity fields and optional opaque extension message of the libp2p payload. -/
 structure Payload where
   publicKey : ByteArray := .empty
@@ -131,7 +133,7 @@ def identitySecretError : Libp2p.IdentityError → NoiseError
 The rule is noise-libp2p "Static Key Authentication" and "The libp2p Handshake Payload".
 
 The secret key must stay private, and this function makes no constant-time claim. -/
-def makePayload (identitySecret : Cryptography.Secp256k1.Fn) (staticKey : Key)
+def makePayload (identitySecret : Fn) (staticKey : Key)
     (extensions : Option ByteArray) :
     Except NoiseError ByteArray := do
   let publicKey ← (Libp2p.publicKey identitySecret).mapError identitySecretError
@@ -199,7 +201,7 @@ def complete (s : Libp2pState) : Except NoiseError (Key × RemoteInfo) := do
   else throw .wrongPhase
 
 /-- Write a libp2p message; first-message extensions are forbidden by the payload rules. -/
-def writeLibp2p (s : Libp2pState) (identitySecret : Cryptography.Secp256k1.Fn)
+def writeLibp2p (s : Libp2pState) (identitySecret : Fn)
     (extensions : Option ByteArray) :
     Except NoiseError (Libp2pState × ByteArray) := do
   let payload ← if s.handshake.step = 0 then

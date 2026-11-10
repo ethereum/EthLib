@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Networking.Exports.Libp2p
 public import EthLib.Networking.Noise.Identity
 
 /-!
@@ -128,7 +129,7 @@ def initializeLibp2pExport (args : PyValue) : Result PyValue :=
 @[export eth_noise_libp2p_write]
 def writeLibp2pExport (args : PyValue) : Result PyValue :=
   pyExport (fun (value, identitySecret, extensions) => result (do
-    let secret ← (Libp2p.secretOfBytes identitySecret).mapError identitySecretError
+    let secret ← (Libp2p.Exports.secretOfBytes identitySecret).mapError identitySecretError
     let (state, message) ← writeLibp2p (libp2pOfValue value) secret extensions
     return (libp2pToValue state, message))) args
 

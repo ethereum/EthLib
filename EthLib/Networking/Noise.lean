@@ -37,12 +37,12 @@ open EthLib.Cryptography
 /-- An X25519 private key or public coordinate, Noise §12.1. -/
 abbrev Key := X25519.Key
 
-/-- The chaining key `ck` of Noise §5.2, a `HASHLEN`-byte output of SHA-256. -/
+/-- The chaining key `ck` of Noise §5.2, of `HASHLEN` = 32 bytes. -/
 structure ChainingKey where
   bytes : Vector UInt8 32
 deriving DecidableEq
 
-/-- The handshake hash `h` of Noise §5.2, a `HASHLEN`-byte output of SHA-256. -/
+/-- The handshake hash `h` of Noise §5.2, of `HASHLEN` = 32 bytes. -/
 structure HandshakeHash where
   bytes : Vector UInt8 32
 deriving DecidableEq
