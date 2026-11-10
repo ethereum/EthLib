@@ -133,6 +133,10 @@ def makePayload (identitySecret staticKey : Key) (extensions : Option ByteArray)
 /-- Successful authentication carries the real signature check on this static coordinate. -/
 structure AuthenticatedRemote (staticKey : Key) where
   publicKey : ByteArray
+  /-- The secp256k1 point that the public key encodes. -/
+  key : Cryptography.Secp256k1.Point
+  /-- The public key decodes to that point. -/
+  decoded : Libp2p.decodePublicKey publicKey = .ok key
   signature : ByteArray
   extensions : Option ByteArray
   verified : Libp2p.verify publicKey (signedStatic staticKey) signature = true
@@ -142,7 +146,10 @@ def authenticatePayload (staticKey : Key) (bytes : ByteArray) :
     Except NoiseError (AuthenticatedRemote staticKey) := do
   let p ← decodePayload bytes
   if h : Libp2p.verify p.publicKey (signedStatic staticKey) p.signature = true then
-    return ⟨p.publicKey, p.signature, p.extensions, h⟩
+    match hk : Libp2p.decodePublicKey p.publicKey with
+    | .ok key => return ⟨p.publicKey, key, hk, p.signature, p.extensions, h⟩
+    -- A verified signature implies that the key decodes, so this branch never runs.
+    | .error _ => throw .identity
   else throw .identity
 
 /-- An authenticated remote key, derived peer ID, signature and opaque extensions. -/
@@ -150,7 +157,7 @@ abbrev RemoteInfo := ByteArray × ByteArray × ByteArray × Option ByteArray
 
 /-- Project authenticated data to the public result, deriving the ID from the signing key. -/
 def remoteInfo {staticKey : Key} (remote : AuthenticatedRemote staticKey) : RemoteInfo :=
-  (remote.publicKey, Libp2p.peerId remote.publicKey, remote.signature, remote.extensions)
+  (remote.publicKey, Libp2p.peerId remote.key, remote.signature, remote.extensions)
 
 /-- The XX state and the original encrypted remote message with its pre-read state. -/
 structure Libp2pState where
