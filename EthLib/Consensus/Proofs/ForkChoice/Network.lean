@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.Containers.State
-public import EthLib.Consensus.Proofs.ForkChoice.Reachable
+public import EthLib.Consensus.Proofs.ForkChoice.ForwardClock
 public import EthLib.Consensus.Proofs.Models.Network.Model
 
 /-!
@@ -22,6 +22,8 @@ A message that the handler rejects leaves the store as it was, and may be proces
 What lies outside the beacon chain, such as the execution engine, is one source for all.
 
 The store of each honest validator stays reachable from the anchor along every execution.
+
+Along an execution of the network model, an honest store that starts with a forward clock keeps one.
 -/
 
 @[expose] public section
@@ -139,6 +141,35 @@ theorem Execution.reachable {ν κ : Type*} [DecidableEq ν] {checks : Signature
     (start : ∀ v ∈ J, Store.Reachable config anchorState anchorBlock (e.start v)) (n : ℕ) :
     ∀ v ∈ J, Store.Reachable config anchorState anchorBlock ((e.world n).state v) :=
   e.state_induction start (fun _ _ _ _ _ _ reachable moved => moved.reachable reachable) n
+
+/-- A move of an honest validator keeps its store reachable with a forward clock. -/
+theorem Handles.forwardReachable {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {time : ℕ} {view : Set (Message preset fork)} {store after : Store preset fork}
+    (handles : Handles config checks sources time view store after)
+    (forward : Store.ForwardReachable config anchorState anchorBlock store) :
+    Store.ForwardReachable config anchorState anchorBlock after := by
+  cases handles with
+  | tick le lt ticked =>
+    refine forward.tick ?_ ticked
+    rw [UInt64.le_iff_toNat_le, Nat.toUInt64, UInt64.toNat_ofNat_of_lt' lt]
+    exact le
+  | block _ added => exact forward.onBlockWithVotes added
+  | attestation _ attested => exact forward.attestation attested
+  | attesterSlashing _ slashed => exact forward.attesterSlashing slashed
+  | payloadAttestation _ voted => exact forward.payloadAttestation voted
+  | envelope _ accepted => exact forward.envelope accepted
+  | inclusionList _ accepted => exact forward.inclusionList accepted
+
+/-- Along an execution, the store of each honest validator stays reachable with a forward clock.
+
+The stores of the honest validators must be reachable with a forward clock at the start. -/
+theorem Execution.forwardReachable {ν κ : Type*} [DecidableEq ν] {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {signed : Message preset fork → Set (ν × κ)}
+    {sends : ν → ℕ → Set (Message preset fork) → Store preset fork → Message preset fork → Prop}
+    {J : Set ν} (e : Execution (forkChoice config checks sources signed sends) J)
+    (start : ∀ v ∈ J, Store.ForwardReachable config anchorState anchorBlock (e.start v)) (n : ℕ) :
+    ∀ v ∈ J, Store.ForwardReachable config anchorState anchorBlock ((e.world n).state v) :=
+  e.state_induction start (fun _ _ _ _ _ _ forward moved => moved.forwardReachable forward) n
 
 /-- A store can start from a mainnet state at slot zero and a block with the root of that state.
 

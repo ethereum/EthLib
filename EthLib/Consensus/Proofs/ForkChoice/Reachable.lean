@@ -201,7 +201,9 @@ The handlers are the tick, the block, the attestation and the attester slashing.
 
 From Gloas they also take a vote of the payload committee and a signed envelope.
 
-From Heze they also take an inclusion list. -/
+From Heze they also take an inclusion list.
+
+A store with a forward clock has the same cases, with a tick that never sets the time back. -/
 inductive Reachable (config : Config) (anchorState : BeaconState preset fork)
     (anchorBlock : BeaconBlock preset fork) : Store preset fork → Prop where
   /-- The store built from the anchor. -/
@@ -258,14 +260,10 @@ theorem Reachable.onBlockWithVotes {checks : SignatureChecks} {sources : BlockSo
     {signed : SignedBeaconBlock preset fork}
     (reachable : Reachable config anchorState anchorBlock store)
     (added : store.onBlockWithVotes config checks sources signed = .ok after) :
-    Reachable config anchorState anchorBlock after := by
-  unfold Store.onBlockWithVotes at added
-  simp only [bind_ok_iff, ← Array.foldlM_toList] at added
-  obtain ⟨blocked, block, voted, attested, slashed⟩ := added
-  have votes := foldlM_ok_invariant (Reachable config anchorState anchorBlock)
-    (fun _ _ _ reached step => reached.attestation step) (reachable.block block) attested
-  exact foldlM_ok_invariant (Reachable config anchorState anchorBlock)
-    (fun _ _ _ reached step => reached.attesterSlashing step) votes slashed
+    Reachable config anchorState anchorBlock after :=
+  onBlockWithVotes_preserves (fun reached step => reached.block step)
+    (fun _ reached step => reached.attestation step)
+    (fun _ reached step => reached.attesterSlashing step) reachable added
 
 /-- Each known block of a reachable store has its own root as its key. -/
 theorem Reachable.root (reachable : Reachable config anchorState anchorBlock store)

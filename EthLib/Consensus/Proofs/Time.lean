@@ -108,6 +108,27 @@ theorem computeSlotAtTimeMs_computeTimeAtSlotMs {genesisTimeMs timeMs : UInt64} 
       rw [offsetValue, Nat.mul_div_cancel _ positive]
     simp only [computeSlotAtTimeMs, elapsed, quotient, bind, Except.bind]
 
+/-- The slot at a time does not decrease as the time grows. -/
+theorem computeSlotAtTimeMs_mono {genesisTimeMs timeMs laterMs : UInt64} {slot later : Slot}
+    (le : timeMs ≤ laterMs)
+    (current : computeSlotAtTimeMs config genesisTimeMs timeMs = .ok slot)
+    (next : computeSlotAtTimeMs config genesisTimeMs laterMs = .ok later) : slot ≤ later := by
+  unfold computeSlotAtTimeMs at current next
+  cases subA : subChecked timeMs genesisTimeMs with
+  | error e => simp [subA, bind, Except.bind] at current
+  | ok elapsed =>
+    cases subB : subChecked laterMs genesisTimeMs with
+    | error e => simp [subB, bind, Except.bind] at next
+    | ok elapsedLater =>
+      simp only [subA, subB, bind, Except.bind] at current next
+      obtain ⟨_, eA⟩ := subChecked_ok_iff.mp subA
+      obtain ⟨_, eB⟩ := subChecked_ok_iff.mp subB
+      obtain ⟨_, qA⟩ := divChecked_ok_iff.mp current
+      obtain ⟨_, qB⟩ := divChecked_ok_iff.mp next
+      rw [UInt64.le_iff_toNat_le, qA, qB]
+      have := UInt64.le_iff_toNat_le.mp le
+      exact Nat.div_le_div_right (by omega)
+
 /-- A whole number of seconds that fits keeps its value, in milliseconds.
 
 It fits when it is at most the largest 64-bit integer divided by 1000. -/

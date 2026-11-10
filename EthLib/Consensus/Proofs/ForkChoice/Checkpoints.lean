@@ -293,8 +293,8 @@ theorem onBlock_ordered {checks : SignatureChecks}
         · cases keptFound
           exact invariant
         · exact holds keptFound
-      · rw [updateCheckpoints_blockStates, (updateProposerBoostRoot_frame boost).2.2,
-          (recordBlockTimeliness_frame record).2.2]
+      · rw [updateCheckpoints_blockStates, (updateProposerBoostRoot_frame boost).2.2.1,
+          (recordBlockTimeliness_frame record).2.2.1]
     exact computePulledUpTip_ordered
       (updateCheckpoints_ordered boostedOrdered (finalized_le_currentJustified invariant.ordered))
       statesHold added
