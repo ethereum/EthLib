@@ -53,6 +53,10 @@ Two branches can justify one checkpoint from two states, each with its own balan
 
 A set of weights holds them both, where a single weights function could not.
 
+Nothing bounds `W` either: with the zero weights in `W t`, every ordered link is a slack link.
+
+So the safety bounds say something only when each weights of each set stays close to a reference.
+
 With `U = V` and the single stake function `w` in each set, a slack link is a supermajority link.
 
 Justification and finalization take the kind of link as a parameter.
@@ -145,9 +149,8 @@ The slack is the stake of the set `V t` outside the set `U t`.
 
 Some weights `w` of the set `W t` give the bound below.
 
-Under `w`, twice the stake of `V t` is at most three times the stake of its voters.
-
-That bound adds twice the slack, also under `w`. -/
+Under `w`, twice the stake of `V t` is at most three times that of its voters plus twice the slack.
+-/
 def SlackLink (V U : Checkpoint β → Finset ν) (W : Checkpoint β → Set (ν → ℕ))
     (votes : Set (Vote ν β)) (s t : Checkpoint β) : Prop :=
   s.epoch < t.epoch ∧ s.block ≤ t.block ∧ ∃ w ∈ W t,

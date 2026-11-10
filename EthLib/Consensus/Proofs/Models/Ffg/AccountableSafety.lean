@@ -43,9 +43,9 @@ The bounds measure every stake under reference weights.
 
 They lose the change from the reference weights to the weights of each of the two links.
 
-A gain of weight counts like an activation, and a loss like an exit.
+In the reference form, a gain of weight counts like an activation, and a loss like an exit.
 
-With one stake function that change is zero, which gives the bounds of Gasper.
+With one stake function as reference weights that change is zero, which gives the bounds of Gasper.
 
 With no slack, a slack link is a supermajority link, which gives the bounds without slack.
 -/
@@ -214,7 +214,7 @@ Each validator that votes for both links is slashable.
 
 The links have the validator sets `L` and `R` of their targets.
 
-Under weights `w₁`, twice the stake of `L` is at most three times that of its voters plus its slack.
+Under `w₁`, twice the stake of `L` is at most three times that of its voters plus twice its slack.
 
 The same holds for `R` under weights `w₂`.
 
@@ -267,7 +267,7 @@ Their epochs lie between the epochs of the two finalized checkpoints.
 
 They come with weights `wl` from the set of `l` and `wr` from the set of `r`.
 
-The bounds below hold under those weights.
+The change and slack terms below are measured under those weights.
 
 Take the validator sets `L` and `R` of `l` and `r`, a reference set `V₀` and reference weights `w₀`.
 
@@ -286,6 +286,8 @@ The slashable validators of both sets hold stake `x` under `w₀`, with two boun
 The first bound: `2 * w₀(L) ≤ 3 * x + w₀(R) + 3 * (aL + eR) + δL + δR`.
 
 The second bound is the first with the two sides swapped.
+
+The bounds have content only when `w₀` stays close to `wl` on `L` and to `wr` on `R`.
 
 The two checkpoints and their weights do not depend on the reference set or weights. -/
 theorem accountable_safety_dynamic_slack {W : Checkpoint β → Set (ν → ℕ)} {c₁ c₂ : Checkpoint β}
@@ -375,7 +377,7 @@ Their epochs lie between the epochs of the two finalized checkpoints.
 
 They come with weights `wl` from the set of `l` and `wr` from the set of `r`.
 
-The bound below holds under those weights.
+The change and slack terms below are measured under those weights.
 
 Take the validator sets `L` and `R` of `l` and `r`.
 
