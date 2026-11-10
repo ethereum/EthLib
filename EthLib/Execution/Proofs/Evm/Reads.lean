@@ -39,7 +39,11 @@ BALANCE, EXTCODESIZE, EXTCODECOPY, EXTCODEHASH, SELFBALANCE and SLOAD add exactl
 
 They keep every other read.
 
-Every other instruction that gives the next frame keeps the account reads and the storage reads.
+Every other instruction of the dispatch keeps the account reads and the storage reads.
+
+The calls and the creations are outside the dispatch, and they read accounts too.
+
+A step that fails before its read gives no frame, so it adds no read.
 -/
 
 @[expose] public section
@@ -133,14 +137,14 @@ theorem mem_accountReads_balanceStep {evm after : Evm fork Meter} {word : U256}
     exact (State.TransactionState.mem_accountReads_recordAccountRead _ _ _).mpr (.inl rfl)
 
 omit [GasMeter Meter] in
-/-- An access to an address keeps the state, with its reads. -/
+/-- An access to an address changes only the substate, so the state stays exactly as it was. -/
 theorem state_accessAddress (evm : Evm fork Meter) (address : Address) :
     (accessAddress evm address).2.state = evm.state := by
   unfold accessAddress
   split <;> rfl
 
 omit [GasMeter Meter] in
-/-- An access to a storage key keeps the state, with its reads. -/
+/-- An access to a storage key changes only the substate, so the state stays exactly as it was. -/
 theorem state_accessStorageKey (evm : Evm fork Meter) (address : Address) (key : Bytes32) :
     (accessStorageKey evm address key).2.state = evm.state := by
   unfold accessStorageKey
@@ -342,9 +346,11 @@ theorem accountReads_selfdestructStep {evm after : Evm fork Meter} {word : U256}
     exact ⟨by rw [← c2.2]; rfl, e, rfl⟩
 
 
-/-- Every other instruction that gives the next frame keeps the account and storage reads.
+/-- Every other instruction of the dispatch keeps the account and storage reads.
 
-The eight instructions that read an account or a storage slot are left out. -/
+The dispatch leaves out the calls and the creations.
+
+Of its own instructions, the eight that read an account or a storage slot are left out. -/
 theorem reads_instruction {op : Op} {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
     {evm after : Evm fork Meter} (hrun : instruction fork op = some run)
     (ordinary : op ∉ [.balance, .selfbalance, .extcodesize, .extcodecopy, .extcodehash,
