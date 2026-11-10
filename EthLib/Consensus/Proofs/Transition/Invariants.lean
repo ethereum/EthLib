@@ -1386,6 +1386,47 @@ private theorem queueForActivation_pubkey {validator queued : Validator}
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ rfl
 
+/-- The state that the epoch transition reaches before the step of the payments.
+
+It runs the steps of the epoch transition that come before that step, in their order.
+
+Before Altair it skips the inactivity scores, as the epoch transition does. -/
+def epochBeforePayments (config : Config) (checks : SignatureChecks)
+    (state : BeaconState preset fork) : Except TransitionError (BeaconState preset fork) := do
+  let state ← processJustificationAndFinalization state
+  let state ← (if altair : .altair ≤ fork then processInactivityUpdates config state altair
+    else pure state)
+  let state ← processRewardsAndPenalties config state
+  let state ← processRegistryUpdates config state
+  let state ← processSlashings state
+  let state ← (if before : fork < .hegota then processEth1DataReset before state else pure state)
+  processPendingBalances config checks state
+
+/-- From Altair, the epoch transition first runs the steps that come before the payments.
+
+It then runs the rest of its steps in their order.
+
+So those first steps are a factor of the epoch transition, and not a second form of it. -/
+theorem processEpochAltair_eq_epochBeforePayments_bind (config : Config) (checks : SignatureChecks)
+    (state : BeaconState preset fork) (altair : .altair ≤ fork) :
+    processEpochAltair config checks state altair = (do
+      let state ← epochBeforePayments config checks state
+      let state ← (if gloas : .glamsterdam ≤ fork then
+          liftAccessor (processBuilderPendingPayments state gloas)
+        else pure state)
+      let state ← processEffectiveBalanceUpdates state
+      let state ← processSlashingsReset state
+      let state ← processRandaoMixesReset state
+      let state ← if capella : .shapella ≤ fork then processHistoricalSummariesUpdate state capella
+        else processHistoricalRootsUpdate state
+      let state := processParticipationFlagUpdates state altair
+      let state ← processSyncCommitteeUpdates state altair
+      let state ← (if fulu : .fusaka ≤ fork then liftAccessor (processProposerLookahead state fulu)
+        else pure state)
+      if gloas : .glamsterdam ≤ fork then liftAccessor (processPtcWindow state gloas)
+      else pure state) := by
+  simp only [processEpochAltair, epochBeforePayments, altair, ↓reduceDIte, bind_assoc]
+
 namespace EpochFrameLaws
 
 variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
@@ -1731,35 +1772,47 @@ theorem processPtcWindow {gloas : .glamsterdam ≤ fork}
   obtain ⟨_, _, _, _, rfl⟩ := computed
   exact (laws.ptcWindow _ _)
 
-/-- From Altair, the epoch transition is justification, then steps in the relation.
-
-The builder payments follow, which change nothing before Gloas, then more steps in the relation.
-
-The rotation of the participation flags comes next, then the last steps in the relation. -/
-theorem processEpochAltair_split {altair : .altair ≤ fork}
-    (computed : Consensus.processEpochAltair config checks state altair = .ok after) :
-    ∃ justified pending paid rooted,
-      processJustificationAndFinalization state = .ok justified ∧ R justified pending ∧
-      (if gloas : .glamsterdam ≤ fork then
-        liftAccessor (processBuilderPendingPayments pending gloas) else pure pending) =
-          (Except.ok paid : Except TransitionError _) ∧
-      R paid rooted ∧ R (processParticipationFlagUpdates rooted altair) after := by
-  unfold Consensus.processEpochAltair at computed
-  simp only [bind_ok_iff] at computed
+/-- The steps of an epoch before the payments are justification, then steps in the relation. -/
+theorem epochBeforePayments_split
+    (computed : epochBeforePayments config checks state = .ok after) :
+    ∃ justified, processJustificationAndFinalization state = .ok justified ∧
+      R justified after := by
+  simp only [epochBeforePayments, bind_ok_iff] at computed
   obtain ⟨justified, justifiedOk, scored, scoredOk, rewarded, rewardedOk, registered,
-    registeredOk, slashed, slashedOk, reset, resetOk, pending, pendingOk, paid, paidOk, balanced,
-    balancedOk, cleared, clearedOk, mixed, mixedOk, computed⟩ := computed
+    registeredOk, slashed, slashedOk, reset, resetOk, pendingOk⟩ := computed
+  have scoredFrame : R justified scored := by
+    split at scoredOk
+    · exact laws.processInactivityUpdates scoredOk
+    · simp only [pure, Except.pure, Except.ok.injEq] at scoredOk
+      exact scoredOk ▸ laws.refl _
   have resetFrame : R slashed reset := by
     split at resetOk
     · exact laws.processEth1DataReset resetOk
     · simp only [pure, Except.pure, Except.ok.injEq] at resetOk
       exact resetOk ▸ laws.refl _
-  have head : R justified pending :=
-    laws.trans (laws.processInactivityUpdates scoredOk) <|
+  exact ⟨justified, justifiedOk, laws.trans scoredFrame <|
     laws.trans (laws.processRewardsAndPenalties rewardedOk) <|
     laws.trans (laws.processRegistryUpdates registeredOk) <|
     laws.trans (laws.processSlashings slashedOk) <|
-    laws.trans resetFrame (laws.processPendingBalances pendingOk)
+    laws.trans resetFrame (laws.processPendingBalances pendingOk)⟩
+
+/-- From Altair, the epoch transition first runs the steps before the payments.
+
+The builder payments follow, which change nothing before Gloas, then steps in the relation.
+
+The rotation of the participation flags comes next, then the last steps in the relation. -/
+theorem processEpochAltair_paymentSplit {altair : .altair ≤ fork}
+    (computed : Consensus.processEpochAltair config checks state altair = .ok after) :
+    ∃ pending paid rooted,
+      epochBeforePayments config checks state = .ok pending ∧
+      (if gloas : .glamsterdam ≤ fork then
+        liftAccessor (processBuilderPendingPayments pending gloas) else pure pending) =
+          (Except.ok paid : Except TransitionError _) ∧
+      R paid rooted ∧ R (processParticipationFlagUpdates rooted altair) after := by
+  rw [processEpochAltair_eq_epochBeforePayments_bind] at computed
+  simp only [bind_ok_iff] at computed
+  obtain ⟨pending, pendingOk, paid, paidOk, balanced, balancedOk, cleared, clearedOk, mixed,
+    mixedOk, computed⟩ := computed
   have middle : R paid mixed :=
     laws.trans (laws.processEffectiveBalanceUpdates balancedOk) <|
     laws.trans (laws.processSlashingsReset clearedOk) (laws.processRandaoMixesReset mixedOk)
@@ -1776,7 +1829,7 @@ theorem processEpochAltair_split {altair : .altair ≤ fork}
       · exact laws.processPtcWindow (liftAccessor_ok.mp windowed)
       · simp only [pure, Except.pure, Except.ok.injEq] at windowed
         exact windowed ▸ laws.refl _
-    refine ⟨justified, pending, paid, rooted, justifiedOk, head, paidOk, ?_, ?_⟩
+    refine ⟨pending, paid, rooted, pendingOk, paidOk, ?_, ?_⟩
     · first
       | exact laws.trans middle (laws.processHistoricalSummariesUpdate rootedOk)
       | exact laws.trans middle (laws.processHistoricalRootsUpdate rootedOk)
@@ -1935,8 +1988,9 @@ theorem processEpochAltair_split {altair : .altair ≤ fork}
     ∃ justified rooted, processJustificationAndFinalization state = .ok justified ∧
       MutatorFrame justified rooted ∧
       MutatorFrame (processParticipationFlagUpdates rooted altair) after := by
-  obtain ⟨justified, pending, paid, rooted, justifiedOk, head, paidOk, middle, tail⟩ :=
-    mutatorEpochFrameLaws.processEpochAltair_split computed
+  obtain ⟨pending, paid, rooted, pendingOk, paidOk, middle, tail⟩ :=
+    mutatorEpochFrameLaws.processEpochAltair_paymentSplit computed
+  obtain ⟨justified, justifiedOk, head⟩ := mutatorEpochFrameLaws.epochBeforePayments_split pendingOk
   have paidFrame : MutatorFrame pending paid := by
     split at paidOk
     · exact frame_processBuilderPendingPayments (liftAccessor_ok.mp paidOk)

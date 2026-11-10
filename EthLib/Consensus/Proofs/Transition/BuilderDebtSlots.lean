@@ -125,47 +125,6 @@ theorem builderFrame_applyPendingDeposit {deposit : PendingDeposit}
     BuilderFrame state after :=
   builderEpochFrameLaws.applyPendingDeposit computed
 
-/-- The state that the epoch transition reaches before the step of the payments.
-
-It runs the steps of the epoch transition that come before that step, in their order.
-
-Before Altair it skips the inactivity scores, as the epoch transition does. -/
-def epochBeforePayments (config : Config) (checks : SignatureChecks)
-    (state : BeaconState preset fork) : Except TransitionError (BeaconState preset fork) := do
-  let state ← processJustificationAndFinalization state
-  let state ← (if altair : .altair ≤ fork then processInactivityUpdates config state altair
-    else pure state)
-  let state ← processRewardsAndPenalties config state
-  let state ← processRegistryUpdates config state
-  let state ← processSlashings state
-  let state ← (if before : fork < .hegota then processEth1DataReset before state else pure state)
-  processPendingBalances config checks state
-
-/-- From Altair, the epoch transition first runs the steps that come before the payments.
-
-It then runs the rest of its steps in their order.
-
-So those first steps are a factor of the epoch transition, and not a second form of it. -/
-theorem processEpochAltair_eq_epochBeforePayments_bind (config : Config) (checks : SignatureChecks)
-    (state : BeaconState preset fork) (altair : .altair ≤ fork) :
-    processEpochAltair config checks state altair = (do
-      let state ← epochBeforePayments config checks state
-      let state ← (if gloas : .glamsterdam ≤ fork then
-          liftAccessor (processBuilderPendingPayments state gloas)
-        else pure state)
-      let state ← processEffectiveBalanceUpdates state
-      let state ← processSlashingsReset state
-      let state ← processRandaoMixesReset state
-      let state ← if capella : .shapella ≤ fork then processHistoricalSummariesUpdate state capella
-        else processHistoricalRootsUpdate state
-      let state := processParticipationFlagUpdates state altair
-      let state ← processSyncCommitteeUpdates state altair
-      let state ← (if fulu : .fusaka ≤ fork then liftAccessor (processProposerLookahead state fulu)
-        else pure state)
-      if gloas : .glamsterdam ≤ fork then liftAccessor (processPtcWindow state gloas)
-      else pure state) := by
-  simp only [processEpochAltair, epochBeforePayments, altair, ↓reduceDIte, bind_assoc]
-
 /-- From Gloas, the epoch transition keeps the builder fields, except the step of the payments.
 
 The step of the payments reads the state that the epoch transition reaches before it. -/
@@ -175,44 +134,22 @@ theorem processEpoch_builderSplit {gloas : .glamsterdam ≤ fork}
       BuilderFrame state pending ∧
       processBuilderPendingPayments pending gloas = .ok paid ∧ BuilderFrame paid after := by
   have altair : .altair ≤ fork := Nat.le_trans (by decide) gloas
-  have capella : .shapella ≤ fork := Nat.le_trans (by decide) gloas
-  have fulu : .fusaka ≤ fork := Nat.le_trans (by decide) gloas
   unfold processEpoch at computed
-  rw [dite_eq_left altair, processEpochAltair_eq_epochBeforePayments_bind] at computed
-  simp only [bind_ok_iff, capella, fulu, gloas, ↓reduceDIte, liftAccessor_ok] at computed
-  obtain ⟨pending, pendingOk, paid, paidOk, balanced, balancedOk, cleared, clearedOk, mixed,
-    mixedOk, rooted, rootedOk, synced, syncedOk, looked, lookedOk, windowed⟩ := computed
-  refine ⟨pending, paid, pendingOk, ?_, paidOk, ?_⟩
-  · simp only [epochBeforePayments, bind_ok_iff, altair, ↓reduceDIte] at pendingOk
-    obtain ⟨justified, justifiedOk, scored, scoredOk, rewarded, rewardedOk, registered,
-      registeredOk, slashed, slashedOk, reset, resetOk, pendingOk⟩ := pendingOk
-    have justifiedFrame : BuilderFrame state justified := by
-      obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok justifiedOk
-      · exact BuilderFrame.refl _
-      · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
-        exact ⟨by rw [← rest], by rw [← rest], by rw [← rest], by rw [← rest], by rw [← rest],
-          by rw [← rest]⟩
-    have resetFrame : BuilderFrame slashed reset := by
-      split at resetOk
-      · exact builderEpochFrameLaws.processEth1DataReset resetOk
-      · simp only [pure, Except.pure, Except.ok.injEq] at resetOk
-        exact resetOk ▸ BuilderFrame.refl _
-    exact justifiedFrame.trans <|
-      (builderEpochFrameLaws.processInactivityUpdates scoredOk).trans <|
-      (builderEpochFrameLaws.processRewardsAndPenalties rewardedOk).trans <|
-      (builderEpochFrameLaws.processRegistryUpdates registeredOk).trans <|
-      (builderEpochFrameLaws.processSlashings slashedOk).trans <|
-      resetFrame.trans (builderEpochFrameLaws.processPendingBalances pendingOk)
+  simp only [altair, ↓reduceDIte] at computed
+  obtain ⟨pending, paid, rooted, pendingOk, paidOk, middle, tail⟩ :=
+    builderEpochFrameLaws.processEpochAltair_paymentSplit computed
+  obtain ⟨justified, justifiedOk, head⟩ := builderEpochFrameLaws.epochBeforePayments_split pendingOk
+  have justifiedFrame : BuilderFrame state justified := by
+    obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok justifiedOk
+    · exact BuilderFrame.refl _
+    · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
+      exact ⟨by rw [← rest], by rw [← rest], by rw [← rest], by rw [← rest], by rw [← rest],
+        by rw [← rest]⟩
   have rotated : BuilderFrame rooted (processParticipationFlagUpdates rooted altair) :=
     ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
-  exact (builderEpochFrameLaws.processEffectiveBalanceUpdates balancedOk).trans <|
-    (builderEpochFrameLaws.processSlashingsReset clearedOk).trans <|
-    (builderEpochFrameLaws.processRandaoMixesReset mixedOk).trans <|
-    (builderEpochFrameLaws.processHistoricalSummariesUpdate rootedOk).trans <|
-    rotated.trans <|
-    (builderEpochFrameLaws.processSyncCommitteeUpdates syncedOk).trans <|
-    (builderEpochFrameLaws.processProposerLookahead lookedOk).trans
-      (builderEpochFrameLaws.processPtcWindow windowed)
+  exact ⟨pending, paid, pendingOk, justifiedFrame.trans head,
+    by simpa only [gloas, ↓reduceDIte, liftAccessor_ok] using paidOk,
+    middle.trans (rotated.trans tail)⟩
 
 /-! ## Slots -/
 
