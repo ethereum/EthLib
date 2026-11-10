@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Consensus.Proofs.Models.Ffg.AccountableSafety
+public import EthLib.Consensus.Proofs.Models.Ffg.Model
 public import Mathlib.Data.Set.Finite.Lemmas
 
 /-!

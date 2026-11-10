@@ -232,32 +232,39 @@ theorem FinalizedBy.imp (weaker : ∀ {s t}, link s t → link' s t) {c : Checkp
   · exact .inl rfl
   · exact .inr ⟨k, hk, b, hb, hchain, fun i hi => (hj i hi).imp weaker, weaker hl⟩
 
-/-- A slack link need not be a supermajority link.
+/-- A slack link whose target set lies in its second set is a supermajority link.
 
-Four validators hold 32 each, and the validator set of the target holds all four.
+The slack is then zero. -/
+theorem SlackLink.supermajorityLink {s t : Checkpoint β} (inside : V t ⊆ U t)
+    (h : SlackLink V U w votes s t) : SupermajorityLink V w votes s t := by
+  classical
+  refine ⟨h.1, h.2.1, ?_⟩
+  have empty : V t \ U t = ∅ := Finset.sdiff_eq_empty_iff_subset.mpr inside
+  have := h.2.2
+  rw [empty, stake_empty] at this
+  simpa using this
 
-The first validator is outside the second set of the target, so the slack is 32.
+/-- A supermajority link raises the epoch, and its source block is in the chain of its target. -/
+theorem SupermajorityLink.ordered {s t : Checkpoint β} (h : SupermajorityLink V w votes s t) :
+    s.epoch < t.epoch ∧ s.block ≤ t.block :=
+  ⟨h.1, h.2.1⟩
 
-The first and the second validators vote for the link, with 64 of the 128.
+/-- A slack link raises the epoch, and its source block is in the chain of its target. -/
+theorem SlackLink.ordered {s t : Checkpoint β} (h : SlackLink V U w votes s t) :
+    s.epoch < t.epoch ∧ s.block ≤ t.block :=
+  ⟨h.1, h.2.1⟩
 
-So the validator that left before the second set votes, as in the beacon chain.
+/-- With the validator sets as second sets, slack-justified means justified. -/
+theorem slackJustified_self : SlackJustified V V w genesis votes = Justified V w genesis votes := by
+  rw [SlackJustified, slackLink_self]
 
-The slack link holds, since `2 * 128 ≤ 3 * 64 + 2 * 32`.
+/-- With the validator sets as second sets, slack-finalized means finalized. -/
+theorem slackFinalized_self : SlackFinalized V V w genesis votes = Finalized V w genesis votes := by
+  rw [SlackFinalized, slackLink_self]
 
-The supermajority link fails, since `2 * 128 > 3 * 64`. -/
-theorem slackLink_and_not_supermajorityLink :
-    SlackLink (fun _ => Finset.univ) (fun _ => {1, 2, 3}) (fun _ : Fin 4 => 32)
-        {x | x.validator ∈ ({0, 1} : Finset (Fin 4)) ∧ x.source = ⟨0, 0⟩ ∧ x.target = ⟨0, 1⟩}
-        (⟨0, 0⟩ : Checkpoint ℕ) ⟨0, 1⟩ ∧
-      ¬SupermajorityLink (fun _ => Finset.univ) (fun _ : Fin 4 => 32)
-        {x | x.validator ∈ ({0, 1} : Finset (Fin 4)) ∧ x.source = ⟨0, 0⟩ ∧ x.target = ⟨0, 1⟩}
-        (⟨0, 0⟩ : Checkpoint ℕ) ⟨0, 1⟩ := by
-  have voters : signers (Finset.univ : Finset (Fin 4))
-      {x | x.validator ∈ ({0, 1} : Finset (Fin 4)) ∧ x.source = ⟨0, 0⟩ ∧ x.target = ⟨0, 1⟩}
-      (⟨0, 0⟩ : Checkpoint ℕ) ⟨0, 1⟩ = {0, 1} := by
-    ext v
-    simp [signers]
-  simp only [SlackLink, SupermajorityLink, voters]
-  simp [stake, Finset.card_univ_sdiff]
+/-- A finalized checkpoint is slack-finalized for every choice of second sets. -/
+theorem Finalized.slackFinalized (U : Checkpoint β → Finset ν) {c : Checkpoint β}
+    (h : Finalized V w genesis votes c) : SlackFinalized V U w genesis votes c :=
+  FinalizedBy.imp (SupermajorityLink.slackLink U) h
 
 end EthLib.Consensus.Models.Ffg

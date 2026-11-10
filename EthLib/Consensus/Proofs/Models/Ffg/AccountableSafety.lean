@@ -31,7 +31,9 @@ Accountable safety holds for `k`-finalization with every `k ≥ 1`.
 
 The proof follows Gasper Lemma 4.11, Lemma 5.1 and Lemma 8.2.
 
-Those lemmas use only the order of each link, so they hold for every kind of link.
+Those lemmas use only the order of each link.
+
+So they hold for every kind of link that raises the epoch and follows the chain.
 
 With slack links, each stake bound also loses twice the slack of two links.
 
@@ -91,13 +93,14 @@ theorem slashableLinksBy_of_surround {s₁ t₁ s₂ t₂ : Checkpoint β}
     SlashableLinksBy (ν := ν) link genesis t₂.epoch t₁.epoch :=
   ⟨s₁, t₁, s₂, t₂, ht.le, le_rfl, le_rfl, ht.le, hs₁, hs₂, h₁, h₂, fun _ => .inr ⟨hs, hst, ht⟩⟩
 
+omit [Preorder β] in
 /-- Gasper Lemma 4.11: two justified checkpoints of one epoch are equal.
 
 Otherwise two links with that target epoch break a slashing condition.
 
 Each link must raise the epoch. -/
 theorem JustifiedBy.eq_or_slashableLinksBy
-    (ordered : ∀ {s t}, link s t → s.epoch < t.epoch ∧ s.block ≤ t.block) {c₁ c₂ : Checkpoint β}
+    (raises : ∀ {s t}, link s t → s.epoch < t.epoch) {c₁ c₂ : Checkpoint β}
     (h₁ : JustifiedBy link genesis c₁) (h₂ : JustifiedBy link genesis c₂)
     (he : c₁.epoch = c₂.epoch) :
     c₁ = c₂ ∨ SlashableLinksBy (ν := ν) link genesis c₁.epoch c₁.epoch := by
@@ -105,10 +108,10 @@ theorem JustifiedBy.eq_or_slashableLinksBy
   | root =>
     cases h₂ with
     | root => exact .inl rfl
-    | link _ hl => exact absurd he (by have := (ordered hl).1; dsimp at this ⊢; omega)
+    | link _ hl => exact absurd he (by have := raises hl; dsimp at this ⊢; omega)
   | link hs₁ hl₁ =>
     cases h₂ with
-    | root => exact absurd he (by have := (ordered hl₁).1; dsimp at this ⊢; omega)
+    | root => exact absurd he (by have := raises hl₁; dsimp at this ⊢; omega)
     | link hs₂ hl₂ =>
       by_cases hc : c₁ = c₂
       · exact .inl hc
@@ -154,7 +157,7 @@ theorem FinalizedBy.le_or_slashableLinksBy
       rcases lt_trichotomy t.epoch (f.epoch + k) with htk | htk | htk
       · -- The target shares its epoch with a justified checkpoint of the finalization.
         have hi : t.epoch - f.epoch < k := by omega
-        rcases (JustifiedBy.link hs hl).eq_or_slashableLinksBy ordered (hjust _ hi)
+        rcases (JustifiedBy.link hs hl).eq_or_slashableLinksBy (fun h => (ordered h).1) (hjust _ hi)
           (by dsimp; omega) with heq | h
         · rw [heq, ← hb]
           exact .inl (le_of_chain hchain _ hi.le)
@@ -166,7 +169,7 @@ theorem FinalizedBy.le_or_slashableLinksBy
         exact .inr ((slashableLinksBy_of_surround hs hfj hl hlink hsf (ordered hlink).1
           htk).mono (by dsimp; omega) le_rfl)
     · -- The source shares its epoch with `f`, so it is `f` itself.
-      rcases hs.eq_or_slashableLinksBy ordered hf.justifiedBy hsf with rfl | h
+      rcases hs.eq_or_slashableLinksBy (fun h => (ordered h).1) hf.justifiedBy hsf with rfl | h
       · exact .inl (ordered hl).2
       · exact .inr (h.mono hsf.ge (ordered hl).1.le)
     · exact (ih hsf).imp (fun h => h.trans (ordered hl).2) fun h => h.mono le_rfl (ordered hl).1.le
@@ -186,7 +189,8 @@ theorem FinalizedBy.slashableLinksBy
   rcases lt_trichotomy c₁.epoch c₂.epoch with h | h | h
   · exact ((h₁.le_or_slashableLinksBy ordered h₂.justifiedBy h).resolve_left hc.1).mono
       (min_le_left _ _) (le_max_right _ _)
-  · rcases h₁.justifiedBy.eq_or_slashableLinksBy ordered h₂.justifiedBy h with rfl | h
+  · rcases h₁.justifiedBy.eq_or_slashableLinksBy (fun h => (ordered h).1) h₂.justifiedBy h with
+        rfl | h
     · exact absurd le_rfl hc.1
     · exact h.mono (min_le_left _ _) (le_max_left _ _)
   · exact ((h₂.le_or_slashableLinksBy ordered h₁.justifiedBy h).resolve_left hc.2).mono
@@ -262,7 +266,7 @@ theorem accountable_safety_dynamic_slack {c₁ c₂ : Checkpoint β}
           stake w (V l) + 3 * (stake w (V r \ V₀) + stake w (V₀ \ V l)) +
           2 * (stake w (V r \ U r) + stake w (V l \ U l)) := by
   obtain ⟨s₁, t₁, s₂, t₂, lo₁, hi₁, lo₂, hi₂, hs₁, hs₂, hl₁, hl₂, h⟩ :=
-    h₁.slashableLinksBy (ν := ν) (fun hl => ⟨hl.1, hl.2.1⟩) h₂ hc
+    h₁.slashableLinksBy (ν := ν) SlackLink.ordered h₂ hc
   -- A validator that votes for both links signs the two votes that break a condition.
   have hboth : ∀ v : ν, ⟨v, s₁, t₁⟩ ∈ votes → ⟨v, s₂, t₂⟩ ∈ votes → Slashable votes v :=
     fun v hv₁ hv₂ => ⟨_, hv₁, _, hv₂, rfl, rfl, h v⟩
@@ -314,8 +318,8 @@ theorem accountable_safety_dynamic {c₁ c₂ : Checkpoint β}
         2 * stake w (V r) ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} +
           stake w (V l) + 3 * (stake w (V r \ V₀) + stake w (V₀ \ V l)) := by
   obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, h⟩ := accountable_safety_dynamic_slack (U := V)
-    (h₁.imp (SupermajorityLink.slackLink V)) (h₂.imp (SupermajorityLink.slackLink V)) hc
-  simp only [SlackJustified, slackLink_self] at hl hr
+    (h₁.slackFinalized V) (h₂.slackFinalized V) hc
+  rw [slackJustified_self] at hl hr
   exact ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, fun V₀ => by simpa using h V₀⟩
 
 open scoped Classical in
@@ -400,8 +404,8 @@ theorem accountable_safety_reference [DecidableEq ν] {c₁ c₂ : Checkpoint β
         (stake w (V l \ V₀) + 2 * stake w (V₀ \ V l)) +
         (stake w (V r \ V₀) + 2 * stake w (V₀ \ V r)) := by
   obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, h⟩ := accountable_safety_reference_slack (U := V)
-    (h₁.imp (SupermajorityLink.slackLink V)) (h₂.imp (SupermajorityLink.slackLink V)) hc
-  simp only [SlackJustified, slackLink_self] at hl hr
+    (h₁.slackFinalized V) (h₂.slackFinalized V) hc
+  rw [slackJustified_self] at hl hr
   exact ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, fun V₀ => by simpa using h V₀⟩
 
 open scoped Classical in
@@ -458,11 +462,11 @@ theorem accountable_safety_of_change [DecidableEq ν] {c₁ c₂ : Checkpoint β
       Justified V w genesis votes l ∧ Justified V w genesis votes r ∧
       stake w V₀ ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} + 2 * b := by
   obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, h⟩ := accountable_safety_of_change_slack (U := V)
-    (h₁.imp (SupermajorityLink.slackLink V)) (h₂.imp (SupermajorityLink.slackLink V)) hc V₀ b
+    (h₁.slackFinalized V) (h₂.slackFinalized V) hc V₀ b
     fun c lo hi hj => by
-      simp only [SlackJustified, slackLink_self] at hj
+      rw [slackJustified_self] at hj
       simpa using change c lo hi hj
-  simp only [SlackJustified, slackLink_self] at hl hr
+  rw [slackJustified_self] at hl hr
   exact ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, h⟩
 
 open scoped Classical in
