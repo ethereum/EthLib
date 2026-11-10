@@ -27,14 +27,27 @@ namespace EthLib.Networking.Libp2p
 
 open EthLib.Cryptography.Secp256k1
 
-/-- A malformed key, peer ID, secret or DER signature. -/
+/-- A malformed key, peer ID, secret or DER signature, or a failure to sign. -/
 inductive IdentityError where
+  /-- The bytes are not the canonical protobuf of a compressed point of the curve. -/
   | publicKey
+  /-- The bytes do not start with the identity code 0 and the length 37. -/
   | peerId
+  /-- The secret is 0, or at least the group order. -/
   | privateKey
+  /-- The bytes are not a strict DER signature with r in [1, n) and s in [1, n/2]. -/
   | signature
+  /-- ECDSA signing failed. -/
   | signing (error : Secp256k1Error)
 deriving Repr, DecidableEq
+
+/-- The stable code of an error, one per constructor. -/
+def IdentityError.code : IdentityError → UInt32
+  | .publicKey => 1
+  | .peerId => 2
+  | .privateKey => 3
+  | .signature => 4
+  | .signing _ => 5
 
 /-- Deterministic protobuf `PublicKey`, type 2 and 33 compressed bytes, peer-IDs "Keys". -/
 def encodePublicKey (point : Point) : ByteArray :=

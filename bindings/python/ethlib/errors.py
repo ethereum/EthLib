@@ -181,6 +181,26 @@ class VarintError(EthLibError, ValueError):
     """The bytes are not one minimal varint."""
 
 
+class UvarintError(EthLibError, ValueError):
+    """The bytes do not start with a multiformats unsigned varint, or a value is out of range."""
+
+
+class MultistreamError(EthLibError, ValueError):
+    """The bytes do not start with a multistream-select message."""
+
+
+class MplexError(EthLibError, ValueError):
+    """The bytes do not start with an mplex frame, or a frame is outside the format."""
+
+
+class YamuxError(EthLibError, ValueError):
+    """The bytes do not start with a yamux frame, or a frame is outside the format."""
+
+
+class Libp2pIdentityError(EthLibError, ValueError):
+    """A secp256k1 key, peer ID or secret of a libp2p identity was rejected."""
+
+
 class GossipError(EthLibError, ValueError):
     """A gossip message was rejected, or its fork has no name."""
 
@@ -312,6 +332,11 @@ __all__ = [
     "SnappyError",
     "SszError",
     "VarintError",
+    "UvarintError",
+    "MultistreamError",
+    "MplexError",
+    "YamuxError",
+    "Libp2pIdentityError",
     "GossipError",
     "Discv5Error",
     "RlpxError",

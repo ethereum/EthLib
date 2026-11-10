@@ -1219,6 +1219,50 @@ def varint_decode(data: bytes) -> int:
     """The 64-bit value a varint denotes, or why it is not a valid varint."""
     ...
 
+def uvarint_encode(value: int) -> bytes:
+    """The unsigned varint of a value below `2^63`."""
+    ...
+
+def uvarint_decode(data: bytes) -> tuple[int, bytes]:
+    """The value of the unsigned varint at the start of the bytes, and the bytes after it."""
+    ...
+
+def multistream_encode(message: bytes) -> bytes:
+    """The bytes of one multistream-select message: its length, its bytes, then a newline."""
+    ...
+
+def multistream_decode(data: bytes) -> tuple[bytes, bytes]:
+    """The multistream-select message at the start of the bytes, and the bytes after it."""
+    ...
+
+def mplex_encode(frame: dict[str, Any]) -> bytes:
+    """The bytes of a valid mplex frame."""
+    ...
+
+def mplex_decode(data: bytes) -> tuple[dict[str, Any], bytes]:
+    """The mplex frame at the start of the bytes, and the bytes after it."""
+    ...
+
+def yamux_encode(frame: dict[str, Any]) -> bytes:
+    """The bytes of a valid yamux frame."""
+    ...
+
+def yamux_decode(data: bytes) -> tuple[dict[str, Any], bytes]:
+    """The yamux frame at the start of the bytes, and the bytes after it."""
+    ...
+
+def libp2p_public_key(secret: bytes) -> bytes:
+    """The public-key protobuf of a 32-byte big-endian secp256k1 secret in [1, n)."""
+    ...
+
+def libp2p_peer_id(public_key: bytes) -> bytes:
+    """The peer ID of a canonical secp256k1 key protobuf."""
+    ...
+
+def libp2p_decode_peer_id(peer_id: bytes) -> bytes:
+    """The key protobuf that a binary secp256k1 peer ID names."""
+    ...
+
 def gossip_message_id(fork: str, topic: bytes, data: bytes) -> bytes:
     """The message ID of a message on a topic of a fork: the first 20 bytes of a SHA-256 digest."""
     ...

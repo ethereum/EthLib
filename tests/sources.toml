@@ -139,6 +139,17 @@ release = "v5.3.0"
 [repositories."leanEthereum/leanVM"]
 commit = "5e3ade21d339a45e1b3b0dba97ad9300ab50e49b"
 
+# The libp2p tests read the hex examples and the key vector of these documents.
+# The mplex and yamux tests also read their frame layouts.
+[repositories."multiformats/unsigned-varint"]
+commit = "dd184f1ce89c81808503bb719b5fcb13844d08f3"
+
+[repositories."multiformats/multistream-select"]
+commit = "9a1fbe8edadebea223f47102f1913b8026c23a1c"
+
+[repositories."libp2p/specs"]
+commit = "c750236de43cd8b246a824b377dfdb26bae686db"
+
 # The release archives, each from a repository above or from the source it names.
 [archives."consensus-specs/v1.7.0-alpha.12/general"]
 repository = "ethereum/consensus-specs"

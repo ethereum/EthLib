@@ -18,6 +18,8 @@ Another constructor becomes a `tuple` of its name in snake case, then its fields
 
 The type must take no parameter and must not contain itself.
 
+A type is derived once, and other modules import its conversions.
+
 A second command proves the law of these conversions, and that no value becomes `None` or an error.
 -/
 
@@ -43,9 +45,9 @@ def PyValue.entries : PyValue → Except String (Array (String × PyValue))
   | .dict entries => .ok entries
   | _ => .error "expected a dict"
 
-/-- The names of the two conversions of a type. -/
+/-- The names of the two conversions of a type, in the namespace of the type. -/
 meta def pyNames (name : Name) : Ident × Ident :=
-  (mkIdent (name ++ `toPyValue), mkIdent (name ++ `ofPyValue))
+  (mkIdent (`_root_ ++ name ++ `toPyValue), mkIdent (`_root_ ++ name ++ `ofPyValue))
 
 /-- The conversions of a structure. -/
 meta def deriveStructure (t : Ident) (name : Name) : CommandElabM Unit := do

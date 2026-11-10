@@ -7,8 +7,10 @@ __all__ = [
     "enr",
     "forkid",
     "gossip",
+    "libp2p",
     "reqresp",
     "rlpx",
     "snappy",
+    "uvarint",
     "varint",
 ]

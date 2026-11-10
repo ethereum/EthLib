@@ -174,6 +174,7 @@ def _make_extension() -> Extension:
             "bindings/python/eth.c",
             "bindings/python/snap.c",
             "bindings/python/snappy.c",
+            "bindings/python/libp2p.c",
             "bindings/python/gossip.c",
             "bindings/python/transactions.c",
             "bindings/python/chain.c",
