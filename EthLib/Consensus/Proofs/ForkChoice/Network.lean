@@ -49,7 +49,9 @@ inductive Message (preset : Preset) (fork : Fork)
 
 /-- The moves of the store of an honest validator, at a time and with a view.
 
-A tick sets the store to the time, which must fit in 64 bits and not lie before its clock.
+A tick sets the store to the time, which must fit in 64 bits.
+
+That time must not lie before the clock of the store.
 
 Every other move processes a message of the view, as one from the network.
 
@@ -200,9 +202,11 @@ Each validator starts from a store built from an anchor, and the clock starts at
 
 An honest validator sends a block from an empty view, as the protocol allows.
 
-Two events later every validator has the block in its view, and the stores stay reachable.
+Two events later every validator has the block, with the clock and the stores as at the start.
 
-There the honest validator may also move, by a tick of its store, when slots last a positive time.
+The stores stay reachable.
+
+There the honest validator may also move to its own store, when slots last a positive time.
 
 The execution is partially synchronous for every GST and every positive delay. -/
 theorem exists_forkChoice_execution {ν κ : Type*} [DecidableEq ν] (checks : SignatureChecks)
