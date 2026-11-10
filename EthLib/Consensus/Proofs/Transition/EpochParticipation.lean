@@ -16,6 +16,8 @@ There it stores as the next committee a draw from the state with that new curren
 
 The inactivity scores change nothing in the first epoch, and keep one score per entry.
 
+Their update changes no other field.
+
 After the first epoch, each eligible validator gets its next score, and the other scores stay.
 
 An unslashed validator that set the target flag in the previous epoch loses one point.
@@ -153,6 +155,20 @@ theorem processInactivityUpdates_sizes {config : Config} {altair : .altair ≤ f
     exact foldlM_ok_invariant (fun s : InactivityScores preset fork =>
       s.data.size = (state.inactivityScores altair).data.size)
       (fun _ _ _ hp step => (updateInactivityScore_size step).trans hp) rfl folded
+
+/-- The inactivity scores update changes only the inactivity scores. -/
+theorem processInactivityUpdates_frame {config : Config} {altair : .altair ≤ fork}
+    (computed : processInactivityUpdates config state altair = .ok after) :
+    after = { state with inactivityScores := after.inactivityScores } := by
+  unfold processInactivityUpdates at computed
+  split at computed
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    rfl
+  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, scores, folded, same⟩ := computed
+    subst same
+    rfl
 
 /-! ## The value of each inactivity score -/
 
