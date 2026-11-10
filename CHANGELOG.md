@@ -9,6 +9,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- The FFG chain theorems now prove that the block of each justified checkpoint is in the chain of the block of its recent epoch, instead of assuming it ([#1420](https://github.com/ethereum/EthLib/issues/1420)).
+  No C export or Python function changes.
+  In Lean, the field `chain` of `SlackStepBounds` becomes `links`, which asks the map from roots to blocks to keep in order the roots of consecutive slots (`rootLinks`).
+  `SlackChainInvariant` gains the field `roots`, a `RootsAbove` fact that the new `FfgRoots.lean` keeps along each chain step.
+  The new `RunRoot` orders the roots by the links of the runs, and `slackJustifiedCheckpoints_runRoot_of_chainSteps` uses it, so it asks no order hypothesis.
 - From Gloas, the pending deposits of an epoch now fail at every deposit they read to a key whose first validator sits at a registry position of 2^64 or more ([#1883](https://github.com/ethereum/EthLib/issues/1883)).
   The specification builds a `ValidatorIndex` from that position before it tests the validator, so it fails there.
   EthLib failed only when it credited such a deposit, and missed the deposit to a validator that exits and is not withdrawn, and the deposit beyond the churn.
