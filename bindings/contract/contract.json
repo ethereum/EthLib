@@ -1961,7 +1961,7 @@
   {"summary":
    "Initialize libp2p XX with explicit X25519 private keys and an empty prologue.",
    "signature":
-   "(initiator: bool, static_key: bytes, ephemeral_key: bytes) -> tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None]",
+   "(initiator: bool, static_key: bytes, ephemeral_key: bytes) -> tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[bytes, bytes, bytes, bytes | None] | None]",
    "operation": "EthLib.Networking.Noise.Exports.initializeLibp2pExport",
    "method": "noise_libp2p_initialize",
    "errors": [],
@@ -1970,7 +1970,7 @@
    "Initialize libp2p XX with explicit X25519 private keys and an empty prologue.\n\nnoise-libp2p sets no prologue."},
   {"summary": "Write the next libp2p message with a signed identity payload.",
    "signature":
-   "(state: tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None], identity_secret: bytes, extensions: bytes | None) -> tuple[tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None], bytes]",
+   "(state: tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[bytes, bytes, bytes, bytes | None] | None], identity_secret: bytes, extensions: bytes | None) -> tuple[tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[bytes, bytes, bytes, bytes | None] | None], bytes]",
    "operation": "EthLib.Networking.Noise.Exports.writeLibp2pExport",
    "method": "noise_libp2p_write",
    "errors":
@@ -1995,7 +1995,7 @@
   {"summary":
    "Read the next libp2p message, and authenticate the static key of message 2 or 3.",
    "signature":
-   "(state: tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None], message: bytes) -> tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None]",
+   "(state: tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[bytes, bytes, bytes, bytes | None] | None], message: bytes) -> tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[bytes, bytes, bytes, bytes | None] | None]",
    "operation": "EthLib.Networking.Noise.Exports.readLibp2pExport",
    "method": "noise_libp2p_read",
    "errors":
@@ -2020,7 +2020,7 @@
   {"summary":
    "Return the authenticated peer and transport keys only after completion.",
    "signature":
-   "(state: tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None]) -> tuple[bytes, tuple[bytes, bytes, bytes, bytes | None], tuple[bytes | None, int], tuple[bytes | None, int], bytes]",
+   "(state: tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[bytes, bytes, bytes, bytes | None] | None]) -> tuple[bytes, tuple[bytes, bytes, bytes, bytes | None], tuple[bytes | None, int], tuple[bytes | None, int], bytes]",
    "operation": "EthLib.Networking.Noise.Exports.completeExport",
    "method": "noise_libp2p_complete",
    "errors":

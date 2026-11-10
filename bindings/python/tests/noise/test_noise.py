@@ -278,25 +278,30 @@ def test_identity_secret_checked_first(secret: int) -> None:
         assert error.value.code == 11
 
 
-@pytest.mark.parametrize("component", ["missing", "tag", "truncated", "static", "phase"])
-def test_completion_rechecks_saved_message(exchange: tuple, component: str) -> None:
-    handshake, saved = exchange[0]
+def test_state_holds_authenticated_remote(exchange: tuple) -> None:
+    initiator, responder, *_ = exchange
+    for state, static, secret in (
+        (initiator, STATIC_R, IDENTITY_R),
+        (responder, STATIC_I, IDENTITY_I),
+    ):
+        static_key, identity, *_ = noise_libp2p_complete(state)
+        assert state[1] == (static_key, identity[0], identity[2], identity[3])
+        assert static_key == x25519_public_key(static)
+        x, y = reference.multiply(reference.G, int.from_bytes(secret, "big"))
+        assert identity[0] == b"\x08\x02\x12\x21" + bytes([2 + y % 2]) + x.to_bytes(32, "big")
+
+
+@pytest.mark.parametrize("component", ["missing", "public_key"])
+def test_completion_needs_stored_remote(exchange: tuple, component: str) -> None:
+    handshake, remote = exchange[0]
     if component == "missing":
-        saved = None
-    elif component == "tag":
-        before, ciphertext = saved
-        saved = (before, ciphertext[:-1] + bytes([ciphertext[-1] ^ 1]))
-    elif component == "truncated":
-        before, ciphertext = saved
-        saved = (before, ciphertext[:50])
-    elif component == "static":
-        h = handshake
-        handshake = (h[0], h[1], h[2], bytes(32), h[4], h[5], h[6], h[7], h[8], h[9])
+        remote = None
     else:
-        b, ciphertext = saved
-        saved = ((b[0], b[1], b[2], b[3], b[4], 0, b[6], b[7], b[8], b[9]), ciphertext)
+        static_key, public_key, signature, extensions = remote
+        # The prefix 05 is not that of a compressed point, so the key protobuf does not decode.
+        remote = (static_key, public_key[:4] + b"\x05" + public_key[5:], signature, extensions)
     with raises(NoiseError, ERROR + "savedRemote") as error:
-        noise_libp2p_complete((handshake, saved))
+        noise_libp2p_complete((handshake, remote))
     assert error.value.code == 13
 
 

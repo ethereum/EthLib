@@ -140,39 +140,38 @@ def makePayload (identitySecret : Fn) (staticKey : Key)
   let signature ← (Libp2p.sign identitySecret (signedStatic staticKey)).mapError identitySecretError
   encodePayload ⟨publicKey, signature, extensions⟩
 
-/-- Successful authentication carries the real signature check on this static coordinate. -/
-structure AuthenticatedRemote (staticKey : Key) where
-  publicKey : ByteArray
-  /-- The secp256k1 point that the public key encodes. -/
-  key : Cryptography.Secp256k1.Point
-  /-- The public key decodes to that point. -/
-  decoded : Libp2p.decodePublicKey publicKey = .ok key
-  signature : ByteArray
-  extensions : Option ByteArray
-  verified : Libp2p.verify publicKey (signedStatic staticKey) signature = true
+/-- The authenticated remote: its Noise static key and the identity that signed it.
 
-/-- Verify the decoded payload against the static key actually read from the encrypted token. -/
-def authenticatePayload (staticKey : Key) (bytes : ByteArray) :
-    Except NoiseError (AuthenticatedRemote staticKey) := do
+The identity key is kept as a point, whose canonical protobuf is the public key. -/
+structure Remote where
+  /-- The static public key that the remote's encrypted token carries. -/
+  staticKey : Key
+  /-- The secp256k1 identity key of the payload. -/
+  key : Cryptography.Secp256k1.Point
+  /-- The DER signature by that key over the prefixed static key. -/
+  signature : ByteArray
+  /-- The opaque libp2p extensions of the payload, if any. -/
+  extensions : Option ByteArray
+
+/-- The protobuf of the identity key, peer-IDs "Keys". -/
+def Remote.publicKey (remote : Remote) : ByteArray := Libp2p.encodePublicKey remote.key
+
+/-- Verify a decoded payload against the static key actually read from the encrypted token.
+
+The rule is noise-libp2p "Static Key Authentication". -/
+def authenticatePayload (staticKey : Key) (bytes : ByteArray) : Except NoiseError Remote := do
   let p ← decodePayload bytes
-  if h : Libp2p.verify p.publicKey (signedStatic staticKey) p.signature = true then
-    match hk : Libp2p.decodePublicKey p.publicKey with
-    | .ok key => return ⟨p.publicKey, key, hk, p.signature, p.extensions, h⟩
+  if Libp2p.verify p.publicKey (signedStatic staticKey) p.signature then
+    match Libp2p.decodePublicKey p.publicKey with
+    | .ok key => return ⟨staticKey, key, p.signature, p.extensions⟩
     -- A verified signature implies that the key decodes, so this branch never runs.
     | .error _ => throw .identity
   else throw .identity
 
-/-- An authenticated remote key, derived peer ID, signature and opaque extensions. -/
-abbrev RemoteInfo := ByteArray × ByteArray × ByteArray × Option ByteArray
-
-/-- Project authenticated data to the public result, deriving the ID from the signing key. -/
-def remoteInfo {staticKey : Key} (remote : AuthenticatedRemote staticKey) : RemoteInfo :=
-  (remote.publicKey, Libp2p.peerId remote.key, remote.signature, remote.extensions)
-
-/-- The XX state and the original encrypted remote message with its pre-read state. -/
+/-- The XX state, and the remote once the message that carries its static key is read. -/
 structure Libp2pState where
   handshake : HandshakeState
-  remoteMessage : Option (HandshakeState × ByteArray)
+  remote : Option Remote
 
 /-- Initialize the libp2p suite.
 
@@ -180,25 +179,14 @@ noise-libp2p sets no prologue, so this specification uses the empty one. -/
 def initializeLibp2p (initiator : Bool) (staticKey ephemeralKey : Key) : Libp2pState :=
   ⟨initializeHandshake initiator staticKey ephemeralKey .empty, none⟩
 
-/-- Finish only with a verified payload bound to the stored, decrypted remote static key. -/
-def complete (s : Libp2pState) : Except NoiseError (Key × RemoteInfo) := do
-  if s.handshake.step = 3 then
-    let (before, message) ← match s.remoteMessage with
-      | some value => pure value
-      | none => throw .savedRemote
-    if before.initiator = s.handshake.initiator ∧
-        before.step = (if s.handshake.initiator then 1 else 2) then
-      -- Reading succeeded once, so a failure now means the caller changed the saved message.
-      let (received, payload) ← (readMessage before message).mapError fun _ => .savedRemote
-      if received.step = (if s.handshake.initiator then 2 else 3) then
-        let staticKey ← (requireKey received.remoteStatic).mapError fun _ => .savedRemote
-        if s.handshake.remoteStatic = some staticKey then
-          let authenticated ← (authenticatePayload staticKey payload).mapError fun _ => .savedRemote
-          return (staticKey, remoteInfo authenticated)
-        else throw .savedRemote
-      else throw .savedRemote
-    else throw .savedRemote
-  else throw .wrongPhase
+/-- The authenticated remote and the send and receive ciphers, after all three messages.
+
+Completion reads no message: the read of message 2 or 3 stored the remote. -/
+def complete (s : Libp2pState) : Except NoiseError (Remote × CipherState × CipherState) := do
+  let (send, receive) ← transport s.handshake
+  match s.remote with
+  | some remote => return (remote, send, receive)
+  | none => throw .savedRemote
 
 /-- Write a libp2p message; first-message extensions are forbidden by the payload rules.
 
@@ -215,22 +203,19 @@ def writeLibp2p (s : Libp2pState) (identitySecret : Fn)
       if extensions.isSome then throw .firstMessageExtensions else pure .empty
     else makePayload identitySecret (Cryptography.X25519.publicKey s.handshake.staticKey) extensions
   let (handshake, message) ← writeMessage s.handshake payload
-  let next := { s with handshake := handshake }
-  if handshake.step = 3 then
-    let _ ← complete next
-    return (next, message)
-  else return (next, message)
+  return ({ s with handshake := handshake }, message)
 
-/-- Read and authenticate the real static-key payload before accepting messages 2 and 3. -/
+/-- Read a message, and authenticate the static key that message 2 or 3 carries.
+
+The first message carries no static key, so it leaves no remote. -/
 def readLibp2p (s : Libp2pState) (message : ByteArray) : Except NoiseError Libp2pState := do
   let (handshake, payload) ← readMessage s.handshake message
   if handshake.step = 1 then
     let first ← decodePayload payload
     if first.extensions.isSome then throw .firstMessageExtensions
-    return { s with handshake := handshake }
+    return ⟨handshake, none⟩
   else
     let staticKey ← requireKey handshake.remoteStatic
-    let _ ← authenticatePayload staticKey payload
-    return ⟨handshake, some (s.handshake, message)⟩
+    return ⟨handshake, some (← authenticatePayload staticKey payload)⟩
 
 end EthLib.Networking.Noise

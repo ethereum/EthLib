@@ -15,6 +15,8 @@ There the chaining key is the salt, and the info is empty.
 So the two outputs are the first 64 bytes of that HKDF.
 
 Distinct kinds of handshake error have distinct codes.
+
+Each message keeps the role, advances the step by one, and fits the XX pattern of Noise §7.5.
 -/
 
 @[expose] public section
@@ -43,5 +45,53 @@ theorem NoiseError.code_injective (e₁ e₂ : NoiseError) (h : e₁.code = e₂
   -- Two distinct constructors have two distinct literal codes, which `decide` separates.
   cases e₁ <;> cases e₂ <;>
     first | rfl | (simp only [NoiseError.code] at h; exact absurd h (by decide))
+
+/-- Writing keeps the role and the remote static key, and advances the step by one.
+
+XX writes only message 1 or 3 as initiator, and message 2 as responder, Noise §7.5. -/
+theorem writeMessage_ok {s next : HandshakeState} {payload message : ByteArray}
+    (h : writeMessage s payload = .ok (next, message)) :
+    next.initiator = s.initiator ∧ next.step = s.step + 1 ∧
+      next.remoteStatic = s.remoteStatic ∧
+      (s.initiator = true ∧ s.step = 0 ∨ s.initiator = false ∧ s.step = 1 ∨
+        s.initiator = true ∧ s.step = 2) := by
+  dsimp only [writeMessage, Bind.bind, Pure.pure, Except.bind, Except.pure, throw, throwThe,
+    MonadExceptOf.throw] at h
+  split at h
+  · cases h
+  rename_i v hv
+  split at h
+  · cases h
+  cases h
+  refine ⟨rfl, rfl, rfl, ?_⟩
+  split at hv
+  next _ _ hi hs => exact .inl ⟨hi, hs⟩
+  next _ _ hi hs => exact .inr (.inl ⟨hi, hs⟩)
+  next _ _ hi hs => exact .inr (.inr ⟨hi, hs⟩)
+  next => cases hv
+
+/-- Reading keeps the role and advances the step by one.
+
+XX reads only message 1 or 3 as responder, and message 2 as initiator, Noise §7.5. -/
+theorem readMessage_ok {s next : HandshakeState} {message payload : ByteArray}
+    (h : readMessage s message = .ok (next, payload)) :
+    next.initiator = s.initiator ∧ next.step = s.step + 1 ∧
+      (s.initiator = false ∧ s.step = 0 ∨ s.initiator = true ∧ s.step = 1 ∨
+        s.initiator = false ∧ s.step = 2) := by
+  dsimp only [readMessage, Bind.bind, Pure.pure, Except.bind, Except.pure, throw, throwThe,
+    MonadExceptOf.throw] at h
+  split at h
+  · cases h
+  split at h
+  · cases h
+  rename_i v hv
+  split at h
+  · cases h
+  cases h
+  split at hv
+  next _ _ hi hs => (repeat' split at hv) <;> cases hv <;> exact ⟨rfl, rfl, .inl ⟨hi, hs⟩⟩
+  next _ _ hi hs => (repeat' split at hv) <;> cases hv <;> exact ⟨rfl, rfl, .inr (.inl ⟨hi, hs⟩)⟩
+  next _ _ hi hs => (repeat' split at hv) <;> cases hv <;> exact ⟨rfl, rfl, .inr (.inr ⟨hi, hs⟩)⟩
+  next => cases hv
 
 end EthLib.Networking.Noise

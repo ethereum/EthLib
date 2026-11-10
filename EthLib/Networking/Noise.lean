@@ -75,7 +75,9 @@ inductive NoiseError where
   | identitySecret
   /-- ECDSA signing with the local identity secret failed. -/
   | signing (error : Secp256k1.Secp256k1Error)
-  /-- The saved remote message is missing, or does not match the state that completion reads. -/
+  /-- The state holds no authenticated remote at completion.
+
+  In the exports, it is also a stored remote whose key protobuf does not decode. -/
   | savedRemote
 deriving DecidableEq, Repr
 
