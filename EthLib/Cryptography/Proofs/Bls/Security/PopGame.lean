@@ -7,7 +7,7 @@ public import EthLib.Cryptography.Proofs.Bls.Security.Game
 
 This is the proof-of-possession scheme of the BLS draft, §3.3.
 
-<https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-05#section-3.3>
+<https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04#section-3.3>
 
 A proof of possession of the key `a • g1` is `a • H'(a • g1)`, with `H'` a second hash into `G2`.
 
