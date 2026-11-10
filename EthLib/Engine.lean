@@ -5,6 +5,7 @@ public import EthLib.Engine.BuildPayload
 public import EthLib.Engine.ExecutionEngine
 public import EthLib.Engine.ForkchoiceUpdated
 public import EthLib.Engine.GetBlobs
+public import EthLib.Engine.GetPayload
 public import EthLib.Engine.Json
 public import EthLib.Engine.Jwt
 public import EthLib.Engine.NewPayload

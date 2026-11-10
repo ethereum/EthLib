@@ -306,34 +306,6 @@ theorem createsFresh_prepareCreation {state prepared : TransactionState} {addres
     rw [hother x hne]
     exact hcode
 
-/-- A deposit of code rolls back, keeps the state, or sets the code of the current target. -/
-private theorem state_depositCode {snapshot : TransactionState} {evm after : Evm fork Meter}
-    (h : depositCode fork snapshot evm = .ok after) :
-    after.state = evm.state.restoreTxState snapshot ∨ after.state = evm.state ∨
-      evm.state.setCode fork evm.message.currentTarget evm.output = .ok after.state := by
-  unfold depositCode at h
-  dsimp only at h
-  split at h
-  · cases h
-    exact .inl rfl
-  split at h
-  · cases h
-    exact .inl rfl
-  split at h
-  · cases h
-    exact .inl rfl
-  split at h
-  · cases h
-    split
-    · exact .inl rfl
-    · exact .inr (.inl rfl)
-  split at h
-  · cases h
-    exact .inl rfl
-  obtain ⟨st, hst, h⟩ := Base.bind_ok_iff.mp h
-  cases h
-  exact .inr (.inr (Base.mapError_ok_iff.mp hst))
-
 /-- A creation whose init code creates only fresh accounts does so, its own address aside.
 
 The init code runs at the address of the creation.
@@ -352,7 +324,7 @@ theorem createsFresh_depositCode {state prepared : TransactionState} {address : 
   refine ⟨hn, hpar, fun x hx => hc ▸ h.created x hx, fun x hx hnot => h.fresh x (hc ▸ hx) hnot,
     fun x hx hcode => ?_⟩
   rw [hc] at hx
-  rcases state_depositCode hd with hs | hs | hs
+  rcases (depositCode_cases hd).2.2 with hs | hs | hs
   · rw [hs]
     unfold TransactionState.getAccount
     rw [TransactionState.getAccountOptional_restoreTxState h.parent]

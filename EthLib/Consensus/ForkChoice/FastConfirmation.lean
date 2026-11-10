@@ -12,11 +12,19 @@ The rule and its proof are in [arXiv 2405.00549](https://arxiv.org/abs/2405.0054
 
 It assumes that the attestations of honest validators reach every node by the end of their slot.
 
-It also assumes that at most a quarter of the stake is Byzantine, a value of the configuration.
+It also assumes a static set of validators.
+
+In every range of consecutive committees, at most a share of the stake is Byzantine.
+
+That share is a value of the configuration, a quarter by default.
 
 A block is safe for LMD-GHOST when its votes exceed a threshold.
 
 The threshold counts the largest weight that could still vote, the boost, and the adversary.
+
+It weighs the committees of a range of slots exactly, from the effective balances of their members.
+
+An average weight per slot would not bound a given committee, as [a counterexample][avg] shows.
 
 A block of the previous epoch also needs its justification to stay within reach.
 
@@ -33,6 +41,8 @@ From Gloas a pending node counts the votes for the block whether its payload is 
 From Bellatrix the payload of the confirmed block is the safe block of the execution layer.
 
 From Gloas the safe block is the parent payload that the bid of the confirmed block builds on.
+
+[avg]: https://github.com/ethereum/EthLib/issues/1458#issuecomment-6764027413
 -/
 
 @[expose] public section
@@ -42,9 +52,6 @@ namespace EthLib.Consensus
 open Base Uint64
 
 variable {preset : Preset} {fork : Fork}
-
-/-- The per mille added to the weight of a few slots across an epoch boundary, for safety. -/
-def COMMITTEE_WEIGHT_ESTIMATION_ADJUSTMENT_FACTOR : UInt64 := 5
 
 /-- What the fast confirmation rule tracks besides the store of the fork choice. -/
 structure FastConfirmationStore where
@@ -73,41 +80,6 @@ def isFullValidatorSetCovered (preset : Preset) (startSlot endSlot : Slot) :
   let lastOfFirst ← (subChecked afterFirst 1).mapError .arith
   let afterEnd ← (addChecked endSlot 1).mapError .arith
   return computeEpochAtSlot preset lastOfFirst < computeEpochAtSlot preset afterEnd
-
-/-- An estimate of committee weight, rounded up to a thousandth and raised by the adjustment. -/
-def adjustCommitteeWeightEstimateToEnsureSafety (estimate : Gwei) :
-    Except ForkChoiceError Gwei := do
-  let ceil := (← (addChecked estimate 999).mapError .arith) / 1000
-  (mulChecked ceil (1000 + COMMITTEE_WEIGHT_ESTIMATION_ADJUSTMENT_FACTOR)).mapError .arith
-
-/-- An estimate of the weight of the committees of the slots from a start to an end.
-
-A range with a whole epoch weighs the whole active balance.
-
-A range within one epoch weighs one committee per slot.
-
-A range across one epoch boundary counts its slots of the first epoch pro rata, then adjusts. -/
-def estimateCommitteeWeightBetweenSlots (preset : Preset) (totalActiveBalance : Gwei)
-    (startSlot endSlot : Slot) : Except ForkChoiceError Gwei := do
-  if startSlot > endSlot then return 0
-  if ← isFullValidatorSetCovered preset startSlot endSlot then return totalActiveBalance
-  let startEpoch := computeEpochAtSlot preset startSlot
-  let endEpoch := computeEpochAtSlot preset endSlot
-  let slotsPerEpoch := preset.SLOTS_PER_EPOCH
-  let arith {α : Type} (x : Except ArithError α) : Except ForkChoiceError α := x.mapError .arith
-  let committeeWeight ← arith (divChecked totalActiveBalance slotsPerEpoch)
-  if startEpoch = endEpoch then
-    return ← arith (do mulChecked committeeWeight (← addChecked (← subChecked endSlot startSlot) 1))
-  let numSlotsInEndEpoch ← arith (do addChecked (← computeSlotsSinceEpochStart preset endSlot) 1)
-  let remainingSlotsInEndEpoch ← arith (subChecked slotsPerEpoch numSlotsInEndEpoch)
-  let numSlotsInStartEpoch ←
-    arith (do subChecked slotsPerEpoch (← computeSlotsSinceEpochStart preset startSlot))
-  let startEpochWeight ← arith (mulChecked committeeWeight numSlotsInStartEpoch)
-  let endEpochWeight ← arith (mulChecked committeeWeight numSlotsInEndEpoch)
-  let startEpochWeightProRated ←
-    arith (do mulChecked (← divChecked startEpochWeight slotsPerEpoch) remainingSlotsInEndEpoch)
-  adjustCommitteeWeightEstimateToEnsureSafety
-    (← arith (addChecked startEpochWeightProRated endEpochWeight))
 
 /-- The sum of a weight over a list, which must stay within 64 bits. -/
 def sumGwei {α : Type} (items : List α) (weight : α → Except ForkChoiceError Gwei) :
@@ -180,6 +152,34 @@ def getCommitteesBetweenSlots (head : Root) (startSlot endSlot : Slot) :
     let committee ← store.getSlotCommittee head (startSlot + offset.toUInt64)
     return committee.foldl (·.insert ·) participants
 
+/-- The weight of the committees of the slots from a start to an end, both included.
+
+The members of those committees come with it when it reads them.
+
+A range that starts after it ends weighs nothing.
+
+A range with a whole epoch weighs the total active balance of the source of balances.
+
+Otherwise a member of the committees counts once, when it is active in the source of balances.
+
+Its weight is its effective balance there, and the sum is at least one increment. -/
+def computeCommitteeWeightAndMembers (head : Root) (balanceSource : BeaconState preset fork)
+    (startSlot endSlot : Slot) :
+    Except ForkChoiceError (Gwei × Option (Std.TreeSet ValidatorIndex)) := do
+  if startSlot > endSlot then return (0, none)
+  if ← isFullValidatorSetCovered preset startSlot endSlot then
+    return (← (getTotalActiveBalance balanceSource).mapError .accessor, none)
+  let participants ← store.getCommitteesBetweenSlots head startSlot endSlot
+  let epoch := getCurrentEpoch balanceSource
+  let active ← participants.toList.filterM fun index =>
+    return isActiveValidator (← validatorAt balanceSource index) epoch
+  return (← (getTotalBalance balanceSource active).mapError .accessor, some participants)
+
+/-- The weight of the committees of the slots from a start to an end, both included. -/
+def computeCommitteeWeightBetweenSlots (head : Root) (balanceSource : BeaconState preset fork)
+    (startSlot endSlot : Slot) : Except ForkChoiceError Gwei := do
+  return (← store.computeCommitteeWeightAndMembers head balanceSource startSlot endSlot).1
+
 /-- The state of the head, with its slots processed to the current epoch if it is older.
 
 The pending deposits of an epoch from Electra check the signatures of new keys with BLS. -/
@@ -211,29 +211,40 @@ def getNodeSupportBetweenSlots (head : Root) (balanceSource : BeaconState preset
         return (← validatorAt balanceSource index).effectiveBalance
       else return 0
 
-/-- The weight of the equivocators among the members of the committees of a range of slots.
+/-- The weight of the equivocators among a set of validators.
 
 An equivocator counts when it is active in the source of balances. -/
-def getEquivocationScore (head : Root) (balanceSource : BeaconState preset fork)
-    (startSlot endSlot : Slot) : Except ForkChoiceError Gwei := do
-  let participants ← store.getCommitteesBetweenSlots head startSlot endSlot
+def getEquivocationScoreOf (balanceSource : BeaconState preset fork)
+    (participants : Std.TreeSet ValidatorIndex) : Except ForkChoiceError Gwei := do
   let epoch := getCurrentEpoch balanceSource
   let equivocators := participants.toList.filter (· ∈ store.equivocatingIndices)
   let active ← equivocators.filterM fun index => do
     return isActiveValidator (← validatorAt balanceSource index) epoch
   sumGwei active fun index => return (← validatorAt balanceSource index).effectiveBalance
 
+/-- The weight of the equivocators among the members of the committees of a range of slots. -/
+def getEquivocationScore (head : Root) (balanceSource : BeaconState preset fork)
+    (startSlot endSlot : Slot) : Except ForkChoiceError Gwei := do
+  store.getEquivocationScoreOf balanceSource
+    (← store.getCommitteesBetweenSlots head startSlot endSlot)
+
 /-- The largest weight that the adversary can hold in the committees of a range of slots.
 
-It is the Byzantine share of the estimated weight, less the weight of known equivocators. -/
+It is the Byzantine share of the weight of the committees, less the weight of known equivocators.
+
+The share rounds the weight down to 100 Gwei.
+
+The members of the committees are read once: by the weight when it needs them, else here. -/
 def computeAdversarialWeight (head : Root) (balanceSource : BeaconState preset fork)
     (startSlot endSlot : Slot) : Except ForkChoiceError Gwei := do
-  let totalActiveBalance ← (getTotalActiveBalance balanceSource).mapError .accessor
-  let maximumWeight ←
-    estimateCommitteeWeightBetweenSlots preset totalActiveBalance startSlot endSlot
+  let (maximumWeight, members) ←
+    store.computeCommitteeWeightAndMembers head balanceSource startSlot endSlot
   let maxAdversarialWeight ←
     (mulChecked (maximumWeight / 100) config.CONFIRMATION_BYZANTINE_THRESHOLD).mapError .arith
-  let equivocationScore ← store.getEquivocationScore head balanceSource startSlot endSlot
+  let participants ← match members with
+    | some participants => pure participants
+    | none => store.getCommitteesBetweenSlots head startSlot endSlot
+  let equivocationScore ← store.getEquivocationScoreOf balanceSource participants
   return saturatingSub maxAdversarialWeight equivocationScore
 
 /-- The largest weight that the adversary can give a block, from its slot to the last slot.
@@ -269,9 +280,11 @@ def computeEmptySlotSupportDiscount (head : Root) (balanceSource : BeaconState p
 
 /-- The votes that a block needs to be safe for LMD-GHOST.
 
-It starts from the largest weight that could vote since its parent, plus the boost.
+It starts from the weight of the committees since its parent, plus the boost.
 
 It takes off the votes for the parent from the empty slots before the block, less the adversary.
+
+That discount exceeding the weight of the committees since the parent is an error.
 
 It halves the result.
 
@@ -281,17 +294,17 @@ def computeSafetyThreshold (head : Root) (root : Root) (balanceSource : BeaconSt
   let currentSlot ← store.getCurrentSlot config
   let block ← store.block root
   let parentBlock ← store.block block.parentRoot
-  let totalActiveBalance ← (getTotalActiveBalance balanceSource).mapError .accessor
   let proposerScore ← computeProposerScore config balanceSource
-  let maximumSupport ← estimateCommitteeWeightBetweenSlots preset totalActiveBalance
+  let maximumSupport ← store.computeCommitteeWeightBetweenSlots head balanceSource
     (← (addChecked parentBlock.slot 1).mapError .arith)
     (← (subChecked currentSlot 1).mapError .arith)
   let supportDiscount ← store.computeEmptySlotSupportDiscount config head balanceSource root
   let adversarialWeight ← store.getAdversarialWeight config head balanceSource root
+  if supportDiscount > maximumSupport then throw (.supportDiscountAboveMaximum root)
   let withBoost ← (addChecked maximumSupport proposerScore).mapError .arith
   let doubled ← (mulChecked 2 adversarialWeight).mapError .arith
   let bound ← (addChecked withBoost doubled).mapError .arith
-  return if supportDiscount < bound then (bound - supportDiscount) / 2 else 0
+  return (bound - supportDiscount) / 2
 
 /-- Whether a block is safe for LMD-GHOST: its votes exceed its safety threshold.
 
@@ -358,7 +371,7 @@ def computeHonestFfgSupportForCurrentTarget (head : Root) : Except ForkChoiceErr
   let epochStart ← (computeStartSlotAtEpoch preset currentEpoch).mapError .arith
   let lastSlot ← (subChecked currentSlot 1).mapError .arith
   let ffgWeightTillNow ←
-    estimateCommitteeWeightBetweenSlots preset totalActiveBalance epochStart lastSlot
+    store.computeCommitteeWeightBetweenSlots head balanceSource epochStart lastSlot
   let remainingFfgWeight ← (subChecked totalActiveBalance ffgWeightTillNow).mapError .arith
   let honestShare ← (subChecked 100 config.CONFIRMATION_BYZANTINE_THRESHOLD).mapError .arith
   let remainingHonestFfgWeight ←

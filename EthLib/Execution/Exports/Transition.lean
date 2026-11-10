@@ -51,6 +51,22 @@ def recentOf (config : ChainConfig) (block : String × ByteArray × List ByteArr
     ← runRlp "recent ommers rejected" (ommers.mapM fun ommer => do
       Header.ofItemAtNumber (forkAtBlock config) (← decode ommer))⟩
 
+/-- The chain that a configuration, a state and recent blocks give, as the exports take them.
+
+The configuration is the typed value of its JSON, and the state takes the form of the root export.
+
+A state or a recent block that does not decode has code 0, since the export reads it itself. -/
+def chainOf (config : PyValue) (state : ByteArray)
+    (recent : List (String × ByteArray × List ByteArray)) : Result BlockChain := do
+  let config ← ChainConfig.Exports.configOfJson config.toJson
+  let pre ← (State.Exports.ofInput state).mapError fun e => (0, e.message)
+  let recent ← (recent.mapM (recentOf config)).mapError fun (_, m) => (0, m)
+  return ⟨config, pre, recent⟩
+
+/-- The accounts of a state, as the list of entries of the state root export. -/
+def accountsItem (state : Execution.State.State) : Item :=
+  .list (state.accounts.toList.map fun (address, account) => stateEntryItem state address account)
+
 /-- A message for a block error, phrased for a Python traceback. -/
 def blockErrorMessage : BlockError → String
   | .invalidTransaction index e => s!"transaction {index} rejected: {inclusionMessage e}"
@@ -67,24 +83,18 @@ def stateTransitionOf
     (args : PyValue × ByteArray × List (String × ByteArray × List ByteArray) × String × ByteArray ×
       Bool) : Result ByteArray := do
   let (config, state, recent, fork, block, checkSeal) := args
-  let config ← ChainConfig.Exports.configOfJson config.toJson
-  -- The chain is an input that the export reads itself, so its errors have code 0.
-  let pre ← (State.Exports.ofInput state).mapError fun e => (0, e.message)
-  let recent ← (recent.mapM (recentOf config)).mapError fun (_, m) => (0, m)
+  let chain ← chainOf config state recent
   let fork ← forkUpTo .glamsterdam fork.toUTF8
-  let raw : Block fork Item ← (Block.decode (forkAtBlock config) block).mapError
+  let raw : Block fork Item ← (Block.decode (forkAtBlock chain.config) block).mapError
     fun e => ((BlockError.encoding e).code, s!"block rejected: {reprStr e}")
   let transactions ← raw.transactions.zipIdx.mapM fun (item, index) =>
     (Transactions.decodeBodyTransaction fork item).mapError fun e =>
       ((BlockError.undecodableTransaction index e).code,
         s!"transaction {index} does not decode: {message e}")
-  let chain : BlockChain := ⟨config, pre, recent⟩
   let post ← (stateTransition chain { raw with transactions } checkSeal).mapError
     fun e => (e.code, blockErrorMessage e)
   let root ← State.Exports.rootOf post
-  let accounts := post.accounts.toList.map fun (address, account) =>
-    stateEntryItem post address account
-  (encode (Item.list [Codec.toItem root, .list accounts])).mapError
+  (encode (Item.list [Codec.toItem root, accountsItem post])).mapError
     fun e => (0, s!"result: {reprStr e}")
 
 /-- Run the state transition of a block on a chain, and give the state after it.

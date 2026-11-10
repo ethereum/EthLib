@@ -189,26 +189,13 @@ theorem createdAccounts_rollbackOnError (snapshot : TransactionState) (evm : Evm
 theorem createdAccounts_depositCode {snapshot : TransactionState} {evm after : Evm fork Meter}
     (h : depositCode fork snapshot evm = .ok after) :
     after.state.createdAccounts = evm.state.createdAccounts ∧ after.substate = evm.substate := by
-  unfold depositCode at h
-  dsimp only at h
-  split at h
-  · cases h
-    exact ⟨rfl, rfl⟩
-  split at h
-  · cases h
-    exact ⟨rfl, rfl⟩
-  split at h
-  · cases h
-    exact ⟨rfl, rfl⟩
-  split at h
-  · cases h
-    split <;> exact ⟨rfl, rfl⟩
-  split at h
-  · cases h
-    exact ⟨rfl, rfl⟩
-  obtain ⟨st, hst, h⟩ := Base.bind_ok_iff.mp h
-  cases h
-  exact ⟨TransactionState.createdAccounts_setCode (Base.mapError_ok_iff.mp hst), rfl⟩
+  obtain ⟨hsub, -, hstate⟩ := depositCode_cases h
+  refine ⟨?_, hsub⟩
+  rcases hstate with hs | hs | hs
+  · rw [hs]
+    rfl
+  · rw [hs]
+  · exact TransactionState.createdAccounts_setCode hs
 
 /-- From Cancun, every call and creation that returns a frame keeps the created accounts.
 

@@ -247,28 +247,12 @@ The frame that ends the init code must have those nonces and the block of that s
 theorem nonceLe_depositCode {snapshot : TransactionState} {evm after : Evm fork Meter}
     (hle : NonceLe snapshot evm.state) (hp : evm.state.parent = snapshot.parent)
     (h : depositCode fork snapshot evm = .ok after) : NonceLe snapshot after.state := by
-  unfold depositCode at h
-  dsimp only at h
-  split at h
-  · cases h
+  rcases (depositCode_cases h).2.2 with hs | hs | hs
+  · rw [hs]
     exact nonceLe_restoreTxState hp
-  split at h
-  · cases h
-    exact nonceLe_restoreTxState hp
-  split at h
-  · cases h
-    exact nonceLe_restoreTxState hp
-  split at h
-  · cases h
-    split
-    · exact nonceLe_restoreTxState hp
-    · exact hle
-  split at h
-  · cases h
-    exact nonceLe_restoreTxState hp
-  obtain ⟨st, hst, h⟩ := Base.bind_ok_iff.mp h
-  cases h
-  exact hle.trans (nonceLe_setCode (Base.mapError_ok_iff.mp hst))
+  · rw [hs]
+    exact hle
+  · exact hle.trans (nonceLe_setCode hs)
 
 /-- The state that a message starts its frame from has every nonce of the state it is sent from. -/
 theorem nonceLe_startState (message : Message fork) (state : TransactionState) :

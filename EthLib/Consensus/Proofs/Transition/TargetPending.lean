@@ -143,9 +143,7 @@ theorem PendingSigned.of_processAttestation {parentSlot : Slot}
   have beforeElectra : fork < .pectra := Nat.lt_trans before (by decide)
   have committees : ∀ epoch, CommitteesKept epoch state after := CommitteesKept.of_eq
     (congrArg (·.data) registry.1) (congrArg (·.elements) registry.2)
-  have keys : KeysKept state after := by
-    intro index validator found
-    exact ⟨validator, by rw [getValidator_of_validators_eq registry.1]; exact found, rfl⟩
+  have keys : KeysKept state after := KeysKept.of_validators (by simp only [registry.1])
   have currentEq : getCurrentEpoch after = getCurrentEpoch state := by
     simp only [getCurrentEpoch, frame.slot]
   have previousEq : getPreviousEpoch after = getPreviousEpoch state := by

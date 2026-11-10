@@ -160,6 +160,10 @@ commit = "9a1fbe8edadebea223f47102f1913b8026c23a1c"
 [repositories."libp2p/specs"]
 commit = "c750236de43cd8b246a824b377dfdb26bae686db"
 
+# The gossip RPC tests build their frames from the protobuf encoding guide at this commit.
+[repositories."protocolbuffers/protocolbuffers.github.io"]
+commit = "bc2f346991e20631ed0a884e345110738228bfae"
+
 # The release archives and single files, each from a repository above or from the source it names.
 [archives."consensus-specs/v1.7.0-alpha.12/general"]
 repository = "ethereum/consensus-specs"

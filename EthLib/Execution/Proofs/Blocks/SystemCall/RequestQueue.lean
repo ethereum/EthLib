@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
 public import EthLib.Execution.Proofs.Fees.BlobBaseFee
 public import EthLib.Execution.Proofs.Evm.Instructions.Arithmetic
+public import EthLib.Execution.Proofs.Evm.Instructions.Bitwise
 public import EthLib.Execution.Proofs.Evm.Logic.Log
 
 /-!
@@ -135,6 +136,40 @@ def afterDequeue (max target : Nat) (read : U256 → U256) (slot : U256) : U256 
   else if slot = 2 then (if next = tail then 0 else BitVec.ofNat 256 next)
   else if slot = 3 then (if next = tail then 0 else read 3)
   else read slot
+
+/-- The writes of the system call give the storage after the requests are taken.
+
+The head and the tail go back to 0 when the queue empties, and the head moves on otherwise.
+
+Then the excess is updated and the count reset. -/
+theorem deq_store (max target : Nat) (r : U256 → U256) (F : U256 → U256)
+    (hF : F = if (r 2).toNat + numDequeued max r = (r 3).toNat then setSlot (setSlot r 2 0) 3 0
+      else setSlot r 2 (BitVec.ofNat 256 ((r 2).toNat + numDequeued max r))) :
+    setSlot (setSlot F 0 (BitVec.ofNat 256 (newExcess target (F 0) (F 1)))) 1 0 =
+      afterDequeue max target r := by
+  funext slot
+  subst hF
+  by_cases h : (r 2).toNat + numDequeued max r = (r 3).toNat
+  · simp only [h, ite_true, setSlot, afterDequeue]
+    by_cases h1 : slot = 1
+    · simp [h1]
+    · by_cases h0 : slot = 0
+      · simp [h0]
+      · by_cases h2 : slot = 2
+        · simp [h2]
+        · by_cases h3 : slot = 3
+          · simp [h3]
+          · simp_all
+  · simp only [h, ite_false, setSlot, afterDequeue]
+    by_cases h1 : slot = 1
+    · simp [h1]
+    · by_cases h0 : slot = 0
+      · simp [h0]
+      · by_cases h2 : slot = 2
+        · simp [h2]
+        · by_cases h3 : slot = 3
+          · simp [h3]
+          · simp_all
 
 /-- The records of the first `k` requests from the head, in the order of the queue.
 
@@ -522,7 +557,97 @@ theorem mstore_then {pc s t e : Nat} {start value : U256} {rest : List U256} {ga
   rw [size_memoryWrite (by rw [size_memoryExtend, size_wordBytes, hs]; exact hfit),
     size_memoryExtend, hs]
 
+/-- Growth of memory to at most 1,248 bytes costs at most 197 gas.
+
+So the MSTORE that grows it costs at most 200. -/
+theorem extendMemory_cost_le {size : Nat} {start : U256} (hmod : size % 32 = 0)
+    (hend : start.toNat + 32 ≤ 1248) : (extendMemory size [(start, 32)]).cost ≤ 197 := by
+  by_cases h : size < start.toNat + (32 : U256).toNat
+  · rw [extendMemory_of_lt hmod (by decide) h]
+    have hw : wordCount (ceil32 (start.toNat + (32 : U256).toNat)) ≤ 39 :=
+      wordCount_le (ceil32_le (by decide) (by simpa using hend))
+    have hsq := Nat.pow_le_pow_left hw 2
+    simp only [memoryGasCost, GasCosts.MEMORY_PER_WORD]
+    omega
+  · rw [extendMemory_of_le (by omega)]
+    decide
+
+/-- MSTORE of a word that ends by byte 1,248, followed by a specification from the frame after it.
+
+Memory grows by `e` bytes to a multiple of 32 that holds the word, for at most 200 gas. -/
+theorem mstore_grow {code : ByteArray} {pc t : Nat} {start value : U256}
+    {rest : List U256} {M : ByteArray} {gas : Nat} {S : State.TransactionState} {ss : Substate}
+    {Q : Evm fork Nat → Prop} (hlt : pc < code.size) (hbyte : code[pc] = 0x52)
+    (hmod : M.size % 32 = 0) (ht : start.toNat = t) (hend : t + 32 ≤ 1248) (hgas : 200 ≤ gas)
+    (next : ∀ M' e g', M' = memoryWrite (memoryExtend M e) t (wordBytes value) →
+      t + 32 ≤ M.size + e → M'.size = M.size + e → M'.size % 32 = 0 → gas ≤ g' + 200 →
+      Spec fork (At code message (pc + 1) rest M' g' S ss returnData) Q) :
+    Spec fork (At code message pc (start :: value :: rest) M gas S ss returnData) Q := by
+  have hcost := extendMemory_cost_le (size := M.size) hmod (ht ▸ hend)
+  refine Triple.seq (mstore hlt hbyte (by omega)) ?_
+  have hsz := size_memoryExtend_extendMemory (memory := M) (start := start) (length := 32) hmod
+    (by decide)
+  rw [size_memoryExtend] at hsz
+  have hc := ceil32_mod (start.toNat + (32 : U256).toNat)
+  have hl := le_ceil32 (start.toNat + (32 : U256).toNat)
+  have h32 : (32 : U256).toNat = 32 := rfl
+  rw [ht]
+  have hfit : t + 32 ≤ M.size + (extendMemory M.size [(start, 32)]).expandBy := by
+    rw [hsz]
+    omega
+  have hs := size_memoryWrite
+    (memory := memoryExtend M (extendMemory M.size [(start, 32)]).expandBy) (start := t)
+    (value := wordBytes value) (by rw [size_memoryExtend, size_wordBytes]; exact hfit)
+  rw [size_memoryExtend] at hs
+  refine next _ _ _ rfl hfit hs ?_ (by omega)
+  rw [hs, hsz]
+  omega
+
 end Writes
+
+/-! ## What a stopped frame holds -/
+
+section Frames
+
+open EthLib.Execution.Evm EthLib.Execution.Evm.Logic
+open EthLib.Execution.Blocks.SystemContract (storageOf WritesStorage)
+open EthLib.Execution.State (TransactionState)
+open EthLib.Base (Fork Address)
+
+/-- What a stopped frame holds when a call adds the request `words` with the log data `data`.
+
+The frame stops with no error and no output.
+
+The state holds the storage after the request is added, at the contract, and keeps the rest.
+
+The logs gain one log of the contract, with no topic and the data `data`.
+
+The pseudocode of the EIP has no log; its code writes this one. -/
+def Added {fork : Fork} (slots : Nat) (target : Address) (words : List U256) (data : ByteArray)
+    (state : TransactionState) (substate : Substate) (evm : Evm fork Nat) : Prop :=
+  evm.error = none ∧ evm.output = .empty ∧
+    WritesStorage target (afterAdd slots words (storageOf state target)) state
+      evm.state ∧
+    evm.substate.logs = substate.logs.push { address := target, topics := [], data := data }
+
+/-- Equal storages, keys and words give equal storages after the write. -/
+theorem setSlot_congr {r r' : U256 → U256} {k k' v v' : U256} (hr : r = r') (hk : k = k')
+    (hv : v = v') : setSlot r k v = setSlot r' k' v' := by
+  rw [hr, hk, hv]
+
+/-- A bound on the gas of the dequeue loop with `n` runs left: 9,000 per run, 30 for the exit. -/
+def deqGas : Nat → Nat
+  | 0 => 30
+  | n + 1 => deqGas n + 9000
+
+/-- What a stopped frame holds at the end of the system call, from the state `S`.
+
+It stops with no error, returns `size` bytes of the memory `M`, and holds the storage `store`. -/
+def Returned {fork : Fork} (target : Address) (M : ByteArray) (size : Nat)
+    (store : U256 → U256) (S : TransactionState) (evm : Evm fork Nat) : Prop :=
+  evm.error = none ∧ evm.output = memoryReadBytes M 0 size ∧ WritesStorage target store S evm.state
+
+end Frames
 
 /-! ## The bytes of a log -/
 
@@ -546,6 +671,23 @@ theorem byteAt_wordBytes_shl (c : U256) {i : Nat} (hi : i < 20) :
   have h2 : (⟨(natToBytes 12 (c.toNat / 256 ^ 20)).toArray⟩ : ByteArray).size = 12 := by
     simp [ByteArray.size, natToBytes_length]
   rw [h1, h2, ite_eq_left hi, ite_eq_right (by omega), Nat.add_sub_cancel_left]
+
+/-- The mask of the code keeps the first 16 bytes of a word. -/
+theorem byteAt_wordBytes_and (v : U256) {i : Nat} (hi : i < 16) :
+    EthLib.Base.byteAt (wordBytes (bitwiseAnd
+      0xffffffffffffffffffffffffffffffff00000000000000000000000000000000#256 v)) i =
+      EthLib.Base.byteAt (wordBytes v) i := by
+  have key : (bitwiseAnd
+      0xffffffffffffffffffffffffffffffff00000000000000000000000000000000#256 v).toNat / 2 ^ 128 =
+      v.toNat / 2 ^ 128 := by
+    rw [toNat_bitwiseAnd, Nat.and_div_two_pow,
+      show (0xffffffffffffffffffffffffffffffff00000000000000000000000000000000#256 : U256).toNat /
+        2 ^ 128 = 2 ^ 128 - 1 from rfl, Nat.and_comm, Nat.and_two_pow_sub_one_eq_mod]
+    exact Nat.mod_eq_of_lt (Nat.div_lt_of_lt_mul (by have := v.isLt; omega))
+  rw [byteAt_wordBytes _ (by omega), byteAt_wordBytes _ (by omega),
+    show 256 ^ (31 - i) = 2 ^ 128 * 256 ^ (15 - i) by
+      rw [show 31 - i = 16 + (15 - i) by omega, Nat.pow_add],
+    ← Nat.div_div_eq_div_mul, ← Nat.div_div_eq_div_mul, key]
 
 /-- The memory of a log of the caller and the input.
 

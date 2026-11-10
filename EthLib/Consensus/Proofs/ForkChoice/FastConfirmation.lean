@@ -11,6 +11,10 @@ public import EthLib.Consensus.Proofs.ForkChoice.Store
 
 An empty range of slots weighs nothing, and so does a sum over no items.
 
+A sum is at most the sum of bounds on its weights.
+
+A range of slots that ends later has every member of the committees of a shorter one.
+
 A range that covers a whole epoch weighs the whole active balance.
 
 At each slot the tracked heads move on by one: the current head becomes the previous one.
@@ -34,18 +38,132 @@ open Base
 
 variable {preset : Preset} {fork : Fork}
 
-/-- A range that starts after it ends weighs nothing. -/
-theorem estimateCommitteeWeightBetweenSlots_of_gt {totalActiveBalance : Gwei}
-    {startSlot endSlot : Slot} (empty : endSlot < startSlot) :
-    estimateCommitteeWeightBetweenSlots preset totalActiveBalance startSlot endSlot = .ok 0 := by
-  simp [estimateCommitteeWeightBetweenSlots, empty, pure, Except.pure]
+/-- A sum over no items is zero. -/
+theorem sumGwei_nil {α : Type} {weight : α → Except ForkChoiceError Gwei} :
+    sumGwei [] weight = .ok 0 := by
+  simp [sumGwei, bind, Except.bind, pure, Except.pure]
 
-/-- A range that covers a whole epoch weighs the whole active balance. -/
-theorem estimateCommitteeWeightBetweenSlots_of_covered {totalActiveBalance : Gwei}
-    {startSlot endSlot : Slot}
+/-- A sum that the store computes is at most the sum of bounds on its weights. -/
+theorem toNat_le_of_sumGwei {α : Type} {items : List α}
+    {weight : α → Except ForkChoiceError Gwei} {bound : α → Nat} {total : Gwei}
+    (summed : sumGwei items weight = .ok total)
+    (each : ∀ item ∈ items, ∀ value, weight item = .ok value → value.toNat ≤ bound item) :
+    total.toNat ≤ (items.map bound).sum := by
+  -- The fold adds each weight to the running sum.
+  have fold : ∀ (rest : List α) (start sum : Nat),
+      (∀ item ∈ rest, ∀ value, weight item = .ok value → value.toNat ≤ bound item) →
+      rest.foldlM (fun sum item => return sum + (← weight item).toNat) start = .ok sum →
+      sum ≤ start + (rest.map bound).sum := by
+    intro rest
+    induction rest with
+    | nil =>
+      intro start sum _ folded
+      simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at folded
+      simp [folded]
+    | cons first rest ih =>
+      intro start sum each folded
+      simp only [List.foldlM_cons, bind_ok_iff, pure, Except.pure] at folded
+      obtain ⟨next, ⟨value, valueOk, nextOk⟩, folded⟩ := folded
+      simp only [Except.ok.injEq] at nextOk
+      subst nextOk
+      have head := each first List.mem_cons_self value valueOk
+      have tail := ih _ _ (fun item member => each item (List.mem_cons_of_mem first member))
+        folded
+      simp only [List.map_cons, List.sum_cons]
+      omega
+  simp only [sumGwei, bind_ok_iff] at summed
+  obtain ⟨sum, sumOk, summed⟩ := summed
+  have bounded := fold items 0 sum each sumOk
+  split at summed
+  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at summed
+  · rename_i small
+    simp only [pure, Except.pure, Except.ok.injEq] at summed
+    subst summed
+    rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (by omega)]
+    omega
+/-- The validator at an index is the one that the registry holds there. -/
+theorem validatorAt_ok_iff {state : BeaconState preset fork} {index : ValidatorIndex}
+    {validator : Validator} :
+    validatorAt state index = .ok validator ↔
+      state.validators.data[index.toNat]? = some validator := by
+  unfold validatorAt
+  split <;> simp_all [throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
+
+/-- The members of a set with a committee folded in: those of the set and of the committee. -/
+private theorem mem_foldl_insert {committee participants : Std.TreeSet ValidatorIndex}
+    {v : ValidatorIndex} :
+    v ∈ committee.foldl (·.insert ·) participants ↔ v ∈ participants ∨ v ∈ committee := by
+  have onList : ∀ (members : List ValidatorIndex) (start : Std.TreeSet ValidatorIndex),
+      v ∈ members.foldl (·.insert ·) start ↔ v ∈ start ∨ v ∈ members := by
+    intro members
+    induction members with
+    | nil => simp
+    | cons first rest ih =>
+      intro start
+      simp only [List.foldl_cons, ih, Std.TreeSet.mem_insert, List.mem_cons,
+        Std.LawfulEqCmp.compare_eq_iff_eq]
+      constructor
+      · rintro ((rfl | inside) | later)
+        · exact .inr (.inl rfl)
+        · exact .inl inside
+        · exact .inr (.inr later)
+      · rintro (inside | rfl | later)
+        · exact .inl (.inr inside)
+        · exact .inl (.inl rfl)
+        · exact .inr later
+  rw [Std.TreeSet.foldl_eq_foldl_toList, onList, Std.TreeSet.mem_toList]
+
+/-- The members of a fold of committees: those it starts with, and those of a committee it reads.
+-/
+theorem mem_foldlM_committees_iff {α : Type}
+    {read : α → Except ForkChoiceError (Std.TreeSet ValidatorIndex)} {v : ValidatorIndex} :
+    ∀ {items : List α} {start out : Std.TreeSet ValidatorIndex},
+      items.foldlM (fun (participants : Std.TreeSet ValidatorIndex) item => do
+          let committee ← read item
+          return committee.foldl (·.insert ·) participants) start =
+        (.ok out : Except ForkChoiceError _) →
+      (v ∈ out ↔
+        v ∈ start ∨ ∃ item ∈ items, ∃ committee, read item = .ok committee ∧ v ∈ committee)
+  | [], start, out, folded => by
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at folded
+    subst folded
+    simp
+  | first :: rest, start, out, folded => by
+    simp only [List.foldlM_cons, bind_ok_iff, pure, Except.pure] at folded
+    obtain ⟨next, ⟨committee, readOk, nextOk⟩, folded⟩ := folded
+    simp only [Except.ok.injEq] at nextOk
+    subst nextOk
+    rw [mem_foldlM_committees_iff folded, mem_foldl_insert]
+    constructor
+    · rintro ((inside | inCommittee) | ⟨item, member, other, otherOk, inOther⟩)
+      · exact .inl inside
+      · exact .inr ⟨first, List.mem_cons_self, committee, readOk, inCommittee⟩
+      · exact .inr ⟨item, List.mem_cons_of_mem first member, other, otherOk, inOther⟩
+    · rintro (inside | ⟨item, member, other, otherOk, inOther⟩)
+      · exact .inl (.inl inside)
+      · rcases List.mem_cons.mp member with rfl | later
+        · rw [readOk, Except.ok.injEq] at otherOk
+          subst otherOk
+          exact .inl (.inr inOther)
+        · exact .inr ⟨item, later, other, otherOk, inOther⟩
+namespace Store
+
+variable {config : Config} {store : Store preset fork}
+
+/-- A range that starts after it ends weighs nothing. -/
+theorem computeCommitteeWeightBetweenSlots_of_gt {head : Root}
+    {balanceSource : BeaconState preset fork} {startSlot endSlot : Slot}
+    (empty : endSlot < startSlot) :
+    store.computeCommitteeWeightBetweenSlots head balanceSource startSlot endSlot = .ok 0 := by
+  simp [computeCommitteeWeightBetweenSlots, computeCommitteeWeightAndMembers, empty, bind,
+    Except.bind, pure, Except.pure]
+
+/-- A range that covers a whole epoch weighs the total active balance of the source. -/
+theorem computeCommitteeWeightBetweenSlots_of_covered {head : Root}
+    {balanceSource : BeaconState preset fork} {startSlot endSlot : Slot}
     (covered : isFullValidatorSetCovered preset startSlot endSlot = .ok true) :
-    estimateCommitteeWeightBetweenSlots preset totalActiveBalance startSlot endSlot =
-      .ok totalActiveBalance := by
+    store.computeCommitteeWeightBetweenSlots head balanceSource startSlot endSlot =
+      (getTotalActiveBalance balanceSource).mapError .accessor := by
   -- A covered range ends in a later epoch than its first slot, so it is not empty.
   have ordered : startSlot ≤ endSlot := by
     have steps := covered
@@ -68,16 +186,90 @@ theorem estimateCommitteeWeightBetweenSlots_of_covered {totalActiveBalance : Gwe
     rw [UInt64.le_iff_toNat_le]
     omega
   have notGt : ¬ endSlot < startSlot := UInt64.not_lt.mpr ordered
-  simp [estimateCommitteeWeightBetweenSlots, notGt, covered, bind, Except.bind, pure, Except.pure]
+  simp only [computeCommitteeWeightBetweenSlots, computeCommitteeWeightAndMembers, notGt,
+    covered, ↓reduceIte]
+  cases (getTotalActiveBalance balanceSource) <;> rfl
 
-/-- A sum over no items is zero. -/
-theorem sumGwei_nil {α : Type} {weight : α → Except ForkChoiceError Gwei} :
-    sumGwei [] weight = .ok 0 := by
-  simp [sumGwei, bind, Except.bind, pure, Except.pure]
+/-- A range of slots that starts after it ends has no members of its committees. -/
+theorem getCommitteesBetweenSlots_of_gt {head : Root} {startSlot endSlot : Slot}
+    (empty : endSlot < startSlot) :
+    store.getCommitteesBetweenSlots head startSlot endSlot = .ok ∅ := by
+  have below : endSlot.toNat + 1 < 2 ^ 64 := by
+    have := UInt64.lt_iff_toNat_lt.mp empty
+    have := startSlot.toNat_lt
+    omega
+  have afterEndOk : Uint64.addChecked endSlot 1 = .ok (endSlot + 1) := by
+    rw [Uint64.addChecked_ok_iff]
+    refine ⟨by simpa using below, ?_⟩
+    rw [UInt64.toNat_add, Nat.mod_eq_of_lt (by simpa using below)]
+  have zero : (endSlot + 1).toNat - startSlot.toNat = 0 := by
+    rw [UInt64.toNat_add, Nat.mod_eq_of_lt (by simpa using below)]
+    have := UInt64.lt_iff_toNat_lt.mp empty
+    simp only [UInt64.toNat_one]
+    omega
+  simp only [getCommitteesBetweenSlots, afterEndOk, Except.mapError, bind, Except.bind, zero,
+    List.range_zero, List.foldlM_nil, pure, Except.pure]
 
-namespace Store
+/-- The members that come with a committee weight are those of the committees of its range. -/
+theorem getCommitteesBetweenSlots_of_computeCommitteeWeightAndMembers {head : Root}
+    {balanceSource : BeaconState preset fork} {startSlot endSlot : Slot} {weight : Gwei}
+    {participants : Std.TreeSet ValidatorIndex}
+    (computed : store.computeCommitteeWeightAndMembers head balanceSource startSlot endSlot =
+      .ok (weight, some participants)) :
+    store.getCommitteesBetweenSlots head startSlot endSlot = .ok participants := by
+  simp only [computeCommitteeWeightAndMembers] at computed
+  split at computed
+  · simp [pure, Except.pure] at computed
+  · rw [bind_ok_iff] at computed
+    obtain ⟨covered, -, computed⟩ := computed
+    cases covered
+    · simp only [Bool.false_eq_true, ↓reduceIte, bind_ok_iff, mapError_ok_iff] at computed
+      obtain ⟨found, foundOk, _, -, _, -, final⟩ := computed
+      simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq, Option.some.injEq] at final
+      exact final.2 ▸ foundOk
+    · simp only [↓reduceIte, bind_ok_iff, mapError_ok_iff] at computed
+      obtain ⟨_, -, final⟩ := computed
+      simp [pure, Except.pure] at final
 
-variable {config : Config} {store : Store preset fork}
+/-- A member of the committees of a range is a member of those of a range that ends later.
+
+Both ranges start at one slot. -/
+theorem mem_getCommitteesBetweenSlots_of_le {head : Root} {startSlot shortEnd endSlot : Slot}
+    {short long : Std.TreeSet ValidatorIndex}
+    (shortOk : store.getCommitteesBetweenSlots head startSlot shortEnd = .ok short)
+    (longOk : store.getCommitteesBetweenSlots head startSlot endSlot = .ok long)
+    (le : shortEnd ≤ endSlot) {v : ValidatorIndex} (member : v ∈ short) : v ∈ long := by
+  simp only [getCommitteesBetweenSlots, bind_ok_iff, mapError_ok_iff] at shortOk longOk
+  obtain ⟨afterShort, afterShortOk, shortOk⟩ := shortOk
+  obtain ⟨afterEnd, afterEndOk, longOk⟩ := longOk
+  rw [Uint64.addChecked_ok_iff] at afterShortOk afterEndOk
+  rw [UInt64.le_iff_toNat_le] at le
+  have one : (1 : UInt64).toNat = 1 := rfl
+  rw [one] at afterShortOk afterEndOk
+  rcases (mem_foldlM_committees_iff shortOk).mp member with none | ⟨offset, inRange, rest⟩
+  · simp at none
+  refine (mem_foldlM_committees_iff longOk).mpr (.inr ⟨offset, ?_, rest⟩)
+  rw [List.mem_range] at inRange ⊢
+  omega
+/-- The adversary of a range reads the committee weight, its share, then the equivocators.
+
+That holds for every input, errors included, so reading the members once changes nothing. -/
+theorem computeAdversarialWeight_eq_spec {config : Config} {head : Root}
+    {balanceSource : BeaconState preset fork} {startSlot endSlot : Slot} :
+    store.computeAdversarialWeight config head balanceSource startSlot endSlot = (do
+      let w ← store.computeCommitteeWeightBetweenSlots head balanceSource startSlot endSlot
+      let s ← (Uint64.mulChecked (w / 100) config.CONFIRMATION_BYZANTINE_THRESHOLD).mapError .arith
+      let e ← store.getEquivocationScore head balanceSource startSlot endSlot
+      return Uint64.saturatingSub s e) := by
+  unfold computeAdversarialWeight computeCommitteeWeightBetweenSlots
+  rcases pair : store.computeCommitteeWeightAndMembers head balanceSource startSlot endSlot with
+    _ | ⟨w, _ | m⟩
+  · rfl
+  · simp only [bind, Except.bind, pure, Except.pure, getEquivocationScore]
+    split <;> try rfl
+    split <;> rfl
+  · have := getCommitteesBetweenSlots_of_computeCommitteeWeightAndMembers pair
+    simp [bind, Except.bind, pure, Except.pure, getEquivocationScore, this]
 
 /-- At each slot the tracked heads move on: the current head becomes the previous one. -/
 theorem updateFastConfirmationVariables_heads {fcr after : FastConfirmationStore} {head : Root}

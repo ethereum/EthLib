@@ -37,6 +37,34 @@ def new_payload_on_chain(
     return _native.engine_new_payload_on_chain(config, state, items, request)
 
 
+def build_payload(
+    config: dict,
+    state: bytes,
+    recent: Sequence[RecentBlock],
+    method: str,
+    attributes: dict,
+    *,
+    fee_recipient: bytes,
+    extra_data: bytes,
+    target_gas_limit: int,
+    transactions: Sequence[bytes],
+) -> tuple[bytes, bytes, list[bytes], int]:
+    """The block that payload attributes build on a chain, its accounts, requests and value."""
+    # The attributes pass the checks of the forkchoice update `method` against the last block.
+    items = [(name, header, list(ommers)) for name, header, ommers in recent]
+    return _native.engine_build_payload(
+        config,
+        state,
+        items,
+        method,
+        attributes,
+        fee_recipient,
+        extra_data,
+        target_gas_limit,
+        list(transactions),
+    )
+
+
 def forkchoice_updated(
     config: dict, tree: list, method: str, params: list, finalized: str | None = None
 ) -> dict:
@@ -103,6 +131,30 @@ def get_payload_bodies(
         for block_hash, number, fork, transactions, withdrawals, access_list in store
     ]
     return _native.engine_get_payload_bodies(entries, latest, max_request, request)
+
+
+# An ID, fork, payload JSON value, block value, network blob transactions, requests and override.
+PayloadEntry: TypeAlias = tuple[
+    bytes, str, dict, int, Sequence[bytes], Sequence[bytes] | None, bool
+]
+
+
+def get_payload(config: dict, store: Sequence[PayloadEntry], method: str, params: list) -> dict:
+    """The latest completed payload of a build, with its checked blobs bundle."""
+    request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    entries = [
+        (
+            identifier,
+            fork,
+            payload,
+            value,
+            list(network),
+            None if requests is None else list(requests),
+            override,
+        )
+        for identifier, fork, payload, value, network, requests, override in store
+    ]
+    return _native.engine_get_payload(config, entries, request)
 
 
 def prepare_execution_payload(
@@ -194,6 +246,8 @@ __all__ = [
     "get_blobs",
     "PoolEntry",
     "get_payload_bodies",
+    "get_payload",
+    "PayloadEntry",
     "BodyEntry",
     "WithdrawalEntry",
     "prepare_execution_payload",

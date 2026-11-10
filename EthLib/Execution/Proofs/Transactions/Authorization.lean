@@ -1171,11 +1171,52 @@ private theorem readsDelegable_applyAuthorization
   · obtain ⟨hstate, -, -⟩ := state_payAuthorization hpay
     exact readsDelegable_delegate hdelegate codeHash fun _ => hstate ▸ hcode
 
+/-- A delegation keeps the storage of its authority, unless setting the code deletes the account.
+
+From Paris, a write that leaves an account empty deletes it, with its storage.
+
+Setting the code leaves it empty only with a nonce of 0, a balance of 0 and the empty code hash.
+
+The nonce then grows, so the account that the delegation leaves is not empty. -/
+theorem getStorage_delegate {state state' : TransactionState} {refund : Nat}
+    (h : delegate fork state authority auth = .ok (state', refund))
+    (hkeep : fork < .paris ∨ (state.getAccount authority).nonce ≠ 0 ∨
+      (state.getAccount authority).balance ≠ 0 ∨
+      Cryptography.Hash.Keccak.keccak256 (delegationCode auth) ≠ EMPTY_CODE_HASH)
+    (key : Bytes32) : state'.getStorage authority key = state.getStorage authority key := by
+  obtain ⟨coded, hcode, h⟩ := bind_ok_iff.mp h
+  obtain ⟨bumped, hnonce, h⟩ := bind_ok_iff.mp h
+  cases h
+  obtain ⟨hcode_self, -⟩ := getAccount_setCode hcode
+  obtain ⟨hnonce_self, -⟩ := getAccount_incrementNonce hnonce
+  have hbumped : state'.getAccount authority ≠ State.EMPTY_ACCOUNT := by
+    rw [hnonce_self]
+    intro he
+    have := congrArg State.Account.nonce he
+    simp [State.EMPTY_ACCOUNT] at this
+  have hcoded : fork < .paris ∨ coded.getAccount authority ≠ State.EMPTY_ACCOUNT := by
+    rcases hkeep with hp | hk
+    · exact .inl hp
+    · refine .inr fun he => ?_
+      rw [hcode_self] at he
+      have h1 := congrArg State.Account.nonce he
+      have h2 := congrArg State.Account.balance he
+      have h3 := congrArg State.Account.codeHash he
+      simp only [State.EMPTY_ACCOUNT] at h1 h2 h3
+      rcases hk with hk | hk | hk
+      · exact hk h1
+      · exact hk h2
+      · exact hk h3
+  rw [getStorage_modifyState_self hnonce (.inr hbumped) key,
+    getStorage_setCode_self hcode hcoded key]
+
 /-- One authorization, seen from an authority whose code is empty or a delegation indicator.
 
 When the authorization counts for the authority, it delegates it and adds one to its nonce.
 
-Otherwise the account of the authority stays. -/
+Its storage then stays, unless setting the code deletes the account, as for one delegation.
+
+Otherwise the account and the storage of the authority stay. -/
 private theorem account_applyAuthorization
     (h : applyAuthorization fork chainId done auth = .ok done')
     (hcode : ReadsDelegable done.state (done.state.getAccount authority).codeHash) :
@@ -1184,30 +1225,42 @@ private theorem account_applyAuthorization
       done'.state.getAccount authority = { done.state.getAccount authority with
         nonce := (done.state.getAccount authority).nonce + 1
         codeHash := Cryptography.Hash.Keccak.keccak256 (delegationCode auth) } ∧
-      ReadsDelegable done'.state (Cryptography.Hash.Keccak.keccak256 (delegationCode auth))) ∧
+      ReadsDelegable done'.state (Cryptography.Hash.Keccak.keccak256 (delegationCode auth)) ∧
+      (fork < .paris ∨ (done.state.getAccount authority).nonce ≠ 0 ∨
+          (done.state.getAccount authority).balance ≠ 0 ∨
+          Cryptography.Hash.Keccak.keccak256 (delegationCode auth) ≠ EMPTY_CODE_HASH →
+        ∀ key, done'.state.getStorage authority key = done.state.getStorage authority key)) ∧
     (¬(authorizationInScope chainId auth = true ∧ recoverAuthority auth = some authority ∧
         (done.state.getAccount authority).nonce = auth.nonce.toNat) →
-      done'.state.getAccount authority = done.state.getAccount authority) := by
+      done'.state.getAccount authority = done.state.getAccount authority ∧
+        ∀ key, done'.state.getStorage authority key = done.state.getStorage authority key) := by
   refine ⟨fun ⟨hscope, hrecover, hnonce⟩ => ?_, fun hnot => ?_⟩
   · obtain ⟨code, hget, hok⟩ := hcode
     have haccept : authorityAccepts done.state authority auth = .ok true := by
       simp only [authorityAccepts, hget, bind, Except.bind, pure, Except.pure, hok, hnonce,
         decide_true, Bool.and_self]
     refine ⟨authority_applyAuthorization h hscope hrecover haccept, ?_⟩
-    obtain ⟨paid, state, refund, -, hdelegate, rfl⟩ :=
+    obtain ⟨paid, state, refund, hpay, hdelegate, rfl⟩ :=
       applyAuthorization_of_accepts_eq_ok h hscope hrecover haccept
-    exact readsDelegable_delegate hdelegate _ fun hne => absurd rfl hne
+    obtain ⟨hstate, -, -⟩ := state_payAuthorization hpay
+    refine ⟨readsDelegable_delegate hdelegate _ fun hne => absurd rfl hne, fun hkeep key => ?_⟩
+    rw [getStorage_delegate hdelegate (by rw [hstate]; exact hkeep) key, hstate]
+    rfl
   · rcases applyAuthorization_cases h with rfl | ⟨other, hscope, hrecover, ⟨-, rfl⟩ |
       ⟨haccept, paid, state, refund, hpay, hdelegate, rfl⟩⟩
-    · rfl
-    · rfl
+    · exact ⟨rfl, fun _ => rfl⟩
+    · exact ⟨rfl, fun _ => rfl⟩
     · by_cases hsame : other = authority
       · subst hsame
         exact absurd ⟨hscope, hrecover, nonce_of_authorityAccepts haccept⟩ hnot
       · obtain ⟨hstate, -, -⟩ := state_payAuthorization hpay
-        rw [(sameOutside_delegate hdelegate).1.getAccount_eq (by simpa using Ne.symm hsame),
-          hstate]
-        rfl
+        have hout := (sameOutside_delegate hdelegate).1 authority (by simpa using Ne.symm hsame)
+        refine ⟨?_, fun key => ?_⟩
+        · rw [(sameOutside_delegate hdelegate).1.getAccount_eq (by simpa using Ne.symm hsame),
+            hstate]
+          rfl
+        · rw [hout.2.1 key, hstate]
+          rfl
 
 /-- Authorizations that succeed, seen from an authority with code of the right kind. -/
 private theorem foldlM_applyAuthorization_account :
@@ -1229,14 +1282,14 @@ private theorem foldlM_applyAuthorization_account :
     by_cases hcount : authorizationInScope chainId auth = true ∧
         recoverAuthority auth = some authority ∧
         (start.state.getAccount authority).nonce = auth.nonce.toNat
-    · obtain ⟨haccount, hreads⟩ := hyes hcount
+    · obtain ⟨haccount, hreads, -⟩ := hyes hcount
       have ih := foldlM_applyAuthorization_account h (by rw [haccount]; exact hreads)
       rw [ih, haccount]
       simp only [acceptedBy, ite_eq_left_of_eq_true _ _ (eq_true hcount), List.length_cons,
         delegatedCodeHash]
       congr 1
       omega
-    · have haccount := hno hcount
+    · have haccount := (hno hcount).1
       have ih := foldlM_applyAuthorization_account h
         (by rw [haccount]; exact readsDelegable_applyAuthorization hnext hcode)
       rw [ih, haccount]
@@ -1263,6 +1316,78 @@ theorem foldlM_applyAuthorization_authority {code : ByteArray} {auths : List Aut
         (acceptedBy chainId authority (start.state.getAccount authority).nonce auths)
         (start.state.getAccount authority).codeHash } :=
   foldlM_applyAuthorization_account h ⟨code, hcode, hdelegable⟩
+
+/-! ## The storage of an authority -/
+
+/-- An authority keeps its storage through authorizations that succeed, unless one deletes it.
+
+The code of the authority must be empty or a delegation indicator at the start. -/
+private theorem foldlM_applyAuthorization_storage_of_readsDelegable :
+    ∀ {auths : List Authorization} {start done : Delegations Meter},
+      auths.foldlM (applyAuthorization fork chainId) start = .ok done →
+      ReadsDelegable start.state (start.state.getAccount authority).codeHash →
+      (fork < .paris ∨ (start.state.getAccount authority).nonce ≠ 0 ∨
+        (start.state.getAccount authority).balance ≠ 0 ∨
+        ∀ first ∈ (acceptedBy chainId authority (start.state.getAccount authority).nonce
+          auths).head?,
+          Cryptography.Hash.Keccak.keccak256 (delegationCode first) ≠ EMPTY_CODE_HASH) →
+      ∀ key, done.state.getStorage authority key = start.state.getStorage authority key
+  | [], _, _, h, _, _, _ => by
+    cases h
+    rfl
+  | auth :: rest, start, done, h, hcode, hkeep, key => by
+    obtain ⟨next, hnext, h⟩ := bind_ok_iff.mp h
+    obtain ⟨hyes, hno⟩ := account_applyAuthorization hnext hcode
+    by_cases hcount : authorizationInScope chainId auth = true ∧
+        recoverAuthority auth = some authority ∧
+        (start.state.getAccount authority).nonce = auth.nonce.toNat
+    · obtain ⟨haccount, hreads, hstorage⟩ := hyes hcount
+      have hfirst : fork < .paris ∨ (start.state.getAccount authority).nonce ≠ 0 ∨
+          (start.state.getAccount authority).balance ≠ 0 ∨
+          Cryptography.Hash.Keccak.keccak256 (delegationCode auth) ≠ EMPTY_CODE_HASH := by
+        rcases hkeep with hp | hk | hk | hk
+        · exact .inl hp
+        · exact .inr (.inl hk)
+        · exact .inr (.inr (.inl hk))
+        · exact .inr (.inr (.inr (hk auth (by simp [acceptedBy, hcount]))))
+      rw [← hstorage hfirst key]
+      refine foldlM_applyAuthorization_storage_of_readsDelegable h
+        (by rw [haccount]; exact hreads) (.inr (.inl ?_)) key
+      rw [haccount]
+      simp
+    · obtain ⟨haccount, hstorage⟩ := hno hcount
+      rw [← hstorage key]
+      refine foldlM_applyAuthorization_storage_of_readsDelegable h
+        (by rw [haccount]; exact readsDelegable_applyAuthorization hnext hcode) ?_ key
+      rw [haccount]
+      simpa only [acceptedBy, hcount, ↓reduceIte] using hkeep
+
+/-- Authorizations that succeed keep the storage of an authority, unless the first one deletes it.
+
+The code of the authority must be empty or a delegation indicator at the start.
+
+From Paris, a write that leaves an account empty deletes it, with its storage.
+
+Only the first authorization that the authority accepts can do that, as each adds one to its nonce.
+
+It does so when the nonce and the balance are 0, and the code it sets has the empty code hash.
+
+An authorization to the zero address sets the empty code.
+
+Another address gets a delegation indicator, whose hash differs unless Keccak-256 collides.
+
+That is not proved here, so the hypothesis names the hash. -/
+theorem foldlM_applyAuthorization_storage {code : ByteArray} {auths : List Authorization}
+    {start done : Delegations Meter}
+    (h : auths.foldlM (applyAuthorization fork chainId) start = .ok done)
+    (hcode : start.state.getCode (start.state.getAccount authority).codeHash = .ok code)
+    (hdelegable : (code.size = 0 || isValidDelegation code) = true)
+    (hkeep : fork < .paris ∨ (start.state.getAccount authority).nonce ≠ 0 ∨
+      (start.state.getAccount authority).balance ≠ 0 ∨
+      ∀ first ∈ (acceptedBy chainId authority (start.state.getAccount authority).nonce auths).head?,
+        Cryptography.Hash.Keccak.keccak256 (delegationCode first) ≠ EMPTY_CODE_HASH)
+    (key : Bytes32) : done.state.getStorage authority key = start.state.getStorage authority key :=
+  foldlM_applyAuthorization_storage_of_readsDelegable h ⟨code, hcode, hdelegable⟩ hkeep key
 
 /-! ## The hash that an authority signs -/
 

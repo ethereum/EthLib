@@ -1366,6 +1366,12 @@ def bindings : List Binding := [
     "(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], " ++
       "request: dict) -> tuple[dict, bytes, bytes] | tuple[dict, None, None]",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
+  ⟨"engine_build_payload", `EthLib.Engine.Exports.buildPayloadExport,
+    "(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], " ++
+      "method: str, attributes: dict, fee_recipient: bytes, extra_data: bytes, " ++
+      "target_gas_limit: int, transactions: list[bytes]) -> tuple[bytes, bytes, list[bytes], int]",
+    [`EthLib.Engine.EngineError, `EthLib.Engine.PayloadError,
+      `EthLib.Execution.Blocks.BlockError], some "EngineError"⟩,
   ⟨"engine_forkchoice_updated", `EthLib.Engine.Exports.forkchoiceUpdatedExport,
     "(config: dict, tree: list, finalized: str | None, request: dict) -> dict",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
@@ -1373,6 +1379,10 @@ def bindings : List Binding := [
     "(pool: list[tuple[bytes, bytes | None, bytes | None, " ++
       "list[tuple[bytes, bytes] | None] | None]], serving: bool, max_request: int, " ++
       "fork: str, request: dict) -> list | None",
+    [`EthLib.Engine.EngineError], some "EngineError"⟩,
+  ⟨"engine_get_payload", `EthLib.Engine.Exports.getPayloadExport,
+    "(config: dict, store: list[tuple[bytes, str, dict, int, list[bytes], " ++
+      "list[bytes] | None, bool]], request: dict) -> dict",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
   ⟨"engine_get_payload_bodies", `EthLib.Engine.Exports.payloadBodiesExport,
     "(store: list[tuple[bytes, int | None, str, list[bytes], " ++

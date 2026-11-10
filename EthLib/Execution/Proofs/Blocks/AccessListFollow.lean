@@ -79,17 +79,15 @@ The call ran on `block`.
 
 A key that the call did not write reads as it did in `block`, so a wipe hides no word.
 
-This excludes a creation at an address with storage but no nonce and no code.
+This excludes a change that deletes an empty account with storage, which wipes that storage.
 
-EthLib wipes that storage, since it does not apply [EIP-7610][eip7610].
-
-It also excludes a change that deletes an empty account with storage, which wipes it too.
+A creation wipes no word, since [EIP-7610][eip7610] makes it fail at an address with storage.
 
 The code that the call reads for an account it wrote has the code hash of that account.
 
 A code map is a plain map, so nothing else ties the code that it gives to its hash.
 
-[eip7610]: https://eips.ethereum.org/EIPS/eip-7610#specification -/
+[eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification -/
 structure Followable (block : BlockState) (tx : TransactionState) : Prop where
   /-- The call ran on the block state. -/
   parent : tx.parent = block

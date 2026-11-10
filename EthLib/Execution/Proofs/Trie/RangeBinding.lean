@@ -21,6 +21,10 @@ The trie is any plain trie with the requested root and distinct keys.
 
 Its keys are not hashed again: each is a 32-byte hash, as in the range.
 
+A last section carries the result to a secured trie, such as a state or storage trie.
+
+Such a trie has the root of the plain trie of its hashed keys.
+
 The source is [`caps/snap.md`][snap], sections "AccountRange (0x01)" and "StorageRanges (0x03)".
 
 [snap]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md
@@ -608,5 +612,57 @@ theorem verifyRange_sound (hash : ByteArray → Hash32) {data : List (ByteArray 
   · exact .inr ⟨pair, by simp only [findRangeCollision, hhonest, hfound], hcollision⟩
   · -- A plain trie has no two keys with one path.
     simp [findPathCollision] at hfound
+
+/-! ## A secured trie -/
+
+/-- Soundness of a range against a secured trie, such as a state or storage trie.
+
+The keys of the range are hashes, since the trie stores each key under its hash.
+
+An accepted range gives each hash between its ends the value of the trie's key with that hash.
+
+When the range check shows no key after the range, each hash need only follow the start.
+
+The keys of the trie must be distinct.
+
+Otherwise the range search returns a collision in the plain trie of the hashed keys.
+
+Or the trie has two keys with one hash, which the key search returns. -/
+theorem verifyRange_sound_secured (hash : ByteArray → Hash32) {data : List (ByteArray × ByteArray)}
+    {root' start : Hash32} {entries : List (Hash32 × ByteArray)} {proof : List ByteArray}
+    {more : Bool}
+    (hroot : root hash ⟨true, data⟩ = .ok root') (hkeys : (data.map Prod.fst).Nodup)
+    (hverify : verifyRange hash root' start entries proof = .ok more) (key : Hash32)
+    (hstart : bytesToNibbleList ⟨start.toArray⟩ ≤ bytesToNibbleList ⟨key.toArray⟩)
+    (hlast : more = false ∨ entries.getLast?.all fun last =>
+      bytesToNibbleList ⟨key.toArray⟩ ≤ bytesToNibbleList ⟨last.1.toArray⟩) :
+    (data.find? fun entry => hash entry.1 = key).map Prod.snd =
+        (entries.find? fun entry => entry.1 = key).map Prod.snd ∨
+      (∃ pair, findRangeCollision hash
+        ⟨false, data.map fun entry => (⟨(hash entry.1).toArray⟩, entry.2)⟩
+        root' start entries proof key = some pair ∧ IsCollision hash pair) ∨
+      ∃ pair, findPathCollision hash ⟨true, data⟩ = some pair ∧ IsCollision hash pair := by
+  cases hcollision : findPathCollision hash ⟨true, data⟩ with
+  | some pair => exact .inr (.inr ⟨pair, rfl, findPathCollision_valid hash hcollision⟩)
+  | none =>
+    -- With no two keys of one hash, the hashed keys are distinct.
+    have hhashes := nodup_map_of_findKeyCollision hash _ hkeys
+      (by simpa [findPathCollision] using hcollision)
+    have hnodup : ((data.map fun entry => ((⟨(hash entry.1).toArray⟩ : ByteArray),
+        entry.2)).map Prod.fst).Nodup := by
+      simpa [List.map_map, Function.comp_def] using
+        nodup_map_of_injective hashBytes_injective hhashes
+    rw [root_secured_eq_plain] at hroot
+    rcases verifyRange_sound hash hroot hnodup hverify key hstart hlast with hvalue | hfound
+    · refine .inl ?_
+      rw [← hvalue, valueAt_plain, List.find?_map, Option.map_map]
+      -- Two hashes are equal exactly when their bytes are.
+      congr 1
+      apply find?_congr
+      intro entry _
+      simp only [Function.comp_apply]
+      rw [Bool.eq_iff_iff, sameBytes_iff, decide_eq_true_iff]
+      exact ⟨fun h => by rw [h], fun h => hashBytes_injective h⟩
+    · exact .inr (.inl hfound)
 
 end EthLib.Execution.Trie
