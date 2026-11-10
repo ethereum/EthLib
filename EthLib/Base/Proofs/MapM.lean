@@ -24,6 +24,7 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - Two functions that agree on every entry of a vector map it to one result.
 - A failed map fails on some input, and succeeds on every input before it.
 - A property that each step keeps holds after a successful fold.
+- A fold succeeds when each step succeeds and keeps an invariant that holds at the start.
 - A successful fold reads only inputs that its steps accept.
 - A fold over distinct keys changes the view of a key only in the step of that key.
 - A fold of steps that each succeed with a pure step is the pure fold.

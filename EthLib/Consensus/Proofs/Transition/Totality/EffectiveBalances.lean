@@ -15,7 +15,11 @@ The two bands of the preset must also be below 2^63 Gwei, as they are on mainnet
 
 The registry must hold one balance for each validator, and stay within its limit.
 
-Each new effective balance is then below 2^63 Gwei too, so the bound carries to the next epoch.
+The update leaves the balances unchanged.
+
+It changes only the effective balance of each validator.
+
+The new effective balance is the old one, or at most both the balance and its largest value.
 -/
 
 @[expose] public section
@@ -27,20 +31,23 @@ open Base Uint64
 variable {preset : Preset} {fork : Base.Fork} {state after : BeaconState preset fork}
 
 /-- The two bands of hysteresis of a preset are each below 2^63 Gwei. -/
-abbrev Preset.HysteresisBelow (preset : Preset) : Prop :=
+abbrev Preset.HysteresisBandsBelow (preset : Preset) : Prop :=
   (preset.EFFECTIVE_BALANCE_INCREMENT / preset.HYSTERESIS_QUOTIENT).toNat *
       preset.HYSTERESIS_DOWNWARD_MULTIPLIER.toNat < 2 ^ 63 ∧
     (preset.EFFECTIVE_BALANCE_INCREMENT / preset.HYSTERESIS_QUOTIENT).toNat *
       preset.HYSTERESIS_UPWARD_MULTIPLIER.toNat < 2 ^ 63
 
-/-- The bands of hysteresis of the mainnet and minimal presets are below 2^63 Gwei. -/
-theorem Preset.hysteresisBelow_named :
-    Preset.mainnet.HysteresisBelow ∧ Preset.minimal.HysteresisBelow := by
+/-- The bands of hysteresis of the mainnet preset are below 2^63 Gwei. -/
+theorem Preset.hysteresisBandsBelow_mainnet : Preset.mainnet.HysteresisBandsBelow := by
+  decide
+
+/-- The bands of hysteresis of the minimal preset are below 2^63 Gwei. -/
+theorem Preset.hysteresisBandsBelow_minimal : Preset.minimal.HysteresisBandsBelow := by
   decide
 
 /-- An updated effective balance succeeds when each amount is below 2^63 Gwei. -/
 private theorem updatedEffectiveBalance_exists_ok {largest balance effectiveBalance : Gwei}
-    (bands : preset.HysteresisBelow) (low : balance.toNat < 2 ^ 63)
+    (bands : preset.HysteresisBandsBelow) (low : balance.toNat < 2 ^ 63)
     (old : effectiveBalance.toNat < 2 ^ 63) :
     ∃ result, updatedEffectiveBalance preset largest balance effectiveBalance = .ok result := by
   obtain ⟨down, up⟩ := bands
@@ -95,10 +102,30 @@ private theorem updateEffectiveBalance_keeps {index : Nat}
       (balances _ (Array.mem_of_getElem? (getBalance_eq_ok_iff.mp read)))
       (effective _ (Array.mem_of_getElem? (getValidator_eq_ok_iff.mp found))) updated
 
+/-- The update of one effective balance keeps the balances, and replaces one validator.
+
+The new validator is the old one at the position, with its updated effective balance. -/
+private theorem updateEffectiveBalance_ok {index : Nat}
+    (computed : updateEffectiveBalance state index = .ok after) :
+    after.balances = state.balances ∧ ∃ validator balance effectiveBalance,
+      state.validators.data[index.toUInt64.toNat]? = some validator ∧
+        state.balances.data[index.toUInt64.toNat]? = some balance ∧
+        updatedEffectiveBalance preset (withdrawalMaxEffectiveBalance preset fork validator)
+          balance validator.effectiveBalance = .ok effectiveBalance ∧
+        ∀ j, after.validators.data[j]? = if index.toUInt64.toNat = j
+          then some { validator with effectiveBalance } else state.validators.data[j]? := by
+  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨validator, found, balance, read, effectiveBalance, updated, set⟩ := computed
+  obtain ⟨inside, rfl⟩ := setValidator_ok set
+  refine ⟨rfl, validator, balance, effectiveBalance, getValidator_eq_ok_iff.mp found,
+    getBalance_eq_ok_iff.mp read, updated, fun j => ?_⟩
+  simp only [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set,
+    Array.getElem?_set]
+
 /-- The update of one effective balance succeeds at a position of the registry.
 
 Every amount must be below 2^63 Gwei, and the registry must hold one balance per validator. -/
-private theorem updateEffectiveBalance_exists_ok {index : Nat} (bands : preset.HysteresisBelow)
+private theorem updateEffectiveBalance_exists_ok {index : Nat} (bands : preset.HysteresisBandsBelow)
     (within : state.RegistryWithinLimit) (matched : BalancesMatch state)
     (lt : index < state.validators.data.size)
     (balances : ∀ balance ∈ state.balances.data, balance.toNat < 2 ^ 63)
@@ -132,7 +159,7 @@ private theorem updateEffectiveBalance_exists_ok {index : Nat} (bands : preset.H
 The amounts are the balances, the effective balances and the two bands of the preset.
 
 The registry must hold one balance for each validator, and stay within its limit. -/
-theorem processEffectiveBalanceUpdates_total (bands : preset.HysteresisBelow)
+theorem processEffectiveBalanceUpdates_total (bands : preset.HysteresisBandsBelow)
     (within : state.RegistryWithinLimit) (matched : BalancesMatch state)
     (balances : ∀ balance ∈ state.balances.data, balance.toNat < 2 ^ 63)
     (effective : ∀ validator ∈ state.validators.data, validator.effectiveBalance.toNat < 2 ^ 63) :
@@ -153,20 +180,79 @@ theorem processEffectiveBalanceUpdates_total (bands : preset.HysteresisBelow)
   exact ⟨next, computed, sizes.trans (sameSizes_updateEffectiveBalance computed),
     same.trans kept, below⟩
 
-/-- After the update, each effective balance is below 2^63 Gwei when every amount was before.
-
-Each new effective balance is the old one, or at most the balance. -/
-theorem processEffectiveBalanceUpdates_effective_lt
-    (balances : ∀ balance ∈ state.balances.data, balance.toNat < 2 ^ 63)
-    (effective : ∀ validator ∈ state.validators.data, validator.effectiveBalance.toNat < 2 ^ 63)
+/-- The update of the effective balances leaves the balances unchanged. -/
+theorem processEffectiveBalanceUpdates_balances
     (computed : processEffectiveBalanceUpdates state = .ok after) :
-    ∀ validator ∈ after.validators.data, validator.effectiveBalance.toNat < 2 ^ 63 := by
+    after.balances = state.balances := by
   unfold processEffectiveBalanceUpdates at computed
-  refine (foldlM_ok_invariant (fun current : BeaconState preset fork =>
-      (∀ balance ∈ current.balances.data, balance.toNat < 2 ^ 63) ∧
-        ∀ validator ∈ current.validators.data, validator.effectiveBalance.toNat < 2 ^ 63)
-    (fun _ _ _ ⟨low, old⟩ step => ?_) ⟨balances, effective⟩ computed).2
-  obtain ⟨same, below⟩ := updateEffectiveBalance_keeps low old step
-  exact ⟨same ▸ low, below⟩
+  exact foldlM_ok_invariant (fun current : BeaconState preset fork =>
+      current.balances = state.balances)
+    (fun _ _ _ kept step => (updateEffectiveBalance_ok step).1.trans kept) rfl computed
+
+/-- The update changes only the effective balance of each validator.
+
+The new effective balance is the old one, or at most both the balance and its largest value.
+
+The largest value is that of the fork, which from Electra depends on the credentials.
+
+The registry must stay within its limit, so that each position is read and written once. -/
+theorem processEffectiveBalanceUpdates_effectiveBalance (within : state.RegistryWithinLimit)
+    (computed : processEffectiveBalanceUpdates state = .ok after) {index : Nat}
+    {validator : Validator} (found : state.validators.data[index]? = some validator)
+    {balance : Gwei} (owned : state.balances.data[index]? = some balance) :
+    ∃ effectiveBalance : Gwei,
+      after.validators.data[index]? = some { validator with effectiveBalance } ∧
+        (effectiveBalance = validator.effectiveBalance ∨
+          effectiveBalance ≤ balance ∧
+            effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator) := by
+  unfold processEffectiveBalanceUpdates at computed
+  have inside := (Array.getElem?_eq_some_iff.mp found).1
+  let H : Nat → Option Validator → Option Validator := fun _ current => current.map fun old =>
+    match updatedEffectiveBalance preset (withdrawalMaxEffectiveBalance preset fork old) balance
+        old.effectiveBalance with
+    | .ok effectiveBalance => { old with effectiveBalance }
+    | .error _ => old
+  have round : ∀ current : BeaconState preset fork, SameSizes state current →
+      ∀ j ∈ List.range state.validators.data.size, j.toUInt64.toNat = j :=
+    fun current sizes j member => toNat_toUInt64_of_lt
+      (show current.validators.data.size ≤ _ by rw [sizes.1]; exact within)
+      (by rw [sizes.1]; exact List.mem_range.mp member)
+  obtain ⟨-, -, changed⟩ := foldlM_ok_pointwise
+    (fun current => SameSizes state current ∧ current.balances = state.balances)
+    (fun current => current.validators.data[index]?) id index H
+    (by simpa using List.nodup_range)
+    (fun _ _ _ _ ⟨sizes, kept⟩ step =>
+      ⟨sizes.trans (sameSizes_updateEffectiveBalance step),
+        (updateEffectiveBalance_ok step).1.trans kept⟩)
+    (fun j member current _ ⟨sizes, _⟩ step other => by
+      obtain ⟨-, _, _, _, _, _, _, view⟩ := updateEffectiveBalance_ok step
+      simp only [view, round current sizes j member, show j ≠ index from other, ite_false])
+    (fun j member current _ ⟨sizes, kept⟩ step same => by
+      obtain ⟨-, old, read, _, located, owner, updated, view⟩ := updateEffectiveBalance_ok step
+      rw [round current sizes j member] at located owner view
+      rw [id] at same
+      subst same
+      rw [kept, owned, Option.some.injEq] at owner
+      subst owner
+      simp only [view, ite_true, located, H, Option.map_some, updated])
+    ⟨SameSizes.refl state, rfl⟩ computed
+  rw [changed index (List.mem_range.mpr inside) rfl, found]
+  simp only [H, Option.map_some]
+  split
+  · rename_i effectiveBalance updated
+    refine ⟨effectiveBalance, rfl, ?_⟩
+    rcases updatedEffectiveBalance_cases updated with rfl | rfl
+    · exact Or.inl rfl
+    · have rounded := UInt64.le_iff_toNat_le.mp (UInt64.sub_le
+        (a := balance) (b := balance % preset.EFFECTIVE_BALANCE_INCREMENT)
+        (UInt64.le_iff_toNat_le.mpr (by rw [UInt64.toNat_mod]; exact Nat.mod_le _ _)))
+      rw [UInt64.min_def]
+      split
+      · rename_i below
+        exact Or.inr ⟨UInt64.le_iff_toNat_le.mpr rounded, below⟩
+      · rename_i above
+        have := UInt64.lt_iff_toNat_lt.mp (UInt64.not_le.mp above)
+        exact Or.inr ⟨UInt64.le_iff_toNat_le.mpr (by omega), UInt64.le_refl _⟩
+  · exact ⟨validator.effectiveBalance, rfl, Or.inl rfl⟩
 
 end EthLib.Consensus
