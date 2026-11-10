@@ -316,3 +316,67 @@ def test_anchor_state_mismatch():
     ) as info:
         consensus.fork_choice("minimal", "altair", _read(case, "anchor_state"), bytes(block), [])
     assert info.value.code == 1
+
+
+def test_fast_confirmation_discount_bound():
+    # The vector leaves blocks at slots 1 and 2, then votes for block 2 through slot 6.
+    case = (
+        FILES
+        / "minimal/altair/fast_confirmation/empty_slots/pyspec_tests"
+        / "fcr_slot_head_tracking_during_empty_slots"
+    )
+    steps = _load(case / "steps.yaml")
+    anchor_state = _read(case, "anchor_state")
+    anchor_block = _read(case, "anchor_block")
+    blocks = [_read(case, step["block"]) for step in steps if "block" in step]
+    state = consensus.state_transitions("minimal", "altair", anchor_state, blocks, False)
+    parent = consensus.ssz_static("minimal", "altair", "BeaconBlock", blocks[-1][100:])[0]
+    at_seven = consensus.process_slots("minimal", "altair", state, 5)
+    proposer = next(
+        index for index in range(64) if consensus.is_proposer("minimal", "altair", at_seven, index)
+    )
+    # Add a child at slot 7, reusing the first block's body and skipping signature checks.
+    child = bytearray(blocks[0][100:])
+    child[:8] = (7).to_bytes(8, "little")
+    child[8:16] = proposer.to_bytes(8, "little")
+    child[16:48] = parent
+    child[48:80] = consensus.compute_new_state_root("minimal", "altair", state, bytes(child), False)
+    child_root = consensus.ssz_static("minimal", "altair", "BeaconBlock", bytes(child))[0]
+    signed_child = blocks[0][:100] + bytes(child)
+    # All members of slot 7 vote for the child; the empty-slot committees still vote for its parent.
+    attestations = []
+    for step in steps:
+        if "attestation" not in step:
+            continue
+        vote = bytearray(_read(case, step["attestation"]))
+        if int.from_bytes(vote[4:12], "little") == 6:
+            vote[4:12] = (7).to_bytes(8, "little")
+            vote[20:52] = child_root
+            attestations.append(("attestation", bytes(vote)))
+    assert len(attestations) == 2
+    inputs = [one for step in steps for one in _inputs(case, step)]
+    inputs += [("block", signed_child), ("tick", 48), *attestations]
+    config = {"CONFIRMATION_BYZANTINE_THRESHOLD": 0, "PROPOSER_SCORE_BOOST": 0}
+    # Rewind the clock: at slot 6 the child is from the future; at slot 7 it is not.
+    # Votes from four empty slots give a 1024 ETH discount; the maxima are 768 and 1024 ETH.
+    for current_slot in (7, 6):
+        outcomes = consensus.fork_choice(
+            "minimal",
+            "altair",
+            anchor_state,
+            anchor_block,
+            [*inputs, ("tick", current_slot * 6), ("fast_confirmation", None)],
+            False,
+            config,
+        )
+        assert all(outcome is None or isinstance(outcome, dict) for outcome in outcomes[:-1])
+        if current_slot == 6:
+            error = outcomes[-1]
+            assert isinstance(error, consensus.ForkChoiceError)
+            assert error.code == 53
+            assert " ".join(str(error).split()) == (
+                f"EthLib.Consensus.ForkChoiceError.supportDiscountAboveMaximum #v{list(child_root)}"
+            )
+        else:
+            # Equality is valid: the discount cancels the maximum, and the child has support.
+            assert outcomes[-1]["confirmed_root"] == child_root
