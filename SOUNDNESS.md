@@ -1410,7 +1410,8 @@ Its first theorems bound the writes to the sender, the beneficiary and the autho
 `buyGas_sender` in `Settlement.lean` proves that buying gas raises the nonce of the sender by one and takes the fees from its balance.
 `buyGas_keeps` proves that it changes no code hash of the sender, no word of storage and no code.
 `settleGas_accounts` proves that the settlement refunds the sender and pays the priority fee to the beneficiary.
-It changes no nonce, code hash or code, and storage only at a deleted sender or beneficiary.
+It changes no nonce, code hash or code.
+Storage stays at the sender when its nonce is not 0, and at the beneficiary unless it is deleted.
 
 `authority_applyAuthorization` proves that one accepted authorization in scope sets the delegation code and raises the nonce of its authority by one.
 The authorities after the whole list are given against the state that the authorizations leave; the fold over the list is not unrolled.
@@ -1421,7 +1422,7 @@ The authorities after the whole list are given against the state that the author
 It gives the nonce, the code hash, the balance and the storage of every address against the state before settlement.
 That state reads as the state after the gas purchase when the transaction creates a contract or its first frame never starts.
 When the first frame of a call starts and fails, it reads as the state that the authorizations leave.
-`processTransaction_values_of_error` restates it for every fork before Hegotá, without the case that the message takes.
+`processTransaction_values_of_error` gives the same conclusion for every fork before Hegotá, with the gas meter of that fork.
 `block_of_output` proves that the block after the transaction reads as the state that the transaction leaves.
 
 ### Transaction gas

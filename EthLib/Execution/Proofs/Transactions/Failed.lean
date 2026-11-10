@@ -481,7 +481,9 @@ variable {Meter : Type} [GasMeter Meter]
 
 /-- An accepted authorization in scope adds one to the nonce of its authority.
 
-It sets the code of the authority to the delegation indicator, and keeps its balance.
+It sets the code that the authorization names, and keeps the balance of the authority.
+
+That code is the delegation indicator, or no code for the zero address.
 
 The payment changes no account, so the authority is read as it was before the authorization. -/
 theorem authority_applyAuthorization {chainId : Nat} {done done' : Delegations Meter}
@@ -726,7 +728,7 @@ abbrev transactionFirstFrame (Meter : Type) [GasMeter Meter] (tx : Transaction)
     (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
     (paidWrites included.sender target tx)
 
-/-- A failed run leaves the fees, the nonce of the sender and any committed authorizations.
+/-- What a failed run leaves: it buys the gas, then settles it against the state of the message.
 
 When the transaction creates a contract, or its first frame never starts, no authorization stays.
 
@@ -735,28 +737,33 @@ The state before settlement then reads as the state after the gas purchase.
 When the first frame of a call starts and fails, that state reads as the authorizations left it.
 
 No log is kept. -/
+abbrev FailedRun (Meter : Type) [GasMeter Meter] (tx : Transaction) (env : BlockEnvironment fork)
+    (block : State.BlockState) (included : Included) (out : TransactionOutput) : Prop :=
+  let pre := State.TransactionState.ofBlock block
+  ∃ target bought message base gasLeft refund,
+    messageTarget included.sender (pre.getAccount included.sender).nonce tx = .ok target ∧
+    buyGas env pre included.sender tx = .ok bought ∧
+    transactionMessage env
+      { origin := included.sender, gasPrice := included.gasPrice,
+        blobVersionedHashes := fun _ => tx.blobHashes } bought included.sender target
+      (allocateGas fork tx included.intrinsicGas).execution tx = .ok message ∧
+    out.logs = #[] ∧
+    out.gasUsed = (settlement fork (baseFeeOf env) included.sender tx gasLeft refund).gasUsed ∧
+    SettledAccounts tx env included out base gasLeft refund ∧
+    (∀ codeHash, out.state.getCode codeHash = base.getCode codeHash) ∧
+    (((tx.to = none ∨ ∃ e read,
+          transactionFirstFrame Meter tx env included bought target message = .error (e, read)) ∧
+        SameOutside [] bought base ∧
+        (∀ codeHash, base.getCode codeHash = bought.getCode codeHash) ∧ refund = 0) ∨
+      ∃ first, ∃ done : Delegations Meter, tx.to = some target ∧
+        transactionFirstFrame Meter tx env included bought target message = .ok first ∧
+        KeptAuthorizations tx env included bought base target done refund)
+
+/-- A failed run at one gas meter leaves the fees, the nonce and any committed authorizations. -/
 theorem runTransaction_values_of_error {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter]
     {block : State.BlockState} (h : runTransaction Meter env block included tx = .ok out)
-    (failed : out.error.isSome = true) :
-    let pre := State.TransactionState.ofBlock block
-    ∃ target bought message base gasLeft refund,
-      messageTarget included.sender (pre.getAccount included.sender).nonce tx = .ok target ∧
-      buyGas env pre included.sender tx = .ok bought ∧
-      transactionMessage env
-        { origin := included.sender, gasPrice := included.gasPrice,
-          blobVersionedHashes := fun _ => tx.blobHashes } bought included.sender target
-        (allocateGas fork tx included.intrinsicGas).execution tx = .ok message ∧
-      out.logs = #[] ∧
-      out.gasUsed = (settlement fork (baseFeeOf env) included.sender tx gasLeft refund).gasUsed ∧
-      SettledAccounts tx env included out base gasLeft refund ∧
-      (∀ codeHash, out.state.getCode codeHash = base.getCode codeHash) ∧
-      (((tx.to = none ∨ ∃ e read,
-            transactionFirstFrame Meter tx env included bought target message = .error (e, read)) ∧
-          SameOutside [] bought base ∧
-          (∀ codeHash, base.getCode codeHash = bought.getCode codeHash) ∧ refund = 0) ∨
-        ∃ first, ∃ done : Delegations Meter, tx.to = some target ∧
-          transactionFirstFrame Meter tx env included bought target message = .ok first ∧
-          KeptAuthorizations tx env included bought base target done refund) := by
+    (failed : out.error.isSome = true) : FailedRun Meter tx env block included out := by
+  dsimp only [FailedRun]
   unfold runTransaction at h
   obtain ⟨target, htarget, h⟩ := bind_ok_iff.mp h
   obtain ⟨bought, hbought, h⟩ := bind_ok_iff.mp h
@@ -847,48 +854,22 @@ theorem runTransaction_values_of_error {Meter : Type} [GasMeter Meter] [LawfulGa
 
 It also leaves the authorizations that its first frame commits.
 
-The state before settlement reads as the state after the gas purchase.
-
-Or, for a call, it reads as the state that the authorizations leave.
-
-The run of the transaction at its gas meter tells which case a message takes. -/
+Up to BPO5 it runs with one counter of gas, and from Glamsterdam with the meter of state gas. -/
 theorem processTransaction_values_of_error {block : State.BlockState}
     (h : processTransaction env block included tx = .ok out) (failed : out.error.isSome = true) :
-    let pre := State.TransactionState.ofBlock block
-    ∃ bought base gasLeft refund,
-      buyGas env pre included.sender tx = .ok bought ∧
-      out.logs = #[] ∧
-      out.gasUsed = (settlement fork (baseFeeOf env) included.sender tx gasLeft refund).gasUsed ∧
-      SettledAccounts tx env included out base gasLeft refund ∧
-      (∀ codeHash, out.state.getCode codeHash = base.getCode codeHash) ∧
-      ((SameOutside [] bought base ∧
-          (∀ codeHash, base.getCode codeHash = bought.getCode codeHash) ∧ refund = 0) ∨
-        (∃ target, tx.to = some target ∧
-          ((fork < .glamsterdam ∧ ∃ done : Delegations Nat,
-              KeptAuthorizations tx env included bought base target done refund) ∨
-            (.glamsterdam ≤ fork ∧ fork < .hegota ∧ ∃ done : Delegations StateGasMeter,
-              KeptAuthorizations tx env included bought base target done refund)))) := by
-  unfold processTransaction at h
-  split at h
-  · cases h
-  rename_i hhegota
+    (fork < .glamsterdam ∧ FailedRun Nat tx env block included out) ∨
+      (.glamsterdam ≤ fork ∧ fork < .hegota ∧
+        FailedRun StateGasMeter tx env block included out) := by
+  by_cases hhegota : .hegota ≤ fork
+  · rw [processTransaction_of_hegota_le hhegota] at h
+    cases h
   have hlt_hegota : fork < .hegota := Nat.lt_of_not_le hhegota
-  split at h
-  · rename_i hglam
-    obtain ⟨_, bought, _, base, gasLeft, refund, _, hbought, _, hlogs, hused, hacc, hcode,
-      hbranch⟩ := runTransaction_values_of_error h failed
-    refine ⟨bought, base, gasLeft, refund, hbought, hlogs, hused, hacc, hcode, ?_⟩
-    rcases hbranch with ⟨-, hhalt⟩ | ⟨-, done, hto, -, hk⟩
-    · exact .inl hhalt
-    · exact .inr ⟨_, hto, .inr ⟨hglam, hlt_hegota, done, hk⟩⟩
-  · rename_i hglam
-    have hlt_glam : fork < .glamsterdam := Nat.lt_of_not_le hglam
-    obtain ⟨_, bought, _, base, gasLeft, refund, _, hbought, _, hlogs, hused, hacc, hcode,
-      hbranch⟩ := runTransaction_values_of_error h failed
-    refine ⟨bought, base, gasLeft, refund, hbought, hlogs, hused, hacc, hcode, ?_⟩
-    rcases hbranch with ⟨-, hhalt⟩ | ⟨-, done, hto, -, hk⟩
-    · exact .inl hhalt
-    · exact .inr ⟨_, hto, .inl ⟨hlt_glam, done, hk⟩⟩
+  by_cases hglam : .glamsterdam ≤ fork
+  · rw [processTransaction_of_glamsterdam hglam hlt_hegota] at h
+    exact .inr ⟨hglam, hlt_hegota, runTransaction_values_of_error h failed⟩
+  · have hlt_glam : fork < .glamsterdam := Nat.lt_of_not_le hglam
+    rw [processTransaction_of_lt_glamsterdam hlt_glam] at h
+    exact .inl ⟨hlt_glam, runTransaction_values_of_error h failed⟩
 
 end Values
 
