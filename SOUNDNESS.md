@@ -2456,8 +2456,8 @@ From Gloas the type of the registry has no length limit ([EIP-7688](https://eips
 A new validator still gets the size of the registry as its index, and that index must be below `2^64` (`getIndexForNewValidator_ok_iff`).
 So a transition never adds a validator at a position of `2^64` or more, and only a starting state built outside the transition can hold one.
 
-`getActiveValidatorIndices_eq_mapM_ofNatChecked` in `Consensus/Proofs/Accessors.lean` states the divergence exactly.
-The checked conversion of the active positions, which the specification computes, succeeds and gives EthLib's list exactly when every active position is below `2^64`.
+`getActiveValidatorIndicesChecked_eq_ok_iff` in `Consensus/Proofs/Accessors.lean` states the divergence exactly.
+The checked read converts each active position as the specification does, and it gives EthLib's list exactly when every active position is below `2^64`.
 The number of committees per slot, the churn limit of validators before Electra and the Phase 0 weak subjectivity period also convert the number of active validators to a 64-bit integer without a check.
 The specification rejects a count of `2^64` active validators, which a registry of `2^64` positions allows.
 Such a registry can arise through the transition, at least in principle.

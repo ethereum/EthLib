@@ -56,6 +56,9 @@ Not yet released.
   `KeysKept`, `Frame.keysKept` and `UpgradeFrame.keysKept` are gone, as no theorem read them ([#1908](https://github.com/ethereum/EthLib/issues/1908)); `advanceSlot_keys` becomes `advanceSlot_kept`, without the key conjunct.
   The setter laws of `EpochFrameLaws` and the frame lemmas of validator writes no longer take a key equality, and the `_of_whole` forms no longer take the old validator.
   The activity, chain and effective-balance totality theorems lose their registry-size arguments.
+  `getActiveValidatorIndicesChecked` converts each active position with `ofNatChecked`, as the specification builds each index.
+  `getActiveValidatorIndicesChecked_eq_ok_iff` replaces `getActiveValidatorIndices_eq_mapM_ofNatChecked`, and `getActiveValidatorIndicesChecked_error_of_le` is gone; `getTotalActiveBalance_ne_indexOutOfRange` drops its registry bound.
+  New lemmas: `sorted_of_getActiveValidatorIndicesChecked_ok`, `mem_iff_of_getActiveValidatorIndicesChecked_ok`, `getActiveValidatorIndicesChecked_error`, `getActiveValidatorIndicesChecked_eq_error`, and in `Base`, `ofNatChecked_toNat`, `mapM_ofNatChecked_eq_ok_iff` and `mapM_ofNatChecked_error`.
   `exists_mem_getBeaconCommittee` takes a successful checked active-index read, and `attestationCommitteesSize_of_attesterShuffle` takes a successful checked committee-count read.
   `attestationCommitteesSize_cons` includes that count check on its right side.
 - From Gloas, a deposit, a withdrawal or consolidation request, or a sync aggregate now fails where a registry position of 2^64 or more would become a validator index ([#1883](https://github.com/ethereum/EthLib/issues/1883)).

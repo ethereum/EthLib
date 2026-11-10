@@ -185,48 +185,36 @@ theorem ActiveKept.getActiveValidatorIndices_eq {post : Base.Fork} {bound epoch 
     getActiveValidatorIndices_eq_range state epoch (Nat.le_max_right other.validators.data.size _)]
   exact filterMap_congr_mem fun index _ => by rw [kept epoch le index]
 
-/-- Every active position fits exactly when the checked active-index guard passes. -/
-private theorem activePositionsFit_iff (state : BeaconState preset fork) (epoch : Epoch) :
-    state.validators.data.toList.zipIdx.all (fun (validator, index) =>
-      !isActiveValidator validator epoch || index < 2 ^ 64) = true ↔
+/-- Every active position of a registry fits in 64 bits, read by position or by activity. -/
+private theorem activePositionsFit_iff {post : Base.Fork} (state : BeaconState preset post)
+    (epoch : Epoch) :
+    (∀ position (inside : position < state.validators.data.size),
+      isActiveValidator state.validators.data[position] epoch = true → position < 2 ^ 64) ↔
       ∀ position, isActiveAt state epoch position = true → position < 2 ^ 64 := by
   constructor
-  · intro valid position active
-    cases found : state.validators.data[position]? with
-    | none => simp [isActiveAt, found] at active
-    | some validator =>
-      have member : (validator, position) ∈ state.validators.data.toList.zipIdx := by
-        rw [List.mk_mem_zipIdx_iff_getElem?]
-        simpa using found
-      have check := List.all_eq_true.mp valid (validator, position) member
-      have passes : isActiveValidator validator epoch = true := by
-        simpa [isActiveAt, found] using active
-      simpa [passes] using check
-  · intro fits
-    rw [List.all_eq_true]
-    intro ⟨validator, position⟩ member
-    have found : state.validators.data[position]? = some validator := by
-      have found := List.mk_mem_zipIdx_iff_getElem?.mp member
-      simpa using found
-    by_cases active : isActiveValidator validator epoch = true
-    · have small := fits position (by simp [isActiveAt, found, active])
-      simp [small]
-    · simp [active]
+  · intro fits position active
+    obtain ⟨_, found, active⟩ := isActiveAt_eq_true_iff.mp active
+    obtain ⟨inside, rfl⟩ := Array.getElem?_eq_some_iff.mp found
+    exact fits position inside active
+  · intro fits position inside active
+    exact fits position (isActiveAt_eq_true_iff.mpr ⟨_, by simp [inside], active⟩)
 
 /-- Two states with the same activity have the same checked active indices, including errors. -/
 theorem ActiveKept.getActiveValidatorIndicesChecked_eq {post : Base.Fork} {bound epoch : Epoch}
     {other : BeaconState preset post} (kept : ActiveKept bound state other) (le : epoch ≤ bound) :
     getActiveValidatorIndicesChecked other epoch =
       getActiveValidatorIndicesChecked state epoch := by
-  have same : other.validators.data.toList.zipIdx.all (fun (validator, index) =>
-      !isActiveValidator validator epoch || index < 2 ^ 64) =
-      state.validators.data.toList.zipIdx.all (fun (validator, index) =>
-        !isActiveValidator validator epoch || index < 2 ^ 64) := by
-    apply Bool.eq_iff_iff.mpr
-    rw [activePositionsFit_iff, activePositionsFit_iff]
+  have same : (∀ position, isActiveAt other epoch position = true → position < 2 ^ 64) ↔
+      ∀ position, isActiveAt state epoch position = true → position < 2 ^ 64 := by
     simp only [kept epoch le]
-  unfold getActiveValidatorIndicesChecked
-  rw [same, kept.getActiveValidatorIndices_eq le]
+  by_cases small : ∀ position, isActiveAt state epoch position = true → position < 2 ^ 64
+  · rw [getActiveValidatorIndicesChecked_eq_ok_iff.mpr ((activePositionsFit_iff _ _).mpr small),
+      getActiveValidatorIndicesChecked_eq_ok_iff.mpr
+        ((activePositionsFit_iff _ _).mpr (same.mpr small)),
+      kept.getActiveValidatorIndices_eq le]
+  · rw [getActiveValidatorIndicesChecked_eq_error (mt (activePositionsFit_iff _ _).mp small),
+      getActiveValidatorIndicesChecked_eq_error
+        (mt (activePositionsFit_iff _ _).mp (mt same.mp small))]
 
 /-- The RANDAO mixes of two states agree, except perhaps at the position of one epoch. -/
 def MixesKeptBut {post : Base.Fork} (written : Epoch) (state : BeaconState preset fork)
@@ -271,7 +259,7 @@ theorem CommitteesKept.of_eq {post : Base.Fork} {other : BeaconState preset post
     (mixes : other.randaoMixes.elements = state.randaoMixes.elements) (epoch : Epoch) :
     CommitteesKept epoch state other :=
   committeesKept_of_seed (by unfold getActiveValidatorIndices; rw [validators])
-    (by unfold getActiveValidatorIndicesChecked getActiveValidatorIndices; rw [validators])
+    (by unfold getActiveValidatorIndicesChecked; rw [validators])
     (by unfold getSeed getRandaoMix; rw [mixes])
 
 /-- The seed of an epoch reads only the mix of one position, which a nearby write misses.
@@ -356,7 +344,7 @@ theorem getAttestingIndices_eq_of_eq {other : BeaconState preset fork}
     (attestation : Attestation preset fork) :
     getAttestingIndices other attestation = getAttestingIndices state attestation :=
   getAttestingIndices_eq_of_seed (by unfold getActiveValidatorIndices; rw [validators])
-    (by unfold getActiveValidatorIndicesChecked getActiveValidatorIndices; rw [validators])
+    (by unfold getActiveValidatorIndicesChecked; rw [validators])
     (by unfold getSeed getRandaoMix; rw [mixes])
 
 /-- Two states agree on the attesters of an attestation, when two facts hold.

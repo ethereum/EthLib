@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Uint64
 
 /-!
@@ -77,6 +78,35 @@ theorem ofNatChecked_of_lt {n : Nat} (h : n < 2 ^ 64) : ofNatChecked n = .ok n.t
 /-- The conversion of the value of a 64-bit integer returns that integer. -/
 theorem ofNatChecked_toNat (a : UInt64) : ofNatChecked a.toNat = .ok a :=
   ofNatChecked_ok_iff.mpr ⟨a.toNat_lt, rfl⟩
+
+/-- The conversions of a list succeed exactly when every entry is below `2^64`.
+
+They then return the plain conversions. -/
+theorem mapM_ofNatChecked_eq_ok_iff {entries : List Nat} {values : List UInt64} :
+    entries.mapM ofNatChecked = .ok values ↔
+      (∀ n ∈ entries, n < 2 ^ 64) ∧ values = entries.map Nat.toUInt64 := by
+  induction entries generalizing values with
+  | nil => simp [pure, Except.pure, eq_comm]
+  | cons n rest ih =>
+    rw [mapM_cons_ok]
+    constructor
+    · rintro ⟨value, others, converted, mapped, rfl⟩
+      obtain ⟨small, rfl⟩ := ih.mp mapped
+      obtain ⟨fits, same⟩ := ofNatChecked_ok_iff.mp converted
+      refine ⟨List.forall_mem_cons.mpr ⟨fits, small⟩, ?_⟩
+      rw [List.map_cons, ← same, Nat.toUInt64_eq, UInt64.ofNat_toNat]
+    · rintro ⟨small, rfl⟩
+      obtain ⟨fits, rest⟩ := List.forall_mem_cons.mp small
+      exact ⟨_, _, ofNatChecked_of_lt fits, ih.mpr ⟨rest, rfl⟩, rfl⟩
+
+/-- The conversions of a list fail only by an overflow. -/
+theorem mapM_ofNatChecked_error {entries : List Nat} {error : ArithError}
+    (failed : entries.mapM ofNatChecked = .error error) : error = .overflow := by
+  obtain ⟨i, _, converted, -⟩ := mapM_error failed
+  unfold ofNatChecked at converted
+  split at converted
+  · cases converted
+  · exact (Except.error.inj converted).symm
 
 /-- The difference succeeds exactly when `b ≤ a`, and then it is the difference on `Nat`. -/
 theorem subChecked_ok_iff {a b c : UInt64} :

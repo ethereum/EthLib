@@ -101,15 +101,17 @@ def getActiveValidatorIndices (state : BeaconState preset fork) (epoch : Epoch) 
   state.validators.data.toList.zipIdx.filterMap fun (validator, index) =>
     if isActiveValidator validator epoch then some index.toUInt64 else none
 
-/-- The active indices, rejecting each active position that does not fit in 64 bits.
+/-- An error of a 64-bit operation, as an error of an accessor. -/
+def liftArith {α : Type} (result : Except ArithError α) : Except AccessorError α :=
+  result.mapError .arith
+
+/-- The active indices, or an error when an active position does not fit in 64 bits.
 
 An inactive position is not converted, so it needs no bound. -/
 def getActiveValidatorIndicesChecked (state : BeaconState preset fork) (epoch : Epoch) :
     Except AccessorError (List ValidatorIndex) :=
-  if state.validators.data.toList.zipIdx.all (fun (validator, index) =>
-      !isActiveValidator validator epoch || index < 2 ^ 64) then
-    .ok (getActiveValidatorIndices state epoch)
-  else .error (.arith .overflow)
+  liftArith ((state.validators.data.toList.zipIdx.filterMap fun (validator, position) =>
+    if isActiveValidator validator epoch then some position else none).mapM ofNatChecked)
 
 /-- The marks of the validators at some indices: one flag per validator of the registry.
 
@@ -142,10 +144,6 @@ def getTotalActiveBalance (state : BeaconState preset fork) : Except AccessorErr
   do
     let active ← getActiveValidatorIndicesChecked state (getCurrentEpoch state)
     getTotalBalance state active
-
-/-- An error of a 64-bit operation, as an error of an accessor. -/
-def liftArith {α : Type} (result : Except ArithError α) : Except AccessorError α :=
-  result.mapError .arith
 
 /-- The position `i mod n` is below `n`, for `n ≠ 0`. -/
 theorem toNat_mod_lt {i n : UInt64} (nonzero : n ≠ 0) : (i % n).toNat < n.toNat := by
