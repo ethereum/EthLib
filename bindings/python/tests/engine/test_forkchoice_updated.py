@@ -20,7 +20,7 @@ def _hash(n: int) -> str:
     return "0x" + n.to_bytes(32, "big").hex()
 
 
-def _known(block: str, parent: str, number: str, timestamp: str, valid: bool = True) -> dict:
+def _known(block: str, parent: str, number: str, timestamp: str, *, valid: bool = True) -> dict:
     # The genesis headers of the fixtures write 0 as `0x00`, which is no Engine API quantity.
     return {
         "blockHash": block,
@@ -89,7 +89,7 @@ def test_chain(chain: dict) -> None:
 # A tree of five blocks: 1 <- 2 <- 3 is valid, 4 is an invalid child of 3, and 5 a child of 4.
 # Block n has number n and timestamp 10 n, so all five are of Paris.
 TREE = [
-    _known(_hash(n), _hash(n - 1) if n > 1 else ZERO, hex(n), hex(10 * n), n <= 3)
+    _known(_hash(n), _hash(n - 1) if n > 1 else ZERO, hex(n), hex(10 * n), valid=n <= 3)
     for n in range(1, 6)
 ]
 
@@ -196,7 +196,7 @@ def test_build_not_specified(version: int, attributes: dict[str, object]) -> Non
 @pytest.mark.parametrize(
     ("version", "attributes"),
     [
-        pytest.param(1, {"timestamp": "0x1"}, id="v1-timestamp-only"),
+        pytest.param(1, {"timestamp": "0x32"}, id="v1-timestamp-only"),
         pytest.param(1, ATTRIBUTES_V2, id="v1-structure-2"),
         pytest.param(2, ATTRIBUTES_V3, id="v2-structure-3"),
         pytest.param(3, ATTRIBUTES_V2, id="v3-structure-2"),
@@ -459,6 +459,8 @@ def test_bad_state_and_attributes() -> None:
         pytest.param(3, ATTRIBUTES_V3 | {"timestamp": "0x64"}, id="v3-at-shapella"),
         pytest.param(3, ATTRIBUTES_V3 | {"timestamp": "0x2bc"}, id="v3-at-glamsterdam"),
         pytest.param(4, ATTRIBUTES_V4 | {"timestamp": "0x258"}, id="v4-at-bpo2"),
+        # Both the fork and the timestamp fail here, and the fork check runs first.
+        pytest.param(4, ATTRIBUTES_V4 | {"timestamp": "0x1"}, id="v4-before-head-in-paris"),
     ],
 )
 def test_attributes_unsupported_fork(version: int, attributes: dict[str, object]) -> None:
@@ -497,3 +499,40 @@ def test_attributes_rejected_at_head(version: int, attributes: dict[str, object]
             CONFIG, TREE, f"engine_forkchoiceUpdatedV{version}", [NEW_HEAD, attributes]
         )
     assert error.value.code == 38003
+
+
+def _paris_at(block: int) -> dict:
+    """A chain whose forks before Paris start at block 0, and Paris at a later block."""
+    activations = [[fork, "block", 0] for fork in BLOCK_FORKS[:-1]]
+    return CONFIG | {"activations": [*activations, ["paris", "block", block]]}
+
+
+def test_fork_of_the_next_block() -> None:
+    """The fork of the attributes is that of the block after the head, number 3 here."""
+    with raises(
+        engine.EngineError, "payload attributes: building a payload is not specified"
+    ) as error:
+        engine.forkchoice_updated(
+            _paris_at(4), TREE, "engine_forkchoiceUpdatedV1", [NEW_HEAD, ATTRIBUTES_V1]
+        )
+    assert error.value.code == 0
+    # With Paris at block 5, block 4 is of London, which version 1 does not take.
+    with raises(
+        engine.EngineError, "engine error: EthLib.Engine.EngineError.unsupportedFork"
+    ) as error:
+        engine.forkchoice_updated(
+            _paris_at(5), TREE, "engine_forkchoiceUpdatedV1", [NEW_HEAD, ATTRIBUTES_V1]
+        )
+    assert error.value.code == 38005
+
+
+def test_attributes_of_no_fork() -> None:
+    """Attributes of a block that no fork has reached yet give -38005."""
+    config = CONFIG | {"activations": [["paris", "block", 5]]}
+    with raises(
+        engine.EngineError, "engine error: EthLib.Engine.EngineError.unsupportedFork"
+    ) as error:
+        engine.forkchoice_updated(
+            config, TREE, "engine_forkchoiceUpdatedV1", [NEW_HEAD, ATTRIBUTES_V1]
+        )
+    assert error.value.code == 38005
