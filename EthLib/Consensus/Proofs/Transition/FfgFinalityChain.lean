@@ -173,7 +173,9 @@ The validator set of a checkpoint is the active set of its epoch in the last sta
 
 Its second set is the active set of the next epoch in the last state.
 
-Its weights are the effective balances of each state at the end of an epoch that records its root.
+Its weights are the effective balances of each state at the end of its epoch or the next one.
+
+That state must record its root for its epoch.
 
 The votes are those that the block steps between genesis and the last state cast.
 

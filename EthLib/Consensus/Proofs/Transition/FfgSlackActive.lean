@@ -26,7 +26,9 @@ For a checkpoint of the current epoch, the step reads no second set.
 
 Its validators that exit at the next epoch then count as slack, which that step does not need.
 
-Its weights are the effective balances of each state at the end of an epoch that records its root.
+Its weights are the effective balances of each state at the end of its epoch or the next one.
+
+That state must record its root for its epoch.
 
 That state may lie on any run between the first and the last state.
 
@@ -88,7 +90,11 @@ The epoch of the checkpoint is the previous or the current epoch of the state.
 
 Its block is that of the root that the state records for the start of that epoch.
 
-The epoch step of that slot may justify the checkpoint, and the finalization rules may read it. -/
+The epoch step of that slot may justify the checkpoint, and the finalization rules may read it.
+
+That step need not justify the checkpoint.
+
+A map from roots to blocks that tells roots apart keeps the set small. -/
 def justifyingBalances (config : Config) (checks : SignatureChecks) (block : Root → β)
     (first last : ForkedBeaconState preset) (c : Models.Ffg.Checkpoint β) :
     Set (ValidatorIndex → ℕ) :=
@@ -232,7 +238,9 @@ The validator set of a checkpoint is the active set of its epoch in the last sta
 
 Its second set is the active set of the next epoch in the last state.
 
-Its weights are the effective balances of each state at the end of an epoch that records its root.
+Its weights are the effective balances of each state at the end of its epoch or the next one.
+
+That state must record its root for its epoch.
 
 The votes are those that the block steps between genesis and the last state cast.
 
