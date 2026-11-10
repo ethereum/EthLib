@@ -601,14 +601,17 @@ The million-iteration X25519 vector requires `ETHLIB_SLOW_VECTORS=1`.
 
 ### Noise XX and libp2p identities
 
-`complete_authenticates` (`Networking/Proofs/Noise/Identity.lean`) ties successful completion to an incoming message that the XX reader accepts.
-The reported public key, signature and extensions are the fields of the payload decrypted from that message.
-The signature verifies against the static key read from that message, and the reported peer ID derives from the signing public key.
-`readLibp2p_authenticates` states the same check for the read of message 2 or 3.
-This is an acceptance theorem, not a proof of protocol security, confidentiality or constant-time execution.
-Both theorems hold for any state that a caller passes in.
-They do not relate the identity to the transport keys or the handshake hash of that state.
-Only the libp2p read and completion check an identity; the raw transport split of an XX state checks none.
+`readLibp2p_authenticates` (`Networking/Proofs/Noise/Identity.lean`) says that the read of message 2 or 3 accepts only a payload whose signature verifies on the static key that the message carries.
+The state then stores that remote, and completion returns it without reading a message or verifying the signature again.
+`complete_ok` holds for any state: the returned remote is the stored one, its static key is the remote static key of the handshake, and the ciphers are those of that handshake.
+`Produced.complete_authenticates` adds, for states that the libp2p initialize, write and read functions produce, that the signature verifies on that static key and that the public key decodes to the stored point.
+A caller that edits the state can therefore complete with a remote whose signature does not verify.
+`Produced.complete_isOk` says that completion of such a state after message 3 succeeds.
+These are acceptance theorems, not a proof of protocol security, confidentiality or constant-time execution.
+They relate the identity to the transport keys only through the shared handshake state.
+No theorem says that the chaining key mixed a Diffie-Hellman output with the remote static key, and none covers the handshake hash.
+Only the libp2p read verifies an identity, and completion checks that the stored remote has the remote static key of the handshake.
+The raw transport split of an XX state checks neither.
 The Python tests compare the raw XX handshake with a published test vector.
 No published vector covers the libp2p payload, so its tests check the keys and signatures with independent code.
 

@@ -15,7 +15,11 @@ Do not reuse a cipher state after a successful operation; use its returned state
 
 Discard the handshake state after a handshake error.
 
-The libp2p completion result comes from a payload whose static-key signature verifies.
+The libp2p state holds the remote that the read of message 2 or 3 authenticated.
+
+Completion returns that remote and does not verify its signature again.
+
+The state carries the remote's extensions; use them only from the completion result.
 
 Framing follows [noise-libp2p][libp2p], "Wire Format".
 
@@ -35,8 +39,11 @@ abbrev CipherValue := Option Cryptography.ChaCha20Poly1305.Key × UInt64
 abbrev StateValue := Bool × Key × Key × Option Key × Option Key × Nat × Vector UInt8 32 ×
   Vector UInt8 32 × Option Cryptography.ChaCha20Poly1305.Key × UInt64
 
-/-- An XX state and the original encrypted message with its pre-read state. -/
-abbrev Libp2pValue := StateValue × Option (StateValue × ByteArray)
+/-- The remote static key, identity key protobuf, signature and extensions. -/
+abbrev RemoteValue := Key × ByteArray × ByteArray × Option ByteArray
+
+/-- An XX state and its authenticated remote, if any. -/
+abbrev Libp2pValue := StateValue × Option RemoteValue
 
 def cipherToValue (s : CipherState) : CipherValue := (s.key, s.nonce)
 def cipherOfValue (s : CipherValue) : CipherState := ⟨s.1, s.2⟩
@@ -52,12 +59,25 @@ def stateOfValue (v : StateValue) : HandshakeState :=
   ⟨initiator, staticKey, ephemeralKey, remoteStatic, remoteEphemeral, step,
     ⟨⟨ck⟩, ⟨h⟩, ⟨key, nonce⟩⟩⟩
 
-def libp2pToValue (s : Libp2pState) : Libp2pValue :=
-  (stateToValue s.handshake, s.remoteMessage.map fun (before, message) =>
-    (stateToValue before, message))
+def remoteToValue (r : Remote) : RemoteValue :=
+  (r.staticKey, r.publicKey, r.signature, r.extensions)
 
-def libp2pOfValue (v : Libp2pValue) : Libp2pState :=
-  ⟨stateOfValue v.1, v.2.map fun (before, message) => (stateOfValue before, message)⟩
+/-- Read back the remote of a returned state.
+
+Only its key protobuf is decoded; its signature is not checked again. -/
+def remoteOfValue (v : RemoteValue) : Except NoiseError Remote := do
+  let (staticKey, publicKey, signature, extensions) := v
+  let key ← (Libp2p.decodePublicKey publicKey).mapError fun _ => .savedRemote
+  return ⟨staticKey, key, signature, extensions⟩
+
+def libp2pToValue (s : Libp2pState) : Libp2pValue :=
+  (stateToValue s.handshake, s.remote.map remoteToValue)
+
+def libp2pOfValue (v : Libp2pValue) : Except NoiseError Libp2pState := do
+  let remote ← match v.2 with
+    | none => pure none
+    | some r => some <$> remoteOfValue r
+  return ⟨stateOfValue v.1, remote⟩
 
 def result {α : Type} (r : Except NoiseError α) : Result α :=
   r.mapError fun error => (error.code, reprStr error)
@@ -134,14 +154,14 @@ It is checked before every other check, on every message. -/
 def writeLibp2pExport (args : PyValue) : Result PyValue :=
   pyExport (fun (value, identitySecret, extensions) => result (do
     let secret ← (Libp2p.Exports.secretOfBytes identitySecret).mapError identitySecretError
-    let (state, message) ← writeLibp2p (libp2pOfValue value) secret extensions
+    let (state, message) ← writeLibp2p (← libp2pOfValue value) secret extensions
     return (libp2pToValue state, message))) args
 
 /-- Read the next libp2p message, and authenticate the static key of message 2 or 3. -/
 @[export eth_noise_libp2p_read]
 def readLibp2pExport (args : PyValue) : Result PyValue :=
   pyExport (fun (value, message) => result (do
-    let state ← readLibp2p (libp2pOfValue value) message
+    let state ← readLibp2p (← libp2pOfValue value) message
     return libp2pToValue state)) args
 
 /-- Return the authenticated peer and transport keys only after completion. -/
@@ -149,10 +169,10 @@ def readLibp2pExport (args : PyValue) : Result PyValue :=
 def completeExport (args : PyValue) : Result PyValue :=
   letI : EthLib.Exports.FromPyItems Libp2pValue := EthLib.Exports.instFromPyItemsOfFromPy
   pyExport (fun value => result (do
-    let state := libp2pOfValue value
-    let (staticKey, identity) ← complete state
-    let (send, receive) ← transport state.handshake
-    return (staticKey, identity, cipherToValue send, cipherToValue receive,
-      state.handshake.symmetric.hash.bytes))) args
+    let state ← libp2pOfValue value
+    let (remote, send, receive) ← complete state
+    return (remote.staticKey,
+      (remote.publicKey, Libp2p.peerId remote.key, remote.signature, remote.extensions),
+      cipherToValue send, cipherToValue receive, state.handshake.symmetric.hash.bytes))) args
 
 end EthLib.Networking.Noise.Exports

@@ -46,9 +46,9 @@ def noiseCipherType : String := "tuple[bytes | None, int]"
 def noiseStateType : String :=
   "tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int]"
 
-/-- The Python type of a libp2p Noise state: the XX state, and the saved message and reader. -/
+/-- The Python type of a libp2p Noise state: the XX state and its authenticated remote. -/
 def noiseLibp2pType : String :=
-  "tuple[" ++ noiseStateType ++ ", tuple[" ++ noiseStateType ++ ", bytes] | None]"
+  "tuple[" ++ noiseStateType ++ ", tuple[bytes, bytes, bytes, bytes | None] | None]"
 
 /-- Every method of the Python extension, in the order of its method table. -/
 def bindings : List Binding := [
