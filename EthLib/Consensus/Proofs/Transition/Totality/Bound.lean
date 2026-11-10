@@ -173,20 +173,22 @@ def effectiveBalanceSum (state : BeaconState preset fork) : Nat :=
 def slashedBalanceSum (state : BeaconState preset fork) : Nat :=
   (state.slashings.elements.toList.map (·.toNat)).sum
 
+/-- The sum of the effective balances reads the registry at each position below its size. -/
+theorem effectiveBalanceSum_eq_sum_range (state : BeaconState preset fork) :
+    effectiveBalanceSum state = ((List.range state.validators.data.size).map fun j =>
+      ((state.validators.data[j]?).map (·.effectiveBalance.toNat)).getD 0).sum := by
+  unfold effectiveBalanceSum
+  congr 1
+  apply List.ext_getElem
+  · simp
+  · intro i first second
+    simp [Array.getElem?_eq_getElem (by simpa using first)]
+
 /-- The marked sum of the effective balances is at most the sum of all of them. -/
 private theorem sumMarked_le_effectiveBalanceSum {state : BeaconState preset fork}
     (marks : Array Bool) :
     sumMarked state.validators.data marks ≤ effectiveBalanceSum state := by
-  rw [sumMarked_eq_sum]
-  have : effectiveBalanceSum state = ((List.range state.validators.data.size).map fun j =>
-      ((state.validators.data[j]?).map (·.effectiveBalance.toNat)).getD 0).sum := by
-    unfold effectiveBalanceSum
-    congr 1
-    apply List.ext_getElem
-    · simp
-    · intro i first second
-      simp [Array.getElem?_eq_getElem (by simpa using first)]
-  rw [this]
+  rw [sumMarked_eq_sum, effectiveBalanceSum_eq_sum_range]
   refine sum_map_le_sum_map fun j _ => ?_
   split <;> omega
 
