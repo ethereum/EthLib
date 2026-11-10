@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.DivisionResistance
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.ForwardCase
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.ForwardSolver
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Game
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.InverseCase
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.JointGame
@@ -83,6 +84,8 @@ A win with no flag raised then has a fork index, or its point is not in the log 
 Take a fork whose two forgeries divide to the same scalar.
 
 A reduction wins a game of division resistance at least that often, divided by `q + 1`.
+
+Two forgeries of a fork that divide to different scalars give the discrete logarithm of the key.
 
 No theorem bounds the advantage of a forger yet.
 -/
