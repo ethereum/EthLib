@@ -58,83 +58,63 @@ It sums the validated keys, then checks the signature under the sum, as §3.3.4 
 noncomputable def byteFastAggregateVerify
     (pubkeys : Array ByteArray) (sigBytes : ByteArray) (h : G2Sub) : Bool :=
   match aggregatePubkeyPoint pubkeys with
-  | none => false
-  | some agg => byteVerify (G1.compress agg) sigBytes h
+  | .error _ => false
+  | .ok agg => byteVerify (G1.compress agg) sigBytes h
 
 /-- With the hash of the message under the message tag, it is EthLib's fast aggregate check. -/
 theorem byteFastAggregateVerify_hashPoint (pubkeys : Array ByteArray) (msg sig : ByteArray) :
     byteFastAggregateVerify pubkeys sig (hashPoint msg) = fastAggregateVerify pubkeys msg sig := by
   unfold byteFastAggregateVerify fastAggregateVerify
   cases aggregatePubkeyPoint pubkeys with
-  | none => rfl
-  | some agg => exact byteVerify_hashPoint _ _ _
+  | error _ => rfl
+  | ok agg => exact byteVerify_hashPoint _ _ _
 
-/-- The loop of the key sum either stops with nothing or decodes every key.
+/-- A fold of the key sum that succeeds decodes every key.
 
-If it does not stop, the sum it ends with is the starting sum plus the decoded keys. -/
-private theorem forIn_decode (ks : List ByteArray) :
-    ∀ (acc : G1) (a : G1Sub) (o : Option (Option G1)) (R : G1), G1.Valid acc →
+The point it ends with is the starting sum plus the decoded keys. -/
+private theorem foldlM_decode (ks : List ByteArray) :
+    ∀ (idx : Nat) (acc R : G1) (a : G1Sub), G1.Valid acc →
     G1.toPoint acc = a →
-    forIn (m := Id) ks ((none : Option (Option G1)), acc)
-        (fun pk (s : Option (Option G1) × G1) =>
-          if (decide (pk.size ≠ 48) || !(G1.keyValidate pk).isOk) = true then
-            pure (ForInStep.done (some none, s.2))
-          else
-            match G1.uncompress pk with
-            | .error _ => pure (ForInStep.done (some none, s.2))
-            | .ok p => pure (ForInStep.yield (none, s.2.add p))) = (o, R) →
-    o = some none ∨ (o = none ∧ ∃ xs : List G1Sub, ks.mapM decodeKey = some xs ∧ G1.Valid R ∧
-      G1.toPoint R = ((a + xs.sum : G1Sub) : G1.curve.toAffine.Point)) := by
+    (ks.zipIdx idx).foldlM addPubkeyPoint acc = .ok R →
+    ∃ xs : List G1Sub, ks.mapM decodeKey = some xs ∧ G1.Valid R ∧
+      G1.toPoint R = ((a + xs.sum : G1Sub) : G1.curve.toAffine.Point) := by
   induction ks with
   | nil =>
-    intro acc a o R hv ha h
-    have h' : (none, acc) = (o, R) := h
-    obtain ⟨rfl, rfl⟩ := Prod.mk.inj h'
-    exact Or.inr ⟨rfl, [], rfl, hv, by simpa using ha⟩
+    intro _ acc R a hv ha h
+    obtain rfl := Except.ok.inj h.symm
+    exact ⟨[], rfl, hv, by simpa using ha⟩
   | cons pk rest ih =>
-    intro acc a o R hv ha h
-    rw [List.forIn_cons] at h
-    by_cases hc : (decide (pk.size ≠ 48) || !(G1.keyValidate pk).isOk) = true
-    · simp only [hc, ↓reduceIte] at h
-      change (some none, acc) = (o, R) at h
-      exact Or.inl (Prod.mk.inj h).1.symm
-    · simp only [hc] at h
-      have hc' := hc
-      simp at hc'
-      obtain ⟨P, hp⟩ := G1.exists_keyValidatePoint_of_isOk hc'.2
-      obtain ⟨hpu, hPv, -, hord⟩ := G1.keyValidatePoint_eq_ok_iff.mp hp
-      obtain ⟨x, hdk, hx⟩ := exists_decodeKey_of_uncompress hpu
-        ((G1.inSubgroup_iff_modulus_smul_eq_zero hPv).mpr hord)
-      simp only [hpu] at h
-      rcases ih (acc.add P) (a + x) o R (G1.valid_add hv hPv)
-        (by rw [G1.toPoint_add hv hPv, ha, hx, AddSubgroup.coe_add]) h with
-        ho | ⟨ho, xs, hxs, hRv, hRe⟩
-      · exact Or.inl ho
-      · refine Or.inr ⟨ho, x :: xs, ?_, hRv, ?_⟩
+    intro idx acc R a hv ha h
+    simp only [List.zipIdx_cons, List.foldlM_cons, addPubkeyPoint] at h
+    by_cases hsize : pk.size ≠ 48
+    · simp [hsize, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+    · simp only [hsize, ↓reduceIte] at h
+      cases hp : G1.keyValidatePoint pk with
+      | error _ => simp [hp, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+      | ok P =>
+        simp only [hp, pure, Except.pure, bind, Except.bind] at h
+        obtain ⟨hpu, hPv, -, hord⟩ := G1.keyValidatePoint_eq_ok_iff.mp hp
+        obtain ⟨x, hdk, hx⟩ := exists_decodeKey_of_uncompress hpu
+          ((G1.inSubgroup_iff_modulus_smul_eq_zero hPv).mpr hord)
+        obtain ⟨xs, hxs, hRv, hRe⟩ := ih (idx + 1) (acc.add P) R (a + x) (G1.valid_add hv hPv)
+          (by rw [G1.toPoint_add hv hPv, ha, hx, AddSubgroup.coe_add]) h
+        refine ⟨x :: xs, ?_, hRv, ?_⟩
         · simp [List.mapM_cons, hdk, hxs]
         · rw [hRe, List.sum_cons, add_assoc]
 
 /-- A key sum that succeeds decodes every key, and is a point of the sum of the decoded keys. -/
 private theorem exists_mapM_decodeKey {pubkeys : Array ByteArray} {R : G1}
-    (h : aggregatePubkeyPoint pubkeys = some R) :
+    (h : aggregatePubkeyPoint pubkeys = .ok R) :
     ∃ xs : List G1Sub, pubkeys.toList.mapM decodeKey = some xs ∧ G1.Valid R ∧
       G1.toPoint R = ((xs.sum : G1Sub) : G1.curve.toAffine.Point) := by
   obtain ⟨l, rfl⟩ : ∃ l, pubkeys = l.toArray := ⟨pubkeys.toList, by simp⟩
   unfold aggregatePubkeyPoint at h
   by_cases he : l.toArray.isEmpty = true
-  · simp [he] at h
-  · simp only [he, Bool.false_eq_true, ↓reduceIte, List.forIn_toArray] at h
-    rw [Id.run_bind] at h
-    generalize hL : forIn (m := Id) l ((none : Option (Option G1)), (G1.zero : G1)) _ = L at h
-    obtain ⟨o, R'⟩ := L
-    rcases forIn_decode l G1.zero 0 o R' G1.valid_zero (by simpa using G1.toPoint_zero) hL with
-      ho | ⟨ho, xs, hxs, hRv, hRe⟩
-    · subst ho
-      simp [Id.run] at h
-    · subst ho
-      have hR : R' = R := Option.some.inj h
-      subst hR
-      exact ⟨xs, by simpa using hxs, hRv, by rw [hRe, zero_add]⟩
+  · simp [he, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+  · simp only [he, Bool.false_eq_true, ↓reduceIte, Array.zipIdx_toArray, List.foldlM_toArray] at h
+    obtain ⟨xs, hxs, hRv, hRe⟩ := foldlM_decode l 0 G1.zero R 0 G1.valid_zero
+      (by simpa using G1.toPoint_zero) h
+    exact ⟨xs, by simpa using hxs, hRv, by rw [hRe, zero_add]⟩
 
 /-- An accepted fast aggregate check decodes every key.
 
@@ -144,8 +124,8 @@ theorem isDh_of_byteFastAggregateVerify {pubkeys : Array ByteArray} {sig : ByteA
     ∃ xs : List G1Sub, pubkeys.toList.mapM decodeKey = some xs ∧
       blsScheme.isDh xs.sum h ((decodeSignature sig).getD 0) = true := by
   cases ha : aggregatePubkeyPoint pubkeys with
-  | none => simp [byteFastAggregateVerify, ha] at hv
-  | some R =>
+  | error _ => simp [byteFastAggregateVerify, ha] at hv
+  | ok R =>
     have hv' : byteVerify (G1.compress R) sig h = true := by
       simpa [byteFastAggregateVerify, ha] using hv
     obtain ⟨xs, hxs, hRv, hRe⟩ := exists_mapM_decodeKey ha

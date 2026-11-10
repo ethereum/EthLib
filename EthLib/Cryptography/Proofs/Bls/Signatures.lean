@@ -42,6 +42,27 @@ theorem popProve_ok (sk : SecretKey) : ∃ proof, popProve sk = .ok proof :=
 /-- Aggregation rejects an empty list (§2.8). -/
 theorem aggregate_empty : aggregate #[] = .error .emptySignatureList := rfl
 
+/-- The key sum rejects an empty list (§3.3.4). -/
+theorem aggregatePubkeyPoint_empty : aggregatePubkeyPoint #[] = .error .emptyPubkeyList := rfl
+
+/-- The fast aggregate verification rejects an empty key list (§3.3.4). -/
+theorem fastAggregateVerify_empty (msg sig : ByteArray) :
+    fastAggregateVerify #[] msg sig = false := rfl
+
+/-- The Ethereum key aggregation rejects an empty list. -/
+theorem ethAggregatePubkeys_empty : ethAggregatePubkeys #[] = .error .emptyPubkeyList := rfl
+
+/-- Adding one key rejects a public key that is not 48 bytes. -/
+theorem addPubkeyPoint_badPubkeySize {pk : ByteArray} (h : pk.size ≠ 48) (agg : G1) (i : Nat) :
+    addPubkeyPoint agg (pk, i) = .error (.badPubkeySize pk.size) := by
+  simp [addPubkeyPoint, h, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+
+/-- Adding one 48-byte key that fails key validation reports its index. -/
+theorem addPubkeyPoint_invalidPubkey {pk : ByteArray} {e : BlsError} (hsize : pk.size = 48)
+    (hval : G1.keyValidatePoint pk = .error e) (agg : G1) (i : Nat) :
+    addPubkeyPoint agg (pk, i) = .error (.invalidPubkey (some i)) := by
+  simp [addPubkeyPoint, hsize, hval, throw, throwThe, MonadExceptOf.throw]
+
 /-- The core aggregate verification rejects an empty key list (§2.9). -/
 theorem coreAggregateVerify_empty (msgs : Array ByteArray) (sig dst : ByteArray) :
     coreAggregateVerify #[] msgs sig dst = false := rfl

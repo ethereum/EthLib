@@ -182,66 +182,30 @@ theorem pkBytes_eq (sk : SecretKey) :
     pkBytes sk = G1.compress (G1.mul G1.generator sk.val) :=
   skToPk_bytes sk
 
-/-- Key validation and decoding accept the public key of a secret key, as a representative. -/
+/-- Key validation accepts the public key of a secret key, as a representative of its scalar. -/
 private theorem pkBytes_checks (sk : SecretKey) :
-    ∃ P, (pkBytes sk).size = 48 ∧ (G1.keyValidate (pkBytes sk)).isOk = true ∧
-      G1.uncompress (pkBytes sk) = .ok P ∧ G1.Represents P sk.val := by
+    ∃ P, (pkBytes sk).size = 48 ∧ G1.keyValidatePoint (pkBytes sk) = .ok P ∧
+      G1.Represents P sk.val := by
   obtain ⟨P, hP, hrep⟩ := G1.keyValidatePoint_compress_mul sk.property
   have hb := pkBytes_eq sk
-  refine ⟨P, ?_, ?_, (G1.keyValidatePoint_eq_ok_iff.mp (hb ▸ hP)).1, hrep⟩
-  · rw [hb]
-    exact G1.size_compress _
-  · -- Rewrite the validation first, so the kernel never evaluates it.
-    unfold G1.keyValidate
-    rw [hb, hP]
-    rfl
+  exact ⟨P, hb ▸ G1.size_compress _, hb ▸ hP, hrep⟩
 
-/-- One step of the loop of the key sum adds a valid key.
-
-It is stated on a variable key, so the kernel never evaluates a public key. -/
-private theorem forIn_cons_valid {pk : ByteArray} {P : G1} (hsize : pk.size = 48)
-    (hvalid : (G1.keyValidate pk).isOk = true) (hP : G1.uncompress pk = .ok P)
-    (rest : List ByteArray) (acc : G1) :
-    forIn (m := Id) (pk :: rest) ((none : Option (Option G1)), acc)
-        (fun pk (s : Option (Option G1) × G1) =>
-            if (decide (pk.size ≠ 48) || !(G1.keyValidate pk).isOk) = true then
-              pure (ForInStep.done (some none, s.2))
-            else
-              match G1.uncompress pk with
-              | .error _ => pure (ForInStep.done (some none, s.2))
-              | .ok p => pure (ForInStep.yield (none, s.2.add p))) =
-      forIn (m := Id) rest ((none : Option (Option G1)), acc.add P)
-        (fun pk (s : Option (Option G1) × G1) =>
-            if (decide (pk.size ≠ 48) || !(G1.keyValidate pk).isOk) = true then
-              pure (ForInStep.done (some none, s.2))
-            else
-              match G1.uncompress pk with
-              | .error _ => pure (ForInStep.done (some none, s.2))
-              | .ok p => pure (ForInStep.yield (none, s.2.add p))) := by
-  rw [List.forIn_cons]
-  simp only [hsize, hvalid, hP, ne_eq, not_true_eq_false, decide_false, Bool.not_true,
-    Bool.or_false, Bool.false_eq_true, ↓reduceIte]
-  rfl
-
-/-- The loop of the key sum adds honest public keys without stopping. -/
-private theorem forIn_pkBytes (sks : List SecretKey) {acc : G1} {a : Fr}
+/-- The fold of the key sum adds honest public keys without failing. -/
+private theorem foldlM_pkBytes (sks : List SecretKey) (idx : Nat) {acc : G1} {a : Fr}
     (hacc : G1.Represents acc a) :
-    ∃ R, forIn (m := Id) (sks.map pkBytes) ((none : Option (Option G1)), acc)
-        (fun pk (s : Option (Option G1) × G1) =>
-          if (decide (pk.size ≠ 48) || !(G1.keyValidate pk).isOk) = true then
-            pure (ForInStep.done (some none, s.2))
-          else
-            match G1.uncompress pk with
-            | .error _ => pure (ForInStep.done (some none, s.2))
-            | .ok p => pure (ForInStep.yield (none, s.2.add p))) = (none, R) ∧
+    ∃ R, ((sks.map pkBytes).zipIdx idx).foldlM addPubkeyPoint acc = .ok R ∧
       G1.Represents R (a + (sks.map (·.val)).sum) := by
-  induction sks generalizing acc a with
+  induction sks generalizing idx acc a with
   | nil => exact ⟨acc, rfl, (congrArg (G1.Represents acc) (add_zero a)).mpr hacc⟩
   | cons sk sks ih =>
-    obtain ⟨P, hsize, hvalid, hP, hrep⟩ := pkBytes_checks sk
-    obtain ⟨R, hR, hRrep⟩ := ih (hacc.add hrep)
+    obtain ⟨P, hsize, hP, hrep⟩ := pkBytes_checks sk
+    obtain ⟨R, hR, hRrep⟩ := ih (idx + 1) (hacc.add hrep)
     refine ⟨R, ?_, ?_⟩
-    · rw [List.map_cons, forIn_cons_valid hsize hvalid hP]
+    · -- Rewrite the size and validation first, so the kernel never evaluates a public key.
+      simp only [List.map_cons, List.zipIdx_cons, List.foldlM_cons, addPubkeyPoint]
+      rw [hsize]
+      simp only [ne_eq, not_true_eq_false, ↓reduceIte]
+      rw [hP]
       exact hR
     · rw [List.map_cons]
       exact (add_sum_cons a sk.val _) ▸ hRrep
@@ -250,19 +214,17 @@ private theorem forIn_pkBytes (sks : List SecretKey) {acc : G1} {a : Fr}
 
 The list must be nonempty, but its scalar sum may be zero. -/
 theorem aggregatePubkeyPoint_pkBytes (sks : List SecretKey) (hne : sks ≠ []) :
-    ∃ P, aggregatePubkeyPoint (sks.map pkBytes).toArray = some P ∧
+    ∃ P, aggregatePubkeyPoint (sks.map pkBytes).toArray = .ok P ∧
       G1.Represents P (sks.map (·.val)).sum := by
-  obtain ⟨P, hP, hPrep⟩ := forIn_pkBytes sks G1.represents_zero
-  -- The loop starts from the point at infinity, so its sum carries a leading `0 +`.
+  obtain ⟨P, hP, hPrep⟩ := foldlM_pkBytes sks 0 G1.represents_zero
+  -- The fold starts from the point at infinity, so its sum carries a leading `0 +`.
   refine ⟨P, ?_, (congrArg (G1.Represents P) (zero_add _)).mp hPrep⟩
   unfold aggregatePubkeyPoint
   rw [ite_eq_right (by cases sks with
     | nil => exact absurd rfl hne
     | cons _ _ => exact Bool.false_ne_true)]
-  simp only [List.forIn_toArray]
-  rw [Id.run_bind]
-  erw [hP]
-  rfl
+  simp only [Array.zipIdx_toArray, List.foldlM_toArray]
+  exact hP
 
 /-- The fast aggregate verification accepts honest keys and a signature for their sum.
 
@@ -277,6 +239,13 @@ theorem fastAggregateVerify_of_represents {sks : List SecretKey}
   rw [hP]
   exact coreVerify_of_represents hPrep hsum hQ hb hS
 
+/-- The compressed key of a point that represents a scalar is the compressed multiple of `g1`. -/
+private theorem compress_eq_of_represents {P : G1} {s : Fr} (hP : G1.Represents P s) :
+    G1.compress P = G1.compress (G1.mul G1.generator s) := by
+  obtain ⟨hi, ha⟩ := G1.toAffine_congr hP.1 (G1.valid_mul G1.valid_generator s) hP.2
+  unfold G1.compress
+  rw [hi, ha]
+
 /-- Fast verification of honest keys is verification under the key of their scalar sum.
 
 The list must be nonempty, but its scalar sum may be zero. -/
@@ -285,16 +254,7 @@ theorem fastAggregateVerify_eq_verify (sks : List SecretKey) (hne : sks ≠ [])
     fastAggregateVerify (sks.map pkBytes).toArray msg sig =
       verify (G1.compress (G1.mul G1.generator (sks.map (·.val)).sum)) msg sig := by
   obtain ⟨P, hP, hPrep⟩ := aggregatePubkeyPoint_pkBytes sks hne
-  unfold fastAggregateVerify
-  rw [hP]
-  obtain ⟨hi, ha⟩ := G1.toAffine_congr hPrep.1
-    (G1.valid_mul G1.valid_generator _) hPrep.2
-  change verify (G1.compress P) msg sig = _
-  have compressed : G1.compress P =
-      G1.compress (G1.mul G1.generator (sks.map (·.val)).sum) := by
-    unfold G1.compress
-    rw [hi, ha]
-  rw [compressed]
+  simp [fastAggregateVerify, hP, compress_eq_of_represents hPrep]
 
 /-- Honest signatures on one message aggregate to a signature that verifies under the key sum.
 
@@ -482,6 +442,16 @@ theorem aggregateVerify_aggregate (l : List (SecretKey × ByteArray))
 
 
 /-! ## The Ethereum wrapper -/
+
+/-- The Ethereum key aggregation of honest public keys is the key of their scalar sum.
+
+The list must be nonempty, but its scalar sum may be zero. -/
+theorem ethAggregatePubkeys_pkBytes (sks : List SecretKey) (hne : sks ≠ []) :
+    ethAggregatePubkeys (sks.map pkBytes).toArray =
+      .ok (G1.compress (G1.mul G1.generator (sks.map (·.val)).sum)) := by
+  obtain ⟨P, hP, hPrep⟩ := aggregatePubkeyPoint_pkBytes sks hne
+  unfold ethAggregatePubkeys
+  rw [hP, bind_ok_pure, compress_eq_of_represents hPrep]
 
 /-- With no keys, the Ethereum fast aggregate verification accepts only the point at infinity. -/
 theorem ethFastAggregateVerify_empty (msg sig : ByteArray) :
