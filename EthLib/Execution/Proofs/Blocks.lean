@@ -17,6 +17,7 @@ public import EthLib.Execution.Proofs.Blocks.Receipt
 public import EthLib.Execution.Proofs.Blocks.Rewards
 public import EthLib.Execution.Proofs.Blocks.Requests
 public import EthLib.Execution.Proofs.Blocks.Roots
+public import EthLib.Execution.Proofs.Blocks.Supply
 public import EthLib.Execution.Proofs.Blocks.SystemCall
 public import EthLib.Execution.Proofs.Blocks.SystemCall.BeaconRoots
 public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract

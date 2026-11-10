@@ -28,6 +28,10 @@ So do a wipe of storage, and taking the reads of another state.
 So do the clear of an account that keeps its balance, and the deletion of empty touched accounts.
 
 A rollback gives back the supply of its snapshot, and the end of a transaction keeps the supply.
+
+The supply of the state after a block is the sum of the balances of its accounts.
+
+It is the supply of the block state, read as a transaction.
 -/
 
 @[expose] public section
@@ -308,6 +312,59 @@ theorem supply_restoreTxState {tx snapshot : TransactionState}
     tx.incorporateTxIntoBlock.supply = tx.supply :=
   supply_eq_of_getAccountOptional (getAccountOptional_incorporateTxIntoBlock tx)
 
+/-! ## Creations of ether in a row -/
+
+/-- Creations of ether, one for each item in order, add the sum of their amounts to the supply. -/
+theorem supply_foldlM_createEther {α : Type} {fork : Fork} (target : α → Address)
+    (amount : α → U256) :
+    ∀ (items : List α) {tx tx' : TransactionState},
+      items.foldlM (fun tx x => tx.createEther fork (target x) (amount x)) tx = .ok tx' →
+      tx'.supply = tx.supply + (items.map fun x => (amount x).toNat).sum
+  | [], _, _, h => by
+    cases h
+    simp
+  | _ :: rest, _, _, h => by
+    obtain ⟨mid, hmid, h⟩ := Base.bind_ok_iff.mp h
+    rw [supply_foldlM_createEther target amount rest h, supply_createEther hmid, List.map_cons,
+      List.sum_cons, Nat.add_assoc]
+
 end TransactionState
+
+/-! ## The supply of a state -/
+
+/-- The supply of ether in a state: the sum of the balances of its accounts, in wei. -/
+def State.supply (state : State) : Nat :=
+  (state.accounts.toList.map fun entry => entry.2.balance.toNat).sum
+
+/-- The supply of a block state, read as a transaction, is the supply of the state after it. -/
+theorem TransactionState.supply_ofBlock (block : BlockState) :
+    (TransactionState.ofBlock block).supply = block.applyChanges.supply := by
+  have read : ∀ address, (TransactionState.ofBlock block).balanceOf address =
+      ((block.applyChanges.accounts[address]?).getD EMPTY_ACCOUNT).balance.toNat := by
+    intro address
+    unfold TransactionState.balanceOf TransactionState.getAccount
+    rw [← BlockState.getAccountOptional_applyChanges]
+    rfl
+  rw [TransactionState.supply_eq_sum (Std.ExtTreeMap.nodup_keys (t := block.applyChanges.accounts))
+    fun address hne => ?_]
+  · unfold State.supply
+    rw [← Std.ExtTreeMap.map_fst_toList_eq_keys, List.map_map]
+    congr 1
+    refine List.map_congr_left fun entry hmem => ?_
+    rw [Function.comp_apply, read,
+      (Std.ExtTreeMap.mem_toList_iff_getElem?_eq_some (k := entry.1) (v := entry.2)).mp hmem]
+    rfl
+  · rw [read] at hne
+    rw [Std.ExtTreeMap.mem_keys, Std.ExtTreeMap.mem_iff_isSome_getElem?]
+    cases h : block.applyChanges.accounts[address]? with
+    | none =>
+      rw [h] at hne
+      exact absurd rfl hne
+    | some _ => rfl
+
+/-- The supply of a block with no write yet is the supply of the state before it. -/
+theorem TransactionState.supply_ofPreState (pre : State) :
+    (TransactionState.ofBlock ⟨pre, ∅, ∅, ∅, ∅⟩).supply = pre.supply := by
+  rw [supply_ofBlock, BlockState.applyChanges_ofPreState]
 
 end EthLib.Execution.State
