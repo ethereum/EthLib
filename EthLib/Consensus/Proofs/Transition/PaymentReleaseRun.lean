@@ -437,7 +437,7 @@ theorem chainSteps_paysQuorum (positive : preset.PaymentQuorumPositive)
     registryGrows_of_chainSteps behind
   have builders := buildersGrow_of_chainSteps (gloas := gloas) behind rfl
   obtain ⟨_, _, chain, facts⟩ := PaymentChain.extend positive twoSlots .refl holds before rfl
-    (Nat.le_trans (advanceSlot_keys computed).2.2.1 (Nat.le_trans validators validatorsFit))
+    (Nat.le_trans (advanceSlot_kept computed).2.2 (Nat.le_trans validators validatorsFit))
     (by rw [← advanceSlot_builders gloas computed]; exact Nat.le_trans builders buildersFit)
   obtain ⟨more, release, closes, -, pays⟩ := advanceSlot_release positive
     facts.covered.parentFresh facts.funded facts.genesis computed

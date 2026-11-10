@@ -52,7 +52,9 @@ Not yet released.
   No C export or Python function signature changes.
   In Lean, `addBuilderToRegistry` now returns an `Except TransitionError`; bind its result, and pass a successful return to `builderBalanceSum_addBuilderToRegistry`.
   `EpochFrameLaws` gains a `setValidatorAt` field for writes at plain integer positions.
-  `Frame.keysKept` and `UpgradeFrame.keysKept` are unconditional, and the activity, chain and effective-balance totality theorems lose their registry-size arguments.
+  `KeysKept`, `Frame.keysKept` and `UpgradeFrame.keysKept` are gone, as no theorem read them ([#1908](https://github.com/ethereum/EthLib/issues/1908)); `advanceSlot_keys` becomes `advanceSlot_kept`, without the key conjunct.
+  The setter laws of `EpochFrameLaws` and the frame lemmas of validator writes no longer take a key equality, and the `_of_whole` forms no longer take the old validator.
+  The activity, chain and effective-balance totality theorems lose their registry-size arguments.
   `exists_mem_getBeaconCommittee` takes a successful checked active-index read, and `attestationCommitteesSize_of_attesterShuffle` takes a successful checked committee-count read.
   `attestationCommitteesSize_cons` includes that count check on its right side.
 - From Gloas, a deposit, a withdrawal or consolidation request, or a sync aggregate now fails where a registry position of 2^64 or more would become a validator index ([#1883](https://github.com/ethereum/EthLib/issues/1883)).
