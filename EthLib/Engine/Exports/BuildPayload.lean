@@ -27,6 +27,10 @@ Then come the requests of the block and its value in wei.
 An error of the attributes has the code of its Engine API error, and a failed build its block error.
 
 An input of the chain that does not decode has code 0, since the export reads it itself.
+
+So do an empty chain, an unknown method and a parent number or time past 64 bits.
+
+So does a result without an encoding.
 -/
 
 public section
@@ -57,6 +61,8 @@ def buildPayloadOf
     act.mapError fun e => (e.code, s!"engine error: {reprStr e}")
   let decoded ← engine (payloadAttributesOfVersion version attributes.toJson)
   -- The parent is the head that the update applies, so the checks read its number and time.
+  unless parent.header.number < UInt64.size ∧ parent.header.timestamp.toNat < UInt64.size do
+    throw (0, "recent: the parent's number or time does not fit 64 bits")
   let head : KnownPayload := ⟨parent.header.parentHash, true,
     UInt64.ofNat parent.header.number, UInt64.ofNat parent.header.timestamp.toNat⟩
   let ⟨fork, attributes⟩ ← engine (checkAttributes config version head decoded)

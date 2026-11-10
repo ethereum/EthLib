@@ -47,9 +47,13 @@ The value is the sum of the priority fees, one rule that [`engine_getPayloadV2`]
 
 A forkchoice update that starts a build answers with an ID of 8 bytes for it.
 
-The source leaves the ID to the execution layer, and this model hashes the head and the attributes.
+The source asks that each new build has its own ID, and leaves the rest to the execution layer.
 
-So the same attributes on the same head give the same ID.
+This model hashes the head and the attributes, so the same inputs give the same ID.
+
+Under one configuration the head and the timestamp fix the fork, so other inputs give other bytes.
+
+Their IDs differ only if the 8-byte cut of the hash has no collision, an assumption of this model.
 
 The source states the build in [Payload building][build], at commit `3284ee8` of execution-apis.
 
@@ -225,7 +229,7 @@ def payloadIdInput (head : Hash32) (attributes : PayloadAttributes fork) : ByteA
 
 /-- The ID of the build that attributes start on a head: the first 8 bytes of a Keccak-256 hash.
 
-The hash is that of the head and the attributes, in the order above. -/
+The hash is that of the head and then the attributes, each number in 8 big-endian bytes. -/
 def payloadId (head : Hash32) (attributes : PayloadAttributes fork) : Vector UInt8 8 :=
   let digest := Cryptography.Hash.Keccak.keccak256 (payloadIdInput head attributes)
   Vector.ofFn fun i => digest[i.val]'(by

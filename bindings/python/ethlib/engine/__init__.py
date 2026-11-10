@@ -43,6 +43,7 @@ def build_payload(
     recent: Sequence[RecentBlock],
     method: str,
     attributes: dict,
+    *,
     fee_recipient: bytes,
     extra_data: bytes,
     target_gas_limit: int,
@@ -50,7 +51,6 @@ def build_payload(
 ) -> tuple[bytes, bytes, list[bytes], int]:
     """The block that payload attributes build on a chain, its accounts, requests and value."""
     # The attributes pass the checks of the forkchoice update `method` against the last block.
-    # It returns the block and the accounts after it in RLP form, the requests and the value in wei.
     items = [(name, header, list(ommers)) for name, header, ommers in recent]
     return _native.engine_build_payload(
         config,

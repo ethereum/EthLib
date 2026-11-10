@@ -196,7 +196,7 @@ def test_build_starts(version: int, attributes: dict[str, object]) -> None:
 
 
 def _payload_id(head: str, attributes: Mapping[str, object]) -> str:
-    """The first 8 bytes of the Keccak-256 hash of the head and the attributes, in order."""
+    """EthLib's payload ID: the first 8 bytes of the Keccak-256 hash of the head and attributes."""
 
     def raw(value: object) -> bytes:
         return bytes.fromhex(str(value).removeprefix("0x"))
@@ -297,32 +297,25 @@ def test_version_4_without_attributes(params: list[object]) -> None:
     assert engine.forkchoice_updated(CONFIG, TREE, "engine_forkchoiceUpdatedV4", params) == want
 
 
-@pytest.mark.parametrize(
-    ("attributes", "message", "code"),
-    [
-        pytest.param(
-            ATTRIBUTES_V3,
-            "engine error: EthLib.Engine.EngineError.invalidPayloadAttributes",
-            38003,
-            id="invalid",
-        ),
-    ],
-)
-def test_custody_columns_with_invalid_attributes(
-    attributes: dict[str, object], message: str, code: int
-) -> None:
+def test_custody_columns_with_invalid_attributes() -> None:
     """Custody columns that decode leave the answer to the attributes."""
-    with raises(engine.EngineError, message) as error:
+    with raises(
+        engine.EngineError, "engine error: EthLib.Engine.EngineError.invalidPayloadAttributes"
+    ) as error:
         engine.forkchoice_updated(
-            CONFIG, TREE, "engine_forkchoiceUpdatedV4", [NEW_HEAD, attributes, CUSTODY_COLUMNS]
+            CONFIG, TREE, "engine_forkchoiceUpdatedV4", [NEW_HEAD, ATTRIBUTES_V3, CUSTODY_COLUMNS]
         )
-    assert error.value.code == code
+    assert error.value.code == 38003
 
 
 def test_custody_columns_with_build() -> None:
     """Custody columns that decode leave the payload ID of the build unchanged."""
-    params = [NEW_HEAD, ATTRIBUTES_V4, CUSTODY_COLUMNS]
-    response = engine.forkchoice_updated(CONFIG, TREE, "engine_forkchoiceUpdatedV4", params)
+    with_custody = [NEW_HEAD, ATTRIBUTES_V4, CUSTODY_COLUMNS]
+    without = [NEW_HEAD, ATTRIBUTES_V4]
+    response = engine.forkchoice_updated(CONFIG, TREE, "engine_forkchoiceUpdatedV4", with_custody)
+    assert response == engine.forkchoice_updated(
+        CONFIG, TREE, "engine_forkchoiceUpdatedV4", without
+    )
     assert response["payloadId"] == _payload_id(_hash(3), ATTRIBUTES_V4)
 
 
