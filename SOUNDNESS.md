@@ -1813,7 +1813,7 @@ The rule of the latest valid hash in `Consensus/ForkChoice/Optimistic.lean` name
 The theorems here take that block as given.
 No theorem relates the optimistic set to the blocks that the store of the fork choice removes.
 A node is optimistic when its head is optimistic, or when invalid payloads left its block tree with no viable branch.
-`isOptimisticNode_of_isHeadOptimistic` shows that, before Gloas, the first case alone makes an optimistic node.
+`isOptimisticNode_of_isHeadOptimistic` shows that, at every fork, the first case alone makes an optimistic node.
 `isOptimisticNode_of_not_isHeadOptimistic` shows that, before Gloas, the second case needs a block that the fork choice dropped at or above the justified block.
 So a tree that empties with nothing invalidated does not count.
 This assumes that the optimistic store holds only blocks that the fork choice accepted.
@@ -1838,11 +1838,30 @@ So it reaches every payload that the block builds on among the known blocks of i
 A payload that builds on an invalid payload in that way leaves the set.
 A block built on its parent without the payload of the parent does not hold that payload on its payload chain.
 So its own optimistic payload stays when only the payload of the parent is invalid.
-From Gloas the rule of the latest valid hash, the latest verified ancestor and the optimistic node are not yet specified, and the last two fail.
+From Gloas the head of the fork choice is a block with or without its payload, so the optimistic store keeps the status of the head.
+A full head reads the payload of its block, an empty head the payload its block builds on, and a pending head both; `isHeadOptimistic_of_full`, `isHeadOptimistic_of_empty_of_named` and `isHeadOptimistic_of_pending_of_optimistic` and `isHeadOptimistic_of_pending_of_not_optimistic` state it.
+The search of the head never stops at a pending node, so reading both for a pending head is a choice of EthLib, the cautious one.
+`isHeadOptimistic_of_empty_of_unnamed` shows that an empty head whose bid names no known payload fails with `payloadNotVerified`.
+That is the case of an empty first block of Gloas, whose bid builds on a payload of Fulu, which a store of one fork never holds.
+The rule fails there rather than call that payload verified, so the head rule and the latest verified ancestor agree.
+From Gloas the latest verified ancestor takes a node, and reads only the payloads that the node holds.
+A full node holds every payload of its payload chain, and an empty or pending node holds all but its own.
+`latestVerifiedAncestor_ne_root` shows that a node without its own payload is never its own verified ancestor.
+So a pending node reads as full or empty for the head, and as empty for the ancestor: each reading is the cautious one.
+The status of a node is an assumption: a full node must name a payload that the store holds, and the rules do not check it.
+The optimistic store follows the fields of the guide, which do not record the payloads held; the search of the head returns a full node only for a held payload.
+`latestVerifiedAncestor_of_glamsterdam` shows that the answer is the first of those payloads that is not optimistic, with every one before it optimistic.
+`latestVerifiedAncestor_eq_error_of_optimistic` shows that it fails with `payloadNotVerified` when all of them are optimistic, or when there is none.
+Before Gloas the walk returns an optimistic genesis block; from Gloas it never returns an optimistic payload, a choice of EthLib.
+From Gloas the rule of the latest valid hash is not defined, and the second case of an optimistic node is not yet specified.
+That case needs the removal of an invalid payload from the store of the fork choice, which is not defined from Gloas.
+`isOptimisticNode_of_glamsterdam` shows that the rule then fails when the head is not optimistic.
+`isOptimisticNode_of_isHeadOptimistic_error` shows that it fails as the optimism of the head does.
 The store holds the blocks of one fork, so a payload chain does not cross from Gloas into Fulu.
 The Heze record of whether a payload satisfies the inclusion lists is not modelled here.
 The Python suite checks each rule on Bellatrix blocks built in the test, with roots from the SSZ export.
-At Gloas it checks the execution block, the candidate rule and the two payload answers, and that the latest verified ancestor and the optimistic node are refused.
+At Gloas it checks the execution block, the candidate rule, the two payload answers and the latest verified ancestor.
+It checks the optimistic head of each status on a pinned Gloas fork choice case, and that the second case is refused.
 
 ### Light client
 

@@ -926,11 +926,18 @@ def is_optimistic_candidate_block(
 
 
 def latest_verified_ancestor(
-    name: str, fork: str, blocks: Sequence[bytes], optimistic_roots: Sequence[bytes], root: bytes
+    name: str,
+    fork: str,
+    blocks: Sequence[bytes],
+    optimistic_roots: Sequence[bytes],
+    root: bytes,
+    payload_status: int = 2,
 ) -> bytes:
-    """From Bellatrix to Fulu, the root of the latest block of a chain that is not optimistic."""
+    """From Bellatrix, the root of the latest block of a chain that is not optimistic."""
+    # The status of the payload of the block in the node: 0 empty, 1 full and 2 pending.
+    # From Gloas the status matters: a pending node holds only the payloads its block builds on.
     return _native.consensus_latest_verified_ancestor(
-        name, fork, list(blocks), list(optimistic_roots), root
+        name, fork, list(blocks), list(optimistic_roots), root, payload_status
     )
 
 
@@ -963,8 +970,11 @@ def is_optimistic_node(
     verify: bool = True,
     # `Any`, because `dict` is invariant in its values.
     config: dict[str, Any] | None = None,
+    head_payload_status: int = 2,
 ) -> bool:
-    """From Bellatrix to Fulu, whether a node is optimistic after the steps of a fork choice run."""
+    """From Bellatrix, whether a node is optimistic after the steps of a fork choice run."""
+    # The status of the payload of the head: 0 empty, 1 full and 2 pending, read from Gloas.
+    # A pending head is optimistic when its own payload or the one it builds on is.
     return _native.consensus_is_optimistic_node(
         name,
         fork,
@@ -975,6 +985,7 @@ def is_optimistic_node(
         config,
         list(optimistic_roots),
         head,
+        head_payload_status,
     )
 
 

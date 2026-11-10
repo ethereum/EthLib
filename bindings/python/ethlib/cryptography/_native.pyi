@@ -739,7 +739,7 @@ def consensus_is_optimistic_candidate_block(name: str, fork: str, blocks: list[b
     """From Bellatrix: whether a block may be imported optimistically, given the known blocks."""
     ...
 
-def consensus_latest_verified_ancestor(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], root: bytes) -> bytes:
+def consensus_latest_verified_ancestor(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], root: bytes, payload_status: int) -> bytes:
     """From Bellatrix: the root of the latest block of a chain that is not optimistic."""
     ...
 
@@ -751,7 +751,7 @@ def consensus_on_invalidated_payload(name: str, fork: str, blocks: list[bytes], 
     """From Bellatrix: the optimistic roots after a block is found the first invalid one, as a list."""
     ...
 
-def consensus_is_optimistic_node(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None, optimistic_roots: list[bytes], head: bytes) -> bool:
+def consensus_is_optimistic_node(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None, optimistic_roots: list[bytes], head: bytes, head_payload_status: int) -> bool:
     """From Bellatrix: whether a node is optimistic, after a run of fork choice steps."""
     ...
 

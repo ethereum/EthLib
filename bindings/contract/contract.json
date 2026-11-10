@@ -4634,7 +4634,7 @@
   {"summary":
    "From Bellatrix: the root of the latest block of a chain that is not optimistic.",
    "signature":
-   "(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], root: bytes) -> bytes",
+   "(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], root: bytes, payload_status: int) -> bytes",
    "operation": "EthLib.Consensus.Exports.latestVerifiedAncestorExport",
    "method": "consensus_latest_verified_ancestor",
    "errors":
@@ -4693,7 +4693,7 @@
       {"constructor": "invalidInclusionListSignature", "code": 51}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "From Bellatrix: the root of the latest block of a chain that is not optimistic.\n\nThe arguments are the names of the preset and the fork, the blocks and the optimistic roots.\n\nThen comes the root of a block."},
+   "From Bellatrix: the root of the latest block of a chain that is not optimistic.\n\nThe arguments are the names of the preset and the fork, the blocks and the optimistic roots.\n\nThen come the root of a block and the code of the status of its payload in the node."},
   {"summary":
    "From Bellatrix: the optimistic roots after the payload of a block is found valid, as a list.",
    "signature":
@@ -4823,7 +4823,7 @@
   {"summary":
    "From Bellatrix: whether a node is optimistic, after a run of fork choice steps.",
    "signature":
-   "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None, optimistic_roots: list[bytes], head: bytes) -> bool",
+   "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None, optimistic_roots: list[bytes], head: bytes, head_payload_status: int) -> bool",
    "operation": "EthLib.Consensus.Exports.isOptimisticNodeExport",
    "method": "consensus_is_optimistic_node",
    "errors":
@@ -4882,7 +4882,7 @@
       {"constructor": "invalidInclusionListSignature", "code": 51}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "From Bellatrix: whether a node is optimistic, after a run of fork choice steps.\n\nThe first seven arguments are those of the fork choice run.\n\nThen come the optimistic roots and the root of the head of the node."},
+   "From Bellatrix: whether a node is optimistic, after a run of fork choice steps.\n\nThe first seven arguments are those of the fork choice run.\n\nThen come the optimistic roots, the root of the head of the node and the code of its status."},
   {"summary":
    "Whether an optimistic validator may not sign under a domain type of 4 bytes.",
    "signature": "(domain_type: bytes) -> bool",
