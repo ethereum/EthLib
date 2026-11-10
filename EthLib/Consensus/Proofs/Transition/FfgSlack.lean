@@ -338,27 +338,22 @@ theorem advanceSlot_slackJustifiedCheckpoints
       intro index
       unfold balanceAt
       rw [validators]
-    have flagsCached : TargetFlagsSigned config checks cached :=
+    have flagsCached : TargetFlagsVoted attested cached :=
       flagsVoted.of_processSlot positive window cachedOk
-    have pendingCached : PendingSigned config checks cached :=
+    have pendingCached : PendingVoted attested cached :=
       pendingVoted.of_processSlot cachedOk
     have largeCached : 3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
         2 * stake (fun index => balanceAt cached index.toNat)
           (getActiveValidatorIndices cached (getCurrentEpoch cached)).toFinset := by
       simp only [balances, active, currentEq]
       exact large last
-    have containsCached :
-        ffgVotes block {vote | SignedVote config checks cached vote} ⊆ votes := by
-      rintro _ ⟨signer, signed, rfl⟩
-      exact contains last ⟨signer, signed.of_keys (Nat.le_refl _)
-        cachedFrame.genesisValidatorsRoot.symm keysBack, rfl⟩
     obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame epochedOk
     suffices key : SlackJustifiedCheckpoints V U W genesis votes block justified by
       unfold SlackJustifiedCheckpoints at key ⊢
       rw [frame.previousJustified, frame.currentJustified]
       exact key
     refine processJustificationAndFinalization_slackJustifiedCheckpoints flagsCached pendingCached
-      largeCached block containsCached ?_ ?_ ?_ ?_ ?_ justifiedOk
+      largeCached block contains ?_ ?_ ?_ ?_ ?_ justifiedOk
     · unfold JustifiedSettled
       rw [cachedFrame.currentJustified, previousEq]
       exact settled
