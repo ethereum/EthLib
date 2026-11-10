@@ -20,7 +20,7 @@ The block is first checked alone and against its parent.
 
 Then its body runs on the state after the parent.
 
-- At the first block of the DAO Fork, the ether of the DAO accounts moves first.
+- Before Paris, at the first block of the DAO Fork, the ether of the DAO accounts moves first.
 - From Dencun, the system calls at the start of the block come next.
 - Then each transaction must be able to enter the block, and runs.
 - From Shapella, the withdrawals follow.
@@ -192,6 +192,18 @@ def onBlock (block : BlockState)
   let tx ← (step (.ofBlock block)).mapError .state
   return tx.incorporateTxIntoBlock.parent
 
+/-- The block state at the start of a body at `fork`, after the DAO transfer if it runs there.
+
+The transfer runs at the first block of the DAO Fork on the chain `config`, and only before Paris.
+
+[EIP-779][eip-779] makes that fork an irregular state change at a block of proof of work.
+
+[eip-779]: https://eips.ethereum.org/EIPS/eip-779#abstract -/
+def daoTransfer (config : ChainConfig) (fork : Fork) (number : Nat) (start : BlockState) :
+    Except BlockError BlockState :=
+  if fork < .paris ∧ daoForkBlock config = some number then onBlock start (applyDaoFork fork)
+  else pure start
+
 /-- The requests of a block at `fork`, after its transactions and withdrawals.
 
 The deposits come from the logs of the deposit contract at `depositContract`.
@@ -225,7 +237,7 @@ def accessListHashOf (fork : Fork) (body : BodyState) (gasLimit : Nat) :
 
 /-- Run the body of the block `block` on the block state `start`, at `fork`.
 
-At the first block of the DAO Fork on the chain `config`, the DAO ether moves first.
+Before Paris, at the first block of the DAO Fork on the chain `config`, the DAO ether moves first.
 
 The system calls at the start run at position 0 of the block access list.
 
@@ -235,8 +247,7 @@ From Glamsterdam, the body then builds its block access list, which must fit the
 def applyBody {fork : Fork} (config : ChainConfig) (env : BlockEnvironment fork)
     (block : Block fork Transaction) (start : BlockState) :
     Except BlockError (BlockOutput fork) := do
-  let state ← if daoForkBlock config = some block.header.number then
-      onBlock start (applyDaoFork fork) else pure start
+  let state ← daoTransfer config fork block.header.number start
   let body ← (startSystemCalls env block.header.parentHash (.init state)).mapError .aborted
   let output ← applyTransactions env body block.transactions
   let body := output.body.beginIndex (block.transactions.length + 1)
