@@ -293,6 +293,12 @@ Not yet released.
   In Lean, `GossipTopic.sizeLimit` now takes the configuration, and the gossip `sizeLimit_ne_none_iff` names the data column sidecar topics.
   From `glamsterdam`, `decodePayload_message` at a sidecar topic now needs a message within the size limit of the topic.
   `responseBounds_eq` now takes a protocol without a size limit, and `decodeResponseChunk_response` a value within the size limit of its protocol.
+- The rules that a transaction must pass alone now reject a transaction whose type the fork does not have, with `unsupportedType` and the type ([#1779](https://github.com/ethereum/EthLib/issues/1779)).
+  Before, only decoding rejected it, so a block built in Lean could run a type-4 transaction before Pectra, or a type-3 transaction before Dencun.
+  `validateTransaction` checks the type first, and the inclusion check and `checkTransaction` call it, so they reject such a transaction too.
+  The exports decode each transaction at its fork first, so their answers do not change.
+  In Lean, `validateTransaction_eq_ok_iff` ends with the new conjunct `tx.fork ≤ fork`, and `checkInclusion_fork_le` derives it from a passing inclusion check.
+  `processTransaction_nonce_lt` no longer takes the hypothesis `tx.fork ≤ fork`.
 
 ## 0.3.0
 

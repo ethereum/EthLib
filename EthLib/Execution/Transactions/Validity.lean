@@ -267,10 +267,11 @@ def checkContents (fork : Fork) : Transaction → Except TransactionError Unit
   | .setCode tx => if tx.authorizations.isEmpty then .error .emptyAuthorizationList else .ok ()
   | _ => .ok ()
 
-/-- Check the fees, the gas limit and the nonce of a transaction from `sender` at `fork`.
+/-- Check the type, the fees, the gas limit and the nonce of a transaction from `sender` at `fork`.
 
 It returns the intrinsic gas.
 
+- The type of the transaction exists at the fork.
 - The gas limit covers the least gas limit of the fork.
 - From Shapella, init code has at most the size that the fork allows.
 - From Fusaka to BPO5, the gas limit is at most `2^24`, as EIP-7825 asks.
@@ -282,14 +283,29 @@ It returns the intrinsic gas.
 
 The first rule that fails gives the error.
 
-Before Glamsterdam, the rules run in the order of the list.
+The type comes first at every fork.
 
-From Glamsterdam, the nonce comes first, and the least gas limit and its bound come last.
+Before Glamsterdam, the other rules run in the order of the list.
+
+From Glamsterdam, the nonce comes next, and the least gas limit and its bound come last.
 
 The other rules keep the order of the list.
 
+A typed transaction exists from the fork of the EIP that adds its type to [EIP-2718][eip-2718]:
+
+- type 1 from Berlin, by [EIP-2930][eip-2930];
+- type 2 from London, by [EIP-1559][eip-1559];
+- type 3 from Dencun, by [EIP-4844][eip-4844];
+- type 4 from Pectra, by [EIP-7702][eip-7702].
+
+Decoding rejects such a type too, and this rule also covers a transaction built without bytes.
+
 Sources: [EIP-7825][eip-7825], [EIP-8037][eip-8037], [EIP-2681][eip-2681], [EIP-1559][eip-1559].
 
+[eip-2718]: https://eips.ethereum.org/EIPS/eip-2718#specification
+[eip-2930]: https://eips.ethereum.org/EIPS/eip-2930#specification
+[eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#blob-transaction
+[eip-7702]: https://eips.ethereum.org/EIPS/eip-7702#set-code-transaction
 [eip-7825]: https://eips.ethereum.org/EIPS/eip-7825#specification
 [eip-8037]: https://eips.ethereum.org/EIPS/eip-8037#transaction-validation
 [eip-2681]: https://eips.ethereum.org/EIPS/eip-2681#specification
@@ -302,6 +318,7 @@ def validateTransaction (fork : Fork) (sender : Address) (tx : Transaction) :
     (.initCodeTooLarge tx.data.size)
   let nonceFits := ensure (tx.nonce.toNat < 2 ^ 64 - 1) .nonceOverflow
   let feesOrdered := ensure (feesInverted tx = false) .priorityFeeGreaterThanMaxFee
+  ensure (tx.fork ≤ fork) (.unsupportedType tx.type)
   if fork ≥ .glamsterdam then
     nonceFits
     initCodeFits
@@ -337,7 +354,7 @@ def checkChainId (fork : Fork) (chainId : UInt64) (tx : Transaction) :
 
 It returns the sender and the intrinsic gas.
 
-The checks run in order: the chain, the signature, the gas and the nonce, then the contents.
+The checks run in order: the chain, the signature, the type, the gas and nonce, then the contents.
 
 The signature comes before the gas, since from Glamsterdam the intrinsic gas reads the sender.
 
