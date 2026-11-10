@@ -55,7 +55,9 @@ The validator is the first with the key.
 
 A key that no validator has is neither.
 
-A known key at a position of `2^64` or more has no validator index, an overflow. -/
+A known key at a position of `2^64` or more has no validator index, an overflow.
+
+The read at that index then always finds the validator. -/
 def depositTargetStatus (state : BeaconState preset fork) (nextEpoch : Epoch)
     (pubkey : BLSPubkey) : Except AccessorError (Bool × Bool) :=
   match state.validators.data.findIdx? (·.pubkey == pubkey) with
@@ -132,8 +134,9 @@ The queue keeps the deposits not reached, then the postponed ones.
 
 If the pass stopped at the churn, the churn not used carries over, and else none does.
 
-A 64-bit overflow is an error, and so is a deposit read to a key at a position of `2^64` or more.
--/
+A 64-bit overflow is an error.
+
+A deposit it reads to a known key at a position of `2^64` or more overflows a validator index. -/
 def processPendingDeposits (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (electra : .pectra ≤ fork) :
     Except TransitionError (BeaconState preset fork) := do

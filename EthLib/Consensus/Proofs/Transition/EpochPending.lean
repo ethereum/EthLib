@@ -255,14 +255,14 @@ theorem processPendingDeposits_size_le {electra : .pectra ≤ fork}
   rw [queue, Array.size_append, List.size_toArray]
   exact fits
 
-/-- A pair of tests is two false tests exactly when neither test holds. -/
-private theorem beq_false_false {status : Bool × Bool} :
+/-- A found pair of tests is two false tests exactly when neither test holds. -/
+private theorem some_beq_false_false {status : Bool × Bool} :
     (some status == some (false, false)) = (!status.1 && !status.2) := by
   cases status with
   | mk exited withdrawn => cases exited <;> cases withdrawn <;> rfl
 
-/-- A pair of tests is a true test then a false test exactly when only the first holds. -/
-private theorem beq_true_false {status : Bool × Bool} :
+/-- A found pair of tests is a true test then a false test exactly when only the first holds. -/
+private theorem some_beq_true_false {status : Bool × Bool} :
     (some status == some (true, false)) = (status.1 && !status.2) := by
   cases status with
   | mk exited withdrawn => cases exited <;> cases withdrawn <;> rfl
@@ -295,7 +295,9 @@ The churn grows by nothing else.
 
 As for the churn, the validators are those at the start of the pass.
 
-`applied` holds the others. -/
+`applied` holds the others.
+
+The tests of a deposit that the pass reads succeed, so the filters may read them as options. -/
 structure PassPendingDepositsFacts (config : Config) (checks : SignatureChecks)
     (stop : PendingDeposit → Bool) (nextEpoch : Epoch) (available : Gwei)
     (state : BeaconState preset fork) (processed : Gwei) (count : Nat)
@@ -322,6 +324,8 @@ structure PassPendingDepositsFacts (config : Config) (checks : SignatureChecks)
       (depositTargetStatus state nextEpoch deposit.pubkey).toOption != some (true, false)
   movedFilter : moved = read.filter fun deposit =>
       (depositTargetStatus state nextEpoch deposit.pubkey).toOption == some (true, false)
+  statusOk : ∀ deposit ∈ read, ∃ status,
+    depositTargetStatus state nextEpoch deposit.pubkey = .ok status
 
 /-- A pass reads a prefix of its deposits, applies some of them and postpones the others.
 
@@ -342,7 +346,7 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
     subst computed
     exact ⟨[], [], [], rfl, by simp, by simp, List.nil_sublist _, List.nil_sublist _,
       List.Perm.refl _, rfl, by simp, by simp, by simp, by simp [pendingAmount],
-      rfl, rfl⟩
+      rfl, rfl, by simp⟩
   | deposit :: rest, state, processed, count, postponed, pass, computed => by
     unfold passPendingDeposits at computed
     simp only [bind, Except.bind, pure, Except.pure] at computed
@@ -351,7 +355,7 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
       cases computed
       refine ⟨[], [], [], rfl, by simp, by simp, List.nil_sublist _, List.nil_sublist _,
         List.Perm.refl _, rfl, by simp, ?_, by simp, by simp [pendingAmount],
-        rfl, rfl⟩
+        rfl, rfl, by simp⟩
       rintro _ _ ⟨⟩
       simp only [Bool.or_eq_true, decide_eq_true_eq] at stopped
       exact stopped.imp_right Or.inl
@@ -379,7 +383,7 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
       -- A deposit credited outside the churn does not wait.
       have notMoved :
           (some status == some (true, false)) = false := by
-        rw [beq_true_false]; simp [isWithdrawn]
+        rw [some_beq_true_false]; simp [isWithdrawn]
       refine ⟨deposit :: read, deposit :: applied, moved,
         { split := congrArg (deposit :: ·) facts.split
           pushed := facts.pushed
@@ -396,7 +400,10 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
               ⟨front, unstopped, by simp only [List.length_cons]; omega⟩
           used := ?_
           appliedFilter := ?_
-          movedFilter := ?_ }⟩
+          movedFilter := ?_
+          statusOk := List.forall_mem_cons.mpr ⟨⟨status, liftAccessor_ok.mp found⟩, by
+            rw [← depositTargetStatus_applyPendingDeposit step]
+            exact facts.statusOk⟩ }⟩
       · simp only [List.foldlM_cons, bind, Except.bind, step]
         exact facts.applies
       all_goals
@@ -407,7 +414,7 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
         -- A deposit credited outside the churn takes none of it.
         have outside :
             (some status == some (false, false)) = false := by
-          rw [beq_false_false]; simp [isWithdrawn]
+          rw [some_beq_false_false]; simp [isWithdrawn]
         simp only [List.filter_cons, known, outside, Bool.false_eq_true, ↓reduceIte, used]
       · have filtered := facts.appliedFilter
         rw [kept] at filtered
@@ -427,7 +434,7 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
       have isMoved :
           (some status == some (true, false)) = true := by
         simp only [Bool.not_eq_true] at notWithdrawn
-        rw [beq_true_false]; simp [isExited, notWithdrawn]
+        rw [some_beq_true_false]; simp [isExited, notWithdrawn]
       refine ⟨deposit :: read, applied, deposit :: moved,
         { split := congrArg (deposit :: ·) facts.split
           pushed := ?_
@@ -444,7 +451,9 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
               ⟨front, unstopped, by simp only [List.length_cons]; omega⟩
           used := ?_
           appliedFilter := ?_
-          movedFilter := ?_ }⟩
+          movedFilter := ?_
+          statusOk := List.forall_mem_cons.mpr
+            ⟨⟨status, liftAccessor_ok.mp found⟩, facts.statusOk⟩ }⟩
       · -- The deposit waits after those that earlier steps postponed.
         rw [facts.pushed, Array.toList_push, List.append_assoc]
         rfl
@@ -452,11 +461,11 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
         -- A deposit postponed takes no churn.
         have outside :
             (some status == some (false, false)) = false := by
-          rw [beq_false_false]; simp [isExited]
+          rw [some_beq_false_false]; simp [isExited]
         simp only [List.filter_cons, known, outside, Bool.false_eq_true, ↓reduceIte, used]
       · have filtered := facts.appliedFilter
-        simp only [List.filter_cons, known, bne, isMoved, Bool.not_true, Bool.false_eq_true, ↓reduceIte,
-          filtered]
+        simp only [List.filter_cons, known, bne, isMoved, Bool.not_true, Bool.false_eq_true,
+          ↓reduceIte, filtered]
       · have filtered := facts.movedFilter
         simp only [List.filter_cons, known, isMoved, ↓reduceIte, filtered]
     rename_i notExited
@@ -468,7 +477,7 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
     -- The deposit takes churn, since neither test of its validator held.
     have inside :
         (some status == some (false, false)) = true := by
-      rw [beq_false_false]; simp [notExited, notWithdrawn]
+      rw [some_beq_false_false]; simp [notExited, notWithdrawn]
     split at computed
     · rename_i over
       cases computed
@@ -479,7 +488,7 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
       refine ⟨[], [], [], rfl, by simp, by simp, List.nil_sublist _, List.nil_sublist _,
         List.Perm.refl _, rfl, by simp, ?_,
         fun _ => ⟨deposit, rest, rfl, reads, by simpa using below⟩,
-        by simp [pendingAmount], rfl, rfl⟩
+        by simp [pendingAmount], rfl, rfl, by simp⟩
       rintro _ _ ⟨⟩
       exact Or.inr (Or.inr ⟨(liftAccessor_ok.mp found).trans
         (congrArg _ (Prod.ext notExited notWithdrawn)), beyond, rfl⟩)
@@ -494,7 +503,7 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
     -- The deposit takes churn, so it does not wait.
     have notMoved :
         (some status == some (true, false)) = false := by
-      rw [beq_true_false]; simp [notExited]
+      rw [some_beq_true_false]; simp [notExited]
     refine ⟨deposit :: read, deposit :: applied, moved,
       { split := congrArg (deposit :: ·) facts.split
         pushed := facts.pushed
@@ -511,7 +520,10 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
             ⟨front, unstopped, by simp only [List.length_cons]; omega⟩
         used := ?_
         appliedFilter := ?_
-        movedFilter := ?_ }⟩
+        movedFilter := ?_
+        statusOk := List.forall_mem_cons.mpr ⟨⟨status, liftAccessor_ok.mp found⟩, by
+          rw [← depositTargetStatus_applyPendingDeposit step]
+          exact facts.statusOk⟩ }⟩
     · simp only [List.foldlM_cons, bind, Except.bind, step]
       exact facts.applies
     all_goals
@@ -564,7 +576,9 @@ Withdrawn means withdrawable before the next epoch.
 
 They apply the others in order, and move the postponed ones to the end of the queue in order.
 
-The state after is the state of those applied, with a new queue and a new churn left over. -/
+The state after is the state of those applied, with a new queue and a new churn left over.
+
+The two tests of each deposit read succeed. -/
 theorem processPendingDeposits_postponed {electra : .pectra ≤ fork}
     (computed : processPendingDeposits config checks state electra = .ok after) :
     ∃ (read rest : List PendingDeposit) (next : BeaconState preset fork)
@@ -574,6 +588,8 @@ theorem processPendingDeposits_postponed {electra : .pectra ≤ fork}
           (depositTargetStatus state (getCurrentEpoch state + 1) deposit.pubkey).toOption ==
             some (true, false)) ∧
         read.length ≤ preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat ∧
+        (∀ deposit ∈ read, ∃ status,
+          depositTargetStatus state (getCurrentEpoch state + 1) deposit.pubkey = .ok status) ∧
         (read.filter fun deposit =>
             (depositTargetStatus state (getCurrentEpoch state + 1) deposit.pubkey).toOption !=
               some (true, false)).foldlM (applyPendingDeposit config checks) state = .ok next ∧
@@ -593,7 +609,8 @@ theorem processPendingDeposits_postponed {electra : .pectra ≤ fork}
     obtain ⟨read, applied, _, facts⟩ := passPendingDeposits_applied ‹_›
     have applies := facts.applies
     rw [facts.appliedFilter] at applies
-    refine ⟨read, _, _, _, _, facts.split, ?_, by simpa using facts.bounded, applies, rfl⟩
+    refine ⟨read, _, _, _, _, facts.split, ?_, by simpa using facts.bounded, facts.statusOk, applies,
+      rfl⟩
     rw [← facts.movedFilter]
     simpa using facts.pushed
 
