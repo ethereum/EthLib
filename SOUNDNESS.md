@@ -1790,9 +1790,15 @@ It also assumes that the increment of the preset is a whole number of 100 Gwei, 
 No theorem yet derives that from the state transition.
 The update of effective balances keeps it, but the other steps and the upgrades have no proof.
 It also assumes that each supporter of the block is a member of the committees of the range.
-Before Gloas the store keeps the target epoch and the root of each latest vote, not its slot, so no theorem yet proves that.
-From Gloas it keeps the slot, but the committees of the vote must still match those of the head.
+No theorem yet proves that assumption.
 The store checks a vote against the committees in the state of its target, while the rule reads them in the state of the head.
+In a store with a forward clock, `Store.ForwardReachable.votesHaveOrigins` gives each latest vote the facts of its attestation.
+From those facts, `VoteOrigin.exists_mem_committee` (`Consensus/Proofs/ForkChoice/VoteOrigins.lean`) places the voter in a committee of the slot of its attestation, in the state of its target.
+`mem_getCommitteesBetweenSlots` (`Consensus/Proofs/ForkChoice/FastConfirmation.lean`) places each member of a committee of a slot of the range, in the state of the head, among the members that the rule reads.
+What remains is that the slot of the vote lies in the range, and that the two states agree on the count and the committees of that slot.
+They should agree when both states hold the same RANDAO mix of the epoch `MIN_SEED_LOOKAHEAD + 1` epochs before the epoch of the slot, two in both presets, and the same active validators in the epoch of the slot.
+No theorem yet proves that.
+For a range with part of an epoch that should hold when the head descends from the block, since the range then lies in the epoch of the block and the next one.
 Both corollaries apply `lt_two_mul_honest_supportersOf_of_weighed`, which builds those sets for any `W` that holds the supporters and the active members of the committees, and whose stake the weight covers.
 `lt_two_mul_honest_supportersOf_of_covered` drops that assumption when the range of the adversary holds a whole epoch.
 Its set `W` is then every validator active in the source of balances, which holds each supporter.
@@ -1826,11 +1832,6 @@ It assumes that the registry stays within its limit, and that the active validat
 The search can still fail, for an epoch after the next one or a committee without a value.
 It also fails for the epoch whose first slot plus the length of an epoch reaches 2^64.
 There the 64-bit sum of the guide overflows, as `getCommitteeAssignment_eq_error_of_overflow` shows.
-
-`getActiveValidatorIndices` keeps a pure list interface and reduces positions modulo `2^64`.
-An active position of `2^64` or more becomes a wrapped index instead of a constructor failure.
-Transition paths check unbounded positions through `getActiveValidatorIndicesChecked` before using those indices.
-Direct callers of the pure helper, including the standalone genesis validity check, keep that difference.
 
 From Gloas, a validator also finds the slot of its payload timeliness committee and the slots it will propose.
 `getPtcAssignment_sound` shows that an assignment is the first slot of the epoch whose committee holds the validator.
@@ -2328,7 +2329,15 @@ The step also needs the previous justified epoch below the previous epoch once j
 `slackJustifiedCheckpoints_of_chain` (`Consensus/Proofs/Transition/FfgSlackChain.lean`) carries these steps along a chain from the genesis state built from deposits, for a set of votes that holds the votes of each block step.
 `slackJustifiedCheckpoints_activeSetAt_of_chainSteps` (`FfgSlackActive.lean`) takes the votes that the block steps of the run cast, the active sets and the effective balances.
 Its step asks only the active stake, the order of the blocks and the preset.
-The order of the blocks of the model is an assumption on the map from roots to blocks, and no theorem gives a finalized checkpoint of the model along a chain yet.
+The order of the blocks asks that the map from roots to blocks keeps in order the roots that a state records at two consecutive slots, and the zero root before the root of slot zero (`rootLinks`, `Consensus/Proofs/Transition/FfgRoots.lean`).
+Two consecutive slots record the same root, or a block and its child, since the header check makes the parent root of a block the root recorded at the slot before it; no theorem states that yet.
+Without a collision of header roots, such pairs order the roots by ancestry.
+`RootsAbove.of_chainStep` then keeps each justified checkpoint below every root that the state records from its epoch on, which gives the source block of each recent link in the chain of its target block.
+`slackJustifiedCheckpoints_chainRoot_of_chainSteps` (`FfgSlackActive.lean`) takes the roots themselves as the blocks of the model, ordered by the links of every state that genesis reaches (`ChainRoot`), so the order holds by construction and the step asks only the active stake.
+That order does not depend on the last state, so two branches from one genesis share it.
+It holds the links of every reachable state, so it also holds every collision of header roots among reachable headers, and such collisions exist by counting.
+A collision of header roots makes two conflicting blocks comparable, so this order does not serve a safety theorem for two chains; that needs the order of the states of the given runs, with a named search for a collision.
+No theorem gives a finalized checkpoint of the model along a chain yet.
 
 ### Engine API
 
@@ -2417,6 +2426,26 @@ In Lean a division of 64-bit integers by zero returns zero and a remainder retur
 Block processing divides by further constants, such as the quotients of the slashing penalty and of the whistleblower reward, which these predicates do not list.
 A theorem that a step succeeds takes a predicate only where its proof needs a positive divisor.
 For a preset or configuration with a zero divisor, any theorem about a step that divides by it describes EthLib's transition, not the specification's.
+
+The accessor that lists the active validators keeps a result where the specification fails.
+The specification lists the active validators of an epoch by their indices, and builds each index as a `ValidatorIndex`, a 64-bit integer.
+That construction rejects a value of `2^64` or more, so the specification fails when a validator at a registry position of `2^64` or more is active.
+`getActiveValidatorIndices` returns a plain list and never fails; at such a position it would take the position modulo `2^64`.
+Before Gloas the type of the registry bounds it by the limit of the preset, a 64-bit integer (`2^40` in the mainnet and minimal presets), so no position reaches `2^64`.
+From Gloas the type of the registry has no length limit ([EIP-7688](https://eips.ethereum.org/EIPS/eip-7688#converted-types)).
+A new validator still gets the size of the registry as its index, and that index must be below `2^64` (`getIndexForNewValidator_ok_iff`).
+So a transition never adds a validator at a position of `2^64` or more, and only a starting state built outside the transition can hold one.
+
+`getActiveValidatorIndices_eq_mapM_ofNatChecked` in `Consensus/Proofs/Accessors.lean` states the divergence exactly.
+The checked conversion of the active positions, which the specification computes, succeeds and gives EthLib's list exactly when every active position is below `2^64`.
+The number of committees per slot, the churn limit of validators before Electra and the Phase 0 weak subjectivity period also convert the number of active validators to a 64-bit integer without a check.
+The specification rejects a count of `2^64` active validators, which a registry of `2^64` positions allows.
+Such a registry can arise through the transition, at least in principle.
+
+Transition paths use `getActiveValidatorIndicesChecked` for unbounded active-position reads.
+It rejects an active position of `2^64` or more.
+Committee construction and attestation checks also reject an active count of `2^64` or more.
+Direct callers of the pure helper, including the standalone genesis validity check, keep the difference from the specification.
 
 Some official vectors expect more than a source says.
 The transaction tests of ethereum/tests reject 43 results whose gas limit is `2^64`, or whose gas limit times gas price exceeds `2^256 - 1`.

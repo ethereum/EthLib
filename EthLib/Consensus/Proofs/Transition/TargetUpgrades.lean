@@ -234,6 +234,21 @@ theorem processUpgrades_justified {forked after : ForkedBeaconState preset}
         (upgradeFrame_upgradeNext stepOk).currentJustified.trans current⟩)
     ⟨rfl, rfl⟩ computed
 
+/-- The upgrades due at a slot keep the slot. -/
+theorem processUpgrades_slot {forked after : ForkedBeaconState preset}
+    (computed : processUpgrades config checks forked = .ok after) :
+    after.state.slot = forked.state.slot :=
+  processUpgrades_induction (property := fun state => state.state.slot = forked.state.slot)
+    (fun same stepOk => (upgradeFrame_upgradeNext stepOk).slot.trans same) rfl computed
+
+/-- The upgrades due at a slot keep the buffer of block roots. -/
+theorem processUpgrades_blockRoots {forked after : ForkedBeaconState preset}
+    (computed : processUpgrades config checks forked = .ok after) :
+    after.state.blockRoots = forked.state.blockRoots :=
+  processUpgrades_induction
+    (property := fun state => state.state.blockRoots = forked.state.blockRoots)
+    (fun same stepOk => (upgradeFrame_upgradeNext stepOk).blockRoots.trans same) rfl computed
+
 /-- An upgrade reaches Altair or a later fork.
 
 Before Altair, only a state of Phase 0 upgrades. -/

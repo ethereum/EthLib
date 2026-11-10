@@ -1,8 +1,6 @@
 module
 
-public import EthLib.Consensus.Proofs.Transition.Chain
-public import EthLib.Consensus.Proofs.Transition.FfgSlack
-public import EthLib.Consensus.Proofs.Transition.TargetUpgrades
+public import EthLib.Consensus.Proofs.Transition.FfgRoots
 
 /-!
 # Proofs: a chain of beacon states keeps its justified checkpoints slack-justified
@@ -37,9 +35,11 @@ Another module instantiates them with the active sets and balances that the chai
 
 An empty second set, or the zero weights, makes every ordered link a slack link.
 
-Each step at the end of an epoch also asks that each justified block is in the chain of its target.
+Each step asks the map from roots to blocks to keep in order the roots of consecutive slots.
 
-That is a hypothesis on the map from roots to blocks of the model, which no theorem gives yet.
+It also asks the zero root before the root of slot zero.
+
+Each justified block is then in the chain of the block of its recent epoch.
 
 Gasper §4.4, Definitions 4.5 and 4.6, justify a checkpoint by a supermajority link.
 
@@ -83,6 +83,8 @@ Once justification runs, its previous justified epoch is below its previous epoc
 
 Its target flags and pending attestations come from votes of a set for their links.
 
+Its justified checkpoints are below the roots it records from their epochs on.
+
 Its two justified checkpoints are slack-justified in the model, for the votes of that set. -/
 structure SlackChainInvariant (V U : Models.Ffg.Checkpoint β → Finset ValidatorIndex)
     (W : Models.Ffg.Checkpoint β → Set (ValidatorIndex → ℕ)) (genesis : β)
@@ -98,39 +100,35 @@ structure SlackChainInvariant (V U : Models.Ffg.Checkpoint β → Finset Validat
   flagsVoted : TargetFlagsVoted attested forked.state
   /-- Before Altair, each pending attestation is a vote of the set for its link. -/
   pendingVoted : PendingVoted attested forked.state
+  /-- The justified checkpoints are below the roots recorded from their epochs on. -/
+  roots : RootsAbove block forked.state
   /-- The two justified checkpoints are slack-justified in the model. -/
   slack : SlackJustifiedCheckpoints V U W genesis (ffgVotes block attested) block forked.state
 
 /-- The bounds that one step of a chain needs, apart from its sets, weights and votes.
 
-Both bounds apply only to a step that moves the slot, when that slot ends an epoch.
+The bound on the stake is asked only of a step that moves the slot, when that slot ends an epoch.
 
 Then the active stake of the current epoch must be more than one and a half increments.
 
-The block of each justified checkpoint must be in the chain of the block of its recent epoch.
+The map from roots to blocks must keep in order the roots of consecutive slots after the step.
 
-A block keeps the slot and the justified checkpoints, so neither bound applies to it.
+It must also keep the zero root before the root of slot zero.
 
 The order of the blocks of the model is an assumption on the map from roots to blocks.
 
-The meaningful choice takes roots ordered by ancestry, with the zero root lowest. -/
+The meaningful choice orders the roots by the links that the states of the chains record. -/
 structure SlackStepBounds (block : Root → β) (forked after : ForkedBeaconState preset) : Prop where
   /-- At the end of an epoch, the active stake is more than one and a half increments.
 
-  It is asked only when the slot moves, as is the next one. -/
+  It is asked only when the slot moves. -/
   large : after.state.slot ≠ forked.state.slot →
     (forked.state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 →
     3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
       2 * stake (fun index => balanceAt forked.state index.toNat)
         (getActiveValidatorIndices forked.state (getCurrentEpoch forked.state)).toFinset
-  /-- At the end of an epoch, each justified block is below the block of its recent epoch. -/
-  chain : after.state.slot ≠ forked.state.slot →
-    (forked.state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 → ∀ (current : Bool) (root : Root),
-    getBlockRoot forked.state
-        (if current then getCurrentEpoch forked.state else getPreviousEpoch forked.state) =
-      .ok root →
-    block (if current then forked.state.currentJustifiedCheckpoint
-      else forked.state.previousJustifiedCheckpoint).root ≤ block root
+  /-- The map from roots to blocks keeps the roots of consecutive slots in order. -/
+  links : ∀ link ∈ rootLinks after.state, block link.1 ≤ block link.2
 
 /-- The hypotheses that one step of a chain needs, on the states before and after it.
 
@@ -211,9 +209,7 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
     have early := holds.early.of_advanceSlot advancedOk
     -- The slot moves on by one, and the upgrades keep it.
     have moved : after.state.slot ≠ forked.state.slot := by
-      have kept : after.state.slot = advanced.slot :=
-        processUpgrades_induction (property := fun state => state.state.slot = advanced.slot)
-          (fun same stepOk => (upgradeFrame_upgradeNext stepOk).slot.trans same) rfl upgraded
+      have kept : after.state.slot = advanced.slot := processUpgrades_slot upgraded
       intro same
       have next := advanceSlot_slot advancedOk
       rw [← kept, same] at next
@@ -229,11 +225,12 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
       holds.invariant.settled
       holds.separated (fun ne => by
         rw [← currentKept] at ne ⊢
-        exact hypotheses.sets ne) (hypotheses.chain moved) holds.slack advancedOk
+        exact hypotheses.sets ne) (fun _ => holds.roots.le_of_getBlockRoot) holds.slack advancedOk
     refine ⟨(advanceSlotAcross_invariant holds.invariant computed).1,
       early.of_processUpgrades upgraded,
       (holds.separated.of_advanceSlot holds.early holds.invariant.settled
-        advancedOk).of_processUpgrades upgraded, ?_, pending.of_processUpgrades upgraded, ?_⟩
+        advancedOk).of_processUpgrades upgraded, ?_, pending.of_processUpgrades upgraded,
+      RootsAbove.of_chainStep positive window holds.roots hypotheses.links (.slot computed), ?_⟩
     · by_cases altair : .altair ≤ forked.fork
       · exact TargetFlagsVoted.of_processUpgrades (forked := ⟨forked.fork, advanced⟩) altair
           flags upgraded
@@ -252,7 +249,9 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
       holds.separated.of_frame frame,
       (holds.flagsVoted.of_voteFrame voteFrame).mono (Set.union_subset subset_rfl sub),
       fun before => (PendingVoted.of_processBlock before apart holds.pendingVoted blockOk).mono
-        (Set.union_subset subset_rfl sub) before, ?_⟩
+        (Set.union_subset subset_rfl sub) before,
+      RootsAbove.of_chainStep positive window holds.roots hypotheses.links
+        (.block engine signed validateResult applied), ?_⟩
     unfold SlackJustifiedCheckpoints
     rw [frame.previousJustified, frame.currentJustified]
     exact holds.slack
@@ -284,7 +283,8 @@ theorem initializeBeaconStateFromEth1_slackChainInvariant {fork : Fork}
   obtain ⟨before, holds⟩ := initializeBeaconStateFromEth1_invariant computed
   obtain ⟨slot, previous, current⟩ := initializeBeaconStateFromEth1_checkpoints computed
   refine ⟨holds, JustifiedEarly.of_initializeBeaconStateFromEth1 computed, fun later => ?_,
-    fun altair => absurd altair (Nat.not_le_of_lt before), fun _ current pending member => ?_, ?_⟩
+    fun altair => absurd altair (Nat.not_le_of_lt before), fun _ current pending member => ?_,
+    RootsAbove.of_initializeBeaconStateFromEth1 computed, ?_⟩
   · simp [getCurrentEpoch, slot, computeEpochAtSlot, GENESIS_SLOT, GENESIS_EPOCH] at later
   · rw [initializeBeaconStateFromEth1_pending computed] at member
     simp at member

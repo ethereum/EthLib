@@ -309,6 +309,78 @@ theorem attestationCommitteesSize_cons (data : AttestationData) (bits : Array Bo
       simp only [attestationCommitteesSize_of_attesterShuffle shuffleOk countOk,
         attestationCommitteesSizeOf, liftAccessor, Except.mapError, bind, Except.bind]
 
+/-- Each committee that a checked attestation names has an index below the count.
+
+The count is that of the committees in each slot of the target epoch. -/
+theorem lt_getCommitteeCountPerSlot_of_checkAttestationCommittees
+    {attestation : Attestation preset fork} {index : CommitteeIndex}
+    (checked : checkAttestationCommittees state attestation = .ok ())
+    (named : if electra : .pectra ≤ fork then
+        index ∈ getCommitteeIndices (attestation.committeeBits electra)
+      else index = attestation.data.index) :
+    index < getCommitteeCountPerSlot state attestation.data.target.epoch := by
+  -- Each committee of the walk has its index checked against the count.
+  have walk : ∀ {committees : List CommitteeIndex} {offset size : Nat},
+      attestationCommitteesSize state attestation.data attestation.aggregationBits.bits
+        committees offset = .ok size →
+      index ∈ committees →
+        index < getCommitteeCountPerSlot state attestation.data.target.epoch := by
+    intro committees
+    induction committees with
+    | nil =>
+      intro _ _ _ mem
+      simp at mem
+    | cons first rest ih =>
+      intro offset size sized mem
+      rw [attestationCommitteesSize_cons] at sized
+      obtain ⟨count, countOk, sized⟩ := bind_ok_iff.mp sized
+      rw [getCommitteeCountPerSlotChecked_ok (liftAccessor_ok.mp countOk)] at sized
+      obtain ⟨below, sized⟩ := bind_unit_ok_iff.mp sized
+      obtain ⟨committee, -, sized⟩ := bind_ok_iff.mp sized
+      obtain ⟨attesters, -, sized⟩ := bind_ok_iff.mp sized
+      obtain ⟨-, sized⟩ := bind_unit_ok_iff.mp sized
+      rcases List.mem_cons.mp mem with rfl | later
+      · exact ensure_ok_iff.mp below
+      · exact ih sized later
+  by_cases electra : .pectra ≤ fork
+  · simp only [electra, ↓reduceDIte] at named
+    simp only [checkAttestationCommittees, electra, ↓reduceDIte] at checked
+    obtain ⟨size, sizeOk⟩ : ∃ size, attestationCommitteesSize state attestation.data
+        attestation.aggregationBits.bits
+        (getCommitteeIndices (attestation.committeeBits electra)) 0 = .ok size := by
+      split at checked <;>
+      · obtain ⟨size, sizeOk, -⟩ := bind_ok_iff.mp (bind_unit_ok_iff.mp checked).2
+        exact ⟨size, sizeOk⟩
+    exact walk sizeOk named
+  · simp only [electra, ↓reduceDIte] at named
+    subst named
+    simp only [checkAttestationCommittees, electra, ↓reduceDIte] at checked
+    obtain ⟨count, countOk, checked⟩ := bind_ok_iff.mp checked
+    rw [getCommitteeCountPerSlotChecked_ok (liftAccessor_ok.mp countOk)] at checked
+    exact ensure_ok_iff.mp (bind_unit_ok_iff.mp checked).1
+
+/-- An attester of an attestation that passes the committee check sits in one of its committees.
+
+That committee is one of the slot of the attestation.
+
+Its index is below the count of committees in each slot of the target epoch. -/
+theorem exists_mem_getBeaconCommittee_of_checkAttestationCommittees
+    {attestation : Attestation preset fork} {indexed : IndexedAttestation preset fork}
+    {validator : ValidatorIndex}
+    (checked : checkAttestationCommittees state attestation = .ok ())
+    (indexedOk : getIndexedAttestation state attestation = .ok indexed)
+    (attests : validator ∈ indexed.attestingIndices.data.toList) :
+    ∃ index committee,
+      index < getCommitteeCountPerSlot state attestation.data.target.epoch ∧
+      getBeaconCommittee state attestation.data.slot index = .ok committee ∧
+      validator ∈ committee := by
+  obtain ⟨attesters, attestersOk, data⟩ := getAttestingIndices_of_getIndexedAttestation indexedOk
+  rw [data] at attests
+  obtain ⟨index, committee, named, committeeOk, member⟩ :=
+    exists_mem_getBeaconCommittee_of_getAttestingIndices attestersOk (by simpa using attests)
+  exact ⟨index, committee, lt_getCommitteeCountPerSlot_of_checkAttestationCommittees checked named,
+    committeeOk, member⟩
+
 /-- From Gloas, weighing the payment of a block changes only the pending payments of builders. -/
 theorem recordPaymentWeight_eq {gloas : .glamsterdam ≤ fork} {data : AttestationData}
     {current : Bool} {before updated : EpochParticipation preset fork}
