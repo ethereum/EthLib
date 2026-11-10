@@ -178,6 +178,53 @@ theorem validatorPositions_sorted {state : BeaconState preset fork}
   rw [UInt64.lt_iff_toNat_lt, toNat_toUInt64_of_lt within hi, toNat_toUInt64_of_lt within hj]
   exact lt
 
+/-- Converting the positions that pass a test, with a check at `2^64`, gives their wrapped indices.
+
+It does so exactly when each position that passes is below `2^64`. -/
+private theorem mapM_ofNatChecked_filterMap {α : Type} (test : α → Bool) :
+    ∀ entries : List (α × Nat),
+      (entries.filterMap fun (value, position) =>
+          if test value then some position else none).mapM ofNatChecked =
+        .ok (entries.filterMap fun (value, position) =>
+          if test value then some position.toUInt64 else none) ↔
+      ∀ entry ∈ entries, test entry.1 = true → entry.2 < 2 ^ 64
+  | [] => by simp [pure, Except.pure]
+  | (value, position) :: rest => by
+    have later := mapM_ofNatChecked_filterMap test rest
+    cases passes : test value
+    · simp only [List.filterMap_cons, passes, Bool.false_eq_true, ↓reduceIte, later,
+        List.forall_mem_cons, false_implies, true_and]
+    · simp only [List.filterMap_cons, passes, ↓reduceIte, List.mapM_cons, List.forall_mem_cons,
+        forall_const]
+      by_cases small : position < 2 ^ 64
+      · simp only [ofNatChecked_of_lt small, small, true_and, ← later]
+        cases rest.filterMap (fun (value, position) =>
+            if test value then some position else none) |>.mapM ofNatChecked <;>
+          simp [bind, Except.bind, pure, Except.pure]
+      · simp [ofNatChecked, small, bind, Except.bind]
+
+/-- The specification converts each active position to an index, and fails at `2^64` or more.
+
+That conversion gives the active indices exactly when each active position is below `2^64`.
+
+Otherwise the active indices take a position modulo `2^64` where the specification fails. -/
+theorem getActiveValidatorIndices_eq_mapM_ofNatChecked {state : BeaconState preset fork}
+    {epoch : Epoch} :
+    (state.validators.data.toList.zipIdx.filterMap fun (validator, position) =>
+        if isActiveValidator validator epoch then some position else none).mapM ofNatChecked =
+      .ok (getActiveValidatorIndices state epoch) ↔
+    ∀ position (inside : position < state.validators.data.size),
+      isActiveValidator state.validators.data[position] epoch = true → position < 2 ^ 64 := by
+  refine (mapM_ofNatChecked_filterMap (isActiveValidator · epoch) _).trans ?_
+  constructor
+  · intro below position inside active
+    exact below (state.validators.data[position], position)
+      (List.mem_zipIdx_iff_getElem?.mpr (by simp [inside])) active
+  · rintro below ⟨validator, position⟩ member active
+    obtain ⟨inside, read⟩ := Array.getElem?_eq_some_iff.mp
+      (by simpa using List.mem_zipIdx_iff_getElem?.mp member)
+    exact below position inside (read ▸ active)
+
 /-- The active indices increase strictly. -/
 theorem getActiveValidatorIndices_sorted {state : BeaconState preset fork}
     (within : state.RegistryWithinLimit) (epoch : Epoch) :
