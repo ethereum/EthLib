@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnly
 public import EthLib.Cryptography.Proofs.IndependentOutside
 public import VCVio.CryptoFoundations.ReplayFork
+import VCVio.EvalDist.Inequalities
 
 /-!
 # Proofs: the key-only game with new forward answers asked of one oracle
@@ -67,7 +68,7 @@ The fork here reruns the run from the selected query on, with fresh answers and 
 
 Its bound has the form of their Lemma 1 for one fixed key, with `q + 1` for `Q` and `|A|` for `|B|`.
 
-Their Lemma 1 draws the key at random; no theorem averages over the key yet.
+With the key drawn uniformly, the bound also holds, as in their Lemma 1.
 -/
 
 @[expose] public section
@@ -298,6 +299,32 @@ theorem le_prEvent_isSome_contextFork_keyOnlyOutsideRun
     rw [FinEnum.card_eq_fintypeCard]
     rfl
   simpa only [forkBound, Nat.cast_add, Nat.cast_one, hcard] using h
+
+/-- **The forking lemma for the run on a uniform key.**
+
+Draw the key uniformly, and let `acc` be the chance that the run has a fork index.
+
+Then the fork on the same key succeeds with chance at least `acc (acc / (q + 1) - 1 / |A|)`.
+
+The mean of the bounds of the forking lemma on each key is at least this bound.
+
+The reason is that the mean of a square is at least the square of the mean. -/
+theorem le_prEvent_isSome_contextFork_keyOnlyOutsideRun_uniform [SampleableType F]
+    [UniformAnswerMeasure (Unit →ₒ A)] (scheme : Scheme F G A M)
+    (adversary : KeyOnlyAdversary F G A M) (q : ℕ) :
+    (let acc := Pr{let x ← liftComp ($ᵗ F : ProbComp F) (OutsideSpec A)
+                   let tr ← keyOnlyOutsideRun scheme adversary (x • scheme.g)}[
+        (forkIndex scheme (x • scheme.g) q tr).isSome]
+     acc * (acc / (q + 1 : ℝ≥0∞) - (FinEnum.card A : ℝ≥0∞)⁻¹)) ≤
+      Pr{let x ← liftComp ($ᵗ F : ProbComp F) (OutsideSpec A)
+         let r ← contextFork (keyOnlyOutsideRun scheme adversary (x • scheme.g)) (forkBound q)
+           (.inr ()) (forkIndex scheme (x • scheme.g) q)}[r.isSome] := by
+  let : MeasurableSpace F := ⊤
+  dsimp only
+  rw [prEvent_bind_of_discrete, prEvent_bind_of_discrete]
+  exact OracleComp.EvalDist.marginalized_jensen_forking_bound_of_discrete _ _ _ _ _
+    (fun _ => prEvent_le_one _)
+    (fun x => le_prEvent_isSome_contextFork_keyOnlyOutsideRun scheme adversary _ q)
 
 /-! ## Runs of the fork -/
 
