@@ -69,9 +69,11 @@ Twice the stake of that set is at most three times the stake of its voters for t
 
 The term of churn adds twice the stake of that set outside the active set of the current epoch.
 
-The model asks for the bound without that term, and a source epoch below the target epoch.
+A supermajority link of the model asks for the bound without that term; a slack link takes it.
 
-It also asks for the source block in the chain of the target block. -/
+Both ask for a source epoch below the target epoch.
+
+Both also ask for the source block in the chain of the target block. -/
 def LinkWithChurn (state : BeaconState preset fork) (votes : Set (Vote ValidatorIndex β))
     (epoch : Epoch) (source target : Models.Ffg.Checkpoint β) : Prop :=
   2 * stake (fun index => balanceAt state index.toNat)
