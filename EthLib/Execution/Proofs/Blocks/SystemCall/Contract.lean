@@ -172,9 +172,11 @@ Such a frame comes from the system address, to the contract, with the block and 
 
 It may change the state, it has the gas of a system call, and the account of the contract exists.
 
+It starts from the state of the block, with the read of the contract recorded.
+
 The system call then succeeds, and its state and output meet `Q`.
 
-The start state is the state of the block with the read of the contract recorded. -/
+In the conclusion, `Q` gets that start state. -/
 theorem systemCall_of_spec {env : BlockEnvironment fork} {block : State.BlockState}
     {target : Address} {data : ByteArray}
     {Q : TransactionState → TransactionState → ByteArray → Prop}
@@ -186,6 +188,7 @@ theorem systemCall_of_spec {env : BlockEnvironment fork} {block : State.BlockSta
       message.caller = SYSTEM_ADDRESS → message.currentTarget = target →
       message.isStatic = false → message.blockEnv = env → message.data = data →
       message.gas = SYSTEM_TRANSACTION_GAS → (state.getAccountOptional target).isSome = true →
+      state = (TransactionState.ofBlock block).recordAccountRead target →
       Spec fork (At code message 0 [] .empty message.gas state substate .empty)
         fun evm => evm.error = none ∧ Q state evm.state evm.output) :
     ∃ out, systemCall env block target data = .ok out ∧ out.error = none ∧
@@ -213,7 +216,8 @@ theorem systemCall_of_spec {env : BlockEnvironment fork} {block : State.BlockSta
     (state := first.state) (substate := first.substate)
     (hspec first.message (startState fork first.message first.state) first.substate
       (by subst hF; rfl) (by subst hF; rfl) (by subst hF; rfl) (by subst hF; rfl)
-      (by subst hF; rfl) (by subst hF; rfl) (by rw [hstart]; exact hacc))
+      (by subst hF; rfl) (by subst hF; rfl) (by rw [hstart]; exact hacc)
+      (by rw [hstart]; subst hF; rfl))
     hvalue hpre' (at_startFrame hcodeM _ _)
   rw [rollbackOnError_of_error_eq_none herr] at hpm
   rw [hstart] at hq
@@ -235,5 +239,47 @@ theorem systemCall_of_spec {env : BlockEnvironment fork} {block : State.BlockSta
       Bool.false_eq_true, ↓reduceIte]
     subst hF
     exact ⟨trivial, hq⟩
+
+/-- From Paris up to BPO5, a system call to a contract whose code writes its storage.
+
+The contract has code at an address that is not a precompile, and its code is not a delegation.
+
+The storage of the contract in the block meets `P`.
+
+From every frame that a system call starts on a storage that meets `P`, the code stops.
+
+It stops with no error, and returns `output` of that storage.
+
+Its state holds `store` of that storage at the contract, and keeps the rest.
+
+The system call then succeeds and returns `output` of the storage in the block.
+
+Its state holds `store` of the storage in the block at the contract, and keeps the rest. -/
+theorem systemCall_of_writesStorage {env : BlockEnvironment fork} {block : State.BlockState}
+    {target : Address} {data : ByteArray} {P : (U256 → U256) → Prop}
+    (output : (U256 → U256) → ByteArray) (store : (U256 → U256) → U256 → U256)
+    (hparis : .paris ≤ fork) (hglam : fork < .glamsterdam)
+    (hcode : codeAt block target = .ok code) (hsize : code.size ≠ 0)
+    (hpre : Precompiles.addedAt target.toU256.toNat = none)
+    (hdelegate : delegatedAddress code = none)
+    (hread : P (storageOf (.ofBlock block) target))
+    (hspec : ∀ (message : Message fork) (state : TransactionState) (substate : Substate),
+      message.caller = SYSTEM_ADDRESS → message.currentTarget = target →
+      message.isStatic = false → message.blockEnv = env → message.data = data →
+      message.gas = SYSTEM_TRANSACTION_GAS → (state.getAccountOptional target).isSome = true →
+      P (storageOf state target) →
+      Spec fork (At code message 0 [] .empty message.gas state substate .empty) fun evm =>
+        evm.error = none ∧ evm.output = output (storageOf state target) ∧
+        WritesStorage target (store (storageOf state target)) state evm.state) :
+    ∃ out, systemCall env block target data = .ok out ∧ out.error = none ∧
+      out.output = output (storageOf (.ofBlock block) target) ∧
+      WritesStorage target (store (storageOf (.ofBlock block) target)) (.ofBlock block)
+        out.state :=
+  systemCall_of_spec (Q := fun S post out => out = output (storageOf S target) ∧
+      WritesStorage target (store (storageOf S target)) S post)
+    hparis hglam hcode hsize hpre hdelegate
+    fun message state substate hcaller htarget hstatic henv hdata hgas hacc hstate =>
+      hspec message state substate hcaller htarget hstatic henv hdata hgas hacc
+        (by subst hstate; exact hread)
 
 end EthLib.Execution.Blocks.SystemContract
