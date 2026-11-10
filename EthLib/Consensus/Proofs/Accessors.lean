@@ -1193,6 +1193,14 @@ theorem readCircular_writeCircular {α : Type} {n : UInt64} {buffer written : Ve
     cases computed
     simp [readCircular, nonzero]
 
+/-- Two numbers that differ by less than a length lie at different positions modulo it. -/
+theorem _root_.Nat.mod_ne_of_sub_lt {low high length : Nat} (lt : low < high)
+    (close : high - low < length) : high % length ≠ low % length := by
+  intro same
+  have zero := Nat.sub_mod_eq_zero_of_mod_eq same
+  rw [Nat.mod_eq_of_lt close] at zero
+  omega
+
 /-- A write to a circular buffer leaves the entry at every other position unchanged. -/
 theorem readCircular_writeCircular_of_ne {α : Type} {n : UInt64}
     {buffer written : Vector α n.toNat} {i j : UInt64} {value : α}

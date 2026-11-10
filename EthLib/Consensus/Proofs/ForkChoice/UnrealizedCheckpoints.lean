@@ -267,14 +267,6 @@ private theorem Moved.slot (same : Moved state moved) (slot : Slot) :
   obtain ⟨_, _, _, _, _, rfl⟩ := same
   exact ⟨_, _, _, _, _, rfl⟩
 
-/-- Two numbers that differ by less than a length lie at different positions modulo it. -/
-private theorem mod_ne {low high length : Nat} (lt : low < high) (close : high - low < length) :
-    high % length ≠ low % length := by
-  intro same
-  have zero := Nat.sub_mod_eq_zero_of_mod_eq same
-  rw [Nat.mod_eq_of_lt close] at zero
-  omega
-
 /-- The first slot of the epoch of a state is at most its slot. -/
 private theorem epoch_bounds (state : BeaconState preset fork) :
     (getCurrentEpoch state).toNat * preset.SLOTS_PER_EPOCH.toNat ≤ state.slot.toNat := by
@@ -299,7 +291,7 @@ private theorem KeepsRoots.processSlot {cached : BeaconState preset fork}
   have start := epoch_bounds state
   rw [Nat.add_mul, Nat.one_mul] at high
   rw [Nat.sub_mul, Nat.one_mul] at lo
-  exact mod_ne (by omega) (by omega) same'
+  exact Nat.mod_ne_of_sub_lt (by omega) (by omega) same'
 
 /-- The slots up to the first slot of the next epoch end as justification on the original state.
 
@@ -315,10 +307,7 @@ private theorem advanceSlots_outcome
   | count, moved, after, same, keeps, low, total, computed => by
     simp only [advanceSlots, bind_ok_iff] at computed
     obtain ⟨stepped, steppedOk, rest⟩ := computed
-    simp only [advanceSlot, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-      addChecked_ok_iff, pure, Except.pure, Except.ok.injEq] at steppedOk
-    obtain ⟨nextSlot, ⟨_, sum⟩, cached, cachedOk, epoched, epochedOk, rfl⟩ := steppedOk
-    simp only [UInt64.toNat_one] at sum
+    obtain ⟨nextSlot, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok steppedOk
     have cachedSlot := processSlot_slot cachedOk
     have cachedSame := same.processSlot cachedOk
     have cachedKeeps := keeps.processSlot window cachedOk low (by omega)

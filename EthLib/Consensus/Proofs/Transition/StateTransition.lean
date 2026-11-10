@@ -108,12 +108,30 @@ theorem processSlot_nextPayloadUnavailable (gloas : .glamsterdam ≤ fork)
     simpa [UInt64.toNat_mod, sum] using getElem?_writeCircular written
   · contradiction
 
+/-- The caching of a slot keeps the flags of both epochs. -/
+theorem processSlot_participation (computed : processSlot state = .ok after) :
+    after.previousEpochParticipation = state.previousEpochParticipation ∧
+      after.currentEpochParticipation = state.currentEpochParticipation := by
+  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok computed
+  exact ⟨rfl, rfl⟩
+
+/-- What one slot step did.
+
+It cached the roots of the slot, ran the epoch step if the slot ends an epoch, and moved on. -/
+theorem advanceSlot_ok (computed : advanceSlot config checks state = .ok after) :
+    ∃ next cached epoched, next.toNat = state.slot.toNat + 1 ∧ processSlot state = .ok cached ∧
+      epochIfLast config checks next cached = .ok epoched ∧
+      after = { epoched with slot := next } := by
+  simp only [advanceSlot, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
+    addChecked_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨next, ⟨_, sum⟩, cached, cachedOk, epoched, epochedOk, rfl⟩ := computed
+  simp only [UInt64.toNat_one] at sum
+  exact ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩
+
 /-- One slot step moves the slot on by exactly one. -/
 theorem advanceSlot_slot (computed : advanceSlot config checks state = .ok after) :
     after.slot.toNat = state.slot.toNat + 1 := by
-  simp only [advanceSlot, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    addChecked_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨next, ⟨_, sum⟩, _, _, _, _, rfl⟩ := computed
+  obtain ⟨_, _, _, sum, -, -, rfl⟩ := advanceSlot_ok computed
   exact sum
 
 /-- Some count of slot steps moves the slot on by exactly that count. -/

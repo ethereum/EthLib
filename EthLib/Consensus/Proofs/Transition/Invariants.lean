@@ -196,13 +196,6 @@ theorem EpochFrame.of_validators (sizes : SameSizes state after)
     justificationBits genesisTime forkVersions genesisValidatorsRoot, blockRoots, latestBlockHeader,
     latestBlockHash, latestExecutionPayloadBid⟩
 
-/-- A fold whose every step is an epoch frame is an epoch frame. -/
-theorem EpochFrame.foldlM {α ε : Type} {step : BeaconState preset fork → α → Except ε _}
-    (frame : ∀ s x s', step s x = .ok s' → EpochFrame s s') {items : List α}
-    (computed : items.foldlM step state = .ok after) : EpochFrame state after :=
-  foldlM_ok_invariant (EpochFrame state) (fun _ _ _ before ok => before.trans (frame _ _ _ ok))
-    (EpochFrame.refl state) computed
-
 /-- From Altair, each byte of flags after a step is the byte at its position before, or zero.
 
 This holds for the flags of the previous epoch and for those of the current epoch. -/
@@ -282,7 +275,9 @@ So it is also a block frame.
 
 The mutators of a balance, of the exit queue and of a validator that keeps its key form one.
 
-So do the steps that add a validator to the registry. -/
+So do the steps that add a validator to the registry.
+
+So does each step of an epoch after justification, other than the rotation of the flags. -/
 structure MutatorFrame (state after : BeaconState preset fork) : Prop extends EpochFrame state after
     where
   flags : FlagsKeptOrZero state after
@@ -1615,17 +1610,26 @@ theorem processEpoch_frame (computed : processEpoch config checks state = .ok af
 
 /-- Justification and finalization keep the genesis time and the buffer of block roots.
 
-They also keep the latest block header, and from Gloas the latest block hash and bid. -/
+They also keep the latest block header, and from Gloas the latest block hash and bid.
+
+They keep the registry, the fork versions and the genesis validators root.
+
+From Altair they also keep the flags of both epochs. -/
 theorem processJustificationAndFinalization_keeps
     (computed : processJustificationAndFinalization state = .ok after) :
     after.genesisTime = state.genesisTime ∧ after.blockRoots = state.blockRoots ∧
       after.latestBlockHeader = state.latestBlockHeader ∧
       after.latestBlockHash = state.latestBlockHash ∧
-      after.latestExecutionPayloadBid = state.latestExecutionPayloadBid := by
+      after.latestExecutionPayloadBid = state.latestExecutionPayloadBid ∧
+      after.validators = state.validators ∧ after.forkVersions = state.forkVersions ∧
+      after.genesisValidatorsRoot = state.genesisValidatorsRoot ∧
+      after.previousEpochParticipation = state.previousEpochParticipation ∧
+      after.currentEpochParticipation = state.currentEpochParticipation := by
   obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok computed
-  · exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+  · exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
-    exact ⟨by rw [← rest], by rw [← rest], by rw [← rest], by rw [← rest], by rw [← rest]⟩
+    exact ⟨by rw [← rest], by rw [← rest], by rw [← rest], by rw [← rest], by rw [← rest],
+      by rw [← rest], by rw [← rest], by rw [← rest], by rw [← rest], by rw [← rest]⟩
 
 /-- The current justified epoch is at most the previous epoch. -/
 def JustifiedSettled (state : BeaconState preset fork) : Prop :=
@@ -1747,6 +1751,28 @@ theorem getCurrentEpoch_toNat (state : BeaconState preset fork) :
     (getCurrentEpoch state).toNat = state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by
   simp [getCurrentEpoch, computeEpochAtSlot, UInt64.toNat_div]
 
+/-- The slot after the last slot of an epoch is in the next epoch. -/
+theorem nextSlot_epoch_of_boundary {slot next : Slot} (sum : next.toNat = slot.toNat + 1)
+    (boundary : next % preset.SLOTS_PER_EPOCH = 0) :
+    next.toNat / preset.SLOTS_PER_EPOCH.toNat =
+      slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1 := by
+  have boundary' : next.toNat % preset.SLOTS_PER_EPOCH.toNat = 0 := by
+    simpa [UInt64.toNat_mod] using congrArg UInt64.toNat boundary
+  rw [sum]
+  exact Nat.succ_div_of_dvd (Nat.dvd_of_mod_eq_zero (sum ▸ boundary'))
+
+/-- The slot after a slot that does not end an epoch is in the same epoch. -/
+theorem nextSlot_epoch_of_inside {slot next : Slot} (sum : next.toNat = slot.toNat + 1)
+    (inside : ¬next % preset.SLOTS_PER_EPOCH = 0) :
+    next.toNat / preset.SLOTS_PER_EPOCH.toNat = slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by
+  have notDvd : ¬preset.SLOTS_PER_EPOCH.toNat ∣ slot.toNat + 1 := by
+    intro divides
+    apply inside
+    apply UInt64.toNat_inj.mp
+    simpa [UInt64.toNat_mod, sum] using Nat.mod_eq_zero_of_dvd divides
+  rw [sum]
+  exact Nat.succ_div_of_not_dvd notDvd
+
 theorem frame_processSlot (computed : processSlot state = .ok after) : Frame state after := by
   obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok computed
   exact Frame.of_validators ⟨rfl, rfl⟩
@@ -1759,24 +1785,16 @@ The next slot starts the next epoch, whose previous epoch is that one. -/
 theorem advanceSlot_invariant (holds : Invariant state)
     (computed : advanceSlot config checks state = .ok after) :
     Invariant after ∧ state.finalizedCheckpoint.epoch ≤ after.finalizedCheckpoint.epoch := by
-  simp only [advanceSlot, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    addChecked_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨next, ⟨_, sum⟩, cached, cachedOk, epoched, epochedOk, rfl⟩ := computed
+  obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
   have cachedFrame := frame_processSlot cachedOk
   have cachedHolds := cachedFrame.invariant holds
-  simp only [UInt64.toNat_one] at sum
   have stateEpoch := getCurrentEpoch_toNat state
   unfold epochIfLast at epochedOk
   split at epochedOk
   · rename_i boundary
     obtain ⟨_, balancesMatch, exitsOrdered, ordered, finalized, current⟩ :=
       processEpoch_invariant cachedHolds epochedOk
-    have boundary' : next.toNat % preset.SLOTS_PER_EPOCH.toNat = 0 := by
-      simpa [UInt64.toNat_mod] using congrArg UInt64.toNat boundary
-    have step : next.toNat / preset.SLOTS_PER_EPOCH.toNat =
-        state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1 := by
-      rw [sum]
-      exact Nat.succ_div_of_dvd (Nat.dvd_of_mod_eq_zero (sum ▸ boundary'))
+    have step := nextSlot_epoch_of_boundary sum boundary
     refine ⟨⟨balancesMatch, exitsOrdered, ordered, ?_⟩, ?_⟩
     · have current' := UInt64.le_iff_toNat_le.mp current
       rw [getCurrentEpoch_toNat, cachedFrame.slot] at current'
@@ -1789,15 +1807,7 @@ theorem advanceSlot_invariant (holds : Invariant state)
   · rename_i notBoundary
     simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
     subst epochedOk
-    have notBoundary' : ¬preset.SLOTS_PER_EPOCH.toNat ∣ state.slot.toNat + 1 := by
-      intro divides
-      apply notBoundary
-      apply UInt64.toNat_inj.mp
-      simpa [UInt64.toNat_mod, sum] using Nat.mod_eq_zero_of_dvd divides
-    have step : next.toNat / preset.SLOTS_PER_EPOCH.toNat =
-        state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by
-      rw [sum]
-      exact Nat.succ_div_of_not_dvd notBoundary'
+    have step := nextSlot_epoch_of_inside sum notBoundary
     refine ⟨⟨cachedHolds.balancesMatch, cachedHolds.exitsOrdered, cachedHolds.ordered, ?_⟩, ?_⟩
     · have settled := UInt64.le_iff_toNat_le.mp holds.settled
       rw [getPreviousEpoch_toNat, getCurrentEpoch_toNat] at settled
