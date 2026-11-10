@@ -1524,4 +1524,75 @@ theorem getBlockRootAtSlot_read {state : BeaconState preset fork} {slot : Slot} 
     obtain ⟨_, thrown, _⟩ := computed
     cases thrown
 
+/-- A read of a recorded root succeeds exactly when the slot is recent and its bound fits.
+
+The read of the buffer must then succeed too. -/
+theorem getBlockRootAtSlot_ok_iff {state : BeaconState preset fork}
+    {slot : Slot} {root : Root} :
+    getBlockRootAtSlot state slot = .ok root ↔ slot.toNat < state.slot.toNat ∧
+      slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat < 2 ^ 64 ∧
+      state.slot.toNat ≤ slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ∧
+      readCircular state.blockRoots.elements slot = .ok root := by
+  unfold getBlockRootAtSlot
+  by_cases lt : slot < state.slot
+  · simp only [lt, ↓reduceIte, bind_ok_iff, liftArith, mapError_ok_iff, addChecked_ok_iff]
+    have lt' := UInt64.lt_iff_toNat_lt.mp lt
+    constructor
+    · rintro ⟨bound, ⟨fits, boundEq⟩, rest⟩
+      by_cases within : state.slot ≤ bound
+      · simp only [within, ↓reduceIte] at rest
+        exact ⟨lt', fits, boundEq ▸ UInt64.le_iff_toNat_le.mp within, rest⟩
+      · simp only [within, ↓reduceIte, bind_ok_iff] at rest
+        obtain ⟨_, thrown, _⟩ := rest
+        cases thrown
+    · rintro ⟨-, fits, within, rest⟩
+      have sum : (slot + preset.SLOTS_PER_HISTORICAL_ROOT).toNat =
+          slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
+        rw [UInt64.toNat_add, Nat.mod_eq_of_lt fits]
+      refine ⟨slot + preset.SLOTS_PER_HISTORICAL_ROOT, ⟨fits, sum⟩, ?_⟩
+      simp only [UInt64.le_iff_toNat_le.mpr (sum ▸ within), ↓reduceIte]
+      exact rest
+  · have lt' : ¬slot.toNat < state.slot.toNat := fun lt' => lt (UInt64.lt_iff_toNat_lt.mpr lt')
+    simp only [lt, lt', ↓reduceIte, false_and, iff_false]
+    intro computed
+    rw [bind_ok_iff] at computed
+    obtain ⟨_, thrown, _⟩ := computed
+    cases thrown
+
+/-- A read of a recorded root succeeds when the slot is recent and its bound does not overflow.
+
+The buffer of roots must not be empty. -/
+theorem getBlockRootAtSlot_exists {state : BeaconState preset fork}
+    {slot : Slot} (before : slot.toNat < state.slot.toNat)
+    (fits : slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat < 2 ^ 64)
+    (within : state.slot.toNat ≤ slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    (nonempty : 0 < preset.SLOTS_PER_HISTORICAL_ROOT.toNat) :
+    ∃ root, getBlockRootAtSlot state slot = .ok root := by
+  have : NeZero preset.SLOTS_PER_HISTORICAL_ROOT.toNat := ⟨Nat.pos_iff_ne_zero.mp nonempty⟩
+  obtain ⟨root, read⟩ := readCircular_total state.blockRoots.elements slot
+  exact ⟨root, getBlockRootAtSlot_ok_iff.mpr ⟨before, fits, within, read⟩⟩
+
+/-- A read of a recorded root succeeds at each slot between two slots where it succeeds. -/
+theorem getBlockRootAtSlot_between {state : BeaconState preset fork}
+    {low middle high : Slot} {lowRoot highRoot : Root}
+    (lowRead : getBlockRootAtSlot state low = .ok lowRoot)
+    (highRead : getBlockRootAtSlot state high = .ok highRoot)
+    (above : low.toNat ≤ middle.toNat) (below : middle.toNat ≤ high.toNat) :
+    ∃ root, getBlockRootAtSlot state middle = .ok root := by
+  obtain ⟨-, -, lowWithin, -⟩ := getBlockRootAtSlot_ok_iff.mp lowRead
+  obtain ⟨highLt, highFits, -, highBuffer⟩ := getBlockRootAtSlot_ok_iff.mp highRead
+  unfold readCircular at highBuffer
+  split at highBuffer
+  · cases highBuffer
+  rename_i nonzero
+  exact getBlockRootAtSlot_exists (by omega) (by omega) (by omega)
+    (Nat.pos_of_ne_zero fun zero => nonzero (UInt64.toNat_inj.mp (by simpa using zero)))
+
+/-- Two states with the same slot and buffer of roots read the same root at each slot. -/
+theorem getBlockRootAtSlot_congr {post : Fork} {state : BeaconState preset fork}
+    {other : BeaconState preset post} (slot : other.slot = state.slot)
+    (roots : other.blockRoots = state.blockRoots) (index : Slot) :
+    getBlockRootAtSlot other index = getBlockRootAtSlot state index := by
+  simp only [getBlockRootAtSlot, slot, roots]
+
 end EthLib.Consensus

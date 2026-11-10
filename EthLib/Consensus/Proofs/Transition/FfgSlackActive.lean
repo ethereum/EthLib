@@ -44,6 +44,14 @@ So the voters of a link are validators whose attestations a block of some run ap
 
 The step asks only the stake, the order of the blocks, the size of the registry and the preset.
 
+The blocks of the model can also be the roots themselves, ordered by the links of reached states.
+
+Two roots are linked when a state that genesis reaches records them at consecutive slots.
+
+The zero root is also linked to the root recorded at slot zero.
+
+Then the order of the blocks holds by construction, and the step asks only the stake and registry.
+
 The slack is the stake of the set `E(V t, U t)` of Gasper §8.6, Definition 8.1.
 
 The paper is [arXiv 2003.03052v3](https://arxiv.org/abs/2003.03052v3).
@@ -178,5 +186,56 @@ theorem slackJustifiedCheckpoints_activeSetAt_of_chainSteps
     rw [next, activeSetAt_toNat _ (getCurrentEpoch forked.state),
       kept.getActiveValidatorIndices_eq (UInt64.le_refl _)]
     exact Finset.inter_subset_right
+
+/-- Along a run of steps of a chain from genesis, both justified checkpoints are slack-justified.
+
+The blocks of the model are the roots, ordered by the links of the states that genesis reaches.
+
+The sets are the active sets, the weights the effective balances, and the votes those of the run.
+
+Each step on any run between them must meet the bound on the stake and on the registry.
+
+An epoch must have at least one slot, and the buffer of roots must cover two epochs.
+
+The seed lookahead must leave room in the buffer of RANDAO mixes.
+
+The genesis block of the model is the zero root. -/
+theorem slackJustifiedCheckpoints_chainRoot_of_chainSteps
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {fork : Fork} {state : BeaconState preset fork} {eth1BlockHash : Hash32}
+    {eth1Timestamp : UInt64} {deposits : Array Deposit}
+    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
+      .ok state)
+    {last : ForkedBeaconState preset}
+    (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, state⟩ last)
+    (large : ∀ forked after,
+      Relation.ReflTransGen (ChainStep config checks) ⟨fork, state⟩ forked →
+      ChainStep config checks forked after →
+      Relation.ReflTransGen (ChainStep config checks) after last →
+      after.state.slot ≠ forked.state.slot →
+      (forked.state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 →
+      3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
+        2 * stake (fun index => balanceAt forked.state index.toNat)
+          (getActiveValidatorIndices forked.state (getCurrentEpoch forked.state)).toFinset)
+    (small : ∀ forked after,
+      Relation.ReflTransGen (ChainStep config checks) ⟨fork, state⟩ forked →
+      ChainStep config checks forked after →
+      Relation.ReflTransGen (ChainStep config checks) after last →
+      after.state.validators.data.size < 2 ^ 64) :
+    SlackJustifiedCheckpoints (fun c => activeSetAt last.state c.epoch)
+      (fun c => activeSetAt last.state (c.epoch + 1))
+      (justifyingBalances config checks (toChainRoot config checks ⟨fork, state⟩)
+        ⟨fork, state⟩ last)
+      (toChainRoot config checks ⟨fork, state⟩ (Vector.replicate 32 0))
+      (ffgVotes (toChainRoot config checks ⟨fork, state⟩)
+        (runVotes config checks ⟨fork, state⟩ last))
+      (toChainRoot config checks ⟨fork, state⟩) last.state :=
+  slackJustifiedCheckpoints_activeSetAt_of_chainSteps positive window apart computed steps
+    fun forked after reach step rest =>
+      ⟨large forked after reach step rest,
+        fun _ member => Relation.ReflTransGen.single ⟨after, reach.tail step, member⟩,
+        small forked after reach step rest⟩
 
 end EthLib.Consensus

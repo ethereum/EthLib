@@ -2328,7 +2328,15 @@ The step also needs the previous justified epoch below the previous epoch once j
 `slackJustifiedCheckpoints_of_chain` (`Consensus/Proofs/Transition/FfgSlackChain.lean`) carries these steps along a chain from the genesis state built from deposits, for a set of votes that holds the votes of each block step.
 `slackJustifiedCheckpoints_activeSetAt_of_chainSteps` (`FfgSlackActive.lean`) takes the votes that the block steps of the run cast, the active sets and the effective balances.
 Its step asks only the active stake, the order of the blocks, the size of the registry and the preset.
-The order of the blocks of the model is an assumption on the map from roots to blocks, and no theorem gives a finalized checkpoint of the model along a chain yet.
+The order of the blocks asks that the map from roots to blocks keeps in order the roots that a state records at two consecutive slots, and the zero root before the root of slot zero (`rootLinks`, `Consensus/Proofs/Transition/FfgRoots.lean`).
+Two consecutive slots record the same root, or a block and its child, since the header check makes the parent root of a block the root recorded at the slot before it; no theorem states that yet.
+Without a collision of header roots, such pairs order the roots by ancestry.
+`RootsAbove.of_chainStep` then keeps each justified checkpoint below every root that the state records from its epoch on, which gives the source block of each recent link in the chain of its target block.
+`slackJustifiedCheckpoints_chainRoot_of_chainSteps` (`FfgSlackActive.lean`) takes the roots themselves as the blocks of the model, ordered by the links of every state that genesis reaches (`ChainRoot`), so the order holds by construction and the step asks only the active stake and the size of the registry.
+That order does not depend on the last state, so two branches from one genesis share it.
+It holds the links of every reachable state, so it also holds every collision of header roots among reachable headers, and such collisions exist by counting.
+A collision of header roots makes two conflicting blocks comparable, so this order does not serve a safety theorem for two chains; that needs the order of the states of the given runs, with a named search for a collision.
+No theorem gives a finalized checkpoint of the model along a chain yet.
 
 ### Engine API
 
