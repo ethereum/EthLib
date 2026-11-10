@@ -5,6 +5,8 @@ public import EthLib.Execution.Proofs.Evm.Call.Create
 public import EthLib.Execution.Proofs.Evm.Call.Delegation
 public import EthLib.Execution.Proofs.Evm.Call.Instructions
 public import EthLib.Execution.Proofs.Evm.Call.MessageCall
+public import EthLib.Execution.Proofs.Evm.Call.MeterRules
+public import EthLib.Execution.Proofs.Evm.Call.MeterSteps
 public import EthLib.Execution.Proofs.Evm.Call.Nonce
 public import EthLib.Execution.Proofs.Evm.Call.Parent
 public import EthLib.Execution.Proofs.Evm.Call.Run
