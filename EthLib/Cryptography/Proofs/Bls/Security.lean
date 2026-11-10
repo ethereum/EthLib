@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Bls.Security.PopEager
 public import EthLib.Cryptography.Proofs.Bls.Security.PopExtract
+public import EthLib.Cryptography.Proofs.Bls.Security.PopReduction
 public import EthLib.Cryptography.Proofs.Bls.Security.Refinement
 
 /-!
@@ -26,6 +27,16 @@ A valid aggregate with valid proofs on key hashes `r x • Z` gives `a • Z`, f
 That needs every key to be a multiple of `g1`, no `r x` to be zero, and a nonzero honest count.
 
 The game is unchanged in distribution when one message hash scalar is drawn right after the key.
+
+The aggregate game's reduction answers every oracle without the secret key.
+
+Fix the guess `j`, and let the co-CDH challenge be `z • g2`, with `z` the scalar drawn first.
+
+Let `z ≠ 0`.
+
+Then an event of the game, read on the state the reduction sees, is at most as likely in its run.
+
+This holds until the message at position `j` is signed.
 
 No bound on the aggregate game is proved yet.
 -/
