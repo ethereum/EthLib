@@ -330,7 +330,10 @@ theorem systemCall_of_spec {env : BlockEnvironment fork} {block : State.BlockSta
     have hbound : low.pc ∈ opcodePositions low.code :=
       mem_opcodePositions_iff.mpr (.here (by change 0 < message.code.size; rw [hcodeM]; omega))
     obtain ⟨after, _, highReached⟩ := reached.followsMeter
-      (by change SupportedCode message.code = true; rw [hcodeM]; exact supported (Nat.le_of_not_gt hglam))
+      (by
+        change SupportedCode message.code = true
+        rw [hcodeM]
+        exact supported (Nat.le_of_not_gt hglam))
       rfl (.inr hbound) herr (Nat.le_of_eq hheld)
     exact ⟨_, runFrame_of_reaches highReached halted held, herr, hq⟩
 
