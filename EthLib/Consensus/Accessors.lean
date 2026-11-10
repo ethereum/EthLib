@@ -23,6 +23,8 @@ The committees cut the shuffled active validators of an epoch, and the proposer 
 
 The members of the committees of a slot are cut from one shuffle, computed once for the slot.
 
+From Electra, the committees of one attestation are cut from one shuffle too.
+
 A failed assertion of the rule, or a read past the end of a list, is an error.
 
 A division by a parameter of the preset or the configuration assumes that it is not zero.
@@ -292,20 +294,6 @@ def beaconCommitteeOf (preset : Preset) (slot : Slot) (index : CommitteeIndex) (
   let count ← liftArith (mulChecked perSlot preset.SLOTS_PER_EPOCH)
   (shuffledCommittee active shuffled position count).mapError .shuffle
 
-/-- The committee of a slot with a given index, cut from the shuffled active validators.
-
-The committees of an epoch are numbered across its slots, in the order of the slots.
-
-It fails as the shuffle does, for more than `2^40` active validators. -/
-def getBeaconCommittee (state : BeaconState preset fork) (slot : Slot) (index : CommitteeIndex) :
-    Except AccessorError (Array ValidatorIndex) := do
-  let epoch := computeEpochAtSlot preset slot
-  let seed ← getSeed state epoch DOMAIN_BEACON_ATTESTER
-  let active := (getActiveValidatorIndices state epoch).toArray
-  let shuffled ← (computeShuffledPermutation preset (UInt64.ofNat active.size) seed).mapError
-    .shuffle
-  beaconCommitteeOf preset slot index (getCommitteeCountPerSlot state epoch) active shuffled
-
 /-- The active validators of an epoch, and their shuffle for the beacon committees.
 
 It fails as the shuffle does, for more than `2^40` active validators. -/
@@ -315,6 +303,17 @@ def attesterShuffle (state : BeaconState preset fork) (epoch : Epoch) :
   let active := (getActiveValidatorIndices state epoch).toArray
   return (active,
     ← (computeShuffledPermutation preset (UInt64.ofNat active.size) seed).mapError .shuffle)
+
+/-- The committee of a slot with a given index, cut from the shuffled active validators.
+
+The committees of an epoch are numbered across its slots, in the order of the slots.
+
+It fails as the shuffle does, for more than `2^40` active validators. -/
+def getBeaconCommittee (state : BeaconState preset fork) (slot : Slot) (index : CommitteeIndex) :
+    Except AccessorError (Array ValidatorIndex) := do
+  let epoch := computeEpochAtSlot preset slot
+  let (active, shuffled) ← attesterShuffle state epoch
+  beaconCommitteeOf preset slot index (getCommitteeCountPerSlot state epoch) active shuffled
 
 /-- The members of the beacon committees of a slot, committee after committee.
 
@@ -472,14 +471,35 @@ def committeeAttesters (bits : Array Bool) (offset : Nat) (committee : Array Val
     .ok (committee.toList.zipIdx.filterMap fun (member, position) =>
       if bits.getD (offset + position) false then some member else none)
 
-/-- From Electra: the attesters of each committee in a list, whose bits follow one another. -/
+/-- From Electra: the attesters of each committee in a list, whose bits follow one another.
+
+The committees are cut from the given active validators and shuffle.
+
+The count of committees per slot is given too. -/
+def committeesAttestersOf (preset : Preset) (slot : Slot) (bits : Array Bool) (perSlot : UInt64)
+    (active : Array ValidatorIndex) (shuffled : Array UInt64) :
+    List CommitteeIndex → Nat → Except AccessorError (List ValidatorIndex)
+  | [], _ => .ok []
+  | index :: rest, offset => do
+    let committee ← beaconCommitteeOf preset slot index perSlot active shuffled
+    let here ← committeeAttesters bits offset committee
+    return here ++ (← committeesAttestersOf preset slot bits perSlot active shuffled rest
+      (offset + committee.size))
+
+/-- From Electra: the attesters of each committee in a list, whose bits follow one another.
+
+The committees share one shuffle of the active validators, computed once for the list.
+
+A list that names no committee computes no shuffle. -/
 def committeesAttesters (state : BeaconState preset fork) (slot : Slot) (bits : Array Bool) :
     List CommitteeIndex → Nat → Except AccessorError (List ValidatorIndex)
   | [], _ => .ok []
   | index :: rest, offset => do
-    let committee ← getBeaconCommittee state slot index
-    let here ← committeeAttesters bits offset committee
-    return here ++ (← committeesAttesters state slot bits rest (offset + committee.size))
+    let epoch := computeEpochAtSlot preset slot
+    -- Each committee alone reads the shuffle before its cut, so reading it first changes no error.
+    let (active, shuffled) ← attesterShuffle state epoch
+    committeesAttestersOf preset slot bits (getCommitteeCountPerSlot state epoch) active shuffled
+      (index :: rest) offset
 
 /-- The validators that an attestation shows as signers, as a set.
 

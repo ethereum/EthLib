@@ -30,9 +30,13 @@ Each member of a committee, and each validator that an attestation shows, is act
 
 Every active validator is in a committee of its epoch, and no validator is in two of them.
 
+A committee is cut from the shuffle of the epoch of its slot.
+
 The members of the committees of a slot, cut from one shuffle, are those of each committee in turn.
 
 A validator is among those members exactly when one of the committees holds it.
+
+From Electra, the attesters of some committees, cut from one shuffle, are those of each in turn.
 
 The indices of an attestation increase strictly, as the check of an indexed attestation asks.
 
@@ -366,8 +370,9 @@ theorem getBeaconCommittee_ok {state : BeaconState preset fork} {slot : Slot}
       computeCommittee preset
         (getActiveValidatorIndices state (computeEpochAtSlot preset slot)).toArray seed position
         count = .ok committee := by
-  simp only [getBeaconCommittee, beaconCommitteeOf, bind_ok_iff, liftArith, mapError_ok_iff,
-    Base.Uint64.mulChecked_ok_iff, Base.Uint64.addChecked_ok_iff] at computed
+  simp only [getBeaconCommittee, attesterShuffle, bind_assoc, pure_bind, beaconCommitteeOf,
+    bind_ok_iff, liftArith, mapError_ok_iff, Base.Uint64.mulChecked_ok_iff,
+    Base.Uint64.addChecked_ok_iff] at computed
   obtain ⟨seed, seedOk, shuffled, shuffleOk, position, ⟨product, ⟨_, productEq⟩, _, positionEq⟩,
     count, ⟨_, countEq⟩, committeeOk⟩ := computed
   refine ⟨seed, position, count, seedOk, by rw [positionEq, productEq], countEq, ?_⟩
@@ -578,9 +583,21 @@ theorem exists_mem_getBeaconCommittee {state : BeaconState preset fork} {epoch :
     (count := UInt64.ofNat (getActiveValidatorIndices state epoch).toArray.size)
     (by rw [activeSize]; simpa using small)
   rw [computeCommittee_of_le (by simpa using small)] at computed
-  simp only [getBeaconCommittee, beaconCommitteeOf, epochEq, seedOk, shuffleOk, activeSize,
-    liftArith, productOk, sumOk, countOk, bind, Except.bind, Except.mapError, positionEq]
+  simp only [getBeaconCommittee, attesterShuffle, beaconCommitteeOf, epochEq, seedOk, shuffleOk,
+    activeSize, liftArith, productOk, sumOk, countOk, bind, Except.bind, Except.mapError, pure,
+    Except.pure, positionEq]
   rw [computed]
+
+/-- A beacon committee is cut from the shuffle of the epoch of its slot.
+
+The two sides fail with the same error too. -/
+theorem getBeaconCommittee_eq (state : BeaconState preset fork) (slot : Slot)
+    (index : CommitteeIndex) :
+    getBeaconCommittee state slot index = (do
+      let (active, shuffled) ← attesterShuffle state (computeEpochAtSlot preset slot)
+      beaconCommitteeOf preset slot index
+        (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)) active shuffled) :=
+  rfl
 
 /-- The members of the committees of a slot are those of each committee, one after the other.
 
@@ -600,20 +617,22 @@ theorem slotCommitteeMembers_eq (state : BeaconState preset fork) (slot : Slot) 
   cases seedOk : getSeed state (computeEpochAtSlot preset slot) DOMAIN_BEACON_ATTESTER with
   | error e =>
     rw [count, List.range_succ_eq_map, List.foldlM_cons]
-    simp [getBeaconCommittee, seedOk, bind, Except.bind]
+    simp [getBeaconCommittee, attesterShuffle, seedOk, bind, Except.bind]
   | ok seed =>
     cases shuffleOk : computeShuffledPermutation preset
         (UInt64.ofNat (getActiveValidatorIndices state (computeEpochAtSlot preset slot)).length)
         seed with
     | error e =>
       rw [count, List.range_succ_eq_map, List.foldlM_cons]
-      simp [getBeaconCommittee, seedOk, shuffleOk, bind, Except.bind, Except.mapError]
+      simp [getBeaconCommittee, attesterShuffle, seedOk, shuffleOk, bind, Except.bind,
+        Except.mapError]
     | ok shuffled =>
       simp only [seedOk, List.size_toArray, shuffleOk, Except.mapError, bind, Except.bind, pure,
         Except.pure]
       congr 1
       funext members index
-      simp [getBeaconCommittee, seedOk, shuffleOk, bind, Except.bind, Except.mapError]
+      simp [getBeaconCommittee, attesterShuffle, seedOk, shuffleOk, bind, Except.bind,
+        Except.mapError, pure, Except.pure]
 
 /-- A validator is among the members of a slot exactly when a beacon committee of it holds it. -/
 theorem mem_slotCommitteeMembers {state : BeaconState preset fork} {slot : Slot}
@@ -760,6 +779,47 @@ theorem mem_of_committeeAttesters {bits : Array Bool} {offset : Nat}
   obtain ⟨member, position, found, -, rfl⟩ := mem
   exact Array.mem_toList_iff.mp (List.mem_of_getElem? found)
 
+/-- From Electra: with a shuffle that has a value, the attesters are those cut from that shuffle.
+
+The shuffle is that of the epoch of the slot, with its count of committees per slot. -/
+theorem committeesAttesters_of_attesterShuffle {state : BeaconState preset fork} {slot : Slot}
+    {active : Array ValidatorIndex} {shuffled : Array UInt64}
+    (shuffleOk : attesterShuffle state (computeEpochAtSlot preset slot) = .ok (active, shuffled))
+    (bits : Array Bool) (committees : List CommitteeIndex) (offset : Nat) :
+    committeesAttesters state slot bits committees offset =
+      committeesAttestersOf preset slot bits
+        (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)) active shuffled
+        committees offset := by
+  cases committees with
+  | nil => rfl
+  | cons index rest => simp only [committeesAttesters, shuffleOk, bind, Except.bind]
+
+/-- From Electra: a list with no committee has no attesters. -/
+theorem committeesAttesters_nil (state : BeaconState preset fork) (slot : Slot)
+    (bits : Array Bool) (offset : Nat) :
+    committeesAttesters state slot bits [] offset = .ok [] :=
+  rfl
+
+/-- From Electra: the attesters of a list of committees are those of the first, then of the rest.
+
+The committees share one shuffle, and the first committee alone gives the same attesters.
+
+The two sides fail with the same error too. -/
+theorem committeesAttesters_cons (state : BeaconState preset fork) (slot : Slot)
+    (bits : Array Bool) (index : CommitteeIndex) (rest : List CommitteeIndex) (offset : Nat) :
+    committeesAttesters state slot bits (index :: rest) offset = (do
+      let committee ← getBeaconCommittee state slot index
+      let here ← committeeAttesters bits offset committee
+      return here ++ (← committeesAttesters state slot bits rest (offset + committee.size))) := by
+  rw [getBeaconCommittee_eq]
+  -- The first committee reads the shuffle first, so a failure of the shuffle is on both sides.
+  cases shuffleOk : attesterShuffle state (computeEpochAtSlot preset slot) with
+  | error e => simp only [committeesAttesters, shuffleOk, bind, Except.bind]
+  | ok pair =>
+    obtain ⟨active, shuffled⟩ := pair
+    simp only [committeesAttesters_of_attesterShuffle shuffleOk, committeesAttestersOf, bind,
+      Except.bind]
+
 /-- From Electra: each attester of a list of committees is active in the epoch of the slot. -/
 theorem mem_of_committeesAttesters {state : BeaconState preset fork} {slot : Slot}
     {bits : Array Bool} {committees : List CommitteeIndex} {offset : Nat}
@@ -772,7 +832,7 @@ theorem mem_of_committeesAttesters {state : BeaconState preset fork} {slot : Slo
     cases computed
     simp at mem
   | cons index rest ih =>
-    simp only [committeesAttesters, bind, Except.bind, pure, Except.pure] at computed
+    simp only [committeesAttesters_cons, bind, Except.bind, pure, Except.pure] at computed
     split at computed
     · cases computed
     rename_i committee committeeOk
@@ -889,7 +949,7 @@ theorem length_committeesAttesters {state : BeaconState preset fork} {slot : Slo
     simp only [List.length_nil, Nat.add_zero]
     omega
   | cons index rest ih =>
-    simp only [committeesAttesters, bind, Except.bind, pure, Except.pure] at computed
+    simp only [committeesAttesters_cons, bind, Except.bind, pure, Except.pure] at computed
     split at computed
     · cases computed
     rename_i committee _

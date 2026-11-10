@@ -690,8 +690,8 @@ theorem mem_getAttestingIndices_constructAggregateOfSingleAttestations
     dsimp only
     split
     · rw [getCommitteeIndices_constructAggregateOfSingleAttestations electra built]
-      simp only [committeesAttesters, sameData, committeeOk, attestersOk, bind, Except.bind, pure,
-        Except.pure, List.append_nil]
+      simp only [committeesAttesters_cons, committeesAttesters_nil, sameData, committeeOk,
+        attestersOk, bind, Except.bind, pure, Except.pure, List.append_nil]
     · exact absurd electra ‹_›
   · rw [mem_sortedSet, mem_committeeAttesters_iff attestersOk]
     constructor
