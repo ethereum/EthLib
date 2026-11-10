@@ -571,7 +571,8 @@ theorem frame_queuePreActivation {fork : Fork} {state after : BeaconState preset
   have sizes := sameSizes_setBalance set₁
   obtain ⟨_, rfl⟩ := setBalance_ok set₁
   have zeroed := Frame.of_validators sizes
-  have reset := frame_setValidator set₂ fun ordered => ordered validator (mem_of_getValidator found)
+  have reset := frame_setValidator set₂ found rfl fun ordered =>
+    ordered validator (mem_of_getValidator found)
   exact (zeroed.trans reset.toFrame).trans (Frame.of_validators ⟨rfl, rfl⟩)
 
 /-- Queueing the excess balance of a validator with compounding credentials keeps the frame. -/
@@ -581,7 +582,7 @@ theorem frame_queueCompoundingExcess {fork : Fork} {state after : BeaconState pr
   unfold queueCompoundingExcess at computed
   split at computed
   · split at computed
-    · exact frame_queueExcessActiveBalance (liftAccessor_ok.mp computed)
+    · exact (frame_queueExcessActiveBalance (liftAccessor_ok.mp computed)).toFrame
     · cases computed
       exact Frame.refl _
   · cases computed
