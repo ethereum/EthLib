@@ -134,6 +134,47 @@ theorem slackJustifiedCheckpoints_activeSetAt_of_chainSteps
       (fun c => activeSetAt last.state (c.epoch + 1))
       (justifyingBalances config checks block ⟨fork, state⟩ last) (block (Vector.replicate 32 0))
       (ffgVotes block (runVotes config checks ⟨fork, state⟩ last)) block last.state := by
-  sorry
+  refine slackJustifiedCheckpoints_of_chainSteps positive window apart computed steps
+    fun forked after reach step rest => ?_
+  have bounds := meets forked after reach step rest
+  -- The registry of the last state stays below 2^64 validators.
+  have small : last.state.validators.data.size < 2 ^ 64 := by
+    cases rest with
+    | refl => exact bounds.small
+    | tail middle lastStep =>
+      exact (meets _ _ ((reach.tail step).trans middle) lastStep .refl).small
+  have kept : ActiveKept (getCurrentEpoch forked.state) forked.state last.state :=
+    (step.activeKept bounds.small).trans
+      ((activeKept_of_chainSteps small rest).mono step.currentEpoch_le)
+  refine ⟨bounds, fun vote member => ⟨forked, after, reach, rest, member⟩,
+    fun changed root rootOk => ?_⟩
+  obtain ⟨recent, rootAfter⟩ := step.getBlockRoot_currentJustified_of_ne window changed
+  rw [rootOk, Except.ok.injEq] at rootAfter
+  have previous := getPreviousEpoch_toNat forked.state
+  set epoch := after.state.currentJustifiedCheckpoint.epoch with epochEq
+  have below : epoch ≤ getCurrentEpoch forked.state := by
+    rcases recent with same | same
+    · rw [same, UInt64.le_iff_toNat_le, previous]
+      omega
+    · rw [same]
+      exact UInt64.le_refl _
+  have activeEq : activeSetAt last.state epoch.toNat =
+      (getActiveValidatorIndices forked.state epoch).toFinset := by
+    rw [activeSetAt_toNat, kept.getActiveValidatorIndices_eq below]
+  refine ⟨activeEq, ⟨forked, after, reach, step, rest, changed, ?_, rfl⟩, ?_⟩
+  · simp only [Checkpoint.toFfg, rootAfter, epochEq]
+  · dsimp only
+    by_cases current : epoch = getCurrentEpoch forked.state
+    · rw [activeEq, current]
+      exact Finset.inter_subset_left
+    -- The previous epoch is then below the current one, so its next epoch is the current one.
+    have previousEq : epoch = getPreviousEpoch forked.state := recent.resolve_right current
+    have next : epoch.toNat + 1 = (getCurrentEpoch forked.state).toNat := by
+      have ne := mt UInt64.toNat_inj.mp current
+      rw [previousEq, previous] at ne ⊢
+      omega
+    rw [next, activeSetAt_toNat _ (getCurrentEpoch forked.state),
+      kept.getActiveValidatorIndices_eq (UInt64.le_refl _)]
+    exact Finset.inter_subset_right
 
 end EthLib.Consensus
