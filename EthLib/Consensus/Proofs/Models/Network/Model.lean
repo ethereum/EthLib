@@ -5,8 +5,8 @@ public import EthLib.Consensus.Proofs.Models.Stake
 /-!
 # A partially synchronous network of honest and Byzantine validators
 
-The model follows the system model of the fast confirmation rule, §2 of
-[arXiv 2405.00549v4](https://arxiv.org/abs/2405.00549v4).
+The model follows the system model of the fast confirmation rule.
+That model is §2 of [arXiv 2405.00549v4](https://arxiv.org/abs/2405.00549v4).
 
 Each validator is a node with a view: the set of messages that it has received.
 
@@ -22,8 +22,8 @@ The protocol only allows actions; a duty to act is a further condition on execut
 
 Partial synchrony bounds the delay after a global stabilisation time, written GST.
 
-A message in the view of an honest validator at time `t` reaches every honest validator by
-`max t GST + Δ`.
+Take a message in the view of an honest validator at time `t`.
+It reaches every honest validator by `max t GST + Δ`.
 
 The rule follows from the network rule of §2 and its assumption that honest validators gossip.
 
@@ -33,8 +33,8 @@ So a result proved here holds under §2, when time grows without bound and the d
 
 A message that no honest validator holds may never be delivered, as a Byzantine sender may keep it.
 
-Footnote 1 of §2 compares it with the partial synchrony of Dwork, Lynch and Stockmeyer,
-[doi:10.1145/42282.42283](https://doi.org/10.1145/42282.42283).
+Footnote 1 of §2 compares it with the partial synchrony of Dwork, Lynch and Stockmeyer.
+Their paper is [doi:10.1145/42282.42283](https://doi.org/10.1145/42282.42283).
 
 Partial synchrony also asks that time grows without bound, so that GST comes.
 
@@ -158,8 +158,8 @@ The delay is positive, since a send and a delivery are two events.
 
 Time grows without bound.
 
-A message in the view of an honest validator at time `t` is in the view of every honest validator
-at each later time from `max t GST + Δ` on. -/
+Take a message in the view of an honest validator at time `t`.
+At each time from `max t GST + Δ` on, it is in the view of every honest validator. -/
 def PartiallySynchronous (e : Execution P J) (GST Δ : ℕ) : Prop :=
   0 < Δ ∧ (∀ T, ∃ n, T ≤ (e.world n).time) ∧
     ∀ n k, n ≤ k → ∀ v ∈ J, ∀ u ∈ J, ∀ m ∈ (e.world n).view v,

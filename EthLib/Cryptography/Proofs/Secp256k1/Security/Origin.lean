@@ -75,8 +75,8 @@ variable [DecidableEq M] [FinEnum A]
 
 variable [Field F] [DecidableEq F] [AddCommGroup G] [Module F G] [DecidableEq G]
 
-/-- The joint run over tagged caches, with the tags erased, is the joint run over the lazy
-permutation.
+/-- Erase the tags of the joint run over tagged caches.
+The result is the joint run over the lazy permutation.
 
 The tags of the adversary and of the signer may differ. -/
 theorem map_jointRun_taggedLazyPermOracle (scheme : Scheme F G A M)

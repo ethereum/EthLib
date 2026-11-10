@@ -1103,6 +1103,9 @@
 #define DOC_engine_new_payload_on_chain \
   "The payload status of an `engine_newPayload` request, on a chain that holds the parent."
 
+#define DOC_engine_build_payload \
+  "Build a payload on a chain, from attributes, the builder's choices and transactions."
+
 #define DOC_engine_forkchoice_updated \
   "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads."
 
